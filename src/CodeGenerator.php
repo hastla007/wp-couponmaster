@@ -33,7 +33,7 @@ final class CodeGenerator {
 			array(
 				trim( (string) ( $opts['prefix'] ?? '' ) ),
 				trim( (string) ( $opts['order_ref'] ?? '' ) ),
-				self::random( max( 4, min( 40, (int) ( $opts['length'] ?? 10 ) ) ), (string) ( $opts['charset'] ?? 'alnum_upper' ) ),
+				self::random( max( 4, min( 40, (int) ( $opts['length'] ?? 12 ) ) ), (string) ( $opts['charset'] ?? 'alnum_upper' ) ),
 				trim( (string) ( $opts['suffix'] ?? '' ) ),
 			),
 			'strlen'

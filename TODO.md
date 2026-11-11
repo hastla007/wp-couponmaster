@@ -6,42 +6,46 @@ Ziel: Voucher Captain bleibt ein allgemein einsetzbares WooCommerce-Gutschein-Pl
 
 Diese Liste ist eine Arbeitsliste, kein verifizierter Fortschrittsbericht. Der Entwicklungsbranch enthält bereits umfangreiche Voucher-Captain-Funktionen; bestehende Funktionen gelten erst dann als erledigt, wenn sie gegen Scope und Abnahmekriterien geprüft und hier nachvollziehbar markiert wurden. Die Liste darf nicht so gelesen werden, dass alle angeführten Grundfunktionen noch fehlen.
 
-Der ausführbare Plugin-Code liegt aktuell auf `claude/youthful-bardeen-7ejd7a). Der Standardbranch `main` enthält noch nicht diesen Code. Der Entwicklungsbranch muss über einen geprüften Pull Request in `main` überführt werden, bevor `main` als Release-Quelle gilt.
+Der ausführbare Plugin-Code liegt aktuell auf `claude/youthful-bardeen-7ejd7a` (enthält auch `codex/fix-voucher-audit-findings`). Der Standardbranch `main` enthält noch nicht diesen Code. Der Entwicklungsbranch muss über einen geprüften Pull Request in `main` überführt werden, bevor `main` als Release-Quelle gilt.
+
+### Abgleich vom 11.11.2026 (Version 1.1.0)
+
+Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sind. Nachweise: `tests/run.php` (ohne WordPress), sowie die CI-Suiten `tests/woocommerce-integration.php`, `tests/compatibility-integration.php`, `tests/security-integration.php`, `tests/redemption-integration.php` und `tests/order-lifecycle-integration.php`, die gegen WordPress 7.1.4, WooCommerce 11.2.2 und PHP 8.4 laufen (MySQL 8.4 und MariaDB 11.4, jeweils mit HPOS und mit klassischem Bestellspeicher), plus Installation, Update und Deinstallation des Release-ZIPs. Teilweise erledigte Punkte bleiben offen und tragen einen Vermerk *(teilweise: …)*.
 
 ## P0 – Repository, Status und Produktgrenze
 
 - [ ] Pull Request des bestehenden Entwicklungsbranchs nach `main` vorbereiten, bestehende Änderungen prüfen und nach den Release-Gates mergen.
-- [ ] SCOPE, Quellcode und TODO gegeneinander abgleichen; vorhandene Funktionen mit dokumentierten Abnahmekriterien verifizieren und erst dann erledigt markieren.
+- [x] SCOPE, Quellcode und TODO gegeneinander abgleichen; vorhandene Funktionen mit dokumentierten Abnahmekriterien verifizieren und erst dann erledigt markieren. — *Nachweis: dieser Abgleich*
 - [ ] Voucher-Captain-Grenze gegenüber Ticket Captain festschreiben: Gutscheine/Geschenkkarten/Discounts und Gutschein-Einlösung bleiben bei VCAP; Events, Sitzplätze, Kapazitäten, Eventbestellungen und Event-Check-in gehören TCAP.
 - [ ] Bestehende Voucher-Scanner- und Ticket-ähnliche Funktionen inventarisieren; klare Migrations-/Koexistenzregel definieren, damit Event-Einlass nur den TCAP-Ticketstatus verändert.
 - [ ] Release-Prüfung für VCAP allein, TCAP allein und beide Plugins gemeinsam als Pflichtkriterium dokumentieren.
 
 ## P0 – Öffentliche Einlöse-Schnittstelle
 
-- [ ] Einen versionierten, dokumentierten öffentlichen PHP-Service für Gutscheinabfragen und -einlösungen bereitstellen. Keine Connector-Abhängigkeit von internen Klassen oder Tabellen.
-- [ ] Ein generisches Redemption-Provider-Konzept festlegen, über das Add-ons eigene Einlösearten registrieren können.
-- [ ] Den Einlöseablauf als Zustandsübergang mit Reservierung, erfolgreichem Abschluss und wiederholbarem Fehlerfall umsetzen.
-- [ ] Einlöseversuche mit Idempotency-Key absichern, damit parallele Requests oder Wiederholungen keinen doppelten Verbrauch und keine doppelte Leistung erzeugen.
-- [ ] WooCommerce-Warenkorb und externe Einlösung auf denselben Gutscheinstatus prüfen lassen. Ein Code darf nicht über beide Wege doppelt eingelöst werden.
-- [ ] Ein Ereignis nach erfolgreichem Abschluss dokumentieren, z. B. `vcap_voucher_redeemed`, mit Gutschein-ID, Code, Nutzer-ID, Ziel-ID, Einlöse-ID und Zeitstempel.
-- [ ] Stabile Fehlercodes und API-Antworten definieren: ungültig, abgelaufen, bereits eingelöst, nicht berechtigt, Ziel nicht verfügbar, vorübergehender Fehler.
-- [ ] Für browserbasierte REST-Aufrufe WordPress-Login-Cookies und Nonce unterstützen; bei externen Servern eine eng begrenzte Authentifizierung vorsehen.
-- [ ] Nutzeridentität ausschließlich aus dem authentifizierten Request ableiten; keine frei übergebene `user_id` vertrauen.
-- [ ] Rate-Limit für fehlgeschlagene Codeversuche implementieren und konfigurierbar machen.
+- [x] Einen versionierten, dokumentierten öffentlichen PHP-Service für Gutscheinabfragen und -einlösungen bereitstellen. Keine Connector-Abhängigkeit von internen Klassen oder Tabellen. — *Nachweis: `vcap()->redemptions` (ohne Bestellung) und `vcap()->api_v1` (bestellbezogen), API.md*
+- [x] Ein generisches Redemption-Provider-Konzept festlegen, über das Add-ons eigene Einlösearten registrieren können. — *Nachweis: `VCAP\\Contracts\\RedemptionProvider` + Filter `vcap_redemption_providers` (bestellbezogen); Einlöseziele über `vcap_redemption_allowed` / `vcap_redemption_target_available`*
+- [x] Den Einlöseablauf als Zustandsübergang mit Reservierung, erfolgreichem Abschluss und wiederholbarem Fehlerfall umsetzen. — *Nachweis: reserve → commit/release, automatische Freigabe nach Ablauf; tests/redemption-integration.php*
+- [x] Einlöseversuche mit Idempotency-Key absichern, damit parallele Requests oder Wiederholungen keinen doppelten Verbrauch und keine doppelte Leistung erzeugen. — *Nachweis: eindeutiger Schlüssel pro Einlösung, Konflikt bei abweichender Anfrage; tests/redemption-integration.php*
+- [x] WooCommerce-Warenkorb und externe Einlösung auf denselben Gutscheinstatus prüfen lassen. Ein Code darf nicht über beide Wege doppelt eingelöst werden. — *Nachweis: Status `reserved`/`redeemed` wird im Warenkorb abgelehnt; tests/redemption-integration.php*
+- [x] Ein Ereignis nach erfolgreichem Abschluss dokumentieren, z. B. `vcap_voucher_redeemed`, mit Gutschein-ID, Code, Nutzer-ID, Ziel-ID, Einlöse-ID und Zeitstempel. — *Nachweis: `vcap_voucher_redeemed` (API.md), feuert genau einmal*
+- [x] Stabile Fehlercodes und API-Antworten definieren: ungültig, abgelaufen, bereits eingelöst, nicht berechtigt, Ziel nicht verfügbar, vorübergehender Fehler. — *Nachweis: Fehlercode-Tabelle in API.md*
+- [x] Für browserbasierte REST-Aufrufe WordPress-Login-Cookies und Nonce unterstützen; bei externen Servern eine eng begrenzte Authentifizierung vorsehen. — *Nachweis: REST `/wp-json/vcap/v1/redemptions`, Server über WordPress-Anwendungspasswörter*
+- [x] Nutzeridentität ausschließlich aus dem authentifizierten Request ableiten; keine frei übergebene `user_id` vertrauen. — *Nachweis: REST ignoriert `user_id`; getestet*
+- [x] Rate-Limit für fehlgeschlagene Codeversuche implementieren und konfigurierbar machen. — *Nachweis: Einstellung „Fehlversuche mit ungültigen Codes“; getestet*
 
 ## P1 – Allgemeine Gutschein-Grundlage
 
 - [ ] Gutscheintyp und Einlöseweg generisch erweiterbar machen, ohne Kurs- oder LMS-Felder in den Plugin-Kern aufzunehmen.
 - [ ] Transferierbarkeit als klare Produkteinstellung abbilden und für Vorlagen/E-Mails als Platzhalter bereitstellen.
-- [ ] Ablaufdatum, Restwert, Übertragbarkeit und Einlösebedingungen in Admin, Kundenkonto und PDF-Vorlagen ausgeben.
+- [ ] Ablaufdatum, Restwert, Übertragbarkeit und Einlösebedingungen in Admin, Kundenkonto und PDF-Vorlagen ausgeben. *(teilweise: Ablauf und Restwert erscheinen in Admin, Kundenkonto-Tab und als PDF-Platzhalter; Übertragbarkeit und Einlösebedingungen fehlen)*
 - [ ] Erneuten Versand für berechtigte Käufer im Kundenkonto ergänzen.
-- [ ] Code-Standard auf mindestens 12 zufällige Zeichen setzen; verwechslungsanfällige Zeichen weiter ausschließen.
-- [ ] Rabattierte Gutscheinbestellungen anhand des tatsächlich bezahlten Positionsbetrags berechnen; Steueranteile und Mehrwährung gesondert berücksichtigen.
+- [x] Code-Standard auf mindestens 12 zufällige Zeichen setzen; verwechslungsanfällige Zeichen weiter ausschließen. — *Nachweis: Standard 12, Minimum 8, ohne 0/O/1/I*
+- [ ] Rabattierte Gutscheinbestellungen anhand des tatsächlich bezahlten Positionsbetrags berechnen; Steueranteile und Mehrwährung gesondert berücksichtigen. *(teilweise: Steuer und Mehrwährung werden berücksichtigt; der Wert basiert noch auf dem Positionspreis vor Rabatt. Offen: wie mit Geschenkkarten als Zahlungsmittel umgegangen wird)*
 - [ ] Auftrags- und Erstattungsdaten positionsbezogen für angeschlossene Plugins verfügbar machen.
 - [ ] Verhalten für vollständig rabattierte 0-Euro-Bestellungen festlegen und mit Bestellstatus-/Zugangs-Integrationen abstimmen.
-- [ ] WooCommerce-CRUD-APIs für Bestellungen und Gutscheine verwenden; HPOS-Unterstützung verifizieren.
+- [x] WooCommerce-CRUD-APIs für Bestellungen und Gutscheine verwenden; HPOS-Unterstützung verifizieren. — *Nachweis: CI-Matrix HPOS und klassischer Bestellspeicher*
 - [ ] Kompatibilität der Produktfelder mit Produkt-, Warenkorb- und Kassenblöcken herstellen und testen.
-- [ ] Datenschutzauskunft, Löschung und konfigurierbare Aufbewahrungsfristen für Käufer- und Empfängerdaten abschließen.
+- [x] Datenschutzauskunft, Löschung und konfigurierbare Aufbewahrungsfristen für Käufer- und Empfängerdaten abschließen. — *Nachweis: Exporter/Eraser inkl. Einlösungen, Aufbewahrungsfrist; tests/security-integration.php*
 
 ## P1 – Steuer, Rabattregeln und Gutscheincodes
 
@@ -51,22 +55,22 @@ Der ausführbare Plugin-Code liegt aktuell auf `claude/youthful-bardeen-7ejd7a).
 - [ ] Gesamtlimit, Limit pro Kunde, Mindestbestellwert, Ablauf und Erstkaufbedingung konfigurierbar machen.
 - [ ] Erweiterungspunkte für „Kunde besitzt Kurs/Produkt X“ und Konflikte mit externen Mitgliederrabatten/Kombipreisen dokumentieren.
 - [ ] Coupon-Link mit sicherer automatischer Anwendung ergänzen, z. B. `?gutschein=CODE`.
-- [ ] Generierung mehrerer Codes nach Präfix/Länge und CSV-Export für Partner- und Kampagnenpakete ergänzen.
+- [ ] Generierung mehrerer Codes nach Präfix/Länge und CSV-Export für Partner- und Kampagnenpakete ergänzen. *(teilweise: Import von Codes und CSV-Export der ausgestellten Gutscheine vorhanden; Massengenerierung fehlt)*
 - [ ] Sicherstellen, dass Coupons keine Katalog-Streichpreise erzeugen und der Rabatt erst im Warenkorb erscheint.
 
 ## P2 – Integrations- und Betriebsverhalten
 
 - [ ] Gruppenpaket-Verhalten dokumentieren: Gutschein/Rabatt je Platz oder je Paket.
-- [ ] Einlöse-, Guthaben- und Rückbuchungshistorie mit Nutzer, Zeitpunkt, Auftrag und externem Referenzschlüssel führen.
+- [x] Einlöse-, Guthaben- und Rückbuchungshistorie mit Nutzer, Zeitpunkt, Auftrag und externem Referenzschlüssel führen. — *Nachweis: Ereignisprotokoll je Gutschein (Nutzer, Zeit, Bestellung) und Tabelle `vcap_redemptions` mit Einlöseschlüssel*
 - [ ] Regeln für Rückerstattung/Storno vor und nach einer externen Einlösung definieren.
 - [ ] Fehlgeschlagene externe Freischaltungen wiederholbar machen, ohne Gutscheinverbrauch oder Zugriff zu duplizieren.
 - [ ] Integrationsdokumentation, Beispiel-Connector und öffentliche API-Versionspolitik veröffentlichen.
 
 ## P2 – Qualitätssicherung und Veröffentlichung
 
-- [ ] Automatisierte Integrationsprüfungen für VCAP allein und gemeinsam mit TCAP einrichten; WooCommerce-Statuswiederholungen, parallele Einlösungen, Timeout, Teil-/Vollerstat­tung und 0-Euro-Checkout abdecken.
+- [ ] Automatisierte Integrationsprüfungen für VCAP allein und gemeinsam mit TCAP einrichten; WooCommerce-Statuswiederholungen, parallele Einlösungen, Timeout, Teil-/Vollerstat­tung und 0-Euro-Checkout abdecken. *(teilweise: VCAP allein inkl. Statuswiederholungen, Teil-/Vollerstattung und Abbruch; TCAP und 0-Euro-Checkout fehlen)*
 - [ ] Release-Prüfung mit HPOS, klassischer Kasse, Checkout-Blöcken, unterstützten Mehrwährungs-/Subscription-Integrationen und minimaler WordPress-/PHP-Version dokumentieren.
-- [ ] Build-ZIP in einer sauberen WordPress-Installation installieren, aktivieren, aktualisieren und deinstallieren; bei gemeinsamer Installation Klassen-/Vendor-Konflikte prüfen.
+- [x] Build-ZIP in einer sauberen WordPress-Installation installieren, aktivieren, aktualisieren und deinstallieren; bei gemeinsamer Installation Klassen-/Vendor-Konflikte prüfen. — *Nachweis: CI-Schritt „Build, install, and update the release ZIP“ + Deinstallationsprüfung; Konflikte mit TCAP noch offen, siehe Native Integration*
 - [ ] Übersetzungen, Datenschutzauskunft/-löschung, Berechtigungen, Nonces, Rate-Limits und Admin-/Kunden-E-Mail-Vorlagen für Release freigeben.
 
 ## Optional nach dem ersten Kunden-Connector
@@ -140,15 +144,15 @@ Befund im Kursplugin: `/wp-json/boatingschool/v1/coupons/redeem` ist derzeit fü
 - [ ] Gutscheine mit konfigurierbarem Vorablauf-Hinweis und Zustellstatus versenden; Versandwiederholung und Unterdrückung von Erinnerungen unterstützen.
 - [ ] Bonusgutschein bei qualifizierender Bestellung oder Geschenkkartenkauf als optionale Kampagnenaktion ausgeben.
 - [ ] Gutscheinsaldo, Gutscheinstatus, Einlöseseite und Versandaktion über wiederverwendbare Blöcke/Shortcodes bereitstellen.
-- [ ] Kundenvorschau personalisierter Gutscheine vor dem Kauf anbieten.
-- [ ] Feste Wertstufen und Wunschbetrag für Gutscheinprodukte unterstützen, wenn Produkt-/Preis-Integrationen dies erlauben; Werte, Währung und Steuerdaten positionsbezogen speichern.
+- [x] Kundenvorschau personalisierter Gutscheine vor dem Kauf anbieten. — *Nachweis: Vorschau-Button auf der Produktseite, PDF mit Wasserzeichen*
+- [ ] Feste Wertstufen und Wunschbetrag für Gutscheinprodukte unterstützen, wenn Produkt-/Preis-Integrationen dies erlauben; Werte, Währung und Steuerdaten positionsbezogen speichern. *(teilweise: Wunschbetrag mit Min/Max/Schrittweite/Vorschlägen und Variationen als Wertstufen vorhanden)*
 - [ ] Mehrsprachige, mehrwährungsfähige, Subscription- und Produktfeld-Erweiterungen über dokumentierte Adapter statt interne APIs anbinden.
 - [ ] Akzeptanztests für Kampagnenpriorität, Warenkorbgrenzen, teilweise Einlösung, Erstattung, Mehrwährung, Wiederholungs-Webhook und Datenschutzfristen ergänzen.
 
 ## P1 – EU-Markt und Plattform-Kompatibilität
 
 - [ ] EU als Zielmarkt umsetzen; Länder-, Währungs-, Sprach- und Steuerkonfiguration getrennt von fest codierter Geschäftslogik halten.
-- [ ] Release-CI gegen WordPress 7.1.4, WooCommerce 11.2.2, PHP 8.4 (am Snapshot 8.4.27), MySQL 8.4 LTS und MariaDB 11.4 LTS einrichten.
+- [x] Release-CI gegen WordPress 7.1.4, WooCommerce 11.2.2, PHP 8.4 (am Snapshot 8.4.27), MySQL 8.4 LTS und MariaDB 11.4 LTS einrichten. — *Nachweis: .github/workflows/plugin-smoke.yml*
 - [ ] Unterstützte Mindestversionen separat von der aktuellen Test-Baseline festlegen und pro Release aktualisieren.
 - [ ] Yoast SEO 28.8 als optionale Kompatibilitätskonfiguration prüfen; Yoast darf keine Laufzeitabhängigkeit sein.
 - [ ] Mehrwährungs-, Mehrsprachigkeits- und WooCommerce-Produktfeld-Integrationen über dokumentierte Adapter spezifizieren.
