@@ -36,9 +36,9 @@ final class CustomAmount {
 		$value   = isset( $_POST['wcvs_amount'] ) ? wc_format_decimal( wp_unslash( $_POST['wcvs_amount'] ) ) : ( $presets ? reset( $presets ) : ( $min ?: '' ) ); // phpcs:ignore
 		?>
 		<div class="wcvs-amount">
-			<label for="wcvs-amount"><?php echo esc_html( sprintf( /* translators: %s: currency symbol */ __( 'Voucher amount (%s)', 'wc-voucher-studio' ), html_entity_decode( get_woocommerce_currency_symbol() ) ) ); ?> <abbr class="required" title="<?php esc_attr_e( 'required', 'wc-voucher-studio' ); ?>">*</abbr></label>
+			<label for="wcvs-amount"><?php echo esc_html( sprintf( /* translators: %s: currency symbol */ __( 'Voucher amount (%s)', 'voucher-captain' ), html_entity_decode( get_woocommerce_currency_symbol() ) ) ); ?> <abbr class="required" title="<?php esc_attr_e( 'required', 'voucher-captain' ); ?>">*</abbr></label>
 			<?php if ( $presets ) : ?>
-				<div class="wcvs-amount-presets" role="group" aria-label="<?php esc_attr_e( 'Suggested amounts', 'wc-voucher-studio' ); ?>">
+				<div class="wcvs-amount-presets" role="group" aria-label="<?php esc_attr_e( 'Suggested amounts', 'voucher-captain' ); ?>">
 					<?php foreach ( $presets as $preset ) : ?>
 						<button type="button" class="button wcvs-amount-preset" data-amount="<?php echo esc_attr( $preset ); ?>"><?php echo wp_kses_post( wc_price( (float) $preset ) ); ?></button>
 					<?php endforeach; ?>
@@ -53,10 +53,10 @@ final class CustomAmount {
 				<?php
 				if ( $min > 0 && $max > 0 ) {
 					/* translators: 1: min, 2: max */
-					printf( esc_html__( 'Choose an amount between %1$s and %2$s.', 'wc-voucher-studio' ), wp_kses_post( wc_price( $min ) ), wp_kses_post( wc_price( $max ) ) );
+					printf( esc_html__( 'Choose an amount between %1$s and %2$s.', 'voucher-captain' ), wp_kses_post( wc_price( $min ) ), wp_kses_post( wc_price( $max ) ) );
 				} elseif ( $min > 0 ) {
 					/* translators: %s: min */
-					printf( esc_html__( 'Minimum %s.', 'wc-voucher-studio' ), wp_kses_post( wc_price( $min ) ) );
+					printf( esc_html__( 'Minimum %s.', 'voucher-captain' ), wp_kses_post( wc_price( $min ) ) );
 				}
 				?>
 			</span>
@@ -75,11 +75,11 @@ final class CustomAmount {
 		$min    = (float) $config['custom_min'];
 		$max    = (float) $config['custom_max'];
 		if ( '' === $raw || $amount <= 0 ) {
-			wc_add_notice( __( 'Please enter a voucher amount.', 'wc-voucher-studio' ), 'error' );
+			wc_add_notice( __( 'Please enter a voucher amount.', 'voucher-captain' ), 'error' );
 			return false;
 		}
 		if ( ( $min > 0 && $amount < $min ) || ( $max > 0 && $amount > $max ) ) {
-			wc_add_notice( __( 'The voucher amount is outside the allowed range.', 'wc-voucher-studio' ), 'error' );
+			wc_add_notice( __( 'The voucher amount is outside the allowed range.', 'voucher-captain' ), 'error' );
 			return false;
 		}
 		return $passed;
@@ -114,7 +114,7 @@ final class CustomAmount {
 	public function display( $item_data, $cart_item ) {
 		if ( isset( $cart_item['wcvs_amount'] ) ) {
 			$item_data[] = array(
-				'key'   => __( 'Voucher amount', 'wc-voucher-studio' ),
+				'key'   => __( 'Voucher amount', 'voucher-captain' ),
 				'value' => wp_strip_all_tags( wc_price( (float) $cart_item['wcvs_amount'] ) ),
 			);
 		}
@@ -152,9 +152,9 @@ final class CustomAmount {
 			}
 			if ( $min > 0 ) {
 				/* translators: %s: min price */
-				return sprintf( __( 'From %s', 'wc-voucher-studio' ), wc_price( $min ) );
+				return sprintf( __( 'From %s', 'voucher-captain' ), wc_price( $min ) );
 			}
-			return __( 'Choose your amount', 'wc-voucher-studio' );
+			return __( 'Choose your amount', 'voucher-captain' );
 		}
 		return $html;
 	}

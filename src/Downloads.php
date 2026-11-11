@@ -69,10 +69,10 @@ final class Downloads {
 		$valid = hash_equals( $this->sign( $token, $exp ), $sig ) && ( 0 === $exp || $exp >= time() );
 		$voucher = $valid ? $this->repo->get_by_token( $token ) : null;
 		if ( ! $voucher ) {
-			wp_die( esc_html__( 'This download link is invalid or has expired. Please log in to your account or contact us for a new link.', 'wc-voucher-studio' ), esc_html__( 'Download unavailable', 'wc-voucher-studio' ), array( 'response' => 403 ) );
+			wp_die( esc_html__( 'This download link is invalid or has expired. Please log in to your account or contact us for a new link.', 'voucher-captain' ), esc_html__( 'Download unavailable', 'voucher-captain' ), array( 'response' => 403 ) );
 		}
 		if ( Voucher::STATUS_VOID === $voucher->status ) {
-			wp_die( esc_html__( 'This voucher has been cancelled.', 'wc-voucher-studio' ), '', array( 'response' => 410 ) );
+			wp_die( esc_html__( 'This voucher has been cancelled.', 'voucher-captain' ), '', array( 'response' => 410 ) );
 		}
 		$this->serve( $voucher, ! empty( $_GET['dl'] ) ); // phpcs:ignore WordPress.Security.NonceVerification
 	}
@@ -81,18 +81,18 @@ final class Downloads {
 		$id = absint( $_GET['id'] ?? 0 );
 		check_admin_referer( 'wcvs_admin_pdf_' . $id );
 		if ( ! current_user_can( 'wcvs_manage_vouchers' ) && ! current_user_can( 'manage_woocommerce' ) ) {
-			wp_die( esc_html__( 'You are not allowed to do this.', 'wc-voucher-studio' ), 403 );
+			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
 		$voucher = $this->repo->get( $id );
 		if ( ! $voucher ) {
-			wp_die( esc_html__( 'Voucher not found.', 'wc-voucher-studio' ), 404 );
+			wp_die( esc_html__( 'Voucher not found.', 'voucher-captain' ), 404 );
 		}
 		$this->serve( $voucher, ! empty( $_GET['dl'] ), false );
 	}
 
 	private function serve( Voucher $voucher, bool $download, bool $log = true ): void {
 		if ( ! class_exists( '\Dompdf\Dompdf' ) ) {
-			wp_die( esc_html__( 'PDF generation is not available.', 'wc-voucher-studio' ), 500 );
+			wp_die( esc_html__( 'PDF generation is not available.', 'voucher-captain' ), 500 );
 		}
 		if ( $log ) {
 			$this->repo->log( $voucher->id, 'downloaded' );
@@ -114,7 +114,7 @@ final class Downloads {
 		$vouchers = $this->repo->for_order( $order->get_id() );
 		if ( ! $vouchers ) {
 			if ( $this->order_has_voucher_products( $order ) && ! $order->is_paid() ) {
-				echo '<p class="wcvs-pending-notice">' . esc_html__( 'Your vouchers will be available here once the payment has been confirmed.', 'wc-voucher-studio' ) . '</p>';
+				echo '<p class="wcvs-pending-notice">' . esc_html__( 'Your vouchers will be available here once the payment has been confirmed.', 'voucher-captain' ) . '</p>';
 			}
 			return;
 		}
@@ -123,7 +123,7 @@ final class Downloads {
 			array(
 				'vouchers'  => $vouchers,
 				'downloads' => $this,
-				'title'     => __( 'Your vouchers', 'wc-voucher-studio' ),
+				'title'     => __( 'Your vouchers', 'voucher-captain' ),
 			)
 		);
 	}
@@ -162,17 +162,17 @@ final class Downloads {
 		foreach ( $items as $key => $label ) {
 			$new[ $key ] = $label;
 			if ( 'orders' === $key ) {
-				$new[ self::ENDPOINT ] = __( 'Vouchers', 'wc-voucher-studio' );
+				$new[ self::ENDPOINT ] = __( 'Vouchers', 'voucher-captain' );
 			}
 		}
 		if ( ! isset( $new[ self::ENDPOINT ] ) ) {
-			$new[ self::ENDPOINT ] = __( 'Vouchers', 'wc-voucher-studio' );
+			$new[ self::ENDPOINT ] = __( 'Vouchers', 'voucher-captain' );
 		}
 		return $new;
 	}
 
 	public function endpoint_title(): string {
-		return __( 'Vouchers', 'wc-voucher-studio' );
+		return __( 'Vouchers', 'voucher-captain' );
 	}
 
 	public function account_page(): void {
@@ -199,20 +199,20 @@ final class Downloads {
 			$tries = (int) get_transient( $key );
 			set_transient( $key, $tries + 1, 15 * MINUTE_IN_SECONDS );
 			if ( $tries > 15 ) {
-				$result = '<p class="woocommerce-error">' . esc_html__( 'Too many attempts. Please try again later.', 'wc-voucher-studio' ) . '</p>';
+				$result = '<p class="woocommerce-error">' . esc_html__( 'Too many attempts. Please try again later.', 'voucher-captain' ) . '</p>';
 			} else {
 				$code    = wc_format_coupon_code( sanitize_text_field( wp_unslash( $_POST['wcvs_balance_code'] ) ) );
 				$voucher = $this->repo->get_by_code( $code ) ?? $this->repo->get_by_code( strtoupper( $code ) );
 				if ( ! $voucher ) {
-					$result = '<p class="woocommerce-error">' . esc_html__( 'Voucher code not found.', 'wc-voucher-studio' ) . '</p>';
+					$result = '<p class="woocommerce-error">' . esc_html__( 'Voucher code not found.', 'voucher-captain' ) . '</p>';
 				} else {
 					$result = '<div class="woocommerce-info wcvs-balance-result">' . esc_html(
 						sprintf(
 							/* translators: 1: status, 2: balance, 3: expiry */
-							__( 'Status: %1$s · Balance: %2$s · Valid until: %3$s', 'wc-voucher-studio' ),
+							__( 'Status: %1$s · Balance: %2$s · Valid until: %3$s', 'voucher-captain' ),
 							$voucher->status_label(),
 							html_entity_decode( wp_strip_all_tags( wc_price( $voucher->balance, array( 'currency' => $voucher->currency ) ) ) ),
-							$voucher->expires_at ? wp_date( $this->settings->date_format(), strtotime( $voucher->expires_at . ' UTC' ) ) : __( 'unlimited', 'wc-voucher-studio' )
+							$voucher->expires_at ? wp_date( $this->settings->date_format(), strtotime( $voucher->expires_at . ' UTC' ) ) : __( 'unlimited', 'voucher-captain' )
 						)
 					) . '</div>';
 				}
@@ -222,9 +222,9 @@ final class Downloads {
 		?>
 		<form method="post" class="wcvs-balance-form">
 			<?php wp_nonce_field( 'wcvs_balance', 'wcvs_balance_nonce' ); ?>
-			<label for="wcvs-balance-code"><?php esc_html_e( 'Voucher code', 'wc-voucher-studio' ); ?></label>
+			<label for="wcvs-balance-code"><?php esc_html_e( 'Voucher code', 'voucher-captain' ); ?></label>
 			<input type="text" id="wcvs-balance-code" name="wcvs_balance_code" required autocomplete="off" />
-			<button type="submit" class="button"><?php esc_html_e( 'Check balance', 'wc-voucher-studio' ); ?></button>
+			<button type="submit" class="button"><?php esc_html_e( 'Check balance', 'voucher-captain' ); ?></button>
 		</form>
 		<?php
 		return $result . ob_get_clean();

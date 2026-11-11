@@ -1,5 +1,5 @@
 /**
- * Voucher Studio – visual PDF template designer.
+ * Voucher Captain – visual PDF template designer.
  *
  * Data model (stored as JSON in the hidden #wcvs-design-json textarea):
  *   { page: { format, orientation, width, height, background, backgroundImageId, backgroundImage, backgroundFit },

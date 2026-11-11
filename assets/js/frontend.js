@@ -1,4 +1,4 @@
-/* Voucher Studio – product page: character counters, amount presets, personalised preview. */
+/* Voucher Captain – product page: character counters, amount presets, personalised preview. */
 ( function ( $ ) {
 	'use strict';
 	var cfg = window.wcvsFront || {};

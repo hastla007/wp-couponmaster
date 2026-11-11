@@ -1,4 +1,4 @@
-=== Voucher Studio for WooCommerce ===
+=== Voucher Captain ===
 Tags: woocommerce, gift card, voucher, pdf, coupon
 Requires at least: 6.4
 Tested up to: 6.8

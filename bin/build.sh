@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Builds an installable release ZIP: build/wc-voucher-studio.zip
+# Builds an installable release ZIP: build/voucher-captain.zip
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SLUG="wc-voucher-studio"
+SLUG="voucher-captain"
 OUT="$ROOT/build"
 DEST="$OUT/$SLUG"
 
@@ -14,7 +14,7 @@ php "$ROOT/bin/make-mo.php"
 
 # Copy plugin files (no dev tooling).
 cp -R "$ROOT/assets" "$ROOT/languages" "$ROOT/src" "$ROOT/templates" "$DEST/"
-cp "$ROOT/wc-voucher-studio.php" "$ROOT/uninstall.php" "$ROOT/readme.txt" "$ROOT/wpml-config.xml" "$ROOT/LICENSE" "$ROOT/composer.json" "$ROOT/composer.lock" "$DEST/"
+cp "$ROOT/voucher-captain.php" "$ROOT/uninstall.php" "$ROOT/readme.txt" "$ROOT/wpml-config.xml" "$ROOT/LICENSE" "$ROOT/composer.json" "$ROOT/composer.lock" "$DEST/"
 
 # Production dependencies only.
 ( cd "$DEST" && composer install --no-dev --optimize-autoloader --no-interaction --quiet )

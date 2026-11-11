@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name:       Voucher Studio for WooCommerce
+ * Plugin Name:       Voucher Captain
  * Plugin URI:        https://github.com/hastla007/wp-couponmaster
  * Description:       Sell personalised PDF vouchers, gift cards and event tickets with WooCommerce: visual PDF designer, recipient fields, scheduled delivery, balance-tracked gift cards, QR ticket check-in and code import.
  * Version:           1.0.0
@@ -10,7 +10,7 @@
  * WC requires at least: 8.0
  * WC tested up to:   10.3
  * Author:            CouponMaster
- * Text Domain:       wc-voucher-studio
+ * Text Domain:       voucher-captain
  * Domain Path:       /languages
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
@@ -63,7 +63,7 @@ add_action(
 				'admin_notices',
 				static function (): void {
 					if ( current_user_can( 'activate_plugins' ) ) {
-						echo '<div class="notice notice-error"><p>' . esc_html__( 'Voucher Studio for WooCommerce requires WooCommerce to be installed and active.', 'wc-voucher-studio' ) . '</p></div>';
+						echo '<div class="notice notice-error"><p>' . esc_html__( 'Voucher Captain requires WooCommerce to be installed and active.', 'voucher-captain' ) . '</p></div>';
 					}
 				}
 			);

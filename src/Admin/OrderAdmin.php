@@ -27,7 +27,7 @@ final class OrderAdmin {
 
 	public function meta_box(): void {
 		foreach ( array_unique( array( $this->screen_id(), 'shop_order' ) ) as $screen ) {
-			add_meta_box( 'wcvs-order-vouchers', __( 'Vouchers', 'wc-voucher-studio' ), array( $this, 'render' ), $screen, 'side', 'default' );
+			add_meta_box( 'wcvs-order-vouchers', __( 'Vouchers', 'voucher-captain' ), array( $this, 'render' ), $screen, 'side', 'default' );
 		}
 	}
 
@@ -56,8 +56,8 @@ final class OrderAdmin {
 		$vouchers = $this->repo->for_order( $order->get_id() );
 		if ( ! $vouchers ) {
 			echo '<p>' . ( $this->has_voucher_items( $order )
-				? esc_html__( 'No vouchers issued yet. Use the order action "Generate vouchers" to issue them now.', 'wc-voucher-studio' )
-				: esc_html__( 'This order contains no voucher products.', 'wc-voucher-studio' ) ) . '</p>';
+				? esc_html__( 'No vouchers issued yet. Use the order action "Generate vouchers" to issue them now.', 'voucher-captain' )
+				: esc_html__( 'This order contains no voucher products.', 'voucher-captain' ) ) . '</p>';
 			return;
 		}
 		echo '<ul class="wcvs-order-vouchers">';
@@ -66,7 +66,7 @@ final class OrderAdmin {
 			echo '<li><a href="' . esc_url( $detail ) . '"><code>' . esc_html( $v->code ) . '</code></a> ';
 			echo '<mark class="wcvs-status wcvs-status--' . esc_attr( $v->status ) . '"><span>' . esc_html( $v->status_label() ) . '</span></mark><br>';
 			if ( $v->is_multi_use() ) {
-				echo '<small>' . esc_html__( 'Balance:', 'wc-voucher-studio' ) . ' ' . wp_kses_post( wc_price( $v->balance, array( 'currency' => $v->currency ) ) ) . '</small> · ';
+				echo '<small>' . esc_html__( 'Balance:', 'voucher-captain' ) . ' ' . wp_kses_post( wc_price( $v->balance, array( 'currency' => $v->currency ) ) ) . '</small> · ';
 			}
 			if ( $v->recipient_email ) {
 				echo '<small>→ ' . esc_html( $v->recipient_email ) . '</small> · ';
@@ -79,8 +79,8 @@ final class OrderAdmin {
 	public function actions( array $actions, $order = null ): array {
 		$order = $order instanceof \WC_Order ? $order : self::order_from( $GLOBALS['theorder'] ?? ( $GLOBALS['post'] ?? null ) );
 		if ( $order && $this->has_voucher_items( $order ) ) {
-			$actions['wcvs_issue']  = __( 'Generate vouchers', 'wc-voucher-studio' );
-			$actions['wcvs_resend'] = __( 'Resend voucher emails', 'wc-voucher-studio' );
+			$actions['wcvs_issue']  = __( 'Generate vouchers', 'voucher-captain' );
+			$actions['wcvs_resend'] = __( 'Resend voucher emails', 'voucher-captain' );
 		}
 		return $actions;
 	}
@@ -88,7 +88,7 @@ final class OrderAdmin {
 	public function issue( \WC_Order $order ): void {
 		$created = $this->issuer->issue_for_order( $order, true );
 		if ( ! $created ) {
-			$order->add_order_note( __( 'Generate vouchers: all vouchers for this order already exist.', 'wc-voucher-studio' ) );
+			$order->add_order_note( __( 'Generate vouchers: all vouchers for this order already exist.', 'voucher-captain' ) );
 		}
 	}
 
@@ -103,6 +103,6 @@ final class OrderAdmin {
 			++$count;
 		}
 		/* translators: %d: number of vouchers */
-		$order->add_order_note( sprintf( __( 'Voucher emails resent for %d voucher(s).', 'wc-voucher-studio' ), $count ) );
+		$order->add_order_note( sprintf( __( 'Voucher emails resent for %d voucher(s).', 'voucher-captain' ), $count ) );
 	}
 }

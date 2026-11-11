@@ -2,7 +2,7 @@
 /**
  * Ticket / voucher QR landing page.
  *
- * Override: yourtheme/woocommerce/wc-voucher-studio/ticket-status.php
+ * Override: yourtheme/woocommerce/voucher-captain/ticket-status.php
  *
  * @var \WCVS\Voucher|null $voucher
  * @var array|null         $data
@@ -25,7 +25,7 @@ $state  = $data['state'] ?? 'error';
 	<meta charset="<?php bloginfo( 'charset' ); ?>">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<meta name="robots" content="noindex,nofollow">
-	<title><?php esc_html_e( 'Ticket status', 'wc-voucher-studio' ); ?> – <?php bloginfo( 'name' ); ?></title>
+	<title><?php esc_html_e( 'Ticket status', 'voucher-captain' ); ?> – <?php bloginfo( 'name' ); ?></title>
 	<style>
 		body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f3f4f6;margin:0;padding:24px;color:#1f2933}
 		.card{max-width:420px;margin:0 auto;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);overflow:hidden}
@@ -44,8 +44,8 @@ $state  = $data['state'] ?? 'error';
 <body>
 <main class="card" role="main">
 	<?php if ( ! $voucher || ( ! $staff && ! $public ) ) : ?>
-		<div class="state" style="background:<?php echo esc_attr( $colors['error'] ); ?>"><?php esc_html_e( 'Unknown ticket', 'wc-voucher-studio' ); ?></div>
-		<div class="body"><p><?php esc_html_e( 'This code could not be verified.', 'wc-voucher-studio' ); ?></p></div>
+		<div class="state" style="background:<?php echo esc_attr( $colors['error'] ); ?>"><?php esc_html_e( 'Unknown ticket', 'voucher-captain' ); ?></div>
+		<div class="body"><p><?php esc_html_e( 'This code could not be verified.', 'voucher-captain' ); ?></p></div>
 	<?php else : ?>
 		<div class="state" role="status" style="background:<?php echo esc_attr( $colors[ $state ] ?? $colors['error'] ); ?>"><?php echo esc_html( $data['message'] ); ?></div>
 		<div class="body">
@@ -53,22 +53,22 @@ $state  = $data['state'] ?? 'error';
 				<div class="notice" role="alert"><?php echo esc_html( $notice ); ?></div>
 			<?php endif; ?>
 			<dl>
-				<dt><?php esc_html_e( 'Product', 'wc-voucher-studio' ); ?></dt><dd><?php echo esc_html( $data['product'] ); ?></dd>
+				<dt><?php esc_html_e( 'Product', 'voucher-captain' ); ?></dt><dd><?php echo esc_html( $data['product'] ); ?></dd>
 				<?php if ( $voucher->is_ticket() ) : ?>
-					<dt><?php esc_html_e( 'Admissions', 'wc-voucher-studio' ); ?></dt><dd><?php echo esc_html( $data['checkins'] . ' / ' . $data['max_checkins'] ); ?></dd>
+					<dt><?php esc_html_e( 'Admissions', 'voucher-captain' ); ?></dt><dd><?php echo esc_html( $data['checkins'] . ' / ' . $data['max_checkins'] ); ?></dd>
 				<?php endif; ?>
 				<?php if ( $data['expires'] ) : ?>
-					<dt><?php esc_html_e( 'Valid until', 'wc-voucher-studio' ); ?></dt><dd><?php echo esc_html( $data['expires'] ); ?></dd>
+					<dt><?php esc_html_e( 'Valid until', 'voucher-captain' ); ?></dt><dd><?php echo esc_html( $data['expires'] ); ?></dd>
 				<?php endif; ?>
 				<?php if ( $staff ) : ?>
-					<dt><?php esc_html_e( 'Code', 'wc-voucher-studio' ); ?></dt><dd><?php echo esc_html( $data['code'] ); ?></dd>
-					<dt><?php esc_html_e( 'Holder', 'wc-voucher-studio' ); ?></dt><dd><?php echo esc_html( $data['holder'] ); ?></dd>
-					<dt><?php esc_html_e( 'Order', 'wc-voucher-studio' ); ?></dt><dd>#<?php echo esc_html( $data['order'] ); ?></dd>
+					<dt><?php esc_html_e( 'Code', 'voucher-captain' ); ?></dt><dd><?php echo esc_html( $data['code'] ); ?></dd>
+					<dt><?php esc_html_e( 'Holder', 'voucher-captain' ); ?></dt><dd><?php echo esc_html( $data['holder'] ); ?></dd>
+					<dt><?php esc_html_e( 'Order', 'voucher-captain' ); ?></dt><dd>#<?php echo esc_html( $data['order'] ); ?></dd>
 					<?php if ( $data['multi_use'] ) : ?>
-						<dt><?php esc_html_e( 'Balance', 'wc-voucher-studio' ); ?></dt><dd><?php echo esc_html( $data['balance_html'] ); ?></dd>
+						<dt><?php esc_html_e( 'Balance', 'voucher-captain' ); ?></dt><dd><?php echo esc_html( $data['balance_html'] ); ?></dd>
 					<?php endif; ?>
 					<?php if ( $data['last_checkin'] ) : ?>
-						<dt><?php esc_html_e( 'Last check-in', 'wc-voucher-studio' ); ?></dt><dd><?php echo esc_html( $data['last_checkin'] ); ?></dd>
+						<dt><?php esc_html_e( 'Last check-in', 'voucher-captain' ); ?></dt><dd><?php echo esc_html( $data['last_checkin'] ); ?></dd>
 					<?php endif; ?>
 				<?php endif; ?>
 			</dl>
@@ -76,14 +76,14 @@ $state  = $data['state'] ?? 'error';
 				<form method="post">
 					<?php wp_nonce_field( 'wcvs_checkin_' . $voucher->id, 'wcvs_checkin_nonce' ); ?>
 					<?php if ( $voucher->max_checkins - $voucher->checkins > 1 ) : ?>
-						<label class="screen-reader-text" for="wcvs-count"><?php esc_html_e( 'Admissions', 'wc-voucher-studio' ); ?></label>
+						<label class="screen-reader-text" for="wcvs-count"><?php esc_html_e( 'Admissions', 'voucher-captain' ); ?></label>
 						<input type="number" id="wcvs-count" name="count" value="1" min="1" max="<?php echo esc_attr( (string) ( $voucher->max_checkins - $voucher->checkins ) ); ?>">
 					<?php endif; ?>
-					<button type="submit"><?php esc_html_e( 'Check in', 'wc-voucher-studio' ); ?></button>
+					<button type="submit"><?php esc_html_e( 'Check in', 'voucher-captain' ); ?></button>
 				</form>
 			<?php endif; ?>
 			<?php if ( $staff ) : ?>
-				<p><a href="<?php echo esc_url( $data['admin_url'] ); ?>"><?php esc_html_e( 'Open in admin', 'wc-voucher-studio' ); ?></a> · <a href="<?php echo esc_url( admin_url( 'admin.php?page=wcvs-scanner' ) ); ?>"><?php esc_html_e( 'Scanner', 'wc-voucher-studio' ); ?></a></p>
+				<p><a href="<?php echo esc_url( $data['admin_url'] ); ?>"><?php esc_html_e( 'Open in admin', 'voucher-captain' ); ?></a> · <a href="<?php echo esc_url( admin_url( 'admin.php?page=wcvs-scanner' ) ); ?>"><?php esc_html_e( 'Scanner', 'voucher-captain' ); ?></a></p>
 			<?php endif; ?>
 		</div>
 	<?php endif; ?>

@@ -29,7 +29,7 @@ final class CouponManager {
 		$coupon->set_description(
 			sprintf(
 				/* translators: 1: voucher type, 2: order number */
-				__( '%1$s from order #%2$s (Voucher Studio)', 'wc-voucher-studio' ),
+				__( '%1$s from order #%2$s (Voucher Captain)', 'voucher-captain' ),
 				Voucher::types()[ $voucher->type ] ?? $voucher->type,
 				$voucher->order() ? $voucher->order()->get_order_number() : $voucher->order_id
 			)
@@ -132,13 +132,13 @@ final class CouponManager {
 			return $valid;
 		}
 		if ( Voucher::STATUS_VOID === $voucher->status ) {
-			throw new \Exception( esc_html__( 'This voucher has been cancelled.', 'wc-voucher-studio' ), 9001 );
+			throw new \Exception( esc_html__( 'This voucher has been cancelled.', 'voucher-captain' ), 9001 );
 		}
 		if ( Voucher::STATUS_REDEEMED === $voucher->status || ( $voucher->is_multi_use() && $voucher->balance <= 0 ) ) {
-			throw new \Exception( esc_html__( 'This voucher has already been fully redeemed.', 'wc-voucher-studio' ), 9002 );
+			throw new \Exception( esc_html__( 'This voucher has already been fully redeemed.', 'voucher-captain' ), 9002 );
 		}
 		if ( Voucher::STATUS_EXPIRED === $voucher->status || $voucher->is_expired() ) {
-			throw new \Exception( esc_html__( 'This voucher has expired.', 'wc-voucher-studio' ), 9003 );
+			throw new \Exception( esc_html__( 'This voucher has expired.', 'voucher-captain' ), 9003 );
 		}
 		return $valid;
 	}
@@ -153,7 +153,7 @@ final class CouponManager {
 				echo '<tr class="wcvs-balance"><th>' . esc_html(
 					sprintf(
 						/* translators: %s: voucher code */
-						__( 'Voucher %s balance', 'wc-voucher-studio' ),
+						__( 'Voucher %s balance', 'voucher-captain' ),
 						$voucher->code
 					)
 				) . '</th><td>' . wp_kses_post( wc_price( $voucher->balance, array( 'currency' => $voucher->currency ) ) ) . '</td></tr>';
@@ -207,7 +207,7 @@ final class CouponManager {
 				'redeemed',
 				$amount,
 				/* translators: %s: order number */
-				sprintf( __( 'Used in order #%s', 'wc-voucher-studio' ), $order->get_order_number() ),
+				sprintf( __( 'Used in order #%s', 'voucher-captain' ), $order->get_order_number() ),
 				$order->get_id()
 			);
 			$applied[ $code ] = $amount;
@@ -215,7 +215,7 @@ final class CouponManager {
 			$order->add_order_note(
 				sprintf(
 					/* translators: 1: code, 2: amount, 3: remaining balance */
-					__( 'Voucher %1$s: %2$s deducted, remaining balance %3$s.', 'wc-voucher-studio' ),
+					__( 'Voucher %1$s: %2$s deducted, remaining balance %3$s.', 'voucher-captain' ),
 					$voucher->code,
 					wc_price( $amount, array( 'currency' => $voucher->currency ) ),
 					wc_price( $voucher->balance, array( 'currency' => $voucher->currency ) )
@@ -244,7 +244,7 @@ final class CouponManager {
 				'restored',
 				(float) $amount,
 				/* translators: %s: order number */
-				sprintf( __( 'Order #%s cancelled or refunded', 'wc-voucher-studio' ), $order->get_order_number() ),
+				sprintf( __( 'Order #%s cancelled or refunded', 'voucher-captain' ), $order->get_order_number() ),
 				$order->get_id()
 			);
 		}

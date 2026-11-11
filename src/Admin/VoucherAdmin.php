@@ -34,14 +34,14 @@ final class VoucherAdmin {
 			return;
 		}
 		$messages = array(
-			'saved'       => __( 'Voucher saved.', 'wc-voucher-studio' ),
-			'resent'      => __( 'Voucher email sent.', 'wc-voucher-studio' ),
-			'voided'      => __( 'Voucher voided.', 'wc-voucher-studio' ),
-			'reactivated' => __( 'Voucher reactivated.', 'wc-voucher-studio' ),
-			'adjusted'    => __( 'Balance updated.', 'wc-voucher-studio' ),
-			'bulk'        => __( 'Bulk action completed.', 'wc-voucher-studio' ),
-			'issued'      => __( 'Vouchers generated.', 'wc-voucher-studio' ),
-			'none'        => __( 'No new vouchers were needed for this order.', 'wc-voucher-studio' ),
+			'saved'       => __( 'Voucher saved.', 'voucher-captain' ),
+			'resent'      => __( 'Voucher email sent.', 'voucher-captain' ),
+			'voided'      => __( 'Voucher voided.', 'voucher-captain' ),
+			'reactivated' => __( 'Voucher reactivated.', 'voucher-captain' ),
+			'adjusted'    => __( 'Balance updated.', 'voucher-captain' ),
+			'bulk'        => __( 'Bulk action completed.', 'voucher-captain' ),
+			'issued'      => __( 'Vouchers generated.', 'voucher-captain' ),
+			'none'        => __( 'No new vouchers were needed for this order.', 'voucher-captain' ),
 		);
 		$key = sanitize_key( $_GET['wcvs_msg'] ); // phpcs:ignore WordPress.Security.NonceVerification
 		if ( isset( $messages[ $key ] ) ) {
@@ -51,7 +51,7 @@ final class VoucherAdmin {
 
 	public function page(): void {
 		if ( ! $this->can() ) {
-			wp_die( esc_html__( 'You are not allowed to do this.', 'wc-voucher-studio' ) );
+			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ) );
 		}
 		$id = absint( $_GET['voucher'] ?? 0 ); // phpcs:ignore WordPress.Security.NonceVerification
 		if ( $id ) {
@@ -60,8 +60,8 @@ final class VoucherAdmin {
 		}
 		$table = new VouchersListTable( $this->repo );
 		$table->prepare_items();
-		echo '<div class="wrap wcvs-wrap"><h1 class="wp-heading-inline">' . esc_html__( 'Issued vouchers', 'wc-voucher-studio' ) . '</h1>';
-		echo ' <a class="page-title-action" href="' . esc_url( admin_url( 'admin.php?page=wcvs-scanner' ) ) . '">' . esc_html__( 'Open scanner', 'wc-voucher-studio' ) . '</a><hr class="wp-header-end">';
+		echo '<div class="wrap wcvs-wrap"><h1 class="wp-heading-inline">' . esc_html__( 'Issued vouchers', 'voucher-captain' ) . '</h1>';
+		echo ' <a class="page-title-action" href="' . esc_url( admin_url( 'admin.php?page=wcvs-scanner' ) ) . '">' . esc_html__( 'Open scanner', 'voucher-captain' ) . '</a><hr class="wp-header-end">';
 		$table->views();
 		// Single GET form (like core list tables): search, filters, pagination and bulk actions.
 		echo '<form method="get"><input type="hidden" name="page" value="wcvs-vouchers" />';
@@ -69,7 +69,7 @@ final class VoucherAdmin {
 			echo '<input type="hidden" name="status" value="' . esc_attr( sanitize_key( $_GET['status'] ) ) . '" />'; // phpcs:ignore WordPress.Security.NonceVerification
 		}
 		wp_nonce_field( 'wcvs_bulk', 'wcvs_bulk_nonce', false );
-		$table->search_box( __( 'Search code, email, name, order', 'wc-voucher-studio' ), 'wcvs-search' );
+		$table->search_box( __( 'Search code, email, name, order', 'voucher-captain' ), 'wcvs-search' );
 		$table->display();
 		echo '</form></div>';
 	}
@@ -77,7 +77,7 @@ final class VoucherAdmin {
 	private function detail( int $id ): void {
 		$v = $this->repo->get( $id );
 		if ( ! $v ) {
-			echo '<div class="wrap"><p>' . esc_html__( 'Voucher not found.', 'wc-voucher-studio' ) . '</p></div>';
+			echo '<div class="wrap"><p>' . esc_html__( 'Voucher not found.', 'voucher-captain' ) . '</p></div>';
 			return;
 		}
 		$order   = $v->order();
@@ -94,96 +94,96 @@ final class VoucherAdmin {
 		};
 		?>
 		<div class="wrap wcvs-wrap">
-			<h1 class="wp-heading-inline"><?php echo esc_html( sprintf( /* translators: %s: code */ __( 'Voucher %s', 'wc-voucher-studio' ), $v->code ) ); ?></h1>
-			<a class="page-title-action" href="<?php echo esc_url( $back ); ?>"><?php esc_html_e( 'Back to list', 'wc-voucher-studio' ); ?></a>
+			<h1 class="wp-heading-inline"><?php echo esc_html( sprintf( /* translators: %s: code */ __( 'Voucher %s', 'voucher-captain' ), $v->code ) ); ?></h1>
+			<a class="page-title-action" href="<?php echo esc_url( $back ); ?>"><?php esc_html_e( 'Back to list', 'voucher-captain' ); ?></a>
 			<hr class="wp-header-end">
 
 			<div class="wcvs-detail-grid">
 				<div class="wcvs-card">
-					<h2><?php esc_html_e( 'Overview', 'wc-voucher-studio' ); ?></h2>
+					<h2><?php esc_html_e( 'Overview', 'voucher-captain' ); ?></h2>
 					<table class="widefat striped" role="presentation">
-						<tr><th><?php esc_html_e( 'Status', 'wc-voucher-studio' ); ?></th><td><mark class="wcvs-status wcvs-status--<?php echo esc_attr( $v->status ); ?>"><span><?php echo esc_html( $v->status_label() ); ?></span></mark></td></tr>
-						<tr><th><?php esc_html_e( 'Type', 'wc-voucher-studio' ); ?></th><td><?php echo esc_html( Voucher::types()[ $v->type ] ?? $v->type ); ?></td></tr>
-						<tr><th><?php esc_html_e( 'Product', 'wc-voucher-studio' ); ?></th><td><?php echo $product ? '<a href="' . esc_url( get_edit_post_link( $v->product_id ) ?: '' ) . '">' . esc_html( $product->get_name() ) . '</a>' : '–'; ?></td></tr>
-						<tr><th><?php esc_html_e( 'Order', 'wc-voucher-studio' ); ?></th><td><?php echo $order ? '<a href="' . esc_url( $order->get_edit_order_url() ) . '">#' . esc_html( $order->get_order_number() ) . '</a>' : '–'; ?></td></tr>
-						<tr><th><?php esc_html_e( 'Value', 'wc-voucher-studio' ); ?></th><td><?php echo 'percent' === $v->discount_type ? esc_html( $v->initial_amount . '%' ) : wp_kses_post( wc_price( $v->initial_amount, array( 'currency' => $v->currency ) ) ); ?></td></tr>
+						<tr><th><?php esc_html_e( 'Status', 'voucher-captain' ); ?></th><td><mark class="wcvs-status wcvs-status--<?php echo esc_attr( $v->status ); ?>"><span><?php echo esc_html( $v->status_label() ); ?></span></mark></td></tr>
+						<tr><th><?php esc_html_e( 'Type', 'voucher-captain' ); ?></th><td><?php echo esc_html( Voucher::types()[ $v->type ] ?? $v->type ); ?></td></tr>
+						<tr><th><?php esc_html_e( 'Product', 'voucher-captain' ); ?></th><td><?php echo $product ? '<a href="' . esc_url( get_edit_post_link( $v->product_id ) ?: '' ) . '">' . esc_html( $product->get_name() ) . '</a>' : '–'; ?></td></tr>
+						<tr><th><?php esc_html_e( 'Order', 'voucher-captain' ); ?></th><td><?php echo $order ? '<a href="' . esc_url( $order->get_edit_order_url() ) . '">#' . esc_html( $order->get_order_number() ) . '</a>' : '–'; ?></td></tr>
+						<tr><th><?php esc_html_e( 'Value', 'voucher-captain' ); ?></th><td><?php echo 'percent' === $v->discount_type ? esc_html( $v->initial_amount . '%' ) : wp_kses_post( wc_price( $v->initial_amount, array( 'currency' => $v->currency ) ) ); ?></td></tr>
 						<?php if ( $v->is_multi_use() ) : ?>
-							<tr><th><?php esc_html_e( 'Balance', 'wc-voucher-studio' ); ?></th><td><strong><?php echo wp_kses_post( wc_price( $v->balance, array( 'currency' => $v->currency ) ) ); ?></strong></td></tr>
+							<tr><th><?php esc_html_e( 'Balance', 'voucher-captain' ); ?></th><td><strong><?php echo wp_kses_post( wc_price( $v->balance, array( 'currency' => $v->currency ) ) ); ?></strong></td></tr>
 						<?php endif; ?>
 						<?php if ( $v->is_ticket() ) : ?>
-							<tr><th><?php esc_html_e( 'Check-ins', 'wc-voucher-studio' ); ?></th><td><?php echo esc_html( $v->checkins . ' / ' . $v->max_checkins ); ?></td></tr>
+							<tr><th><?php esc_html_e( 'Check-ins', 'voucher-captain' ); ?></th><td><?php echo esc_html( $v->checkins . ' / ' . $v->max_checkins ); ?></td></tr>
 						<?php endif; ?>
-						<tr><th><?php esc_html_e( 'Usage', 'wc-voucher-studio' ); ?></th><td><?php echo esc_html( array( 'single' => __( 'Single use', 'wc-voucher-studio' ), 'balance' => __( 'Stored balance', 'wc-voucher-studio' ), 'unlimited' => __( 'Reusable', 'wc-voucher-studio' ) )[ $v->usage_mode ] ?? $v->usage_mode ); ?></td></tr>
-						<tr><th><?php esc_html_e( 'Coupon', 'wc-voucher-studio' ); ?></th><td><?php echo $v->coupon_id ? '<a href="' . esc_url( get_edit_post_link( $v->coupon_id ) ?: '' ) . '">#' . esc_html( (string) $v->coupon_id ) . '</a>' : esc_html__( 'none (ticket)', 'wc-voucher-studio' ); ?></td></tr>
-						<tr><th><?php esc_html_e( 'Delivered', 'wc-voucher-studio' ); ?></th><td><?php echo $v->delivered_at ? esc_html( get_date_from_gmt( $v->delivered_at, get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ) : '–'; ?></td></tr>
-						<tr><th><?php esc_html_e( 'Buyer', 'wc-voucher-studio' ); ?></th><td><?php echo esc_html( trim( $v->buyer_name . ' <' . $v->buyer_email . '>' ) ); ?></td></tr>
+						<tr><th><?php esc_html_e( 'Usage', 'voucher-captain' ); ?></th><td><?php echo esc_html( array( 'single' => __( 'Single use', 'voucher-captain' ), 'balance' => __( 'Stored balance', 'voucher-captain' ), 'unlimited' => __( 'Reusable', 'voucher-captain' ) )[ $v->usage_mode ] ?? $v->usage_mode ); ?></td></tr>
+						<tr><th><?php esc_html_e( 'Coupon', 'voucher-captain' ); ?></th><td><?php echo $v->coupon_id ? '<a href="' . esc_url( get_edit_post_link( $v->coupon_id ) ?: '' ) . '">#' . esc_html( (string) $v->coupon_id ) . '</a>' : esc_html__( 'none (ticket)', 'voucher-captain' ); ?></td></tr>
+						<tr><th><?php esc_html_e( 'Delivered', 'voucher-captain' ); ?></th><td><?php echo $v->delivered_at ? esc_html( get_date_from_gmt( $v->delivered_at, get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ) : '–'; ?></td></tr>
+						<tr><th><?php esc_html_e( 'Buyer', 'voucher-captain' ); ?></th><td><?php echo esc_html( trim( $v->buyer_name . ' <' . $v->buyer_email . '>' ) ); ?></td></tr>
 					</table>
 					<p class="wcvs-actions">
-						<a class="button" target="_blank" href="<?php echo esc_url( wcvs()->downloads->admin_url( $v ) ); ?>"><?php esc_html_e( 'View PDF', 'wc-voucher-studio' ); ?></a>
+						<a class="button" target="_blank" href="<?php echo esc_url( wcvs()->downloads->admin_url( $v ) ); ?>"><?php esc_html_e( 'View PDF', 'voucher-captain' ); ?></a>
 						<?php
-						$form( 'resend_buyer', __( 'Email buyer', 'wc-voucher-studio' ) );
+						$form( 'resend_buyer', __( 'Email buyer', 'voucher-captain' ) );
 						if ( is_email( $v->recipient_email ) ) {
-							$form( 'resend_recipient', __( 'Email recipient', 'wc-voucher-studio' ) );
+							$form( 'resend_recipient', __( 'Email recipient', 'voucher-captain' ) );
 						}
 						if ( Voucher::STATUS_VOID === $v->status ) {
-							$form( 'reactivate', __( 'Reactivate', 'wc-voucher-studio' ) );
+							$form( 'reactivate', __( 'Reactivate', 'voucher-captain' ) );
 						} else {
-							$form( 'void', __( 'Void voucher', 'wc-voucher-studio' ), 'button button-link-delete' );
+							$form( 'void', __( 'Void voucher', 'voucher-captain' ), 'button button-link-delete' );
 						}
 						?>
 					</p>
 				</div>
 
 				<div class="wcvs-card">
-					<h2><?php esc_html_e( 'Edit', 'wc-voucher-studio' ); ?></h2>
+					<h2><?php esc_html_e( 'Edit', 'voucher-captain' ); ?></h2>
 					<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 						<input type="hidden" name="action" value="wcvs_voucher_action" />
 						<input type="hidden" name="do" value="save" />
 						<input type="hidden" name="id" value="<?php echo esc_attr( (string) $v->id ); ?>" />
 						<?php wp_nonce_field( 'wcvs_voucher_' . $v->id ); ?>
 						<table class="form-table" role="presentation">
-							<tr><th><label for="wcvs-rn"><?php esc_html_e( 'Recipient name', 'wc-voucher-studio' ); ?></label></th><td><input class="regular-text" id="wcvs-rn" name="recipient_name" value="<?php echo esc_attr( $v->recipient_name ); ?>" /></td></tr>
-							<tr><th><label for="wcvs-re"><?php esc_html_e( 'Recipient email', 'wc-voucher-studio' ); ?></label></th><td><input class="regular-text" type="email" id="wcvs-re" name="recipient_email" value="<?php echo esc_attr( $v->recipient_email ); ?>" /></td></tr>
-							<tr><th><label for="wcvs-msg"><?php esc_html_e( 'Message', 'wc-voucher-studio' ); ?></label></th><td><textarea class="large-text" rows="3" id="wcvs-msg" name="message"><?php echo esc_textarea( $v->message ); ?></textarea></td></tr>
-							<tr><th><label for="wcvs-send"><?php esc_html_e( 'Send to', 'wc-voucher-studio' ); ?></label></th><td>
+							<tr><th><label for="wcvs-rn"><?php esc_html_e( 'Recipient name', 'voucher-captain' ); ?></label></th><td><input class="regular-text" id="wcvs-rn" name="recipient_name" value="<?php echo esc_attr( $v->recipient_name ); ?>" /></td></tr>
+							<tr><th><label for="wcvs-re"><?php esc_html_e( 'Recipient email', 'voucher-captain' ); ?></label></th><td><input class="regular-text" type="email" id="wcvs-re" name="recipient_email" value="<?php echo esc_attr( $v->recipient_email ); ?>" /></td></tr>
+							<tr><th><label for="wcvs-msg"><?php esc_html_e( 'Message', 'voucher-captain' ); ?></label></th><td><textarea class="large-text" rows="3" id="wcvs-msg" name="message"><?php echo esc_textarea( $v->message ); ?></textarea></td></tr>
+							<tr><th><label for="wcvs-send"><?php esc_html_e( 'Send to', 'voucher-captain' ); ?></label></th><td>
 								<select id="wcvs-send" name="send_to">
-									<?php foreach ( array( 'buyer' => __( 'Buyer', 'wc-voucher-studio' ), 'recipient' => __( 'Recipient', 'wc-voucher-studio' ), 'both' => __( 'Both', 'wc-voucher-studio' ) ) as $key => $label ) : ?>
+									<?php foreach ( array( 'buyer' => __( 'Buyer', 'voucher-captain' ), 'recipient' => __( 'Recipient', 'voucher-captain' ), 'both' => __( 'Both', 'voucher-captain' ) ) as $key => $label ) : ?>
 										<option value="<?php echo esc_attr( $key ); ?>" <?php selected( $v->send_to, $key ); ?>><?php echo esc_html( $label ); ?></option>
 									<?php endforeach; ?>
 								</select>
 							</td></tr>
-							<tr><th><label for="wcvs-exp"><?php esc_html_e( 'Expiry date', 'wc-voucher-studio' ); ?></label></th><td><input type="date" id="wcvs-exp" name="expires_at" value="<?php echo esc_attr( $v->expires_at ? get_date_from_gmt( $v->expires_at, 'Y-m-d' ) : '' ); ?>" /> <span class="description"><?php esc_html_e( 'Empty = never', 'wc-voucher-studio' ); ?></span></td></tr>
-							<tr><th><label for="wcvs-del"><?php esc_html_e( 'Delivery date', 'wc-voucher-studio' ); ?></label></th><td><input type="datetime-local" id="wcvs-del" name="delivery_at" value="<?php echo esc_attr( $v->delivery_at && ! $v->delivered_at ? get_date_from_gmt( $v->delivery_at, 'Y-m-d\TH:i' ) : '' ); ?>" /> <span class="description"><?php esc_html_e( 'Set a future date to (re)schedule delivery.', 'wc-voucher-studio' ); ?></span></td></tr>
+							<tr><th><label for="wcvs-exp"><?php esc_html_e( 'Expiry date', 'voucher-captain' ); ?></label></th><td><input type="date" id="wcvs-exp" name="expires_at" value="<?php echo esc_attr( $v->expires_at ? get_date_from_gmt( $v->expires_at, 'Y-m-d' ) : '' ); ?>" /> <span class="description"><?php esc_html_e( 'Empty = never', 'voucher-captain' ); ?></span></td></tr>
+							<tr><th><label for="wcvs-del"><?php esc_html_e( 'Delivery date', 'voucher-captain' ); ?></label></th><td><input type="datetime-local" id="wcvs-del" name="delivery_at" value="<?php echo esc_attr( $v->delivery_at && ! $v->delivered_at ? get_date_from_gmt( $v->delivery_at, 'Y-m-d\TH:i' ) : '' ); ?>" /> <span class="description"><?php esc_html_e( 'Set a future date to (re)schedule delivery.', 'voucher-captain' ); ?></span></td></tr>
 							<?php if ( $v->is_ticket() ) : ?>
-								<tr><th><label for="wcvs-mc"><?php esc_html_e( 'Admissions', 'wc-voucher-studio' ); ?></label></th><td><input type="number" min="1" id="wcvs-mc" name="max_checkins" value="<?php echo esc_attr( (string) $v->max_checkins ); ?>" /></td></tr>
+								<tr><th><label for="wcvs-mc"><?php esc_html_e( 'Admissions', 'voucher-captain' ); ?></label></th><td><input type="number" min="1" id="wcvs-mc" name="max_checkins" value="<?php echo esc_attr( (string) $v->max_checkins ); ?>" /></td></tr>
 							<?php endif; ?>
 						</table>
-						<?php submit_button( __( 'Save voucher', 'wc-voucher-studio' ) ); ?>
+						<?php submit_button( __( 'Save voucher', 'voucher-captain' ) ); ?>
 					</form>
 
 					<?php if ( $v->is_multi_use() || 'single' !== $v->usage_mode ) : ?>
-						<h2><?php esc_html_e( 'Adjust balance', 'wc-voucher-studio' ); ?></h2>
+						<h2><?php esc_html_e( 'Adjust balance', 'voucher-captain' ); ?></h2>
 						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="wcvs-balance-adjust">
 							<input type="hidden" name="action" value="wcvs_voucher_action" />
 							<input type="hidden" name="do" value="adjust" />
 							<input type="hidden" name="id" value="<?php echo esc_attr( (string) $v->id ); ?>" />
 							<?php wp_nonce_field( 'wcvs_voucher_' . $v->id ); ?>
-							<label class="screen-reader-text" for="wcvs-adj-mode"><?php esc_html_e( 'Mode', 'wc-voucher-studio' ); ?></label>
+							<label class="screen-reader-text" for="wcvs-adj-mode"><?php esc_html_e( 'Mode', 'voucher-captain' ); ?></label>
 							<select name="mode" id="wcvs-adj-mode">
-								<option value="subtract"><?php esc_html_e( 'Deduct', 'wc-voucher-studio' ); ?></option>
-								<option value="add"><?php esc_html_e( 'Add', 'wc-voucher-studio' ); ?></option>
-								<option value="set"><?php esc_html_e( 'Set to', 'wc-voucher-studio' ); ?></option>
+								<option value="subtract"><?php esc_html_e( 'Deduct', 'voucher-captain' ); ?></option>
+								<option value="add"><?php esc_html_e( 'Add', 'voucher-captain' ); ?></option>
+								<option value="set"><?php esc_html_e( 'Set to', 'voucher-captain' ); ?></option>
 							</select>
-							<label class="screen-reader-text" for="wcvs-adj-amount"><?php esc_html_e( 'Amount', 'wc-voucher-studio' ); ?></label>
+							<label class="screen-reader-text" for="wcvs-adj-amount"><?php esc_html_e( 'Amount', 'voucher-captain' ); ?></label>
 							<input type="text" class="wc_input_price short" id="wcvs-adj-amount" name="amount" required />
-							<label class="screen-reader-text" for="wcvs-adj-note"><?php esc_html_e( 'Note', 'wc-voucher-studio' ); ?></label>
-							<input type="text" id="wcvs-adj-note" name="note" placeholder="<?php esc_attr_e( 'Note (e.g. redeemed in store)', 'wc-voucher-studio' ); ?>" />
-							<button type="submit" class="button"><?php esc_html_e( 'Apply', 'wc-voucher-studio' ); ?></button>
+							<label class="screen-reader-text" for="wcvs-adj-note"><?php esc_html_e( 'Note', 'voucher-captain' ); ?></label>
+							<input type="text" id="wcvs-adj-note" name="note" placeholder="<?php esc_attr_e( 'Note (e.g. redeemed in store)', 'voucher-captain' ); ?>" />
+							<button type="submit" class="button"><?php esc_html_e( 'Apply', 'voucher-captain' ); ?></button>
 						</form>
 					<?php endif; ?>
 
 					<?php if ( $v->fields ) : ?>
-						<h2><?php esc_html_e( 'Personalisation', 'wc-voucher-studio' ); ?></h2>
+						<h2><?php esc_html_e( 'Personalisation', 'voucher-captain' ); ?></h2>
 						<table class="widefat striped" role="presentation">
 							<?php foreach ( $v->fields as $key => $field ) : ?>
 								<tr><th><?php echo esc_html( $field['label'] ?? $key ); ?> <code>{field:<?php echo esc_html( $key ); ?>}</code></th><td><?php echo esc_html( $field['value'] ?? '' ); ?></td></tr>
@@ -194,9 +194,9 @@ final class VoucherAdmin {
 			</div>
 
 			<div class="wcvs-card">
-				<h2><?php esc_html_e( 'History', 'wc-voucher-studio' ); ?></h2>
+				<h2><?php esc_html_e( 'History', 'voucher-captain' ); ?></h2>
 				<table class="widefat striped">
-					<thead><tr><th><?php esc_html_e( 'Date', 'wc-voucher-studio' ); ?></th><th><?php esc_html_e( 'Event', 'wc-voucher-studio' ); ?></th><th><?php esc_html_e( 'Amount', 'wc-voucher-studio' ); ?></th><th><?php esc_html_e( 'Balance after', 'wc-voucher-studio' ); ?></th><th><?php esc_html_e( 'Order', 'wc-voucher-studio' ); ?></th><th><?php esc_html_e( 'User', 'wc-voucher-studio' ); ?></th><th><?php esc_html_e( 'Note', 'wc-voucher-studio' ); ?></th></tr></thead>
+					<thead><tr><th><?php esc_html_e( 'Date', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'Event', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'Amount', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'Balance after', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'Order', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'User', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'Note', 'voucher-captain' ); ?></th></tr></thead>
 					<tbody>
 					<?php
 					$labels = VoucherRepository::event_labels();
@@ -233,11 +233,11 @@ final class VoucherAdmin {
 		$id = absint( $_POST['id'] ?? 0 );
 		check_admin_referer( 'wcvs_voucher_' . $id );
 		if ( ! $this->can() ) {
-			wp_die( esc_html__( 'You are not allowed to do this.', 'wc-voucher-studio' ), 403 );
+			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
 		$v = $this->repo->get( $id );
 		if ( ! $v ) {
-			wp_die( esc_html__( 'Voucher not found.', 'wc-voucher-studio' ), 404 );
+			wp_die( esc_html__( 'Voucher not found.', 'voucher-captain' ), 404 );
 		}
 		$do = sanitize_key( $_POST['do'] ?? '' );
 		switch ( $do ) {
@@ -251,7 +251,7 @@ final class VoucherAdmin {
 				$this->redirect( 'resent', $id );
 				break;
 			case 'void':
-				wcvs()->issuer->void( $v, __( 'Voided by admin', 'wc-voucher-studio' ) );
+				wcvs()->issuer->void( $v, __( 'Voided by admin', 'voucher-captain' ) );
 				$this->redirect( 'voided', $id );
 				break;
 			case 'reactivate':
@@ -328,7 +328,7 @@ final class VoucherAdmin {
 		}
 		check_admin_referer( 'wcvs_bulk', 'wcvs_bulk_nonce' );
 		if ( ! $this->can() ) {
-			wp_die( esc_html__( 'You are not allowed to do this.', 'wc-voucher-studio' ), 403 );
+			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
 		$action = sanitize_key( wp_unslash( $_REQUEST['action'] ?? '-1' ) );
 		if ( '-1' === $action || '' === $action ) {
@@ -343,7 +343,7 @@ final class VoucherAdmin {
 				continue;
 			}
 			if ( 'void' === $action ) {
-				wcvs()->issuer->void( $v, __( 'Voided by admin (bulk)', 'wc-voucher-studio' ) );
+				wcvs()->issuer->void( $v, __( 'Voided by admin (bulk)', 'voucher-captain' ) );
 			} elseif ( 'reactivate' === $action && Voucher::STATUS_VOID === $v->status ) {
 				wcvs()->issuer->reactivate( $v );
 			} elseif ( 'resend' === $action ) {
@@ -357,7 +357,7 @@ final class VoucherAdmin {
 	public function export(): void {
 		check_admin_referer( 'wcvs_export' );
 		if ( ! $this->can() ) {
-			wp_die( esc_html__( 'You are not allowed to do this.', 'wc-voucher-studio' ), 403 );
+			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
 		$table = new VouchersListTable( $this->repo );
 		$args  = array_merge( $table->filter_args(), array( 'per_page' => 500 ) );

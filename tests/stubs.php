@@ -6,7 +6,7 @@
 
 define( 'ABSPATH', sys_get_temp_dir() . '/wcvs-abspath/' );
 define( 'WCVS_PATH', dirname( __DIR__ ) . '/' );
-define( 'WCVS_URL', 'https://shop.test/wp-content/plugins/wc-voucher-studio/' );
+define( 'WCVS_URL', 'https://shop.test/wp-content/plugins/voucher-captain/' );
 define( 'WCVS_VERSION', 'test' );
 define( 'MINUTE_IN_SECONDS', 60 );
 define( 'HOUR_IN_SECONDS', 3600 );

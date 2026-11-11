@@ -19,10 +19,10 @@ final class Delivery {
 
 	public static function delivery_modes(): array {
 		return array(
-			'immediate' => __( 'Immediately after purchase', 'wc-voucher-studio' ),
-			'delay'     => __( 'X days after purchase', 'wc-voucher-studio' ),
-			'date'      => __( 'On a fixed date', 'wc-voucher-studio' ),
-			'customer'  => __( 'On a date chosen by the customer', 'wc-voucher-studio' ),
+			'immediate' => __( 'Immediately after purchase', 'voucher-captain' ),
+			'delay'     => __( 'X days after purchase', 'voucher-captain' ),
+			'date'      => __( 'On a fixed date', 'voucher-captain' ),
+			'customer'  => __( 'On a date chosen by the customer', 'voucher-captain' ),
 		);
 	}
 

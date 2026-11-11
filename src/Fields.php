@@ -50,12 +50,12 @@ final class Fields {
 			self::POST_TYPE,
 			array(
 				'labels'          => array(
-					'name'          => __( 'Field groups', 'wc-voucher-studio' ),
-					'singular_name' => __( 'Field group', 'wc-voucher-studio' ),
-					'add_new'       => __( 'Add field group', 'wc-voucher-studio' ),
-					'add_new_item'  => __( 'Add field group', 'wc-voucher-studio' ),
-					'edit_item'     => __( 'Edit field group', 'wc-voucher-studio' ),
-					'all_items'     => __( 'Field groups', 'wc-voucher-studio' ),
+					'name'          => __( 'Field groups', 'voucher-captain' ),
+					'singular_name' => __( 'Field group', 'voucher-captain' ),
+					'add_new'       => __( 'Add field group', 'voucher-captain' ),
+					'add_new_item'  => __( 'Add field group', 'voucher-captain' ),
+					'edit_item'     => __( 'Edit field group', 'voucher-captain' ),
+					'all_items'     => __( 'Field groups', 'voucher-captain' ),
 				),
 				'public'          => false,
 				'show_ui'         => true,
@@ -74,25 +74,25 @@ final class Fields {
 		$defs = array(
 			'recipient_name'  => array(
 				'key'         => 'recipient_name',
-				'label'       => __( 'Recipient name', 'wc-voucher-studio' ),
+				'label'       => __( 'Recipient name', 'voucher-captain' ),
 				'type'        => 'text',
 				'required'    => false,
 				'maxlength'   => 100,
 				'placeholder' => '',
-				'tooltip'     => __( 'Printed on the voucher.', 'wc-voucher-studio' ),
+				'tooltip'     => __( 'Printed on the voucher.', 'voucher-captain' ),
 			),
 			'recipient_email' => array(
 				'key'         => 'recipient_email',
-				'label'       => __( 'Recipient email', 'wc-voucher-studio' ),
+				'label'       => __( 'Recipient email', 'voucher-captain' ),
 				'type'        => 'email',
 				'required'    => false,
 				'maxlength'   => 200,
 				'placeholder' => '',
-				'tooltip'     => __( 'Leave empty to receive the voucher yourself.', 'wc-voucher-studio' ),
+				'tooltip'     => __( 'Leave empty to receive the voucher yourself.', 'voucher-captain' ),
 			),
 			'message'         => array(
 				'key'         => 'message',
-				'label'       => __( 'Personal message', 'wc-voucher-studio' ),
+				'label'       => __( 'Personal message', 'voucher-captain' ),
 				'type'        => 'textarea',
 				'required'    => false,
 				'maxlength'   => max( 10, (int) $config['message_maxlength'] ),
@@ -101,12 +101,12 @@ final class Fields {
 			),
 			'delivery_date'   => array(
 				'key'         => 'delivery_date',
-				'label'       => __( 'Delivery date', 'wc-voucher-studio' ),
+				'label'       => __( 'Delivery date', 'voucher-captain' ),
 				'type'        => 'date',
 				'required'    => false,
 				'maxlength'   => 10,
 				'placeholder' => '',
-				'tooltip'     => __( 'The voucher is emailed on this day. Leave empty to send it right away.', 'wc-voucher-studio' ),
+				'tooltip'     => __( 'The voucher is emailed on this day. Leave empty to send it right away.', 'voucher-captain' ),
 			),
 		);
 		$enabled = (array) $config['builtin_fields'];
@@ -242,7 +242,7 @@ final class Fields {
 				'nonce'   => wp_create_nonce( 'wcvs_preview' ),
 				'i18n'    => array(
 					/* translators: %d: characters left */
-					'charsLeft' => __( '%d characters left', 'wc-voucher-studio' ),
+					'charsLeft' => __( '%d characters left', 'voucher-captain' ),
 				),
 			)
 		);
@@ -270,7 +270,7 @@ final class Fields {
 			$this->render_field( $key, $field );
 		}
 		if ( 'before_button' === $position && 'yes' === $config['preview'] ) {
-			echo '<p class="wcvs-preview-row"><button type="button" class="button wcvs-preview-button" data-product="' . esc_attr( (string) $product->get_id() ) . '">' . esc_html__( 'Preview voucher', 'wc-voucher-studio' ) . '</button></p>';
+			echo '<p class="wcvs-preview-row"><button type="button" class="button wcvs-preview-button" data-product="' . esc_attr( (string) $product->get_id() ) . '">' . esc_html__( 'Preview voucher', 'voucher-captain' ) . '</button></p>';
 		}
 		echo '</div>';
 	}
@@ -302,21 +302,21 @@ final class Fields {
 
 		echo '<p class="form-row wcvs-field wcvs-field--' . esc_attr( $type ) . '">';
 		if ( 'checkbox' !== $type ) {
-			echo '<label for="' . esc_attr( $id ) . '">' . esc_html( $field['label'] ?? $key ) . ( $required ? ' <abbr class="required" title="' . esc_attr__( 'required', 'wc-voucher-studio' ) . '">*</abbr>' : ' <span class="optional">(' . esc_html__( 'optional', 'wc-voucher-studio' ) . ')</span>' ) . '</label>';
+			echo '<label for="' . esc_attr( $id ) . '">' . esc_html( $field['label'] ?? $key ) . ( $required ? ' <abbr class="required" title="' . esc_attr__( 'required', 'voucher-captain' ) . '">*</abbr>' : ' <span class="optional">(' . esc_html__( 'optional', 'voucher-captain' ) . ')</span>' ) . '</label>';
 		}
 		switch ( $type ) {
 			case 'textarea':
 				echo '<textarea ' . $attrs . ' rows="3">' . esc_textarea( $value ) . '</textarea>'; // phpcs:ignore WordPress.Security.EscapeOutput
 				break;
 			case 'select':
-				echo '<select ' . $attrs . '><option value="">' . esc_html__( '— Select —', 'wc-voucher-studio' ) . '</option>'; // phpcs:ignore WordPress.Security.EscapeOutput
+				echo '<select ' . $attrs . '><option value="">' . esc_html__( '— Select —', 'voucher-captain' ) . '</option>'; // phpcs:ignore WordPress.Security.EscapeOutput
 				foreach ( self::options( $field ) as $option ) {
 					echo '<option value="' . esc_attr( $option ) . '"' . selected( $value, $option, false ) . '>' . esc_html( $option ) . '</option>';
 				}
 				echo '</select>';
 				break;
 			case 'checkbox':
-				echo '<label for="' . esc_attr( $id ) . '" class="checkbox"><input type="checkbox" value="1" ' . $attrs . checked( '1', $value, false ) . ' /> ' . esc_html( $field['label'] ?? $key ) . ( $required ? ' <abbr class="required" title="' . esc_attr__( 'required', 'wc-voucher-studio' ) . '">*</abbr>' : '' ) . '</label>'; // phpcs:ignore WordPress.Security.EscapeOutput
+				echo '<label for="' . esc_attr( $id ) . '" class="checkbox"><input type="checkbox" value="1" ' . $attrs . checked( '1', $value, false ) . ' /> ' . esc_html( $field['label'] ?? $key ) . ( $required ? ' <abbr class="required" title="' . esc_attr__( 'required', 'voucher-captain' ) . '">*</abbr>' : '' ) . '</label>'; // phpcs:ignore WordPress.Security.EscapeOutput
 				break;
 			case 'date':
 				$min = 'delivery_date' === $key ? wp_date( 'Y-m-d', time() + DAY_IN_SECONDS ) : '';
@@ -363,7 +363,7 @@ final class Fields {
 					$value = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $raw ) ? $raw : '';
 					break;
 				case 'checkbox':
-					$value = '' !== $raw ? __( 'Yes', 'wc-voucher-studio' ) : '';
+					$value = '' !== $raw ? __( 'Yes', 'voucher-captain' ) : '';
 					break;
 				default:
 					$value = sanitize_text_field( $raw );
@@ -393,7 +393,7 @@ final class Fields {
 			$label = (string) ( $field['label'] ?? $key );
 			if ( ! empty( $field['required'] ) && '' === $raw ) {
 				/* translators: %s: field label */
-				wc_add_notice( sprintf( __( '%s is a required field.', 'wc-voucher-studio' ), $label ), 'error' );
+				wc_add_notice( sprintf( __( '%s is a required field.', 'voucher-captain' ), $label ), 'error' );
 				$passed = false;
 				continue;
 			}
@@ -403,34 +403,34 @@ final class Fields {
 			$type = $field['type'] ?? 'text';
 			if ( 'email' === $type && ! is_email( $raw ) ) {
 				/* translators: %s: field label */
-				wc_add_notice( sprintf( __( '%s is not a valid email address.', 'wc-voucher-studio' ), $label ), 'error' );
+				wc_add_notice( sprintf( __( '%s is not a valid email address.', 'voucher-captain' ), $label ), 'error' );
 				$passed = false;
 			}
 			if ( 'date' === $type ) {
 				$ts = strtotime( $raw );
 				if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $raw ) || ! $ts ) {
 					/* translators: %s: field label */
-					wc_add_notice( sprintf( __( '%s is not a valid date.', 'wc-voucher-studio' ), $label ), 'error' );
+					wc_add_notice( sprintf( __( '%s is not a valid date.', 'voucher-captain' ), $label ), 'error' );
 					$passed = false;
 				} elseif ( 'delivery_date' === $key && ( $raw < wp_date( 'Y-m-d' ) || $ts > time() + YEAR_IN_SECONDS + DAY_IN_SECONDS ) ) {
-					wc_add_notice( __( 'Please choose a delivery date between today and one year from now.', 'wc-voucher-studio' ), 'error' );
+					wc_add_notice( __( 'Please choose a delivery date between today and one year from now.', 'voucher-captain' ), 'error' );
 					$passed = false;
 				}
 			}
 			if ( 'number' === $type && ! is_numeric( wc_format_decimal( $raw ) ) ) {
 				/* translators: %s: field label */
-				wc_add_notice( sprintf( __( '%s must be a number.', 'wc-voucher-studio' ), $label ), 'error' );
+				wc_add_notice( sprintf( __( '%s must be a number.', 'voucher-captain' ), $label ), 'error' );
 				$passed = false;
 			}
 			if ( 'select' === $type && ! in_array( $raw, self::options( $field ), true ) ) {
 				/* translators: %s: field label */
-				wc_add_notice( sprintf( __( 'Please choose a valid option for %s.', 'wc-voucher-studio' ), $label ), 'error' );
+				wc_add_notice( sprintf( __( 'Please choose a valid option for %s.', 'voucher-captain' ), $label ), 'error' );
 				$passed = false;
 			}
 			$max = (int) ( $field['maxlength'] ?? 0 );
 			if ( $max > 0 && mb_strlen( $raw ) > $max ) {
 				/* translators: 1: field label, 2: max length */
-				wc_add_notice( sprintf( __( '%1$s may contain at most %2$d characters.', 'wc-voucher-studio' ), $label, $max ), 'error' );
+				wc_add_notice( sprintf( __( '%1$s may contain at most %2$d characters.', 'voucher-captain' ), $label, $max ), 'error' );
 				$passed = false;
 			}
 		}
@@ -499,7 +499,7 @@ final class Fields {
 
 	public function loop_add_to_cart_text( $text, $product ) {
 		if ( $product instanceof \WC_Product && $product->is_type( 'simple' ) && ProductConfig::is_voucher( $product ) && $this->has_required_or_custom( $product ) ) {
-			return __( 'Personalise', 'wc-voucher-studio' );
+			return __( 'Personalise', 'voucher-captain' );
 		}
 		return $text;
 	}
@@ -524,41 +524,41 @@ final class Fields {
 			'wcvsFieldGroups',
 			array(
 				'types' => array(
-					'text'     => __( 'Text', 'wc-voucher-studio' ),
-					'textarea' => __( 'Text area', 'wc-voucher-studio' ),
-					'email'    => __( 'Email', 'wc-voucher-studio' ),
-					'number'   => __( 'Number', 'wc-voucher-studio' ),
-					'date'     => __( 'Date', 'wc-voucher-studio' ),
-					'select'   => __( 'Select', 'wc-voucher-studio' ),
-					'checkbox' => __( 'Checkbox', 'wc-voucher-studio' ),
+					'text'     => __( 'Text', 'voucher-captain' ),
+					'textarea' => __( 'Text area', 'voucher-captain' ),
+					'email'    => __( 'Email', 'voucher-captain' ),
+					'number'   => __( 'Number', 'voucher-captain' ),
+					'date'     => __( 'Date', 'voucher-captain' ),
+					'select'   => __( 'Select', 'voucher-captain' ),
+					'checkbox' => __( 'Checkbox', 'voucher-captain' ),
 				),
 				'i18n'  => array(
-					'label'       => __( 'Label', 'wc-voucher-studio' ),
-					'key'         => __( 'Key', 'wc-voucher-studio' ),
-					'type'        => __( 'Type', 'wc-voucher-studio' ),
-					'required'    => __( 'Required', 'wc-voucher-studio' ),
-					'maxlength'   => __( 'Max. characters', 'wc-voucher-studio' ),
-					'placeholder' => __( 'Placeholder', 'wc-voucher-studio' ),
-					'tooltip'     => __( 'Help text', 'wc-voucher-studio' ),
-					'options'     => __( 'Options (one per line)', 'wc-voucher-studio' ),
-					'remove'      => __( 'Remove field', 'wc-voucher-studio' ),
-					'placeholderToken' => __( 'PDF placeholder:', 'wc-voucher-studio' ),
+					'label'       => __( 'Label', 'voucher-captain' ),
+					'key'         => __( 'Key', 'voucher-captain' ),
+					'type'        => __( 'Type', 'voucher-captain' ),
+					'required'    => __( 'Required', 'voucher-captain' ),
+					'maxlength'   => __( 'Max. characters', 'voucher-captain' ),
+					'placeholder' => __( 'Placeholder', 'voucher-captain' ),
+					'tooltip'     => __( 'Help text', 'voucher-captain' ),
+					'options'     => __( 'Options (one per line)', 'voucher-captain' ),
+					'remove'      => __( 'Remove field', 'voucher-captain' ),
+					'placeholderToken' => __( 'PDF placeholder:', 'voucher-captain' ),
 				),
 			)
 		);
 	}
 
 	public function meta_boxes(): void {
-		add_meta_box( 'wcvs-fields', __( 'Fields', 'wc-voucher-studio' ), array( $this, 'fields_box' ), self::POST_TYPE, 'normal', 'high' );
-		add_meta_box( 'wcvs-assign', __( 'Display rules', 'wc-voucher-studio' ), array( $this, 'assign_box' ), self::POST_TYPE, 'normal', 'default' );
+		add_meta_box( 'wcvs-fields', __( 'Fields', 'voucher-captain' ), array( $this, 'fields_box' ), self::POST_TYPE, 'normal', 'high' );
+		add_meta_box( 'wcvs-assign', __( 'Display rules', 'voucher-captain' ), array( $this, 'assign_box' ), self::POST_TYPE, 'normal', 'default' );
 	}
 
 	public function fields_box( \WP_Post $post ): void {
 		wp_nonce_field( 'wcvs_field_group', 'wcvs_field_group_nonce' );
 		$fields = json_decode( (string) get_post_meta( $post->ID, '_wcvs_fields', true ), true ) ?: array();
-		echo '<p class="description">' . esc_html__( 'These fields are shown on the product page of matching voucher products. Use {field:key} in PDF templates and emails to print a value.', 'wc-voucher-studio' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'These fields are shown on the product page of matching voucher products. Use {field:key} in PDF templates and emails to print a value.', 'voucher-captain' ) . '</p>';
 		echo '<div id="wcvs-field-list" data-fields="' . esc_attr( wp_json_encode( $fields ) ) . '"></div>';
-		echo '<p><button type="button" class="button" id="wcvs-add-field">' . esc_html__( 'Add field', 'wc-voucher-studio' ) . '</button></p>';
+		echo '<p><button type="button" class="button" id="wcvs-add-field">' . esc_html__( 'Add field', 'voucher-captain' ) . '</button></p>';
 		echo '<input type="hidden" name="wcvs_fields_json" id="wcvs-fields-json" value="" />';
 	}
 
@@ -569,18 +569,18 @@ final class Fields {
 		?>
 		<table class="form-table" role="presentation">
 			<tr>
-				<th scope="row"><label for="wcvs-assign-mode"><?php esc_html_e( 'Show on', 'wc-voucher-studio' ); ?></label></th>
+				<th scope="row"><label for="wcvs-assign-mode"><?php esc_html_e( 'Show on', 'voucher-captain' ); ?></label></th>
 				<td>
 					<select name="wcvs_assign[mode]" id="wcvs-assign-mode">
-						<option value="all" <?php selected( $mode, 'all' ); ?>><?php esc_html_e( 'All voucher products', 'wc-voucher-studio' ); ?></option>
-						<option value="products" <?php selected( $mode, 'products' ); ?>><?php esc_html_e( 'Selected products', 'wc-voucher-studio' ); ?></option>
-						<option value="categories" <?php selected( $mode, 'categories' ); ?>><?php esc_html_e( 'Products in categories', 'wc-voucher-studio' ); ?></option>
-						<option value="tags" <?php selected( $mode, 'tags' ); ?>><?php esc_html_e( 'Products with tags', 'wc-voucher-studio' ); ?></option>
+						<option value="all" <?php selected( $mode, 'all' ); ?>><?php esc_html_e( 'All voucher products', 'voucher-captain' ); ?></option>
+						<option value="products" <?php selected( $mode, 'products' ); ?>><?php esc_html_e( 'Selected products', 'voucher-captain' ); ?></option>
+						<option value="categories" <?php selected( $mode, 'categories' ); ?>><?php esc_html_e( 'Products in categories', 'voucher-captain' ); ?></option>
+						<option value="tags" <?php selected( $mode, 'tags' ); ?>><?php esc_html_e( 'Products with tags', 'voucher-captain' ); ?></option>
 					</select>
 				</td>
 			</tr>
 			<tr class="wcvs-assign-row" data-mode="products">
-				<th scope="row"><label for="wcvs-assign-products"><?php esc_html_e( 'Products', 'wc-voucher-studio' ); ?></label></th>
+				<th scope="row"><label for="wcvs-assign-products"><?php esc_html_e( 'Products', 'voucher-captain' ); ?></label></th>
 				<td>
 					<select class="wc-product-search" multiple style="width:100%" id="wcvs-assign-products" name="wcvs_assign[products][]" data-action="woocommerce_json_search_products">
 						<?php
@@ -596,7 +596,7 @@ final class Fields {
 			</tr>
 			<?php foreach ( array( 'categories' => 'product_cat', 'tags' => 'product_tag' ) as $key => $taxonomy ) : ?>
 				<tr class="wcvs-assign-row" data-mode="<?php echo esc_attr( $key ); ?>">
-					<th scope="row"><label for="wcvs-assign-<?php echo esc_attr( $key ); ?>"><?php echo 'categories' === $key ? esc_html__( 'Categories', 'wc-voucher-studio' ) : esc_html__( 'Tags', 'wc-voucher-studio' ); ?></label></th>
+					<th scope="row"><label for="wcvs-assign-<?php echo esc_attr( $key ); ?>"><?php echo 'categories' === $key ? esc_html__( 'Categories', 'voucher-captain' ) : esc_html__( 'Tags', 'voucher-captain' ); ?></label></th>
 					<td>
 						<select class="wc-enhanced-select" multiple style="width:100%" id="wcvs-assign-<?php echo esc_attr( $key ); ?>" name="wcvs_assign[<?php echo esc_attr( $key ); ?>][]">
 							<?php
@@ -610,14 +610,14 @@ final class Fields {
 				</tr>
 			<?php endforeach; ?>
 			<tr>
-				<th scope="row"><label for="wcvs-position"><?php esc_html_e( 'Position', 'wc-voucher-studio' ); ?></label></th>
+				<th scope="row"><label for="wcvs-position"><?php esc_html_e( 'Position', 'voucher-captain' ); ?></label></th>
 				<td>
 					<select name="wcvs_position" id="wcvs-position">
-						<option value="before_quantity" <?php selected( $position, 'before_quantity' ); ?>><?php esc_html_e( 'Before quantity field', 'wc-voucher-studio' ); ?></option>
-						<option value="before_button" <?php selected( $position, 'before_button' ); ?>><?php esc_html_e( 'Before "Add to cart" button', 'wc-voucher-studio' ); ?></option>
-						<option value="after_button" <?php selected( $position, 'after_button' ); ?>><?php esc_html_e( 'After "Add to cart" button', 'wc-voucher-studio' ); ?></option>
+						<option value="before_quantity" <?php selected( $position, 'before_quantity' ); ?>><?php esc_html_e( 'Before quantity field', 'voucher-captain' ); ?></option>
+						<option value="before_button" <?php selected( $position, 'before_button' ); ?>><?php esc_html_e( 'Before "Add to cart" button', 'voucher-captain' ); ?></option>
+						<option value="after_button" <?php selected( $position, 'after_button' ); ?>><?php esc_html_e( 'After "Add to cart" button', 'voucher-captain' ); ?></option>
 					</select>
-					<p class="description"><?php esc_html_e( 'Groups with a lower "Order" value (Page attributes) are shown first.', 'wc-voucher-studio' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Groups with a lower "Order" value (Page attributes) are shown first.', 'voucher-captain' ); ?></p>
 				</td>
 			</tr>
 		</table>

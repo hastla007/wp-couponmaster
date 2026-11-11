@@ -1,4 +1,4 @@
-# Voucher Studio for WooCommerce
+# Voucher Captain
 
 WooCommerce-Plugin für personalisierte **PDF-Gutscheine, Geschenkkarten und Event-Tickets**. Der Funktionsumfang orientiert sich an „Flexible PDF Coupons PRO“. Code, Namen und Gestaltung sind eigenständig.
 
@@ -41,7 +41,7 @@ WordPress 6.4+, WooCommerce 8.0+, PHP 8.1+ (mit GD, mbstring, zip).
 ```bash
 bin/build.sh
 ```
-Danach `build/wc-voucher-studio.zip` unter *Plugins → Installieren → Hochladen* einspielen.
+Danach `build/voucher-captain.zip` unter *Plugins → Installieren → Hochladen* einspielen.
 
 **Aus dem Repository** (z. B. Entwicklung): Ordner nach `wp-content/plugins/` legen und die Abhängigkeiten installieren:
 ```bash
@@ -72,7 +72,7 @@ php bin/make-mo.php
 ```
 Kompiliert die `.po`-Dateien zu `.mo`.
 
-Templates lassen sich im Theme unter `woocommerce/wc-voucher-studio/` überschreiben.
+Templates lassen sich im Theme unter `woocommerce/voucher-captain/` überschreiben.
 
 ## Lizenz
 

@@ -98,7 +98,7 @@ final class PdfRenderer {
 		$dompdf->loadHtml( $html, 'UTF-8' );
 		$dompdf->render();
 		$dompdf->addInfo( 'Title', $voucher->code );
-		$dompdf->addInfo( 'Creator', 'Voucher Studio for WooCommerce' );
+		$dompdf->addInfo( 'Creator', 'Voucher Captain' );
 		return (string) $dompdf->output();
 	}
 

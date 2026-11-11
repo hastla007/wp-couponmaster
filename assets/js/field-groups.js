@@ -1,4 +1,4 @@
-/* Voucher Studio – field group editor (repeater). */
+/* Voucher Captain – field group editor (repeater). */
 ( function ( $ ) {
 	'use strict';
 	var cfg = window.wcvsFieldGroups || { types: {}, i18n: {} };

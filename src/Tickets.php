@@ -84,22 +84,22 @@ final class Tickets {
 	public function describe( Voucher $voucher ): array {
 		$product = $voucher->product();
 		$state   = 'ok';
-		$message = __( 'Valid', 'wc-voucher-studio' );
+		$message = __( 'Valid', 'voucher-captain' );
 		if ( Voucher::STATUS_VOID === $voucher->status ) {
 			$state   = 'error';
-			$message = __( 'Cancelled', 'wc-voucher-studio' );
+			$message = __( 'Cancelled', 'voucher-captain' );
 		} elseif ( $voucher->is_expired() || Voucher::STATUS_EXPIRED === $voucher->status ) {
 			$state   = 'error';
-			$message = __( 'Expired', 'wc-voucher-studio' );
+			$message = __( 'Expired', 'voucher-captain' );
 		} elseif ( $voucher->is_ticket() && $voucher->checkins >= $voucher->max_checkins ) {
 			$state   = 'warning';
-			$message = __( 'Already checked in', 'wc-voucher-studio' );
+			$message = __( 'Already checked in', 'voucher-captain' );
 		} elseif ( ! $voucher->is_ticket() && Voucher::STATUS_REDEEMED === $voucher->status ) {
 			$state   = 'warning';
-			$message = __( 'Already redeemed', 'wc-voucher-studio' );
+			$message = __( 'Already redeemed', 'voucher-captain' );
 		} elseif ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
 			$state   = 'warning';
-			$message = __( 'Not yet delivered', 'wc-voucher-studio' );
+			$message = __( 'Not yet delivered', 'voucher-captain' );
 		}
 		return array(
 			'id'             => $voucher->id,
@@ -128,7 +128,7 @@ final class Tickets {
 	public function rest_lookup( \WP_REST_Request $request ) {
 		$voucher = $this->resolve( (string) $request['q'] );
 		if ( ! $voucher ) {
-			return new \WP_Error( 'wcvs_not_found', __( 'No voucher or ticket found for this code.', 'wc-voucher-studio' ), array( 'status' => 404 ) );
+			return new \WP_Error( 'wcvs_not_found', __( 'No voucher or ticket found for this code.', 'voucher-captain' ), array( 'status' => 404 ) );
 		}
 		return rest_ensure_response( $this->describe( $voucher ) );
 	}
@@ -158,7 +158,7 @@ final class Tickets {
 		}
 		$fresh = $this->repo->get( $voucher->id );
 		/* translators: 1: used admissions, 2: total admissions */
-		$this->repo->log( $voucher->id, 'checkin', $count, null, sprintf( __( '%1$d of %2$d admissions used', 'wc-voucher-studio' ), $fresh->checkins, $fresh->max_checkins ) );
+		$this->repo->log( $voucher->id, 'checkin', $count, null, sprintf( __( '%1$d of %2$d admissions used', 'voucher-captain' ), $fresh->checkins, $fresh->max_checkins ) );
 		if ( $fresh->checkins >= $fresh->max_checkins && $fresh->is_ticket() ) {
 			$fresh->status = Voucher::STATUS_REDEEMED;
 			$this->repo->update( $fresh );
@@ -183,7 +183,7 @@ final class Tickets {
 	public function rest_checkin( \WP_REST_Request $request ) {
 		$voucher = $this->resolve( (string) $request['q'] );
 		if ( ! $voucher ) {
-			return new \WP_Error( 'wcvs_not_found', __( 'No voucher or ticket found for this code.', 'wc-voucher-studio' ), array( 'status' => 404 ) );
+			return new \WP_Error( 'wcvs_not_found', __( 'No voucher or ticket found for this code.', 'voucher-captain' ), array( 'status' => 404 ) );
 		}
 		if ( $request['undo'] ) {
 			$ok = $this->undo_checkin( $voucher );
@@ -194,10 +194,10 @@ final class Tickets {
 		$data['success'] = $ok;
 		if ( $ok ) {
 			$data['state']   = 'ok';
-			$data['message'] = $request['undo'] ? __( 'Check-in reverted', 'wc-voucher-studio' ) : __( 'Checked in', 'wc-voucher-studio' );
+			$data['message'] = $request['undo'] ? __( 'Check-in reverted', 'voucher-captain' ) : __( 'Checked in', 'voucher-captain' );
 		} elseif ( 'ok' === $data['state'] ) {
 			$data['state']   = 'error';
-			$data['message'] = __( 'Check-in not possible.', 'wc-voucher-studio' );
+			$data['message'] = __( 'Check-in not possible.', 'voucher-captain' );
 		}
 		return rest_ensure_response( $data );
 	}
@@ -208,18 +208,18 @@ final class Tickets {
 	public function rest_redeem( \WP_REST_Request $request ) {
 		$voucher = $this->resolve( (string) $request['q'] );
 		if ( ! $voucher ) {
-			return new \WP_Error( 'wcvs_not_found', __( 'No voucher or ticket found for this code.', 'wc-voucher-studio' ), array( 'status' => 404 ) );
+			return new \WP_Error( 'wcvs_not_found', __( 'No voucher or ticket found for this code.', 'voucher-captain' ), array( 'status' => 404 ) );
 		}
 		if ( ! $voucher->is_usable() || Voucher::STATUS_REDEEMED === $voucher->status ) {
 			$data            = $this->describe( $voucher );
 			$data['success'] = false;
 			return rest_ensure_response( $data );
 		}
-		$note = sanitize_text_field( (string) $request['note'] ) ?: __( 'Redeemed in store', 'wc-voucher-studio' );
+		$note = sanitize_text_field( (string) $request['note'] ) ?: __( 'Redeemed in store', 'voucher-captain' );
 		if ( $voucher->is_multi_use() ) {
 			$amount = min( $voucher->balance, max( 0, (float) $request['amount'] ) );
 			if ( $amount <= 0 ) {
-				return new \WP_Error( 'wcvs_amount', __( 'Please enter an amount.', 'wc-voucher-studio' ), array( 'status' => 400 ) );
+				return new \WP_Error( 'wcvs_amount', __( 'Please enter an amount.', 'voucher-captain' ), array( 'status' => 400 ) );
 			}
 			wcvs()->coupons->set_balance( $voucher, $voucher->balance - $amount, 'redeemed', $amount, $note );
 		} else {
@@ -239,7 +239,7 @@ final class Tickets {
 		$data            = $this->describe( $this->repo->get( $voucher->id ) );
 		$data['success'] = true;
 		$data['state']   = 'ok';
-		$data['message'] = __( 'Redeemed', 'wc-voucher-studio' );
+		$data['message'] = __( 'Redeemed', 'voucher-captain' );
 		return rest_ensure_response( $data );
 	}
 
@@ -255,7 +255,7 @@ final class Tickets {
 
 		if ( $voucher && self::can_scan() && isset( $_POST['wcvs_checkin_nonce'] ) && wp_verify_nonce( sanitize_key( wp_unslash( $_POST['wcvs_checkin_nonce'] ) ), 'wcvs_checkin_' . $voucher->id ) ) {
 			$count  = max( 1, absint( $_POST['count'] ?? 1 ) );
-			$notice = $this->checkin( $voucher, $count ) ? __( 'Checked in', 'wc-voucher-studio' ) : __( 'Check-in not possible.', 'wc-voucher-studio' );
+			$notice = $this->checkin( $voucher, $count ) ? __( 'Checked in', 'voucher-captain' ) : __( 'Check-in not possible.', 'voucher-captain' );
 			$voucher = $this->repo->get( $voucher->id );
 		}
 

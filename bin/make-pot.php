@@ -1,12 +1,12 @@
 <?php
 /**
- * Generates languages/wc-voucher-studio.pot from the PHP sources (no WP-CLI needed).
+ * Generates languages/voucher-captain.pot from the PHP sources (no WP-CLI needed).
  * Usage: php bin/make-pot.php
  */
 $root   = dirname( __DIR__ );
-$domain = 'wc-voucher-studio';
+$domain = 'voucher-captain';
 $funcs  = array( '__' => 1, '_e' => 1, 'esc_html__' => 1, 'esc_html_e' => 1, 'esc_attr__' => 1, 'esc_attr_e' => 1, '_x' => 'x', '_n' => 'n' );
-$files  = array( "$root/wc-voucher-studio.php" );
+$files  = array( "$root/voucher-captain.php" );
 foreach ( array( 'src', 'templates' ) as $dir ) {
 	$it = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( "$root/$dir" ) );
 	foreach ( $it as $f ) {
@@ -97,7 +97,7 @@ foreach ( $files as $file ) {
 	}
 }
 $esc = static fn( $s ) => '"' . str_replace( array( '\\', '"', "\n", "\t" ), array( '\\\\', '\\"', '\\n', '\\t' ), $s ) . '"';
-$out = "# Copyright (C) " . gmdate( 'Y' ) . " Voucher Studio for WooCommerce\n# This file is distributed under the GPL-2.0-or-later.\nmsgid \"\"\nmsgstr \"\"\n\"Project-Id-Version: Voucher Studio for WooCommerce 1.0.0\\n\"\n\"MIME-Version: 1.0\\n\"\n\"Content-Type: text/plain; charset=UTF-8\\n\"\n\"Content-Transfer-Encoding: 8bit\\n\"\n\"POT-Creation-Date: " . gmdate( 'Y-m-d H:i+0000' ) . "\\n\"\n\"X-Domain: $domain\\n\"\n\n";
+$out = "# Copyright (C) " . gmdate( 'Y' ) . " Voucher Captain\n# This file is distributed under the GPL-2.0-or-later.\nmsgid \"\"\nmsgstr \"\"\n\"Project-Id-Version: Voucher Captain 1.0.0\\n\"\n\"MIME-Version: 1.0\\n\"\n\"Content-Type: text/plain; charset=UTF-8\\n\"\n\"Content-Transfer-Encoding: 8bit\\n\"\n\"POT-Creation-Date: " . gmdate( 'Y-m-d H:i+0000' ) . "\\n\"\n\"X-Domain: $domain\\n\"\n\n";
 foreach ( $entries as $e ) {
 	if ( $e['comment'] ) {
 		$out .= '#. ' . str_replace( "\n", "\n#. ", $e['comment'] ) . "\n";

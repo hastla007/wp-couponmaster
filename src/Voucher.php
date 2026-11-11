@@ -50,19 +50,19 @@ final class Voucher {
 
 	public static function statuses(): array {
 		return array(
-			self::STATUS_ACTIVE    => __( 'Active', 'wc-voucher-studio' ),
-			self::STATUS_SCHEDULED => __( 'Scheduled', 'wc-voucher-studio' ),
-			self::STATUS_REDEEMED  => __( 'Redeemed', 'wc-voucher-studio' ),
-			self::STATUS_EXPIRED   => __( 'Expired', 'wc-voucher-studio' ),
-			self::STATUS_VOID      => __( 'Void', 'wc-voucher-studio' ),
+			self::STATUS_ACTIVE    => __( 'Active', 'voucher-captain' ),
+			self::STATUS_SCHEDULED => __( 'Scheduled', 'voucher-captain' ),
+			self::STATUS_REDEEMED  => __( 'Redeemed', 'voucher-captain' ),
+			self::STATUS_EXPIRED   => __( 'Expired', 'voucher-captain' ),
+			self::STATUS_VOID      => __( 'Void', 'voucher-captain' ),
 		);
 	}
 
 	public static function types(): array {
 		return array(
-			'voucher'  => __( 'Voucher', 'wc-voucher-studio' ),
-			'giftcard' => __( 'Gift card', 'wc-voucher-studio' ),
-			'ticket'   => __( 'Ticket', 'wc-voucher-studio' ),
+			'voucher'  => __( 'Voucher', 'voucher-captain' ),
+			'giftcard' => __( 'Gift card', 'voucher-captain' ),
+			'ticket'   => __( 'Ticket', 'voucher-captain' ),
 		);
 	}
 

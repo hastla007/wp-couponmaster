@@ -2,7 +2,7 @@
 /**
  * Voucher email (HTML).
  *
- * Override: yourtheme/woocommerce/wc-voucher-studio/emails/voucher.php
+ * Override: yourtheme/woocommerce/voucher-captain/emails/voucher.php
  *
  * @var \WCVS\Voucher  $voucher
  * @var string         $email_heading
@@ -29,11 +29,11 @@ $value = 'percent' === $voucher->discount_type
 			<?php if ( ! $voucher->is_ticket() || $voucher->initial_amount > 0 ) : ?>
 				<div style="font-size:28px;font-weight:bold;margin-bottom:6px;"><?php echo wp_kses_post( $value ); ?></div>
 			<?php endif; ?>
-			<div style="font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#777;"><?php esc_html_e( 'Your code', 'wc-voucher-studio' ); ?></div>
+			<div style="font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#777;"><?php esc_html_e( 'Your code', 'voucher-captain' ); ?></div>
 			<div style="font-family:monospace;font-size:22px;font-weight:bold;letter-spacing:2px;margin:4px 0 8px;"><?php echo esc_html( $voucher->code ); ?></div>
 			<?php if ( $voucher->expires_at ) : ?>
 				<div style="font-size:13px;color:#555;">
-					<?php /* translators: %s: date */ printf( esc_html__( 'Valid until %s', 'wc-voucher-studio' ), esc_html( wp_date( wcvs()->settings->date_format(), strtotime( $voucher->expires_at . ' UTC' ) ) ) ); ?>
+					<?php /* translators: %s: date */ printf( esc_html__( 'Valid until %s', 'voucher-captain' ), esc_html( wp_date( wcvs()->settings->date_format(), strtotime( $voucher->expires_at . ' UTC' ) ) ) ); ?>
 				</div>
 			<?php endif; ?>
 		</td>
@@ -52,7 +52,7 @@ $value = 'percent' === $voucher->discount_type
 <?php if ( $download_url ) : ?>
 	<p style="text-align:center;margin:20px 0;">
 		<a href="<?php echo esc_url( $download_url ); ?>" style="display:inline-block;padding:12px 22px;background:#1f3a4d;color:#ffffff;text-decoration:none;border-radius:4px;font-weight:bold;">
-			<?php echo $voucher->is_ticket() ? esc_html__( 'Download ticket (PDF)', 'wc-voucher-studio' ) : esc_html__( 'Download voucher (PDF)', 'wc-voucher-studio' ); ?>
+			<?php echo $voucher->is_ticket() ? esc_html__( 'Download ticket (PDF)', 'voucher-captain' ) : esc_html__( 'Download voucher (PDF)', 'voucher-captain' ); ?>
 		</a>
 	</p>
 <?php endif; ?>
@@ -62,7 +62,7 @@ $value = 'percent' === $voucher->discount_type
 		<?php
 		printf(
 			/* translators: %s: shop link */
-			esc_html__( 'Enter the code in the cart or at checkout on %s to redeem it.', 'wc-voucher-studio' ),
+			esc_html__( 'Enter the code in the cart or at checkout on %s to redeem it.', 'voucher-captain' ),
 			'<a href="' . esc_url( home_url( '/' ) ) . '">' . esc_html( wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ) ) . '</a>'
 		);
 		?>

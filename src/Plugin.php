@@ -76,13 +76,13 @@ final class Plugin {
 	}
 
 	public function load_textdomain(): void {
-		load_plugin_textdomain( 'wc-voucher-studio', false, dirname( plugin_basename( WCVS_FILE ) ) . '/languages' );
+		load_plugin_textdomain( 'voucher-captain', false, dirname( plugin_basename( WCVS_FILE ) ) . '/languages' );
 	}
 
 	public function action_links( array $links ): array {
 		$extra = array(
-			'<a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=wcvs' ) ) . '">' . esc_html__( 'Settings', 'wc-voucher-studio' ) . '</a>',
-			'<a href="' . esc_url( admin_url( 'admin.php?page=wcvs-vouchers' ) ) . '">' . esc_html__( 'Vouchers', 'wc-voucher-studio' ) . '</a>',
+			'<a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=wcvs' ) ) . '">' . esc_html__( 'Settings', 'voucher-captain' ) . '</a>',
+			'<a href="' . esc_url( admin_url( 'admin.php?page=wcvs-vouchers' ) ) . '">' . esc_html__( 'Vouchers', 'voucher-captain' ) . '</a>',
 		);
 		return array_merge( $extra, $links );
 	}
@@ -91,17 +91,17 @@ final class Plugin {
 		if ( ! current_user_can( 'activate_plugins' ) || class_exists( '\Dompdf\Dompdf' ) ) {
 			return;
 		}
-		echo '<div class="notice notice-error"><p>' . esc_html__( 'Voucher Studio: the PDF libraries are missing. Install the release ZIP or run "composer install --no-dev" in the plugin folder.', 'wc-voucher-studio' ) . '</p></div>';
+		echo '<div class="notice notice-error"><p>' . esc_html__( 'Voucher Captain: the PDF libraries are missing. Install the release ZIP or run "composer install --no-dev" in the plugin folder.', 'voucher-captain' ) . '</p></div>';
 	}
 
 	/**
-	 * Render a PHP template from /templates, overridable from the theme at woocommerce/wc-voucher-studio/.
+	 * Render a PHP template from /templates, overridable from the theme at woocommerce/voucher-captain/.
 	 */
 	public static function template( string $name, array $args = array() ): void {
-		wc_get_template( $name, $args, 'wc-voucher-studio/', WCVS_PATH . 'templates/' );
+		wc_get_template( $name, $args, 'voucher-captain/', WCVS_PATH . 'templates/' );
 	}
 
 	public static function template_html( string $name, array $args = array() ): string {
-		return wc_get_template_html( $name, $args, 'wc-voucher-studio/', WCVS_PATH . 'templates/' );
+		return wc_get_template_html( $name, $args, 'voucher-captain/', WCVS_PATH . 'templates/' );
 	}
 }

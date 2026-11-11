@@ -65,7 +65,7 @@ abstract class VoucherEmail extends \WC_Email {
 					$attachments[]      = $file;
 				}
 			} catch ( \Throwable $e ) {
-				wc_get_logger()->error( 'PDF attachment failed: ' . $e->getMessage(), array( 'source' => 'wc-voucher-studio' ) );
+				wc_get_logger()->error( 'PDF attachment failed: ' . $e->getMessage(), array( 'source' => 'voucher-captain' ) );
 			}
 		}
 		return $attachments;
@@ -111,7 +111,7 @@ abstract class VoucherEmail extends \WC_Email {
 		parent::init_form_fields();
 		$placeholder_text = sprintf(
 			/* translators: %s: list of placeholders */
-			__( 'Available placeholders: %s', 'wc-voucher-studio' ),
+			__( 'Available placeholders: %s', 'voucher-captain' ),
 			'<code>' . implode( '</code>, <code>', array_keys( Placeholders::email_map( null ) ) ) . '</code>'
 		);
 		$fields = array(
@@ -119,7 +119,7 @@ abstract class VoucherEmail extends \WC_Email {
 			'subject'            => array_merge( $this->form_fields['subject'], array( 'description' => $placeholder_text ) ),
 			'heading'            => array_merge( $this->form_fields['heading'], array( 'description' => $placeholder_text ) ),
 			'intro'              => array(
-				'title'       => __( 'Email body', 'wc-voucher-studio' ),
+				'title'       => __( 'Email body', 'voucher-captain' ),
 				'type'        => 'textarea',
 				'css'         => 'width:400px; height: 90px;',
 				'placeholder' => $this->get_default_intro(),
@@ -128,16 +128,16 @@ abstract class VoucherEmail extends \WC_Email {
 			),
 			'additional_content' => $this->form_fields['additional_content'],
 			'extra_recipients'   => array(
-				'title'       => __( 'Additional recipients', 'wc-voucher-studio' ),
+				'title'       => __( 'Additional recipients', 'voucher-captain' ),
 				'type'        => 'text',
-				'description' => __( 'Comma separated addresses that also receive this email (e.g. for your records).', 'wc-voucher-studio' ),
+				'description' => __( 'Comma separated addresses that also receive this email (e.g. for your records).', 'voucher-captain' ),
 				'default'     => '',
 				'desc_tip'    => true,
 			),
 			'attach_pdf'         => array(
-				'title'   => __( 'Attach PDF', 'wc-voucher-studio' ),
+				'title'   => __( 'Attach PDF', 'voucher-captain' ),
 				'type'    => 'checkbox',
-				'label'   => __( 'Attach the voucher PDF', 'wc-voucher-studio' ),
+				'label'   => __( 'Attach the voucher PDF', 'voucher-captain' ),
 				'default' => 'yes',
 			),
 			'email_type'         => $this->form_fields['email_type'],

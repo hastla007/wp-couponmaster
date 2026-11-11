@@ -16,16 +16,16 @@ final class Privacy {
 	}
 
 	public function exporters( array $exporters ): array {
-		$exporters['wc-voucher-studio'] = array(
-			'exporter_friendly_name' => __( 'Vouchers', 'wc-voucher-studio' ),
+		$exporters['voucher-captain'] = array(
+			'exporter_friendly_name' => __( 'Vouchers', 'voucher-captain' ),
 			'callback'               => array( $this, 'export' ),
 		);
 		return $exporters;
 	}
 
 	public function erasers( array $erasers ): array {
-		$erasers['wc-voucher-studio'] = array(
-			'eraser_friendly_name' => __( 'Vouchers', 'wc-voucher-studio' ),
+		$erasers['voucher-captain'] = array(
+			'eraser_friendly_name' => __( 'Vouchers', 'voucher-captain' ),
 			'callback'             => array( $this, 'erase' ),
 		);
 		return $erasers;
@@ -35,20 +35,20 @@ final class Privacy {
 		$items = array();
 		foreach ( $this->repo->for_email( $email, 500 ) as $voucher ) {
 			$data = array(
-				array( 'name' => __( 'Code', 'wc-voucher-studio' ), 'value' => $voucher->code ),
-				array( 'name' => __( 'Status', 'wc-voucher-studio' ), 'value' => $voucher->status_label() ),
-				array( 'name' => __( 'Buyer name', 'wc-voucher-studio' ), 'value' => $voucher->buyer_name ),
-				array( 'name' => __( 'Buyer email', 'wc-voucher-studio' ), 'value' => $voucher->buyer_email ),
-				array( 'name' => __( 'Recipient name', 'wc-voucher-studio' ), 'value' => $voucher->recipient_name ),
-				array( 'name' => __( 'Recipient email', 'wc-voucher-studio' ), 'value' => $voucher->recipient_email ),
-				array( 'name' => __( 'Message', 'wc-voucher-studio' ), 'value' => $voucher->message ),
+				array( 'name' => __( 'Code', 'voucher-captain' ), 'value' => $voucher->code ),
+				array( 'name' => __( 'Status', 'voucher-captain' ), 'value' => $voucher->status_label() ),
+				array( 'name' => __( 'Buyer name', 'voucher-captain' ), 'value' => $voucher->buyer_name ),
+				array( 'name' => __( 'Buyer email', 'voucher-captain' ), 'value' => $voucher->buyer_email ),
+				array( 'name' => __( 'Recipient name', 'voucher-captain' ), 'value' => $voucher->recipient_name ),
+				array( 'name' => __( 'Recipient email', 'voucher-captain' ), 'value' => $voucher->recipient_email ),
+				array( 'name' => __( 'Message', 'voucher-captain' ), 'value' => $voucher->message ),
 			);
 			foreach ( $voucher->fields as $field ) {
 				$data[] = array( 'name' => $field['label'] ?? '', 'value' => $field['value'] ?? '' );
 			}
 			$items[] = array(
 				'group_id'    => 'wcvs-vouchers',
-				'group_label' => __( 'Vouchers', 'wc-voucher-studio' ),
+				'group_label' => __( 'Vouchers', 'voucher-captain' ),
 				'item_id'     => 'wcvs-voucher-' . $voucher->id,
 				'data'        => $data,
 			);
@@ -83,8 +83,8 @@ final class Privacy {
 	public function policy(): void {
 		if ( function_exists( 'wp_add_privacy_policy_content' ) ) {
 			wp_add_privacy_policy_content(
-				__( 'Voucher Studio for WooCommerce', 'wc-voucher-studio' ),
-				wp_kses_post( wpautop( __( 'When you buy a voucher, we store the recipient name, recipient email address, personal message and any personalisation you enter so that we can create and deliver the voucher. The recipient receives an email with the voucher if you entered their address. This data is kept as long as the voucher can be used and is then removed according to our retention settings.', 'wc-voucher-studio' ) ) )
+				__( 'Voucher Captain', 'voucher-captain' ),
+				wp_kses_post( wpautop( __( 'When you buy a voucher, we store the recipient name, recipient email address, personal message and any personalisation you enter so that we can create and deliver the voucher. The recipient receives an email with the voucher if you entered their address. This data is kept as long as the voucher can be used and is then removed according to our retention settings.', 'voucher-captain' ) ) )
 			);
 		}
 	}

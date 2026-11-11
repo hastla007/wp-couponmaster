@@ -24,14 +24,14 @@ final class VouchersListTable extends \WP_List_Table {
 	public function get_columns(): array {
 		return array(
 			'cb'        => '<input type="checkbox" />',
-			'code'      => __( 'Code', 'wc-voucher-studio' ),
-			'product'   => __( 'Product', 'wc-voucher-studio' ),
-			'value'     => __( 'Value / balance', 'wc-voucher-studio' ),
-			'status'    => __( 'Status', 'wc-voucher-studio' ),
-			'recipient' => __( 'Buyer → recipient', 'wc-voucher-studio' ),
-			'order'     => __( 'Order', 'wc-voucher-studio' ),
-			'expires'   => __( 'Expires', 'wc-voucher-studio' ),
-			'created'   => __( 'Issued', 'wc-voucher-studio' ),
+			'code'      => __( 'Code', 'voucher-captain' ),
+			'product'   => __( 'Product', 'voucher-captain' ),
+			'value'     => __( 'Value / balance', 'voucher-captain' ),
+			'status'    => __( 'Status', 'voucher-captain' ),
+			'recipient' => __( 'Buyer → recipient', 'voucher-captain' ),
+			'order'     => __( 'Order', 'voucher-captain' ),
+			'expires'   => __( 'Expires', 'voucher-captain' ),
+			'created'   => __( 'Issued', 'voucher-captain' ),
 		);
 	}
 
@@ -48,15 +48,15 @@ final class VouchersListTable extends \WP_List_Table {
 
 	protected function get_bulk_actions(): array {
 		return array(
-			'resend'     => __( 'Resend email', 'wc-voucher-studio' ),
-			'void'       => __( 'Void', 'wc-voucher-studio' ),
-			'reactivate' => __( 'Reactivate', 'wc-voucher-studio' ),
+			'resend'     => __( 'Resend email', 'voucher-captain' ),
+			'void'       => __( 'Void', 'voucher-captain' ),
+			'reactivate' => __( 'Reactivate', 'voucher-captain' ),
 		);
 	}
 
 	protected function get_views(): array {
 		$current = sanitize_key( $_GET['status'] ?? '' ); // phpcs:ignore WordPress.Security.NonceVerification
-		$views   = array( '' => __( 'All', 'wc-voucher-studio' ) ) + Voucher::statuses();
+		$views   = array( '' => __( 'All', 'voucher-captain' ) ) + Voucher::statuses();
 		$out     = array();
 		foreach ( $views as $key => $label ) {
 			$url         = add_query_arg( array( 'page' => 'wcvs-vouchers', 'status' => $key ), admin_url( 'admin.php' ) );
@@ -72,16 +72,16 @@ final class VouchersListTable extends \WP_List_Table {
 		$type     = sanitize_key( $_GET['type'] ?? '' ); // phpcs:ignore WordPress.Security.NonceVerification
 		$expiring = sanitize_key( $_GET['expiring'] ?? '' ); // phpcs:ignore WordPress.Security.NonceVerification
 		echo '<div class="alignleft actions">';
-		echo '<label class="screen-reader-text" for="wcvs-filter-type">' . esc_html__( 'Filter by type', 'wc-voucher-studio' ) . '</label>';
-		echo '<select name="type" id="wcvs-filter-type"><option value="">' . esc_html__( 'All types', 'wc-voucher-studio' ) . '</option>';
+		echo '<label class="screen-reader-text" for="wcvs-filter-type">' . esc_html__( 'Filter by type', 'voucher-captain' ) . '</label>';
+		echo '<select name="type" id="wcvs-filter-type"><option value="">' . esc_html__( 'All types', 'voucher-captain' ) . '</option>';
 		foreach ( Voucher::types() as $key => $label ) {
 			echo '<option value="' . esc_attr( $key ) . '"' . selected( $type, $key, false ) . '>' . esc_html( $label ) . '</option>';
 		}
 		echo '</select>';
-		echo '<label><input type="checkbox" name="expiring" value="soon" ' . checked( $expiring, 'soon', false ) . '> ' . esc_html__( 'Expiring within 30 days', 'wc-voucher-studio' ) . '</label> ';
-		submit_button( __( 'Filter', 'wc-voucher-studio' ), '', 'filter_action', false );
+		echo '<label><input type="checkbox" name="expiring" value="soon" ' . checked( $expiring, 'soon', false ) . '> ' . esc_html__( 'Expiring within 30 days', 'voucher-captain' ) . '</label> ';
+		submit_button( __( 'Filter', 'voucher-captain' ), '', 'filter_action', false );
 		$export = wp_nonce_url( add_query_arg( array_merge( array( 'action' => 'wcvs_export' ), $this->filter_args() ), admin_url( 'admin-post.php' ) ), 'wcvs_export' );
-		echo ' <a class="button" href="' . esc_url( $export ) . '">' . esc_html__( 'Export CSV', 'wc-voucher-studio' ) . '</a>';
+		echo ' <a class="button" href="' . esc_url( $export ) . '">' . esc_html__( 'Export CSV', 'voucher-captain' ) . '</a>';
 		echo '</div>';
 	}
 
@@ -127,11 +127,11 @@ final class VouchersListTable extends \WP_List_Table {
 	protected function column_code( Voucher $v ): string {
 		$url     = add_query_arg( array( 'page' => 'wcvs-vouchers', 'voucher' => $v->id ), admin_url( 'admin.php' ) );
 		$actions = array(
-			'view' => '<a href="' . esc_url( $url ) . '">' . esc_html__( 'Details', 'wc-voucher-studio' ) . '</a>',
+			'view' => '<a href="' . esc_url( $url ) . '">' . esc_html__( 'Details', 'voucher-captain' ) . '</a>',
 			'pdf'  => '<a href="' . esc_url( wcvs()->downloads->admin_url( $v ) ) . '" target="_blank">PDF</a>',
 		);
 		if ( $v->coupon_id ) {
-			$actions['coupon'] = '<a href="' . esc_url( get_edit_post_link( $v->coupon_id ) ?: '' ) . '">' . esc_html__( 'Coupon', 'wc-voucher-studio' ) . '</a>';
+			$actions['coupon'] = '<a href="' . esc_url( get_edit_post_link( $v->coupon_id ) ?: '' ) . '">' . esc_html__( 'Coupon', 'voucher-captain' ) . '</a>';
 		}
 		return '<strong><a href="' . esc_url( $url ) . '"><code>' . esc_html( $v->code ) . '</code></a></strong><br><small>' . esc_html( Voucher::types()[ $v->type ] ?? $v->type ) . '</small>' . $this->row_actions( $actions );
 	}
@@ -147,10 +147,10 @@ final class VouchersListTable extends \WP_List_Table {
 		}
 		$out = wc_price( $v->initial_amount, array( 'currency' => $v->currency ) );
 		if ( $v->is_multi_use() ) {
-			$out .= '<br><small>' . esc_html__( 'Balance:', 'wc-voucher-studio' ) . ' ' . wc_price( $v->balance, array( 'currency' => $v->currency ) ) . '</small>';
+			$out .= '<br><small>' . esc_html__( 'Balance:', 'voucher-captain' ) . ' ' . wc_price( $v->balance, array( 'currency' => $v->currency ) ) . '</small>';
 		}
 		if ( $v->is_ticket() ) {
-			$out .= '<br><small>' . esc_html( sprintf( /* translators: 1: used, 2: max */ __( 'Check-ins: %1$d / %2$d', 'wc-voucher-studio' ), $v->checkins, $v->max_checkins ) ) . '</small>';
+			$out .= '<br><small>' . esc_html( sprintf( /* translators: 1: used, 2: max */ __( 'Check-ins: %1$d / %2$d', 'voucher-captain' ), $v->checkins, $v->max_checkins ) ) . '</small>';
 		}
 		return wp_kses_post( $out );
 	}
@@ -178,7 +178,7 @@ final class VouchersListTable extends \WP_List_Table {
 	}
 
 	protected function column_expires( Voucher $v ): string {
-		return $v->expires_at ? esc_html( get_date_from_gmt( $v->expires_at, get_option( 'date_format' ) ) ) : esc_html__( 'Never', 'wc-voucher-studio' );
+		return $v->expires_at ? esc_html( get_date_from_gmt( $v->expires_at, get_option( 'date_format' ) ) ) : esc_html__( 'Never', 'voucher-captain' );
 	}
 
 	protected function column_created( Voucher $v ): string {
@@ -186,6 +186,6 @@ final class VouchersListTable extends \WP_List_Table {
 	}
 
 	public function no_items(): void {
-		esc_html_e( 'No vouchers found.', 'wc-voucher-studio' );
+		esc_html_e( 'No vouchers found.', 'voucher-captain' );
 	}
 }

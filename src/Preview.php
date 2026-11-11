@@ -21,11 +21,11 @@ final class Preview {
 		$v->balance         = 50;
 		$v->currency        = get_woocommerce_currency();
 		$v->expires_at      = gmdate( 'Y-m-d 23:59:59', time() + YEAR_IN_SECONDS );
-		$v->buyer_name      = __( 'Alex Buyer', 'wc-voucher-studio' );
+		$v->buyer_name      = __( 'Alex Buyer', 'voucher-captain' );
 		$v->buyer_email     = 'buyer@example.com';
-		$v->recipient_name  = __( 'Sam Recipient', 'wc-voucher-studio' );
+		$v->recipient_name  = __( 'Sam Recipient', 'voucher-captain' );
 		$v->recipient_email = 'recipient@example.com';
-		$v->message         = __( 'Happy birthday! Enjoy something nice.', 'wc-voucher-studio' );
+		$v->message         = __( 'Happy birthday! Enjoy something nice.', 'voucher-captain' );
 		$v->created_at      = gmdate( 'Y-m-d H:i:s' );
 		$v->token           = str_repeat( '0', 48 );
 		$v->max_checkins    = 1;
@@ -35,12 +35,12 @@ final class Preview {
 	/** Sample placeholder values for the designer canvas. */
 	public static function sample_values(): array {
 		$values = Placeholders::values( self::sample_voucher() );
-		$values['product_name']   = __( 'Gift card', 'wc-voucher-studio' );
+		$values['product_name']   = __( 'Gift card', 'voucher-captain' );
 		$values['order_number']   = '1042';
 		$values['order_id']       = '1042';
 		$values['order_date']     = wp_date( get_option( 'date_format' ) );
 		$values['event_date']     = wp_date( get_option( 'date_format' ), time() + MONTH_IN_SECONDS );
-		$values['event_location'] = __( 'Main hall', 'wc-voucher-studio' );
+		$values['event_location'] = __( 'Main hall', 'voucher-captain' );
 		return $values;
 	}
 
@@ -65,18 +65,18 @@ final class Preview {
 		$ip_key = 'wcvs_pv_' . md5( (string) \WC_Geolocation::get_ip_address() );
 		$count  = (int) get_transient( $ip_key );
 		if ( $count > 20 ) {
-			wp_die( esc_html__( 'Too many preview requests. Please try again later.', 'wc-voucher-studio' ), 429 );
+			wp_die( esc_html__( 'Too many preview requests. Please try again later.', 'voucher-captain' ), 429 );
 		}
 		set_transient( $ip_key, $count + 1, 10 * MINUTE_IN_SECONDS );
 
 		$product_id = absint( $_REQUEST['variation_id'] ?? 0 ) ?: absint( $_REQUEST['product_id'] ?? 0 );
 		$product    = wc_get_product( $product_id );
 		if ( ! $product || ! ProductConfig::is_voucher( $product ) || 'publish' !== get_post_status( $product->get_parent_id() ?: $product->get_id() ) ) {
-			wp_die( esc_html__( 'Invalid product.', 'wc-voucher-studio' ), 400 );
+			wp_die( esc_html__( 'Invalid product.', 'voucher-captain' ), 400 );
 		}
 		$config = ProductConfig::get( $product );
 		if ( 'yes' !== $config['preview'] ) {
-			wp_die( esc_html__( 'Preview is not available for this product.', 'wc-voucher-studio' ), 403 );
+			wp_die( esc_html__( 'Preview is not available for this product.', 'voucher-captain' ), 403 );
 		}
 
 		$fields = wcvs()->fields->collect_posted( $product, false );
@@ -118,7 +118,7 @@ final class Preview {
 			'y'        => PdfRenderer::page_size( $design['page'] )[1] / 2 - 12,
 			'w'        => PdfRenderer::page_size( $design['page'] )[0],
 			'h'        => 24,
-			'text'     => __( 'PREVIEW', 'wc-voucher-studio' ),
+			'text'     => __( 'PREVIEW', 'voucher-captain' ),
 			'size'     => 48,
 			'bold'     => true,
 			'align'    => 'center',

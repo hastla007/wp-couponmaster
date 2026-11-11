@@ -29,13 +29,13 @@ final class TemplatePostType {
 			self::POST_TYPE,
 			array(
 				'labels'          => array(
-					'name'          => __( 'PDF templates', 'wc-voucher-studio' ),
-					'singular_name' => __( 'PDF template', 'wc-voucher-studio' ),
-					'add_new'       => __( 'Add template', 'wc-voucher-studio' ),
-					'add_new_item'  => __( 'Add PDF template', 'wc-voucher-studio' ),
-					'edit_item'     => __( 'Edit PDF template', 'wc-voucher-studio' ),
-					'not_found'     => __( 'No templates found.', 'wc-voucher-studio' ),
-					'all_items'     => __( 'PDF templates', 'wc-voucher-studio' ),
+					'name'          => __( 'PDF templates', 'voucher-captain' ),
+					'singular_name' => __( 'PDF template', 'voucher-captain' ),
+					'add_new'       => __( 'Add template', 'voucher-captain' ),
+					'add_new_item'  => __( 'Add PDF template', 'voucher-captain' ),
+					'edit_item'     => __( 'Edit PDF template', 'voucher-captain' ),
+					'not_found'     => __( 'No templates found.', 'voucher-captain' ),
+					'all_items'     => __( 'PDF templates', 'voucher-captain' ),
 				),
 				'public'          => false,
 				'show_ui'         => true,
@@ -99,14 +99,14 @@ final class TemplatePostType {
 				'elements' => array(
 					array( 'id' => 'e1', 'type' => 'rect', 'name' => 'Frame', 'x' => 6, 'y' => 6, 'w' => 198, 'h' => 136, 'fill' => 'transparent', 'borderColor' => '#b8925a', 'borderWidth' => 0.8, 'radius' => 3 ),
 					array( 'id' => 'e2', 'type' => 'rect', 'name' => 'Band', 'x' => 6, 'y' => 6, 'w' => 62, 'h' => 136, 'fill' => '#1f3a4d' ),
-					array( 'id' => 'e3', 'type' => 'heading', 'name' => 'Title', 'x' => 10, 'y' => 20, 'w' => 54, 'h' => 30, 'text' => __( 'GIFT VOUCHER', 'wc-voucher-studio' ), 'font' => 'DejaVu Serif', 'size' => 20, 'color' => '#f3e6cf', 'align' => 'center', 'bold' => true, 'letterSpacing' => 1 ),
+					array( 'id' => 'e3', 'type' => 'heading', 'name' => 'Title', 'x' => 10, 'y' => 20, 'w' => 54, 'h' => 30, 'text' => __( 'GIFT VOUCHER', 'voucher-captain' ), 'font' => 'DejaVu Serif', 'size' => 20, 'color' => '#f3e6cf', 'align' => 'center', 'bold' => true, 'letterSpacing' => 1 ),
 					array( 'id' => 'e4', 'type' => 'text', 'name' => 'Site', 'x' => 10, 'y' => 120, 'w' => 54, 'h' => 10, 'text' => '{site_name}', 'font' => 'DejaVu Sans', 'size' => 9, 'color' => '#f3e6cf', 'align' => 'center' ),
 					array( 'id' => 'e5', 'type' => 'text', 'name' => 'Value', 'x' => 76, 'y' => 18, 'w' => 120, 'h' => 22, 'text' => '{coupon_value}', 'font' => 'DejaVu Serif', 'size' => 34, 'color' => '#1f3a4d', 'align' => 'left', 'bold' => true ),
-					array( 'id' => 'e6', 'type' => 'text', 'name' => 'For', 'x' => 76, 'y' => 44, 'w' => 120, 'h' => 10, 'text' => __( 'For: {recipient_name}', 'wc-voucher-studio' ), 'font' => 'DejaVu Sans', 'size' => 12, 'color' => '#333333' ),
+					array( 'id' => 'e6', 'type' => 'text', 'name' => 'For', 'x' => 76, 'y' => 44, 'w' => 120, 'h' => 10, 'text' => __( 'For: {recipient_name}', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 12, 'color' => '#333333' ),
 					array( 'id' => 'e7', 'type' => 'text', 'name' => 'Message', 'x' => 76, 'y' => 56, 'w' => 120, 'h' => 30, 'text' => '{message}', 'font' => 'DejaVu Serif', 'size' => 11, 'color' => '#555555', 'italic' => true ),
-					array( 'id' => 'e8', 'type' => 'text', 'name' => 'Code label', 'x' => 76, 'y' => 96, 'w' => 80, 'h' => 6, 'text' => __( 'Voucher code', 'wc-voucher-studio' ), 'font' => 'DejaVu Sans', 'size' => 8, 'color' => '#8a8a8a', 'uppercase' => true ),
+					array( 'id' => 'e8', 'type' => 'text', 'name' => 'Code label', 'x' => 76, 'y' => 96, 'w' => 80, 'h' => 6, 'text' => __( 'Voucher code', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 8, 'color' => '#8a8a8a', 'uppercase' => true ),
 					array( 'id' => 'e9', 'type' => 'text', 'name' => 'Code', 'x' => 76, 'y' => 102, 'w' => 90, 'h' => 10, 'text' => '{coupon_code}', 'font' => 'DejaVu Sans Mono', 'size' => 15, 'color' => '#1f3a4d', 'bold' => true ),
-					array( 'id' => 'e10', 'type' => 'text', 'name' => 'Expiry', 'x' => 76, 'y' => 118, 'w' => 90, 'h' => 8, 'text' => __( 'Valid until {expiry_date}', 'wc-voucher-studio' ), 'font' => 'DejaVu Sans', 'size' => 9, 'color' => '#555555' ),
+					array( 'id' => 'e10', 'type' => 'text', 'name' => 'Expiry', 'x' => 76, 'y' => 118, 'w' => 90, 'h' => 8, 'text' => __( 'Valid until {expiry_date}', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 9, 'color' => '#555555' ),
 					array( 'id' => 'e11', 'type' => 'qrcode', 'name' => 'QR code', 'x' => 170, 'y' => 100, 'w' => 28, 'h' => 28, 'qrContent' => 'code', 'color' => '#1f3a4d' ),
 				),
 			),
@@ -120,11 +120,11 @@ final class TemplatePostType {
 					array( 'id' => 't1', 'type' => 'rect', 'name' => 'Header', 'x' => 0, 'y' => 0, 'w' => 105, 'h' => 38, 'fill' => '#5b2a86' ),
 					array( 'id' => 't2', 'type' => 'heading', 'name' => 'Event', 'x' => 6, 'y' => 8, 'w' => 93, 'h' => 14, 'text' => '{product_name}', 'font' => 'DejaVu Sans', 'size' => 16, 'color' => '#ffffff', 'bold' => true ),
 					array( 'id' => 't3', 'type' => 'text', 'name' => 'When', 'x' => 6, 'y' => 24, 'w' => 93, 'h' => 10, 'text' => '{event_date} · {event_location}', 'font' => 'DejaVu Sans', 'size' => 9, 'color' => '#e9dcf5' ),
-					array( 'id' => 't4', 'type' => 'text', 'name' => 'Guest', 'x' => 6, 'y' => 44, 'w' => 93, 'h' => 8, 'text' => __( 'Guest: {recipient_name}', 'wc-voucher-studio' ), 'font' => 'DejaVu Sans', 'size' => 10, 'color' => '#222222' ),
-					array( 'id' => 't5', 'type' => 'text', 'name' => 'Admissions', 'x' => 6, 'y' => 52, 'w' => 93, 'h' => 8, 'text' => __( 'Admissions: {ticket_admissions}', 'wc-voucher-studio' ), 'font' => 'DejaVu Sans', 'size' => 10, 'color' => '#222222' ),
+					array( 'id' => 't4', 'type' => 'text', 'name' => 'Guest', 'x' => 6, 'y' => 44, 'w' => 93, 'h' => 8, 'text' => __( 'Guest: {recipient_name}', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 10, 'color' => '#222222' ),
+					array( 'id' => 't5', 'type' => 'text', 'name' => 'Admissions', 'x' => 6, 'y' => 52, 'w' => 93, 'h' => 8, 'text' => __( 'Admissions: {ticket_admissions}', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 10, 'color' => '#222222' ),
 					array( 'id' => 't6', 'type' => 'qrcode', 'name' => 'Check-in QR', 'x' => 25, 'y' => 64, 'w' => 55, 'h' => 55, 'qrContent' => 'checkin', 'color' => '#000000' ),
 					array( 'id' => 't7', 'type' => 'text', 'name' => 'Code', 'x' => 6, 'y' => 122, 'w' => 93, 'h' => 8, 'text' => '{coupon_code}', 'font' => 'DejaVu Sans Mono', 'size' => 11, 'color' => '#5b2a86', 'align' => 'center', 'bold' => true ),
-					array( 'id' => 't8', 'type' => 'text', 'name' => 'Order', 'x' => 6, 'y' => 134, 'w' => 93, 'h' => 6, 'text' => __( 'Order #{order_number} · {site_name}', 'wc-voucher-studio' ), 'font' => 'DejaVu Sans', 'size' => 7, 'color' => '#888888', 'align' => 'center' ),
+					array( 'id' => 't8', 'type' => 'text', 'name' => 'Order', 'x' => 6, 'y' => 134, 'w' => 93, 'h' => 6, 'text' => __( 'Order #{order_number} · {site_name}', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 7, 'color' => '#888888', 'align' => 'center' ),
 				),
 			),
 		);
@@ -139,8 +139,8 @@ final class TemplatePostType {
 			return;
 		}
 		$titles = array(
-			'giftcard' => __( 'Gift card (A5 landscape)', 'wc-voucher-studio' ),
-			'ticket'   => __( 'Event ticket (A6)', 'wc-voucher-studio' ),
+			'giftcard' => __( 'Gift card (A5 landscape)', 'voucher-captain' ),
+			'ticket'   => __( 'Event ticket (A6)', 'voucher-captain' ),
 		);
 		$first = 0;
 		foreach ( self::default_designs() as $key => $design ) {
@@ -163,15 +163,15 @@ final class TemplatePostType {
 
 	public function meta_boxes(): void {
 		remove_meta_box( 'slugdiv', self::POST_TYPE, 'normal' );
-		add_meta_box( 'wcvs-designer-box', __( 'Designer', 'wc-voucher-studio' ), array( $this, 'designer_box' ), self::POST_TYPE, 'normal', 'high' );
+		add_meta_box( 'wcvs-designer-box', __( 'Designer', 'voucher-captain' ), array( $this, 'designer_box' ), self::POST_TYPE, 'normal', 'high' );
 	}
 
 	public function designer_box( \WP_Post $post ): void {
 		$design = self::get_design( $post->ID );
 		wp_nonce_field( 'wcvs_save_design', 'wcvs_design_nonce' );
 		echo '<textarea name="wcvs_design" id="wcvs-design-json" hidden>' . esc_textarea( wp_json_encode( $design ) ) . '</textarea>';
-		echo '<div id="wcvs-designer" class="wcvs-designer" aria-label="' . esc_attr__( 'Template designer', 'wc-voucher-studio' ) . '"><p>' . esc_html__( 'Loading designer…', 'wc-voucher-studio' ) . '</p></div>';
-		echo '<noscript>' . esc_html__( 'The designer requires JavaScript.', 'wc-voucher-studio' ) . '</noscript>';
+		echo '<div id="wcvs-designer" class="wcvs-designer" aria-label="' . esc_attr__( 'Template designer', 'voucher-captain' ) . '"><p>' . esc_html__( 'Loading designer…', 'voucher-captain' ) . '</p></div>';
+		echo '<noscript>' . esc_html__( 'The designer requires JavaScript.', 'voucher-captain' ) . '</noscript>';
 	}
 
 	public function assets( string $hook ): void {
@@ -208,86 +208,86 @@ final class TemplatePostType {
 				'previewNonce' => wp_create_nonce( 'wcvs_template_preview' ),
 				'postId'       => get_the_ID(),
 				'i18n'         => array(
-					'text'        => __( 'Text', 'wc-voucher-studio' ),
-					'heading'     => __( 'Heading', 'wc-voucher-studio' ),
-					'image'       => __( 'Image', 'wc-voucher-studio' ),
-					'qrcode'      => __( 'QR code', 'wc-voucher-studio' ),
-					'barcode'     => __( 'Barcode', 'wc-voucher-studio' ),
-					'rect'        => __( 'Shape', 'wc-voucher-studio' ),
-					'line'        => __( 'Line', 'wc-voucher-studio' ),
-					'add'         => __( 'Add element', 'wc-voucher-studio' ),
-					'page'        => __( 'Page', 'wc-voucher-studio' ),
-					'layers'      => __( 'Layers', 'wc-voucher-studio' ),
-					'properties'  => __( 'Properties', 'wc-voucher-studio' ),
-					'format'      => __( 'Format', 'wc-voucher-studio' ),
-					'custom'      => __( 'Custom', 'wc-voucher-studio' ),
-					'width'       => __( 'Width (mm)', 'wc-voucher-studio' ),
-					'height'      => __( 'Height (mm)', 'wc-voucher-studio' ),
-					'orientation' => __( 'Orientation', 'wc-voucher-studio' ),
-					'portrait'    => __( 'Portrait', 'wc-voucher-studio' ),
-					'landscape'   => __( 'Landscape', 'wc-voucher-studio' ),
-					'background'  => __( 'Background colour', 'wc-voucher-studio' ),
-					'bgImage'     => __( 'Background image', 'wc-voucher-studio' ),
-					'choose'      => __( 'Choose image', 'wc-voucher-studio' ),
-					'remove'      => __( 'Remove', 'wc-voucher-studio' ),
-					'fit'         => __( 'Fit', 'wc-voucher-studio' ),
-					'contain'     => __( 'Contain', 'wc-voucher-studio' ),
-					'cover'       => __( 'Cover', 'wc-voucher-studio' ),
-					'stretch'     => __( 'Stretch', 'wc-voucher-studio' ),
-					'content'     => __( 'Content', 'wc-voucher-studio' ),
-					'insert'      => __( 'Insert placeholder…', 'wc-voucher-studio' ),
-					'font'        => __( 'Font', 'wc-voucher-studio' ),
-					'size'        => __( 'Size (pt)', 'wc-voucher-studio' ),
-					'color'       => __( 'Colour', 'wc-voucher-studio' ),
-					'fill'        => __( 'Fill', 'wc-voucher-studio' ),
-					'align'       => __( 'Alignment', 'wc-voucher-studio' ),
-					'valign'      => __( 'Vertical alignment', 'wc-voucher-studio' ),
-					'bold'        => __( 'Bold', 'wc-voucher-studio' ),
-					'italic'      => __( 'Italic', 'wc-voucher-studio' ),
-					'underline'   => __( 'Underline', 'wc-voucher-studio' ),
-					'uppercase'   => __( 'Uppercase', 'wc-voucher-studio' ),
-					'lineHeight'  => __( 'Line height', 'wc-voucher-studio' ),
-					'letterSpacing' => __( 'Letter spacing (pt)', 'wc-voucher-studio' ),
-					'rotation'    => __( 'Rotation (°)', 'wc-voucher-studio' ),
-					'opacity'     => __( 'Opacity', 'wc-voucher-studio' ),
-					'border'      => __( 'Border width (mm)', 'wc-voucher-studio' ),
-					'borderColor' => __( 'Border colour', 'wc-voucher-studio' ),
-					'radius'      => __( 'Corner radius (mm)', 'wc-voucher-studio' ),
-					'qrContent'   => __( 'QR content', 'wc-voucher-studio' ),
-					'qrCode'      => __( 'Coupon code', 'wc-voucher-studio' ),
-					'qrCheckin'   => __( 'Ticket check-in link', 'wc-voucher-studio' ),
-					'qrDownload'  => __( 'PDF download link', 'wc-voucher-studio' ),
-					'qrCustom'    => __( 'Custom text', 'wc-voucher-studio' ),
-					'value'       => __( 'Value', 'wc-voucher-studio' ),
-					'barcodeType' => __( 'Barcode type', 'wc-voucher-studio' ),
-					'showText'    => __( 'Show text', 'wc-voucher-studio' ),
-					'name'        => __( 'Layer name', 'wc-voucher-studio' ),
-					'lock'        => __( 'Lock', 'wc-voucher-studio' ),
-					'hide'        => __( 'Hide', 'wc-voucher-studio' ),
-					'up'          => __( 'Bring forward', 'wc-voucher-studio' ),
-					'down'        => __( 'Send backward', 'wc-voucher-studio' ),
-					'duplicate'   => __( 'Duplicate', 'wc-voucher-studio' ),
-					'delete'      => __( 'Delete', 'wc-voucher-studio' ),
-					'preview'     => __( 'Preview PDF', 'wc-voucher-studio' ),
-					'grid'        => __( 'Snap to guides', 'wc-voucher-studio' ),
-					'zoom'        => __( 'Zoom', 'wc-voucher-studio' ),
-					'undo'        => __( 'Undo', 'wc-voucher-studio' ),
-					'redo'        => __( 'Redo', 'wc-voucher-studio' ),
-					'starter'     => __( 'Load starter layout…', 'wc-voucher-studio' ),
-					'starterGift' => __( 'Gift card', 'wc-voucher-studio' ),
-					'starterTicket' => __( 'Event ticket', 'wc-voucher-studio' ),
-					'confirmStarter' => __( 'Replace the current layout?', 'wc-voucher-studio' ),
-					'noSelection' => __( 'Select an element on the canvas or in the layer list.', 'wc-voucher-studio' ),
-					'alignPage'   => __( 'Align to page', 'wc-voucher-studio' ),
-					'left'        => __( 'Left', 'wc-voucher-studio' ),
-					'center'      => __( 'Center', 'wc-voucher-studio' ),
-					'right'       => __( 'Right', 'wc-voucher-studio' ),
-					'justify'     => __( 'Justify', 'wc-voucher-studio' ),
-					'top'         => __( 'Top', 'wc-voucher-studio' ),
-					'middle'      => __( 'Middle', 'wc-voucher-studio' ),
-					'bottom'      => __( 'Bottom', 'wc-voucher-studio' ),
-					'position'    => __( 'Position & size (mm)', 'wc-voucher-studio' ),
-					'shortcuts'   => __( 'Arrow keys move the selection (Shift = 5 mm), Delete removes it, Ctrl+D duplicates, Ctrl+Z undoes.', 'wc-voucher-studio' ),
+					'text'        => __( 'Text', 'voucher-captain' ),
+					'heading'     => __( 'Heading', 'voucher-captain' ),
+					'image'       => __( 'Image', 'voucher-captain' ),
+					'qrcode'      => __( 'QR code', 'voucher-captain' ),
+					'barcode'     => __( 'Barcode', 'voucher-captain' ),
+					'rect'        => __( 'Shape', 'voucher-captain' ),
+					'line'        => __( 'Line', 'voucher-captain' ),
+					'add'         => __( 'Add element', 'voucher-captain' ),
+					'page'        => __( 'Page', 'voucher-captain' ),
+					'layers'      => __( 'Layers', 'voucher-captain' ),
+					'properties'  => __( 'Properties', 'voucher-captain' ),
+					'format'      => __( 'Format', 'voucher-captain' ),
+					'custom'      => __( 'Custom', 'voucher-captain' ),
+					'width'       => __( 'Width (mm)', 'voucher-captain' ),
+					'height'      => __( 'Height (mm)', 'voucher-captain' ),
+					'orientation' => __( 'Orientation', 'voucher-captain' ),
+					'portrait'    => __( 'Portrait', 'voucher-captain' ),
+					'landscape'   => __( 'Landscape', 'voucher-captain' ),
+					'background'  => __( 'Background colour', 'voucher-captain' ),
+					'bgImage'     => __( 'Background image', 'voucher-captain' ),
+					'choose'      => __( 'Choose image', 'voucher-captain' ),
+					'remove'      => __( 'Remove', 'voucher-captain' ),
+					'fit'         => __( 'Fit', 'voucher-captain' ),
+					'contain'     => __( 'Contain', 'voucher-captain' ),
+					'cover'       => __( 'Cover', 'voucher-captain' ),
+					'stretch'     => __( 'Stretch', 'voucher-captain' ),
+					'content'     => __( 'Content', 'voucher-captain' ),
+					'insert'      => __( 'Insert placeholder…', 'voucher-captain' ),
+					'font'        => __( 'Font', 'voucher-captain' ),
+					'size'        => __( 'Size (pt)', 'voucher-captain' ),
+					'color'       => __( 'Colour', 'voucher-captain' ),
+					'fill'        => __( 'Fill', 'voucher-captain' ),
+					'align'       => __( 'Alignment', 'voucher-captain' ),
+					'valign'      => __( 'Vertical alignment', 'voucher-captain' ),
+					'bold'        => __( 'Bold', 'voucher-captain' ),
+					'italic'      => __( 'Italic', 'voucher-captain' ),
+					'underline'   => __( 'Underline', 'voucher-captain' ),
+					'uppercase'   => __( 'Uppercase', 'voucher-captain' ),
+					'lineHeight'  => __( 'Line height', 'voucher-captain' ),
+					'letterSpacing' => __( 'Letter spacing (pt)', 'voucher-captain' ),
+					'rotation'    => __( 'Rotation (°)', 'voucher-captain' ),
+					'opacity'     => __( 'Opacity', 'voucher-captain' ),
+					'border'      => __( 'Border width (mm)', 'voucher-captain' ),
+					'borderColor' => __( 'Border colour', 'voucher-captain' ),
+					'radius'      => __( 'Corner radius (mm)', 'voucher-captain' ),
+					'qrContent'   => __( 'QR content', 'voucher-captain' ),
+					'qrCode'      => __( 'Coupon code', 'voucher-captain' ),
+					'qrCheckin'   => __( 'Ticket check-in link', 'voucher-captain' ),
+					'qrDownload'  => __( 'PDF download link', 'voucher-captain' ),
+					'qrCustom'    => __( 'Custom text', 'voucher-captain' ),
+					'value'       => __( 'Value', 'voucher-captain' ),
+					'barcodeType' => __( 'Barcode type', 'voucher-captain' ),
+					'showText'    => __( 'Show text', 'voucher-captain' ),
+					'name'        => __( 'Layer name', 'voucher-captain' ),
+					'lock'        => __( 'Lock', 'voucher-captain' ),
+					'hide'        => __( 'Hide', 'voucher-captain' ),
+					'up'          => __( 'Bring forward', 'voucher-captain' ),
+					'down'        => __( 'Send backward', 'voucher-captain' ),
+					'duplicate'   => __( 'Duplicate', 'voucher-captain' ),
+					'delete'      => __( 'Delete', 'voucher-captain' ),
+					'preview'     => __( 'Preview PDF', 'voucher-captain' ),
+					'grid'        => __( 'Snap to guides', 'voucher-captain' ),
+					'zoom'        => __( 'Zoom', 'voucher-captain' ),
+					'undo'        => __( 'Undo', 'voucher-captain' ),
+					'redo'        => __( 'Redo', 'voucher-captain' ),
+					'starter'     => __( 'Load starter layout…', 'voucher-captain' ),
+					'starterGift' => __( 'Gift card', 'voucher-captain' ),
+					'starterTicket' => __( 'Event ticket', 'voucher-captain' ),
+					'confirmStarter' => __( 'Replace the current layout?', 'voucher-captain' ),
+					'noSelection' => __( 'Select an element on the canvas or in the layer list.', 'voucher-captain' ),
+					'alignPage'   => __( 'Align to page', 'voucher-captain' ),
+					'left'        => __( 'Left', 'voucher-captain' ),
+					'center'      => __( 'Center', 'voucher-captain' ),
+					'right'       => __( 'Right', 'voucher-captain' ),
+					'justify'     => __( 'Justify', 'voucher-captain' ),
+					'top'         => __( 'Top', 'voucher-captain' ),
+					'middle'      => __( 'Middle', 'voucher-captain' ),
+					'bottom'      => __( 'Bottom', 'voucher-captain' ),
+					'position'    => __( 'Position & size (mm)', 'voucher-captain' ),
+					'shortcuts'   => __( 'Arrow keys move the selection (Shift = 5 mm), Delete removes it, Ctrl+D duplicates, Ctrl+Z undoes.', 'voucher-captain' ),
 				),
 				'starters'     => self::default_designs(),
 			)
@@ -404,7 +404,7 @@ final class TemplatePostType {
 	public function ajax_preview(): void {
 		check_ajax_referer( 'wcvs_template_preview', 'nonce' );
 		if ( ! current_user_can( 'edit_products' ) ) {
-			wp_die( esc_html__( 'You are not allowed to do this.', 'wc-voucher-studio' ), 403 );
+			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
 		$design = json_decode( wp_unslash( (string) ( $_POST['design'] ?? '' ) ), true ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised below.
 		$design = is_array( $design ) ? self::sanitize_design( $design ) : self::get_design( absint( $_POST['post_id'] ?? 0 ) );
@@ -415,7 +415,7 @@ final class TemplatePostType {
 	public function row_actions( array $actions, \WP_Post $post ): array {
 		if ( self::POST_TYPE === $post->post_type && current_user_can( 'edit_products' ) ) {
 			$url                  = wp_nonce_url( admin_url( 'admin.php?action=wcvs_duplicate_template&post=' . $post->ID ), 'wcvs_duplicate_' . $post->ID );
-			$actions['duplicate'] = '<a href="' . esc_url( $url ) . '">' . esc_html__( 'Duplicate', 'wc-voucher-studio' ) . '</a>';
+			$actions['duplicate'] = '<a href="' . esc_url( $url ) . '">' . esc_html__( 'Duplicate', 'voucher-captain' ) . '</a>';
 			unset( $actions['inline hide-if-no-js'] );
 		}
 		return $actions;
@@ -425,14 +425,14 @@ final class TemplatePostType {
 		$id = absint( $_GET['post'] ?? 0 );
 		check_admin_referer( 'wcvs_duplicate_' . $id );
 		if ( ! current_user_can( 'edit_products' ) || self::POST_TYPE !== get_post_type( $id ) ) {
-			wp_die( esc_html__( 'You are not allowed to do this.', 'wc-voucher-studio' ), 403 );
+			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
 		$new = wp_insert_post(
 			array(
 				'post_type'   => self::POST_TYPE,
 				'post_status' => 'draft',
 				/* translators: %s: template title */
-				'post_title'  => sprintf( __( '%s (copy)', 'wc-voucher-studio' ), get_the_title( $id ) ),
+				'post_title'  => sprintf( __( '%s (copy)', 'voucher-captain' ), get_the_title( $id ) ),
 			)
 		);
 		if ( $new && ! is_wp_error( $new ) ) {
@@ -447,8 +447,8 @@ final class TemplatePostType {
 	public function columns( array $columns ): array {
 		$date = $columns['date'] ?? null;
 		unset( $columns['date'] );
-		$columns['wcvs_format'] = __( 'Format', 'wc-voucher-studio' );
-		$columns['wcvs_usage']  = __( 'Used by products', 'wc-voucher-studio' );
+		$columns['wcvs_format'] = __( 'Format', 'voucher-captain' );
+		$columns['wcvs_usage']  = __( 'Used by products', 'voucher-captain' );
 		if ( $date ) {
 			$columns['date'] = $date;
 		}
@@ -459,7 +459,7 @@ final class TemplatePostType {
 		if ( 'wcvs_format' === $column ) {
 			$design = self::get_design( $post_id );
 			list( $w, $h ) = PdfRenderer::page_size( $design['page'] );
-			echo esc_html( ( 'custom' === $design['page']['format'] ? __( 'Custom', 'wc-voucher-studio' ) : $design['page']['format'] ) . sprintf( ' · %s × %s mm', round( $w ), round( $h ) ) );
+			echo esc_html( ( 'custom' === $design['page']['format'] ? __( 'Custom', 'voucher-captain' ) : $design['page']['format'] ) . sprintf( ' · %s × %s mm', round( $w ), round( $h ) ) );
 		} elseif ( 'wcvs_usage' === $column ) {
 			global $wpdb;
 			$count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = '_wcvs_template' AND meta_value = %s", (string) $post_id ) ); // phpcs:ignore

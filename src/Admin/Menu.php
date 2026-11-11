@@ -25,21 +25,21 @@ final class Menu {
 	public function menu(): void {
 		$voucher_admin = new VoucherAdmin( wcvs()->vouchers );
 		add_menu_page(
-			__( 'Vouchers', 'wc-voucher-studio' ),
-			__( 'Vouchers', 'wc-voucher-studio' ),
+			__( 'Vouchers', 'voucher-captain' ),
+			__( 'Vouchers', 'voucher-captain' ),
 			self::cap(),
 			'wcvs-vouchers',
 			array( $voucher_admin, 'page' ),
 			'dashicons-tickets-alt',
 			56
 		);
-		add_submenu_page( 'wcvs-vouchers', __( 'Issued vouchers', 'wc-voucher-studio' ), __( 'Issued vouchers', 'wc-voucher-studio' ), self::cap(), 'wcvs-vouchers', array( $voucher_admin, 'page' ) );
-		add_submenu_page( 'wcvs-vouchers', __( 'Import codes', 'wc-voucher-studio' ), __( 'Import codes', 'wc-voucher-studio' ), self::cap(), 'wcvs-import', array( new Import( wcvs()->code_pool ), 'page' ) );
-		add_submenu_page( 'wcvs-vouchers', __( 'Scanner', 'wc-voucher-studio' ), __( 'Scanner', 'wc-voucher-studio' ), self::scan_cap(), 'wcvs-scanner', array( new Scanner(), 'page' ) );
+		add_submenu_page( 'wcvs-vouchers', __( 'Issued vouchers', 'voucher-captain' ), __( 'Issued vouchers', 'voucher-captain' ), self::cap(), 'wcvs-vouchers', array( $voucher_admin, 'page' ) );
+		add_submenu_page( 'wcvs-vouchers', __( 'Import codes', 'voucher-captain' ), __( 'Import codes', 'voucher-captain' ), self::cap(), 'wcvs-import', array( new Import( wcvs()->code_pool ), 'page' ) );
+		add_submenu_page( 'wcvs-vouchers', __( 'Scanner', 'voucher-captain' ), __( 'Scanner', 'voucher-captain' ), self::scan_cap(), 'wcvs-scanner', array( new Scanner(), 'page' ) );
 	}
 
 	public function settings_link(): void {
-		add_submenu_page( 'wcvs-vouchers', __( 'Settings', 'wc-voucher-studio' ), __( 'Settings', 'wc-voucher-studio' ), 'manage_woocommerce', 'admin.php?page=wc-settings&tab=wcvs' );
+		add_submenu_page( 'wcvs-vouchers', __( 'Settings', 'voucher-captain' ), __( 'Settings', 'voucher-captain' ), 'manage_woocommerce', 'admin.php?page=wc-settings&tab=wcvs' );
 	}
 
 	public function parent_file( $parent ) {

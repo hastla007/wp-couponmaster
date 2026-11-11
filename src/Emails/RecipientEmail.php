@@ -8,8 +8,8 @@ defined( 'ABSPATH' ) || exit;
 final class RecipientEmail extends VoucherEmail {
 	public function __construct() {
 		$this->id          = 'wcvs_voucher_recipient';
-		$this->title       = __( 'Voucher (gift recipient)', 'wc-voucher-studio' );
-		$this->description = __( 'Sent to the gift recipient entered on the product page, at the scheduled delivery time.', 'wc-voucher-studio' );
+		$this->title       = __( 'Voucher (gift recipient)', 'voucher-captain' );
+		$this->description = __( 'Sent to the gift recipient entered on the product page, at the scheduled delivery time.', 'voucher-captain' );
 		parent::__construct();
 	}
 
@@ -18,14 +18,14 @@ final class RecipientEmail extends VoucherEmail {
 	}
 
 	public function get_default_subject() {
-		return __( '{buyer_name} sent you a gift from {site_title}', 'wc-voucher-studio' );
+		return __( '{buyer_name} sent you a gift from {site_title}', 'voucher-captain' );
 	}
 
 	public function get_default_heading() {
-		return __( 'You received a gift!', 'wc-voucher-studio' );
+		return __( 'You received a gift!', 'voucher-captain' );
 	}
 
 	public function get_default_intro(): string {
-		return __( 'Hi {recipient_name}, {buyer_name} sent you a voucher worth {coupon_value}.', 'wc-voucher-studio' );
+		return __( 'Hi {recipient_name}, {buyer_name} sent you a voucher worth {coupon_value}.', 'voucher-captain' );
 	}
 }

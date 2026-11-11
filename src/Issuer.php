@@ -75,10 +75,10 @@ final class Issuer {
 			$order->add_order_note(
 				sprintf(
 					/* translators: 1: count, 2: codes */
-					_n( '%1$d voucher issued: %2$s', '%1$d vouchers issued: %2$s', count( $created ), 'wc-voucher-studio' ),
+					_n( '%1$d voucher issued: %2$s', '%1$d vouchers issued: %2$s', count( $created ), 'voucher-captain' ),
 					count( $created ),
 					implode( ', ', wp_list_pluck( $created, 'code' ) )
-				) . ( $manual ? ' ' . __( '(manual)', 'wc-voucher-studio' ) : '' )
+				) . ( $manual ? ' ' . __( '(manual)', 'voucher-captain' ) : '' )
 			);
 			foreach ( $created as $voucher ) {
 				$this->delivery->schedule( $voucher );
@@ -150,7 +150,7 @@ final class Issuer {
 			if ( ! $from_pool ) {
 				$order->add_order_note(
 					/* translators: %s: batch name */
-					sprintf( __( 'Voucher code batch "%s" is empty, a random code was generated instead.', 'wc-voucher-studio' ), $config['code_batch'] )
+					sprintf( __( 'Voucher code batch "%s" is empty, a random code was generated instead.', 'voucher-captain' ), $config['code_batch'] )
 				);
 			}
 		}
@@ -201,7 +201,7 @@ final class Issuer {
 			return;
 		}
 		foreach ( $this->repo->for_order( (int) $order_id ) as $voucher ) {
-			$this->void( $voucher, __( 'Purchase order cancelled or refunded', 'wc-voucher-studio' ) );
+			$this->void( $voucher, __( 'Purchase order cancelled or refunded', 'voucher-captain' ) );
 		}
 	}
 

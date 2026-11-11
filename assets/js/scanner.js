@@ -1,4 +1,4 @@
-/* Voucher Studio – QR scanner (BarcodeDetector with jsQR fallback). */
+/* Voucher Captain – QR scanner (BarcodeDetector with jsQR fallback). */
 ( function () {
 	'use strict';
 	var cfg = window.wcvsScanner || {};

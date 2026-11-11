@@ -241,20 +241,20 @@ final class VoucherRepository {
 
 	public static function event_labels(): array {
 		return array(
-			'issued'     => __( 'Issued', 'wc-voucher-studio' ),
-			'scheduled'  => __( 'Delivery scheduled', 'wc-voucher-studio' ),
-			'delivered'  => __( 'Delivered', 'wc-voucher-studio' ),
-			'resent'     => __( 'Email resent', 'wc-voucher-studio' ),
-			'redeemed'   => __( 'Redeemed', 'wc-voucher-studio' ),
-			'restored'   => __( 'Balance restored', 'wc-voucher-studio' ),
-			'adjusted'   => __( 'Balance adjusted', 'wc-voucher-studio' ),
-			'checkin'    => __( 'Checked in', 'wc-voucher-studio' ),
-			'checkin_undo' => __( 'Check-in reverted', 'wc-voucher-studio' ),
-			'voided'     => __( 'Voided', 'wc-voucher-studio' ),
-			'reactivated'=> __( 'Reactivated', 'wc-voucher-studio' ),
-			'expired'    => __( 'Expired', 'wc-voucher-studio' ),
-			'edited'     => __( 'Edited', 'wc-voucher-studio' ),
-			'downloaded' => __( 'Downloaded', 'wc-voucher-studio' ),
+			'issued'     => __( 'Issued', 'voucher-captain' ),
+			'scheduled'  => __( 'Delivery scheduled', 'voucher-captain' ),
+			'delivered'  => __( 'Delivered', 'voucher-captain' ),
+			'resent'     => __( 'Email resent', 'voucher-captain' ),
+			'redeemed'   => __( 'Redeemed', 'voucher-captain' ),
+			'restored'   => __( 'Balance restored', 'voucher-captain' ),
+			'adjusted'   => __( 'Balance adjusted', 'voucher-captain' ),
+			'checkin'    => __( 'Checked in', 'voucher-captain' ),
+			'checkin_undo' => __( 'Check-in reverted', 'voucher-captain' ),
+			'voided'     => __( 'Voided', 'voucher-captain' ),
+			'reactivated'=> __( 'Reactivated', 'voucher-captain' ),
+			'expired'    => __( 'Expired', 'voucher-captain' ),
+			'edited'     => __( 'Edited', 'voucher-captain' ),
+			'downloaded' => __( 'Downloaded', 'voucher-captain' ),
 		);
 	}
 }

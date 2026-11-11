@@ -20,19 +20,19 @@ echo esc_html( wp_strip_all_tags( wptexturize( $intro ) ) ) . "\n\n";
 if ( ! $voucher->is_ticket() || $voucher->initial_amount > 0 ) {
 	$value = 'percent' === $voucher->discount_type ? wc_format_localized_decimal( $voucher->initial_amount ) . '%' : html_entity_decode( wp_strip_all_tags( wc_price( $voucher->initial_amount, array( 'currency' => $voucher->currency ) ) ) );
 	/* translators: %s: value */
-	echo esc_html( sprintf( __( 'Value: %s', 'wc-voucher-studio' ), $value ) ) . "\n";
+	echo esc_html( sprintf( __( 'Value: %s', 'voucher-captain' ), $value ) ) . "\n";
 }
 /* translators: %s: code */
-echo esc_html( sprintf( __( 'Code: %s', 'wc-voucher-studio' ), $voucher->code ) ) . "\n";
+echo esc_html( sprintf( __( 'Code: %s', 'voucher-captain' ), $voucher->code ) ) . "\n";
 if ( $voucher->expires_at ) {
 	/* translators: %s: date */
-	echo esc_html( sprintf( __( 'Valid until %s', 'wc-voucher-studio' ), wp_date( wcvs()->settings->date_format(), strtotime( $voucher->expires_at . ' UTC' ) ) ) ) . "\n";
+	echo esc_html( sprintf( __( 'Valid until %s', 'voucher-captain' ), wp_date( wcvs()->settings->date_format(), strtotime( $voucher->expires_at . ' UTC' ) ) ) ) . "\n";
 }
 if ( $voucher->message ) {
 	echo "\n" . esc_html( $voucher->message ) . "\n";
 }
 if ( $download_url ) {
-	echo "\n" . esc_html__( 'Download:', 'wc-voucher-studio' ) . ' ' . esc_url_raw( $download_url ) . "\n";
+	echo "\n" . esc_html__( 'Download:', 'voucher-captain' ) . ' ' . esc_url_raw( $download_url ) . "\n";
 }
 echo "\n=================================================================\n\n";
 

@@ -25,28 +25,28 @@ final class Import {
 
 	public function page(): void {
 		if ( ! $this->can() ) {
-			wp_die( esc_html__( 'You are not allowed to do this.', 'wc-voucher-studio' ) );
+			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ) );
 		}
 		$report = get_transient( self::REPORT_TRANSIENT . get_current_user_id() );
 		delete_transient( self::REPORT_TRANSIENT . get_current_user_id() );
 		?>
 		<div class="wrap wcvs-wrap">
-			<h1><?php esc_html_e( 'Import coupon codes', 'wc-voucher-studio' ); ?></h1>
-			<p><?php esc_html_e( 'Upload a list of pre-generated codes (e.g. printed cards or codes from a partner). Assign the batch to a voucher product under Product data → Voucher → Code source; each sale uses the next free code.', 'wc-voucher-studio' ); ?></p>
+			<h1><?php esc_html_e( 'Import coupon codes', 'voucher-captain' ); ?></h1>
+			<p><?php esc_html_e( 'Upload a list of pre-generated codes (e.g. printed cards or codes from a partner). Assign the batch to a voucher product under Product data → Voucher → Code source; each sale uses the next free code.', 'voucher-captain' ); ?></p>
 
 			<?php if ( is_array( $report ) ) : ?>
 				<div class="notice <?php echo $report['error'] ? 'notice-error' : 'notice-success'; ?>">
 					<?php if ( $report['error'] ) : ?>
 						<p><?php echo esc_html( $report['error'] ); ?></p>
 					<?php else : ?>
-						<p><strong><?php echo esc_html( sprintf( /* translators: 1: imported, 2: batch */ __( '%1$d codes imported into batch "%2$s".', 'wc-voucher-studio' ), $report['imported'], $report['batch'] ) ); ?></strong></p>
+						<p><strong><?php echo esc_html( sprintf( /* translators: 1: imported, 2: batch */ __( '%1$d codes imported into batch "%2$s".', 'voucher-captain' ), $report['imported'], $report['batch'] ) ); ?></strong></p>
 						<ul>
-							<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Duplicates within the file skipped: %d', 'wc-voucher-studio' ), $report['dupes_file'] ) ); ?></li>
-							<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Already existing codes skipped: %d', 'wc-voucher-studio' ), $report['dupes_existing'] ) ); ?></li>
-							<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Invalid codes skipped: %d', 'wc-voucher-studio' ), count( $report['invalid'] ) ) ); ?></li>
+							<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Duplicates within the file skipped: %d', 'voucher-captain' ), $report['dupes_file'] ) ); ?></li>
+							<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Already existing codes skipped: %d', 'voucher-captain' ), $report['dupes_existing'] ) ); ?></li>
+							<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Invalid codes skipped: %d', 'voucher-captain' ), count( $report['invalid'] ) ) ); ?></li>
 						</ul>
 						<?php if ( $report['invalid'] ) : ?>
-							<details><summary><?php esc_html_e( 'Show invalid rows', 'wc-voucher-studio' ); ?></summary>
+							<details><summary><?php esc_html_e( 'Show invalid rows', 'voucher-captain' ); ?></summary>
 								<ul><?php foreach ( array_slice( $report['invalid'], 0, 100 ) as $row ) : ?><li><?php echo esc_html( $row ); ?></li><?php endforeach; ?></ul>
 							</details>
 						<?php endif; ?>
@@ -60,60 +60,60 @@ final class Import {
 					<?php wp_nonce_field( 'wcvs_import' ); ?>
 					<table class="form-table" role="presentation">
 						<tr>
-							<th scope="row"><label for="wcvs-file"><?php esc_html_e( 'File', 'wc-voucher-studio' ); ?></label></th>
+							<th scope="row"><label for="wcvs-file"><?php esc_html_e( 'File', 'voucher-captain' ); ?></label></th>
 							<td><input type="file" id="wcvs-file" name="file" required accept=".csv,.txt,.xls,.xlsx,.ods" />
-								<p class="description"><?php esc_html_e( 'CSV, XLS, XLSX or ODS. The first worksheet is read.', 'wc-voucher-studio' ); ?></p></td>
+								<p class="description"><?php esc_html_e( 'CSV, XLS, XLSX or ODS. The first worksheet is read.', 'voucher-captain' ); ?></p></td>
 						</tr>
 						<tr>
-							<th scope="row"><label for="wcvs-batch"><?php esc_html_e( 'Batch name', 'wc-voucher-studio' ); ?></label></th>
+							<th scope="row"><label for="wcvs-batch"><?php esc_html_e( 'Batch name', 'voucher-captain' ); ?></label></th>
 							<td><input type="text" id="wcvs-batch" name="batch" class="regular-text" required maxlength="100" list="wcvs-batches" />
 								<datalist id="wcvs-batches"><?php foreach ( $this->pool->batches() as $b ) : ?><option value="<?php echo esc_attr( $b['batch'] ); ?>"></option><?php endforeach; ?></datalist>
-								<p class="description"><?php esc_html_e( 'Use an existing name to add codes to that batch.', 'wc-voucher-studio' ); ?></p></td>
+								<p class="description"><?php esc_html_e( 'Use an existing name to add codes to that batch.', 'voucher-captain' ); ?></p></td>
 						</tr>
 						<tr>
-							<th scope="row"><label for="wcvs-column"><?php esc_html_e( 'Column', 'wc-voucher-studio' ); ?></label></th>
+							<th scope="row"><label for="wcvs-column"><?php esc_html_e( 'Column', 'voucher-captain' ); ?></label></th>
 							<td><input type="text" id="wcvs-column" name="column" value="A" class="small-text" />
-								<p class="description"><?php esc_html_e( 'Column letter (A, B, …) or header name containing the codes.', 'wc-voucher-studio' ); ?></p></td>
+								<p class="description"><?php esc_html_e( 'Column letter (A, B, …) or header name containing the codes.', 'voucher-captain' ); ?></p></td>
 						</tr>
 						<tr>
-							<th scope="row"><?php esc_html_e( 'Options', 'wc-voucher-studio' ); ?></th>
+							<th scope="row"><?php esc_html_e( 'Options', 'voucher-captain' ); ?></th>
 							<td>
-								<label><input type="checkbox" name="header" value="1" checked /> <?php esc_html_e( 'First row is a header', 'wc-voucher-studio' ); ?></label><br>
-								<label><input type="checkbox" name="uppercase" value="1" /> <?php esc_html_e( 'Convert codes to uppercase', 'wc-voucher-studio' ); ?></label>
+								<label><input type="checkbox" name="header" value="1" checked /> <?php esc_html_e( 'First row is a header', 'voucher-captain' ); ?></label><br>
+								<label><input type="checkbox" name="uppercase" value="1" /> <?php esc_html_e( 'Convert codes to uppercase', 'voucher-captain' ); ?></label>
 							</td>
 						</tr>
 						<tr>
-							<th scope="row"><label for="wcvs-pattern"><?php esc_html_e( 'Allowed format', 'wc-voucher-studio' ); ?></label></th>
+							<th scope="row"><label for="wcvs-pattern"><?php esc_html_e( 'Allowed format', 'voucher-captain' ); ?></label></th>
 							<td><input type="text" id="wcvs-pattern" name="pattern" value="^[A-Za-z0-9._-]{4,64}$" class="regular-text code" />
-								<p class="description"><?php esc_html_e( 'Regular expression each code must match.', 'wc-voucher-studio' ); ?></p></td>
+								<p class="description"><?php esc_html_e( 'Regular expression each code must match.', 'voucher-captain' ); ?></p></td>
 						</tr>
 					</table>
-					<?php submit_button( __( 'Import codes', 'wc-voucher-studio' ) ); ?>
+					<?php submit_button( __( 'Import codes', 'voucher-captain' ) ); ?>
 				</form>
 			</div>
 
-			<h2><?php esc_html_e( 'Batches', 'wc-voucher-studio' ); ?></h2>
+			<h2><?php esc_html_e( 'Batches', 'voucher-captain' ); ?></h2>
 			<table class="widefat striped">
-				<thead><tr><th><?php esc_html_e( 'Batch', 'wc-voucher-studio' ); ?></th><th><?php esc_html_e( 'Total', 'wc-voucher-studio' ); ?></th><th><?php esc_html_e( 'Free', 'wc-voucher-studio' ); ?></th><th></th></tr></thead>
+				<thead><tr><th><?php esc_html_e( 'Batch', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'Total', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'Free', 'voucher-captain' ); ?></th><th></th></tr></thead>
 				<tbody>
 				<?php
 				$batches = $this->pool->batches();
 				if ( ! $batches ) {
-					echo '<tr><td colspan="4">' . esc_html__( 'No codes imported yet.', 'wc-voucher-studio' ) . '</td></tr>';
+					echo '<tr><td colspan="4">' . esc_html__( 'No codes imported yet.', 'voucher-captain' ) . '</td></tr>';
 				}
 				foreach ( $batches as $b ) :
 					?>
 					<tr>
 						<td><strong><?php echo esc_html( $b['batch'] ); ?></strong></td>
 						<td><?php echo esc_html( (string) $b['total'] ); ?></td>
-						<td><?php echo esc_html( (string) $b['free'] ); ?><?php echo $b['free'] < 10 ? ' <span class="wcvs-low">' . esc_html__( 'running low', 'wc-voucher-studio' ) . '</span>' : ''; ?></td>
+						<td><?php echo esc_html( (string) $b['free'] ); ?><?php echo $b['free'] < 10 ? ' <span class="wcvs-low">' . esc_html__( 'running low', 'voucher-captain' ) . '</span>' : ''; ?></td>
 						<td>
 							<?php if ( $b['free'] ) : ?>
-								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" onsubmit="return confirm('<?php echo esc_js( __( 'Delete all unused codes of this batch?', 'wc-voucher-studio' ) ); ?>');">
+								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" onsubmit="return confirm('<?php echo esc_js( __( 'Delete all unused codes of this batch?', 'voucher-captain' ) ); ?>');">
 									<input type="hidden" name="action" value="wcvs_delete_batch" />
 									<input type="hidden" name="batch" value="<?php echo esc_attr( $b['batch'] ); ?>" />
 									<?php wp_nonce_field( 'wcvs_delete_batch' ); ?>
-									<button class="button button-link-delete"><?php esc_html_e( 'Delete unused codes', 'wc-voucher-studio' ); ?></button>
+									<button class="button button-link-delete"><?php esc_html_e( 'Delete unused codes', 'voucher-captain' ); ?></button>
 								</form>
 							<?php endif; ?>
 						</td>
@@ -134,7 +134,7 @@ final class Import {
 	public function handle(): void {
 		check_admin_referer( 'wcvs_import' );
 		if ( ! $this->can() ) {
-			wp_die( esc_html__( 'You are not allowed to do this.', 'wc-voucher-studio' ), 403 );
+			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
 		$report = array(
 			'error'          => '',
@@ -146,7 +146,7 @@ final class Import {
 		);
 		$batch = sanitize_text_field( wp_unslash( $_POST['batch'] ?? '' ) );
 		if ( '' === $batch ) {
-			$report['error'] = __( 'Please enter a batch name.', 'wc-voucher-studio' );
+			$report['error'] = __( 'Please enter a batch name.', 'voucher-captain' );
 			$this->finish( $report );
 		}
 		$report['batch'] = $batch;
@@ -154,30 +154,30 @@ final class Import {
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- validated below.
 		$file = $_FILES['file'] ?? null;
 		if ( ! $file || ! empty( $file['error'] ) || ! is_uploaded_file( $file['tmp_name'] ) ) {
-			$report['error'] = __( 'The file could not be uploaded.', 'wc-voucher-studio' );
+			$report['error'] = __( 'The file could not be uploaded.', 'voucher-captain' );
 			$this->finish( $report );
 		}
 		$ext = strtolower( pathinfo( sanitize_file_name( $file['name'] ), PATHINFO_EXTENSION ) );
 		if ( ! in_array( $ext, array( 'csv', 'txt', 'xls', 'xlsx', 'ods' ), true ) ) {
-			$report['error'] = __( 'Unsupported file type. Please upload CSV, XLS, XLSX or ODS.', 'wc-voucher-studio' );
+			$report['error'] = __( 'Unsupported file type. Please upload CSV, XLS, XLSX or ODS.', 'voucher-captain' );
 			$this->finish( $report );
 		}
 		if ( (int) $file['size'] > 20 * MB_IN_BYTES ) {
-			$report['error'] = __( 'The file is too large (max. 20 MB).', 'wc-voucher-studio' );
+			$report['error'] = __( 'The file is too large (max. 20 MB).', 'voucher-captain' );
 			$this->finish( $report );
 		}
 
 		try {
 			$rows = SpreadsheetReader::read( $file['tmp_name'], $ext );
 		} catch ( \Throwable $e ) {
-			$report['error'] = __( 'The file could not be read:', 'wc-voucher-studio' ) . ' ' . $e->getMessage();
+			$report['error'] = __( 'The file could not be read:', 'voucher-captain' ) . ' ' . $e->getMessage();
 			$this->finish( $report );
 		}
 
 		$pattern = wp_unslash( (string) ( $_POST['pattern'] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- used as regex only.
 		$regex   = '/' . str_replace( '/', '\/', $pattern ?: '^[A-Za-z0-9._-]{4,64}$' ) . '/u';
 		if ( false === @preg_match( $regex, '' ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors
-			$report['error'] = __( 'The "Allowed format" is not a valid regular expression.', 'wc-voucher-studio' );
+			$report['error'] = __( 'The "Allowed format" is not a valid regular expression.', 'voucher-captain' );
 			$this->finish( $report );
 		}
 
@@ -193,7 +193,7 @@ final class Import {
 		} elseif ( '' !== $column && $rows ) {
 			$found = array_search( strtolower( $column ), array_map( 'strtolower', $rows[0] ), true );
 			if ( false === $found ) {
-				$report['error'] = __( 'The column header was not found in the first row.', 'wc-voucher-studio' );
+				$report['error'] = __( 'The column header was not found in the first row.', 'voucher-captain' );
 				$this->finish( $report );
 			}
 			$index  = (int) $found;
@@ -214,7 +214,7 @@ final class Import {
 			$key  = wc_format_coupon_code( $code ); // WooCommerce codes are case-insensitive.
 			if ( ! preg_match( $regex, $code ) ) {
 				/* translators: 1: row number, 2: value */
-				$report['invalid'][] = sprintf( __( 'Row %1$d: "%2$s"', 'wc-voucher-studio' ), $n + ( $header ? 2 : 1 ), mb_substr( $code, 0, 80 ) );
+				$report['invalid'][] = sprintf( __( 'Row %1$d: "%2$s"', 'voucher-captain' ), $n + ( $header ? 2 : 1 ), mb_substr( $code, 0, 80 ) );
 				continue;
 			}
 			if ( isset( $seen[ $key ] ) ) {
@@ -238,7 +238,7 @@ final class Import {
 	public function delete_batch(): void {
 		check_admin_referer( 'wcvs_delete_batch' );
 		if ( ! $this->can() ) {
-			wp_die( esc_html__( 'You are not allowed to do this.', 'wc-voucher-studio' ), 403 );
+			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
 		$this->pool->delete_free( sanitize_text_field( wp_unslash( $_POST['batch'] ?? '' ) ) );
 		wp_safe_redirect( admin_url( 'admin.php?page=wcvs-import' ) );

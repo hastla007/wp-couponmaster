@@ -1,4 +1,4 @@
-# Product scope: WooCommerce Voucher Studio
+# Product scope: Voucher Captain
 
 ## Goal
 

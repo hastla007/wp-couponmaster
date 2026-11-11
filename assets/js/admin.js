@@ -1,4 +1,4 @@
-/* Voucher Studio – admin helpers. */
+/* Voucher Captain – admin helpers. */
 ( function ( $ ) {
 	'use strict';
 	$( function () {

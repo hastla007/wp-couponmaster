@@ -1,6 +1,6 @@
 {
-  "name": "hastla007/wc-voucher-studio",
-  "description": "Voucher Studio for WooCommerce \u2013 sell personalised PDF vouchers, gift cards and tickets.",
+  "name": "hastla007/voucher-captain",
+  "description": "Voucher Captain \u2013 sell personalised PDF vouchers, gift cards and tickets.",
   "type": "wordpress-plugin",
   "license": "GPL-2.0-or-later",
   "require": {

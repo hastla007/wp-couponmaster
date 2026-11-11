@@ -1,4 +1,4 @@
-/* Voucher Studio – product edit screen: show/hide the Voucher tab and dependent fields. */
+/* Voucher Captain – product edit screen: show/hide the Voucher tab and dependent fields. */
 ( function ( $ ) {
 	'use strict';
 	function toggleTab() {

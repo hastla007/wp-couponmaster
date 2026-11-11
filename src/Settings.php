@@ -52,15 +52,15 @@ final class Settings {
 	}
 
 	public function add_tab( array $tabs ): array {
-		$tabs['wcvs'] = __( 'Vouchers', 'wc-voucher-studio' );
+		$tabs['wcvs'] = __( 'Vouchers', 'voucher-captain' );
 		return $tabs;
 	}
 
 	private function section_list(): array {
 		return array(
-			''         => __( 'General', 'wc-voucher-studio' ),
-			'delivery' => __( 'Delivery & downloads', 'wc-voucher-studio' ),
-			'privacy'  => __( 'Privacy & advanced', 'wc-voucher-studio' ),
+			''         => __( 'General', 'voucher-captain' ),
+			'delivery' => __( 'Delivery & downloads', 'voucher-captain' ),
+			'privacy'  => __( 'Privacy & advanced', 'voucher-captain' ),
 		);
 	}
 
@@ -85,7 +85,7 @@ final class Settings {
 	}
 
 	private function template_options(): array {
-		$options = array( 0 => __( '— None —', 'wc-voucher-studio' ) );
+		$options = array( 0 => __( '— None —', 'voucher-captain' ) );
 		foreach ( get_posts( array( 'post_type' => TemplatePostType::POST_TYPE, 'numberposts' => 200, 'post_status' => 'publish' ) ) as $post ) {
 			$options[ $post->ID ] = $post->post_title;
 		}
@@ -96,63 +96,63 @@ final class Settings {
 		switch ( $section ) {
 			case 'delivery':
 				$fields = array(
-					array( 'type' => 'title', 'title' => __( 'Delivery & downloads', 'wc-voucher-studio' ), 'id' => 'wcvs_delivery' ),
+					array( 'type' => 'title', 'title' => __( 'Delivery & downloads', 'voucher-captain' ), 'id' => 'wcvs_delivery' ),
 					array(
-						'title'   => __( 'Attach PDF to emails', 'wc-voucher-studio' ),
+						'title'   => __( 'Attach PDF to emails', 'voucher-captain' ),
 						'id'      => 'wcvs_attach_pdf',
 						'type'    => 'checkbox',
 						'default' => 'yes',
-						'desc'    => __( 'Attach the voucher PDF to voucher emails.', 'wc-voucher-studio' ),
+						'desc'    => __( 'Attach the voucher PDF to voucher emails.', 'voucher-captain' ),
 					),
 					array(
-						'title'   => __( 'Download link in emails', 'wc-voucher-studio' ),
+						'title'   => __( 'Download link in emails', 'voucher-captain' ),
 						'id'      => 'wcvs_include_link',
 						'type'    => 'checkbox',
 						'default' => 'yes',
-						'desc'    => __( 'Include a secure download link in voucher emails.', 'wc-voucher-studio' ),
+						'desc'    => __( 'Include a secure download link in voucher emails.', 'voucher-captain' ),
 					),
 					array(
-						'title'             => __( 'Download link lifetime (days)', 'wc-voucher-studio' ),
+						'title'             => __( 'Download link lifetime (days)', 'voucher-captain' ),
 						'id'                => 'wcvs_download_link_days',
 						'type'              => 'number',
 						'default'           => 0,
 						'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
-						'desc_tip'          => __( 'Signed links in emails expire after this many days. Links shown to logged-in customers are always re-signed. 0 = never expire.', 'wc-voucher-studio' ),
+						'desc_tip'          => __( 'Signed links in emails expire after this many days. Links shown to logged-in customers are always re-signed. 0 = never expire.', 'voucher-captain' ),
 					),
 					array(
-						'title'   => __( 'Order confirmation', 'wc-voucher-studio' ),
+						'title'   => __( 'Order confirmation', 'voucher-captain' ),
 						'id'      => 'wcvs_show_thankyou',
 						'type'    => 'checkbox',
 						'default' => 'yes',
-						'desc'    => __( 'Show voucher downloads on the order received page.', 'wc-voucher-studio' ),
+						'desc'    => __( 'Show voucher downloads on the order received page.', 'voucher-captain' ),
 					),
 					array(
-						'title'   => __( 'My Account', 'wc-voucher-studio' ),
+						'title'   => __( 'My Account', 'voucher-captain' ),
 						'id'      => 'wcvs_show_myaccount',
 						'type'    => 'checkbox',
 						'default' => 'yes',
-						'desc'    => __( 'Show voucher downloads in the My Account order details.', 'wc-voucher-studio' ),
+						'desc'    => __( 'Show voucher downloads in the My Account order details.', 'voucher-captain' ),
 					),
 					array(
-						'title'   => __( 'My Account "Vouchers" tab', 'wc-voucher-studio' ),
+						'title'   => __( 'My Account "Vouchers" tab', 'voucher-captain' ),
 						'id'      => 'wcvs_myaccount_tab',
 						'type'    => 'checkbox',
 						'default' => 'yes',
-						'desc'    => __( 'Add a "Vouchers" tab listing all purchased vouchers with balance and status.', 'wc-voucher-studio' ),
+						'desc'    => __( 'Add a "Vouchers" tab listing all purchased vouchers with balance and status.', 'voucher-captain' ),
 					),
 					array(
-						'title'    => __( 'PDF file name', 'wc-voucher-studio' ),
+						'title'    => __( 'PDF file name', 'voucher-captain' ),
 						'id'       => 'wcvs_pdf_filename',
 						'type'     => 'text',
 						'default'  => 'voucher-{coupon_code}',
-						'desc_tip' => __( 'Placeholders are allowed, e.g. {coupon_code}, {order_number}.', 'wc-voucher-studio' ),
+						'desc_tip' => __( 'Placeholders are allowed, e.g. {coupon_code}, {order_number}.', 'voucher-captain' ),
 					),
 					array(
-						'title'    => __( 'Date format', 'wc-voucher-studio' ),
+						'title'    => __( 'Date format', 'voucher-captain' ),
 						'id'       => 'wcvs_date_format',
 						'type'     => 'text',
 						'default'  => '',
-						'desc_tip' => __( 'PHP date format used in PDFs and emails. Leave empty to use the WordPress date format.', 'wc-voucher-studio' ),
+						'desc_tip' => __( 'PHP date format used in PDFs and emails. Leave empty to use the WordPress date format.', 'voucher-captain' ),
 					),
 					array( 'type' => 'sectionend', 'id' => 'wcvs_delivery' ),
 				);
@@ -160,35 +160,35 @@ final class Settings {
 
 			case 'privacy':
 				$fields = array(
-					array( 'type' => 'title', 'title' => __( 'Privacy & advanced', 'wc-voucher-studio' ), 'id' => 'wcvs_privacy' ),
+					array( 'type' => 'title', 'title' => __( 'Privacy & advanced', 'voucher-captain' ), 'id' => 'wcvs_privacy' ),
 					array(
-						'title'             => __( 'Anonymise recipient data after (days)', 'wc-voucher-studio' ),
+						'title'             => __( 'Anonymise recipient data after (days)', 'voucher-captain' ),
 						'id'                => 'wcvs_retention_days',
 						'type'              => 'number',
 						'default'           => 0,
 						'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
-						'desc_tip'          => __( 'Recipient name, email, message and custom fields are erased this many days after a voucher has expired or been fully redeemed. 0 = keep.', 'wc-voucher-studio' ),
+						'desc_tip'          => __( 'Recipient name, email, message and custom fields are erased this many days after a voucher has expired or been fully redeemed. 0 = keep.', 'voucher-captain' ),
 					),
 					array(
-						'title'   => __( 'Public ticket status', 'wc-voucher-studio' ),
+						'title'   => __( 'Public ticket status', 'voucher-captain' ),
 						'id'      => 'wcvs_ticket_public_status',
 						'type'    => 'checkbox',
 						'default' => 'yes',
-						'desc'    => __( 'When a ticket QR code is opened by someone without scanning rights, show whether the ticket is valid (no personal data).', 'wc-voucher-studio' ),
+						'desc'    => __( 'When a ticket QR code is opened by someone without scanning rights, show whether the ticket is valid (no personal data).', 'voucher-captain' ),
 					),
 					array(
-						'title'   => __( 'Subscription renewals', 'wc-voucher-studio' ),
+						'title'   => __( 'Subscription renewals', 'voucher-captain' ),
 						'id'      => 'wcvs_subscription_renewals',
 						'type'    => 'checkbox',
 						'default' => 'no',
-						'desc'    => __( 'Issue new vouchers for WooCommerce Subscriptions renewal orders.', 'wc-voucher-studio' ),
+						'desc'    => __( 'Issue new vouchers for WooCommerce Subscriptions renewal orders.', 'voucher-captain' ),
 					),
 					array(
-						'title'   => __( 'Delete data on uninstall', 'wc-voucher-studio' ),
+						'title'   => __( 'Delete data on uninstall', 'voucher-captain' ),
 						'id'      => 'wcvs_delete_on_uninstall',
 						'type'    => 'checkbox',
 						'default' => 'no',
-						'desc'    => __( 'Remove voucher tables, templates and settings when the plugin is deleted. WooCommerce coupons are kept.', 'wc-voucher-studio' ),
+						'desc'    => __( 'Remove voucher tables, templates and settings when the plugin is deleted. WooCommerce coupons are kept.', 'voucher-captain' ),
 					),
 					array( 'type' => 'sectionend', 'id' => 'wcvs_privacy' ),
 				);
@@ -200,102 +200,102 @@ final class Settings {
 					$statuses[ substr( $key, 3 ) ] = $label;
 				}
 				$fields = array(
-					array( 'type' => 'title', 'title' => __( 'Voucher issuing', 'wc-voucher-studio' ), 'id' => 'wcvs_general' ),
+					array( 'type' => 'title', 'title' => __( 'Voucher issuing', 'voucher-captain' ), 'id' => 'wcvs_general' ),
 					array(
-						'title'   => __( 'Generate vouchers when order is', 'wc-voucher-studio' ),
+						'title'   => __( 'Generate vouchers when order is', 'voucher-captain' ),
 						'id'      => 'wcvs_issue_statuses',
 						'type'    => 'multiselect',
 						'class'   => 'wc-enhanced-select',
 						'options' => $statuses,
 						'default' => array( 'processing', 'completed' ),
-						'desc'    => __( 'Vouchers are created once per purchased item the first time an order reaches one of these statuses. Leave empty to issue manually only.', 'wc-voucher-studio' ),
+						'desc'    => __( 'Vouchers are created once per purchased item the first time an order reaches one of these statuses. Leave empty to issue manually only.', 'voucher-captain' ),
 					),
 					array(
-						'title'   => __( 'Default template', 'wc-voucher-studio' ),
+						'title'   => __( 'Default template', 'voucher-captain' ),
 						'id'      => 'wcvs_default_template',
 						'type'    => 'select',
 						'options' => $this->template_options(),
 						'default' => 0,
 					),
 					array(
-						'title'             => __( 'Default validity (days)', 'wc-voucher-studio' ),
+						'title'             => __( 'Default validity (days)', 'voucher-captain' ),
 						'id'                => 'wcvs_default_expiry_days',
 						'type'              => 'number',
 						'default'           => 365,
 						'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
-						'desc_tip'          => __( 'Used when a product does not define its own expiry. 0 = never expires.', 'wc-voucher-studio' ),
+						'desc_tip'          => __( 'Used when a product does not define its own expiry. 0 = never expires.', 'voucher-captain' ),
 					),
 					array( 'type' => 'sectionend', 'id' => 'wcvs_general' ),
 
-					array( 'type' => 'title', 'title' => __( 'Coupon codes', 'wc-voucher-studio' ), 'id' => 'wcvs_codes' ),
+					array( 'type' => 'title', 'title' => __( 'Coupon codes', 'voucher-captain' ), 'id' => 'wcvs_codes' ),
 					array(
-						'title'   => __( 'Prefix', 'wc-voucher-studio' ),
+						'title'   => __( 'Prefix', 'voucher-captain' ),
 						'id'      => 'wcvs_code_prefix',
 						'type'    => 'text',
 						'default' => '',
 					),
 					array(
-						'title'   => __( 'Suffix', 'wc-voucher-studio' ),
+						'title'   => __( 'Suffix', 'voucher-captain' ),
 						'id'      => 'wcvs_code_suffix',
 						'type'    => 'text',
 						'default' => '',
 					),
 					array(
-						'title'             => __( 'Random part length', 'wc-voucher-studio' ),
+						'title'             => __( 'Random part length', 'voucher-captain' ),
 						'id'                => 'wcvs_code_length',
 						'type'              => 'number',
 						'default'           => 10,
 						'custom_attributes' => array( 'min' => 4, 'max' => 40, 'step' => 1 ),
 					),
 					array(
-						'title'   => __( 'Characters', 'wc-voucher-studio' ),
+						'title'   => __( 'Characters', 'voucher-captain' ),
 						'id'      => 'wcvs_code_charset',
 						'type'    => 'select',
 						'default' => 'alnum_upper',
 						'options' => array(
-							'alnum_upper' => __( 'Letters and digits, uppercase (no ambiguous characters)', 'wc-voucher-studio' ),
-							'alpha_upper' => __( 'Letters only, uppercase', 'wc-voucher-studio' ),
-							'numeric'     => __( 'Digits only', 'wc-voucher-studio' ),
-							'alnum'       => __( 'Letters and digits, mixed case', 'wc-voucher-studio' ),
+							'alnum_upper' => __( 'Letters and digits, uppercase (no ambiguous characters)', 'voucher-captain' ),
+							'alpha_upper' => __( 'Letters only, uppercase', 'voucher-captain' ),
+							'numeric'     => __( 'Digits only', 'voucher-captain' ),
+							'alnum'       => __( 'Letters and digits, mixed case', 'voucher-captain' ),
 						),
 					),
 					array(
-						'title'   => __( 'Separator', 'wc-voucher-studio' ),
+						'title'   => __( 'Separator', 'voucher-captain' ),
 						'id'      => 'wcvs_code_separator',
 						'type'    => 'text',
 						'default' => '-',
 						'css'     => 'width:60px',
 					),
 					array(
-						'title'   => __( 'Include order number', 'wc-voucher-studio' ),
+						'title'   => __( 'Include order number', 'voucher-captain' ),
 						'id'      => 'wcvs_code_order_ref',
 						'type'    => 'checkbox',
 						'default' => 'no',
-						'desc'    => __( 'Add the order number to the code, e.g. GIFT-1042-7KQ2M9XA.', 'wc-voucher-studio' ),
+						'desc'    => __( 'Add the order number to the code, e.g. GIFT-1042-7KQ2M9XA.', 'voucher-captain' ),
 					),
 					array( 'type' => 'sectionend', 'id' => 'wcvs_codes' ),
 
-					array( 'type' => 'title', 'title' => __( 'Redemption', 'wc-voucher-studio' ), 'id' => 'wcvs_redeem' ),
+					array( 'type' => 'title', 'title' => __( 'Redemption', 'voucher-captain' ), 'id' => 'wcvs_redeem' ),
 					array(
-						'title'   => __( 'Balance includes tax', 'wc-voucher-studio' ),
+						'title'   => __( 'Balance includes tax', 'voucher-captain' ),
 						'id'      => 'wcvs_balance_include_tax',
 						'type'    => 'checkbox',
 						'default' => 'yes',
-						'desc'    => __( 'Deduct the discount including tax from multi-use voucher balances (recommended for gift cards).', 'wc-voucher-studio' ),
+						'desc'    => __( 'Deduct the discount including tax from multi-use voucher balances (recommended for gift cards).', 'voucher-captain' ),
 					),
 					array(
-						'title'   => __( 'Restore balance on cancellation', 'wc-voucher-studio' ),
+						'title'   => __( 'Restore balance on cancellation', 'voucher-captain' ),
 						'id'      => 'wcvs_restore_on_cancel',
 						'type'    => 'checkbox',
 						'default' => 'yes',
-						'desc'    => __( 'Give the redeemed amount back when an order that used a voucher is cancelled, refunded or failed.', 'wc-voucher-studio' ),
+						'desc'    => __( 'Give the redeemed amount back when an order that used a voucher is cancelled, refunded or failed.', 'voucher-captain' ),
 					),
 					array(
-						'title'   => __( 'Void vouchers on refund', 'wc-voucher-studio' ),
+						'title'   => __( 'Void vouchers on refund', 'voucher-captain' ),
 						'id'      => 'wcvs_void_on_refund',
 						'type'    => 'checkbox',
 						'default' => 'yes',
-						'desc'    => __( 'Disable vouchers when the order they were bought with is fully refunded or cancelled.', 'wc-voucher-studio' ),
+						'desc'    => __( 'Disable vouchers when the order they were bought with is fully refunded or cancelled.', 'voucher-captain' ),
 					),
 					array( 'type' => 'sectionend', 'id' => 'wcvs_redeem' ),
 				);
