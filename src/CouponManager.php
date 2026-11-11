@@ -277,8 +277,9 @@ final class CouponManager {
 	}
 
 	public function deduct_order( \WC_Order $order ): void {
-		$applied = (array) $order->get_meta( '_vcap_redemptions' );
-		$changed = false;
+		$applied  = (array) $order->get_meta( '_vcap_redemptions' );
+		$changed  = false;
+		$shortfall = false;
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
 			/** @var \WC_Order_Item_Coupon $item */
 			$code = wc_format_coupon_code( $item->get_code() );
@@ -289,9 +290,10 @@ final class CouponManager {
 			if ( ! $voucher || ! $voucher->is_multi_use() ) {
 				continue;
 			}
+			$requested = $this->used_amount( $item );
 			$deduction = $this->deduct_balance_atomic(
 				$voucher,
-				$this->used_amount( $item ),
+				$requested,
 				/* translators: %s: order number */
 				sprintf( __( 'Used in order #%s', 'voucher-captain' ), $order->get_order_number() ),
 				$order->get_id()
@@ -299,8 +301,12 @@ final class CouponManager {
 			if ( ! $deduction ) {
 				continue;
 			}
-			$amount          = $deduction['amount'];
+			$amount           = $deduction['amount'];
 			$voucher->balance = $deduction['balance'];
+			if ( $amount + 0.0001 < $requested ) {
+				$shortfall = true;
+				$order->add_order_note( __( 'A stored-value voucher balance changed during checkout. Review this order and adjust the charge before fulfilment.', 'voucher-captain' ) );
+			}
 			$applied[ $code ] = $amount;
 			$changed          = true;
 			$order->add_order_note(
@@ -316,6 +322,9 @@ final class CouponManager {
 		if ( $changed ) {
 			$order->update_meta_data( '_vcap_redemptions', $applied );
 			$order->save();
+			if ( $shortfall && 'on-hold' !== $order->get_status() ) {
+				$order->update_status( 'on-hold', __( 'Voucher balance shortfall requires manual review before fulfilment.', 'voucher-captain' ) );
+			}
 		}
 	}
 
