@@ -18,6 +18,13 @@ cp "$ROOT/voucher-captain.php" "$ROOT/uninstall.php" "$ROOT/readme.txt" "$ROOT/w
 
 # Production dependencies only.
 ( cd "$DEST" && composer install --no-dev --optimize-autoloader --no-interaction --quiet )
+# Libraries other plugins also bundle (WooCommerce 8.x: sabberworm/php-css-parser) get our own namespace.
+php "$ROOT/bin/scope-vendor.php" "$DEST/vendor"
+( cd "$DEST" && composer dump-autoload --no-dev --optimize --no-interaction --quiet )
+if grep -rqE '(^|[^\\])Sabberworm\\CSS' "$DEST/vendor" --include=*.php --exclude-dir=composer; then
+	echo "Unscoped Sabberworm references left in the build." >&2
+	exit 1
+fi
 rm -f "$DEST/composer.lock"
 
 # Strip VCS data, tests and docs from vendor.

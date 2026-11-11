@@ -15,6 +15,10 @@ The CI integration suite installs WordPress 7.1.4, WooCommerce 11.2.2, Yoast SEO
 
 The CI job `minimum-versions` installs WordPress 6.4.5 and WooCommerce 8.8.3 on PHP 8.1 **without** Yoast SEO and runs the full integration suite, so the minimums are tested, not assumed. Update both columns with every release.
 
+## Bundled libraries
+
+Voucher Captain bundles dompdf, php-font-lib, php-svg-lib, html5, php-qrcode and php-barcode-generator. Libraries that other plugins also ship are moved into the `VCAP\Vendor` namespace when the release ZIP is built (`bin/scope-vendor.php`), so two versions can never collide. This is currently `sabberworm/php-css-parser`: WooCommerce 8.x bundles an older, incompatible version, and loading both ended in a fatal error. The build fails if an unprefixed reference remains; `tests/scoping-integration.php` checks the installed ZIP.
+
 ## Optional integrations
 
 | Integration | Contract | CI coverage |
