@@ -82,6 +82,13 @@ final class VoucherService {
 	 * @return RedemptionProvider|\WP_Error
 	 */
 	private function provider( string $code ) {
+		/**
+		 * Filters the redemption providers available for a voucher code.
+		 *
+		 * @param RedemptionProvider[] $providers Registered provider adapters.
+		 * @param string               $code      Voucher code being resolved.
+		 * @param VoucherService       $service   Voucher service instance.
+		 */
 		$providers = apply_filters(
 			'vcap_redemption_providers',
 			array( new WooCommerceRedemptionProvider( $this->vouchers, $this->coupons ) ),
