@@ -39,12 +39,12 @@ final class WooCommerceRedemptionProvider implements RedemptionProvider {
 	 * Return a privacy-safe voucher lookup result.
 	 *
 	 * @param string $code Voucher code.
-	 * @return array<string, mixed>|\\WP_Error
+	 * @return array<string, mixed>|\WP_Error
 	 */
 	public function lookup( string $code ) {
 		$voucher = $this->find( $code );
 		if ( ! $voucher ) {
-			return new \\WP_Error( 'vcap_not_found', __( 'Voucher not found.', 'voucher-captain' ), array( 'status' => 404 ) );
+			return new \WP_Error( 'vcap_not_found', __( 'Voucher not found.', 'voucher-captain' ), array( 'status' => 404 ) );
 		}
 		return array(
 			'code'       => $voucher->code,
@@ -63,23 +63,23 @@ final class WooCommerceRedemptionProvider implements RedemptionProvider {
 	 *
 	 * @param string   $code Voucher code.
 	 * @param float    $amount Amount to reserve.
-	 * @param \\WC_Order $order Saved WooCommerce order.
-	 * @return array<string, mixed>|\\WP_Error
+	 * @param \WC_Order $order Saved WooCommerce order.
+	 * @return array<string, mixed>|\WP_Error
 	 */
-	public function reserve( string $code, float $amount, \\WC_Order $order ) {
+	public function reserve( string $code, float $amount, \WC_Order $order ) {
 		$voucher = $this->find( $code );
 		if ( ! $voucher ) {
-			return new \\WP_Error( 'vcap_not_found', __( 'Voucher not found.', 'voucher-captain' ), array( 'status' => 404 ) );
+			return new \WP_Error( 'vcap_not_found', __( 'Voucher not found.', 'voucher-captain' ), array( 'status' => 404 ) );
 		}
 		if ( ! $order->get_id() || $amount <= 0 ) {
-			return new \\WP_Error( 'vcap_invalid_redemption', __( 'A saved order and a positive amount are required.', 'voucher-captain' ), array( 'status' => 400 ) );
+			return new \WP_Error( 'vcap_invalid_redemption', __( 'A saved order and a positive amount are required.', 'voucher-captain' ), array( 'status' => 400 ) );
 		}
 		if ( ! $voucher->is_multi_use() ) {
-			return new \\WP_Error( 'vcap_balance_only', __( 'This operation requires a stored-balance voucher.', 'voucher-captain' ), array( 'status' => 422 ) );
+			return new \WP_Error( 'vcap_balance_only', __( 'This operation requires a stored-balance voucher.', 'voucher-captain' ), array( 'status' => 422 ) );
 		}
 		$result = $this->coupons->reserve_voucher_balance( $voucher, $amount, $order, __( 'Reserved by an integration', 'voucher-captain' ) );
 		if ( ! $result ) {
-			return new \\WP_Error( 'vcap_balance_conflict', __( 'Voucher balance is unavailable or has changed.', 'voucher-captain' ), array( 'status' => 409 ) );
+			return new \WP_Error( 'vcap_balance_conflict', __( 'Voucher balance is unavailable or has changed.', 'voucher-captain' ), array( 'status' => 409 ) );
 		}
 		if ( 'committed' === $result['state'] ) {
 			$redemptions = (array) $order->get_meta( '_vcap_redemptions' );
@@ -106,17 +106,17 @@ final class WooCommerceRedemptionProvider implements RedemptionProvider {
 	 * Commit the order's active balance reservation.
 	 *
 	 * @param string   $code Voucher code.
-	 * @param \\WC_Order $order Saved WooCommerce order.
-	 * @return array<string, mixed>|\\WP_Error
+	 * @param \WC_Order $order Saved WooCommerce order.
+	 * @return array<string, mixed>|\WP_Error
 	 */
-	public function commit( string $code, \\WC_Order $order ) {
+	public function commit( string $code, \WC_Order $order ) {
 		$voucher = $this->find( $code );
 		if ( ! $voucher ) {
-			return new \\WP_Error( 'vcap_not_found', __( 'Voucher not found.', 'voucher-captain' ), array( 'status' => 404 ) );
+			return new \WP_Error( 'vcap_not_found', __( 'Voucher not found.', 'voucher-captain' ), array( 'status' => 404 ) );
 		}
 		$result = $this->coupons->commit_voucher_reservation( $voucher, $order );
 		if ( ! $result ) {
-			return new \\WP_Error( 'vcap_reservation_missing', __( 'No matching voucher reservation could be committed.', 'voucher-captain' ), array( 'status' => 409 ) );
+			return new \WP_Error( 'vcap_reservation_missing', __( 'No matching voucher reservation could be committed.', 'voucher-captain' ), array( 'status' => 409 ) );
 		}
 		$redemptions = (array) $order->get_meta( '_vcap_redemptions' );
 
@@ -143,16 +143,16 @@ final class WooCommerceRedemptionProvider implements RedemptionProvider {
 	 * Release the order's active balance reservation.
 	 *
 	 * @param string   $code Voucher code.
-	 * @param \\WC_Order $order Saved WooCommerce order.
-	 * @return array<string, mixed>|\\WP_Error
+	 * @param \WC_Order $order Saved WooCommerce order.
+	 * @return array<string, mixed>|\WP_Error
 	 */
-	public function release( string $code, \\WC_Order $order ) {
+	public function release( string $code, \WC_Order $order ) {
 		$voucher = $this->find( $code );
 		if ( ! $voucher ) {
-			return new \\WP_Error( 'vcap_not_found', __( 'Voucher not found.', 'voucher-captain' ), array( 'status' => 404 ) );
+			return new \WP_Error( 'vcap_not_found', __( 'Voucher not found.', 'voucher-captain' ), array( 'status' => 404 ) );
 		}
 		if ( ! $this->coupons->release_voucher_reservation( $voucher, $order, __( 'Released by an integration', 'voucher-captain' ) ) ) {
-			return new \\WP_Error( 'vcap_reservation_missing', __( 'No matching voucher reservation could be released.', 'voucher-captain' ), array( 'status' => 409 ) );
+			return new \WP_Error( 'vcap_reservation_missing', __( 'No matching voucher reservation could be released.', 'voucher-captain' ), array( 'status' => 409 ) );
 		}
 		$reservations = (array) $order->get_meta( '_vcap_reservations' );
 
