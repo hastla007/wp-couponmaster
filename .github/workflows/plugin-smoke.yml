@@ -146,6 +146,15 @@ jobs:
         run: composer install --no-interaction --prefer-dist
       - name: Download WP-CLI
         run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
+      - name: Probe which WooCommerce versions provide the coupon item filter
+        run: |
+          for v in 8.8.0 8.9.0 9.0.0 9.1.0 9.2.0 9.3.0 9.4.0 9.5.0 9.6.0 9.7.0 9.8.0 9.9.0 10.0.0; do
+            if curl --fail --silent --location --output /tmp/wc.zip "https://downloads.wordpress.org/plugin/woocommerce.${v}.zip"; then
+              if unzip -p /tmp/wc.zip woocommerce/includes/class-wc-discounts.php | grep -q "woocommerce_coupon_get_items_to_apply"; then echo "WooCommerce ${v}: filter present"; else echo "WooCommerce ${v}: filter missing"; fi
+            else
+              echo "WooCommerce ${v}: download failed"
+            fi
+          done
       - name: Install WordPress 6.4, WooCommerce 8.8 and the release ZIP (no Yoast SEO)
         run: |
           php wp-cli.phar core download --path=wp-test --version=6.4.5
