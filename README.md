@@ -50,6 +50,13 @@ composer install --no-dev
 
 Nach der Aktivierung werden zwei Startvorlagen angelegt (Geschenkkarte A5 und Gutschein-/Leistungspass A6). Danach im Produkt die Option **„Gutschein“** anhaken und den Tab **„Gutschein“** konfigurieren.
 
+## Integrationen und Sicherheit
+
+- [Versionierte PHP-API und Providervertrag](API.md)
+- [Sicherheits- und Datenschutzkontrollen](SECURITY.md)
+- [Release-Abnahmecheckliste](RELEASE_CHECKLIST.md)
+- [50-Punkte-Roadmap](ROADMAP.md)
+
 ## Entwicklung
 
 ```bash
