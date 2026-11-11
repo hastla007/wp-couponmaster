@@ -58,7 +58,8 @@ final class Privacy {
 	}
 
 	public function erase( string $email, int $page = 1 ): array {
-		$removed = false;
+		$removed  = false;
+		$retained = false;
 		$vouchers = $this->repo->for_email( $email, 500 );
 		foreach ( $vouchers as $voucher ) {
 			$changed = false;
@@ -74,15 +75,20 @@ final class Privacy {
 				$voucher->buyer_name  = '';
 				$changed              = true;
 			}
-			if ( $changed ) {
-				$this->repo->update( $voucher );
-				$removed = true;
+			if ( ! $changed ) {
+				continue;
 			}
+			// Remove free-text notes before clearing the lookup email, so a database failure remains retryable.
+			if ( ! $this->repo->anonymise_event_notes( $voucher->id ) || ! $this->repo->update( $voucher ) ) {
+				$retained = true;
+				continue;
+			}
+			$removed = true;
 		}
 		return array(
 			'items_removed'  => $removed,
-			'items_retained' => false,
-			'messages'       => array(),
+			'items_retained' => $retained,
+			'messages'       => $retained ? array( __( 'Some voucher records could not be fully anonymised. Please retry the erasure request.', 'voucher-captain' ) ) : array(),
 			'done'           => count( $vouchers ) < 500,
 		);
 	}
