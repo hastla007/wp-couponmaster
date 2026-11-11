@@ -67,6 +67,7 @@ Voucher Captain und Pass Captain sind eigenständige Plugins. Wenn beide aktiv s
 - [ ] Gutscheineinlösung und Ticketausstellung so koordinieren, dass Wiederholungen/Timeouts keinen Doppelverbrauch und keine doppelten Tickets erzeugen; fehlgeschlagene Zustellung sicher wiederholbar machen.
 - [ ] Rückerstattung, Storno und Gutscheinwiderruf zwischen den Plugins abstimmen; Ticketstatus und Gutscheinstatus nachvollziehbar protokollieren.
 - [ ] In Admin-Oberflächen den jeweils anderen Plugin-Status und fehlende Voraussetzungen verständlich anzeigen, ohne das jeweils andere Plugin zur Pflichtabhängigkeit zu machen.
+- [ ] Voucher Captain und Ticket Captain als getrennte Plugin-Einträge und eigene Admin-Menüs beibehalten; gegenseitige Links und optional gemeinsame Scannerfunktion ergänzen, ohne Menüs oder Pluginverwaltung zusammenzulegen.
 
 ## Connector für Learnboating (kundenspezifisches Add-on)
 
