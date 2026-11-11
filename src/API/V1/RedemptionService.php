@@ -95,7 +95,9 @@ final class RedemptionService {
 	 *
 	 * @param string $code Voucher code.
 	 * @param array  $args key (string, required), target (string, required), amount (float, gift cards),
-	 *                     user_id (int, PHP callers only; REST always uses the authenticated user), meta (array).
+	 *                     user_id (int, PHP callers only; REST always uses the authenticated user), meta (array),
+	 *                     ttl_minutes (int, PHP callers only: how long the reservation is held before it is released
+	 *                     automatically; default the "Reservation lifetime" setting, at most 60 days).
 	 * @return array<string, mixed>|\WP_Error
 	 * @throws \Throwable Database errors are re-thrown after the transaction was rolled back.
 	 */
@@ -140,7 +142,7 @@ final class RedemptionService {
 
 		global $wpdb;
 		$tables = Install::tables();
-		$ttl    = max( 1, (int) get_option( 'vcap_redemption_ttl', 15 ) ) * MINUTE_IN_SECONDS;
+		$ttl    = max( 1, min( 60 * 24 * 60, (int) ( $args['ttl_minutes'] ?? get_option( 'vcap_redemption_ttl', 15 ) ) ) ) * MINUTE_IN_SECONDS;
 		$now    = gmdate( 'Y-m-d H:i:s' );
 		$id     = 0;
 		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery

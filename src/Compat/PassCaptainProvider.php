@@ -76,12 +76,28 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 		);
 	}
 
+	/**
+	 * How long a reservation must survive: Pass Captain keeps unpaid orders open for its own hold time
+	 * (online payments: minutes; manual/bank payments: up to days) and releases the voucher itself when an order
+	 * is cancelled or expires. Our automatic release is only a safety net after that, never before payment.
+	 */
+	public static function hold_minutes(): int {
+		$minutes = 7 * 24 * 60;
+		if ( class_exists( '\PassCaptain\Settings' ) && is_callable( array( '\PassCaptain\Settings', 'get' ) ) ) {
+			$online  = (int) \PassCaptain\Settings::get( 'hold_minutes' );
+			$manual  = (int) \PassCaptain\Settings::get( 'manual_hold_hours' ) * 60;
+			$minutes = max( $online, $manual, 30 );
+		}
+		return (int) apply_filters( 'vcap_passcaptain_reservation_minutes', $minutes + 24 * 60 );
+	}
+
 	/** @return array|\WP_Error */
 	public function reserve( array $quote, $idempotency_key ) {
 		$args = array(
-			'key'    => (string) $idempotency_key,
-			'target' => (string) ( $quote['target'] ?? PassCaptain::CHANNEL . ':order' ),
-			'meta'   => array( 'source' => 'passcaptain' ),
+			'key'         => (string) $idempotency_key,
+			'target'      => (string) ( $quote['target'] ?? PassCaptain::CHANNEL . ':order' ),
+			'meta'        => array( 'source' => 'passcaptain' ),
+			'ttl_minutes' => self::hold_minutes(),
 		);
 		if ( ! empty( $quote['balance'] ) ) {
 			$args['amount'] = (float) $quote['amount'];

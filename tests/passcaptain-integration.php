@@ -80,6 +80,9 @@ $order = vcap_pc_order( $type, 3 );
 $applied = Checkout::apply( $order['order_id'], strtoupper( $card->code ) );
 vcap_pc_assert( ! is_wp_error( $applied ) && 5000 === $applied['applied_minor'] && 1000 === $applied['total_minor'], 'a gift card pays 50 of a 60 ticket order' );
 vcap_pc_assert( 0.0 === vcap()->vouchers->get( $card->id )->balance && 'reserved' === vcap_pc_redemption( $order['order_id'] )['state'], 'the gift card balance is reserved before payment' );
+$held_until = strtotime( vcap_pc_redemption( $order['order_id'] )['expires_at'] . ' UTC' );
+$manual     = (int) PassCaptain\Settings::get( 'manual_hold_hours' ) * HOUR_IN_SECONDS;
+vcap_pc_assert( $held_until > time() + max( $manual, 15 * MINUTE_IN_SECONDS ), 'the reservation outlives Pass Captain\'s payment window (no release before a late bank transfer)' );
 
 Orders::confirm_manual_payment( $order['order_id'] );
 Checkout::commit( $order['order_id'] );
