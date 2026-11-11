@@ -48,6 +48,14 @@ final class Repository {
 		return $this->cache[ $id ];
 	}
 
+	/**
+	 * A campaign in any status (for recalculating orders that already carry its discount).
+	 */
+	public function get_any( int $id ): ?array {
+		$post = $id > 0 ? get_post( $id ) : null;
+		return $post && self::POST_TYPE === $post->post_type && 'trash' !== $post->post_status ? self::build( $post ) : null;
+	}
+
 	public static function build( \WP_Post $post ): array {
 		$raw = json_decode( (string) get_post_meta( $post->ID, self::META, true ), true );
 		return array(

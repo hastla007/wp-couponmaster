@@ -91,23 +91,37 @@ final class CartIntegration {
 			$email   = (string) $object->get_billing_email();
 			$exclude = (int) $object->get_id();
 			$coupons = $object->get_coupon_codes();
+			$created = $object->get_date_created();
+			$now     = $created ? $created->getTimestamp() : time();
 		} else {
+			$now     = time();
 			$user    = get_current_user_id();
 			$email   = WC()->customer ? (string) WC()->customer->get_billing_email() : '';
 			$exclude = WC()->session ? (int) WC()->session->get( 'order_awaiting_payment' ) : 0;
 			$coupons = WC()->cart ? WC()->cart->get_applied_coupons() : array();
 		}
-		$key = $user . '|' . strtolower( $email ) . '|' . $exclude;
+		$before = $object instanceof \WC_Order ? $now : 0;
+		$key    = $user . '|' . strtolower( $email ) . '|' . $exclude . '|' . $before;
 		if ( ! isset( self::$previous[ $key ] ) ) {
-			self::$previous[ $key ] = ( $user || is_email( $email ) ) && FirstOrderCoupons::has_previous_order( $user, $email, $exclude );
+			self::$previous[ $key ] = ( $user || is_email( $email ) ) && FirstOrderCoupons::has_previous_order( $user, $email, $exclude, $before );
+		}
+		$others     = array_values( array_filter( array_map( 'strval', $coupons ), static fn( $c ) => ! self::id_from_code( $c ) ) );
+		$individual = false;
+		foreach ( $others as $code ) {
+			$other = new \WC_Coupon( $code );
+			if ( $other->get_id() && $other->get_individual_use() ) {
+				$individual = true;
+				break;
+			}
 		}
 		$userdata = $user ? get_userdata( $user ) : null;
 		return array(
-			'now'                => time(),
+			'now'                => $now,
 			'logged_in'          => $user > 0,
 			'roles'              => $userdata ? (array) $userdata->roles : array(),
 			'has_previous_order' => self::$previous[ $key ],
-			'other_coupons'      => array_values( array_filter( array_map( 'strval', $coupons ), static fn( $c ) => ! self::id_from_code( $c ) ) ),
+			'other_coupons'      => $others,
+			'individual_use_coupon' => $individual,
 			'allow_vouchers'     => $this->settings->yes( 'vcap_discounts_on_vouchers' ),
 			'decimals'           => wc_get_price_decimals(),
 		);
@@ -160,12 +174,8 @@ final class CartIntegration {
 		if ( ! $coupon instanceof \WC_Coupon || ! $coupon->is_type( self::TYPE ) ) {
 			return $discounts;
 		}
-		$campaign = $this->campaigns->get( self::id_from_code( $coupon->get_code() ) );
-		$items    = $this->items[ $coupon->get_code() ] ?? array();
-		$out      = array_fill_keys( array_keys( (array) $discounts ), 0 );
-		if ( ! $campaign || ! $items || ! $this->enabled() ) {
-			return $out;
-		}
+		$items  = $this->items[ $coupon->get_code() ] ?? array();
+		$out    = array_fill_keys( array_keys( (array) $discounts ), 0 );
 		$object = WC()->cart;
 		foreach ( $items as $item ) {
 			if ( isset( $item->object ) && $item->object instanceof \WC_Order_Item ) {
@@ -173,7 +183,31 @@ final class CartIntegration {
 				break;
 			}
 		}
-		$amounts = Engine::discounts( $campaign['rules'], self::lines_from_items( $items ), $this->context( $object ) );
+		$is_order = $object instanceof \WC_Order;
+		$id       = self::id_from_code( $coupon->get_code() );
+		// An existing order keeps its promotion when it is recalculated later, even if the promotion has ended,
+		// was unpublished or promotions were switched off meanwhile.
+		$campaign = $this->campaigns->get( $id ) ?? ( $is_order ? $this->campaigns->get_any( $id ) : null );
+		if ( ! $campaign || ! $items || ( ! $is_order && ! $this->enabled() ) ) {
+			return $out;
+		}
+		// All promotions of this cart/order, in priority order: each takes only what the earlier ones left.
+		$codes  = $is_order ? $object->get_coupon_codes() : ( $object ? $object->get_applied_coupons() : array() );
+		$stack  = array();
+		foreach ( $codes as $code ) {
+			$other_id = self::id_from_code( (string) $code );
+			$other    = $other_id ? ( $this->campaigns->get( $other_id ) ?? ( $is_order ? $this->campaigns->get_any( $other_id ) : null ) ) : null;
+			if ( $other ) {
+				$stack[] = $other;
+			}
+		}
+		usort( $stack, static fn( $a, $b ) => array( $a['priority'], $a['id'] ) <=> array( $b['priority'], $b['id'] ) );
+		$rules = array();
+		foreach ( $stack as $entry ) {
+			$rules[ $entry['id'] ] = $entry['rules'];
+		}
+		$rules  += array( $campaign['id'] => $campaign['rules'] );
+		$amounts = Engine::stack( $rules, self::lines_from_items( $items ), $this->context( $object ) )[ $campaign['id'] ] ?? array();
 		foreach ( $items as $item ) {
 			$key = (string) $item->key;
 			if ( isset( $amounts[ $key ] ) ) {

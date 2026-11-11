@@ -39,18 +39,20 @@ final class FirstOrderCoupons {
 	/**
 	 * Whether the customer (user id and/or email) already has an order other than $exclude_order_id.
 	 */
-	public static function has_previous_order( int $user_id, string $email, int $exclude_order_id = 0 ): bool {
+	public static function has_previous_order( int $user_id, string $email, int $exclude_order_id = 0, int $before = 0 ): bool {
 		$statuses = apply_filters( 'vcap_first_order_counting_statuses', array( 'processing', 'completed', 'on-hold' ) );
 		foreach ( array_filter( array( $user_id ?: null, is_email( $email ) ? strtolower( $email ) : null ) ) as $customer ) {
-			$ids = wc_get_orders(
-				array(
-					'customer' => $customer,
-					'status'   => $statuses,
-					'limit'    => 2,
-					'return'   => 'ids',
-					'type'     => 'shop_order',
-				)
+			$query = array(
+				'customer' => $customer,
+				'status'   => $statuses,
+				'limit'    => 2,
+				'return'   => 'ids',
+				'type'     => 'shop_order',
 			);
+			if ( $before > 0 ) {
+				$query['date_created'] = '<' . $before; // Only orders placed before the one being recalculated.
+			}
+			$ids = wc_get_orders( $query );
 			if ( array_diff( array_map( 'intval', $ids ), array( $exclude_order_id ) ) ) {
 				return true;
 			}
