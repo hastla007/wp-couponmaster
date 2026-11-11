@@ -31,22 +31,22 @@ Abgehakte Punkte sind im aktuellen PR implementiert und/oder durch die aufgefüh
 15. [ ] Fehler-Injektion für fehlgeschlagene Ledger-INSERTs und Voucher-UPDATEs ergänzen.
 16. [x] Statusfolgen pending → processing → failed → payment retry → processing abdecken.
 17. [x] Mehrgutschein-Checkout bei Abbruch nach erster Reservierung testen.
-18. [ ] Erstattung parallel zu neuer Einlösung testen.
-19. [ ] Zustelltests für Prozessabbruch, leere Empfängerliste und Mailer-Fehler ergänzen.
+18. [x] Erstattung parallel zu neuer Einlösung testen.
+19. [x] Zustelltests für Prozessabbruch, leere Empfängerliste und Mailer-Fehler ergänzen.
 20. [x] CI-Ergebnisse und bekannte Grenzen im PR- und Release-Checklistenprozess dokumentieren.
 
 ## P1 – WordPress- und WooCommerce-Kompatibilität
 
-21. [ ] Plugin auf WordPress 7.1.4 und WooCommerce 11.2.2 mit HPOS installieren und aktualisieren.
-22. [ ] Klassische Kasse und Checkout-Blöcke separat mit bezahlten und unbezahlten Bestellungen prüfen.
-23. [ ] Payment-Retry für bestehende Bestellungen sowie Gateway-Redirects und Webhook-Wiederholungen prüfen.
-24. [ ] Kompatibilität mit PHP 8.1 und 8.4 durch vollständige Lint- und Smoke-Läufe bestätigen.
-25. [ ] MySQL- und MariaDB-Tabellenengine nach Aktivierung und Upgrade verifizieren.
-26. [ ] Datenbankmigration von vorhandenen MyISAM-Tabellen unter realistischen Datenmengen testen.
-27. [ ] HPOS- und Legacy-Order-Storage in einer Integrationstestmatrix prüfen.
-28. [ ] Yoast SEO 28.8 optional aktivieren und Admin-, Checkout- und Frontend-Konflikte prüfen.
-29. [ ] WooCommerce-Produkt-, Warenkorb- und Checkout-Blöcke mit Gutscheinfeldern testen.
-30. [ ] WooCommerce-Subscriptions-, Mehrwährungs- und Produktfeld-Integrationen gezielt spezifizieren und testen.
+21. [x] Plugin auf WordPress 7.1.4 und WooCommerce 11.2.2 mit HPOS installieren und aktualisieren.
+22. [x] Klassische Kasse und Checkout-Blöcke separat mit bezahlten und unbezahlten Bestellungen prüfen.
+23. [ ] Payment-Retry für bestehende Bestellungen ist hook-level abgedeckt; Gateway-Redirects und Webhook-Wiederholungen mit realen Gateways als E2E testen.
+24. [x] Kompatibilität mit PHP 8.1 und 8.4 durch vollständige Lint- und Smoke-Läufe bestätigen.
+25. [x] MySQL- und MariaDB-Tabellenengine nach Aktivierung und Upgrade verifizieren.
+26. [x] Datenbankmigration von vorhandenen MyISAM-Tabellen unter realistischen Datenmengen testen.
+27. [x] HPOS- und Legacy-Order-Storage in einer Integrationstestmatrix prüfen.
+28. [ ] Yoast SEO 28.8 ist in CI parallel aktiviert; Admin-, Checkout- und Frontend-Konflikte noch per Browser-E2E prüfen.
+29. [x] WooCommerce-Produkt-, Warenkorb- und Checkout-Blöcke mit Gutscheinfeldern testen.
+30. [x] WooCommerce-Subscriptions-, Mehrwährungs- und Produktfeld-Verträge dokumentieren und mit optionalen Provider-/Renewal-Tests absichern (externe Premium-Plugins bleiben außerhalb der CI).
 
 ## P1 – Sicherheit, Datenschutz und Datenintegrität
 
