@@ -76,12 +76,12 @@ Der ausführbare Plugin-Code liegt aktuell auf `claude/youthful-bardeen-7ejd7a).
 - [ ] Empfehlungs-/Freunde-werben-Codes.
 - [ ] Allgemeine Einlöseseite oder Block/Shortcode, den Connector-Plugins erweitern können.
 
-## Native Integration: Voucher Captain + Pass Captain
+## Native Integration: Voucher Captain + Ticket Captain
 
-Voucher Captain und Pass Captain sind eigenständige Plugins. Wenn beide aktiv sind, integrieren sie sich direkt; ein separates Connector-Plugin zwischen ihnen ist nicht erforderlich. Beide Plugins müssen auch allein funktionsfähig bleiben.
+Voucher Captain und Ticket Captain sind eigenständige Plugins. Wenn beide aktiv sind, integrieren sie sich direkt; ein separates Connector-Plugin zwischen ihnen ist nicht erforderlich. Beide Plugins müssen auch allein funktionsfähig bleiben.
 
 - [ ] Gemeinsamen, versionierten PHP-Vertrag für Gutschein-Einlösung und Ticketausstellung festlegen. Keine direkten Abhängigkeiten auf interne Klassen oder Datenbanktabellen des jeweils anderen Plugins.
-- [ ] Bei gemeinsamer Installation Pass Captain als Einlöseziel/Aktion für passende Voucher-Captain-Gutscheine anbieten.
+- [ ] Bei gemeinsamer Installation Ticket Captain als Einlöseziel/Aktion für passende Voucher-Captain-Gutscheine anbieten.
 - [ ] Für ein Gutscheinprodukt konfigurierbar machen, welches Pass-Captain-Ticket bei erfolgreicher Einlösung ausgestellt wird. Die Ticketausstellung erst nach bestätigter Gutschein-Einlösung auslösen.
 - [ ] WooCommerce-Ticketprodukte weiterhin direkt nach erfolgreichem Kauf ausstellen können; dafür ist kein Gutschein erforderlich.
 - [ ] Ereignisvertrag mit eindeutiger Bestellpositions- bzw. Einlöse-ID, Nutzer/Empfänger, Zielprodukt und Zeitstempel definieren. Ticket-Ausstellung muss idempotent sein.
