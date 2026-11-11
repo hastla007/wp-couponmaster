@@ -52,7 +52,7 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 
 - [ ] Einzweck- und Mehrzweckgutschein als konfigurierbare Steuerbehandlung modellieren; steuerliche Umsetzung und Produkttexte mit Steuerberatung freigeben lassen.
 - [ ] Steuerfälle für OSS, unterschiedliche Leistungsorte/-steuersätze, Kleinunternehmer und Preise mit gleichem Bruttopreis spezifizieren und verifizieren.
-- [ ] Produkt-, Kategorie- und SKU-Regeln samt Ausschlüssen für Rabattcodes unterstützen.
+- [x] Produkt-, Kategorie- und SKU-Regeln samt Ausschlüssen für Rabattcodes unterstützen. — *Nachweis: Produkte/Kategorien und Ausschlüsse sind WooCommerce-Standard; neue Felder „Artikelnummern“ und „Artikelnummern ausschließen“ mit Präfix-Platzhalter *, auch für Warenkorb-Festbeträge; tests/sku-rules-integration.php*
 - [x] Gesamtlimit, Limit pro Kunde, Mindestbestellwert, Ablauf und Erstkaufbedingung konfigurierbar machen. — *Nachweis: Gesamtlimit, Limit pro Kunde, Mindestbestellwert und Ablauf sind WooCommerce-Standard; neue Gutschein-Option „Nur für die erste Bestellung“ (Konto oder Rechnungs-E-Mail); tests/first-order-integration.php*
 - [ ] Erweiterungspunkte für „Kunde besitzt Kurs/Produkt X“ und Konflikte mit externen Mitgliederrabatten/Kombipreisen dokumentieren.
 - [x] Coupon-Link mit sicherer automatischer Anwendung ergänzen, z. B. `?gutschein=CODE`. — *Nachweis: Einstellung „Gutschein-Links“ (standardmäßig aus), einmalige Anwendung über WooCommerce-Prüfung, Parameter wird per Redirect entfernt; tests/coupon-link-integration.php*

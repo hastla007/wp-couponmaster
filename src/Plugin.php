@@ -59,6 +59,7 @@ final class Plugin {
 		( new CouponLink( $this->settings ) )->register();
 		( new VoucherPurchaseRules( $this->settings ) )->register();
 		( new FirstOrderCoupons() )->register();
+		( new CouponSkuRules() )->register();
 		$promotions = new Discounts\Repository();
 		$promotions->register();
 		( new Discounts\Usage() )->register();

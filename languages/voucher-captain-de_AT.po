@@ -3066,3 +3066,18 @@ msgstr "den Kauf von Gutscheinen/Geschenkkarten"
 
 msgid "no expiry"
 msgstr "unbegrenzt"
+
+msgid "SKUs"
+msgstr "Artikelnummern"
+
+msgid "Exclude SKUs"
+msgstr "Artikelnummern ausschließen"
+
+msgid "Only products with these SKUs (comma separated, * at the end matches the beginning of a SKU)."
+msgstr "Nur Produkte mit diesen Artikelnummern (kommagetrennt, * am Ende passt auf den Anfang einer Artikelnummer)."
+
+msgid "Never discount products with these SKUs (comma separated, * at the end matches the beginning of a SKU)."
+msgstr "Produkte mit diesen Artikelnummern nie rabattieren (kommagetrennt, * am Ende passt auf den Anfang einer Artikelnummer)."
+
+msgid "Sorry, this coupon is not applicable to the products in your cart."
+msgstr "Dieser Gutschein gilt leider nicht für die Produkte in Ihrem Warenkorb."

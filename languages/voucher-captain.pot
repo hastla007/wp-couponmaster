@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-11 17:36+0000\n"
+"POT-Creation-Date: 2026-11-11 17:37+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:73 src/API/V1/RedemptionService.php:112
@@ -403,7 +403,7 @@ msgstr ""
 msgid "Scanner"
 msgstr ""
 
-#: src/Admin/Menu.php:43 src/Admin/Menu.php:43 src/Plugin.php:105
+#: src/Admin/Menu.php:43 src/Admin/Menu.php:43 src/Plugin.php:106
 msgid "Settings"
 msgstr ""
 
@@ -1016,6 +1016,26 @@ msgstr ""
 
 #: src/CouponManager.php:941
 msgid "Some voucher balances could not be restored. Review this order and retry the refund handling."
+msgstr ""
+
+#: src/CouponSkuRules.php:96
+msgid "SKUs"
+msgstr ""
+
+#: src/CouponSkuRules.php:98
+msgid "Only products with these SKUs (comma separated, * at the end matches the beginning of a SKU)."
+msgstr ""
+
+#: src/CouponSkuRules.php:106
+msgid "Exclude SKUs"
+msgstr ""
+
+#: src/CouponSkuRules.php:108
+msgid "Never discount products with these SKUs (comma separated, * at the end matches the beginning of a SKU)."
+msgstr ""
+
+#: src/CouponSkuRules.php:145
+msgid "Sorry, this coupon is not applicable to the products in your cart."
 msgstr ""
 
 #. translators: %s: currency symbol
@@ -1989,12 +2009,12 @@ msgid "Site URL"
 msgstr ""
 
 #. translators: %s: comma separated table names
-#: src/Plugin.php:121
+#: src/Plugin.php:122
 #, php-format
 msgid "Voucher Captain: the voucher database tables do not support transactions (InnoDB). Gift card balances cannot be redeemed until these tables are converted to InnoDB: %s"
 msgstr ""
 
-#: src/Plugin.php:129
+#: src/Plugin.php:130
 msgid "Voucher Captain: the PDF libraries are missing. Install the release ZIP or run \"composer install --no-dev\" in the plugin folder."
 msgstr ""
 
