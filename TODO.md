@@ -124,12 +124,12 @@ Befund im Kursplugin: `/wp-json/boatingschool/v1/coupons/redeem` ist derzeit fü
 
 ### Regelbasierte Aktionen
 
-- [ ] Rabattkampagnen mit Bedingungen für Erstkauf, nächste Bestellung, Mindestwarenkorb, Produkt/Kategorie, Kundengruppe, Zeitraum und gekaufte Menge modellieren.
-- [ ] Prozent-, Festbetrag-, Staffel- und „Kaufe X, erhalte Y“-Aktionen unterstützen, soweit sie sich zuverlässig auf WooCommerce-Bestellpositionen abbilden lassen.
-- [ ] Priorität, Ausschlüsse, Stapelbarkeit und Verhalten bei mehreren passenden Kampagnen konfigurierbar machen.
-- [ ] Vor Veröffentlichung eine Vorschau/Testmöglichkeit für Regeln und berechnete Rabatte bereitstellen.
-- [ ] Rabatte ausschließlich nachvollziehbar im Warenkorb/Checkout berechnen; keine künstlichen Streichpreise erzeugen.
-- [ ] Automatisches Anwenden nur nach ausdrücklicher Aktivierung durch den Händler anbieten; URL-Coupon sicher validieren und gegen wiederholte/unerwünschte Anwendung absichern.
+- [x] Rabattkampagnen mit Bedingungen für Erstkauf, nächste Bestellung, Mindestwarenkorb, Produkt/Kategorie, Kundengruppe, Zeitraum und gekaufte Menge modellieren. — *Nachweis: Gutscheine → Aktionen (CPT `vcap_discount`); Bedingungen Erstkauf/Stammkunde, Mindestwarenwert, Produkte/Kategorien, Benutzerrollen, Von/Bis, Mindestmenge; src/Discounts/Engine.php*
+- [x] Prozent-, Festbetrag-, Staffel- und „Kaufe X, erhalte Y“-Aktionen unterstützen, soweit sie sich zuverlässig auf WooCommerce-Bestellpositionen abbilden lassen. — *Nachweis: alle vier Typen als WooCommerce-Coupon-Typ `vcap_campaign` mit Rabatt pro Bestellposition; tests/run.php + tests/promotion-integration.php*
+- [x] Priorität, Ausschlüsse, Stapelbarkeit und Verhalten bei mehreren passenden Kampagnen konfigurierbar machen. — *Nachweis: Priorität = Reihenfolge, Ausschluss-Produkte/-Kategorien, „mit anderen Aktionen kombinierbar“, „gilt auch mit Gutscheincode“; Engine::select()*
+- [x] Vor Veröffentlichung eine Vorschau/Testmöglichkeit für Regeln und berechnete Rabatte bereitstellen. — *Nachweis: Metabox „Testwarenkorb“ berechnet ungespeicherte Regeln per AJAX mit Rabatt je Zeile und Ablehnungsgrund*
+- [x] Rabatte ausschließlich nachvollziehbar im Warenkorb/Checkout berechnen; keine künstlichen Streichpreise erzeugen. — *Nachweis: Rabatt als eigene Coupon-Zeile mit Aktionsname in Warenkorb und Bestellung (Meta `_vcap_campaign_id`); Katalogpreise unverändert*
+- [x] Automatisches Anwenden nur nach ausdrücklicher Aktivierung durch den Händler anbieten; URL-Coupon sicher validieren und gegen wiederholte/unerwünschte Anwendung absichern. — *Nachweis: Einstellung „Automatische Aktionen“ standardmäßig aus; Aktionscodes sind nur gültig, solange die Aktion veröffentlicht ist und ihre Regeln erfüllt sind; URL-Coupons über CouponLink*
 
 ### Kundenkonto-Guthaben
 

@@ -36,6 +36,7 @@ final class Settings {
 		'vcap_coupon_link'             => 'no',
 		'vcap_discounts_on_vouchers'   => 'no',
 		'vcap_store_credit'            => 'no',
+		'vcap_campaigns_enabled'       => 'no',
 		'vcap_vouchers_buy_vouchers'   => 'no',
 		'vcap_coupon_link_param'       => 'gutschein',
 		'vcap_redemption_max_failures' => 10,
@@ -342,6 +343,13 @@ final class Settings {
 						'type'    => 'checkbox',
 						'default' => 'yes',
 						'desc'    => __( 'Disable vouchers when the order they were bought with is fully refunded or cancelled.', 'voucher-captain' ),
+					),
+					array(
+						'title'   => __( 'Automatic promotions', 'voucher-captain' ),
+						'id'      => 'vcap_campaigns_enabled',
+						'type'    => 'checkbox',
+						'default' => 'no',
+						'desc'    => __( 'Apply published promotions (Vouchers → Promotions) automatically in the cart. The discount is shown as its own line in the cart and the order; catalog prices do not change.', 'voucher-captain' ),
 					),
 					array(
 						'title'   => __( 'Store credit', 'voucher-captain' ),

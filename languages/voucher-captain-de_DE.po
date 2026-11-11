@@ -2787,3 +2787,207 @@ msgstr "Guthaben verwenden"
 
 msgid "You have %1$s store credit. %2$s"
 msgstr "Sie haben %1$s Guthaben. %2$s"
+
+msgid "%s off"
+msgstr "%s Rabatt"
+
+msgid "Add promotion"
+msgstr "Aktion hinzufügen"
+
+msgid "Also applies when the customer uses a coupon code"
+msgstr "Gilt auch, wenn der Kunde einen Gutscheincode verwendet"
+
+msgid "Apply published promotions (Vouchers → Promotions) automatically in the cart. The discount is shown as its own line in the cart and the order; catalog prices do not change."
+msgstr "Veröffentlichte Aktionen (Gutscheine → Aktionen) automatisch im Warenkorb anwenden. Der Rabatt erscheint als eigene Zeile im Warenkorb und in der Bestellung; die Katalogpreise ändern sich nicht."
+
+msgid "Automatic promotions"
+msgstr "Automatische Aktionen"
+
+msgid "Buy"
+msgstr "Kaufe"
+
+msgid "Buy %1$d, get %2$d at %3$s %% off"
+msgstr "Kaufe %1$d, erhalte %2$d mit %3$s %% Rabatt"
+
+msgid "Buy X, get Y"
+msgstr "Kaufe X, erhalte Y"
+
+msgid "Calculate"
+msgstr "Berechnen"
+
+msgid "Can be combined with other promotions"
+msgstr "Mit anderen Aktionen kombinierbar"
+
+msgid "Choose at least one product."
+msgstr "Wählen Sie mindestens ein Produkt."
+
+msgid "Choose roles…"
+msgstr "Rollen wählen …"
+
+msgid "Combination"
+msgstr "Kombination"
+
+msgid "Conditions"
+msgstr "Bedingungen"
+
+msgid "Customer"
+msgstr "Kunde"
+
+msgid "Customer groups (user roles)"
+msgstr "Kundengruppen (Benutzerrollen)"
+
+msgid "Customers"
+msgstr "Kunden"
+
+msgid "Discount"
+msgstr "Rabatt"
+
+msgid "Discount campaign (Voucher Captain)"
+msgstr "Rabattaktion (Voucher Captain)"
+
+msgid "Edit promotion"
+msgstr "Aktion bearbeiten"
+
+msgid "Everyone"
+msgstr "Alle"
+
+msgid "Fixed amount off"
+msgstr "Fester Betrag Rabatt"
+
+msgid "From"
+msgstr "Von"
+
+msgid "Guest, first order"
+msgstr "Gast, erste Bestellung"
+
+msgid "Leave products and categories empty for all products. Voucher products are excluded unless \"Discount codes on vouchers\" is allowed."
+msgstr "Produkte und Kategorien leer lassen, um alle Produkte einzuschließen. Gutscheinprodukte sind ausgenommen, außer „Rabattcodes auf Gutscheine“ ist erlaubt."
+
+msgid "Logged-in customer, first order"
+msgstr "Angemeldeter Kunde, erste Bestellung"
+
+msgid "Logged-in customers"
+msgstr "Angemeldete Kunden"
+
+msgid "Logged-in returning customer"
+msgstr "Angemeldeter Stammkunde"
+
+msgid "Minimum cart value"
+msgstr "Mindestwarenwert"
+
+msgid "Minimum quantity of qualifying items"
+msgstr "Mindestanzahl berechtigter Artikel"
+
+msgid "No product in this cart qualifies."
+msgstr "Kein Produkt in diesem Warenkorb ist berechtigt."
+
+msgid "No promotions found."
+msgstr "Keine Aktionen gefunden."
+
+msgid "Not combined with coupon codes."
+msgstr "Nicht mit Gutscheincodes kombinierbar."
+
+msgid "Not enough qualifying items."
+msgstr "Nicht genügend berechtigte Artikel."
+
+msgid "One tier per line: \"from quantity:percent\", e.g. 3:5 = 5 % from 3 items. The highest reached tier applies to all qualifying items."
+msgstr "Eine Staffel pro Zeile: „ab Menge:Prozent“, z. B. 3:5 = 5 % ab 3 Artikeln. Die höchste erreichte Staffel gilt für alle berechtigten Artikel."
+
+msgid "Percentage"
+msgstr "Prozent"
+
+msgid "Percentage off"
+msgstr "Prozentrabatt"
+
+msgid "Period"
+msgstr "Zeitraum"
+
+msgid "Price"
+msgstr "Preis"
+
+msgid "Priority"
+msgstr "Priorität"
+
+msgid "Priority = \"Order\" in the Attributes box (lower first). A promotion that cannot be combined only applies alone; if it has the best priority, others are skipped."
+msgstr "Priorität = „Reihenfolge“ im Kasten „Attribute“ (niedrigere zuerst). Eine nicht kombinierbare Aktion gilt nur allein; hat sie die beste Priorität, werden die anderen übersprungen."
+
+msgid "Promotion"
+msgstr "Aktion"
+
+msgid "Promotions"
+msgstr "Aktionen"
+
+msgid "Promotions are switched off. Enable them under WooCommerce → Settings → Vouchers (“Automatic promotions”); until then no promotion is applied in the shop."
+msgstr "Aktionen sind ausgeschaltet. Aktivieren Sie sie unter WooCommerce → Einstellungen → Gutscheine („Automatische Aktionen“); bis dahin wird im Shop keine Aktion angewendet."
+
+msgid "Quantity"
+msgstr "Menge"
+
+msgid "Repeat (every group of X+Y)"
+msgstr "Wiederholen (jede Gruppe aus X+Y)"
+
+msgid "Returning customers (next order)"
+msgstr "Stammkunden (Folgebestellung)"
+
+msgid "Role"
+msgstr "Rolle"
+
+msgid "Rules"
+msgstr "Regeln"
+
+msgid "Taken off the qualifying products in total, split proportionally."
+msgstr "Wird insgesamt von den berechtigten Produkten abgezogen, anteilig aufgeteilt."
+
+msgid "Test cart"
+msgstr "Testwarenkorb"
+
+msgid "The cheapest qualifying items are discounted, e.g. buy 2 get 1 at 100 % off = the cheapest of three is free."
+msgstr "Die günstigsten berechtigten Artikel werden rabattiert, z. B. kaufe 2, erhalte 1 mit 100 % Rabatt = der günstigste von dreien ist gratis."
+
+msgid "The conditions of this promotion are not met."
+msgstr "Die Bedingungen dieser Aktion sind nicht erfüllt."
+
+msgid "The minimum cart value is not reached."
+msgstr "Der Mindestwarenwert ist nicht erreicht."
+
+msgid "The promotion has ended."
+msgstr "Die Aktion ist beendet."
+
+msgid "The promotion has not started yet."
+msgstr "Die Aktion hat noch nicht begonnen."
+
+msgid "This customer does not qualify."
+msgstr "Dieser Kunde ist nicht berechtigt."
+
+msgid "This promotion is not active."
+msgstr "Diese Aktion ist nicht aktiv."
+
+msgid "Tiered by quantity"
+msgstr "Staffelrabatt nach Menge"
+
+msgid "Tiered:"
+msgstr "Staffel:"
+
+msgid "Tiers"
+msgstr "Staffeln"
+
+msgid "Total discount"
+msgstr "Rabatt gesamt"
+
+msgid "Try the rules above with a sample cart before publishing. Unsaved changes are used."
+msgstr "Testen Sie die Regeln oben vor dem Veröffentlichen mit einem Beispielwarenkorb. Nicht gespeicherte Änderungen werden berücksichtigt."
+
+msgid "at"
+msgstr "mit"
+
+msgid "get"
+msgstr "erhalte"
+
+msgid "off"
+msgstr "Rabatt"
+
+msgid "until"
+msgstr "bis"
+
+msgid "voucher"
+msgstr "Gutschein"
