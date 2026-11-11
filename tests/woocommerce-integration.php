@@ -147,11 +147,15 @@ vcap_integration_assert( null === $audit_result && 100.0 === (float) $repo->get(
 
 // Delivery locks are connection-scoped, and a no-recipient attempt must remain eligible for retry.
 list( $delivery_voucher ) = vcap_integration_create_voucher( 100.0, '' );
-$lock_name = 'vcap_delivery_' . $delivery_voucher->id;
-$wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $lock_name ) );
+$lock_name   = 'vcap_delivery_' . $delivery_voucher->id;
+$other_db    = new wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+$other_lock  = $other_db->get_var( $other_db->prepare( 'SELECT GET_LOCK(%s, 0)', $lock_name ) );
+$before_rows = count( $repo->events( $delivery_voucher->id ) );
 vcap()->delivery->deliver( $delivery_voucher->id );
-$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
-vcap_integration_assert( null === $repo->get( $delivery_voucher->id )->delivered_at, 'concurrent delivery worker does not claim an active lock' );
+$after_rows  = count( $repo->events( $delivery_voucher->id ) );
+$other_db->get_var( $other_db->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+$other_db->close();
+vcap_integration_assert( 1 === (int) $other_lock && $before_rows === $after_rows, 'concurrent delivery worker respects a lock held by another database connection' );
 vcap()->delivery->deliver( $delivery_voucher->id );
 vcap_integration_assert( null === $repo->get( $delivery_voucher->id )->delivered_at, 'unsent email remains eligible for delivery retry' );
 
