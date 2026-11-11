@@ -137,6 +137,7 @@ if ( 0 === $pid ) {
 	fwrite( $pair[1], 'R' );
 	fread( $pair[1], 1 );
 	$wpdb = new wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+	$wpdb->set_prefix( $table_prefix );
 	$result = vcap_compat_private_call( vcap()->coupons, 'reserve_balance_atomic', array( $race_voucher, 50.0, $new_order->get_id(), 'parallel redemption test' ) );
 	fwrite( $pair[1], $result ? '1' : '0' );
 	fclose( $pair[1] );
