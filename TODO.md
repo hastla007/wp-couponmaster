@@ -44,7 +44,7 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 - [x] Auftrags- und Erstattungsdaten positionsbezogen für angeschlossene Plugins verfügbar machen. — *Nachweis: `vcap()->api_v1->order_lines()` mit Mengen, Summen, Steuern, Erstattungen, Gutscheinen und Positions-Snapshot je Zeile; tests/connector-integration.php*
 - [x] Verhalten für vollständig rabattierte 0-Euro-Bestellungen festlegen und mit Bestellstatus-/Zugangs-Integrationen abstimmen. — *WooCommerce-Standard: gilt als bezahlt, Gutscheine werden sofort ausgestellt und Guthaben abgebucht; tests/zero-total-integration.php*
 - [x] WooCommerce-CRUD-APIs für Bestellungen und Gutscheine verwenden; HPOS-Unterstützung verifizieren. — *Nachweis: CI-Matrix HPOS und klassischer Bestellspeicher*
-- [ ] Kompatibilität der Produktfelder mit Produkt-, Warenkorb- und Kassenblöcken herstellen und testen.
+- [x] Kompatibilität der Produktfelder mit Produkt-, Warenkorb- und Kassenblöcken herstellen und testen. — *Nachweis: Produktformular-Block nutzt die klassischen Hooks; Store API nimmt `vcap_fields` beim Hinzufügen an, prüft Pflicht-/Formatregeln (RouteException), Felder erscheinen im Warenkorb-Block und landen in den Bestellpositionen; Produkte mit Pflichtfeldern verlinken in Produktlisten auf die Produktseite; tests/blocks-integration.php. Browser-Abnahme bleibt Release-Prüfung.*
 - [x] Datenschutzauskunft, Löschung und konfigurierbare Aufbewahrungsfristen für Käufer- und Empfängerdaten abschließen. — *Nachweis: Exporter/Eraser inkl. Einlösungen, Aufbewahrungsfrist; tests/security-integration.php*
 
 ## P1 – Steuer, Rabattregeln und Gutscheincodes

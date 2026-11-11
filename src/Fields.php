@@ -29,6 +29,8 @@ final class Fields {
 			);
 		}
 		add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'validate' ), 10, 6 );
+		add_filter( 'woocommerce_store_api_add_to_cart_data', array( $this, 'store_api_data' ), 10, 2 );
+		add_action( 'woocommerce_store_api_validate_add_to_cart', array( $this, 'store_api_validate' ), 10, 2 );
 		add_filter( 'woocommerce_add_cart_item_data', array( $this, 'cart_item_data' ), 10, 3 );
 		add_filter( 'woocommerce_get_item_data', array( $this, 'display_item_data' ), 10, 2 );
 		add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'save_order_item' ), 10, 4 );
@@ -289,7 +291,14 @@ final class Fields {
 		echo '</div>';
 	}
 
+	/** @var array<string, mixed>|null field values of a Store API request (blocks), used instead of $_POST */
+	private ?array $override = null;
+
 	private function posted_value( string $key ): string {
+		if ( null !== $this->override ) {
+			$raw = $this->override[ $key ] ?? null;
+			return is_scalar( $raw ) ? (string) $raw : '';
+		}
 		// phpcs:ignore WordPress.Security.NonceVerification -- Add-to-cart form; WooCommerce handles the request.
 		$raw = isset( $_POST['vcap_fields'][ $key ] ) ? wp_unslash( $_POST['vcap_fields'][ $key ] ) : ( isset( $_REQUEST['vcap_fields'][ $key ] ) ? wp_unslash( $_REQUEST['vcap_fields'][ $key ] ) : null ); // phpcs:ignore
 		return is_scalar( $raw ) ? (string) $raw : '';
@@ -405,13 +414,26 @@ final class Fields {
 		if ( is_array( $cart_item_data ) && ! empty( $cart_item_data['vcap_fields'] ) ) {
 			return $passed; // "Order again": values were validated when first ordered.
 		}
+		foreach ( $this->errors( $product ) as $message ) {
+			wc_add_notice( $message, 'error' );
+			$passed = false;
+		}
+		return $passed;
+	}
+
+	/**
+	 * Validation messages for the submitted field values (empty when valid).
+	 *
+	 * @return string[]
+	 */
+	public function errors( \WC_Product $product ): array {
+		$errors = array();
 		foreach ( $this->flat_definitions( $product ) as $key => $field ) {
 			$raw   = trim( $this->posted_value( (string) $key ) );
 			$label = (string) ( $field['label'] ?? $key );
 			if ( ! empty( $field['required'] ) && '' === $raw ) {
 				/* translators: %s: field label */
-				wc_add_notice( sprintf( __( '%s is a required field.', 'voucher-captain' ), $label ), 'error' );
-				$passed = false;
+				$errors[] = sprintf( __( '%s is a required field.', 'voucher-captain' ), $label );
 				continue;
 			}
 			if ( '' === $raw ) {
@@ -420,38 +442,66 @@ final class Fields {
 			$type = $field['type'] ?? 'text';
 			if ( 'email' === $type && ! is_email( $raw ) ) {
 				/* translators: %s: field label */
-				wc_add_notice( sprintf( __( '%s is not a valid email address.', 'voucher-captain' ), $label ), 'error' );
-				$passed = false;
+				$errors[] = sprintf( __( '%s is not a valid email address.', 'voucher-captain' ), $label );
 			}
 			if ( 'date' === $type ) {
 				$ts = strtotime( $raw );
 				if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $raw ) || ! $ts ) {
 					/* translators: %s: field label */
-					wc_add_notice( sprintf( __( '%s is not a valid date.', 'voucher-captain' ), $label ), 'error' );
-					$passed = false;
+					$errors[] = sprintf( __( '%s is not a valid date.', 'voucher-captain' ), $label );
 				} elseif ( 'delivery_date' === $key && ( $raw < wp_date( 'Y-m-d' ) || $ts > time() + YEAR_IN_SECONDS + DAY_IN_SECONDS ) ) {
-					wc_add_notice( __( 'Please choose a delivery date between today and one year from now.', 'voucher-captain' ), 'error' );
-					$passed = false;
+					$errors[] = __( 'Please choose a delivery date between today and one year from now.', 'voucher-captain' );
 				}
 			}
 			if ( 'number' === $type && ! is_numeric( wc_format_decimal( $raw ) ) ) {
 				/* translators: %s: field label */
-				wc_add_notice( sprintf( __( '%s must be a number.', 'voucher-captain' ), $label ), 'error' );
-				$passed = false;
+				$errors[] = sprintf( __( '%s must be a number.', 'voucher-captain' ), $label );
 			}
 			if ( 'select' === $type && ! in_array( $raw, self::options( $field ), true ) ) {
 				/* translators: %s: field label */
-				wc_add_notice( sprintf( __( 'Please choose a valid option for %s.', 'voucher-captain' ), $label ), 'error' );
-				$passed = false;
+				$errors[] = sprintf( __( 'Please choose a valid option for %s.', 'voucher-captain' ), $label );
 			}
 			$max = (int) ( $field['maxlength'] ?? 0 );
 			if ( $max > 0 && mb_strlen( $raw ) > $max ) {
 				/* translators: 1: field label, 2: max length */
-				wc_add_notice( sprintf( __( '%1$s may contain at most %2$d characters.', 'voucher-captain' ), $label, $max ), 'error' );
-				$passed = false;
+				$errors[] = sprintf( __( '%1$s may contain at most %2$d characters.', 'voucher-captain' ), $label, $max );
 			}
 		}
-		return $passed;
+		return $errors;
+	}
+
+	/**
+	 * Store API (cart/checkout blocks, product collection buttons): voucher fields can be sent as "vcap_fields"
+	 * in the add-item request. They are validated like the product form and stored as cart item data.
+	 */
+	public function store_api_data( $data, $request ) {
+		$product = wc_get_product( (int) ( $data['id'] ?? 0 ) );
+		if ( ! $product || ! ProductConfig::is_voucher( $product ) || ! $request instanceof \WP_REST_Request ) {
+			return $data;
+		}
+		$values         = $request->get_param( 'vcap_fields' );
+		$this->override = is_array( $values ) ? $values : array();
+		$fields         = $this->collect_posted( $product );
+		if ( $fields ) {
+			$data['cart_item_data']                = (array) ( $data['cart_item_data'] ?? array() );
+			$data['cart_item_data']['vcap_fields'] = $fields;
+			$data['cart_item_data']['vcap_key']    = md5( wp_json_encode( $fields ) );
+		}
+		return $data;
+	}
+
+	public function store_api_validate( $product, $request ): void {
+		if ( ! $product instanceof \WC_Product || ! ProductConfig::is_voucher( $product ) ) {
+			return;
+		}
+		if ( $request instanceof \WP_REST_Request ) {
+			$values         = $request->get_param( 'vcap_fields' );
+			$this->override = is_array( $values ) ? $values : array();
+		}
+		$errors = $this->errors( $product );
+		if ( $errors && class_exists( '\Automattic\WooCommerce\StoreApi\Exceptions\RouteException' ) ) {
+			throw new \Automattic\WooCommerce\StoreApi\Exceptions\RouteException( 'vcap_invalid_voucher_fields', esc_html( implode( ' ', $errors ) ), 400 );
+		}
 	}
 
 	public function cart_item_data( $data, $product_id, $variation_id ) {
