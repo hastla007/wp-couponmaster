@@ -34,6 +34,10 @@ final class Downloads {
 		return hash_hmac( 'sha256', $token . '|' . $exp, $this->settings->secret() );
 	}
 
+	private function valid_guest_link( string $token, int $exp, string $signature ): bool {
+		return hash_equals( $this->sign( $token, $exp ), $signature ) && ( 0 === $exp || $exp >= time() );
+	}
+
 	/**
 	 * @param bool $for_email Email links honour the configured lifetime; page links are short-lived and re-signed per view.
 	 */
@@ -66,7 +70,7 @@ final class Downloads {
 		$exp   = absint( $_GET['exp'] ?? 0 ); // phpcs:ignore WordPress.Security.NonceVerification
 		$sig   = sanitize_key( wp_unslash( $_GET['sig'] ?? '' ) ); // phpcs:ignore WordPress.Security.NonceVerification
 
-		$valid = hash_equals( $this->sign( $token, $exp ), $sig ) && ( 0 === $exp || $exp >= time() );
+		$valid = $this->valid_guest_link( $token, $exp, $sig );
 		$voucher = $valid ? $this->repo->get_by_token( $token ) : null;
 		if ( ! $voucher ) {
 			wp_die( esc_html__( 'This download link is invalid or has expired. Please log in to your account or contact us for a new link.', 'voucher-captain' ), esc_html__( 'Download unavailable', 'voucher-captain' ), array( 'response' => 403 ) );
