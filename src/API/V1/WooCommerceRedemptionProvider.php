@@ -30,6 +30,7 @@ final class WooCommerceRedemptionProvider implements RedemptionProvider {
 	 * Check whether this provider owns the voucher code.
 	 *
 	 * @param string $code Voucher code.
+	 * @return bool Whether the provider supports this code.
 	 */
 	public function supports( string $code ): bool {
 		return null !== $this->find( $code );
@@ -121,6 +122,7 @@ final class WooCommerceRedemptionProvider implements RedemptionProvider {
 		$redemptions = (array) $order->get_meta( '_vcap_redemptions' );
 
 		$redemptions[ $voucher->code ] = $result['amount'];
+
 		$reservations                  = (array) $order->get_meta( '_vcap_reservations' );
 
 		unset( $reservations[ $voucher->code ] );
