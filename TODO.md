@@ -78,7 +78,7 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 
 - [x] E-Mail-Erinnerung vor Ablauf eines Gutscheins. — *Nachweis: Einstellung „Erinnerung vor Ablauf“ (aus, bis Tage gesetzt sind), WooCommerce-E-Mail „Erinnerung vor Gutschein-Ablauf“, einmal je Gutschein; tests/reminder-integration.php*
 - [x] Statistiken nach Kampagne und Partner. — *Nachweis: Gutscheine → Auswertung: Zeitraum, je Code-Kampagne/Partner, Aktion, Bonus, Gutscheine und Einzelcode ausgegebene Codes, Nutzungen, Bestellungen, Rabatt und Umsatz abzüglich Erstattungen, Fremdwährungen getrennt, CSV-Export; tests/reports-integration.php*
-- [ ] Empfehlungs-/Freunde-werben-Codes.
+- [x] Empfehlungs-/Freunde-werben-Codes. — *Nachweis: Einstellung „Freunde werben“ (standardmäßig aus), persönlicher Erstbestellungs-Code im Kundenkonto mit Teilen-Link, eigene Codes gesperrt, Prämie als Gutschein per E-Mail oder Guthaben nach abgeschlossener Bestellung, einmal pro Bestellung, Auswertung je Werbendem; tests/referral-integration.php*
 - [ ] Allgemeine Einlöseseite oder Block/Shortcode, den Connector-Plugins erweitern können.
 
 ## Native Integration: Voucher Captain + Ticket Captain

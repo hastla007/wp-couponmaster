@@ -6,14 +6,14 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Bonus voucher from a promotion, sent to the customer after the qualifying order was paid.
  */
-final class BonusEmail extends \WC_Email {
+class BonusEmail extends \WC_Email {
 	public ?\WC_Coupon $coupon = null;
 
 	public function __construct() {
-		$this->id             = 'vcap_bonus_voucher';
+		$this->id             = $this->id ? $this->id : 'vcap_bonus_voucher';
 		$this->customer_email = true;
-		$this->title          = __( 'Bonus voucher', 'voucher-captain' );
-		$this->description    = __( 'Sent when an order earns a bonus voucher from a promotion (Vouchers → Promotions, discount "Bonus voucher after the order").', 'voucher-captain' );
+		$this->title          = $this->title ? $this->title : __( 'Bonus voucher', 'voucher-captain' );
+		$this->description    = $this->description ? $this->description : __( 'Sent when an order earns a bonus voucher from a promotion (Vouchers → Promotions, discount "Bonus voucher after the order").', 'voucher-captain' );
 		$this->placeholders   = array(
 			'{coupon_code}'   => '',
 			'{coupon_amount}' => '',
@@ -46,11 +46,11 @@ final class BonusEmail extends \WC_Email {
 			: wp_strip_all_tags( wc_price( (float) $coupon->get_amount() ) );
 	}
 
-	public function trigger( \WC_Coupon $coupon, \WC_Order $order, string $promotion ): bool {
+	public function trigger( \WC_Coupon $coupon, \WC_Order $order, string $promotion, string $recipient = '' ): bool {
 		$this->setup_locale();
 		$this->coupon    = $coupon;
 		$this->object    = $order;
-		$this->recipient = (string) $order->get_billing_email();
+		$this->recipient = '' !== $recipient ? $recipient : (string) $order->get_billing_email();
 		$this->fill( $promotion );
 		$sent = false;
 		if ( $this->is_enabled() && $this->get_recipient() ) {

@@ -16,6 +16,7 @@ final class Emails {
 		$emails['VCAP_Email_Voucher_Recipient'] = new Emails\RecipientEmail();
 		$emails['VCAP_Email_Voucher_Expiry']    = new Emails\ExpiryReminderEmail();
 		$emails['VCAP_Email_Bonus']             = new Emails\BonusEmail();
+		$emails['VCAP_Email_Referral']          = new Emails\ReferralEmail();
 		return $emails;
 	}
 }

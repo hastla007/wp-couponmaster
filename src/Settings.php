@@ -40,6 +40,13 @@ final class Settings {
 		'vcap_vouchers_buy_vouchers'   => 'no',
 		'vcap_coupon_link_param'       => 'gutschein',
 		'vcap_redemption_max_failures' => 10,
+		'vcap_referral_enabled'        => 'no',
+		'vcap_referral_friend_type'    => 'fixed_cart',
+		'vcap_referral_friend_amount'  => 10,
+		'vcap_referral_min_spend'      => 0,
+		'vcap_referral_reward_amount'  => 10,
+		'vcap_referral_reward_as'      => 'coupon',
+		'vcap_referral_reward_days'    => 90,
 	);
 
 	public function register(): void {
@@ -388,6 +395,73 @@ final class Settings {
 						'desc_tip' => __( 'Name of the URL parameter (letters, digits, - and _).', 'voucher-captain' ),
 					),
 					array( 'type' => 'sectionend', 'id' => 'vcap_redeem' ),
+
+					array(
+						'type'  => 'title',
+						'title' => __( 'Refer a friend', 'voucher-captain' ),
+						'desc'  => __( 'Customers find their personal code in My Account → Vouchers. Friends use it on their first order; the referring customer is rewarded once that order is completed. Own codes cannot be used.', 'voucher-captain' ),
+						'id'    => 'vcap_referral',
+					),
+					array(
+						'title'   => __( 'Refer a friend', 'voucher-captain' ),
+						'id'      => 'vcap_referral_enabled',
+						'type'    => 'checkbox',
+						'default' => 'no',
+						'desc'    => __( 'Enable referral codes', 'voucher-captain' ),
+					),
+					array(
+						'title'             => __( 'Discount for the friend', 'voucher-captain' ),
+						'id'                => 'vcap_referral_friend_amount',
+						'type'              => 'number',
+						'default'           => 10,
+						'css'               => 'width:90px',
+						'custom_attributes' => array( 'min' => 0, 'step' => '0.01' ),
+					),
+					array(
+						'title'   => __( 'Discount type', 'voucher-captain' ),
+						'id'      => 'vcap_referral_friend_type',
+						'type'    => 'select',
+						'default' => 'fixed_cart',
+						'options' => array(
+							'fixed_cart' => __( 'Fixed amount', 'voucher-captain' ),
+							'percent'    => __( 'Percentage', 'voucher-captain' ),
+						),
+					),
+					array(
+						'title'             => __( 'Minimum order value for the friend', 'voucher-captain' ),
+						'id'                => 'vcap_referral_min_spend',
+						'type'              => 'number',
+						'default'           => 0,
+						'css'               => 'width:90px',
+						'custom_attributes' => array( 'min' => 0, 'step' => '0.01' ),
+					),
+					array(
+						'title'             => __( 'Reward for the referrer', 'voucher-captain' ),
+						'id'                => 'vcap_referral_reward_amount',
+						'type'              => 'number',
+						'default'           => 10,
+						'css'               => 'width:90px',
+						'custom_attributes' => array( 'min' => 0, 'step' => '0.01' ),
+					),
+					array(
+						'title'   => __( 'Reward as', 'voucher-captain' ),
+						'id'      => 'vcap_referral_reward_as',
+						'type'    => 'select',
+						'default' => 'coupon',
+						'options' => array(
+							'coupon' => __( 'Coupon by email', 'voucher-captain' ),
+							'credit' => __( 'Store credit (requires store credit)', 'voucher-captain' ),
+						),
+					),
+					array(
+						'title'             => __( 'Reward coupon valid for (days)', 'voucher-captain' ),
+						'id'                => 'vcap_referral_reward_days',
+						'type'              => 'number',
+						'default'           => 90,
+						'css'               => 'width:90px',
+						'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
+					),
+					array( 'type' => 'sectionend', 'id' => 'vcap_referral' ),
 				);
 		}
 		return apply_filters( 'vcap_settings_fields', $fields, $section );

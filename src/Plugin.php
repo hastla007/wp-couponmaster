@@ -60,6 +60,7 @@ final class Plugin {
 		( new VoucherPurchaseRules( $this->settings ) )->register();
 		( new FirstOrderCoupons() )->register();
 		( new CouponSkuRules() )->register();
+		( new Referrals( $this->settings, $this->store_credit ) )->register();
 		$promotions = new Discounts\Repository();
 		$promotions->register();
 		( new Discounts\Usage() )->register();

@@ -3117,3 +3117,80 @@ msgstr "Nutzungen"
 
 msgid "Vouchers and gift cards"
 msgstr "Gutscheine und Geschenkkarten"
+
+msgid "A friend you referred has placed an order. As a thank-you you receive {coupon_amount} off your next order with the code below. Valid until {expiry_date}."
+msgstr "Eine von Ihnen geworbene Person hat bestellt. Als Dankeschön erhalten Sie mit dem folgenden Code {coupon_amount} Rabatt auf Ihre nächste Bestellung. Gültig bis {expiry_date}."
+
+msgid "Coupon by email"
+msgstr "Gutschein per E-Mail"
+
+msgid "Customers find their personal code in My Account → Vouchers. Friends use it on their first order; the referring customer is rewarded once that order is completed. Own codes cannot be used."
+msgstr "Kunden finden ihren persönlichen Code unter Mein Konto → Gutscheine. Freunde nutzen ihn bei ihrer ersten Bestellung; der werbende Kunde wird belohnt, sobald diese Bestellung abgeschlossen ist. Eigene Codes können nicht verwendet werden."
+
+msgid "Discount for the friend"
+msgstr "Rabatt für den Freund"
+
+msgid "Enable referral codes"
+msgstr "Empfehlungscodes aktivieren"
+
+msgid "Fixed amount"
+msgstr "Fester Betrag"
+
+msgid "Link to share"
+msgstr "Link zum Teilen"
+
+msgid "Minimum order value for the friend"
+msgstr "Mindestbestellwert für den Freund"
+
+msgid "Refer a friend"
+msgstr "Freunde werben"
+
+msgid "Refer a friend – code of customer #%d"
+msgstr "Freunde werben – Code von Kunde #%d"
+
+msgid "Referral codes are currently not available."
+msgstr "Empfehlungscodes sind derzeit nicht verfügbar."
+
+msgid "Referral reward"
+msgstr "Empfehlungsprämie"
+
+msgid "Referral reward for order #%s"
+msgstr "Empfehlungsprämie für Bestellung #%s"
+
+msgid "Referral reward: %1$s store credit for %2$s."
+msgstr "Empfehlungsprämie: %1$s Guthaben für %2$s."
+
+msgid "Referral reward: coupon %1$s for %2$s."
+msgstr "Empfehlungsprämie: Gutschein %1$s für %2$s."
+
+msgid "Reward as"
+msgstr "Prämie als"
+
+msgid "Reward coupon valid for (days)"
+msgstr "Prämiengutschein gültig für (Tage)"
+
+msgid "Reward for the referrer"
+msgstr "Prämie für den Werbenden"
+
+msgid "Sent to a customer when a friend they referred completed an order (Refer a friend, reward as coupon)."
+msgstr "Wird an einen Kunden gesendet, wenn ein von ihm geworbener Freund eine Bestellung abgeschlossen hat (Freunde werben, Prämie als Gutschein)."
+
+msgid "Store credit (requires store credit)"
+msgstr "Guthaben (erfordert Guthaben-Funktion)"
+
+msgid "Thank you for recommending {site_title}"
+msgstr "Danke, dass Sie {site_title} empfehlen"
+
+msgid "You cannot use your own referral code."
+msgstr "Sie können Ihren eigenen Empfehlungscode nicht verwenden."
+
+msgid "Your friend ordered – here is your reward"
+msgstr "Ihr Freund hat bestellt – hier ist Ihre Prämie"
+
+msgid "Your friends get %1$s off their first order with your code, and you receive %2$s once their order is completed."
+msgstr "Ihre Freunde erhalten mit Ihrem Code %1$s Rabatt auf ihre erste Bestellung, und Sie erhalten %2$s, sobald deren Bestellung abgeschlossen ist."
+
+msgid "%d friend has ordered so far."
+msgid_plural "%d friends have ordered so far."
+msgstr[0] "%d Freund hat bisher bestellt."
+msgstr[1] "%d Freunde haben bisher bestellt."

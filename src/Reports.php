@@ -39,9 +39,13 @@ final class Reports {
 			$group = array( 'type' => 'coupon', 'name' => strtoupper( $code ) );
 			if ( $id ) {
 				$bonus    = (int) get_post_meta( $id, Bonus::COUPON_SOURCE, true );
+				$referrer = (int) get_post_meta( $id, Referrals::OWNER, true );
 				$campaign = (string) get_post_meta( $id, Campaigns::META, true );
 				if ( 'yes' === get_post_meta( $id, '_vcap_voucher', true ) ) {
 					$group = array( 'type' => 'voucher', 'name' => __( 'Vouchers and gift cards', 'voucher-captain' ) );
+				} elseif ( $referrer ) {
+					$user  = get_userdata( $referrer );
+					$group = array( 'type' => 'referral', 'name' => $user ? $user->display_name . ' <' . $user->user_email . '>' : '#' . $referrer );
 				} elseif ( $bonus ) {
 					$group = array( 'type' => 'bonus', 'name' => (string) get_the_title( $bonus ) );
 				} elseif ( '' !== $campaign ) {
