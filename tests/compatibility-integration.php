@@ -159,16 +159,35 @@ fclose( $pair[0] );
 vcap_compat_assert( 'R' === $ready && '1' === $child_result && $restored, 'parallel refund and redemption both finish under row locking' );
 vcap_compat_assert( 50.0 === (float) vcap()->vouchers->get( $race_voucher->id )->balance, 'parallel refund and redemption preserve the serial final balance' );
 
-// Closing the worker connection simulates a worker process dying while it owns a delivery advisory lock.
+// Kill a separate worker process while it owns a delivery advisory lock. MySQL must drop the lock.
+if ( ! function_exists( 'pcntl_fork' ) || ! function_exists( 'posix_kill' ) ) {
+	throw new RuntimeException( 'pcntl and posix extensions are required for the worker crash check.' );
+}
 $crash_lock = 'vcap_delivery_crash_test_' . wp_generate_password( 8, false, false );
-$crash_db   = new wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
-$crash_db->get_var( $crash_db->prepare( 'SELECT GET_LOCK(%s, 0)', $crash_lock ) );
-$crash_db->close();
-$released = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $crash_lock ) );
+$crash_pair = stream_socket_pair( STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP );
+$crash_pid  = pcntl_fork();
+if ( -1 === $crash_pid ) {
+	throw new RuntimeException( 'Could not fork the delivery crash worker.' );
+}
+if ( 0 === $crash_pid ) {
+	fclose( $crash_pair[0] );
+	$crash_db = new wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+	$acquired = $crash_db->get_var( $crash_db->prepare( 'SELECT GET_LOCK(%s, 0)', $crash_lock ) );
+	fwrite( $crash_pair[1], '1' === (string) $acquired ? 'L' : 'N' );
+	if ( '1' === (string) $acquired ) {
+		posix_kill( getmypid(), SIGKILL );
+	}
+	exit( 1 );
+}
+fclose( $crash_pair[1] );
+$crash_ready = fread( $crash_pair[0], 1 );
+pcntl_waitpid( $crash_pid, $crash_status );
+fclose( $crash_pair[0] );
+$released = 'L' === $crash_ready ? $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $crash_lock ) ) : null;
 if ( '1' === (string) $released ) {
 	$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $crash_lock ) );
 }
-vcap_compat_assert( '1' === (string) $released, 'delivery lock is automatically released when the worker connection exits' );
+vcap_compat_assert( 'L' === $crash_ready && '1' === (string) $released, 'delivery lock is released after abrupt worker process termination' );
 
 // Failed mail delivery stays retryable, then succeeds on a later Action Scheduler attempt.
 list( $mail_voucher ) = vcap_compat_voucher( 100, 'buyer@example.test' );
