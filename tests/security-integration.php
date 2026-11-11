@@ -3,6 +3,8 @@
  * Security, privacy and personal-data lifecycle checks. Run through WP-CLI.
  */
 
+global $wpdb;
+
 function vcap_security_assert( bool $condition, string $message ): void {
 	if ( ! $condition ) {
 		throw new RuntimeException( 'FAIL: ' . $message );
