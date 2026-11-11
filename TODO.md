@@ -115,3 +115,32 @@ Befund im Kursplugin: `/wp-json/boatingschool/v1/coupons/redeem` ist derzeit fü
 - [ ] Bei Fehler/Timeout bleibt die Einlösung sicher wiederholbar; die Voucher-Reservierung kann erneut verarbeitet oder freigegeben werden.
 - [ ] Verlauf und Supportansicht können Nutzer, Voucher-ID, Kursprodukt, Einlöse-ID und Zeitpunkt zusammenführen.
 
+## P2 – Rabattkampagnen und Store Credit
+
+### Regelbasierte Aktionen
+
+- [ ] Rabattkampagnen mit Bedingungen für Erstkauf, nächste Bestellung, Mindestwarenkorb, Produkt/Kategorie, Kundengruppe, Zeitraum und gekaufte Menge modellieren.
+- [ ] Prozent-, Festbetrag-, Staffel- und „Kaufe X, erhalte Y“-Aktionen unterstützen, soweit sie sich zuverlässig auf WooCommerce-Bestellpositionen abbilden lassen.
+- [ ] Priorität, Ausschlüsse, Stapelbarkeit und Verhalten bei mehreren passenden Kampagnen konfigurierbar machen.
+- [ ] Vor Veröffentlichung eine Vorschau/Testmöglichkeit für Regeln und berechnete Rabatte bereitstellen.
+- [ ] Rabatte ausschließlich nachvollziehbar im Warenkorb/Checkout berechnen; keine künstlichen Streichpreise erzeugen.
+- [ ] Automatisches Anwenden nur nach ausdrücklicher Aktivierung durch den Händler anbieten; URL-Coupon sicher validieren und gegen wiederholte/unerwünschte Anwendung absichern.
+
+### Kundenkonto-Guthaben
+
+- [ ] Optionales Store-Credit-Konto mit unveränderlichem Buchungsjournal für Gutschriften, Belastungen, Korrekturen, Bestellbezug und Erstattungen umsetzen.
+- [ ] Manuelle Gutschrift/Korrektur im Admin mit Berechtigung, Begründung und Audit-Protokoll ermöglichen.
+- [ ] Guthaben im Kundenkonto anzeigen und teilweise Einlösung an der Kasse unterstützen.
+- [ ] Kombination mit Coupons, Steuerbehandlung und Erstattungsreihenfolge eindeutig konfigurieren und dokumentieren.
+- [ ] Rückerstattung als Guthaben nur als ausdrücklich gewählte Erstattungsart anbieten; niemals eine Geldrückzahlung stillschweigend ersetzen.
+- [ ] Guthaben standardmäßig währungsgebunden führen; Mehrwährungsumrechnung nur über unterstützte Integration mit dokumentierter Wechselkursregel zulassen.
+
+## P2 – Kundenbindung und Shop-Erweiterungen
+
+- [ ] Gutscheine mit konfigurierbarem Vorablauf-Hinweis und Zustellstatus versenden; Versandwiederholung und Unterdrückung von Erinnerungen unterstützen.
+- [ ] Bonusgutschein bei qualifizierender Bestellung oder Geschenkkartenkauf als optionale Kampagnenaktion ausgeben.
+- [ ] Gutscheinsaldo, Gutscheinstatus, Einlöseseite und Versandaktion über wiederverwendbare Blöcke/Shortcodes bereitstellen.
+- [ ] Kundenvorschau personalisierter Gutscheine vor dem Kauf anbieten.
+- [ ] Feste Wertstufen und Wunschbetrag für Gutscheinprodukte unterstützen, wenn Produkt-/Preis-Integrationen dies erlauben; Werte, Währung und Steuerdaten positionsbezogen speichern.
+- [ ] Mehrsprachige, mehrwährungsfähige, Subscription- und Produktfeld-Erweiterungen über dokumentierte Adapter statt interne APIs anbinden.
+- [ ] Akzeptanztests für Kampagnenpriorität, Warenkorbgrenzen, teilweise Einlösung, Erstattung, Mehrwährung, Wiederholungs-Webhook und Datenschutzfristen ergänzen.
