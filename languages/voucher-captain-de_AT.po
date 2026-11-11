@@ -3326,3 +3326,54 @@ msgstr "Partner wurde von der Kampagne entfernt."
 
 msgid "Partner saved. New orders with codes of this campaign are credited to the partner."
 msgstr "Partner gespeichert. Neue Bestellungen mit Codes dieser Kampagne werden dem Partner gutgeschrieben."
+
+msgid "%1$d ticket(s), Pass Captain order %2$s, sent to %3$s"
+msgstr "%1$d Ticket(s), Pass-Captain-Bestellung %2$s, gesendet an %3$s"
+
+msgid "Exchange each voucher for tickets of this ticket type (redeem page or voucher admin). The voucher becomes redeemable via WP Pass Captain."
+msgstr "Jeder Gutschein wird gegen Tickets dieser Ticketart eingetauscht (Einlöseseite oder Gutscheinverwaltung). Der Gutschein wird über WP Pass Captain einlösbar."
+
+msgid "Exchange for tickets"
+msgstr "In Tickets umwandeln"
+
+msgid "Exchanged for Pass Captain tickets"
+msgstr "In Pass-Captain-Tickets umgewandelt"
+
+msgid "Gift cards with a balance cannot be exchanged for tickets; use them in the ticket checkout."
+msgstr "Geschenkkarten mit Guthaben können nicht in Tickets umgewandelt werden; bitte im Ticket-Checkout einlösen."
+
+msgid "Pass Captain tickets revoked"
+msgstr "Pass-Captain-Tickets widerrufen"
+
+msgid "Please log in so we know where to send the tickets."
+msgstr "Bitte melde dich an, damit wir wissen, wohin die Tickets gesendet werden sollen."
+
+msgid "The tickets could not be issued. The reason is in the voucher history."
+msgstr "Die Tickets konnten nicht ausgestellt werden. Der Grund steht im Gutscheinverlauf."
+
+msgid "This voucher cannot be exchanged for tickets."
+msgstr "Dieser Gutschein kann nicht in Tickets umgewandelt werden."
+
+msgid "Ticket exchange failed"
+msgstr "Umwandlung in Tickets fehlgeschlagen"
+
+msgid "Ticket type #%d (no longer on sale)"
+msgstr "Ticketart #%d (nicht mehr im Verkauf)"
+
+msgid "Tickets cannot be issued right now. Please try again later."
+msgstr "Tickets können gerade nicht ausgestellt werden. Bitte versuche es später erneut."
+
+msgid "Tickets issued in WP Pass Captain and sent by email."
+msgstr "Tickets in WP Pass Captain ausgestellt und per E-Mail gesendet."
+
+msgid "Tickets per voucher"
+msgstr "Tickets pro Gutschein"
+
+msgid "WP Pass Captain ticket"
+msgstr "WP-Pass-Captain-Ticket"
+
+msgid "Your tickets (%1$d) were sent to %2$s."
+msgstr "Deine Tickets (%1$d) wurden an %2$s gesendet."
+
+msgid "— No ticket (regular voucher) —"
+msgstr "— Kein Ticket (normaler Gutschein) —"

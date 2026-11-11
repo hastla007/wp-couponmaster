@@ -39,9 +39,11 @@ final class VoucherAdmin {
 			'issued'      => __( 'Vouchers generated.', 'voucher-captain' ),
 			'none'        => __( 'No new vouchers were needed for this order.', 'voucher-captain' ),
 		);
-		$key = sanitize_key( $_GET['vcap_msg'] ); // phpcs:ignore WordPress.Security.NonceVerification
+		/** Extra messages for connector actions (keys ending in "_failed" are shown as errors). */
+		$messages = (array) apply_filters( 'vcap_voucher_admin_messages', $messages );
+		$key      = sanitize_key( $_GET['vcap_msg'] ); // phpcs:ignore WordPress.Security.NonceVerification
 		if ( isset( $messages[ $key ] ) ) {
-			$notice_class = 'adjust_failed' === $key ? 'notice-error' : 'notice-success';
+			$notice_class = str_ends_with( $key, '_failed' ) ? 'notice-error' : 'notice-success';
 			echo '<div class="notice ' . esc_attr( $notice_class ) . ' is-dismissible"><p>' . esc_html( $messages[ $key ] ) . '</p></div>';
 		}
 	}
@@ -134,6 +136,8 @@ final class VoucherAdmin {
 						} else {
 							$form( 'void', __( 'Void voucher', 'voucher-captain' ), 'button button-link-delete' );
 						}
+						/** Extra buttons for connectors: call $form( $do, $label ) and handle $do in vcap_voucher_admin_action. */
+						do_action( 'vcap_voucher_admin_actions', $v, $form );
 						?>
 					</p>
 				</div>
@@ -284,6 +288,12 @@ final class VoucherAdmin {
 				$this->save( $v );
 				$this->redirect( 'saved', $id );
 				break;
+			default:
+				/** Connector actions: return the message key to show ('' = not handled). */
+				$msg = (string) apply_filters( 'vcap_voucher_admin_action', '', $do, $v );
+				if ( '' !== $msg ) {
+					$this->redirect( sanitize_key( $msg ), $id );
+				}
 		}
 		$this->redirect( '', $id );
 	}

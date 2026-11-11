@@ -103,30 +103,29 @@ final class Issuer {
 			return;
 		}
 		$product = $item->get_product();
-		$item->update_meta_data(
-			self::LINE_META,
-			array(
-				'version'            => 1,
-				'voucher_type'       => (string) $config['type'],
-				'discount_type'      => (string) $config['discount_type'],
-				'amount_source'      => (string) $config['amount_source'],
-				'face_value'         => $this->voucher_amount( $order, $item, $config ),
-				'voucher_currency'   => get_woocommerce_currency(),
-				'vouchers'           => $count,
-				'quantity'           => (int) $item->get_quantity(),
-				'order_currency'     => $order->get_currency(),
-				'subtotal'           => (float) $item->get_subtotal(),
-				'subtotal_tax'       => (float) $item->get_subtotal_tax(),
-				'total'              => (float) $item->get_total(),
-				'total_tax'          => (float) $item->get_total_tax(),
-				'tax_class'          => (string) $item->get_tax_class(),
-				'tax_status'         => $product ? (string) $product->get_tax_status() : '',
-				'prices_include_tax' => (bool) $order->get_prices_include_tax(),
-				// Kept as configured, even for channels whose plugin is not active right now (never widen access).
-				'channels'           => array_values( array_filter( array_map( 'sanitize_key', (array) ( $config['channels'] ?? array() ) ) ) ),
-				'recorded_at'        => time(),
-			)
+		$core    = array(
+			'version'            => 1,
+			'voucher_type'       => (string) $config['type'],
+			'discount_type'      => (string) $config['discount_type'],
+			'amount_source'      => (string) $config['amount_source'],
+			'face_value'         => $this->voucher_amount( $order, $item, $config ),
+			'voucher_currency'   => get_woocommerce_currency(),
+			'vouchers'           => $count,
+			'quantity'           => (int) $item->get_quantity(),
+			'order_currency'     => $order->get_currency(),
+			'subtotal'           => (float) $item->get_subtotal(),
+			'subtotal_tax'       => (float) $item->get_subtotal_tax(),
+			'total'              => (float) $item->get_total(),
+			'total_tax'          => (float) $item->get_total_tax(),
+			'tax_class'          => (string) $item->get_tax_class(),
+			'tax_status'         => $product ? (string) $product->get_tax_status() : '',
+			'prices_include_tax' => (bool) $order->get_prices_include_tax(),
+			// Kept as configured, even for channels whose plugin is not active right now (never widen access).
+			'channels'           => array_values( array_filter( array_map( 'sanitize_key', (array) ( $config['channels'] ?? array() ) ) ) ),
+			'recorded_at'        => time(),
 		);
+		/** Extra snapshot keys of connectors (e.g. the ticket a voucher is exchanged for); core keys always win. */
+		$item->update_meta_data( self::LINE_META, $core + (array) apply_filters( 'vcap_line_snapshot', array(), $item, $config, $order ) );
 		$item->save_meta_data();
 	}
 

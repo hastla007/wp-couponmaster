@@ -79,6 +79,11 @@ final class Shortcodes {
 			wc_add_notice( __( 'Voucher code not found.', 'voucher-captain' ), 'error' );
 			return 'invalid';
 		}
+		/** Connectors may handle a code themselves (e.g. exchange it for tickets): return a result string. */
+		$handled = apply_filters( 'vcap_redeem_code', null, $code );
+		if ( is_string( $handled ) && '' !== $handled ) {
+			return $handled;
+		}
 		if ( ! WC()->cart || WC()->cart->is_empty() ) {
 			if ( WC()->session && ! WC()->session->has_session() ) {
 				WC()->session->set_customer_session_cookie( true );

@@ -85,13 +85,13 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 
 Voucher Captain und Ticket Captain sind eigenständige Plugins. Wenn beide aktiv sind, integrieren sie sich direkt; ein separates Connector-Plugin zwischen ihnen ist nicht erforderlich. Beide Plugins müssen auch allein funktionsfähig bleiben.
 
-- [ ] Gemeinsamen, versionierten PHP-Vertrag für Gutschein-Einlösung und Ticketausstellung festlegen. Keine direkten Abhängigkeiten auf interne Klassen oder Datenbanktabellen des jeweils anderen Plugins. *(teilweise: Gutschein-Einlösung im Pass-Captain-Checkout umgesetzt – Voucher Captain implementiert `wp_pass_captain_voucher_provider_v1` v1; Ticketausstellung aus einem Gutschein fehlt noch auf beiden Seiten)*
-- [ ] Bei gemeinsamer Installation Ticket Captain als Einlöseziel/Aktion für passende Voucher-Captain-Gutscheine anbieten.
-- [ ] Für ein Gutscheinprodukt konfigurierbar machen, welches Pass-Captain-Ticket bei erfolgreicher Einlösung ausgestellt wird. Die Ticketausstellung erst nach bestätigter Gutschein-Einlösung auslösen.
+- [x] Gemeinsamen, versionierten PHP-Vertrag für Gutschein-Einlösung und Ticketausstellung festlegen. Keine direkten Abhängigkeiten auf interne Klassen oder Datenbanktabellen des jeweils anderen Plugins. *(Gutschein-Einlösung im Pass-Captain-Checkout: `wp_pass_captain_voucher_provider_v1`; Ticketausstellung aus einem Gutschein: `wp_pass_captain_ticket_service_v1`)*
+- [x] Bei gemeinsamer Installation Ticket Captain als Einlöseziel/Aktion für passende Voucher-Captain-Gutscheine anbieten. *(Einlöseseite, Gutscheinverwaltung „In Tickets umwandeln“, `vcap()->passcaptain_tickets->exchange()`)*
+- [x] Für ein Gutscheinprodukt konfigurierbar machen, welches Pass-Captain-Ticket bei erfolgreicher Einlösung ausgestellt wird. Die Ticketausstellung erst nach bestätigter Gutschein-Einlösung auslösen. *(reservieren → Tickets ausstellen → bestätigen)*
 - [ ] WooCommerce-Ticketprodukte weiterhin direkt nach erfolgreichem Kauf ausstellen können; dafür ist kein Gutschein erforderlich.
-- [ ] Ereignisvertrag mit eindeutiger Bestellpositions- bzw. Einlöse-ID, Nutzer/Empfänger, Zielprodukt und Zeitstempel definieren. Ticket-Ausstellung muss idempotent sein.
-- [ ] Gutscheineinlösung und Ticketausstellung so koordinieren, dass Wiederholungen/Timeouts keinen Doppelverbrauch und keine doppelten Tickets erzeugen; fehlgeschlagene Zustellung sicher wiederholbar machen.
-- [ ] Rückerstattung, Storno und Gutscheinwiderruf zwischen den Plugins abstimmen; Ticketstatus und Gutscheinstatus nachvollziehbar protokollieren.
+- [x] Ereignisvertrag mit eindeutiger Bestellpositions- bzw. Einlöse-ID, Nutzer/Empfänger, Zielprodukt und Zeitstempel definieren. Ticket-Ausstellung muss idempotent sein.
+- [x] Gutscheineinlösung und Ticketausstellung so koordinieren, dass Wiederholungen/Timeouts keinen Doppelverbrauch und keine doppelten Tickets erzeugen; fehlgeschlagene Zustellung sicher wiederholbar machen.
+- [x] Rückerstattung, Storno und Gutscheinwiderruf zwischen den Plugins abstimmen; Ticketstatus und Gutscheinstatus nachvollziehbar protokollieren. *(storniert → Tickets widerrufen; Gutscheinverlauf und Pass-Captain-Audit-Log)*
 - [ ] In Admin-Oberflächen den jeweils anderen Plugin-Status und fehlende Voraussetzungen verständlich anzeigen, ohne das jeweils andere Plugin zur Pflichtabhängigkeit zu machen.
 - [ ] Voucher Captain und Ticket Captain als getrennte Plugin-Einträge und eigene Admin-Menüs beibehalten; gegenseitige Links und optional gemeinsame Scannerfunktion ergänzen, ohne Menüs oder Pluginverwaltung zusammenzulegen.
 

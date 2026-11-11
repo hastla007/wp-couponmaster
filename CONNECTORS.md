@@ -16,6 +16,11 @@ A complete, tested reference implementation is in [`examples/vcap-example-connec
 | React to completion / release | `vcap_voucher_redeemed`, `vcap_redemption_released` |
 | React to voiding, refunds, edits | `vcap_voucher_event` (`voided`, `restored`, `reactivated`, …) |
 | Order and refund data per line | `vcap()->api_v1->order_lines( $order )`, `VCAP\Issuer::line_data( $item )` |
+| Own product settings | `vcap_product_settings_fields` (`WC_Product`) to print fields, `vcap_product_settings_save` (`WC_Product`, `$post`) to store them |
+| Store something with each sold voucher line | `vcap_line_snapshot` (`array $extra`, `WC_Order_Item_Product`, `$config`, `WC_Order`) – extra keys in `_vcap_line`; core keys always win |
+| Handle a code on the redeem page | `vcap_redeem_code` (`null`, `$code`) – return a result string (add your own `wc_add_notice()`) to take the code over, `null` to let the cart apply it |
+| Buttons on the voucher admin page | `vcap_voucher_admin_actions` (`Voucher`, `callable $form`) – call `$form( $do, $label )`; handle it in `vcap_voucher_admin_action` (`''`, `$do`, `Voucher`) and return a message key registered with `vcap_voucher_admin_messages` (keys ending in `_failed` show as errors) |
+| Own events in the voucher history | `VoucherRepository::log()` plus a label via `vcap_event_labels` |
 
 ## 2. Redemption flow (copy this)
 

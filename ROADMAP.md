@@ -72,7 +72,7 @@ Offen bleiben reale Gateway-Redirects/Webhooks (23), Yoast-Browser-E2E (28), der
 41. [x] Öffentlichen, versionierten PHP-Service für Gutscheinprüfung und -einlösung definieren.
 42. [x] Einlöse-Provider-Schnittstelle ohne Abhängigkeit auf interne Tabellen spezifizieren.
 43. [x] Idempotency-Key und stabile Fehlercodes für externe Connectoren festlegen.
-44. [ ] Voucher Captain und Ticket Captain über dokumentierten, optionalen Vertrag integrieren.
+44. [x] Voucher Captain und Ticket Captain über dokumentierten, optionalen Vertrag integrieren. (Pass-Captain-Checkout und Gutschein → Ticket)
 45. [ ] Learnboating-Connector als separates Add-on mit wiederholbarer Grant-Verarbeitung planen.
 46. [x] Ablauf-, Übertragbarkeits-, Restwert- und Einlösebedingungen im Kundenkonto erklären. (Kundenkonto-Tab, E-Mail, Produktseite; Bedingungen pro Land)
 47. [ ] Steuerbehandlung und Erstattungsreihenfolge je Gutscheinart mit Fachberatung spezifizieren.

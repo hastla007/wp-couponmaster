@@ -163,12 +163,13 @@ jobs:
 
   pass-captain:
     # Voucher Captain as voucher provider of WP Pass Captain: released main and the upcoming release branch
-    # of hastla007/wp-passmaster (a ref that no longer exists is skipped).
+    # of hastla007/wp-passmaster (a ref that no longer exists is skipped). claude/youthful-bardeen-7ejd7a carries the
+    # ticket service (voucher → ticket exchange) until it is merged into wp-passmaster main; then drop it here.
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        pass_captain_ref: ['main', 'claude/woocommerce-ticket-plugin-8q4m8q']
+        pass_captain_ref: ['main', 'claude/woocommerce-ticket-plugin-8q4m8q', 'claude/youthful-bardeen-7ejd7a']
     services:
       db:
         image: mysql:8.4
