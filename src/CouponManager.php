@@ -136,6 +136,12 @@ final class CouponManager {
 		// Keep matching reservations and release removed/changed coupon lines before rebuilding the map.
 		$made = array();
 		foreach ( $reservations as $code => $reserved_amount ) {
+			if ( isset( $redemptions[ $code ] ) ) {
+				unset( $reservations[ $code ] );
+				$order->update_meta_data( '_vcap_reservations', $reservations );
+				$order->save();
+				continue;
+			}
 			if ( isset( $coupons[ $code ] ) && abs( (float) $reserved_amount - $coupons[ $code ]['amount'] ) < 0.0001 ) {
 				$made[ $code ] = (float) $reserved_amount;
 				continue;
