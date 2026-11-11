@@ -98,3 +98,4 @@ jobs:
         run: |
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/woocommerce-integration.php"
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/compatibility-integration.php"
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/security-integration.php"
