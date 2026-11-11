@@ -55,6 +55,19 @@ Ziel: Voucher Captain bleibt ein allgemein einsetzbares WooCommerce-Gutschein-Pl
 - [ ] Empfehlungs-/Freunde-werben-Codes.
 - [ ] Allgemeine Einlöseseite oder Block/Shortcode, den Connector-Plugins erweitern können.
 
+## Native Integration: Voucher Captain + Pass Captain
+
+Voucher Captain und Pass Captain sind eigenständige Plugins. Wenn beide aktiv sind, integrieren sie sich direkt; ein separates Connector-Plugin zwischen ihnen ist nicht erforderlich. Beide Plugins müssen auch allein funktionsfähig bleiben.
+
+- [ ] Gemeinsamen, versionierten PHP-Vertrag für Gutschein-Einlösung und Ticketausstellung festlegen. Keine direkten Abhängigkeiten auf interne Klassen oder Datenbanktabellen des jeweils anderen Plugins.
+- [ ] Bei gemeinsamer Installation Pass Captain als Einlöseziel/Aktion für passende Voucher-Captain-Gutscheine anbieten.
+- [ ] Für ein Gutscheinprodukt konfigurierbar machen, welches Pass-Captain-Ticket bei erfolgreicher Einlösung ausgestellt wird. Die Ticketausstellung erst nach bestätigter Gutschein-Einlösung auslösen.
+- [ ] WooCommerce-Ticketprodukte weiterhin direkt nach erfolgreichem Kauf ausstellen können; dafür ist kein Gutschein erforderlich.
+- [ ] Ereignisvertrag mit eindeutiger Bestellpositions- bzw. Einlöse-ID, Nutzer/Empfänger, Zielprodukt und Zeitstempel definieren. Ticket-Ausstellung muss idempotent sein.
+- [ ] Gutscheineinlösung und Ticketausstellung so koordinieren, dass Wiederholungen/Timeouts keinen Doppelverbrauch und keine doppelten Tickets erzeugen; fehlgeschlagene Zustellung sicher wiederholbar machen.
+- [ ] Rückerstattung, Storno und Gutscheinwiderruf zwischen den Plugins abstimmen; Ticketstatus und Gutscheinstatus nachvollziehbar protokollieren.
+- [ ] In Admin-Oberflächen den jeweils anderen Plugin-Status und fehlende Voraussetzungen verständlich anzeigen, ohne das jeweils andere Plugin zur Pflichtabhängigkeit zu machen.
+
 ## Connector für Learnboating (kundenspezifisches Add-on)
 
 Befund im Kursplugin: `/wp-json/boatingschool/v1/coupons/redeem` ist derzeit für Gruppen-Beitrittscodes bestimmt. Der `CouponController` lehnt WooCommerce-Coupons ausdrücklich ab. WooCommerce-Kursprodukte werden über „Lernzugang“ in `bp_product_access` Kursen/Features und Laufzeiten zugeordnet; `OrderSync` und `EntitlementService` erzeugen daraus idempotent Zugänge für Bestellpositionen. Es gibt noch keinen öffentlichen, idempotenten Dienst zum Freischalten eines Kurszugangs aus einer externen Gutscheineinlösung. `EntitlementService::grantManual()` ist dafür kein sicherer Ersatz: es erzeugt bei jedem Aufruf neue manuelle Zugänge mit neuer Referenz.
