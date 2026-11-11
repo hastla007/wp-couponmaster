@@ -3209,3 +3209,21 @@ msgstr "Gutscheinguthaben"
 
 msgid "log in"
 msgstr "melden Sie sich an"
+
+msgid "Allow store credit in the same order as discount codes. Discounts are always calculated first; gift cards and store credit then pay the remaining amount."
+msgstr "Guthaben in derselben Bestellung wie Rabattcodes erlauben. Rabatte werden immer zuerst berechnet; Geschenkkarten und Guthaben bezahlen danach den Restbetrag."
+
+msgid "Gift cards first, then store credit"
+msgstr "Erst Geschenkkarten, dann Guthaben"
+
+msgid "Order of gift cards and store credit"
+msgstr "Reihenfolge von Geschenkkarten und Guthaben"
+
+msgid "Store credit cannot be combined with discount codes."
+msgstr "Guthaben kann nicht mit Rabattcodes kombiniert werden."
+
+msgid "Store credit first, then gift cards"
+msgstr "Erst Guthaben, dann Geschenkkarten"
+
+msgid "Store credit with discount codes"
+msgstr "Guthaben mit Rabattcodes"

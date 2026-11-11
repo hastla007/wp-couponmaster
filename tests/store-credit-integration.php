@@ -71,6 +71,28 @@ $guest->set_status( 'completed' );
 $guest->save();
 vcap_sc_assert( is_wp_error( $credit->refund_as_credit( $guest, 5, 'Guest' ) ), 'guest orders cannot be refunded as credit' );
 
+// Discounts are calculated first, store credit pays the rest (even when the credit was applied first).
+$credit->adjust( $alice, 30, 'Top-up for ordering test' );
+$five = new WC_Coupon();
+$five->set_code( 'sc-five-' . strtolower( wp_generate_password( 6, false ) ) );
+$five->set_discount_type( 'fixed_cart' );
+$five->set_amount( '5' );
+$five->save();
+wp_set_current_user( $alice );
+wc_load_cart();
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart( $product->get_id(), 1 );
+WC()->cart->apply_coupon( $account->code );
+WC()->cart->apply_coupon( $five->get_code() );
+WC()->cart->calculate_totals();
+vcap_sc_assert( 15.0 === round( (float) WC()->cart->get_coupon_discount_amount( wc_format_coupon_code( $account->code ), false ), 2 ), 'the discount code is applied before the store credit (credit pays 15, not 20)' );
+update_option( 'vcap_credit_with_coupons', 'no' );
+$check = ( new WC_Discounts( WC()->cart ) )->is_coupon_valid( new WC_Coupon( $account->code ) );
+vcap_sc_assert( is_wp_error( $check ), 'store credit can be kept apart from discount codes' );
+delete_option( 'vcap_credit_with_coupons' );
+WC()->cart->empty_cart();
+wp_set_current_user( 0 );
+
 // Disabled feature: credit coupons stop working.
 update_option( 'vcap_store_credit', 'no' );
 $late = vcap_sc_order( $product, $alice );

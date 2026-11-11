@@ -206,7 +206,28 @@ final class StoreCredit {
 		if ( ! $this->enabled() || $user !== $voucher->user_id ) {
 			throw new \Exception( esc_html__( 'This store credit belongs to another customer account.', 'voucher-captain' ), 9030 );
 		}
+		if ( ! $this->settings->yes( 'vcap_credit_with_coupons' ) && $this->has_discount_codes( $discounts ) ) {
+			throw new \Exception( esc_html__( 'Store credit cannot be combined with discount codes.', 'voucher-captain' ), 9031 );
+		}
 		return $valid;
+	}
+
+	/**
+	 * Whether the cart/order also uses discount codes (gift cards, store credit and promotions do not count).
+	 */
+	private function has_discount_codes( $discounts ): bool {
+		$object = $discounts instanceof \WC_Discounts ? $discounts->get_object() : null;
+		$codes  = $object instanceof \WC_Order ? $object->get_coupon_codes() : ( WC()->cart ? WC()->cart->get_applied_coupons() : array() );
+		foreach ( $codes as $code ) {
+			if ( \VCAP\Discounts\CartIntegration::id_from_code( (string) $code ) ) {
+				continue;
+			}
+			$id = wc_get_coupon_id_by_code( (string) $code );
+			if ( $id && 'yes' !== get_post_meta( $id, '_vcap_voucher', true ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	// ------------------------------------------------------------------ customer UI.

@@ -11,6 +11,7 @@ final class CouponManager {
 
 	public function register(): void {
 		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'validate' ), 20, 3 );
+		add_filter( 'woocommerce_coupon_sort', array( $this, 'sort' ), 20, 2 );
 		add_action( 'woocommerce_checkout_order_processed', array( $this, 'reserve_order' ), 5, 3 );
 		add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'reserve_store_api_order' ), 5, 1 );
 		add_action( 'woocommerce_before_pay_action', array( $this, 'reserve_retry_order' ), 5, 1 );
@@ -709,6 +710,25 @@ final class CouponManager {
 			'balance'   => $fresh->balance,
 			'duplicate' => false,
 		);
+	}
+
+	/**
+	 * Order in which WooCommerce applies coupons: discounts first (WooCommerce: product 1, percent 2, cart 3),
+	 * then stored-value gift cards and store credit, which pay what is left like a means of payment. Store credit
+	 * comes after gift cards unless "Use store credit first" is set.
+	 */
+	public function sort( $sort, $coupon ) {
+		if ( ! $coupon instanceof \WC_Coupon || 'yes' !== $coupon->get_meta( '_vcap_voucher' ) || ! $coupon->is_type( 'fixed_cart' ) ) {
+			return $sort;
+		}
+		$voucher = $coupon->get_id() ? $this->repo->get_by_coupon( $coupon->get_id() ) : null;
+		if ( ! $voucher || ! $voucher->is_multi_use() ) {
+			return $sort;
+		}
+		if ( 'credit' === $voucher->type ) {
+			return 'first' === $this->settings->get( 'vcap_credit_apply_order' ) ? 90 : 110;
+		}
+		return 100;
 	}
 
 	/**

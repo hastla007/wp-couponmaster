@@ -50,6 +50,20 @@ composer install --no-dev
 
 Nach der Aktivierung werden zwei Startvorlagen angelegt (Geschenkkarte A5 und Gutschein-/Leistungspass A6). Danach im Produkt die Option **„Gutschein“** anhaken und den Tab **„Gutschein“** konfigurieren.
 
+## Verrechnung, Steuer und Erstattung von Gutscheinen und Guthaben
+
+**Reihenfolge an der Kasse.** WooCommerce rechnet zuerst die Rabatte (Aktionen, Produkt-, Prozent- und Warenkorb-Rabattcodes). Danach bezahlen Wertgutscheine/Geschenkkarten und Kundenguthaben den Restbetrag – unabhängig davon, in welcher Reihenfolge der Kunde die Codes eingegeben hat. Zwischen Geschenkkarten und Guthaben gilt die Einstellung *„Reihenfolge von Geschenkkarten und Guthaben“* (Standard: erst Geschenkkarten, dann Guthaben). So wird nie mehr Guthaben verbraucht als nötig.
+
+**Kombination.** *„Guthaben mit Rabattcodes“* (Standard: erlaubt) legt fest, ob Guthaben in derselben Bestellung wie Rabattcodes genutzt werden darf. Rabattcodes und Geschenkkarten dürfen Gutscheinprodukte standardmäßig nicht verbilligen bzw. bezahlen (*„Rabattcodes auf Gutscheine“*, *„Gutscheine mit Gutscheinen bezahlen“*).
+
+**Steuer.** Geschenkkarten und Guthaben werden technisch als WooCommerce-Warenkorb-Coupon (Festbetrag) verrechnet. WooCommerce verteilt den Betrag anteilig auf die Positionen und berechnet die Steuer vom reduzierten Preis. Das entspricht einer Behandlung wie ein Preisnachlass. Ob das für Ihre Gutscheinart (Einzweck-/Mehrzweckgutschein) steuerlich passt, muss mit der Steuerberatung geklärt werden; eine Verrechnung „nach Steuer“ als Zahlungsmittel ist derzeit nicht eingebaut (offener Punkt in TODO.md).
+
+**Erstattung.**
+- *Storniert, fehlgeschlagen oder vollständig erstattet:* der in der Bestellung verwendete Gutschein-/Guthabenbetrag wird zurückgebucht (Einstellung *„Guthaben bei Stornierung wiederherstellen“*, Standard an). Ungenutzte Bonusgutscheine der Bestellung werden zurückgezogen.
+- *Teilerstattung:* WooCommerce erstattet den Betrag über die Zahlungsart; Gutschein- und Guthabensalden bleiben unverändert.
+- *Erstattung als Guthaben:* nur ausdrücklich über „Als Guthaben erstatten“ in der Bestellung (nie automatisch, nicht für Gastbestellungen).
+- Gekaufte Gutscheine werden bei vollständiger Erstattung/Stornierung der Kaufbestellung gesperrt (*„Gutscheine bei Erstattung stornieren“*).
+
 ## Integrationen und Sicherheit
 
 - [Versionierte PHP-API und Providervertrag](API.md)

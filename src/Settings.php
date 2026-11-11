@@ -40,6 +40,8 @@ final class Settings {
 		'vcap_vouchers_buy_vouchers'   => 'no',
 		'vcap_coupon_link_param'       => 'gutschein',
 		'vcap_redemption_max_failures' => 10,
+		'vcap_credit_with_coupons'     => 'yes',
+		'vcap_credit_apply_order'      => 'last',
 		'vcap_referral_enabled'        => 'no',
 		'vcap_referral_friend_type'    => 'fixed_cart',
 		'vcap_referral_friend_amount'  => 10,
@@ -364,6 +366,23 @@ final class Settings {
 						'type'    => 'checkbox',
 						'default' => 'no',
 						'desc'    => __( 'Enable store credit accounts: credit customers manually (user profile) or refund orders as store credit (order screen); customers see and use their credit in My Account and the cart.', 'voucher-captain' ),
+					),
+					array(
+						'title'   => __( 'Store credit with discount codes', 'voucher-captain' ),
+						'id'      => 'vcap_credit_with_coupons',
+						'type'    => 'checkbox',
+						'default' => 'yes',
+						'desc'    => __( 'Allow store credit in the same order as discount codes. Discounts are always calculated first; gift cards and store credit then pay the remaining amount.', 'voucher-captain' ),
+					),
+					array(
+						'title'   => __( 'Order of gift cards and store credit', 'voucher-captain' ),
+						'id'      => 'vcap_credit_apply_order',
+						'type'    => 'select',
+						'default' => 'last',
+						'options' => array(
+							'last'  => __( 'Gift cards first, then store credit', 'voucher-captain' ),
+							'first' => __( 'Store credit first, then gift cards', 'voucher-captain' ),
+						),
 					),
 					array(
 						'title'   => __( 'Discount codes on vouchers', 'voucher-captain' ),
