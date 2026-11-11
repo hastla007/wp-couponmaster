@@ -2,6 +2,20 @@
 
 Ziel: Voucher Captain bleibt ein allgemein einsetzbares WooCommerce-Gutschein-Plugin. Anbindungen an ein bestimmtes Lern-, Kurs- oder Mitgliedersystem kommen in separate Connector-Plugins.
 
+## Status und Repository-Hinweis
+
+Diese Liste ist eine Arbeitsliste, kein verifizierter Fortschrittsbericht. Der Entwicklungsbranch enthält bereits umfangreiche Voucher-Captain-Funktionen; bestehende Funktionen gelten erst dann als erledigt, wenn sie gegen Scope und Abnahmekriterien geprüft und hier nachvollziehbar markiert wurden. Die Liste darf nicht so gelesen werden, dass alle angeführten Grundfunktionen noch fehlen.
+
+Der ausführbare Plugin-Code liegt aktuell auf `claude/youthful-bardeen-7ejd7a). Der Standardbranch `main` enthält noch nicht diesen Code. Der Entwicklungsbranch muss über einen geprüften Pull Request in `main` überführt werden, bevor `main` als Release-Quelle gilt.
+
+## P0 – Repository, Status und Produktgrenze
+
+- [ ] Pull Request des bestehenden Entwicklungsbranchs nach `main` vorbereiten, bestehende Änderungen prüfen und nach den Release-Gates mergen.
+- [ ] SCOPE, Quellcode und TODO gegeneinander abgleichen; vorhandene Funktionen mit dokumentierten Abnahmekriterien verifizieren und erst dann erledigt markieren.
+- [ ] Voucher-Captain-Grenze gegenüber Ticket Captain festschreiben: Gutscheine/Geschenkkarten/Discounts und Gutschein-Einlösung bleiben bei VCAP; Events, Sitzplätze, Kapazitäten, Eventbestellungen und Event-Check-in gehören TCAP.
+- [ ] Bestehende Voucher-Scanner- und Ticket-ähnliche Funktionen inventarisieren; klare Migrations-/Koexistenzregel definieren, damit Event-Einlass nur den TCAP-Ticketstatus verändert.
+- [ ] Release-Prüfung für VCAP allein, TCAP allein und beide Plugins gemeinsam als Pflichtkriterium dokumentieren.
+
 ## P0 – Öffentliche Einlöse-Schnittstelle
 
 - [ ] Einen versionierten, dokumentierten öffentlichen PHP-Service für Gutscheinabfragen und -einlösungen bereitstellen. Keine Connector-Abhängigkeit von internen Klassen oder Tabellen.
@@ -47,6 +61,13 @@ Ziel: Voucher Captain bleibt ein allgemein einsetzbares WooCommerce-Gutschein-Pl
 - [ ] Regeln für Rückerstattung/Storno vor und nach einer externen Einlösung definieren.
 - [ ] Fehlgeschlagene externe Freischaltungen wiederholbar machen, ohne Gutscheinverbrauch oder Zugriff zu duplizieren.
 - [ ] Integrationsdokumentation, Beispiel-Connector und öffentliche API-Versionspolitik veröffentlichen.
+
+## P2 – Qualitätssicherung und Veröffentlichung
+
+- [ ] Automatisierte Integrationsprüfungen für VCAP allein und gemeinsam mit TCAP einrichten; WooCommerce-Statuswiederholungen, parallele Einlösungen, Timeout, Teil-/Vollerstat­tung und 0-Euro-Checkout abdecken.
+- [ ] Release-Prüfung mit HPOS, klassischer Kasse, Checkout-Blöcken, unterstützten Mehrwährungs-/Subscription-Integrationen und minimaler WordPress-/PHP-Version dokumentieren.
+- [ ] Build-ZIP in einer sauberen WordPress-Installation installieren, aktivieren, aktualisieren und deinstallieren; bei gemeinsamer Installation Klassen-/Vendor-Konflikte prüfen.
+- [ ] Übersetzungen, Datenschutzauskunft/-löschung, Berechtigungen, Nonces, Rate-Limits und Admin-/Kunden-E-Mail-Vorlagen für Release freigeben.
 
 ## Optional nach dem ersten Kunden-Connector
 
