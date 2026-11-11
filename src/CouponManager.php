@@ -215,6 +215,23 @@ final class CouponManager {
 	 *
 	 * @return array{amount:float,balance:float,state:string}|null
 	 */
+	/**
+	 * Public order-scoped operations for the versioned integration service.
+	 * The order id is the idempotency scope used by the event ledger.
+	 */
+	public function reserve_voucher_balance( Voucher $voucher, float $amount, \WC_Order $order, string $note = '' ): ?array {
+		return $this->reserve_balance_atomic( $voucher, $amount, (int) $order->get_id(), $note );
+	}
+
+	/** @return array{amount:float,balance:float}|null */
+	public function commit_voucher_reservation( Voucher $voucher, \WC_Order $order ): ?array {
+		return $this->commit_reservation_atomic( $voucher, (int) $order->get_id() );
+	}
+
+	public function release_voucher_reservation( Voucher $voucher, \WC_Order $order, string $note = '' ): bool {
+		return $this->release_reservation_atomic( $voucher, (int) $order->get_id(), $note );
+	}
+
 	private function reserve_balance_atomic( Voucher $voucher, float $requested, int $order_id, string $note ): ?array {
 		global $wpdb;
 		$table  = Install::tables()['vouchers'];
