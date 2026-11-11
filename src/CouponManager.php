@@ -449,28 +449,43 @@ final class CouponManager {
 	/**
 	 * Apply a new balance to voucher + coupon.
 	 */
-	public function set_balance( Voucher $voucher, float $balance, string $event, ?float $amount = null, string $note = '', int $order_id = 0 ): void {
-		$balance          = max( 0.0, round( $balance, wc_get_price_decimals() ) );
-		$voucher->balance = $balance;
-		if ( $voucher->is_multi_use() ) {
-			if ( $balance <= 0 && Voucher::STATUS_ACTIVE === $voucher->status ) {
-				$voucher->status = Voucher::STATUS_REDEEMED;
-			} elseif ( $balance > 0 && Voucher::STATUS_REDEEMED === $voucher->status ) {
-				$voucher->status = Voucher::STATUS_ACTIVE;
-			}
+	public function set_balance( Voucher $voucher, float $balance, string $event, ?float $amount = null, string $note = '', int $order_id = 0 ): bool {
+		global $wpdb;
+		$table = Install::tables()['vouchers'];
+		if ( ! Install::tables_support_transactions() || false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return false;
 		}
-		$this->repo->update( $voucher );
-		$this->repo->log( $voucher->id, $event, $amount, $balance, $note, $order_id );
-
-		if ( $voucher->coupon_id && $voucher->is_multi_use() ) {
-			$coupon = new \WC_Coupon( $voucher->coupon_id );
-			if ( $coupon->get_id() ) {
-				$coupon->set_amount( $balance );
-				$coupon->save();
+		try {
+			$locked = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d FOR UPDATE", $voucher->id ) ); // phpcs:ignore
+			$fresh = $locked ? $this->repo->get( $voucher->id ) : null;
+			if ( ! $fresh ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return false;
 			}
+			$balance          = max( 0.0, round( $balance, wc_get_price_decimals() ) );
+			$fresh->balance   = $balance;
+			if ( $fresh->is_multi_use() ) {
+				if ( $balance <= 0 && Voucher::STATUS_ACTIVE === $fresh->status ) {
+					$fresh->status = Voucher::STATUS_REDEEMED;
+				} elseif ( $balance > 0 && Voucher::STATUS_REDEEMED === $fresh->status ) {
+					$fresh->status = $fresh->is_expired() ? Voucher::STATUS_EXPIRED : Voucher::STATUS_ACTIVE;
+				}
+			}
+			if ( ! $this->repo->update( $fresh ) || ! $this->repo->log( $fresh->id, $event, $amount, $balance, $note, $order_id ) ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return false;
+			}
+			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return false;
+			}
+		} catch ( \\Throwable $e ) {
+			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			throw $e;
 		}
+		$this->sync_balance_coupon( $fresh );
+		return true;
 	}
-
 	/**
 	 * Atomically deduct stored value under a row lock. For order redemptions, the audit row also
 	 * makes retries for the same order idempotent.
