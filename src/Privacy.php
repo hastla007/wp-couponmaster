@@ -33,7 +33,8 @@ final class Privacy {
 
 	public function export( string $email, int $page = 1 ): array {
 		$items = array();
-		foreach ( $this->repo->for_email( $email, 500 ) as $voucher ) {
+		$vouchers = $this->repo->for_email( $email, 500, max( 0, ( $page - 1 ) * 500 ) );
+		foreach ( $vouchers as $voucher ) {
 			$data = array(
 				array( 'name' => __( 'Code', 'voucher-captain' ), 'value' => $voucher->code ),
 				array( 'name' => __( 'Status', 'voucher-captain' ), 'value' => $voucher->status_label() ),
@@ -53,12 +54,14 @@ final class Privacy {
 				'data'        => $data,
 			);
 		}
-		return array( 'data' => $items, 'done' => true );
+		return array( 'data' => $items, 'done' => count( $vouchers ) < 500 );
 	}
 
 	public function erase( string $email, int $page = 1 ): array {
-		$removed = false;
-		foreach ( $this->repo->for_email( $email, 500 ) as $voucher ) {
+		$removed  = false;
+		$retained = false;
+		$vouchers = $this->repo->for_email( $email, 500 );
+		foreach ( $vouchers as $voucher ) {
 			$changed = false;
 			if ( 0 === strcasecmp( $voucher->recipient_email, $email ) ) {
 				$changed = true;
@@ -72,16 +75,21 @@ final class Privacy {
 				$voucher->buyer_name  = '';
 				$changed              = true;
 			}
-			if ( $changed ) {
-				$this->repo->update( $voucher );
-				$removed = true;
+			if ( ! $changed ) {
+				continue;
 			}
+			// Remove free-text notes before clearing the lookup email, so a database failure remains retryable.
+			if ( ! $this->repo->anonymise_event_notes( $voucher->id ) || ! $this->repo->update( $voucher ) ) {
+				$retained = true;
+				continue;
+			}
+			$removed = true;
 		}
 		return array(
 			'items_removed'  => $removed,
-			'items_retained' => false,
-			'messages'       => array(),
-			'done'           => true,
+			'items_retained' => $retained,
+			'messages'       => $retained ? array( __( 'Some voucher records could not be fully anonymised. Please retry the erasure request.', 'voucher-captain' ) ) : array(),
+			'done'           => count( $vouchers ) < 500,
 		);
 	}
 

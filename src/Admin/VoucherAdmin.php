@@ -34,13 +34,15 @@ final class VoucherAdmin {
 			'voided'      => __( 'Voucher voided.', 'voucher-captain' ),
 			'reactivated' => __( 'Voucher reactivated.', 'voucher-captain' ),
 			'adjusted'    => __( 'Balance updated.', 'voucher-captain' ),
+			'adjust_failed' => __( 'Balance could not be saved. Check the database tables and try again.', 'voucher-captain' ),
 			'bulk'        => __( 'Bulk action completed.', 'voucher-captain' ),
 			'issued'      => __( 'Vouchers generated.', 'voucher-captain' ),
 			'none'        => __( 'No new vouchers were needed for this order.', 'voucher-captain' ),
 		);
 		$key = sanitize_key( $_GET['vcap_msg'] ); // phpcs:ignore WordPress.Security.NonceVerification
 		if ( isset( $messages[ $key ] ) ) {
-			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html( $messages[ $key ] ) . '</p></div>';
+			$notice_class = 'adjust_failed' === $key ? 'notice-error' : 'notice-success';
+			echo '<div class="notice ' . esc_attr( $notice_class ) . ' is-dismissible"><p>' . esc_html( $messages[ $key ] ) . '</p></div>';
 		}
 	}
 
@@ -242,7 +244,7 @@ final class VoucherAdmin {
 				if ( 'resend_buyer' === $do && ! $sent && isset( WC()->mailer()->get_emails()['VCAP_Email_Voucher_Buyer'] ) ) {
 					WC()->mailer()->get_emails()['VCAP_Email_Voucher_Buyer']->trigger( $v );
 				}
-				$this->repo->log( $v->id, 'resent', null, null, 'resend_buyer' === $do ? $v->buyer_email : $v->recipient_email );
+				$this->repo->log( $v->id, 'resent', null, null, 'resend_buyer' === $do ? 'Sent to buyer' : 'Sent to recipient' );
 				$this->redirect( 'resent', $id );
 				break;
 			case 'void':
@@ -262,7 +264,9 @@ final class VoucherAdmin {
 					// Reusable vouchers have no stored balance: switch to balance tracking on first adjustment.
 					$v->usage_mode = 'balance';
 				}
-				vcap()->coupons->set_balance( $v, $new, 'subtract' === $mode ? 'redeemed' : 'adjusted', abs( $new - $v->balance ), $note );
+				if ( ! vcap()->coupons->set_balance( $v, $new, 'subtract' === $mode ? 'redeemed' : 'adjusted', abs( $new - $v->balance ), $note ) ) {
+					$this->redirect( 'adjust_failed', $id );
+				}
 				$this->redirect( 'adjusted', $id );
 				break;
 			case 'save':

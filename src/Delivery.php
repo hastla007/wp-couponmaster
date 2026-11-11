@@ -95,32 +95,64 @@ final class Delivery {
 	 */
 	public function deliver( $voucher_id ): void {
 		$voucher_id = is_array( $voucher_id ) ? (int) ( $voucher_id['voucher_id'] ?? 0 ) : (int) $voucher_id;
-		$voucher    = $this->repo->get( $voucher_id );
-		if ( ! $voucher || $voucher->delivered_at || Voucher::STATUS_VOID === $voucher->status ) {
+		if ( $voucher_id <= 0 ) {
 			return;
 		}
-		if ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
-			$voucher->status = Voucher::STATUS_ACTIVE;
-			vcap()->coupons->set_coupon_enabled( $voucher, true );
+
+		// A connection-scoped lock is released automatically if a worker crashes.
+		global $wpdb;
+		$lock_name = 'vcap_delivery_' . $voucher_id;
+		$locked    = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $lock_name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( 1 !== (int) $locked ) {
+			return;
 		}
-		$voucher->delivered_at = $this->repo->now();
-		$this->repo->update( $voucher );
 
 		try {
+			$voucher = $this->repo->get( $voucher_id );
+			if ( ! $voucher || $voucher->delivered_at || ! in_array( $voucher->status, array( Voucher::STATUS_SCHEDULED, Voucher::STATUS_ACTIVE ), true ) ) {
+				return;
+			}
+			$now = $this->repo->now();
+			if ( $voucher->delivery_at && strtotime( $voucher->delivery_at . ' UTC' ) > time() ) {
+				return;
+			}
+
 			$sent = $this->send( $voucher );
+			if ( ! $sent ) {
+				$this->repo->log( $voucher->id, 'delivery_failed', null, null, __( 'No email was sent (email disabled or no valid address).', 'voucher-captain' ) );
+				return;
+			}
+
+			if ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
+				vcap()->coupons->set_coupon_enabled( $voucher, true );
+			}
+			$table   = Install::tables()['vouchers'];
+			$updated = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->prepare(
+					"UPDATE {$table} SET delivered_at = %s, status = CASE WHEN status = 'scheduled' THEN 'active' ELSE status END, updated_at = %s
+					WHERE id = %d AND delivered_at IS NULL AND status IN ('scheduled','active')",
+					$now,
+					$now,
+					$voucher_id
+				)
+			);
+			if ( 1 !== (int) $updated ) {
+				throw new \RuntimeException( __( 'Voucher email was sent but its delivery state could not be saved.', 'voucher-captain' ) );
+			}
+			if ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
+				$voucher->status = Voucher::STATUS_ACTIVE;
+			}
+			$voucher->delivered_at = $now;
+			$this->repo->log( $voucher->id, 'delivered', null, null, sprintf( 'Sent to %d recipient(s)', count( $sent ) ) );
+			do_action( 'vcap_voucher_delivered', $voucher, $sent );
 		} catch ( \Throwable $e ) {
-			// Let Action Scheduler record the failure and keep the voucher eligible for the daily retry.
-			$voucher->delivered_at = null;
-			$this->repo->update( $voucher );
-			$this->repo->log( $voucher->id, 'delivery_failed', null, null, $e->getMessage() );
+			if ( isset( $voucher ) && $voucher instanceof Voucher ) {
+				$this->repo->log( $voucher->id, 'delivery_failed', null, null, $e->getMessage() );
+			}
 			throw $e;
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
-		if ( ! $sent ) {
-			$this->repo->log( $voucher->id, 'delivery_failed', null, null, __( 'No email was sent (email disabled or no valid address).', 'voucher-captain' ) );
-		} else {
-			$this->repo->log( $voucher->id, 'delivered', null, null, implode( ', ', $sent ) );
-		}
-		do_action( 'vcap_voucher_delivered', $voucher, $sent );
 	}
 
 	/**

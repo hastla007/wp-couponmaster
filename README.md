@@ -7,7 +7,7 @@ WooCommerce-Plugin für personalisierte **PDF-Gutscheine, Geschenkkarten, Guthab
 | Bereich | Umfang |
 |---|---|
 | **Verkauf & Ausstellung** | Einfache und variable Produkte (inkl. Variationen) als Gutschein. Pro gekauftem Stück wird ein WooCommerce-Coupon erzeugt, auch mehrere PDFs pro Stück möglich. Code mit Präfix/Suffix/Länge/Zeichensatz und optionaler Bestellnummer. Ausstellung automatisch bei frei wählbaren Bestellstatus oder manuell über die Bestellaktion. Idempotent (keine Duplikate). |
-| **Wert & Einlösung** | Produktpreis, fixer Wert oder **Wunschbetrag des Kunden** (Min/Max/Schrittweite/Vorschlagsbeträge). Prozent- oder Fixrabatt. Einmalig, mehrfach mit **Guthaben** (Geschenkkarte) oder wiederverwendbar. Ablauf in Tagen, zu einem festen Datum oder nie. Gratisversand, Produkt-/Kategorie-Einschränkungen, Mindest-/Höchstbestellwert, Einschränkung auf E-Mail-Adressen. Guthaben wird bei Storno zurückgebucht. |
+| **Wert & Einlösung** | Produktpreis, fixer Wert oder **Wunschbetrag des Kunden** (Min/Max/Schrittweite/Vorschlagsbeträge). Prozent- oder Fixrabatt. Einmalig, mehrfach mit **Guthaben** (Geschenkkarte) oder wiederverwendbar. Ablauf in Tagen, zu einem festen Datum oder nie. Gratisversand, Produkt-/Kategorie-Einschränkungen, Mindest-/Höchstbestellwert, Einschränkung auf E-Mail-Adressen. Guthaben wird vor dem Senden an das Zahlungsgateway pro Bestellung reserviert, nach erfolgreicher Zahlung verbucht und bei fehlgeschlagener oder abgebrochener Zahlung freigegeben; Stornos verbuchen die Rückbuchung gemäß Einstellung. |
 | **Personalisierung** | Empfängername, Empfänger-E-Mail, Nachricht und Wunsch-Zustelldatum. Eigene **Feldgruppen** (Text, Textbereich, E-Mail, Zahl, Datum, Auswahl, Checkbox) für alle, ausgewählte Produkte, Kategorien oder Tags. Pflichtfeld, Zeichenlimit, Hilfetext und Position einstellbar. |
 | **Zustellung** | Sofort, X Tage nach Kauf, festes Datum oder Kundenwunschdatum, über Action Scheduler. Versand an Käufer, Empfänger oder beide. Eigene E-Mails mit konfigurierbarem Betreff/Überschrift/Text, zusätzlichen Empfängern und PDF-Anhang. |
 | **PDF-Designer** | Mehrere Vorlagen, A4/A5/A6/DL/Letter oder eigenes Format, Hoch-/Querformat, Hintergrundfarbe/-bild. Drag & Drop mit Hilfslinien/Snapping, Ebenen (sperren/ausblenden/sortieren), Rotation, Deckkraft, Undo/Redo. Elemente: Text, Überschrift, Bild, QR-Code, Barcode, Form, Linie. Schrift, Größe, Farbe, Ausrichtung, fett/kursiv/unterstrichen. Platzhalter. PDF-Vorschau im Admin und optional für Kunden (mit Wasserzeichen). |
@@ -49,6 +49,13 @@ composer install --no-dev
 ```
 
 Nach der Aktivierung werden zwei Startvorlagen angelegt (Geschenkkarte A5 und Gutschein-/Leistungspass A6). Danach im Produkt die Option **„Gutschein“** anhaken und den Tab **„Gutschein“** konfigurieren.
+
+## Integrationen und Sicherheit
+
+- [Versionierte PHP-API und Providervertrag](API.md)
+- [Sicherheits- und Datenschutzkontrollen](SECURITY.md)
+- [Release-Abnahmecheckliste](RELEASE_CHECKLIST.md)
+- [50-Punkte-Roadmap](ROADMAP.md)
 
 ## Entwicklung
 

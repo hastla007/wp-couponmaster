@@ -12,6 +12,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Install {
 	public const OPTION_DB_VERSION = 'vcap_db_version';
+	private static ?bool $transactional_tables = null;
 
 	/** @var array<string, callable-string> */
 	private const MIGRATIONS = array(
@@ -64,6 +65,42 @@ final class Install {
 		);
 	}
 
+	public static function tables_support_transactions(): bool {
+		if ( null !== self::$transactional_tables ) {
+			return self::$transactional_tables;
+		}
+		global $wpdb;
+		$tables = self::tables();
+		foreach ( array( 'vouchers', 'events' ) as $key ) {
+			$engine = $wpdb->get_var(
+				$wpdb->prepare(
+					'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s',
+					$tables[ $key ]
+				)
+			);
+			if ( 'innodb' !== strtolower( (string) $engine ) ) {
+				return self::$transactional_tables = false;
+			}
+		}
+		return self::$transactional_tables = true;
+	}
+
+	private static function ensure_transactional_tables( array $tables ): void {
+		global $wpdb;
+		self::$transactional_tables = null;
+		foreach ( array( 'vouchers', 'events' ) as $key ) {
+			$engine = $wpdb->get_var(
+				$wpdb->prepare(
+					'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s',
+					$tables[ $key ]
+				)
+			);
+			if ( $engine && 'innodb' !== strtolower( (string) $engine ) ) {
+				$wpdb->query( "ALTER TABLE {$tables[ $key ]} ENGINE=InnoDB" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			}
+		}
+	}
+
 	public static function create_tables(): void {
 		global $wpdb;
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
@@ -114,7 +151,7 @@ final class Install {
 				KEY product_id (product_id),
 				KEY recipient_email (recipient_email(100)),
 				KEY buyer_email (buyer_email(100))
-			) $collate;"
+			) ENGINE=InnoDB $collate;"
 		);
 
 		dbDelta(
@@ -131,7 +168,7 @@ final class Install {
 				PRIMARY KEY  (id),
 				KEY voucher_id (voucher_id),
 				KEY event (event)
-			) $collate;"
+			) ENGINE=InnoDB $collate;"
 		);
 
 		dbDelta(
@@ -145,8 +182,9 @@ final class Install {
 				PRIMARY KEY  (id),
 				UNIQUE KEY code (code),
 				KEY batch_free (batch,voucher_id)
-			) $collate;"
+			) ENGINE=InnoDB $collate;"
 		);
+		self::ensure_transactional_tables( $t );
 	}
 
 	public static function add_caps(): void {
