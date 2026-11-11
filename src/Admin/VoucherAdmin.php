@@ -126,6 +126,9 @@ final class VoucherAdmin {
 						if ( is_email( $v->recipient_email ) ) {
 							$form( 'resend_recipient', __( 'Email recipient', 'voucher-captain' ) );
 						}
+						if ( $v->expires_at && ! in_array( 'expiry_reminder', array_column( $this->repo->events( $v->id ), 'event' ), true ) ) {
+							$form( 'suppress_reminder', __( 'No expiry reminder', 'voucher-captain' ) );
+						}
 						if ( Voucher::STATUS_VOID === $v->status ) {
 							$form( 'reactivate', __( 'Reactivate', 'voucher-captain' ) );
 						} else {
@@ -250,6 +253,10 @@ final class VoucherAdmin {
 				}
 				$this->repo->log( $v->id, 'resent', null, null, 'resend_buyer' === $do ? 'Sent to buyer' : 'Sent to recipient' );
 				$this->redirect( 'resent', $id );
+				break;
+			case 'suppress_reminder':
+				$this->repo->log( $v->id, 'expiry_reminder', null, null, __( 'Suppressed by admin', 'voucher-captain' ) );
+				$this->redirect( 'saved', $id );
 				break;
 			case 'void':
 				vcap()->issuer->void( $v, __( 'Voided by admin', 'voucher-captain' ) );

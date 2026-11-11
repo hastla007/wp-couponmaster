@@ -75,7 +75,7 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 
 ## Optional nach dem ersten Kunden-Connector
 
-- [ ] E-Mail-Erinnerung vor Ablauf eines Gutscheins.
+- [x] E-Mail-Erinnerung vor Ablauf eines Gutscheins. — *Nachweis: Einstellung „Erinnerung vor Ablauf“ (aus, bis Tage gesetzt sind), WooCommerce-E-Mail „Erinnerung vor Gutschein-Ablauf“, einmal je Gutschein; tests/reminder-integration.php*
 - [ ] Statistiken nach Kampagne und Partner.
 - [ ] Empfehlungs-/Freunde-werben-Codes.
 - [ ] Allgemeine Einlöseseite oder Block/Shortcode, den Connector-Plugins erweitern können.
@@ -141,7 +141,7 @@ Befund im Kursplugin: `/wp-json/boatingschool/v1/coupons/redeem` ist derzeit fü
 
 ## P2 – Kundenbindung und Shop-Erweiterungen
 
-- [ ] Gutscheine mit konfigurierbarem Vorablauf-Hinweis und Zustellstatus versenden; Versandwiederholung und Unterdrückung von Erinnerungen unterstützen.
+- [x] Gutscheine mit konfigurierbarem Vorablauf-Hinweis und Zustellstatus versenden; Versandwiederholung und Unterdrückung von Erinnerungen unterstützen. — *Nachweis: Vorablauf-Erinnerung, Zustellstatus/-fehler im Verlauf, erneuter Versand (Admin und Kundenkonto), Unterdrückung je Gutschein; tests/reminder-integration.php*
 - [ ] Bonusgutschein bei qualifizierender Bestellung oder Geschenkkartenkauf als optionale Kampagnenaktion ausgeben.
 - [ ] Gutscheinsaldo, Gutscheinstatus, Einlöseseite und Versandaktion über wiederverwendbare Blöcke/Shortcodes bereitstellen.
 - [x] Kundenvorschau personalisierter Gutscheine vor dem Kauf anbieten. — *Nachweis: Vorschau-Button auf der Produktseite, PDF mit Wasserzeichen*

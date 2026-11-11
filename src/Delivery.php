@@ -192,8 +192,39 @@ final class Delivery {
 		}
 	}
 
+	/**
+	 * Remind holders of vouchers with remaining value before they expire. Each voucher is reminded at most once
+	 * (ledger event 'expiry_reminder'); admins can suppress the reminder per voucher.
+	 *
+	 * @return int number of reminders sent
+	 */
+	public function send_expiry_reminders(): int {
+		$days = (int) $this->settings->get( 'vcap_expiry_reminder_days' );
+		if ( $days <= 0 ) {
+			return 0;
+		}
+		$emails = WC()->mailer()->get_emails();
+		$email  = $emails['VCAP_Email_Voucher_Expiry'] ?? null;
+		if ( ! $email ) {
+			return 0;
+		}
+		$sent = 0;
+		foreach ( $this->repo->due_for_expiry_reminder( $days ) as $voucher ) {
+			if ( ! apply_filters( 'vcap_send_expiry_reminder', true, $voucher ) ) {
+				continue;
+			}
+			// Logged first: a crash after sending must not lead to a second reminder.
+			$this->repo->log( $voucher->id, 'expiry_reminder', null, $voucher->balance, '' );
+			if ( $email->trigger( $voucher ) ) {
+				++$sent;
+			}
+		}
+		return $sent;
+	}
+
 	public function maintenance(): void {
 		$this->repo->expire_overdue();
+		$this->send_expiry_reminders();
 		// Safety net for deliveries whose scheduled action got lost.
 		foreach ( $this->repo->due_for_delivery() as $id ) {
 			$this->deliver( $id );

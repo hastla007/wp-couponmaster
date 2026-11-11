@@ -25,6 +25,7 @@ final class Settings {
 		'vcap_myaccount_tab'         => 'yes',
 		'vcap_attach_pdf'            => 'yes',
 		'vcap_include_link'          => 'yes',
+		'vcap_expiry_reminder_days'  => 0,
 		'vcap_date_format'           => '',
 		'vcap_retention_days'        => 0,
 		'vcap_delete_on_uninstall'   => 'no',
@@ -123,6 +124,14 @@ final class Settings {
 						'default'           => 0,
 						'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
 						'desc_tip'          => __( 'Signed links in emails expire after this many days. Links shown to logged-in customers are always re-signed. 0 = never expire.', 'voucher-captain' ),
+					),
+					array(
+						'title'             => __( 'Expiry reminder (days before)', 'voucher-captain' ),
+						'id'                => 'vcap_expiry_reminder_days',
+						'type'              => 'number',
+						'default'           => 0,
+						'custom_attributes' => array( 'min' => 0, 'max' => 365, 'step' => 1 ),
+						'desc_tip'          => __( 'Email the voucher holder once this many days before a voucher with remaining value expires. 0 = no reminders. The email text is edited under WooCommerce → Settings → Emails.', 'voucher-captain' ),
 					),
 					array(
 						'title'   => __( 'Order confirmation', 'voucher-captain' ),

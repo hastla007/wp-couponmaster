@@ -218,6 +218,30 @@ final class VoucherRepository {
 		);
 	}
 
+	/**
+	 * Delivered, usable vouchers with remaining value that expire within $days and were not reminded yet.
+	 *
+	 * @return Voucher[]
+	 */
+	public function due_for_expiry_reminder( int $days, int $limit = 200 ): array {
+		global $wpdb;
+		$rows = $wpdb->get_results( // phpcs:ignore
+			$wpdb->prepare(
+				"SELECT v.* FROM {$this->table} v
+				WHERE v.status = 'active' AND v.delivered_at IS NOT NULL AND v.type <> 'ticket'
+				AND v.expires_at IS NOT NULL AND v.expires_at > %s AND v.expires_at <= %s
+				AND ( v.usage_mode <> 'balance' OR v.balance > 0 )
+				AND NOT EXISTS ( SELECT 1 FROM {$this->events} e WHERE e.voucher_id = v.id AND e.event = 'expiry_reminder' )
+				ORDER BY v.expires_at ASC LIMIT %d",
+				$this->now(),
+				gmdate( 'Y-m-d H:i:s', time() + $days * DAY_IN_SECONDS ),
+				$limit
+			),
+			ARRAY_A
+		);
+		return array_map( array( Voucher::class, 'from_row' ), $rows ? $rows : array() );
+	}
+
 	public function expire_overdue(): int {
 		global $wpdb;
 		return (int) $wpdb->query( $wpdb->prepare( "UPDATE {$this->table} SET status = 'expired', updated_at = %s WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < %s", $this->now(), $this->now() ) ); // phpcs:ignore
@@ -314,6 +338,7 @@ final class VoucherRepository {
 			'scheduled'  => __( 'Delivery scheduled', 'voucher-captain' ),
 			'delivered'  => __( 'Delivered', 'voucher-captain' ),
 			'delivery_failed' => __( 'Delivery failed', 'voucher-captain' ),
+			'expiry_reminder' => __( 'Expiry reminder', 'voucher-captain' ),
 			'resent'     => __( 'Email resent', 'voucher-captain' ),
 			'redeemed'   => __( 'Redeemed', 'voucher-captain' ),
 			'restored'   => __( 'Balance restored', 'voucher-captain' ),
