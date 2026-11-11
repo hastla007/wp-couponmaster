@@ -104,6 +104,22 @@ $expected_sig = $sign_method->invoke( vcap()->downloads, $query['vcap_pdf'], (in
 vcap_security_assert( hash_equals( $expected_sig, $query['sig'] ) && (int) $query['exp'] > time(), 'guest PDF URL signs the token and expiry' );
 vcap_security_assert( ! hash_equals( $expected_sig, hash_hmac( 'sha256', $query['vcap_pdf'] . '|' . ( (int) $query['exp'] + 1 ), vcap()->settings->secret() ) ), 'changing a signed guest-link expiry invalidates its signature' );
 
+// Versioned PHP facade: stable DTOs, order-scoped idempotency and stable error codes.
+$api_voucher = vcap_security_create_voucher( 'api@example.test', 900002 );
+$order       = wc_create_order();
+$order->set_status( 'pending' );
+$order->save();
+$lookup = vcap()->api_v1->lookup( $api_voucher->code );
+vcap_security_assert( is_array( $lookup ) && 25.0 === (float) $lookup['balance'] && ! isset( $lookup['buyer_email'] ), 'public voucher service returns a safe lookup DTO' );
+$reservation_one = vcap()->api_v1->reserve( $api_voucher->code, 10.0, $order );
+$reservation_two = vcap()->api_v1->reserve( $api_voucher->code, 10.0, $order );
+vcap_security_assert( is_array( $reservation_one ) && is_array( $reservation_two ) && 15.0 === (float) vcap()->vouchers->get( $api_voucher->id )->balance && $reservation_one['idempotency_key'] === $reservation_two['idempotency_key'], 'reserve retries for one order do not deduct twice' );
+$commit_one = vcap()->api_v1->commit( $api_voucher->code, $order );
+$commit_two = vcap()->api_v1->commit( $api_voucher->code, $order );
+vcap_security_assert( is_array( $commit_one ) && is_array( $commit_two ) && 15.0 === (float) vcap()->vouchers->get( $api_voucher->id )->balance, 'commit retries are idempotent and preserve the single deduction' );
+$missing = vcap()->api_v1->lookup( 'definitely-not-a-voucher' );
+vcap_security_assert( is_wp_error( $missing ) && 'vcap_not_found' === $missing->get_error_code(), 'unknown vouchers return a stable error code' );
+
 // Admin write handlers are expected to verify both a nonce and a capability.
 $admin_checks = array(
 	array( VCAP\Admin\Import::class, 'handle', 'vcap_import' ),
