@@ -51,6 +51,8 @@ final class Engine {
 			'date_to'         => (int) ( $r['date_to'] ?? 0 ),
 			'stackable'       => ! empty( $r['stackable'] ),
 			'with_coupons'    => ! isset( $r['with_coupons'] ) || ! empty( $r['with_coupons'] ),
+			'usage_limit'              => max( 0, (int) ( $r['usage_limit'] ?? 0 ) ),
+			'usage_limit_per_customer' => max( 0, (int) ( $r['usage_limit_per_customer'] ?? 0 ) ),
 		);
 	}
 

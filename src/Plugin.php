@@ -61,6 +61,7 @@ final class Plugin {
 		( new FirstOrderCoupons() )->register();
 		$promotions = new Discounts\Repository();
 		$promotions->register();
+		( new Discounts\Usage() )->register();
 		( new Discounts\CartIntegration( $this->settings, $promotions ) )->register();
 		( new Discounts\Admin( $promotions ) )->register();
 

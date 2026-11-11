@@ -113,6 +113,19 @@ final class CartIntegration {
 		);
 	}
 
+	/** Customer of a cart or order: [ user id, billing email ]. */
+	private static function customer( $object ): array {
+		if ( $object instanceof \WC_Order ) {
+			return array( (int) $object->get_customer_id(), (string) $object->get_billing_email() );
+		}
+		return array( get_current_user_id(), WC()->customer ? (string) WC()->customer->get_billing_email() : '' );
+	}
+
+	private static function usage_blocker( array $campaign, $object ): string {
+		list( $user, $email ) = self::customer( $object );
+		return Usage::blocker( $campaign, $user, $email );
+	}
+
 	private static function line( string $key, \WC_Product $product, int $qty, float $unit ): array {
 		$parent = $product->get_parent_id() ? $product->get_parent_id() : $product->get_id();
 		return array(
@@ -183,11 +196,22 @@ final class CartIntegration {
 		}
 		if ( $discounts instanceof \WC_Discounts ) {
 			$lines = self::lines_from_items( $discounts->get_items_to_validate() );
-			if ( ! Engine::discounts( $campaign['rules'], $lines, $this->context( $discounts->get_object() ) ) ) {
+			$object = $discounts->get_object();
+			$usage  = self::usage_blocker( $campaign, $object );
+			if ( '' !== $usage ) {
+				throw new \Exception( esc_html( self::usage_message( $usage ) ), 9042 );
+			}
+			if ( ! Engine::discounts( $campaign['rules'], $lines, $this->context( $object ) ) ) {
 				throw new \Exception( esc_html__( 'The conditions of this promotion are not met.', 'voucher-captain' ), 9041 );
 			}
 		}
 		return $valid;
+	}
+
+	public static function usage_message( string $reason ): string {
+		return 'usage_limit_customer' === $reason
+			? __( 'You have already used this promotion the maximum number of times.', 'voucher-captain' )
+			: __( 'This promotion has reached its usage limit.', 'voucher-captain' );
 	}
 
 	/**
@@ -209,7 +233,8 @@ final class CartIntegration {
 						$lines[] = self::line( (string) $key, $item['data'], (int) $item['quantity'], (float) $item['data']->get_price() );
 					}
 				}
-				foreach ( Engine::select( $this->campaigns->active(), $lines, $this->context( $cart ) ) as $id ) {
+				$available = array_values( array_filter( $this->campaigns->active(), static fn( $c ) => '' === self::usage_blocker( $c, $cart ) ) );
+				foreach ( Engine::select( $available, $lines, $this->context( $cart ) ) as $id ) {
 					$desired[] = self::code( $id );
 				}
 			}

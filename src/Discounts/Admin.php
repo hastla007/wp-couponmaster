@@ -184,6 +184,14 @@ final class Admin {
 				</td>
 			</tr>
 			<tr>
+				<th scope="row"><?php esc_html_e( 'Usage limits', 'voucher-captain' ); ?></th>
+				<td>
+					<label><?php esc_html_e( 'Total uses', 'voucher-captain' ); ?> <input type="number" min="0" name="vcap_rules[usage_limit]" value="<?php echo esc_attr( $r['usage_limit'] ? (string) $r['usage_limit'] : '' ); ?>" class="small-text" placeholder="∞" /></label>
+					<label><?php esc_html_e( 'Uses per customer', 'voucher-captain' ); ?> <input type="number" min="0" name="vcap_rules[usage_limit_per_customer]" value="<?php echo esc_attr( $r['usage_limit_per_customer'] ? (string) $r['usage_limit_per_customer'] : '' ); ?>" class="small-text" placeholder="∞" /></label>
+					<p class="description"><?php esc_html_e( 'An order counts once it is paid or on hold and is given back when it is cancelled or fails. Customers are recognised by account and billing email; guests without an email are checked at checkout.', 'voucher-captain' ); ?></p>
+				</td>
+			</tr>
+			<tr>
 				<th scope="row"><?php esc_html_e( 'Combination', 'voucher-captain' ); ?></th>
 				<td>
 					<label><input type="checkbox" name="vcap_rules[stackable]" value="1" <?php checked( $r['stackable'] ); ?> /> <?php esc_html_e( 'Can be combined with other promotions', 'voucher-captain' ); ?></label><br>
@@ -270,6 +278,8 @@ final class Admin {
 				'date_to'            => $ts( $in['date_to'] ?? '' ),
 				'stackable'          => ! empty( $in['stackable'] ),
 				'with_coupons'       => ! empty( $in['with_coupons'] ),
+				'usage_limit'              => absint( $in['usage_limit'] ?? 0 ),
+				'usage_limit_per_customer' => absint( $in['usage_limit_per_customer'] ?? 0 ),
 			)
 		);
 	}
@@ -369,6 +379,7 @@ final class Admin {
 		$columns['vcap_discount'] = __( 'Discount', 'voucher-captain' );
 		$columns['vcap_period']   = __( 'Period', 'voucher-captain' );
 		$columns['vcap_priority'] = __( 'Priority', 'voucher-captain' );
+		$columns['vcap_usage']    = __( 'Used', 'voucher-captain' );
 		if ( $date ) {
 			$columns['date'] = $date;
 		}
@@ -385,6 +396,9 @@ final class Admin {
 			echo esc_html( $from . ' – ' . $to );
 		} elseif ( 'vcap_priority' === $column ) {
 			echo esc_html( (string) $c['priority'] );
+		} elseif ( 'vcap_usage' === $column ) {
+			$used = Usage::count( $post_id );
+			echo esc_html( $c['rules']['usage_limit'] ? $used . ' / ' . $c['rules']['usage_limit'] : (string) $used );
 		}
 	}
 }

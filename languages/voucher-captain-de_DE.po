@@ -2991,3 +2991,24 @@ msgstr "bis"
 
 msgid "voucher"
 msgstr "Gutschein"
+
+msgid "Usage limits"
+msgstr "Nutzungslimits"
+
+msgid "Total uses"
+msgstr "Nutzungen insgesamt"
+
+msgid "Uses per customer"
+msgstr "Nutzungen pro Kunde"
+
+msgid "An order counts once it is paid or on hold and is given back when it is cancelled or fails. Customers are recognised by account and billing email; guests without an email are checked at checkout."
+msgstr "Eine Bestellung zählt, sobald sie bezahlt oder in Wartestellung ist, und wird bei Stornierung oder Fehlschlag wieder freigegeben. Kunden werden über Konto und Rechnungs-E-Mail erkannt; Gäste ohne E-Mail werden an der Kasse geprüft."
+
+msgid "Used"
+msgstr "Genutzt"
+
+msgid "You have already used this promotion the maximum number of times."
+msgstr "Sie haben diese Aktion bereits so oft wie erlaubt genutzt."
+
+msgid "This promotion has reached its usage limit."
+msgstr "Diese Aktion hat ihr Nutzungslimit erreicht."

@@ -112,6 +112,48 @@ $order   = wc_get_order( $order->get_id() );
 vcap_promo_assert( true === $applied && 4.0 === round( (float) $order->get_discount_total(), 2 ), 'promotions calculate correctly on orders (10 % of 40)' );
 
 wp_update_post( array( 'ID' => $ten, 'post_status' => 'draft' ) );
+
+// Usage limits: counted when the order is paid, given back when it is cancelled.
+$once = vcap_promo_campaign( 'Once only', array( 'action' => 'percent', 'percent' => 10, 'usage_limit' => 1 ), 0 );
+list( $codes ) = vcap_promo_cart();
+vcap_promo_assert( array( 'vcap-campaign-' . $once ) === $codes, 'a promotion with a total limit applies while unused' );
+$paid = wc_create_order();
+$paid->add_product( $shirt, 1 );
+$paid->set_billing_email( 'promo-limit@example.com' );
+$paid->calculate_totals();
+$paid->apply_coupon( 'vcap-campaign-' . $once );
+$paid->update_status( 'processing' );
+$paid->update_status( 'completed' );
+vcap_promo_assert( 1 === VCAP\Discounts\Usage::count( $once ), 'a paid order counts one use (status repeats do not count twice)' );
+list( $codes ) = vcap_promo_cart();
+vcap_promo_assert( ! in_array( 'vcap-campaign-' . $once, $codes, true ), 'a used-up promotion is no longer applied' );
+$again = wc_create_order();
+$again->add_product( $shirt, 1 );
+$again->calculate_totals();
+vcap_promo_assert( is_wp_error( $again->apply_coupon( 'vcap-campaign-' . $once ) ), 'a used-up promotion is refused on orders' );
+$paid = wc_get_order( $paid->get_id() );
+$paid->update_status( 'cancelled' );
+vcap_promo_assert( 0 === VCAP\Discounts\Usage::count( $once ), 'cancelling the order gives the use back' );
+list( $codes ) = vcap_promo_cart();
+vcap_promo_assert( array( 'vcap-campaign-' . $once ) === $codes, 'the promotion applies again after the cancellation' );
+wp_update_post( array( 'ID' => $once, 'post_status' => 'draft' ) );
+
+$per = vcap_promo_campaign( 'Once per customer', array( 'action' => 'percent', 'percent' => 10, 'usage_limit_per_customer' => 1 ), 0 );
+$mine = wc_create_order();
+$mine->add_product( $shirt, 1 );
+$mine->set_billing_email( 'Repeat@Example.com' );
+$mine->calculate_totals();
+$mine->apply_coupon( 'vcap-campaign-' . $per );
+$mine->update_status( 'processing' );
+WC()->customer->set_billing_email( 'repeat@example.com' );
+list( $codes ) = vcap_promo_cart();
+vcap_promo_assert( ! in_array( 'vcap-campaign-' . $per, $codes, true ), 'the per-customer limit recognises the billing email' );
+WC()->customer->set_billing_email( 'someone-else@example.com' );
+list( $codes ) = vcap_promo_cart();
+vcap_promo_assert( array( 'vcap-campaign-' . $per ) === $codes, 'other customers can still use it' );
+WC()->customer->set_billing_email( '' );
+wp_update_post( array( 'ID' => $per, 'post_status' => 'draft' ) );
+
 update_option( 'vcap_campaigns_enabled', 'no' );
 WC()->cart->empty_cart();
 wc_clear_notices();

@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-11 12:38+0000\n"
+"POT-Creation-Date: 2026-11-11 13:20+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:73 src/API/V1/RedemptionService.php:112
@@ -403,7 +403,7 @@ msgstr ""
 msgid "Scanner"
 msgstr ""
 
-#: src/Admin/Menu.php:43 src/Admin/Menu.php:43 src/Plugin.php:102
+#: src/Admin/Menu.php:43 src/Admin/Menu.php:43 src/Plugin.php:103
 msgid "Settings"
 msgstr ""
 
@@ -481,7 +481,7 @@ msgstr ""
 msgid "Holder"
 msgstr ""
 
-#: src/Admin/Scanner.php:35 src/Admin/VoucherAdmin.php:104 src/Admin/VouchersListTable.php:28 src/Discounts/Admin.php:202 src/Discounts/Admin.php:355 templates/ticket-status.php:56
+#: src/Admin/Scanner.php:35 src/Admin/VoucherAdmin.php:104 src/Admin/VouchersListTable.php:28 src/Discounts/Admin.php:210 src/Discounts/Admin.php:365 templates/ticket-status.php:56
 msgid "Product"
 msgstr ""
 
@@ -1130,7 +1130,7 @@ msgstr ""
 msgid "Search for a product…"
 msgstr ""
 
-#: src/Discounts/Admin.php:111 src/Discounts/Admin.php:355 src/Discounts/Admin.php:369
+#: src/Discounts/Admin.php:111 src/Discounts/Admin.php:365 src/Discounts/Admin.php:379
 msgid "Discount"
 msgstr ""
 
@@ -1250,7 +1250,7 @@ msgstr ""
 msgid "Choose roles…"
 msgstr ""
 
-#: src/Discounts/Admin.php:180 src/Discounts/Admin.php:370
+#: src/Discounts/Admin.php:180 src/Discounts/Admin.php:380
 msgid "Period"
 msgstr ""
 
@@ -1263,127 +1263,155 @@ msgid "until"
 msgstr ""
 
 #: src/Discounts/Admin.php:187
-msgid "Combination"
+msgid "Usage limits"
 msgstr ""
 
 #: src/Discounts/Admin.php:189
-msgid "Can be combined with other promotions"
+msgid "Total uses"
 msgstr ""
 
 #: src/Discounts/Admin.php:190
-msgid "Also applies when the customer uses a coupon code"
+msgid "Uses per customer"
 msgstr ""
 
 #: src/Discounts/Admin.php:191
+msgid "An order counts once it is paid or on hold and is given back when it is cancelled or fails. Customers are recognised by account and billing email; guests without an email are checked at checkout."
+msgstr ""
+
+#: src/Discounts/Admin.php:195
+msgid "Combination"
+msgstr ""
+
+#: src/Discounts/Admin.php:197
+msgid "Can be combined with other promotions"
+msgstr ""
+
+#: src/Discounts/Admin.php:198
+msgid "Also applies when the customer uses a coupon code"
+msgstr ""
+
+#: src/Discounts/Admin.php:199
 msgid "Priority = \"Order\" in the Attributes box (lower first). A promotion that cannot be combined only applies alone; if it has the best priority, others are skipped."
 msgstr ""
 
-#: src/Discounts/Admin.php:200
+#: src/Discounts/Admin.php:208
 msgid "Try the rules above with a sample cart before publishing. Unsaved changes are used."
 msgstr ""
 
-#: src/Discounts/Admin.php:202 src/Discounts/Admin.php:207 src/Discounts/Admin.php:355
+#: src/Discounts/Admin.php:210 src/Discounts/Admin.php:215 src/Discounts/Admin.php:365
 msgid "Quantity"
 msgstr ""
 
-#: src/Discounts/Admin.php:213
+#: src/Discounts/Admin.php:221
 msgid "Customer"
 msgstr ""
 
-#: src/Discounts/Admin.php:215
+#: src/Discounts/Admin.php:223
 msgid "Guest, first order"
 msgstr ""
 
-#: src/Discounts/Admin.php:216
+#: src/Discounts/Admin.php:224
 msgid "Logged-in customer, first order"
 msgstr ""
 
-#: src/Discounts/Admin.php:217
+#: src/Discounts/Admin.php:225
 msgid "Logged-in returning customer"
 msgstr ""
 
-#: src/Discounts/Admin.php:220
+#: src/Discounts/Admin.php:228
 msgid "Role"
 msgstr ""
 
-#: src/Discounts/Admin.php:227
+#: src/Discounts/Admin.php:235
 msgid "Calculate"
 msgstr ""
 
 #. translators: %s: amount
-#: src/Discounts/Admin.php:292
+#: src/Discounts/Admin.php:302
 #, php-format
 msgid "%s off"
 msgstr ""
 
-#: src/Discounts/Admin.php:294
+#: src/Discounts/Admin.php:304
 msgid "Tiered:"
 msgstr ""
 
 #. translators: 1: buy quantity, 2: get quantity, 3: percent
-#: src/Discounts/Admin.php:297
+#: src/Discounts/Admin.php:307
 #, php-format
 msgid "Buy %1$d, get %2$d at %3$s %% off"
 msgstr ""
 
-#: src/Discounts/Admin.php:342
+#: src/Discounts/Admin.php:352
 msgid "Choose at least one product."
 msgstr ""
 
-#: src/Discounts/Admin.php:345
+#: src/Discounts/Admin.php:355
 msgid "The promotion has not started yet."
 msgstr ""
 
-#: src/Discounts/Admin.php:346
+#: src/Discounts/Admin.php:356
 msgid "The promotion has ended."
 msgstr ""
 
-#: src/Discounts/Admin.php:347
+#: src/Discounts/Admin.php:357
 msgid "Not combined with coupon codes."
 msgstr ""
 
-#: src/Discounts/Admin.php:348
+#: src/Discounts/Admin.php:358
 msgid "This customer does not qualify."
 msgstr ""
 
-#: src/Discounts/Admin.php:349
+#: src/Discounts/Admin.php:359
 msgid "The minimum cart value is not reached."
 msgstr ""
 
-#: src/Discounts/Admin.php:350
+#: src/Discounts/Admin.php:360
 msgid "No product in this cart qualifies."
 msgstr ""
 
-#: src/Discounts/Admin.php:351
+#: src/Discounts/Admin.php:361
 msgid "Not enough qualifying items."
 msgstr ""
 
-#: src/Discounts/Admin.php:355
+#: src/Discounts/Admin.php:365
 msgid "Price"
 msgstr ""
 
-#: src/Discounts/Admin.php:357
+#: src/Discounts/Admin.php:367
 msgid "voucher"
 msgstr ""
 
-#: src/Discounts/Admin.php:359
+#: src/Discounts/Admin.php:369
 msgid "Total discount"
 msgstr ""
 
-#: src/Discounts/Admin.php:371
+#: src/Discounts/Admin.php:381
 msgid "Priority"
+msgstr ""
+
+#: src/Discounts/Admin.php:382
+msgid "Used"
 msgstr ""
 
 #: src/Discounts/CartIntegration.php:56
 msgid "Discount campaign (Voucher Captain)"
 msgstr ""
 
-#: src/Discounts/CartIntegration.php:182
+#: src/Discounts/CartIntegration.php:195
 msgid "This promotion is not active."
 msgstr ""
 
-#: src/Discounts/CartIntegration.php:187
+#: src/Discounts/CartIntegration.php:205
 msgid "The conditions of this promotion are not met."
+msgstr ""
+
+#: src/Discounts/CartIntegration.php:213
+msgid "You have already used this promotion the maximum number of times."
+msgstr ""
+
+#: src/Discounts/CartIntegration.php:214
+msgid "This promotion has reached its usage limit."
 msgstr ""
 
 #: src/Downloads.php:84
@@ -1873,12 +1901,12 @@ msgid "Site URL"
 msgstr ""
 
 #. translators: %s: comma separated table names
-#: src/Plugin.php:118
+#: src/Plugin.php:119
 #, php-format
 msgid "Voucher Captain: the voucher database tables do not support transactions (InnoDB). Gift card balances cannot be redeemed until these tables are converted to InnoDB: %s"
 msgstr ""
 
-#: src/Plugin.php:126
+#: src/Plugin.php:127
 msgid "Voucher Captain: the PDF libraries are missing. Install the release ZIP or run \"composer install --no-dev\" in the plugin folder."
 msgstr ""
 
