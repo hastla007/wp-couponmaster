@@ -106,3 +106,25 @@ These features extend the core voucher lifecycle. They are product options, not 
 3. Rule-based automatic promotions, bonus vouchers, and broader shortcode/block integrations.
 
 Each expansion needs acceptance criteria for limits, stacking, refunds, currencies, privacy retention, and order idempotency before implementation.
+
+## EU target market and compatibility baseline
+
+**Target market:** European Union, with country-specific configuration rather than DACH-only assumptions.
+
+### Test baseline (snapshot: 11 November 2026)
+
+- WordPress 7.1.4.
+- WooCommerce 11.2.2.
+- PHP 8.4, with current security patch level (8.4.27 at the snapshot date).
+- MySQL 8.4 LTS or MariaDB 11.4 LTS.
+- Yoast SEO 28.8 is an optional compatibility-test component, not a dependency. Voucher Captain must also work when Yoast SEO is absent.
+
+These are release-test targets, not permanently fixed minimum versions. Publish and review minimum supported WordPress, WooCommerce, PHP, and database versions separately for each plugin release. Keep CI forward-compatibility coverage for the next supported PHP/WordPress releases where available.
+
+### EU product requirements
+
+- Model VAT treatment, country, currency, tax-inclusive prices, refunds, and invoice references at order-line level; support country-specific configuration and OSS-related workflows without embedding tax rates in code.
+- Make voucher terms, expiry, delivery, redemption, and customer notices configurable and translatable; obtain country-specific legal review before marketing legal compliance.
+- Make multilingual and multi-currency integrations optional adapters. Do not assume every EU customer uses EUR or one checkout language.
+- Include privacy export/deletion and retention controls for buyer and recipient records; keep required financial records separate from voucher personalization data.
+- Include accessibility and keyboard/screen-reader checks for product forms, account flows, checkout extensions, PDF preview, and admin workflows.
