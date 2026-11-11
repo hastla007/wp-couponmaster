@@ -142,6 +142,7 @@ final class CouponManager {
 				sprintf( __( 'Reserved for order #%s', 'voucher-captain' ), $order->get_order_number() )
 			);
 			if ( ! $reservation || 'reserved' !== $reservation['state'] || abs( $reservation['amount'] - $amount ) >= 0.0001 ) {
+				$this->release_reservation_atomic( $voucher, $order->get_id(), __( 'Checkout reservation rolled back', 'voucher-captain' ) );
 				foreach ( $made as $reserved_code => $reserved_amount ) {
 					$reserved_voucher = $this->find_voucher_for_code( $reserved_code );
 					if ( $reserved_voucher ) {
