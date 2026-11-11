@@ -13,6 +13,7 @@ function vcap_security_assert( bool $condition, string $message ): void {
 function vcap_security_create_voucher( string $email, int $index ): VCAP\Voucher {
 	$voucher                  = new VCAP\Voucher();
 	$voucher->code            = 'vcap-privacy-' . $index . '-' . strtolower( wp_generate_password( 8, false, false ) );
+	$voucher->order_item_id   = 92000000 + $index;
 	$voucher->type            = 'giftcard';
 	$voucher->usage_mode      = 'balance';
 	$voucher->initial_amount  = 25;
