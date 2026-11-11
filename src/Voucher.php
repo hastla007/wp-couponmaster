@@ -44,6 +44,10 @@ final class Voucher {
 	public ?string $delivery_at  = null;
 	public ?string $delivered_at = null;
 	public string $token         = '';
+	/** Whether someone other than buyer/recipient may redeem it (snapshot at purchase). */
+	public bool $transferable    = true;
+	/** Redemption conditions as agreed at purchase (snapshot, plain text). */
+	public string $terms         = '';
 	public int $max_checkins     = 1;
 	public int $checkins         = 0;
 	public ?string $last_checkin_at = null;
@@ -88,6 +92,9 @@ final class Voucher {
 				case 'checkins':
 					$v->$key = (int) $value;
 					break;
+				case 'transferable':
+					$v->transferable = (bool) (int) $value;
+					break;
 				case 'initial_amount':
 				case 'balance':
 					$v->$key = (float) $value;
@@ -113,6 +120,7 @@ final class Voucher {
 		$row = get_object_vars( $this );
 		unset( $row['id'] );
 		$row['fields'] = wp_json_encode( $this->fields );
+		$row['transferable'] = $this->transferable ? 1 : 0;
 		return $row;
 	}
 
@@ -151,6 +159,13 @@ final class Voucher {
 			return self::statuses()[ self::STATUS_EXPIRED ];
 		}
 		return self::statuses()[ $this->status ] ?? $this->status;
+	}
+
+	/** Human readable transferability. */
+	public function transferable_label(): string {
+		return $this->transferable
+			? __( 'Transferable – anyone with the code can redeem it.', 'voucher-captain' )
+			: __( 'Personal – only the buyer or the named recipient can redeem it.', 'voucher-captain' );
 	}
 
 	public function field( string $key ): string {

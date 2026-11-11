@@ -13,6 +13,7 @@ final class Downloads {
 
 	public function register(): void {
 		add_action( 'template_redirect', array( $this, 'maybe_serve' ), 1 );
+		add_action( 'template_redirect', array( $this, 'customer_resend' ), 5 );
 		add_action( 'admin_post_vcap_admin_pdf', array( $this, 'admin_download' ) );
 		add_action( 'woocommerce_order_details_after_order_table', array( $this, 'order_downloads' ), 5 );
 		add_action( 'wp_loaded', array( $this, 'maybe_flush_rewrite' ) );
@@ -56,6 +57,54 @@ final class Downloads {
 			),
 			home_url( '/' )
 		);
+	}
+
+	/**
+	 * Buyers may resend their own delivered vouchers from My Account (not scheduled gifts – that would spoil them).
+	 */
+	public function customer_can_resend( Voucher $voucher ): bool {
+		$order = $voucher->order();
+		return is_user_logged_in()
+			&& $order instanceof \WC_Order
+			&& (int) $order->get_customer_id() === get_current_user_id()
+			&& null !== $voucher->delivered_at
+			&& in_array( $voucher->status, array( Voucher::STATUS_ACTIVE, Voucher::STATUS_REDEEMED ), true )
+			&& (bool) apply_filters( 'vcap_customer_can_resend', true, $voucher );
+	}
+
+	/**
+	 * POST handler for the "Send email again" button. Limited to 3 emails per voucher and hour.
+	 */
+	public function customer_resend(): void {
+		if ( empty( $_POST['vcap_resend'] ) || empty( $_POST['vcap_resend_nonce'] ) ) {
+			return;
+		}
+		$id = absint( $_POST['vcap_resend'] );
+		if ( ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_resend_nonce'] ) ), 'vcap_resend_' . $id ) ) {
+			wc_add_notice( __( 'The request has expired. Please try again.', 'voucher-captain' ), 'error' );
+			return;
+		}
+		$voucher = $this->repo->get( $id );
+		if ( ! $voucher || ! $this->customer_can_resend( $voucher ) ) {
+			wc_add_notice( __( 'This voucher cannot be sent again.', 'voucher-captain' ), 'error' );
+			return;
+		}
+		$key   = 'vcap_resend_' . $voucher->id;
+		$count = (int) get_transient( $key );
+		if ( $count >= 3 ) {
+			wc_add_notice( __( 'This voucher was sent several times already. Please try again later.', 'voucher-captain' ), 'error' );
+			return;
+		}
+		set_transient( $key, $count + 1, HOUR_IN_SECONDS );
+		$sent = vcap()->delivery->send( $voucher );
+		$this->repo->log( $voucher->id, 'resent', null, null, sprintf( 'Requested by customer, %d recipient(s)', count( $sent ) ) );
+		if ( $sent ) {
+			wc_add_notice( __( 'The voucher email has been sent again.', 'voucher-captain' ) );
+		} else {
+			wc_add_notice( __( 'The voucher email could not be sent. Please contact us.', 'voucher-captain' ), 'error' );
+		}
+		wp_safe_redirect( wp_get_referer() ? wp_get_referer() : wc_get_account_endpoint_url( self::ENDPOINT ) );
+		exit;
 	}
 
 	public function admin_url( Voucher $voucher, bool $download = false ): string {

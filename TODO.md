@@ -36,9 +36,9 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 ## P1 – Allgemeine Gutschein-Grundlage
 
 - [ ] Gutscheintyp und Einlöseweg generisch erweiterbar machen, ohne Kurs- oder LMS-Felder in den Plugin-Kern aufzunehmen.
-- [ ] Transferierbarkeit als klare Produkteinstellung abbilden und für Vorlagen/E-Mails als Platzhalter bereitstellen.
-- [ ] Ablaufdatum, Restwert, Übertragbarkeit und Einlösebedingungen in Admin, Kundenkonto und PDF-Vorlagen ausgeben. *(teilweise: Ablauf und Restwert erscheinen in Admin, Kundenkonto-Tab und als PDF-Platzhalter; Übertragbarkeit und Einlösebedingungen fehlen)*
-- [ ] Erneuten Versand für berechtigte Käufer im Kundenkonto ergänzen.
+- [x] Transferierbarkeit als klare Produkteinstellung abbilden und für Vorlagen/E-Mails als Platzhalter bereitstellen. — *Nachweis: Produktoption „Übertragbar“, Platzhalter `{transferable}`; nicht übertragbare Gutscheine sind auf Käufer/Empfänger-E-Mail beschränkt; tests/account-integration.php*
+- [x] Ablaufdatum, Restwert, Übertragbarkeit und Einlösebedingungen in Admin, Kundenkonto und PDF-Vorlagen ausgeben. — *Nachweis: Admin-Detail, Kundenkonto-Tab, E-Mail, Produktseite, Platzhalter `{redemption_terms}`/`{transferable}`; Bedingungen werden beim Kauf am Gutschein festgeschrieben*
+- [x] Erneuten Versand für berechtigte Käufer im Kundenkonto ergänzen. — *Nachweis: Button „E-Mail erneut senden“ für zugestellte eigene Gutscheine, 3×/Stunde; tests/account-integration.php*
 - [x] Code-Standard auf mindestens 12 zufällige Zeichen setzen; verwechslungsanfällige Zeichen weiter ausschließen. — *Nachweis: Standard 12, Minimum 8, ohne 0/O/1/I*
 - [ ] Rabattierte Gutscheinbestellungen anhand des tatsächlich bezahlten Positionsbetrags berechnen; Steueranteile und Mehrwährung gesondert berücksichtigen. *(teilweise: Steuer und Mehrwährung werden berücksichtigt; der Wert basiert noch auf dem Positionspreis vor Rabatt. Offen: wie mit Geschenkkarten als Zahlungsmittel umgegangen wird)*
 - [ ] Auftrags- und Erstattungsdaten positionsbezogen für angeschlossene Plugins verfügbar machen.

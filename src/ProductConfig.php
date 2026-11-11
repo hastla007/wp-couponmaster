@@ -46,6 +46,8 @@ final class ProductConfig {
 		'max_checkins'        => 1,
 		'event_date'          => '',
 		'event_location'      => '',
+		'transferable'        => 'yes',
+		'redemption_terms'    => '',
 		'preview'             => 'yes',
 		'builtin_fields'      => array( 'recipient_name', 'recipient_email', 'message' ),
 		'message_maxlength'   => 300,
@@ -107,6 +109,14 @@ final class ProductConfig {
 			$config['template'] = TemplatePostType::first_template_id();
 		}
 		return apply_filters( 'vcap_product_config', $config, $product );
+	}
+
+	/**
+	 * Redemption conditions: product text, otherwise the shop default.
+	 */
+	public static function terms( array $config ): string {
+		$terms = trim( (string) ( $config['redemption_terms'] ?? '' ) );
+		return '' !== $terms ? $terms : trim( (string) get_option( 'vcap_default_terms', '' ) );
 	}
 
 	/**

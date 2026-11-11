@@ -2505,3 +2505,54 @@ msgstr "Gutschein %s: Der Rabatt konnte nicht vom Guthaben abgebucht werden. Bit
 
 msgid "Voucher Captain: the voucher database tables do not support transactions (InnoDB). Gift card balances cannot be redeemed until these tables are converted to InnoDB: %s"
 msgstr "Voucher Captain: Die Gutschein-Datenbanktabellen unterstützen keine Transaktionen (InnoDB). Geschenkkarten-Guthaben können erst eingelöst werden, wenn diese Tabellen auf InnoDB umgestellt sind: %s"
+
+msgid "Transferable – anyone with the code can redeem it."
+msgstr "Übertragbar – jede Person mit dem Code kann ihn einlösen."
+
+msgid "Personal – only the buyer or the named recipient can redeem it."
+msgstr "Persönlich – nur Käufer oder genannte Empfänger können ihn einlösen."
+
+msgid "Transferable"
+msgstr "Übertragbar"
+
+msgid "Anyone with the code may redeem it. Untick to restrict redemption to the buyer and the named recipient (their email addresses)."
+msgstr "Jede Person mit dem Code darf ihn einlösen. Deaktivieren, um die Einlösung auf Käufer und genannte Empfänger (deren E-Mail-Adressen) zu beschränken."
+
+msgid "Redemption conditions"
+msgstr "Einlösebedingungen"
+
+msgid "Shop default (WooCommerce → Settings → Vouchers)"
+msgstr "Shop-Standard (WooCommerce → Einstellungen → Gutscheine)"
+
+msgid "Shown on the product page, in emails, in the customer account and via {redemption_terms} on the PDF. Stored with each voucher at purchase."
+msgstr "Wird auf der Produktseite, in E-Mails, im Kundenkonto und über {redemption_terms} im PDF angezeigt. Wird beim Kauf mit jedem Gutschein gespeichert."
+
+msgid "Default redemption conditions"
+msgstr "Standard-Einlösebedingungen"
+
+msgid "Used when a product has no conditions of its own, e.g. \"Not exchangeable for cash. Residual value remains on the voucher.\""
+msgstr "Gilt, wenn ein Produkt keine eigenen Bedingungen hat, z. B. „Keine Barauszahlung. Restwert bleibt auf dem Gutschein erhalten.“"
+
+msgid "Transferability"
+msgstr "Übertragbarkeit"
+
+msgid "Personal, not transferable"
+msgstr "Persönlich, nicht übertragbar"
+
+msgid "Send email again"
+msgstr "E-Mail erneut senden"
+
+msgid "The request has expired. Please try again."
+msgstr "Die Anfrage ist abgelaufen. Bitte versuchen Sie es erneut."
+
+msgid "This voucher cannot be sent again."
+msgstr "Dieser Gutschein kann nicht erneut gesendet werden."
+
+msgid "This voucher was sent several times already. Please try again later."
+msgstr "Dieser Gutschein wurde bereits mehrfach gesendet. Bitte versuchen Sie es später erneut."
+
+msgid "The voucher email has been sent again."
+msgstr "Die Gutschein-E-Mail wurde erneut gesendet."
+
+msgid "The voucher email could not be sent. Please contact us."
+msgstr "Die Gutschein-E-Mail konnte nicht gesendet werden. Bitte kontaktieren Sie uns."

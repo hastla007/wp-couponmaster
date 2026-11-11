@@ -110,6 +110,10 @@ final class VoucherAdmin {
 						<?php if ( $v->is_ticket() ) : ?>
 							<tr><th><?php esc_html_e( 'Check-ins', 'voucher-captain' ); ?></th><td><?php echo esc_html( $v->checkins . ' / ' . $v->max_checkins ); ?></td></tr>
 						<?php endif; ?>
+						<tr><th><?php esc_html_e( 'Transferability', 'voucher-captain' ); ?></th><td><?php echo esc_html( $v->transferable_label() ); ?></td></tr>
+						<?php if ( '' !== $v->terms ) : ?>
+							<tr><th><?php esc_html_e( 'Redemption conditions', 'voucher-captain' ); ?></th><td><?php echo wp_kses_post( nl2br( esc_html( $v->terms ) ) ); ?></td></tr>
+						<?php endif; ?>
 						<tr><th><?php esc_html_e( 'Usage', 'voucher-captain' ); ?></th><td><?php echo esc_html( array( 'single' => __( 'Single use', 'voucher-captain' ), 'balance' => __( 'Stored balance', 'voucher-captain' ), 'unlimited' => __( 'Reusable', 'voucher-captain' ) )[ $v->usage_mode ] ?? $v->usage_mode ); ?></td></tr>
 						<tr><th><?php esc_html_e( 'Coupon', 'voucher-captain' ); ?></th><td><?php echo $v->coupon_id ? '<a href="' . esc_url( get_edit_post_link( $v->coupon_id ) ?: '' ) . '">#' . esc_html( (string) $v->coupon_id ) . '</a>' : esc_html__( 'none (ticket)', 'voucher-captain' ); ?></td></tr>
 						<tr><th><?php esc_html_e( 'Delivered', 'voucher-captain' ); ?></th><td><?php echo $v->delivered_at ? esc_html( get_date_from_gmt( $v->delivered_at, get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ) : '–'; ?></td></tr>

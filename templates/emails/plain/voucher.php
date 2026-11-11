@@ -28,6 +28,12 @@ if ( $voucher->expires_at ) {
 	/* translators: %s: date */
 	echo esc_html( sprintf( __( 'Valid until %s', 'voucher-captain' ), wp_date( vcap()->settings->date_format(), strtotime( $voucher->expires_at . ' UTC' ) ) ) ) . "\n";
 }
+if ( ! $voucher->transferable ) {
+	echo esc_html( $voucher->transferable_label() ) . "\n";
+}
+if ( '' !== $voucher->terms ) {
+	echo "\n" . esc_html( $voucher->terms ) . "\n";
+}
 if ( $voucher->message ) {
 	echo "\n" . esc_html( $voucher->message ) . "\n";
 }

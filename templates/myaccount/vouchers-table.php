@@ -59,6 +59,12 @@ $show_order = ! empty( $show_order );
 					<?php if ( $voucher->expires_at ) : ?>
 						<br><small><?php /* translators: %s: date */ printf( esc_html__( 'Valid until %s', 'voucher-captain' ), esc_html( wp_date( vcap()->settings->date_format(), strtotime( $voucher->expires_at . ' UTC' ) ) ) ); ?></small>
 					<?php endif; ?>
+					<?php if ( ! $voucher->transferable ) : ?>
+						<br><small><?php esc_html_e( 'Personal, not transferable', 'voucher-captain' ); ?></small>
+					<?php endif; ?>
+					<?php if ( '' !== $voucher->terms ) : ?>
+						<details class="vcap-terms"><summary><?php esc_html_e( 'Redemption conditions', 'voucher-captain' ); ?></summary><?php echo wp_kses_post( wpautop( esc_html( $voucher->terms ) ) ); ?></details>
+					<?php endif; ?>
 					<?php if ( \VCAP\Voucher::STATUS_SCHEDULED === $voucher->status && $voucher->delivery_at ) : ?>
 						<br><small><?php /* translators: %s: date */ printf( esc_html__( 'Delivery on %s', 'voucher-captain' ), esc_html( get_date_from_gmt( $voucher->delivery_at, vcap()->settings->date_format() ) ) ); ?></small>
 					<?php endif; ?>
@@ -80,6 +86,13 @@ $show_order = ! empty( $show_order );
 						<a class="woocommerce-button button vcap-download-button" href="<?php echo esc_url( $downloads->signed_url( $voucher ) ); ?>" target="_blank" rel="noopener">
 							<?php esc_html_e( 'Download PDF', 'voucher-captain' ); ?>
 						</a>
+					<?php endif; ?>
+					<?php if ( $downloads->customer_can_resend( $voucher ) ) : ?>
+						<form method="post" class="vcap-resend-form">
+							<input type="hidden" name="vcap_resend" value="<?php echo esc_attr( (string) $voucher->id ); ?>" />
+							<?php wp_nonce_field( 'vcap_resend_' . $voucher->id, 'vcap_resend_nonce' ); ?>
+							<button type="submit" class="woocommerce-button button vcap-resend-button"><?php esc_html_e( 'Send email again', 'voucher-captain' ); ?></button>
+						</form>
 					<?php endif; ?>
 				</td>
 			</tr>

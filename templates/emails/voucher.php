@@ -40,6 +40,15 @@ $value = 'percent' === $voucher->discount_type
 	</tr>
 </table>
 
+<?php if ( ! $voucher->transferable || '' !== $voucher->terms ) : ?>
+	<p style="font-size:12px;color:#666;margin:0 0 16px;">
+		<?php if ( ! $voucher->transferable ) : ?>
+			<?php echo esc_html( $voucher->transferable_label() ); ?><br>
+		<?php endif; ?>
+		<?php echo wp_kses_post( nl2br( esc_html( $voucher->terms ) ) ); ?>
+	</p>
+<?php endif; ?>
+
 <?php if ( $voucher->message ) : ?>
 	<blockquote style="border-left:4px solid #c9b28a;margin:0 0 16px;padding:8px 14px;font-style:italic;">
 		<?php echo wp_kses_post( nl2br( esc_html( $voucher->message ) ) ); ?>

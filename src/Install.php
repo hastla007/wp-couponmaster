@@ -137,6 +137,8 @@ final class Install {
 				delivery_at datetime NULL DEFAULT NULL,
 				delivered_at datetime NULL DEFAULT NULL,
 				token varchar(64) NOT NULL,
+				transferable tinyint(1) NOT NULL DEFAULT 1,
+				terms text NULL,
 				max_checkins int(11) unsigned NOT NULL DEFAULT 1,
 				checkins int(11) unsigned NOT NULL DEFAULT 0,
 				last_checkin_at datetime NULL DEFAULT NULL,

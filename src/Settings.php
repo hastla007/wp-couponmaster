@@ -242,6 +242,14 @@ final class Settings {
 						'desc'    => __( 'Vouchers are created once per purchased item the first time an order reaches one of these statuses. Leave empty to issue manually only.', 'voucher-captain' ),
 					),
 					array(
+						'title'    => __( 'Default redemption conditions', 'voucher-captain' ),
+						'id'       => 'vcap_default_terms',
+						'type'     => 'textarea',
+						'default'  => '',
+						'css'      => 'min-width:400px;height:80px;',
+						'desc_tip' => __( 'Used when a product has no conditions of its own, e.g. "Not exchangeable for cash. Residual value remains on the voucher."', 'voucher-captain' ),
+					),
+					array(
 						'title'   => __( 'Default template', 'voucher-captain' ),
 						'id'      => 'vcap_default_template',
 						'type'    => 'select',

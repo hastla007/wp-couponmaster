@@ -227,6 +227,24 @@ final class ProductSettings {
 				'wrapper_class' => 'vcap-show-expiry-date',
 			)
 		);
+		woocommerce_wp_checkbox(
+			array(
+				'id'          => '_vcap_transferable',
+				'label'       => __( 'Transferable', 'voucher-captain' ),
+				'value'       => $this->v( $p, 'transferable' ),
+				'description' => __( 'Anyone with the code may redeem it. Untick to restrict redemption to the buyer and the named recipient (their email addresses).', 'voucher-captain' ),
+			)
+		);
+		woocommerce_wp_textarea_input(
+			array(
+				'id'          => '_vcap_redemption_terms',
+				'label'       => __( 'Redemption conditions', 'voucher-captain' ),
+				'value'       => $this->v( $p, 'redemption_terms' ),
+				'placeholder' => __( 'Shop default (WooCommerce → Settings → Vouchers)', 'voucher-captain' ),
+				'desc_tip'    => true,
+				'description' => __( 'Shown on the product page, in emails, in the customer account and via {redemption_terms} on the PDF. Stored with each voucher at purchase.', 'voucher-captain' ),
+			)
+		);
 		echo '</div>';
 
 		echo '<div class="options_group"><h4 class="vcap-group-title">' . esc_html__( 'Coupon restrictions', 'voucher-captain' ) . '</h4>';
@@ -471,7 +489,8 @@ final class ProductSettings {
 		}
 		$event = (string) ( $post['_vcap_event_date'] ?? '' );
 		$product->update_meta_data( '_vcap_event_date', preg_match( '/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/', $event ) ? $event : '' );
-		foreach ( array( 'free_shipping', 'individual_use', 'exclude_sale', 'preview', 'buyer_copy' ) as $key ) {
+		$product->update_meta_data( '_vcap_redemption_terms', sanitize_textarea_field( (string) ( $post['_vcap_redemption_terms'] ?? '' ) ) );
+		foreach ( array( 'free_shipping', 'individual_use', 'exclude_sale', 'preview', 'buyer_copy', 'transferable' ) as $key ) {
 			$product->update_meta_data( '_vcap_' . $key, isset( $post[ '_vcap_' . $key ] ) ? 'yes' : 'no' );
 		}
 		foreach ( array( 'product_ids', 'exclude_product_ids', 'category_ids', 'exclude_category_ids' ) as $key ) {

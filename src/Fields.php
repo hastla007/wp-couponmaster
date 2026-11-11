@@ -270,6 +270,19 @@ final class Fields {
 		foreach ( $defs as $key => $field ) {
 			$this->render_field( $key, $field );
 		}
+		if ( 'before_button' === $position ) {
+			$terms = ProductConfig::terms( $config );
+			if ( '' !== $terms || 'no' === $config['transferable'] ) {
+				echo '<details class="vcap-terms"><summary>' . esc_html__( 'Redemption conditions', 'voucher-captain' ) . '</summary>';
+				if ( 'no' === $config['transferable'] ) {
+					echo '<p>' . esc_html__( 'Personal – only the buyer or the named recipient can redeem it.', 'voucher-captain' ) . '</p>';
+				}
+				if ( '' !== $terms ) {
+					echo wp_kses_post( wpautop( esc_html( $terms ) ) );
+				}
+				echo '</details>';
+			}
+		}
 		if ( 'before_button' === $position && 'yes' === $config['preview'] ) {
 			echo '<p class="vcap-preview-row"><button type="button" class="button vcap-preview-button" data-product="' . esc_attr( (string) $product->get_id() ) . '">' . esc_html__( 'Preview voucher', 'voucher-captain' ) . '</button></p>';
 		}

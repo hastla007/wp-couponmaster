@@ -149,7 +149,12 @@ final class CouponManager {
 		$coupon->set_product_categories( array_map( 'intval', (array) $config['category_ids'] ) );
 		$coupon->set_excluded_product_categories( array_map( 'intval', (array) $config['exclude_category_ids'] ) );
 
-		$emails = array();
+		$emails   = array();
+		$restrict = (string) $config['email_restrict'];
+		if ( ! $voucher->transferable && 'none' === $restrict ) {
+			$restrict = 'both'; // Personal voucher: only buyer and named recipient.
+		}
+		$config['email_restrict'] = $restrict;
 		if ( 'recipient' === $config['email_restrict'] && is_email( $voucher->recipient_email ) ) {
 			$emails[] = $voucher->recipient_email;
 		} elseif ( 'buyer' === $config['email_restrict'] && is_email( $voucher->buyer_email ) ) {

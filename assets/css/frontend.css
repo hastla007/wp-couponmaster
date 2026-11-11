@@ -15,3 +15,7 @@
 .vcap-download { text-align: right; }
 .vcap-balance-form { display: flex; flex-wrap: wrap; gap: .5em; align-items: center; }
 .vcap-balance-form label { flex-basis: 100%; font-weight: 600; }
+
+.vcap-resend-form { display: inline-block; margin: .3em 0 0; }
+.vcap-terms { margin: .4em 0; font-size: .9em; }
+.vcap-terms summary { cursor: pointer; }
