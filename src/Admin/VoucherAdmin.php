@@ -244,7 +244,7 @@ final class VoucherAdmin {
 				if ( 'resend_buyer' === $do && ! $sent && isset( WC()->mailer()->get_emails()['VCAP_Email_Voucher_Buyer'] ) ) {
 					WC()->mailer()->get_emails()['VCAP_Email_Voucher_Buyer']->trigger( $v );
 				}
-				$this->repo->log( $v->id, 'resent', null, null, 'resend_buyer' === $do ? $v->buyer_email : $v->recipient_email );
+				$this->repo->log( $v->id, 'resent', null, null, 'resend_buyer' === $do ? 'Sent to buyer' : 'Sent to recipient' );
 				$this->redirect( 'resent', $id );
 				break;
 			case 'void':
