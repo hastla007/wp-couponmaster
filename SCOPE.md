@@ -2,7 +2,18 @@
 
 ## Goal
 
-Build an original WooCommerce plugin with functional breadth comparable to Flexible PDF Coupons: merchants can turn products into gift cards, vouchers, or tickets, design printable PDFs, issue redeemable codes, personalize delivery, and manage redemption. Use original naming, code, UI, and visual assets; this is a functional reference, not a code or brand copy.
+Build an original WooCommerce plugin for gift vouchers, gift cards, stored-value balances, discount coupons, personalisation, PDF delivery, and voucher redemption. It can issue voucher-like service passes, but it is not the event catalogue, seat inventory, checkout, or event-entry system. Use original naming, code, UI, and visual assets; Flexible PDF Coupons is a functional reference, not a code or brand copy.
+
+
+## Boundary with Ticket Captain
+
+Voucher Captain and Ticket Captain are separate plugins with separate WordPress plugin entries, activation, updates, admin menus, and data ownership. When both are active, a versioned bridge connects their functions; neither plugin requires the other to operate.
+
+- Voucher Captain owns voucher codes, discount rules, gift-card balances, voucher delivery, voucher-level redemption, and voucher history.
+- Ticket Captain owns event/occurrence data, ticket categories and capacities, event orders, seat assignments, event admission tickets, check-in, and ticket-specific refunds/status.
+- A Voucher Captain gift voucher may be configured to issue one or more Ticket Captain tickets after successful redemption. Ticket Captain may use a Voucher Captain code in its checkout only through reserve/commit/release/refund services.
+- Voucher Captain's existing scanner remains available for its own voucher/pass operations. Event admission uses Ticket Captain's ticket status and check-in records. A shared scanner may route by code prefix but must never confuse voucher redemption with event check-in.
+- Customer-specific course access remains in the separate Bootsschule/Learnboating connector.
 
 ## Feature inventory
 
