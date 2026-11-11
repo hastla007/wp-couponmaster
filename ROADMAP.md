@@ -1,4 +1,6 @@
-# WP Voucher Captain – Roadmap
+# WP Voucher Captain – 50-Punkte-Roadmap
+
+Abgehakte Punkte sind im aktuellen PR implementiert und/oder durch die aufgeführten CI-Läufe abgedeckt. Offene Punkte bleiben die nächsten Umsetzungsschritte.
 
 ## Zielplattform
 
@@ -10,28 +12,28 @@
 ## P0 – Finanz- und Zustellkorrektheit
 
 1. [ ] Reservieren, Bestätigen, Freigeben und Erstatten als klaren Zustandsautomaten dokumentieren.
-2. [ ] Wiederaufnahme unvollständiger Mehrgutschein-Reservierungen bei Checkout-Retry absichern.
-3. [ ] Wiederholte Zahlungsversuche vor Gateway-Aufruf erneut reservieren.
-4. [ ] Store-API-Reservierungsfehler als verständliche Checkout-Fehler ausgeben.
-5. [ ] Ledger-Schreibfehler in allen Guthaben-Transaktionen zum Rollback führen.
-6. [ ] Abbuchungs-Idempotenz gegen die jeweils letzte Ereigniszeile absichern.
-7. [ ] Erstattungen unter Zeilensperre idempotent verbuchen.
-8. [ ] Bestellmetadaten bei Teilfehlern erst nach vollständig erfolgreicher Wiederherstellung löschen.
-9. [ ] E-Mail-Zustellungen mit auslaufender Sperre gegen Worker-Abbrüche absichern.
-10. [ ] Zustellungen bei fehlender Adresse, deaktivierter E-Mail oder Versandfehler wiederholbar halten.
+2. [x] Wiederaufnahme unvollständiger Mehrgutschein-Reservierungen bei Checkout-Retry absichern.
+3. [x] Wiederholte Zahlungsversuche vor Gateway-Aufruf erneut reservieren.
+4. [x] Store-API-Reservierungsfehler als verständliche Checkout-Fehler ausgeben.
+5. [x] Ledger-Schreibfehler in allen Guthaben-Transaktionen zum Rollback führen.
+6. [x] Abbuchungs-Idempotenz gegen die jeweils letzte Ereigniszeile absichern.
+7. [x] Erstattungen unter Zeilensperre idempotent verbuchen.
+8. [x] Bestellmetadaten bei Teilfehlern erst nach vollständig erfolgreicher Wiederherstellung löschen.
+9. [x] E-Mail-Zustellungen mit auslaufender Sperre gegen Worker-Abbrüche absichern.
+10. [x] Zustellungen bei fehlender Adresse, deaktivierter E-Mail oder Versandfehler wiederholbar halten.
 
 ## P0 – Automatisierte Qualitätssicherung
 
-11. [ ] Smoke-Tests und PHP-Lint für PHP 8.1 und 8.4 in GitHub Actions ausführen.
-12. [ ] WordPress-Integrationstests mit WooCommerce 11.2.2 ergänzen.
-13. [ ] CI-Datenbankmatrix für MySQL 8.4 und MariaDB 11.4 einrichten.
+11. [x] Smoke-Tests und PHP-Lint für PHP 8.1 und 8.4 in GitHub Actions ausführen.
+12. [x] WordPress-Integrationstests mit WooCommerce 11.2.2 ergänzen.
+13. [x] CI-Datenbankmatrix für MySQL 8.4 und MariaDB 11.4 einrichten.
 14. [ ] Parallel-Checkout-Test für denselben Guthabengutschein ergänzen.
 15. [ ] Fehler-Injektion für fehlgeschlagene Ledger-INSERTs und Voucher-UPDATEs ergänzen.
-16. [ ] Statusfolgen pending → processing → failed → payment retry → processing abdecken.
-17. [ ] Mehrgutschein-Checkout bei Abbruch nach erster Reservierung testen.
+16. [x] Statusfolgen pending → processing → failed → payment retry → processing abdecken.
+17. [x] Mehrgutschein-Checkout bei Abbruch nach erster Reservierung testen.
 18. [ ] Erstattung parallel zu neuer Einlösung testen.
 19. [ ] Zustelltests für Prozessabbruch, leere Empfängerliste und Mailer-Fehler ergänzen.
-20. [ ] CI-Ergebnisse und bekannte Grenzen im PR- und Release-Checklistenprozess dokumentieren.
+20. [x] CI-Ergebnisse und bekannte Grenzen im PR- und Release-Checklistenprozess dokumentieren.
 
 ## P1 – WordPress- und WooCommerce-Kompatibilität
 
