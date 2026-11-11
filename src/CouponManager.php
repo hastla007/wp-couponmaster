@@ -149,12 +149,12 @@ final class CouponManager {
 						$this->release_reservation_atomic( $reserved_voucher, $order->get_id(), __( 'Checkout reservation rolled back', 'voucher-captain' ) );
 					}
 				}
+				$order->delete_meta_data( '_vcap_reservations' );
+				$order->save();
 				throw new \Exception( __( 'A voucher balance changed while checkout was processing. Your order was not sent for payment. Refresh the cart and try again.', 'voucher-captain' ) );
 			}
 			$made[ $code ] = $reservation['amount'];
-		}
-
-		if ( $made ) {
+			// Persist incrementally so failed/cancelled orders can release a reservation after a partial failure.
 			$order->update_meta_data( '_vcap_reservations', $made );
 			$order->save();
 		}
