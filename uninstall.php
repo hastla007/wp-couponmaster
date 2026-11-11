@@ -14,7 +14,7 @@ foreach ( array( 'vcap_vouchers', 'vcap_events', 'vcap_code_pool' ) as $table ) 
 	$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}{$table}" ); // phpcs:ignore
 }
 foreach ( array( 'vcap_template', 'vcap_field_group' ) as $post_type ) {
-	$ids = get_posts( array( 'post_type' => $post_type, 'post_status' => 'any', 'numberposts' => -1, 'fields' => 'ids' ) );
+	$ids = get_posts( array( 'post_type' => $post_type, 'post_status' => array( 'any', 'trash', 'auto-draft' ), 'numberposts' => -1, 'fields' => 'ids' ) );
 	foreach ( $ids as $id ) {
 		wp_delete_post( $id, true );
 	}

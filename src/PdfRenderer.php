@@ -31,6 +31,20 @@ final class PdfRenderer {
 	private static array $height_ratio = array();
 
 	/**
+	 * CSS font-family list for dompdf. dompdf falls back per glyph to the next family, so characters missing in
+	 * the chosen font (e.g. ✓ ★ in DejaVu Serif Italic, € in the core Courier) come from DejaVu Sans instead of
+	 * rendering as empty boxes.
+	 */
+	public static function font_stack( string $font ): string {
+		$font  = str_replace( array( "'", '"', ';', '<', '>' ), '', $font );
+		$stack = "'" . $font . "'";
+		if ( 'DejaVu Sans' !== $font ) {
+			$stack .= ", 'DejaVu Sans'";
+		}
+		return $stack;
+	}
+
+	/**
 	 * dompdf multiplies CSS line-height by the font's own height ratio (≈1.28 for DejaVu, 0.86 for Courier),
 	 * browsers do not. Dividing by this ratio makes the PDF line pitch equal to the designer canvas.
 	 */
@@ -274,8 +288,8 @@ final class PdfRenderer {
 
 		$style  = $this->box_style( $el );
 		$inner  = sprintf(
-			"font-family:'%s';font-size:%spt;line-height:%s;color:%s;text-align:%s;font-weight:%s;font-style:%s;%s",
-			esc_attr( $font ),
+			"font-family:%s;font-size:%spt;line-height:%s;color:%s;text-align:%s;font-weight:%s;font-style:%s;%s",
+			self::font_stack( (string) $font ),
 			$this->num( $size ),
 			$this->num( $lh ),
 			$this->color( $el['color'] ?? '#000000' ),

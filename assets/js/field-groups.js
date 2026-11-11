@@ -38,20 +38,33 @@
 		return $r;
 	}
 
+	var RESERVED = [ 'recipient_name', 'recipient_email', 'message', 'delivery_date' ];
+
 	function slug( s ) {
-		return String( s ).toLowerCase().normalize( 'NFD' ).replace( /[̀-ͯ]/g, '' ).replace( /[^a-z0-9]+/g, '_' ).replace( /^_+|_+$/g, '' );
+		return String( s ).toLowerCase().replace( /ß/g, 'ss' ).normalize( 'NFD' ).replace( /[̀-ͯ]/g, '' ).replace( /[^a-z0-9]+/g, '_' ).replace( /^_+|_+$/g, '' );
 	}
 
 	function refresh( $list ) {
 		var data = [];
+		var used = {};
 		$list.find( '.vcap-fg-row' ).each( function () {
 			var $r = $( this );
 			var f = {};
 			$r.find( '[data-k]' ).each( function () {
 				f[ $( this ).data( 'k' ) ] = 'checkbox' === this.type ? this.checked : $( this ).val();
 			} );
-			if ( ! f.key && f.label ) {
-				f.key = slug( f.label );
+			// Same rules as Fields::save_group(): the token shown is exactly the key that will be saved.
+			f.key = slug( f.key || f.label || '' );
+			if ( f.key ) {
+				if ( /^[0-9]+$/.test( f.key ) ) {
+					f.key = 'field_' + f.key;
+				}
+				var base = f.key;
+				var n = 2;
+				while ( -1 !== RESERVED.indexOf( f.key ) || used[ f.key ] ) {
+					f.key = base + '_' + n++;
+				}
+				used[ f.key ] = true;
 			}
 			$r.find( '.vcap-fg-options' ).toggle( 'select' === f.type );
 			$r.find( '.vcap-fg-token' ).text( f.key ? t.placeholderToken + ' {field:' + f.key + '}' : '' );
