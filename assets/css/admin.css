@@ -9,6 +9,7 @@
 mark.vcap-status { display: inline-flex; line-height: 2.2; border-radius: 4px; padding: 0 .8em; background: #e5e5e5; color: #454545; font-size: 12px; white-space: nowrap; }
 mark.vcap-status--active { background: #c6e1c6; color: #2c4700; }
 mark.vcap-status--scheduled { background: #c8d7e1; color: #2e4453; }
+mark.vcap-status--reserved { background: #e5d5f2; color: #4a2a63; }
 mark.vcap-status--redeemed { background: #f8dda7; color: #573b00; }
 mark.vcap-status--expired, mark.vcap-status--void { background: #eba3a3; color: #761919; }
 .vcap-order-vouchers li { border-bottom: 1px solid #f0f0f1; padding-bottom: 6px; }

@@ -20,6 +20,7 @@ final class Plugin {
 	public Fields $fields;
 	public Tickets $tickets;
 	public API\V1\VoucherService $api_v1;
+	public API\V1\RedemptionService $redemptions;
 
 	public static function instance(): Plugin {
 		if ( null === self::$instance ) {
@@ -45,6 +46,7 @@ final class Plugin {
 		$this->fields    = new Fields();
 		$this->tickets   = new Tickets( $this->vouchers );
 		$this->api_v1    = new API\V1\VoucherService( $this->vouchers, $this->coupons );
+		$this->redemptions = new API\V1\RedemptionService( $this->vouchers );
 
 		( new TemplatePostType() )->register();
 		( new ProductSettings() )->register();
@@ -60,6 +62,8 @@ final class Plugin {
 		$this->issuer->register();
 		$this->fields->register();
 		$this->tickets->register();
+		$this->redemptions->register();
+		( new API\V1\RestController( $this->redemptions ) )->register();
 
 		( new Compat\Subscriptions() )->register();
 		( new Compat\Wpml() )->register();

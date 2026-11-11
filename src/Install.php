@@ -62,6 +62,7 @@ final class Install {
 			'vouchers' => $wpdb->prefix . 'vcap_vouchers',
 			'events'   => $wpdb->prefix . 'vcap_events',
 			'pool'     => $wpdb->prefix . 'vcap_code_pool',
+			'redemptions' => $wpdb->prefix . 'vcap_redemptions',
 		);
 	}
 
@@ -71,7 +72,7 @@ final class Install {
 		}
 		global $wpdb;
 		$tables = self::tables();
-		foreach ( array( 'vouchers', 'events' ) as $key ) {
+		foreach ( array( 'vouchers', 'events', 'redemptions' ) as $key ) {
 			$engine = $wpdb->get_var(
 				$wpdb->prepare(
 					'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s',
@@ -88,7 +89,7 @@ final class Install {
 	private static function ensure_transactional_tables( array $tables ): void {
 		global $wpdb;
 		self::$transactional_tables = null;
-		foreach ( array( 'vouchers', 'events' ) as $key ) {
+		foreach ( array( 'vouchers', 'events', 'redemptions' ) as $key ) {
 			$engine = $wpdb->get_var(
 				$wpdb->prepare(
 					'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s',
@@ -182,6 +183,28 @@ final class Install {
 				PRIMARY KEY  (id),
 				UNIQUE KEY code (code),
 				KEY batch_free (batch,voucher_id)
+			) ENGINE=InnoDB $collate;"
+		);
+		// External (order-less) redemptions, see API\V1\RedemptionService. redemption_key is the caller's idempotency key.
+		dbDelta(
+			"CREATE TABLE {$t['redemptions']} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				redemption_key varchar(64) NOT NULL,
+				voucher_id bigint(20) unsigned NOT NULL,
+				user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				target varchar(191) NOT NULL DEFAULT '',
+				amount decimal(19,4) NOT NULL DEFAULT 0,
+				state varchar(20) NOT NULL DEFAULT 'reserved',
+				request_hash char(64) NOT NULL,
+				meta longtext NULL,
+				expires_at datetime NULL DEFAULT NULL,
+				created_at datetime NOT NULL,
+				updated_at datetime NOT NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY redemption_key (redemption_key),
+				KEY voucher_id (voucher_id),
+				KEY user_id (user_id),
+				KEY state_expires (state,expires_at)
 			) ENGINE=InnoDB $collate;"
 		);
 		self::ensure_transactional_tables( $t );

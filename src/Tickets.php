@@ -100,6 +100,9 @@ final class Tickets {
 		} elseif ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
 			$state   = 'warning';
 			$message = __( 'Not yet delivered', 'voucher-captain' );
+		} elseif ( Voucher::STATUS_RESERVED === $voucher->status ) {
+			$state   = 'warning';
+			$message = __( 'Currently being redeemed elsewhere', 'voucher-captain' );
 		}
 		return array(
 			'id'             => $voucher->id,

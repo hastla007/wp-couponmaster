@@ -10,7 +10,7 @@ if ( 'yes' !== get_option( 'vcap_delete_on_uninstall', 'no' ) ) {
 }
 
 global $wpdb;
-foreach ( array( 'vcap_vouchers', 'vcap_events', 'vcap_code_pool' ) as $table ) {
+foreach ( array( 'vcap_vouchers', 'vcap_events', 'vcap_code_pool', 'vcap_redemptions' ) as $table ) {
 	$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}{$table}" ); // phpcs:ignore
 }
 foreach ( array( 'vcap_template', 'vcap_field_group' ) as $post_type ) {

@@ -102,6 +102,7 @@ jobs:
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/woocommerce-integration.php"
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/compatibility-integration.php"
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/security-integration.php"
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/redemption-integration.php"
       - name: Verify uninstall preserves data by default and deletes only when opted in
         run: |
           php wp-cli.phar --path=wp-test option update vcap_delete_on_uninstall no

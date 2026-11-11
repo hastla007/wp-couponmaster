@@ -617,6 +617,10 @@ final class CouponManager {
 		if ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
 			throw new \Exception( esc_html__( 'This voucher is not active yet.', 'voucher-captain' ), 9004 );
 		}
+		if ( Voucher::STATUS_RESERVED === $voucher->status ) {
+			// Being redeemed outside the shop right now (API reservation); released again if that fails.
+			throw new \Exception( esc_html__( 'This voucher is currently being redeemed. Please try again in a few minutes.', 'voucher-captain' ), 9005 );
+		}
 		if ( Voucher::STATUS_REDEEMED === $voucher->status || ( $voucher->is_multi_use() && $voucher->balance <= 0 ) ) {
 			throw new \Exception( esc_html__( 'This voucher has already been fully redeemed.', 'voucher-captain' ), 9002 );
 		}

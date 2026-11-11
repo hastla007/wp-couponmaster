@@ -54,7 +54,39 @@ final class Privacy {
 				'data'        => $data,
 			);
 		}
+		if ( 1 === $page ) {
+			foreach ( $this->redemptions_of( $email ) as $row ) {
+				$items[] = array(
+					'group_id'    => 'vcap-redemptions',
+					'group_label' => __( 'Voucher redemptions', 'voucher-captain' ),
+					'item_id'     => 'vcap-redemption-' . $row['id'],
+					'data'        => array(
+						array( 'name' => __( 'Redemption key', 'voucher-captain' ), 'value' => $row['redemption_key'] ),
+						array( 'name' => __( 'Target', 'voucher-captain' ), 'value' => $row['target'] ),
+						array( 'name' => __( 'Status', 'voucher-captain' ), 'value' => $row['state'] ),
+						array( 'name' => __( 'Date', 'voucher-captain' ), 'value' => $row['created_at'] ),
+						array( 'name' => __( 'Details', 'voucher-captain' ), 'value' => (string) $row['meta'] ),
+					),
+				);
+			}
+		}
 		return array( 'data' => $items, 'done' => count( $vouchers ) < 500 );
+	}
+
+	/**
+	 * External redemptions made by the WordPress user with this email address.
+	 *
+	 * @param string $email Email.
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function redemptions_of( string $email ): array {
+		global $wpdb;
+		$user = get_user_by( 'email', $email );
+		if ( ! $user ) {
+			return array();
+		}
+		$table = Install::tables()['redemptions'];
+		return $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE user_id = %d ORDER BY id LIMIT 1000", $user->ID ), ARRAY_A ) ?: array(); // phpcs:ignore
 	}
 
 	public function erase( string $email, int $page = 1 ): array {
@@ -84,6 +116,18 @@ final class Privacy {
 				continue;
 			}
 			$removed = true;
+		}
+		// Unlink external redemptions from the user and drop integration details (amounts stay for accounting).
+		$user = get_user_by( 'email', $email );
+		if ( $user ) {
+			global $wpdb;
+			$table   = Install::tables()['redemptions'];
+			$changed = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET user_id = 0, meta = '[]' WHERE user_id = %d", $user->ID ) ); // phpcs:ignore
+			if ( false === $changed ) {
+				$retained = true;
+			} elseif ( $changed > 0 ) {
+				$removed = true;
+			}
 		}
 		return array(
 			'items_removed'  => $removed,

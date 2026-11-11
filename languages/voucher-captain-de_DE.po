@@ -2301,3 +2301,195 @@ msgstr "Zustellung fehlgeschlagen"
 
 msgid "No email was sent (email disabled or no valid address)."
 msgstr "Es wurde keine E-Mail gesendet (E-Mail deaktiviert oder keine gültige Adresse)."
+
+msgid "A redemption key of 8–64 characters (letters, digits, . _ : -) is required."
+msgstr "Ein Einlöseschlüssel mit 8–64 Zeichen (Buchstaben, Ziffern, . _ : -) ist erforderlich."
+
+msgid "A redemption target is required."
+msgstr "Ein Einlöseziel ist erforderlich."
+
+msgid "A reserved voucher that is neither completed nor cancelled within this time is released automatically."
+msgstr "Ein reservierter Gutschein, der in dieser Zeit weder abgeschlossen noch storniert wird, wird automatisch wieder freigegeben."
+
+msgid "A saved order and a positive amount are required."
+msgstr "Eine gespeicherte Bestellung und ein positiver Betrag sind erforderlich."
+
+msgid "A stored-value voucher balance changed during checkout. Review this order and adjust the charge before fulfilment."
+msgstr "Das Guthaben eines Gutscheins hat sich während des Bezahlvorgangs geändert. Bitte prüfen Sie diese Bestellung und passen Sie den Betrag vor der Ausführung an."
+
+msgid "A voucher balance changed while checkout was processing. Your order was not sent for payment. Refresh the cart and try again."
+msgstr "Ein Gutscheinguthaben hat sich während der Bestellung geändert. Ihre Bestellung wurde nicht zur Zahlung weitergeleitet. Bitte aktualisieren Sie den Warenkorb und versuchen Sie es erneut."
+
+msgid "An earlier voucher reservation could not be released. Please contact the store before trying again."
+msgstr "Eine frühere Gutschein-Reservierung konnte nicht freigegeben werden. Bitte wenden Sie sich an den Shop, bevor Sie es erneut versuchen."
+
+msgid "Balance could not be saved. Check the database tables and try again."
+msgstr "Das Guthaben konnte nicht gespeichert werden. Bitte prüfen Sie die Datenbanktabellen und versuchen Sie es erneut."
+
+msgid "Balance reservation committed"
+msgstr "Guthaben-Reservierung verbucht"
+
+msgid "Balance reservation released"
+msgstr "Guthaben-Reservierung freigegeben"
+
+msgid "Balance reserved for payment"
+msgstr "Guthaben für Zahlung reserviert"
+
+msgid "Checkout reservation reconciled"
+msgstr "Kassen-Reservierung abgeglichen"
+
+msgid "Checkout reservation rolled back"
+msgstr "Kassen-Reservierung zurückgenommen"
+
+msgid "Currently being redeemed elsewhere"
+msgstr "Wird gerade anderweitig eingelöst"
+
+msgid "External redemptions"
+msgstr "Externe Einlösungen"
+
+msgid "External reservation released"
+msgstr "Externe Reservierung freigegeben"
+
+msgid "Integrations (API)"
+msgstr "Integrationen (API)"
+
+msgid "Invalid code attempts"
+msgstr "Fehlversuche mit ungültigen Codes"
+
+msgid "Invalid redemption key."
+msgstr "Ungültiger Einlöseschlüssel."
+
+msgid "No matching voucher reservation could be committed."
+msgstr "Es konnte keine passende Gutschein-Reservierung verbucht werden."
+
+msgid "No matching voucher reservation could be released."
+msgstr "Es konnte keine passende Gutschein-Reservierung freigegeben werden."
+
+msgid "No redemption exists for this key."
+msgstr "Für diesen Schlüssel existiert keine Einlösung."
+
+msgid "Number of invalid codes a user may enter within 15 minutes before further attempts are blocked. 0 = no limit."
+msgstr "Anzahl ungültiger Codes, die ein Nutzer innerhalb von 15 Minuten eingeben darf, bevor weitere Versuche gesperrt werden. 0 = keine Begrenzung."
+
+msgid "Other plugins and apps can redeem vouchers through the PHP service vcap()->redemptions or the REST API /wp-json/vcap/v1/redemptions (see API.md)."
+msgstr "Andere Plugins und Apps können Gutscheine über den PHP-Service vcap()->redemptions oder die REST-API /wp-json/vcap/v1/redemptions einlösen (siehe API.md)."
+
+msgid "Please enter an amount matching the allowed increment."
+msgstr "Bitte geben Sie einen Betrag in der erlaubten Schrittweite ein."
+
+msgid "Please log in to redeem a voucher."
+msgstr "Bitte melden Sie sich an, um einen Gutschein einzulösen."
+
+msgid "Please specify the amount to redeem from this gift card."
+msgstr "Bitte geben Sie an, welcher Betrag von dieser Geschenkkarte eingelöst werden soll."
+
+msgid "Redeemed externally"
+msgstr "Extern eingelöst"
+
+msgid "Redemption %1$s for %2$s"
+msgstr "Einlösung %1$s für %2$s"
+
+msgid "Redemption key"
+msgstr "Einlöseschlüssel"
+
+msgid "Released by an integration"
+msgstr "Durch eine Integration freigegeben"
+
+msgid "Released from order #%s"
+msgstr "Aus Bestellung #%s freigegeben"
+
+msgid "Reservation lifetime (minutes)"
+msgstr "Gültigkeit einer Reservierung (Minuten)"
+
+msgid "Reserved"
+msgstr "Reserviert"
+
+msgid "Reserved by an integration"
+msgstr "Durch eine Integration reserviert"
+
+msgid "Reserved for external redemption"
+msgstr "Für externe Einlösung reserviert"
+
+msgid "Reserved for order #%s"
+msgstr "Für Bestellung #%s reserviert"
+
+msgid "Some voucher balances could not be restored. Review this order and retry the refund handling."
+msgstr "Einige Gutscheinguthaben konnten nicht zurückgebucht werden. Bitte prüfen Sie diese Bestellung und wiederholen Sie die Erstattung."
+
+msgid "Some voucher records could not be fully anonymised. Please retry the erasure request."
+msgstr "Einige Gutscheindaten konnten nicht vollständig anonymisiert werden. Bitte wiederholen Sie die Löschanfrage."
+
+msgid "Some voucher reservations could not be committed. Review this order before fulfilment."
+msgstr "Einige Gutschein-Reservierungen konnten nicht verbucht werden. Bitte prüfen Sie diese Bestellung vor der Ausführung."
+
+msgid "Some voucher reservations could not be released. Review this order."
+msgstr "Einige Gutschein-Reservierungen konnten nicht freigegeben werden. Bitte prüfen Sie diese Bestellung."
+
+msgid "Target"
+msgstr "Ziel"
+
+msgid "The remaining voucher balance is not sufficient."
+msgstr "Das verbleibende Gutscheinguthaben reicht nicht aus."
+
+msgid "The selected offer is currently not available."
+msgstr "Das gewählte Angebot ist derzeit nicht verfügbar."
+
+msgid "The voucher could not be redeemed right now. Please try again."
+msgstr "Der Gutschein konnte gerade nicht eingelöst werden. Bitte versuchen Sie es erneut."
+
+msgid "This operation requires a stored-balance voucher."
+msgstr "Dieser Vorgang erfordert einen Gutschein mit Guthaben."
+
+msgid "This redemption belongs to another user."
+msgstr "Diese Einlösung gehört einem anderen Nutzer."
+
+msgid "This redemption has already been completed."
+msgstr "Diese Einlösung wurde bereits abgeschlossen."
+
+msgid "This redemption key was already used for another request."
+msgstr "Dieser Einlöseschlüssel wurde bereits für eine andere Anfrage verwendet."
+
+msgid "This reservation has expired or was cancelled. Please redeem the voucher again."
+msgstr "Diese Reservierung ist abgelaufen oder wurde storniert. Bitte lösen Sie den Gutschein erneut ein."
+
+msgid "This voucher can only be used in the shop."
+msgstr "Dieser Gutschein kann nur im Shop verwendet werden."
+
+msgid "This voucher cannot be used for this purpose."
+msgstr "Dieser Gutschein kann hierfür nicht verwendet werden."
+
+msgid "This voucher code is not valid."
+msgstr "Dieser Gutscheincode ist ungültig."
+
+msgid "This voucher has already been redeemed."
+msgstr "Dieser Gutschein wurde bereits eingelöst."
+
+msgid "This voucher is currently being redeemed. Please try again in a few minutes."
+msgstr "Dieser Gutschein wird gerade eingelöst. Bitte versuchen Sie es in einigen Minuten erneut."
+
+msgid "This voucher is not valid for your account."
+msgstr "Dieser Gutschein ist für Ihr Konto nicht gültig."
+
+msgid "Tickets are checked in at the entrance and cannot be redeemed here."
+msgstr "Tickets werden am Einlass eingecheckt und können hier nicht eingelöst werden."
+
+msgid "Too many invalid voucher codes. Please try again later."
+msgstr "Zu viele ungültige Gutscheincodes. Bitte versuchen Sie es später erneut."
+
+msgid "Voucher balance is unavailable or has changed."
+msgstr "Das Gutscheinguthaben ist nicht verfügbar oder hat sich geändert."
+
+msgid "Voucher balance shortfall requires manual review before fulfilment."
+msgstr "Fehlendes Gutscheinguthaben erfordert vor der Ausführung eine manuelle Prüfung."
+
+msgid "Voucher email was sent but its delivery state could not be saved."
+msgstr "Die Gutschein-E-Mail wurde versendet, aber der Zustellstatus konnte nicht gespeichert werden."
+
+msgid "Voucher redemption is temporarily unavailable."
+msgstr "Die Gutscheineinlösung ist vorübergehend nicht verfügbar."
+
+msgid "Voucher redemptions"
+msgstr "Gutscheineinlösungen"
+
+msgid "expired"
+msgstr "abgelaufen"

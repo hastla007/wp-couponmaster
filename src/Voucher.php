@@ -13,6 +13,8 @@ final class Voucher {
 	public const STATUS_EXPIRED   = 'expired';
 	public const STATUS_VOID      = 'void';
 	public const STATUS_SCHEDULED = 'scheduled';
+	/** Locked by an external redemption that is not committed yet (see API\V1\RedemptionService). */
+	public const STATUS_RESERVED  = 'reserved';
 
 	public int $id               = 0;
 	public string $code          = '';
@@ -52,6 +54,7 @@ final class Voucher {
 		return array(
 			self::STATUS_ACTIVE    => __( 'Active', 'voucher-captain' ),
 			self::STATUS_SCHEDULED => __( 'Scheduled', 'voucher-captain' ),
+			self::STATUS_RESERVED  => __( 'Reserved', 'voucher-captain' ),
 			self::STATUS_REDEEMED  => __( 'Redeemed', 'voucher-captain' ),
 			self::STATUS_EXPIRED   => __( 'Expired', 'voucher-captain' ),
 			self::STATUS_VOID      => __( 'Void', 'voucher-captain' ),

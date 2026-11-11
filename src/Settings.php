@@ -31,6 +31,8 @@ final class Settings {
 		'vcap_ticket_public_status'  => 'yes',
 		'vcap_subscription_renewals' => 'no',
 		'vcap_pdf_filename'          => 'voucher-{coupon_code}',
+		'vcap_redemption_ttl'          => 15,
+		'vcap_redemption_max_failures' => 10,
 	);
 
 	public function register(): void {
@@ -60,6 +62,7 @@ final class Settings {
 			''         => __( 'General', 'voucher-captain' ),
 			'delivery' => __( 'Delivery & downloads', 'voucher-captain' ),
 			'privacy'  => __( 'Privacy & advanced', 'voucher-captain' ),
+			'api'      => __( 'Integrations (API)', 'voucher-captain' ),
 		);
 	}
 
@@ -155,6 +158,34 @@ final class Settings {
 						'desc_tip' => __( 'PHP date format used in PDFs and emails. Leave empty to use the WordPress date format.', 'voucher-captain' ),
 					),
 					array( 'type' => 'sectionend', 'id' => 'vcap_delivery' ),
+				);
+				break;
+
+			case 'api':
+				$fields = array(
+					array(
+						'type'  => 'title',
+						'title' => __( 'External redemptions', 'voucher-captain' ),
+						'id'    => 'vcap_api',
+						'desc'  => __( 'Other plugins and apps can redeem vouchers through the PHP service vcap()->redemptions or the REST API /wp-json/vcap/v1/redemptions (see API.md).', 'voucher-captain' ),
+					),
+					array(
+						'title'             => __( 'Reservation lifetime (minutes)', 'voucher-captain' ),
+						'id'                => 'vcap_redemption_ttl',
+						'type'              => 'number',
+						'default'           => 15,
+						'custom_attributes' => array( 'min' => 1, 'max' => 1440, 'step' => 1 ),
+						'desc_tip'          => __( 'A reserved voucher that is neither completed nor cancelled within this time is released automatically.', 'voucher-captain' ),
+					),
+					array(
+						'title'             => __( 'Invalid code attempts', 'voucher-captain' ),
+						'id'                => 'vcap_redemption_max_failures',
+						'type'              => 'number',
+						'default'           => 10,
+						'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
+						'desc_tip'          => __( 'Number of invalid codes a user may enter within 15 minutes before further attempts are blocked. 0 = no limit.', 'voucher-captain' ),
+					),
+					array( 'type' => 'sectionend', 'id' => 'vcap_api' ),
 				);
 				break;
 
