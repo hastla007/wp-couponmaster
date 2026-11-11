@@ -1,5 +1,5 @@
 <?php
-namespace WCVS;
+namespace VCAP;
 
 use chillerlan\QRCode\Common\EccLevel;
 use chillerlan\QRCode\Output\QROutputInterface;
@@ -46,7 +46,7 @@ final class PdfRenderer {
 	 * Custom TTF fonts: [ 'Family' => [ 'normal' => '/path.ttf', 'bold' => ..., 'italic' => ..., 'bold_italic' => ... ] ].
 	 */
 	public static function custom_fonts(): array {
-		return (array) apply_filters( 'wcvs_pdf_fonts', array() );
+		return (array) apply_filters( 'vcap_pdf_fonts', array() );
 	}
 
 	/**
@@ -71,7 +71,7 @@ final class PdfRenderer {
 	}
 
 	public function render( Voucher $voucher, ?array $design = null ): string {
-		$design = $design ?? TemplatePostType::get_design( (int) apply_filters( 'wcvs_render_template_id', $voucher->template_id, $voucher ) );
+		$design = $design ?? TemplatePostType::get_design( (int) apply_filters( 'vcap_render_template_id', $voucher->template_id, $voucher ) );
 		$html   = $this->html( $voucher, $design );
 		list( $w, $h ) = self::page_size( $design['page'] ?? array() );
 
@@ -90,8 +90,8 @@ final class PdfRenderer {
 		$options->set( 'fontCache', $tmp );
 		$options->set( 'tempDir', is_writable( $tmp ) ? $tmp : sys_get_temp_dir() );
 		$uploads = wp_upload_dir( null, false );
-		$options->set( 'chroot', array_values( array_filter( array( WCVS_PATH, $uploads['basedir'], ABSPATH ) ) ) );
-		$options = apply_filters( 'wcvs_dompdf_options', $options );
+		$options->set( 'chroot', array_values( array_filter( array( VCAP_PATH, $uploads['basedir'], ABSPATH ) ) ) );
+		$options = apply_filters( 'vcap_dompdf_options', $options );
 
 		$dompdf = new Dompdf( $options );
 		$dompdf->setPaper( array( 0, 0, $w * self::MM_TO_PT, $h * self::MM_TO_PT ) );
@@ -117,7 +117,7 @@ final class PdfRenderer {
 	}
 
 	public function filename( Voucher $voucher ): string {
-		$pattern = $this->settings ? (string) $this->settings->get( 'wcvs_pdf_filename' ) : 'voucher-{coupon_code}';
+		$pattern = $this->settings ? (string) $this->settings->get( 'vcap_pdf_filename' ) : 'voucher-{coupon_code}';
 		$name    = sanitize_file_name( Placeholders::replace( $pattern ?: 'voucher-{coupon_code}', $voucher ) );
 		return ( '' !== $name ? $name : 'voucher-' . $voucher->id ) . '.pdf';
 	}
@@ -160,7 +160,7 @@ final class PdfRenderer {
 			$out .= $this->element( (array) $el, $voucher, $values );
 		}
 		$out .= '</div></body></html>';
-		return (string) apply_filters( 'wcvs_pdf_html', $out, $voucher, $design );
+		return (string) apply_filters( 'vcap_pdf_html', $out, $voucher, $design );
 	}
 
 	private function num( $v ): string {
@@ -226,7 +226,7 @@ final class PdfRenderer {
 				$style .= 'background:' . $this->color( $el['borderColor'] ?? ( $el['fill'] ?? '#000000' ) ) . ';';
 				return '<div class="el" style="' . esc_attr( $style ) . '"></div>';
 		}
-		return (string) apply_filters( 'wcvs_pdf_element_html', '', $el, $voucher, $values );
+		return (string) apply_filters( 'vcap_pdf_element_html', '', $el, $voucher, $values );
 	}
 
 	private function text_element( array $el, Voucher $voucher, array $values ): string {
@@ -277,7 +277,7 @@ final class PdfRenderer {
 			case 'checkin':
 				return Tickets::checkin_url( $voucher );
 			case 'download':
-				return $voucher->id ? wcvs()->downloads->signed_url( $voucher, true ) : home_url( '/' );
+				return $voucher->id ? vcap()->downloads->signed_url( $voucher, true ) : home_url( '/' );
 			case 'custom':
 				return Placeholders::replace( (string) ( $el['qrValue'] ?? '{coupon_code}' ), $voucher, $values );
 			default:
@@ -386,12 +386,12 @@ final class PdfRenderer {
 		if ( '' === $url ) {
 			return null;
 		}
-		if ( str_starts_with( $url, 'wcvs-asset:' ) ) {
-			$file = WCVS_PATH . 'assets/images/' . basename( substr( $url, 11 ) );
+		if ( str_starts_with( $url, 'vcap-asset:' ) ) {
+			$file = VCAP_PATH . 'assets/images/' . basename( substr( $url, 11 ) );
 			return is_readable( $file ) ? $file : null;
 		}
 		$uploads = wp_upload_dir( null, false );
-		foreach ( array( array( $uploads['baseurl'], $uploads['basedir'] ), array( WCVS_URL, WCVS_PATH ) ) as $map ) {
+		foreach ( array( array( $uploads['baseurl'], $uploads['basedir'] ), array( VCAP_URL, VCAP_PATH ) ) as $map ) {
 			$base = set_url_scheme( trailingslashit( $map[0] ) );
 			$test = set_url_scheme( $url );
 			if ( str_starts_with( $test, $base ) ) {

@@ -1,5 +1,5 @@
 <?php
-namespace WCVS;
+namespace VCAP;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -7,13 +7,13 @@ defined( 'ABSPATH' ) || exit;
  * Delivery scheduling (immediate, relative delay, fixed date, customer-chosen date) via Action Scheduler.
  */
 final class Delivery {
-	public const GROUP = 'wcvs';
+	public const GROUP = 'vcap';
 
 	public function __construct( private Settings $settings, private VoucherRepository $repo ) {}
 
 	public function register(): void {
-		add_action( 'wcvs_deliver_voucher', array( $this, 'deliver' ), 10, 1 );
-		add_action( 'wcvs_daily_maintenance', array( $this, 'maintenance' ) );
+		add_action( 'vcap_deliver_voucher', array( $this, 'deliver' ), 10, 1 );
+		add_action( 'vcap_daily_maintenance', array( $this, 'maintenance' ) );
 		add_action( 'init', array( $this, 'schedule_maintenance' ), 20 );
 	}
 
@@ -31,7 +31,7 @@ final class Delivery {
 	 */
 	public static function compute_time( array $config, array $fields, ?\WC_Order $order = null ): ?string {
 		$tz   = wp_timezone();
-		$hour = (int) apply_filters( 'wcvs_delivery_hour', 8 );
+		$hour = (int) apply_filters( 'vcap_delivery_hour', 8 );
 		$ts   = null;
 		switch ( $config['delivery'] ) {
 			case 'delay':
@@ -53,7 +53,7 @@ final class Delivery {
 				}
 				break;
 		}
-		$ts = apply_filters( 'wcvs_delivery_timestamp', $ts, $config, $fields, $order );
+		$ts = apply_filters( 'vcap_delivery_timestamp', $ts, $config, $fields, $order );
 		return $ts && $ts > time() ? gmdate( 'Y-m-d H:i:s', (int) $ts ) : null;
 	}
 
@@ -69,11 +69,11 @@ final class Delivery {
 			return;
 		}
 		if ( $voucher->delivery_at && strtotime( $voucher->delivery_at . ' UTC' ) > time() ) {
-			as_unschedule_all_actions( 'wcvs_deliver_voucher', $args, self::GROUP );
-			as_schedule_single_action( strtotime( $voucher->delivery_at . ' UTC' ), 'wcvs_deliver_voucher', $args, self::GROUP );
+			as_unschedule_all_actions( 'vcap_deliver_voucher', $args, self::GROUP );
+			as_schedule_single_action( strtotime( $voucher->delivery_at . ' UTC' ), 'vcap_deliver_voucher', $args, self::GROUP );
 			$this->repo->log( $voucher->id, 'scheduled', null, null, get_date_from_gmt( $voucher->delivery_at ) );
 		} else {
-			as_enqueue_async_action( 'wcvs_deliver_voucher', $args, self::GROUP );
+			as_enqueue_async_action( 'vcap_deliver_voucher', $args, self::GROUP );
 		}
 	}
 
@@ -82,7 +82,7 @@ final class Delivery {
 		$voucher->delivered_at = null;
 		if ( $delivery_at_utc && strtotime( $delivery_at_utc . ' UTC' ) > time() && Voucher::STATUS_ACTIVE === $voucher->status ) {
 			$voucher->status = Voucher::STATUS_SCHEDULED;
-			wcvs()->coupons->set_coupon_enabled( $voucher, false );
+			vcap()->coupons->set_coupon_enabled( $voucher, false );
 		}
 		$this->repo->update( $voucher );
 		$this->schedule( $voucher );
@@ -101,14 +101,14 @@ final class Delivery {
 		}
 		if ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
 			$voucher->status = Voucher::STATUS_ACTIVE;
-			wcvs()->coupons->set_coupon_enabled( $voucher, true );
+			vcap()->coupons->set_coupon_enabled( $voucher, true );
 		}
 		$voucher->delivered_at = $this->repo->now();
 		$this->repo->update( $voucher );
 
 		$sent = $this->send( $voucher );
 		$this->repo->log( $voucher->id, 'delivered', null, null, implode( ', ', $sent ) );
-		do_action( 'wcvs_voucher_delivered', $voucher, $sent );
+		do_action( 'vcap_voucher_delivered', $voucher, $sent );
 	}
 
 	/**
@@ -125,13 +125,13 @@ final class Delivery {
 		$to_recipient = in_array( $voucher->send_to, array( 'recipient', 'both' ), true ) && is_email( $voucher->recipient_email );
 		$to_buyer     = ! $to_recipient || 'both' === $voucher->send_to || 'yes' === $config['buyer_copy'];
 
-		if ( $to_recipient && ( null === $only || 'recipient' === $only ) && isset( $emails['WCVS_Email_Voucher_Recipient'] ) ) {
-			if ( $emails['WCVS_Email_Voucher_Recipient']->trigger( $voucher ) ) {
+		if ( $to_recipient && ( null === $only || 'recipient' === $only ) && isset( $emails['VCAP_Email_Voucher_Recipient'] ) ) {
+			if ( $emails['VCAP_Email_Voucher_Recipient']->trigger( $voucher ) ) {
 				$sent[] = $voucher->recipient_email;
 			}
 		}
-		if ( $to_buyer && ( null === $only || 'buyer' === $only ) && isset( $emails['WCVS_Email_Voucher_Buyer'] ) ) {
-			if ( $emails['WCVS_Email_Voucher_Buyer']->trigger( $voucher ) ) {
+		if ( $to_buyer && ( null === $only || 'buyer' === $only ) && isset( $emails['VCAP_Email_Voucher_Buyer'] ) ) {
+			if ( $emails['VCAP_Email_Voucher_Buyer']->trigger( $voucher ) ) {
 				$sent[] = $voucher->buyer_email;
 			}
 		}
@@ -139,8 +139,8 @@ final class Delivery {
 	}
 
 	public function schedule_maintenance(): void {
-		if ( function_exists( 'as_has_scheduled_action' ) && ! as_has_scheduled_action( 'wcvs_daily_maintenance', array(), self::GROUP ) ) {
-			as_schedule_recurring_action( strtotime( 'tomorrow 03:15' ), DAY_IN_SECONDS, 'wcvs_daily_maintenance', array(), self::GROUP );
+		if ( function_exists( 'as_has_scheduled_action' ) && ! as_has_scheduled_action( 'vcap_daily_maintenance', array(), self::GROUP ) ) {
+			as_schedule_recurring_action( strtotime( 'tomorrow 03:15' ), DAY_IN_SECONDS, 'vcap_daily_maintenance', array(), self::GROUP );
 		}
 	}
 
@@ -150,7 +150,7 @@ final class Delivery {
 		foreach ( $this->repo->due_for_delivery() as $id ) {
 			$this->deliver( $id );
 		}
-		$days = (int) $this->settings->get( 'wcvs_retention_days' );
+		$days = (int) $this->settings->get( 'vcap_retention_days' );
 		if ( $days > 0 ) {
 			$this->repo->anonymise_older_than( $days );
 		}

@@ -12,7 +12,7 @@ WooCommerce-Plugin für personalisierte **PDF-Gutscheine, Geschenkkarten und Eve
 | **Zustellung** | Sofort, X Tage nach Kauf, festes Datum oder Kundenwunschdatum, über Action Scheduler. Versand an Käufer, Empfänger oder beide. Eigene E-Mails mit konfigurierbarem Betreff/Überschrift/Text, zusätzlichen Empfängern und PDF-Anhang. |
 | **PDF-Designer** | Mehrere Vorlagen, A4/A5/A6/DL/Letter oder eigenes Format, Hoch-/Querformat, Hintergrundfarbe/-bild. Drag & Drop mit Hilfslinien/Snapping, Ebenen (sperren/ausblenden/sortieren), Rotation, Deckkraft, Undo/Redo. Elemente: Text, Überschrift, Bild, QR-Code, Barcode, Form, Linie. Schrift, Größe, Farbe, Ausrichtung, fett/kursiv/unterstrichen. Platzhalter. PDF-Vorschau im Admin und optional für Kunden (mit Wasserzeichen). |
 | **Downloads** | Auf der Bestellbestätigung, in Mein Konto (Bestellung + eigener Tab „Gutscheine“) und in E-Mails. Gastkäufe über HMAC-signierte, optional ablaufende Links. |
-| **Verwaltung** | Gutscheinliste mit Suche, Filtern und CSV-Export. Detailansicht mit Bearbeiten, Guthabenkorrektur, erneutem Versand, Stornieren und vollständigem Verlauf (Audit-Log). Metabox in der Bestellung (HPOS-kompatibel). Shortcode `[wcvs_balance]` zur Guthabenabfrage. |
+| **Verwaltung** | Gutscheinliste mit Suche, Filtern und CSV-Export. Detailansicht mit Bearbeiten, Guthabenkorrektur, erneutem Versand, Stornieren und vollständigem Verlauf (Audit-Log). Metabox in der Bestellung (HPOS-kompatibel). Shortcode `[vcap_balance]` zur Guthabenabfrage. |
 | **Tickets & Scanner** | QR-Check-in-Link auf Tickets. Scanner-Seite für Handy/Desktop (Kamera, USB-Scanner oder manuelle Eingabe) mit mehreren Einlässen pro Ticket, Rückgängig und Einlösen im Laden. |
 | **Code-Import** | CSV, XLS, XLSX, ODS (eigener schlanker Leser), Batches, Formatprüfung per Regex, Duplikate in Datei und Bestand werden erkannt. |
 | **Kompatibilität** | WooCommerce Subscriptions, WPML/WCML (`wpml-config.xml`, Vorlage je Sprache), Multi-Currency (WCML, Aelia, WOOCS, CURCY), Flexible Product Fields / Flexible Checkout Fields über `{item_meta:…}` / `{order_meta:…}`. HPOS und Block-Warenkorb/-Kasse. |
@@ -29,7 +29,7 @@ Dynamische Platzhalter:
 - `{order_meta:_feld}` für Bestell-Meta, z. B. aus Flexible Checkout Fields
 - `{billing_company}` und `{shipping_…}` für Adressfelder
 
-Eigene Platzhalter lassen sich über die Filter `wcvs_placeholder_definitions` und `wcvs_placeholders` ergänzen.
+Eigene Platzhalter lassen sich über die Filter `vcap_placeholder_definitions` und `vcap_placeholders` ergänzen.
 
 ## Voraussetzungen
 

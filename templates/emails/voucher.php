@@ -4,7 +4,7 @@
  *
  * Override: yourtheme/woocommerce/voucher-captain/emails/voucher.php
  *
- * @var \WCVS\Voucher  $voucher
+ * @var \VCAP\Voucher  $voucher
  * @var string         $email_heading
  * @var string         $intro
  * @var string         $additional_content
@@ -33,7 +33,7 @@ $value = 'percent' === $voucher->discount_type
 			<div style="font-family:monospace;font-size:22px;font-weight:bold;letter-spacing:2px;margin:4px 0 8px;"><?php echo esc_html( $voucher->code ); ?></div>
 			<?php if ( $voucher->expires_at ) : ?>
 				<div style="font-size:13px;color:#555;">
-					<?php /* translators: %s: date */ printf( esc_html__( 'Valid until %s', 'voucher-captain' ), esc_html( wp_date( wcvs()->settings->date_format(), strtotime( $voucher->expires_at . ' UTC' ) ) ) ); ?>
+					<?php /* translators: %s: date */ printf( esc_html__( 'Valid until %s', 'voucher-captain' ), esc_html( wp_date( vcap()->settings->date_format(), strtotime( $voucher->expires_at . ' UTC' ) ) ) ); ?>
 				</div>
 			<?php endif; ?>
 		</td>

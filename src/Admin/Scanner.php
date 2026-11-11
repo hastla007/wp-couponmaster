@@ -1,5 +1,5 @@
 <?php
-namespace WCVS\Admin;
+namespace VCAP\Admin;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -8,17 +8,17 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Scanner {
 	public function page(): void {
-		if ( ! \WCVS\Tickets::can_scan() ) {
+		if ( ! \VCAP\Tickets::can_scan() ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ) );
 		}
-		wp_enqueue_style( 'wcvs-admin', WCVS_URL . 'assets/css/admin.css', array(), WCVS_VERSION );
-		wp_enqueue_script( 'wcvs-jsqr', WCVS_URL . 'assets/vendor/jsQR.js', array(), '1.4.0', true );
-		wp_enqueue_script( 'wcvs-scanner', WCVS_URL . 'assets/js/scanner.js', array( 'wcvs-jsqr' ), WCVS_VERSION, true );
+		wp_enqueue_style( 'vcap-admin', VCAP_URL . 'assets/css/admin.css', array(), VCAP_VERSION );
+		wp_enqueue_script( 'vcap-jsqr', VCAP_URL . 'assets/vendor/jsQR.js', array(), '1.4.0', true );
+		wp_enqueue_script( 'vcap-scanner', VCAP_URL . 'assets/js/scanner.js', array( 'vcap-jsqr' ), VCAP_VERSION, true );
 		wp_localize_script(
-			'wcvs-scanner',
-			'wcvsScanner',
+			'vcap-scanner',
+			'vcapScanner',
 			array(
-				'root'  => esc_url_raw( rest_url( 'wcvs/v1/' ) ),
+				'root'  => esc_url_raw( rest_url( 'vcap/v1/' ) ),
 				'nonce' => wp_create_nonce( 'wp_rest' ),
 				'i18n'  => array(
 					'start'      => __( 'Start camera', 'voucher-captain' ),
@@ -43,22 +43,22 @@ final class Scanner {
 			)
 		);
 		?>
-		<div class="wrap wcvs-wrap wcvs-scanner-wrap">
+		<div class="wrap vcap-wrap vcap-scanner-wrap">
 			<h1><?php esc_html_e( 'Scanner', 'voucher-captain' ); ?></h1>
 			<p class="description"><?php esc_html_e( 'Scan ticket or voucher QR codes with the camera of this device, a USB/Bluetooth barcode scanner, or type a code.', 'voucher-captain' ); ?></p>
-			<div class="wcvs-scanner">
-				<div class="wcvs-scanner-video">
-					<video id="wcvs-video" playsinline muted aria-label="<?php esc_attr_e( 'Camera preview', 'voucher-captain' ); ?>"></video>
-					<canvas id="wcvs-canvas" hidden></canvas>
-					<button type="button" class="button button-primary button-hero" id="wcvs-camera-toggle"><?php esc_html_e( 'Start camera', 'voucher-captain' ); ?></button>
+			<div class="vcap-scanner">
+				<div class="vcap-scanner-video">
+					<video id="vcap-video" playsinline muted aria-label="<?php esc_attr_e( 'Camera preview', 'voucher-captain' ); ?>"></video>
+					<canvas id="vcap-canvas" hidden></canvas>
+					<button type="button" class="button button-primary button-hero" id="vcap-camera-toggle"><?php esc_html_e( 'Start camera', 'voucher-captain' ); ?></button>
 				</div>
-				<form id="wcvs-manual" class="wcvs-scanner-form">
-					<label for="wcvs-code" class="screen-reader-text"><?php esc_html_e( 'Code', 'voucher-captain' ); ?></label>
-					<input type="text" id="wcvs-code" autocomplete="off" autofocus placeholder="<?php esc_attr_e( 'Scan or enter code…', 'voucher-captain' ); ?>" />
+				<form id="vcap-manual" class="vcap-scanner-form">
+					<label for="vcap-code" class="screen-reader-text"><?php esc_html_e( 'Code', 'voucher-captain' ); ?></label>
+					<input type="text" id="vcap-code" autocomplete="off" autofocus placeholder="<?php esc_attr_e( 'Scan or enter code…', 'voucher-captain' ); ?>" />
 					<button type="submit" class="button button-primary"><?php esc_html_e( 'Look up', 'voucher-captain' ); ?></button>
 				</form>
-				<label class="wcvs-auto"><input type="checkbox" id="wcvs-auto-checkin" /> <?php esc_html_e( 'Check in tickets automatically after scan', 'voucher-captain' ); ?></label>
-				<div id="wcvs-result" class="wcvs-result" aria-live="assertive"></div>
+				<label class="vcap-auto"><input type="checkbox" id="vcap-auto-checkin" /> <?php esc_html_e( 'Check in tickets automatically after scan', 'voucher-captain' ); ?></label>
+				<div id="vcap-result" class="vcap-result" aria-live="assertive"></div>
 			</div>
 		</div>
 		<?php

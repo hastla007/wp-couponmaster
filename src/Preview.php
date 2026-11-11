@@ -1,5 +1,5 @@
 <?php
-namespace WCVS;
+namespace VCAP;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -10,8 +10,8 @@ final class Preview {
 	public function __construct( private PdfRenderer $pdf ) {}
 
 	public function register(): void {
-		add_action( 'wp_ajax_wcvs_product_preview', array( $this, 'product_preview' ) );
-		add_action( 'wp_ajax_nopriv_wcvs_product_preview', array( $this, 'product_preview' ) );
+		add_action( 'wp_ajax_vcap_product_preview', array( $this, 'product_preview' ) );
+		add_action( 'wp_ajax_nopriv_vcap_product_preview', array( $this, 'product_preview' ) );
 	}
 
 	public static function sample_voucher(): Voucher {
@@ -29,7 +29,7 @@ final class Preview {
 		$v->created_at      = gmdate( 'Y-m-d H:i:s' );
 		$v->token           = str_repeat( '0', 48 );
 		$v->max_checkins    = 1;
-		return apply_filters( 'wcvs_sample_voucher', $v );
+		return apply_filters( 'vcap_sample_voucher', $v );
 	}
 
 	/** Sample placeholder values for the designer canvas. */
@@ -59,10 +59,10 @@ final class Preview {
 	 * Customer preview of the personalised voucher before purchase (watermarked, fake code).
 	 */
 	public function product_preview(): void {
-		check_ajax_referer( 'wcvs_preview', 'nonce' );
+		check_ajax_referer( 'vcap_preview', 'nonce' );
 
 		// Basic abuse protection: max 20 previews / 10 min per visitor IP.
-		$ip_key = 'wcvs_pv_' . md5( (string) \WC_Geolocation::get_ip_address() );
+		$ip_key = 'vcap_pv_' . md5( (string) \WC_Geolocation::get_ip_address() );
 		$count  = (int) get_transient( $ip_key );
 		if ( $count > 20 ) {
 			wp_die( esc_html__( 'Too many preview requests. Please try again later.', 'voucher-captain' ), 429 );
@@ -79,7 +79,7 @@ final class Preview {
 			wp_die( esc_html__( 'Preview is not available for this product.', 'voucher-captain' ), 403 );
 		}
 
-		$fields = wcvs()->fields->collect_posted( $product, false );
+		$fields = vcap()->fields->collect_posted( $product, false );
 		$v      = self::sample_voucher();
 		$v->code            = 'PREVIEW';
 		$v->type            = $config['type'];
@@ -101,7 +101,7 @@ final class Preview {
 				$amount = (float) $config['amount'];
 				break;
 			case 'custom':
-				$amount = (float) wc_format_decimal( wp_unslash( (string) ( $_REQUEST['wcvs_amount'] ?? '' ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+				$amount = (float) wc_format_decimal( wp_unslash( (string) ( $_REQUEST['vcap_amount'] ?? '' ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 				$amount = $amount > 0 ? $amount : (float) $config['custom_min'];
 				break;
 			default:
@@ -112,7 +112,7 @@ final class Preview {
 
 		$design               = TemplatePostType::get_design( $v->template_id );
 		$design['elements'][] = array(
-			'id'       => 'wcvs-watermark',
+			'id'       => 'vcap-watermark',
 			'type'     => 'text',
 			'x'        => 0,
 			'y'        => PdfRenderer::page_size( $design['page'] )[1] / 2 - 12,
@@ -126,7 +126,7 @@ final class Preview {
 			'opacity'  => 0.25,
 			'rotation' => -20,
 		);
-		$design = apply_filters( 'wcvs_customer_preview_design', $design, $v, $product );
+		$design = apply_filters( 'vcap_customer_preview_design', $design, $v, $product );
 		self::stream( $this->pdf->render( $v, $design ), 'preview.pdf' );
 	}
 }

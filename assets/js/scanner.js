@@ -1,15 +1,15 @@
 /* Voucher Captain – QR scanner (BarcodeDetector with jsQR fallback). */
 ( function () {
 	'use strict';
-	var cfg = window.wcvsScanner || {};
+	var cfg = window.vcapScanner || {};
 	var t = cfg.i18n || {};
-	var video = document.getElementById( 'wcvs-video' );
-	var canvas = document.getElementById( 'wcvs-canvas' );
-	var toggleBtn = document.getElementById( 'wcvs-camera-toggle' );
-	var form = document.getElementById( 'wcvs-manual' );
-	var input = document.getElementById( 'wcvs-code' );
-	var result = document.getElementById( 'wcvs-result' );
-	var auto = document.getElementById( 'wcvs-auto-checkin' );
+	var video = document.getElementById( 'vcap-video' );
+	var canvas = document.getElementById( 'vcap-canvas' );
+	var toggleBtn = document.getElementById( 'vcap-camera-toggle' );
+	var form = document.getElementById( 'vcap-manual' );
+	var input = document.getElementById( 'vcap-code' );
+	var result = document.getElementById( 'vcap-result' );
+	var auto = document.getElementById( 'vcap-auto-checkin' );
 	if ( ! video || ! form ) {
 		return;
 	}
@@ -20,11 +20,11 @@
 	var busy = false;
 
 	try {
-		auto.checked = '1' === window.localStorage.getItem( 'wcvsAutoCheckin' );
+		auto.checked = '1' === window.localStorage.getItem( 'vcapAutoCheckin' );
 	} catch ( e ) {}
 	auto.addEventListener( 'change', function () {
 		try {
-			window.localStorage.setItem( 'wcvsAutoCheckin', auto.checked ? '1' : '0' );
+			window.localStorage.setItem( 'vcapAutoCheckin', auto.checked ? '1' : '0' );
 		} catch ( e ) {}
 	} );
 
@@ -75,14 +75,14 @@
 			[ t.expires, d.expires ],
 			d.last_checkin ? [ t.lastCheckin, d.last_checkin ] : null
 		].filter( function ( r ) { return r && r[ 1 ]; } );
-		var html = '<div class="wcvs-r-head wcvs-r-' + esc( d.state ) + '">' + esc( d.message ) + ' · <code>' + esc( d.code ) + '</code></div><div class="wcvs-r-body"><dl>';
+		var html = '<div class="vcap-r-head vcap-r-' + esc( d.state ) + '">' + esc( d.message ) + ' · <code>' + esc( d.code ) + '</code></div><div class="vcap-r-body"><dl>';
 		rows.forEach( function ( r ) {
 			html += '<dt>' + esc( r[ 0 ] ) + '</dt><dd>' + esc( r[ 1 ] ) + '</dd>';
 		} );
-		html += '</dl><div class="wcvs-r-actions">';
+		html += '</dl><div class="vcap-r-actions">';
 		if ( 'ticket' === d.type ) {
 			if ( d.checkins < d.max_checkins && 'error' !== d.state ) {
-				html += ( d.max_checkins - d.checkins > 1 ? '<input type="number" min="1" value="1" max="' + ( d.max_checkins - d.checkins ) + '" class="small-text" id="wcvs-count" aria-label="' + esc( t.admissions ) + '">' : '' );
+				html += ( d.max_checkins - d.checkins > 1 ? '<input type="number" min="1" value="1" max="' + ( d.max_checkins - d.checkins ) + '" class="small-text" id="vcap-count" aria-label="' + esc( t.admissions ) + '">' : '' );
 				html += '<button type="button" class="button button-primary button-hero" data-act="checkin">' + esc( t.checkin ) + '</button>';
 			}
 			if ( d.checkins > 0 ) {
@@ -90,7 +90,7 @@
 			}
 		} else if ( 'ok' === d.state ) {
 			if ( d.multi_use ) {
-				html += '<input type="text" inputmode="decimal" id="wcvs-amount" class="small-text" placeholder="' + esc( t.amount ) + '" aria-label="' + esc( t.amount ) + '">';
+				html += '<input type="text" inputmode="decimal" id="vcap-amount" class="small-text" placeholder="' + esc( t.amount ) + '" aria-label="' + esc( t.amount ) + '">';
 			}
 			html += '<button type="button" class="button button-primary" data-act="redeem">' + esc( t.redeem ) + '</button>';
 		}
@@ -100,7 +100,7 @@
 	}
 
 	function showError( err ) {
-		result.innerHTML = '<div class="wcvs-r-head wcvs-r-error">' + esc( ( err && err.message ) || t.error ) + '</div>';
+		result.innerHTML = '<div class="vcap-r-head vcap-r-error">' + esc( ( err && err.message ) || t.error ) + '</div>';
 		beep( false );
 	}
 
@@ -133,12 +133,12 @@
 		}
 		var req;
 		if ( 'checkin' === act ) {
-			var c = document.getElementById( 'wcvs-count' );
+			var c = document.getElementById( 'vcap-count' );
 			req = api( 'checkin', 'POST', { q: query, count: c ? parseInt( c.value, 10 ) || 1 : 1 } );
 		} else if ( 'undo' === act ) {
 			req = api( 'checkin', 'POST', { q: query, undo: true } );
 		} else if ( 'redeem' === act ) {
-			var a = document.getElementById( 'wcvs-amount' );
+			var a = document.getElementById( 'vcap-amount' );
 			req = api( 'redeem', 'POST', { q: query, amount: a ? parseFloat( String( a.value ).replace( ',', '.' ) ) || 0 : 0 } );
 		}
 		if ( req ) {

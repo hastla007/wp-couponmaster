@@ -1,10 +1,10 @@
 <?php
-namespace WCVS\Admin;
+namespace VCAP\Admin;
 
-use WCVS\Issuer;
-use WCVS\ProductConfig;
-use WCVS\Voucher;
-use WCVS\VoucherRepository;
+use VCAP\Issuer;
+use VCAP\ProductConfig;
+use VCAP\Voucher;
+use VCAP\VoucherRepository;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -17,8 +17,8 @@ final class OrderAdmin {
 	public function register(): void {
 		add_action( 'add_meta_boxes', array( $this, 'meta_box' ), 30 );
 		add_filter( 'woocommerce_order_actions', array( $this, 'actions' ), 10, 2 );
-		add_action( 'woocommerce_order_action_wcvs_issue', array( $this, 'issue' ) );
-		add_action( 'woocommerce_order_action_wcvs_resend', array( $this, 'resend' ) );
+		add_action( 'woocommerce_order_action_vcap_issue', array( $this, 'issue' ) );
+		add_action( 'woocommerce_order_action_vcap_resend', array( $this, 'resend' ) );
 	}
 
 	private function screen_id(): string {
@@ -27,7 +27,7 @@ final class OrderAdmin {
 
 	public function meta_box(): void {
 		foreach ( array_unique( array( $this->screen_id(), 'shop_order' ) ) as $screen ) {
-			add_meta_box( 'wcvs-order-vouchers', __( 'Vouchers', 'voucher-captain' ), array( $this, 'render' ), $screen, 'side', 'default' );
+			add_meta_box( 'vcap-order-vouchers', __( 'Vouchers', 'voucher-captain' ), array( $this, 'render' ), $screen, 'side', 'default' );
 		}
 	}
 
@@ -60,18 +60,18 @@ final class OrderAdmin {
 				: esc_html__( 'This order contains no voucher products.', 'voucher-captain' ) ) . '</p>';
 			return;
 		}
-		echo '<ul class="wcvs-order-vouchers">';
+		echo '<ul class="vcap-order-vouchers">';
 		foreach ( $vouchers as $v ) {
-			$detail = admin_url( 'admin.php?page=wcvs-vouchers&voucher=' . $v->id );
+			$detail = admin_url( 'admin.php?page=vcap-vouchers&voucher=' . $v->id );
 			echo '<li><a href="' . esc_url( $detail ) . '"><code>' . esc_html( $v->code ) . '</code></a> ';
-			echo '<mark class="wcvs-status wcvs-status--' . esc_attr( $v->status ) . '"><span>' . esc_html( $v->status_label() ) . '</span></mark><br>';
+			echo '<mark class="vcap-status vcap-status--' . esc_attr( $v->status ) . '"><span>' . esc_html( $v->status_label() ) . '</span></mark><br>';
 			if ( $v->is_multi_use() ) {
 				echo '<small>' . esc_html__( 'Balance:', 'voucher-captain' ) . ' ' . wp_kses_post( wc_price( $v->balance, array( 'currency' => $v->currency ) ) ) . '</small> · ';
 			}
 			if ( $v->recipient_email ) {
 				echo '<small>→ ' . esc_html( $v->recipient_email ) . '</small> · ';
 			}
-			echo '<a href="' . esc_url( wcvs()->downloads->admin_url( $v ) ) . '" target="_blank">PDF</a></li>';
+			echo '<a href="' . esc_url( vcap()->downloads->admin_url( $v ) ) . '" target="_blank">PDF</a></li>';
 		}
 		echo '</ul>';
 	}
@@ -79,8 +79,8 @@ final class OrderAdmin {
 	public function actions( array $actions, $order = null ): array {
 		$order = $order instanceof \WC_Order ? $order : self::order_from( $GLOBALS['theorder'] ?? ( $GLOBALS['post'] ?? null ) );
 		if ( $order && $this->has_voucher_items( $order ) ) {
-			$actions['wcvs_issue']  = __( 'Generate vouchers', 'voucher-captain' );
-			$actions['wcvs_resend'] = __( 'Resend voucher emails', 'voucher-captain' );
+			$actions['vcap_issue']  = __( 'Generate vouchers', 'voucher-captain' );
+			$actions['vcap_resend'] = __( 'Resend voucher emails', 'voucher-captain' );
 		}
 		return $actions;
 	}
@@ -98,7 +98,7 @@ final class OrderAdmin {
 			if ( Voucher::STATUS_VOID === $v->status ) {
 				continue;
 			}
-			wcvs()->delivery->send( $v );
+			vcap()->delivery->send( $v );
 			$this->repo->log( $v->id, 'resent' );
 			++$count;
 		}

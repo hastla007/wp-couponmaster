@@ -1,8 +1,8 @@
 <?php
-namespace WCVS\Compat;
+namespace VCAP\Compat;
 
-use WCVS\TemplatePostType;
-use WCVS\Voucher;
+use VCAP\TemplatePostType;
+use VCAP\Voucher;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -15,7 +15,7 @@ final class Wpml {
 		if ( ! defined( 'ICL_SITEPRESS_VERSION' ) ) {
 			return;
 		}
-		add_filter( 'wcvs_render_template_id', array( $this, 'template_for_voucher' ), 10, 2 );
+		add_filter( 'vcap_render_template_id', array( $this, 'template_for_voucher' ), 10, 2 );
 	}
 
 	public static function order_language( Voucher $voucher ): string {

@@ -1,7 +1,7 @@
 /* Voucher Captain – field group editor (repeater). */
 ( function ( $ ) {
 	'use strict';
-	var cfg = window.wcvsFieldGroups || { types: {}, i18n: {} };
+	var cfg = window.vcapFieldGroups || { types: {}, i18n: {} };
 	var t = cfg.i18n;
 
 	function row( f ) {
@@ -12,19 +12,19 @@
 			types += '<option value="' + k + '"' + ( k === f.type ? ' selected' : '' ) + '>' + $( '<i>' ).text( v ).html() + '</option>';
 		} );
 		var $r = $(
-			'<div class="wcvs-fg-row">' +
-				'<span class="wcvs-fg-handle dashicons dashicons-move" aria-hidden="true"></span>' +
-				'<div class="wcvs-fg-cols">' +
+			'<div class="vcap-fg-row">' +
+				'<span class="vcap-fg-handle dashicons dashicons-move" aria-hidden="true"></span>' +
+				'<div class="vcap-fg-cols">' +
 					'<p><label for="' + id + 'l">' + t.label + '</label><input type="text" id="' + id + 'l" data-k="label"></p>' +
 					'<p><label for="' + id + 'k">' + t.key + '</label><input type="text" id="' + id + 'k" data-k="key" pattern="[a-z0-9_]+"></p>' +
 					'<p><label for="' + id + 't">' + t.type + '</label><select id="' + id + 't" data-k="type">' + types + '</select></p>' +
 					'<p><label for="' + id + 'm">' + t.maxlength + '</label><input type="number" min="0" id="' + id + 'm" data-k="maxlength"></p>' +
 					'<p><label for="' + id + 'p">' + t.placeholder + '</label><input type="text" id="' + id + 'p" data-k="placeholder"></p>' +
 					'<p><label for="' + id + 'h">' + t.tooltip + '</label><input type="text" id="' + id + 'h" data-k="tooltip"></p>' +
-					'<p class="wcvs-fg-options"><label for="' + id + 'o">' + t.options + '</label><textarea rows="3" id="' + id + 'o" data-k="options"></textarea></p>' +
-					'<p class="wcvs-fg-req"><label><input type="checkbox" data-k="required"> ' + t.required + '</label><br><small class="wcvs-fg-token"></small></p>' +
+					'<p class="vcap-fg-options"><label for="' + id + 'o">' + t.options + '</label><textarea rows="3" id="' + id + 'o" data-k="options"></textarea></p>' +
+					'<p class="vcap-fg-req"><label><input type="checkbox" data-k="required"> ' + t.required + '</label><br><small class="vcap-fg-token"></small></p>' +
 				'</div>' +
-				'<button type="button" class="button-link button-link-delete wcvs-fg-remove">' + t.remove + '</button>' +
+				'<button type="button" class="button-link button-link-delete vcap-fg-remove">' + t.remove + '</button>' +
 			'</div>'
 		);
 		$r.find( '[data-k]' ).each( function () {
@@ -44,7 +44,7 @@
 
 	function refresh( $list ) {
 		var data = [];
-		$list.find( '.wcvs-fg-row' ).each( function () {
+		$list.find( '.vcap-fg-row' ).each( function () {
 			var $r = $( this );
 			var f = {};
 			$r.find( '[data-k]' ).each( function () {
@@ -53,38 +53,38 @@
 			if ( ! f.key && f.label ) {
 				f.key = slug( f.label );
 			}
-			$r.find( '.wcvs-fg-options' ).toggle( 'select' === f.type );
-			$r.find( '.wcvs-fg-token' ).text( f.key ? t.placeholderToken + ' {field:' + f.key + '}' : '' );
+			$r.find( '.vcap-fg-options' ).toggle( 'select' === f.type );
+			$r.find( '.vcap-fg-token' ).text( f.key ? t.placeholderToken + ' {field:' + f.key + '}' : '' );
 			data.push( f );
 		} );
-		$( '#wcvs-fields-json' ).val( JSON.stringify( data ) );
+		$( '#vcap-fields-json' ).val( JSON.stringify( data ) );
 	}
 
 	$( function () {
-		var $list = $( '#wcvs-field-list' );
+		var $list = $( '#vcap-field-list' );
 		if ( ! $list.length ) {
 			return;
 		}
 		( $list.data( 'fields' ) || [] ).forEach( function ( f ) {
 			$list.append( row( f ) );
 		} );
-		$list.sortable( { handle: '.wcvs-fg-handle', update: function () { refresh( $list ); } } );
-		$( '#wcvs-add-field' ).on( 'click', function () {
+		$list.sortable( { handle: '.vcap-fg-handle', update: function () { refresh( $list ); } } );
+		$( '#vcap-add-field' ).on( 'click', function () {
 			$list.append( row() );
 			refresh( $list );
-			$list.find( '.wcvs-fg-row:last [data-k="label"]' ).trigger( 'focus' );
+			$list.find( '.vcap-fg-row:last [data-k="label"]' ).trigger( 'focus' );
 		} );
 		$list.on( 'input change', '[data-k]', function () { refresh( $list ); } );
-		$list.on( 'click', '.wcvs-fg-remove', function () {
-			$( this ).closest( '.wcvs-fg-row' ).remove();
+		$list.on( 'click', '.vcap-fg-remove', function () {
+			$( this ).closest( '.vcap-fg-row' ).remove();
 			refresh( $list );
 		} );
 		$( '#post' ).on( 'submit', function () { refresh( $list ); } );
 		refresh( $list );
 
-		var $mode = $( '#wcvs-assign-mode' );
+		var $mode = $( '#vcap-assign-mode' );
 		var toggle = function () {
-			$( '.wcvs-assign-row' ).each( function () {
+			$( '.vcap-assign-row' ).each( function () {
 				$( this ).toggle( $( this ).data( 'mode' ) === $mode.val() );
 			} );
 		};

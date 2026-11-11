@@ -1,5 +1,5 @@
 <?php
-namespace WCVS;
+namespace VCAP;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -8,7 +8,7 @@ defined( 'ABSPATH' ) || exit;
  * (assignable to all, selected products, categories or tags), carried through cart → order item → voucher.
  */
 final class Fields {
-	public const POST_TYPE = 'wcvs_field_group';
+	public const POST_TYPE = 'vcap_field_group';
 	public const TYPES     = array( 'text', 'textarea', 'email', 'number', 'date', 'select', 'checkbox' );
 
 	public const POSITIONS = array(
@@ -59,7 +59,7 @@ final class Fields {
 				),
 				'public'          => false,
 				'show_ui'         => true,
-				'show_in_menu'    => 'wcvs-vouchers',
+				'show_in_menu'    => 'vcap-vouchers',
 				'supports'        => array( 'title', 'page-attributes' ),
 				'capability_type' => 'product',
 				'map_meta_cap'    => true,
@@ -128,7 +128,7 @@ final class Fields {
 				}
 			}
 		}
-		return apply_filters( 'wcvs_builtin_fields', $out, $config );
+		return apply_filters( 'vcap_builtin_fields', $out, $config );
 	}
 
 	/** @return array<int, array{id:int,title:string,position:string,fields:array,assign:array}> */
@@ -139,12 +139,12 @@ final class Fields {
 		}
 		$cache = array();
 		foreach ( get_posts( array( 'post_type' => self::POST_TYPE, 'post_status' => 'publish', 'numberposts' => 100, 'orderby' => 'menu_order', 'order' => 'ASC' ) ) as $post ) {
-			$fields = json_decode( (string) get_post_meta( $post->ID, '_wcvs_fields', true ), true );
-			$assign = json_decode( (string) get_post_meta( $post->ID, '_wcvs_assign', true ), true );
+			$fields = json_decode( (string) get_post_meta( $post->ID, '_vcap_fields', true ), true );
+			$assign = json_decode( (string) get_post_meta( $post->ID, '_vcap_assign', true ), true );
 			$cache[] = array(
 				'id'       => $post->ID,
 				'title'    => $post->post_title,
-				'position' => (string) ( get_post_meta( $post->ID, '_wcvs_position', true ) ?: 'before_button' ),
+				'position' => (string) ( get_post_meta( $post->ID, '_vcap_position', true ) ?: 'before_button' ),
 				'fields'   => is_array( $fields ) ? $fields : array(),
 				'assign'   => is_array( $assign ) ? $assign : array( 'mode' => 'all' ),
 			);
@@ -169,7 +169,7 @@ final class Fields {
 			default:
 				$applies = true;
 		}
-		return (bool) apply_filters( 'wcvs_field_group_applies', $applies, $group, $product );
+		return (bool) apply_filters( 'vcap_field_group_applies', $applies, $group, $product );
 	}
 
 	/**
@@ -195,11 +195,11 @@ final class Fields {
 				$out[ $position ][ $field['key'] ] = $field;
 			}
 		}
-		return apply_filters( 'wcvs_field_definitions', array_filter( $out ), $product );
+		return apply_filters( 'vcap_field_definitions', array_filter( $out ), $product );
 	}
 
 	private function variable_has_vouchers( \WC_Product $product ): bool {
-		return 'yes' === $product->get_meta( '_wcvs_enabled' );
+		return 'yes' === $product->get_meta( '_vcap_enabled' );
 	}
 
 	private function flat_definitions( \WC_Product $product ): array {
@@ -232,14 +232,14 @@ final class Fields {
 		if ( ! $product || ! $this->definitions_for( $product ) ) {
 			return;
 		}
-		wp_enqueue_style( 'wcvs-frontend', WCVS_URL . 'assets/css/frontend.css', array(), WCVS_VERSION );
-		wp_enqueue_script( 'wcvs-frontend', WCVS_URL . 'assets/js/frontend.js', array( 'jquery' ), WCVS_VERSION, true );
+		wp_enqueue_style( 'vcap-frontend', VCAP_URL . 'assets/css/frontend.css', array(), VCAP_VERSION );
+		wp_enqueue_script( 'vcap-frontend', VCAP_URL . 'assets/js/frontend.js', array( 'jquery' ), VCAP_VERSION, true );
 		wp_localize_script(
-			'wcvs-frontend',
-			'wcvsFront',
+			'vcap-frontend',
+			'vcapFront',
 			array(
 				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
-				'nonce'   => wp_create_nonce( 'wcvs_preview' ),
+				'nonce'   => wp_create_nonce( 'vcap_preview' ),
 				'i18n'    => array(
 					/* translators: %d: characters left */
 					'charsLeft' => __( '%d characters left', 'voucher-captain' ),
@@ -257,33 +257,33 @@ final class Fields {
 		$amount_html = '';
 		if ( 'before_button' === $position ) {
 			ob_start();
-			do_action( 'wcvs_before_fields', $product );
+			do_action( 'vcap_before_fields', $product );
 			$amount_html = (string) ob_get_clean();
 		}
 		if ( ! $defs && '' === $amount_html ) {
 			return;
 		}
 		$config = ProductConfig::get( $product );
-		echo '<div class="wcvs-fields wcvs-fields--' . esc_attr( $position ) . '">';
+		echo '<div class="vcap-fields vcap-fields--' . esc_attr( $position ) . '">';
 		echo $amount_html; // phpcs:ignore WordPress.Security.EscapeOutput -- built by CustomAmount with escaping.
 		foreach ( $defs as $key => $field ) {
 			$this->render_field( $key, $field );
 		}
 		if ( 'before_button' === $position && 'yes' === $config['preview'] ) {
-			echo '<p class="wcvs-preview-row"><button type="button" class="button wcvs-preview-button" data-product="' . esc_attr( (string) $product->get_id() ) . '">' . esc_html__( 'Preview voucher', 'voucher-captain' ) . '</button></p>';
+			echo '<p class="vcap-preview-row"><button type="button" class="button vcap-preview-button" data-product="' . esc_attr( (string) $product->get_id() ) . '">' . esc_html__( 'Preview voucher', 'voucher-captain' ) . '</button></p>';
 		}
 		echo '</div>';
 	}
 
 	private function posted_value( string $key ): string {
 		// phpcs:ignore WordPress.Security.NonceVerification -- Add-to-cart form; WooCommerce handles the request.
-		$raw = isset( $_POST['wcvs_fields'][ $key ] ) ? wp_unslash( $_POST['wcvs_fields'][ $key ] ) : ( isset( $_REQUEST['wcvs_fields'][ $key ] ) ? wp_unslash( $_REQUEST['wcvs_fields'][ $key ] ) : null ); // phpcs:ignore
+		$raw = isset( $_POST['vcap_fields'][ $key ] ) ? wp_unslash( $_POST['vcap_fields'][ $key ] ) : ( isset( $_REQUEST['vcap_fields'][ $key ] ) ? wp_unslash( $_REQUEST['vcap_fields'][ $key ] ) : null ); // phpcs:ignore
 		return is_scalar( $raw ) ? (string) $raw : '';
 	}
 
 	private function render_field( string $key, array $field ): void {
-		$id       = 'wcvs-field-' . sanitize_html_class( $key );
-		$name     = 'wcvs_fields[' . esc_attr( $key ) . ']';
+		$id       = 'vcap-field-' . sanitize_html_class( $key );
+		$name     = 'vcap_fields[' . esc_attr( $key ) . ']';
 		$type     = in_array( $field['type'] ?? 'text', self::TYPES, true ) ? ( $field['type'] ?? 'text' ) : 'text';
 		$required = ! empty( $field['required'] );
 		$max      = (int) ( $field['maxlength'] ?? 0 );
@@ -294,13 +294,13 @@ final class Fields {
 		$desc_id = $id . '-desc';
 		$attrs   = sprintf( 'id="%s" name="%s"%s%s', esc_attr( $id ), $name, $required ? ' required aria-required="true"' : '', ! empty( $field['tooltip'] ) ? ' aria-describedby="' . esc_attr( $desc_id ) . '"' : '' );
 		if ( $max > 0 && in_array( $type, array( 'text', 'textarea', 'email' ), true ) ) {
-			$attrs .= ' maxlength="' . esc_attr( (string) $max ) . '" data-wcvs-counter="1"';
+			$attrs .= ' maxlength="' . esc_attr( (string) $max ) . '" data-vcap-counter="1"';
 		}
 		if ( ! empty( $field['placeholder'] ) ) {
 			$attrs .= ' placeholder="' . esc_attr( $field['placeholder'] ) . '"';
 		}
 
-		echo '<p class="form-row wcvs-field wcvs-field--' . esc_attr( $type ) . '">';
+		echo '<p class="form-row vcap-field vcap-field--' . esc_attr( $type ) . '">';
 		if ( 'checkbox' !== $type ) {
 			echo '<label for="' . esc_attr( $id ) . '">' . esc_html( $field['label'] ?? $key ) . ( $required ? ' <abbr class="required" title="' . esc_attr__( 'required', 'voucher-captain' ) . '">*</abbr>' : ' <span class="optional">(' . esc_html__( 'optional', 'voucher-captain' ) . ')</span>' ) . '</label>';
 		}
@@ -327,7 +327,7 @@ final class Fields {
 				echo '<input type="' . esc_attr( $type ) . '" class="input-text" ' . $attrs . ' value="' . esc_attr( $value ) . '" />'; // phpcs:ignore WordPress.Security.EscapeOutput
 		}
 		if ( ! empty( $field['tooltip'] ) ) {
-			echo '<span class="description wcvs-field-help" id="' . esc_attr( $desc_id ) . '">' . esc_html( $field['tooltip'] ) . '</span>';
+			echo '<span class="description vcap-field-help" id="' . esc_attr( $desc_id ) . '">' . esc_html( $field['tooltip'] ) . '</span>';
 		}
 		echo '</p>';
 	}
@@ -444,14 +444,14 @@ final class Fields {
 		}
 		$fields = $this->collect_posted( $product );
 		if ( $fields ) {
-			$data['wcvs_fields'] = $fields;
-			$data['wcvs_key']    = md5( wp_json_encode( $fields ) ); // Separate cart lines per personalisation.
+			$data['vcap_fields'] = $fields;
+			$data['vcap_key']    = md5( wp_json_encode( $fields ) ); // Separate cart lines per personalisation.
 		}
 		return $data;
 	}
 
 	public function display_item_data( $item_data, $cart_item ) {
-		foreach ( (array) ( $cart_item['wcvs_fields'] ?? array() ) as $field ) {
+		foreach ( (array) ( $cart_item['vcap_fields'] ?? array() ) as $field ) {
 			$item_data[] = array(
 				'key'   => $field['label'],
 				'value' => $field['value'],
@@ -461,12 +461,12 @@ final class Fields {
 	}
 
 	public function save_order_item( $item, $cart_item_key, $values, $order ): void {
-		if ( empty( $values['wcvs_fields'] ) ) {
+		if ( empty( $values['vcap_fields'] ) ) {
 			return;
 		}
-		$item->add_meta_data( '_wcvs_fields', $values['wcvs_fields'], true );
+		$item->add_meta_data( '_vcap_fields', $values['vcap_fields'], true );
 		// Visible copy (admin order screen, emails, {item_meta:Label} placeholders).
-		foreach ( $values['wcvs_fields'] as $field ) {
+		foreach ( $values['vcap_fields'] as $field ) {
 			if ( '' !== (string) $field['value'] ) {
 				$item->add_meta_data( wp_strip_all_tags( $field['label'] ), $field['value'], true );
 			}
@@ -474,10 +474,10 @@ final class Fields {
 	}
 
 	public function order_again( $data, $item, $order ) {
-		$fields = $item->get_meta( '_wcvs_fields' );
+		$fields = $item->get_meta( '_vcap_fields' );
 		if ( $fields ) {
-			$data['wcvs_fields'] = $fields;
-			$data['wcvs_key']    = md5( wp_json_encode( $fields ) );
+			$data['vcap_fields'] = $fields;
+			$data['vcap_key']    = md5( wp_json_encode( $fields ) );
 		}
 		return $data;
 	}
@@ -516,12 +516,12 @@ final class Fields {
 		if ( ! $screen || self::POST_TYPE !== $screen->post_type || ! in_array( $hook, array( 'post.php', 'post-new.php' ), true ) ) {
 			return;
 		}
-		wp_enqueue_style( 'wcvs-admin', WCVS_URL . 'assets/css/admin.css', array(), WCVS_VERSION );
-		wp_enqueue_script( 'wcvs-field-groups', WCVS_URL . 'assets/js/field-groups.js', array( 'jquery', 'jquery-ui-sortable', 'wc-enhanced-select' ), WCVS_VERSION, true );
+		wp_enqueue_style( 'vcap-admin', VCAP_URL . 'assets/css/admin.css', array(), VCAP_VERSION );
+		wp_enqueue_script( 'vcap-field-groups', VCAP_URL . 'assets/js/field-groups.js', array( 'jquery', 'jquery-ui-sortable', 'wc-enhanced-select' ), VCAP_VERSION, true );
 		wp_enqueue_style( 'woocommerce_admin_styles' );
 		wp_localize_script(
-			'wcvs-field-groups',
-			'wcvsFieldGroups',
+			'vcap-field-groups',
+			'vcapFieldGroups',
 			array(
 				'types' => array(
 					'text'     => __( 'Text', 'voucher-captain' ),
@@ -549,29 +549,29 @@ final class Fields {
 	}
 
 	public function meta_boxes(): void {
-		add_meta_box( 'wcvs-fields', __( 'Fields', 'voucher-captain' ), array( $this, 'fields_box' ), self::POST_TYPE, 'normal', 'high' );
-		add_meta_box( 'wcvs-assign', __( 'Display rules', 'voucher-captain' ), array( $this, 'assign_box' ), self::POST_TYPE, 'normal', 'default' );
+		add_meta_box( 'vcap-fields', __( 'Fields', 'voucher-captain' ), array( $this, 'fields_box' ), self::POST_TYPE, 'normal', 'high' );
+		add_meta_box( 'vcap-assign', __( 'Display rules', 'voucher-captain' ), array( $this, 'assign_box' ), self::POST_TYPE, 'normal', 'default' );
 	}
 
 	public function fields_box( \WP_Post $post ): void {
-		wp_nonce_field( 'wcvs_field_group', 'wcvs_field_group_nonce' );
-		$fields = json_decode( (string) get_post_meta( $post->ID, '_wcvs_fields', true ), true ) ?: array();
+		wp_nonce_field( 'vcap_field_group', 'vcap_field_group_nonce' );
+		$fields = json_decode( (string) get_post_meta( $post->ID, '_vcap_fields', true ), true ) ?: array();
 		echo '<p class="description">' . esc_html__( 'These fields are shown on the product page of matching voucher products. Use {field:key} in PDF templates and emails to print a value.', 'voucher-captain' ) . '</p>';
-		echo '<div id="wcvs-field-list" data-fields="' . esc_attr( wp_json_encode( $fields ) ) . '"></div>';
-		echo '<p><button type="button" class="button" id="wcvs-add-field">' . esc_html__( 'Add field', 'voucher-captain' ) . '</button></p>';
-		echo '<input type="hidden" name="wcvs_fields_json" id="wcvs-fields-json" value="" />';
+		echo '<div id="vcap-field-list" data-fields="' . esc_attr( wp_json_encode( $fields ) ) . '"></div>';
+		echo '<p><button type="button" class="button" id="vcap-add-field">' . esc_html__( 'Add field', 'voucher-captain' ) . '</button></p>';
+		echo '<input type="hidden" name="vcap_fields_json" id="vcap-fields-json" value="" />';
 	}
 
 	public function assign_box( \WP_Post $post ): void {
-		$assign   = json_decode( (string) get_post_meta( $post->ID, '_wcvs_assign', true ), true ) ?: array( 'mode' => 'all' );
-		$position = (string) ( get_post_meta( $post->ID, '_wcvs_position', true ) ?: 'before_button' );
+		$assign   = json_decode( (string) get_post_meta( $post->ID, '_vcap_assign', true ), true ) ?: array( 'mode' => 'all' );
+		$position = (string) ( get_post_meta( $post->ID, '_vcap_position', true ) ?: 'before_button' );
 		$mode     = $assign['mode'] ?? 'all';
 		?>
 		<table class="form-table" role="presentation">
 			<tr>
-				<th scope="row"><label for="wcvs-assign-mode"><?php esc_html_e( 'Show on', 'voucher-captain' ); ?></label></th>
+				<th scope="row"><label for="vcap-assign-mode"><?php esc_html_e( 'Show on', 'voucher-captain' ); ?></label></th>
 				<td>
-					<select name="wcvs_assign[mode]" id="wcvs-assign-mode">
+					<select name="vcap_assign[mode]" id="vcap-assign-mode">
 						<option value="all" <?php selected( $mode, 'all' ); ?>><?php esc_html_e( 'All voucher products', 'voucher-captain' ); ?></option>
 						<option value="products" <?php selected( $mode, 'products' ); ?>><?php esc_html_e( 'Selected products', 'voucher-captain' ); ?></option>
 						<option value="categories" <?php selected( $mode, 'categories' ); ?>><?php esc_html_e( 'Products in categories', 'voucher-captain' ); ?></option>
@@ -579,10 +579,10 @@ final class Fields {
 					</select>
 				</td>
 			</tr>
-			<tr class="wcvs-assign-row" data-mode="products">
-				<th scope="row"><label for="wcvs-assign-products"><?php esc_html_e( 'Products', 'voucher-captain' ); ?></label></th>
+			<tr class="vcap-assign-row" data-mode="products">
+				<th scope="row"><label for="vcap-assign-products"><?php esc_html_e( 'Products', 'voucher-captain' ); ?></label></th>
 				<td>
-					<select class="wc-product-search" multiple style="width:100%" id="wcvs-assign-products" name="wcvs_assign[products][]" data-action="woocommerce_json_search_products">
+					<select class="wc-product-search" multiple style="width:100%" id="vcap-assign-products" name="vcap_assign[products][]" data-action="woocommerce_json_search_products">
 						<?php
 						foreach ( (array) ( $assign['products'] ?? array() ) as $pid ) {
 							$p = wc_get_product( $pid );
@@ -595,10 +595,10 @@ final class Fields {
 				</td>
 			</tr>
 			<?php foreach ( array( 'categories' => 'product_cat', 'tags' => 'product_tag' ) as $key => $taxonomy ) : ?>
-				<tr class="wcvs-assign-row" data-mode="<?php echo esc_attr( $key ); ?>">
-					<th scope="row"><label for="wcvs-assign-<?php echo esc_attr( $key ); ?>"><?php echo 'categories' === $key ? esc_html__( 'Categories', 'voucher-captain' ) : esc_html__( 'Tags', 'voucher-captain' ); ?></label></th>
+				<tr class="vcap-assign-row" data-mode="<?php echo esc_attr( $key ); ?>">
+					<th scope="row"><label for="vcap-assign-<?php echo esc_attr( $key ); ?>"><?php echo 'categories' === $key ? esc_html__( 'Categories', 'voucher-captain' ) : esc_html__( 'Tags', 'voucher-captain' ); ?></label></th>
 					<td>
-						<select class="wc-enhanced-select" multiple style="width:100%" id="wcvs-assign-<?php echo esc_attr( $key ); ?>" name="wcvs_assign[<?php echo esc_attr( $key ); ?>][]">
+						<select class="wc-enhanced-select" multiple style="width:100%" id="vcap-assign-<?php echo esc_attr( $key ); ?>" name="vcap_assign[<?php echo esc_attr( $key ); ?>][]">
 							<?php
 							$terms = get_terms( array( 'taxonomy' => $taxonomy, 'hide_empty' => false ) );
 							foreach ( is_wp_error( $terms ) ? array() : $terms as $term ) {
@@ -610,9 +610,9 @@ final class Fields {
 				</tr>
 			<?php endforeach; ?>
 			<tr>
-				<th scope="row"><label for="wcvs-position"><?php esc_html_e( 'Position', 'voucher-captain' ); ?></label></th>
+				<th scope="row"><label for="vcap-position"><?php esc_html_e( 'Position', 'voucher-captain' ); ?></label></th>
 				<td>
-					<select name="wcvs_position" id="wcvs-position">
+					<select name="vcap_position" id="vcap-position">
 						<option value="before_quantity" <?php selected( $position, 'before_quantity' ); ?>><?php esc_html_e( 'Before quantity field', 'voucher-captain' ); ?></option>
 						<option value="before_button" <?php selected( $position, 'before_button' ); ?>><?php esc_html_e( 'Before "Add to cart" button', 'voucher-captain' ); ?></option>
 						<option value="after_button" <?php selected( $position, 'after_button' ); ?>><?php esc_html_e( 'After "Add to cart" button', 'voucher-captain' ); ?></option>
@@ -625,13 +625,13 @@ final class Fields {
 	}
 
 	public function save_group( int $post_id, \WP_Post $post ): void {
-		if ( ! isset( $_POST['wcvs_field_group_nonce'] ) || ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['wcvs_field_group_nonce'] ) ), 'wcvs_field_group' ) ) {
+		if ( ! isset( $_POST['vcap_field_group_nonce'] ) || ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_field_group_nonce'] ) ), 'vcap_field_group' ) ) {
 			return;
 		}
 		if ( ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) || ! current_user_can( 'edit_post', $post_id ) ) {
 			return;
 		}
-		$fields_in = json_decode( wp_unslash( (string) ( $_POST['wcvs_fields_json'] ?? '' ) ), true ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised below.
+		$fields_in = json_decode( wp_unslash( (string) ( $_POST['vcap_fields_json'] ?? '' ) ), true ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised below.
 		$fields    = array();
 		$reserved  = array( 'recipient_name', 'recipient_email', 'message', 'delivery_date' );
 		foreach ( is_array( $fields_in ) ? $fields_in : array() as $f ) {
@@ -651,17 +651,17 @@ final class Fields {
 				'options'     => sanitize_textarea_field( $f['options'] ?? '' ),
 			);
 		}
-		update_post_meta( $post_id, '_wcvs_fields', wp_slash( wp_json_encode( array_values( $fields ) ) ) );
+		update_post_meta( $post_id, '_vcap_fields', wp_slash( wp_json_encode( array_values( $fields ) ) ) );
 
-		$assign_in = isset( $_POST['wcvs_assign'] ) ? (array) wp_unslash( $_POST['wcvs_assign'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		$assign_in = isset( $_POST['vcap_assign'] ) ? (array) wp_unslash( $_POST['vcap_assign'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		$assign    = array(
 			'mode'       => in_array( $assign_in['mode'] ?? 'all', array( 'all', 'products', 'categories', 'tags' ), true ) ? ( $assign_in['mode'] ?? 'all' ) : 'all',
 			'products'   => array_map( 'absint', (array) ( $assign_in['products'] ?? array() ) ),
 			'categories' => array_map( 'absint', (array) ( $assign_in['categories'] ?? array() ) ),
 			'tags'       => array_map( 'absint', (array) ( $assign_in['tags'] ?? array() ) ),
 		);
-		update_post_meta( $post_id, '_wcvs_assign', wp_slash( wp_json_encode( $assign ) ) );
-		$position = sanitize_key( wp_unslash( $_POST['wcvs_position'] ?? 'before_button' ) );
-		update_post_meta( $post_id, '_wcvs_position', isset( self::POSITIONS[ $position ] ) ? $position : 'before_button' );
+		update_post_meta( $post_id, '_vcap_assign', wp_slash( wp_json_encode( $assign ) ) );
+		$position = sanitize_key( wp_unslash( $_POST['vcap_position'] ?? 'before_button' ) );
+		update_post_meta( $post_id, '_vcap_position', isset( self::POSITIONS[ $position ] ) ? $position : 'before_button' );
 	}
 }

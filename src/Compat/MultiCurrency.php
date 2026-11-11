@@ -1,5 +1,5 @@
 <?php
-namespace WCVS\Compat;
+namespace VCAP\Compat;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -7,11 +7,11 @@ defined( 'ABSPATH' ) || exit;
  * Multi-currency: vouchers bought in a foreign currency are converted to the shop base currency,
  * because WooCommerce coupons are stored in the base currency (currency switchers convert them on the fly).
  * Supported: WooCommerce Multilingual (WCML), Aelia Currency Switcher, WOOCS, CURCY; others via the
- * `wcvs_amount_to_base_currency` filter.
+ * `vcap_amount_to_base_currency` filter.
  */
 final class MultiCurrency {
 	public function register(): void {
-		add_filter( 'wcvs_amount_to_base_currency', array( $this, 'convert' ), 10, 3 );
+		add_filter( 'vcap_amount_to_base_currency', array( $this, 'convert' ), 10, 3 );
 	}
 
 	public function convert( $amount, $currency, $order = null ) {
@@ -54,7 +54,7 @@ final class MultiCurrency {
 
 		// Order-stored rate (some switchers save it).
 		if ( $order instanceof \WC_Order ) {
-			$rate = (float) $order->get_meta( '_wcvs_exchange_rate' );
+			$rate = (float) $order->get_meta( '_vcap_exchange_rate' );
 			if ( $rate > 0 ) {
 				return $amount / $rate;
 			}

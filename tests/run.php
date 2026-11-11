@@ -4,16 +4,16 @@
  */
 require __DIR__ . '/stubs.php';
 
-use WCVS\CodeGenerator;
-use WCVS\Delivery;
-use WCVS\PdfRenderer;
-use WCVS\Placeholders;
-use WCVS\ProductConfig;
-use WCVS\SpreadsheetReader;
-use WCVS\TemplatePostType;
-use WCVS\Voucher;
+use VCAP\CodeGenerator;
+use VCAP\Delivery;
+use VCAP\PdfRenderer;
+use VCAP\Placeholders;
+use VCAP\ProductConfig;
+use VCAP\SpreadsheetReader;
+use VCAP\TemplatePostType;
+use VCAP\Voucher;
 
-$out    = $argv[1] ?? sys_get_temp_dir() . '/wcvs-test-output';
+$out    = $argv[1] ?? sys_get_temp_dir() . '/vcap-test-output';
 @mkdir( $out, 0777, true );
 $failed = 0;
 $passed = 0;
@@ -100,10 +100,10 @@ echo "PDF rendering\n";
 $img = imagecreatetruecolor( 300, 200 );
 imagefill( $img, 0, 0, imagecolorallocate( $img, 230, 210, 180 ) );
 imagefilledellipse( $img, 150, 100, 160, 160, imagecolorallocate( $img, 31, 58, 77 ) );
-$png = $GLOBALS['wcvs_test_uploads'] . '/2026/11/logo.png';
+$png = $GLOBALS['vcap_test_uploads'] . '/2026/11/logo.png';
 @mkdir( dirname( $png ), 0777, true );
 imagepng( $img, $png );
-$GLOBALS['wcvs_test_attachments'][77] = $png;
+$GLOBALS['vcap_test_attachments'][77] = $png;
 
 $designs                                = TemplatePostType::default_designs();
 $designs['giftcard']['elements'][]      = array( 'id' => 'logo', 'type' => 'image', 'imageId' => 77, 'x' => 18, 'y' => 60, 'w' => 38, 'h' => 30, 'fit' => 'contain' );
@@ -124,7 +124,7 @@ $ticket->initial_amount = 0;
 foreach ( array( 'giftcard' => $v, 'ticket' => $ticket ) as $key => $voucher ) {
 	$start = microtime( true );
 	try {
-		$pdf = wcvs()->pdf->render( $voucher, $designs[ $key ] );
+		$pdf = vcap()->pdf->render( $voucher, $designs[ $key ] );
 	} catch ( \Throwable $e ) {
 		check( "$key renders", false, $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine() );
 		continue;
@@ -145,16 +145,16 @@ foreach ( array( 'giftcard' => $v, 'ticket' => $ticket ) as $key => $voucher ) {
 		if ( 'giftcard' === $key ) {
 			check( 'umlauts survive (Jörg Empfänger, Ümläuten)', str_contains( $text, 'Jörg Empfänger' ) && str_contains( $text, 'Ümläuten' ) );
 			check( 'value printed', str_contains( $text, "50,00\u{a0}€" ) || str_contains( $text, '50,00 €' ) );
-			check( 'custom field placeholder in markup', str_contains( wcvs()->pdf->html( $voucher, $designs[ $key ] ), 'Rotated Für die Beste' ) );
+			check( 'custom field placeholder in markup', str_contains( vcap()->pdf->html( $voucher, $designs[ $key ] ), 'Rotated Für die Beste' ) );
 		}
 	}
 	shell_exec( 'pdftoppm -png -r 110 -singlefile ' . escapeshellarg( $file ) . ' ' . escapeshellarg( "$out/$key" ) . ' 2>/dev/null' );
 }
-$html = wcvs()->pdf->html( $v, array( 'page' => array( 'format' => 'A6' ), 'elements' => array( array( 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 50, 'h' => 10, 'text' => '<img src=x onerror=alert(1)> {message}' ) ) ) );
+$html = vcap()->pdf->html( $v, array( 'page' => array( 'format' => 'A6' ), 'elements' => array( array( 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 50, 'h' => 10, 'text' => '<img src=x onerror=alert(1)> {message}' ) ) ) );
 check( 'text is HTML-escaped in PDF markup', ! str_contains( $html, '<img src=x' ) && str_contains( $html, '&lt;img src=x' ) );
-check( 'remote images are never fetched', null === wcvs()->pdf->image_path( 0, 'https://evil.test/x.png' ) );
-check( 'uploads URL maps to local file', $png === wcvs()->pdf->image_path( 0, 'https://shop.test/wp-content/uploads/2026/11/logo.png' ) );
-check( 'path traversal blocked', null === wcvs()->pdf->image_path( 0, 'https://shop.test/wp-content/uploads/../../../../etc/passwd' ) );
+check( 'remote images are never fetched', null === vcap()->pdf->image_path( 0, 'https://evil.test/x.png' ) );
+check( 'uploads URL maps to local file', $png === vcap()->pdf->image_path( 0, 'https://shop.test/wp-content/uploads/2026/11/logo.png' ) );
+check( 'path traversal blocked', null === vcap()->pdf->image_path( 0, 'https://shop.test/wp-content/uploads/../../../../etc/passwd' ) );
 
 echo "Spreadsheet import\n";
 $csv = "$out/codes.csv";

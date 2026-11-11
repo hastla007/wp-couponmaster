@@ -1,9 +1,9 @@
 <?php
-namespace WCVS\Emails;
+namespace VCAP\Emails;
 
-use WCVS\Placeholders;
-use WCVS\Plugin;
-use WCVS\Voucher;
+use VCAP\Placeholders;
+use VCAP\Plugin;
+use VCAP\Voucher;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -17,7 +17,7 @@ abstract class VoucherEmail extends \WC_Email {
 
 	public function __construct() {
 		$this->customer_email = true;
-		$this->template_base  = WCVS_PATH . 'templates/';
+		$this->template_base  = VCAP_PATH . 'templates/';
 		$this->template_html  = 'emails/voucher.php';
 		$this->template_plain = 'emails/plain/voucher.php';
 		$this->placeholders   = array();
@@ -57,9 +57,9 @@ abstract class VoucherEmail extends \WC_Email {
 
 	public function get_attachments() {
 		$attachments = parent::get_attachments();
-		if ( $this->voucher && 'yes' === $this->get_option( 'attach_pdf', get_option( 'wcvs_attach_pdf', 'yes' ) ) && class_exists( '\Dompdf\Dompdf' ) ) {
+		if ( $this->voucher && 'yes' === $this->get_option( 'attach_pdf', get_option( 'vcap_attach_pdf', 'yes' ) ) && class_exists( '\Dompdf\Dompdf' ) ) {
 			try {
-				$file = wcvs()->pdf->to_temp_file( $this->voucher );
+				$file = vcap()->pdf->to_temp_file( $this->voucher );
 				if ( $file ) {
 					$this->temp_files[] = $file;
 					$attachments[]      = $file;
@@ -81,7 +81,7 @@ abstract class VoucherEmail extends \WC_Email {
 	private function template_args( bool $plain ): array {
 		if ( ! $this->voucher ) {
 			// WooCommerce email preview (Settings → Emails) renders without a trigger.
-			$this->voucher      = \WCVS\Preview::sample_voucher();
+			$this->voucher      = \VCAP\Preview::sample_voucher();
 			$this->placeholders = array_merge( $this->placeholders, Placeholders::email_map( $this->voucher ) );
 		}
 		return array(
@@ -90,7 +90,7 @@ abstract class VoucherEmail extends \WC_Email {
 			'email_heading'      => $this->get_heading(),
 			'intro'              => $this->format_string( (string) $this->get_option( 'intro', $this->get_default_intro() ) ),
 			'additional_content' => $this->get_additional_content(),
-			'download_url'       => $this->voucher->id && 'yes' === get_option( 'wcvs_include_link', 'yes' ) ? wcvs()->downloads->signed_url( $this->voucher, true ) : '',
+			'download_url'       => $this->voucher->id && 'yes' === get_option( 'vcap_include_link', 'yes' ) ? vcap()->downloads->signed_url( $this->voucher, true ) : '',
 			'sent_to_admin'      => false,
 			'plain_text'         => $plain,
 			'email'              => $this,

@@ -1,5 +1,5 @@
 <?php
-namespace WCVS;
+namespace VCAP;
 
 /**
  * Minimal, dependency-free reader for the first worksheet of CSV, XLSX, ODS and legacy XLS (BIFF8) files.

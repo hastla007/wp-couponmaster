@@ -1,5 +1,5 @@
 <?php
-namespace WCVS;
+namespace VCAP;
 
 defined( 'ABSPATH' ) || exit;
 

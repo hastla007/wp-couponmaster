@@ -1,5 +1,5 @@
 <?php
-namespace WCVS;
+namespace VCAP;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -47,9 +47,9 @@ final class Privacy {
 				$data[] = array( 'name' => $field['label'] ?? '', 'value' => $field['value'] ?? '' );
 			}
 			$items[] = array(
-				'group_id'    => 'wcvs-vouchers',
+				'group_id'    => 'vcap-vouchers',
 				'group_label' => __( 'Vouchers', 'voucher-captain' ),
-				'item_id'     => 'wcvs-voucher-' . $voucher->id,
+				'item_id'     => 'vcap-voucher-' . $voucher->id,
 				'data'        => $data,
 			);
 		}

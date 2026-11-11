@@ -1,8 +1,8 @@
 <?php
-namespace WCVS\Admin;
+namespace VCAP\Admin;
 
-use WCVS\Voucher;
-use WCVS\VoucherRepository;
+use VCAP\Voucher;
+use VCAP\VoucherRepository;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -59,7 +59,7 @@ final class VouchersListTable extends \WP_List_Table {
 		$views   = array( '' => __( 'All', 'voucher-captain' ) ) + Voucher::statuses();
 		$out     = array();
 		foreach ( $views as $key => $label ) {
-			$url         = add_query_arg( array( 'page' => 'wcvs-vouchers', 'status' => $key ), admin_url( 'admin.php' ) );
+			$url         = add_query_arg( array( 'page' => 'vcap-vouchers', 'status' => $key ), admin_url( 'admin.php' ) );
 			$out[ $key ?: 'all' ] = '<a href="' . esc_url( $url ) . '"' . ( $current === $key ? ' class="current" aria-current="page"' : '' ) . '>' . esc_html( $label ) . '</a>';
 		}
 		return $out;
@@ -72,15 +72,15 @@ final class VouchersListTable extends \WP_List_Table {
 		$type     = sanitize_key( $_GET['type'] ?? '' ); // phpcs:ignore WordPress.Security.NonceVerification
 		$expiring = sanitize_key( $_GET['expiring'] ?? '' ); // phpcs:ignore WordPress.Security.NonceVerification
 		echo '<div class="alignleft actions">';
-		echo '<label class="screen-reader-text" for="wcvs-filter-type">' . esc_html__( 'Filter by type', 'voucher-captain' ) . '</label>';
-		echo '<select name="type" id="wcvs-filter-type"><option value="">' . esc_html__( 'All types', 'voucher-captain' ) . '</option>';
+		echo '<label class="screen-reader-text" for="vcap-filter-type">' . esc_html__( 'Filter by type', 'voucher-captain' ) . '</label>';
+		echo '<select name="type" id="vcap-filter-type"><option value="">' . esc_html__( 'All types', 'voucher-captain' ) . '</option>';
 		foreach ( Voucher::types() as $key => $label ) {
 			echo '<option value="' . esc_attr( $key ) . '"' . selected( $type, $key, false ) . '>' . esc_html( $label ) . '</option>';
 		}
 		echo '</select>';
 		echo '<label><input type="checkbox" name="expiring" value="soon" ' . checked( $expiring, 'soon', false ) . '> ' . esc_html__( 'Expiring within 30 days', 'voucher-captain' ) . '</label> ';
 		submit_button( __( 'Filter', 'voucher-captain' ), '', 'filter_action', false );
-		$export = wp_nonce_url( add_query_arg( array_merge( array( 'action' => 'wcvs_export' ), $this->filter_args() ), admin_url( 'admin-post.php' ) ), 'wcvs_export' );
+		$export = wp_nonce_url( add_query_arg( array_merge( array( 'action' => 'vcap_export' ), $this->filter_args() ), admin_url( 'admin-post.php' ) ), 'vcap_export' );
 		echo ' <a class="button" href="' . esc_url( $export ) . '">' . esc_html__( 'Export CSV', 'voucher-captain' ) . '</a>';
 		echo '</div>';
 	}
@@ -100,7 +100,7 @@ final class VouchersListTable extends \WP_List_Table {
 	}
 
 	public function prepare_items(): void {
-		$per_page = $this->get_items_per_page( 'wcvs_vouchers_per_page', 20 );
+		$per_page = $this->get_items_per_page( 'vcap_vouchers_per_page', 20 );
 		$result   = $this->repo->query(
 			array_merge(
 				$this->filter_args(),
@@ -125,10 +125,10 @@ final class VouchersListTable extends \WP_List_Table {
 	}
 
 	protected function column_code( Voucher $v ): string {
-		$url     = add_query_arg( array( 'page' => 'wcvs-vouchers', 'voucher' => $v->id ), admin_url( 'admin.php' ) );
+		$url     = add_query_arg( array( 'page' => 'vcap-vouchers', 'voucher' => $v->id ), admin_url( 'admin.php' ) );
 		$actions = array(
 			'view' => '<a href="' . esc_url( $url ) . '">' . esc_html__( 'Details', 'voucher-captain' ) . '</a>',
-			'pdf'  => '<a href="' . esc_url( wcvs()->downloads->admin_url( $v ) ) . '" target="_blank">PDF</a>',
+			'pdf'  => '<a href="' . esc_url( vcap()->downloads->admin_url( $v ) ) . '" target="_blank">PDF</a>',
 		);
 		if ( $v->coupon_id ) {
 			$actions['coupon'] = '<a href="' . esc_url( get_edit_post_link( $v->coupon_id ) ?: '' ) . '">' . esc_html__( 'Coupon', 'voucher-captain' ) . '</a>';
@@ -157,7 +157,7 @@ final class VouchersListTable extends \WP_List_Table {
 
 	protected function column_status( Voucher $v ): string {
 		$status = Voucher::STATUS_ACTIVE === $v->status && $v->is_expired() ? Voucher::STATUS_EXPIRED : $v->status;
-		$out    = '<mark class="wcvs-status wcvs-status--' . esc_attr( $status ) . '"><span>' . esc_html( $v->status_label() ) . '</span></mark>';
+		$out    = '<mark class="vcap-status vcap-status--' . esc_attr( $status ) . '"><span>' . esc_html( $v->status_label() ) . '</span></mark>';
 		if ( Voucher::STATUS_SCHEDULED === $v->status && $v->delivery_at ) {
 			$out .= '<br><small>' . esc_html( get_date_from_gmt( $v->delivery_at, get_option( 'date_format' ) ) ) . '</small>';
 		}

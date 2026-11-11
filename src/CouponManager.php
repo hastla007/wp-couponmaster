@@ -1,5 +1,5 @@
 <?php
-namespace WCVS;
+namespace VCAP;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -71,14 +71,14 @@ final class CouponManager {
 		}
 		$coupon->set_email_restrictions( array_values( array_unique( $emails ) ) );
 
-		$coupon->update_meta_data( '_wcvs_voucher', 'yes' );
-		$coupon->update_meta_data( '_wcvs_voucher_code', $voucher->code );
+		$coupon->update_meta_data( '_vcap_voucher', 'yes' );
+		$coupon->update_meta_data( '_vcap_voucher_code', $voucher->code );
 		if ( $voucher->is_ticket() ) {
 			// Tickets are admission passes: do not give a cart discount unless an amount was configured.
-			$coupon->update_meta_data( '_wcvs_ticket', 'yes' );
+			$coupon->update_meta_data( '_vcap_ticket', 'yes' );
 		}
 
-		$coupon = apply_filters( 'wcvs_coupon_before_save', $coupon, $voucher, $config );
+		$coupon = apply_filters( 'vcap_coupon_before_save', $coupon, $voucher, $config );
 		$coupon->save();
 		return (int) $coupon->get_id();
 	}
@@ -124,7 +124,7 @@ final class CouponManager {
 	 * Reject coupons whose voucher is void, not yet delivered or used up.
 	 */
 	public function validate( $valid, $coupon, $discounts = null ) {
-		if ( ! $valid || ! $coupon instanceof \WC_Coupon || 'yes' !== $coupon->get_meta( '_wcvs_voucher' ) ) {
+		if ( ! $valid || ! $coupon instanceof \WC_Coupon || 'yes' !== $coupon->get_meta( '_vcap_voucher' ) ) {
 			return $valid;
 		}
 		$voucher = $this->repo->get_by_coupon( $coupon->get_id() );
@@ -150,7 +150,7 @@ final class CouponManager {
 		foreach ( WC()->cart->get_applied_coupons() as $code ) {
 			$voucher = $this->repo->get_by_code( wc_format_coupon_code( $code ) ) ?? $this->repo->get_by_code( $code );
 			if ( $voucher && $voucher->is_multi_use() ) {
-				echo '<tr class="wcvs-balance"><th>' . esc_html(
+				echo '<tr class="vcap-balance"><th>' . esc_html(
 					sprintf(
 						/* translators: %s: voucher code */
 						__( 'Voucher %s balance', 'voucher-captain' ),
@@ -163,7 +163,7 @@ final class CouponManager {
 
 	private function used_amount( \WC_Order_Item_Coupon $item ): float {
 		$amount = (float) $item->get_discount();
-		if ( $this->settings->yes( 'wcvs_balance_include_tax' ) ) {
+		if ( $this->settings->yes( 'vcap_balance_include_tax' ) ) {
 			$amount += (float) $item->get_discount_tax();
 		}
 		return $amount;
@@ -177,18 +177,18 @@ final class CouponManager {
 		if ( ! $order ) {
 			return;
 		}
-		$deduct_statuses  = apply_filters( 'wcvs_balance_deduct_statuses', array( 'processing', 'completed', 'on-hold' ) );
-		$restore_statuses = apply_filters( 'wcvs_balance_restore_statuses', array( 'cancelled', 'refunded', 'failed' ) );
+		$deduct_statuses  = apply_filters( 'vcap_balance_deduct_statuses', array( 'processing', 'completed', 'on-hold' ) );
+		$restore_statuses = apply_filters( 'vcap_balance_restore_statuses', array( 'cancelled', 'refunded', 'failed' ) );
 
 		if ( in_array( $to, $deduct_statuses, true ) ) {
 			$this->deduct_order( $order );
-		} elseif ( in_array( $to, $restore_statuses, true ) && $this->settings->yes( 'wcvs_restore_on_cancel' ) ) {
+		} elseif ( in_array( $to, $restore_statuses, true ) && $this->settings->yes( 'vcap_restore_on_cancel' ) ) {
 			$this->restore_order( $order );
 		}
 	}
 
 	public function deduct_order( \WC_Order $order ): void {
-		$applied = (array) $order->get_meta( '_wcvs_redemptions' );
+		$applied = (array) $order->get_meta( '_vcap_redemptions' );
 		$changed = false;
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
 			/** @var \WC_Order_Item_Coupon $item */
@@ -223,13 +223,13 @@ final class CouponManager {
 			);
 		}
 		if ( $changed ) {
-			$order->update_meta_data( '_wcvs_redemptions', $applied );
+			$order->update_meta_data( '_vcap_redemptions', $applied );
 			$order->save();
 		}
 	}
 
 	public function restore_order( \WC_Order $order ): void {
-		$applied = (array) $order->get_meta( '_wcvs_redemptions' );
+		$applied = (array) $order->get_meta( '_vcap_redemptions' );
 		if ( ! $applied ) {
 			return;
 		}
@@ -248,7 +248,7 @@ final class CouponManager {
 				$order->get_id()
 			);
 		}
-		$order->delete_meta_data( '_wcvs_redemptions' );
+		$order->delete_meta_data( '_vcap_redemptions' );
 		$order->save();
 	}
 
@@ -261,7 +261,7 @@ final class CouponManager {
 	 * Single-use vouchers: mark redeemed once WooCommerce's usage limit is reached.
 	 */
 	public function usage_increased( $coupon, $new_count, $used_by ): void {
-		if ( ! $coupon instanceof \WC_Coupon || 'yes' !== $coupon->get_meta( '_wcvs_voucher' ) ) {
+		if ( ! $coupon instanceof \WC_Coupon || 'yes' !== $coupon->get_meta( '_vcap_voucher' ) ) {
 			return;
 		}
 		$voucher = $this->repo->get_by_coupon( $coupon->get_id() );
@@ -278,7 +278,7 @@ final class CouponManager {
 	}
 
 	public function usage_decreased( $coupon, $new_count, $used_by ): void {
-		if ( ! $coupon instanceof \WC_Coupon || 'yes' !== $coupon->get_meta( '_wcvs_voucher' ) ) {
+		if ( ! $coupon instanceof \WC_Coupon || 'yes' !== $coupon->get_meta( '_vcap_voucher' ) ) {
 			return;
 		}
 		$voucher = $this->repo->get_by_coupon( $coupon->get_id() );

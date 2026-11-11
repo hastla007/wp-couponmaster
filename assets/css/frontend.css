@@ -1,17 +1,17 @@
 /* Voucher Captain – storefront */
-.wcvs-fields { margin: 0 0 1.2em; }
-.wcvs-fields .form-row { margin: 0 0 .9em; }
-.wcvs-fields label { display: block; font-weight: 600; margin-bottom: .25em; }
-.wcvs-fields label.checkbox { font-weight: 400; }
-.wcvs-fields input.input-text, .wcvs-fields textarea, .wcvs-fields select, .wcvs-amount input { width: 100%; box-sizing: border-box; }
-.wcvs-field-help, .wcvs-counter { display: block; font-size: .85em; opacity: .75; margin-top: .25em; }
-.wcvs-amount { margin-bottom: 1em; }
-.wcvs-amount label { display: block; font-weight: 600; margin-bottom: .3em; }
-.wcvs-amount-presets { display: flex; flex-wrap: wrap; gap: .4em; margin-bottom: .5em; }
-.wcvs-amount-preset.is-active { outline: 2px solid currentColor; }
-.wcvs-preview-row { margin: .5em 0 0; }
-.wcvs-vouchers { margin: 2em 0; }
-.wcvs-vouchers-table code { font-size: 1em; letter-spacing: .05em; }
-.wcvs-download { text-align: right; }
-.wcvs-balance-form { display: flex; flex-wrap: wrap; gap: .5em; align-items: center; }
-.wcvs-balance-form label { flex-basis: 100%; font-weight: 600; }
+.vcap-fields { margin: 0 0 1.2em; }
+.vcap-fields .form-row { margin: 0 0 .9em; }
+.vcap-fields label { display: block; font-weight: 600; margin-bottom: .25em; }
+.vcap-fields label.checkbox { font-weight: 400; }
+.vcap-fields input.input-text, .vcap-fields textarea, .vcap-fields select, .vcap-amount input { width: 100%; box-sizing: border-box; }
+.vcap-field-help, .vcap-counter { display: block; font-size: .85em; opacity: .75; margin-top: .25em; }
+.vcap-amount { margin-bottom: 1em; }
+.vcap-amount label { display: block; font-weight: 600; margin-bottom: .3em; }
+.vcap-amount-presets { display: flex; flex-wrap: wrap; gap: .4em; margin-bottom: .5em; }
+.vcap-amount-preset.is-active { outline: 2px solid currentColor; }
+.vcap-preview-row { margin: .5em 0 0; }
+.vcap-vouchers { margin: 2em 0; }
+.vcap-vouchers-table code { font-size: 1em; letter-spacing: .05em; }
+.vcap-download { text-align: right; }
+.vcap-balance-form { display: flex; flex-wrap: wrap; gap: .5em; align-items: center; }
+.vcap-balance-form label { flex-basis: 100%; font-weight: 600; }

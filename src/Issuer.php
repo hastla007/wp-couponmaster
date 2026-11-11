@@ -1,5 +1,5 @@
 <?php
-namespace WCVS;
+namespace VCAP;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -19,17 +19,17 @@ final class Issuer {
 	) {}
 
 	public function register(): void {
-		foreach ( (array) $this->settings->get( 'wcvs_issue_statuses' ) as $status ) {
+		foreach ( (array) $this->settings->get( 'vcap_issue_statuses' ) as $status ) {
 			add_action( 'woocommerce_order_status_' . sanitize_key( $status ), array( $this, 'on_status' ), 20, 2 );
 		}
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'on_purchase_cancelled' ), 30, 2 );
 		add_action( 'woocommerce_order_status_refunded', array( $this, 'on_purchase_cancelled' ), 30, 2 );
-		add_action( 'wcvs_issue_order', array( $this, 'issue_async' ) );
+		add_action( 'vcap_issue_order', array( $this, 'issue_async' ) );
 	}
 
 	public function on_status( $order_id, $order = null ): void {
 		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
-		if ( ! $order || ! apply_filters( 'wcvs_should_issue_for_order', true, $order ) ) {
+		if ( ! $order || ! apply_filters( 'vcap_should_issue_for_order', true, $order ) ) {
 			return;
 		}
 		$this->issue_for_order( $order );
@@ -58,7 +58,7 @@ final class Issuer {
 			}
 			$config = ProductConfig::get( $product );
 			$qty    = max( 0, (int) $item->get_quantity() + (int) $order->get_qty_refunded_for_item( $item_id ) );
-			$count  = (int) apply_filters( 'wcvs_vouchers_per_item', $qty * $config['per_item'], $item, $config );
+			$count  = (int) apply_filters( 'vcap_vouchers_per_item', $qty * $config['per_item'], $item, $config );
 
 			for ( $index = 0; $index < $count; $index++ ) {
 				if ( $this->repo->get_slot( (int) $item_id, $index ) ) {
@@ -83,7 +83,7 @@ final class Issuer {
 			foreach ( $created as $voucher ) {
 				$this->delivery->schedule( $voucher );
 			}
-			do_action( 'wcvs_vouchers_issued', $created, $order );
+			do_action( 'vcap_vouchers_issued', $created, $order );
 		}
 		return $created;
 	}
@@ -99,7 +99,7 @@ final class Issuer {
 				$amount = (float) wc_format_decimal( $config['amount'] );
 				break;
 			case 'custom':
-				$custom = $item->get_meta( '_wcvs_custom_amount' );
+				$custom = $item->get_meta( '_vcap_custom_amount' );
 				$amount = '' !== (string) $custom ? (float) $custom : ( (float) $item->get_subtotal() + (float) $item->get_subtotal_tax() ) / $qty;
 				break;
 			default:
@@ -107,9 +107,9 @@ final class Issuer {
 		}
 		if ( 'percent' !== $config['discount_type'] && 'fixed' !== $config['amount_source'] ) {
 			// Paid / entered in the order currency; coupons are stored in the shop base currency.
-			$amount = (float) apply_filters( 'wcvs_amount_to_base_currency', $amount, $order->get_currency(), $order );
+			$amount = (float) apply_filters( 'vcap_amount_to_base_currency', $amount, $order->get_currency(), $order );
 		}
-		return round( (float) apply_filters( 'wcvs_voucher_amount', $amount, $item, $config, $order ), wc_get_price_decimals() );
+		return round( (float) apply_filters( 'vcap_voucher_amount', $amount, $item, $config, $order ), wc_get_price_decimals() );
 	}
 
 	private function create_voucher( \WC_Order $order, \WC_Order_Item_Product $item, \WC_Product $product, array $config, int $index ): ?Voucher {
@@ -131,7 +131,7 @@ final class Issuer {
 		$voucher->buyer_email   = (string) $order->get_billing_email();
 		$voucher->max_checkins  = (int) $config['max_checkins'];
 
-		$fields                   = (array) $item->get_meta( '_wcvs_fields' );
+		$fields                   = (array) $item->get_meta( '_vcap_fields' );
 		$voucher->recipient_name  = (string) ( $fields['recipient_name']['value'] ?? '' );
 		$voucher->recipient_email = sanitize_email( (string) ( $fields['recipient_email']['value'] ?? '' ) );
 		$voucher->message         = (string) ( $fields['message']['value'] ?? '' );
@@ -157,17 +157,17 @@ final class Issuer {
 		if ( '' === $code ) {
 			$code = CodeGenerator::unique(
 				array(
-					'prefix'    => '' !== (string) $config['code_prefix'] ? $config['code_prefix'] : $this->settings->get( 'wcvs_code_prefix' ),
-					'suffix'    => '' !== (string) $config['code_suffix'] ? $config['code_suffix'] : $this->settings->get( 'wcvs_code_suffix' ),
-					'length'    => (int) ( $config['code_length'] ?: $this->settings->get( 'wcvs_code_length' ) ),
-					'charset'   => $this->settings->get( 'wcvs_code_charset' ),
-					'separator' => $this->settings->get( 'wcvs_code_separator' ),
-					'order_ref' => $this->settings->yes( 'wcvs_code_order_ref' ) ? $order->get_order_number() : '',
+					'prefix'    => '' !== (string) $config['code_prefix'] ? $config['code_prefix'] : $this->settings->get( 'vcap_code_prefix' ),
+					'suffix'    => '' !== (string) $config['code_suffix'] ? $config['code_suffix'] : $this->settings->get( 'vcap_code_suffix' ),
+					'length'    => (int) ( $config['code_length'] ?: $this->settings->get( 'vcap_code_length' ) ),
+					'charset'   => $this->settings->get( 'vcap_code_charset' ),
+					'separator' => $this->settings->get( 'vcap_code_separator' ),
+					'order_ref' => $this->settings->yes( 'vcap_code_order_ref' ) ? $order->get_order_number() : '',
 				),
 				array( $this->coupons, 'code_exists' )
 			);
 		}
-		$voucher->code = (string) apply_filters( 'wcvs_voucher_code', $code, $order, $item, $index );
+		$voucher->code = (string) apply_filters( 'vcap_voucher_code', $code, $order, $item, $index );
 
 		if ( ! $this->repo->insert( $voucher ) ) {
 			// Slot taken by a concurrent request or code collision.
@@ -181,7 +181,7 @@ final class Issuer {
 		}
 
 		$create_coupon = 'ticket' !== $voucher->type || $voucher->initial_amount > 0;
-		if ( apply_filters( 'wcvs_create_coupon', $create_coupon, $voucher, $config ) ) {
+		if ( apply_filters( 'vcap_create_coupon', $create_coupon, $voucher, $config ) ) {
 			$voucher->coupon_id = $this->coupons->create_coupon( $voucher, $config );
 			if ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
 				// Not redeemable before the gift is delivered.
@@ -197,7 +197,7 @@ final class Issuer {
 	 * Purchase order cancelled/refunded → void its vouchers.
 	 */
 	public function on_purchase_cancelled( $order_id, $order = null ): void {
-		if ( ! $this->settings->yes( 'wcvs_void_on_refund' ) ) {
+		if ( ! $this->settings->yes( 'vcap_void_on_refund' ) ) {
 			return;
 		}
 		foreach ( $this->repo->for_order( (int) $order_id ) as $voucher ) {
@@ -214,7 +214,7 @@ final class Issuer {
 		$this->coupons->set_coupon_enabled( $voucher, false );
 		$this->repo->log( $voucher->id, 'voided', null, $voucher->balance, $note );
 		if ( function_exists( 'as_unschedule_all_actions' ) ) {
-			as_unschedule_all_actions( 'wcvs_deliver_voucher', array( 'voucher_id' => $voucher->id ), 'wcvs' );
+			as_unschedule_all_actions( 'vcap_deliver_voucher', array( 'voucher_id' => $voucher->id ), 'vcap' );
 		}
 	}
 

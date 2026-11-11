@@ -4,7 +4,7 @@
  *
  * Override: yourtheme/woocommerce/voucher-captain/ticket-status.php
  *
- * @var \WCVS\Voucher|null $voucher
+ * @var \VCAP\Voucher|null $voucher
  * @var array|null         $data
  * @var bool               $staff
  * @var bool               $public
@@ -74,16 +74,16 @@ $state  = $data['state'] ?? 'error';
 			</dl>
 			<?php if ( $staff && $voucher->is_ticket() && 'ok' === $state ) : ?>
 				<form method="post">
-					<?php wp_nonce_field( 'wcvs_checkin_' . $voucher->id, 'wcvs_checkin_nonce' ); ?>
+					<?php wp_nonce_field( 'vcap_checkin_' . $voucher->id, 'vcap_checkin_nonce' ); ?>
 					<?php if ( $voucher->max_checkins - $voucher->checkins > 1 ) : ?>
-						<label class="screen-reader-text" for="wcvs-count"><?php esc_html_e( 'Admissions', 'voucher-captain' ); ?></label>
-						<input type="number" id="wcvs-count" name="count" value="1" min="1" max="<?php echo esc_attr( (string) ( $voucher->max_checkins - $voucher->checkins ) ); ?>">
+						<label class="screen-reader-text" for="vcap-count"><?php esc_html_e( 'Admissions', 'voucher-captain' ); ?></label>
+						<input type="number" id="vcap-count" name="count" value="1" min="1" max="<?php echo esc_attr( (string) ( $voucher->max_checkins - $voucher->checkins ) ); ?>">
 					<?php endif; ?>
 					<button type="submit"><?php esc_html_e( 'Check in', 'voucher-captain' ); ?></button>
 				</form>
 			<?php endif; ?>
 			<?php if ( $staff ) : ?>
-				<p><a href="<?php echo esc_url( $data['admin_url'] ); ?>"><?php esc_html_e( 'Open in admin', 'voucher-captain' ); ?></a> · <a href="<?php echo esc_url( admin_url( 'admin.php?page=wcvs-scanner' ) ); ?>"><?php esc_html_e( 'Scanner', 'voucher-captain' ); ?></a></p>
+				<p><a href="<?php echo esc_url( $data['admin_url'] ); ?>"><?php esc_html_e( 'Open in admin', 'voucher-captain' ); ?></a> · <a href="<?php echo esc_url( admin_url( 'admin.php?page=vcap-scanner' ) ); ?>"><?php esc_html_e( 'Scanner', 'voucher-captain' ); ?></a></p>
 			<?php endif; ?>
 		</div>
 	<?php endif; ?>

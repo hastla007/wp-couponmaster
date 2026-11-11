@@ -1,5 +1,5 @@
 <?php
-namespace WCVS;
+namespace VCAP;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -12,8 +12,8 @@ final class Emails {
 	}
 
 	public function classes( array $emails ): array {
-		$emails['WCVS_Email_Voucher_Buyer']     = new Emails\BuyerEmail();
-		$emails['WCVS_Email_Voucher_Recipient'] = new Emails\RecipientEmail();
+		$emails['VCAP_Email_Voucher_Buyer']     = new Emails\BuyerEmail();
+		$emails['VCAP_Email_Voucher_Recipient'] = new Emails\RecipientEmail();
 		return $emails;
 	}
 }

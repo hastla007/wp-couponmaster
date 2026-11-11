@@ -1,13 +1,13 @@
 <?php
-namespace WCVS\Emails;
+namespace VCAP\Emails;
 
-use WCVS\Voucher;
+use VCAP\Voucher;
 
 defined( 'ABSPATH' ) || exit;
 
 final class BuyerEmail extends VoucherEmail {
 	public function __construct() {
-		$this->id          = 'wcvs_voucher_buyer';
+		$this->id          = 'vcap_voucher_buyer';
 		$this->title       = __( 'Voucher (buyer)', 'voucher-captain' );
 		$this->description = __( 'Sent to the customer with their purchased voucher, gift card or ticket.', 'voucher-captain' );
 		parent::__construct();

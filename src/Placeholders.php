@@ -1,5 +1,5 @@
 <?php
-namespace WCVS;
+namespace VCAP;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -9,7 +9,7 @@ defined( 'ABSPATH' ) || exit;
  * Static tokens: {coupon_code}, {coupon_value}, … (see definitions()).
  * Dynamic tokens: {field:KEY} personalisation field, {item_meta:KEY} order item meta (e.g. Flexible Product Fields),
  * {order_meta:KEY} order meta (e.g. Flexible Checkout Fields), {billing_FIELD} / {shipping_FIELD} address fields.
- * Extend with the `wcvs_placeholder_definitions` and `wcvs_placeholders` filters.
+ * Extend with the `vcap_placeholder_definitions` and `vcap_placeholders` filters.
  */
 final class Placeholders {
 	public static function definitions(): array {
@@ -40,7 +40,7 @@ final class Placeholders {
 			'site_name'         => __( 'Site name', 'voucher-captain' ),
 			'site_url'          => __( 'Site URL', 'voucher-captain' ),
 		);
-		return apply_filters( 'wcvs_placeholder_definitions', $defs );
+		return apply_filters( 'vcap_placeholder_definitions', $defs );
 	}
 
 	private static function money( float $amount, string $currency ): string {
@@ -52,7 +52,7 @@ final class Placeholders {
 		if ( ! $utc ) {
 			return '';
 		}
-		$format = wcvs()->settings->date_format();
+		$format = vcap()->settings->date_format();
 		return wp_date( $format, strtotime( $utc . ' UTC' ) );
 	}
 
@@ -68,11 +68,11 @@ final class Placeholders {
 			? wc_format_localized_decimal( $voucher->initial_amount ) . '%'
 			: self::money( $voucher->initial_amount, $voucher->currency );
 
-		$delivery = $voucher->delivery_at ? self::date( $voucher->delivery_at ) : ( $voucher->field( 'delivery_date' ) ? wp_date( wcvs()->settings->date_format(), strtotime( $voucher->field( 'delivery_date' ) ) ) : '' );
+		$delivery = $voucher->delivery_at ? self::date( $voucher->delivery_at ) : ( $voucher->field( 'delivery_date' ) ? wp_date( vcap()->settings->date_format(), strtotime( $voucher->field( 'delivery_date' ) ) ) : '' );
 
 		$event_date = (string) $config['event_date'];
 		if ( $event_date && strtotime( $event_date ) ) {
-			$event_date = wp_date( wcvs()->settings->date_format() . ( str_contains( $event_date, ':' ) ? ' ' . get_option( 'time_format' ) : '' ), strtotime( $event_date ), wp_timezone() );
+			$event_date = wp_date( vcap()->settings->date_format() . ( str_contains( $event_date, ':' ) ? ' ' . get_option( 'time_format' ) : '' ), strtotime( $event_date ), wp_timezone() );
 		}
 
 		$values = array(
@@ -95,14 +95,14 @@ final class Placeholders {
 			'delivery_date'     => $delivery,
 			'order_id'          => $voucher->order_id ? (string) $voucher->order_id : '',
 			'order_number'      => $order ? (string) $order->get_order_number() : ( $voucher->order_id ? (string) $voucher->order_id : '' ),
-			'order_date'        => $order && $order->get_date_created() ? wp_date( wcvs()->settings->date_format(), $order->get_date_created()->getTimestamp() ) : '',
+			'order_date'        => $order && $order->get_date_created() ? wp_date( vcap()->settings->date_format(), $order->get_date_created()->getTimestamp() ) : '',
 			'event_date'        => $event_date,
 			'event_location'    => (string) $config['event_location'],
 			'ticket_admissions' => (string) $voucher->max_checkins,
 			'site_name'         => wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ),
 			'site_url'          => home_url( '/' ),
 		);
-		return apply_filters( 'wcvs_placeholders', $values, $voucher );
+		return apply_filters( 'vcap_placeholders', $values, $voucher );
 	}
 
 	public static function replace( string $text, Voucher $voucher, ?array $values = null ): string {
@@ -158,7 +158,7 @@ final class Placeholders {
 			}
 			return (string) $order->get_meta( '_' . $token );
 		}
-		$custom = apply_filters( 'wcvs_dynamic_placeholder', null, $token, $arg, $voucher );
+		$custom = apply_filters( 'vcap_dynamic_placeholder', null, $token, $arg, $voucher );
 		return null === $custom ? ( $order ? '' : $original ) : (string) $custom;
 	}
 

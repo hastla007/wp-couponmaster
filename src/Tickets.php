@@ -1,5 +1,5 @@
 <?php
-namespace WCVS;
+namespace VCAP;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -15,16 +15,16 @@ final class Tickets {
 	}
 
 	public static function checkin_url( Voucher $voucher ): string {
-		return add_query_arg( 'wcvs_ticket', $voucher->token, home_url( '/' ) );
+		return add_query_arg( 'vcap_ticket', $voucher->token, home_url( '/' ) );
 	}
 
 	public static function can_scan(): bool {
-		return current_user_can( 'wcvs_scan_tickets' ) || current_user_can( 'manage_woocommerce' );
+		return current_user_can( 'vcap_scan_tickets' ) || current_user_can( 'manage_woocommerce' );
 	}
 
 	public function routes(): void {
 		register_rest_route(
-			'wcvs/v1',
+			'vcap/v1',
 			'/lookup',
 			array(
 				'methods'             => 'GET',
@@ -34,7 +34,7 @@ final class Tickets {
 			)
 		);
 		register_rest_route(
-			'wcvs/v1',
+			'vcap/v1',
 			'/checkin',
 			array(
 				'methods'             => 'POST',
@@ -48,7 +48,7 @@ final class Tickets {
 			)
 		);
 		register_rest_route(
-			'wcvs/v1',
+			'vcap/v1',
 			'/redeem',
 			array(
 				'methods'             => 'POST',
@@ -68,7 +68,7 @@ final class Tickets {
 	 */
 	public function resolve( string $input ): ?Voucher {
 		$input = trim( $input );
-		if ( preg_match( '/[?&]wcvs_ticket=([a-f0-9]{48})/', $input, $m ) ) {
+		if ( preg_match( '/[?&]vcap_ticket=([a-f0-9]{48})/', $input, $m ) ) {
 			return $this->repo->get_by_token( $m[1] );
 		}
 		if ( preg_match( '/^[a-f0-9]{48}$/', $input ) ) {
@@ -121,14 +121,14 @@ final class Tickets {
 			'balance_html'   => html_entity_decode( wp_strip_all_tags( wc_price( $voucher->balance, array( 'currency' => $voucher->currency ) ) ) ),
 			'value_html'     => 'percent' === $voucher->discount_type ? $voucher->initial_amount . '%' : html_entity_decode( wp_strip_all_tags( wc_price( $voucher->initial_amount, array( 'currency' => $voucher->currency ) ) ) ),
 			'expires'        => $voucher->expires_at ? get_date_from_gmt( $voucher->expires_at, get_option( 'date_format' ) ) : '',
-			'admin_url'      => admin_url( 'admin.php?page=wcvs-vouchers&voucher=' . $voucher->id ),
+			'admin_url'      => admin_url( 'admin.php?page=vcap-vouchers&voucher=' . $voucher->id ),
 		);
 	}
 
 	public function rest_lookup( \WP_REST_Request $request ) {
 		$voucher = $this->resolve( (string) $request['q'] );
 		if ( ! $voucher ) {
-			return new \WP_Error( 'wcvs_not_found', __( 'No voucher or ticket found for this code.', 'voucher-captain' ), array( 'status' => 404 ) );
+			return new \WP_Error( 'vcap_not_found', __( 'No voucher or ticket found for this code.', 'voucher-captain' ), array( 'status' => 404 ) );
 		}
 		return rest_ensure_response( $this->describe( $voucher ) );
 	}
@@ -163,7 +163,7 @@ final class Tickets {
 			$fresh->status = Voucher::STATUS_REDEEMED;
 			$this->repo->update( $fresh );
 		}
-		do_action( 'wcvs_ticket_checked_in', $fresh, $count );
+		do_action( 'vcap_ticket_checked_in', $fresh, $count );
 		return true;
 	}
 
@@ -183,7 +183,7 @@ final class Tickets {
 	public function rest_checkin( \WP_REST_Request $request ) {
 		$voucher = $this->resolve( (string) $request['q'] );
 		if ( ! $voucher ) {
-			return new \WP_Error( 'wcvs_not_found', __( 'No voucher or ticket found for this code.', 'voucher-captain' ), array( 'status' => 404 ) );
+			return new \WP_Error( 'vcap_not_found', __( 'No voucher or ticket found for this code.', 'voucher-captain' ), array( 'status' => 404 ) );
 		}
 		if ( $request['undo'] ) {
 			$ok = $this->undo_checkin( $voucher );
@@ -208,7 +208,7 @@ final class Tickets {
 	public function rest_redeem( \WP_REST_Request $request ) {
 		$voucher = $this->resolve( (string) $request['q'] );
 		if ( ! $voucher ) {
-			return new \WP_Error( 'wcvs_not_found', __( 'No voucher or ticket found for this code.', 'voucher-captain' ), array( 'status' => 404 ) );
+			return new \WP_Error( 'vcap_not_found', __( 'No voucher or ticket found for this code.', 'voucher-captain' ), array( 'status' => 404 ) );
 		}
 		if ( ! $voucher->is_usable() || Voucher::STATUS_REDEEMED === $voucher->status ) {
 			$data            = $this->describe( $voucher );
@@ -219,9 +219,9 @@ final class Tickets {
 		if ( $voucher->is_multi_use() ) {
 			$amount = min( $voucher->balance, max( 0, (float) $request['amount'] ) );
 			if ( $amount <= 0 ) {
-				return new \WP_Error( 'wcvs_amount', __( 'Please enter an amount.', 'voucher-captain' ), array( 'status' => 400 ) );
+				return new \WP_Error( 'vcap_amount', __( 'Please enter an amount.', 'voucher-captain' ), array( 'status' => 400 ) );
 			}
-			wcvs()->coupons->set_balance( $voucher, $voucher->balance - $amount, 'redeemed', $amount, $note );
+			vcap()->coupons->set_balance( $voucher, $voucher->balance - $amount, 'redeemed', $amount, $note );
 		} else {
 			$voucher->status  = Voucher::STATUS_REDEEMED;
 			$voucher->balance = 0;
@@ -247,13 +247,13 @@ final class Tickets {
 	 * Opening a ticket QR code: staff get the check-in screen, everyone else a privacy-safe status page.
 	 */
 	public function ticket_page(): void {
-		if ( empty( $_GET['wcvs_ticket'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+		if ( empty( $_GET['vcap_ticket'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
 			return;
 		}
-		$voucher = $this->repo->get_by_token( sanitize_key( wp_unslash( $_GET['wcvs_ticket'] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification
+		$voucher = $this->repo->get_by_token( sanitize_key( wp_unslash( $_GET['vcap_ticket'] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification
 		$notice  = '';
 
-		if ( $voucher && self::can_scan() && isset( $_POST['wcvs_checkin_nonce'] ) && wp_verify_nonce( sanitize_key( wp_unslash( $_POST['wcvs_checkin_nonce'] ) ), 'wcvs_checkin_' . $voucher->id ) ) {
+		if ( $voucher && self::can_scan() && isset( $_POST['vcap_checkin_nonce'] ) && wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_checkin_nonce'] ) ), 'vcap_checkin_' . $voucher->id ) ) {
 			$count  = max( 1, absint( $_POST['count'] ?? 1 ) );
 			$notice = $this->checkin( $voucher, $count ) ? __( 'Checked in', 'voucher-captain' ) : __( 'Check-in not possible.', 'voucher-captain' );
 			$voucher = $this->repo->get( $voucher->id );
@@ -272,7 +272,7 @@ final class Tickets {
 				'voucher' => $voucher,
 				'data'    => $data,
 				'staff'   => self::can_scan(),
-				'public'  => 'yes' === get_option( 'wcvs_ticket_public_status', 'yes' ),
+				'public'  => 'yes' === get_option( 'vcap_ticket_public_status', 'yes' ),
 				'notice'  => $notice,
 			)
 		);

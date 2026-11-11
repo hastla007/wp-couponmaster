@@ -2,7 +2,7 @@
 /**
  * Voucher email (plain text).
  *
- * @var \WCVS\Voucher $voucher
+ * @var \VCAP\Voucher $voucher
  * @var string        $email_heading
  * @var string        $intro
  * @var string        $additional_content
@@ -26,7 +26,7 @@ if ( ! $voucher->is_ticket() || $voucher->initial_amount > 0 ) {
 echo esc_html( sprintf( __( 'Code: %s', 'voucher-captain' ), $voucher->code ) ) . "\n";
 if ( $voucher->expires_at ) {
 	/* translators: %s: date */
-	echo esc_html( sprintf( __( 'Valid until %s', 'voucher-captain' ), wp_date( wcvs()->settings->date_format(), strtotime( $voucher->expires_at . ' UTC' ) ) ) ) . "\n";
+	echo esc_html( sprintf( __( 'Valid until %s', 'voucher-captain' ), wp_date( vcap()->settings->date_format(), strtotime( $voucher->expires_at . ' UTC' ) ) ) ) . "\n";
 }
 if ( $voucher->message ) {
 	echo "\n" . esc_html( $voucher->message ) . "\n";

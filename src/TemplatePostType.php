@@ -1,5 +1,5 @@
 <?php
-namespace WCVS;
+namespace VCAP;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -7,8 +7,8 @@ defined( 'ABSPATH' ) || exit;
  * Reusable PDF templates (custom post type) + the visual designer screen.
  */
 final class TemplatePostType {
-	public const POST_TYPE = 'wcvs_template';
-	public const META      = '_wcvs_design';
+	public const POST_TYPE = 'vcap_template';
+	public const META      = '_vcap_design';
 
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_post_type' ) );
@@ -16,9 +16,9 @@ final class TemplatePostType {
 		add_action( 'add_meta_boxes_' . self::POST_TYPE, array( $this, 'meta_boxes' ) );
 		add_action( 'save_post_' . self::POST_TYPE, array( $this, 'save' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'assets' ) );
-		add_action( 'wp_ajax_wcvs_template_preview', array( $this, 'ajax_preview' ) );
+		add_action( 'wp_ajax_vcap_template_preview', array( $this, 'ajax_preview' ) );
 		add_filter( 'post_row_actions', array( $this, 'row_actions' ), 10, 2 );
-		add_action( 'admin_action_wcvs_duplicate_template', array( $this, 'duplicate' ) );
+		add_action( 'admin_action_vcap_duplicate_template', array( $this, 'duplicate' ) );
 		add_filter( 'manage_' . self::POST_TYPE . '_posts_columns', array( $this, 'columns' ) );
 		add_action( 'manage_' . self::POST_TYPE . '_posts_custom_column', array( $this, 'column' ), 10, 2 );
 		add_filter( 'admin_body_class', array( $this, 'body_class' ) );
@@ -39,7 +39,7 @@ final class TemplatePostType {
 				),
 				'public'          => false,
 				'show_ui'         => true,
-				'show_in_menu'    => 'wcvs-vouchers',
+				'show_in_menu'    => 'vcap-vouchers',
 				'supports'        => array( 'title' ),
 				'capability_type' => 'product',
 				'map_meta_cap'    => true,
@@ -52,7 +52,7 @@ final class TemplatePostType {
 	public function body_class( $classes ) {
 		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
 		if ( $screen && self::POST_TYPE === $screen->post_type && 'post' === $screen->base ) {
-			$classes .= ' wcvs-designer-screen';
+			$classes .= ' vcap-designer-screen';
 		}
 		return $classes;
 	}
@@ -82,7 +82,7 @@ final class TemplatePostType {
 		if ( ! is_array( $design ) || empty( $design['page'] ) ) {
 			$design = self::default_designs()['giftcard'];
 		}
-		return apply_filters( 'wcvs_template_design', $design, $template_id );
+		return apply_filters( 'vcap_template_design', $design, $template_id );
 	}
 
 	/**
@@ -131,10 +131,10 @@ final class TemplatePostType {
 	}
 
 	public function maybe_create_defaults(): void {
-		if ( 'yes' !== get_option( 'wcvs_needs_default_template' ) || ! current_user_can( 'edit_products' ) ) {
+		if ( 'yes' !== get_option( 'vcap_needs_default_template' ) || ! current_user_can( 'edit_products' ) ) {
 			return;
 		}
-		update_option( 'wcvs_needs_default_template', 'no' );
+		update_option( 'vcap_needs_default_template', 'no' );
 		if ( self::first_template_id() ) {
 			return;
 		}
@@ -156,21 +156,21 @@ final class TemplatePostType {
 				$first = $first ?: (int) $id;
 			}
 		}
-		if ( $first && ! get_option( 'wcvs_default_template' ) ) {
-			update_option( 'wcvs_default_template', $first );
+		if ( $first && ! get_option( 'vcap_default_template' ) ) {
+			update_option( 'vcap_default_template', $first );
 		}
 	}
 
 	public function meta_boxes(): void {
 		remove_meta_box( 'slugdiv', self::POST_TYPE, 'normal' );
-		add_meta_box( 'wcvs-designer-box', __( 'Designer', 'voucher-captain' ), array( $this, 'designer_box' ), self::POST_TYPE, 'normal', 'high' );
+		add_meta_box( 'vcap-designer-box', __( 'Designer', 'voucher-captain' ), array( $this, 'designer_box' ), self::POST_TYPE, 'normal', 'high' );
 	}
 
 	public function designer_box( \WP_Post $post ): void {
 		$design = self::get_design( $post->ID );
-		wp_nonce_field( 'wcvs_save_design', 'wcvs_design_nonce' );
-		echo '<textarea name="wcvs_design" id="wcvs-design-json" hidden>' . esc_textarea( wp_json_encode( $design ) ) . '</textarea>';
-		echo '<div id="wcvs-designer" class="wcvs-designer" aria-label="' . esc_attr__( 'Template designer', 'voucher-captain' ) . '"><p>' . esc_html__( 'Loading designer…', 'voucher-captain' ) . '</p></div>';
+		wp_nonce_field( 'vcap_save_design', 'vcap_design_nonce' );
+		echo '<textarea name="vcap_design" id="vcap-design-json" hidden>' . esc_textarea( wp_json_encode( $design ) ) . '</textarea>';
+		echo '<div id="vcap-designer" class="vcap-designer" aria-label="' . esc_attr__( 'Template designer', 'voucher-captain' ) . '"><p>' . esc_html__( 'Loading designer…', 'voucher-captain' ) . '</p></div>';
 		echo '<noscript>' . esc_html__( 'The designer requires JavaScript.', 'voucher-captain' ) . '</noscript>';
 	}
 
@@ -180,8 +180,8 @@ final class TemplatePostType {
 			return;
 		}
 		wp_enqueue_media();
-		wp_enqueue_style( 'wcvs-designer', WCVS_URL . 'assets/css/designer.css', array(), WCVS_VERSION );
-		wp_enqueue_script( 'wcvs-designer', WCVS_URL . 'assets/js/designer.js', array( 'jquery' ), WCVS_VERSION, true );
+		wp_enqueue_style( 'vcap-designer', VCAP_URL . 'assets/css/designer.css', array(), VCAP_VERSION );
+		wp_enqueue_script( 'vcap-designer', VCAP_URL . 'assets/js/designer.js', array( 'jquery' ), VCAP_VERSION, true );
 
 		$placeholders = array();
 		foreach ( Placeholders::definitions() as $key => $label ) {
@@ -197,15 +197,15 @@ final class TemplatePostType {
 			);
 		}
 		wp_localize_script(
-			'wcvs-designer',
-			'wcvsDesigner',
+			'vcap-designer',
+			'vcapDesigner',
 			array(
 				'formats'      => PdfRenderer::FORMATS,
 				'fonts'        => array_values( PdfRenderer::fonts() ),
 				'placeholders' => $placeholders,
 				'sample'       => Preview::sample_values(),
-				'previewUrl'   => admin_url( 'admin-ajax.php?action=wcvs_template_preview' ),
-				'previewNonce' => wp_create_nonce( 'wcvs_template_preview' ),
+				'previewUrl'   => admin_url( 'admin-ajax.php?action=vcap_template_preview' ),
+				'previewNonce' => wp_create_nonce( 'vcap_template_preview' ),
 				'postId'       => get_the_ID(),
 				'i18n'         => array(
 					'text'        => __( 'Text', 'voucher-captain' ),
@@ -295,13 +295,13 @@ final class TemplatePostType {
 	}
 
 	public function save( int $post_id, \WP_Post $post ): void {
-		if ( ! isset( $_POST['wcvs_design_nonce'] ) || ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['wcvs_design_nonce'] ) ), 'wcvs_save_design' ) ) {
+		if ( ! isset( $_POST['vcap_design_nonce'] ) || ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_design_nonce'] ) ), 'vcap_save_design' ) ) {
 			return;
 		}
 		if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE || ! current_user_can( 'edit_post', $post_id ) ) {
 			return;
 		}
-		$raw    = isset( $_POST['wcvs_design'] ) ? wp_unslash( $_POST['wcvs_design'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised in sanitize_design().
+		$raw    = isset( $_POST['vcap_design'] ) ? wp_unslash( $_POST['vcap_design'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised in sanitize_design().
 		$design = json_decode( (string) $raw, true );
 		if ( is_array( $design ) ) {
 			update_post_meta( $post_id, self::META, wp_slash( wp_json_encode( self::sanitize_design( $design ) ) ) );
@@ -384,7 +384,7 @@ final class TemplatePostType {
 			$elements[] = $clean;
 		}
 		return apply_filters(
-			'wcvs_sanitize_design',
+			'vcap_sanitize_design',
 			array(
 				'page'     => $page,
 				'elements' => $elements,
@@ -402,19 +402,19 @@ final class TemplatePostType {
 	}
 
 	public function ajax_preview(): void {
-		check_ajax_referer( 'wcvs_template_preview', 'nonce' );
+		check_ajax_referer( 'vcap_template_preview', 'nonce' );
 		if ( ! current_user_can( 'edit_products' ) ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
 		$design = json_decode( wp_unslash( (string) ( $_POST['design'] ?? '' ) ), true ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised below.
 		$design = is_array( $design ) ? self::sanitize_design( $design ) : self::get_design( absint( $_POST['post_id'] ?? 0 ) );
 		$voucher = Preview::sample_voucher();
-		Preview::stream( wcvs()->pdf->render( $voucher, $design ), 'template-preview.pdf' );
+		Preview::stream( vcap()->pdf->render( $voucher, $design ), 'template-preview.pdf' );
 	}
 
 	public function row_actions( array $actions, \WP_Post $post ): array {
 		if ( self::POST_TYPE === $post->post_type && current_user_can( 'edit_products' ) ) {
-			$url                  = wp_nonce_url( admin_url( 'admin.php?action=wcvs_duplicate_template&post=' . $post->ID ), 'wcvs_duplicate_' . $post->ID );
+			$url                  = wp_nonce_url( admin_url( 'admin.php?action=vcap_duplicate_template&post=' . $post->ID ), 'vcap_duplicate_' . $post->ID );
 			$actions['duplicate'] = '<a href="' . esc_url( $url ) . '">' . esc_html__( 'Duplicate', 'voucher-captain' ) . '</a>';
 			unset( $actions['inline hide-if-no-js'] );
 		}
@@ -423,7 +423,7 @@ final class TemplatePostType {
 
 	public function duplicate(): void {
 		$id = absint( $_GET['post'] ?? 0 );
-		check_admin_referer( 'wcvs_duplicate_' . $id );
+		check_admin_referer( 'vcap_duplicate_' . $id );
 		if ( ! current_user_can( 'edit_products' ) || self::POST_TYPE !== get_post_type( $id ) ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
@@ -447,8 +447,8 @@ final class TemplatePostType {
 	public function columns( array $columns ): array {
 		$date = $columns['date'] ?? null;
 		unset( $columns['date'] );
-		$columns['wcvs_format'] = __( 'Format', 'voucher-captain' );
-		$columns['wcvs_usage']  = __( 'Used by products', 'voucher-captain' );
+		$columns['vcap_format'] = __( 'Format', 'voucher-captain' );
+		$columns['vcap_usage']  = __( 'Used by products', 'voucher-captain' );
 		if ( $date ) {
 			$columns['date'] = $date;
 		}
@@ -456,13 +456,13 @@ final class TemplatePostType {
 	}
 
 	public function column( string $column, int $post_id ): void {
-		if ( 'wcvs_format' === $column ) {
+		if ( 'vcap_format' === $column ) {
 			$design = self::get_design( $post_id );
 			list( $w, $h ) = PdfRenderer::page_size( $design['page'] );
 			echo esc_html( ( 'custom' === $design['page']['format'] ? __( 'Custom', 'voucher-captain' ) : $design['page']['format'] ) . sprintf( ' · %s × %s mm', round( $w ), round( $h ) ) );
-		} elseif ( 'wcvs_usage' === $column ) {
+		} elseif ( 'vcap_usage' === $column ) {
 			global $wpdb;
-			$count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = '_wcvs_template' AND meta_value = %s", (string) $post_id ) ); // phpcs:ignore
+			$count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = '_vcap_template' AND meta_value = %s", (string) $post_id ) ); // phpcs:ignore
 			echo esc_html( (string) $count );
 		}
 	}

@@ -1,5 +1,5 @@
 <?php
-namespace WCVS\Compat;
+namespace VCAP\Compat;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -19,7 +19,7 @@ final class Subscriptions {
 			return;
 		}
 		$this->done = true;
-		add_filter( 'wcvs_should_issue_for_order', array( $this, 'should_issue' ), 10, 2 );
+		add_filter( 'vcap_should_issue_for_order', array( $this, 'should_issue' ), 10, 2 );
 		add_filter( 'wc_subscriptions_renewal_order_data', array( $this, 'strip_meta' ) );
 		add_filter( 'wcs_renewal_order_meta', array( $this, 'strip_meta_rows' ) );
 		add_filter( 'product_type_options', array( $this, 'type_option_classes' ), 20 );
@@ -27,7 +27,7 @@ final class Subscriptions {
 
 	public function should_issue( bool $issue, \WC_Order $order ): bool {
 		if ( function_exists( 'wcs_order_contains_renewal' ) && wcs_order_contains_renewal( $order ) ) {
-			return 'yes' === get_option( 'wcvs_subscription_renewals', 'no' );
+			return 'yes' === get_option( 'vcap_subscription_renewals', 'no' );
 		}
 		return $issue;
 	}
@@ -35,7 +35,7 @@ final class Subscriptions {
 	public function strip_meta( $data ) {
 		if ( is_array( $data ) ) {
 			foreach ( array_keys( $data ) as $key ) {
-				if ( is_string( $key ) && str_starts_with( $key, '_wcvs_' ) ) {
+				if ( is_string( $key ) && str_starts_with( $key, '_vcap_' ) ) {
 					unset( $data[ $key ] );
 				}
 			}
@@ -48,7 +48,7 @@ final class Subscriptions {
 			$meta = array_values(
 				array_filter(
 					$meta,
-					static fn( $row ) => ! ( is_array( $row ) && isset( $row['meta_key'] ) && str_starts_with( (string) $row['meta_key'], '_wcvs_' ) )
+					static fn( $row ) => ! ( is_array( $row ) && isset( $row['meta_key'] ) && str_starts_with( (string) $row['meta_key'], '_vcap_' ) )
 				)
 			);
 		}
@@ -56,8 +56,8 @@ final class Subscriptions {
 	}
 
 	public function type_option_classes( array $options ): array {
-		if ( isset( $options['wcvs_enabled'] ) ) {
-			$options['wcvs_enabled']['wrapper_class'] .= ' show_if_subscription show_if_variable-subscription';
+		if ( isset( $options['vcap_enabled'] ) ) {
+			$options['vcap_enabled']['wrapper_class'] .= ' show_if_subscription show_if_variable-subscription';
 		}
 		return $options;
 	}

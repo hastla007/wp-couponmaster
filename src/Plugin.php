@@ -1,5 +1,5 @@
 <?php
-namespace WCVS;
+namespace VCAP;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -71,18 +71,18 @@ final class Plugin {
 		}
 
 		add_action( 'init', array( $this, 'load_textdomain' ), 0 );
-		add_filter( 'plugin_action_links_' . plugin_basename( WCVS_FILE ), array( $this, 'action_links' ) );
+		add_filter( 'plugin_action_links_' . plugin_basename( VCAP_FILE ), array( $this, 'action_links' ) );
 		add_action( 'admin_notices', array( $this, 'dependency_notice' ) );
 	}
 
 	public function load_textdomain(): void {
-		load_plugin_textdomain( 'voucher-captain', false, dirname( plugin_basename( WCVS_FILE ) ) . '/languages' );
+		load_plugin_textdomain( 'voucher-captain', false, dirname( plugin_basename( VCAP_FILE ) ) . '/languages' );
 	}
 
 	public function action_links( array $links ): array {
 		$extra = array(
-			'<a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=wcvs' ) ) . '">' . esc_html__( 'Settings', 'voucher-captain' ) . '</a>',
-			'<a href="' . esc_url( admin_url( 'admin.php?page=wcvs-vouchers' ) ) . '">' . esc_html__( 'Vouchers', 'voucher-captain' ) . '</a>',
+			'<a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=vcap' ) ) . '">' . esc_html__( 'Settings', 'voucher-captain' ) . '</a>',
+			'<a href="' . esc_url( admin_url( 'admin.php?page=vcap-vouchers' ) ) . '">' . esc_html__( 'Vouchers', 'voucher-captain' ) . '</a>',
 		);
 		return array_merge( $extra, $links );
 	}
@@ -98,10 +98,10 @@ final class Plugin {
 	 * Render a PHP template from /templates, overridable from the theme at woocommerce/voucher-captain/.
 	 */
 	public static function template( string $name, array $args = array() ): void {
-		wc_get_template( $name, $args, 'voucher-captain/', WCVS_PATH . 'templates/' );
+		wc_get_template( $name, $args, 'voucher-captain/', VCAP_PATH . 'templates/' );
 	}
 
 	public static function template_html( string $name, array $args = array() ): string {
-		return wc_get_template_html( $name, $args, 'voucher-captain/', WCVS_PATH . 'templates/' );
+		return wc_get_template_html( $name, $args, 'voucher-captain/', VCAP_PATH . 'templates/' );
 	}
 }

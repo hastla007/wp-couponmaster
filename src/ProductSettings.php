@@ -1,5 +1,5 @@
 <?php
-namespace WCVS;
+namespace VCAP;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -21,14 +21,14 @@ final class ProductSettings {
 	public function assets( string $hook ): void {
 		$screen = get_current_screen();
 		if ( $screen && 'product' === $screen->post_type && in_array( $hook, array( 'post.php', 'post-new.php' ), true ) ) {
-			wp_enqueue_style( 'wcvs-admin', WCVS_URL . 'assets/css/admin.css', array(), WCVS_VERSION );
-			wp_enqueue_script( 'wcvs-product-admin', WCVS_URL . 'assets/js/product-admin.js', array( 'jquery' ), WCVS_VERSION, true );
+			wp_enqueue_style( 'vcap-admin', VCAP_URL . 'assets/css/admin.css', array(), VCAP_VERSION );
+			wp_enqueue_script( 'vcap-product-admin', VCAP_URL . 'assets/js/product-admin.js', array( 'jquery' ), VCAP_VERSION, true );
 		}
 	}
 
 	public function type_option( array $options ): array {
-		$options['wcvs_enabled'] = array(
-			'id'            => '_wcvs_enabled',
+		$options['vcap_enabled'] = array(
+			'id'            => '_vcap_enabled',
 			'wrapper_class' => 'show_if_simple show_if_variable',
 			'label'         => __( 'Voucher', 'voucher-captain' ),
 			'description'   => __( 'Sell this product as a PDF voucher, gift card or ticket.', 'voucher-captain' ),
@@ -38,10 +38,10 @@ final class ProductSettings {
 	}
 
 	public function tab( array $tabs ): array {
-		$tabs['wcvs'] = array(
+		$tabs['vcap'] = array(
 			'label'    => __( 'Voucher', 'voucher-captain' ),
-			'target'   => 'wcvs_product_data',
-			'class'    => array( 'show_if_wcvs' ),
+			'target'   => 'vcap_product_data',
+			'class'    => array( 'show_if_vcap' ),
 			'priority' => 25,
 		);
 		return $tabs;
@@ -57,7 +57,7 @@ final class ProductSettings {
 
 	private function batch_options(): array {
 		$options = array( '' => __( 'Generate random codes', 'voucher-captain' ) );
-		foreach ( wcvs()->code_pool->batches() as $b ) {
+		foreach ( vcap()->code_pool->batches() as $b ) {
 			/* translators: 1: batch, 2: free codes, 3: total */
 			$options[ $b['batch'] ] = sprintf( __( 'Imported batch "%1$s" (%2$d of %3$d free)', 'voucher-captain' ), $b['batch'], $b['free'], $b['total'] );
 		}
@@ -65,18 +65,18 @@ final class ProductSettings {
 	}
 
 	private function v( \WC_Product $product, string $key ) {
-		return $product->meta_exists( '_wcvs_' . $key ) ? $product->get_meta( '_wcvs_' . $key ) : ProductConfig::DEFAULTS[ $key ];
+		return $product->meta_exists( '_vcap_' . $key ) ? $product->get_meta( '_vcap_' . $key ) : ProductConfig::DEFAULTS[ $key ];
 	}
 
 	public function panel(): void {
 		global $product_object;
 		$p = $product_object instanceof \WC_Product ? $product_object : new \WC_Product_Simple();
-		echo '<div id="wcvs_product_data" class="panel woocommerce_options_panel hidden">';
+		echo '<div id="vcap_product_data" class="panel woocommerce_options_panel hidden">';
 
 		echo '<div class="options_group">';
 		woocommerce_wp_select(
 			array(
-				'id'      => '_wcvs_type',
+				'id'      => '_vcap_type',
 				'label'   => __( 'Type', 'voucher-captain' ),
 				'value'   => $this->v( $p, 'type' ),
 				'options' => Voucher::types(),
@@ -86,7 +86,7 @@ final class ProductSettings {
 		);
 		woocommerce_wp_select(
 			array(
-				'id'      => '_wcvs_template',
+				'id'      => '_vcap_template',
 				'label'   => __( 'PDF template', 'voucher-captain' ),
 				'value'   => $this->v( $p, 'template' ),
 				'options' => $this->template_options(),
@@ -94,7 +94,7 @@ final class ProductSettings {
 		);
 		woocommerce_wp_text_input(
 			array(
-				'id'                => '_wcvs_per_item',
+				'id'                => '_vcap_per_item',
 				'label'             => __( 'PDFs per item', 'voucher-captain' ),
 				'type'              => 'number',
 				'value'             => $this->v( $p, 'per_item' ),
@@ -105,7 +105,7 @@ final class ProductSettings {
 		);
 		woocommerce_wp_checkbox(
 			array(
-				'id'          => '_wcvs_preview',
+				'id'          => '_vcap_preview',
 				'label'       => __( 'Customer preview', 'voucher-captain' ),
 				'value'       => $this->v( $p, 'preview' ),
 				'description' => __( 'Show a "Preview voucher" button on the product page.', 'voucher-captain' ),
@@ -113,10 +113,10 @@ final class ProductSettings {
 		);
 		echo '</div>';
 
-		echo '<div class="options_group"><h4 class="wcvs-group-title">' . esc_html__( 'Value', 'voucher-captain' ) . '</h4>';
+		echo '<div class="options_group"><h4 class="vcap-group-title">' . esc_html__( 'Value', 'voucher-captain' ) . '</h4>';
 		woocommerce_wp_select(
 			array(
-				'id'      => '_wcvs_amount_source',
+				'id'      => '_vcap_amount_source',
 				'label'   => __( 'Voucher value', 'voucher-captain' ),
 				'value'   => $this->v( $p, 'amount_source' ),
 				'options' => array(
@@ -128,11 +128,11 @@ final class ProductSettings {
 		);
 		woocommerce_wp_text_input(
 			array(
-				'id'            => '_wcvs_amount',
+				'id'            => '_vcap_amount',
 				'label'         => __( 'Fixed value', 'voucher-captain' ),
 				'data_type'     => 'price',
 				'value'         => $this->v( $p, 'amount' ),
-				'wrapper_class' => 'wcvs-show-fixed',
+				'wrapper_class' => 'vcap-show-fixed',
 				'desc_tip'      => true,
 				'description'   => __( 'Amount (or percentage for percentage discounts) the voucher is worth.', 'voucher-captain' ),
 			)
@@ -140,28 +140,28 @@ final class ProductSettings {
 		foreach ( array( 'custom_min' => __( 'Minimum amount', 'voucher-captain' ), 'custom_max' => __( 'Maximum amount', 'voucher-captain' ), 'custom_step' => __( 'Step', 'voucher-captain' ) ) as $key => $label ) {
 			woocommerce_wp_text_input(
 				array(
-					'id'            => '_wcvs_' . $key,
+					'id'            => '_vcap_' . $key,
 					'label'         => $label,
 					'data_type'     => 'price',
 					'value'         => $this->v( $p, $key ),
-					'wrapper_class' => 'wcvs-show-custom',
+					'wrapper_class' => 'vcap-show-custom',
 				)
 			);
 		}
 		woocommerce_wp_text_input(
 			array(
-				'id'            => '_wcvs_custom_presets',
+				'id'            => '_vcap_custom_presets',
 				'label'         => __( 'Suggested amounts', 'voucher-captain' ),
 				'value'         => $this->v( $p, 'custom_presets' ),
 				'placeholder'   => '25, 50, 100',
-				'wrapper_class' => 'wcvs-show-custom',
+				'wrapper_class' => 'vcap-show-custom',
 				'desc_tip'      => true,
 				'description'   => __( 'Comma separated amounts shown as quick-pick buttons.', 'voucher-captain' ),
 			)
 		);
 		woocommerce_wp_select(
 			array(
-				'id'      => '_wcvs_discount_type',
+				'id'      => '_vcap_discount_type',
 				'label'   => __( 'Discount type', 'voucher-captain' ),
 				'value'   => $this->v( $p, 'discount_type' ),
 				'options' => wc_get_coupon_types(),
@@ -169,10 +169,10 @@ final class ProductSettings {
 		);
 		echo '</div>';
 
-		echo '<div class="options_group"><h4 class="wcvs-group-title">' . esc_html__( 'Redemption & validity', 'voucher-captain' ) . '</h4>';
+		echo '<div class="options_group"><h4 class="vcap-group-title">' . esc_html__( 'Redemption & validity', 'voucher-captain' ) . '</h4>';
 		woocommerce_wp_select(
 			array(
-				'id'          => '_wcvs_usage',
+				'id'          => '_vcap_usage',
 				'label'       => __( 'Usage', 'voucher-captain' ),
 				'value'       => $this->v( $p, 'usage' ),
 				'options'     => array(
@@ -186,18 +186,18 @@ final class ProductSettings {
 		);
 		woocommerce_wp_text_input(
 			array(
-				'id'                => '_wcvs_usage_limit',
+				'id'                => '_vcap_usage_limit',
 				'label'             => __( 'Usage limit', 'voucher-captain' ),
 				'type'              => 'number',
 				'value'             => $this->v( $p, 'usage_limit' ),
 				'placeholder'       => __( 'Unlimited', 'voucher-captain' ),
 				'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
-				'wrapper_class'     => 'wcvs-show-unlimited',
+				'wrapper_class'     => 'vcap-show-unlimited',
 			)
 		);
 		woocommerce_wp_select(
 			array(
-				'id'      => '_wcvs_expiry_mode',
+				'id'      => '_vcap_expiry_mode',
 				'label'   => __( 'Expiry', 'voucher-captain' ),
 				'value'   => $this->v( $p, 'expiry_mode' ),
 				'options' => array(
@@ -210,26 +210,26 @@ final class ProductSettings {
 		);
 		woocommerce_wp_text_input(
 			array(
-				'id'                => '_wcvs_expiry_days',
+				'id'                => '_vcap_expiry_days',
 				'label'             => __( 'Valid for (days)', 'voucher-captain' ),
 				'type'              => 'number',
 				'value'             => $this->v( $p, 'expiry_days' ),
 				'custom_attributes' => array( 'min' => 1, 'step' => 1 ),
-				'wrapper_class'     => 'wcvs-show-expiry-days',
+				'wrapper_class'     => 'vcap-show-expiry-days',
 			)
 		);
 		woocommerce_wp_text_input(
 			array(
-				'id'            => '_wcvs_expiry_date',
+				'id'            => '_vcap_expiry_date',
 				'label'         => __( 'Expiry date', 'voucher-captain' ),
 				'type'          => 'date',
 				'value'         => $this->v( $p, 'expiry_date' ),
-				'wrapper_class' => 'wcvs-show-expiry-date',
+				'wrapper_class' => 'vcap-show-expiry-date',
 			)
 		);
 		echo '</div>';
 
-		echo '<div class="options_group"><h4 class="wcvs-group-title">' . esc_html__( 'Coupon restrictions', 'voucher-captain' ) . '</h4>';
+		echo '<div class="options_group"><h4 class="vcap-group-title">' . esc_html__( 'Coupon restrictions', 'voucher-captain' ) . '</h4>';
 		foreach ( array(
 			'free_shipping'  => __( 'Allow free shipping', 'voucher-captain' ),
 			'individual_use' => __( 'Individual use only', 'voucher-captain' ),
@@ -237,7 +237,7 @@ final class ProductSettings {
 		) as $key => $label ) {
 			woocommerce_wp_checkbox(
 				array(
-					'id'    => '_wcvs_' . $key,
+					'id'    => '_vcap_' . $key,
 					'label' => $label,
 					'value' => $this->v( $p, $key ),
 				)
@@ -245,7 +245,7 @@ final class ProductSettings {
 		}
 		woocommerce_wp_text_input(
 			array(
-				'id'        => '_wcvs_min_spend',
+				'id'        => '_vcap_min_spend',
 				'label'     => __( 'Minimum spend', 'voucher-captain' ),
 				'data_type' => 'price',
 				'value'     => $this->v( $p, 'min_spend' ),
@@ -253,19 +253,19 @@ final class ProductSettings {
 		);
 		woocommerce_wp_text_input(
 			array(
-				'id'        => '_wcvs_max_spend',
+				'id'        => '_vcap_max_spend',
 				'label'     => __( 'Maximum spend', 'voucher-captain' ),
 				'data_type' => 'price',
 				'value'     => $this->v( $p, 'max_spend' ),
 			)
 		);
-		$this->product_search( '_wcvs_product_ids', __( 'Valid for products', 'voucher-captain' ), (array) $this->v( $p, 'product_ids' ) );
-		$this->product_search( '_wcvs_exclude_product_ids', __( 'Exclude products', 'voucher-captain' ), (array) $this->v( $p, 'exclude_product_ids' ) );
-		$this->category_select( '_wcvs_category_ids', __( 'Valid for categories', 'voucher-captain' ), (array) $this->v( $p, 'category_ids' ) );
-		$this->category_select( '_wcvs_exclude_category_ids', __( 'Exclude categories', 'voucher-captain' ), (array) $this->v( $p, 'exclude_category_ids' ) );
+		$this->product_search( '_vcap_product_ids', __( 'Valid for products', 'voucher-captain' ), (array) $this->v( $p, 'product_ids' ) );
+		$this->product_search( '_vcap_exclude_product_ids', __( 'Exclude products', 'voucher-captain' ), (array) $this->v( $p, 'exclude_product_ids' ) );
+		$this->category_select( '_vcap_category_ids', __( 'Valid for categories', 'voucher-captain' ), (array) $this->v( $p, 'category_ids' ) );
+		$this->category_select( '_vcap_exclude_category_ids', __( 'Exclude categories', 'voucher-captain' ), (array) $this->v( $p, 'exclude_category_ids' ) );
 		woocommerce_wp_select(
 			array(
-				'id'      => '_wcvs_email_restrict',
+				'id'      => '_vcap_email_restrict',
 				'label'   => __( 'Restrict to email', 'voucher-captain' ),
 				'value'   => $this->v( $p, 'email_restrict' ),
 				'options' => array(
@@ -278,10 +278,10 @@ final class ProductSettings {
 		);
 		echo '</div>';
 
-		echo '<div class="options_group"><h4 class="wcvs-group-title">' . esc_html__( 'Codes', 'voucher-captain' ) . '</h4>';
+		echo '<div class="options_group"><h4 class="vcap-group-title">' . esc_html__( 'Codes', 'voucher-captain' ) . '</h4>';
 		woocommerce_wp_select(
 			array(
-				'id'          => '_wcvs_code_batch',
+				'id'          => '_vcap_code_batch',
 				'label'       => __( 'Code source', 'voucher-captain' ),
 				'value'       => $this->v( $p, 'code_batch' ),
 				'options'     => $this->batch_options(),
@@ -292,7 +292,7 @@ final class ProductSettings {
 		foreach ( array( 'code_prefix' => __( 'Code prefix', 'voucher-captain' ), 'code_suffix' => __( 'Code suffix', 'voucher-captain' ) ) as $key => $label ) {
 			woocommerce_wp_text_input(
 				array(
-					'id'          => '_wcvs_' . $key,
+					'id'          => '_vcap_' . $key,
 					'label'       => $label,
 					'value'       => $this->v( $p, $key ),
 					'placeholder' => __( 'Global setting', 'voucher-captain' ),
@@ -301,7 +301,7 @@ final class ProductSettings {
 		}
 		woocommerce_wp_text_input(
 			array(
-				'id'                => '_wcvs_code_length',
+				'id'                => '_vcap_code_length',
 				'label'             => __( 'Random part length', 'voucher-captain' ),
 				'type'              => 'number',
 				'value'             => $this->v( $p, 'code_length' ),
@@ -311,9 +311,9 @@ final class ProductSettings {
 		);
 		echo '</div>';
 
-		echo '<div class="options_group"><h4 class="wcvs-group-title">' . esc_html__( 'Personalisation & delivery', 'voucher-captain' ) . '</h4>';
+		echo '<div class="options_group"><h4 class="vcap-group-title">' . esc_html__( 'Personalisation & delivery', 'voucher-captain' ) . '</h4>';
 		$builtin = (array) $this->v( $p, 'builtin_fields' );
-		echo '<fieldset class="form-field wcvs-builtin-fields"><legend>' . esc_html__( 'Product page fields', 'voucher-captain' ) . '</legend><div class="wcvs-builtin-grid">';
+		echo '<fieldset class="form-field vcap-builtin-fields"><legend>' . esc_html__( 'Product page fields', 'voucher-captain' ) . '</legend><div class="vcap-builtin-grid">';
 		foreach ( array(
 			'recipient_name'  => __( 'Recipient name', 'voucher-captain' ),
 			'recipient_email' => __( 'Recipient email', 'voucher-captain' ),
@@ -321,7 +321,7 @@ final class ProductSettings {
 			'delivery_date'   => __( 'Delivery date', 'voucher-captain' ),
 		) as $key => $label ) {
 			printf(
-				'<span><label><input type="checkbox" name="_wcvs_builtin_fields[]" value="%1$s" %2$s /> %3$s</label> <label class="wcvs-required"><input type="checkbox" name="_wcvs_builtin_fields[]" value="%1$s_required" %4$s /> %5$s</label></span>',
+				'<span><label><input type="checkbox" name="_vcap_builtin_fields[]" value="%1$s" %2$s /> %3$s</label> <label class="vcap-required"><input type="checkbox" name="_vcap_builtin_fields[]" value="%1$s_required" %4$s /> %5$s</label></span>',
 				esc_attr( $key ),
 				checked( in_array( $key, $builtin, true ), true, false ),
 				esc_html( $label ),
@@ -332,7 +332,7 @@ final class ProductSettings {
 		echo '</div><p class="description">' . esc_html__( 'Additional fields can be added under Vouchers → Field groups.', 'voucher-captain' ) . '</p></fieldset>';
 		woocommerce_wp_text_input(
 			array(
-				'id'                => '_wcvs_message_maxlength',
+				'id'                => '_vcap_message_maxlength',
 				'label'             => __( 'Message max. characters', 'voucher-captain' ),
 				'type'              => 'number',
 				'value'             => $this->v( $p, 'message_maxlength' ),
@@ -341,7 +341,7 @@ final class ProductSettings {
 		);
 		woocommerce_wp_select(
 			array(
-				'id'      => '_wcvs_delivery',
+				'id'      => '_vcap_delivery',
 				'label'   => __( 'Delivery', 'voucher-captain' ),
 				'value'   => $this->v( $p, 'delivery' ),
 				'options' => Delivery::delivery_modes(),
@@ -349,26 +349,26 @@ final class ProductSettings {
 		);
 		woocommerce_wp_text_input(
 			array(
-				'id'                => '_wcvs_delivery_delay_days',
+				'id'                => '_vcap_delivery_delay_days',
 				'label'             => __( 'Delay (days)', 'voucher-captain' ),
 				'type'              => 'number',
 				'value'             => $this->v( $p, 'delivery_delay_days' ),
 				'custom_attributes' => array( 'min' => 1 ),
-				'wrapper_class'     => 'wcvs-show-delay',
+				'wrapper_class'     => 'vcap-show-delay',
 			)
 		);
 		woocommerce_wp_text_input(
 			array(
-				'id'            => '_wcvs_delivery_date',
+				'id'            => '_vcap_delivery_date',
 				'label'         => __( 'Delivery date', 'voucher-captain' ),
 				'type'          => 'date',
 				'value'         => $this->v( $p, 'delivery_date' ),
-				'wrapper_class' => 'wcvs-show-date',
+				'wrapper_class' => 'vcap-show-date',
 			)
 		);
 		woocommerce_wp_select(
 			array(
-				'id'          => '_wcvs_send_to',
+				'id'          => '_vcap_send_to',
 				'label'       => __( 'Send voucher to', 'voucher-captain' ),
 				'value'       => $this->v( $p, 'send_to' ),
 				'options'     => array(
@@ -380,7 +380,7 @@ final class ProductSettings {
 		);
 		woocommerce_wp_checkbox(
 			array(
-				'id'          => '_wcvs_buyer_copy',
+				'id'          => '_vcap_buyer_copy',
 				'label'       => __( 'Buyer copy', 'voucher-captain' ),
 				'value'       => $this->v( $p, 'buyer_copy' ),
 				'description' => __( 'Also send the voucher to the buyer when it goes to a recipient.', 'voucher-captain' ),
@@ -388,10 +388,10 @@ final class ProductSettings {
 		);
 		echo '</div>';
 
-		echo '<div class="options_group wcvs-show-ticket"><h4 class="wcvs-group-title">' . esc_html__( 'Ticket', 'voucher-captain' ) . '</h4>';
+		echo '<div class="options_group vcap-show-ticket"><h4 class="vcap-group-title">' . esc_html__( 'Ticket', 'voucher-captain' ) . '</h4>';
 		woocommerce_wp_text_input(
 			array(
-				'id'                => '_wcvs_max_checkins',
+				'id'                => '_vcap_max_checkins',
 				'label'             => __( 'Admissions per ticket', 'voucher-captain' ),
 				'type'              => 'number',
 				'value'             => $this->v( $p, 'max_checkins' ),
@@ -402,7 +402,7 @@ final class ProductSettings {
 		);
 		woocommerce_wp_text_input(
 			array(
-				'id'    => '_wcvs_event_date',
+				'id'    => '_vcap_event_date',
 				'label' => __( 'Event date & time', 'voucher-captain' ),
 				'type'  => 'datetime-local',
 				'value' => $this->v( $p, 'event_date' ),
@@ -410,7 +410,7 @@ final class ProductSettings {
 		);
 		woocommerce_wp_text_input(
 			array(
-				'id'    => '_wcvs_event_location',
+				'id'    => '_vcap_event_location',
 				'label' => __( 'Event location', 'voucher-captain' ),
 				'value' => $this->v( $p, 'event_location' ),
 			)
@@ -446,53 +446,53 @@ final class ProductSettings {
 	public function save( \WC_Product $product ): void {
 		// Nonce is verified by WooCommerce before woocommerce_admin_process_product_object fires.
 		// phpcs:disable WordPress.Security.NonceVerification.Missing
-		$product->update_meta_data( '_wcvs_enabled', isset( $_POST['_wcvs_enabled'] ) ? 'yes' : 'no' );
-		if ( ! isset( $_POST['_wcvs_type'] ) ) {
+		$product->update_meta_data( '_vcap_enabled', isset( $_POST['_vcap_enabled'] ) ? 'yes' : 'no' );
+		if ( ! isset( $_POST['_vcap_type'] ) ) {
 			return;
 		}
 		$post = wp_unslash( $_POST );
 		$text = array( 'type', 'template', 'amount_source', 'custom_presets', 'discount_type', 'usage', 'expiry_mode', 'email_restrict', 'code_batch', 'code_prefix', 'code_suffix', 'delivery', 'send_to', 'event_location' );
 		foreach ( $text as $key ) {
-			$product->update_meta_data( '_wcvs_' . $key, sanitize_text_field( (string) ( $post[ '_wcvs_' . $key ] ?? '' ) ) );
+			$product->update_meta_data( '_vcap_' . $key, sanitize_text_field( (string) ( $post[ '_vcap_' . $key ] ?? '' ) ) );
 		}
 		$decimals = array( 'amount', 'custom_min', 'custom_max', 'custom_step', 'min_spend', 'max_spend' );
 		foreach ( $decimals as $key ) {
-			$value = (string) ( $post[ '_wcvs_' . $key ] ?? '' );
-			$product->update_meta_data( '_wcvs_' . $key, '' === $value ? '' : wc_format_decimal( $value ) );
+			$value = (string) ( $post[ '_vcap_' . $key ] ?? '' );
+			$product->update_meta_data( '_vcap_' . $key, '' === $value ? '' : wc_format_decimal( $value ) );
 		}
 		$ints = array( 'per_item', 'usage_limit', 'expiry_days', 'code_length', 'delivery_delay_days', 'max_checkins', 'message_maxlength' );
 		foreach ( $ints as $key ) {
-			$value = (string) ( $post[ '_wcvs_' . $key ] ?? '' );
-			$product->update_meta_data( '_wcvs_' . $key, '' === $value ? '' : absint( $value ) );
+			$value = (string) ( $post[ '_vcap_' . $key ] ?? '' );
+			$product->update_meta_data( '_vcap_' . $key, '' === $value ? '' : absint( $value ) );
 		}
 		foreach ( array( 'expiry_date', 'delivery_date' ) as $key ) {
-			$value = (string) ( $post[ '_wcvs_' . $key ] ?? '' );
-			$product->update_meta_data( '_wcvs_' . $key, preg_match( '/^\d{4}-\d{2}-\d{2}$/', $value ) ? $value : '' );
+			$value = (string) ( $post[ '_vcap_' . $key ] ?? '' );
+			$product->update_meta_data( '_vcap_' . $key, preg_match( '/^\d{4}-\d{2}-\d{2}$/', $value ) ? $value : '' );
 		}
-		$event = (string) ( $post['_wcvs_event_date'] ?? '' );
-		$product->update_meta_data( '_wcvs_event_date', preg_match( '/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/', $event ) ? $event : '' );
+		$event = (string) ( $post['_vcap_event_date'] ?? '' );
+		$product->update_meta_data( '_vcap_event_date', preg_match( '/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/', $event ) ? $event : '' );
 		foreach ( array( 'free_shipping', 'individual_use', 'exclude_sale', 'preview', 'buyer_copy' ) as $key ) {
-			$product->update_meta_data( '_wcvs_' . $key, isset( $post[ '_wcvs_' . $key ] ) ? 'yes' : 'no' );
+			$product->update_meta_data( '_vcap_' . $key, isset( $post[ '_vcap_' . $key ] ) ? 'yes' : 'no' );
 		}
 		foreach ( array( 'product_ids', 'exclude_product_ids', 'category_ids', 'exclude_category_ids' ) as $key ) {
-			$product->update_meta_data( '_wcvs_' . $key, array_values( array_filter( array_map( 'absint', (array) ( $post[ '_wcvs_' . $key ] ?? array() ) ) ) ) );
+			$product->update_meta_data( '_vcap_' . $key, array_values( array_filter( array_map( 'absint', (array) ( $post[ '_vcap_' . $key ] ?? array() ) ) ) ) );
 		}
 		$allowed = array( 'recipient_name', 'recipient_email', 'message', 'delivery_date' );
 		$builtin = array();
-		foreach ( (array) ( $post['_wcvs_builtin_fields'] ?? array() ) as $value ) {
+		foreach ( (array) ( $post['_vcap_builtin_fields'] ?? array() ) as $value ) {
 			$value = sanitize_key( $value );
 			if ( in_array( preg_replace( '/_required$/', '', $value ), $allowed, true ) ) {
 				$builtin[] = $value;
 			}
 		}
-		$product->update_meta_data( '_wcvs_builtin_fields', $builtin );
+		$product->update_meta_data( '_vcap_builtin_fields', $builtin );
 		// phpcs:enable
 	}
 
 	public function variation_option( $loop, $variation_data, $variation ): void {
-		$value = get_post_meta( $variation->ID, '_wcvs_enabled', true );
+		$value = get_post_meta( $variation->ID, '_vcap_enabled', true );
 		printf(
-			'<label class="tips show_if_wcvs_parent" data-tip="%1$s"> %2$s <input type="checkbox" class="checkbox wcvs_variation_enabled" name="wcvs_variation_enabled[%3$d]" %4$s /></label>',
+			'<label class="tips show_if_vcap_parent" data-tip="%1$s"> %2$s <input type="checkbox" class="checkbox vcap_variation_enabled" name="vcap_variation_enabled[%3$d]" %4$s /></label>',
 			esc_attr__( 'Issue vouchers for this variation.', 'voucher-captain' ),
 			esc_html__( 'Voucher', 'voucher-captain' ),
 			(int) $loop,
@@ -505,65 +505,65 @@ final class ProductSettings {
 		if ( ! $product ) {
 			return;
 		}
-		echo '<div class="wcvs-variation-fields show_if_wcvs_variation">';
+		echo '<div class="vcap-variation-fields show_if_vcap_variation">';
 		echo '<p class="form-row form-row-full"><strong>' . esc_html__( 'Voucher overrides (empty = use product settings)', 'voucher-captain' ) . '</strong></p>';
 		woocommerce_wp_select(
 			array(
-				'id'            => "wcvs_var_template_{$loop}",
-				'name'          => "wcvs_var[{$loop}][template]",
+				'id'            => "vcap_var_template_{$loop}",
+				'name'          => "vcap_var[{$loop}][template]",
 				'label'         => __( 'PDF template', 'voucher-captain' ),
-				'value'         => $product->get_meta( '_wcvs_template' ),
+				'value'         => $product->get_meta( '_vcap_template' ),
 				'options'       => array( '' => __( 'Inherit', 'voucher-captain' ) ) + array_slice( $this->template_options(), 1, null, true ),
 				'wrapper_class' => 'form-row form-row-first',
 			)
 		);
 		woocommerce_wp_text_input(
 			array(
-				'id'            => "wcvs_var_amount_{$loop}",
-				'name'          => "wcvs_var[{$loop}][amount]",
+				'id'            => "vcap_var_amount_{$loop}",
+				'name'          => "vcap_var[{$loop}][amount]",
 				'label'         => __( 'Fixed value', 'voucher-captain' ),
 				'data_type'     => 'price',
-				'value'         => $product->get_meta( '_wcvs_amount' ),
+				'value'         => $product->get_meta( '_vcap_amount' ),
 				'wrapper_class' => 'form-row form-row-last',
 			)
 		);
 		woocommerce_wp_text_input(
 			array(
-				'id'            => "wcvs_var_expiry_days_{$loop}",
-				'name'          => "wcvs_var[{$loop}][expiry_days]",
+				'id'            => "vcap_var_expiry_days_{$loop}",
+				'name'          => "vcap_var[{$loop}][expiry_days]",
 				'label'         => __( 'Valid for (days)', 'voucher-captain' ),
 				'type'          => 'number',
-				'value'         => $product->get_meta( '_wcvs_expiry_days' ),
+				'value'         => $product->get_meta( '_vcap_expiry_days' ),
 				'wrapper_class' => 'form-row form-row-first',
 			)
 		);
 		woocommerce_wp_text_input(
 			array(
-				'id'            => "wcvs_var_per_item_{$loop}",
-				'name'          => "wcvs_var[{$loop}][per_item]",
+				'id'            => "vcap_var_per_item_{$loop}",
+				'name'          => "vcap_var[{$loop}][per_item]",
 				'label'         => __( 'PDFs per item', 'voucher-captain' ),
 				'type'          => 'number',
-				'value'         => $product->get_meta( '_wcvs_per_item' ),
+				'value'         => $product->get_meta( '_vcap_per_item' ),
 				'wrapper_class' => 'form-row form-row-last',
 			)
 		);
 		woocommerce_wp_text_input(
 			array(
-				'id'            => "wcvs_var_max_checkins_{$loop}",
-				'name'          => "wcvs_var[{$loop}][max_checkins]",
+				'id'            => "vcap_var_max_checkins_{$loop}",
+				'name'          => "vcap_var[{$loop}][max_checkins]",
 				'label'         => __( 'Admissions per ticket', 'voucher-captain' ),
 				'type'          => 'number',
-				'value'         => $product->get_meta( '_wcvs_max_checkins' ),
+				'value'         => $product->get_meta( '_vcap_max_checkins' ),
 				'wrapper_class' => 'form-row form-row-first',
 			)
 		);
 		woocommerce_wp_text_input(
 			array(
-				'id'            => "wcvs_var_event_date_{$loop}",
-				'name'          => "wcvs_var[{$loop}][event_date]",
+				'id'            => "vcap_var_event_date_{$loop}",
+				'name'          => "vcap_var[{$loop}][event_date]",
 				'label'         => __( 'Event date & time', 'voucher-captain' ),
 				'type'          => 'datetime-local',
-				'value'         => $product->get_meta( '_wcvs_event_date' ),
+				'value'         => $product->get_meta( '_vcap_event_date' ),
 				'wrapper_class' => 'form-row form-row-last',
 			)
 		);
@@ -572,15 +572,15 @@ final class ProductSettings {
 
 	public function save_variation( \WC_Product_Variation $variation, int $loop ): void {
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the variations nonce.
-		$variation->update_meta_data( '_wcvs_enabled', isset( $_POST['wcvs_variation_enabled'][ $loop ] ) ? 'yes' : 'no' );
-		$data = isset( $_POST['wcvs_var'][ $loop ] ) ? (array) wp_unslash( $_POST['wcvs_var'][ $loop ] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		$variation->update_meta_data( '_vcap_enabled', isset( $_POST['vcap_variation_enabled'][ $loop ] ) ? 'yes' : 'no' );
+		$data = isset( $_POST['vcap_var'][ $loop ] ) ? (array) wp_unslash( $_POST['vcap_var'][ $loop ] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		// phpcs:enable
-		$variation->update_meta_data( '_wcvs_template', isset( $data['template'] ) && '' !== $data['template'] ? absint( $data['template'] ) : '' );
-		$variation->update_meta_data( '_wcvs_amount', isset( $data['amount'] ) && '' !== $data['amount'] ? wc_format_decimal( $data['amount'] ) : '' );
+		$variation->update_meta_data( '_vcap_template', isset( $data['template'] ) && '' !== $data['template'] ? absint( $data['template'] ) : '' );
+		$variation->update_meta_data( '_vcap_amount', isset( $data['amount'] ) && '' !== $data['amount'] ? wc_format_decimal( $data['amount'] ) : '' );
 		foreach ( array( 'expiry_days', 'per_item', 'max_checkins' ) as $key ) {
-			$variation->update_meta_data( '_wcvs_' . $key, isset( $data[ $key ] ) && '' !== $data[ $key ] ? absint( $data[ $key ] ) : '' );
+			$variation->update_meta_data( '_vcap_' . $key, isset( $data[ $key ] ) && '' !== $data[ $key ] ? absint( $data[ $key ] ) : '' );
 		}
 		$event = (string) ( $data['event_date'] ?? '' );
-		$variation->update_meta_data( '_wcvs_event_date', preg_match( '/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/', $event ) ? $event : '' );
+		$variation->update_meta_data( '_vcap_event_date', preg_match( '/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/', $event ) ? $event : '' );
 	}
 }

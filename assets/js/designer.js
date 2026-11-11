@@ -1,7 +1,7 @@
 /**
  * Voucher Captain – visual PDF template designer.
  *
- * Data model (stored as JSON in the hidden #wcvs-design-json textarea):
+ * Data model (stored as JSON in the hidden #vcap-design-json textarea):
  *   { page: { format, orientation, width, height, background, backgroundImageId, backgroundImage, backgroundFit },
  *     elements: [ { id, type, name, x, y, w, h, rotation, opacity, locked, hidden, ...typeProps } ] }
  * All geometry is in millimetres; elements later in the array are rendered on top.
@@ -9,10 +9,10 @@
 ( function () {
 	'use strict';
 
-	var cfg = window.wcvsDesigner || {};
+	var cfg = window.vcapDesigner || {};
 	var t = cfg.i18n || {};
-	var root = document.getElementById( 'wcvs-designer' );
-	var store = document.getElementById( 'wcvs-design-json' );
+	var root = document.getElementById( 'vcap-designer' );
+	var store = document.getElementById( 'vcap-design-json' );
 	if ( ! root || ! store ) {
 		return;
 	}
@@ -180,14 +180,14 @@
 	// ------------------------------------------------------------------ layout.
 
 	root.innerHTML = '';
-	var toolbar = el( 'div', { class: 'wcvs-d-toolbar', role: 'toolbar', 'aria-label': t.add } );
-	var workspace = el( 'div', { class: 'wcvs-d-workspace', tabindex: '0', 'aria-label': t.shortcuts } );
-	var page = el( 'div', { class: 'wcvs-d-page' } );
-	var guidesLayer = el( 'div', { class: 'wcvs-d-guides', 'aria-hidden': 'true' } );
-	var sidebar = el( 'div', { class: 'wcvs-d-sidebar' } );
-	var propsPanel = el( 'div', { class: 'wcvs-d-panel wcvs-d-props' } );
-	var layersPanel = el( 'div', { class: 'wcvs-d-panel wcvs-d-layers' } );
-	var pagePanel = el( 'div', { class: 'wcvs-d-panel wcvs-d-pageprops' } );
+	var toolbar = el( 'div', { class: 'vcap-d-toolbar', role: 'toolbar', 'aria-label': t.add } );
+	var workspace = el( 'div', { class: 'vcap-d-workspace', tabindex: '0', 'aria-label': t.shortcuts } );
+	var page = el( 'div', { class: 'vcap-d-page' } );
+	var guidesLayer = el( 'div', { class: 'vcap-d-guides', 'aria-hidden': 'true' } );
+	var sidebar = el( 'div', { class: 'vcap-d-sidebar' } );
+	var propsPanel = el( 'div', { class: 'vcap-d-panel vcap-d-props' } );
+	var layersPanel = el( 'div', { class: 'vcap-d-panel vcap-d-layers' } );
+	var pagePanel = el( 'div', { class: 'vcap-d-panel vcap-d-pageprops' } );
 
 	page.appendChild( guidesLayer );
 	workspace.appendChild( page );
@@ -195,8 +195,8 @@
 	sidebar.appendChild( layersPanel );
 	sidebar.appendChild( pagePanel );
 	root.appendChild( toolbar );
-	root.appendChild( el( 'div', { class: 'wcvs-d-main' }, [ workspace, sidebar ] ) );
-	root.appendChild( el( 'p', { class: 'description wcvs-d-help', text: t.shortcuts } ) );
+	root.appendChild( el( 'div', { class: 'vcap-d-main' }, [ workspace, sidebar ] ) );
+	root.appendChild( el( 'p', { class: 'description vcap-d-help', text: t.shortcuts } ) );
 
 	// ------------------------------------------------------------------ toolbar.
 
@@ -249,16 +249,16 @@
 
 	function buildToolbar() {
 		toolbar.innerHTML = '';
-		var group = el( 'div', { class: 'wcvs-d-group' }, [ el( 'span', { class: 'wcvs-d-label', text: t.add + ':' } ) ] );
+		var group = el( 'div', { class: 'vcap-d-group' }, [ el( 'span', { class: 'vcap-d-label', text: t.add + ':' } ) ] );
 		[ 'heading', 'text', 'image', 'qrcode', 'barcode', 'rect', 'line' ].forEach( function ( type ) {
-			group.appendChild( el( 'button', { type: 'button', class: 'button wcvs-d-add wcvs-d-add--' + type, text: t[ type ], onclick: function () { addElement( type ); } } ) );
+			group.appendChild( el( 'button', { type: 'button', class: 'button vcap-d-add vcap-d-add--' + type, text: t[ type ], onclick: function () { addElement( type ); } } ) );
 		} );
 		toolbar.appendChild( group );
 
 		undoBtn = el( 'button', { type: 'button', class: 'button', title: t.undo + ' (Ctrl+Z)', 'aria-label': t.undo, html: '&#8630;', onclick: undo } );
 		redoBtn = el( 'button', { type: 'button', class: 'button', title: t.redo + ' (Ctrl+Y)', 'aria-label': t.redo, html: '&#8631;', onclick: redo } );
-		zoomLabel = el( 'span', { class: 'wcvs-d-zoom', 'aria-live': 'polite' } );
-		var snapBox = el( 'input', { type: 'checkbox', id: 'wcvs-d-snap', checked: state.snap, onchange: function ( e ) { state.snap = e.target.checked; } } );
+		zoomLabel = el( 'span', { class: 'vcap-d-zoom', 'aria-live': 'polite' } );
+		var snapBox = el( 'input', { type: 'checkbox', id: 'vcap-d-snap', checked: state.snap, onchange: function ( e ) { state.snap = e.target.checked; } } );
 		var starter = el( 'select', { 'aria-label': t.starter, onchange: function ( e ) {
 			var key = e.target.value;
 			e.target.value = '';
@@ -274,12 +274,12 @@
 			el( 'option', { value: 'ticket', text: t.starterTicket } )
 		] );
 
-		toolbar.appendChild( el( 'div', { class: 'wcvs-d-group' }, [
+		toolbar.appendChild( el( 'div', { class: 'vcap-d-group' }, [
 			undoBtn, redoBtn,
 			el( 'button', { type: 'button', class: 'button', 'aria-label': t.zoom + ' -', text: '−', onclick: function () { setZoom( state.scale / 1.2 ); } } ),
 			zoomLabel,
 			el( 'button', { type: 'button', class: 'button', 'aria-label': t.zoom + ' +', text: '+', onclick: function () { setZoom( state.scale * 1.2 ); } } ),
-			el( 'label', { class: 'wcvs-d-check', for: 'wcvs-d-snap' }, [ snapBox, ' ' + t.grid ] ),
+			el( 'label', { class: 'vcap-d-check', for: 'vcap-d-snap' }, [ snapBox, ' ' + t.grid ] ),
 			starter,
 			el( 'button', { type: 'button', class: 'button button-primary', text: t.preview, onclick: preview } )
 		] ) );
@@ -351,13 +351,13 @@
 			page.style.backgroundImage = 'none';
 		}
 
-		Array.prototype.slice.call( page.querySelectorAll( '.wcvs-d-el' ) ).forEach( function ( n ) {
+		Array.prototype.slice.call( page.querySelectorAll( '.vcap-d-el' ) ).forEach( function ( n ) {
 			n.parentNode.removeChild( n );
 		} );
 
 		design.elements.forEach( function ( item, i ) {
 			var node = el( 'div', {
-				class: 'wcvs-d-el wcvs-d-el--' + item.type + ( item.id === state.selected ? ' is-selected' : '' ) + ( item.locked ? ' is-locked' : '' ) + ( item.hidden ? ' is-hidden' : '' ),
+				class: 'vcap-d-el vcap-d-el--' + item.type + ( item.id === state.selected ? ' is-selected' : '' ) + ( item.locked ? ' is-locked' : '' ) + ( item.hidden ? ' is-hidden' : '' ),
 				'data-id': item.id,
 				role: 'button',
 				tabindex: '-1',
@@ -371,7 +371,7 @@
 			node.style.transform = item.rotation ? 'rotate(' + item.rotation + 'deg)' : '';
 			node.style.opacity = undefined === item.opacity ? 1 : item.opacity;
 
-			var inner = el( 'div', { class: 'wcvs-d-inner' } );
+			var inner = el( 'div', { class: 'vcap-d-inner' } );
 			switch ( item.type ) {
 				case 'text':
 				case 'heading':
@@ -398,7 +398,7 @@
 						img.style.objectFit = 'stretch' === item.fit ? 'fill' : ( item.fit || 'contain' );
 						inner.appendChild( img );
 					} else {
-						inner.className += ' wcvs-d-empty';
+						inner.className += ' vcap-d-empty';
 						inner.textContent = t.image;
 					}
 					break;
@@ -408,7 +408,7 @@
 					inner.firstChild.setAttribute( 'fill', item.color || '#000' );
 					break;
 				case 'barcode':
-					inner.className += ' wcvs-d-barcode';
+					inner.className += ' vcap-d-barcode';
 					inner.style.color = item.color || '#000';
 					inner.innerHTML = '<span class="bars"></span>' + ( false !== item.showText ? '<span class="lbl">' + sampleText( item.qrValue || '{coupon_code}' ).replace( /</g, '&lt;' ) + '</span>' : '' );
 					break;
@@ -430,9 +430,9 @@
 					if ( 'line' === item.type && -1 === [ 'e', 'w' ].indexOf( h ) ) {
 						return;
 					}
-					node.appendChild( el( 'span', { class: 'wcvs-d-handle wcvs-d-handle--' + h, 'data-handle': h } ) );
+					node.appendChild( el( 'span', { class: 'vcap-d-handle vcap-d-handle--' + h, 'data-handle': h } ) );
 				} );
-				node.appendChild( el( 'span', { class: 'wcvs-d-rotate', 'data-handle': 'rotate', title: t.rotation } ) );
+				node.appendChild( el( 'span', { class: 'vcap-d-rotate', 'data-handle': 'rotate', title: t.rotation } ) );
 			}
 			page.appendChild( node );
 		} );
@@ -444,7 +444,7 @@
 		guidesLayer.innerHTML = '';
 		var s = state.scale;
 		lines.forEach( function ( g ) {
-			var line = el( 'div', { class: 'wcvs-d-guide wcvs-d-guide--' + g.axis } );
+			var line = el( 'div', { class: 'vcap-d-guide vcap-d-guide--' + g.axis } );
 			if ( 'x' === g.axis ) {
 				line.style.left = g.pos * s + 'px';
 			} else {
@@ -484,7 +484,7 @@
 	var drag = null;
 
 	page.addEventListener( 'pointerdown', function ( e ) {
-		var node = e.target.closest( '.wcvs-d-el' );
+		var node = e.target.closest( '.vcap-d-el' );
 		if ( ! node ) {
 			if ( e.target === page || e.target === guidesLayer ) {
 				state.selected = null;
@@ -639,7 +639,7 @@
 	page.addEventListener( 'pointercancel', endDrag );
 
 	page.addEventListener( 'dblclick', function ( e ) {
-		var node = e.target.closest( '.wcvs-d-el' );
+		var node = e.target.closest( '.vcap-d-el' );
 		if ( node ) {
 			var field = propsPanel.querySelector( 'textarea, [data-key="qrValue"]' );
 			if ( field ) {
@@ -744,9 +744,9 @@
 	// ------------------------------------------------------------------ property panels.
 
 	function field( label, input, wide ) {
-		var id = 'wcvs-d-f-' + Math.random().toString( 36 ).slice( 2 );
+		var id = 'vcap-d-f-' + Math.random().toString( 36 ).slice( 2 );
 		input.id = input.id || id;
-		return el( 'div', { class: 'wcvs-d-field' + ( wide ? ' is-wide' : '' ) }, [ el( 'label', { for: input.id, text: label } ), input ] );
+		return el( 'div', { class: 'vcap-d-field' + ( wide ? ' is-wide' : '' ) }, [ el( 'label', { for: input.id, text: label } ), input ] );
 	}
 
 	function numberInput( obj, key, opts ) {
@@ -795,7 +795,7 @@
 			commit();
 			renderCanvas();
 		} } );
-		var wrap = el( 'span', { class: 'wcvs-d-color' }, [ color ] );
+		var wrap = el( 'span', { class: 'vcap-d-color' }, [ color ] );
 		if ( allowTransparent ) {
 			var box = el( 'input', { type: 'checkbox', checked: transparent, onchange: function ( e ) {
 				obj[ key ] = e.target.checked ? 'transparent' : color.value;
@@ -803,7 +803,7 @@
 				commit( true );
 				renderCanvas();
 			} } );
-			wrap.appendChild( el( 'label', { class: 'wcvs-d-check' }, [ box, ' ∅' ] ) );
+			wrap.appendChild( el( 'label', { class: 'vcap-d-check' }, [ box, ' ∅' ] ) );
 		}
 		return wrap;
 	}
@@ -829,7 +829,7 @@
 			commit( true );
 			renderCanvas();
 		} } );
-		return el( 'label', { class: 'wcvs-d-toggle' }, [ input, ' ' + label ] );
+		return el( 'label', { class: 'vcap-d-toggle' }, [ input, ' ' + label ] );
 	}
 
 	function placeholderSelect( textarea, obj, key ) {
@@ -865,7 +865,7 @@
 			[ t.middle, function () { item.y = round( ( size[ 1 ] - item.h ) / 2 ); } ],
 			[ t.bottom, function () { item.y = round( size[ 1 ] - item.h ); } ]
 		];
-		return el( 'div', { class: 'wcvs-d-align', role: 'group', 'aria-label': t.alignPage }, defs.map( function ( d ) {
+		return el( 'div', { class: 'vcap-d-align', role: 'group', 'aria-label': t.alignPage }, defs.map( function ( d ) {
 			return el( 'button', { type: 'button', class: 'button button-small', text: d[ 0 ], onclick: function () {
 				d[ 1 ]();
 				commit( true );
@@ -891,13 +891,13 @@
 			propsPanel.appendChild( el( 'p', { class: 'description', text: t.noSelection } ) );
 			return;
 		}
-		var grid = el( 'div', { class: 'wcvs-d-grid' } );
+		var grid = el( 'div', { class: 'vcap-d-grid' } );
 		grid.appendChild( field( t.name, textInput( item, 'name' ), true ) );
 
 		if ( 'text' === item.type || 'heading' === item.type ) {
 			var ta = textInput( item, 'text', true );
 			grid.appendChild( field( t.content, ta, true ) );
-			grid.appendChild( el( 'div', { class: 'wcvs-d-field is-wide' }, [ placeholderSelect( ta, item, 'text' ) ] ) );
+			grid.appendChild( el( 'div', { class: 'vcap-d-field is-wide' }, [ placeholderSelect( ta, item, 'text' ) ] ) );
 			var fonts = {};
 			( cfg.fonts || [] ).forEach( function ( f ) {
 				fonts[ f ] = f;
@@ -910,11 +910,11 @@
 			grid.appendChild( field( t.valign, selectInput( item, 'valign', { top: t.top, middle: t.middle, bottom: t.bottom } ) ) );
 			grid.appendChild( field( t.lineHeight, numberInput( item, 'lineHeight', { step: 0.05, min: 0.8, max: 3, def: 1.25 } ) ) );
 			grid.appendChild( field( t.letterSpacing, numberInput( item, 'letterSpacing', { step: 0.1, min: -2, max: 20, def: 0 } ) ) );
-			grid.appendChild( el( 'div', { class: 'wcvs-d-field is-wide wcvs-d-toggles' }, [
+			grid.appendChild( el( 'div', { class: 'vcap-d-field is-wide vcap-d-toggles' }, [
 				toggle( item, 'bold', t.bold ), toggle( item, 'italic', t.italic ), toggle( item, 'underline', t.underline ), toggle( item, 'uppercase', t.uppercase )
 			] ) );
 		} else if ( 'image' === item.type ) {
-			grid.appendChild( el( 'div', { class: 'wcvs-d-field is-wide' }, [
+			grid.appendChild( el( 'div', { class: 'vcap-d-field is-wide' }, [
 				el( 'button', { type: 'button', class: 'button', text: t.choose, onclick: function () {
 					chooseImage( function ( att ) {
 						item.imageId = att.id;
@@ -935,7 +935,7 @@
 			grid.appendChild( field( t.value, textInput( item, 'qrValue' ), true ) );
 			grid.appendChild( field( t.barcodeType, selectInput( item, 'barcodeType', { C128: 'Code 128', C39: 'Code 39', EAN13: 'EAN-13' } ) ) );
 			grid.appendChild( field( t.color, colorInput( item, 'color' ) ) );
-			grid.appendChild( el( 'div', { class: 'wcvs-d-field is-wide' }, [ toggle( item, 'showText', t.showText ) ] ) );
+			grid.appendChild( el( 'div', { class: 'vcap-d-field is-wide' }, [ toggle( item, 'showText', t.showText ) ] ) );
 		} else if ( 'rect' === item.type ) {
 			grid.appendChild( field( t.fill, colorInput( item, 'fill', true ) ) );
 			grid.appendChild( field( t.borderColor, colorInput( item, 'borderColor' ) ) );
@@ -946,7 +946,7 @@
 			grid.appendChild( field( t.border, numberInput( item, 'borderWidth', { step: 0.1, min: 0.1, max: 20, def: 0.5 } ) ) );
 		}
 
-		grid.appendChild( el( 'h4', { class: 'wcvs-d-sub', text: t.position } ) );
+		grid.appendChild( el( 'h4', { class: 'vcap-d-sub', text: t.position } ) );
 		grid.appendChild( field( 'X', numberInput( item, 'x' ) ) );
 		grid.appendChild( field( 'Y', numberInput( item, 'y' ) ) );
 		grid.appendChild( field( t.width, numberInput( item, 'w', { min: 0.5 } ) ) );
@@ -955,9 +955,9 @@
 		}
 		grid.appendChild( field( t.rotation, numberInput( item, 'rotation', { step: 1, min: -360, max: 360 } ) ) );
 		grid.appendChild( field( t.opacity, numberInput( item, 'opacity', { step: 0.05, min: 0, max: 1, def: 1 } ) ) );
-		grid.appendChild( el( 'div', { class: 'wcvs-d-field is-wide' }, [ el( 'span', { class: 'wcvs-d-label', text: t.alignPage } ), alignButtons( item ) ] ) );
+		grid.appendChild( el( 'div', { class: 'vcap-d-field is-wide' }, [ el( 'span', { class: 'vcap-d-label', text: t.alignPage } ), alignButtons( item ) ] ) );
 		propsPanel.appendChild( grid );
-		propsPanel.appendChild( el( 'p', { class: 'wcvs-d-actions' }, [
+		propsPanel.appendChild( el( 'p', { class: 'vcap-d-actions' }, [
 			el( 'button', { type: 'button', class: 'button', text: t.duplicate, onclick: duplicateSelected } ),
 			el( 'button', { type: 'button', class: 'button button-link-delete', text: t['delete'], onclick: removeSelected } )
 		] ) );
@@ -966,25 +966,25 @@
 	function renderLayers() {
 		layersPanel.innerHTML = '';
 		layersPanel.appendChild( el( 'h3', { text: t.layers } ) );
-		var list = el( 'ul', { class: 'wcvs-d-layer-list' } );
+		var list = el( 'ul', { class: 'vcap-d-layer-list' } );
 		design.elements.slice().reverse().forEach( function ( item ) {
 			var li = el( 'li', { class: item.id === state.selected ? 'is-selected' : '' } );
-			li.appendChild( el( 'button', { type: 'button', class: 'wcvs-d-layer-name', 'aria-pressed': item.id === state.selected ? 'true' : 'false', onclick: function () {
+			li.appendChild( el( 'button', { type: 'button', class: 'vcap-d-layer-name', 'aria-pressed': item.id === state.selected ? 'true' : 'false', onclick: function () {
 				state.selected = item.id;
 				renderAll();
-			} }, [ el( 'span', { class: 'wcvs-d-layer-type', text: t[ item.type ] || item.type } ), ' ' + ( item.name || '' ) ] ) );
-			li.appendChild( el( 'button', { type: 'button', class: 'wcvs-d-icon' + ( item.hidden ? ' is-off' : '' ), title: t.hide, 'aria-label': t.hide, 'aria-pressed': item.hidden ? 'true' : 'false', html: item.hidden ? '&#9711;' : '&#9673;', onclick: function () {
+			} }, [ el( 'span', { class: 'vcap-d-layer-type', text: t[ item.type ] || item.type } ), ' ' + ( item.name || '' ) ] ) );
+			li.appendChild( el( 'button', { type: 'button', class: 'vcap-d-icon' + ( item.hidden ? ' is-off' : '' ), title: t.hide, 'aria-label': t.hide, 'aria-pressed': item.hidden ? 'true' : 'false', html: item.hidden ? '&#9711;' : '&#9673;', onclick: function () {
 				item.hidden = ! item.hidden;
 				commit( true );
 				renderAll();
 			} } ) );
-			li.appendChild( el( 'button', { type: 'button', class: 'wcvs-d-icon' + ( item.locked ? ' is-on' : '' ), title: t.lock, 'aria-label': t.lock, 'aria-pressed': item.locked ? 'true' : 'false', html: item.locked ? '&#128274;' : '&#128275;', onclick: function () {
+			li.appendChild( el( 'button', { type: 'button', class: 'vcap-d-icon' + ( item.locked ? ' is-on' : '' ), title: t.lock, 'aria-label': t.lock, 'aria-pressed': item.locked ? 'true' : 'false', html: item.locked ? '&#128274;' : '&#128275;', onclick: function () {
 				item.locked = ! item.locked;
 				commit( true );
 				renderAll();
 			} } ) );
-			li.appendChild( el( 'button', { type: 'button', class: 'wcvs-d-icon', title: t.up, 'aria-label': t.up, html: '&#9650;', onclick: function () { moveLayer( item.id, 1 ); } } ) );
-			li.appendChild( el( 'button', { type: 'button', class: 'wcvs-d-icon', title: t.down, 'aria-label': t.down, html: '&#9660;', onclick: function () { moveLayer( item.id, -1 ); } } ) );
+			li.appendChild( el( 'button', { type: 'button', class: 'vcap-d-icon', title: t.up, 'aria-label': t.up, html: '&#9650;', onclick: function () { moveLayer( item.id, 1 ); } } ) );
+			li.appendChild( el( 'button', { type: 'button', class: 'vcap-d-icon', title: t.down, 'aria-label': t.down, html: '&#9660;', onclick: function () { moveLayer( item.id, -1 ); } } ) );
 			list.appendChild( li );
 		} );
 		layersPanel.appendChild( list );
@@ -994,7 +994,7 @@
 		var p = design.page;
 		pagePanel.innerHTML = '';
 		pagePanel.appendChild( el( 'h3', { text: t.page } ) );
-		var grid = el( 'div', { class: 'wcvs-d-grid' } );
+		var grid = el( 'div', { class: 'vcap-d-grid' } );
 		var formats = {};
 		Object.keys( cfg.formats ).forEach( function ( k ) {
 			formats[ k ] = k + ' (' + cfg.formats[ k ][ 0 ] + '×' + cfg.formats[ k ][ 1 ] + ' mm)';
@@ -1013,8 +1013,8 @@
 		}
 		grid.appendChild( field( t.background, colorInput( p, 'background' ) ) );
 		grid.appendChild( field( t.fit, selectInput( p, 'backgroundFit', { cover: t.cover, contain: t.contain, stretch: t.stretch } ) ) );
-		var bgButtons = el( 'div', { class: 'wcvs-d-field is-wide' }, [
-			el( 'span', { class: 'wcvs-d-label', text: t.bgImage } ),
+		var bgButtons = el( 'div', { class: 'vcap-d-field is-wide' }, [
+			el( 'span', { class: 'vcap-d-label', text: t.bgImage } ),
 			el( 'button', { type: 'button', class: 'button', text: t.choose, onclick: function () {
 				chooseImage( function ( att ) {
 					p.backgroundImageId = att.id;

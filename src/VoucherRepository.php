@@ -1,5 +1,5 @@
 <?php
-namespace WCVS;
+namespace VCAP;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -32,7 +32,7 @@ final class VoucherRepository {
 			return 0;
 		}
 		$voucher->id = (int) $wpdb->insert_id;
-		do_action( 'wcvs_voucher_created', $voucher );
+		do_action( 'vcap_voucher_created', $voucher );
 		return $voucher->id;
 	}
 
@@ -41,7 +41,7 @@ final class VoucherRepository {
 		$voucher->updated_at = $this->now();
 		$ok                  = false !== $wpdb->update( $this->table, $voucher->to_row(), array( 'id' => $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( $ok ) {
-			do_action( 'wcvs_voucher_updated', $voucher );
+			do_action( 'vcap_voucher_updated', $voucher );
 		}
 		return $ok;
 	}
@@ -231,7 +231,7 @@ final class VoucherRepository {
 				'created_at'    => $this->now(),
 			)
 		);
-		do_action( 'wcvs_voucher_event', $voucher_id, $event, $amount, $balance_after, $note, $order_id );
+		do_action( 'vcap_voucher_event', $voucher_id, $event, $amount, $balance_after, $note, $order_id );
 	}
 
 	public function events( int $voucher_id ): array {

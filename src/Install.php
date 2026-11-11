@@ -1,17 +1,17 @@
 <?php
-namespace WCVS;
+namespace VCAP;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
  * Database schema, capabilities and versioned migrations.
  *
- * Migration strategy: WCVS_DB_VERSION is bumped whenever the schema changes; dbDelta() is idempotent
+ * Migration strategy: VCAP_DB_VERSION is bumped whenever the schema changes; dbDelta() is idempotent
  * and adds new columns/indexes. Data migrations are registered in self::MIGRATIONS keyed by the version
  * that introduced them and run exactly once, in order.
  */
 final class Install {
-	public const OPTION_DB_VERSION = 'wcvs_db_version';
+	public const OPTION_DB_VERSION = 'vcap_db_version';
 
 	/** @var array<string, callable-string> */
 	private const MIGRATIONS = array(
@@ -22,23 +22,23 @@ final class Install {
 		self::create_tables();
 		self::add_caps();
 		self::ensure_upload_dir();
-		update_option( self::OPTION_DB_VERSION, WCVS_DB_VERSION );
-		if ( ! get_option( 'wcvs_secret' ) ) {
-			update_option( 'wcvs_secret', wp_generate_password( 64, true, true ), false );
+		update_option( self::OPTION_DB_VERSION, VCAP_DB_VERSION );
+		if ( ! get_option( 'vcap_secret' ) ) {
+			update_option( 'vcap_secret', wp_generate_password( 64, true, true ), false );
 		}
-		add_option( 'wcvs_needs_default_template', 'yes' );
-		update_option( 'wcvs_flush_rewrite', 'yes' );
+		add_option( 'vcap_needs_default_template', 'yes' );
+		update_option( 'vcap_flush_rewrite', 'yes' );
 	}
 
 	public static function deactivate(): void {
 		if ( function_exists( 'as_unschedule_all_actions' ) ) {
-			as_unschedule_all_actions( 'wcvs_daily_maintenance' );
+			as_unschedule_all_actions( 'vcap_daily_maintenance' );
 		}
 	}
 
 	public static function maybe_upgrade(): void {
 		$installed = get_option( self::OPTION_DB_VERSION );
-		if ( WCVS_DB_VERSION === $installed ) {
+		if ( VCAP_DB_VERSION === $installed ) {
 			return;
 		}
 		self::create_tables();
@@ -49,18 +49,18 @@ final class Install {
 				self::$method();
 			}
 		}
-		if ( ! get_option( 'wcvs_secret' ) ) {
-			update_option( 'wcvs_secret', wp_generate_password( 64, true, true ), false );
+		if ( ! get_option( 'vcap_secret' ) ) {
+			update_option( 'vcap_secret', wp_generate_password( 64, true, true ), false );
 		}
-		update_option( self::OPTION_DB_VERSION, WCVS_DB_VERSION );
+		update_option( self::OPTION_DB_VERSION, VCAP_DB_VERSION );
 	}
 
 	public static function tables(): array {
 		global $wpdb;
 		return array(
-			'vouchers' => $wpdb->prefix . 'wcvs_vouchers',
-			'events'   => $wpdb->prefix . 'wcvs_events',
-			'pool'     => $wpdb->prefix . 'wcvs_code_pool',
+			'vouchers' => $wpdb->prefix . 'vcap_vouchers',
+			'events'   => $wpdb->prefix . 'vcap_events',
+			'pool'     => $wpdb->prefix . 'vcap_code_pool',
 		);
 	}
 
@@ -153,15 +153,15 @@ final class Install {
 		foreach ( array( 'administrator', 'shop_manager' ) as $role_name ) {
 			$role = get_role( $role_name );
 			if ( $role ) {
-				$role->add_cap( 'wcvs_manage_vouchers' );
-				$role->add_cap( 'wcvs_scan_tickets' );
+				$role->add_cap( 'vcap_manage_vouchers' );
+				$role->add_cap( 'vcap_scan_tickets' );
 			}
 		}
 	}
 
 	public static function upload_dir(): string {
 		$uploads = wp_upload_dir( null, false );
-		return trailingslashit( $uploads['basedir'] ) . 'wcvs';
+		return trailingslashit( $uploads['basedir'] ) . 'vcap';
 	}
 
 	public static function ensure_upload_dir(): void {

@@ -1,5 +1,5 @@
 <?php
-namespace WCVS;
+namespace VCAP;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -55,7 +55,7 @@ final class ProductConfig {
 	public const VARIATION_KEYS = array( 'template', 'amount', 'expiry_days', 'per_item', 'max_checkins', 'code_batch', 'event_date' );
 
 	public static function meta_key( string $key ): string {
-		return '_wcvs_' . $key;
+		return '_vcap_' . $key;
 	}
 
 	public static function is_voucher( $product ): bool {
@@ -63,13 +63,13 @@ final class ProductConfig {
 		if ( ! $product ) {
 			return false;
 		}
-		$enabled = 'yes' === $product->get_meta( '_wcvs_enabled' );
+		$enabled = 'yes' === $product->get_meta( '_vcap_enabled' );
 		if ( $product->is_type( 'variation' ) && ! $enabled ) {
 			// Variations inherit when the parent is a voucher and the variation has no explicit opt-out.
 			$parent  = wc_get_product( $product->get_parent_id() );
-			$enabled = $parent && 'yes' === $parent->get_meta( '_wcvs_enabled' ) && 'no' !== $product->get_meta( '_wcvs_enabled' );
+			$enabled = $parent && 'yes' === $parent->get_meta( '_vcap_enabled' ) && 'no' !== $product->get_meta( '_vcap_enabled' );
 		}
-		return (bool) apply_filters( 'wcvs_is_voucher_product', $enabled, $product );
+		return (bool) apply_filters( 'vcap_is_voucher_product', $enabled, $product );
 	}
 
 	public static function get( $product ): array {
@@ -100,11 +100,11 @@ final class ProductConfig {
 		}
 		$config['per_item']     = max( 1, (int) $config['per_item'] );
 		$config['max_checkins'] = max( 1, (int) $config['max_checkins'] );
-		$config['template']     = (int) $config['template'] ?: (int) get_option( 'wcvs_default_template', 0 );
+		$config['template']     = (int) $config['template'] ?: (int) get_option( 'vcap_default_template', 0 );
 		if ( ! $config['template'] ) {
 			$config['template'] = TemplatePostType::first_template_id();
 		}
-		return apply_filters( 'wcvs_product_config', $config, $product );
+		return apply_filters( 'vcap_product_config', $config, $product );
 	}
 
 	/**
@@ -125,7 +125,7 @@ final class ProductConfig {
 				$days = (int) $config['expiry_days'];
 				break;
 			default:
-				$days = '' !== (string) $config['expiry_days'] && $config['expiry_days'] !== null ? (int) $config['expiry_days'] : (int) get_option( 'wcvs_default_expiry_days', 365 );
+				$days = '' !== (string) $config['expiry_days'] && $config['expiry_days'] !== null ? (int) $config['expiry_days'] : (int) get_option( 'vcap_default_expiry_days', 365 );
 		}
 		return $days > 0 ? gmdate( 'Y-m-d 23:59:59', $from + $days * DAY_IN_SECONDS ) : null;
 	}

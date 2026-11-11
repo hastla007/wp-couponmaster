@@ -2,29 +2,29 @@
 ( function ( $ ) {
 	'use strict';
 	function toggleTab() {
-		var on = $( '#_wcvs_enabled' ).is( ':checked' );
-		$( '.show_if_wcvs' ).toggle( on );
-		$( '.show_if_wcvs_parent, .show_if_wcvs_variation' ).toggle( on );
-		if ( ! on && $( '.wcvs_options.active' ).length ) {
+		var on = $( '#_vcap_enabled' ).is( ':checked' );
+		$( '.show_if_vcap' ).toggle( on );
+		$( '.show_if_vcap_parent, .show_if_vcap_variation' ).toggle( on );
+		if ( ! on && $( '.vcap_options.active' ).length ) {
 			$( '.general_options a' ).trigger( 'click' );
 		}
 	}
 	function toggleFields() {
-		var source = $( '#_wcvs_amount_source' ).val();
-		$( '.wcvs-show-fixed' ).toggle( 'fixed' === source );
-		$( '.wcvs-show-custom' ).toggle( 'custom' === source );
-		$( '.wcvs-show-unlimited' ).toggle( 'unlimited' === $( '#_wcvs_usage' ).val() );
-		var exp = $( '#_wcvs_expiry_mode' ).val();
-		$( '.wcvs-show-expiry-days' ).toggle( 'days' === exp || 'default' === exp );
-		$( '.wcvs-show-expiry-date' ).toggle( 'date' === exp );
-		var del = $( '#_wcvs_delivery' ).val();
-		$( '.wcvs-show-delay' ).toggle( 'delay' === del );
-		$( '.wcvs-show-date' ).toggle( 'date' === del );
-		$( '.wcvs-show-ticket' ).toggle( 'ticket' === $( '#_wcvs_type' ).val() );
+		var source = $( '#_vcap_amount_source' ).val();
+		$( '.vcap-show-fixed' ).toggle( 'fixed' === source );
+		$( '.vcap-show-custom' ).toggle( 'custom' === source );
+		$( '.vcap-show-unlimited' ).toggle( 'unlimited' === $( '#_vcap_usage' ).val() );
+		var exp = $( '#_vcap_expiry_mode' ).val();
+		$( '.vcap-show-expiry-days' ).toggle( 'days' === exp || 'default' === exp );
+		$( '.vcap-show-expiry-date' ).toggle( 'date' === exp );
+		var del = $( '#_vcap_delivery' ).val();
+		$( '.vcap-show-delay' ).toggle( 'delay' === del );
+		$( '.vcap-show-date' ).toggle( 'date' === del );
+		$( '.vcap-show-ticket' ).toggle( 'ticket' === $( '#_vcap_type' ).val() );
 	}
 	$( function () {
-		$( '#_wcvs_enabled' ).on( 'change', toggleTab );
-		$( '#woocommerce-product-data' ).on( 'change', '#_wcvs_amount_source, #_wcvs_usage, #_wcvs_expiry_mode, #_wcvs_delivery, #_wcvs_type', toggleFields );
+		$( '#_vcap_enabled' ).on( 'change', toggleTab );
+		$( '#woocommerce-product-data' ).on( 'change', '#_vcap_amount_source, #_vcap_usage, #_vcap_expiry_mode, #_vcap_delivery, #_vcap_type', toggleFields );
 		$( '#woocommerce-product-data' ).on( 'woocommerce_variations_loaded', toggleTab );
 		$( document.body ).on( 'woocommerce-product-type-change', toggleTab );
 		toggleTab();

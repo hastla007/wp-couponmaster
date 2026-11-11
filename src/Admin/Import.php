@@ -1,8 +1,8 @@
 <?php
-namespace WCVS\Admin;
+namespace VCAP\Admin;
 
-use WCVS\CodePool;
-use WCVS\SpreadsheetReader;
+use VCAP\CodePool;
+use VCAP\SpreadsheetReader;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -10,17 +10,17 @@ defined( 'ABSPATH' ) || exit;
  * Import pre-generated coupon codes (CSV, XLS, XLSX, ODS) into named batches with validation and duplicate handling.
  */
 final class Import {
-	private const REPORT_TRANSIENT = 'wcvs_import_report_';
+	private const REPORT_TRANSIENT = 'vcap_import_report_';
 
 	public function __construct( private CodePool $pool ) {}
 
 	public function register(): void {
-		add_action( 'admin_post_wcvs_import', array( $this, 'handle' ) );
-		add_action( 'admin_post_wcvs_delete_batch', array( $this, 'delete_batch' ) );
+		add_action( 'admin_post_vcap_import', array( $this, 'handle' ) );
+		add_action( 'admin_post_vcap_delete_batch', array( $this, 'delete_batch' ) );
 	}
 
 	private function can(): bool {
-		return current_user_can( 'wcvs_manage_vouchers' ) || current_user_can( 'manage_woocommerce' );
+		return current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' );
 	}
 
 	public function page(): void {
@@ -30,7 +30,7 @@ final class Import {
 		$report = get_transient( self::REPORT_TRANSIENT . get_current_user_id() );
 		delete_transient( self::REPORT_TRANSIENT . get_current_user_id() );
 		?>
-		<div class="wrap wcvs-wrap">
+		<div class="wrap vcap-wrap">
 			<h1><?php esc_html_e( 'Import coupon codes', 'voucher-captain' ); ?></h1>
 			<p><?php esc_html_e( 'Upload a list of pre-generated codes (e.g. printed cards or codes from a partner). Assign the batch to a voucher product under Product data → Voucher → Code source; each sale uses the next free code.', 'voucher-captain' ); ?></p>
 
@@ -54,25 +54,25 @@ final class Import {
 				</div>
 			<?php endif; ?>
 
-			<div class="wcvs-card">
+			<div class="vcap-card">
 				<form method="post" enctype="multipart/form-data" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-					<input type="hidden" name="action" value="wcvs_import" />
-					<?php wp_nonce_field( 'wcvs_import' ); ?>
+					<input type="hidden" name="action" value="vcap_import" />
+					<?php wp_nonce_field( 'vcap_import' ); ?>
 					<table class="form-table" role="presentation">
 						<tr>
-							<th scope="row"><label for="wcvs-file"><?php esc_html_e( 'File', 'voucher-captain' ); ?></label></th>
-							<td><input type="file" id="wcvs-file" name="file" required accept=".csv,.txt,.xls,.xlsx,.ods" />
+							<th scope="row"><label for="vcap-file"><?php esc_html_e( 'File', 'voucher-captain' ); ?></label></th>
+							<td><input type="file" id="vcap-file" name="file" required accept=".csv,.txt,.xls,.xlsx,.ods" />
 								<p class="description"><?php esc_html_e( 'CSV, XLS, XLSX or ODS. The first worksheet is read.', 'voucher-captain' ); ?></p></td>
 						</tr>
 						<tr>
-							<th scope="row"><label for="wcvs-batch"><?php esc_html_e( 'Batch name', 'voucher-captain' ); ?></label></th>
-							<td><input type="text" id="wcvs-batch" name="batch" class="regular-text" required maxlength="100" list="wcvs-batches" />
-								<datalist id="wcvs-batches"><?php foreach ( $this->pool->batches() as $b ) : ?><option value="<?php echo esc_attr( $b['batch'] ); ?>"></option><?php endforeach; ?></datalist>
+							<th scope="row"><label for="vcap-batch"><?php esc_html_e( 'Batch name', 'voucher-captain' ); ?></label></th>
+							<td><input type="text" id="vcap-batch" name="batch" class="regular-text" required maxlength="100" list="vcap-batches" />
+								<datalist id="vcap-batches"><?php foreach ( $this->pool->batches() as $b ) : ?><option value="<?php echo esc_attr( $b['batch'] ); ?>"></option><?php endforeach; ?></datalist>
 								<p class="description"><?php esc_html_e( 'Use an existing name to add codes to that batch.', 'voucher-captain' ); ?></p></td>
 						</tr>
 						<tr>
-							<th scope="row"><label for="wcvs-column"><?php esc_html_e( 'Column', 'voucher-captain' ); ?></label></th>
-							<td><input type="text" id="wcvs-column" name="column" value="A" class="small-text" />
+							<th scope="row"><label for="vcap-column"><?php esc_html_e( 'Column', 'voucher-captain' ); ?></label></th>
+							<td><input type="text" id="vcap-column" name="column" value="A" class="small-text" />
 								<p class="description"><?php esc_html_e( 'Column letter (A, B, …) or header name containing the codes.', 'voucher-captain' ); ?></p></td>
 						</tr>
 						<tr>
@@ -83,8 +83,8 @@ final class Import {
 							</td>
 						</tr>
 						<tr>
-							<th scope="row"><label for="wcvs-pattern"><?php esc_html_e( 'Allowed format', 'voucher-captain' ); ?></label></th>
-							<td><input type="text" id="wcvs-pattern" name="pattern" value="^[A-Za-z0-9._-]{4,64}$" class="regular-text code" />
+							<th scope="row"><label for="vcap-pattern"><?php esc_html_e( 'Allowed format', 'voucher-captain' ); ?></label></th>
+							<td><input type="text" id="vcap-pattern" name="pattern" value="^[A-Za-z0-9._-]{4,64}$" class="regular-text code" />
 								<p class="description"><?php esc_html_e( 'Regular expression each code must match.', 'voucher-captain' ); ?></p></td>
 						</tr>
 					</table>
@@ -106,13 +106,13 @@ final class Import {
 					<tr>
 						<td><strong><?php echo esc_html( $b['batch'] ); ?></strong></td>
 						<td><?php echo esc_html( (string) $b['total'] ); ?></td>
-						<td><?php echo esc_html( (string) $b['free'] ); ?><?php echo $b['free'] < 10 ? ' <span class="wcvs-low">' . esc_html__( 'running low', 'voucher-captain' ) . '</span>' : ''; ?></td>
+						<td><?php echo esc_html( (string) $b['free'] ); ?><?php echo $b['free'] < 10 ? ' <span class="vcap-low">' . esc_html__( 'running low', 'voucher-captain' ) . '</span>' : ''; ?></td>
 						<td>
 							<?php if ( $b['free'] ) : ?>
 								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" onsubmit="return confirm('<?php echo esc_js( __( 'Delete all unused codes of this batch?', 'voucher-captain' ) ); ?>');">
-									<input type="hidden" name="action" value="wcvs_delete_batch" />
+									<input type="hidden" name="action" value="vcap_delete_batch" />
 									<input type="hidden" name="batch" value="<?php echo esc_attr( $b['batch'] ); ?>" />
-									<?php wp_nonce_field( 'wcvs_delete_batch' ); ?>
+									<?php wp_nonce_field( 'vcap_delete_batch' ); ?>
 									<button class="button button-link-delete"><?php esc_html_e( 'Delete unused codes', 'voucher-captain' ); ?></button>
 								</form>
 							<?php endif; ?>
@@ -127,12 +127,12 @@ final class Import {
 
 	private function finish( array $report ): void {
 		set_transient( self::REPORT_TRANSIENT . get_current_user_id(), $report, 10 * MINUTE_IN_SECONDS );
-		wp_safe_redirect( admin_url( 'admin.php?page=wcvs-import' ) );
+		wp_safe_redirect( admin_url( 'admin.php?page=vcap-import' ) );
 		exit;
 	}
 
 	public function handle(): void {
-		check_admin_referer( 'wcvs_import' );
+		check_admin_referer( 'vcap_import' );
 		if ( ! $this->can() ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
@@ -222,7 +222,7 @@ final class Import {
 				continue;
 			}
 			$seen[ $key ] = true;
-			if ( $this->pool->exists( $code ) || wc_get_coupon_id_by_code( $code ) || wcvs()->vouchers->code_exists( $code ) ) {
+			if ( $this->pool->exists( $code ) || wc_get_coupon_id_by_code( $code ) || vcap()->vouchers->code_exists( $code ) ) {
 				++$report['dupes_existing'];
 				continue;
 			}
@@ -236,12 +236,12 @@ final class Import {
 	}
 
 	public function delete_batch(): void {
-		check_admin_referer( 'wcvs_delete_batch' );
+		check_admin_referer( 'vcap_delete_batch' );
 		if ( ! $this->can() ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
 		$this->pool->delete_free( sanitize_text_field( wp_unslash( $_POST['batch'] ?? '' ) ) );
-		wp_safe_redirect( admin_url( 'admin.php?page=wcvs-import' ) );
+		wp_safe_redirect( admin_url( 'admin.php?page=vcap-import' ) );
 		exit;
 	}
 }
