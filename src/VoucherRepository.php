@@ -225,14 +225,52 @@ final class VoucherRepository {
 	/** Erase personal data of vouchers that ended more than $days ago. */
 	public function anonymise_older_than( int $days ): int {
 		global $wpdb;
-		$cutoff = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
-		return (int) $wpdb->query( // phpcs:ignore
+		if ( $days <= 0 || ! Install::tables_support_transactions() || false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return 0;
+		}
+		$cutoff      = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
+		$eligibility = "( (v.status IN ('expired','redeemed','void') AND v.updated_at < %s) OR (v.expires_at IS NOT NULL AND v.expires_at < %s) )";
+		try {
+			$notes = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->prepare(
+					"UPDATE {$this->events} AS e INNER JOIN {$this->table} AS v ON v.id = e.voucher_id
+					SET e.note = '[personal data removed by retention]'
+					WHERE (v.buyer_email <> '' OR v.recipient_email <> '') AND {$eligibility} AND e.note <> ''",
+					$cutoff,
+					$cutoff
+				)
+			);
+			if ( false === $notes ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return 0;
+			}
+			$updated = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->prepare(
+					"UPDATE {$this->table} AS v SET buyer_name = '', buyer_email = '', recipient_name = '', recipient_email = '', message = '', fields = '[]', updated_at = %s
+					WHERE (v.buyer_email <> '' OR v.recipient_email <> '') AND {$eligibility}",
+					$this->now(),
+					$cutoff,
+					$cutoff
+				)
+			);
+			if ( false === $updated || false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return 0;
+			}
+			return (int) $updated;
+		} catch ( Throwable $e ) {
+			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			throw $e;
+		}
+	}
+
+	/** Redact free-text audit notes while retaining event type, amount, balance and timestamp. */
+	public function anonymise_event_notes( int $voucher_id ): bool {
+		global $wpdb;
+		return false !== $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prepare(
-				"UPDATE {$this->table} SET buyer_name = '', buyer_email = '', recipient_name = '', recipient_email = '', message = '', fields = '[]', updated_at = %s
-				WHERE (buyer_email <> '' OR recipient_email <> '') AND ( (status IN ('expired','redeemed','void') AND updated_at < %s) OR (expires_at IS NOT NULL AND expires_at < %s) )",
-				$this->now(),
-				$cutoff,
-				$cutoff
+				"UPDATE {$this->events} SET note = '[personal data removed]' WHERE voucher_id = %d AND note <> ''",
+				$voucher_id
 			)
 		);
 	}
