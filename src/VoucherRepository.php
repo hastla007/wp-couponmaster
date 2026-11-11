@@ -192,7 +192,17 @@ final class VoucherRepository {
 		global $wpdb;
 		return array_map(
 			'intval',
-			$wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$this->table} WHERE delivered_at IS NULL AND status IN ('scheduled','active') AND delivery_at IS NOT NULL AND delivery_at <= %s LIMIT %d", $this->now(), $limit ) ) // phpcs:ignore
+			$wpdb->get_col( // phpcs:ignore
+				$wpdb->prepare(
+					// Scheduled deliveries that are due, plus immediate ones whose queued action was lost or failed (retried for 30 days).
+					"SELECT id FROM {$this->table} WHERE delivered_at IS NULL AND status IN ('scheduled','active')
+					AND ( ( delivery_at IS NOT NULL AND delivery_at <= %s ) OR ( delivery_at IS NULL AND created_at <= %s AND created_at >= %s ) ) LIMIT %d",
+					$this->now(),
+					gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS ),
+					gmdate( 'Y-m-d H:i:s', time() - 30 * DAY_IN_SECONDS ),
+					$limit
+				)
+			)
 		);
 	}
 
@@ -244,6 +254,7 @@ final class VoucherRepository {
 			'issued'     => __( 'Issued', 'voucher-captain' ),
 			'scheduled'  => __( 'Delivery scheduled', 'voucher-captain' ),
 			'delivered'  => __( 'Delivered', 'voucher-captain' ),
+			'delivery_failed' => __( 'Delivery failed', 'voucher-captain' ),
 			'resent'     => __( 'Email resent', 'voucher-captain' ),
 			'redeemed'   => __( 'Redeemed', 'voucher-captain' ),
 			'restored'   => __( 'Balance restored', 'voucher-captain' ),

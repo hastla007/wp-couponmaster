@@ -93,6 +93,10 @@ final class CouponManager {
 				'post_status' => $enabled ? 'publish' : 'draft',
 			)
 		);
+		// WooCommerce caches code → ID lookups; drop it so a persistent object cache cannot keep a disabled coupon alive.
+		if ( class_exists( '\WC_Cache_Helper' ) ) {
+			wp_cache_delete( \WC_Cache_Helper::get_cache_prefix( 'coupons' ) . 'coupon_id_from_code_' . wc_format_coupon_code( $voucher->code ), 'coupons' );
+		}
 	}
 
 	/**
@@ -134,6 +138,9 @@ final class CouponManager {
 		if ( Voucher::STATUS_VOID === $voucher->status ) {
 			throw new \Exception( esc_html__( 'This voucher has been cancelled.', 'voucher-captain' ), 9001 );
 		}
+		if ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
+			throw new \Exception( esc_html__( 'This voucher is not active yet.', 'voucher-captain' ), 9004 );
+		}
 		if ( Voucher::STATUS_REDEEMED === $voucher->status || ( $voucher->is_multi_use() && $voucher->balance <= 0 ) ) {
 			throw new \Exception( esc_html__( 'This voucher has already been fully redeemed.', 'voucher-captain' ), 9002 );
 		}
@@ -163,7 +170,9 @@ final class CouponManager {
 
 	private function used_amount( \WC_Order_Item_Coupon $item ): float {
 		$amount = (float) $item->get_discount();
-		if ( $this->settings->yes( 'vcap_balance_include_tax' ) ) {
+		// Shops with tax-inclusive prices apply coupons to gross prices, so the tax part belongs to the redeemed
+		// value. In tax-exclusive shops coupon amounts are net, so only the net discount is deducted.
+		if ( apply_filters( 'vcap_balance_deduct_tax', wc_prices_include_tax(), $item ) ) {
 			$amount += (float) $item->get_discount_tax();
 		}
 		return $amount;

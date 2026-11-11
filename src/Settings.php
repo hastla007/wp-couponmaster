@@ -17,7 +17,6 @@ final class Settings {
 		'vcap_code_separator'        => '-',
 		'vcap_default_template'      => 0,
 		'vcap_default_expiry_days'   => 365,
-		'vcap_balance_include_tax'   => 'yes',
 		'vcap_restore_on_cancel'     => 'yes',
 		'vcap_void_on_refund'        => 'yes',
 		'vcap_download_link_days'    => 0,
@@ -276,13 +275,6 @@ final class Settings {
 					array( 'type' => 'sectionend', 'id' => 'vcap_codes' ),
 
 					array( 'type' => 'title', 'title' => __( 'Redemption', 'voucher-captain' ), 'id' => 'vcap_redeem' ),
-					array(
-						'title'   => __( 'Balance includes tax', 'voucher-captain' ),
-						'id'      => 'vcap_balance_include_tax',
-						'type'    => 'checkbox',
-						'default' => 'yes',
-						'desc'    => __( 'Deduct the discount including tax from multi-use voucher balances (recommended for gift cards).', 'voucher-captain' ),
-					),
 					array(
 						'title'   => __( 'Restore balance on cancellation', 'voucher-captain' ),
 						'id'      => 'vcap_restore_on_cancel',

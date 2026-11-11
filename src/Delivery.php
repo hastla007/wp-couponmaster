@@ -106,8 +106,20 @@ final class Delivery {
 		$voucher->delivered_at = $this->repo->now();
 		$this->repo->update( $voucher );
 
-		$sent = $this->send( $voucher );
-		$this->repo->log( $voucher->id, 'delivered', null, null, implode( ', ', $sent ) );
+		try {
+			$sent = $this->send( $voucher );
+		} catch ( \Throwable $e ) {
+			// Let Action Scheduler record the failure and keep the voucher eligible for the daily retry.
+			$voucher->delivered_at = null;
+			$this->repo->update( $voucher );
+			$this->repo->log( $voucher->id, 'delivery_failed', null, null, $e->getMessage() );
+			throw $e;
+		}
+		if ( ! $sent ) {
+			$this->repo->log( $voucher->id, 'delivery_failed', null, null, __( 'No email was sent (email disabled or no valid address).', 'voucher-captain' ) );
+		} else {
+			$this->repo->log( $voucher->id, 'delivered', null, null, implode( ', ', $sent ) );
+		}
 		do_action( 'vcap_voucher_delivered', $voucher, $sent );
 	}
 

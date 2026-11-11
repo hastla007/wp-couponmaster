@@ -93,17 +93,19 @@ final class Issuer {
 			// Tickets are admission passes; they only carry a cash value when one is set explicitly.
 			return 0.0;
 		}
-		$qty = max( 1, (int) $item->get_quantity() );
+		$qty  = max( 1, (int) $item->get_quantity() );
+		// Coupon amounts follow the shop's price mode: gross where prices include tax, net otherwise.
+		$paid = (float) $item->get_subtotal() + ( wc_prices_include_tax() ? (float) $item->get_subtotal_tax() : 0.0 );
 		switch ( $config['amount_source'] ) {
 			case 'fixed':
 				$amount = (float) wc_format_decimal( $config['amount'] );
 				break;
 			case 'custom':
 				$custom = $item->get_meta( '_vcap_custom_amount' );
-				$amount = '' !== (string) $custom ? (float) $custom : ( (float) $item->get_subtotal() + (float) $item->get_subtotal_tax() ) / $qty;
+				$amount = '' !== (string) $custom ? (float) $custom : $paid / $qty;
 				break;
 			default:
-				$amount = ( (float) $item->get_subtotal() + (float) $item->get_subtotal_tax() ) / $qty / max( 1, (int) $config['per_item'] );
+				$amount = $paid / $qty / max( 1, (int) $config['per_item'] );
 		}
 		if ( 'percent' !== $config['discount_type'] && 'fixed' !== $config['amount_source'] ) {
 			// Paid / entered in the order currency; coupons are stored in the shop base currency.
