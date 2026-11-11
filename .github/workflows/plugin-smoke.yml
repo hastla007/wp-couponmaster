@@ -46,11 +46,11 @@ jobs:
             health_cmd: healthcheck.sh --connect --innodb_initialized
         order_storage:
           - name: HPOS
-            enabled: yes
-            expected: yes
+            enabled: 'yes'
+            expected: 'yes'
           - name: Legacy posts
-            enabled: no
-            expected: no
+            enabled: 'no'
+            expected: 'no'
     services:
       db:
         image: ${{ matrix.database.image }}
