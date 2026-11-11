@@ -59,6 +59,7 @@ function vcap_compat_order( string $coupon_code = '', float $discount = 0 ): WC_
 }
 
 global $wpdb;
+$database_prefix = $wpdb->prefix;
 $expected_hpos = 'yes' === getenv( 'VCAP_EXPECT_HPOS' );
 $hpos_enabled  = Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
 vcap_compat_assert( $expected_hpos === $hpos_enabled, 'configured HPOS / legacy order storage is active' );
@@ -137,7 +138,7 @@ if ( 0 === $pid ) {
 	fwrite( $pair[1], 'R' );
 	fread( $pair[1], 1 );
 	$wpdb = new wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
-	$wpdb->set_prefix( $table_prefix );
+	$wpdb->set_prefix( $database_prefix );
 	$result = vcap_compat_private_call( vcap()->coupons, 'reserve_balance_atomic', array( $race_voucher, 50.0, $new_order->get_id(), 'parallel redemption test' ) );
 	fwrite( $pair[1], $result ? '1' : '0' );
 	fclose( $pair[1] );
