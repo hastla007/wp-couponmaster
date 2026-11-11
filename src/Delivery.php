@@ -123,6 +123,9 @@ final class Delivery {
 				return;
 			}
 
+			if ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
+				vcap()->coupons->set_coupon_enabled( $voucher, true );
+			}
 			$table   = Install::tables()['vouchers'];
 			$updated = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				$wpdb->prepare(
@@ -138,7 +141,6 @@ final class Delivery {
 			}
 			if ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
 				$voucher->status = Voucher::STATUS_ACTIVE;
-				vcap()->coupons->set_coupon_enabled( $voucher, true );
 			}
 			$voucher->delivered_at = $now;
 			$this->repo->log( $voucher->id, 'delivered', null, null, implode( ', ', $sent ) );
