@@ -33,7 +33,7 @@ Visual PDF designer, recipient fields and custom field groups, scheduled deliver
 * Fix: promotion editor selects have accessible labels.
 * Dev: CONNECTORS.md, ADAPTERS.md and an example connector plugin; browser tests (Playwright, axe) in CI.
 * New: redemption conditions per country (billing country decides).
-* Change: requires WooCommerce 8.8 or newer (checked on load); tested with WordPress 7.1.
+* Change: requires WooCommerce 8.9 or newer (checked on load); tested with WordPress 7.1.
 * Fix: fatal error together with WooCommerce 8.x when emails were styled after a PDF was rendered – the bundled CSS parser now lives in its own namespace (VCAP\Vendor).
 * Fix: paid orders whose voucher balance could not be deducted are put on hold for review.
 * Fix: holds of trashed, deleted or abandoned unpaid orders are released.

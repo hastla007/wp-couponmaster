@@ -9,11 +9,11 @@ The CI integration suite installs WordPress 7.1.4, WooCommerce 11.2.2, Yoast SEO
 | | Minimum (plugin header, enforced) | Test baseline |
 |---|---|---|
 | WordPress | 6.4 | 7.1.4 |
-| WooCommerce | 8.8 (needed for the `woocommerce_coupon_get_items_to_apply` filter used by promotions, purchase rules and SKU rules; older versions show an admin notice and the plugin stays inactive) | 11.2.2 |
+| WooCommerce | 8.9 (first version with the `woocommerce_coupon_get_items_to_apply` filter used by promotions, purchase rules and SKU rules – verified against the 8.8.0–10.0.0 releases; older versions show an admin notice and the plugin stays inactive) | 11.2.2 |
 | PHP | 8.1 | 8.4 |
 | Yoast SEO | not required | 28.8 (optional, tested alongside) |
 
-The CI job `minimum-versions` installs WordPress 6.4.5 and WooCommerce 8.8.3 on PHP 8.1 **without** Yoast SEO and runs the full integration suite, so the minimums are tested, not assumed. Update both columns with every release.
+The CI job `minimum-versions` installs WordPress 6.4.5 and WooCommerce 8.9.0 on PHP 8.1 **without** Yoast SEO and runs the full integration suite, so the minimums are tested, not assumed. Update both columns with every release.
 
 ## Bundled libraries
 

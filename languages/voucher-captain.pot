@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-11 18:19+0000\n"
+"POT-Creation-Date: 2026-11-11 18:35+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:74 src/API/V1/RedemptionService.php:113
@@ -3625,6 +3625,6 @@ msgstr ""
 #. translators: %s: installed WooCommerce version
 #: voucher-captain.php:78
 #, php-format
-msgid "Voucher Captain requires WooCommerce 8.8 or newer (installed: %s). Please update WooCommerce."
+msgid "Voucher Captain requires WooCommerce 8.9 or newer (installed: %s). Please update WooCommerce."
 msgstr ""
 

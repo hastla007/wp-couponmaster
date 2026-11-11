@@ -3255,5 +3255,5 @@ msgstr "Optional, für Shops mit mehreren Lieferländern. Ein Block pro Land, be
 msgid "Redemption conditions per country"
 msgstr "Einlösebedingungen pro Land"
 
-msgid "Voucher Captain requires WooCommerce 8.8 or newer (installed: %s). Please update WooCommerce."
-msgstr "Voucher Captain benötigt WooCommerce 8.8 oder neuer (installiert: %s). Bitte aktualisieren Sie WooCommerce."
+msgid "Voucher Captain requires WooCommerce 8.9 or newer (installed: %s). Please update WooCommerce."
+msgstr "Voucher Captain benötigt WooCommerce 8.9 oder neuer (installiert: %s). Bitte aktualisieren Sie WooCommerce."
