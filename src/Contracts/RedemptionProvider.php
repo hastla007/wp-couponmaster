@@ -34,8 +34,8 @@ interface RedemptionProvider {
 	/**
 	 * Reserve voucher value against an order.
 	 *
-	 * @param string   $code Voucher code.
-	 * @param float    $amount Amount to reserve.
+	 * @param string    $code Voucher code.
+	 * @param float     $amount Amount to reserve.
 	 * @param \WC_Order $order Saved WooCommerce order.
 	 * @return array<string, mixed>|\WP_Error
 	 */
@@ -44,7 +44,7 @@ interface RedemptionProvider {
 	/**
 	 * Commit a prior reservation.
 	 *
-	 * @param string   $code Voucher code.
+	 * @param string    $code Voucher code.
 	 * @param \WC_Order $order Saved WooCommerce order.
 	 * @return array<string, mixed>|\WP_Error
 	 */
@@ -53,7 +53,7 @@ interface RedemptionProvider {
 	/**
 	 * Release a prior reservation.
 	 *
-	 * @param string   $code Voucher code.
+	 * @param string    $code Voucher code.
 	 * @param \WC_Order $order Saved WooCommerce order.
 	 * @return array<string, mixed>|\WP_Error
 	 */
