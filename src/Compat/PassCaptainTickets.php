@@ -24,6 +24,11 @@ final class PassCaptainTickets {
 	public const SERVICE_FILTER = 'wp_pass_captain_ticket_service_v1';
 	public const META_TYPE      = '_vcap_passcaptain_ticket_type';
 	public const META_QTY       = '_vcap_passcaptain_tickets';
+	/** "Customer chooses the date": event id and optional ticket name instead of a fixed ticket type. */
+	public const META_EVENT     = '_vcap_passcaptain_event';
+	public const META_NAME      = '_vcap_passcaptain_ticket_name';
+	/** Session key of a code waiting for its date choice on the redeem page. */
+	public const SESSION_CODE   = 'vcap_ticket_choice_code';
 	public const SNAPSHOT_KEY   = 'passcaptain_ticket';
 
 	public function __construct( private RedemptionService $redemptions, private VoucherRepository $vouchers ) {}
@@ -33,6 +38,8 @@ final class PassCaptainTickets {
 		add_action( 'vcap_product_settings_save', array( $this, 'product_save' ), 10, 2 );
 		add_filter( 'vcap_line_snapshot', array( $this, 'snapshot' ), 10, 2 );
 		add_filter( 'vcap_redeem_code', array( $this, 'redeem_page' ), 10, 2 );
+		add_filter( 'vcap_redeem_prefill', array( $this, 'redeem_prefill' ) );
+		add_action( 'vcap_redeem_form_fields', array( $this, 'redeem_fields' ) );
 		add_action( 'vcap_voucher_admin_actions', array( $this, 'admin_button' ), 10, 2 );
 		add_filter( 'vcap_voucher_admin_action', array( $this, 'admin_action' ), 10, 3 );
 		add_filter( 'vcap_voucher_admin_messages', array( $this, 'admin_messages' ) );
@@ -65,20 +72,38 @@ final class PassCaptainTickets {
 		$target = null;
 		if ( $voucher->order_item_id ) {
 			$line = wc_get_order_item_meta( $voucher->order_item_id, Issuer::LINE_META, true );
-			if ( is_array( $line ) && ! empty( $line[ self::SNAPSHOT_KEY ]['ticket_type_id'] ) ) {
+			if ( is_array( $line ) && ( ! empty( $line[ self::SNAPSHOT_KEY ]['ticket_type_id'] ) || ! empty( $line[ self::SNAPSHOT_KEY ]['event_id'] ) ) ) {
 				$target = (array) $line[ self::SNAPSHOT_KEY ];
 			}
 		}
 		/** Ticket target of a voucher (e.g. for imported or generated codes); return null for none. */
 		$target = apply_filters( 'vcap_passcaptain_ticket_target', $target, $voucher );
-		if ( ! is_array( $target ) || empty( $target['ticket_type_id'] ) ) {
+		if ( ! is_array( $target ) || ( empty( $target['ticket_type_id'] ) && empty( $target['event_id'] ) ) ) {
 			return null;
 		}
+		$event = absint( $target['event_id'] ?? 0 );
 		return array(
-			'ticket_type_id' => absint( $target['ticket_type_id'] ),
+			// 0 for "customer chooses the date": the ticket type is picked from options() at exchange time.
+			'ticket_type_id' => $event ? 0 : absint( $target['ticket_type_id'] ),
+			'event_id'       => $event,
+			'ticket_name'    => $event ? (string) ( $target['ticket_name'] ?? '' ) : '',
 			'quantity'       => max( 1, min( 10, absint( $target['quantity'] ?? 1 ) ) ),
 			'label'          => (string) ( $target['label'] ?? '' ),
 		);
+	}
+
+	/**
+	 * Dates the customer can choose for a "customer chooses the date" voucher (empty for fixed tickets).
+	 *
+	 * @return array<int, array{ticket_type_id:int,date_label:string}>
+	 */
+	public static function options( Voucher $voucher ): array {
+		$target  = self::target( $voucher );
+		$service = self::service();
+		if ( ! $target || ! $target['event_id'] || ! $service || ! method_exists( $service, 'options' ) ) {
+			return array();
+		}
+		return array_values( (array) $service->options( array( 'event_id' => $target['event_id'], 'ticket_name' => $target['ticket_name'] ) ) );
 	}
 
 	/**
@@ -88,7 +113,8 @@ final class PassCaptainTickets {
 	 * @param array  $args email (string, trusted PHP callers: the ticket recipient and the address personal
 	 *                     vouchers are checked against; default: logged-in user, else voucher recipient/buyer),
 	 *                     name (string), user_id (int, default current user), attendees (array, passed to
-	 *                     Pass Captain for ticket types with required attendee fields).
+	 *                     Pass Captain for ticket types with required attendee fields), ticket_type_id (int,
+	 *                     the chosen date of a "customer chooses the date" voucher – one of options()).
 	 * @return array<string, mixed>|\WP_Error voucher_id, order_public_id, tickets, email, status ("issued").
 	 */
 	public function exchange( string $code, array $args = array() ) {
@@ -113,6 +139,22 @@ final class PassCaptainTickets {
 			$state = $service->get( self::exchange_key( $voucher ) );
 			return $this->result( $voucher, is_array( $state ) ? $state : array(), (string) ( $existing['meta']['email'] ?? '' ) );
 		}
+		$ticket_type = $target['ticket_type_id'];
+		if ( $target['event_id'] ) {
+			$ticket_type = absint( $args['ticket_type_id'] ?? 0 );
+			$options     = self::options( $voucher );
+			if ( ! $ticket_type || ! in_array( $ticket_type, array_map( 'intval', array_column( $options, 'ticket_type_id' ) ), true ) ) {
+				return new \WP_Error(
+					$options ? 'vcap_ticket_choice_required' : 'vcap_no_ticket_dates',
+					$options ? __( 'Please choose a date for your tickets.', 'voucher-captain' ) : __( 'There are no upcoming dates for this voucher at the moment.', 'voucher-captain' ),
+					array( 'status' => $options ? 400 : 409, 'options' => $options )
+				);
+			}
+			if ( ! is_wp_error( $existing ) && RedemptionService::STATE_RESERVED === $existing['state'] && 'passcaptain:ticket:' . $ticket_type !== $existing['target'] ) {
+				// An earlier attempt for another date is still reserved (e.g. after an outage): start over.
+				$this->redemptions->release( $key );
+			}
+		}
 
 		$user    = wp_get_current_user();
 		$user_id = (int) ( $args['user_id'] ?? get_current_user_id() );
@@ -131,7 +173,7 @@ final class PassCaptainTickets {
 			$voucher->code,
 			array(
 				'key'         => $key,
-				'target'      => 'passcaptain:ticket:' . $target['ticket_type_id'],
+				'target'      => 'passcaptain:ticket:' . $ticket_type,
 				'user_id'     => $user_id,
 				'email'       => $check,
 				'meta'        => array( 'email' => $email, 'tickets' => $target['quantity'] ),
@@ -151,7 +193,14 @@ final class PassCaptainTickets {
 				'code_hint'      => substr( $voucher->code, -4 ),
 			),
 			self::exchange_key( $voucher ),
-			array( 'ticket_type_id' => $target['ticket_type_id'], 'quantity' => $target['quantity'] ),
+			array_filter(
+				array(
+					'ticket_type_id' => $ticket_type,
+					'quantity'       => $target['quantity'],
+					'event_id'       => $target['event_id'],
+					'ticket_name'    => $target['ticket_name'],
+				)
+			),
 			array(
 				'email'     => $email,
 				'name'      => sanitize_text_field( (string) ( $args['name'] ?? ( $voucher->recipient_name ?: $voucher->buyer_name ) ) ),
@@ -222,14 +271,46 @@ final class PassCaptainTickets {
 		if ( ! $voucher || ! self::target( $voucher ) || $voucher->is_multi_use() ) {
 			return $handled;
 		}
-		$result = $this->exchange( (string) $code );
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in Shortcodes::handle_redeem().
+		$choice = isset( $_POST['vcap_ticket_choice'] ) ? absint( wp_unslash( $_POST['vcap_ticket_choice'] ) ) : 0;
+		$result = $this->exchange( (string) $code, $choice ? array( 'ticket_type_id' => $choice ) : array() );
+		if ( is_wp_error( $result ) && 'vcap_ticket_choice_required' === $result->get_error_code() ) {
+			// Show the date choice: the form is rendered again with the code and a select (redeem_fields()).
+			WC()->session && WC()->session->set( self::SESSION_CODE, (string) $code );
+			wc_add_notice( $result->get_error_message(), $choice ? 'error' : 'notice' );
+			return 'choose';
+		}
 		if ( is_wp_error( $result ) ) {
 			wc_add_notice( $result->get_error_message(), 'error' );
 			return 'rejected';
 		}
+		WC()->session && WC()->session->set( self::SESSION_CODE, null );
 		/* translators: 1: number of tickets, 2: email */
 		wc_add_notice( sprintf( __( 'Your tickets (%1$d) were sent to %2$s.', 'voucher-captain' ), $result['tickets'], $result['email'] ) );
 		return 'exchanged';
+	}
+
+	/** The code waiting for its date choice (pre-filled in the redeem form). */
+	public function redeem_prefill( $value ) {
+		$code = function_exists( 'WC' ) && WC()->session ? (string) WC()->session->get( self::SESSION_CODE ) : '';
+		return '' !== $code ? $code : $value;
+	}
+
+	/** Date select of a "customer chooses the date" voucher in the redeem form. */
+	public function redeem_fields(): void {
+		$code    = $this->redeem_prefill( '' );
+		$voucher = '' !== $code ? $this->vouchers->get_by_code( $code ) : null;
+		$options = $voucher ? self::options( $voucher ) : array();
+		if ( ! $options ) {
+			return;
+		}
+		echo '<label for="vcap-ticket-choice">' . esc_html__( 'Date', 'voucher-captain' ) . '</label>';
+		echo '<select id="vcap-ticket-choice" name="vcap_ticket_choice" required>';
+		echo '<option value="">' . esc_html__( '— Choose a date —', 'voucher-captain' ) . '</option>';
+		foreach ( $options as $o ) {
+			echo '<option value="' . esc_attr( (string) $o['ticket_type_id'] ) . '">' . esc_html( (string) $o['date_label'] ) . '</option>';
+		}
+		echo '</select>';
 	}
 
 	/* ---- Product settings -------------------------------------------------------------------------- */
@@ -240,9 +321,21 @@ final class PassCaptainTickets {
 			return;
 		}
 		$current = $product instanceof \WC_Product ? absint( $product->get_meta( self::META_TYPE ) ) : 0;
+		$event   = $product instanceof \WC_Product ? absint( $product->get_meta( self::META_EVENT ) ) : 0;
 		$options = array( '' => __( '— No ticket (regular voucher) —', 'voucher-captain' ) );
+		if ( method_exists( $service, 'events' ) ) {
+			foreach ( (array) $service->events() as $e ) {
+				/* translators: 1: event, 2: number of upcoming dates */
+				$options[ 'event:' . $e['event_id'] ] = sprintf( __( 'Customer chooses the date: %1$s (%2$d dates)', 'voucher-captain' ), $e['label'], (int) $e['dates'] );
+			}
+		}
 		foreach ( (array) $service->targets() as $t ) {
-			$options[ (string) $t['ticket_type_id'] ] = (string) $t['label'];
+			/* translators: %s: event, date and ticket type */
+			$options[ (string) $t['ticket_type_id'] ] = sprintf( __( 'Fixed date: %s', 'voucher-captain' ), $t['label'] );
+		}
+		if ( $event && ! isset( $options[ 'event:' . $event ] ) ) {
+			/* translators: %d: event id */
+			$options[ 'event:' . $event ] = sprintf( __( 'Event #%d (no upcoming dates)', 'voucher-captain' ), $event );
 		}
 		if ( $current && ! isset( $options[ (string) $current ] ) ) {
 			/* translators: %d: ticket type id */
@@ -253,7 +346,7 @@ final class PassCaptainTickets {
 				'id'          => self::META_TYPE,
 				'label'       => __( 'WP Pass Captain ticket', 'voucher-captain' ),
 				'options'     => $options,
-				'value'       => $current ? (string) $current : '',
+				'value'       => $event ? 'event:' . $event : ( $current ? (string) $current : '' ),
 				'desc_tip'    => true,
 				'description' => __( 'Exchange each voucher for tickets of this ticket type (redeem page or voucher admin). The voucher becomes redeemable via WP Pass Captain.', 'voucher-captain' ),
 			)
@@ -267,17 +360,31 @@ final class PassCaptainTickets {
 				'custom_attributes' => array( 'min' => 1, 'max' => 10, 'step' => 1 ),
 			)
 		);
+		woocommerce_wp_text_input(
+			array(
+				'id'          => self::META_NAME,
+				'label'       => __( 'Ticket name (date choice)', 'voucher-captain' ),
+				'value'       => $product instanceof \WC_Product ? (string) $product->get_meta( self::META_NAME ) : '',
+				'placeholder' => __( 'Any ticket type', 'voucher-captain' ),
+				'desc_tip'    => true,
+				'description' => __( 'Only for "customer chooses the date": offer only ticket types with exactly this name (e.g. "Standard").', 'voucher-captain' ),
+			)
+		);
 	}
 
 	public function product_save( \WC_Product $product, $post ): void {
 		if ( ! is_array( $post ) || ! array_key_exists( self::META_TYPE, $post ) ) {
 			return; // Field not shown (Pass Captain inactive): keep what is stored.
 		}
-		$type = absint( $post[ self::META_TYPE ] );
+		$value = sanitize_text_field( (string) $post[ self::META_TYPE ] );
+		$event = 0 === strpos( $value, 'event:' ) ? absint( substr( $value, 6 ) ) : 0;
+		$type  = $event ? 0 : absint( $value );
 		$product->update_meta_data( self::META_TYPE, $type ? $type : '' );
+		$product->update_meta_data( self::META_EVENT, $event ? $event : '' );
+		$product->update_meta_data( self::META_NAME, $event ? sanitize_text_field( (string) ( $post[ self::META_NAME ] ?? '' ) ) : '' );
 		$product->update_meta_data( self::META_QTY, max( 1, min( 10, absint( $post[ self::META_QTY ] ?? 1 ) ) ) );
 		$channels = array_values( array_filter( (array) $product->get_meta( '_vcap_channels' ) ) );
-		if ( $type && $channels && ! in_array( PassCaptain::CHANNEL, $channels, true ) ) {
+		if ( ( $type || $event ) && $channels && ! in_array( PassCaptain::CHANNEL, $channels, true ) ) {
 			// A ticket voucher must be redeemable via Pass Captain, whatever else was ticked.
 			$channels[] = PassCaptain::CHANNEL;
 			$product->update_meta_data( '_vcap_channels', $channels );
@@ -289,12 +396,19 @@ final class PassCaptainTickets {
 		$product = $item instanceof \WC_Order_Item_Product ? $item->get_product() : null;
 		$base    = $product && $product->is_type( 'variation' ) ? wc_get_product( $product->get_parent_id() ) : $product;
 		$type    = $base ? absint( $base->get_meta( self::META_TYPE ) ) : 0;
-		if ( ! $type ) {
+		$event   = $base ? absint( $base->get_meta( self::META_EVENT ) ) : 0;
+		if ( ! $type && ! $event ) {
 			return $extra;
 		}
 		$label = '';
 		$service = self::service();
-		if ( $service && method_exists( $service, 'targets' ) ) {
+		if ( $service && $event && method_exists( $service, 'events' ) ) {
+			foreach ( (array) $service->events() as $e ) {
+				if ( (int) $e['event_id'] === $event ) {
+					$label = (string) $e['label'];
+				}
+			}
+		} elseif ( $service && method_exists( $service, 'targets' ) ) {
 			foreach ( (array) $service->targets() as $t ) {
 				if ( (int) $t['ticket_type_id'] === $type ) {
 					$label = (string) $t['label'];
@@ -302,7 +416,9 @@ final class PassCaptainTickets {
 			}
 		}
 		$extra[ self::SNAPSHOT_KEY ] = array(
-			'ticket_type_id' => $type,
+			'ticket_type_id' => $event ? 0 : $type,
+			'event_id'       => $event,
+			'ticket_name'    => $event ? (string) $base->get_meta( self::META_NAME ) : '',
 			'quantity'       => max( 1, min( 10, absint( $base->get_meta( self::META_QTY ) ) ?: 1 ) ),
 			'label'          => $label,
 		);
@@ -319,9 +435,28 @@ final class PassCaptainTickets {
 		if ( ! is_wp_error( $redemption ) && RedemptionService::STATE_COMMITTED === $redemption['state'] ) {
 			return; // Already exchanged: see the voucher history.
 		}
-		if ( in_array( $voucher->status, array( Voucher::STATUS_ACTIVE, Voucher::STATUS_RESERVED ), true ) ) {
-			$form( 'passcaptain_tickets', __( 'Exchange for tickets', 'voucher-captain' ) );
+		if ( ! in_array( $voucher->status, array( Voucher::STATUS_ACTIVE, Voucher::STATUS_RESERVED ), true ) ) {
+			return;
 		}
+		$options = self::target( $voucher )['event_id'] ? self::options( $voucher ) : null;
+		if ( null === $options ) {
+			$form( 'passcaptain_tickets', __( 'Exchange for tickets', 'voucher-captain' ) );
+			return;
+		}
+		if ( ! $options ) {
+			echo '<span class="description">' . esc_html__( 'There are no upcoming dates for this voucher at the moment.', 'voucher-captain' ) . '</span>';
+			return;
+		}
+		// Same request as the core buttons (admin-post, nonce vcap_voucher_{id}), plus the chosen date.
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="vcap-inline-form">';
+		echo '<input type="hidden" name="action" value="vcap_voucher_action" /><input type="hidden" name="do" value="passcaptain_tickets" /><input type="hidden" name="id" value="' . esc_attr( (string) $voucher->id ) . '" />';
+		wp_nonce_field( 'vcap_voucher_' . $voucher->id );
+		echo '<label class="screen-reader-text" for="vcap-admin-ticket-choice">' . esc_html__( 'Date', 'voucher-captain' ) . '</label>';
+		echo '<select id="vcap-admin-ticket-choice" name="vcap_ticket_choice" required><option value="">' . esc_html__( '— Choose a date —', 'voucher-captain' ) . '</option>';
+		foreach ( $options as $o ) {
+			echo '<option value="' . esc_attr( (string) $o['ticket_type_id'] ) . '">' . esc_html( (string) $o['date_label'] ) . '</option>';
+		}
+		echo '</select> <button type="submit" class="button">' . esc_html__( 'Exchange for tickets', 'voucher-captain' ) . '</button></form>';
 	}
 
 	public function admin_action( $msg, $do, $voucher ) {
@@ -329,7 +464,9 @@ final class PassCaptainTickets {
 			return $msg;
 		}
 		$email  = is_email( $voucher->recipient_email ) ? $voucher->recipient_email : $voucher->buyer_email;
-		$result = $this->exchange( $voucher->code, array( 'email' => $email, 'user_id' => 0 ) );
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in VoucherAdmin::handle_action().
+		$choice = isset( $_POST['vcap_ticket_choice'] ) ? absint( wp_unslash( $_POST['vcap_ticket_choice'] ) ) : 0;
+		$result = $this->exchange( $voucher->code, array( 'email' => $email, 'user_id' => 0, 'ticket_type_id' => $choice ) );
 		return is_wp_error( $result ) ? 'passcaptain_tickets_failed' : 'passcaptain_tickets_issued';
 	}
 

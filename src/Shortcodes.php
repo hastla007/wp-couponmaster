@@ -121,7 +121,11 @@ final class Shortcodes {
 		<form method="post" class="vcap-redeem-form">
 			<?php wp_nonce_field( 'vcap_redeem', 'vcap_redeem_nonce' ); ?>
 			<label for="vcap-redeem-code"><?php esc_html_e( 'Voucher code', 'voucher-captain' ); ?></label>
-			<input type="text" id="vcap-redeem-code" name="vcap_redeem_code" required autocomplete="off" maxlength="100" />
+			<input type="text" id="vcap-redeem-code" name="vcap_redeem_code" required autocomplete="off" maxlength="100" value="<?php echo esc_attr( (string) apply_filters( 'vcap_redeem_prefill', '' ) ); ?>" />
+			<?php
+			/** Extra fields of connectors (e.g. the date for a ticket voucher), posted with the code. */
+			do_action( 'vcap_redeem_form_fields' );
+			?>
 			<button type="submit" class="button"><?php echo esc_html( $atts['button'] ); ?></button>
 		</form>
 		<?php

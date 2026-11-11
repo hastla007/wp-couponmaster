@@ -200,6 +200,43 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	vcap_pc_assert( is_wp_error( $refused ) && VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $full->id )->status, 'a sold-out ticket type refuses the exchange and the voucher stays usable' );
 	remove_filter( 'vcap_passcaptain_ticket_target', $give, 10 );
 	vcap_pc_assert( is_wp_error( vcap()->passcaptain_tickets->exchange( vcap_pc_voucher( 'single', 10 )->code ) ), 'vouchers without a ticket target are not exchanged' );
+
+	// "Customer chooses the date": the voucher names an event; the customer picks one of its upcoming dates.
+	if ( method_exists( VCAP\Compat\PassCaptainTickets::service(), 'options' ) ) {
+		$first = vcap_pc_ticket_type( 3000 );
+		$ev    = $wpdb->get_row( $wpdb->prepare( "SELECT o.event_id FROM {$wpdb->prefix}wpcap_ticket_types tt JOIN {$wpdb->prefix}wpcap_occurrences o ON o.occurrence_id=tt.occurrence_id WHERE tt.ticket_type_id=%d", $first ) );
+		$wpdb->insert( "{$wpdb->prefix}wpcap_occurrences", array( 'event_id' => $ev->event_id, 'starts_at' => gmdate( 'Y-m-d H:i:s', time() + 21 * DAY_IN_SECONDS ), 'timezone' => 'Europe/Vienna', 'location' => 'Wien', 'capacity' => 0, 'status' => 'scheduled' ) );
+		$wpdb->insert( "{$wpdb->prefix}wpcap_ticket_types", array( 'occurrence_id' => $wpdb->insert_id, 'name' => 'Standard', 'price_minor' => 3000, 'currency' => 'EUR', 'capacity' => 100, 'max_per_order' => 10, 'status' => 'active' ) );
+		$second = (int) $wpdb->insert_id;
+		$ev_product = new WC_Product_Simple();
+		$ev_product->set_name( 'Concert voucher (any date)' );
+		$ev_product->set_regular_price( '30' );
+		$ev_product->set_virtual( true );
+		$ev_product->update_meta_data( '_vcap_enabled', 'yes' );
+		$ev_product->update_meta_data( '_vcap_type', 'voucher' );
+		$ev_product->update_meta_data( VCAP\Compat\PassCaptainTickets::META_EVENT, (int) $ev->event_id );
+		$ev_product->update_meta_data( VCAP\Compat\PassCaptainTickets::META_NAME, 'Standard' );
+		$ev_product->update_meta_data( VCAP\Compat\PassCaptainTickets::META_QTY, 1 );
+		$ev_product->save();
+		$ev_order = wc_create_order();
+		$ev_order->add_product( $ev_product, 1 );
+		$ev_order->set_billing_email( 'any-date@example.com' );
+		$ev_order->calculate_totals();
+		$ev_order->set_status( 'processing' );
+		$ev_order->save();
+		vcap()->issuer->issue_for_order( $ev_order, true );
+		$ev_voucher = vcap()->vouchers->for_order( $ev_order->get_id() )[0];
+		$choices    = array_map( 'intval', array_column( VCAP\Compat\PassCaptainTickets::options( $ev_voucher ), 'ticket_type_id' ) );
+		vcap_pc_assert( array( $first, $second ) === $choices, 'an event voucher offers every upcoming date of the event' );
+		wp_set_current_user( 0 );
+		$ask = vcap()->passcaptain_tickets->exchange( $ev_voucher->code );
+		vcap_pc_assert( is_wp_error( $ask ) && 'vcap_ticket_choice_required' === $ask->get_error_code() && 2 === count( $ask->get_error_data()['options'] ) && VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $ev_voucher->id )->status, 'without a chosen date the customer is asked to choose one (nothing is redeemed)' );
+		vcap_pc_assert( is_wp_error( vcap()->passcaptain_tickets->exchange( $ev_voucher->code, array( 'ticket_type_id' => $ticket_type ) ) ), 'a date of another event cannot be chosen' );
+		$picked = vcap()->passcaptain_tickets->exchange( $ev_voucher->code, array( 'ticket_type_id' => $second ) );
+		$picked_type = is_array( $picked ) ? (int) $wpdb->get_var( $wpdb->prepare( "SELECT t.ticket_type_id FROM {$wpdb->prefix}wpcap_tickets t JOIN {$wpdb->prefix}wpcap_orders o ON o.order_id=t.order_id WHERE o.public_id=%s", $picked['order_public_id'] ) ) : 0;
+		vcap_pc_assert( is_array( $picked ) && 1 === $picked['tickets'] && $second === $picked_type && VCAP\Voucher::STATUS_REDEEMED === vcap()->vouchers->get( $ev_voucher->id )->status, 'the ticket is issued for the chosen date' );
+		wp_set_current_user( 1 );
+	}
 }
 
 // Minor units follow ISO 4217 (as Pass Captain does), not the shop's price display setting.
