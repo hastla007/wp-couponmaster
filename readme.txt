@@ -16,6 +16,8 @@ Visual PDF designer, recipient fields and custom field groups, scheduled deliver
 == Changelog ==
 
 = Unreleased =
+* New: WP Affiliate Captain adapter – assign a partner to a code campaign (Vouchers → Generate codes); every code of the campaign is credited to that partner. Purchased vouchers and gift cards are never assigned.
+* New: hooks vcap_campaigns_table_header and vcap_campaigns_table_cell for extra columns in the campaign table.
 * New: WP Pass Captain integration – vouchers and gift cards pay for tickets in Pass Captain's checkout (reserve before payment, commit after payment, release on cancellation, proportional give-back on ticket refunds).
 * New: redemptions->refund() gives back (part of) a completed external redemption.
 * Fix: Pass Captain reservations are held for Pass Captain's whole payment window (late bank transfers no longer find the voucher released).

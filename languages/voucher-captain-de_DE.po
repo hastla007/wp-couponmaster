@@ -3305,3 +3305,24 @@ msgstr "Empfehlungsbelohnung zurückgenommen: %s Guthaben abgebucht."
 
 msgid "Referral reward store credit was already spent and could not be withdrawn."
 msgstr "Das Guthaben aus der Empfehlungsbelohnung wurde bereits verbraucht und konnte nicht zurückgenommen werden."
+
+msgid "Unknown campaign."
+msgstr "Unbekannte Kampagne."
+
+msgid "This partner code is unknown or not active in WP Affiliate Captain."
+msgstr "Dieser Partnercode ist in WP Affiliate Captain unbekannt oder nicht aktiv."
+
+msgid "Partner (WP Affiliate Captain)"
+msgstr "Partner (WP Affiliate Captain)"
+
+msgid "Partner code"
+msgstr "Partnercode"
+
+msgid "Save"
+msgstr "Speichern"
+
+msgid "Partner removed from the campaign."
+msgstr "Partner wurde von der Kampagne entfernt."
+
+msgid "Partner saved. New orders with codes of this campaign are credited to the partner."
+msgstr "Partner gespeichert. Neue Bestellungen mit Codes dieser Kampagne werden dem Partner gutgeschrieben."

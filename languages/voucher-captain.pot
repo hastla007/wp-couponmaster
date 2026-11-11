@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-11 21:55+0000\n"
+"POT-Creation-Date: 2026-11-11 22:33+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:75 src/API/V1/RedemptionService.php:117
@@ -173,7 +173,7 @@ msgstr ""
 msgid "No matching voucher reservation could be released."
 msgstr ""
 
-#: src/Admin/CampaignAdmin.php:50 src/Admin/CampaignAdmin.php:154 src/Admin/CampaignAdmin.php:184 src/Admin/Import.php:28 src/Admin/Import.php:138 src/Admin/Import.php:242
+#: src/Admin/CampaignAdmin.php:50 src/Admin/CampaignAdmin.php:163 src/Admin/CampaignAdmin.php:193 src/Admin/Import.php:28 src/Admin/Import.php:138 src/Admin/Import.php:242
 msgid "You are not allowed to do this."
 msgstr ""
 
@@ -191,7 +191,7 @@ msgstr ""
 msgid "%1$d codes created in \"%2$s\"."
 msgstr ""
 
-#: src/Admin/CampaignAdmin.php:73 src/Admin/CampaignAdmin.php:137 src/Admin/Import.php:111
+#: src/Admin/CampaignAdmin.php:73 src/Admin/CampaignAdmin.php:146 src/Admin/Import.php:111
 msgid "Download CSV"
 msgstr ""
 
@@ -259,7 +259,7 @@ msgstr ""
 msgid "No campaigns yet."
 msgstr ""
 
-#: src/Admin/CampaignAdmin.php:142
+#: src/Admin/CampaignAdmin.php:151
 msgid "Code pool batches and their CSV export are listed under Vouchers → Import codes."
 msgstr ""
 
@@ -429,7 +429,7 @@ msgstr ""
 msgid "Scanner"
 msgstr ""
 
-#: src/Admin/Menu.php:44 src/Admin/Menu.php:44 src/Plugin.php:111
+#: src/Admin/Menu.php:44 src/Admin/Menu.php:44 src/Plugin.php:112
 msgid "Settings"
 msgstr ""
 
@@ -987,6 +987,34 @@ msgstr ""
 
 #: src/Channels.php:22
 msgid "External redemption (API, connected plugins)"
+msgstr ""
+
+#: src/Compat/AffiliateCaptain.php:73
+msgid "Unknown campaign."
+msgstr ""
+
+#: src/Compat/AffiliateCaptain.php:80
+msgid "This partner code is unknown or not active in WP Affiliate Captain."
+msgstr ""
+
+#: src/Compat/AffiliateCaptain.php:140
+msgid "Partner (WP Affiliate Captain)"
+msgstr ""
+
+#: src/Compat/AffiliateCaptain.php:151 src/Compat/AffiliateCaptain.php:152
+msgid "Partner code"
+msgstr ""
+
+#: src/Compat/AffiliateCaptain.php:153
+msgid "Save"
+msgstr ""
+
+#: src/Compat/AffiliateCaptain.php:171
+msgid "Partner removed from the campaign."
+msgstr ""
+
+#: src/Compat/AffiliateCaptain.php:171
+msgid "Partner saved. New orders with codes of this campaign are credited to the partner."
 msgstr ""
 
 #: src/Compat/PassCaptain.php:36
@@ -2125,12 +2153,12 @@ msgid "Site URL"
 msgstr ""
 
 #. translators: %s: comma separated table names
-#: src/Plugin.php:127
+#: src/Plugin.php:128
 #, php-format
 msgid "Voucher Captain: the voucher database tables do not support transactions (InnoDB). Gift card balances cannot be redeemed until these tables are converted to InnoDB: %s"
 msgstr ""
 
-#: src/Plugin.php:135
+#: src/Plugin.php:136
 msgid "Voucher Captain: the PDF libraries are missing. Install the release ZIP or run \"composer install --no-dev\" in the plugin folder."
 msgstr ""
 

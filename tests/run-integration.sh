@@ -9,7 +9,7 @@ if [ "${VCAP_WITH_COMPAT:-0}" = "1" ]; then compat="compatibility"; fi
 for suite in \
 	woocommerce $compat security redemption order-lifecycle account coupon-link campaign reminder zero-total \
 	purchase-rules first-order store-credit promotion bonus sku-rules reports referral shortcodes \
-	connector example-connector blocks fault-injection acceptance scoping; do
+	connector example-connector affiliate-captain blocks fault-injection acceptance scoping; do
 	echo "::group::${suite}"
 	$WP eval-file "$PWD/tests/${suite}-integration.php"
 	echo "::endgroup::"
