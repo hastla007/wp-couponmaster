@@ -85,6 +85,7 @@ final class Plugin {
 		( new Compat\Subscriptions() )->register();
 		( new Compat\Wpml() )->register();
 		( new Compat\MultiCurrency() )->register();
+		( new Compat\AffiliateCaptain() )->register();
 		( new Compat\PassCaptain() )->register();
 
 		if ( is_admin() ) {
