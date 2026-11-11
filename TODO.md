@@ -144,3 +144,14 @@ Befund im Kursplugin: `/wp-json/boatingschool/v1/coupons/redeem` ist derzeit fü
 - [ ] Feste Wertstufen und Wunschbetrag für Gutscheinprodukte unterstützen, wenn Produkt-/Preis-Integrationen dies erlauben; Werte, Währung und Steuerdaten positionsbezogen speichern.
 - [ ] Mehrsprachige, mehrwährungsfähige, Subscription- und Produktfeld-Erweiterungen über dokumentierte Adapter statt interne APIs anbinden.
 - [ ] Akzeptanztests für Kampagnenpriorität, Warenkorbgrenzen, teilweise Einlösung, Erstattung, Mehrwährung, Wiederholungs-Webhook und Datenschutzfristen ergänzen.
+
+## P1 – EU-Markt und Plattform-Kompatibilität
+
+- [ ] EU als Zielmarkt umsetzen; Länder-, Währungs-, Sprach- und Steuerkonfiguration getrennt von fest codierter Geschäftslogik halten.
+- [ ] Release-CI gegen WordPress 7.1.4, WooCommerce 11.2.2, PHP 8.4 (am Snapshot 8.4.27), MySQL 8.4 LTS und MariaDB 11.4 LTS einrichten.
+- [ ] Unterstützte Mindestversionen separat von der aktuellen Test-Baseline festlegen und pro Release aktualisieren.
+- [ ] Yoast SEO 28.8 als optionale Kompatibilitätskonfiguration prüfen; Yoast darf keine Laufzeitabhängigkeit sein.
+- [ ] Mehrwährungs-, Mehrsprachigkeits- und WooCommerce-Produktfeld-Integrationen über dokumentierte Adapter spezifizieren.
+- [ ] EU-weite Steuerfälle, OSS, Bruttopreisberechnung, Gutscheinbesteuerung und positionsbezogene Erstattungen mit Steuerberatung für die unterstützten Länder festlegen.
+- [ ] Verbraucherinformationen und Gutscheinbedingungen pro Land konfigurierbar machen und rechtlich prüfen lassen.
+- [ ] Barrierefreiheit von Produktfeldern, Checkout-/Kundenkonto-Flows, PDF-Vorschau und Admin-Oberfläche prüfen.
