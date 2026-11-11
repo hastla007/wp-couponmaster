@@ -1,0 +1,143 @@
+<?php
+namespace VCAP\Discounts;
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Usage counting and limits for promotions.
+ *
+ * Like WooCommerce's own "_used_by" coupon meta, every use is one post meta row on the promotion
+ * ("_vcap_used_by" = "u:{user id}" or "e:{billing email}"), so concurrent orders never overwrite each other's count.
+ * A use is counted when the order reaches a paid/on-hold status and given back when it is cancelled, failed or
+ * set back to pending. Each order remembers what it counted, so status repeats never count twice.
+ */
+final class Usage {
+	public const META       = '_vcap_used_by';
+	public const ORDER_META = '_vcap_campaign_usage';
+	public const ORDER_KEY  = '_vcap_campaign_usage_key';
+
+	public function register(): void {
+		foreach ( array( 'processing', 'completed', 'on-hold' ) as $status ) {
+			add_action( 'woocommerce_order_status_' . $status, array( $this, 'record' ), 20 );
+		}
+		foreach ( array( 'cancelled', 'failed', 'pending' ) as $status ) {
+			add_action( 'woocommerce_order_status_' . $status, array( $this, 'revert' ), 20 );
+		}
+	}
+
+	/** Keys identifying a customer: account and billing email (guest orders of the same email count too). */
+	public static function customer_keys( int $user_id, string $email ): array {
+		$keys = array();
+		if ( $user_id > 0 ) {
+			$keys[] = 'u:' . $user_id;
+		}
+		$email = strtolower( trim( $email ) );
+		if ( is_email( $email ) ) {
+			$keys[] = 'e:' . $email;
+		}
+		return $keys;
+	}
+
+	public static function count( int $campaign_id ): int {
+		global $wpdb;
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s", $campaign_id, self::META ) );
+	}
+
+	public static function count_for( int $campaign_id, array $keys ): int {
+		global $wpdb;
+		if ( ! $keys ) {
+			return 0;
+		}
+		$in = implode( ',', array_fill( 0, count( $keys ), '%s' ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built above.
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s AND meta_value IN ($in)", array_merge( array( $campaign_id, self::META ), $keys ) ) );
+	}
+
+	/**
+	 * Why a promotion cannot be used any more ('' when it can).
+	 */
+	public static function blocker( array $campaign, int $user_id, string $email ): string {
+		$rules = $campaign['rules'];
+		if ( $rules['usage_limit'] > 0 && self::count( (int) $campaign['id'] ) >= $rules['usage_limit'] ) {
+			return 'usage_limit';
+		}
+		if ( $rules['usage_limit_per_customer'] > 0 ) {
+			$keys = self::customer_keys( $user_id, $email );
+			if ( $keys && self::count_for( (int) $campaign['id'], $keys ) >= $rules['usage_limit_per_customer'] ) {
+				return 'usage_limit_customer';
+			}
+		}
+		return '';
+	}
+
+	public static function add( int $campaign_id, string $key ): void {
+		add_post_meta( $campaign_id, self::META, $key );
+	}
+
+	public static function remove( int $campaign_id, string $key ): void {
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s AND meta_value = %s LIMIT 1", $campaign_id, self::META, $key ) );
+		wp_cache_delete( $campaign_id, 'post_meta' );
+	}
+
+	/** The key a use of this order is stored under (kept on the order, so later email changes do not matter). */
+	public static function order_key( \WC_Order $order ): string {
+		$key = (string) $order->get_meta( self::ORDER_KEY );
+		if ( '' === $key ) {
+			$keys = self::customer_keys( (int) $order->get_customer_id(), (string) $order->get_billing_email() );
+			$key  = $keys ? $keys[0] : 'o:' . $order->get_id();
+			$order->update_meta_data( self::ORDER_KEY, $key );
+		}
+		return $key;
+	}
+
+	/** Promotion ids on an order's coupon lines. */
+	public static function campaign_ids( \WC_Order $order ): array {
+		$ids = array();
+		foreach ( $order->get_coupon_codes() as $code ) {
+			$id = CartIntegration::id_from_code( (string) $code );
+			if ( $id ) {
+				$ids[] = $id;
+			}
+		}
+		return array_values( array_unique( $ids ) );
+	}
+
+	public function record( $order_id ): void {
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			return;
+		}
+		$done = array_map( 'intval', (array) $order->get_meta( self::ORDER_META ) );
+		$done = array_values( array_filter( $done ) );
+		$new = array_diff( self::campaign_ids( $order ), $done );
+		if ( ! $new ) {
+			return;
+		}
+		$key = self::order_key( $order );
+		foreach ( $new as $id ) {
+			if ( get_post( $id ) ) {
+				self::add( $id, $key );
+			}
+		}
+		$order->update_meta_data( self::ORDER_META, array_values( array_merge( $done, $new ) ) );
+		$order->save_meta_data();
+	}
+
+	public function revert( $order_id ): void {
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			return;
+		}
+		$done = array_values( array_filter( array_map( 'intval', (array) $order->get_meta( self::ORDER_META ) ) ) );
+		if ( ! $done ) {
+			return;
+		}
+		$key = (string) $order->get_meta( self::ORDER_KEY );
+		foreach ( $done as $id ) {
+			self::remove( $id, $key );
+		}
+		$order->delete_meta_data( self::ORDER_META );
+		$order->save_meta_data();
+	}
+}

@@ -1,0 +1,66 @@
+/* Voucher Captain – template designer */
+.vcap-designer-screen #postdivrich,
+.vcap-designer-screen #vcap-designer-box .postbox-header .handle-actions { display: none; }
+.vcap-designer { --vcap-accent: #2271b1; font-size: 13px; }
+.vcap-d-toolbar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding: 8px 0 12px; border-bottom: 1px solid #dcdcde; margin-bottom: 12px; }
+.vcap-d-group { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.vcap-d-label { font-weight: 600; margin-right: 4px; }
+.vcap-d-zoom { min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
+.vcap-d-check { display: inline-flex; align-items: center; gap: 4px; margin: 0 6px; }
+.vcap-d-main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .vcap-d-main { grid-template-columns: 1fr; } }
+.vcap-d-workspace { background: repeating-conic-gradient(#ececec 0% 25%, #f6f6f6 0% 50%) 50% / 20px 20px; padding: 40px; overflow: auto; max-height: 78vh; min-height: 300px; border: 1px solid #dcdcde; border-radius: 4px; outline: none; }
+.vcap-d-workspace:focus-visible { box-shadow: 0 0 0 2px var(--vcap-accent); }
+.vcap-d-page { position: relative; margin: 0 auto; box-shadow: 0 2px 14px rgba(0,0,0,.18); overflow: visible; touch-action: none; user-select: none; }
+.vcap-d-sel { position: absolute; box-sizing: border-box; transform-origin: 50% 50%; outline: 1px solid var(--vcap-accent); pointer-events: none; z-index: 9998; }
+.vcap-d-sel .vcap-d-handle, .vcap-d-sel .vcap-d-rotate { pointer-events: auto; }
+.vcap-d-el { position: absolute; box-sizing: border-box; cursor: move; transform-origin: 50% 50%; }
+.vcap-d-el.is-locked { cursor: default; }
+.vcap-d-el.is-hidden { opacity: .15 !important; outline: 1px dashed #999; }
+.vcap-d-el:hover { outline: 1px dashed rgba(34,113,177,.6); }
+.vcap-d-el.is-selected { outline: 1px solid var(--vcap-accent); }
+.vcap-d-inner { width: 100%; height: 100%; overflow: hidden; box-sizing: border-box; pointer-events: none; }
+.vcap-d-inner img { width: 100%; height: 100%; display: block; }
+.vcap-d-empty { display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.06); border: 1px dashed #999; color: #666; }
+.vcap-d-barcode { display: flex; flex-direction: column; }
+.vcap-d-barcode .bars { flex: 1; background: repeating-linear-gradient(90deg, currentColor 0 2px, transparent 2px 3px, currentColor 3px 4px, transparent 4px 7px, currentColor 7px 10px, transparent 10px 11px); }
+.vcap-d-barcode .lbl { font-family: monospace; line-height: 1.2; text-align: center; }
+.vcap-d-handle { position: absolute; width: 9px; height: 9px; background: #fff; border: 1px solid var(--vcap-accent); border-radius: 2px; z-index: 5; }
+.vcap-d-handle--nw { left: -5px; top: -5px; cursor: nwse-resize; }
+.vcap-d-handle--n { left: calc(50% - 5px); top: -5px; cursor: ns-resize; }
+.vcap-d-handle--ne { right: -5px; top: -5px; cursor: nesw-resize; }
+.vcap-d-handle--e { right: -5px; top: calc(50% - 5px); cursor: ew-resize; }
+.vcap-d-handle--se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+.vcap-d-handle--s { left: calc(50% - 5px); bottom: -5px; cursor: ns-resize; }
+.vcap-d-handle--sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+.vcap-d-handle--w { left: -5px; top: calc(50% - 5px); cursor: ew-resize; }
+.vcap-d-rotate { position: absolute; left: calc(50% - 6px); top: -26px; width: 12px; height: 12px; border-radius: 50%; background: var(--vcap-accent); cursor: grab; z-index: 5; }
+.vcap-d-rotate::after { content: ""; position: absolute; left: 5px; top: 12px; width: 1px; height: 14px; background: var(--vcap-accent); }
+.vcap-d-guides { position: absolute; inset: 0; pointer-events: none; z-index: 9999; }
+.vcap-d-guide { position: absolute; background: #e2266b; }
+.vcap-d-guide--x { top: 0; bottom: 0; width: 1px; }
+.vcap-d-guide--y { left: 0; right: 0; height: 1px; }
+.vcap-d-sidebar { display: flex; flex-direction: column; gap: 12px; }
+.vcap-d-panel { background: #fff; border: 1px solid #dcdcde; border-radius: 4px; padding: 10px 12px; }
+.vcap-d-panel h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #50575e; }
+.vcap-d-sub { grid-column: 1 / -1; margin: 6px 0 0; font-size: 12px; color: #50575e; }
+.vcap-d-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.vcap-d-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.vcap-d-field.is-wide { grid-column: 1 / -1; }
+.vcap-d-field label { font-weight: 600; font-size: 12px; }
+.vcap-d-field input[type=number], .vcap-d-field input[type=text], .vcap-d-field select, .vcap-d-field textarea { width: 100%; max-width: 100%; }
+.vcap-d-color { display: flex; align-items: center; gap: 6px; }
+.vcap-d-color input[type=color] { width: 44px; height: 30px; padding: 0 2px; }
+.vcap-d-toggles { flex-direction: row; flex-wrap: wrap; gap: 4px 12px; }
+.vcap-d-toggle { font-weight: 400 !important; }
+.vcap-d-align { display: flex; flex-wrap: wrap; gap: 3px; }
+.vcap-d-actions { display: flex; justify-content: space-between; margin: 10px 0 0; }
+.vcap-d-layer-list { margin: 0; max-height: 280px; overflow: auto; }
+.vcap-d-layer-list li { display: flex; align-items: center; gap: 2px; margin: 0; border-bottom: 1px solid #f0f0f1; }
+.vcap-d-layer-list li.is-selected { background: #f0f6fc; }
+.vcap-d-layer-name { flex: 1; text-align: left; background: none; border: 0; padding: 6px 4px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vcap-d-layer-type { display: inline-block; font-size: 10px; padding: 1px 5px; border-radius: 3px; background: #f0f0f1; color: #50575e; }
+.vcap-d-icon { background: none; border: 0; cursor: pointer; padding: 4px; color: #50575e; line-height: 1; }
+.vcap-d-icon:hover, .vcap-d-icon:focus { color: var(--vcap-accent); }
+.vcap-d-icon.is-off, .vcap-d-icon.is-on { color: #b32d2e; }
+.vcap-d-help { margin-top: 10px; }
