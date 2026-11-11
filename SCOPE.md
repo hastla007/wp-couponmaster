@@ -71,3 +71,38 @@ Voucher Captain and Ticket Captain are separate plugins with separate WordPress 
 - Whether custom denominations require native support or integration with a product-price extension.
 - Whether commercial licensing/update delivery is required, or the first release is a single GPL plugin.
 - Supported ticket check-in workflows and whether scanning is single-use only or supports partial admission.
+
+## Optional feature expansions
+
+These features extend the core voucher lifecycle. They are product options, not prerequisites for the first usable release. They must remain configurable and must not introduce surprising automatic discounts.
+
+### Promotion and coupon automation
+
+- Define rule-based campaigns with conditions such as first purchase, next order, minimum spend, eligible products/categories, customer group, date window, and purchase quantity.
+- Support fixed discounts, percentage discounts, tiered thresholds, and buy-X-get-Y campaigns where WooCommerce can represent the resulting order discount reliably.
+- Allow an eligible code to be applied from a signed or validated URL parameter. Offer automatic application only when the merchant explicitly enables it.
+- Provide explicit priority, exclusions, stacking rules, per-customer limits, total limits, and a clear preview of which rule wins when multiple campaigns match.
+- Keep discounts visible in cart/checkout line calculations. Do not create artificial catalog strike-through prices.
+
+### Customer store credit
+
+- Optionally maintain customer-linked credit balances with an auditable ledger, manual grants/adjustments, partial use, and clear order/refund references.
+- Show available credit in My Account and allow it to be applied at checkout. Define whether credit can be used with other coupons and whether it is applied before or after tax according to the WooCommerce integration and merchant configuration.
+- Offer refund-to-credit as an explicit refund choice; never silently replace a cash refund with store credit.
+- Specify multi-currency behavior: keep balances currency-specific by default unless a supported currency integration provides a safe conversion policy.
+
+### Lifecycle campaigns and product integrations
+
+- Add configurable expiry reminders for unused vouchers and customer-controlled resend options, with delivery status and suppression controls.
+- Optionally issue a bonus voucher with a qualifying purchase or gift-card purchase.
+- Support customer-selected fixed denominations and custom amounts where the product-price integration permits; preserve tax and order-item values.
+- Offer reusable shortcodes/blocks for voucher balances, redemption links, and voucher details, plus optional customer preview before purchase.
+- Expand compatibility through documented adapters for multilingual, multi-currency, subscription, and product-field extensions rather than hard-coding their internal APIs.
+
+### Expansion order
+
+1. Coupon URL application, expiry reminders, and campaign reporting.
+2. Customer store-credit wallet and explicit refund-to-credit flow.
+3. Rule-based automatic promotions, bonus vouchers, and broader shortcode/block integrations.
+
+Each expansion needs acceptance criteria for limits, stacking, refunds, currencies, privacy retention, and order idempotency before implementation.
