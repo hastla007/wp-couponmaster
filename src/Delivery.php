@@ -137,7 +137,7 @@ final class Delivery {
 				)
 			);
 			if ( 1 !== (int) $updated ) {
-				throw new \\RuntimeException( __( 'Voucher email was sent but its delivery state could not be saved.', 'voucher-captain' ) );
+				throw new \RuntimeException( __( 'Voucher email was sent but its delivery state could not be saved.', 'voucher-captain' ) );
 			}
 			if ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
 				$voucher->status = Voucher::STATUS_ACTIVE;
@@ -145,7 +145,7 @@ final class Delivery {
 			$voucher->delivered_at = $now;
 			$this->repo->log( $voucher->id, 'delivered', null, null, implode( ', ', $sent ) );
 			do_action( 'vcap_voucher_delivered', $voucher, $sent );
-		} catch ( \\Throwable $e ) {
+		} catch ( \Throwable $e ) {
 			if ( isset( $voucher ) && $voucher instanceof Voucher ) {
 				$this->repo->log( $voucher->id, 'delivery_failed', null, null, $e->getMessage() );
 			}
