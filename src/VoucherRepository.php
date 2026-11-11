@@ -335,6 +335,7 @@ final class VoucherRepository {
 			'api_reserved'  => __( 'Reserved for external redemption', 'voucher-captain' ),
 			'api_committed' => __( 'Redeemed externally', 'voucher-captain' ),
 			'api_released'  => __( 'External reservation released', 'voucher-captain' ),
+			'api_refunded'  => __( 'External redemption refunded', 'voucher-captain' ),
 			'scheduled'  => __( 'Delivery scheduled', 'voucher-captain' ),
 			'delivered'  => __( 'Delivered', 'voucher-captain' ),
 			'delivery_failed' => __( 'Delivery failed', 'voucher-captain' ),

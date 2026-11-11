@@ -86,6 +86,7 @@ final class Plugin {
 		( new Compat\Wpml() )->register();
 		( new Compat\MultiCurrency() )->register();
 		( new Compat\AffiliateCaptain() )->register();
+		( new Compat\PassCaptain() )->register();
 
 		if ( is_admin() ) {
 			( new Admin\Menu() )->register();

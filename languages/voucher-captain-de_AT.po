@@ -3258,6 +3258,36 @@ msgstr "Einlösebedingungen pro Land"
 msgid "Voucher Captain requires WooCommerce 8.9 or newer (installed: %s). Please update WooCommerce."
 msgstr "Voucher Captain benötigt WooCommerce 8.9 oder neuer (installiert: %s). Bitte aktualisieren Sie WooCommerce."
 
+msgid "A redemption key, a refund key and a positive amount are required."
+msgstr "Einlöse-Schlüssel, Erstattungs-Schlüssel und ein positiver Betrag sind erforderlich."
+
+msgid "External redemption refunded"
+msgstr "Externe Einlösung erstattet"
+
+msgid "Only completed redemptions can be refunded."
+msgstr "Nur abgeschlossene Einlösungen können erstattet werden."
+
+msgid "Please enter a voucher code."
+msgstr "Bitte geben Sie einen Gutscheincode ein."
+
+msgid "Refund %1$s of redemption %2$s"
+msgstr "Erstattung %1$s der Einlösung %2$s"
+
+msgid "This redemption has already been refunded completely."
+msgstr "Diese Einlösung wurde bereits vollständig erstattet."
+
+msgid "This refund key was already used for another amount."
+msgstr "Dieser Erstattungs-Schlüssel wurde bereits für einen anderen Betrag verwendet."
+
+msgid "This voucher has no value left."
+msgstr "Dieser Gutschein hat keinen Restwert mehr."
+
+msgid "This voucher is in a different currency."
+msgstr "Dieser Gutschein lautet auf eine andere Währung."
+
+msgid "WP Pass Captain (ticket checkout)"
+msgstr "WP Pass Captain (Ticket-Kasse)"
+
 msgid "Unknown campaign."
 msgstr "Unbekannte Kampagne."
 
