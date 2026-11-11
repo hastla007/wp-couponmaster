@@ -237,9 +237,9 @@ final class VoucherRepository {
 		);
 	}
 
-	public function log( int $voucher_id, string $event, ?float $amount = null, ?float $balance_after = null, string $note = '', int $order_id = 0 ): void {
+	public function log( int $voucher_id, string $event, ?float $amount = null, ?float $balance_after = null, string $note = '', int $order_id = 0 ): bool {
 		global $wpdb;
-		$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$inserted = false !== $wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$this->events,
 			array(
 				'voucher_id'    => $voucher_id,
@@ -252,7 +252,10 @@ final class VoucherRepository {
 				'created_at'    => $this->now(),
 			)
 		);
-		do_action( 'vcap_voucher_event', $voucher_id, $event, $amount, $balance_after, $note, $order_id );
+		if ( $inserted ) {
+			do_action( 'vcap_voucher_event', $voucher_id, $event, $amount, $balance_after, $note, $order_id );
+		}
+		return $inserted;
 	}
 
 	public function events( int $voucher_id ): array {
