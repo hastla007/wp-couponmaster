@@ -62,8 +62,8 @@ final class WooCommerceRedemptionProvider implements RedemptionProvider {
 	/**
 	 * Reserve balance against a persisted WooCommerce order.
 	 *
-	 * @param string   $code Voucher code.
-	 * @param float    $amount Amount to reserve.
+	 * @param string    $code Voucher code.
+	 * @param float     $amount Amount to reserve.
 	 * @param \WC_Order $order Saved WooCommerce order.
 	 * @return array<string, mixed>|\WP_Error
 	 */
@@ -106,7 +106,7 @@ final class WooCommerceRedemptionProvider implements RedemptionProvider {
 	/**
 	 * Commit the order's active balance reservation.
 	 *
-	 * @param string   $code Voucher code.
+	 * @param string    $code Voucher code.
 	 * @param \WC_Order $order Saved WooCommerce order.
 	 * @return array<string, mixed>|\WP_Error
 	 */
@@ -123,7 +123,7 @@ final class WooCommerceRedemptionProvider implements RedemptionProvider {
 
 		$redemptions[ $voucher->code ] = $result['amount'];
 
-		$reservations                  = (array) $order->get_meta( '_vcap_reservations' );
+		$reservations = (array) $order->get_meta( '_vcap_reservations' );
 
 		unset( $reservations[ $voucher->code ] );
 		$order->update_meta_data( '_vcap_redemptions', $redemptions );
@@ -144,7 +144,7 @@ final class WooCommerceRedemptionProvider implements RedemptionProvider {
 	/**
 	 * Release the order's active balance reservation.
 	 *
-	 * @param string   $code Voucher code.
+	 * @param string    $code Voucher code.
 	 * @param \WC_Order $order Saved WooCommerce order.
 	 * @return array<string, mixed>|\WP_Error
 	 */
