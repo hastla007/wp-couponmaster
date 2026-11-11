@@ -132,7 +132,7 @@ vcap_integration_assert( 10.0 === (float) $repo->get( $short->id )->balance, 'fa
 // A failed audit insert must roll back the corresponding balance update.
 list( $audit_voucher ) = vcap_integration_create_voucher();
 $fail_event_insert = static function ( $query ) use ( $events ) {
-	if ( str_contains( $query, 'INSERT INTO ' . $events ) ) {
+	if ( str_contains( $query, $events ) && str_starts_with( ltrim( $query ), 'INSERT INTO' ) ) {
 		return 'THIS IS NOT VALID SQL';
 	}
 	return $query;
@@ -145,7 +145,8 @@ try {
 	remove_filter( 'query', $fail_event_insert, 999 );
 	$wpdb->suppress_errors( $was_suppressed );
 }
-vcap_integration_assert( null === $audit_result && 100.0 === (float) $repo->get( $audit_voucher->id )->balance, 'failed audit insert rolls back the voucher balance' );
+vcap_integration_assert( null === $audit_result, 'failed audit insert aborts the reservation' );
+vcap_integration_assert( 100.0 === (float) $repo->get( $audit_voucher->id )->balance, 'failed audit insert rolls back the voucher balance' );
 
 // Delivery locks are connection-scoped, and a no-recipient attempt must remain eligible for retry.
 list( $delivery_voucher ) = vcap_integration_create_voucher( 100.0, '' );
