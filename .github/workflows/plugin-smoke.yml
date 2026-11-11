@@ -120,6 +120,14 @@ jobs:
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/shortcodes-integration.php"
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/connector-integration.php"
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/blocks-integration.php"
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/fault-injection-integration.php"
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/acceptance-integration.php"
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/parallel-checkout.php" setup
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/parallel-checkout.php" reserve 0 & first=$!
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/parallel-checkout.php" reserve 1 & second=$!
+          wait "$first"
+          wait "$second"
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/parallel-checkout.php" verify
       - name: Verify uninstall preserves data by default and deletes only when opted in
         run: |
           php wp-cli.phar --path=wp-test option update vcap_delete_on_uninstall no

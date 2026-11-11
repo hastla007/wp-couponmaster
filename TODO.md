@@ -148,7 +148,7 @@ Befund im Kursplugin: `/wp-json/boatingschool/v1/coupons/redeem` ist derzeit fü
 - [x] Kundenvorschau personalisierter Gutscheine vor dem Kauf anbieten. — *Nachweis: Vorschau-Button auf der Produktseite, PDF mit Wasserzeichen*
 - [x] Feste Wertstufen und Wunschbetrag für Gutscheinprodukte unterstützen, wenn Produkt-/Preis-Integrationen dies erlauben; Werte, Währung und Steuerdaten positionsbezogen speichern. — *Nachweis: Wunschbetrag mit Min/Max/Schrittweite/Vorschlägen, Variationen als Wertstufen; Positions-Snapshot `_vcap_line` mit Nennwert, Gutschein- und Bestellwährung, Netto/Steuer nach Rabatt, Steuerklasse/-status; tests/connector-integration.php*
 - [ ] Mehrsprachige, mehrwährungsfähige, Subscription- und Produktfeld-Erweiterungen über dokumentierte Adapter statt interne APIs anbinden.
-- [ ] Akzeptanztests für Kampagnenpriorität, Warenkorbgrenzen, teilweise Einlösung, Erstattung, Mehrwährung, Wiederholungs-Webhook und Datenschutzfristen ergänzen.
+- [x] Akzeptanztests für Kampagnenpriorität, Warenkorbgrenzen, teilweise Einlösung, Erstattung, Mehrwährung, Wiederholungs-Webhook und Datenschutzfristen ergänzen. — *Nachweis: tests/acceptance-integration.php (Warenkorbgrenze, Teil-Einlösung, Erstattung, wiederholte Webhooks), promotion-/bonus-integration (Priorität, Limits), order-lifecycle-integration (Mehrwährung), security-integration (Aufbewahrungsfristen), parallel-checkout und fault-injection; Zustandsautomat in STATE_MACHINE.md*
 
 ## P1 – EU-Markt und Plattform-Kompatibilität
 

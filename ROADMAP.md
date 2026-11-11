@@ -11,7 +11,7 @@ Abgehakte Punkte sind im aktuellen PR implementiert und/oder durch die aufgefüh
 
 ## P0 – Finanz- und Zustellkorrektheit
 
-1. [ ] Reservieren, Bestätigen, Freigeben und Erstatten als klaren Zustandsautomaten dokumentieren.
+1. [x] Reservieren, Bestätigen, Freigeben und Erstatten als klaren Zustandsautomaten dokumentieren. (STATE_MACHINE.md)
 2. [x] Wiederaufnahme unvollständiger Mehrgutschein-Reservierungen bei Checkout-Retry absichern.
 3. [x] Wiederholte Zahlungsversuche vor Gateway-Aufruf erneut reservieren.
 4. [x] Store-API-Reservierungsfehler als verständliche Checkout-Fehler ausgeben.
@@ -27,8 +27,8 @@ Abgehakte Punkte sind im aktuellen PR implementiert und/oder durch die aufgefüh
 11. [x] Smoke-Tests und PHP-Lint für PHP 8.1 und 8.4 in GitHub Actions ausführen.
 12. [x] WordPress-Integrationstests mit WooCommerce 11.2.2 ergänzen.
 13. [x] CI-Datenbankmatrix für MySQL 8.4 und MariaDB 11.4 einrichten.
-14. [ ] Parallel-Checkout-Test für denselben Guthabengutschein ergänzen.
-15. [ ] Fehler-Injektion für fehlgeschlagene Ledger-INSERTs und Voucher-UPDATEs ergänzen.
+14. [x] Parallel-Checkout-Test für denselben Guthabengutschein ergänzen. (tests/parallel-checkout.php, zwei Prozesse)
+15. [x] Fehler-Injektion für fehlgeschlagene Ledger-INSERTs und Voucher-UPDATEs ergänzen. (tests/fault-injection-integration.php)
 16. [x] Statusfolgen pending → processing → failed → payment retry → processing abdecken.
 17. [x] Mehrgutschein-Checkout bei Abbruch nach erster Reservierung testen.
 18. [x] Erstattung parallel zu neuer Einlösung testen.
