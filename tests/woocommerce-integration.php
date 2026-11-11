@@ -27,6 +27,8 @@ function vcap_integration_create_voucher( float $balance = 100.0, string $email 
 	$voucher               = new VCAP\Voucher();
 	$voucher->code         = wc_format_coupon_code( $coupon->get_code() );
 	$voucher->coupon_id    = $coupon->get_id();
+	// The production schema has a unique order_item_id/item_index slot; give fixtures unique slots.
+	$voucher->order_item_id = 90000000 + $coupon->get_id();
 	$voucher->type         = 'giftcard';
 	$voucher->usage_mode   = 'balance';
 	$voucher->discount_type = 'fixed_cart';
