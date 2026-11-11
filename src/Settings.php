@@ -32,6 +32,8 @@ final class Settings {
 		'vcap_subscription_renewals' => 'no',
 		'vcap_pdf_filename'          => 'voucher-{coupon_code}',
 		'vcap_redemption_ttl'          => 15,
+		'vcap_coupon_link'             => 'no',
+		'vcap_coupon_link_param'       => 'gutschein',
 		'vcap_redemption_max_failures' => 10,
 	);
 
@@ -328,6 +330,21 @@ final class Settings {
 						'type'    => 'checkbox',
 						'default' => 'yes',
 						'desc'    => __( 'Disable vouchers when the order they were bought with is fully refunded or cancelled.', 'voucher-captain' ),
+					),
+					array(
+						'title'   => __( 'Voucher links', 'voucher-captain' ),
+						'id'      => 'vcap_coupon_link',
+						'type'    => 'checkbox',
+						'default' => 'no',
+						'desc'    => __( 'Apply a coupon automatically when a customer opens a link such as https://your-shop/?gutschein=CODE (any WooCommerce coupon). The code is applied once, validated by WooCommerce, and only when the cart has products.', 'voucher-captain' ),
+					),
+					array(
+						'title'    => __( 'Link parameter', 'voucher-captain' ),
+						'id'       => 'vcap_coupon_link_param',
+						'type'     => 'text',
+						'default'  => 'gutschein',
+						'css'      => 'width:160px',
+						'desc_tip' => __( 'Name of the URL parameter (letters, digits, - and _).', 'voucher-captain' ),
 					),
 					array( 'type' => 'sectionend', 'id' => 'vcap_redeem' ),
 				);

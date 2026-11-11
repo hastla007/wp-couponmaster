@@ -54,6 +54,7 @@ final class Plugin {
 		( new Preview( $this->pdf ) )->register();
 		( new Emails() )->register();
 		( new Privacy( $this->vouchers ) )->register();
+		( new CouponLink( $this->settings ) )->register();
 
 		$this->settings->register();
 		$this->coupons->register();

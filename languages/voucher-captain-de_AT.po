@@ -2556,3 +2556,24 @@ msgstr "Die Gutschein-E-Mail wurde erneut gesendet."
 
 msgid "The voucher email could not be sent. Please contact us."
 msgstr "Die Gutschein-E-Mail konnte nicht gesendet werden. Bitte kontaktieren Sie uns."
+
+msgid "Too many voucher links opened. Please try again later."
+msgstr "Zu viele Gutschein-Links geöffnet. Bitte versuchen Sie es später erneut."
+
+msgid "This voucher link is not valid."
+msgstr "Dieser Gutschein-Link ist ungültig."
+
+msgid "The voucher %s will be applied as soon as you add products to your cart."
+msgstr "Der Gutschein %s wird angewendet, sobald Sie Produkte in den Warenkorb legen."
+
+msgid "Voucher links"
+msgstr "Gutschein-Links"
+
+msgid "Apply a coupon automatically when a customer opens a link such as https://your-shop/?gutschein=CODE (any WooCommerce coupon). The code is applied once, validated by WooCommerce, and only when the cart has products."
+msgstr "Einen Gutschein automatisch anwenden, wenn Kunden einen Link wie https://ihr-shop/?gutschein=CODE öffnen (jeder WooCommerce-Gutschein). Der Code wird einmalig, von WooCommerce geprüft und erst bei befülltem Warenkorb angewendet."
+
+msgid "Link parameter"
+msgstr "Link-Parameter"
+
+msgid "Name of the URL parameter (letters, digits, - and _)."
+msgstr "Name des URL-Parameters (Buchstaben, Ziffern, - und _)."
