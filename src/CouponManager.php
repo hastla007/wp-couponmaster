@@ -125,6 +125,86 @@ final class CouponManager {
 	}
 
 	/**
+	 * Atomically deduct stored value under a row lock. For order redemptions, the audit row also
+	 * makes retries for the same order idempotent.
+	 *
+	 * @return array{amount:float,balance:float,duplicate:bool}|null
+	 */
+	public function deduct_balance_atomic( Voucher $voucher, float $requested, string $note = '', int $order_id = 0 ): ?array {
+		global $wpdb;
+		$table  = Install::tables()['vouchers'];
+		$events = Install::tables()['events'];
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return null;
+		}
+		try {
+			$locked = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d FOR UPDATE", $voucher->id ) ); // phpcs:ignore
+			if ( ! $locked ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return null;
+			}
+
+			if ( $order_id > 0 ) {
+				$prior = $wpdb->get_row(
+					$wpdb->prepare(
+						"SELECT amount, balance_after FROM {$events} WHERE voucher_id = %d AND order_id = %d AND event = 'redeemed' ORDER BY id DESC LIMIT 1",
+						$voucher->id,
+						$order_id
+					),
+					ARRAY_A
+				); // phpcs:ignore
+				if ( $prior ) {
+					$wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					return array(
+						'amount'    => (float) $prior['amount'],
+						'balance'   => (float) $prior['balance_after'],
+						'duplicate' => true,
+					);
+				}
+			}
+
+			$fresh = $this->repo->get( $voucher->id );
+			if ( ! $fresh || ! $fresh->is_multi_use() || Voucher::STATUS_ACTIVE !== $fresh->status || $fresh->is_expired() ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return null;
+			}
+
+			$amount          = min( $fresh->balance, max( 0.0, round( $requested, wc_get_price_decimals() ) ) );
+			$fresh->balance  = max( 0.0, round( $fresh->balance - $amount, wc_get_price_decimals() ) );
+			if ( $fresh->balance <= 0 ) {
+				$fresh->status = Voucher::STATUS_REDEEMED;
+			}
+			if ( ! $this->repo->update( $fresh ) ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return null;
+			}
+			if ( $amount > 0 || $order_id > 0 ) {
+				$this->repo->log( $fresh->id, 'redeemed', $amount, $fresh->balance, $note, $order_id );
+			}
+			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return null;
+			}
+		} catch ( \Throwable $e ) {
+			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			throw $e;
+		}
+
+		if ( $fresh->coupon_id ) {
+			$coupon = new \\WC_Coupon( $fresh->coupon_id );
+			if ( $coupon->get_id() ) {
+				$coupon->set_amount( $fresh->balance );
+				$coupon->save();
+			}
+		}
+		return array(
+			'amount'    => $amount,
+			'balance'   => $fresh->balance,
+			'duplicate' => false,
+		);
+	}
+
+	/**
 	 * Reject coupons whose voucher is void, not yet delivered or used up.
 	 */
 	public function validate( $valid, $coupon, $discounts = null ) {
@@ -209,16 +289,18 @@ final class CouponManager {
 			if ( ! $voucher || ! $voucher->is_multi_use() ) {
 				continue;
 			}
-			$amount = min( $voucher->balance, $this->used_amount( $item ) );
-			$this->set_balance(
+			$deduction = $this->deduct_balance_atomic(
 				$voucher,
-				$voucher->balance - $amount,
-				'redeemed',
-				$amount,
+				$this->used_amount( $item ),
 				/* translators: %s: order number */
 				sprintf( __( 'Used in order #%s', 'voucher-captain' ), $order->get_order_number() ),
 				$order->get_id()
 			);
+			if ( ! $deduction ) {
+				continue;
+			}
+			$amount          = $deduction['amount'];
+			$voucher->balance = $deduction['balance'];
 			$applied[ $code ] = $amount;
 			$changed          = true;
 			$order->add_order_note(
