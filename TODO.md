@@ -79,7 +79,7 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 - [x] E-Mail-Erinnerung vor Ablauf eines Gutscheins. — *Nachweis: Einstellung „Erinnerung vor Ablauf“ (aus, bis Tage gesetzt sind), WooCommerce-E-Mail „Erinnerung vor Gutschein-Ablauf“, einmal je Gutschein; tests/reminder-integration.php*
 - [x] Statistiken nach Kampagne und Partner. — *Nachweis: Gutscheine → Auswertung: Zeitraum, je Code-Kampagne/Partner, Aktion, Bonus, Gutscheine und Einzelcode ausgegebene Codes, Nutzungen, Bestellungen, Rabatt und Umsatz abzüglich Erstattungen, Fremdwährungen getrennt, CSV-Export; tests/reports-integration.php*
 - [x] Empfehlungs-/Freunde-werben-Codes. — *Nachweis: Einstellung „Freunde werben“ (standardmäßig aus), persönlicher Erstbestellungs-Code im Kundenkonto mit Teilen-Link, eigene Codes gesperrt, Prämie als Gutschein per E-Mail oder Guthaben nach abgeschlossener Bestellung, einmal pro Bestellung, Auswertung je Werbendem; tests/referral-integration.php*
-- [ ] Allgemeine Einlöseseite oder Block/Shortcode, den Connector-Plugins erweitern können.
+- [x] Allgemeine Einlöseseite oder Block/Shortcode, den Connector-Plugins erweitern können. — *Nachweis: `[vcap_redeem]` / Block „Gutschein einlösen“; Connectoren nutzen die Einlöse-API (API.md)*
 
 ## Native Integration: Voucher Captain + Ticket Captain
 
@@ -144,7 +144,7 @@ Befund im Kursplugin: `/wp-json/boatingschool/v1/coupons/redeem` ist derzeit fü
 
 - [x] Gutscheine mit konfigurierbarem Vorablauf-Hinweis und Zustellstatus versenden; Versandwiederholung und Unterdrückung von Erinnerungen unterstützen. — *Nachweis: Vorablauf-Erinnerung, Zustellstatus/-fehler im Verlauf, erneuter Versand (Admin und Kundenkonto), Unterdrückung je Gutschein; tests/reminder-integration.php*
 - [x] Bonusgutschein bei qualifizierender Bestellung oder Geschenkkartenkauf als optionale Kampagnenaktion ausgeben. — *Nachweis: Aktion „Bonusgutschein nach der Bestellung“ (Auslöser Bestellung oder Gutscheinkauf), Einmal-Code mit E-Mail-Bindung, Ablauf und Mindestwert, eigene WooCommerce-E-Mail; Rücknahme bei Storno/Erstattung; tests/bonus-integration.php*
-- [ ] Gutscheinsaldo, Gutscheinstatus, Einlöseseite und Versandaktion über wiederverwendbare Blöcke/Shortcodes bereitstellen.
+- [x] Gutscheinsaldo, Gutscheinstatus, Einlöseseite und Versandaktion über wiederverwendbare Blöcke/Shortcodes bereitstellen. — *Nachweis: Shortcodes `[vcap_balance]`/`[vcap_voucher_status]`, `[vcap_redeem]`, `[vcap_my_vouchers]` (mit „erneut senden“), `[vcap_referral]` und gleichnamige serverseitige Blöcke; tests/shortcodes-integration.php*
 - [x] Kundenvorschau personalisierter Gutscheine vor dem Kauf anbieten. — *Nachweis: Vorschau-Button auf der Produktseite, PDF mit Wasserzeichen*
 - [ ] Feste Wertstufen und Wunschbetrag für Gutscheinprodukte unterstützen, wenn Produkt-/Preis-Integrationen dies erlauben; Werte, Währung und Steuerdaten positionsbezogen speichern. *(teilweise: Wunschbetrag mit Min/Max/Schrittweite/Vorschlägen und Variationen als Wertstufen vorhanden)*
 - [ ] Mehrsprachige, mehrwährungsfähige, Subscription- und Produktfeld-Erweiterungen über dokumentierte Adapter statt interne APIs anbinden.

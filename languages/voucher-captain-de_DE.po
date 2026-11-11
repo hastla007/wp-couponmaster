@@ -3194,3 +3194,18 @@ msgid "%d friend has ordered so far."
 msgid_plural "%d friends have ordered so far."
 msgstr[0] "%d Freund hat bisher bestellt."
 msgstr[1] "%d Freunde haben bisher bestellt."
+
+msgid "My vouchers"
+msgstr "Meine Gutscheine"
+
+msgid "Please %s to see your vouchers."
+msgstr "Bitte %s, um Ihre Gutscheine zu sehen."
+
+msgid "Redeem voucher"
+msgstr "Gutschein einlösen"
+
+msgid "Voucher balance"
+msgstr "Gutscheinguthaben"
+
+msgid "log in"
+msgstr "melden Sie sich an"

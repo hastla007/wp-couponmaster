@@ -25,6 +25,7 @@ Visual PDF designer, recipient fields and custom field groups, scheduled deliver
 * New: SKU and "exclude SKU" rules for any coupon (with prefix wildcard).
 * New: Vouchers → Reports – uses, orders, discount and revenue per code campaign/partner, promotion, bonus voucher and coupon, with CSV export.
 * New: refer a friend – personal first-order codes in My Account, reward for the referrer as coupon or store credit once the friend's order is completed.
+* New: shortcodes and blocks – [vcap_voucher_status], [vcap_redeem] (redeem page), [vcap_my_vouchers] (with "send again") and [vcap_referral].
 * Fix: paid orders whose voucher balance could not be deducted are put on hold for review.
 * Fix: holds of trashed, deleted or abandoned unpaid orders are released.
 * Fix: a due scheduled gift becomes redeemable even when no email can be sent.

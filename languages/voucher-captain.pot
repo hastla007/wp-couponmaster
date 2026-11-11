@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-11 17:41+0000\n"
+"POT-Creation-Date: 2026-11-11 17:43+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:73 src/API/V1/RedemptionService.php:112
@@ -407,7 +407,7 @@ msgstr ""
 msgid "Scanner"
 msgstr ""
 
-#: src/Admin/Menu.php:44 src/Admin/Menu.php:44 src/Plugin.php:108
+#: src/Admin/Menu.php:44 src/Admin/Menu.php:44 src/Plugin.php:110
 msgid "Settings"
 msgstr ""
 
@@ -513,7 +513,7 @@ msgstr ""
 msgid "Undo check-in"
 msgstr ""
 
-#: src/Admin/Scanner.php:29
+#: src/Admin/Scanner.php:29 src/Shortcodes.php:113
 msgid "Redeem"
 msgstr ""
 
@@ -968,7 +968,7 @@ msgid "This voucher link is not valid."
 msgstr ""
 
 #. translators: %s: coupon code
-#: src/CouponLink.php:100
+#: src/CouponLink.php:100 src/Shortcodes.php:88
 #, php-format
 msgid "The voucher %s will be applied as soon as you add products to your cart."
 msgstr ""
@@ -1538,7 +1538,7 @@ msgstr ""
 msgid "This promotion has reached its usage limit."
 msgstr ""
 
-#: src/Downloads.php:84
+#: src/Downloads.php:84 src/Shortcodes.php:102
 msgid "The request has expired. Please try again."
 msgstr ""
 
@@ -1578,11 +1578,11 @@ msgstr ""
 msgid "Your vouchers"
 msgstr ""
 
-#: src/Downloads.php:254
+#: src/Downloads.php:254 src/Shortcodes.php:74
 msgid "Too many attempts. Please try again later."
 msgstr ""
 
-#: src/Downloads.php:259
+#: src/Downloads.php:259 src/Shortcodes.php:79
 msgid "Voucher code not found."
 msgstr ""
 
@@ -1596,7 +1596,7 @@ msgstr ""
 msgid "unlimited"
 msgstr ""
 
-#: src/Downloads.php:277 src/TemplatePostType.php:107
+#: src/Downloads.php:277 src/Shortcodes.php:118 src/TemplatePostType.php:107
 msgid "Voucher code"
 msgstr ""
 
@@ -2065,12 +2065,12 @@ msgid "Site URL"
 msgstr ""
 
 #. translators: %s: comma separated table names
-#: src/Plugin.php:124
+#: src/Plugin.php:126
 #, php-format
 msgid "Voucher Captain: the voucher database tables do not support transactions (InnoDB). Gift card balances cannot be redeemed until these tables are converted to InnoDB: %s"
 msgstr ""
 
-#: src/Plugin.php:132
+#: src/Plugin.php:134
 msgid "Voucher Captain: the PDF libraries are missing. Install the release ZIP or run \"composer install --no-dev\" in the plugin folder."
 msgstr ""
 
@@ -2472,7 +2472,7 @@ msgstr ""
 msgid "Referral reward: coupon %1$s for %2$s."
 msgstr ""
 
-#: src/Referrals.php:141 src/Referrals.php:180 src/Settings.php:401 src/Settings.php:406
+#: src/Referrals.php:141 src/Referrals.php:180 src/Settings.php:401 src/Settings.php:406 src/Shortcodes.php:45
 msgid "Refer a friend"
 msgstr ""
 
@@ -2820,6 +2820,28 @@ msgstr ""
 
 #: src/Settings.php:457
 msgid "Reward coupon valid for (days)"
+msgstr ""
+
+#: src/Shortcodes.php:42
+msgid "Voucher balance"
+msgstr ""
+
+#: src/Shortcodes.php:43
+msgid "Redeem voucher"
+msgstr ""
+
+#: src/Shortcodes.php:44
+msgid "My vouchers"
+msgstr ""
+
+#. translators: %s: login link
+#: src/Shortcodes.php:130
+#, php-format
+msgid "Please %s to see your vouchers."
+msgstr ""
+
+#: src/Shortcodes.php:131
+msgid "log in"
 msgstr ""
 
 #. translators: %s: customer name

@@ -11,7 +11,7 @@ defined( 'ABSPATH' ) || exit;
  * sharing the resulting page does not apply the code again, and a coupon the customer removed stays removed.
  */
 final class CouponLink {
-	private const SESSION_KEY = 'vcap_pending_coupon';
+	public const SESSION_KEY = 'vcap_pending_coupon';
 
 	public function __construct( private Settings $settings ) {}
 
