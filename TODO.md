@@ -55,7 +55,7 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 - [ ] Gesamtlimit, Limit pro Kunde, Mindestbestellwert, Ablauf und Erstkaufbedingung konfigurierbar machen.
 - [ ] Erweiterungspunkte für „Kunde besitzt Kurs/Produkt X“ und Konflikte mit externen Mitgliederrabatten/Kombipreisen dokumentieren.
 - [x] Coupon-Link mit sicherer automatischer Anwendung ergänzen, z. B. `?gutschein=CODE`. — *Nachweis: Einstellung „Gutschein-Links“ (standardmäßig aus), einmalige Anwendung über WooCommerce-Prüfung, Parameter wird per Redirect entfernt; tests/coupon-link-integration.php*
-- [ ] Generierung mehrerer Codes nach Präfix/Länge und CSV-Export für Partner- und Kampagnenpakete ergänzen. *(teilweise: Import von Codes und CSV-Export der ausgestellten Gutscheine vorhanden; Massengenerierung fehlt)*
+- [x] Generierung mehrerer Codes nach Präfix/Länge und CSV-Export für Partner- und Kampagnenpakete ergänzen. — *Nachweis: Gutscheine → Codes generieren (bis 1000 je Lauf, aus Vorlage-Gutschein oder in Code-Pool-Stapel), CSV-Export je Kampagne/Stapel; tests/campaign-integration.php*
 - [ ] Sicherstellen, dass Coupons keine Katalog-Streichpreise erzeugen und der Rabatt erst im Warenkorb erscheint.
 
 ## P2 – Integrations- und Betriebsverhalten

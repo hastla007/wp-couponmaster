@@ -2577,3 +2577,69 @@ msgstr "Link-Parameter"
 
 msgid "Name of the URL parameter (letters, digits, - and _)."
 msgstr "Name des URL-Parameters (Buchstaben, Ziffern, - und _)."
+
+msgid "%1$d codes created in \"%2$s\"."
+msgstr "%1$d Codes in „%2$s“ erstellt."
+
+msgid "Campaign"
+msgstr "Kampagne"
+
+msgid "Campaign / batch name"
+msgstr "Name der Kampagne / des Stapels"
+
+msgid "Campaign: %s"
+msgstr "Kampagne: %s"
+
+msgid "Campaigns"
+msgstr "Kampagnen"
+
+msgid "Code format"
+msgstr "Codeformat"
+
+msgid "Code pool batches and their CSV export are listed under Vouchers → Import codes."
+msgstr "Code-Pool-Stapel und deren CSV-Export finden Sie unter Gutscheine → Codes importieren."
+
+msgid "Codes for voucher products (code pool batch)"
+msgstr "Codes für Gutscheinprodukte (Code-Pool-Stapel)"
+
+msgid "Coupons"
+msgstr "Gutscheine"
+
+msgid "Create"
+msgstr "Erstellen"
+
+msgid "Create a normal coupon under Marketing → Coupons with the discount, restrictions, expiry and usage limits you want; it is copied for every code."
+msgstr "Legen Sie unter Marketing → Gutscheine einen normalen Gutschein mit dem gewünschten Rabatt, Einschränkungen, Ablauf und Nutzungslimits an; er wird für jeden Code kopiert."
+
+msgid "Create many unique codes at once, e.g. for partners, flyers or campaigns, and download them as CSV."
+msgstr "Erstellen Sie viele eindeutige Codes auf einmal, z. B. für Partner, Flyer oder Kampagnen, und laden Sie sie als CSV herunter."
+
+msgid "Download CSV"
+msgstr "CSV herunterladen"
+
+msgid "Generate codes"
+msgstr "Codes generieren"
+
+msgid "No campaigns yet."
+msgstr "Noch keine Kampagnen."
+
+msgid "Number of codes"
+msgstr "Anzahl der Codes"
+
+msgid "Please choose an existing coupon as template."
+msgstr "Bitte wählen Sie einen bestehenden Gutschein als Vorlage."
+
+msgid "Please enter a batch name and between 1 and %d codes."
+msgstr "Bitte geben Sie einen Stapelnamen und zwischen 1 und %d Codes an."
+
+msgid "Please enter a campaign name and between 1 and %d codes."
+msgstr "Bitte geben Sie einen Kampagnennamen und zwischen 1 und %d Codes an."
+
+msgid "Template coupon"
+msgstr "Vorlage-Gutschein"
+
+msgid "Voucher coupons cannot be used as a template. Please choose a regular coupon."
+msgstr "Gutschein-Coupons können nicht als Vorlage dienen. Bitte wählen Sie einen normalen Gutschein."
+
+msgid "WooCommerce coupons (copy all settings of a template coupon)"
+msgstr "WooCommerce-Gutscheine (alle Einstellungen eines Vorlage-Gutscheins übernehmen)"

@@ -108,6 +108,7 @@ final class Import {
 						<td><?php echo esc_html( (string) $b['total'] ); ?></td>
 						<td><?php echo esc_html( (string) $b['free'] ); ?><?php echo $b['free'] < 10 ? ' <span class="vcap-low">' . esc_html__( 'running low', 'voucher-captain' ) . '</span>' : ''; ?></td>
 						<td>
+							<a class="button button-small" href="<?php echo esc_url( ( new CampaignAdmin( new \VCAP\Campaigns( $this->pool, vcap()->vouchers ) ) )->export_url( 'pool', $b['batch'] ) ); ?>"><?php esc_html_e( 'Download CSV', 'voucher-captain' ); ?></a>
 							<?php if ( $b['free'] ) : ?>
 								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" onsubmit="return confirm('<?php echo esc_js( __( 'Delete all unused codes of this batch?', 'voucher-captain' ) ); ?>');">
 									<input type="hidden" name="action" value="vcap_delete_batch" />

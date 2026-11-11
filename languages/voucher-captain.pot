@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-11 12:07+0000\n"
+"POT-Creation-Date: 2026-11-11 12:09+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:73 src/API/V1/RedemptionService.php:112
@@ -151,8 +151,94 @@ msgstr ""
 msgid "No matching voucher reservation could be released."
 msgstr ""
 
-#: src/Admin/Import.php:28 src/Admin/Import.php:137 src/Admin/Import.php:241 src/Admin/Scanner.php:12 src/Admin/VoucherAdmin.php:51 src/Admin/VoucherAdmin.php:237
+#: src/Admin/CampaignAdmin.php:50 src/Admin/CampaignAdmin.php:154 src/Admin/CampaignAdmin.php:184 src/Admin/Import.php:28 src/Admin/Import.php:138 src/Admin/Import.php:242
 msgid "You are not allowed to do this."
+msgstr ""
+
+#: src/Admin/CampaignAdmin.php:57 src/Admin/CampaignAdmin.php:119 src/Admin/Menu.php:38 src/Admin/Menu.php:38
+msgid "Generate codes"
+msgstr ""
+
+#: src/Admin/CampaignAdmin.php:58
+msgid "Create many unique codes at once, e.g. for partners, flyers or campaigns, and download them as CSV."
+msgstr ""
+
+#. translators: 1: number of codes, 2: campaign or batch name
+#: src/Admin/CampaignAdmin.php:66
+#, php-format
+msgid "%1$d codes created in \"%2$s\"."
+msgstr ""
+
+#: src/Admin/CampaignAdmin.php:73 src/Admin/CampaignAdmin.php:137 src/Admin/Import.php:111
+msgid "Download CSV"
+msgstr ""
+
+#: src/Admin/CampaignAdmin.php:84
+msgid "Create"
+msgstr ""
+
+#: src/Admin/CampaignAdmin.php:86
+msgid "WooCommerce coupons (copy all settings of a template coupon)"
+msgstr ""
+
+#: src/Admin/CampaignAdmin.php:87
+msgid "Codes for voucher products (code pool batch)"
+msgstr ""
+
+#: src/Admin/CampaignAdmin.php:91
+msgid "Template coupon"
+msgstr ""
+
+#: src/Admin/CampaignAdmin.php:94 src/Fields.php:326
+msgid "— Select —"
+msgstr ""
+
+#: src/Admin/CampaignAdmin.php:99
+msgid "Create a normal coupon under Marketing → Coupons with the discount, restrictions, expiry and usage limits you want; it is copied for every code."
+msgstr ""
+
+#: src/Admin/CampaignAdmin.php:103
+msgid "Campaign / batch name"
+msgstr ""
+
+#: src/Admin/CampaignAdmin.php:107
+msgid "Number of codes"
+msgstr ""
+
+#: src/Admin/CampaignAdmin.php:111
+msgid "Code format"
+msgstr ""
+
+#: src/Admin/CampaignAdmin.php:113 src/Settings.php:273
+msgid "Prefix"
+msgstr ""
+
+#: src/Admin/CampaignAdmin.php:114 src/ProductSettings.php:323 src/Settings.php:285
+msgid "Random part length"
+msgstr ""
+
+#: src/Admin/CampaignAdmin.php:115 src/Settings.php:279
+msgid "Suffix"
+msgstr ""
+
+#: src/Admin/CampaignAdmin.php:123
+msgid "Campaigns"
+msgstr ""
+
+#: src/Admin/CampaignAdmin.php:125
+msgid "Campaign"
+msgstr ""
+
+#: src/Admin/CampaignAdmin.php:125
+msgid "Coupons"
+msgstr ""
+
+#: src/Admin/CampaignAdmin.php:130
+msgid "No campaigns yet."
+msgstr ""
+
+#: src/Admin/CampaignAdmin.php:142
+msgid "Code pool batches and their CSV export are listed under Vouchers → Import codes."
 msgstr ""
 
 #: src/Admin/Import.php:34
@@ -263,44 +349,44 @@ msgstr ""
 msgid "running low"
 msgstr ""
 
-#: src/Admin/Import.php:112
+#: src/Admin/Import.php:113
 msgid "Delete all unused codes of this batch?"
 msgstr ""
 
-#: src/Admin/Import.php:116
+#: src/Admin/Import.php:117
 msgid "Delete unused codes"
 msgstr ""
 
-#: src/Admin/Import.php:149
+#: src/Admin/Import.php:150
 msgid "Please enter a batch name."
 msgstr ""
 
-#: src/Admin/Import.php:157
+#: src/Admin/Import.php:158
 msgid "The file could not be uploaded."
 msgstr ""
 
-#: src/Admin/Import.php:162
+#: src/Admin/Import.php:163
 msgid "Unsupported file type. Please upload CSV, XLS, XLSX or ODS."
 msgstr ""
 
-#: src/Admin/Import.php:166
+#: src/Admin/Import.php:167
 msgid "The file is too large (max. 20 MB)."
 msgstr ""
 
-#: src/Admin/Import.php:173
+#: src/Admin/Import.php:174
 msgid "The file could not be read:"
 msgstr ""
 
-#: src/Admin/Import.php:180
+#: src/Admin/Import.php:181
 msgid "The \"Allowed format\" is not a valid regular expression."
 msgstr ""
 
-#: src/Admin/Import.php:196
+#: src/Admin/Import.php:197
 msgid "The column header was not found in the first row."
 msgstr ""
 
 #. translators: 1: row number, 2: value
-#: src/Admin/Import.php:217
+#: src/Admin/Import.php:218
 #, php-format
 msgid "Row %1$d: \"%2$s\""
 msgstr ""
@@ -313,11 +399,11 @@ msgstr ""
 msgid "Issued vouchers"
 msgstr ""
 
-#: src/Admin/Menu.php:38 src/Admin/Menu.php:38 src/Admin/Scanner.php:47 templates/ticket-status.php:86
+#: src/Admin/Menu.php:39 src/Admin/Menu.php:39 src/Admin/Scanner.php:47 templates/ticket-status.php:86
 msgid "Scanner"
 msgstr ""
 
-#: src/Admin/Menu.php:42 src/Admin/Menu.php:42 src/Plugin.php:91
+#: src/Admin/Menu.php:43 src/Admin/Menu.php:43 src/Plugin.php:92
 msgid "Settings"
 msgstr ""
 
@@ -755,6 +841,32 @@ msgstr ""
 msgid "No vouchers found."
 msgstr ""
 
+#: src/Campaigns.php:46
+msgid "Please choose an existing coupon as template."
+msgstr ""
+
+#: src/Campaigns.php:49
+msgid "Voucher coupons cannot be used as a template. Please choose a regular coupon."
+msgstr ""
+
+#. translators: %d: maximum number of codes
+#: src/Campaigns.php:53
+#, php-format
+msgid "Please enter a campaign name and between 1 and %d codes."
+msgstr ""
+
+#. translators: %s: campaign name
+#: src/Campaigns.php:67
+#, php-format
+msgid "Campaign: %s"
+msgstr ""
+
+#. translators: %d: maximum number of codes
+#: src/Campaigns.php:86
+#, php-format
+msgid "Please enter a batch name and between 1 and %d codes."
+msgstr ""
+
 #: src/CouponLink.php:60
 msgid "Too many voucher links opened. Please try again later."
 msgstr ""
@@ -1120,10 +1232,6 @@ msgstr ""
 msgid "optional"
 msgstr ""
 
-#: src/Fields.php:326
-msgid "— Select —"
-msgstr ""
-
 #: src/Fields.php:380
 msgid "Yes"
 msgstr ""
@@ -1403,12 +1511,12 @@ msgid "Site URL"
 msgstr ""
 
 #. translators: %s: comma separated table names
-#: src/Plugin.php:107
+#: src/Plugin.php:108
 #, php-format
 msgid "Voucher Captain: the voucher database tables do not support transactions (InnoDB). Gift card balances cannot be redeemed until these tables are converted to InnoDB: %s"
 msgstr ""
 
-#: src/Plugin.php:115
+#: src/Plugin.php:116
 msgid "Voucher Captain: the PDF libraries are missing. Install the release ZIP or run \"composer install --no-dev\" in the plugin folder."
 msgstr ""
 
@@ -1710,10 +1818,6 @@ msgstr ""
 msgid "Global setting"
 msgstr ""
 
-#: src/ProductSettings.php:323 src/Settings.php:285
-msgid "Random part length"
-msgstr ""
-
 #: src/ProductSettings.php:332
 msgid "Personalisation & delivery"
 msgstr ""
@@ -1968,14 +2072,6 @@ msgstr ""
 
 #: src/Settings.php:271
 msgid "Coupon codes"
-msgstr ""
-
-#: src/Settings.php:273
-msgid "Prefix"
-msgstr ""
-
-#: src/Settings.php:279
-msgid "Suffix"
 msgstr ""
 
 #: src/Settings.php:292

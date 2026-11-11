@@ -35,6 +35,7 @@ final class Menu {
 		);
 		add_submenu_page( 'vcap-vouchers', __( 'Issued vouchers', 'voucher-captain' ), __( 'Issued vouchers', 'voucher-captain' ), self::cap(), 'vcap-vouchers', array( $voucher_admin, 'page' ) );
 		add_submenu_page( 'vcap-vouchers', __( 'Import codes', 'voucher-captain' ), __( 'Import codes', 'voucher-captain' ), self::cap(), 'vcap-import', array( new Import( vcap()->code_pool ), 'page' ) );
+		add_submenu_page( 'vcap-vouchers', __( 'Generate codes', 'voucher-captain' ), __( 'Generate codes', 'voucher-captain' ), self::cap(), 'vcap-generate', array( new CampaignAdmin( new \VCAP\Campaigns( vcap()->code_pool, vcap()->vouchers ) ), 'page' ) );
 		add_submenu_page( 'vcap-vouchers', __( 'Scanner', 'voucher-captain' ), __( 'Scanner', 'voucher-captain' ), self::scan_cap(), 'vcap-scanner', array( new Scanner(), 'page' ) );
 	}
 
