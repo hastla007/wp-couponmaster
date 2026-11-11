@@ -19,7 +19,7 @@ final class Plugin {
 	public Delivery $delivery;
 	public Fields $fields;
 	public Tickets $tickets;
-	public API\\V1\\VoucherService $api_v1;
+	public API\V1\VoucherService $api_v1;
 
 	public static function instance(): Plugin {
 		if ( null === self::$instance ) {
@@ -44,7 +44,7 @@ final class Plugin {
 		$this->issuer    = new Issuer( $this->settings, $this->vouchers, $this->coupons, $this->code_pool, $this->delivery );
 		$this->fields    = new Fields();
 		$this->tickets   = new Tickets( $this->vouchers );
-		$this->api_v1    = new API\\V1\\VoucherService( $this->vouchers, $this->coupons );
+		$this->api_v1    = new API\V1\VoucherService( $this->vouchers, $this->coupons );
 
 		( new TemplatePostType() )->register();
 		( new ProductSettings() )->register();
