@@ -174,7 +174,11 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	$tv_target = $tv ? VCAP\Compat\PassCaptainTickets::target( $tv ) : null;
 	vcap_pc_assert( $tv_target && $ticket_type === $tv_target['ticket_type_id'] && 2 === $tv_target['quantity'], 'the sold voucher stores its ticket target with the order line' );
 
+	wp_set_current_user( 0 ); // A guest on the redeem page: tickets go to the voucher's recipient or buyer.
 	$done = vcap()->passcaptain_tickets->exchange( $tv->code );
+	if ( is_wp_error( $done ) ) {
+		echo 'Exchange error: ' . $done->get_error_code() . ' – ' . $done->get_error_message() . "\n";
+	}
 	$pc_order = is_array( $done ) ? $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}wpcap_orders WHERE public_id=%s", $done['order_public_id'] ) ) : null;
 	vcap_pc_assert( is_array( $done ) && 2 === $done['tickets'] && 'ticket-buyer@example.com' === $done['email'] && $pc_order && 'paid' === $pc_order->payment_status && 0 === (int) $pc_order->total_minor, 'the voucher is exchanged for two free Pass Captain tickets' );
 	vcap_pc_assert( VCAP\Voucher::STATUS_REDEEMED === vcap()->vouchers->get( $tv->id )->status && 'committed' === vcap()->redemptions->get( VCAP\Compat\PassCaptainTickets::key( $tv ) )['state'], 'the voucher is redeemed only after the tickets were issued' );
@@ -182,6 +186,7 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	vcap_pc_assert( is_array( $again ) && $again['order_public_id'] === $done['order_public_id'] && 2 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}wpcap_tickets WHERE order_id=%d", $pc_order->order_id ) ), 'exchanging again returns the same tickets (no second order)' );
 	vcap_pc_assert( 'passcaptain_tickets' === array_column( vcap()->vouchers->events( $tv->id ), 'event' )[ count( vcap()->vouchers->events( $tv->id ) ) - 1 ], 'the exchange is in the voucher history' );
 
+	wp_set_current_user( 1 );
 	vcap()->issuer->void( vcap()->vouchers->get( $tv->id ), 'Purchase order refunded' );
 	vcap_pc_assert( 0 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}wpcap_tickets WHERE order_id=%d AND status='valid'", $pc_order->order_id ) ), 'voiding the voucher (purchase refunded) revokes its tickets' );
 
