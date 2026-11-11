@@ -1,6 +1,6 @@
 # Voucher Captain
 
-WooCommerce-Plugin für personalisierte **PDF-Gutscheine, Geschenkkarten und Event-Tickets**. Der Funktionsumfang orientiert sich an „Flexible PDF Coupons PRO“. Code, Namen und Gestaltung sind eigenständig.
+WooCommerce-Plugin für personalisierte **PDF-Gutscheine, Geschenkkarten, Guthaben und Rabattcodes**. Voucher Captain verwaltet Gutscheine und Gutschein-Einlösungen. Die Eventverwaltung, Ticketkontingente, Sitzplätze, Eventbestellungen und der Einlass gehören zu [Ticket Captain](https://github.com/hastla007/wp-passmaster). Beide Plugins bleiben eigenständig; die direkte Bridge wird separat umgesetzt. Code, Namen und Gestaltung sind eigenständig.
 
 ## Funktionen
 
@@ -13,7 +13,7 @@ WooCommerce-Plugin für personalisierte **PDF-Gutscheine, Geschenkkarten und Eve
 | **PDF-Designer** | Mehrere Vorlagen, A4/A5/A6/DL/Letter oder eigenes Format, Hoch-/Querformat, Hintergrundfarbe/-bild. Drag & Drop mit Hilfslinien/Snapping, Ebenen (sperren/ausblenden/sortieren), Rotation, Deckkraft, Undo/Redo. Elemente: Text, Überschrift, Bild, QR-Code, Barcode, Form, Linie. Schrift, Größe, Farbe, Ausrichtung, fett/kursiv/unterstrichen. Platzhalter. PDF-Vorschau im Admin und optional für Kunden (mit Wasserzeichen). |
 | **Downloads** | Auf der Bestellbestätigung, in Mein Konto (Bestellung + eigener Tab „Gutscheine“) und in E-Mails. Gastkäufe über HMAC-signierte, optional ablaufende Links. |
 | **Verwaltung** | Gutscheinliste mit Suche, Filtern und CSV-Export. Detailansicht mit Bearbeiten, Guthabenkorrektur, erneutem Versand, Stornieren und vollständigem Verlauf (Audit-Log). Metabox in der Bestellung (HPOS-kompatibel). Shortcode `[vcap_balance]` zur Guthabenabfrage. |
-| **Tickets & Scanner** | QR-Check-in-Link auf Tickets. Scanner-Seite für Handy/Desktop (Kamera, USB-Scanner oder manuelle Eingabe) mit mehreren Einlässen pro Ticket, Rückgängig und Einlösen im Laden. |
+| **Gutschein- und Leistungspässe** | QR-Prüfung und Einlösung von Voucher-Captain-Gutscheinen bzw. serviceartigen Pässen. Der aktuelle Scanner bleibt für diese VCAP-Datensätze zuständig; Eventtickets und Einlassstatus verwaltet Ticket Captain. Die gemeinsame Scanner-Bridge ist geplant. |
 | **Code-Import** | CSV, XLS, XLSX, ODS (eigener schlanker Leser), Batches, Formatprüfung per Regex, Duplikate in Datei und Bestand werden erkannt. |
 | **Kompatibilität** | WooCommerce Subscriptions, WPML/WCML (`wpml-config.xml`, Vorlage je Sprache), Multi-Currency (WCML, Aelia, WOOCS, CURCY), Flexible Product Fields / Flexible Checkout Fields über `{item_meta:…}` / `{order_meta:…}`. HPOS und Block-Warenkorb/-Kasse. |
 | **Sicherheit & Datenschutz** | Capabilities, Nonces, Escaping, signierte Links, keine Remote-Bilder im PDF (SSRF-Schutz). WordPress-Datenexport/-löschung, automatische Anonymisierung nach X Tagen. Übersetzungsfertig, Deutsch (de_DE, de_AT) enthalten. |
@@ -48,7 +48,7 @@ Danach `build/voucher-captain.zip` unter *Plugins → Installieren → Hochladen
 composer install --no-dev
 ```
 
-Nach der Aktivierung werden zwei Startvorlagen angelegt (Geschenkkarte A5, Ticket A6). Danach im Produkt die Option **„Gutschein“** anhaken und den Tab **„Gutschein“** konfigurieren.
+Nach der Aktivierung werden zwei Startvorlagen angelegt (Geschenkkarte A5 und Gutschein-/Leistungspass A6). Danach im Produkt die Option **„Gutschein“** anhaken und den Tab **„Gutschein“** konfigurieren.
 
 ## Entwicklung
 
