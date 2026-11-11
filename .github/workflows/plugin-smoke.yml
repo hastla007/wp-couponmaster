@@ -40,8 +40,10 @@ jobs:
         database:
           - name: MySQL 8.4
             image: mysql:8.4
+            health_cmd: mysqladmin ping --host=127.0.0.1 --user=root --password=root
           - name: MariaDB 11.4
             image: mariadb:11.4
+            health_cmd: healthcheck.sh --connect --innodb_initialized
     services:
       db:
         image: ${{ matrix.database.image }}
@@ -53,7 +55,7 @@ jobs:
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --password=root"
+          --health-cmd="${{ matrix.database.health_cmd }}"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
