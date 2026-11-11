@@ -95,16 +95,36 @@ final class Delivery {
 	 */
 	public function deliver( $voucher_id ): void {
 		$voucher_id = is_array( $voucher_id ) ? (int) ( $voucher_id['voucher_id'] ?? 0 ) : (int) $voucher_id;
-		$voucher    = $this->repo->get( $voucher_id );
+		$voucher = $this->repo->get( $voucher_id );
 		if ( ! $voucher || $voucher->delivered_at || Voucher::STATUS_VOID === $voucher->status ) {
 			return;
 		}
-		if ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
-			$voucher->status = Voucher::STATUS_ACTIVE;
+
+		// Claim delivery atomically so overlapping Action Scheduler workers cannot send duplicate emails.
+		global $wpdb;
+		$table         = Install::tables()['vouchers'];
+		$now           = $this->repo->now();
+		$was_scheduled = Voucher::STATUS_SCHEDULED === $voucher->status;
+		$claimed       = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				"UPDATE {$table} SET delivered_at = %s, status = CASE WHEN status = 'scheduled' THEN 'active' ELSE status END, updated_at = %s
+				WHERE id = %d AND delivered_at IS NULL AND status IN ('scheduled','active') AND (delivery_at IS NULL OR delivery_at <= %s)",
+				$now,
+				$now,
+				$voucher_id,
+				$now
+			)
+		);
+		if ( 1 !== (int) $claimed ) {
+			return;
+		}
+		if ( $was_scheduled ) {
 			vcap()->coupons->set_coupon_enabled( $voucher, true );
 		}
-		$voucher->delivered_at = $this->repo->now();
-		$this->repo->update( $voucher );
+		$voucher = $this->repo->get( $voucher_id );
+		if ( ! $voucher ) {
+			return;
+		}
 
 		try {
 			$sent = $this->send( $voucher );
