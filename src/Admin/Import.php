@@ -175,7 +175,7 @@ final class Import {
 		}
 
 		$pattern = wp_unslash( (string) ( $_POST['pattern'] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- used as regex only.
-		$regex   = '/' . str_replace( '/', '\/', $pattern ?: '^[A-Za-z0-9._-]{4,64}$' ) . '/u';
+		$regex   = "\x01" . str_replace( "\x01", '', $pattern ?: '^[A-Za-z0-9._-]{4,64}$' ) . "\x01u"; // Control-char delimiter: the pattern needs no escaping.
 		if ( false === @preg_match( $regex, '' ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors
 			$report['error'] = __( 'The "Allowed format" is not a valid regular expression.', 'voucher-captain' );
 			$this->finish( $report );

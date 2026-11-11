@@ -81,6 +81,7 @@ final class Settings {
 	public function save(): void {
 		global $current_section;
 		\WC_Admin_Settings::save_fields( $this->fields( (string) $current_section ) );
+		update_option( 'vcap_flush_rewrite', 'yes' ); // The My Account tab may have been toggled.
 	}
 
 	private function template_options(): array {

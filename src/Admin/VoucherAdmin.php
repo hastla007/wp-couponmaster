@@ -17,12 +17,7 @@ final class VoucherAdmin {
 		add_action( 'admin_post_vcap_voucher_action', array( $this, 'handle_action' ) );
 		add_action( 'admin_init', array( $this, 'handle_bulk' ) );
 		add_action( 'admin_post_vcap_export', array( $this, 'export' ) );
-		add_filter( 'set-screen-option', array( $this, 'screen_option' ), 10, 3 );
 		add_action( 'admin_notices', array( $this, 'notices' ) );
-	}
-
-	public function screen_option( $status, $option, $value ) {
-		return 'vcap_vouchers_per_page' === $option ? (int) $value : $status;
 	}
 
 	private function can(): bool {
@@ -297,7 +292,11 @@ final class VoucherAdmin {
 			}
 		}
 		$exp = sanitize_text_field( wp_unslash( $_POST['expires_at'] ?? '' ) );
-		$v->expires_at = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $exp ) ? get_gmt_from_date( $exp . ' 23:59:59' ) : null;
+		$current       = $v->expires_at ? get_date_from_gmt( $v->expires_at, 'Y-m-d' ) : '';
+		if ( $exp !== $current ) {
+			// Only touch the stored time when the date was actually changed.
+			$v->expires_at = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $exp ) ? get_gmt_from_date( $exp . ' 23:59:59' ) : null;
+		}
 		if ( Voucher::STATUS_EXPIRED === $v->status && ! $v->is_expired() ) {
 			$v->status = Voucher::STATUS_ACTIVE;
 		}

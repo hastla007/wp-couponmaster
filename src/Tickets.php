@@ -168,14 +168,16 @@ final class Tickets {
 	}
 
 	public function undo_checkin( Voucher $voucher ): bool {
-		if ( $voucher->checkins <= 0 ) {
+		global $wpdb;
+		$table = Install::tables()['vouchers'];
+		// Atomic like checkin(): parallel scanners must not lose updates.
+		$rows = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET checkins = checkins - 1, updated_at = %s WHERE id = %d AND checkins > 0", gmdate( 'Y-m-d H:i:s' ), $voucher->id ) ); // phpcs:ignore
+		if ( 1 !== (int) $rows ) {
 			return false;
 		}
-		$voucher->checkins--;
-		if ( Voucher::STATUS_REDEEMED === $voucher->status && $voucher->is_ticket() ) {
-			$voucher->status = Voucher::STATUS_ACTIVE;
+		if ( $voucher->is_ticket() ) {
+			$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'active' WHERE id = %d AND status = 'redeemed' AND checkins < max_checkins", $voucher->id ) ); // phpcs:ignore
 		}
-		$this->repo->update( $voucher );
 		$this->repo->log( $voucher->id, 'checkin_undo', 1 );
 		return true;
 	}
@@ -222,6 +224,15 @@ final class Tickets {
 				return new \WP_Error( 'vcap_amount', __( 'Please enter an amount.', 'voucher-captain' ), array( 'status' => 400 ) );
 			}
 			vcap()->coupons->set_balance( $voucher, $voucher->balance - $amount, 'redeemed', $amount, $note );
+		} elseif ( 'unlimited' === $voucher->usage_mode ) {
+			// Reusable vouchers: count one use, WooCommerce's usage limit decides when it is used up.
+			$this->repo->log( $voucher->id, 'redeemed', $voucher->initial_amount, null, $note );
+			if ( $voucher->coupon_id ) {
+				$coupon = new \WC_Coupon( $voucher->coupon_id );
+				if ( $coupon->get_id() ) {
+					$coupon->increase_usage_count();
+				}
+			}
 		} else {
 			$voucher->status  = Voucher::STATUS_REDEEMED;
 			$voucher->balance = 0;

@@ -15,7 +15,7 @@ final class Downloads {
 		add_action( 'template_redirect', array( $this, 'maybe_serve' ), 1 );
 		add_action( 'admin_post_vcap_admin_pdf', array( $this, 'admin_download' ) );
 		add_action( 'woocommerce_order_details_after_order_table', array( $this, 'order_downloads' ), 5 );
-		add_action( 'init', array( $this, 'add_endpoint' ) );
+		add_action( 'wp_loaded', array( $this, 'maybe_flush_rewrite' ) );
 		add_filter( 'woocommerce_get_query_vars', array( $this, 'query_vars' ) );
 		add_filter( 'woocommerce_account_menu_items', array( $this, 'menu_item' ) );
 		add_action( 'woocommerce_account_' . self::ENDPOINT . '_endpoint', array( $this, 'account_page' ) );
@@ -137,10 +137,11 @@ final class Downloads {
 		return false;
 	}
 
-	public function add_endpoint(): void {
-		if ( $this->settings->yes( 'vcap_myaccount_tab' ) ) {
-			add_rewrite_endpoint( self::ENDPOINT, EP_ROOT | EP_PAGES );
-		}
+	/**
+	 * WooCommerce registers the My Account endpoint itself from woocommerce_get_query_vars (see query_vars());
+	 * we only flush once after activation / settings changes, after every plugin and theme registered its rules.
+	 */
+	public function maybe_flush_rewrite(): void {
 		if ( 'yes' === get_option( 'vcap_flush_rewrite', 'yes' ) ) {
 			flush_rewrite_rules( false );
 			update_option( 'vcap_flush_rewrite', 'no' );
@@ -177,7 +178,7 @@ final class Downloads {
 
 	public function account_page(): void {
 		$user = wp_get_current_user();
-		$list = $this->repo->for_customer( $user->ID, (string) $user->user_email );
+		$list = $this->repo->for_customer( (int) $user->ID );
 		Plugin::template(
 			'myaccount/vouchers-table.php',
 			array(
@@ -195,10 +196,7 @@ final class Downloads {
 	public function balance_shortcode(): string {
 		$result = '';
 		if ( isset( $_POST['vcap_balance_code'], $_POST['vcap_balance_nonce'] ) && wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_balance_nonce'] ) ), 'vcap_balance' ) ) {
-			$key   = 'vcap_bal_' . md5( (string) \WC_Geolocation::get_ip_address() );
-			$tries = (int) get_transient( $key );
-			set_transient( $key, $tries + 1, 15 * MINUTE_IN_SECONDS );
-			if ( $tries > 15 ) {
+			if ( Plugin::rate_limited( 'balance', 15, 300, 15 * MINUTE_IN_SECONDS ) ) {
 				$result = '<p class="woocommerce-error">' . esc_html__( 'Too many attempts. Please try again later.', 'voucher-captain' ) . '</p>';
 			} else {
 				$code    = wc_format_coupon_code( sanitize_text_field( wp_unslash( $_POST['vcap_balance_code'] ) ) );

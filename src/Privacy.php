@@ -59,18 +59,23 @@ final class Privacy {
 	public function erase( string $email, int $page = 1 ): array {
 		$removed = false;
 		foreach ( $this->repo->for_email( $email, 500 ) as $voucher ) {
-			if ( $voucher->recipient_email === $email ) {
+			$changed = false;
+			if ( 0 === strcasecmp( $voucher->recipient_email, $email ) ) {
+				$changed = true;
 				$voucher->recipient_email = '';
 				$voucher->recipient_name  = '';
 				$voucher->message         = '';
 				$voucher->fields          = array();
 			}
-			if ( $voucher->buyer_email === $email ) {
+			if ( 0 === strcasecmp( $voucher->buyer_email, $email ) ) {
 				$voucher->buyer_email = '';
 				$voucher->buyer_name  = '';
+				$changed              = true;
 			}
-			$this->repo->update( $voucher );
-			$removed = true;
+			if ( $changed ) {
+				$this->repo->update( $voucher );
+				$removed = true;
+			}
 		}
 		return array(
 			'items_removed'  => $removed,

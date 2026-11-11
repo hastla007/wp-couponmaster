@@ -99,8 +99,15 @@ final class VoucherRepository {
 	}
 
 	/** @return Voucher[] */
-	public function for_customer( int $user_id, string $email, int $limit = 200 ): array {
+	/**
+	 * Vouchers bought by a customer. Deliberately NOT matched by recipient email: WooCommerce account emails are
+	 * unverified, so that would let anyone list gifts addressed to an email they merely claim.
+	 */
+	public function for_customer( int $user_id, int $limit = 200 ): array {
 		global $wpdb;
+		if ( $user_id <= 0 ) {
+			return array();
+		}
 		$order_ids = wc_get_orders(
 			array(
 				'customer_id' => $user_id,
@@ -108,9 +115,11 @@ final class VoucherRepository {
 				'return'      => 'ids',
 			)
 		);
-		$order_ids = array_map( 'intval', $order_ids ?: array( 0 ) );
-		$in        = implode( ',', $order_ids );
-		$rows      = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->table} WHERE order_id IN ($in) OR recipient_email = %s ORDER BY id DESC LIMIT %d", $email, $limit ), ARRAY_A ); // phpcs:ignore
+		if ( ! $order_ids ) {
+			return array();
+		}
+		$in   = implode( ',', array_map( 'intval', $order_ids ) );
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->table} WHERE order_id IN ($in) ORDER BY id DESC LIMIT %d", $limit ), ARRAY_A ); // phpcs:ignore
 		return array_map( array( Voucher::class, 'from_row' ), $rows ?: array() );
 	}
 

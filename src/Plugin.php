@@ -95,13 +95,36 @@ final class Plugin {
 	}
 
 	/**
+	 * Simple fixed-window rate limit for public endpoints. The per-visitor bucket can be evaded by spoofing
+	 * proxy headers, so a site-wide bucket caps the total as well.
+	 *
+	 * @return bool true when the request must be rejected
+	 */
+	public static function rate_limited( string $bucket, int $per_visitor, int $site_wide, int $window ): bool {
+		$ip   = (string) \WC_Geolocation::get_ip_address();
+		$keys = array(
+			'vcap_rl_' . $bucket . '_' . md5( $ip ) => $per_visitor,
+			'vcap_rl_' . $bucket . '_all'            => $site_wide,
+		);
+		$blocked = false;
+		foreach ( $keys as $key => $limit ) {
+			$count = (int) get_transient( $key );
+			if ( $count >= $limit ) {
+				$blocked = true;
+			}
+			set_transient( $key, $count + 1, $window );
+		}
+		return $blocked;
+	}
+
+	/**
 	 * Render a PHP template from /templates, overridable from the theme at woocommerce/voucher-captain/.
 	 */
 	public static function template( string $name, array $args = array() ): void {
-		wc_get_template( $name, $args, 'voucher-captain/', VCAP_PATH . 'templates/' );
+		wc_get_template( $name, $args, WC()->template_path() . 'voucher-captain/', VCAP_PATH . 'templates/' );
 	}
 
 	public static function template_html( string $name, array $args = array() ): string {
-		return wc_get_template_html( $name, $args, 'voucher-captain/', VCAP_PATH . 'templates/' );
+		return wc_get_template_html( $name, $args, WC()->template_path() . 'voucher-captain/', VCAP_PATH . 'templates/' );
 	}
 }

@@ -28,7 +28,7 @@ final class Fields {
 				'before_button' === $position ? 5 : 10
 			);
 		}
-		add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'validate' ), 10, 4 );
+		add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'validate' ), 10, 6 );
 		add_filter( 'woocommerce_add_cart_item_data', array( $this, 'cart_item_data' ), 10, 3 );
 		add_filter( 'woocommerce_get_item_data', array( $this, 'display_item_data' ), 10, 2 );
 		add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'save_order_item' ), 10, 4 );
@@ -95,7 +95,7 @@ final class Fields {
 				'label'       => __( 'Personal message', 'voucher-captain' ),
 				'type'        => 'textarea',
 				'required'    => false,
-				'maxlength'   => max( 10, (int) $config['message_maxlength'] ),
+				'maxlength'   => max( 10, (int) ( $config['message_maxlength'] ?: 300 ) ),
 				'placeholder' => '',
 				'tooltip'     => '',
 			),
@@ -205,7 +205,7 @@ final class Fields {
 	private function flat_definitions( \WC_Product $product ): array {
 		$flat = array();
 		foreach ( $this->definitions_for( $product ) as $fields ) {
-			$flat = array_merge( $flat, $fields );
+			$flat = $flat + $fields; // Not array_merge(): numeric field keys must not be renumbered.
 		}
 		return $flat;
 	}
@@ -383,10 +383,13 @@ final class Fields {
 		return $out;
 	}
 
-	public function validate( $passed, $product_id, $quantity, $variation_id = 0 ) {
+	public function validate( $passed, $product_id, $quantity, $variation_id = 0, $variations = array(), $cart_item_data = array() ) {
 		$product = wc_get_product( $variation_id ?: $product_id );
 		if ( ! $product || ! ProductConfig::is_voucher( $product ) ) {
 			return $passed;
+		}
+		if ( is_array( $cart_item_data ) && ! empty( $cart_item_data['vcap_fields'] ) ) {
+			return $passed; // "Order again": values were validated when first ordered.
 		}
 		foreach ( $this->flat_definitions( $product ) as $key => $field ) {
 			$raw   = trim( $this->posted_value( (string) $key ) );
@@ -441,6 +444,9 @@ final class Fields {
 		$product = wc_get_product( $variation_id ?: $product_id );
 		if ( ! $product || ! ProductConfig::is_voucher( $product ) ) {
 			return $data;
+		}
+		if ( ! empty( $data['vcap_fields'] ) && is_array( $data['vcap_fields'] ) ) {
+			return $data; // Already supplied ("order again").
 		}
 		$fields = $this->collect_posted( $product );
 		if ( $fields ) {

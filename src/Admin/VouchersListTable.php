@@ -80,7 +80,10 @@ final class VouchersListTable extends \WP_List_Table {
 		echo '</select>';
 		echo '<label><input type="checkbox" name="expiring" value="soon" ' . checked( $expiring, 'soon', false ) . '> ' . esc_html__( 'Expiring within 30 days', 'voucher-captain' ) . '</label> ';
 		submit_button( __( 'Filter', 'voucher-captain' ), '', 'filter_action', false );
-		$export = wp_nonce_url( add_query_arg( array_merge( array( 'action' => 'vcap_export' ), $this->filter_args() ), admin_url( 'admin-post.php' ) ), 'vcap_export' );
+		$args = $this->filter_args();
+		$args['s'] = $args['search']; // filter_args() reads the search term from "s".
+		unset( $args['search'] );
+		$export = wp_nonce_url( add_query_arg( array_merge( array( 'action' => 'vcap_export' ), array_filter( $args ) ), admin_url( 'admin-post.php' ) ), 'vcap_export' );
 		echo ' <a class="button" href="' . esc_url( $export ) . '">' . esc_html__( 'Export CSV', 'voucher-captain' ) . '</a>';
 		echo '</div>';
 	}

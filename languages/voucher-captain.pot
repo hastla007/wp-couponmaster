@@ -6,10 +6,10 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-11 07:16+0000\n"
+"POT-Creation-Date: 2026-11-11 07:26+0000\n"
 "X-Domain: voucher-captain\n"
 
-#: src/Admin/Import.php:28 src/Admin/Import.php:137 src/Admin/Import.php:241 src/Admin/Scanner.php:12 src/Admin/VoucherAdmin.php:54 src/Admin/VoucherAdmin.php:236
+#: src/Admin/Import.php:28 src/Admin/Import.php:137 src/Admin/Import.php:241 src/Admin/Scanner.php:12 src/Admin/VoucherAdmin.php:49 src/Admin/VoucherAdmin.php:231
 msgid "You are not allowed to do this."
 msgstr ""
 
@@ -163,11 +163,11 @@ msgstr ""
 msgid "Row %1$d: \"%2$s\""
 msgstr ""
 
-#: src/Admin/Menu.php:28 src/Admin/Menu.php:29 src/Admin/OrderAdmin.php:30 src/Downloads.php:165 src/Downloads.php:169 src/Downloads.php:175
+#: src/Admin/Menu.php:28 src/Admin/Menu.php:29 src/Admin/OrderAdmin.php:30 src/Downloads.php:166 src/Downloads.php:170 src/Downloads.php:176
 msgid "Vouchers"
 msgstr ""
 
-#: src/Admin/Menu.php:36 src/Admin/Menu.php:36 src/Admin/VoucherAdmin.php:63
+#: src/Admin/Menu.php:36 src/Admin/Menu.php:36 src/Admin/VoucherAdmin.php:58
 msgid "Issued vouchers"
 msgstr ""
 
@@ -187,7 +187,7 @@ msgstr ""
 msgid "This order contains no voucher products."
 msgstr ""
 
-#: src/Admin/OrderAdmin.php:69 src/Admin/VouchersListTable.php:150
+#: src/Admin/OrderAdmin.php:69 src/Admin/VouchersListTable.php:153
 msgid "Balance:"
 msgstr ""
 
@@ -237,15 +237,15 @@ msgstr ""
 msgid "Amount to deduct"
 msgstr ""
 
-#: src/Admin/Scanner.php:31 src/Admin/VoucherAdmin.php:158 templates/ticket-status.php:58 templates/ticket-status.php:79
+#: src/Admin/Scanner.php:31 src/Admin/VoucherAdmin.php:153 templates/ticket-status.php:58 templates/ticket-status.php:79
 msgid "Admissions"
 msgstr ""
 
-#: src/Admin/Scanner.php:32 src/Admin/VoucherAdmin.php:111 templates/ticket-status.php:68
+#: src/Admin/Scanner.php:32 src/Admin/VoucherAdmin.php:106 templates/ticket-status.php:68
 msgid "Balance"
 msgstr ""
 
-#: src/Admin/Scanner.php:33 src/Admin/VoucherAdmin.php:109 src/ProductSettings.php:116 src/TemplatePostType.php:261 templates/myaccount/vouchers-table.php:30 templates/myaccount/vouchers-table.php:56
+#: src/Admin/Scanner.php:33 src/Admin/VoucherAdmin.php:104 src/ProductSettings.php:116 src/TemplatePostType.php:261 templates/myaccount/vouchers-table.php:30 templates/myaccount/vouchers-table.php:56
 msgid "Value"
 msgstr ""
 
@@ -253,11 +253,11 @@ msgstr ""
 msgid "Holder"
 msgstr ""
 
-#: src/Admin/Scanner.php:35 src/Admin/VoucherAdmin.php:107 src/Admin/VouchersListTable.php:28 templates/ticket-status.php:56
+#: src/Admin/Scanner.php:35 src/Admin/VoucherAdmin.php:102 src/Admin/VouchersListTable.php:28 templates/ticket-status.php:56
 msgid "Product"
 msgstr ""
 
-#: src/Admin/Scanner.php:36 src/Admin/VoucherAdmin.php:108 src/Admin/VoucherAdmin.php:199 src/Admin/VouchersListTable.php:32 templates/myaccount/vouchers-table.php:33 templates/myaccount/vouchers-table.php:67
+#: src/Admin/Scanner.php:36 src/Admin/VoucherAdmin.php:103 src/Admin/VoucherAdmin.php:194 src/Admin/VouchersListTable.php:32 templates/myaccount/vouchers-table.php:33 templates/myaccount/vouchers-table.php:67
 msgid "Order"
 msgstr ""
 
@@ -269,7 +269,7 @@ msgstr ""
 msgid "Last check-in"
 msgstr ""
 
-#: src/Admin/Scanner.php:39 src/Admin/VouchersListTable.php:130
+#: src/Admin/Scanner.php:39 src/Admin/VouchersListTable.php:133
 msgid "Details"
 msgstr ""
 
@@ -305,241 +305,241 @@ msgstr ""
 msgid "Check in tickets automatically after scan"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:37
+#: src/Admin/VoucherAdmin.php:32
 msgid "Voucher saved."
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:38
+#: src/Admin/VoucherAdmin.php:33
 msgid "Voucher email sent."
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:39
+#: src/Admin/VoucherAdmin.php:34
 msgid "Voucher voided."
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:40
+#: src/Admin/VoucherAdmin.php:35
 msgid "Voucher reactivated."
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:41
+#: src/Admin/VoucherAdmin.php:36
 msgid "Balance updated."
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:42
+#: src/Admin/VoucherAdmin.php:37
 msgid "Bulk action completed."
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:43
+#: src/Admin/VoucherAdmin.php:38
 msgid "Vouchers generated."
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:44
+#: src/Admin/VoucherAdmin.php:39
 msgid "No new vouchers were needed for this order."
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:64
+#: src/Admin/VoucherAdmin.php:59
 msgid "Open scanner"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:72
+#: src/Admin/VoucherAdmin.php:67
 msgid "Search code, email, name, order"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:80 src/Admin/VoucherAdmin.php:240 src/Downloads.php:88
+#: src/Admin/VoucherAdmin.php:75 src/Admin/VoucherAdmin.php:235 src/Downloads.php:88
 msgid "Voucher not found."
 msgstr ""
 
 #. translators: %s: code
-#: src/Admin/VoucherAdmin.php:97
+#: src/Admin/VoucherAdmin.php:92
 #, php-format
 msgid "Voucher %s"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:98
+#: src/Admin/VoucherAdmin.php:93
 msgid "Back to list"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:103
+#: src/Admin/VoucherAdmin.php:98
 msgid "Overview"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:105 src/Admin/VouchersListTable.php:30 src/Privacy.php:39 templates/myaccount/vouchers-table.php:31 templates/myaccount/vouchers-table.php:57
+#: src/Admin/VoucherAdmin.php:100 src/Admin/VouchersListTable.php:30 src/Privacy.php:39 templates/myaccount/vouchers-table.php:31 templates/myaccount/vouchers-table.php:57
 msgid "Status"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:106 src/Fields.php:538 src/ProductSettings.php:80
+#: src/Admin/VoucherAdmin.php:101 src/Fields.php:544 src/ProductSettings.php:80
 msgid "Type"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:114
+#: src/Admin/VoucherAdmin.php:109
 msgid "Check-ins"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:116 src/ProductSettings.php:176
+#: src/Admin/VoucherAdmin.php:111 src/ProductSettings.php:176
 msgid "Usage"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:116
+#: src/Admin/VoucherAdmin.php:111
 msgid "Single use"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:116
+#: src/Admin/VoucherAdmin.php:111
 msgid "Stored balance"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:116
+#: src/Admin/VoucherAdmin.php:111
 msgid "Reusable"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:117 src/Admin/VouchersListTable.php:134
+#: src/Admin/VoucherAdmin.php:112 src/Admin/VouchersListTable.php:137
 msgid "Coupon"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:117
+#: src/Admin/VoucherAdmin.php:112
 msgid "none (ticket)"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:118 src/VoucherRepository.php:256
+#: src/Admin/VoucherAdmin.php:113 src/VoucherRepository.php:265
 msgid "Delivered"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:119 src/Admin/VoucherAdmin.php:150
+#: src/Admin/VoucherAdmin.php:114 src/Admin/VoucherAdmin.php:145
 msgid "Buyer"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:122
+#: src/Admin/VoucherAdmin.php:117
 msgid "View PDF"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:124
+#: src/Admin/VoucherAdmin.php:119
 msgid "Email buyer"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:126
+#: src/Admin/VoucherAdmin.php:121
 msgid "Email recipient"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:129 src/Admin/VouchersListTable.php:53
+#: src/Admin/VoucherAdmin.php:124 src/Admin/VouchersListTable.php:53
 msgid "Reactivate"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:131
+#: src/Admin/VoucherAdmin.php:126
 msgid "Void voucher"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:138
+#: src/Admin/VoucherAdmin.php:133
 msgid "Edit"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:145 src/Fields.php:77 src/Placeholders.php:30 src/Privacy.php:42 src/ProductSettings.php:318
+#: src/Admin/VoucherAdmin.php:140 src/Fields.php:77 src/Placeholders.php:30 src/Privacy.php:42 src/ProductSettings.php:318
 msgid "Recipient name"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:146 src/Fields.php:86 src/Placeholders.php:31 src/Privacy.php:43 src/ProductSettings.php:319
+#: src/Admin/VoucherAdmin.php:141 src/Fields.php:86 src/Placeholders.php:31 src/Privacy.php:43 src/ProductSettings.php:319
 msgid "Recipient email"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:147 src/Privacy.php:44
+#: src/Admin/VoucherAdmin.php:142 src/Privacy.php:44
 msgid "Message"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:148
+#: src/Admin/VoucherAdmin.php:143
 msgid "Send to"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:150
+#: src/Admin/VoucherAdmin.php:145
 msgid "Recipient"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:150
+#: src/Admin/VoucherAdmin.php:145
 msgid "Both"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:155 src/Placeholders.php:21 src/ProductSettings.php:224
+#: src/Admin/VoucherAdmin.php:150 src/Placeholders.php:21 src/ProductSettings.php:224
 msgid "Expiry date"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:155
+#: src/Admin/VoucherAdmin.php:150
 msgid "Empty = never"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:156 src/Fields.php:104 src/Placeholders.php:33 src/ProductSettings.php:321 src/ProductSettings.php:363
+#: src/Admin/VoucherAdmin.php:151 src/Fields.php:104 src/Placeholders.php:33 src/ProductSettings.php:321 src/ProductSettings.php:363
 msgid "Delivery date"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:156
+#: src/Admin/VoucherAdmin.php:151
 msgid "Set a future date to (re)schedule delivery."
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:161
+#: src/Admin/VoucherAdmin.php:156
 msgid "Save voucher"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:165
+#: src/Admin/VoucherAdmin.php:160
 msgid "Adjust balance"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:171
+#: src/Admin/VoucherAdmin.php:166
 msgid "Mode"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:173
+#: src/Admin/VoucherAdmin.php:168
 msgid "Deduct"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:174
+#: src/Admin/VoucherAdmin.php:169
 msgid "Add"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:175
+#: src/Admin/VoucherAdmin.php:170
 msgid "Set to"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:177 src/Admin/VoucherAdmin.php:199
+#: src/Admin/VoucherAdmin.php:172 src/Admin/VoucherAdmin.php:194
 msgid "Amount"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:179 src/Admin/VoucherAdmin.php:199
+#: src/Admin/VoucherAdmin.php:174 src/Admin/VoucherAdmin.php:194
 msgid "Note"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:180
+#: src/Admin/VoucherAdmin.php:175
 msgid "Note (e.g. redeemed in store)"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:181
+#: src/Admin/VoucherAdmin.php:176
 msgid "Apply"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:186
+#: src/Admin/VoucherAdmin.php:181
 msgid "Personalisation"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:197
+#: src/Admin/VoucherAdmin.php:192
 msgid "History"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:199 src/Fields.php:531
+#: src/Admin/VoucherAdmin.php:194 src/Fields.php:537
 msgid "Date"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:199
+#: src/Admin/VoucherAdmin.php:194
 msgid "Event"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:199
+#: src/Admin/VoucherAdmin.php:194
 msgid "Balance after"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:199
+#: src/Admin/VoucherAdmin.php:194
 msgid "User"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:254
+#: src/Admin/VoucherAdmin.php:249
 msgid "Voided by admin"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:346
+#: src/Admin/VoucherAdmin.php:345
 msgid "Voided by admin (bulk)"
 msgstr ""
 
@@ -555,7 +555,7 @@ msgstr ""
 msgid "Expires"
 msgstr ""
 
-#: src/Admin/VouchersListTable.php:34 src/VoucherRepository.php:254
+#: src/Admin/VouchersListTable.php:34 src/VoucherRepository.php:263
 msgid "Issued"
 msgstr ""
 
@@ -587,21 +587,21 @@ msgstr ""
 msgid "Filter"
 msgstr ""
 
-#: src/Admin/VouchersListTable.php:84
+#: src/Admin/VouchersListTable.php:87
 msgid "Export CSV"
 msgstr ""
 
 #. translators: 1: used, 2: max
-#: src/Admin/VouchersListTable.php:153
+#: src/Admin/VouchersListTable.php:156
 #, php-format
 msgid "Check-ins: %1$d / %2$d"
 msgstr ""
 
-#: src/Admin/VouchersListTable.php:181
+#: src/Admin/VouchersListTable.php:184
 msgid "Never"
 msgstr ""
 
-#: src/Admin/VouchersListTable.php:189
+#: src/Admin/VouchersListTable.php:192
 msgid "No vouchers found."
 msgstr ""
 
@@ -677,25 +677,25 @@ msgstr ""
 msgid "Minimum %s."
 msgstr ""
 
-#: src/CustomAmount.php:78
+#: src/CustomAmount.php:86
 msgid "Please enter a voucher amount."
 msgstr ""
 
-#: src/CustomAmount.php:82
+#: src/CustomAmount.php:89
 msgid "The voucher amount is outside the allowed range."
 msgstr ""
 
-#: src/CustomAmount.php:117
+#: src/CustomAmount.php:147
 msgid "Voucher amount"
 msgstr ""
 
 #. translators: %s: min price
-#: src/CustomAmount.php:155
+#: src/CustomAmount.php:185
 #, php-format
 msgid "From %s"
 msgstr ""
 
-#: src/CustomAmount.php:157
+#: src/CustomAmount.php:187
 msgid "Choose your amount"
 msgstr ""
 
@@ -739,29 +739,29 @@ msgstr ""
 msgid "Your vouchers"
 msgstr ""
 
-#: src/Downloads.php:202
+#: src/Downloads.php:200
 msgid "Too many attempts. Please try again later."
 msgstr ""
 
-#: src/Downloads.php:207
+#: src/Downloads.php:205
 msgid "Voucher code not found."
 msgstr ""
 
 #. translators: 1: status, 2: balance, 3: expiry
-#: src/Downloads.php:212
+#: src/Downloads.php:210
 #, php-format
 msgid "Status: %1$s · Balance: %2$s · Valid until: %3$s"
 msgstr ""
 
-#: src/Downloads.php:215 src/Placeholders.php:83
+#: src/Downloads.php:213 src/Placeholders.php:83
 msgid "unlimited"
 msgstr ""
 
-#: src/Downloads.php:225 src/TemplatePostType.php:107
+#: src/Downloads.php:223 src/TemplatePostType.php:107
 msgid "Voucher code"
 msgstr ""
 
-#: src/Downloads.php:227
+#: src/Downloads.php:225
 msgid "Check balance"
 msgstr ""
 
@@ -886,174 +886,174 @@ msgid "Yes"
 msgstr ""
 
 #. translators: %s: field label
-#: src/Fields.php:396
+#: src/Fields.php:399
 #, php-format
 msgid "%s is a required field."
 msgstr ""
 
 #. translators: %s: field label
-#: src/Fields.php:406
+#: src/Fields.php:409
 #, php-format
 msgid "%s is not a valid email address."
 msgstr ""
 
 #. translators: %s: field label
-#: src/Fields.php:413
+#: src/Fields.php:416
 #, php-format
 msgid "%s is not a valid date."
 msgstr ""
 
-#: src/Fields.php:416
+#: src/Fields.php:419
 msgid "Please choose a delivery date between today and one year from now."
 msgstr ""
 
 #. translators: %s: field label
-#: src/Fields.php:422
+#: src/Fields.php:425
 #, php-format
 msgid "%s must be a number."
 msgstr ""
 
 #. translators: %s: field label
-#: src/Fields.php:427
+#: src/Fields.php:430
 #, php-format
 msgid "Please choose a valid option for %s."
 msgstr ""
 
 #. translators: 1: field label, 2: max length
-#: src/Fields.php:433
+#: src/Fields.php:436
 #, php-format
 msgid "%1$s may contain at most %2$d characters."
 msgstr ""
 
-#: src/Fields.php:502
+#: src/Fields.php:508
 msgid "Personalise"
 msgstr ""
 
-#: src/Fields.php:527 src/TemplatePostType.php:211
+#: src/Fields.php:533 src/TemplatePostType.php:211
 msgid "Text"
 msgstr ""
 
-#: src/Fields.php:528
+#: src/Fields.php:534
 msgid "Text area"
 msgstr ""
 
-#: src/Fields.php:529
+#: src/Fields.php:535
 msgid "Email"
 msgstr ""
 
-#: src/Fields.php:530
+#: src/Fields.php:536
 msgid "Number"
 msgstr ""
 
-#: src/Fields.php:532
+#: src/Fields.php:538
 msgid "Select"
 msgstr ""
 
-#: src/Fields.php:533
+#: src/Fields.php:539
 msgid "Checkbox"
 msgstr ""
 
-#: src/Fields.php:536
+#: src/Fields.php:542
 msgid "Label"
 msgstr ""
 
-#: src/Fields.php:537
+#: src/Fields.php:543
 msgid "Key"
 msgstr ""
 
-#: src/Fields.php:539
+#: src/Fields.php:545
 msgid "Required"
 msgstr ""
 
-#: src/Fields.php:540
+#: src/Fields.php:546
 msgid "Max. characters"
 msgstr ""
 
-#: src/Fields.php:541
+#: src/Fields.php:547
 msgid "Placeholder"
 msgstr ""
 
-#: src/Fields.php:542
+#: src/Fields.php:548
 msgid "Help text"
 msgstr ""
 
-#: src/Fields.php:543
+#: src/Fields.php:549
 msgid "Options (one per line)"
 msgstr ""
 
-#: src/Fields.php:544
+#: src/Fields.php:550
 msgid "Remove field"
 msgstr ""
 
-#: src/Fields.php:545
+#: src/Fields.php:551
 msgid "PDF placeholder:"
 msgstr ""
 
-#: src/Fields.php:552
+#: src/Fields.php:558
 msgid "Fields"
 msgstr ""
 
-#: src/Fields.php:553
+#: src/Fields.php:559
 msgid "Display rules"
 msgstr ""
 
-#: src/Fields.php:559
+#: src/Fields.php:565
 msgid "These fields are shown on the product page of matching voucher products. Use {field:key} in PDF templates and emails to print a value."
 msgstr ""
 
-#: src/Fields.php:561
+#: src/Fields.php:567
 msgid "Add field"
 msgstr ""
 
-#: src/Fields.php:572
+#: src/Fields.php:578
 msgid "Show on"
 msgstr ""
 
-#: src/Fields.php:575
+#: src/Fields.php:581
 msgid "All voucher products"
 msgstr ""
 
-#: src/Fields.php:576
+#: src/Fields.php:582
 msgid "Selected products"
 msgstr ""
 
-#: src/Fields.php:577
+#: src/Fields.php:583
 msgid "Products in categories"
 msgstr ""
 
-#: src/Fields.php:578
+#: src/Fields.php:584
 msgid "Products with tags"
 msgstr ""
 
-#: src/Fields.php:583
+#: src/Fields.php:589
 msgid "Products"
 msgstr ""
 
-#: src/Fields.php:599
+#: src/Fields.php:605
 msgid "Categories"
 msgstr ""
 
-#: src/Fields.php:599
+#: src/Fields.php:605
 msgid "Tags"
 msgstr ""
 
-#: src/Fields.php:613
+#: src/Fields.php:619
 msgid "Position"
 msgstr ""
 
-#: src/Fields.php:616
+#: src/Fields.php:622
 msgid "Before quantity field"
 msgstr ""
 
-#: src/Fields.php:617
+#: src/Fields.php:623
 msgid "Before \"Add to cart\" button"
 msgstr ""
 
-#: src/Fields.php:618
+#: src/Fields.php:624
 msgid "After \"Add to cart\" button"
 msgstr ""
 
-#: src/Fields.php:620
+#: src/Fields.php:626
 msgid "Groups with a lower \"Order\" value (Page attributes) are shown first."
 msgstr ""
 
@@ -1183,27 +1183,27 @@ msgstr ""
 msgid "Main hall"
 msgstr ""
 
-#: src/Preview.php:68
+#: src/Preview.php:66
 msgid "Too many preview requests. Please try again later."
 msgstr ""
 
-#: src/Preview.php:75
+#: src/Preview.php:72
 msgid "Invalid product."
 msgstr ""
 
-#: src/Preview.php:79
+#: src/Preview.php:76
 msgid "Preview is not available for this product."
 msgstr ""
 
-#: src/Preview.php:121
+#: src/Preview.php:118
 msgid "PREVIEW"
 msgstr ""
 
-#: src/Privacy.php:86
+#: src/Privacy.php:91
 msgid "Voucher Captain"
 msgstr ""
 
-#: src/Privacy.php:87
+#: src/Privacy.php:92
 msgid "When you buy a voucher, we store the recipient name, recipient email address, personal message and any personalisation you enter so that we can create and deliver the voucher. The recipient receives an email with the voucher if you entered their address. This data is kept as long as the voucher can be used and is then removed according to our retention settings."
 msgstr ""
 
@@ -1215,7 +1215,7 @@ msgstr ""
 msgid "Sell this product as a PDF voucher, gift card or ticket."
 msgstr ""
 
-#: src/ProductSettings.php:51 src/Settings.php:213
+#: src/ProductSettings.php:51 src/Settings.php:214
 msgid "Default template"
 msgstr ""
 
@@ -1429,7 +1429,7 @@ msgstr ""
 msgid "Global setting"
 msgstr ""
 
-#: src/ProductSettings.php:305 src/Settings.php:243
+#: src/ProductSettings.php:305 src/Settings.php:244
 msgid "Random part length"
 msgstr ""
 
@@ -1521,195 +1521,195 @@ msgstr ""
 msgid "General"
 msgstr ""
 
-#: src/Settings.php:61 src/Settings.php:98
+#: src/Settings.php:61 src/Settings.php:99
 msgid "Delivery & downloads"
 msgstr ""
 
-#: src/Settings.php:62 src/Settings.php:162
+#: src/Settings.php:62 src/Settings.php:163
 msgid "Privacy & advanced"
 msgstr ""
 
-#: src/Settings.php:87
+#: src/Settings.php:88
 msgid "— None —"
 msgstr ""
 
-#: src/Settings.php:100
+#: src/Settings.php:101
 msgid "Attach PDF to emails"
 msgstr ""
 
-#: src/Settings.php:104
+#: src/Settings.php:105
 msgid "Attach the voucher PDF to voucher emails."
 msgstr ""
 
-#: src/Settings.php:107
+#: src/Settings.php:108
 msgid "Download link in emails"
 msgstr ""
 
-#: src/Settings.php:111
+#: src/Settings.php:112
 msgid "Include a secure download link in voucher emails."
 msgstr ""
 
-#: src/Settings.php:114
+#: src/Settings.php:115
 msgid "Download link lifetime (days)"
 msgstr ""
 
-#: src/Settings.php:119
+#: src/Settings.php:120
 msgid "Signed links in emails expire after this many days. Links shown to logged-in customers are always re-signed. 0 = never expire."
 msgstr ""
 
-#: src/Settings.php:122
+#: src/Settings.php:123
 msgid "Order confirmation"
 msgstr ""
 
-#: src/Settings.php:126
+#: src/Settings.php:127
 msgid "Show voucher downloads on the order received page."
 msgstr ""
 
-#: src/Settings.php:129
+#: src/Settings.php:130
 msgid "My Account"
 msgstr ""
 
-#: src/Settings.php:133
+#: src/Settings.php:134
 msgid "Show voucher downloads in the My Account order details."
 msgstr ""
 
-#: src/Settings.php:136
+#: src/Settings.php:137
 msgid "My Account \"Vouchers\" tab"
 msgstr ""
 
-#: src/Settings.php:140
+#: src/Settings.php:141
 msgid "Add a \"Vouchers\" tab listing all purchased vouchers with balance and status."
 msgstr ""
 
-#: src/Settings.php:143
+#: src/Settings.php:144
 msgid "PDF file name"
 msgstr ""
 
-#: src/Settings.php:147
+#: src/Settings.php:148
 msgid "Placeholders are allowed, e.g. {coupon_code}, {order_number}."
 msgstr ""
 
-#: src/Settings.php:150
+#: src/Settings.php:151
 msgid "Date format"
 msgstr ""
 
-#: src/Settings.php:154
+#: src/Settings.php:155
 msgid "PHP date format used in PDFs and emails. Leave empty to use the WordPress date format."
 msgstr ""
 
-#: src/Settings.php:164
+#: src/Settings.php:165
 msgid "Anonymise recipient data after (days)"
 msgstr ""
 
-#: src/Settings.php:169
+#: src/Settings.php:170
 msgid "Recipient name, email, message and custom fields are erased this many days after a voucher has expired or been fully redeemed. 0 = keep."
 msgstr ""
 
-#: src/Settings.php:172
+#: src/Settings.php:173
 msgid "Public ticket status"
 msgstr ""
 
-#: src/Settings.php:176
+#: src/Settings.php:177
 msgid "When a ticket QR code is opened by someone without scanning rights, show whether the ticket is valid (no personal data)."
 msgstr ""
 
-#: src/Settings.php:179
+#: src/Settings.php:180
 msgid "Subscription renewals"
 msgstr ""
 
-#: src/Settings.php:183
+#: src/Settings.php:184
 msgid "Issue new vouchers for WooCommerce Subscriptions renewal orders."
 msgstr ""
 
-#: src/Settings.php:186
+#: src/Settings.php:187
 msgid "Delete data on uninstall"
 msgstr ""
 
-#: src/Settings.php:190
+#: src/Settings.php:191
 msgid "Remove voucher tables, templates and settings when the plugin is deleted. WooCommerce coupons are kept."
 msgstr ""
 
-#: src/Settings.php:202
+#: src/Settings.php:203
 msgid "Voucher issuing"
 msgstr ""
 
-#: src/Settings.php:204
+#: src/Settings.php:205
 msgid "Generate vouchers when order is"
 msgstr ""
 
-#: src/Settings.php:210
+#: src/Settings.php:211
 msgid "Vouchers are created once per purchased item the first time an order reaches one of these statuses. Leave empty to issue manually only."
 msgstr ""
 
-#: src/Settings.php:220
+#: src/Settings.php:221
 msgid "Default validity (days)"
 msgstr ""
 
-#: src/Settings.php:225
+#: src/Settings.php:226
 msgid "Used when a product does not define its own expiry. 0 = never expires."
 msgstr ""
 
-#: src/Settings.php:229
+#: src/Settings.php:230
 msgid "Coupon codes"
 msgstr ""
 
-#: src/Settings.php:231
+#: src/Settings.php:232
 msgid "Prefix"
 msgstr ""
 
-#: src/Settings.php:237
+#: src/Settings.php:238
 msgid "Suffix"
 msgstr ""
 
-#: src/Settings.php:250
+#: src/Settings.php:251
 msgid "Characters"
 msgstr ""
 
-#: src/Settings.php:255
+#: src/Settings.php:256
 msgid "Letters and digits, uppercase (no ambiguous characters)"
 msgstr ""
 
-#: src/Settings.php:256
+#: src/Settings.php:257
 msgid "Letters only, uppercase"
 msgstr ""
 
-#: src/Settings.php:257
+#: src/Settings.php:258
 msgid "Digits only"
 msgstr ""
 
-#: src/Settings.php:258
+#: src/Settings.php:259
 msgid "Letters and digits, mixed case"
 msgstr ""
 
-#: src/Settings.php:262
+#: src/Settings.php:263
 msgid "Separator"
 msgstr ""
 
-#: src/Settings.php:269
+#: src/Settings.php:270
 msgid "Include order number"
 msgstr ""
 
-#: src/Settings.php:273
+#: src/Settings.php:274
 msgid "Add the order number to the code, e.g. GIFT-1042-7KQ2M9XA."
 msgstr ""
 
-#: src/Settings.php:277
+#: src/Settings.php:278
 msgid "Redemption"
 msgstr ""
 
-#: src/Settings.php:279
+#: src/Settings.php:280
 msgid "Restore balance on cancellation"
 msgstr ""
 
-#: src/Settings.php:283
+#: src/Settings.php:284
 msgid "Give the redeemed amount back when an order that used a voucher is cancelled, refunded or failed."
 msgstr ""
 
-#: src/Settings.php:286
+#: src/Settings.php:287
 msgid "Void vouchers on refund"
 msgstr ""
 
-#: src/Settings.php:290
+#: src/Settings.php:291
 msgid "Disable vouchers when the order they were bought with is fully refunded or cancelled."
 msgstr ""
 
@@ -2103,7 +2103,7 @@ msgstr ""
 msgid "Cancelled"
 msgstr ""
 
-#: src/Tickets.php:93 src/Voucher.php:56 src/VoucherRepository.php:266
+#: src/Tickets.php:93 src/Voucher.php:56 src/VoucherRepository.php:275
 msgid "Expired"
 msgstr ""
 
@@ -2119,7 +2119,7 @@ msgstr ""
 msgid "Not yet delivered"
 msgstr ""
 
-#: src/Tickets.php:131 src/Tickets.php:186 src/Tickets.php:211
+#: src/Tickets.php:131 src/Tickets.php:188 src/Tickets.php:213
 msgid "No voucher or ticket found for this code."
 msgstr ""
 
@@ -2129,27 +2129,27 @@ msgstr ""
 msgid "%1$d of %2$d admissions used"
 msgstr ""
 
-#: src/Tickets.php:197 src/VoucherRepository.php:263
+#: src/Tickets.php:199 src/VoucherRepository.php:272
 msgid "Check-in reverted"
 msgstr ""
 
-#: src/Tickets.php:197 src/Tickets.php:258 src/VoucherRepository.php:262
+#: src/Tickets.php:199 src/Tickets.php:269 src/VoucherRepository.php:271
 msgid "Checked in"
 msgstr ""
 
-#: src/Tickets.php:200 src/Tickets.php:258
+#: src/Tickets.php:202 src/Tickets.php:269
 msgid "Check-in not possible."
 msgstr ""
 
-#: src/Tickets.php:218
+#: src/Tickets.php:220
 msgid "Redeemed in store"
 msgstr ""
 
-#: src/Tickets.php:222
+#: src/Tickets.php:224
 msgid "Please enter an amount."
 msgstr ""
 
-#: src/Tickets.php:242 src/Voucher.php:55 src/VoucherRepository.php:259
+#: src/Tickets.php:253 src/Voucher.php:55 src/VoucherRepository.php:268
 msgid "Redeemed"
 msgstr ""
 
@@ -2161,39 +2161,39 @@ msgstr ""
 msgid "Scheduled"
 msgstr ""
 
-#: src/VoucherRepository.php:255
+#: src/VoucherRepository.php:264
 msgid "Delivery scheduled"
 msgstr ""
 
-#: src/VoucherRepository.php:257
+#: src/VoucherRepository.php:266
 msgid "Delivery failed"
 msgstr ""
 
-#: src/VoucherRepository.php:258
+#: src/VoucherRepository.php:267
 msgid "Email resent"
 msgstr ""
 
-#: src/VoucherRepository.php:260
+#: src/VoucherRepository.php:269
 msgid "Balance restored"
 msgstr ""
 
-#: src/VoucherRepository.php:261
+#: src/VoucherRepository.php:270
 msgid "Balance adjusted"
 msgstr ""
 
-#: src/VoucherRepository.php:264
+#: src/VoucherRepository.php:273
 msgid "Voided"
 msgstr ""
 
-#: src/VoucherRepository.php:265
+#: src/VoucherRepository.php:274
 msgid "Reactivated"
 msgstr ""
 
-#: src/VoucherRepository.php:267
+#: src/VoucherRepository.php:276
 msgid "Edited"
 msgstr ""
 
-#: src/VoucherRepository.php:268
+#: src/VoucherRepository.php:277
 msgid "Downloaded"
 msgstr ""
 

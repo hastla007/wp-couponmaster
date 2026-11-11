@@ -61,13 +61,10 @@ final class Preview {
 	public function product_preview(): void {
 		check_ajax_referer( 'vcap_preview', 'nonce' );
 
-		// Basic abuse protection: max 20 previews / 10 min per visitor IP.
-		$ip_key = 'vcap_pv_' . md5( (string) \WC_Geolocation::get_ip_address() );
-		$count  = (int) get_transient( $ip_key );
-		if ( $count > 20 ) {
+		// Abuse protection (PDF rendering is expensive): 20 previews per visitor, 300 site-wide per 10 minutes.
+		if ( Plugin::rate_limited( 'preview', 20, 300, 10 * MINUTE_IN_SECONDS ) ) {
 			wp_die( esc_html__( 'Too many preview requests. Please try again later.', 'voucher-captain' ), 429 );
 		}
-		set_transient( $ip_key, $count + 1, 10 * MINUTE_IN_SECONDS );
 
 		$product_id = absint( $_REQUEST['variation_id'] ?? 0 ) ?: absint( $_REQUEST['product_id'] ?? 0 );
 		$product    = wc_get_product( $product_id );

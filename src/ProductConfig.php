@@ -63,11 +63,13 @@ final class ProductConfig {
 		if ( ! $product ) {
 			return false;
 		}
-		$enabled = 'yes' === $product->get_meta( '_vcap_enabled' );
-		if ( $product->is_type( 'variation' ) && ! $enabled ) {
-			// Variations inherit when the parent is a voucher and the variation has no explicit opt-out.
+		if ( $product->is_type( 'variation' ) ) {
+			// The parent product decides; a variation can only opt out. (The variation checkbox is submitted for
+			// every variable product, so its own "yes" must never enable vouchers on a non-voucher product.)
 			$parent  = wc_get_product( $product->get_parent_id() );
 			$enabled = $parent && 'yes' === $parent->get_meta( '_vcap_enabled' ) && 'no' !== $product->get_meta( '_vcap_enabled' );
+		} else {
+			$enabled = 'yes' === $product->get_meta( '_vcap_enabled' );
 		}
 		return (bool) apply_filters( 'vcap_is_voucher_product', $enabled, $product );
 	}

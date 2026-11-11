@@ -9,7 +9,7 @@ defined( 'ABSPATH' ) || exit;
 final class CustomAmount {
 	public function register(): void {
 		add_action( 'vcap_before_fields', array( $this, 'render' ) );
-		add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'validate' ), 5, 4 );
+		add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'validate' ), 5, 6 );
 		add_filter( 'woocommerce_add_cart_item_data', array( $this, 'cart_item_data' ), 5, 3 );
 		add_filter( 'woocommerce_get_cart_item_from_session', array( $this, 'from_session' ), 10, 2 );
 		add_action( 'woocommerce_before_calculate_totals', array( $this, 'apply_prices' ), 20 );
@@ -64,32 +64,62 @@ final class CustomAmount {
 		<?php
 	}
 
-	public function validate( $passed, $product_id, $quantity, $variation_id = 0 ) {
+	/**
+	 * Requested amount: from existing cart item data ("order again", programmatic adds) or the request.
+	 */
+	private function requested_amount( $cart_item_data ): string {
+		if ( is_array( $cart_item_data ) && isset( $cart_item_data['vcap_amount'] ) ) {
+			return (string) wc_format_decimal( $cart_item_data['vcap_amount'] );
+		}
+		return isset( $_REQUEST['vcap_amount'] ) && is_scalar( $_REQUEST['vcap_amount'] ) ? (string) wc_format_decimal( wp_unslash( $_REQUEST['vcap_amount'] ) ) : ''; // phpcs:ignore
+	}
+
+	/**
+	 * @return string|null error message, null when the amount is acceptable
+	 */
+	private function amount_error( \WC_Product $product, string $raw ): ?string {
+		$config = ProductConfig::get( $product );
+		$amount = (float) $raw;
+		$min    = (float) $config['custom_min'];
+		$max    = (float) $config['custom_max'];
+		if ( '' === $raw || ! is_numeric( $raw ) || $amount <= 0 ) {
+			return __( 'Please enter a voucher amount.', 'voucher-captain' );
+		}
+		if ( ( $min > 0 && $amount < $min ) || ( $max > 0 && $amount > $max ) ) {
+			return __( 'The voucher amount is outside the allowed range.', 'voucher-captain' );
+		}
+		return null;
+	}
+
+	public function validate( $passed, $product_id, $quantity, $variation_id = 0, $variations = array(), $cart_item_data = array() ) {
 		$product = wc_get_product( $variation_id ?: $product_id );
 		if ( ! $product || ! $this->is_custom( $product ) ) {
 			return $passed;
 		}
-		$config = ProductConfig::get( $product );
-		$raw    = isset( $_REQUEST['vcap_amount'] ) ? wc_format_decimal( wp_unslash( $_REQUEST['vcap_amount'] ) ) : ''; // phpcs:ignore
-		$amount = (float) $raw;
-		$min    = (float) $config['custom_min'];
-		$max    = (float) $config['custom_max'];
-		if ( '' === $raw || $amount <= 0 ) {
-			wc_add_notice( __( 'Please enter a voucher amount.', 'voucher-captain' ), 'error' );
-			return false;
-		}
-		if ( ( $min > 0 && $amount < $min ) || ( $max > 0 && $amount > $max ) ) {
-			wc_add_notice( __( 'The voucher amount is outside the allowed range.', 'voucher-captain' ), 'error' );
+		$error = $this->amount_error( $product, $this->requested_amount( $cart_item_data ) );
+		if ( $error ) {
+			wc_add_notice( $error, 'error' );
 			return false;
 		}
 		return $passed;
 	}
 
+	/**
+	 * Enforced here as well, because the Store API and direct WC()->cart->add_to_cart() calls skip
+	 * woocommerce_add_to_cart_validation. WooCommerce turns the exception into an error notice / API error.
+	 */
 	public function cart_item_data( $data, $product_id, $variation_id ) {
 		$product = wc_get_product( $variation_id ?: $product_id );
-		if ( $product && $this->is_custom( $product ) && isset( $_REQUEST['vcap_amount'] ) ) { // phpcs:ignore
-			$data['vcap_amount'] = (float) wc_format_decimal( wp_unslash( $_REQUEST['vcap_amount'] ), wc_get_price_decimals() ); // phpcs:ignore
+		if ( ! $product || ! $this->is_custom( $product ) ) {
+			unset( $data['vcap_amount'] );
+			return $data;
 		}
+		$raw   = $this->requested_amount( $data );
+		$error = $this->amount_error( $product, $raw );
+		if ( $error ) {
+			throw new \Exception( esc_html( $error ) );
+		}
+		$data['vcap_amount'] = round( (float) $raw, wc_get_price_decimals() );
 		return $data;
 	}
 
@@ -106,7 +136,7 @@ final class CustomAmount {
 		}
 		foreach ( $cart->get_cart() as $item ) {
 			if ( isset( $item['vcap_amount'] ) && $item['data'] instanceof \WC_Product ) {
-				$item['data']->set_price( (float) apply_filters( 'vcap_custom_amount_price', $item['vcap_amount'], $item ) );
+				$item['data']->set_price( max( 0.0, (float) apply_filters( 'vcap_custom_amount_price', $item['vcap_amount'], $item ) ) );
 			}
 		}
 	}
