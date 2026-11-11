@@ -61,15 +61,15 @@ final class CampaignAdmin {
 				<div class="notice <?php echo $report['error'] ? 'notice-error' : 'notice-success'; ?>"><p>
 					<?php
 					echo esc_html(
-						$report['error'] ? $report['error'] : sprintf(
+						$report['error'] ? $report['error'] : ( ! empty( $report['message'] ) ? $report['message'] : sprintf(
 							/* translators: 1: number of codes, 2: campaign or batch name */
 							__( '%1$d codes created in "%2$s".', 'voucher-captain' ),
 							$report['count'],
 							$report['name']
-						)
+						) )
 					);
 					?>
-					<?php if ( ! $report['error'] ) : ?>
+					<?php if ( ! $report['error'] && empty( $report['message'] ) ) : ?>
 						<a class="button button-small" href="<?php echo esc_url( $this->export_url( $report['target'], $report['name'] ) ); ?>"><?php esc_html_e( 'Download CSV', 'voucher-captain' ); ?></a>
 					<?php endif; ?>
 				</p></div>
@@ -122,18 +122,27 @@ final class CampaignAdmin {
 
 			<h2><?php esc_html_e( 'Campaigns', 'voucher-captain' ); ?></h2>
 			<table class="widefat striped">
-				<thead><tr><th><?php esc_html_e( 'Campaign', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'Coupons', 'voucher-captain' ); ?></th><th></th></tr></thead>
+				<thead><tr><th><?php esc_html_e( 'Campaign', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'Coupons', 'voucher-captain' ); ?></th><?php do_action( 'vcap_campaigns_table_header' ); ?><th></th></tr></thead>
 				<tbody>
 				<?php
 				$campaigns = $this->campaigns->campaigns();
 				if ( ! $campaigns ) {
-					echo '<tr><td colspan="3">' . esc_html__( 'No campaigns yet.', 'voucher-captain' ) . '</td></tr>';
+					echo '<tr><td colspan="' . ( has_action( 'vcap_campaigns_table_cell' ) ? 4 : 3 ) . '">' . esc_html__( 'No campaigns yet.', 'voucher-captain' ) . '</td></tr>';
 				}
 				foreach ( $campaigns as $c ) :
 					?>
 					<tr>
 						<td><strong><?php echo esc_html( $c['campaign'] ); ?></strong></td>
 						<td><?php echo esc_html( (string) $c['total'] ); ?></td>
+						<?php
+						/**
+						 * Extra cells of the campaign table (e.g. the partner of WP Affiliate Captain).
+						 *
+						 * @since 1.2.0
+						 * @param string $campaign Campaign name.
+						 */
+						do_action( 'vcap_campaigns_table_cell', $c['campaign'] );
+						?>
 						<td><a class="button button-small" href="<?php echo esc_url( $this->export_url( 'coupons', $c['campaign'] ) ); ?>"><?php esc_html_e( 'Download CSV', 'voucher-captain' ); ?></a></td>
 					</tr>
 				<?php endforeach; ?>

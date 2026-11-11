@@ -56,7 +56,21 @@ Other subscription plugins: return `false` from `vcap_should_issue_for_order` fo
 | Custom amount / price plugins | `vcap_custom_amount_price( float $price, array $cart_item )` sets the cart price of a "customer chooses amount" voucher; `vcap_voucher_amount( float $amount, WC_Order_Item_Product $item, array $config, WC_Order $order )` decides the face value issued. The paid line total is always in the line snapshot. |
 | Add-on plugins that add their own price (gift wrap etc.) | Face value defaults to the paid line price ÷ vouchers. If add-ons must not increase the face value, set the voucher value source to *Fixed* or filter `vcap_voucher_amount`. |
 
-## 5. Rules for every adapter
+## 5. WP Affiliate Captain (partner programme)
+
+Built in: `src/Compat/AffiliateCaptain.php`, active only when WP Affiliate Captain reports integration contract 1.x (`wpac_contract_version()`).
+
+| Contract | How |
+|---|---|
+| Partner per code campaign | Vouchers → Generate codes → Campaigns → *Partner (WP Affiliate Captain)*: enter the partner code. It is checked with `wpac_resolve_partner_code()` and stored in the option `vcap_affiliate_campaigns`. |
+| Coupon → partner | The adapter answers Affiliate Captain's `wpac_coupon_affiliate` filter (priority 20) for coupons of an assigned campaign. A coupon linked to a partner directly in Affiliate Captain wins (priority 10). Paused or ended partners are resolved by Affiliate Captain and receive nothing. |
+| Orders, refunds | Recorded by Affiliate Captain's own WooCommerce integration – Voucher Captain sends nothing itself, so there is no double booking. |
+| Vouchers and gift cards | Purchased vouchers (`_vcap_voucher`) are means of payment and never map to a partner. By default the partner who brought the buyer of a voucher earns commission on the voucher sale (the redeeming order is reduced by the voucher amount, so nothing is paid twice). `add_filter( 'vcap_affiliate_commission_on_voucher_sales', '__return_false' )` pays nothing on voucher products instead. |
+| Status | Listed on Affiliate Captain's integration page (`wpac_registered_integrations`). |
+
+Test: `tests/affiliate-captain-integration.php` (runs with and without Affiliate Captain; without it the two contract functions are stubbed).
+
+## 6. Rules for every adapter
 
 - Load only when the other plugin is active (`class_exists` / `function_exists` on `plugins_loaded`).
 - Use only the other plugin's public API and documented hooks; keep the adapter in one class.
