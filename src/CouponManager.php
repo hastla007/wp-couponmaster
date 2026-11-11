@@ -191,7 +191,7 @@ final class CouponManager {
 		}
 
 		if ( $fresh->coupon_id ) {
-			$coupon = new \\WC_Coupon( $fresh->coupon_id );
+			$coupon = new \WC_Coupon( $fresh->coupon_id );
 			if ( $coupon->get_id() ) {
 				$coupon->set_amount( $fresh->balance );
 				$coupon->save();
