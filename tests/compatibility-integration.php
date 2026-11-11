@@ -97,6 +97,8 @@ list( $block_voucher, $block_coupon ) = vcap_compat_voucher( 40 );
 $block_order = vcap_compat_order( $block_coupon->get_code(), 10 );
 vcap()->coupons->reserve_store_api_order( $block_order );
 vcap_compat_assert( 30.0 === (float) vcap()->vouchers->get( $block_voucher->id )->balance, 'Store API checkout reserves an eligible voucher balance' );
+vcap()->coupons->order_status_changed( $block_order->get_id(), 'pending', 'processing', $block_order );
+vcap_compat_assert( 30.0 === (float) vcap()->vouchers->get( $block_voucher->id )->balance, 'paid Checkout Block order commits the stored reservation without deducting twice' );
 
 // Provider compatibility contracts: verify conversion/filter hooks and renewal metadata stripping without requiring paid extensions.
 $currency = new VCAP\Compat\MultiCurrency();
