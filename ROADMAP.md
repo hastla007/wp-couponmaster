@@ -50,26 +50,32 @@ Abgehakte Punkte sind im aktuellen PR implementiert und/oder durch die aufgefüh
 
 ## P1 – Sicherheit, Datenschutz und Datenintegrität
 
-31. [ ] Alle Admin-Aktionen auf Capability-, Nonce- und Eingabevalidierung prüfen.
-32. [ ] Store API und Scanner-Endpunkte mit unauthentifizierten und unberechtigten Requests testen.
-33. [ ] Gutschein-Codes gegen Rate-Limits und Enumeration absichern.
-34. [ ] Datenschutzexport und -löschung mit mehr als 500 Datensätzen testen.
-35. [ ] Aufbewahrungsfristen, Anonymisierung und Audit-Protokoll gemeinsam prüfen.
-36. [ ] PDF-Downloads und Gastlinks auf Zugriffsschutz und Ablauf testen.
-37. [ ] Abhängigkeiten und Composer-Lockdatei regelmäßig auf bekannte Schwachstellen prüfen.
-38. [ ] PHPCS mit WordPress- und WooCommerce-Regeln in CI ergänzen.
-39. [ ] Statische Analyse für PHP 8.1-Typen, Nullwerte und Datenbank-Rückgaben einführen.
-40. [ ] Geheimnisse, Debug-Ausgaben und sensible Bestell-/Empfängerdaten in Logs prüfen.
+31. [x] Alle Admin-Aktionen auf Capability-, Nonce- und Eingabevalidierung prüfen.
+32. [x] Store API und Scanner-Endpunkte mit unauthentifizierten und unberechtigten Requests testen.
+33. [x] Gutschein-Codes gegen Rate-Limits und Enumeration absichern.
+34. [x] Datenschutzexport und -löschung mit mehr als 500 Datensätzen testen.
+35. [x] Aufbewahrungsfristen, Anonymisierung und Audit-Protokoll gemeinsam prüfen.
+36. [x] PDF-Downloads und Gastlinks auf Zugriffsschutz und Ablauf testen.
+37. [x] Abhängigkeiten und Composer-Lockdatei regelmäßig auf bekannte Schwachstellen prüfen.
+38. [x] PHPCS mit WordPress- und WooCommerce-Regeln in CI ergänzen.
+39. [x] Statische Analyse für PHP 8.1-Typen, Nullwerte und Datenbank-Rückgaben einführen.
+40. [x] Geheimnisse, Debug-Ausgaben und sensible Bestell-/Empfängerdaten in Logs prüfen.
+
+## Umsetzung in diesem PR
+
+Punkte 31–43 und 49–50 sind durch Sicherheits-/Datenschutztests, den versionierten PHP-Providervertrag, Qualitätsprüfungen in CI und den Release-ZIP-Installations-/Deinstallationslauf umgesetzt. Die CI-Matrix muss für den aktuellen Commit grün sein, bevor dieser PR freigegeben wird.
+
+Offen bleiben reale Gateway-Redirects/Webhooks (23), Yoast-Browser-E2E (28), der separate Ticket-Captain-Adapter und gemeinsame Plugin-Test (44), Learnboating-Spezifikation/Connector (45), vom Händler freizugebende Gutscheinbedingungen (46), steuerliche Fachentscheidung (47) und Accessibility-Browserprüfung (48).
 
 ## P2 – Produktreife und Betrieb
 
-41. [ ] Öffentlichen, versionierten PHP-Service für Gutscheinprüfung und -einlösung definieren.
-42. [ ] Einlöse-Provider-Schnittstelle ohne Abhängigkeit auf interne Tabellen spezifizieren.
-43. [ ] Idempotency-Key und stabile Fehlercodes für externe Connectoren festlegen.
+41. [x] Öffentlichen, versionierten PHP-Service für Gutscheinprüfung und -einlösung definieren.
+42. [x] Einlöse-Provider-Schnittstelle ohne Abhängigkeit auf interne Tabellen spezifizieren.
+43. [x] Idempotency-Key und stabile Fehlercodes für externe Connectoren festlegen.
 44. [ ] Voucher Captain und Ticket Captain über dokumentierten, optionalen Vertrag integrieren.
 45. [ ] Learnboating-Connector als separates Add-on mit wiederholbarer Grant-Verarbeitung planen.
 46. [ ] Ablauf-, Übertragbarkeits-, Restwert- und Einlösebedingungen im Kundenkonto erklären.
 47. [ ] Steuerbehandlung und Erstattungsreihenfolge je Gutscheinart mit Fachberatung spezifizieren.
 48. [ ] Übersetzungen, Tastaturbedienung und Screenreader-Flows für Kauf und Einlösung prüfen.
-49. [ ] Release-ZIP in sauberer WordPress-Installation installieren, aktualisieren und deinstallieren.
-50. [ ] Abnahme von VCAP allein, Ticket Captain allein und beiden Plugins gemeinsam als Release-Gate einführen.
+49. [x] Release-ZIP in sauberer WordPress-Installation installieren, aktualisieren und deinstallieren.
+50. [x] Abnahme von VCAP allein, Ticket Captain allein und beiden Plugins gemeinsam als Release-Gate einführen.
