@@ -48,6 +48,7 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 - [x] Datenschutzauskunft, Löschung und konfigurierbare Aufbewahrungsfristen für Käufer- und Empfängerdaten abschließen. — *Nachweis: Exporter/Eraser inkl. Einlösungen, Aufbewahrungsfrist; tests/security-integration.php*
 
 ## P1 – Steuer, Rabattregeln und Gutscheincodes
+- [x] Rabattcodes und Gutscheine/Geschenkkarten dürfen Gutscheinprodukte standardmäßig nicht verbilligen bzw. bezahlen (Entscheidung 11.11.2026, branchenüblich); beides pro Shop freigebbar — *Nachweis: Einstellungen „Rabattcodes auf Gutscheine“ und „Gutscheine mit Gutscheinen bezahlen“, andere Produkte im Warenkorb bleiben rabattierbar; tests/purchase-rules-integration.php*
 
 - [ ] Einzweck- und Mehrzweckgutschein als konfigurierbare Steuerbehandlung modellieren; steuerliche Umsetzung und Produkttexte mit Steuerberatung freigeben lassen.
 - [ ] Steuerfälle für OSS, unterschiedliche Leistungsorte/-steuersätze, Kleinunternehmer und Preise mit gleichem Bruttopreis spezifizieren und verifizieren.

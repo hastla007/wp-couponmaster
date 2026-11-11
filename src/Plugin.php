@@ -55,6 +55,7 @@ final class Plugin {
 		( new Emails() )->register();
 		( new Privacy( $this->vouchers ) )->register();
 		( new CouponLink( $this->settings ) )->register();
+		( new VoucherPurchaseRules( $this->settings ) )->register();
 
 		$this->settings->register();
 		$this->coupons->register();

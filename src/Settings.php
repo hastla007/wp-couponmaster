@@ -34,6 +34,8 @@ final class Settings {
 		'vcap_pdf_filename'          => 'voucher-{coupon_code}',
 		'vcap_redemption_ttl'          => 15,
 		'vcap_coupon_link'             => 'no',
+		'vcap_discounts_on_vouchers'   => 'no',
+		'vcap_vouchers_buy_vouchers'   => 'no',
 		'vcap_coupon_link_param'       => 'gutschein',
 		'vcap_redemption_max_failures' => 10,
 	);
@@ -339,6 +341,20 @@ final class Settings {
 						'type'    => 'checkbox',
 						'default' => 'yes',
 						'desc'    => __( 'Disable vouchers when the order they were bought with is fully refunded or cancelled.', 'voucher-captain' ),
+					),
+					array(
+						'title'   => __( 'Discount codes on vouchers', 'voucher-captain' ),
+						'id'      => 'vcap_discounts_on_vouchers',
+						'type'    => 'checkbox',
+						'default' => 'no',
+						'desc'    => __( 'Allow discount codes to reduce the price of voucher products. Vouchers keep their full face value, so a 10 % code on a 50 € voucher costs the shop 5 €.', 'voucher-captain' ),
+					),
+					array(
+						'title'   => __( 'Pay vouchers with vouchers', 'voucher-captain' ),
+						'id'      => 'vcap_vouchers_buy_vouchers',
+						'type'    => 'checkbox',
+						'default' => 'no',
+						'desc'    => __( 'Allow vouchers and gift cards to pay for voucher products (off by default to prevent exchanging or extending vouchers).', 'voucher-captain' ),
 					),
 					array(
 						'title'   => __( 'Voucher links', 'voucher-captain' ),

@@ -12,6 +12,9 @@ function vcap_zero_assert( bool $condition, string $message ): void {
 	echo "PASS: {$message}\n";
 }
 
+// This shop allows paying vouchers with gift cards (off by default, see tests/purchase-rules-integration.php).
+update_option( 'vcap_vouchers_buy_vouchers', 'yes' );
+
 // A gift card with 50 balance pays for everything.
 $card_coupon = new WC_Coupon();
 $card_coupon->set_code( 'vcap-zero-' . strtolower( wp_generate_password( 10, false, false ) ) );
@@ -58,4 +61,5 @@ $bought = vcap()->vouchers->for_order( $order->get_id() )[0];
 vcap_zero_assert( 30.0 === (float) $bought->initial_amount, 'the purchased voucher keeps its full value of 30' );
 vcap_zero_assert( 20.0 === (float) vcap()->vouchers->get( $card->id )->balance, 'the gift card balance is charged with 30' );
 
+delete_option( 'vcap_vouchers_buy_vouchers' );
 echo "Voucher Captain zero-total checks passed.\n";

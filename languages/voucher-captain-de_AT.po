@@ -2673,3 +2673,21 @@ msgstr "Keine Ablauf-Erinnerung"
 
 msgid "Suppressed by admin"
 msgstr "Vom Admin unterdrückt"
+
+msgid "Vouchers and gift cards cannot be used to buy vouchers."
+msgstr "Gutscheine und Geschenkkarten können nicht zum Kauf von Gutscheinen verwendet werden."
+
+msgid "Discount codes cannot be used to buy vouchers."
+msgstr "Rabattcodes können nicht für den Kauf von Gutscheinen verwendet werden."
+
+msgid "Discount codes on vouchers"
+msgstr "Rabattcodes auf Gutscheine"
+
+msgid "Allow discount codes to reduce the price of voucher products. Vouchers keep their full face value, so a 10 % code on a 50 € voucher costs the shop 5 €."
+msgstr "Rabattcodes dürfen den Preis von Gutscheinprodukten senken. Gutscheine behalten ihren vollen Nennwert – ein 10-%-Code auf einen 50-€-Gutschein kostet den Shop also 5 €."
+
+msgid "Pay vouchers with vouchers"
+msgstr "Gutscheine mit Gutscheinen bezahlen"
+
+msgid "Allow vouchers and gift cards to pay for voucher products (off by default to prevent exchanging or extending vouchers)."
+msgstr "Gutscheine und Geschenkkarten dürfen Gutscheinprodukte bezahlen (standardmäßig aus, um Umtausch oder Verlängerung von Gutscheinen zu verhindern)."
