@@ -82,11 +82,20 @@ final class CustomAmount {
 		$amount = (float) $raw;
 		$min    = (float) $config['custom_min'];
 		$max    = (float) $config['custom_max'];
+		$step   = (float) $config['custom_step'];
 		if ( '' === $raw || ! is_numeric( $raw ) || $amount <= 0 ) {
 			return __( 'Please enter a voucher amount.', 'voucher-captain' );
 		}
 		if ( ( $min > 0 && $amount < $min ) || ( $max > 0 && $amount > $max ) ) {
 			return __( 'The voucher amount is outside the allowed range.', 'voucher-captain' );
+		}
+		if ( $step > 0 ) {
+			// Match the HTML number input: step increments are anchored at min, or at 0.01 when min is unset.
+			$step_base = $min > 0 ? $min : 0.01;
+			$steps     = ( $amount - $step_base ) / $step;
+			if ( abs( $steps - round( $steps ) ) > 1e-8 ) {
+				return __( 'Please enter an amount matching the allowed increment.', 'voucher-captain' );
+			}
 		}
 		return null;
 	}
