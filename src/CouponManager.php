@@ -462,8 +462,9 @@ final class CouponManager {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				return false;
 			}
-			$balance          = max( 0.0, round( $balance, wc_get_price_decimals() ) );
-			$fresh->balance   = $balance;
+			$balance           = max( 0.0, round( $balance, wc_get_price_decimals() ) );
+			$fresh->usage_mode = $voucher->usage_mode;
+			$fresh->balance    = $balance;
 			if ( $fresh->is_multi_use() ) {
 				if ( $balance <= 0 && Voucher::STATUS_ACTIVE === $fresh->status ) {
 					$fresh->status = Voucher::STATUS_REDEEMED;
