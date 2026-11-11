@@ -80,6 +80,9 @@ $order = vcap_pc_order( $type, 3 );
 $applied = Checkout::apply( $order['order_id'], strtoupper( $card->code ) );
 vcap_pc_assert( ! is_wp_error( $applied ) && 5000 === $applied['applied_minor'] && 1000 === $applied['total_minor'], 'a gift card pays 50 of a 60 ticket order' );
 vcap_pc_assert( 0.0 === vcap()->vouchers->get( $card->id )->balance && 'reserved' === vcap_pc_redemption( $order['order_id'] )['state'], 'the gift card balance is reserved before payment' );
+$held_until = strtotime( vcap_pc_redemption( $order['order_id'] )['expires_at'] . ' UTC' );
+$manual     = (int) PassCaptain\Settings::get( 'manual_hold_hours' ) * HOUR_IN_SECONDS;
+vcap_pc_assert( $held_until > time() + max( $manual, 15 * MINUTE_IN_SECONDS ), 'the reservation outlives Pass Captain\'s payment window (no release before a late bank transfer)' );
 
 Orders::confirm_manual_payment( $order['order_id'] );
 Checkout::commit( $order['order_id'] );
@@ -130,4 +133,26 @@ $shop = vcap_pc_voucher( 'balance', 20 );
 add_filter( 'vcap_redemption_channel_allowed', $only_shop = static fn( $allowed, $voucher, $channel ) => $voucher->id === $shop->id ? 'shop' === $channel : $allowed, 10, 3 );
 vcap_pc_assert( is_wp_error( Checkout::apply( vcap_pc_order( $type, 1 )['order_id'], $shop->code ) ), 'vouchers without the Pass Captain channel are refused' );
 remove_filter( 'vcap_redemption_channel_allowed', $only_shop, 10 );
+
+// Late payment after Pass Captain expired the order and released the voucher (Pass Captain with the commit fix).
+if ( method_exists( Checkout::class, 'handle_job' ) ) {
+	global $wpdb;
+	$late_card  = vcap_pc_voucher( 'balance', 15 ); // Less than the 20 € ticket: the order stays unpaid until the transfer.
+	$late_order = vcap_pc_order( $type, 1 );
+	Checkout::apply( $late_order['order_id'], $late_card->code );
+	$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}wpcap_reservations SET status='expired', expires_at=%s WHERE order_id=%d", gmdate( 'Y-m-d H:i:s', time() - 60 ), $late_order['order_id'] ) );
+	$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}wpcap_orders SET status='expired', payment_status='expired' WHERE order_id=%d", $late_order['order_id'] ) );
+	Checkout::release( $late_order['order_id'] );
+	vcap_pc_assert( 'pending' === Orders::get( $late_order['order_id'] )->payment_status || 'expired' === Orders::get( $late_order['order_id'] )->payment_status, 'the partly voucher-paid ticket order waits for the transfer' );
+	vcap_pc_assert( 15.0 === vcap()->vouchers->get( $late_card->id )->balance, 'an expired ticket order gives the gift card balance back' );
+	$paid = Orders::confirm_external_payment( $late_order['order_id'], 'late-transfer' );
+	vcap_pc_assert( true === $paid && 'committed' === vcap_pc_redemption( $late_order['order_id'] )['state'] && 0.0 === vcap()->vouchers->get( $late_card->id )->balance, 'a late payment reserves and charges the gift card again (no free discount)' );
+}
+
+// Minor units follow ISO 4217 (as Pass Captain does), not the shop's price display setting.
+$decimals = static fn() => 0;
+add_filter( 'wc_get_price_decimals', $decimals );
+vcap_pc_assert( 2 === VCAP\Compat\PassCaptainProvider::decimals( get_woocommerce_currency() ) && 0 === VCAP\Compat\PassCaptainProvider::decimals( 'JPY' ), 'minor units use ISO 4217 decimals, whatever the shop displays' );
+remove_filter( 'wc_get_price_decimals', $decimals );
+
 echo "Voucher Captain + Pass Captain checks passed.\n";

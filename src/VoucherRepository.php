@@ -46,6 +46,19 @@ final class VoucherRepository {
 		return $ok;
 	}
 
+	/** Change only the status column (never overwrites a balance changed concurrently by a transaction). */
+	public function update_status( int $id, string $status ): bool {
+		global $wpdb;
+		$ok = false !== $wpdb->update( $this->table, array( 'status' => $status, 'updated_at' => $this->now() ), array( 'id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( $ok ) {
+			$fresh = $this->get( $id );
+			if ( $fresh ) {
+				do_action( 'vcap_voucher_updated', $fresh );
+			}
+		}
+		return $ok;
+	}
+
 	public function delete( int $id ): void {
 		global $wpdb;
 		$wpdb->delete( $this->table, array( 'id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery

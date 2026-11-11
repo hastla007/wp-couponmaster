@@ -130,8 +130,60 @@ $first = $service->refund( $rkey, 10, 'conn-refund-0001' );
 vcap_conn_assert( ! is_wp_error( $first ) && 10.0 === $first['restored'] && 30.0 === vcap()->vouchers->get( $card->id )->balance, 'a partial refund returns the amount to the gift card balance' );
 $again = $service->refund( $rkey, 10, 'conn-refund-0001' );
 vcap_conn_assert( ! is_wp_error( $again ) && 0.0 === $again['restored'] && 30.0 === vcap()->vouchers->get( $card->id )->balance, 'repeating the same refund key changes nothing' );
+$retry = $service->refund( $rkey, 7.5, 'conn-refund-0001' );
+vcap_conn_assert( ! is_wp_error( $retry ) && 0.0 === $retry['restored'] && 30.0 === vcap()->vouchers->get( $card->id )->balance, 'a retry of a known refund key answers with the stored result, even with a recalculated amount' );
 $rest = $service->refund( $rkey, 50, 'conn-refund-0002' );
 vcap_conn_assert( ! is_wp_error( $rest ) && 20.0 === $rest['restored'] && 30.0 === $rest['refunded'] && 50.0 === vcap()->vouchers->get( $card->id )->balance, 'refunds are capped at the redeemed amount' );
 vcap_conn_assert( 'vcap_refund_exceeded' === $service->refund( $rkey, 1, 'conn-refund-0003' )->get_error_code(), 'a fully refunded redemption cannot be refunded again' );
+
+
+function vcap_conn_voucher( string $type, string $mode, float $value, array $emails = array() ): VCAP\Voucher {
+	$coupon = new WC_Coupon();
+	$coupon->set_code( 'conn-' . $type . '-' . strtolower( wp_generate_password( 8, false ) ) );
+	$coupon->set_discount_type( 'fixed_cart' );
+	$coupon->set_amount( $value );
+	$coupon->set_usage_limit( 'single' === $mode ? 1 : 0 );
+	$coupon->set_email_restrictions( $emails );
+	$coupon->update_meta_data( '_vcap_voucher', 'yes' );
+	$coupon->save();
+	$v                 = new VCAP\Voucher();
+	$v->code           = wc_format_coupon_code( $coupon->get_code() );
+	$v->coupon_id      = $coupon->get_id();
+	$v->order_item_id  = 97000000 + $coupon->get_id();
+	$v->type           = $type;
+	$v->usage_mode     = $mode;
+	$v->discount_type  = 'fixed_cart';
+	$v->initial_amount = $value;
+	$v->balance        = $value;
+	$v->currency       = get_woocommerce_currency();
+	$v->status         = VCAP\Voucher::STATUS_ACTIVE;
+	$v->send_to        = 'buyer';
+	$v->token          = VCAP\VoucherRepository::new_token();
+	$v->id             = vcap()->vouchers->insert( $v );
+	return $v;
+}
+
+// Store credit belongs to one customer account: never redeemable through the redemption API.
+$credit = vcap_conn_voucher( 'credit', 'balance', 40 );
+$refused = $service->check( $credit->code, array( 'target' => 'test:credit' ) );
+vcap_conn_assert( is_wp_error( $refused ) && 'vcap_not_redeemable' === $refused->get_error_code(), 'store credit cannot be redeemed through the redemption API' );
+
+// Personal vouchers: a trusted PHP caller (guest checkout of a connector) may pass the customer email.
+$personal = vcap_conn_voucher( 'voucher', 'single', 20, array( 'guest-buyer@example.com' ) );
+vcap_conn_assert( is_wp_error( $service->check( $personal->code, array( 'target' => 'test:personal' ) ) ), 'a personal voucher is refused without the customer email' );
+vcap_conn_assert( ! is_wp_error( $service->check( $personal->code, array( 'target' => 'test:personal', 'email' => 'Guest-Buyer@example.com' ) ) ), 'a personal voucher is accepted with the matching customer email' );
+
+// Reactivating a voided single-use voucher that was already redeemed keeps it redeemed.
+$single = vcap_conn_voucher( 'voucher', 'single', 25 );
+$skey   = 'conn-s-' . wp_generate_uuid4();
+$service->reserve( $single->code, array( 'key' => $skey, 'target' => 'test:single' ) );
+$service->commit( $skey );
+vcap()->issuer->void( vcap()->vouchers->get( $single->id ), 'Purchase order refunded' );
+vcap()->issuer->reactivate( vcap()->vouchers->get( $single->id ) );
+vcap_conn_assert( VCAP\Voucher::STATUS_REDEEMED === vcap()->vouchers->get( $single->id )->status, 'reactivating a redeemed single-use voucher does not make it usable again' );
+$unused = vcap_conn_voucher( 'voucher', 'single', 25 );
+vcap()->issuer->void( vcap()->vouchers->get( $unused->id ), 'Purchase order refunded' );
+vcap()->issuer->reactivate( vcap()->vouchers->get( $unused->id ) );
+vcap_conn_assert( VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $unused->id )->status, 'reactivating an unused voucher makes it active again' );
 
 echo "Voucher Captain connector checks passed.\n";

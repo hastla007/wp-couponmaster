@@ -122,7 +122,8 @@ final class Issuer {
 				'tax_class'          => (string) $item->get_tax_class(),
 				'tax_status'         => $product ? (string) $product->get_tax_status() : '',
 				'prices_include_tax' => (bool) $order->get_prices_include_tax(),
-				'channels'           => array_values( array_intersect( (array) ( $config['channels'] ?? array() ), array_keys( Channels::all() ) ) ),
+				// Kept as configured, even for channels whose plugin is not active right now (never widen access).
+				'channels'           => array_values( array_filter( array_map( 'sanitize_key', (array) ( $config['channels'] ?? array() ) ) ) ),
 				'recorded_at'        => time(),
 			)
 		);
@@ -266,7 +267,7 @@ final class Issuer {
 			return;
 		}
 		$voucher->status = Voucher::STATUS_VOID;
-		$this->repo->update( $voucher );
+		$this->repo->update_status( $voucher->id, Voucher::STATUS_VOID );
 		$this->coupons->set_coupon_enabled( $voucher, false );
 		$this->repo->log( $voucher->id, 'voided', null, $voucher->balance, $note );
 		if ( function_exists( 'as_unschedule_all_actions' ) ) {
@@ -275,8 +276,15 @@ final class Issuer {
 	}
 
 	public function reactivate( Voucher $voucher ): void {
-		$voucher->status = $voucher->is_multi_use() && $voucher->balance <= 0 ? Voucher::STATUS_REDEEMED : Voucher::STATUS_ACTIVE;
-		$this->repo->update( $voucher );
+		$fresh   = $this->repo->get( $voucher->id ) ?? $voucher;
+		$coupon  = $fresh->coupon_id ? new \WC_Coupon( $fresh->coupon_id ) : null;
+		$used_up = $fresh->is_multi_use()
+			? $fresh->balance <= 0
+			: ( $coupon && $coupon->get_id() && $coupon->get_usage_limit() > 0 && $coupon->get_usage_count() >= $coupon->get_usage_limit() );
+		// A single-use voucher that was already redeemed (shop or externally) stays redeemed.
+		$voucher->status = $used_up ? Voucher::STATUS_REDEEMED : Voucher::STATUS_ACTIVE;
+		$voucher->balance = $fresh->balance;
+		$this->repo->update_status( $voucher->id, $voucher->status );
 		$this->coupons->set_coupon_enabled( $voucher, true );
 		$this->repo->log( $voucher->id, 'reactivated', null, $voucher->balance );
 	}

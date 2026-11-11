@@ -65,7 +65,8 @@ final class RedemptionService {
 	 * Check whether a code can be redeemed, without reserving anything.
 	 *
 	 * @param string $code    Voucher code.
-	 * @param array  $args    Optional: target (string), amount (float), user_id (int, PHP callers only).
+	 * @param array  $args    Optional: target (string), amount (float), user_id (int, PHP callers only),
+	 *                        email (string, PHP callers only: customer email of a guest, for personal vouchers).
 	 * @return array<string, mixed>|\WP_Error
 	 */
 	public function check( string $code, array $args = array() ) {
@@ -80,7 +81,7 @@ final class RedemptionService {
 		}
 		$target = isset( $args['target'] ) ? $this->clean_target( (string) $args['target'] ) : '';
 		$amount = isset( $args['amount'] ) ? (float) $args['amount'] : null;
-		$check  = $this->eligibility( $voucher, $target, $amount, $user_id );
+		$check  = $this->eligibility( $voucher, $target, $amount, $user_id, (string) ( $args['email'] ?? '' ) );
 		if ( is_wp_error( $check ) ) {
 			return $check;
 		}
@@ -95,7 +96,10 @@ final class RedemptionService {
 	 *
 	 * @param string $code Voucher code.
 	 * @param array  $args key (string, required), target (string, required), amount (float, gift cards),
-	 *                     user_id (int, PHP callers only; REST always uses the authenticated user), meta (array).
+	 *                     user_id (int, PHP callers only; REST always uses the authenticated user), meta (array),
+	 *                     ttl_minutes (int, PHP callers only: how long the reservation is held before it is released
+	 *                     automatically; default the "Reservation lifetime" setting, at most 60 days),
+	 *                     email (string, PHP callers only: verified customer email of a guest, for personal vouchers).
 	 * @return array<string, mixed>|\WP_Error
 	 * @throws \Throwable Database errors are re-thrown after the transaction was rolled back.
 	 */
@@ -140,7 +144,7 @@ final class RedemptionService {
 
 		global $wpdb;
 		$tables = Install::tables();
-		$ttl    = max( 1, (int) get_option( 'vcap_redemption_ttl', 15 ) ) * MINUTE_IN_SECONDS;
+		$ttl    = max( 1, min( 60 * 24 * 60, (int) ( $args['ttl_minutes'] ?? get_option( 'vcap_redemption_ttl', 15 ) ) ) ) * MINUTE_IN_SECONDS;
 		$now    = gmdate( 'Y-m-d H:i:s' );
 		$id     = 0;
 		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -153,7 +157,7 @@ final class RedemptionService {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				return $this->temporary();
 			}
-			$check = $this->eligibility( $fresh, $target, $fresh->is_multi_use() ? $amount : null, $user_id );
+			$check = $this->eligibility( $fresh, $target, $fresh->is_multi_use() ? $amount : null, $user_id, (string) ( $args['email'] ?? '' ) );
 			if ( is_wp_error( $check ) ) {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				return $check;
@@ -264,12 +268,23 @@ final class RedemptionService {
 	 */
 	public function refund( string $key, float $amount, string $refund_key, array $args = array() ) {
 		$amount = round( $amount, wc_get_price_decimals() );
-		if ( ! preg_match( self::KEY_PATTERN, $key ) || ! preg_match( self::KEY_PATTERN, $refund_key ) || $amount <= 0 ) {
+		if ( ! preg_match( self::KEY_PATTERN, $key ) || ! preg_match( self::KEY_PATTERN, $refund_key ) ) {
 			return self::error( 'vcap_invalid_request', __( 'A redemption key, a refund key and a positive amount are required.', 'voucher-captain' ), 400 );
 		}
 		$row = $this->get_row( $key );
 		if ( ! $row ) {
 			return self::error( 'vcap_reservation_missing', __( 'No redemption exists for this key.', 'voucher-captain' ), 404 );
+		}
+		$known = json_decode( (string) $row['meta'], true );
+		if ( is_array( $known ) && isset( $known['_refunds'][ $refund_key ] ) ) {
+			// Repeated refund (retry): answer with the stored result, whatever amount the retry computed.
+			return $this->redemption_data( $row ) + array(
+				'refunded' => array_sum( array_map( 'floatval', (array) $known['_refunds'] ) ),
+				'restored' => 0.0,
+			);
+		}
+		if ( $amount <= 0 ) {
+			return self::error( 'vcap_invalid_request', __( 'A redemption key, a refund key and a positive amount are required.', 'voucher-captain' ), 400 );
 		}
 		if ( isset( $args['user_id'] ) && (int) $args['user_id'] !== (int) $row['user_id'] ) {
 			return self::error( 'vcap_not_allowed', __( 'This redemption belongs to another user.', 'voucher-captain' ), 403 );
@@ -299,9 +314,6 @@ final class RedemptionService {
 			$refunds = isset( $meta['_refunds'] ) && is_array( $meta['_refunds'] ) ? array_map( 'floatval', $meta['_refunds'] ) : array();
 			if ( isset( $refunds[ $refund_key ] ) ) {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				if ( abs( $refunds[ $refund_key ] - $amount ) >= 0.0001 && $refunds[ $refund_key ] < $amount ) {
-					return self::error( 'vcap_idempotency_conflict', __( 'This refund key was already used for another amount.', 'voucher-captain' ), 409 );
-				}
 				return $this->redemption_data( $row ) + array(
 					'refunded' => array_sum( $refunds ),
 					'restored' => 0.0,
@@ -537,9 +549,14 @@ final class RedemptionService {
 	 * @param string     $target  Redemption target.
 	 * @param float|null $amount  Requested gift card amount (null = whole voucher / not checked).
 	 * @param int        $user_id User id.
+	 * @param string     $email   Customer email given by a trusted PHP caller (e.g. a guest checkout), else ''.
 	 * @return true|\WP_Error
 	 */
-	private function eligibility( Voucher $voucher, string $target, ?float $amount, int $user_id ) {
+	private function eligibility( Voucher $voucher, string $target, ?float $amount, int $user_id, string $email = '' ) {
+		if ( 'credit' === $voucher->type ) {
+			// Store credit belongs to one customer account and is only used in the shop (owner check there).
+			return self::error( 'vcap_not_redeemable', __( 'Store credit can only be used in the shop.', 'voucher-captain' ), 422 );
+		}
 		if ( $voucher->is_ticket() ) {
 			return self::error( 'vcap_not_redeemable', __( 'Tickets are checked in at the entrance and cannot be redeemed here.', 'voucher-captain' ), 422 );
 		}
@@ -575,9 +592,9 @@ final class RedemptionService {
 			$coupon = new \WC_Coupon( $voucher->coupon_id );
 			$emails = $coupon->get_id() ? array_map( 'strtolower', (array) $coupon->get_email_restrictions() ) : array();
 			if ( $emails ) {
-				$user  = $user_id ? get_userdata( $user_id ) : null;
-				$email = $user ? strtolower( (string) $user->user_email ) : '';
-				if ( '' === $email || ! in_array( $email, $emails, true ) ) {
+				$user     = $user_id ? get_userdata( $user_id ) : null;
+				$accepted = array_filter( array( $user ? strtolower( (string) $user->user_email ) : '', strtolower( trim( $email ) ) ) );
+				if ( ! array_intersect( $accepted, $emails ) ) {
 					return self::error( 'vcap_not_allowed', __( 'This voucher is not valid for your account.', 'voucher-captain' ), 403 );
 				}
 			}

@@ -19,7 +19,7 @@ foreach ( array( 'vcap_template', 'vcap_field_group' ) as $post_type ) {
 		wp_delete_post( $id, true );
 	}
 }
-$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'vcap\_%' OR option_name LIKE '\_transient\_vcap\_%' OR option_name LIKE '\_transient\_timeout\_vcap\_%'" ); // phpcs:ignore
+$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'vcap\_%' OR option_name LIKE '\_vcap\_claim\_%' OR option_name LIKE '\_transient\_vcap\_%' OR option_name LIKE '\_transient\_timeout\_vcap\_%'" ); // phpcs:ignore
 foreach ( array( 'administrator', 'shop_manager' ) as $role_name ) {
 	$role = get_role( $role_name );
 	if ( $role ) {

@@ -66,7 +66,7 @@ The caller supplies the key (8–64 characters `A–Z a–z 0–9 . _ : -`, e.g.
 
 ### Identity
 
-PHP callers may pass `user_id`; otherwise the logged-in user is used. The REST API always uses the authenticated user and ignores any `user_id` in the request. Only the reserving user or a voucher manager may read, commit or release a redemption (`vcap_rest_can_access_redemption` filter).
+PHP callers may pass `user_id`; otherwise the logged-in user is used. For guest checkouts PHP callers may also pass the customer's `email`, so vouchers restricted to an email address ("recipient only") can be redeemed; pass only an address your plugin has verified or will send the order to. Store credit (type `credit`) is never redeemable through this API – it belongs to one customer account and is used in the shop. The REST API always uses the authenticated user and ignores any `user_id` in the request. Only the reserving user or a voucher manager may read, commit or release a redemption (`vcap_rest_can_access_redemption` filter).
 
 ### REST
 

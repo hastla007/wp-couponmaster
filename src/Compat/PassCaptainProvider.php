@@ -19,12 +19,9 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 
 	public function __construct( private RedemptionService $redemptions, private VoucherRepository $vouchers ) {}
 
+	/** ISO 4217 minor units (as Pass Captain uses them) – never the shop's display decimals. */
 	public static function decimals( string $currency ): int {
-		$currency = strtoupper( $currency );
-		if ( $currency === get_woocommerce_currency() ) {
-			return wc_get_price_decimals();
-		}
-		return in_array( $currency, self::ZERO_DECIMAL, true ) ? 0 : 2;
+		return in_array( strtoupper( $currency ), self::ZERO_DECIMAL, true ) ? 0 : 2;
 	}
 
 	private static function to_minor( float $amount, int $decimals ): int {
@@ -44,7 +41,8 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 		if ( '' === $code || $total < 1 ) {
 			return new \WP_Error( 'vcap_invalid_request', __( 'Please enter a voucher code.', 'voucher-captain' ) );
 		}
-		$check = $this->redemptions->check( $code, array( 'target' => $target ) );
+		$email = sanitize_email( (string) ( $context['customer_email'] ?? '' ) );
+		$check = $this->redemptions->check( $code, array( 'target' => $target, 'email' => $email ) );
 		if ( is_wp_error( $check ) ) {
 			return $check;
 		}
@@ -73,15 +71,33 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 			'amount'       => self::to_major( $minor, $decimals ),
 			'balance'      => null !== $check['balance'],
 			'target'       => $target,
+			'email'        => $email,
 		);
+	}
+
+	/**
+	 * How long a reservation must survive: Pass Captain keeps unpaid orders open for its own hold time
+	 * (online payments: minutes; manual/bank payments: up to days) and releases the voucher itself when an order
+	 * is cancelled or expires. Our automatic release is only a safety net after that, never before payment.
+	 */
+	public static function hold_minutes(): int {
+		$minutes = 7 * 24 * 60;
+		if ( class_exists( '\PassCaptain\Settings' ) && is_callable( array( '\PassCaptain\Settings', 'get' ) ) ) {
+			$online  = (int) \PassCaptain\Settings::get( 'hold_minutes' );
+			$manual  = (int) \PassCaptain\Settings::get( 'manual_hold_hours' ) * 60;
+			$minutes = max( $online, $manual, 30 );
+		}
+		return (int) apply_filters( 'vcap_passcaptain_reservation_minutes', $minutes + 24 * 60 );
 	}
 
 	/** @return array|\WP_Error */
 	public function reserve( array $quote, $idempotency_key ) {
 		$args = array(
-			'key'    => (string) $idempotency_key,
-			'target' => (string) ( $quote['target'] ?? PassCaptain::CHANNEL . ':order' ),
-			'meta'   => array( 'source' => 'passcaptain' ),
+			'key'         => (string) $idempotency_key,
+			'target'      => (string) ( $quote['target'] ?? PassCaptain::CHANNEL . ':order' ),
+			'meta'        => array( 'source' => 'passcaptain' ),
+			'ttl_minutes' => self::hold_minutes(),
+			'email'       => (string) ( $quote['email'] ?? '' ),
 		);
 		if ( ! empty( $quote['balance'] ) ) {
 			$args['amount'] = (float) $quote['amount'];
@@ -137,7 +153,11 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 		if ( is_wp_error( $current ) ) {
 			return $current;
 		}
-		$done   = array_sum( array_map( 'floatval', (array) ( $current['meta']['_refunds'] ?? array() ) ) );
+		$done_by_key = (array) ( $current['meta']['_refunds'] ?? array() );
+		if ( isset( $done_by_key[ (string) $idempotency_key ] ) ) {
+			return $this->redemptions->refund( $key, 0.0, (string) $idempotency_key ); // Retry: stored result.
+		}
+		$done   = array_sum( array_map( 'floatval', $done_by_key ) );
 		$amount = round( $redeemed * min( 1.0, absint( $amount_minor ) / $applied ), $decimals );
 		if ( $done + $amount >= $redeemed - ( 1 / ( 10 ** $decimals ) ) ) {
 			$amount = round( $redeemed - $done, $decimals ); // Last refund: give back the exact rest.

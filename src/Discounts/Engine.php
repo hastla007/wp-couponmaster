@@ -102,8 +102,8 @@ final class Engine {
 		if ( $rules['date_to'] && $now > $rules['date_to'] ) {
 			return 'ended';
 		}
-		if ( ! $rules['with_coupons'] && ! empty( $context['other_coupons'] ) ) {
-			return 'other_coupon';
+		if ( ( ! $rules['with_coupons'] && ! empty( $context['other_coupons'] ) ) || ! empty( $context['individual_use_coupon'] ) ) {
+			return 'other_coupon'; // A coupon marked "individual use only" never shares the cart with promotions.
 		}
 		switch ( $rules['customer'] ) {
 			case 'logged_in':
@@ -129,6 +129,9 @@ final class Engine {
 		}
 		$subtotal = 0.0;
 		foreach ( $lines as $line ) {
+			if ( ! empty( $line['is_voucher'] ) && empty( $context['allow_vouchers'] ) ) {
+				continue; // Buying vouchers never unlocks a promotion on other products.
+			}
 			$subtotal += (float) $line['unit'] * (int) $line['qty'];
 		}
 		if ( $rules['min_subtotal'] > 0 && $subtotal + 0.00001 < $rules['min_subtotal'] ) {
@@ -233,6 +236,33 @@ final class Engine {
 				break;
 		}
 		return array_filter( $out, static fn( $v ) => $v > 0 );
+	}
+
+	/**
+	 * Discounts of several campaigns applied together, in the given order: each campaign can only take what the
+	 * campaigns before it left of a line, so stacked promotions never exceed the line price.
+	 *
+	 * @param array<int|string, array> $rules_by_id Rules per campaign id, in application order.
+	 * @return array<int|string, array<string, float>> Discount per campaign id and line key.
+	 */
+	public static function stack( array $rules_by_id, array $lines, array $context ): array {
+		$decimals = (int) ( $context['decimals'] ?? 2 );
+		$left     = array();
+		foreach ( $lines as $line ) {
+			$left[ $line['key'] ] = round( (float) $line['unit'] * (int) $line['qty'], $decimals );
+		}
+		$out = array();
+		foreach ( $rules_by_id as $id => $rules ) {
+			$out[ $id ] = array();
+			foreach ( self::discounts( $rules, $lines, $context ) as $key => $amount ) {
+				$give = round( min( $amount, $left[ $key ] ?? 0.0 ), $decimals );
+				if ( $give > 0 ) {
+					$out[ $id ][ $key ] = $give;
+					$left[ $key ]      -= $give;
+				}
+			}
+		}
+		return $out;
 	}
 
 	/**

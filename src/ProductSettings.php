@@ -499,8 +499,11 @@ final class ProductSettings {
 		foreach ( array( 'free_shipping', 'individual_use', 'exclude_sale', 'preview', 'buyer_copy', 'transferable' ) as $key ) {
 			$product->update_meta_data( '_vcap_' . $key, isset( $post[ '_vcap_' . $key ] ) ? 'yes' : 'no' );
 		}
-		$channels = array_map( 'sanitize_key', (array) ( $post['_vcap_channels'] ?? array() ) );
-		$product->update_meta_data( '_vcap_channels', array_values( array_intersect( $channels, array_keys( Channels::all() ) ) ) );
+		$registered = array_keys( Channels::all() );
+		$channels   = array_intersect( array_map( 'sanitize_key', (array) ( $post['_vcap_channels'] ?? array() ) ), $registered );
+		// Channels of plugins that are inactive right now are not shown in the form: keep them, never drop them.
+		$hidden     = array_diff( array_map( 'sanitize_key', (array) $product->get_meta( '_vcap_channels' ) ), $registered );
+		$product->update_meta_data( '_vcap_channels', array_values( array_filter( array_unique( array_merge( $channels, $hidden ) ) ) ) );
 		foreach ( array( 'product_ids', 'exclude_product_ids', 'category_ids', 'exclude_category_ids' ) as $key ) {
 			$product->update_meta_data( '_vcap_' . $key, array_values( array_filter( array_map( 'absint', (array) ( $post[ '_vcap_' . $key ] ?? array() ) ) ) ) );
 		}

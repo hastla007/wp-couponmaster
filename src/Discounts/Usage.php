@@ -25,17 +25,29 @@ final class Usage {
 		}
 	}
 
-	/** Keys identifying a customer: account and billing email (guest orders of the same email count too). */
+	/**
+	 * Keys identifying a customer: account, account email and billing email. A guest order with the email of
+	 * an account counts for that account too (and the other way round), so checking out as guest is no way
+	 * around a per-customer limit.
+	 */
 	public static function customer_keys( int $user_id, string $email ): array {
-		$keys = array();
+		$keys  = array();
+		$email = strtolower( trim( $email ) );
+		if ( $user_id <= 0 && is_email( $email ) ) {
+			$owner   = get_user_by( 'email', $email );
+			$user_id = $owner ? (int) $owner->ID : 0;
+		}
 		if ( $user_id > 0 ) {
 			$keys[] = 'u:' . $user_id;
+			$user   = get_userdata( $user_id );
+			if ( $user && is_email( $user->user_email ) ) {
+				$keys[] = 'e:' . strtolower( (string) $user->user_email );
+			}
 		}
-		$email = strtolower( trim( $email ) );
 		if ( is_email( $email ) ) {
 			$keys[] = 'e:' . $email;
 		}
-		return $keys;
+		return array_values( array_unique( $keys ) );
 	}
 
 	public static function count( int $campaign_id ): int {
@@ -114,13 +126,22 @@ final class Usage {
 		if ( ! $new ) {
 			return;
 		}
-		$key = self::order_key( $order );
+		$key     = self::order_key( $order );
+		$claimed = array();
 		foreach ( $new as $id ) {
+			// A parallel request handling the same status change must not count the use twice.
+			if ( ! \VCAP\Claim::take( 'usage:' . $order->get_id() . ':' . $id ) ) {
+				continue;
+			}
+			$claimed[] = $id;
 			if ( get_post( $id ) ) {
 				self::add( $id, $key );
 			}
 		}
-		$order->update_meta_data( self::ORDER_META, array_values( array_merge( $done, $new ) ) );
+		if ( ! $claimed ) {
+			return;
+		}
+		$order->update_meta_data( self::ORDER_META, array_values( array_merge( $done, $claimed ) ) );
 		$order->save_meta_data();
 	}
 
@@ -136,6 +157,7 @@ final class Usage {
 		$key = (string) $order->get_meta( self::ORDER_KEY );
 		foreach ( $done as $id ) {
 			self::remove( $id, $key );
+			\VCAP\Claim::release( 'usage:' . $order->get_id() . ':' . $id );
 		}
 		$order->delete_meta_data( self::ORDER_META );
 		$order->save_meta_data();

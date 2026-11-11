@@ -43,6 +43,9 @@ $product->save();
 
 list( , $own ) = vcap_ref_order( $product, 'ref-' . $tag . '@example.com', $code, $referrer );
 vcap_ref_assert( is_wp_error( $own ), 'customers cannot use their own code' );
+list( , $alias ) = vcap_ref_order( $product, 'Ref-' . $tag . '+second@example.com', $code );
+vcap_ref_assert( is_wp_error( $alias ), 'customers cannot use their own code as guest with a +alias of their email' );
+vcap_ref_assert( 'johndoe@gmail.com' === VCAP\Referrals::normalize_email( 'John.Doe+shop@GoogleMail.com' ), 'Gmail dots and +tags are ignored when comparing emails' );
 
 list( $friend_order, $ok ) = vcap_ref_order( $product, 'friend-' . $tag . '@example.com', $code );
 vcap_ref_assert( true === $ok && 10.0 === (float) $friend_order->get_discount_total(), 'a new friend gets the referral discount' );
@@ -72,6 +75,17 @@ vcap_ref_assert( 15.0 === vcap()->store_credit->balance( $referrer ), 'the rewar
 $rows = ( new VCAP\Reports() )->collect( wp_date( 'Y-m-d', time() - DAY_IN_SECONDS ), wp_date( 'Y-m-d', time() + DAY_IN_SECONDS ) );
 $ref  = array_values( array_filter( $rows, static fn( $r ) => 'referral' === $r['type'] && false !== strpos( $r['name'], 'ref-' . $tag ) ) );
 vcap_ref_assert( 1 === count( $ref ) && 2 === $ref[0]['orders'], 'referrals appear per referrer in the report' );
+
+$second = wc_get_order( $second->get_id() );
+$second->update_status( 'refunded' );
+vcap_ref_assert( 0.0 === vcap()->store_credit->balance( $referrer ), 'a refunded friend order takes the store credit reward back' );
+$second = wc_get_order( $second->get_id() );
+$second->update_status( 'cancelled' );
+vcap_ref_assert( 0.0 === vcap()->store_credit->balance( $referrer ) && 1 === (int) get_user_meta( $referrer, VCAP\Referrals::COUNT_META, true ), 'the reward is taken back only once' );
+
+$friend_order = wc_get_order( $friend_order->get_id() );
+$friend_order->update_status( 'cancelled' );
+vcap_ref_assert( 'trash' === get_post_status( $rewards[0] ), 'a cancelled friend order withdraws the unused reward coupon' );
 
 update_option( 'vcap_referral_enabled', 'no' );
 list( , $off ) = vcap_ref_order( $product, 'friend3-' . $tag . '@example.com', $code );
