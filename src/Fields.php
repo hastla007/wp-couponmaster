@@ -229,7 +229,8 @@ final class Fields {
 			return;
 		}
 		$product = wc_get_product( get_queried_object_id() );
-		if ( ! $product || ! $this->definitions_for( $product ) ) {
+		// Also needed without personalisation fields: amount presets and the preview button use it.
+		if ( ! $product || ! ProductConfig::is_voucher( $product ) ) {
 			return;
 		}
 		wp_enqueue_style( 'vcap-frontend', VCAP_URL . 'assets/css/frontend.css', array(), VCAP_VERSION );
@@ -643,8 +644,17 @@ final class Fields {
 		foreach ( is_array( $fields_in ) ? $fields_in : array() as $f ) {
 			$key = sanitize_key( $f['key'] ?? '' ) ?: sanitize_key( sanitize_title( $f['label'] ?? '' ) );
 			$key = str_replace( '-', '_', $key );
-			if ( '' === $key || in_array( $key, $reserved, true ) || isset( $fields[ $key ] ) ) {
+			if ( '' === $key ) {
 				continue;
+			}
+			if ( is_numeric( $key ) ) {
+				$key = 'field_' . $key;
+			}
+			// Never drop a field silently: make reserved or duplicate keys unique instead.
+			$base = $key;
+			$n    = 2;
+			while ( in_array( $key, $reserved, true ) || isset( $fields[ $key ] ) ) {
+				$key = $base . '_' . $n++;
 			}
 			$fields[ $key ] = array(
 				'key'         => $key,

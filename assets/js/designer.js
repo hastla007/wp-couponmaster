@@ -38,11 +38,26 @@
 		design = JSON.parse( JSON.stringify( cfg.starters.giftcard ) );
 	}
 	design.elements = design.elements || [];
+	design.elements.forEach( function ( item ) {
+		item.rotation = +item.rotation || 0;
+		item.opacity = undefined === item.opacity ? 1 : +item.opacity;
+	} );
+	// The designer's inputs live inside WordPress' post form: their step/min constraints must never block
+	// saving (dragging produces values such as 101.95), and Enter in a field must not submit the post.
+	if ( store.form ) {
+		store.form.noValidate = true;
+	}
+	root.addEventListener( 'keydown', function ( e ) {
+		if ( 'Enter' === e.key && e.target && 'INPUT' === e.target.tagName ) {
+			e.preventDefault();
+		}
+	} );
 
 	var state = {
 		selected: null,
 		scale: 3, // px per mm
 		snap: true,
+		userZoom: false,
 		history: [],
 		future: []
 	};
@@ -127,6 +142,14 @@
 	// ------------------------------------------------------------------ history.
 
 	var commitTimer = null;
+	var pendingPush = null;
+
+	function flushCommit() {
+		if ( pendingPush ) {
+			clearTimeout( commitTimer );
+			pendingPush();
+		}
+	}
 
 	function save() {
 		store.value = JSON.stringify( design );
@@ -136,6 +159,7 @@
 		save();
 		var snapshot = store.value;
 		var push = function () {
+			pendingPush = null;
 			if ( state.history[ state.history.length - 1 ] !== snapshot ) {
 				state.history.push( snapshot );
 				if ( state.history.length > 60 ) {
@@ -149,11 +173,13 @@
 		if ( immediate ) {
 			push();
 		} else {
+			pendingPush = push;
 			commitTimer = setTimeout( push, 400 );
 		}
 	}
 
 	function undo() {
+		flushCommit();
 		if ( state.history.length < 2 ) {
 			return;
 		}
@@ -167,6 +193,7 @@
 	}
 
 	function redo() {
+		flushCommit();
 		if ( ! state.future.length ) {
 			return;
 		}
@@ -295,6 +322,7 @@
 	}
 
 	function setZoom( scale ) {
+		state.userZoom = true;
 		state.scale = Math.max( 1, Math.min( 10, scale ) );
 		renderCanvas();
 		updateToolbar();
@@ -302,7 +330,7 @@
 
 	function fitZoom() {
 		var size = pageSize();
-		var avail = Math.max( 300, workspace.clientWidth - 40 );
+		var avail = Math.max( 300, workspace.clientWidth - 80 );
 		state.scale = Math.max( 1, Math.min( 6, avail / size[ 0 ] ) );
 	}
 
@@ -330,7 +358,7 @@
 				}
 			}
 		}
-		return '<svg viewBox="0 0 21 21" preserveAspectRatio="xMidYMid meet" width="100%" height="100%" shape-rendering="crispEdges">' + cells.join( '' ) + '</svg>';
+		return '<svg viewBox="-2 -2 25 25" preserveAspectRatio="xMidYMid meet" width="100%" height="100%" shape-rendering="crispEdges">' + cells.join( '' ) + '</svg>';
 	}
 
 	var QR_SVG = qrPlaceholder();
@@ -351,7 +379,8 @@
 			page.style.backgroundImage = 'none';
 		}
 
-		Array.prototype.slice.call( page.querySelectorAll( '.vcap-d-el' ) ).forEach( function ( n ) {
+		var selNode = null;
+		Array.prototype.slice.call( page.querySelectorAll( '.vcap-d-el, .vcap-d-sel' ) ).forEach( function ( n ) {
 			n.parentNode.removeChild( n );
 		} );
 
@@ -378,7 +407,7 @@
 					var txt = sampleText( item.text );
 					inner.textContent = item.uppercase ? txt.toUpperCase() : txt;
 					inner.style.fontFamily = FONT_STACKS[ item.font ] || FONT_STACKS[ 'DejaVu Sans' ];
-					inner.style.fontSize = ( item.size || 12 ) * PT_TO_MM * s + 'px';
+					inner.style.fontSize = ( item.size || ( 'heading' === item.type ? 24 : 11 ) ) * PT_TO_MM * s + 'px';
 					inner.style.lineHeight = item.lineHeight || 1.25;
 					inner.style.color = item.color || '#000';
 					inner.style.textAlign = item.align || 'left';
@@ -386,7 +415,7 @@
 					inner.style.fontStyle = item.italic ? 'italic' : 'normal';
 					inner.style.textDecoration = item.underline ? 'underline' : 'none';
 					inner.style.letterSpacing = item.letterSpacing ? item.letterSpacing * PT_TO_MM * s + 'px' : 'normal';
-					inner.style.whiteSpace = 'pre-wrap';
+					inner.style.whiteSpace = 'pre-line'; // Like the PDF: line breaks kept, runs of spaces collapsed.
 					inner.style.background = item.fill && 'transparent' !== item.fill ? item.fill : 'transparent';
 					inner.style.display = 'flex';
 					inner.style.flexDirection = 'column';
@@ -410,7 +439,13 @@
 				case 'barcode':
 					inner.className += ' vcap-d-barcode';
 					inner.style.color = item.color || '#000';
-					inner.innerHTML = '<span class="bars"></span>' + ( false !== item.showText ? '<span class="lbl">' + sampleText( item.qrValue || '{coupon_code}' ).replace( /</g, '&lt;' ) + '</span>' : '' );
+					inner.innerHTML = '<span class="bars"></span>' + ( false !== item.showText ? '<span class="lbl">' + sampleText( item.qrValue || '{coupon_code}' ).replace( /&/g, '&amp;' ).replace( /</g, '&lt;' ) + '</span>' : '' );
+					// Same proportions as the PDF: 8pt label, bars fill the box minus 4.5 mm when the text is shown.
+					inner.firstChild.style.flex = 'none';
+					inner.firstChild.style.height = Math.max( 1, false !== item.showText ? item.h - 4.5 : item.h ) * s + 'px';
+					if ( inner.lastChild !== inner.firstChild ) {
+						inner.lastChild.style.fontSize = 8 * PT_TO_MM * s + 'px';
+					}
 					break;
 				case 'rect':
 					inner.style.background = item.fill && 'transparent' !== item.fill ? item.fill : 'transparent';
@@ -425,17 +460,30 @@
 			}
 			node.appendChild( inner );
 
-			if ( item.id === state.selected && ! item.locked ) {
+			page.appendChild( node );
+			if ( item.id === state.selected ) {
+				selNode = { node: node, item: item };
+			}
+		} );
+
+		// Selection frame + handles live in an overlay above all layers, so they stay reachable when the
+		// selected element is covered by others, without changing the real stacking order.
+		if ( selNode ) {
+			var sel = el( 'div', { class: 'vcap-d-sel', 'data-id': selNode.item.id } );
+			[ 'left', 'top', 'width', 'height', 'transform' ].forEach( function ( prop ) {
+				sel.style[ prop ] = selNode.node.style[ prop ];
+			} );
+			if ( ! selNode.item.locked ) {
 				[ 'nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w' ].forEach( function ( h ) {
-					if ( 'line' === item.type && -1 === [ 'e', 'w' ].indexOf( h ) ) {
+					if ( 'line' === selNode.item.type && -1 === [ 'e', 'w' ].indexOf( h ) ) {
 						return;
 					}
-					node.appendChild( el( 'span', { class: 'vcap-d-handle vcap-d-handle--' + h, 'data-handle': h } ) );
+					sel.appendChild( el( 'span', { class: 'vcap-d-handle vcap-d-handle--' + h, 'data-handle': h } ) );
 				} );
-				node.appendChild( el( 'span', { class: 'vcap-d-rotate', 'data-handle': 'rotate', title: t.rotation } ) );
+				sel.appendChild( el( 'span', { class: 'vcap-d-rotate', 'data-handle': 'rotate', title: t.rotation } ) );
 			}
-			page.appendChild( node );
-		} );
+			page.appendChild( sel );
+		}
 	}
 
 	// ------------------------------------------------------------------ interaction (drag, resize, rotate, snap).
@@ -484,7 +532,7 @@
 	var drag = null;
 
 	page.addEventListener( 'pointerdown', function ( e ) {
-		var node = e.target.closest( '.vcap-d-el' );
+		var node = e.target.closest( '.vcap-d-el, .vcap-d-sel' );
 		if ( ! node ) {
 			if ( e.target === page || e.target === guidesLayer ) {
 				state.selected = null;
@@ -555,56 +603,53 @@
 			item.y = round( ny );
 		} else if ( 'resize' === drag.mode ) {
 			var h = drag.handle;
-			var x = o.x, y = o.y, w = o.w, hh = o.h;
-			if ( -1 !== h.indexOf( 'e' ) ) {
-				w = Math.max( 2, o.w + dx );
-			}
-			if ( -1 !== h.indexOf( 's' ) ) {
-				hh = Math.max( 1, o.h + dy );
-			}
-			if ( -1 !== h.indexOf( 'w' ) ) {
-				w = Math.max( 2, o.w - dx );
-				x = o.x + o.w - w;
-			}
-			if ( -1 !== h.indexOf( 'n' ) ) {
-				hh = Math.max( 1, o.h - dy );
-				y = o.y + o.h - hh;
-			}
+			var hx = -1 !== h.indexOf( 'e' ) ? 1 : ( -1 !== h.indexOf( 'w' ) ? -1 : 0 );
+			var hy = -1 !== h.indexOf( 's' ) ? 1 : ( -1 !== h.indexOf( 'n' ) ? -1 : 0 );
+			var isLine = 'line' === item.type;
+			var oh = isLine ? ( item.borderWidth || 0.5 ) : o.h;
+			var rad = ( o.rotation || 0 ) * Math.PI / 180;
+			var cos = Math.cos( rad );
+			var sin = Math.sin( rad );
+			// Pointer movement in the element's own (unrotated) axes.
+			var lx = dx * cos + dy * sin;
+			var ly = -dx * sin + dy * cos;
+			var w = hx ? Math.max( 2, o.w + hx * lx ) : o.w;
+			var hh = hy && ! isLine ? Math.max( 1, oh + hy * ly ) : oh;
 			var keepRatio = e.shiftKey || 'qrcode' === item.type;
-			if ( keepRatio && 2 === h.length ) {
-				var ratio = o.w / o.h;
+			if ( keepRatio && hx && hy ) {
+				var ratio = o.w / oh;
 				if ( w / hh > ratio ) {
 					hh = w / ratio;
 				} else {
 					w = hh * ratio;
 				}
-				if ( -1 !== h.indexOf( 'w' ) ) {
-					x = o.x + o.w - w;
-				}
-				if ( -1 !== h.indexOf( 'n' ) ) {
-					y = o.y + o.h - hh;
-				}
-			}
-			if ( state.snap && ! e.altKey ) {
-				if ( -1 !== h.indexOf( 'e' ) ) {
-					var se = snapValue( [ { value: x + w } ], drag.targets.xs );
-					if ( se ) {
-						w += se.delta;
-						guides.push( { axis: 'x', pos: se.pos } );
+			} else if ( state.snap && ! e.altKey && ! rad ) {
+				if ( hx ) {
+					var sx2 = snapValue( [ { value: hx > 0 ? o.x + w : o.x + o.w - w } ], drag.targets.xs );
+					if ( sx2 ) {
+						w = Math.max( 2, w + hx * sx2.delta );
+						guides.push( { axis: 'x', pos: sx2.pos } );
 					}
 				}
-				if ( -1 !== h.indexOf( 's' ) ) {
-					var ss = snapValue( [ { value: y + hh } ], drag.targets.ys );
-					if ( ss ) {
-						hh += ss.delta;
-						guides.push( { axis: 'y', pos: ss.pos } );
+				if ( hy && ! isLine ) {
+					var sy2 = snapValue( [ { value: hy > 0 ? o.y + hh : o.y + oh - hh } ], drag.targets.ys );
+					if ( sy2 ) {
+						hh = Math.max( 1, hh + hy * sy2.delta );
+						guides.push( { axis: 'y', pos: sy2.pos } );
 					}
 				}
 			}
-			item.x = round( x );
-			item.y = round( y );
+			// Keep the opposite edge/corner fixed in page space (also for rotated elements, which turn around their centre).
+			var ax = -hx;
+			var ay = -hy;
+			var px = o.x + o.w / 2 + ( ax * o.w / 2 ) * cos - ( ay * oh / 2 ) * sin;
+			var py = o.y + oh / 2 + ( ax * o.w / 2 ) * sin + ( ay * oh / 2 ) * cos;
+			var ncx = px - ( ( ax * w / 2 ) * cos - ( ay * hh / 2 ) * sin );
+			var ncy = py - ( ( ax * w / 2 ) * sin + ( ay * hh / 2 ) * cos );
 			item.w = round( w );
-			if ( 'line' !== item.type ) {
+			item.x = round( ncx - w / 2 );
+			item.y = round( ncy - hh / 2 );
+			if ( ! isLine ) {
 				item.h = round( hh );
 			}
 		} else if ( 'rotate' === drag.mode ) {
@@ -639,8 +684,7 @@
 	page.addEventListener( 'pointercancel', endDrag );
 
 	page.addEventListener( 'dblclick', function ( e ) {
-		var node = e.target.closest( '.vcap-d-el' );
-		if ( node ) {
+		if ( state.selected && ( e.target === page || e.target.closest( '.vcap-d-el, .vcap-d-sel' ) ) ) {
 			var field = propsPanel.querySelector( 'textarea, [data-key="qrValue"]' );
 			if ( field ) {
 				field.focus();
@@ -712,6 +756,7 @@
 		state.selected = copy.id;
 		commit( true );
 		renderAll();
+		workspace.focus( { preventScroll: true } );
 	}
 
 	function moveLayer( id, dir ) {
@@ -761,6 +806,12 @@
 			oninput: function ( e ) {
 				var v = parseFloat( e.target.value );
 				if ( ! isNaN( v ) ) {
+					if ( undefined !== opts.min && v < opts.min ) {
+						v = opts.min;
+					}
+					if ( undefined !== opts.max && v > opts.max ) {
+						v = opts.max;
+					}
 					obj[ key ] = v;
 					commit();
 					renderCanvas();
@@ -839,8 +890,9 @@
 			if ( ! token ) {
 				return;
 			}
-			var start = textarea.selectionStart || 0;
-			var end = textarea.selectionEnd || 0;
+			var touched = '1' === textarea.getAttribute( 'data-touched' );
+			var start = touched ? ( textarea.selectionStart || 0 ) : textarea.value.length;
+			var end = touched ? ( textarea.selectionEnd || 0 ) : textarea.value.length;
 			var value = textarea.value;
 			textarea.value = value.slice( 0, start ) + token + value.slice( end );
 			obj[ key ] = textarea.value;
@@ -880,7 +932,7 @@
 			[ 'x', 'y', 'w', 'h', 'rotation' ].forEach( function ( key ) {
 				var input = propsPanel.querySelector( '[data-key="' + key + '"]' );
 				if ( input && document.activeElement !== input ) {
-					input.value = item[ key ];
+					input.value = undefined === item[ key ] ? 0 : item[ key ];
 				}
 			} );
 			return;
@@ -896,6 +948,9 @@
 
 		if ( 'text' === item.type || 'heading' === item.type ) {
 			var ta = textInput( item, 'text', true );
+			ta.addEventListener( 'focus', function () {
+				ta.setAttribute( 'data-touched', '1' );
+			} );
 			grid.appendChild( field( t.content, ta, true ) );
 			grid.appendChild( el( 'div', { class: 'vcap-d-field is-wide' }, [ placeholderSelect( ta, item, 'text' ) ] ) );
 			var fonts = {};
@@ -972,6 +1027,7 @@
 			li.appendChild( el( 'button', { type: 'button', class: 'vcap-d-layer-name', 'aria-pressed': item.id === state.selected ? 'true' : 'false', onclick: function () {
 				state.selected = item.id;
 				renderAll();
+				workspace.focus( { preventScroll: true } ); // Keep keyboard shortcuts working.
 			} }, [ el( 'span', { class: 'vcap-d-layer-type', text: t[ item.type ] || item.type } ), ' ' + ( item.name || '' ) ] ) );
 			li.appendChild( el( 'button', { type: 'button', class: 'vcap-d-icon' + ( item.hidden ? ' is-off' : '' ), title: t.hide, 'aria-label': t.hide, 'aria-pressed': item.hidden ? 'true' : 'false', html: item.hidden ? '&#9711;' : '&#9673;', onclick: function () {
 				item.hidden = ! item.hidden;
@@ -1065,7 +1121,7 @@
 	fitZoom();
 	renderAll();
 	window.addEventListener( 'resize', function () {
-		if ( ! drag ) {
+		if ( ! drag && ! state.userZoom ) {
 			fitZoom();
 			renderCanvas();
 			updateToolbar();

@@ -2292,3 +2292,12 @@ msgstr "Im Admin-Bereich öffnen"
 #: voucher-captain.php:66
 msgid "Voucher Captain requires WooCommerce to be installed and active."
 msgstr "Voucher Captain erfordert, dass WooCommerce installiert und aktiviert ist."
+
+msgid "This voucher is not active yet."
+msgstr "Dieser Gutschein ist noch nicht aktiv."
+
+msgid "Delivery failed"
+msgstr "Zustellung fehlgeschlagen"
+
+msgid "No email was sent (email disabled or no valid address)."
+msgstr "Es wurde keine E-Mail gesendet (E-Mail deaktiviert oder keine gültige Adresse)."

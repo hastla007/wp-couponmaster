@@ -9,9 +9,11 @@
 .vcap-d-check { display: inline-flex; align-items: center; gap: 4px; margin: 0 6px; }
 .vcap-d-main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
 @media (max-width: 1100px) { .vcap-d-main { grid-template-columns: 1fr; } }
-.vcap-d-workspace { background: repeating-conic-gradient(#ececec 0% 25%, #f6f6f6 0% 50%) 50% / 20px 20px; padding: 20px; overflow: auto; max-height: 78vh; min-height: 300px; border: 1px solid #dcdcde; border-radius: 4px; outline: none; }
+.vcap-d-workspace { background: repeating-conic-gradient(#ececec 0% 25%, #f6f6f6 0% 50%) 50% / 20px 20px; padding: 40px; overflow: auto; max-height: 78vh; min-height: 300px; border: 1px solid #dcdcde; border-radius: 4px; outline: none; }
 .vcap-d-workspace:focus-visible { box-shadow: 0 0 0 2px var(--vcap-accent); }
-.vcap-d-page { position: relative; margin: 0 auto; box-shadow: 0 2px 14px rgba(0,0,0,.18); overflow: hidden; touch-action: none; user-select: none; }
+.vcap-d-page { position: relative; margin: 0 auto; box-shadow: 0 2px 14px rgba(0,0,0,.18); overflow: visible; touch-action: none; user-select: none; }
+.vcap-d-sel { position: absolute; box-sizing: border-box; transform-origin: 50% 50%; outline: 1px solid var(--vcap-accent); pointer-events: none; z-index: 9998; }
+.vcap-d-sel .vcap-d-handle, .vcap-d-sel .vcap-d-rotate { pointer-events: auto; }
 .vcap-d-el { position: absolute; box-sizing: border-box; cursor: move; transform-origin: 50% 50%; }
 .vcap-d-el.is-locked { cursor: default; }
 .vcap-d-el.is-hidden { opacity: .15 !important; outline: 1px dashed #999; }
@@ -22,7 +24,7 @@
 .vcap-d-empty { display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.06); border: 1px dashed #999; color: #666; }
 .vcap-d-barcode { display: flex; flex-direction: column; }
 .vcap-d-barcode .bars { flex: 1; background: repeating-linear-gradient(90deg, currentColor 0 2px, transparent 2px 3px, currentColor 3px 4px, transparent 4px 7px, currentColor 7px 10px, transparent 10px 11px); }
-.vcap-d-barcode .lbl { font: 9px/1.2 monospace; text-align: center; }
+.vcap-d-barcode .lbl { font-family: monospace; line-height: 1.2; text-align: center; }
 .vcap-d-handle { position: absolute; width: 9px; height: 9px; background: #fff; border: 1px solid var(--vcap-accent); border-radius: 2px; z-index: 5; }
 .vcap-d-handle--nw { left: -5px; top: -5px; cursor: nwse-resize; }
 .vcap-d-handle--n { left: calc(50% - 5px); top: -5px; cursor: ns-resize; }

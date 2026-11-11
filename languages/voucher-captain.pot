@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-11 07:26+0000\n"
+"POT-Creation-Date: 2026-11-11 07:37+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/Admin/Import.php:28 src/Admin/Import.php:137 src/Admin/Import.php:241 src/Admin/Scanner.php:12 src/Admin/VoucherAdmin.php:49 src/Admin/VoucherAdmin.php:231
@@ -367,7 +367,7 @@ msgstr ""
 msgid "Status"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:101 src/Fields.php:544 src/ProductSettings.php:80
+#: src/Admin/VoucherAdmin.php:101 src/Fields.php:545 src/ProductSettings.php:80
 msgid "Type"
 msgstr ""
 
@@ -519,7 +519,7 @@ msgstr ""
 msgid "History"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:194 src/Fields.php:537
+#: src/Admin/VoucherAdmin.php:194 src/Fields.php:538
 msgid "Date"
 msgstr ""
 
@@ -657,7 +657,7 @@ msgstr ""
 msgid "Voucher amount (%s)"
 msgstr ""
 
-#: src/CustomAmount.php:39 src/Fields.php:305 src/Fields.php:319 src/ProductSettings.php:329
+#: src/CustomAmount.php:39 src/Fields.php:306 src/Fields.php:320 src/ProductSettings.php:329
 msgid "required"
 msgstr ""
 
@@ -864,196 +864,196 @@ msgid "The voucher is emailed on this day. Leave empty to send it right away."
 msgstr ""
 
 #. translators: %d: characters left
-#: src/Fields.php:245
+#: src/Fields.php:246
 #, php-format
 msgid "%d characters left"
 msgstr ""
 
-#: src/Fields.php:273
+#: src/Fields.php:274
 msgid "Preview voucher"
 msgstr ""
 
-#: src/Fields.php:305
+#: src/Fields.php:306
 msgid "optional"
 msgstr ""
 
-#: src/Fields.php:312
+#: src/Fields.php:313
 msgid "— Select —"
 msgstr ""
 
-#: src/Fields.php:366
+#: src/Fields.php:367
 msgid "Yes"
 msgstr ""
 
 #. translators: %s: field label
-#: src/Fields.php:399
+#: src/Fields.php:400
 #, php-format
 msgid "%s is a required field."
 msgstr ""
 
 #. translators: %s: field label
-#: src/Fields.php:409
+#: src/Fields.php:410
 #, php-format
 msgid "%s is not a valid email address."
 msgstr ""
 
 #. translators: %s: field label
-#: src/Fields.php:416
+#: src/Fields.php:417
 #, php-format
 msgid "%s is not a valid date."
 msgstr ""
 
-#: src/Fields.php:419
+#: src/Fields.php:420
 msgid "Please choose a delivery date between today and one year from now."
 msgstr ""
 
 #. translators: %s: field label
-#: src/Fields.php:425
+#: src/Fields.php:426
 #, php-format
 msgid "%s must be a number."
 msgstr ""
 
 #. translators: %s: field label
-#: src/Fields.php:430
+#: src/Fields.php:431
 #, php-format
 msgid "Please choose a valid option for %s."
 msgstr ""
 
 #. translators: 1: field label, 2: max length
-#: src/Fields.php:436
+#: src/Fields.php:437
 #, php-format
 msgid "%1$s may contain at most %2$d characters."
 msgstr ""
 
-#: src/Fields.php:508
+#: src/Fields.php:509
 msgid "Personalise"
 msgstr ""
 
-#: src/Fields.php:533 src/TemplatePostType.php:211
+#: src/Fields.php:534 src/TemplatePostType.php:211
 msgid "Text"
 msgstr ""
 
-#: src/Fields.php:534
+#: src/Fields.php:535
 msgid "Text area"
 msgstr ""
 
-#: src/Fields.php:535
+#: src/Fields.php:536
 msgid "Email"
 msgstr ""
 
-#: src/Fields.php:536
+#: src/Fields.php:537
 msgid "Number"
 msgstr ""
 
-#: src/Fields.php:538
+#: src/Fields.php:539
 msgid "Select"
 msgstr ""
 
-#: src/Fields.php:539
+#: src/Fields.php:540
 msgid "Checkbox"
 msgstr ""
 
-#: src/Fields.php:542
+#: src/Fields.php:543
 msgid "Label"
 msgstr ""
 
-#: src/Fields.php:543
+#: src/Fields.php:544
 msgid "Key"
 msgstr ""
 
-#: src/Fields.php:545
+#: src/Fields.php:546
 msgid "Required"
 msgstr ""
 
-#: src/Fields.php:546
+#: src/Fields.php:547
 msgid "Max. characters"
 msgstr ""
 
-#: src/Fields.php:547
+#: src/Fields.php:548
 msgid "Placeholder"
 msgstr ""
 
-#: src/Fields.php:548
+#: src/Fields.php:549
 msgid "Help text"
 msgstr ""
 
-#: src/Fields.php:549
+#: src/Fields.php:550
 msgid "Options (one per line)"
 msgstr ""
 
-#: src/Fields.php:550
+#: src/Fields.php:551
 msgid "Remove field"
 msgstr ""
 
-#: src/Fields.php:551
+#: src/Fields.php:552
 msgid "PDF placeholder:"
 msgstr ""
 
-#: src/Fields.php:558
+#: src/Fields.php:559
 msgid "Fields"
 msgstr ""
 
-#: src/Fields.php:559
+#: src/Fields.php:560
 msgid "Display rules"
 msgstr ""
 
-#: src/Fields.php:565
+#: src/Fields.php:566
 msgid "These fields are shown on the product page of matching voucher products. Use {field:key} in PDF templates and emails to print a value."
 msgstr ""
 
-#: src/Fields.php:567
+#: src/Fields.php:568
 msgid "Add field"
 msgstr ""
 
-#: src/Fields.php:578
+#: src/Fields.php:579
 msgid "Show on"
 msgstr ""
 
-#: src/Fields.php:581
+#: src/Fields.php:582
 msgid "All voucher products"
 msgstr ""
 
-#: src/Fields.php:582
+#: src/Fields.php:583
 msgid "Selected products"
 msgstr ""
 
-#: src/Fields.php:583
+#: src/Fields.php:584
 msgid "Products in categories"
 msgstr ""
 
-#: src/Fields.php:584
+#: src/Fields.php:585
 msgid "Products with tags"
 msgstr ""
 
-#: src/Fields.php:589
+#: src/Fields.php:590
 msgid "Products"
 msgstr ""
 
-#: src/Fields.php:605
+#: src/Fields.php:606
 msgid "Categories"
 msgstr ""
 
-#: src/Fields.php:605
+#: src/Fields.php:606
 msgid "Tags"
 msgstr ""
 
-#: src/Fields.php:619
+#: src/Fields.php:620
 msgid "Position"
 msgstr ""
 
-#: src/Fields.php:622
+#: src/Fields.php:623
 msgid "Before quantity field"
 msgstr ""
 
-#: src/Fields.php:623
+#: src/Fields.php:624
 msgid "Before \"Add to cart\" button"
 msgstr ""
 
-#: src/Fields.php:624
+#: src/Fields.php:625
 msgid "After \"Add to cart\" button"
 msgstr ""
 
-#: src/Fields.php:626
+#: src/Fields.php:627
 msgid "Groups with a lower \"Order\" value (Page attributes) are shown first."
 msgstr ""
 
@@ -2119,37 +2119,37 @@ msgstr ""
 msgid "Not yet delivered"
 msgstr ""
 
-#: src/Tickets.php:131 src/Tickets.php:188 src/Tickets.php:213
+#: src/Tickets.php:131 src/Tickets.php:191 src/Tickets.php:216
 msgid "No voucher or ticket found for this code."
 msgstr ""
 
 #. translators: 1: used admissions, 2: total admissions
-#: src/Tickets.php:161
+#: src/Tickets.php:164
 #, php-format
 msgid "%1$d of %2$d admissions used"
 msgstr ""
 
-#: src/Tickets.php:199 src/VoucherRepository.php:272
+#: src/Tickets.php:202 src/VoucherRepository.php:272
 msgid "Check-in reverted"
 msgstr ""
 
-#: src/Tickets.php:199 src/Tickets.php:269 src/VoucherRepository.php:271
+#: src/Tickets.php:202 src/Tickets.php:272 src/VoucherRepository.php:271
 msgid "Checked in"
 msgstr ""
 
-#: src/Tickets.php:202 src/Tickets.php:269
+#: src/Tickets.php:205 src/Tickets.php:272
 msgid "Check-in not possible."
 msgstr ""
 
-#: src/Tickets.php:220
+#: src/Tickets.php:223
 msgid "Redeemed in store"
 msgstr ""
 
-#: src/Tickets.php:224
+#: src/Tickets.php:227
 msgid "Please enter an amount."
 msgstr ""
 
-#: src/Tickets.php:253 src/Voucher.php:55 src/VoucherRepository.php:268
+#: src/Tickets.php:256 src/Voucher.php:55 src/VoucherRepository.php:268
 msgid "Redeemed"
 msgstr ""
 

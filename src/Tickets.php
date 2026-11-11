@@ -138,6 +138,9 @@ final class Tickets {
 	 */
 	public function checkin( Voucher $voucher, int $count = 1 ): bool {
 		global $wpdb;
+		if ( ! $voucher->is_ticket() ) {
+			return false; // Vouchers and gift cards are redeemed, not checked in.
+		}
 		$table = Install::tables()['vouchers'];
 		$count = max( 1, $count );
 		$now   = gmdate( 'Y-m-d H:i:s' );

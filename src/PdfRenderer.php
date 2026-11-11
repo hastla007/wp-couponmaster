@@ -27,6 +27,33 @@ final class PdfRenderer {
 
 	public function __construct( private ?Settings $settings = null ) {}
 
+	/** @var array<string,float> */
+	private static array $height_ratio = array();
+
+	/**
+	 * dompdf multiplies CSS line-height by the font's own height ratio (≈1.28 for DejaVu, 0.86 for Courier),
+	 * browsers do not. Dividing by this ratio makes the PDF line pitch equal to the designer canvas.
+	 */
+	private static function font_height_ratio( string $family, bool $bold, bool $italic ): float {
+		$style = $bold && $italic ? 'bold_italic' : ( $bold ? 'bold' : ( $italic ? 'italic' : 'normal' ) );
+		$key   = $family . '|' . $style;
+		if ( ! isset( self::$height_ratio[ $key ] ) ) {
+			$ratio = 1.0;
+			try {
+				static $metrics = null;
+				$metrics = $metrics ?? ( new Dompdf() )->getFontMetrics();
+				$font    = $metrics->getFont( $family, $style );
+				if ( $font ) {
+					$ratio = (float) $metrics->getFontHeight( $font, 100 ) / 100;
+				}
+			} catch ( \Throwable $e ) {
+				$ratio = 1.0;
+			}
+			self::$height_ratio[ $key ] = $ratio > 0.5 && $ratio < 2 ? $ratio : 1.0;
+		}
+		return self::$height_ratio[ $key ];
+	}
+
 	public static function fonts(): array {
 		$fonts = array(
 			'DejaVu Sans'      => 'DejaVu Sans',
@@ -242,6 +269,8 @@ final class PdfRenderer {
 		$valign = (string) ( $el['valign'] ?? 'top' );
 		$valign = in_array( $valign, array( 'top', 'middle', 'bottom' ), true ) ? $valign : 'top';
 		$lh     = max( 0.8, min( 3, (float) ( $el['lineHeight'] ?? 1.25 ) ) );
+		$bold   = ! empty( $el['bold'] ) || ( 'heading' === $el['type'] && ! isset( $el['bold'] ) );
+		$lh    /= self::font_height_ratio( (string) $font, $bold, ! empty( $el['italic'] ) );
 
 		$style  = $this->box_style( $el );
 		$inner  = sprintf(
@@ -251,7 +280,7 @@ final class PdfRenderer {
 			$this->num( $lh ),
 			$this->color( $el['color'] ?? '#000000' ),
 			$align,
-			! empty( $el['bold'] ) || ( 'heading' === $el['type'] && ! isset( $el['bold'] ) ) ? 'bold' : 'normal',
+			$bold ? 'bold' : 'normal',
 			! empty( $el['italic'] ) ? 'italic' : 'normal',
 			! empty( $el['underline'] ) ? 'text-decoration:underline;' : ''
 		);
@@ -266,7 +295,7 @@ final class PdfRenderer {
 		if ( 'top' !== $valign ) {
 			// dompdf supports table-cell vertical alignment.
 			$h    = max( 1, (float) ( $el['h'] ?? 10 ) );
-			$body = sprintf( '<table style="width:100%%;height:%smm;border-collapse:collapse;"><tr><td style="vertical-align:%s;padding:0;%s">%s</td></tr></table>', $this->num( $h ), $valign, esc_attr( $inner ), $body );
+			$body = sprintf( '<table style="width:100%%;border-collapse:collapse;"><tr><td style="height:%smm;vertical-align:%s;padding:0;%s">%s</td></tr></table>', $this->num( $h ), $valign, esc_attr( $inner ), $body ); // dompdf ignores height on <table>, not on <td>.
 			return '<div class="el txt" style="' . esc_attr( $style ) . '">' . $body . '</div>';
 		}
 		return '<div class="el txt" style="' . esc_attr( $style . $inner ) . '">' . $body . '</div>';
@@ -313,6 +342,7 @@ final class PdfRenderer {
 					\chillerlan\QRCode\Data\QRMatrix::M_FORMAT_DARK    => $dark,
 					\chillerlan\QRCode\Data\QRMatrix::M_VERSION_DARK   => $dark,
 					\chillerlan\QRCode\Data\QRMatrix::M_FINDER_DOT     => $dark,
+					\chillerlan\QRCode\Data\QRMatrix::M_DARKMODULE     => $dark,
 				),
 			)
 		);

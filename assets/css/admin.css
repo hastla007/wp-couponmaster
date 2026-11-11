@@ -31,6 +31,7 @@ mark.vcap-status--expired, mark.vcap-status--void { background: #eba3a3; color: 
 .vcap-scanner { max-width: 560px; }
 .vcap-scanner-video { position: relative; background: #1d2327; border-radius: 8px; overflow: hidden; aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center; }
 .vcap-scanner-video video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.vcap-scanner-video #vcap-camera-toggle { position: relative; z-index: 1; } /* above the video layer, otherwise it cannot be clicked */
 .vcap-scanner-video.is-live #vcap-camera-toggle { position: absolute; bottom: 12px; }
 .vcap-scanner-form { display: flex; gap: 6px; margin: 12px 0 6px; }
 .vcap-scanner-form input { flex: 1; font-size: 18px; padding: 8px 10px; }

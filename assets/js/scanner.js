@@ -18,6 +18,7 @@
 	var lastCode = '';
 	var lastTime = 0;
 	var busy = false;
+	var runId = 0;
 
 	try {
 		auto.checked = '1' === window.localStorage.getItem( 'vcapAutoCheckin' );
@@ -29,6 +30,10 @@
 	} );
 
 	function api( path, method, body ) {
+		// With plain permalinks the REST root already contains "?rest_route=…".
+		if ( -1 !== cfg.root.indexOf( '?' ) ) {
+			path = path.replace( '?', '&' );
+		}
 		return fetch( cfg.root + path, {
 			method: method || 'GET',
 			credentials: 'same-origin',
@@ -88,7 +93,7 @@
 			if ( d.checkins > 0 ) {
 				html += '<button type="button" class="button" data-act="undo">' + esc( t.undo ) + '</button>';
 			}
-		} else if ( 'ok' === d.state ) {
+		} else if ( 'ok' === d.state && 'redeemed' !== d.status ) {
 			if ( d.multi_use ) {
 				html += '<input type="text" inputmode="decimal" id="vcap-amount" class="small-text" placeholder="' + esc( t.amount ) + '" aria-label="' + esc( t.amount ) + '">';
 			}
@@ -109,14 +114,13 @@
 			return;
 		}
 		busy = true;
-		var p = auto.checked
-			? api( 'checkin', 'POST', { q: query } ).then( function ( d ) {
-				if ( 'ticket' !== d.type || ! d.success ) {
-					return api( 'lookup?q=' + encodeURIComponent( query ) );
-				}
-				return d;
-			} )
-			: api( 'lookup?q=' + encodeURIComponent( query ) );
+		// Always look up first; auto check-in applies to valid tickets only (never to vouchers or gift cards).
+		var p = api( 'lookup?q=' + encodeURIComponent( query ) ).then( function ( d ) {
+			if ( auto.checked && 'ticket' === d.type && 'ok' === d.state ) {
+				return api( 'checkin', 'POST', { q: query } );
+			}
+			return d;
+		} );
 		p.then( function ( d ) {
 			render( d, query );
 			beep( 'ok' === d.state );
@@ -157,18 +161,21 @@
 
 	function onCode( code ) {
 		var now = Date.now();
-		if ( code === lastCode && now - lastTime < 4000 ) {
-			return;
-		}
+		var same = code === lastCode && now - lastTime < 4000;
+		// Re-arm only after the code has left the frame for 4 s: a ticket held in view must not be
+		// checked in again and again.
 		lastCode = code;
 		lastTime = now;
+		if ( same ) {
+			return;
+		}
 		input.value = code;
 		lookup( code );
 	}
 
-	function tick() {
-		if ( ! stream ) {
-			return;
+	function tick( run ) {
+		if ( ! stream || run !== runId ) {
+			return; // Camera stopped or restarted: only the newest loop keeps running.
 		}
 		if ( video.readyState >= 2 ) {
 			if ( detector ) {
@@ -176,7 +183,9 @@
 					if ( codes.length ) {
 						onCode( codes[ 0 ].rawValue );
 					}
-				} ).catch( function () {} );
+				} ).catch( function () {
+					detector = null; // Fall back to jsQR when the native detector fails.
+				} );
 			} else if ( window.jsQR ) {
 				var w = video.videoWidth;
 				var h = video.videoHeight;
@@ -193,7 +202,9 @@
 			}
 		}
 		window.setTimeout( function () {
-			window.requestAnimationFrame( tick );
+			window.requestAnimationFrame( function () {
+				tick( run );
+			} );
 		}, 200 );
 	}
 
@@ -215,7 +226,8 @@
 					detector = null;
 				}
 			}
-			tick();
+			runId++;
+			tick( runId );
 		} ).catch( function () {
 			showError( { message: t.noCamera } );
 		} );
