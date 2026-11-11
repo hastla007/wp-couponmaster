@@ -92,9 +92,11 @@ final class VoucherRepository {
 	}
 
 	/** @return Voucher[] */
-	public function for_email( string $email, int $limit = 200 ): array {
+	public function for_email( string $email, int $limit = 200, int $offset = 0 ): array {
 		global $wpdb;
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->table} WHERE buyer_email = %s OR recipient_email = %s ORDER BY id DESC LIMIT %d", $email, $email, $limit ), ARRAY_A ); // phpcs:ignore
+		$limit  = max( 1, $limit );
+		$offset = max( 0, $offset );
+		$rows   = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->table} WHERE buyer_email = %s OR recipient_email = %s ORDER BY id DESC LIMIT %d OFFSET %d", $email, $email, $limit, $offset ), ARRAY_A ); // phpcs:ignore
 		return array_map( array( Voucher::class, 'from_row' ), $rows ?: array() );
 	}
 
@@ -226,8 +228,8 @@ final class VoucherRepository {
 		$cutoff = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
 		return (int) $wpdb->query( // phpcs:ignore
 			$wpdb->prepare(
-				"UPDATE {$this->table} SET recipient_name = '', recipient_email = '', message = '', fields = '[]', updated_at = %s
-				WHERE recipient_email <> '' AND ( (status IN ('expired','redeemed','void') AND updated_at < %s) OR (expires_at IS NOT NULL AND expires_at < %s) )",
+				"UPDATE {$this->table} SET buyer_name = '', buyer_email = '', recipient_name = '', recipient_email = '', message = '', fields = '[]', updated_at = %s
+				WHERE (buyer_email <> '' OR recipient_email <> '') AND ( (status IN ('expired','redeemed','void') AND updated_at < %s) OR (expires_at IS NOT NULL AND expires_at < %s) )",
 				$this->now(),
 				$cutoff,
 				$cutoff
