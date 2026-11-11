@@ -15,5 +15,15 @@ Visual PDF designer, recipient fields and custom field groups, scheduled deliver
 
 == Changelog ==
 
+= 1.1.0 =
+* New: redeem vouchers and gift cards outside the shop (courses, tickets, memberships) through the PHP service vcap()->redemptions or the REST API /wp-json/vcap/v1/redemptions – reserve, commit, release, with idempotency keys, stable error codes and automatic release of expired reservations.
+* New: settings section "Integrations (API)" (reservation lifetime, invalid-code limit).
+* New: gift card balances are reserved before payment and committed after payment (transactional ledger).
+* Fix: paid orders whose voucher balance could not be deducted are put on hold for review.
+* Fix: holds of trashed, deleted or abandoned unpaid orders are released.
+* Fix: a due scheduled gift becomes redeemable even when no email can be sent.
+* Fix: foreign-currency discounts are converted before they are deducted from a balance.
+* Change: random code part defaults to 12 characters.
+
 = 1.0.0 =
 * Initial release.
