@@ -1,0 +1,12 @@
+{
+  "name": "voucher-captain-e2e",
+  "private": true,
+  "description": "Browser tests for Voucher Captain (run in CI against a real WordPress).",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.10.1",
+    "@playwright/test": "1.49.1"
+  }
+}

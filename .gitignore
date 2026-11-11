@@ -2,3 +2,6 @@ vendor/
 node_modules/
 /build/
 .phpunit*
+tests/e2e/test-results/
+tests/e2e/.state.json
+tests/e2e/package-lock.json
