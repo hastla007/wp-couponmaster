@@ -109,7 +109,7 @@ final class Delivery {
 
 		try {
 			$voucher = $this->repo->get( $voucher_id );
-			if ( ! $voucher || $voucher->delivered_at || Voucher::STATUS_VOID === $voucher->status ) {
+			if ( ! $voucher || $voucher->delivered_at || ! in_array( $voucher->status, array( Voucher::STATUS_SCHEDULED, Voucher::STATUS_ACTIVE ), true ) ) {
 				return;
 			}
 			$now = $this->repo->now();
