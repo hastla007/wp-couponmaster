@@ -137,15 +137,16 @@ remove_filter( 'vcap_redemption_channel_allowed', $only_shop, 10 );
 // Late payment after Pass Captain expired the order and released the voucher (Pass Captain with the commit fix).
 if ( method_exists( Checkout::class, 'handle_job' ) ) {
 	global $wpdb;
-	$late_card  = vcap_pc_voucher( 'balance', 30 );
+	$late_card  = vcap_pc_voucher( 'balance', 15 ); // Less than the 20 € ticket: the order stays unpaid until the transfer.
 	$late_order = vcap_pc_order( $type, 1 );
 	Checkout::apply( $late_order['order_id'], $late_card->code );
 	$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}wpcap_reservations SET status='expired', expires_at=%s WHERE order_id=%d", gmdate( 'Y-m-d H:i:s', time() - 60 ), $late_order['order_id'] ) );
 	$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}wpcap_orders SET status='expired', payment_status='expired' WHERE order_id=%d", $late_order['order_id'] ) );
 	Checkout::release( $late_order['order_id'] );
-	vcap_pc_assert( 30.0 === vcap()->vouchers->get( $late_card->id )->balance, 'an expired ticket order gives the gift card balance back' );
+	vcap_pc_assert( 'pending' === Orders::get( $late_order['order_id'] )->payment_status || 'expired' === Orders::get( $late_order['order_id'] )->payment_status, 'the partly voucher-paid ticket order waits for the transfer' );
+	vcap_pc_assert( 15.0 === vcap()->vouchers->get( $late_card->id )->balance, 'an expired ticket order gives the gift card balance back' );
 	$paid = Orders::confirm_external_payment( $late_order['order_id'], 'late-transfer' );
-	vcap_pc_assert( true === $paid && 'committed' === vcap_pc_redemption( $late_order['order_id'] )['state'] && 10.0 === vcap()->vouchers->get( $late_card->id )->balance, 'a late payment reserves and charges the gift card again (no free discount)' );
+	vcap_pc_assert( true === $paid && 'committed' === vcap_pc_redemption( $late_order['order_id'] )['state'] && 0.0 === vcap()->vouchers->get( $late_card->id )->balance, 'a late payment reserves and charges the gift card again (no free discount)' );
 }
 
 // Minor units follow ISO 4217 (as Pass Captain does), not the shop's price display setting.
