@@ -41,8 +41,8 @@ final class VoucherService {
 	/**
 	 * Reserve a balance amount for a saved order.
 	 *
-	 * @param string   $code Voucher code.
-	 * @param float    $amount Amount to reserve.
+	 * @param string    $code Voucher code.
+	 * @param float     $amount Amount to reserve.
 	 * @param \WC_Order $order Saved WooCommerce order.
 	 * @return array<string, mixed>|\WP_Error
 	 */
@@ -54,7 +54,7 @@ final class VoucherService {
 	/**
 	 * Commit a saved order's reservation.
 	 *
-	 * @param string   $code Voucher code.
+	 * @param string    $code Voucher code.
 	 * @param \WC_Order $order Saved WooCommerce order.
 	 * @return array<string, mixed>|\WP_Error
 	 */
@@ -66,7 +66,7 @@ final class VoucherService {
 	/**
 	 * Release a saved order's reservation.
 	 *
-	 * @param string   $code Voucher code.
+	 * @param string    $code Voucher code.
 	 * @param \WC_Order $order Saved WooCommerce order.
 	 * @return array<string, mixed>|\WP_Error
 	 */
