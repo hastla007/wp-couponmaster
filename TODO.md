@@ -70,7 +70,7 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 ## P2 – Qualitätssicherung und Veröffentlichung
 
 - [ ] Automatisierte Integrationsprüfungen für VCAP allein und gemeinsam mit TCAP einrichten; WooCommerce-Statuswiederholungen, parallele Einlösungen, Timeout, Teil-/Vollerstat­tung und 0-Euro-Checkout abdecken. *(teilweise: VCAP allein inkl. Statuswiederholungen, Teil-/Vollerstattung und Abbruch; TCAP fehlt; 0-Euro-Checkout in tests/zero-total-integration.php)*
-- [ ] Release-Prüfung mit HPOS, klassischer Kasse, Checkout-Blöcken, unterstützten Mehrwährungs-/Subscription-Integrationen und minimaler WordPress-/PHP-Version dokumentieren.
+- [ ] Release-Prüfung mit HPOS, klassischer Kasse, Checkout-Blöcken, unterstützten Mehrwährungs-/Subscription-Integrationen und minimaler WordPress-/PHP-Version dokumentieren. *(automatisiert: HPOS/Legacy-Matrix, klassische Kasse und Checkout-Blöcke im Browser, Mindestversionen; offen: echte Mehrwährungs-/Subscription-Plugins und Zahlungsanbieter)*
 - [x] Build-ZIP in einer sauberen WordPress-Installation installieren, aktivieren, aktualisieren und deinstallieren; bei gemeinsamer Installation Klassen-/Vendor-Konflikte prüfen. — *Nachweis: CI-Schritt „Build, install, and update the release ZIP“ + Deinstallationsprüfung; Konflikte mit TCAP noch offen, siehe Native Integration*
 - [ ] Übersetzungen, Datenschutzauskunft/-löschung, Berechtigungen, Nonces, Rate-Limits und Admin-/Kunden-E-Mail-Vorlagen für Release freigeben.
 
@@ -154,9 +154,9 @@ Befund im Kursplugin: `/wp-json/boatingschool/v1/coupons/redeem` ist derzeit fü
 
 - [ ] EU als Zielmarkt umsetzen; Länder-, Währungs-, Sprach- und Steuerkonfiguration getrennt von fest codierter Geschäftslogik halten.
 - [x] Release-CI gegen WordPress 7.1.4, WooCommerce 11.2.2, PHP 8.4 (am Snapshot 8.4.27), MySQL 8.4 LTS und MariaDB 11.4 LTS einrichten. — *Nachweis: .github/workflows/plugin-smoke.yml*
-- [ ] Unterstützte Mindestversionen separat von der aktuellen Test-Baseline festlegen und pro Release aktualisieren.
-- [ ] Yoast SEO 28.8 als optionale Kompatibilitätskonfiguration prüfen; Yoast darf keine Laufzeitabhängigkeit sein.
+- [x] Unterstützte Mindestversionen separat von der aktuellen Test-Baseline festlegen und pro Release aktualisieren. — *Nachweis: COMPATIBILITY.md (Minimum WP 6.4 / WC 8.8 / PHP 8.1 vs. Baseline WP 7.1.4 / WC 11.2.2 / PHP 8.4); Hinweis und Abschaltung bei WC < 8.8; CI-Job `minimum-versions` führt die komplette Integrationssuite auf den Mindestversionen aus*
+- [x] Yoast SEO 28.8 als optionale Kompatibilitätskonfiguration prüfen; Yoast darf keine Laufzeitabhängigkeit sein. — *Nachweis: kein Yoast-Bezug im Code; Integrationssuite und Browser-Tests mit Yoast 28.8, Job `minimum-versions` ohne Yoast*
 - [x] Mehrwährungs-, Mehrsprachigkeits- und WooCommerce-Produktfeld-Integrationen über dokumentierte Adapter spezifizieren. — *Nachweis: ADAPTERS.md*
 - [ ] EU-weite Steuerfälle, OSS, Bruttopreisberechnung, Gutscheinbesteuerung und positionsbezogene Erstattungen mit Steuerberatung für die unterstützten Länder festlegen.
-- [ ] Verbraucherinformationen und Gutscheinbedingungen pro Land konfigurierbar machen und rechtlich prüfen lassen.
-- [ ] Barrierefreiheit von Produktfeldern, Checkout-/Kundenkonto-Flows, PDF-Vorschau und Admin-Oberfläche prüfen.
+- [ ] Verbraucherinformationen und Gutscheinbedingungen pro Land konfigurierbar machen und rechtlich prüfen lassen. *(technisch erledigt: Einstellung „Einlösebedingungen pro Land“, Rechnungsland entscheidet, am Gutschein festgeschrieben; offen: rechtliche Prüfung der Texte)*
+- [ ] Barrierefreiheit von Produktfeldern, Checkout-/Kundenkonto-Flows, PDF-Vorschau und Admin-Oberfläche prüfen. *(automatisiert erledigt: axe-Scans und Tastaturbedienung für Produktfelder, PDF-Vorschau, Shortcodes, Kundenkonto, Scanner und Aktions-Editor in `browser-e2e`; gefundene Mängel behoben. Offen: Prüfung mit echtem Screenreader)*

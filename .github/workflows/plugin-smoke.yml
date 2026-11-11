@@ -99,30 +99,7 @@ jobs:
         env:
           VCAP_EXPECT_HPOS: ${{ matrix.order_storage.expected }}
         run: |
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/woocommerce-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/compatibility-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/security-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/redemption-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/order-lifecycle-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/account-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/coupon-link-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/campaign-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/reminder-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/zero-total-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/purchase-rules-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/first-order-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/store-credit-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/promotion-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/bonus-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/sku-rules-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/reports-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/referral-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/shortcodes-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/connector-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/example-connector-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/blocks-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/fault-injection-integration.php"
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/acceptance-integration.php"
+          VCAP_WITH_COMPAT=1 tests/run-integration.sh
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/parallel-checkout.php" setup
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/parallel-checkout.php" reserve 0 & first=$!
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/parallel-checkout.php" reserve 1 & second=$!
@@ -140,6 +117,49 @@ jobs:
           php wp-cli.phar --path=wp-test plugin deactivate voucher-captain
           php wp-cli.phar --path=wp-test plugin uninstall voucher-captain
           php wp-cli.phar --path=wp-test eval 'global $wpdb; if ($wpdb->get_var("SHOW TABLES LIKE \"{$wpdb->prefix}vcap_vouchers\"")) { exit(1); }'
+
+  minimum-versions:
+    # Oldest supported platform (plugin header) without Yoast SEO: WordPress 6.4, WooCommerce 8.8, PHP 8.1.
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --password=root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up PHP 8.1
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          extensions: dom, gd, mbstring, mysqli, xml, zip
+          coverage: none
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist
+      - name: Download WP-CLI
+        run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
+      - name: Install WordPress 6.4, WooCommerce 8.8 and the release ZIP (no Yoast SEO)
+        run: |
+          php wp-cli.phar core download --path=wp-test --version=6.4.5
+          php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
+          php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher Captain minimum" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
+          php wp-cli.phar --path=wp-test plugin install woocommerce --version=8.8.3 --activate
+          bin/build.sh
+          php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
+          php wp-cli.phar --path=wp-test plugin list
+          if php wp-cli.phar --path=wp-test plugin is-installed wordpress-seo; then echo "Yoast SEO must not be installed here"; exit 1; fi
+      - name: Run the integration suites on the minimum versions
+        env:
+          VCAP_EXPECT_HPOS: ''
+        run: tests/run-integration.sh
 
   browser-e2e:
     runs-on: ubuntu-latest

@@ -185,7 +185,7 @@ final class Issuer {
 		$voucher->buyer_email   = (string) $order->get_billing_email();
 		$voucher->max_checkins  = (int) $config['max_checkins'];
 		$voucher->transferable  = 'no' !== $config['transferable'];
-		$voucher->terms         = ProductConfig::terms( $config );
+		$voucher->terms         = ProductConfig::terms( $config, ProductConfig::country_of( $order ) );
 
 		$fields                   = is_array( $item->get_meta( '_vcap_fields' ) ) ? $item->get_meta( '_vcap_fields' ) : array();
 		$voucher->recipient_name  = (string) ( $fields['recipient_name']['value'] ?? '' );

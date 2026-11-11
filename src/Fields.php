@@ -273,7 +273,7 @@ final class Fields {
 			$this->render_field( $key, $field );
 		}
 		if ( 'before_button' === $position ) {
-			$terms = ProductConfig::terms( $config );
+			$terms = ProductConfig::terms( $config, ProductConfig::country_of( WC()->customer ) );
 			if ( '' !== $terms || 'no' === $config['transferable'] ) {
 				echo '<details class="vcap-terms"><summary>' . esc_html__( 'Redemption conditions', 'voucher-captain' ) . '</summary>';
 				if ( 'no' === $config['transferable'] ) {

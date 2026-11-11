@@ -3248,3 +3248,12 @@ msgstr "Kategorien wählen …"
 
 msgid "Product %d"
 msgstr "Produkt %d"
+
+msgid "Optional, for shops selling to several countries. One block per country, starting with the two-letter country code and a colon, e.g. \"AT: Valid for 30 years.\" The billing country of the order decides; products with their own conditions and countries without a block use the conditions above. Have the texts checked legally for each country."
+msgstr "Optional, für Shops mit mehreren Lieferländern. Ein Block pro Land, beginnend mit dem zweistelligen Ländercode und einem Doppelpunkt, z. B. „AT: Gültig für 30 Jahre.“ Maßgeblich ist das Rechnungsland der Bestellung; Produkte mit eigenen Bedingungen und Länder ohne Block verwenden die Bedingungen oben. Lassen Sie die Texte für jedes Land rechtlich prüfen."
+
+msgid "Redemption conditions per country"
+msgstr "Einlösebedingungen pro Land"
+
+msgid "Voucher Captain requires WooCommerce 8.8 or newer (installed: %s). Please update WooCommerce."
+msgstr "Voucher Captain benötigt WooCommerce 8.8 oder neuer (installiert: %s). Bitte aktualisieren Sie WooCommerce."

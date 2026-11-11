@@ -35,6 +35,21 @@ test.describe( 'Product page', () => {
 		await expect( page.getByText( /is a required field/i ).first() ).toBeVisible();
 	} );
 
+	test( 'the personalised PDF preview works with the keyboard', async ( { page, context } ) => {
+		await page.goto( '/product/e2e-voucher/' );
+		await page.fill( '#vcap-field-recipient_name', 'Vorschau Person' );
+		const button = page.getByRole( 'button', { name: /Preview voucher/i } );
+		await expect( button ).toBeVisible();
+		await button.focus();
+		await expect( button ).toBeFocused();
+		const [ response ] = await Promise.all( [
+			context.waitForEvent( 'response', ( r ) => r.url().includes( 'admin-ajax.php' ) && 'POST' === r.request().method() ),
+			page.keyboard.press( 'Enter' ),
+		] );
+		expect( response.status() ).toBe( 200 );
+		expect( response.headers()[ 'content-type' ] || '' ).toContain( 'pdf' );
+	} );
+
 	test( 'Yoast SEO and the voucher fields coexist on the product page', async ( { page } ) => {
 		await page.goto( '/product/e2e-voucher/' );
 		await expect( page.locator( '#vcap-field-recipient_email' ) ).toBeVisible();

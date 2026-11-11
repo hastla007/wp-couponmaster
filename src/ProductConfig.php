@@ -115,9 +115,57 @@ final class ProductConfig {
 	/**
 	 * Redemption conditions: product text, otherwise the shop default.
 	 */
-	public static function terms( array $config ): string {
+	/**
+	 * Redemption conditions: the product's own, else the shop default for the customer's country, else the
+	 * general shop default.
+	 */
+	public static function terms( array $config, string $country = '' ): string {
 		$terms = trim( (string) ( $config['redemption_terms'] ?? '' ) );
-		return '' !== $terms ? $terms : trim( (string) get_option( 'vcap_default_terms', '' ) );
+		if ( '' !== $terms ) {
+			return $terms;
+		}
+		$by_country = self::terms_by_country( (string) get_option( 'vcap_terms_by_country', '' ) );
+		$country    = strtoupper( $country );
+		if ( '' !== $country && isset( $by_country[ $country ] ) ) {
+			return $by_country[ $country ];
+		}
+		return trim( (string) get_option( 'vcap_default_terms', '' ) );
+	}
+
+	/**
+	 * Parse "AT: text" blocks (a block runs until the next line starting with a two-letter country code and a colon).
+	 *
+	 * @return array<string, string>
+	 */
+	public static function terms_by_country( string $raw ): array {
+		$out     = array();
+		$current = '';
+		foreach ( preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
+			if ( preg_match( '/^\s*([A-Za-z]{2})\s*:\s*(.*)$/', $line, $m ) ) {
+				$current         = strtoupper( $m[1] );
+				$out[ $current ] = $m[2];
+				continue;
+			}
+			if ( '' !== $current ) {
+				$out[ $current ] .= "\n" . $line;
+			}
+		}
+		return array_filter( array_map( 'trim', $out ), 'strlen' );
+	}
+
+	/** Country for country-specific conditions: billing, else shipping, else the shop's base country. */
+	public static function country_of( $order_or_customer ): string {
+		$country = '';
+		if ( $order_or_customer instanceof \WC_Order || $order_or_customer instanceof \WC_Customer ) {
+			$country = (string) $order_or_customer->get_billing_country();
+			if ( '' === $country ) {
+				$country = (string) $order_or_customer->get_shipping_country();
+			}
+		}
+		if ( '' === $country && function_exists( 'WC' ) && WC()->countries ) {
+			$country = (string) WC()->countries->get_base_country();
+		}
+		return $country;
 	}
 
 	/**

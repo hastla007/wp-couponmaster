@@ -7,7 +7,7 @@
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Requires Plugins:  woocommerce
- * WC requires at least: 8.0
+ * WC requires at least: 8.8
  * WC tested up to:   11.2
  * Author:            CouponMaster
  * Text Domain:       voucher-captain
@@ -64,6 +64,18 @@ add_action(
 				static function (): void {
 					if ( current_user_can( 'activate_plugins' ) ) {
 						echo '<div class="notice notice-error"><p>' . esc_html__( 'Voucher Captain requires WooCommerce to be installed and active.', 'voucher-captain' ) . '</p></div>';
+					}
+				}
+			);
+			return;
+		}
+		if ( defined( 'WC_VERSION' ) && version_compare( WC_VERSION, '8.8', '<' ) ) {
+			add_action(
+				'admin_notices',
+				static function (): void {
+					if ( current_user_can( 'activate_plugins' ) ) {
+						/* translators: %s: installed WooCommerce version */
+						echo '<div class="notice notice-error"><p>' . esc_html( sprintf( __( 'Voucher Captain requires WooCommerce 8.8 or newer (installed: %s). Please update WooCommerce.', 'voucher-captain' ), WC_VERSION ) ) . '</p></div>';
 					}
 				}
 			);

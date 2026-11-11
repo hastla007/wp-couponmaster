@@ -42,6 +42,7 @@ final class Settings {
 		'vcap_redemption_max_failures' => 10,
 		'vcap_credit_with_coupons'     => 'yes',
 		'vcap_credit_apply_order'      => 'last',
+		'vcap_terms_by_country'        => '',
 		'vcap_referral_enabled'        => 'no',
 		'vcap_referral_friend_type'    => 'fixed_cart',
 		'vcap_referral_friend_amount'  => 10,
@@ -272,6 +273,14 @@ final class Settings {
 						'default'  => '',
 						'css'      => 'min-width:400px;height:80px;',
 						'desc_tip' => __( 'Used when a product has no conditions of its own, e.g. "Not exchangeable for cash. Residual value remains on the voucher."', 'voucher-captain' ),
+					),
+					array(
+						'title'    => __( 'Redemption conditions per country', 'voucher-captain' ),
+						'id'       => 'vcap_terms_by_country',
+						'type'     => 'textarea',
+						'default'  => '',
+						'css'      => 'min-width:400px;height:120px;',
+						'desc'     => __( 'Optional, for shops selling to several countries. One block per country, starting with the two-letter country code and a colon, e.g. "AT: Valid for 30 years." The billing country of the order decides; products with their own conditions and countries without a block use the conditions above. Have the texts checked legally for each country.', 'voucher-captain' ),
 					),
 					array(
 						'title'   => __( 'Default template', 'voucher-captain' ),

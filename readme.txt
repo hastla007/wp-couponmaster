@@ -1,7 +1,7 @@
 === Voucher Captain ===
 Tags: woocommerce, gift card, voucher, pdf, coupon
 Requires at least: 6.4
-Tested up to: 6.8
+Tested up to: 7.1
 Requires PHP: 8.1
 Stable tag: 1.1.0
 License: GPLv2 or later
@@ -32,6 +32,8 @@ Visual PDF designer, recipient fields and custom field groups, scheduled deliver
 * Fix: a voucher voided while an external redemption is reserved can no longer be committed (vcap_cancelled).
 * Fix: promotion editor selects have accessible labels.
 * Dev: CONNECTORS.md, ADAPTERS.md and an example connector plugin; browser tests (Playwright, axe) in CI.
+* New: redemption conditions per country (billing country decides).
+* Change: requires WooCommerce 8.8 or newer (checked on load); tested with WordPress 7.1.
 * Fix: paid orders whose voucher balance could not be deducted are put on hold for review.
 * Fix: holds of trashed, deleted or abandoned unpaid orders are released.
 * Fix: a due scheduled gift becomes redeemable even when no email can be sent.

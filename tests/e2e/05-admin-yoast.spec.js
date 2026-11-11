@@ -34,6 +34,17 @@ test.describe( 'Admin with Yoast SEO active', () => {
 		expect( errors ).toEqual( [] );
 	} );
 
+	test( 'scanner is accessible and usable with the keyboard (barcode scanners type + Enter)', async ( { page } ) => {
+		const errors = trackPluginErrors( page );
+		await page.goto( '/wp-admin/admin.php?page=vcap-scanner' );
+		await expectAccessible( page, '.vcap-scanner' );
+		await page.focus( '#vcap-code' );
+		await page.keyboard.type( 'NOPE-E2E-0000' );
+		await page.keyboard.press( 'Enter' );
+		await expect( page.locator( '#vcap-result' ) ).not.toBeEmpty();
+		expect( errors ).toEqual( [] );
+	} );
+
 	test( 'promotion rules editor is accessible and the test cart works', async ( { page } ) => {
 		const errors = trackPluginErrors( page );
 		await page.goto( '/wp-admin/post-new.php?post_type=vcap_discount' );

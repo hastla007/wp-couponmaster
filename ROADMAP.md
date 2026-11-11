@@ -44,7 +44,7 @@ Abgehakte Punkte sind im aktuellen PR implementiert und/oder durch die aufgefüh
 25. [x] MySQL- und MariaDB-Tabellenengine nach Aktivierung und Upgrade verifizieren.
 26. [x] Datenbankmigration von vorhandenen MyISAM-Tabellen unter realistischen Datenmengen testen.
 27. [x] HPOS- und Legacy-Order-Storage in einer Integrationstestmatrix prüfen.
-28. [ ] Yoast SEO 28.8 ist in CI parallel aktiviert; Admin-, Checkout- und Frontend-Konflikte noch per Browser-E2E prüfen.
+28. [x] Yoast SEO 28.8 ist in CI parallel aktiviert; Admin-, Checkout- und Frontend-Konflikte per Browser-E2E geprüft (`browser-e2e`).
 29. [x] WooCommerce-Produkt-, Warenkorb- und Checkout-Blöcke mit Gutscheinfeldern testen.
 30. [x] WooCommerce-Subscriptions-, Mehrwährungs- und Produktfeld-Verträge dokumentieren und mit optionalen Provider-/Renewal-Tests absichern (externe Premium-Plugins bleiben außerhalb der CI).
 
@@ -74,8 +74,8 @@ Offen bleiben reale Gateway-Redirects/Webhooks (23), Yoast-Browser-E2E (28), der
 43. [x] Idempotency-Key und stabile Fehlercodes für externe Connectoren festlegen.
 44. [ ] Voucher Captain und Ticket Captain über dokumentierten, optionalen Vertrag integrieren.
 45. [ ] Learnboating-Connector als separates Add-on mit wiederholbarer Grant-Verarbeitung planen.
-46. [ ] Ablauf-, Übertragbarkeits-, Restwert- und Einlösebedingungen im Kundenkonto erklären.
+46. [x] Ablauf-, Übertragbarkeits-, Restwert- und Einlösebedingungen im Kundenkonto erklären. (Kundenkonto-Tab, E-Mail, Produktseite; Bedingungen pro Land)
 47. [ ] Steuerbehandlung und Erstattungsreihenfolge je Gutscheinart mit Fachberatung spezifizieren.
-48. [ ] Übersetzungen, Tastaturbedienung und Screenreader-Flows für Kauf und Einlösung prüfen.
+48. [ ] Übersetzungen, Tastaturbedienung und Screenreader-Flows für Kauf und Einlösung prüfen. (Tastatur und axe automatisiert in `browser-e2e`; offen: echter Screenreader)
 49. [x] Release-ZIP in sauberer WordPress-Installation installieren, aktualisieren und deinstallieren.
 50. [x] Abnahme von VCAP allein, Ticket Captain allein und beiden Plugins gemeinsam als Release-Gate einführen.
