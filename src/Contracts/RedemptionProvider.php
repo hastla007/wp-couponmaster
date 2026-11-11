@@ -19,6 +19,7 @@ interface RedemptionProvider {
 	 * Check whether this provider owns the voucher code.
 	 *
 	 * @param string $code Voucher code.
+	 * @return bool Whether the provider supports this code.
 	 */
 	public function supports( string $code ): bool;
 
