@@ -110,8 +110,8 @@ final class CouponManager {
 	 * @param int|\WC_Order $order_or_id Order ID or order object.
 	 */
 	public function reserve_order( $order_or_id, $posted_data = null, $order = null ): void {
-		$order = $order instanceof \\WC_Order ? $order : ( $order_or_id instanceof \\WC_Order ? $order_or_id : wc_get_order( (int) $order_or_id ) );
-		if ( ! $order instanceof \\WC_Order || in_array( $order->get_status(), array( 'cancelled', 'refunded' ), true ) ) {
+		$order = $order instanceof \WC_Order ? $order : ( $order_or_id instanceof \WC_Order ? $order_or_id : wc_get_order( (int) $order_or_id ) );
+		if ( ! $order instanceof \WC_Order || in_array( $order->get_status(), array( 'cancelled', 'refunded' ), true ) ) {
 			return;
 		}
 
@@ -142,7 +142,7 @@ final class CouponManager {
 			}
 			$reserved_voucher = $this->find_voucher_for_code( (string) $code );
 			if ( ! $reserved_voucher || ! $this->release_reservation_atomic( $reserved_voucher, $order->get_id(), __( 'Checkout reservation reconciled', 'voucher-captain' ) ) ) {
-				throw new \\Exception( __( 'An earlier voucher reservation could not be released. Please contact the store before trying again.', 'voucher-captain' ) );
+				throw new \Exception( __( 'An earlier voucher reservation could not be released. Please contact the store before trying again.', 'voucher-captain' ) );
 			}
 			unset( $reservations[ $code ] );
 			$order->update_meta_data( '_vcap_reservations', $reservations );
@@ -171,7 +171,7 @@ final class CouponManager {
 				}
 				$order->delete_meta_data( '_vcap_reservations' );
 				$order->save();
-				throw new \\Exception( __( 'A voucher balance changed while checkout was processing. Your order was not sent for payment. Refresh the cart and try again.', 'voucher-captain' ) );
+				throw new \Exception( __( 'A voucher balance changed while checkout was processing. Your order was not sent for payment. Refresh the cart and try again.', 'voucher-captain' ) );
 			}
 			$made[ $code ] = $reservation['amount'];
 			// Persist after each successful reserve so an interrupted checkout can resume safely.
@@ -186,9 +186,9 @@ final class CouponManager {
 	public function reserve_store_api_order( $order ): void {
 		try {
 			$this->reserve_order( $order );
-		} catch ( \\Throwable $e ) {
-			if ( class_exists( \\Automattic\\WooCommerce\\StoreApi\\Exceptions\\RouteException::class ) ) {
-				throw new \\Automattic\\WooCommerce\\StoreApi\\Exceptions\\RouteException( 'vcap_voucher_reservation_failed', $e->getMessage(), 409 );
+		} catch ( \Throwable $e ) {
+			if ( class_exists( \Automattic\WooCommerce\StoreApi\Exceptions\RouteException::class ) ) {
+				throw new \Automattic\WooCommerce\StoreApi\Exceptions\RouteException( 'vcap_voucher_reservation_failed', $e->getMessage(), 409 );
 			}
 			throw $e;
 		}
@@ -200,7 +200,7 @@ final class CouponManager {
 	public function reserve_retry_order( $order ): void {
 		try {
 			$this->reserve_order( $order );
-		} catch ( \\Throwable $e ) {
+		} catch ( \Throwable $e ) {
 			wc_add_notice( $e->getMessage(), 'error' );
 		}
 	}
@@ -256,7 +256,7 @@ final class CouponManager {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				return null;
 			}
-			$if ( ! $this->repo->log( $fresh->id, 'reserved', $requested, $fresh->balance, $note, $order_id ) ) {
+			if ( ! $this->repo->log( $fresh->id, 'reserved', $requested, $fresh->balance, $note, $order_id ) ) {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				return null;
 			}
@@ -480,7 +480,7 @@ final class CouponManager {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				return false;
 			}
-		} catch ( \\Throwable $e ) {
+		} catch ( \Throwable $e ) {
 			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			throw $e;
 		}
@@ -752,7 +752,7 @@ final class CouponManager {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				return false;
 			}
-		} catch ( \\Throwable $e ) {
+		} catch ( \Throwable $e ) {
 			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			throw $e;
 		}
@@ -760,7 +760,7 @@ final class CouponManager {
 		return true;
 	}
 
-	public function restore_order( \\WC_Order $order ): void {
+	public function restore_order( \WC_Order $order ): void {
 		$applied = (array) $order->get_meta( '_vcap_redemptions' );
 		if ( ! $applied ) {
 			return;
