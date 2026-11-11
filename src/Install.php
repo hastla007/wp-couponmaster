@@ -12,6 +12,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Install {
 	public const OPTION_DB_VERSION = 'vcap_db_version';
+	private static ?bool $transactional_tables = null;
 
 	/** @var array<string, callable-string> */
 	private const MIGRATIONS = array(
@@ -65,6 +66,9 @@ final class Install {
 	}
 
 	public static function tables_support_transactions(): bool {
+		if ( null !== self::$transactional_tables ) {
+			return self::$transactional_tables;
+		}
 		global $wpdb;
 		$tables = self::tables();
 		foreach ( array( 'vouchers', 'events' ) as $key ) {
@@ -75,14 +79,15 @@ final class Install {
 				)
 			);
 			if ( 'innodb' !== strtolower( (string) $engine ) ) {
-				return false;
+				return self::$transactional_tables = false;
 			}
 		}
-		return true;
+		return self::$transactional_tables = true;
 	}
 
 	private static function ensure_transactional_tables( array $tables ): void {
 		global $wpdb;
+		self::$transactional_tables = null;
 		foreach ( array( 'vouchers', 'events' ) as $key ) {
 			$engine = $wpdb->get_var(
 				$wpdb->prepare(
