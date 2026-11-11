@@ -85,7 +85,7 @@ final class CartIntegration {
 	/**
 	 * Context for rule evaluation (cart or order).
 	 */
-	private function context( $object ): array {
+	public function context( $object ): array {
 		if ( $object instanceof \WC_Order ) {
 			$user    = (int) $object->get_customer_id();
 			$email   = (string) $object->get_billing_email();
@@ -126,7 +126,7 @@ final class CartIntegration {
 		return Usage::blocker( $campaign, $user, $email );
 	}
 
-	private static function line( string $key, \WC_Product $product, int $qty, float $unit ): array {
+	public static function line( string $key, \WC_Product $product, int $qty, float $unit ): array {
 		$parent = $product->get_parent_id() ? $product->get_parent_id() : $product->get_id();
 		return array(
 			'key'        => $key,

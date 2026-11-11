@@ -62,7 +62,9 @@ final class Plugin {
 		$promotions = new Discounts\Repository();
 		$promotions->register();
 		( new Discounts\Usage() )->register();
-		( new Discounts\CartIntegration( $this->settings, $promotions ) )->register();
+		$promotion_cart = new Discounts\CartIntegration( $this->settings, $promotions );
+		$promotion_cart->register();
+		( new Discounts\Bonus( $promotions, $promotion_cart ) )->register();
 		( new Discounts\Admin( $promotions ) )->register();
 
 		$this->settings->register();

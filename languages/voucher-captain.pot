@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-11 13:20+0000\n"
+"POT-Creation-Date: 2026-11-11 17:36+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:73 src/API/V1/RedemptionService.php:112
@@ -403,7 +403,7 @@ msgstr ""
 msgid "Scanner"
 msgstr ""
 
-#: src/Admin/Menu.php:43 src/Admin/Menu.php:43 src/Plugin.php:103
+#: src/Admin/Menu.php:43 src/Admin/Menu.php:43 src/Plugin.php:105
 msgid "Settings"
 msgstr ""
 
@@ -473,7 +473,7 @@ msgstr ""
 msgid "Balance"
 msgstr ""
 
-#: src/Admin/Scanner.php:33 src/Admin/VoucherAdmin.php:106 src/ProductSettings.php:116 src/TemplatePostType.php:261 templates/myaccount/vouchers-table.php:30 templates/myaccount/vouchers-table.php:56
+#: src/Admin/Scanner.php:33 src/Admin/VoucherAdmin.php:106 src/Discounts/Admin.php:155 src/ProductSettings.php:116 src/TemplatePostType.php:261 templates/myaccount/vouchers-table.php:30
 msgid "Value"
 msgstr ""
 
@@ -481,7 +481,7 @@ msgstr ""
 msgid "Holder"
 msgstr ""
 
-#: src/Admin/Scanner.php:35 src/Admin/VoucherAdmin.php:104 src/Admin/VouchersListTable.php:28 src/Discounts/Admin.php:210 src/Discounts/Admin.php:365 templates/ticket-status.php:56
+#: src/Admin/Scanner.php:35 src/Admin/VoucherAdmin.php:104 src/Admin/VouchersListTable.php:28 src/Discounts/Admin.php:232 src/Discounts/Admin.php:406 templates/ticket-status.php:56
 msgid "Product"
 msgstr ""
 
@@ -561,7 +561,7 @@ msgstr ""
 msgid "Event"
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:60 src/Admin/StoreCreditAdmin.php:110 src/Admin/VoucherAdmin.php:181 src/Admin/VoucherAdmin.php:203 src/Discounts/Admin.php:126 src/StoreCredit.php:267
+#: src/Admin/StoreCreditAdmin.php:60 src/Admin/StoreCreditAdmin.php:110 src/Admin/VoucherAdmin.php:181 src/Admin/VoucherAdmin.php:203 src/Discounts/Admin.php:127 src/StoreCredit.php:267
 msgid "Amount"
 msgstr ""
 
@@ -1098,7 +1098,7 @@ msgstr ""
 msgid "Promotions"
 msgstr ""
 
-#: src/Discounts/Admin.php:32 src/Discounts/Repository.php:55
+#: src/Discounts/Admin.php:32 src/Discounts/Repository.php:55 src/Emails/BonusEmail.php:75
 msgid "Promotion"
 msgstr ""
 
@@ -1130,7 +1130,7 @@ msgstr ""
 msgid "Search for a product…"
 msgstr ""
 
-#: src/Discounts/Admin.php:111 src/Discounts/Admin.php:365 src/Discounts/Admin.php:379
+#: src/Discounts/Admin.php:111 src/Discounts/Admin.php:406 src/Discounts/Admin.php:420
 msgid "Discount"
 msgstr ""
 
@@ -1146,252 +1146,320 @@ msgstr ""
 msgid "Tiered by quantity"
 msgstr ""
 
-#: src/Discounts/Admin.php:117 src/Discounts/Admin.php:136
+#: src/Discounts/Admin.php:117 src/Discounts/Admin.php:137
 msgid "Buy X, get Y"
 msgstr ""
 
-#: src/Discounts/Admin.php:122
+#: src/Discounts/Admin.php:118
+msgid "Bonus voucher after the order"
+msgstr ""
+
+#: src/Discounts/Admin.php:123
 msgid "Percentage"
 msgstr ""
 
-#: src/Discounts/Admin.php:128
+#: src/Discounts/Admin.php:129
 msgid "Taken off the qualifying products in total, split proportionally."
 msgstr ""
 
-#: src/Discounts/Admin.php:131
+#: src/Discounts/Admin.php:132
 msgid "Tiers"
 msgstr ""
 
-#: src/Discounts/Admin.php:133
+#: src/Discounts/Admin.php:134
 msgid "One tier per line: \"from quantity:percent\", e.g. 3:5 = 5 % from 3 items. The highest reached tier applies to all qualifying items."
 msgstr ""
 
-#: src/Discounts/Admin.php:138
+#: src/Discounts/Admin.php:139
 msgid "Buy"
 msgstr ""
 
-#: src/Discounts/Admin.php:139
+#: src/Discounts/Admin.php:140
 msgid "get"
 msgstr ""
 
-#: src/Discounts/Admin.php:140
+#: src/Discounts/Admin.php:141
 msgid "at"
 msgstr ""
 
-#: src/Discounts/Admin.php:140
+#: src/Discounts/Admin.php:141
 msgid "off"
 msgstr ""
 
-#: src/Discounts/Admin.php:141
+#: src/Discounts/Admin.php:142
 msgid "Repeat (every group of X+Y)"
 msgstr ""
 
-#: src/Discounts/Admin.php:142
+#: src/Discounts/Admin.php:143
 msgid "The cheapest qualifying items are discounted, e.g. buy 2 get 1 at 100 % off = the cheapest of three is free."
 msgstr ""
 
-#: src/Discounts/Admin.php:146 src/Fields.php:603
-msgid "Products"
+#: src/Discounts/Admin.php:147 src/Emails/BonusEmail.php:15
+msgid "Bonus voucher"
 msgstr ""
 
-#: src/Discounts/Admin.php:148
-msgid "Leave products and categories empty for all products. Voucher products are excluded unless \"Discount codes on vouchers\" is allowed."
+#: src/Discounts/Admin.php:149
+msgid "Earned by"
 msgstr ""
 
-#: src/Discounts/Admin.php:150 src/Fields.php:619
-msgid "Categories"
+#: src/Discounts/Admin.php:151
+msgid "a qualifying order"
 msgstr ""
 
-#: src/Discounts/Admin.php:151 src/ProductSettings.php:281
-msgid "Exclude products"
+#: src/Discounts/Admin.php:152
+msgid "buying vouchers/gift cards"
 msgstr ""
 
-#: src/Discounts/Admin.php:152 src/ProductSettings.php:283
-msgid "Exclude categories"
+#: src/Discounts/Admin.php:162 src/ProductSettings.php:214 src/ProductSettings.php:553
+msgid "Valid for (days)"
 msgstr ""
 
-#: src/Discounts/Admin.php:154
-msgid "Conditions"
-msgstr ""
-
-#: src/Discounts/Admin.php:156
-msgid "Minimum cart value"
-msgstr ""
-
-#: src/Discounts/Admin.php:157
-msgid "Minimum quantity of qualifying items"
-msgstr ""
-
-#: src/Discounts/Admin.php:161
-msgid "Customers"
+#: src/Discounts/Admin.php:163
+msgid "Minimum order value to redeem"
 msgstr ""
 
 #: src/Discounts/Admin.php:164
-msgid "Everyone"
+msgid "After payment the customer receives a single-use code for the next order by email (WooCommerce → Settings → Emails → Bonus voucher), restricted to their billing email. The conditions below decide which orders qualify; the minimum cart value applies to the qualifying order. An unused bonus is withdrawn when the order is cancelled or refunded."
 msgstr ""
 
-#: src/Discounts/Admin.php:165
-msgid "Logged-in customers"
+#: src/Discounts/Admin.php:168 src/Fields.php:603
+msgid "Products"
 msgstr ""
 
-#: src/Discounts/Admin.php:166
-msgid "Customer groups (user roles)"
+#: src/Discounts/Admin.php:170
+msgid "Leave products and categories empty for all products. Voucher products are excluded unless \"Discount codes on vouchers\" is allowed."
 msgstr ""
 
-#: src/Discounts/Admin.php:167 src/FirstOrderCoupons.php:26
-msgid "First order only"
+#: src/Discounts/Admin.php:172 src/Fields.php:619
+msgid "Categories"
 msgstr ""
 
-#: src/Discounts/Admin.php:168
-msgid "Returning customers (next order)"
+#: src/Discounts/Admin.php:173 src/ProductSettings.php:281
+msgid "Exclude products"
 msgstr ""
 
-#: src/Discounts/Admin.php:171
-msgid "Choose roles…"
+#: src/Discounts/Admin.php:174 src/ProductSettings.php:283
+msgid "Exclude categories"
 msgstr ""
 
-#: src/Discounts/Admin.php:180 src/Discounts/Admin.php:380
-msgid "Period"
+#: src/Discounts/Admin.php:176
+msgid "Conditions"
 msgstr ""
 
-#: src/Discounts/Admin.php:182
-msgid "From"
+#: src/Discounts/Admin.php:178
+msgid "Minimum cart value"
+msgstr ""
+
+#: src/Discounts/Admin.php:179
+msgid "Minimum quantity of qualifying items"
 msgstr ""
 
 #: src/Discounts/Admin.php:183
-msgid "until"
+msgid "Customers"
+msgstr ""
+
+#: src/Discounts/Admin.php:186
+msgid "Everyone"
 msgstr ""
 
 #: src/Discounts/Admin.php:187
-msgid "Usage limits"
+msgid "Logged-in customers"
 msgstr ""
 
-#: src/Discounts/Admin.php:189
-msgid "Total uses"
+#: src/Discounts/Admin.php:188
+msgid "Customer groups (user roles)"
+msgstr ""
+
+#: src/Discounts/Admin.php:189 src/FirstOrderCoupons.php:26
+msgid "First order only"
 msgstr ""
 
 #: src/Discounts/Admin.php:190
+msgid "Returning customers (next order)"
+msgstr ""
+
+#: src/Discounts/Admin.php:193
+msgid "Choose roles…"
+msgstr ""
+
+#: src/Discounts/Admin.php:202 src/Discounts/Admin.php:421
+msgid "Period"
+msgstr ""
+
+#: src/Discounts/Admin.php:204
+msgid "From"
+msgstr ""
+
+#: src/Discounts/Admin.php:205
+msgid "until"
+msgstr ""
+
+#: src/Discounts/Admin.php:209
+msgid "Usage limits"
+msgstr ""
+
+#: src/Discounts/Admin.php:211
+msgid "Total uses"
+msgstr ""
+
+#: src/Discounts/Admin.php:212
 msgid "Uses per customer"
 msgstr ""
 
-#: src/Discounts/Admin.php:191
+#: src/Discounts/Admin.php:213
 msgid "An order counts once it is paid or on hold and is given back when it is cancelled or fails. Customers are recognised by account and billing email; guests without an email are checked at checkout."
 msgstr ""
 
-#: src/Discounts/Admin.php:195
+#: src/Discounts/Admin.php:217
 msgid "Combination"
 msgstr ""
 
-#: src/Discounts/Admin.php:197
+#: src/Discounts/Admin.php:219
 msgid "Can be combined with other promotions"
 msgstr ""
 
-#: src/Discounts/Admin.php:198
+#: src/Discounts/Admin.php:220
 msgid "Also applies when the customer uses a coupon code"
 msgstr ""
 
-#: src/Discounts/Admin.php:199
+#: src/Discounts/Admin.php:221
 msgid "Priority = \"Order\" in the Attributes box (lower first). A promotion that cannot be combined only applies alone; if it has the best priority, others are skipped."
 msgstr ""
 
-#: src/Discounts/Admin.php:208
+#: src/Discounts/Admin.php:230
 msgid "Try the rules above with a sample cart before publishing. Unsaved changes are used."
 msgstr ""
 
-#: src/Discounts/Admin.php:210 src/Discounts/Admin.php:215 src/Discounts/Admin.php:365
+#: src/Discounts/Admin.php:232 src/Discounts/Admin.php:237 src/Discounts/Admin.php:406
 msgid "Quantity"
 msgstr ""
 
-#: src/Discounts/Admin.php:221
+#: src/Discounts/Admin.php:243
 msgid "Customer"
 msgstr ""
 
-#: src/Discounts/Admin.php:223
+#: src/Discounts/Admin.php:245
 msgid "Guest, first order"
 msgstr ""
 
-#: src/Discounts/Admin.php:224
+#: src/Discounts/Admin.php:246
 msgid "Logged-in customer, first order"
 msgstr ""
 
-#: src/Discounts/Admin.php:225
+#: src/Discounts/Admin.php:247
 msgid "Logged-in returning customer"
 msgstr ""
 
-#: src/Discounts/Admin.php:228
+#: src/Discounts/Admin.php:250
 msgid "Role"
 msgstr ""
 
-#: src/Discounts/Admin.php:235
+#: src/Discounts/Admin.php:257
 msgid "Calculate"
 msgstr ""
 
 #. translators: %s: amount
-#: src/Discounts/Admin.php:302
+#: src/Discounts/Admin.php:329
 #, php-format
 msgid "%s off"
 msgstr ""
 
-#: src/Discounts/Admin.php:304
+#: src/Discounts/Admin.php:331
 msgid "Tiered:"
 msgstr ""
 
+#. translators: %s: bonus voucher value
+#: src/Discounts/Admin.php:335
+#, php-format
+msgid "Bonus voucher %s"
+msgstr ""
+
 #. translators: 1: buy quantity, 2: get quantity, 3: percent
-#: src/Discounts/Admin.php:307
+#: src/Discounts/Admin.php:338
 #, php-format
 msgid "Buy %1$d, get %2$d at %3$s %% off"
 msgstr ""
 
-#: src/Discounts/Admin.php:352
+#: src/Discounts/Admin.php:383
 msgid "Choose at least one product."
 msgstr ""
 
-#: src/Discounts/Admin.php:355
+#: src/Discounts/Admin.php:386
 msgid "The promotion has not started yet."
 msgstr ""
 
-#: src/Discounts/Admin.php:356
+#: src/Discounts/Admin.php:387
 msgid "The promotion has ended."
 msgstr ""
 
-#: src/Discounts/Admin.php:357
+#: src/Discounts/Admin.php:388
 msgid "Not combined with coupon codes."
 msgstr ""
 
-#: src/Discounts/Admin.php:358
+#: src/Discounts/Admin.php:389
 msgid "This customer does not qualify."
 msgstr ""
 
-#: src/Discounts/Admin.php:359
+#: src/Discounts/Admin.php:390
 msgid "The minimum cart value is not reached."
 msgstr ""
 
-#: src/Discounts/Admin.php:360
+#: src/Discounts/Admin.php:391
 msgid "No product in this cart qualifies."
 msgstr ""
 
-#: src/Discounts/Admin.php:361
+#: src/Discounts/Admin.php:392
 msgid "Not enough qualifying items."
 msgstr ""
 
-#: src/Discounts/Admin.php:365
+#. translators: %s: bonus voucher value
+#: src/Discounts/Admin.php:400
+#, php-format
+msgid "This order earns a bonus voucher worth %s after payment."
+msgstr ""
+
+#: src/Discounts/Admin.php:406
 msgid "Price"
 msgstr ""
 
-#: src/Discounts/Admin.php:367
+#: src/Discounts/Admin.php:408
 msgid "voucher"
 msgstr ""
 
-#: src/Discounts/Admin.php:369
+#: src/Discounts/Admin.php:410
 msgid "Total discount"
 msgstr ""
 
-#: src/Discounts/Admin.php:381
+#: src/Discounts/Admin.php:422
 msgid "Priority"
 msgstr ""
 
-#: src/Discounts/Admin.php:382
+#: src/Discounts/Admin.php:423
 msgid "Used"
+msgstr ""
+
+#. translators: 1: coupon code, 2: promotion title
+#: src/Discounts/Bonus.php:81
+#, php-format
+msgid "Bonus voucher %1$s issued (promotion \"%2$s\")."
+msgstr ""
+
+#. translators: 1: promotion title, 2: order number
+#: src/Discounts/Bonus.php:117
+#, php-format
+msgid "Bonus voucher (%1$s) for order #%2$s"
+msgstr ""
+
+#. translators: %s: coupon code
+#: src/Discounts/Bonus.php:150
+#, php-format
+msgid "Bonus voucher %s was already used and stays valid."
+msgstr ""
+
+#. translators: %s: coupon code
+#: src/Discounts/Bonus.php:157
+#, php-format
+msgid "Unused bonus voucher %s withdrawn."
 msgstr ""
 
 #: src/Discounts/CartIntegration.php:56
@@ -1480,6 +1548,36 @@ msgstr ""
 msgid "Check balance"
 msgstr ""
 
+#: src/Emails/BonusEmail.php:16
+msgid "Sent when an order earns a bonus voucher from a promotion (Vouchers → Promotions, discount \"Bonus voucher after the order\")."
+msgstr ""
+
+#: src/Emails/BonusEmail.php:28
+msgid "A bonus voucher from {site_title} for you"
+msgstr ""
+
+#: src/Emails/BonusEmail.php:32
+msgid "Thank you – here is your bonus"
+msgstr ""
+
+#: src/Emails/BonusEmail.php:36
+msgid "Thank you for your order {order_number}. As a thank-you you receive {coupon_amount} off your next order with the code below. Valid until {expiry_date}."
+msgstr ""
+
+#: src/Emails/BonusEmail.php:68
+msgid "no expiry"
+msgstr ""
+
+#. translators: %s: list of placeholders
+#: src/Emails/BonusEmail.php:106 src/Emails/VoucherEmail.php:114
+#, php-format
+msgid "Available placeholders: %s"
+msgstr ""
+
+#: src/Emails/BonusEmail.php:114 src/Emails/VoucherEmail.php:122
+msgid "Email body"
+msgstr ""
+
 #: src/Emails/BuyerEmail.php:11
 msgid "Voucher (buyer)"
 msgstr ""
@@ -1538,16 +1636,6 @@ msgstr ""
 
 #: src/Emails/RecipientEmail.php:29
 msgid "Hi {recipient_name}, {buyer_name} sent you a voucher worth {coupon_value}."
-msgstr ""
-
-#. translators: %s: list of placeholders
-#: src/Emails/VoucherEmail.php:114
-#, php-format
-msgid "Available placeholders: %s"
-msgstr ""
-
-#: src/Emails/VoucherEmail.php:122
-msgid "Email body"
 msgstr ""
 
 #: src/Emails/VoucherEmail.php:131
@@ -1901,12 +1989,12 @@ msgid "Site URL"
 msgstr ""
 
 #. translators: %s: comma separated table names
-#: src/Plugin.php:119
+#: src/Plugin.php:121
 #, php-format
 msgid "Voucher Captain: the voucher database tables do not support transactions (InnoDB). Gift card balances cannot be redeemed until these tables are converted to InnoDB: %s"
 msgstr ""
 
-#: src/Plugin.php:127
+#: src/Plugin.php:129
 msgid "Voucher Captain: the PDF libraries are missing. Install the release ZIP or run \"composer install --no-dev\" in the plugin folder."
 msgstr ""
 
@@ -2102,10 +2190,6 @@ msgstr ""
 
 #: src/ProductSettings.php:207
 msgid "Never expires"
-msgstr ""
-
-#: src/ProductSettings.php:214 src/ProductSettings.php:553
-msgid "Valid for (days)"
 msgstr ""
 
 #: src/ProductSettings.php:233

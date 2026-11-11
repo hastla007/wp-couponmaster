@@ -3012,3 +3012,57 @@ msgstr "Sie haben diese Aktion bereits so oft wie erlaubt genutzt."
 
 msgid "This promotion has reached its usage limit."
 msgstr "Diese Aktion hat ihr Nutzungslimit erreicht."
+
+msgid "A bonus voucher from {site_title} for you"
+msgstr "Ein Bonusgutschein von {site_title} für Sie"
+
+msgid "After payment the customer receives a single-use code for the next order by email (WooCommerce → Settings → Emails → Bonus voucher), restricted to their billing email. The conditions below decide which orders qualify; the minimum cart value applies to the qualifying order. An unused bonus is withdrawn when the order is cancelled or refunded."
+msgstr "Nach der Zahlung erhält der Kunde per E-Mail einen einmal nutzbaren Code für die nächste Bestellung (WooCommerce → Einstellungen → E-Mails → Bonusgutschein), beschränkt auf seine Rechnungs-E-Mail. Die Bedingungen unten legen fest, welche Bestellungen sich qualifizieren; der Mindestwarenwert gilt für die qualifizierende Bestellung. Ein ungenutzter Bonus wird bei Stornierung oder Erstattung der Bestellung zurückgezogen."
+
+msgid "Bonus voucher"
+msgstr "Bonusgutschein"
+
+msgid "Bonus voucher %1$s issued (promotion \"%2$s\")."
+msgstr "Bonusgutschein %1$s ausgegeben (Aktion „%2$s“)."
+
+msgid "Bonus voucher %s"
+msgstr "Bonusgutschein %s"
+
+msgid "Bonus voucher %s was already used and stays valid."
+msgstr "Bonusgutschein %s wurde bereits genutzt und bleibt gültig."
+
+msgid "Bonus voucher (%1$s) for order #%2$s"
+msgstr "Bonusgutschein (%1$s) für Bestellung #%2$s"
+
+msgid "Bonus voucher after the order"
+msgstr "Bonusgutschein nach der Bestellung"
+
+msgid "Earned by"
+msgstr "Erhalten durch"
+
+msgid "Minimum order value to redeem"
+msgstr "Mindestbestellwert zum Einlösen"
+
+msgid "Sent when an order earns a bonus voucher from a promotion (Vouchers → Promotions, discount \"Bonus voucher after the order\")."
+msgstr "Wird gesendet, wenn eine Bestellung einen Bonusgutschein aus einer Aktion erhält (Gutscheine → Aktionen, Rabatt „Bonusgutschein nach der Bestellung“)."
+
+msgid "Thank you for your order {order_number}. As a thank-you you receive {coupon_amount} off your next order with the code below. Valid until {expiry_date}."
+msgstr "Vielen Dank für Ihre Bestellung {order_number}. Als Dankeschön erhalten Sie mit dem folgenden Code {coupon_amount} Rabatt auf Ihre nächste Bestellung. Gültig bis {expiry_date}."
+
+msgid "Thank you – here is your bonus"
+msgstr "Danke – hier ist Ihr Bonus"
+
+msgid "This order earns a bonus voucher worth %s after payment."
+msgstr "Diese Bestellung erhält nach der Zahlung einen Bonusgutschein im Wert von %s."
+
+msgid "Unused bonus voucher %s withdrawn."
+msgstr "Ungenutzter Bonusgutschein %s zurückgezogen."
+
+msgid "a qualifying order"
+msgstr "eine qualifizierende Bestellung"
+
+msgid "buying vouchers/gift cards"
+msgstr "den Kauf von Gutscheinen/Geschenkkarten"
+
+msgid "no expiry"
+msgstr "unbegrenzt"

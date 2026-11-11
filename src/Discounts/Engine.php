@@ -13,7 +13,8 @@ defined( 'ABSPATH' ) || exit;
  *                   'other_coupons' => string[], 'allow_vouchers' => bool, 'decimals' => int ]
  */
 final class Engine {
-	public const ACTIONS   = array( 'percent', 'fixed', 'tiered', 'bxgy' );
+	public const ACTIONS   = array( 'percent', 'fixed', 'tiered', 'bxgy', 'bonus' );
+	public const BONUS_TYPES = array( 'percent', 'fixed_cart' );
 	public const CUSTOMERS = array( 'any', 'logged_in', 'roles', 'first_order', 'returning' );
 
 	/**
@@ -53,6 +54,11 @@ final class Engine {
 			'with_coupons'    => ! isset( $r['with_coupons'] ) || ! empty( $r['with_coupons'] ),
 			'usage_limit'              => max( 0, (int) ( $r['usage_limit'] ?? 0 ) ),
 			'usage_limit_per_customer' => max( 0, (int) ( $r['usage_limit_per_customer'] ?? 0 ) ),
+			'bonus_type'               => in_array( $r['bonus_type'] ?? '', self::BONUS_TYPES, true ) ? $r['bonus_type'] : 'fixed_cart',
+			'bonus_amount'             => max( 0.0, (float) ( $r['bonus_amount'] ?? 0 ) ),
+			'bonus_days'               => max( 0, (int) ( $r['bonus_days'] ?? 90 ) ),
+			'bonus_min_spend'          => max( 0.0, (float) ( $r['bonus_min_spend'] ?? 0 ) ),
+			'bonus_trigger'            => 'gift_card' === ( $r['bonus_trigger'] ?? '' ) ? 'gift_card' : 'order',
 		);
 	}
 
@@ -143,6 +149,21 @@ final class Engine {
 			return 'min_qty';
 		}
 		return '';
+	}
+
+	/**
+	 * Why an order does not earn the bonus voucher of a "bonus" promotion ('' when it does).
+	 * With the trigger "gift_card" only voucher/gift card lines count.
+	 */
+	public static function bonus_blocker( array $rules, array $lines, array $context ): string {
+		if ( 'bonus' !== $rules['action'] || $rules['bonus_amount'] <= 0 ) {
+			return 'no_items';
+		}
+		if ( 'gift_card' === $rules['bonus_trigger'] ) {
+			$lines                     = array_values( array_filter( $lines, static fn( $l ) => ! empty( $l['is_voucher'] ) ) );
+			$context['allow_vouchers'] = true;
+		}
+		return self::blocker( $rules, $lines, $context );
 	}
 
 	private static function tier( array $rules, int $qty ): ?array {

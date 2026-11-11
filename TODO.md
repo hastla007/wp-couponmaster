@@ -69,7 +69,7 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 
 ## P2 – Qualitätssicherung und Veröffentlichung
 
-- [ ] Automatisierte Integrationsprüfungen für VCAP allein und gemeinsam mit TCAP einrichten; WooCommerce-Statuswiederholungen, parallele Einlösungen, Timeout, Teil-/Vollerstat­tung und 0-Euro-Checkout abdecken. *(teilweise: VCAP allein inkl. Statuswiederholungen, Teil-/Vollerstattung und Abbruch; TCAP und 0-Euro-Checkout fehlen)*
+- [ ] Automatisierte Integrationsprüfungen für VCAP allein und gemeinsam mit TCAP einrichten; WooCommerce-Statuswiederholungen, parallele Einlösungen, Timeout, Teil-/Vollerstat­tung und 0-Euro-Checkout abdecken. *(teilweise: VCAP allein inkl. Statuswiederholungen, Teil-/Vollerstattung und Abbruch; TCAP fehlt; 0-Euro-Checkout in tests/zero-total-integration.php)*
 - [ ] Release-Prüfung mit HPOS, klassischer Kasse, Checkout-Blöcken, unterstützten Mehrwährungs-/Subscription-Integrationen und minimaler WordPress-/PHP-Version dokumentieren.
 - [x] Build-ZIP in einer sauberen WordPress-Installation installieren, aktivieren, aktualisieren und deinstallieren; bei gemeinsamer Installation Klassen-/Vendor-Konflikte prüfen. — *Nachweis: CI-Schritt „Build, install, and update the release ZIP“ + Deinstallationsprüfung; Konflikte mit TCAP noch offen, siehe Native Integration*
 - [ ] Übersetzungen, Datenschutzauskunft/-löschung, Berechtigungen, Nonces, Rate-Limits und Admin-/Kunden-E-Mail-Vorlagen für Release freigeben.
@@ -143,7 +143,7 @@ Befund im Kursplugin: `/wp-json/boatingschool/v1/coupons/redeem` ist derzeit fü
 ## P2 – Kundenbindung und Shop-Erweiterungen
 
 - [x] Gutscheine mit konfigurierbarem Vorablauf-Hinweis und Zustellstatus versenden; Versandwiederholung und Unterdrückung von Erinnerungen unterstützen. — *Nachweis: Vorablauf-Erinnerung, Zustellstatus/-fehler im Verlauf, erneuter Versand (Admin und Kundenkonto), Unterdrückung je Gutschein; tests/reminder-integration.php*
-- [ ] Bonusgutschein bei qualifizierender Bestellung oder Geschenkkartenkauf als optionale Kampagnenaktion ausgeben.
+- [x] Bonusgutschein bei qualifizierender Bestellung oder Geschenkkartenkauf als optionale Kampagnenaktion ausgeben. — *Nachweis: Aktion „Bonusgutschein nach der Bestellung“ (Auslöser Bestellung oder Gutscheinkauf), Einmal-Code mit E-Mail-Bindung, Ablauf und Mindestwert, eigene WooCommerce-E-Mail; Rücknahme bei Storno/Erstattung; tests/bonus-integration.php*
 - [ ] Gutscheinsaldo, Gutscheinstatus, Einlöseseite und Versandaktion über wiederverwendbare Blöcke/Shortcodes bereitstellen.
 - [x] Kundenvorschau personalisierter Gutscheine vor dem Kauf anbieten. — *Nachweis: Vorschau-Button auf der Produktseite, PDF mit Wasserzeichen*
 - [ ] Feste Wertstufen und Wunschbetrag für Gutscheinprodukte unterstützen, wenn Produkt-/Preis-Integrationen dies erlauben; Werte, Währung und Steuerdaten positionsbezogen speichern. *(teilweise: Wunschbetrag mit Min/Max/Schrittweite/Vorschlägen und Variationen als Wertstufen vorhanden)*

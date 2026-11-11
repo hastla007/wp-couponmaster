@@ -70,6 +70,27 @@ final class Usage {
 		return '';
 	}
 
+	public static function add( int $campaign_id, string $key ): void {
+		add_post_meta( $campaign_id, self::META, $key );
+	}
+
+	public static function remove( int $campaign_id, string $key ): void {
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s AND meta_value = %s LIMIT 1", $campaign_id, self::META, $key ) );
+		wp_cache_delete( $campaign_id, 'post_meta' );
+	}
+
+	/** The key a use of this order is stored under (kept on the order, so later email changes do not matter). */
+	public static function order_key( \WC_Order $order ): string {
+		$key = (string) $order->get_meta( self::ORDER_KEY );
+		if ( '' === $key ) {
+			$keys = self::customer_keys( (int) $order->get_customer_id(), (string) $order->get_billing_email() );
+			$key  = $keys ? $keys[0] : 'o:' . $order->get_id();
+			$order->update_meta_data( self::ORDER_KEY, $key );
+		}
+		return $key;
+	}
+
 	/** Promotion ids on an order's coupon lines. */
 	public static function campaign_ids( \WC_Order $order ): array {
 		$ids = array();
@@ -93,15 +114,10 @@ final class Usage {
 		if ( ! $new ) {
 			return;
 		}
-		$key = (string) $order->get_meta( self::ORDER_KEY );
-		if ( '' === $key ) {
-			$keys = self::customer_keys( (int) $order->get_customer_id(), (string) $order->get_billing_email() );
-			$key  = $keys ? $keys[0] : 'o:' . $order->get_id();
-			$order->update_meta_data( self::ORDER_KEY, $key );
-		}
+		$key = self::order_key( $order );
 		foreach ( $new as $id ) {
 			if ( get_post( $id ) ) {
-				add_post_meta( $id, self::META, $key );
+				self::add( $id, $key );
 			}
 		}
 		$order->update_meta_data( self::ORDER_META, array_values( array_merge( $done, $new ) ) );
@@ -109,7 +125,6 @@ final class Usage {
 	}
 
 	public function revert( $order_id ): void {
-		global $wpdb;
 		$order = wc_get_order( $order_id );
 		if ( ! $order instanceof \WC_Order ) {
 			return;
@@ -120,8 +135,7 @@ final class Usage {
 		}
 		$key = (string) $order->get_meta( self::ORDER_KEY );
 		foreach ( $done as $id ) {
-			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s AND meta_value = %s LIMIT 1", $id, self::META, $key ) );
-			wp_cache_delete( $id, 'post_meta' );
+			self::remove( $id, $key );
 		}
 		$order->delete_meta_data( self::ORDER_META );
 		$order->save_meta_data();

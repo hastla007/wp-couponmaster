@@ -115,6 +115,7 @@ final class Admin {
 						<option value="fixed" <?php selected( $r['action'], 'fixed' ); ?>><?php esc_html_e( 'Fixed amount off', 'voucher-captain' ); ?></option>
 						<option value="tiered" <?php selected( $r['action'], 'tiered' ); ?>><?php esc_html_e( 'Tiered by quantity', 'voucher-captain' ); ?></option>
 						<option value="bxgy" <?php selected( $r['action'], 'bxgy' ); ?>><?php esc_html_e( 'Buy X, get Y', 'voucher-captain' ); ?></option>
+						<option value="bonus" <?php selected( $r['action'], 'bonus' ); ?>><?php esc_html_e( 'Bonus voucher after the order', 'voucher-captain' ); ?></option>
 					</select>
 				</td>
 			</tr>
@@ -140,6 +141,27 @@ final class Admin {
 					<label><?php esc_html_e( 'at', 'voucher-captain' ); ?> <input type="number" min="1" max="100" name="vcap_rules[get_percent]" value="<?php echo esc_attr( (string) $r['get_percent'] ); ?>" class="small-text" /> % <?php esc_html_e( 'off', 'voucher-captain' ); ?></label>
 					<label><input type="checkbox" name="vcap_rules[repeat]" value="1" <?php checked( $r['repeat'] ); ?> /> <?php esc_html_e( 'Repeat (every group of X+Y)', 'voucher-captain' ); ?></label>
 					<p class="description"><?php esc_html_e( 'The cheapest qualifying items are discounted, e.g. buy 2 get 1 at 100 % off = the cheapest of three is free.', 'voucher-captain' ); ?></p>
+				</td>
+			</tr>
+			<tr class="vcap-for vcap-for-bonus">
+				<th scope="row"><?php esc_html_e( 'Bonus voucher', 'voucher-captain' ); ?></th>
+				<td>
+					<label><?php esc_html_e( 'Earned by', 'voucher-captain' ); ?>
+						<select name="vcap_rules[bonus_trigger]">
+							<option value="order" <?php selected( $r['bonus_trigger'], 'order' ); ?>><?php esc_html_e( 'a qualifying order', 'voucher-captain' ); ?></option>
+							<option value="gift_card" <?php selected( $r['bonus_trigger'], 'gift_card' ); ?>><?php esc_html_e( 'buying vouchers/gift cards', 'voucher-captain' ); ?></option>
+						</select>
+					</label><br>
+					<label><?php esc_html_e( 'Value', 'voucher-captain' ); ?>
+						<input type="text" name="vcap_rules[bonus_amount]" value="<?php echo esc_attr( $r['bonus_amount'] ? wc_format_localized_price( (string) $r['bonus_amount'] ) : '' ); ?>" class="short wc_input_price" />
+						<select name="vcap_rules[bonus_type]">
+							<option value="fixed_cart" <?php selected( $r['bonus_type'], 'fixed_cart' ); ?>><?php echo esc_html( get_woocommerce_currency_symbol() ); ?></option>
+							<option value="percent" <?php selected( $r['bonus_type'], 'percent' ); ?>>%</option>
+						</select>
+					</label>
+					<label><?php esc_html_e( 'Valid for (days)', 'voucher-captain' ); ?> <input type="number" min="0" name="vcap_rules[bonus_days]" value="<?php echo esc_attr( (string) $r['bonus_days'] ); ?>" class="small-text" /></label>
+					<label><?php esc_html_e( 'Minimum order value to redeem', 'voucher-captain' ); ?> <input type="text" name="vcap_rules[bonus_min_spend]" value="<?php echo esc_attr( $r['bonus_min_spend'] ? wc_format_localized_price( (string) $r['bonus_min_spend'] ) : '' ); ?>" class="short wc_input_price" /></label>
+					<p class="description"><?php esc_html_e( 'After payment the customer receives a single-use code for the next order by email (WooCommerce → Settings → Emails → Bonus voucher), restricted to their billing email. The conditions below decide which orders qualify; the minimum cart value applies to the qualifying order. An unused bonus is withdrawn when the order is cancelled or refunded.', 'voucher-captain' ); ?></p>
 				</td>
 			</tr>
 			<tr>
@@ -279,6 +301,11 @@ final class Admin {
 				'stackable'          => ! empty( $in['stackable'] ),
 				'with_coupons'       => ! empty( $in['with_coupons'] ),
 				'usage_limit'              => absint( $in['usage_limit'] ?? 0 ),
+				'bonus_type'               => sanitize_key( $in['bonus_type'] ?? 'fixed_cart' ),
+				'bonus_amount'             => (float) wc_format_decimal( $in['bonus_amount'] ?? 0 ),
+				'bonus_days'               => absint( $in['bonus_days'] ?? 90 ),
+				'bonus_min_spend'          => (float) wc_format_decimal( $in['bonus_min_spend'] ?? 0 ),
+				'bonus_trigger'            => sanitize_key( $in['bonus_trigger'] ?? 'order' ),
 				'usage_limit_per_customer' => absint( $in['usage_limit_per_customer'] ?? 0 ),
 			)
 		);
@@ -302,6 +329,10 @@ final class Admin {
 				return sprintf( /* translators: %s: amount */ __( '%s off', 'voucher-captain' ), wp_strip_all_tags( wc_price( $r['amount'] ) ) );
 			case 'tiered':
 				return __( 'Tiered:', 'voucher-captain' ) . ' ' . implode( ', ', array_map( static fn( $t ) => $t['min_qty'] . '+ → ' . $t['percent'] . ' %', $r['tiers'] ) );
+			case 'bonus':
+				$value = 'percent' === $r['bonus_type'] ? $r['bonus_amount'] . ' %' : wp_strip_all_tags( wc_price( $r['bonus_amount'] ) );
+				/* translators: %s: bonus voucher value */
+				return sprintf( __( 'Bonus voucher %s', 'voucher-captain' ), $value );
 			case 'bxgy':
 				/* translators: 1: buy quantity, 2: get quantity, 3: percent */
 				return sprintf( __( 'Buy %1$d, get %2$d at %3$s %% off', 'voucher-captain' ), $r['buy_qty'], $r['get_qty'], $r['get_percent'] );
@@ -360,6 +391,16 @@ final class Admin {
 			'no_items'     => __( 'No product in this cart qualifies.', 'voucher-captain' ),
 			'min_qty'      => __( 'Not enough qualifying items.', 'voucher-captain' ),
 		);
+		if ( 'bonus' === $rules['action'] ) {
+			$blocker = Engine::bonus_blocker( $rules, $lines, $context );
+			$value   = 'percent' === $rules['bonus_type'] ? $rules['bonus_amount'] . ' %' : wp_strip_all_tags( wc_price( $rules['bonus_amount'] ) );
+			wp_send_json_success(
+				'' === $blocker
+					/* translators: %s: bonus voucher value */
+					? '<p class="vcap-ok">' . esc_html( sprintf( __( 'This order earns a bonus voucher worth %s after payment.', 'voucher-captain' ), $value ) ) . '</p>'
+					: '<p class="vcap-low">' . esc_html( $reasons[ $blocker ] ?? $blocker ) . '</p>'
+			);
+		}
 		$blocker  = Engine::blocker( $rules, $lines, $context );
 		$amounts  = Engine::discounts( $rules, $lines, $context );
 		$html     = '<table class="widefat striped"><thead><tr><th>' . esc_html__( 'Product', 'voucher-captain' ) . '</th><th>' . esc_html__( 'Quantity', 'voucher-captain' ) . '</th><th>' . esc_html__( 'Price', 'voucher-captain' ) . '</th><th>' . esc_html__( 'Discount', 'voucher-captain' ) . '</th></tr></thead><tbody>';

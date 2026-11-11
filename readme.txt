@@ -20,6 +20,8 @@ Visual PDF designer, recipient fields and custom field groups, scheduled deliver
 * New: settings section "Integrations (API)" (reservation lifetime, invalid-code limit).
 * New: gift card balances are reserved before payment and committed after payment (transactional ledger).
 * New: automatic promotions (Vouchers → Promotions) – percentage, fixed amount, quantity tiers and "buy X, get Y" with customer groups, first/returning order, minimum cart value, period, priority and stacking, plus a test cart before publishing. Off by default.
+* New: promotion usage limits (total and per customer).
+* New: "Bonus voucher after the order" promotions – a single-use coupon by email after a qualifying paid order or gift card purchase, withdrawn when the order is cancelled or refunded.
 * Fix: paid orders whose voucher balance could not be deducted are put on hold for review.
 * Fix: holds of trashed, deleted or abandoned unpaid orders are released.
 * Fix: a due scheduled gift becomes redeemable even when no email can be sent.
