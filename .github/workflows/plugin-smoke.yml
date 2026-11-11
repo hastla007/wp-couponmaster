@@ -131,9 +131,11 @@ jobs:
       - name: Install PHPCS, WordPress Coding Standards, and PHPStan
         run: |
           composer global config allow-plugins.dealerdirect/phpcodesniffer-composer-installer true
-          composer global require --no-interaction squizlabs/php_codesniffer:^3.13 wp-coding-standards/wpcs:^3.0 phpstan/phpstan:^2.1
+          composer global require --no-interaction squizlabs/php_codesniffer:^3.13 wp-coding-standards/wpcs:^3.0 woocommerce/woocommerce-sniffs:^2.0 phpstan/phpstan:^2.1
           echo "$(composer global config bin-dir --absolute)" >> "$GITHUB_PATH"
       - name: Check API and contract coding standards
         run: phpcs --standard=WordPress --extensions=php --exclude=WordPress.Files.FileName src/API/V1 src/Contracts
+      - name: Check API and contract WooCommerce coding standards
+        run: phpcs --standard=WooCommerce-Core --extensions=php --exclude=WordPress.Files.FileName src/API/V1 src/Contracts
       - name: Analyze API and contract types
         run: phpstan analyse --configuration=phpstan.neon.dist --no-progress
