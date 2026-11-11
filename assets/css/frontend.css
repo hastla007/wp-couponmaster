@@ -1,0 +1,17 @@
+/* Voucher Studio – storefront */
+.wcvs-fields { margin: 0 0 1.2em; }
+.wcvs-fields .form-row { margin: 0 0 .9em; }
+.wcvs-fields label { display: block; font-weight: 600; margin-bottom: .25em; }
+.wcvs-fields label.checkbox { font-weight: 400; }
+.wcvs-fields input.input-text, .wcvs-fields textarea, .wcvs-fields select, .wcvs-amount input { width: 100%; box-sizing: border-box; }
+.wcvs-field-help, .wcvs-counter { display: block; font-size: .85em; opacity: .75; margin-top: .25em; }
+.wcvs-amount { margin-bottom: 1em; }
+.wcvs-amount label { display: block; font-weight: 600; margin-bottom: .3em; }
+.wcvs-amount-presets { display: flex; flex-wrap: wrap; gap: .4em; margin-bottom: .5em; }
+.wcvs-amount-preset.is-active { outline: 2px solid currentColor; }
+.wcvs-preview-row { margin: .5em 0 0; }
+.wcvs-vouchers { margin: 2em 0; }
+.wcvs-vouchers-table code { font-size: 1em; letter-spacing: .05em; }
+.wcvs-download { text-align: right; }
+.wcvs-balance-form { display: flex; flex-wrap: wrap; gap: .5em; align-items: center; }
+.wcvs-balance-form label { flex-basis: 100%; font-weight: 600; }

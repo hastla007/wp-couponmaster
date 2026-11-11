@@ -1,0 +1,247 @@
+<?php
+namespace WCVS\Admin;
+
+use WCVS\CodePool;
+use WCVS\SpreadsheetReader;
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Import pre-generated coupon codes (CSV, XLS, XLSX, ODS) into named batches with validation and duplicate handling.
+ */
+final class Import {
+	private const REPORT_TRANSIENT = 'wcvs_import_report_';
+
+	public function __construct( private CodePool $pool ) {}
+
+	public function register(): void {
+		add_action( 'admin_post_wcvs_import', array( $this, 'handle' ) );
+		add_action( 'admin_post_wcvs_delete_batch', array( $this, 'delete_batch' ) );
+	}
+
+	private function can(): bool {
+		return current_user_can( 'wcvs_manage_vouchers' ) || current_user_can( 'manage_woocommerce' );
+	}
+
+	public function page(): void {
+		if ( ! $this->can() ) {
+			wp_die( esc_html__( 'You are not allowed to do this.', 'wc-voucher-studio' ) );
+		}
+		$report = get_transient( self::REPORT_TRANSIENT . get_current_user_id() );
+		delete_transient( self::REPORT_TRANSIENT . get_current_user_id() );
+		?>
+		<div class="wrap wcvs-wrap">
+			<h1><?php esc_html_e( 'Import coupon codes', 'wc-voucher-studio' ); ?></h1>
+			<p><?php esc_html_e( 'Upload a list of pre-generated codes (e.g. printed cards or codes from a partner). Assign the batch to a voucher product under Product data → Voucher → Code source; each sale uses the next free code.', 'wc-voucher-studio' ); ?></p>
+
+			<?php if ( is_array( $report ) ) : ?>
+				<div class="notice <?php echo $report['error'] ? 'notice-error' : 'notice-success'; ?>">
+					<?php if ( $report['error'] ) : ?>
+						<p><?php echo esc_html( $report['error'] ); ?></p>
+					<?php else : ?>
+						<p><strong><?php echo esc_html( sprintf( /* translators: 1: imported, 2: batch */ __( '%1$d codes imported into batch "%2$s".', 'wc-voucher-studio' ), $report['imported'], $report['batch'] ) ); ?></strong></p>
+						<ul>
+							<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Duplicates within the file skipped: %d', 'wc-voucher-studio' ), $report['dupes_file'] ) ); ?></li>
+							<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Already existing codes skipped: %d', 'wc-voucher-studio' ), $report['dupes_existing'] ) ); ?></li>
+							<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Invalid codes skipped: %d', 'wc-voucher-studio' ), count( $report['invalid'] ) ) ); ?></li>
+						</ul>
+						<?php if ( $report['invalid'] ) : ?>
+							<details><summary><?php esc_html_e( 'Show invalid rows', 'wc-voucher-studio' ); ?></summary>
+								<ul><?php foreach ( array_slice( $report['invalid'], 0, 100 ) as $row ) : ?><li><?php echo esc_html( $row ); ?></li><?php endforeach; ?></ul>
+							</details>
+						<?php endif; ?>
+					<?php endif; ?>
+				</div>
+			<?php endif; ?>
+
+			<div class="wcvs-card">
+				<form method="post" enctype="multipart/form-data" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<input type="hidden" name="action" value="wcvs_import" />
+					<?php wp_nonce_field( 'wcvs_import' ); ?>
+					<table class="form-table" role="presentation">
+						<tr>
+							<th scope="row"><label for="wcvs-file"><?php esc_html_e( 'File', 'wc-voucher-studio' ); ?></label></th>
+							<td><input type="file" id="wcvs-file" name="file" required accept=".csv,.txt,.xls,.xlsx,.ods" />
+								<p class="description"><?php esc_html_e( 'CSV, XLS, XLSX or ODS. The first worksheet is read.', 'wc-voucher-studio' ); ?></p></td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="wcvs-batch"><?php esc_html_e( 'Batch name', 'wc-voucher-studio' ); ?></label></th>
+							<td><input type="text" id="wcvs-batch" name="batch" class="regular-text" required maxlength="100" list="wcvs-batches" />
+								<datalist id="wcvs-batches"><?php foreach ( $this->pool->batches() as $b ) : ?><option value="<?php echo esc_attr( $b['batch'] ); ?>"></option><?php endforeach; ?></datalist>
+								<p class="description"><?php esc_html_e( 'Use an existing name to add codes to that batch.', 'wc-voucher-studio' ); ?></p></td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="wcvs-column"><?php esc_html_e( 'Column', 'wc-voucher-studio' ); ?></label></th>
+							<td><input type="text" id="wcvs-column" name="column" value="A" class="small-text" />
+								<p class="description"><?php esc_html_e( 'Column letter (A, B, …) or header name containing the codes.', 'wc-voucher-studio' ); ?></p></td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Options', 'wc-voucher-studio' ); ?></th>
+							<td>
+								<label><input type="checkbox" name="header" value="1" checked /> <?php esc_html_e( 'First row is a header', 'wc-voucher-studio' ); ?></label><br>
+								<label><input type="checkbox" name="uppercase" value="1" /> <?php esc_html_e( 'Convert codes to uppercase', 'wc-voucher-studio' ); ?></label>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="wcvs-pattern"><?php esc_html_e( 'Allowed format', 'wc-voucher-studio' ); ?></label></th>
+							<td><input type="text" id="wcvs-pattern" name="pattern" value="^[A-Za-z0-9._-]{4,64}$" class="regular-text code" />
+								<p class="description"><?php esc_html_e( 'Regular expression each code must match.', 'wc-voucher-studio' ); ?></p></td>
+						</tr>
+					</table>
+					<?php submit_button( __( 'Import codes', 'wc-voucher-studio' ) ); ?>
+				</form>
+			</div>
+
+			<h2><?php esc_html_e( 'Batches', 'wc-voucher-studio' ); ?></h2>
+			<table class="widefat striped">
+				<thead><tr><th><?php esc_html_e( 'Batch', 'wc-voucher-studio' ); ?></th><th><?php esc_html_e( 'Total', 'wc-voucher-studio' ); ?></th><th><?php esc_html_e( 'Free', 'wc-voucher-studio' ); ?></th><th></th></tr></thead>
+				<tbody>
+				<?php
+				$batches = $this->pool->batches();
+				if ( ! $batches ) {
+					echo '<tr><td colspan="4">' . esc_html__( 'No codes imported yet.', 'wc-voucher-studio' ) . '</td></tr>';
+				}
+				foreach ( $batches as $b ) :
+					?>
+					<tr>
+						<td><strong><?php echo esc_html( $b['batch'] ); ?></strong></td>
+						<td><?php echo esc_html( (string) $b['total'] ); ?></td>
+						<td><?php echo esc_html( (string) $b['free'] ); ?><?php echo $b['free'] < 10 ? ' <span class="wcvs-low">' . esc_html__( 'running low', 'wc-voucher-studio' ) . '</span>' : ''; ?></td>
+						<td>
+							<?php if ( $b['free'] ) : ?>
+								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" onsubmit="return confirm('<?php echo esc_js( __( 'Delete all unused codes of this batch?', 'wc-voucher-studio' ) ); ?>');">
+									<input type="hidden" name="action" value="wcvs_delete_batch" />
+									<input type="hidden" name="batch" value="<?php echo esc_attr( $b['batch'] ); ?>" />
+									<?php wp_nonce_field( 'wcvs_delete_batch' ); ?>
+									<button class="button button-link-delete"><?php esc_html_e( 'Delete unused codes', 'wc-voucher-studio' ); ?></button>
+								</form>
+							<?php endif; ?>
+						</td>
+					</tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
+		</div>
+		<?php
+	}
+
+	private function finish( array $report ): void {
+		set_transient( self::REPORT_TRANSIENT . get_current_user_id(), $report, 10 * MINUTE_IN_SECONDS );
+		wp_safe_redirect( admin_url( 'admin.php?page=wcvs-import' ) );
+		exit;
+	}
+
+	public function handle(): void {
+		check_admin_referer( 'wcvs_import' );
+		if ( ! $this->can() ) {
+			wp_die( esc_html__( 'You are not allowed to do this.', 'wc-voucher-studio' ), 403 );
+		}
+		$report = array(
+			'error'          => '',
+			'batch'          => '',
+			'imported'       => 0,
+			'dupes_file'     => 0,
+			'dupes_existing' => 0,
+			'invalid'        => array(),
+		);
+		$batch = sanitize_text_field( wp_unslash( $_POST['batch'] ?? '' ) );
+		if ( '' === $batch ) {
+			$report['error'] = __( 'Please enter a batch name.', 'wc-voucher-studio' );
+			$this->finish( $report );
+		}
+		$report['batch'] = $batch;
+
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- validated below.
+		$file = $_FILES['file'] ?? null;
+		if ( ! $file || ! empty( $file['error'] ) || ! is_uploaded_file( $file['tmp_name'] ) ) {
+			$report['error'] = __( 'The file could not be uploaded.', 'wc-voucher-studio' );
+			$this->finish( $report );
+		}
+		$ext = strtolower( pathinfo( sanitize_file_name( $file['name'] ), PATHINFO_EXTENSION ) );
+		if ( ! in_array( $ext, array( 'csv', 'txt', 'xls', 'xlsx', 'ods' ), true ) ) {
+			$report['error'] = __( 'Unsupported file type. Please upload CSV, XLS, XLSX or ODS.', 'wc-voucher-studio' );
+			$this->finish( $report );
+		}
+		if ( (int) $file['size'] > 20 * MB_IN_BYTES ) {
+			$report['error'] = __( 'The file is too large (max. 20 MB).', 'wc-voucher-studio' );
+			$this->finish( $report );
+		}
+
+		try {
+			$rows = SpreadsheetReader::read( $file['tmp_name'], $ext );
+		} catch ( \Throwable $e ) {
+			$report['error'] = __( 'The file could not be read:', 'wc-voucher-studio' ) . ' ' . $e->getMessage();
+			$this->finish( $report );
+		}
+
+		$pattern = wp_unslash( (string) ( $_POST['pattern'] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- used as regex only.
+		$regex   = '/' . str_replace( '/', '\/', $pattern ?: '^[A-Za-z0-9._-]{4,64}$' ) . '/u';
+		if ( false === @preg_match( $regex, '' ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors
+			$report['error'] = __( 'The "Allowed format" is not a valid regular expression.', 'wc-voucher-studio' );
+			$this->finish( $report );
+		}
+
+		$column = trim( sanitize_text_field( wp_unslash( $_POST['column'] ?? 'A' ) ) );
+		$index  = 0;
+		$header = ! empty( $_POST['header'] );
+		if ( preg_match( '/^[A-Za-z]{1,2}$/', $column ) ) {
+			$index = 0;
+			foreach ( str_split( strtoupper( $column ) ) as $ch ) {
+				$index = $index * 26 + ( ord( $ch ) - 64 );
+			}
+			--$index;
+		} elseif ( '' !== $column && $rows ) {
+			$found = array_search( strtolower( $column ), array_map( 'strtolower', $rows[0] ), true );
+			if ( false === $found ) {
+				$report['error'] = __( 'The column header was not found in the first row.', 'wc-voucher-studio' );
+				$this->finish( $report );
+			}
+			$index  = (int) $found;
+			$header = true;
+		}
+		if ( $header ) {
+			array_shift( $rows );
+		}
+
+		$upper = ! empty( $_POST['uppercase'] );
+		$seen  = array();
+		foreach ( $rows as $n => $row ) {
+			$code = trim( (string) ( $row[ $index ] ?? '' ) );
+			if ( '' === $code ) {
+				continue;
+			}
+			$code = $upper ? strtoupper( $code ) : $code;
+			$key  = wc_format_coupon_code( $code ); // WooCommerce codes are case-insensitive.
+			if ( ! preg_match( $regex, $code ) ) {
+				/* translators: 1: row number, 2: value */
+				$report['invalid'][] = sprintf( __( 'Row %1$d: "%2$s"', 'wc-voucher-studio' ), $n + ( $header ? 2 : 1 ), mb_substr( $code, 0, 80 ) );
+				continue;
+			}
+			if ( isset( $seen[ $key ] ) ) {
+				++$report['dupes_file'];
+				continue;
+			}
+			$seen[ $key ] = true;
+			if ( $this->pool->exists( $code ) || wc_get_coupon_id_by_code( $code ) || wcvs()->vouchers->code_exists( $code ) ) {
+				++$report['dupes_existing'];
+				continue;
+			}
+			if ( $this->pool->add( $code, $batch ) ) {
+				++$report['imported'];
+			} else {
+				++$report['dupes_existing'];
+			}
+		}
+		$this->finish( $report );
+	}
+
+	public function delete_batch(): void {
+		check_admin_referer( 'wcvs_delete_batch' );
+		if ( ! $this->can() ) {
+			wp_die( esc_html__( 'You are not allowed to do this.', 'wc-voucher-studio' ), 403 );
+		}
+		$this->pool->delete_free( sanitize_text_field( wp_unslash( $_POST['batch'] ?? '' ) ) );
+		wp_safe_redirect( admin_url( 'admin.php?page=wcvs-import' ) );
+		exit;
+	}
+}

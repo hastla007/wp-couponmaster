@@ -1,0 +1,29 @@
+{
+  "name": "hastla007/wc-voucher-studio",
+  "description": "Voucher Studio for WooCommerce \u2013 sell personalised PDF vouchers, gift cards and tickets.",
+  "type": "wordpress-plugin",
+  "license": "GPL-2.0-or-later",
+  "require": {
+    "php": ">=8.1",
+    "dompdf/dompdf": "^3.1",
+    "chillerlan/php-qrcode": "^5.0",
+    "picqer/php-barcode-generator": "^2.4 || ^3.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "WCVS\\": "src/"
+    }
+  },
+  "config": {
+    "platform": {
+      "php": "8.1.0"
+    },
+    "optimize-autoloader": true,
+    "sort-packages": true
+  },
+  "require-dev": {
+    "php-stubs/woocommerce-stubs": "*",
+    "php-stubs/wordpress-stubs": "*",
+    "phpoffice/phpspreadsheet": "^3.9 || ^4.0 || ^5.0"
+  }
+}

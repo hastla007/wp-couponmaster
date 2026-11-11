@@ -1,0 +1,156 @@
+<?php
+namespace WCVS;
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * An issued voucher / gift card / ticket. Coupon restrictions live on the linked WooCommerce coupon;
+ * lifecycle, delivery, personalisation and redemption state live here.
+ */
+final class Voucher {
+	public const STATUS_ACTIVE    = 'active';
+	public const STATUS_REDEEMED  = 'redeemed';
+	public const STATUS_EXPIRED   = 'expired';
+	public const STATUS_VOID      = 'void';
+	public const STATUS_SCHEDULED = 'scheduled';
+
+	public int $id               = 0;
+	public string $code          = '';
+	public int $coupon_id        = 0;
+	public string $type          = 'voucher';
+	public string $status        = self::STATUS_ACTIVE;
+	public int $order_id         = 0;
+	public int $order_item_id    = 0;
+	public int $item_index       = 0;
+	public int $product_id       = 0;
+	public int $variation_id     = 0;
+	public int $template_id      = 0;
+	public string $usage_mode    = 'single';
+	public string $discount_type = 'fixed_cart';
+	public float $initial_amount = 0.0;
+	public float $balance        = 0.0;
+	public string $currency      = '';
+	public ?string $expires_at   = null;
+	public string $buyer_name    = '';
+	public string $buyer_email   = '';
+	public string $recipient_name  = '';
+	public string $recipient_email = '';
+	public string $message       = '';
+	/** @var array<string, array{label:string,value:string}> */
+	public array $fields         = array();
+	public string $send_to       = 'buyer';
+	public ?string $delivery_at  = null;
+	public ?string $delivered_at = null;
+	public string $token         = '';
+	public int $max_checkins     = 1;
+	public int $checkins         = 0;
+	public ?string $last_checkin_at = null;
+	public string $created_at    = '';
+	public string $updated_at    = '';
+
+	public static function statuses(): array {
+		return array(
+			self::STATUS_ACTIVE    => __( 'Active', 'wc-voucher-studio' ),
+			self::STATUS_SCHEDULED => __( 'Scheduled', 'wc-voucher-studio' ),
+			self::STATUS_REDEEMED  => __( 'Redeemed', 'wc-voucher-studio' ),
+			self::STATUS_EXPIRED   => __( 'Expired', 'wc-voucher-studio' ),
+			self::STATUS_VOID      => __( 'Void', 'wc-voucher-studio' ),
+		);
+	}
+
+	public static function types(): array {
+		return array(
+			'voucher'  => __( 'Voucher', 'wc-voucher-studio' ),
+			'giftcard' => __( 'Gift card', 'wc-voucher-studio' ),
+			'ticket'   => __( 'Ticket', 'wc-voucher-studio' ),
+		);
+	}
+
+	public static function from_row( array $row ): self {
+		$v = new self();
+		foreach ( $row as $key => $value ) {
+			if ( ! property_exists( $v, $key ) ) {
+				continue;
+			}
+			switch ( $key ) {
+				case 'id':
+				case 'coupon_id':
+				case 'order_id':
+				case 'order_item_id':
+				case 'item_index':
+				case 'product_id':
+				case 'variation_id':
+				case 'template_id':
+				case 'max_checkins':
+				case 'checkins':
+					$v->$key = (int) $value;
+					break;
+				case 'initial_amount':
+				case 'balance':
+					$v->$key = (float) $value;
+					break;
+				case 'fields':
+					$decoded   = $value ? json_decode( (string) $value, true ) : array();
+					$v->fields = is_array( $decoded ) ? $decoded : array();
+					break;
+				case 'expires_at':
+				case 'delivery_at':
+				case 'delivered_at':
+				case 'last_checkin_at':
+					$v->$key = $value ? (string) $value : null;
+					break;
+				default:
+					$v->$key = (string) $value;
+			}
+		}
+		return $v;
+	}
+
+	public function to_row(): array {
+		$row = get_object_vars( $this );
+		unset( $row['id'] );
+		$row['fields'] = wp_json_encode( $this->fields );
+		return $row;
+	}
+
+	public function is_ticket(): bool {
+		return 'ticket' === $this->type;
+	}
+
+	public function is_multi_use(): bool {
+		return 'balance' === $this->usage_mode;
+	}
+
+	public function is_expired(): bool {
+		return $this->expires_at && strtotime( $this->expires_at . ' UTC' ) < time();
+	}
+
+	public function is_usable(): bool {
+		return in_array( $this->status, array( self::STATUS_ACTIVE, self::STATUS_SCHEDULED ), true ) && ! $this->is_expired();
+	}
+
+	public function product(): ?\WC_Product {
+		$product = wc_get_product( $this->variation_id ?: $this->product_id );
+		return $product instanceof \WC_Product ? $product : null;
+	}
+
+	public function order(): ?\WC_Order {
+		$order = $this->order_id ? wc_get_order( $this->order_id ) : null;
+		return $order instanceof \WC_Order ? $order : null;
+	}
+
+	public function delivery_email(): string {
+		return 'recipient' === $this->send_to && is_email( $this->recipient_email ) ? $this->recipient_email : $this->buyer_email;
+	}
+
+	public function status_label(): string {
+		if ( self::STATUS_ACTIVE === $this->status && $this->is_expired() ) {
+			return self::statuses()[ self::STATUS_EXPIRED ];
+		}
+		return self::statuses()[ $this->status ] ?? $this->status;
+	}
+
+	public function field( string $key ): string {
+		return isset( $this->fields[ $key ]['value'] ) ? (string) $this->fields[ $key ]['value'] : '';
+	}
+}

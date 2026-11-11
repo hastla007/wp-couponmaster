@@ -1,0 +1,241 @@
+/* Voucher Studio – QR scanner (BarcodeDetector with jsQR fallback). */
+( function () {
+	'use strict';
+	var cfg = window.wcvsScanner || {};
+	var t = cfg.i18n || {};
+	var video = document.getElementById( 'wcvs-video' );
+	var canvas = document.getElementById( 'wcvs-canvas' );
+	var toggleBtn = document.getElementById( 'wcvs-camera-toggle' );
+	var form = document.getElementById( 'wcvs-manual' );
+	var input = document.getElementById( 'wcvs-code' );
+	var result = document.getElementById( 'wcvs-result' );
+	var auto = document.getElementById( 'wcvs-auto-checkin' );
+	if ( ! video || ! form ) {
+		return;
+	}
+	var stream = null;
+	var detector = null;
+	var lastCode = '';
+	var lastTime = 0;
+	var busy = false;
+
+	try {
+		auto.checked = '1' === window.localStorage.getItem( 'wcvsAutoCheckin' );
+	} catch ( e ) {}
+	auto.addEventListener( 'change', function () {
+		try {
+			window.localStorage.setItem( 'wcvsAutoCheckin', auto.checked ? '1' : '0' );
+		} catch ( e ) {}
+	} );
+
+	function api( path, method, body ) {
+		return fetch( cfg.root + path, {
+			method: method || 'GET',
+			credentials: 'same-origin',
+			headers: { 'X-WP-Nonce': cfg.nonce, 'Content-Type': 'application/json' },
+			body: body ? JSON.stringify( body ) : undefined
+		} ).then( function ( r ) {
+			return r.json().then( function ( data ) {
+				if ( ! r.ok ) {
+					throw data;
+				}
+				return data;
+			} );
+		} );
+	}
+
+	function esc( s ) {
+		var d = document.createElement( 'div' );
+		d.textContent = null === s || undefined === s ? '' : String( s );
+		return d.innerHTML;
+	}
+
+	function beep( ok ) {
+		try {
+			var ctx = new ( window.AudioContext || window.webkitAudioContext )();
+			var osc = ctx.createOscillator();
+			osc.frequency.value = ok ? 880 : 220;
+			osc.connect( ctx.destination );
+			osc.start();
+			osc.stop( ctx.currentTime + 0.15 );
+		} catch ( e ) {}
+		if ( navigator.vibrate ) {
+			navigator.vibrate( ok ? 80 : [ 60, 60, 60 ] );
+		}
+	}
+
+	function render( d, query ) {
+		var rows = [
+			[ t.product, d.product ],
+			[ t.holder, d.holder ],
+			[ t.order, d.order ? '#' + d.order : '' ],
+			[ t.value, d.value_html ],
+			d.multi_use ? [ t.balance, d.balance_html ] : null,
+			'ticket' === d.type ? [ t.admissions, d.checkins + ' / ' + d.max_checkins ] : null,
+			[ t.expires, d.expires ],
+			d.last_checkin ? [ t.lastCheckin, d.last_checkin ] : null
+		].filter( function ( r ) { return r && r[ 1 ]; } );
+		var html = '<div class="wcvs-r-head wcvs-r-' + esc( d.state ) + '">' + esc( d.message ) + ' · <code>' + esc( d.code ) + '</code></div><div class="wcvs-r-body"><dl>';
+		rows.forEach( function ( r ) {
+			html += '<dt>' + esc( r[ 0 ] ) + '</dt><dd>' + esc( r[ 1 ] ) + '</dd>';
+		} );
+		html += '</dl><div class="wcvs-r-actions">';
+		if ( 'ticket' === d.type ) {
+			if ( d.checkins < d.max_checkins && 'error' !== d.state ) {
+				html += ( d.max_checkins - d.checkins > 1 ? '<input type="number" min="1" value="1" max="' + ( d.max_checkins - d.checkins ) + '" class="small-text" id="wcvs-count" aria-label="' + esc( t.admissions ) + '">' : '' );
+				html += '<button type="button" class="button button-primary button-hero" data-act="checkin">' + esc( t.checkin ) + '</button>';
+			}
+			if ( d.checkins > 0 ) {
+				html += '<button type="button" class="button" data-act="undo">' + esc( t.undo ) + '</button>';
+			}
+		} else if ( 'ok' === d.state ) {
+			if ( d.multi_use ) {
+				html += '<input type="text" inputmode="decimal" id="wcvs-amount" class="small-text" placeholder="' + esc( t.amount ) + '" aria-label="' + esc( t.amount ) + '">';
+			}
+			html += '<button type="button" class="button button-primary" data-act="redeem">' + esc( t.redeem ) + '</button>';
+		}
+		html += '<a class="button-link" href="' + esc( d.admin_url ) + '">' + esc( t.details ) + '</a></div></div>';
+		result.innerHTML = html;
+		result.setAttribute( 'data-query', query );
+	}
+
+	function showError( err ) {
+		result.innerHTML = '<div class="wcvs-r-head wcvs-r-error">' + esc( ( err && err.message ) || t.error ) + '</div>';
+		beep( false );
+	}
+
+	function lookup( query ) {
+		if ( busy || ! query ) {
+			return;
+		}
+		busy = true;
+		var p = auto.checked
+			? api( 'checkin', 'POST', { q: query } ).then( function ( d ) {
+				if ( 'ticket' !== d.type || ! d.success ) {
+					return api( 'lookup?q=' + encodeURIComponent( query ) );
+				}
+				return d;
+			} )
+			: api( 'lookup?q=' + encodeURIComponent( query ) );
+		p.then( function ( d ) {
+			render( d, query );
+			beep( 'ok' === d.state );
+		} ).catch( showError ).then( function () {
+			busy = false;
+		} );
+	}
+
+	result.addEventListener( 'click', function ( e ) {
+		var act = e.target.getAttribute( 'data-act' );
+		var query = result.getAttribute( 'data-query' );
+		if ( ! act || ! query ) {
+			return;
+		}
+		var req;
+		if ( 'checkin' === act ) {
+			var c = document.getElementById( 'wcvs-count' );
+			req = api( 'checkin', 'POST', { q: query, count: c ? parseInt( c.value, 10 ) || 1 : 1 } );
+		} else if ( 'undo' === act ) {
+			req = api( 'checkin', 'POST', { q: query, undo: true } );
+		} else if ( 'redeem' === act ) {
+			var a = document.getElementById( 'wcvs-amount' );
+			req = api( 'redeem', 'POST', { q: query, amount: a ? parseFloat( String( a.value ).replace( ',', '.' ) ) || 0 : 0 } );
+		}
+		if ( req ) {
+			req.then( function ( d ) {
+				render( d, query );
+				beep( !! d.success );
+			} ).catch( showError );
+		}
+	} );
+
+	form.addEventListener( 'submit', function ( e ) {
+		e.preventDefault();
+		lookup( input.value.trim() );
+		input.select();
+	} );
+
+	function onCode( code ) {
+		var now = Date.now();
+		if ( code === lastCode && now - lastTime < 4000 ) {
+			return;
+		}
+		lastCode = code;
+		lastTime = now;
+		input.value = code;
+		lookup( code );
+	}
+
+	function tick() {
+		if ( ! stream ) {
+			return;
+		}
+		if ( video.readyState >= 2 ) {
+			if ( detector ) {
+				detector.detect( video ).then( function ( codes ) {
+					if ( codes.length ) {
+						onCode( codes[ 0 ].rawValue );
+					}
+				} ).catch( function () {} );
+			} else if ( window.jsQR ) {
+				var w = video.videoWidth;
+				var h = video.videoHeight;
+				var scale = Math.min( 1, 640 / w );
+				canvas.width = Math.round( w * scale );
+				canvas.height = Math.round( h * scale );
+				var ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+				ctx.drawImage( video, 0, 0, canvas.width, canvas.height );
+				var img = ctx.getImageData( 0, 0, canvas.width, canvas.height );
+				var res = window.jsQR( img.data, img.width, img.height, { inversionAttempts: 'dontInvert' } );
+				if ( res && res.data ) {
+					onCode( res.data );
+				}
+			}
+		}
+		window.setTimeout( function () {
+			window.requestAnimationFrame( tick );
+		}, 200 );
+	}
+
+	function start() {
+		if ( ! navigator.mediaDevices || ! navigator.mediaDevices.getUserMedia ) {
+			showError( { message: t.noCamera } );
+			return;
+		}
+		navigator.mediaDevices.getUserMedia( { video: { facingMode: 'environment' }, audio: false } ).then( function ( s ) {
+			stream = s;
+			video.srcObject = s;
+			video.play();
+			video.parentNode.classList.add( 'is-live' );
+			toggleBtn.textContent = t.stop;
+			if ( 'BarcodeDetector' in window ) {
+				try {
+					detector = new window.BarcodeDetector( { formats: [ 'qr_code', 'code_128', 'code_39', 'ean_13' ] } );
+				} catch ( e ) {
+					detector = null;
+				}
+			}
+			tick();
+		} ).catch( function () {
+			showError( { message: t.noCamera } );
+		} );
+	}
+
+	function stop() {
+		if ( stream ) {
+			stream.getTracks().forEach( function ( tr ) { tr.stop(); } );
+		}
+		stream = null;
+		video.srcObject = null;
+		video.parentNode.classList.remove( 'is-live' );
+		toggleBtn.textContent = t.start;
+	}
+
+	toggleBtn.addEventListener( 'click', function () {
+		if ( stream ) {
+			stop();
+		} else {
+			start();
+		}
+	} );
+} )();
