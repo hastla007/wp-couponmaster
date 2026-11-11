@@ -18,6 +18,20 @@ Visual PDF designer, recipient fields and custom field groups, scheduled deliver
 = Unreleased =
 * New: WP Pass Captain integration – vouchers and gift cards pay for tickets in Pass Captain's checkout (reserve before payment, commit after payment, release on cancellation, proportional give-back on ticket refunds).
 * New: redemptions->refund() gives back (part of) a completed external redemption.
+* Fix: Pass Captain reservations are held for Pass Captain's whole payment window (late bank transfers no longer find the voucher released).
+* Fix: stacked promotions never discount a line by more than its price; recalculating an order keeps the promotions it was placed with.
+* Fix: "individual use" coupons no longer stack with promotions; gift card lines in the cart no longer count towards a promotion's minimum cart value.
+* Fix: store credit can no longer be redeemed through the redemption API or Pass Captain (it is used in the shop only).
+* Fix: Pass Captain amounts use ISO 4217 minor units, independent of the shop's price decimals setting.
+* Fix: retrying a refund with a known refund key returns the stored result instead of a conflict.
+* Fix: reactivating a voided single-use voucher that was already redeemed keeps it redeemed; voiding/reactivating no longer overwrites a balance changed at the same time.
+* Fix: redemption channels of plugins that are inactive are kept on products and vouchers (never widened to "all channels").
+* Fix: personal (email-restricted) vouchers can be used in guest checkouts of connectors that pass the customer email.
+* Fix: guest orders with an account's email count against per-customer promotion limits.
+* Fix: bonus vouchers are judged on the price paid after discount codes; a cancelled and later refunded order no longer gives back another order's use.
+* Fix: refer a friend – own codes are refused for email aliases (+tag, Gmail dots); the reward is withdrawn when the friend's order is cancelled or refunded (unused coupon trashed, store credit debited).
+* Fix: parallel requests for the same order status change count uses, bonus vouchers and referral rewards only once.
+* Fix: Reports no longer count trashed bonus vouchers as issued.
 
 = 1.1.0 =
 * New: redeem vouchers and gift cards outside the shop (courses, tickets, memberships) through the PHP service vcap()->redemptions or the REST API /wp-json/vcap/v1/redemptions – reserve, commit, release, with idempotency keys, stable error codes and automatic release of expired reservations.

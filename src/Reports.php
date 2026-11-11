@@ -120,7 +120,7 @@ final class Reports {
 			}
 			$rows[ $key ]['issued'] = (int) $c['total'];
 		}
-		$bonus = $wpdb->get_results( $wpdb->prepare( "SELECT meta_value AS id, COUNT(*) AS total FROM {$wpdb->postmeta} m JOIN {$wpdb->posts} p ON p.ID = m.post_id AND p.post_type = 'shop_coupon' WHERE m.meta_key = %s GROUP BY meta_value", Bonus::COUPON_SOURCE ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$bonus = $wpdb->get_results( $wpdb->prepare( "SELECT meta_value AS id, COUNT(*) AS total FROM {$wpdb->postmeta} m JOIN {$wpdb->posts} p ON p.ID = m.post_id AND p.post_type = 'shop_coupon' AND p.post_status <> 'trash' WHERE m.meta_key = %s GROUP BY meta_value", Bonus::COUPON_SOURCE ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		foreach ( $bonus ? $bonus : array() as $b ) {
 			$name = (string) get_the_title( (int) $b['id'] );
 			$key  = 'bonus:' . $name;

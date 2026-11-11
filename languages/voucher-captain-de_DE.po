@@ -3287,3 +3287,21 @@ msgstr "Dieser Gutschein lautet auf eine andere Währung."
 
 msgid "WP Pass Captain (ticket checkout)"
 msgstr "WP Pass Captain (Ticket-Kasse)"
+
+msgid "Store credit can only be used in the shop."
+msgstr "Guthaben kann nur im Shop verwendet werden."
+
+msgid "Referral reward coupon %s was already used and stays valid."
+msgstr "Der Belohnungs-Gutschein %s wurde bereits verwendet und bleibt gültig."
+
+msgid "Unused referral reward coupon %s withdrawn."
+msgstr "Nicht verwendeter Belohnungs-Gutschein %s wurde zurückgezogen."
+
+msgid "Referral reward withdrawn (order #%s cancelled)"
+msgstr "Empfehlungsbelohnung zurückgenommen (Bestellung #%s storniert)"
+
+msgid "Referral reward withdrawn: %s store credit debited."
+msgstr "Empfehlungsbelohnung zurückgenommen: %s Guthaben abgebucht."
+
+msgid "Referral reward store credit was already spent and could not be withdrawn."
+msgstr "Das Guthaben aus der Empfehlungsbelohnung wurde bereits verbraucht und konnte nicht zurückgenommen werden."

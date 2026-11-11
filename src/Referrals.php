@@ -13,6 +13,7 @@ final class Referrals {
 	public const USER_META  = '_vcap_referral_coupon';
 	public const COUNT_META = '_vcap_referral_count';
 	public const REWARDED   = '_vcap_referral_rewarded';
+	public const REWARD     = '_vcap_referral_reward';
 
 	public function __construct( private Settings $settings, private StoreCredit $credit ) {}
 
@@ -20,6 +21,43 @@ final class Referrals {
 		add_action( 'vcap_account_vouchers_top', array( $this, 'account_block' ), 20 );
 		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'validate' ), 28, 3 );
 		add_action( 'woocommerce_order_status_completed', array( $this, 'reward' ), 30 );
+		add_action( 'woocommerce_order_status_cancelled', array( $this, 'revoke' ), 30 );
+		add_action( 'woocommerce_order_status_refunded', array( $this, 'revoke' ), 30 );
+	}
+
+	/**
+	 * Email reduced to its mailbox, so aliases of the same person compare equal:
+	 * lower case, "+tag" removed, and for Gmail the dots of the local part removed.
+	 */
+	public static function normalize_email( string $email ): string {
+		$email = strtolower( trim( $email ) );
+		if ( ! str_contains( $email, '@' ) ) {
+			return $email;
+		}
+		[ $local, $domain ] = explode( '@', $email, 2 );
+		$local = explode( '+', $local, 2 )[0];
+		if ( in_array( $domain, array( 'gmail.com', 'googlemail.com' ), true ) ) {
+			$local  = str_replace( '.', '', $local );
+			$domain = 'gmail.com';
+		}
+		return $local . '@' . $domain;
+	}
+
+	/** Whether the customer (account or email) is the owner of the referral code. */
+	public static function is_owner( int $owner_id, int $user_id, string $email ): bool {
+		if ( $owner_id <= 0 ) {
+			return false;
+		}
+		if ( $user_id === $owner_id ) {
+			return true;
+		}
+		$owner = get_userdata( $owner_id );
+		if ( ! $owner || '' === trim( $email ) ) {
+			return false;
+		}
+		$mailbox = self::normalize_email( $email );
+		$own     = array( self::normalize_email( (string) $owner->user_email ), self::normalize_email( (string) get_user_meta( $owner_id, 'billing_email', true ) ) );
+		return in_array( $mailbox, array_filter( $own ), true );
 	}
 
 	public function enabled(): bool {
@@ -84,8 +122,7 @@ final class Referrals {
 			$user  = get_current_user_id();
 			$email = WC()->customer ? (string) WC()->customer->get_billing_email() : '';
 		}
-		$owner = get_userdata( self::owner( $coupon ) );
-		if ( $user === self::owner( $coupon ) || ( $owner && '' !== $email && strtolower( $email ) === strtolower( (string) $owner->user_email ) ) ) {
+		if ( self::is_owner( self::owner( $coupon ), $user, $email ) ) {
 			throw new \Exception( esc_html__( 'You cannot use your own referral code.', 'voucher-captain' ), 9061 );
 		}
 		return $valid;
@@ -108,14 +145,17 @@ final class Referrals {
 			}
 		}
 		$user = $owner ? get_userdata( $owner ) : null;
-		if ( ! $user || (int) $order->get_customer_id() === $owner ) {
+		if ( ! $user || self::is_owner( $owner, (int) $order->get_customer_id(), (string) $order->get_billing_email() ) ) {
 			return;
 		}
 		$amount = (float) $this->settings->get( 'vcap_referral_reward_amount' );
 		if ( $amount <= 0 ) {
 			return;
 		}
-		// Mark first, so a failure later can never reward twice.
+		// Claim and mark first, so neither a parallel request nor a failure later can reward twice.
+		if ( ! Claim::take( 'referral:' . $order->get_id() ) ) {
+			return;
+		}
 		$order->update_meta_data( self::REWARDED, $owner );
 		$order->save_meta_data();
 		update_user_meta( $owner, self::COUNT_META, (int) get_user_meta( $owner, self::COUNT_META, true ) + 1 );
@@ -124,6 +164,8 @@ final class Referrals {
 			/* translators: %s: order number */
 			$result = $this->credit->adjust( $owner, $amount, sprintf( __( 'Referral reward for order #%s', 'voucher-captain' ), $order->get_order_number() ), $order->get_id(), 'credit' );
 			if ( ! is_wp_error( $result ) ) {
+				$order->update_meta_data( self::REWARD, array( 'type' => 'credit', 'user' => $owner, 'amount' => $amount ) );
+				$order->save_meta_data();
 				/* translators: 1: amount, 2: customer email */
 				$order->add_order_note( sprintf( __( 'Referral reward: %1$s store credit for %2$s.', 'voucher-captain' ), wp_strip_all_tags( wc_price( $amount ) ), $user->user_email ) );
 				return;
@@ -133,6 +175,8 @@ final class Referrals {
 		if ( ! $coupon ) {
 			return;
 		}
+		$order->update_meta_data( self::REWARD, array( 'type' => 'coupon', 'user' => $owner, 'coupon' => $coupon->get_id() ) );
+		$order->save_meta_data();
 		/* translators: 1: coupon code, 2: customer email */
 		$order->add_order_note( sprintf( __( 'Referral reward: coupon %1$s for %2$s.', 'voucher-captain' ), $coupon->get_code(), $user->user_email ) );
 		$mailer = WC()->mailer();
@@ -140,6 +184,47 @@ final class Referrals {
 		if ( isset( $emails['VCAP_Email_Referral'] ) ) {
 			$emails['VCAP_Email_Referral']->trigger( $coupon, $order, __( 'Refer a friend', 'voucher-captain' ), (string) $user->user_email );
 		}
+	}
+
+	/**
+	 * The friend's order was cancelled or refunded after the reward: take back what is still unused –
+	 * an unused reward coupon goes to the trash, store credit is debited (as far as it is still there).
+	 */
+	public function revoke( $order_id ): void {
+		$order  = wc_get_order( $order_id );
+		$reward = $order instanceof \WC_Order ? $order->get_meta( self::REWARD ) : null;
+		if ( ! is_array( $reward ) || ! empty( $reward['revoked'] ) || ! Claim::take( 'referral-revoke:' . $order->get_id() ) ) {
+			return;
+		}
+		$owner = (int) ( $reward['user'] ?? 0 );
+		if ( 'coupon' === ( $reward['type'] ?? '' ) ) {
+			$coupon = new \WC_Coupon( (int) ( $reward['coupon'] ?? 0 ) );
+			if ( $coupon->get_id() && $coupon->get_usage_count() > 0 ) {
+				/* translators: %s: coupon code */
+				$order->add_order_note( sprintf( __( 'Referral reward coupon %s was already used and stays valid.', 'voucher-captain' ), $coupon->get_code() ) );
+			} elseif ( $coupon->get_id() ) {
+				wp_trash_post( $coupon->get_id() );
+				/* translators: %s: coupon code */
+				$order->add_order_note( sprintf( __( 'Unused referral reward coupon %s withdrawn.', 'voucher-captain' ), $coupon->get_code() ) );
+			}
+		} elseif ( 'credit' === ( $reward['type'] ?? '' ) ) {
+			$account = $this->credit->account( $owner, false );
+			$amount  = min( (float) ( $reward['amount'] ?? 0 ), $account ? (float) $account->balance : 0.0 );
+			/* translators: %s: order number */
+			$result = $amount > 0 ? $this->credit->adjust( $owner, -$amount, sprintf( __( 'Referral reward withdrawn (order #%s cancelled)', 'voucher-captain' ), $order->get_order_number() ), $order->get_id(), 'debit' ) : null;
+			if ( $result && ! is_wp_error( $result ) ) {
+				/* translators: %s: amount */
+				$order->add_order_note( sprintf( __( 'Referral reward withdrawn: %s store credit debited.', 'voucher-captain' ), wp_strip_all_tags( wc_price( $amount ) ) ) );
+			} else {
+				$order->add_order_note( __( 'Referral reward store credit was already spent and could not be withdrawn.', 'voucher-captain' ) );
+			}
+		}
+		if ( $owner ) {
+			update_user_meta( $owner, self::COUNT_META, max( 0, (int) get_user_meta( $owner, self::COUNT_META, true ) - 1 ) );
+		}
+		$reward['revoked'] = time();
+		$order->update_meta_data( self::REWARD, $reward );
+		$order->save_meta_data();
 	}
 
 	private function reward_coupon( \WP_User $user, float $amount, \WC_Order $order ): ?\WC_Coupon {

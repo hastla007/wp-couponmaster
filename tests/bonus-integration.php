@@ -73,6 +73,37 @@ vcap_bonus_assert( 0 === VCAP\Discounts\Usage::count( $bonus ), 'the withdrawn b
 $order = wc_get_order( $order->get_id() );
 $order->update_status( 'processing' );
 vcap_bonus_assert( $issued === VCAP\Discounts\Bonus::issued( wc_get_order( $order->get_id() ) ), 'a withdrawn bonus is not issued again' );
+
+$third = vcap_bonus_order( $product, 2, 'bonus-buyer@example.com' );
+$third->update_status( 'processing' );
+vcap_bonus_assert( 1 === count( VCAP\Discounts\Bonus::issued( wc_get_order( $third->get_id() ) ) ) && 1 === VCAP\Discounts\Usage::count( $bonus ), 'after a withdrawal the customer can earn the bonus with a new order' );
+$order = wc_get_order( $order->get_id() );
+$order->update_status( 'refunded' );
+vcap_bonus_assert( 1 === VCAP\Discounts\Usage::count( $bonus ), 'withdrawing the same order twice never gives back the use of another order' );
+
+$tag    = strtolower( wp_generate_password( 6, false ) );
+$member = wp_create_user( 'bonus-member-' . $tag, wp_generate_password(), 'bonus-member-' . $tag . '@example.com' );
+$own    = wc_create_order( array( 'customer_id' => $member ) );
+$own->add_product( $product, 2 );
+$own->set_billing_email( 'bonus-member-' . $tag . '@example.com' );
+$own->calculate_totals();
+$own->save();
+$own->update_status( 'processing' );
+vcap_bonus_assert( 1 === count( VCAP\Discounts\Bonus::issued( wc_get_order( $own->get_id() ) ) ), 'a customer account earns the bonus' );
+$guest = vcap_bonus_order( $product, 2, 'Bonus-Member-' . $tag . '@example.com' );
+$guest->update_status( 'processing' );
+vcap_bonus_assert( array() === VCAP\Discounts\Bonus::issued( wc_get_order( $guest->get_id() ) ), 'a guest order with the account email counts against the per-customer limit' );
+
+$code = new WC_Coupon();
+$code->set_code( 'bonus-minus-' . $tag );
+$code->set_discount_type( 'fixed_cart' );
+$code->set_amount( 20 );
+$code->save();
+$cheap = vcap_bonus_order( $product, 2, 'bonus-cheap-' . $tag . '@example.com' );
+$cheap->apply_coupon( 'bonus-minus-' . $tag );
+$cheap = wc_get_order( $cheap->get_id() );
+$cheap->update_status( 'processing' );
+vcap_bonus_assert( array() === VCAP\Discounts\Bonus::issued( wc_get_order( $cheap->get_id() ) ), 'a discount code counts: 60 minus 20 paid does not reach the minimum of 50' );
 wp_update_post( array( 'ID' => $bonus, 'post_status' => 'draft' ) );
 
 $gift = vcap_bonus_campaign( 'Gift card bonus', array( 'action' => 'bonus', 'bonus_amount' => 10, 'bonus_type' => 'percent', 'bonus_trigger' => 'gift_card' ) );

@@ -24,14 +24,32 @@ final class Bonus {
 		add_action( 'woocommerce_order_status_refunded', array( $this, 'withdraw' ), 25 );
 	}
 
-	/** Lines of an order in Engine format (price before discounts). */
+	/**
+	 * Lines of an order in Engine format, at the price actually paid: discount codes and promotions are
+	 * deducted (a 50 % code must not unlock a "spend 100" bonus with 50 paid), gift cards and store credit are
+	 * not (they are a means of payment, not a discount).
+	 */
 	public static function order_lines( \WC_Order $order ): array {
+		$all      = 0.0;
+		$discount = 0.0;
+		foreach ( $order->get_items( 'coupon' ) as $coupon_item ) {
+			$amount = (float) $coupon_item->get_discount() + ( wc_prices_include_tax() ? (float) $coupon_item->get_discount_tax() : 0.0 );
+			$all   += $amount;
+			$id     = wc_get_coupon_id_by_code( $coupon_item->get_code() );
+			if ( ! $id || 'yes' !== get_post_meta( $id, '_vcap_voucher', true ) ) {
+				$discount += $amount;
+			}
+		}
+		$share = $all > 0 ? min( 1.0, $discount / $all ) : 1.0;
 		$lines = array();
 		foreach ( $order->get_items() as $item_id => $item ) {
 			if ( ! $item instanceof \WC_Order_Item_Product || ! $item->get_product() || $item->get_quantity() <= 0 ) {
 				continue;
 			}
-			$unit    = ( (float) $item->get_subtotal() + ( wc_prices_include_tax() ? (float) $item->get_subtotal_tax() : 0.0 ) ) / $item->get_quantity();
+			$tax      = wc_prices_include_tax();
+			$subtotal = (float) $item->get_subtotal() + ( $tax ? (float) $item->get_subtotal_tax() : 0.0 );
+			$total    = (float) $item->get_total() + ( $tax ? (float) $item->get_total_tax() : 0.0 );
+			$unit     = max( 0.0, $subtotal - ( $subtotal - $total ) * $share ) / $item->get_quantity();
 			$lines[] = CartIntegration::line( (string) $item_id, $item->get_product(), (int) $item->get_quantity(), $unit );
 		}
 		return $lines;
@@ -66,8 +84,13 @@ final class Bonus {
 			if ( '' !== Usage::blocker( $campaign, (int) $order->get_customer_id(), (string) $order->get_billing_email() ) ) {
 				continue;
 			}
+			// Processing and completed can fire in parallel requests: only one may issue the bonus.
+			if ( ! \VCAP\Claim::take( 'bonus:' . $order->get_id() . ':' . $id ) ) {
+				continue;
+			}
 			$coupon_id = $this->create_coupon( $campaign, $order );
 			if ( ! $coupon_id ) {
+				\VCAP\Claim::release( 'bonus:' . $order->get_id() . ':' . $id );
 				continue;
 			}
 			Usage::add( $id, Usage::order_key( $order ) );
@@ -137,11 +160,16 @@ final class Bonus {
 		if ( ! $order instanceof \WC_Order ) {
 			return;
 		}
-		$issued = self::issued( $order );
-		$left   = $issued;
+		$issued    = self::issued( $order );
+		$left      = $issued;
+		$withdrawn = array_map( 'intval', (array) $order->get_meta( '_vcap_bonus_withdrawn' ) );
 		foreach ( $issued as $campaign_id => $coupon_id ) {
+			if ( in_array( (int) $campaign_id, $withdrawn, true ) ) {
+				unset( $left[ $campaign_id ] ); // Already withdrawn (cancelled, then refunded): never give back another order's use.
+				continue;
+			}
 			$coupon = new \WC_Coupon( $coupon_id );
-			if ( ! $coupon->get_id() ) {
+			if ( ! $coupon->get_id() || 'trash' === get_post_status( $coupon_id ) ) {
 				unset( $left[ $campaign_id ] );
 				continue;
 			}
@@ -158,7 +186,7 @@ final class Bonus {
 		}
 		// Keep withdrawn campaigns marked, so a later status change does not issue the bonus again.
 		$order->update_meta_data( self::ORDER_META, $issued );
-		$order->update_meta_data( '_vcap_bonus_withdrawn', array_keys( array_diff_key( $issued, $left ) ) );
+		$order->update_meta_data( '_vcap_bonus_withdrawn', array_values( array_unique( array_merge( $withdrawn, array_map( 'intval', array_keys( array_diff_key( $issued, $left ) ) ) ) ) ) );
 		$order->save_meta_data();
 	}
 }

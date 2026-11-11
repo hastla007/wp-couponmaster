@@ -133,4 +133,11 @@ $shop = vcap_pc_voucher( 'balance', 20 );
 add_filter( 'vcap_redemption_channel_allowed', $only_shop = static fn( $allowed, $voucher, $channel ) => $voucher->id === $shop->id ? 'shop' === $channel : $allowed, 10, 3 );
 vcap_pc_assert( is_wp_error( Checkout::apply( vcap_pc_order( $type, 1 )['order_id'], $shop->code ) ), 'vouchers without the Pass Captain channel are refused' );
 remove_filter( 'vcap_redemption_channel_allowed', $only_shop, 10 );
+
+// Minor units follow ISO 4217 (as Pass Captain does), not the shop's price display setting.
+$decimals = static fn() => 0;
+add_filter( 'wc_get_price_decimals', $decimals );
+vcap_pc_assert( 2 === VCAP\Compat\PassCaptainProvider::decimals( get_woocommerce_currency() ) && 0 === VCAP\Compat\PassCaptainProvider::decimals( 'JPY' ), 'minor units use ISO 4217 decimals, whatever the shop displays' );
+remove_filter( 'wc_get_price_decimals', $decimals );
+
 echo "Voucher Captain + Pass Captain checks passed.\n";
