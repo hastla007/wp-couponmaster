@@ -222,11 +222,17 @@ final class Tickets {
 		}
 		$note = sanitize_text_field( (string) $request['note'] ) ?: __( 'Redeemed in store', 'voucher-captain' );
 		if ( $voucher->is_multi_use() ) {
-			$amount = min( $voucher->balance, max( 0, (float) $request['amount'] ) );
+			$amount = max( 0, (float) $request['amount'] );
 			if ( $amount <= 0 ) {
 				return new \WP_Error( 'vcap_amount', __( 'Please enter an amount.', 'voucher-captain' ), array( 'status' => 400 ) );
 			}
-			vcap()->coupons->set_balance( $voucher, $voucher->balance - $amount, 'redeemed', $amount, $note );
+			$deduction = vcap()->coupons->deduct_balance_atomic( $voucher, $amount, $note );
+			if ( ! $deduction ) {
+				$data            = $this->describe( $this->repo->get( $voucher->id ) );
+				$data['success'] = false;
+				return rest_ensure_response( $data );
+			}
+			$voucher = $this->repo->get( $voucher->id );
 		} elseif ( 'unlimited' === $voucher->usage_mode ) {
 			// Reusable vouchers: count one use, WooCommerce's usage limit decides when it is used up.
 			$this->repo->log( $voucher->id, 'redeemed', $voucher->initial_amount, null, $note );
