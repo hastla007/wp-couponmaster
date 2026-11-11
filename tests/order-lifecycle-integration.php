@@ -29,7 +29,7 @@ function vcap_life_voucher( float $balance = 50.0, array $props = array() ): arr
 	$voucher->discount_type  = 'fixed_cart';
 	$voucher->initial_amount = $balance;
 	$voucher->balance        = $balance;
-	$voucher->currency       = get_option( 'woocommerce_currency' );
+	$voucher->currency       = get_woocommerce_currency();
 	$voucher->status         = $props['status'] ?? VCAP\Voucher::STATUS_ACTIVE;
 	$voucher->delivery_at    = $props['delivery_at'] ?? null;
 	$voucher->buyer_email    = $props['buyer_email'] ?? '';
@@ -115,7 +115,7 @@ vcap_life_assert( 15.0 === (float) $repo->get( $abandoned->id )->balance, 'a lat
 
 // Order currency differs from the shop currency: the balance is charged in the base currency.
 list( $fx, $fx_coupon ) = vcap_life_voucher( 50.0 );
-$foreign = 'EUR' === get_option( 'woocommerce_currency' ) ? 'USD' : 'EUR';
+$foreign = 'EUR' === get_option( 'woocommerce_currency', 'USD' ) ? 'USD' : 'EUR';
 $half    = static function ( $amount, $currency ) use ( $foreign ) {
 	return $currency === $foreign ? $amount / 2 : $amount;
 };

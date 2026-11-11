@@ -64,20 +64,41 @@ final class CouponManager {
 		if ( $minutes <= 0 ) {
 			return;
 		}
-		$orders = wc_get_orders(
-			array(
-				'status'        => array( 'pending' ),
-				'date_modified' => '<' . ( time() - $minutes * MINUTE_IN_SECONDS ),
-				'meta_query'    => array( array( 'key' => '_vcap_reservations', 'compare' => 'EXISTS' ) ), // phpcs:ignore WordPress.DB.SlowDBQuery
-				'limit'         => 50,
-			)
+		// Orders whose latest ledger entry for a voucher is still an open checkout hold (own table, works with
+		// HPOS and the legacy order store alike).
+		global $wpdb;
+		$events    = Install::tables()['events'];
+		$order_ids = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			"SELECT DISTINCT e.order_id FROM {$events} e
+			INNER JOIN ( SELECT MAX(id) AS id FROM {$events} WHERE order_id > 0 GROUP BY voucher_id, order_id ) latest ON latest.id = e.id
+			WHERE e.event = 'reserved' LIMIT 200"
 		);
-		foreach ( $orders as $order ) {
-			if ( $order instanceof \WC_Order ) {
-				$this->release_order_reservations( $order );
-				$order->add_order_note( __( 'Unpaid order: voucher balance reservations released.', 'voucher-captain' ) );
+		$cutoff = time() - $minutes * MINUTE_IN_SECONDS;
+		foreach ( array_map( 'intval', $order_ids ? $order_ids : array() ) as $order_id ) {
+			$order = wc_get_order( $order_id );
+			if ( ! $order instanceof \WC_Order || 'pending' !== $order->get_status() ) {
+				continue;
 			}
+			$modified = $order->get_date_modified() ? $order->get_date_modified()->getTimestamp() : 0;
+			if ( $modified > $cutoff || ! self::order_map( $order, '_vcap_reservations' ) ) {
+				continue;
+			}
+			$this->release_order_reservations( $order );
+			$order->add_order_note( __( 'Unpaid order: voucher balance reservations released.', 'voucher-captain' ) );
 		}
+	}
+
+	/**
+	 * Read a code => amount map from order meta. A missing meta value is '' and (array) '' would be [ '' ].
+	 *
+	 * @return array<string, float>
+	 */
+	public static function order_map( \WC_Order $order, string $key ): array {
+		$value = $order->get_meta( $key );
+		if ( ! is_array( $value ) ) {
+			return array();
+		}
+		return array_filter( $value, static fn( $amount, $code ) => '' !== (string) $code && is_numeric( $amount ), ARRAY_FILTER_USE_BOTH );
 	}
 
 	public function code_exists( string $code ): bool {
@@ -179,8 +200,8 @@ final class CouponManager {
 			return;
 		}
 
-		$redemptions  = (array) $order->get_meta( '_vcap_redemptions' );
-		$reservations = (array) $order->get_meta( '_vcap_reservations' );
+		$redemptions  = self::order_map( $order, '_vcap_redemptions' );
+		$reservations = self::order_map( $order, '_vcap_reservations' );
 		$coupons      = array();
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
 			$code = wc_format_coupon_code( $item->get_code() );
@@ -486,11 +507,11 @@ final class CouponManager {
 	 * Move reservations to the committed redemption list when payment succeeds.
 	 */
 	private function commit_order_reservations( \WC_Order $order ): void {
-		$reservations = (array) $order->get_meta( '_vcap_reservations' );
+		$reservations = self::order_map( $order, '_vcap_reservations' );
 		if ( ! $reservations ) {
 			return;
 		}
-		$redemptions = (array) $order->get_meta( '_vcap_redemptions' );
+		$redemptions = self::order_map( $order, '_vcap_redemptions' );
 		// The order may have been edited after checkout: only coupons still on it, with the same amount, are committed.
 		$current = array();
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
@@ -535,7 +556,7 @@ final class CouponManager {
 	 * Release every reservation on an order that failed or was cancelled before payment.
 	 */
 	private function release_order_reservations( \WC_Order $order ): void {
-		$reservations = (array) $order->get_meta( '_vcap_reservations' );
+		$reservations = self::order_map( $order, '_vcap_reservations' );
 		if ( ! $reservations ) {
 			return;
 		}
@@ -771,8 +792,8 @@ final class CouponManager {
 	}
 
 	public function deduct_order( \WC_Order $order ): void {
-		$applied      = (array) $order->get_meta( '_vcap_redemptions' );
-		$reservations = (array) $order->get_meta( '_vcap_reservations' );
+		$applied      = self::order_map( $order, '_vcap_redemptions' );
+		$reservations = self::order_map( $order, '_vcap_reservations' );
 		$changed      = false;
 		$shortfall    = false;
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
@@ -892,7 +913,7 @@ final class CouponManager {
 	}
 
 	public function restore_order( \WC_Order $order ): void {
-		$applied = (array) $order->get_meta( '_vcap_redemptions' );
+		$applied = self::order_map( $order, '_vcap_redemptions' );
 		if ( ! $applied ) {
 			return;
 		}

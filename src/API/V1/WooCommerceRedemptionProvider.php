@@ -83,12 +83,12 @@ final class WooCommerceRedemptionProvider implements RedemptionProvider {
 			return new \WP_Error( 'vcap_balance_conflict', __( 'Voucher balance is unavailable or has changed.', 'voucher-captain' ), array( 'status' => 409 ) );
 		}
 		if ( 'committed' === $result['state'] ) {
-			$redemptions = (array) $order->get_meta( '_vcap_redemptions' );
+			$redemptions = CouponManager::order_map( $order, '_vcap_redemptions' );
 
 			$redemptions[ wc_format_coupon_code( $voucher->code ) ] = $result['amount'];
 			$order->update_meta_data( '_vcap_redemptions', $redemptions );
 		} else {
-			$reservations = (array) $order->get_meta( '_vcap_reservations' );
+			$reservations = CouponManager::order_map( $order, '_vcap_reservations' );
 
 			$reservations[ wc_format_coupon_code( $voucher->code ) ] = $result['amount'];
 			$order->update_meta_data( '_vcap_reservations', $reservations );
@@ -119,11 +119,11 @@ final class WooCommerceRedemptionProvider implements RedemptionProvider {
 		if ( ! $result ) {
 			return new \WP_Error( 'vcap_reservation_missing', __( 'No matching voucher reservation could be committed.', 'voucher-captain' ), array( 'status' => 409 ) );
 		}
-		$redemptions = (array) $order->get_meta( '_vcap_redemptions' );
+		$redemptions = CouponManager::order_map( $order, '_vcap_redemptions' );
 
 		$redemptions[ wc_format_coupon_code( $voucher->code ) ] = $result['amount'];
 
-		$reservations = (array) $order->get_meta( '_vcap_reservations' );
+		$reservations = CouponManager::order_map( $order, '_vcap_reservations' );
 
 		unset( $reservations[ wc_format_coupon_code( $voucher->code ) ] );
 		$order->update_meta_data( '_vcap_redemptions', $redemptions );
@@ -156,7 +156,7 @@ final class WooCommerceRedemptionProvider implements RedemptionProvider {
 		if ( ! $this->coupons->release_voucher_reservation( $voucher, $order, __( 'Released by an integration', 'voucher-captain' ) ) ) {
 			return new \WP_Error( 'vcap_reservation_missing', __( 'No matching voucher reservation could be released.', 'voucher-captain' ), array( 'status' => 409 ) );
 		}
-		$reservations = (array) $order->get_meta( '_vcap_reservations' );
+		$reservations = CouponManager::order_map( $order, '_vcap_reservations' );
 
 		unset( $reservations[ wc_format_coupon_code( $voucher->code ) ] );
 		if ( $reservations ) {

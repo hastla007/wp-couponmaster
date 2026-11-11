@@ -136,7 +136,7 @@ final class Issuer {
 		$voucher->buyer_email   = (string) $order->get_billing_email();
 		$voucher->max_checkins  = (int) $config['max_checkins'];
 
-		$fields                   = (array) $item->get_meta( '_vcap_fields' );
+		$fields                   = is_array( $item->get_meta( '_vcap_fields' ) ) ? $item->get_meta( '_vcap_fields' ) : array();
 		$voucher->recipient_name  = (string) ( $fields['recipient_name']['value'] ?? '' );
 		$voucher->recipient_email = sanitize_email( (string) ( $fields['recipient_email']['value'] ?? '' ) );
 		$voucher->message         = (string) ( $fields['message']['value'] ?? '' );
