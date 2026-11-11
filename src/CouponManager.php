@@ -311,8 +311,8 @@ final class CouponManager {
 			}
 			$amount         = (float) $latest['amount'];
 			$fresh->balance = round( $fresh->balance + $amount, wc_get_price_decimals() );
-			if ( Voucher::STATUS_REDEEMED === $fresh->status && ! $fresh->is_expired() ) {
-				$fresh->status = Voucher::STATUS_ACTIVE;
+			if ( Voucher::STATUS_REDEEMED === $fresh->status ) {
+				$fresh->status = $fresh->is_expired() ? Voucher::STATUS_EXPIRED : Voucher::STATUS_ACTIVE;
 			}
 			if ( ! $this->repo->update( $fresh ) ) {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
