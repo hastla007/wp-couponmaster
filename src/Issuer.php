@@ -59,6 +59,9 @@ final class Issuer {
 			$config = ProductConfig::get( $product );
 			$qty    = max( 0, (int) $item->get_quantity() + (int) $order->get_qty_refunded_for_item( $item_id ) );
 			$count  = (int) apply_filters( 'vcap_vouchers_per_item', $qty * $config['per_item'], $item, $config );
+			if ( $count > 0 ) {
+				$this->record_line( $order, $item, $config, $count );
+			}
 
 			for ( $index = 0; $index < $count; $index++ ) {
 				if ( $this->repo->get_slot( (int) $item_id, $index ) ) {
@@ -86,6 +89,52 @@ final class Issuer {
 			do_action( 'vcap_vouchers_issued', $created, $order );
 		}
 		return $created;
+	}
+
+	public const LINE_META = '_vcap_line';
+
+	/**
+	 * Snapshot of the voucher line at issue time: face value and currency of the vouchers, what was paid for the
+	 * line (net, tax, after discounts) in the order currency, and the tax setup. Written once per line, so later
+	 * product or tax changes never alter what was sold.
+	 */
+	private function record_line( \WC_Order $order, \WC_Order_Item_Product $item, array $config, int $count ): void {
+		if ( is_array( $item->get_meta( self::LINE_META ) ) ) {
+			return;
+		}
+		$product = $item->get_product();
+		$item->update_meta_data(
+			self::LINE_META,
+			array(
+				'version'            => 1,
+				'voucher_type'       => (string) $config['type'],
+				'discount_type'      => (string) $config['discount_type'],
+				'amount_source'      => (string) $config['amount_source'],
+				'face_value'         => $this->voucher_amount( $order, $item, $config ),
+				'voucher_currency'   => get_woocommerce_currency(),
+				'vouchers'           => $count,
+				'quantity'           => (int) $item->get_quantity(),
+				'order_currency'     => $order->get_currency(),
+				'subtotal'           => (float) $item->get_subtotal(),
+				'subtotal_tax'       => (float) $item->get_subtotal_tax(),
+				'total'              => (float) $item->get_total(),
+				'total_tax'          => (float) $item->get_total_tax(),
+				'tax_class'          => (string) $item->get_tax_class(),
+				'tax_status'         => $product ? (string) $product->get_tax_status() : '',
+				'prices_include_tax' => (bool) $order->get_prices_include_tax(),
+				'channels'           => array_values( array_intersect( (array) ( $config['channels'] ?? array() ), array_keys( Channels::all() ) ) ),
+				'recorded_at'        => time(),
+			)
+		);
+		$item->save_meta_data();
+	}
+
+	/**
+	 * The stored line snapshot (empty array for lines without vouchers).
+	 */
+	public static function line_data( \WC_Order_Item_Product $item ): array {
+		$data = $item->get_meta( self::LINE_META );
+		return is_array( $data ) ? $data : array();
 	}
 
 	private function voucher_amount( \WC_Order $order, \WC_Order_Item_Product $item, array $config ): float {
@@ -116,7 +165,7 @@ final class Issuer {
 
 	private function create_voucher( \WC_Order $order, \WC_Order_Item_Product $item, \WC_Product $product, array $config, int $index ): ?Voucher {
 		$voucher                = new Voucher();
-		$voucher->type          = in_array( $config['type'], array( 'voucher', 'giftcard', 'ticket' ), true ) ? $config['type'] : 'voucher';
+		$voucher->type          = isset( Voucher::types()[ $config['type'] ] ) && 'credit' !== $config['type'] ? $config['type'] : 'voucher';
 		$voucher->order_id      = $order->get_id();
 		$voucher->order_item_id = (int) $item->get_id();
 		$voucher->item_index    = $index;

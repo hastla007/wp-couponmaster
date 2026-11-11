@@ -118,3 +118,28 @@ add_filter( 'vcap_redemption_target_available', fn( $available, string $target )
 // React once per completed redemption.
 add_action( 'vcap_voucher_redeemed', function ( array $redemption ) { /* audit, notify … */ } );
 ```
+
+## Extension points for connector plugins (since 1.1.0)
+
+### Voucher types
+
+Add your own voucher type (e.g. a course voucher) with the `vcap_voucher_types` filter. It appears in the product's "Type" select and behaves like a regular voucher (coupon, PDF, email). Built-in types (`voucher`, `giftcard`, `ticket`, `credit`) cannot be replaced. Use the type in `vcap_redemption_allowed` to decide what a voucher may unlock.
+
+```php
+add_filter( 'vcap_voucher_types', fn( array $types ) => $types + array( 'course' => __( 'Course voucher', 'my-plugin' ) ) );
+```
+
+### Redemption channels
+
+Each voucher product chooses where its vouchers can be redeemed ("Redeemable via"): `shop` (cart/checkout) and `external` (redemption API). The choice is stored with every sold order line, so later product changes do not alter sold vouchers. No selection allows every channel.
+
+- `vcap_redemption_channels` (array channel ⇒ label): add your own channel, e.g. `learnboating`.
+- `vcap_redemption_channel_for_target` (string channel, string target): map your redemption targets to your channel (default `external`).
+- `vcap_redemption_channel_allowed` (bool, Voucher, channel, stored channels): final decision.
+- `VCAP\Channels::allowed( $voucher, $channel )` checks a voucher. The shop refuses vouchers without the `shop` channel (error 9006); the redemption API answers `vcap_not_redeemable`.
+
+### Per-line order and refund data
+
+`vcap()->api_v1->order_lines( WC_Order $order )` returns, per product line (keyed by order item id): product and variation id, name, quantity, refunded quantity, subtotal/total and taxes, refunded total and order currency, the voucher line snapshot and the vouchers issued for the line (id, code, type, status, value, balance, currency, expiry). Filter: `vcap_order_lines`.
+
+The voucher line snapshot (`VCAP\Issuer::line_data( $item )`, order item meta `_vcap_line`) is written once when the vouchers are issued: `face_value` and `voucher_currency` of each voucher, number of `vouchers`, `quantity`, `order_currency`, `subtotal`, `subtotal_tax`, `total`, `total_tax` (after discounts), `tax_class`, `tax_status`, `prices_include_tax`, `voucher_type`, `discount_type`, `amount_source`, `channels` and `recorded_at`.

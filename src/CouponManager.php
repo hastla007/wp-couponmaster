@@ -758,6 +758,9 @@ final class CouponManager {
 		if ( Voucher::STATUS_EXPIRED === $voucher->status || $voucher->is_expired() ) {
 			throw new \Exception( esc_html__( 'This voucher has expired.', 'voucher-captain' ), 9003 );
 		}
+		if ( ! Channels::allowed( $voucher, Channels::SHOP ) ) {
+			throw new \Exception( esc_html__( 'This voucher cannot be redeemed in the shop.', 'voucher-captain' ), 9006 );
+		}
 		return $valid;
 	}
 

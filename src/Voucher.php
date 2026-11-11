@@ -67,13 +67,26 @@ final class Voucher {
 		);
 	}
 
+	/**
+	 * Voucher types. Connector plugins may add their own (e.g. "course"); such vouchers behave like regular
+	 * vouchers (coupon + PDF) and can be targeted in the "vcap_redemption_allowed" filter. "ticket" and "credit"
+	 * have built-in special handling and cannot be removed.
+	 */
 	public static function types(): array {
-		return array(
+		$core  = array(
 			'voucher'  => __( 'Voucher', 'voucher-captain' ),
 			'giftcard' => __( 'Gift card', 'voucher-captain' ),
 			'ticket'   => __( 'Ticket', 'voucher-captain' ),
 			'credit'   => __( 'Store credit', 'voucher-captain' ),
 		);
+		$extra = (array) apply_filters( 'vcap_voucher_types', array() );
+		foreach ( $extra as $key => $label ) {
+			$key = sanitize_key( (string) $key );
+			if ( '' !== $key && strlen( $key ) <= 20 && ! isset( $core[ $key ] ) ) {
+				$core[ $key ] = (string) $label;
+			}
+		}
+		return $core;
 	}
 
 	public static function from_row( array $row ): self {

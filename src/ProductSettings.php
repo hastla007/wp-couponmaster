@@ -235,6 +235,12 @@ final class ProductSettings {
 				'description' => __( 'Anyone with the code may redeem it. Untick to restrict redemption to the buyer and the named recipient (their email addresses).', 'voucher-captain' ),
 			)
 		);
+		$channels = (array) ProductConfig::get( $p )['channels'];
+		echo '<fieldset class="form-field vcap-channels"><legend>' . esc_html__( 'Redeemable via', 'voucher-captain' ) . '</legend>';
+		foreach ( Channels::all() as $key => $label ) {
+			echo '<label style="display:block;margin-left:0"><input type="checkbox" name="_vcap_channels[]" value="' . esc_attr( $key ) . '" ' . checked( in_array( $key, $channels, true ), true, false ) . ' /> ' . esc_html( $label ) . '</label>';
+		}
+		echo '<span class="description">' . esc_html__( 'Leave all unticked to allow every channel. Stored with each sold voucher.', 'voucher-captain' ) . '</span></fieldset>';
 		woocommerce_wp_textarea_input(
 			array(
 				'id'          => '_vcap_redemption_terms',
@@ -493,6 +499,8 @@ final class ProductSettings {
 		foreach ( array( 'free_shipping', 'individual_use', 'exclude_sale', 'preview', 'buyer_copy', 'transferable' ) as $key ) {
 			$product->update_meta_data( '_vcap_' . $key, isset( $post[ '_vcap_' . $key ] ) ? 'yes' : 'no' );
 		}
+		$channels = array_map( 'sanitize_key', (array) ( $post['_vcap_channels'] ?? array() ) );
+		$product->update_meta_data( '_vcap_channels', array_values( array_intersect( $channels, array_keys( Channels::all() ) ) ) );
 		foreach ( array( 'product_ids', 'exclude_product_ids', 'category_ids', 'exclude_category_ids' ) as $key ) {
 			$product->update_meta_data( '_vcap_' . $key, array_values( array_filter( array_map( 'absint', (array) ( $post[ '_vcap_' . $key ] ?? array() ) ) ) ) );
 		}

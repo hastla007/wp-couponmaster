@@ -35,13 +35,13 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 
 ## P1 – Allgemeine Gutschein-Grundlage
 
-- [ ] Gutscheintyp und Einlöseweg generisch erweiterbar machen, ohne Kurs- oder LMS-Felder in den Plugin-Kern aufzunehmen.
+- [x] Gutscheintyp und Einlöseweg generisch erweiterbar machen, ohne Kurs- oder LMS-Felder in den Plugin-Kern aufzunehmen. — *Nachweis: Filter `vcap_voucher_types`, Einlösewege `shop`/`external` pro Produkt („Einlösbar über“, am Verkauf festgeschrieben) mit Filtern `vcap_redemption_channels`, `vcap_redemption_channel_for_target`, `vcap_redemption_channel_allowed`; API.md; tests/connector-integration.php*
 - [x] Transferierbarkeit als klare Produkteinstellung abbilden und für Vorlagen/E-Mails als Platzhalter bereitstellen. — *Nachweis: Produktoption „Übertragbar“, Platzhalter `{transferable}`; nicht übertragbare Gutscheine sind auf Käufer/Empfänger-E-Mail beschränkt; tests/account-integration.php*
 - [x] Ablaufdatum, Restwert, Übertragbarkeit und Einlösebedingungen in Admin, Kundenkonto und PDF-Vorlagen ausgeben. — *Nachweis: Admin-Detail, Kundenkonto-Tab, E-Mail, Produktseite, Platzhalter `{redemption_terms}`/`{transferable}`; Bedingungen werden beim Kauf am Gutschein festgeschrieben*
 - [x] Erneuten Versand für berechtigte Käufer im Kundenkonto ergänzen. — *Nachweis: Button „E-Mail erneut senden“ für zugestellte eigene Gutscheine, 3×/Stunde; tests/account-integration.php*
 - [x] Code-Standard auf mindestens 12 zufällige Zeichen setzen; verwechslungsanfällige Zeichen weiter ausschließen. — *Nachweis: Standard 12, Minimum 8, ohne 0/O/1/I*
 - [x] Rabattierte Gutscheinbestellungen anhand des tatsächlich bezahlten Positionsbetrags berechnen; Steueranteile und Mehrwährung gesondert berücksichtigen. — *Entscheidung 11.11.2026: Ein Gutschein ist immer seinen Nennwert wert (z. B. 50-€-Gutschein mit 10 % Rabatt gekauft = 50 €). Steuer und Mehrwährung werden berücksichtigt; tests/zero-total-integration.php*
-- [ ] Auftrags- und Erstattungsdaten positionsbezogen für angeschlossene Plugins verfügbar machen.
+- [x] Auftrags- und Erstattungsdaten positionsbezogen für angeschlossene Plugins verfügbar machen. — *Nachweis: `vcap()->api_v1->order_lines()` mit Mengen, Summen, Steuern, Erstattungen, Gutscheinen und Positions-Snapshot je Zeile; tests/connector-integration.php*
 - [x] Verhalten für vollständig rabattierte 0-Euro-Bestellungen festlegen und mit Bestellstatus-/Zugangs-Integrationen abstimmen. — *WooCommerce-Standard: gilt als bezahlt, Gutscheine werden sofort ausgestellt und Guthaben abgebucht; tests/zero-total-integration.php*
 - [x] WooCommerce-CRUD-APIs für Bestellungen und Gutscheine verwenden; HPOS-Unterstützung verifizieren. — *Nachweis: CI-Matrix HPOS und klassischer Bestellspeicher*
 - [ ] Kompatibilität der Produktfelder mit Produkt-, Warenkorb- und Kassenblöcken herstellen und testen.
@@ -146,7 +146,7 @@ Befund im Kursplugin: `/wp-json/boatingschool/v1/coupons/redeem` ist derzeit fü
 - [x] Bonusgutschein bei qualifizierender Bestellung oder Geschenkkartenkauf als optionale Kampagnenaktion ausgeben. — *Nachweis: Aktion „Bonusgutschein nach der Bestellung“ (Auslöser Bestellung oder Gutscheinkauf), Einmal-Code mit E-Mail-Bindung, Ablauf und Mindestwert, eigene WooCommerce-E-Mail; Rücknahme bei Storno/Erstattung; tests/bonus-integration.php*
 - [x] Gutscheinsaldo, Gutscheinstatus, Einlöseseite und Versandaktion über wiederverwendbare Blöcke/Shortcodes bereitstellen. — *Nachweis: Shortcodes `[vcap_balance]`/`[vcap_voucher_status]`, `[vcap_redeem]`, `[vcap_my_vouchers]` (mit „erneut senden“), `[vcap_referral]` und gleichnamige serverseitige Blöcke; tests/shortcodes-integration.php*
 - [x] Kundenvorschau personalisierter Gutscheine vor dem Kauf anbieten. — *Nachweis: Vorschau-Button auf der Produktseite, PDF mit Wasserzeichen*
-- [ ] Feste Wertstufen und Wunschbetrag für Gutscheinprodukte unterstützen, wenn Produkt-/Preis-Integrationen dies erlauben; Werte, Währung und Steuerdaten positionsbezogen speichern. *(teilweise: Wunschbetrag mit Min/Max/Schrittweite/Vorschlägen und Variationen als Wertstufen vorhanden)*
+- [x] Feste Wertstufen und Wunschbetrag für Gutscheinprodukte unterstützen, wenn Produkt-/Preis-Integrationen dies erlauben; Werte, Währung und Steuerdaten positionsbezogen speichern. — *Nachweis: Wunschbetrag mit Min/Max/Schrittweite/Vorschlägen, Variationen als Wertstufen; Positions-Snapshot `_vcap_line` mit Nennwert, Gutschein- und Bestellwährung, Netto/Steuer nach Rabatt, Steuerklasse/-status; tests/connector-integration.php*
 - [ ] Mehrsprachige, mehrwährungsfähige, Subscription- und Produktfeld-Erweiterungen über dokumentierte Adapter statt interne APIs anbinden.
 - [ ] Akzeptanztests für Kampagnenpriorität, Warenkorbgrenzen, teilweise Einlösung, Erstattung, Mehrwährung, Wiederholungs-Webhook und Datenschutzfristen ergänzen.
 

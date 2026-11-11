@@ -49,6 +49,7 @@ final class ProductConfig {
 		'transferable'        => 'yes',
 		'redemption_terms'    => '',
 		'preview'             => 'yes',
+		'channels'            => array(),
 		'builtin_fields'      => array( 'recipient_name', 'recipient_email', 'message' ),
 		'message_maxlength'   => 300,
 	);

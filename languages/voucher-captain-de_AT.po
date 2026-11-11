@@ -3227,3 +3227,18 @@ msgstr "Erst Guthaben, dann Geschenkkarten"
 
 msgid "Store credit with discount codes"
 msgstr "Guthaben mit Rabattcodes"
+
+msgid "External redemption (API, connected plugins)"
+msgstr "Externe Einlösung (API, angebundene Plugins)"
+
+msgid "Leave all unticked to allow every channel. Stored with each sold voucher."
+msgstr "Keine Auswahl = alle Einlösewege erlaubt. Wird mit jedem verkauften Gutschein gespeichert."
+
+msgid "Redeemable via"
+msgstr "Einlösbar über"
+
+msgid "Shop (cart and checkout)"
+msgstr "Shop (Warenkorb und Kasse)"
+
+msgid "This voucher cannot be redeemed in the shop."
+msgstr "Dieser Gutschein kann nicht im Shop eingelöst werden."

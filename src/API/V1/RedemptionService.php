@@ -7,6 +7,7 @@
 
 namespace VCAP\API\V1;
 
+use VCAP\Channels;
 use VCAP\Install;
 use VCAP\Voucher;
 use VCAP\VoucherRepository;
@@ -418,6 +419,9 @@ final class RedemptionService {
 			return self::error( 'vcap_not_redeemable', __( 'Tickets are checked in at the entrance and cannot be redeemed here.', 'voucher-captain' ), 422 );
 		}
 		if ( ! in_array( $voucher->usage_mode, array( 'single', 'balance' ), true ) ) {
+			return self::error( 'vcap_not_redeemable', __( 'This voucher can only be used in the shop.', 'voucher-captain' ), 422 );
+		}
+		if ( ! Channels::allowed( $voucher, Channels::for_target( $target ) ) ) {
 			return self::error( 'vcap_not_redeemable', __( 'This voucher can only be used in the shop.', 'voucher-captain' ), 422 );
 		}
 		switch ( $voucher->status ) {

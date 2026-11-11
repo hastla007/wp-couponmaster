@@ -9,6 +9,7 @@ namespace VCAP\API\V1;
 
 use VCAP\Contracts\RedemptionProvider;
 use VCAP\CouponManager;
+use VCAP\Issuer;
 use VCAP\VoucherRepository;
 
 defined( 'ABSPATH' ) || exit;
@@ -73,6 +74,62 @@ final class VoucherService {
 	public function release( string $code, \WC_Order $order ) {
 		$provider = $this->provider( $code );
 		return is_wp_error( $provider ) ? $provider : $provider->release( $code, $order );
+	}
+
+	/**
+	 * Order and refund data per order line, for connector plugins (e.g. to grant or revoke access per line).
+	 *
+	 * Each product line contains its quantities, totals and refunds in the order currency, the voucher line
+	 * snapshot (face value, voucher currency, tax data, allowed channels) and the vouchers issued for it.
+	 *
+	 * @since 1.1.0
+	 * @param \WC_Order $order Order.
+	 * @return array<int, array<string, mixed>> Lines keyed by order item id.
+	 */
+	public function order_lines( \WC_Order $order ): array {
+		$vouchers = array();
+		foreach ( $this->vouchers->for_order( $order->get_id() ) as $voucher ) {
+			$vouchers[ $voucher->order_item_id ][] = array(
+				'id'       => $voucher->id,
+				'code'     => $voucher->code,
+				'type'     => $voucher->type,
+				'status'   => $voucher->status,
+				'value'    => $voucher->initial_amount,
+				'balance'  => $voucher->balance,
+				'currency' => $voucher->currency,
+				'expires'  => $voucher->expires_at,
+			);
+		}
+		$lines = array();
+		foreach ( $order->get_items() as $item_id => $item ) {
+			if ( ! $item instanceof \WC_Order_Item_Product ) {
+				continue;
+			}
+			$lines[ (int) $item_id ] = array(
+				'item_id'           => (int) $item_id,
+				'product_id'        => (int) $item->get_product_id(),
+				'variation_id'      => (int) $item->get_variation_id(),
+				'name'              => $item->get_name(),
+				'quantity'          => (int) $item->get_quantity(),
+				'refunded_quantity' => abs( (int) $order->get_qty_refunded_for_item( $item_id ) ),
+				'subtotal'          => (float) $item->get_subtotal(),
+				'subtotal_tax'      => (float) $item->get_subtotal_tax(),
+				'total'             => (float) $item->get_total(),
+				'total_tax'         => (float) $item->get_total_tax(),
+				'refunded_total'    => (float) $order->get_total_refunded_for_item( $item_id ),
+				'currency'          => $order->get_currency(),
+				'voucher_line'      => Issuer::line_data( $item ),
+				'vouchers'          => $vouchers[ (int) $item_id ] ?? array(),
+			);
+		}
+		/**
+		 * Filters the per-line order data handed to connector plugins.
+		 *
+		 * @since 1.1.0
+		 * @param array<int, array<string, mixed>> $lines Lines keyed by order item id.
+		 * @param \WC_Order                        $order Order.
+		 */
+		return (array) apply_filters( 'vcap_order_lines', $lines, $order );
 	}
 
 	/**
