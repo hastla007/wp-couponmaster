@@ -85,6 +85,7 @@ final class VoucherService {
 		/**
 		 * Filters the redemption providers available for a voucher code.
 		 *
+		 * @since 1.1.0
 		 * @param RedemptionProvider[] $providers Registered provider adapters.
 		 * @param string               $code      Voucher code being resolved.
 		 * @param VoucherService       $service   Voucher service instance.
