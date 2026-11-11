@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-11 18:35+0000\n"
+"POT-Creation-Date: 2026-11-11 21:09+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:74 src/API/V1/RedemptionService.php:113
@@ -38,80 +38,102 @@ msgid "Voucher redemption is temporarily unavailable."
 msgstr ""
 
 #. translators: 1: redemption key, 2: target
-#: src/API/V1/RedemptionService.php:199 src/API/V1/RedemptionService.php:343
+#: src/API/V1/RedemptionService.php:199 src/API/V1/RedemptionService.php:463
 #, php-format
 msgid "Redemption %1$s for %2$s"
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:258 src/API/V1/RedemptionService.php:306
+#: src/API/V1/RedemptionService.php:268
+msgid "A redemption key, a refund key and a positive amount are required."
+msgstr ""
+
+#: src/API/V1/RedemptionService.php:272 src/API/V1/RedemptionService.php:378 src/API/V1/RedemptionService.php:426
 msgid "No redemption exists for this key."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:302
-msgid "Invalid redemption key."
-msgstr ""
-
-#: src/API/V1/RedemptionService.php:309 src/API/V1/RestController.php:169
+#: src/API/V1/RedemptionService.php:275 src/API/V1/RedemptionService.php:429 src/API/V1/RestController.php:169
 msgid "This redemption belongs to another user."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:316
+#: src/API/V1/RedemptionService.php:278
+msgid "Only completed redemptions can be refunded."
+msgstr ""
+
+#: src/API/V1/RedemptionService.php:303
+msgid "This refund key was already used for another amount."
+msgstr ""
+
+#: src/API/V1/RedemptionService.php:314
+msgid "This redemption has already been refunded completely."
+msgstr ""
+
+#. translators: 1: refund key, 2: redemption key
+#: src/API/V1/RedemptionService.php:340
+#, php-format
+msgid "Refund %1$s of redemption %2$s"
+msgstr ""
+
+#: src/API/V1/RedemptionService.php:422
+msgid "Invalid redemption key."
+msgstr ""
+
+#: src/API/V1/RedemptionService.php:436
 msgid "This redemption has already been completed."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:317 src/API/V1/RedemptionService.php:334
+#: src/API/V1/RedemptionService.php:437 src/API/V1/RedemptionService.php:454
 msgid "This reservation has expired or was cancelled. Please redeem the voucher again."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:348 src/API/V1/RedemptionService.php:434 src/CouponManager.php:746 src/Downloads.php:128
+#: src/API/V1/RedemptionService.php:468 src/API/V1/RedemptionService.php:554 src/CouponManager.php:746 src/Downloads.php:128
 msgid "This voucher has been cancelled."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:365
+#: src/API/V1/RedemptionService.php:485
 msgid "expired"
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:424
+#: src/API/V1/RedemptionService.php:544
 msgid "Tickets are checked in at the entrance and cannot be redeemed here."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:427 src/API/V1/RedemptionService.php:430
+#: src/API/V1/RedemptionService.php:547 src/API/V1/RedemptionService.php:550
 msgid "This voucher can only be used in the shop."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:436 src/CouponManager.php:749
+#: src/API/V1/RedemptionService.php:556 src/CouponManager.php:749
 msgid "This voucher is not active yet."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:438 src/CouponManager.php:753
+#: src/API/V1/RedemptionService.php:558 src/CouponManager.php:753
 msgid "This voucher is currently being redeemed. Please try again in a few minutes."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:440 src/API/V1/RedemptionService.php:447
+#: src/API/V1/RedemptionService.php:560 src/API/V1/RedemptionService.php:567
 msgid "This voucher has already been redeemed."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:443 src/CouponManager.php:759
+#: src/API/V1/RedemptionService.php:563 src/CouponManager.php:759
 msgid "This voucher has expired."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:450
+#: src/API/V1/RedemptionService.php:570
 msgid "The remaining voucher balance is not sufficient."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:461
+#: src/API/V1/RedemptionService.php:581
 msgid "This voucher is not valid for your account."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:480
+#: src/API/V1/RedemptionService.php:600
 msgid "This voucher cannot be used for this purpose."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:491
+#: src/API/V1/RedemptionService.php:611
 msgid "The selected offer is currently not available."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:633
+#: src/API/V1/RedemptionService.php:756
 msgid "The voucher could not be redeemed right now. Please try again."
 msgstr ""
 
@@ -407,7 +429,7 @@ msgstr ""
 msgid "Scanner"
 msgstr ""
 
-#: src/Admin/Menu.php:44 src/Admin/Menu.php:44 src/Plugin.php:110
+#: src/Admin/Menu.php:44 src/Admin/Menu.php:44 src/Plugin.php:111
 msgid "Settings"
 msgstr ""
 
@@ -747,7 +769,7 @@ msgstr ""
 msgid "none (ticket)"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:119 src/VoucherRepository.php:339
+#: src/Admin/VoucherAdmin.php:119 src/VoucherRepository.php:340
 msgid "Delivered"
 msgstr ""
 
@@ -965,6 +987,22 @@ msgstr ""
 
 #: src/Channels.php:22
 msgid "External redemption (API, connected plugins)"
+msgstr ""
+
+#: src/Compat/PassCaptain.php:36
+msgid "WP Pass Captain (ticket checkout)"
+msgstr ""
+
+#: src/Compat/PassCaptainProvider.php:45
+msgid "Please enter a voucher code."
+msgstr ""
+
+#: src/Compat/PassCaptainProvider.php:52
+msgid "This voucher is in a different currency."
+msgstr ""
+
+#: src/Compat/PassCaptainProvider.php:66
+msgid "This voucher has no value left."
 msgstr ""
 
 #: src/CouponLink.php:60
@@ -2087,12 +2125,12 @@ msgid "Site URL"
 msgstr ""
 
 #. translators: %s: comma separated table names
-#: src/Plugin.php:126
+#: src/Plugin.php:127
 #, php-format
 msgid "Voucher Captain: the voucher database tables do not support transactions (InnoDB). Gift card balances cannot be redeemed until these tables are converted to InnoDB: %s"
 msgstr ""
 
-#: src/Plugin.php:134
+#: src/Plugin.php:135
 msgid "Voucher Captain: the PDF libraries are missing. Install the release ZIP or run \"composer install --no-dev\" in the plugin folder."
 msgstr ""
 
@@ -3366,7 +3404,7 @@ msgstr ""
 msgid "Cancelled"
 msgstr ""
 
-#: src/Tickets.php:93 src/Voucher.php:65 src/VoucherRepository.php:353
+#: src/Tickets.php:93 src/Voucher.php:65 src/VoucherRepository.php:354
 msgid "Expired"
 msgstr ""
 
@@ -3396,11 +3434,11 @@ msgstr ""
 msgid "%1$d of %2$d admissions used"
 msgstr ""
 
-#: src/Tickets.php:205 src/VoucherRepository.php:350
+#: src/Tickets.php:205 src/VoucherRepository.php:351
 msgid "Check-in reverted"
 msgstr ""
 
-#: src/Tickets.php:205 src/Tickets.php:281 src/VoucherRepository.php:349
+#: src/Tickets.php:205 src/Tickets.php:281 src/VoucherRepository.php:350
 msgid "Checked in"
 msgstr ""
 
@@ -3416,7 +3454,7 @@ msgstr ""
 msgid "Please enter an amount."
 msgstr ""
 
-#: src/Tickets.php:265 src/Voucher.php:64 src/VoucherRepository.php:346
+#: src/Tickets.php:265 src/Voucher.php:64 src/VoucherRepository.php:347
 msgid "Redeemed"
 msgstr ""
 
@@ -3469,54 +3507,58 @@ msgid "External reservation released"
 msgstr ""
 
 #: src/VoucherRepository.php:338
+msgid "External redemption refunded"
+msgstr ""
+
+#: src/VoucherRepository.php:339
 msgid "Delivery scheduled"
 msgstr ""
 
-#: src/VoucherRepository.php:340
+#: src/VoucherRepository.php:341
 msgid "Delivery failed"
 msgstr ""
 
-#: src/VoucherRepository.php:341
+#: src/VoucherRepository.php:342
 msgid "Expiry reminder"
 msgstr ""
 
-#: src/VoucherRepository.php:342
+#: src/VoucherRepository.php:343
 msgid "Credit added"
 msgstr ""
 
-#: src/VoucherRepository.php:343
+#: src/VoucherRepository.php:344
 msgid "Credit removed"
 msgstr ""
 
-#: src/VoucherRepository.php:344
+#: src/VoucherRepository.php:345
 msgid "Refunded as store credit"
 msgstr ""
 
-#: src/VoucherRepository.php:345
+#: src/VoucherRepository.php:346
 msgid "Email resent"
 msgstr ""
 
-#: src/VoucherRepository.php:347
+#: src/VoucherRepository.php:348
 msgid "Balance restored"
 msgstr ""
 
-#: src/VoucherRepository.php:348
+#: src/VoucherRepository.php:349
 msgid "Balance adjusted"
 msgstr ""
 
-#: src/VoucherRepository.php:351
+#: src/VoucherRepository.php:352
 msgid "Voided"
 msgstr ""
 
-#: src/VoucherRepository.php:352
+#: src/VoucherRepository.php:353
 msgid "Reactivated"
 msgstr ""
 
-#: src/VoucherRepository.php:354
+#: src/VoucherRepository.php:355
 msgid "Edited"
 msgstr ""
 
-#: src/VoucherRepository.php:355
+#: src/VoucherRepository.php:356
 msgid "Downloaded"
 msgstr ""
 

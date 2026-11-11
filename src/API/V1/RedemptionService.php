@@ -248,6 +248,126 @@ final class RedemptionService {
 	}
 
 	/**
+	 * Give back (part of) a completed external redemption, e.g. when the delivered service is refunded.
+	 *
+	 * Gift cards: the amount returns to the balance. Single-use vouchers: once the refunds reach the redeemed
+	 * amount, the voucher becomes usable again; partial refunds are recorded only. Idempotent per refund key;
+	 * the same refund key with a different amount is a conflict.
+	 *
+	 * @since 1.1.0
+	 * @param string $key        Redemption key.
+	 * @param float  $amount     Amount to give back (voucher currency).
+	 * @param string $refund_key Idempotency key of this refund.
+	 * @param array  $args       user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
+	 * @return array<string, mixed>|\WP_Error Redemption data plus refunded (total) and restored (this call).
+	 * @throws \Throwable Database errors are re-thrown after the transaction was rolled back.
+	 */
+	public function refund( string $key, float $amount, string $refund_key, array $args = array() ) {
+		$amount = round( $amount, wc_get_price_decimals() );
+		if ( ! preg_match( self::KEY_PATTERN, $key ) || ! preg_match( self::KEY_PATTERN, $refund_key ) || $amount <= 0 ) {
+			return self::error( 'vcap_invalid_request', __( 'A redemption key, a refund key and a positive amount are required.', 'voucher-captain' ), 400 );
+		}
+		$row = $this->get_row( $key );
+		if ( ! $row ) {
+			return self::error( 'vcap_reservation_missing', __( 'No redemption exists for this key.', 'voucher-captain' ), 404 );
+		}
+		if ( isset( $args['user_id'] ) && (int) $args['user_id'] !== (int) $row['user_id'] ) {
+			return self::error( 'vcap_not_allowed', __( 'This redemption belongs to another user.', 'voucher-captain' ), 403 );
+		}
+		if ( self::STATE_COMMITTED !== $row['state'] ) {
+			return self::error( 'vcap_not_committed', __( 'Only completed redemptions can be refunded.', 'voucher-captain' ), 409 );
+		}
+		if ( ! Install::tables_support_transactions() ) {
+			return $this->temporary();
+		}
+
+		global $wpdb;
+		$tables = Install::tables();
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return $this->temporary();
+		}
+		try {
+			$wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$tables['vouchers']} WHERE id = %d FOR UPDATE", (int) $row['voucher_id'] ) ); // phpcs:ignore
+			$row     = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$tables['redemptions']} WHERE redemption_key = %s FOR UPDATE", $key ), ARRAY_A ); // phpcs:ignore
+			$voucher = $row ? $this->vouchers->get( (int) $row['voucher_id'] ) : null;
+			if ( ! $row || ! $voucher ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return $this->temporary();
+			}
+			$meta    = json_decode( (string) $row['meta'], true );
+			$meta    = is_array( $meta ) ? $meta : array();
+			$refunds = isset( $meta['_refunds'] ) && is_array( $meta['_refunds'] ) ? array_map( 'floatval', $meta['_refunds'] ) : array();
+			if ( isset( $refunds[ $refund_key ] ) ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				if ( abs( $refunds[ $refund_key ] - $amount ) >= 0.0001 && $refunds[ $refund_key ] < $amount ) {
+					return self::error( 'vcap_idempotency_conflict', __( 'This refund key was already used for another amount.', 'voucher-captain' ), 409 );
+				}
+				return $this->redemption_data( $row ) + array(
+					'refunded' => array_sum( $refunds ),
+					'restored' => 0.0,
+				);
+			}
+			$redeemed = (float) $row['amount'];
+			$give     = round( min( $amount, $redeemed - array_sum( $refunds ) ), wc_get_price_decimals() );
+			if ( $give <= 0 ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return self::error( 'vcap_refund_exceeded', __( 'This redemption has already been refunded completely.', 'voucher-captain' ), 409 );
+			}
+			$refunds[ $refund_key ] = $give;
+			$total                  = array_sum( $refunds );
+			$restored               = 0.0;
+			if ( $voucher->is_multi_use() ) {
+				$voucher->balance = round( $voucher->balance + $give, wc_get_price_decimals() );
+				$restored         = $give;
+				if ( Voucher::STATUS_REDEEMED === $voucher->status && $voucher->balance > 0 ) {
+					$voucher->status = $voucher->is_expired() ? Voucher::STATUS_EXPIRED : Voucher::STATUS_ACTIVE;
+				}
+			} elseif ( $total + 0.0001 >= $redeemed && Voucher::STATUS_REDEEMED === $voucher->status ) {
+				$voucher->status  = $voucher->is_expired() ? Voucher::STATUS_EXPIRED : Voucher::STATUS_ACTIVE;
+				$voucher->balance = $voucher->initial_amount;
+				$restored         = $redeemed;
+			}
+			$meta['_refunds'] = $refunds;
+			$updated          = $wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$tables['redemptions'],
+				array(
+					'meta'       => wp_json_encode( $meta ),
+					'updated_at' => gmdate( 'Y-m-d H:i:s' ),
+				),
+				array( 'id' => (int) $row['id'] )
+			);
+			/* translators: 1: refund key, 2: redemption key */
+			$note = sprintf( __( 'Refund %1$s of redemption %2$s', 'voucher-captain' ), $refund_key, $key );
+			if ( 1 !== (int) $updated || ! $this->vouchers->update( $voucher ) || ! $this->vouchers->log( $voucher->id, 'api_refunded', $give, $voucher->balance, $note ) ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return $this->temporary();
+			}
+			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return $this->temporary();
+			}
+		} catch ( \Throwable $e ) {
+			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			throw $e;
+		}
+
+		$this->sync_coupon( $voucher );
+		$data = $this->redemption_data( $this->get_row( $key ) ) + array(
+			'refunded' => $total,
+			'restored' => $restored,
+		);
+		/**
+		 * Fires once per refund of a completed external redemption.
+		 *
+		 * @since 1.1.0
+		 * @param array $data   Redemption data with refunded (total) and restored (this call).
+		 * @param float $amount Amount refunded with this call.
+		 */
+		do_action( 'vcap_redemption_refunded', $data, $give );
+		return $data;
+	}
+
+	/**
 	 * Read a redemption.
 	 *
 	 * @param string $key Redemption key.
@@ -620,6 +740,9 @@ final class RedemptionService {
 			// Used up outside the cart: make WooCommerce's own usage limit refuse it too.
 			$coupon->set_usage_count( max( 1, (int) $coupon->get_usage_count() ) );
 			$coupon->set_usage_limit( max( 1, (int) $coupon->get_usage_count() ) );
+		} elseif ( Voucher::STATUS_ACTIVE === $voucher->status && $coupon->get_usage_limit() > 0 && $coupon->get_usage_count() >= $coupon->get_usage_limit() ) {
+			// Usable again after a full refund: allow exactly one more use.
+			$coupon->set_usage_limit( (int) $coupon->get_usage_count() + 1 );
 		}
 		$coupon->save();
 	}

@@ -161,6 +161,51 @@ jobs:
           VCAP_EXPECT_HPOS: ''
         run: tests/run-integration.sh
 
+  pass-captain:
+    # Voucher Captain as voucher provider of WP Pass Captain (current main of hastla007/wp-passmaster).
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --password=root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, gd, mbstring, mysqli, xml, zip
+          coverage: none
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist
+      - name: Download WP-CLI
+        run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
+      - name: Install WordPress, WooCommerce, WP Pass Captain and the release ZIP
+        run: |
+          php wp-cli.phar core download --path=wp-test --version=7.1.4
+          php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
+          php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher + Pass Captain" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
+          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.2.2 --activate
+          curl --fail --silent --show-error --location --output pass-captain.zip https://codeload.github.com/hastla007/wp-passmaster/zip/refs/heads/main
+          unzip -q pass-captain.zip -d pass-captain-src
+          mv pass-captain-src/wp-passmaster-main wp-test/wp-content/plugins/wp-pass-captain
+          composer install --working-dir=wp-test/wp-content/plugins/wp-pass-captain --no-dev --no-interaction --prefer-dist
+          php wp-cli.phar --path=wp-test plugin activate wp-pass-captain
+          bin/build.sh
+          php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
+          php wp-cli.phar --path=wp-test plugin list
+      - name: Run the Voucher Captain + Pass Captain checks
+        run: php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/passcaptain-integration.php"
+
   browser-e2e:
     runs-on: ubuntu-latest
     services:
