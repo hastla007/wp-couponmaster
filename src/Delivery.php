@@ -117,15 +117,22 @@ final class Delivery {
 				return;
 			}
 
+			// The delivery date has passed: the gift becomes redeemable even if no email can be sent
+			// (email disabled, invalid address). The download link and the admin "resend" still work.
+			if ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
+				$table = Install::tables()['vouchers'];
+				$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'active', updated_at = %s WHERE id = %d AND status = 'scheduled'", $now, $voucher_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				vcap()->coupons->set_coupon_enabled( $voucher, true );
+				$voucher->status = Voucher::STATUS_ACTIVE;
+			}
+
 			$sent = $this->send( $voucher );
 			if ( ! $sent ) {
+				// Retried by the daily maintenance until 30 days after the due date (VoucherRepository::due_for_delivery()).
 				$this->repo->log( $voucher->id, 'delivery_failed', null, null, __( 'No email was sent (email disabled or no valid address).', 'voucher-captain' ) );
 				return;
 			}
 
-			if ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
-				vcap()->coupons->set_coupon_enabled( $voucher, true );
-			}
 			$table   = Install::tables()['vouchers'];
 			$updated = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				$wpdb->prepare(
@@ -138,9 +145,6 @@ final class Delivery {
 			);
 			if ( 1 !== (int) $updated ) {
 				throw new \RuntimeException( __( 'Voucher email was sent but its delivery state could not be saved.', 'voucher-captain' ) );
-			}
-			if ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
-				$voucher->status = Voucher::STATUS_ACTIVE;
 			}
 			$voucher->delivered_at = $now;
 			$this->repo->log( $voucher->id, 'delivered', null, null, sprintf( 'Sent to %d recipient(s)', count( $sent ) ) );

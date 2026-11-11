@@ -205,10 +205,11 @@ final class VoucherRepository {
 			'intval',
 			$wpdb->get_col( // phpcs:ignore
 				$wpdb->prepare(
-					// Scheduled deliveries that are due, plus immediate ones whose queued action was lost or failed (retried for 30 days).
+					// Due deliveries whose queued action was lost or failed, retried daily for 30 days after the due date.
 					"SELECT id FROM {$this->table} WHERE delivered_at IS NULL AND status IN ('scheduled','active')
-					AND ( ( delivery_at IS NOT NULL AND delivery_at <= %s ) OR ( delivery_at IS NULL AND created_at <= %s AND created_at >= %s ) ) LIMIT %d",
+					AND ( ( delivery_at IS NOT NULL AND delivery_at <= %s AND delivery_at >= %s ) OR ( delivery_at IS NULL AND created_at <= %s AND created_at >= %s ) ) LIMIT %d",
 					$this->now(),
+					gmdate( 'Y-m-d H:i:s', time() - 30 * DAY_IN_SECONDS ),
 					gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS ),
 					gmdate( 'Y-m-d H:i:s', time() - 30 * DAY_IN_SECONDS ),
 					$limit
@@ -258,7 +259,7 @@ final class VoucherRepository {
 				return 0;
 			}
 			return (int) $updated;
-		} catch ( Throwable $e ) {
+		} catch ( \Throwable $e ) {
 			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			throw $e;
 		}

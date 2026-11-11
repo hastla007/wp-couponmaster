@@ -18,6 +18,66 @@ final class CouponManager {
 		add_action( 'woocommerce_increase_coupon_usage_count', array( $this, 'usage_increased' ), 10, 3 );
 		add_action( 'woocommerce_decrease_coupon_usage_count', array( $this, 'usage_decreased' ), 10, 3 );
 		add_action( 'woocommerce_cart_totals_after_order_total', array( $this, 'cart_balance_notice' ) );
+		// Free balance holds of unpaid orders that are trashed, deleted or abandoned.
+		add_action( 'woocommerce_trash_order', array( $this, 'release_deleted_order' ), 5 );
+		add_action( 'woocommerce_before_delete_order', array( $this, 'release_deleted_order' ), 5 );
+		add_action( 'wp_trash_post', array( $this, 'release_deleted_order' ), 5 );
+		add_action( 'before_delete_post', array( $this, 'release_deleted_order' ), 5 );
+		add_action( 'vcap_release_stale_order_reservations', array( $this, 'release_stale_order_reservations' ) );
+		add_action( 'init', array( $this, 'schedule_stale_release' ), 20 );
+	}
+
+	/**
+	 * A trashed or deleted order must not keep stored balance locked. Committed redemptions of paid orders
+	 * stay untouched (refunds handle those).
+	 *
+	 * @param int|\WC_Order $order_or_id Order or post id.
+	 */
+	public function release_deleted_order( $order_or_id ): void {
+		if ( ! $order_or_id instanceof \WC_Order ) {
+			$post_type = get_post_type( (int) $order_or_id );
+			// wp_trash_post / before_delete_post fire for every post type; HPOS passes order ids without posts.
+			if ( $post_type && ! in_array( $post_type, wc_get_order_types(), true ) ) {
+				return;
+			}
+		}
+		$order = $order_or_id instanceof \WC_Order ? $order_or_id : wc_get_order( (int) $order_or_id );
+		if ( $order instanceof \WC_Order && ! $order instanceof \WC_Order_Refund && $order->get_meta( '_vcap_reservations' ) ) {
+			$this->release_order_reservations( $order );
+		}
+	}
+
+	public function schedule_stale_release(): void {
+		if ( function_exists( 'as_has_scheduled_action' ) && ! as_has_scheduled_action( 'vcap_release_stale_order_reservations', array(), 'vcap' ) ) {
+			as_schedule_recurring_action( time() + HOUR_IN_SECONDS, HOUR_IN_SECONDS, 'vcap_release_stale_order_reservations', array(), 'vcap' );
+		}
+	}
+
+	/**
+	 * Release balance holds of orders left unpaid (customer abandoned the payment page). Uses WooCommerce's
+	 * "hold stock" duration when set, otherwise 60 minutes. A late payment is still deducted when it arrives;
+	 * if the balance was spent meanwhile the order is put on hold for review (see deduct_order()).
+	 */
+	public function release_stale_order_reservations(): void {
+		$hold    = (int) get_option( 'woocommerce_hold_stock_minutes', 0 );
+		$minutes = (int) apply_filters( 'vcap_stale_reservation_minutes', $hold > 0 ? $hold : 60 );
+		if ( $minutes <= 0 ) {
+			return;
+		}
+		$orders = wc_get_orders(
+			array(
+				'status'        => array( 'pending' ),
+				'date_modified' => '<' . ( time() - $minutes * MINUTE_IN_SECONDS ),
+				'meta_query'    => array( array( 'key' => '_vcap_reservations', 'compare' => 'EXISTS' ) ), // phpcs:ignore WordPress.DB.SlowDBQuery
+				'limit'         => 50,
+			)
+		);
+		foreach ( $orders as $order ) {
+			if ( $order instanceof \WC_Order ) {
+				$this->release_order_reservations( $order );
+				$order->add_order_note( __( 'Unpaid order: voucher balance reservations released.', 'voucher-captain' ) );
+			}
+		}
 	}
 
 	public function code_exists( string $code ): bool {
@@ -27,7 +87,11 @@ final class CouponManager {
 	public function create_coupon( Voucher $voucher, array $config ): int {
 		$coupon = new \WC_Coupon();
 		$coupon->set_code( $voucher->code );
-		$coupon->set_discount_type( in_array( $voucher->discount_type, array( 'fixed_cart', 'percent', 'fixed_product' ), true ) ? $voucher->discount_type : 'fixed_cart' );
+		$type = in_array( $voucher->discount_type, array( 'fixed_cart', 'percent', 'fixed_product' ), true ) ? $voucher->discount_type : 'fixed_cart';
+		if ( $voucher->is_multi_use() ) {
+			$type = 'fixed_cart'; // A stored balance is one amount for the whole cart, never per item.
+		}
+		$coupon->set_discount_type( $type );
 		$coupon->set_amount( $voucher->is_multi_use() ? $voucher->balance : $voucher->initial_amount );
 		$coupon->set_description(
 			sprintf(
@@ -427,23 +491,44 @@ final class CouponManager {
 			return;
 		}
 		$redemptions = (array) $order->get_meta( '_vcap_redemptions' );
-		$committed   = array();
+		// The order may have been edited after checkout: only coupons still on it, with the same amount, are committed.
+		$current = array();
+		foreach ( $order->get_items( 'coupon' ) as $item ) {
+			$current[ wc_format_coupon_code( $item->get_code() ) ] = $this->used_amount( $item );
+		}
+		$failed = false;
 		foreach ( $reservations as $code => $amount ) {
-			$voucher = $this->find_voucher_for_code( (string) $code );
-			$result  = $voucher ? $this->commit_reservation_atomic( $voucher, $order->get_id() ) : null;
-			if ( ! $result ) {
+			$code    = (string) $code;
+			$voucher = $this->find_voucher_for_code( $code );
+			$key     = wc_format_coupon_code( $code );
+			if ( ! isset( $current[ $key ] ) || abs( (float) $current[ $key ] - (float) $amount ) >= 0.0001 ) {
+				// Removed or changed coupon line: give the hold back; deduct_order() charges the current amount.
+				if ( $voucher && $this->release_reservation_atomic( $voucher, $order->get_id(), __( 'Coupon removed or changed on the order', 'voucher-captain' ) ) ) {
+					unset( $reservations[ $code ] );
+				} else {
+					$failed = true;
+				}
 				continue;
 			}
-			$redemptions[ $code ] = $result['amount'];
-			$committed[ $code ]  = $result['amount'];
+			$result = $voucher ? $this->commit_reservation_atomic( $voucher, $order->get_id() ) : null;
+			if ( ! $result ) {
+				$failed = true; // Stays in _vcap_reservations; deduct_order() retries it through the ledger.
+				continue;
+			}
+			$redemptions[ $key ] = $result['amount'];
+			unset( $reservations[ $code ] );
 		}
-		if ( count( $committed ) !== count( $reservations ) ) {
-			$order->add_order_note( __( 'Some voucher reservations could not be committed. Review this order before fulfilment.', 'voucher-captain' ) );
-			return;
-		}
+		// Persist whatever succeeded, so refunds restore exactly what was committed.
 		$order->update_meta_data( '_vcap_redemptions', $redemptions );
-		$order->delete_meta_data( '_vcap_reservations' );
+		if ( $reservations ) {
+			$order->update_meta_data( '_vcap_reservations', $reservations );
+		} else {
+			$order->delete_meta_data( '_vcap_reservations' );
+		}
 		$order->save();
+		if ( $failed ) {
+			$order->add_order_note( __( 'Some voucher reservations could not be committed. Review this order before fulfilment.', 'voucher-captain' ) );
+		}
 	}
 
 	/**
@@ -655,7 +740,12 @@ final class CouponManager {
 		if ( apply_filters( 'vcap_balance_deduct_tax', wc_prices_include_tax(), $item ) ) {
 			$amount += (float) $item->get_discount_tax();
 		}
-		return $amount;
+		// Discounts are in the order currency, balances in the shop base currency.
+		$order = $item->get_order();
+		if ( $order instanceof \WC_Order && $order->get_currency() && $order->get_currency() !== get_option( 'woocommerce_currency' ) ) {
+			$amount = (float) apply_filters( 'vcap_amount_to_base_currency', $amount, $order->get_currency(), $order );
+		}
+		return round( $amount, wc_get_price_decimals() );
 	}
 
 	/**
@@ -688,7 +778,7 @@ final class CouponManager {
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
 			/** @var \WC_Order_Item_Coupon $item */
 			$code = wc_format_coupon_code( $item->get_code() );
-			if ( isset( $applied[ $code ] ) || isset( $reservations[ $code ] ) ) {
+			if ( isset( $applied[ $code ] ) ) {
 				continue;
 			}
 			$voucher = $this->find_voucher_for_code( $code );
@@ -704,8 +794,17 @@ final class CouponManager {
 				$order->get_id()
 			);
 			if ( ! $deduction ) {
+				// The discount was granted but nothing could be deducted (balance used up meanwhile, voucher voided or
+				// expired, database without transactions): never let such an order through unnoticed.
+				$shortfall = true;
+				$changed   = true;
+				$order->add_order_note(
+					/* translators: %s: voucher code */
+					sprintf( __( 'Voucher %s: the discount could not be deducted from its balance. Review this order and adjust the charge before fulfilment.', 'voucher-captain' ), $voucher->code )
+				);
 				continue;
 			}
+			unset( $reservations[ $code ] );
 			$amount           = $deduction['amount'];
 			$voucher->balance = $deduction['balance'];
 			if ( $amount + 0.0001 < $requested ) {
@@ -726,6 +825,11 @@ final class CouponManager {
 		}
 		if ( $changed ) {
 			$order->update_meta_data( '_vcap_redemptions', $applied );
+			if ( $reservations ) {
+				$order->update_meta_data( '_vcap_reservations', $reservations );
+			} else {
+				$order->delete_meta_data( '_vcap_reservations' );
+			}
 			$order->save();
 			if ( $shortfall && 'on-hold' !== $order->get_status() ) {
 				$order->update_status( 'on-hold', __( 'Voucher balance shortfall requires manual review before fulfilment.', 'voucher-captain' ) );

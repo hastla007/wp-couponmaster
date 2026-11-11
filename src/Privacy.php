@@ -110,6 +110,16 @@ final class Privacy {
 			if ( ! $changed ) {
 				continue;
 			}
+			// The WooCommerce coupon may be restricted to the erased address; drop exactly that address.
+			if ( $voucher->coupon_id ) {
+				$coupon = new \WC_Coupon( $voucher->coupon_id );
+				$emails = $coupon->get_id() ? (array) $coupon->get_email_restrictions() : array();
+				$kept   = array_values( array_filter( $emails, static fn( $e ) => 0 !== strcasecmp( (string) $e, $email ) ) );
+				if ( count( $kept ) !== count( $emails ) ) {
+					$coupon->set_email_restrictions( $kept );
+					$coupon->save();
+				}
+			}
 			// Remove free-text notes before clearing the lookup email, so a database failure remains retryable.
 			if ( ! $this->repo->anonymise_event_notes( $voucher->id ) || ! $this->repo->update( $voucher ) ) {
 				$retained = true;

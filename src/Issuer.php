@@ -125,6 +125,9 @@ final class Issuer {
 		$voucher->template_id   = (int) $config['template'];
 		$voucher->discount_type = $config['discount_type'];
 		$voucher->usage_mode    = 'percent' === $config['discount_type'] && 'balance' === $config['usage'] ? 'single' : $config['usage'];
+		if ( 'balance' === $voucher->usage_mode ) {
+			$voucher->discount_type = 'fixed_cart';
+		}
 		$voucher->currency      = get_woocommerce_currency();
 		$voucher->initial_amount = $this->voucher_amount( $order, $item, $config );
 		$voucher->balance       = $voucher->initial_amount;

@@ -2493,3 +2493,15 @@ msgstr "Gutscheineinlösungen"
 
 msgid "expired"
 msgstr "abgelaufen"
+
+msgid "Coupon removed or changed on the order"
+msgstr "Gutschein wurde in der Bestellung entfernt oder geändert"
+
+msgid "Unpaid order: voucher balance reservations released."
+msgstr "Unbezahlte Bestellung: Guthaben-Reservierungen wurden freigegeben."
+
+msgid "Voucher %s: the discount could not be deducted from its balance. Review this order and adjust the charge before fulfilment."
+msgstr "Gutschein %s: Der Rabatt konnte nicht vom Guthaben abgebucht werden. Bitte prüfen Sie diese Bestellung und passen Sie den Betrag vor der Ausführung an."
+
+msgid "Voucher Captain: the voucher database tables do not support transactions (InnoDB). Gift card balances cannot be redeemed until these tables are converted to InnoDB: %s"
+msgstr "Voucher Captain: Die Gutschein-Datenbanktabellen unterstützen keine Transaktionen (InnoDB). Geschenkkarten-Guthaben können erst eingelöst werden, wenn diese Tabellen auf InnoDB umgestellt sind: %s"

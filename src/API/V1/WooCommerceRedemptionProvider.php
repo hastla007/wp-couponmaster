@@ -85,12 +85,12 @@ final class WooCommerceRedemptionProvider implements RedemptionProvider {
 		if ( 'committed' === $result['state'] ) {
 			$redemptions = (array) $order->get_meta( '_vcap_redemptions' );
 
-			$redemptions[ $voucher->code ] = $result['amount'];
+			$redemptions[ wc_format_coupon_code( $voucher->code ) ] = $result['amount'];
 			$order->update_meta_data( '_vcap_redemptions', $redemptions );
 		} else {
 			$reservations = (array) $order->get_meta( '_vcap_reservations' );
 
-			$reservations[ $voucher->code ] = $result['amount'];
+			$reservations[ wc_format_coupon_code( $voucher->code ) ] = $result['amount'];
 			$order->update_meta_data( '_vcap_reservations', $reservations );
 		}
 		$order->save();
@@ -121,11 +121,11 @@ final class WooCommerceRedemptionProvider implements RedemptionProvider {
 		}
 		$redemptions = (array) $order->get_meta( '_vcap_redemptions' );
 
-		$redemptions[ $voucher->code ] = $result['amount'];
+		$redemptions[ wc_format_coupon_code( $voucher->code ) ] = $result['amount'];
 
 		$reservations = (array) $order->get_meta( '_vcap_reservations' );
 
-		unset( $reservations[ $voucher->code ] );
+		unset( $reservations[ wc_format_coupon_code( $voucher->code ) ] );
 		$order->update_meta_data( '_vcap_redemptions', $redemptions );
 		if ( $reservations ) {
 			$order->update_meta_data( '_vcap_reservations', $reservations );
@@ -158,7 +158,7 @@ final class WooCommerceRedemptionProvider implements RedemptionProvider {
 		}
 		$reservations = (array) $order->get_meta( '_vcap_reservations' );
 
-		unset( $reservations[ $voucher->code ] );
+		unset( $reservations[ wc_format_coupon_code( $voucher->code ) ] );
 		if ( $reservations ) {
 			$order->update_meta_data( '_vcap_reservations', $reservations );
 		} else {

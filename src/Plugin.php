@@ -94,7 +94,21 @@ final class Plugin {
 	}
 
 	public function dependency_notice(): void {
-		if ( ! current_user_can( 'activate_plugins' ) || class_exists( '\Dompdf\Dompdf' ) ) {
+		if ( ! current_user_can( 'activate_plugins' ) ) {
+			return;
+		}
+		if ( ! Install::tables_support_transactions() ) {
+			// Balance reservations, redemptions and retention need InnoDB; without it they fail closed.
+			$tables = Install::tables();
+			echo '<div class="notice notice-error"><p>' . esc_html(
+				sprintf(
+					/* translators: %s: comma separated table names */
+					__( 'Voucher Captain: the voucher database tables do not support transactions (InnoDB). Gift card balances cannot be redeemed until these tables are converted to InnoDB: %s', 'voucher-captain' ),
+					implode( ', ', array( $tables['vouchers'], $tables['events'], $tables['redemptions'] ) )
+				)
+			) . '</p></div>';
+		}
+		if ( class_exists( '\Dompdf\Dompdf' ) ) {
 			return;
 		}
 		echo '<div class="notice notice-error"><p>' . esc_html__( 'Voucher Captain: the PDF libraries are missing. Install the release ZIP or run "composer install --no-dev" in the plugin folder.', 'voucher-captain' ) . '</p></div>';
