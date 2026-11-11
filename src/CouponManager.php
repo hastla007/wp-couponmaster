@@ -13,6 +13,7 @@ final class CouponManager {
 		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'validate' ), 20, 3 );
 		add_action( 'woocommerce_checkout_order_processed', array( $this, 'reserve_order' ), 5, 3 );
 		add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'reserve_store_api_order' ), 5, 1 );
+		add_action( 'woocommerce_before_pay_action', array( $this, 'reserve_retry_order' ), 5, 1 );
 		add_action( 'woocommerce_order_status_changed', array( $this, 'order_status_changed' ), 20, 4 );
 		add_action( 'woocommerce_increase_coupon_usage_count', array( $this, 'usage_increased' ), 10, 3 );
 		add_action( 'woocommerce_decrease_coupon_usage_count', array( $this, 'usage_decreased' ), 10, 3 );
@@ -110,7 +111,7 @@ final class CouponManager {
 	 */
 	public function reserve_order( $order_or_id, $posted_data = null, $order = null ): void {
 		$order = $order instanceof \\WC_Order ? $order : ( $order_or_id instanceof \\WC_Order ? $order_or_id : wc_get_order( (int) $order_or_id ) );
-		if ( ! $order instanceof \\WC_Order || in_array( $order->get_status(), array( 'cancelled', 'failed', 'refunded' ), true ) ) {
+		if ( ! $order instanceof \\WC_Order || in_array( $order->get_status(), array( 'cancelled', 'refunded' ), true ) ) {
 			return;
 		}
 
@@ -190,6 +191,17 @@ final class CouponManager {
 				throw new \\Automattic\\WooCommerce\\StoreApi\\Exceptions\\RouteException( 'vcap_voucher_reservation_failed', $e->getMessage(), 409 );
 			}
 			throw $e;
+		}
+	}
+
+	/**
+	 * Re-reserve voucher balances before a customer retries payment for a failed order.
+	 */
+	public function reserve_retry_order( $order ): void {
+		try {
+			$this->reserve_order( $order );
+		} catch ( \\Throwable $e ) {
+			wc_add_notice( $e->getMessage(), 'error' );
 		}
 	}
 	/**
