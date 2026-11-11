@@ -44,6 +44,13 @@ jobs:
           - name: MariaDB 11.4
             image: mariadb:11.4
             health_cmd: healthcheck.sh --connect --innodb_initialized
+        order_storage:
+          - name: HPOS
+            enabled: yes
+            expected: yes
+          - name: Legacy posts
+            enabled: no
+            expected: no
     services:
       db:
         image: ${{ matrix.database.image }}
@@ -82,7 +89,12 @@ jobs:
         run: |
           php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.2.2 --activate
           php wp-cli.phar --path=wp-test plugin install wordpress-seo --version=28.8 --activate
+          php wp-cli.phar --path=wp-test option update woocommerce_custom_orders_table_enabled ${{ matrix.order_storage.enabled }}
           ln -s "$GITHUB_WORKSPACE" wp-test/wp-content/plugins/voucher-captain
           php wp-cli.phar --path=wp-test plugin activate voucher-captain
       - name: Run WooCommerce lifecycle and database integration checks
-        run: php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/woocommerce-integration.php"
+        env:
+          VCAP_EXPECT_HPOS: ${{ matrix.order_storage.expected }}
+        run: |
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/woocommerce-integration.php"
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/compatibility-integration.php"
