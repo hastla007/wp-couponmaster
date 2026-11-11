@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-11 17:37+0000\n"
+"POT-Creation-Date: 2026-11-11 17:39+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:73 src/API/V1/RedemptionService.php:112
@@ -399,11 +399,15 @@ msgstr ""
 msgid "Issued vouchers"
 msgstr ""
 
-#: src/Admin/Menu.php:39 src/Admin/Menu.php:39 src/Admin/Scanner.php:47 templates/ticket-status.php:86
+#: src/Admin/Menu.php:39 src/Admin/Menu.php:39 src/Admin/ReportsAdmin.php:36
+msgid "Reports"
+msgstr ""
+
+#: src/Admin/Menu.php:40 src/Admin/Menu.php:40 src/Admin/Scanner.php:47 templates/ticket-status.php:86
 msgid "Scanner"
 msgstr ""
 
-#: src/Admin/Menu.php:43 src/Admin/Menu.php:43 src/Plugin.php:106
+#: src/Admin/Menu.php:44 src/Admin/Menu.php:44 src/Plugin.php:107
 msgid "Settings"
 msgstr ""
 
@@ -435,6 +439,58 @@ msgstr ""
 #: src/Admin/OrderAdmin.php:108
 #, php-format
 msgid "Voucher emails resent for %d voucher(s)."
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:39 src/Discounts/Admin.php:204
+msgid "From"
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:40 src/Discounts/Admin.php:205
+msgid "until"
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:41
+msgid "Show"
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:42 src/Admin/VouchersListTable.php:87
+msgid "Export CSV"
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:44
+msgid "Paid and refunded orders created in this period. Discount = what customers saved (incl. tax); revenue = order total minus refunds. An order with several codes counts for each of them. \"Codes issued\" is the total for code campaigns and bonus promotions."
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:47 src/Admin/VoucherAdmin.php:103 src/Fields.php:558 src/ProductSettings.php:80
+msgid "Type"
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:48
+msgid "Name"
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:49
+msgid "Codes issued"
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:50
+msgid "Uses"
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:51
+msgid "Orders"
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:52 src/Discounts/Admin.php:111 src/Discounts/Admin.php:406 src/Discounts/Admin.php:420
+msgid "Discount"
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:53
+msgid "Revenue"
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:57
+msgid "No redemptions in this period."
 msgstr ""
 
 #: src/Admin/Scanner.php:24 src/Admin/Scanner.php:53
@@ -655,10 +711,6 @@ msgstr ""
 msgid "Status"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:103 src/Fields.php:558 src/ProductSettings.php:80
-msgid "Type"
-msgstr ""
-
 #: src/Admin/VoucherAdmin.php:111
 msgid "Check-ins"
 msgstr ""
@@ -687,7 +739,7 @@ msgstr ""
 msgid "Reusable"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:118 src/Admin/VouchersListTable.php:137
+#: src/Admin/VoucherAdmin.php:118 src/Admin/VouchersListTable.php:137 src/Reports.php:137
 msgid "Coupon"
 msgstr ""
 
@@ -865,10 +917,6 @@ msgstr ""
 
 #: src/Admin/VouchersListTable.php:82
 msgid "Filter"
-msgstr ""
-
-#: src/Admin/VouchersListTable.php:87
-msgid "Export CSV"
 msgstr ""
 
 #. translators: 1: used, 2: max
@@ -1118,7 +1166,7 @@ msgstr ""
 msgid "Promotions"
 msgstr ""
 
-#: src/Discounts/Admin.php:32 src/Discounts/Repository.php:55 src/Emails/BonusEmail.php:75
+#: src/Discounts/Admin.php:32 src/Discounts/Repository.php:55 src/Emails/BonusEmail.php:75 src/Reports.php:133
 msgid "Promotion"
 msgstr ""
 
@@ -1148,10 +1196,6 @@ msgstr ""
 
 #: src/Discounts/Admin.php:85 src/ProductSettings.php:443
 msgid "Search for a product…"
-msgstr ""
-
-#: src/Discounts/Admin.php:111 src/Discounts/Admin.php:406 src/Discounts/Admin.php:420
-msgid "Discount"
 msgstr ""
 
 #: src/Discounts/Admin.php:114
@@ -1214,7 +1258,7 @@ msgstr ""
 msgid "The cheapest qualifying items are discounted, e.g. buy 2 get 1 at 100 % off = the cheapest of three is free."
 msgstr ""
 
-#: src/Discounts/Admin.php:147 src/Emails/BonusEmail.php:15
+#: src/Discounts/Admin.php:147 src/Emails/BonusEmail.php:15 src/Reports.php:134
 msgid "Bonus voucher"
 msgstr ""
 
@@ -1304,14 +1348,6 @@ msgstr ""
 
 #: src/Discounts/Admin.php:202 src/Discounts/Admin.php:421
 msgid "Period"
-msgstr ""
-
-#: src/Discounts/Admin.php:204
-msgid "From"
-msgstr ""
-
-#: src/Discounts/Admin.php:205
-msgid "until"
 msgstr ""
 
 #: src/Discounts/Admin.php:209
@@ -2009,12 +2045,12 @@ msgid "Site URL"
 msgstr ""
 
 #. translators: %s: comma separated table names
-#: src/Plugin.php:122
+#: src/Plugin.php:123
 #, php-format
 msgid "Voucher Captain: the voucher database tables do not support transactions (InnoDB). Gift card balances cannot be redeemed until these tables are converted to InnoDB: %s"
 msgstr ""
 
-#: src/Plugin.php:130
+#: src/Plugin.php:131
 msgid "Voucher Captain: the PDF libraries are missing. Install the release ZIP or run \"composer install --no-dev\" in the plugin folder."
 msgstr ""
 
@@ -2382,6 +2418,18 @@ msgstr ""
 
 #: src/ProductSettings.php:535
 msgid "Inherit"
+msgstr ""
+
+#: src/Reports.php:44 src/Reports.php:136
+msgid "Vouchers and gift cards"
+msgstr ""
+
+#: src/Reports.php:132
+msgid "Code campaign / partner"
+msgstr ""
+
+#: src/Reports.php:135
+msgid "Referral"
 msgstr ""
 
 #: src/Settings.php:69

@@ -77,7 +77,7 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 ## Optional nach dem ersten Kunden-Connector
 
 - [x] E-Mail-Erinnerung vor Ablauf eines Gutscheins. — *Nachweis: Einstellung „Erinnerung vor Ablauf“ (aus, bis Tage gesetzt sind), WooCommerce-E-Mail „Erinnerung vor Gutschein-Ablauf“, einmal je Gutschein; tests/reminder-integration.php*
-- [ ] Statistiken nach Kampagne und Partner.
+- [x] Statistiken nach Kampagne und Partner. — *Nachweis: Gutscheine → Auswertung: Zeitraum, je Code-Kampagne/Partner, Aktion, Bonus, Gutscheine und Einzelcode ausgegebene Codes, Nutzungen, Bestellungen, Rabatt und Umsatz abzüglich Erstattungen, Fremdwährungen getrennt, CSV-Export; tests/reports-integration.php*
 - [ ] Empfehlungs-/Freunde-werben-Codes.
 - [ ] Allgemeine Einlöseseite oder Block/Shortcode, den Connector-Plugins erweitern können.
 

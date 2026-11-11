@@ -3081,3 +3081,39 @@ msgstr "Produkte mit diesen Artikelnummern nie rabattieren (kommagetrennt, * am 
 
 msgid "Sorry, this coupon is not applicable to the products in your cart."
 msgstr "Dieser Gutschein gilt leider nicht für die Produkte in Ihrem Warenkorb."
+
+msgid "Code campaign / partner"
+msgstr "Code-Kampagne / Partner"
+
+msgid "Codes issued"
+msgstr "Ausgegebene Codes"
+
+msgid "Name"
+msgstr "Name"
+
+msgid "No redemptions in this period."
+msgstr "Keine Einlösungen in diesem Zeitraum."
+
+msgid "Orders"
+msgstr "Bestellungen"
+
+msgid "Paid and refunded orders created in this period. Discount = what customers saved (incl. tax); revenue = order total minus refunds. An order with several codes counts for each of them. \"Codes issued\" is the total for code campaigns and bonus promotions."
+msgstr "Bezahlte und erstattete Bestellungen aus diesem Zeitraum. Rabatt = Ersparnis der Kunden (inkl. Steuer); Umsatz = Bestellsumme abzüglich Erstattungen. Eine Bestellung mit mehreren Codes zählt bei jedem davon. „Ausgegebene Codes“ ist die Gesamtzahl für Code-Kampagnen und Bonusaktionen."
+
+msgid "Referral"
+msgstr "Empfehlung"
+
+msgid "Reports"
+msgstr "Auswertung"
+
+msgid "Revenue"
+msgstr "Umsatz"
+
+msgid "Show"
+msgstr "Anzeigen"
+
+msgid "Uses"
+msgstr "Nutzungen"
+
+msgid "Vouchers and gift cards"
+msgstr "Gutscheine und Geschenkkarten"
