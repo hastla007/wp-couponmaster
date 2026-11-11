@@ -482,14 +482,21 @@ final class CouponManager {
 			if ( $order_id > 0 ) {
 				$prior = $wpdb->get_row(
 					$wpdb->prepare(
-						"SELECT amount, balance_after FROM {$events} WHERE voucher_id = %d AND order_id = %d AND event = 'redeemed' ORDER BY id DESC LIMIT 1",
+						"SELECT event, amount, balance_after FROM {$events} WHERE voucher_id = %d AND order_id = %d ORDER BY id DESC LIMIT 1",
 						$voucher->id,
 						$order_id
 					),
 					ARRAY_A
 				); // phpcs:ignore
-				if ( $prior ) {
-					$wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				if ( $prior && in_array( $prior['event'], array( 'reserved', 'committed', 'redeemed' ), true ) ) {
+					if ( 'reserved' === $prior['event'] && ! $this->repo->log( $voucher->id, 'committed', (float) $prior['amount'], (float) $prior['balance_after'], $note, $order_id ) ) {
+						$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+						return null;
+					}
+					if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+						$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+						return null;
+					}
 					return array(
 						'amount'    => (float) $prior['amount'],
 						'balance'   => (float) $prior['balance_after'],
@@ -619,13 +626,14 @@ final class CouponManager {
 	}
 
 	public function deduct_order( \WC_Order $order ): void {
-		$applied  = (array) $order->get_meta( '_vcap_redemptions' );
-		$changed  = false;
-		$shortfall = false;
+		$applied      = (array) $order->get_meta( '_vcap_redemptions' );
+		$reservations = (array) $order->get_meta( '_vcap_reservations' );
+		$changed      = false;
+		$shortfall    = false;
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
 			/** @var \WC_Order_Item_Coupon $item */
 			$code = wc_format_coupon_code( $item->get_code() );
-			if ( isset( $applied[ $code ] ) ) {
+			if ( isset( $applied[ $code ] ) || isset( $reservations[ $code ] ) ) {
 				continue;
 			}
 			$voucher = $this->find_voucher_for_code( $code );
@@ -670,30 +678,84 @@ final class CouponManager {
 		}
 	}
 
-	public function restore_order( \WC_Order $order ): void {
+	private function restore_balance_atomic( Voucher $voucher, float $amount, int $order_id, string $note ): bool {
+		global $wpdb;
+		$table  = Install::tables()['vouchers'];
+		$events = Install::tables()['events'];
+		if ( $amount <= 0 || $order_id <= 0 || ! Install::tables_support_transactions() || false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return false;
+		}
+		try {
+			$locked = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d FOR UPDATE", $voucher->id ) ); // phpcs:ignore
+			if ( ! $locked ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return false;
+			}
+			$latest = $wpdb->get_row(
+				$wpdb->prepare(
+					"SELECT event, amount FROM {$events} WHERE voucher_id = %d AND order_id = %d ORDER BY id DESC LIMIT 1",
+					$voucher->id,
+					$order_id
+				),
+				ARRAY_A
+			); // phpcs:ignore
+			if ( $latest && 'restored' === $latest['event'] ) {
+				$wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return true;
+			}
+			if ( ! $latest || ! in_array( $latest['event'], array( 'committed', 'redeemed' ), true ) || abs( (float) $latest['amount'] - $amount ) >= 0.0001 ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return false;
+			}
+			$fresh = $this->repo->get( $voucher->id );
+			if ( ! $fresh ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return false;
+			}
+			$fresh->balance = round( $fresh->balance + $amount, wc_get_price_decimals() );
+			if ( Voucher::STATUS_REDEEMED === $fresh->status ) {
+				$fresh->status = $fresh->is_expired() ? Voucher::STATUS_EXPIRED : Voucher::STATUS_ACTIVE;
+			}
+			if ( ! $this->repo->update( $fresh ) || ! $this->repo->log( $fresh->id, 'restored', $amount, $fresh->balance, $note, $order_id ) ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return false;
+			}
+			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return false;
+			}
+		} catch ( \\Throwable $e ) {
+			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			throw $e;
+		}
+		$this->sync_balance_coupon( $fresh );
+		return true;
+	}
+
+	public function restore_order( \\WC_Order $order ): void {
 		$applied = (array) $order->get_meta( '_vcap_redemptions' );
 		if ( ! $applied ) {
 			return;
 		}
+		$restored = 0;
 		foreach ( $applied as $code => $amount ) {
 			$voucher = $this->find_voucher_for_code( (string) $code );
-			if ( ! $voucher ) {
-				continue;
-			}
-			$this->set_balance(
+			if ( $voucher && $this->restore_balance_atomic(
 				$voucher,
-				$voucher->balance + (float) $amount,
-				'restored',
 				(float) $amount,
-				/* translators: %s: order number */
-				sprintf( __( 'Order #%s cancelled or refunded', 'voucher-captain' ), $order->get_order_number() ),
-				$order->get_id()
-			);
+				$order->get_id(),
+				sprintf( __( 'Order #%s cancelled or refunded', 'voucher-captain' ), $order->get_order_number() )
+			) ) {
+				++$restored;
+			}
 		}
-		$order->delete_meta_data( '_vcap_redemptions' );
-		$order->save();
+		if ( $restored === count( $applied ) ) {
+			$order->delete_meta_data( '_vcap_redemptions' );
+			$order->save();
+		} else {
+			$order->add_order_note( __( 'Some voucher balances could not be restored. Review this order and retry the refund handling.', 'voucher-captain' ) );
+		}
 	}
-
 	private function find_voucher_for_code( string $code ): ?Voucher {
 		$coupon_id = wc_get_coupon_id_by_code( $code );
 		return $coupon_id ? $this->repo->get_by_coupon( (int) $coupon_id ) : $this->repo->get_by_code( $code );
