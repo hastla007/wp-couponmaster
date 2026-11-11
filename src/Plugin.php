@@ -56,6 +56,7 @@ final class Plugin {
 		( new Privacy( $this->vouchers ) )->register();
 		( new CouponLink( $this->settings ) )->register();
 		( new VoucherPurchaseRules( $this->settings ) )->register();
+		( new FirstOrderCoupons() )->register();
 
 		$this->settings->register();
 		$this->coupons->register();

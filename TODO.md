@@ -53,11 +53,11 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 - [ ] Einzweck- und Mehrzweckgutschein als konfigurierbare Steuerbehandlung modellieren; steuerliche Umsetzung und Produkttexte mit Steuerberatung freigeben lassen.
 - [ ] Steuerfälle für OSS, unterschiedliche Leistungsorte/-steuersätze, Kleinunternehmer und Preise mit gleichem Bruttopreis spezifizieren und verifizieren.
 - [ ] Produkt-, Kategorie- und SKU-Regeln samt Ausschlüssen für Rabattcodes unterstützen.
-- [ ] Gesamtlimit, Limit pro Kunde, Mindestbestellwert, Ablauf und Erstkaufbedingung konfigurierbar machen.
+- [x] Gesamtlimit, Limit pro Kunde, Mindestbestellwert, Ablauf und Erstkaufbedingung konfigurierbar machen. — *Nachweis: Gesamtlimit, Limit pro Kunde, Mindestbestellwert und Ablauf sind WooCommerce-Standard; neue Gutschein-Option „Nur für die erste Bestellung“ (Konto oder Rechnungs-E-Mail); tests/first-order-integration.php*
 - [ ] Erweiterungspunkte für „Kunde besitzt Kurs/Produkt X“ und Konflikte mit externen Mitgliederrabatten/Kombipreisen dokumentieren.
 - [x] Coupon-Link mit sicherer automatischer Anwendung ergänzen, z. B. `?gutschein=CODE`. — *Nachweis: Einstellung „Gutschein-Links“ (standardmäßig aus), einmalige Anwendung über WooCommerce-Prüfung, Parameter wird per Redirect entfernt; tests/coupon-link-integration.php*
 - [x] Generierung mehrerer Codes nach Präfix/Länge und CSV-Export für Partner- und Kampagnenpakete ergänzen. — *Nachweis: Gutscheine → Codes generieren (bis 1000 je Lauf, aus Vorlage-Gutschein oder in Code-Pool-Stapel), CSV-Export je Kampagne/Stapel; tests/campaign-integration.php*
-- [ ] Sicherstellen, dass Coupons keine Katalog-Streichpreise erzeugen und der Rabatt erst im Warenkorb erscheint.
+- [x] Sicherstellen, dass Coupons keine Katalog-Streichpreise erzeugen und der Rabatt erst im Warenkorb erscheint. — *Nachweis: Preis, Preisanzeige und Angebotsstatus bleiben unverändert, Rabatt nur im Warenkorb; tests/first-order-integration.php*
 
 ## P2 – Integrations- und Betriebsverhalten
 

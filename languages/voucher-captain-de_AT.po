@@ -2691,3 +2691,15 @@ msgstr "Gutscheine mit Gutscheinen bezahlen"
 
 msgid "Allow vouchers and gift cards to pay for voucher products (off by default to prevent exchanging or extending vouchers)."
 msgstr "Gutscheine und Geschenkkarten dürfen Gutscheinprodukte bezahlen (standardmäßig aus, um Umtausch oder Verlängerung von Gutscheinen zu verhindern)."
+
+msgid "First order only"
+msgstr "Nur für die erste Bestellung"
+
+msgid "Only customers without an earlier order (by account or billing email) can use this coupon."
+msgstr "Nur Kunden ohne frühere Bestellung (nach Konto oder Rechnungs-E-Mail) können diesen Gutschein verwenden."
+
+msgid "This coupon is only valid for your first order."
+msgstr "Dieser Gutschein gilt nur für Ihre erste Bestellung."
+
+msgid "The coupon %s is only valid for your first order."
+msgstr "Der Gutschein %s gilt nur für Ihre erste Bestellung."
