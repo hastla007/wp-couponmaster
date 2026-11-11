@@ -143,7 +143,7 @@ final class Delivery {
 				$voucher->status = Voucher::STATUS_ACTIVE;
 			}
 			$voucher->delivered_at = $now;
-			$this->repo->log( $voucher->id, 'delivered', null, null, implode( ', ', $sent ) );
+			$this->repo->log( $voucher->id, 'delivered', null, null, sprintf( 'Sent to %d recipient(s)', count( $sent ) ) );
 			do_action( 'vcap_voucher_delivered', $voucher, $sent );
 		} catch ( \Throwable $e ) {
 			if ( isset( $voucher ) && $voucher instanceof Voucher ) {
