@@ -194,5 +194,8 @@ $wpdb->query( "ALTER TABLE {$tables['events']} ENGINE=MyISAM" );
 VCAP\Install::create_tables();
 $after = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . $tables['events'] . ' WHERE voucher_id = %d', $legacy_voucher->id ) );
 vcap_compat_assert( $before === $after && VCAP\Install::tables_support_transactions(), 'MyISAM-to-InnoDB upgrade preserves a 1000-row voucher event history' );
+update_option( VCAP\Install::OPTION_DB_VERSION, '1.0.0' );
+VCAP\Install::maybe_upgrade();
+vcap_compat_assert( VCAP_DB_VERSION === get_option( VCAP\Install::OPTION_DB_VERSION ), 'plugin database upgrade path reaches the current schema version' );
 
 echo "Voucher Captain compatibility checks passed.\n";
