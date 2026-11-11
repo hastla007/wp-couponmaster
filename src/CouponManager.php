@@ -12,7 +12,7 @@ final class CouponManager {
 	public function register(): void {
 		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'validate' ), 20, 3 );
 		add_action( 'woocommerce_checkout_order_processed', array( $this, 'reserve_order' ), 5, 3 );
-		add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'reserve_order' ), 5, 1 );
+		add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'reserve_store_api_order' ), 5, 1 );
 		add_action( 'woocommerce_order_status_changed', array( $this, 'order_status_changed' ), 20, 4 );
 		add_action( 'woocommerce_increase_coupon_usage_count', array( $this, 'usage_increased' ), 10, 3 );
 		add_action( 'woocommerce_decrease_coupon_usage_count', array( $this, 'usage_decreased' ), 10, 3 );
@@ -109,18 +109,14 @@ final class CouponManager {
 	 * @param int|\WC_Order $order_or_id Order ID or order object.
 	 */
 	public function reserve_order( $order_or_id, $posted_data = null, $order = null ): void {
-		$order = $order instanceof \WC_Order ? $order : ( $order_or_id instanceof \WC_Order ? $order_or_id : wc_get_order( (int) $order_or_id ) );
-		if ( ! $order instanceof \WC_Order || in_array( $order->get_status(), array( 'cancelled', 'failed', 'refunded' ), true ) ) {
+		$order = $order instanceof \\WC_Order ? $order : ( $order_or_id instanceof \\WC_Order ? $order_or_id : wc_get_order( (int) $order_or_id ) );
+		if ( ! $order instanceof \\WC_Order || in_array( $order->get_status(), array( 'cancelled', 'failed', 'refunded' ), true ) ) {
 			return;
 		}
 
 		$redemptions  = (array) $order->get_meta( '_vcap_redemptions' );
 		$reservations = (array) $order->get_meta( '_vcap_reservations' );
-		if ( $reservations ) {
-			return;
-		}
-
-		$made = array();
+		$coupons      = array();
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
 			$code = wc_format_coupon_code( $item->get_code() );
 			if ( isset( $redemptions[ $code ] ) ) {
@@ -131,10 +127,33 @@ final class CouponManager {
 				continue;
 			}
 			$amount = $this->used_amount( $item );
-			if ( $amount <= 0 ) {
+			if ( $amount > 0 ) {
+				$coupons[ $code ] = array( 'voucher' => $voucher, 'amount' => $amount );
+			}
+		}
+
+		// Keep matching reservations and release removed/changed coupon lines before rebuilding the map.
+		$made = array();
+		foreach ( $reservations as $code => $reserved_amount ) {
+			if ( isset( $coupons[ $code ] ) && abs( (float) $reserved_amount - $coupons[ $code ]['amount'] ) < 0.0001 ) {
+				$made[ $code ] = (float) $reserved_amount;
 				continue;
 			}
+			$reserved_voucher = $this->find_voucher_for_code( (string) $code );
+			if ( ! $reserved_voucher || ! $this->release_reservation_atomic( $reserved_voucher, $order->get_id(), __( 'Checkout reservation reconciled', 'voucher-captain' ) ) ) {
+				throw new \\Exception( __( 'An earlier voucher reservation could not be released. Please contact the store before trying again.', 'voucher-captain' ) );
+			}
+			unset( $reservations[ $code ] );
+			$order->update_meta_data( '_vcap_reservations', $reservations );
+			$order->save();
+		}
 
+		foreach ( $coupons as $code => $coupon_data ) {
+			if ( isset( $made[ $code ] ) ) {
+				continue;
+			}
+			$voucher = $coupon_data['voucher'];
+			$amount  = $coupon_data['amount'];
 			$reservation = $this->reserve_balance_atomic(
 				$voucher,
 				$amount,
@@ -151,15 +170,28 @@ final class CouponManager {
 				}
 				$order->delete_meta_data( '_vcap_reservations' );
 				$order->save();
-				throw new \Exception( __( 'A voucher balance changed while checkout was processing. Your order was not sent for payment. Refresh the cart and try again.', 'voucher-captain' ) );
+				throw new \\Exception( __( 'A voucher balance changed while checkout was processing. Your order was not sent for payment. Refresh the cart and try again.', 'voucher-captain' ) );
 			}
 			$made[ $code ] = $reservation['amount'];
-			// Persist incrementally so failed/cancelled orders can release a reservation after a partial failure.
+			// Persist after each successful reserve so an interrupted checkout can resume safely.
 			$order->update_meta_data( '_vcap_reservations', $made );
 			$order->save();
 		}
 	}
 
+	/**
+	 * Convert reservation failures into Store API client errors instead of uncaught server errors.
+	 */
+	public function reserve_store_api_order( $order ): void {
+		try {
+			$this->reserve_order( $order );
+		} catch ( \\Throwable $e ) {
+			if ( class_exists( \\Automattic\\WooCommerce\\StoreApi\\Exceptions\\RouteException::class ) ) {
+				throw new \\Automattic\\WooCommerce\\StoreApi\\Exceptions\\RouteException( 'vcap_voucher_reservation_failed', $e->getMessage(), 409 );
+			}
+			throw $e;
+		}
+	}
 	/**
 	 * Atomically reserve stored balance for a specific order.
 	 *
@@ -169,7 +201,7 @@ final class CouponManager {
 		global $wpdb;
 		$table  = Install::tables()['vouchers'];
 		$events = Install::tables()['events'];
-		if ( $order_id <= 0 || $requested <= 0 || false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( $order_id <= 0 || $requested <= 0 || ! Install::tables_support_transactions() || false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			return null;
 		}
 		try {
@@ -212,7 +244,10 @@ final class CouponManager {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				return null;
 			}
-			$this->repo->log( $fresh->id, 'reserved', $requested, $fresh->balance, $note, $order_id );
+			$if ( ! $this->repo->log( $fresh->id, 'reserved', $requested, $fresh->balance, $note, $order_id ) ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return null;
+			}
 			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				return null;
@@ -235,7 +270,7 @@ final class CouponManager {
 		global $wpdb;
 		$table  = Install::tables()['vouchers'];
 		$events = Install::tables()['events'];
-		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( ! Install::tables_support_transactions() || false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			return null;
 		}
 		try {
@@ -262,7 +297,10 @@ final class CouponManager {
 					return null;
 				}
 				$fresh = $this->repo->get( $voucher->id );
-				$this->repo->log( $voucher->id, 'committed', (float) $latest['amount'], $fresh ? $fresh->balance : (float) $latest['balance_after'], '', $order_id );
+				if ( ! $fresh || ! $this->repo->log( $voucher->id, 'committed', (float) $latest['amount'], $fresh->balance, '', $order_id ) ) {
+					$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					return null;
+				}
 			}
 			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -283,7 +321,7 @@ final class CouponManager {
 		global $wpdb;
 		$table  = Install::tables()['vouchers'];
 		$events = Install::tables()['events'];
-		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( ! Install::tables_support_transactions() || false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			return false;
 		}
 		try {
@@ -318,7 +356,10 @@ final class CouponManager {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				return false;
 			}
-			$this->repo->log( $fresh->id, 'reservation_released', $amount, $fresh->balance, $note, $order_id );
+			if ( ! $this->repo->log( $fresh->id, 'reservation_released', $amount, $fresh->balance, $note, $order_id ) ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return false;
+			}
 			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				return false;
@@ -428,7 +469,7 @@ final class CouponManager {
 		global $wpdb;
 		$table  = Install::tables()['vouchers'];
 		$events = Install::tables()['events'];
-		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( ! Install::tables_support_transactions() || false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			return null;
 		}
 		try {
@@ -473,7 +514,10 @@ final class CouponManager {
 				return null;
 			}
 			if ( $amount > 0 || $order_id > 0 ) {
-				$this->repo->log( $fresh->id, 'redeemed', $amount, $fresh->balance, $note, $order_id );
+				if ( ! $this->repo->log( $fresh->id, 'redeemed', $amount, $fresh->balance, $note, $order_id ) ) {
+					$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					return null;
+				}
 			}
 			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
