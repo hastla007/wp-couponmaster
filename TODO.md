@@ -55,20 +55,28 @@ Ziel: Voucher Captain bleibt ein allgemein einsetzbares WooCommerce-Gutschein-Pl
 - [ ] Empfehlungs-/Freunde-werben-Codes.
 - [ ] Allgemeine Einlöseseite oder Block/Shortcode, den Connector-Plugins erweitern können.
 
-## Connector dieses Kundenprojekts (separates Plugin)
+## Connector für Learnboating (kundenspezifisches Add-on)
 
-- [ ] Gutscheinprodukt im Connector einem Kursprodukt bzw. einer Kurs-ID zuordnen.
-- [ ] Eingabefeld und Statusanzeige unter „Mein Lernen“ ergänzen.
-- [ ] Angemeldeten Nutzer, Gutscheinstatus, Ablauf, Übertragbarkeit und Kurszuordnung serverseitig prüfen.
-- [ ] Kurszugang idempotent anlegen; Laufzeit mit dem bestätigten Einlösezeitpunkt starten.
-- [ ] Voucher-ID, Kurs-ID und Einlöse-ID als Herkunft des Zugangs speichern.
-- [ ] Verhalten für bereits vorhandenen Kurszugang, abgelaufenen Kurs, Rückerstattung und widerrufenen Gutschein abstimmen.
-- [ ] API-Fehler für Nutzer verständlich anzeigen, ohne gültige Codes oder fremde Personendaten preiszugeben.
+Befund im Kursplugin: `/wp-json/boatingschool/v1/coupons/redeem` ist derzeit für Gruppen-Beitrittscodes bestimmt. Der `CouponController` lehnt WooCommerce-Coupons ausdrücklich ab. WooCommerce-Kursprodukte werden über „Lernzugang“ in `bp_product_access` Kursen/Features und Laufzeiten zugeordnet; `OrderSync` und `EntitlementService` erzeugen daraus idempotent Zugänge für Bestellpositionen. Es gibt noch keinen öffentlichen, idempotenten Dienst zum Freischalten eines Kurszugangs aus einer externen Gutscheineinlösung. `EntitlementService::grantManual()` ist dafür kein sicherer Ersatz: es erzeugt bei jedem Aufruf neue manuelle Zugänge mit neuer Referenz.
+
+- [ ] Learnboating-Vertrag ergänzen: stabile PHP-Schnittstelle oder authentifizierte REST-Route zum Prüfen und Einlösen eines Kursgutscheins. Nicht die Gruppen-Code-Route `/coupons/redeem` umwidmen.
+- [ ] Vertragseingaben festlegen: Voucher Captain Einlöse-ID als Idempotency-Key, authentifizierter Learnboating-Nutzer, zugeordnetes WooCommerce-Kursprodukt oder Variation, Kurs-Feature(s), gewünschter Startzeitpunkt und Voucher Captain Herkunftsreferenz.
+- [ ] Learnboating soll Kurs und Feature(s), Laufzeit, Zugangskonflikte und Kursstatus anhand seiner bestehenden Produktzuordnung „Lernzugang“ (`ProductAccessRepository`) validieren. Keine zweite, abweichende Kurs-/Laufzeit-Konfiguration im allgemeinen Voucher Captain anlegen.
+- [ ] In Learnboating einen idempotenten Grant-Service ergänzen. Er muss denselben Einlöse-Key wiedererkennen, eine eindeutige Referenz am Zugang speichern und für Audit/Support Quelle, Voucher-ID, Kursprodukt, Nutzer und Einlösezeitpunkt protokollieren.
+- [ ] Start der Kurslaufzeit auf bestätigten Einlösezeitpunkt setzen und die konfigurierte Dauer aus der Kursprodukt-Zuordnung verwenden. Verhalten bei vorhandenem Zugang oder Verlängerung festlegen.
+- [ ] Voucher Captain muss den Gutschein zunächst reservieren, dann den Grant-Service aufrufen und erst bei bestätigter Freischaltung die Einlösung endgültig verbuchen. Fehler und Timeouts müssen wiederholbar sein; keine dauerhafte Reservierung oder doppelte Freischaltung.
+- [ ] Für „Mein Lernen“ die bestehende authentifizierte Learnboating-App-Route erweitern oder eine neue Route einführen. Der Nutzer wird aus dem Login-Token abgeleitet, nicht aus einem Request-Feld.
+- [ ] WooCommerce-Warenkorb/Kasse und die direkte Kurseinlösung müssen denselben Voucher-Status verwenden. Die Einlöseroute soll nur für passende Gutscheintypen/Kursziele verfügbar sein.
+- [ ] Admin-Verknüpfung des Gutschein-Ziels mit einem Learnboating-Kursprodukt/Variation bereitstellen und gegen gelöschte, deaktivierte oder nicht mehr zugeordnete Produkte absichern.
+- [ ] Regeln für Erstattung, Widerruf, bereits bestehenden Kurszugang, abgelaufenen Kurs und Ablauf des Gutscheins gemeinsam festlegen.
+- [ ] Fehlercodes und Nutzertexte für ungültig, reserviert, eingelöst, abgelaufen, falscher Kurs, kein Zugang möglich sowie vorübergehenden Fehler abstimmen.
 
 ## Abnahmekriterien für den Connector
 
-- [ ] Ein gültiger Kursgutschein schaltet den richtigen Kurs genau einmal frei.
-- [ ] Die Laufzeit beginnt am bestätigten Einlösezeitpunkt.
-- [ ] Derselbe Code kann nicht gleichzeitig im Warenkorb und in „Mein Lernen“ eingelöst werden.
-- [ ] Fehler oder Timeouts erzeugen weder doppelten Zugriff noch endgültig verlorenes Gutschein-Guthaben.
-- [ ] Der Verlauf zeigt, wer wann welchen Gutschein für welchen Kurs eingelöst hat.
+- [ ] Ein gültiger Kursgutschein schaltet über die konfigurierte Learnboating-Produktzuordnung exakt Kurs und Feature(s) frei.
+- [ ] Derselbe Idempotency-Key liefert denselben Grant zurück; parallele oder wiederholte Requests erzeugen keinen zweiten Zugang und verbrauchen den Gutschein nicht mehrfach.
+- [ ] Die Laufzeit beginnt am bestätigten Einlösezeitpunkt und folgt der in Learnboating konfigurierten Produktlaufzeit.
+- [ ] Derselbe Code kann nicht gleichzeitig im WooCommerce-Warenkorb und über „Mein Lernen“ eingelöst werden.
+- [ ] Bei Fehler/Timeout bleibt die Einlösung sicher wiederholbar; die Voucher-Reservierung kann erneut verarbeitet oder freigegeben werden.
+- [ ] Verlauf und Supportansicht können Nutzer, Voucher-ID, Kursprodukt, Einlöse-ID und Zeitpunkt zusammenführen.
+
