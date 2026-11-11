@@ -35,6 +35,8 @@ final class Voucher {
 	public ?string $expires_at   = null;
 	public string $buyer_name    = '';
 	public string $buyer_email   = '';
+	/** Owner of a store credit account (type 'credit'). */
+	public int $user_id          = 0;
 	public string $recipient_name  = '';
 	public string $recipient_email = '';
 	public string $message       = '';
@@ -70,6 +72,7 @@ final class Voucher {
 			'voucher'  => __( 'Voucher', 'voucher-captain' ),
 			'giftcard' => __( 'Gift card', 'voucher-captain' ),
 			'ticket'   => __( 'Ticket', 'voucher-captain' ),
+			'credit'   => __( 'Store credit', 'voucher-captain' ),
 		);
 	}
 
@@ -88,6 +91,7 @@ final class Voucher {
 				case 'product_id':
 				case 'variation_id':
 				case 'template_id':
+				case 'user_id':
 				case 'max_checkins':
 				case 'checkins':
 					$v->$key = (int) $value;

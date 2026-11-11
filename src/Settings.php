@@ -35,6 +35,7 @@ final class Settings {
 		'vcap_redemption_ttl'          => 15,
 		'vcap_coupon_link'             => 'no',
 		'vcap_discounts_on_vouchers'   => 'no',
+		'vcap_store_credit'            => 'no',
 		'vcap_vouchers_buy_vouchers'   => 'no',
 		'vcap_coupon_link_param'       => 'gutschein',
 		'vcap_redemption_max_failures' => 10,
@@ -341,6 +342,13 @@ final class Settings {
 						'type'    => 'checkbox',
 						'default' => 'yes',
 						'desc'    => __( 'Disable vouchers when the order they were bought with is fully refunded or cancelled.', 'voucher-captain' ),
+					),
+					array(
+						'title'   => __( 'Store credit', 'voucher-captain' ),
+						'id'      => 'vcap_store_credit',
+						'type'    => 'checkbox',
+						'default' => 'no',
+						'desc'    => __( 'Enable store credit accounts: credit customers manually (user profile) or refund orders as store credit (order screen); customers see and use their credit in My Account and the cart.', 'voucher-captain' ),
 					),
 					array(
 						'title'   => __( 'Discount codes on vouchers', 'voucher-captain' ),

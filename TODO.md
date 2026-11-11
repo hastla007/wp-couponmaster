@@ -133,12 +133,12 @@ Befund im Kursplugin: `/wp-json/boatingschool/v1/coupons/redeem` ist derzeit fü
 
 ### Kundenkonto-Guthaben
 
-- [ ] Optionales Store-Credit-Konto mit unveränderlichem Buchungsjournal für Gutschriften, Belastungen, Korrekturen, Bestellbezug und Erstattungen umsetzen.
-- [ ] Manuelle Gutschrift/Korrektur im Admin mit Berechtigung, Begründung und Audit-Protokoll ermöglichen.
-- [ ] Guthaben im Kundenkonto anzeigen und teilweise Einlösung an der Kasse unterstützen.
+- [x] Optionales Store-Credit-Konto mit unveränderlichem Buchungsjournal für Gutschriften, Belastungen, Korrekturen, Bestellbezug und Erstattungen umsetzen. — *Nachweis: Einstellung „Guthaben“ (standardmäßig aus); Journal mit Gutschrift, Belastung, Erstattung, Reservierung/Verbuchung, Bestellbezug; tests/store-credit-integration.php*
+- [x] Manuelle Gutschrift/Korrektur im Admin mit Berechtigung, Begründung und Audit-Protokoll ermöglichen. — *Nachweis: Benutzerprofil → Guthaben: Betrag ± mit Pflicht-Grund, Berechtigung und Nonce, atomar; Journal mit Benutzer*
+- [x] Guthaben im Kundenkonto anzeigen und teilweise Einlösung an der Kasse unterstützen. — *Nachweis: Mein Konto → Gutscheine zeigt Saldo, Code und Journal; Hinweis mit „Guthaben verwenden“ in Warenkorb/Kasse; Teil-Einlösung über die Guthaben-Logik*
 - [ ] Kombination mit Coupons, Steuerbehandlung und Erstattungsreihenfolge eindeutig konfigurieren und dokumentieren.
-- [ ] Rückerstattung als Guthaben nur als ausdrücklich gewählte Erstattungsart anbieten; niemals eine Geldrückzahlung stillschweigend ersetzen.
-- [ ] Guthaben standardmäßig währungsgebunden führen; Mehrwährungsumrechnung nur über unterstützte Integration mit dokumentierter Wechselkursregel zulassen.
+- [x] Rückerstattung als Guthaben nur als ausdrücklich gewählte Erstattungsart anbieten; niemals eine Geldrückzahlung stillschweigend ersetzen. — *Nachweis: eigener Button „Als Guthaben erstatten“ in der Bestellung (WooCommerce-Erstattung ohne Rückzahlung + Gutschrift), Gäste ausgeschlossen*
+- [x] Guthaben standardmäßig währungsgebunden führen; Mehrwährungsumrechnung nur über unterstützte Integration mit dokumentierter Wechselkursregel zulassen. — *Nachweis: Guthaben in Shop-Basiswährung; Fremdwährungs-Erstattungen über `vcap_amount_to_base_currency` (unterstützte Währungs-Plugins)*
 
 ## P2 – Kundenbindung und Shop-Erweiterungen
 

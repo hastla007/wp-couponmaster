@@ -2703,3 +2703,87 @@ msgstr "Dieser Gutschein gilt nur für Ihre erste Bestellung."
 
 msgid "The coupon %s is only valid for your first order."
 msgstr "Der Gutschein %s gilt nur für Ihre erste Bestellung."
+
+msgid "%s refunded as store credit."
+msgstr "%s als Guthaben erstattet."
+
+msgid "Code for the cart: %s"
+msgstr "Code für den Warenkorb: %s"
+
+msgid "Credit / debit"
+msgstr "Gutschrift / Belastung"
+
+msgid "Credit added"
+msgstr "Guthaben gutgeschrieben"
+
+msgid "Credit removed"
+msgstr "Guthaben belastet"
+
+msgid "Enable store credit accounts: credit customers manually (user profile) or refund orders as store credit (order screen); customers see and use their credit in My Account and the cart."
+msgstr "Guthabenkonten aktivieren: Kunden manuell Guthaben gutschreiben (Benutzerprofil) oder Bestellungen als Guthaben erstatten (Bestellansicht); Kunden sehen und nutzen ihr Guthaben in „Mein Konto“ und im Warenkorb."
+
+msgid "Guest orders cannot be refunded as store credit."
+msgstr "Gastbestellungen können nicht als Guthaben erstattet werden."
+
+msgid "Order not found."
+msgstr "Bestellung nicht gefunden."
+
+msgid "Please enter a reason and an amount up to the remaining refundable total."
+msgstr "Bitte geben Sie einen Grund und einen Betrag bis zum noch erstattbaren Gesamtbetrag ein."
+
+msgid "Please enter an amount and a reason."
+msgstr "Bitte geben Sie einen Betrag und einen Grund ein."
+
+msgid "Positive amounts add credit, negative amounts remove it. Every change is recorded with your user and the reason."
+msgstr "Positive Beträge schreiben Guthaben gut, negative belasten es. Jede Änderung wird mit Ihrem Benutzer und dem Grund protokolliert."
+
+msgid "Reason"
+msgstr "Grund"
+
+msgid "Reason (required)"
+msgstr "Grund (Pflichtfeld)"
+
+msgid "Records a refund without paying money back and credits the customer account instead. Use only if the customer chose store credit."
+msgstr "Erfasst eine Erstattung ohne Rückzahlung und schreibt den Betrag stattdessen dem Kundenkonto gut. Nur verwenden, wenn der Kunde Guthaben gewählt hat."
+
+msgid "Refund as store credit"
+msgstr "Als Guthaben erstatten"
+
+msgid "Refund as store credit failed:"
+msgstr "Erstattung als Guthaben fehlgeschlagen:"
+
+msgid "Refunded as store credit"
+msgstr "Als Guthaben erstattet"
+
+msgid "Refunded as store credit: %s"
+msgstr "Als Guthaben erstattet: %s"
+
+msgid "Store credit"
+msgstr "Guthaben"
+
+msgid "Store credit account opened"
+msgstr "Guthabenkonto eröffnet"
+
+msgid "Store credit is not enabled."
+msgstr "Guthaben ist nicht aktiviert."
+
+msgid "Store credit is temporarily unavailable."
+msgstr "Guthaben ist vorübergehend nicht verfügbar."
+
+msgid "Store credit of %s (Voucher Captain)"
+msgstr "Guthaben von %s (Voucher Captain)"
+
+msgid "The store credit is not sufficient."
+msgstr "Das Guthaben reicht nicht aus."
+
+msgid "This customer has no store credit."
+msgstr "Dieser Kunde hat kein Guthaben."
+
+msgid "This store credit belongs to another customer account."
+msgstr "Dieses Guthaben gehört zu einem anderen Kundenkonto."
+
+msgid "Use store credit"
+msgstr "Guthaben verwenden"
+
+msgid "You have %1$s store credit. %2$s"
+msgstr "Sie haben %1$s Guthaben. %2$s"

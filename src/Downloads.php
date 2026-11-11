@@ -231,6 +231,7 @@ final class Downloads {
 
 	public function account_page(): void {
 		$user = wp_get_current_user();
+		do_action( 'vcap_account_vouchers_top', $user );
 		$list = $this->repo->for_customer( (int) $user->ID );
 		Plugin::template(
 			'myaccount/vouchers-table.php',

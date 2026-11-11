@@ -79,7 +79,7 @@ final class ProductSettings {
 				'id'      => '_vcap_type',
 				'label'   => __( 'Type', 'voucher-captain' ),
 				'value'   => $this->v( $p, 'type' ),
-				'options' => Voucher::types(),
+				'options' => array_diff_key( Voucher::types(), array( 'credit' => true ) ),
 				'desc_tip'    => true,
 				'description' => __( 'Tickets get a QR check-in code and do not create a discount coupon unless a value is set.', 'voucher-captain' ),
 			)

@@ -21,6 +21,7 @@ final class Plugin {
 	public Tickets $tickets;
 	public API\V1\VoucherService $api_v1;
 	public API\V1\RedemptionService $redemptions;
+	public StoreCredit $store_credit;
 
 	public static function instance(): Plugin {
 		if ( null === self::$instance ) {
@@ -47,6 +48,7 @@ final class Plugin {
 		$this->tickets   = new Tickets( $this->vouchers );
 		$this->api_v1    = new API\V1\VoucherService( $this->vouchers, $this->coupons );
 		$this->redemptions = new API\V1\RedemptionService( $this->vouchers );
+		$this->store_credit = new StoreCredit( $this->settings, $this->vouchers, $this->coupons );
 
 		( new TemplatePostType() )->register();
 		( new ProductSettings() )->register();
@@ -66,6 +68,7 @@ final class Plugin {
 		$this->fields->register();
 		$this->tickets->register();
 		$this->redemptions->register();
+		$this->store_credit->register();
 		( new API\V1\RestController( $this->redemptions ) )->register();
 
 		( new Compat\Subscriptions() )->register();
@@ -77,6 +80,7 @@ final class Plugin {
 			( new Admin\OrderAdmin( $this->vouchers, $this->issuer ) )->register();
 			( new Admin\VoucherAdmin( $this->vouchers ) )->register();
 			( new Admin\Import( $this->code_pool ) )->register();
+			( new Admin\StoreCreditAdmin( $this->store_credit, $this->vouchers ) )->register();
 			( new Admin\CampaignAdmin( new Campaigns( $this->code_pool, $this->vouchers ) ) )->register();
 		}
 

@@ -129,6 +129,7 @@ final class Install {
 				expires_at datetime NULL DEFAULT NULL,
 				buyer_name varchar(200) NOT NULL DEFAULT '',
 				buyer_email varchar(200) NOT NULL DEFAULT '',
+				user_id bigint(20) unsigned NOT NULL DEFAULT 0,
 				recipient_name varchar(200) NOT NULL DEFAULT '',
 				recipient_email varchar(200) NOT NULL DEFAULT '',
 				message text NULL,
@@ -153,7 +154,8 @@ final class Install {
 				KEY status (status),
 				KEY product_id (product_id),
 				KEY recipient_email (recipient_email(100)),
-				KEY buyer_email (buyer_email(100))
+				KEY buyer_email (buyer_email(100)),
+				KEY user_type (user_id,type)
 			) ENGINE=InnoDB $collate;"
 		);
 

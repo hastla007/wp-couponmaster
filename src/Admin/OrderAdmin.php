@@ -58,6 +58,7 @@ final class OrderAdmin {
 			echo '<p>' . ( $this->has_voucher_items( $order )
 				? esc_html__( 'No vouchers issued yet. Use the order action "Generate vouchers" to issue them now.', 'voucher-captain' )
 				: esc_html__( 'This order contains no voucher products.', 'voucher-captain' ) ) . '</p>';
+			do_action( 'vcap_order_metabox_after', $order );
 			return;
 		}
 		echo '<ul class="vcap-order-vouchers">';
@@ -74,6 +75,7 @@ final class OrderAdmin {
 			echo '<a href="' . esc_url( vcap()->downloads->admin_url( $v ) ) . '" target="_blank">PDF</a></li>';
 		}
 		echo '</ul>';
+		do_action( 'vcap_order_metabox_after', $order );
 	}
 
 	public function actions( array $actions, $order = null ): array {

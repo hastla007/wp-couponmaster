@@ -116,7 +116,7 @@ final class Issuer {
 
 	private function create_voucher( \WC_Order $order, \WC_Order_Item_Product $item, \WC_Product $product, array $config, int $index ): ?Voucher {
 		$voucher                = new Voucher();
-		$voucher->type          = in_array( $config['type'], array_keys( Voucher::types() ), true ) ? $config['type'] : 'voucher';
+		$voucher->type          = in_array( $config['type'], array( 'voucher', 'giftcard', 'ticket' ), true ) ? $config['type'] : 'voucher';
 		$voucher->order_id      = $order->get_id();
 		$voucher->order_item_id = (int) $item->get_id();
 		$voucher->item_index    = $index;
