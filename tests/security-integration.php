@@ -99,10 +99,10 @@ $download_voucher = new VCAP\Voucher();
 $download_voucher->token = VCAP\VoucherRepository::new_token();
 $url = vcap()->downloads->signed_url( $download_voucher );
 wp_parse_str( (string) wp_parse_url( $url, PHP_URL_QUERY ), $query );
-$sign_method = new ReflectionMethod( VCAP\Downloads::class, 'sign' );
-$expected_sig = $sign_method->invoke( vcap()->downloads, $query['vcap_pdf'], (int) $query['exp'] );
-vcap_security_assert( hash_equals( $expected_sig, $query['sig'] ) && (int) $query['exp'] > time(), 'guest PDF URL signs the token and expiry' );
-vcap_security_assert( ! hash_equals( $expected_sig, hash_hmac( 'sha256', $query['vcap_pdf'] . '|' . ( (int) $query['exp'] + 1 ), vcap()->settings->secret() ) ), 'changing a signed guest-link expiry invalidates its signature' );
+$valid_link = new ReflectionMethod( VCAP\Downloads::class, 'valid_guest_link' );
+vcap_security_assert( $valid_link->invoke( vcap()->downloads, $query['vcap_pdf'], (int) $query['exp'], $query['sig'] ) && (int) $query['exp'] > time(), 'guest PDF URL signs the token and expiry' );
+vcap_security_assert( ! $valid_link->invoke( vcap()->downloads, $query['vcap_pdf'], time() - 1, $query['sig'] ), 'expired guest PDF URLs are rejected' );
+vcap_security_assert( ! $valid_link->invoke( vcap()->downloads, $query['vcap_pdf'], (int) $query['exp'], str_repeat( '0', 64 ) ), 'invalid guest PDF signatures are rejected' );
 
 // Versioned PHP facade: stable DTOs, order-scoped idempotency and stable error codes.
 $api_voucher = vcap_security_create_voucher( 'api@example.test', 900002 );
