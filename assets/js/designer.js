@@ -672,12 +672,15 @@
 
 	function endDrag() {
 		if ( drag ) {
-			if ( drag.moved ) {
+			var moved = drag.moved;
+			if ( moved ) {
 				commit( true );
 			}
 			drag = null;
 			showGuides( [] );
-			renderAll();
+			if ( moved ) {
+				renderAll();
+			}
 		}
 	}
 	page.addEventListener( 'pointerup', endDrag );

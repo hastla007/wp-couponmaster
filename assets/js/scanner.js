@@ -19,6 +19,7 @@
 	var lastTime = 0;
 	var busy = false;
 	var runId = 0;
+	var starting = false;
 
 	try {
 		auto.checked = '1' === window.localStorage.getItem( 'vcapAutoCheckin' );
@@ -161,14 +162,18 @@
 
 	function onCode( code ) {
 		var now = Date.now();
-		var same = code === lastCode && now - lastTime < 4000;
-		// Re-arm only after the code has left the frame for 4 s: a ticket held in view must not be
-		// checked in again and again.
+		if ( code === lastCode ) {
+			var same = now - lastTime < 4000;
+			lastTime = now;
+			if ( same ) {
+				return;
+			}
+		}
+		if ( busy ) {
+			return; // Not remembered: retried on the next frame once the running request is done.
+		}
 		lastCode = code;
 		lastTime = now;
-		if ( same ) {
-			return;
-		}
 		input.value = code;
 		lookup( code );
 	}
@@ -213,7 +218,12 @@
 			showError( { message: t.noCamera } );
 			return;
 		}
+		if ( starting ) {
+			return;
+		}
+		starting = true;
 		navigator.mediaDevices.getUserMedia( { video: { facingMode: 'environment' }, audio: false } ).then( function ( s ) {
+			starting = false;
 			stream = s;
 			video.srcObject = s;
 			video.play();
@@ -229,6 +239,7 @@
 			runId++;
 			tick( runId );
 		} ).catch( function () {
+			starting = false;
 			showError( { message: t.noCamera } );
 		} );
 	}
