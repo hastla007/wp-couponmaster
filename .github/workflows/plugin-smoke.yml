@@ -27,6 +27,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --yes poppler-utils
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist
+      - name: Audit locked dependencies
+        run: composer audit --locked --no-interaction
       - name: Lint PHP files
         run: find . -path './vendor' -prune -o -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: Run plugin smoke tests
@@ -85,13 +87,14 @@ jobs:
           php wp-cli.phar core download --path=wp-test --version=7.1.4
           php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
           php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher Captain CI" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
-      - name: Install target plugins and activate Voucher Captain
+      - name: Build, install, and update the release ZIP
         run: |
           php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.2.2 --activate
           php wp-cli.phar --path=wp-test plugin install wordpress-seo --version=28.8 --activate
           php wp-cli.phar --path=wp-test option update woocommerce_custom_orders_table_enabled ${{ matrix.order_storage.enabled }}
-          ln -s "$GITHUB_WORKSPACE" wp-test/wp-content/plugins/voucher-captain
-          php wp-cli.phar --path=wp-test plugin activate voucher-captain
+          bin/build.sh
+          php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
+          php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --force
       - name: Run WooCommerce lifecycle and database integration checks
         env:
           VCAP_EXPECT_HPOS: ${{ matrix.order_storage.expected }}
@@ -99,3 +102,38 @@ jobs:
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/woocommerce-integration.php"
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/compatibility-integration.php"
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/security-integration.php"
+      - name: Verify uninstall preserves data by default and deletes only when opted in
+        run: |
+          php wp-cli.phar --path=wp-test option update vcap_delete_on_uninstall no
+          php wp-cli.phar --path=wp-test plugin deactivate voucher-captain
+          php wp-cli.phar --path=wp-test plugin uninstall voucher-captain
+          php wp-cli.phar --path=wp-test eval 'global $wpdb; if (!$wpdb->get_var("SHOW TABLES LIKE \"{$wpdb->prefix}vcap_vouchers\"")) { exit(1); }'
+          php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
+          php wp-cli.phar --path=wp-test option update vcap_delete_on_uninstall yes
+          php wp-cli.phar --path=wp-test plugin deactivate voucher-captain
+          php wp-cli.phar --path=wp-test plugin uninstall voucher-captain
+          php wp-cli.phar --path=wp-test eval 'global $wpdb; if ($wpdb->get_var("SHOW TABLES LIKE \"{$wpdb->prefix}vcap_vouchers\"")) { exit(1); }'
+
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, gd, mbstring, mysqli, xml, zip
+          coverage: none
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist
+      - name: Audit locked dependencies
+        run: composer audit --locked --no-interaction
+      - name: Install PHPCS, WordPress Coding Standards, and PHPStan
+        run: |
+          composer global config allow-plugins.dealerdirect/phpcodesniffer-composer-installer true
+          composer global require --no-interaction squizlabs/php_codesniffer:^3.13 wp-coding-standards/wpcs:^3.0 phpstan/phpstan:^2.1
+          echo "$(composer global config bin-dir --absolute)" >> "$GITHUB_PATH"
+      - name: Check API and contract coding standards
+        run: phpcs --standard=WordPress --extensions=php src/API/V1 src/Contracts
+      - name: Analyze API and contract types
+        run: phpstan analyse --configuration=phpstan.neon.dist --no-progress
