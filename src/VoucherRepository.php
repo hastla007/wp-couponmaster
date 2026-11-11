@@ -263,6 +263,9 @@ final class VoucherRepository {
 	public static function event_labels(): array {
 		return array(
 			'issued'     => __( 'Issued', 'voucher-captain' ),
+			'reserved'   => __( 'Balance reserved for payment', 'voucher-captain' ),
+			'committed'  => __( 'Balance reservation committed', 'voucher-captain' ),
+			'reservation_released' => __( 'Balance reservation released', 'voucher-captain' ),
 			'scheduled'  => __( 'Delivery scheduled', 'voucher-captain' ),
 			'delivered'  => __( 'Delivered', 'voucher-captain' ),
 			'delivery_failed' => __( 'Delivery failed', 'voucher-captain' ),
