@@ -3242,3 +3242,9 @@ msgstr "Shop (Warenkorb und Kasse)"
 
 msgid "This voucher cannot be redeemed in the shop."
 msgstr "Dieser Gutschein kann nicht im Shop eingelöst werden."
+
+msgid "Choose categories…"
+msgstr "Kategorien wählen …"
+
+msgid "Product %d"
+msgstr "Produkt %d"

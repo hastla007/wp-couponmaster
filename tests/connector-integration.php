@@ -92,4 +92,13 @@ $lines = vcap()->api_v1->order_lines( wc_get_order( $order->get_id() ) );
 $data  = $lines[ $item->get_id() ] ?? array();
 vcap_conn_assert( 2 === $data['quantity'] && 1 === $data['refunded_quantity'] && 40.0 === $data['refunded_total'], 'order_lines() reports quantities and refunds per line' );
 vcap_conn_assert( 2 === count( $data['vouchers'] ) && $code === $data['vouchers'][0]['code'] && 40.0 === (float) $data['voucher_line']['face_value'], 'order_lines() lists the vouchers and the line snapshot' );
+// Refund before the external redemption is completed: the voided voucher can no longer be committed.
+$late_key = 'conn-' . wp_generate_uuid4();
+$late     = $service->reserve( $vouchers[1]->code, array( 'key' => $late_key, 'target' => 'test:course:8' ) );
+vcap_conn_assert( ! is_wp_error( $late ), 'a second voucher of the order is reserved externally' );
+vcap()->issuer->void( vcap()->vouchers->get( $vouchers[1]->id ), 'Purchase order refunded' );
+$commit = $service->commit( $late_key );
+vcap_conn_assert( is_wp_error( $commit ) && 'vcap_cancelled' === $commit->get_error_code(), 'a voucher voided during the reservation cannot be committed' );
+$released = $service->release( $late_key );
+vcap_conn_assert( ! is_wp_error( $released ) && VCAP\Voucher::STATUS_VOID === vcap()->vouchers->get( $vouchers[1]->id )->status, 'releasing the reservation keeps the voucher voided' );
 echo "Voucher Captain connector checks passed.\n";

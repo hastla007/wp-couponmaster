@@ -29,6 +29,9 @@ Visual PDF designer, recipient fields and custom field groups, scheduled deliver
 * New: discounts are always applied before gift cards and store credit; settings "Store credit with discount codes" and "Order of gift cards and store credit".
 * New: redemption channels per product ("Redeemable via": shop / external), custom voucher types (vcap_voucher_types), per-line voucher snapshot (value, currencies, tax data) and order_lines() for connector plugins.
 * New: voucher fields in block-based add-to-cart requests (Store API "vcap_fields"), validated like the product form.
+* Fix: a voucher voided while an external redemption is reserved can no longer be committed (vcap_cancelled).
+* Fix: promotion editor selects have accessible labels.
+* Dev: CONNECTORS.md, ADAPTERS.md and an example connector plugin; browser tests (Playwright, axe) in CI.
 * Fix: paid orders whose voucher balance could not be deducted are put on hold for review.
 * Fix: holds of trashed, deleted or abandoned unpaid orders are released.
 * Fix: a due scheduled gift becomes redeemable even when no email can be sent.

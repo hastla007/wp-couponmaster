@@ -119,6 +119,7 @@ jobs:
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/referral-integration.php"
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/shortcodes-integration.php"
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/connector-integration.php"
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/example-connector-integration.php"
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/blocks-integration.php"
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/fault-injection-integration.php"
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/acceptance-integration.php"

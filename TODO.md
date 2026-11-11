@@ -54,18 +54,18 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 - [ ] Steuerfälle für OSS, unterschiedliche Leistungsorte/-steuersätze, Kleinunternehmer und Preise mit gleichem Bruttopreis spezifizieren und verifizieren.
 - [x] Produkt-, Kategorie- und SKU-Regeln samt Ausschlüssen für Rabattcodes unterstützen. — *Nachweis: Produkte/Kategorien und Ausschlüsse sind WooCommerce-Standard; neue Felder „Artikelnummern“ und „Artikelnummern ausschließen“ mit Präfix-Platzhalter *, auch für Warenkorb-Festbeträge; tests/sku-rules-integration.php*
 - [x] Gesamtlimit, Limit pro Kunde, Mindestbestellwert, Ablauf und Erstkaufbedingung konfigurierbar machen. — *Nachweis: Gesamtlimit, Limit pro Kunde, Mindestbestellwert und Ablauf sind WooCommerce-Standard; neue Gutschein-Option „Nur für die erste Bestellung“ (Konto oder Rechnungs-E-Mail); tests/first-order-integration.php*
-- [ ] Erweiterungspunkte für „Kunde besitzt Kurs/Produkt X“ und Konflikte mit externen Mitgliederrabatten/Kombipreisen dokumentieren.
+- [x] Erweiterungspunkte für „Kunde besitzt Kurs/Produkt X“ und Konflikte mit externen Mitgliederrabatten/Kombipreisen dokumentieren. — *Nachweis: CONNECTORS.md Abschnitt 5*
 - [x] Coupon-Link mit sicherer automatischer Anwendung ergänzen, z. B. `?gutschein=CODE`. — *Nachweis: Einstellung „Gutschein-Links“ (standardmäßig aus), einmalige Anwendung über WooCommerce-Prüfung, Parameter wird per Redirect entfernt; tests/coupon-link-integration.php*
 - [x] Generierung mehrerer Codes nach Präfix/Länge und CSV-Export für Partner- und Kampagnenpakete ergänzen. — *Nachweis: Gutscheine → Codes generieren (bis 1000 je Lauf, aus Vorlage-Gutschein oder in Code-Pool-Stapel), CSV-Export je Kampagne/Stapel; tests/campaign-integration.php*
 - [x] Sicherstellen, dass Coupons keine Katalog-Streichpreise erzeugen und der Rabatt erst im Warenkorb erscheint. — *Nachweis: Preis, Preisanzeige und Angebotsstatus bleiben unverändert, Rabatt nur im Warenkorb; tests/first-order-integration.php*
 
 ## P2 – Integrations- und Betriebsverhalten
 
-- [ ] Gruppenpaket-Verhalten dokumentieren: Gutschein/Rabatt je Platz oder je Paket.
+- [x] Gruppenpaket-Verhalten dokumentieren: Gutschein/Rabatt je Platz oder je Paket. — *Nachweis: CONNECTORS.md Abschnitt 4 (empfohlen: je Platz)*
 - [x] Einlöse-, Guthaben- und Rückbuchungshistorie mit Nutzer, Zeitpunkt, Auftrag und externem Referenzschlüssel führen. — *Nachweis: Ereignisprotokoll je Gutschein (Nutzer, Zeit, Bestellung) und Tabelle `vcap_redemptions` mit Einlöseschlüssel*
-- [ ] Regeln für Rückerstattung/Storno vor und nach einer externen Einlösung definieren.
-- [ ] Fehlgeschlagene externe Freischaltungen wiederholbar machen, ohne Gutscheinverbrauch oder Zugriff zu duplizieren.
-- [ ] Integrationsdokumentation, Beispiel-Connector und öffentliche API-Versionspolitik veröffentlichen.
+- [x] Regeln für Rückerstattung/Storno vor und nach einer externen Einlösung definieren. — *Nachweis: CONNECTORS.md Abschnitt 3; stornierte Gutscheine können während einer Reservierung nicht mehr bestätigt werden (`vcap_cancelled`), tests/connector-integration.php*
+- [x] Fehlgeschlagene externe Freischaltungen wiederholbar machen, ohne Gutscheinverbrauch oder Zugriff zu duplizieren. — *Nachweis: Muster in CONNECTORS.md Abschnitt 2 und Beispiel-Connector mit Wiederholungsjob und Freigabe nach Limit; tests/example-connector-integration.php*
+- [x] Integrationsdokumentation, Beispiel-Connector und öffentliche API-Versionspolitik veröffentlichen. — *Nachweis: CONNECTORS.md (inkl. Versionspolitik), ADAPTERS.md, examples/vcap-example-connector*
 
 ## P2 – Qualitätssicherung und Veröffentlichung
 
@@ -147,7 +147,7 @@ Befund im Kursplugin: `/wp-json/boatingschool/v1/coupons/redeem` ist derzeit fü
 - [x] Gutscheinsaldo, Gutscheinstatus, Einlöseseite und Versandaktion über wiederverwendbare Blöcke/Shortcodes bereitstellen. — *Nachweis: Shortcodes `[vcap_balance]`/`[vcap_voucher_status]`, `[vcap_redeem]`, `[vcap_my_vouchers]` (mit „erneut senden“), `[vcap_referral]` und gleichnamige serverseitige Blöcke; tests/shortcodes-integration.php*
 - [x] Kundenvorschau personalisierter Gutscheine vor dem Kauf anbieten. — *Nachweis: Vorschau-Button auf der Produktseite, PDF mit Wasserzeichen*
 - [x] Feste Wertstufen und Wunschbetrag für Gutscheinprodukte unterstützen, wenn Produkt-/Preis-Integrationen dies erlauben; Werte, Währung und Steuerdaten positionsbezogen speichern. — *Nachweis: Wunschbetrag mit Min/Max/Schrittweite/Vorschlägen, Variationen als Wertstufen; Positions-Snapshot `_vcap_line` mit Nennwert, Gutschein- und Bestellwährung, Netto/Steuer nach Rabatt, Steuerklasse/-status; tests/connector-integration.php*
-- [ ] Mehrsprachige, mehrwährungsfähige, Subscription- und Produktfeld-Erweiterungen über dokumentierte Adapter statt interne APIs anbinden.
+- [x] Mehrsprachige, mehrwährungsfähige, Subscription- und Produktfeld-Erweiterungen über dokumentierte Adapter statt interne APIs anbinden. — *Nachweis: ADAPTERS.md; eingebaute Adapter WPML/WCML, Aelia, WOOCS, CURCY, Subscriptions; wpml-config.xml um neue Daten ergänzt*
 - [x] Akzeptanztests für Kampagnenpriorität, Warenkorbgrenzen, teilweise Einlösung, Erstattung, Mehrwährung, Wiederholungs-Webhook und Datenschutzfristen ergänzen. — *Nachweis: tests/acceptance-integration.php (Warenkorbgrenze, Teil-Einlösung, Erstattung, wiederholte Webhooks), promotion-/bonus-integration (Priorität, Limits), order-lifecycle-integration (Mehrwährung), security-integration (Aufbewahrungsfristen), parallel-checkout und fault-injection; Zustandsautomat in STATE_MACHINE.md*
 
 ## P1 – EU-Markt und Plattform-Kompatibilität
@@ -156,7 +156,7 @@ Befund im Kursplugin: `/wp-json/boatingschool/v1/coupons/redeem` ist derzeit fü
 - [x] Release-CI gegen WordPress 7.1.4, WooCommerce 11.2.2, PHP 8.4 (am Snapshot 8.4.27), MySQL 8.4 LTS und MariaDB 11.4 LTS einrichten. — *Nachweis: .github/workflows/plugin-smoke.yml*
 - [ ] Unterstützte Mindestversionen separat von der aktuellen Test-Baseline festlegen und pro Release aktualisieren.
 - [ ] Yoast SEO 28.8 als optionale Kompatibilitätskonfiguration prüfen; Yoast darf keine Laufzeitabhängigkeit sein.
-- [ ] Mehrwährungs-, Mehrsprachigkeits- und WooCommerce-Produktfeld-Integrationen über dokumentierte Adapter spezifizieren.
+- [x] Mehrwährungs-, Mehrsprachigkeits- und WooCommerce-Produktfeld-Integrationen über dokumentierte Adapter spezifizieren. — *Nachweis: ADAPTERS.md*
 - [ ] EU-weite Steuerfälle, OSS, Bruttopreisberechnung, Gutscheinbesteuerung und positionsbezogene Erstattungen mit Steuerberatung für die unterstützten Länder festlegen.
 - [ ] Verbraucherinformationen und Gutscheinbedingungen pro Land konfigurierbar machen und rechtlich prüfen lassen.
 - [ ] Barrierefreiheit von Produktfeldern, Checkout-/Kundenkonto-Flows, PDF-Vorschau und Admin-Oberfläche prüfen.

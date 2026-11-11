@@ -81,8 +81,9 @@ final class Admin {
 		return $ts ? wp_date( 'Y-m-d\TH:i', $ts ) : '';
 	}
 
-	private static function product_select( string $name, array $ids, bool $multiple = true ): void {
-		echo '<select class="wc-product-search" style="width:100%" ' . ( $multiple ? 'multiple' : '' ) . ' name="' . esc_attr( $name ) . '" data-placeholder="' . esc_attr__( 'Search for a product…', 'voucher-captain' ) . '" data-action="woocommerce_json_search_products_and_variations" data-allow_clear="true">';
+	private static function product_select( string $name, array $ids, bool $multiple = true, string $label = '' ): void {
+		$label = '' !== $label ? $label : __( 'Product', 'voucher-captain' );
+		echo '<select class="wc-product-search" style="width:100%" ' . ( $multiple ? 'multiple' : '' ) . ' name="' . esc_attr( $name ) . '" aria-label="' . esc_attr( $label ) . '" data-placeholder="' . esc_attr__( 'Search for a product…', 'voucher-captain' ) . '" data-action="woocommerce_json_search_products_and_variations" data-allow_clear="true">';
 		foreach ( $ids as $id ) {
 			$product = wc_get_product( $id );
 			if ( $product ) {
@@ -92,8 +93,9 @@ final class Admin {
 		echo '</select>';
 	}
 
-	private static function category_select( string $name, array $ids ): void {
-		echo '<select class="wc-enhanced-select" multiple style="width:100%" name="' . esc_attr( $name ) . '">';
+	private static function category_select( string $name, array $ids, string $label = '' ): void {
+		$label = '' !== $label ? $label : __( 'Categories', 'voucher-captain' );
+		echo '<select class="wc-enhanced-select" multiple style="width:100%" name="' . esc_attr( $name ) . '" aria-label="' . esc_attr( $label ) . '" data-placeholder="' . esc_attr__( 'Choose categories…', 'voucher-captain' ) . '">';
 		$terms = get_terms( array( 'taxonomy' => 'product_cat', 'hide_empty' => false ) );
 		foreach ( is_wp_error( $terms ) ? array() : $terms as $term ) {
 			echo '<option value="' . esc_attr( (string) $term->term_id ) . '" ' . selected( in_array( (int) $term->term_id, $ids, true ), true, false ) . '>' . esc_html( $term->name ) . '</option>';
@@ -166,12 +168,12 @@ final class Admin {
 			</tr>
 			<tr>
 				<th scope="row"><?php esc_html_e( 'Products', 'voucher-captain' ); ?></th>
-				<td><?php self::product_select( 'vcap_rules[products][]', $r['products'] ); ?>
+				<td><?php self::product_select( 'vcap_rules[products][]', $r['products'], true, __( 'Products', 'voucher-captain' ) ); ?>
 					<p class="description"><?php esc_html_e( 'Leave products and categories empty for all products. Voucher products are excluded unless "Discount codes on vouchers" is allowed.', 'voucher-captain' ); ?></p></td>
 			</tr>
-			<tr><th scope="row"><?php esc_html_e( 'Categories', 'voucher-captain' ); ?></th><td><?php self::category_select( 'vcap_rules[categories][]', $r['categories'] ); ?></td></tr>
-			<tr><th scope="row"><?php esc_html_e( 'Exclude products', 'voucher-captain' ); ?></th><td><?php self::product_select( 'vcap_rules[exclude_products][]', $r['exclude_products'] ); ?></td></tr>
-			<tr><th scope="row"><?php esc_html_e( 'Exclude categories', 'voucher-captain' ); ?></th><td><?php self::category_select( 'vcap_rules[exclude_categories][]', $r['exclude_categories'] ); ?></td></tr>
+			<tr><th scope="row"><?php esc_html_e( 'Categories', 'voucher-captain' ); ?></th><td><?php self::category_select( 'vcap_rules[categories][]', $r['categories'], __( 'Categories', 'voucher-captain' ) ); ?></td></tr>
+			<tr><th scope="row"><?php esc_html_e( 'Exclude products', 'voucher-captain' ); ?></th><td><?php self::product_select( 'vcap_rules[exclude_products][]', $r['exclude_products'], true, __( 'Exclude products', 'voucher-captain' ) ); ?></td></tr>
+			<tr><th scope="row"><?php esc_html_e( 'Exclude categories', 'voucher-captain' ); ?></th><td><?php self::category_select( 'vcap_rules[exclude_categories][]', $r['exclude_categories'], __( 'Exclude categories', 'voucher-captain' ) ); ?></td></tr>
 			<tr>
 				<th scope="row"><?php esc_html_e( 'Conditions', 'voucher-captain' ); ?></th>
 				<td>
@@ -190,7 +192,7 @@ final class Admin {
 						<option value="returning" <?php selected( $r['customer'], 'returning' ); ?>><?php esc_html_e( 'Returning customers (next order)', 'voucher-captain' ); ?></option>
 					</select>
 					<div class="vcap-for-roles">
-						<select class="wc-enhanced-select" multiple style="width:100%" name="vcap_rules[roles][]" data-placeholder="<?php esc_attr_e( 'Choose roles…', 'voucher-captain' ); ?>">
+						<select class="wc-enhanced-select" multiple style="width:100%" name="vcap_rules[roles][]" aria-label="<?php esc_attr_e( 'Customer groups (user roles)', 'voucher-captain' ); ?>" data-placeholder="<?php esc_attr_e( 'Choose roles…', 'voucher-captain' ); ?>">
 							<?php foreach ( wp_roles()->get_names() as $role => $name ) : ?>
 								<option value="<?php echo esc_attr( $role ); ?>" <?php selected( in_array( $role, $r['roles'], true ) ); ?>><?php echo esc_html( translate_user_role( $name ) ); ?></option>
 							<?php endforeach; ?>
@@ -233,7 +235,8 @@ final class Admin {
 			<tbody>
 			<?php for ( $i = 0; $i < 4; $i++ ) : ?>
 				<tr>
-					<td><?php self::product_select( 'vcap_preview[product][' . $i . ']', array(), false ); ?></td>
+					<td><?php /* translators: %d: row number */
+					self::product_select( 'vcap_preview[product][' . $i . ']', array(), false, sprintf( __( 'Product %d', 'voucher-captain' ), $i + 1 ) ); ?></td>
 					<td><input type="number" min="0" value="1" name="vcap_preview[qty][<?php echo esc_attr( (string) $i ); ?>]" class="small-text" aria-label="<?php esc_attr_e( 'Quantity', 'voucher-captain' ); ?>" /></td>
 				</tr>
 			<?php endfor; ?>

@@ -2,6 +2,7 @@
 	<custom-types>
 		<custom-type translate="1">vcap_template</custom-type>
 		<custom-type translate="1">vcap_field_group</custom-type>
+		<custom-type translate="0">vcap_discount</custom-type>
 	</custom-types>
 	<custom-fields>
 		<custom-field action="copy-once">_vcap_design</custom-field>
@@ -10,6 +11,10 @@
 		<custom-field action="copy">_vcap_position</custom-field>
 		<custom-field action="copy">_vcap_enabled</custom-field>
 		<custom-field action="copy">_vcap_type</custom-field>
+		<custom-field action="copy">_vcap_channels</custom-field>
+		<custom-field action="copy">_vcap_skus</custom-field>
+		<custom-field action="copy">_vcap_exclude_skus</custom-field>
+		<custom-field action="copy">_vcap_first_order</custom-field>
 		<custom-field action="copy">_vcap_template</custom-field>
 		<custom-field action="copy">_vcap_amount_source</custom-field>
 		<custom-field action="copy">_vcap_amount</custom-field>

@@ -11,6 +11,8 @@ async function expectAccessible( page, selector ) {
 	const results = await new AxeBuilder( { page } ).include( selector ).analyze();
 	const serious = results.violations
 		.filter( ( v ) => [ 'serious', 'critical' ].includes( v.impact ) )
+		// WooCommerce's selectWoo library sets aria-haspopup on its combobox; not Voucher Captain markup.
+		.filter( ( v ) => ! ( 'aria-allowed-attr' === v.id && v.nodes.every( ( n ) => n.target.join( ' ' ).includes( 'select2-selection' ) ) ) )
 		.map( ( v ) => `${ v.id }: ${ v.help } (${ v.nodes.map( ( n ) => n.target.join( ' ' ) ).join( ', ' ) })` );
 	expect( serious, `accessibility problems in ${ selector }` ).toEqual( [] );
 }

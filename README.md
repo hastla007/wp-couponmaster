@@ -69,6 +69,8 @@ Nach der Aktivierung werden zwei Startvorlagen angelegt (Geschenkkarte A5 und Gu
 - [Versionierte PHP-API und Providervertrag](API.md)
 - [Sicherheits- und Datenschutzkontrollen](SECURITY.md)
 - [Release-Abnahmecheckliste](RELEASE_CHECKLIST.md)
+- [Connector-Plugins: Einlösung, Wiederholung, Storno, Versionierung](CONNECTORS.md)
+- [Adapter für Mehrsprachigkeit, Mehrwährung, Subscriptions und Produktfelder](ADAPTERS.md)
 - [Zustandsautomat für Reservierung, Buchung, Freigabe und Erstattung](STATE_MACHINE.md)
 - [50-Punkte-Roadmap](ROADMAP.md)
 

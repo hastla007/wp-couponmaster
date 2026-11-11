@@ -342,6 +342,11 @@ final class RedemptionService {
 			/* translators: 1: redemption key, 2: target */
 			$note = sprintf( __( 'Redemption %1$s for %2$s', 'voucher-captain' ), $key, $row['target'] );
 
+			if ( self::STATE_COMMITTED === $to && Voucher::STATUS_VOID === $voucher->status ) {
+				// Voided while reserved (e.g. the purchase order was refunded): never complete the redemption.
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return self::error( 'vcap_cancelled', __( 'This voucher has been cancelled.', 'voucher-captain' ), 410 );
+			}
 			if ( self::STATE_COMMITTED === $to ) {
 				if ( ! $voucher->is_multi_use() ) {
 					$voucher->status  = Voucher::STATUS_REDEEMED;
