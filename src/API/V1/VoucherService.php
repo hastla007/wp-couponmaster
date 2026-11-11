@@ -1,4 +1,10 @@
 <?php
+/**
+ * Stable PHP facade for voucher integrations.
+ *
+ * @package VCAP\API\V1
+ */
+
 namespace VCAP\API\V1;
 
 use VCAP\Contracts\RedemptionProvider;
@@ -13,33 +19,68 @@ defined( 'ABSPATH' ) || exit;
  * @since 1.1.0
  */
 final class VoucherService {
+	/**
+	 * Construct the voucher service.
+	 *
+	 * @param VoucherRepository $vouchers Voucher repository.
+	 * @param CouponManager     $coupons Coupon manager.
+	 */
 	public function __construct( private VoucherRepository $vouchers, private CouponManager $coupons ) {}
 
-	/** @return array<string, mixed>|\WP_Error */
+	/**
+	 * Look up a voucher through the configured provider.
+	 *
+	 * @param string $code Voucher code.
+	 * @return array<string, mixed>|\WP_Error
+	 */
 	public function lookup( string $code ) {
 		$provider = $this->provider( $code );
 		return is_wp_error( $provider ) ? $provider : $provider->lookup( $code );
 	}
 
-	/** @return array<string, mixed>|\WP_Error */
+	/**
+	 * Reserve a balance amount for a saved order.
+	 *
+	 * @param string   $code Voucher code.
+	 * @param float    $amount Amount to reserve.
+	 * @param \WC_Order $order Saved WooCommerce order.
+	 * @return array<string, mixed>|\WP_Error
+	 */
 	public function reserve( string $code, float $amount, \WC_Order $order ) {
 		$provider = $this->provider( $code );
 		return is_wp_error( $provider ) ? $provider : $provider->reserve( $code, $amount, $order );
 	}
 
-	/** @return array<string, mixed>|\WP_Error */
+	/**
+	 * Commit a saved order's reservation.
+	 *
+	 * @param string   $code Voucher code.
+	 * @param \WC_Order $order Saved WooCommerce order.
+	 * @return array<string, mixed>|\WP_Error
+	 */
 	public function commit( string $code, \WC_Order $order ) {
 		$provider = $this->provider( $code );
 		return is_wp_error( $provider ) ? $provider : $provider->commit( $code, $order );
 	}
 
-	/** @return array<string, mixed>|\WP_Error */
+	/**
+	 * Release a saved order's reservation.
+	 *
+	 * @param string   $code Voucher code.
+	 * @param \WC_Order $order Saved WooCommerce order.
+	 * @return array<string, mixed>|\WP_Error
+	 */
 	public function release( string $code, \WC_Order $order ) {
 		$provider = $this->provider( $code );
 		return is_wp_error( $provider ) ? $provider : $provider->release( $code, $order );
 	}
 
-	/** @return RedemptionProvider|\WP_Error */
+	/**
+	 * Find the first provider that supports the voucher code.
+	 *
+	 * @param string $code Voucher code.
+	 * @return RedemptionProvider|\WP_Error
+	 */
 	private function provider( string $code ) {
 		$providers = apply_filters(
 			'vcap_redemption_providers',
