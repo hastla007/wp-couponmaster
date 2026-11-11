@@ -119,7 +119,7 @@ jobs:
           php wp-cli.phar --path=wp-test eval 'global $wpdb; if ($wpdb->get_var("SHOW TABLES LIKE \"{$wpdb->prefix}vcap_vouchers\"")) { exit(1); }'
 
   minimum-versions:
-    # Oldest supported platform (plugin header) without Yoast SEO: WordPress 6.4, WooCommerce 8.8, PHP 8.1.
+    # Oldest supported platform (plugin header) without Yoast SEO: WordPress 6.4, WooCommerce 8.9, PHP 8.1.
     runs-on: ubuntu-latest
     services:
       db:
@@ -146,12 +146,12 @@ jobs:
         run: composer install --no-interaction --prefer-dist
       - name: Download WP-CLI
         run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
-      - name: Install WordPress 6.4, WooCommerce 8.8 and the release ZIP (no Yoast SEO)
+      - name: Install WordPress 6.4, WooCommerce 8.9 and the release ZIP (no Yoast SEO)
         run: |
           php wp-cli.phar core download --path=wp-test --version=6.4.5
           php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
           php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher Captain minimum" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
-          php wp-cli.phar --path=wp-test plugin install woocommerce --version=8.8.3 --activate
+          php wp-cli.phar --path=wp-test plugin install woocommerce --version=8.9.0 --activate
           bin/build.sh
           php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
           php wp-cli.phar --path=wp-test plugin list

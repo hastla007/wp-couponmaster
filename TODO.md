@@ -154,7 +154,7 @@ Befund im Kursplugin: `/wp-json/boatingschool/v1/coupons/redeem` ist derzeit fü
 
 - [ ] EU als Zielmarkt umsetzen; Länder-, Währungs-, Sprach- und Steuerkonfiguration getrennt von fest codierter Geschäftslogik halten.
 - [x] Release-CI gegen WordPress 7.1.4, WooCommerce 11.2.2, PHP 8.4 (am Snapshot 8.4.27), MySQL 8.4 LTS und MariaDB 11.4 LTS einrichten. — *Nachweis: .github/workflows/plugin-smoke.yml*
-- [x] Unterstützte Mindestversionen separat von der aktuellen Test-Baseline festlegen und pro Release aktualisieren. — *Nachweis: COMPATIBILITY.md (Minimum WP 6.4 / WC 8.8 / PHP 8.1 vs. Baseline WP 7.1.4 / WC 11.2.2 / PHP 8.4); Hinweis und Abschaltung bei WC < 8.8; CI-Job `minimum-versions` führt die komplette Integrationssuite auf den Mindestversionen aus*
+- [x] Unterstützte Mindestversionen separat von der aktuellen Test-Baseline festlegen und pro Release aktualisieren. — *Nachweis: COMPATIBILITY.md (Minimum WP 6.4 / WC 8.9 / PHP 8.1 vs. Baseline WP 7.1.4 / WC 11.2.2 / PHP 8.4); Hinweis und Abschaltung bei WC < 8.9; CI-Job `minimum-versions` führt die komplette Integrationssuite auf den Mindestversionen aus*
 - [x] Yoast SEO 28.8 als optionale Kompatibilitätskonfiguration prüfen; Yoast darf keine Laufzeitabhängigkeit sein. — *Nachweis: kein Yoast-Bezug im Code; Integrationssuite und Browser-Tests mit Yoast 28.8, Job `minimum-versions` ohne Yoast*
 - [x] Mehrwährungs-, Mehrsprachigkeits- und WooCommerce-Produktfeld-Integrationen über dokumentierte Adapter spezifizieren. — *Nachweis: ADAPTERS.md*
 - [ ] EU-weite Steuerfälle, OSS, Bruttopreisberechnung, Gutscheinbesteuerung und positionsbezogene Erstattungen mit Steuerberatung für die unterstützten Länder festlegen.
