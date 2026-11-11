@@ -97,7 +97,7 @@ vcap_security_assert( $allowed && $blocked, 'public balance lookup rate limit re
 // Signed guest downloads bind the voucher token and expiry to the site secret.
 $download_voucher = new VCAP\Voucher();
 $download_voucher->token = VCAP\VoucherRepository::new_token();
-$url = vcap()->downloads->signed_url( $download_voucher, true );
+$url = vcap()->downloads->signed_url( $download_voucher );
 wp_parse_str( (string) wp_parse_url( $url, PHP_URL_QUERY ), $query );
 $sign_method = new ReflectionMethod( VCAP\Downloads::class, 'sign' );
 $expected_sig = $sign_method->invoke( vcap()->downloads, $query['vcap_pdf'], (int) $query['exp'] );
