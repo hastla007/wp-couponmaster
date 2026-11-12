@@ -270,7 +270,11 @@ final class Delivery {
 		$logged     = false;
 		try {
 			$fresh = $this->repo->get( $voucher->id );
-			if ( ! $fresh || Voucher::STATUS_ACTIVE !== $fresh->status || ! $fresh->delivered_at || ! $fresh->expires_at || strtotime( $fresh->expires_at . ' UTC' ) <= time() || 'ticket' === $fresh->type || ( 'balance' === $fresh->usage_mode && $fresh->balance <= 0 ) ) {
+			if (
+				! $fresh || Voucher::STATUS_ACTIVE !== $fresh->status || ! $fresh->delivered_at || ! $fresh->expires_at ||
+				strtotime( $fresh->expires_at . ' UTC' ) <= time() || 'ticket' === $fresh->type ||
+				( 'balance' === $fresh->usage_mode && $fresh->balance <= 0 )
+			) {
 				return false;
 			}
 			foreach ( $this->repo->events( $fresh->id ) as $event ) {
@@ -288,10 +292,12 @@ final class Delivery {
 			if ( $email && $email->trigger( $fresh ) ) {
 				return true;
 			}
-			$this->repo->mark_last_expiry_reminder_failed( $fresh->id, $days );
+			$failed = $this->repo->mark_last_expiry_reminder_failed( $fresh->id, $days );
 			$logged = false;
-			$this->schedule_expiry_reminder_retry( $fresh->id, $days, $attempt );
-		} catch ( Throwable $e ) {
+			if ( $failed ) {
+				$this->schedule_expiry_reminder_retry( $fresh->id, $days, $attempt );
+			}
+		} catch ( \Throwable $e ) {
 			if ( $logged && $this->repo->mark_last_expiry_reminder_failed( $voucher->id, $days ) ) {
 				$this->schedule_expiry_reminder_retry( $voucher->id, $days, $attempt );
 			}
