@@ -131,6 +131,11 @@ final class Tickets {
 	public function rest_lookup( \WP_REST_Request $request ) {
 		$voucher = $this->resolve( (string) $request['q'] );
 		if ( ! $voucher ) {
+			/** Codes Voucher Captain does not know may belong to another plugin (shared scanner, e.g. Pass Captain tickets). */
+			$external = apply_filters( 'vcap_scanner_lookup', null, (string) $request['q'] );
+			if ( null !== $external ) {
+				return is_wp_error( $external ) ? $external : rest_ensure_response( $external );
+			}
 			return new \WP_Error( 'vcap_not_found', __( 'No voucher or ticket found for this code.', 'voucher-captain' ), array( 'status' => 404 ) );
 		}
 		return rest_ensure_response( $this->describe( $voucher ) );
@@ -191,6 +196,10 @@ final class Tickets {
 	public function rest_checkin( \WP_REST_Request $request ) {
 		$voucher = $this->resolve( (string) $request['q'] );
 		if ( ! $voucher ) {
+			$external = $request['undo'] ? null : apply_filters( 'vcap_scanner_checkin', null, (string) $request['q'] );
+			if ( null !== $external ) {
+				return is_wp_error( $external ) ? $external : rest_ensure_response( $external );
+			}
 			return new \WP_Error( 'vcap_not_found', __( 'No voucher or ticket found for this code.', 'voucher-captain' ), array( 'status' => 404 ) );
 		}
 		if ( $request['undo'] ) {

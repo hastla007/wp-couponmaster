@@ -408,6 +408,9 @@ final class PassCaptainTickets {
 		if ( ! $service || ! method_exists( $service, 'targets' ) ) {
 			return;
 		}
+		if ( $product instanceof \WC_Product && 'ticket' === $product->get_meta( '_vcap_type' ) ) {
+			echo '<p class="form-field vcap-passcaptain-hint"><span class="description">' . esc_html__( 'Tip: the voucher type "Ticket" is a simple admission pass without dates or capacity, checked in at Voucher Captain. For events with dates, capacity and admission rules, create them in WP Pass Captain and use a voucher with "WP Pass Captain ticket" below (or sell Pass Captain tickets directly).', 'voucher-captain' ) . '</span></p>';
+		}
 		$current = $product instanceof \WC_Product ? absint( $product->get_meta( self::META_TYPE ) ) : 0;
 		$event   = $product instanceof \WC_Product ? absint( $product->get_meta( self::META_EVENT ) ) : 0;
 		$options = array( '' => __( '— No ticket (regular voucher) —', 'voucher-captain' ) );

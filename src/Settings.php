@@ -211,6 +211,13 @@ final class Settings {
 						'desc_tip'          => __( 'Number of invalid codes a user may enter within 15 minutes before further attempts are blocked. 0 = no limit.', 'voucher-captain' ),
 					),
 					array( 'type' => 'sectionend', 'id' => 'vcap_api' ),
+					array(
+						'type'  => 'title',
+						'title' => __( 'WP Pass Captain (tickets)', 'voucher-captain' ),
+						'id'    => 'vcap_passcaptain',
+						'desc'  => Compat\PassCaptain::status_html(),
+					),
+					array( 'type' => 'sectionend', 'id' => 'vcap_passcaptain' ),
 				);
 				break;
 

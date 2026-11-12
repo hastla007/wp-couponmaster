@@ -3410,3 +3410,60 @@ msgstr "Bitte fülle die Angaben für jedes Ticket aus."
 
 msgid "Ticket %d"
 msgstr "Ticket %d"
+
+msgid "Active (version %s)"
+msgstr "Aktiv (Version %s)"
+
+msgid "Already checked in by this scan"
+msgstr "Mit diesem Scan bereits eingecheckt"
+
+msgid "Attendee"
+msgstr "Teilnehmer"
+
+msgid "Check-ins in WP Pass Captain"
+msgstr "Check-ins in WP Pass Captain"
+
+msgid "Not active – vouchers in the ticket checkout, ticket vouchers and the shared scanner are off. Voucher Captain works fully without it."
+msgstr "Nicht aktiv – Gutscheine im Ticket-Checkout, Ticket-Gutscheine und der gemeinsame Scanner sind aus. Voucher Captain funktioniert ohne Einschränkung."
+
+msgid "Not admitted (%s)"
+msgstr "Kein Einlass (%s)"
+
+msgid "Open WP Pass Captain"
+msgstr "WP Pass Captain öffnen"
+
+msgid "Shared scanner: Vouchers → Scanner also checks in Pass Captain tickets."
+msgstr "Gemeinsamer Scanner: Gutscheine → Scanner checkt auch Pass-Captain-Tickets ein."
+
+msgid "Shared scanner: WP Pass Captain tickets are recognised too and checked in at Pass Captain (needs the Pass Captain check-in permission). Voucher codes are always looked up in Voucher Captain first."
+msgstr "Gemeinsamer Scanner: Auch WP-Pass-Captain-Tickets werden erkannt und in Pass Captain eingecheckt (dafür ist das Pass-Captain-Recht für Check-ins nötig). Gutscheincodes werden immer zuerst in Voucher Captain gesucht."
+
+msgid "Shared scanner: not available – update WP Pass Captain."
+msgstr "Gemeinsamer Scanner: nicht verfügbar – WP Pass Captain aktualisieren."
+
+msgid "Ticket type"
+msgstr "Ticketart"
+
+msgid "Ticket vouchers: choose a ticket type or event in the product's voucher settings."
+msgstr "Ticket-Gutscheine: Ticketart oder Veranstaltung in den Gutschein-Einstellungen des Produkts wählen."
+
+msgid "Ticket vouchers: not available – update WP Pass Captain."
+msgstr "Ticket-Gutscheine: nicht verfügbar – WP Pass Captain aktualisieren."
+
+msgid "Tip: the voucher type \"Ticket\" is a simple admission pass without dates or capacity, checked in at Voucher Captain. For events with dates, capacity and admission rules, create them in WP Pass Captain and use a voucher with \"WP Pass Captain ticket\" below (or sell Pass Captain tickets directly)."
+msgstr "Tipp: Der Gutscheintyp „Ticket“ ist ein einfacher Eintrittsgutschein ohne Termin und Kontingent, eingecheckt in Voucher Captain. Für Veranstaltungen mit Terminen, Kontingent und Einlassregeln diese in WP Pass Captain anlegen und unten „WP-Pass-Captain-Ticket“ wählen (oder Pass-Captain-Tickets direkt verkaufen)."
+
+msgid "Valid ticket"
+msgstr "Gültiges Ticket"
+
+msgid "Vouchers and gift cards pay in the ticket checkout (contract v1; tick \"WP Pass Captain\" under \"Redeemable via\" or leave all channels unticked)."
+msgstr "Gutscheine und Geschenkkarten bezahlen im Ticket-Checkout (Vertrag v1; unter „Einlösbar über“ „WP Pass Captain“ ankreuzen oder keine Einschränkung setzen)."
+
+msgid "WP Pass Captain"
+msgstr "WP Pass Captain"
+
+msgid "WP Pass Captain (tickets)"
+msgstr "WP Pass Captain (Tickets)"
+
+msgid "WP Pass Captain ↗"
+msgstr "WP Pass Captain ↗"

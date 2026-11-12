@@ -258,6 +258,41 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	}
 }
 
+// Shared scanner: Voucher Captain's scanner checks in Pass Captain tickets (and still finds vouchers first).
+if ( null !== VCAP\Compat\PassCaptainScanner::service() ) {
+	$mails = array();
+	$grab  = static function ( $args ) use ( &$mails ) { $mails[] = (string) ( $args['message'] ?? '' ); return $args; };
+	add_filter( 'wp_mail', $grab );
+	$scan_voucher = vcap_pc_voucher( 'single', 20 );
+	$scan_type    = vcap_pc_ticket_type( 2000 );
+	$give_scan    = static fn( $t, $v ) => $v->id === $scan_voucher->id ? array( 'ticket_type_id' => $scan_type, 'quantity' => 1 ) : $t;
+	add_filter( 'vcap_passcaptain_ticket_target', $give_scan, 10, 2 );
+	wp_set_current_user( 1 );
+	$scan_done = vcap()->passcaptain_tickets->exchange( $scan_voucher->code, array( 'email' => 'scanner@example.com' ) );
+	remove_filter( 'vcap_passcaptain_ticket_target', $give_scan, 10 );
+	remove_filter( 'wp_mail', $grab );
+	preg_match( '/[a-f0-9]{64}/', implode( "\n", $mails ), $tm );
+	$token = $tm[0] ?? '';
+	vcap_pc_assert( is_array( $scan_done ) && '' !== $token, 'a Pass Captain ticket code reaches the customer by mail' );
+	$scan = static function ( string $route, array $params ) {
+		$req = new WP_REST_Request( 'lookup' === $route ? 'GET' : 'POST', '/vcap/v1/' . $route );
+		foreach ( $params as $k => $v ) {
+			$req->set_param( $k, $v );
+		}
+		$res = 'lookup' === $route ? vcap()->tickets->rest_lookup( $req ) : vcap()->tickets->rest_checkin( $req );
+		return is_wp_error( $res ) ? $res : $res->get_data();
+	};
+	$seen = $scan( 'lookup', array( 'q' => home_url( '/?wpcap_ticket=' . $token ) ) );
+	vcap_pc_assert( is_array( $seen ) && 'passcaptain' === $seen['type'] && 'ok' === $seen['state'] && true === $seen['can_checkin'], 'the shared scanner recognises a Pass Captain ticket (URL from the QR code)' );
+	$in = $scan( 'checkin', array( 'q' => $token ) );
+	vcap_pc_assert( is_array( $in ) && 'ok' === $in['state'] && true === $in['success'], 'the shared scanner checks the ticket in at Pass Captain' );
+	$twice = $scan( 'checkin', array( 'q' => $token ) );
+	vcap_pc_assert( is_array( $twice ) && 'ok' !== $twice['state'] && false === $twice['success'], 'a second scan does not admit the ticket again' );
+	$own = $scan( 'lookup', array( 'q' => vcap_pc_voucher( 'balance', 10 )->code ) );
+	vcap_pc_assert( is_array( $own ) && 'giftcard' === $own['type'], 'voucher codes are still handled by Voucher Captain' );
+	vcap_pc_assert( false !== strpos( VCAP\Compat\PassCaptain::status_html(), '✔' ), 'the settings show the Pass Captain integration as active' );
+}
+
 // Minor units follow ISO 4217 (as Pass Captain does), not the shop's price display setting.
 $decimals = static fn() => 0;
 add_filter( 'wc_get_price_decimals', $decimals );

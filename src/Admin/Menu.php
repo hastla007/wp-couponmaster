@@ -38,6 +38,10 @@ final class Menu {
 		add_submenu_page( 'vcap-vouchers', __( 'Generate codes', 'voucher-captain' ), __( 'Generate codes', 'voucher-captain' ), self::cap(), 'vcap-generate', array( new CampaignAdmin( new \VCAP\Campaigns( vcap()->code_pool, vcap()->vouchers ) ), 'page' ) );
 		add_submenu_page( 'vcap-vouchers', __( 'Reports', 'voucher-captain' ), __( 'Reports', 'voucher-captain' ), self::cap(), 'vcap-reports', array( new ReportsAdmin(), 'page' ) );
 		add_submenu_page( 'vcap-vouchers', __( 'Scanner', 'voucher-captain' ), __( 'Scanner', 'voucher-captain' ), self::scan_cap(), 'vcap-scanner', array( new Scanner(), 'page' ) );
+		if ( \VCAP\Compat\PassCaptain::active() ) {
+			// Link into Pass Captain's own menu (both plugins keep their menus).
+			add_submenu_page( 'vcap-vouchers', __( 'WP Pass Captain', 'voucher-captain' ), __( 'WP Pass Captain ↗', 'voucher-captain' ), 'wpcap_checkin', 'admin.php?page=wp-pass-captain' );
+		}
 	}
 
 	public function settings_link(): void {

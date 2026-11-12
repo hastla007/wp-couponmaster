@@ -16,6 +16,8 @@ Visual PDF designer, recipient fields and custom field groups, scheduled deliver
 == Changelog ==
 
 = Unreleased =
+* New: shared scanner – Vouchers → Scanner also recognises WP Pass Captain tickets and checks them in at Pass Captain (Pass Captain permission required); voucher codes are looked up first.
+* New: integration status for WP Pass Captain in the settings (Integrations), menu link to Pass Captain, hint on the voucher type "Ticket" while Pass Captain is active.
 * New: ticket vouchers for WP Pass Captain – a voucher product names a Pass Captain ticket type; the voucher is exchanged for the tickets on the redeem page, by an admin or by code (reserve → issue tickets → commit, idempotent, tickets revoked when the voucher is voided).
 * New: ticket vouchers for any date of a Pass Captain event – the customer chooses the date on the redeem page (admins on the voucher page); optionally limited to one ticket name. Sold-out dates are not offered; required attendee details are asked on the redeem page.
 * Dev: hooks vcap_product_settings_fields/_save, vcap_line_snapshot, vcap_redeem_code, vcap_voucher_admin_actions/_action/_messages and vcap_event_labels for connectors.

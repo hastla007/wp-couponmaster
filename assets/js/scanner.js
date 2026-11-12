@@ -70,7 +70,34 @@
 		}
 	}
 
+	function renderPassCaptain( d, query ) {
+		var rows = [
+			[ t.event, d.event ],
+			[ t.ticketType, d.ticket ],
+			[ t.date, d.starts ],
+			[ t.attendee, d.attendee ]
+		].filter( function ( r ) { return r && r[ 1 ]; } );
+		var html = '<div class="vcap-r-head vcap-r-' + esc( d.state ) + '">' + esc( d.message ) + ' · ' + esc( d.type_label ) + '</div><div class="vcap-r-body"><dl>';
+		rows.forEach( function ( r ) {
+			html += '<dt>' + esc( r[ 0 ] ) + '</dt><dd>' + esc( r[ 1 ] ) + '</dd>';
+		} );
+		html += '</dl><div class="vcap-r-actions">';
+		if ( d.can_checkin ) {
+			html += '<button type="button" class="button button-primary button-hero" data-act="checkin">' + esc( t.checkin ) + '</button>';
+		}
+		if ( d.admin_url ) {
+			html += '<a class="button-link" href="' + esc( d.admin_url ) + '">' + esc( t.passCaptainCheckins ) + '</a>';
+		}
+		html += '</div></div>';
+		result.innerHTML = html;
+		result.setAttribute( 'data-query', query );
+	}
+
 	function render( d, query ) {
+		if ( 'passcaptain' === d.type ) {
+			renderPassCaptain( d, query );
+			return;
+		}
 		var rows = [
 			[ t.product, d.product ],
 			[ t.holder, d.holder ],
@@ -117,7 +144,7 @@
 		busy = true;
 		// Always look up first; auto check-in applies to valid tickets only (never to vouchers or gift cards).
 		var p = api( 'lookup?q=' + encodeURIComponent( query ) ).then( function ( d ) {
-			if ( auto.checked && 'ticket' === d.type && 'ok' === d.state ) {
+			if ( auto.checked && 'ok' === d.state && ( 'ticket' === d.type || ( 'passcaptain' === d.type && d.can_checkin ) ) ) {
 				return api( 'checkin', 'POST', { q: query } );
 			}
 			return d;

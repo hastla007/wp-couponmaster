@@ -32,6 +32,32 @@ final class PassCaptain {
 		return new PassCaptainProvider( vcap()->redemptions, vcap()->vouchers );
 	}
 
+	/** Whether WP Pass Captain is active with the voucher bridge (contract v1). */
+	public static function active(): bool {
+		return interface_exists( self::INTERFACE );
+	}
+
+	/**
+	 * Status of the integration for the settings page (HTML, escaped).
+	 */
+	public static function status_html(): string {
+		if ( ! self::active() ) {
+			return esc_html__( 'Not active – vouchers in the ticket checkout, ticket vouchers and the shared scanner are off. Voucher Captain works fully without it.', 'voucher-captain' );
+		}
+		$rows = array(
+			array( true, __( 'Vouchers and gift cards pay in the ticket checkout (contract v1; tick "WP Pass Captain" under "Redeemable via" or leave all channels unticked).', 'voucher-captain' ) ),
+			array( null !== PassCaptainTickets::service(), null !== PassCaptainTickets::service() ? __( 'Ticket vouchers: choose a ticket type or event in the product\'s voucher settings.', 'voucher-captain' ) : __( 'Ticket vouchers: not available – update WP Pass Captain.', 'voucher-captain' ) ),
+			array( null !== PassCaptainScanner::service(), null !== PassCaptainScanner::service() ? __( 'Shared scanner: Vouchers → Scanner also checks in Pass Captain tickets.', 'voucher-captain' ) : __( 'Shared scanner: not available – update WP Pass Captain.', 'voucher-captain' ) ),
+		);
+		$version = defined( 'WPCAP_VERSION' ) ? (string) WPCAP_VERSION : '';
+		/* translators: %s: version */
+		$html = '<strong>' . esc_html( '' !== $version ? sprintf( __( 'Active (version %s)', 'voucher-captain' ), $version ) : __( 'Active', 'voucher-captain' ) ) . '</strong>';
+		foreach ( $rows as $row ) {
+			$html .= '<br />' . ( $row[0] ? '✔ ' : '– ' ) . esc_html( $row[1] );
+		}
+		return $html . '<br /><a href="' . esc_url( admin_url( 'admin.php?page=wp-pass-captain' ) ) . '">' . esc_html__( 'Open WP Pass Captain', 'voucher-captain' ) . '</a>';
+	}
+
 	public function channels( array $channels ): array {
 		return $channels + array( self::CHANNEL => __( 'WP Pass Captain (ticket checkout)', 'voucher-captain' ) );
 	}
