@@ -2668,6 +2668,9 @@ msgstr "Senden Sie jeweils eine E-Mail zu jedem eingestellten Vorlaufzeitpunkt, 
 msgid "Expiry reminder"
 msgstr "Erinnerung vor Ablauf"
 
+msgid "Expiry reminder failed"
+msgstr "Ablauf-Erinnerung fehlgeschlagen"
+
 msgid "No expiry reminder"
 msgstr "Keine Ablauf-Erinnerung"
 
