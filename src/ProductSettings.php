@@ -167,6 +167,21 @@ final class ProductSettings {
 				'options' => wc_get_coupon_types(),
 			)
 		);
+		woocommerce_wp_select(
+			array(
+				'id'          => '_vcap_tax_treatment',
+				'label'       => __( 'VAT treatment', 'voucher-captain' ),
+				'value'       => $this->v( $p, 'tax_treatment' ),
+				'options'     => array(
+					'auto'     => __( 'Automatic (value vouchers: multi-purpose, percentage: discount)', 'voucher-captain' ),
+					'payment'  => __( 'Multi-purpose voucher (means of payment, VAT on redemption)', 'voucher-captain' ),
+					'single'   => __( 'Single-purpose voucher (VAT already charged at sale)', 'voucher-captain' ),
+					'discount' => __( 'Promotion (price reduction)', 'voucher-captain' ),
+				),
+				'desc_tip'    => true,
+				'description' => __( 'How connected checkouts (e.g. WP Pass Captain) treat the voucher for VAT. Have the classification checked by your tax adviser.', 'voucher-captain' ),
+			)
+		);
 		echo '</div>';
 
 		echo '<div class="options_group"><h4 class="vcap-group-title">' . esc_html__( 'Redemption & validity', 'voucher-captain' ) . '</h4>';
@@ -477,7 +492,7 @@ final class ProductSettings {
 			return;
 		}
 		$post = wp_unslash( $_POST );
-		$text = array( 'type', 'template', 'amount_source', 'custom_presets', 'discount_type', 'usage', 'expiry_mode', 'email_restrict', 'code_batch', 'code_prefix', 'code_suffix', 'delivery', 'send_to', 'event_location' );
+		$text = array( 'type', 'template', 'amount_source', 'custom_presets', 'discount_type', 'tax_treatment', 'usage', 'expiry_mode', 'email_restrict', 'code_batch', 'code_prefix', 'code_suffix', 'delivery', 'send_to', 'event_location' );
 		foreach ( $text as $key ) {
 			$product->update_meta_data( '_vcap_' . $key, sanitize_text_field( (string) ( $post[ '_vcap_' . $key ] ?? '' ) ) );
 		}

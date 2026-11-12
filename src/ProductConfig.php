@@ -18,6 +18,7 @@ final class ProductConfig {
 		'custom_step'         => '1',
 		'custom_presets'      => '',
 		'discount_type'       => 'fixed_cart',
+		'tax_treatment'       => 'auto',
 		'usage'               => 'single',
 		'usage_limit'         => '',
 		'expiry_mode'         => 'default',
@@ -166,6 +167,32 @@ final class ProductConfig {
 			$country = (string) WC()->countries->get_base_country();
 		}
 		return $country;
+	}
+
+	/**
+	 * VAT treatment of a voucher when it pays for something (EU Directive 2016/1065):
+	 *  - "payment"  multi-purpose voucher (Mehrzweckgutschein): a means of payment, VAT is due on the full price
+	 *               when it is redeemed;
+	 *  - "single"   single-purpose voucher (Einzweckgutschein): VAT was already charged when it was sold;
+	 *  - "discount" promotion: a price reduction, VAT is reduced.
+	 * Product setting "tax_treatment" ("auto": percentage vouchers and promotion codes are discounts, value
+	 * vouchers and gift cards multi-purpose vouchers). Filter "vcap_voucher_tax_treatment".
+	 */
+	public static function tax_treatment( Voucher $voucher ): string {
+		$product = $voucher->product();
+		$setting = $product ? (string) self::get( $product )['tax_treatment'] : 'auto';
+		if ( in_array( $setting, array( 'payment', 'single', 'discount' ), true ) ) {
+			$treatment = $setting;
+		} else {
+			if ( 'percent' === $voucher->discount_type ) {
+				$treatment = 'discount';
+			} elseif ( $voucher->is_multi_use() || in_array( $voucher->type, array( 'giftcard', 'credit' ), true ) || $product ) {
+				$treatment = 'payment'; // Gift cards, store credit and value vouchers that were sold.
+			} else {
+				$treatment = 'discount'; // Codes without a sale behind them (promotions, campaigns).
+			}
+		}
+		return (string) apply_filters( 'vcap_voucher_tax_treatment', $treatment, $voucher );
 	}
 
 	/**

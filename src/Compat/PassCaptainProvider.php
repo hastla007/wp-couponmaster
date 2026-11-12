@@ -2,6 +2,7 @@
 namespace VCAP\Compat;
 
 use VCAP\API\V1\RedemptionService;
+use VCAP\ProductConfig;
 use VCAP\VoucherRepository;
 
 defined( 'ABSPATH' ) || exit;
@@ -70,6 +71,8 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 			'amount_minor' => $minor,
 			'amount'       => self::to_major( $minor, $decimals ),
 			'balance'      => null !== $check['balance'],
+			// VAT treatment for the ticket checkout: "payment" keeps the VAT, "single"/"discount" reduce it.
+			'treatment'    => $voucher ? ProductConfig::tax_treatment( $voucher ) : 'discount',
 			'target'       => $target,
 			'email'        => $email,
 		);
