@@ -307,7 +307,16 @@ final class Issuer {
 			return;
 		}
 		// Balances are kept in the shop base currency: compare in the base currency, report in the order currency.
-		$remaining = (float) $order->get_total() - (float) $order->get_total_refunded();
+		// WooCommerce has already saved this refund (wc_create_refund() recalculates its taxes before the hook),
+		// so only earlier refunds count as refunded.
+		$current_id = $refund instanceof \WC_Order_Refund ? (int) $refund->get_id() : 0;
+		$refunded   = 0.0;
+		foreach ( wc_get_orders( array( 'type' => 'shop_order_refund', 'parent' => $order->get_id(), 'limit' => -1 ) ) as $earlier ) {
+			if ( (int) $earlier->get_id() !== $current_id ) {
+				$refunded += abs( (float) $earlier->get_amount() );
+			}
+		}
+		$remaining = (float) $order->get_total() - $refunded;
 		$amount    = (float) ( $args['amount'] ?? 0 );
 		$to_base   = static function ( float $value ) use ( $order ): float {
 			return $order->get_currency() && $order->get_currency() !== get_option( 'woocommerce_currency' ) ? (float) apply_filters( 'vcap_amount_to_base_currency', $value, $order->get_currency(), $order ) : $value;
@@ -325,8 +334,8 @@ final class Issuer {
 				/* translators: 1: voucher codes, 2: spent value, 3: maximum refund */
 				__( 'Vouchers from this order were already used (%1$s, value used: %2$s). At most %3$s can be refunded; the unused vouchers are voided.', 'voucher-captain' ),
 				implode( ', ', $codes ),
-				wp_strip_all_tags( wc_price( $spent, array( 'currency' => $order->get_currency() ) ) ),
-				wp_strip_all_tags( wc_price( max( 0, $max ), array( 'currency' => $order->get_currency() ) ) )
+				html_entity_decode( wp_strip_all_tags( wc_price( $spent, array( 'currency' => $order->get_currency() ) ) ) ),
+				html_entity_decode( wp_strip_all_tags( wc_price( max( 0, $max ), array( 'currency' => $order->get_currency() ) ) ) )
 			)
 		);
 	}
