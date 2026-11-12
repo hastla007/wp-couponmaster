@@ -119,7 +119,8 @@ final class PassCaptainScanner {
 		}
 		// array_merge: the result's values (e.g. can_checkin) must override the defaults in $base.
 		return array_merge( $base, array(
-			'state'       => $valid && ! $other_day || $done ? 'ok' : ( 'checked_in' === $status || $other_day ? 'warning' : 'error' ),
+			// Refused tickets are always red; a valid ticket for another day is yellow (admit only knowingly).
+			'state'       => $done ? 'ok' : ( $valid ? ( $other_day ? 'warning' : 'ok' ) : ( 'checked_in' === $status ? 'warning' : 'error' ) ),
 			'status'      => $status,
 			'message'     => $message,
 			'event'       => (string) ( $res['event'] ?? '' ),
