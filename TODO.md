@@ -250,8 +250,8 @@ Fünf parallele Prüfungen (Sicherheit, Geld/Buchungen, Steuer/Recht/Datenschutz
 
 ### Sicherheit
 
-- [ ] Sicherheit (hoch): Guthaben-/Geschenkkarten-Coupons sind WooCommerce-seitig unbegrenzt nutzbar (`usage_limit 0`, CouponManager.php); ist VC deaktiviert, im Recovery-Mode oder deinstalliert, gewährt jeder Code bei jeder Bestellung den vollen Restbetrag (Guthaben-Codes ohne Eigentümerprüfung). Bei Deaktivierung sperren (Entwurf oder `usage_limit = usage_count`), bei Aktivierung wiederherstellen; Test „VC inaktiv, WooCommerce aktiv“.
-- [ ] Sicherheit: REST-`meta` bei `POST /redemptions` von internen Schlüsseln (`_*`, v. a. `_refunds`) bereinigen; vorbelegte oder negative `_refunds` stellen Gutscheine sonst vollständig wieder her bzw. heben die Erstattungsobergrenze auf. Refund-Buchhaltung in eigene Spalte; Regressionstest.
+- [x] Sicherheit (hoch): Guthaben-/Geschenkkarten-Coupons sind WooCommerce-seitig unbegrenzt nutzbar (`usage_limit 0`, CouponManager.php); ist VC deaktiviert, im Recovery-Mode oder deinstalliert, gewährt jeder Code bei jeder Bestellung den vollen Restbetrag (Guthaben-Codes ohne Eigentümerprüfung). Bei Deaktivierung sperren (Entwurf oder `usage_limit = usage_count`), bei Aktivierung wiederherstellen; Test „VC inaktiv, WooCommerce aktiv“. — *erledigt (21b6823): Entwurf bei Deaktivierung, Wiederherstellung bei Aktivierung, Coupon-Cache geleert, Akzeptanztest; Recovery-Mode bleibt Restrisiko (SECURITY.md).*
+- [x] Sicherheit: REST-`meta` bei `POST /redemptions` von internen Schlüsseln (`_*`, v. a. `_refunds`) bereinigen; vorbelegte oder negative `_refunds` stellen Gutscheine sonst vollständig wieder her bzw. heben die Erstattungsobergrenze auf. Refund-Buchhaltung in eigene Spalte; Regressionstest. — *erledigt (da6ccb7): Schlüssel mit „_“ werden verworfen; Test in tests/run.php.*
 - [ ] Scanner-`/redeem` (Tickets.php) an `RedemptionService::eligibility()` angleichen: Guthaben, Ticketgutscheine und Kanalbeschränkungen ablehnen; eigener Kanal „Kasse/Scanner“.
 - [ ] Globale Rate-Limit-Zähler gegen Aussperrung aller Besucher härten (Backoff/Captcha statt harter Sperre); Gast-Fehlversuchszähler nicht über fälschbare Proxy-Header (`X-Forwarded-For`) schlüsseln.
 
@@ -276,7 +276,7 @@ Fünf parallele Prüfungen (Sicherheit, Geld/Buchungen, Steuer/Recht/Datenschutz
 - [ ] `vcap_balance_deduct_statuses` zur Laufzeit im Callback auswerten statt bei `plugins_loaded` (Filter auf „nur completed“ wird sonst ignoriert).
 - [ ] `order_coupon_object()` bei Bestellungen in Fremdwährung von Basis- in Bestellwährung umrechnen oder überspringen.
 - [ ] `exchange_state()` pro Request zwischenspeichern (Kundenkonto: bis zu 50+ Abfragen je Gutschein).
-- [ ] Bei Deaktivierung `vcap_release_stale_order_reservations` aus dem Action Scheduler entfernen.
+- [x] Bei Deaktivierung `vcap_release_stale_order_reservations` aus dem Action Scheduler entfernen. — *erledigt (21b6823).*
 - [ ] „Tickets erneut senden“ rotiert die Codes, die der Beschenkte schon hat: nur mit Bestätigung bzw. für den Ticketempfänger anbieten.
 - [ ] Multisite-Netzwerkaktivierung: Rewrite-Flush und Standardvorlage je Site; Deinstallation löscht auch `vcap_discount`-Aktionen samt `_vcap_used_by`.
 - [ ] Fähigkeit `wpcap_woocommerce_hold_fulfilment` versioniert anbieten und in VC prüfen (Hinweis, wenn PC zu alt – mit PC main werden Tickets trotz Fehlbetrag ausgestellt); E2E-Test Fehlbetrag mit beiden Plugins; CI-Matrix auf existierende PC-Refs inkl. Arbeits-/Release-Branch umstellen (der Ref `claude/woocommerce-ticket-plugin-8q4m8q` existiert nicht mehr).
