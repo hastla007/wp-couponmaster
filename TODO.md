@@ -72,7 +72,7 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 
 - [x] Automatisierte Integrationsprüfungen für VCAP allein und gemeinsam mit TCAP einrichten; WooCommerce-Statuswiederholungen, parallele Einlösungen, Timeout, Teil-/Vollerstat­tung und 0-Euro-Checkout abdecken. *(VCAP allein inkl. Statuswiederholungen, Teil-/Vollerstattung und Abbruch; gemeinsam mit Pass Captain im CI-Job `pass-captain`; 0-Euro-Checkout in tests/zero-total-integration.php)*
 - [x] Release-Testbasis für HPOS, klassische Kasse, Checkout-Blöcke und Mindestversionen dokumentieren und automatisiert abdecken. — *Nachweis: COMPATIBILITY.md und CI-Matrix.*
-- [ ] Reale Zahlungsanbieter sowie die konkret unterstützten Mehrwährungs- und Subscription-Plugins durch E2E-/Kompatibilitätstests freigeben.*
+- [ ] Reale Zahlungsanbieter sowie die konkret unterstützten Mehrwährungs- und Subscription-Plugins durch E2E-/Kompatibilitätstests freigeben.
 - [x] Build-ZIP in sauberer WordPress-Installation installieren, aktivieren, aktualisieren und deinstallieren. — *Nachweis: CI-Schritt „Build, install, and update the release ZIP“ plus Deinstallationsprüfung.*
 - [ ] Gemeinsame Installation von Voucher Captain und Ticket Captain auf Klassen-/Vendor-Konflikte und gemeinsame Abläufe final freigeben.
 - [x] Datenschutzexport/-löschung, Berechtigungen, Nonces, Rate-Limits und E-Mail-Funktionen implementieren und automatisiert prüfen. — *Nachweis: tests/security-integration.php, tests/account-integration.php und tests/reminder-integration.php.*
