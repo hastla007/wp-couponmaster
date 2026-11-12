@@ -29,6 +29,8 @@ final class PassCaptainTickets {
 	public const META_NAME      = '_vcap_passcaptain_ticket_name';
 	/** Session key of a code waiting for its date choice on the redeem page. */
 	public const SESSION_CODE   = 'vcap_ticket_choice_code';
+	/** Session key of the date already chosen for that code (while the attendee details are asked). */
+	public const SESSION_CHOICE = 'vcap_ticket_choice_type';
 	public const SNAPSHOT_KEY   = 'passcaptain_ticket';
 
 	public function __construct( private RedemptionService $redemptions, private VoucherRepository $vouchers ) {}
@@ -103,7 +105,18 @@ final class PassCaptainTickets {
 		if ( ! $target || ! $target['event_id'] || ! $service || ! method_exists( $service, 'options' ) ) {
 			return array();
 		}
-		return array_values( (array) $service->options( array( 'event_id' => $target['event_id'], 'ticket_name' => $target['ticket_name'] ) ) );
+		// Only dates with enough free places for all tickets of the voucher.
+		return array_values( (array) $service->options( array( 'event_id' => $target['event_id'], 'ticket_name' => $target['ticket_name'], 'quantity' => $target['quantity'] ) ) );
+	}
+
+	/**
+	 * Attendee fields Pass Captain asks for per ticket of a ticket type (empty when none or unknown).
+	 *
+	 * @return array<int, array{key:string,label:string,type:string,required:bool}>
+	 */
+	public static function fields( int $ticket_type_id ): array {
+		$service = self::service();
+		return $service && $ticket_type_id && method_exists( $service, 'fields' ) ? array_values( (array) $service->fields( $ticket_type_id ) ) : array();
 	}
 
 	/**
@@ -155,6 +168,20 @@ final class PassCaptainTickets {
 				$this->redemptions->release( $key );
 			}
 		}
+		$attendees = array();
+		foreach ( is_array( $args['attendees'] ?? null ) ? array_values( $args['attendees'] ) : array() as $entry ) {
+			if ( is_array( $entry ) ) {
+				$attendees[] = array( 'ticket_type_id' => $ticket_type ) + $entry;
+			}
+		}
+		$fields = self::fields( $ticket_type );
+		if ( ! $attendees && array_filter( array_column( $fields, 'required' ) ) ) {
+			return new \WP_Error(
+				'vcap_ticket_attendees_required',
+				__( 'Please fill in the details for each ticket.', 'voucher-captain' ),
+				array( 'status' => 400, 'fields' => $fields, 'quantity' => $target['quantity'], 'ticket_type_id' => $ticket_type )
+			);
+		}
 
 		$user    = wp_get_current_user();
 		$user_id = (int) ( $args['user_id'] ?? get_current_user_id() );
@@ -204,7 +231,7 @@ final class PassCaptainTickets {
 			array(
 				'email'     => $email,
 				'name'      => sanitize_text_field( (string) ( $args['name'] ?? ( $voucher->recipient_name ?: $voucher->buyer_name ) ) ),
-				'attendees' => is_array( $args['attendees'] ?? null ) ? $args['attendees'] : array(),
+				'attendees' => $attendees,
 			)
 		);
 		if ( is_wp_error( $issued ) ) {
@@ -271,20 +298,40 @@ final class PassCaptainTickets {
 		if ( ! $voucher || ! self::target( $voucher ) || $voucher->is_multi_use() ) {
 			return $handled;
 		}
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in Shortcodes::handle_redeem().
-		$choice = isset( $_POST['vcap_ticket_choice'] ) ? absint( wp_unslash( $_POST['vcap_ticket_choice'] ) ) : 0;
-		$result = $this->exchange( (string) $code, $choice ? array( 'ticket_type_id' => $choice ) : array() );
-		if ( is_wp_error( $result ) && 'vcap_ticket_choice_required' === $result->get_error_code() ) {
-			// Show the date choice: the form is rendered again with the code and a select (redeem_fields()).
-			WC()->session && WC()->session->set( self::SESSION_CODE, (string) $code );
-			wc_add_notice( $result->get_error_message(), $choice ? 'error' : 'notice' );
+		$session = function_exists( 'WC' ) ? WC()->session : null;
+		$pending = $session && (string) $session->get( self::SESSION_CODE ) === (string) $code;
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified in Shortcodes::handle_redeem().
+		$choice    = isset( $_POST['vcap_ticket_choice'] ) ? absint( wp_unslash( $_POST['vcap_ticket_choice'] ) ) : ( $pending ? absint( $session->get( self::SESSION_CHOICE ) ) : 0 );
+		$posted    = isset( $_POST['vcap_attendees'] ) && is_array( $_POST['vcap_attendees'] ) ? wp_unslash( $_POST['vcap_attendees'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised below.
+		// phpcs:enable
+		$attendees = array();
+		foreach ( $posted as $answers ) {
+			$clean = array();
+			foreach ( is_array( $answers ) ? $answers : array() as $field => $value ) {
+				$clean[ sanitize_key( (string) $field ) ] = is_scalar( $value ) ? sanitize_textarea_field( (string) $value ) : '';
+			}
+			$attendees[] = array( 'answers' => $clean );
+		}
+		$args = array_filter( array( 'ticket_type_id' => $choice, 'attendees' => $attendees ) );
+		$result = $this->exchange( (string) $code, $args );
+		$step   = is_wp_error( $result ) ? $result->get_error_code() : '';
+		if ( in_array( $step, array( 'vcap_ticket_choice_required', 'vcap_ticket_attendees_required' ), true ) || ( $attendees && 0 === strpos( $step, 'wpcap_attendee' ) ) ) {
+			// Ask for the missing input: the form comes back with the code, the date and/or the attendee fields.
+			if ( $session ) {
+				$session->set( self::SESSION_CODE, (string) $code );
+				$session->set( self::SESSION_CHOICE, 'vcap_ticket_choice_required' === $step ? 0 : $choice );
+			}
+			wc_add_notice( $result->get_error_message(), ( $choice || $attendees ) && 'vcap_ticket_attendees_required' !== $step ? 'error' : 'notice' );
 			return 'choose';
 		}
 		if ( is_wp_error( $result ) ) {
 			wc_add_notice( $result->get_error_message(), 'error' );
 			return 'rejected';
 		}
-		WC()->session && WC()->session->set( self::SESSION_CODE, null );
+		if ( $session ) {
+			$session->set( self::SESSION_CODE, null );
+			$session->set( self::SESSION_CHOICE, null );
+		}
 		/* translators: 1: number of tickets, 2: email */
 		wc_add_notice( sprintf( __( 'Your tickets (%1$d) were sent to %2$s.', 'voucher-captain' ), $result['tickets'], $result['email'] ) );
 		return 'exchanged';
@@ -296,11 +343,21 @@ final class PassCaptainTickets {
 		return '' !== $code ? $code : $value;
 	}
 
-	/** Date select of a "customer chooses the date" voucher in the redeem form. */
+	/** Date select of a "customer chooses the date" voucher and the attendee fields in the redeem form. */
 	public function redeem_fields(): void {
 		$code    = $this->redeem_prefill( '' );
 		$voucher = '' !== $code ? $this->vouchers->get_by_code( $code ) : null;
-		$options = $voucher ? self::options( $voucher ) : array();
+		$target  = $voucher ? self::target( $voucher ) : null;
+		if ( ! $target ) {
+			return;
+		}
+		$choice = function_exists( 'WC' ) && WC()->session ? absint( WC()->session->get( self::SESSION_CHOICE ) ) : 0;
+		$type   = $target['event_id'] ? $choice : $target['ticket_type_id'];
+		if ( $type ) {
+			$this->attendee_fields( $type, $target['quantity'], (bool) $target['event_id'] );
+			return;
+		}
+		$options = self::options( $voucher );
 		if ( ! $options ) {
 			return;
 		}
@@ -311,6 +368,37 @@ final class PassCaptainTickets {
 			echo '<option value="' . esc_attr( (string) $o['ticket_type_id'] ) . '">' . esc_html( (string) $o['date_label'] ) . '</option>';
 		}
 		echo '</select>';
+	}
+
+	/** One set of attendee inputs per ticket (names as posted to redeem_page()). */
+	private function attendee_fields( int $type, int $quantity, bool $chosen ): void {
+		$fields = self::fields( $type );
+		if ( ! $fields ) {
+			return;
+		}
+		if ( $chosen ) {
+			echo '<input type="hidden" name="vcap_ticket_choice" value="' . esc_attr( (string) $type ) . '" />';
+		}
+		for ( $i = 0; $i < $quantity; $i++ ) {
+			/* translators: %d: ticket number */
+			echo '<fieldset class="vcap-ticket-attendee"><legend>' . esc_html( sprintf( __( 'Ticket %d', 'voucher-captain' ), $i + 1 ) ) . '</legend>';
+			foreach ( $fields as $f ) {
+				$id   = 'vcap-attendee-' . $i . '-' . sanitize_key( $f['key'] );
+				$name = 'vcap_attendees[' . $i . '][' . sanitize_key( $f['key'] ) . ']';
+				$req  = ! empty( $f['required'] ) ? ' required' : '';
+				if ( 'checkbox' === $f['type'] ) {
+					echo '<label for="' . esc_attr( $id ) . '"><input type="checkbox" id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" value="1"' . esc_attr( $req ) . ' /> ' . esc_html( $f['label'] ) . '</label>';
+					continue;
+				}
+				echo '<label for="' . esc_attr( $id ) . '">' . esc_html( $f['label'] ) . '</label>';
+				if ( 'textarea' === $f['type'] ) {
+					echo '<textarea id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" rows="3"' . esc_attr( $req ) . '></textarea>';
+				} else {
+					echo '<input type="' . ( 'email' === $f['type'] ? 'email' : 'text' ) . '" id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" maxlength="190"' . esc_attr( $req ) . ' />';
+				}
+			}
+			echo '</fieldset>';
+		}
 	}
 
 	/* ---- Product settings -------------------------------------------------------------------------- */

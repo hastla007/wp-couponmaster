@@ -235,6 +235,25 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 		$picked = vcap()->passcaptain_tickets->exchange( $ev_voucher->code, array( 'ticket_type_id' => $second ) );
 		$picked_type = is_array( $picked ) ? (int) $wpdb->get_var( $wpdb->prepare( "SELECT t.ticket_type_id FROM {$wpdb->prefix}wpcap_tickets t JOIN {$wpdb->prefix}wpcap_orders o ON o.order_id=t.order_id WHERE o.public_id=%s", $picked['order_public_id'] ) ) : 0;
 		vcap_pc_assert( is_array( $picked ) && 1 === $picked['tickets'] && $second === $picked_type && VCAP\Voucher::STATUS_REDEEMED === vcap()->vouchers->get( $ev_voucher->id )->status, 'the ticket is issued for the chosen date' );
+		// Sold-out dates are not offered; required attendee fields are asked before the tickets are issued.
+		$wpdb->update( "{$wpdb->prefix}wpcap_ticket_types", array( 'capacity' => 1 ), array( 'ticket_type_id' => $first ) );
+		vcap_pc_order( $first, 1 ); // The last place of the first date is held by another buyer.
+		$wpdb->insert( "{$wpdb->prefix}wpcap_participant_fields", array( 'ticket_type_id' => $second, 'field_key' => 'name', 'label' => 'Name', 'field_type' => 'text', 'required' => 1, 'status' => 'active' ) );
+		$ev_order2 = wc_create_order();
+		$ev_order2->add_product( $ev_product, 1 );
+		$ev_order2->set_billing_email( 'any-date2@example.com' );
+		$ev_order2->calculate_totals();
+		$ev_order2->set_status( 'processing' );
+		$ev_order2->save();
+		vcap()->issuer->issue_for_order( $ev_order2, true );
+		$ev_voucher2 = vcap()->vouchers->for_order( $ev_order2->get_id() )[0];
+		vcap_pc_assert( array( $second ) === array_map( 'intval', array_column( VCAP\Compat\PassCaptainTickets::options( $ev_voucher2 ), 'ticket_type_id' ) ), 'a sold-out date is no longer offered' );
+		wp_set_current_user( 0 );
+		$need = vcap()->passcaptain_tickets->exchange( $ev_voucher2->code, array( 'ticket_type_id' => $second ) );
+		vcap_pc_assert( is_wp_error( $need ) && 'vcap_ticket_attendees_required' === $need->get_error_code() && 'name' === $need->get_error_data()['fields'][0]['key'] && VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $ev_voucher2->id )->status, 'required attendee details are asked before anything is redeemed' );
+		$with = vcap()->passcaptain_tickets->exchange( $ev_voucher2->code, array( 'ticket_type_id' => $second, 'attendees' => array( array( 'answers' => array( 'name' => 'Erika Muster' ) ) ) ) );
+		$answer = is_array( $with ) ? $wpdb->get_var( $wpdb->prepare( "SELECT a.answer FROM {$wpdb->prefix}wpcap_participant_answers a JOIN {$wpdb->prefix}wpcap_tickets t ON t.ticket_id=a.ticket_id JOIN {$wpdb->prefix}wpcap_orders o ON o.order_id=t.order_id WHERE o.public_id=%s", $with['order_public_id'] ) ) : '';
+		vcap_pc_assert( is_array( $with ) && 'Erika Muster' === $answer, 'the attendee details are stored with the issued ticket' );
 		wp_set_current_user( 1 );
 	}
 }

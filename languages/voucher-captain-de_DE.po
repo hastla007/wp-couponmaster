@@ -3404,3 +3404,9 @@ msgstr "Ticketname (Terminwahl)"
 
 msgid "— Choose a date —"
 msgstr "— Termin wählen —"
+
+msgid "Please fill in the details for each ticket."
+msgstr "Bitte fülle die Angaben für jedes Ticket aus."
+
+msgid "Ticket %d"
+msgstr "Ticket %d"
