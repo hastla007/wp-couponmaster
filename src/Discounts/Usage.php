@@ -239,23 +239,33 @@ final class Usage {
 		}
 	}
 
-	/** Give back the uses held by unpaid orders that were abandoned (same age as voucher reservations). */
-	public function release_abandoned(): void {
+	/**
+	 * Give back the uses held by unpaid orders that were abandoned (same age as voucher reservations).
+	 *
+	 * @param int|null $now Reference time (tests); default: now.
+	 */
+	public function release_abandoned( $now = null ): void {
 		$hold    = (int) get_option( 'woocommerce_hold_stock_minutes', 0 );
 		$minutes = (int) apply_filters( 'vcap_stale_reservation_minutes', $hold > 0 ? $hold : 60 );
 		if ( $minutes <= 0 ) {
 			return;
 		}
+		$cutoff = ( is_numeric( $now ) ? (int) $now : time() ) - $minutes * MINUTE_IN_SECONDS;
 		$orders = wc_get_orders(
 			array(
-				'status'        => 'pending',
-				'limit'         => 100,
-				'date_modified' => '<' . ( time() - $minutes * MINUTE_IN_SECONDS ),
-				'meta_query'    => array( array( 'key' => self::ORDER_META, 'compare' => 'EXISTS' ) ), // phpcs:ignore WordPress.DB.SlowDBQuery
+				'status'     => 'pending',
+				'limit'      => 200,
+				'orderby'    => 'date',
+				'order'      => 'ASC',
+				'meta_query' => array( array( 'key' => self::ORDER_META, 'compare' => 'EXISTS' ) ), // phpcs:ignore WordPress.DB.SlowDBQuery
 			)
 		);
 		foreach ( $orders as $order ) {
-			if ( $order instanceof \WC_Order ) {
+			if ( ! $order instanceof \WC_Order || ! $order->get_meta( self::ORDER_META ) ) {
+				continue;
+			}
+			$changed = $order->get_date_modified() ? $order->get_date_modified() : $order->get_date_created();
+			if ( $changed && $changed->getTimestamp() <= $cutoff ) {
 				$this->revert( $order->get_id() );
 			}
 		}

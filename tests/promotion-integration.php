@@ -167,13 +167,9 @@ $first->update_status( 'cancelled' );
 vcap_promo_assert( 0 === VCAP\Discounts\Usage::count( $held ), 'cancelling gives the held use back' );
 $usage->hold( wc_get_order( $second->get_id() ) );
 vcap_promo_assert( 1 === VCAP\Discounts\Usage::count( $held ), 'the other order can hold it afterwards' );
-$one_minute = static fn() => 1;
-add_filter( 'vcap_stale_reservation_minutes', $one_minute );
-$stale = wc_get_order( $second->get_id() );
-$stale->set_date_modified( time() - HOUR_IN_SECONDS );
-$stale->save();
 $usage->release_abandoned();
-remove_filter( 'vcap_stale_reservation_minutes', $one_minute );
+vcap_promo_assert( 1 === VCAP\Discounts\Usage::count( $held ), 'a recent unpaid order keeps its held use' );
+$usage->release_abandoned( time() + 2 * HOUR_IN_SECONDS ); // Two hours later the order is abandoned.
 vcap_promo_assert( 0 === VCAP\Discounts\Usage::count( $held ), 'an abandoned unpaid order gives its held use back' );
 wp_update_post( array( 'ID' => $held, 'post_status' => 'draft' ) );
 
