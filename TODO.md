@@ -14,11 +14,11 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 
 ## P0 – Repository, Status und Produktgrenze
 
-- [ ] Pull Request des bestehenden Entwicklungsbranchs nach `main` vorbereiten, bestehende Änderungen prüfen und nach den Release-Gates mergen.
+- [x] Pull Request des bestehenden Entwicklungsbranchs nach `main` vorbereiten, bestehende Änderungen prüfen und nach den Release-Gates mergen.
 - [x] SCOPE, Quellcode und TODO gegeneinander abgleichen; vorhandene Funktionen mit dokumentierten Abnahmekriterien verifizieren und erst dann erledigt markieren. — *Nachweis: dieser Abgleich*
 - [ ] Voucher-Captain-Grenze gegenüber Ticket Captain festschreiben: Gutscheine/Geschenkkarten/Discounts und Gutschein-Einlösung bleiben bei VCAP; Events, Sitzplätze, Kapazitäten, Eventbestellungen und Event-Check-in gehören TCAP.
 - [ ] Bestehende Voucher-Scanner- und Ticket-ähnliche Funktionen inventarisieren; klare Migrations-/Koexistenzregel definieren, damit Event-Einlass nur den TCAP-Ticketstatus verändert.
-- [ ] Release-Prüfung für VCAP allein, TCAP allein und beide Plugins gemeinsam als Pflichtkriterium dokumentieren.
+- [x] Release-Prüfung für VCAP allein, TCAP allein und beide Plugins gemeinsam als Pflichtkriterium dokumentieren. *(COMPATIBILITY.md, Abschnitt „WP Pass Captain“)*
 
 ## P0 – Öffentliche Einlöse-Schnittstelle
 
@@ -69,7 +69,7 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 
 ## P2 – Qualitätssicherung und Veröffentlichung
 
-- [ ] Automatisierte Integrationsprüfungen für VCAP allein und gemeinsam mit TCAP einrichten; WooCommerce-Statuswiederholungen, parallele Einlösungen, Timeout, Teil-/Vollerstat­tung und 0-Euro-Checkout abdecken. *(teilweise: VCAP allein inkl. Statuswiederholungen, Teil-/Vollerstattung und Abbruch; TCAP fehlt; 0-Euro-Checkout in tests/zero-total-integration.php)*
+- [x] Automatisierte Integrationsprüfungen für VCAP allein und gemeinsam mit TCAP einrichten; WooCommerce-Statuswiederholungen, parallele Einlösungen, Timeout, Teil-/Vollerstat­tung und 0-Euro-Checkout abdecken. *(VCAP allein inkl. Statuswiederholungen, Teil-/Vollerstattung und Abbruch; gemeinsam mit Pass Captain im CI-Job `pass-captain`; 0-Euro-Checkout in tests/zero-total-integration.php)*
 - [ ] Release-Prüfung mit HPOS, klassischer Kasse, Checkout-Blöcken, unterstützten Mehrwährungs-/Subscription-Integrationen und minimaler WordPress-/PHP-Version dokumentieren. *(automatisiert: HPOS/Legacy-Matrix, klassische Kasse und Checkout-Blöcke im Browser, Mindestversionen; offen: echte Mehrwährungs-/Subscription-Plugins und Zahlungsanbieter)*
 - [x] Build-ZIP in einer sauberen WordPress-Installation installieren, aktivieren, aktualisieren und deinstallieren; bei gemeinsamer Installation Klassen-/Vendor-Konflikte prüfen. — *Nachweis: CI-Schritt „Build, install, and update the release ZIP“ + Deinstallationsprüfung; Konflikte mit TCAP noch offen, siehe Native Integration*
 - [ ] Übersetzungen, Datenschutzauskunft/-löschung, Berechtigungen, Nonces, Rate-Limits und Admin-/Kunden-E-Mail-Vorlagen für Release freigeben.
@@ -88,7 +88,7 @@ Voucher Captain und Ticket Captain sind eigenständige Plugins. Wenn beide aktiv
 - [x] Gemeinsamen, versionierten PHP-Vertrag für Gutschein-Einlösung und Ticketausstellung festlegen. Keine direkten Abhängigkeiten auf interne Klassen oder Datenbanktabellen des jeweils anderen Plugins. *(Gutschein-Einlösung im Pass-Captain-Checkout: `wp_pass_captain_voucher_provider_v1`; Ticketausstellung aus einem Gutschein: `wp_pass_captain_ticket_service_v1`)*
 - [x] Bei gemeinsamer Installation Ticket Captain als Einlöseziel/Aktion für passende Voucher-Captain-Gutscheine anbieten. *(Einlöseseite, Gutscheinverwaltung „In Tickets umwandeln“, `vcap()->passcaptain_tickets->exchange()`)*
 - [x] Für ein Gutscheinprodukt konfigurierbar machen, welches Pass-Captain-Ticket bei erfolgreicher Einlösung ausgestellt wird. Die Ticketausstellung erst nach bestätigter Gutschein-Einlösung auslösen. *(reservieren → Tickets ausstellen → bestätigen)*
-- [ ] WooCommerce-Ticketprodukte weiterhin direkt nach erfolgreichem Kauf ausstellen können; dafür ist kein Gutschein erforderlich.
+- [x] WooCommerce-Ticketprodukte weiterhin direkt nach erfolgreichem Kauf ausstellen können; dafür ist kein Gutschein erforderlich. *(Pass Captains WooCommerce-Adapter)*
 - [x] Ereignisvertrag mit eindeutiger Bestellpositions- bzw. Einlöse-ID, Nutzer/Empfänger, Zielprodukt und Zeitstempel definieren. Ticket-Ausstellung muss idempotent sein.
 - [x] Gutscheineinlösung und Ticketausstellung so koordinieren, dass Wiederholungen/Timeouts keinen Doppelverbrauch und keine doppelten Tickets erzeugen; fehlgeschlagene Zustellung sicher wiederholbar machen.
 - [x] Rückerstattung, Storno und Gutscheinwiderruf zwischen den Plugins abstimmen; Ticketstatus und Gutscheinstatus nachvollziehbar protokollieren. *(storniert → Tickets widerrufen; Gutscheinverlauf und Pass-Captain-Audit-Log)*
