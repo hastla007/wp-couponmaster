@@ -33,6 +33,7 @@ $state  = $data['state'] ?? 'error';
 		.body{padding:20px}
 		dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0}
 		dt{color:#6b7280}
+		.screen-reader-text{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 		dd{margin:0;font-weight:600}
 		.notice{background:#e8f4ea;color:#1e7e34;padding:10px 14px;border-radius:6px;margin-bottom:14px;font-weight:600}
 		form{margin-top:18px;display:flex;gap:8px}

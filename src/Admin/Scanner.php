@@ -62,12 +62,13 @@ final class Scanner {
 					<button type="button" class="button button-primary button-hero" id="vcap-camera-toggle"><?php esc_html_e( 'Start camera', 'voucher-captain' ); ?></button>
 				</div>
 				<form id="vcap-manual" class="vcap-scanner-form">
-					<label for="vcap-code" class="screen-reader-text"><?php esc_html_e( 'Code', 'voucher-captain' ); ?></label>
+					<label for="vcap-code" class="vcap-code-label"><?php esc_html_e( 'Code', 'voucher-captain' ); ?></label>
 					<input type="text" id="vcap-code" autocomplete="off" autofocus placeholder="<?php esc_attr_e( 'Scan or enter code…', 'voucher-captain' ); ?>" />
 					<button type="submit" class="button button-primary"><?php esc_html_e( 'Look up', 'voucher-captain' ); ?></button>
 				</form>
 				<label class="vcap-auto"><input type="checkbox" id="vcap-auto-checkin" /> <?php esc_html_e( 'Check in tickets automatically after scan', 'voucher-captain' ); ?></label>
-				<div id="vcap-result" class="vcap-result" aria-live="assertive"></div>
+				<div id="vcap-result" class="vcap-result"></div>
+				<p id="vcap-live" class="screen-reader-text" role="status" aria-live="assertive" aria-atomic="true"></p>
 			</div>
 		</div>
 		<?php

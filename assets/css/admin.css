@@ -46,4 +46,10 @@ mark.vcap-status--expired, mark.vcap-status--void { background: #eba3a3; color: 
 .vcap-result dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0 0 12px; }
 .vcap-result dt { color: #646970; }
 .vcap-result dd { margin: 0; font-weight: 600; }
-.vcap-result .vcap-r-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.vcap-result .vcap-r-actions { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+.vcap-result .vcap-r-actions .button, .vcap-result .vcap-r-actions input { min-height: 48px; }
+.vcap-result .vcap-r-head::before { display: inline-block; min-width: 1.4em; font-size: 1.3em; }
+.vcap-result .vcap-r-ok::before { content: "\2713"; }
+.vcap-result .vcap-r-warning::before { content: "!"; }
+.vcap-result .vcap-r-error::before { content: "\2715"; }
+.vcap-code-label { align-self: center; font-weight: 600; }

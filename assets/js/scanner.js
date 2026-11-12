@@ -9,6 +9,31 @@
 	var form = document.getElementById( 'vcap-manual' );
 	var input = document.getElementById( 'vcap-code' );
 	var result = document.getElementById( 'vcap-result' );
+	var live = document.getElementById( 'vcap-live' );
+	var audio = null;
+
+	/** One AudioContext, created in a user gesture (iOS keeps contexts created later silent). */
+	function unlockAudio() {
+		if ( audio || ! ( window.AudioContext || window.webkitAudioContext ) ) {
+			return;
+		}
+		try {
+			audio = new ( window.AudioContext || window.webkitAudioContext )();
+		} catch ( e ) {
+			audio = null;
+		}
+	}
+	document.addEventListener( 'pointerdown', unlockAudio, { once: true } );
+	document.addEventListener( 'keydown', unlockAudio, { once: true } );
+
+	/** Short announcement for screen readers (the result block holds buttons and is not a live region). */
+	function announce() {
+		var head = result.querySelector( '.vcap-r-head' );
+		if ( live && head ) {
+			live.textContent = '';
+			live.textContent = head.textContent;
+		}
+	}
 	var auto = document.getElementById( 'vcap-auto-checkin' );
 	var acting = false;
 	if ( ! video || ! form ) {
@@ -58,16 +83,21 @@
 	}
 
 	function beep( ok ) {
+		announce();
 		try {
-			var ctx = new ( window.AudioContext || window.webkitAudioContext )();
-			var osc = ctx.createOscillator();
-			osc.frequency.value = ok ? 880 : 220;
-			osc.connect( ctx.destination );
-			osc.start();
-			osc.stop( ctx.currentTime + 0.15 );
+			if ( audio ) {
+				if ( 'suspended' === audio.state ) {
+					audio.resume();
+				}
+				var osc = audio.createOscillator();
+				osc.frequency.value = ok ? 880 : 220;
+				osc.connect( audio.destination );
+				osc.start();
+				osc.stop( audio.currentTime + ( ok ? 0.15 : 0.4 ) );
+			}
 		} catch ( e ) {}
 		if ( navigator.vibrate ) {
-			navigator.vibrate( ok ? 80 : [ 60, 60, 60 ] );
+			navigator.vibrate( ok ? 80 : [ 200, 100, 200 ] );
 		}
 	}
 
