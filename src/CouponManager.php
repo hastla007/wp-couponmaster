@@ -933,6 +933,8 @@ final class CouponManager {
 	 * Deduct stored balances when an order using balance vouchers is paid; restore on cancellation.
 	 */
 	public const SHORTFALL_META = '_vcap_shortfall';
+	/** Code => amount that could not be charged although the code was booked (partial shortfall). */
+	public const SHORTFALL_AMOUNTS_META = '_vcap_shortfall_amounts';
 
 	/** @var array<int, bool> Orders settled by settle_before_fulfilment() in this request. */
 	private array $settled = array();
@@ -985,6 +987,7 @@ final class CouponManager {
 			$order->delete_meta_data( '_vcap_reservations' );
 		}
 		$order->delete_meta_data( self::SHORTFALL_META );
+		$order->delete_meta_data( self::SHORTFALL_AMOUNTS_META );
 		$order->save();
 		$order->add_order_note( __( 'Voucher shortfall accepted by an administrator; the order can be fulfilled.', 'voucher-captain' ), false, true );
 	}
@@ -1016,6 +1019,9 @@ final class CouponManager {
 	public function deduct_order( \WC_Order $order, bool $hold = true ): void {
 		$applied      = self::order_map( $order, '_vcap_redemptions' );
 		$reservations = self::order_map( $order, '_vcap_reservations' );
+		// Codes charged with less than their discount (code => missing amount): such a gap stays open until an
+		// administrator accepts it, even though the code is already booked.
+		$missing      = self::order_map( $order, self::SHORTFALL_AMOUNTS_META );
 		$changed      = false;
 		$shortfall    = false;
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
@@ -1051,7 +1057,8 @@ final class CouponManager {
 			$amount           = $deduction['amount'];
 			$voucher->balance = $deduction['balance'];
 			if ( $amount + 0.0001 < $requested ) {
-				$shortfall = true;
+				$shortfall        = true;
+				$missing[ $code ] = round( $requested - $amount, wc_get_price_decimals() );
 				$order->add_order_note( __( 'A stored-value voucher balance changed during checkout. Review this order and adjust the charge before fulfilment.', 'voucher-captain' ) );
 			}
 			$applied[ $code ] = $amount;
@@ -1066,7 +1073,10 @@ final class CouponManager {
 				)
 			);
 		}
-		if ( $shortfall ) {
+		if ( $missing ) {
+			$order->update_meta_data( self::SHORTFALL_AMOUNTS_META, $missing );
+		}
+		if ( $shortfall || $missing ) {
 			$order->update_meta_data( self::SHORTFALL_META, 'yes' );
 		} elseif ( self::has_shortfall( $order ) && ! $this->open_balance_coupons( $order, $applied ) ) {
 			$order->delete_meta_data( self::SHORTFALL_META ); // Resolved (balance restored and charged on a later run).

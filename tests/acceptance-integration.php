@@ -150,6 +150,21 @@ wp_set_current_user( 0 );
 $short_order = wc_get_order( $short_order->get_id() );
 vcap_acc_assert( 'processing' === $short_order->get_status() && ! VCAP\CouponManager::has_shortfall( $short_order ) && 1 === count( vcap()->vouchers->for_order( $short_order->get_id() ) ), 'after the shortfall is accepted the order is fulfilled (voucher issued)' );
 
+// Partial shortfall: only 10 of the 30 can be charged. A second payment confirmation (e.g. a late webhook
+// from on-hold) must not clear the hold by itself.
+$part_card  = vcap_acc_card( 30 );
+$part_order = wc_create_order();
+$part_order->add_product( $gc_product, 1 );
+$part_order->set_billing_email( 'acceptance-partial@example.com' );
+$part_order->calculate_totals();
+$part_order->apply_coupon( $part_card->code );
+$part_left          = vcap()->vouchers->get( $part_card->id );
+$part_left->balance = 10.0;
+vcap()->vouchers->update( $part_left );
+wc_get_order( $part_order->get_id() )->payment_complete( 'txn-part-1' );
+wc_get_order( $part_order->get_id() )->payment_complete( 'txn-part-2' );
+$part_order = wc_get_order( $part_order->get_id() );
+vcap_acc_assert( VCAP\CouponManager::has_shortfall( $part_order ) && 'on-hold' === $part_order->get_status() && ! vcap()->vouchers->for_order( $part_order->get_id() ) && 0.0 === (float) vcap()->vouchers->get( $part_card->id )->balance, 'a partial shortfall stays on hold after a second payment confirmation (nothing issued)' );
 update_option( 'vcap_vouchers_buy_vouchers', 'no' );
 
 // Tax-exclusive shop: a 60 gift card pays 60 of the gross price (not 60 net + 20 % tax) and 60 is deducted.
