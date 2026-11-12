@@ -81,4 +81,28 @@ vcap_acc_assert( 0.0 === vcap()->vouchers->get( $card->id )->balance && VCAP\Vou
 $next = wc_get_order( $next->get_id() );
 $next->update_status( 'refunded' );
 vcap_acc_assert( 30.0 === vcap()->vouchers->get( $card->id )->balance && VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $card->id )->status, 'a full refund restores the used balance and reactivates the card' );
+// Tax-exclusive shop: a 60 gift card pays 60 of the gross price (not 60 net + 20 % tax) and 60 is deducted.
+update_option( 'woocommerce_calc_taxes', 'yes' );
+update_option( 'woocommerce_prices_include_tax', 'no' );
+$rate_id = WC_Tax::_insert_tax_rate( array( 'tax_rate_country' => '', 'tax_rate_state' => '', 'tax_rate' => '20.0000', 'tax_rate_name' => 'VAT', 'tax_rate_priority' => 1, 'tax_rate_compound' => 0, 'tax_rate_shipping' => 1, 'tax_rate_order' => 1, 'tax_rate_class' => '' ) );
+$net_product = new WC_Product_Simple();
+$net_product->set_name( 'Net price product' );
+$net_product->set_regular_price( '100' );
+$net_product->set_virtual( true );
+$net_product->save();
+$gross_card = vcap_acc_card( 60 );
+$taxed      = wc_create_order();
+$taxed->add_product( $net_product, 1 );
+$taxed->set_billing_email( 'acceptance-tax@example.com' );
+$taxed->set_billing_country( 'AT' );
+$taxed->calculate_totals();
+$taxed->apply_coupon( $gross_card->code );
+$taxed = wc_get_order( $taxed->get_id() );
+vcap_acc_assert( abs( 60.0 - ( (float) $taxed->get_discount_total() + (float) $taxed->get_discount_tax() ) ) < 0.02 && abs( 60.0 - (float) $taxed->get_total() ) < 0.02, 'in a tax-exclusive shop a 60 gift card pays 60 of the 120 gross total' );
+vcap()->coupons->reserve_order( $taxed );
+$taxed->payment_complete( 'txn-tax' );
+vcap_acc_assert( vcap()->vouchers->get( $gross_card->id )->balance < 0.02, 'the gift card is used up by exactly what it paid' );
+WC_Tax::_delete_tax_rate( $rate_id );
+update_option( 'woocommerce_calc_taxes', 'no' );
+
 echo "Voucher Captain acceptance checks passed.\n";

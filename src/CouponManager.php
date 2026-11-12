@@ -12,6 +12,8 @@ final class CouponManager {
 	public function register(): void {
 		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'validate' ), 20, 3 );
 		add_filter( 'woocommerce_coupon_sort', array( $this, 'sort' ), 20, 2 );
+		add_filter( 'woocommerce_coupon_get_items_to_apply', array( $this, 'prepare_gross_balance' ), 20, 2 );
+		add_filter( 'woocommerce_coupon_get_amount', array( $this, 'gross_balance_amount' ), 20, 2 );
 		add_action( 'woocommerce_checkout_order_processed', array( $this, 'reserve_order' ), 5, 3 );
 		add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'reserve_store_api_order' ), 5, 1 );
 		add_action( 'woocommerce_before_pay_action', array( $this, 'reserve_retry_order' ), 5, 1 );
@@ -799,11 +801,66 @@ final class CouponManager {
 		}
 	}
 
+	/** @var array<string, float> Net coupon amounts for the next discount calculation (tax-exclusive shops). */
+	private array $net_amounts = array();
+
+	/**
+	 * Tax-exclusive shops apply a fixed cart coupon to net prices and then reduce the tax as well, so a
+	 * balance of 50 would pay 50 net + tax. A stored balance is money (a multi-purpose voucher pays the
+	 * gross price), so right before WooCommerce distributes the coupon its amount is converted to net with
+	 * the tax ratio of the discounted lines: the customer saves exactly the balance, and exactly that is
+	 * deducted (net + tax, see used_amount()). Filter "vcap_balance_covers_tax" (false = old behaviour).
+	 *
+	 * @param array      $items  Items the coupon applies to (WC_Discounts items).
+	 * @param \WC_Coupon $coupon Coupon.
+	 */
+	public function prepare_gross_balance( $items, $coupon ) {
+		if ( ! $coupon instanceof \WC_Coupon ) {
+			return $items;
+		}
+		$code = wc_format_coupon_code( $coupon->get_code() );
+		unset( $this->net_amounts[ $code ] );
+		if ( ! wc_tax_enabled() || wc_prices_include_tax() || 'fixed_cart' !== $coupon->get_discount_type() || ! apply_filters( 'vcap_balance_covers_tax', true, $coupon ) ) {
+			return $items;
+		}
+		$voucher = $this->repo->get_by_code( $code );
+		if ( ! $voucher || ! $voucher->is_multi_use() ) {
+			return $items;
+		}
+		$net = 0.0;
+		$tax = 0.0;
+		foreach ( (array) $items as $item ) {
+			if ( isset( $item->subtotal, $item->subtotal_tax ) ) { // Cart totals items (same precision for both).
+				$net += (float) $item->subtotal;
+				$tax += (float) $item->subtotal_tax;
+			} elseif ( isset( $item->object ) && $item->object instanceof \WC_Order_Item_Product ) {
+				$net += (float) $item->object->get_subtotal();
+				$tax += (float) $item->object->get_subtotal_tax();
+			}
+		}
+		if ( $net > 0 && $tax > 0 ) {
+			$factor                     = 10 ** wc_get_price_decimals();
+			$this->net_amounts[ $code ] = floor( (float) $coupon->get_amount( 'edit' ) / ( 1 + $tax / $net ) * $factor ) / $factor;
+		}
+		return $items;
+	}
+
+	/** One-shot: the net amount prepared above, read by WooCommerce right after the items filter. */
+	public function gross_balance_amount( $amount, $coupon ) {
+		$code = $coupon instanceof \WC_Coupon ? wc_format_coupon_code( $coupon->get_code() ) : '';
+		if ( '' !== $code && isset( $this->net_amounts[ $code ] ) ) {
+			$net = $this->net_amounts[ $code ];
+			unset( $this->net_amounts[ $code ] );
+			return $net;
+		}
+		return $amount;
+	}
+
 	private function used_amount( \WC_Order_Item_Coupon $item ): float {
 		$amount = (float) $item->get_discount();
-		// Shops with tax-inclusive prices apply coupons to gross prices, so the tax part belongs to the redeemed
-		// value. In tax-exclusive shops coupon amounts are net, so only the net discount is deducted.
-		if ( apply_filters( 'vcap_balance_deduct_tax', wc_prices_include_tax(), $item ) ) {
+		// The value the customer received is the discount plus the tax it removed – in tax-inclusive shops
+		// (coupons apply to gross prices) and, for stored balances, in tax-exclusive shops (see prepare_gross_balance()).
+		if ( apply_filters( 'vcap_balance_deduct_tax', wc_prices_include_tax() || apply_filters( 'vcap_balance_covers_tax', true, null ), $item ) ) {
 			$amount += (float) $item->get_discount_tax();
 		}
 		// Discounts are in the order currency, balances in the shop base currency.
