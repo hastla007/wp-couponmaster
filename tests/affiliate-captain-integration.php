@@ -59,11 +59,23 @@ $gift->update_meta_data( VCAP\Campaigns::META, $name );
 $gift->save();
 vcap_aff_assert( null === apply_filters( 'wpac_coupon_affiliate', null, $gift->get_code() ), 'purchased vouchers and gift cards never map to a partner' );
 
-$admin = new VCAP\Admin\CampaignAdmin( $campaigns );
+$admin   = new VCAP\Admin\CampaignAdmin( $campaigns );
+$user    = wp_get_current_user();
+$had_cap = $user->has_cap( AffiliateCaptain::CAPABILITY );
+if ( ! $had_cap ) {
+	ob_start();
+	$admin->page();
+	$html = ob_get_clean();
+	vcap_aff_assert( str_contains( $html, 'Partner (WP Affiliate Captain)' ) && str_contains( $html, '<code>VCAP-TEST-PARTNER</code>' ) && ! str_contains( $html, 'value="VCAP-TEST-PARTNER"' ), 'without the Affiliate Captain capability the partner is shown read-only' );
+	$user->add_cap( AffiliateCaptain::CAPABILITY );
+}
 ob_start();
 $admin->page();
 $html = ob_get_clean();
-vcap_aff_assert( str_contains( $html, 'Partner (WP Affiliate Captain)' ) && str_contains( $html, 'value="VCAP-TEST-PARTNER"' ), 'the campaign table shows the partner column with the saved code' );
+if ( ! $had_cap ) {
+	$user->remove_cap( AffiliateCaptain::CAPABILITY );
+}
+vcap_aff_assert( str_contains( $html, 'Partner (WP Affiliate Captain)' ) && str_contains( $html, 'value="VCAP-TEST-PARTNER"' ), 'with the capability the campaign table shows the editable partner code' );
 
 $base = apply_filters( 'wpac_commission_base', 5000, array( 'product_id' => 0 ), array( 'source' => 'woocommerce' ) );
 vcap_aff_assert( 5000 === (int) $base, 'voucher sales earn commission by default' );
