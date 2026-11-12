@@ -94,7 +94,7 @@ vcap_conn_assert( 2 === $data['quantity'] && 1 === $data['refunded_quantity'] &&
 vcap_conn_assert( 2 === count( $data['vouchers'] ) && $code === $data['vouchers'][0]['code'] && 40.0 === (float) $data['voucher_line']['face_value'], 'order_lines() lists the vouchers and the line snapshot' );
 vcap_conn_assert( VCAP\Voucher::STATUS_VOID === vcap()->vouchers->get( $vouchers[1]->id )->status && VCAP\Voucher::STATUS_VOID !== vcap()->vouchers->get( $vouchers[0]->id )->status, 'the line refund voids the unused voucher, not the one in use' );
 // Refund before the external redemption is completed: the voided voucher can no longer be committed.
-list( , $late_vouchers ) = vcap_conn_issue( $external, 1 );
+list( , $late_vouchers ) = vcap_conn_issue( $any, 1 ); // Unrestricted: $external is shop-only by now.
 $late_key = 'conn-' . wp_generate_uuid4();
 $late     = $service->reserve( $late_vouchers[0]->code, array( 'key' => $late_key, 'target' => 'test:course:8' ) );
 vcap_conn_assert( ! is_wp_error( $late ), 'a voucher is reserved externally' );
