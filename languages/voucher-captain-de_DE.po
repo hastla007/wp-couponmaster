@@ -3731,3 +3731,6 @@ msgstr "Sie erhalten %s sofort per E-Mail."
 
 msgid "Your ticket voucher {coupon_code} is valid until {expiry_date}. Exchange it for your tickets before then."
 msgstr "Ihr Ticket-Gutschein {coupon_code} ist bis {expiry_date} gültig. Tauschen Sie ihn bis dahin gegen Ihre Tickets ein."
+
+msgid "The promotion could not be checked right now. Please try again in a moment."
+msgstr "Die Aktion konnte gerade nicht geprüft werden. Bitte versuchen Sie es gleich noch einmal."

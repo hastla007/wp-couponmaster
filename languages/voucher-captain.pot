@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-12 14:22+0000\n"
+"POT-Creation-Date: 2026-11-12 19:12+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:75 src/API/V1/RedemptionService.php:117
@@ -433,7 +433,7 @@ msgstr ""
 msgid "Reports"
 msgstr ""
 
-#: src/Admin/Menu.php:40 src/Admin/Menu.php:40 src/Admin/Scanner.php:53 templates/ticket-status.php:86
+#: src/Admin/Menu.php:40 src/Admin/Menu.php:40 src/Admin/Scanner.php:53 templates/ticket-status.php:87
 msgid "Scanner"
 msgstr ""
 
@@ -551,7 +551,7 @@ msgstr ""
 msgid "No camera available. Use the input field or a USB scanner."
 msgstr ""
 
-#: src/Admin/Scanner.php:27 templates/ticket-status.php:82
+#: src/Admin/Scanner.php:27 templates/ticket-status.php:83
 msgid "Check in"
 msgstr ""
 
@@ -567,11 +567,11 @@ msgstr ""
 msgid "Amount to deduct"
 msgstr ""
 
-#: src/Admin/Scanner.php:31 src/Admin/VoucherAdmin.php:167 templates/ticket-status.php:58 templates/ticket-status.php:79
+#: src/Admin/Scanner.php:31 src/Admin/VoucherAdmin.php:167 templates/ticket-status.php:59 templates/ticket-status.php:80
 msgid "Admissions"
 msgstr ""
 
-#: src/Admin/Scanner.php:32 src/Admin/StoreCreditAdmin.php:39 src/Admin/VoucherAdmin.php:111 templates/ticket-status.php:68
+#: src/Admin/Scanner.php:32 src/Admin/StoreCreditAdmin.php:39 src/Admin/VoucherAdmin.php:111 templates/ticket-status.php:69
 msgid "Balance"
 msgstr ""
 
@@ -579,7 +579,7 @@ msgstr ""
 msgid "Value"
 msgstr ""
 
-#: src/Admin/Scanner.php:34 templates/ticket-status.php:65
+#: src/Admin/Scanner.php:34 templates/ticket-status.php:66
 msgid "Holder"
 msgstr ""
 
@@ -591,11 +591,11 @@ msgstr ""
 msgid "Order"
 msgstr ""
 
-#: src/Admin/Scanner.php:37 templates/ticket-status.php:61
+#: src/Admin/Scanner.php:37 templates/ticket-status.php:62
 msgid "Valid until"
 msgstr ""
 
-#: src/Admin/Scanner.php:38 templates/ticket-status.php:71
+#: src/Admin/Scanner.php:38 templates/ticket-status.php:72
 msgid "Last check-in"
 msgstr ""
 
@@ -647,7 +647,7 @@ msgstr ""
 msgid "Camera preview"
 msgstr ""
 
-#: src/Admin/Scanner.php:65 src/Admin/VouchersListTable.php:27 src/Privacy.php:39 templates/myaccount/vouchers-table.php:29 templates/myaccount/vouchers-table.php:55 templates/ticket-status.php:64
+#: src/Admin/Scanner.php:65 src/Admin/VouchersListTable.php:27 src/Privacy.php:39 templates/myaccount/vouchers-table.php:29 templates/myaccount/vouchers-table.php:55 templates/ticket-status.php:65
 msgid "Code"
 msgstr ""
 
@@ -2086,8 +2086,12 @@ msgstr ""
 msgid "This promotion has reached its usage limit."
 msgstr ""
 
+#: src/Discounts/Usage.php:190
+msgid "The promotion could not be checked right now. Please try again in a moment."
+msgstr ""
+
 #. translators: %s: promotion title
-#: src/Discounts/Usage.php:197
+#: src/Discounts/Usage.php:208
 #, php-format
 msgid "The promotion \"%s\" has reached its usage limit. Please remove it from your cart and try again."
 msgstr ""
@@ -4286,15 +4290,15 @@ msgstr ""
 msgid "Ticket status"
 msgstr ""
 
-#: templates/ticket-status.php:47
+#: templates/ticket-status.php:48
 msgid "Unknown ticket"
 msgstr ""
 
-#: templates/ticket-status.php:48
+#: templates/ticket-status.php:49
 msgid "This code could not be verified."
 msgstr ""
 
-#: templates/ticket-status.php:86
+#: templates/ticket-status.php:87
 msgid "Open in admin"
 msgstr ""
 

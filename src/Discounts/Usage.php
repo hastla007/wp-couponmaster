@@ -28,9 +28,12 @@ final class Usage {
 		foreach ( array( 'processing', 'completed', 'on-hold' ) as $status ) {
 			add_action( 'woocommerce_order_status_' . $status, array( $this, 'record' ), 20 );
 		}
-		foreach ( array( 'cancelled', 'failed', 'pending' ) as $status ) {
+		foreach ( array( 'cancelled', 'failed' ) as $status ) {
 			add_action( 'woocommerce_order_status_' . $status, array( $this, 'revert' ), 20 );
 		}
+		// Back to pending only from a paid/on-hold state (not checkout-draft → pending in the block checkout,
+		// which would give back the use that was just held).
+		add_action( 'woocommerce_order_status_changed', array( $this, 'reverted_to_pending' ), 20, 3 );
 	}
 
 	/**
@@ -178,6 +181,14 @@ final class Usage {
 			$rules   = $campaign['rules'] ?? array();
 			$limited = ! empty( $rules['usage_limit'] ) || ! empty( $rules['usage_limit_per_customer'] );
 			$locked  = $limited ? self::lock( $id ) : false;
+			if ( $limited && ! $locked ) {
+				// Without the lock two checkouts could take the last use together: refuse rather than oversell.
+				foreach ( $held as $undo ) {
+					self::remove( $undo, $key );
+					\VCAP\Claim::release( 'usage:' . $order->get_id() . ':' . $undo );
+				}
+				throw new \Exception( __( 'The promotion could not be checked right now. Please try again in a moment.', 'voucher-captain' ) );
+			}
 			$blocker = $limited ? self::blocker( $campaign, (int) $order->get_customer_id(), (string) $order->get_billing_email() ) : '';
 			if ( '' === $blocker && \VCAP\Claim::take( 'usage:' . $order->get_id() . ':' . $id ) ) {
 				self::add( $id, $key );
@@ -280,6 +291,12 @@ final class Usage {
 	private static function unlock( int $id ): void {
 		global $wpdb;
 		$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', 'vcap_usage_' . $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
+
+	public function reverted_to_pending( $order_id, $from, $to ): void {
+		if ( 'pending' === $to && in_array( $from, array( 'processing', 'completed', 'on-hold' ), true ) ) {
+			$this->revert( $order_id );
+		}
 	}
 
 	public function revert( $order_id ): void {

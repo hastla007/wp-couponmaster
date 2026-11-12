@@ -153,6 +153,8 @@ $second->calculate_totals();
 $second->apply_coupon( 'vcap-campaign-' . $held );
 $usage->hold( wc_get_order( $first->get_id() ) );
 vcap_promo_assert( 1 === VCAP\Discounts\Usage::count( $held ), 'placing an unpaid order holds the use' );
+$usage->reverted_to_pending( $first->get_id(), 'checkout-draft', 'pending' );
+vcap_promo_assert( 1 === VCAP\Discounts\Usage::count( $held ), 'the block checkout step checkout-draft → pending keeps the held use' );
 $refused = '';
 try {
 	$usage->hold( wc_get_order( $second->get_id() ) );
