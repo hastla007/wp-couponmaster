@@ -22,6 +22,8 @@ final class AffiliateCaptain {
 	public const OPTION   = 'vcap_affiliate_campaigns';
 	public const SOURCE   = 'voucher-captain';
 	public const CONTRACT = '1.0.0';
+	/** Capability of WP Affiliate Captain needed to assign campaign partners. */
+	public const CAPABILITY = 'wpac_manage_affiliates';
 
 	private bool $done = false;
 
@@ -142,6 +144,10 @@ final class AffiliateCaptain {
 
 	public function table_cell( string $campaign ): void {
 		$code = self::partner_for_campaign( $campaign );
+		if ( ! current_user_can( self::CAPABILITY ) ) {
+			echo '<td><code>' . esc_html( '' !== $code ? $code : '—' ) . '</code></td>';
+			return;
+		}
 		?>
 		<td>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="vcap-inline-form">
@@ -158,12 +164,26 @@ final class AffiliateCaptain {
 
 	public function save_partner(): void {
 		check_admin_referer( 'vcap_campaign_partner' );
-		if ( ! current_user_can( 'vcap_manage_vouchers' ) && ! current_user_can( 'manage_woocommerce' ) ) {
+		// Routing commissions is a partner-program decision: WP Affiliate Captain's own
+		// capability is required (voucher or shop rights alone are not enough).
+		if ( ! current_user_can( self::CAPABILITY ) ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
 		$campaign = wp_unslash( (string) ( $_POST['campaign'] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- Cleaned in assign().
 		$code     = sanitize_text_field( wp_unslash( (string) ( $_POST['partner_code'] ?? '' ) ) );
+		$before   = self::partner_for_campaign( Campaigns::clean_name( $campaign ) );
 		$result   = self::assign( $campaign, $code );
+		if ( ! is_wp_error( $result ) && $before !== strtoupper( $code ) ) {
+			/**
+			 * Fires after the partner of a voucher campaign was changed (for audit logs).
+			 *
+			 * @param string $campaign Campaign.
+			 * @param string $before   Previous partner code ('' = none).
+			 * @param string $code     New partner code ('' = removed).
+			 * @param int    $user_id  Acting user.
+			 */
+			do_action( 'vcap_affiliate_campaign_partner_changed', Campaigns::clean_name( $campaign ), $before, strtoupper( $code ), get_current_user_id() );
+		}
 		set_transient(
 			'vcap_generate_report_' . get_current_user_id(),
 			array(
