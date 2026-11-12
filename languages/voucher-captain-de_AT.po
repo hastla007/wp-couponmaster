@@ -3566,3 +3566,54 @@ msgstr "Ticket widerrufen"
 
 msgid "unknown ticket"
 msgstr "unbekanntes Ticket"
+
+msgid "Voucher restored (tickets cancelled in Pass Captain)"
+msgstr "Gutschein wiederhergestellt (Tickets in Pass Captain storniert)"
+
+msgid "Vouchers from this order were already used (%1$s, value used: %2$s). At most %3$s can be refunded; the unused vouchers are voided."
+msgstr "Gutscheine aus dieser Bestellung wurden bereits verwendet (%1$s, verbrauchter Wert: %2$s). Erstattet werden können höchstens %3$s; die unverbrauchten Gutscheine werden entwertet."
+
+msgid "Partial refund #%d of the purchase order"
+msgstr "Teilerstattung #%d der Kaufbestellung"
+
+msgid "Voucher %s voided (refunded)."
+msgstr "Gutschein %s entwertet (erstattet)."
+
+msgid "VAT treatment"
+msgstr "USt-Behandlung"
+
+msgid "Automatic (value vouchers: multi-purpose, percentage: discount)"
+msgstr "Automatisch (Wertgutscheine: Mehrzweck, Prozentgutscheine: Rabatt)"
+
+msgid "Multi-purpose voucher (means of payment, VAT on redemption)"
+msgstr "Mehrzweckgutschein (Zahlungsmittel, USt bei Einlösung)"
+
+msgid "Single-purpose voucher (VAT already charged at sale)"
+msgstr "Einzweckgutschein (USt bereits beim Verkauf abgeführt)"
+
+msgid "Promotion (price reduction)"
+msgstr "Aktion (Preisnachlass)"
+
+msgid "How connected checkouts (e.g. WP Pass Captain) treat the voucher for VAT. Have the classification checked by your tax adviser."
+msgstr "Wie angebundene Kassen (z. B. WP Pass Captain) den Gutschein umsatzsteuerlich behandeln. Lassen Sie die Einordnung von Ihrer Steuerberatung prüfen."
+
+msgid "Holder name in the scanner"
+msgstr "Name des Inhabers im Scanner"
+
+msgid "Show the name of the buyer or recipient when a code is scanned. Personal tickets always show the name so it can be checked. Order number and original value are only shown to staff who manage vouchers."
+msgstr "Beim Scannen den Namen von Käufer oder Empfänger anzeigen. Personalisierte Tickets zeigen den Namen immer an, damit er geprüft werden kann. Bestellnummer und ursprünglicher Wert sehen nur Mitarbeitende, die Gutscheine verwalten."
+
+msgid "Default validity"
+msgstr "Standard-Gültigkeit"
+
+msgid "Statutory default for the shop country (Germany: 3 years to the end of the year, Austria: 30 years)"
+msgstr "Gesetzlicher Standard des Shop-Landes (Deutschland: 3 Jahre zum Jahresende, Österreich: 30 Jahre)"
+
+msgid "Fixed number of days (below)"
+msgstr "Feste Anzahl Tage (unten)"
+
+msgid "Used when a product does not define its own expiry. Shorter validity periods can be invalid towards consumers; have them checked legally."
+msgstr "Gilt, wenn ein Produkt keine eigene Gültigkeit festlegt. Kürzere Fristen können gegenüber Verbrauchern unwirksam sein; lassen Sie sie rechtlich prüfen."
+
+msgid "Used with \"Fixed number of days\" when a product does not define its own expiry. 0 = never expires."
+msgstr "Gilt bei „Feste Anzahl Tage“, wenn ein Produkt keine eigene Gültigkeit festlegt. 0 = unbegrenzt gültig."
