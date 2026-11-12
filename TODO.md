@@ -6,7 +6,7 @@ Ziel: Voucher Captain bleibt ein allgemein einsetzbares WooCommerce-Gutschein-Pl
 
 Diese Liste ist eine Arbeitsliste, kein verifizierter Fortschrittsbericht. Der Entwicklungsbranch enthält bereits umfangreiche Voucher-Captain-Funktionen; bestehende Funktionen gelten erst dann als erledigt, wenn sie gegen Scope und Abnahmekriterien geprüft und hier nachvollziehbar markiert wurden. Die Liste darf nicht so gelesen werden, dass alle angeführten Grundfunktionen noch fehlen.
 
-Der ausführbare Plugin-Kern ist inzwischen in `main`: Die PRs #2 bis #9 wurden bis 12.11.2026 gemergt. Die frühere Aussage, `main` enthalte den Plugin-Code noch nicht, ist überholt. `main` ist der aktuelle Integrationsstand; ein Merge allein bedeutet noch keine Release-Freigabe. Die PRs #10 bis #13 zur WP-License-Captain-Anbindung sind noch offen. Die jüngsten CI-Läufe zu diesen vier PRs waren am 12.11.2026 fehlgeschlagen; vor dem Merge sind Fehler zu beheben und grüne Läufe abzuwarten. Die Mehrfach-Erinnerungen mit Wiederholungsversand liegen derzeit nur auf `codex/multi-expiry-reminders` und sind noch nicht in `main`.
+Der ausführbare Plugin-Kern ist inzwischen in `main`: Die PRs #2 bis #9 wurden bis 12.11.2026 gemergt. Die frühere Aussage, `main` enthalte den Plugin-Code noch nicht, ist überholt. `main` ist der aktuelle Integrationsstand; ein Merge allein bedeutet noch keine Release-Freigabe. Die PRs #10 bis #13 zur WP-License-Captain-Anbindung sind noch offen. Die jüngsten Läufe vom 12.11.2026 für diese PRs scheitern jeweils am zusätzlichen Pass-Captain-Matrixziel `claude/woocommerce-ticket-plugin-8q4m8q`: Beim Aktivieren des Plugins fehlt `PassCaptain\\Partners\\Sales`. Die übrigen Jobs des jüngsten PR-#13-Laufs (Quality, Smoke, WordPress-Integration, Mindestversionen, Browser-E2E und Pass-Captain `main`) sind grün. Die Ursache liegt somit im zusätzlichen Integrationsziel, nicht in den Lizenzänderungen selbst. Das Matrixziel ist unten als CI-Arbeitspunkt erfasst; danach die betroffenen PRs erneut ausführen. Die Mehrfach-Erinnerungen mit Wiederholungsversand liegen derzeit nur auf `codex/multi-expiry-reminders` und sind noch nicht in `main`.
 
 ### Abgleich vom 12.11.2026 (Version 1.1.0)
 
@@ -67,6 +67,7 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 - [x] Regeln für Rückerstattung/Storno vor und nach einer externen Einlösung definieren. — *Nachweis: CONNECTORS.md Abschnitt 3; stornierte Gutscheine können während einer Reservierung nicht mehr bestätigt werden (`vcap_cancelled`), tests/connector-integration.php*
 - [x] Fehlgeschlagene externe Freischaltungen wiederholbar machen, ohne Gutscheinverbrauch oder Zugriff zu duplizieren. — *Nachweis: Muster in CONNECTORS.md Abschnitt 2 und Beispiel-Connector mit Wiederholungsjob und Freigabe nach Limit; tests/example-connector-integration.php*
 - [x] Integrationsdokumentation, Beispiel-Connector und öffentliche API-Versionspolitik veröffentlichen. — *Nachweis: CONNECTORS.md (inkl. Versionspolitik), ADAPTERS.md, examples/vcap-example-connector*
+- [ ] Site-weite Rate-Limits mit unterstütztem persistentem Object Cache und mehreren Web-/PHP-Knoten prüfen; Parallelversuche und Cache-Ausfall abdecken und die Betriebsgrenzen dokumentieren. — *SECURITY.md nennt Multi-Node-Rate-Limit-Verhalten als noch ausstehenden Release-Check.*
 
 ## P2 – Qualitätssicherung und Veröffentlichung
 
@@ -75,6 +76,8 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 - [ ] Reale Zahlungsanbieter sowie die konkret unterstützten Mehrwährungs- und Subscription-Plugins durch E2E-/Kompatibilitätstests freigeben.
 - [x] Build-ZIP in sauberer WordPress-Installation installieren, aktivieren, aktualisieren und deinstallieren. — *Nachweis: CI-Schritt „Build, install, and update the release ZIP“ plus Deinstallationsprüfung.*
 - [ ] Gemeinsame Installation von Voucher Captain und Ticket Captain auf Klassen-/Vendor-Konflikte und gemeinsame Abläufe final freigeben.
+- [ ] Pass-Captain-CI-Matrix auf einen gültigen, unterstützten Branch/Release-Ref ausrichten oder den defekten Ref bis zur Reparatur aus der Matrix nehmen; aktuell scheitert `claude/woocommerce-ticket-plugin-8q4m8q` beim Laden mit fehlender Klasse `PassCaptain\\Partners\\Sales`. Danach die ausstehenden CI-Läufe erneut ausführen.
+- [ ] `RELEASE_CHECKLIST.md` mit den aktuellen CI-/Browser-Nachweisen abgleichen, widersprüchliche Statusangaben zu Pass Captain auflösen und belegte Release-Gates erst nach erfolgreichem Lauf abhaken.
 - [x] Datenschutzexport/-löschung, Berechtigungen, Nonces, Rate-Limits und E-Mail-Funktionen implementieren und automatisiert prüfen. — *Nachweis: tests/security-integration.php, tests/account-integration.php und tests/reminder-integration.php.*
 - [ ] Übersetzungsabdeckung und die finalen Admin-/Kunden-E-Mail-Texte für den Release freigeben.
 
