@@ -24,6 +24,8 @@ final class Issuer {
 		}
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'on_purchase_cancelled' ), 30, 2 );
 		add_action( 'woocommerce_order_status_refunded', array( $this, 'on_purchase_cancelled' ), 30, 2 );
+		add_action( 'woocommerce_create_refund', array( $this, 'guard_refund' ), 10, 2 );
+		add_action( 'woocommerce_order_partially_refunded', array( $this, 'on_partial_refund' ), 20, 2 );
 		add_action( 'vcap_issue_order', array( $this, 'issue_async' ) );
 	}
 
@@ -259,6 +261,117 @@ final class Issuer {
 		}
 		foreach ( $this->repo->for_order( (int) $order_id ) as $voucher ) {
 			$this->void( $voucher, __( 'Purchase order cancelled or refunded', 'voucher-captain' ) );
+		}
+	}
+
+	/** Whether a voucher was (partly) used or is being redeemed right now. */
+	private static function in_use( Voucher $voucher ): bool {
+		return self::spent_value( $voucher ) > 0 || Voucher::STATUS_RESERVED === $voucher->status;
+	}
+
+	/** Value of a voucher that was already used (base currency). */
+	public static function spent_value( Voucher $voucher ): float {
+		if ( Voucher::STATUS_VOID === $voucher->status ) {
+			return 0.0;
+		}
+		if ( $voucher->is_multi_use() ) {
+			return max( 0.0, (float) $voucher->initial_amount - (float) $voucher->balance );
+		}
+		return Voucher::STATUS_REDEEMED === $voucher->status ? (float) $voucher->initial_amount : 0.0;
+	}
+
+	/**
+	 * Before a refund of a voucher purchase is saved: refunding more than the order minus the value already
+	 * spent from its vouchers would pay back goods the customer already received. Such refunds are refused
+	 * with the maximum amount (filter "vcap_allow_refund_of_spent_vouchers" to allow them knowingly).
+	 *
+	 * @param \WC_Order_Refund $refund Refund about to be saved.
+	 * @param array            $args   wc_create_refund() arguments.
+	 * @throws \Exception To stop the refund (WooCommerce shows the message).
+	 */
+	public function guard_refund( $refund, $args ): void {
+		$order = wc_get_order( (int) ( $args['order_id'] ?? ( $refund instanceof \WC_Order_Refund ? $refund->get_parent_id() : 0 ) ) );
+		if ( ! $order instanceof \WC_Order || ! $this->settings->yes( 'vcap_void_on_refund' ) ) {
+			return;
+		}
+		$spent = 0.0;
+		$codes = array();
+		foreach ( $this->repo->for_order( $order->get_id() ) as $voucher ) {
+			$used = self::spent_value( $voucher );
+			if ( $used > 0 ) {
+				$spent  += $used;
+				$codes[] = $voucher->code;
+			}
+		}
+		if ( $spent <= 0 ) {
+			return;
+		}
+		// Balances are kept in the shop base currency: compare in the base currency, report in the order currency.
+		$remaining = (float) $order->get_total() - (float) $order->get_total_refunded();
+		$amount    = (float) ( $args['amount'] ?? 0 );
+		$to_base   = static function ( float $value ) use ( $order ): float {
+			return $order->get_currency() && $order->get_currency() !== get_option( 'woocommerce_currency' ) ? (float) apply_filters( 'vcap_amount_to_base_currency', $value, $order->get_currency(), $order ) : $value;
+		};
+		$remaining_base = $to_base( $remaining );
+		$max_base       = $remaining_base - $spent;
+		$tolerance      = 0.5 / ( 10 ** wc_get_price_decimals() );
+		if ( $to_base( $amount ) <= $max_base + $tolerance || apply_filters( 'vcap_allow_refund_of_spent_vouchers', false, $order, $amount, $spent ) ) {
+			return;
+		}
+		$max   = $remaining_base > 0 ? round( $remaining * max( 0.0, $max_base ) / $remaining_base, wc_get_price_decimals() ) : 0.0;
+		$spent = $remaining_base > 0 ? $remaining * $spent / $remaining_base : $spent;
+		throw new \Exception(
+			sprintf(
+				/* translators: 1: voucher codes, 2: spent value, 3: maximum refund */
+				__( 'Vouchers from this order were already used (%1$s, value used: %2$s). At most %3$s can be refunded; the unused vouchers are voided.', 'voucher-captain' ),
+				implode( ', ', $codes ),
+				wp_strip_all_tags( wc_price( $spent, array( 'currency' => $order->get_currency() ) ) ),
+				wp_strip_all_tags( wc_price( max( 0, $max ), array( 'currency' => $order->get_currency() ) ) )
+			)
+		);
+	}
+
+	/**
+	 * Partial refund of voucher lines: as many vouchers as the refunded quantity covers are voided, unused
+	 * ones first (newest first). Used vouchers are only voided when no unused one is left for that line.
+	 */
+	public function on_partial_refund( $order_id, $refund_id = 0 ): void {
+		$order = wc_get_order( (int) $order_id );
+		if ( ! $order instanceof \WC_Order || ! $this->settings->yes( 'vcap_void_on_refund' ) ) {
+			return;
+		}
+		$by_item = array();
+		foreach ( $this->repo->for_order( $order->get_id() ) as $voucher ) {
+			$by_item[ (int) $voucher->order_item_id ][] = $voucher;
+		}
+		foreach ( $by_item as $item_id => $vouchers ) {
+			$item = $order->get_item( $item_id );
+			if ( ! $item instanceof \WC_Order_Item_Product || $item->get_quantity() < 1 ) {
+				continue;
+			}
+			$refunded_qty = abs( (int) $order->get_qty_refunded_for_item( $item_id ) );
+			$per_unit     = max( 1, (int) round( count( $vouchers ) / $item->get_quantity() ) );
+			$void_target  = min( count( $vouchers ), $refunded_qty * $per_unit );
+			$voided       = count( array_filter( $vouchers, static fn( Voucher $v ) => Voucher::STATUS_VOID === $v->status ) );
+			if ( $voided >= $void_target ) {
+				continue;
+			}
+			$open = array_values( array_filter( $vouchers, static fn( Voucher $v ) => Voucher::STATUS_VOID !== $v->status ) );
+			usort(
+				$open,
+				static fn( Voucher $a, Voucher $b ) => array( self::in_use( $a ) ? 1 : 0, -$a->item_index ) <=> array( self::in_use( $b ) ? 1 : 0, -$b->item_index )
+			);
+			foreach ( array_slice( $open, 0, $void_target - $voided ) as $voucher ) {
+				/* translators: %d: refund id */
+				$this->void( $voucher, sprintf( __( 'Partial refund #%d of the purchase order', 'voucher-captain' ), (int) $refund_id ) );
+				$order->add_order_note(
+					sprintf(
+						/* translators: %s: voucher code */
+						__( 'Voucher %s voided (refunded).', 'voucher-captain' ),
+						$voucher->code
+					)
+				);
+			}
 		}
 	}
 

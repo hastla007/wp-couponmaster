@@ -81,6 +81,36 @@ vcap_acc_assert( 0.0 === vcap()->vouchers->get( $card->id )->balance && VCAP\Vou
 $next = wc_get_order( $next->get_id() );
 $next->update_status( 'refunded' );
 vcap_acc_assert( 30.0 === vcap()->vouchers->get( $card->id )->balance && VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $card->id )->status, 'a full refund restores the used balance and reactivates the card' );
+// Partial refund of a voucher purchase: the refunded unit voids an unused voucher; refunding value already spent is refused.
+$gc_product = new WC_Product_Simple();
+$gc_product->set_name( 'Gift card 50' );
+$gc_product->set_regular_price( '50' );
+$gc_product->set_virtual( true );
+$gc_product->update_meta_data( '_vcap_enabled', 'yes' );
+$gc_product->update_meta_data( '_vcap_type', 'giftcard' );
+$gc_product->update_meta_data( '_vcap_usage', 'balance' );
+$gc_product->save();
+$purchase = wc_create_order();
+$purchase->add_product( $gc_product, 2 );
+$purchase->set_billing_email( 'gift-buyer@example.com' );
+$purchase->calculate_totals();
+$purchase->set_status( 'processing' );
+$purchase->save();
+vcap()->issuer->issue_for_order( $purchase, true );
+$bought = vcap()->vouchers->for_order( $purchase->get_id() );
+vcap_acc_assert( 2 === count( $bought ), 'two gift cards are issued for the purchase' );
+$spent_card = $bought[0];
+$spent_card->balance = 20.0; // 30 of 50 already used in the shop.
+vcap()->vouchers->update( $spent_card );
+$line_id = array_key_first( $purchase->get_items() );
+$partial = wc_create_refund( array( 'order_id' => $purchase->get_id(), 'amount' => 50, 'line_items' => array( $line_id => array( 'qty' => 1, 'refund_total' => 50 ) ) ) );
+$after   = array_map( static fn( $v ) => vcap()->vouchers->get( $v->id )->status, $bought );
+vcap_acc_assert( ! is_wp_error( $partial ) && VCAP\Voucher::STATUS_VOID !== $after[0] && VCAP\Voucher::STATUS_VOID === $after[1], 'refunding one of two gift cards voids the unused one, not the one in use' );
+$too_much = wc_create_refund( array( 'order_id' => $purchase->get_id(), 'amount' => 50 ) );
+vcap_acc_assert( is_wp_error( $too_much ) && str_contains( $too_much->get_error_message(), $spent_card->code ), 'refunding value that was already spent from a gift card is refused with the reason' );
+$allowed = wc_create_refund( array( 'order_id' => $purchase->get_id(), 'amount' => 20 ) );
+vcap_acc_assert( ! is_wp_error( $allowed ), 'refunding up to the unused value is possible' );
+
 // Tax-exclusive shop: a 60 gift card pays 60 of the gross price (not 60 net + 20 % tax) and 60 is deducted.
 update_option( 'woocommerce_calc_taxes', 'yes' );
 update_option( 'woocommerce_prices_include_tax', 'no' );

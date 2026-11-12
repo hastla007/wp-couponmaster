@@ -16,6 +16,16 @@ Visual PDF designer, recipient fields and custom field groups, scheduled deliver
 == Changelog ==
 
 = Unreleased =
+* New: VAT treatment per voucher product (automatic, multi-purpose, single-purpose, promotion). Pass Captain keeps the VAT for multi-purpose vouchers and shows them as a payment on its invoices.
+* New: default validity by the shop country when a product has no expiry of its own – Germany 3 years to the end of the year, Austria 30 years (filter vcap_statutory_expiry). Shops that saved a default in days keep it.
+* New: ticket vouchers are given back automatically when Pass Captain cancels or refunds the exchanged tickets (date or event cancelled); the voucher can then be exchanged again.
+* New: partial refunds of voucher purchases void as many vouchers as were refunded (unused ones first); refunds that would pay back value already spent from a voucher are refused with the maximum amount (filter vcap_allow_refund_of_spent_vouchers).
+* New: scanner privacy – the holder name is hidden unless enabled (personal tickets always show it); order number and original value only for staff who manage vouchers.
+* Fix: in shops with net prices a gift card paid the net amount plus tax while only the net amount was deducted; it now pays exactly its balance of the gross price (filter vcap_balance_covers_tax).
+* Fix (security): keys of built-in integrations can no longer be created, read or released over REST; Pass Captain reservations are owned by no customer.
+* Fix: scanner – ticket vouchers cannot be redeemed at the counter, single-use redemption is atomic, vouchers held by an unpaid order are refused, undo asks first, check-ins are idempotent, Pass Captain results show readable reasons and the date of other-day tickets.
+* Fix: ticket exchange – one key per attempt, so a voucher can be exchanged again after a released attempt; guests confirm their email; the date can be changed or the exchange cancelled.
+* Fix: voucher currency is the shop base currency; "days" expiry ends at the end of the day in the shop's time zone; stale reservation release can no longer starve; double use of single-use vouchers is logged.
 * New: shared scanner – Vouchers → Scanner also recognises WP Pass Captain tickets and checks them in at Pass Captain (Pass Captain permission required); voucher codes are looked up first.
 * New: integration status for WP Pass Captain in the settings (Integrations), menu link to Pass Captain, hint on the voucher type "Ticket" while Pass Captain is active.
 * New: ticket vouchers for WP Pass Captain – a voucher product names a Pass Captain ticket type; the voucher is exchanged for the tickets on the redeem page, by an admin or by code (reserve → issue tickets → commit, idempotent, tickets revoked when the voucher is voided).
