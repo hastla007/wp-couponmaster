@@ -3704,6 +3704,9 @@ msgstr ""
 msgid "Expiry reminder"
 msgstr ""
 
+msgid "Expiry reminder failed"
+msgstr ""
+
 #: src/VoucherRepository.php:356
 msgid "Credit added"
 msgstr ""
