@@ -64,6 +64,7 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 		if ( $minor < 1 ) {
 			return new \WP_Error( 'vcap_no_value', __( 'This voucher has no value left.', 'voucher-captain' ) );
 		}
+		$treatment = $voucher ? ProductConfig::tax_treatment( $voucher ) : 'discount';
 		return array(
 			'version'      => 1,
 			'code'         => (string) $check['code'],
@@ -72,7 +73,9 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 			'amount'       => self::to_major( $minor, $decimals ),
 			'balance'      => null !== $check['balance'],
 			// VAT treatment for the ticket checkout: "payment" keeps the VAT, "single"/"discount" reduce it.
-			'treatment'    => $voucher ? ProductConfig::tax_treatment( $voucher ) : 'discount',
+			'treatment'    => $treatment,
+			// Pass Captain's terms: multi-purpose voucher (means of payment) or single-purpose (reduces price and VAT).
+			'purpose'      => 'payment' === $treatment ? 'multi' : 'single',
 			'target'       => $target,
 			'email'        => $email,
 		);

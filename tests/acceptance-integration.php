@@ -105,6 +105,20 @@ vcap()->vouchers->update( $spent_card );
 $line_id = array_key_first( $purchase->get_items() );
 $partial = wc_create_refund( array( 'order_id' => $purchase->get_id(), 'amount' => 50, 'line_items' => array( $line_id => array( 'qty' => 1, 'refund_total' => 50 ) ) ) );
 $after   = array_map( static fn( $v ) => vcap()->vouchers->get( $v->id )->status, $bought );
+if ( is_wp_error( $partial ) || VCAP\Voucher::STATUS_VOID !== $after[1] ) {
+	echo 'Partial refund diagnostics: ' . wp_json_encode(
+		array(
+			'error'          => is_wp_error( $partial ) ? $partial->get_error_message() : null,
+			'line_id'        => $line_id,
+			'vouchers'       => array_map( static fn( $v ) => array( $v->id, $v->order_item_id, $v->item_index, $v->usage_mode, vcap()->vouchers->get( $v->id )->status, vcap()->vouchers->get( $v->id )->balance ), $bought ),
+			'partial_action' => did_action( 'woocommerce_order_partially_refunded' ),
+			'full_action'    => did_action( 'woocommerce_order_fully_refunded' ),
+			'order_status'   => wc_get_order( $purchase->get_id() )->get_status(),
+			'refunded_qty'   => wc_get_order( $purchase->get_id() )->get_qty_refunded_for_item( $line_id ),
+			'void_on_refund' => get_option( 'vcap_void_on_refund', 'unset' ),
+		)
+	) . "\n";
+}
 vcap_acc_assert( ! is_wp_error( $partial ) && VCAP\Voucher::STATUS_VOID !== $after[0] && VCAP\Voucher::STATUS_VOID === $after[1], 'refunding one of two gift cards voids the unused one, not the one in use' );
 $too_much = wc_create_refund( array( 'order_id' => $purchase->get_id(), 'amount' => 50 ) );
 vcap_acc_assert( is_wp_error( $too_much ) && str_contains( $too_much->get_error_message(), $spent_card->code ), 'refunding value that was already spent from a gift card is refused with the reason' );
