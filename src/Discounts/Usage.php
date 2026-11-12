@@ -21,8 +21,9 @@ final class Usage {
 	public function __construct( private ?Repository $campaigns = null ) {}
 
 	public function register(): void {
-		add_action( 'woocommerce_checkout_order_processed', array( $this, 'hold_classic' ), 4, 3 );
-		add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'hold_store_api' ), 4, 1 );
+		// After other plugins' validation (see CouponManager), before the balance reservation (51).
+		add_action( 'woocommerce_checkout_order_processed', array( $this, 'hold_classic' ), 50, 3 );
+		add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'hold_store_api' ), 50, 1 );
 		add_action( 'woocommerce_before_pay_action', array( $this, 'hold_retry' ), 4, 1 );
 		add_action( 'vcap_release_stale_order_reservations', array( $this, 'release_abandoned' ), 20 );
 		foreach ( array( 'processing', 'completed', 'on-hold' ) as $status ) {

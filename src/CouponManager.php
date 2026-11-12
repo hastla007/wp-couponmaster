@@ -15,8 +15,13 @@ final class CouponManager {
 		add_filter( 'woocommerce_coupon_get_items_to_apply', array( $this, 'prepare_gross_balance' ), 20, 2 );
 		add_filter( 'woocommerce_coupon_get_amount', array( $this, 'gross_balance_amount' ), 20, 2 );
 		add_filter( 'woocommerce_order_recalculate_coupons_coupon_object', array( $this, 'order_coupon_object' ), 10, 4 );
-		add_action( 'woocommerce_checkout_order_processed', array( $this, 'reserve_order' ), 5, 3 );
-		add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'reserve_store_api_order' ), 5, 1 );
+		// Late priority: other plugins (e.g. Pass Captain's capacity hold at 10) validate first, so a checkout they
+		// refuse never leaves a balance reservation behind. A previous unpaid checkout order of the same session
+		// gives its holds back first (classic checkout creates a new order after a failed attempt).
+		add_action( 'woocommerce_checkout_order_processed', array( $this, 'release_previous_checkout_order' ), 49, 1 );
+		add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'release_previous_checkout_order' ), 49, 1 );
+		add_action( 'woocommerce_checkout_order_processed', array( $this, 'reserve_order' ), 51, 3 );
+		add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'reserve_store_api_order' ), 51, 1 );
 		add_action( 'woocommerce_before_pay_action', array( $this, 'reserve_retry_order' ), 5, 1 );
 		add_action( 'woocommerce_order_status_changed', array( $this, 'order_status_changed' ), 20, 4 );
 		// Charge stored balances before anything is fulfilled (vouchers, bonus coupons, Pass Captain tickets run
@@ -295,6 +300,38 @@ final class CouponManager {
 			$order->update_meta_data( '_vcap_reservations', $made );
 			$order->save();
 		}
+	}
+
+	public const SESSION_ORDER = 'vcap_checkout_order';
+
+	/**
+	 * A new checkout order of a session whose earlier checkout order is still unpaid (pending/failed): that
+	 * earlier attempt was abandoned (e.g. refused by another plugin after our reservation, or the cart changed),
+	 * so its balance reservations and promotion holds are released instead of blocking the customer for an hour.
+	 * Paying the old order later through its pay link reserves again (reserve_retry_order).
+	 *
+	 * @param int|\WC_Order $order_or_id
+	 */
+	public function release_previous_checkout_order( $order_or_id ): void {
+		$order   = $order_or_id instanceof \WC_Order ? $order_or_id : wc_get_order( (int) $order_or_id );
+		$session = function_exists( 'WC' ) && WC()->session ? WC()->session : null;
+		if ( ! $order instanceof \WC_Order || ! $session ) {
+			return;
+		}
+		$previous_id = absint( $session->get( self::SESSION_ORDER ) );
+		$session->set( self::SESSION_ORDER, $order->get_id() );
+		if ( ! $previous_id || $previous_id === $order->get_id() ) {
+			return;
+		}
+		$previous = wc_get_order( $previous_id );
+		if ( ! $previous instanceof \WC_Order || ! $previous->has_status( array( 'pending', 'failed', 'checkout-draft' ) ) || $previous->is_paid() ) {
+			return;
+		}
+		if ( (int) $previous->get_customer_id() !== (int) $order->get_customer_id() ) {
+			return;
+		}
+		$this->release_order_reservations( $previous );
+		( new Discounts\Usage() )->revert( $previous->get_id() );
 	}
 
 	/**

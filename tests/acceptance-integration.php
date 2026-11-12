@@ -191,6 +191,26 @@ vcap_acc_assert( vcap()->vouchers->get( $gross_card->id )->balance < 0.02, 'the 
 WC_Tax::_delete_tax_rate( $rate_id );
 update_option( 'woocommerce_calc_taxes', 'no' );
 
+// A checkout refused after the reservation (e.g. by another plugin) and retried as a new order of the same
+// session gives the first order's reservation back right away.
+wc_load_cart();
+$retry_card  = vcap_acc_card( 25 );
+$first_try   = wc_create_order();
+$first_try->add_product( $product, 1 );
+$first_try->set_billing_email( 'acceptance-retry@example.com' );
+$first_try->calculate_totals();
+$first_try->apply_coupon( $retry_card->code );
+$first_try = wc_get_order( $first_try->get_id() );
+vcap()->coupons->release_previous_checkout_order( $first_try );
+vcap()->coupons->reserve_order( $first_try->get_id(), array(), $first_try );
+$reserved_balance = (float) vcap()->vouchers->get( $retry_card->id )->balance;
+$second_try = wc_create_order();
+$second_try->add_product( $product, 1 );
+$second_try->set_billing_email( 'acceptance-retry@example.com' );
+$second_try->save();
+vcap()->coupons->release_previous_checkout_order( $second_try );
+vcap_acc_assert( 5.0 === $reserved_balance && 25.0 === (float) vcap()->vouchers->get( $retry_card->id )->balance, 'a new checkout order of the session releases the abandoned order\'s reservation (gift card usable again at once)' );
+
 // Deactivation: without Voucher Captain nobody deducts balances, so balance coupons must not work.
 $idle_card = vcap_acc_card( 40 );
 VCAP\Install::suspend_balance_coupons();
