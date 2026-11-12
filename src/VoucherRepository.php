@@ -256,6 +256,22 @@ final class VoucherRepository {
 		return array_map( array( Voucher::class, 'from_row' ), $rows ? $rows : array() );
 	}
 
+	/** Mark the latest reminder event as failed so a scheduled retry can safely claim it again. */
+	public function mark_last_expiry_reminder_failed( int $voucher_id, int $days ): bool {
+		global $wpdb;
+		$note = sprintf( 'days_before=%d', $days );
+		$id   = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$this->events} WHERE voucher_id = %d AND event = 'expiry_reminder' AND note = %s ORDER BY id DESC LIMIT 1", $voucher_id, $note ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( $id <= 0 ) {
+			return false;
+		}
+		$updated = $wpdb->update( $this->events, array( 'event' => 'expiry_reminder_failed' ), array( 'id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( 1 === (int) $updated ) {
+			do_action( 'vcap_voucher_event', $voucher_id, 'expiry_reminder_failed', null, null, $note, 0 );
+			return true;
+		}
+		return false;
+	}
+
 	public function expire_overdue(): int {
 		global $wpdb;
 		return (int) $wpdb->query( $wpdb->prepare( "UPDATE {$this->table} SET status = 'expired', updated_at = %s WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < %s", $this->now(), $this->now() ) ); // phpcs:ignore
@@ -354,6 +370,7 @@ final class VoucherRepository {
 			'delivered'  => __( 'Delivered', 'voucher-captain' ),
 			'delivery_failed' => __( 'Delivery failed', 'voucher-captain' ),
 			'expiry_reminder' => __( 'Expiry reminder', 'voucher-captain' ),
+			'expiry_reminder_failed' => __( 'Expiry reminder failed', 'voucher-captain' ),
 			'credit'        => __( 'Credit added', 'voucher-captain' ),
 			'debit'         => __( 'Credit removed', 'voucher-captain' ),
 			'refund_credit' => __( 'Refunded as store credit', 'voucher-captain' ),
