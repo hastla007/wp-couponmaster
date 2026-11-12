@@ -37,6 +37,7 @@ final class Plugin {
 
 	private function boot(): void {
 		Install::maybe_upgrade();
+		( new Licensing\PremiumUpdater() )->register_hooks();
 
 		$this->settings  = new Settings();
 		$this->vouchers  = new VoucherRepository();
