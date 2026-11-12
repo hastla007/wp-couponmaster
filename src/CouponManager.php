@@ -14,6 +14,7 @@ final class CouponManager {
 		add_filter( 'woocommerce_coupon_sort', array( $this, 'sort' ), 20, 2 );
 		add_filter( 'woocommerce_coupon_get_items_to_apply', array( $this, 'prepare_gross_balance' ), 20, 2 );
 		add_filter( 'woocommerce_coupon_get_amount', array( $this, 'gross_balance_amount' ), 20, 2 );
+		add_filter( 'woocommerce_order_recalculate_coupons_coupon_object', array( $this, 'order_coupon_object' ), 10, 4 );
 		add_action( 'woocommerce_checkout_order_processed', array( $this, 'reserve_order' ), 5, 3 );
 		add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'reserve_store_api_order' ), 5, 1 );
 		add_action( 'woocommerce_before_pay_action', array( $this, 'reserve_retry_order' ), 5, 1 );
@@ -799,6 +800,40 @@ final class CouponManager {
 				) . '</th><td>' . wp_kses_post( wc_price( $voucher->balance, array( 'currency' => $voucher->currency ) ) ) . '</td></tr>';
 			}
 		}
+	}
+
+	/**
+	 * Recalculating an order (admin adds a coupon, changes items …) reads the coupon amount again, which for a
+	 * stored balance is the *remaining* balance – after the reservation often 0, so the gift card line would
+	 * shrink and the customer would be charged more. In order context the amount is what this order holds:
+	 * the deducted amount of a paid order, or the reserved amount plus the free balance of an open order.
+	 *
+	 * @param \WC_Coupon $coupon Coupon object used for the recalculation.
+	 * @param string     $code   Coupon code.
+	 * @param mixed      $item   Coupon line item.
+	 * @param \WC_Order  $order  Order.
+	 */
+	public function order_coupon_object( $coupon, $code, $item = null, $order = null ) {
+		if ( ! $coupon instanceof \WC_Coupon || ! $order instanceof \WC_Order ) {
+			return $coupon;
+		}
+		$code    = wc_format_coupon_code( (string) $code );
+		$voucher = $this->find_voucher_for_code( $code );
+		if ( ! $voucher || ! $voucher->is_multi_use() ) {
+			return $coupon;
+		}
+		$redeemed = (float) ( self::order_map( $order, '_vcap_redemptions' )[ $code ] ?? 0 );
+		$reserved = (float) ( self::order_map( $order, '_vcap_reservations' )[ $code ] ?? 0 );
+		if ( $redeemed > 0 ) {
+			$amount = $redeemed; // Already deducted: never more than the order was charged.
+		} elseif ( $reserved > 0 ) {
+			$fresh  = $this->repo->get( $voucher->id ) ?? $voucher;
+			$amount = $reserved + max( 0.0, (float) $fresh->balance );
+		} else {
+			return $coupon;
+		}
+		$coupon->set_amount( round( $amount, wc_get_price_decimals() ) );
+		return $coupon;
 	}
 
 	/** @var array<string, float> Net coupon amounts for the next discount calculation (tax-exclusive shops). */

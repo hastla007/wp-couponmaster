@@ -81,6 +81,22 @@ vcap_acc_assert( 0.0 === vcap()->vouchers->get( $card->id )->balance && VCAP\Vou
 $next = wc_get_order( $next->get_id() );
 $next->update_status( 'refunded' );
 vcap_acc_assert( 30.0 === vcap()->vouchers->get( $card->id )->balance && VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $card->id )->status, 'a full refund restores the used balance and reactivates the card' );
+// Recalculating an order with a reserved gift card keeps the gift card amount (not the remaining balance 0).
+$recalc_card  = vcap_acc_card( 100 );
+$recalc_order = wc_create_order();
+$recalc_order->add_product( $product, 8 ); // 160
+$recalc_order->set_billing_email( 'acceptance-recalc@example.com' );
+$recalc_order->calculate_totals();
+$recalc_order->apply_coupon( $recalc_card->code );
+$recalc_order = wc_get_order( $recalc_order->get_id() );
+vcap()->coupons->reserve_order( $recalc_order );
+$recalc_order = wc_get_order( $recalc_order->get_id() );
+$recalc_order->recalculate_coupons();
+$recalc_order = wc_get_order( $recalc_order->get_id() );
+vcap_acc_assert( 100.0 === (float) $recalc_order->get_discount_total() && 60.0 === (float) $recalc_order->get_total(), 'recalculating the order keeps the reserved gift card amount' );
+$recalc_order->payment_complete( 'txn-recalc' );
+vcap_acc_assert( 0.0 === vcap()->vouchers->get( $recalc_card->id )->balance, 'payment deducts exactly the reserved 100' );
+
 // Partial refund of a voucher purchase: the refunded unit voids an unused voucher; refunding value already spent is refused.
 $gc_product = new WC_Product_Simple();
 $gc_product->set_name( 'Gift card 50' );
