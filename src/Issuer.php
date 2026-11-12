@@ -344,12 +344,33 @@ final class Issuer {
 		foreach ( $this->repo->for_order( $order->get_id() ) as $voucher ) {
 			$by_item[ (int) $voucher->order_item_id ][] = $voucher;
 		}
+		if ( ! $by_item ) {
+			return;
+		}
+		// Refunded quantities straight from the refund documents: the order's cached refund list was read by
+		// wc_create_refund() before the new refund was saved.
+		$refunded = array();
+		$refunds  = wc_get_orders(
+			array(
+				'type'   => 'shop_order_refund',
+				'parent' => $order->get_id(),
+				'limit'  => -1,
+			)
+		);
+		foreach ( $refunds as $refund ) {
+			foreach ( $refund->get_items( 'line_item' ) as $refund_item ) {
+				$original = (int) $refund_item->get_meta( '_refunded_item_id' );
+				if ( $original ) {
+					$refunded[ $original ] = ( $refunded[ $original ] ?? 0 ) + abs( (int) $refund_item->get_quantity() );
+				}
+			}
+		}
 		foreach ( $by_item as $item_id => $vouchers ) {
 			$item = $order->get_item( $item_id );
 			if ( ! $item instanceof \WC_Order_Item_Product || $item->get_quantity() < 1 ) {
 				continue;
 			}
-			$refunded_qty = abs( (int) $order->get_qty_refunded_for_item( $item_id ) );
+			$refunded_qty = (int) ( $refunded[ $item_id ] ?? 0 );
 			$per_unit     = max( 1, (int) round( count( $vouchers ) / $item->get_quantity() ) );
 			$void_target  = min( count( $vouchers ), $refunded_qty * $per_unit );
 			$voided       = count( array_filter( $vouchers, static fn( Voucher $v ) => Voucher::STATUS_VOID === $v->status ) );
