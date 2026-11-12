@@ -168,7 +168,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pass_captain_ref: ['main', 'claude/woocommerce-ticket-plugin-8q4m8q']
+        pass_captain_ref: ['main']
     services:
       db:
         image: mysql:8.4
