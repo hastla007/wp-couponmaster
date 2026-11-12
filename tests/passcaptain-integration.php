@@ -287,10 +287,12 @@ if ( null !== VCAP\Compat\PassCaptainScanner::service() ) {
 		return is_wp_error( $res ) ? $res : $res->get_data();
 	};
 	$seen = $scan( 'lookup', array( 'q' => home_url( '/?wpcap_ticket=' . $token ) ) );
-	if ( ! is_array( $seen ) || 'ok' !== ( $seen['state'] ?? '' ) ) {
+	if ( ! is_array( $seen ) || 'valid' !== ( $seen['status'] ?? '' ) ) {
 		echo 'Scanner lookup: ' . wp_json_encode( is_wp_error( $seen ) ? $seen->get_error_message() : $seen ) . "\n";
 	}
-	vcap_pc_assert( is_array( $seen ) && 'passcaptain' === $seen['type'] && 'ok' === $seen['state'] && true === $seen['can_checkin'], 'the shared scanner recognises a Pass Captain ticket (URL from the QR code)' );
+	vcap_pc_assert( is_array( $seen ) && 'passcaptain' === $seen['type'] && 'valid' === $seen['status'] && true === $seen['can_checkin'], 'the shared scanner recognises a Pass Captain ticket (URL from the QR code)' );
+	// The test event is next week: a valid ticket for another day is admitted only after a visible warning.
+	vcap_pc_assert( 'warning' === $seen['state'] && str_contains( (string) $seen['message'], (string) $seen['starts'] ), 'a valid ticket for another date is flagged with its date' );
 	$in = $scan( 'checkin', array( 'q' => $token ) );
 	vcap_pc_assert( is_array( $in ) && 'ok' === $in['state'] && true === $in['success'], 'the shared scanner checks the ticket in at Pass Captain' );
 	$twice = $scan( 'checkin', array( 'q' => $token ) );
