@@ -42,7 +42,7 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 			return new \WP_Error( 'vcap_invalid_request', __( 'Please enter a voucher code.', 'voucher-captain' ) );
 		}
 		$email = sanitize_email( (string) ( $context['customer_email'] ?? '' ) );
-		$check = $this->redemptions->check( $code, array( 'target' => $target, 'email' => $email ) );
+		$check = $this->redemptions->check( $code, array( 'target' => $target, 'email' => $email, 'user_id' => 0 ) );
 		if ( is_wp_error( $check ) ) {
 			return $check;
 		}
@@ -98,6 +98,8 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 			'meta'        => array( 'source' => 'passcaptain' ),
 			'ttl_minutes' => self::hold_minutes(),
 			'email'       => (string) ( $quote['email'] ?? '' ),
+			// Owned by the integration, not by the logged-in buyer: only Pass Captain commits or releases it.
+			'user_id'     => 0,
 		);
 		if ( ! empty( $quote['balance'] ) ) {
 			$args['amount'] = (float) $quote['amount'];

@@ -576,6 +576,10 @@ final class RedemptionService {
 			case Voucher::STATUS_REDEEMED:
 				return self::error( 'vcap_already_redeemed', __( 'This voucher has already been redeemed.', 'voucher-captain' ), 409 );
 		}
+		if ( \VCAP\CouponManager::held_by_pending_order( $voucher ) ) {
+			// In an unpaid shop order right now: redeeming it here too would spend it twice.
+			return self::error( 'vcap_reserved', __( 'This voucher is currently being redeemed. Please try again in a few minutes.', 'voucher-captain' ), 409 );
+		}
 		if ( Voucher::STATUS_EXPIRED === $voucher->status || $voucher->is_expired() ) {
 			return self::error( 'vcap_expired', __( 'This voucher has expired.', 'voucher-captain' ), 410 );
 		}

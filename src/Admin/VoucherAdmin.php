@@ -83,7 +83,8 @@ final class VoucherAdmin {
 		$product = $v->product();
 		$back    = admin_url( 'admin.php?page=vcap-vouchers' );
 		$form    = static function ( string $do, string $label, string $class = 'button', array $extra = array() ) use ( $v ): void {
-			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="vcap-inline-form">';
+			$confirm = 'void' === $do ? __( 'Void this voucher? It can no longer be redeemed; tickets it was exchanged for in WP Pass Captain are revoked.', 'voucher-captain' ) : '';
+			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="vcap-inline-form"' . ( '' !== $confirm ? ' data-confirm="' . esc_attr( $confirm ) . '"' : '' ) . '>';
 			echo '<input type="hidden" name="action" value="vcap_voucher_action" /><input type="hidden" name="do" value="' . esc_attr( $do ) . '" /><input type="hidden" name="id" value="' . esc_attr( (string) $v->id ) . '" />';
 			foreach ( $extra as $k => $val ) {
 				echo '<input type="hidden" name="' . esc_attr( $k ) . '" value="' . esc_attr( $val ) . '" />';

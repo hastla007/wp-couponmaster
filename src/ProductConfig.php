@@ -188,6 +188,11 @@ final class ProductConfig {
 			default:
 				$days = '' !== (string) $config['expiry_days'] && $config['expiry_days'] !== null ? (int) $config['expiry_days'] : (int) get_option( 'vcap_default_expiry_days', 365 );
 		}
-		return $days > 0 ? gmdate( 'Y-m-d 23:59:59', $from + $days * DAY_IN_SECONDS ) : null;
+		if ( $days <= 0 ) {
+			return null;
+		}
+		// End of the expiry day in the shop's time zone (like the fixed date), stored in UTC.
+		$local = ( new \DateTimeImmutable( '@' . ( $from + $days * DAY_IN_SECONDS ) ) )->setTimezone( wp_timezone() )->setTime( 23, 59, 59 );
+		return $local->setTimezone( new \DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
 	}
 }

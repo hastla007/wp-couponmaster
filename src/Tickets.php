@@ -104,7 +104,7 @@ final class Tickets {
 			$state   = 'warning';
 			$message = __( 'Currently being redeemed elsewhere', 'voucher-captain' );
 		}
-		return array(
+		$data = array(
 			'id'             => $voucher->id,
 			'code'           => $voucher->code,
 			'type'           => $voucher->type,
@@ -126,6 +126,8 @@ final class Tickets {
 			'expires'        => $voucher->expires_at ? get_date_from_gmt( $voucher->expires_at, get_option( 'date_format' ) ) : '',
 			'admin_url'      => admin_url( 'admin.php?page=vcap-vouchers&voucher=' . $voucher->id ),
 		);
+		/** Connector details for the scanner (e.g. "ticket voucher – exchange first", redeemable false). */
+		return (array) apply_filters( 'vcap_scanner_describe', $data, $voucher );
 	}
 
 	public function rest_lookup( \WP_REST_Request $request ) {
@@ -196,7 +198,7 @@ final class Tickets {
 	public function rest_checkin( \WP_REST_Request $request ) {
 		$voucher = $this->resolve( (string) $request['q'] );
 		if ( ! $voucher ) {
-			$external = $request['undo'] ? null : apply_filters( 'vcap_scanner_checkin', null, (string) $request['q'] );
+			$external = $request['undo'] ? null : apply_filters( 'vcap_scanner_checkin', null, (string) $request['q'], sanitize_text_field( (string) $request['idempotency_key'] ) );
 			if ( null !== $external ) {
 				return is_wp_error( $external ) ? $external : rest_ensure_response( $external );
 			}
@@ -232,6 +234,16 @@ final class Tickets {
 			$data['success'] = false;
 			return rest_ensure_response( $data );
 		}
+		/** Vouchers that must not be redeemed at the counter (e.g. ticket vouchers: exchange them for tickets). */
+		$refused = \VCAP\CouponManager::held_by_pending_order( $voucher ) ? __( 'This voucher is in an unpaid shop order right now. Redeem it after that order is cancelled.', 'voucher-captain' ) : '';
+		$refused = apply_filters( 'vcap_scanner_redeem_refused', $refused, $voucher );
+		if ( '' !== (string) $refused ) {
+			$data            = $this->describe( $voucher );
+			$data['success'] = false;
+			$data['state']   = 'error';
+			$data['message'] = (string) $refused;
+			return rest_ensure_response( $data );
+		}
 		$note = sanitize_text_field( (string) $request['note'] ) ?: __( 'Redeemed in store', 'voucher-captain' );
 		if ( $voucher->is_multi_use() ) {
 			$amount = max( 0, (float) $request['amount'] );
@@ -240,8 +252,12 @@ final class Tickets {
 			}
 			$deduction = vcap()->coupons->deduct_balance_atomic( $voucher, $amount, $note );
 			if ( ! $deduction ) {
-				$data            = $this->describe( $this->repo->get( $voucher->id ) );
+				$fresh           = $this->repo->get( $voucher->id );
+				$data            = $this->describe( $fresh );
 				$data['success'] = false;
+				$data['state']   = 'error';
+				/* translators: %s: remaining balance */
+				$data['message'] = sprintf( __( 'Not deducted: the amount exceeds the balance (remaining %s).', 'voucher-captain' ), $data['balance_html'] );
 				return rest_ensure_response( $data );
 			}
 			$voucher = $this->repo->get( $voucher->id );
@@ -255,9 +271,14 @@ final class Tickets {
 				}
 			}
 		} else {
+			// Atomic: of two parallel redemptions (two tills, or till and online) only one wins.
+			if ( ! $this->repo->redeem_single_if_active( $voucher->id ) ) {
+				$data            = $this->describe( $this->repo->get( $voucher->id ) );
+				$data['success'] = false;
+				return rest_ensure_response( $data );
+			}
 			$voucher->status  = Voucher::STATUS_REDEEMED;
 			$voucher->balance = 0;
-			$this->repo->update( $voucher );
 			$this->repo->log( $voucher->id, 'redeemed', $voucher->initial_amount, 0, $note );
 			if ( $voucher->coupon_id ) {
 				$coupon = new \WC_Coupon( $voucher->coupon_id );

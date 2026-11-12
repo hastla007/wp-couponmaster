@@ -109,7 +109,8 @@ final class Issuer {
 			'discount_type'      => (string) $config['discount_type'],
 			'amount_source'      => (string) $config['amount_source'],
 			'face_value'         => $this->voucher_amount( $order, $item, $config ),
-			'voucher_currency'   => get_woocommerce_currency(),
+			// Base currency: switchers (WCML, Aelia, …) change get_woocommerce_currency() during the request.
+			'voucher_currency'   => (string) get_option( 'woocommerce_currency' ),
 			'vouchers'           => $count,
 			'quantity'           => (int) $item->get_quantity(),
 			'order_currency'     => $order->get_currency(),
@@ -177,7 +178,7 @@ final class Issuer {
 		if ( 'balance' === $voucher->usage_mode ) {
 			$voucher->discount_type = 'fixed_cart';
 		}
-		$voucher->currency      = get_woocommerce_currency();
+		$voucher->currency      = (string) get_option( 'woocommerce_currency' ); // Amounts are in base currency.
 		$voucher->initial_amount = $this->voucher_amount( $order, $item, $config );
 		$voucher->balance       = $voucher->initial_amount;
 		$voucher->expires_at    = ProductConfig::expiry_for( $config, $order->get_date_paid() ? $order->get_date_paid()->getTimestamp() : time() );

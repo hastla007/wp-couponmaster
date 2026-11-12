@@ -44,6 +44,7 @@ final class Scanner {
 					'date'       => __( 'Date', 'voucher-captain' ),
 					'attendee'   => __( 'Attendee', 'voucher-captain' ),
 					'passCaptainCheckins' => __( 'Check-ins in WP Pass Captain', 'voucher-captain' ),
+					'confirmUndo' => __( 'Revert this check-in? The ticket can then be used for entry again.', 'voucher-captain' ),
 				),
 			)
 		);

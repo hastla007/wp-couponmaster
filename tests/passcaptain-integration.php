@@ -198,6 +198,9 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	add_filter( 'vcap_passcaptain_ticket_target', $give, 10, 2 );
 	$refused = vcap()->passcaptain_tickets->exchange( $full->code );
 	vcap_pc_assert( is_wp_error( $refused ) && VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $full->id )->status, 'a sold-out ticket type refuses the exchange and the voucher stays usable' );
+	$wpdb->update( "{$wpdb->prefix}wpcap_ticket_types", array( 'capacity' => 10 ), array( 'ticket_type_id' => $full_type ) );
+	$second_try = vcap()->passcaptain_tickets->exchange( $full->code );
+	vcap_pc_assert( is_array( $second_try ) && 2 === $second_try['tickets'] && 'committed' === vcap()->redemptions->get( VCAP\Compat\PassCaptainTickets::key( $full, 2 ) )['state'], 'after a failed attempt the voucher can be exchanged again (new keys)' );
 	remove_filter( 'vcap_passcaptain_ticket_target', $give, 10 );
 	vcap_pc_assert( is_wp_error( vcap()->passcaptain_tickets->exchange( vcap_pc_voucher( 'single', 10 )->code ) ), 'vouchers without a ticket target are not exchanged' );
 

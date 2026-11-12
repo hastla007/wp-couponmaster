@@ -94,7 +94,7 @@ check( 'percent value', '15%' === Placeholders::replace( '{coupon_value}', $v2 )
 
 echo "Expiry & delivery\n";
 $base = strtotime( '2026-01-10 12:00:00 UTC' );
-check( 'expiry in days', '2026-02-09 23:59:59' === ProductConfig::expiry_for( array_merge( ProductConfig::DEFAULTS, array( 'expiry_mode' => 'days', 'expiry_days' => 30 ) ), $base ) );
+check( 'expiry in days (shop-local end of day)', '2026-02-09 22:59:59' === ProductConfig::expiry_for( array_merge( ProductConfig::DEFAULTS, array( 'expiry_mode' => 'days', 'expiry_days' => 30 ) ), $base ) );
 check( 'never expires', null === ProductConfig::expiry_for( array_merge( ProductConfig::DEFAULTS, array( 'expiry_mode' => 'never' ) ), $base ) );
 check( 'fixed expiry date (local end of day)', '2027-03-01 22:59:59' === ProductConfig::expiry_for( array_merge( ProductConfig::DEFAULTS, array( 'expiry_mode' => 'date', 'expiry_date' => '2027-03-01' ) ), $base ) );
 $future = wp_date( 'Y-m-d', time() + 10 * DAY_IN_SECONDS );
