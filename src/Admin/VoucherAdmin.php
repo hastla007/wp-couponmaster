@@ -275,12 +275,15 @@ final class VoucherAdmin {
 				$amount = (float) wc_format_decimal( wp_unslash( (string) ( $_POST['amount'] ?? 0 ) ) );
 				$mode   = sanitize_key( $_POST['mode'] ?? 'subtract' );
 				$note   = sanitize_text_field( wp_unslash( $_POST['note'] ?? '' ) );
-				$new    = 'set' === $mode ? $amount : ( 'add' === $mode ? $v->balance + $amount : $v->balance - $amount );
 				if ( 'single' !== $v->usage_mode && ! $v->is_multi_use() ) {
 					// Reusable vouchers have no stored balance: switch to balance tracking on first adjustment.
 					$v->usage_mode = 'balance';
 				}
-				if ( ! vcap()->coupons->set_balance( $v, $new, 'subtract' === $mode ? 'redeemed' : 'adjusted', abs( $new - $v->balance ), $note ) ) {
+				// Add/subtract apply to the balance as it is when the row is locked, not as the form showed it.
+				$ok = 'set' === $mode
+					? vcap()->coupons->set_balance( $v, $amount, 'adjusted', null, $note )
+					: vcap()->coupons->adjust_balance( $v, 'add' === $mode ? $amount : -$amount, 'subtract' === $mode ? 'redeemed' : 'adjusted', $note );
+				if ( ! $ok ) {
 					$this->redirect( 'adjust_failed', $id );
 				}
 				$this->redirect( 'adjusted', $id );
@@ -300,6 +303,7 @@ final class VoucherAdmin {
 	}
 
 	private function save( Voucher $v ): void {
+		$from_status = $v->status;
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified in handle_action().
 		$v->recipient_name  = sanitize_text_field( wp_unslash( $_POST['recipient_name'] ?? '' ) );
 		$v->recipient_email = sanitize_email( wp_unslash( $_POST['recipient_email'] ?? '' ) );
@@ -328,7 +332,7 @@ final class VoucherAdmin {
 		}
 		$delivery = sanitize_text_field( wp_unslash( $_POST['delivery_at'] ?? '' ) );
 		// phpcs:enable
-		$this->repo->update( $v );
+		$this->repo->update_columns( $v, array( 'recipient_name', 'recipient_email', 'message', 'send_to', 'fields', 'max_checkins', 'expires_at' ), $from_status );
 		$this->repo->log( $v->id, 'edited' );
 
 		if ( $v->coupon_id ) {

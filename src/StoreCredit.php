@@ -166,6 +166,14 @@ final class StoreCredit {
 		if ( $amount <= 0 || $amount > (float) $order->get_remaining_refund_amount() + 0.00001 || '' === $reason ) {
 			return new \WP_Error( 'vcap_credit_input', __( 'Please enter a reason and an amount up to the remaining refundable total.', 'voucher-captain' ) );
 		}
+		// Credit first: a full refund sets the order to "refunded" right away (gift cards restored, vouchers
+		// voided, connected tickets cancelled), which cannot be undone by deleting the refund afterwards.
+		// A credit that turns out to have no refund is simply booked back.
+		$credit = (float) apply_filters( 'vcap_amount_to_base_currency', $amount, $order->get_currency(), $order );
+		$result = $this->adjust( $user_id, $credit, $reason, $order->get_id(), 'refund_credit' );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
 		$refund = wc_create_refund(
 			array(
 				'amount'         => $amount,
@@ -177,13 +185,11 @@ final class StoreCredit {
 			)
 		);
 		if ( is_wp_error( $refund ) ) {
+			$back = $this->adjust( $user_id, -$credit, __( 'Refund as store credit failed', 'voucher-captain' ), $order->get_id(), 'refund_credit_reversed' );
+			if ( is_wp_error( $back ) ) {
+				$order->add_order_note( __( 'Store credit was added but the refund could not be recorded, and the credit could not be booked back. Please check the customer\'s store credit.', 'voucher-captain' ) );
+			}
 			return $refund;
-		}
-		$credit = (float) apply_filters( 'vcap_amount_to_base_currency', $amount, $order->get_currency(), $order );
-		$result = $this->adjust( $user_id, $credit, $reason, $order->get_id(), 'refund_credit' );
-		if ( is_wp_error( $result ) ) {
-			$refund->delete( true ); // No credit, no refund record.
-			return $result;
 		}
 		$order->add_order_note(
 			/* translators: %s: amount */

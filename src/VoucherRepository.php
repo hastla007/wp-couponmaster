@@ -46,6 +46,35 @@ final class VoucherRepository {
 		return $ok;
 	}
 
+	/**
+	 * Write only the given columns, so an edit of e.g. the recipient cannot overwrite a balance or
+	 * status that a redemption changed in the meantime. A status change is applied only when the
+	 * stored status is still the one the edit started from ($from_status).
+	 *
+	 * @param string[] $columns Column names from Voucher::to_row() (except status).
+	 */
+	public function update_columns( Voucher $voucher, array $columns, ?string $from_status = null ): bool {
+		global $wpdb;
+		$voucher->updated_at = $this->now();
+		$row                 = $voucher->to_row();
+		$data                = array_intersect_key( $row, array_flip( array_diff( $columns, array( 'status' ) ) ) );
+		$data['updated_at']  = $voucher->updated_at;
+		$ok                  = false !== $wpdb->update( $this->table, $data, array( 'id' => $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( $ok && null !== $from_status && $from_status !== $voucher->status ) {
+			$wpdb->update( $this->table, array( 'status' => $voucher->status ), array( 'id' => $voucher->id, 'status' => $from_status ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		if ( $ok ) {
+			$fresh = $this->get( $voucher->id );
+			if ( $fresh ) {
+				foreach ( get_object_vars( $fresh ) as $key => $value ) {
+					$voucher->$key = $value;
+				}
+				do_action( 'vcap_voucher_updated', $fresh );
+			}
+		}
+		return $ok;
+	}
+
 	/** Mark a single-use voucher redeemed only if it is still active (atomic; false when someone else won). */
 	public function redeem_single_if_active( int $id ): bool {
 		global $wpdb;
@@ -370,6 +399,7 @@ final class VoucherRepository {
 			'credit'        => __( 'Credit added', 'voucher-captain' ),
 			'debit'         => __( 'Credit removed', 'voucher-captain' ),
 			'refund_credit' => __( 'Refunded as store credit', 'voucher-captain' ),
+			'refund_credit_reversed' => __( 'Store credit refund reversed', 'voucher-captain' ),
 			'resent'     => __( 'Email resent', 'voucher-captain' ),
 			'redeemed'   => __( 'Redeemed', 'voucher-captain' ),
 			'restored'   => __( 'Balance restored', 'voucher-captain' ),

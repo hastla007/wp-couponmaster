@@ -138,6 +138,45 @@ list( $codes ) = vcap_promo_cart();
 vcap_promo_assert( array( 'vcap-campaign-' . $once ) === $codes, 'the promotion applies again after the cancellation' );
 wp_update_post( array( 'ID' => $once, 'post_status' => 'draft' ) );
 
+// Checkout holds the use right away: a second unpaid order cannot take the last use as well.
+$held = vcap_promo_campaign( 'Held at checkout', array( 'action' => 'percent', 'percent' => 10, 'usage_limit' => 1 ), 0 );
+$usage = new VCAP\Discounts\Usage( new VCAP\Discounts\Repository() );
+$first = wc_create_order();
+$first->add_product( $shirt, 1 );
+$first->set_billing_email( 'hold-a@example.com' );
+$first->calculate_totals();
+$first->apply_coupon( 'vcap-campaign-' . $held );
+$second = wc_create_order();
+$second->add_product( $shirt, 1 );
+$second->set_billing_email( 'hold-b@example.com' );
+$second->calculate_totals();
+$second->apply_coupon( 'vcap-campaign-' . $held );
+$usage->hold( wc_get_order( $first->get_id() ) );
+vcap_promo_assert( 1 === VCAP\Discounts\Usage::count( $held ), 'placing an unpaid order holds the use' );
+$refused = '';
+try {
+	$usage->hold( wc_get_order( $second->get_id() ) );
+} catch ( Exception $e ) {
+	$refused = $e->getMessage();
+}
+vcap_promo_assert( '' !== $refused && 1 === VCAP\Discounts\Usage::count( $held ), 'a parallel order is refused instead of exceeding the limit' );
+$first = wc_get_order( $first->get_id() );
+$first->update_status( 'processing' );
+vcap_promo_assert( 1 === VCAP\Discounts\Usage::count( $held ), 'paying the held order does not count the use twice' );
+$first->update_status( 'cancelled' );
+vcap_promo_assert( 0 === VCAP\Discounts\Usage::count( $held ), 'cancelling gives the held use back' );
+$usage->hold( wc_get_order( $second->get_id() ) );
+vcap_promo_assert( 1 === VCAP\Discounts\Usage::count( $held ), 'the other order can hold it afterwards' );
+$one_minute = static fn() => 1;
+add_filter( 'vcap_stale_reservation_minutes', $one_minute );
+$stale = wc_get_order( $second->get_id() );
+$stale->set_date_modified( time() - HOUR_IN_SECONDS );
+$stale->save();
+$usage->release_abandoned();
+remove_filter( 'vcap_stale_reservation_minutes', $one_minute );
+vcap_promo_assert( 0 === VCAP\Discounts\Usage::count( $held ), 'an abandoned unpaid order gives its held use back' );
+wp_update_post( array( 'ID' => $held, 'post_status' => 'draft' ) );
+
 $per = vcap_promo_campaign( 'Once per customer', array( 'action' => 'percent', 'percent' => 10, 'usage_limit_per_customer' => 1 ), 0 );
 $mine = wc_create_order();
 $mine->add_product( $shirt, 1 );

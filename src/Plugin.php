@@ -68,7 +68,7 @@ final class Plugin {
 		( new Shortcodes( $this->downloads, $referrals ) )->register();
 		$promotions = new Discounts\Repository();
 		$promotions->register();
-		( new Discounts\Usage() )->register();
+		( new Discounts\Usage( $promotions ) )->register();
 		$promotion_cart = new Discounts\CartIntegration( $this->settings, $promotions );
 		$promotion_cart->register();
 		( new Discounts\Bonus( $promotions, $promotion_cart ) )->register();

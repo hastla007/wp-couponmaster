@@ -612,6 +612,20 @@ final class CouponManager {
 	 * Apply a new balance to voucher + coupon.
 	 */
 	public function set_balance( Voucher $voucher, float $balance, string $event, ?float $amount = null, string $note = '', int $order_id = 0 ): bool {
+		return $this->write_balance( $voucher, static fn() => $balance, $event, $amount, $note, $order_id );
+	}
+
+	/**
+	 * Add (positive) or remove (negative) value relative to the balance stored right now, under the
+	 * row lock. Admin edits use this so a redemption that lands while the edit form is open is not
+	 * overwritten by a balance computed from the stale form value.
+	 */
+	public function adjust_balance( Voucher $voucher, float $delta, string $event, string $note = '', int $order_id = 0 ): bool {
+		return $this->write_balance( $voucher, static fn( float $current ) => $current + $delta, $event, null, $note, $order_id );
+	}
+
+	/** @param callable(float):float $compute New balance from the locked, current balance. */
+	private function write_balance( Voucher $voucher, callable $compute, string $event, ?float $amount, string $note, int $order_id ): bool {
 		global $wpdb;
 		$table = Install::tables()['vouchers'];
 		if ( ! Install::tables_support_transactions() || false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -624,7 +638,9 @@ final class CouponManager {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				return false;
 			}
-			$balance           = max( 0.0, round( $balance, wc_get_price_decimals() ) );
+			$before            = (float) $fresh->balance;
+			$balance           = max( 0.0, round( (float) $compute( $before ), wc_get_price_decimals() ) );
+			$amount            = $amount ?? abs( $balance - $before );
 			$fresh->usage_mode = $voucher->usage_mode;
 			$fresh->balance    = $balance;
 			if ( $fresh->is_multi_use() ) {

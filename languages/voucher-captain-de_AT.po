@@ -3617,3 +3617,24 @@ msgstr "Gilt, wenn ein Produkt keine eigene Gültigkeit festlegt. Kürzere Frist
 
 msgid "Used with \"Fixed number of days\" when a product does not define its own expiry. 0 = never expires."
 msgstr "Gilt bei „Feste Anzahl Tage“, wenn ein Produkt keine eigene Gültigkeit festlegt. 0 = unbegrenzt gültig."
+
+msgid "The promotion \"%s\" has reached its usage limit. Please remove it from your cart and try again."
+msgstr "Die Aktion „%s“ hat ihr Nutzungslimit erreicht. Bitte entfernen Sie sie aus dem Warenkorb und versuchen Sie es erneut."
+
+msgid "Refund as store credit failed"
+msgstr "Erstattung als Guthaben fehlgeschlagen"
+
+msgid "Store credit was added but the refund could not be recorded, and the credit could not be booked back. Please check the customer's store credit."
+msgstr "Das Guthaben wurde gutgeschrieben, aber die Erstattung konnte nicht erfasst und das Guthaben nicht zurückgebucht werden. Bitte prüfen Sie das Guthaben des Kunden."
+
+msgid "Store credit refund reversed"
+msgstr "Erstattung als Guthaben zurückgebucht"
+
+msgid "Accept voucher shortfall and fulfil the order"
+msgstr "Gutschein-Fehlbetrag akzeptieren und Bestellung ausführen"
+
+msgid "Fulfilment after the voucher shortfall was accepted."
+msgstr "Ausführung nach akzeptiertem Gutschein-Fehlbetrag."
+
+msgid "Voucher shortfall accepted by an administrator; the order can be fulfilled."
+msgstr "Gutschein-Fehlbetrag von einem Administrator akzeptiert; die Bestellung kann ausgeführt werden."

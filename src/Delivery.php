@@ -78,13 +78,17 @@ final class Delivery {
 	}
 
 	public function reschedule( Voucher $voucher, ?string $delivery_at_utc ): void {
+		$from_status           = $voucher->status;
 		$voucher->delivery_at  = $delivery_at_utc;
 		$voucher->delivered_at = null;
 		if ( $delivery_at_utc && strtotime( $delivery_at_utc . ' UTC' ) > time() && Voucher::STATUS_ACTIVE === $voucher->status ) {
 			$voucher->status = Voucher::STATUS_SCHEDULED;
+		}
+		$this->repo->update_columns( $voucher, array( 'delivery_at', 'delivered_at' ), $from_status );
+		if ( Voucher::STATUS_SCHEDULED === $voucher->status && Voucher::STATUS_SCHEDULED !== $from_status ) {
+			// Only once the stored row really is scheduled (a concurrent redemption wins).
 			vcap()->coupons->set_coupon_enabled( $voucher, false );
 		}
-		$this->repo->update( $voucher );
 		$this->schedule( $voucher );
 	}
 

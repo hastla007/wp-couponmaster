@@ -8,15 +8,23 @@ defined( 'ABSPATH' ) || exit;
  *
  * Like WooCommerce's own "_used_by" coupon meta, every use is one post meta row on the promotion
  * ("_vcap_used_by" = "u:{user id}" or "e:{billing email}"), so concurrent orders never overwrite each other's count.
- * A use is counted when the order reaches a paid/on-hold status and given back when it is cancelled, failed or
- * set back to pending. Each order remembers what it counted, so status repeats never count twice.
+ * A use is held when the order is placed (classic and Store API checkout, retried payment), under a named
+ * lock per promotion, so parallel or still unpaid orders cannot together exceed a limit. It is confirmed when the
+ * order reaches a paid/on-hold status and given back when it is cancelled, failed or set back to pending, or when
+ * an unpaid order is abandoned. Each order remembers what it counted, so status repeats never count twice.
  */
 final class Usage {
 	public const META       = '_vcap_used_by';
 	public const ORDER_META = '_vcap_campaign_usage';
 	public const ORDER_KEY  = '_vcap_campaign_usage_key';
 
+	public function __construct( private ?Repository $campaigns = null ) {}
+
 	public function register(): void {
+		add_action( 'woocommerce_checkout_order_processed', array( $this, 'hold_classic' ), 4, 3 );
+		add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'hold_store_api' ), 4, 1 );
+		add_action( 'woocommerce_before_pay_action', array( $this, 'hold_retry' ), 4, 1 );
+		add_action( 'vcap_release_stale_order_reservations', array( $this, 'release_abandoned' ), 20 );
 		foreach ( array( 'processing', 'completed', 'on-hold' ) as $status ) {
 			add_action( 'woocommerce_order_status_' . $status, array( $this, 'record' ), 20 );
 		}
@@ -143,6 +151,125 @@ final class Usage {
 		}
 		$order->update_meta_data( self::ORDER_META, array_values( array_merge( $done, $claimed ) ) );
 		$order->save_meta_data();
+	}
+
+	/**
+	 * Hold the uses of an order being placed. Throws (and holds nothing) when a limit is reached, so the
+	 * order is not sent for payment.
+	 *
+	 * @throws \Exception When a promotion's usage limit is reached.
+	 */
+	public function hold( \WC_Order $order ): void {
+		if ( ! $this->campaigns ) {
+			return;
+		}
+		$done = array_values( array_filter( array_map( 'intval', (array) $order->get_meta( self::ORDER_META ) ) ) );
+		$new  = array_values( array_diff( self::campaign_ids( $order ), $done ) );
+		if ( ! $new ) {
+			return;
+		}
+		$key  = self::order_key( $order );
+		$held = array();
+		foreach ( $new as $id ) {
+			$campaign = $this->campaigns->get( $id );
+			if ( ! $campaign ) {
+				continue;
+			}
+			$rules   = $campaign['rules'] ?? array();
+			$limited = ! empty( $rules['usage_limit'] ) || ! empty( $rules['usage_limit_per_customer'] );
+			$locked  = $limited ? self::lock( $id ) : false;
+			$blocker = $limited ? self::blocker( $campaign, (int) $order->get_customer_id(), (string) $order->get_billing_email() ) : '';
+			if ( '' === $blocker && \VCAP\Claim::take( 'usage:' . $order->get_id() . ':' . $id ) ) {
+				self::add( $id, $key );
+				$held[] = $id;
+			}
+			if ( $locked ) {
+				self::unlock( $id );
+			}
+			if ( '' !== $blocker ) {
+				foreach ( $held as $undo ) {
+					self::remove( $undo, $key );
+					\VCAP\Claim::release( 'usage:' . $order->get_id() . ':' . $undo );
+				}
+				throw new \Exception(
+					sprintf(
+						/* translators: %s: promotion title */
+						__( 'The promotion "%s" has reached its usage limit. Please remove it from your cart and try again.', 'voucher-captain' ),
+						(string) ( $campaign['title'] ?? '' )
+					)
+				);
+			}
+		}
+		if ( $held ) {
+			$order->update_meta_data( self::ORDER_META, array_values( array_merge( $done, $held ) ) );
+			$order->save_meta_data();
+		}
+	}
+
+	public function hold_classic( $order_id, $posted_data = null, $order = null ): void {
+		$order = $order instanceof \WC_Order ? $order : wc_get_order( (int) $order_id );
+		if ( $order instanceof \WC_Order ) {
+			$this->hold( $order );
+		}
+	}
+
+	public function hold_store_api( $order ): void {
+		if ( ! $order instanceof \WC_Order ) {
+			return;
+		}
+		try {
+			$this->hold( $order );
+		} catch ( \Exception $e ) {
+			if ( class_exists( \Automattic\WooCommerce\StoreApi\Exceptions\RouteException::class ) ) {
+				throw new \Automattic\WooCommerce\StoreApi\Exceptions\RouteException( 'vcap_promotion_usage_limit', $e->getMessage(), 409 );
+			}
+			throw $e;
+		}
+	}
+
+	/** A failed order paid again from the "pay for order" page gave its uses back and holds them again. */
+	public function hold_retry( $order ): void {
+		if ( ! $order instanceof \WC_Order ) {
+			return;
+		}
+		try {
+			$this->hold( $order );
+		} catch ( \Exception $e ) {
+			wc_add_notice( $e->getMessage(), 'error' );
+		}
+	}
+
+	/** Give back the uses held by unpaid orders that were abandoned (same age as voucher reservations). */
+	public function release_abandoned(): void {
+		$hold    = (int) get_option( 'woocommerce_hold_stock_minutes', 0 );
+		$minutes = (int) apply_filters( 'vcap_stale_reservation_minutes', $hold > 0 ? $hold : 60 );
+		if ( $minutes <= 0 ) {
+			return;
+		}
+		$orders = wc_get_orders(
+			array(
+				'status'        => 'pending',
+				'limit'         => 100,
+				'date_modified' => '<' . ( time() - $minutes * MINUTE_IN_SECONDS ),
+				'meta_query'    => array( array( 'key' => self::ORDER_META, 'compare' => 'EXISTS' ) ), // phpcs:ignore WordPress.DB.SlowDBQuery
+			)
+		);
+		foreach ( $orders as $order ) {
+			if ( $order instanceof \WC_Order ) {
+				$this->revert( $order->get_id() );
+			}
+		}
+	}
+
+	/** Named database lock per promotion (count + add must not interleave with another checkout). */
+	private static function lock( int $id ): bool {
+		global $wpdb;
+		return 1 === (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 10)', 'vcap_usage_' . $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
+
+	private static function unlock( int $id ): void {
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', 'vcap_usage_' . $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	public function revert( $order_id ): void {
