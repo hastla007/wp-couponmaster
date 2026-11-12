@@ -140,7 +140,8 @@ $emptied->balance = 0.0; // Spent in another order meanwhile (no reservation hel
 vcap()->vouchers->update( $emptied );
 wc_get_order( $short_order->get_id() )->payment_complete( 'txn-short' );
 $short_order = wc_get_order( $short_order->get_id() );
-vcap_acc_assert( 'on-hold' === $short_order->get_status() && VCAP\CouponManager::has_shortfall( $short_order ) && ! vcap()->vouchers->for_order( $short_order->get_id() ), 'a gift card that can no longer be charged holds the order and nothing is issued' );
+$short_diag = sprintf( ' [status=%s shortfall=%s issued=%d balance=%s redemptions=%s notes=%s]', $short_order->get_status(), $short_order->get_meta( VCAP\CouponManager::SHORTFALL_META ), count( vcap()->vouchers->for_order( $short_order->get_id() ) ), vcap()->vouchers->get( $short_card->id )->balance, wp_json_encode( $short_order->get_meta( '_vcap_redemptions' ) ), wp_json_encode( array_map( static fn( $n ) => $n->content, wc_get_order_notes( array( 'order_id' => $short_order->get_id() ) ) ) ) );
+vcap_acc_assert( 'on-hold' === $short_order->get_status() && VCAP\CouponManager::has_shortfall( $short_order ) && ! vcap()->vouchers->for_order( $short_order->get_id() ), 'a gift card that can no longer be charged holds the order and nothing is issued' . ( 'on-hold' === $short_order->get_status() && VCAP\CouponManager::has_shortfall( $short_order ) && ! vcap()->vouchers->for_order( $short_order->get_id() ) ? '' : $short_diag ) );
 wp_set_current_user( 1 ); // The order action needs a shop manager.
 ( new VCAP\Admin\OrderAdmin( vcap()->vouchers, vcap()->issuer ) )->accept_shortfall( $short_order );
 wp_set_current_user( 0 );
