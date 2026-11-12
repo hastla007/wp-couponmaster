@@ -12,6 +12,8 @@ final class CouponManager {
 	public function register(): void {
 		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'validate' ), 20, 3 );
 		add_filter( 'woocommerce_coupon_sort', array( $this, 'sort' ), 20, 2 );
+		add_filter( 'woocommerce_coupon_get_items_to_apply', array( $this, 'prepare_gross_balance' ), 20, 2 );
+		add_filter( 'woocommerce_coupon_get_amount', array( $this, 'gross_balance_amount' ), 20, 2 );
 		add_action( 'woocommerce_checkout_order_processed', array( $this, 'reserve_order' ), 5, 3 );
 		add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'reserve_store_api_order' ), 5, 1 );
 		add_action( 'woocommerce_before_pay_action', array( $this, 'reserve_retry_order' ), 5, 1 );
@@ -69,11 +71,21 @@ final class CouponManager {
 		// HPOS and the legacy order store alike).
 		global $wpdb;
 		$events    = Install::tables()['events'];
-		$order_ids = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			"SELECT DISTINCT e.order_id FROM {$events} e
-			INNER JOIN ( SELECT MAX(id) AS id FROM {$events} WHERE order_id > 0 GROUP BY voucher_id, order_id ) latest ON latest.id = e.id
-			WHERE e.event = 'reserved' LIMIT 200"
+		// Walk through all open holds in batches (cursor), so on-hold orders that keep their hold can never block
+		// the release of abandoned pending orders behind them.
+		$cursor = (int) get_option( 'vcap_stale_release_cursor', 0 );
+		$rows   = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				"SELECT e.id, e.order_id FROM {$events} e
+				INNER JOIN ( SELECT MAX(id) AS id FROM {$events} WHERE order_id > 0 GROUP BY voucher_id, order_id ) latest ON latest.id = e.id
+				WHERE e.event = 'reserved' AND e.id > %d ORDER BY e.id ASC LIMIT 200",
+				$cursor
+			),
+			ARRAY_A
 		);
+		$rows      = $rows ? $rows : array();
+		$order_ids = array_values( array_unique( array_column( $rows, 'order_id' ) ) );
+		update_option( 'vcap_stale_release_cursor', count( $rows ) < 200 ? 0 : (int) end( $rows )['id'], false );
 		$cutoff = time() - $minutes * MINUTE_IN_SECONDS;
 		foreach ( array_map( 'intval', $order_ids ? $order_ids : array() ) as $order_id ) {
 			$order = wc_get_order( $order_id );
@@ -358,6 +370,10 @@ final class CouponManager {
 
 			$fresh = $this->repo->get( $voucher->id );
 			$requested = round( $requested, wc_get_price_decimals() );
+			if ( $fresh && $fresh->balance < $requested && $requested - $fresh->balance <= (float) apply_filters( 'vcap_balance_rounding_tolerance', max( 0.05, $fresh->balance * 0.001 ), $fresh ) ) {
+				// Currency round trips (order currency → base currency) can exceed the full balance by a few cents.
+				$requested = $fresh->balance;
+			}
 			if ( ! $fresh || ! $fresh->is_multi_use() || Voucher::STATUS_ACTIVE !== $fresh->status || $fresh->is_expired() || $fresh->balance < $requested ) {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				return null;
@@ -528,7 +544,10 @@ final class CouponManager {
 			$code    = (string) $code;
 			$voucher = $this->find_voucher_for_code( $code );
 			$key     = wc_format_coupon_code( $code );
-			if ( ! isset( $current[ $key ] ) || abs( (float) $current[ $key ] - (float) $amount ) >= 0.0001 ) {
+			// Currency round trips can make the used amount a few cents larger than the (full-balance) hold.
+			$excess = isset( $current[ $key ] ) ? (float) $current[ $key ] - (float) $amount : 0.0;
+			$same   = isset( $current[ $key ] ) && ( abs( $excess ) < 0.0001 || ( $excess > 0 && $excess <= (float) apply_filters( 'vcap_balance_rounding_tolerance', max( 0.05, (float) $amount * 0.001 ), $voucher ) ) );
+			if ( ! $same ) {
 				// Removed or changed coupon line: give the hold back; deduct_order() charges the current amount.
 				if ( $voucher && $this->release_reservation_atomic( $voucher, $order->get_id(), __( 'Coupon removed or changed on the order', 'voucher-captain' ) ) ) {
 					unset( $reservations[ $code ] );
@@ -782,11 +801,66 @@ final class CouponManager {
 		}
 	}
 
+	/** @var array<string, float> Net coupon amounts for the next discount calculation (tax-exclusive shops). */
+	private array $net_amounts = array();
+
+	/**
+	 * Tax-exclusive shops apply a fixed cart coupon to net prices and then reduce the tax as well, so a
+	 * balance of 50 would pay 50 net + tax. A stored balance is money (a multi-purpose voucher pays the
+	 * gross price), so right before WooCommerce distributes the coupon its amount is converted to net with
+	 * the tax ratio of the discounted lines: the customer saves exactly the balance, and exactly that is
+	 * deducted (net + tax, see used_amount()). Filter "vcap_balance_covers_tax" (false = old behaviour).
+	 *
+	 * @param array      $items  Items the coupon applies to (WC_Discounts items).
+	 * @param \WC_Coupon $coupon Coupon.
+	 */
+	public function prepare_gross_balance( $items, $coupon ) {
+		if ( ! $coupon instanceof \WC_Coupon ) {
+			return $items;
+		}
+		$code = wc_format_coupon_code( $coupon->get_code() );
+		unset( $this->net_amounts[ $code ] );
+		if ( ! wc_tax_enabled() || wc_prices_include_tax() || 'fixed_cart' !== $coupon->get_discount_type() || ! apply_filters( 'vcap_balance_covers_tax', true, $coupon ) ) {
+			return $items;
+		}
+		$voucher = $this->repo->get_by_code( $code );
+		if ( ! $voucher || ! $voucher->is_multi_use() ) {
+			return $items;
+		}
+		$net = 0.0;
+		$tax = 0.0;
+		foreach ( (array) $items as $item ) {
+			if ( isset( $item->subtotal, $item->subtotal_tax ) ) { // Cart totals items (same precision for both).
+				$net += (float) $item->subtotal;
+				$tax += (float) $item->subtotal_tax;
+			} elseif ( isset( $item->object ) && $item->object instanceof \WC_Order_Item_Product ) {
+				$net += (float) $item->object->get_subtotal();
+				$tax += (float) $item->object->get_subtotal_tax();
+			}
+		}
+		if ( $net > 0 && $tax > 0 ) {
+			$factor                     = 10 ** wc_get_price_decimals();
+			$this->net_amounts[ $code ] = floor( (float) $coupon->get_amount( 'edit' ) / ( 1 + $tax / $net ) * $factor ) / $factor;
+		}
+		return $items;
+	}
+
+	/** One-shot: the net amount prepared above, read by WooCommerce right after the items filter. */
+	public function gross_balance_amount( $amount, $coupon ) {
+		$code = $coupon instanceof \WC_Coupon ? wc_format_coupon_code( $coupon->get_code() ) : '';
+		if ( '' !== $code && isset( $this->net_amounts[ $code ] ) ) {
+			$net = $this->net_amounts[ $code ];
+			unset( $this->net_amounts[ $code ] );
+			return $net;
+		}
+		return $amount;
+	}
+
 	private function used_amount( \WC_Order_Item_Coupon $item ): float {
 		$amount = (float) $item->get_discount();
-		// Shops with tax-inclusive prices apply coupons to gross prices, so the tax part belongs to the redeemed
-		// value. In tax-exclusive shops coupon amounts are net, so only the net discount is deducted.
-		if ( apply_filters( 'vcap_balance_deduct_tax', wc_prices_include_tax(), $item ) ) {
+		// The value the customer received is the discount plus the tax it removed – in tax-inclusive shops
+		// (coupons apply to gross prices) and, for stored balances, in tax-exclusive shops (see prepare_gross_balance()).
+		if ( apply_filters( 'vcap_balance_deduct_tax', wc_prices_include_tax() || apply_filters( 'vcap_balance_covers_tax', true, null ), $item ) ) {
 			$amount += (float) $item->get_discount_tax();
 		}
 		// Discounts are in the order currency, balances in the shop base currency.
@@ -972,6 +1046,19 @@ final class CouponManager {
 	/**
 	 * Single-use vouchers: mark redeemed once WooCommerce's usage limit is reached.
 	 */
+	/**
+	 * Whether a single-use voucher is held by a shop order that is not paid yet (WooCommerce's tentative coupon
+	 * usage). Such a voucher must not be redeemed elsewhere at the same time.
+	 */
+	public static function held_by_pending_order( Voucher $voucher ): bool {
+		if ( $voucher->is_multi_use() || ! $voucher->coupon_id ) {
+			return false;
+		}
+		$coupon = new \WC_Coupon( $voucher->coupon_id );
+		$store  = $coupon->get_id() ? $coupon->get_data_store() : null;
+		return $store && method_exists( $store, 'get_tentative_usage_count' ) && (int) $store->get_tentative_usage_count( $coupon->get_id() ) > 0;
+	}
+
 	public function usage_increased( $coupon, $new_count, $used_by ): void {
 		if ( ! $coupon instanceof \WC_Coupon || 'yes' !== $coupon->get_meta( '_vcap_voucher' ) ) {
 			return;
@@ -982,10 +1069,13 @@ final class CouponManager {
 		}
 		$limit = (int) $coupon->get_usage_limit();
 		if ( $limit > 0 && (int) $new_count >= $limit && Voucher::STATUS_ACTIVE === $voucher->status ) {
-			$voucher->status  = Voucher::STATUS_REDEEMED;
-			$voucher->balance = 0;
-			$this->repo->update( $voucher );
-			$this->repo->log( $voucher->id, 'redeemed', $voucher->initial_amount, 0, (string) $used_by );
+			if ( $this->repo->redeem_single_if_active( $voucher->id ) ) {
+				$this->repo->log( $voucher->id, 'redeemed', $voucher->initial_amount, 0, (string) $used_by );
+			}
+		} elseif ( $limit > 0 && (int) $new_count >= $limit && Voucher::STATUS_ACTIVE !== $voucher->status ) {
+			// Used in the shop although it was redeemed, reserved or voided elsewhere meanwhile: make it visible.
+			$this->repo->log( $voucher->id, 'double_use', $voucher->initial_amount, null, (string) $used_by );
+			do_action( 'vcap_voucher_double_use', $voucher, $coupon, $used_by );
 		}
 	}
 

@@ -2,6 +2,7 @@
 namespace VCAP\Compat;
 
 use VCAP\API\V1\RedemptionService;
+use VCAP\ProductConfig;
 use VCAP\VoucherRepository;
 
 defined( 'ABSPATH' ) || exit;
@@ -42,7 +43,7 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 			return new \WP_Error( 'vcap_invalid_request', __( 'Please enter a voucher code.', 'voucher-captain' ) );
 		}
 		$email = sanitize_email( (string) ( $context['customer_email'] ?? '' ) );
-		$check = $this->redemptions->check( $code, array( 'target' => $target, 'email' => $email ) );
+		$check = $this->redemptions->check( $code, array( 'target' => $target, 'email' => $email, 'user_id' => 0 ) );
 		if ( is_wp_error( $check ) ) {
 			return $check;
 		}
@@ -63,6 +64,7 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 		if ( $minor < 1 ) {
 			return new \WP_Error( 'vcap_no_value', __( 'This voucher has no value left.', 'voucher-captain' ) );
 		}
+		$treatment = $voucher ? ProductConfig::tax_treatment( $voucher ) : 'discount';
 		return array(
 			'version'      => 1,
 			'code'         => (string) $check['code'],
@@ -70,6 +72,10 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 			'amount_minor' => $minor,
 			'amount'       => self::to_major( $minor, $decimals ),
 			'balance'      => null !== $check['balance'],
+			// VAT treatment for the ticket checkout: "payment" keeps the VAT, "single"/"discount" reduce it.
+			'treatment'    => $treatment,
+			// Pass Captain's terms: multi-purpose voucher (means of payment) or single-purpose (reduces price and VAT).
+			'purpose'      => 'payment' === $treatment ? 'multi' : 'single',
 			'target'       => $target,
 			'email'        => $email,
 		);
@@ -98,6 +104,8 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 			'meta'        => array( 'source' => 'passcaptain' ),
 			'ttl_minutes' => self::hold_minutes(),
 			'email'       => (string) ( $quote['email'] ?? '' ),
+			// Owned by the integration, not by the logged-in buyer: only Pass Captain commits or releases it.
+			'user_id'     => 0,
 		);
 		if ( ! empty( $quote['balance'] ) ) {
 			$args['amount'] = (float) $quote['amount'];

@@ -139,6 +139,29 @@ final class RestController {
 	}
 
 	/**
+	 * Keys used by built-in integrations (Pass Captain checkout "wpcap-…", ticket vouchers "passcaptain:…").
+	 * Connectors add their own prefixes with the filter vcap_internal_redemption_key_prefixes.
+	 *
+	 * @param string $key Redemption key.
+	 * @return bool
+	 */
+	public static function is_internal_key( string $key ): bool {
+		/**
+		 * Key prefixes reserved for built-in integrations (never created or driven over REST).
+		 *
+		 * @since 1.2.0
+		 * @param string[] $prefixes Prefixes.
+		 */
+		$prefixes = (array) apply_filters( 'vcap_internal_redemption_key_prefixes', array( 'wpcap-', 'passcaptain:' ) );
+		foreach ( $prefixes as $prefix ) {
+			if ( '' !== (string) $prefix && 0 === stripos( $key, (string) $prefix ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Only the user who reserved (or a voucher manager) may read, commit or release a redemption.
 	 *
 	 * @param \WP_REST_Request $request Request.
@@ -155,6 +178,11 @@ final class RestController {
 		$data = $this->service->get( (string) $request['key'] );
 		if ( is_wp_error( $data ) ) {
 			return true; // Let the callback answer 404 consistently.
+		}
+		if ( self::is_internal_key( (string) $request['key'] ) ) {
+			// Redemptions of built-in integrations are driven by those integrations only (otherwise a customer
+			// could release the reservation behind their own Pass Captain order and keep the voucher value).
+			return new \WP_Error( 'vcap_not_allowed', __( 'This redemption is managed by an integration.', 'voucher-captain' ), array( 'status' => 403 ) );
 		}
 		$own = get_current_user_id() === (int) $data['user_id'];
 		/**
@@ -192,6 +220,11 @@ final class RestController {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function reserve( \WP_REST_Request $request ) {
+		if ( self::is_internal_key( (string) $request['key'] ) ) {
+			// Keys of built-in integrations (Pass Captain checkout and ticket vouchers) are never created over REST,
+			// so nobody can claim them in advance and block or hijack those redemptions.
+			return new \WP_Error( 'vcap_invalid_request', __( 'This redemption key is reserved.', 'voucher-captain' ), array( 'status' => 400 ) );
+		}
 		$result = $this->service->reserve(
 			(string) $request['code'],
 			array(

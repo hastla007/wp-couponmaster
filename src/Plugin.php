@@ -91,6 +91,7 @@ final class Plugin {
 		( new Compat\AffiliateCaptain() )->register();
 		( new Compat\PassCaptain() )->register();
 		$this->passcaptain_tickets->register();
+		( new Compat\PassCaptainScanner() )->register();
 
 		if ( is_admin() ) {
 			( new Admin\Menu() )->register();

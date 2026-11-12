@@ -92,15 +92,17 @@ $lines = vcap()->api_v1->order_lines( wc_get_order( $order->get_id() ) );
 $data  = $lines[ $item->get_id() ] ?? array();
 vcap_conn_assert( 2 === $data['quantity'] && 1 === $data['refunded_quantity'] && 40.0 === $data['refunded_total'], 'order_lines() reports quantities and refunds per line' );
 vcap_conn_assert( 2 === count( $data['vouchers'] ) && $code === $data['vouchers'][0]['code'] && 40.0 === (float) $data['voucher_line']['face_value'], 'order_lines() lists the vouchers and the line snapshot' );
+vcap_conn_assert( VCAP\Voucher::STATUS_VOID === vcap()->vouchers->get( $vouchers[1]->id )->status && VCAP\Voucher::STATUS_VOID !== vcap()->vouchers->get( $vouchers[0]->id )->status, 'the line refund voids the unused voucher, not the one in use' );
 // Refund before the external redemption is completed: the voided voucher can no longer be committed.
+list( , $late_vouchers ) = vcap_conn_issue( $any, 1 ); // Unrestricted: $external is shop-only by now.
 $late_key = 'conn-' . wp_generate_uuid4();
-$late     = $service->reserve( $vouchers[1]->code, array( 'key' => $late_key, 'target' => 'test:course:8' ) );
-vcap_conn_assert( ! is_wp_error( $late ), 'a second voucher of the order is reserved externally' );
-vcap()->issuer->void( vcap()->vouchers->get( $vouchers[1]->id ), 'Purchase order refunded' );
+$late     = $service->reserve( $late_vouchers[0]->code, array( 'key' => $late_key, 'target' => 'test:course:8' ) );
+vcap_conn_assert( ! is_wp_error( $late ), 'a voucher is reserved externally' );
+vcap()->issuer->void( vcap()->vouchers->get( $late_vouchers[0]->id ), 'Purchase order refunded' );
 $commit = $service->commit( $late_key );
 vcap_conn_assert( is_wp_error( $commit ) && 'vcap_cancelled' === $commit->get_error_code(), 'a voucher voided during the reservation cannot be committed' );
 $released = $service->release( $late_key );
-vcap_conn_assert( ! is_wp_error( $released ) && VCAP\Voucher::STATUS_VOID === vcap()->vouchers->get( $vouchers[1]->id )->status, 'releasing the reservation keeps the voucher voided' );
+vcap_conn_assert( ! is_wp_error( $released ) && VCAP\Voucher::STATUS_VOID === vcap()->vouchers->get( $late_vouchers[0]->id )->status, 'releasing the reservation keeps the voucher voided' );
 // Refunds of completed external redemptions (partial, idempotent, capped).
 $gift = new WC_Coupon();
 $gift->set_code( 'conn-gift-' . strtolower( wp_generate_password( 8, false ) ) );

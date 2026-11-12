@@ -18,6 +18,7 @@ final class ProductConfig {
 		'custom_step'         => '1',
 		'custom_presets'      => '',
 		'discount_type'       => 'fixed_cart',
+		'tax_treatment'       => 'auto',
 		'usage'               => 'single',
 		'usage_limit'         => '',
 		'expiry_mode'         => 'default',
@@ -169,6 +170,74 @@ final class ProductConfig {
 	}
 
 	/**
+	 * VAT treatment of a voucher when it pays for something (EU Directive 2016/1065):
+	 *  - "payment"  multi-purpose voucher (Mehrzweckgutschein): a means of payment, VAT is due on the full price
+	 *               when it is redeemed;
+	 *  - "single"   single-purpose voucher (Einzweckgutschein): VAT was already charged when it was sold;
+	 *  - "discount" promotion: a price reduction, VAT is reduced.
+	 * Product setting "tax_treatment" ("auto": percentage vouchers and promotion codes are discounts, value
+	 * vouchers and gift cards multi-purpose vouchers). Filter "vcap_voucher_tax_treatment".
+	 */
+	public static function tax_treatment( Voucher $voucher ): string {
+		$product = $voucher->product();
+		$setting = $product ? (string) self::get( $product )['tax_treatment'] : 'auto';
+		if ( in_array( $setting, array( 'payment', 'single', 'discount' ), true ) ) {
+			$treatment = $setting;
+		} else {
+			if ( 'percent' === $voucher->discount_type ) {
+				$treatment = 'discount';
+			} elseif ( $voucher->is_multi_use() || in_array( $voucher->type, array( 'giftcard', 'credit' ), true ) || $product ) {
+				$treatment = 'payment'; // Gift cards, store credit and value vouchers that were sold.
+			} else {
+				$treatment = 'discount'; // Codes without a sale behind them (promotions, campaigns).
+			}
+		}
+		return (string) apply_filters( 'vcap_voucher_tax_treatment', $treatment, $voucher );
+	}
+
+	/**
+	 * Global default for products without their own expiry: "statutory" (by the shop's country) or "days"
+	 * (vcap_default_expiry_days). Shops that saved a number of days before this setting existed keep it.
+	 */
+	public static function default_expiry_rule(): string {
+		$rule = (string) get_option( 'vcap_default_expiry_rule', '' );
+		if ( in_array( $rule, array( 'statutory', 'days' ), true ) ) {
+			return $rule;
+		}
+		return false !== get_option( 'vcap_default_expiry_days', false ) ? 'days' : 'statutory';
+	}
+
+	/**
+	 * Statutory default validity for the shop's base country: Germany 3 years to the end of the year
+	 * (§§ 195, 199 BGB), Austria 30 years (OGH case law), other countries 3 years to the end of the year.
+	 * Filter "vcap_statutory_expiry" (array{years:int, end_of_year:bool}, country code); years 0 = never.
+	 *
+	 * @return array{years:int, end_of_year:bool}
+	 */
+	public static function statutory_rule( string $country = '' ): array {
+		if ( '' === $country ) {
+			$country = strtoupper( strtok( (string) get_option( 'woocommerce_default_country', '' ), ':' ) ?: '' );
+		}
+		$rules = array(
+			'AT' => array( 'years' => 30, 'end_of_year' => false ),
+			'DE' => array( 'years' => 3, 'end_of_year' => true ),
+		);
+		$rule = (array) apply_filters( 'vcap_statutory_expiry', $rules[ $country ] ?? array( 'years' => 3, 'end_of_year' => true ), $country );
+		return array( 'years' => max( 0, (int) ( $rule['years'] ?? 3 ) ), 'end_of_year' => ! empty( $rule['end_of_year'] ) );
+	}
+
+	/** Expiry by the statutory rule (end of day / end of year in the shop's time zone, stored in UTC). */
+	public static function statutory_expiry( int $from, string $country = '' ): ?string {
+		$rule = self::statutory_rule( $country );
+		if ( $rule['years'] < 1 ) {
+			return null;
+		}
+		$local = ( new \DateTimeImmutable( '@' . $from ) )->setTimezone( wp_timezone() )->modify( '+' . $rule['years'] . ' years' );
+		$local = $rule['end_of_year'] ? $local->setDate( (int) $local->format( 'Y' ), 12, 31 ) : $local;
+		return $local->setTime( 23, 59, 59 )->setTimezone( new \DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
+	}
+
+	/**
 	 * Expiry timestamp (UTC MySQL datetime) or null for "never".
 	 */
 	public static function expiry_for( array $config, ?int $from = null ): ?string {
@@ -186,8 +255,19 @@ final class ProductConfig {
 				$days = (int) $config['expiry_days'];
 				break;
 			default:
-				$days = '' !== (string) $config['expiry_days'] && $config['expiry_days'] !== null ? (int) $config['expiry_days'] : (int) get_option( 'vcap_default_expiry_days', 365 );
+				if ( '' !== (string) $config['expiry_days'] && null !== $config['expiry_days'] ) {
+					$days = (int) $config['expiry_days'];
+				} elseif ( 'statutory' === self::default_expiry_rule() ) {
+					return self::statutory_expiry( $from );
+				} else {
+					$days = (int) get_option( 'vcap_default_expiry_days', 365 );
+				}
 		}
-		return $days > 0 ? gmdate( 'Y-m-d 23:59:59', $from + $days * DAY_IN_SECONDS ) : null;
+		if ( $days <= 0 ) {
+			return null;
+		}
+		// End of the expiry day in the shop's time zone (like the fixed date), stored in UTC.
+		$local = ( new \DateTimeImmutable( '@' . ( $from + $days * DAY_IN_SECONDS ) ) )->setTimezone( wp_timezone() )->setTime( 23, 59, 59 );
+		return $local->setTimezone( new \DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
 	}
 }

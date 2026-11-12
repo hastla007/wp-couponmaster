@@ -46,6 +46,19 @@ final class VoucherRepository {
 		return $ok;
 	}
 
+	/** Mark a single-use voucher redeemed only if it is still active (atomic; false when someone else won). */
+	public function redeem_single_if_active( int $id ): bool {
+		global $wpdb;
+		$done = (int) $wpdb->query( $wpdb->prepare( "UPDATE {$this->table} SET status = %s, balance = 0, updated_at = %s WHERE id = %d AND status = %s", Voucher::STATUS_REDEEMED, $this->now(), $id, Voucher::STATUS_ACTIVE ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( 1 === $done ) {
+			$fresh = $this->get( $id );
+			if ( $fresh ) {
+				do_action( 'vcap_voucher_updated', $fresh );
+			}
+		}
+		return 1 === $done;
+	}
+
 	/** Change only the status column (never overwrites a balance changed concurrently by a transaction). */
 	public function update_status( int $id, string $status ): bool {
 		global $wpdb;
@@ -343,6 +356,7 @@ final class VoucherRepository {
 		$labels = array(
 			'issued'     => __( 'Issued', 'voucher-captain' ),
 			'reserved'   => __( 'Balance reserved for payment', 'voucher-captain' ),
+			'double_use' => __( 'Used in a shop order although already redeemed elsewhere – check the order', 'voucher-captain' ),
 			'committed'  => __( 'Balance reservation committed', 'voucher-captain' ),
 			'reservation_released' => __( 'Balance reservation released', 'voucher-captain' ),
 			'api_reserved'  => __( 'Reserved for external redemption', 'voucher-captain' ),

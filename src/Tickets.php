@@ -81,6 +81,12 @@ final class Tickets {
 		return $this->repo->get_by_code( $code ) ?? $this->repo->get_by_code( strtoupper( $code ) );
 	}
 
+	/** Whether the scanner shows the holder's name (setting "vcap_scanner_show_holder"; personal tickets always). */
+	public static function show_holder( Voucher $voucher ): bool {
+		$show = 'yes' === get_option( 'vcap_scanner_show_holder', 'no' ) || ( $voucher->is_ticket() && '' !== (string) $voucher->recipient_name );
+		return (bool) apply_filters( 'vcap_scanner_show_holder', $show, $voucher );
+	}
+
 	public function describe( Voucher $voucher ): array {
 		$product = $voucher->product();
 		$state   = 'ok';
@@ -104,7 +110,8 @@ final class Tickets {
 			$state   = 'warning';
 			$message = __( 'Currently being redeemed elsewhere', 'voucher-captain' );
 		}
-		return array(
+		$manager = current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' );
+		$data    = array(
 			'id'             => $voucher->id,
 			'code'           => $voucher->code,
 			'type'           => $voucher->type,
@@ -114,23 +121,32 @@ final class Tickets {
 			'state'          => $state,
 			'message'        => $message,
 			'product'        => $product ? $product->get_name() : '',
-			'holder'         => $voucher->recipient_name ?: $voucher->buyer_name,
-			'order'          => $voucher->order() ? $voucher->order()->get_order_number() : '',
+			// Privacy at the door: the name only when enabled (or for personal tickets, where it is checked);
+			// order number and original value only for staff who manage vouchers.
+			'holder'         => self::show_holder( $voucher ) ? ( $voucher->recipient_name ?: $voucher->buyer_name ) : '',
+			'order'          => $manager && $voucher->order() ? $voucher->order()->get_order_number() : '',
 			'checkins'       => $voucher->checkins,
 			'max_checkins'   => $voucher->max_checkins,
 			'last_checkin'   => $voucher->last_checkin_at ? get_date_from_gmt( $voucher->last_checkin_at, get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) : '',
 			'multi_use'      => $voucher->is_multi_use(),
 			'balance'        => $voucher->balance,
 			'balance_html'   => html_entity_decode( wp_strip_all_tags( wc_price( $voucher->balance, array( 'currency' => $voucher->currency ) ) ) ),
-			'value_html'     => 'percent' === $voucher->discount_type ? $voucher->initial_amount . '%' : html_entity_decode( wp_strip_all_tags( wc_price( $voucher->initial_amount, array( 'currency' => $voucher->currency ) ) ) ),
+			'value_html'     => ! $manager ? '' : ( 'percent' === $voucher->discount_type ? $voucher->initial_amount . '%' : html_entity_decode( wp_strip_all_tags( wc_price( $voucher->initial_amount, array( 'currency' => $voucher->currency ) ) ) ) ),
 			'expires'        => $voucher->expires_at ? get_date_from_gmt( $voucher->expires_at, get_option( 'date_format' ) ) : '',
 			'admin_url'      => admin_url( 'admin.php?page=vcap-vouchers&voucher=' . $voucher->id ),
 		);
+		/** Connector details for the scanner (e.g. "ticket voucher – exchange first", redeemable false). */
+		return (array) apply_filters( 'vcap_scanner_describe', $data, $voucher );
 	}
 
 	public function rest_lookup( \WP_REST_Request $request ) {
 		$voucher = $this->resolve( (string) $request['q'] );
 		if ( ! $voucher ) {
+			/** Codes Voucher Captain does not know may belong to another plugin (shared scanner, e.g. Pass Captain tickets). */
+			$external = apply_filters( 'vcap_scanner_lookup', null, (string) $request['q'] );
+			if ( null !== $external ) {
+				return is_wp_error( $external ) ? $external : rest_ensure_response( $external );
+			}
 			return new \WP_Error( 'vcap_not_found', __( 'No voucher or ticket found for this code.', 'voucher-captain' ), array( 'status' => 404 ) );
 		}
 		return rest_ensure_response( $this->describe( $voucher ) );
@@ -191,6 +207,10 @@ final class Tickets {
 	public function rest_checkin( \WP_REST_Request $request ) {
 		$voucher = $this->resolve( (string) $request['q'] );
 		if ( ! $voucher ) {
+			$external = $request['undo'] ? null : apply_filters( 'vcap_scanner_checkin', null, (string) $request['q'], sanitize_text_field( (string) $request['idempotency_key'] ) );
+			if ( null !== $external ) {
+				return is_wp_error( $external ) ? $external : rest_ensure_response( $external );
+			}
 			return new \WP_Error( 'vcap_not_found', __( 'No voucher or ticket found for this code.', 'voucher-captain' ), array( 'status' => 404 ) );
 		}
 		if ( $request['undo'] ) {
@@ -223,6 +243,16 @@ final class Tickets {
 			$data['success'] = false;
 			return rest_ensure_response( $data );
 		}
+		/** Vouchers that must not be redeemed at the counter (e.g. ticket vouchers: exchange them for tickets). */
+		$refused = \VCAP\CouponManager::held_by_pending_order( $voucher ) ? __( 'This voucher is in an unpaid shop order right now. Redeem it after that order is cancelled.', 'voucher-captain' ) : '';
+		$refused = apply_filters( 'vcap_scanner_redeem_refused', $refused, $voucher );
+		if ( '' !== (string) $refused ) {
+			$data            = $this->describe( $voucher );
+			$data['success'] = false;
+			$data['state']   = 'error';
+			$data['message'] = (string) $refused;
+			return rest_ensure_response( $data );
+		}
 		$note = sanitize_text_field( (string) $request['note'] ) ?: __( 'Redeemed in store', 'voucher-captain' );
 		if ( $voucher->is_multi_use() ) {
 			$amount = max( 0, (float) $request['amount'] );
@@ -231,8 +261,12 @@ final class Tickets {
 			}
 			$deduction = vcap()->coupons->deduct_balance_atomic( $voucher, $amount, $note );
 			if ( ! $deduction ) {
-				$data            = $this->describe( $this->repo->get( $voucher->id ) );
+				$fresh           = $this->repo->get( $voucher->id );
+				$data            = $this->describe( $fresh );
 				$data['success'] = false;
+				$data['state']   = 'error';
+				/* translators: %s: remaining balance */
+				$data['message'] = sprintf( __( 'Not deducted: the amount exceeds the balance (remaining %s).', 'voucher-captain' ), $data['balance_html'] );
 				return rest_ensure_response( $data );
 			}
 			$voucher = $this->repo->get( $voucher->id );
@@ -246,9 +280,14 @@ final class Tickets {
 				}
 			}
 		} else {
+			// Atomic: of two parallel redemptions (two tills, or till and online) only one wins.
+			if ( ! $this->repo->redeem_single_if_active( $voucher->id ) ) {
+				$data            = $this->describe( $this->repo->get( $voucher->id ) );
+				$data['success'] = false;
+				return rest_ensure_response( $data );
+			}
 			$voucher->status  = Voucher::STATUS_REDEEMED;
 			$voucher->balance = 0;
-			$this->repo->update( $voucher );
 			$this->repo->log( $voucher->id, 'redeemed', $voucher->initial_amount, 0, $note );
 			if ( $voucher->coupon_id ) {
 				$coupon = new \WC_Coupon( $voucher->coupon_id );

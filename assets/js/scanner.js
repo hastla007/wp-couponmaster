@@ -10,6 +10,7 @@
 	var input = document.getElementById( 'vcap-code' );
 	var result = document.getElementById( 'vcap-result' );
 	var auto = document.getElementById( 'vcap-auto-checkin' );
+	var acting = false;
 	if ( ! video || ! form ) {
 		return;
 	}
@@ -70,7 +71,34 @@
 		}
 	}
 
+	function renderPassCaptain( d, query ) {
+		var rows = [
+			[ t.event, d.event ],
+			[ t.ticketType, d.ticket ],
+			[ t.date, d.starts ],
+			[ t.attendee, d.attendee ]
+		].filter( function ( r ) { return r && r[ 1 ]; } );
+		var html = '<div class="vcap-r-head vcap-r-' + esc( d.state ) + '">' + esc( d.message ) + ' · ' + esc( d.type_label ) + '</div><div class="vcap-r-body"><dl>';
+		rows.forEach( function ( r ) {
+			html += '<dt>' + esc( r[ 0 ] ) + '</dt><dd>' + esc( r[ 1 ] ) + '</dd>';
+		} );
+		html += '</dl><div class="vcap-r-actions">';
+		if ( d.can_checkin ) {
+			html += '<button type="button" class="button button-primary button-hero" data-act="checkin">' + esc( t.checkin ) + '</button>';
+		}
+		if ( d.admin_url ) {
+			html += '<a class="button-link" href="' + esc( d.admin_url ) + '">' + esc( t.passCaptainCheckins ) + '</a>';
+		}
+		html += '</div></div>';
+		result.innerHTML = html;
+		result.setAttribute( 'data-query', query );
+	}
+
 	function render( d, query ) {
+		if ( 'passcaptain' === d.type ) {
+			renderPassCaptain( d, query );
+			return;
+		}
 		var rows = [
 			[ t.product, d.product ],
 			[ t.holder, d.holder ],
@@ -95,10 +123,12 @@
 				html += '<button type="button" class="button" data-act="undo">' + esc( t.undo ) + '</button>';
 			}
 		} else if ( 'ok' === d.state && 'redeemed' !== d.status ) {
-			if ( d.multi_use ) {
-				html += '<input type="text" inputmode="decimal" id="vcap-amount" class="small-text" placeholder="' + esc( t.amount ) + '" aria-label="' + esc( t.amount ) + '">';
+			if ( false !== d.redeemable ) {
+				if ( d.multi_use ) {
+					html += '<label for="vcap-amount">' + esc( t.amount ) + '</label> <input type="text" inputmode="decimal" id="vcap-amount" class="small-text">';
+				}
+				html += '<button type="button" class="button button-primary" data-act="redeem">' + esc( t.redeem ) + '</button>';
 			}
-			html += '<button type="button" class="button button-primary" data-act="redeem">' + esc( t.redeem ) + '</button>';
 		}
 		html += '<a class="button-link" href="' + esc( d.admin_url ) + '">' + esc( t.details ) + '</a></div></div>';
 		result.innerHTML = html;
@@ -117,8 +147,8 @@
 		busy = true;
 		// Always look up first; auto check-in applies to valid tickets only (never to vouchers or gift cards).
 		var p = api( 'lookup?q=' + encodeURIComponent( query ) ).then( function ( d ) {
-			if ( auto.checked && 'ticket' === d.type && 'ok' === d.state ) {
-				return api( 'checkin', 'POST', { q: query } );
+			if ( auto.checked && 'ok' === d.state && ( 'ticket' === d.type || ( 'passcaptain' === d.type && d.can_checkin ) ) ) {
+				return api( 'checkin', 'POST', { q: query, idempotency_key: uuid() } );
 			}
 			return d;
 		} );
@@ -130,27 +160,58 @@
 		} );
 	}
 
+	/** "12,50", "1.000,00", "1,000.00", "1.000" (thousands) → number. */
+	function parseAmount( raw ) {
+		var v = String( raw || '' ).replace( /[\s\u00a0']/g, '' );
+		if ( /,\d{1,2}$/.test( v ) ) {
+			v = v.replace( /\./g, '' ).replace( ',', '.' );
+		} else if ( /\.\d{3}$/.test( v ) && -1 === v.indexOf( ',' ) ) {
+			v = v.replace( /\./g, '' );
+		} else {
+			v = v.replace( /,/g, '' );
+		}
+		return parseFloat( v ) || 0;
+	}
+
+	function uuid() {
+		if ( window.crypto && window.crypto.randomUUID ) {
+			return window.crypto.randomUUID();
+		}
+		return String( Date.now() ) + '-' + Math.random().toString( 16 ).slice( 2 );
+	}
+
 	result.addEventListener( 'click', function ( e ) {
 		var act = e.target.getAttribute( 'data-act' );
 		var query = result.getAttribute( 'data-query' );
-		if ( ! act || ! query ) {
+		if ( ! act || ! query || acting ) {
+			return; // One action at a time: a double tap never admits twice.
+		}
+		if ( 'undo' === act && ! window.confirm( t.confirmUndo ) ) {
 			return;
 		}
 		var req;
 		if ( 'checkin' === act ) {
 			var c = document.getElementById( 'vcap-count' );
-			req = api( 'checkin', 'POST', { q: query, count: c ? parseInt( c.value, 10 ) || 1 : 1 } );
+			req = api( 'checkin', 'POST', { q: query, count: c ? parseInt( c.value, 10 ) || 1 : 1, idempotency_key: uuid() } );
 		} else if ( 'undo' === act ) {
 			req = api( 'checkin', 'POST', { q: query, undo: true } );
 		} else if ( 'redeem' === act ) {
 			var a = document.getElementById( 'vcap-amount' );
-			req = api( 'redeem', 'POST', { q: query, amount: a ? parseFloat( String( a.value ).replace( ',', '.' ) ) || 0 : 0 } );
+			req = api( 'redeem', 'POST', { q: query, amount: a ? parseAmount( a.value ) : 0 } );
 		}
 		if ( req ) {
+			acting = true;
+			Array.prototype.forEach.call( result.querySelectorAll( 'button' ), function ( b ) {
+				b.disabled = true;
+			} );
 			req.then( function ( d ) {
 				render( d, query );
 				beep( !! d.success );
-			} ).catch( showError );
+			} ).catch( showError ).then( function () {
+				acting = false;
+				input.focus(); // Ready for the next scan (USB scanners type into the focused field).
+				input.select();
+			} );
 		}
 	} );
 

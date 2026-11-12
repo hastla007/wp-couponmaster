@@ -79,6 +79,8 @@ $card  = vcap_pc_voucher( 'balance', 50 );
 $order = vcap_pc_order( $type, 3 );
 $applied = Checkout::apply( $order['order_id'], strtoupper( $card->code ) );
 vcap_pc_assert( ! is_wp_error( $applied ) && 5000 === $applied['applied_minor'] && 1000 === $applied['total_minor'], 'a gift card pays 50 of a 60 ticket order' );
+$card_quote = json_decode( (string) Orders::get( $order['order_id'] )->voucher_snapshot, true )['quote'] ?? array();
+vcap_pc_assert( 'payment' === ( $card_quote['treatment'] ?? '' ) && 'multi' === ( $card_quote['purpose'] ?? '' ), 'a gift card is a multi-purpose voucher (means of payment) for the ticket checkout' );
 vcap_pc_assert( 0.0 === vcap()->vouchers->get( $card->id )->balance && 'reserved' === vcap_pc_redemption( $order['order_id'] )['state'], 'the gift card balance is reserved before payment' );
 $held_until = strtotime( vcap_pc_redemption( $order['order_id'] )['expires_at'] . ' UTC' );
 $manual     = (int) PassCaptain\Settings::get( 'manual_hold_hours' ) * HOUR_IN_SECONDS;
@@ -198,6 +200,19 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	add_filter( 'vcap_passcaptain_ticket_target', $give, 10, 2 );
 	$refused = vcap()->passcaptain_tickets->exchange( $full->code );
 	vcap_pc_assert( is_wp_error( $refused ) && VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $full->id )->status, 'a sold-out ticket type refuses the exchange and the voucher stays usable' );
+	$wpdb->update( "{$wpdb->prefix}wpcap_ticket_types", array( 'capacity' => 10 ), array( 'ticket_type_id' => $full_type ) );
+	$second_try = vcap()->passcaptain_tickets->exchange( $full->code );
+	vcap_pc_assert( is_array( $second_try ) && 2 === $second_try['tickets'] && 'committed' === vcap()->redemptions->get( VCAP\Compat\PassCaptainTickets::key( $full, 2 ) )['state'], 'after a failed attempt the voucher can be exchanged again (new keys)' );
+	if ( defined( 'PassCaptain\\Integrations\\Vouchers\\TicketService::REVOKED_ACTION' ) ) {
+		// Pass Captain cancels the exchange order (e.g. the date was cancelled): the voucher comes back.
+		$second_order = (int) $wpdb->get_var( $wpdb->prepare( "SELECT order_id FROM {$wpdb->prefix}wpcap_orders WHERE public_id=%s", $second_try['order_public_id'] ) );
+		Orders::cancel_order( $second_order, 'occurrence_cancelled' );
+		Orders::cancel_order( $second_order, 'occurrence_cancelled' );
+		$restored_events = array_count_values( array_column( vcap()->vouchers->events( $full->id ), 'event' ) );
+		vcap_pc_assert( VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $full->id )->status && 1 === ( $restored_events['passcaptain_tickets_restored'] ?? 0 ), 'tickets cancelled in Pass Captain give the voucher back exactly once' );
+		$third_try = vcap()->passcaptain_tickets->exchange( $full->code );
+		vcap_pc_assert( is_array( $third_try ) && 2 === $third_try['tickets'] && $third_try['order_public_id'] !== $second_try['order_public_id'] && VCAP\Voucher::STATUS_REDEEMED === vcap()->vouchers->get( $full->id )->status, 'the restored voucher can be exchanged again for new tickets' );
+	}
 	remove_filter( 'vcap_passcaptain_ticket_target', $give, 10 );
 	vcap_pc_assert( is_wp_error( vcap()->passcaptain_tickets->exchange( vcap_pc_voucher( 'single', 10 )->code ) ), 'vouchers without a ticket target are not exchanged' );
 
@@ -255,6 +270,59 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 		$answer = is_array( $with ) ? $wpdb->get_var( $wpdb->prepare( "SELECT a.answer FROM {$wpdb->prefix}wpcap_participant_answers a JOIN {$wpdb->prefix}wpcap_tickets t ON t.ticket_id=a.ticket_id JOIN {$wpdb->prefix}wpcap_orders o ON o.order_id=t.order_id WHERE o.public_id=%s", $with['order_public_id'] ) ) : '';
 		vcap_pc_assert( is_array( $with ) && 'Erika Muster' === $answer, 'the attendee details are stored with the issued ticket' );
 		wp_set_current_user( 1 );
+	}
+}
+
+// Shared scanner: Voucher Captain's scanner checks in Pass Captain tickets (and still finds vouchers first).
+if ( null !== VCAP\Compat\PassCaptainScanner::service() ) {
+	$mails = array();
+	$grab  = static function ( $args ) use ( &$mails ) { $mails[] = (string) ( $args['message'] ?? '' ); return $args; };
+	add_filter( 'wp_mail', $grab );
+	$scan_voucher = vcap_pc_voucher( 'single', 20 );
+	$scan_type    = vcap_pc_ticket_type( 2000 );
+	$give_scan    = static fn( $t, $v ) => $v->id === $scan_voucher->id ? array( 'ticket_type_id' => $scan_type, 'quantity' => 1 ) : $t;
+	add_filter( 'vcap_passcaptain_ticket_target', $give_scan, 10, 2 );
+	wp_set_current_user( 1 );
+	$scan_done = vcap()->passcaptain_tickets->exchange( $scan_voucher->code, array( 'email' => 'scanner@example.com' ) );
+	remove_filter( 'vcap_passcaptain_ticket_target', $give_scan, 10 );
+	remove_filter( 'wp_mail', $grab );
+	// The ticket code, not the order access token that the same mail may contain.
+	preg_match( '/(?:wpcap_ticket=|Ticket-Code: )([a-f0-9]{64})/', implode( "\n", $mails ), $tm );
+	$token = $tm[1] ?? '';
+	vcap_pc_assert( is_array( $scan_done ) && '' !== $token, 'a Pass Captain ticket code reaches the customer by mail' );
+	$scan = static function ( string $route, array $params ) {
+		$req = new WP_REST_Request( 'lookup' === $route ? 'GET' : 'POST', '/vcap/v1/' . $route );
+		foreach ( $params as $k => $v ) {
+			$req->set_param( $k, $v );
+		}
+		$res = 'lookup' === $route ? vcap()->tickets->rest_lookup( $req ) : vcap()->tickets->rest_checkin( $req );
+		return is_wp_error( $res ) ? $res : $res->get_data();
+	};
+	// Pass Captain's default entry window (2 h before the start) refuses a ticket for next week …
+	$has_window = array_key_exists( 'default_entry_window', PassCaptain\Settings::defaults() );
+	if ( $has_window ) {
+		PassCaptain\Settings::update( array( 'default_entry_window' => 1 ) );
+		$early = $scan( 'lookup', array( 'q' => $token ) );
+		vcap_pc_assert( is_array( $early ) && 'outside_entry_window' === $early['status'] && 'error' === $early['state'] && false === $early['can_checkin'], 'a ticket outside the entry window is refused with its reason' );
+		// … the rest checks the scanner itself, without the window.
+		PassCaptain\Settings::update( array( 'default_entry_window' => 0 ) );
+	}
+	$seen = $scan( 'lookup', array( 'q' => home_url( '/?wpcap_ticket=' . $token ) ) );
+	if ( ! is_array( $seen ) || 'valid' !== ( $seen['status'] ?? '' ) ) {
+		echo 'Scanner lookup: ' . wp_json_encode( is_wp_error( $seen ) ? $seen->get_error_message() : $seen ) . "\n";
+	}
+	vcap_pc_assert( is_array( $seen ) && 'passcaptain' === $seen['type'] && 'valid' === $seen['status'] && true === $seen['can_checkin'], 'the shared scanner recognises a Pass Captain ticket (URL from the QR code)' );
+	// The test event is next week: a valid ticket for another day is admitted only after a visible warning.
+	vcap_pc_assert( 'warning' === $seen['state'] && str_contains( (string) $seen['message'], (string) $seen['starts'] ), 'a valid ticket for another date is flagged with its date' );
+	$in = $scan( 'checkin', array( 'q' => $token ) );
+	vcap_pc_assert( is_array( $in ) && 'ok' === $in['state'] && true === $in['success'], 'the shared scanner checks the ticket in at Pass Captain' );
+	$twice = $scan( 'checkin', array( 'q' => $token ) );
+	vcap_pc_assert( is_array( $twice ) && 'ok' !== $twice['state'] && false === $twice['success'], 'a second scan does not admit the ticket again' );
+	$own = $scan( 'lookup', array( 'q' => vcap_pc_voucher( 'balance', 10 )->code ) );
+	vcap_pc_assert( is_array( $own ) && 'giftcard' === $own['type'], 'voucher codes are still handled by Voucher Captain' );
+	vcap_pc_assert( false !== strpos( VCAP\Compat\PassCaptain::status_html(), '✔' ), 'the settings show the Pass Captain integration as active' );
+	if ( $has_window ) {
+		PassCaptain\Settings::update( array( 'default_entry_window' => 1 ) );
 	}
 }
 

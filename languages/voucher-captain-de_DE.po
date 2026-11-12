@@ -3346,7 +3346,7 @@ msgid "Pass Captain tickets revoked"
 msgstr "Pass-Captain-Tickets widerrufen"
 
 msgid "Please log in so we know where to send the tickets."
-msgstr "Bitte melde dich an, damit wir wissen, wohin die Tickets gesendet werden sollen."
+msgstr "Bitte melden Sie sich an, damit wir wissen, wohin die Tickets gesendet werden sollen."
 
 msgid "The tickets could not be issued. The reason is in the voucher history."
 msgstr "Die Tickets konnten nicht ausgestellt werden. Der Grund steht im Gutscheinverlauf."
@@ -3361,7 +3361,7 @@ msgid "Ticket type #%d (no longer on sale)"
 msgstr "Ticketart #%d (nicht mehr im Verkauf)"
 
 msgid "Tickets cannot be issued right now. Please try again later."
-msgstr "Tickets können gerade nicht ausgestellt werden. Bitte versuche es später erneut."
+msgstr "Tickets können gerade nicht ausgestellt werden. Bitte versuchen Sie es später erneut."
 
 msgid "Tickets issued in WP Pass Captain and sent by email."
 msgstr "Tickets in WP Pass Captain ausgestellt und per E-Mail gesendet."
@@ -3373,7 +3373,7 @@ msgid "WP Pass Captain ticket"
 msgstr "WP-Pass-Captain-Ticket"
 
 msgid "Your tickets (%1$d) were sent to %2$s."
-msgstr "Deine Tickets (%1$d) wurden an %2$s gesendet."
+msgstr "Ihre Tickets (%1$d) wurden an %2$s gesendet."
 
 msgid "— No ticket (regular voucher) —"
 msgstr "— Kein Ticket (normaler Gutschein) —"
@@ -3394,7 +3394,7 @@ msgid "Only for \"customer chooses the date\": offer only ticket types with exac
 msgstr "Nur bei „Kunde wählt den Termin“: nur Ticketarten mit genau diesem Namen anbieten (z. B. „Standard“)."
 
 msgid "Please choose a date for your tickets."
-msgstr "Bitte wähle einen Termin für deine Tickets."
+msgstr "Bitte wählen Sie einen Termin für Ihre Tickets."
 
 msgid "There are no upcoming dates for this voucher at the moment."
 msgstr "Für diesen Gutschein gibt es derzeit keine künftigen Termine."
@@ -3406,7 +3406,214 @@ msgid "— Choose a date —"
 msgstr "— Termin wählen —"
 
 msgid "Please fill in the details for each ticket."
-msgstr "Bitte fülle die Angaben für jedes Ticket aus."
+msgstr "Bitte füllen Sie die Angaben für jedes Ticket aus."
 
 msgid "Ticket %d"
 msgstr "Ticket %d"
+
+msgid "Active (version %s)"
+msgstr "Aktiv (Version %s)"
+
+msgid "Already checked in by this scan"
+msgstr "Mit diesem Scan bereits eingecheckt"
+
+msgid "Attendee"
+msgstr "Teilnehmer"
+
+msgid "Check-ins in WP Pass Captain"
+msgstr "Check-ins in WP Pass Captain"
+
+msgid "Not active – vouchers in the ticket checkout, ticket vouchers and the shared scanner are off. Voucher Captain works fully without it."
+msgstr "Nicht aktiv – Gutscheine im Ticket-Checkout, Ticket-Gutscheine und der gemeinsame Scanner sind aus. Voucher Captain funktioniert ohne Einschränkung."
+
+msgid "Not admitted (%s)"
+msgstr "Kein Einlass (%s)"
+
+msgid "Open WP Pass Captain"
+msgstr "WP Pass Captain öffnen"
+
+msgid "Shared scanner: Vouchers → Scanner also checks in Pass Captain tickets."
+msgstr "Gemeinsamer Scanner: Gutscheine → Scanner checkt auch Pass-Captain-Tickets ein."
+
+msgid "Shared scanner: WP Pass Captain tickets are recognised too and checked in at Pass Captain (needs the Pass Captain check-in permission). Voucher codes are always looked up in Voucher Captain first."
+msgstr "Gemeinsamer Scanner: Auch WP-Pass-Captain-Tickets werden erkannt und in Pass Captain eingecheckt (dafür ist das Pass-Captain-Recht für Check-ins nötig). Gutscheincodes werden immer zuerst in Voucher Captain gesucht."
+
+msgid "Shared scanner: not available – update WP Pass Captain."
+msgstr "Gemeinsamer Scanner: nicht verfügbar – WP Pass Captain aktualisieren."
+
+msgid "Ticket type"
+msgstr "Ticketart"
+
+msgid "Ticket vouchers: choose a ticket type or event in the product's voucher settings."
+msgstr "Ticket-Gutscheine: Ticketart oder Veranstaltung in den Gutschein-Einstellungen des Produkts wählen."
+
+msgid "Ticket vouchers: not available – update WP Pass Captain."
+msgstr "Ticket-Gutscheine: nicht verfügbar – WP Pass Captain aktualisieren."
+
+msgid "Tip: the voucher type \"Ticket\" is a simple admission pass without dates or capacity, checked in at Voucher Captain. For events with dates, capacity and admission rules, create them in WP Pass Captain and use a voucher with \"WP Pass Captain ticket\" below (or sell Pass Captain tickets directly)."
+msgstr "Tipp: Der Gutscheintyp „Ticket“ ist ein einfacher Eintrittsgutschein ohne Termin und Kontingent, eingecheckt in Voucher Captain. Für Veranstaltungen mit Terminen, Kontingent und Einlassregeln diese in WP Pass Captain anlegen und unten „WP-Pass-Captain-Ticket“ wählen (oder Pass-Captain-Tickets direkt verkaufen)."
+
+msgid "Valid ticket"
+msgstr "Gültiges Ticket"
+
+msgid "Vouchers and gift cards pay in the ticket checkout (contract v1; tick \"WP Pass Captain\" under \"Redeemable via\" or leave all channels unticked)."
+msgstr "Gutscheine und Geschenkkarten bezahlen im Ticket-Checkout (Vertrag v1; unter „Einlösbar über“ „WP Pass Captain“ ankreuzen oder keine Einschränkung setzen)."
+
+msgid "WP Pass Captain"
+msgstr "WP Pass Captain"
+
+msgid "WP Pass Captain (tickets)"
+msgstr "WP Pass Captain (Tickets)"
+
+msgid "WP Pass Captain ↗"
+msgstr "WP Pass Captain ↗"
+
+msgid "Cancel"
+msgstr "Abbrechen"
+
+msgid "Choose another date"
+msgstr "Anderen Termin wählen"
+
+msgid "Not admitted: %s"
+msgstr "Kein Einlass: %s"
+
+msgid "Not deducted: the amount exceeds the balance (remaining %s)."
+msgstr "Nicht abgebucht: Der Betrag übersteigt das Guthaben (Rest %s)."
+
+msgid "Please enter a valid email address for your tickets."
+msgstr "Bitte geben Sie eine gültige E-Mail-Adresse für Ihre Tickets ein."
+
+msgid "Please enter the email address the tickets should be sent to."
+msgstr "Bitte geben Sie die E-Mail-Adresse ein, an die die Tickets gesendet werden sollen."
+
+msgid "Redeeming issues the tickets bindingly; the voucher is used up."
+msgstr "Mit dem Einlösen werden die Tickets verbindlich ausgestellt; der Gutschein ist dann verbraucht."
+
+msgid "Revert this check-in? The ticket can then be used for entry again."
+msgstr "Diesen Check-in zurücknehmen? Das Ticket kann danach erneut für den Einlass verwendet werden."
+
+msgid "Send the tickets to (email)"
+msgstr "Tickets senden an (E-Mail)"
+
+msgid "The tickets of this voucher were revoked (for example because the event was cancelled). Please contact us."
+msgstr "Die Tickets dieses Gutscheins wurden widerrufen (zum Beispiel, weil die Veranstaltung abgesagt wurde). Bitte kontaktieren Sie uns."
+
+msgid "This redemption is managed by an integration."
+msgstr "Diese Einlösung wird von einer Integration verwaltet."
+
+msgid "This redemption key is reserved."
+msgstr "Dieser Einlöse-Schlüssel ist reserviert."
+
+msgid "This voucher is in an unpaid shop order right now. Redeem it after that order is cancelled."
+msgstr "Dieser Gutschein steckt gerade in einer unbezahlten Shop-Bestellung. Erst einlösen, wenn diese Bestellung storniert ist."
+
+msgid "Ticket voucher – not a ticket. Exchange it for tickets first (redeem page or voucher admin)."
+msgstr "Ticket-Gutschein – kein Ticket. Zuerst in Tickets umwandeln (Einlöseseite oder Gutscheinverwaltung)."
+
+msgid "Ticket vouchers cannot be redeemed at the counter. Exchange them for tickets first."
+msgstr "Ticket-Gutscheine können nicht an der Kasse eingelöst werden. Bitte zuerst in Tickets umwandeln."
+
+msgid "Used in a shop order although already redeemed elsewhere – check the order"
+msgstr "In einer Shop-Bestellung verwendet, obwohl bereits anderswo eingelöst – Bestellung prüfen"
+
+msgid "Valid ticket – but for another date: %s"
+msgstr "Gültiges Ticket – aber für einen anderen Termin: %s"
+
+msgid "Void this voucher? It can no longer be redeemed; tickets it was exchanged for in WP Pass Captain are revoked."
+msgstr "Diesen Gutschein stornieren? Er kann dann nicht mehr eingelöst werden; Tickets, gegen die er in WP Pass Captain umgewandelt wurde, werden widerrufen."
+
+msgid "already checked in"
+msgstr "bereits eingecheckt"
+
+msgid "already inside"
+msgstr "bereits drinnen"
+
+msgid "checked out"
+msgstr "ausgecheckt"
+
+msgid "daily limit reached"
+msgstr "Tageslimit erreicht"
+
+msgid "entry limit reached"
+msgstr "Eintrittslimit erreicht"
+
+msgid "event cancelled"
+msgstr "Veranstaltung abgesagt"
+
+msgid "not valid today"
+msgstr "heute nicht gültig"
+
+msgid "outside the admission period"
+msgstr "außerhalb des Einlasszeitraums"
+
+msgid "outside the entry time"
+msgstr "außerhalb der Einlasszeit"
+
+msgid "ticket for another area"
+msgstr "Ticket für einen anderen Bereich"
+
+msgid "ticket for another date"
+msgstr "Ticket für einen anderen Termin"
+
+msgid "ticket for another event"
+msgstr "Ticket für eine andere Veranstaltung"
+
+msgid "ticket refunded"
+msgstr "Ticket erstattet"
+
+msgid "ticket revoked"
+msgstr "Ticket widerrufen"
+
+msgid "unknown ticket"
+msgstr "unbekanntes Ticket"
+
+msgid "Voucher restored (tickets cancelled in Pass Captain)"
+msgstr "Gutschein wiederhergestellt (Tickets in Pass Captain storniert)"
+
+msgid "Vouchers from this order were already used (%1$s, value used: %2$s). At most %3$s can be refunded; the unused vouchers are voided."
+msgstr "Gutscheine aus dieser Bestellung wurden bereits verwendet (%1$s, verbrauchter Wert: %2$s). Erstattet werden können höchstens %3$s; die unverbrauchten Gutscheine werden entwertet."
+
+msgid "Partial refund #%d of the purchase order"
+msgstr "Teilerstattung #%d der Kaufbestellung"
+
+msgid "Voucher %s voided (refunded)."
+msgstr "Gutschein %s entwertet (erstattet)."
+
+msgid "VAT treatment"
+msgstr "USt-Behandlung"
+
+msgid "Automatic (value vouchers: multi-purpose, percentage: discount)"
+msgstr "Automatisch (Wertgutscheine: Mehrzweck, Prozentgutscheine: Rabatt)"
+
+msgid "Multi-purpose voucher (means of payment, VAT on redemption)"
+msgstr "Mehrzweckgutschein (Zahlungsmittel, USt bei Einlösung)"
+
+msgid "Single-purpose voucher (VAT already charged at sale)"
+msgstr "Einzweckgutschein (USt bereits beim Verkauf abgeführt)"
+
+msgid "Promotion (price reduction)"
+msgstr "Aktion (Preisnachlass)"
+
+msgid "How connected checkouts (e.g. WP Pass Captain) treat the voucher for VAT. Have the classification checked by your tax adviser."
+msgstr "Wie angebundene Kassen (z. B. WP Pass Captain) den Gutschein umsatzsteuerlich behandeln. Lassen Sie die Einordnung von Ihrer Steuerberatung prüfen."
+
+msgid "Holder name in the scanner"
+msgstr "Name des Inhabers im Scanner"
+
+msgid "Show the name of the buyer or recipient when a code is scanned. Personal tickets always show the name so it can be checked. Order number and original value are only shown to staff who manage vouchers."
+msgstr "Beim Scannen den Namen von Käufer oder Empfänger anzeigen. Personalisierte Tickets zeigen den Namen immer an, damit er geprüft werden kann. Bestellnummer und ursprünglicher Wert sehen nur Mitarbeitende, die Gutscheine verwalten."
+
+msgid "Default validity"
+msgstr "Standard-Gültigkeit"
+
+msgid "Statutory default for the shop country (Germany: 3 years to the end of the year, Austria: 30 years)"
+msgstr "Gesetzlicher Standard des Shop-Landes (Deutschland: 3 Jahre zum Jahresende, Österreich: 30 Jahre)"
+
+msgid "Fixed number of days (below)"
+msgstr "Feste Anzahl Tage (unten)"
+
+msgid "Used when a product does not define its own expiry. Shorter validity periods can be invalid towards consumers; have them checked legally."
+msgstr "Gilt, wenn ein Produkt keine eigene Gültigkeit festlegt. Kürzere Fristen können gegenüber Verbrauchern unwirksam sein; lassen Sie sie rechtlich prüfen."
+
+msgid "Used with \"Fixed number of days\" when a product does not define its own expiry. 0 = never expires."
+msgstr "Gilt bei „Feste Anzahl Tage“, wenn ein Produkt keine eigene Gültigkeit festlegt. 0 = unbegrenzt gültig."
