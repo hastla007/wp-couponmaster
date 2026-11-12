@@ -176,4 +176,11 @@ vcap_acc_assert( vcap()->vouchers->get( $gross_card->id )->balance < 0.02, 'the 
 WC_Tax::_delete_tax_rate( $rate_id );
 update_option( 'woocommerce_calc_taxes', 'no' );
 
+// Deactivation: without Voucher Captain nobody deducts balances, so balance coupons must not work.
+$idle_card = vcap_acc_card( 40 );
+VCAP\Install::suspend_balance_coupons();
+vcap_acc_assert( 0 === wc_get_coupon_id_by_code( $idle_card->code ) && 'draft' === get_post_status( $idle_card->coupon_id ), 'deactivating suspends gift card coupons (WooCommerce no longer finds the code)' );
+VCAP\Install::restore_balance_coupons();
+vcap_acc_assert( $idle_card->coupon_id === wc_get_coupon_id_by_code( $idle_card->code ) && 'publish' === get_post_status( $idle_card->coupon_id ), 'reactivating publishes exactly the suspended coupons again' );
+
 echo "Voucher Captain acceptance checks passed.\n";

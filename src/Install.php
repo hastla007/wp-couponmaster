@@ -29,12 +29,61 @@ final class Install {
 		}
 		add_option( 'vcap_needs_default_template', 'yes' );
 		update_option( 'vcap_flush_rewrite', 'yes' );
+		self::restore_balance_coupons();
 	}
 
 	public static function deactivate(): void {
 		if ( function_exists( 'as_unschedule_all_actions' ) ) {
 			as_unschedule_all_actions( 'vcap_daily_maintenance' );
+			as_unschedule_all_actions( 'vcap_release_stale_order_reservations' );
 		}
+		self::suspend_balance_coupons();
+	}
+
+	public const SUSPENDED_OPTION = 'vcap_suspended_coupons';
+
+	/**
+	 * Gift cards and store credit are WooCommerce coupons without a usage limit whose amount is the remaining
+	 * balance; only Voucher Captain deducts that balance. Without the plugin every such code would take its
+	 * full balance off every order, so they are set to draft (WooCommerce refuses them) until reactivation.
+	 */
+	public static function suspend_balance_coupons(): void {
+		global $wpdb;
+		$tables = self::tables();
+		$ids    = array_map( 'intval', (array) $wpdb->get_col( "SELECT p.ID FROM {$wpdb->posts} p INNER JOIN {$tables['vouchers']} v ON v.coupon_id = p.ID WHERE p.post_type = 'shop_coupon' AND p.post_status = 'publish' AND v.usage_mode = 'balance'" ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( ! $ids ) {
+			return;
+		}
+		$known = array_map( 'intval', (array) get_option( self::SUSPENDED_OPTION, array() ) );
+		update_option( self::SUSPENDED_OPTION, array_values( array_unique( array_merge( $known, $ids ) ) ), false );
+		foreach ( array_chunk( $ids, 500 ) as $chunk ) {
+			$wpdb->query( "UPDATE {$wpdb->posts} SET post_status = 'draft' WHERE ID IN (" . implode( ',', $chunk ) . ") AND post_status = 'publish'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+			foreach ( $chunk as $id ) {
+				clean_post_cache( $id );
+			}
+		}
+		self::flush_coupon_cache();
+	}
+
+	/** WooCommerce caches "code → coupon id"; a cached id would keep a suspended coupon usable. */
+	private static function flush_coupon_cache(): void {
+		if ( class_exists( '\WC_Cache_Helper' ) && method_exists( '\WC_Cache_Helper', 'invalidate_cache_group' ) ) {
+			\WC_Cache_Helper::invalidate_cache_group( 'coupons' );
+		}
+	}
+
+	/** Publishes the coupons suspended on deactivation again (only those, never coupons drafted by hand). */
+	public static function restore_balance_coupons(): void {
+		global $wpdb;
+		$ids = array_values( array_filter( array_map( 'intval', (array) get_option( self::SUSPENDED_OPTION, array() ) ) ) );
+		foreach ( array_chunk( $ids, 500 ) as $chunk ) {
+			$wpdb->query( "UPDATE {$wpdb->posts} SET post_status = 'publish' WHERE ID IN (" . implode( ',', $chunk ) . ") AND post_type = 'shop_coupon' AND post_status = 'draft'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+			foreach ( $chunk as $id ) {
+				clean_post_cache( $id );
+			}
+		}
+		delete_option( self::SUSPENDED_OPTION );
+		self::flush_coupon_cache();
 	}
 
 	public static function maybe_upgrade(): void {

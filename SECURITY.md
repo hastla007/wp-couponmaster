@@ -8,6 +8,10 @@ Voucher administration and import/export handlers check capabilities and WordPre
 
 The public balance shortcode requires a nonce and applies per-visitor and site-wide fixed-window rate limits before voucher lookup. Rate limits reduce code enumeration; they are not a substitute for edge-level abuse protection under distributed traffic.
 
+## Deactivation
+
+Gift cards and store credit are WooCommerce coupons without a usage limit whose amount is the remaining balance; only Voucher Captain deducts that balance. On deactivation these coupons are set to draft (WooCommerce no longer accepts the codes) and published again on reactivation. This does not cover a plugin paused by WordPress recovery mode after a fatal error: there, nothing of the plugin runs, so fix or deactivate it promptly.
+
 ## Guest PDF links
 
 Guest PDF links are signed with an HMAC tied to the site secret and the voucher token. Page links expire after one day. Email-link lifetime follows the merchant's download-link setting; zero means no expiry. A changed token, expiry, or signature makes the URL invalid. Admin-generated links use a nonce and capability check.
