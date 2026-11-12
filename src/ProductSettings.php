@@ -241,6 +241,8 @@ final class ProductSettings {
 			echo '<label style="display:block;margin-left:0"><input type="checkbox" name="_vcap_channels[]" value="' . esc_attr( $key ) . '" ' . checked( in_array( $key, $channels, true ), true, false ) . ' /> ' . esc_html( $label ) . '</label>';
 		}
 		echo '<span class="description">' . esc_html__( 'Leave all unticked to allow every channel. Stored with each sold voucher.', 'voucher-captain' ) . '</span></fieldset>';
+		/** Extra product fields of connectors (saved in vcap_product_settings_save). */
+		do_action( 'vcap_product_settings_fields', $p );
 		woocommerce_wp_textarea_input(
 			array(
 				'id'          => '_vcap_redemption_terms',
@@ -504,6 +506,7 @@ final class ProductSettings {
 		// Channels of plugins that are inactive right now are not shown in the form: keep them, never drop them.
 		$hidden     = array_diff( array_map( 'sanitize_key', (array) $product->get_meta( '_vcap_channels' ) ), $registered );
 		$product->update_meta_data( '_vcap_channels', array_values( array_filter( array_unique( array_merge( $channels, $hidden ) ) ) ) );
+		do_action( 'vcap_product_settings_save', $product, $post );
 		foreach ( array( 'product_ids', 'exclude_product_ids', 'category_ids', 'exclude_category_ids' ) as $key ) {
 			$product->update_meta_data( '_vcap_' . $key, array_values( array_filter( array_map( 'absint', (array) ( $post[ '_vcap_' . $key ] ?? array() ) ) ) ) );
 		}

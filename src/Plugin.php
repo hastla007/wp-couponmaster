@@ -21,6 +21,8 @@ final class Plugin {
 	public Tickets $tickets;
 	public API\V1\VoucherService $api_v1;
 	public API\V1\RedemptionService $redemptions;
+	/** Exchange of ticket vouchers for WP Pass Captain tickets (works only while Pass Captain is active). */
+	public Compat\PassCaptainTickets $passcaptain_tickets;
 	public StoreCredit $store_credit;
 
 	public static function instance(): Plugin {
@@ -48,6 +50,7 @@ final class Plugin {
 		$this->tickets   = new Tickets( $this->vouchers );
 		$this->api_v1    = new API\V1\VoucherService( $this->vouchers, $this->coupons );
 		$this->redemptions = new API\V1\RedemptionService( $this->vouchers );
+		$this->passcaptain_tickets = new Compat\PassCaptainTickets( $this->redemptions, $this->vouchers );
 		$this->store_credit = new StoreCredit( $this->settings, $this->vouchers, $this->coupons );
 
 		( new TemplatePostType() )->register();
@@ -87,6 +90,7 @@ final class Plugin {
 		( new Compat\MultiCurrency() )->register();
 		( new Compat\AffiliateCaptain() )->register();
 		( new Compat\PassCaptain() )->register();
+		$this->passcaptain_tickets->register();
 
 		if ( is_admin() ) {
 			( new Admin\Menu() )->register();

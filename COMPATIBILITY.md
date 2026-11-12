@@ -37,3 +37,15 @@ Provider integrations are optional. Each store should verify its currency switch
 Voucher fields use WooCommerce product add-to-cart hooks and cart/order-item data. The integration suite checks field definitions, cart data persistence, order-item persistence, Store API reservation, paid-order commit, payment retry behavior, and both HPOS and legacy order CRUD. Voucher Captain declares HPOS and Cart/Checkout Blocks compatibility. Block-based add-to-cart requests (Store API `cart/add-item`) accept the voucher fields as `vcap_fields` (object of field key ⇒ value); they are validated like the product form (required fields, email/date/number/select rules) and refused with the error code `vcap_invalid_voucher_fields`. Products with required or custom fields link to the product page instead of adding to the cart from product lists.
 
 The CI job `browser-e2e` runs Playwright against a real shop (WordPress 7.1.4, WooCommerce 11.2.2, Yoast SEO 28.8): product page fields, keyboard-only use, classic cart/checkout and the cart/checkout blocks with cash on delivery, shortcodes and blocks, My Account, admin screens and the product editor next to Yoast SEO, axe-core accessibility scans of all Voucher Captain markup, and a PHP notice check. External payment gateways, redirects and webhooks, and screen-reader testing by a person remain release acceptance checks.
+
+## WP Pass Captain (tickets)
+
+Release gate: Voucher Captain alone, WP Pass Captain alone and both together.
+
+| Setup | Where it is checked |
+|---|---|
+| Voucher Captain without Pass Captain | Every suite of this repository's CI (`smoke`, `wordpress-integration`, `minimum-versions`, `browser-e2e`); Pass Captain code paths stay inactive. |
+| Pass Captain without Voucher Captain | Pass Captain's own CI (hastla007/wp-passmaster), with a stub voucher provider. |
+| Both plugins | CI job `pass-captain`: `tests/passcaptain-integration.php` against Pass Captain `main` and its release branch – vouchers and gift cards in the ticket checkout (reserve, commit, late payment, release, proportional refund, currencies, channels) and ticket vouchers (fixed date or date chosen by the customer, sold-out dates, attendee details, repeat, revoke on void). |
+
+Both plugins keep their own plugin entries and admin menus. They talk only through the versioned filters `wp_pass_captain_voucher_provider_v1` and `wp_pass_captain_ticket_service_v1`, never through each other's tables.

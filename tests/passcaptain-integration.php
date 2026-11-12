@@ -149,6 +149,115 @@ if ( method_exists( Checkout::class, 'handle_job' ) ) {
 	vcap_pc_assert( true === $paid && 'committed' === vcap_pc_redemption( $late_order['order_id'] )['state'] && 0.0 === vcap()->vouchers->get( $late_card->id )->balance, 'a late payment reserves and charges the gift card again (no free discount)' );
 }
 
+// Ticket vouchers: a voucher product names a Pass Captain ticket type; the voucher is exchanged for tickets.
+if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
+	global $wpdb;
+	$ticket_type = vcap_pc_ticket_type( 3500 );
+	vcap_pc_assert( null !== VCAP\Compat\PassCaptainTickets::service(), 'Pass Captain offers its ticket service to Voucher Captain' );
+	$tv_product = new WC_Product_Simple();
+	$tv_product->set_name( 'Concert voucher (2 tickets)' );
+	$tv_product->set_regular_price( '70' );
+	$tv_product->set_virtual( true );
+	$tv_product->update_meta_data( '_vcap_enabled', 'yes' );
+	$tv_product->update_meta_data( '_vcap_type', 'voucher' );
+	$tv_product->update_meta_data( VCAP\Compat\PassCaptainTickets::META_TYPE, $ticket_type );
+	$tv_product->update_meta_data( VCAP\Compat\PassCaptainTickets::META_QTY, 2 );
+	$tv_product->save();
+	$tv_order = wc_create_order();
+	$tv_order->add_product( $tv_product, 1 );
+	$tv_order->set_billing_email( 'ticket-buyer@example.com' );
+	$tv_order->calculate_totals();
+	$tv_order->set_status( 'processing' );
+	$tv_order->save();
+	vcap()->issuer->issue_for_order( $tv_order, true );
+	$tv = vcap()->vouchers->for_order( $tv_order->get_id() )[0] ?? null;
+	$tv_target = $tv ? VCAP\Compat\PassCaptainTickets::target( $tv ) : null;
+	vcap_pc_assert( $tv_target && $ticket_type === $tv_target['ticket_type_id'] && 2 === $tv_target['quantity'], 'the sold voucher stores its ticket target with the order line' );
+
+	wp_set_current_user( 0 ); // A guest on the redeem page: tickets go to the voucher's recipient or buyer.
+	$done = vcap()->passcaptain_tickets->exchange( $tv->code );
+	if ( is_wp_error( $done ) ) {
+		echo 'Exchange error: ' . $done->get_error_code() . ' – ' . $done->get_error_message() . "\n";
+	}
+	$pc_order = is_array( $done ) ? $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}wpcap_orders WHERE public_id=%s", $done['order_public_id'] ) ) : null;
+	vcap_pc_assert( is_array( $done ) && 2 === $done['tickets'] && 'ticket-buyer@example.com' === $done['email'] && $pc_order && 'paid' === $pc_order->payment_status && 0 === (int) $pc_order->total_minor, 'the voucher is exchanged for two free Pass Captain tickets' );
+	vcap_pc_assert( VCAP\Voucher::STATUS_REDEEMED === vcap()->vouchers->get( $tv->id )->status && 'committed' === vcap()->redemptions->get( VCAP\Compat\PassCaptainTickets::key( $tv ) )['state'], 'the voucher is redeemed only after the tickets were issued' );
+	$again = vcap()->passcaptain_tickets->exchange( $tv->code );
+	vcap_pc_assert( is_array( $again ) && $again['order_public_id'] === $done['order_public_id'] && 2 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}wpcap_tickets WHERE order_id=%d", $pc_order->order_id ) ), 'exchanging again returns the same tickets (no second order)' );
+	vcap_pc_assert( 'passcaptain_tickets' === array_column( vcap()->vouchers->events( $tv->id ), 'event' )[ count( vcap()->vouchers->events( $tv->id ) ) - 1 ], 'the exchange is in the voucher history' );
+
+	wp_set_current_user( 1 );
+	vcap()->issuer->void( vcap()->vouchers->get( $tv->id ), 'Purchase order refunded' );
+	vcap_pc_assert( 0 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}wpcap_tickets WHERE order_id=%d AND status='valid'", $pc_order->order_id ) ), 'voiding the voucher (purchase refunded) revokes its tickets' );
+
+	// Sold out: nothing is redeemed, the voucher stays usable.
+	$full_type = vcap_pc_ticket_type( 1000 );
+	$wpdb->update( "{$wpdb->prefix}wpcap_ticket_types", array( 'capacity' => 1 ), array( 'ticket_type_id' => $full_type ) );
+	$full = vcap_pc_voucher( 'single', 20 );
+	$give = static fn( $t, $v ) => $v->id === $full->id ? array( 'ticket_type_id' => $full_type, 'quantity' => 2 ) : $t;
+	add_filter( 'vcap_passcaptain_ticket_target', $give, 10, 2 );
+	$refused = vcap()->passcaptain_tickets->exchange( $full->code );
+	vcap_pc_assert( is_wp_error( $refused ) && VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $full->id )->status, 'a sold-out ticket type refuses the exchange and the voucher stays usable' );
+	remove_filter( 'vcap_passcaptain_ticket_target', $give, 10 );
+	vcap_pc_assert( is_wp_error( vcap()->passcaptain_tickets->exchange( vcap_pc_voucher( 'single', 10 )->code ) ), 'vouchers without a ticket target are not exchanged' );
+
+	// "Customer chooses the date": the voucher names an event; the customer picks one of its upcoming dates.
+	if ( method_exists( VCAP\Compat\PassCaptainTickets::service(), 'options' ) ) {
+		$first = vcap_pc_ticket_type( 3000 );
+		$ev    = $wpdb->get_row( $wpdb->prepare( "SELECT o.event_id FROM {$wpdb->prefix}wpcap_ticket_types tt JOIN {$wpdb->prefix}wpcap_occurrences o ON o.occurrence_id=tt.occurrence_id WHERE tt.ticket_type_id=%d", $first ) );
+		$wpdb->insert( "{$wpdb->prefix}wpcap_occurrences", array( 'event_id' => $ev->event_id, 'starts_at' => gmdate( 'Y-m-d H:i:s', time() + 21 * DAY_IN_SECONDS ), 'timezone' => 'Europe/Vienna', 'location' => 'Wien', 'capacity' => 0, 'status' => 'scheduled' ) );
+		$wpdb->insert( "{$wpdb->prefix}wpcap_ticket_types", array( 'occurrence_id' => $wpdb->insert_id, 'name' => 'Standard', 'price_minor' => 3000, 'currency' => 'EUR', 'capacity' => 100, 'max_per_order' => 10, 'status' => 'active' ) );
+		$second = (int) $wpdb->insert_id;
+		$ev_product = new WC_Product_Simple();
+		$ev_product->set_name( 'Concert voucher (any date)' );
+		$ev_product->set_regular_price( '30' );
+		$ev_product->set_virtual( true );
+		$ev_product->update_meta_data( '_vcap_enabled', 'yes' );
+		$ev_product->update_meta_data( '_vcap_type', 'voucher' );
+		$ev_product->update_meta_data( VCAP\Compat\PassCaptainTickets::META_EVENT, (int) $ev->event_id );
+		$ev_product->update_meta_data( VCAP\Compat\PassCaptainTickets::META_NAME, 'Standard' );
+		$ev_product->update_meta_data( VCAP\Compat\PassCaptainTickets::META_QTY, 1 );
+		$ev_product->save();
+		$ev_order = wc_create_order();
+		$ev_order->add_product( $ev_product, 1 );
+		$ev_order->set_billing_email( 'any-date@example.com' );
+		$ev_order->calculate_totals();
+		$ev_order->set_status( 'processing' );
+		$ev_order->save();
+		vcap()->issuer->issue_for_order( $ev_order, true );
+		$ev_voucher = vcap()->vouchers->for_order( $ev_order->get_id() )[0];
+		$choices    = array_map( 'intval', array_column( VCAP\Compat\PassCaptainTickets::options( $ev_voucher ), 'ticket_type_id' ) );
+		vcap_pc_assert( array( $first, $second ) === $choices, 'an event voucher offers every upcoming date of the event' );
+		wp_set_current_user( 0 );
+		$ask = vcap()->passcaptain_tickets->exchange( $ev_voucher->code );
+		vcap_pc_assert( is_wp_error( $ask ) && 'vcap_ticket_choice_required' === $ask->get_error_code() && 2 === count( $ask->get_error_data()['options'] ) && VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $ev_voucher->id )->status, 'without a chosen date the customer is asked to choose one (nothing is redeemed)' );
+		vcap_pc_assert( is_wp_error( vcap()->passcaptain_tickets->exchange( $ev_voucher->code, array( 'ticket_type_id' => $ticket_type ) ) ), 'a date of another event cannot be chosen' );
+		$picked = vcap()->passcaptain_tickets->exchange( $ev_voucher->code, array( 'ticket_type_id' => $second ) );
+		$picked_type = is_array( $picked ) ? (int) $wpdb->get_var( $wpdb->prepare( "SELECT t.ticket_type_id FROM {$wpdb->prefix}wpcap_tickets t JOIN {$wpdb->prefix}wpcap_orders o ON o.order_id=t.order_id WHERE o.public_id=%s", $picked['order_public_id'] ) ) : 0;
+		vcap_pc_assert( is_array( $picked ) && 1 === $picked['tickets'] && $second === $picked_type && VCAP\Voucher::STATUS_REDEEMED === vcap()->vouchers->get( $ev_voucher->id )->status, 'the ticket is issued for the chosen date' );
+		// Sold-out dates are not offered; required attendee fields are asked before the tickets are issued.
+		$wpdb->update( "{$wpdb->prefix}wpcap_ticket_types", array( 'capacity' => 1 ), array( 'ticket_type_id' => $first ) );
+		vcap_pc_order( $first, 1 ); // The last place of the first date is held by another buyer.
+		$wpdb->insert( "{$wpdb->prefix}wpcap_participant_fields", array( 'ticket_type_id' => $second, 'field_key' => 'name', 'label' => 'Name', 'field_type' => 'text', 'required' => 1, 'status' => 'active' ) );
+		$ev_order2 = wc_create_order();
+		$ev_order2->add_product( $ev_product, 1 );
+		$ev_order2->set_billing_email( 'any-date2@example.com' );
+		$ev_order2->calculate_totals();
+		$ev_order2->set_status( 'processing' );
+		$ev_order2->save();
+		vcap()->issuer->issue_for_order( $ev_order2, true );
+		$ev_voucher2 = vcap()->vouchers->for_order( $ev_order2->get_id() )[0];
+		vcap_pc_assert( array( $second ) === array_map( 'intval', array_column( VCAP\Compat\PassCaptainTickets::options( $ev_voucher2 ), 'ticket_type_id' ) ), 'a sold-out date is no longer offered' );
+		wp_set_current_user( 0 );
+		$need = vcap()->passcaptain_tickets->exchange( $ev_voucher2->code, array( 'ticket_type_id' => $second ) );
+		vcap_pc_assert( is_wp_error( $need ) && 'vcap_ticket_attendees_required' === $need->get_error_code() && 'name' === $need->get_error_data()['fields'][0]['key'] && VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $ev_voucher2->id )->status, 'required attendee details are asked before anything is redeemed' );
+		$with = vcap()->passcaptain_tickets->exchange( $ev_voucher2->code, array( 'ticket_type_id' => $second, 'attendees' => array( array( 'answers' => array( 'name' => 'Erika Muster' ) ) ) ) );
+		$answer = is_array( $with ) ? $wpdb->get_var( $wpdb->prepare( "SELECT a.answer FROM {$wpdb->prefix}wpcap_participant_answers a JOIN {$wpdb->prefix}wpcap_tickets t ON t.ticket_id=a.ticket_id JOIN {$wpdb->prefix}wpcap_orders o ON o.order_id=t.order_id WHERE o.public_id=%s", $with['order_public_id'] ) ) : '';
+		vcap_pc_assert( is_array( $with ) && 'Erika Muster' === $answer, 'the attendee details are stored with the issued ticket' );
+		wp_set_current_user( 1 );
+	}
+}
+
 // Minor units follow ISO 4217 (as Pass Captain does), not the shop's price display setting.
 $decimals = static fn() => 0;
 add_filter( 'wc_get_price_decimals', $decimals );

@@ -340,7 +340,7 @@ final class VoucherRepository {
 	}
 
 	public static function event_labels(): array {
-		return array(
+		$labels = array(
 			'issued'     => __( 'Issued', 'voucher-captain' ),
 			'reserved'   => __( 'Balance reserved for payment', 'voucher-captain' ),
 			'committed'  => __( 'Balance reservation committed', 'voucher-captain' ),
@@ -368,5 +368,7 @@ final class VoucherRepository {
 			'edited'     => __( 'Edited', 'voucher-captain' ),
 			'downloaded' => __( 'Downloaded', 'voucher-captain' ),
 		);
+		/** Labels of connector events in the voucher history. */
+		return (array) apply_filters( 'vcap_event_labels', $labels );
 	}
 }
