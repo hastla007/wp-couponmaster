@@ -81,6 +81,12 @@ final class Tickets {
 		return $this->repo->get_by_code( $code ) ?? $this->repo->get_by_code( strtoupper( $code ) );
 	}
 
+	/** Whether the scanner shows the holder's name (setting "vcap_scanner_show_holder"; personal tickets always). */
+	public static function show_holder( Voucher $voucher ): bool {
+		$show = 'yes' === get_option( 'vcap_scanner_show_holder', 'no' ) || ( $voucher->is_ticket() && '' !== (string) $voucher->recipient_name );
+		return (bool) apply_filters( 'vcap_scanner_show_holder', $show, $voucher );
+	}
+
 	public function describe( Voucher $voucher ): array {
 		$product = $voucher->product();
 		$state   = 'ok';
@@ -104,7 +110,8 @@ final class Tickets {
 			$state   = 'warning';
 			$message = __( 'Currently being redeemed elsewhere', 'voucher-captain' );
 		}
-		$data = array(
+		$manager = current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' );
+		$data    = array(
 			'id'             => $voucher->id,
 			'code'           => $voucher->code,
 			'type'           => $voucher->type,
@@ -114,15 +121,17 @@ final class Tickets {
 			'state'          => $state,
 			'message'        => $message,
 			'product'        => $product ? $product->get_name() : '',
-			'holder'         => $voucher->recipient_name ?: $voucher->buyer_name,
-			'order'          => $voucher->order() ? $voucher->order()->get_order_number() : '',
+			// Privacy at the door: the name only when enabled (or for personal tickets, where it is checked);
+			// order number and original value only for staff who manage vouchers.
+			'holder'         => self::show_holder( $voucher ) ? ( $voucher->recipient_name ?: $voucher->buyer_name ) : '',
+			'order'          => $manager && $voucher->order() ? $voucher->order()->get_order_number() : '',
 			'checkins'       => $voucher->checkins,
 			'max_checkins'   => $voucher->max_checkins,
 			'last_checkin'   => $voucher->last_checkin_at ? get_date_from_gmt( $voucher->last_checkin_at, get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) : '',
 			'multi_use'      => $voucher->is_multi_use(),
 			'balance'        => $voucher->balance,
 			'balance_html'   => html_entity_decode( wp_strip_all_tags( wc_price( $voucher->balance, array( 'currency' => $voucher->currency ) ) ) ),
-			'value_html'     => 'percent' === $voucher->discount_type ? $voucher->initial_amount . '%' : html_entity_decode( wp_strip_all_tags( wc_price( $voucher->initial_amount, array( 'currency' => $voucher->currency ) ) ) ),
+			'value_html'     => ! $manager ? '' : ( 'percent' === $voucher->discount_type ? $voucher->initial_amount . '%' : html_entity_decode( wp_strip_all_tags( wc_price( $voucher->initial_amount, array( 'currency' => $voucher->currency ) ) ) ) ),
 			'expires'        => $voucher->expires_at ? get_date_from_gmt( $voucher->expires_at, get_option( 'date_format' ) ) : '',
 			'admin_url'      => admin_url( 'admin.php?page=vcap-vouchers&voucher=' . $voucher->id ),
 		);

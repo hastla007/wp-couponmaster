@@ -138,4 +138,16 @@ foreach ( $admin_checks as $check ) {
 	vcap_security_assert( str_contains( $source, 'current_user_can' ) || str_contains( $source, '$this->can()' ), $check[0] . '::' . $check[1] . ' checks capabilities' );
 }
 
+// Scanner privacy: door staff (scan right only) see neither the name nor order number or original value by default.
+$scan_voucher = vcap_security_create_voucher( 'scanner-privacy@example.com', 900 );
+$door_user    = wp_insert_user( array( 'user_login' => 'vcap-door-' . wp_generate_password( 6, false, false ), 'user_pass' => wp_generate_password( 20 ), 'role' => 'subscriber' ) );
+( new WP_User( $door_user ) )->add_cap( 'vcap_scan_tickets' );
+wp_set_current_user( $door_user );
+$door_view = vcap()->tickets->describe( vcap()->vouchers->get( $scan_voucher->id ) );
+vcap_security_assert( '' === $door_view['holder'] && '' === $door_view['order'] && '' === $door_view['value_html'] && '' !== $door_view['balance_html'], 'the scanner hides name, order and value from door staff by default (balance stays for redemption)' );
+update_option( 'vcap_scanner_show_holder', 'yes' );
+vcap_security_assert( 'Privacy Test Recipient' === vcap()->tickets->describe( vcap()->vouchers->get( $scan_voucher->id ) )['holder'], 'the holder name is shown when enabled' );
+delete_option( 'vcap_scanner_show_holder' );
+wp_set_current_user( 0 );
+
 echo "Voucher Captain security and privacy checks passed.\n";

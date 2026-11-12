@@ -169,6 +169,48 @@ final class ProductConfig {
 	}
 
 	/**
+	 * Global default for products without their own expiry: "statutory" (by the shop's country) or "days"
+	 * (vcap_default_expiry_days). Shops that saved a number of days before this setting existed keep it.
+	 */
+	public static function default_expiry_rule(): string {
+		$rule = (string) get_option( 'vcap_default_expiry_rule', '' );
+		if ( in_array( $rule, array( 'statutory', 'days' ), true ) ) {
+			return $rule;
+		}
+		return false !== get_option( 'vcap_default_expiry_days', false ) ? 'days' : 'statutory';
+	}
+
+	/**
+	 * Statutory default validity for the shop's base country: Germany 3 years to the end of the year
+	 * (§§ 195, 199 BGB), Austria 30 years (OGH case law), other countries 3 years to the end of the year.
+	 * Filter "vcap_statutory_expiry" (array{years:int, end_of_year:bool}, country code); years 0 = never.
+	 *
+	 * @return array{years:int, end_of_year:bool}
+	 */
+	public static function statutory_rule( string $country = '' ): array {
+		if ( '' === $country ) {
+			$country = strtoupper( strtok( (string) get_option( 'woocommerce_default_country', '' ), ':' ) ?: '' );
+		}
+		$rules = array(
+			'AT' => array( 'years' => 30, 'end_of_year' => false ),
+			'DE' => array( 'years' => 3, 'end_of_year' => true ),
+		);
+		$rule = (array) apply_filters( 'vcap_statutory_expiry', $rules[ $country ] ?? array( 'years' => 3, 'end_of_year' => true ), $country );
+		return array( 'years' => max( 0, (int) ( $rule['years'] ?? 3 ) ), 'end_of_year' => ! empty( $rule['end_of_year'] ) );
+	}
+
+	/** Expiry by the statutory rule (end of day / end of year in the shop's time zone, stored in UTC). */
+	public static function statutory_expiry( int $from, string $country = '' ): ?string {
+		$rule = self::statutory_rule( $country );
+		if ( $rule['years'] < 1 ) {
+			return null;
+		}
+		$local = ( new \DateTimeImmutable( '@' . $from ) )->setTimezone( wp_timezone() )->modify( '+' . $rule['years'] . ' years' );
+		$local = $rule['end_of_year'] ? $local->setDate( (int) $local->format( 'Y' ), 12, 31 ) : $local;
+		return $local->setTime( 23, 59, 59 )->setTimezone( new \DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
+	}
+
+	/**
 	 * Expiry timestamp (UTC MySQL datetime) or null for "never".
 	 */
 	public static function expiry_for( array $config, ?int $from = null ): ?string {
@@ -186,7 +228,13 @@ final class ProductConfig {
 				$days = (int) $config['expiry_days'];
 				break;
 			default:
-				$days = '' !== (string) $config['expiry_days'] && $config['expiry_days'] !== null ? (int) $config['expiry_days'] : (int) get_option( 'vcap_default_expiry_days', 365 );
+				if ( '' !== (string) $config['expiry_days'] && null !== $config['expiry_days'] ) {
+					$days = (int) $config['expiry_days'];
+				} elseif ( 'statutory' === self::default_expiry_rule() ) {
+					return self::statutory_expiry( $from );
+				} else {
+					$days = (int) get_option( 'vcap_default_expiry_days', 365 );
+				}
 		}
 		if ( $days <= 0 ) {
 			return null;

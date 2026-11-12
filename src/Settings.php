@@ -30,6 +30,7 @@ final class Settings {
 		'vcap_retention_days'        => 0,
 		'vcap_delete_on_uninstall'   => 'no',
 		'vcap_ticket_public_status'  => 'yes',
+		'vcap_scanner_show_holder'   => 'no',
 		'vcap_subscription_renewals' => 'no',
 		'vcap_pdf_filename'          => 'voucher-{coupon_code}',
 		'vcap_redemption_ttl'          => 15,
@@ -240,6 +241,13 @@ final class Settings {
 						'desc'    => __( 'When a ticket QR code is opened by someone without scanning rights, show whether the ticket is valid (no personal data).', 'voucher-captain' ),
 					),
 					array(
+						'title'   => __( 'Holder name in the scanner', 'voucher-captain' ),
+						'id'      => 'vcap_scanner_show_holder',
+						'type'    => 'checkbox',
+						'default' => 'no',
+						'desc'    => __( 'Show the name of the buyer or recipient when a code is scanned. Personal tickets always show the name so it can be checked. Order number and original value are only shown to staff who manage vouchers.', 'voucher-captain' ),
+					),
+					array(
 						'title'   => __( 'Subscription renewals', 'voucher-captain' ),
 						'id'      => 'vcap_subscription_renewals',
 						'type'    => 'checkbox',
@@ -297,12 +305,23 @@ final class Settings {
 						'default' => 0,
 					),
 					array(
+						'title'    => __( 'Default validity', 'voucher-captain' ),
+						'id'       => 'vcap_default_expiry_rule',
+						'type'     => 'select',
+						'options'  => array(
+							'statutory' => __( 'Statutory default for the shop country (Germany: 3 years to the end of the year, Austria: 30 years)', 'voucher-captain' ),
+							'days'      => __( 'Fixed number of days (below)', 'voucher-captain' ),
+						),
+						'default'  => ProductConfig::default_expiry_rule(),
+						'desc_tip' => __( 'Used when a product does not define its own expiry. Shorter validity periods can be invalid towards consumers; have them checked legally.', 'voucher-captain' ),
+					),
+					array(
 						'title'             => __( 'Default validity (days)', 'voucher-captain' ),
 						'id'                => 'vcap_default_expiry_days',
 						'type'              => 'number',
 						'default'           => 365,
 						'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
-						'desc_tip'          => __( 'Used when a product does not define its own expiry. 0 = never expires.', 'voucher-captain' ),
+						'desc_tip'          => __( 'Used with "Fixed number of days" when a product does not define its own expiry. 0 = never expires.', 'voucher-captain' ),
 					),
 					array( 'type' => 'sectionend', 'id' => 'vcap_general' ),
 
