@@ -6,9 +6,9 @@ Ziel: Voucher Captain bleibt ein allgemein einsetzbares WooCommerce-Gutschein-Pl
 
 Diese Liste ist eine Arbeitsliste, kein verifizierter Fortschrittsbericht. Der Entwicklungsbranch enthält bereits umfangreiche Voucher-Captain-Funktionen; bestehende Funktionen gelten erst dann als erledigt, wenn sie gegen Scope und Abnahmekriterien geprüft und hier nachvollziehbar markiert wurden. Die Liste darf nicht so gelesen werden, dass alle angeführten Grundfunktionen noch fehlen.
 
-Der ausführbare Plugin-Code liegt aktuell auf `claude/youthful-bardeen-7ejd7a` (enthält auch `codex/fix-voucher-audit-findings`). Der Standardbranch `main` enthält noch nicht diesen Code. Der Entwicklungsbranch muss über einen geprüften Pull Request in `main` überführt werden, bevor `main` als Release-Quelle gilt.
+Der ausführbare Plugin-Kern ist inzwischen in `main`: Die PRs #2 bis #9 wurden bis 12.11.2026 gemergt. Die frühere Aussage, `main` enthalte den Plugin-Code noch nicht, ist überholt. `main` ist der aktuelle Integrationsstand; ein Merge allein bedeutet noch keine Release-Freigabe. Die PRs #10 bis #13 zur WP-License-Captain-Anbindung sind noch offen. Die jüngsten CI-Läufe zu diesen vier PRs waren am 12.11.2026 fehlgeschlagen; vor dem Merge sind Fehler zu beheben und grüne Läufe abzuwarten. Die Mehrfach-Erinnerungen mit Wiederholungsversand liegen derzeit nur auf `codex/multi-expiry-reminders` und sind noch nicht in `main`.
 
-### Abgleich vom 11.11.2026 (Version 1.1.0)
+### Abgleich vom 12.11.2026 (Version 1.1.0)
 
 Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sind. Nachweise: `tests/run.php` (ohne WordPress), sowie die CI-Suiten `tests/woocommerce-integration.php`, `tests/compatibility-integration.php`, `tests/security-integration.php`, `tests/redemption-integration.php` und `tests/order-lifecycle-integration.php`, die gegen WordPress 7.1.4, WooCommerce 11.2.2 und PHP 8.4 laufen (MySQL 8.4 und MariaDB 11.4, jeweils mit HPOS und mit klassischem Bestellspeicher), plus Installation, Update und Deinstallation des Release-ZIPs. Teilweise erledigte Punkte bleiben offen und tragen einen Vermerk *(teilweise: …)*.
 
@@ -50,7 +50,8 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 ## P1 – Steuer, Rabattregeln und Gutscheincodes
 - [x] Rabattcodes und Gutscheine/Geschenkkarten dürfen Gutscheinprodukte standardmäßig nicht verbilligen bzw. bezahlen (Entscheidung 11.11.2026, branchenüblich); beides pro Shop freigebbar — *Nachweis: Einstellungen „Rabattcodes auf Gutscheine“ und „Gutscheine mit Gutscheinen bezahlen“, andere Produkte im Warenkorb bleiben rabattierbar; tests/purchase-rules-integration.php*
 
-- [ ] Einzweck- und Mehrzweckgutschein als konfigurierbare Steuerbehandlung modellieren; steuerliche Umsetzung und Produkttexte mit Steuerberatung freigeben lassen.
+- [x] Steuerbehandlung je Gutscheinprodukt modellieren (automatisch, Einzweck, Mehrzweck oder Rabattaktion) und an den Pass-Captain-Vertrag übergeben. — *Nachweis: Produktfeld „VAT treatment“, Filter `vcap_voucher_tax_treatment`, gemergter Commit `cc298a16`.*
+- [ ] Steuerliche Zuordnung, Produkttexte und Erstattungsfolgen je Gutscheinart mit Steuerberatung freigeben lassen.
 - [ ] Steuerfälle für OSS, unterschiedliche Leistungsorte/-steuersätze, Kleinunternehmer und Preise mit gleichem Bruttopreis spezifizieren und verifizieren.
 - [x] Produkt-, Kategorie- und SKU-Regeln samt Ausschlüssen für Rabattcodes unterstützen. — *Nachweis: Produkte/Kategorien und Ausschlüsse sind WooCommerce-Standard; neue Felder „Artikelnummern“ und „Artikelnummern ausschließen“ mit Präfix-Platzhalter *, auch für Warenkorb-Festbeträge; tests/sku-rules-integration.php*
 - [x] Gesamtlimit, Limit pro Kunde, Mindestbestellwert, Ablauf und Erstkaufbedingung konfigurierbar machen. — *Nachweis: Gesamtlimit, Limit pro Kunde, Mindestbestellwert und Ablauf sind WooCommerce-Standard; neue Gutschein-Option „Nur für die erste Bestellung“ (Konto oder Rechnungs-E-Mail); tests/first-order-integration.php*
@@ -70,13 +71,17 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 ## P2 – Qualitätssicherung und Veröffentlichung
 
 - [x] Automatisierte Integrationsprüfungen für VCAP allein und gemeinsam mit TCAP einrichten; WooCommerce-Statuswiederholungen, parallele Einlösungen, Timeout, Teil-/Vollerstat­tung und 0-Euro-Checkout abdecken. *(VCAP allein inkl. Statuswiederholungen, Teil-/Vollerstattung und Abbruch; gemeinsam mit Pass Captain im CI-Job `pass-captain`; 0-Euro-Checkout in tests/zero-total-integration.php)*
-- [ ] Release-Prüfung mit HPOS, klassischer Kasse, Checkout-Blöcken, unterstützten Mehrwährungs-/Subscription-Integrationen und minimaler WordPress-/PHP-Version dokumentieren. *(automatisiert: HPOS/Legacy-Matrix, klassische Kasse und Checkout-Blöcke im Browser, Mindestversionen; offen: echte Mehrwährungs-/Subscription-Plugins und Zahlungsanbieter)*
-- [x] Build-ZIP in einer sauberen WordPress-Installation installieren, aktivieren, aktualisieren und deinstallieren; bei gemeinsamer Installation Klassen-/Vendor-Konflikte prüfen. — *Nachweis: CI-Schritt „Build, install, and update the release ZIP“ + Deinstallationsprüfung; Konflikte mit TCAP noch offen, siehe Native Integration*
-- [ ] Übersetzungen, Datenschutzauskunft/-löschung, Berechtigungen, Nonces, Rate-Limits und Admin-/Kunden-E-Mail-Vorlagen für Release freigeben.
+- [x] Release-Testbasis für HPOS, klassische Kasse, Checkout-Blöcke und Mindestversionen dokumentieren und automatisiert abdecken. — *Nachweis: COMPATIBILITY.md und CI-Matrix.*
+- [ ] Reale Zahlungsanbieter sowie die konkret unterstützten Mehrwährungs- und Subscription-Plugins durch E2E-/Kompatibilitätstests freigeben.*
+- [x] Build-ZIP in sauberer WordPress-Installation installieren, aktivieren, aktualisieren und deinstallieren. — *Nachweis: CI-Schritt „Build, install, and update the release ZIP“ plus Deinstallationsprüfung.*
+- [ ] Gemeinsame Installation von Voucher Captain und Ticket Captain auf Klassen-/Vendor-Konflikte und gemeinsame Abläufe final freigeben.
+- [x] Datenschutzexport/-löschung, Berechtigungen, Nonces, Rate-Limits und E-Mail-Funktionen implementieren und automatisiert prüfen. — *Nachweis: tests/security-integration.php, tests/account-integration.php und tests/reminder-integration.php.*
+- [ ] Übersetzungsabdeckung und die finalen Admin-/Kunden-E-Mail-Texte für den Release freigeben.
 
 ## Optional nach dem ersten Kunden-Connector
 
 - [x] E-Mail-Erinnerung vor Ablauf eines Gutscheins. — *Nachweis: Einstellung „Erinnerung vor Ablauf“ (aus, bis Tage gesetzt sind), WooCommerce-E-Mail „Erinnerung vor Gutschein-Ablauf“, einmal je Gutschein; tests/reminder-integration.php*
+- [ ] Mehrere konfigurierbare Vorlaufzeiten und Wiederholungsversand bei fehlgeschlagener Mailzustellung in `main` integrieren. — *Umsetzung liegt derzeit auf `codex/multi-expiry-reminders`; noch nicht gemergt.*
 - [x] Statistiken nach Kampagne und Partner. — *Nachweis: Gutscheine → Auswertung: Zeitraum, je Code-Kampagne/Partner, Aktion, Bonus, Gutscheine und Einzelcode ausgegebene Codes, Nutzungen, Bestellungen, Rabatt und Umsatz abzüglich Erstattungen, Fremdwährungen getrennt, CSV-Export; tests/reports-integration.php*
 - [x] Empfehlungs-/Freunde-werben-Codes. — *Nachweis: Einstellung „Freunde werben“ (standardmäßig aus), persönlicher Erstbestellungs-Code im Kundenkonto mit Teilen-Link, eigene Codes gesperrt, Prämie als Gutschein per E-Mail oder Guthaben nach abgeschlossener Bestellung, einmal pro Bestellung, Auswertung je Werbendem; tests/referral-integration.php*
 - [x] Allgemeine Einlöseseite oder Block/Shortcode, den Connector-Plugins erweitern können. — *Nachweis: `[vcap_redeem]` / Block „Gutschein einlösen“; Connectoren nutzen die Einlöse-API (API.md)*
@@ -158,5 +163,19 @@ Befund im Kursplugin: `/wp-json/boatingschool/v1/coupons/redeem` ist derzeit fü
 - [x] Yoast SEO 28.8 als optionale Kompatibilitätskonfiguration prüfen; Yoast darf keine Laufzeitabhängigkeit sein. — *Nachweis: kein Yoast-Bezug im Code; Integrationssuite und Browser-Tests mit Yoast 28.8, Job `minimum-versions` ohne Yoast*
 - [x] Mehrwährungs-, Mehrsprachigkeits- und WooCommerce-Produktfeld-Integrationen über dokumentierte Adapter spezifizieren. — *Nachweis: ADAPTERS.md*
 - [ ] EU-weite Steuerfälle, OSS, Bruttopreisberechnung, Gutscheinbesteuerung und positionsbezogene Erstattungen mit Steuerberatung für die unterstützten Länder festlegen.
-- [ ] Verbraucherinformationen und Gutscheinbedingungen pro Land konfigurierbar machen und rechtlich prüfen lassen. *(technisch erledigt: Einstellung „Einlösebedingungen pro Land“, Rechnungsland entscheidet, am Gutschein festgeschrieben; offen: rechtliche Prüfung der Texte)*
-- [ ] Barrierefreiheit von Produktfeldern, Checkout-/Kundenkonto-Flows, PDF-Vorschau und Admin-Oberfläche prüfen. *(automatisiert erledigt: axe-Scans und Tastaturbedienung für Produktfelder, PDF-Vorschau, Shortcodes, Kundenkonto, Scanner und Aktions-Editor in `browser-e2e`; gefundene Mängel behoben. Offen: Prüfung mit echtem Screenreader)*
+- [x] Verbraucherinformationen und Gutscheinbedingungen pro Land konfigurierbar speichern und am Gutschein festschreiben. — *Nachweis: Einstellung „Einlösebedingungen pro Land“, Rechnungsland entscheidet.*
+- [ ] Ländertexte und Verbraucherinformationen rechtlich prüfen und freigeben lassen.
+- [x] Automatisierte axe- und Tastaturprüfungen für Produktfelder, PDF-Vorschau, Shortcodes, Kundenkonto, Scanner und Aktions-Editor durchführen und gefundene Mängel beheben. — *Nachweis: `browser-e2e`.*
+- [ ] Barrierefreiheit der genannten Flows zusätzlich mit einem echten Screenreader prüfen.
+
+
+## Separater Arbeitsstrang: WP License Captain
+
+Stand 12.11.2026: Die Aktivierung, Premium-Berechtigungen und Updates werden in gestapelten offenen PRs vorbereitet. Keine der folgenden Arbeiten gilt als fertig oder in Voucher Captain ausgeliefert, bis die PRs gemergt und die Abnahme abgeschlossen sind.
+
+- [ ] PR #10: signierten WP-License-Captain-Client, Lizenzseite, Aktivierung/Deaktivierung und sichere lokale Speicherung integrieren.
+- [ ] PR #12: fail-closed Berechtigungsprüfung in den tatsächlichen Premium-Funktionen verdrahten; der aktuelle Helper allein schaltet noch keine Features.
+- [ ] PR #13: signierten Offline-Berechtigungscache integrieren und gegen die Lizenzserver-/Ausfallfälle abnehmen.
+- [ ] PR #11: Premium-Updates mit einmaligem Download-Grant, HTTPS-Allowlist und SHA-256-Prüfung integrieren.
+- [ ] Alle Lizenz-PRs auf eine konsistente Basis bringen, aktuelle CI-Fehler beheben und grüne CI-Läufe abwarten.
+- [ ] Aktivierung, Feature-Sperren, Offline-Verhalten und Update-Installation gegen einen erreichbaren Lizenzserver und echte Release-Pakete abnehmen.
