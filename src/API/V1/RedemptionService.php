@@ -181,7 +181,7 @@ final class RedemptionService {
 					'amount'         => $amount,
 					'state'          => self::STATE_RESERVED,
 					'request_hash'   => $hash,
-					'meta'           => wp_json_encode( is_array( $args['meta'] ?? null ) ? $args['meta'] : array() ),
+					'meta'           => wp_json_encode( self::caller_meta( $args['meta'] ?? null ) ),
 					'expires_at'     => gmdate( 'Y-m-d H:i:s', time() + $ttl ),
 					'created_at'     => $now,
 					'updated_at'     => $now,
@@ -386,6 +386,26 @@ final class RedemptionService {
 	 * @param string $currency ISO 4217 code.
 	 * @return int
 	 */
+	/**
+	 * Caller metadata as stored with a redemption. Keys starting with "_" are reserved for the service's own
+	 * bookkeeping (e.g. "_refunds"): a caller could otherwise pre-seed refunds and restore a voucher or lift the
+	 * refund cap. Nested values are kept as given.
+	 *
+	 * @param mixed $meta Caller metadata.
+	 * @return array<string, mixed>
+	 */
+	public static function caller_meta( $meta ): array {
+		if ( ! is_array( $meta ) ) {
+			return array();
+		}
+		foreach ( array_keys( $meta ) as $key ) {
+			if ( 0 === strpos( (string) $key, '_' ) ) {
+				unset( $meta[ $key ] );
+			}
+		}
+		return $meta;
+	}
+
 	public static function decimals( string $currency ): int {
 		$currency = strtoupper( $currency );
 		$zero     = array( 'BIF', 'CLP', 'DJF', 'GNF', 'ISK', 'JPY', 'KMF', 'KRW', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF' );
