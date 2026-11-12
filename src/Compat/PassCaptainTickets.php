@@ -635,6 +635,10 @@ final class PassCaptainTickets {
 
 	/** The code waiting for its date choice (pre-filled in the redeem form). */
 	public function redeem_prefill( $value ) {
+		// A code from a link (?vcap_code=…) wins over a code still waiting in the session.
+		if ( '' !== (string) $value ) {
+			return $value;
+		}
 		$code = function_exists( 'WC' ) && WC()->session ? (string) WC()->session->get( self::SESSION_CODE ) : '';
 		return '' !== $code ? $code : $value;
 	}

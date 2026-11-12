@@ -141,6 +141,8 @@ final class Shortcodes {
 		?>
 		<form method="post" class="vcap-redeem-form">
 			<?php wp_nonce_field( 'vcap_redeem', 'vcap_redeem_nonce' ); ?>
+			<?php // Default button for Enter (implicit submission uses the first submit button; connector steps such as "Cancel" come before the visible one). ?>
+			<button type="submit" class="vcap-default-submit" tabindex="-1" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;"><?php echo esc_html( $atts['button'] ); ?></button>
 			<label for="vcap-redeem-code"><?php esc_html_e( 'Voucher code', 'voucher-captain' ); ?></label>
 			<input type="text" id="vcap-redeem-code" name="vcap_redeem_code" required autocomplete="off" maxlength="100" value="<?php echo esc_attr( (string) apply_filters( 'vcap_redeem_prefill', isset( $_GET['vcap_code'] ) ? substr( sanitize_text_field( wp_unslash( $_GET['vcap_code'] ) ), 0, 100 ) : '' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- only pre-fills the field. ?>" />
 			<?php
