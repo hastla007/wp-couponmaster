@@ -3734,3 +3734,9 @@ msgstr "Ihr Ticket-Gutschein {coupon_code} ist bis {expiry_date} gültig. Tausch
 
 msgid "The promotion could not be checked right now. Please try again in a moment."
 msgstr "Die Aktion konnte gerade nicht geprüft werden. Bitte versuchen Sie es gleich noch einmal."
+
+msgid "System error – the code was not checked. Please scan again."
+msgstr "Systemfehler – der Code wurde nicht geprüft. Bitte erneut scannen."
+
+msgid "Session expired – please reload the page and scan again."
+msgstr "Sitzung abgelaufen – bitte laden Sie die Seite neu und scannen Sie erneut."

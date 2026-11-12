@@ -67,8 +67,12 @@
 			headers: { 'X-WP-Nonce': cfg.nonce, 'Content-Type': 'application/json' },
 			body: body ? JSON.stringify( body ) : undefined
 		} ).then( function ( r ) {
-			return r.json().then( function ( data ) {
+			return r.json().catch( function () {
+				return {};
+			} ).then( function ( data ) {
 				if ( ! r.ok ) {
+					data = data || {};
+					data.status = r.status;
 					throw data;
 				}
 				return data;
@@ -79,7 +83,8 @@
 	function esc( s ) {
 		var d = document.createElement( 'div' );
 		d.textContent = null === s || undefined === s ? '' : String( s );
-		return d.innerHTML;
+		// Also safe inside attribute values (href, class, data-*).
+		return d.innerHTML.replace( /"/g, '&quot;' ).replace( /'/g, '&#39;' );
 	}
 
 	function beep( ok ) {
@@ -166,7 +171,11 @@
 	}
 
 	function showError( err ) {
-		result.innerHTML = '<div class="vcap-r-head vcap-r-error">' + esc( ( err && err.message ) || t.error ) + '</div>';
+		var code   = String( ( err && err.code ) || '' );
+		var system = ! err || ! err.status || err.status >= 500 || 'rest_cookie_invalid_nonce' === code || /retry|busy/.test( code );
+		// A server fault or an expired session is no verdict on the code: yellow "try again", never red "invalid".
+		var text = system ? ( 'rest_cookie_invalid_nonce' === code ? t.sessionExpired : t.systemError ) || t.error : ( err.message || t.error );
+		result.innerHTML = '<div class="vcap-r-head ' + ( system ? 'vcap-r-warning' : 'vcap-r-error' ) + '">' + esc( text ) + '</div>';
 		beep( false );
 	}
 

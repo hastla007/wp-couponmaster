@@ -28,6 +28,8 @@ final class Scanner {
 					'undo'       => __( 'Undo check-in', 'voucher-captain' ),
 					'redeem'     => __( 'Redeem', 'voucher-captain' ),
 					'amount'     => __( 'Amount to deduct', 'voucher-captain' ),
+					'systemError'    => __( 'System error – the code was not checked. Please scan again.', 'voucher-captain' ),
+					'sessionExpired' => __( 'Session expired – please reload the page and scan again.', 'voucher-captain' ),
 					'admissions' => __( 'Admissions', 'voucher-captain' ),
 					'balance'    => __( 'Balance', 'voucher-captain' ),
 					'value'      => __( 'Value', 'voucher-captain' ),

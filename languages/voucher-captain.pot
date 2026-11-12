@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-12 19:12+0000\n"
+"POT-Creation-Date: 2026-11-12 19:14+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:75 src/API/V1/RedemptionService.php:117
@@ -433,7 +433,7 @@ msgstr ""
 msgid "Reports"
 msgstr ""
 
-#: src/Admin/Menu.php:40 src/Admin/Menu.php:40 src/Admin/Scanner.php:53 templates/ticket-status.php:87
+#: src/Admin/Menu.php:40 src/Admin/Menu.php:40 src/Admin/Scanner.php:55 templates/ticket-status.php:87
 msgid "Scanner"
 msgstr ""
 
@@ -539,7 +539,7 @@ msgstr ""
 msgid "No redemptions in this period."
 msgstr ""
 
-#: src/Admin/Scanner.php:24 src/Admin/Scanner.php:62
+#: src/Admin/Scanner.php:24 src/Admin/Scanner.php:64
 msgid "Start camera"
 msgstr ""
 
@@ -567,99 +567,107 @@ msgstr ""
 msgid "Amount to deduct"
 msgstr ""
 
-#: src/Admin/Scanner.php:31 src/Admin/VoucherAdmin.php:167 templates/ticket-status.php:59 templates/ticket-status.php:80
+#: src/Admin/Scanner.php:31
+msgid "System error – the code was not checked. Please scan again."
+msgstr ""
+
+#: src/Admin/Scanner.php:32
+msgid "Session expired – please reload the page and scan again."
+msgstr ""
+
+#: src/Admin/Scanner.php:33 src/Admin/VoucherAdmin.php:167 templates/ticket-status.php:59 templates/ticket-status.php:80
 msgid "Admissions"
 msgstr ""
 
-#: src/Admin/Scanner.php:32 src/Admin/StoreCreditAdmin.php:39 src/Admin/VoucherAdmin.php:111 templates/ticket-status.php:69
+#: src/Admin/Scanner.php:34 src/Admin/StoreCreditAdmin.php:39 src/Admin/VoucherAdmin.php:111 templates/ticket-status.php:69
 msgid "Balance"
 msgstr ""
 
-#: src/Admin/Scanner.php:33 src/Admin/VoucherAdmin.php:109 src/Discounts/Admin.php:157 src/ProductSettings.php:116 src/TemplatePostType.php:261 templates/myaccount/vouchers-table.php:30
+#: src/Admin/Scanner.php:35 src/Admin/VoucherAdmin.php:109 src/Discounts/Admin.php:157 src/ProductSettings.php:116 src/TemplatePostType.php:261 templates/myaccount/vouchers-table.php:30
 msgid "Value"
 msgstr ""
 
-#: src/Admin/Scanner.php:34 templates/ticket-status.php:66
+#: src/Admin/Scanner.php:36 templates/ticket-status.php:66
 msgid "Holder"
 msgstr ""
 
-#: src/Admin/Scanner.php:35 src/Admin/VoucherAdmin.php:107 src/Admin/VouchersListTable.php:28 src/Discounts/Admin.php:85 src/Discounts/Admin.php:234 src/Discounts/Admin.php:409
+#: src/Admin/Scanner.php:37 src/Admin/VoucherAdmin.php:107 src/Admin/VouchersListTable.php:28 src/Discounts/Admin.php:85 src/Discounts/Admin.php:234 src/Discounts/Admin.php:409
 msgid "Product"
 msgstr ""
 
-#: src/Admin/Scanner.php:36 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:108 src/Admin/VoucherAdmin.php:208 src/Admin/VouchersListTable.php:32 templates/myaccount/vouchers-table.php:33
+#: src/Admin/Scanner.php:38 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:108 src/Admin/VoucherAdmin.php:208 src/Admin/VouchersListTable.php:32 templates/myaccount/vouchers-table.php:33
 msgid "Order"
 msgstr ""
 
-#: src/Admin/Scanner.php:37 templates/ticket-status.php:62
+#: src/Admin/Scanner.php:39 templates/ticket-status.php:62
 msgid "Valid until"
 msgstr ""
 
-#: src/Admin/Scanner.php:38 templates/ticket-status.php:72
+#: src/Admin/Scanner.php:40 templates/ticket-status.php:72
 msgid "Last check-in"
 msgstr ""
 
-#: src/Admin/Scanner.php:39 src/Admin/VouchersListTable.php:133 src/Privacy.php:68
+#: src/Admin/Scanner.php:41 src/Admin/VouchersListTable.php:133 src/Privacy.php:68
 msgid "Details"
 msgstr ""
 
-#: src/Admin/Scanner.php:40
+#: src/Admin/Scanner.php:42
 msgid "Check in automatically after scan"
 msgstr ""
 
-#: src/Admin/Scanner.php:41
+#: src/Admin/Scanner.php:43
 msgid "Request failed."
 msgstr ""
 
-#: src/Admin/Scanner.php:42 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:208 src/StoreCredit.php:297
+#: src/Admin/Scanner.php:44 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:208 src/StoreCredit.php:297
 msgid "Event"
 msgstr ""
 
-#: src/Admin/Scanner.php:43
+#: src/Admin/Scanner.php:45
 msgid "Ticket type"
 msgstr ""
 
-#: src/Admin/Scanner.php:44 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:208 src/Compat/PassCaptainTickets.php:673 src/Compat/PassCaptainTickets.php:876 src/Fields.php:601
+#: src/Admin/Scanner.php:46 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:208 src/Compat/PassCaptainTickets.php:677 src/Compat/PassCaptainTickets.php:880 src/Fields.php:601
 msgid "Date"
 msgstr ""
 
-#: src/Admin/Scanner.php:45
+#: src/Admin/Scanner.php:47
 msgid "Attendee"
 msgstr ""
 
-#: src/Admin/Scanner.php:46
+#: src/Admin/Scanner.php:48
 msgid "Check-ins in WP Pass Captain"
 msgstr ""
 
-#: src/Admin/Scanner.php:47
+#: src/Admin/Scanner.php:49
 msgid "Revert this check-in? The ticket can then be used for entry again."
 msgstr ""
 
-#: src/Admin/Scanner.php:54
+#: src/Admin/Scanner.php:56
 msgid "Scan ticket or voucher QR codes with the camera of this device, a USB/Bluetooth barcode scanner, or type a code."
 msgstr ""
 
-#: src/Admin/Scanner.php:56
+#: src/Admin/Scanner.php:58
 msgid "Shared scanner: WP Pass Captain tickets are recognised too and checked in at Pass Captain (needs the Pass Captain check-in permission). Voucher codes are always looked up in Voucher Captain first."
 msgstr ""
 
-#: src/Admin/Scanner.php:60
+#: src/Admin/Scanner.php:62
 msgid "Camera preview"
 msgstr ""
 
-#: src/Admin/Scanner.php:65 src/Admin/VouchersListTable.php:27 src/Privacy.php:39 templates/myaccount/vouchers-table.php:29 templates/myaccount/vouchers-table.php:55 templates/ticket-status.php:65
+#: src/Admin/Scanner.php:67 src/Admin/VouchersListTable.php:27 src/Privacy.php:39 templates/myaccount/vouchers-table.php:29 templates/myaccount/vouchers-table.php:55 templates/ticket-status.php:65
 msgid "Code"
 msgstr ""
 
-#: src/Admin/Scanner.php:66
+#: src/Admin/Scanner.php:68
 msgid "Scan or enter code…"
 msgstr ""
 
-#: src/Admin/Scanner.php:67
+#: src/Admin/Scanner.php:69
 msgid "Look up"
 msgstr ""
 
-#: src/Admin/Scanner.php:69
+#: src/Admin/Scanner.php:71
 msgid "Check in tickets automatically after scan"
 msgstr ""
 
@@ -1179,7 +1187,7 @@ msgstr ""
 msgid "unknown ticket"
 msgstr ""
 
-#: src/Compat/PassCaptainScanner.php:77 src/Compat/PassCaptainTickets.php:769
+#: src/Compat/PassCaptainScanner.php:77 src/Compat/PassCaptainTickets.php:773
 msgid "WP Pass Captain ticket"
 msgstr ""
 
@@ -1295,7 +1303,7 @@ msgstr ""
 msgid "Exchange voucher %s for tickets"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:173 src/Compat/PassCaptainTickets.php:865 src/Compat/PassCaptainTickets.php:881
+#: src/Compat/PassCaptainTickets.php:173 src/Compat/PassCaptainTickets.php:869 src/Compat/PassCaptainTickets.php:885
 msgid "Exchange for tickets"
 msgstr ""
 
@@ -1343,7 +1351,7 @@ msgstr ""
 msgid "Please choose a date for your tickets."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:402 src/Compat/PassCaptainTickets.php:869
+#: src/Compat/PassCaptainTickets.php:402 src/Compat/PassCaptainTickets.php:873
 msgid "There are no upcoming dates for this voucher at the moment."
 msgstr ""
 
@@ -1375,117 +1383,117 @@ msgstr ""
 msgid "Your tickets (%1$d) were sent to %2$s."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:656
+#: src/Compat/PassCaptainTickets.php:660
 msgid "Send the tickets to (email)"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:661
+#: src/Compat/PassCaptainTickets.php:665
 msgid "Choose another date"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:663
+#: src/Compat/PassCaptainTickets.php:667
 msgid "Cancel"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:664
+#: src/Compat/PassCaptainTickets.php:668
 msgid "Redeeming issues the tickets bindingly; the voucher is used up."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:675 src/Compat/PassCaptainTickets.php:877
+#: src/Compat/PassCaptainTickets.php:679 src/Compat/PassCaptainTickets.php:881
 msgid "— Choose a date —"
 msgstr ""
 
 #. translators: %d: ticket number
-#: src/Compat/PassCaptainTickets.php:695
+#: src/Compat/PassCaptainTickets.php:699
 #, php-format
 msgid "Ticket %d"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:726
+#: src/Compat/PassCaptainTickets.php:730
 msgid "Ticket voucher – not a ticket. Exchange it for tickets first (redeem page or voucher admin)."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:732
+#: src/Compat/PassCaptainTickets.php:736
 msgid "Ticket vouchers cannot be redeemed at the counter. Exchange them for tickets first."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:743
+#: src/Compat/PassCaptainTickets.php:747
 msgid "Tip: the voucher type \"Ticket\" is a simple admission pass without dates or capacity, checked in at Voucher Captain. For events with dates, capacity and admission rules, create them in WP Pass Captain and use a voucher with \"WP Pass Captain ticket\" below (or sell Pass Captain tickets directly)."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:747
+#: src/Compat/PassCaptainTickets.php:751
 msgid "— No ticket (regular voucher) —"
 msgstr ""
 
 #. translators: 1: event, 2: number of upcoming dates
-#: src/Compat/PassCaptainTickets.php:751
+#: src/Compat/PassCaptainTickets.php:755
 #, php-format
 msgid "Customer chooses the date: %1$s (%2$d dates)"
 msgstr ""
 
 #. translators: %s: event, date and ticket type
-#: src/Compat/PassCaptainTickets.php:756
+#: src/Compat/PassCaptainTickets.php:760
 #, php-format
 msgid "Fixed date: %s"
 msgstr ""
 
 #. translators: %d: event id
-#: src/Compat/PassCaptainTickets.php:760
+#: src/Compat/PassCaptainTickets.php:764
 #, php-format
 msgid "Event #%d (no upcoming dates)"
 msgstr ""
 
 #. translators: %d: ticket type id
-#: src/Compat/PassCaptainTickets.php:764
+#: src/Compat/PassCaptainTickets.php:768
 #, php-format
 msgid "Ticket type #%d (no longer on sale)"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:773
+#: src/Compat/PassCaptainTickets.php:777
 msgid "Exchange each voucher for tickets of this ticket type (redeem page or voucher admin). The voucher becomes redeemable via WP Pass Captain."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:779
+#: src/Compat/PassCaptainTickets.php:783
 msgid "Tickets per voucher"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:788
+#: src/Compat/PassCaptainTickets.php:792
 msgid "Ticket name (date choice)"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:790
+#: src/Compat/PassCaptainTickets.php:794
 msgid "Any ticket type"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:792
+#: src/Compat/PassCaptainTickets.php:796
 msgid "Only for \"customer chooses the date\": offer only ticket types with exactly this name (e.g. \"Standard\")."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:897
+#: src/Compat/PassCaptainTickets.php:901
 msgid "Tickets issued in WP Pass Captain and sent by email."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:898
+#: src/Compat/PassCaptainTickets.php:902
 msgid "The tickets could not be issued. The reason is in the voucher history."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:904
+#: src/Compat/PassCaptainTickets.php:908
 msgid "Exchanged for Pass Captain tickets"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:905
+#: src/Compat/PassCaptainTickets.php:909
 msgid "Ticket exchange failed"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:906
+#: src/Compat/PassCaptainTickets.php:910
 msgid "Pass Captain tickets revoked"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:907
+#: src/Compat/PassCaptainTickets.php:911
 msgid "Voucher restored (tickets cancelled in Pass Captain)"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:908
+#: src/Compat/PassCaptainTickets.php:912
 msgid "Tickets sent again"
 msgstr ""
 
@@ -2150,7 +2158,7 @@ msgstr ""
 msgid "unlimited"
 msgstr ""
 
-#: src/Downloads.php:277 src/Shortcodes.php:144 src/TemplatePostType.php:107
+#: src/Downloads.php:277 src/Shortcodes.php:146 src/TemplatePostType.php:107
 msgid "Voucher code"
 msgstr ""
 
@@ -3535,12 +3543,12 @@ msgid "My vouchers"
 msgstr ""
 
 #. translators: %s: login link
-#: src/Shortcodes.php:160
+#: src/Shortcodes.php:162
 #, php-format
 msgid "Please %s to see your vouchers."
 msgstr ""
 
-#: src/Shortcodes.php:161
+#: src/Shortcodes.php:163
 msgid "log in"
 msgstr ""
 
