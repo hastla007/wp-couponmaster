@@ -271,8 +271,9 @@ if ( null !== VCAP\Compat\PassCaptainScanner::service() ) {
 	$scan_done = vcap()->passcaptain_tickets->exchange( $scan_voucher->code, array( 'email' => 'scanner@example.com' ) );
 	remove_filter( 'vcap_passcaptain_ticket_target', $give_scan, 10 );
 	remove_filter( 'wp_mail', $grab );
-	preg_match( '/[a-f0-9]{64}/', implode( "\n", $mails ), $tm );
-	$token = $tm[0] ?? '';
+	// The ticket code, not the order access token that the same mail may contain.
+	preg_match( '/(?:wpcap_ticket=|Ticket-Code: )([a-f0-9]{64})/', implode( "\n", $mails ), $tm );
+	$token = $tm[1] ?? '';
 	vcap_pc_assert( is_array( $scan_done ) && '' !== $token, 'a Pass Captain ticket code reaches the customer by mail' );
 	$scan = static function ( string $route, array $params ) {
 		$req = new WP_REST_Request( 'lookup' === $route ? 'GET' : 'POST', '/vcap/v1/' . $route );
@@ -283,6 +284,9 @@ if ( null !== VCAP\Compat\PassCaptainScanner::service() ) {
 		return is_wp_error( $res ) ? $res : $res->get_data();
 	};
 	$seen = $scan( 'lookup', array( 'q' => home_url( '/?wpcap_ticket=' . $token ) ) );
+	if ( ! is_array( $seen ) || 'ok' !== ( $seen['state'] ?? '' ) ) {
+		echo 'Scanner lookup: ' . wp_json_encode( is_wp_error( $seen ) ? $seen->get_error_message() : $seen ) . "\n";
+	}
 	vcap_pc_assert( is_array( $seen ) && 'passcaptain' === $seen['type'] && 'ok' === $seen['state'] && true === $seen['can_checkin'], 'the shared scanner recognises a Pass Captain ticket (URL from the QR code)' );
 	$in = $scan( 'checkin', array( 'q' => $token ) );
 	vcap_pc_assert( is_array( $in ) && 'ok' === $in['state'] && true === $in['success'], 'the shared scanner checks the ticket in at Pass Captain' );
