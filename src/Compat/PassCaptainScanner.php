@@ -117,7 +117,8 @@ final class PassCaptainScanner {
 			/* translators: %s: date and time of the event */
 			$message = sprintf( __( 'Valid ticket – but for another date: %s', 'voucher-captain' ), $start );
 		}
-		return $base + array(
+		// array_merge: the result's values (e.g. can_checkin) must override the defaults in $base.
+		return array_merge( $base, array(
 			'state'       => $valid && ! $other_day || $done ? 'ok' : ( 'checked_in' === $status || $other_day ? 'warning' : 'error' ),
 			'status'      => $status,
 			'message'     => $message,
@@ -127,6 +128,6 @@ final class PassCaptainScanner {
 			'attendee'    => (string) ( $res['attendee_name'] ?? '' ),
 			'can_checkin' => $valid,
 			'success'     => $done,
-		);
+		) );
 	}
 }
