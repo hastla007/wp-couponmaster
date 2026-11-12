@@ -133,7 +133,7 @@ final class Referrals {
 	 */
 	public function reward( $order_id ): void {
 		$order = wc_get_order( $order_id );
-		if ( ! $order instanceof \WC_Order || ! $this->enabled() || $order->get_meta( self::REWARDED ) ) {
+		if ( ! $order instanceof \WC_Order || ! $this->enabled() || $order->get_meta( self::REWARDED ) || CouponManager::has_shortfall( $order ) ) {
 			return;
 		}
 		$owner = 0;

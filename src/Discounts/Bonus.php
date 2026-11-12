@@ -69,6 +69,9 @@ final class Bonus {
 		if ( ! $order instanceof \WC_Order || ! $this->cart->enabled() || $order->get_parent_id() ) {
 			return array();
 		}
+		if ( \VCAP\CouponManager::has_shortfall( $order ) ) {
+			return array(); // Gift card not charged yet: bonus follows when the order is fulfilled after the review.
+		}
 		$issued  = self::issued( $order );
 		$lines   = self::order_lines( $order );
 		$context = $this->cart->context( $order );

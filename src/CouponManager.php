@@ -19,6 +19,13 @@ final class CouponManager {
 		add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'reserve_store_api_order' ), 5, 1 );
 		add_action( 'woocommerce_before_pay_action', array( $this, 'reserve_retry_order' ), 5, 1 );
 		add_action( 'woocommerce_order_status_changed', array( $this, 'order_status_changed' ), 20, 4 );
+		// Charge stored balances before anything is fulfilled (vouchers, bonus coupons, Pass Captain tickets run
+		// on the same status hooks with later priorities) and hold fulfilment while a shortfall is unresolved.
+		foreach ( (array) apply_filters( 'vcap_balance_deduct_statuses', array( 'processing', 'completed' ) ) as $status ) {
+			add_action( 'woocommerce_order_status_' . sanitize_key( (string) $status ), array( $this, 'settle_before_fulfilment' ), 1, 2 );
+		}
+		add_filter( 'vcap_should_issue_for_order', array( $this, 'issue_unless_shortfall' ), 5, 2 );
+		add_filter( 'wpcap_woocommerce_hold_fulfilment', array( $this, 'hold_on_shortfall' ), 10, 2 );
 		add_action( 'woocommerce_increase_coupon_usage_count', array( $this, 'usage_increased' ), 10, 3 );
 		add_action( 'woocommerce_decrease_coupon_usage_count', array( $this, 'usage_decreased' ), 10, 3 );
 		add_action( 'woocommerce_cart_totals_after_order_total', array( $this, 'cart_balance_notice' ) );
@@ -909,6 +916,63 @@ final class CouponManager {
 	/**
 	 * Deduct stored balances when an order using balance vouchers is paid; restore on cancellation.
 	 */
+	public const SHORTFALL_META = '_vcap_shortfall';
+
+	/** @var array<int, bool> Orders settled by settle_before_fulfilment() in this request. */
+	private array $settled = array();
+
+	/** Whether a stored balance of the order could not be charged and fulfilment waits for a review. */
+	public static function has_shortfall( \WC_Order $order ): bool {
+		return 'yes' === $order->get_meta( self::SHORTFALL_META );
+	}
+
+	/** Status hook, priority 1: commit and deduct before vouchers, bonus coupons or tickets are issued. */
+	public function settle_before_fulfilment( $order_id, $order = null ): void {
+		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Order || $order instanceof \WC_Order_Refund ) {
+			return;
+		}
+		$this->settled[ $order->get_id() ] = true;
+		$this->commit_order_reservations( $order );
+		// The order is in the middle of its status transition: the on-hold switch follows in order_status_changed().
+		$this->deduct_order( $order, false );
+	}
+
+	public function issue_unless_shortfall( $issue, $order ) {
+		return $issue && ! ( $order instanceof \WC_Order && self::has_shortfall( $order ) );
+	}
+
+	public function hold_on_shortfall( $hold, $order ) {
+		return $hold || ( $order instanceof \WC_Order && self::has_shortfall( $order ) );
+	}
+
+	/**
+	 * Admin decision for a shortfall: accept that the missing amount is not charged from the voucher (e.g.
+	 * collected otherwise). Failed vouchers are booked with 0, the flag is cleared and fulfilment can follow.
+	 */
+	public function accept_shortfall( \WC_Order $order ): void {
+		$applied      = self::order_map( $order, '_vcap_redemptions' );
+		$reservations = self::order_map( $order, '_vcap_reservations' );
+		foreach ( $order->get_items( 'coupon' ) as $item ) {
+			$code    = wc_format_coupon_code( $item->get_code() );
+			$voucher = $this->find_voucher_for_code( $code );
+			if ( ! $voucher || ! $voucher->is_multi_use() || isset( $applied[ $code ] ) ) {
+				continue;
+			}
+			$applied[ $code ] = 0.0;
+			unset( $reservations[ $code ] );
+		}
+		$order->update_meta_data( '_vcap_redemptions', $applied );
+		if ( $reservations ) {
+			$order->update_meta_data( '_vcap_reservations', $reservations );
+		} else {
+			$order->delete_meta_data( '_vcap_reservations' );
+		}
+		$order->delete_meta_data( self::SHORTFALL_META );
+		$order->save();
+		$order->add_order_note( __( 'Voucher shortfall accepted by an administrator; the order can be fulfilled.', 'voucher-captain' ), false, true );
+	}
+
 	public function order_status_changed( $order_id, $from, $to, $order = null ): void {
 		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
 		if ( ! $order ) {
@@ -918,8 +982,13 @@ final class CouponManager {
 		$restore_statuses = apply_filters( 'vcap_balance_restore_statuses', array( 'cancelled', 'refunded', 'failed' ) );
 
 		if ( in_array( $to, $deduct_statuses, true ) ) {
-			$this->commit_order_reservations( $order );
-			$this->deduct_order( $order );
+			if ( empty( $this->settled[ $order->get_id() ] ) ) {
+				$this->commit_order_reservations( $order );
+				$this->deduct_order( $order );
+			} elseif ( self::has_shortfall( $order ) && 'on-hold' !== $order->get_status() ) {
+				$order->update_status( 'on-hold', __( 'Voucher balance shortfall requires manual review before fulfilment.', 'voucher-captain' ) );
+			}
+			unset( $this->settled[ $order->get_id() ] );
 		} elseif ( in_array( $to, $restore_statuses, true ) ) {
 			$this->release_order_reservations( $order );
 			if ( $this->settings->yes( 'vcap_restore_on_cancel' ) ) {
@@ -928,7 +997,7 @@ final class CouponManager {
 		}
 	}
 
-	public function deduct_order( \WC_Order $order ): void {
+	public function deduct_order( \WC_Order $order, bool $hold = true ): void {
 		$applied      = self::order_map( $order, '_vcap_redemptions' );
 		$reservations = self::order_map( $order, '_vcap_reservations' );
 		$changed      = false;
@@ -981,6 +1050,12 @@ final class CouponManager {
 				)
 			);
 		}
+		if ( $shortfall ) {
+			$order->update_meta_data( self::SHORTFALL_META, 'yes' );
+		} elseif ( self::has_shortfall( $order ) && ! $this->open_balance_coupons( $order, $applied ) ) {
+			$order->delete_meta_data( self::SHORTFALL_META ); // Resolved (balance restored and charged on a later run).
+			$changed = true;
+		}
 		if ( $changed ) {
 			$order->update_meta_data( '_vcap_redemptions', $applied );
 			if ( $reservations ) {
@@ -989,7 +1064,7 @@ final class CouponManager {
 				$order->delete_meta_data( '_vcap_reservations' );
 			}
 			$order->save();
-			if ( $shortfall && 'on-hold' !== $order->get_status() ) {
+			if ( $hold && $shortfall && 'on-hold' !== $order->get_status() ) {
 				$order->update_status( 'on-hold', __( 'Voucher balance shortfall requires manual review before fulfilment.', 'voucher-captain' ) );
 			}
 		}
@@ -1073,6 +1148,18 @@ final class CouponManager {
 			$order->add_order_note( __( 'Some voucher balances could not be restored. Review this order and retry the refund handling.', 'voucher-captain' ) );
 		}
 	}
+	/** Whether balance vouchers of the order are still not charged. */
+	private function open_balance_coupons( \WC_Order $order, array $applied ): bool {
+		foreach ( $order->get_items( 'coupon' ) as $item ) {
+			$code    = wc_format_coupon_code( $item->get_code() );
+			$voucher = $this->find_voucher_for_code( $code );
+			if ( $voucher && $voucher->is_multi_use() && ! isset( $applied[ $code ] ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	private function find_voucher_for_code( string $code ): ?Voucher {
 		$coupon_id = wc_get_coupon_id_by_code( $code );
 		return $coupon_id ? $this->repo->get_by_coupon( (int) $coupon_id ) : $this->repo->get_by_code( $code );

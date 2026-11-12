@@ -127,6 +127,26 @@ vcap_acc_assert( is_wp_error( $too_much ) && str_contains( $too_much->get_error_
 $allowed = wc_create_refund( array( 'order_id' => $purchase->get_id(), 'amount' => 20 ) );
 vcap_acc_assert( ! is_wp_error( $allowed ), 'refunding up to the unused value is possible' );
 
+// Shortfall: the gift card was emptied elsewhere before the late payment arrived. Nothing is fulfilled
+// (no voucher issued) until an administrator accepts the shortfall.
+$short_card  = vcap_acc_card( 30 );
+$short_order = wc_create_order();
+$short_order->add_product( $gc_product, 1 ); // Buys a 50 gift card.
+$short_order->set_billing_email( 'acceptance-shortfall@example.com' );
+$short_order->calculate_totals();
+$short_order->apply_coupon( $short_card->code );
+$emptied          = vcap()->vouchers->get( $short_card->id );
+$emptied->balance = 0.0; // Spent in another order meanwhile (no reservation held for this one).
+vcap()->vouchers->update( $emptied );
+wc_get_order( $short_order->get_id() )->payment_complete( 'txn-short' );
+$short_order = wc_get_order( $short_order->get_id() );
+vcap_acc_assert( 'on-hold' === $short_order->get_status() && VCAP\CouponManager::has_shortfall( $short_order ) && ! vcap()->vouchers->for_order( $short_order->get_id() ), 'a gift card that can no longer be charged holds the order and nothing is issued' );
+wp_set_current_user( 1 ); // The order action needs a shop manager.
+( new VCAP\Admin\OrderAdmin( vcap()->vouchers, vcap()->issuer ) )->accept_shortfall( $short_order );
+wp_set_current_user( 0 );
+$short_order = wc_get_order( $short_order->get_id() );
+vcap_acc_assert( 'processing' === $short_order->get_status() && ! VCAP\CouponManager::has_shortfall( $short_order ) && 1 === count( vcap()->vouchers->for_order( $short_order->get_id() ) ), 'after the shortfall is accepted the order is fulfilled (voucher issued)' );
+
 // Tax-exclusive shop: a 60 gift card pays 60 of the gross price (not 60 net + 20 % tax) and 60 is deducted.
 update_option( 'woocommerce_calc_taxes', 'yes' );
 update_option( 'woocommerce_prices_include_tax', 'no' );

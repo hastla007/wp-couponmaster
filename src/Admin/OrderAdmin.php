@@ -19,6 +19,19 @@ final class OrderAdmin {
 		add_filter( 'woocommerce_order_actions', array( $this, 'actions' ), 10, 2 );
 		add_action( 'woocommerce_order_action_vcap_issue', array( $this, 'issue' ) );
 		add_action( 'woocommerce_order_action_vcap_resend', array( $this, 'resend' ) );
+		add_action( 'woocommerce_order_action_vcap_accept_shortfall', array( $this, 'accept_shortfall' ) );
+	}
+
+	/** Order action: accept a voucher shortfall and fulfil the order (status back to processing). */
+	public function accept_shortfall( $order ): void {
+		$order = self::order_from( $order );
+		if ( ! $order || ! current_user_can( 'edit_shop_orders' ) || ! \VCAP\CouponManager::has_shortfall( $order ) ) {
+			return;
+		}
+		vcap()->coupons->accept_shortfall( $order );
+		if ( 'on-hold' === $order->get_status() ) {
+			$order->update_status( 'processing', __( 'Fulfilment after the voucher shortfall was accepted.', 'voucher-captain' ) );
+		}
 	}
 
 	private function screen_id(): string {
@@ -80,6 +93,9 @@ final class OrderAdmin {
 
 	public function actions( array $actions, $order = null ): array {
 		$order = $order instanceof \WC_Order ? $order : self::order_from( $GLOBALS['theorder'] ?? ( $GLOBALS['post'] ?? null ) );
+		if ( $order && \VCAP\CouponManager::has_shortfall( $order ) ) {
+			$actions['vcap_accept_shortfall'] = __( 'Accept voucher shortfall and fulfil the order', 'voucher-captain' );
+		}
 		if ( $order && $this->has_voucher_items( $order ) ) {
 			$actions['vcap_issue']  = __( 'Generate vouchers', 'voucher-captain' );
 			$actions['vcap_resend'] = __( 'Resend voucher emails', 'voucher-captain' );
