@@ -13,6 +13,7 @@ final class Delivery {
 
 	public function register(): void {
 		add_action( 'vcap_deliver_voucher', array( $this, 'deliver' ), 10, 1 );
+		add_action( 'vcap_retry_expiry_reminder', array( $this, 'retry_expiry_reminder' ), 10, 3 );
 		add_action( 'vcap_daily_maintenance', array( $this, 'maintenance' ) );
 		add_action( 'init', array( $this, 'schedule_maintenance' ), 20 );
 	}
@@ -234,17 +235,78 @@ final class Delivery {
 		$sent = 0;
 		foreach ( $offsets as $days ) {
 			foreach ( $this->repo->due_for_expiry_reminder( $days ) as $voucher ) {
-				if ( ! apply_filters( 'vcap_send_expiry_reminder', true, $voucher, $days ) ) {
-					continue;
-				}
-				// Store the threshold so each reminder is independently idempotent; an empty legacy note blocks duplicates.
-				$this->repo->log( $voucher->id, 'expiry_reminder', null, $voucher->balance, sprintf( 'days_before=%d', $days ) );
-				if ( $email->trigger( $voucher ) ) {
+				if ( $this->send_expiry_reminder_attempt( $voucher, $days, 0 ) ) {
 					++$sent;
 				}
 			}
 		}
 		return $sent;
+	}
+
+	/** Retry a failed expiry reminder from Action Scheduler. */
+	public function retry_expiry_reminder( $voucher_id, $days, $attempt ): void {
+		$voucher_id = (int) $voucher_id;
+		$days       = (int) $days;
+		$attempt    = (int) $attempt;
+		$voucher    = $this->repo->get( $voucher_id );
+		if ( ! $voucher || $attempt < 1 || $attempt > 3 ) {
+			return;
+		}
+		$this->send_expiry_reminder_attempt( $voucher, $days, $attempt );
+	}
+
+	/** Send one reminder with a voucher-and-threshold lock, retrying failed mail up to three times. */
+	private function send_expiry_reminder_attempt( Voucher $voucher, int $days, int $attempt ): bool {
+		global $wpdb;
+		if ( ! in_array( $days, self::expiry_reminder_offsets( $this->settings->get( 'vcap_expiry_reminder_days' ) ), true ) ) {
+			return false;
+		}
+		$lock_name = 'vcap_expiry_' . $voucher->id . '_' . $days;
+		$locked    = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $lock_name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( 1 !== (int) $locked ) {
+			return false;
+		}
+		$event_note = sprintf( 'days_before=%d', $days );
+		$logged     = false;
+		try {
+			$fresh = $this->repo->get( $voucher->id );
+			if ( ! $fresh || Voucher::STATUS_ACTIVE !== $fresh->status || ! $fresh->delivered_at || ! $fresh->expires_at || strtotime( $fresh->expires_at . ' UTC' ) <= time() || 'ticket' === $fresh->type || ( 'balance' === $fresh->usage_mode && $fresh->balance <= 0 ) ) {
+				return false;
+			}
+			foreach ( $this->repo->events( $fresh->id ) as $event ) {
+				$note = (string) ( $event['note'] ?? '' );
+				if ( 'expiry_reminder' === ( $event['event'] ?? '' ) && ( $event_note === $note || ( '' !== $note && ! str_starts_with( $note, 'days_before=' ) ) ) ) {
+					return false;
+				}
+			}
+			if ( ! apply_filters( 'vcap_send_expiry_reminder', true, $fresh, $days ) || ! $this->repo->log( $fresh->id, 'expiry_reminder', null, $fresh->balance, $event_note ) ) {
+				return false;
+			}
+			$logged = true;
+			$emails = WC()->mailer()->get_emails();
+			$email  = $emails['VCAP_Email_Voucher_Expiry'] ?? null;
+			if ( $email && $email->trigger( $fresh ) ) {
+				return true;
+			}
+			$this->repo->mark_last_expiry_reminder_failed( $fresh->id, $days );
+			$logged = false;
+			$this->schedule_expiry_reminder_retry( $fresh->id, $days, $attempt );
+		} catch ( Throwable $e ) {
+			if ( $logged && $this->repo->mark_last_expiry_reminder_failed( $voucher->id, $days ) ) {
+				$this->schedule_expiry_reminder_retry( $voucher->id, $days, $attempt );
+			}
+			wc_get_logger()->error( 'Voucher expiry reminder failed: ' . $e->getMessage(), array( 'source' => 'voucher-captain' ) );
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		return false;
+	}
+
+	private function schedule_expiry_reminder_retry( int $voucher_id, int $days, int $attempt ): void {
+		if ( $attempt >= 3 || ! function_exists( 'as_schedule_single_action' ) ) {
+			return;
+		}
+		as_schedule_single_action( time() + HOUR_IN_SECONDS, 'vcap_retry_expiry_reminder', array( $voucher_id, $days, $attempt + 1 ), self::GROUP, true );
 	}
 
 	public function maintenance(): void {
