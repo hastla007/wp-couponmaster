@@ -121,3 +121,8 @@ final class VCAP_Test_Plugin {
 	}
 }
 function vcap() { static $p = null; return $p ??= new VCAP_Test_Plugin(); }
+// No pages in the unit tests: the redeem page lookup finds none (-1 = cached "none").
+function get_transient( $k ) { return $GLOBALS['vcap_test_transients'][ $k ] ?? -1; }
+function set_transient( $k, $v, $e = 0 ) { $GLOBALS['vcap_test_transients'][ $k ] = $v; return true; }
+function get_post_status( $id = null ) { return false; }
+function get_permalink( $id = 0 ) { return ''; }

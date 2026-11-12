@@ -88,7 +88,8 @@ abstract class VoucherEmail extends \WC_Email {
 			'voucher'            => $this->voucher,
 			'order'              => $this->object,
 			'email_heading'      => $this->get_heading(),
-			'intro'              => $this->format_string( (string) $this->get_option( 'intro', $this->get_default_intro() ) ),
+			/** Intro text of a voucher email (e.g. a ticket voucher's reminder speaks of tickets, not of a remaining value). */
+			'intro'              => $this->format_string( (string) apply_filters( 'vcap_email_intro', (string) $this->get_option( 'intro', $this->get_default_intro() ), $this->voucher, $this ) ),
 			'additional_content' => $this->get_additional_content(),
 			'download_url'       => $this->voucher->id && 'yes' === get_option( 'vcap_include_link', 'yes' ) ? vcap()->downloads->signed_url( $this->voucher, true ) : '',
 			'sent_to_admin'      => false,

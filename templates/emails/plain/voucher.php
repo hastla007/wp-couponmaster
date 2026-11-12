@@ -40,6 +40,17 @@ if ( $voucher->message ) {
 if ( $download_url ) {
 	echo "\n" . esc_html__( 'Download:', 'voucher-captain' ) . ' ' . esc_url_raw( $download_url ) . "\n";
 }
+$next_steps = array_filter( array_map( 'strval', (array) apply_filters( 'vcap_voucher_next_steps', array(), $voucher ) ) );
+if ( $next_steps ) {
+	echo "\n" . esc_html__( 'What happens next', 'voucher-captain' ) . "\n";
+	foreach ( array_values( $next_steps ) as $i => $step ) {
+		echo esc_html( ( $i + 1 ) . '. ' . $step ) . "\n";
+	}
+	$redeem_url = $voucher->id ? \VCAP\Shortcodes::redeem_url( $voucher->code ) : '';
+	if ( $redeem_url ) {
+		echo esc_html__( 'Redeem now:', 'voucher-captain' ) . ' ' . esc_url_raw( $redeem_url ) . "\n";
+	}
+}
 echo "\n=================================================================\n\n";
 
 if ( $additional_content ) {

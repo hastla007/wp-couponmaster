@@ -375,6 +375,16 @@ final class Settings {
 
 					array( 'type' => 'title', 'title' => __( 'Redemption', 'voucher-captain' ), 'id' => 'vcap_redeem' ),
 					array(
+						'title'    => __( 'Redeem page', 'voucher-captain' ),
+						'id'       => 'vcap_redeem_page_id',
+						'type'     => 'single_select_page',
+						'default'  => '',
+						'class'    => 'wc-enhanced-select-nostd',
+						'css'      => 'min-width:300px;',
+						'desc_tip' => true,
+						'desc'     => __( 'Page with the "Redeem voucher" block or [vcap_redeem]. Emails, PDFs ({redeem_url}) and the customer account link there, with the code filled in. Ticket vouchers are exchanged for tickets on this page.', 'voucher-captain' ),
+					),
+					array(
 						'title'   => __( 'Restore balance on cancellation', 'voucher-captain' ),
 						'id'      => 'vcap_restore_on_cancel',
 						'type'    => 'checkbox',

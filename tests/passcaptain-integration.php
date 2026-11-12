@@ -176,6 +176,13 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	$tv_target = $tv ? VCAP\Compat\PassCaptainTickets::target( $tv ) : null;
 	vcap_pc_assert( $tv_target && $ticket_type === $tv_target['ticket_type_id'] && 2 === $tv_target['quantity'], 'the sold voucher stores its ticket target with the order line' );
 
+	$redeem_page = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'publish', 'post_title' => 'Redeem', 'post_content' => '[vcap_redeem]' ) );
+	delete_transient( 'vcap_redeem_page_guess' );
+	vcap_pc_assert( str_contains( VCAP\Shortcodes::redeem_url( $tv->code ), 'vcap_code=' . rawurlencode( $tv->code ) ) && str_contains( VCAP\Shortcodes::redeem_url(), (string) get_permalink( $redeem_page ) ), 'the redeem page is found and links carry the code' );
+	$tv_steps = apply_filters( 'vcap_voucher_next_steps', array(), vcap()->vouchers->get( $tv->id ) );
+	$tv_values = VCAP\Placeholders::values( vcap()->vouchers->get( $tv->id ) );
+	vcap_pc_assert( 4 === count( $tv_steps ) && str_contains( implode( ' ', $tv_steps ), '2 tickets' ) && '2' === $tv_values['ticket_quantity'] && '' !== $tv_values['redeem_url'], 'a ticket voucher email explains the next steps (redeem page, tickets by email)' );
+
 	wp_set_current_user( 0 ); // A guest on the redeem page: tickets go to the voucher's recipient or buyer.
 	$done = vcap()->passcaptain_tickets->exchange( $tv->code );
 	if ( is_wp_error( $done ) ) {
@@ -187,6 +194,14 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	$again = vcap()->passcaptain_tickets->exchange( $tv->code );
 	vcap_pc_assert( is_array( $again ) && $again['order_public_id'] === $done['order_public_id'] && 2 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}wpcap_tickets WHERE order_id=%d", $pc_order->order_id ) ), 'exchanging again returns the same tickets (no second order)' );
 	vcap_pc_assert( 'passcaptain_tickets' === array_column( vcap()->vouchers->events( $tv->id ), 'event' )[ count( vcap()->vouchers->events( $tv->id ) ) - 1 ], 'the exchange is in the voucher history' );
+	ob_start();
+	do_action( 'vcap_account_voucher_status', vcap()->vouchers->get( $tv->id ) );
+	$tv_status = (string) ob_get_clean();
+	// Event and recipient come from Pass Captain 1.5+ (ticket service with resend_tickets()).
+	$pc_details = method_exists( VCAP\Compat\PassCaptainTickets::service(), 'resend_tickets' );
+	vcap_pc_assert( $pc_details ? str_contains( $tv_status, '2 tickets for' ) && str_contains( $tv_status, 't***@example.com' ) : str_contains( $tv_status, '2 tickets' ), 'the customer account shows what the voucher was exchanged for and where the tickets went (masked)' );
+	vcap_pc_assert( ! apply_filters( 'vcap_voucher_next_steps', array(), vcap()->vouchers->get( $tv->id ) ) && false === apply_filters( 'vcap_customer_can_resend', true, vcap()->vouchers->get( $tv->id ) ), 'after the exchange there are no next steps and no voucher resend' );
+	wp_delete_post( $redeem_page, true );
 
 	wp_set_current_user( 1 );
 	vcap()->issuer->void( vcap()->vouchers->get( $tv->id ), 'Purchase order refunded' );

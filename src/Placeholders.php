@@ -39,6 +39,7 @@ final class Placeholders {
 			'ticket_admissions' => __( 'Admissions per ticket', 'voucher-captain' ),
 			'site_name'         => __( 'Site name', 'voucher-captain' ),
 			'site_url'          => __( 'Site URL', 'voucher-captain' ),
+			'redeem_url'        => __( 'Redeem page link with the code', 'voucher-captain' ),
 			'redemption_terms'  => __( 'Redemption conditions', 'voucher-captain' ),
 			'transferable'      => __( 'Transferability', 'voucher-captain' ),
 		);
@@ -103,6 +104,7 @@ final class Placeholders {
 			'ticket_admissions' => (string) $voucher->max_checkins,
 			'site_name'         => wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ),
 			'site_url'          => home_url( '/' ),
+			'redeem_url'        => $voucher->code ? Shortcodes::redeem_url( $voucher->code ) : '',
 			'redemption_terms'  => '' !== $voucher->terms ? $voucher->terms : ProductConfig::terms( $config ),
 			'transferable'      => $voucher->transferable_label(),
 		);

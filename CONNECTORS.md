@@ -20,6 +20,8 @@ A complete, tested reference implementation is in [`examples/vcap-example-connec
 | Store something with each sold voucher line | `vcap_line_snapshot` (`array $extra`, `WC_Order_Item_Product`, `$config`, `WC_Order`) – extra keys in `_vcap_line`; core keys always win |
 | Handle a code on the redeem page | `vcap_redeem_code` (`null`, `$code`) – return a result string (add your own `wc_add_notice()`) to take the code over, `null` to let the cart apply it |
 | Extra fields in the redeem form | `vcap_redeem_form_fields` (print inputs, posted with the code) and `vcap_redeem_prefill` (pre-fill the code, e.g. while asking for more input) |
+| Customer guidance | `vcap_voucher_next_steps` (list of "what happens next" steps in the voucher email; the redeem button is added), `vcap_email_intro` (intro text per voucher/email), `vcap_redeem_url` (redeem page link; setting "Redeem page") |
+| Customer account | `vcap_account_voucher_status` (extra status lines), `vcap_account_voucher_actions` (extra buttons), `vcap_customer_can_resend` |
 | Buttons on the voucher admin page | `vcap_voucher_admin_actions` (`Voucher`, `callable $form`) – call `$form( $do, $label )`; handle it in `vcap_voucher_admin_action` (`''`, `$do`, `Voucher`) and return a message key registered with `vcap_voucher_admin_messages` (keys ending in `_failed` show as errors) |
 | Own events in the voucher history | `VoucherRepository::log()` plus a label via `vcap_event_labels` |
 | Codes of another plugin in the scanner | `vcap_scanner_lookup` / `vcap_scanner_checkin` (`null`, `$code`) – called only for codes Voucher Captain does not know; return a scanner payload with your own `type` (see `Compat\PassCaptainScanner::view()`) or `null` |

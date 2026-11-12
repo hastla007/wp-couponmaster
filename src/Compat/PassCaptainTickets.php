@@ -50,6 +50,177 @@ final class PassCaptainTickets {
 		add_filter( 'vcap_scanner_redeem_refused', array( $this, 'scanner_redeem_refused' ), 10, 2 );
 		add_action( 'vcap_voucher_event', array( $this, 'on_voucher_event' ), 10, 2 );
 		add_action( 'wp_pass_captain_voucher_tickets_revoked_v1', array( $this, 'on_tickets_revoked' ), 10, 1 );
+		add_filter( 'vcap_voucher_next_steps', array( $this, 'next_steps' ), 10, 2 );
+		add_filter( 'vcap_email_intro', array( $this, 'email_intro' ), 10, 3 );
+		add_filter( 'vcap_placeholder_definitions', array( $this, 'placeholder_definitions' ) );
+		add_filter( 'vcap_placeholders', array( $this, 'placeholders' ), 10, 2 );
+		add_action( 'vcap_account_voucher_status', array( $this, 'account_status' ) );
+		add_action( 'vcap_account_voucher_actions', array( $this, 'account_actions' ) );
+		add_filter( 'vcap_customer_can_resend', array( $this, 'customer_can_resend' ), 10, 2 );
+		add_action( 'template_redirect', array( $this, 'customer_resend_tickets' ), 5 );
+	}
+
+	/* ---- Customer communication ------------------------------------------------------------------- */
+
+	/** What a ticket voucher holder does next (voucher email and expiry reminder). */
+	public function next_steps( $steps, $voucher ) {
+		if ( ! $voucher instanceof Voucher || ! $voucher->is_usable() ) {
+			return $steps;
+		}
+		$target = self::target( $voucher );
+		if ( ! $target || $this->exchange_state( $voucher ) ) {
+			return $steps;
+		}
+		$what = self::tickets_label( $target );
+		return array(
+			'' !== \VCAP\Shortcodes::redeem_url()
+				? __( 'Open the redeem page with the button below – your code is already filled in.', 'voucher-captain' )
+				: __( 'Enter your code on our website\'s redeem page.', 'voucher-captain' ),
+			$target['event_id']
+				? __( 'Choose your date and, if asked, enter the names of the attendees.', 'voucher-captain' )
+				: __( 'If asked, enter the names of the attendees.', 'voucher-captain' ),
+			/* translators: %s: e.g. "2 tickets for Concert X" */
+			sprintf( __( 'You receive %s by email right away.', 'voucher-captain' ), $what ),
+			__( 'Show the tickets at the entrance – the voucher itself is not an admission ticket.', 'voucher-captain' ),
+		);
+	}
+
+	/** The expiry reminder of a ticket voucher speaks of tickets, not of a remaining value (default text only). */
+	public function email_intro( $intro, $voucher, $email ) {
+		if ( ! $voucher instanceof Voucher || ! is_object( $email ) || 'vcap_voucher_expiry' !== ( $email->id ?? '' ) || '' !== (string) $email->get_option( 'intro', '' ) || ! self::target( $voucher ) ) {
+			return $intro;
+		}
+		return __( 'Your ticket voucher {coupon_code} is valid until {expiry_date}. Exchange it for your tickets before then.', 'voucher-captain' );
+	}
+
+	public function placeholder_definitions( array $defs ): array {
+		return $defs + array(
+			'ticket_event'    => __( 'Event of a ticket voucher', 'voucher-captain' ),
+			'ticket_quantity' => __( 'Number of tickets of a ticket voucher', 'voucher-captain' ),
+		);
+	}
+
+	public function placeholders( $values, $voucher ) {
+		$target = $voucher instanceof Voucher ? self::target( $voucher ) : null;
+		$values = (array) $values;
+		$values['ticket_event']    = $target ? $target['label'] : '';
+		$values['ticket_quantity'] = $target ? (string) $target['quantity'] : '';
+		return $values;
+	}
+
+	/** "2 tickets for Concert X" (or just "2 tickets" without a label). */
+	private static function tickets_label( array $target ): string {
+		$count = sprintf(
+			/* translators: %d: number of tickets */
+			_n( '%d ticket', '%d tickets', $target['quantity'], 'voucher-captain' ),
+			$target['quantity']
+		);
+		/* translators: 1: "2 tickets", 2: event */
+		return '' !== $target['label'] ? sprintf( __( '%1$s for %2$s', 'voucher-captain' ), $count, $target['label'] ) : $count;
+	}
+
+	/**
+	 * Pass Captain's state of the voucher's committed exchange (event, starts_at, email, ticket_ids, status), or
+	 * null when it was not exchanged (yet).
+	 */
+	private function exchange_state( Voucher $voucher ): ?array {
+		[ $attempt, $redemption ] = $this->attempt( $voucher );
+		$service                  = self::service();
+		if ( ! $redemption || RedemptionService::STATE_COMMITTED !== $redemption['state'] || ! $service ) {
+			return null;
+		}
+		$state = $service->get( self::exchange_key( $voucher, $attempt ) );
+		return is_array( $state ) ? $state + array( 'key' => self::exchange_key( $voucher, $attempt ) ) : null;
+	}
+
+	/** Customer account: what the voucher was exchanged for. */
+	public function account_status( $voucher ): void {
+		if ( ! $voucher instanceof Voucher || ! self::target( $voucher ) ) {
+			return;
+		}
+		$state = $this->exchange_state( $voucher );
+		if ( ! $state ) {
+			return;
+		}
+		if ( 'revoked' === ( $state['status'] ?? '' ) ) {
+			echo '<br><small>' . esc_html__( 'The tickets were cancelled.', 'voucher-captain' ) . '</small>';
+			return;
+		}
+		$count = count( (array) ( $state['ticket_ids'] ?? array() ) );
+		$what  = '' !== (string) ( $state['event'] ?? '' ) ? trim( $state['event'] . ( '' !== (string) ( $state['starts_at'] ?? '' ) ? ', ' . $state['starts_at'] : '' ) ) : '';
+		$text  = '' !== $what
+			/* translators: 1: number of tickets, 2: event and date */
+			? sprintf( _n( '%1$d ticket for %2$s', '%1$d tickets for %2$s', $count, 'voucher-captain' ), $count, $what )
+			/* translators: %d: number of tickets */
+			: sprintf( _n( 'Exchanged for %d ticket', 'Exchanged for %d tickets', $count, 'voucher-captain' ), $count );
+		if ( '' !== (string) ( $state['email'] ?? '' ) ) {
+			/* translators: 1: tickets text, 2: masked email */
+			$text = sprintf( __( '%1$s, sent to %2$s', 'voucher-captain' ), $text, self::mask_email( (string) $state['email'] ) );
+		}
+		echo '<br><small>' . esc_html( $text ) . '</small>';
+	}
+
+	/** Customer account: "Exchange for tickets" before, "Send tickets again" after the exchange. */
+	public function account_actions( $voucher ): void {
+		if ( ! $voucher instanceof Voucher || ! self::target( $voucher ) ) {
+			return;
+		}
+		$state = $this->exchange_state( $voucher );
+		if ( ! $state ) {
+			$url = $voucher->is_usable() ? \VCAP\Shortcodes::redeem_url( $voucher->code ) : '';
+			if ( '' !== $url ) {
+				/* translators: %s: voucher code */
+				echo '<a class="woocommerce-button button vcap-exchange-button" href="' . esc_url( $url ) . '" aria-label="' . esc_attr( sprintf( __( 'Exchange voucher %s for tickets', 'voucher-captain' ), $voucher->code ) ) . '">' . esc_html__( 'Exchange for tickets', 'voucher-captain' ) . '</a> ';
+			}
+			return;
+		}
+		$service = self::service();
+		if ( 'issued' !== ( $state['status'] ?? '' ) || ! $service || ! method_exists( $service, 'resend_tickets' ) || ! $this->is_buyer( $voucher ) ) {
+			return;
+		}
+		echo '<form method="post" class="vcap-resend-tickets-form"><input type="hidden" name="vcap_resend_tickets" value="' . esc_attr( (string) $voucher->id ) . '" />';
+		wp_nonce_field( 'vcap_resend_tickets_' . $voucher->id, 'vcap_resend_tickets_nonce' );
+		/* translators: %s: voucher code */
+		echo '<button type="submit" class="woocommerce-button button" aria-label="' . esc_attr( sprintf( __( 'Send the tickets of voucher %s again', 'voucher-captain' ), $voucher->code ) ) . '">' . esc_html__( 'Send tickets again', 'voucher-captain' ) . '</button></form>';
+	}
+
+	/** After the exchange, "Send email again" would only resend the voucher – the tickets are what counts. */
+	public function customer_can_resend( $can, $voucher ) {
+		return $can && $voucher instanceof Voucher && self::target( $voucher ) && $this->exchange_state( $voucher ) ? false : $can;
+	}
+
+	private function is_buyer( Voucher $voucher ): bool {
+		$order = $voucher->order();
+		return is_user_logged_in() && $order instanceof \WC_Order && (int) $order->get_customer_id() === get_current_user_id();
+	}
+
+	/** POST handler of "Send tickets again" (new codes; Pass Captain limits it to 3 per hour). */
+	public function customer_resend_tickets(): void {
+		if ( empty( $_POST['vcap_resend_tickets'] ) || empty( $_POST['vcap_resend_tickets_nonce'] ) || ! function_exists( 'wc_add_notice' ) ) {
+			return;
+		}
+		$id = absint( $_POST['vcap_resend_tickets'] );
+		if ( ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_resend_tickets_nonce'] ) ), 'vcap_resend_tickets_' . $id ) ) {
+			wc_add_notice( __( 'The request has expired. Please try again.', 'voucher-captain' ), 'error' );
+			return;
+		}
+		$voucher = $this->vouchers->get( $id );
+		$state   = $voucher && $this->is_buyer( $voucher ) ? $this->exchange_state( $voucher ) : null;
+		$service = self::service();
+		if ( ! $state || ! $service || ! method_exists( $service, 'resend_tickets' ) ) {
+			wc_add_notice( __( 'The tickets of this voucher cannot be sent again.', 'voucher-captain' ), 'error' );
+			return;
+		}
+		$result = $service->resend_tickets( $state['key'] );
+		if ( is_wp_error( $result ) ) {
+			wc_add_notice( $result->get_error_message(), 'error' );
+		} else {
+			$this->vouchers->log( $voucher->id, 'passcaptain_tickets_resent', null, null, 'Requested by customer' );
+			/* translators: %s: masked email */
+			wc_add_notice( sprintf( __( 'The tickets were sent again to %s. Only the new tickets are valid.', 'voucher-captain' ), self::mask_email( (string) ( $result['email'] ?? '' ) ) ) );
+		}
+		wp_safe_redirect( wp_get_referer() ? wp_get_referer() : wc_get_account_endpoint_url( \VCAP\Downloads::ENDPOINT ) );
+		exit;
 	}
 
 	/**
@@ -734,6 +905,7 @@ final class PassCaptainTickets {
 			'passcaptain_tickets_failed'  => __( 'Ticket exchange failed', 'voucher-captain' ),
 			'passcaptain_tickets_revoked' => __( 'Pass Captain tickets revoked', 'voucher-captain' ),
 			'passcaptain_tickets_restored' => __( 'Voucher restored (tickets cancelled in Pass Captain)', 'voucher-captain' ),
+			'passcaptain_tickets_resent'  => __( 'Tickets sent again', 'voucher-captain' ),
 		);
 	}
 }

@@ -24,6 +24,7 @@ final class Shortcodes {
 	public function register(): void {
 		add_shortcode( 'vcap_voucher_status', array( $this->downloads, 'balance_shortcode' ) );
 		add_shortcode( 'vcap_redeem', array( $this, 'redeem_shortcode' ) );
+		add_action( 'save_post_page', static fn() => delete_transient( 'vcap_redeem_page_guess' ) );
 		add_shortcode( 'vcap_my_vouchers', array( $this, 'my_vouchers_shortcode' ) );
 		add_shortcode( 'vcap_referral', array( $this, 'referral_shortcode' ) );
 		add_action( 'template_redirect', array( $this, 'handle_redeem' ), 8 );
@@ -114,6 +115,26 @@ final class Shortcodes {
 		}
 	}
 
+	/**
+	 * Link to the redeem page (setting "Redeem page"; otherwise the first published page that contains the
+	 * redeem block or shortcode), with the code filled in. '' when there is none.
+	 */
+	public static function redeem_url( string $code = '' ): string {
+		$page = (int) get_option( 'vcap_redeem_page_id', 0 );
+		if ( $page <= 0 || 'publish' !== get_post_status( $page ) ) {
+			$page = (int) get_transient( 'vcap_redeem_page_guess' );
+			if ( ! $page ) {
+				global $wpdb;
+				$page = (int) $wpdb->get_var( "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'page' AND post_status = 'publish' AND ( post_content LIKE '%[vcap_redeem%' OR post_content LIKE '%<!-- wp:vcap/redeem%' ) ORDER BY ID LIMIT 1" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				set_transient( 'vcap_redeem_page_guess', $page ? $page : -1, DAY_IN_SECONDS );
+			}
+		}
+		$url = $page > 0 ? (string) get_permalink( $page ) : '';
+		$url = '' !== $url && '' !== $code ? add_query_arg( 'vcap_code', rawurlencode( $code ), $url ) : $url;
+		/** Redeem page link of a code ('' = none). */
+		return (string) apply_filters( 'vcap_redeem_url', $url, $code );
+	}
+
 	public function redeem_shortcode( $atts = array() ): string {
 		$atts = shortcode_atts( array( 'button' => __( 'Redeem', 'voucher-captain' ) ), (array) $atts, 'vcap_redeem' );
 		ob_start();
@@ -121,7 +142,7 @@ final class Shortcodes {
 		<form method="post" class="vcap-redeem-form">
 			<?php wp_nonce_field( 'vcap_redeem', 'vcap_redeem_nonce' ); ?>
 			<label for="vcap-redeem-code"><?php esc_html_e( 'Voucher code', 'voucher-captain' ); ?></label>
-			<input type="text" id="vcap-redeem-code" name="vcap_redeem_code" required autocomplete="off" maxlength="100" value="<?php echo esc_attr( (string) apply_filters( 'vcap_redeem_prefill', '' ) ); ?>" />
+			<input type="text" id="vcap-redeem-code" name="vcap_redeem_code" required autocomplete="off" maxlength="100" value="<?php echo esc_attr( (string) apply_filters( 'vcap_redeem_prefill', isset( $_GET['vcap_code'] ) ? substr( sanitize_text_field( wp_unslash( $_GET['vcap_code'] ) ), 0, 100 ) : '' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- only pre-fills the field. ?>" />
 			<?php
 			/** Extra fields of connectors (e.g. the date for a ticket voucher), posted with the code. */
 			do_action( 'vcap_redeem_form_fields' );

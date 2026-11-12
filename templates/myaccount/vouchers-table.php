@@ -56,6 +56,10 @@ $show_order = ! empty( $show_order );
 				<td data-title="<?php esc_attr_e( 'Value', 'voucher-captain' ); ?>"><?php echo wp_kses_post( $value ); ?></td>
 				<td data-title="<?php esc_attr_e( 'Status', 'voucher-captain' ); ?>">
 					<?php echo esc_html( $voucher->status_label() ); ?>
+					<?php
+					/** Extra status lines of connectors (e.g. "2 tickets for … on …, sent to …"). */
+					do_action( 'vcap_account_voucher_status', $voucher );
+					?>
 					<?php if ( $voucher->expires_at ) : ?>
 						<br><small><?php /* translators: %s: date */ printf( esc_html__( 'Valid until %s', 'voucher-captain' ), esc_html( wp_date( vcap()->settings->date_format(), strtotime( $voucher->expires_at . ' UTC' ) ) ) ); ?></small>
 					<?php endif; ?>
@@ -82,8 +86,12 @@ $show_order = ! empty( $show_order );
 					</td>
 				<?php endif; ?>
 				<td class="vcap-download">
+					<?php
+					/** Extra actions of connectors (e.g. "Exchange for tickets", "Send tickets again"). */
+					do_action( 'vcap_account_voucher_actions', $voucher );
+					?>
 					<?php if ( \VCAP\Voucher::STATUS_VOID !== $voucher->status ) : ?>
-						<a class="woocommerce-button button vcap-download-button" href="<?php echo esc_url( $downloads->signed_url( $voucher ) ); ?>" target="_blank" rel="noopener">
+						<a class="woocommerce-button button vcap-download-button" href="<?php echo esc_url( $downloads->signed_url( $voucher ) ); ?>" target="_blank" rel="noopener" aria-label="<?php /* translators: %s: voucher code */ echo esc_attr( sprintf( __( 'Download PDF of voucher %s', 'voucher-captain' ), $voucher->code ) ); ?>">
 							<?php esc_html_e( 'Download PDF', 'voucher-captain' ); ?>
 						</a>
 					<?php endif; ?>
@@ -91,7 +99,7 @@ $show_order = ! empty( $show_order );
 						<form method="post" class="vcap-resend-form">
 							<input type="hidden" name="vcap_resend" value="<?php echo esc_attr( (string) $voucher->id ); ?>" />
 							<?php wp_nonce_field( 'vcap_resend_' . $voucher->id, 'vcap_resend_nonce' ); ?>
-							<button type="submit" class="woocommerce-button button vcap-resend-button"><?php esc_html_e( 'Send email again', 'voucher-captain' ); ?></button>
+							<button type="submit" class="woocommerce-button button vcap-resend-button" aria-label="<?php /* translators: %s: voucher code */ echo esc_attr( sprintf( __( 'Send the email of voucher %s again', 'voucher-captain' ), $voucher->code ) ); ?>"><?php esc_html_e( 'Send email again', 'voucher-captain' ); ?></button>
 						</form>
 					<?php endif; ?>
 				</td>

@@ -3638,3 +3638,96 @@ msgstr "Ausführung nach akzeptiertem Gutschein-Fehlbetrag."
 
 msgid "Voucher shortfall accepted by an administrator; the order can be fulfilled."
 msgstr "Gutschein-Fehlbetrag von einem Administrator akzeptiert; die Bestellung kann ausgeführt werden."
+
+msgid "%1$d ticket for %2$s"
+msgid_plural "%1$d tickets for %2$s"
+msgstr[0] "%1$d Ticket für %2$s"
+msgstr[1] "%1$d Tickets für %2$s"
+
+msgid "%1$s for %2$s"
+msgstr "%1$s für %2$s"
+
+msgid "%1$s, sent to %2$s"
+msgstr "%1$s, gesendet an %2$s"
+
+msgid "%d ticket"
+msgid_plural "%d tickets"
+msgstr[0] "%d Ticket"
+msgstr[1] "%d Tickets"
+
+msgid "Choose your date and, if asked, enter the names of the attendees."
+msgstr "Wählen Sie Ihren Termin und geben Sie, falls gefragt, die Namen der Teilnehmenden ein."
+
+msgid "Download PDF of voucher %s"
+msgstr "PDF des Gutscheins %s herunterladen"
+
+msgid "Enter your code on our website's redeem page."
+msgstr "Geben Sie Ihren Code auf der Einlöseseite unserer Website ein."
+
+msgid "Event of a ticket voucher"
+msgstr "Veranstaltung eines Ticket-Gutscheins"
+
+msgid "Exchange voucher %s for tickets"
+msgstr "Gutschein %s gegen Tickets eintauschen"
+
+msgid "Exchanged for %d ticket"
+msgid_plural "Exchanged for %d tickets"
+msgstr[0] "Gegen %d Ticket eingetauscht"
+msgstr[1] "Gegen %d Tickets eingetauscht"
+
+msgid "If asked, enter the names of the attendees."
+msgstr "Geben Sie, falls gefragt, die Namen der Teilnehmenden ein."
+
+msgid "Number of tickets of a ticket voucher"
+msgstr "Anzahl Tickets eines Ticket-Gutscheins"
+
+msgid "Open the redeem page with the button below – your code is already filled in."
+msgstr "Öffnen Sie die Einlöseseite über die Schaltfläche unten – Ihr Code ist bereits eingetragen."
+
+msgid "Page with the \"Redeem voucher\" block or [vcap_redeem]. Emails, PDFs ({redeem_url}) and the customer account link there, with the code filled in. Ticket vouchers are exchanged for tickets on this page."
+msgstr "Seite mit dem Block „Gutschein einlösen“ oder [vcap_redeem]. E-Mails, PDFs ({redeem_url}) und das Kundenkonto verlinken dorthin, mit eingetragenem Code. Ticket-Gutscheine werden auf dieser Seite gegen Tickets eingetauscht."
+
+msgid "Redeem now"
+msgstr "Jetzt einlösen"
+
+msgid "Redeem now:"
+msgstr "Jetzt einlösen:"
+
+msgid "Redeem page"
+msgstr "Einlöseseite"
+
+msgid "Redeem page link with the code"
+msgstr "Link zur Einlöseseite mit Code"
+
+msgid "Send the email of voucher %s again"
+msgstr "E-Mail des Gutscheins %s erneut senden"
+
+msgid "Send the tickets of voucher %s again"
+msgstr "Tickets des Gutscheins %s erneut senden"
+
+msgid "Send tickets again"
+msgstr "Tickets erneut senden"
+
+msgid "Show the tickets at the entrance – the voucher itself is not an admission ticket."
+msgstr "Zeigen Sie die Tickets am Einlass vor – der Gutschein selbst ist keine Eintrittskarte."
+
+msgid "The tickets of this voucher cannot be sent again."
+msgstr "Die Tickets dieses Gutscheins können nicht erneut gesendet werden."
+
+msgid "The tickets were cancelled."
+msgstr "Die Tickets wurden storniert."
+
+msgid "The tickets were sent again to %s. Only the new tickets are valid."
+msgstr "Die Tickets wurden erneut an %s gesendet. Nur die neuen Tickets sind gültig."
+
+msgid "Tickets sent again"
+msgstr "Tickets erneut gesendet"
+
+msgid "What happens next"
+msgstr "So geht es weiter"
+
+msgid "You receive %s by email right away."
+msgstr "Sie erhalten %s sofort per E-Mail."
+
+msgid "Your ticket voucher {coupon_code} is valid until {expiry_date}. Exchange it for your tickets before then."
+msgstr "Ihr Ticket-Gutschein {coupon_code} ist bis {expiry_date} gültig. Tauschen Sie ihn bis dahin gegen Ihre Tickets ein."
