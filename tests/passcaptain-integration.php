@@ -286,6 +286,15 @@ if ( null !== VCAP\Compat\PassCaptainScanner::service() ) {
 		$res = 'lookup' === $route ? vcap()->tickets->rest_lookup( $req ) : vcap()->tickets->rest_checkin( $req );
 		return is_wp_error( $res ) ? $res : $res->get_data();
 	};
+	// Pass Captain's default entry window (2 h before the start) refuses a ticket for next week …
+	$has_window = array_key_exists( 'default_entry_window', PassCaptain\Settings::defaults() );
+	if ( $has_window ) {
+		PassCaptain\Settings::update( array( 'default_entry_window' => 1 ) );
+		$early = $scan( 'lookup', array( 'q' => $token ) );
+		vcap_pc_assert( is_array( $early ) && 'outside_entry_window' === $early['status'] && 'error' === $early['state'] && false === $early['can_checkin'], 'a ticket outside the entry window is refused with its reason' );
+		// … the rest checks the scanner itself, without the window.
+		PassCaptain\Settings::update( array( 'default_entry_window' => 0 ) );
+	}
 	$seen = $scan( 'lookup', array( 'q' => home_url( '/?wpcap_ticket=' . $token ) ) );
 	if ( ! is_array( $seen ) || 'valid' !== ( $seen['status'] ?? '' ) ) {
 		echo 'Scanner lookup: ' . wp_json_encode( is_wp_error( $seen ) ? $seen->get_error_message() : $seen ) . "\n";
@@ -300,6 +309,9 @@ if ( null !== VCAP\Compat\PassCaptainScanner::service() ) {
 	$own = $scan( 'lookup', array( 'q' => vcap_pc_voucher( 'balance', 10 )->code ) );
 	vcap_pc_assert( is_array( $own ) && 'giftcard' === $own['type'], 'voucher codes are still handled by Voucher Captain' );
 	vcap_pc_assert( false !== strpos( VCAP\Compat\PassCaptain::status_html(), '✔' ), 'the settings show the Pass Captain integration as active' );
+	if ( $has_window ) {
+		PassCaptain\Settings::update( array( 'default_entry_window' => 1 ) );
+	}
 }
 
 // Minor units follow ISO 4217 (as Pass Captain does), not the shop's price display setting.
