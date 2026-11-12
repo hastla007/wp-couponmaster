@@ -203,6 +203,16 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	$wpdb->update( "{$wpdb->prefix}wpcap_ticket_types", array( 'capacity' => 10 ), array( 'ticket_type_id' => $full_type ) );
 	$second_try = vcap()->passcaptain_tickets->exchange( $full->code );
 	vcap_pc_assert( is_array( $second_try ) && 2 === $second_try['tickets'] && 'committed' === vcap()->redemptions->get( VCAP\Compat\PassCaptainTickets::key( $full, 2 ) )['state'], 'after a failed attempt the voucher can be exchanged again (new keys)' );
+	if ( defined( 'PassCaptain\\Integrations\\Vouchers\\TicketService::REVOKED_ACTION' ) ) {
+		// Pass Captain cancels the exchange order (e.g. the date was cancelled): the voucher comes back.
+		$second_order = (int) $wpdb->get_var( $wpdb->prepare( "SELECT order_id FROM {$wpdb->prefix}wpcap_orders WHERE public_id=%s", $second_try['order_public_id'] ) );
+		Orders::cancel_order( $second_order, 'occurrence_cancelled' );
+		Orders::cancel_order( $second_order, 'occurrence_cancelled' );
+		$restored_events = array_count_values( array_column( vcap()->vouchers->events( $full->id ), 'event' ) );
+		vcap_pc_assert( VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $full->id )->status && 1 === ( $restored_events['passcaptain_tickets_restored'] ?? 0 ), 'tickets cancelled in Pass Captain give the voucher back exactly once' );
+		$third_try = vcap()->passcaptain_tickets->exchange( $full->code );
+		vcap_pc_assert( is_array( $third_try ) && 2 === $third_try['tickets'] && $third_try['order_public_id'] !== $second_try['order_public_id'] && VCAP\Voucher::STATUS_REDEEMED === vcap()->vouchers->get( $full->id )->status, 'the restored voucher can be exchanged again for new tickets' );
+	}
 	remove_filter( 'vcap_passcaptain_ticket_target', $give, 10 );
 	vcap_pc_assert( is_wp_error( vcap()->passcaptain_tickets->exchange( vcap_pc_voucher( 'single', 10 )->code ) ), 'vouchers without a ticket target are not exchanged' );
 

@@ -49,6 +49,42 @@ final class PassCaptainTickets {
 		add_filter( 'vcap_scanner_describe', array( $this, 'scanner_describe' ), 10, 2 );
 		add_filter( 'vcap_scanner_redeem_refused', array( $this, 'scanner_redeem_refused' ), 10, 2 );
 		add_action( 'vcap_voucher_event', array( $this, 'on_voucher_event' ), 10, 2 );
+		add_action( 'wp_pass_captain_voucher_tickets_revoked_v1', array( $this, 'on_tickets_revoked' ), 10, 1 );
+	}
+
+	/**
+	 * Pass Captain revoked or refunded the tickets of an exchange (order cancelled or refunded, date or
+	 * event cancelled): once no ticket is left – none valid, none used – the voucher is given back (the
+	 * redemption is refunded in full, a single-use voucher becomes active again) and can be exchanged anew.
+	 * Idempotent per Pass Captain order. Filter "vcap_passcaptain_restore_on_revoke" (false = keep redeemed).
+	 *
+	 * @param array $info redemption_key, order_public_id, remaining, revoked, reason.
+	 */
+	public function on_tickets_revoked( $info ): void {
+		$info = (array) $info;
+		$key  = (string) ( $info['redemption_key'] ?? '' );
+		if ( 0 !== strpos( $key, 'passcaptain:ticket:' ) || (int) ( $info['remaining'] ?? 1 ) > 0 ) {
+			return;
+		}
+		$row = $this->redemptions->get( $key );
+		if ( is_wp_error( $row ) || RedemptionService::STATE_COMMITTED !== $row['state'] ) {
+			return;
+		}
+		$voucher = $this->vouchers->get( (int) $row['voucher_id'] );
+		if ( ! $voucher || Voucher::STATUS_VOID === $voucher->status || ! apply_filters( 'vcap_passcaptain_restore_on_revoke', true, $voucher, $info ) ) {
+			return;
+		}
+		$order_ref  = preg_replace( '/[^a-f0-9]/', '', strtolower( (string) ( $info['order_public_id'] ?? '' ) ) );
+		$refund_key = 'passcaptain:restore:' . substr( '' !== $order_ref ? $order_ref : md5( $key ), 0, 32 );
+		$amount     = (float) $row['amount'];
+		$refunded   = array_sum( array_map( 'floatval', (array) ( $row['meta']['_refunds'] ?? array() ) ) );
+		if ( $amount <= 0 || $refunded + 0.0001 >= $amount ) {
+			return;
+		}
+		$result = $this->redemptions->refund( $key, $amount - $refunded, $refund_key );
+		if ( ! is_wp_error( $result ) && ! empty( $result['restored'] ) ) {
+			$this->vouchers->log( $voucher->id, 'passcaptain_tickets_restored', (float) $result['restored'], null, (string) ( $info['order_public_id'] ?? '' ) );
+		}
 	}
 
 	/** Pass Captain's ticket service (contract v1), or null when Pass Captain is not active or too old. */
@@ -82,7 +118,10 @@ final class PassCaptainTickets {
 			if ( is_wp_error( $row ) ) {
 				return array( $n, null );
 			}
-			if ( RedemptionService::STATE_RELEASED !== $row['state'] ) {
+			// Released attempts and exchanges given back in full (tickets revoked in Pass Captain) are finished.
+			$refunded = array_sum( array_map( 'floatval', (array) ( $row['meta']['_refunds'] ?? array() ) ) );
+			$returned = RedemptionService::STATE_COMMITTED === $row['state'] && (float) $row['amount'] > 0 && $refunded + 0.0001 >= (float) $row['amount'];
+			if ( RedemptionService::STATE_RELEASED !== $row['state'] && ! $returned ) {
 				return array( $n, $row );
 			}
 		}
@@ -694,6 +733,7 @@ final class PassCaptainTickets {
 			'passcaptain_tickets'         => __( 'Exchanged for Pass Captain tickets', 'voucher-captain' ),
 			'passcaptain_tickets_failed'  => __( 'Ticket exchange failed', 'voucher-captain' ),
 			'passcaptain_tickets_revoked' => __( 'Pass Captain tickets revoked', 'voucher-captain' ),
+			'passcaptain_tickets_restored' => __( 'Voucher restored (tickets cancelled in Pass Captain)', 'voucher-captain' ),
 		);
 	}
 }
