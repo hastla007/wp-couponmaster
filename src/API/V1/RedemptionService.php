@@ -127,7 +127,7 @@ final class RedemptionService {
 			$this->record_failure( $user_id );
 			return self::error( 'vcap_not_found', __( 'This voucher code is not valid.', 'voucher-captain' ), 404 );
 		}
-		$amount = $voucher->is_multi_use() ? round( (float) ( $args['amount'] ?? 0 ), wc_get_price_decimals() ) : round( $voucher->initial_amount, wc_get_price_decimals() );
+		$amount = $voucher->is_multi_use() ? round( (float) ( $args['amount'] ?? 0 ), self::decimals( $voucher->currency ) ) : round( $voucher->initial_amount, self::decimals( $voucher->currency ) );
 		$hash   = $this->request_hash( $voucher->id, $target, $amount, $user_id );
 		if ( $existing ) {
 			return hash_equals( (string) $existing['request_hash'], $hash )
@@ -164,7 +164,7 @@ final class RedemptionService {
 			}
 
 			if ( $fresh->is_multi_use() ) {
-				$fresh->balance = max( 0.0, round( $fresh->balance - $amount, wc_get_price_decimals() ) );
+				$fresh->balance = max( 0.0, round( $fresh->balance - $amount, self::decimals( $fresh->currency ) ) );
 				if ( $fresh->balance <= 0 ) {
 					$fresh->status = Voucher::STATUS_REDEEMED;
 				}
@@ -267,7 +267,7 @@ final class RedemptionService {
 	 * @throws \Throwable Database errors are re-thrown after the transaction was rolled back.
 	 */
 	public function refund( string $key, float $amount, string $refund_key, array $args = array() ) {
-		$amount = round( $amount, wc_get_price_decimals() );
+		$amount = (float) $amount; // Rounded to the voucher currency below.
 		if ( ! preg_match( self::KEY_PATTERN, $key ) || ! preg_match( self::KEY_PATTERN, $refund_key ) ) {
 			return self::error( 'vcap_invalid_request', __( 'A redemption key, a refund key and a positive amount are required.', 'voucher-captain' ), 400 );
 		}
@@ -320,7 +320,7 @@ final class RedemptionService {
 				);
 			}
 			$redeemed = (float) $row['amount'];
-			$give     = round( min( $amount, $redeemed - array_sum( $refunds ) ), wc_get_price_decimals() );
+			$give     = round( min( $amount, $redeemed - array_sum( $refunds ) ), self::decimals( $voucher->currency ) );
 			if ( $give <= 0 ) {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				return self::error( 'vcap_refund_exceeded', __( 'This redemption has already been refunded completely.', 'voucher-captain' ), 409 );
@@ -329,7 +329,7 @@ final class RedemptionService {
 			$total                  = array_sum( $refunds );
 			$restored               = 0.0;
 			if ( $voucher->is_multi_use() ) {
-				$voucher->balance = round( $voucher->balance + $give, wc_get_price_decimals() );
+				$voucher->balance = round( $voucher->balance + $give, self::decimals( $voucher->currency ) );
 				$restored         = $give;
 				if ( Voucher::STATUS_REDEEMED === $voucher->status && $voucher->balance > 0 ) {
 					$voucher->status = $voucher->is_expired() ? Voucher::STATUS_EXPIRED : Voucher::STATUS_ACTIVE;
@@ -377,6 +377,28 @@ final class RedemptionService {
 		 */
 		do_action( 'vcap_redemption_refunded', $data, $give );
 		return $data;
+	}
+
+	/**
+	 * Decimal places of a currency (ISO 4217 minor units), not the shop's price display setting: a shop that
+	 * shows whole forints still books exact amounts. Unknown or empty currency: 2 (the internal precision).
+	 *
+	 * @param string $currency ISO 4217 code.
+	 * @return int
+	 */
+	public static function decimals( string $currency ): int {
+		$currency = strtoupper( $currency );
+		$zero     = array( 'BIF', 'CLP', 'DJF', 'GNF', 'ISK', 'JPY', 'KMF', 'KRW', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF' );
+		$three    = array( 'BHD', 'IQD', 'JOD', 'KWD', 'LYD', 'OMR', 'TND' );
+		$decimals = in_array( $currency, $zero, true ) ? 0 : ( in_array( $currency, $three, true ) ? 3 : 2 );
+		/**
+		 * Decimal places used for voucher amounts of a currency.
+		 *
+		 * @since 1.2.0
+		 * @param int    $decimals Decimal places.
+		 * @param string $currency ISO 4217 code.
+		 */
+		return (int) apply_filters( 'vcap_currency_decimals', $decimals, $currency );
 	}
 
 	/**
@@ -487,7 +509,7 @@ final class RedemptionService {
 				$event = 'api_committed';
 			} else {
 				if ( $voucher->is_multi_use() ) {
-					$voucher->balance = round( $voucher->balance + $amount, wc_get_price_decimals() );
+					$voucher->balance = round( $voucher->balance + $amount, self::decimals( $voucher->currency ) );
 				}
 				if ( in_array( $voucher->status, array( Voucher::STATUS_RESERVED, Voucher::STATUS_REDEEMED ), true ) && ( ! $voucher->is_multi_use() || $voucher->balance > 0 ) ) {
 					$voucher->status = $voucher->is_expired() ? Voucher::STATUS_EXPIRED : Voucher::STATUS_ACTIVE;

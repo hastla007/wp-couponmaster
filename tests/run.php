@@ -92,6 +92,8 @@ $v2->discount_type = 'percent';
 $v2->initial_amount = 15;
 check( 'percent value', '15%' === Placeholders::replace( '{coupon_value}', $v2 ) );
 
+check( 'redemption amounts use ISO currency decimals', 0 === VCAP\API\V1\RedemptionService::decimals( 'JPY' ) && 2 === VCAP\API\V1\RedemptionService::decimals( 'EUR' ) && 3 === VCAP\API\V1\RedemptionService::decimals( 'kwd' ) );
+
 echo "Expiry & delivery\n";
 $base = strtotime( '2026-01-10 12:00:00 UTC' );
 check( 'expiry in days (shop-local end of day)', '2026-02-09 22:59:59' === ProductConfig::expiry_for( array_merge( ProductConfig::DEFAULTS, array( 'expiry_mode' => 'days', 'expiry_days' => 30 ) ), $base ) );
