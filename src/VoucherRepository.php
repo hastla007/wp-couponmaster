@@ -244,10 +244,11 @@ final class VoucherRepository {
 				WHERE v.status = 'active' AND v.delivered_at IS NOT NULL AND v.type <> 'ticket'
 				AND v.expires_at IS NOT NULL AND v.expires_at > %s AND v.expires_at <= %s
 				AND ( v.usage_mode <> 'balance' OR v.balance > 0 )
-				AND NOT EXISTS ( SELECT 1 FROM {$this->events} e WHERE e.voucher_id = v.id AND e.event = 'expiry_reminder' )
+				AND NOT EXISTS ( SELECT 1 FROM {$this->events} e WHERE e.voucher_id = v.id AND e.event = 'expiry_reminder' AND ( LEFT( e.note, 12 ) <> 'days_before=' OR e.note = %s ) )
 				ORDER BY v.expires_at ASC LIMIT %d",
-				$this->now(),
+				gmdate( 'Y-m-d H:i:s', time() + max( 0, $days - 1 ) * DAY_IN_SECONDS ),
 				gmdate( 'Y-m-d H:i:s', time() + $days * DAY_IN_SECONDS ),
+				sprintf( 'days_before=%d', $days ),
 				$limit
 			),
 			ARRAY_A

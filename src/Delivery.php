@@ -193,14 +193,37 @@ final class Delivery {
 	}
 
 	/**
-	 * Remind holders of vouchers with remaining value before they expire. Each voucher is reminded at most once
-	 * (ledger event 'expiry_reminder'); admins can suppress the reminder per voucher.
+	 * Parse the configured reminder thresholds. Numeric settings from older versions remain valid.
+	 *
+	 * @param mixed $value Stored setting.
+	 * @return int[] Unique reminder thresholds between 1 and 365 days.
+	 */
+	public static function expiry_reminder_offsets( $value ): array {
+		$offsets = array();
+		$parts   = preg_split( '/[\\s,;]+/', trim( (string) $value ), -1, PREG_SPLIT_NO_EMPTY );
+		foreach ( $parts ?: array() as $part ) {
+			if ( ! ctype_digit( $part ) ) {
+				continue;
+			}
+			$days = (int) $part;
+			if ( $days >= 1 && $days <= 365 ) {
+				$offsets[] = $days;
+			}
+		}
+		$offsets = array_values( array_unique( $offsets ) );
+		rsort( $offsets, SORT_NUMERIC );
+		return $offsets;
+	}
+
+	/**
+	 * Remind holders of vouchers with remaining value before expiry. Each configured threshold is sent at most once;
+	 * admins and connector filters can suppress reminders per voucher.
 	 *
 	 * @return int number of reminders sent
 	 */
 	public function send_expiry_reminders(): int {
-		$days = (int) $this->settings->get( 'vcap_expiry_reminder_days' );
-		if ( $days <= 0 ) {
+		$offsets = self::expiry_reminder_offsets( $this->settings->get( 'vcap_expiry_reminder_days' ) );
+		if ( ! $offsets ) {
 			return 0;
 		}
 		$emails = WC()->mailer()->get_emails();
@@ -209,14 +232,16 @@ final class Delivery {
 			return 0;
 		}
 		$sent = 0;
-		foreach ( $this->repo->due_for_expiry_reminder( $days ) as $voucher ) {
-			if ( ! apply_filters( 'vcap_send_expiry_reminder', true, $voucher ) ) {
-				continue;
-			}
-			// Logged first: a crash after sending must not lead to a second reminder.
-			$this->repo->log( $voucher->id, 'expiry_reminder', null, $voucher->balance, '' );
-			if ( $email->trigger( $voucher ) ) {
-				++$sent;
+		foreach ( $offsets as $days ) {
+			foreach ( $this->repo->due_for_expiry_reminder( $days ) as $voucher ) {
+				if ( ! apply_filters( 'vcap_send_expiry_reminder', true, $voucher, $days ) ) {
+					continue;
+				}
+				// Store the threshold so each reminder is independently idempotent; an empty legacy note blocks duplicates.
+				$this->repo->log( $voucher->id, 'expiry_reminder', null, $voucher->balance, sprintf( 'days_before=%d', $days ) );
+				if ( $email->trigger( $voucher ) ) {
+					++$sent;
+				}
 			}
 		}
 		return $sent;

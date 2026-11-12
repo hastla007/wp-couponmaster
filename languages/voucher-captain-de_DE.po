@@ -2659,11 +2659,11 @@ msgstr "Vergessen Sie Ihren Gutschein nicht"
 msgid "Your voucher {coupon_code} is valid until {expiry_date}. Remaining value: {coupon_balance}."
 msgstr "Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}."
 
-msgid "Expiry reminder (days before)"
-msgstr "Erinnerung vor Ablauf (Tage vorher)"
+msgid "Expiry reminder days (comma separated)"
+msgstr "Erinnerung vor Ablauf (Tage, kommagetrennt)"
 
-msgid "Email the voucher holder once this many days before a voucher with remaining value expires. 0 = no reminders. The email text is edited under WooCommerce → Settings → Emails."
-msgstr "Gutscheininhaber einmalig so viele Tage vor Ablauf eines Gutscheins mit Restwert per E-Mail erinnern. 0 = keine Erinnerungen. Den Text bearbeiten Sie unter WooCommerce → Einstellungen → E-Mails."
+msgid "Send one email at each configured threshold before expiry, for example 30, 7, 1. Use 0 to disable reminders. Existing single-number settings continue to work. Edit the email under WooCommerce → Settings → Emails."
+msgstr "Senden Sie jeweils eine E-Mail zu jedem eingestellten Vorlaufzeitpunkt, z. B. 30, 7, 1 Tage vor Ablauf. 0 deaktiviert Erinnerungen. Bisherige einzelne Zahlenwerte werden weiterhin unterstützt. Den Text bearbeiten Sie unter WooCommerce → Einstellungen → E-Mails."
 
 msgid "Expiry reminder"
 msgstr "Erinnerung vor Ablauf"

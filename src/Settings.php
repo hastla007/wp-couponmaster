@@ -140,12 +140,11 @@ final class Settings {
 						'desc_tip'          => __( 'Signed links in emails expire after this many days. Links shown to logged-in customers are always re-signed. 0 = never expire.', 'voucher-captain' ),
 					),
 					array(
-						'title'             => __( 'Expiry reminder (days before)', 'voucher-captain' ),
+						'title'             => __( 'Expiry reminder days (comma separated)', 'voucher-captain' ),
 						'id'                => 'vcap_expiry_reminder_days',
-						'type'              => 'number',
-						'default'           => 0,
-						'custom_attributes' => array( 'min' => 0, 'max' => 365, 'step' => 1 ),
-						'desc_tip'          => __( 'Email the voucher holder once this many days before a voucher with remaining value expires. 0 = no reminders. The email text is edited under WooCommerce → Settings → Emails.', 'voucher-captain' ),
+						'type'              => 'text',
+						'default'           => '0',
+						'desc_tip'          => __( 'Send one email at each configured threshold before expiry, for example 30, 7, 1. Use 0 to disable reminders. Existing single-number settings continue to work. Edit the email under WooCommerce → Settings → Emails.', 'voucher-captain' ),
 					),
 					array(
 						'title'   => __( 'Order confirmation', 'voucher-captain' ),

@@ -128,7 +128,15 @@ final class VoucherAdmin {
 						if ( is_email( $v->recipient_email ) ) {
 							$form( 'resend_recipient', __( 'Email recipient', 'voucher-captain' ) );
 						}
-						if ( $v->expires_at && ! in_array( 'expiry_reminder', array_column( $this->repo->events( $v->id ), 'event' ), true ) ) {
+						$reminder_suppressed = false;
+						foreach ( $this->repo->events( $v->id ) as $event ) {
+							$note = (string) ( $event['note'] ?? '' );
+							if ( 'expiry_reminder' === ( $event['event'] ?? '' ) && '' !== $note && ! str_starts_with( $note, 'days_before=' ) ) {
+								$reminder_suppressed = true;
+								break;
+							}
+						}
+						if ( $v->expires_at && ! $reminder_suppressed ) {
 							$form( 'suppress_reminder', __( 'No expiry reminder', 'voucher-captain' ) );
 						}
 						if ( Voucher::STATUS_VOID === $v->status ) {
