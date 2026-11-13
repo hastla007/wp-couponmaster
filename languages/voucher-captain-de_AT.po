@@ -3413,9 +3413,6 @@ msgstr "Anderen Termin wählen"
 msgid "Not admitted: %s"
 msgstr "Kein Einlass: %s"
 
-msgid "Not deducted: the amount exceeds the balance (remaining %s)."
-msgstr "Nicht abgebucht: Der Betrag übersteigt den Restwert (verbleibend %s)."
-
 msgid "Please enter a valid email address for your tickets."
 msgstr "Bitte geben Sie eine gültige E-Mail-Adresse für Ihre Tickets ein."
 
@@ -4959,3 +4956,72 @@ msgstr "Die Antwort ist nicht vom Lizenzserver dieses Produkts signiert."
 
 msgid "This version of WP Pass Captain has no reconciliation interface yet, so its order table is read directly as a fallback. Please update WP Pass Captain."
 msgstr "Diese Version von WP Pass Captain bietet noch keine Schnittstelle für den Abgleich, daher wird ersatzweise direkt die Bestelltabelle von WP Pass Captain gelesen. Bitte aktualisieren Sie WP Pass Captain."
+
+msgid "Deduct %1$s from card …%2$s? Remaining balance afterwards: %3$s"
+msgstr "%1$s von Karte …%2$s abbuchen? Restwert danach: %3$s"
+
+msgid "Deduct only the remaining balance of %1$s from card …%2$s? Still to be paid otherwise: %3$s. Remaining balance afterwards: %4$s"
+msgstr "Nur den Restwert von %1$s von Karte …%2$s abbuchen? Anderweitig noch zu bezahlen: %3$s. Restwert danach: %4$s"
+
+msgid "Deduct remaining balance only (%s)"
+msgstr "Nur Restwert abbuchen (%s)"
+
+msgid "Deducted"
+msgstr "Abgebucht"
+
+msgid "Not deducted: the amount (%1$s) exceeds the remaining balance (%2$s)."
+msgstr "Nicht abgebucht: Der Betrag (%1$s) übersteigt den Restwert (%2$s)."
+
+msgid "Not deducted: the amount has more decimal places than the currency allows (%d)."
+msgstr "Nicht abgebucht: Der Betrag hat mehr Nachkommastellen, als die Währung erlaubt (%d)."
+
+msgid "Not deducted: the balance could not be updated. Please try again."
+msgstr "Nicht abgebucht: Der Restwert konnte nicht aktualisiert werden. Bitte versuchen Sie es erneut."
+
+msgid "Not deducted: the balance is used up."
+msgstr "Nicht abgebucht: Der Restwert ist aufgebraucht."
+
+msgid "Not deducted: the database cannot deduct balances safely (no transaction support). Please contact the shop administrator."
+msgstr "Nicht abgebucht: Die Datenbank kann Restwerte nicht sicher abbuchen (keine Transaktionen). Bitte wenden Sie sich an die Shop-Administration."
+
+msgid "Not deducted: this voucher has been cancelled."
+msgstr "Nicht abgebucht: Dieser Gutschein wurde storniert."
+
+msgid "Not deducted: this voucher has expired."
+msgstr "Nicht abgebucht: Dieser Gutschein ist abgelaufen."
+
+msgid "Not deducted: this voucher has not been delivered yet."
+msgstr "Nicht abgebucht: Dieser Gutschein wurde noch nicht zugestellt."
+
+msgid "Not deducted: this voucher is being redeemed elsewhere right now. Please try again in a moment."
+msgstr "Nicht abgebucht: Dieser Gutschein wird gerade an anderer Stelle eingelöst. Bitte versuchen Sie es gleich noch einmal."
+
+msgid "Not deducted: this voucher is not active."
+msgstr "Nicht abgebucht: Dieser Gutschein ist nicht aktiv."
+
+msgid "Partially redeemed: %1$s deducted, %2$s still to be paid otherwise. Remaining balance: %3$s."
+msgstr "Teilweise eingelöst: %1$s abgebucht, %2$s sind anderweitig zu bezahlen. Restwert: %3$s."
+
+msgid "Please enter an amount greater than zero."
+msgstr "Bitte geben Sie einen Betrag größer als null ein."
+
+msgid "Please enter only the amount as a number, e.g. %s."
+msgstr "Bitte geben Sie nur den Betrag als Zahl ein, z. B. %s."
+
+msgid "Redeemed: %1$s deducted. Remaining balance: %2$s."
+msgstr "Eingelöst: %1$s abgebucht. Restwert: %2$s."
+
+msgid "Still to be paid"
+msgstr "Noch zu bezahlen"
+
+msgid "The amount is ambiguous (thousands or decimal separator?). Please enter it without thousands separators, e.g. %s."
+msgstr "Der Betrag ist mehrdeutig (Tausender- oder Dezimaltrennzeichen?). Bitte geben Sie ihn ohne Tausendertrennzeichen ein, z. B. %s."
+
+msgid "This currency has at most %d decimal places."
+msgstr "Diese Währung hat höchstens %d Nachkommastellen."
+
+msgid "This currency has no decimal places."
+msgstr "Diese Währung hat keine Nachkommastellen."
+
+msgid "This voucher is not active."
+msgstr "Dieser Gutschein ist nicht aktiv."
