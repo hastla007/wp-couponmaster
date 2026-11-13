@@ -161,7 +161,7 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 == Upgrade Notice ==
 
 = Unreleased =
-Premium edition: after the update, promotions, bonus vouchers, refer a friend, gift card top-up, reports and the WP Pass Captain integration work only with an active license – activate it on the license page. Gift cards and vouchers already sold stay redeemable in the shop. New optional setting "Multi-purpose vouchers as payment" (off by default).
+Premium: promotions, refer a friend, top-ups, reports and the WP Pass Captain integration need an active license (Vouchers → License). Vouchers already sold keep working. Database update 1.4.0 – make a backup first.
 
 = 1.1.0 =
 Requires WooCommerce 8.9 or newer.
