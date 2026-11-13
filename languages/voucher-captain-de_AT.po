@@ -745,12 +745,6 @@ msgstr "Zu viele Versuche. Bitte versuchen Sie es später erneut."
 msgid "Voucher code not found."
 msgstr "Gutscheincode nicht gefunden."
 
-#. translators: 1: status, 2: balance, 3: expiry
-#: src/Downloads.php:212
-#, php-format
-msgid "Status: %1$s · Balance: %2$s · Valid until: %3$s"
-msgstr "Status: %1$s · Guthaben: %2$s · Gültig bis: %3$s"
-
 #: src/Downloads.php:215 src/Placeholders.php:83
 msgid "unlimited"
 msgstr "unbegrenzt"
@@ -1643,10 +1637,6 @@ msgstr "Gutscheine werden einmal pro gekauftem Artikel erstellt, sobald eine Bes
 msgid "Default validity (days)"
 msgstr "Standard-Gültigkeit (Tage)"
 
-#: src/Settings.php:226
-msgid "Used when a product does not define its own expiry. 0 = never expires."
-msgstr "Wird verwendet, wenn ein Produkt kein eigenes Ablaufdatum festlegt. 0 = läuft nie ab."
-
 #: src/Settings.php:230
 msgid "Coupon codes"
 msgstr "Gutscheincodes"
@@ -1694,14 +1684,6 @@ msgstr "Die Bestellnummer in den Code aufnehmen, z. B. GIFT-1042-7KQ2M9XA."
 #: src/Settings.php:278
 msgid "Redemption"
 msgstr "Einlösung"
-
-#: src/Settings.php:280
-msgid "Balance includes tax"
-msgstr "Guthaben inklusive Steuern"
-
-#: src/Settings.php:284
-msgid "Deduct the discount including tax from multi-use voucher balances (recommended for gift cards)."
-msgstr "Den Rabatt inklusive Steuern vom Guthaben mehrfach verwendbarer Gutscheine abziehen (empfohlen für Geschenkkarten)."
 
 #: src/Settings.php:287
 msgid "Restore balance on cancellation"
@@ -3173,7 +3155,7 @@ msgid "Reward for the referrer"
 msgstr "Prämie für den Werbenden"
 
 msgid "Sent to a customer when a friend they referred completed an order (Refer a friend, reward as coupon)."
-msgstr "Wird an einen Kunden gesendet, wenn ein von ihm geworbener Freund eine Bestellung abgeschlossen hat (Freunde werben, Prämie als Gutschein)."
+msgstr "Wird an Kundinnen und Kunden gesendet, wenn eine von ihnen geworbene Person eine Bestellung abgeschlossen hat (Freunde werben, Prämie als Gutschein)."
 
 msgid "Store credit (requires store credit)"
 msgstr "Guthaben (erfordert Guthaben-Funktion)"
@@ -3185,7 +3167,7 @@ msgid "You cannot use your own referral code."
 msgstr "Sie können Ihren eigenen Empfehlungscode nicht verwenden."
 
 msgid "Your friend ordered – here is your reward"
-msgstr "Ihr Freund hat bestellt – hier ist Ihre Prämie"
+msgstr "Ihre Empfehlung hat sich gelohnt – hier ist Ihre Prämie"
 
 msgid "Your friends get %1$s off their first order with your code, and you receive %2$s once their order is completed."
 msgstr "Ihre Freunde erhalten mit Ihrem Code %1$s Rabatt auf ihre erste Bestellung, und Sie erhalten %2$s, sobald deren Bestellung abgeschlossen ist."
@@ -3276,9 +3258,6 @@ msgstr "Erstattung %1$s der Einlösung %2$s"
 msgid "This redemption has already been refunded completely."
 msgstr "Diese Einlösung wurde bereits vollständig erstattet."
 
-msgid "This refund key was already used for another amount."
-msgstr "Dieser Erstattungs-Schlüssel wurde bereits für einen anderen Betrag verwendet."
-
 msgid "This voucher has no value left."
 msgstr "Dieser Gutschein hat keinen Restwert mehr."
 
@@ -3329,9 +3308,6 @@ msgstr "Partner gespeichert. Neue Bestellungen mit Codes dieser Kampagne werden 
 
 msgid "%1$d ticket(s), Pass Captain order %2$s, sent to %3$s"
 msgstr "%1$d Ticket(s), Pass-Captain-Bestellung %2$s, gesendet an %3$s"
-
-msgid "Exchange each voucher for tickets of this ticket type (redeem page or voucher admin). The voucher becomes redeemable via WP Pass Captain."
-msgstr "Jeder Gutschein wird gegen Tickets dieser Ticketart eingetauscht (Einlöseseite oder Gutscheinverwaltung). Der Gutschein wird über WP Pass Captain einlösbar."
 
 msgid "Exchange for tickets"
 msgstr "In Tickets umwandeln"
@@ -3425,9 +3401,6 @@ msgstr "Check-ins in WP Pass Captain"
 
 msgid "Not active – vouchers in the ticket checkout, ticket vouchers and the shared scanner are off. Voucher Captain works fully without it."
 msgstr "Nicht aktiv – Gutscheine im Ticket-Checkout, Ticket-Gutscheine und der gemeinsame Scanner sind aus. Voucher Captain funktioniert ohne Einschränkung."
-
-msgid "Not admitted (%s)"
-msgstr "Kein Einlass (%s)"
 
 msgid "Open WP Pass Captain"
 msgstr "WP Pass Captain öffnen"
@@ -4149,3 +4122,54 @@ msgstr "Keine Abweichungen gefunden."
 
 msgid "\"%s\" is not available: the date is sold out or already over."
 msgstr "„%s“ ist nicht verfügbar: Der Termin ist ausverkauft oder bereits vorbei."
+
+msgid "You received a gift from {site_title}"
+msgstr "Sie haben ein Geschenk von {site_title} erhalten"
+
+msgid "Hello, thank you for your order #{order_number}. Your voucher for {product_name} is ready."
+msgstr "Hallo, vielen Dank für Ihre Bestellung #{order_number}. Ihr Gutschein für {product_name} ist bereit."
+
+msgid "Hi {buyer_name}, your voucher for {product_name} is ready."
+msgstr "Hallo {buyer_name}, Ihr Gutschein für {product_name} ist bereit."
+
+msgid "Hello, your voucher for {product_name} is ready."
+msgstr "Hallo, Ihr Gutschein für {product_name} ist bereit."
+
+msgid "Hi {buyer_name}, your voucher is ready."
+msgstr "Hallo {buyer_name}, Ihr Gutschein ist bereit."
+
+msgid "Hello, your voucher is ready."
+msgstr "Hallo, Ihr Gutschein ist bereit."
+
+msgid "Hi {recipient_name}, you received a voucher worth {coupon_value} as a gift."
+msgstr "Hallo {recipient_name}, Sie haben einen Gutschein im Wert von {coupon_value} geschenkt bekommen."
+
+msgid "Hello, {buyer_name} sent you a voucher worth {coupon_value}."
+msgstr "Hallo, {buyer_name} hat Ihnen einen Gutschein im Wert von {coupon_value} geschenkt."
+
+msgid "Hello, you received a voucher worth {coupon_value} as a gift."
+msgstr "Hallo, Sie haben einen Gutschein im Wert von {coupon_value} geschenkt bekommen."
+
+msgid "Hi {recipient_name}, {buyer_name} sent you a voucher for {coupon_value} off."
+msgstr "Hallo {recipient_name}, {buyer_name} hat Ihnen einen Gutschein über {coupon_value} Rabatt geschenkt."
+
+msgid "Hi {recipient_name}, you received a voucher for {coupon_value} off as a gift."
+msgstr "Hallo {recipient_name}, Sie haben einen Gutschein über {coupon_value} Rabatt geschenkt bekommen."
+
+msgid "Hello, {buyer_name} sent you a voucher for {coupon_value} off."
+msgstr "Hallo, {buyer_name} hat Ihnen einen Gutschein über {coupon_value} Rabatt geschenkt."
+
+msgid "Hello, you received a voucher for {coupon_value} off as a gift."
+msgstr "Hallo, Sie haben einen Gutschein über {coupon_value} Rabatt geschenkt bekommen."
+
+msgid "Hi {recipient_name}, {buyer_name} sent you {product_name}."
+msgstr "Hallo {recipient_name}, {buyer_name} hat Ihnen {product_name} geschenkt."
+
+msgid "Hi {recipient_name}, you received {product_name} as a gift."
+msgstr "Hallo {recipient_name}, Sie haben {product_name} geschenkt bekommen."
+
+msgid "Hello, {buyer_name} sent you {product_name}."
+msgstr "Hallo, {buyer_name} hat Ihnen {product_name} geschenkt."
+
+msgid "Hello, you received {product_name} as a gift."
+msgstr "Hallo, Sie haben {product_name} geschenkt bekommen."

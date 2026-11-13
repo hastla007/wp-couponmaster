@@ -89,7 +89,7 @@ abstract class VoucherEmail extends \WC_Email {
 			'order'              => $this->object,
 			'email_heading'      => $this->get_heading(),
 			/** Intro text of a voucher email (e.g. a ticket voucher's reminder speaks of tickets, not of a remaining value). */
-			'intro'              => $this->format_string( (string) apply_filters( 'vcap_email_intro', (string) $this->get_option( 'intro', $this->get_default_intro() ), $this->voucher, $this ) ),
+			'intro'              => $this->format_string( (string) apply_filters( 'vcap_email_intro', $this->intro_text( $this->voucher ), $this->voucher, $this ) ),
 			'additional_content' => $this->get_additional_content(),
 			'download_url'       => $this->voucher->id && 'yes' === get_option( 'vcap_include_link', 'yes' ) ? vcap()->downloads->signed_url( $this->voucher, true ) : '',
 			'sent_to_admin'      => false,
@@ -107,6 +107,30 @@ abstract class VoucherEmail extends \WC_Email {
 	}
 
 	abstract public function get_default_intro(): string;
+
+	/**
+	 * The body text: the shop's own text, or – while the default is kept – the default that fits this voucher
+	 * (no greeting by an empty name, no order number for vouchers without an order, no value for tickets).
+	 */
+	protected function intro_text( Voucher $voucher ): string {
+		$stored = trim( (string) $this->get_option( 'intro', '' ) );
+		return '' === $stored || $stored === $this->get_default_intro() ? $this->default_intro_for( $voucher ) : $stored;
+	}
+
+	/** Default body for one voucher (subclasses adapt it to the voucher). */
+	protected function default_intro_for( Voucher $voucher ): string {
+		return $this->get_default_intro();
+	}
+
+	/** Placeholder value of a voucher (e.g. "{buyer_name}"), '' when unknown. */
+	protected function placeholder( string $token ): string {
+		return trim( (string) ( $this->placeholders[ '{' . $token . '}' ] ?? '' ) );
+	}
+
+	/** A voucher without monetary value (ticket voucher, admission pass). */
+	protected static function has_no_value( Voucher $voucher ): bool {
+		return 'percent' !== $voucher->discount_type && (float) $voucher->initial_amount <= 0;
+	}
 
 	public function init_form_fields() {
 		parent::init_form_fields();

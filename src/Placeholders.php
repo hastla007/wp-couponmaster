@@ -90,9 +90,10 @@ final class Placeholders {
 			'product_price'     => $product ? self::money( (float) wc_get_price_to_display( $product ), get_woocommerce_currency() ) : '',
 			'product_sku'       => $product ? (string) $product->get_sku() : '',
 			'product_short_description' => $product ? wp_strip_all_tags( (string) ( $product->get_short_description() ?: ( $product->is_type( 'variation' ) ? $product->get_description() : '' ) ) ) : '',
-			'buyer_name'        => $voucher->buyer_name,
+			// Vouchers created before names were stored (or by hand) fall back to the order's billing name.
+			'buyer_name'        => '' !== trim( $voucher->buyer_name ) ? $voucher->buyer_name : ( $order ? trim( $order->get_formatted_billing_full_name() ) : '' ),
 			'buyer_email'       => $voucher->buyer_email,
-			'recipient_name'    => $voucher->recipient_name ?: $voucher->buyer_name,
+			'recipient_name'    => $voucher->recipient_name ?: ( '' !== trim( $voucher->buyer_name ) ? $voucher->buyer_name : ( $order ? trim( $order->get_formatted_billing_full_name() ) : '' ) ),
 			'recipient_email'   => $voucher->recipient_email,
 			'message'           => $voucher->message,
 			'delivery_date'     => $delivery,

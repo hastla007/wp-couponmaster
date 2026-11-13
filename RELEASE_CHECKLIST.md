@@ -21,6 +21,7 @@ the release commit.
 - [ ] Complete a real gateway payment, redirect return, webhook retry, and refund on the supported gateway set.
 - [ ] Check Yoast SEO admin, checkout, and customer account pages in a browser.
 - [ ] Review keyboard and screen-reader flows for voucher purchase, balance check, account downloads, and scanner actions.
+- [ ] Approve the customer email texts in `EMAILS.md` (generated, EN/DE/AT; CI job `smoke` fails when it is out of date). Translation coverage and placeholders are checked automatically (`tests/run.php` → Translations).
 - [ ] Verify translations and customer-facing voucher expiry, transferability, residual value, and redemption terms for the store's legal policy.
 - [ ] Have the merchant's tax/accounting adviser approve voucher tax and refund treatment for each voucher type.
 

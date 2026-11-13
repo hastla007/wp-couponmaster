@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-13 00:59+0000\n"
+"POT-Creation-Date: 2026-11-13 06:00+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:75 src/API/V1/RedemptionService.php:117
@@ -1306,22 +1306,22 @@ msgid "State differs: Pass Captain \"%1$s\", Voucher Captain \"%2$s\"."
 msgstr ""
 
 #. translators: 1: amount in Pass Captain, 2: amount in Voucher Captain
-#: src/Compat/PassCaptainReconcile.php:67
+#: src/Compat/PassCaptainReconcile.php:72
 #, php-format
 msgid "Amount differs: Pass Captain %1$s, Voucher Captain %2$s."
 msgstr ""
 
 #. translators: 1: refunded in Pass Captain, 2: given back in Voucher Captain
-#: src/Compat/PassCaptainReconcile.php:73
+#: src/Compat/PassCaptainReconcile.php:83
 #, php-format
 msgid "Refunds differ: Pass Captain refunded %1$s of the voucher share, Voucher Captain gave back %2$s."
 msgstr ""
 
-#: src/Compat/PassCaptainReconcile.php:81
+#: src/Compat/PassCaptainReconcile.php:91
 msgid "Voucher Captain holds a redemption for Pass Captain without a matching Pass Captain order."
 msgstr ""
 
-#: src/Compat/PassCaptainReconcile.php:100
+#: src/Compat/PassCaptainReconcile.php:110
 msgid "The tickets were cancelled in Pass Captain, but the voucher still counts as exchanged."
 msgstr ""
 
@@ -2543,12 +2543,12 @@ msgid "no expiry"
 msgstr ""
 
 #. translators: %s: list of placeholders
-#: src/Emails/BonusEmail.php:106 src/Emails/VoucherEmail.php:115
+#: src/Emails/BonusEmail.php:106 src/Emails/VoucherEmail.php:139
 #, php-format
 msgid "Available placeholders: %s"
 msgstr ""
 
-#: src/Emails/BonusEmail.php:114 src/Emails/VoucherEmail.php:123
+#: src/Emails/BonusEmail.php:114 src/Emails/VoucherEmail.php:147
 msgid "Email body"
 msgstr ""
 
@@ -2570,6 +2570,26 @@ msgstr ""
 
 #: src/Emails/BuyerEmail.php:29
 msgid "Hi {buyer_name}, thank you for your order #{order_number}. Your voucher for {product_name} is ready."
+msgstr ""
+
+#: src/Emails/BuyerEmail.php:37
+msgid "Hello, thank you for your order #{order_number}. Your voucher for {product_name} is ready."
+msgstr ""
+
+#: src/Emails/BuyerEmail.php:40
+msgid "Hi {buyer_name}, your voucher for {product_name} is ready."
+msgstr ""
+
+#: src/Emails/BuyerEmail.php:40
+msgid "Hello, your voucher for {product_name} is ready."
+msgstr ""
+
+#: src/Emails/BuyerEmail.php:42
+msgid "Hi {buyer_name}, your voucher is ready."
+msgstr ""
+
+#: src/Emails/BuyerEmail.php:42
+msgid "Hello, your voucher is ready."
 msgstr ""
 
 #: src/Emails/ExpiryReminderEmail.php:14
@@ -2600,16 +2620,64 @@ msgstr ""
 msgid "Sent to the gift recipient entered on the product page, at the scheduled delivery time."
 msgstr ""
 
-#: src/Emails/RecipientEmail.php:21
+#: src/Emails/RecipientEmail.php:22
+msgid "You received a gift from {site_title}"
+msgstr ""
+
+#: src/Emails/RecipientEmail.php:24
 msgid "{buyer_name} sent you a gift from {site_title}"
 msgstr ""
 
-#: src/Emails/RecipientEmail.php:25
+#: src/Emails/RecipientEmail.php:28
 msgid "You received a gift!"
 msgstr ""
 
-#: src/Emails/RecipientEmail.php:29
+#: src/Emails/RecipientEmail.php:32
 msgid "Hi {recipient_name}, {buyer_name} sent you a voucher worth {coupon_value}."
+msgstr ""
+
+#: src/Emails/RecipientEmail.php:47
+msgid "Hi {recipient_name}, you received a voucher worth {coupon_value} as a gift."
+msgstr ""
+
+#: src/Emails/RecipientEmail.php:48
+msgid "Hello, {buyer_name} sent you a voucher worth {coupon_value}."
+msgstr ""
+
+#: src/Emails/RecipientEmail.php:49
+msgid "Hello, you received a voucher worth {coupon_value} as a gift."
+msgstr ""
+
+#: src/Emails/RecipientEmail.php:52
+msgid "Hi {recipient_name}, {buyer_name} sent you a voucher for {coupon_value} off."
+msgstr ""
+
+#: src/Emails/RecipientEmail.php:53
+msgid "Hi {recipient_name}, you received a voucher for {coupon_value} off as a gift."
+msgstr ""
+
+#: src/Emails/RecipientEmail.php:54
+msgid "Hello, {buyer_name} sent you a voucher for {coupon_value} off."
+msgstr ""
+
+#: src/Emails/RecipientEmail.php:55
+msgid "Hello, you received a voucher for {coupon_value} off as a gift."
+msgstr ""
+
+#: src/Emails/RecipientEmail.php:58
+msgid "Hi {recipient_name}, {buyer_name} sent you {product_name}."
+msgstr ""
+
+#: src/Emails/RecipientEmail.php:59
+msgid "Hi {recipient_name}, you received {product_name} as a gift."
+msgstr ""
+
+#: src/Emails/RecipientEmail.php:60
+msgid "Hello, {buyer_name} sent you {product_name}."
+msgstr ""
+
+#: src/Emails/RecipientEmail.php:61
+msgid "Hello, you received {product_name} as a gift."
 msgstr ""
 
 #: src/Emails/ReferralEmail.php:12
@@ -2632,19 +2700,19 @@ msgstr ""
 msgid "A friend you referred has placed an order. As a thank-you you receive {coupon_amount} off your next order with the code below. Valid until {expiry_date}."
 msgstr ""
 
-#: src/Emails/VoucherEmail.php:132
+#: src/Emails/VoucherEmail.php:156
 msgid "Additional recipients"
 msgstr ""
 
-#: src/Emails/VoucherEmail.php:134
+#: src/Emails/VoucherEmail.php:158
 msgid "Comma separated addresses that also receive this email (e.g. for your records)."
 msgstr ""
 
-#: src/Emails/VoucherEmail.php:139
+#: src/Emails/VoucherEmail.php:163
 msgid "Attach PDF"
 msgstr ""
 
-#: src/Emails/VoucherEmail.php:141
+#: src/Emails/VoucherEmail.php:165
 msgid "Attach the voucher PDF"
 msgstr ""
 

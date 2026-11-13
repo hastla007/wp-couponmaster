@@ -267,5 +267,69 @@ if ( class_exists( 'ZipArchive' ) ) {
 	unlink( $bomb );
 }
 
+echo "Translations\n";
+/** @return array<string, array{0: string[], 1: ?string, 2: bool}> key (context \x04 msgid) => [msgstr forms, msgid_plural, fuzzy] */
+function vcap_test_po( string $file ): array {
+	$entries = array();
+	foreach ( preg_split( "/\n\s*\n/", (string) file_get_contents( $file ) ) as $block ) {
+		$lines = array();
+		$key   = null;
+		foreach ( explode( "\n", $block ) as $line ) {
+			if ( preg_match( '/^(msgctxt|msgid|msgid_plural|msgstr(?:\[\d+\])?) "(.*)"$/', $line, $m ) ) {
+				$key           = $m[1];
+				$lines[ $key ] = stripcslashes( $m[2] );
+			} elseif ( null !== $key && preg_match( '/^"(.*)"$/', $line, $m ) ) {
+				$lines[ $key ] .= stripcslashes( $m[1] );
+			}
+		}
+		if ( ! isset( $lines['msgid'] ) || '' === $lines['msgid'] ) {
+			continue;
+		}
+		$forms = array();
+		foreach ( $lines as $k => $v ) {
+			if ( str_starts_with( $k, 'msgstr' ) ) {
+				$forms[] = $v;
+			}
+		}
+		$entries[ ( $lines['msgctxt'] ?? '' ) . "\x04" . $lines['msgid'] ] = array( $forms, $lines['msgid_plural'] ?? null, str_contains( $block, '#, fuzzy' ) );
+	}
+	return $entries;
+}
+$placeholders = static function ( string $text ): array {
+	preg_match_all( '/%(?:\d+\$)?[sdf]|\{[a-z_]+\}/', $text, $m );
+	$list = array_map( static fn( $p ) => preg_replace( '/%\d+\$/', '%', $p ), $m[0] );
+	sort( $list );
+	return $list;
+};
+$pot = vcap_test_po( dirname( __DIR__ ) . '/languages/voucher-captain.pot' );
+check( 'the POT file lists the plugin texts', count( $pot ) > 1000, (string) count( $pot ) );
+foreach ( array( 'de_DE', 'de_AT' ) as $locale ) {
+	$po        = vcap_test_po( dirname( __DIR__ ) . "/languages/voucher-captain-{$locale}.po" );
+	$missing   = array();
+	$broken    = array();
+	foreach ( $pot as $key => $entry ) {
+		$translation = $po[ $key ] ?? null;
+		if ( ! $translation || $translation[2] || in_array( '', $translation[0], true ) || ! $translation[0] ) {
+			$missing[] = substr( $key, strpos( $key, "\x04" ) + 1 );
+			continue;
+		}
+		$source = substr( $key, strpos( $key, "\x04" ) + 1 );
+		$want   = array_values( array_unique( array_merge( $placeholders( $source ), $placeholders( (string) $entry[1] ) ) ) );
+		foreach ( $translation[0] as $form ) {
+			$got = array_values( array_unique( $placeholders( $form ) ) );
+			// Plural forms may leave out the number (e.g. "one voucher"), never add a placeholder.
+			if ( $entry[1] ? array_diff( $got, $want ) : $got !== $want ) {
+				$broken[] = $source;
+			}
+		}
+	}
+	$obsolete = array_diff_key( $po, $pot );
+	check( "{$locale}: every text is translated (none missing or fuzzy)", ! $missing, implode( ' | ', array_slice( $missing, 0, 5 ) ) );
+	check( "{$locale}: translations keep the placeholders (%s, %1\$s, {code}) of the source", ! $broken, implode( ' | ', array_slice( array_unique( $broken ), 0, 5 ) ) );
+	check( "{$locale}: no translations for texts the plugin no longer uses", ! $obsolete, implode( ' | ', array_slice( array_keys( $obsolete ), 0, 5 ) ) );
+	$mo = dirname( __DIR__ ) . "/languages/voucher-captain-{$locale}.mo";
+	check( "{$locale}: the compiled .mo file is there", is_file( $mo ) && filesize( $mo ) > 1000 );
+}
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

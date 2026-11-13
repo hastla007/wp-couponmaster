@@ -33,6 +33,11 @@ jobs:
         run: find . -path './vendor' -prune -o -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: Run plugin smoke tests
         run: php tests/run.php
+      - name: Translation template and email text list are up to date
+        run: |
+          php bin/make-pot.php
+          git diff --exit-code -I 'POT-Creation-Date' -I '^#: ' -- languages/voucher-captain.pot
+          php bin/email-texts.php --check
       - name: Release ZIP is reproducible (two builds, same SHA-256)
         if: matrix.php == '8.4'
         run: |
