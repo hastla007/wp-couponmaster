@@ -55,6 +55,19 @@ final class Privacy {
 			);
 		}
 		if ( 1 === $page ) {
+			// Uses of other people's vouchers: WooCommerce records the redeeming customer ("used by") in their history.
+			foreach ( $this->repo->events_noting( $email ) as $row ) {
+				$items[] = array(
+					'group_id'    => 'vcap-voucher-uses',
+					'group_label' => __( 'Voucher uses', 'voucher-captain' ),
+					'item_id'     => 'vcap-event-' . $row['id'],
+					'data'        => array(
+						array( 'name' => __( 'Event', 'voucher-captain' ), 'value' => $row['event'] ),
+						array( 'name' => __( 'Amount', 'voucher-captain' ), 'value' => (string) $row['amount'] ),
+						array( 'name' => __( 'Date', 'voucher-captain' ), 'value' => $row['created_at'] ),
+					),
+				);
+			}
 			foreach ( $this->redemptions_of( $email ) as $row ) {
 				$items[] = array(
 					'group_id'    => 'vcap-redemptions',
@@ -115,7 +128,12 @@ final class Privacy {
 				$coupon = new \WC_Coupon( $voucher->coupon_id );
 				$emails = $coupon->get_id() ? (array) $coupon->get_email_restrictions() : array();
 				$kept   = array_values( array_filter( $emails, static fn( $e ) => 0 !== strcasecmp( (string) $e, $email ) ) );
-				if ( count( $kept ) !== count( $emails ) ) {
+				if ( $emails && ! $kept ) {
+					// An empty restriction would make a personal voucher usable by anyone: keep it restricted to an
+					// address nobody can have, until an administrator assigns a new holder.
+					$kept = array( 'erased-' . $voucher->id . '@invalid.invalid' );
+				}
+				if ( count( $kept ) !== count( $emails ) || $kept !== array_values( $emails ) ) {
 					$coupon->set_email_restrictions( $kept );
 					$coupon->save();
 				}
@@ -126,6 +144,14 @@ final class Privacy {
 				continue;
 			}
 			$removed = true;
+		}
+		// "Used by" entries in the history of other people's vouchers.
+		if ( $this->repo->events_noting( $email ) ) {
+			if ( $this->repo->erase_event_notes( $email ) ) {
+				$removed = true;
+			} else {
+				$retained = true;
+			}
 		}
 		// Unlink external redemptions from the user and drop integration details (amounts stay for accounting).
 		$user = get_user_by( 'email', $email );

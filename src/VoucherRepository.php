@@ -357,6 +357,22 @@ final class VoucherRepository {
 	}
 
 	/** Redact free-text audit notes while retaining event type, amount, balance and timestamp. */
+	/** History entries whose note is exactly this e-mail address (WooCommerce "used by"). */
+	public function events_noting( string $email ): array {
+		global $wpdb;
+		$email = strtolower( trim( $email ) );
+		if ( ! is_email( $email ) ) {
+			return array();
+		}
+		return $wpdb->get_results( $wpdb->prepare( "SELECT id, voucher_id, event, amount, created_at FROM {$this->events} WHERE LOWER(note) = %s ORDER BY id LIMIT 1000", $email ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
+
+	public function erase_event_notes( string $email ): bool {
+		global $wpdb;
+		$email = strtolower( trim( $email ) );
+		return is_email( $email ) && false !== $wpdb->query( $wpdb->prepare( "UPDATE {$this->events} SET note = '[personal data removed]' WHERE LOWER(note) = %s", $email ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
+
 	public function anonymise_event_notes( int $voucher_id ): bool {
 		global $wpdb;
 		return false !== $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery

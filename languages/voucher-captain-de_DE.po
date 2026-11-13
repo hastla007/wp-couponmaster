@@ -3755,3 +3755,6 @@ msgstr "Vor Ort (Scanner)"
 
 msgid "This voucher cannot be redeemed at the counter."
 msgstr "Dieser Gutschein kann nicht vor Ort eingelöst werden."
+
+msgid "Voucher uses"
+msgstr "Gutscheinverwendungen"

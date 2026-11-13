@@ -63,6 +63,31 @@ vcap_security_assert( 0 === $still_personal && $all_privacy_ids, 'erasure leaves
 $privacy_event = $wpdb->get_var( $wpdb->prepare( 'SELECT note FROM ' . VCAP\Install::tables()['events'] . ' WHERE voucher_id = %d ORDER BY id DESC LIMIT 1', (int) $all_privacy_ids[0] ) );
 vcap_security_assert( '[personal data removed]' === $privacy_event, 'erasure redacts free-text audit notes while preserving event rows' );
 
+// A customer who used someone else's voucher is named in its history ("used by"): exported and erased too.
+$user_email = 'privacy-user-' . strtolower( wp_generate_password( 8, false, false ) ) . '@example.test';
+$foreign    = vcap_security_create_voucher( 'owner-' . $user_email, 900100 );
+vcap()->vouchers->log( $foreign->id, 'redeemed', 10.0, 0.0, strtoupper( $user_email ) );
+$use_export = $privacy->export( $user_email, 1 );
+vcap_security_assert( in_array( 'vcap-voucher-uses', array_column( $use_export['data'], 'group_id' ), true ), 'the export lists uses of other people\'s vouchers by this customer' );
+$privacy->erase( $user_email, 1 );
+$use_note = $wpdb->get_var( $wpdb->prepare( 'SELECT note FROM ' . VCAP\Install::tables()['events'] . ' WHERE voucher_id = %d ORDER BY id DESC LIMIT 1', $foreign->id ) );
+vcap_security_assert( '[personal data removed]' === $use_note, 'erasure removes the customer from the history of other people\'s vouchers' );
+
+// Erasing the only allowed address must not turn a personal voucher into one anybody can use.
+$personal_email = 'privacy-personal-' . strtolower( wp_generate_password( 8, false, false ) ) . '@example.test';
+$personal       = vcap_security_create_voucher( $personal_email, 900200 );
+$personal_wc    = new WC_Coupon();
+$personal_wc->set_code( $personal->code );
+$personal_wc->set_discount_type( 'fixed_cart' );
+$personal_wc->set_amount( 10 );
+$personal_wc->set_email_restrictions( array( $personal_email ) );
+$personal_wc->save();
+$personal->coupon_id = $personal_wc->get_id();
+vcap()->vouchers->update( $personal );
+$privacy->erase( $personal_email, 1 );
+$left = ( new WC_Coupon( $personal_wc->get_id() ) )->get_email_restrictions();
+vcap_security_assert( $left && ! in_array( $personal_email, $left, true ), 'erasing the only allowed address keeps the personal voucher restricted (no open coupon)' );
+
 // Retention clears voucher fields and audit free text in one transaction.
 $retention_voucher = vcap_security_create_voucher( 'retention@example.test', 900001 );
 vcap()->vouchers->log( $retention_voucher->id, 'delivery_failed', null, null, 'Transport failed for retention@example.test' );

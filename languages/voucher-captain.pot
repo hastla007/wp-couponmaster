@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-13 00:08+0000\n"
+"POT-Creation-Date: 2026-11-13 00:09+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:75 src/API/V1/RedemptionService.php:117
@@ -607,7 +607,7 @@ msgstr ""
 msgid "Last check-in"
 msgstr ""
 
-#: src/Admin/Scanner.php:41 src/Admin/VouchersListTable.php:133 src/Privacy.php:68
+#: src/Admin/Scanner.php:41 src/Admin/VouchersListTable.php:133 src/Privacy.php:81
 msgid "Details"
 msgstr ""
 
@@ -619,7 +619,7 @@ msgstr ""
 msgid "Request failed."
 msgstr ""
 
-#: src/Admin/Scanner.php:44 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:208 src/StoreCredit.php:297
+#: src/Admin/Scanner.php:44 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:208 src/Privacy.php:65 src/StoreCredit.php:297
 msgid "Event"
 msgstr ""
 
@@ -691,7 +691,7 @@ msgstr ""
 msgid "Positive amounts add credit, negative amounts remove it. Every change is recorded with your user and the reason."
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:60 src/Admin/StoreCreditAdmin.php:110 src/Admin/VoucherAdmin.php:186 src/Admin/VoucherAdmin.php:208 src/Discounts/Admin.php:129 src/StoreCredit.php:297
+#: src/Admin/StoreCreditAdmin.php:60 src/Admin/StoreCreditAdmin.php:110 src/Admin/VoucherAdmin.php:186 src/Admin/VoucherAdmin.php:208 src/Discounts/Admin.php:129 src/Privacy.php:66
 msgid "Amount"
 msgstr ""
 
@@ -785,7 +785,7 @@ msgstr ""
 msgid "Overview"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:105 src/Admin/VouchersListTable.php:30 src/Privacy.php:40 src/Privacy.php:66 templates/myaccount/vouchers-table.php:31 templates/myaccount/vouchers-table.php:57
+#: src/Admin/VoucherAdmin.php:105 src/Admin/VouchersListTable.php:30 src/Privacy.php:40 src/Privacy.php:79 templates/myaccount/vouchers-table.php:31 templates/myaccount/vouchers-table.php:57
 msgid "Status"
 msgstr ""
 
@@ -825,7 +825,7 @@ msgstr ""
 msgid "none (ticket)"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:122 src/VoucherRepository.php:408
+#: src/Admin/VoucherAdmin.php:122 src/VoucherRepository.php:424
 msgid "Delivered"
 msgstr ""
 
@@ -965,7 +965,7 @@ msgstr ""
 msgid "Expires"
 msgstr ""
 
-#: src/Admin/VouchersListTable.php:34 src/VoucherRepository.php:398
+#: src/Admin/VouchersListTable.php:34 src/VoucherRepository.php:414
 msgid "Issued"
 msgstr ""
 
@@ -1203,7 +1203,7 @@ msgstr ""
 msgid "Already checked in by this scan"
 msgstr ""
 
-#: src/Compat/PassCaptainScanner.php:97 src/Tickets.php:225 src/Tickets.php:331 src/VoucherRepository.php:419
+#: src/Compat/PassCaptainScanner.php:97 src/Tickets.php:225 src/Tickets.php:331 src/VoucherRepository.php:435
 msgid "Checked in"
 msgstr ""
 
@@ -2714,27 +2714,31 @@ msgstr ""
 msgid "PREVIEW"
 msgstr ""
 
-#: src/Privacy.php:61
+#: src/Privacy.php:62
+msgid "Voucher uses"
+msgstr ""
+
+#: src/Privacy.php:74
 msgid "Voucher redemptions"
 msgstr ""
 
-#: src/Privacy.php:64
+#: src/Privacy.php:77
 msgid "Redemption key"
 msgstr ""
 
-#: src/Privacy.php:65
+#: src/Privacy.php:78
 msgid "Target"
 msgstr ""
 
-#: src/Privacy.php:145
+#: src/Privacy.php:171
 msgid "Some voucher records could not be fully anonymised. Please retry the erasure request."
 msgstr ""
 
-#: src/Privacy.php:153
+#: src/Privacy.php:179
 msgid "Voucher Captain"
 msgstr ""
 
-#: src/Privacy.php:154
+#: src/Privacy.php:180
 msgid "When you buy a voucher, we store the recipient name, recipient email address, personal message and any personalisation you enter so that we can create and deliver the voucher. The recipient receives an email with the voucher if you entered their address. This data is kept as long as the voucher can be used and is then removed according to our retention settings."
 msgstr ""
 
@@ -4044,7 +4048,7 @@ msgstr ""
 msgid "Cancelled"
 msgstr ""
 
-#: src/Tickets.php:99 src/Voucher.php:65 src/VoucherRepository.php:423
+#: src/Tickets.php:99 src/Voucher.php:65 src/VoucherRepository.php:439
 msgid "Expired"
 msgstr ""
 
@@ -4070,7 +4074,7 @@ msgstr ""
 msgid "%1$d of %2$d admissions used"
 msgstr ""
 
-#: src/Tickets.php:225 src/VoucherRepository.php:420
+#: src/Tickets.php:225 src/VoucherRepository.php:436
 msgid "Check-in reverted"
 msgstr ""
 
@@ -4100,7 +4104,7 @@ msgstr ""
 msgid "Not deducted: the amount exceeds the balance (remaining %s)."
 msgstr ""
 
-#: src/Tickets.php:315 src/Voucher.php:64 src/VoucherRepository.php:416
+#: src/Tickets.php:315 src/Voucher.php:64 src/VoucherRepository.php:432
 msgid "Redeemed"
 msgstr ""
 
@@ -4124,91 +4128,91 @@ msgstr ""
 msgid "Discount codes cannot be used to buy vouchers."
 msgstr ""
 
-#: src/VoucherRepository.php:399
+#: src/VoucherRepository.php:415
 msgid "Balance reserved for payment"
 msgstr ""
 
-#: src/VoucherRepository.php:400
+#: src/VoucherRepository.php:416
 msgid "Used in a shop order although already redeemed elsewhere – check the order"
 msgstr ""
 
-#: src/VoucherRepository.php:401
+#: src/VoucherRepository.php:417
 msgid "Balance reservation committed"
 msgstr ""
 
-#: src/VoucherRepository.php:402
+#: src/VoucherRepository.php:418
 msgid "Balance reservation released"
 msgstr ""
 
-#: src/VoucherRepository.php:403
+#: src/VoucherRepository.php:419
 msgid "Reserved for external redemption"
 msgstr ""
 
-#: src/VoucherRepository.php:404
+#: src/VoucherRepository.php:420
 msgid "Redeemed externally"
 msgstr ""
 
-#: src/VoucherRepository.php:405
+#: src/VoucherRepository.php:421
 msgid "External reservation released"
 msgstr ""
 
-#: src/VoucherRepository.php:406
+#: src/VoucherRepository.php:422
 msgid "External redemption refunded"
 msgstr ""
 
-#: src/VoucherRepository.php:407
+#: src/VoucherRepository.php:423
 msgid "Delivery scheduled"
 msgstr ""
 
-#: src/VoucherRepository.php:409
+#: src/VoucherRepository.php:425
 msgid "Delivery failed"
 msgstr ""
 
-#: src/VoucherRepository.php:410
+#: src/VoucherRepository.php:426
 msgid "Expiry reminder"
 msgstr ""
 
-#: src/VoucherRepository.php:411
+#: src/VoucherRepository.php:427
 msgid "Credit added"
 msgstr ""
 
-#: src/VoucherRepository.php:412
+#: src/VoucherRepository.php:428
 msgid "Credit removed"
 msgstr ""
 
-#: src/VoucherRepository.php:413
+#: src/VoucherRepository.php:429
 msgid "Refunded as store credit"
 msgstr ""
 
-#: src/VoucherRepository.php:414
+#: src/VoucherRepository.php:430
 msgid "Store credit refund reversed"
 msgstr ""
 
-#: src/VoucherRepository.php:415
+#: src/VoucherRepository.php:431
 msgid "Email resent"
 msgstr ""
 
-#: src/VoucherRepository.php:417
+#: src/VoucherRepository.php:433
 msgid "Balance restored"
 msgstr ""
 
-#: src/VoucherRepository.php:418
+#: src/VoucherRepository.php:434
 msgid "Balance adjusted"
 msgstr ""
 
-#: src/VoucherRepository.php:421
+#: src/VoucherRepository.php:437
 msgid "Voided"
 msgstr ""
 
-#: src/VoucherRepository.php:422
+#: src/VoucherRepository.php:438
 msgid "Reactivated"
 msgstr ""
 
-#: src/VoucherRepository.php:424
+#: src/VoucherRepository.php:440
 msgid "Edited"
 msgstr ""
 
-#: src/VoucherRepository.php:425
+#: src/VoucherRepository.php:441
 msgid "Downloaded"
 msgstr ""
 
