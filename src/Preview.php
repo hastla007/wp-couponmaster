@@ -59,7 +59,11 @@ final class Preview {
 	 * Customer preview of the personalised voucher before purchase (watermarked, fake code).
 	 */
 	public function product_preview(): void {
-		check_ajax_referer( 'vcap_preview', 'nonce' );
+		// Guests need no nonce (a cached product page would carry an expired one or another session's): the
+		// preview only renders a watermarked sample and is rate limited below. Logged-in customers keep it.
+		if ( is_user_logged_in() ) {
+			check_ajax_referer( 'vcap_preview', 'nonce' );
+		}
 
 		// Abuse protection (PDF rendering is expensive): 20 previews per visitor, 300 site-wide per 10 minutes.
 		if ( Plugin::rate_limited( 'preview', 20, 300, 10 * MINUTE_IN_SECONDS ) ) {

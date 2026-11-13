@@ -242,7 +242,8 @@ final class Fields {
 			'vcapFront',
 			array(
 				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
-				'nonce'   => wp_create_nonce( 'vcap_preview' ),
+				// Only for logged-in customers (product pages of guests stay cacheable, see Preview::product_preview()).
+				'nonce'   => is_user_logged_in() ? wp_create_nonce( 'vcap_preview' ) : '',
 				'i18n'    => array(
 					/* translators: %d: characters left */
 					'charsLeft' => __( '%d characters left', 'voucher-captain' ),

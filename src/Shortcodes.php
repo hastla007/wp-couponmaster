@@ -28,6 +28,7 @@ final class Shortcodes {
 		add_shortcode( 'vcap_my_vouchers', array( $this, 'my_vouchers_shortcode' ) );
 		add_shortcode( 'vcap_referral', array( $this, 'referral_shortcode' ) );
 		add_action( 'template_redirect', array( $this, 'handle_redeem' ), 8 );
+		add_action( 'template_redirect', array( $this, 'maybe_no_cache' ), 9 );
 		add_action( 'init', array( $this, 'blocks' ) );
 	}
 
@@ -56,6 +57,36 @@ final class Shortcodes {
 					'supports'        => array( 'html' => false ),
 				)
 			);
+		}
+	}
+
+	/**
+	 * Keeps the current page out of full-page caches: it shows session data (a waiting code, a guest email,
+	 * notices) or a form whose nonce is tied to the visitor's session. Sets DONOTCACHEPAGE (respected by the common
+	 * cache plugins) and sends no-cache headers while they can still be sent.
+	 */
+	public static function no_cache(): void {
+		if ( function_exists( 'wc_maybe_define_constant' ) ) {
+			wc_maybe_define_constant( 'DONOTCACHEPAGE', true );
+		} elseif ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', true );
+		}
+		if ( ! headers_sent() ) {
+			nocache_headers();
+		}
+		/** Fires when a page must not be cached (hook for cache plugins without DONOTCACHEPAGE support). */
+		do_action( 'vcap_no_cache' );
+	}
+
+	/**
+	 * The redeem page is never cached: decided before any output, so the no-cache headers can still be sent
+	 * (the shortcode alone could only set DONOTCACHEPAGE).
+	 */
+	public function maybe_no_cache(): void {
+		$id = is_singular() ? (int) get_queried_object_id() : 0;
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- only decides about caching.
+		if ( isset( $_GET['vcap_code'] ) || ( $id > 0 && ( (int) get_option( 'vcap_redeem_page_id', 0 ) === $id || self::page_has_redeem_form( $id ) ) ) ) {
+			self::no_cache();
 		}
 	}
 
@@ -163,6 +194,7 @@ final class Shortcodes {
 
 	public function redeem_shortcode( $atts = array() ): string {
 		$atts = shortcode_atts( array( 'button' => __( 'Redeem', 'voucher-captain' ) ), (array) $atts, 'vcap_redeem' );
+		self::no_cache();
 		ob_start();
 		?>
 		<form method="post" class="vcap-redeem-form">
@@ -195,6 +227,7 @@ final class Shortcodes {
 		if ( ! is_user_logged_in() ) {
 			return self::login_hint();
 		}
+		self::no_cache();
 		ob_start();
 		$this->downloads->account_page();
 		return self::notices() . ob_get_clean();

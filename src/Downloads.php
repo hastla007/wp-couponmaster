@@ -286,9 +286,15 @@ final class Downloads {
 		return '<div class="woocommerce-info vcap-balance-result" role="status">' . $html . '</div>';
 	}
 
+	/**
+	 * Balance check form. Guests send it without a nonce: it only reads (rate limited) and a nonce in a cached
+	 * page would expire or belong to another visitor's session. Logged-in customers keep the nonce check.
+	 */
 	public function balance_shortcode(): string {
 		$result = '';
-		if ( isset( $_POST['vcap_balance_code'], $_POST['vcap_balance_nonce'] ) && wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_balance_nonce'] ) ), 'vcap_balance' ) ) {
+		$posted = isset( $_POST['vcap_balance_code'] ) && ( ! is_user_logged_in() || ( isset( $_POST['vcap_balance_nonce'] ) && wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_balance_nonce'] ) ), 'vcap_balance' ) ) );
+		if ( $posted ) {
+			Shortcodes::no_cache();
 			if ( Plugin::rate_limited( 'balance', 15, 300, 15 * MINUTE_IN_SECONDS, false ) ) {
 				$result = '<p class="woocommerce-error" role="alert">' . esc_html__( 'Too many attempts. Please try again later.', 'voucher-captain' ) . '</p>';
 			} else {
@@ -305,7 +311,11 @@ final class Downloads {
 		ob_start();
 		?>
 		<form method="post" class="vcap-balance-form">
-			<?php wp_nonce_field( 'vcap_balance', 'vcap_balance_nonce' ); ?>
+			<?php
+			if ( is_user_logged_in() ) {
+				wp_nonce_field( 'vcap_balance', 'vcap_balance_nonce' );
+			}
+			?>
 			<label for="vcap-balance-code"><?php esc_html_e( 'Voucher code', 'voucher-captain' ); ?></label>
 			<input type="text" id="vcap-balance-code" name="vcap_balance_code" required autocomplete="off" />
 			<button type="submit" class="button"><?php esc_html_e( 'Check balance', 'voucher-captain' ); ?></button>
