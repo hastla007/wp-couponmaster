@@ -123,7 +123,7 @@ final class OrderAdmin {
 				$this->repo->log( $v->id, 'delivery_failed', null, null, __( 'Resend from the order: no email was sent.', 'voucher-captain' ) );
 				continue;
 			}
-			$this->repo->log( $v->id, 'resent', null, null, sprintf( 'Sent to %d recipient(s)', count( $sent ) ) );
+			$this->repo->log( $v->id, 'resent', null, null, sprintf( /* translators: %d: number of addresses */ _n( 'Sent again from the order to %d address', 'Sent again from the order to %d addresses', count( $sent ), 'voucher-captain' ), count( $sent ) ) );
 			++$count;
 		}
 		/* translators: %d: number of vouchers */

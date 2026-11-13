@@ -23,7 +23,7 @@ final class SpreadsheetReader {
 			case 'xls':
 				return self::xls( $file );
 		}
-		throw new \InvalidArgumentException( 'Unsupported file type.' );
+		throw new \InvalidArgumentException( esc_html__( 'Unsupported file type.', 'voucher-captain' ) );
 	}
 
 	// ---------------------------------------------------------------- CSV.
@@ -80,11 +80,11 @@ final class SpreadsheetReader {
 	private static function zip_entry( string $file, string $name ): ?string {
 		$zip = new \ZipArchive();
 		if ( true !== $zip->open( $file ) ) {
-			throw new \RuntimeException( 'The file is not a valid spreadsheet archive.' );
+			throw new \RuntimeException( esc_html__( 'The file is not a valid spreadsheet archive.', 'voucher-captain' ) );
 		}
 		try {
 			if ( $zip->numFiles > self::MAX_ZIP_ENTRIES ) {
-				throw new \RuntimeException( 'The spreadsheet archive has too many entries.' );
+				throw new \RuntimeException( esc_html__( 'The spreadsheet archive has too many entries.', 'voucher-captain' ) );
 			}
 			$stat = $zip->statName( $name );
 			if ( false === $stat ) {
@@ -94,14 +94,14 @@ final class SpreadsheetReader {
 			$size  = (int) $stat['size'];
 			$comp  = max( 1, (int) $stat['comp_size'] );
 			if ( $size > $limit || ( $size > 1024 * 1024 && $size / $comp > self::MAX_ZIP_RATIO ) ) {
-				throw new \RuntimeException( 'The spreadsheet is too large to import. Please split it into smaller files.' );
+				throw new \RuntimeException( esc_html__( 'The spreadsheet is too large to import. Please split it into smaller files.', 'voucher-captain' ) );
 			}
 			$data = $zip->getFromName( $name, $limit + 1 );
 			if ( false === $data ) {
 				return null;
 			}
 			if ( strlen( $data ) > $limit ) {
-				throw new \RuntimeException( 'The spreadsheet is too large to import. Please split it into smaller files.' );
+				throw new \RuntimeException( esc_html__( 'The spreadsheet is too large to import. Please split it into smaller files.', 'voucher-captain' ) );
 			}
 			return $data;
 		} finally {
@@ -114,7 +114,7 @@ final class SpreadsheetReader {
 		$xml  = simplexml_load_string( $data, 'SimpleXMLElement', LIBXML_NONET | LIBXML_COMPACT );
 		libxml_use_internal_errors( $prev );
 		if ( false === $xml ) {
-			throw new \RuntimeException( 'The spreadsheet XML could not be parsed.' );
+			throw new \RuntimeException( esc_html__( 'The spreadsheet XML could not be parsed.', 'voucher-captain' ) );
 		}
 		return $xml;
 	}
@@ -166,7 +166,7 @@ final class SpreadsheetReader {
 		}
 		$data = self::zip_entry( $file, $sheet_path );
 		if ( null === $data ) {
-			throw new \RuntimeException( 'No worksheet found.' );
+			throw new \RuntimeException( esc_html__( 'No worksheet found.', 'voucher-captain' ) );
 		}
 		$xml  = self::xml( $data );
 		$rows = array();
@@ -214,7 +214,7 @@ final class SpreadsheetReader {
 	public static function ods( string $file ): array {
 		$data = self::zip_entry( $file, 'content.xml' );
 		if ( null === $data ) {
-			throw new \RuntimeException( 'No content found.' );
+			throw new \RuntimeException( esc_html__( 'No content found.', 'voucher-captain' ) );
 		}
 		$xml = self::xml( $data );
 		$ns  = $xml->getNamespaces( true );
@@ -277,7 +277,7 @@ final class SpreadsheetReader {
 		}
 		$stream = self::ole_stream( $data, array( 'Workbook', 'Book' ) );
 		if ( null === $stream ) {
-			throw new \RuntimeException( 'No workbook stream found.' );
+			throw new \RuntimeException( esc_html__( 'No workbook stream found.', 'voucher-captain' ) );
 		}
 		return self::biff( $stream );
 	}

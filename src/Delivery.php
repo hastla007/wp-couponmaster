@@ -173,7 +173,7 @@ final class Delivery {
 			}
 			$voucher->delivered_at = $now;
 			delete_transient( 'vcap_undelivered_count' );
-			$this->repo->log( $voucher->id, 'delivered', null, null, sprintf( 'Sent to %d recipient(s)', count( $sent ) ) );
+			$this->repo->log( $voucher->id, 'delivered', null, null, sprintf( /* translators: %d: number of addresses */ _n( 'Sent to %d address', 'Sent to %d addresses', count( $sent ), 'voucher-captain' ), count( $sent ) ) );
 			do_action( 'vcap_voucher_delivered', $voucher, $sent );
 		} catch ( \Throwable $e ) {
 			if ( isset( $voucher ) && $voucher instanceof Voucher ) {

@@ -254,7 +254,7 @@ final class PassCaptainTickets {
 		if ( is_wp_error( $result ) ) {
 			wc_add_notice( $result->get_error_message(), 'error' );
 		} else {
-			$this->vouchers->log( $voucher->id, 'passcaptain_tickets_resent', null, null, 'Requested by customer' );
+			$this->vouchers->log( $voucher->id, 'passcaptain_tickets_resent', null, null, __( 'Requested by the customer', 'voucher-captain' ) );
 			/* translators: %s: masked email */
 			wc_add_notice( sprintf( __( 'The tickets were sent again to %s. Only the new tickets are valid.', 'voucher-captain' ), self::mask_email( (string) ( $result['email'] ?? '' ) ) ) );
 		}
@@ -1151,7 +1151,7 @@ final class PassCaptainTickets {
 			$this->vouchers->log( $voucher->id, 'passcaptain_tickets_failed', null, null, $result->get_error_code() . ': ' . $result->get_error_message() );
 			return 'passcaptain_resend_failed';
 		}
-		$this->vouchers->log( $voucher->id, 'passcaptain_tickets_resent', null, null, 'Requested by admin: ' . self::mask_email( (string) ( $result['email'] ?? '' ) ) );
+		$this->vouchers->log( $voucher->id, 'passcaptain_tickets_resent', null, null, __( 'Requested by an admin:', 'voucher-captain' ) . ' ' . self::mask_email( (string) ( $result['email'] ?? '' ) ) );
 		return 'passcaptain_resent';
 	}
 
