@@ -33,6 +33,13 @@ jobs:
         run: find . -path './vendor' -prune -o -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: Run plugin smoke tests
         run: php tests/run.php
+      - name: Release ZIP is reproducible (two builds, same SHA-256)
+        if: matrix.php == '8.4'
+        run: |
+          bin/build.sh
+          cp build/voucher-captain.zip.sha256 /tmp/first.sha256
+          bin/build.sh
+          diff /tmp/first.sha256 build/voucher-captain.zip.sha256
 
   wordpress-integration:
     runs-on: ubuntu-latest

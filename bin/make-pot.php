@@ -97,7 +97,9 @@ foreach ( $files as $file ) {
 	}
 }
 $esc = static fn( $s ) => '"' . str_replace( array( '\\', '"', "\n", "\t" ), array( '\\\\', '\\"', '\\n', '\\t' ), $s ) . '"';
-$out = "# Copyright (C) " . gmdate( 'Y' ) . " Voucher Captain\n# This file is distributed under the GPL-2.0-or-later.\nmsgid \"\"\nmsgstr \"\"\n\"Project-Id-Version: Voucher Captain 1.0.0\\n\"\n\"MIME-Version: 1.0\\n\"\n\"Content-Type: text/plain; charset=UTF-8\\n\"\n\"Content-Transfer-Encoding: 8bit\\n\"\n\"POT-Creation-Date: " . gmdate( 'Y-m-d H:i+0000' ) . "\\n\"\n\"X-Domain: $domain\\n\"\n\n";
+// Reproducible builds: the creation date comes from SOURCE_DATE_EPOCH (bin/build.sh sets the commit time).
+$vcap_pot_time = (int) getenv( 'SOURCE_DATE_EPOCH' ) ?: time();
+$out = "# Copyright (C) " . gmdate( 'Y', $vcap_pot_time ) . " Voucher Captain\n# This file is distributed under the GPL-2.0-or-later.\nmsgid \"\"\nmsgstr \"\"\n\"Project-Id-Version: Voucher Captain 1.0.0\\n\"\n\"MIME-Version: 1.0\\n\"\n\"Content-Type: text/plain; charset=UTF-8\\n\"\n\"Content-Transfer-Encoding: 8bit\\n\"\n\"POT-Creation-Date: " . gmdate( 'Y-m-d H:i+0000', $vcap_pot_time ) . "\\n\"\n\"X-Domain: $domain\\n\"\n\n";
 foreach ( $entries as $e ) {
 	if ( $e['comment'] ) {
 		$out .= '#. ' . str_replace( "\n", "\n#. ", $e['comment'] ) . "\n";

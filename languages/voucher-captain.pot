@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-13 00:42+0000\n"
+"POT-Creation-Date: 2026-11-13 00:47+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:75 src/API/V1/RedemptionService.php:117
@@ -629,7 +629,7 @@ msgstr ""
 msgid "Request failed."
 msgstr ""
 
-#: src/Admin/Scanner.php:44 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:246 src/Privacy.php:71 src/StoreCredit.php:330
+#: src/Admin/Scanner.php:44 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:246 src/Privacy.php:71 src/StoreCredit.php:331
 msgid "Event"
 msgstr ""
 
@@ -681,7 +681,7 @@ msgstr ""
 msgid "Check in tickets automatically after scan"
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:36 src/Settings.php:409 src/StoreCredit.php:323 src/Voucher.php:80
+#: src/Admin/StoreCreditAdmin.php:36 src/Settings.php:409 src/StoreCredit.php:324 src/Voucher.php:80
 msgid "Store credit"
 msgstr ""
 
@@ -705,7 +705,7 @@ msgstr ""
 msgid "Amount"
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:246 src/StoreCredit.php:330
+#: src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:246 src/StoreCredit.php:331
 msgid "Balance after"
 msgstr ""
 
@@ -3927,83 +3927,83 @@ msgid "Store credit account opened"
 msgstr ""
 
 #. translators: %s: customer name
-#: src/StoreCredit.php:94
+#: src/StoreCredit.php:95
 #, php-format
 msgid "Store credit of %s (Voucher Captain)"
 msgstr ""
 
-#: src/StoreCredit.php:112
+#: src/StoreCredit.php:113
 msgid "Store credit coupon was missing and has been created again."
 msgstr ""
 
-#: src/StoreCredit.php:131
+#: src/StoreCredit.php:132
 msgid "Please enter an amount and a reason."
 msgstr ""
 
-#: src/StoreCredit.php:135
+#: src/StoreCredit.php:136
 msgid "This customer has no store credit."
 msgstr ""
 
-#: src/StoreCredit.php:138 src/StoreCredit.php:144 src/StoreCredit.php:159 src/StoreCredit.php:163
+#: src/StoreCredit.php:139 src/StoreCredit.php:145 src/StoreCredit.php:160 src/StoreCredit.php:164
 msgid "Store credit is temporarily unavailable."
 msgstr ""
 
-#: src/StoreCredit.php:151
+#: src/StoreCredit.php:152
 msgid "The store credit is not sufficient."
 msgstr ""
 
-#: src/StoreCredit.php:194
+#: src/StoreCredit.php:195
 msgid "Store credit is not enabled."
 msgstr ""
 
-#: src/StoreCredit.php:197
+#: src/StoreCredit.php:198
 msgid "Guest orders cannot be refunded as store credit."
 msgstr ""
 
-#: src/StoreCredit.php:200
+#: src/StoreCredit.php:201
 msgid "Please enter a reason and an amount up to the remaining refundable total."
 msgstr ""
 
 #. translators: %s: reason
-#: src/StoreCredit.php:214
+#: src/StoreCredit.php:215
 #, php-format
 msgid "Refunded as store credit: %s"
 msgstr ""
 
-#: src/StoreCredit.php:221
+#: src/StoreCredit.php:222
 msgid "Refund as store credit failed"
 msgstr ""
 
-#: src/StoreCredit.php:223
+#: src/StoreCredit.php:224
 msgid "Store credit was added but the refund could not be recorded, and the credit could not be booked back. Please check the customer's store credit."
 msgstr ""
 
 #. translators: %s: amount
-#: src/StoreCredit.php:229
+#: src/StoreCredit.php:230
 #, php-format
 msgid "%s refunded as store credit."
 msgstr ""
 
-#: src/StoreCredit.php:249
+#: src/StoreCredit.php:250
 msgid "This store credit belongs to another customer account."
 msgstr ""
 
-#: src/StoreCredit.php:252
+#: src/StoreCredit.php:253
 msgid "Store credit cannot be combined with discount codes."
 msgstr ""
 
 #. translators: 1: balance, 2: link
-#: src/StoreCredit.php:306
+#: src/StoreCredit.php:307
 #, php-format
 msgid "You have %1$s store credit. %2$s"
 msgstr ""
 
-#: src/StoreCredit.php:308 src/StoreCredit.php:328
+#: src/StoreCredit.php:309 src/StoreCredit.php:329
 msgid "Use store credit"
 msgstr ""
 
 #. translators: %s: coupon code
-#: src/StoreCredit.php:326
+#: src/StoreCredit.php:327
 #, php-format
 msgid "Code for the cart: %s"
 msgstr ""
