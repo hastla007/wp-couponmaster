@@ -52,7 +52,7 @@ dass die Vorlage aktuell ist und jeder Text noch existiert). Prüfung durch die 
 |---|---|---|---|---|
 | Valid until %s | Gültig bis %s | Gültig bis %s | templates/emails/plain/voucher.php:29 templates/emails/voucher.php:36 | ☐ |
 | Valid until: %s | Gültig bis: %s | Gültig bis: %s | src/Downloads.php:336 | ☐ |
-| unlimited | unbegrenzt | unbegrenzt | src/Downloads.php:336 src/Placeholders.php:97 | ☐ |
+| unlimited | unbegrenzt | unbegrenzt | src/Downloads.php:336 src/Placeholders.php:99 | ☐ |
 | no expiry | unbegrenzt | unbegrenzt | src/Emails/BonusEmail.php:78 | ☐ |
 | Your voucher from {site_title} expires on {expiry_date} | Ihr Gutschein von {site_title} läuft am {expiry_date} ab | Ihr Gutschein von {site_title} läuft am {expiry_date} ab | src/Emails/ExpiryReminderEmail.php:24 | ☐ |
 | Your voucher {coupon_code} is valid until {expiry_date}. Remaining value: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | src/Emails/ExpiryReminderEmail.php:32 | ☐ |

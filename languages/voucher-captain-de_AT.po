@@ -3786,11 +3786,6 @@ msgstr "Bitte bestätigen Sie, dass die bisher gesendeten Tickets ungültig werd
 msgid "Not delivered"
 msgstr "Nicht zugestellt"
 
-msgid "%d voucher has not been delivered (email failed, no valid address or email disabled). It is retried automatically every day for 30 days; you can also send it again yourself."
-msgid_plural "%d vouchers have not been delivered (email failed, no valid address or email disabled). They are retried automatically every day for 30 days; you can also send them again yourself."
-msgstr[0] "%d Gutschein wurde nicht zugestellt (E-Mail fehlgeschlagen, keine gültige Adresse oder E-Mail deaktiviert). Der Versand wird 30 Tage lang täglich automatisch wiederholt; Sie können ihn auch selbst erneut senden."
-msgstr[1] "%d Gutscheine wurden nicht zugestellt (E-Mail fehlgeschlagen, keine gültige Adresse oder E-Mail deaktiviert). Der Versand wird 30 Tage lang täglich automatisch wiederholt; Sie können sie auch selbst erneut senden."
-
 msgid "Show them"
 msgstr "Anzeigen"
 
@@ -5025,3 +5020,57 @@ msgstr "Diese Währung hat keine Nachkommastellen."
 
 msgid "This voucher is not active."
 msgstr "Dieser Gutschein ist nicht aktiv."
+
+msgid "%d of them is no longer retried after repeated failures and has to be sent again by hand."
+msgid_plural "%d of them are no longer retried after repeated failures and have to be sent again by hand."
+msgstr[0] "%d davon wird nach wiederholten Fehlschlägen nicht mehr automatisch versucht und muss von Hand erneut gesendet werden."
+msgstr[1] "%d davon werden nach wiederholten Fehlschlägen nicht mehr automatisch versucht und müssen von Hand erneut gesendet werden."
+
+msgid "%d voucher has not been delivered (email failed, no valid address or email disabled). Delivery is retried automatically with growing pauses; you can also send it again yourself."
+msgid_plural "%d vouchers have not been delivered (email failed, no valid address or email disabled). Delivery is retried automatically with growing pauses; you can also send them again yourself."
+msgstr[0] "%d Gutschein wurde nicht zugestellt (E-Mail fehlgeschlagen, keine gültige Adresse oder E-Mail deaktiviert). Die Zustellung wird automatisch mit wachsenden Pausen wiederholt; Sie können ihn auch selbst erneut senden."
+msgstr[1] "%d Gutscheine wurden nicht zugestellt (E-Mail fehlgeschlagen, keine gültige Adresse oder E-Mail deaktiviert). Die Zustellung wird automatisch mit wachsenden Pausen wiederholt; Sie können sie auch selbst erneut senden."
+
+msgid "Daily maintenance (last run per step)"
+msgstr "Tägliche Wartung (letzter Lauf je Schritt)"
+
+msgid "Deliveries given up after repeated failures"
+msgstr "Nach wiederholten Fehlschlägen aufgegebene Zustellungen"
+
+msgid "Delivery given up (no more automatic attempts)"
+msgstr "Zustellung aufgegeben (keine automatischen Versuche mehr)"
+
+msgid "No more automatic attempts after %d failed delivery. Check the email address and the email settings, then send the voucher again."
+msgid_plural "No more automatic attempts after %d failed deliveries. Check the email address and the email settings, then send the voucher again."
+msgstr[0] "Nach %d fehlgeschlagenen Zustellung keine automatischen Versuche mehr. Prüfen Sie die E-Mail-Adresse und die E-Mail-Einstellungen und senden Sie den Gutschein dann erneut."
+msgstr[1] "Nach %d fehlgeschlagenen Zustellungen keine automatischen Versuche mehr. Prüfen Sie die E-Mail-Adresse und die E-Mail-Einstellungen und senden Sie den Gutschein dann erneut."
+
+msgid "Not delivered: already expired"
+msgstr "Nicht zugestellt: bereits abgelaufen"
+
+msgid "Not delivered: the voucher had already expired on %s."
+msgstr "Nicht zugestellt: Der Gutschein war bereits am %s abgelaufen."
+
+msgid "The product page field \"Delivery date\" is on, but the delivery is not \"On a date chosen by the customer\". A date the customer enters is used; save the product to make both settings match."
+msgstr "Das Produktseiten-Feld „Zustelldatum“ ist aktiv, die Zustellung ist aber nicht „An einem vom Kunden gewählten Datum“. Ein vom Kunden eingegebenes Datum wird verwendet; speichern Sie das Produkt, damit beide Einstellungen zusammenpassen."
+
+msgid "The voucher would already have expired on this delivery date. Please choose %s or an earlier date."
+msgstr "Der Gutschein wäre an diesem Zustelldatum bereits abgelaufen. Bitte wählen Sie den %s oder ein früheres Datum."
+
+msgid "This voucher cannot be delivered on a later date because it would already have expired. Leave the delivery date empty to receive it right away."
+msgstr "Dieser Gutschein kann nicht später zugestellt werden, weil er dann bereits abgelaufen wäre. Lassen Sie das Zustelldatum leer, um ihn sofort zu erhalten."
+
+msgid "Voucher %1$s could not be delivered after %2$d attempts and is no longer sent automatically. Check the email address and the email settings, then send it again on the voucher screen."
+msgstr "Gutschein %1$s konnte nach %2$d Versuchen nicht zugestellt werden und wird nicht mehr automatisch gesendet. Prüfen Sie die E-Mail-Adresse und die E-Mail-Einstellungen und senden Sie ihn dann in der Gutscheinansicht erneut."
+
+msgid "Voucher %1$s was not delivered: it had already expired on %2$s, before its delivery date. Extend its validity and send it again, or refund the buyer."
+msgstr "Gutschein %1$s wurde nicht zugestellt: Er war bereits am %2$s abgelaufen, vor seinem Zustelldatum. Verlängern Sie die Gültigkeit und senden Sie ihn erneut, oder erstatten Sie dem Käufer den Betrag."
+
+msgid "Voucher Captain: the product page asks for a delivery date, so the delivery was set to \"On a date chosen by the customer\". Without a date the voucher is still sent right away."
+msgstr "Voucher Captain: Die Produktseite fragt nach einem Zustelldatum, daher wurde die Zustellung auf „An einem vom Kunden gewählten Datum“ gestellt. Ohne Datum wird der Gutschein weiterhin sofort gesendet."
+
+msgid "Voucher Captain: the product page field \"Delivery date\" was switched off. It only works with the delivery \"On a date chosen by the customer\", and this product is delivered \"%s\"."
+msgstr "Voucher Captain: Das Produktseiten-Feld „Zustelldatum“ wurde ausgeschaltet. Es wirkt nur mit der Zustellung „An einem vom Kunden gewählten Datum“, dieses Produkt wird „%s“ zugestellt."
+
+msgid "Vouchers sold now would be delivered on %1$s but expire on %2$s: the recipient would get an expired voucher (it is then not sent; the order gets a note). Choose an earlier delivery or a longer validity."
+msgstr "Jetzt verkaufte Gutscheine würden am %1$s zugestellt, laufen aber am %2$s ab: Der Empfänger bekäme einen abgelaufenen Gutschein (er wird dann nicht gesendet; die Bestellung erhält eine Notiz). Wählen Sie eine frühere Zustellung oder eine längere Gültigkeit."
