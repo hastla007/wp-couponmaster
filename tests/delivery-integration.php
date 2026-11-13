@@ -1,13 +1,14 @@
 <?php
 /**
- * Delivery robustness (fourth expert review B1, D1):
+ * Delivery robustness (fourth/sixth expert review B1, D1, H2):
  * - a failed delivery is retried by an own Action Scheduler action with growing pauses and a per-voucher attempt
  *   counter (from the ledger); after the last attempt it is given up, recorded and shown to the shop;
  * - a new delivery (reschedule) starts the attempts anew; the daily safety net takes never-attempted vouchers first,
  *   skips given-up ones and vouchers with a pending action;
  * - the daily maintenance runs each step isolated: a failing step is logged and remembered, the others still run;
  *   an expiry reminder that throws gives its claim back;
- * - restore after a reactivation runs in Action Scheduler batches, also for overdue scheduled vouchers.
+ * - restore after a reactivation runs in Action Scheduler batches, also for overdue scheduled vouchers;
+ * - a voucher that expired before its delivery date is not mailed; the order gets a note.
  *
  * Run through WP-CLI after activating WooCommerce and Voucher Captain:
  *   wp eval-file tests/delivery-integration.php
@@ -196,6 +197,27 @@ while ( $next && 'vouchers' === $next[0] ) {
 vcap_dlv_assert( array( 'redemptions', 0 ) === $next && as_has_scheduled_action( 'vcap_deliver_voucher', array( 'voucher_id' => $overdue->id ), Delivery::GROUP ), 'restore queues the delivery of a scheduled voucher that became due long ago, then goes on with the next phase', $next );
 as_unschedule_all_actions( 'vcap_deliver_voucher', array( 'voucher_id' => $overdue->id ), Delivery::GROUP );
 as_unschedule_all_actions( Delivery::RESTORE_HOOK );
+
+/* ---- 7. Expired before its delivery date: not sent ----------------------------------------------------------- */
+
+$late_order = vcap_dlv_order();
+$late       = vcap_dlv_voucher(
+	"late-{$tag}@example.com",
+	array(
+		'order_id'    => $late_order->get_id(),
+		'status'      => Voucher::STATUS_SCHEDULED,
+		'delivery_at' => gmdate( 'Y-m-d H:i:s', time() - MINUTE_IN_SECONDS ),
+		'expires_at'  => gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS ),
+	)
+);
+vcap()->coupons->set_coupon_enabled( $late, false );
+$mails = array();
+vcap()->delivery->deliver( $late->id );
+$stored = $repo->get( $late->id );
+vcap_dlv_assert( ! in_array( "late-{$tag}@example.com", $mails, true ) && null === $stored->delivered_at, 'a voucher that expired before its delivery date is not mailed' );
+vcap_dlv_assert( Voucher::STATUS_EXPIRED === $stored->status && 'publish' !== get_post_status( $late->coupon_id ) && 1 === vcap_dlv_events( $late->id, 'delivery_expired' ), 'it is marked expired (coupon stays off) and the ledger says why' );
+vcap_dlv_assert( str_contains( vcap_dlv_notes( $late_order->get_id() ), $late->code ), 'the order gets a note for the shop' );
+vcap_dlv_assert( ! in_array( $late->id, $repo->due_for_delivery( 1000 ), true ), 'the safety net does not pick it up again' );
 
 remove_filter( 'pre_wp_mail', $catch, 999 );
 echo "Voucher Captain delivery checks passed.\n";

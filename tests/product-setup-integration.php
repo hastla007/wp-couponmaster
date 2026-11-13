@@ -267,7 +267,7 @@ $pooled->update_meta_data( '_vcap_code_pool_empty', 'random' );
 $pooled->save();
 vcap_ps_assert( wc_get_product( $pooled->get_id() )->is_purchasable(), 'with "random codes" it can still be bought' );
 
-/* ---- 14. Customer delivery date: coupled with the delivery ---------------------------------------------------- */
+/* ---- 14. Customer delivery date: coupled with the delivery, never after the expiry --------------------------- */
 
 // Saving: the field with "Immediately" switches to "On a date chosen by the customer"; with a fixed date it is switched off.
 $coupled = vcap_ps_product( 'PS delivery date immediate', array() );
@@ -295,6 +295,45 @@ list( , $legacy_vouchers ) = vcap_ps_buy( $legacy, array( 'delivery_date' => arr
 $legacy_voucher = $legacy_vouchers[0] ?? null;
 vcap_ps_assert( $legacy_voucher && VCAP\Voucher::STATUS_SCHEDULED === $legacy_voucher->status && $wish_day === get_date_from_gmt( (string) $legacy_voucher->delivery_at, 'Y-m-d' ), 'the voucher is delivered on the date the customer chose, not right away', $legacy_voucher ? $legacy_voucher->delivery_at : null );
 vcap_ps_assert( VCAP\Placeholders::values( $legacy_voucher )['delivery_date'] === wp_date( vcap()->settings->date_format(), (int) strtotime( (string) $legacy_voucher->delivery_at . ' UTC' ) ), 'the voucher prints the date that is really used' );
+
+// Validity 10 days: a delivery date in 20 days is refused (classic form and Store API) and the field offers no later date.
+$short = vcap_ps_product( 'PS delivery after expiry', array( 'delivery' => 'customer', 'expiry_mode' => 'days', 'expiry_days' => 10 ) );
+$last  = VCAP\Delivery::latest_delivery_date( ProductConfig::get( $short ), time() );
+vcap_ps_assert( wp_date( 'Y-m-d', time() + 10 * DAY_IN_SECONDS ) === $last, 'the last possible delivery date is the expiry day', $last );
+wc_clear_notices();
+$_POST = array( 'vcap_fields' => array( 'delivery_date' => wp_date( 'Y-m-d', time() + 20 * DAY_IN_SECONDS ) ) );
+vcap_ps_assert( ! WC()->cart->add_to_cart( $short->get_id(), 1 ), 'a delivery date after the expiry is refused at add to cart' );
+$notices = implode( ' ', array_map( static fn( $n ) => is_array( $n ) ? (string) $n['notice'] : (string) $n, wc_get_notices( 'error' ) ) );
+vcap_ps_assert( str_contains( $notices, wp_date( (string) get_option( 'date_format' ), (int) strtotime( $last . ' 12:00:00 ' . wp_timezone_string() ) ) ), 'the message names the last possible date', $notices );
+wc_clear_notices();
+$_POST = array( 'vcap_fields' => array( 'delivery_date' => wp_date( 'Y-m-d', time() + 5 * DAY_IN_SECONDS ) ) );
+vcap_ps_assert( array() === vcap()->fields->errors( $short ), 'a delivery date within the validity is accepted' );
+$GLOBALS['product'] = $short;
+ob_start();
+vcap()->fields->render( 'before_button' );
+$form = (string) ob_get_clean();
+vcap_ps_assert( str_contains( $form, 'max="' . $last . '"' ), 'the date field offers no day after the last possible one' );
+$_POST = array();
+if ( class_exists( '\Automattic\WooCommerce\StoreApi\Exceptions\RouteException' ) ) {
+	$request = new WP_REST_Request( 'POST', '/wc/store/v1/cart/add-item' );
+	$request->set_param( 'vcap_fields', array( 'delivery_date' => wp_date( 'Y-m-d', time() + 20 * DAY_IN_SECONDS ) ) );
+	$refused = false;
+	try {
+		vcap()->fields->store_api_validate( $short, $request );
+	} catch ( \Automattic\WooCommerce\StoreApi\Exceptions\RouteException $e ) {
+		$refused = 'vcap_invalid_voucher_fields' === $e->getErrorCode();
+	}
+	vcap_ps_assert( $refused, 'the Store API (cart block) refuses it as well' );
+	$request->set_param( 'vcap_fields', array() );
+	vcap()->fields->store_api_validate( $short, $request ); // Leaves no stale Store API values behind.
+}
+WC()->cart->empty_cart();
+
+// "X days after purchase" / fixed delivery date after the expiry: an error on the product screen.
+$late_delay = vcap_ps_product( 'PS delay after expiry', array( 'delivery' => 'delay', 'delivery_delay_days' => 45, 'expiry_mode' => 'days', 'expiry_days' => 30 ) );
+vcap_ps_assert( in_array( 'error', array_column( ProductChecks::problems( $late_delay ), 'level' ), true ), 'a delivery delay longer than the validity is reported as an error' );
+$ok_delay = vcap_ps_product( 'PS delay within validity', array( 'delivery' => 'delay', 'delivery_delay_days' => 5, 'expiry_mode' => 'days', 'expiry_days' => 30 ) );
+vcap_ps_assert( ! in_array( 'error', array_column( ProductChecks::problems( $ok_delay ), 'level' ), true ), 'a delay within the validity is fine' );
 
 /* ---- 12. Onboarding ----------------------------------------------------------------------------------------- */
 

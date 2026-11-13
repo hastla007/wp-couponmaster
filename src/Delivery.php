@@ -95,6 +95,60 @@ final class Delivery {
 		return 'customer' === ( $config['delivery'] ?? '' ) || (bool) array_intersect( array( 'delivery_date', 'delivery_date_required' ), $builtin );
 	}
 
+	/**
+	 * Last local date ("Y-m-d") on which a voucher of this product may still be delivered: a voucher bought at $from
+	 * gets the expiry ProductConfig::expiry_for() gives it (from the payment, the same rule as Issuer), and must
+	 * reach its recipient at least "vcap_delivery_min_validity_days" days (default 0) before it ends. Null when the
+	 * voucher never expires.
+	 */
+	public static function latest_delivery_date( array $config, ?int $from = null, string $country = '' ): ?string {
+		$expiry = ProductConfig::expiry_for( $config, $from ?? time(), $country );
+		if ( ! $expiry ) {
+			return null;
+		}
+		$tz      = wp_timezone();
+		$min     = max( 0, (int) apply_filters( 'vcap_delivery_min_validity_days', 0, $config ) );
+		$limit   = (int) strtotime( $expiry . ' UTC' ) - $min * DAY_IN_SECONDS;
+		$day     = ( new \DateTimeImmutable( '@' . $limit ) )->setTimezone( $tz );
+		$ymd     = $day->format( 'Y-m-d' );
+		$deliver = self::local_date_ts( $ymd, self::delivery_hour(), $tz );
+		if ( null !== $deliver && $deliver > $limit ) {
+			// The voucher ends on that day before the delivery hour: the day before is the last one.
+			$ymd = $day->modify( '-1 day' )->format( 'Y-m-d' );
+		}
+		return $ymd;
+	}
+
+	/**
+	 * Delivery after expiry for products with a delivery delay or a fixed delivery date: the local delivery date,
+	 * the expiry date ("Y-m-d" both) of a voucher bought at $from, or null when the delivery is in time.
+	 *
+	 * @return array{delivery:string, expiry:string}|null
+	 */
+	public static function delivery_after_expiry( array $config, ?int $from = null ): ?array {
+		$from = $from ?? time();
+		$tz   = wp_timezone();
+		switch ( $config['delivery'] ?? '' ) {
+			case 'delay':
+				$days = (int) $config['delivery_delay_days'];
+				$ts   = $days > 0 ? $from + $days * DAY_IN_SECONDS : null;
+				break;
+			case 'date':
+				$ts = $config['delivery_date'] ? self::local_date_ts( (string) $config['delivery_date'], self::delivery_hour(), $tz ) : null;
+				break;
+			default:
+				$ts = null;
+		}
+		$expiry = $ts ? ProductConfig::expiry_for( $config, $from ) : null;
+		if ( ! $expiry || $ts <= (int) strtotime( $expiry . ' UTC' ) ) {
+			return null;
+		}
+		return array(
+			'delivery' => wp_date( 'Y-m-d', (int) $ts, $tz ),
+			'expiry'   => wp_date( 'Y-m-d', (int) strtotime( $expiry . ' UTC' ), $tz ),
+		);
+	}
+
 	public function schedule( Voucher $voucher ): void {
 		$args = array( 'voucher_id' => $voucher->id );
 		if ( ! function_exists( 'as_schedule_single_action' ) ) {
@@ -157,6 +211,11 @@ final class Delivery {
 			}
 			$now = $this->repo->now();
 			if ( $voucher->delivery_at && strtotime( $voucher->delivery_at . ' UTC' ) > time() ) {
+				return;
+			}
+			if ( $voucher->expires_at && strtotime( $voucher->expires_at . ' UTC' ) < time() ) {
+				// Never mail (or activate) a voucher that has already ended: the shop has to decide.
+				$this->refuse_expired( $voucher );
 				return;
 			}
 
@@ -300,6 +359,134 @@ final class Delivery {
 		Logger::warning( 'Voucher delivery given up after repeated failures.', array( 'voucher_id' => $voucher->id, 'attempts' => $failures ) );
 		/** A delivery was given up after $failures failed attempts. */
 		do_action( 'vcap_voucher_delivery_given_up', $voucher, $failures );
+	}
+
+	/**
+	 * The voucher ended before it could be delivered (e.g. a delivery date after the expiry): it is not mailed or
+	 * activated but marked as expired, and the shop is told on the order and in the ledger.
+	 */
+	private function refuse_expired( Voucher $voucher ): void {
+		global $wpdb;
+		$table   = Install::tables()['vouchers'];
+		$changed = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'expired', updated_at = %s WHERE id = %d AND delivered_at IS NULL AND status IN ('scheduled','active')", $this->repo->now(), $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( 1 !== (int) $changed ) {
+			return; // Changed meanwhile, or recorded by a parallel run.
+		}
+		$expiry = wp_date( (string) get_option( 'date_format' ), (int) strtotime( $voucher->expires_at . ' UTC' ) );
+		/* translators: %s: expiry date */
+		$this->repo->log( $voucher->id, 'delivery_expired', null, null, sprintf( __( 'Not delivered: the voucher had already expired on %s.', 'voucher-captain' ), $expiry ) );
+		delete_transient( 'vcap_undelivered_count' );
+		delete_transient( 'vcap_given_up_count' );
+		$order = $voucher->order_id && function_exists( 'wc_get_order' ) ? wc_get_order( $voucher->order_id ) : null;
+		if ( $order instanceof \WC_Order ) {
+			$order->add_order_note(
+				sprintf(
+					/* translators: 1: voucher code, 2: expiry date */
+					__( 'Voucher %1$s was not delivered: it had already expired on %2$s, before its delivery date. Extend its validity and send it again, or refund the buyer.', 'voucher-captain' ),
+					$voucher->code,
+					$expiry
+				)
+			);
+		}
+		Logger::warning( 'Voucher not delivered because it had already expired.', array( 'voucher_id' => $voucher->id ) );
+	}
+
+	/**
+	 * Roles ('recipient', 'buyer') that already received this voucher in an earlier, partly failed attempt.
+	 *
+	 * @return string[]
+	 */
+	private function delivered_roles( Voucher $voucher ): array {
+		if ( Install::storage_ready() ) {
+			global $wpdb;
+			$table = Install::tables()['vouchers'];
+			$roles = (string) $wpdb->get_var( $wpdb->prepare( "SELECT delivered_roles FROM {$table} WHERE id = %d", $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$roles = array_values( array_intersect( array_filter( explode( ',', $roles ) ), array( 'recipient', 'buyer' ) ) );
+			if ( $roles ) {
+				return $roles;
+			}
+		}
+		// Before schema 1.4 (or a retry recorded by an older version) a transient listed who was still missing.
+		$missing = get_transient( 'vcap_delivery_missing_' . $voucher->id );
+		// (array) false would be array( false ): no transient means nobody got it yet.
+		$missing = is_array( $missing ) ? array_values( array_intersect( $missing, array( 'recipient', 'buyer' ) ) ) : array();
+		return $missing ? array_values( array_diff( $this->required_roles( $voucher ), $missing ) ) : array();
+	}
+
+	/**
+	 * Remembers who got the voucher. Before schema 1.4 only the missing roles are kept, in a transient.
+	 *
+	 * @param string[] $delivered Roles mailed so far.
+	 * @param string[] $missing   Required roles still missing.
+	 */
+	private function store_delivered_roles( int $voucher_id, array $delivered, array $missing ): void {
+		$key = 'vcap_delivery_missing_' . $voucher_id;
+		if ( Install::storage_ready() ) {
+			global $wpdb;
+			$table = Install::tables()['vouchers'];
+			$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET delivered_roles = %s WHERE id = %d", implode( ',', $delivered ), $voucher_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			delete_transient( $key );
+			return;
+		}
+		if ( $missing ) {
+			set_transient( $key, $missing, 31 * DAY_IN_SECONDS );
+		} else {
+			delete_transient( $key );
+		}
+	}
+
+	/**
+	 * Send the voucher emails according to the voucher's routing.
+	 *
+	 * @return string[] addresses mailed
+	 */
+	/**
+	 * Who must receive the voucher for it to count as delivered ('recipient', 'buyer'); a buyer copy next to a
+	 * gift for the recipient is a courtesy and not required.
+	 *
+	 * @return string[]
+	 */
+	public function required_roles( Voucher $voucher ): array {
+		$to_recipient = in_array( $voucher->send_to, array( 'recipient', 'both' ), true ) && is_email( $voucher->recipient_email );
+		$roles        = $to_recipient ? array( 'recipient' ) : array();
+		if ( ! $to_recipient || 'both' === $voucher->send_to ) {
+			$roles[] = 'buyer';
+		}
+		return $roles;
+	}
+
+	/**
+	 * @param string[] $sent_roles Filled with the roles that were mailed ('recipient', 'buyer').
+	 */
+	public function send( Voucher $voucher, ?string $only = null, array &$sent_roles = array() ): array {
+		$mailer = WC()->mailer();
+		$emails = $mailer->get_emails();
+		$sent   = array();
+		$config = ProductConfig::get( $voucher->variation_id ?: $voucher->product_id );
+
+		$to_recipient = in_array( $voucher->send_to, array( 'recipient', 'both' ), true ) && is_email( $voucher->recipient_email );
+		$to_buyer     = ! $to_recipient || 'both' === $voucher->send_to || 'yes' === $config['buyer_copy'];
+
+		if ( $to_recipient && ( null === $only || 'recipient' === $only ) && isset( $emails['VCAP_Email_Voucher_Recipient'] ) ) {
+			if ( $emails['VCAP_Email_Voucher_Recipient']->trigger( $voucher ) ) {
+				$sent[]       = $voucher->recipient_email;
+				$sent_roles[] = 'recipient';
+			}
+		}
+		if ( $to_buyer && ( null === $only || 'buyer' === $only ) && isset( $emails['VCAP_Email_Voucher_Buyer'] ) ) {
+			if ( $emails['VCAP_Email_Voucher_Buyer']->trigger( $voucher ) ) {
+				$sent[]       = $voucher->buyer_email;
+				$sent_roles[] = 'buyer';
+			}
+		}
+		return $sent;
+	}
+
+	/** Called by Plugin::ensure_schedules() (once a day and after activation or an update, not on every request). */
+	public function schedule_maintenance(): void {
+		if ( function_exists( 'as_has_scheduled_action' ) && ! as_has_scheduled_action( 'vcap_daily_maintenance', array(), self::GROUP ) ) {
+			as_schedule_recurring_action( strtotime( 'tomorrow 03:15' ), DAY_IN_SECONDS, 'vcap_daily_maintenance', array(), self::GROUP );
+		}
 	}
 
 	/** After a reactivation (Plugin::ensure_schedules()): re-plans the removed tasks in Action Scheduler batches. */

@@ -296,7 +296,7 @@ final class Fields {
 		echo '<div class="vcap-fields vcap-fields--' . esc_attr( $position ) . '">';
 		echo $amount_html; // phpcs:ignore WordPress.Security.EscapeOutput -- built by CustomAmount with escaping.
 		foreach ( $defs as $key => $field ) {
-			$this->render_field( $key, $field );
+			$this->render_field( $key, $field, $config );
 		}
 		if ( 'before_button' === $position ) {
 			$terms = ProductConfig::terms( $config, ProductConfig::country_of( WC()->customer ) );
@@ -330,7 +330,7 @@ final class Fields {
 		return is_scalar( $raw ) ? (string) $raw : '';
 	}
 
-	private function render_field( string $key, array $field ): void {
+	private function render_field( string $key, array $field, array $config = array() ): void {
 		$id       = 'vcap-field-' . sanitize_html_class( $key );
 		$name     = 'vcap_fields[' . esc_attr( $key ) . ']';
 		$type     = in_array( $field['type'] ?? 'text', self::TYPES, true ) ? ( $field['type'] ?? 'text' ) : 'text';
@@ -368,8 +368,8 @@ final class Fields {
 				echo '<label for="' . esc_attr( $id ) . '" class="checkbox"><input type="checkbox" value="1" ' . $attrs . checked( '1', $value, false ) . ' /> ' . esc_html( $field['label'] ?? $key ) . ( $required ? ' <abbr class="required" title="' . esc_attr__( 'required', 'voucher-captain' ) . '">*</abbr>' : '' ) . '</label>'; // phpcs:ignore WordPress.Security.EscapeOutput
 				break;
 			case 'date':
-				$min = 'delivery_date' === $key ? wp_date( 'Y-m-d', time() + DAY_IN_SECONDS ) : '';
-				$maxd = 'delivery_date' === $key ? wp_date( 'Y-m-d', time() + YEAR_IN_SECONDS ) : '';
+				$min  = 'delivery_date' === $key ? wp_date( 'Y-m-d', time() + DAY_IN_SECONDS ) : '';
+				$maxd = 'delivery_date' === $key ? self::max_delivery_date( $config ) : '';
 				echo '<input type="date" ' . $attrs . ' value="' . esc_attr( $value ) . '"' . ( $min ? ' min="' . esc_attr( $min ) . '" max="' . esc_attr( $maxd ) . '"' : '' ) . ' />'; // phpcs:ignore WordPress.Security.EscapeOutput
 				break;
 			default:
@@ -379,6 +379,21 @@ final class Fields {
 			echo '<span class="description vcap-field-help" id="' . esc_attr( $desc_id ) . '">' . esc_html( $field['tooltip'] ) . '</span>';
 		}
 		echo '</p>';
+	}
+
+	/**
+	 * Latest date the delivery date field offers: one year ahead, or earlier when the voucher would expire before
+	 * (Delivery::latest_delivery_date(), same rule as the server-side check in errors()).
+	 */
+	private static function max_delivery_date( array $config ): string {
+		$max    = wp_date( 'Y-m-d', time() + YEAR_IN_SECONDS );
+		$latest = $config ? Delivery::latest_delivery_date( $config, time(), self::customer_country() ) : null;
+		return null !== $latest && $latest < $max ? $latest : $max;
+	}
+
+	/** Country of the current customer (statutory validity, see ProductConfig::expiry_for()). */
+	private static function customer_country(): string {
+		return ProductConfig::country_of( function_exists( 'WC' ) && WC()->customer ? WC()->customer : null );
 	}
 
 	private static function options( array $field ): array {
@@ -477,6 +492,17 @@ final class Fields {
 					$errors[] = sprintf( __( '%s is not a valid date.', 'voucher-captain' ), $label );
 				} elseif ( 'delivery_date' === $key && ( $raw < wp_date( 'Y-m-d' ) || $ts > time() + YEAR_IN_SECONDS + DAY_IN_SECONDS ) ) {
 					$errors[] = __( 'Please choose a delivery date between today and one year from now.', 'voucher-captain' );
+				} elseif ( 'delivery_date' === $key ) {
+					$latest = Delivery::latest_delivery_date( ProductConfig::get( $product ), time(), self::customer_country() );
+					if ( null !== $latest && $raw > $latest ) {
+						$errors[] = $latest < wp_date( 'Y-m-d' )
+							? __( 'This voucher cannot be delivered on a later date because it would already have expired. Leave the delivery date empty to receive it right away.', 'voucher-captain' )
+							: sprintf(
+								/* translators: %s: last possible delivery date */
+								__( 'The voucher would already have expired on this delivery date. Please choose %s or an earlier date.', 'voucher-captain' ),
+								wp_date( (string) get_option( 'date_format' ), (int) strtotime( $latest . ' 12:00:00 ' . wp_timezone_string() ) )
+							);
+					}
 				}
 			}
 			if ( 'number' === $type && ! is_numeric( wc_format_decimal( $raw ) ) ) {

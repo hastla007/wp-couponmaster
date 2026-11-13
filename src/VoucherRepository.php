@@ -501,6 +501,7 @@ final class VoucherRepository {
 			'delivered'  => __( 'Delivered', 'voucher-captain' ),
 			'delivery_failed' => __( 'Delivery failed', 'voucher-captain' ),
 			'delivery_given_up' => __( 'Delivery given up (no more automatic attempts)', 'voucher-captain' ),
+			'delivery_expired'  => __( 'Not delivered: already expired', 'voucher-captain' ),
 			'expiry_reminder' => __( 'Expiry reminder', 'voucher-captain' ),
 			'credit'        => __( 'Credit added', 'voucher-captain' ),
 			'debit'         => __( 'Credit removed', 'voucher-captain' ),
