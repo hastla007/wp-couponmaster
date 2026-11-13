@@ -1,0 +1,4 @@
+# Baseline of known PHPStan findings for phpstan-wide.neon.dist. Replace with the "phpstan-baseline" artifact of the
+# CI job quality-wide (generated with --generate-baseline) after reviewing it; never add entries by hand for new code.
+parameters:
+  ignoreErrors: []

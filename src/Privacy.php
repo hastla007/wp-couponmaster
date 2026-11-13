@@ -4,7 +4,8 @@ namespace VCAP;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * WordPress personal data export / erasure for buyer and recipient data stored on vouchers.
+ * WordPress personal data export / erasure (buyer and recipient data on vouchers, "used by" history, external
+ * redemptions, refer a friend) and the suggested privacy policy text.
  */
 final class Privacy {
 	public function __construct( private VoucherRepository $repo ) {}
@@ -88,6 +89,9 @@ final class Privacy {
 				),
 			);
 		}
+		if ( 1 === $page ) {
+			$items = array_merge( $items, $this->export_referrals( $email ) );
+		}
 		$done = count( $vouchers ) < self::EXPORT_PAGE && count( $uses ) < self::EXPORT_PAGE && count( $redemptions ) < self::EXPORT_PAGE;
 		return array( 'data' => $items, 'done' => $done );
 	}
@@ -106,6 +110,146 @@ final class Privacy {
 		}
 		$table = Install::tables()['redemptions'];
 		return $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE user_id = %d ORDER BY id LIMIT %d OFFSET %d", $user->ID, max( 1, $limit ), max( 0, $offset ) ), ARRAY_A ) ?: array(); // phpcs:ignore
+	}
+
+	/**
+	 * Refer a friend: the customer's own referral code, the number of friends who ordered and the rewards received
+	 * (Referrals: user meta, coupon meta "_vcap_referral_owner", order meta "_vcap_referral_rewarded"/"_reward").
+	 * Nothing about the friends is exported.
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function export_referrals( string $email ): array {
+		$user = get_user_by( 'email', $email );
+		if ( ! $user ) {
+			return array();
+		}
+		$items     = array();
+		$group     = __( 'Refer a friend', 'voucher-captain' );
+		$coupon_id = (int) get_user_meta( $user->ID, Referrals::USER_META, true );
+		$count     = get_user_meta( $user->ID, Referrals::COUNT_META, true );
+		if ( $coupon_id || '' !== (string) $count ) {
+			$code    = $coupon_id ? (string) get_post_field( 'post_title', $coupon_id ) : '';
+			$items[] = array(
+				'group_id'    => 'vcap-referrals',
+				'group_label' => $group,
+				'item_id'     => 'vcap-referral-code-' . $user->ID,
+				'data'        => array(
+					array( 'name' => __( 'Referral code', 'voucher-captain' ), 'value' => strtoupper( $code ) ),
+					array( 'name' => __( 'Friends who ordered', 'voucher-captain' ), 'value' => (string) (int) $count ),
+				),
+			);
+		}
+		foreach ( $this->referral_reward_orders( $user->ID ) as $order ) {
+			$reward = $order->get_meta( Referrals::REWARD );
+			$reward = is_array( $reward ) ? $reward : array();
+			$value  = 'credit' === ( $reward['type'] ?? '' )
+				? (string) ( $reward['amount'] ?? '' )
+				: ( ! empty( $reward['coupon'] ) ? strtoupper( (string) get_post_field( 'post_title', (int) $reward['coupon'] ) ) : '' );
+			$date   = $order->get_date_completed() ?: $order->get_date_created();
+			$items[] = array(
+				'group_id'    => 'vcap-referrals',
+				'group_label' => $group,
+				'item_id'     => 'vcap-referral-reward-' . $order->get_id(),
+				'data'        => array(
+					array( 'name' => __( 'Referral reward', 'voucher-captain' ), 'value' => 'credit' === ( $reward['type'] ?? '' ) ? __( 'Store credit', 'voucher-captain' ) : __( 'Coupon', 'voucher-captain' ) ),
+					array( 'name' => __( 'Amount or code', 'voucher-captain' ), 'value' => $value ),
+					array( 'name' => __( 'Withdrawn', 'voucher-captain' ), 'value' => empty( $reward['revoked'] ) ? __( 'No', 'voucher-captain' ) : __( 'Yes', 'voucher-captain' ) ),
+					array( 'name' => __( 'Date', 'voucher-captain' ), 'value' => $date ? $date->date( 'Y-m-d H:i:s' ) : '' ),
+				),
+			);
+		}
+		return $items;
+	}
+
+	/**
+	 * Friends' orders that rewarded this customer (at most 500 – one erasure/export run).
+	 *
+	 * @return \WC_Order[]
+	 */
+	private function referral_reward_orders( int $user_id ): array {
+		if ( $user_id <= 0 || ! function_exists( 'wc_get_orders' ) ) {
+			return array();
+		}
+		$orders = wc_get_orders(
+			array(
+				'limit'      => 500,
+				'type'       => 'shop_order',
+				'status'     => 'any',
+				'meta_query' => array( array( 'key' => Referrals::REWARDED, 'value' => (string) $user_id ) ), // phpcs:ignore WordPress.DB.SlowDBQuery
+			)
+		);
+		return array_filter( is_array( $orders ) ? $orders : array(), static fn( $o ) => $o instanceof \WC_Order );
+	}
+
+	/**
+	 * Erase the referral link of a customer: the personal referral code is withdrawn (it names the customer and would
+	 * otherwise become an unrestricted discount code), the counters go, friends' orders no longer point to the
+	 * customer (the reward stays recorded for accounting, marked as erased) and unused reward coupons restricted to the
+	 * address are restricted to an address nobody can have.
+	 *
+	 * @return array{0: bool, 1: bool} removed, retained
+	 */
+	private function erase_referrals( string $email ): array {
+		$removed  = false;
+		$retained = false;
+		$user     = get_user_by( 'email', $email );
+		if ( $user ) {
+			$coupon_id = (int) get_user_meta( $user->ID, Referrals::USER_META, true );
+			if ( $coupon_id && (int) get_post_meta( $coupon_id, Referrals::OWNER, true ) === (int) $user->ID ) {
+				delete_post_meta( $coupon_id, Referrals::OWNER );
+				wp_update_post( array( 'ID' => $coupon_id, 'post_excerpt' => '' ) );
+				if ( 'trash' !== get_post_status( $coupon_id ) && ! wp_trash_post( $coupon_id ) ) {
+					$retained = true;
+				}
+				$removed = true;
+			}
+			foreach ( array( Referrals::USER_META, Referrals::COUNT_META ) as $key ) {
+				if ( '' !== (string) get_user_meta( $user->ID, $key, true ) ) {
+					delete_user_meta( $user->ID, $key );
+					$removed = true;
+				}
+			}
+			foreach ( $this->referral_reward_orders( $user->ID ) as $order ) {
+				$reward = $order->get_meta( Referrals::REWARD );
+				if ( is_array( $reward ) ) {
+					$reward['user']   = 0;
+					$reward['erased'] = time();
+					$order->update_meta_data( Referrals::REWARD, $reward );
+				}
+				// Stays set (an order never rewards twice), but no longer names the customer.
+				$order->update_meta_data( Referrals::REWARDED, 'erased' );
+				$order->save_meta_data();
+				$removed = true;
+			}
+		}
+		$coupons = get_posts(
+			array(
+				'post_type'   => 'shop_coupon',
+				'post_status' => array( 'any', 'trash' ),
+				'numberposts' => 500,
+				'fields'      => 'ids',
+				'meta_query'  => array( // phpcs:ignore WordPress.DB.SlowDBQuery
+					array( 'key' => '_vcap_referral_reward_for', 'compare' => 'EXISTS' ),
+					array( 'key' => 'customer_email', 'value' => '"' . strtolower( $email ) . '"', 'compare' => 'LIKE' ),
+				),
+			)
+		);
+		foreach ( $coupons as $id ) {
+			$coupon = new \WC_Coupon( (int) $id );
+			$emails = (array) $coupon->get_email_restrictions();
+			$kept   = array_values( array_filter( $emails, static fn( $e ) => 0 !== strcasecmp( (string) $e, $email ) ) );
+			if ( count( $kept ) === count( $emails ) ) {
+				continue;
+			}
+			$coupon->set_email_restrictions( $kept ?: array( 'erased-referral-' . $coupon->get_id() . '@invalid.invalid' ) );
+			if ( $coupon->save() ) {
+				$removed = true;
+			} else {
+				$retained = true;
+			}
+		}
+		return array( $removed, $retained );
 	}
 
 	public function erase( string $email, int $page = 1 ): array {
@@ -171,6 +315,9 @@ final class Privacy {
 				$removed = true;
 			}
 		}
+		list( $referrals_removed, $referrals_retained ) = $this->erase_referrals( $email );
+		$removed  = $removed || $referrals_removed;
+		$retained = $retained || $referrals_retained;
 		return array(
 			'items_removed'  => $removed,
 			'items_retained' => $retained,
@@ -181,10 +328,28 @@ final class Privacy {
 
 	public function policy(): void {
 		if ( function_exists( 'wp_add_privacy_policy_content' ) ) {
-			wp_add_privacy_policy_content(
-				__( 'Voucher Captain', 'voucher-captain' ),
-				wp_kses_post( wpautop( __( 'When you buy a voucher, we store the recipient name, recipient email address, personal message and any personalisation you enter so that we can create and deliver the voucher. The recipient receives an email with the voucher if you entered their address. This data is kept as long as the voucher can be used and is then removed according to our retention settings.', 'voucher-captain' ) ) )
-			);
+			wp_add_privacy_policy_content( __( 'Voucher Captain', 'voucher-captain' ), wp_kses_post( wpautop( implode( "\n\n", self::policy_paragraphs() ) ) ) );
 		}
+	}
+
+	/**
+	 * Suggested privacy policy text, one paragraph per kind of data.
+	 *
+	 * @return string[]
+	 */
+	public static function policy_paragraphs(): array {
+		$paragraphs = array(
+			__( 'When you buy a voucher, we store the recipient name, recipient email address, personal message and any personalisation you enter so that we can create and deliver the voucher. The recipient receives an email with the voucher if you entered their address. This data is kept as long as the voucher can be used and is then removed according to our retention settings.', 'voucher-captain' ),
+			__( 'Vouchers, gift cards and store credit keep a history of every change of their balance (issue, payment in an order, refund, top-up, manual correction) with the date, the amount, the order number and, when a voucher is used by another customer, that customer\'s email address. Store credit is linked to your customer account. We keep this history as long as the voucher or credit can be used and as long as we are required to keep accounting records.', 'voucher-captain' ),
+			__( 'Refer a friend: if you take part, we store your personal referral code, how many friends have ordered with it and which rewards you received. A friend\'s order that used your code is linked to your customer account so that we can give you the reward and take it back if the order is cancelled or refunded.', 'voucher-captain' ),
+			__( 'When a voucher is redeemed outside the shop checkout, for example by a booking or ticket system on this website that is connected to our vouchers, we record the redemption with the connected service, the amount, the date, your customer account and the details that service passes on (for example its order or booking number).', 'voucher-captain' ),
+			__( 'Tickets: when you exchange a ticket voucher for tickets or pay for tickets with a gift card, the voucher code, the amount, your name and email address and the attendee names you enter are passed to the ticket system on this website (WP Pass Captain), which issues and sends the tickets. Its privacy information applies to the tickets.', 'voucher-captain' ),
+			__( 'At the entrance or the counter, our staff may scan the code of your voucher or ticket. We record the time, the staff member and the result (redeemed, checked in or refused) in the voucher history.', 'voucher-captain' ),
+			__( 'To protect voucher codes against guessing, we count failed code entries per visitor for a short time window (at most 15 minutes). For this we store the counter under a hashed (pseudonymised) form of your IP address, never the address itself; the counters are deleted automatically after the window.', 'voucher-captain' ),
+		);
+		if ( Licensing\Entitlements::required() ) {
+			$paragraphs[] = __( 'License check (premium edition): to check the license and offer updates, this website sends its address (URL), the WordPress, PHP and plugin versions, the license key and a random installation ID to the license server of the plugin vendor when the license is activated, about twice a day and when updates are checked. No data about customers or orders is sent.', 'voucher-captain' );
+		}
+		return $paragraphs;
 	}
 }

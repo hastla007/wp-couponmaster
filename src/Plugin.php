@@ -128,6 +128,7 @@ final class Plugin {
 	}
 
 	public function load_textdomain(): void {
+		I18n::register(); // de_DE_formal, de_CH, de_AT without own file → German (de_DE).
 		load_plugin_textdomain( 'voucher-captain', false, dirname( plugin_basename( VCAP_FILE ) ) . '/languages' );
 	}
 

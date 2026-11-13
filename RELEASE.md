@@ -23,9 +23,13 @@ release notes). Entries start with **New**, **Fix** or **Fix (security)** and de
 ## Cutting a release
 
 1. Merge the release branch into `main`; CI (`Plugin smoke tests`) must be green, including the multisite,
-   minimum-versions, Pass Captain and browser jobs.
+   minimum-versions, ecosystem, license-acceptance, Pass Captain and browser jobs. Tag only a commit that was pushed to
+   `main` (or another branch CI runs on): the release workflow checks exactly that commit.
 2. Work through `RELEASE_CHECKLIST.md` (the manual checks).
-3. Bump the version in the three places above, rename `= Unreleased =` to `= X.Y.Z =`, commit.
+3. Bump the version in the three places above, rename `= Unreleased =` to `= X.Y.Z =` in `== Changelog ==` and in
+   `== Upgrade Notice ==` (one or two sentences: what a shop must do after updating; leave the section out when
+   nothing), check that `Tested up to`, `Requires at least`, `Requires PHP` and the WooCommerce lines of `readme.txt`
+   match the plugin header, commit.
 4. Tag that commit and push the tag:
 
    ```bash
@@ -36,7 +40,9 @@ release notes). Entries start with **New**, **Fix** or **Fix (security)** and de
    git push origin vX.Y.Z
    ```
 
-5. The `Release` workflow checks tag ↔ version, builds the free and the premium ZIP twice each (identical SHA-256
+5. The `Release` workflow first waits for the push run of `Plugin smoke tests` on the tagged commit (job `ci-green`,
+   up to about two hours) and stops unless it finished with *success*; no run, a failed or a cancelled run blocks the
+   release (re-run CI, then re-run the release workflow). It then checks tag ↔ version, builds the free and the premium ZIP twice each (identical SHA-256
    required) and creates a **draft** GitHub release with `voucher-captain.zip`, `voucher-captain-premium-X.Y.Z.zip`,
    their `.sha256` files and the licence-manager manifest `voucher-captain-X.Y.Z.json` (made by WP License
    Captain's `tools/create-release-manifest.php`: version, HTTPS package URL, SHA-256, required PHP/WordPress,
@@ -53,6 +59,39 @@ release notes). Entries start with **New**, **Fix** or **Fix (security)** and de
      previous version through the licence download grant. The CI job `license-acceptance` does exactly this on
      every push against a real WP License Captain server (two releases, wrong SHA-256 refused, real one installed).
    Withdrawing a release = removing its manifest; shops on that version are offered the newest remaining one.
+
+## Static analysis
+
+| Job | Scope | Configuration | Blocking |
+| --- | --- | --- | --- |
+| `quality` | `src/API/V1`, `src/Contracts` – PHPCS WordPress and WooCommerce-Core, PHPStan level 0 | `phpstan.neon.dist` | yes |
+| `quality-wide` | whole plugin (`voucher-captain.php`, `uninstall.php`, `config/`, `src/`, `templates/`) – PHPCS WordPress-Extra incl. `WordPress.WP.I18n` (text domain `voucher-captain`), `WordPress.Security.*`, prefix check; PHPStan level 1 | `phpcs.xml.dist`, `phpstan-wide.neon.dist` + `phpstan-baseline.neon` | no (report-only) |
+| `plugin-check` | installed release ZIP – WordPress Plugin Check (PCP), static and runtime checks | – | no (report-only) |
+
+The wide scans were introduced on an existing code base and report its findings without turning CI red
+(`continue-on-error`). This is technical debt with a plan:
+
+- **PHPCS**: `phpcs.xml.dist` excludes only formatting rules (alignment, Yoda conditions, doc-comment style, short
+  ternaries – listed there as debt) and the PSR-4 file names. Security, I18n, deprecated-API and prefix sniffs are never
+  excluded. The job writes the sources summary to the job summary and uploads the full report (artifact
+  `phpstan-baseline`, files `phpcs-*.txt`, `phpcs.json`). Work them off by category; remove a debt exclusion together
+  with its clean-up commit.
+- **PHPStan**: the job uploads a baseline of the current findings (`phpstan-baseline.generated.neon`). Review it and
+  commit it as `phpstan-baseline.neon`; from then on every new finding is visible in the step "PHPStan level 1". Never
+  add baseline entries by hand for new code.
+- **Plugin Check**: the result table is in the job summary and the artifact `plugin-check`. Errors there must be
+  resolved (or documented as not applicable for a non-wordpress.org premium build) before a wordpress.org submission.
+- When a scan has no findings left (or only baselined ones), remove `continue-on-error` from its job so it gates
+  releases like the others.
+
+## Third-party licences
+
+The release ZIP bundles Composer packages (`vendor/`) and dompdf's fonts. `bin/build.sh` keeps every `LICENSE*`,
+`LICENCE*`, `COPYING*`, `NOTICE*` and `AUTHORS*` file of the packages, copies the texts in `licenses/` (GPL-3.0,
+required by the LGPL-3.0 packages; DejaVu/Bitstream Vera font licence) and writes `THIRD-PARTY-NOTICES.txt` from the
+installed packages' Composer metadata (`bin/third-party-notices.php`). The build fails when a bundled package has no
+licence file; the CI job `quality` checks the finished ZIP again (`--check-zip`). When a dependency is added, check its
+licence is GPL-compatible and update the list in `README.md`.
 
 ## Reproducible ZIP
 

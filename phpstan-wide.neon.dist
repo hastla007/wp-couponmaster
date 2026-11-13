@@ -1,0 +1,24 @@
+# Wide static analysis of the whole plugin (CI job quality-wide, report-only). The strict configuration for the public
+# API and contracts is phpstan.neon.dist (job quality, blocking).
+#
+# Existing findings belong in phpstan-baseline.neon: the job uploads a freshly generated baseline as the artifact
+# "phpstan-baseline"; commit it once reviewed (RELEASE.md → Static analysis). New code must not add findings.
+includes:
+  - phpstan-baseline.neon
+
+parameters:
+  level: 1
+  paths:
+    - voucher-captain.php
+    - uninstall.php
+    - config
+    - src
+    - templates
+  bootstrapFiles:
+    - tests/phpstan-bootstrap.php
+  scanFiles:
+    - vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
+    - vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
+  dynamicConstantNames:
+    - VCAP_LICENSE_REQUIRED
+  reportUnmatchedIgnoredErrors: false
