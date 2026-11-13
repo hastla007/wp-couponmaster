@@ -195,6 +195,45 @@ final class ProductConfig {
 		return (string) apply_filters( 'vcap_voucher_tax_treatment', $treatment, $voucher );
 	}
 
+	/** VAT treatment configured for a voucher product ("auto": percentage vouchers are discounts, the rest multi-purpose). */
+	public static function product_treatment( $product ): string {
+		$config  = self::get( $product );
+		$setting = (string) $config['tax_treatment'];
+		if ( in_array( $setting, array( 'payment', 'single', 'discount' ), true ) ) {
+			return $setting;
+		}
+		return 'percent' === $config['discount_type'] ? 'discount' : 'payment';
+	}
+
+	/**
+	 * Does the product's tax status fit the voucher kind? Multi-purpose vouchers are sold without VAT (tax status
+	 * "None", VAT is due at redemption), single-purpose vouchers with the VAT of the later service ("Taxable").
+	 * Null when it fits, taxes are off or the product is no voucher / a promotion.
+	 *
+	 * @return array{treatment:string, expected:string, actual:string, message:string}|null
+	 */
+	public static function tax_status_conflict( $product ): ?array {
+		$product = $product instanceof \WC_Product ? $product : wc_get_product( $product );
+		if ( ! $product || ! self::is_voucher( $product ) || ! function_exists( 'wc_tax_enabled' ) || ! wc_tax_enabled() ) {
+			return null;
+		}
+		$status = (string) $product->get_tax_status();
+		if ( 'parent' === $status && $product->is_type( 'variation' ) ) {
+			$parent = wc_get_product( $product->get_parent_id() );
+			$status = $parent ? (string) $parent->get_tax_status() : 'taxable';
+		}
+		$treatment = self::product_treatment( $product );
+		if ( 'payment' === $treatment && 'none' !== $status ) {
+			$message = __( 'This product sells a multi-purpose voucher (means of payment): its sale is not subject to VAT, the VAT is due when the voucher is redeemed. Set the tax status to "None" – or choose "Single-purpose voucher" if place and VAT of the service are fixed at the sale.', 'voucher-captain' );
+			return array( 'treatment' => $treatment, 'expected' => 'none', 'actual' => $status, 'message' => $message );
+		}
+		if ( 'single' === $treatment && 'taxable' !== $status ) {
+			$message = __( 'This product sells a single-purpose voucher: the VAT is due at the sale. Set the tax status to "Taxable" with the tax class of the service the voucher is for.', 'voucher-captain' );
+			return array( 'treatment' => $treatment, 'expected' => 'taxable', 'actual' => $status, 'message' => $message );
+		}
+		return null;
+	}
+
 	/**
 	 * Pass Captain's term for the VAT treatment: "multi" (multi-purpose voucher, means of payment), "single"
 	 * (single-purpose voucher, VAT was charged at the sale) or "discount" (promotion code: a plain price reduction,

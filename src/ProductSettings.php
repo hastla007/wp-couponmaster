@@ -16,6 +16,7 @@ final class ProductSettings {
 		add_action( 'woocommerce_product_after_variable_attributes', array( $this, 'variation_fields' ), 10, 3 );
 		add_action( 'woocommerce_admin_process_variation_object', array( $this, 'save_variation' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'assets' ) );
+		add_action( 'admin_notices', array( $this, 'tax_status_notice' ) );
 	}
 
 	public function assets( string $hook ): void {
@@ -182,6 +183,10 @@ final class ProductSettings {
 				'description' => __( 'How connected checkouts (e.g. WP Pass Captain) treat the voucher for VAT. Have the classification checked by your tax adviser.', 'voucher-captain' ),
 			)
 		);
+		$conflict = ProductConfig::tax_status_conflict( $p );
+		if ( $conflict ) {
+			echo '<p class="form-field vcap-tax-conflict" role="alert" style="color:#b32d2e">' . esc_html( $conflict['message'] ) . '</p>';
+		}
 		echo '</div>';
 
 		echo '<div class="options_group"><h4 class="vcap-group-title">' . esc_html__( 'Redemption & validity', 'voucher-captain' ) . '</h4>';
@@ -482,6 +487,29 @@ final class ProductSettings {
 			echo '<option value="' . esc_attr( (string) $term->term_id ) . '" ' . selected( in_array( $term->term_id, $ids, true ), true, false ) . '>' . esc_html( $term->name ) . '</option>';
 		}
 		echo '</select></p>';
+	}
+
+	/** Product edit screen: warn when the tax status does not fit the voucher kind (product or one of its variations). */
+	public function tax_status_notice(): void {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		$id     = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! $screen || 'product' !== $screen->id || ! $id || ! current_user_can( 'edit_product', $id ) ) {
+			return;
+		}
+		$product = wc_get_product( $id );
+		if ( ! $product ) {
+			return;
+		}
+		$conflicts = array();
+		foreach ( array_merge( array( $product ), $product->is_type( 'variable' ) ? array_filter( array_map( 'wc_get_product', $product->get_children() ) ) : array() ) as $item ) {
+			$conflict = ProductConfig::tax_status_conflict( $item );
+			if ( $conflict ) {
+				$conflicts[ $conflict['message'] ] = $conflict['message'];
+			}
+		}
+		foreach ( $conflicts as $message ) {
+			echo '<div class="notice notice-warning"><p><strong>' . esc_html__( 'Voucher Captain – VAT', 'voucher-captain' ) . ':</strong> ' . esc_html( $message ) . '</p></div>';
+		}
 	}
 
 	public function save( \WC_Product $product ): void {

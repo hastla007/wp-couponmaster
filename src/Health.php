@@ -19,7 +19,7 @@ final class Health {
 
 	public function tests( $tests ) {
 		$tests = (array) $tests;
-		foreach ( array( 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets' ) as $id ) {
+		foreach ( array( 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets', 'tax_status' ) as $id ) {
 			$tests['direct'][ 'vcap_' . $id ] = array(
 				'label' => __( 'Voucher Captain', 'voucher-captain' ),
 				'test'  => array( $this, 'test_' . $id ),
@@ -147,6 +147,27 @@ final class Health {
 		}
 		/* translators: %s: list of countries with what is missing */
 		return self::result( 'markets', 'recommended', __( 'Some EU selling countries need voucher settings', 'voucher-captain' ), sprintf( __( 'Set the statutory validity and conditions per country under Vouchers → Settings (have them checked legally) and add translations: %s', 'voucher-captain' ), implode( '; ', $gaps ) ) );
+	}
+
+	/** Voucher products whose tax status does not fit the voucher kind (multi-purpose: none, single-purpose: taxable). */
+	public function test_tax_status(): array {
+		$ids   = get_posts( array( 'post_type' => array( 'product', 'product_variation' ), 'post_status' => array( 'publish', 'private', 'draft' ), 'fields' => 'ids', 'numberposts' => 500, 'meta_key' => '_vcap_enabled', 'meta_value' => 'yes' ) ); // phpcs:ignore WordPress.DB.SlowDBQuery
+		$names = array();
+		foreach ( $ids as $id ) {
+			$product = wc_get_product( $id );
+			foreach ( $product ? array_merge( array( $product ), $product->is_type( 'variable' ) ? array_filter( array_map( 'wc_get_product', $product->get_children() ) ) : array() ) : array() as $item ) {
+				$conflict = ProductConfig::tax_status_conflict( $item );
+				if ( $conflict ) {
+					/* translators: 1: product name, 2: expected tax status ("none" or "taxable") */
+					$names[] = sprintf( __( '%1$s (tax status should be "%2$s")', 'voucher-captain' ), $item->get_name(), 'none' === $conflict['expected'] ? __( 'None', 'voucher-captain' ) : __( 'Taxable', 'voucher-captain' ) );
+				}
+			}
+		}
+		if ( ! $names ) {
+			return self::result( 'tax_status', 'good', __( 'Voucher products have a tax status that fits their VAT treatment', 'voucher-captain' ), __( 'Multi-purpose vouchers are sold without VAT, single-purpose vouchers with VAT.', 'voucher-captain' ) );
+		}
+		/* translators: %s: list of products */
+		return self::result( 'tax_status', 'recommended', __( 'Some voucher products have a tax status that does not fit their VAT treatment', 'voucher-captain' ), sprintf( __( 'Multi-purpose vouchers are sold without VAT (tax status "None"), single-purpose vouchers with VAT ("Taxable"). Check with your tax adviser and correct: %s', 'voucher-captain' ), implode( '; ', $names ) ) );
 	}
 
 	private static function result( string $id, string $status, string $label, string $text ): array {

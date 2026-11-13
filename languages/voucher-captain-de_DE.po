@@ -4302,3 +4302,33 @@ msgstr "Premium-Funktionen von Voucher Captain sind ausgeschaltet, bis die Lizen
 
 msgid "You are not allowed to manage this license."
 msgstr "Sie dürfen diese Lizenz nicht verwalten."
+
+msgid "%1$s (tax status should be \"%2$s\")"
+msgstr "%1$s (Steuerstatus sollte „%2$s“ sein)"
+
+msgid "Multi-purpose vouchers are sold without VAT (tax status \"None\"), single-purpose vouchers with VAT (\"Taxable\"). Check with your tax adviser and correct: %s"
+msgstr "Mehrzweckgutscheine werden ohne Umsatzsteuer verkauft (Steuerstatus „Keiner“), Einzweckgutscheine mit Umsatzsteuer („Steuerpflichtig“). Bitte mit der Steuerberatung abstimmen und korrigieren: %s"
+
+msgid "Multi-purpose vouchers are sold without VAT, single-purpose vouchers with VAT."
+msgstr "Mehrzweckgutscheine werden ohne, Einzweckgutscheine mit Umsatzsteuer verkauft."
+
+msgid "Some voucher products have a tax status that does not fit their VAT treatment"
+msgstr "Der Steuerstatus einiger Gutscheinprodukte passt nicht zu ihrer Umsatzsteuer-Einordnung"
+
+msgid "This product sells a multi-purpose voucher (means of payment): its sale is not subject to VAT, the VAT is due when the voucher is redeemed. Set the tax status to \"None\" – or choose \"Single-purpose voucher\" if place and VAT of the service are fixed at the sale."
+msgstr "Dieses Produkt verkauft einen Mehrzweckgutschein (Zahlungsmittel): Der Verkauf ist nicht umsatzsteuerbar, die Umsatzsteuer entsteht bei der Einlösung. Stellen Sie den Steuerstatus auf „Keiner“ – oder wählen Sie „Einzweckgutschein“, wenn Ort und Umsatzsteuer der Leistung schon beim Verkauf feststehen."
+
+msgid "This product sells a single-purpose voucher: the VAT is due at the sale. Set the tax status to \"Taxable\" with the tax class of the service the voucher is for."
+msgstr "Dieses Produkt verkauft einen Einzweckgutschein: Die Umsatzsteuer entsteht beim Verkauf. Stellen Sie den Steuerstatus auf „Steuerpflichtig“ mit der Steuerklasse der Leistung, für die der Gutschein gilt."
+
+msgid "Voucher Captain – VAT"
+msgstr "Voucher Captain – Umsatzsteuer"
+
+msgid "Voucher products have a tax status that fits their VAT treatment"
+msgstr "Der Steuerstatus der Gutscheinprodukte passt zu ihrer Umsatzsteuer-Einordnung"
+
+msgid "None"
+msgstr "Keiner"
+
+msgid "Taxable"
+msgstr "Steuerpflichtig"
