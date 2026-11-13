@@ -235,8 +235,20 @@ final class Fields {
 		if ( ! $product || ! ProductConfig::is_voucher( $product ) ) {
 			return;
 		}
-		wp_enqueue_style( 'vcap-frontend', VCAP_URL . 'assets/css/frontend.css', array(), VCAP_VERSION );
-		wp_enqueue_script( 'vcap-frontend', VCAP_URL . 'assets/js/frontend.js', array( 'jquery' ), VCAP_VERSION, true );
+		self::enqueue_assets();
+	}
+
+	/**
+	 * Style and script of the voucher fields. Enqueued on voucher product pages and whenever the fields render,
+	 * so [product_page], page builder add-to-cart widgets and quick views get them as well (printed in the footer).
+	 */
+	public static function enqueue_assets(): void {
+		Downloads::enqueue_style();
+		if ( wp_script_is( 'vcap-frontend', 'enqueued' ) ) {
+			return;
+		}
+		Downloads::register_assets();
+		wp_enqueue_script( 'vcap-frontend' );
 		wp_localize_script(
 			'vcap-frontend',
 			'vcapFront',
@@ -267,6 +279,7 @@ final class Fields {
 		if ( ! $defs && '' === $amount_html ) {
 			return;
 		}
+		self::enqueue_assets();
 		$config = ProductConfig::get( $product );
 		echo '<div class="vcap-fields vcap-fields--' . esc_attr( $position ) . '">';
 		echo $amount_html; // phpcs:ignore WordPress.Security.EscapeOutput -- built by CustomAmount with escaping.

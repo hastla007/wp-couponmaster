@@ -3,17 +3,24 @@
 	'use strict';
 	var cfg = window.vcapFront || {};
 
+	// Character counters; also for fields inserted later (quick view, page builder widgets loaded by AJAX).
+	var counter = function ( input ) {
+		var $input = $( input );
+		var $counter = $input.next( '.vcap-counter' );
+		if ( ! $counter.length ) {
+			$counter = $( '<span class="vcap-counter" aria-live="polite"></span>' );
+			$input.after( $counter );
+		}
+		var max = parseInt( $input.attr( 'maxlength' ), 10 );
+		$counter.text( ( ( cfg.i18n && cfg.i18n.charsLeft ) || '%d' ).replace( '%d', Math.max( 0, max - $input.val().length ) ) );
+	};
+
 	$( function () {
 		$( '[data-vcap-counter]' ).each( function () {
-			var $input = $( this );
-			var max = parseInt( $input.attr( 'maxlength' ), 10 );
-			var $counter = $( '<span class="vcap-counter" aria-live="polite"></span>' );
-			$input.after( $counter );
-			var update = function () {
-				$counter.text( ( cfg.i18n.charsLeft || '%d' ).replace( '%d', Math.max( 0, max - $input.val().length ) ) );
-			};
-			$input.on( 'input', update );
-			update();
+			counter( this );
+		} );
+		$( document ).on( 'input focus', '[data-vcap-counter]', function () {
+			counter( this );
 		} );
 
 		$( document ).on( 'click', '.vcap-amount-preset', function () {

@@ -1,0 +1,15 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "vcap/redeem",
+	"title": "Redeem voucher",
+	"category": "widgets",
+	"icon": "tickets-alt",
+	"description": "Lets customers enter a voucher code; it is applied to the cart now or as soon as it has products.",
+	"textdomain": "voucher-captain",
+	"supports": {
+		"html": false
+	},
+	"editorScript": "vcap-blocks",
+	"style": "vcap-frontend"
+}

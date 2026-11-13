@@ -1,0 +1,15 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "vcap/my-vouchers",
+	"title": "My vouchers",
+	"category": "widgets",
+	"icon": "id-alt",
+	"description": "The logged-in customer's vouchers with PDF download and \"send again\".",
+	"textdomain": "voucher-captain",
+	"supports": {
+		"html": false
+	},
+	"editorScript": "vcap-blocks",
+	"style": "vcap-frontend"
+}

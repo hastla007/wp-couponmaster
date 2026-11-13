@@ -22,12 +22,32 @@ final class Downloads {
 		add_action( 'woocommerce_account_' . self::ENDPOINT . '_endpoint', array( $this, 'account_page' ) );
 		add_filter( 'woocommerce_endpoint_' . self::ENDPOINT . '_title', array( $this, 'endpoint_title' ) );
 		add_shortcode( 'vcap_balance', array( $this, 'balance_shortcode' ) );
+		add_action( 'init', array( self::class, 'register_assets' ), 5 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'styles' ) );
+	}
+
+	/** Registers the storefront style and script (enqueued where vouchers are shown, see enqueue_style()). */
+	public static function register_assets(): void {
+		if ( ! wp_style_is( 'vcap-frontend', 'registered' ) ) {
+			wp_register_style( 'vcap-frontend', VCAP_URL . 'assets/css/frontend.css', array(), VCAP_VERSION );
+		}
+		if ( ! wp_script_is( 'vcap-frontend', 'registered' ) ) {
+			wp_register_script( 'vcap-frontend', VCAP_URL . 'assets/js/frontend.js', array( 'jquery' ), VCAP_VERSION, true );
+		}
+	}
+
+	/**
+	 * Enqueues the storefront style where Voucher Captain output is rendered (shortcodes, blocks, voucher fields),
+	 * so it is styled on any page – also inside [product_page] or page builder widgets.
+	 */
+	public static function enqueue_style(): void {
+		self::register_assets();
+		wp_enqueue_style( 'vcap-frontend' );
 	}
 
 	public function styles(): void {
 		if ( is_account_page() || is_order_received_page() || is_product() || is_cart() || is_checkout() ) {
-			wp_enqueue_style( 'vcap-frontend', VCAP_URL . 'assets/css/frontend.css', array(), VCAP_VERSION );
+			self::enqueue_style();
 		}
 	}
 
@@ -293,6 +313,7 @@ final class Downloads {
 	public function balance_shortcode(): string {
 		$result = '';
 		$posted = isset( $_POST['vcap_balance_code'] ) && ( ! is_user_logged_in() || ( isset( $_POST['vcap_balance_nonce'] ) && wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_balance_nonce'] ) ), 'vcap_balance' ) ) );
+		self::enqueue_style();
 		if ( $posted ) {
 			Shortcodes::no_cache();
 			if ( Plugin::rate_limited( 'balance', 15, 300, 15 * MINUTE_IN_SECONDS, false ) ) {
