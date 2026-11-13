@@ -3831,3 +3831,18 @@ msgstr "Rabatt: %s"
 
 msgid "Valid until: %s"
 msgstr "Gültig bis: %s"
+
+msgid "The redeem page \"%s\" contains neither the \"Redeem voucher\" block nor the [vcap_redeem] shortcode."
+msgstr "Die Einlöseseite „%s“ enthält weder den Block „Gutschein einlösen“ noch den Shortcode [vcap_redeem]."
+
+msgid "No published page contains the \"Redeem voucher\" block or the [vcap_redeem] shortcode."
+msgstr "Keine veröffentlichte Seite enthält den Block „Gutschein einlösen“ oder den Shortcode [vcap_redeem]."
+
+msgid "The selected redeem page is not published; links use another page with the redeem form."
+msgstr "Die gewählte Einlöseseite ist nicht veröffentlicht; Links führen zu einer anderen Seite mit dem Einlöseformular."
+
+msgid "Customers exchange ticket vouchers for tickets on that page, and voucher emails link to it."
+msgstr "Dort tauschen Kunden Ticketgutscheine gegen Tickets ein, und die Gutschein-E-Mails verlinken darauf."
+
+msgid "Choose the redeem page"
+msgstr "Einlöseseite wählen"

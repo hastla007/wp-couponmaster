@@ -135,6 +135,30 @@ final class Shortcodes {
 		return (string) apply_filters( 'vcap_redeem_url', $url, $code );
 	}
 
+	/** Whether a page shows the redeem form (block or shortcode in its content). */
+	public static function page_has_redeem_form( int $page_id ): bool {
+		$content = (string) get_post_field( 'post_content', $page_id );
+		$has     = has_shortcode( $content, 'vcap_redeem' ) || has_block( 'vcap/redeem', $content );
+		/** Whether the page shows the redeem form (e.g. true when a theme template renders it). */
+		return (bool) apply_filters( 'vcap_page_has_redeem_form', $has, $page_id );
+	}
+
+	/**
+	 * What is wrong with the redeem page, for an admin notice: '' when links lead to a working redeem form.
+	 */
+	public static function redeem_page_problem(): string {
+		$page = (int) get_option( 'vcap_redeem_page_id', 0 );
+		if ( $page > 0 && 'publish' === get_post_status( $page ) ) {
+			return self::page_has_redeem_form( $page )
+				/* translators: %s: page title */
+				? '' : sprintf( __( 'The redeem page "%s" contains neither the "Redeem voucher" block nor the [vcap_redeem] shortcode.', 'voucher-captain' ), get_the_title( $page ) );
+		}
+		if ( '' === self::redeem_url() ) {
+			return __( 'No published page contains the "Redeem voucher" block or the [vcap_redeem] shortcode.', 'voucher-captain' );
+		}
+		return $page > 0 ? __( 'The selected redeem page is not published; links use another page with the redeem form.', 'voucher-captain' ) : '';
+	}
+
 	public function redeem_shortcode( $atts = array() ): string {
 		$atts = shortcode_atts( array( 'button' => __( 'Redeem', 'voucher-captain' ) ), (array) $atts, 'vcap_redeem' );
 		ob_start();

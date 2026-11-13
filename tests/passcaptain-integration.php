@@ -187,6 +187,13 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	$redeem_page = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'publish', 'post_title' => 'Redeem', 'post_content' => '[vcap_redeem]' ) );
 	delete_transient( 'vcap_redeem_page_guess' );
 	vcap_pc_assert( str_contains( VCAP\Shortcodes::redeem_url( $tv->code ), 'vcap_code=' . rawurlencode( $tv->code ) ) && str_contains( VCAP\Shortcodes::redeem_url(), (string) get_permalink( $redeem_page ) ), 'the redeem page is found and links carry the code' );
+	$plain_page = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'publish', 'post_title' => 'About us', 'post_content' => 'Hello' ) );
+	update_option( 'vcap_redeem_page_id', $plain_page );
+	vcap_pc_assert( VCAP\Compat\PassCaptainTickets::sells_ticket_vouchers() && str_contains( VCAP\Shortcodes::redeem_page_problem(), 'About us' ), 'a redeem page without the redeem form is reported while ticket vouchers are sold' );
+	update_option( 'vcap_redeem_page_id', $redeem_page );
+	vcap_pc_assert( '' === VCAP\Shortcodes::redeem_page_problem(), 'a redeem page with the form is fine' );
+	delete_option( 'vcap_redeem_page_id' );
+	wp_delete_post( $plain_page, true );
 	$_POST    = array( 'vcap_balance_code' => $tv->code, 'vcap_balance_nonce' => wp_create_nonce( 'vcap_balance' ) );
 	$tv_bal   = do_shortcode( '[vcap_balance]' );
 	$_POST    = array();

@@ -289,7 +289,7 @@ Fünf parallele Prüfungen (Sicherheit, Geld/Buchungen, Steuer/Recht/Datenschutz
 - [x] Ticketgutscheine standardmäßig nur Kanal „passcaptain“, nicht als Wertgutschein im Warenkorb/PC-Checkout. — *erledigt: ohne Kanalauswahl nur Umtausch; Warenkorb-Hinweis auf die Einlöseseite, PC-Checkout lehnt ab; Wertnutzung nur mit „Shop“ oder Filter `vcap_passcaptain_ticket_voucher_as_value`.*
 - [x] Massenaktion „Ungültig machen“ mit Bestätigung (widerruft PC-Tickets). — *erledigt (4f3d8a4).*
 - [x] `[vcap_balance]` zeigt Prozentgutscheine als Eurobetrag und Ticketgutscheine als Geldguthaben; typgerecht anzeigen mit Einlöselink. — *erledigt: Guthaben / Wert / Rabatt % / Eintrittskarte / „Für n Tickets“ mit Link „Gegen Tickets eintauschen“; Filter `vcap_balance_result_parts`.*
-- [ ] Admin-Hinweis, wenn Ticketgutscheine verkauft werden, aber keine gültige Einlöseseite existiert; gewählte Seite auf Shortcode/Block prüfen.
+- [x] Admin-Hinweis, wenn Ticketgutscheine verkauft werden, aber keine gültige Einlöseseite existiert; gewählte Seite auf Shortcode/Block prüfen. — *erledigt: Hinweis auf VC-Seiten, Dashboard, Produkten und Einstellungen (`Shortcodes::redeem_page_problem()`, Filter `vcap_page_has_redeem_form`).*
 - [ ] Admin-Aktionen für umgewandelte Gutscheine: Tickets erneut/an andere E-Mail senden, Umwandlung rückgängig, Termin ändern; Fehler vor der Reservierung im Verlauf protokollieren.
 - [ ] Fehlgeschlagene Zustellungen: Listenfilter, Dashboard-Hinweis, automatischer Retry; Kunden über wiederhergestellten Gutschein nach PC-Absage informieren.
 - [ ] Verbindlichkeitenbericht zum Stichtag und Einlösejournal für die Buchhaltung; Guthaben-Aufladung von Geschenkkarten.

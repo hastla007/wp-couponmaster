@@ -42,6 +42,7 @@ final class PassCaptainTickets {
 		add_filter( 'vcap_line_snapshot', array( $this, 'snapshot' ), 10, 2 );
 		add_filter( 'vcap_redemption_channel_allowed', array( $this, 'channel_allowed' ), 10, 4 );
 		add_filter( 'vcap_shop_channel_refused_message', array( $this, 'shop_refused_message' ), 10, 2 );
+		add_action( 'admin_notices', array( $this, 'redeem_page_notice' ) );
 		add_filter( 'vcap_redeem_code', array( $this, 'redeem_page' ), 10, 2 );
 		add_filter( 'vcap_redeem_prefill', array( $this, 'redeem_prefill' ) );
 		add_action( 'vcap_redeem_form_fields', array( $this, 'redeem_fields' ) );
@@ -360,6 +361,28 @@ final class PassCaptainTickets {
 			return $allowed;
 		}
 		return self::value_use_allowed( $voucher );
+	}
+
+	/** Ticket vouchers are exchanged on the redeem page: warn when products sell them but the page is missing. */
+	public function redeem_page_notice(): void {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! $screen || ! current_user_can( 'manage_woocommerce' ) || ! ( str_contains( (string) $screen->id, 'vcap' ) || in_array( $screen->id, array( 'dashboard', 'product', 'edit-product', 'woocommerce_page_wc-settings' ), true ) ) ) {
+			return;
+		}
+		$problem = self::sells_ticket_vouchers() ? \VCAP\Shortcodes::redeem_page_problem() : '';
+		if ( '' === $problem ) {
+			return;
+		}
+		$link = admin_url( 'admin.php?page=wc-settings&tab=vcap' );
+		echo '<div class="notice notice-warning"><p>' . esc_html( $problem ) . ' ' . esc_html__( 'Customers exchange ticket vouchers for tickets on that page, and voucher emails link to it.', 'voucher-captain' )
+			. ' <a href="' . esc_url( $link ) . '">' . esc_html__( 'Choose the redeem page', 'voucher-captain' ) . '</a></p></div>';
+	}
+
+	/** Whether any published product sells Pass Captain ticket vouchers. */
+	public static function sells_ticket_vouchers(): bool {
+		global $wpdb;
+		$found = $wpdb->get_var( $wpdb->prepare( "SELECT pm.post_id FROM {$wpdb->postmeta} pm JOIN {$wpdb->posts} p ON p.ID = pm.post_id WHERE pm.meta_key IN (%s, %s) AND pm.meta_value NOT IN ('', '0') AND p.post_status = 'publish' LIMIT 1", self::META_TYPE, self::META_EVENT ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		return (bool) apply_filters( 'vcap_sells_ticket_vouchers', (bool) $found );
 	}
 
 	public function shop_refused_message( $message, $voucher ) {
