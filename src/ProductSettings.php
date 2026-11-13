@@ -563,7 +563,11 @@ final class ProductSettings {
 		if ( ! isset( $_POST['_vcap_type'] ) ) {
 			return;
 		}
-		$post = wp_unslash( $_POST );
+		$post     = wp_unslash( $_POST );
+		$previous = array();
+		foreach ( array( 'discount_type', 'amount_source', 'amount' ) as $key ) {
+			$previous[ $key ] = (string) $product->get_meta( '_vcap_' . $key );
+		}
 		$text = array( 'type', 'template', 'amount_source', 'custom_presets', 'discount_type', 'tax_treatment', 'usage', 'expiry_mode', 'email_restrict', 'code_batch', 'code_prefix', 'code_suffix', 'delivery', 'send_to', 'event_location', 'code_pool_empty' );
 		foreach ( $text as $key ) {
 			$product->update_meta_data( '_vcap_' . $key, sanitize_text_field( (string) ( $post[ '_vcap_' . $key ] ?? '' ) ) );
@@ -622,6 +626,40 @@ final class ProductSettings {
 		}
 		$product->update_meta_data( '_vcap_builtin_fields', $builtin );
 		// phpcs:enable
+		$this->keep_valid_discount( $product, $previous );
+	}
+
+	/**
+	 * An invalid discount setup (ProductConfig::discount_errors()) is not saved: the previous discount type, value
+	 * source and value are kept (a setup that was invalid before falls back to "Fixed cart discount") and the
+	 * product screen shows why.
+	 *
+	 * @param array<string, string> $previous Discount type, value source and value before this save.
+	 */
+	private function keep_valid_discount( \WC_Product $product, array $previous ): void {
+		$errors = 'yes' === $product->get_meta( '_vcap_enabled' ) ? ProductConfig::discount_errors( ProductConfig::get( $product ) ) : array();
+		if ( ! $errors ) {
+			return;
+		}
+		foreach ( $previous as $key => $value ) {
+			$product->update_meta_data( '_vcap_' . $key, $value );
+		}
+		if ( ProductConfig::discount_errors( ProductConfig::get( $product ) ) ) {
+			$product->update_meta_data( '_vcap_discount_type', 'fixed_cart' );
+		}
+		self::save_error(
+			/* translators: %s: reasons */
+			sprintf( __( 'Voucher discount not saved: %s The previous discount type and voucher value were kept.', 'voucher-captain' ), implode( ' ', $errors ) )
+		);
+	}
+
+	/** Error shown on the product screen after saving (WooCommerce's product save errors). */
+	private static function save_error( string $message ): void {
+		if ( class_exists( '\WC_Admin_Meta_Boxes' ) && method_exists( '\WC_Admin_Meta_Boxes', 'add_error' ) ) {
+			\WC_Admin_Meta_Boxes::add_error( $message );
+		} else {
+			Admin\Flash::add( 'error', $message );
+		}
 	}
 
 	public function variation_option( $loop, $variation_data, $variation ): void {
@@ -711,7 +749,17 @@ final class ProductSettings {
 		$data = isset( $_POST['vcap_var'][ $loop ] ) ? (array) wp_unslash( $_POST['vcap_var'][ $loop ] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		// phpcs:enable
 		$variation->update_meta_data( '_vcap_template', isset( $data['template'] ) && '' !== $data['template'] ? absint( $data['template'] ) : '' );
+		$previous = (string) $variation->get_meta( '_vcap_amount' );
 		$variation->update_meta_data( '_vcap_amount', isset( $data['amount'] ) && '' !== $data['amount'] ? wc_format_decimal( $data['amount'] ) : '' );
+		$errors = ProductConfig::discount_errors( ProductConfig::get( $variation ) );
+		if ( $errors && '' !== (string) $variation->get_meta( '_vcap_amount' ) ) {
+			// E.g. a value above 100 for a percentage voucher: keep the previous value.
+			$variation->update_meta_data( '_vcap_amount', $previous );
+			self::save_error(
+				/* translators: 1: variation name, 2: reasons */
+				sprintf( __( 'Voucher value of "%1$s" not saved: %2$s The previous value was kept.', 'voucher-captain' ), wp_strip_all_tags( $variation->get_name() ), implode( ' ', $errors ) )
+			);
+		}
 		foreach ( array( 'expiry_days', 'per_item', 'max_checkins' ) as $key ) {
 			$variation->update_meta_data( '_vcap_' . $key, isset( $data[ $key ] ) && '' !== $data[ $key ] ? absint( $data[ $key ] ) : '' );
 		}

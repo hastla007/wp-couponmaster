@@ -36,7 +36,7 @@ Shops und Erweiterungen können die Zuordnung je Gutschein mit dem Filter `vcap_
 |---|---|---|---|---|
 | 2.1 | **Wertgutschein** (Typ „Gutschein“, Festbetrag, einmalig) | verkauft als Produkt | `payment` (Mehrzweck) | „auto: a sold value voucher …“ |
 | 2.2 | **Geschenkkarte** (Typ „Geschenkkarte“, Restguthaben) | verkauft als Produkt, auch Aufladung | `payment` (Mehrzweck) | „auto: a gift card with balance …“ |
-| 2.3 | **Prozentgutschein** | verkauft als Produkt | `discount` (Preisnachlass) | „auto: a sold percentage voucher …“ |
+| 2.3 | **Prozentgutschein** | verkauft als Produkt; nur mit Wertquelle „Fester Wert“ über 0 bis höchstens 100 (sonst nicht speicherbar, nicht kaufbar und nicht ausgestellt – `ProductConfig::discount_errors()`); „Fester Produktrabatt“ ist für verkaufte Gutscheine gesperrt | `discount` (Preisnachlass) | „auto: a sold percentage voucher …“; `tests/product-setup-integration.php` Abschnitt 14 |
 | 2.4 | **Ticketgutschein** (Typ „Ticket“, mit Geldwert) | verkauft als Produkt | `payment` (wie Wertgutschein) | „auto: a sold ticket voucher …“ |
 | 2.5 | **Ticketgutschein ohne Geldwert** (Eintritt für bestimmte Veranstaltung/Termin) | verkauft als Produkt; wird auf der Einlöseseite in Tickets getauscht, bezahlt keine Bestellung | im Warenkorb und bei Pass Captain als Zahlung gesperrt (`vcap_ticket_voucher`); Tausch erzeugt eine 0‑€‑Bestellung in Pass Captain | `tests/passcaptain-integration.php` „a ticket voucher cannot pay for a Pass Captain checkout …“ |
 | 2.6 | **Kundenguthaben** (Typ „Guthaben“) | nicht verkauft: Erstattung als Guthaben, Empfehlungsprämie, manuelle Gutschrift | `payment` | „auto: store credit …“ |

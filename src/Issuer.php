@@ -29,6 +29,9 @@ final class Issuer {
 		add_action( 'vcap_issue_order', array( $this, 'issue_async' ) );
 	}
 
+	/** Order item meta: issuing was refused because the product's discount setup is invalid (note written once). */
+	public const CONFIG_REFUSED_META = '_vcap_config_refused';
+
 	public function on_status( $order_id, $order = null ): void {
 		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
 		if ( ! $order || ! self::payment_ok( $order ) || ! apply_filters( 'vcap_should_issue_for_order', true, $order ) ) {
@@ -74,6 +77,12 @@ final class Issuer {
 			$config = ProductConfig::get( $product );
 			$qty    = max( 0, (int) $item->get_quantity() + (int) $order->get_qty_refunded_for_item( $item_id ) );
 			$count  = (int) apply_filters( 'vcap_vouchers_per_item', $qty * $config['per_item'], $item, $config );
+			$errors = ProductConfig::discount_errors( $config );
+			if ( $count > 0 && $errors && ! $this->repo->get_slot( (int) $item_id, $count - 1 ) ) {
+				// Invalid discount setup (e.g. a percentage from the price): never insert a voucher for it.
+				$this->refuse_line( $order, $item, $errors );
+				continue;
+			}
 			if ( $count > 0 ) {
 				$this->record_line( $order, $item, $config, $count );
 			}
@@ -104,6 +113,23 @@ final class Issuer {
 			do_action( 'vcap_vouchers_issued', $created, $order );
 		}
 		return $created;
+	}
+
+	/** Order note (once per line) for a voucher line that is not issued because of its product's discount setup. */
+	private function refuse_line( \WC_Order $order, \WC_Order_Item_Product $item, array $errors ): void {
+		if ( 'yes' === $item->get_meta( self::CONFIG_REFUSED_META ) ) {
+			return;
+		}
+		$item->update_meta_data( self::CONFIG_REFUSED_META, 'yes' );
+		$item->save_meta_data();
+		$order->add_order_note(
+			sprintf(
+				/* translators: 1: product name, 2: reasons */
+				__( 'No voucher issued for "%1$s": the product\'s discount setup is invalid (%2$s). Correct the product and issue the vouchers from this order screen, or refund the line.', 'voucher-captain' ),
+				wp_strip_all_tags( $item->get_name() ),
+				implode( ' ', $errors )
+			)
+		);
 	}
 
 	public const LINE_META = '_vcap_line';
@@ -265,7 +291,18 @@ final class Issuer {
 
 		$create_coupon = 'ticket' !== $voucher->type || $voucher->initial_amount > 0;
 		if ( apply_filters( 'vcap_create_coupon', $create_coupon, $voucher, $config ) ) {
-			$voucher->coupon_id = $this->coupons->create_coupon( $voucher, $config );
+			$error = '';
+			try {
+				$voucher->coupon_id = $this->coupons->create_coupon( $voucher, $config );
+			} catch ( \Throwable $e ) {
+				// E.g. WC_Data_Exception for an amount WooCommerce refuses: roll the voucher back like a failed save.
+				$voucher->coupon_id = 0;
+				$error              = wp_strip_all_tags( $e->getMessage() );
+			}
+			if ( '' !== $error ) {
+				/* translators: 1: product name, 2: error message */
+				$order->add_order_note( sprintf( __( 'WooCommerce refused the coupon of a voucher for "%1$s": %2$s', 'voucher-captain' ), $item->get_name(), $error ) );
+			}
 			if ( ! $voucher->coupon_id || ! $this->repo->update( $voucher ) ) {
 				// Never leave a voucher without its WooCommerce coupon (the code would be sent but not work): undo
 				// this slot so the next issuing run creates it again, and tell the shop.

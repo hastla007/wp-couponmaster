@@ -138,8 +138,25 @@ final class CouponManager {
 		return $this->repo->code_exists( $code ) || wc_get_coupon_id_by_code( $code ) > 0;
 	}
 
+	/**
+	 * Creates the WooCommerce coupon of a voucher. A failure (e.g. WC_Data_Exception for an invalid amount) removes
+	 * a coupon that was saved already and is passed on, so the caller can roll the voucher back.
+	 *
+	 * @throws \Throwable When WooCommerce refuses the coupon data.
+	 */
 	public function create_coupon( Voucher $voucher, array $config ): int {
 		$coupon = new \WC_Coupon();
+		try {
+			return $this->build_coupon( $coupon, $voucher, $config );
+		} catch ( \Throwable $e ) {
+			if ( $coupon->get_id() ) {
+				wp_delete_post( $coupon->get_id(), true );
+			}
+			throw $e;
+		}
+	}
+
+	private function build_coupon( \WC_Coupon $coupon, Voucher $voucher, array $config ): int {
 		$coupon->set_code( $voucher->code );
 		$type = in_array( $voucher->discount_type, array( 'fixed_cart', 'percent', 'fixed_product' ), true ) ? $voucher->discount_type : 'fixed_cart';
 		if ( $voucher->is_multi_use() ) {

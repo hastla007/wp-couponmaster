@@ -267,6 +267,52 @@ $pooled->update_meta_data( '_vcap_code_pool_empty', 'random' );
 $pooled->save();
 vcap_ps_assert( wc_get_product( $pooled->get_id() )->is_purchasable(), 'with "random codes" it can still be bought' );
 
+/* ---- 14. Discount setup of sold vouchers (percentage, fixed product discount) ------------------------------ */
+
+$pct_price = vcap_ps_product( 'PS percent from price', array( 'discount_type' => 'percent', 'amount_source' => 'price' ), '120' );
+vcap_ps_assert( 'discount_invalid' === ProductChecks::unsellable_reason( $pct_price ) && ! $pct_price->is_purchasable(), 'a percentage taken from the product price (120 € = 120 %) cannot be bought' );
+vcap_ps_assert( (bool) array_filter( ProductChecks::problems( $pct_price ), static fn( $p ) => 'error' === $p['level'] ) && in_array( $pct_price->get_id(), array_map( static fn( $p ) => $p->get_id(), ProductChecks::shop_problems()['invalid'] ), true ), 'the product screen and the shop notices name the invalid discount setup' );
+$per_item = vcap_ps_product( 'PS fixed product discount', array( 'discount_type' => 'fixed_product', 'amount_source' => 'fixed', 'amount' => '50' ), '50' );
+vcap_ps_assert( 'discount_invalid' === ProductChecks::unsellable_reason( $per_item ) && ! $per_item->is_purchasable(), '"Fixed product discount" (the value per item and unit) cannot be bought for a sold voucher' );
+$pct_ok = vcap_ps_product( 'PS percent 20', array( 'discount_type' => 'percent', 'amount_source' => 'fixed', 'amount' => '20' ), '30' );
+vcap_ps_assert( '' === ProductChecks::unsellable_reason( $pct_ok ) && $pct_ok->is_purchasable(), 'a fixed percentage of 20 can be bought' );
+
+// Issuing an order of such a product (e.g. placed before the setup changed): no voucher row, a note on the order.
+list( $bad_order, $bad_vouchers ) = vcap_ps_buy( $pct_price );
+$bad_notes = implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $bad_order->get_id() ) ), 'content' ) );
+vcap_ps_assert( ! $bad_vouchers && false !== strpos( $bad_notes, 'discount setup is invalid' ), 'an order of a product with an invalid discount setup issues nothing and says why', $bad_notes );
+$over = vcap_ps_product( 'PS percent 150', array( 'discount_type' => 'percent', 'amount_source' => 'fixed', 'amount' => '150' ), '30' );
+list( , $over_vouchers ) = vcap_ps_buy( $over );
+vcap_ps_assert( ! $over_vouchers, 'a percentage above 100 is refused before any voucher is inserted' );
+
+// WooCommerce refuses the coupon (WC_Data_Exception): the voucher row is rolled back, the slot is free again.
+$refuse = static function () {
+	throw new WC_Data_Exception( 'vcap_test_refused', 'Refused by the test' );
+};
+add_filter( 'vcap_coupon_before_save', $refuse );
+list( $exc_order, $exc_vouchers ) = vcap_ps_buy( $pct_ok );
+remove_filter( 'vcap_coupon_before_save', $refuse );
+$exc_notes = implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $exc_order->get_id() ) ), 'content' ) );
+vcap_ps_assert( ! $exc_vouchers && false !== strpos( $exc_notes, 'Refused by the test' ) && false !== strpos( $exc_notes, 'could not be created' ), 'a coupon WooCommerce refuses rolls the voucher back with a note (no voucher without coupon)', $exc_notes );
+$retry = vcap()->issuer->issue_for_order( wc_get_order( $exc_order->get_id() ), true );
+vcap_ps_assert( 1 === count( $retry ) && 'percent' === ( new WC_Coupon( $retry[0]->coupon_id ) )->get_discount_type() && 20.0 === (float) ( new WC_Coupon( $retry[0]->coupon_id ) )->get_amount(), 'the next issuing run creates the voucher (20 % coupon)' );
+
+// Saving the product form: an invalid combination keeps the previous discount setup.
+$form = vcap_ps_product( 'PS form discount', array( 'type' => 'voucher', 'discount_type' => 'fixed_cart', 'amount_source' => 'price' ), '80' );
+$_POST = array( '_vcap_enabled' => 'yes', '_vcap_type' => 'voucher', '_vcap_discount_type' => 'percent', '_vcap_amount_source' => 'price', '_vcap_amount' => '' );
+( new VCAP\ProductSettings() )->save( $form );
+$form->save();
+$_POST = array();
+$form  = wc_get_product( $form->get_id() );
+vcap_ps_assert( 'fixed_cart' === $form->get_meta( '_vcap_discount_type' ) && 'price' === $form->get_meta( '_vcap_amount_source' ) && $form->is_purchasable(), 'saving "percentage from the product price" keeps the previous discount setup' );
+vcap_ps_assert( class_exists( 'WC_Admin_Meta_Boxes' ) || false !== strpos( (string) wp_json_encode( Flash::pending() ), 'not saved' ), 'the product screen says why it was not saved' );
+$_POST = array( '_vcap_enabled' => 'yes', '_vcap_type' => 'voucher', '_vcap_discount_type' => 'percent', '_vcap_amount_source' => 'fixed', '_vcap_amount' => '25' );
+( new VCAP\ProductSettings() )->save( $form );
+$form->save();
+$_POST = array();
+$form  = wc_get_product( $form->get_id() );
+vcap_ps_assert( 'percent' === $form->get_meta( '_vcap_discount_type' ) && '25' === (string) $form->get_meta( '_vcap_amount' ) && $form->is_purchasable(), 'a fixed percentage of 25 is saved' );
+
 /* ---- 12. Onboarding ----------------------------------------------------------------------------------------- */
 
 $keep_page = get_option( 'vcap_redeem_page_id', false );
