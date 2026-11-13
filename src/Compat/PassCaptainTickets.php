@@ -50,6 +50,7 @@ final class PassCaptainTickets {
 		add_filter( 'vcap_scanner_redeem_refused', array( $this, 'scanner_redeem_refused' ), 10, 2 );
 		add_action( 'vcap_voucher_event', array( $this, 'on_voucher_event' ), 10, 2 );
 		add_action( 'wp_pass_captain_voucher_tickets_revoked_v1', array( $this, 'on_tickets_revoked' ), 10, 1 );
+		add_action( 'vcap_passcaptain_tickets_issued', function () { $this->forget_states(); }, 0 );
 		add_filter( 'vcap_voucher_next_steps', array( $this, 'next_steps' ), 10, 2 );
 		add_filter( 'vcap_email_intro', array( $this, 'email_intro' ), 10, 3 );
 		add_filter( 'vcap_placeholder_definitions', array( $this, 'placeholder_definitions' ) );
@@ -123,14 +124,25 @@ final class PassCaptainTickets {
 	 * Pass Captain's state of the voucher's committed exchange (event, starts_at, email, ticket_ids, status), or
 	 * null when it was not exchanged (yet).
 	 */
+	/** @var array<int, array|null> Exchange state per voucher for this request (account pages ask several times). */
+	private array $states = array();
+
 	private function exchange_state( Voucher $voucher ): ?array {
+		if ( array_key_exists( $voucher->id, $this->states ) ) {
+			return $this->states[ $voucher->id ];
+		}
 		[ $attempt, $redemption ] = $this->attempt( $voucher );
 		$service                  = self::service();
 		if ( ! $redemption || RedemptionService::STATE_COMMITTED !== $redemption['state'] || ! $service ) {
-			return null;
+			return $this->states[ $voucher->id ] = null;
 		}
 		$state = $service->get( self::exchange_key( $voucher, $attempt ) );
-		return is_array( $state ) ? $state + array( 'key' => self::exchange_key( $voucher, $attempt ) ) : null;
+		return $this->states[ $voucher->id ] = ( is_array( $state ) ? $state + array( 'key' => self::exchange_key( $voucher, $attempt ) ) : null );
+	}
+
+	/** Forget cached exchange states (after an exchange, a revocation or a void). */
+	private function forget_states(): void {
+		$this->states = array();
 	}
 
 	/** Customer account: what the voucher was exchanged for. */
@@ -232,6 +244,7 @@ final class PassCaptainTickets {
 	 * @param array $info redemption_key, order_public_id, remaining, revoked, reason.
 	 */
 	public function on_tickets_revoked( $info ): void {
+		$this->forget_states();
 		$info = (array) $info;
 		$key  = (string) ( $info['redemption_key'] ?? '' );
 		if ( 0 !== strpos( $key, 'passcaptain:ticket:' ) || (int) ( $info['remaining'] ?? 1 ) > 0 ) {
@@ -367,6 +380,7 @@ final class PassCaptainTickets {
 	 * @return array<string, mixed>|\WP_Error voucher_id, order_public_id, tickets, email, status ("issued").
 	 */
 	public function exchange( string $code, array $args = array() ) {
+		$this->forget_states();
 		$voucher = $this->vouchers->get_by_code( wc_format_coupon_code( $code ) ) ?? $this->vouchers->get_by_code( $code );
 		if ( ! $voucher ) {
 			return new \WP_Error( 'vcap_not_found', __( 'This voucher code is not valid.', 'voucher-captain' ), array( 'status' => 404 ) );
@@ -525,6 +539,7 @@ final class PassCaptainTickets {
 
 	/** Voucher voided (purchase refunded) after the exchange: revoke the tickets in Pass Captain. */
 	public function on_voucher_event( $voucher_id, $event ): void {
+		$this->forget_states();
 		if ( 'voided' !== $event ) {
 			return;
 		}
