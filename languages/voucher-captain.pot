@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-13 00:47+0000\n"
+"POT-Creation-Date: 2026-11-13 00:50+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:75 src/API/V1/RedemptionService.php:117
@@ -1123,45 +1123,53 @@ msgstr ""
 msgid "Partner saved. New orders with codes of this campaign are credited to the partner."
 msgstr ""
 
-#: src/Compat/PassCaptain.php:45
+#: src/Compat/PassCaptain.php:54
 msgid "Not active – vouchers in the ticket checkout, ticket vouchers and the shared scanner are off. Voucher Captain works fully without it."
 msgstr ""
 
-#: src/Compat/PassCaptain.php:48
+#: src/Compat/PassCaptain.php:57
 msgid "Vouchers and gift cards pay in the ticket checkout (contract v1; tick \"WP Pass Captain\" under \"Redeemable via\" or leave all channels unticked)."
 msgstr ""
 
-#: src/Compat/PassCaptain.php:49
+#: src/Compat/PassCaptain.php:58
 msgid "Ticket vouchers: choose a ticket type or event in the product's voucher settings."
 msgstr ""
 
-#: src/Compat/PassCaptain.php:49
+#: src/Compat/PassCaptain.php:58
 msgid "Ticket vouchers: not available – update WP Pass Captain."
 msgstr ""
 
-#: src/Compat/PassCaptain.php:50
+#: src/Compat/PassCaptain.php:59
 msgid "Shared scanner: Vouchers → Scanner also checks in Pass Captain tickets."
 msgstr ""
 
-#: src/Compat/PassCaptain.php:50
+#: src/Compat/PassCaptain.php:59
 msgid "Shared scanner: not available – update WP Pass Captain."
 msgstr ""
 
+#: src/Compat/PassCaptain.php:60
+msgid "Gift card shortfall: tickets of the shop order wait for the review."
+msgstr ""
+
+#: src/Compat/PassCaptain.php:60
+msgid "Gift card shortfall: this WP Pass Captain issues tickets anyway – update it."
+msgstr ""
+
 #. translators: %s: version
-#: src/Compat/PassCaptain.php:54
+#: src/Compat/PassCaptain.php:64
 #, php-format
 msgid "Active (version %s)"
 msgstr ""
 
-#: src/Compat/PassCaptain.php:54 src/Voucher.php:61
+#: src/Compat/PassCaptain.php:64 src/Voucher.php:61
 msgid "Active"
 msgstr ""
 
-#: src/Compat/PassCaptain.php:58
+#: src/Compat/PassCaptain.php:68
 msgid "Open WP Pass Captain"
 msgstr ""
 
-#: src/Compat/PassCaptain.php:62
+#: src/Compat/PassCaptain.php:72
 msgid "WP Pass Captain (ticket checkout)"
 msgstr ""
 
@@ -1729,7 +1737,7 @@ msgstr ""
 msgid "Voucher shortfall accepted by an administrator; the order can be fulfilled."
 msgstr ""
 
-#: src/CouponManager.php:1084 src/CouponManager.php:1170
+#: src/CouponManager.php:1084 src/CouponManager.php:1174
 msgid "Voucher balance shortfall requires manual review before fulfilment."
 msgstr ""
 
@@ -1755,12 +1763,16 @@ msgstr ""
 msgid "Voucher %1$s: %2$s deducted, remaining balance %3$s."
 msgstr ""
 
-#: src/CouponManager.php:1241
+#: src/CouponManager.php:1158
+msgid "Gift card shortfall: the installed WP Pass Captain cannot hold ticket issuance. If this order contains tickets, check them – and update WP Pass Captain."
+msgstr ""
+
+#: src/CouponManager.php:1245
 #, php-format
 msgid "Order #%s cancelled or refunded"
 msgstr ""
 
-#: src/CouponManager.php:1250
+#: src/CouponManager.php:1254
 msgid "Some voucher balances could not be restored. Review this order and retry the refund handling."
 msgstr ""
 

@@ -403,6 +403,14 @@ if ( null !== VCAP\Compat\PassCaptainScanner::service() ) {
 	}
 }
 
+// Gift card shortfall: Voucher Captain asks Pass Captain to hold the tickets of the shop order (versioned contract).
+$short_order = wc_create_order();
+$short_order->update_meta_data( VCAP\CouponManager::SHORTFALL_META, 'yes' );
+$short_order->save();
+$has_contract = defined( 'PassCaptain\\Integrations\\WooCommerce\\OrderAdapter::HOLD_FULFILMENT' );
+vcap_pc_assert( true === apply_filters( 'wpcap_woocommerce_hold_fulfilment', false, $short_order ) && $has_contract === VCAP\Compat\PassCaptain::supports_hold_fulfilment(), 'a shortfall holds the ticket issuance; support for the hold is detected from Pass Captain\'s contract version' );
+vcap_pc_assert( false === apply_filters( 'wpcap_woocommerce_hold_fulfilment', false, wc_create_order() ), 'orders without a shortfall are not held' );
+
 // Minor units follow ISO 4217 (as Pass Captain does), not the shop's price display setting.
 $decimals = static fn() => 0;
 add_filter( 'wc_get_price_decimals', $decimals );

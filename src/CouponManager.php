@@ -1153,6 +1153,10 @@ final class CouponManager {
 			$order->update_meta_data( self::SHORTFALL_AMOUNTS_META, $missing );
 		}
 		if ( $shortfall || $missing ) {
+			if ( ! self::has_shortfall( $order ) && class_exists( '\\PassCaptain\\Integrations\\WooCommerce\\OrderAdapter' ) && ! Compat\PassCaptain::supports_hold_fulfilment() ) {
+				// Tickets in this order would be issued although the gift card could not be charged in full.
+				$order->add_order_note( __( 'Gift card shortfall: the installed WP Pass Captain cannot hold ticket issuance. If this order contains tickets, check them – and update WP Pass Captain.', 'voucher-captain' ) );
+			}
 			$order->update_meta_data( self::SHORTFALL_META, 'yes' );
 		} elseif ( self::has_shortfall( $order ) && ! $this->open_balance_coupons( $order, $applied ) ) {
 			$order->delete_meta_data( self::SHORTFALL_META ); // Resolved (balance restored and charged on a later run).

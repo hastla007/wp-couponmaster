@@ -3993,3 +3993,12 @@ msgstr "Empfehlungsprämie teilweise zurückgenommen: %s Guthaben abgebucht, der
 
 msgid "Store credit coupon was missing and has been created again."
 msgstr "Der Guthaben-Coupon fehlte und wurde neu angelegt."
+
+msgid "Gift card shortfall: tickets of the shop order wait for the review."
+msgstr "Fehlbetrag einer Geschenkkarte: Die Tickets der Shop-Bestellung warten auf die Prüfung."
+
+msgid "Gift card shortfall: this WP Pass Captain issues tickets anyway – update it."
+msgstr "Fehlbetrag einer Geschenkkarte: Diese WP-Pass-Captain-Version stellt die Tickets trotzdem aus – bitte aktualisieren."
+
+msgid "Gift card shortfall: the installed WP Pass Captain cannot hold ticket issuance. If this order contains tickets, check them – and update WP Pass Captain."
+msgstr "Fehlbetrag einer Geschenkkarte: Das installierte WP Pass Captain kann die Ticketausstellung nicht anhalten. Enthält diese Bestellung Tickets, prüfen Sie diese – und aktualisieren Sie WP Pass Captain."
