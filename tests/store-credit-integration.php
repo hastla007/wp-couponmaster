@@ -46,6 +46,22 @@ vcap_sc_assert( is_wp_error( $credit->adjust( $alice, 10, '' ) ), 'a reason is r
 $events = array_column( vcap()->vouchers->events( $account->id ), 'note', 'event' );
 vcap_sc_assert( 'Goodwill' === ( $events['credit'] ?? '' ) && 'Correction' === ( $events['debit'] ?? '' ), 'credit changes are journaled with their reason' );
 
+// A missing account coupon is created again (balance kept); a failed coupon save does not leave a broken account.
+wp_delete_post( $account->coupon_id, true );
+$repaired = $credit->account( $alice );
+vcap_sc_assert( $repaired && $repaired->coupon_id && 'publish' === get_post_status( $repaired->coupon_id ) && 25.0 === (float) $repaired->balance, 'an account whose coupon was deleted gets a new one and keeps its balance' );
+$account  = $repaired;
+$carol    = vcap_sc_user( 'carol' );
+global $wpdb;
+$posts_tb = $wpdb->posts;
+$no_coupon = static fn( $q ) => ( str_starts_with( ltrim( (string) $q ), 'INSERT INTO `' . $posts_tb . '`' ) && str_contains( (string) $q, 'shop_coupon' ) ) ? '' : $q;
+add_filter( 'query', $no_coupon );
+$failed = $credit->adjust( $carol, 10, 'Goodwill' );
+remove_filter( 'query', $no_coupon );
+vcap_sc_assert( is_wp_error( $failed ) && null === $credit->account( $carol ), 'a store credit account whose coupon cannot be saved is not opened' );
+$retry = $credit->adjust( $carol, 10, 'Goodwill' );
+vcap_sc_assert( ! is_wp_error( $retry ) && 10.0 === $credit->balance( $carol ), 'the next attempt opens the account' );
+
 // Paying with store credit: only the owner, partial use, deducted at payment.
 $foreign = vcap_sc_order( $product, $bob );
 vcap_sc_assert( is_wp_error( $foreign->apply_coupon( $account->code ) ), 'another customer cannot use the store credit' );

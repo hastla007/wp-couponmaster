@@ -3990,3 +3990,6 @@ msgstr "Die Empfehlungsprämie konnte noch nicht zurückgenommen werden (%s); es
 
 msgid "Referral reward partly withdrawn: %s store credit debited, the rest was already spent."
 msgstr "Empfehlungsprämie teilweise zurückgenommen: %s Guthaben abgebucht, der Rest war bereits ausgegeben."
+
+msgid "Store credit coupon was missing and has been created again."
+msgstr "Der Guthaben-Coupon fehlte und wurde neu angelegt."

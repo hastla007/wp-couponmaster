@@ -39,7 +39,10 @@ final class StoreCredit {
 		$table = Install::tables()['vouchers'];
 		$row   = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE user_id = %d AND type = 'credit' ORDER BY id ASC LIMIT 1", $user_id ), ARRAY_A ); // phpcs:ignore
 		if ( $row ) {
-			return Voucher::from_row( $row );
+			$account = Voucher::from_row( $row );
+			// An account whose WooCommerce coupon is missing (failed save, deleted by hand) cannot be used in
+			// the cart: give it a coupon again.
+			return $account->coupon_id && get_post_status( $account->coupon_id ) ? $account : $this->repair_coupon( $account );
 		}
 		if ( ! $create ) {
 			return null;
@@ -71,14 +74,44 @@ final class StoreCredit {
 			// Created concurrently: return the existing account.
 			return $this->account( $user_id, false );
 		}
-		$v->coupon_id = $this->coupons->create_coupon( $v, ProductConfig::DEFAULTS );
-		$coupon       = new \WC_Coupon( $v->coupon_id );
+		if ( ! $this->attach_coupon( $v ) ) {
+			// No usable coupon: undo the account, the next attempt opens it again.
+			$this->repo->delete( $v->id );
+			return null;
+		}
+		$this->repo->log( $v->id, 'issued', 0.0, 0.0, __( 'Store credit account opened', 'voucher-captain' ) );
+		return $v;
+	}
+
+	/** Creates the account's WooCommerce coupon and stores its id; false (and no coupon left) on failure. */
+	private function attach_coupon( Voucher $v ): bool {
+		$coupon_id = $this->coupons->create_coupon( $v, ProductConfig::DEFAULTS );
+		if ( ! $coupon_id ) {
+			return false;
+		}
+		$coupon = new \WC_Coupon( $coupon_id );
 		/* translators: %s: customer name */
 		$coupon->set_description( sprintf( __( 'Store credit of %s (Voucher Captain)', 'voucher-captain' ), $v->buyer_name ) );
 		$coupon->save();
-		$this->repo->update( $v );
-		$this->repo->log( $v->id, 'issued', 0.0, 0.0, __( 'Store credit account opened', 'voucher-captain' ) );
-		return $v;
+		$v->coupon_id = $coupon_id;
+		if ( ! $this->repo->update( $v ) ) {
+			wp_delete_post( $coupon_id, true );
+			$v->coupon_id = 0;
+			return false;
+		}
+		return true;
+	}
+
+	/** Gives an existing account a coupon again (its balance is kept); the account is returned either way. */
+	private function repair_coupon( Voucher $account ): Voucher {
+		$existing = wc_get_coupon_id_by_code( $account->code );
+		if ( $existing ) {
+			$account->coupon_id = (int) $existing;
+			$this->repo->update( $account );
+		} elseif ( $this->attach_coupon( $account ) ) {
+			$this->repo->log( $account->id, 'edited', null, null, __( 'Store credit coupon was missing and has been created again.', 'voucher-captain' ) );
+		}
+		return $account;
 	}
 
 	public function balance( int $user_id ): float {
