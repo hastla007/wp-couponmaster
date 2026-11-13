@@ -76,6 +76,16 @@ final class VoucherService {
 		return is_wp_error( $provider ) ? $provider : $provider->release( $code, $order );
 	}
 
+	/** VAT refunded for one order line, over all its tax rates. */
+	private static function refunded_tax( \WC_Order $order, \WC_Order_Item_Product $item ): float {
+		$total = 0.0;
+		$taxes = (array) $item->get_taxes();
+		foreach ( array_keys( (array) ( $taxes['total'] ?? array() ) ) as $rate_id ) {
+			$total += (float) $order->get_tax_refunded_for_item( $item->get_id(), (int) $rate_id );
+		}
+		return round( $total, wc_get_price_decimals() );
+	}
+
 	/**
 	 * Order and refund data per order line, for connector plugins (e.g. to grant or revoke access per line).
 	 *
@@ -117,6 +127,8 @@ final class VoucherService {
 				'total'             => (float) $item->get_total(),
 				'total_tax'         => (float) $item->get_total_tax(),
 				'refunded_total'    => (float) $order->get_total_refunded_for_item( $item_id ),
+				// Refunded VAT of this line (sum over its tax rates), for the VAT correction of a refund.
+				'refunded_tax'      => self::refunded_tax( $order, $item ),
 				'currency'          => $order->get_currency(),
 				'voucher_line'      => Issuer::line_data( $item ),
 				'vouchers'          => $vouchers[ (int) $item_id ] ?? array(),

@@ -191,6 +191,28 @@ Offene Fragen dazu an die Steuerberatung:
 | F14 | 10.5: Soll der Shop bei steuerpflichtigen Gutscheinen „gleicher Bruttopreis“ (10.4) verwenden, oder ist der WooCommerce-Standard akzeptabel? | ☐ 10.4 ☐ Standard |
 | F15 | 10.7: Wechsel vom Kleinunternehmer zur Regelbesteuerung – wie sind vorher verkaufte, später eingelöste Gutscheine zu behandeln? | |
 
+## 11. EU-weite Steuerfälle (Zielmarkt EU‑27)
+
+Gilt für jedes Land, an das der Shop verkauft (WooCommerce „Verkaufsorte“). Voucher Captain speichert **keine
+Steuersätze**; Sätze, OSS-Länder und Leistungsort kommen aus den WooCommerce-Steuereinstellungen. Länderdaten
+(Währung, Sprache, gesetzliche Gültigkeit) stehen in `config/markets.php` (COMPATIBILITY.md „EU target market“).
+
+| Thema | Festgelegtes Verhalten (gilt in allen EU-Ländern gleich) | Nachweis |
+|---|---|---|
+| OSS / Leistungsort | WooCommerce berechnet die USt nach Käuferland (Abschnitt 10.3); Gutscheine verändern den Satz nicht. | `tests/tax-integration.php` 7.3 |
+| Bruttopreise | Gutscheinwert = tatsächlich bezahlter Bruttobetrag; „gleicher Bruttopreis“ und WooCommerce-Standard beide unterstützt (10.4/10.5). | 7.4 |
+| Gutscheinbesteuerung | Richtlinie (EU) 2016/1065 ist in allen Mitgliedstaaten umgesetzt; Einordnung je Produkt (Abschnitt 1–4). Länderspezifische Abweichungen nur über `vcap_voucher_tax_treatment`. | Abschnitt 2 |
+| Positionsbezogene Erstattung | Je Bestellposition: erstattete Menge, Netto **und USt** (`order_lines()` → `refunded_quantity`, `refunded_total`, `refunded_tax`); Gutscheine der Position werden in dieser Menge gesperrt. | „line-based refund …“, `tests/acceptance-integration.php` |
+| Kleinunternehmer (z. B. DE § 19, AT § 6 Abs. 1 Z 27) | Steuer im Shop aus → keine USt bei Verkauf und Einlösung (10.7). | 7.5 |
+
+Prüfung je Land durch die Steuerberatung (je Zeile ankreuzen):
+
+| Land | Satz/OSS in WooCommerce eingerichtet | Einordnung Mehrzweck/Einzweck bestätigt (F1) | Verfall/Erstattung bestätigt (F5–F8) | Besonderheiten |
+|---|---|---|---|---|
+| DE | ☐ | ☐ | ☐ | |
+| AT | ☐ | ☐ | ☐ | |
+| weitere Verkaufsländer: | ☐ | ☐ | ☐ | |
+
 ## 9. Freigabe
 
 | | |

@@ -167,6 +167,14 @@ vcap_tax_assert( vcap()->vouchers->get( $card->id )->balance < 0.02, 'the redemp
 wc_get_order( $spend->get_id() )->update_status( 'cancelled' );
 vcap_tax_assert( abs( 60.0 - (float) vcap()->vouchers->get( $card->id )->balance ) < 0.02, 'cancelling the redemption order books the 60 back onto the gift card' );
 
+// Line-based refund: refunding the single-purpose voucher line (100 net + 20 VAT) reports net and VAT per line.
+$spv_item = current( $buy2->get_items() );
+$refund2  = wc_create_refund( array( 'order_id' => $buy2->get_id(), 'amount' => 120, 'line_items' => array( $spv_item->get_id() => array( 'qty' => 1, 'refund_total' => 100, 'refund_tax' => array( $rate_id => 20 ) ) ) ) );
+$lines2   = vcap()->api_v1->order_lines( wc_get_order( $buy2->get_id() ) );
+$line2r   = $lines2[ $spv_item->get_id() ] ?? array();
+vcap_tax_assert( ! is_wp_error( $refund2 ) && 1 === ( $line2r['refunded_quantity'] ?? 0 ) && abs( 100.0 - (float) ( $line2r['refunded_total'] ?? 0 ) ) < 0.01 && abs( 20.0 - (float) ( $line2r['refunded_tax'] ?? 0 ) ) < 0.01, 'line-based refund: order_lines() reports refunded quantity, net and VAT per line (100 + 20)', $line2r );
+vcap_tax_assert( Voucher::STATUS_VOID === vcap()->vouchers->get( $spv[0]->id )->status, 'the refunded single-purpose voucher is voided' );
+
 wc_get_order( $buy->get_id() )->update_status( 'refunded' );
 vcap_tax_assert( Voucher::STATUS_VOID === vcap()->vouchers->get( $issued[0]->id )->status, 'a fully refunded gift card purchase voids the unused gift card' );
 
