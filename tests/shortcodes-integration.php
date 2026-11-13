@@ -63,7 +63,7 @@ wc_clear_notices();
 $check = static function ( array $props ) use ( $tag ) {
 	$v                 = new VCAP\Voucher();
 	$v->code           = 'vcap-bal-' . strtolower( wp_generate_password( 8, false, false ) );
-	$v->order_item_id  = 0;
+	$v->order_item_id  = 70000000 + random_int( 1, 9999999 );
 	$v->type           = $props['type'] ?? 'giftcard';
 	$v->usage_mode     = $props['usage_mode'] ?? 'balance';
 	$v->discount_type  = $props['discount_type'] ?? 'fixed_cart';
