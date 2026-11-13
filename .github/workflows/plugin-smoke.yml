@@ -343,6 +343,8 @@ jobs:
           php wp-cli.phar --path=wp-test plugin get wp-pass-captain --field=version
           php bin/check-coexistence.php wp-test/wp-content/plugins/voucher-captain wp-test/wp-content/plugins/wp-pass-captain
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/passcaptain-integration.php"
+          # Tax classification incl. what Pass Captain receives in the quote (TAX.md 4.2).
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/tax-integration.php"
 
   browser-e2e:
     runs-on: ubuntu-latest

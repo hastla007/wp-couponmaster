@@ -88,14 +88,19 @@ remove_filter( 'vcap_voucher_tax_treatment', $filter, 10 );
 
 /* ---- 3. What Pass Captain receives -------------------------------------------------------------------- */
 
-$provider = new VCAP\Compat\PassCaptainProvider( vcap()->redemptions, vcap()->vouchers );
-$minor    = 10 ** VCAP\API\V1\RedemptionService::decimals( get_woocommerce_currency() );
-$quote    = $provider->quote( array( 'code' => vcap_tax_voucher( 'voucher', 'single', 'fixed_cart', $auto_value->get_id() )->code, 'currency' => get_woocommerce_currency(), 'amount_minor' => 80 * $minor, 'order_reference' => 'tax-test' ) );
-vcap_tax_assert( is_array( $quote ) && 'payment' === $quote['treatment'] && 'multi' === $quote['purpose'], 'Pass Captain gets treatment "payment" / purpose "multi" for a multi-purpose voucher' );
-$quote = $provider->quote( array( 'code' => vcap_tax_voucher( 'voucher', 'single', 'fixed_cart', $single->get_id() )->code, 'currency' => get_woocommerce_currency(), 'amount_minor' => 80 * $minor, 'order_reference' => 'tax-test' ) );
-vcap_tax_assert( is_array( $quote ) && 'single' === $quote['treatment'] && 'single' === $quote['purpose'], 'Pass Captain gets treatment "single" / purpose "single" for a single-purpose voucher' );
-$quote = $provider->quote( array( 'code' => vcap_tax_voucher( 'voucher', 'single', 'fixed_cart' )->code, 'currency' => get_woocommerce_currency(), 'amount_minor' => 80 * $minor, 'order_reference' => 'tax-test' ) );
-vcap_tax_assert( is_array( $quote ) && 'discount' === $quote['treatment'] && 'single' === $quote['purpose'], 'Pass Captain gets treatment "discount" (purpose "single": reduces price and VAT) for a promotion code' );
+// Runs where WP Pass Captain is installed (CI job "pass-captain"); the provider implements its interface.
+if ( interface_exists( 'PassCaptain\\Integrations\\Vouchers\\ProviderInterface' ) ) {
+	$provider = new VCAP\Compat\PassCaptainProvider( vcap()->redemptions, vcap()->vouchers );
+	$minor    = 10 ** VCAP\API\V1\RedemptionService::decimals( get_woocommerce_currency() );
+	$quote    = $provider->quote( array( 'code' => vcap_tax_voucher( 'voucher', 'single', 'fixed_cart', $auto_value->get_id() )->code, 'currency' => get_woocommerce_currency(), 'amount_minor' => 80 * $minor, 'order_reference' => 'tax-test' ) );
+	vcap_tax_assert( is_array( $quote ) && 'payment' === $quote['treatment'] && 'multi' === $quote['purpose'], 'Pass Captain gets treatment "payment" / purpose "multi" for a multi-purpose voucher' );
+	$quote = $provider->quote( array( 'code' => vcap_tax_voucher( 'voucher', 'single', 'fixed_cart', $single->get_id() )->code, 'currency' => get_woocommerce_currency(), 'amount_minor' => 80 * $minor, 'order_reference' => 'tax-test' ) );
+	vcap_tax_assert( is_array( $quote ) && 'single' === $quote['treatment'] && 'single' === $quote['purpose'], 'Pass Captain gets treatment "single" / purpose "single" for a single-purpose voucher' );
+	$quote = $provider->quote( array( 'code' => vcap_tax_voucher( 'voucher', 'single', 'fixed_cart' )->code, 'currency' => get_woocommerce_currency(), 'amount_minor' => 80 * $minor, 'order_reference' => 'tax-test' ) );
+	vcap_tax_assert( is_array( $quote ) && 'discount' === $quote['treatment'] && 'single' === $quote['purpose'], 'Pass Captain gets treatment "discount" (purpose "single": reduces price and VAT) for a promotion code' );
+} else {
+	echo "SKIP: Pass Captain is not installed – quote checks run in the pass-captain job\n";
+}
 
 /* ---- 4. Sale of a voucher: what is recorded --------------------------------------------------------- */
 
