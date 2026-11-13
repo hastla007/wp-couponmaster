@@ -172,6 +172,7 @@ final class Delivery {
 				throw new \RuntimeException( __( 'Voucher email was sent but its delivery state could not be saved.', 'voucher-captain' ) );
 			}
 			$voucher->delivered_at = $now;
+			delete_transient( 'vcap_undelivered_count' );
 			$this->repo->log( $voucher->id, 'delivered', null, null, sprintf( 'Sent to %d recipient(s)', count( $sent ) ) );
 			do_action( 'vcap_voucher_delivered', $voucher, $sent );
 		} catch ( \Throwable $e ) {

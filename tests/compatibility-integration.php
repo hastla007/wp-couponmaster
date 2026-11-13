@@ -199,6 +199,9 @@ try {
 	remove_filter( 'pre_wp_mail', $fail_mail, 999 );
 }
 vcap_compat_assert( null === vcap()->vouchers->get( $mail_voucher->id )->delivered_at, 'mailer failure does not mark a voucher as delivered' );
+$wpdb->update( VCAP\Install::tables()['vouchers'], array( 'created_at' => gmdate( 'Y-m-d H:i:s', time() - 2 * HOUR_IN_SECONDS ) ), array( 'id' => $mail_voucher->id ) );
+$undelivered_ids = static fn() => array_map( static fn( $v ) => $v->id, vcap()->vouchers->query( array( 'undelivered' => 'yes', 'per_page' => 500 ) )['items'] );
+vcap_compat_assert( in_array( $mail_voucher->id, $undelivered_ids(), true ), 'the voucher list can show vouchers that were never delivered' );
 $success_mail = static function ( $pre, $atts ) { return true; };
 add_filter( 'pre_wp_mail', $success_mail, 999, 2 );
 try {
@@ -207,6 +210,7 @@ try {
 	remove_filter( 'pre_wp_mail', $success_mail, 999 );
 }
 vcap_compat_assert( null !== vcap()->vouchers->get( $mail_voucher->id )->delivered_at, 'failed delivery is retried and marked only after successful mail' );
+vcap_compat_assert( ! in_array( $mail_voucher->id, $undelivered_ids(), true ), 'a delivered voucher leaves the "not delivered" list' );
 
 // "Send to buyer and recipient": delivered only when both got it; the retry mails only who is missing.
 list( $both_voucher ) = vcap_compat_voucher( 50, 'both-buyer@example.test' );

@@ -205,6 +205,7 @@ final class VoucherRepository {
 				'type'     => '',
 				'product'  => 0,
 				'expiring' => '',
+				'undelivered' => '',
 				'orderby'  => 'id',
 				'order'    => 'DESC',
 				'per_page' => 20,
@@ -236,6 +237,11 @@ final class VoucherRepository {
 			$where[] = '(product_id = %d OR variation_id = %d)';
 			array_push( $vals, (int) $args['product'], (int) $args['product'] );
 		}
+		if ( 'yes' === ( $args['undelivered'] ?? '' ) ) {
+			// Due for more than an hour but never delivered (mail failed, no valid address, email disabled).
+			$where[] = "delivered_at IS NULL AND status IN ('scheduled','active') AND COALESCE(delivery_at, created_at) <= %s";
+			$vals[]  = gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS );
+		}
 		if ( 'soon' === $args['expiring'] ) {
 			$where[] = 'expires_at BETWEEN %s AND %s';
 			array_push( $vals, $this->now(), gmdate( 'Y-m-d H:i:s', time() + 30 * DAY_IN_SECONDS ) );
@@ -263,6 +269,16 @@ final class VoucherRepository {
 	public function code_exists( string $code ): bool {
 		global $wpdb;
 		return (bool) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$this->table} WHERE code = %s", $code ) ); // phpcs:ignore
+	}
+
+	/** Number of vouchers that are due but were never delivered (cached for ten minutes). */
+	public function undelivered_count(): int {
+		$count = get_transient( 'vcap_undelivered_count' );
+		if ( false === $count ) {
+			$count = $this->query( array( 'undelivered' => 'yes', 'per_page' => 1 ) )['total'];
+			set_transient( 'vcap_undelivered_count', (int) $count, 10 * MINUTE_IN_SECONDS );
+		}
+		return (int) $count;
 	}
 
 	/** @return int[] voucher ids whose delivery is due */

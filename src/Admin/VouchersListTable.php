@@ -71,6 +71,7 @@ final class VouchersListTable extends \WP_List_Table {
 		}
 		$type     = sanitize_key( $_GET['type'] ?? '' ); // phpcs:ignore WordPress.Security.NonceVerification
 		$expiring = sanitize_key( $_GET['expiring'] ?? '' ); // phpcs:ignore WordPress.Security.NonceVerification
+		$undeliv  = sanitize_key( $_GET['undelivered'] ?? '' ); // phpcs:ignore WordPress.Security.NonceVerification
 		echo '<div class="alignleft actions">';
 		echo '<label class="screen-reader-text" for="vcap-filter-type">' . esc_html__( 'Filter by type', 'voucher-captain' ) . '</label>';
 		echo '<select name="type" id="vcap-filter-type"><option value="">' . esc_html__( 'All types', 'voucher-captain' ) . '</option>';
@@ -79,6 +80,7 @@ final class VouchersListTable extends \WP_List_Table {
 		}
 		echo '</select>';
 		echo '<label><input type="checkbox" name="expiring" value="soon" ' . checked( $expiring, 'soon', false ) . '> ' . esc_html__( 'Expiring within 30 days', 'voucher-captain' ) . '</label> ';
+		echo '<label><input type="checkbox" name="undelivered" value="yes" ' . checked( $undeliv, 'yes', false ) . '> ' . esc_html__( 'Not delivered', 'voucher-captain' ) . '</label> ';
 		submit_button( __( 'Filter', 'voucher-captain' ), '', 'filter_action', false );
 		$args = $this->filter_args();
 		$args['s'] = $args['search']; // filter_args() reads the search term from "s".
@@ -96,6 +98,7 @@ final class VouchersListTable extends \WP_List_Table {
 			'type'     => sanitize_key( $_REQUEST['type'] ?? '' ),
 			'product'  => absint( $_REQUEST['product'] ?? 0 ),
 			'expiring' => sanitize_key( $_REQUEST['expiring'] ?? '' ),
+			'undelivered' => sanitize_key( $_REQUEST['undelivered'] ?? '' ),
 			'orderby'  => sanitize_key( $_REQUEST['orderby'] ?? 'id' ),
 			'order'    => sanitize_key( $_REQUEST['order'] ?? 'desc' ),
 		);

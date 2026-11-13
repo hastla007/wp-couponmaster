@@ -3852,3 +3852,29 @@ msgstr "Mir ist bewusst, dass die bisher gesendeten Tickets ungültig werden."
 
 msgid "Please confirm that the tickets sent so far become invalid."
 msgstr "Bitte bestätigen Sie, dass die bisher gesendeten Tickets ungültig werden."
+
+msgid "Not delivered"
+msgstr "Nicht zugestellt"
+
+msgid "%d voucher has not been delivered (email failed, no valid address or email disabled). It is retried automatically every day for 30 days; you can also send it again yourself."
+msgid_plural "%d vouchers have not been delivered (email failed, no valid address or email disabled). They are retried automatically every day for 30 days; you can also send them again yourself."
+msgstr[0] "%d Gutschein wurde nicht zugestellt (E-Mail fehlgeschlagen, keine gültige Adresse oder E-Mail deaktiviert). Der Versand wird 30 Tage lang täglich automatisch wiederholt; Sie können ihn auch selbst erneut senden."
+msgstr[1] "%d Gutscheine wurden nicht zugestellt (E-Mail fehlgeschlagen, keine gültige Adresse oder E-Mail deaktiviert). Der Versand wird 30 Tage lang täglich automatisch wiederholt; Sie können sie auch selbst erneut senden."
+
+msgid "Show them"
+msgstr "Anzeigen"
+
+msgid "Your voucher is valid again"
+msgstr "Ihr Gutschein ist wieder gültig"
+
+msgid "The tickets you received for voucher %1$s were cancelled. The voucher is valid again until %2$s and can be exchanged for tickets once more."
+msgstr "Die Tickets, die Sie für den Gutschein %1$s erhalten haben, wurden storniert. Der Gutschein ist wieder gültig bis %2$s und kann erneut gegen Tickets eingetauscht werden."
+
+msgid "[%s] Your voucher is valid again"
+msgstr "[%s] Ihr Gutschein ist wieder gültig"
+
+msgid "The customer could not be told that the voucher is valid again."
+msgstr "Der Kunde konnte nicht informiert werden, dass der Gutschein wieder gültig ist."
+
+msgid "Customer told that the voucher is valid again"
+msgstr "Kunde über wieder gültigen Gutschein informiert"

@@ -30,6 +30,7 @@ final class VoucherAdmin {
 			/* translators: %s: folder path */
 			echo '<div class="notice notice-error"><p>' . esc_html( sprintf( __( 'Voucher Captain could not create or protect its private folder %s (PDFs, fonts). Check the folder permissions; until then PDF vouchers may fail or be reachable without protection.', 'voucher-captain' ), $upload_error ) ) . '</p></div>';
 		}
+		$this->undelivered_notice();
 		if ( empty( $_GET['vcap_msg'] ) || ! $this->can() ) { // phpcs:ignore WordPress.Security.NonceVerification
 			return;
 		}
@@ -52,6 +53,29 @@ final class VoucherAdmin {
 			$notice_class = str_ends_with( $key, '_failed' ) ? 'notice-error' : 'notice-success';
 			echo '<div class="notice ' . esc_attr( $notice_class ) . ' is-dismissible"><p>' . esc_html( $messages[ $key ] ) . '</p></div>';
 		}
+	}
+
+	/** Vouchers that are due but never reached anyone: shown on the voucher screens and the dashboard. */
+	private function undelivered_notice(): void {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! $screen || ! $this->can() || ! ( str_contains( (string) $screen->id, 'vcap' ) || 'dashboard' === $screen->id ) ) {
+			return;
+		}
+		if ( ! empty( $_GET['undelivered'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification -- the filtered list is shown already.
+			return;
+		}
+		$count = $this->repo->undelivered_count();
+		if ( $count < 1 ) {
+			return;
+		}
+		$url = add_query_arg( array( 'page' => 'vcap-vouchers', 'undelivered' => 'yes' ), admin_url( 'admin.php' ) );
+		echo '<div class="notice notice-warning"><p>' . esc_html(
+			sprintf(
+				/* translators: %d: number of vouchers */
+				_n( '%d voucher has not been delivered (email failed, no valid address or email disabled). It is retried automatically every day for 30 days; you can also send it again yourself.', '%d vouchers have not been delivered (email failed, no valid address or email disabled). They are retried automatically every day for 30 days; you can also send them again yourself.', $count, 'voucher-captain' ),
+				$count
+			)
+		) . ' <a href="' . esc_url( $url ) . '">' . esc_html__( 'Show them', 'voucher-captain' ) . '</a></p></div>';
 	}
 
 	public function page(): void {

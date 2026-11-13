@@ -258,10 +258,20 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	if ( defined( 'PassCaptain\\Integrations\\Vouchers\\TicketService::REVOKED_ACTION' ) ) {
 		// Pass Captain cancels the exchange order (e.g. the date was cancelled): the voucher comes back.
 		$second_order = (int) $wpdb->get_var( $wpdb->prepare( "SELECT order_id FROM {$wpdb->prefix}wpcap_orders WHERE public_id=%s", $second_try['order_public_id'] ) );
+		$restore_mails = array();
+		$catch_restore = static function ( $pre, $atts ) use ( &$restore_mails ) {
+			if ( str_contains( (string) $atts['subject'], 'valid again' ) ) {
+				$restore_mails[] = $atts;
+			}
+			return true;
+		};
+		add_filter( 'pre_wp_mail', $catch_restore, 10, 2 );
 		Orders::cancel_order( $second_order, 'occurrence_cancelled' );
 		Orders::cancel_order( $second_order, 'occurrence_cancelled' );
+		remove_filter( 'pre_wp_mail', $catch_restore, 10 );
 		$restored_events = array_count_values( array_column( vcap()->vouchers->events( $full->id ), 'event' ) );
 		vcap_pc_assert( VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $full->id )->status && 1 === ( $restored_events['passcaptain_tickets_restored'] ?? 0 ), 'tickets cancelled in Pass Captain give the voucher back exactly once' );
+		vcap_pc_assert( 1 === count( $restore_mails ) && 1 === ( $restored_events['passcaptain_restore_notified'] ?? 0 ) && str_contains( (string) $restore_mails[0]['message'], $full->code ), 'the customer is told once that the voucher is valid again' );
 		$third_try = vcap()->passcaptain_tickets->exchange( $full->code );
 		vcap_pc_assert( is_array( $third_try ) && 2 === $third_try['tickets'] && $third_try['order_public_id'] !== $second_try['order_public_id'] && VCAP\Voucher::STATUS_REDEEMED === vcap()->vouchers->get( $full->id )->status, 'the restored voucher can be exchanged again for new tickets' );
 	}

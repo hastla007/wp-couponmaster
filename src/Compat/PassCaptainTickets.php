@@ -291,6 +291,38 @@ final class PassCaptainTickets {
 		$result = $this->redemptions->refund( $key, $amount - $refunded, $refund_key );
 		if ( ! is_wp_error( $result ) && ! empty( $result['restored'] ) ) {
 			$this->vouchers->log( $voucher->id, 'passcaptain_tickets_restored', (float) $result['restored'], null, (string) ( $info['order_public_id'] ?? '' ) );
+			$this->notify_restored( $this->vouchers->get( $voucher->id ) ?? $voucher );
+		}
+	}
+
+	/**
+	 * Tells the customer that the voucher is valid again after its tickets were cancelled (Pass Captain's own
+	 * mail only says the tickets are gone). Filter "vcap_passcaptain_notify_restored" (false = no mail).
+	 */
+	private function notify_restored( Voucher $voucher ): void {
+		$to = $voucher->delivery_email();
+		if ( ! is_email( $to ) || ! apply_filters( 'vcap_passcaptain_notify_restored', true, $voucher, $to ) || ! function_exists( 'WC' ) ) {
+			return;
+		}
+		$values  = \VCAP\Placeholders::values( $voucher );
+		$url     = \VCAP\Shortcodes::redeem_url( $voucher->code );
+		$heading = __( 'Your voucher is valid again', 'voucher-captain' );
+		$lines   = array(
+			/* translators: 1: voucher code, 2: expiry date */
+			sprintf( __( 'The tickets you received for voucher %1$s were cancelled. The voucher is valid again until %2$s and can be exchanged for tickets once more.', 'voucher-captain' ), $voucher->code, $values['expiry_date'] ?? '' ),
+		);
+		$body = '<p>' . implode( '</p><p>', array_map( 'esc_html', $lines ) ) . '</p>';
+		if ( '' !== $url ) {
+			$body .= '<p><a href="' . esc_url( $url ) . '">' . esc_html__( 'Exchange for tickets', 'voucher-captain' ) . '</a></p>';
+		}
+		$mailer = WC()->mailer();
+		/* translators: %s: site name */
+		$subject = sprintf( __( '[%s] Your voucher is valid again', 'voucher-captain' ), wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ) );
+		$sent    = $mailer->send( $to, $subject, $mailer->wrap_message( $heading, $body ) );
+		if ( $sent ) {
+			$this->vouchers->log( $voucher->id, 'passcaptain_restore_notified', null, null, self::mask_email( $to ) );
+		} else {
+			$this->vouchers->log( $voucher->id, 'delivery_failed', null, null, __( 'The customer could not be told that the voucher is valid again.', 'voucher-captain' ) );
 		}
 	}
 
@@ -1016,6 +1048,7 @@ final class PassCaptainTickets {
 			'passcaptain_tickets_revoked' => __( 'Pass Captain tickets revoked', 'voucher-captain' ),
 			'passcaptain_tickets_restored' => __( 'Voucher restored (tickets cancelled in Pass Captain)', 'voucher-captain' ),
 			'passcaptain_tickets_resent'  => __( 'Tickets sent again', 'voucher-captain' ),
+			'passcaptain_restore_notified' => __( 'Customer told that the voucher is valid again', 'voucher-captain' ),
 		);
 	}
 }
