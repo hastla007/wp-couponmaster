@@ -82,7 +82,12 @@ jobs:
           test "v${version}" = "${GITHUB_REF_NAME}" || { echo "Tag ${GITHUB_REF_NAME} does not match plugin version ${version}"; exit 1; }
           grep -q "^= ${version} =" readme.txt || { echo "readme.txt has no changelog section for ${version}"; exit 1; }
       - name: Build both editions twice and compare
+        env:
+          # Premium build: license server (HTTPS) pinned into the plugin, also the "Update URI" (LICENSING.md).
+          VCAP_LICENSE_SERVER: ${{ vars.VCAP_LICENSE_SERVER }}
+          VCAP_UPDATE_URI: ${{ vars.VCAP_UPDATE_URI }}
         run: |
+          if [ -z "${VCAP_LICENSE_SERVER}" ]; then echo "::error::Repository variable VCAP_LICENSE_SERVER (https://license-server) is not set – the premium build would point to a placeholder."; exit 1; fi
           version="${GITHUB_REF_NAME#v}"
           mkdir -p dist
           for edition in free premium; do
