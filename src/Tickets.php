@@ -55,9 +55,11 @@ final class Tickets {
 				'callback'            => array( $this, 'rest_redeem' ),
 				'permission_callback' => array( self::class, 'can_scan' ),
 				'args'                => array(
-					'q'      => array( 'required' => true, 'type' => 'string' ),
-					'amount' => array( 'type' => 'number' ),
-					'note'   => array( 'type' => 'string', 'default' => '' ),
+					'q'             => array( 'required' => true, 'type' => 'string' ),
+					'amount'        => array( 'type' => 'number' ),
+					'note'          => array( 'type' => 'string', 'default' => '' ),
+					// Only with this flag may an amount above the balance book the remaining balance.
+					'allow_partial' => array( 'type' => 'boolean', 'default' => false ),
 				),
 			)
 		);
@@ -110,8 +112,9 @@ final class Tickets {
 			$state   = 'warning';
 			$message = __( 'Currently being redeemed elsewhere', 'voucher-captain' );
 		}
-		$manager = current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' );
-		$data    = array(
+		$manager  = current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' );
+		$currency = '' !== $voucher->currency ? $voucher->currency : get_woocommerce_currency();
+		$data     = array(
 			'id'             => $voucher->id,
 			'code'           => $voucher->code,
 			'type'           => $voucher->type,
@@ -130,7 +133,11 @@ final class Tickets {
 			'last_checkin'   => $voucher->last_checkin_at ? get_date_from_gmt( $voucher->last_checkin_at, get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) : '',
 			'multi_use'      => $voucher->is_multi_use(),
 			'balance'        => $voucher->balance,
-			'balance_html'   => html_entity_decode( wp_strip_all_tags( wc_price( $voucher->balance, array( 'currency' => $voucher->currency ) ) ) ),
+			'balance_html'   => self::money_text( $voucher->balance, $voucher->currency ),
+			// Amount entry at the counter: currency shown next to the field, parsed with its decimal places.
+			'currency'        => $currency,
+			'currency_symbol' => html_entity_decode( get_woocommerce_currency_symbol( $currency ) ),
+			'decimals'        => $voucher->decimals(),
 			'value_html'     => ! $manager ? '' : ( 'percent' === $voucher->discount_type ? $voucher->initial_amount . '%' : html_entity_decode( wp_strip_all_tags( wc_price( $voucher->initial_amount, array( 'currency' => $voucher->currency ) ) ) ) ),
 			'expires'        => $voucher->expires_at ? get_date_from_gmt( $voucher->expires_at, get_option( 'date_format' ) ) : '',
 			'admin_url'      => admin_url( 'admin.php?page=vcap-vouchers&voucher=' . $voucher->id ),
@@ -301,7 +308,8 @@ final class Tickets {
 			return new \WP_Error( 'vcap_not_found', __( 'No voucher or ticket found for this code.', 'voucher-captain' ), array( 'status' => 404 ) );
 		}
 		$key   = sanitize_text_field( (string) $request['idempotency_key'] );
-		$prior = $this->scan_claim( $key, md5( 'redeem|' . $voucher->id . '|' . round( max( 0, (float) $request['amount'] ), 4 ) ) );
+		$sig   = 'redeem|' . $voucher->id . '|' . round( max( 0, (float) $request['amount'] ), 4 ) . ( self::allow_partial( $request ) ? '|partial' : '' );
+		$prior = $this->scan_claim( $key, md5( $sig ) );
 		if ( null !== $prior ) {
 			return is_wp_error( $prior ) ? $prior : rest_ensure_response( $prior );
 		}
@@ -319,11 +327,109 @@ final class Tickets {
 		return $response;
 	}
 
+	private static function allow_partial( \WP_REST_Request $request ): bool {
+		return (bool) rest_sanitize_boolean( $request['allow_partial'] ?? false );
+	}
+
+	/** Plain-text price ("12,50 €") for scanner messages. */
+	public static function money_text( float $amount, string $currency ): string {
+		return html_entity_decode( wp_strip_all_tags( wc_price( $amount, array( 'currency' => $currency ) ) ) );
+	}
+
+	/**
+	 * Plausibility of an amount entered at the counter: '' when it may be booked, otherwise
+	 * 'amount_missing' (not above zero, not a number), 'amount_precision' (more decimal places than the
+	 * currency has) or 'exceeds_balance' (above the balance without an explicit partial booking).
+	 */
+	public static function counter_amount_error( float $amount, float $balance, int $decimals, bool $allow_partial ): string {
+		if ( ! is_finite( $amount ) || $amount <= 0 ) {
+			return 'amount_missing';
+		}
+		$scaled = $amount * ( 10 ** max( 0, $decimals ) );
+		if ( abs( $scaled - round( $scaled ) ) > 1e-6 ) {
+			return 'amount_precision';
+		}
+		if ( CouponManager::minor_units( $amount, $decimals ) <= 0 ) {
+			return 'amount_missing';
+		}
+		if ( ! $allow_partial && CouponManager::minor_units( $amount, $decimals ) > CouponManager::minor_units( $balance, $decimals ) ) {
+			return 'exceeds_balance';
+		}
+		return '';
+	}
+
+	/**
+	 * Scanner message for a counter booking that deducted nothing (reason codes of
+	 * CouponManager::deduct_balance_atomic() and counter_amount_error()).
+	 */
+	public static function refusal_message( string $reason, string $requested_html = '', string $balance_html = '', int $decimals = 2 ): string {
+		switch ( $reason ) {
+			case 'exceeds_balance':
+				/* translators: 1: entered amount, 2: remaining balance of the voucher */
+				return sprintf( __( 'Not deducted: the amount (%1$s) exceeds the remaining balance (%2$s).', 'voucher-captain' ), $requested_html, $balance_html );
+			case 'amount_missing':
+			case 'invalid_amount':
+				return __( 'Please enter an amount greater than zero.', 'voucher-captain' );
+			case 'amount_precision':
+				/* translators: %d: number of decimal places of the currency */
+				return sprintf( __( 'Not deducted: the amount has more decimal places than the currency allows (%d).', 'voucher-captain' ), $decimals );
+			case 'void':
+				return __( 'Not deducted: this voucher has been cancelled.', 'voucher-captain' );
+			case 'expired':
+				return __( 'Not deducted: this voucher has expired.', 'voucher-captain' );
+			case 'reserved':
+				return __( 'Not deducted: this voucher is being redeemed elsewhere right now. Please try again in a moment.', 'voucher-captain' );
+			case 'scheduled':
+				return __( 'Not deducted: this voucher has not been delivered yet.', 'voucher-captain' );
+			case 'redeemed':
+				return __( 'Not deducted: the balance is used up.', 'voucher-captain' );
+			case 'not_active':
+			case 'not_found':
+			case 'not_multi_use':
+				return __( 'Not deducted: this voucher is not active.', 'voucher-captain' );
+			case 'no_transactions':
+				return __( 'Not deducted: the database cannot deduct balances safely (no transaction support). Please contact the shop administrator.', 'voucher-captain' );
+			default:
+				return __( 'Not deducted: the balance could not be updated. Please try again.', 'voucher-captain' );
+		}
+	}
+
+	/**
+	 * Scanner answer for a counter booking of a stored-value voucher that deducted nothing.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	private function counter_refusal( int $voucher_id, string $reason, float $requested ) {
+		$fresh = $this->repo->get( $voucher_id );
+		if ( ! $fresh ) {
+			return new \WP_Error( 'vcap_not_found', __( 'No voucher or ticket found for this code.', 'voucher-captain' ), array( 'status' => 404 ) );
+		}
+		$data                       = $this->describe( $fresh );
+		$data['success']            = false;
+		$data['state']              = in_array( $reason, array( 'no_transactions', 'db_error', 'reserved' ), true ) ? 'warning' : 'error';
+		$data['reason']             = $reason;
+		$data['requested']          = $requested;
+		$data['requested_html']     = self::money_text( $requested, $fresh->currency );
+		$data['booked']             = 0.0;
+		$data['booked_html']        = self::money_text( 0, $fresh->currency );
+		$data['balance_after']      = $fresh->balance;
+		$data['balance_after_html'] = $data['balance_html'];
+		$data['message']            = self::refusal_message( $reason, $data['requested_html'], $data['balance_html'], $fresh->decimals() );
+		return rest_ensure_response( $data );
+	}
+
 	/** @return \WP_REST_Response|\WP_Error */
 	private function redeem_at_counter( \WP_REST_Request $request, Voucher $voucher ) {
-		if ( ! $voucher->is_usable() || Voucher::STATUS_REDEEMED === $voucher->status ) {
+		// Only active vouchers: not yet delivered (scheduled), reserved, cancelled or expired ones are refused with
+		// their own reason (describe()).
+		if ( Voucher::STATUS_ACTIVE !== $voucher->status || $voucher->is_expired() ) {
 			$data            = $this->describe( $voucher );
 			$data['success'] = false;
+			$data['reason']  = CouponManager::balance_refusal( $voucher ) ?: 'not_active';
+			if ( 'ok' === $data['state'] ) {
+				$data['state']   = 'error';
+				$data['message'] = __( 'This voucher is not active.', 'voucher-captain' );
+			}
 			return rest_ensure_response( $data );
 		}
 		// Same rules as the redemption API: store credit belongs to a customer account, tickets are checked in
@@ -349,21 +455,49 @@ final class Tickets {
 		}
 		$note = sanitize_text_field( (string) $request['note'] ) ?: __( 'Redeemed in store', 'voucher-captain' );
 		if ( $voucher->is_multi_use() ) {
-			$amount = max( 0, (float) $request['amount'] );
-			if ( $amount <= 0 ) {
-				return new \WP_Error( 'vcap_amount', __( 'Please enter an amount.', 'voucher-captain' ), array( 'status' => 400 ) );
+			$amount  = (float) $request['amount'];
+			$partial = self::allow_partial( $request );
+			$check   = self::counter_amount_error( $amount, $voucher->balance, $voucher->decimals(), $partial );
+			if ( 'amount_missing' === $check ) {
+				return new \WP_Error( 'vcap_amount', self::refusal_message( $check ), array( 'status' => 400 ) );
 			}
-			$deduction = vcap()->coupons->deduct_balance_atomic( $voucher, $amount, $note );
-			if ( ! $deduction ) {
-				$fresh           = $this->repo->get( $voucher->id );
-				$data            = $this->describe( $fresh );
-				$data['success'] = false;
-				$data['state']   = 'error';
-				/* translators: %s: remaining balance */
-				$data['message'] = sprintf( __( 'Not deducted: the amount exceeds the balance (remaining %s).', 'voucher-captain' ), $data['balance_html'] );
-				return rest_ensure_response( $data );
+			if ( 'amount_precision' === $check ) {
+				return new \WP_Error( 'vcap_amount_precision', self::refusal_message( $check, '', '', $voucher->decimals() ), array( 'status' => 400 ) );
 			}
-			$voucher = $this->repo->get( $voucher->id );
+			if ( '' !== $check ) {
+				return $this->counter_refusal( $voucher->id, $check, $amount );
+			}
+			// The balance is checked again under the row lock: above it, nothing is booked unless a partial
+			// booking was asked for explicitly (the till must collect the rest otherwise).
+			$reason    = '';
+			$deduction = vcap()->coupons->deduct_balance_atomic( $voucher, $amount, $note, 0, $partial, $reason );
+			if ( ! $deduction || $deduction['amount'] <= 0 ) {
+				return $this->counter_refusal( $voucher->id, $deduction ? 'redeemed' : (string) $reason, $amount );
+			}
+			$fresh                      = $this->repo->get( $voucher->id );
+			$data                       = $this->describe( $fresh );
+			$booked                     = (float) $deduction['amount'];
+			$uncovered                  = max( 0.0, round( $amount - $booked, $fresh->decimals() ) );
+			$data['success']            = true;
+			$data['state']              = $uncovered > 0 ? 'warning' : 'ok';
+			$data['reason']             = '';
+			$data['partial']            = $uncovered > 0;
+			$data['requested']          = $amount;
+			$data['requested_html']     = self::money_text( $amount, $fresh->currency );
+			$data['booked']             = $booked;
+			$data['booked_html']        = self::money_text( $booked, $fresh->currency );
+			$data['balance_after']      = (float) $deduction['balance'];
+			$data['balance_after_html'] = self::money_text( (float) $deduction['balance'], $fresh->currency );
+			$data['uncovered']          = $uncovered;
+			$data['uncovered_html']     = self::money_text( $uncovered, $fresh->currency );
+			if ( $uncovered > 0 ) {
+				/* translators: 1: amount deducted, 2: amount still to be paid in another way, 3: remaining balance */
+				$data['message'] = sprintf( __( 'Partially redeemed: %1$s deducted, %2$s still to be paid otherwise. Remaining balance: %3$s.', 'voucher-captain' ), $data['booked_html'], $data['uncovered_html'], $data['balance_after_html'] );
+			} else {
+				/* translators: 1: amount deducted, 2: remaining balance */
+				$data['message'] = sprintf( __( 'Redeemed: %1$s deducted. Remaining balance: %2$s.', 'voucher-captain' ), $data['booked_html'], $data['balance_after_html'] );
+			}
+			return rest_ensure_response( $data );
 		} elseif ( 'unlimited' === $voucher->usage_mode ) {
 			// Reusable vouchers: count one use, WooCommerce's usage limit decides when it is used up.
 			$this->repo->log( $voucher->id, 'redeemed', $voucher->initial_amount, null, $note );

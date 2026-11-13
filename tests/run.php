@@ -5,12 +5,14 @@
 require __DIR__ . '/stubs.php';
 
 use VCAP\CodeGenerator;
+use VCAP\CouponManager;
 use VCAP\Delivery;
 use VCAP\PdfRenderer;
 use VCAP\Placeholders;
 use VCAP\ProductConfig;
 use VCAP\SpreadsheetReader;
 use VCAP\TemplatePostType;
+use VCAP\Tickets;
 use VCAP\Voucher;
 use VCAP\Licensing\PremiumUpdater;
 
@@ -209,6 +211,46 @@ check( 'malformed idempotency keys are rejected', 0 === count( array_filter( $in
 $h = \VCAP\API\V1\RedemptionService::request_hash( 7, 'course:1', 30, 5 );
 check( 'request fingerprint is stable and amount-normalised', $h === \VCAP\API\V1\RedemptionService::request_hash( 7, 'course:1', 30.0000, 5 ) );
 check( 'request fingerprint changes with target, amount or user', count( array_unique( array( $h, \VCAP\API\V1\RedemptionService::request_hash( 7, 'course:2', 30, 5 ), \VCAP\API\V1\RedemptionService::request_hash( 7, 'course:1', 30.01, 5 ), \VCAP\API\V1\RedemptionService::request_hash( 7, 'course:1', 30, 6 ) ) ) ) === 4 );
+
+echo "Counter redemption (scanner): plausibility and refusal reasons\n";
+check( 'an amount within the balance may be booked', '' === Tickets::counter_amount_error( 12.5, 50, 2, false ) && '' === Tickets::counter_amount_error( 50, 50, 2, false ) );
+check( 'an amount above the balance is refused unless a partial booking is asked for', 'exceeds_balance' === Tickets::counter_amount_error( 80, 50, 2, false ) && '' === Tickets::counter_amount_error( 80, 50, 2, true ) );
+check( 'one cent above the balance is already refused (minor units, no float noise)', 'exceeds_balance' === Tickets::counter_amount_error( 50.01, 50, 2, false ) && '' === Tickets::counter_amount_error( 0.1 + 0.2, 0.3, 2, false ) );
+check( 'zero, negative and non-finite amounts are refused', 'amount_missing' === Tickets::counter_amount_error( 0, 50, 2, false ) && 'amount_missing' === Tickets::counter_amount_error( -5, 50, 2, true ) && 'amount_missing' === Tickets::counter_amount_error( NAN, 50, 2, false ) && 'amount_missing' === Tickets::counter_amount_error( INF, 50, 2, true ) );
+check( 'more decimals than the currency has are refused (EUR 0.999, JPY 12.5), KWD 1.5 is fine', 'amount_precision' === Tickets::counter_amount_error( 0.999, 50, 2, false ) && 'amount_precision' === Tickets::counter_amount_error( 12.5, 5000, 0, false ) && '' === Tickets::counter_amount_error( 1.5, 5, 3, false ) && '' === Tickets::counter_amount_error( 0.29, 5, 2, false ) );
+check( 'minor units are exact', 29 === CouponManager::minor_units( 0.29, 2 ) && 1500 === CouponManager::minor_units( 1500, 0 ) && 1500 === CouponManager::minor_units( 1.5, 3 ) );
+$counter_card              = new Voucher();
+$counter_card->usage_mode  = 'balance';
+$counter_card->balance     = 50;
+$counter_card->status      = Voucher::STATUS_ACTIVE;
+$counter_reason            = static function ( array $props ) use ( $counter_card ): string {
+	$v = clone $counter_card;
+	foreach ( $props as $k => $val ) {
+		$v->$k = $val;
+	}
+	return CouponManager::balance_refusal( $v );
+};
+check( 'an active card with balance can be charged', '' === CouponManager::balance_refusal( $counter_card ) );
+check(
+	'each refusal names its own reason (cancelled, expired, reserved, not delivered, used up, other status)',
+	'void' === $counter_reason( array( 'status' => Voucher::STATUS_VOID ) )
+	&& 'expired' === $counter_reason( array( 'status' => Voucher::STATUS_EXPIRED ) )
+	&& 'expired' === $counter_reason( array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() - 3600 ) ) )
+	&& 'reserved' === $counter_reason( array( 'status' => Voucher::STATUS_RESERVED ) )
+	&& 'scheduled' === $counter_reason( array( 'status' => Voucher::STATUS_SCHEDULED ) )
+	&& 'redeemed' === $counter_reason( array( 'status' => Voucher::STATUS_REDEEMED ) )
+	&& 'redeemed' === $counter_reason( array( 'balance' => 0.0 ) )
+	&& 'not_active' === $counter_reason( array( 'status' => 'pending' ) )
+	&& 'not_multi_use' === $counter_reason( array( 'usage_mode' => 'single' ) )
+	&& 'not_found' === CouponManager::balance_refusal( null )
+);
+$counter_messages = array();
+foreach ( array( 'exceeds_balance', 'void', 'expired', 'reserved', 'scheduled', 'redeemed', 'not_active', 'no_transactions', 'db_error', 'amount_precision', 'amount_missing' ) as $counter_code ) {
+	$counter_messages[ $counter_code ] = Tickets::refusal_message( $counter_code, '80,00 €', '50,00 €', 2 );
+}
+check( 'refusal messages differ per reason (no blanket "amount exceeds the balance")', count( $counter_messages ) === count( array_unique( $counter_messages ) ), json_encode( $counter_messages, JSON_UNESCAPED_UNICODE ) );
+check( 'the over-balance refusal names the entered amount and the remaining balance', str_contains( $counter_messages['exceeds_balance'], '80,00 €' ) && str_contains( $counter_messages['exceeds_balance'], '50,00 €' ) );
+check( 'only the over-balance refusal mentions the balance being exceeded', 1 === count( array_filter( $counter_messages, static fn( $m ) => str_contains( $m, 'exceeds' ) ) ) );
 
 echo "Discount campaign engine\n";
 use VCAP\Discounts\Engine;
