@@ -122,6 +122,25 @@ foreach ( array( array( 'GET', '/vcap/v1/lookup' ), array( 'POST', '/vcap/v1/che
 	vcap_security_assert( in_array( $response->get_status(), array( 401, 403 ), true ), 'unauthenticated scanner route ' . $route[1] . ' is denied' );
 }
 
+// Counter redemption with an idempotency key: a retry after a timeout replays the result, never deducts twice.
+$scan_card = vcap_security_create_voucher( 'scan-' . strtolower( wp_generate_password( 6, false, false ) ) . '@example.test', 930000 + random_int( 1, 99999 ) );
+$scan_req  = static function ( float $amount, string $key ) use ( $scan_card ) {
+	$req = new WP_REST_Request( 'POST', '/vcap/v1/redeem' );
+	$req->set_param( 'q', $scan_card->code );
+	$req->set_param( 'amount', $amount );
+	$req->set_param( 'idempotency_key', $key );
+	$res = vcap()->tickets->rest_redeem( $req );
+	return is_wp_error( $res ) ? $res : $res->get_data();
+};
+$scan_key = wp_generate_uuid4();
+$first    = $scan_req( 5, $scan_key );
+$again    = $scan_req( 5, $scan_key );
+vcap_security_assert( is_array( $first ) && ! empty( $first['success'] ) && is_array( $again ) && ! empty( $again['replayed'] ) && 20.0 === (float) vcap()->vouchers->get( $scan_card->id )->balance, 'a repeated counter redemption with the same key is answered from the first one (deducted once)' );
+$misused = $scan_req( 7, $scan_key );
+vcap_security_assert( is_wp_error( $misused ) && 'vcap_idempotency_conflict' === $misused->get_error_code(), 'a key reused for another amount is refused' );
+$second = $scan_req( 5, wp_generate_uuid4() );
+vcap_security_assert( is_array( $second ) && ! empty( $second['success'] ) && 15.0 === (float) vcap()->vouchers->get( $scan_card->id )->balance, 'a new key deducts again' );
+
 // Per-visitor/public balance lookup throttling is enforced before a code lookup.
 $bucket = 'security-test-' . strtolower( wp_generate_password( 8, false, false ) );
 $allowed = true;

@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-13 00:34+0000\n"
+"POT-Creation-Date: 2026-11-13 00:37+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:75 src/API/V1/RedemptionService.php:117
@@ -89,11 +89,11 @@ msgstr ""
 msgid "expired"
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:600 src/Tickets.php:250
+#: src/API/V1/RedemptionService.php:600 src/Tickets.php:333
 msgid "Store credit can only be used in the shop."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:603 src/Tickets.php:252
+#: src/API/V1/RedemptionService.php:603 src/Tickets.php:335
 msgid "Tickets are checked in at the entrance and cannot be redeemed here."
 msgstr ""
 
@@ -617,7 +617,7 @@ msgstr ""
 msgid "Last check-in"
 msgstr ""
 
-#: src/Admin/Scanner.php:41 src/Admin/VouchersListTable.php:136 src/Privacy.php:81
+#: src/Admin/Scanner.php:41 src/Admin/VouchersListTable.php:136 src/Privacy.php:87
 msgid "Details"
 msgstr ""
 
@@ -629,7 +629,7 @@ msgstr ""
 msgid "Request failed."
 msgstr ""
 
-#: src/Admin/Scanner.php:44 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:246 src/Privacy.php:65 src/StoreCredit.php:297
+#: src/Admin/Scanner.php:44 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:246 src/Privacy.php:71 src/StoreCredit.php:297
 msgid "Event"
 msgstr ""
 
@@ -665,7 +665,7 @@ msgstr ""
 msgid "Camera preview"
 msgstr ""
 
-#: src/Admin/Scanner.php:67 src/Admin/VouchersListTable.php:27 src/Privacy.php:39 templates/myaccount/vouchers-table.php:29 templates/myaccount/vouchers-table.php:55 templates/ticket-status.php:65
+#: src/Admin/Scanner.php:67 src/Admin/VouchersListTable.php:27 src/Privacy.php:43 templates/myaccount/vouchers-table.php:29 templates/myaccount/vouchers-table.php:55 templates/ticket-status.php:65
 msgid "Code"
 msgstr ""
 
@@ -701,7 +701,7 @@ msgstr ""
 msgid "Positive amounts add credit, negative amounts remove it. Every change is recorded with your user and the reason."
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:60 src/Admin/StoreCreditAdmin.php:110 src/Admin/VoucherAdmin.php:224 src/Admin/VoucherAdmin.php:246 src/Discounts/Admin.php:129 src/Privacy.php:66
+#: src/Admin/StoreCreditAdmin.php:60 src/Admin/StoreCreditAdmin.php:110 src/Admin/VoucherAdmin.php:224 src/Admin/VoucherAdmin.php:246 src/Discounts/Admin.php:129 src/Privacy.php:72
 msgid "Amount"
 msgstr ""
 
@@ -827,7 +827,7 @@ msgstr ""
 msgid "Overview"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:143 src/Admin/VouchersListTable.php:30 src/Privacy.php:40 src/Privacy.php:79 templates/myaccount/vouchers-table.php:31 templates/myaccount/vouchers-table.php:57
+#: src/Admin/VoucherAdmin.php:143 src/Admin/VouchersListTable.php:30 src/Privacy.php:44 src/Privacy.php:85 templates/myaccount/vouchers-table.php:31 templates/myaccount/vouchers-table.php:57
 msgid "Status"
 msgstr ""
 
@@ -903,15 +903,15 @@ msgstr ""
 msgid "Edit"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:192 src/Fields.php:79 src/Placeholders.php:30 src/Privacy.php:43 src/ProductSettings.php:359
+#: src/Admin/VoucherAdmin.php:192 src/Fields.php:79 src/Placeholders.php:30 src/Privacy.php:47 src/ProductSettings.php:359
 msgid "Recipient name"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:193 src/Fields.php:88 src/Placeholders.php:31 src/Privacy.php:44 src/ProductSettings.php:360
+#: src/Admin/VoucherAdmin.php:193 src/Fields.php:88 src/Placeholders.php:31 src/Privacy.php:48 src/ProductSettings.php:360
 msgid "Recipient email"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:194 src/Privacy.php:45
+#: src/Admin/VoucherAdmin.php:194 src/Privacy.php:49
 msgid "Message"
 msgstr ""
 
@@ -1253,7 +1253,7 @@ msgstr ""
 msgid "Already checked in by this scan"
 msgstr ""
 
-#: src/Compat/PassCaptainScanner.php:97 src/Tickets.php:225 src/Tickets.php:331 src/VoucherRepository.php:451
+#: src/Compat/PassCaptainScanner.php:97 src/Tickets.php:232 src/Tickets.php:414 src/VoucherRepository.php:451
 msgid "Checked in"
 msgstr ""
 
@@ -2730,7 +2730,7 @@ msgstr ""
 msgid "The coupon %s is only valid for your first order."
 msgstr ""
 
-#: src/Health.php:24 src/Privacy.php:179
+#: src/Health.php:24 src/Privacy.php:185
 msgid "Voucher Captain"
 msgstr ""
 
@@ -2948,11 +2948,11 @@ msgstr ""
 msgid "Product short description"
 msgstr ""
 
-#: src/Placeholders.php:28 src/Privacy.php:41
+#: src/Placeholders.php:28 src/Privacy.php:45
 msgid "Buyer name"
 msgstr ""
 
-#: src/Placeholders.php:29 src/Privacy.php:42
+#: src/Placeholders.php:29 src/Privacy.php:46
 msgid "Buyer email"
 msgstr ""
 
@@ -3038,27 +3038,27 @@ msgstr ""
 msgid "PREVIEW"
 msgstr ""
 
-#: src/Privacy.php:62
+#: src/Privacy.php:68
 msgid "Voucher uses"
 msgstr ""
 
-#: src/Privacy.php:74
+#: src/Privacy.php:80
 msgid "Voucher redemptions"
 msgstr ""
 
-#: src/Privacy.php:77
+#: src/Privacy.php:83
 msgid "Redemption key"
 msgstr ""
 
-#: src/Privacy.php:78
+#: src/Privacy.php:84
 msgid "Target"
 msgstr ""
 
-#: src/Privacy.php:171
+#: src/Privacy.php:177
 msgid "Some voucher records could not be fully anonymised. Please retry the erasure request."
 msgstr ""
 
-#: src/Privacy.php:180
+#: src/Privacy.php:186
 msgid "When you buy a voucher, we store the recipient name, recipient email address, personal message and any personalisation you enter so that we can create and deliver the voucher. The recipient receives an email with the voucher if you entered their address. This data is kept as long as the voucher can be used and is then removed according to our retention settings."
 msgstr ""
 
@@ -4398,7 +4398,7 @@ msgstr ""
 msgid "Currently being redeemed elsewhere"
 msgstr ""
 
-#: src/Tickets.php:150 src/Tickets.php:214 src/Tickets.php:239
+#: src/Tickets.php:150 src/Tickets.php:214 src/Tickets.php:301
 msgid "No voucher or ticket found for this code."
 msgstr ""
 
@@ -4408,37 +4408,45 @@ msgstr ""
 msgid "%1$d of %2$d admissions used"
 msgstr ""
 
-#: src/Tickets.php:225 src/VoucherRepository.php:452
+#: src/Tickets.php:232 src/VoucherRepository.php:452
 msgid "Check-in reverted"
 msgstr ""
 
-#: src/Tickets.php:228 src/Tickets.php:331
+#: src/Tickets.php:235 src/Tickets.php:414
 msgid "Check-in not possible."
 msgstr ""
 
-#: src/Tickets.php:254
-msgid "This voucher cannot be redeemed at the counter."
-msgstr ""
-
-#: src/Tickets.php:256
-msgid "This voucher is in an unpaid shop order right now. Redeem it after that order is cancelled."
+#: src/Tickets.php:264
+msgid "This scanner request was already used for another action. Please scan the code again."
 msgstr ""
 
 #: src/Tickets.php:267
+msgid "This action is still being processed. Please wait a moment and try again."
+msgstr ""
+
+#: src/Tickets.php:337
+msgid "This voucher cannot be redeemed at the counter."
+msgstr ""
+
+#: src/Tickets.php:339
+msgid "This voucher is in an unpaid shop order right now. Redeem it after that order is cancelled."
+msgstr ""
+
+#: src/Tickets.php:350
 msgid "Redeemed in store"
 msgstr ""
 
-#: src/Tickets.php:271
+#: src/Tickets.php:354
 msgid "Please enter an amount."
 msgstr ""
 
 #. translators: %s: remaining balance
-#: src/Tickets.php:280
+#: src/Tickets.php:363
 #, php-format
 msgid "Not deducted: the amount exceeds the balance (remaining %s)."
 msgstr ""
 
-#: src/Tickets.php:315 src/Voucher.php:64 src/VoucherRepository.php:448
+#: src/Tickets.php:398 src/Voucher.php:64 src/VoucherRepository.php:448
 msgid "Redeemed"
 msgstr ""
 

@@ -213,10 +213,17 @@ final class Tickets {
 			}
 			return new \WP_Error( 'vcap_not_found', __( 'No voucher or ticket found for this code.', 'voucher-captain' ), array( 'status' => 404 ) );
 		}
-		if ( $request['undo'] ) {
-			$ok = $this->undo_checkin( $voucher );
-		} else {
-			$ok = $this->checkin( $voucher, (int) $request['count'] );
+		$key   = sanitize_text_field( (string) $request['idempotency_key'] );
+		$sig   = md5( 'checkin|' . $voucher->id . '|' . ( $request['undo'] ? 'undo' : max( 1, (int) $request['count'] ) ) );
+		$prior = $this->scan_claim( $key, $sig );
+		if ( null !== $prior ) {
+			return is_wp_error( $prior ) ? $prior : rest_ensure_response( $prior );
+		}
+		try {
+			$ok = $request['undo'] ? $this->undo_checkin( $voucher ) : $this->checkin( $voucher, (int) $request['count'] );
+		} catch ( \Throwable $e ) {
+			$this->scan_release( $key );
+			throw $e;
 		}
 		$data            = $this->describe( $this->repo->get( $voucher->id ) );
 		$data['success'] = $ok;
@@ -227,7 +234,62 @@ final class Tickets {
 			$data['state']   = 'error';
 			$data['message'] = __( 'Check-in not possible.', 'voucher-captain' );
 		}
+		$this->scan_store( $key, $data );
 		return rest_ensure_response( $data );
+	}
+
+	private const SCAN_PREFIX = '_vcap_scan_';
+
+	/**
+	 * Idempotency of native scanner mutations (check-in, undo, counter redemption). The first request with a key
+	 * claims it atomically (unique option row); a repeat with the same key gets the stored answer, a repeat
+	 * while the first is still running gets 409 (the scanner retries with the same key), and a key reused
+	 * for another action is refused. Keys are kept two days.
+	 *
+	 * @return array|\WP_Error|null stored response, error, or null when this request may act
+	 */
+	private function scan_claim( string $key, string $sig ) {
+		if ( '' === $key ) {
+			return null;
+		}
+		global $wpdb;
+		$name = self::SCAN_PREFIX . md5( $key );
+		$wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $name, time() . '|' . $sig . '|' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( 1 === (int) $wpdb->rows_affected ) {
+			return null;
+		}
+		$row                      = (string) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		list( , $stored, $json )  = array_pad( explode( '|', $row, 3 ), 3, '' );
+		if ( $stored !== $sig ) {
+			return new \WP_Error( 'vcap_idempotency_conflict', __( 'This scanner request was already used for another action. Please scan the code again.', 'voucher-captain' ), array( 'status' => 422 ) );
+		}
+		if ( '' === $json ) {
+			return new \WP_Error( 'vcap_in_progress', __( 'This action is still being processed. Please wait a moment and try again.', 'voucher-captain' ), array( 'status' => 409 ) );
+		}
+		$data             = (array) json_decode( $json, true );
+		$data['replayed'] = true;
+		return $data;
+	}
+
+	private function scan_store( string $key, $data ): void {
+		if ( '' === $key ) {
+			return;
+		}
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT(SUBSTRING_INDEX(option_value, '|', 2), '|', %s) WHERE option_name = %s", (string) wp_json_encode( $data ), self::SCAN_PREFIX . md5( $key ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
+
+	private function scan_release( string $key ): void {
+		if ( '' !== $key ) {
+			global $wpdb;
+			$wpdb->delete( $wpdb->options, array( 'option_name' => self::SCAN_PREFIX . md5( $key ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+	}
+
+	/** Removes scanner idempotency keys older than two days (daily maintenance). */
+	public static function purge_scan_keys(): void {
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) < %d", $wpdb->esc_like( self::SCAN_PREFIX ) . '%', time() - 2 * DAY_IN_SECONDS ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	/**
@@ -238,6 +300,27 @@ final class Tickets {
 		if ( ! $voucher ) {
 			return new \WP_Error( 'vcap_not_found', __( 'No voucher or ticket found for this code.', 'voucher-captain' ), array( 'status' => 404 ) );
 		}
+		$key   = sanitize_text_field( (string) $request['idempotency_key'] );
+		$prior = $this->scan_claim( $key, md5( 'redeem|' . $voucher->id . '|' . round( max( 0, (float) $request['amount'] ), 4 ) ) );
+		if ( null !== $prior ) {
+			return is_wp_error( $prior ) ? $prior : rest_ensure_response( $prior );
+		}
+		try {
+			$response = $this->redeem_at_counter( $request, $voucher );
+		} catch ( \Throwable $e ) {
+			$this->scan_release( $key );
+			throw $e;
+		}
+		if ( is_wp_error( $response ) ) {
+			$this->scan_release( $key ); // Nothing was changed (e.g. no amount): the same key may act later.
+			return $response;
+		}
+		$this->scan_store( $key, $response instanceof \WP_REST_Response ? $response->get_data() : $response );
+		return $response;
+	}
+
+	/** @return \WP_REST_Response|\WP_Error */
+	private function redeem_at_counter( \WP_REST_Request $request, Voucher $voucher ) {
 		if ( ! $voucher->is_usable() || Voucher::STATUS_REDEEMED === $voucher->status ) {
 			$data            = $this->describe( $voucher );
 			$data['success'] = false;

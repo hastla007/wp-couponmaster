@@ -3978,3 +3978,9 @@ msgstr "Die Gutschein-Datenbank-Aktualisierung ist unvollständig"
 
 msgid "Missing: %s. The update is retried automatically; check the database permissions."
 msgstr "Es fehlt: %s. Die Aktualisierung wird automatisch wiederholt; prüfen Sie die Datenbankrechte."
+
+msgid "This scanner request was already used for another action. Please scan the code again."
+msgstr "Diese Scanner-Anfrage wurde bereits für eine andere Aktion verwendet. Bitte scannen Sie den Code erneut."
+
+msgid "This action is still being processed. Please wait a moment and try again."
+msgstr "Diese Aktion wird noch verarbeitet. Bitte warten Sie einen Moment und versuchen Sie es erneut."

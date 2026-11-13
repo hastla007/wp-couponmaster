@@ -187,7 +187,7 @@
 		// Always look up first; auto check-in applies to valid tickets only (never to vouchers or gift cards).
 		var p = api( 'lookup?q=' + encodeURIComponent( query ) ).then( function ( d ) {
 			if ( auto.checked && 'ok' === d.state && ( 'ticket' === d.type || ( 'passcaptain' === d.type && d.can_checkin ) ) ) {
-				return api( 'checkin', 'POST', { q: query, idempotency_key: uuid() } );
+				return send( 'checkin', { q: query }, 'checkin|' + query + '|1' );
 			}
 			return d;
 		} );
@@ -219,6 +219,25 @@
 		return String( Date.now() ) + '-' + Math.random().toString( 16 ).slice( 2 );
 	}
 
+	// One idempotency key per intended action (code + action + count/amount). It is kept until the server
+	// answered, so repeating an action after a timeout or network error replays the first result instead of
+	// admitting or deducting twice; a new key is only made once the previous attempt got an answer.
+	var pendingKeys = {};
+	function send( path, body, sig ) {
+		var key = pendingKeys[ sig ] || ( pendingKeys[ sig ] = uuid() );
+		body.idempotency_key = key;
+		return api( path, 'POST', body ).then( function ( d ) {
+			delete pendingKeys[ sig ];
+			return d;
+		}, function ( err ) {
+			// Answered (4xx) = done; no answer, server error or "still processing" (409) = keep the key for a retry.
+			if ( err && err.status && err.status < 500 && 409 !== err.status ) {
+				delete pendingKeys[ sig ];
+			}
+			throw err;
+		} );
+	}
+
 	result.addEventListener( 'click', function ( e ) {
 		var act = e.target.getAttribute( 'data-act' );
 		var query = result.getAttribute( 'data-query' );
@@ -231,12 +250,14 @@
 		var req;
 		if ( 'checkin' === act ) {
 			var c = document.getElementById( 'vcap-count' );
-			req = api( 'checkin', 'POST', { q: query, count: c ? parseInt( c.value, 10 ) || 1 : 1, idempotency_key: uuid() } );
+			var count = c ? parseInt( c.value, 10 ) || 1 : 1;
+			req = send( 'checkin', { q: query, count: count }, 'checkin|' + query + '|' + count );
 		} else if ( 'undo' === act ) {
-			req = api( 'checkin', 'POST', { q: query, undo: true } );
+			req = send( 'checkin', { q: query, undo: true }, 'undo|' + query );
 		} else if ( 'redeem' === act ) {
 			var a = document.getElementById( 'vcap-amount' );
-			req = api( 'redeem', 'POST', { q: query, amount: a ? parseAmount( a.value ) : 0 } );
+			var amount = a ? parseAmount( a.value ) : 0;
+			req = send( 'redeem', { q: query, amount: amount }, 'redeem|' + query + '|' + amount );
 		}
 		if ( req ) {
 			acting = true;
