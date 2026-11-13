@@ -63,7 +63,11 @@ final class PassCaptainReconcile {
 			$decimals = RedemptionService::decimals( (string) ( $o->currency ?: $row['currency'] ) );
 			// amount_minor is the voucher's share in both treatments (amount_paid_by_voucher is 0 for single-purpose vouchers).
 			$pc_paid  = (int) ( $snapshot['amount_minor'] ?? 0 ) / ( 10 ** $decimals );
-			if ( RedemptionService::STATE_COMMITTED === $row['state'] && abs( $pc_paid - (float) $row['amount'] ) > 0.5 / ( 10 ** $decimals ) ) {
+			$tolerance = 0.5 / ( 10 ** $decimals );
+			// A single-use voucher is used up as a whole even when the order cost less: only less than credited differs.
+			$single    = null === $row['balance_after'];
+			$differs   = $single ? (float) $row['amount'] + $tolerance < $pc_paid : abs( $pc_paid - (float) $row['amount'] ) > $tolerance;
+			if ( RedemptionService::STATE_COMMITTED === $row['state'] && $differs ) {
 				/* translators: 1: amount in Pass Captain, 2: amount in Voucher Captain */
 				$issues[] = self::issue( 'checkout', $ref, $key, sprintf( __( 'Amount differs: Pass Captain %1$s, Voucher Captain %2$s.', 'voucher-captain' ), wc_format_decimal( $pc_paid, $decimals ), wc_format_decimal( (float) $row['amount'], $decimals ) ) );
 			}
