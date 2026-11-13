@@ -427,7 +427,7 @@ $reconcile = ( new VCAP\Compat\PassCaptainReconcile( vcap()->redemptions ) )->ru
 $orphans   = array_filter( $reconcile['issues'], static fn( $i ) => 'orphan' === $i['kind'] && $orphan_key === $i['key'] );
 vcap_pc_assert( VCAP\Compat\PassCaptainReconcile::available() && $reconcile['checked'] > 0 && 1 === count( $orphans ), 'the reconciliation checks Pass Captain orders and reports a redemption without an order' );
 $checkout_issues = array_filter( $reconcile['issues'], static fn( $i ) => 'checkout' === $i['kind'] && str_contains( $i['problem'], 'Amount differs' ) );
-vcap_pc_assert( array() === $checkout_issues, 'gift cards paid in the ticket checkout match Pass Captain\'s amounts' );
+vcap_pc_assert( array() === $checkout_issues, 'gift cards paid in the ticket checkout match Pass Captain\'s amounts' . ( $checkout_issues ? ': ' . wp_json_encode( array_values( $checkout_issues ) ) : '' ) );
 $wpdb->delete( VCAP\Install::tables()['redemptions'], array( 'redemption_key' => $orphan_key ) );
 
 // Minor units follow ISO 4217 (as Pass Captain does), not the shop's price display setting.
