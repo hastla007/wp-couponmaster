@@ -247,6 +247,7 @@ final class LicenseClient {
 		$verified = self::verify_envelope( $response, $credentials['installation_secret'] );
 		if ( ! is_wp_error( $verified ) ) {
 			delete_option( $this->option_key );
+			delete_option( $this->option_key . '_entitlements_cache' );
 		}
 		return $verified;
 	}

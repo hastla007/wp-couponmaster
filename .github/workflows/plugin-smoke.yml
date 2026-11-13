@@ -237,6 +237,123 @@ jobs:
           php wp-cli.phar --path=wp-test eval 'echo "ok\n";' 2>&1 | tee load.log
           ! grep -E "PHP (Fatal|Warning)" load.log
 
+  license-acceptance:
+    # Acceptance against a reachable WP License Captain server with real release packages (TODO "Aktivierung,
+    # Feature-Sperren, Offline-Verhalten und Update-Installation …"): the license server (hastla007/wp-license on
+    # WordPress + WooCommerce) runs over HTTPS as https://licenses.test (own test CA), a second WordPress site
+    # installs the Voucher Captain premium release ZIP. tests/license-acceptance.php
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --password=root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      SERVER: ${{ github.workspace }}/../license-server
+      SHOP: ${{ github.workspace }}/../license-shop
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check out the license server (WP License Captain)
+        uses: actions/checkout@v5
+        with:
+          repository: hastla007/wp-license
+          ref: 3300685a524edfc4ed0e1f3119f739c5e989b2d4
+          path: wp-license
+      - name: Set up PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, gd, intl, mbstring, mysqli, xml, zip
+          coverage: none
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist
+      - name: Download WP-CLI
+        run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
+      - name: HTTPS for licenses.test with a test CA
+        run: |
+          echo "127.0.0.1 licenses.test" | sudo tee -a /etc/hosts
+          sudo apt-get update -qq && sudo apt-get install -y -qq socat
+          mkdir -p "$RUNNER_TEMP/tls" && cd "$RUNNER_TEMP/tls"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj "/CN=Voucher Captain CI test CA" -keyout ca.key -out ca.crt -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
+          openssl req -newkey rsa:2048 -nodes -subj "/CN=licenses.test" -keyout server.key -out server.csr
+          printf "subjectAltName=DNS:licenses.test\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n" > ext.cnf
+          openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 2 -sha256 -extfile ext.cnf -out server.crt
+          cat server.crt server.key > server.pem
+      - name: License server on https://licenses.test
+        run: |
+          mysql -h 127.0.0.1 -uroot -proot -e "CREATE DATABASE licenses; CREATE DATABASE shop;"
+          php wp-cli.phar core download --path="$SERVER" --version=7.1.4
+          printf "\$_SERVER['HTTPS'] = 'on';\n" | php wp-cli.phar config create --path="$SERVER" --dbname=licenses --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check --extra-php
+          php wp-cli.phar core install --path="$SERVER" --url=https://licenses.test --title="License server" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
+          php wp-cli.phar --path="$SERVER" rewrite structure '/%postname%/'
+          php wp-cli.phar --path="$SERVER" plugin install woocommerce --version=11.2.2 --activate
+          php wp-cli.phar --path="$SERVER" option update woocommerce_currency EUR
+          ln -s "$GITHUB_WORKSPACE/wp-license" "$SERVER/wp-content/plugins/wp-license"
+          php wp-cli.phar --path="$SERVER" plugin activate wp-license
+          mkdir -p "$SERVER/wp-content/mu-plugins" "$SERVER/packages"
+          cp tests/license-server-mu.php "$SERVER/wp-content/mu-plugins/"
+          ( cd "$SERVER" && PHP_CLI_SERVER_WORKERS=4 nohup php -S 127.0.0.1:8080 > "$RUNNER_TEMP/php-server.log" 2>&1 & )
+          sudo nohup socat OPENSSL-LISTEN:443,reuseaddr,fork,cert="$RUNNER_TEMP/tls/server.pem",verify=0 TCP:127.0.0.1:8080 > "$RUNNER_TEMP/socat.log" 2>&1 &
+          sleep 3
+          curl --fail --silent --show-error --cacert "$RUNNER_TEMP/tls/ca.crt" https://licenses.test/wp-json/wplc/v1 | head -c 300; echo
+      - name: Release packages (premium edition) – installed version and update
+        run: |
+          VCAP_EDITION=premium bin/build.sh
+          # The update: the same sources as the next release 99.0.0, built by the same release script.
+          rsync -a --exclude build --exclude wp-license ./ "$RUNNER_TEMP/vc-next/"
+          cd "$RUNNER_TEMP/vc-next"
+          sed -i "s/^ \* Version: .*/ * Version:           99.0.0/; s/^define( 'VCAP_VERSION', '[^']*' );/define( 'VCAP_VERSION', '99.0.0' );/" voucher-captain.php
+          sed -i "s/^Stable tag: .*/Stable tag: 99.0.0/" readme.txt
+          VCAP_EDITION=premium bin/build.sh
+          cp build/voucher-captain.zip "$SERVER/packages/voucher-captain-99.0.0.zip"
+      - name: Shop with the Voucher Captain premium release ZIP
+        run: |
+          php wp-cli.phar core download --path="$SHOP" --version=7.1.4
+          printf "define( 'FS_METHOD', 'direct' );\n" | php wp-cli.phar config create --path="$SHOP" --dbname=shop --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check --extra-php
+          php wp-cli.phar core install --path="$SHOP" --url=http://shop.test --title="Shop" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
+          php wp-cli.phar --path="$SHOP" plugin install woocommerce --version=11.2.2 --activate
+          # WordPress verifies HTTPS against its own CA bundle: trust the test CA of licenses.test.
+          cat "$RUNNER_TEMP/tls/ca.crt" >> "$SHOP/wp-includes/certificates/ca-bundle.crt"
+          php wp-cli.phar --path="$SHOP" plugin install build/voucher-captain.zip --activate
+          php wp-cli.phar --path="$SHOP" plugin list
+      - name: Acceptance – activation, feature gate, offline, suspension, update, deactivation
+        run: |
+          T="$GITHUB_WORKSPACE/tests/license-acceptance.php"
+          server() { php wp-cli.phar --path="$SERVER" eval-file "$T" "$@"; }
+          shop() { php wp-cli.phar --path="$SHOP" --user=admin eval-file "$T" "$@"; }
+          tls_up() { sudo nohup socat OPENSSL-LISTEN:443,reuseaddr,fork,cert="$RUNNER_TEMP/tls/server.pem",verify=0 TCP:127.0.0.1:8080 >> "$RUNNER_TEMP/socat.log" 2>&1 & sleep 2; }
+          server server-setup "$RUNNER_TEMP/license.key"
+          server server-package 99.0.0 "$SERVER/packages/voucher-captain-99.0.0.zip"
+          shop shop-locked
+          shop shop-activate "$RUNNER_TEMP/license.key"
+          shop shop-active
+          sudo pkill -f "socat OPENSSL-LISTEN:443" && sleep 1
+          shop shop-offline
+          tls_up
+          server server-status suspended
+          shop shop-suspended
+          server server-status active
+          shop shop-reactivated
+          server server-bad-checksum
+          shop shop-update-rejected
+          server server-good-checksum
+          shop shop-update
+          shop shop-updated 99.0.0
+          shop shop-deactivate
+          ! grep -E "PHP (Fatal|Warning)" "$RUNNER_TEMP/php-server.log"
+      - name: Server logs
+        if: failure()
+        run: |
+          tail -n 80 "$RUNNER_TEMP/php-server.log" || true
+          tail -n 40 "$RUNNER_TEMP/socat.log" || true
+
   multisite:
     # Network activation sets up every site (own tables and options per site), new sites are set up on their
     # first request, and a network uninstall removes data only on the sites that opted in.
