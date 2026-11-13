@@ -1,6 +1,7 @@
 <?php
 namespace VCAP\Admin;
 
+use VCAP\CodeGenerator;
 use VCAP\CodePool;
 use VCAP\SpreadsheetReader;
 
@@ -44,7 +45,19 @@ final class Import {
 							<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Duplicates within the file skipped: %d', 'voucher-captain' ), $report['dupes_file'] ) ); ?></li>
 							<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Already existing codes skipped: %d', 'voucher-captain' ), $report['dupes_existing'] ) ); ?></li>
 							<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Invalid codes skipped: %d', 'voucher-captain' ), count( $report['invalid'] ) ) ); ?></li>
+							<?php if ( ! empty( $report['weak'] ) ) : ?>
+								<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Codes too easy to guess skipped: %d', 'voucher-captain' ), count( $report['weak'] ) ) ); ?></li>
+							<?php endif; ?>
 						</ul>
+						<?php if ( ! empty( $report['weak'] ) ) : ?>
+							<p><?php esc_html_e( 'Codes of vouchers with a value must have at least about 2^50 combinations (e.g. 10 letters and digits or 16 digits besides a common prefix), otherwise they can be found by trying. Use longer codes, or tick "Accept codes that are easy to guess" if the codes are protected otherwise.', 'voucher-captain' ); ?></p>
+							<details><summary><?php esc_html_e( 'Show codes that are too easy to guess', 'voucher-captain' ); ?></summary>
+								<ul><?php foreach ( array_slice( $report['weak'], 0, 100 ) as $row ) : ?><li><?php echo esc_html( $row ); ?></li><?php endforeach; ?></ul>
+							</details>
+						<?php endif; ?>
+						<?php if ( ! empty( $report['weak_imported'] ) ) : ?>
+							<p class="vcap-warning"><strong><?php echo esc_html( sprintf( /* translators: %d: count */ _n( 'Warning: %d imported code is easy to guess.', 'Warning: %d imported codes are easy to guess.', (int) $report['weak_imported'], 'voucher-captain' ), (int) $report['weak_imported'] ) ); ?></strong></p>
+						<?php endif; ?>
 						<?php if ( $report['invalid'] ) : ?>
 							<details><summary><?php esc_html_e( 'Show invalid rows', 'voucher-captain' ); ?></summary>
 								<ul><?php foreach ( array_slice( $report['invalid'], 0, 100 ) as $row ) : ?><li><?php echo esc_html( $row ); ?></li><?php endforeach; ?></ul>
@@ -79,7 +92,9 @@ final class Import {
 							<th scope="row"><?php esc_html_e( 'Options', 'voucher-captain' ); ?></th>
 							<td>
 								<label><input type="checkbox" name="header" value="1" checked /> <?php esc_html_e( 'First row is a header', 'voucher-captain' ); ?></label><br>
-								<label><input type="checkbox" name="uppercase" value="1" /> <?php esc_html_e( 'Convert codes to uppercase', 'voucher-captain' ); ?></label>
+								<label><input type="checkbox" name="uppercase" value="1" /> <?php esc_html_e( 'Convert codes to uppercase', 'voucher-captain' ); ?></label><br>
+								<label><input type="checkbox" name="allow_weak" value="1" /> <?php esc_html_e( 'Accept codes that are easy to guess (not recommended)', 'voucher-captain' ); ?></label>
+								<p class="description"><?php esc_html_e( 'Codes with fewer than about 2^50 combinations (e.g. 8 digits) are skipped by default: they could be found by trying.', 'voucher-captain' ); ?></p>
 							</td>
 						</tr>
 						<tr>
@@ -144,6 +159,8 @@ final class Import {
 			'dupes_file'     => 0,
 			'dupes_existing' => 0,
 			'invalid'        => array(),
+			'weak'           => array(),
+			'weak_imported'  => 0,
 		);
 		$batch = sanitize_text_field( wp_unslash( $_POST['batch'] ?? '' ) );
 		if ( '' === $batch ) {
@@ -204,8 +221,10 @@ final class Import {
 			array_shift( $rows );
 		}
 
-		$upper = ! empty( $_POST['uppercase'] );
-		$seen  = array();
+		$upper      = ! empty( $_POST['uppercase'] );
+		$allow_weak = ! empty( $_POST['allow_weak'] );
+		$seen       = array();
+		$candidates = array();
 		foreach ( $rows as $n => $row ) {
 			$code = trim( (string) ( $row[ $index ] ?? '' ) );
 			if ( '' === $code ) {
@@ -222,7 +241,23 @@ final class Import {
 				++$report['dupes_file'];
 				continue;
 			}
-			$seen[ $key ] = true;
+			$seen[ $key ]     = true;
+			$candidates[ $n ] = $code;
+		}
+
+		// Guessing space without the parts all codes of the file share (e.g. "SHOP-2026-").
+		list( $prefix, $suffix ) = CodeGenerator::common_affixes( $candidates );
+		/** This filter is documented in src/Issuer.php */
+		$min_bits = (int) apply_filters( 'vcap_min_code_bits', CodeGenerator::MIN_BITS );
+		foreach ( $candidates as $n => $code ) {
+			if ( CodeGenerator::estimated_bits( $code, $prefix, $suffix ) < $min_bits ) {
+				if ( ! $allow_weak ) {
+					/* translators: 1: row number, 2: value */
+					$report['weak'][] = sprintf( __( 'Row %1$d: "%2$s"', 'voucher-captain' ), $n + ( $header ? 2 : 1 ), mb_substr( $code, 0, 80 ) );
+					continue;
+				}
+				++$report['weak_imported'];
+			}
 			if ( $this->pool->exists( $code ) || wc_get_coupon_id_by_code( $code ) || vcap()->vouchers->code_exists( $code ) ) {
 				++$report['dupes_existing'];
 				continue;

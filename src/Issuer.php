@@ -230,6 +230,8 @@ final class Issuer {
 					'charset'   => $this->settings->get( 'vcap_code_charset' ),
 					'separator' => $this->settings->get( 'vcap_code_separator' ),
 					'order_ref' => $this->settings->yes( 'vcap_code_order_ref' ) ? $order->get_order_number() : '',
+					/** Minimum guessing space of generated voucher codes in bits (default 50: 10 letters/digits or 16 digits). */
+					'min_bits'  => (int) apply_filters( 'vcap_min_code_bits', CodeGenerator::MIN_BITS ),
 				),
 				array( $this->coupons, 'code_exists' )
 			);

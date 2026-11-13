@@ -85,8 +85,10 @@ final class Campaigns {
 			/* translators: %d: maximum number of codes */
 			return new \WP_Error( 'vcap_campaign_input', sprintf( __( 'Please enter a batch name and between 1 and %d codes.', 'voucher-captain' ), self::MAX_RUN ) );
 		}
-		$options = $this->code_options( $opts );
-		$codes   = array();
+		// Pool codes become vouchers with a value when sold: as hard to guess as generated voucher codes.
+		$options             = $this->code_options( $opts );
+		$options['min_bits'] = (int) apply_filters( 'vcap_min_code_bits', CodeGenerator::MIN_BITS );
+		$codes               = array();
 		for ( $i = 0; $i < $count; $i++ ) {
 			$code = CodeGenerator::unique( $options, array( $this, 'taken' ) );
 			if ( $this->pool->add( $code, $batch ) ) {
