@@ -200,11 +200,8 @@ $order_with = static function ( array $lines, string $country, string $email ): 
 	$order = wc_create_order();
 	foreach ( $lines as $line ) {
 		list( $product, $net ) = $line;
-		$item_id = $order->add_product( $product, 1 );
-		$item    = $order->get_item( $item_id );
-		$item->set_subtotal( $net );
-		$item->set_total( $net );
-		$item->save();
+		// Net amounts go in with the line, so its tax is calculated on them (not on the product price).
+		$order->add_product( $product, 1, array( 'subtotal' => $net, 'total' => $net ) );
 	}
 	$order->set_billing_email( $email );
 	$order->set_billing_country( $country );
@@ -235,25 +232,8 @@ vcap_tax_assert( abs( 115.0 - (float) $mixed->get_total_tax() - array_sum( array
 
 // 7.2 Same with net prices: the card still pays gross (net share + its VAT), across both rates.
 update_option( 'woocommerce_prices_include_tax', 'no' );
-$net_trace = array();
-$trace_items = static function ( $items, $coupon ) use ( &$net_trace ) {
-	$rows = array();
-	foreach ( (array) $items as $item ) {
-		$rows[] = isset( $item->object ) && $item->object instanceof WC_Order_Item_Product ? array( $item->object->get_name(), $item->object->get_subtotal(), $item->object->get_subtotal_tax(), $item->object->get_total(), $item->price ?? null ) : 'other';
-	}
-	$net_trace[] = array( 'items' => $rows, 'amount_edit' => $coupon instanceof WC_Coupon ? $coupon->get_amount( 'edit' ) : null );
-	return $items;
-};
-$trace_amount = static function ( $amount ) use ( &$net_trace ) {
-	$net_trace[] = array( 'get_amount' => $amount );
-	return $amount;
-};
-add_filter( 'woocommerce_coupon_get_items_to_apply', $trace_items, 99, 2 );
-add_filter( 'woocommerce_coupon_get_amount', $trace_amount, 99 );
 list( $mixed_net, $left ) = $pay_with_card( $order_with( array( array( $goods, 100 ), array( $goods_reduced, 100 ) ), 'AT', 'tax-mixed-net@example.com' ), 115 );
-vcap_tax_assert( abs( 115.0 - (float) $mixed_net->get_total() ) < 0.05 && $left < 0.05, 'mixed rates, net prices: a 115 card pays 115 of the 230 gross total and is used up exactly', array( 'total' => $mixed_net->get_total(), 'card_left' => $left, 'discount' => $mixed_net->get_discount_total(), 'discount_tax' => $mixed_net->get_discount_tax(), 'subtotal' => $mixed_net->get_subtotal(), 'tax' => $mixed_net->get_total_tax(), 'trace' => $net_trace ) );
-remove_filter( 'woocommerce_coupon_get_items_to_apply', $trace_items, 99 );
-remove_filter( 'woocommerce_coupon_get_amount', $trace_amount, 99 );
+vcap_tax_assert( abs( 115.0 - (float) $mixed_net->get_total() ) < 0.05 && $left < 0.05, 'mixed rates, net prices: a 115 card pays 115 of the 230 gross total and is used up exactly', array( 'total' => $mixed_net->get_total(), 'card_left' => $left, 'discount' => $mixed_net->get_discount_total(), 'discount_tax' => $mixed_net->get_discount_tax(), 'subtotal' => $mixed_net->get_subtotal(), 'tax' => $mixed_net->get_total_tax() ) );
 
 // 7.3 Place of supply in another EU country (OSS): the order is taxed at the buyer's rate, the card pays gross.
 update_option( 'woocommerce_prices_include_tax', 'yes' );

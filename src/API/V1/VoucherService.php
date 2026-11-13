@@ -76,7 +76,12 @@ final class VoucherService {
 		return is_wp_error( $provider ) ? $provider : $provider->release( $code, $order );
 	}
 
-	/** VAT refunded for one order line, over all its tax rates. */
+	/**
+	 * VAT refunded for one order line, over all its tax rates.
+	 *
+	 * @param \WC_Order              $order Order the line belongs to.
+	 * @param \WC_Order_Item_Product $item  Order line.
+	 */
 	private static function refunded_tax( \WC_Order $order, \WC_Order_Item_Product $item ): float {
 		$total = 0.0;
 		$taxes = (array) $item->get_taxes();
