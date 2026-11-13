@@ -71,4 +71,36 @@ $rows = ( new VCAP\Reports() )->collect( wp_date( 'Y-m-d', time() - DAY_IN_SECON
 vcap_report_assert( 35.0 === $rows[ 'campaign:' . $campaign ]['revenue'], 'refunds are subtracted from the revenue' );
 $csv = VCAP\Reports::csv_rows( $rows );
 vcap_report_assert( 'type' === $csv[0][0] && count( $csv ) === count( $rows ) + 1, 'the CSV export has a header and one line per group' );
+// Ledger: outstanding value at a date and the redemption journal (own currency so other fixtures do not count).
+$ledger_new = static function ( string $mode, float $value ) use ( $tag ) {
+	$v                 = new VCAP\Voucher();
+	$v->code           = 'ledger-' . $mode . '-' . strtolower( wp_generate_password( 8, false, false ) );
+	$v->order_item_id  = 94000000 + random_int( 1, 9999999 );
+	$v->type           = 'balance' === $mode ? 'giftcard' : 'voucher';
+	$v->usage_mode     = $mode;
+	$v->initial_amount = $value;
+	$v->balance        = $value;
+	$v->currency       = 'XTS'; // ISO 4217 test currency.
+	$v->status         = VCAP\Voucher::STATUS_ACTIVE;
+	$v->token          = VCAP\VoucherRepository::new_token();
+	$v->id             = vcap()->vouchers->insert( $v );
+	vcap()->vouchers->log( $v->id, 'issued', $value, 'balance' === $mode ? $value : null, '' );
+	return $v;
+};
+$card   = $ledger_new( 'balance', 50 );
+$single = $ledger_new( 'single', 25 );
+$used   = $ledger_new( 'single', 10 );
+vcap()->vouchers->log( $card->id, 'redeemed', 20, 30, 'Order test', 0 );
+vcap()->vouchers->log( $used->id, 'redeemed', 10, null, 'Order test', 0 );
+$ledger    = new VCAP\Ledger( vcap()->vouchers );
+$today     = wp_date( 'Y-m-d' );
+$liability = $ledger->liability( $today )['totals']['XTS'] ?? array();
+vcap_report_assert( 30.0 === (float) ( $liability['giftcard']['amount'] ?? 0 ) && 25.0 === (float) ( $liability['voucher']['amount'] ?? 0 ) && 1 === (int) ( $liability['voucher']['count'] ?? 0 ), 'outstanding value: gift card balance and the unredeemed single-use voucher, not the redeemed one' );
+$yesterday = wp_date( 'Y-m-d', time() - 2 * DAY_IN_SECONDS );
+vcap_report_assert( empty( $ledger->liability( $yesterday )['totals']['XTS'] ), 'vouchers issued later are not part of an earlier day' );
+$journal = array_values( array_filter( $ledger->journal( $today, $today ), static fn( $r ) => 'XTS' === $r['currency'] && 'redeemed' === $r['event'] ) );
+vcap_report_assert( 2 === count( $journal ) && 30.0 === (float) $journal[0]['balance_after'], 'the journal lists the redemptions of the day with amount and balance' );
+$jcsv = VCAP\Ledger::journal_csv( $journal );
+vcap_report_assert( 'date_utc' === $jcsv[0][0] && 3 === count( $jcsv ), 'the journal exports as CSV' );
+
 echo "Voucher Captain report checks passed.\n";
