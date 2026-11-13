@@ -278,6 +278,7 @@ jobs:
         if: env.VCAP_SKIP_PASS_CAPTAIN != '1'
         run: |
           php wp-cli.phar --path=wp-test plugin get wp-pass-captain --field=version
+          php bin/check-coexistence.php wp-test/wp-content/plugins/voucher-captain wp-test/wp-content/plugins/wp-pass-captain
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/passcaptain-integration.php"
 
   browser-e2e:
