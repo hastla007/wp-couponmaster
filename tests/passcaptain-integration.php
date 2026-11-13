@@ -248,6 +248,8 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	$full_type = vcap_pc_ticket_type( 1000 );
 	$wpdb->update( "{$wpdb->prefix}wpcap_ticket_types", array( 'capacity' => 1 ), array( 'ticket_type_id' => $full_type ) );
 	$full = vcap_pc_voucher( 'single', 20 );
+	$full->buyer_email = 'full-holder@example.com';
+	vcap()->vouchers->update( $full );
 	$give = static fn( $t, $v ) => $v->id === $full->id ? array( 'ticket_type_id' => $full_type, 'quantity' => 2 ) : $t;
 	add_filter( 'vcap_passcaptain_ticket_target', $give, 10, 2 );
 	$refused = vcap()->passcaptain_tickets->exchange( $full->code );
