@@ -3,7 +3,8 @@
 ## Automated checks
 
 Each line names the CI job (`.github/workflows/plugin-smoke.yml`) that proves it; tick it when that job is green on
-the release commit.
+the release commit. The `Release` workflow enforces this: its job `ci-green` refuses to build a tag whose commit has
+no successful push run of `Plugin smoke tests` (RELEASE.md → Cutting a release).
 
 - [ ] Smoke tests and PHP lint on PHP 8.1 and 8.4; release ZIP reproducible (two builds, same SHA-256) – `smoke`.
 - [ ] Integration suites on MySQL 8.4 and MariaDB 11.4, each with HPOS and legacy order storage, plus parallel checkout – `wordpress-integration`.
@@ -13,7 +14,10 @@ the release commit.
 - [ ] Multisite: network activation, a site added later, per-site uninstall – `multisite`.
 - [ ] Voucher Captain + WP Pass Captain (released `main` and the work branch): gift cards in the ticket checkout, ticket voucher exchange, refunds, shared scanner – `pass-captain`.
 - [ ] Browser: product page, classic and block checkout, customer account, shortcodes, admin with Yoast SEO, axe accessibility and keyboard checks – `browser-e2e`.
-- [ ] Composer audit, scoped PHPCS (WordPress and WooCommerce standards) and PHPStan – `quality` (weekly also `dependency-audit` in `scheduled.yml`).
+- [ ] Real gateways and currency switchers from wordpress.org next to Voucher Captain (Stripe, PayPal Payments, WOOCS, CURCY, WCML): purchase, voucher payment, refund, currency conversion – `ecosystem`.
+- [ ] Licensing against a real WP License Captain server: activation, premium feature locks, offline cache, install of the premium ZIP from the release storage, update through the download grant, wrong SHA-256 refused – `license-acceptance`.
+- [ ] Composer audit, scoped PHPCS (WordPress and WooCommerce standards) and PHPStan on the API and contracts; the release ZIP has a licence file for every bundled package and `THIRD-PARTY-NOTICES.txt` – `quality` (weekly also `dependency-audit` in `scheduled.yml`).
+- [ ] Review the report-only scans (findings must not grow; RELEASE.md → Static analysis): PHPCS WordPress-Extra/I18n/Security and PHPStan level 1 on the whole plugin – `quality-wide`; WordPress Plugin Check – `plugin-check`.
 - [ ] Newest PHP/WordPress/WooCommerce and WordPress nightly – `forward-compatibility` in `scheduled.yml` (informational; investigate failures before release).
 
 ## Manual release checks

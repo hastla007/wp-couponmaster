@@ -610,3 +610,108 @@ jobs:
         run: phpcs --standard=WooCommerce-Core --extensions=php --exclude=WordPress.Files.FileName src/API/V1 src/Contracts
       - name: Analyze API and contract types
         run: phpstan analyse --configuration=phpstan.neon.dist --no-progress
+
+  quality-wide:
+    # Wide scan of the whole plugin (src/, templates/, config/, main and uninstall file): PHPCS with phpcs.xml.dist
+    # (WordPress-Extra, I18n text domain, Security) and PHPStan level 1 with phpstan-wide.neon.dist + baseline.
+    # Report-only until the existing findings are worked off (RELEASE.md → Static analysis); the strict scan of the
+    # API and contracts in the job quality stays blocking.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, gd, mbstring, mysqli, xml, zip
+          coverage: none
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist
+      - name: Install PHPCS, WordPress Coding Standards, and PHPStan
+        run: |
+          composer global config allow-plugins.dealerdirect/phpcodesniffer-composer-installer true
+          composer global require --no-interaction squizlabs/php_codesniffer:^3.13 wp-coding-standards/wpcs:^3.0 phpstan/phpstan:^2.1
+          echo "$(composer global config bin-dir --absolute)" >> "$GITHUB_PATH"
+      - name: PHPCS (WordPress-Extra, I18n, Security) on the whole plugin
+        run: |
+          set +e
+          phpcs --report-full=phpcs-full.txt --report-summary=phpcs-summary.txt --report-source=phpcs-source.txt --report-json=phpcs.json
+          status=$?
+          { echo '### PHPCS (wide scan, report-only)'; echo '```'; cat phpcs-source.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+      - name: PHPStan level 1 on the whole plugin (findings beyond phpstan-baseline.neon)
+        if: always()
+        run: phpstan analyse --configuration=phpstan-wide.neon.dist --no-progress --memory-limit=1G
+      - name: Generate a PHPStan baseline of the current findings
+        if: always()
+        run: phpstan analyse --configuration=phpstan-wide.neon.dist --no-progress --memory-limit=1G --generate-baseline=phpstan-baseline.generated.neon --allow-empty-baseline || true
+      - name: Upload the reports and the generated baseline
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phpstan-baseline
+          path: |
+            phpcs-*.txt
+            phpcs.json
+            phpstan-baseline.generated.neon
+          if-no-files-found: ignore
+
+  plugin-check:
+    # WordPress Plugin Check (PCP, the wordpress.org review tool) against the installed release ZIP. Report-only for
+    # now (RELEASE.md → Static analysis); the result table is in the job summary and the artifact plugin-check.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    services:
+      db:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --password=root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, gd, mbstring, mysqli, xml, zip
+          coverage: none
+      - name: Download WP-CLI
+        run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
+      - name: Install WordPress, WooCommerce, Plugin Check and the release ZIP
+        run: |
+          php wp-cli.phar core download --path=wp-test --version=7.1.4
+          php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
+          php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher Captain plugin check" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
+          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.2.2 --activate
+          php wp-cli.phar --path=wp-test plugin install plugin-check --activate
+          bin/build.sh
+          php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
+          php wp-cli.phar --path=wp-test plugin list
+      - name: Plugin Check (static and runtime checks)
+        run: |
+          set +e
+          php wp-cli.phar --path=wp-test plugin check voucher-captain --format=csv \
+            --require="$GITHUB_WORKSPACE/wp-test/wp-content/plugins/plugin-check/cli.php" > plugin-check.csv
+          status=$?
+          cat plugin-check.csv
+          {
+            echo '### Plugin Check (report-only)'
+            echo "Errors: $(grep -c ',ERROR,' plugin-check.csv || true), warnings: $(grep -c ',WARNING,' plugin-check.csv || true)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if grep -q ',ERROR,' plugin-check.csv; then exit 1; fi
+          exit $status
+      - name: Upload the Plugin Check result
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: plugin-check
+          path: plugin-check.csv
+          if-no-files-found: ignore

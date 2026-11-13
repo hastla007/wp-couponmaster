@@ -1,6 +1,7 @@
 name: Release
 
-# Pushing a tag vX.Y.Z (see RELEASE.md) builds the release ZIPs reproducibly (free and premium edition), checks that
+# Pushing a tag vX.Y.Z (see RELEASE.md) builds the release ZIPs reproducibly (free and premium edition) – but only
+# after the CI workflow "Plugin smoke tests" finished green on exactly the tagged commit (job ci-green). It checks that
 # the tag matches the plugin version, creates the licence-manager manifest of the premium ZIP (SHA-256, requirements,
 # release notes) with WP License Captain's own tool and publishes everything as a GitHub release draft.
 on:
@@ -10,9 +11,56 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
+  ci-green:
+    # Release gate: the tagged commit must have a completed, successful push run of plugin-smoke.yml (all jobs,
+    # including integration, multisite, license-acceptance, ecosystem, Pass Captain and browser tests). Waits while
+    # that run is still in progress (tag pushed together with the commit); fails when there is none or it failed.
+    name: CI green for the tagged commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - name: Wait for "Plugin smoke tests" on ${{ github.sha }} and require success
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          # A run must appear within 15 minutes and complete within 140 minutes.
+          start="$(date +%s)"
+          while :; do
+            now="$(date +%s)"
+            run="$(gh api "repos/${REPO}/actions/workflows/plugin-smoke.yml/runs?head_sha=${SHA}&event=push&per_page=50" \
+              --jq '.workflow_runs | sort_by(.created_at) | last // empty | [.id, .status, (.conclusion // ""), .html_url] | @tsv')"
+            if [ -z "$run" ]; then
+              if [ $(( now - start )) -gt 900 ]; then
+                echo "::error::No push run of plugin-smoke.yml for ${SHA}. Push the release commit to main, wait for CI, then tag it (RELEASE.md)."
+                exit 1
+              fi
+              echo "No CI run for ${SHA} yet – waiting."
+            else
+              IFS=$'\t' read -r id status conclusion url <<< "$run"
+              if [ "$status" = "completed" ]; then
+                if [ "$conclusion" = "success" ]; then
+                  echo "CI run ${id} for ${SHA} is green: ${url}"
+                  exit 0
+                fi
+                echo "::error::CI run ${id} for ${SHA} ended with '${conclusion}': ${url}. Fix (or re-run) it, then re-run this release workflow."
+                exit 1
+              fi
+              if [ $(( now - start )) -gt 8400 ]; then
+                echo "::error::CI run ${id} for ${SHA} did not finish in time (${status}): ${url}"
+                exit 1
+              fi
+              echo "CI run ${id} is ${status} – waiting: ${url}"
+            fi
+            sleep 60
+          done
+
   release:
+    needs: ci-green
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
