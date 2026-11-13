@@ -183,14 +183,15 @@ switch ( $mode ) {
 		wp_update_plugins();
 		$offer = get_site_transient( 'update_plugins' )->response[ VCAP_ACC_BASENAME ] ?? null;
 		$check( is_object( $offer ) && ! empty( $offer->wplc_managed ) && false !== strpos( (string) $offer->package, VCAP_ACC_SERVER . '/wp-json/wplc/v1/updates/download/' ), 'update offered by the license server with a one-time download grant', $offer );
-		$upgrader = new Plugin_Upgrader( new Automatic_Upgrader_Skin() );
+		$upgrader = new Plugin_Upgrader( new WP_Ajax_Upgrader_Skin() ); // collects errors (get_errors()).
 		$result   = $upgrader->upgrade( VCAP_ACC_BASENAME );
 		wp_clean_plugins_cache();
 		$after = get_plugin_data( WP_PLUGIN_DIR . '/' . VCAP_ACC_BASENAME, false, false )['Version'];
 		if ( 'shop-update-rejected' === $mode ) {
 			$errors = $upgrader->skin->get_errors();
-			$check( true !== $result && $before === $after, 'package with a wrong SHA-256 is not installed, the plugin stays at ' . $before, array( 'result' => is_wp_error( $result ) ? $result->get_error_code() : $result, 'errors' => is_wp_error( $errors ) ? $errors->get_error_codes() : null ) );
-			$check( is_wp_error( $errors ) && in_array( 'wplc_checksum_mismatch', $errors->get_error_codes(), true ), 'stopped with wplc_checksum_mismatch', is_wp_error( $errors ) ? $errors->get_error_codes() : null );
+			$codes  = array_merge( is_wp_error( $result ) ? $result->get_error_codes() : array(), is_wp_error( $errors ) ? $errors->get_error_codes() : array() );
+			$check( true !== $result && $before === $after, 'package with a wrong SHA-256 is not installed, the plugin stays at ' . $before, array( 'result' => is_wp_error( $result ) ? $result->get_error_code() : $result, 'codes' => $codes ) );
+			$check( in_array( 'wplc_checksum_mismatch', $codes, true ), 'stopped with wplc_checksum_mismatch', $codes );
 		} else {
 			$check( true === $result, 'update downloaded through the grant, checksum verified and installed', is_wp_error( $result ) ? $result->get_error_message() : $result );
 			echo "  info installed version {$after} (was {$before})\n";
