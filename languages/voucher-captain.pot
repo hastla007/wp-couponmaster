@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-13 00:37+0000\n"
+"POT-Creation-Date: 2026-11-13 00:40+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:75 src/API/V1/RedemptionService.php:117
@@ -1725,42 +1725,42 @@ msgstr ""
 msgid "Voucher %s balance"
 msgstr ""
 
-#: src/CouponManager.php:1050
+#: src/CouponManager.php:1068
 msgid "Voucher shortfall accepted by an administrator; the order can be fulfilled."
 msgstr ""
 
-#: src/CouponManager.php:1066 src/CouponManager.php:1152
+#: src/CouponManager.php:1084 src/CouponManager.php:1170
 msgid "Voucher balance shortfall requires manual review before fulfilment."
 msgstr ""
 
 #. translators: %s: order number
-#: src/CouponManager.php:1100
+#: src/CouponManager.php:1118
 #, php-format
 msgid "Used in order #%s"
 msgstr ""
 
 #. translators: %s: voucher code
-#: src/CouponManager.php:1110
+#: src/CouponManager.php:1128
 #, php-format
 msgid "Voucher %s: the discount could not be deducted from its balance. Review this order and adjust the charge before fulfilment."
 msgstr ""
 
-#: src/CouponManager.php:1120
+#: src/CouponManager.php:1138
 msgid "A stored-value voucher balance changed during checkout. Review this order and adjust the charge before fulfilment."
 msgstr ""
 
 #. translators: 1: code, 2: amount, 3: remaining balance
-#: src/CouponManager.php:1127
+#: src/CouponManager.php:1145
 #, php-format
 msgid "Voucher %1$s: %2$s deducted, remaining balance %3$s."
 msgstr ""
 
-#: src/CouponManager.php:1223
+#: src/CouponManager.php:1241
 #, php-format
 msgid "Order #%s cancelled or refunded"
 msgstr ""
 
-#: src/CouponManager.php:1232
+#: src/CouponManager.php:1250
 msgid "Some voucher balances could not be restored. Review this order and retry the refund handling."
 msgstr ""
 
@@ -2536,7 +2536,7 @@ msgstr ""
 msgid "%d characters left"
 msgstr ""
 
-#: src/Fields.php:280 src/Voucher.php:185
+#: src/Fields.php:280 src/Voucher.php:190
 msgid "Personal – only the buyer or the named recipient can redeem it."
 msgstr ""
 
@@ -2851,60 +2851,60 @@ msgid "(manual)"
 msgstr ""
 
 #. translators: %s: batch name
-#: src/Issuer.php:212
+#: src/Issuer.php:213
 #, php-format
 msgid "Voucher code batch \"%s\" is empty, a random code was generated instead."
 msgstr ""
 
-#: src/Issuer.php:240
+#: src/Issuer.php:241
 msgid "Imported code could not be linked to this voucher in the code pool."
 msgstr ""
 
 #. translators: %s: code
-#: src/Issuer.php:255
+#: src/Issuer.php:256
 #, php-format
 msgid "Imported code %s could not be returned to the code pool."
 msgstr ""
 
 #. translators: %s: product name
-#: src/Issuer.php:258
+#: src/Issuer.php:259
 #, php-format
 msgid "A voucher for \"%s\" could not be created (WooCommerce coupon not saved). It will be issued on the next attempt."
 msgstr ""
 
 #. translators: %s: code
-#: src/Issuer.php:267
+#: src/Issuer.php:268
 #, php-format
 msgid "Voucher %s was issued, but its history entry could not be written."
 msgstr ""
 
-#: src/Issuer.php:280
+#: src/Issuer.php:281
 msgid "Purchase order cancelled or refunded"
 msgstr ""
 
 #. translators: 1: voucher codes, 2: spent value, 3: maximum refund
-#: src/Issuer.php:352
+#: src/Issuer.php:354
 #, php-format
 msgid "Vouchers from this order were already used (%1$s, value used: %2$s). At most %3$s can be refunded; the unused vouchers are voided."
 msgstr ""
 
 #. translators: %d: refund id
-#: src/Issuer.php:413
+#: src/Issuer.php:415
 #, php-format
 msgid "Partial refund #%d of the purchase order"
 msgstr ""
 
 #. translators: %s: voucher code
-#: src/Issuer.php:417
+#: src/Issuer.php:419
 #, php-format
 msgid "Voucher %s voided (refunded)."
 msgstr ""
 
-#: src/Issuer.php:436
+#: src/Issuer.php:438
 msgid "(WooCommerce coupon could not be disabled – disable it manually)"
 msgstr ""
 
-#: src/Issuer.php:461
+#: src/Issuer.php:463
 msgid "WooCommerce coupon could not be enabled – enable it manually"
 msgstr ""
 
@@ -3401,81 +3401,93 @@ msgid "Inherit"
 msgstr ""
 
 #. translators: %d: user id
-#: src/Referrals.php:90
+#: src/Referrals.php:93
 #, php-format
 msgid "Refer a friend – code of customer #%d"
 msgstr ""
 
-#: src/Referrals.php:115
+#: src/Referrals.php:118
 msgid "Referral codes are currently not available."
 msgstr ""
 
-#: src/Referrals.php:126
+#: src/Referrals.php:129
 msgid "You cannot use your own referral code."
 msgstr ""
 
 #. translators: %s: order number
-#: src/Referrals.php:165 src/Referrals.php:247
+#: src/Referrals.php:168 src/Referrals.php:270
 #, php-format
 msgid "Referral reward for order #%s"
 msgstr ""
 
 #. translators: 1: amount, 2: customer email
-#: src/Referrals.php:170
+#: src/Referrals.php:173
 #, php-format
 msgid "Referral reward: %1$s store credit for %2$s."
 msgstr ""
 
 #. translators: 1: coupon code, 2: customer email
-#: src/Referrals.php:181
+#: src/Referrals.php:184
 #, php-format
 msgid "Referral reward: coupon %1$s for %2$s."
 msgstr ""
 
-#: src/Referrals.php:185 src/Referrals.php:265 src/Settings.php:465 src/Settings.php:470 src/Shortcodes.php:46
+#: src/Referrals.php:188 src/Referrals.php:288 src/Settings.php:465 src/Settings.php:470 src/Shortcodes.php:46
 msgid "Refer a friend"
 msgstr ""
 
 #. translators: %s: coupon code
-#: src/Referrals.php:204
+#: src/Referrals.php:207
 #, php-format
 msgid "Referral reward coupon %s was already used and stays valid."
 msgstr ""
 
 #. translators: %s: coupon code
-#: src/Referrals.php:208
+#: src/Referrals.php:211
 #, php-format
 msgid "Unused referral reward coupon %s withdrawn."
 msgstr ""
 
 #. translators: %s: order number
-#: src/Referrals.php:214
+#: src/Referrals.php:217
 #, php-format
 msgid "Referral reward withdrawn (order #%s cancelled)"
 msgstr ""
 
+#. translators: %s: error message
+#: src/Referrals.php:229
+#, php-format
+msgid "Referral reward could not be withdrawn yet (%s); it is tried again automatically."
+msgstr ""
+
 #. translators: %s: amount
-#: src/Referrals.php:217
+#: src/Referrals.php:237
+#, php-format
+msgid "Referral reward partly withdrawn: %s store credit debited, the rest was already spent."
+msgstr ""
+
+#. translators: %s: amount
+#: src/Referrals.php:239
 #, php-format
 msgid "Referral reward withdrawn: %s store credit debited."
 msgstr ""
 
-#: src/Referrals.php:219
+#: src/Referrals.php:242
 msgid "Referral reward store credit was already spent and could not be withdrawn."
 msgstr ""
 
 #. translators: 1: friend discount, 2: reward
-#: src/Referrals.php:267
+#: src/Referrals.php:290
 #, php-format
 msgid "Your friends get %1$s off their first order with your code, and you receive %2$s once their order is completed."
 msgstr ""
 
-#: src/Referrals.php:270
+#: src/Referrals.php:293
 msgid "Link to share"
 msgstr ""
 
 #. translators: %d: number of completed referrals
-#: src/Referrals.php:273
+#: src/Referrals.php:296
 #, php-format
 msgid "%d friend has ordered so far."
 msgid_plural "%d friends have ordered so far."
@@ -4458,7 +4470,7 @@ msgstr ""
 msgid "Reserved"
 msgstr ""
 
-#: src/Voucher.php:184
+#: src/Voucher.php:189
 msgid "Transferable – anyone with the code can redeem it."
 msgstr ""
 

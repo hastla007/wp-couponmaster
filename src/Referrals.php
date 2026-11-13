@@ -9,6 +9,8 @@ defined( 'ABSPATH' ) || exit;
  * (sent by email) or store credit. Own codes cannot be used, and every order rewards at most once.
  */
 final class Referrals {
+	/** Scheduled retry of a reward withdrawal that failed with a booking error. */
+	public const RETRY_HOOK = 'vcap_referral_revoke_retry';
 	public const OWNER      = '_vcap_referral_owner';
 	public const USER_META  = '_vcap_referral_coupon';
 	public const COUNT_META = '_vcap_referral_count';
@@ -23,6 +25,7 @@ final class Referrals {
 		add_action( 'woocommerce_order_status_completed', array( $this, 'reward' ), 30 );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'revoke' ), 30 );
 		add_action( 'woocommerce_order_status_refunded', array( $this, 'revoke' ), 30 );
+		add_action( self::RETRY_HOOK, array( $this, 'revoke' ) );
 	}
 
 	/**
@@ -212,9 +215,29 @@ final class Referrals {
 			$amount  = min( (float) ( $reward['amount'] ?? 0 ), $account ? (float) $account->balance : 0.0 );
 			/* translators: %s: order number */
 			$result = $amount > 0 ? $this->credit->adjust( $owner, -$amount, sprintf( __( 'Referral reward withdrawn (order #%s cancelled)', 'voucher-captain' ), $order->get_order_number() ), $order->get_id(), 'debit' ) : null;
+			if ( is_wp_error( $result ) && 'vcap_insufficient_balance' !== $result->get_error_code() ) {
+				// A booking error, not a spent reward: nothing is finished – the withdrawal is tried again later.
+				Claim::release( 'referral-revoke:' . $order->get_id() );
+				$attempts = (int) ( $reward['revoke_attempts'] ?? 0 ) + 1;
+				$reward['revoke_attempts'] = $attempts;
+				$order->update_meta_data( self::REWARD, $reward );
+				$order->save_meta_data();
+				if ( $attempts < 5 && function_exists( 'as_schedule_single_action' ) ) {
+					as_schedule_single_action( time() + $attempts * HOUR_IN_SECONDS, self::RETRY_HOOK, array( $order->get_id() ), Delivery::GROUP );
+				}
+				/* translators: %s: error message */
+				$order->add_order_note( sprintf( __( 'Referral reward could not be withdrawn yet (%s); it is tried again automatically.', 'voucher-captain' ), $result->get_error_message() ) );
+				return;
+			}
 			if ( $result && ! is_wp_error( $result ) ) {
-				/* translators: %s: amount */
-				$order->add_order_note( sprintf( __( 'Referral reward withdrawn: %s store credit debited.', 'voucher-captain' ), wp_strip_all_tags( wc_price( $amount ) ) ) );
+				$partly = $amount + 0.0001 < (float) ( $reward['amount'] ?? 0 );
+				$order->add_order_note(
+					$partly
+						/* translators: %s: amount */
+						? sprintf( __( 'Referral reward partly withdrawn: %s store credit debited, the rest was already spent.', 'voucher-captain' ), wp_strip_all_tags( wc_price( $amount ) ) )
+						/* translators: %s: amount */
+						: sprintf( __( 'Referral reward withdrawn: %s store credit debited.', 'voucher-captain' ), wp_strip_all_tags( wc_price( $amount ) ) )
+				);
 			} else {
 				$order->add_order_note( __( 'Referral reward store credit was already spent and could not be withdrawn.', 'voucher-captain' ) );
 			}

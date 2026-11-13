@@ -83,6 +83,22 @@ $second = wc_get_order( $second->get_id() );
 $second->update_status( 'cancelled' );
 vcap_ref_assert( 0.0 === vcap()->store_credit->balance( $referrer ) && 1 === (int) get_user_meta( $referrer, VCAP\Referrals::COUNT_META, true ), 'the reward is taken back only once' );
 
+// A booking error while taking the reward back is not "already spent": nothing is finished, a retry withdraws it.
+list( $third, $ok ) = vcap_ref_order( $product, 'friend4-' . $tag . '@example.com', $code );
+$third->update_status( 'completed' );
+$count_before = (int) get_user_meta( $referrer, VCAP\Referrals::COUNT_META, true );
+$vouchers_tbl = VCAP\Install::tables()['vouchers'];
+$break_update = static fn( $q ) => str_starts_with( ltrim( (string) $q ), 'UPDATE `' . $vouchers_tbl . '`' ) || str_starts_with( ltrim( (string) $q ), 'UPDATE ' . $vouchers_tbl ) ? '' : $q;
+add_filter( 'query', $break_update );
+$third = wc_get_order( $third->get_id() );
+$third->update_status( 'refunded' );
+remove_filter( 'query', $break_update );
+$pending_reward = wc_get_order( $third->get_id() )->get_meta( VCAP\Referrals::REWARD );
+vcap_ref_assert( 15.0 === vcap()->store_credit->balance( $referrer ) && empty( $pending_reward['revoked'] ) && $count_before === (int) get_user_meta( $referrer, VCAP\Referrals::COUNT_META, true ), 'a failed debit leaves the withdrawal open (not treated as spent)' );
+do_action( VCAP\Referrals::RETRY_HOOK, $third->get_id() );
+$done_reward = wc_get_order( $third->get_id() )->get_meta( VCAP\Referrals::REWARD );
+vcap_ref_assert( 0.0 === vcap()->store_credit->balance( $referrer ) && ! empty( $done_reward['revoked'] ) && $count_before - 1 === (int) get_user_meta( $referrer, VCAP\Referrals::COUNT_META, true ), 'the retry withdraws the reward' );
+
 $friend_order = wc_get_order( $friend_order->get_id() );
 $friend_order->update_status( 'cancelled' );
 vcap_ref_assert( 'trash' === get_post_status( $rewards[0] ), 'a cancelled friend order withdraws the unused reward coupon' );

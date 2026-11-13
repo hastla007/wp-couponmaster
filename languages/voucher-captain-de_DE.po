@@ -3984,3 +3984,9 @@ msgstr "Diese Scanner-Anfrage wurde bereits für eine andere Aktion verwendet. B
 
 msgid "This action is still being processed. Please wait a moment and try again."
 msgstr "Diese Aktion wird noch verarbeitet. Bitte warten Sie einen Moment und versuchen Sie es erneut."
+
+msgid "Referral reward could not be withdrawn yet (%s); it is tried again automatically."
+msgstr "Die Empfehlungsprämie konnte noch nicht zurückgenommen werden (%s); es wird automatisch erneut versucht."
+
+msgid "Referral reward partly withdrawn: %s store credit debited, the rest was already spent."
+msgstr "Empfehlungsprämie teilweise zurückgenommen: %s Guthaben abgebucht, der Rest war bereits ausgegeben."
