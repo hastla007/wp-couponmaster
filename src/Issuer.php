@@ -34,6 +34,8 @@ final class Issuer {
 	public const FX_HOLD_META = '_vcap_fx_hold';
 	/** Order item meta: issuing was refused because the product's discount setup is invalid (note written once). */
 	public const CONFIG_REFUSED_META = '_vcap_config_refused';
+	/** Ledger event: the unspent purchased value was taken off a gift card whose purchase was refunded. */
+	public const PURCHASE_REFUNDED_EVENT = 'purchase_refunded';
 	/** Whether issuing runs inside a status transition (status changes wait until it is through). */
 	private bool $in_transition = false;
 	/** @var array<int, true> Orders to put on hold after their status transition (no exchange rate). */
@@ -420,23 +422,33 @@ final class Issuer {
 		if ( ! $this->settings->yes( 'vcap_void_on_refund' ) ) {
 			return;
 		}
+		$order = wc_get_order( (int) $order_id );
 		foreach ( $this->repo->for_order( (int) $order_id ) as $voucher ) {
-			$this->void( $voucher, __( 'Purchase order cancelled or refunded', 'voucher-captain' ) );
+			$this->void_purchase( $voucher, __( 'Purchase order cancelled or refunded', 'voucher-captain' ), $order instanceof \WC_Order ? $order : null );
 		}
 	}
 
 	/** Whether a voucher was (partly) used or is being redeemed right now. */
-	private static function in_use( Voucher $voucher ): bool {
-		return self::spent_value( $voucher ) > 0 || Voucher::STATUS_RESERVED === $voucher->status;
+	private function in_use( Voucher $voucher ): bool {
+		return self::spent_value( $voucher, $this->repo ) > 0 || Voucher::STATUS_RESERVED === $voucher->status;
 	}
 
-	/** Value of a voucher that was already used (base currency). */
-	public static function spent_value( Voucher $voucher ): float {
+	/**
+	 * Purchased value of a voucher that was already used (base currency) – what a refund of its purchase can no
+	 * longer pay back.
+	 *  - Gift cards: spent = purchased value + net top-ups − balance (ledger), spent from the purchased value first
+	 *    (TopUp::shares()); so a refund of the purchase and refunds of top-ups together never pay out more than
+	 *    the balance. Purchased value already taken off the card by a refund does not count again.
+	 */
+	public static function spent_value( Voucher $voucher, ?VoucherRepository $repo = null ): float {
+		if ( $voucher->is_multi_use() ) {
+			return TopUp::card_shares( $voucher, $repo ?? vcap()->vouchers )['purchase_spent'];
+		}
 		if ( Voucher::STATUS_VOID === $voucher->status ) {
 			return 0.0;
 		}
-		if ( $voucher->is_multi_use() ) {
-			return max( 0.0, (float) $voucher->initial_amount - (float) $voucher->balance );
+		if ( Voucher::STATUS_REDEEMED === $voucher->status ) {
+			return (float) $voucher->initial_amount;
 		}
 		return Voucher::STATUS_REDEEMED === $voucher->status ? (float) $voucher->initial_amount : 0.0;
 	}
@@ -461,7 +473,7 @@ final class Issuer {
 		$codes = array();
 		if ( $this->settings->yes( 'vcap_void_on_refund' ) ) {
 			foreach ( $this->repo->for_order( $order->get_id() ) as $voucher ) {
-				$used = self::spent_value( $voucher );
+				$used = self::spent_value( $voucher, $this->repo );
 				if ( $used > 0 ) {
 					$spent  += $used;
 					$codes[] = $voucher->code;
@@ -568,27 +580,93 @@ final class Issuer {
 			$refunded_qty = (int) ( $refunded[ $item_id ] ?? 0 );
 			$per_unit     = max( 1, (int) round( count( $vouchers ) / $item->get_quantity() ) );
 			$void_target  = min( count( $vouchers ), $refunded_qty * $per_unit );
-			$voided       = count( array_filter( $vouchers, static fn( Voucher $v ) => Voucher::STATUS_VOID === $v->status ) );
+			$handled      = array_filter( $vouchers, fn( Voucher $v ) => $this->purchase_handled( $v ) );
+			$voided       = count( $handled );
 			if ( $voided >= $void_target ) {
 				continue;
 			}
-			$open = array_values( array_filter( $vouchers, static fn( Voucher $v ) => Voucher::STATUS_VOID !== $v->status ) );
+			$open = array_values( array_diff_key( $vouchers, $handled ) );
 			usort(
 				$open,
-				static fn( Voucher $a, Voucher $b ) => array( self::in_use( $a ) ? 1 : 0, -$a->item_index ) <=> array( self::in_use( $b ) ? 1 : 0, -$b->item_index )
+				fn( Voucher $a, Voucher $b ) => array( $this->in_use( $a ) ? 1 : 0, -$a->item_index ) <=> array( $this->in_use( $b ) ? 1 : 0, -$b->item_index )
 			);
 			foreach ( array_slice( $open, 0, $void_target - $voided ) as $voucher ) {
 				/* translators: %d: refund id */
-				$this->void( $voucher, sprintf( __( 'Partial refund #%d of the purchase order', 'voucher-captain' ), (int) $refund_id ) );
-				$order->add_order_note(
-					sprintf(
-						/* translators: %s: voucher code */
-						__( 'Voucher %s voided (refunded).', 'voucher-captain' ),
-						$voucher->code
-					)
-				);
+				$kept = $this->void_purchase( $voucher, sprintf( __( 'Partial refund #%d of the purchase order', 'voucher-captain' ), (int) $refund_id ), $order );
+				if ( Voucher::STATUS_VOID === $voucher->status ) {
+					$order->add_order_note(
+						sprintf(
+							/* translators: %s: voucher code */
+							__( 'Voucher %s voided (refunded).', 'voucher-captain' ),
+							$voucher->code
+						)
+					);
+				} elseif ( $kept > 0 ) {
+					$order->add_order_note(
+						sprintf(
+							/* translators: 1: gift card code, 2: topped-up value that stays on the card */
+							__( 'Gift card %1$s: the purchased value was taken off the card (refunded); the topped-up value of %2$s stays on it.', 'voucher-captain' ),
+							$voucher->code,
+							wp_strip_all_tags( wc_price( $kept, array( 'currency' => $voucher->currency ) ) )
+						)
+					);
+				}
 			}
 		}
+	}
+
+	/** Whether the purchase of this voucher was refunded already (voided, or its purchased value taken off). */
+	private function purchase_handled( Voucher $voucher ): bool {
+		if ( Voucher::STATUS_VOID === $voucher->status ) {
+			return true;
+		}
+		if ( ! $voucher->is_multi_use() ) {
+			return false;
+		}
+		foreach ( $this->repo->events( $voucher->id ) as $event ) {
+			if ( self::PURCHASE_REFUNDED_EVENT === ( $event['event'] ?? '' ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * The purchase of a voucher was refunded (cancelled, fully or by quantity). A gift card that was topped up
+	 * keeps its topped-up value: only the unspent purchased value is taken off the balance (ledger event
+	 * "purchase_refunded") and the card stays usable. Without top-up value left the voucher is voided as before.
+	 *
+	 * @return float Topped-up value that stays on the card (0 when the voucher was voided or nothing changed).
+	 */
+	public function void_purchase( Voucher $voucher, string $note = '', ?\WC_Order $order = null ): float {
+		if ( Voucher::STATUS_VOID === $voucher->status || ! $voucher->is_multi_use() ) {
+			$this->void( $voucher, $note );
+			return 0.0;
+		}
+		$fresh = $this->repo->get( $voucher->id ) ?? $voucher;
+		if ( $this->purchase_handled( $fresh ) ) {
+			return (float) $fresh->balance; // Purchased value already taken off; the rest is topped-up value.
+		}
+		$shares = TopUp::card_shares( $fresh, $this->repo );
+		if ( $shares['topup_unspent'] <= 0.5 / ( 10 ** $fresh->decimals() ) ) {
+			$this->void( $voucher, $note );
+			return 0.0;
+		}
+		$take     = round( $shares['purchase_unspent'], $fresh->decimals() );
+		$order_id = $order ? $order->get_id() : (int) $voucher->order_id;
+		$text     = trim( $note . ' ' . __( '(purchased value taken off, topped-up value kept)', 'voucher-captain' ) );
+		$done     = $take > 0
+			? $this->coupons->adjust_balance( $fresh, -$take, self::PURCHASE_REFUNDED_EVENT, $text, $order_id )
+			: $this->repo->log( $fresh->id, self::PURCHASE_REFUNDED_EVENT, 0.0, (float) $fresh->balance, $text, $order_id );
+		if ( ! $done ) {
+			// The balance could not be changed: lock the whole card rather than pay out the purchased value twice.
+			$this->void( $voucher, $note );
+			return 0.0;
+		}
+		$after            = $this->repo->get( $voucher->id ) ?? $fresh;
+		$voucher->balance = $after->balance;
+		$voucher->status  = $after->status;
+		return (float) $after->balance;
 	}
 
 	/** @return bool False when the voucher could not be voided (nothing logged, the coupon stays as it was). */

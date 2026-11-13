@@ -567,6 +567,34 @@ if ( null === $fx_known ) {
 }
 unset( $GLOBALS['vcap_test_options'][ VCAP\Compat\MultiCurrency::UNKNOWN_OPTION ] );
 
+$sh = VCAP\TopUp::shares( 100, 0, 100, 100 );
+check( 'card 100 + top-up 100, 100 spent: the purchase counts as spent, the top-up as unspent', 100.0 === $sh['purchase_spent'] && 0.0 === $sh['purchase_unspent'] && 100.0 === $sh['topup_unspent'], wp_json_encode( $sh ) );
+$sh = VCAP\TopUp::shares( 100, 0, 100, 150 );
+check( 'card 100 + top-up 100, 50 spent: 50 of the purchase and the whole top-up can be refunded (= balance 150)', 50.0 === $sh['purchase_spent'] && 50.0 === $sh['purchase_unspent'] && 100.0 === $sh['topup_unspent'], wp_json_encode( $sh ) );
+$sh = VCAP\TopUp::shares( 100, 0, 0, 50 );
+check( 'after the top-up (100) was refunded first, the purchase counts 50 as spent', 50.0 === $sh['purchase_spent'] && 50.0 === $sh['purchase_unspent'], wp_json_encode( $sh ) );
+$sh = VCAP\TopUp::shares( 100, 50, 100, 100 );
+check( 'after the unspent purchased value (50) was taken off, the purchase has nothing left and the top-up keeps 100', 50.0 === $sh['purchase_spent'] && 0.0 === $sh['purchase_unspent'] && 100.0 === $sh['topup_unspent'], wp_json_encode( $sh ) );
+$sh = VCAP\TopUp::shares( 100, 0, 100, 100, true );
+check( 'a voided card: top-ups only claim the balance above the purchased value still on the books', 0.0 === $sh['topup_unspent'], wp_json_encode( $sh ) );
+$sh = VCAP\TopUp::shares( 20, 0, 0, 60 );
+check( 'goodwill above purchase and top-ups is not refundable', 0.0 === $sh['purchase_spent'] && 20.0 === $sh['purchase_unspent'] && 0.0 === $sh['topup_unspent'], wp_json_encode( $sh ) );
+$over = array();
+mt_srand( 42 );
+for ( $i = 0; $i < 2000; $i++ ) {
+	$initial = mt_rand( 0, 300 );
+	$topups  = mt_rand( 0, 300 );
+	$removed = mt_rand( 0, $initial );
+	$balance = mt_rand( 0, max( 0, $initial - $removed + $topups ) );
+	foreach ( array( false, true ) as $void ) {
+		$sh = VCAP\TopUp::shares( $initial, $removed, $topups, $balance, $void );
+		if ( $sh['purchase_unspent'] + $sh['topup_unspent'] > $balance + 1e-9 || $sh['purchase_spent'] + $sh['purchase_unspent'] > $initial - $removed + 1e-9 ) {
+			$over[] = array( $initial, $removed, $topups, $balance, $void );
+		}
+	}
+}
+check( 'purchase refund + top-up refunds never exceed the balance (2000 random cards, active and voided)', ! $over, wp_json_encode( array_slice( $over, 0, 3 ) ) );
+
 $cfg = static fn( array $c ) => $c + ProductConfig::DEFAULTS;
 check( 'percentage from the product price is refused', (bool) ProductConfig::discount_errors( $cfg( array( 'discount_type' => 'percent', 'amount_source' => 'price' ) ) ) );
 check( 'percentage from a customer-chosen amount is refused', (bool) ProductConfig::discount_errors( $cfg( array( 'discount_type' => 'percent', 'amount_source' => 'custom' ) ) ) );
