@@ -283,7 +283,11 @@ final class CouponManager {
 				$order->get_id(),
 				sprintf( __( 'Reserved for order #%s', 'voucher-captain' ), $order->get_order_number() )
 			);
-			if ( ! $reservation || 'reserved' !== $reservation['state'] || abs( $reservation['amount'] - $amount ) >= 0.0001 ) {
+			// The reservation may be a few cents below the discount when currency round trips exceed the balance
+			// (same tolerance as reserve_balance_atomic()): that is the full balance, not a changed one.
+			$short_by = $reservation ? $amount - (float) $reservation['amount'] : 0.0;
+			$tolerant = $reservation && $short_by > -0.0001 && $short_by <= (float) apply_filters( 'vcap_balance_rounding_tolerance', max( 0.05, $amount * 0.001 ), $voucher );
+			if ( ! $reservation || 'reserved' !== $reservation['state'] || ! $tolerant ) {
 				$this->release_reservation_atomic( $voucher, $order->get_id(), __( 'Checkout reservation rolled back', 'voucher-captain' ) );
 				foreach ( $made as $reserved_code => $reserved_amount ) {
 					$reserved_voucher = $this->find_voucher_for_code( $reserved_code );
