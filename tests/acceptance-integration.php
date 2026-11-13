@@ -97,6 +97,27 @@ vcap_acc_assert( 100.0 === (float) $recalc_order->get_discount_total() && 60.0 =
 $recalc_order->payment_complete( 'txn-recalc' );
 vcap_acc_assert( 0.0 === vcap()->vouchers->get( $recalc_card->id )->balance, 'payment deducts exactly the reserved 100' );
 
+// Foreign-currency order: the recalculated gift card amount is converted from the base currency (or, without
+// a known rate, the amount the order already granted is kept).
+$fx_card  = vcap_acc_card( 40 );
+$fx_order = wc_create_order();
+$fx_order->set_currency( 'CHF' === get_option( 'woocommerce_currency' ) ? 'EUR' : 'CHF' );
+$fx_order->update_meta_data( '_vcap_redemptions', array( $fx_card->code => 30 ) );
+$fx_order->save();
+$fx_rate = static fn( $amount ) => (float) $amount * 0.5; // 1 order unit = 0.5 base units.
+add_filter( 'vcap_amount_to_base_currency', $fx_rate, 20 );
+$fx_coupon = vcap()->coupons->order_coupon_object( new WC_Coupon( $fx_card->code ), $fx_card->code, null, $fx_order );
+remove_filter( 'vcap_amount_to_base_currency', $fx_rate, 20 );
+vcap_acc_assert( 60.0 === (float) $fx_coupon->get_amount(), 'a foreign-currency order recalculates the gift card in its own currency (30 base = 60)' );
+$fx_item = new WC_Order_Item_Coupon();
+$fx_item->set_code( $fx_card->code );
+$fx_item->set_discount( 25 );
+$no_rate = static fn( $amount ) => $amount;
+add_filter( 'vcap_amount_to_base_currency', $no_rate, 99 );
+$kept = vcap()->coupons->order_coupon_object( new WC_Coupon( $fx_card->code ), $fx_card->code, $fx_item, $fx_order );
+remove_filter( 'vcap_amount_to_base_currency', $no_rate, 99 );
+vcap_acc_assert( 25.0 === (float) $kept->get_amount(), 'without an exchange rate the discount the order already granted is kept' );
+
 // Partial refund of a voucher purchase: the refunded unit voids an unused voucher; refunding value already spent is refused.
 $gc_product = new WC_Product_Simple();
 $gc_product->set_name( 'Gift card 50' );

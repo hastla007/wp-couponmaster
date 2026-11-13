@@ -903,7 +903,25 @@ final class CouponManager {
 		} else {
 			return $coupon;
 		}
-		$coupon->set_amount( round( $amount, $voucher->decimals() ) );
+		$decimals = $voucher->decimals();
+		$currency = (string) $order->get_currency();
+		if ( '' !== $currency && $currency !== get_option( 'woocommerce_currency' ) ) {
+			// Balances are kept in the base currency, the recalculated order is in its own currency.
+			$per_unit = (float) apply_filters( 'vcap_amount_to_base_currency', 1.0, $currency, $order );
+			if ( $per_unit > 0 && abs( $per_unit - 1.0 ) > 1e-9 ) {
+				$amount = $amount / $per_unit;
+			} elseif ( $item instanceof \WC_Order_Item_Coupon ) {
+				// No exchange rate known: keep what the order already granted instead of reading base as order currency.
+				$amount = (float) $item->get_discount();
+				if ( apply_filters( 'vcap_balance_deduct_tax', wc_prices_include_tax() || apply_filters( 'vcap_balance_covers_tax', true, null ), $item ) ) {
+					$amount += (float) $item->get_discount_tax();
+				}
+			} else {
+				return $coupon;
+			}
+			$decimals = API\V1\RedemptionService::decimals( $currency );
+		}
+		$coupon->set_amount( round( $amount, $decimals ) );
 		return $coupon;
 	}
 
