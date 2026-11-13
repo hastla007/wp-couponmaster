@@ -87,6 +87,31 @@ $guest->set_status( 'completed' );
 $guest->save();
 vcap_sc_assert( is_wp_error( $credit->refund_as_credit( $guest, 5, 'Guest' ) ), 'guest orders cannot be refunded as credit' );
 
+// Fault injection: WooCommerce cannot record the refund – the credit added first is booked back, nothing else changes.
+$before_fail  = $credit->balance( $alice );
+$refunds_fail = (float) wc_get_order( $paid->get_id() )->get_total_refunded();
+$break_refund = static function () {
+	throw new Exception( 'Injected refund failure' );
+};
+add_action( 'woocommerce_create_refund', $break_refund );
+$failed_refund = $credit->refund_as_credit( wc_get_order( $paid->get_id() ), 4, 'Customer chose credit' );
+remove_action( 'woocommerce_create_refund', $break_refund );
+$paid_after = wc_get_order( $paid->get_id() );
+$journal    = array_column( vcap()->vouchers->events( $credit->account( $alice )->id ), 'event' );
+vcap_sc_assert( is_wp_error( $failed_refund ) && $before_fail === $credit->balance( $alice ) && $refunds_fail === (float) $paid_after->get_total_refunded() && in_array( 'refund_credit_reversed', $journal, true ), 'a refund WooCommerce cannot record books the credit back' );
+
+// The credit was spent in the meantime (booking back fails): the order gets a note for the shop team.
+$spend_it = static function () use ( $credit, $alice ) {
+	$credit->adjust( $alice, -$credit->balance( $alice ), 'Spent at the same time' );
+	throw new Exception( 'Injected refund failure' );
+};
+add_action( 'woocommerce_create_refund', $spend_it );
+$spent_refund = $credit->refund_as_credit( wc_get_order( $paid->get_id() ), 4, 'Customer chose credit' );
+remove_action( 'woocommerce_create_refund', $spend_it );
+$notes = array_map( static fn( $n ) => $n->content, wc_get_order_notes( array( 'order_id' => $paid->get_id() ) ) );
+vcap_sc_assert( is_wp_error( $spent_refund ) && (bool) array_filter( $notes, static fn( $n ) => str_contains( $n, 'could not be booked back' ) ), 'credit that was already spent when the refund failed is flagged on the order' );
+$credit->adjust( $alice, $before_fail, 'Restore test balance' );
+
 // Discounts are calculated first, store credit pays the rest (even when the credit was applied first).
 $credit->adjust( $alice, 30, 'Top-up for ordering test' );
 $five = new WC_Coupon();
