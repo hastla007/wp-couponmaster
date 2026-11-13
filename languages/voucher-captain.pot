@@ -6,11 +6,11 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-13 21:08+0000\n"
+"POT-Creation-Date: 2026-11-13 22:09+0000\n"
 "X-Domain: voucher-captain\n"
 
 #. Plugin Name of the plugin
-#: voucher-captain.php src/Diagnostics.php:23 src/Health.php:30 src/Health.php:36 src/Privacy.php:335 src/ProductChecks.php:293
+#: voucher-captain.php src/Diagnostics.php:23 src/Health.php:30 src/Health.php:36 src/Privacy.php:336 src/ProductChecks.php:293
 msgid "Voucher Captain"
 msgstr ""
 
@@ -71,7 +71,7 @@ msgstr ""
 msgid "No redemption exists for this key."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:297 src/API/V1/RedemptionService.php:499 src/API/V1/RestController.php:266
+#: src/API/V1/RedemptionService.php:297 src/API/V1/RedemptionService.php:499 src/API/V1/RestController.php:268
 msgid "This redemption belongs to another user."
 msgstr ""
 
@@ -169,11 +169,11 @@ msgstr ""
 msgid "Vouchers cannot be redeemed for this target here."
 msgstr ""
 
-#: src/API/V1/RestController.php:246
+#: src/API/V1/RestController.php:248
 msgid "This redemption is managed by an integration."
 msgstr ""
 
-#: src/API/V1/RestController.php:301
+#: src/API/V1/RestController.php:303
 msgid "This redemption key is reserved."
 msgstr ""
 
@@ -855,7 +855,7 @@ msgstr ""
 msgid "Undo check-in"
 msgstr ""
 
-#: src/Admin/Scanner.php:29 src/Shortcodes.php:252
+#: src/Admin/Scanner.php:29 src/Shortcodes.php:254
 msgid "Redeem"
 msgstr ""
 
@@ -2213,7 +2213,7 @@ msgstr ""
 msgid "Customer told that the voucher is valid again"
 msgstr ""
 
-#: src/CouponGuard.php:134 src/Downloads.php:359 src/Shortcodes.php:113 src/TopUp.php:153
+#: src/CouponGuard.php:142 src/Downloads.php:359 src/Shortcodes.php:113 src/TopUp.php:153
 msgid "Too many attempts. Please try again later."
 msgstr ""
 
@@ -3041,7 +3041,7 @@ msgstr ""
 msgid "Voucher code not found."
 msgstr ""
 
-#: src/Downloads.php:380 src/Shortcodes.php:261 src/TemplatePostType.php:107
+#: src/Downloads.php:380 src/Shortcodes.php:263 src/TemplatePostType.php:107
 msgid "Voucher code"
 msgstr ""
 
@@ -3867,7 +3867,7 @@ msgstr ""
 msgid "License activated for this site."
 msgstr ""
 
-#: src/Licensing/AdminPage.php:166 src/Licensing/LicenseClient.php:61
+#: src/Licensing/AdminPage.php:166 src/Licensing/LicenseClient.php:67
 msgid "License server settings or license key are missing."
 msgstr ""
 
@@ -3921,43 +3921,47 @@ msgstr ""
 msgid "Voucher Captain premium features are switched off until the license is active: %s. Vouchers, top-ups and rewards sold earlier keep working."
 msgstr ""
 
-#: src/Licensing/LicenseClient.php:167
+#: src/Licensing/LicenseClient.php:176
 msgid "No verified offline entitlement cache is available."
 msgstr ""
 
-#: src/Licensing/LicenseClient.php:172
+#: src/Licensing/LicenseClient.php:181
 msgid "The offline entitlement cache has expired."
 msgstr ""
 
-#: src/Licensing/LicenseClient.php:177
+#: src/Licensing/LicenseClient.php:186 src/Licensing/LicenseClient.php:189
 msgid "The offline entitlement cache could not be verified."
 msgstr ""
 
-#: src/Licensing/LicenseClient.php:293
+#: src/Licensing/LicenseClient.php:310
 msgid "Could not encode the license request."
 msgstr ""
 
-#: src/Licensing/LicenseClient.php:335
+#: src/Licensing/LicenseClient.php:352
 msgid "The license server returned an error."
 msgstr ""
 
-#: src/Licensing/LicenseClient.php:335
+#: src/Licensing/LicenseClient.php:352
 msgid "The license server returned an invalid response."
 msgstr ""
 
-#: src/Licensing/LicenseClient.php:339
+#: src/Licensing/LicenseClient.php:356
 msgid "The license server returned invalid JSON."
 msgstr ""
 
-#: src/Licensing/LicenseClient.php:344
+#: src/Licensing/LicenseClient.php:361
 msgid "The license server response is missing its signature envelope."
 msgstr ""
 
-#: src/Licensing/LicenseClient.php:381
+#: src/Licensing/LicenseClient.php:403
 msgid "The license server response signature could not be verified."
 msgstr ""
 
-#: src/Licensing/LicenseClient.php:394
+#: src/Licensing/LicenseClient.php:406
+msgid "The response is not signed by the license server of this product."
+msgstr ""
+
+#: src/Licensing/LicenseClient.php:453
 msgid "This product installation has not been activated."
 msgstr ""
 
@@ -4155,39 +4159,39 @@ msgstr ""
 msgid "Withdrawn"
 msgstr ""
 
-#: src/Privacy.php:328
+#: src/Privacy.php:329
 msgid "Some voucher records could not be fully anonymised. Please retry the erasure request."
 msgstr ""
 
-#: src/Privacy.php:346
+#: src/Privacy.php:347
 msgid "When you buy a voucher, we store the recipient name, recipient email address, personal message and any personalisation you enter so that we can create and deliver the voucher. The recipient receives an email with the voucher if you entered their address. This data is kept as long as the voucher can be used and is then removed according to our retention settings."
 msgstr ""
 
-#: src/Privacy.php:347
+#: src/Privacy.php:348
 msgid "Vouchers, gift cards and store credit keep a history of every change of their balance (issue, payment in an order, refund, top-up, manual correction) with the date, the amount, the order number and, when a voucher is used by another customer, that customer's email address. Store credit is linked to your customer account. We keep this history as long as the voucher or credit can be used and as long as we are required to keep accounting records."
 msgstr ""
 
-#: src/Privacy.php:348
+#: src/Privacy.php:349
 msgid "Refer a friend: if you take part, we store your personal referral code, how many friends have ordered with it and which rewards you received. A friend's order that used your code is linked to your customer account so that we can give you the reward and take it back if the order is cancelled or refunded."
 msgstr ""
 
-#: src/Privacy.php:349
+#: src/Privacy.php:350
 msgid "When a voucher is redeemed outside the shop checkout, for example by a booking or ticket system on this website that is connected to our vouchers, we record the redemption with the connected service, the amount, the date, your customer account and the details that service passes on (for example its order or booking number)."
 msgstr ""
 
-#: src/Privacy.php:350
+#: src/Privacy.php:351
 msgid "Tickets: when you exchange a ticket voucher for tickets or pay for tickets with a gift card, the voucher code, the amount, your name and email address and the attendee names you enter are passed to the ticket system on this website (WP Pass Captain), which issues and sends the tickets. Its privacy information applies to the tickets."
 msgstr ""
 
-#: src/Privacy.php:351
+#: src/Privacy.php:352
 msgid "At the entrance or the counter, our staff may scan the code of your voucher or ticket. We record the time, the staff member and the result (redeemed, checked in or refused) in the voucher history."
 msgstr ""
 
-#: src/Privacy.php:352
+#: src/Privacy.php:353
 msgid "To protect voucher codes against guessing, we count failed code entries per visitor for a short time window (at most 15 minutes). For this we store the counter under a hashed (pseudonymised) form of your IP address, never the address itself; the counters are deleted automatically after the window."
 msgstr ""
 
-#: src/Privacy.php:355
+#: src/Privacy.php:356
 msgid "License check (premium edition): to check the license and offer updates, this website sends its address (URL), the WordPress, PHP and plugin versions, the license key and a random installation ID to the license server of the plugin vendor when the license is activated, about twice a day and when updates are checked. No data about customers or orders is sent."
 msgstr ""
 
@@ -5208,26 +5212,26 @@ msgid "The logged-in customer's personal referral code."
 msgstr ""
 
 #. translators: %s: page title
-#: src/Shortcodes.php:243
+#: src/Shortcodes.php:245
 #, php-format
 msgid "The redeem page \"%s\" contains neither the \"Redeem voucher\" block nor the [vcap_redeem] shortcode."
 msgstr ""
 
-#: src/Shortcodes.php:246
+#: src/Shortcodes.php:248
 msgid "No published page contains the \"Redeem voucher\" block or the [vcap_redeem] shortcode."
 msgstr ""
 
-#: src/Shortcodes.php:248
+#: src/Shortcodes.php:250
 msgid "The selected redeem page is not published; links use another page with the redeem form."
 msgstr ""
 
 #. translators: %s: login link
-#: src/Shortcodes.php:277
+#: src/Shortcodes.php:279
 #, php-format
 msgid "Please %s to see your vouchers."
 msgstr ""
 
-#: src/Shortcodes.php:278
+#: src/Shortcodes.php:280
 msgid "log in"
 msgstr ""
 

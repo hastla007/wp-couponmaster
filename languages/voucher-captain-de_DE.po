@@ -4953,3 +4953,6 @@ msgstr "Diese Version von WP Pass Captain stellt die für den Abgleich nötigen 
 
 msgid "This version of WP Pass Captain stores its orders differently (missing: %s); the reconciliation is not available."
 msgstr "Diese Version von WP Pass Captain speichert ihre Bestellungen anders (es fehlt: %s); der Abgleich ist nicht verfügbar."
+
+msgid "The response is not signed by the license server of this product."
+msgstr "Die Antwort ist nicht vom Lizenzserver dieses Produkts signiert."

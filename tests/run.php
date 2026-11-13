@@ -520,6 +520,29 @@ check( 'make-pot: the POT names the plugin version of the header', str_contains(
 check( 'make-pot: plugin name and description are translatable', isset( $pot_new[ "\x04Voucher Captain" ], $pot_new[ "\x04" . trim( $vcap_description[1] ?? '?' ) ] ) );
 @unlink( $pot_file );
 
+echo "License server signature (Ed25519, WP License Captain docs/API-V1.md test vector)\n";
+$sig_code = <<<'PHP'
+define( 'VCAP_LICENSE_PUBLIC_KEY', 'iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w=' );
+require $argv[1];
+$c   = VCAP\Licensing\LicenseClient::class;
+$sig = '4qfhfiKz3F2K45FnfKU7bEeAoreDXyf6tuAtlPXlCSvVRxzcoqVFOubr0bb+TtmU65fpRAc2KRVZ4KdooQMBDA==';
+$id  = 'a1b2c3d4-0000-4000-8000-000000000001';
+echo json_encode( array(
+	$c::server_signature_valid( '{"license_status":"active"}', $sig, $id ),
+	$c::server_signature_valid( '{"license_status":"active"}', $sig, strtoupper( $id ) ),
+	$c::server_signature_valid( '{"license_status":"suspended"}', $sig, $id ),
+	$c::server_signature_valid( '{"license_status":"active"}', $sig, 'a1b2c3d4-0000-4000-8000-000000000002' ),
+	$c::server_signature_valid( '{"license_status":"active"}', '', $id ),
+) );
+PHP;
+$sig_file = $out . '/license-signature.php';
+file_put_contents( $sig_file, '<?php ' . $sig_code );
+$sig_prepend = (string) ini_get( 'auto_prepend_file' );
+$sig_out     = (string) shell_exec( escapeshellarg( PHP_BINARY ) . ( '' !== $sig_prepend ? ' -d auto_prepend_file=' . escapeshellarg( $sig_prepend ) : '' ) . ' ' . escapeshellarg( $sig_file ) . ' ' . escapeshellarg( __DIR__ . '/stubs.php' ) . ' 2>&1' );
+check( 'pinned key: the server signature of the documented vector is accepted (installation case-insensitive)', str_starts_with( trim( $sig_out ), '[true,true,' ), $sig_out );
+check( 'pinned key: other data, another installation or a missing signature are rejected', '[true,true,false,false,false]' === trim( $sig_out ), $sig_out );
+check( 'without a pinned key the HMAC alone decides (development and free builds)', VCAP\Licensing\LicenseClient::server_signature_valid( '{}', '', 'x' ) );
+
 echo "Editions (constants set by bin/build.sh)\n";
 // Premium build in a child process (constants cannot be undone here): no filter unlocks anything.
 $premium_code = <<<'PHP'

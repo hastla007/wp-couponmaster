@@ -170,6 +170,27 @@ switch ( $mode ) {
 		echo "Shop: next request after activation\n";
 		$check( $allows( 'promotions' ) && $hooked( 'vcap_product_settings_fields', 'VCAP\TopUp', 'product_field' ), 'premium features are registered in a new request (gate reads the snapshot, no server call)' );
 		$check( array( 'referrals' ) === VCAP\Licensing\Entitlements::locked(), 'only refer-a-friend is locked', VCAP\Licensing\Entitlements::locked() );
+		$snapshot = get_option( VCAP\Licensing\Entitlements::CREDENTIALS_OPTION . '_entitlements_cache' );
+		$check( defined( 'VCAP_LICENSE_PUBLIC_KEY' ) && '' !== VCAP\Licensing\LicenseClient::pinned_public_key() && 88 === strlen( (string) ( $snapshot['signature_ed25519'] ?? '' ) ), 'the build pins the server key and the snapshot carries the server\'s Ed25519 signature' );
+		break;
+
+	case 'shop-forged-cache':
+		// Somebody who can write options (and so knows the installation secret) forges the offline snapshot:
+		// refer a friend unlocked, HMAC recomputed. Only the license server's Ed25519 signature cannot be forged.
+		echo "Shop: forged offline snapshot\n";
+		$name     = VCAP\Licensing\Entitlements::CREDENTIALS_OPTION . '_entitlements_cache';
+		$original = get_option( $name );
+		$creds    = get_option( VCAP\Licensing\Entitlements::CREDENTIALS_OPTION );
+		$forged   = $original;
+		$forged['data']['entitlements']['voucher.referrals'] = true;
+		$forged['signature'] = hash_hmac( 'sha256', (string) wp_json_encode( $forged['data'], JSON_UNESCAPED_SLASHES ), (string) $creds['installation_secret'] );
+		update_option( $name, $forged, false );
+		VCAP\Licensing\Entitlements::reset();
+		$check( ! $allows( 'referrals' ), 'a snapshot with a recomputed HMAC but without the server\'s signature unlocks nothing' );
+		$check( ! $allows( 'promotions' ), 'the forged snapshot is rejected as a whole (fail-closed)' );
+		update_option( $name, $original, false );
+		VCAP\Licensing\Entitlements::reset();
+		$check( $allows( 'promotions' ) && ! $allows( 'referrals' ), 'the genuine snapshot is accepted again' );
 		break;
 
 	case 'shop-offline':
@@ -253,6 +274,23 @@ switch ( $mode ) {
 		$check( ! is_wp_error( $result ), 'site deactivated on the server', is_wp_error( $result ) ? $result->get_error_code() : null );
 		$check( false === get_option( VCAP\Licensing\Entitlements::CREDENTIALS_OPTION ), 'local credentials removed' );
 		$check( ! $allows( 'promotions' ), 'premium features locked again after deactivation' );
+		break;
+
+	case 'shop-uninstall':
+		// Deleting the plugin with "delete data" releases the place of the license on the server first.
+		echo "Shop: uninstall with data deletion\n";
+		$credentials = get_option( VCAP\Licensing\Entitlements::CREDENTIALS_OPTION );
+		$check( is_array( $credentials ) && VCAP_ACC_SERVER === ( $credentials['server_url'] ?? '' ), 'the activation keeps the license server with its credentials' );
+		update_option( 'vcap_delete_on_uninstall', 'yes' );
+		if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
+			define( 'WP_UNINSTALL_PLUGIN', VCAP_ACC_BASENAME );
+		}
+		include WP_PLUGIN_DIR . '/' . dirname( VCAP_ACC_BASENAME ) . '/uninstall.php';
+		$check( false === get_option( VCAP\Licensing\Entitlements::CREDENTIALS_OPTION ), 'the credentials are deleted' );
+		update_option( 'vcap_acc_released_credentials', $credentials, false );
+		$after = ( new VCAP\Licensing\LicenseClient( VCAP_ACC_SERVER, VCAP_ACC_PRODUCT, VCAP_VERSION, 'vcap_acc_released_credentials' ) )->check_entitlements();
+		$check( is_wp_error( $after ), 'the license server no longer accepts the released activation', is_wp_error( $after ) ? $after->get_error_code() : $after );
+		delete_option( 'vcap_acc_released_credentials' );
 		break;
 
 	default:

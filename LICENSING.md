@@ -50,10 +50,18 @@ activation; Pass Captain part in the `pass-captain` job), `tests/run.php` → Ed
 | Premium updates (`PremiumUpdater`) | Offered also from WP-Cron (no user check); answer cached 12 h (failure 1 h, timeout 5 s; key: version, server, activation, license status; "Check again" bypasses it). Only one-time download grants of the licence server are offered; any other offer for the plugin is removed. Download via the grant (302) to an HTTPS host on the allow-list (licence server host, filter `wplc_client_update_hosts`, never IP addresses); SHA-256 of the ZIP must match before WordPress installs it. "View details" shows version, requirements and release notes from the licence server. | `tests/run.php` → Premium updates |
 | Support | Site Health → Info → "Voucher Captain": edition, license status, snapshot age, locked features, DB version, schema error, Pass Captain version, payment-after-tax. License and update errors go to the WooCommerce log, source `voucher-captain`. | – |
 
-**Open (server side):** WP License Captain signs answers with the HMAC of the installation secret the client generated
-itself; it has no asymmetric response signing (e.g. Ed25519 with a public key in the build). Whoever can write the
-options can therefore forge a snapshot. Needs server work in `hastla007/wp-license` (sign envelopes and update
-manifests with a private key, publish the public key) before the client can verify it.
+**Server signature (Ed25519):** besides the HMAC (installation secret – it protects transport and the cache, but the
+shop knows the secret), every answer of WP License Captain carries `signature_ed25519` over
+`wplc-response-v1\n{installation UUID}\n{JSON of data}` (server branch `claude/youthful-bardeen-7ejd7a`, fc26a96). The
+premium build pins the server's public key (`VCAP_LICENSE_PUBLIC_KEY`, from `wp wplc signing-key --field=public_key`;
+`bin/build.sh` refuses a tag build without it). The client then accepts answers and offline snapshots only with a
+valid server signature for exactly this installation – a server of one's own, written options or a snapshot copied
+from another shop unlock nothing (`LicenseClient::server_signature_valid()`, test vector in `tests/run.php`,
+forged-snapshot check in `license-acceptance`). A malformed pinned key fails closed. Rotating the server key needs a
+release with the new public key.
+
+**Uninstall:** with "Delete data on uninstall" the site's activation is released on the licence server first
+(best effort, 5 s; `uninstall.php`, `license-acceptance` → `shop-uninstall`), then the credentials are deleted.
 
 ## Acceptance against a real licence server (CI job `license-acceptance`)
 

@@ -86,7 +86,10 @@ jobs:
           # Premium build: license server (HTTPS) pinned into the plugin, also the "Update URI" (LICENSING.md).
           VCAP_LICENSE_SERVER: ${{ vars.VCAP_LICENSE_SERVER }}
           VCAP_UPDATE_URI: ${{ vars.VCAP_UPDATE_URI }}
+          # Ed25519 public key of the license server (wp wplc signing-key --field=public_key on the server).
+          VCAP_LICENSE_PUBLIC_KEY: ${{ vars.VCAP_LICENSE_PUBLIC_KEY }}
         run: |
+          if [ -z "${VCAP_LICENSE_PUBLIC_KEY}" ]; then echo "::error::Repository variable VCAP_LICENSE_PUBLIC_KEY (wp wplc signing-key --field=public_key) is not set."; exit 1; fi
           if [ -z "${VCAP_LICENSE_SERVER}" ]; then echo "::error::Repository variable VCAP_LICENSE_SERVER (https://license-server) is not set – the premium build would point to a placeholder."; exit 1; fi
           version="${GITHUB_REF_NAME#v}"
           mkdir -p dist

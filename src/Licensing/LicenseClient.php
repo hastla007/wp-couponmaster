@@ -35,6 +35,12 @@ final class LicenseClient {
 	 * @param string $product_version Installed product version.
 	 * @param string $option_key Product-specific option key.
 	 */
+	/** Context string of the server's Ed25519 response signature (WP License Captain docs/API-V1.md). */
+	public const SIGNED_CONTEXT = 'wplc-response-v1';
+
+	/** @var string Ed25519 signature of the last verified authenticated response (kept with the cache). */
+	private string $last_server_signature = '';
+
 	public function __construct( string $server_url, string $product_key, string $product_version, string $option_key ) {
 		$this->server_url = untrailingslashit( esc_url_raw( $server_url, array( 'https' ) ) );
 		$this->product_key = sanitize_key( $product_key );
@@ -78,11 +84,12 @@ final class LicenseClient {
 		if ( is_wp_error( $response ) ) {
 			return $response;
 		}
-		$verified = self::verify_envelope( $response, $secret );
+		$verified = self::verify_envelope( $response, $secret, $installation_id );
 		if ( is_wp_error( $verified ) ) {
 			return $verified;
 		}
-		update_option( $this->option_key, array( 'installation_id' => $installation_id, 'installation_secret' => $secret, 'activation_id' => absint( $verified['activation_id'] ?? 0 ) ), false );
+		// The server is kept with the credentials: uninstall.php releases the site there without the plugin loaded.
+		update_option( $this->option_key, array( 'installation_id' => $installation_id, 'installation_secret' => $secret, 'activation_id' => absint( $verified['activation_id'] ?? 0 ), 'server_url' => $this->server_url ), false );
 
 		return $verified;
 	}
@@ -154,6 +161,8 @@ final class LicenseClient {
 				'cached_at' => $now,
 				'expires_at' => $expires,
 				'signature' => hash_hmac( 'sha256', $json, $credentials['installation_secret'] ),
+				// The server's own signature travels with the snapshot: a pinned build re-checks it offline.
+				'signature_ed25519' => $this->last_server_signature,
 			),
 			false
 		);
@@ -174,6 +183,9 @@ final class LicenseClient {
 		$json = wp_json_encode( $cache['data'], JSON_UNESCAPED_SLASHES );
 		$expected = hash_hmac( 'sha256', false === $json ? '' : $json, $credentials['installation_secret'] );
 		if ( ! is_string( $cache['signature'] ?? null ) || ! hash_equals( $expected, $cache['signature'] ) ) {
+			return new \WP_Error( 'wplc_cache_signature_invalid', __( 'The offline entitlement cache could not be verified.', 'voucher-captain' ) );
+		}
+		if ( ! self::server_signature_valid( false === $json ? '' : $json, (string) ( $cache['signature_ed25519'] ?? '' ), (string) $credentials['installation_id'] ) ) {
 			return new \WP_Error( 'wplc_cache_signature_invalid', __( 'The offline entitlement cache could not be verified.', 'voucher-captain' ) );
 		}
 		return $cache['data'];
@@ -252,7 +264,7 @@ final class LicenseClient {
 		if ( is_wp_error( $response ) ) {
 			return $response;
 		}
-		$verified = self::verify_envelope( $response, $credentials['installation_secret'] );
+		$verified = self::verify_envelope( $response, $credentials['installation_secret'], (string) $credentials['installation_id'] );
 		if ( ! is_wp_error( $verified ) ) {
 			delete_option( $this->option_key );
 			delete_option( $this->option_key . '_entitlements_cache' );
@@ -273,7 +285,12 @@ final class LicenseClient {
 			return $credentials;
 		}
 		$response = $this->request( 'POST', $path, $payload, $credentials['installation_secret'], true, $credentials['installation_id'] );
-		return is_wp_error( $response ) ? $response : self::verify_envelope( $response, $credentials['installation_secret'] );
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+		$verified = self::verify_envelope( $response, $credentials['installation_secret'], (string) $credentials['installation_id'] );
+		$this->last_server_signature = is_wp_error( $verified ) ? '' : (string) ( $response['signature_ed25519'] ?? '' );
+		return $verified;
 	}
 
 	/**
@@ -368,19 +385,61 @@ final class LicenseClient {
 	}
 
 	/**
-	 * Verify the response HMAC before exposing entitlement data to product code.
+	 * Verify the response before exposing entitlement data to product code: the HMAC with the installation secret
+	 * and – when the build pins the server's public key (VCAP_LICENSE_PUBLIC_KEY) – the server's Ed25519 signature of
+	 * "wplc-response-v1\n{installation}\n{JSON}". Only the license server can produce the latter, so a server of
+	 * one's own or written options cannot unlock anything.
 	 *
 	 * @param array<string,mixed> $envelope Response wrapper.
 	 * @param string $secret Installation secret.
+	 * @param string $installation_id Installation UUID the data must be for.
 	 * @return array<string,mixed>|\WP_Error
 	 */
-	private static function verify_envelope( array $envelope, string $secret ) {
-		$json = wp_json_encode( $envelope['data'], JSON_UNESCAPED_SLASHES );
-		$expected = hash_hmac( 'sha256', false === $json ? '' : $json, $secret );
+	private static function verify_envelope( array $envelope, string $secret, string $installation_id = '' ) {
+		$json = wp_json_encode( $envelope['data'] ?? null, JSON_UNESCAPED_SLASHES );
+		$json = false === $json ? '' : $json;
+		$expected = hash_hmac( 'sha256', $json, $secret );
 		if ( ! is_string( $envelope['signature'] ?? null ) || ! hash_equals( $expected, $envelope['signature'] ) ) {
 			return new \WP_Error( 'wplc_signature_invalid', __( 'The license server response signature could not be verified.', 'voucher-captain' ) );
 		}
-		return is_array( $envelope['data'] ) ? $envelope['data'] : array();
+		if ( ! self::server_signature_valid( $json, (string) ( $envelope['signature_ed25519'] ?? '' ), $installation_id ) ) {
+			return new \WP_Error( 'wplc_server_signature_invalid', __( 'The response is not signed by the license server of this product.', 'voucher-captain' ) );
+		}
+		return is_array( $envelope['data'] ?? null ) ? $envelope['data'] : array();
+	}
+
+	/** Base64 Ed25519 public key of the license server pinned by the build ('' = not pinned). */
+	public static function pinned_public_key(): string {
+		if ( ! defined( 'VCAP_LICENSE_PUBLIC_KEY' ) ) {
+			return '';
+		}
+		$key = base64_decode( (string) VCAP_LICENSE_PUBLIC_KEY, true );
+		// A malformed pinned key must not silently disable the check: it then matches nothing (fail-closed).
+		return false !== $key && 32 === strlen( $key ) ? (string) VCAP_LICENSE_PUBLIC_KEY : 'invalid';
+	}
+
+	/**
+	 * Whether the server's Ed25519 signature is valid – always true when the build pins no public key.
+	 *
+	 * @param string $json            JSON of the data.
+	 * @param string $signature       Base64 signature.
+	 * @param string $installation_id Installation UUID.
+	 */
+	public static function server_signature_valid( string $json, string $signature, string $installation_id ): bool {
+		$public_key = self::pinned_public_key();
+		if ( '' === $public_key ) {
+			return true;
+		}
+		$key = base64_decode( $public_key, true );
+		$sig = base64_decode( $signature, true );
+		if ( false === $key || false === $sig || 32 !== strlen( $key ) || 64 !== strlen( $sig ) || ! function_exists( 'sodium_crypto_sign_verify_detached' ) ) {
+			return false;
+		}
+		try {
+			return sodium_crypto_sign_verify_detached( $sig, self::SIGNED_CONTEXT . "\n" . strtolower( $installation_id ) . "\n" . $json, $key );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
 	}
 
 	/**

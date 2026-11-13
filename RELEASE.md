@@ -49,7 +49,8 @@ release notes). Entries start with **New**, **Fix** or **Fix (security)** and de
    tested WordPress, release notes). The package URL is the repository variable `WPLC_PACKAGE_BASE_URL` + the ZIP
    name; without the variable the workflow warns and leaves the manifest out. Review and publish the draft.
    Editions (LICENSING.md): the free ZIP is built with `VCAP_EDITION=free`, the premium ZIP with
-   `VCAP_EDITION=premium VCAP_LICENSE_SERVER=https://<licence server>` (repository variable; optional
+   `VCAP_EDITION=premium VCAP_LICENSE_SERVER=https://<licence server> VCAP_LICENSE_PUBLIC_KEY=<wp wplc signing-key --field=public_key>`
+   (repository variables, both required for tag builds; optional
    `VCAP_UPDATE_URI`, default `<server>/voucher-captain`). A tag build without `VCAP_EDITION` fails, and the
    release workflow stops when the repository variable `VCAP_LICENSE_SERVER` is not set (a local premium build
    without it points to the placeholder `https://licenses.example.com`).

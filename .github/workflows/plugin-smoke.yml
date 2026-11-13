@@ -275,7 +275,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: hastla007/wp-license
-          ref: 3300685a524edfc4ed0e1f3119f739c5e989b2d4
+          ref: fc26a96cd4bb179de0f6279e05cf3ab5d2c68732
           path: wp-license
       - name: Set up PHP 8.4
         uses: shivammathur/setup-php@v2
@@ -322,7 +322,9 @@ jobs:
           # the licence server's own tool (RELEASE.md step 6).
           release() {
             # The premium build fixes the license server (VCAP_LICENSE_SERVER) and its "Update URI" header.
-            ( cd "$1" && VCAP_EDITION=premium VCAP_LICENSE_SERVER=https://licenses.test bin/build.sh )
+            # and pins its Ed25519 public key (VCAP_LICENSE_PUBLIC_KEY, from wp wplc signing-key).
+            public_key="$(php wp-cli.phar --path="$SERVER" wplc signing-key --field=public_key)"
+            ( cd "$1" && VCAP_EDITION=premium VCAP_LICENSE_SERVER=https://licenses.test VCAP_LICENSE_PUBLIC_KEY="$public_key" bin/build.sh )
             version="$(sed -n 's/^ \* Version: *//p' "$1/voucher-captain.php" | tr -d '[:space:]')"
             cp "$1/build/voucher-captain.zip" "$SERVER/packages/voucher-captain-premium-$version.zip"
             printf 'Voucher Captain %s (CI acceptance release).\n' "$version" > "$RUNNER_TEMP/notes-$version.md"
@@ -370,6 +372,7 @@ jobs:
           shop shop-active
           sudo pkill -f "socat OPENSSL-LISTEN:443" && sleep 1
           shop shop-offline
+          shop shop-forged-cache
           tls_up
           server server-status suspended
           shop shop-suspended
@@ -381,6 +384,8 @@ jobs:
           shop shop-update
           shop shop-updated 99.0.0
           shop shop-deactivate
+          shop shop-activate "$RUNNER_TEMP/license.key"
+          shop shop-uninstall
           ! grep -E "PHP (Fatal|Warning)" "$RUNNER_TEMP/php-server.log"
       - name: Server logs
         if: failure()

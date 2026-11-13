@@ -6,6 +6,35 @@
 defined( 'WP_UNINSTALL_PLUGIN' ) || exit;
 
 /**
+ * Releases this site's license activation on the license server before its credentials are deleted, so the site
+ * does not keep using a place of the license. Best effort with a short timeout: an unreachable server never blocks
+ * the uninstall (the activation can still be released in the customer account on the license server).
+ */
+function vcap_uninstall_release_license(): void {
+	$credentials = get_option( 'vcap_wplc_credentials' ); // VCAP\Licensing\Entitlements::CREDENTIALS_OPTION.
+	if ( ! is_array( $credentials ) || empty( $credentials['activation_id'] ) ) {
+		return;
+	}
+	$server = (string) ( $credentials['server_url'] ?? '' );
+	if ( '' === $server ) {
+		$server = (string) get_option( 'vcap_wplc_server_url', '' );
+	}
+	if ( '' === $server && is_readable( __DIR__ . '/voucher-captain.php' ) && preg_match( "/define\\( 'VCAP_LICENSE_SERVER', '([^']+)' \\);/", (string) file_get_contents( __DIR__ . '/voucher-captain.php' ), $m ) ) {
+		$server = $m[1]; // Premium build: the server is fixed in the plugin file.
+	}
+	if ( '' === $server || ! is_readable( __DIR__ . '/vendor/autoload.php' ) ) {
+		return;
+	}
+	require_once __DIR__ . '/vendor/autoload.php';
+	if ( ! class_exists( 'VCAP\\Licensing\\LicenseClient' ) ) {
+		return;
+	}
+	$client = new VCAP\Licensing\LicenseClient( $server, 'voucher-captain', '0', 'vcap_wplc_credentials' );
+	$client->set_timeout( 5 );
+	$client->deactivate();
+}
+
+/**
  * Removes Voucher Captain's data of the current site (only when that site opted in). The background license
  * check is removed on every site, it would only fail without the plugin.
  *
@@ -16,6 +45,7 @@ function vcap_uninstall_site(): bool {
 	if ( 'yes' !== get_option( 'vcap_delete_on_uninstall', 'no' ) ) {
 		return false;
 	}
+	vcap_uninstall_release_license();
 
 	global $wpdb;
 	foreach ( array( 'vcap_vouchers', 'vcap_events', 'vcap_code_pool', 'vcap_redemptions', 'vcap_promotion_usage', 'vcap_claims' ) as $table ) {
