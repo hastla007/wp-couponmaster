@@ -13,9 +13,9 @@
 use VCAP\ProductConfig;
 use VCAP\Voucher;
 
-function vcap_tax_assert( bool $condition, string $message ): void {
+function vcap_tax_assert( bool $condition, string $message, $detail = null ): void {
 	if ( ! $condition ) {
-		throw new RuntimeException( 'FAIL: ' . $message );
+		throw new RuntimeException( 'FAIL: ' . $message . ( null === $detail ? '' : ' – ' . wp_json_encode( $detail ) ) );
 	}
 	echo "PASS: {$message}\n";
 }
