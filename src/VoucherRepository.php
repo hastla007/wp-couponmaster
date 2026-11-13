@@ -281,24 +281,85 @@ final class VoucherRepository {
 		return (int) $count;
 	}
 
-	/** @return int[] voucher ids whose delivery is due */
-	public function due_for_delivery( int $limit = 50 ): array {
+	/**
+	 * Undelivered vouchers whose delivery is due (for an hour, when without date), at most 30 days ago, and that
+	 * were not given up (delivery_attempts()): never attempted first, then the oldest last attempt, then the
+	 * oldest due date. $exclude: ids already handled in this run.
+	 *
+	 * @param int[] $exclude
+	 * @return int[] voucher ids
+	 */
+	public function due_for_delivery( int $limit = 50, array $exclude = array() ): array {
 		global $wpdb;
+		$exclude = array_values( array_filter( array_map( 'intval', $exclude ) ) );
+		$not_in  = $exclude ? ' AND v.id NOT IN (' . implode( ',', $exclude ) . ')' : '';
+		$since   = gmdate( 'Y-m-d H:i:s', time() - 30 * DAY_IN_SECONDS );
 		return array_map(
 			'intval',
 			$wpdb->get_col( // phpcs:ignore
 				$wpdb->prepare(
-					// Due deliveries whose queued action was lost or failed, retried daily for 30 days after the due date.
-					"SELECT id FROM {$this->table} WHERE delivered_at IS NULL AND status IN ('scheduled','active')
-					AND ( ( delivery_at IS NOT NULL AND delivery_at <= %s AND delivery_at >= %s ) OR ( delivery_at IS NULL AND created_at <= %s AND created_at >= %s ) ) LIMIT %d",
+					"SELECT v.id FROM {$this->table} v
+					WHERE v.delivered_at IS NULL AND v.status IN ('scheduled','active')
+					AND ( ( v.delivery_at IS NOT NULL AND v.delivery_at <= %s AND v.delivery_at >= %s ) OR ( v.delivery_at IS NULL AND v.created_at <= %s AND v.created_at >= %s ) )
+					AND NOT EXISTS ( " . $this->given_up_sql( 'v' ) . " ){$not_in}
+					ORDER BY ( SELECT MAX(f.id) FROM {$this->events} f WHERE f.voucher_id = v.id AND f.event = 'delivery_failed' ) IS NOT NULL,
+					( SELECT MAX(f.id) FROM {$this->events} f WHERE f.voucher_id = v.id AND f.event = 'delivery_failed' ) ASC,
+					COALESCE( v.delivery_at, v.created_at ) ASC, v.id ASC
+					LIMIT %d",
 					$this->now(),
-					gmdate( 'Y-m-d H:i:s', time() - 30 * DAY_IN_SECONDS ),
+					$since,
 					gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS ),
-					gmdate( 'Y-m-d H:i:s', time() - 30 * DAY_IN_SECONDS ),
-					$limit
+					$since,
+					max( 1, $limit )
 				)
 			)
 		);
+	}
+
+	/**
+	 * Ledger events after which the delivery attempts of a voucher are counted anew (an admin resend is not one: it
+	 * does not mark the voucher delivered, so a given-up delivery must not start over and mail it a second time).
+	 */
+	private const DELIVERY_RESET_EVENTS = "'scheduled','delivered'";
+
+	/** Subquery (for EXISTS): a "delivery_given_up" of voucher alias $v after its last reset event. */
+	private function given_up_sql( string $v ): string {
+		return "SELECT 1 FROM {$this->events} g WHERE g.voucher_id = {$v}.id AND g.event = 'delivery_given_up'
+			AND g.id > COALESCE( ( SELECT MAX(r.id) FROM {$this->events} r WHERE r.voucher_id = {$v}.id AND r.event IN (" . self::DELIVERY_RESET_EVENTS . ') ), 0 )';
+	}
+
+	/**
+	 * Delivery attempts of a voucher, counted from the ledger since its delivery was last (re)scheduled or delivered:
+	 * failed attempts, the time of the last one and whether the delivery was given up.
+	 *
+	 * @return array{failures:int, last_attempt:?string, given_up:bool}
+	 */
+	public function delivery_attempts( int $voucher_id ): array {
+		global $wpdb;
+		$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT event, created_at FROM {$this->events} WHERE voucher_id = %d AND event IN ('delivery_failed','delivery_given_up'," . self::DELIVERY_RESET_EVENTS . ') ORDER BY id DESC LIMIT 500', $voucher_id ), ARRAY_A ); // phpcs:ignore
+		$state = array( 'failures' => 0, 'last_attempt' => null, 'given_up' => false );
+		foreach ( $rows ? $rows : array() as $row ) {
+			if ( 'delivery_failed' === $row['event'] ) {
+				++$state['failures'];
+				$state['last_attempt'] = $state['last_attempt'] ?? (string) $row['created_at'];
+			} elseif ( 'delivery_given_up' === $row['event'] ) {
+				$state['given_up'] = true;
+			} else {
+				break; // A reset event: earlier attempts belong to an earlier delivery.
+			}
+		}
+		return $state;
+	}
+
+	/** Undelivered vouchers whose delivery was given up after repeated failures (cached for ten minutes). */
+	public function given_up_count(): int {
+		$count = get_transient( 'vcap_given_up_count' );
+		if ( false === $count ) {
+			global $wpdb;
+			$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table} v WHERE v.delivered_at IS NULL AND v.status IN ('scheduled','active') AND EXISTS ( " . $this->given_up_sql( 'v' ) . ' )' ); // phpcs:ignore
+			set_transient( 'vcap_given_up_count', $count, 10 * MINUTE_IN_SECONDS );
+		}
+		return (int) $count;
 	}
 
 	/**
@@ -439,6 +500,8 @@ final class VoucherRepository {
 			'scheduled'  => __( 'Delivery scheduled', 'voucher-captain' ),
 			'delivered'  => __( 'Delivered', 'voucher-captain' ),
 			'delivery_failed' => __( 'Delivery failed', 'voucher-captain' ),
+			'delivery_given_up' => __( 'Delivery given up (no more automatic attempts)', 'voucher-captain' ),
+			'delivery_expired'  => __( 'Not delivered: already expired', 'voucher-captain' ),
 			'expiry_reminder' => __( 'Expiry reminder', 'voucher-captain' ),
 			'credit'        => __( 'Credit added', 'voucher-captain' ),
 			'debit'         => __( 'Credit removed', 'voucher-captain' ),

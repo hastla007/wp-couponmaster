@@ -293,10 +293,23 @@ final class Tickets {
 		}
 	}
 
-	/** Removes scanner idempotency keys older than two days (daily maintenance). */
-	public static function purge_scan_keys(): void {
+	/**
+	 * Removes scanner idempotency keys older than two days (daily maintenance), in batches until done or $budget
+	 * seconds are used.
+	 *
+	 * @return bool true when all old keys are removed.
+	 */
+	public static function purge_scan_keys( float $budget = 10.0 ): bool {
 		global $wpdb;
-		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) < %d", $wpdb->esc_like( self::SCAN_PREFIX ) . '%', time() - 2 * DAY_IN_SECONDS ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$start = microtime( true );
+		$limit = 1000;
+		do {
+			$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) < %d LIMIT %d", $wpdb->esc_like( self::SCAN_PREFIX ) . '%', time() - 2 * DAY_IN_SECONDS, $limit ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			if ( false === $deleted ) {
+				throw new \RuntimeException( 'Scanner keys could not be removed: ' . $wpdb->last_error );
+			}
+		} while ( (int) $deleted >= $limit && microtime( true ) - $start < $budget );
+		return (int) $deleted < $limit;
 	}
 
 	/**

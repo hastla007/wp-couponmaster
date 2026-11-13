@@ -96,6 +96,7 @@ final class Preview {
 		$v->fields          = $fields;
 		$v->max_checkins    = (int) $config['max_checkins'];
 		$v->expires_at      = ProductConfig::expiry_for( $config );
+		$v->delivery_at     = Delivery::compute_time( $config, $fields ); // The date the voucher would really go out.
 
 		switch ( $config['amount_source'] ) {
 			case 'fixed':

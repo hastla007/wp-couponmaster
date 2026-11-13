@@ -49,11 +49,11 @@ final class Claim {
 
 	/**
 	 * Removes claims of the purgeable kinds older than the retention period (filter "vcap_claim_retention_days",
-	 * default 180 days; 0 keeps everything).
+	 * default 180 days; 0 keeps everything), in batches until none is left or $budget seconds are used.
 	 *
 	 * @return int Claims removed.
 	 */
-	public static function purge(): int {
+	public static function purge( float $budget = 10.0 ): int {
 		global $wpdb;
 		$days = (int) apply_filters( 'vcap_claim_retention_days', 180 );
 		if ( $days <= 0 || ! Install::storage_ready() ) {
@@ -63,10 +63,20 @@ final class Claim {
 		if ( ! $kinds ) {
 			return 0;
 		}
-		$table = Install::tables()['claims'];
-		$in    = implode( ',', array_fill( 0, count( $kinds ), '%s' ) );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built above.
-		return (int) $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE kind IN ({$in}) AND created_at < %s LIMIT 5000", array_merge( $kinds, array( gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS ) ) ) ) );
+		$table   = Install::tables()['claims'];
+		$in      = implode( ',', array_fill( 0, count( $kinds ), '%s' ) );
+		$args    = array_merge( $kinds, array( gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS ), 1000 ) );
+		$start   = microtime( true );
+		$removed = 0;
+		do {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built above.
+			$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE kind IN ({$in}) AND created_at < %s LIMIT %d", $args ) );
+			if ( false === $deleted ) {
+				throw new \RuntimeException( 'Claims could not be purged: ' . $wpdb->last_error );
+			}
+			$removed += (int) $deleted;
+		} while ( (int) $deleted >= 1000 && microtime( true ) - $start < $budget );
+		return $removed;
 	}
 
 	/** Claim before schema 1.4: an options row. */

@@ -17,6 +17,9 @@ final class ProductSettings {
 		add_action( 'woocommerce_admin_process_variation_object', array( $this, 'save_variation' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'assets' ) );
 		add_action( 'admin_notices', array( $this, 'tax_status_notice' ) );
+		if ( is_admin() ) {
+			Admin\Flash::register(); // Notices of save() survive the redirect after saving the product.
+		}
 		( new ProductChecks() )->register();
 	}
 
@@ -620,8 +623,43 @@ final class ProductSettings {
 				$builtin[] = $value;
 			}
 		}
+		$builtin = $this->couple_delivery_date( $product, $builtin );
 		$product->update_meta_data( '_vcap_builtin_fields', $builtin );
 		// phpcs:enable
+	}
+
+	/**
+	 * The product page field "Delivery date" only works with the delivery "On a date chosen by the customer". When it
+	 * is switched on with another delivery:
+	 *  - "Immediately after purchase" (the default) becomes "On a date chosen by the customer" – the field is the
+	 *    shop's clear intent, and without a date the voucher still goes out right away;
+	 *  - "X days after purchase" / "On a fixed date" were chosen on purpose: they stay and the field is switched off.
+	 * Either way a notice says what changed (product-admin.js couples both on the screen already).
+	 *
+	 * @param string[] $builtin Built-in fields as submitted.
+	 * @return string[] Built-in fields to store.
+	 */
+	public function couple_delivery_date( \WC_Product $product, array $builtin ): array {
+		$asks = (bool) array_intersect( array( 'delivery_date', 'delivery_date_required' ), $builtin );
+		$mode = (string) $product->get_meta( '_vcap_delivery' );
+		if ( ! $asks || 'customer' === $mode ) {
+			return $builtin;
+		}
+		if ( '' === $mode || 'immediate' === $mode ) {
+			$product->update_meta_data( '_vcap_delivery', 'customer' );
+			Admin\Flash::add( 'info', __( 'Voucher Captain: the product page asks for a delivery date, so the delivery was set to "On a date chosen by the customer". Without a date the voucher is still sent right away.', 'voucher-captain' ) );
+			return $builtin;
+		}
+		$modes = Delivery::delivery_modes();
+		Admin\Flash::add(
+			'warning',
+			sprintf(
+				/* translators: %s: delivery mode, e.g. "On a fixed date" */
+				__( 'Voucher Captain: the product page field "Delivery date" was switched off. It only works with the delivery "On a date chosen by the customer", and this product is delivered "%s".', 'voucher-captain' ),
+				$modes[ $mode ] ?? $mode
+			)
+		);
+		return array_values( array_diff( $builtin, array( 'delivery_date', 'delivery_date_required' ) ) );
 	}
 
 	public function variation_option( $loop, $variation_data, $variation ): void {

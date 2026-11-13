@@ -120,6 +120,12 @@ vcap_inst_assert( ! as_has_scheduled_action( 'vcap_deliver_voucher', array( 'vou
 VCAP\Install::activate_site();
 vcap()->ensure_schedules();
 vcap_inst_assert( 'publish' === get_post_status( $card->coupon_id ), 'activation publishes the suspended coupons again' );
+vcap_inst_assert( as_has_scheduled_action( VCAP\Delivery::RESTORE_HOOK, array( 'phase' => 'vouchers', 'after' => 0 ), 'vcap' ), 'the removed tasks are restored by an Action Scheduler action, not in the request' );
+// What that action does, batch by batch (500 vouchers each), until the vouchers are done.
+$restore = array( 'vouchers', 0 );
+while ( $restore && 'vouchers' === $restore[0] ) {
+	$restore = vcap()->delivery->restore_tasks( $restore[0], $restore[1] );
+}
 vcap_inst_assert( as_has_scheduled_action( 'vcap_deliver_voucher', array( 'voucher_id' => $future->id ), 'vcap' ) && as_has_scheduled_action( 'vcap_daily_maintenance', array(), 'vcap' ) && as_has_scheduled_action( 'vcap_release_stale_order_reservations', array(), 'vcap' ), 'activation schedules the delivery and the recurring tasks again' );
 $checked = (int) get_option( VCAP\Install::SCHEDULES_OPTION );
 vcap_inst_assert( $checked > time() - MINUTE_IN_SECONDS && false === get_option( VCAP\Install::RESTORE_TASKS_OPTION ), 'the schedule check is remembered (no Action Scheduler queries on every request)' );

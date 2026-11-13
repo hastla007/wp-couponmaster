@@ -47,6 +47,19 @@
 				$( '#_vcap_expiry_days' ).val( '' );
 			}
 		} );
+		// The customer's delivery date only works with the delivery "On a date chosen by the customer": ticking the
+		// field (or "required") selects that delivery; another delivery switches the field off (saving enforces it too).
+		var dateBoxes = 'input[name="_vcap_builtin_fields[]"][value="delivery_date"], input[name="_vcap_builtin_fields[]"][value="delivery_date_required"]';
+		$( '#woocommerce-product-data' ).on( 'change', dateBoxes, function () {
+			if ( $( this ).is( ':checked' ) && 'customer' !== $( '#_vcap_delivery' ).val() ) {
+				$( '#_vcap_delivery' ).val( 'customer' ).trigger( 'change' );
+			}
+		} );
+		$( '#woocommerce-product-data' ).on( 'change', '#_vcap_delivery', function () {
+			if ( 'customer' !== $( this ).val() ) {
+				$( dateBoxes ).filter( ':checked' ).prop( 'checked', false );
+			}
+		} );
 		// A gift card keeps its remaining value: choosing the type switches "single use" to the stored balance.
 		$( '#woocommerce-product-data' ).on( 'change', '#_vcap_type', function () {
 			if ( 'giftcard' === $( this ).val() && 'single' === $( '#_vcap_usage' ).val() ) {

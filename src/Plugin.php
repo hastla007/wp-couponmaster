@@ -167,7 +167,8 @@ final class Plugin {
 		$this->coupons->schedule_stale_release();
 		if ( 'yes' === get_option( Install::RESTORE_TASKS_OPTION ) ) {
 			delete_option( Install::RESTORE_TASKS_OPTION );
-			$this->delivery->restore_tasks();
+			// In Action Scheduler batches, not in this (arbitrary) request.
+			$this->delivery->queue_restore_tasks();
 		}
 	}
 
@@ -360,10 +361,22 @@ final class Plugin {
 		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
-	/** Removes counters of finished windows (daily maintenance). */
-	public static function purge_rate_limits(): void {
+	/**
+	 * Removes counters of finished windows (daily maintenance), in batches until done or $budget seconds are used.
+	 *
+	 * @return bool true when all finished windows are removed.
+	 */
+	public static function purge_rate_limits( float $budget = 10.0 ): bool {
 		global $wpdb;
-		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND option_name < %s", $wpdb->esc_like( 'vcap_rl_' ) . '%', 'vcap_rl_' . sprintf( '%010d', time() ) . '_' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$start = microtime( true );
+		$limit = 1000;
+		do {
+			$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND option_name < %s LIMIT %d", $wpdb->esc_like( 'vcap_rl_' ) . '%', 'vcap_rl_' . sprintf( '%010d', time() ) . '_', $limit ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			if ( false === $deleted ) {
+				throw new \RuntimeException( 'Rate limit counters could not be removed: ' . $wpdb->last_error );
+			}
+		} while ( (int) $deleted >= $limit && microtime( true ) - $start < $budget );
+		return (int) $deleted < $limit;
 	}
 
 	/**
