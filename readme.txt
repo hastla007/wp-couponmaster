@@ -51,7 +51,7 @@ Cancelled, failed or fully refunded orders give the used voucher amount back. Re
 
 = Does it work with the block checkout and HPOS? =
 
-Yes, with High-Performance Order Storage and the legacy order storage, and with the cart and checkout blocks. The optional setting "Multi-purpose vouchers as payment" is currently meant for the classic cart and checkout: the blocks do not show its payment row yet.
+Yes, with High-Performance Order Storage and the legacy order storage, and with the cart and checkout blocks. With the optional setting "Multi-purpose vouchers as payment" the blocks show the payment row "Voucher CODE" below the discounts; the coupon itself shows a discount of 0 there with a note that it pays below. The warning that a single-use voucher worth more than the cart loses its remaining value is shown in the blocks as well.
 
 = Which data does the plugin share? =
 

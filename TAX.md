@@ -92,8 +92,15 @@ Warenkorb-/Kassenblöcke: Die Store API liefert Zahlungen, Restguthaben und den 
 `extensions["voucher-captain"]` (`CartBlocks`); `assets/js/cart-blocks.js` zeigt je Gutschein die Zeile „Gutschein CODE
 −x“ und das Restguthaben unter den Rabatten (Slot `ExperimentalDiscountsMeta`), ergänzt den Coupon um „zahlt als
 Gutscheinzahlung (siehe unten)“ (Filter `coupons`) und zeigt „Guthaben verwenden“ (Slot `ExperimentalOrderMeta`).
-Die Rabattsumme des Blocks bleibt bei 0 (dafür bietet WooCommerce keinen Filter); in der Bestellung ist die Zahlung
-eine Gebührenzeile. Nachweis: `tests/blocks-integration.php`.
+Die Rabattangabe des Blocks bleibt bei 0 bzw. „–“ (je nach WooCommerce-Version als Summe oder je Coupon): Sie stammt
+aus `totals.total_discount` bzw. `coupons[].totals.total_discount` der Store API, für die WooCommerce keinen Filter
+bietet (der Filter `coupons` ändert nur die Beschriftung, die Coupon-Darstellung hat keine Klasse je Coupon, die sich
+gezielt ausblenden ließe). Der Hinweis „zahlt als Gutscheinzahlung“ erklärt die 0 und steht nur an einem zahlenden
+Coupon mit eigenem Rabatt 0; Summe und Zahlbetrag stimmen, in der Bestellung ist die Zahlung eine Gebührenzeile. Ein Festbetragsgutschein zur
+einmaligen Einlösung, der mehr wert ist als der Warenkorb, zeigt wie im klassischen Warenkorb den Hinweis, dass der
+Restwert verfällt (`extensions["voucher-captain"]["forfeits"]`, gleicher Text aus
+`ProductChecks::residual_notice()`, als Statusmeldung unter den Rabatten); ein zahlender Gutschein verliert dabei nur,
+was er nicht bezahlen kann. Nachweis: `tests/blocks-integration.php`.
 
 **Was der Gutschein bezahlen darf** (`PaymentVouchers::payments_for()`): nur den Bruttobetrag (Zeilensumme nach
 anderen Rabatten + deren USt) der Positionen, auf die WooCommerce den Coupon anwenden würde, und davon nur die, die

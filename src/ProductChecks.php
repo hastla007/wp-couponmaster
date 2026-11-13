@@ -89,12 +89,17 @@ final class ProductChecks {
 	}
 
 	/**
-	 * Single-use vouchers whose value exceeds what the cart can take: the remaining value is lost.
+	 * Single-use vouchers whose value exceeds what the cart can take: the remaining value is lost. Shared by the
+	 * classic cart (residual_rows()) and the cart and checkout blocks (CartBlocks, Store API "forfeits").
+	 *
+	 * What a voucher uses is its coupon discount plus what it pays after tax ("Multi-purpose vouchers as payment":
+	 * such a coupon discounts 0 and pays with a payment row instead, PaymentVouchers).
 	 *
 	 * @return array<int, array{code:string, value:float, used:float, currency:string}>
 	 */
 	public static function residual_losses( \WC_Cart $cart ): array {
 		$losses = array();
+		$paid   = PaymentVouchers::enabled() && function_exists( 'WC' ) && WC()->cart === $cart ? vcap()->payments->cart_payments() : array();
 		foreach ( $cart->get_applied_coupons() as $code ) {
 			$voucher = vcap()->vouchers->get_by_code( wc_format_coupon_code( $code ) );
 			if ( ! $voucher ) {
@@ -107,7 +112,7 @@ final class ProductChecks {
 			if ( '' !== $voucher->currency && function_exists( 'get_woocommerce_currency' ) && get_woocommerce_currency() !== $voucher->currency ) {
 				continue; // Converted by a currency switcher: amounts are not comparable.
 			}
-			$used  = (float) $cart->get_coupon_discount_amount( $code, ! wc_prices_include_tax() );
+			$used  = (float) $cart->get_coupon_discount_amount( $code, ! wc_prices_include_tax() ) + (float) ( $paid[ wc_format_coupon_code( $code ) ] ?? 0 );
 			$value = (float) $voucher->initial_amount;
 			if ( $value - $used > 0.009 ) {
 				$losses[] = array( 'code' => $voucher->code, 'value' => $value, 'used' => $used, 'currency' => $voucher->currency );
@@ -122,18 +127,26 @@ final class ProductChecks {
 			return;
 		}
 		foreach ( self::residual_losses( WC()->cart ) as $loss ) {
-			$args = array( 'currency' => $loss['currency'] );
-			echo '<tr class="vcap-residual-warning"><td colspan="2"><div class="woocommerce-info" role="status">' . wp_kses_post(
-				sprintf(
-					/* translators: 1: voucher code, 2: amount used in this order, 3: voucher value, 4: lost remaining value */
-					__( 'Voucher %1$s: only %2$s of %3$s is used in this order. The voucher can be redeemed only once – the remaining %4$s will be lost. Add more items to use its full value.', 'voucher-captain' ),
-					esc_html( $loss['code'] ),
-					wc_price( $loss['used'], $args ),
-					wc_price( $loss['value'], $args ),
-					wc_price( $loss['value'] - $loss['used'], $args )
-				)
-			) . '</div></td></tr>';
+			echo '<tr class="vcap-residual-warning"><td colspan="2"><div class="woocommerce-info" role="status">' . wp_kses_post( self::residual_notice( $loss ) ) . '</div></td></tr>';
 		}
+	}
+
+	/**
+	 * The notice for one residual_losses() row: HTML (classic cart) or plain text (Store API for the blocks).
+	 *
+	 * @param array{code:string, value:float, used:float, currency:string} $loss
+	 */
+	public static function residual_notice( array $loss, bool $plain = false ): string {
+		$args = array( 'currency' => (string) $loss['currency'] );
+		$html = sprintf(
+			/* translators: 1: voucher code, 2: amount used in this order, 3: voucher value, 4: lost remaining value */
+			__( 'Voucher %1$s: only %2$s of %3$s is used in this order. The voucher can be redeemed only once – the remaining %4$s will be lost. Add more items to use its full value.', 'voucher-captain' ),
+			esc_html( (string) $loss['code'] ),
+			wc_price( (float) $loss['used'], $args ),
+			wc_price( (float) $loss['value'], $args ),
+			wc_price( (float) $loss['value'] - (float) $loss['used'], $args )
+		);
+		return $plain ? html_entity_decode( wp_strip_all_tags( $html ), ENT_QUOTES, 'UTF-8' ) : $html;
 	}
 
 	// ----------------------------------------------------------------- Codes.

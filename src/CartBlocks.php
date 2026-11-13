@@ -5,7 +5,8 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Cart and checkout blocks: what the classic cart prints with PHP hooks (voucher payment rows "Voucher CODE",
- * the note on paying coupons, remaining balances of gift cards, the "use store credit" hint) is exposed through
+ * the note on paying coupons, remaining balances of gift cards, the "use store credit" hint, the warning that a
+ * single-use voucher worth more than the cart loses its remaining value) is exposed through
  * the Store API cart endpoint (namespace "voucher-captain") and shown by assets/js/cart-blocks.js
  * (Compat\CartBlocksIntegration). The texts come translated from PHP.
  */
@@ -48,7 +49,10 @@ final class CartBlocks {
 		}
 	}
 
-	/** Store API cart data: extensions["voucher-captain"]. */
+	/**
+	 * Store API cart data: extensions["voucher-captain"]. Amounts ("amount") are strings in minor units like the
+	 * Store API's own prices; "formatted" and "text" are ready to show.
+	 */
 	public function cart_data(): array {
 		$data = array(
 			'payments'       => array(),
@@ -56,6 +60,7 @@ final class CartBlocks {
 			'coupon_note'    => __( 'pays as voucher payment (see below)', 'voucher-captain' ),
 			'balances'       => array(),
 			'store_credit'   => null,
+			'forfeits'       => array(),
 		);
 		$cart = function_exists( 'WC' ) ? WC()->cart : null;
 		if ( ! $cart instanceof \WC_Cart ) {
@@ -81,6 +86,16 @@ final class CartBlocks {
 					'formatted' => self::plain_price( (float) $voucher->balance, (string) $voucher->currency ),
 				);
 			}
+		}
+		// Same rows and text as the classic cart totals (ProductChecks::residual_rows()), as plain text.
+		foreach ( ProductChecks::residual_losses( $cart ) as $loss ) {
+			$lost               = (float) $loss['value'] - (float) $loss['used'];
+			$data['forfeits'][] = array(
+				'code'      => wc_format_coupon_code( (string) $loss['code'] ),
+				'amount'    => (string) (int) round( $lost * ( 10 ** wc_get_price_decimals() ) ),
+				'formatted' => self::plain_price( $lost, (string) $loss['currency'] ),
+				'text'      => ProductChecks::residual_notice( $loss, true ),
+			);
 		}
 		if ( $this->credit->enabled() && is_user_logged_in() ) {
 			$account = $this->credit->account( get_current_user_id() );
@@ -143,6 +158,14 @@ final class CartBlocks {
 					'link_label' => $string,
 					'url'        => $string,
 				),
+			),
+			'forfeits'       => $rows(
+				array(
+					'code'      => $string,
+					'amount'    => $string,
+					'formatted' => $string,
+					'text'      => $string,
+				)
 			),
 		);
 	}
