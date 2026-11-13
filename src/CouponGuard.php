@@ -101,8 +101,16 @@ final class CouponGuard {
 		$this->failed  = false;
 	}
 
+	/** Same coupon code (wc_is_same_coupon() exists only from WooCommerce 9.x; the minimum is 8.9). */
+	private static function same_code( string $a, string $b ): bool {
+		if ( function_exists( 'wc_is_same_coupon' ) ) {
+			return wc_is_same_coupon( $a, $b );
+		}
+		return wc_strtolower( wc_format_coupon_code( $a ) ) === wc_strtolower( wc_format_coupon_code( $b ) );
+	}
+
 	private function concerns( $coupon ): bool {
-		return '' !== $this->code && $coupon instanceof \WC_Coupon && wc_is_same_coupon( (string) $coupon->get_code(), $this->code );
+		return '' !== $this->code && $coupon instanceof \WC_Coupon && self::same_code( (string) $coupon->get_code(), $this->code );
 	}
 
 	/** An existing code while the visitor's quota is used up: refused like an unknown one. */

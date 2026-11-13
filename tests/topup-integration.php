@@ -98,7 +98,7 @@ vcap_topup_assert( 120.0 === vcap_topup_balance( $card ), 'a top-up of 100 is bo
 $partial = vcap_topup_refund( $order, 40, array( $line => array( 'qty' => 0, 'refund_total' => 40 ) ) );
 vcap_topup_assert( ! is_wp_error( $partial ) && 80.0 === vcap_topup_balance( $card ), 'a partial refund of 40 on the top-up line takes 40 back from the card', is_wp_error( $partial ) ? $partial->get_error_message() : vcap_topup_balance( $card ) );
 vcap_topup_assert( 40.0 === (float) wc_get_order( $order->get_id() )->get_item( $line )->get_meta( TopUp::REVERSED_META ), 'the line remembers what was taken back' );
-do_action( 'woocommerce_order_partially_refunded', $order->get_id(), 0 );
+do_action( 'woocommerce_order_partially_refunded', $order->get_id(), $partial->get_id() ); // As WooCommerce passes it (its own listeners need the refund).
 vcap_topup_assert( 80.0 === vcap_topup_balance( $card ), 'handling the same refunds again takes nothing more back' );
 $rest = vcap_topup_refund( wc_get_order( $order->get_id() ), 60, array( $line => array( 'qty' => 1, 'refund_total' => 60 ) ) );
 vcap_topup_assert( ! is_wp_error( $rest ) && 'refunded' === wc_get_order( $order->get_id() )->get_status() && 20.0 === vcap_topup_balance( $card ), 'refunding the rest refunds the order and takes the remaining 60 back (card back at 20)', is_wp_error( $rest ) ? $rest->get_error_message() : vcap_topup_balance( $card ) );
