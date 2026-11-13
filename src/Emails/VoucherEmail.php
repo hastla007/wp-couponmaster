@@ -55,6 +55,16 @@ abstract class VoucherEmail extends \WC_Email {
 		return $sent;
 	}
 
+	/** Marks the mail as a Voucher Captain mail, so Site Health records it if it fails (see Health). */
+	public function send( $to, $subject, $message, $headers, $attachments ) {
+		\VCAP\Health::mail_begin( (string) $this->get_title() );
+		try {
+			return parent::send( $to, $subject, $message, $headers, $attachments );
+		} finally {
+			\VCAP\Health::mail_end();
+		}
+	}
+
 	public function get_attachments() {
 		$attachments = parent::get_attachments();
 		if ( $this->voucher && 'yes' === $this->get_option( 'attach_pdf', get_option( 'vcap_attach_pdf', 'yes' ) ) && class_exists( '\Dompdf\Dompdf' ) ) {

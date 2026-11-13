@@ -252,4 +252,21 @@ $owner_html = $render_order();
 vcap_security_assert( str_contains( $owner_html, $tracked_voucher->code ) && str_contains( $owner_html, 'vcap_pdf=' ), 'the order\'s customer sees the codes and PDF links' );
 wp_set_current_user( 0 );
 
+// Failed-mail log (Site Health): only Voucher Captain mails, no personal data, pruned, included in the erasure.
+delete_option( VCAP\Health::MAIL_LOG );
+do_action( 'wp_mail_failed', new WP_Error( 'wp_mail_failed', 'SMTP connect() failed.', array( 'to' => array( 'someone@example.test' ), 'subject' => 'Password reset' ) ) );
+vcap_security_assert( array() === VCAP\Health::mail_failures(), 'failed mails of other plugins are not recorded' );
+VCAP\Health::mail_begin( 'Voucher to recipient' );
+do_action( 'wp_mail_failed', new WP_Error( 'wp_mail_failed', 'SMTP Error: The following recipients failed: jane.roe@example.test', array( 'to' => array( 'jane.roe@example.test' ), 'subject' => 'Jane Roe sends you a voucher' ) ) );
+VCAP\Health::mail_end();
+$mail_log = VCAP\Health::mail_failures();
+$mail_raw = wp_json_encode( get_option( VCAP\Health::MAIL_LOG ) );
+vcap_security_assert( 1 === count( $mail_log ) && ! str_contains( $mail_raw, 'jane.roe' ) && ! str_contains( $mail_raw, 'Jane Roe' ) && str_contains( $mail_log[0]['error'], 'j***@example.test' ) && 'Voucher to recipient' === $mail_log[0]['email'], 'a failed voucher mail is recorded without addresses (also in the error text) or the subject' );
+update_option( VCAP\Health::MAIL_LOG, array_merge( $mail_log, array( array( 'time' => time() - 8 * DAY_IN_SECONDS, 'to' => 'o***@example.test', 'error' => 'old' ) ) ), false );
+VCAP\Health::prune_mail_failures();
+vcap_security_assert( 1 === count( (array) get_option( VCAP\Health::MAIL_LOG ) ), 'entries older than 7 days are removed by the daily maintenance' );
+$privacy->erase( 'jane.roe@example.test', 1 );
+vcap_security_assert( array() === VCAP\Health::mail_failures(), 'the privacy eraser removes the failed-mail entries of the address' );
+delete_option( VCAP\Health::MAIL_LOG );
+
 echo "Voucher Captain security and privacy checks passed.\n";

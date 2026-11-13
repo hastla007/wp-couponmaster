@@ -279,7 +279,9 @@ $health_tests = apply_filters( 'site_status_tests', array( 'direct' => array(), 
 vcap_compat_assert( isset( $health_tests['direct']['vcap_scheduler'], $health_tests['direct']['vcap_mail'], $health_tests['direct']['vcap_upload_dir'], $health_tests['direct']['vcap_redeem_page'] ), 'Voucher Captain adds its checks to Site Health' );
 $mail_test = $health_tests['direct']['vcap_mail']['test'];
 vcap_compat_assert( 'good' === call_user_func( $mail_test )['status'], 'without failed mails the mail check is good' );
+VCAP\Health::mail_begin( 'Voucher to recipient' ); // Only Voucher Captain mails are recorded.
 do_action( 'wp_mail_failed', new WP_Error( 'wp_mail_failed', 'SMTP connect() failed.', array( 'to' => array( 'jane.doe@example.com' ), 'subject' => 'Your voucher' ) ) );
+VCAP\Health::mail_end();
 $failures = VCAP\Health::mail_failures();
 vcap_compat_assert( 1 === count( $failures ) && ! str_contains( $failures[0]['to'], 'jane.doe' ) && str_contains( $failures[0]['error'], 'SMTP' ), 'a failed mail is recorded with a masked address' );
 vcap_compat_assert( 'critical' === call_user_func( $mail_test )['status'], 'failed mails are reported in Site Health' );
