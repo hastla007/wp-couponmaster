@@ -209,6 +209,8 @@ final class RestController {
 	}
 
 	/**
+	 * Whether the value starts with one of the prefixes.
+	 *
 	 * @param string   $value    Key or target.
 	 * @param string[] $prefixes Prefixes.
 	 * @return bool

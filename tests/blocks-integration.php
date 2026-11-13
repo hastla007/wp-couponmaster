@@ -109,7 +109,7 @@ $block_goods->set_virtual( true );
 $block_goods->save();
 WC()->cart->add_to_cart( $block_goods->get_id(), 1 );
 WC()->cart->apply_coupon( $block_card->code );
-$block_cart = rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/cart' ) )->get_data();
+$block_cart = json_decode( (string) wp_json_encode( rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/cart' ) )->get_data() ), true ); // Extension data may be objects.
 $block_ext  = $block_cart['extensions']['voucher-captain'] ?? array();
 $minor      = 10 ** wc_get_price_decimals();
 vcap_blocks_assert( isset( $block_ext['payments'][0] ) && $block_card->code === $block_ext['payments'][0]['code'] && (string) ( 30 * $minor ) === $block_ext['payments'][0]['amount'] && false !== strpos( $block_ext['payments'][0]['label'], strtoupper( $block_card->code ) ), 'Store API cart: the voucher payment row "Voucher CODE" with its amount (30)' );
@@ -132,7 +132,7 @@ $block_user = wp_insert_user(
 wp_set_current_user( $block_user );
 vcap()->store_credit->adjust( $block_user, 15, 'Block test' );
 WC()->cart->add_to_cart( $block_goods->get_id(), 1 );
-$credit_ext = rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/cart' ) )->get_data()['extensions']['voucher-captain'] ?? array();
+$credit_ext = json_decode( (string) wp_json_encode( rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/cart' ) )->get_data() ), true )['extensions']['voucher-captain'] ?? array();
 vcap_blocks_assert( is_array( $credit_ext['store_credit'] ?? null ) && false !== strpos( $credit_ext['store_credit']['url'], 'vcap_apply_credit' ) && '' !== $credit_ext['store_credit']['text'], 'Store API cart: the "use store credit" hint with its link for a customer with credit' );
 wp_set_current_user( 0 );
 WC()->cart->empty_cart();

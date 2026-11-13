@@ -176,8 +176,10 @@ final class Shortcodes {
 				$session->set_customer_session_cookie( true ); // Guests need a session to keep the code.
 			}
 			$session->set( self::PREFILL_KEY, '' !== $code ? $code : null );
-			nocache_headers();
-			header( 'Referrer-Policy: no-referrer' );
+			if ( ! headers_sent() ) {
+				nocache_headers();
+				header( 'Referrer-Policy: no-referrer' );
+			}
 			wp_safe_redirect( remove_query_arg( 'vcap_code' ) );
 			exit;
 		}
