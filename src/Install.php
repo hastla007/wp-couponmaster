@@ -14,7 +14,13 @@ final class Install {
 	public const OPTION_DB_VERSION = 'vcap_db_version';
 	/** Set while the database schema is incomplete (cleared once an upgrade verified it). */
 	public const SCHEMA_ERROR_OPTION = 'vcap_schema_error';
+	/** Upgrade lock (options row holding its expiry time). */
+	public const UPGRADE_LOCK = 'vcap_upgrade_lock';
+	/** Marker of Plugin::ensure_schedules() (deleted to have the recurring tasks checked again). */
+	public const SCHEDULES_OPTION = 'vcap_schedules_checked';
+	private const LOCK_SECONDS = 300;
 	private static ?bool $transactional_tables = null;
+	private static ?string $lock_value = null;
 
 	/** @var array<string, callable-string> */
 	private const MIGRATIONS = array(
@@ -88,16 +94,32 @@ final class Install {
 	}
 
 	public static function activate_site(): void {
-		self::create_tables();
-		self::add_caps();
-		self::ensure_upload_dir();
-		self::finish_schema();
-		if ( ! get_option( 'vcap_secret' ) ) {
-			update_option( 'vcap_secret', wp_generate_password( 64, true, true ), false );
+		// Schema work only under the upgrade lock; when another request holds it, that request finishes the schema.
+		$locked = self::lock();
+		try {
+			if ( $locked ) {
+				$installed = self::stored_version();
+				// After a downgrade the newer schema stays as it is (see maybe_upgrade()).
+				if ( '' === $installed || version_compare( $installed, VCAP_DB_VERSION, '<=' ) ) {
+					self::create_tables();
+					self::add_caps();
+					self::ensure_upload_dir();
+					if ( self::run_migrations( $installed ) ) {
+						self::finish_schema();
+					}
+				}
+			}
+			if ( ! get_option( 'vcap_secret' ) ) {
+				update_option( 'vcap_secret', wp_generate_password( 64, true, true ), false );
+			}
+			add_option( 'vcap_needs_default_template', 'yes' );
+			update_option( 'vcap_flush_rewrite', 'yes' );
+			self::restore_balance_coupons();
+		} finally {
+			if ( $locked ) {
+				self::unlock();
+			}
 		}
-		add_option( 'vcap_needs_default_template', 'yes' );
-		update_option( 'vcap_flush_rewrite', 'yes' );
-		self::restore_balance_coupons();
 	}
 
 	public static function deactivate_site(): void {
@@ -186,28 +208,123 @@ final class Install {
 		self::flush_coupon_cache();
 	}
 
+	/**
+	 * Brings the schema of this site to VCAP_DB_VERSION. Runs on every request until the stored version matches,
+	 * but only one request at a time does the work (upgrade lock); the others carry on with the old schema.
+	 * A newer stored version (the plugin was downgraded) is never lowered: migrations would otherwise run twice
+	 * after the next update. Administrators see a notice instead.
+	 */
 	public static function maybe_upgrade(): void {
-		$installed = get_option( self::OPTION_DB_VERSION );
-		if ( VCAP_DB_VERSION === $installed || get_transient( 'vcap_schema_retry' ) ) {
+		$installed = (string) get_option( self::OPTION_DB_VERSION );
+		if ( VCAP_DB_VERSION === $installed ) {
 			return;
 		}
-		if ( ! $installed ) {
-			// Never activated on this site (a network-activated plugin on a new or not yet visited site).
-			self::activate_site();
+		if ( '' !== $installed && version_compare( $installed, VCAP_DB_VERSION, '>' ) ) {
+			add_action( 'admin_notices', array( self::class, 'downgrade_notice' ) );
 			return;
 		}
-		self::create_tables();
-		self::add_caps();
-		self::ensure_upload_dir();
+		if ( get_transient( 'vcap_schema_retry' ) || ! self::lock() ) {
+			return;
+		}
+		try {
+			// The request that held the lock before may have finished the upgrade meanwhile.
+			$installed = self::stored_version();
+			if ( VCAP_DB_VERSION === $installed || ( '' !== $installed && version_compare( $installed, VCAP_DB_VERSION, '>' ) ) ) {
+				return;
+			}
+			if ( '' === $installed ) {
+				// Never activated on this site (a network-activated plugin on a new or not yet visited site).
+				self::unlock();
+				self::activate_site();
+				return;
+			}
+			self::create_tables();
+			self::add_caps();
+			self::ensure_upload_dir();
+			if ( ! get_option( 'vcap_secret' ) ) {
+				update_option( 'vcap_secret', wp_generate_password( 64, true, true ), false );
+			}
+			// A data migration that stopped after its time budget continues on the next request.
+			if ( self::run_migrations( $installed ) ) {
+				self::finish_schema();
+			}
+			// Recurring tasks are checked again after an update (see Plugin::ensure_schedules()).
+			delete_option( self::SCHEDULES_OPTION );
+		} finally {
+			self::unlock();
+		}
+	}
+
+	/**
+	 * Runs the data migrations newer than $installed, in order.
+	 *
+	 * @return bool False while a migration still has work left (it continues on the next request).
+	 */
+	private static function run_migrations( string $installed ): bool {
+		if ( '' === $installed ) {
+			return true; // New installation: nothing to migrate.
+		}
 		foreach ( self::MIGRATIONS as $version => $method ) {
-			if ( $installed && version_compare( $installed, $version, '<' ) ) {
-				self::$method();
+			if ( version_compare( $installed, $version, '<' ) && false === self::$method() ) {
+				return false;
 			}
 		}
-		if ( ! get_option( 'vcap_secret' ) ) {
-			update_option( 'vcap_secret', wp_generate_password( 64, true, true ), false );
+		return true;
+	}
+
+	/** The stored schema version, read from the database (the options cache can be stale under the lock). */
+	private static function stored_version(): string {
+		global $wpdb;
+		return (string) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::OPTION_DB_VERSION ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
+
+	/**
+	 * Upgrade lock: one options row created with INSERT IGNORE (only one request succeeds), holding its expiry
+	 * time. A lock left behind by a request that died is taken over once it has expired.
+	 */
+	private static function lock(): bool {
+		global $wpdb;
+		$now    = time();
+		$expiry = (string) ( $now + self::LOCK_SECONDS );
+		$wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", self::UPGRADE_LOCK, $expiry ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$taken = 1 === (int) $wpdb->rows_affected;
+		if ( ! $taken ) {
+			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND CAST(option_value AS UNSIGNED) < %d", $expiry, self::UPGRADE_LOCK, $now ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$taken = 1 === (int) $wpdb->rows_affected;
 		}
-		self::finish_schema();
+		if ( $taken ) {
+			self::$lock_value = $expiry;
+			wp_cache_delete( self::UPGRADE_LOCK, 'options' );
+			wp_cache_delete( 'notoptions', 'options' );
+		}
+		return $taken;
+	}
+
+	/** Gives the upgrade lock back (only the lock this request holds). */
+	private static function unlock(): bool {
+		global $wpdb;
+		if ( null === self::$lock_value ) {
+			return false;
+		}
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value = %s", self::UPGRADE_LOCK, self::$lock_value ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		self::$lock_value = null;
+		wp_cache_delete( self::UPGRADE_LOCK, 'options' );
+		return true;
+	}
+
+	/** The database was updated by a newer Voucher Captain than the one running now. */
+	public static function downgrade_notice(): void {
+		if ( ! current_user_can( 'activate_plugins' ) ) {
+			return;
+		}
+		echo '<div class="notice notice-error"><p>' . esc_html(
+			sprintf(
+				/* translators: 1: database version in use, 2: database version of the running plugin */
+				__( 'Voucher Captain: the voucher database was updated by a newer plugin version (database version %1$s; this version expects %2$s). The data is left unchanged. Install the newer version again, or restore the backup taken before the update together with this version.', 'voucher-captain' ),
+				(string) get_option( self::OPTION_DB_VERSION ),
+				VCAP_DB_VERSION
+			)
+		) . '</p></div>';
 	}
 
 	public static function tables(): array {
@@ -412,7 +529,11 @@ final class Install {
 			return false;
 		}
 		delete_option( self::SCHEMA_ERROR_OPTION );
-		update_option( self::OPTION_DB_VERSION, VCAP_DB_VERSION );
+		$installed = self::stored_version();
+		if ( '' === $installed || version_compare( $installed, VCAP_DB_VERSION, '<' ) ) {
+			// Never lowered (downgrade), see maybe_upgrade().
+			update_option( self::OPTION_DB_VERSION, VCAP_DB_VERSION );
+		}
 		return true;
 	}
 
