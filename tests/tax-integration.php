@@ -218,7 +218,12 @@ update_option( 'woocommerce_prices_include_tax', 'yes' );
 list( $mixed, $left ) = $pay_with_card( $order_with( array( array( $goods, 100 ), array( $goods_reduced, 100 ) ), 'AT', 'tax-mixed@example.com' ), 115 );
 vcap_tax_assert( abs( 230.0 - (float) $mixed->get_subtotal() - ( (float) $mixed->get_cart_tax() + (float) $mixed->get_discount_tax() ) ) < 0.05, 'mixed-rate order: 120 at 20 % + 110 at 10 % = 230 gross before the card' );
 vcap_tax_assert( abs( 115.0 - (float) $mixed->get_total() ) < 0.03 && $left < 0.03, 'mixed rates, gross prices: a 115 card pays 115 of 230 and is used up exactly' );
-vcap_tax_assert( abs( 15.0 - (float) $mixed->get_total_tax() ) < 0.05, 'mixed rates, gross prices: each line keeps its rate on the remaining half (10 + 5 VAT)' );
+$line_rates = array();
+foreach ( $mixed->get_items() as $line ) {
+	$line_rates[ $line->get_name() ] = (float) $line->get_total() > 0 ? round( (float) $line->get_total_tax() / (float) $line->get_total(), 3 ) : null;
+}
+vcap_tax_assert( array( 'Taxed goods' => 0.2, 'Reduced-rate goods' => 0.1 ) === $line_rates, 'mixed rates, gross prices: each line keeps its own rate after the card (20 % and 10 %)', $line_rates );
+vcap_tax_assert( abs( 115.0 - (float) $mixed->get_total_tax() - array_sum( array_map( static fn( $l ) => (float) $l->get_total(), $mixed->get_items() ) ) ) < 0.03, 'mixed rates, gross prices: the remaining 115 is net + VAT of both lines', array( 'tax' => $mixed->get_total_tax() ) );
 
 // 7.2 Same with net prices: the card still pays gross (net share + its VAT), across both rates.
 update_option( 'woocommerce_prices_include_tax', 'no' );

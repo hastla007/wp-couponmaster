@@ -174,7 +174,7 @@ ihm abgebucht wird. Spezifikation und Nachweis (`tests/tax-integration.php`, Abs
 
 | Nr. | Fall | Festgelegtes Verhalten | Nachweis |
 |---|---|---|---|
-| 10.1 | **Mehrere Steuersätze in einer Bestellung** (z. B. 20 % und 10 %), Bruttopreise | Gutscheinbetrag wird nach Wert auf die Positionen verteilt; jede Position behält ihren Satz; abgebucht wird genau der bezahlte Betrag. Beispiel: 120 € (20 %) + 110 € (10 %), Karte 115 € → Rest 115 €, USt 10 € + 5 €, Karte 0 €. | „mixed rates, gross prices …“ |
+| 10.1 | **Mehrere Steuersätze in einer Bestellung** (z. B. 20 % und 10 %), Bruttopreise | WooCommerce verteilt den Gutscheinbetrag anteilig auf die Positionen; jede Position behält ihren Satz; abgebucht wird genau der bezahlte Betrag. Beispiel: 120 € (20 %) + 110 € (10 %), Karte 115 € → Rest 115 € (netto + USt beider Positionen), Karte 0 €. Die Aufteilung der USt auf die Sätze folgt der WooCommerce-Verteilung. | „mixed rates, gross prices …“ (3 Prüfungen) |
 | 10.2 | Mehrere Steuersätze, **Nettopreise** | Karte bezahlt brutto (Nettoanteil + dessen USt) über beide Sätze; abgebucht wird genau der Kartenwert. | „mixed rates, net prices …“ |
 | 10.3 | **Leistungsort im anderen EU-Land (OSS)**, Steuer nach Rechnungsland | Die Bestellung trägt nur den Satz des Käuferlands (z. B. DE 19 %); die Karte bezahlt brutto und wird genau um den bezahlten Betrag belastet. Der Gutscheinwert bleibt in der Shop-Basiswährung; das Land der Einlösung spielt für den Wert keine Rolle. | „OSS: …“ (3 Prüfungen) |
 | 10.4 | **Gleicher Bruttopreis in allen Ländern** (WooCommerce-Filter `woocommerce_adjust_non_base_location_prices` = false) | Ein steuerpflichtiger Gutschein für „50 €“ kostet überall 50 € brutto und ist 50 € wert. | „same gross price …“ |
