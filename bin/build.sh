@@ -48,9 +48,16 @@ if grep -rqE '(^|[^\\])Sabberworm\\CSS' "$DEST/vendor" --include=*.php --exclude
 fi
 rm -f "$DEST/composer.lock"
 
-# Strip VCS data, tests and docs from vendor.
+# Strip VCS data, tests and docs from vendor – but never licence, copyright or notice files (LGPL/GPL/MIT/Apache
+# require them; e.g. picqer/php-barcode-generator ships its LGPL-3.0 text as LICENSE.md).
 find "$DEST/vendor" -type d \( -name .git -o -name .github -o -name tests -o -name Tests -o -name docs -o -name doc -o -name examples \) -prune -exec rm -rf {} +
-find "$DEST/vendor" -type f \( -name '*.md' -o -name 'phpunit*' -o -name '.gitignore' -o -name '.gitattributes' -o -name '.editorconfig' -o -name 'phpcs.xml*' -o -name 'phpstan*' \) -delete
+find "$DEST/vendor" -type f \( -name '*.md' -o -name 'phpunit*' -o -name '.gitignore' -o -name '.gitattributes' -o -name '.editorconfig' -o -name 'phpcs.xml*' -o -name 'phpstan*' \) \
+	! -iname 'LICENSE*' ! -iname 'LICENCE*' ! -iname 'COPYING*' ! -iname 'NOTICE*' ! -iname 'AUTHORS*' -delete
+
+# Third-party licences (RELEASE.md): GPL-3.0 text for the LGPL-3.0 packages, DejaVu font licence, and
+# THIRD-PARTY-NOTICES.txt from the installed packages; fails when a bundled package has no licence file.
+cp -R "$ROOT/licenses" "$DEST/"
+php "$ROOT/bin/third-party-notices.php" "$DEST"
 
 find "$DEST" -exec touch -h -d "@$SOURCE_DATE_EPOCH" {} +
 ( cd "$OUT" && find "$SLUG" -print | LC_ALL=C sort | TZ=UTC zip -qX -@ "$SLUG.zip" )

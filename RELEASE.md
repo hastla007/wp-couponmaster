@@ -81,6 +81,15 @@ The wide scans were introduced on an existing code base and report its findings 
 - When a scan has no findings left (or only baselined ones), remove `continue-on-error` from its job so it gates
   releases like the others.
 
+## Third-party licences
+
+The release ZIP bundles Composer packages (`vendor/`) and dompdf's fonts. `bin/build.sh` keeps every `LICENSE*`,
+`LICENCE*`, `COPYING*`, `NOTICE*` and `AUTHORS*` file of the packages, copies the texts in `licenses/` (GPL-3.0,
+required by the LGPL-3.0 packages; DejaVu/Bitstream Vera font licence) and writes `THIRD-PARTY-NOTICES.txt` from the
+installed packages' Composer metadata (`bin/third-party-notices.php`). The build fails when a bundled package has no
+licence file; the CI job `quality` checks the finished ZIP again (`--check-zip`). When a dependency is added, check its
+licence is GPL-compatible and update the list in `README.md`.
+
 ## Reproducible ZIP
 
 `bin/build.sh` builds `build/voucher-captain.zip` and `build/voucher-captain.zip.sha256`. Identical sources give a

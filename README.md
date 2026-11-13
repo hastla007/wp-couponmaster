@@ -100,4 +100,19 @@ Templates lassen sich im Theme unter `woocommerce/voucher-captain/` überschreib
 
 ## Lizenz
 
-GPL-2.0-or-later. Mitgelieferte Bibliotheken: dompdf (LGPL-2.1), chillerlan/php-qrcode (MIT), picqer/php-barcode-generator (LGPL-3.0), jsQR (Apache-2.0).
+Voucher Captain: GPL-2.0-or-later ([LICENSE](LICENSE)). Das Release-ZIP enthält diese Bibliotheken und Schriften; jede behält ihre Lizenzdatei im `vendor/`-Ordner, die Übersicht steht in `THIRD-PARTY-NOTICES.txt` im ZIP (erzeugt von `bin/third-party-notices.php`, siehe [RELEASE.md](RELEASE.md#third-party-licences)):
+
+| Komponente | Lizenz | Hinweis |
+|---|---|---|
+| dompdf/dompdf | LGPL-2.1 | PDF-Erzeugung |
+| dompdf/php-font-lib | LGPL-2.1-or-later | von dompdf |
+| dompdf/php-svg-lib | LGPL-3.0-or-later | von dompdf; GPL-3.0-Text in `licenses/GPL-3.0.txt` |
+| masterminds/html5 | MIT | von dompdf |
+| sabberworm/php-css-parser | MIT | von dompdf; beim Build in den Namensraum `VCAP\Vendor\` verschoben (`bin/scope-vendor.php`) |
+| chillerlan/php-qrcode | MIT oder Apache-2.0 | QR-Codes |
+| chillerlan/php-settings-container | MIT | von php-qrcode |
+| picqer/php-barcode-generator | LGPL-3.0-or-later | Barcodes; GPL-3.0-Text in `licenses/GPL-3.0.txt` |
+| DejaVu-Schriften (mit dompdf) | Bitstream-Vera- und Arev-Lizenz, DejaVu-Änderungen gemeinfrei | `licenses/DejaVu-Fonts-LICENSE.txt` |
+| Adobe-Core-14-Fontmetriken (`*.afm`, mit dompdf) | Adobe-Hinweis in jeder Datei | |
+
+Der Kamera-Scanner nutzt den nativen `BarcodeDetector` und, falls vorhanden, `jsQR` (Apache-2.0) als Rückfall; jsQR liegt derzeit nicht im Repository/ZIP.

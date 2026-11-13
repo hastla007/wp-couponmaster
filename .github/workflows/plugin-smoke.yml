@@ -610,6 +610,10 @@ jobs:
         run: phpcs --standard=WooCommerce-Core --extensions=php --exclude=WordPress.Files.FileName src/API/V1 src/Contracts
       - name: Analyze API and contract types
         run: phpstan analyse --configuration=phpstan.neon.dist --no-progress
+      - name: Release ZIP ships a licence file for every bundled package and the third-party notices
+        run: |
+          bin/build.sh
+          php bin/third-party-notices.php --check-zip build/voucher-captain.zip
 
   quality-wide:
     # Wide scan of the whole plugin (src/, templates/, config/, main and uninstall file): PHPCS with phpcs.xml.dist
