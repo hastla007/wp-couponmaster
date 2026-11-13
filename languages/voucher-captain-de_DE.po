@@ -4098,3 +4098,51 @@ msgstr "Aufladung zurückgenommen: %1$s zurückgebucht, %2$s war bereits ausgege
 
 msgid "Gift card top-up reversed: %s taken back."
 msgstr "Aufladung zurückgenommen: %s zurückgebucht."
+
+msgid "Pass Captain booked a voucher payment that Voucher Captain does not know."
+msgstr "Pass Captain hat eine Gutscheinzahlung gebucht, die Voucher Captain nicht kennt."
+
+msgid "Pass Captain could not confirm the voucher payment (commit failed) – check the order."
+msgstr "Pass Captain konnte die Gutscheinzahlung nicht bestätigen (Commit fehlgeschlagen) – bitte die Bestellung prüfen."
+
+msgid "State differs: Pass Captain \"%1$s\", Voucher Captain \"%2$s\"."
+msgstr "Status weicht ab: Pass Captain „%1$s“, Voucher Captain „%2$s“."
+
+msgid "Amount differs: Pass Captain %1$s, Voucher Captain %2$s."
+msgstr "Betrag weicht ab: Pass Captain %1$s, Voucher Captain %2$s."
+
+msgid "Refunds differ: Pass Captain refunded %1$s of the voucher share, Voucher Captain gave back %2$s."
+msgstr "Erstattungen weichen ab: Pass Captain hat %1$s des Gutscheinanteils erstattet, Voucher Captain %2$s zurückgebucht."
+
+msgid "Voucher Captain holds a redemption for Pass Captain without a matching Pass Captain order."
+msgstr "Voucher Captain führt eine Einlösung für Pass Captain ohne passende Pass-Captain-Bestellung."
+
+msgid "The tickets were cancelled in Pass Captain, but the voucher still counts as exchanged."
+msgstr "Die Tickets wurden in Pass Captain storniert, der Gutschein gilt aber noch als eingetauscht."
+
+msgid "Pass Captain reconciliation"
+msgstr "Abgleich mit Pass Captain"
+
+msgid "Ticket checkout"
+msgstr "Ticket-Checkout"
+
+msgid "Ticket voucher"
+msgstr "Ticketgutschein"
+
+msgid "Without order"
+msgstr "Ohne Bestellung"
+
+msgid "Compares the vouchers used in WP Pass Captain (ticket checkout and ticket vouchers) with the redemptions in Voucher Captain: state, amount and refunds. %d Pass Captain orders checked; only differences are listed, nothing is changed."
+msgstr "Vergleicht die in WP Pass Captain verwendeten Gutscheine (Ticket-Checkout und Ticketgutscheine) mit den Einlösungen in Voucher Captain: Status, Betrag und Erstattungen. %d Pass-Captain-Bestellungen geprüft; es werden nur Abweichungen aufgeführt, nichts wird geändert."
+
+msgid "Kind"
+msgstr "Art"
+
+msgid "Pass Captain order"
+msgstr "Pass-Captain-Bestellung"
+
+msgid "Difference"
+msgstr "Abweichung"
+
+msgid "No differences found."
+msgstr "Keine Abweichungen gefunden."

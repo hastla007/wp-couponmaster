@@ -411,6 +411,17 @@ $has_contract = defined( 'PassCaptain\\Integrations\\WooCommerce\\OrderAdapter::
 vcap_pc_assert( true === apply_filters( 'wpcap_woocommerce_hold_fulfilment', false, $short_order ) && $has_contract === VCAP\Compat\PassCaptain::supports_hold_fulfilment(), 'a shortfall holds the ticket issuance; support for the hold is detected from Pass Captain\'s contract version' );
 vcap_pc_assert( false === apply_filters( 'wpcap_woocommerce_hold_fulfilment', false, wc_create_order() ), 'orders without a shortfall are not held' );
 
+// Reconciliation with Pass Captain: an old open redemption for Pass Captain without an order there is reported.
+global $wpdb;
+$orphan_key = 'orphan-' . strtolower( wp_generate_password( 10, false, false ) );
+$wpdb->insert( VCAP\Install::tables()['redemptions'], array( 'redemption_key' => $orphan_key, 'voucher_id' => vcap_pc_voucher( 'balance', 10 )->id, 'user_id' => 0, 'target' => 'passcaptain:order-none', 'amount' => 5, 'state' => 'reserved', 'request_hash' => str_repeat( 'b', 64 ), 'created_at' => gmdate( 'Y-m-d H:i:s', time() - 3 * HOUR_IN_SECONDS ), 'updated_at' => gmdate( 'Y-m-d H:i:s', time() - 3 * HOUR_IN_SECONDS ) ) );
+$reconcile = ( new VCAP\Compat\PassCaptainReconcile( vcap()->redemptions ) )->run();
+$orphans   = array_filter( $reconcile['issues'], static fn( $i ) => 'orphan' === $i['kind'] && $orphan_key === $i['key'] );
+vcap_pc_assert( VCAP\Compat\PassCaptainReconcile::available() && $reconcile['checked'] > 0 && 1 === count( $orphans ), 'the reconciliation checks Pass Captain orders and reports a redemption without an order' );
+$checkout_issues = array_filter( $reconcile['issues'], static fn( $i ) => 'checkout' === $i['kind'] && str_contains( $i['problem'], 'Amount differs' ) );
+vcap_pc_assert( array() === $checkout_issues, 'gift cards paid in the ticket checkout match Pass Captain\'s amounts' );
+$wpdb->delete( VCAP\Install::tables()['redemptions'], array( 'redemption_key' => $orphan_key ) );
+
 // Minor units follow ISO 4217 (as Pass Captain does), not the shop's price display setting.
 $decimals = static fn() => 0;
 add_filter( 'wc_get_price_decimals', $decimals );

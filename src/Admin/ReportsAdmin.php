@@ -29,7 +29,11 @@ final class ReportsAdmin {
 	/** Current report view: campaigns (default), liability or journal. */
 	private static function view(): string {
 		$view = sanitize_key( wp_unslash( $_GET['view'] ?? '' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only.
-		return in_array( $view, array( 'liability', 'journal' ), true ) ? $view : 'campaigns';
+		$views = array( 'liability', 'journal' );
+		if ( \VCAP\Compat\PassCaptainReconcile::available() ) {
+			$views[] = 'reconcile';
+		}
+		return in_array( $view, $views, true ) ? $view : 'campaigns';
 	}
 
 	private static function tabs( string $current ): void {
@@ -38,6 +42,9 @@ final class ReportsAdmin {
 			'liability' => __( 'Outstanding value', 'voucher-captain' ),
 			'journal'   => __( 'Redemption journal', 'voucher-captain' ),
 		);
+		if ( \VCAP\Compat\PassCaptainReconcile::available() ) {
+			$tabs['reconcile'] = __( 'Pass Captain reconciliation', 'voucher-captain' );
+		}
 		echo '<nav class="nav-tab-wrapper" aria-label="' . esc_attr__( 'Reports', 'voucher-captain' ) . '">';
 		foreach ( $tabs as $key => $label ) {
 			$url = add_query_arg( array( 'page' => 'vcap-reports', 'view' => $key ), admin_url( 'admin.php' ) );
@@ -57,6 +64,10 @@ final class ReportsAdmin {
 		}
 		if ( 'journal' === $view ) {
 			$this->journal_page();
+			return;
+		}
+		if ( 'reconcile' === $view ) {
+			$this->reconcile_page();
 			return;
 		}
 		list( $from, $to ) = self::range( $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only filter.
@@ -192,6 +203,49 @@ final class ReportsAdmin {
 						<td><?php echo wp_kses_post( wc_price( (float) $r['amount'], array( 'currency' => $r['currency'] ) ) ); ?></td>
 						<td><?php echo null === $r['balance_after'] ? '–' : wp_kses_post( wc_price( (float) $r['balance_after'], array( 'currency' => $r['currency'] ) ) ); ?></td>
 						<td><?php echo $r['order_id'] ? '#' . esc_html( (string) $r['order_id'] ) : '–'; ?></td>
+					</tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
+		</div>
+		<?php
+	}
+
+	/** Differences between Voucher Captain's redemptions and WP Pass Captain's orders. */
+	private function reconcile_page(): void {
+		$result = ( new \VCAP\Compat\PassCaptainReconcile( vcap()->redemptions ) )->run();
+		$kinds  = array(
+			'checkout' => __( 'Ticket checkout', 'voucher-captain' ),
+			'exchange' => __( 'Ticket voucher', 'voucher-captain' ),
+			'orphan'   => __( 'Without order', 'voucher-captain' ),
+		);
+		?>
+		<div class="wrap">
+			<h1><?php esc_html_e( 'Reports', 'voucher-captain' ); ?></h1>
+			<?php self::tabs( 'reconcile' ); ?>
+			<p class="description">
+				<?php
+				/* translators: %d: number of Pass Captain orders checked */
+				echo esc_html( sprintf( __( 'Compares the vouchers used in WP Pass Captain (ticket checkout and ticket vouchers) with the redemptions in Voucher Captain: state, amount and refunds. %d Pass Captain orders checked; only differences are listed, nothing is changed.', 'voucher-captain' ), (int) $result['checked'] ) );
+				?>
+			</p>
+			<table class="widefat striped">
+				<thead><tr>
+					<th><?php esc_html_e( 'Kind', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'Pass Captain order', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'Redemption key', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'Difference', 'voucher-captain' ); ?></th>
+				</tr></thead>
+				<tbody>
+				<?php if ( ! $result['issues'] ) : ?>
+					<tr><td colspan="4"><?php esc_html_e( 'No differences found.', 'voucher-captain' ); ?></td></tr>
+				<?php endif; ?>
+				<?php foreach ( $result['issues'] as $issue ) : ?>
+					<tr>
+						<td><?php echo esc_html( $kinds[ $issue['kind'] ] ?? $issue['kind'] ); ?></td>
+						<td><code><?php echo esc_html( $issue['order'] ); ?></code></td>
+						<td><code><?php echo esc_html( $issue['key'] ); ?></code></td>
+						<td><?php echo esc_html( $issue['problem'] ); ?></td>
 					</tr>
 				<?php endforeach; ?>
 				</tbody>

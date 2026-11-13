@@ -260,7 +260,7 @@ Fünf parallele Prüfungen (Sicherheit, Geld/Buchungen, Steuer/Recht/Datenschutz
 - [x] Rundungstoleranz in `reserve_order()` akzeptieren statt Checkout-Abbruch „Guthaben geändert“ (Währungsumrechnung, Netto-Shop mit vollem Guthaben). — *erledigt (fed93a8).*
 - [x] Eine Dezimalstellenregel (ISO 4217) für Shop-Buchungen (reserve/release/deduct/write_balance) und Einlöse-API – heute `wc_get_price_decimals()` vs. ISO. — *erledigt: `Voucher::decimals()` (ISO 4217 der Gutscheinwährung, Filter `vcap_currency_decimals`) für Reservieren, Freigeben, Abbuchen, Guthaben schreiben, Coupon-Betrag, Fehlbetrag, Guthabenkonto, Ausstellung und Erstattungsprüfung; nur die Warenkorb-Rundung bleibt bei WooCommerce.*
 - [x] `PassCaptainProvider::reserve()` bei Wiederholung nur Zustand `reserved` als Erfolg melden (nicht released/committed). — *erledigt (68eecb6).*
-- [ ] Abgleichbericht: VC-Einlösungen vs. PC-Snapshots (committed/released/refunded) und offene Gutschein-Rückbuchungen.
+- [x] Abgleichbericht: VC-Einlösungen vs. PC-Snapshots (committed/released/refunded) und offene Gutschein-Rückbuchungen. — *erledigt: Berichte → „Abgleich mit Pass Captain“ (`Compat\PassCaptainReconcile`): Status, Betrag und Erstattungen je Ticket-Checkout-Bestellung, stornierte Tickets bei weiter eingelöstem Ticketgutschein, Einlösungen ohne PC-Bestellung; nur Anzeige, keine Änderung; Test im pass-captain-Job.*
 
 ### Steuer, Recht und Datenschutz (DE/AT)
 

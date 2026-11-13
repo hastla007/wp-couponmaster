@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-13 00:55+0000\n"
+"POT-Creation-Date: 2026-11-13 00:57+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:75 src/API/V1/RedemptionService.php:117
@@ -429,7 +429,7 @@ msgstr ""
 msgid "Issued vouchers"
 msgstr ""
 
-#: src/Admin/Menu.php:39 src/Admin/Menu.php:39 src/Admin/ReportsAdmin.php:41 src/Admin/ReportsAdmin.php:67 src/Admin/ReportsAdmin.php:116 src/Admin/ReportsAdmin.php:164
+#: src/Admin/Menu.php:39 src/Admin/Menu.php:39 src/Admin/ReportsAdmin.php:48 src/Admin/ReportsAdmin.php:78 src/Admin/ReportsAdmin.php:127 src/Admin/ReportsAdmin.php:175
 msgid "Reports"
 msgstr ""
 
@@ -497,132 +497,174 @@ msgstr ""
 msgid "Not sent (email disabled or no valid address): %s"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:37
+#: src/Admin/ReportsAdmin.php:41
 msgid "Campaigns and codes"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:38 src/Admin/ReportsAdmin.php:130
+#: src/Admin/ReportsAdmin.php:42 src/Admin/ReportsAdmin.php:141
 msgid "Outstanding value"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:39
+#: src/Admin/ReportsAdmin.php:43
 msgid "Redemption journal"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:71 src/Admin/ReportsAdmin.php:168 src/Discounts/Admin.php:206
+#: src/Admin/ReportsAdmin.php:46
+msgid "Pass Captain reconciliation"
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:82 src/Admin/ReportsAdmin.php:179 src/Discounts/Admin.php:206
 msgid "From"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:72 src/Admin/ReportsAdmin.php:169 src/Discounts/Admin.php:207
+#: src/Admin/ReportsAdmin.php:83 src/Admin/ReportsAdmin.php:180 src/Discounts/Admin.php:207
 msgid "until"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:73 src/Admin/ReportsAdmin.php:121 src/Admin/ReportsAdmin.php:170
+#: src/Admin/ReportsAdmin.php:84 src/Admin/ReportsAdmin.php:132 src/Admin/ReportsAdmin.php:181
 msgid "Show"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:74 src/Admin/ReportsAdmin.php:171 src/Admin/VouchersListTable.php:89
+#: src/Admin/ReportsAdmin.php:85 src/Admin/ReportsAdmin.php:182 src/Admin/VouchersListTable.php:89
 msgid "Export CSV"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:76
+#: src/Admin/ReportsAdmin.php:87
 msgid "Paid and refunded orders created in this period. Discount = what customers saved (incl. tax); revenue = order total minus refunds. An order with several codes counts for each of them. \"Codes issued\" is the total for code campaigns and bonus promotions."
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:79 src/Admin/ReportsAdmin.php:128 src/Admin/VoucherAdmin.php:144 src/Fields.php:608 src/ProductSettings.php:80
+#: src/Admin/ReportsAdmin.php:90 src/Admin/ReportsAdmin.php:139 src/Admin/VoucherAdmin.php:144 src/Fields.php:608 src/ProductSettings.php:80
 msgid "Type"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:80
+#: src/Admin/ReportsAdmin.php:91
 msgid "Name"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:81
+#: src/Admin/ReportsAdmin.php:92
 msgid "Codes issued"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:82
+#: src/Admin/ReportsAdmin.php:93
 msgid "Uses"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:83
+#: src/Admin/ReportsAdmin.php:94
 msgid "Orders"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:84 src/Discounts/Admin.php:113 src/Discounts/Admin.php:409 src/Discounts/Admin.php:423
+#: src/Admin/ReportsAdmin.php:95 src/Discounts/Admin.php:113 src/Discounts/Admin.php:409 src/Discounts/Admin.php:423
 msgid "Discount"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:85
+#: src/Admin/ReportsAdmin.php:96
 msgid "Revenue"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:89
+#: src/Admin/ReportsAdmin.php:100
 msgid "No redemptions in this period."
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:120
+#: src/Admin/ReportsAdmin.php:131
 msgid "At the end of"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:122
+#: src/Admin/ReportsAdmin.php:133
 msgid "Export CSV (per voucher)"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:124
+#: src/Admin/ReportsAdmin.php:135
 msgid "Value customers could still redeem at the end of the chosen day: the balance of gift cards and store credit, and the value of single-use vouchers not yet redeemed or voided. Expired value is shown separately. Percentage and ticket vouchers carry no monetary value and are not included. Have your accountant decide how to book it."
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:127
+#: src/Admin/ReportsAdmin.php:138
 msgid "Currency"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:129
+#: src/Admin/ReportsAdmin.php:140
 msgid "Valid vouchers"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:131
+#: src/Admin/ReportsAdmin.php:142
 msgid "Expired vouchers"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:132
+#: src/Admin/ReportsAdmin.php:143
 msgid "Expired value"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:136
+#: src/Admin/ReportsAdmin.php:147
 msgid "No outstanding voucher value on this day."
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:173
+#: src/Admin/ReportsAdmin.php:184
 msgid "Redemptions, refunds, credits and corrections with their amount, in booking order. The page shows the first 1,000 bookings; the CSV contains up to 50,000."
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:176 src/Admin/Scanner.php:46 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:246 src/Compat/PassCaptainTickets.php:824 src/Compat/PassCaptainTickets.php:1034
+#: src/Admin/ReportsAdmin.php:187 src/Admin/Scanner.php:46 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:246 src/Compat/PassCaptainTickets.php:824 src/Compat/PassCaptainTickets.php:1034
 msgid "Date"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:177 src/Admin/Scanner.php:67 src/Admin/VouchersListTable.php:27 src/Privacy.php:43 templates/myaccount/vouchers-table.php:29 templates/myaccount/vouchers-table.php:55
+#: src/Admin/ReportsAdmin.php:188 src/Admin/Scanner.php:67 src/Admin/VouchersListTable.php:27 src/Privacy.php:43 templates/myaccount/vouchers-table.php:29 templates/myaccount/vouchers-table.php:55
 msgid "Code"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:178
+#: src/Admin/ReportsAdmin.php:189
 msgid "Booking"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:179 src/Admin/StoreCreditAdmin.php:60 src/Admin/StoreCreditAdmin.php:110 src/Admin/VoucherAdmin.php:224 src/Admin/VoucherAdmin.php:246 src/Discounts/Admin.php:129
+#: src/Admin/ReportsAdmin.php:190 src/Admin/StoreCreditAdmin.php:60 src/Admin/StoreCreditAdmin.php:110 src/Admin/VoucherAdmin.php:224 src/Admin/VoucherAdmin.php:246 src/Discounts/Admin.php:129
 msgid "Amount"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:180 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:246 src/StoreCredit.php:331
+#: src/Admin/ReportsAdmin.php:191 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:246 src/StoreCredit.php:331
 msgid "Balance after"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:181 src/Admin/Scanner.php:38 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:146 src/Admin/VoucherAdmin.php:246 src/Admin/VouchersListTable.php:32
+#: src/Admin/ReportsAdmin.php:192 src/Admin/Scanner.php:38 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:146 src/Admin/VoucherAdmin.php:246 src/Admin/VouchersListTable.php:32
 msgid "Order"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:185
+#: src/Admin/ReportsAdmin.php:196
 msgid "No bookings in this period."
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:218
+msgid "Ticket checkout"
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:219
+msgid "Ticket voucher"
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:220
+msgid "Without order"
+msgstr ""
+
+#. translators: %d: number of Pass Captain orders checked
+#: src/Admin/ReportsAdmin.php:229
+#, php-format
+msgid "Compares the vouchers used in WP Pass Captain (ticket checkout and ticket vouchers) with the redemptions in Voucher Captain: state, amount and refunds. %d Pass Captain orders checked; only differences are listed, nothing is changed."
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:234
+msgid "Kind"
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:235
+msgid "Pass Captain order"
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:236 src/Privacy.php:83
+msgid "Redemption key"
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:237
+msgid "Difference"
+msgstr ""
+
+#: src/Admin/ReportsAdmin.php:241
+msgid "No differences found."
 msgstr ""
 
 #: src/Admin/Scanner.php:24 src/Admin/Scanner.php:64
@@ -1247,6 +1289,40 @@ msgstr ""
 
 #: src/Compat/PassCaptainProvider.php:124
 msgid "This voucher reservation was already released. Please apply the voucher again."
+msgstr ""
+
+#: src/Compat/PassCaptainReconcile.php:52
+msgid "Pass Captain booked a voucher payment that Voucher Captain does not know."
+msgstr ""
+
+#: src/Compat/PassCaptainReconcile.php:58
+msgid "Pass Captain could not confirm the voucher payment (commit failed) – check the order."
+msgstr ""
+
+#. translators: 1: state in Pass Captain, 2: state in Voucher Captain
+#: src/Compat/PassCaptainReconcile.php:61
+#, php-format
+msgid "State differs: Pass Captain \"%1$s\", Voucher Captain \"%2$s\"."
+msgstr ""
+
+#. translators: 1: amount in Pass Captain, 2: amount in Voucher Captain
+#: src/Compat/PassCaptainReconcile.php:67
+#, php-format
+msgid "Amount differs: Pass Captain %1$s, Voucher Captain %2$s."
+msgstr ""
+
+#. translators: 1: refunded in Pass Captain, 2: given back in Voucher Captain
+#: src/Compat/PassCaptainReconcile.php:73
+#, php-format
+msgid "Refunds differ: Pass Captain refunded %1$s of the voucher share, Voucher Captain gave back %2$s."
+msgstr ""
+
+#: src/Compat/PassCaptainReconcile.php:81
+msgid "Voucher Captain holds a redemption for Pass Captain without a matching Pass Captain order."
+msgstr ""
+
+#: src/Compat/PassCaptainReconcile.php:100
+msgid "The tickets were cancelled in Pass Captain, but the voucher still counts as exchanged."
 msgstr ""
 
 #: src/Compat/PassCaptainScanner.php:48
@@ -3112,10 +3188,6 @@ msgstr ""
 
 #: src/Privacy.php:80
 msgid "Voucher redemptions"
-msgstr ""
-
-#: src/Privacy.php:83
-msgid "Redemption key"
 msgstr ""
 
 #: src/Privacy.php:84
