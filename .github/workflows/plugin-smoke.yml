@@ -297,6 +297,8 @@ jobs:
           php wp-cli.phar --path="$SERVER" rewrite structure '/%postname%/'
           php wp-cli.phar --path="$SERVER" plugin install woocommerce --version=11.2.2 --activate
           php wp-cli.phar --path="$SERVER" option update woocommerce_currency EUR
+          # The plugin loads its classes through Composer's autoloader (PSR-4, no third-party packages needed).
+          composer dump-autoload --no-dev --working-dir=wp-license --no-interaction
           ln -s "$GITHUB_WORKSPACE/wp-license" "$SERVER/wp-content/plugins/wp-license"
           php wp-cli.phar --path="$SERVER" plugin activate wp-license
           mkdir -p "$SERVER/wp-content/mu-plugins" "$SERVER/wp-content/wplc-releases" "$SERVER/packages"

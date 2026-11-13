@@ -24,6 +24,26 @@ final class RecipientEmail extends VoucherEmail {
 		return __( '{buyer_name} sent you a gift from {site_title}', 'voucher-captain' );
 	}
 
+	/**
+	 * WooCommerce caches the first default it hands out in the settings (WC_Settings_API::get_option()), which
+	 * would freeze the subject to the first voucher's variant (with or without the giver's name). As long as the
+	 * shop keeps the default, it is chosen per voucher.
+	 */
+	public function get_option( $key, $empty_value = null ) {
+		if ( 'subject' === $key ) {
+			if ( empty( $this->settings ) ) {
+				$this->init_settings();
+			}
+			$stored = (string) ( $this->settings['subject'] ?? '' );
+			$named  = __( '{buyer_name} sent you a gift from {site_title}', 'voucher-captain' );
+			$plain  = __( 'You received a gift from {site_title}', 'voucher-captain' );
+			if ( '' === $stored || $stored === $named || $stored === $plain ) {
+				return $this->get_default_subject();
+			}
+		}
+		return parent::get_option( $key, $empty_value );
+	}
+
 	public function get_default_heading() {
 		return __( 'You received a gift!', 'voucher-captain' );
 	}
