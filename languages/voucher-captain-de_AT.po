@@ -3767,3 +3767,9 @@ msgstr "WooCommerce-Gutschein konnte nicht aktiviert werden – bitte manuell ak
 
 msgid "The change could not be saved completely. Check the voucher history and the WooCommerce coupon."
 msgstr "Die Änderung konnte nicht vollständig gespeichert werden. Bitte prüfen Sie den Verlauf des Gutscheins und den WooCommerce-Gutschein."
+
+msgid "A voucher for \"%s\" could not be created (WooCommerce coupon not saved). It will be issued on the next attempt."
+msgstr "Ein Gutschein für „%s“ konnte nicht erstellt werden (WooCommerce-Gutschein nicht gespeichert). Er wird beim nächsten Versuch ausgestellt."
+
+msgid "Voucher %s was issued, but its history entry could not be written."
+msgstr "Gutschein %s wurde ausgestellt, der Verlaufseintrag konnte aber nicht geschrieben werden."

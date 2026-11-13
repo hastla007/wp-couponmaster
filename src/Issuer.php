@@ -242,13 +242,28 @@ final class Issuer {
 		$create_coupon = 'ticket' !== $voucher->type || $voucher->initial_amount > 0;
 		if ( apply_filters( 'vcap_create_coupon', $create_coupon, $voucher, $config ) ) {
 			$voucher->coupon_id = $this->coupons->create_coupon( $voucher, $config );
+			if ( ! $voucher->coupon_id || ! $this->repo->update( $voucher ) ) {
+				// Never leave a voucher without its WooCommerce coupon (the code would be sent but not work): undo
+				// this slot so the next issuing run creates it again, and tell the shop.
+				if ( $voucher->coupon_id ) {
+					wp_delete_post( $voucher->coupon_id, true );
+				}
+				$this->repo->delete( $voucher->id );
+				if ( $from_pool ) {
+					$this->pool->release( $code );
+				}
+				/* translators: %s: product name */
+				$order->add_order_note( sprintf( __( 'A voucher for "%s" could not be created (WooCommerce coupon not saved). It will be issued on the next attempt.', 'voucher-captain' ), $item->get_name() ) );
+				return null;
+			}
 			if ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
 				// Not redeemable before the gift is delivered.
 				$this->coupons->set_coupon_enabled( $voucher, false );
 			}
-			$this->repo->update( $voucher );
 		}
-		$this->repo->log( $voucher->id, 'issued', $voucher->initial_amount, $voucher->balance, '', $order->get_id() );
+		if ( ! $this->repo->log( $voucher->id, 'issued', $voucher->initial_amount, $voucher->balance, '', $order->get_id() ) ) {
+			$order->add_order_note( sprintf( /* translators: %s: code */ __( 'Voucher %s was issued, but its history entry could not be written.', 'voucher-captain' ), $voucher->code ) );
+		}
 		return $voucher;
 	}
 
