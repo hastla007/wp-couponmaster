@@ -300,4 +300,39 @@ vcap_acc_assert( abs( 20.0 - (float) $fx_checkout->get_meta( VCAP\Compat\MultiCu
 delete_option( VCAP\Compat\MultiCurrency::UNKNOWN_OPTION );
 delete_option( VCAP\Compat\MultiCurrency::HELD_OPTION );
 
+// A single-use voucher in an unpaid (failed) order counts as used for the refund guard of its purchase. Paid after
+// its purchase was refunded anyway (voucher voided), the order is held with a shortfall instead of being fulfilled.
+$single_product = new WC_Product_Simple();
+$single_product->set_name( 'Voucher 30' );
+$single_product->set_regular_price( '30' );
+$single_product->set_virtual( true );
+$single_product->update_meta_data( '_vcap_enabled', 'yes' );
+$single_product->update_meta_data( '_vcap_type', 'voucher' );
+$single_product->update_meta_data( '_vcap_usage', 'single' );
+$single_product->save();
+$single_buy = wc_create_order();
+$single_buy->add_product( $single_product, 1 );
+$single_buy->set_billing_email( 'acceptance-single@example.com' );
+$single_buy->calculate_totals();
+wc_get_order( $single_buy->get_id() )->payment_complete( 'txn-single-buy' );
+$single = vcap()->vouchers->for_order( $single_buy->get_id() )[0] ?? null;
+vcap_acc_assert( $single instanceof VCAP\Voucher && VCAP\Voucher::STATUS_ACTIVE === $single->status, 'a single-use voucher of 30 is issued' );
+$single_use = wc_create_order();
+$single_use->add_product( $product, 2 );
+$single_use->set_billing_email( 'acceptance-single@example.com' );
+$single_use->calculate_totals();
+vcap_acc_assert( true === $single_use->apply_coupon( $single->code ), 'the voucher is applied to a second order' );
+wc_get_order( $single_use->get_id() )->update_status( 'failed', 'Card declined.' );
+$single_guard = wc_create_refund( array( 'order_id' => $single_buy->get_id(), 'amount' => 30 ) );
+vcap_acc_assert( is_wp_error( $single_guard ) && str_contains( $single_guard->get_error_message(), $single->code ), 'the purchase of a single-use voucher sitting in an unpaid order cannot be refunded' );
+add_filter( 'vcap_allow_refund_of_spent_vouchers', '__return_true' );
+$single_forced = wc_create_refund( array( 'order_id' => $single_buy->get_id(), 'amount' => 30 ) );
+remove_filter( 'vcap_allow_refund_of_spent_vouchers', '__return_true' );
+vcap_acc_assert( ! is_wp_error( $single_forced ) && VCAP\Voucher::STATUS_VOID === vcap()->vouchers->get( $single->id )->status, 'refunded knowingly anyway, the voucher is voided' );
+wc_get_order( $single_use->get_id() )->payment_complete( 'txn-single-late' );
+$single_use = wc_get_order( $single_use->get_id() );
+$single_map = VCAP\CouponManager::order_map( $single_use, VCAP\CouponManager::SHORTFALL_AMOUNTS_META );
+vcap_acc_assert( 'on-hold' === $single_use->get_status() && VCAP\CouponManager::has_shortfall( $single_use ) && isset( $single_map[ wc_format_coupon_code( $single->code ) ] ), 'paying the order after the voucher was voided holds it with a shortfall instead of fulfilling the discount' );
+vcap_acc_assert( in_array( 'double_use', array_column( vcap()->vouchers->events( $single->id ), 'event' ), true ), 'the double use is in the voucher history' );
+
 echo "Voucher Captain acceptance checks passed.\n";

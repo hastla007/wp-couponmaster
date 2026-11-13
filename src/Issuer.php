@@ -36,6 +36,7 @@ final class Issuer {
 	public const CONFIG_REFUSED_META = '_vcap_config_refused';
 	/** Ledger event: the unspent purchased value was taken off a gift card whose purchase was refunded. */
 	public const PURCHASE_REFUNDED_EVENT = 'purchase_refunded';
+
 	/** Whether issuing runs inside a status transition (status changes wait until it is through). */
 	private bool $in_transition = false;
 	/** @var array<int, true> Orders to put on hold after their status transition (no exchange rate). */
@@ -439,6 +440,8 @@ final class Issuer {
 	 *  - Gift cards: spent = purchased value + net top-ups − balance (ledger), spent from the purchased value first
 	 *    (TopUp::shares()); so a refund of the purchase and refunds of top-ups together never pay out more than
 	 *    the balance. Purchased value already taken off the card by a refund does not count again.
+	 *  - Single-use vouchers: the whole value once redeemed, or while an unpaid order (pending, failed, on hold)
+	 *    still carries the code – it can be paid later with the discount (CouponManager::open_orders_with()).
 	 */
 	public static function spent_value( Voucher $voucher, ?VoucherRepository $repo = null ): float {
 		if ( $voucher->is_multi_use() ) {
@@ -450,7 +453,7 @@ final class Issuer {
 		if ( Voucher::STATUS_REDEEMED === $voucher->status ) {
 			return (float) $voucher->initial_amount;
 		}
-		return Voucher::STATUS_REDEEMED === $voucher->status ? (float) $voucher->initial_amount : 0.0;
+		return CouponManager::open_orders_with( $voucher ) ? (float) $voucher->initial_amount : 0.0;
 	}
 
 	/**
