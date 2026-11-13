@@ -1,6 +1,8 @@
 <?php
 namespace VCAP;
 
+defined( 'ABSPATH' ) || exit;
+
 /**
  * Minimal, dependency-free reader for the first worksheet of CSV, XLSX, ODS and legacy XLS (BIFF8) files.
  * Returns rows as arrays of strings. Designed for code lists, not for formulas or formatting.
