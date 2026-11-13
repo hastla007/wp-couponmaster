@@ -26,8 +26,11 @@ final class CouponManager {
 		add_action( 'woocommerce_order_status_changed', array( $this, 'order_status_changed' ), 20, 4 );
 		// Charge stored balances before anything is fulfilled (vouchers, bonus coupons, Pass Captain tickets run
 		// on the same status hooks with later priorities) and hold fulfilment while a shortfall is unresolved.
-		foreach ( (array) apply_filters( 'vcap_balance_deduct_statuses', array( 'processing', 'completed' ) ) as $status ) {
-			add_action( 'woocommerce_order_status_' . sanitize_key( (string) $status ), array( $this, 'settle_before_fulfilment' ), 1, 2 );
+		// Registered on init so a theme's or late plugin's `vcap_balance_deduct_statuses` filter is respected.
+		if ( did_action( 'init' ) ) {
+			$this->register_settle_hooks();
+		} else {
+			add_action( 'init', array( $this, 'register_settle_hooks' ), 0 );
 		}
 		add_filter( 'vcap_should_issue_for_order', array( $this, 'issue_unless_shortfall' ), 5, 2 );
 		add_filter( 'wpcap_woocommerce_hold_fulfilment', array( $this, 'hold_on_shortfall' ), 10, 2 );
@@ -985,10 +988,20 @@ final class CouponManager {
 		return 'yes' === $order->get_meta( self::SHORTFALL_META );
 	}
 
+	public static function deduct_statuses(): array {
+		return array_map( 'sanitize_key', (array) apply_filters( 'vcap_balance_deduct_statuses', array( 'processing', 'completed' ) ) );
+	}
+
+	public function register_settle_hooks(): void {
+		foreach ( self::deduct_statuses() as $status ) {
+			add_action( 'woocommerce_order_status_' . $status, array( $this, 'settle_before_fulfilment' ), 1, 2 );
+		}
+	}
+
 	/** Status hook, priority 1: commit and deduct before vouchers, bonus coupons or tickets are issued. */
 	public function settle_before_fulfilment( $order_id, $order = null ): void {
 		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
-		if ( ! $order instanceof \WC_Order || $order instanceof \WC_Order_Refund ) {
+		if ( ! $order instanceof \WC_Order || $order instanceof \WC_Order_Refund || ! in_array( $order->get_status(), self::deduct_statuses(), true ) ) {
 			return;
 		}
 		$this->settled[ $order->get_id() ] = true;
@@ -1038,7 +1051,7 @@ final class CouponManager {
 		if ( ! $order ) {
 			return;
 		}
-		$deduct_statuses  = apply_filters( 'vcap_balance_deduct_statuses', array( 'processing', 'completed' ) );
+		$deduct_statuses  = self::deduct_statuses();
 		$restore_statuses = apply_filters( 'vcap_balance_restore_statuses', array( 'cancelled', 'refunded', 'failed' ) );
 
 		if ( in_array( $to, $deduct_statuses, true ) ) {
