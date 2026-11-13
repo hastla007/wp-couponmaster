@@ -285,6 +285,48 @@ $small_spend->calculate_totals();
 list( $small_spend, $left ) = $pay_with_card( $small_spend, 50 );
 vcap_tax_assert( 0.0 === (float) $small_spend->get_total_tax() && abs( 70.0 - (float) $small_spend->get_total() ) < 0.001 && $left < 0.001, 'small business: a 50 card pays 50 of 120, no VAT anywhere' );
 
+/* ---- 8. Multi-purpose vouchers as a payment after tax (setting vcap_mpv_after_tax, TAX.md 4.1) -------- */
+
+update_option( 'woocommerce_calc_taxes', 'yes' );
+update_option( 'woocommerce_prices_include_tax', 'yes' );
+update_option( VCAP\PaymentVouchers::OPTION, 'yes' );
+wc_load_cart();
+WC()->customer->set_billing_country( 'AT' );
+WC()->customer->set_shipping_country( 'AT' );
+WC()->customer->set_billing_email( 'tax-after@example.com' );
+$after_card = vcap_tax_voucher( 'giftcard', 'balance', 'fixed_cart', $auto_card->get_id(), 60 );
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart( $goods->get_id(), 1 );
+WC()->cart->apply_coupon( $after_card->code );
+WC()->cart->calculate_totals();
+$after_fees = array_values( WC()->cart->get_fees() );
+$after_cart = array( 'total' => WC()->cart->get_total( 'edit' ), 'tax' => WC()->cart->get_total_tax(), 'fees' => array_map( static fn( $f ) => array( $f->name, $f->total, $f->tax ), $after_fees ), 'discount' => WC()->cart->get_coupon_discount_amount( wc_format_coupon_code( $after_card->code ), false ) );
+vcap_tax_assert( abs( 60.0 - (float) WC()->cart->get_total( 'edit' ) ) < 0.01 && abs( 20.0 - (float) WC()->cart->get_total_tax() ) < 0.01, 'after tax: goods 120 incl. 20 % VAT, card 60 → the customer pays 60 and the order keeps the full 20 VAT', $after_cart );
+vcap_tax_assert( 1 === count( $after_fees ) && abs( 60.0 + (float) $after_fees[0]->total ) < 0.01 && 0.0 === (float) $after_fees[0]->tax && 0.0 === (float) $after_cart['discount'], 'the card is a non-taxable payment line of -60; its coupon lowers no price', $after_cart );
+$after_id = WC()->checkout()->create_order( array( 'billing_email' => 'tax-after@example.com', 'billing_country' => 'AT', 'payment_method' => 'bacs' ) );
+$after    = wc_get_order( $after_id );
+$after_fee = $after ? current( $after->get_items( 'fee' ) ) : null;
+vcap_tax_assert( $after && abs( 60.0 - (float) $after->get_total() ) < 0.01 && abs( 20.0 - (float) $after->get_total_tax() ) < 0.01 && $after_fee && wc_format_coupon_code( $after_card->code ) === $after_fee->get_meta( VCAP\PaymentVouchers::FEE_META ) && abs( 60.0 - (float) VCAP\PaymentVouchers::paid_amount( $after, $after_card->code ) ) < 0.01, 'the order: total 60, VAT 20, a payment line marked with the card code', $after ? array( 'total' => $after->get_total(), 'tax' => $after->get_total_tax() ) : $after_id );
+vcap()->coupons->reserve_order( $after );
+wc_get_order( $after_id )->payment_complete( 'txn-tax-after' );
+vcap_tax_assert( abs( 0.0 - (float) vcap()->vouchers->get( $after_card->id )->balance ) < 0.01, 'the card is charged exactly the 60 it paid' );
+wc_get_order( $after_id )->update_status( 'cancelled' );
+vcap_tax_assert( abs( 60.0 - (float) vcap()->vouchers->get( $after_card->id )->balance ) < 0.01, 'cancelling the order gives the 60 back to the card' );
+$big_card = vcap_tax_voucher( 'giftcard', 'balance', 'fixed_cart', $auto_card->get_id(), 200 );
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart( $goods->get_id(), 1 );
+WC()->cart->apply_coupon( $big_card->code );
+WC()->cart->calculate_totals();
+vcap_tax_assert( abs( (float) WC()->cart->get_total( 'edit' ) ) < 0.01 && abs( 20.0 - (float) WC()->cart->get_total_tax() ) < 0.01 && abs( 120.0 + (float) current( WC()->cart->get_fees() )->total ) < 0.01, 'a 200 card pays the whole 120 (VAT 20 stays), never more than is due', array( 'total' => WC()->cart->get_total( 'edit' ), 'tax' => WC()->cart->get_total_tax() ) );
+$spv_after = vcap_tax_voucher( 'voucher', 'single', 'fixed_cart', $single->get_id(), 60 );
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart( $goods->get_id(), 1 );
+WC()->cart->apply_coupon( $spv_after->code );
+WC()->cart->calculate_totals();
+vcap_tax_assert( array() === WC()->cart->get_fees() && abs( 10.0 - (float) WC()->cart->get_total_tax() ) < 0.01, 'a single-purpose voucher stays a price reduction (VAT 10 on the remaining 60)', array( 'tax' => WC()->cart->get_total_tax() ) );
+WC()->cart->empty_cart();
+update_option( VCAP\PaymentVouchers::OPTION, 'no' );
+
 foreach ( $rates as $id ) {
 	WC_Tax::_delete_tax_rate( $id );
 }

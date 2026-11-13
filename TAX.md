@@ -76,7 +76,19 @@ Beispiel (Nachweis „current behaviour: WooCommerce charges VAT only on the rem
 |---|---|---|---|
 | `discount` | Preisnachlass mindert Bemessungsgrundlage | USt vom reduzierten Preis | passt |
 | `single` | USt wurde beim Verkauf berechnet; Einlösung ist keine neue steuerbare Leistung | USt nur auf den Rest | passt, **wenn** Satz und Land des Verkaufs mit der Bestellung übereinstimmen (Frage F3) |
-| `payment` | Gutschein ist Zahlungsmittel; USt auf die volle Leistung (20 € im Beispiel) | USt nur auf den Rest (10 €) | **passt nicht** – zu wenig USt ausgewiesen; Umsetzung „nach Steuer verrechnen“ offen (TODO.md, Entscheidungen Steuer) |
+| `payment` | Gutschein ist Zahlungsmittel; USt auf die volle Leistung (20 € im Beispiel) | Standard: USt nur auf den Rest (10 €). Mit Einstellung „Mehrzweckgutscheine als Zahlung“: volle USt (20 €), Gutschein als Zahlungszeile | Standard **passt nicht** (zu wenig USt); mit der Einstellung passend – Umstellung mit der Steuerberatung abstimmen |
+
+**Einstellung „Mehrzweckgutscheine als Zahlung“** (`vcap_mpv_after_tax`, Standard aus, damit bestehende Shops
+unverändert bleiben): Gutscheine mit Einordnung `payment` (Geschenkkarten, Wertgutscheine, Guthabenkonto) bleiben
+als Code im Warenkorb (Prüfung, Nutzungsgrenzen), mindern aber keinen Preis. Sie zahlen stattdessen mit einer
+eigenen, nicht steuerbaren Zeile „Gutschein CODE“ **nach** allen Steuern, Versand und Gebühren – höchstens den noch
+offenen Betrag. Die Bestellung weist die volle USt aus; Reservierung, Abbuchung, Storno und Erstattung lesen den
+gezahlten Betrag aus dieser Zeile (`PaymentVouchers::paid_amount()`), eine Neuberechnung der Bestellung macht daraus
+keinen zusätzlichen Rabatt. Einzweckgutscheine und Rabattaktionen bleiben Preisnachlässe. Filter
+`vcap_voucher_pays_after_tax( $applies, $coupon, $voucher )`. Nachweis: `tests/tax-integration.php` Abschnitt 8
+(Warenkorb 120 € inkl. 20 % USt, Karte 60 € → Zahlbetrag 60 €, USt 20 €; Zahlungszeile −60 € ohne Steuer; Bestellung,
+Abbuchung genau 60 €, Storno gibt 60 € zurück; 200‑€‑Karte zahlt höchstens 120 €; Einzweckgutschein bleibt Rabatt).
+Hinweis: In den Warenkorb-/Kassenblöcken erscheint der Code mit 0 € Rabatt, die Zahlung als Gebührenzeile.
 
 Für Shops mit Nettopreisen zieht das Plugin Geschenkkarten und Guthaben brutto ab (60 € Guthaben bezahlen 60 € des
 Bruttobetrags, nicht 60 € netto + Steuer; Filter `vcap_balance_covers_tax`, Nachweis

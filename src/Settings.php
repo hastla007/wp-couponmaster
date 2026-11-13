@@ -401,6 +401,13 @@ final class Settings {
 						'desc'    => __( 'Give the redeemed amount back when an order that used a voucher is cancelled, refunded or failed.', 'voucher-captain' ),
 					),
 					array(
+						'title'   => __( 'Multi-purpose vouchers as payment', 'voucher-captain' ),
+						'id'      => PaymentVouchers::OPTION,
+						'type'    => 'checkbox',
+						'default' => 'no',
+						'desc'    => __( 'Settle multi-purpose vouchers (gift cards, value vouchers) as a payment after tax: the order keeps the full VAT and the voucher pays part of the total as a separate line. Off: the voucher is a coupon and lowers price and VAT (previous behaviour). Have the switch confirmed by your tax adviser.', 'voucher-captain' ),
+					),
+					array(
 						'title'   => __( 'Void vouchers on refund', 'voucher-captain' ),
 						'id'      => 'vcap_void_on_refund',
 						'type'    => 'checkbox',

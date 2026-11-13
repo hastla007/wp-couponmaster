@@ -4332,3 +4332,12 @@ msgstr "Keiner"
 
 msgid "Taxable"
 msgstr "Steuerpflichtig"
+
+msgid "Multi-purpose vouchers as payment"
+msgstr "Mehrzweckgutscheine als Zahlung"
+
+msgid "Settle multi-purpose vouchers (gift cards, value vouchers) as a payment after tax: the order keeps the full VAT and the voucher pays part of the total as a separate line. Off: the voucher is a coupon and lowers price and VAT (previous behaviour). Have the switch confirmed by your tax adviser."
+msgstr "Mehrzweckgutscheine (Geschenkkarten, Wertgutscheine) nach Steuer als Zahlung verrechnen: Die Bestellung behält die volle Umsatzsteuer, der Gutschein bezahlt einen Teil des Gesamtbetrags als eigene Zeile. Aus: Der Gutschein wirkt als Gutscheincode und mindert Preis und Umsatzsteuer (bisheriges Verhalten). Lassen Sie die Umstellung von Ihrer Steuerberatung bestätigen."
+
+msgid "pays as voucher payment (see below)"
+msgstr "wird als Gutscheinzahlung verrechnet (siehe unten)"

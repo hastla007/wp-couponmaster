@@ -893,6 +893,11 @@ final class CouponManager {
 		if ( ! $voucher || ! $voucher->is_multi_use() ) {
 			return $coupon;
 		}
+		if ( null !== PaymentVouchers::paid_amount( $order, $code ) ) {
+			// Paid after tax by its fee line: a recalculation must not turn it into a discount as well.
+			$coupon->set_amount( 0 );
+			return $coupon;
+		}
 		$redeemed = (float) ( self::order_map( $order, '_vcap_redemptions' )[ $code ] ?? 0 );
 		$reserved = (float) ( self::order_map( $order, '_vcap_reservations' )[ $code ] ?? 0 );
 		if ( $redeemed > 0 ) {
@@ -948,8 +953,8 @@ final class CouponManager {
 			return $items;
 		}
 		$voucher = $this->repo->get_by_code( $code );
-		if ( ! $voucher || ! $voucher->is_multi_use() ) {
-			return $items;
+		if ( ! $voucher || ! $voucher->is_multi_use() || ( PaymentVouchers::enabled() && ( new PaymentVouchers( $this->repo ) )->applies( $coupon ) ) ) {
+			return $items; // Paid after tax as a fee line: nothing to convert.
 		}
 		$net = 0.0;
 		$tax = 0.0;
@@ -981,6 +986,15 @@ final class CouponManager {
 	}
 
 	private function used_amount( \WC_Order_Item_Coupon $item ): float {
+		$order = $item->get_order();
+		// Multi-purpose voucher paid after tax (PaymentVouchers): the fee line holds the gross amount paid.
+		$paid = $order instanceof \WC_Order ? PaymentVouchers::paid_amount( $order, (string) $item->get_code() ) : null;
+		if ( null !== $paid ) {
+			if ( $order->get_currency() && $order->get_currency() !== get_option( 'woocommerce_currency' ) ) {
+				$paid = (float) apply_filters( 'vcap_amount_to_base_currency', $paid, $order->get_currency(), $order );
+			}
+			return round( $paid, API\V1\RedemptionService::decimals( (string) get_option( 'woocommerce_currency' ) ) );
+		}
 		$amount = (float) $item->get_discount();
 		// The value the customer received is the discount plus the tax it removed – in tax-inclusive shops
 		// (coupons apply to gross prices) and, for stored balances, in tax-exclusive shops (see prepare_gross_balance()).

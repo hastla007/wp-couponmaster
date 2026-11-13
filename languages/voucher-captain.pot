@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-13 10:57+0000\n"
+"POT-Creation-Date: 2026-11-13 11:01+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:75 src/API/V1/RedemptionService.php:117
@@ -445,7 +445,7 @@ msgstr ""
 msgid "WP Pass Captain ↗"
 msgstr ""
 
-#: src/Admin/Menu.php:48 src/Admin/Menu.php:48 src/Plugin.php:132
+#: src/Admin/Menu.php:48 src/Admin/Menu.php:48 src/Plugin.php:136
 msgid "Settings"
 msgstr ""
 
@@ -787,7 +787,7 @@ msgstr ""
 msgid "Check in tickets automatically after scan"
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:36 src/Settings.php:418 src/StoreCredit.php:324 src/Voucher.php:80
+#: src/Admin/StoreCreditAdmin.php:36 src/Settings.php:425 src/StoreCredit.php:324 src/Voucher.php:80
 msgid "Store credit"
 msgstr ""
 
@@ -911,8 +911,8 @@ msgstr ""
 msgid "Void this voucher? It can no longer be redeemed; tickets it was exchanged for in WP Pass Captain are revoked."
 msgstr ""
 
-#. translators: %s: code
-#: src/Admin/VoucherAdmin.php:135
+#. translators: %s: voucher code
+#: src/Admin/VoucherAdmin.php:135 src/PaymentVouchers.php:80
 #, php-format
 msgid "Voucher %s"
 msgstr ""
@@ -1871,46 +1871,46 @@ msgstr ""
 msgid "Voucher %s balance"
 msgstr ""
 
-#: src/CouponManager.php:1068
+#: src/CouponManager.php:1082
 msgid "Voucher shortfall accepted by an administrator; the order can be fulfilled."
 msgstr ""
 
-#: src/CouponManager.php:1084 src/CouponManager.php:1174
+#: src/CouponManager.php:1098 src/CouponManager.php:1188
 msgid "Voucher balance shortfall requires manual review before fulfilment."
 msgstr ""
 
 #. translators: %s: order number
-#: src/CouponManager.php:1118
+#: src/CouponManager.php:1132
 #, php-format
 msgid "Used in order #%s"
 msgstr ""
 
 #. translators: %s: voucher code
-#: src/CouponManager.php:1128
+#: src/CouponManager.php:1142
 #, php-format
 msgid "Voucher %s: the discount could not be deducted from its balance. Review this order and adjust the charge before fulfilment."
 msgstr ""
 
-#: src/CouponManager.php:1138
+#: src/CouponManager.php:1152
 msgid "A stored-value voucher balance changed during checkout. Review this order and adjust the charge before fulfilment."
 msgstr ""
 
 #. translators: 1: code, 2: amount, 3: remaining balance
-#: src/CouponManager.php:1145
+#: src/CouponManager.php:1159
 #, php-format
 msgid "Voucher %1$s: %2$s deducted, remaining balance %3$s."
 msgstr ""
 
-#: src/CouponManager.php:1158
+#: src/CouponManager.php:1172
 msgid "Gift card shortfall: the installed WP Pass Captain cannot hold ticket issuance. If this order contains tickets, check them – and update WP Pass Captain."
 msgstr ""
 
-#: src/CouponManager.php:1245
+#: src/CouponManager.php:1259
 #, php-format
 msgid "Order #%s cancelled or refunded"
 msgstr ""
 
-#: src/CouponManager.php:1254
+#: src/CouponManager.php:1268
 msgid "Some voucher balances could not be restored. Review this order and retry the refund handling."
 msgstr ""
 
@@ -2084,7 +2084,7 @@ msgstr ""
 msgid "Bonus voucher after the order"
 msgstr ""
 
-#: src/Discounts/Admin.php:125 src/Settings.php:500
+#: src/Discounts/Admin.php:125 src/Settings.php:507
 msgid "Percentage"
 msgstr ""
 
@@ -3328,6 +3328,10 @@ msgstr ""
 msgid "The update package checksum did not match. Installation was stopped."
 msgstr ""
 
+#: src/PaymentVouchers.php:103
+msgid "pays as voucher payment (see below)"
+msgstr ""
+
 #: src/Placeholders.php:17 src/TemplatePostType.php:257
 msgid "Coupon code"
 msgstr ""
@@ -3413,12 +3417,12 @@ msgid "Redeem page link with the code"
 msgstr ""
 
 #. translators: %s: comma separated table names
-#: src/Plugin.php:148
+#: src/Plugin.php:152
 #, php-format
 msgid "Voucher Captain: the voucher database tables do not support transactions (InnoDB). Gift card balances cannot be redeemed until these tables are converted to InnoDB: %s"
 msgstr ""
 
-#: src/Plugin.php:156
+#: src/Plugin.php:160
 msgid "Voucher Captain: the PDF libraries are missing. Install the release ZIP or run \"composer install --no-dev\" in the plugin folder."
 msgstr ""
 
@@ -3568,7 +3572,7 @@ msgstr ""
 msgid "Comma separated amounts shown as quick-pick buttons."
 msgstr ""
 
-#: src/ProductSettings.php:166 src/Settings.php:494
+#: src/ProductSettings.php:166 src/Settings.php:501
 msgid "Discount type"
 msgstr ""
 
@@ -3860,7 +3864,7 @@ msgstr ""
 msgid "Referral reward: coupon %1$s for %2$s."
 msgstr ""
 
-#: src/Referrals.php:188 src/Referrals.php:288 src/Settings.php:474 src/Settings.php:479 src/Shortcodes.php:46
+#: src/Referrals.php:188 src/Referrals.php:288 src/Settings.php:481 src/Settings.php:486 src/Shortcodes.php:46
 msgid "Refer a friend"
 msgstr ""
 
@@ -4211,114 +4215,122 @@ msgid "Give the redeemed amount back when an order that used a voucher is cancel
 msgstr ""
 
 #: src/Settings.php:404
-msgid "Void vouchers on refund"
+msgid "Multi-purpose vouchers as payment"
 msgstr ""
 
 #: src/Settings.php:408
-msgid "Disable vouchers when the order they were bought with is fully refunded or cancelled."
+msgid "Settle multi-purpose vouchers (gift cards, value vouchers) as a payment after tax: the order keeps the full VAT and the voucher pays part of the total as a separate line. Off: the voucher is a coupon and lowers price and VAT (previous behaviour). Have the switch confirmed by your tax adviser."
 msgstr ""
 
 #: src/Settings.php:411
-msgid "Automatic promotions"
+msgid "Void vouchers on refund"
 msgstr ""
 
 #: src/Settings.php:415
-msgid "Apply published promotions (Vouchers → Promotions) automatically in the cart. The discount is shown as its own line in the cart and the order; catalog prices do not change."
+msgid "Disable vouchers when the order they were bought with is fully refunded or cancelled."
+msgstr ""
+
+#: src/Settings.php:418
+msgid "Automatic promotions"
 msgstr ""
 
 #: src/Settings.php:422
-msgid "Enable store credit accounts: credit customers manually (user profile) or refund orders as store credit (order screen); customers see and use their credit in My Account and the cart."
-msgstr ""
-
-#: src/Settings.php:425
-msgid "Store credit with discount codes"
+msgid "Apply published promotions (Vouchers → Promotions) automatically in the cart. The discount is shown as its own line in the cart and the order; catalog prices do not change."
 msgstr ""
 
 #: src/Settings.php:429
-msgid "Allow store credit in the same order as discount codes. Discounts are always calculated first; gift cards and store credit then pay the remaining amount."
+msgid "Enable store credit accounts: credit customers manually (user profile) or refund orders as store credit (order screen); customers see and use their credit in My Account and the cart."
 msgstr ""
 
 #: src/Settings.php:432
+msgid "Store credit with discount codes"
+msgstr ""
+
+#: src/Settings.php:436
+msgid "Allow store credit in the same order as discount codes. Discounts are always calculated first; gift cards and store credit then pay the remaining amount."
+msgstr ""
+
+#: src/Settings.php:439
 msgid "Order of gift cards and store credit"
 msgstr ""
 
-#: src/Settings.php:437
+#: src/Settings.php:444
 msgid "Gift cards first, then store credit"
 msgstr ""
 
-#: src/Settings.php:438
+#: src/Settings.php:445
 msgid "Store credit first, then gift cards"
 msgstr ""
 
-#: src/Settings.php:442
+#: src/Settings.php:449
 msgid "Discount codes on vouchers"
 msgstr ""
 
-#: src/Settings.php:446
+#: src/Settings.php:453
 msgid "Allow discount codes to reduce the price of voucher products. Vouchers keep their full face value, so a 10 % code on a 50 € voucher costs the shop 5 €."
 msgstr ""
 
-#: src/Settings.php:449
+#: src/Settings.php:456
 msgid "Pay vouchers with vouchers"
 msgstr ""
 
-#: src/Settings.php:453
+#: src/Settings.php:460
 msgid "Allow vouchers and gift cards to pay for voucher products (off by default to prevent exchanging or extending vouchers)."
 msgstr ""
 
-#: src/Settings.php:456
+#: src/Settings.php:463
 msgid "Voucher links"
 msgstr ""
 
-#: src/Settings.php:460
+#: src/Settings.php:467
 msgid "Apply a coupon automatically when a customer opens a link such as https://your-shop/?gutschein=CODE (any WooCommerce coupon). The code is applied once, validated by WooCommerce, and only when the cart has products."
 msgstr ""
 
-#: src/Settings.php:463
+#: src/Settings.php:470
 msgid "Link parameter"
 msgstr ""
 
-#: src/Settings.php:468
+#: src/Settings.php:475
 msgid "Name of the URL parameter (letters, digits, - and _)."
 msgstr ""
 
-#: src/Settings.php:475
+#: src/Settings.php:482
 msgid "Customers find their personal code in My Account → Vouchers. Friends use it on their first order; the referring customer is rewarded once that order is completed. Own codes cannot be used."
 msgstr ""
 
-#: src/Settings.php:483
+#: src/Settings.php:490
 msgid "Enable referral codes"
 msgstr ""
 
-#: src/Settings.php:486
+#: src/Settings.php:493
 msgid "Discount for the friend"
 msgstr ""
 
-#: src/Settings.php:499
+#: src/Settings.php:506
 msgid "Fixed amount"
 msgstr ""
 
-#: src/Settings.php:504
+#: src/Settings.php:511
 msgid "Minimum order value for the friend"
 msgstr ""
 
-#: src/Settings.php:512
+#: src/Settings.php:519
 msgid "Reward for the referrer"
 msgstr ""
 
-#: src/Settings.php:520
+#: src/Settings.php:527
 msgid "Reward as"
 msgstr ""
 
-#: src/Settings.php:525
+#: src/Settings.php:532
 msgid "Coupon by email"
 msgstr ""
 
-#: src/Settings.php:526
+#: src/Settings.php:533
 msgid "Store credit (requires store credit)"
 msgstr ""
 
-#: src/Settings.php:530
+#: src/Settings.php:537
 msgid "Reward coupon valid for (days)"
 msgstr ""
 

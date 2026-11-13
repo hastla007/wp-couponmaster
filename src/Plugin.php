@@ -24,6 +24,8 @@ final class Plugin {
 	/** Exchange of ticket vouchers for WP Pass Captain tickets (works only while Pass Captain is active). */
 	public Compat\PassCaptainTickets $passcaptain_tickets;
 	public StoreCredit $store_credit;
+	/** Multi-purpose vouchers as a payment after tax (setting "vcap_mpv_after_tax"). */
+	public PaymentVouchers $payments;
 
 	public static function instance(): Plugin {
 		if ( null === self::$instance ) {
@@ -53,6 +55,7 @@ final class Plugin {
 		$this->redemptions = new API\V1\RedemptionService( $this->vouchers );
 		$this->passcaptain_tickets = new Compat\PassCaptainTickets( $this->redemptions, $this->vouchers );
 		$this->store_credit = new StoreCredit( $this->settings, $this->vouchers, $this->coupons );
+		$this->payments     = new PaymentVouchers( $this->vouchers );
 
 		( new TemplatePostType() )->register();
 		( new ProductSettings() )->register();
@@ -93,6 +96,7 @@ final class Plugin {
 		$this->tickets->register();
 		$this->redemptions->register();
 		$this->store_credit->register();
+		$this->payments->register();
 		( new API\V1\RestController( $this->redemptions ) )->register();
 
 		( new Compat\Subscriptions() )->register();
