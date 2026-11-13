@@ -223,4 +223,30 @@ vcap_security_assert( 'Privacy Test Recipient' === vcap()->tickets->describe( vc
 delete_option( 'vcap_scanner_show_holder' );
 wp_set_current_user( 0 );
 
+// Order details hook (also used by the order tracking page): full codes and PDF links only for the order's customer.
+$owner_id    = wp_insert_user( array( 'user_login' => 'vcap-owner-' . wp_generate_password( 6, false, false ), 'user_pass' => wp_generate_password( 20 ), 'role' => 'customer' ) );
+$stranger_id = wp_insert_user( array( 'user_login' => 'vcap-stranger-' . wp_generate_password( 6, false, false ), 'user_pass' => wp_generate_password( 20 ), 'role' => 'customer' ) );
+$tracked     = wc_create_order( array( 'customer_id' => $owner_id ) );
+$tracked->set_billing_email( 'tracked@example.test' );
+$tracked->set_status( 'completed' );
+$tracked->save();
+$tracked_voucher           = vcap_security_create_voucher( 'tracked@example.test', 900300 + random_int( 1, 9999 ) );
+$tracked_voucher->order_id = $tracked->get_id();
+vcap()->vouchers->update( $tracked_voucher );
+$render_order = static function () use ( $tracked ): string {
+	ob_start();
+	vcap()->downloads->order_downloads( wc_get_order( $tracked->get_id() ) );
+	return (string) ob_get_clean();
+};
+wp_set_current_user( 0 );
+$guest_html = $render_order();
+vcap_security_assert( ! str_contains( $guest_html, $tracked_voucher->code ) && ! str_contains( $guest_html, 'vcap_pdf=' ) && str_contains( $guest_html, VCAP\Downloads::masked_code( $tracked_voucher->code ) ), 'order tracking (guest) shows only masked codes without PDF links' );
+wp_set_current_user( $stranger_id );
+$stranger_html = $render_order();
+vcap_security_assert( ! str_contains( $stranger_html, $tracked_voucher->code ) && ! str_contains( $stranger_html, 'vcap_pdf=' ), 'another logged-in customer sees only masked codes' );
+wp_set_current_user( $owner_id );
+$owner_html = $render_order();
+vcap_security_assert( str_contains( $owner_html, $tracked_voucher->code ) && str_contains( $owner_html, 'vcap_pdf=' ), 'the order\'s customer sees the codes and PDF links' );
+wp_set_current_user( 0 );
+
 echo "Voucher Captain security and privacy checks passed.\n";

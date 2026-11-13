@@ -155,6 +155,11 @@ final class Downloads {
 
 	/**
 	 * Voucher downloads under the order details (order received page + My Account → View order).
+	 *
+	 * The same hook also runs on the order tracking page ([woocommerce_order_tracking]: order number + billing
+	 * email), where knowing an email address would be enough to collect codes of guessed order numbers. Full
+	 * codes and PDF links are therefore shown only to whoever may see them: the order received page with the
+	 * order key, or the logged-in customer of the order. Everywhere else the codes are masked, without links.
 	 */
 	public function order_downloads( $order ): void {
 		if ( ! $order instanceof \WC_Order ) {
@@ -171,6 +176,10 @@ final class Downloads {
 			}
 			return;
 		}
+		if ( ! $this->may_see_codes( $order ) ) {
+			$this->masked_list( $vouchers );
+			return;
+		}
 		Plugin::template(
 			'myaccount/vouchers-table.php',
 			array(
@@ -179,6 +188,36 @@ final class Downloads {
 				'title'     => __( 'Your vouchers', 'voucher-captain' ),
 			)
 		);
+	}
+
+	/**
+	 * Whether the current visitor may see the full codes and PDF links of an order: the order received page
+	 * with the order's key, or the logged-in customer of the order (My Account → View order).
+	 */
+	public function may_see_codes( \WC_Order $order ): bool {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- the order key is the credential here.
+		$key     = isset( $_GET['key'] ) ? wc_clean( wp_unslash( (string) $_GET['key'] ) ) : '';
+		$allowed = ( is_order_received_page() && '' !== $key && hash_equals( (string) $order->get_order_key(), (string) $key ) )
+			|| ( is_user_logged_in() && (int) $order->get_customer_id() > 0 && (int) $order->get_customer_id() === get_current_user_id() );
+		/** Whether the current visitor may see the full voucher codes and PDF links of an order (default: order key or own order). */
+		return (bool) apply_filters( 'vcap_order_codes_visible', $allowed, $order );
+	}
+
+	/** Last four characters of a code, e.g. "…7KQ2" (the code is a means of payment). */
+	public static function masked_code( string $code ): string {
+		return '…' . substr( strtoupper( $code ), -4 );
+	}
+
+	/**
+	 * @param Voucher[] $vouchers
+	 */
+	private function masked_list( array $vouchers ): void {
+		echo '<section class="vcap-vouchers vcap-vouchers-masked"><h2 class="woocommerce-column__title">' . esc_html__( 'Your vouchers', 'voucher-captain' ) . '</h2><ul>';
+		foreach ( $vouchers as $voucher ) {
+			$product = $voucher->product();
+			echo '<li>' . esc_html( ( $product ? $product->get_name() : __( 'Voucher', 'voucher-captain' ) ) . ' · ' . self::masked_code( $voucher->code ) . ' · ' . $voucher->status_label() ) . '</li>';
+		}
+		echo '</ul><p class="vcap-masked-hint">' . esc_html__( 'For security reasons the codes are shown in full only in your customer account and in the voucher email.', 'voucher-captain' ) . '</p></section>';
 	}
 
 	private function order_has_voucher_products( \WC_Order $order ): bool {
