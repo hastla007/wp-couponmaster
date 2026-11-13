@@ -187,6 +187,10 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	$redeem_page = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'publish', 'post_title' => 'Redeem', 'post_content' => '[vcap_redeem]' ) );
 	delete_transient( 'vcap_redeem_page_guess' );
 	vcap_pc_assert( str_contains( VCAP\Shortcodes::redeem_url( $tv->code ), 'vcap_code=' . rawurlencode( $tv->code ) ) && str_contains( VCAP\Shortcodes::redeem_url(), (string) get_permalink( $redeem_page ) ), 'the redeem page is found and links carry the code' );
+	$_POST    = array( 'vcap_balance_code' => $tv->code, 'vcap_balance_nonce' => wp_create_nonce( 'vcap_balance' ) );
+	$tv_bal   = do_shortcode( '[vcap_balance]' );
+	$_POST    = array();
+	vcap_pc_assert( str_contains( $tv_bal, '2 tickets' ) && str_contains( $tv_bal, 'vcap_code=' ) && ! str_contains( wp_strip_all_tags( html_entity_decode( $tv_bal ) ), '70' ), 'the balance check shows a ticket voucher as tickets with a link to exchange them' );
 	$tv_steps = apply_filters( 'vcap_voucher_next_steps', array(), vcap()->vouchers->get( $tv->id ) );
 	$tv_values = VCAP\Placeholders::values( vcap()->vouchers->get( $tv->id ) );
 	vcap_pc_assert( 4 === count( $tv_steps ) && str_contains( implode( ' ', $tv_steps ), '2 tickets' ) && '2' === $tv_values['ticket_quantity'] && '' !== $tv_values['redeem_url'], 'a ticket voucher email explains the next steps (redeem page, tickets by email)' );

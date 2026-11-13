@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-13 00:18+0000\n"
+"POT-Creation-Date: 2026-11-13 00:20+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:75 src/API/V1/RedemptionService.php:117
@@ -1339,7 +1339,7 @@ msgstr ""
 msgid "Exchange voucher %s for tickets"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:188 src/Compat/PassCaptainTickets.php:933 src/Compat/PassCaptainTickets.php:949
+#: src/Compat/PassCaptainTickets.php:188 src/Compat/PassCaptainTickets.php:933 src/Compat/PassCaptainTickets.php:949 src/Downloads.php:283
 msgid "Exchange for tickets"
 msgstr ""
 
@@ -2208,29 +2208,73 @@ msgstr ""
 msgid "Your vouchers"
 msgstr ""
 
-#: src/Downloads.php:254 src/Shortcodes.php:75
-msgid "Too many attempts. Please try again later."
-msgstr ""
-
-#: src/Downloads.php:259 src/Shortcodes.php:80
-msgid "Voucher code not found."
-msgstr ""
-
-#. translators: 1: status, 2: balance, 3: expiry
-#: src/Downloads.php:264
+#. translators: %s: voucher status
+#: src/Downloads.php:254
 #, php-format
-msgid "Status: %1$s · Balance: %2$s · Valid until: %3$s"
+msgid "Status: %s"
 msgstr ""
 
-#: src/Downloads.php:267 src/Placeholders.php:86
+#. translators: 1: number of tickets, 2: event / ticket type
+#: src/Downloads.php:261
+#, php-format
+msgid "For %1$d ticket: %2$s"
+msgid_plural "For %1$d tickets: %2$s"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of tickets
+#: src/Downloads.php:263
+#, php-format
+msgid "For %d ticket"
+msgid_plural "For %d tickets"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Downloads.php:265
+msgid "Admission ticket (shown at the entrance)"
+msgstr ""
+
+#. translators: %s: percentage
+#: src/Downloads.php:268
+#, php-format
+msgid "Discount: %s"
+msgstr ""
+
+#. translators: %s: remaining balance
+#: src/Downloads.php:271 templates/myaccount/vouchers-table.php:45
+#, php-format
+msgid "Balance: %s"
+msgstr ""
+
+#. translators: %s: value
+#: src/Downloads.php:274 templates/emails/plain/voucher.php:23
+#, php-format
+msgid "Value: %s"
+msgstr ""
+
+#. translators: %s: expiry date or "unlimited"
+#: src/Downloads.php:277
+#, php-format
+msgid "Valid until: %s"
+msgstr ""
+
+#: src/Downloads.php:277 src/Placeholders.php:86
 msgid "unlimited"
 msgstr ""
 
-#: src/Downloads.php:277 src/Shortcodes.php:146 src/TemplatePostType.php:107
+#: src/Downloads.php:292 src/Shortcodes.php:75
+msgid "Too many attempts. Please try again later."
+msgstr ""
+
+#: src/Downloads.php:297 src/Shortcodes.php:80
+msgid "Voucher code not found."
+msgstr ""
+
+#: src/Downloads.php:307 src/Shortcodes.php:146 src/TemplatePostType.php:107
 msgid "Voucher code"
 msgstr ""
 
-#: src/Downloads.php:279
+#: src/Downloads.php:309
 msgid "Check balance"
 msgstr ""
 
@@ -4294,12 +4338,6 @@ msgstr ""
 msgid "Downloaded"
 msgstr ""
 
-#. translators: %s: value
-#: templates/emails/plain/voucher.php:23
-#, php-format
-msgid "Value: %s"
-msgstr ""
-
 #. translators: %s: code
 #: templates/emails/plain/voucher.php:26
 #, php-format
@@ -4352,12 +4390,6 @@ msgstr ""
 
 #: templates/myaccount/vouchers-table.php:35
 msgid "Download"
-msgstr ""
-
-#. translators: %s: remaining balance
-#: templates/myaccount/vouchers-table.php:45
-#, php-format
-msgid "Balance: %s"
 msgstr ""
 
 #. translators: %s: recipient name

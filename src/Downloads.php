@@ -247,6 +247,44 @@ final class Downloads {
 	/**
 	 * [vcap_balance] – lets customers check the remaining value of a voucher code.
 	 */
+	/** Status line of a code, by voucher kind: balance, value, percentage, admission ticket or Pass Captain tickets. */
+	private function balance_result( Voucher $voucher ): string {
+		$parts  = array(
+			/* translators: %s: voucher status */
+			'status' => sprintf( __( 'Status: %s', 'voucher-captain' ), $voucher->status_label() ),
+		);
+		$money  = static fn( float $amount ): string => html_entity_decode( wp_strip_all_tags( wc_price( $amount, array( 'currency' => $voucher->currency ) ) ) );
+		$target = Compat\PassCaptainTickets::target( $voucher );
+		if ( $target ) {
+			$parts['value'] = $target['label']
+				/* translators: 1: number of tickets, 2: event / ticket type */
+				? sprintf( _n( 'For %1$d ticket: %2$s', 'For %1$d tickets: %2$s', $target['quantity'], 'voucher-captain' ), $target['quantity'], $target['label'] )
+				/* translators: %d: number of tickets */
+				: sprintf( _n( 'For %d ticket', 'For %d tickets', $target['quantity'], 'voucher-captain' ), $target['quantity'] );
+		} elseif ( $voucher->is_ticket() ) {
+			$parts['value'] = __( 'Admission ticket (shown at the entrance)', 'voucher-captain' );
+		} elseif ( 'percent' === $voucher->discount_type ) {
+			/* translators: %s: percentage */
+			$parts['value'] = sprintf( __( 'Discount: %s', 'voucher-captain' ), wc_format_localized_decimal( $voucher->initial_amount ) . '%' );
+		} elseif ( $voucher->is_multi_use() ) {
+			/* translators: %s: remaining balance */
+			$parts['value'] = sprintf( __( 'Balance: %s', 'voucher-captain' ), $money( $voucher->balance ) );
+		} else {
+			/* translators: %s: voucher value */
+			$parts['value'] = sprintf( __( 'Value: %s', 'voucher-captain' ), $money( $voucher->initial_amount ) );
+		}
+		/* translators: %s: expiry date or "unlimited" */
+		$parts['expiry'] = sprintf( __( 'Valid until: %s', 'voucher-captain' ), $voucher->expires_at ? wp_date( $this->settings->date_format(), strtotime( $voucher->expires_at . ' UTC' ) ) : __( 'unlimited', 'voucher-captain' ) );
+		/** Parts of the [vcap_balance] result line (status, value, expiry), plain text. */
+		$parts = (array) apply_filters( 'vcap_balance_result_parts', $parts, $voucher );
+		$html  = esc_html( implode( ' · ', array_map( 'strval', $parts ) ) );
+		$url   = $target && $voucher->is_usable() ? Shortcodes::redeem_url( $voucher->code ) : '';
+		if ( '' !== $url ) {
+			$html .= ' <a href="' . esc_url( $url ) . '">' . esc_html__( 'Exchange for tickets', 'voucher-captain' ) . '</a>';
+		}
+		return '<div class="woocommerce-info vcap-balance-result">' . $html . '</div>';
+	}
+
 	public function balance_shortcode(): string {
 		$result = '';
 		if ( isset( $_POST['vcap_balance_code'], $_POST['vcap_balance_nonce'] ) && wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_balance_nonce'] ) ), 'vcap_balance' ) ) {
@@ -258,15 +296,7 @@ final class Downloads {
 				if ( ! $voucher ) {
 					$result = '<p class="woocommerce-error">' . esc_html__( 'Voucher code not found.', 'voucher-captain' ) . '</p>';
 				} else {
-					$result = '<div class="woocommerce-info vcap-balance-result">' . esc_html(
-						sprintf(
-							/* translators: 1: status, 2: balance, 3: expiry */
-							__( 'Status: %1$s · Balance: %2$s · Valid until: %3$s', 'voucher-captain' ),
-							$voucher->status_label(),
-							html_entity_decode( wp_strip_all_tags( wc_price( $voucher->balance, array( 'currency' => $voucher->currency ) ) ) ),
-							$voucher->expires_at ? wp_date( $this->settings->date_format(), strtotime( $voucher->expires_at . ' UTC' ) ) : __( 'unlimited', 'voucher-captain' )
-						)
-					) . '</div>';
+					$result = $this->balance_result( $voucher );
 				}
 			}
 		}

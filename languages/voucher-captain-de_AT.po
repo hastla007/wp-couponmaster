@@ -3809,3 +3809,25 @@ msgstr "Dieser Gutschein wird gegen Tickets eingetauscht, nicht als Zahlungsmitt
 
 msgid "This voucher is exchanged for tickets, not used as payment. Please redeem it on the voucher redemption page."
 msgstr "Dieser Gutschein wird gegen Tickets eingetauscht, nicht als Zahlungsmittel verwendet. Bitte lösen Sie ihn auf der Einlöseseite ein."
+
+msgid "Status: %s"
+msgstr "Status: %s"
+
+msgid "For %1$d ticket: %2$s"
+msgid_plural "For %1$d tickets: %2$s"
+msgstr[0] "Für %1$d Ticket: %2$s"
+msgstr[1] "Für %1$d Tickets: %2$s"
+
+msgid "For %d ticket"
+msgid_plural "For %d tickets"
+msgstr[0] "Für %d Ticket"
+msgstr[1] "Für %d Tickets"
+
+msgid "Admission ticket (shown at the entrance)"
+msgstr "Eintrittskarte (wird am Einlass vorgezeigt)"
+
+msgid "Discount: %s"
+msgstr "Rabatt: %s"
+
+msgid "Valid until: %s"
+msgstr "Gültig bis: %s"

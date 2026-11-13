@@ -59,4 +59,32 @@ vcap_sc_assert( 'applied' === $sc->redeem( 'redeem-' . $tag ) && WC()->cart->has
 
 WC()->cart->empty_cart();
 wc_clear_notices();
+// [vcap_balance] describes each kind of voucher by what it is worth.
+$check = static function ( array $props ) use ( $tag ) {
+	$v                 = new VCAP\Voucher();
+	$v->code           = 'vcap-bal-' . strtolower( wp_generate_password( 8, false, false ) );
+	$v->order_item_id  = 0;
+	$v->type           = $props['type'] ?? 'giftcard';
+	$v->usage_mode     = $props['usage_mode'] ?? 'balance';
+	$v->discount_type  = $props['discount_type'] ?? 'fixed_cart';
+	$v->initial_amount = $props['initial'] ?? 50;
+	$v->balance        = $props['balance'] ?? 50;
+	$v->currency       = get_woocommerce_currency();
+	$v->status         = VCAP\Voucher::STATUS_ACTIVE;
+	$v->token          = VCAP\VoucherRepository::new_token();
+	$v->id             = vcap()->vouchers->insert( $v );
+	$_POST             = array( 'vcap_balance_code' => $v->code, 'vcap_balance_nonce' => wp_create_nonce( 'vcap_balance' ) );
+	$html              = do_shortcode( '[vcap_balance]' );
+	$_POST             = array();
+	return wp_strip_all_tags( html_entity_decode( $html ) );
+};
+$card = $check( array( 'initial' => 80, 'balance' => 12.25 ) );
+vcap_sc_assert( str_contains( $card, '12' ) && ! str_contains( $card, '80' ), 'a gift card shows its remaining balance' );
+$percent = $check( array( 'usage_mode' => 'single', 'discount_type' => 'percent', 'initial' => 15, 'balance' => 15 ) );
+vcap_sc_assert( str_contains( $percent, '15%' ) && ! str_contains( $percent, get_woocommerce_currency_symbol() ), 'a percentage voucher shows its discount, not an amount of money' );
+$single = $check( array( 'usage_mode' => 'single', 'initial' => 30, 'balance' => 30 ) );
+vcap_sc_assert( str_contains( $single, '30' ), 'a single-use voucher shows its value' );
+$ticket = $check( array( 'type' => 'ticket', 'usage_mode' => 'single', 'initial' => 20, 'balance' => 20 ) );
+vcap_sc_assert( ! str_contains( $ticket, '20' ), 'an admission ticket is not shown as an amount of money' );
+
 echo "Voucher Captain shortcode checks passed.\n";
