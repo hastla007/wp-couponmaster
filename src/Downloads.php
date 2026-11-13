@@ -282,20 +282,21 @@ final class Downloads {
 		if ( '' !== $url ) {
 			$html .= ' <a href="' . esc_url( $url ) . '">' . esc_html__( 'Exchange for tickets', 'voucher-captain' ) . '</a>';
 		}
-		return '<div class="woocommerce-info vcap-balance-result">' . $html . '</div>';
+		// role=status: screen readers announce the result after the form was sent (page reload).
+		return '<div class="woocommerce-info vcap-balance-result" role="status">' . $html . '</div>';
 	}
 
 	public function balance_shortcode(): string {
 		$result = '';
 		if ( isset( $_POST['vcap_balance_code'], $_POST['vcap_balance_nonce'] ) && wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_balance_nonce'] ) ), 'vcap_balance' ) ) {
 			if ( Plugin::rate_limited( 'balance', 15, 300, 15 * MINUTE_IN_SECONDS, false ) ) {
-				$result = '<p class="woocommerce-error">' . esc_html__( 'Too many attempts. Please try again later.', 'voucher-captain' ) . '</p>';
+				$result = '<p class="woocommerce-error" role="alert">' . esc_html__( 'Too many attempts. Please try again later.', 'voucher-captain' ) . '</p>';
 			} else {
 				$code    = wc_format_coupon_code( sanitize_text_field( wp_unslash( $_POST['vcap_balance_code'] ) ) );
 				$voucher = $this->repo->get_by_code( $code ) ?? $this->repo->get_by_code( strtoupper( $code ) );
 				if ( ! $voucher ) {
 					Plugin::rate_limit_failure( 'balance', 15 * MINUTE_IN_SECONDS );
-					$result = '<p class="woocommerce-error">' . esc_html__( 'Voucher code not found.', 'voucher-captain' ) . '</p>';
+					$result = '<p class="woocommerce-error" role="alert">' . esc_html__( 'Voucher code not found.', 'voucher-captain' ) . '</p>';
 				} else {
 					$result = $this->balance_result( $voucher );
 				}

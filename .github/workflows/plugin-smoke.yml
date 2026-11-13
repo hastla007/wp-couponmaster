@@ -411,7 +411,7 @@ jobs:
         working-directory: tests/e2e
         env:
           CI: 'true'
-        run: npx playwright test 01-product.spec.js 04-account-and-shortcodes.spec.js 05-admin-yoast.spec.js
+        run: npx playwright test 01-product.spec.js 04-account-and-shortcodes.spec.js 05-admin-yoast.spec.js 06-screen-reader.spec.js
       - name: Browser tests – classic cart and checkout
         env:
           CI: 'true'

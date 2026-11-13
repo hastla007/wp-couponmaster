@@ -176,7 +176,7 @@ Befund im Kursplugin: `/wp-json/boatingschool/v1/coupons/redeem` ist derzeit fü
 - [x] Verbraucherinformationen und Gutscheinbedingungen pro Land konfigurierbar speichern und am Gutschein festschreiben. — *Nachweis: Einstellung „Einlösebedingungen pro Land“, Rechnungsland entscheidet.*
 - [ ] Ländertexte und Verbraucherinformationen rechtlich prüfen und freigeben lassen. — *vorbereitet: Prüfvorlage `LEGAL_TEXTS.md` (erzeugt mit `bin/legal-texts.php`, CI prüft Aktualität und dass jeder gelistete Text noch existiert): vom Shop festzulegende Texte und Fundorte, gesetzliche Gültigkeit je EU-Land mit Quelle, feste Plugin-Texte zu Gültigkeit, Übertragbarkeit, Restwert, Erstattung und Einlösung in EN/DE/AT mit Freigabespalte. Offen: Prüfung und Freigabe durch die Rechtsberatung je Verkaufsland.*
 - [x] Automatisierte axe- und Tastaturprüfungen für Produktfelder, PDF-Vorschau, Shortcodes, Kundenkonto, Scanner und Aktions-Editor durchführen und gefundene Mängel beheben. — *Nachweis: `browser-e2e`.*
-- [ ] Barrierefreiheit der genannten Flows zusätzlich mit einem echten Screenreader prüfen.
+- [ ] Barrierefreiheit der genannten Flows zusätzlich mit einem echten Screenreader prüfen. — *vorbereitet: Accessibility-Baum automatisch geprüft (`tests/e2e/06-screen-reader.spec.js` im Job `browser-e2e`: zugängliche Namen aller Felder, Pflichtfelder, Fehler als `alert`, Ergebnisse als Live-Region, Tabellenköpfe); dabei behoben: Ergebnis der Guthabenabfrage wurde nicht angesagt (jetzt `role=status`, Fehler `role=alert`). Hörprüfprotokoll für NVDA und VoiceOver mit 12 Abläufen in ACCESSIBILITY.md. Offen: die Hörprüfung selbst durch eine Person vor dem Release.*
 
 
 ## Separater Arbeitsstrang: WP License Captain
