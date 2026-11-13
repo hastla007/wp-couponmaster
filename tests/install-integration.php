@@ -2,7 +2,8 @@
 /**
  * Install, upgrade and lifecycle checks: upgrade lock, downgrade guard, schema 1.4 storage (promotion usage,
  * claims, ledger indexes), the fail-safe for balance coupons, deactivation/reactivation of tasks, scheduling
- * marker, page-cache rules and the asynchronous Site Health checks.
+ * marker, uninstall (coupons suspended or trashed), voucher coupons without voucher, page-cache rules and the
+ * asynchronous Site Health checks.
  *   wp eval-file tests/install-integration.php
  */
 
@@ -123,6 +124,52 @@ vcap_inst_assert( 'publish' === get_post_status( $card->coupon_id ), 'activation
 vcap_inst_assert( as_has_scheduled_action( 'vcap_deliver_voucher', array( 'voucher_id' => $future->id ), 'vcap' ) && as_has_scheduled_action( 'vcap_daily_maintenance', array(), 'vcap' ) && as_has_scheduled_action( 'vcap_release_stale_order_reservations', array(), 'vcap' ), 'activation schedules the delivery and the recurring tasks again' );
 $checked = (int) get_option( VCAP\Install::SCHEDULES_OPTION );
 vcap_inst_assert( $checked > time() - MINUTE_IN_SECONDS && false === get_option( VCAP\Install::RESTORE_TASKS_OPTION ), 'the schedule check is remembered (no Action Scheduler queries on every request)' );
+
+// Uninstall (uninstall.php, functions only): balance coupons are always suspended, with data deletion every
+// Voucher Captain coupon goes to the trash; other coupons are kept.
+define( 'VCAP_UNINSTALL_FUNCTIONS_ONLY', true );
+require VCAP_PATH . 'uninstall.php';
+$u_card   = vcap_inst_voucher( 'balance' );
+$u_single = vcap_inst_voucher( 'single' );
+$u_orphan = new WC_Coupon();
+$u_orphan->set_code( 'vcap-inst-orphan-' . strtolower( wp_generate_password( 8, false, false ) ) );
+$u_orphan->set_discount_type( 'fixed_cart' );
+$u_orphan->set_amount( 30 );
+$u_orphan->update_meta_data( '_vcap_voucher', 'yes' );
+$u_orphan->save();
+$u_plain = new WC_Coupon();
+$u_plain->set_code( 'vcap-inst-plain-' . strtolower( wp_generate_password( 8, false, false ) ) );
+$u_plain->set_discount_type( 'percent' );
+$u_plain->set_amount( 10 );
+$u_plain->save();
+$u_changed = vcap_uninstall_coupons( false );
+vcap_inst_assert( 'draft' === get_post_status( $u_card->coupon_id ) && 'publish' === get_post_status( $u_single->coupon_id ) && 'publish' === get_post_status( $u_orphan->get_id() ) && 'publish' === get_post_status( $u_plain->get_id() ), 'uninstall without data deletion suspends balance coupons only' );
+vcap_inst_assert( in_array( $u_card->coupon_id, array_map( 'intval', (array) get_option( VCAP\Install::SUSPENDED_OPTION ) ), true ) && isset( $u_changed[ $u_card->coupon_id ] ) && ! isset( $u_changed[ $u_single->coupon_id ] ), 'the suspended coupons are remembered for a reinstall' );
+VCAP\Install::restore_balance_coupons();
+vcap_inst_assert( 'publish' === get_post_status( $u_card->coupon_id ), 'a reinstall publishes the suspended coupons again' );
+$u_changed = vcap_uninstall_coupons( true );
+vcap_inst_assert( 'trash' === get_post_status( $u_card->coupon_id ) && 'trash' === get_post_status( $u_single->coupon_id ) && 'trash' === get_post_status( $u_orphan->get_id() ) && 'publish' === get_post_status( $u_plain->get_id() ), 'uninstall with data deletion moves every voucher coupon to the trash and keeps other coupons' );
+vcap_inst_assert( 'publish' === get_post_meta( $u_card->coupon_id, '_wp_trash_meta_status', true ) && 'publish' === get_post_meta( $u_single->coupon_id, '_wp_trash_meta_status', true ) && ! wc_get_coupon_id_by_code( $u_single->code ), 'trashed voucher coupons can be restored with their status and are no longer found by code' );
+// Undo for the following checks and suites (this run did not really uninstall).
+foreach ( $u_changed as $u_id => $u_status ) {
+	$wpdb->update( $wpdb->posts, array( 'post_status' => $u_status ), array( 'ID' => (int) $u_id ) );
+	delete_post_meta( (int) $u_id, '_wp_trash_meta_status' );
+	delete_post_meta( (int) $u_id, '_wp_trash_meta_time' );
+	clean_post_cache( (int) $u_id );
+}
+WC_Cache_Helper::invalidate_cache_group( 'coupons' );
+vcap_inst_assert( 'publish' === get_post_status( $u_card->coupon_id ) && 'publish' === get_post_status( $u_orphan->get_id() ), '(coupons restored after the uninstall check)' );
+
+// A voucher coupon without its voucher (row deleted, data removed) is never redeemed as an ordinary coupon.
+$u_refused = 0;
+try {
+	vcap()->coupons->validate( true, new WC_Coupon( $u_orphan->get_id() ) );
+} catch ( Exception $e ) {
+	$u_refused = $e->getCode();
+}
+vcap_inst_assert( 9007 === $u_refused && true === vcap()->coupons->validate( true, new WC_Coupon( $u_single->coupon_id ) ) && true === vcap()->coupons->validate( true, new WC_Coupon( $u_plain->get_id() ) ), 'a voucher coupon without voucher row is refused, vouchers and ordinary coupons are not' );
+wp_delete_post( $u_orphan->get_id(), true );
+wp_delete_post( $u_plain->get_id(), true );
 
 // Page caches: the redeem form keeps the page out of caches; guests check balances without a nonce.
 wp_set_current_user( 0 );

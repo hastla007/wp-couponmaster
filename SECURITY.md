@@ -28,7 +28,7 @@ Over REST, customers may reserve, commit or release only for targets whose prefi
 
 ## Deactivation
 
-Gift cards and store credit are WooCommerce coupons without a usage limit whose amount is the remaining balance; only Voucher Captain deducts that balance. On deactivation these coupons are set to draft (WooCommerce no longer accepts the codes) and published again on reactivation. This does not cover a plugin paused by WordPress recovery mode after a fatal error: there, nothing of the plugin runs, so fix or deactivate it promptly.
+Gift cards and store credit are WooCommerce coupons without a usage limit whose amount is the remaining balance; only Voucher Captain deducts that balance. On deactivation these coupons are set to draft (WooCommerce no longer accepts the codes) and published again on reactivation. Uninstalling suspends them as well (also when deactivation did not run, e.g. a network delete while the plugin is active on single sites); with "Delete data on uninstall" every Voucher Captain coupon is moved to the trash, because without its voucher it would be an ordinary coupon worth the full value. While the plugin runs, a Voucher Captain coupon without a voucher row is refused at checkout. This does not cover a plugin paused by WordPress recovery mode after a fatal error: there, nothing of the plugin runs, so fix or deactivate it promptly.
 
 ## Guest PDF links
 

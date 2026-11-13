@@ -872,7 +872,9 @@ final class CouponManager {
 	}
 
 	/**
-	 * Reject coupons whose voucher is void, not yet delivered or used up.
+	 * Reject coupons whose voucher is void, not yet delivered or used up – and Voucher Captain coupons without a
+	 * voucher (row deleted, data removed on uninstall, copied coupon): their amount, usage limit and balance are
+	 * only right together with the voucher, so they are never redeemed as ordinary coupons.
 	 */
 	public function validate( $valid, $coupon, $discounts = null ) {
 		if ( ! $valid || ! $coupon instanceof \WC_Coupon || 'yes' !== $coupon->get_meta( '_vcap_voucher' ) ) {
@@ -880,7 +882,7 @@ final class CouponManager {
 		}
 		$voucher = $this->repo->get_by_coupon( $coupon->get_id() );
 		if ( ! $voucher ) {
-			return $valid;
+			throw new \Exception( esc_html__( 'This voucher cannot be redeemed: its voucher record is missing. Please contact the shop.', 'voucher-captain' ), 9007 );
 		}
 		if ( Voucher::STATUS_VOID === $voucher->status ) {
 			throw new \Exception( esc_html__( 'This voucher has been cancelled.', 'voucher-captain' ), 9001 );
