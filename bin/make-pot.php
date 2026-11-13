@@ -1,13 +1,29 @@
 <?php
 /**
- * Generates languages/voucher-captain.pot from the PHP sources (no WP-CLI needed).
- * Usage: php bin/make-pot.php
+ * Generates languages/voucher-captain.pot from the PHP sources (no WP-CLI needed), like `wp i18n make-pot`: the
+ * plugin header (name, description, URIs, author) and every gettext call with the text domain voucher-captain.
+ * Usage: php bin/make-pot.php [output file, default languages/voucher-captain.pot]
  */
 $root   = dirname( __DIR__ );
 $domain = 'voucher-captain';
+$target = $argv[1] ?? "$root/languages/$domain.pot";
 $funcs  = array( '__' => 1, '_e' => 1, 'esc_html__' => 1, 'esc_html_e' => 1, 'esc_attr__' => 1, 'esc_attr_e' => 1, '_x' => 'x', '_n' => 'n' );
 $files  = array( "$root/voucher-captain.php" );
-foreach ( array( 'src', 'templates' ) as $dir ) {
+
+// Plugin header: version for the POT header, translatable header fields as WordPress shows them on Plugins.
+$header_src = (string) file_get_contents( "$root/voucher-captain.php", false, null, 0, 8192 );
+$header     = static function ( string $field ) use ( $header_src ): string {
+	return preg_match( '/^[ \t\/*#@]*' . preg_quote( $field, '/' ) . ':(.*)$/mi', $header_src, $m ) ? trim( preg_replace( '/\s*(?:\*\/|\?>).*/', '', $m[1] ) ) : '';
+};
+$version = $header( 'Version' );
+$entries = array();
+foreach ( array( 'Plugin Name', 'Plugin URI', 'Description', 'Author', 'Author URI' ) as $field ) {
+	$value = $header( $field );
+	if ( '' !== $value && ! isset( $entries[ $value ] ) ) {
+		$entries[ $value ] = array( 'refs' => array( 'voucher-captain.php' ), 'comment' => "$field of the plugin", 'plural' => null, 'ctx' => null, 'msgid' => $value );
+	}
+}
+foreach ( array( 'config', 'src', 'templates' ) as $dir ) {
 	$it = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( "$root/$dir" ) );
 	foreach ( $it as $f ) {
 		if ( $f->isFile() && 'php' === $f->getExtension() ) {
@@ -16,7 +32,6 @@ foreach ( array( 'src', 'templates' ) as $dir ) {
 	}
 }
 sort( $files );
-$entries = array();
 foreach ( $files as $file ) {
 	$tokens  = token_get_all( file_get_contents( $file ) );
 	$comment = '';
@@ -88,7 +103,7 @@ foreach ( $files as $file ) {
 			$entries[ $key ] = array( 'refs' => array(), 'comment' => '', 'plural' => $plural ?? null, 'ctx' => $ctx ?? null, 'msgid' => $single );
 		}
 		$entries[ $key ]['refs'][] = $ref;
-		if ( $comment ) {
+		if ( $comment && ! str_ends_with( $entries[ $key ]['comment'], ' of the plugin' ) ) {
 			$entries[ $key ]['comment'] = $comment;
 		}
 		$comment = '';
@@ -99,7 +114,7 @@ foreach ( $files as $file ) {
 $esc = static fn( $s ) => '"' . str_replace( array( '\\', '"', "\n", "\t" ), array( '\\\\', '\\"', '\\n', '\\t' ), $s ) . '"';
 // Reproducible builds: the creation date comes from SOURCE_DATE_EPOCH (bin/build.sh sets the commit time).
 $vcap_pot_time = (int) getenv( 'SOURCE_DATE_EPOCH' ) ?: time();
-$out = "# Copyright (C) " . gmdate( 'Y', $vcap_pot_time ) . " Voucher Captain\n# This file is distributed under the GPL-2.0-or-later.\nmsgid \"\"\nmsgstr \"\"\n\"Project-Id-Version: Voucher Captain 1.0.0\\n\"\n\"MIME-Version: 1.0\\n\"\n\"Content-Type: text/plain; charset=UTF-8\\n\"\n\"Content-Transfer-Encoding: 8bit\\n\"\n\"POT-Creation-Date: " . gmdate( 'Y-m-d H:i+0000', $vcap_pot_time ) . "\\n\"\n\"X-Domain: $domain\\n\"\n\n";
+$out = "# Copyright (C) " . gmdate( 'Y', $vcap_pot_time ) . " Voucher Captain\n# This file is distributed under the GPL-2.0-or-later.\nmsgid \"\"\nmsgstr \"\"\n\"Project-Id-Version: Voucher Captain " . $version . "\\n\"\n\"MIME-Version: 1.0\\n\"\n\"Content-Type: text/plain; charset=UTF-8\\n\"\n\"Content-Transfer-Encoding: 8bit\\n\"\n\"POT-Creation-Date: " . gmdate( 'Y-m-d H:i+0000', $vcap_pot_time ) . "\\n\"\n\"X-Domain: $domain\\n\"\n\n";
 foreach ( $entries as $e ) {
 	if ( $e['comment'] ) {
 		$out .= '#. ' . str_replace( "\n", "\n#. ", $e['comment'] ) . "\n";
@@ -118,6 +133,6 @@ foreach ( $entries as $e ) {
 		$out .= "msgstr \"\"\n\n";
 	}
 }
-@mkdir( "$root/languages" );
-file_put_contents( "$root/languages/$domain.pot", $out );
-echo count( $entries ) . " strings written to languages/$domain.pot\n";
+@mkdir( dirname( $target ), 0777, true );
+file_put_contents( $target, $out );
+echo count( $entries ) . ' strings written to ' . str_replace( $root . '/', '', $target ) . "\n";

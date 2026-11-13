@@ -286,7 +286,7 @@ final class CouponManager {
 				$voucher,
 				$amount,
 				$order->get_id(),
-				sprintf( __( 'Reserved for order #%s', 'voucher-captain' ), $order->get_order_number() )
+				sprintf( /* translators: %s: order number */ __( 'Reserved for order #%s', 'voucher-captain' ), $order->get_order_number() )
 			);
 			// The reservation may be a few cents below the discount when currency round trips exceed the balance
 			// (same tolerance as reserve_balance_atomic()): that is the full balance, not a changed one.
@@ -642,7 +642,7 @@ final class CouponManager {
 		$released = 0;
 		foreach ( $reservations as $code => $amount ) {
 			$voucher = $this->find_voucher_for_code( (string) $code );
-			if ( $voucher && $this->release_reservation_atomic( $voucher, $order->get_id(), sprintf( __( 'Released from order #%s', 'voucher-captain' ), $order->get_order_number() ) ) ) {
+			if ( $voucher && $this->release_reservation_atomic( $voucher, $order->get_id(), sprintf( /* translators: %s: order number */ __( 'Released from order #%s', 'voucher-captain' ), $order->get_order_number() ) ) ) {
 				++$released;
 			}
 		}
@@ -1256,7 +1256,7 @@ final class CouponManager {
 				$voucher,
 				(float) $amount,
 				$order->get_id(),
-				sprintf( __( 'Order #%s cancelled or refunded', 'voucher-captain' ), $order->get_order_number() )
+				sprintf( /* translators: %s: order number */ __( 'Order #%s cancelled or refunded', 'voucher-captain' ), $order->get_order_number() )
 			) ) {
 				++$restored;
 			}
