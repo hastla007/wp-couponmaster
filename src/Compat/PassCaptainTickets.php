@@ -40,6 +40,9 @@ final class PassCaptainTickets {
 		add_action( 'vcap_product_settings_fields', array( $this, 'product_fields' ) );
 		add_action( 'vcap_product_settings_save', array( $this, 'product_save' ), 10, 2 );
 		add_filter( 'vcap_line_snapshot', array( $this, 'snapshot' ), 10, 2 );
+		add_filter( 'vcap_voucher_expires_at', array( $this, 'expires_at_event' ), 10, 2 );
+		add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'check_fixed_date_capacity' ), 25, 3 );
+		add_action( 'woocommerce_check_cart_items', array( $this, 'check_cart_capacity' ) );
 		add_filter( 'vcap_redemption_channel_allowed', array( $this, 'channel_allowed' ), 10, 4 );
 		add_filter( 'vcap_shop_channel_refused_message', array( $this, 'shop_refused_message' ), 10, 2 );
 		add_action( 'admin_notices', array( $this, 'redeem_page_notice' ) );
@@ -964,6 +967,69 @@ final class PassCaptainTickets {
 		}
 	}
 
+	/** A fixed-date ticket voucher expires when its event starts (no exchange after the date). */
+	public function expires_at_event( $expires, $item ) {
+		$line   = $item instanceof \WC_Order_Item_Product ? $item->get_meta( Issuer::LINE_META ) : null;
+		$starts = is_array( $line ) ? (string) ( $line[ self::SNAPSHOT_KEY ]['starts_at'] ?? '' ) : '';
+		if ( '' === $starts || ! strtotime( $starts . ' UTC' ) ) {
+			return $expires;
+		}
+		return ! $expires || strtotime( $starts . ' UTC' ) < strtotime( $expires . ' UTC' ) ? $starts : $expires;
+	}
+
+	/**
+	 * Fixed-date ticket vouchers are only sold while the date has room for their tickets (all of this product in
+	 * the cart). The places are taken when the voucher is exchanged; until then Pass Captain may sell them too.
+	 */
+	public function check_fixed_date_capacity( $passed, $product_id, $quantity = 1 ) {
+		if ( ! $passed ) {
+			return $passed;
+		}
+		$product = wc_get_product( (int) $product_id );
+		$in_cart = 0;
+		if ( function_exists( 'WC' ) && WC()->cart ) {
+			foreach ( WC()->cart->get_cart() as $line ) {
+				$in_cart += (int) $line['product_id'] === (int) $product_id ? (int) $line['quantity'] : 0;
+			}
+		}
+		$problem = $product instanceof \WC_Product ? $this->fixed_date_problem( $product, $in_cart + max( 1, (int) $quantity ) ) : '';
+		if ( '' !== $problem ) {
+			wc_add_notice( $problem, 'error' );
+			return false;
+		}
+		return $passed;
+	}
+
+	public function check_cart_capacity(): void {
+		if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
+			return;
+		}
+		$counts = array();
+		foreach ( WC()->cart->get_cart() as $line ) {
+			$counts[ (int) $line['product_id'] ] = ( $counts[ (int) $line['product_id'] ] ?? 0 ) + (int) $line['quantity'];
+		}
+		foreach ( $counts as $product_id => $qty ) {
+			$product = wc_get_product( $product_id );
+			$problem = $product instanceof \WC_Product ? $this->fixed_date_problem( $product, $qty ) : '';
+			if ( '' !== $problem ) {
+				wc_add_notice( $problem, 'error' );
+			}
+		}
+	}
+
+	/** Why $vouchers of a fixed-date ticket voucher product cannot be sold right now ('' = fine). */
+	public function fixed_date_problem( \WC_Product $product, int $vouchers ): string {
+		$type    = absint( $product->get_meta( self::META_TYPE ) );
+		$service = self::service();
+		if ( ! $type || ! $service || ! method_exists( $service, 'targets' ) || ! apply_filters( 'vcap_passcaptain_check_fixed_date_capacity', true, $product ) ) {
+			return '';
+		}
+		$needed = $vouchers * max( 1, min( 10, absint( $product->get_meta( self::META_QTY ) ) ?: 1 ) );
+		$open   = array_map( 'intval', array_column( (array) $service->targets( array( 'quantity' => $needed ) ), 'ticket_type_id' ) );
+		/* translators: %s: product name */
+		return in_array( $type, $open, true ) ? '' : sprintf( __( '"%s" is not available: the date is sold out or already over.', 'voucher-captain' ), $product->get_name() );
+	}
+
 	/** Stores the ticket target with each sold voucher line (later product edits never change it). */
 	public function snapshot( $extra, $item ) {
 		$product = $item instanceof \WC_Order_Item_Product ? $item->get_product() : null;
@@ -973,7 +1039,8 @@ final class PassCaptainTickets {
 		if ( ! $type && ! $event ) {
 			return $extra;
 		}
-		$label = '';
+		$label     = '';
+		$starts_at = '';
 		$service = self::service();
 		if ( $service && $event && method_exists( $service, 'events' ) ) {
 			foreach ( (array) $service->events() as $e ) {
@@ -984,7 +1051,8 @@ final class PassCaptainTickets {
 		} elseif ( $service && method_exists( $service, 'targets' ) ) {
 			foreach ( (array) $service->targets() as $t ) {
 				if ( (int) $t['ticket_type_id'] === $type ) {
-					$label = (string) $t['label'];
+					$label     = (string) $t['label'];
+					$starts_at = (string) ( $t['starts_at'] ?? '' );
 				}
 			}
 		}
@@ -994,6 +1062,8 @@ final class PassCaptainTickets {
 			'ticket_name'    => $event ? (string) $base->get_meta( self::META_NAME ) : '',
 			'quantity'       => max( 1, min( 10, absint( $base->get_meta( self::META_QTY ) ) ?: 1 ) ),
 			'label'          => $label,
+			// Fixed date: the voucher can be exchanged until the event starts (UTC).
+			'starts_at'      => $starts_at ?? '',
 		);
 		return $extra;
 	}

@@ -185,6 +185,8 @@ final class Issuer {
 		$voucher->initial_amount = $this->voucher_amount( $order, $item, $config );
 		$voucher->balance       = $voucher->initial_amount;
 		$voucher->expires_at    = ProductConfig::expiry_for( $config, $order->get_date_paid() ? $order->get_date_paid()->getTimestamp() : time() );
+		/** Expiry (UTC "Y-m-d H:i:s" or null) of a voucher being issued, e.g. no later than the event it is for. */
+		$voucher->expires_at    = apply_filters( 'vcap_voucher_expires_at', $voucher->expires_at, $item, $config, $order );
 		$voucher->buyer_name    = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() );
 		$voucher->buyer_email   = (string) $order->get_billing_email();
 		$voucher->max_checkins  = (int) $config['max_checkins'];

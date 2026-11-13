@@ -284,7 +284,7 @@ Fünf parallele Prüfungen (Sicherheit, Geld/Buchungen, Steuer/Recht/Datenschutz
 ### Bedienung, Barrierefreiheit und Betrieb
 
 - [x] Rate-Limit Einlösen/Guthaben zählt Erfolge und jeden Schritt, gleitendes Fenster und globaler Zähler können alle Kunden sperren (Plugin.php); nur Fehlversuche zählen, festes Fenster. — *erledigt: nur unbekannte Codes zählen (Guthaben, Einlöseformular, Coupon-Link), festes Fenster, nur `REMOTE_ADDR` (Filter `vcap_client_ip` für vertrauenswürdige Proxys).*
-- [ ] Festtermin-Ticketgutscheine: Kontingent beim Verkauf prüfen/halten, Einlösefrist bis Eventbeginn, Erinnerung vor dem Event.
+- [x] Festtermin-Ticketgutscheine: Kontingent beim Verkauf prüfen/halten, Einlösefrist bis Eventbeginn, Erinnerung vor dem Event. — *erledigt: Verkauf nur, solange der Termin Platz für alle Tickets im Warenkorb hat (Warenkorb und Kasse geprüft, Filter `vcap_passcaptain_check_fixed_date_capacity`); Gutschein läuft mit Eventbeginn ab (Filter `vcap_voucher_expires_at`), die Ablauf-Erinnerung wird damit zur Erinnerung vor dem Event. Gehalten werden die Plätze erst beim Umtausch (PC hat kein Vorab-Kontingent für Gutscheine) – Grenze in API.md dokumentiert.*
 - [x] Bereits umgewandelter Gutschein zeigt bei erneuter Eingabe die volle Empfängeradresse und „wurden gesendet“; maskieren und „bereits eingelöst am …“ melden. — *erledigt (5db3db9).*
 - [x] Ticketgutscheine standardmäßig nur Kanal „passcaptain“, nicht als Wertgutschein im Warenkorb/PC-Checkout. — *erledigt: ohne Kanalauswahl nur Umtausch; Warenkorb-Hinweis auf die Einlöseseite, PC-Checkout lehnt ab; Wertnutzung nur mit „Shop“ oder Filter `vcap_passcaptain_ticket_voucher_as_value`.*
 - [x] Massenaktion „Ungültig machen“ mit Bestätigung (widerruft PC-Tickets). — *erledigt (4f3d8a4).*

@@ -4146,3 +4146,6 @@ msgstr "Abweichung"
 
 msgid "No differences found."
 msgstr "Keine Abweichungen gefunden."
+
+msgid "\"%s\" is not available: the date is sold out or already over."
+msgstr "„%s“ ist nicht verfügbar: Der Termin ist ausverkauft oder bereits vorbei."

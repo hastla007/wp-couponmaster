@@ -175,6 +175,14 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	$tv = vcap()->vouchers->for_order( $tv_order->get_id() )[0] ?? null;
 	$tv_target = $tv ? VCAP\Compat\PassCaptainTickets::target( $tv ) : null;
 	vcap_pc_assert( $tv_target && $ticket_type === $tv_target['ticket_type_id'] && 2 === $tv_target['quantity'], 'the sold voucher stores its ticket target with the order line' );
+	$tv_starts = (string) $wpdb->get_var( $wpdb->prepare( "SELECT o.starts_at FROM {$wpdb->prefix}wpcap_ticket_types t JOIN {$wpdb->prefix}wpcap_occurrences o ON o.occurrence_id = t.occurrence_id WHERE t.ticket_type_id = %d", $ticket_type ) );
+	$tv_line   = wc_get_order_item_meta( $tv->order_item_id, VCAP\Issuer::LINE_META, true );
+	$has_start = '' !== (string) ( $tv_line['passcaptain_ticket']['starts_at'] ?? '' ); // Pass Captain lists start times (targets()).
+	vcap_pc_assert( ! $has_start || ( $tv->expires_at && strtotime( $tv->expires_at . ' UTC' ) <= strtotime( $tv_starts . ' UTC' ) ), 'a fixed-date ticket voucher expires when its event starts' );
+	$capacity_check = vcap()->passcaptain_tickets;
+	// Pass Captain versions with the quantity filter of targets() leave out dates without enough places.
+	$has_qty_filter = ! in_array( $ticket_type, array_map( 'intval', array_column( (array) VCAP\Compat\PassCaptainTickets::service()->targets( array( 'quantity' => 100000 ) ), 'ticket_type_id' ) ), true );
+	vcap_pc_assert( '' === $capacity_check->fixed_date_problem( $tv_product, 1 ) && ( ! $has_qty_filter || '' !== $capacity_check->fixed_date_problem( $tv_product, 60 ) ), 'fixed-date ticket vouchers are sold only while the date has room for their tickets (2 per voucher, 100 places)' );
 	vcap_pc_assert( ! VCAP\Channels::allowed( $tv, VCAP\Channels::SHOP ) && ! VCAP\Channels::allowed( $tv, VCAP\Channels::COUNTER ) && VCAP\Channels::allowed( $tv, 'passcaptain' ), 'a ticket voucher sold without a channel selection is only redeemable via Pass Captain (not in the cart or at the counter)' );
 	vcap_pc_assert( str_contains( (string) apply_filters( 'vcap_shop_channel_refused_message', 'x', $tv ), 'exchanged for tickets' ), 'the cart explains where a ticket voucher is redeemed' );
 	$tv_quote = Bridge::provider()->quote( array( 'code' => $tv->code, 'currency' => get_woocommerce_currency(), 'amount_minor' => 7000, 'order_reference' => 'tv-test' ) );
