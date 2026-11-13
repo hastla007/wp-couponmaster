@@ -404,7 +404,10 @@ final class PassCaptainTickets {
 				// Never report "sent" for tickets that were revoked (e.g. the event was cancelled).
 				return new \WP_Error( 'vcap_ticket_exchange_revoked', __( 'The tickets of this voucher were revoked (for example because the event was cancelled). Please contact us.', 'voucher-captain' ), array( 'status' => 409 ) );
 			}
-			return $this->result( $voucher, is_array( $state ) ? $state : array(), (string) ( $existing['meta']['email'] ?? '' ) );
+			$done = $this->result( $voucher, is_array( $state ) ? $state : array(), (string) ( $existing['meta']['email'] ?? '' ) );
+			$done['reused']       = true;
+			$done['exchanged_at'] = (string) ( $existing['committed_at'] ?? '' );
+			return $done;
 		}
 		$ticket_type = $target['ticket_type_id'];
 		if ( $target['event_id'] ) {
@@ -624,7 +627,21 @@ final class PassCaptainTickets {
 			return 'rejected';
 		}
 		$this->clear_session();
-		$shown = is_email( $guest_email ) || is_user_logged_in() ? $result['email'] : self::mask_email( $result['email'] );
+		// The full address only when it is the visitor's own (entered now or of the logged-in account).
+		$own   = array_filter( array( strtolower( $guest_email ), is_user_logged_in() ? strtolower( (string) wp_get_current_user()->user_email ) : '' ) );
+		$shown = in_array( strtolower( (string) $result['email'] ), $own, true ) ? $result['email'] : self::mask_email( $result['email'] );
+		if ( ! empty( $result['reused'] ) ) {
+			$when = '' !== (string) ( $result['exchanged_at'] ?? '' ) ? get_date_from_gmt( (string) $result['exchanged_at'], (string) get_option( 'date_format' ) ) : '';
+			wc_add_notice(
+				'' !== $when
+					/* translators: 1: date, 2: number of tickets, 3: (masked) email */
+					? sprintf( __( 'This voucher was already exchanged on %1$s: %2$d ticket(s) went to %3$s.', 'voucher-captain' ), $when, $result['tickets'], $shown )
+					/* translators: 1: number of tickets, 2: (masked) email */
+					: sprintf( __( 'This voucher was already exchanged: %1$d ticket(s) went to %2$s.', 'voucher-captain' ), $result['tickets'], $shown ),
+				'notice'
+			);
+			return 'exchanged';
+		}
 		/* translators: 1: number of tickets, 2: email */
 		wc_add_notice( sprintf( __( 'Your tickets (%1$d) were sent to %2$s.', 'voucher-captain' ), $result['tickets'], $shown ) );
 		return 'exchanged';

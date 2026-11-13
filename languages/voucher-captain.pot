@@ -6,14 +6,14 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-13 00:05+0000\n"
+"POT-Creation-Date: 2026-11-13 00:07+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:75 src/API/V1/RedemptionService.php:117
 msgid "Too many invalid voucher codes. Please try again later."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:80 src/API/V1/RedemptionService.php:128 src/Compat/PassCaptainTickets.php:372
+#: src/API/V1/RedemptionService.php:80 src/API/V1/RedemptionService.php:128 src/Compat/PassCaptainTickets.php:386
 msgid "This voucher code is not valid."
 msgstr ""
 
@@ -81,7 +81,7 @@ msgstr ""
 msgid "This reservation has expired or was cancelled. Please redeem the voucher again."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:522 src/API/V1/RedemptionService.php:613 src/CouponManager.php:826 src/Downloads.php:128
+#: src/API/V1/RedemptionService.php:522 src/API/V1/RedemptionService.php:613 src/CouponManager.php:833 src/Downloads.php:128
 msgid "This voucher has been cancelled."
 msgstr ""
 
@@ -101,11 +101,11 @@ msgstr ""
 msgid "This voucher can only be used in the shop."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:615 src/CouponManager.php:829
+#: src/API/V1/RedemptionService.php:615 src/CouponManager.php:836
 msgid "This voucher is not active yet."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:617 src/API/V1/RedemptionService.php:623 src/CouponManager.php:833
+#: src/API/V1/RedemptionService.php:617 src/API/V1/RedemptionService.php:623 src/CouponManager.php:840
 msgid "This voucher is currently being redeemed. Please try again in a few minutes."
 msgstr ""
 
@@ -113,7 +113,7 @@ msgstr ""
 msgid "This voucher has already been redeemed."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:626 src/CouponManager.php:839
+#: src/API/V1/RedemptionService.php:626 src/CouponManager.php:846
 msgid "This voucher has expired."
 msgstr ""
 
@@ -627,7 +627,7 @@ msgstr ""
 msgid "Ticket type"
 msgstr ""
 
-#: src/Admin/Scanner.php:46 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:208 src/Compat/PassCaptainTickets.php:677 src/Compat/PassCaptainTickets.php:880 src/Fields.php:601
+#: src/Admin/Scanner.php:46 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:208 src/Compat/PassCaptainTickets.php:709 src/Compat/PassCaptainTickets.php:912 src/Fields.php:601
 msgid "Date"
 msgstr ""
 
@@ -1191,7 +1191,7 @@ msgstr ""
 msgid "unknown ticket"
 msgstr ""
 
-#: src/Compat/PassCaptainScanner.php:77 src/Compat/PassCaptainTickets.php:773
+#: src/Compat/PassCaptainScanner.php:77 src/Compat/PassCaptainTickets.php:805
 msgid "WP Pass Captain ticket"
 msgstr ""
 
@@ -1223,46 +1223,46 @@ msgstr ""
 msgid "Valid ticket – but for another date: %s"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:77
+#: src/Compat/PassCaptainTickets.php:78
 msgid "Open the redeem page with the button below – your code is already filled in."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:78
+#: src/Compat/PassCaptainTickets.php:79
 msgid "Enter your code on our website's redeem page."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:80
+#: src/Compat/PassCaptainTickets.php:81
 msgid "Choose your date and, if asked, enter the names of the attendees."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:81
+#: src/Compat/PassCaptainTickets.php:82
 msgid "If asked, enter the names of the attendees."
 msgstr ""
 
 #. translators: %s: e.g. "2 tickets for Concert X"
-#: src/Compat/PassCaptainTickets.php:83
+#: src/Compat/PassCaptainTickets.php:84
 #, php-format
 msgid "You receive %s by email right away."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:84
+#: src/Compat/PassCaptainTickets.php:85
 msgid "Show the tickets at the entrance – the voucher itself is not an admission ticket."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:93
+#: src/Compat/PassCaptainTickets.php:94
 msgid "Your ticket voucher {coupon_code} is valid until {expiry_date}. Exchange it for your tickets before then."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:98
+#: src/Compat/PassCaptainTickets.php:99
 msgid "Event of a ticket voucher"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:99
+#: src/Compat/PassCaptainTickets.php:100
 msgid "Number of tickets of a ticket voucher"
 msgstr ""
 
 #. translators: %d: number of tickets
-#: src/Compat/PassCaptainTickets.php:115
+#: src/Compat/PassCaptainTickets.php:116
 #, php-format
 msgid "%d ticket"
 msgid_plural "%d tickets"
@@ -1270,17 +1270,17 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: 1: "2 tickets", 2: event
-#: src/Compat/PassCaptainTickets.php:119
+#: src/Compat/PassCaptainTickets.php:120
 #, php-format
 msgid "%1$s for %2$s"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:146
+#: src/Compat/PassCaptainTickets.php:158
 msgid "The tickets were cancelled."
 msgstr ""
 
 #. translators: 1: number of tickets, 2: event and date
-#: src/Compat/PassCaptainTickets.php:153
+#: src/Compat/PassCaptainTickets.php:165
 #, php-format
 msgid "%1$d ticket for %2$s"
 msgid_plural "%1$d tickets for %2$s"
@@ -1288,7 +1288,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number of tickets
-#: src/Compat/PassCaptainTickets.php:155
+#: src/Compat/PassCaptainTickets.php:167
 #, php-format
 msgid "Exchanged for %d ticket"
 msgid_plural "Exchanged for %d tickets"
@@ -1296,208 +1296,220 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: 1: tickets text, 2: masked email
-#: src/Compat/PassCaptainTickets.php:158
+#: src/Compat/PassCaptainTickets.php:170
 #, php-format
 msgid "%1$s, sent to %2$s"
 msgstr ""
 
 #. translators: %s: voucher code
-#: src/Compat/PassCaptainTickets.php:173
+#: src/Compat/PassCaptainTickets.php:185
 #, php-format
 msgid "Exchange voucher %s for tickets"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:173 src/Compat/PassCaptainTickets.php:869 src/Compat/PassCaptainTickets.php:885
+#: src/Compat/PassCaptainTickets.php:185 src/Compat/PassCaptainTickets.php:901 src/Compat/PassCaptainTickets.php:917
 msgid "Exchange for tickets"
 msgstr ""
 
 #. translators: %s: voucher code
-#: src/Compat/PassCaptainTickets.php:184
+#: src/Compat/PassCaptainTickets.php:196
 #, php-format
 msgid "Send the tickets of voucher %s again"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:184
+#: src/Compat/PassCaptainTickets.php:196
 msgid "Send tickets again"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:204 src/Downloads.php:84 src/Shortcodes.php:108
+#: src/Compat/PassCaptainTickets.php:216 src/Downloads.php:84 src/Shortcodes.php:108
 msgid "The request has expired. Please try again."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:211
+#: src/Compat/PassCaptainTickets.php:223
 msgid "The tickets of this voucher cannot be sent again."
 msgstr ""
 
 #. translators: %s: masked email
-#: src/Compat/PassCaptainTickets.php:220
+#: src/Compat/PassCaptainTickets.php:232
 #, php-format
 msgid "The tickets were sent again to %s. Only the new tickets are valid."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:376
+#: src/Compat/PassCaptainTickets.php:390
 msgid "This voucher cannot be exchanged for tickets."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:379
+#: src/Compat/PassCaptainTickets.php:393
 msgid "Gift cards with a balance cannot be exchanged for tickets; use them in the ticket checkout."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:383 src/Compat/PassCaptainTickets.php:468
+#: src/Compat/PassCaptainTickets.php:397 src/Compat/PassCaptainTickets.php:485
 msgid "Tickets cannot be issued right now. Please try again later."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:391
+#: src/Compat/PassCaptainTickets.php:405
 msgid "The tickets of this voucher were revoked (for example because the event was cancelled). Please contact us."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:402
+#: src/Compat/PassCaptainTickets.php:419
 msgid "Please choose a date for your tickets."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:402 src/Compat/PassCaptainTickets.php:873
+#: src/Compat/PassCaptainTickets.php:419 src/Compat/PassCaptainTickets.php:905
 msgid "There are no upcoming dates for this voucher at the moment."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:425
+#: src/Compat/PassCaptainTickets.php:442
 msgid "Please fill in the details for each ticket."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:445
+#: src/Compat/PassCaptainTickets.php:462
 msgid "Please log in so we know where to send the tickets."
 msgstr ""
 
 #. translators: 1: number of tickets, 2: Pass Captain order id, 3: email
-#: src/Compat/PassCaptainTickets.php:511
+#: src/Compat/PassCaptainTickets.php:528
 #, php-format
 msgid "%1$d ticket(s), Pass Captain order %2$s, sent to %3$s"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:574
+#: src/Compat/PassCaptainTickets.php:592
 msgid "Please enter a valid email address for your tickets."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:574
+#: src/Compat/PassCaptainTickets.php:592
 msgid "Please enter the email address the tickets should be sent to."
 msgstr ""
 
+#. translators: 1: date, 2: number of tickets, 3: (masked) email
+#: src/Compat/PassCaptainTickets.php:638
+#, php-format
+msgid "This voucher was already exchanged on %1$s: %2$d ticket(s) went to %3$s."
+msgstr ""
+
+#. translators: 1: number of tickets, 2: (masked) email
+#: src/Compat/PassCaptainTickets.php:640
+#, php-format
+msgid "This voucher was already exchanged: %1$d ticket(s) went to %2$s."
+msgstr ""
+
 #. translators: 1: number of tickets, 2: email
-#: src/Compat/PassCaptainTickets.php:614
+#: src/Compat/PassCaptainTickets.php:646
 #, php-format
 msgid "Your tickets (%1$d) were sent to %2$s."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:660
+#: src/Compat/PassCaptainTickets.php:692
 msgid "Send the tickets to (email)"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:665
+#: src/Compat/PassCaptainTickets.php:697
 msgid "Choose another date"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:667
+#: src/Compat/PassCaptainTickets.php:699
 msgid "Cancel"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:668
+#: src/Compat/PassCaptainTickets.php:700
 msgid "Redeeming issues the tickets bindingly; the voucher is used up."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:679 src/Compat/PassCaptainTickets.php:881
+#: src/Compat/PassCaptainTickets.php:711 src/Compat/PassCaptainTickets.php:913
 msgid "— Choose a date —"
 msgstr ""
 
 #. translators: %d: ticket number
-#: src/Compat/PassCaptainTickets.php:699
+#: src/Compat/PassCaptainTickets.php:731
 #, php-format
 msgid "Ticket %d"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:730
+#: src/Compat/PassCaptainTickets.php:762
 msgid "Ticket voucher – not a ticket. Exchange it for tickets first (redeem page or voucher admin)."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:736
+#: src/Compat/PassCaptainTickets.php:768
 msgid "Ticket vouchers cannot be redeemed at the counter. Exchange them for tickets first."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:747
+#: src/Compat/PassCaptainTickets.php:779
 msgid "Tip: the voucher type \"Ticket\" is a simple admission pass without dates or capacity, checked in at Voucher Captain. For events with dates, capacity and admission rules, create them in WP Pass Captain and use a voucher with \"WP Pass Captain ticket\" below (or sell Pass Captain tickets directly)."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:751
+#: src/Compat/PassCaptainTickets.php:783
 msgid "— No ticket (regular voucher) —"
 msgstr ""
 
 #. translators: 1: event, 2: number of upcoming dates
-#: src/Compat/PassCaptainTickets.php:755
+#: src/Compat/PassCaptainTickets.php:787
 #, php-format
 msgid "Customer chooses the date: %1$s (%2$d dates)"
 msgstr ""
 
 #. translators: %s: event, date and ticket type
-#: src/Compat/PassCaptainTickets.php:760
+#: src/Compat/PassCaptainTickets.php:792
 #, php-format
 msgid "Fixed date: %s"
 msgstr ""
 
 #. translators: %d: event id
-#: src/Compat/PassCaptainTickets.php:764
+#: src/Compat/PassCaptainTickets.php:796
 #, php-format
 msgid "Event #%d (no upcoming dates)"
 msgstr ""
 
 #. translators: %d: ticket type id
-#: src/Compat/PassCaptainTickets.php:768
+#: src/Compat/PassCaptainTickets.php:800
 #, php-format
 msgid "Ticket type #%d (no longer on sale)"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:777
+#: src/Compat/PassCaptainTickets.php:809
 msgid "Exchange each voucher for tickets of this ticket type (redeem page or voucher admin). The voucher becomes redeemable via WP Pass Captain."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:783
+#: src/Compat/PassCaptainTickets.php:815
 msgid "Tickets per voucher"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:792
+#: src/Compat/PassCaptainTickets.php:824
 msgid "Ticket name (date choice)"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:794
+#: src/Compat/PassCaptainTickets.php:826
 msgid "Any ticket type"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:796
+#: src/Compat/PassCaptainTickets.php:828
 msgid "Only for \"customer chooses the date\": offer only ticket types with exactly this name (e.g. \"Standard\")."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:901
+#: src/Compat/PassCaptainTickets.php:933
 msgid "Tickets issued in WP Pass Captain and sent by email."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:902
+#: src/Compat/PassCaptainTickets.php:934
 msgid "The tickets could not be issued. The reason is in the voucher history."
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:908
+#: src/Compat/PassCaptainTickets.php:940
 msgid "Exchanged for Pass Captain tickets"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:909
+#: src/Compat/PassCaptainTickets.php:941
 msgid "Ticket exchange failed"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:910
+#: src/Compat/PassCaptainTickets.php:942
 msgid "Pass Captain tickets revoked"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:911
+#: src/Compat/PassCaptainTickets.php:943
 msgid "Voucher restored (tickets cancelled in Pass Captain)"
 msgstr ""
 
-#: src/Compat/PassCaptainTickets.php:912
+#: src/Compat/PassCaptainTickets.php:944
 msgid "Tickets sent again"
 msgstr ""
 
@@ -1515,104 +1527,104 @@ msgstr ""
 msgid "The voucher %s will be applied as soon as you add products to your cart."
 msgstr ""
 
-#: src/CouponManager.php:113
+#: src/CouponManager.php:116
 msgid "Unpaid order: voucher balance reservations released."
 msgstr ""
 
 #. translators: 1: voucher type, 2: order number
-#: src/CouponManager.php:146
+#: src/CouponManager.php:149
 #, php-format
 msgid "%1$s from order #%2$s (Voucher Captain)"
 msgstr ""
 
-#: src/CouponManager.php:266
+#: src/CouponManager.php:269
 msgid "Checkout reservation reconciled"
 msgstr ""
 
-#: src/CouponManager.php:267
+#: src/CouponManager.php:270
 msgid "An earlier voucher reservation could not be released. Please contact the store before trying again."
 msgstr ""
 
-#: src/CouponManager.php:284
+#: src/CouponManager.php:287
 #, php-format
 msgid "Reserved for order #%s"
 msgstr ""
 
-#: src/CouponManager.php:287 src/CouponManager.php:291
+#: src/CouponManager.php:294 src/CouponManager.php:298
 msgid "Checkout reservation rolled back"
 msgstr ""
 
-#: src/CouponManager.php:296
+#: src/CouponManager.php:303
 msgid "A voucher balance changed while checkout was processing. Your order was not sent for payment. Refresh the cart and try again."
 msgstr ""
 
-#: src/CouponManager.php:597
+#: src/CouponManager.php:604
 msgid "Coupon removed or changed on the order"
 msgstr ""
 
-#: src/CouponManager.php:621
+#: src/CouponManager.php:628
 msgid "Some voucher reservations could not be committed. Review this order before fulfilment."
 msgstr ""
 
-#: src/CouponManager.php:636
+#: src/CouponManager.php:643
 #, php-format
 msgid "Released from order #%s"
 msgstr ""
 
-#: src/CouponManager.php:644
+#: src/CouponManager.php:651
 msgid "Some voucher reservations could not be released. Review this order."
 msgstr ""
 
-#: src/CouponManager.php:836
+#: src/CouponManager.php:843
 msgid "This voucher has already been fully redeemed."
 msgstr ""
 
-#: src/CouponManager.php:842
+#: src/CouponManager.php:849
 msgid "This voucher cannot be redeemed in the shop."
 msgstr ""
 
 #. translators: %s: voucher code
-#: src/CouponManager.php:857
+#: src/CouponManager.php:864
 #, php-format
 msgid "Voucher %s balance"
 msgstr ""
 
-#: src/CouponManager.php:1029
+#: src/CouponManager.php:1046
 msgid "Voucher shortfall accepted by an administrator; the order can be fulfilled."
 msgstr ""
 
-#: src/CouponManager.php:1045 src/CouponManager.php:1131
+#: src/CouponManager.php:1062 src/CouponManager.php:1148
 msgid "Voucher balance shortfall requires manual review before fulfilment."
 msgstr ""
 
 #. translators: %s: order number
-#: src/CouponManager.php:1079
+#: src/CouponManager.php:1096
 #, php-format
 msgid "Used in order #%s"
 msgstr ""
 
 #. translators: %s: voucher code
-#: src/CouponManager.php:1089
+#: src/CouponManager.php:1106
 #, php-format
 msgid "Voucher %s: the discount could not be deducted from its balance. Review this order and adjust the charge before fulfilment."
 msgstr ""
 
-#: src/CouponManager.php:1099
+#: src/CouponManager.php:1116
 msgid "A stored-value voucher balance changed during checkout. Review this order and adjust the charge before fulfilment."
 msgstr ""
 
 #. translators: 1: code, 2: amount, 3: remaining balance
-#: src/CouponManager.php:1106
+#: src/CouponManager.php:1123
 #, php-format
 msgid "Voucher %1$s: %2$s deducted, remaining balance %3$s."
 msgstr ""
 
-#: src/CouponManager.php:1202
+#: src/CouponManager.php:1219
 #, php-format
 msgid "Order #%s cancelled or refunded"
 msgstr ""
 
-#: src/CouponManager.php:1211
+#: src/CouponManager.php:1228
 msgid "Some voucher balances could not be restored. Review this order and retry the refund handling."
 msgstr ""
 
