@@ -3,6 +3,8 @@
 	'use strict';
 	var cfg = window.vcapScanner || {};
 	var t = cfg.i18n || {};
+	var money = cfg.money || {};
+	var amounts = window.vcapAmount;
 	var video = document.getElementById( 'vcap-video' );
 	var canvas = document.getElementById( 'vcap-canvas' );
 	var toggleBtn = document.getElementById( 'vcap-camera-toggle' );
@@ -46,6 +48,7 @@
 	var busy = false;
 	var runId = 0;
 	var starting = false;
+	var current = null; // Voucher shown in the result block (amount entry, confirmation).
 
 	try {
 		auto.checked = '1' === window.localStorage.getItem( 'vcapAutoCheckin' );
@@ -129,16 +132,47 @@
 		result.setAttribute( 'data-query', query );
 	}
 
+	/** sprintf-style templates from PHP: "%1$s … %2$s" (numbered) or "%s" / "%d" (in order). */
+	function fill( tpl, args ) {
+		var next = 0;
+		return String( tpl || '' ).replace( /%(?:(\d)\$)?[sd]/g, function ( m, n ) {
+			var v = args[ n ? parseInt( n, 10 ) - 1 : next++ ];
+			return undefined === v ? m : String( v );
+		} );
+	}
+
+	function decimalsOf( d ) {
+		var n = parseInt( d && d.decimals, 10 );
+		return isNaN( n ) ? ( parseInt( money.decimals, 10 ) || 0 ) : n;
+	}
+
+	function symbolOf( d ) {
+		return ( d && d.currency_symbol ) || money.symbol || '';
+	}
+
+	function formatMinor( minor, d ) {
+		return amounts.formatMoney( minor, decimalsOf( d ), symbolOf( d ), money );
+	}
+
+	/** Last characters of the code, enough for the cashier to compare with the card. */
+	function cardEnd( d ) {
+		return String( d.code || '' ).toUpperCase().slice( -4 );
+	}
+
 	function render( d, query ) {
 		if ( 'passcaptain' === d.type ) {
+			current = null;
 			renderPassCaptain( d, query );
 			return;
 		}
+		current = d;
 		var rows = [
 			[ t.product, d.product ],
 			[ t.holder, d.holder ],
 			[ t.order, d.order ? '#' + d.order : '' ],
 			[ t.value, d.value_html ],
+			d.multi_use && d.success && d.booked_html ? [ t.booked, d.booked_html ] : null,
+			d.multi_use && d.uncovered > 0 ? [ t.uncovered, d.uncovered_html ] : null,
 			d.multi_use ? [ t.balance, d.balance_html ] : null,
 			'ticket' === d.type ? [ t.admissions, d.checkins + ' / ' + d.max_checkins ] : null,
 			[ t.expires, d.expires ],
@@ -157,12 +191,21 @@
 			if ( d.checkins > 0 ) {
 				html += '<button type="button" class="button" data-act="undo">' + esc( t.undo ) + '</button>';
 			}
-		} else if ( 'ok' === d.state && 'redeemed' !== d.status ) {
+		} else if ( ( 'ok' === d.state || 'exceeds_balance' === d.reason ) && 'redeemed' !== d.status ) {
 			if ( false !== d.redeemable ) {
 				if ( d.multi_use ) {
-					html += '<label for="vcap-amount">' + esc( t.amount ) + '</label> <input type="text" inputmode="decimal" id="vcap-amount" class="small-text">';
+					var cur = d.currency || money.currency || '';
+					html += '<label for="vcap-amount">' + esc( t.amount ) + ( cur ? ' (' + esc( cur ) + ')' : '' ) + '</label> ';
+					html += '<span class="vcap-amount-field"><input type="text" inputmode="decimal" id="vcap-amount" class="small-text" autocomplete="off" placeholder="' + esc( amounts.formatNumber( 0, decimalsOf( d ), money.decimalSep, money.thousandSep ) ) + '" aria-describedby="vcap-amount-error">';
+					html += ' <span class="vcap-amount-currency">' + esc( symbolOf( d ) ) + '</span></span>';
 				}
 				html += '<button type="button" class="button button-primary" data-act="redeem">' + esc( t.redeem ) + '</button>';
+				if ( d.multi_use ) {
+					// Above the balance: only an explicit second action books the remaining balance.
+					var partial = 'exceeds_balance' === d.reason && d.requested > 0;
+					html += '<button type="button" class="button" data-act="redeem-partial"' + ( partial ? ' data-amount="' + esc( d.requested ) + '"' : ' hidden' ) + '>' + esc( fill( t.bookPartial, [ d.balance_html ] ) ) + '</button>';
+					html += '<p id="vcap-amount-error" class="vcap-amount-error" role="alert"' + ( partial ? '>' + esc( d.message ) : ' hidden>' ) + '</p>';
+				}
 			}
 		}
 		html += '<a class="button-link" href="' + esc( d.admin_url ) + '">' + esc( t.details ) + '</a></div></div>';
@@ -199,17 +242,47 @@
 		} );
 	}
 
-	/** "12,50", "1.000,00", "1,000.00", "1.000" (thousands) → number. */
-	function parseAmount( raw ) {
-		var v = String( raw || '' ).replace( /[\s\u00a0']/g, '' );
-		if ( /,\d{1,2}$/.test( v ) ) {
-			v = v.replace( /\./g, '' ).replace( ',', '.' );
-		} else if ( /\.\d{3}$/.test( v ) && -1 === v.indexOf( ',' ) ) {
-			v = v.replace( /\./g, '' );
-		} else {
-			v = v.replace( /,/g, '' );
+	/** Inline message under the amount field (nothing is sent). */
+	function amountError( text ) {
+		var box = document.getElementById( 'vcap-amount-error' );
+		if ( box ) {
+			box.textContent = text;
+			box.hidden = false;
 		}
-		return parseFloat( v ) || 0;
+		var field = document.getElementById( 'vcap-amount' );
+		if ( field ) {
+			field.setAttribute( 'aria-invalid', 'true' );
+			field.focus();
+			field.select();
+		}
+		beep( false );
+	}
+
+	/**
+	 * Strictly parsed amount of the field (see scanner-amount.js), or null after showing why it was refused.
+	 * Never guesses: "12,50 €" is 12.50, "1.500" with two decimals is ambiguous, "0,999" has too many decimals.
+	 */
+	function readAmount( d ) {
+		var field = document.getElementById( 'vcap-amount' );
+		var dec = decimalsOf( d );
+		var res = amounts.parse( field ? field.value : '', {
+			decimals: dec,
+			decimalSep: money.decimalSep,
+			strip: [ symbolOf( d ), d.currency || money.currency ] // Only the voucher's own currency.
+		} );
+		if ( res.ok ) {
+			return res;
+		}
+		var example = amounts.formatNumber( amounts.toMinor( 12.5, dec ), dec, money.decimalSep, '' );
+		var msg = {
+			empty: t.amountEmpty,
+			zero: t.amountZero,
+			negative: t.amountZero,
+			ambiguous: fill( t.amountAmbiguous, [ example ] ),
+			decimals: dec ? fill( t.amountDecimals, [ dec ] ) : t.amountNoDecimals
+		}[ res.error ] || fill( t.amountInvalid, [ example ] );
+		amountError( msg );
+		return null;
 	}
 
 	function uuid() {
@@ -254,10 +327,51 @@
 			req = send( 'checkin', { q: query, count: count }, 'checkin|' + query + '|' + count );
 		} else if ( 'undo' === act ) {
 			req = send( 'checkin', { q: query, undo: true }, 'undo|' + query );
+		} else if ( 'redeem' === act && current && current.multi_use ) {
+			var pb = result.querySelector( '[data-act="redeem-partial"]' );
+			var box = document.getElementById( 'vcap-amount-error' );
+			var field = document.getElementById( 'vcap-amount' );
+			if ( pb ) {
+				pb.hidden = true; // Only for the amount just refused.
+			}
+			if ( box ) {
+				box.hidden = true;
+			}
+			if ( field ) {
+				field.removeAttribute( 'aria-invalid' );
+			}
+			var parsed = readAmount( current );
+			if ( ! parsed ) {
+				return;
+			}
+			var balance = amounts.toMinor( current.balance, decimalsOf( current ) );
+			if ( parsed.minor > balance ) {
+				// Refused before sending; booking the remaining balance needs its own button and confirmation.
+				amountError( fill( t.amountExceeds, [ formatMinor( parsed.minor, current ), current.balance_html ] ) );
+				if ( pb && balance > 0 ) {
+					pb.setAttribute( 'data-amount', String( parsed.value ) );
+					pb.hidden = false;
+				}
+				return;
+			}
+			if ( ! window.confirm( fill( t.confirmRedeem, [ formatMinor( parsed.minor, current ), cardEnd( current ), formatMinor( balance - parsed.minor, current ) ] ) ) ) {
+				return;
+			}
+			req = send( 'redeem', { q: query, amount: parsed.value }, 'redeem|' + query + '|' + parsed.value );
+		} else if ( 'redeem-partial' === act && current && current.multi_use ) {
+			var wanted = parseFloat( e.target.getAttribute( 'data-amount' ) ) || 0;
+			var dec = decimalsOf( current );
+			var rest = amounts.toMinor( current.balance, dec );
+			if ( wanted <= 0 || rest <= 0 ) {
+				return;
+			}
+			var open = Math.max( 0, amounts.toMinor( wanted, dec ) - rest );
+			if ( ! window.confirm( fill( t.confirmPartial, [ formatMinor( rest, current ), cardEnd( current ), formatMinor( open, current ), formatMinor( 0, current ) ] ) ) ) {
+				return;
+			}
+			req = send( 'redeem', { q: query, amount: wanted, allow_partial: true }, 'redeem|' + query + '|' + wanted + '|partial' );
 		} else if ( 'redeem' === act ) {
-			var a = document.getElementById( 'vcap-amount' );
-			var amount = a ? parseAmount( a.value ) : 0;
-			req = send( 'redeem', { q: query, amount: amount }, 'redeem|' + query + '|' + amount );
+			req = send( 'redeem', { q: query }, 'redeem|' + query + '|0' );
 		}
 		if ( req ) {
 			acting = true;
