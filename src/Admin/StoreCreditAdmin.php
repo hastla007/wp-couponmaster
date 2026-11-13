@@ -20,6 +20,7 @@ final class StoreCreditAdmin {
 		add_action( 'edit_user_profile_update', array( $this, 'save_profile' ) );
 		add_action( 'admin_post_vcap_refund_credit', array( $this, 'refund' ) );
 		add_action( 'vcap_order_metabox_after', array( $this, 'order_form' ) );
+		Flash::register();
 	}
 
 	private function can(): bool {
@@ -107,8 +108,14 @@ final class StoreCreditAdmin {
 		<p><strong><?php esc_html_e( 'Refund as store credit', 'voucher-captain' ); ?></strong></p>
 		<p class="description"><?php esc_html_e( 'Records a refund without paying money back and credits the customer account instead. Use only if the customer chose store credit; how they agreed is recorded with the refund.', 'voucher-captain' ); ?></p>
 		<p>
-			<input type="text" class="short" name="vcap_refund_credit_amount" form="vcap-refund-credit" inputmode="decimal" placeholder="<?php echo esc_attr( wc_format_localized_price( $order->get_remaining_refund_amount() ) ); ?>" aria-label="<?php esc_attr_e( 'Amount', 'voucher-captain' ); ?>" />
-			<input type="text" name="vcap_refund_credit_reason" form="vcap-refund-credit" placeholder="<?php esc_attr_e( 'Reason (required)', 'voucher-captain' ); ?>" aria-label="<?php esc_attr_e( 'Reason', 'voucher-captain' ); ?>" />
+			<input type="text" class="short" name="vcap_refund_credit_amount" form="vcap-refund-credit" inputmode="decimal" required value="<?php echo esc_attr( wc_format_localized_price( $order->get_remaining_refund_amount() ) ); ?>" aria-label="<?php esc_attr_e( 'Amount', 'voucher-captain' ); ?>" />
+			<input type="text" name="vcap_refund_credit_reason" form="vcap-refund-credit" required placeholder="<?php esc_attr_e( 'Reason (required)', 'voucher-captain' ); ?>" aria-label="<?php esc_attr_e( 'Reason', 'voucher-captain' ); ?>" />
+			<br><span class="description">
+				<?php
+				/* translators: %s: remaining refundable amount */
+				echo esc_html( sprintf( __( 'Up to %s (the remaining refundable total). Refunding all of it sets the order to "Refunded".', 'voucher-captain' ), html_entity_decode( wp_strip_all_tags( wc_price( (float) $order->get_remaining_refund_amount(), array( 'currency' => $order->get_currency() ) ) ), ENT_QUOTES, 'UTF-8' ) ) );
+				?>
+			</span>
 		</p>
 		<p>
 			<label for="vcap-refund-credit-consent"><?php esc_html_e( 'Customer agreed to store credit', 'voucher-captain' ); ?></label><br>
@@ -122,13 +129,21 @@ final class StoreCreditAdmin {
 		</p>
 		<?php
 		// The metabox sits inside the order <form>; this separate form is placed after it and linked via form="".
+		$confirm = sprintf(
+			/* translators: 1: placeholder for the amount entered (keep "%s"), 2: currency */
+			__( 'Refund %1$s %2$s as store credit? No money is paid back; the amount is added to the customer\'s store credit and booked as a refund. If this refunds the whole remaining total, the order becomes "Refunded": vouchers bought with it are voided and connected tickets are cancelled. This cannot be undone.', 'voucher-captain' ),
+			'%s',
+			html_entity_decode( get_woocommerce_currency_symbol( $order->get_currency() ), ENT_QUOTES, 'UTF-8' )
+		);
 		add_action(
 			'admin_footer',
-			static function () use ( $order ) {
-				echo '<form id="vcap-refund-credit" method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+			static function () use ( $order, $confirm ) {
+				echo '<form id="vcap-refund-credit" method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" data-confirm="' . esc_attr( $confirm ) . '">';
 				echo '<input type="hidden" name="action" value="vcap_refund_credit" /><input type="hidden" name="order_id" value="' . esc_attr( (string) $order->get_id() ) . '" />';
 				wp_nonce_field( 'vcap_refund_credit_' . $order->get_id() );
 				echo '</form>';
+				// Confirmation with the amount entered: the refund cannot be undone.
+				echo "<script>document.getElementById('vcap-refund-credit').addEventListener('submit',function(e){var a=document.querySelector('[name=\"vcap_refund_credit_amount\"]');if(!window.confirm(this.getAttribute('data-confirm').replace('%s',a?a.value:''))){e.preventDefault();}});</script>";
 			}
 		);
 		echo '<p><button type="submit" form="vcap-refund-credit" class="button">' . esc_html__( 'Refund as store credit', 'voucher-captain' ) . '</button></p>';
@@ -155,7 +170,18 @@ final class StoreCreditAdmin {
 			)
 		);
 		if ( is_wp_error( $result ) ) {
-			$order->add_order_note( __( 'Refund as store credit failed:', 'voucher-captain' ) . ' ' . $result->get_error_message() );
+			Flash::add( 'error', __( 'Refund as store credit failed:', 'voucher-captain' ) . ' ' . $result->get_error_message() );
+		} else {
+			$currency = (string) get_option( 'woocommerce_currency' );
+			Flash::add(
+				'success',
+				sprintf(
+					/* translators: 1: refunded amount, 2: new store credit balance of the customer */
+					__( '%1$s refunded as store credit. The customer\'s store credit is now %2$s.', 'voucher-captain' ),
+					html_entity_decode( wp_strip_all_tags( wc_price( $amount, array( 'currency' => $order->get_currency() ) ) ), ENT_QUOTES, 'UTF-8' ),
+					html_entity_decode( wp_strip_all_tags( wc_price( (float) $result['balance'], array( 'currency' => $currency ) ) ), ENT_QUOTES, 'UTF-8' )
+				)
+			);
 		}
 		wp_safe_redirect( $order->get_edit_order_url() );
 		exit;
