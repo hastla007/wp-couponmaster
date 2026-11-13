@@ -48,6 +48,11 @@ mark.vcap-status--expired, mark.vcap-status--void { background: #eba3a3; color: 
 .vcap-result dd { margin: 0; font-weight: 600; }
 .vcap-result .vcap-r-actions { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
 .vcap-result .vcap-r-actions .button, .vcap-result .vcap-r-actions input { min-height: 48px; }
+.vcap-result [hidden] { display: none !important; } /* .button sets display, which would beat the attribute */
+.vcap-result .vcap-amount-field { display: inline-flex; align-items: center; gap: 6px; }
+.vcap-result .vcap-amount-field input { font-size: 18px; }
+.vcap-result .vcap-amount-currency { font-size: 18px; font-weight: 600; }
+.vcap-result .vcap-amount-error { flex-basis: 100%; margin: 0; color: #b00020; font-weight: 600; }
 .vcap-result .vcap-r-head::before { display: inline-block; min-width: 1.4em; font-size: 1.3em; }
 .vcap-result .vcap-r-ok::before { content: "\2713"; }
 .vcap-result .vcap-r-warning::before { content: "!"; }

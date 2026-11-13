@@ -140,6 +140,65 @@ $misused = $scan_req( 7, $scan_key );
 vcap_security_assert( is_wp_error( $misused ) && 'vcap_idempotency_conflict' === $misused->get_error_code(), 'a key reused for another amount is refused' );
 $second = $scan_req( 5, wp_generate_uuid4() );
 vcap_security_assert( is_array( $second ) && ! empty( $second['success'] ) && 15.0 === (float) vcap()->vouchers->get( $scan_card->id )->balance, 'a new key deducts again' );
+vcap_security_assert( 5.0 === (float) $second['booked'] && 15.0 === (float) $second['balance_after'] && empty( $second['partial'] ) && str_contains( (string) $second['message'], (string) $second['booked_html'] ), 'the answer names the amount actually booked and the balance after it' );
+
+// Counter amount above the balance: refused without booking anything; only allow_partial books the remainder.
+$scan_with    = static function ( VCAP\Voucher $card, array $params ) {
+	$req = new WP_REST_Request( 'POST', '/vcap/v1/redeem' );
+	$req->set_param( 'q', $card->code );
+	$req->set_param( 'idempotency_key', wp_generate_uuid4() );
+	foreach ( $params as $name => $value ) {
+		$req->set_param( $name, $value );
+	}
+	$res = vcap()->tickets->rest_redeem( $req );
+	return is_wp_error( $res ) ? $res : $res->get_data();
+};
+$events_table = VCAP\Install::tables()['events'];
+$event_count  = static fn( int $id ): int => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$events_table} WHERE voucher_id = %d", $id ) ); // phpcs:ignore
+$events_before = $event_count( $scan_card->id );
+$over          = $scan_with( $scan_card, array( 'amount' => 20 ) );
+vcap_security_assert(
+	is_array( $over ) && false === $over['success'] && 'exceeds_balance' === $over['reason'] && 0.0 === (float) $over['booked'] && 15.0 === (float) $over['balance_after']
+	&& 15.0 === (float) vcap()->vouchers->get( $scan_card->id )->balance && $events_before === $event_count( $scan_card->id ),
+	'amount > balance is refused, nothing booked (no silent booking of the remaining balance)'
+);
+vcap_security_assert( str_contains( (string) $over['message'], (string) $over['balance_html'] ) && str_contains( (string) $over['message'], (string) $over['requested_html'] ), 'the refusal names the entered amount and the remaining balance' );
+$atomic_reason = '';
+$atomic        = vcap()->coupons->deduct_balance_atomic( vcap()->vouchers->get( $scan_card->id ), 20, 'over balance', 0, false, $atomic_reason );
+vcap_security_assert( null === $atomic && 'exceeds_balance' === $atomic_reason && 15.0 === (float) vcap()->vouchers->get( $scan_card->id )->balance, 'the row-locked deduction refuses amount > balance by itself when partial bookings are not allowed' );
+$precise = $scan_with( $scan_card, array( 'amount' => 1.234 ) );
+$zero    = $scan_with( $scan_card, array( 'amount' => 0 ) );
+vcap_security_assert( is_wp_error( $precise ) && 'vcap_amount_precision' === $precise->get_error_code() && is_wp_error( $zero ) && 'vcap_amount' === $zero->get_error_code() && 15.0 === (float) vcap()->vouchers->get( $scan_card->id )->balance, 'implausible amounts (more decimals than the currency, zero) are refused without booking' );
+$partial = $scan_with( $scan_card, array( 'amount' => 20, 'allow_partial' => true ) );
+$after   = vcap()->vouchers->get( $scan_card->id );
+vcap_security_assert(
+	is_array( $partial ) && true === $partial['success'] && true === $partial['partial'] && 15.0 === (float) $partial['booked'] && 0.0 === (float) $partial['balance_after'] && 5.0 === (float) $partial['uncovered']
+	&& 'warning' === $partial['state'] && 0.0 === (float) $after->balance && VCAP\Voucher::STATUS_REDEEMED === $after->status,
+	'allow_partial books the remaining balance and says so (booked, still to be paid)'
+);
+$used_up = $scan_with( $scan_card, array( 'amount' => 1 ) );
+vcap_security_assert( is_array( $used_up ) && false === $used_up['success'] && 'redeemed' === $used_up['reason'], 'a used-up card is refused as used up, not as "amount exceeds the balance"' );
+
+// Refusal reasons are told apart (cancelled, not yet delivered, reserved) instead of one blanket message.
+$reason_card = static function ( string $status, int $index ) use ( $wpdb ) {
+	$card = vcap_security_create_voucher( 'reason-' . strtolower( wp_generate_password( 6, false, false ) ) . '@example.test', $index );
+	$wpdb->update( VCAP\Install::tables()['vouchers'], array( 'status' => $status ), array( 'id' => $card->id ) ); // Status only, no lifecycle hooks.
+	return vcap()->vouchers->get( $card->id );
+};
+$void_card      = $reason_card( VCAP\Voucher::STATUS_VOID, 940000 + random_int( 1, 9999 ) );
+$scheduled_card = $reason_card( VCAP\Voucher::STATUS_SCHEDULED, 950000 + random_int( 1, 9999 ) );
+$reserved_card  = $reason_card( VCAP\Voucher::STATUS_RESERVED, 960000 + random_int( 1, 9999 ) );
+$void_answer      = $scan_with( $void_card, array( 'amount' => 5 ) );
+$scheduled_answer = $scan_with( $scheduled_card, array( 'amount' => 5 ) );
+vcap_security_assert( is_array( $void_answer ) && false === $void_answer['success'] && 'void' === $void_answer['reason'] && 25.0 === (float) vcap()->vouchers->get( $void_card->id )->balance, 'a cancelled card is refused as cancelled' );
+vcap_security_assert( is_array( $scheduled_answer ) && false === $scheduled_answer['success'] && 'scheduled' === $scheduled_answer['reason'] && 25.0 === (float) vcap()->vouchers->get( $scheduled_card->id )->balance, 'a card not delivered yet is not redeemable at the counter' );
+$reasons = array();
+foreach ( array( $void_card, $reserved_card ) as $card ) {
+	$why = '';
+	vcap()->coupons->deduct_balance_atomic( $card, 5, 'reason test', 0, false, $why );
+	$reasons[] = $why;
+}
+vcap_security_assert( array( 'void', 'reserved' ) === $reasons && VCAP\Tickets::refusal_message( 'void' ) !== VCAP\Tickets::refusal_message( 'reserved' ), 'the deduction reports why nothing was booked (cancelled, reserved)' );
 
 // Per-visitor/public balance lookup throttling is enforced before a code lookup.
 $bucket = 'security-test-' . strtolower( wp_generate_password( 8, false, false ) );

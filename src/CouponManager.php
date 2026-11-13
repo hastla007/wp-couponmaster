@@ -762,23 +762,76 @@ final class CouponManager {
 		$this->sync_balance_coupon( $fresh );
 		return true;
 	}
+
+	/**
+	 * Why a stored-value voucher cannot be charged right now ('' = it can): one of
+	 * 'not_found', 'void', 'expired', 'reserved', 'scheduled', 'redeemed' (balance used up), 'not_active'
+	 * (any other status), 'not_multi_use' (active, but no stored value). Pure, so the counter and the
+	 * tests share one verdict.
+	 */
+	public static function balance_refusal( ?Voucher $voucher ): string {
+		if ( ! $voucher ) {
+			return 'not_found';
+		}
+		if ( Voucher::STATUS_VOID === $voucher->status ) {
+			return 'void';
+		}
+		if ( Voucher::STATUS_EXPIRED === $voucher->status || $voucher->is_expired() ) {
+			return 'expired';
+		}
+		if ( Voucher::STATUS_RESERVED === $voucher->status ) {
+			return 'reserved';
+		}
+		if ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
+			return 'scheduled';
+		}
+		if ( Voucher::STATUS_REDEEMED === $voucher->status ) {
+			return 'redeemed';
+		}
+		if ( Voucher::STATUS_ACTIVE !== $voucher->status ) {
+			return 'not_active';
+		}
+		if ( ! $voucher->is_multi_use() ) {
+			return 'not_multi_use';
+		}
+		return $voucher->balance <= 0 ? 'redeemed' : '';
+	}
+
+	/** Amount in minor units (cents), so comparisons never depend on float noise. */
+	public static function minor_units( float $amount, int $decimals ): int {
+		return (int) round( $amount * ( 10 ** max( 0, $decimals ) ) );
+	}
+
 	/**
 	 * Atomically deduct stored value under a row lock. For order redemptions, the audit row also
 	 * makes retries for the same order idempotent.
 	 *
+	 * By default a request above the balance deducts the whole balance (orders: the shortfall is flagged by
+	 * the caller). With $allow_partial = false (counter/scanner) such a request is refused and nothing is
+	 * deducted. $reason receives why nothing was deducted ('' on success): a balance_refusal() code, or
+	 * 'exceeds_balance', 'invalid_amount', 'no_transactions', 'db_error'.
+	 *
 	 * @return array{amount:float,balance:float,duplicate:bool}|null
 	 */
-	public function deduct_balance_atomic( Voucher $voucher, float $requested, string $note = '', int $order_id = 0 ): ?array {
+	public function deduct_balance_atomic( Voucher $voucher, float $requested, string $note = '', int $order_id = 0, bool $allow_partial = true, ?string &$reason = null ): ?array {
 		global $wpdb;
+		$reason = '';
 		$table  = Install::tables()['vouchers'];
 		$events = Install::tables()['events'];
-		if ( ! Install::tables_support_transactions() || false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( ! Install::tables_support_transactions() ) {
+			$reason = 'no_transactions';
 			return null;
 		}
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$reason = 'db_error';
+			return null;
+		}
+		$reason = 'db_error';
 		try {
 			$locked = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d FOR UPDATE", $voucher->id ) ); // phpcs:ignore
 			if ( ! $locked ) {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$reason = 'not_found';
 				return null;
 			}
 
@@ -800,6 +853,7 @@ final class CouponManager {
 						$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 						return null;
 					}
+					$reason = '';
 					return array(
 						'amount'    => (float) $prior['amount'],
 						'balance'   => (float) $prior['balance_after'],
@@ -808,13 +862,30 @@ final class CouponManager {
 				}
 			}
 
-			$fresh = $this->repo->get( $voucher->id );
-			if ( ! $fresh || ! $fresh->is_multi_use() || Voucher::STATUS_ACTIVE !== $fresh->status || $fresh->is_expired() ) {
+			$fresh   = $this->repo->get( $voucher->id );
+			$refusal = self::balance_refusal( $fresh );
+			// A used-up balance stays chargeable with 0 for orders (the caller records the shortfall).
+			if ( '' !== $refusal && ! ( 'redeemed' === $refusal && $allow_partial && Voucher::STATUS_ACTIVE === $fresh->status ) ) {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$reason = $refusal;
 				return null;
 			}
+			$decimals = $fresh->decimals();
+			if ( ! $allow_partial ) {
+				$wanted = is_finite( $requested ) ? self::minor_units( $requested, $decimals ) : 0;
+				if ( $wanted <= 0 ) {
+					$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					$reason = 'invalid_amount';
+					return null;
+				}
+				if ( $wanted > self::minor_units( $fresh->balance, $decimals ) ) {
+					$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					$reason = 'exceeds_balance';
+					return null;
+				}
+			}
 
-			$amount          = min( $fresh->balance, max( 0.0, round( $requested, $fresh->decimals() ) ) );
+			$amount          = min( $fresh->balance, max( 0.0, round( $requested, $decimals ) ) );
 			$fresh->balance  = max( 0.0, round( $fresh->balance - $amount, $fresh->decimals() ) );
 			if ( $fresh->balance <= 0 ) {
 				$fresh->status = Voucher::STATUS_REDEEMED;
@@ -845,6 +916,7 @@ final class CouponManager {
 				$coupon->save();
 			}
 		}
+		$reason = '';
 		return array(
 			'amount'    => $amount,
 			'balance'   => $fresh->balance,
