@@ -428,6 +428,20 @@ $orphans   = array_filter( $reconcile['issues'], static fn( $i ) => 'orphan' ===
 vcap_pc_assert( VCAP\Compat\PassCaptainReconcile::available() && $reconcile['checked'] > 0 && 1 === count( $orphans ), 'the reconciliation checks Pass Captain orders and reports a redemption without an order' );
 $checkout_issues = array_filter( $reconcile['issues'], static fn( $i ) => 'checkout' === $i['kind'] && str_contains( $i['problem'], 'Amount differs' ) );
 vcap_pc_assert( array() === $checkout_issues, 'gift cards paid in the ticket checkout match Pass Captain\'s amounts' . ( $checkout_issues ? ': ' . wp_json_encode( array_values( $checkout_issues ) ) : '' ) );
+// Pass Captain 1.4+ offers a versioned reconciliation API (work branch); older versions (main) are read from the order table.
+$has_reconcile_api = defined( VCAP\Compat\PassCaptainReconcile::API . '::VERSION' );
+vcap_pc_assert( $has_reconcile_api === VCAP\Compat\PassCaptainReconcile::supports_api() && ( $has_reconcile_api ? 'api' : 'table' ) === $reconcile['source'], 'the reconciliation reads Pass Captain\'s versioned API when offered, else its order table (' . $reconcile['source'] . ')' );
+if ( $has_reconcile_api ) {
+	// The API rows lead to the same findings as the order table (filter rows = the old table read).
+	$table_rows = static fn() => $wpdb->get_results( $wpdb->prepare( "SELECT order_id, public_id, status, payment_status, payment_provider, provider_reference, currency, voucher_snapshot FROM {$wpdb->prefix}wpcap_orders WHERE (voucher_snapshot IS NOT NULL AND voucher_snapshot <> '') OR provider_reference LIKE %s ORDER BY order_id DESC LIMIT %d", $wpdb->esc_like( 'voucher:' ) . '%', 2000 ) );
+	add_filter( 'vcap_passcaptain_reconcile_orders', $table_rows );
+	$from_table = ( new VCAP\Compat\PassCaptainReconcile( vcap()->redemptions ) )->run();
+	remove_filter( 'vcap_passcaptain_reconcile_orders', $table_rows );
+	$not_orphan = static fn( array $issues ) => array_values( array_filter( $issues, static fn( $i ) => 'orphan' !== $i['kind'] ) );
+	vcap_pc_assert( 'filter' === $from_table['source'] && $from_table['checked'] === $reconcile['checked'] && $not_orphan( $from_table['issues'] ) === $not_orphan( $reconcile['issues'] ), 'the API rows give the same reconciliation as Pass Captain\'s order table' . ( $from_table['checked'] !== $reconcile['checked'] ? " ({$reconcile['checked']} vs. {$from_table['checked']})" : '' ) );
+	$api_rows = call_user_func( array( VCAP\Compat\PassCaptainReconcile::API, 'orders' ), array( 'order' => 'desc', 'limit' => 500 ) );
+	vcap_pc_assert( is_array( $api_rows ) && $api_rows && ! array_key_exists( 'voucher_snapshot', $api_rows[0] ) && array() === call_user_func( array( VCAP\Compat\PassCaptainReconcile::API, 'orders' ), array( 'redemption_key' => $orphan_key ) ), 'Pass Captain\'s reconciliation API lists voucher orders without internal snapshot data and finds no order for an orphaned key' );
+}
 $wpdb->delete( VCAP\Install::tables()['redemptions'], array( 'redemption_key' => $orphan_key ) );
 
 // Minor units follow ISO 4217 (as Pass Captain does), not the shop's price display setting.
