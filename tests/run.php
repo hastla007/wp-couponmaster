@@ -278,6 +278,109 @@ if ( class_exists( 'ZipArchive' ) ) {
 	unlink( $bomb );
 }
 
+echo "License (WP License Captain): client, offline cache, fail-closed gate\n";
+// Fake license server: signs each answer with the installation secret (HMAC over the JSON data).
+$lic = array( 'secret' => '', 'mode' => 'ok', 'status' => 'active', 'rights' => array( 'voucher.promotions' => true, 'voucher.referrals' => false, 'voucher.reports' => 0, 'pass.tickets' => true ) );
+$GLOBALS['vcap_test_http'] = static function ( $url, $args ) use ( &$lic ) {
+	if ( 'down' === $lic['mode'] ) {
+		return new WP_Error( 'http_request_failed', 'cURL error 28: timeout' );
+	}
+	if ( '503' === $lic['mode'] ) {
+		return array( 'code' => 503, 'body' => '{"code":"maintenance","message":"down"}' );
+	}
+	if ( '403' === $lic['mode'] ) {
+		return array( 'code' => 403, 'body' => '{"code":"license_revoked","message":"revoked"}' );
+	}
+	$body = json_decode( (string) $args['body'], true ) ?: array();
+	if ( str_contains( $url, '/activations' ) && 'POST' === $args['method'] ) {
+		$lic['secret'] = $body['installation_secret'];
+		$data          = array( 'activation_id' => 7 );
+	} else {
+		$data = array( 'license_status' => $lic['status'], 'entitlements' => $lic['rights'], 'cache_expires_at' => gmdate( 'Y-m-d H:i:s', time() + 30 * DAY_IN_SECONDS ) );
+	}
+	$sig = hash_hmac( 'sha256', json_encode( $data, JSON_UNESCAPED_SLASHES ), 'forged' === $lic['mode'] ? 'wrong-secret' : $lic['secret'] );
+	return array( 'code' => 200, 'body' => json_encode( array( 'data' => $data, 'signature' => $sig ) ) );
+};
+$GLOBALS['vcap_test_options']['vcap_wplc_server_url'] = 'https://licenses.example.test';
+$client = new VCAP\Licensing\LicenseClient( 'https://licenses.example.test', 'voucher-captain', '1.0', 'vcap_wplc_credentials' );
+$lic['mode'] = 'forged';
+check( 'a forged activation answer is refused and nothing is stored', is_wp_error( $client->activate( 'KEY-1' ) ) && ! get_option( 'vcap_wplc_credentials' ) );
+$lic['mode'] = 'ok';
+$act = $client->activate( 'key-1' );
+$cred = get_option( 'vcap_wplc_credentials' );
+check( 'activation stores installation id, secret and activation id – never the license key', is_array( $act ) && 7 === $cred['activation_id'] && 64 === strlen( $cred['installation_secret'] ) && ! str_contains( (string) json_encode( $cred ), 'KEY-1' ) );
+$online = $client->get_entitlements();
+check( 'online check returns the signed rights and stores a signed snapshot', is_array( $online ) && is_array( get_option( 'vcap_wplc_credentials_entitlements_cache' ) ) );
+check( 'rights: true allows; false, 0, missing and foreign-product keys deny', $client->allows_entitlement( 'voucher.promotions', $online ) && ! $client->allows_entitlement( 'voucher.referrals', $online ) && ! $client->allows_entitlement( 'voucher.reports', $online ) && ! $client->allows_entitlement( 'voucher.topup', $online ) && ! $client->allows_entitlement( 'pass.tickets', $online ) );
+check( 'free edition (license not required): every premium feature stays on', VCAP\Licensing\Entitlements::allows( 'referrals' ) && VCAP\Licensing\Entitlements::allows( 'topup' ) );
+$required = static fn() => true;
+add_filter( 'vcap_license_required', $required );
+VCAP\Licensing\Entitlements::reset();
+check( 'premium edition: allowed rights work, others are locked', VCAP\Licensing\Entitlements::allows( 'promotions' ) && ! VCAP\Licensing\Entitlements::allows( 'referrals' ) && ! VCAP\Licensing\Entitlements::allows( 'topup' ) && array( 'referrals', 'topup', 'reports', 'passcaptain' ) === VCAP\Licensing\Entitlements::locked() );
+$lic['mode'] = 'down';
+$offline = $client->get_entitlements();
+check( 'server unreachable: the signed snapshot keeps the rights (offline)', is_array( $offline ) && $client->allows_entitlement( 'voucher.promotions', $offline ) );
+$lic['mode'] = '503';
+check( 'server error 5xx: the signed snapshot keeps the rights', is_array( $client->get_entitlements() ) );
+$cache = get_option( 'vcap_wplc_credentials_entitlements_cache' );
+$tampered = $cache;
+$tampered['data']['entitlements']['voucher.referrals'] = true;
+update_option( 'vcap_wplc_credentials_entitlements_cache', $tampered );
+VCAP\Licensing\Entitlements::reset();
+check( 'a tampered snapshot is refused (fail-closed)', is_wp_error( $client->get_entitlements() ) && ! VCAP\Licensing\Entitlements::allows( 'promotions' ) );
+$expired = $cache;
+$expired['cached_at'] = time() - 20 * DAY_IN_SECONDS;
+$expired['expires_at'] = time() - DAY_IN_SECONDS;
+update_option( 'vcap_wplc_credentials_entitlements_cache', $expired );
+VCAP\Licensing\Entitlements::reset();
+check( 'an expired snapshot (more than 14 days offline) locks the features', is_wp_error( $client->get_entitlements() ) && ! VCAP\Licensing\Entitlements::allows( 'promotions' ) );
+$long = $cache;
+$long['expires_at'] = $long['cached_at'] + 30 * DAY_IN_SECONDS;
+update_option( 'vcap_wplc_credentials_entitlements_cache', $long );
+check( 'a snapshot claiming more than 14 days is refused', is_wp_error( $client->get_entitlements() ) );
+update_option( 'vcap_wplc_credentials_entitlements_cache', $cache );
+$lic['mode'] = '403';
+VCAP\Licensing\Entitlements::reset();
+check( 'license refused by the server (4xx): no offline fallback', is_wp_error( $client->get_entitlements() ) );
+$lic['mode'] = 'ok';
+$lic['status'] = 'expired';
+$client->get_entitlements();
+VCAP\Licensing\Entitlements::reset();
+check( 'license no longer active: snapshot deleted, premium features locked', false === get_option( 'vcap_wplc_credentials_entitlements_cache' ) && ! VCAP\Licensing\Entitlements::allows( 'promotions' ) );
+delete_option( 'vcap_wplc_credentials' );
+VCAP\Licensing\Entitlements::reset();
+check( 'not activated: locked', ! VCAP\Licensing\Entitlements::allows( 'promotions' ) );
+remove_filter( 'vcap_license_required', $required );
+unset( $GLOBALS['vcap_test_http'], $GLOBALS['vcap_test_options']['vcap_wplc_server_url'] );
+VCAP\Licensing\Entitlements::reset();
+
+echo "Premium updates (PR #11): redirect, host allow-list, SHA-256\n";
+$GLOBALS['vcap_test_options']['vcap_wplc_server_url'] = 'https://licenses.example.test';
+$zip      = 'PK-fake-release-zip';
+$redirect = 'https://licenses.example.test/files/voucher-captain.zip';
+$GLOBALS['vcap_test_http'] = static function ( $url ) use ( &$zip, &$redirect ) {
+	if ( str_contains( $url, '/wplc/v1/updates/download/' ) ) {
+		return array( 'code' => 302, 'body' => '', 'headers' => array( 'location' => $redirect ) );
+	}
+	return array( 'code' => 200, 'body' => $zip, 'headers' => array() );
+};
+$updater  = new VCAP\Licensing\PremiumUpdater();
+$call     = static fn( string $m, ...$a ) => ( new ReflectionMethod( $updater, $m ) )->invoke( $updater, ...$a );
+$package  = 'https://licenses.example.test/wp-json/wplc/v1/updates/download/abc';
+$file     = $call( 'download_and_verify', $package, hash( 'sha256', $zip ) );
+check( 'a package with the expected SHA-256 is accepted', is_string( $file ) && is_file( $file ) && hash_file( 'sha256', $file ) === hash( 'sha256', $zip ) );
+@unlink( (string) $file );
+$bad = $call( 'download_and_verify', $package, str_repeat( 'a', 64 ) );
+check( 'a different SHA-256 stops the installation', is_wp_error( $bad ) && 'wplc_checksum_mismatch' === $bad->get_error_code() );
+$redirect = 'https://evil.example.org/voucher-captain.zip';
+$host     = $call( 'download_and_verify', $package, hash( 'sha256', $zip ) );
+check( 'a redirect to a host outside the allow-list is refused', is_wp_error( $host ) && 'wplc_download_host_invalid' === $host->get_error_code() );
+$redirect = 'http://licenses.example.test/voucher-captain.zip';
+check( 'plain HTTP is refused', is_wp_error( $call( 'download_and_verify', $package, hash( 'sha256', $zip ) ) ) );
+check( 'IP addresses are never allowed hosts', ! $call( 'is_allowed_package_host', 'https://192.0.2.1/x.zip' ) && $call( 'is_allowed_package_host', 'https://licenses.example.test/x.zip' ) );
+check( 'only download URLs of the license server are handled by the updater', $call( 'is_license_package', $package ) && ! $call( 'is_license_package', 'https://downloads.wordpress.org/plugin/x.zip' ) );
+unset( $GLOBALS['vcap_test_http'], $GLOBALS['vcap_test_options']['vcap_wplc_server_url'] );
+
 echo "Translations\n";
 /** @return array<string, array{0: string[], 1: ?string, 2: bool}> key (context \x04 msgid) => [msgstr forms, msgid_plural, fuzzy] */
 function vcap_test_po( string $file ): array {

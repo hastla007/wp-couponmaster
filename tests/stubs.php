@@ -5,6 +5,7 @@
  */
 
 define( 'ABSPATH', sys_get_temp_dir() . '/vcap-abspath/' );
+defined( 'VCAP_FILE' ) || define( 'VCAP_FILE', dirname( __DIR__ ) . '/voucher-captain.php' );
 define( 'VCAP_PATH', dirname( __DIR__ ) . '/' );
 define( 'VCAP_URL', 'https://shop.test/wp-content/plugins/voucher-captain/' );
 define( 'VCAP_VERSION', 'test' );
@@ -91,7 +92,7 @@ function wc_get_order( $id ) { return null; }
 function wc_format_coupon_code( $c ) { return strtolower( trim( (string) $c ) ); }
 function get_post_meta( $id, $k = '', $s = false ) { return $GLOBALS['vcap_test_meta'][ $id ][ $k ] ?? ''; }
 function get_posts( $a = array() ) { return array(); }
-function is_wp_error( $v ) { return false; }
+function is_wp_error( $v ) { return $v instanceof WP_Error; }
 function current_user_can( $c ) { return false; }
 function get_current_user_id() { return 0; }
 function wp_generate_password( $l = 12, $s = true, $e = false ) { return substr( bin2hex( random_bytes( $l ) ), 0, $l ); }
@@ -129,3 +130,48 @@ function get_permalink( $id = 0 ) { return ''; }
 function did_action( $h ) { return 0; }
 function delete_option( $k ) { unset( $GLOBALS['vcap_test_options'][ $k ] ); return true; }
 function delete_transient( $k ) { unset( $GLOBALS['vcap_test_transients'][ $k ] ); return true; }
+
+if ( ! class_exists( 'WP_Error' ) ) {
+	class WP_Error {
+		public function __construct( private string $code = '', private string $message = '', private $data = null ) {}
+		public function get_error_code() { return $this->code; }
+		public function get_error_message() { return $this->message; }
+		public function get_error_data() { return $this->data; }
+	}
+}
+if ( ! function_exists( 'untrailingslashit' ) ) {
+	function untrailingslashit( $s ) { return rtrim( (string) $s, '/\\' ); }
+}
+if ( ! function_exists( 'wp_generate_uuid4' ) ) {
+	function wp_generate_uuid4() { return sprintf( '%04x%04x-%04x-4%03x-%04x-%04x%04x%04x', random_int( 0, 0xffff ), random_int( 0, 0xffff ), random_int( 0, 0xffff ), random_int( 0, 0xfff ), random_int( 0x8000, 0xbfff ), random_int( 0, 0xffff ), random_int( 0, 0xffff ), random_int( 0, 0xffff ) ); }
+}
+/** HTTP: $GLOBALS['vcap_test_http'] = callable( $url, $args ) returning array{code:int, body:string} or WP_Error. */
+if ( ! function_exists( 'wp_remote_request' ) ) {
+	function wp_remote_request( $url, $args = array() ) { $h = $GLOBALS['vcap_test_http'] ?? null; return $h ? $h( $url, $args ) : new WP_Error( 'http_request_failed', 'no transport' ); }
+	function wp_remote_retrieve_response_code( $r ) { return is_array( $r ) ? (int) $r['code'] : 0; }
+	function wp_remote_retrieve_body( $r ) { return is_array( $r ) ? (string) $r['body'] : ''; }
+}
+if ( ! function_exists( 'remove_filter' ) ) {
+	function remove_filter( $hook, $cb, $prio = 10 ) {
+		foreach ( $GLOBALS['vcap_test_filters'][ $hook ] ?? array() as $i => $f ) {
+			if ( $f[0] === $cb ) {
+				unset( $GLOBALS['vcap_test_filters'][ $hook ][ $i ] );
+			}
+		}
+		return true;
+	}
+}
+if ( ! function_exists( 'wp_remote_get' ) ) {
+	/** GET through the same fake transport; 'stream' + 'filename' write the body to that file. */
+	function wp_remote_get( $url, $args = array() ) {
+		$r = wp_remote_request( $url, array( 'method' => 'GET' ) + $args );
+		if ( is_array( $r ) && ! empty( $args['stream'] ) && ! empty( $args['filename'] ) ) {
+			file_put_contents( $args['filename'], $r['body'] );
+		}
+		return $r;
+	}
+	function wp_remote_retrieve_header( $r, $name ) { return is_array( $r ) ? (string) ( $r['headers'][ strtolower( $name ) ] ?? '' ) : ''; }
+	function wp_tempnam( $name = '' ) { return tempnam( sys_get_temp_dir(), 'vcap' ); }
+	function wp_parse_url( $url, $component = -1 ) { return parse_url( $url, $component ); }
+	function plugin_basename( $file ) { return basename( dirname( $file ) ) . '/' . basename( $file ); }
+}

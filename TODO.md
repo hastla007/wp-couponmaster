@@ -183,11 +183,11 @@ Befund im Kursplugin: `/wp-json/boatingschool/v1/coupons/redeem` ist derzeit fü
 
 Stand 12.11.2026: Die Aktivierung, Premium-Berechtigungen und Updates werden in gestapelten offenen PRs vorbereitet. Keine der folgenden Arbeiten gilt als fertig oder in Voucher Captain ausgeliefert, bis die PRs gemergt und die Abnahme abgeschlossen sind.
 
-- [ ] PR #10: signierten WP-License-Captain-Client, Lizenzseite, Aktivierung/Deaktivierung und sichere lokale Speicherung integrieren.
-- [ ] PR #12: fail-closed Berechtigungsprüfung in den tatsächlichen Premium-Funktionen verdrahten; der aktuelle Helper allein schaltet noch keine Features.
-- [ ] PR #13: signierten Offline-Berechtigungscache integrieren und gegen die Lizenzserver-/Ausfallfälle abnehmen.
-- [ ] PR #11: Premium-Updates mit einmaligem Download-Grant, HTTPS-Allowlist und SHA-256-Prüfung integrieren.
-- [ ] Alle Lizenz-PRs auf eine konsistente Basis bringen, aktuelle CI-Fehler beheben und grüne CI-Läufe abwarten.
+- [x] PR #10: signierten WP-License-Captain-Client, Lizenzseite, Aktivierung/Deaktivierung und sichere lokale Speicherung integrieren. — *Nachweis: in den Arbeitsbranch gemergt; Lizenzseite lädt jetzt die Rechte über `get_entitlements()` (aktualisiert den signierten Cache); Tests: gefälschte Aktivierungsantwort wird abgelehnt, gespeichert werden nur Installations-ID/-Geheimnis/Aktivierungs-ID, nie der Schlüssel (tests/run.php → License); LICENSING.md.*
+- [x] PR #12: fail-closed Berechtigungsprüfung in den tatsächlichen Premium-Funktionen verdrahten; der aktuelle Helper allein schaltet noch keine Features. — *Nachweis: `Licensing\Entitlements` sperrt Aktionen, Freunde werben, Aufladung, Auswertungen und Pass-Captain-Anbindung in der Premium-Edition (`VCAP_LICENSE_REQUIRED`, Build `VCAP_EDITION=premium`), liest nur den signierten Cache, Admin-Hinweis; Tests: freie Edition unverändert, erlaubte/gesperrte Rechte, nicht aktiviert = gesperrt. **Offen: Feature-Aufteilung (config/premium-features.php) vom Betreiber bestätigen.***
+- [x] PR #13: signierten Offline-Berechtigungscache integrieren und gegen die Lizenzserver-/Ausfallfälle abnehmen. — *Nachweis: gemergt; Ausfalltests: Server nicht erreichbar und 5xx → Cache trägt, manipulierter Cache, abgelaufener Cache (> 14 Tage), Cache mit über 14 Tagen Laufzeit, 4xx/widerrufen und inaktive Lizenz → gesperrt (tests/run.php → License).*
+- [x] PR #11: Premium-Updates mit einmaligem Download-Grant, HTTPS-Allowlist und SHA-256-Prüfung integrieren. — *Nachweis: gemergt; Tests: korrekte SHA-256 akzeptiert, abweichende stoppt, Weiterleitung auf fremden Host/HTTP/IP abgelehnt, nur Download-URLs des Lizenzservers (tests/run.php → Premium updates).*
+- [x] Alle Lizenz-PRs auf eine konsistente Basis bringen, aktuelle CI-Fehler beheben und grüne CI-Läufe abwarten. — *Nachweis: PRs #10/#12/#13 und #11 in `claude/youthful-bardeen-7ejd7a` zusammengeführt (Konflikt nur CI-Matrix; aktueller Stand behalten), Übersetzungen ergänzt; CI des Arbeitsbranchs. Die PRs selbst sind damit im Arbeitsbranch enthalten und können geschlossen werden, sobald dieser gemergt ist.*
 - [ ] Aktivierung, Feature-Sperren, Offline-Verhalten und Update-Installation gegen einen erreichbaren Lizenzserver und echte Release-Pakete abnehmen.
 
 

@@ -31,6 +31,11 @@ php "$ROOT/bin/make-mo.php"
 # Copy plugin files (no dev tooling).
 cp -R "$ROOT/assets" "$ROOT/config" "$ROOT/languages" "$ROOT/src" "$ROOT/templates" "$DEST/"
 cp "$ROOT/voucher-captain.php" "$ROOT/uninstall.php" "$ROOT/readme.txt" "$ROOT/wpml-config.xml" "$ROOT/LICENSE" "$ROOT/composer.json" "$ROOT/composer.lock" "$DEST/"
+# Premium edition (VCAP_EDITION=premium): premium features need an active WP License Captain license (fail-closed).
+if [ "${VCAP_EDITION:-}" = "premium" ]; then
+	sed -i "s/^define( 'VCAP_VERSION', .*/&\ndefine( 'VCAP_LICENSE_REQUIRED', true );/" "$DEST/voucher-captain.php"
+	grep -q "VCAP_LICENSE_REQUIRED" "$DEST/voucher-captain.php" || { echo "Premium flag missing" >&2; exit 1; }
+fi
 
 # Production dependencies only.
 ( cd "$DEST" && composer config --no-interaction autoloader-suffix "VoucherCaptain${VERSION//./_}" && composer install --no-dev --optimize-autoloader --no-interaction --quiet )

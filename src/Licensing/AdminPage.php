@@ -40,7 +40,9 @@ final class AdminPage {
 		$license = null;
 		$error = '';
 		if ( is_array( $credentials ) && ! empty( $credentials['installation_id'] ) && '' !== $server ) {
-			$license = ( new LicenseClient( $server, 'voucher-captain', VCAP_VERSION, 'vcap_wplc_credentials' ) )->check_entitlements();
+			// get_entitlements(): online check that also refreshes the signed snapshot the premium gate reads.
+			$license = ( new LicenseClient( $server, 'voucher-captain', VCAP_VERSION, 'vcap_wplc_credentials' ) )->get_entitlements();
+			Entitlements::reset();
 			if ( is_wp_error( $license ) ) {
 				$error = $license->get_error_message();
 				$license = null;

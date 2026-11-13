@@ -4200,3 +4200,105 @@ msgstr "keine Übersetzung (%s)"
 
 msgid "statutory validity not verified (3 years to the end of the year is used)"
 msgstr "gesetzliche Gültigkeit nicht geprüft (es gelten 3 Jahre zum Jahresende)"
+
+msgid "A temporary update file could not be created."
+msgstr "Es konnte keine temporäre Update-Datei angelegt werden."
+
+msgid "Activate license"
+msgstr "Lizenz aktivieren"
+
+msgid "Could not encode the license request."
+msgstr "Die Lizenzanfrage konnte nicht erstellt werden."
+
+msgid "Current license status"
+msgstr "Aktueller Lizenzstatus"
+
+msgid "Deactivate this site"
+msgstr "Diese Website deaktivieren"
+
+msgid "Enter a valid HTTPS license server URL and license key."
+msgstr "Bitte geben Sie eine gültige HTTPS-Adresse des Lizenzservers und den Lizenzschlüssel ein."
+
+msgid "Feature rights"
+msgstr "Funktionsrechte"
+
+msgid "License"
+msgstr "Lizenz"
+
+msgid "License activated for this site."
+msgstr "Die Lizenz ist für diese Website aktiviert."
+
+msgid "License key"
+msgstr "Lizenzschlüssel"
+
+msgid "License server URL"
+msgstr "Adresse des Lizenzservers"
+
+msgid "License server settings or license key are missing."
+msgstr "Lizenzserver oder Lizenzschlüssel fehlen."
+
+msgid "No authorized product update is available."
+msgstr "Es ist kein freigegebenes Update verfügbar."
+
+msgid "No verified offline entitlement cache is available."
+msgstr "Es sind keine geprüften Offline-Lizenzrechte vorhanden."
+
+msgid "Paid through"
+msgstr "Bezahlt bis"
+
+msgid "Sites"
+msgstr "Websites"
+
+msgid "The license key is used once for activation and is not stored by this plugin. Activation credentials are stored locally without autoloading."
+msgstr "Der Lizenzschlüssel wird nur einmal zur Aktivierung verwendet und nicht gespeichert. Die Aktivierungsdaten werden lokal und ohne Autoload gespeichert."
+
+msgid "The license server URL is not configured."
+msgstr "Die Adresse des Lizenzservers ist nicht eingerichtet."
+
+msgid "The license server did not return a package redirect."
+msgstr "Der Lizenzserver hat keine Weiterleitung zum Update-Paket geliefert."
+
+msgid "The license server response is missing its signature envelope."
+msgstr "Der Antwort des Lizenzservers fehlt die Signatur."
+
+msgid "The license server response signature could not be verified."
+msgstr "Die Signatur der Lizenzserver-Antwort konnte nicht bestätigt werden."
+
+msgid "The license server returned an error."
+msgstr "Der Lizenzserver hat einen Fehler gemeldet."
+
+msgid "The license server returned an invalid response."
+msgstr "Der Lizenzserver hat eine ungültige Antwort geliefert."
+
+msgid "The license server returned invalid JSON."
+msgstr "Der Lizenzserver hat ungültiges JSON geliefert."
+
+msgid "The offline entitlement cache could not be verified."
+msgstr "Die gespeicherten Offline-Lizenzrechte konnten nicht bestätigt werden."
+
+msgid "The offline entitlement cache has expired."
+msgstr "Die gespeicherten Offline-Lizenzrechte sind abgelaufen."
+
+msgid "The premium update could not be downloaded."
+msgstr "Das Premium-Update konnte nicht heruntergeladen werden."
+
+msgid "The update checksum metadata is invalid."
+msgstr "Die Prüfsumme des Updates ist ungültig."
+
+msgid "The update package checksum did not match. Installation was stopped."
+msgstr "Die Prüfsumme des Update-Pakets stimmt nicht. Die Installation wurde abgebrochen."
+
+msgid "The update package host is not allowed."
+msgstr "Der Server des Update-Pakets ist nicht zugelassen."
+
+msgid "This product installation has not been activated."
+msgstr "Diese Installation ist noch nicht aktiviert."
+
+msgid "This site was deactivated."
+msgstr "Diese Website wurde deaktiviert."
+
+msgid "Voucher Captain premium features are switched off until the license is active: %s."
+msgstr "Premium-Funktionen von Voucher Captain sind ausgeschaltet, bis die Lizenz aktiv ist: %s."
+
+msgid "You are not allowed to manage this license."
+msgstr "Sie dürfen diese Lizenz nicht verwalten."

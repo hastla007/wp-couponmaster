@@ -61,20 +61,27 @@ final class Plugin {
 		( new Emails() )->register();
 		( new Privacy( $this->vouchers ) )->register();
 		( new Health() )->register();
-		( new TopUp( $this->vouchers, $this->coupons ) )->register();
+		Licensing\Entitlements::register();
+		if ( Licensing\Entitlements::allows( 'topup' ) ) {
+			( new TopUp( $this->vouchers, $this->coupons ) )->register();
+		}
 		( new CouponLink( $this->settings ) )->register();
 		( new VoucherPurchaseRules( $this->settings ) )->register();
 		( new FirstOrderCoupons() )->register();
 		( new CouponSkuRules() )->register();
 		$referrals = new Referrals( $this->settings, $this->store_credit );
-		$referrals->register();
+		if ( Licensing\Entitlements::allows( 'referrals' ) ) {
+			$referrals->register();
+		}
 		( new Shortcodes( $this->downloads, $referrals ) )->register();
 		$promotions = new Discounts\Repository();
 		$promotions->register();
-		( new Discounts\Usage( $promotions ) )->register();
-		$promotion_cart = new Discounts\CartIntegration( $this->settings, $promotions );
-		$promotion_cart->register();
-		( new Discounts\Bonus( $promotions, $promotion_cart ) )->register();
+		if ( Licensing\Entitlements::allows( 'promotions' ) ) {
+			( new Discounts\Usage( $promotions ) )->register();
+			$promotion_cart = new Discounts\CartIntegration( $this->settings, $promotions );
+			$promotion_cart->register();
+			( new Discounts\Bonus( $promotions, $promotion_cart ) )->register();
+		}
 		( new Discounts\Admin( $promotions ) )->register();
 
 		$this->settings->register();
@@ -92,9 +99,11 @@ final class Plugin {
 		( new Compat\Wpml() )->register();
 		( new Compat\MultiCurrency() )->register();
 		( new Compat\AffiliateCaptain() )->register();
-		( new Compat\PassCaptain() )->register();
-		$this->passcaptain_tickets->register();
-		( new Compat\PassCaptainScanner() )->register();
+		if ( Licensing\Entitlements::allows( 'passcaptain' ) ) {
+			( new Compat\PassCaptain() )->register();
+			$this->passcaptain_tickets->register();
+			( new Compat\PassCaptainScanner() )->register();
+		}
 
 		if ( is_admin() ) {
 			( new Licensing\AdminPage() )->register();
@@ -104,7 +113,9 @@ final class Plugin {
 			( new Admin\Import( $this->code_pool ) )->register();
 			( new Admin\StoreCreditAdmin( $this->store_credit, $this->vouchers ) )->register();
 			( new Admin\CampaignAdmin( new Campaigns( $this->code_pool, $this->vouchers ) ) )->register();
-			( new Admin\ReportsAdmin() )->register();
+			if ( Licensing\Entitlements::allows( 'reports' ) ) {
+				( new Admin\ReportsAdmin() )->register();
+			}
 		}
 
 		add_action( 'init', array( $this, 'load_textdomain' ), 0 );

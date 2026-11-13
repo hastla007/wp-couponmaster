@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-13 06:26+0000\n"
+"POT-Creation-Date: 2026-11-13 06:35+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:75 src/API/V1/RedemptionService.php:117
@@ -149,7 +149,7 @@ msgstr ""
 msgid "This redemption key is reserved."
 msgstr ""
 
-#: src/API/V1/VoucherService.php:161 src/API/V1/WooCommerceRedemptionProvider.php:48 src/API/V1/WooCommerceRedemptionProvider.php:73 src/API/V1/WooCommerceRedemptionProvider.php:116 src/API/V1/WooCommerceRedemptionProvider.php:154 src/Admin/VoucherAdmin.php:115
+#: src/API/V1/VoucherService.php:173 src/API/V1/WooCommerceRedemptionProvider.php:48 src/API/V1/WooCommerceRedemptionProvider.php:73 src/API/V1/WooCommerceRedemptionProvider.php:116 src/API/V1/WooCommerceRedemptionProvider.php:154 src/Admin/VoucherAdmin.php:115
 msgid "Voucher not found."
 msgstr ""
 
@@ -445,7 +445,7 @@ msgstr ""
 msgid "WP Pass Captain ↗"
 msgstr ""
 
-#: src/Admin/Menu.php:48 src/Admin/Menu.php:48 src/Plugin.php:119
+#: src/Admin/Menu.php:48 src/Admin/Menu.php:48 src/Plugin.php:132
 msgid "Settings"
 msgstr ""
 
@@ -925,7 +925,7 @@ msgstr ""
 msgid "Overview"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:143 src/Admin/VouchersListTable.php:30 src/Privacy.php:44 src/Privacy.php:85 templates/myaccount/vouchers-table.php:31 templates/myaccount/vouchers-table.php:57
+#: src/Admin/VoucherAdmin.php:143 src/Admin/VouchersListTable.php:30 src/Licensing/AdminPage.php:64 src/Privacy.php:44 src/Privacy.php:85 templates/myaccount/vouchers-table.php:31
 msgid "Status"
 msgstr ""
 
@@ -2506,19 +2506,19 @@ msgstr ""
 msgid "unlimited"
 msgstr ""
 
-#: src/Downloads.php:292 src/Shortcodes.php:76 src/TopUp.php:95
+#: src/Downloads.php:293 src/Shortcodes.php:76 src/TopUp.php:95
 msgid "Too many attempts. Please try again later."
 msgstr ""
 
-#: src/Downloads.php:298 src/Shortcodes.php:82
+#: src/Downloads.php:299 src/Shortcodes.php:82
 msgid "Voucher code not found."
 msgstr ""
 
-#: src/Downloads.php:308 src/Shortcodes.php:172 src/TemplatePostType.php:107
+#: src/Downloads.php:309 src/Shortcodes.php:172 src/TemplatePostType.php:107
 msgid "Voucher code"
 msgstr ""
 
-#: src/Downloads.php:310
+#: src/Downloads.php:311
 msgid "Check balance"
 msgstr ""
 
@@ -3158,6 +3158,144 @@ msgstr ""
 msgid "WooCommerce coupon could not be enabled – enable it manually"
 msgstr ""
 
+#: src/Licensing/AdminPage.php:26 src/Licensing/AdminPage.php:27 src/Licensing/AdminPage.php:54
+msgid "License"
+msgstr ""
+
+#: src/Licensing/AdminPage.php:63
+msgid "Current license status"
+msgstr ""
+
+#: src/Licensing/AdminPage.php:65
+msgid "Paid through"
+msgstr ""
+
+#: src/Licensing/AdminPage.php:66
+msgid "Sites"
+msgstr ""
+
+#: src/Licensing/AdminPage.php:67
+msgid "Feature rights"
+msgstr ""
+
+#: src/Licensing/AdminPage.php:70
+msgid "Deactivate this site"
+msgstr ""
+
+#: src/Licensing/AdminPage.php:74
+msgid "License server URL"
+msgstr ""
+
+#: src/Licensing/AdminPage.php:75
+msgid "License key"
+msgstr ""
+
+#: src/Licensing/AdminPage.php:76
+msgid "The license key is used once for activation and is not stored by this plugin. Activation credentials are stored locally without autoloading."
+msgstr ""
+
+#: src/Licensing/AdminPage.php:77 src/Licensing/Entitlements.php:94
+msgid "Activate license"
+msgstr ""
+
+#: src/Licensing/AdminPage.php:87
+msgid "Enter a valid HTTPS license server URL and license key."
+msgstr ""
+
+#: src/Licensing/AdminPage.php:94
+msgid "License activated for this site."
+msgstr ""
+
+#: src/Licensing/AdminPage.php:104
+msgid "This site was deactivated."
+msgstr ""
+
+#: src/Licensing/AdminPage.php:109
+msgid "You are not allowed to manage this license."
+msgstr ""
+
+#. translators: %s: list of features
+#: src/Licensing/Entitlements.php:91
+#, php-format
+msgid "Voucher Captain premium features are switched off until the license is active: %s."
+msgstr ""
+
+#: src/Licensing/LicenseClient.php:53
+msgid "License server settings or license key are missing."
+msgstr ""
+
+#: src/Licensing/LicenseClient.php:159
+msgid "No verified offline entitlement cache is available."
+msgstr ""
+
+#: src/Licensing/LicenseClient.php:164
+msgid "The offline entitlement cache has expired."
+msgstr ""
+
+#: src/Licensing/LicenseClient.php:169
+msgid "The offline entitlement cache could not be verified."
+msgstr ""
+
+#: src/Licensing/LicenseClient.php:284
+msgid "Could not encode the license request."
+msgstr ""
+
+#: src/Licensing/LicenseClient.php:317
+msgid "The license server returned an error."
+msgstr ""
+
+#: src/Licensing/LicenseClient.php:317
+msgid "The license server returned an invalid response."
+msgstr ""
+
+#: src/Licensing/LicenseClient.php:321
+msgid "The license server returned invalid JSON."
+msgstr ""
+
+#: src/Licensing/LicenseClient.php:326
+msgid "The license server response is missing its signature envelope."
+msgstr ""
+
+#: src/Licensing/LicenseClient.php:340
+msgid "The license server response signature could not be verified."
+msgstr ""
+
+#: src/Licensing/LicenseClient.php:353
+msgid "This product installation has not been activated."
+msgstr ""
+
+#: src/Licensing/PremiumUpdater.php:102
+msgid "The license server URL is not configured."
+msgstr ""
+
+#: src/Licensing/PremiumUpdater.php:106
+msgid "No authorized product update is available."
+msgstr ""
+
+#: src/Licensing/PremiumUpdater.php:111
+msgid "The update checksum metadata is invalid."
+msgstr ""
+
+#: src/Licensing/PremiumUpdater.php:124
+msgid "The license server did not return a package redirect."
+msgstr ""
+
+#: src/Licensing/PremiumUpdater.php:128
+msgid "The update package host is not allowed."
+msgstr ""
+
+#: src/Licensing/PremiumUpdater.php:132
+msgid "A temporary update file could not be created."
+msgstr ""
+
+#: src/Licensing/PremiumUpdater.php:140
+msgid "The premium update could not be downloaded."
+msgstr ""
+
+#: src/Licensing/PremiumUpdater.php:145
+msgid "The update package checksum did not match. Installation was stopped."
+msgstr ""
+
 #: src/Placeholders.php:17 src/TemplatePostType.php:257
 msgid "Coupon code"
 msgstr ""
@@ -3243,12 +3381,12 @@ msgid "Redeem page link with the code"
 msgstr ""
 
 #. translators: %s: comma separated table names
-#: src/Plugin.php:135
+#: src/Plugin.php:148
 #, php-format
 msgid "Voucher Captain: the voucher database tables do not support transactions (InnoDB). Gift card balances cannot be redeemed until these tables are converted to InnoDB: %s"
 msgstr ""
 
-#: src/Plugin.php:143
+#: src/Plugin.php:156
 msgid "Voucher Captain: the PDF libraries are missing. Install the release ZIP or run \"composer install --no-dev\" in the plugin folder."
 msgstr ""
 

@@ -114,6 +114,15 @@ final class LicenseClient {
 		return is_wp_error( $cached ) ? $online : $cached;
 	}
 
+	/**
+	 * Verified local snapshot without contacting the server (premium gate on every request).
+	 *
+	 * @return array<string,mixed>|\WP_Error
+	 */
+	public function cached_entitlements() {
+		return $this->read_entitlements_cache();
+	}
+
 	/** Store an HMAC-protected snapshot received from the already verified API envelope. */
 	private function store_entitlements_cache( array $data ): void {
 		$credentials = $this->credentials();
