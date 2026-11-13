@@ -71,7 +71,8 @@ final class Shortcodes {
 	 * 'rejected' (WooCommerce refused it) or 'limited' (too many attempts).
 	 */
 	public function redeem( string $raw ): string {
-		// Only unknown codes count: a customer redeeming real vouchers is never locked out.
+		// The attempt counts before the lookup and is given back for an existing code: a customer redeeming real
+		// vouchers is never locked out, and the site-wide counter only brakes guessing (see Plugin::rate_limited()).
 		if ( Plugin::rate_limited( 'redeem', 15, 300, 15 * MINUTE_IN_SECONDS, false ) ) {
 			wc_add_notice( __( 'Too many attempts. Please try again later.', 'voucher-captain' ), 'error' );
 			return 'limited';
@@ -82,6 +83,7 @@ final class Shortcodes {
 			wc_add_notice( __( 'Voucher code not found.', 'voucher-captain' ), 'error' );
 			return 'invalid';
 		}
+		Plugin::rate_limit_success( 'redeem', 15 * MINUTE_IN_SECONDS );
 		/** Connectors may handle a code themselves (e.g. exchange it for tickets): return a result string. */
 		$handled = apply_filters( 'vcap_redeem_code', null, $code );
 		if ( is_string( $handled ) && '' !== $handled ) {

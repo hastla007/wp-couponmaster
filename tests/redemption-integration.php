@@ -189,7 +189,7 @@ for ( $i = 0; $i < 3; $i++ ) {
 	$service->check( 'does-not-exist-' . $i );
 }
 vcap_redeem_assert( 'vcap_rate_limited' === vcap_redeem_code( $service->check( $filtered->code ) ), 'too many invalid codes are rate limited per user' );
-delete_transient( 'vcap_rl_redeem_u' . $user_b );
+VCAP\Plugin::rate_limit_reset( 'redemption', 900, 'u' . $user_b );
 update_option( 'vcap_redemption_max_failures', 10 );
 
 // --- REST: authentication, identity from the session, ownership.

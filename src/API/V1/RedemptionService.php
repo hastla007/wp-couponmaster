@@ -34,6 +34,10 @@ final class RedemptionService {
 	/** Allowed idempotency key format (callers typically use a UUID or "<system>:<id>"). */
 	public const KEY_PATTERN = '/^[A-Za-z0-9][A-Za-z0-9._:\-]{7,63}$/';
 
+	/** Failed-code rate limit (Plugin::rate_limited()): bucket and window. */
+	private const RATE_BUCKET = 'redemption';
+	private const RATE_WINDOW = 900;
+
 	/**
 	 * Construct the service.
 	 *
@@ -76,9 +80,10 @@ final class RedemptionService {
 		}
 		$voucher = $this->find( $code );
 		if ( ! $voucher ) {
-			$this->record_failure( $user_id );
+			$this->record_failure();
 			return self::error( 'vcap_not_found', __( 'This voucher code is not valid.', 'voucher-captain' ), 404 );
 		}
+		$this->record_success( $user_id );
 		$target = isset( $args['target'] ) ? $this->clean_target( (string) $args['target'] ) : '';
 		$amount = isset( $args['amount'] ) ? (float) $args['amount'] : null;
 		$check  = $this->eligibility( $voucher, $target, $amount, $user_id, (string) ( $args['email'] ?? '' ) );
@@ -122,11 +127,13 @@ final class RedemptionService {
 		$voucher  = $this->find( $code );
 		if ( ! $voucher ) {
 			if ( $existing ) {
+				$this->record_success( $user_id ); // A retry with a known key, not a guess.
 				return self::error( 'vcap_idempotency_conflict', __( 'This redemption key was already used for another request.', 'voucher-captain' ), 409 );
 			}
-			$this->record_failure( $user_id );
+			$this->record_failure();
 			return self::error( 'vcap_not_found', __( 'This voucher code is not valid.', 'voucher-captain' ), 404 );
 		}
+		$this->record_success( $user_id );
 		$amount = $voucher->is_multi_use() ? round( (float) ( $args['amount'] ?? 0 ), self::decimals( $voucher->currency ) ) : round( $voucher->initial_amount, self::decimals( $voucher->currency ) );
 		$hash   = $this->request_hash( $voucher->id, $target, $amount, $user_id );
 		if ( $existing ) {
@@ -829,33 +836,63 @@ final class RedemptionService {
 	}
 
 	/**
-	 * Failed-code rate limit per user (and per visitor for anonymous calls).
+	 * Visitor key of the failed-code rate limit: the user (connectors and logged-in customers), else the address.
 	 *
 	 * @param int $user_id User id.
 	 * @return string
 	 */
-	private function failure_key( int $user_id ): string {
-		return 'vcap_rl_redeem_' . ( $user_id ? 'u' . $user_id : md5( \VCAP\Plugin::client_ip() ) );
+	private function rate_visitor( int $user_id ): string {
+		return $user_id ? 'u' . $user_id : '';
 	}
 
 	/**
-	 * Whether the caller exceeded the configured number of invalid codes.
+	 * Configured number of invalid codes per caller and 15 minutes (0 = no limit).
+	 *
+	 * @return int
+	 */
+	private function max_failures(): int {
+		return (int) get_option( 'vcap_redemption_max_failures', 10 );
+	}
+
+	/**
+	 * Counts the attempt before the code lookup (atomic, see Plugin::rate_limited()) and tells whether the caller
+	 * exceeded the number of invalid codes. Existing codes give the attempt back (record_success()).
 	 *
 	 * @param int $user_id User id.
 	 * @return bool
 	 */
 	private function too_many_failures( int $user_id ): bool {
-		$max = (int) get_option( 'vcap_redemption_max_failures', 10 );
-		return $max > 0 && (int) get_transient( $this->failure_key( $user_id ) ) >= $max;
+		$max = $this->max_failures();
+		if ( $max <= 0 ) {
+			return false;
+		}
+		/**
+		 * Invalid codes per 15 minutes across all callers; above it every caller's quota shrinks (brake).
+		 *
+		 * @since 1.2.0
+		 * @param int $site_wide Default 300.
+		 */
+		$site_wide = (int) apply_filters( 'vcap_redemption_site_wide_failures', 300 );
+		return \VCAP\Plugin::rate_limited( self::RATE_BUCKET, $max, $site_wide, self::RATE_WINDOW, false, $this->rate_visitor( $user_id ) );
 	}
 
 	/**
-	 * Count an invalid code.
+	 * The code exists: give the counted attempt back.
 	 *
 	 * @param int $user_id User id.
 	 */
-	private function record_failure( int $user_id ): void {
-		$key = $this->failure_key( $user_id );
-		set_transient( $key, (int) get_transient( $key ) + 1, 15 * MINUTE_IN_SECONDS );
+	private function record_success( int $user_id ): void {
+		if ( $this->max_failures() > 0 ) {
+			\VCAP\Plugin::rate_limit_success( self::RATE_BUCKET, self::RATE_WINDOW, $this->rate_visitor( $user_id ) );
+		}
+	}
+
+	/**
+	 * Count an invalid code site-wide (the caller's attempt is already counted).
+	 */
+	private function record_failure(): void {
+		if ( $this->max_failures() > 0 ) {
+			\VCAP\Plugin::rate_limit_failure( self::RATE_BUCKET, self::RATE_WINDOW );
+		}
 	}
 }

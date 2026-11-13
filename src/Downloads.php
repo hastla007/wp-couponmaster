@@ -337,6 +337,7 @@ final class Downloads {
 					Plugin::rate_limit_failure( 'balance', 15 * MINUTE_IN_SECONDS );
 					$result = '<p class="woocommerce-error" role="alert">' . esc_html__( 'Voucher code not found.', 'voucher-captain' ) . '</p>';
 				} else {
+					Plugin::rate_limit_success( 'balance', 15 * MINUTE_IN_SECONDS );
 					$result = $this->balance_result( $voucher );
 				}
 			}

@@ -149,13 +149,16 @@ for ( $i = 0; $i < 15; $i++ ) {
 }
 $blocked = VCAP\Plugin::rate_limited( $bucket, 15, 300, HOUR_IN_SECONDS );
 vcap_security_assert( $allowed && $blocked, 'public balance lookup rate limit rejects the request after the visitor quota' );
-// Failure-only mode: checking alone never locks anyone out; only failed attempts count (atomic, fixed window).
+// Lookup mode: each attempt counts before the lookup (atomic); existing codes give it back, so only failed
+// attempts use up the quota (fixed window). More cases in tests/rate-limit-integration.php.
 $fail_bucket = 'security-fail-' . strtolower( wp_generate_password( 8, false, false ) );
 $never = true;
 for ( $i = 0; $i < 40; $i++ ) {
 	$never = $never && ! VCAP\Plugin::rate_limited( $fail_bucket, 5, 300, HOUR_IN_SECONDS, false );
+	VCAP\Plugin::rate_limit_success( $fail_bucket, HOUR_IN_SECONDS );
 }
 for ( $i = 0; $i < 5; $i++ ) {
+	VCAP\Plugin::rate_limited( $fail_bucket, 5, 300, HOUR_IN_SECONDS, false );
 	VCAP\Plugin::rate_limit_failure( $fail_bucket, HOUR_IN_SECONDS );
 }
 vcap_security_assert( $never && VCAP\Plugin::rate_limited( $fail_bucket, 5, 300, HOUR_IN_SECONDS, false ), 'valid lookups are never throttled; repeated failed codes are' );
