@@ -175,7 +175,7 @@ die Erstattung in WooCommerce; bei Mehrzweck keine USt-Folge, da beim Verkauf ke
 |---|---|---|
 | Storniert, fehlgeschlagen oder vollständig erstattet | eingesetzter Gutschein-/Guthabenbetrag wird zurückgebucht; einmalige Gutscheine wieder gültig | „Guthaben bei Stornierung wiederherstellen“ (`vcap_restore_on_cancel`, Standard an); `tests/tax-integration.php` „cancelling the redemption order …“, `tests/acceptance-integration.php` „a full refund restores the used balance …“ |
 | Teilerstattung | WooCommerce erstattet über die Zahlungsart; Gutscheinsalden bleiben unverändert | README.md „Erstattung“ |
-| „Als Guthaben erstatten“ | nur ausdrücklich durch das Personal, nicht für Gastbestellungen; erzeugt Kundenguthaben (2.6) | `tests/store-credit-integration.php` (`refund_as_credit`) |
+| „Als Guthaben erstatten“ | nur ausdrücklich durch das Personal, nicht für Gastbestellungen; erzeugt Kundenguthaben (2.6); Bestellung in Fremdwährung ohne bekannten Kurs wird abgelehnt (nie 1:1) | `tests/store-credit-integration.php` (`refund_as_credit`) |
 | Geschenkkarten-Aufladung storniert/erstattet | Aufladung wird zurückgenommen, soweit das Guthaben noch vorhanden ist | `src/TopUp.php::revoke()`; `tests/acceptance-integration.php` (Aufladung) |
 | Pass Captain: Tickets einer Gutscheinzahlung erstattet | Pass Captain bucht den Gutscheinanteil genau einmal zurück; Abgleich unter Gutscheine → Auswertung → Abgleich | `tests/passcaptain-integration.php` „the voucher share of the refunded ticket returns …“ |
 
@@ -240,7 +240,7 @@ ihm abgebucht wird. Spezifikation und Nachweis (`tests/tax-integration.php`, Abs
 | 10.5 | **WooCommerce-Standard** (Netto bleibt, Satz des Käuferlands kommt dazu) | Bei steuerpflichtigem Gutscheinprodukt zahlt ein DE-Käufer 49,58 € statt 50 € (Basis AT 20 %). Der Gutschein ist **genau das wert, was bezahlt wurde** (nie mehr). Für Gutscheine mit festem Nennwert daher Mehrzweck mit Steuerstatus „Keiner“ (10.6) oder gleichen Bruttopreis (10.4) verwenden. | „WooCommerce default …“ |
 | 10.6 | Mehrzweckgutschein **nicht steuerbar** verkauft | Kostet und ist in jedem Land gleich viel wert (keine Länderanpassung ohne Steuer). | „a multi-purpose card sold as not taxable …“ |
 | 10.7 | **Kleinunternehmer** (Steuer im Shop aus) | Verkauf und Einlösung ohne USt; Gutschein ist den bezahlten Betrag wert und bezahlt genau diesen. Die Einordnung Einzweck/Mehrzweck hat keine Steuerwirkung. Pass Captain übernimmt seinen Kleinunternehmer-Hinweis selbst. | „small business: …“ (2 Prüfungen) |
-| 10.8 | **Fremdwährung** (Mehrwährungs-Plugin) | Gutscheinwerte und Salden in der Basiswährung, Umrechnung über `vcap_amount_to_base_currency`; Freigabe je Plugin unter TODO.md „Reale Zahlungsanbieter, Mehrwährungs- …“ | `tests/acceptance-integration.php` |
+| 10.8 | **Fremdwährung** (Mehrwährungs-Plugin) | Gutscheinwerte und Salden in der Basiswährung, Umrechnung über `vcap_amount_to_base_currency` (WCML, Aelia, WOOCS, CURCY, WooPayments Multi-Currency); der Kurs wird beim Checkout an der Bestellung gespeichert (`_vcap_exchange_rate`). **Nie 1:1:** ohne bekannten Kurs wird kein Gutschein ausgestellt (Bestellung „Wartend“ mit Notiz und Admin-Hinweis), keine Guthaben-Erstattung gebucht und kein Festbetragsgutschein im Fremdwährungs-Warenkorb angenommen; Website-Zustand meldet es. Freigabe je Plugin unter TODO.md „Reale Zahlungsanbieter, Mehrwährungs- …“ | `tests/acceptance-integration.php`, `tests/store-credit-integration.php`, `tests/ecosystem-integration.php` |
 
 Offene Fragen dazu an die Steuerberatung:
 

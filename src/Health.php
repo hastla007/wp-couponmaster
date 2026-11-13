@@ -25,7 +25,7 @@ final class Health {
 
 	public function tests( $tests ) {
 		$tests = (array) $tests;
-		foreach ( array( 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets' ) as $id ) {
+		foreach ( array( 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets', 'currency' ) as $id ) {
 			$tests['direct'][ 'vcap_' . $id ] = array(
 				'label' => __( 'Voucher Captain', 'voucher-captain' ),
 				'test'  => array( $this, 'test_' . $id ),
@@ -243,6 +243,35 @@ final class Health {
 		}
 		/* translators: %s: list of countries with what is missing */
 		return self::result( 'markets', 'recommended', __( 'Some EU selling countries need voucher settings', 'voucher-captain' ), sprintf( __( 'Set the statutory validity and conditions per country under Vouchers → Settings (have them checked legally) and add translations: %s', 'voucher-captain' ), implode( '; ', $gaps ) ) );
+	}
+
+	/**
+	 * Foreign currency without converter: a money operation was refused for want of an exchange rate (critical),
+	 * or a currency switcher is active that no adapter (and no `vcap_amount_to_base_currency` callback) converts.
+	 */
+	public function test_currency(): array {
+		$unknown = Compat\MultiCurrency::unknown_currencies();
+		$advice  = __( 'Vouchers and gift card balances are kept in the shop base currency. Use a supported currency switcher (WooCommerce Multilingual, Aelia, WOOCS, CURCY, WooPayments Multi-Currency) or convert amounts with the filter "vcap_amount_to_base_currency".', 'voucher-captain' );
+		if ( $unknown ) {
+			return self::result(
+				'currency',
+				'critical',
+				__( 'Foreign-currency amounts could not be converted', 'voucher-captain' ),
+				/* translators: %s: currency codes */
+				sprintf( __( 'No exchange rate to the shop base currency was known for %s in the last 30 days: voucher sales in that currency were held, store-credit refunds and fixed-value vouchers were refused.', 'voucher-captain' ), implode( ', ', array_keys( $unknown ) ) ) . ' ' . $advice
+			);
+		}
+		$switcher = Compat\MultiCurrency::unsupported_switcher();
+		if ( '' !== $switcher ) {
+			return self::result(
+				'currency',
+				'recommended',
+				__( 'Foreign currency without converter', 'voucher-captain' ),
+				/* translators: %s: plugin name */
+				sprintf( __( 'Voucher Captain cannot read the exchange rates of %s. Orders in other currencies cannot issue vouchers or be charged to gift cards until a rate is known.', 'voucher-captain' ), $switcher ) . ' ' . $advice
+			);
+		}
+		return self::result( 'currency', 'good', __( 'Voucher amounts are converted to the shop base currency', 'voucher-captain' ), __( 'Either all orders are in the base currency or a supported currency switcher provides the exchange rates.', 'voucher-captain' ) );
 	}
 
 	/** Voucher products whose validity ends before the statutory limitation period in the shop or a selling country. */

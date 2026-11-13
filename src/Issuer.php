@@ -27,17 +27,97 @@ final class Issuer {
 		add_action( 'woocommerce_create_refund', array( $this, 'guard_refund' ), 10, 2 );
 		add_action( 'woocommerce_order_partially_refunded', array( $this, 'on_partial_refund' ), 20, 2 );
 		add_action( 'vcap_issue_order', array( $this, 'issue_async' ) );
+		add_action( 'woocommerce_order_status_changed', array( $this, 'hold_after_transition' ), 30, 4 );
 	}
 
+	/** Order meta: the order waits for an exchange rate before its vouchers can be issued (note written once). */
+	public const FX_HOLD_META = '_vcap_fx_hold';
 	/** Order item meta: issuing was refused because the product's discount setup is invalid (note written once). */
 	public const CONFIG_REFUSED_META = '_vcap_config_refused';
+	/** Whether issuing runs inside a status transition (status changes wait until it is through). */
+	private bool $in_transition = false;
+	/** @var array<int, true> Orders to put on hold after their status transition (no exchange rate). */
+	private array $fx_hold = array();
 
 	public function on_status( $order_id, $order = null ): void {
 		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
 		if ( ! $order || ! self::payment_ok( $order ) || ! apply_filters( 'vcap_should_issue_for_order', true, $order ) ) {
 			return;
 		}
-		$this->issue_for_order( $order );
+		$this->in_transition = true;
+		try {
+			$this->issue_for_order( $order );
+		} finally {
+			$this->in_transition = false;
+		}
+	}
+
+	/** After the status transition: an order whose vouchers wait for an exchange rate goes on hold. */
+	public function hold_after_transition( $order_id, $from = '', $to = '', $order = null ): void {
+		if ( ! isset( $this->fx_hold[ (int) $order_id ] ) ) {
+			return;
+		}
+		unset( $this->fx_hold[ (int) $order_id ] );
+		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
+		if ( $order instanceof \WC_Order && ! $order->has_status( array( 'on-hold', 'cancelled', 'refunded', 'failed' ) ) ) {
+			$order->update_status( 'on-hold', __( 'Vouchers wait for an exchange rate to the shop currency.', 'voucher-captain' ) );
+		}
+	}
+
+	/**
+	 * Whether a voucher line of the order still to be issued (or a top-up still to be booked) depends on the
+	 * order currency: its value is the price paid or the amount entered, not a fixed value or a percentage.
+	 */
+	private function needs_conversion( \WC_Order $order ): bool {
+		foreach ( $order->get_items() as $item_id => $item ) {
+			if ( ! $item instanceof \WC_Order_Item_Product ) {
+				continue;
+			}
+			$product = $item->get_product();
+			if ( '' !== (string) $item->get_meta( TopUp::ITEM_META ) ) {
+				if ( ! $item->get_meta( TopUp::DONE_META ) ) {
+					return true;
+				}
+				continue;
+			}
+			if ( ! $product || ! ProductConfig::is_voucher( $product ) || $this->repo->get_slot( (int) $item_id, 0 ) ) {
+				continue;
+			}
+			$config = ProductConfig::get( $product );
+			if ( 'percent' === $config['discount_type'] || 'fixed' === $config['amount_source'] || 'ticket' === $config['type'] ) {
+				continue; // Fixed value or percentage (tickets without fixed value carry none).
+			}
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Foreign-currency order without exchange rate: nothing is issued (never 1:1), the order goes on hold with a
+	 * note and is listed in an admin notice and in Site Health until a rate is known.
+	 */
+	private function hold_for_rate( \WC_Order $order ): void {
+		$currency = (string) $order->get_currency();
+		Compat\MultiCurrency::record_unknown( $currency );
+		Compat\MultiCurrency::record_held( $order );
+		if ( 'yes' !== $order->get_meta( self::FX_HOLD_META ) ) {
+			$order->update_meta_data( self::FX_HOLD_META, 'yes' );
+			$order->save_meta_data();
+			$order->add_order_note(
+				sprintf(
+					/* translators: 1: order currency, 2: shop base currency, 3: order meta key */
+					__( 'Vouchers not issued: the order was paid in %1$s and no exchange rate to the shop currency %2$s is known (vouchers are never converted 1:1). Set up a supported currency switcher or store the rate on the order (meta "%3$s": %1$s per 1 %2$s), then issue the vouchers from this order screen – or refund the order.', 'voucher-captain' ),
+					$currency,
+					(string) get_option( 'woocommerce_currency' ),
+					Compat\MultiCurrency::RATE_META
+				)
+			);
+		}
+		if ( $this->in_transition ) {
+			$this->fx_hold[ $order->get_id() ] = true;
+		} elseif ( ! $order->has_status( array( 'on-hold', 'cancelled', 'refunded', 'failed' ) ) ) {
+			$order->update_status( 'on-hold', __( 'Vouchers wait for an exchange rate to the shop currency.', 'voucher-captain' ) );
+		}
 	}
 
 	public function issue_async( $order_id ): void {
@@ -65,6 +145,10 @@ final class Issuer {
 	 */
 	public function issue_for_order( \WC_Order $order, bool $manual = false ): array {
 		$created = array();
+		if ( ! Compat\MultiCurrency::can_convert( (string) $order->get_currency(), $order ) && $this->needs_conversion( $order ) ) {
+			$this->hold_for_rate( $order );
+			return $created;
+		}
 		foreach ( $order->get_items() as $item_id => $item ) {
 			/** @var \WC_Order_Item_Product $item */
 			if ( ! $item instanceof \WC_Order_Item_Product ) {
@@ -402,10 +486,24 @@ final class Issuer {
 		}
 		$remaining = (float) $order->get_total() - $refunded;
 		$amount    = (float) ( $args['amount'] ?? 0 );
-		$to_base   = static function ( float $value ) use ( $order ): float {
-			return $order->get_currency() && $order->get_currency() !== get_option( 'woocommerce_currency' ) ? (float) apply_filters( 'vcap_amount_to_base_currency', $value, $order->get_currency(), $order ) : $value;
+		$to_base   = static function ( float $value ) use ( $order ): ?float {
+			return Compat\MultiCurrency::to_base( $value, (string) $order->get_currency(), $order );
 		};
 		$remaining_base = $to_base( $remaining );
+		if ( null === $remaining_base || null === $to_base( $amount ) ) {
+			// Foreign currency without exchange rate: the spent base-currency value cannot be compared (never 1:1).
+			if ( apply_filters( 'vcap_allow_refund_of_spent_vouchers', false, $order, $amount, $spent ) ) {
+				return;
+			}
+			throw new \Exception(
+				sprintf(
+					/* translators: 1: voucher codes, 2: order currency */
+					__( 'Value from this order was already spent (%1$s), and no exchange rate for %2$s is known to work out how much can still be refunded. Set up the exchange rate first.', 'voucher-captain' ),
+					implode( ', ', $codes ),
+					(string) $order->get_currency()
+				)
+			);
+		}
 		$max_base       = $remaining_base - $spent;
 		$decimals       = API\V1\RedemptionService::decimals( (string) $order->get_currency() );
 		$tolerance      = 0.5 / ( 10 ** $decimals );

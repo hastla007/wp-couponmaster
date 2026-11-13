@@ -265,4 +265,39 @@ vcap_acc_assert( is_string( ( new VCAP\TopUp( vcap()->vouchers, vcap()->coupons 
 wc_get_order( $topup_order->get_id() )->update_status( 'cancelled' );
 vcap_acc_assert( 20.0 === (float) vcap()->vouchers->get( $topup_card->id )->balance, 'cancelling the top-up order takes the 30 back' );
 
+// Foreign currency without exchange rate: amounts are never taken 1:1 (vouchers and balances are in the base currency).
+$base_currency = (string) get_option( 'woocommerce_currency' );
+$no_rate       = 'CZK' === $base_currency ? 'HUF' : 'CZK';
+$fx_buy        = wc_create_order();
+$fx_buy->add_product( $gc_product, 1 ); // 50 in the order currency.
+$fx_buy->set_currency( $no_rate );
+$fx_buy->set_billing_email( 'acceptance-fx@example.com' );
+$fx_buy->calculate_totals();
+wc_get_order( $fx_buy->get_id() )->payment_complete( 'txn-fx-1' );
+$fx_buy   = wc_get_order( $fx_buy->get_id() );
+$fx_notes = implode( ' | ', array_map( static fn( $n ) => $n->content, wc_get_order_notes( array( 'order_id' => $fx_buy->get_id() ) ) ) );
+vcap_acc_assert( ! vcap()->vouchers->for_order( $fx_buy->get_id() ) && 'on-hold' === $fx_buy->get_status() && 'yes' === $fx_buy->get_meta( VCAP\Issuer::FX_HOLD_META ) && str_contains( $fx_notes, 'no exchange rate' ), 'a gift card paid in a currency without exchange rate is not issued (no 1:1) and the order is held with a note' );
+vcap_acc_assert( 'critical' === ( new VCAP\Health() )->test_currency()['status'], 'Site Health reports the foreign currency without converter' );
+$fx_buy->update_meta_data( VCAP\Compat\MultiCurrency::RATE_META, '25' ); // 25 order-currency units per base unit.
+$fx_buy->save();
+$fx_issued = vcap()->issuer->issue_for_order( wc_get_order( $fx_buy->get_id() ), true );
+vcap_acc_assert( 1 === count( $fx_issued ) && abs( 2.0 - (float) $fx_issued[0]->initial_amount ) < 0.001, 'with the exchange rate stored on the order the gift card is issued at its base value (50 / 25 = 2)' );
+$fx_spend = wc_create_order();
+$fx_spend->add_product( $product, 1 );
+$fx_spend->set_currency( $no_rate );
+$fx_spend->set_billing_email( 'acceptance-fx@example.com' );
+$fx_spend->calculate_totals();
+$fx_card    = vcap_acc_card( 40 );
+$fx_applied = $fx_spend->apply_coupon( $fx_card->code );
+vcap_acc_assert( is_wp_error( $fx_applied ) && str_contains( $fx_applied->get_error_message(), $no_rate ) && 40.0 === (float) vcap()->vouchers->get( $fx_card->id )->balance, 'a base-currency gift card is not valid in an order in a currency without exchange rate' );
+$fx_checkout = wc_create_order();
+$fx_checkout->set_currency( $no_rate );
+$fx_to_base  = static fn( $amount, $currency ) => $currency === $no_rate ? $amount / 20 : $amount;
+add_filter( 'vcap_amount_to_base_currency', $fx_to_base, 20, 2 );
+( new VCAP\Compat\MultiCurrency() )->store_rate( $fx_checkout );
+remove_filter( 'vcap_amount_to_base_currency', $fx_to_base, 20 );
+vcap_acc_assert( abs( 20.0 - (float) $fx_checkout->get_meta( VCAP\Compat\MultiCurrency::RATE_META ) ) < 0.0001, 'checkout stores the exchange rate a converter offers on the order' );
+delete_option( VCAP\Compat\MultiCurrency::UNKNOWN_OPTION );
+delete_option( VCAP\Compat\MultiCurrency::HELD_OPTION );
+
 echo "Voucher Captain acceptance checks passed.\n";

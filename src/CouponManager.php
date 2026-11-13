@@ -317,6 +317,9 @@ final class CouponManager {
 				continue;
 			}
 			$amount = $this->used_amount( $item );
+			if ( null === $amount ) {
+				throw new \Exception( self::currency_message( (string) $order->get_currency() ) );
+			}
 			if ( $amount > 0 ) {
 				$coupons[ $code ] = array( 'voucher' => $voucher, 'amount' => $amount );
 			}
@@ -659,7 +662,7 @@ final class CouponManager {
 		// The order may have been edited after checkout: only coupons still on it, with the same amount, are committed.
 		$current = array();
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
-			$current[ wc_format_coupon_code( $item->get_code() ) ] = $this->used_amount( $item );
+			$current[ wc_format_coupon_code( $item->get_code() ) ] = $this->used_amount( $item ) ?? -1.0; // No rate: never matches.
 		}
 		$failed = false;
 		foreach ( $reservations as $code => $amount ) {
@@ -915,6 +918,16 @@ final class CouponManager {
 		if ( Voucher::STATUS_EXPIRED === $voucher->status || $voucher->is_expired() ) {
 			throw new \Exception( esc_html__( 'This voucher has expired.', 'voucher-captain' ), 9003 );
 		}
+		if ( 'percent' !== $coupon->get_discount_type() ) {
+			// Fixed values are in the shop base currency: never taken 1:1 in a cart or order in another currency.
+			$object   = $discounts instanceof \WC_Discounts ? $discounts->get_object() : null;
+			$order    = $object instanceof \WC_Order ? $object : null;
+			$currency = $order ? (string) $order->get_currency() : ( function_exists( 'get_woocommerce_currency' ) ? (string) get_woocommerce_currency() : '' );
+			if ( ! Compat\MultiCurrency::can_convert( $currency, $order ) ) {
+				Compat\MultiCurrency::record_unknown( $currency );
+				throw new \Exception( esc_html( self::currency_message( $currency ) ), 9007 );
+			}
+		}
 		if ( ! Channels::allowed( $voucher, Channels::SHOP ) ) {
 			/** Message for a voucher that is not redeemable in the shop (e.g. a ticket voucher: where to use it instead). */
 			$message = (string) apply_filters( 'vcap_shop_channel_refused_message', __( 'This voucher cannot be redeemed in the shop.', 'voucher-captain' ), $voucher );
@@ -980,8 +993,8 @@ final class CouponManager {
 		$currency = (string) $order->get_currency();
 		if ( '' !== $currency && $currency !== get_option( 'woocommerce_currency' ) ) {
 			// Balances are kept in the base currency, the recalculated order is in its own currency.
-			$per_unit = (float) apply_filters( 'vcap_amount_to_base_currency', 1.0, $currency, $order );
-			if ( $per_unit > 0 && abs( $per_unit - 1.0 ) > 1e-9 ) {
+			$per_unit = Compat\MultiCurrency::can_convert( $currency, $order ) ? (float) apply_filters( 'vcap_amount_to_base_currency', 1.0, $currency, $order ) : 0.0;
+			if ( $per_unit > 0 ) {
 				$amount = $amount / $per_unit;
 			} elseif ( $item instanceof \WC_Order_Item_Coupon ) {
 				// No exchange rate known: keep what the order already granted instead of reading base as order currency.
@@ -1053,15 +1066,14 @@ final class CouponManager {
 		return $amount;
 	}
 
-	private function used_amount( \WC_Order_Item_Coupon $item ): float {
+	/** What the coupon line used, in the base currency; null when the order is in a currency without known rate. */
+	private function used_amount( \WC_Order_Item_Coupon $item ): ?float {
 		$order = $item->get_order();
 		// Multi-purpose voucher paid after tax (PaymentVouchers): the fee line holds the gross amount paid.
 		$paid = $order instanceof \WC_Order ? PaymentVouchers::paid_amount( $order, (string) $item->get_code() ) : null;
 		if ( null !== $paid ) {
-			if ( $order->get_currency() && $order->get_currency() !== get_option( 'woocommerce_currency' ) ) {
-				$paid = (float) apply_filters( 'vcap_amount_to_base_currency', $paid, $order->get_currency(), $order );
-			}
-			return round( $paid, API\V1\RedemptionService::decimals( (string) get_option( 'woocommerce_currency' ) ) );
+			$paid = Compat\MultiCurrency::to_base( (float) $paid, (string) $order->get_currency(), $order );
+			return null === $paid ? null : round( $paid, API\V1\RedemptionService::decimals( (string) get_option( 'woocommerce_currency' ) ) );
 		}
 		$amount = (float) $item->get_discount();
 		// The value the customer received is the discount plus the tax it removed – in tax-inclusive shops
@@ -1069,12 +1081,24 @@ final class CouponManager {
 		if ( apply_filters( 'vcap_balance_deduct_tax', wc_prices_include_tax() || apply_filters( 'vcap_balance_covers_tax', true, null ), $item ) ) {
 			$amount += (float) $item->get_discount_tax();
 		}
-		// Discounts are in the order currency, balances in the shop base currency.
-		$order = $item->get_order();
-		if ( $order instanceof \WC_Order && $order->get_currency() && $order->get_currency() !== get_option( 'woocommerce_currency' ) ) {
-			$amount = (float) apply_filters( 'vcap_amount_to_base_currency', $amount, $order->get_currency(), $order );
+		// Discounts are in the order currency, balances in the shop base currency (never converted 1:1).
+		if ( $order instanceof \WC_Order ) {
+			$amount = Compat\MultiCurrency::to_base( $amount, (string) $order->get_currency(), $order );
+			if ( null === $amount ) {
+				return null;
+			}
 		}
 		return round( $amount, API\V1\RedemptionService::decimals( (string) get_option( 'woocommerce_currency' ) ) );
+	}
+
+	/** Why a fixed-value voucher cannot be used in this currency (no exchange rate to the base currency). */
+	public static function currency_message( string $currency ): string {
+		return sprintf(
+			/* translators: 1: shop base currency, 2: currency of the cart or order */
+			__( 'This voucher is kept in %1$s and cannot be used for a payment in %2$s, because no exchange rate is known. Please pay in %1$s to use it.', 'voucher-captain' ),
+			(string) get_option( 'woocommerce_currency' ),
+			$currency
+		);
 	}
 
 	/**
@@ -1193,6 +1217,16 @@ final class CouponManager {
 				continue;
 			}
 			$requested = $this->used_amount( $item );
+			if ( null === $requested ) {
+				// Foreign currency without exchange rate: never charge the balance 1:1; hold for a review.
+				$shortfall = true;
+				$changed   = true;
+				$order->add_order_note(
+					/* translators: 1: voucher code, 2: order currency */
+					sprintf( __( 'Voucher %1$s: the discount could not be deducted from its balance because no exchange rate for %2$s is known. Review this order and adjust the charge before fulfilment.', 'voucher-captain' ), $voucher->code, $order->get_currency() )
+				);
+				continue;
+			}
 			$deduction = $this->deduct_balance_atomic(
 				$voucher,
 				$requested,

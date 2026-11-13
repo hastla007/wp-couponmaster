@@ -178,6 +178,12 @@ if ( in_array( $plugin, array( 'woocs', 'curcy', 'wcml' ), true ) ) {
 	$converted = (float) apply_filters( 'vcap_amount_to_base_currency', 110.0, 'USD', null );
 	vcap_eco_assert( abs( 100.0 - $converted ) < 0.01, "the adapter reads the {$plugin} rate: 110 USD = 100 EUR", $converted );
 	vcap_eco_assert( abs( 50.0 - (float) apply_filters( 'vcap_amount_to_base_currency', 50.0, 'EUR', null ) ) < 0.0001, 'base-currency amounts are not converted' );
+	vcap_eco_assert( VCAP\Compat\MultiCurrency::can_convert( 'USD' ) && '' === VCAP\Compat\MultiCurrency::unsupported_switcher(), "{$plugin} counts as a known converter (no Site Health warning)" );
+	$rate_order = wc_create_order();
+	$rate_order->set_currency( 'USD' );
+	$rate_order->save();
+	( new VCAP\Compat\MultiCurrency() )->store_rate( $rate_order );
+	vcap_eco_assert( abs( VCAP_ECO_RATE - (float) wc_get_order( $rate_order->get_id() )->get_meta( VCAP\Compat\MultiCurrency::RATE_META ) ) < 0.0001, "checkout stores the {$plugin} exchange rate on the order", wc_get_order( $rate_order->get_id() )->get_meta( VCAP\Compat\MultiCurrency::RATE_META ) );
 
 	// A voucher bought in USD is worth its EUR value.
 	$product = vcap_eco_product( '50' );

@@ -292,8 +292,16 @@ final class TopUp {
 			}
 			return 0;
 		}
-		$paid   = (float) $item->get_total() + (float) $item->get_total_tax();
-		$amount = round( (float) apply_filters( 'vcap_amount_to_base_currency', $paid, $order->get_currency(), $order ), $card->decimals() );
+		$paid = (float) $item->get_total() + (float) $item->get_total_tax();
+		$base = Compat\MultiCurrency::to_base( $paid, (string) $order->get_currency(), $order );
+		if ( null === $base ) {
+			// Never booked 1:1 from a foreign currency (Issuer holds such orders before it gets here).
+			Claim::release( 'topup:' . $item->get_id() );
+			/* translators: %s: order currency */
+			$order->add_order_note( sprintf( __( 'Gift card top-up not booked: no exchange rate for %s is known. It is booked when the order is processed again with a known rate.', 'voucher-captain' ), $order->get_currency() ) );
+			return 0;
+		}
+		$amount = round( $base, $card->decimals() );
 		/** Value added to the card for a top-up line (default: what was paid, converted to the base currency). */
 		$amount = (float) apply_filters( 'vcap_topup_amount', $amount, $item, $card, $order );
 		/* translators: %s: order number */

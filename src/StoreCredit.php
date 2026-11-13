@@ -221,7 +221,20 @@ final class StoreCredit {
 		// Credit first: a full refund sets the order to "refunded" right away (gift cards restored, vouchers
 		// voided, connected tickets cancelled), which cannot be undone by deleting the refund afterwards.
 		// A credit that turns out to have no refund is simply booked back.
-		$credit = (float) apply_filters( 'vcap_amount_to_base_currency', $amount, $order->get_currency(), $order );
+		$credit = Compat\MultiCurrency::to_base( $amount, (string) $order->get_currency(), $order );
+		if ( null === $credit ) {
+			// Store credit is kept in the base currency: a foreign-currency refund is never credited 1:1.
+			return new \WP_Error(
+				'vcap_credit_currency',
+				sprintf(
+					/* translators: 1: order currency, 2: shop base currency */
+					__( 'This order was paid in %1$s and no exchange rate to the shop currency %2$s is known, so it cannot be refunded as store credit. Refund the money instead, or set up the exchange rate first.', 'voucher-captain' ),
+					(string) $order->get_currency(),
+					(string) get_option( 'woocommerce_currency' )
+				)
+			);
+		}
+		$credit = round( $credit, API\V1\RedemptionService::decimals( (string) get_option( 'woocommerce_currency' ) ) );
 		$result = $this->adjust( $user_id, $credit, $reason, $order->get_id(), 'refund_credit' );
 		if ( is_wp_error( $result ) ) {
 			return $result;
