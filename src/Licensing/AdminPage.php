@@ -111,11 +111,12 @@ final class AdminPage {
 	private function render_status( array $license ): void {
 		$status = (string) ( $license['license_status'] ?? '' );
 		$paid   = self::date_label( $license['paid_until'] ?? '' );
-		$rows   = array(
+		/* translators: 1: websites using the license, 2: allowed websites */
+		$sites = sprintf( __( '%1$d of %2$d', 'voucher-captain' ), (int) ( $license['site_count'] ?? 0 ), (int) ( $license['site_limit'] ?? 0 ) );
+		$rows  = array(
 			__( 'Status', 'voucher-captain' )       => self::status_label( $status ),
 			__( 'Paid through', 'voucher-captain' ) => '' !== $paid ? $paid : __( 'No end date', 'voucher-captain' ),
-			/* translators: 1: websites using the license, 2: allowed websites */
-			__( 'Websites', 'voucher-captain' )     => sprintf( __( '%1$d of %2$d', 'voucher-captain' ), (int) ( $license['site_count'] ?? 0 ), (int) ( $license['site_limit'] ?? 0 ) ),
+			__( 'Websites', 'voucher-captain' )     => $sites,
 		);
 		$checked = self::date_label( $license['server_time'] ?? '' );
 		if ( '' !== $checked ) {
