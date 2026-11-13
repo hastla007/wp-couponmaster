@@ -243,8 +243,19 @@ final class Tickets {
 			$data['success'] = false;
 			return rest_ensure_response( $data );
 		}
+		// Same rules as the redemption API: store credit belongs to a customer account, tickets are checked in
+		// (not redeemed), and a voucher restricted to other channels is not valid at the counter.
+		$refused = '';
+		if ( 'credit' === $voucher->type ) {
+			$refused = __( 'Store credit can only be used in the shop.', 'voucher-captain' );
+		} elseif ( $voucher->is_ticket() ) {
+			$refused = __( 'Tickets are checked in at the entrance and cannot be redeemed here.', 'voucher-captain' );
+		} elseif ( ! Channels::allowed( $voucher, Channels::COUNTER ) ) {
+			$refused = __( 'This voucher cannot be redeemed at the counter.', 'voucher-captain' );
+		} elseif ( \VCAP\CouponManager::held_by_pending_order( $voucher ) ) {
+			$refused = __( 'This voucher is in an unpaid shop order right now. Redeem it after that order is cancelled.', 'voucher-captain' );
+		}
 		/** Vouchers that must not be redeemed at the counter (e.g. ticket vouchers: exchange them for tickets). */
-		$refused = \VCAP\CouponManager::held_by_pending_order( $voucher ) ? __( 'This voucher is in an unpaid shop order right now. Redeem it after that order is cancelled.', 'voucher-captain' ) : '';
 		$refused = apply_filters( 'vcap_scanner_redeem_refused', $refused, $voucher );
 		if ( '' !== (string) $refused ) {
 			$data            = $this->describe( $voucher );

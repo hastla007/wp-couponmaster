@@ -14,12 +14,15 @@ defined( 'ABSPATH' ) || exit;
 final class Channels {
 	public const SHOP     = 'shop';
 	public const EXTERNAL = 'external';
+	/** Redemption at the counter with the admin scanner. */
+	public const COUNTER  = 'counter';
 
 	/** @return array<string, string> channel => label */
 	public static function all(): array {
 		$channels = array(
 			self::SHOP     => __( 'Shop (cart and checkout)', 'voucher-captain' ),
 			self::EXTERNAL => __( 'External redemption (API, connected plugins)', 'voucher-captain' ),
+			self::COUNTER  => __( 'At the counter (scanner)', 'voucher-captain' ),
 		);
 		return (array) apply_filters( 'vcap_redemption_channels', $channels );
 	}

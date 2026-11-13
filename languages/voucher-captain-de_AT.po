@@ -3749,3 +3749,9 @@ msgstr "Dieser Gutschein wurde bereits am %1$s eingelöst: %2$d Ticket(s) gingen
 
 msgid "This voucher was already exchanged: %1$d ticket(s) went to %2$s."
 msgstr "Dieser Gutschein wurde bereits eingelöst: %1$d Ticket(s) gingen an %2$s."
+
+msgid "At the counter (scanner)"
+msgstr "Vor Ort (Scanner)"
+
+msgid "This voucher cannot be redeemed at the counter."
+msgstr "Dieser Gutschein kann nicht vor Ort eingelöst werden."

@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-13 00:07+0000\n"
+"POT-Creation-Date: 2026-11-13 00:08+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:75 src/API/V1/RedemptionService.php:117
@@ -89,11 +89,11 @@ msgstr ""
 msgid "expired"
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:600
+#: src/API/V1/RedemptionService.php:600 src/Tickets.php:250
 msgid "Store credit can only be used in the shop."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:603
+#: src/API/V1/RedemptionService.php:603 src/Tickets.php:252
 msgid "Tickets are checked in at the entrance and cannot be redeemed here."
 msgstr ""
 
@@ -825,7 +825,7 @@ msgstr ""
 msgid "none (ticket)"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:122 src/VoucherRepository.php:396
+#: src/Admin/VoucherAdmin.php:122 src/VoucherRepository.php:408
 msgid "Delivered"
 msgstr ""
 
@@ -965,7 +965,7 @@ msgstr ""
 msgid "Expires"
 msgstr ""
 
-#: src/Admin/VouchersListTable.php:34 src/VoucherRepository.php:386
+#: src/Admin/VouchersListTable.php:34 src/VoucherRepository.php:398
 msgid "Issued"
 msgstr ""
 
@@ -1037,12 +1037,16 @@ msgstr ""
 msgid "Please enter a batch name and between 1 and %d codes."
 msgstr ""
 
-#: src/Channels.php:21
+#: src/Channels.php:23
 msgid "Shop (cart and checkout)"
 msgstr ""
 
-#: src/Channels.php:22
+#: src/Channels.php:24
 msgid "External redemption (API, connected plugins)"
+msgstr ""
+
+#: src/Channels.php:25
+msgid "At the counter (scanner)"
 msgstr ""
 
 #: src/Compat/AffiliateCaptain.php:75
@@ -1199,7 +1203,7 @@ msgstr ""
 msgid "Already checked in by this scan"
 msgstr ""
 
-#: src/Compat/PassCaptainScanner.php:97 src/Tickets.php:225 src/Tickets.php:320 src/VoucherRepository.php:407
+#: src/Compat/PassCaptainScanner.php:97 src/Tickets.php:225 src/Tickets.php:331 src/VoucherRepository.php:419
 msgid "Checked in"
 msgstr ""
 
@@ -4040,7 +4044,7 @@ msgstr ""
 msgid "Cancelled"
 msgstr ""
 
-#: src/Tickets.php:99 src/Voucher.php:65 src/VoucherRepository.php:411
+#: src/Tickets.php:99 src/Voucher.php:65 src/VoucherRepository.php:423
 msgid "Expired"
 msgstr ""
 
@@ -4066,33 +4070,37 @@ msgstr ""
 msgid "%1$d of %2$d admissions used"
 msgstr ""
 
-#: src/Tickets.php:225 src/VoucherRepository.php:408
+#: src/Tickets.php:225 src/VoucherRepository.php:420
 msgid "Check-in reverted"
 msgstr ""
 
-#: src/Tickets.php:228 src/Tickets.php:320
+#: src/Tickets.php:228 src/Tickets.php:331
 msgid "Check-in not possible."
 msgstr ""
 
-#: src/Tickets.php:247
-msgid "This voucher is in an unpaid shop order right now. Redeem it after that order is cancelled."
+#: src/Tickets.php:254
+msgid "This voucher cannot be redeemed at the counter."
 msgstr ""
 
 #: src/Tickets.php:256
+msgid "This voucher is in an unpaid shop order right now. Redeem it after that order is cancelled."
+msgstr ""
+
+#: src/Tickets.php:267
 msgid "Redeemed in store"
 msgstr ""
 
-#: src/Tickets.php:260
+#: src/Tickets.php:271
 msgid "Please enter an amount."
 msgstr ""
 
 #. translators: %s: remaining balance
-#: src/Tickets.php:269
+#: src/Tickets.php:280
 #, php-format
 msgid "Not deducted: the amount exceeds the balance (remaining %s)."
 msgstr ""
 
-#: src/Tickets.php:304 src/Voucher.php:64 src/VoucherRepository.php:404
+#: src/Tickets.php:315 src/Voucher.php:64 src/VoucherRepository.php:416
 msgid "Redeemed"
 msgstr ""
 
@@ -4116,91 +4124,91 @@ msgstr ""
 msgid "Discount codes cannot be used to buy vouchers."
 msgstr ""
 
-#: src/VoucherRepository.php:387
+#: src/VoucherRepository.php:399
 msgid "Balance reserved for payment"
 msgstr ""
 
-#: src/VoucherRepository.php:388
+#: src/VoucherRepository.php:400
 msgid "Used in a shop order although already redeemed elsewhere – check the order"
 msgstr ""
 
-#: src/VoucherRepository.php:389
+#: src/VoucherRepository.php:401
 msgid "Balance reservation committed"
 msgstr ""
 
-#: src/VoucherRepository.php:390
+#: src/VoucherRepository.php:402
 msgid "Balance reservation released"
 msgstr ""
 
-#: src/VoucherRepository.php:391
+#: src/VoucherRepository.php:403
 msgid "Reserved for external redemption"
 msgstr ""
 
-#: src/VoucherRepository.php:392
+#: src/VoucherRepository.php:404
 msgid "Redeemed externally"
 msgstr ""
 
-#: src/VoucherRepository.php:393
+#: src/VoucherRepository.php:405
 msgid "External reservation released"
 msgstr ""
 
-#: src/VoucherRepository.php:394
+#: src/VoucherRepository.php:406
 msgid "External redemption refunded"
 msgstr ""
 
-#: src/VoucherRepository.php:395
+#: src/VoucherRepository.php:407
 msgid "Delivery scheduled"
 msgstr ""
 
-#: src/VoucherRepository.php:397
+#: src/VoucherRepository.php:409
 msgid "Delivery failed"
 msgstr ""
 
-#: src/VoucherRepository.php:398
+#: src/VoucherRepository.php:410
 msgid "Expiry reminder"
 msgstr ""
 
-#: src/VoucherRepository.php:399
+#: src/VoucherRepository.php:411
 msgid "Credit added"
 msgstr ""
 
-#: src/VoucherRepository.php:400
+#: src/VoucherRepository.php:412
 msgid "Credit removed"
 msgstr ""
 
-#: src/VoucherRepository.php:401
+#: src/VoucherRepository.php:413
 msgid "Refunded as store credit"
 msgstr ""
 
-#: src/VoucherRepository.php:402
+#: src/VoucherRepository.php:414
 msgid "Store credit refund reversed"
 msgstr ""
 
-#: src/VoucherRepository.php:403
+#: src/VoucherRepository.php:415
 msgid "Email resent"
 msgstr ""
 
-#: src/VoucherRepository.php:405
+#: src/VoucherRepository.php:417
 msgid "Balance restored"
 msgstr ""
 
-#: src/VoucherRepository.php:406
+#: src/VoucherRepository.php:418
 msgid "Balance adjusted"
 msgstr ""
 
-#: src/VoucherRepository.php:409
+#: src/VoucherRepository.php:421
 msgid "Voided"
 msgstr ""
 
-#: src/VoucherRepository.php:410
+#: src/VoucherRepository.php:422
 msgid "Reactivated"
 msgstr ""
 
-#: src/VoucherRepository.php:412
+#: src/VoucherRepository.php:424
 msgid "Edited"
 msgstr ""
 
-#: src/VoucherRepository.php:413
+#: src/VoucherRepository.php:425
 msgid "Downloaded"
 msgstr ""
 
