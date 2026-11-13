@@ -107,6 +107,21 @@ update_option( 'vcap_referral_enabled', 'no' );
 list( , $off ) = vcap_ref_order( $product, 'friend3-' . $tag . '@example.com', $code );
 vcap_ref_assert( is_wp_error( $off ), 'referral codes are refused while the program is off' );
 
+// Privacy: the referral code, the friend count and the rewards are exported and erased (nothing about friends).
+$privacy        = new VCAP\Privacy( vcap()->vouchers );
+$referrer_email = 'ref-' . $tag . '@example.com';
+$export         = $privacy->export( $referrer_email, 1 );
+$referral_items = array_values( array_filter( $export['data'], static fn( $i ) => 'vcap-referrals' === $i['group_id'] ) );
+$exported       = wp_json_encode( $referral_items );
+vcap_ref_assert( count( $referral_items ) >= 2 && str_contains( $exported, strtoupper( $code ) ) && ! str_contains( $exported, 'friend-' . $tag ), 'the export lists the referral code and rewards, but no friend data' );
+$erased = $privacy->erase( $referrer_email, 1 );
+$friend_order = wc_get_order( $friend_order->get_id() );
+vcap_ref_assert( $erased['items_removed'] && '' === (string) get_user_meta( $referrer, VCAP\Referrals::USER_META, true ) && '' === (string) get_user_meta( $referrer, VCAP\Referrals::COUNT_META, true ), 'erasure removes the referral code and counter from the account' );
+vcap_ref_assert( 'trash' === get_post_status( $coupon->get_id() ) && '' === (string) get_post_meta( $coupon->get_id(), VCAP\Referrals::OWNER, true ), 'the personal referral code is withdrawn and no longer names the customer' );
+vcap_ref_assert( 'erased' === $friend_order->get_meta( VCAP\Referrals::REWARDED ) && 0 === (int) ( $friend_order->get_meta( VCAP\Referrals::REWARD )['user'] ?? -1 ), 'friend orders no longer point to the erased customer' );
+vcap_ref_assert( ! in_array( $referrer_email, ( new WC_Coupon( $rewards[0] ) )->get_email_restrictions(), true ), 'reward coupons are no longer restricted to the erased address' );
+vcap_ref_assert( ! array_filter( $privacy->export( $referrer_email, 1 )['data'], static fn( $i ) => 'vcap-referrals' === $i['group_id'] ), 'nothing is exported after the erasure' );
+
 update_option( 'vcap_store_credit', 'no' );
 delete_option( 'vcap_referral_reward_as' );
 echo "Voucher Captain referral checks passed.\n";
