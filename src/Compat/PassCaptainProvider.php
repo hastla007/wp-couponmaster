@@ -114,6 +114,11 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 		if ( is_wp_error( $reserved ) ) {
 			return $reserved;
 		}
+		// A replay of the same key returns the stored redemption: only an open reservation (or one Pass Captain
+		// already committed itself) is a success; a released one holds nothing and must not look reserved.
+		if ( ! in_array( (string) $reserved['state'], array( RedemptionService::STATE_RESERVED, RedemptionService::STATE_COMMITTED ), true ) ) {
+			return new \WP_Error( 'vcap_redemption_released', __( 'This voucher reservation was already released. Please apply the voucher again.', 'voucher-captain' ), array( 'status' => 409 ) );
+		}
 		return array(
 			'version'        => 1,
 			'redemption_key' => (string) $reserved['redemption_key'],

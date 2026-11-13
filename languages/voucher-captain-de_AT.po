@@ -3740,3 +3740,6 @@ msgstr "Systemfehler – der Code wurde nicht geprüft. Bitte erneut scannen."
 
 msgid "Session expired – please reload the page and scan again."
 msgstr "Sitzung abgelaufen – bitte laden Sie die Seite neu und scannen Sie erneut."
+
+msgid "This voucher reservation was already released. Please apply the voucher again."
+msgstr "Diese Gutschein-Reservierung wurde bereits freigegeben. Bitte lösen Sie den Gutschein erneut ein."
