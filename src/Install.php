@@ -58,6 +58,8 @@ final class Install {
 	 * site that was skipped would stay usable for their full balance on every order (see suspend_balance_coupons()).
 	 */
 	public static function deactivate( $network_wide = false ): void {
+		// Cached update check of the premium updater (network-wide; Licensing\PremiumUpdater cache).
+		delete_site_transient( 'vcap_update_check' );
 		if ( is_multisite() && $network_wide ) {
 			if ( function_exists( 'wp_raise_memory_limit' ) ) {
 				wp_raise_memory_limit( 'admin' );

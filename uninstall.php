@@ -67,6 +67,8 @@ function vcap_uninstall_user_meta(): void {
 	}
 }
 
+delete_site_transient( 'vcap_update_check' ); // Cached update check (VCAP\Licensing\PremiumUpdater).
+
 if ( is_multisite() ) {
 	// Network-wide uninstall: every site decides for itself (its own "Delete data on uninstall" setting).
 	$vcap_all_opted_in = true;
