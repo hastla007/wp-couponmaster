@@ -437,6 +437,13 @@ jobs:
           $WP eval "$check"
           $WP --url=http://localhost/before/ eval "$check"
           $WP --url=http://localhost/after/ eval "$check"
+      - name: Referral code and reward counter stay per site (one customer, two sites)
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          T="$GITHUB_WORKSPACE/tests/multisite-referral-integration.php"
+          $WP eval-file "$T" site-a
+          $WP --url=http://localhost/before/ eval-file "$T" site-b
+          $WP eval-file "$T" verify
       - name: Network uninstall deletes data only on sites that opted in
         run: |
           WP="php wp-cli.phar --path=wp-test"

@@ -60,6 +60,20 @@ final class Placeholders {
 	}
 
 	/**
+	 * A date entered in the shop's local time ("2026-12-24", or "2026-12-24T19:00" from a datetime-local field such
+	 * as the event date) in the voucher date format, with the time format when it has a time of day. It stays the
+	 * wall-clock time that was entered (LocalDate, not strtotime() as UTC). Other text is returned unchanged.
+	 */
+	public static function local_date( string $value ): string {
+		$value = trim( $value );
+		if ( '' === $value ) {
+			return '';
+		}
+		$formatted = LocalDate::format( $value, vcap()->settings->date_format(), (string) get_option( 'time_format', 'H:i' ) );
+		return '' !== $formatted ? $formatted : $value;
+	}
+
+	/**
 	 * @return array<string,string> token (without braces) => value
 	 */
 	public static function values( Voucher $voucher ): array {
@@ -71,12 +85,9 @@ final class Placeholders {
 			? wc_format_localized_decimal( $voucher->initial_amount ) . '%'
 			: self::money( $voucher->initial_amount, $voucher->currency );
 
-		$delivery = $voucher->delivery_at ? self::date( $voucher->delivery_at ) : ( $voucher->field( 'delivery_date' ) ? wp_date( vcap()->settings->date_format(), strtotime( $voucher->field( 'delivery_date' ) ) ) : '' );
+		$delivery = $voucher->delivery_at ? self::date( $voucher->delivery_at ) : self::local_date( (string) $voucher->field( 'delivery_date' ) );
 
-		$event_date = (string) $config['event_date'];
-		if ( $event_date && strtotime( $event_date ) ) {
-			$event_date = wp_date( vcap()->settings->date_format() . ( str_contains( $event_date, ':' ) ? ' ' . get_option( 'time_format' ) : '' ), strtotime( $event_date ), wp_timezone() );
-		}
+		$event_date = self::local_date( (string) $config['event_date'] );
 
 		$values = array(
 			'coupon_code'       => $voucher->code,

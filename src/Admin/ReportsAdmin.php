@@ -22,7 +22,11 @@ final class ReportsAdmin {
 		$to    = $valid( sanitize_text_field( wp_unslash( $in['to'] ?? '' ) ) );
 		$from  = $valid( sanitize_text_field( wp_unslash( $in['from'] ?? '' ) ) );
 		$to    = '' !== $to ? $to : wp_date( 'Y-m-d' );
-		$from  = '' !== $from ? $from : wp_date( 'Y-m-d', strtotime( $to . ' -30 days' ) );
+		if ( '' === $from ) {
+			// "to" is a local date: count back from it in the shop's time zone (strtotime() would read it as UTC).
+			$end  = \VCAP\LocalDate::parse( $to );
+			$from = $end ? $end->modify( '-30 days' )->format( 'Y-m-d' ) : wp_date( 'Y-m-d', time() - 30 * DAY_IN_SECONDS );
+		}
 		return $from <= $to ? array( $from, $to ) : array( $to, $from );
 	}
 

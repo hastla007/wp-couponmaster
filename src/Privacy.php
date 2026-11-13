@@ -114,8 +114,8 @@ final class Privacy {
 
 	/**
 	 * Refer a friend: the customer's own referral code, the number of friends who ordered and the rewards received
-	 * (Referrals: user meta, coupon meta "_vcap_referral_owner", order meta "_vcap_referral_rewarded"/"_reward").
-	 * Nothing about the friends is exported.
+	 * on this site (Referrals: per-site user options, coupon meta "_vcap_referral_owner", order meta
+	 * "_vcap_referral_rewarded"/"_reward"). Nothing about the friends is exported.
 	 *
 	 * @return array<int, array<string, mixed>>
 	 */
@@ -126,16 +126,22 @@ final class Privacy {
 		}
 		$items     = array();
 		$group     = __( 'Refer a friend', 'voucher-captain' );
-		$coupon_id = (int) get_user_meta( $user->ID, Referrals::USER_META, true );
-		$count     = get_user_meta( $user->ID, Referrals::COUNT_META, true );
-		if ( $coupon_id || '' !== (string) $count ) {
-			$code    = $coupon_id ? (string) get_post_field( 'post_title', $coupon_id ) : '';
+		$coupon_id = Referrals::coupon_id( (int) $user->ID, false );
+		$count     = Referrals::count( (int) $user->ID, false );
+		$codes     = array();
+		foreach ( array_merge( array( $coupon_id ), $this->referral_coupons( (int) $user->ID, false ) ) as $id ) {
+			if ( $id ) {
+				$codes[ $id ] = strtoupper( (string) get_post_field( 'post_title', $id ) );
+			}
+		}
+		if ( $codes || null !== $count ) {
+			$code    = implode( ', ', array_unique( array_filter( $codes ) ) );
 			$items[] = array(
 				'group_id'    => 'vcap-referrals',
 				'group_label' => $group,
 				'item_id'     => 'vcap-referral-code-' . $user->ID,
 				'data'        => array(
-					array( 'name' => __( 'Referral code', 'voucher-captain' ), 'value' => strtoupper( $code ) ),
+					array( 'name' => __( 'Referral code', 'voucher-captain' ), 'value' => $code ),
 					array( 'name' => __( 'Friends who ordered', 'voucher-captain' ), 'value' => (string) (int) $count ),
 				),
 			);
@@ -160,6 +166,29 @@ final class Privacy {
 			);
 		}
 		return $items;
+	}
+
+	/**
+	 * Referral coupons of the customer on this site (coupon meta "_vcap_referral_owner" = user id), at most 500:
+	 * also codes no longer referenced by the stored id (e.g. from the network-wide storage of earlier versions).
+	 *
+	 * @param bool $trashed Include coupons in the trash (they still name the customer).
+	 * @return int[]
+	 */
+	private function referral_coupons( int $user_id, bool $trashed ): array {
+		if ( $user_id <= 0 ) {
+			return array();
+		}
+		$ids = get_posts(
+			array(
+				'post_type'   => 'shop_coupon',
+				'post_status' => $trashed ? array( 'any', 'trash' ) : 'any',
+				'numberposts' => 500,
+				'fields'      => 'ids',
+				'meta_query'  => array( array( 'key' => Referrals::OWNER, 'value' => (string) $user_id ) ), // phpcs:ignore WordPress.DB.SlowDBQuery
+			)
+		);
+		return array_values( array_filter( array_map( 'intval', (array) $ids ), static fn( $id ) => (int) get_post_meta( $id, Referrals::OWNER, true ) === $user_id ) );
 	}
 
 	/**
@@ -196,8 +225,13 @@ final class Privacy {
 		$retained = false;
 		$user     = get_user_by( 'email', $email );
 		if ( $user ) {
-			$coupon_id = (int) get_user_meta( $user->ID, Referrals::USER_META, true );
-			if ( $coupon_id && (int) get_post_meta( $coupon_id, Referrals::OWNER, true ) === (int) $user->ID ) {
+			// Every referral coupon of the customer on this site – only coupons whose owner is this customer.
+			$owned = $this->referral_coupons( (int) $user->ID, true );
+			$own   = Referrals::coupon_id( (int) $user->ID, false );
+			if ( $own && ! in_array( $own, $owned, true ) ) {
+				$owned[] = $own;
+			}
+			foreach ( $owned as $coupon_id ) {
 				delete_post_meta( $coupon_id, Referrals::OWNER );
 				wp_update_post( array( 'ID' => $coupon_id, 'post_excerpt' => '' ) );
 				if ( 'trash' !== get_post_status( $coupon_id ) && ! wp_trash_post( $coupon_id ) ) {
@@ -205,7 +239,12 @@ final class Privacy {
 				}
 				$removed = true;
 			}
-			foreach ( array( Referrals::USER_META, Referrals::COUNT_META ) as $key ) {
+			// The per-site values; the network-wide ones of earlier versions belong to the main site (single site).
+			$keys = array( Referrals::site_key( Referrals::USER_META ), Referrals::site_key( Referrals::COUNT_META ) );
+			if ( ! is_multisite() || is_main_site() ) {
+				array_push( $keys, Referrals::USER_META, Referrals::COUNT_META );
+			}
+			foreach ( $keys as $key ) {
 				if ( '' !== (string) get_user_meta( $user->ID, $key, true ) ) {
 					delete_user_meta( $user->ID, $key );
 					$removed = true;
