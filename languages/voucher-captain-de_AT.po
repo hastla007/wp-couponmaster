@@ -5113,3 +5113,102 @@ msgstr "Gutscheine werden noch nicht ausgestellt: Die Zahlung (%s) ist noch nich
 
 msgid "Vouchers are not sold with cash on delivery"
 msgstr "Gutscheine werden nicht per Nachnahme verkauft"
+
+msgid "(purchased value taken off, topped-up value kept)"
+msgstr "(Kaufwert abgebucht, aufgeladener Wert bleibt)"
+
+msgid "A percentage discount needs a fixed value greater than 0 and at most 100 (the percentage)."
+msgstr "Ein Prozentrabatt braucht einen festen Wert größer als 0 und höchstens 100 (den Prozentsatz)."
+
+msgid "A percentage discount needs the voucher value \"Fixed value\" (the percentage): with the product price or a customer-chosen amount the price would become the percentage."
+msgstr "Ein Prozentrabatt braucht den Gutscheinwert „Fester Wert“ (den Prozentsatz): Mit dem Produktpreis oder einem vom Kunden gewählten Betrag würde der Preis zum Prozentsatz."
+
+msgid "A voucher of this order was cancelled or redeemed elsewhere: manual review required before fulfilment."
+msgstr "Ein Gutschein dieser Bestellung wurde storniert oder anderweitig eingelöst: Vor der Ausführung ist eine manuelle Prüfung nötig."
+
+msgid "Either all orders are in the base currency or a supported currency switcher provides the exchange rates."
+msgstr "Entweder sind alle Bestellungen in der Basiswährung oder ein unterstützter Währungsumschalter liefert die Wechselkurse."
+
+msgid "Foreign currency without converter"
+msgstr "Fremdwährung ohne Umrechnung"
+
+msgid "Foreign-currency amounts could not be converted"
+msgstr "Beträge in Fremdwährung konnten nicht umgerechnet werden"
+
+msgid "Gift card %1$s: the purchased value was taken off the card (refunded); the topped-up value of %2$s stays on it."
+msgstr "Geschenkkarte %1$s: Der gekaufte Wert wurde von der Karte abgebucht (erstattet); der aufgeladene Wert von %2$s bleibt darauf."
+
+msgid "Gift card top-up not booked: no exchange rate for %s is known. It is booked when the order is processed again with a known rate."
+msgstr "Aufladung der Geschenkkarte nicht gebucht: Für %s ist kein Wechselkurs bekannt. Sie wird gebucht, wenn die Bestellung mit bekanntem Kurs erneut verarbeitet wird."
+
+msgid "No exchange rate to the shop base currency was known for %s in the last 30 days: voucher sales in that currency were held, store-credit refunds and fixed-value vouchers were refused."
+msgstr "Für %s war in den letzten 30 Tagen kein Wechselkurs zur Basiswährung des Shops bekannt: Gutscheinverkäufe in dieser Währung wurden zurückgehalten, Erstattungen als Kundenguthaben und Gutscheine mit festem Wert abgelehnt."
+
+msgid "No voucher issued for \"%1$s\": the product's discount setup is invalid (%2$s). Correct the product and issue the vouchers from this order screen, or refund the line."
+msgstr "Kein Gutschein für „%1$s“ erzeugt: Die Rabatteinstellung des Produkts ist ungültig (%2$s). Korrigieren Sie das Produkt und erzeugen Sie die Gutscheine in dieser Bestellansicht, oder erstatten Sie die Position."
+
+msgid "Order #%s"
+msgstr "Bestellung #%s"
+
+msgid "Purchase refunded: purchased value taken off"
+msgstr "Kauf erstattet: Kaufwert abgebucht"
+
+msgid "The discount type \"Fixed product discount\" cannot be used for sold vouchers: it would grant the voucher value once per item and unit in the cart. Use \"Fixed cart discount\" (and the product restrictions below if needed)."
+msgstr "Die Rabattart „Fester Produkt-Rabatt“ kann für verkaufte Gutscheine nicht verwendet werden: Sie würde den Gutscheinwert je Artikel und Stück im Warenkorb gewähren. Verwenden Sie „Fester Warenkorb-Rabatt“ (bei Bedarf mit den Produkteinschränkungen unten)."
+
+msgid "The product cannot be bought until the discount setup is corrected."
+msgstr "Das Produkt kann erst gekauft werden, wenn die Rabatteinstellung korrigiert ist."
+
+msgid "These orders were paid in a foreign currency without a known exchange rate, so their vouchers were not issued and the orders are on hold. Set up a supported currency switcher (or the exchange rate on the order) and issue the vouchers from the order screen, or refund the orders:"
+msgstr "Diese Bestellungen wurden in einer Fremdwährung ohne bekannten Wechselkurs bezahlt. Ihre Gutscheine wurden daher nicht erzeugt und die Bestellungen sind in Wartestellung. Richten Sie einen unterstützten Währungsumschalter (oder den Wechselkurs an der Bestellung) ein und erzeugen Sie die Gutscheine in der Bestellansicht, oder erstatten Sie die Bestellungen:"
+
+msgid "These voucher products have an invalid discount setup (a percentage that is not a fixed value between 0 and 100, or \"Fixed product discount\") and cannot be bought until it is corrected:"
+msgstr "Diese Gutscheinprodukte haben eine ungültige Rabatteinstellung (ein Prozentsatz, der kein fester Wert zwischen 0 und 100 ist, oder „Fester Produkt-Rabatt“) und können erst nach der Korrektur gekauft werden:"
+
+msgid "This order was paid in %1$s and no exchange rate to the shop currency %2$s is known, so it cannot be refunded as store credit. Refund the money instead, or set up the exchange rate first."
+msgstr "Diese Bestellung wurde in %1$s bezahlt und es ist kein Wechselkurs zur Shopwährung %2$s bekannt, daher kann sie nicht als Kundenguthaben erstattet werden. Erstatten Sie stattdessen das Geld oder richten Sie zuerst den Wechselkurs ein."
+
+msgid "This voucher is kept in %1$s and cannot be used for a payment in %2$s, because no exchange rate is known. Please pay in %1$s to use it."
+msgstr "Dieser Gutschein wird in %1$s geführt und kann nicht für eine Zahlung in %2$s verwendet werden, weil kein Wechselkurs bekannt ist. Bitte bezahlen Sie in %1$s, um ihn zu verwenden."
+
+msgid "Value from this order was already spent (%1$s), and no exchange rate for %2$s is known to work out how much can still be refunded. Set up the exchange rate first."
+msgstr "Wert aus dieser Bestellung wurde bereits verbraucht (%1$s), und für %2$s ist kein Wechselkurs bekannt, um zu berechnen, wie viel noch erstattet werden kann. Richten Sie zuerst den Wechselkurs ein."
+
+msgid "Voucher %1$s was cancelled or redeemed elsewhere before this order was paid, but the order still has its discount of %2$s. The order is held: collect the difference or cancel the order before fulfilment."
+msgstr "Gutschein %1$s wurde storniert oder anderweitig eingelöst, bevor diese Bestellung bezahlt wurde, die Bestellung enthält aber noch seinen Rabatt von %2$s. Die Bestellung ist in Wartestellung: Fordern Sie die Differenz nach oder stornieren Sie die Bestellung vor der Ausführung."
+
+msgid "Voucher %1$s: the discount could not be deducted from its balance because no exchange rate for %2$s is known. Review this order and adjust the charge before fulfilment."
+msgstr "Gutschein %1$s: Der Rabatt konnte nicht vom Restwert abgebucht werden, weil für %2$s kein Wechselkurs bekannt ist. Prüfen Sie diese Bestellung und passen Sie den Betrag vor der Ausführung an."
+
+msgid "Voucher %s can no longer be used (it was cancelled or redeemed elsewhere). Please contact us to complete this order."
+msgstr "Gutschein %s kann nicht mehr verwendet werden (er wurde storniert oder anderweitig eingelöst). Bitte kontaktieren Sie uns, um diese Bestellung abzuschließen."
+
+msgid "Voucher Captain cannot read the exchange rates of %s. Orders in other currencies cannot issue vouchers or be charged to gift cards until a rate is known."
+msgstr "Voucher Captain kann die Wechselkurse von %s nicht lesen. Bestellungen in anderen Währungen können keine Gutscheine erzeugen und nicht über Geschenkkarten bezahlt werden, bis ein Kurs bekannt ist."
+
+msgid "Voucher amounts are converted to the shop base currency"
+msgstr "Gutscheinbeträge werden in die Basiswährung des Shops umgerechnet"
+
+msgid "Voucher discount not saved: %s The previous discount type and voucher value were kept."
+msgstr "Gutscheinrabatt nicht gespeichert: %s Rabattart und Gutscheinwert bleiben wie bisher."
+
+msgid "Voucher products with an invalid discount setup (not purchasable):"
+msgstr "Gutscheinprodukte mit ungültiger Rabatteinstellung (nicht kaufbar):"
+
+msgid "Voucher value of \"%1$s\" not saved: %2$s The previous value was kept."
+msgstr "Gutscheinwert von „%1$s“ nicht gespeichert: %2$s Der bisherige Wert bleibt."
+
+msgid "Vouchers and gift card balances are kept in the shop base currency. Use a supported currency switcher (WooCommerce Multilingual, Aelia, WOOCS, CURCY, WooPayments Multi-Currency) or convert amounts with the filter \"vcap_amount_to_base_currency\"."
+msgstr "Gutscheine und Restwerte von Geschenkkarten werden in der Basiswährung des Shops geführt. Verwenden Sie einen unterstützten Währungsumschalter (WooCommerce Multilingual, Aelia, WOOCS, CURCY, WooPayments Multi-Currency) oder rechnen Sie Beträge mit dem Filter „vcap_amount_to_base_currency“ um."
+
+msgid "Vouchers not issued: the order was paid in %1$s and no exchange rate to the shop currency %2$s is known (vouchers are never converted 1:1). Set up a supported currency switcher or store the rate on the order (meta \"%3$s\": %1$s per 1 %2$s), then issue the vouchers from this order screen – or refund the order."
+msgstr "Gutscheine nicht erzeugt: Die Bestellung wurde in %1$s bezahlt und es ist kein Wechselkurs zur Shopwährung %2$s bekannt (Gutscheine werden nie 1:1 umgerechnet). Richten Sie einen unterstützten Währungsumschalter ein oder speichern Sie den Kurs an der Bestellung (Meta „%3$s“: %1$s je 1 %2$s) und erzeugen Sie dann die Gutscheine in dieser Bestellansicht – oder erstatten Sie die Bestellung."
+
+msgid "Vouchers wait for an exchange rate to the shop currency."
+msgstr "Gutscheine warten auf einen Wechselkurs zur Shopwährung."
+
+msgid "WooCommerce refused the coupon of a voucher for \"%1$s\": %2$s"
+msgstr "WooCommerce hat den Coupon eines Gutscheins für „%1$s“ abgelehnt: %2$s"
+
+msgid "a currency switcher"
+msgstr "ein Währungsumschalter"

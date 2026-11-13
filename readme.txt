@@ -129,6 +129,8 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 * Fix: refer a friend – own codes are refused for email aliases (+tag, Gmail dots); the reward is withdrawn when the friend's order is cancelled or refunded (unused coupon trashed, store credit debited).
 * Fix: parallel requests for the same order status change count uses, bonus vouchers and referral rewards only once.
 * Fix: Reports no longer count trashed bonus vouchers as issued.
+* Fix: money safety – foreign-currency amounts are never taken 1:1 (rate stored at checkout, sale held or refused without a rate, Site Health test, WooPayments Multi-Currency adapter); gift card refunds count top-ups (a refunded purchase keeps the topped-up value); single-use vouchers in unpaid orders count as used and a late payment after voiding or redemption is held; sold percentage vouchers only with a fixed value of 0–100 %, "Fixed product discount" blocked, refused coupons roll the voucher back.
+
 
 = 1.1.0 =
 * New: redeem vouchers and gift cards outside the shop (courses, tickets, memberships) through the PHP service vcap()->redemptions or the REST API /wp-json/vcap/v1/redemptions – reserve, commit, release, with idempotency keys, stable error codes and automatic release of expired reservations.
