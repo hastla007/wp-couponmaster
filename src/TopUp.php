@@ -64,8 +64,8 @@ final class TopUp {
 		add_action( 'woocommerce_order_status_refunded', array( $this, 'revoke' ), 20 );
 		add_action( 'woocommerce_order_partially_refunded', array( $this, 'reverse_refunded' ), 20, 2 );
 		add_action( 'woocommerce_create_refund', array( $this, 'guard_refund' ), 11, 2 );
-		add_filter( 'vcap_event_labels', static fn( array $l ) => $l + array( 'topup' => __( 'Topped up', 'voucher-captain' ), 'topup_reversed' => __( 'Top-up reversed', 'voucher-captain' ) ) );
-		add_filter( 'vcap_ledger_money_events', static fn( array $e ) => array_merge( $e, array( 'topup', 'topup_reversed' ) ) );
+		add_filter( 'vcap_event_labels', static fn( array $l ) => $l + array( 'topup' => __( 'Topped up', 'voucher-captain' ), 'topup_reversed' => __( 'Top-up reversed', 'voucher-captain' ), Issuer::PURCHASE_REFUNDED_EVENT => __( 'Purchase refunded: purchased value taken off', 'voucher-captain' ) ) );
+		add_filter( 'vcap_ledger_money_events', static fn( array $e ) => array_merge( $e, array( 'topup', 'topup_reversed', Issuer::PURCHASE_REFUNDED_EVENT ) ) );
 	}
 
 	public static function is_topup( $product ): bool {
@@ -292,8 +292,16 @@ final class TopUp {
 			}
 			return 0;
 		}
-		$paid   = (float) $item->get_total() + (float) $item->get_total_tax();
-		$amount = round( (float) apply_filters( 'vcap_amount_to_base_currency', $paid, $order->get_currency(), $order ), $card->decimals() );
+		$paid = (float) $item->get_total() + (float) $item->get_total_tax();
+		$base = Compat\MultiCurrency::to_base( $paid, (string) $order->get_currency(), $order );
+		if ( null === $base ) {
+			// Never booked 1:1 from a foreign currency (Issuer holds such orders before it gets here).
+			Claim::release( 'topup:' . $item->get_id() );
+			/* translators: %s: order currency */
+			$order->add_order_note( sprintf( __( 'Gift card top-up not booked: no exchange rate for %s is known. It is booked when the order is processed again with a known rate.', 'voucher-captain' ), $order->get_currency() ) );
+			return 0;
+		}
+		$amount = round( $base, $card->decimals() );
 		/** Value added to the card for a top-up line (default: what was paid, converted to the base currency). */
 		$amount = (float) apply_filters( 'vcap_topup_amount', $amount, $item, $card, $order );
 		/* translators: %s: order number */
@@ -390,7 +398,7 @@ final class TopUp {
 		if ( $want <= 0 ) {
 			return;
 		}
-		$back = min( $want, max( 0.0, (float) $card->balance ) );
+		$back = min( $want, self::card_shares( $card, $this->repo )['topup_unspent'] );
 		/* translators: %s: order number */
 		if ( $back > 0 && ! $this->coupons->adjust_balance( $card, -$back, 'topup_reversed', sprintf( __( 'Top-up of order #%s reversed', 'voucher-captain' ), $order->get_order_number() ), $order->get_id() ) ) {
 			if ( $all && $handled <= 0 ) {
@@ -458,8 +466,66 @@ final class TopUp {
 	}
 
 	/**
+	 * Shares of a gift card's balance (all base currency). The purchased value is spent first, then the top-ups:
+	 * a refund of the purchase can pay back the unspent purchased value, refunds of top-ups the rest of the balance,
+	 * and both together never more than the balance. A voided card keeps its balance locked: there the purchased
+	 * value still on the books is assumed to be on the card first (its refund may already have been paid without
+	 * taking it off), so top-ups can only claim the balance above it.
+	 *
+	 * @param float $initial Purchased value (initial amount).
+	 * @param float $removed Purchased value taken off by refunds (ledger "purchase_refunded").
+	 * @param float $topups  Net top-ups (ledger "topup" − "topup_reversed").
+	 * @param float $balance Current balance.
+	 * @return array{purchase_spent: float, purchase_unspent: float, topup_unspent: float, spent: float}
+	 */
+	public static function shares( float $initial, float $removed, float $topups, float $balance, bool $void = false ): array {
+		$purchase = max( 0.0, $initial - $removed );
+		$topups   = max( 0.0, $topups );
+		$balance  = max( 0.0, $balance );
+		$spent    = max( 0.0, $purchase + $topups - $balance );
+		$p_spent  = min( $purchase, $spent );
+		if ( $void ) {
+			$topup_unspent = min( $topups, max( 0.0, $balance - $purchase ) );
+		} else {
+			$topup_unspent = min( $topups, max( 0.0, $balance - ( $purchase - $p_spent ) ) );
+		}
+		return array(
+			'purchase_spent'   => $p_spent,
+			'purchase_unspent' => max( 0.0, min( $balance, $purchase - $p_spent ) ),
+			'topup_unspent'    => $topup_unspent,
+			'spent'            => $spent,
+		);
+	}
+
+	/**
+	 * shares() of a gift card from its ledger.
+	 *
+	 * @return array{purchase_spent: float, purchase_unspent: float, topup_unspent: float, spent: float}
+	 */
+	public static function card_shares( Voucher $card, VoucherRepository $repo ): array {
+		$topups  = 0.0;
+		$removed = 0.0;
+		foreach ( $card->id ? $repo->events( $card->id ) : array() as $event ) {
+			$amount = abs( (float) ( $event['amount'] ?? 0 ) );
+			switch ( (string) ( $event['event'] ?? '' ) ) {
+				case 'topup':
+					$topups += $amount;
+					break;
+				case 'topup_reversed':
+					$topups -= $amount;
+					break;
+				case Issuer::PURCHASE_REFUNDED_EVENT:
+					$removed += $amount;
+					break;
+			}
+		}
+		return self::shares( (float) $card->initial_amount, $removed, $topups, (float) $card->balance, Voucher::STATUS_VOID === $card->status );
+	}
+
+	/**
 	 * Top-up value of the order that a refund can no longer take back because it was spent from the card
-	 * (base currency): per card, what is still booked from this order minus the card's balance.
+	 * (base currency): per card, what is still booked from this order minus what the card's top-ups can still
+	 * claim of its balance (card_shares()).
 	 *
 	 * @return array{0: float, 1: string[]} value, masked card codes
 	 */
@@ -476,7 +542,7 @@ final class TopUp {
 		$codes = array();
 		foreach ( $open as $code => $amount ) {
 			$card = $repo->get_by_code( $code );
-			$used = $card ? max( 0.0, $amount - max( 0.0, (float) $card->balance ) ) : 0.0;
+			$used = $card ? max( 0.0, $amount - self::card_shares( $card, $repo )['topup_unspent'] ) : 0.0;
 			if ( $used > 0.0001 ) {
 				$spent  += $used;
 				$codes[] = '…' . substr( strtoupper( $code ), -4 );
@@ -516,7 +582,7 @@ final class TopUp {
 		$codes = array();
 		foreach ( $need as $code => list( $want, $rate ) ) {
 			$card    = $this->repo->get_by_code( $code );
-			$missing = $card ? $want - max( 0.0, (float) $card->balance ) : 0.0;
+			$missing = $card ? $want - self::card_shares( $card, $this->repo )['topup_unspent'] : 0.0;
 			if ( $card && $missing > 0.5 / ( 10 ** $card->decimals() ) ) {
 				$over   += $missing * $rate;
 				$codes[] = '…' . substr( strtoupper( $code ), -4 );

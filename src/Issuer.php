@@ -37,7 +37,20 @@ final class Issuer {
 		add_action( 'woocommerce_create_refund', array( $this, 'guard_refund' ), 10, 2 );
 		add_action( 'woocommerce_order_partially_refunded', array( $this, 'on_partial_refund' ), 20, 2 );
 		add_action( 'vcap_issue_order', array( $this, 'issue_async' ) );
+		add_action( 'woocommerce_order_status_changed', array( $this, 'hold_after_transition' ), 30, 4 );
 	}
+
+	/** Order meta: the order waits for an exchange rate before its vouchers can be issued (note written once). */
+	public const FX_HOLD_META = '_vcap_fx_hold';
+	/** Order item meta: issuing was refused because the product's discount setup is invalid (note written once). */
+	public const CONFIG_REFUSED_META = '_vcap_config_refused';
+	/** Ledger event: the unspent purchased value was taken off a gift card whose purchase was refunded. */
+	public const PURCHASE_REFUNDED_EVENT = 'purchase_refunded';
+
+	/** Whether issuing runs inside a status transition (status changes wait until it is through). */
+	private bool $in_transition = false;
+	/** @var array<int, true> Orders to put on hold after their status transition (no exchange rate). */
+	private array $fx_hold = array();
 
 	/**
 	 * @param int|string     $order_id   Order id.
@@ -61,7 +74,80 @@ final class Issuer {
 		if ( ! apply_filters( 'vcap_should_issue_for_order', true, $order ) ) {
 			return;
 		}
-		$this->issue_for_order( $order );
+		$this->in_transition = true;
+		try {
+			$this->issue_for_order( $order );
+		} finally {
+			$this->in_transition = false;
+		}
+	}
+
+	/** After the status transition: an order whose vouchers wait for an exchange rate goes on hold. */
+	public function hold_after_transition( $order_id, $from = '', $to = '', $order = null ): void {
+		if ( ! isset( $this->fx_hold[ (int) $order_id ] ) ) {
+			return;
+		}
+		unset( $this->fx_hold[ (int) $order_id ] );
+		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
+		if ( $order instanceof \WC_Order && ! $order->has_status( array( 'on-hold', 'cancelled', 'refunded', 'failed' ) ) ) {
+			$order->update_status( 'on-hold', __( 'Vouchers wait for an exchange rate to the shop currency.', 'voucher-captain' ) );
+		}
+	}
+
+	/**
+	 * Whether a voucher line of the order still to be issued (or a top-up still to be booked) depends on the
+	 * order currency: its value is the price paid or the amount entered, not a fixed value or a percentage.
+	 */
+	private function needs_conversion( \WC_Order $order ): bool {
+		foreach ( $order->get_items() as $item_id => $item ) {
+			if ( ! $item instanceof \WC_Order_Item_Product ) {
+				continue;
+			}
+			$product = $item->get_product();
+			if ( '' !== (string) $item->get_meta( TopUp::ITEM_META ) ) {
+				if ( ! $item->get_meta( TopUp::DONE_META ) ) {
+					return true;
+				}
+				continue;
+			}
+			if ( ! $product || ! ProductConfig::is_voucher( $product ) || $this->repo->get_slot( (int) $item_id, 0 ) ) {
+				continue;
+			}
+			$config = ProductConfig::get( $product );
+			if ( 'percent' === $config['discount_type'] || 'fixed' === $config['amount_source'] || 'ticket' === $config['type'] ) {
+				continue; // Fixed value or percentage (tickets without fixed value carry none).
+			}
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Foreign-currency order without exchange rate: nothing is issued (never 1:1), the order goes on hold with a
+	 * note and is listed in an admin notice and in Site Health until a rate is known.
+	 */
+	private function hold_for_rate( \WC_Order $order ): void {
+		$currency = (string) $order->get_currency();
+		Compat\MultiCurrency::record_unknown( $currency );
+		Compat\MultiCurrency::record_held( $order );
+		if ( 'yes' !== $order->get_meta( self::FX_HOLD_META ) ) {
+			$order->update_meta_data( self::FX_HOLD_META, 'yes' );
+			$order->save_meta_data();
+			$order->add_order_note(
+				sprintf(
+					/* translators: 1: order currency, 2: shop base currency, 3: order meta key */
+					__( 'Vouchers not issued: the order was paid in %1$s and no exchange rate to the shop currency %2$s is known (vouchers are never converted 1:1). Set up a supported currency switcher or store the rate on the order (meta "%3$s": %1$s per 1 %2$s), then issue the vouchers from this order screen – or refund the order.', 'voucher-captain' ),
+					$currency,
+					(string) get_option( 'woocommerce_currency' ),
+					Compat\MultiCurrency::RATE_META
+				)
+			);
+		}
+		if ( $this->in_transition ) {
+			$this->fx_hold[ $order->get_id() ] = true;
+		} elseif ( ! $order->has_status( array( 'on-hold', 'cancelled', 'refunded', 'failed' ) ) ) {
+			$order->update_status( 'on-hold', __( 'Vouchers wait for an exchange rate to the shop currency.', 'voucher-captain' ) );
+		}
 	}
 
 	public function issue_async( $order_id ): void {
@@ -92,7 +178,12 @@ final class Issuer {
 	public function on_completed( $order_id, $order = null ): void {
 		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
 		if ( $order instanceof \WC_Order ) {
-			$this->issue_when_confirmed( $order );
+			$this->in_transition = true; // A status hook: an exchange-rate hold waits until the transition is through.
+			try {
+				$this->issue_when_confirmed( $order );
+			} finally {
+				$this->in_transition = false;
+			}
 		}
 	}
 
@@ -200,6 +291,10 @@ final class Issuer {
 	 */
 	public function issue_for_order( \WC_Order $order, bool $manual = false ): array {
 		$created = array();
+		if ( ! Compat\MultiCurrency::can_convert( (string) $order->get_currency(), $order ) && $this->needs_conversion( $order ) ) {
+			$this->hold_for_rate( $order );
+			return $created;
+		}
 		foreach ( $order->get_items() as $item_id => $item ) {
 			/** @var \WC_Order_Item_Product $item */
 			if ( ! $item instanceof \WC_Order_Item_Product ) {
@@ -212,6 +307,12 @@ final class Issuer {
 			$config = ProductConfig::get( $product );
 			$qty    = max( 0, (int) $item->get_quantity() + (int) $order->get_qty_refunded_for_item( $item_id ) );
 			$count  = (int) apply_filters( 'vcap_vouchers_per_item', $qty * $config['per_item'], $item, $config );
+			$errors = ProductConfig::discount_errors( $config );
+			if ( $count > 0 && $errors && ! $this->repo->get_slot( (int) $item_id, $count - 1 ) ) {
+				// Invalid discount setup (e.g. a percentage from the price): never insert a voucher for it.
+				$this->refuse_line( $order, $item, $errors );
+				continue;
+			}
 			if ( $count > 0 ) {
 				$this->record_line( $order, $item, $config, $count );
 			}
@@ -242,6 +343,23 @@ final class Issuer {
 			do_action( 'vcap_vouchers_issued', $created, $order );
 		}
 		return $created;
+	}
+
+	/** Order note (once per line) for a voucher line that is not issued because of its product's discount setup. */
+	private function refuse_line( \WC_Order $order, \WC_Order_Item_Product $item, array $errors ): void {
+		if ( 'yes' === $item->get_meta( self::CONFIG_REFUSED_META ) ) {
+			return;
+		}
+		$item->update_meta_data( self::CONFIG_REFUSED_META, 'yes' );
+		$item->save_meta_data();
+		$order->add_order_note(
+			sprintf(
+				/* translators: 1: product name, 2: reasons */
+				__( 'No voucher issued for "%1$s": the product\'s discount setup is invalid (%2$s). Correct the product and issue the vouchers from this order screen, or refund the line.', 'voucher-captain' ),
+				wp_strip_all_tags( $item->get_name() ),
+				implode( ' ', $errors )
+			)
+		);
 	}
 
 	public const LINE_META = '_vcap_line';
@@ -403,7 +521,18 @@ final class Issuer {
 
 		$create_coupon = 'ticket' !== $voucher->type || $voucher->initial_amount > 0;
 		if ( apply_filters( 'vcap_create_coupon', $create_coupon, $voucher, $config ) ) {
-			$voucher->coupon_id = $this->coupons->create_coupon( $voucher, $config );
+			$error = '';
+			try {
+				$voucher->coupon_id = $this->coupons->create_coupon( $voucher, $config );
+			} catch ( \Throwable $e ) {
+				// E.g. WC_Data_Exception for an amount WooCommerce refuses: roll the voucher back like a failed save.
+				$voucher->coupon_id = 0;
+				$error              = wp_strip_all_tags( $e->getMessage() );
+			}
+			if ( '' !== $error ) {
+				/* translators: 1: product name, 2: error message */
+				$order->add_order_note( sprintf( __( 'WooCommerce refused the coupon of a voucher for "%1$s": %2$s', 'voucher-captain' ), $item->get_name(), $error ) );
+			}
 			if ( ! $voucher->coupon_id || ! $this->repo->update( $voucher ) ) {
 				// Never leave a voucher without its WooCommerce coupon (the code would be sent but not work): undo
 				// this slot so the next issuing run creates it again, and tell the shop.
@@ -437,25 +566,37 @@ final class Issuer {
 		if ( ! $this->settings->yes( 'vcap_void_on_refund' ) ) {
 			return;
 		}
+		$order = wc_get_order( (int) $order_id );
 		foreach ( $this->repo->for_order( (int) $order_id ) as $voucher ) {
-			$this->void( $voucher, __( 'Purchase order cancelled or refunded', 'voucher-captain' ) );
+			$this->void_purchase( $voucher, __( 'Purchase order cancelled or refunded', 'voucher-captain' ), $order instanceof \WC_Order ? $order : null );
 		}
 	}
 
 	/** Whether a voucher was (partly) used or is being redeemed right now. */
-	private static function in_use( Voucher $voucher ): bool {
-		return self::spent_value( $voucher ) > 0 || Voucher::STATUS_RESERVED === $voucher->status;
+	private function in_use( Voucher $voucher ): bool {
+		return self::spent_value( $voucher, $this->repo ) > 0 || Voucher::STATUS_RESERVED === $voucher->status;
 	}
 
-	/** Value of a voucher that was already used (base currency). */
-	public static function spent_value( Voucher $voucher ): float {
+	/**
+	 * Purchased value of a voucher that was already used (base currency) – what a refund of its purchase can no
+	 * longer pay back.
+	 *  - Gift cards: spent = purchased value + net top-ups − balance (ledger), spent from the purchased value first
+	 *    (TopUp::shares()); so a refund of the purchase and refunds of top-ups together never pay out more than
+	 *    the balance. Purchased value already taken off the card by a refund does not count again.
+	 *  - Single-use vouchers: the whole value once redeemed, or while an unpaid order (pending, failed, on hold)
+	 *    still carries the code – it can be paid later with the discount (CouponManager::open_orders_with()).
+	 */
+	public static function spent_value( Voucher $voucher, ?VoucherRepository $repo = null ): float {
+		if ( $voucher->is_multi_use() ) {
+			return TopUp::card_shares( $voucher, $repo ?? vcap()->vouchers )['purchase_spent'];
+		}
 		if ( Voucher::STATUS_VOID === $voucher->status ) {
 			return 0.0;
 		}
-		if ( $voucher->is_multi_use() ) {
-			return max( 0.0, (float) $voucher->initial_amount - (float) $voucher->balance );
+		if ( Voucher::STATUS_REDEEMED === $voucher->status ) {
+			return (float) $voucher->initial_amount;
 		}
-		return Voucher::STATUS_REDEEMED === $voucher->status ? (float) $voucher->initial_amount : 0.0;
+		return CouponManager::open_orders_with( $voucher ) ? (float) $voucher->initial_amount : 0.0;
 	}
 
 	/**
@@ -478,7 +619,7 @@ final class Issuer {
 		$codes = array();
 		if ( $this->settings->yes( 'vcap_void_on_refund' ) ) {
 			foreach ( $this->repo->for_order( $order->get_id() ) as $voucher ) {
-				$used = self::spent_value( $voucher );
+				$used = self::spent_value( $voucher, $this->repo );
 				if ( $used > 0 ) {
 					$spent  += $used;
 					$codes[] = $voucher->code;
@@ -503,10 +644,24 @@ final class Issuer {
 		}
 		$remaining = (float) $order->get_total() - $refunded;
 		$amount    = (float) ( $args['amount'] ?? 0 );
-		$to_base   = static function ( float $value ) use ( $order ): float {
-			return $order->get_currency() && $order->get_currency() !== get_option( 'woocommerce_currency' ) ? (float) apply_filters( 'vcap_amount_to_base_currency', $value, $order->get_currency(), $order ) : $value;
+		$to_base   = static function ( float $value ) use ( $order ): ?float {
+			return Compat\MultiCurrency::to_base( $value, (string) $order->get_currency(), $order );
 		};
 		$remaining_base = $to_base( $remaining );
+		if ( null === $remaining_base || null === $to_base( $amount ) ) {
+			// Foreign currency without exchange rate: the spent base-currency value cannot be compared (never 1:1).
+			if ( apply_filters( 'vcap_allow_refund_of_spent_vouchers', false, $order, $amount, $spent ) ) {
+				return;
+			}
+			throw new \Exception(
+				sprintf(
+					/* translators: 1: voucher codes, 2: order currency */
+					__( 'Value from this order was already spent (%1$s), and no exchange rate for %2$s is known to work out how much can still be refunded. Set up the exchange rate first.', 'voucher-captain' ),
+					implode( ', ', $codes ),
+					(string) $order->get_currency()
+				)
+			);
+		}
 		$max_base       = $remaining_base - $spent;
 		$decimals       = API\V1\RedemptionService::decimals( (string) $order->get_currency() );
 		$tolerance      = 0.5 / ( 10 ** $decimals );
@@ -571,27 +726,93 @@ final class Issuer {
 			$refunded_qty = (int) ( $refunded[ $item_id ] ?? 0 );
 			$per_unit     = max( 1, (int) round( count( $vouchers ) / $item->get_quantity() ) );
 			$void_target  = min( count( $vouchers ), $refunded_qty * $per_unit );
-			$voided       = count( array_filter( $vouchers, static fn( Voucher $v ) => Voucher::STATUS_VOID === $v->status ) );
+			$handled      = array_filter( $vouchers, fn( Voucher $v ) => $this->purchase_handled( $v ) );
+			$voided       = count( $handled );
 			if ( $voided >= $void_target ) {
 				continue;
 			}
-			$open = array_values( array_filter( $vouchers, static fn( Voucher $v ) => Voucher::STATUS_VOID !== $v->status ) );
+			$open = array_values( array_diff_key( $vouchers, $handled ) );
 			usort(
 				$open,
-				static fn( Voucher $a, Voucher $b ) => array( self::in_use( $a ) ? 1 : 0, -$a->item_index ) <=> array( self::in_use( $b ) ? 1 : 0, -$b->item_index )
+				fn( Voucher $a, Voucher $b ) => array( $this->in_use( $a ) ? 1 : 0, -$a->item_index ) <=> array( $this->in_use( $b ) ? 1 : 0, -$b->item_index )
 			);
 			foreach ( array_slice( $open, 0, $void_target - $voided ) as $voucher ) {
 				/* translators: %d: refund id */
-				$this->void( $voucher, sprintf( __( 'Partial refund #%d of the purchase order', 'voucher-captain' ), (int) $refund_id ) );
-				$order->add_order_note(
-					sprintf(
-						/* translators: %s: voucher code */
-						__( 'Voucher %s voided (refunded).', 'voucher-captain' ),
-						$voucher->code
-					)
-				);
+				$kept = $this->void_purchase( $voucher, sprintf( __( 'Partial refund #%d of the purchase order', 'voucher-captain' ), (int) $refund_id ), $order );
+				if ( Voucher::STATUS_VOID === $voucher->status ) {
+					$order->add_order_note(
+						sprintf(
+							/* translators: %s: voucher code */
+							__( 'Voucher %s voided (refunded).', 'voucher-captain' ),
+							$voucher->code
+						)
+					);
+				} elseif ( $kept > 0 ) {
+					$order->add_order_note(
+						sprintf(
+							/* translators: 1: gift card code, 2: topped-up value that stays on the card */
+							__( 'Gift card %1$s: the purchased value was taken off the card (refunded); the topped-up value of %2$s stays on it.', 'voucher-captain' ),
+							$voucher->code,
+							wp_strip_all_tags( wc_price( $kept, array( 'currency' => $voucher->currency ) ) )
+						)
+					);
+				}
 			}
 		}
+	}
+
+	/** Whether the purchase of this voucher was refunded already (voided, or its purchased value taken off). */
+	private function purchase_handled( Voucher $voucher ): bool {
+		if ( Voucher::STATUS_VOID === $voucher->status ) {
+			return true;
+		}
+		if ( ! $voucher->is_multi_use() ) {
+			return false;
+		}
+		foreach ( $this->repo->events( $voucher->id ) as $event ) {
+			if ( self::PURCHASE_REFUNDED_EVENT === ( $event['event'] ?? '' ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * The purchase of a voucher was refunded (cancelled, fully or by quantity). A gift card that was topped up
+	 * keeps its topped-up value: only the unspent purchased value is taken off the balance (ledger event
+	 * "purchase_refunded") and the card stays usable. Without top-up value left the voucher is voided as before.
+	 *
+	 * @return float Topped-up value that stays on the card (0 when the voucher was voided or nothing changed).
+	 */
+	public function void_purchase( Voucher $voucher, string $note = '', ?\WC_Order $order = null ): float {
+		if ( Voucher::STATUS_VOID === $voucher->status || ! $voucher->is_multi_use() ) {
+			$this->void( $voucher, $note );
+			return 0.0;
+		}
+		$fresh = $this->repo->get( $voucher->id ) ?? $voucher;
+		if ( $this->purchase_handled( $fresh ) ) {
+			return (float) $fresh->balance; // Purchased value already taken off; the rest is topped-up value.
+		}
+		$shares = TopUp::card_shares( $fresh, $this->repo );
+		if ( $shares['topup_unspent'] <= 0.5 / ( 10 ** $fresh->decimals() ) ) {
+			$this->void( $voucher, $note );
+			return 0.0;
+		}
+		$take     = round( $shares['purchase_unspent'], $fresh->decimals() );
+		$order_id = $order ? $order->get_id() : (int) $voucher->order_id;
+		$text     = trim( $note . ' ' . __( '(purchased value taken off, topped-up value kept)', 'voucher-captain' ) );
+		$done     = $take > 0
+			? $this->coupons->adjust_balance( $fresh, -$take, self::PURCHASE_REFUNDED_EVENT, $text, $order_id )
+			: $this->repo->log( $fresh->id, self::PURCHASE_REFUNDED_EVENT, 0.0, (float) $fresh->balance, $text, $order_id );
+		if ( ! $done ) {
+			// The balance could not be changed: lock the whole card rather than pay out the purchased value twice.
+			$this->void( $voucher, $note );
+			return 0.0;
+		}
+		$after            = $this->repo->get( $voucher->id ) ?? $fresh;
+		$voucher->balance = $after->balance;
+		$voucher->status  = $after->status;
+		return (float) $after->balance;
 	}
 
 	/** @return bool False when the voucher could not be voided (nothing logged, the coupon stays as it was). */

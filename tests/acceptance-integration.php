@@ -265,4 +265,74 @@ vcap_acc_assert( is_string( ( new VCAP\TopUp( vcap()->vouchers, vcap()->coupons 
 wc_get_order( $topup_order->get_id() )->update_status( 'cancelled' );
 vcap_acc_assert( 20.0 === (float) vcap()->vouchers->get( $topup_card->id )->balance, 'cancelling the top-up order takes the 30 back' );
 
+// Foreign currency without exchange rate: amounts are never taken 1:1 (vouchers and balances are in the base currency).
+$base_currency = (string) get_option( 'woocommerce_currency' );
+$no_rate       = 'CZK' === $base_currency ? 'HUF' : 'CZK';
+$fx_buy        = wc_create_order();
+$fx_buy->add_product( $gc_product, 1 ); // 50 in the order currency.
+$fx_buy->set_currency( $no_rate );
+$fx_buy->set_billing_email( 'acceptance-fx@example.com' );
+$fx_buy->calculate_totals();
+wc_get_order( $fx_buy->get_id() )->payment_complete( 'txn-fx-1' );
+$fx_buy   = wc_get_order( $fx_buy->get_id() );
+$fx_notes = implode( ' | ', array_map( static fn( $n ) => $n->content, wc_get_order_notes( array( 'order_id' => $fx_buy->get_id() ) ) ) );
+vcap_acc_assert( ! vcap()->vouchers->for_order( $fx_buy->get_id() ) && 'on-hold' === $fx_buy->get_status() && 'yes' === $fx_buy->get_meta( VCAP\Issuer::FX_HOLD_META ) && str_contains( $fx_notes, 'no exchange rate' ), 'a gift card paid in a currency without exchange rate is not issued (no 1:1) and the order is held with a note' );
+vcap_acc_assert( 'critical' === ( new VCAP\Health() )->test_currency()['status'], 'Site Health reports the foreign currency without converter' );
+$fx_buy->update_meta_data( VCAP\Compat\MultiCurrency::RATE_META, '25' ); // 25 order-currency units per base unit.
+$fx_buy->save();
+$fx_issued = vcap()->issuer->issue_for_order( wc_get_order( $fx_buy->get_id() ), true );
+vcap_acc_assert( 1 === count( $fx_issued ) && abs( 2.0 - (float) $fx_issued[0]->initial_amount ) < 0.001, 'with the exchange rate stored on the order the gift card is issued at its base value (50 / 25 = 2)' );
+$fx_spend = wc_create_order();
+$fx_spend->add_product( $product, 1 );
+$fx_spend->set_currency( $no_rate );
+$fx_spend->set_billing_email( 'acceptance-fx@example.com' );
+$fx_spend->calculate_totals();
+$fx_card    = vcap_acc_card( 40 );
+$fx_applied = $fx_spend->apply_coupon( $fx_card->code );
+vcap_acc_assert( is_wp_error( $fx_applied ) && str_contains( $fx_applied->get_error_message(), $no_rate ) && 40.0 === (float) vcap()->vouchers->get( $fx_card->id )->balance, 'a base-currency gift card is not valid in an order in a currency without exchange rate' );
+$fx_checkout = wc_create_order();
+$fx_checkout->set_currency( $no_rate );
+$fx_to_base  = static fn( $amount, $currency ) => $currency === $no_rate ? $amount / 20 : $amount;
+add_filter( 'vcap_amount_to_base_currency', $fx_to_base, 20, 2 );
+( new VCAP\Compat\MultiCurrency() )->store_rate( $fx_checkout );
+remove_filter( 'vcap_amount_to_base_currency', $fx_to_base, 20 );
+vcap_acc_assert( abs( 20.0 - (float) $fx_checkout->get_meta( VCAP\Compat\MultiCurrency::RATE_META ) ) < 0.0001, 'checkout stores the exchange rate a converter offers on the order' );
+delete_option( VCAP\Compat\MultiCurrency::UNKNOWN_OPTION );
+delete_option( VCAP\Compat\MultiCurrency::HELD_OPTION );
+
+// A single-use voucher in an unpaid (failed) order counts as used for the refund guard of its purchase. Paid after
+// its purchase was refunded anyway (voucher voided), the order is held with a shortfall instead of being fulfilled.
+$single_product = new WC_Product_Simple();
+$single_product->set_name( 'Voucher 30' );
+$single_product->set_regular_price( '30' );
+$single_product->set_virtual( true );
+$single_product->update_meta_data( '_vcap_enabled', 'yes' );
+$single_product->update_meta_data( '_vcap_type', 'voucher' );
+$single_product->update_meta_data( '_vcap_usage', 'single' );
+$single_product->save();
+$single_buy = wc_create_order();
+$single_buy->add_product( $single_product, 1 );
+$single_buy->set_billing_email( 'acceptance-single@example.com' );
+$single_buy->calculate_totals();
+wc_get_order( $single_buy->get_id() )->payment_complete( 'txn-single-buy' );
+$single = vcap()->vouchers->for_order( $single_buy->get_id() )[0] ?? null;
+vcap_acc_assert( $single instanceof VCAP\Voucher && VCAP\Voucher::STATUS_ACTIVE === $single->status, 'a single-use voucher of 30 is issued' );
+$single_use = wc_create_order();
+$single_use->add_product( $product, 2 );
+$single_use->set_billing_email( 'acceptance-single@example.com' );
+$single_use->calculate_totals();
+vcap_acc_assert( true === $single_use->apply_coupon( $single->code ), 'the voucher is applied to a second order' );
+wc_get_order( $single_use->get_id() )->update_status( 'failed', 'Card declined.' );
+$single_guard = wc_create_refund( array( 'order_id' => $single_buy->get_id(), 'amount' => 30 ) );
+vcap_acc_assert( is_wp_error( $single_guard ) && str_contains( $single_guard->get_error_message(), $single->code ), 'the purchase of a single-use voucher sitting in an unpaid order cannot be refunded' );
+add_filter( 'vcap_allow_refund_of_spent_vouchers', '__return_true' );
+$single_forced = wc_create_refund( array( 'order_id' => $single_buy->get_id(), 'amount' => 30 ) );
+remove_filter( 'vcap_allow_refund_of_spent_vouchers', '__return_true' );
+vcap_acc_assert( ! is_wp_error( $single_forced ) && VCAP\Voucher::STATUS_VOID === vcap()->vouchers->get( $single->id )->status, 'refunded knowingly anyway, the voucher is voided' );
+wc_get_order( $single_use->get_id() )->payment_complete( 'txn-single-late' );
+$single_use = wc_get_order( $single_use->get_id() );
+$single_map = VCAP\CouponManager::order_map( $single_use, VCAP\CouponManager::SHORTFALL_AMOUNTS_META );
+vcap_acc_assert( 'on-hold' === $single_use->get_status() && VCAP\CouponManager::has_shortfall( $single_use ) && isset( $single_map[ wc_format_coupon_code( $single->code ) ] ), 'paying the order after the voucher was voided holds it with a shortfall instead of fulfilling the discount' );
+vcap_acc_assert( in_array( 'double_use', array_column( vcap()->vouchers->events( $single->id ), 'event' ), true ), 'the double use is in the voucher history' );
+
 echo "Voucher Captain acceptance checks passed.\n";

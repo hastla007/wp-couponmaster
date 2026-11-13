@@ -25,7 +25,7 @@ final class Health {
 
 	public function tests( $tests ) {
 		$tests = (array) $tests;
-		foreach ( array( 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets', 'offline_payment' ) as $id ) {
+		foreach ( array( 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets', 'offline_payment', 'currency' ) as $id ) {
 			$tests['direct'][ 'vcap_' . $id ] = array(
 				'label' => __( 'Voucher Captain', 'voucher-captain' ),
 				'test'  => array( $this, 'test_' . $id ),
@@ -254,6 +254,35 @@ final class Health {
 			return self::result( 'offline_payment', 'good', __( 'Vouchers are not sold with cash on delivery', 'voucher-captain' ), __( 'Cash on delivery is not offered for virtual products. Orders paid by bank transfer or cheque issue vouchers once the payment is confirmed.', 'voucher-captain' ) );
 		}
 		return self::result( 'offline_payment', 'recommended', __( 'Cash on delivery is offered for virtual products', 'voucher-captain' ), __( 'Voucher orders paid by cash on delivery are "Processing" before any money arrived. Their vouchers are issued only when the order is completed (or the payment is recorded), so the customer waits. Switch off "Accept for virtual orders" under WooCommerce → Settings → Payments → Cash on delivery if vouchers should only be sold with immediate payment.', 'voucher-captain' ) );
+	}
+
+	/**
+	 * Foreign currency without converter: a money operation was refused for want of an exchange rate (critical),
+	 * or a currency switcher is active that no adapter (and no `vcap_amount_to_base_currency` callback) converts.
+	 */
+	public function test_currency(): array {
+		$unknown = Compat\MultiCurrency::unknown_currencies();
+		$advice  = __( 'Vouchers and gift card balances are kept in the shop base currency. Use a supported currency switcher (WooCommerce Multilingual, Aelia, WOOCS, CURCY, WooPayments Multi-Currency) or convert amounts with the filter "vcap_amount_to_base_currency".', 'voucher-captain' );
+		if ( $unknown ) {
+			return self::result(
+				'currency',
+				'critical',
+				__( 'Foreign-currency amounts could not be converted', 'voucher-captain' ),
+				/* translators: %s: currency codes */
+				sprintf( __( 'No exchange rate to the shop base currency was known for %s in the last 30 days: voucher sales in that currency were held, store-credit refunds and fixed-value vouchers were refused.', 'voucher-captain' ), implode( ', ', array_keys( $unknown ) ) ) . ' ' . $advice
+			);
+		}
+		$switcher = Compat\MultiCurrency::unsupported_switcher();
+		if ( '' !== $switcher ) {
+			return self::result(
+				'currency',
+				'recommended',
+				__( 'Foreign currency without converter', 'voucher-captain' ),
+				/* translators: %s: plugin name */
+				sprintf( __( 'Voucher Captain cannot read the exchange rates of %s. Orders in other currencies cannot issue vouchers or be charged to gift cards until a rate is known.', 'voucher-captain' ), $switcher ) . ' ' . $advice
+			);
+		}
+		return self::result( 'currency', 'good', __( 'Voucher amounts are converted to the shop base currency', 'voucher-captain' ), __( 'Either all orders are in the base currency or a supported currency switcher provides the exchange rates.', 'voucher-captain' ) );
 	}
 
 	/** Voucher products whose validity ends before the statutory limitation period in the shop or a selling country. */

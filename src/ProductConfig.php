@@ -301,6 +301,41 @@ final class ProductConfig {
 		return sprintf( __( 'The validity of vouchers sold now ends before the statutory limitation period (%s). A shorter validity in the voucher conditions is often invalid – have it checked legally or use the statutory validity.', 'voucher-captain' ), implode( ', ', $parts ) );
 	}
 
+	/**
+	 * Discount setups that a sold voucher must never get (empty when the setup is fine):
+	 *  - "Percentage discount" only with the value source "Fixed value" and a percentage above 0 and at most 100.
+	 *    With "Product price paid" or "Customer chooses the amount" the price would become the percentage (a 120 €
+	 *    product = 120 % off), and WooCommerce refuses percentages above 100 only after the voucher exists.
+	 *    Tickets without a fixed value carry no value (no coupon) and are not affected.
+	 *  - "Fixed product discount" is not allowed for sold vouchers: WooCommerce grants it once per item and unit in
+	 *    the cart (a 50 € voucher × 3 items = 150 €). Stored-balance gift cards always use a cart discount.
+	 * Enforced on product save (ProductSettings), at the sale (ProductChecks: not purchasable) and when issuing
+	 * (Issuer: no voucher is inserted).
+	 *
+	 * @return string[]
+	 */
+	public static function discount_errors( array $config ): array {
+		$type   = (string) ( $config['discount_type'] ?? 'fixed_cart' );
+		$source = (string) ( $config['amount_source'] ?? 'price' );
+		if ( 'percent' === $type ) {
+			if ( 'ticket' === ( $config['type'] ?? '' ) && 'fixed' !== $source ) {
+				return array();
+			}
+			if ( 'fixed' !== $source ) {
+				return array( __( 'A percentage discount needs the voucher value "Fixed value" (the percentage): with the product price or a customer-chosen amount the price would become the percentage.', 'voucher-captain' ) );
+			}
+			$percent = (float) wc_format_decimal( (string) ( $config['amount'] ?? '' ) );
+			if ( $percent <= 0 || $percent > 100 ) {
+				return array( __( 'A percentage discount needs a fixed value greater than 0 and at most 100 (the percentage).', 'voucher-captain' ) );
+			}
+			return array();
+		}
+		if ( 'fixed_product' === $type && 'balance' !== (string) ( $config['usage'] ?? '' ) ) {
+			return array( __( 'The discount type "Fixed product discount" cannot be used for sold vouchers: it would grant the voucher value once per item and unit in the cart. Use "Fixed cart discount" (and the product restrictions below if needed).', 'voucher-captain' ) );
+		}
+		return array();
+	}
+
 	/** VAT treatment configured for a voucher product ("auto": percentage vouchers are discounts, the rest multi-purpose). */
 	public static function product_treatment( $product ): string {
 		$config  = self::get( $product );

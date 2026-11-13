@@ -772,6 +772,67 @@ check( 'a malformed key in the set fails closed (nothing verifies)', '{"pinned":
 $r = $keyset( ' , ', 'rotation' );
 check( 'an empty key set fails closed', '{"pinned":"1 invalid","activate":"wplc_server_signature_invalid","snapshot":"none","offline":"refused"}' === $r, $r );
 
+echo "Money guards: currencies, gift card shares, discount setup\n";
+$GLOBALS['vcap_test_options']['woocommerce_currency'] = 'EUR';
+$fx_filters = $GLOBALS['vcap_test_filters']['vcap_amount_to_base_currency'] ?? null;
+$fx_known   = $GLOBALS['vcap_test_filters']['vcap_currency_rate_known'] ?? null;
+( new VCAP\Compat\MultiCurrency() )->register();
+check( 'the base currency always converts (unchanged)', VCAP\Compat\MultiCurrency::can_convert( 'EUR' ) && 12.5 === VCAP\Compat\MultiCurrency::to_base( 12.5, 'EUR' ) );
+check( 'a foreign currency without converter is never taken 1:1', ! VCAP\Compat\MultiCurrency::can_convert( 'CZK' ) && null === VCAP\Compat\MultiCurrency::to_base( 1000.0, 'CZK' ) );
+check( 'the refusal is recorded for Site Health', isset( VCAP\Compat\MultiCurrency::unknown_currencies()['CZK'] ) );
+check( 'the public filter still returns the amount unchanged without a rate (extension contract)', 1000.0 === (float) apply_filters( 'vcap_amount_to_base_currency', 1000.0, 'CZK', null ) );
+add_filter( 'vcap_amount_to_base_currency', static fn( $amount, $currency ) => 'CZK' === $currency ? $amount / 25 : $amount, 20, 2 );
+check( 'a converter on the public filter counts as a known rate (1000 CZK = 40 EUR)', VCAP\Compat\MultiCurrency::can_convert( 'CZK' ) && 40.0 === VCAP\Compat\MultiCurrency::to_base( 1000.0, 'CZK' ) );
+check( 'other currencies stay unknown', ! VCAP\Compat\MultiCurrency::can_convert( 'HUF' ) );
+add_filter( 'vcap_currency_rate_known', static fn( $known, $currency ) => $known || 'DKK' === $currency, 10, 2 );
+check( 'vcap_currency_rate_known declares a 1:1 peg as known', VCAP\Compat\MultiCurrency::can_convert( 'DKK' ) && 10.0 === VCAP\Compat\MultiCurrency::to_base( 10.0, 'DKK' ) );
+$GLOBALS['vcap_test_filters']['vcap_amount_to_base_currency'] = $fx_filters;
+$GLOBALS['vcap_test_filters']['vcap_currency_rate_known']     = $fx_known;
+if ( null === $fx_filters ) {
+	unset( $GLOBALS['vcap_test_filters']['vcap_amount_to_base_currency'] );
+}
+if ( null === $fx_known ) {
+	unset( $GLOBALS['vcap_test_filters']['vcap_currency_rate_known'] );
+}
+unset( $GLOBALS['vcap_test_options'][ VCAP\Compat\MultiCurrency::UNKNOWN_OPTION ] );
+
+$sh = VCAP\TopUp::shares( 100, 0, 100, 100 );
+check( 'card 100 + top-up 100, 100 spent: the purchase counts as spent, the top-up as unspent', 100.0 === $sh['purchase_spent'] && 0.0 === $sh['purchase_unspent'] && 100.0 === $sh['topup_unspent'], wp_json_encode( $sh ) );
+$sh = VCAP\TopUp::shares( 100, 0, 100, 150 );
+check( 'card 100 + top-up 100, 50 spent: 50 of the purchase and the whole top-up can be refunded (= balance 150)', 50.0 === $sh['purchase_spent'] && 50.0 === $sh['purchase_unspent'] && 100.0 === $sh['topup_unspent'], wp_json_encode( $sh ) );
+$sh = VCAP\TopUp::shares( 100, 0, 0, 50 );
+check( 'after the top-up (100) was refunded first, the purchase counts 50 as spent', 50.0 === $sh['purchase_spent'] && 50.0 === $sh['purchase_unspent'], wp_json_encode( $sh ) );
+$sh = VCAP\TopUp::shares( 100, 50, 100, 100 );
+check( 'after the unspent purchased value (50) was taken off, the purchase has nothing left and the top-up keeps 100', 50.0 === $sh['purchase_spent'] && 0.0 === $sh['purchase_unspent'] && 100.0 === $sh['topup_unspent'], wp_json_encode( $sh ) );
+$sh = VCAP\TopUp::shares( 100, 0, 100, 100, true );
+check( 'a voided card: top-ups only claim the balance above the purchased value still on the books', 0.0 === $sh['topup_unspent'], wp_json_encode( $sh ) );
+$sh = VCAP\TopUp::shares( 20, 0, 0, 60 );
+check( 'goodwill above purchase and top-ups is not refundable', 0.0 === $sh['purchase_spent'] && 20.0 === $sh['purchase_unspent'] && 0.0 === $sh['topup_unspent'], wp_json_encode( $sh ) );
+$over = array();
+mt_srand( 42 );
+for ( $i = 0; $i < 2000; $i++ ) {
+	$initial = mt_rand( 0, 300 );
+	$topups  = mt_rand( 0, 300 );
+	$removed = mt_rand( 0, $initial );
+	$balance = mt_rand( 0, max( 0, $initial - $removed + $topups ) );
+	foreach ( array( false, true ) as $void ) {
+		$sh = VCAP\TopUp::shares( $initial, $removed, $topups, $balance, $void );
+		if ( $sh['purchase_unspent'] + $sh['topup_unspent'] > $balance + 1e-9 || $sh['purchase_spent'] + $sh['purchase_unspent'] > $initial - $removed + 1e-9 ) {
+			$over[] = array( $initial, $removed, $topups, $balance, $void );
+		}
+	}
+}
+check( 'purchase refund + top-up refunds never exceed the balance (2000 random cards, active and voided)', ! $over, wp_json_encode( array_slice( $over, 0, 3 ) ) );
+
+$cfg = static fn( array $c ) => $c + ProductConfig::DEFAULTS;
+check( 'percentage from the product price is refused', (bool) ProductConfig::discount_errors( $cfg( array( 'discount_type' => 'percent', 'amount_source' => 'price' ) ) ) );
+check( 'percentage from a customer-chosen amount is refused', (bool) ProductConfig::discount_errors( $cfg( array( 'discount_type' => 'percent', 'amount_source' => 'custom' ) ) ) );
+check( 'percentage above 100 or of 0 is refused', ProductConfig::discount_errors( $cfg( array( 'discount_type' => 'percent', 'amount_source' => 'fixed', 'amount' => '120' ) ) ) && ProductConfig::discount_errors( $cfg( array( 'discount_type' => 'percent', 'amount_source' => 'fixed', 'amount' => '' ) ) ) );
+check( 'a fixed percentage between 0 and 100 is fine', array() === ProductConfig::discount_errors( $cfg( array( 'discount_type' => 'percent', 'amount_source' => 'fixed', 'amount' => '100' ) ) ) && array() === ProductConfig::discount_errors( $cfg( array( 'discount_type' => 'percent', 'amount_source' => 'fixed', 'amount' => '12,5' ) ) ) );
+check( '"Fixed product discount" is refused for sold single-use vouchers, not for stored balances (cart discount)', ProductConfig::discount_errors( $cfg( array( 'discount_type' => 'fixed_product' ) ) ) && array() === ProductConfig::discount_errors( $cfg( array( 'discount_type' => 'fixed_product', 'usage' => 'balance' ) ) ) );
+check( 'a ticket without fixed value carries no value (no coupon) and stays fine', array() === ProductConfig::discount_errors( $cfg( array( 'type' => 'ticket', 'discount_type' => 'percent', 'amount_source' => 'price' ) ) ) );
+check( 'the default setup (fixed cart discount from the price) is fine', array() === ProductConfig::discount_errors( ProductConfig::DEFAULTS ) );
+
 echo "Editions (constants set by bin/build.sh)\n";
 // Premium build in a child process (constants cannot be undone here): no filter unlocks anything.
 $premium_code = <<<'PHP'

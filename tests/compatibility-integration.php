@@ -107,6 +107,8 @@ $base     = get_option( 'woocommerce_currency' );
 vcap_compat_assert( 12.5 === $currency->convert( 12.5, $base ), 'base-currency voucher values are unchanged' );
 $converted = apply_filters( 'vcap_amount_to_base_currency', 12.5, 'TEST', null );
 vcap_compat_assert( 12.5 === (float) $converted, 'unknown currency providers retain the documented extension filter fallback' );
+vcap_compat_assert( ! VCAP\Compat\MultiCurrency::can_convert( 'TEST' ) && null === VCAP\Compat\MultiCurrency::to_base( 12.5, 'TEST' ), 'an amount the filter leaves unchanged counts as not convertible (money is never taken 1:1)' );
+delete_option( VCAP\Compat\MultiCurrency::UNKNOWN_OPTION );
 $aelia_converter = static function ( $amount, $currency_code, $base_currency ) { return (float) $amount / 2; };
 add_filter( 'wc_aelia_cs_convert', $aelia_converter, 10, 3 );
 $aelia_amount = $currency->convert( 25, 'EUR' );

@@ -71,7 +71,8 @@ prints the version) next to WooCommerce 11.2.2 and Voucher Captain and runs `tes
 | **WOOCS** (`woocommerce-currency-switcher`) | Converts by dividing by the currency rate from `get_currencies()`. | `ecosystem (woocs)`: the same checks with WOOCS rates. |
 | **CURCY** (`woo-multi-currency`, free edition; premium uses the same settings API) | Converts by dividing by the currency rate from `get_list_currencies()` (`WOOMULTI_CURRENCY_F_Data` free, `WOOMULTI_CURRENCY_Data` premium). | `ecosystem (curcy)`: the same checks with CURCY rates. |
 | Aelia Currency Switcher | Uses `wc_aelia_cs_convert` to convert the order amount to the shop base currency. | Commercial, not installable in CI; the converter filter contract is exercised with a deterministic test callback. |
-| Other currency switchers | Implement `vcap_amount_to_base_currency`; the fallback can use order meta `_vcap_exchange_rate`. | Unknown-provider fallback is tested. |
+| WooPayments Multi-Currency | Converts by dividing by the rate of `WC_Payments_Multi_Currency()->get_enabled_currencies()`. | Not installed in CI; the order rate stored at checkout and the refusal without rate are tested. |
+| Other currency switchers | Implement `vcap_amount_to_base_currency`; the rate stored at checkout (order meta `_vcap_exchange_rate`) is used first. Without any known rate money is never taken 1:1 (sale held, credit refund and fixed-value vouchers refused, Site Health warns). | Unknown-provider refusal is tested (`acceptance`, `store-credit`, `compatibility`). |
 
 Real payments (card, PayPal account, redirects, the provider's webhooks against its sandbox) need the shop's own
 provider accounts: they are a release acceptance check per shop (`RELEASE_CHECKLIST.md`). Each store should verify its

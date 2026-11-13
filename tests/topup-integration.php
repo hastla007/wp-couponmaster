@@ -146,6 +146,65 @@ $topup_back = vcap_topup_refund( wc_get_order( $order->get_id() ), 40 );
 vcap_topup_assert( ! is_wp_error( $topup_back ) && 0.0 === vcap_topup_balance( $card ), 'refunding another 40 takes the unspent 40 of the top-up back', is_wp_error( $topup_back ) ? $topup_back->get_error_message() : vcap_topup_balance( $card ) );
 vcap_topup_assert( is_wp_error( vcap_topup_refund( wc_get_order( $order->get_id() ), 10 ) ), 'the spent 60 of the top-up cannot be refunded' );
 
+/* ---- 4b. Bought, topped up and spent: purchase and top-up refunds never pay out more than the balance ----- */
+
+$card_product = new WC_Product_Simple();
+$card_product->set_name( 'Gift card 100' );
+$card_product->set_regular_price( '100' );
+$card_product->set_virtual( true );
+$card_product->update_meta_data( '_vcap_enabled', 'yes' );
+$card_product->update_meta_data( '_vcap_type', 'giftcard' );
+$card_product->update_meta_data( '_vcap_usage', 'balance' );
+$card_product->save();
+
+/** @return array{0: WC_Order, 1: int, 2: ?VCAP\Voucher} paid purchase order, its line id, the gift card bought */
+function vcap_topup_bought_card( WC_Product $card_product ): array {
+	$order = wc_create_order();
+	$line  = $order->add_product( $card_product, 1 );
+	$order->set_billing_email( 'topup-bought@example.com' );
+	$order->calculate_totals( false );
+	$order->set_status( 'processing' );
+	$order->save();
+	vcap()->issuer->issue_for_order( wc_get_order( $order->get_id() ), true );
+	$cards = vcap()->vouchers->for_order( $order->get_id() );
+	return array( wc_get_order( $order->get_id() ), $line, $cards[0] ?? null );
+}
+
+// Purchase refund first: the purchased value counts as spent first, so only the top-up can be paid back.
+list( $buy, $buy_line, $bought ) = vcap_topup_bought_card( $card_product );
+vcap_topup_assert( $bought instanceof VCAP\Voucher && 100.0 === vcap_topup_balance( $bought ), 'a gift card of 100 is bought' );
+list( $top, $top_line ) = vcap_topup_order( $topup_product, $bought, 100 );
+vcap()->coupons->adjust_balance( vcap()->vouchers->get( $bought->id ), -100, 'redeemed', 'spent in the shop' );
+vcap_topup_assert( 100.0 === vcap_topup_balance( $bought ), 'bought 100 + topped up 100, 100 spent: 100 left on the card' );
+$purchase_back = vcap_topup_refund( $buy, 100, array( $buy_line => array( 'qty' => 1, 'refund_total' => 100 ) ) );
+vcap_topup_assert( is_wp_error( $purchase_back ) && 100.0 === vcap_topup_balance( $bought ), 'the purchase (spent first) cannot be refunded – it would pay out the 100 a second time', is_wp_error( $purchase_back ) ? null : 'refund created' );
+$top_back = vcap_topup_refund( $top, 100, array( $top_line => array( 'qty' => 1, 'refund_total' => 100 ) ) );
+vcap_topup_assert( ! is_wp_error( $top_back ) && 0.0 === vcap_topup_balance( $bought ), 'the unspent top-up (100) is refunded and taken off the card', is_wp_error( $top_back ) ? $top_back->get_error_message() : vcap_topup_balance( $bought ) );
+vcap_topup_assert( is_wp_error( vcap_topup_refund( wc_get_order( $buy->get_id() ), 1 ) ), 'afterwards nothing of the purchase can be refunded (100 paid back = what was unspent)' );
+
+// Top-up refund first (50 of 200 spent): the top-up goes back in full, the purchase only for its unspent 50.
+list( $buy, $buy_line, $bought ) = vcap_topup_bought_card( $card_product );
+list( $top, $top_line ) = vcap_topup_order( $topup_product, $bought, 100 );
+vcap()->coupons->adjust_balance( vcap()->vouchers->get( $bought->id ), -50, 'redeemed', 'spent in the shop' );
+$top_back = vcap_topup_refund( $top, 100, array( $top_line => array( 'qty' => 1, 'refund_total' => 100 ) ) );
+vcap_topup_assert( ! is_wp_error( $top_back ) && 50.0 === vcap_topup_balance( $bought ), 'top-up first: the unspent top-up (100) is refunded, 50 stay on the card', is_wp_error( $top_back ) ? $top_back->get_error_message() : vcap_topup_balance( $bought ) );
+$purchase_all = vcap_topup_refund( wc_get_order( $buy->get_id() ), 100, array( $buy_line => array( 'qty' => 1, 'refund_total' => 100 ) ) );
+vcap_topup_assert( is_wp_error( $purchase_all ) && false !== strpos( $purchase_all->get_error_message(), '50' ), 'then the purchase cannot be refunded in full (50 of it were spent)', is_wp_error( $purchase_all ) ? $purchase_all->get_error_message() : 'refund created' );
+$purchase_rest = vcap_topup_refund( wc_get_order( $buy->get_id() ), 50, array( $buy_line => array( 'qty' => 1, 'refund_total' => 50 ) ) );
+vcap_topup_assert( ! is_wp_error( $purchase_rest ) && VCAP\Voucher::STATUS_VOID === vcap()->vouchers->get( $bought->id )->status, 'its unspent 50 can be refunded and the card is voided (150 paid back = the balance before)', is_wp_error( $purchase_rest ) ? $purchase_rest->get_error_message() : vcap()->vouchers->get( $bought->id )->status );
+
+// Purchase refund first (50 of 200 spent): only the unspent purchased value is taken off, the top-up stays usable.
+list( $buy, $buy_line, $bought ) = vcap_topup_bought_card( $card_product );
+list( $top, $top_line ) = vcap_topup_order( $topup_product, $bought, 100 );
+vcap()->coupons->adjust_balance( vcap()->vouchers->get( $bought->id ), -50, 'redeemed', 'spent in the shop' );
+vcap_topup_assert( is_wp_error( vcap_topup_refund( $buy, 100, array( $buy_line => array( 'qty' => 1, 'refund_total' => 100 ) ) ) ), 'purchase first: a full refund of the purchase is refused (50 of it were spent)' );
+$purchase_part = vcap_topup_refund( wc_get_order( $buy->get_id() ), 50, array( $buy_line => array( 'qty' => 1, 'refund_total' => 50 ) ) );
+$after_card    = vcap()->vouchers->get( $bought->id );
+vcap_topup_assert( ! is_wp_error( $purchase_part ) && 100.0 === vcap_topup_balance( $bought ) && VCAP\Voucher::STATUS_ACTIVE === $after_card->status && in_array( VCAP\Issuer::PURCHASE_REFUNDED_EVENT, array_column( vcap()->vouchers->events( $bought->id ), 'event' ), true ), 'refunding its unspent 50 takes only the purchased value off; the topped-up 100 stay usable on the card', is_wp_error( $purchase_part ) ? $purchase_part->get_error_message() : array( vcap_topup_balance( $bought ), $after_card->status ) );
+$top_back = vcap_topup_refund( $top, 100, array( $top_line => array( 'qty' => 1, 'refund_total' => 100 ) ) );
+vcap_topup_assert( ! is_wp_error( $top_back ) && 0.0 === vcap_topup_balance( $bought ), 'the top-up (100) can still be refunded and is taken off the card', is_wp_error( $top_back ) ? $top_back->get_error_message() : vcap_topup_balance( $bought ) );
+vcap_topup_assert( is_wp_error( vcap_topup_refund( wc_get_order( $buy->get_id() ), 1 ) ), 'nothing more of the purchase can be refunded (150 paid back = the balance before)' );
+
 /* ---- 5. Top-up line without a card code: no new card ------------------------------------------------- */
 
 $no_code = wc_create_order();

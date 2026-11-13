@@ -18,18 +18,19 @@ WooCommerce coupons – and therefore voucher values, balances and store credit 
 
 | Contract | How |
 |---|---|
-| Voucher bought in another currency | `vcap_amount_to_base_currency( float $amount, string $currency, ?WC_Order $order )` converts the paid amount to the base currency before the voucher is created. Built in: WooCommerce Multilingual, Aelia, WOOCS, CURCY; unknown providers fall back to order meta `_vcap_exchange_rate`. |
+| Voucher bought in another currency | `vcap_amount_to_base_currency( float $amount, string $currency, ?WC_Order $order )` converts the paid amount to the base currency before the voucher is created. Built in: WooCommerce Multilingual, Aelia, WOOCS, CURCY, WooPayments Multi-Currency. The rate of the sale is stored at checkout as order meta `_vcap_exchange_rate` (order-currency units per base unit) and wins over the live rate later. |
+| No exchange rate known | Money is **never taken 1:1**. A rate counts as known for the base currency, a stored `_vcap_exchange_rate`, a built-in switcher, or another `vcap_amount_to_base_currency` callback that changes a probe amount (a callback returning the amount unchanged means "no rate"). Filter `vcap_currency_rate_known( bool $known, string $currency, ?WC_Order $order )` overrides this, e.g. for a converter with a rate of exactly 1. Without a rate: vouchers of the order are not issued (order on hold, note, admin notice), `refund_as_credit()` returns `vcap_credit_currency`, fixed-value vouchers are invalid in such a cart or order, a balance charge becomes a shortfall. Site Health ("Foreign currency without converter") lists refused currencies and switchers without adapter. |
 | Voucher used in another currency | The same filter converts the discount of a foreign-currency order before it is deducted from a balance. |
 | Line snapshot | `_vcap_line` keeps `order_currency` (paid) and `voucher_currency` (stored) separately. |
 | Reports | Amounts in other currencies are reported on separate lines and never added to base-currency totals. |
-| Store credit refunds | `refund_as_credit()` converts the refunded amount with the same filter. |
+| Store credit refunds | `refund_as_credit()` converts the refunded amount with the same filter (refused without a known rate). |
 
 An adapter for another switcher implements one filter:
 
 ```php
 add_filter( 'vcap_amount_to_base_currency', function ( float $amount, string $currency, $order ) {
     $rate = my_switcher_rate( $currency ); // units of $currency per 1 base unit
-    return $rate > 0 ? $amount / $rate : $amount;
+    return $rate > 0 ? $amount / $rate : $amount; // Unchanged = no rate: Voucher Captain refuses instead of 1:1.
 }, 10, 3 );
 ```
 

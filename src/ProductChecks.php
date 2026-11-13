@@ -10,6 +10,8 @@ defined( 'ABSPATH' ) || exit;
  *  - a single-use voucher worth more than the cart says that its remaining value is lost;
  *  - a delivery delay or fixed delivery date after the voucher's expiry, and a customer delivery date field that
  *    does not match the delivery setting, are reported on the product screen;
+ *  - a product with an invalid discount setup (ProductConfig::discount_errors(), e.g. a percentage taken from the
+ *    price) cannot be bought;
  *  - admin notices (product screen, dashboard, voucher screens) and a Site Health test list such products.
  */
 final class ProductChecks {
@@ -32,13 +34,17 @@ final class ProductChecks {
 	// ----------------------------------------------------------------- Sale.
 
 	/**
-	 * Why a voucher product must not be sold right now: "date_past", "date_missing", "codes_empty" or '' (fine).
+	 * Why a voucher product must not be sold right now: "date_past", "date_missing", "codes_empty",
+	 * "discount_invalid" or '' (fine).
 	 */
 	public static function unsellable_reason( \WC_Product $product ): string {
 		if ( ! ProductConfig::is_voucher( $product ) ) {
 			return '';
 		}
 		$config  = ProductConfig::get( $product );
+		if ( ProductConfig::discount_errors( $config ) ) {
+			return 'discount_invalid';
+		}
 		$problem = ProductConfig::expiry_problem( $config );
 		if ( in_array( $problem, array( 'date_past', 'date_missing' ), true ) ) {
 			return $problem;
@@ -190,6 +196,9 @@ final class ProductChecks {
 		foreach ( CustomAmount::config_errors( $config ) as $message ) {
 			$out[] = array( 'level' => 'error', 'message' => $message );
 		}
+		foreach ( ProductConfig::discount_errors( $config ) as $message ) {
+			$out[] = array( 'level' => 'error', 'message' => $message . ' ' . __( 'The product cannot be bought until the discount setup is corrected.', 'voucher-captain' ) );
+		}
 		switch ( ProductConfig::expiry_problem( $config ) ) {
 			case 'date_missing':
 				$out[] = array( 'level' => 'error', 'message' => __( 'Expiry "Fixed date" is selected but no expiry date is set. The product cannot be bought until you enter a date (or choose another expiry).', 'voucher-captain' ) );
@@ -251,10 +260,12 @@ final class ProductChecks {
 	 * Published voucher products that cannot be sold because of their fixed expiry date, or whose code batch
 	 * is empty or running low.
 	 *
-	 * @return array{expired: \WC_Product[], codes: array<int, array{product:\WC_Product, free:int, stop:bool}>}
+	 * Products (or variations) with an invalid discount setup are listed under "invalid".
+	 *
+	 * @return array{expired: \WC_Product[], codes: array<int, array{product:\WC_Product, free:int, stop:bool}>, invalid: \WC_Product[]}
 	 */
 	public static function shop_problems(): array {
-		$out = array( 'expired' => array(), 'codes' => array() );
+		$out = array( 'expired' => array(), 'codes' => array(), 'invalid' => self::invalid_discount_products() );
 		$ids = get_posts(
 			array(
 				'post_type'   => 'product',
@@ -286,6 +297,38 @@ final class ProductChecks {
 				$free = self::free_codes( $batch );
 				if ( $free <= self::low_codes_threshold( $config ) ) {
 					$out['codes'][] = array( 'product' => $product, 'free' => $free, 'stop' => 'stop' === $config['code_pool_empty'] );
+				}
+			}
+		}
+		return $out;
+	}
+
+	/** Published voucher products whose discount setup (or that of a variation) is invalid. @return \WC_Product[] */
+	public static function invalid_discount_products(): array {
+		$ids = get_posts(
+			array(
+				'post_type'   => 'product',
+				'post_status' => 'publish',
+				'numberposts' => 200,
+				'fields'      => 'ids',
+				'meta_query'  => array( // phpcs:ignore WordPress.DB.SlowDBQuery
+					'relation' => 'AND',
+					array( 'key' => '_vcap_enabled', 'value' => 'yes' ),
+					array( 'key' => '_vcap_discount_type', 'value' => array( 'percent', 'fixed_product' ), 'compare' => 'IN' ),
+				),
+			)
+		);
+		$out = array();
+		foreach ( $ids as $id ) {
+			$product = wc_get_product( $id );
+			if ( ! $product ) {
+				continue;
+			}
+			$items = $product->is_type( 'variable' ) ? array_merge( array( $product ), array_filter( array_map( 'wc_get_product', $product->get_children() ) ) ) : array( $product );
+			foreach ( $items as $item ) {
+				if ( ProductConfig::is_voucher( $item ) && ProductConfig::discount_errors( ProductConfig::get( $item ) ) ) {
+					$out[] = $product;
+					break;
 				}
 			}
 		}
@@ -330,6 +373,9 @@ final class ProductChecks {
 			return;
 		}
 		$problems = self::shop_problems();
+		if ( $problems['invalid'] ) {
+			echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'Voucher Captain', 'voucher-captain' ) . ':</strong> ' . esc_html__( 'These voucher products have an invalid discount setup (a percentage that is not a fixed value between 0 and 100, or "Fixed product discount") and cannot be bought until it is corrected:', 'voucher-captain' ) . ' ' . self::product_links( $problems['invalid'] ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in product_links().
+		}
 		if ( $problems['expired'] ) {
 			echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'Voucher Captain', 'voucher-captain' ) . ':</strong> ' . esc_html__( 'These voucher products have a fixed expiry date that has passed (or is missing) and can no longer be bought:', 'voucher-captain' ) . ' ' . self::product_links( $problems['expired'] ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in product_links().
 		}
@@ -364,10 +410,13 @@ final class ProductChecks {
 			'actions'     => '',
 			'test'        => 'vcap_voucher_products',
 		);
-		if ( ! $problems['expired'] && ! $empty ) {
+		if ( ! $problems['expired'] && ! $empty && ! $problems['invalid'] ) {
 			return $result;
 		}
 		$text = '';
+		if ( $problems['invalid'] ) {
+			$text .= '<p>' . esc_html__( 'Voucher products with an invalid discount setup (not purchasable):', 'voucher-captain' ) . ' ' . self::product_links( $problems['invalid'] ) . '</p>';
+		}
 		if ( $problems['expired'] ) {
 			$text .= '<p>' . esc_html__( 'Expired voucher products (fixed expiry date passed or missing, no longer purchasable):', 'voucher-captain' ) . ' ' . self::product_links( $problems['expired'] ) . '</p>';
 		}

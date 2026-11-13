@@ -115,6 +115,22 @@ $notes = array_map( static fn( $n ) => $n->content, wc_get_order_notes( array( '
 vcap_sc_assert( is_wp_error( $spent_refund ) && (bool) array_filter( $notes, static fn( $n ) => str_contains( $n, 'could not be booked back' ) ), 'credit that was already spent when the refund failed is flagged on the order' );
 $credit->adjust( $alice, $before_fail, 'Restore test balance' );
 
+// A foreign-currency order is never refunded as credit 1:1: store credit is kept in the base currency.
+$fx_currency = 'CZK' === get_option( 'woocommerce_currency' ) ? 'HUF' : 'CZK';
+$fx_paid     = vcap_sc_order( $product, $alice );
+$fx_paid->set_currency( $fx_currency );
+$fx_paid->set_status( 'completed' );
+$fx_paid->save();
+$fx_before = $credit->balance( $alice );
+$fx_refund = $credit->refund_as_credit( wc_get_order( $fx_paid->get_id() ), 10, 'Customer chose credit', array( 'channel' => 'email' ) );
+vcap_sc_assert( $fx_refund instanceof WP_Error && 'vcap_credit_currency' === $fx_refund->get_error_code() && $fx_before === $credit->balance( $alice ) && 0.0 === (float) wc_get_order( $fx_paid->get_id() )->get_total_refunded(), 'a refund as credit in a currency without exchange rate is refused (nothing credited, nothing refunded)' );
+$fx_paid = wc_get_order( $fx_paid->get_id() );
+$fx_paid->update_meta_data( VCAP\Compat\MultiCurrency::RATE_META, '25' );
+$fx_paid->save();
+$fx_refund = $credit->refund_as_credit( wc_get_order( $fx_paid->get_id() ), 10, 'Customer chose credit', array( 'channel' => 'email' ) );
+vcap_sc_assert( ! is_wp_error( $fx_refund ) && abs( $fx_before + 0.4 - $credit->balance( $alice ) ) < 0.001, 'with the exchange rate of the sale stored on the order, 10 are credited as 0.40 in the base currency' );
+delete_option( VCAP\Compat\MultiCurrency::UNKNOWN_OPTION );
+
 // Discounts are calculated first, store credit pays the rest (even when the credit was applied first).
 $credit->adjust( $alice, 30, 'Top-up for ordering test' );
 $five = new WC_Coupon();

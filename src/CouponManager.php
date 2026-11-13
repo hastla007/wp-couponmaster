@@ -35,6 +35,11 @@ final class CouponManager {
 		add_filter( 'vcap_should_issue_for_order', array( $this, 'issue_unless_shortfall' ), 5, 2 );
 		add_filter( 'wpcap_woocommerce_hold_fulfilment', array( $this, 'hold_on_shortfall' ), 10, 2 );
 		add_action( 'woocommerce_increase_coupon_usage_count', array( $this, 'usage_increased' ), 10, 3 );
+		// Right before WooCommerce counts the order's coupons (priority 10): a single-use voucher that was voided or
+		// redeemed elsewhere since checkout must not be fulfilled with its discount.
+		foreach ( array( 'pending', 'on-hold', 'processing', 'completed' ) as $status ) {
+			add_action( 'woocommerce_order_status_' . $status, array( $this, 'check_single_use_conflicts' ), 9, 2 );
+		}
 		add_action( 'woocommerce_decrease_coupon_usage_count', array( $this, 'usage_decreased' ), 10, 3 );
 		add_action( 'woocommerce_cart_totals_after_order_total', array( $this, 'cart_balance_notice' ) );
 		// Free balance holds of unpaid orders that are trashed, deleted or abandoned.
@@ -138,8 +143,25 @@ final class CouponManager {
 		return $this->repo->code_exists( $code ) || wc_get_coupon_id_by_code( $code ) > 0;
 	}
 
+	/**
+	 * Creates the WooCommerce coupon of a voucher. A failure (e.g. WC_Data_Exception for an invalid amount) removes
+	 * a coupon that was saved already and is passed on, so the caller can roll the voucher back.
+	 *
+	 * @throws \Throwable When WooCommerce refuses the coupon data.
+	 */
 	public function create_coupon( Voucher $voucher, array $config ): int {
 		$coupon = new \WC_Coupon();
+		try {
+			return $this->build_coupon( $coupon, $voucher, $config );
+		} catch ( \Throwable $e ) {
+			if ( $coupon->get_id() ) {
+				wp_delete_post( $coupon->get_id(), true );
+			}
+			throw $e;
+		}
+	}
+
+	private function build_coupon( \WC_Coupon $coupon, Voucher $voucher, array $config ): int {
 		$coupon->set_code( $voucher->code );
 		$type = in_array( $voucher->discount_type, array( 'fixed_cart', 'percent', 'fixed_product' ), true ) ? $voucher->discount_type : 'fixed_cart';
 		if ( $voucher->is_multi_use() ) {
@@ -300,6 +322,9 @@ final class CouponManager {
 				continue;
 			}
 			$amount = $this->used_amount( $item );
+			if ( null === $amount ) {
+				throw new \Exception( self::currency_message( (string) $order->get_currency() ) );
+			}
 			if ( $amount > 0 ) {
 				$coupons[ $code ] = array( 'voucher' => $voucher, 'amount' => $amount );
 			}
@@ -412,6 +437,15 @@ final class CouponManager {
 	 * Re-reserve voucher balances before a customer retries payment for a failed order.
 	 */
 	public function reserve_retry_order( $order ): void {
+		if ( $order instanceof \WC_Order ) {
+			foreach ( $this->single_use_conflicts( $order ) as $conflict ) {
+				wc_add_notice(
+					/* translators: %s: voucher code */
+					sprintf( __( 'Voucher %s can no longer be used (it was cancelled or redeemed elsewhere). Please contact us to complete this order.', 'voucher-captain' ), $conflict['voucher']->code ),
+					'error'
+				);
+			}
+		}
 		try {
 			$this->reserve_order( $order );
 		} catch ( \Throwable $e ) {
@@ -642,7 +676,7 @@ final class CouponManager {
 		// The order may have been edited after checkout: only coupons still on it, with the same amount, are committed.
 		$current = array();
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
-			$current[ wc_format_coupon_code( $item->get_code() ) ] = $this->used_amount( $item );
+			$current[ wc_format_coupon_code( $item->get_code() ) ] = $this->used_amount( $item ) ?? -1.0; // No rate: never matches.
 		}
 		$failed = false;
 		foreach ( $reservations as $code => $amount ) {
@@ -972,6 +1006,16 @@ final class CouponManager {
 		if ( Voucher::STATUS_EXPIRED === $voucher->status || $voucher->is_expired() ) {
 			throw new \Exception( esc_html__( 'This voucher has expired.', 'voucher-captain' ), 9003 );
 		}
+		if ( 'percent' !== $coupon->get_discount_type() ) {
+			// Fixed values are in the shop base currency: never taken 1:1 in a cart or order in another currency.
+			$object   = $discounts instanceof \WC_Discounts ? $discounts->get_object() : null;
+			$order    = $object instanceof \WC_Order ? $object : null;
+			$currency = $order ? (string) $order->get_currency() : ( function_exists( 'get_woocommerce_currency' ) ? (string) get_woocommerce_currency() : '' );
+			if ( ! Compat\MultiCurrency::can_convert( $currency, $order ) ) {
+				Compat\MultiCurrency::record_unknown( $currency );
+				throw new \Exception( esc_html( self::currency_message( $currency ) ), 9007 );
+			}
+		}
 		if ( ! Channels::allowed( $voucher, Channels::SHOP ) ) {
 			/** Message for a voucher that is not redeemable in the shop (e.g. a ticket voucher: where to use it instead). */
 			$message = (string) apply_filters( 'vcap_shop_channel_refused_message', __( 'This voucher cannot be redeemed in the shop.', 'voucher-captain' ), $voucher );
@@ -1037,8 +1081,8 @@ final class CouponManager {
 		$currency = (string) $order->get_currency();
 		if ( '' !== $currency && $currency !== get_option( 'woocommerce_currency' ) ) {
 			// Balances are kept in the base currency, the recalculated order is in its own currency.
-			$per_unit = (float) apply_filters( 'vcap_amount_to_base_currency', 1.0, $currency, $order );
-			if ( $per_unit > 0 && abs( $per_unit - 1.0 ) > 1e-9 ) {
+			$per_unit = Compat\MultiCurrency::can_convert( $currency, $order ) ? (float) apply_filters( 'vcap_amount_to_base_currency', 1.0, $currency, $order ) : 0.0;
+			if ( $per_unit > 0 ) {
 				$amount = $amount / $per_unit;
 			} elseif ( $item instanceof \WC_Order_Item_Coupon ) {
 				// No exchange rate known: keep what the order already granted instead of reading base as order currency.
@@ -1110,15 +1154,14 @@ final class CouponManager {
 		return $amount;
 	}
 
-	private function used_amount( \WC_Order_Item_Coupon $item ): float {
+	/** What the coupon line used, in the base currency; null when the order is in a currency without known rate. */
+	private function used_amount( \WC_Order_Item_Coupon $item ): ?float {
 		$order = $item->get_order();
 		// Multi-purpose voucher paid after tax (PaymentVouchers): the fee line holds the gross amount paid.
 		$paid = $order instanceof \WC_Order ? PaymentVouchers::paid_amount( $order, (string) $item->get_code() ) : null;
 		if ( null !== $paid ) {
-			if ( $order->get_currency() && $order->get_currency() !== get_option( 'woocommerce_currency' ) ) {
-				$paid = (float) apply_filters( 'vcap_amount_to_base_currency', $paid, $order->get_currency(), $order );
-			}
-			return round( $paid, API\V1\RedemptionService::decimals( (string) get_option( 'woocommerce_currency' ) ) );
+			$paid = Compat\MultiCurrency::to_base( (float) $paid, (string) $order->get_currency(), $order );
+			return null === $paid ? null : round( $paid, API\V1\RedemptionService::decimals( (string) get_option( 'woocommerce_currency' ) ) );
 		}
 		$amount = (float) $item->get_discount();
 		// The value the customer received is the discount plus the tax it removed – in tax-inclusive shops
@@ -1126,12 +1169,24 @@ final class CouponManager {
 		if ( apply_filters( 'vcap_balance_deduct_tax', wc_prices_include_tax() || apply_filters( 'vcap_balance_covers_tax', true, null ), $item ) ) {
 			$amount += (float) $item->get_discount_tax();
 		}
-		// Discounts are in the order currency, balances in the shop base currency.
-		$order = $item->get_order();
-		if ( $order instanceof \WC_Order && $order->get_currency() && $order->get_currency() !== get_option( 'woocommerce_currency' ) ) {
-			$amount = (float) apply_filters( 'vcap_amount_to_base_currency', $amount, $order->get_currency(), $order );
+		// Discounts are in the order currency, balances in the shop base currency (never converted 1:1).
+		if ( $order instanceof \WC_Order ) {
+			$amount = Compat\MultiCurrency::to_base( $amount, (string) $order->get_currency(), $order );
+			if ( null === $amount ) {
+				return null;
+			}
 		}
 		return round( $amount, API\V1\RedemptionService::decimals( (string) get_option( 'woocommerce_currency' ) ) );
+	}
+
+	/** Why a fixed-value voucher cannot be used in this currency (no exchange rate to the base currency). */
+	public static function currency_message( string $currency ): string {
+		return sprintf(
+			/* translators: 1: shop base currency, 2: currency of the cart or order */
+			__( 'This voucher is kept in %1$s and cannot be used for a payment in %2$s, because no exchange rate is known. Please pay in %1$s to use it.', 'voucher-captain' ),
+			(string) get_option( 'woocommerce_currency' ),
+			$currency
+		);
 	}
 
 	/**
@@ -1229,6 +1284,13 @@ final class CouponManager {
 				$this->restore_order( $order );
 			}
 		}
+		if ( isset( $this->hold_after[ $order->get_id() ] ) ) {
+			// A single-use voucher of this order was voided or redeemed elsewhere (check_single_use_conflicts()).
+			unset( $this->hold_after[ $order->get_id() ] );
+			if ( in_array( $to, array( 'processing', 'completed' ), true ) && self::has_shortfall( $order ) && 'on-hold' !== $order->get_status() ) {
+				$order->update_status( 'on-hold', __( 'A voucher of this order was cancelled or redeemed elsewhere: manual review required before fulfilment.', 'voucher-captain' ) );
+			}
+		}
 	}
 
 	public function deduct_order( \WC_Order $order, bool $hold = true ): void {
@@ -1250,6 +1312,16 @@ final class CouponManager {
 				continue;
 			}
 			$requested = $this->used_amount( $item );
+			if ( null === $requested ) {
+				// Foreign currency without exchange rate: never charge the balance 1:1; hold for a review.
+				$shortfall = true;
+				$changed   = true;
+				$order->add_order_note(
+					/* translators: 1: voucher code, 2: order currency */
+					sprintf( __( 'Voucher %1$s: the discount could not be deducted from its balance because no exchange rate for %2$s is known. Review this order and adjust the charge before fulfilment.', 'voucher-captain' ), $voucher->code, $order->get_currency() )
+				);
+				continue;
+			}
 			$deduction = $this->deduct_balance_atomic(
 				$voucher,
 				$requested,
@@ -1426,6 +1498,109 @@ final class CouponManager {
 		return $store && method_exists( $store, 'get_tentative_usage_count' ) && (int) $store->get_tentative_usage_count( $coupon->get_id() ) > 0;
 	}
 
+	/** @var array<int, true> Orders to put on hold once their status transition is through. */
+	private array $hold_after = array();
+	/** @var array<int, true> Vouchers whose double use was recorded with its order in this request. */
+	private array $double_flagged = array();
+
+	/**
+	 * Orders that are not paid (pending, failed, on hold) and carry the voucher's code as a coupon line. Such an
+	 * order can still be paid later (pay link, bank transfer) with the voucher's discount, so its voucher counts
+	 * as used (e.g. for the refund guard of the voucher purchase). Filter "vcap_open_order_statuses".
+	 *
+	 * @return int[] order ids
+	 */
+	public static function open_orders_with( Voucher $voucher ): array {
+		global $wpdb;
+		if ( ! isset( $wpdb ) || '' === (string) $voucher->code || ! function_exists( 'wc_get_order' ) ) {
+			return array();
+		}
+		$ids = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				"SELECT DISTINCT order_id FROM {$wpdb->prefix}woocommerce_order_items WHERE order_item_type = 'coupon' AND order_item_name IN (%s, %s) ORDER BY order_id DESC LIMIT 100",
+				$voucher->code,
+				wc_format_coupon_code( $voucher->code )
+			)
+		);
+		$statuses = (array) apply_filters( 'vcap_open_order_statuses', array( 'pending', 'failed', 'on-hold' ) );
+		$open     = array();
+		foreach ( (array) $ids as $id ) {
+			$order = wc_get_order( (int) $id );
+			if ( $order instanceof \WC_Order && ! $order instanceof \WC_Order_Refund && $order->has_status( $statuses ) && ! $order->is_paid() ) {
+				$open[] = (int) $id;
+			}
+		}
+		return $open;
+	}
+
+	/**
+	 * Single-use vouchers on an order that has not counted its coupons yet (unpaid, failed, or paid right now)
+	 * which were voided, redeemed or reserved elsewhere since the checkout.
+	 *
+	 * @return array<int, array{voucher: Voucher, item: \WC_Order_Item_Coupon}>
+	 */
+	public function single_use_conflicts( \WC_Order $order ): array {
+		if ( $order instanceof \WC_Order_Refund ) {
+			return array();
+		}
+		$store = $order->get_data_store();
+		if ( ! $store->has_callable( 'get_recorded_coupon_usage_counts' ) || $store->get_recorded_coupon_usage_counts( $order ) ) {
+			return array(); // Counted already: the voucher was (or is still) redeemed by this order.
+		}
+		$out = array();
+		foreach ( $order->get_items( 'coupon' ) as $item ) {
+			/** @var \WC_Order_Item_Coupon $item */
+			$code = wc_format_coupon_code( $item->get_code() );
+			// A voided voucher's coupon is a draft that WooCommerce no longer finds by code: look up the voucher.
+			$voucher = $this->find_voucher_for_code( $code ) ?? $this->repo->get_by_code( strtoupper( $code ) );
+			if ( $voucher && ! $voucher->is_multi_use() && in_array( $voucher->status, array( Voucher::STATUS_VOID, Voucher::STATUS_REDEEMED, Voucher::STATUS_RESERVED ), true ) ) {
+				$out[] = array( 'voucher' => $voucher, 'item' => $item );
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Status hook, priority 9 (right before WooCommerce counts the coupons): an order that is paid (or put on
+	 * hold) with a single-use voucher that was voided or redeemed elsewhere meanwhile gets the shortfall marker,
+	 * an order note and – after the status change – the status "On hold", like a gift card that cannot be charged.
+	 */
+	public function check_single_use_conflicts( $order_id, $order = null ): void {
+		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			return;
+		}
+		foreach ( $this->single_use_conflicts( $order ) as $conflict ) {
+			$this->flag_double_use( $order, $conflict['voucher'], $conflict['item'] );
+		}
+	}
+
+	private function flag_double_use( \WC_Order $order, Voucher $voucher, \WC_Order_Item_Coupon $item ): void {
+		$code    = wc_format_coupon_code( $item->get_code() );
+		$missing = self::order_map( $order, self::SHORTFALL_AMOUNTS_META );
+		if ( isset( $missing[ $code ] ) ) {
+			return; // Flagged on an earlier status change.
+		}
+		$value            = (float) $item->get_discount() + ( wc_prices_include_tax() ? (float) $item->get_discount_tax() : 0.0 );
+		$missing[ $code ] = round( $value, API\V1\RedemptionService::decimals( (string) $order->get_currency() ) );
+		$order->update_meta_data( self::SHORTFALL_AMOUNTS_META, $missing );
+		$order->update_meta_data( self::SHORTFALL_META, 'yes' );
+		$order->save();
+		$this->hold_after[ $order->get_id() ] = true;
+		$this->double_flagged[ $voucher->id ] = true;
+		/* translators: %s: order number */
+		$this->repo->log( $voucher->id, 'double_use', $voucher->initial_amount, null, sprintf( __( 'Order #%s', 'voucher-captain' ), $order->get_order_number() ), $order->get_id() );
+		$order->add_order_note(
+			sprintf(
+				/* translators: 1: voucher code, 2: discount amount */
+				__( 'Voucher %1$s was cancelled or redeemed elsewhere before this order was paid, but the order still has its discount of %2$s. The order is held: collect the difference or cancel the order before fulfilment.', 'voucher-captain' ),
+				$voucher->code,
+				wp_strip_all_tags( wc_price( $value, array( 'currency' => $order->get_currency() ) ) )
+			)
+		);
+		do_action( 'vcap_voucher_double_use', $voucher, new \WC_Coupon( $voucher->coupon_id ), $order->get_customer_id() ? $order->get_customer_id() : $order->get_billing_email() );
+	}
+
 	public function usage_increased( $coupon, $new_count, $used_by ): void {
 		if ( ! $coupon instanceof \WC_Coupon || 'yes' !== $coupon->get_meta( '_vcap_voucher' ) ) {
 			return;
@@ -1439,8 +1614,9 @@ final class CouponManager {
 			if ( $this->repo->redeem_single_if_active( $voucher->id ) ) {
 				$this->repo->log( $voucher->id, 'redeemed', $voucher->initial_amount, 0, (string) $used_by );
 			}
-		} elseif ( $limit > 0 && (int) $new_count >= $limit && Voucher::STATUS_ACTIVE !== $voucher->status ) {
-			// Used in the shop although it was redeemed, reserved or voided elsewhere meanwhile: make it visible.
+		} elseif ( $limit > 0 && (int) $new_count >= $limit && Voucher::STATUS_ACTIVE !== $voucher->status && ! isset( $this->double_flagged[ $voucher->id ] ) ) {
+			// Used in the shop although it was redeemed, reserved or voided elsewhere meanwhile: make it visible
+			// (orders paid through a status change were flagged and held already, check_single_use_conflicts()).
 			$this->repo->log( $voucher->id, 'double_use', $voucher->initial_amount, null, (string) $used_by );
 			do_action( 'vcap_voucher_double_use', $voucher, $coupon, $used_by );
 		}
