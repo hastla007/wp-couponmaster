@@ -14,12 +14,15 @@ final class CodePool {
 	}
 
 	/**
-	 * Claim the next free code of a batch atomically.
+	 * Claim a free code of a batch atomically, in random order: the file order (often numbered cards) does not
+	 * tell a buyer which codes the next customers get. A random id between the lowest and highest free id picks
+	 * the next free code from there (two index lookups, no full scan); the optimistic UPDATE below makes sure
+	 * that only one process gets a code, a process that lost the race tries another random position.
 	 */
 	public function claim( string $batch, int $voucher_id = 0 ): ?string {
 		global $wpdb;
 		for ( $i = 0; $i < 5; $i++ ) {
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, code FROM {$this->table} WHERE batch = %s AND voucher_id = 0 AND used_at IS NULL ORDER BY id ASC LIMIT 1", $batch ), ARRAY_A ); // phpcs:ignore
+			$row = $this->random_free( $batch );
 			if ( ! $row ) {
 				return null;
 			}
@@ -30,6 +33,32 @@ final class CodePool {
 			}
 		}
 		return null;
+	}
+
+	/** @return array{id:string|int,code:string}|null a free code of the batch at a random position */
+	private function random_free( string $batch ): ?array {
+		global $wpdb;
+		// Bounds from the (batch, voucher_id) index only; claimed codes in between are skipped by the lookup.
+		$bounds = $wpdb->get_row( $wpdb->prepare( "SELECT MIN(id) AS lo, MAX(id) AS hi FROM {$this->table} WHERE batch = %s AND voucher_id = 0", $batch ), ARRAY_A ); // phpcs:ignore
+		if ( ! $bounds || null === $bounds['lo'] ) {
+			return null;
+		}
+		$pivot = random_int( (int) $bounds['lo'], max( (int) $bounds['lo'], (int) $bounds['hi'] ) );
+		$row   = $wpdb->get_row( $wpdb->prepare( "SELECT id, code FROM {$this->table} WHERE batch = %s AND voucher_id = 0 AND used_at IS NULL AND id >= %d ORDER BY id ASC LIMIT 1", $batch, $pivot ), ARRAY_A ); // phpcs:ignore
+		if ( ! $row ) {
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, code FROM {$this->table} WHERE batch = %s AND voucher_id = 0 AND used_at IS NULL AND id < %d ORDER BY id DESC LIMIT 1", $batch, $pivot ), ARRAY_A ); // phpcs:ignore
+		}
+		return $row ?: null;
+	}
+
+	/**
+	 * Codes already in a batch (the newest $limit), to rate the structure of codes added to it.
+	 *
+	 * @return string[]
+	 */
+	public function sample( string $batch, int $limit = 2000 ): array {
+		global $wpdb;
+		return array_map( 'strval', (array) $wpdb->get_col( $wpdb->prepare( "SELECT code FROM {$this->table} WHERE batch = %s ORDER BY id DESC LIMIT %d", $batch, $limit ) ) ); // phpcs:ignore
 	}
 
 	public function attach( string $code, int $voucher_id ): bool {

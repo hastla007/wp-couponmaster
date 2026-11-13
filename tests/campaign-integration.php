@@ -52,6 +52,12 @@ vcap_camp_assert( is_array( $pool ) && 10 === count( $pool ), 'ten pool codes ar
 $found = array_values( array_filter( vcap()->code_pool->batches(), static fn( $b ) => $b['batch'] === $batch ) );
 vcap_camp_assert( $found && 10 === $found[0]['total'] && 10 === $found[0]['free'], 'the pool batch holds ten free codes' );
 vcap_camp_assert( 11 === count( $campaigns->pool_rows( $batch ) ), 'the pool CSV lists every code' );
+$claimed = array();
+for ( $i = 0; $i < 10; $i++ ) {
+	$claimed[] = vcap()->code_pool->claim( $batch );
+}
+vcap_camp_assert( 10 === count( array_unique( array_filter( $claimed ) ) ) && ! array_diff( $claimed, $pool ) && null === vcap()->code_pool->claim( $batch ), 'every pool code is claimed exactly once, then the batch is empty' );
+vcap_camp_assert( array_values( array_intersect( $pool, $claimed ) ) !== $claimed, 'pool codes are handed out in random order, not in file order' );
 vcap_camp_assert( array( "'=HYPERLINK(1)", 'ok' ) === VCAP\Campaigns::safe_row( array( '=HYPERLINK(1)', 'ok' ) ), 'CSV cells cannot inject spreadsheet formulas' );
 
 echo "Voucher Captain campaign checks passed.\n";

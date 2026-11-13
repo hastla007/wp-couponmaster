@@ -64,6 +64,15 @@ final class Import {
 								<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Codes too easy to guess skipped: %d', 'voucher-captain' ), count( $report['weak'] ) ) ); ?></li>
 							<?php endif; ?>
 						</ul>
+						<?php if ( ! empty( $report['sequential'] ) ) : ?>
+							<p class="vcap-warning"><strong><?php esc_html_e( 'The codes form a numbered series (consecutive or evenly spaced numbers): whoever buys or sees one code can work out others. They count as easy to guess.', 'voucher-captain' ); ?></strong></p>
+						<?php endif; ?>
+						<?php if ( ! empty( $report['check_digit'] ) ) : ?>
+							<p><?php esc_html_e( 'The codes end with a check digit; it follows from the other digits and does not count towards the guessing space.', 'voucher-captain' ); ?></p>
+						<?php endif; ?>
+						<?php if ( ! empty( $report['weak_unconfirmed'] ) && ! empty( $report['weak'] ) ) : ?>
+							<p class="vcap-warning"><?php esc_html_e( 'Codes that are easy to guess were skipped although "Accept codes that are easy to guess" was ticked: please also tick the confirmation below it.', 'voucher-captain' ); ?></p>
+						<?php endif; ?>
 						<?php if ( ! empty( $report['weak'] ) ) : ?>
 							<p><?php esc_html_e( 'Codes of vouchers with a value must have at least about 2^50 combinations (e.g. 10 letters and digits or 16 digits besides a common prefix), otherwise they can be found by trying. Use longer codes, or tick "Accept codes that are easy to guess" if the codes are protected otherwise.', 'voucher-captain' ); ?></p>
 							<details><summary><?php esc_html_e( 'Show codes that are too easy to guess', 'voucher-captain' ); ?></summary>
@@ -108,8 +117,9 @@ final class Import {
 							<td>
 								<label><input type="checkbox" name="header" value="1" checked /> <?php esc_html_e( 'First row is a header', 'voucher-captain' ); ?></label><br>
 								<label><input type="checkbox" name="uppercase" value="1" /> <?php esc_html_e( 'Convert codes to uppercase', 'voucher-captain' ); ?></label><br>
-								<label><input type="checkbox" name="allow_weak" value="1" /> <?php esc_html_e( 'Accept codes that are easy to guess (not recommended)', 'voucher-captain' ); ?></label>
-								<p class="description"><?php esc_html_e( 'Codes with fewer than about 2^50 combinations (e.g. 8 digits) are skipped by default: they could be found by trying.', 'voucher-captain' ); ?></p>
+								<label><input type="checkbox" name="allow_weak" value="1" /> <?php esc_html_e( 'Accept codes that are easy to guess (not recommended)', 'voucher-captain' ); ?></label><br>
+								<label><input type="checkbox" name="confirm_weak" value="1" /> <?php esc_html_e( 'I confirm: codes sold as vouchers with a value can be redeemed by anyone who guesses them, and I accept this risk (e.g. because the cards are protected by a separate PIN).', 'voucher-captain' ); ?></label>
+								<p class="description"><?php esc_html_e( 'Codes with fewer than about 2^50 combinations (e.g. 8 digits) are skipped by default: they could be found by trying.', 'voucher-captain' ); ?> <?php esc_html_e( 'Numbered series (e.g. consecutive card numbers) and check digits count as easy to guess: whoever knows one code can work out others. Both boxes must be ticked to import such codes.', 'voucher-captain' ); ?></p>
 							</td>
 						</tr>
 						<tr>
@@ -174,14 +184,17 @@ final class Import {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
 		$report = array(
-			'error'          => '',
-			'batch'          => '',
-			'imported'       => 0,
-			'dupes_file'     => 0,
-			'dupes_existing' => 0,
-			'invalid'        => array(),
-			'weak'           => array(),
-			'weak_imported'  => 0,
+			'error'            => '',
+			'batch'            => '',
+			'imported'         => 0,
+			'dupes_file'       => 0,
+			'dupes_existing'   => 0,
+			'invalid'          => array(),
+			'weak'             => array(),
+			'weak_imported'    => 0,
+			'sequential'       => false,
+			'check_digit'      => false,
+			'weak_unconfirmed' => false,
 		);
 		$batch = sanitize_text_field( wp_unslash( $_POST['batch'] ?? '' ) );
 		if ( '' === $batch ) {
@@ -270,13 +283,20 @@ final class Import {
 			$candidates[ $n ] = $code;
 		}
 
-		// Guessing space without the parts all codes of the file share (e.g. "SHOP-2026-").
-		list( $prefix, $suffix ) = CodeGenerator::common_affixes( $candidates );
+		// Guessing space without what makes the codes predictable from each other: the parts all codes of the file
+		// share (e.g. "SHOP-2026-"), a check digit, numbered series. A file with a single code is compared with the
+		// codes already in the batch.
 		/** This filter is documented in src/Issuer.php */
 		$min_bits = (int) apply_filters( 'vcap_min_code_bits', CodeGenerator::MIN_BITS );
+		$analysis = CodeGenerator::analyse_batch( $candidates, $this->pool->sample( $batch ), $min_bits );
+		// Weak codes carry money once sold: "Accept" alone is not enough, the risk must be confirmed as well.
+		$accept_weak                = $allow_weak && ! empty( $_POST['confirm_weak'] );
+		$report['sequential']       = $analysis['sequential'];
+		$report['check_digit']      = $analysis['check_digit'];
+		$report['weak_unconfirmed'] = $allow_weak && ! $accept_weak;
 		foreach ( $candidates as $n => $code ) {
-			if ( CodeGenerator::estimated_bits( $code, $prefix, $suffix ) < $min_bits ) {
-				if ( ! $allow_weak ) {
+			if ( $analysis['bits'][ $n ] < $min_bits ) {
+				if ( ! $accept_weak ) {
 					/* translators: 1: row number, 2: value */
 					$report['weak'][] = sprintf( __( 'Row %1$d: "%2$s"', 'voucher-captain' ), $n + ( $header ? 2 : 1 ), mb_substr( $code, 0, 80 ) );
 					continue;
