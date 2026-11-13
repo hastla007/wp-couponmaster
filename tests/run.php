@@ -12,6 +12,7 @@ use VCAP\ProductConfig;
 use VCAP\SpreadsheetReader;
 use VCAP\TemplatePostType;
 use VCAP\Voucher;
+use VCAP\Licensing\PremiumUpdater;
 
 $out    = $argv[1] ?? sys_get_temp_dir() . '/vcap-test-output';
 @mkdir( $out, 0777, true );
@@ -313,7 +314,7 @@ check( 'activation stores installation id, secret and activation id – never th
 $online = $client->get_entitlements();
 check( 'online check returns the signed rights and stores a signed snapshot', is_array( $online ) && is_array( get_option( 'vcap_wplc_credentials_entitlements_cache' ) ) );
 check( 'rights: true allows; false, 0, missing and foreign-product keys deny', $client->allows_entitlement( 'voucher.promotions', $online ) && ! $client->allows_entitlement( 'voucher.referrals', $online ) && ! $client->allows_entitlement( 'voucher.reports', $online ) && ! $client->allows_entitlement( 'voucher.topup', $online ) && ! $client->allows_entitlement( 'pass.tickets', $online ) );
-check( 'free edition (license not required): every premium feature stays on', VCAP\Licensing\Entitlements::allows( 'referrals' ) && VCAP\Licensing\Entitlements::allows( 'topup' ) );
+check( 'development checkout (no edition constant): every premium feature stays on', VCAP\Licensing\Entitlements::allows( 'referrals' ) && VCAP\Licensing\Entitlements::allows( 'topup' ) );
 $required = static fn() => true;
 add_filter( 'vcap_license_required', $required );
 VCAP\Licensing\Entitlements::reset();
@@ -365,7 +366,8 @@ $GLOBALS['vcap_test_http'] = static function ( $url ) use ( &$zip, &$redirect ) 
 	}
 	return array( 'code' => 200, 'body' => $zip, 'headers' => array() );
 };
-$updater  = new VCAP\Licensing\PremiumUpdater();
+$updater  = new PremiumUpdater();
+$updater->register_hooks();
 $call     = static fn( string $m, ...$a ) => ( new ReflectionMethod( $updater, $m ) )->invoke( $updater, ...$a );
 $package  = 'https://licenses.example.test/wp-json/wplc/v1/updates/download/abc';
 $file     = $call( 'download_and_verify', $package, hash( 'sha256', $zip ) );
@@ -380,6 +382,50 @@ $redirect = 'http://licenses.example.test/voucher-captain.zip';
 check( 'plain HTTP is refused', is_wp_error( $call( 'download_and_verify', $package, hash( 'sha256', $zip ) ) ) );
 check( 'IP addresses are never allowed hosts', ! $call( 'is_allowed_package_host', 'https://192.0.2.1/x.zip' ) && $call( 'is_allowed_package_host', 'https://licenses.example.test/x.zip' ) );
 check( 'only download URLs of the license server are handled by the updater', $call( 'is_license_package', $package ) && ! $call( 'is_license_package', 'https://downloads.wordpress.org/plugin/x.zip' ) );
+
+// Update offer: background (no current user), cached, only download grants of the license server.
+$upd_secret = str_repeat( 'b', 64 );
+update_option( 'vcap_wplc_credentials', array( 'installation_id' => 'inst-1', 'installation_secret' => $upd_secret, 'activation_id' => 9 ) );
+$offer = array( 'update_available' => true, 'version' => '9.9.9', 'package_url' => 'https://licenses.example.test/wp-json/wplc/v1/updates/download/' . str_repeat( 'c', 64 ), 'sha256' => hash( 'sha256', $zip ), 'requires_php' => '8.1', 'requires_wp' => '6.4', 'tested_wp' => '7.1', 'release_notes' => '<p>Notes 9.9.9</p>' );
+$checks = 0;
+$timeouts = array();
+$GLOBALS['vcap_test_http'] = static function ( $url, $args ) use ( &$offer, &$checks, &$timeouts, $upd_secret ) {
+	++$checks;
+	$timeouts[] = $args['timeout'] ?? null;
+	return array( 'code' => 200, 'body' => json_encode( array( 'data' => $offer, 'signature' => hash_hmac( 'sha256', json_encode( $offer, JSON_UNESCAPED_SLASHES ), $upd_secret ) ) ) );
+};
+$basename  = plugin_basename( VCAP_FILE );
+$wporg     = (object) array( 'response' => array( $basename => (object) array( 'slug' => 'voucher-captain', 'package' => 'https://downloads.wordpress.org/plugin/voucher-captain.zip' ) ), 'no_update' => array() );
+$offered   = $updater->inject_update( $wporg );
+check( 'without a current user (WP-Cron) the update of the license server is offered', isset( $offered->response[ $basename ] ) && '9.9.9' === $offered->response[ $basename ]->new_version && ! empty( $offered->response[ $basename ]->wplc_managed ) );
+check( 'an offer of another source for the premium plugin (e.g. WordPress.org) is replaced', $offer['package_url'] === $offered->response[ $basename ]->package );
+check( 'the update check uses a short timeout (5 s)', array( 5 ) === $timeouts, (string) json_encode( $timeouts ) );
+$updater->inject_update( (object) array( 'response' => array() ) );
+$updater->inject_update( (object) array( 'response' => array() ) );
+check( 'the answer is cached: further transient updates do not ask the license server', 1 === $checks, (string) $checks );
+delete_site_transient( 'update_plugins' );
+$updater->inject_update( (object) array( 'response' => array() ) );
+check( 'a forced check (update transient deleted) asks the license server again', 2 === $checks, (string) $checks );
+$info = $updater->plugins_api( false, 'plugin_information', (object) array( 'slug' => 'voucher-captain' ) );
+check( '"View details" shows version, requirements and release notes of the license server', is_object( $info ) && '9.9.9' === $info->version && '8.1' === $info->requires_php && str_contains( $info->sections['changelog'], 'Notes 9.9.9' ) && false === $updater->plugins_api( false, 'plugin_information', (object) array( 'slug' => 'woocommerce' ) ) );
+$offer['package_url'] = 'https://cdn.example.org/voucher-captain-9.9.9.zip';
+PremiumUpdater::flush();
+$foreign = $updater->inject_update( (object) array( 'response' => array() ) );
+check( 'a package URL outside the license server is never offered (not even with a checksum)', ! isset( $foreign->response[ $basename ] ) && isset( $foreign->no_update[ $basename ] ) );
+$offer['package_url'] = 'https://licenses.example.test/wp-json/wplc/v1/updates/download/' . str_repeat( 'd', 64 );
+$offer['sha256']      = 'not-a-checksum';
+PremiumUpdater::flush();
+check( 'an offer without a valid SHA-256 is not offered', ! isset( $updater->inject_update( (object) array( 'response' => array() ) )->response[ $basename ] ) );
+$offer['sha256'] = hash( 'sha256', $zip );
+$offer['update_available'] = false;
+PremiumUpdater::flush();
+$GLOBALS['vcap_test_http'] = static function ( $url, $args ) use ( &$offer, $upd_secret ) {
+	return array( 'code' => 503, 'body' => '{"code":"maintenance","message":"down"}' );
+};
+$checks = 0;
+check( 'a failing license server leaves no offer (failure cached for an hour)', ! isset( $updater->inject_update( (object) array( 'response' => array() ) )->response[ $basename ] ) && HOUR_IN_SECONDS === PremiumUpdater::FAILURE_TTL && 12 * HOUR_IN_SECONDS === PremiumUpdater::SUCCESS_TTL );
+delete_option( 'vcap_wplc_credentials' );
+PremiumUpdater::flush();
 unset( $GLOBALS['vcap_test_http'], $GLOBALS['vcap_test_options']['vcap_wplc_server_url'] );
 
 echo "Translations\n";
@@ -445,6 +491,36 @@ foreach ( array( 'de_DE', 'de_AT' ) as $locale ) {
 	$mo = dirname( __DIR__ ) . "/languages/voucher-captain-{$locale}.mo";
 	check( "{$locale}: the compiled .mo file is there", is_file( $mo ) && filesize( $mo ) > 1000 );
 }
+
+echo "Editions (constants set by bin/build.sh)\n";
+// Premium build in a child process (constants cannot be undone here): no filter unlocks anything.
+$premium_code = <<<'PHP'
+define( 'VCAP_EDITION', 'premium' );
+define( 'VCAP_LICENSE_REQUIRED', true );
+define( 'VCAP_LICENSE_SERVER', 'https://licenses.pinned.test' );
+require $argv[1];
+add_filter( 'vcap_license_required', '__return_false' );
+add_filter( 'vcap_premium_feature_allowed', '__return_true' );
+add_filter( 'vcap_premium_features', '__return_empty_array' );
+update_option( 'vcap_wplc_server_url', 'https://evil.example.org' );
+$e = VCAP\Licensing\Entitlements::class;
+echo json_encode( array( $e::edition(), $e::required(), $e::allows( 'promotions' ), count( $e::locked() ), $e::server_url(), $e::server_pinned() ) );
+PHP;
+$premium_file = $out . '/edition-premium.php';
+file_put_contents( $premium_file, '<?php ' . $premium_code );
+$prepend      = (string) ini_get( 'auto_prepend_file' );
+$premium_out  = (string) shell_exec( escapeshellarg( PHP_BINARY ) . ( '' !== $prepend ? ' -d auto_prepend_file=' . escapeshellarg( $prepend ) : '' ) . ' ' . escapeshellarg( $premium_file ) . ' ' . escapeshellarg( __DIR__ . '/stubs.php' ) . ' 2>&1' );
+check( 'premium build: license required, filters cannot unlock, all five features locked without activation', '["premium",true,false,5,"https:\/\/licenses.pinned.test",true]' === trim( $premium_out ), $premium_out );
+check( 'premium build: the license server is the one fixed at build time (stored option ignored)', str_contains( $premium_out, 'licenses.pinned.test' ) && ! str_contains( $premium_out, 'evil' ), $premium_out );
+// Free build (last block of this file: the constant stays defined).
+define( 'VCAP_EDITION', 'free' );
+VCAP\Licensing\Entitlements::reset();
+$free_locked = VCAP\Licensing\Entitlements::locked();
+check( 'free build: edition "free", no license and no license server', 'free' === VCAP\Licensing\Entitlements::edition() && ! VCAP\Licensing\Entitlements::required() && null === VCAP\Licensing\Entitlements::client() && '' === VCAP\Licensing\Entitlements::server_url() );
+check( 'free build: all five premium features are locked', array( 'promotions', 'referrals', 'topup', 'reports', 'passcaptain' ) === $free_locked, implode( ',', $free_locked ) );
+add_filter( 'vcap_license_required', '__return_true' );
+check( 'free build: features outside the premium list are never locked', VCAP\Licensing\Entitlements::allows( 'store_credit' ) );
+check( 'free build: the lock names the premium edition', str_contains( VCAP\Licensing\Entitlements::locked_message( 'topup' ), 'included in Voucher Captain Premium' ) );
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );
