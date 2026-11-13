@@ -18,6 +18,13 @@ final class VoucherAdmin {
 		add_action( 'admin_init', array( $this, 'handle_bulk' ) );
 		add_action( 'admin_post_vcap_export', array( $this, 'export' ) );
 		add_action( 'admin_notices', array( $this, 'notices' ) );
+		Flash::register();
+		( new Onboarding() )->register();
+	}
+
+	/** Plain-text amount for notices and history notes (wc_price without markup). */
+	private static function money( float $amount, string $currency ): string {
+		return html_entity_decode( wp_strip_all_tags( wc_price( $amount, array( 'currency' => $currency ) ) ), ENT_QUOTES, 'UTF-8' );
 	}
 
 	private function can(): bool {
@@ -165,7 +172,16 @@ final class VoucherAdmin {
 						<?php
 						$form( 'resend_buyer', __( 'Email buyer', 'voucher-captain' ) );
 						if ( is_email( $v->recipient_email ) ) {
-							$form( 'resend_recipient', __( 'Email recipient', 'voucher-captain' ) );
+							$form(
+								'resend_recipient',
+								__( 'Email recipient', 'voucher-captain' ),
+								'button',
+								array(),
+								'buyer' === $v->send_to
+									/* translators: %s: email address */
+									? sprintf( __( 'This voucher is set to go to the buyer only. Send it to %s anyway? "Send to" is changed to "Recipient", so later emails go there too.', 'voucher-captain' ), $v->recipient_email )
+									: ''
+							);
 						}
 						if ( $v->expires_at && ! in_array( 'expiry_reminder', array_column( $this->repo->events( $v->id ), 'event' ), true ) ) {
 							$form( 'suppress_reminder', __( 'No expiry reminder', 'voucher-captain' ) );
@@ -210,9 +226,22 @@ final class VoucherAdmin {
 
 					<?php if ( $v->is_multi_use() || 'single' !== $v->usage_mode ) : ?>
 						<h2><?php esc_html_e( 'Adjust balance', 'voucher-captain' ); ?></h2>
-						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="vcap-balance-adjust">
+						<?php
+						$face = 'percent' === $v->discount_type ? 0.0 : (float) $v->initial_amount;
+						?>
+						<p class="description">
+							<?php
+							/* translators: 1: remaining value, 2: face value */
+							echo esc_html( sprintf( __( 'Remaining value: %1$s of %2$s.', 'voucher-captain' ), self::money( (float) $v->balance, $v->currency ), self::money( $face, $v->currency ) ) );
+							?>
+						</p>
+						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="vcap-balance-adjust"
+							data-face="<?php echo esc_attr( (string) $face ); ?>"
+							data-confirm-set="<?php /* translators: %s: amount entered */ echo esc_attr__( 'Set the remaining value to %s? The current value is replaced and the change is recorded in the history.', 'voucher-captain' ); ?>"
+							data-confirm-above="<?php /* translators: %s: face value */ echo esc_attr( sprintf( __( 'This is more than the face value of %s.', 'voucher-captain' ), self::money( $face, $v->currency ) ) ); ?>">
 							<input type="hidden" name="action" value="vcap_voucher_action" />
 							<input type="hidden" name="do" value="adjust" />
+							<input type="hidden" name="confirm_above" value="" />
 							<input type="hidden" name="id" value="<?php echo esc_attr( (string) $v->id ); ?>" />
 							<?php wp_nonce_field( 'vcap_voucher_' . $v->id ); ?>
 							<label class="screen-reader-text" for="vcap-adj-mode"><?php esc_html_e( 'Mode', 'voucher-captain' ); ?></label>
@@ -227,6 +256,12 @@ final class VoucherAdmin {
 							<input type="text" id="vcap-adj-note" name="note" placeholder="<?php esc_attr_e( 'Note (e.g. redeemed in store)', 'voucher-captain' ); ?>" />
 							<button type="submit" class="button"><?php esc_html_e( 'Apply', 'voucher-captain' ); ?></button>
 						</form>
+						<?php
+						wp_add_inline_script(
+							'vcap-admin',
+							"document.addEventListener('submit',function(e){var f=e.target;if(!f.classList||!f.classList.contains('vcap-balance-adjust')||'set'!==f.elements.mode.value){return;}var raw=(f.elements.amount.value||'').replace(/[^0-9.,]/g,'');var n=parseFloat(raw.indexOf(',')>-1?raw.replace(/\\./g,'').replace(',','.'):raw);var face=parseFloat(f.getAttribute('data-face'))||0;var msg=f.getAttribute('data-confirm-set').replace('%s',f.elements.amount.value);var above=face>0&&n>face;if(above){msg+='\\n\\n'+f.getAttribute('data-confirm-above');}f.elements.confirm_above.value=above?'1':'';if(!window.confirm(msg)){e.preventDefault();f.elements.confirm_above.value='';}});"
+						);
+						?>
 					<?php endif; ?>
 
 					<?php if ( $v->fields ) : ?>
@@ -290,12 +325,8 @@ final class VoucherAdmin {
 		switch ( $do ) {
 			case 'resend_buyer':
 			case 'resend_recipient':
-				$sent = vcap()->delivery->send( $v, 'resend_buyer' === $do ? 'buyer' : 'recipient' );
-				if ( 'resend_buyer' === $do && ! $sent && isset( WC()->mailer()->get_emails()['VCAP_Email_Voucher_Buyer'] ) ) {
-					WC()->mailer()->get_emails()['VCAP_Email_Voucher_Buyer']->trigger( $v );
-				}
-				$this->repo->log( $v->id, 'resent', null, null, 'resend_buyer' === $do ? 'Sent to buyer' : 'Sent to recipient' );
-				$this->redirect( 'resent', $id );
+				$this->resend( $v, 'resend_buyer' === $do ? 'buyer' : 'recipient' );
+				$this->redirect( '', $id );
 				break;
 			case 'suppress_reminder':
 				$this->repo->log( $v->id, 'expiry_reminder', null, null, __( 'Suppressed by admin', 'voucher-captain' ) );
@@ -308,25 +339,10 @@ final class VoucherAdmin {
 				$this->redirect( vcap()->issuer->reactivate( $v ) ? 'reactivated' : 'action_failed', $id );
 				break;
 			case 'adjust':
-				$amount = (float) wc_format_decimal( wp_unslash( (string) ( $_POST['amount'] ?? 0 ) ) );
-				$mode   = sanitize_key( $_POST['mode'] ?? 'subtract' );
-				$note   = sanitize_text_field( wp_unslash( $_POST['note'] ?? '' ) );
-				if ( 'single' !== $v->usage_mode && ! $v->is_multi_use() ) {
-					// Reusable vouchers have no stored balance: switch to balance tracking on first adjustment.
-					$v->usage_mode = 'balance';
-				}
-				// Add/subtract apply to the balance as it is when the row is locked, not as the form showed it.
-				$ok = 'set' === $mode
-					? vcap()->coupons->set_balance( $v, $amount, 'adjusted', null, $note )
-					: vcap()->coupons->adjust_balance( $v, 'add' === $mode ? $amount : -$amount, 'subtract' === $mode ? 'redeemed' : 'adjusted', $note );
-				if ( ! $ok ) {
-					$this->redirect( 'adjust_failed', $id );
-				}
-				$this->redirect( 'adjusted', $id );
+				$this->redirect( $this->adjust( $v ), $id );
 				break;
 			case 'save':
-				$this->save( $v );
-				$this->redirect( 'saved', $id );
+				$this->redirect( $this->save( $v ) ? 'saved' : '', $id );
 				break;
 			default:
 				/** Connector actions: return the message key to show ('' = not handled). */
@@ -338,11 +354,116 @@ final class VoucherAdmin {
 		$this->redirect( '', $id );
 	}
 
-	private function save( Voucher $v ): void {
-		$from_status = $v->status;
+	/**
+	 * Send the voucher email to the buyer or the recipient on the admin's request and report the result with
+	 * its reason. Sending to the recipient of a "buyer only" voucher (the admin confirmed it) switches "Send to"
+	 * to the recipient.
+	 */
+	public function resend( Voucher $v, string $role ): bool {
+		$address = 'recipient' === $role ? $v->recipient_email : $v->buyer_email;
+		$emails  = function_exists( 'WC' ) ? WC()->mailer()->get_emails() : array();
+		$email   = $emails[ 'recipient' === $role ? 'VCAP_Email_Voucher_Recipient' : 'VCAP_Email_Voucher_Buyer' ] ?? null;
+		$reason  = '';
+		if ( ! is_email( $address ) ) {
+			$reason = 'recipient' === $role ? __( 'no valid recipient email address is stored', 'voucher-captain' ) : __( 'no valid buyer email address is stored', 'voucher-captain' );
+		} elseif ( ! $email ) {
+			$reason = __( 'the voucher email is not registered (another plugin may have removed it)', 'voucher-captain' );
+		} elseif ( ! $email->is_enabled() ) {
+			/* translators: %s: email title */
+			$reason = sprintf( __( 'the email "%s" is disabled under WooCommerce → Settings → Emails', 'voucher-captain' ), $email->get_title() );
+		}
+		if ( '' === $reason && 'recipient' === $role && 'buyer' === $v->send_to ) {
+			$v->send_to = 'recipient';
+			$this->repo->update_columns( $v, array( 'send_to' ), $v->status );
+		}
+		if ( '' === $reason ) {
+			$started = time();
+			if ( $email->trigger( $v ) ) {
+				$note = 'recipient' === $role
+					/* translators: %s: email address */
+					? sprintf( __( 'Sent to the recipient (%s) by an admin', 'voucher-captain' ), $address )
+					/* translators: %s: email address */
+					: sprintf( __( 'Sent to the buyer (%s) by an admin', 'voucher-captain' ), $address );
+				$this->repo->log( $v->id, 'resent', null, null, $note );
+				/* translators: %s: email address */
+				Flash::add( 'success', sprintf( __( 'Voucher email sent to %s.', 'voucher-captain' ), $address ) );
+				return true;
+			}
+			$last   = \VCAP\Health::mail_failures()[0] ?? null;
+			$reason = $last && (int) $last['time'] >= $started - 1 && '' !== (string) $last['error']
+				/* translators: %s: error of the mail system */
+				? sprintf( __( 'the mail system reported: %s', 'voucher-captain' ), $last['error'] )
+				: __( 'the mail system did not accept the email (see Tools → Site Health)', 'voucher-captain' );
+		}
+		/* translators: %s: reason */
+		$message = sprintf( __( 'The voucher email was not sent: %s.', 'voucher-captain' ), $reason );
+		$this->repo->log( $v->id, 'delivery_failed', null, null, $message );
+		Flash::add( 'error', $message );
+		return false;
+	}
+
+	/**
+	 * "Adjust balance": the amount must be positive (0 allowed for "Set to"), a deduction may not exceed the
+	 * remaining value, and "Set to" above the face value needs the admin's confirmation.
+	 *
+	 * @return string message key for the redirect ('' when a detailed notice was queued)
+	 */
+	public function adjust( Voucher $v ): string {
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified in handle_action().
+		$raw     = trim( sanitize_text_field( wp_unslash( (string) ( $_POST['amount'] ?? '' ) ) ) );
+		$mode    = sanitize_key( $_POST['mode'] ?? 'subtract' );
+		$note    = sanitize_text_field( wp_unslash( $_POST['note'] ?? '' ) );
+		$confirm = ! empty( $_POST['confirm_above'] );
+		// phpcs:enable
+		$mode    = in_array( $mode, array( 'subtract', 'add', 'set' ), true ) ? $mode : 'subtract';
+		$decimal = '' !== $raw ? (string) wc_format_decimal( $raw ) : '';
+		$amount  = round( (float) $decimal, $v->decimals() );
+		if ( '' === $decimal || ! is_numeric( $decimal ) || $amount < 0 || ( 'set' !== $mode && $amount <= 0 ) ) {
+			Flash::add( 'error', 'set' === $mode ? __( 'Please enter the new remaining value (0 or more).', 'voucher-captain' ) : __( 'Please enter an amount greater than 0.', 'voucher-captain' ) );
+			return '';
+		}
+		$fresh   = $this->repo->get( $v->id ) ?? $v;
+		$current = (float) $fresh->balance;
+		if ( 'subtract' === $mode && $amount > $current + 0.000001 ) {
+			/* translators: 1: available remaining value, 2: amount entered */
+			Flash::add( 'error', sprintf( __( 'Only %1$s is available – %2$s cannot be deducted. Nothing was changed.', 'voucher-captain' ), self::money( $current, $v->currency ), self::money( $amount, $v->currency ) ) );
+			return '';
+		}
+		$face = 'percent' === $v->discount_type ? 0.0 : (float) $v->initial_amount;
+		if ( 'set' === $mode && $face > 0 && $amount > $face + 0.000001 && ! $confirm ) {
+			/* translators: 1: amount entered, 2: face value */
+			Flash::add( 'error', sprintf( __( '%1$s is more than the face value of %2$s. Nothing was changed; confirm the dialog to set a higher value.', 'voucher-captain' ), self::money( $amount, $v->currency ), self::money( $face, $v->currency ) ) );
+			return '';
+		}
+		if ( 'single' !== $v->usage_mode && ! $v->is_multi_use() ) {
+			// Reusable vouchers have no stored balance: switch to balance tracking on first adjustment.
+			$v->usage_mode = 'balance';
+		}
+		// Add/subtract apply to the balance as it is when the row is locked, not as the form showed it.
+		$ok = 'set' === $mode
+			? vcap()->coupons->set_balance( $v, $amount, 'adjusted', null, $note )
+			: vcap()->coupons->adjust_balance( $v, 'add' === $mode ? $amount : -$amount, 'subtract' === $mode ? 'redeemed' : 'adjusted', $note );
+		if ( ! $ok ) {
+			return 'adjust_failed';
+		}
+		$after = $this->repo->get( $v->id );
+		/* translators: %s: new remaining value */
+		Flash::add( 'success', sprintf( __( 'Balance updated. New remaining value: %s.', 'voucher-captain' ), self::money( $after ? (float) $after->balance : $amount, $v->currency ) ) );
+		return '';
+	}
+
+	public function save( Voucher $v ): bool {
+		$from_status   = $v->status;
+		$old_recipient = $v->recipient_email;
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified in handle_action().
+		$email_raw = trim( sanitize_text_field( wp_unslash( $_POST['recipient_email'] ?? '' ) ) );
+		if ( '' !== $email_raw && ! is_email( sanitize_email( $email_raw ) ) ) {
+			/* translators: %s: what was entered */
+			Flash::add( 'error', sprintf( __( '"%s" is not a valid email address. The voucher was not saved.', 'voucher-captain' ), $email_raw ) );
+			return false;
+		}
 		$v->recipient_name  = sanitize_text_field( wp_unslash( $_POST['recipient_name'] ?? '' ) );
-		$v->recipient_email = sanitize_email( wp_unslash( $_POST['recipient_email'] ?? '' ) );
+		$v->recipient_email = sanitize_email( $email_raw );
 		$v->message         = sanitize_textarea_field( wp_unslash( $_POST['message'] ?? '' ) );
 		$send_to            = sanitize_key( $_POST['send_to'] ?? 'buyer' );
 		$v->send_to         = in_array( $send_to, array( 'buyer', 'recipient', 'both' ), true ) ? $send_to : 'buyer';
@@ -370,6 +491,16 @@ final class VoucherAdmin {
 		// phpcs:enable
 		$this->repo->update_columns( $v, array( 'recipient_name', 'recipient_email', 'message', 'send_to', 'fields', 'max_checkins', 'expires_at' ), $from_status );
 		$this->repo->log( $v->id, 'edited' );
+		if ( strtolower( $old_recipient ) !== strtolower( $v->recipient_email ) ) {
+			// Personal vouchers: the coupon must accept the new address (and no longer the old one).
+			vcap()->coupons->refresh_email_restrictions( $v, $old_recipient );
+			if ( in_array( $v->send_to, array( 'recipient', 'both' ), true ) && is_email( $v->recipient_email ) ) {
+				Flash::add( 'info', __( 'The recipient email was changed. Use "Email recipient" if the new address should receive the voucher now.', 'voucher-captain' ) );
+			}
+		}
+		if ( in_array( $v->send_to, array( 'recipient', 'both' ), true ) && ! is_email( $v->recipient_email ) ) {
+			Flash::add( 'warning', __( 'There is no recipient email: emails for this voucher go to the buyer.', 'voucher-captain' ) );
+		}
 
 		if ( $v->coupon_id ) {
 			$coupon = new \WC_Coupon( $v->coupon_id );
@@ -384,6 +515,7 @@ final class VoucherAdmin {
 				vcap()->delivery->reschedule( $v, $utc );
 			}
 		}
+		return true;
 	}
 
 	public function handle_bulk(): void {
@@ -402,6 +534,8 @@ final class VoucherAdmin {
 		if ( ! in_array( $action, array( 'void', 'reactivate', 'resend' ), true ) ) {
 			return;
 		}
+		$sent   = 0;
+		$failed = 0;
 		foreach ( $ids as $id ) {
 			$v = $this->repo->get( $id );
 			if ( ! $v ) {
@@ -412,9 +546,27 @@ final class VoucherAdmin {
 			} elseif ( 'reactivate' === $action && Voucher::STATUS_VOID === $v->status ) {
 				vcap()->issuer->reactivate( $v );
 			} elseif ( 'resend' === $action ) {
-				vcap()->delivery->send( $v );
-				$this->repo->log( $v->id, 'resent' );
+				$addresses = vcap()->delivery->send( $v );
+				if ( $addresses ) {
+					++$sent;
+					/* translators: %s: email addresses */
+					$this->repo->log( $v->id, 'resent', null, null, sprintf( __( 'Sent to %s by an admin (bulk action)', 'voucher-captain' ), implode( ', ', $addresses ) ) );
+				} else {
+					++$failed;
+					$this->repo->log( $v->id, 'delivery_failed', null, null, __( 'Bulk resend: the email was not sent (no valid address, email disabled or mail error).', 'voucher-captain' ) );
+				}
 			}
+		}
+		if ( 'resend' === $action ) {
+			if ( $sent ) {
+				/* translators: %d: number of vouchers */
+				Flash::add( 'success', sprintf( _n( '%d voucher sent again.', '%d vouchers sent again.', $sent, 'voucher-captain' ), $sent ) );
+			}
+			if ( $failed ) {
+				/* translators: %d: number of vouchers */
+				Flash::add( 'error', sprintf( _n( '%d voucher could not be sent (no valid address, email disabled or mail error) – see its history.', '%d vouchers could not be sent (no valid address, email disabled or mail error) – see their history.', $failed, 'voucher-captain' ), $failed ) );
+			}
+			$this->redirect( '' );
 		}
 		$this->redirect( 'bulk' );
 	}
