@@ -22,10 +22,19 @@ final class Install {
 	private static ?bool $transactional_tables = null;
 	private static ?string $lock_value = null;
 
-	/** @var array<string, callable-string> */
+	/**
+	 * Data migrations by the schema version that introduced them. A migration returns false while work is left
+	 * (time budget), so it continues on the next request before the version is stored.
+	 *
+	 * @var array<string, callable-string>
+	 */
 	private const MIGRATIONS = array(
-		// '1.1.0' => 'migrate_1_1_0',
+		'1.4.0' => 'migrate_1_4_0',
 	);
+	/** Schema version of the own storage in use (promotion usage, claims, delivery state per role). */
+	public const STORAGE_OPTION = 'vcap_storage_version';
+	/** Time the storage switched while rows were still in post meta / options (cleared once they all moved). */
+	public const LEGACY_OPTION = 'vcap_legacy_rows';
 
 	/**
 	 * Activation hook. Network activation sets up every site (each site has its own tables, options and
@@ -262,7 +271,9 @@ final class Install {
 	 */
 	private static function run_migrations( string $installed ): bool {
 		if ( '' === $installed ) {
-			return true; // New installation: nothing to migrate.
+			// New installation: nothing to migrate, the tables of the current schema are used right away.
+			update_option( self::STORAGE_OPTION, VCAP_DB_VERSION );
+			return true;
 		}
 		foreach ( self::MIGRATIONS as $version => $method ) {
 			if ( version_compare( $installed, $version, '<' ) && false === self::$method() ) {
@@ -334,7 +345,133 @@ final class Install {
 			'events'   => $wpdb->prefix . 'vcap_events',
 			'pool'     => $wpdb->prefix . 'vcap_code_pool',
 			'redemptions' => $wpdb->prefix . 'vcap_redemptions',
+			'usage'       => $wpdb->prefix . 'vcap_promotion_usage',
+			'claims'      => $wpdb->prefix . 'vcap_claims',
 		);
+	}
+
+	/**
+	 * Whether the tables of schema 1.4 hold promotion usage, claims and the delivery state (set when they exist;
+	 * before that, e.g. while another request still runs the upgrade, the old storage is used).
+	 */
+	public static function storage_ready(): bool {
+		return version_compare( (string) get_option( self::STORAGE_OPTION, '0' ), '1.4.0', '>=' );
+	}
+
+	/** Whether rows of the old storage may still exist (read as well until moved). */
+	public static function legacy_rows(): bool {
+		return (int) get_option( self::LEGACY_OPTION, 0 ) > 0;
+	}
+
+	/**
+	 * 1.4.0: promotion uses ("_vcap_used_by" post meta, one row per use) and claims ("_vcap_claim_*" options) move
+	 * into their own tables. New rows go to the tables from now on; the old rows are moved in batches.
+	 */
+	private static function migrate_1_4_0(): bool {
+		if ( ! self::storage_ready() ) {
+			update_option( self::LEGACY_OPTION, time() );
+			update_option( self::STORAGE_OPTION, '1.4.0' );
+			delete_option( 'vcap_stale_release_cursor' ); // The hourly sweep reads order meta now, not the ledger.
+		}
+		return self::move_legacy_rows( 8.0 );
+	}
+
+	/**
+	 * Moves rows of the old storage into the tables until none are left or the time budget is used up. The
+	 * daily maintenance calls it again, so rows a request wrote just before the switch are moved as well.
+	 *
+	 * @param float $budget Seconds.
+	 * @return bool True when nothing is left.
+	 */
+	public static function move_legacy_rows( float $budget ): bool {
+		if ( ! self::storage_ready() || ! self::legacy_rows() ) {
+			return true;
+		}
+		$start = microtime( true );
+		do {
+			$usage  = self::move_usage_batch( 500 );
+			$claims = self::move_claim_batch( 500 );
+			if ( $usage < 0 || $claims < 0 ) {
+				return false;
+			}
+			if ( 0 === $usage && 0 === $claims ) {
+				// Requests that started before the switch may still write the old way: keep reading it for an hour.
+				if ( time() - (int) get_option( self::LEGACY_OPTION, 0 ) > HOUR_IN_SECONDS ) {
+					delete_option( self::LEGACY_OPTION );
+				}
+				return true;
+			}
+		} while ( microtime( true ) - $start < $budget );
+		return false;
+	}
+
+	/** @return int Rows moved, -1 on a database error. */
+	private static function move_usage_batch( int $limit ): int {
+		global $wpdb;
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT meta_id, post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s ORDER BY meta_id LIMIT %d", '_vcap_used_by', $limit ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.SlowDBQuery
+		if ( ! $rows ) {
+			return 0;
+		}
+		$now    = gmdate( 'Y-m-d H:i:s' );
+		$values = array();
+		$args   = array();
+		foreach ( $rows as $row ) {
+			$values[] = '(%d, %s, 0, %s)';
+			array_push( $args, (int) $row['post_id'], substr( (string) $row['meta_value'], 0, 200 ), $now );
+		}
+		$ids   = implode( ',', array_map( 'intval', array_column( $rows, 'meta_id' ) ) );
+		$table = self::tables()['usage'];
+		$ok    = self::in_transaction(
+			static fn() => false !== $wpdb->query( $wpdb->prepare( "INSERT INTO {$table} (campaign_id, customer_key, order_id, created_at) VALUES " . implode( ',', $values ), $args ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				&& false !== $wpdb->query( "DELETE FROM {$wpdb->postmeta} WHERE meta_id IN ({$ids})" ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+		);
+		foreach ( array_unique( array_map( 'intval', array_column( $rows, 'post_id' ) ) ) as $post_id ) {
+			wp_cache_delete( $post_id, 'post_meta' );
+		}
+		return $ok ? count( $rows ) : -1;
+	}
+
+	/** @return int Rows moved, -1 on a database error. */
+	private static function move_claim_batch( int $limit ): int {
+		global $wpdb;
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT option_id, option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s ORDER BY option_id LIMIT %d", $wpdb->esc_like( '_vcap_claim_' ) . '%', $limit ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( ! $rows ) {
+			return 0;
+		}
+		$values = array();
+		$args   = array();
+		foreach ( $rows as $row ) {
+			$time     = (int) $row['option_value'];
+			$values[] = '(%s, %s, %s)';
+			array_push( $args, substr( (string) $row['option_name'], strlen( '_vcap_claim_' ), 32 ), 'legacy', gmdate( 'Y-m-d H:i:s', $time > 0 ? $time : time() ) );
+		}
+		$ids   = implode( ',', array_map( 'intval', array_column( $rows, 'option_id' ) ) );
+		$table = self::tables()['claims'];
+		$ok    = self::in_transaction(
+			static fn() => false !== $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$table} (claim_key, kind, created_at) VALUES " . implode( ',', $values ), $args ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				&& false !== $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_id IN ({$ids})" ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+		);
+		foreach ( array_column( $rows, 'option_name' ) as $name ) {
+			wp_cache_delete( (string) $name, 'options' );
+		}
+		return $ok ? count( $rows ) : -1;
+	}
+
+	/** Runs $work in a transaction: committed when it returns true, rolled back otherwise. */
+	private static function in_transaction( callable $work ): bool {
+		global $wpdb;
+		$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		try {
+			$ok = (bool) $work();
+		} catch ( \Throwable $e ) {
+			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			throw $e;
+		}
+		if ( $ok && false !== $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return true;
+		}
+		$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		return false;
 	}
 
 	public static function tables_support_transactions(): bool {
@@ -414,6 +551,7 @@ final class Install {
 					max_checkins int(11) unsigned NOT NULL DEFAULT 1,
 					checkins int(11) unsigned NOT NULL DEFAULT 0,
 					last_checkin_at datetime NULL DEFAULT NULL,
+					delivered_roles varchar(30) NOT NULL DEFAULT '',
 					created_at datetime NOT NULL,
 					updated_at datetime NOT NULL,
 					PRIMARY KEY  (id),
@@ -440,7 +578,9 @@ final class Install {
 					created_at datetime NOT NULL,
 					PRIMARY KEY  (id),
 					KEY voucher_id (voucher_id),
-					KEY event (event)
+					KEY voucher_order (voucher_id,order_id,id),
+					KEY event (event),
+					KEY created_at (created_at)
 				) ENGINE=InnoDB $collate;",
 			'pool' => "CREATE TABLE {$t['pool']} (
 					id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -471,6 +611,25 @@ final class Install {
 					KEY voucher_id (voucher_id),
 					KEY user_id (user_id),
 					KEY state_expires (state,expires_at)
+				) ENGINE=InnoDB $collate;",
+			// usage: one row per use of a promotion (Discounts\Usage); customer_key "u:{user id}", "e:{email}" or "o:{order id}".
+			'usage' => "CREATE TABLE {$t['usage']} (
+					id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+					campaign_id bigint(20) unsigned NOT NULL,
+					customer_key varchar(200) NOT NULL DEFAULT '',
+					order_id bigint(20) unsigned NOT NULL DEFAULT 0,
+					created_at datetime NOT NULL,
+					PRIMARY KEY  (id),
+					KEY campaign_customer (campaign_id,customer_key(100)),
+					KEY order_campaign (order_id,campaign_id)
+				) ENGINE=InnoDB $collate;",
+			// claims: one-time claims of side effects (Claim); claim_key is a hash of the claim name.
+			'claims' => "CREATE TABLE {$t['claims']} (
+					claim_key char(32) NOT NULL,
+					kind varchar(40) NOT NULL DEFAULT '',
+					created_at datetime NOT NULL,
+					PRIMARY KEY  (claim_key),
+					KEY kind_created (kind,created_at)
 				) ENGINE=InnoDB $collate;",
 		);
 	}

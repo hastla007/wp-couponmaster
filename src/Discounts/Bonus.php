@@ -96,7 +96,7 @@ final class Bonus {
 				\VCAP\Claim::release( 'bonus:' . $order->get_id() . ':' . $id );
 				continue;
 			}
-			Usage::add( $id, Usage::order_key( $order ) );
+			Usage::add( $id, Usage::order_key( $order ), (int) $order->get_id() );
 			$issued[ $id ]  = $coupon_id;
 			$created[ $id ] = $coupon_id;
 			// Save before mailing, so a mail error can never lead to a second coupon.
@@ -182,7 +182,7 @@ final class Bonus {
 				continue;
 			}
 			wp_trash_post( $coupon_id );
-			Usage::remove( (int) $campaign_id, Usage::order_key( $order ) );
+			Usage::remove( (int) $campaign_id, Usage::order_key( $order ), (int) $order->get_id() );
 			unset( $left[ $campaign_id ] );
 			/* translators: %s: coupon code */
 			$order->add_order_note( sprintf( __( 'Unused bonus voucher %s withdrawn.', 'voucher-captain' ), $coupon->get_code() ) );

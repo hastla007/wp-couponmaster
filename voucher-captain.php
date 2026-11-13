@@ -19,7 +19,7 @@
 defined( 'ABSPATH' ) || exit;
 
 define( 'VCAP_VERSION', '1.1.0' );
-define( 'VCAP_DB_VERSION', '1.3.0' );
+define( 'VCAP_DB_VERSION', '1.4.0' );
 define( 'VCAP_FILE', __FILE__ );
 define( 'VCAP_PATH', plugin_dir_path( __FILE__ ) );
 define( 'VCAP_URL', plugin_dir_url( __FILE__ ) );

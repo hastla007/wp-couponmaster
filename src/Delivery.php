@@ -85,6 +85,8 @@ final class Delivery {
 			$voucher->status = Voucher::STATUS_SCHEDULED;
 		}
 		$this->repo->update_columns( $voucher, array( 'delivery_at', 'delivered_at' ), $from_status );
+		// A new delivery goes to everyone again.
+		$this->store_delivered_roles( $voucher->id, array(), array() );
 		if ( Voucher::STATUS_SCHEDULED === $voucher->status && Voucher::STATUS_SCHEDULED !== $from_status ) {
 			// Only once the stored row really is scheduled (a concurrent redemption wins).
 			vcap()->coupons->set_coupon_enabled( $voucher, false );
@@ -134,29 +136,28 @@ final class Delivery {
 				$voucher->status = Voucher::STATUS_ACTIVE;
 			}
 
-			// A retry after a partial failure only mails who is still missing (no duplicate for the others).
-			$pending_key = 'vcap_delivery_missing_' . $voucher->id;
-			$pending     = get_transient( $pending_key );
-			// (array) false would be array( false ): no transient means "send to everyone".
-			$pending     = is_array( $pending ) ? array_values( array_intersect( $pending, array( 'recipient', 'buyer' ) ) ) : array();
-			$only        = 1 === count( $pending ) ? (string) reset( $pending ) : null;
-			$required    = $this->required_roles( $voucher );
-			$sent_roles  = array();
-			$sent        = $this->send( $voucher, $only, $sent_roles );
-			if ( ! $sent ) {
+			// A retry after a partial failure only mails who is still missing (no duplicate for the others): who
+			// already got it is stored with the voucher (delivered_roles), so a cache flush cannot cause a second mail.
+			$required  = $this->required_roles( $voucher );
+			$delivered = $this->delivered_roles( $voucher );
+			$pending   = array_values( array_diff( $required, $delivered ) );
+			$only      = $delivered && 1 === count( $pending ) ? (string) reset( $pending ) : null;
+			$sent_roles = array();
+			$sent       = $delivered && ! $pending ? array() : $this->send( $voucher, $only, $sent_roles );
+			if ( ! $sent && $pending ) {
 				// Retried by the daily maintenance until 30 days after the due date (VoucherRepository::due_for_delivery()).
 				$this->repo->log( $voucher->id, 'delivery_failed', null, null, __( 'No email was sent (email disabled or no valid address).', 'voucher-captain' ) );
 				return;
 			}
-			$missing = array_values( array_diff( null === $only ? $required : array( $only ), $sent_roles ) );
+			$delivered = array_values( array_unique( array_merge( $delivered, $sent_roles ) ) );
+			$missing   = array_values( array_diff( $required, $delivered ) );
+			$this->store_delivered_roles( $voucher->id, $delivered, $missing );
 			if ( $missing ) {
 				// "Send to buyer and recipient": delivered only when both got it; the rest is retried later.
-				set_transient( $pending_key, $missing, 31 * DAY_IN_SECONDS );
 				/* translators: %s: buyer/recipient */
 				$this->repo->log( $voucher->id, 'delivery_failed', null, null, sprintf( __( 'Not delivered to: %s (will be retried).', 'voucher-captain' ), implode( ', ', $missing ) ) );
 				return;
 			}
-			delete_transient( $pending_key );
 
 			$table   = Install::tables()['vouchers'];
 			$updated = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -182,6 +183,50 @@ final class Delivery {
 			throw $e;
 		} finally {
 			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+	}
+
+	/**
+	 * Roles ('recipient', 'buyer') that already received this voucher in an earlier, partly failed attempt.
+	 *
+	 * @return string[]
+	 */
+	private function delivered_roles( Voucher $voucher ): array {
+		if ( Install::storage_ready() ) {
+			global $wpdb;
+			$table = Install::tables()['vouchers'];
+			$roles = (string) $wpdb->get_var( $wpdb->prepare( "SELECT delivered_roles FROM {$table} WHERE id = %d", $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$roles = array_values( array_intersect( array_filter( explode( ',', $roles ) ), array( 'recipient', 'buyer' ) ) );
+			if ( $roles ) {
+				return $roles;
+			}
+		}
+		// Before schema 1.4 (or a retry recorded by an older version) a transient listed who was still missing.
+		$missing = get_transient( 'vcap_delivery_missing_' . $voucher->id );
+		// (array) false would be array( false ): no transient means nobody got it yet.
+		$missing = is_array( $missing ) ? array_values( array_intersect( $missing, array( 'recipient', 'buyer' ) ) ) : array();
+		return $missing ? array_values( array_diff( $this->required_roles( $voucher ), $missing ) ) : array();
+	}
+
+	/**
+	 * Remembers who got the voucher. Before schema 1.4 only the missing roles are kept, in a transient.
+	 *
+	 * @param string[] $delivered Roles mailed so far.
+	 * @param string[] $missing   Required roles still missing.
+	 */
+	private function store_delivered_roles( int $voucher_id, array $delivered, array $missing ): void {
+		$key = 'vcap_delivery_missing_' . $voucher_id;
+		if ( Install::storage_ready() ) {
+			global $wpdb;
+			$table = Install::tables()['vouchers'];
+			$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET delivered_roles = %s WHERE id = %d", implode( ',', $delivered ), $voucher_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			delete_transient( $key );
+			return;
+		}
+		if ( $missing ) {
+			set_transient( $key, $missing, 31 * DAY_IN_SECONDS );
+		} else {
+			delete_transient( $key );
 		}
 	}
 
@@ -290,6 +335,8 @@ final class Delivery {
 		Install::ensure_upload_dir();
 		Plugin::purge_rate_limits();
 		Tickets::purge_scan_keys();
+		Claim::purge();
+		Install::move_legacy_rows( 20.0 );
 		foreach ( glob( Install::upload_dir() . '/tmp/*.pdf' ) ?: array() as $file ) {
 			if ( filemtime( $file ) < time() - HOUR_IN_SECONDS ) {
 				wp_delete_file( $file );

@@ -14,7 +14,7 @@ function vcap_uninstall_site(): void {
 	}
 
 	global $wpdb;
-	foreach ( array( 'vcap_vouchers', 'vcap_events', 'vcap_code_pool', 'vcap_redemptions' ) as $table ) {
+	foreach ( array( 'vcap_vouchers', 'vcap_events', 'vcap_code_pool', 'vcap_redemptions', 'vcap_promotion_usage', 'vcap_claims' ) as $table ) {
 		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}{$table}" ); // phpcs:ignore
 	}
 	// Templates, field groups and promotions (vcap_discount, with their usage records).
