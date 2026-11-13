@@ -3902,3 +3902,64 @@ msgstr "Umtausch rückgängig gemacht: Die Tickets sind storniert und der Gutsch
 
 msgid "The exchange could not be undone. The reason is in the voucher history."
 msgstr "Der Umtausch konnte nicht rückgängig gemacht werden. Der Grund steht im Verlauf des Gutscheins."
+
+msgid "Voucher deliveries and daily maintenance are scheduled"
+msgstr "Gutschein-Zustellungen und tägliche Wartung sind geplant"
+
+msgid "Scheduled vouchers, expiry reminders and the daily maintenance run through the Action Scheduler of WooCommerce."
+msgstr "Geplante Gutscheine, Ablauf-Erinnerungen und die tägliche Wartung laufen über den Action Scheduler von WooCommerce."
+
+msgid "%d scheduled voucher task has been waiting for more than an hour."
+msgid_plural "%d scheduled voucher tasks have been waiting for more than an hour."
+msgstr[0] "%d geplante Gutschein-Aufgabe wartet seit über einer Stunde."
+msgstr[1] "%d geplante Gutschein-Aufgaben warten seit über einer Stunde."
+
+msgid "The daily voucher maintenance (expiry, reminders, delivery retries) is not scheduled."
+msgstr "Die tägliche Gutschein-Wartung (Ablauf, Erinnerungen, erneute Zustellversuche) ist nicht geplant."
+
+msgid "Voucher tasks are not running on time"
+msgstr "Gutschein-Aufgaben laufen nicht rechtzeitig"
+
+msgid "Check that WP-Cron or a server cron job runs, and look at WooCommerce → Status → Scheduled Actions (group \"vcap\")."
+msgstr "Prüfen Sie, ob WP-Cron oder ein Server-Cronjob läuft, und sehen Sie unter WooCommerce → Status → Geplante Aktionen (Gruppe „vcap“) nach."
+
+msgid "No failed emails recorded"
+msgstr "Keine fehlgeschlagenen E-Mails protokolliert"
+
+msgid "Voucher Captain records emails that WordPress could not send (last 7 days)."
+msgstr "Voucher Captain protokolliert E-Mails, die WordPress nicht senden konnte (letzte 7 Tage)."
+
+msgid "%1$d email could not be sent in the last 7 days (last on %2$s: %3$s)."
+msgid_plural "%1$d emails could not be sent in the last 7 days (last on %2$s: %3$s)."
+msgstr[0] "%1$d E-Mail konnte in den letzten 7 Tagen nicht gesendet werden (zuletzt am %2$s: %3$s)."
+msgstr[1] "%1$d E-Mails konnten in den letzten 7 Tagen nicht gesendet werden (zuletzt am %2$s: %3$s)."
+
+msgid "Emails could not be sent"
+msgstr "E-Mails konnten nicht gesendet werden"
+
+msgid "Vouchers and tickets are delivered by email: configure an SMTP or mail service plugin and send a test mail."
+msgstr "Gutscheine und Tickets werden per E-Mail zugestellt: Richten Sie ein SMTP- oder Mailservice-Plugin ein und senden Sie eine Test-E-Mail."
+
+msgid "The private voucher folder is protected"
+msgstr "Der private Gutscheinordner ist geschützt"
+
+msgid "PDF vouchers and fonts are stored in a folder that cannot be opened from the web."
+msgstr "PDF-Gutscheine und Schriften liegen in einem Ordner, der aus dem Web nicht aufrufbar ist."
+
+msgid "The private voucher folder is missing or unprotected"
+msgstr "Der private Gutscheinordner fehlt oder ist ungeschützt"
+
+msgid "Voucher Captain could not create or protect %s. Check the folder permissions."
+msgstr "Voucher Captain konnte %s nicht anlegen oder schützen. Prüfen Sie die Ordnerrechte."
+
+msgid "The voucher redeem page is set up"
+msgstr "Die Einlöseseite für Gutscheine ist eingerichtet"
+
+msgid "Voucher emails and ticket vouchers link to a page with the redeem form."
+msgstr "Gutschein-E-Mails und Ticketgutscheine verlinken auf eine Seite mit dem Einlöseformular."
+
+msgid "The voucher redeem page needs attention"
+msgstr "Die Einlöseseite für Gutscheine braucht Aufmerksamkeit"
+
+msgid "Voucher settings"
+msgstr "Gutschein-Einstellungen"

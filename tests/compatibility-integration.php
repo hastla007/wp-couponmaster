@@ -259,4 +259,16 @@ update_option( VCAP\Install::OPTION_DB_VERSION, '1.0.0' );
 VCAP\Install::maybe_upgrade();
 vcap_compat_assert( VCAP_DB_VERSION === get_option( VCAP\Install::OPTION_DB_VERSION ), 'plugin database upgrade path reaches the current schema version' );
 
+// Site Health: failed mails are recorded (masked) and reported; the checks are registered.
+delete_option( VCAP\Health::MAIL_LOG );
+$health_tests = apply_filters( 'site_status_tests', array( 'direct' => array(), 'async' => array() ) );
+vcap_compat_assert( isset( $health_tests['direct']['vcap_scheduler'], $health_tests['direct']['vcap_mail'], $health_tests['direct']['vcap_upload_dir'], $health_tests['direct']['vcap_redeem_page'] ), 'Voucher Captain adds its checks to Site Health' );
+$mail_test = $health_tests['direct']['vcap_mail']['test'];
+vcap_compat_assert( 'good' === call_user_func( $mail_test )['status'], 'without failed mails the mail check is good' );
+do_action( 'wp_mail_failed', new WP_Error( 'wp_mail_failed', 'SMTP connect() failed.', array( 'to' => array( 'jane.doe@example.com' ), 'subject' => 'Your voucher' ) ) );
+$failures = VCAP\Health::mail_failures();
+vcap_compat_assert( 1 === count( $failures ) && ! str_contains( $failures[0]['to'], 'jane.doe' ) && str_contains( $failures[0]['error'], 'SMTP' ), 'a failed mail is recorded with a masked address' );
+vcap_compat_assert( 'critical' === call_user_func( $mail_test )['status'], 'failed mails are reported in Site Health' );
+delete_option( VCAP\Health::MAIL_LOG );
+
 echo "Voucher Captain compatibility checks passed.\n";

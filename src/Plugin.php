@@ -59,6 +59,7 @@ final class Plugin {
 		( new Preview( $this->pdf ) )->register();
 		( new Emails() )->register();
 		( new Privacy( $this->vouchers ) )->register();
+		( new Health() )->register();
 		( new CouponLink( $this->settings ) )->register();
 		( new VoucherPurchaseRules( $this->settings ) )->register();
 		( new FirstOrderCoupons() )->register();
