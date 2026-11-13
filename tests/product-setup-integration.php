@@ -381,7 +381,8 @@ $last  = VCAP\Delivery::latest_delivery_date( ProductConfig::get( $short ), time
 vcap_ps_assert( wp_date( 'Y-m-d', time() + 10 * DAY_IN_SECONDS ) === $last, 'the last possible delivery date is the expiry day', $last );
 wc_clear_notices();
 $_POST = array( 'vcap_fields' => array( 'delivery_date' => wp_date( 'Y-m-d', time() + 20 * DAY_IN_SECONDS ) ) );
-vcap_ps_assert( ! WC()->cart->add_to_cart( $short->get_id(), 1 ), 'a delivery date after the expiry is refused at add to cart' );
+// The product form runs this filter before WC()->cart->add_to_cart() (WC_Form_Handler), which itself does not.
+vcap_ps_assert( false === apply_filters( 'woocommerce_add_to_cart_validation', true, $short->get_id(), 1 ), 'a delivery date after the expiry is refused at add to cart' );
 $notices = implode( ' ', array_map( static fn( $n ) => is_array( $n ) ? (string) $n['notice'] : (string) $n, wc_get_notices( 'error' ) ) );
 vcap_ps_assert( str_contains( $notices, wp_date( (string) get_option( 'date_format' ), (int) strtotime( $last . ' 12:00:00 ' . wp_timezone_string() ) ) ), 'the message names the last possible date', $notices );
 wc_clear_notices();
