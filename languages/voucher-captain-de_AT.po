@@ -95,10 +95,6 @@ msgstr "Codes in Großbuchstaben umwandeln"
 msgid "Allowed format"
 msgstr "Erlaubtes Format"
 
-#: src/Admin/Import.php:88
-msgid "Regular expression each code must match."
-msgstr "Regulärer Ausdruck, dem jeder Code entsprechen muss."
-
 #: src/Admin/Import.php:91 src/Admin/Menu.php:37 src/Admin/Menu.php:37
 msgid "Import codes"
 msgstr "Codes importieren"
@@ -195,7 +191,7 @@ msgstr "Diese Bestellung enthält keine Gutschein-Produkte."
 
 #: src/Admin/OrderAdmin.php:69 src/Admin/VouchersListTable.php:150
 msgid "Balance:"
-msgstr "Guthaben:"
+msgstr "Restwert:"
 
 #: src/Admin/OrderAdmin.php:82
 msgid "Generate vouchers"
@@ -249,7 +245,7 @@ msgstr "Einlässe"
 
 #: src/Admin/Scanner.php:32 src/Admin/VoucherAdmin.php:111 templates/ticket-status.php:68
 msgid "Balance"
-msgstr "Guthaben"
+msgstr "Restwert"
 
 #: src/Admin/Scanner.php:33 src/Admin/VoucherAdmin.php:109 src/ProductSettings.php:116 src/TemplatePostType.php:261 templates/myaccount/vouchers-table.php:30 templates/myaccount/vouchers-table.php:56
 msgid "Value"
@@ -329,7 +325,7 @@ msgstr "Gutschein reaktiviert."
 
 #: src/Admin/VoucherAdmin.php:41
 msgid "Balance updated."
-msgstr "Guthaben aktualisiert."
+msgstr "Restwert aktualisiert."
 
 #: src/Admin/VoucherAdmin.php:42
 msgid "Bulk action completed."
@@ -399,7 +395,7 @@ msgstr "Mehrfach verwendbar"
 
 #: src/Admin/VoucherAdmin.php:117 src/Admin/VouchersListTable.php:134
 msgid "Coupon"
-msgstr "Gutschein"
+msgstr "WooCommerce-Code"
 
 #: src/Admin/VoucherAdmin.php:117
 msgid "none (ticket)"
@@ -483,7 +479,7 @@ msgstr "Gutschein speichern"
 
 #: src/Admin/VoucherAdmin.php:165
 msgid "Adjust balance"
-msgstr "Guthaben anpassen"
+msgstr "Restwert anpassen"
 
 #: src/Admin/VoucherAdmin.php:171
 msgid "Mode"
@@ -535,7 +531,7 @@ msgstr "Ereignis"
 
 #: src/Admin/VoucherAdmin.php:199
 msgid "Balance after"
-msgstr "Guthaben danach"
+msgstr "Restwert danach"
 
 #: src/Admin/VoucherAdmin.php:199
 msgid "User"
@@ -551,7 +547,7 @@ msgstr "Vom Administrator storniert (Massenaktion)"
 
 #: src/Admin/VouchersListTable.php:29
 msgid "Value / balance"
-msgstr "Wert / Guthaben"
+msgstr "Wert / Restwert"
 
 #: src/Admin/VouchersListTable.php:31
 msgid "Buyer → recipient"
@@ -633,7 +629,7 @@ msgstr "Dieser Gutschein ist abgelaufen."
 #: src/CouponManager.php:156
 #, php-format
 msgid "Voucher %s balance"
-msgstr "Guthaben des Gutscheins %s"
+msgstr "Restwert des Gutscheins %s"
 
 #. translators: %s: order number
 #: src/CouponManager.php:210
@@ -645,7 +641,7 @@ msgstr "Verwendet in Bestellung #%s"
 #: src/CouponManager.php:218
 #, php-format
 msgid "Voucher %1$s: %2$s deducted, remaining balance %3$s."
-msgstr "Gutschein %1$s: %2$s abgezogen, verbleibendes Guthaben %3$s."
+msgstr "Gutschein %1$s: %2$s abgezogen, Restwert %3$s."
 
 #. translators: %s: order number
 #: src/CouponManager.php:247
@@ -755,7 +751,7 @@ msgstr "Gutscheincode"
 
 #: src/Downloads.php:227
 msgid "Check balance"
-msgstr "Guthaben prüfen"
+msgstr "Restwert prüfen"
 
 #: src/Emails/BuyerEmail.php:11
 msgid "Voucher (buyer)"
@@ -1085,7 +1081,7 @@ msgstr "Gutscheinwert (Zahl)"
 
 #: src/Placeholders.php:20
 msgid "Remaining balance"
-msgstr "Restguthaben"
+msgstr "Restwert"
 
 #: src/Placeholders.php:22
 msgid "Issue date"
@@ -1223,7 +1219,7 @@ msgstr "Importierter Stapel \"%1$s\" (%2$d von %3$d frei)"
 
 #: src/ProductSettings.php:84
 msgid "Tickets get a QR check-in code and do not create a discount coupon unless a value is set."
-msgstr "Tickets erhalten einen QR-Code für den Check-in und erzeugen keinen Rabattgutschein, sofern kein Wert festgelegt ist."
+msgstr "Tickets erhalten einen QR-Code für den Check-in und erzeugen keinen WooCommerce-Code, sofern kein Wert festgelegt ist."
 
 #: src/ProductSettings.php:90 src/ProductSettings.php:514 src/TemplatePostType.php:33
 msgid "PDF template"
@@ -1303,7 +1299,7 @@ msgstr "Mehrfach verwendbar (Nutzungslimit unten)"
 
 #: src/ProductSettings.php:184
 msgid "Gift cards keep the remaining balance after each purchase until it is used up."
-msgstr "Bei Geschenkkarten bleibt das Restguthaben nach jedem Einkauf erhalten, bis es aufgebraucht ist."
+msgstr "Bei Geschenkkarten bleibt der Restwert nach jedem Einkauf erhalten, bis er aufgebraucht ist."
 
 #: src/ProductSettings.php:190
 msgid "Usage limit"
@@ -1339,7 +1335,7 @@ msgstr "Gültig für (Tage)"
 
 #: src/ProductSettings.php:232
 msgid "Coupon restrictions"
-msgstr "Gutschein-Einschränkungen"
+msgstr "Einschränkungen des WooCommerce-Codes"
 
 #: src/ProductSettings.php:234
 msgid "Allow free shipping"
@@ -1377,26 +1373,6 @@ msgstr "Gültig für Kategorien"
 msgid "Exclude categories"
 msgstr "Kategorien ausschließen"
 
-#: src/ProductSettings.php:269
-msgid "Restrict to email"
-msgstr "Auf E-Mail-Adresse beschränken"
-
-#: src/ProductSettings.php:272
-msgid "Anyone with the code"
-msgstr "Jeder mit dem Code"
-
-#: src/ProductSettings.php:273
-msgid "Recipient email only"
-msgstr "Nur E-Mail-Adresse des Empfängers"
-
-#: src/ProductSettings.php:274
-msgid "Buyer email only"
-msgstr "Nur E-Mail-Adresse des Käufers"
-
-#: src/ProductSettings.php:275
-msgid "Buyer or recipient"
-msgstr "Käufer oder Empfänger"
-
 #: src/ProductSettings.php:281
 msgid "Codes"
 msgstr "Codes"
@@ -1404,10 +1380,6 @@ msgstr "Codes"
 #: src/ProductSettings.php:285
 msgid "Code source"
 msgstr "Code-Quelle"
-
-#: src/ProductSettings.php:289
-msgid "Use codes imported under Vouchers → Import codes. Random codes are generated when the batch is empty."
-msgstr "Codes verwenden, die unter Gutscheine → Codes importieren importiert wurden. Ist der Stapel leer, werden zufällige Codes erzeugt."
 
 #: src/ProductSettings.php:292
 msgid "Code prefix"
@@ -1619,7 +1591,7 @@ msgstr "Daten bei Deinstallation löschen"
 
 #: src/Settings.php:191
 msgid "Remove voucher tables, templates and settings when the plugin is deleted. WooCommerce coupons are kept."
-msgstr "Gutschein-Tabellen, Vorlagen und Einstellungen entfernen, wenn das Plugin gelöscht wird. WooCommerce-Gutscheine bleiben erhalten."
+msgstr "Gutschein-Tabellen, Vorlagen und Einstellungen entfernen, wenn das Plugin gelöscht wird. WooCommerce-Codes bleiben erhalten."
 
 #: src/Settings.php:203
 msgid "Voucher issuing"
@@ -1687,7 +1659,7 @@ msgstr "Einlösung"
 
 #: src/Settings.php:287
 msgid "Restore balance on cancellation"
-msgstr "Guthaben bei Stornierung wiederherstellen"
+msgstr "Restwert bei Stornierung wiederherstellen"
 
 #: src/Settings.php:291
 msgid "Give the redeemed amount back when an order that used a voucher is cancelled, refunded or failed."
@@ -2159,11 +2131,11 @@ msgstr "E-Mail erneut gesendet"
 
 #: src/VoucherRepository.php:249
 msgid "Balance restored"
-msgstr "Guthaben wiederhergestellt"
+msgstr "Restwert wiederhergestellt"
 
 #: src/VoucherRepository.php:250
 msgid "Balance adjusted"
-msgstr "Guthaben angepasst"
+msgstr "Restwert angepasst"
 
 #: src/VoucherRepository.php:253
 msgid "Voided"
@@ -2233,7 +2205,7 @@ msgstr "Herunterladen"
 #: templates/myaccount/vouchers-table.php:45
 #, php-format
 msgid "Balance: %s"
-msgstr "Guthaben: %s"
+msgstr "Restwert: %s"
 
 #. translators: %s: recipient name
 #: templates/myaccount/vouchers-table.php:52
@@ -2477,7 +2449,7 @@ msgid "expired"
 msgstr "abgelaufen"
 
 msgid "Coupon removed or changed on the order"
-msgstr "Gutschein wurde in der Bestellung entfernt oder geändert"
+msgstr "WooCommerce-Code wurde in der Bestellung entfernt oder geändert"
 
 msgid "Unpaid order: voucher balance reservations released."
 msgstr "Unbezahlte Bestellung: Guthaben-Reservierungen wurden freigegeben."
@@ -2493,12 +2465,6 @@ msgstr "Übertragbar – jede Person mit dem Code kann ihn einlösen."
 
 msgid "Personal – only the buyer or the named recipient can redeem it."
 msgstr "Persönlich – nur Käufer oder genannte Empfänger können ihn einlösen."
-
-msgid "Transferable"
-msgstr "Übertragbar"
-
-msgid "Anyone with the code may redeem it. Untick to restrict redemption to the buyer and the named recipient (their email addresses)."
-msgstr "Jede Person mit dem Code darf ihn einlösen. Deaktivieren, um die Einlösung auf Käufer und genannte Empfänger (deren E-Mail-Adressen) zu beschränken."
 
 msgid "Redemption conditions"
 msgstr "Einlösebedingungen"
@@ -2621,7 +2587,7 @@ msgid "Template coupon"
 msgstr "Vorlage-Gutschein"
 
 msgid "Voucher coupons cannot be used as a template. Please choose a regular coupon."
-msgstr "Gutschein-Coupons können nicht als Vorlage dienen. Bitte wählen Sie einen normalen Gutschein."
+msgstr "WooCommerce-Codes von Gutscheinen können nicht als Vorlage dienen. Bitte wählen Sie einen normalen WooCommerce-Code."
 
 msgid "WooCommerce coupons (copy all settings of a template coupon)"
 msgstr "WooCommerce-Gutscheine (alle Einstellungen eines Vorlage-Gutscheins übernehmen)"
@@ -2687,7 +2653,7 @@ msgid "The coupon %s is only valid for your first order."
 msgstr "Der Gutschein %s gilt nur für Ihre erste Bestellung."
 
 msgid "%s refunded as store credit."
-msgstr "%s als Guthaben erstattet."
+msgstr "%s als Kundenguthaben erstattet."
 
 msgid "Code for the cart: %s"
 msgstr "Code für den Warenkorb: %s"
@@ -2705,7 +2671,7 @@ msgid "Enable store credit accounts: credit customers manually (user profile) or
 msgstr "Guthabenkonten aktivieren: Kunden manuell Guthaben gutschreiben (Benutzerprofil) oder Bestellungen als Guthaben erstatten (Bestellansicht); Kunden sehen und nutzen ihr Guthaben in „Mein Konto“ und im Warenkorb."
 
 msgid "Guest orders cannot be refunded as store credit."
-msgstr "Gastbestellungen können nicht als Guthaben erstattet werden."
+msgstr "Gastbestellungen können nicht als Kundenguthaben erstattet werden."
 
 msgid "Order not found."
 msgstr "Bestellung nicht gefunden."
@@ -2726,46 +2692,46 @@ msgid "Reason (required)"
 msgstr "Grund (Pflichtfeld)"
 
 msgid "Refund as store credit"
-msgstr "Als Guthaben erstatten"
+msgstr "Als Kundenguthaben erstatten"
 
 msgid "Refund as store credit failed:"
-msgstr "Erstattung als Guthaben fehlgeschlagen:"
+msgstr "Erstattung als Kundenguthaben fehlgeschlagen:"
 
 msgid "Refunded as store credit"
-msgstr "Als Guthaben erstattet"
+msgstr "Als Kundenguthaben erstattet"
 
 msgid "Refunded as store credit: %s"
-msgstr "Als Guthaben erstattet: %s"
+msgstr "Als Kundenguthaben erstattet: %s"
 
 msgid "Store credit"
-msgstr "Guthaben"
+msgstr "Kundenguthaben"
 
 msgid "Store credit account opened"
-msgstr "Guthabenkonto eröffnet"
+msgstr "Kundenguthaben-Konto eröffnet"
 
 msgid "Store credit is not enabled."
-msgstr "Guthaben ist nicht aktiviert."
+msgstr "Kundenguthaben ist nicht aktiviert."
 
 msgid "Store credit is temporarily unavailable."
-msgstr "Guthaben ist vorübergehend nicht verfügbar."
+msgstr "Kundenguthaben ist vorübergehend nicht verfügbar."
 
 msgid "Store credit of %s (Voucher Captain)"
-msgstr "Guthaben von %s (Voucher Captain)"
+msgstr "Kundenguthaben von %s (Voucher Captain)"
 
 msgid "The store credit is not sufficient."
-msgstr "Das Guthaben reicht nicht aus."
+msgstr "Das Kundenguthaben reicht nicht aus."
 
 msgid "This customer has no store credit."
-msgstr "Dieser Kunde hat kein Guthaben."
+msgstr "Diese Kundin bzw. dieser Kunde hat kein Kundenguthaben."
 
 msgid "This store credit belongs to another customer account."
-msgstr "Dieses Guthaben gehört zu einem anderen Kundenkonto."
+msgstr "Dieses Kundenguthaben gehört zu einem anderen Kundenkonto."
 
 msgid "Use store credit"
-msgstr "Guthaben verwenden"
+msgstr "Kundenguthaben verwenden"
 
 msgid "You have %1$s store credit. %2$s"
-msgstr "Sie haben %1$s Guthaben. %2$s"
+msgstr "Sie haben %1$s Kundenguthaben. %2$s"
 
 msgid "%s off"
 msgstr "%s Rabatt"
@@ -3137,7 +3103,7 @@ msgid "Referral reward for order #%s"
 msgstr "Empfehlungsprämie für Bestellung #%s"
 
 msgid "Referral reward: %1$s store credit for %2$s."
-msgstr "Empfehlungsprämie: %1$s Guthaben für %2$s."
+msgstr "Empfehlungsprämie: %1$s Kundenguthaben für %2$s."
 
 msgid "Referral reward: coupon %1$s for %2$s."
 msgstr "Empfehlungsprämie: Gutschein %1$s für %2$s."
@@ -3155,7 +3121,7 @@ msgid "Sent to a customer when a friend they referred completed an order (Refer 
 msgstr "Wird an Kundinnen und Kunden gesendet, wenn eine von ihnen geworbene Person eine Bestellung abgeschlossen hat (Freunde werben, Prämie als Gutschein)."
 
 msgid "Store credit (requires store credit)"
-msgstr "Guthaben (erfordert Guthaben-Funktion)"
+msgstr "Kundenguthaben (erfordert die Kundenguthaben-Funktion)"
 
 msgid "Thank you for recommending {site_title}"
 msgstr "Danke, dass Sie {site_title} empfehlen"
@@ -3184,7 +3150,7 @@ msgid "Redeem voucher"
 msgstr "Gutschein einlösen"
 
 msgid "Voucher balance"
-msgstr "Gutscheinguthaben"
+msgstr "Restwert des Gutscheins"
 
 msgid "log in"
 msgstr "melden Sie sich an"
@@ -3193,19 +3159,19 @@ msgid "Allow store credit in the same order as discount codes. Discounts are alw
 msgstr "Guthaben in derselben Bestellung wie Rabattcodes erlauben. Rabatte werden immer zuerst berechnet; Geschenkkarten und Guthaben bezahlen danach den Restbetrag."
 
 msgid "Gift cards first, then store credit"
-msgstr "Erst Geschenkkarten, dann Guthaben"
+msgstr "Erst Geschenkkarten, dann Kundenguthaben"
 
 msgid "Order of gift cards and store credit"
-msgstr "Reihenfolge von Geschenkkarten und Guthaben"
+msgstr "Reihenfolge von Geschenkkarten und Kundenguthaben"
 
 msgid "Store credit cannot be combined with discount codes."
-msgstr "Guthaben kann nicht mit Rabattcodes kombiniert werden."
+msgstr "Kundenguthaben kann nicht mit Rabattcodes kombiniert werden."
 
 msgid "Store credit first, then gift cards"
-msgstr "Erst Guthaben, dann Geschenkkarten"
+msgstr "Erst Kundenguthaben, dann Geschenkkarten"
 
 msgid "Store credit with discount codes"
-msgstr "Guthaben mit Rabattcodes"
+msgstr "Kundenguthaben mit Rabattcodes"
 
 msgid "External redemption (API, connected plugins)"
 msgstr "Externe Einlösung (API, angebundene Plugins)"
@@ -3265,7 +3231,7 @@ msgid "WP Pass Captain (ticket checkout)"
 msgstr "WP Pass Captain (Ticket-Kasse)"
 
 msgid "Store credit can only be used in the shop."
-msgstr "Guthaben kann nur im Shop verwendet werden."
+msgstr "Kundenguthaben kann nur im Shop verwendet werden."
 
 msgid "Referral reward coupon %s was already used and stays valid."
 msgstr "Der Belohnungs-Gutschein %s wurde bereits verwendet und bleibt gültig."
@@ -3277,7 +3243,7 @@ msgid "Referral reward withdrawn (order #%s cancelled)"
 msgstr "Empfehlungsbelohnung zurückgenommen (Bestellung #%s storniert)"
 
 msgid "Referral reward withdrawn: %s store credit debited."
-msgstr "Empfehlungsbelohnung zurückgenommen: %s Guthaben abgebucht."
+msgstr "Empfehlungsprämie zurückgenommen: %s Kundenguthaben abgebucht."
 
 msgid "Referral reward store credit was already spent and could not be withdrawn."
 msgstr "Das Guthaben aus der Empfehlungsbelohnung wurde bereits verbraucht und konnte nicht zurückgenommen werden."
@@ -3448,7 +3414,7 @@ msgid "Not admitted: %s"
 msgstr "Kein Einlass: %s"
 
 msgid "Not deducted: the amount exceeds the balance (remaining %s)."
-msgstr "Nicht abgebucht: Der Betrag übersteigt das Guthaben (Rest %s)."
+msgstr "Nicht abgebucht: Der Betrag übersteigt den Restwert (verbleibend %s)."
 
 msgid "Please enter a valid email address for your tickets."
 msgstr "Bitte geben Sie eine gültige E-Mail-Adresse für Ihre Tickets ein."
@@ -3576,9 +3542,6 @@ msgstr "Beim Scannen den Namen von Käufer oder Empfänger anzeigen. Personalisi
 msgid "Default validity"
 msgstr "Standard-Gültigkeit"
 
-msgid "Statutory default for the shop country (Germany: 3 years to the end of the year, Austria: 30 years)"
-msgstr "Gesetzlicher Standard des Shop-Landes (Deutschland: 3 Jahre zum Jahresende, Österreich: 30 Jahre)"
-
 msgid "Fixed number of days (below)"
 msgstr "Feste Anzahl Tage (unten)"
 
@@ -3592,13 +3555,13 @@ msgid "The promotion \"%s\" has reached its usage limit. Please remove it from y
 msgstr "Die Aktion „%s“ hat ihr Nutzungslimit erreicht. Bitte entfernen Sie sie aus dem Warenkorb und versuchen Sie es erneut."
 
 msgid "Refund as store credit failed"
-msgstr "Erstattung als Guthaben fehlgeschlagen"
+msgstr "Erstattung als Kundenguthaben fehlgeschlagen"
 
 msgid "Store credit was added but the refund could not be recorded, and the credit could not be booked back. Please check the customer's store credit."
 msgstr "Das Guthaben wurde gutgeschrieben, aber die Erstattung konnte nicht erfasst und das Guthaben nicht zurückgebucht werden. Bitte prüfen Sie das Guthaben des Kunden."
 
 msgid "Store credit refund reversed"
-msgstr "Erstattung als Guthaben zurückgebucht"
+msgstr "Erstattung als Kundenguthaben zurückgebucht"
 
 msgid "Accept voucher shortfall and fulfil the order"
 msgstr "Gutschein-Fehlbetrag akzeptieren und Bestellung ausführen"
@@ -3730,16 +3693,16 @@ msgid "Voucher uses"
 msgstr "Gutscheinverwendungen"
 
 msgid "(WooCommerce coupon could not be disabled – disable it manually)"
-msgstr "(WooCommerce-Gutschein konnte nicht deaktiviert werden – bitte manuell deaktivieren)"
+msgstr "(WooCommerce-Code konnte nicht deaktiviert werden – bitte manuell deaktivieren)"
 
 msgid "WooCommerce coupon could not be enabled – enable it manually"
-msgstr "WooCommerce-Gutschein konnte nicht aktiviert werden – bitte manuell aktivieren"
+msgstr "WooCommerce-Code konnte nicht aktiviert werden – bitte manuell aktivieren"
 
 msgid "The change could not be saved completely. Check the voucher history and the WooCommerce coupon."
-msgstr "Die Änderung konnte nicht vollständig gespeichert werden. Bitte prüfen Sie den Verlauf des Gutscheins und den WooCommerce-Gutschein."
+msgstr "Die Änderung konnte nicht vollständig gespeichert werden. Bitte prüfen Sie den Verlauf des Gutscheins und den WooCommerce-Code."
 
 msgid "A voucher for \"%s\" could not be created (WooCommerce coupon not saved). It will be issued on the next attempt."
-msgstr "Ein Gutschein für „%s“ konnte nicht erstellt werden (WooCommerce-Gutschein nicht gespeichert). Er wird beim nächsten Versuch ausgestellt."
+msgstr "Ein Gutschein für „%s“ konnte nicht erstellt werden (WooCommerce-Code nicht gespeichert). Er wird beim nächsten Versuch ausgestellt."
 
 msgid "Voucher %s was issued, but its history entry could not be written."
 msgstr "Gutschein %s wurde ausgestellt, der Verlaufseintrag konnte aber nicht geschrieben werden."
@@ -3962,7 +3925,7 @@ msgid "Referral reward partly withdrawn: %s store credit debited, the rest was a
 msgstr "Empfehlungsprämie teilweise zurückgenommen: %s Guthaben abgebucht, der Rest war bereits ausgegeben."
 
 msgid "Store credit coupon was missing and has been created again."
-msgstr "Der Guthaben-Coupon fehlte und wurde neu angelegt."
+msgstr "Der WooCommerce-Code des Kundenguthabens fehlte und wurde neu angelegt."
 
 msgid "Gift card shortfall: tickets of the shop order wait for the review."
 msgstr "Fehlbetrag einer Geschenkkarte: Die Tickets der Shop-Bestellung warten auf die Prüfung."
@@ -4346,7 +4309,7 @@ msgid "Consent note"
 msgstr "Notiz zur Zustimmung"
 
 msgid "Customer agreed to store credit"
-msgstr "Kunde hat dem Guthaben zugestimmt"
+msgstr "Kunde hat dem Kundenguthaben zugestimmt"
 
 msgid "Customer consent to store credit: %1$s%2$s."
 msgstr "Zustimmung des Kunden zum Guthaben: %1$s%2$s."
@@ -4598,3 +4561,344 @@ msgstr "Zum Schutz der Gutscheincodes vor Erraten zählen wir fehlgeschlagene Co
 
 msgid "License check (premium edition): to check the license and offer updates, this website sends its address (URL), the WordPress, PHP and plugin versions, the license key and a random installation ID to the license server of the plugin vendor when the license is activated, about twice a day and when updates are checked. No data about customers or orders is sent."
 msgstr "Lizenzprüfung (Premium-Edition): Um die Lizenz zu prüfen und Updates anzubieten, sendet diese Website ihre Adresse (URL), die Versionen von WordPress, PHP und dem Plugin, den Lizenzschlüssel und eine zufällige Installations-ID an den Lizenzserver des Plugin-Anbieters – bei der Aktivierung der Lizenz, etwa zweimal täglich und bei der Suche nach Updates. Daten über Kundinnen, Kunden oder Bestellungen werden nicht übertragen."
+
+msgid "\"%s\" is not a valid email address. The voucher was not saved."
+msgstr "„%s“ ist keine gültige E-Mail-Adresse. Der Gutschein wurde nicht gespeichert."
+
+msgid "%1$s is more than the face value of %2$s. Nothing was changed; confirm the dialog to set a higher value."
+msgstr "%1$s ist mehr als der Nennwert von %2$s. Es wurde nichts geändert; bestätigen Sie die Rückfrage, um einen höheren Wert zu setzen."
+
+msgid "%1$s refunded as store credit. The customer's store credit is now %2$s."
+msgstr "%1$s als Kundenguthaben erstattet. Das Kundenguthaben beträgt jetzt %2$s."
+
+msgid "%s (not paid – vouchers wait for the payment)"
+msgstr "%s (nicht bezahlt – Gutscheine warten auf den Zahlungseingang)"
+
+msgid "A notice on the dashboard and the voucher screens warns when the batch has this many free codes or fewer."
+msgstr "Ein Hinweis im Dashboard und in den Gutschein-Ansichten warnt, sobald der Stapel nur noch so viele freie Codes oder weniger hat."
+
+msgid "A page where customers check and redeem their voucher codes (links in emails and PDFs lead there)"
+msgstr "Eine Seite, auf der Kundinnen und Kunden Gutscheincodes prüfen und einlösen (Links in E-Mails und PDFs führen dorthin)"
+
+msgid "A page where customers check the remaining value of a gift card"
+msgstr "Eine Seite, auf der Kundinnen und Kunden den Restwert einer Geschenkkarte prüfen"
+
+msgid "A voucher product: create a virtual product, tick \"Voucher\" and place a test order"
+msgstr "Ein Gutscheinprodukt: virtuelles Produkt anlegen, „Gutschein“ ankreuzen und eine Testbestellung aufgeben"
+
+msgid "Add product"
+msgstr "Produkt anlegen"
+
+msgid "Any code without spaces (1–100 characters)"
+msgstr "Beliebiger Code ohne Leerzeichen (1–100 Zeichen)"
+
+msgid "Anyone with the code (transferable)"
+msgstr "Jede Person mit dem Code (übertragbar)"
+
+msgid "Balance updated. New remaining value: %s."
+msgstr "Restwert aktualisiert. Neuer Restwert: %s."
+
+msgid "Bulk resend: the email was not sent (no valid address, email disabled or mail error)."
+msgstr "Erneuter Sammelversand: Die E-Mail wurde nicht gesendet (keine gültige Adresse, E-Mail deaktiviert oder Mailfehler)."
+
+msgid "Check voucher balance"
+msgstr "Restwert des Gutscheins prüfen"
+
+msgid "Check when vouchers are issued (default: order \"Processing\" or \"Completed\", i.e. paid)"
+msgstr "Prüfen, wann Gutscheine ausgestellt werden (Standard: Bestellung „In Bearbeitung“ oder „Abgeschlossen“, also bezahlt)"
+
+msgid "Codes that do not match are skipped and listed in the import report."
+msgstr "Codes, die nicht passen, werden übersprungen und im Importbericht aufgeführt."
+
+msgid "Create page"
+msgstr "Seite anlegen"
+
+msgid "Customer chooses the amount: the minimum amount is higher than the maximum amount, so no amount can be bought."
+msgstr "Wunschbetrag: Der Mindestbetrag ist höher als der Höchstbetrag, daher kann kein Betrag gekauft werden."
+
+msgid "Customer chooses the amount: the step must be greater than 0 (e.g. 1 for whole amounts)."
+msgstr "Wunschbetrag: Die Schrittweite muss größer als 0 sein (z. B. 1 für ganze Beträge)."
+
+msgid "Customer chooses the amount: the suggested amounts %s are outside the minimum/maximum or do not match the step and are not shown."
+msgstr "Wunschbetrag: Die vorgeschlagenen Beträge %s liegen außerhalb von Mindest-/Höchstbetrag oder passen nicht zur Schrittweite und werden nicht angezeigt."
+
+msgid "Digits only (4–64 characters)"
+msgstr "Nur Ziffern (4–64 Zeichen)"
+
+msgid "Done:"
+msgstr "Erledigt:"
+
+msgid "Expired voucher products (fixed expiry date passed or missing, no longer purchasable):"
+msgstr "Abgelaufene Gutscheinprodukte (festes Ablaufdatum überschritten oder fehlt, nicht mehr kaufbar):"
+
+msgid "Expiry \"Days after purchase\" has no number of days: the global default validity is used."
+msgstr "Ablauf „Tage nach Kauf“ ohne Anzahl Tage: Es gilt die globale Standard-Gültigkeit."
+
+msgid "Expiry \"Fixed date\" is selected but no expiry date is set. The product cannot be bought until you enter a date (or choose another expiry)."
+msgstr "Ablauf „Festes Datum“ ist gewählt, aber kein Ablaufdatum eingetragen. Das Produkt kann erst gekauft werden, wenn Sie ein Datum eintragen (oder einen anderen Ablauf wählen)."
+
+msgid "Gift card with single use: whatever the customer does not use in the first order is lost. Gift cards usually keep their remaining value – choose \"Multi-use with stored balance (gift card)\"."
+msgstr "Geschenkkarte mit einmaliger Einlösung: Was in der ersten Bestellung nicht verbraucht wird, verfällt. Geschenkkarten behalten üblicherweise ihren Restwert – wählen Sie „Mehrfach verwendbar mit gespeichertem Guthaben (Geschenkkarte)“."
+
+msgid "Hide this checklist"
+msgstr "Diese Checkliste ausblenden"
+
+msgid "Letters and digits only (4–64 characters)"
+msgstr "Nur Buchstaben und Ziffern (4–64 Zeichen)"
+
+msgid "Letters, digits, dot, hyphen, underscore (4–64 characters)"
+msgstr "Buchstaben, Ziffern, Punkt, Bindestrich, Unterstrich (4–64 Zeichen)"
+
+msgid "No content found."
+msgstr "Kein Inhalt gefunden."
+
+msgid "No recipient email was given: redemption is limited to the buyer email instead."
+msgstr "Es wurde keine Empfänger-E-Mail angegeben: Die Einlösung ist stattdessen auf die Käufer-E-Mail beschränkt."
+
+msgid "No voucher product has an expired fixed expiry date or an empty code batch."
+msgstr "Kein Gutscheinprodukt hat ein abgelaufenes festes Ablaufdatum oder einen leeren Code-Stapel."
+
+msgid "No workbook stream found."
+msgstr "Kein Arbeitsmappen-Datenstrom gefunden."
+
+msgid "No worksheet found."
+msgstr "Kein Tabellenblatt gefunden."
+
+msgid "Only %1$s is available – %2$s cannot be deducted. Nothing was changed."
+msgstr "Nur %1$s verfügbar – %2$s können nicht abgezogen werden. Es wurde nichts geändert."
+
+msgid "Only with the buyer email"
+msgstr "Nur mit der Käufer-E-Mail"
+
+msgid "Only with the buyer or recipient email (personal)"
+msgstr "Nur mit der Käufer- oder Empfänger-E-Mail (persönlich)"
+
+msgid "Only with the recipient email (buyer email if none was entered)"
+msgstr "Nur mit der Empfänger-E-Mail (Käufer-E-Mail, wenn keine angegeben wurde)"
+
+msgid "Open settings"
+msgstr "Einstellungen öffnen"
+
+msgid "Own format (regular expression below)"
+msgstr "Eigenes Format (regulärer Ausdruck unten)"
+
+msgid "Own regular expression (only for \"Own format\")"
+msgstr "Eigener regulärer Ausdruck (nur für „Eigenes Format“)"
+
+msgid "Personal vouchers can only be redeemed by a customer logged in or checking out with one of these email addresses. The voucher text {transferable} follows this setting."
+msgstr "Persönliche Gutscheine kann nur einlösen, wer mit einer dieser E-Mail-Adressen angemeldet ist oder bestellt. Der Gutscheintext {transferable} richtet sich nach dieser Einstellung."
+
+msgid "Personal – only the buyer can redeem it."
+msgstr "Persönlich – nur die kaufende Person kann ihn einlösen."
+
+msgid "Personal – only the email addresses stored with the voucher can redeem it."
+msgstr "Persönlich – nur mit den beim Gutschein hinterlegten E-Mail-Adressen einlösbar."
+
+msgid "Personal – only the named recipient can redeem it."
+msgstr "Persönlich – nur die genannte beschenkte Person kann ihn einlösen."
+
+msgid "Please enter an amount greater than 0."
+msgstr "Bitte geben Sie einen Betrag größer als 0 ein."
+
+msgid "Please enter the new remaining value (0 or more)."
+msgstr "Bitte geben Sie den neuen Restwert ein (0 oder mehr)."
+
+msgid "Redemption conditions printed on vouchers and shown in emails (have them checked legally)"
+msgstr "Einlösebedingungen, die auf Gutscheinen gedruckt und in E-Mails angezeigt werden (rechtlich prüfen lassen)"
+
+msgid "Refund %1$s %2$s as store credit? No money is paid back; the amount is added to the customer's store credit and booked as a refund. If this refunds the whole remaining total, the order becomes \"Refunded\": vouchers bought with it are voided and connected tickets are cancelled. This cannot be undone."
+msgstr "%1$s %2$s als Kundenguthaben erstatten? Es wird kein Geld zurückgezahlt; der Betrag wird dem Kundenguthaben gutgeschrieben und als Erstattung gebucht. Wird damit der gesamte Restbetrag erstattet, erhält die Bestellung den Status „Erstattet“: Damit gekaufte Gutscheine werden gesperrt und verbundene Tickets storniert. Das kann nicht rückgängig gemacht werden."
+
+msgid "Remaining value: %1$s of %2$s."
+msgstr "Restwert: %1$s von %2$s."
+
+msgid "Requested by an admin:"
+msgstr "Von einer Administratorin oder einem Administrator angefordert:"
+
+msgid "Requested by the customer"
+msgstr "Von der Kundin oder dem Kunden angefordert"
+
+msgid "Required for \"Days after purchase\". Without a number of days the global default validity is used."
+msgstr "Pflichtfeld für „Tage nach Kauf“. Ohne Anzahl Tage gilt die globale Standard-Gültigkeit."
+
+msgid "Required. Vouchers expire at the end of this day; after it the product can no longer be bought."
+msgstr "Pflichtfeld. Gutscheine laufen am Ende dieses Tages ab; danach kann das Produkt nicht mehr gekauft werden."
+
+msgid "Sent to %s by an admin (bulk action)"
+msgstr "Von der Verwaltung an %s gesendet (Sammelaktion)"
+
+msgid "Sent to the buyer (%s) by an admin"
+msgstr "Von der Verwaltung an die kaufende Person (%s) gesendet"
+
+msgid "Sent to the recipient (%s) by an admin"
+msgstr "Von der Verwaltung an die beschenkte Person (%s) gesendet"
+
+msgid "Set the remaining value to %s? The current value is replaced and the change is recorded in the history."
+msgstr "Restwert auf %s setzen? Der bisherige Wert wird ersetzt und die Änderung im Verlauf festgehalten."
+
+msgid "Single use: the whole value must be used in one order, a remaining value is lost (the customer is told so in the cart). Choose \"Multi-use with stored balance\" if the remaining value should be kept."
+msgstr "Einmalige Einlösung: Der ganze Wert muss in einer Bestellung verbraucht werden, ein Restwert verfällt (darauf wird im Warenkorb hingewiesen). Wählen Sie „Mehrfach verwendbar mit gespeichertem Guthaben“, wenn der Restwert erhalten bleiben soll."
+
+msgid "Some voucher products cannot be sold as configured"
+msgstr "Einige Gutscheinprodukte können so nicht verkauft werden"
+
+msgid "Statutory default for the buyer's country (Germany: 3 years to the end of the year, Austria: 30 years)"
+msgstr "Gesetzliche Vorgabe für das Land der kaufenden Person (Deutschland: 3 Jahre zum Jahresende, Österreich: 30 Jahre)"
+
+msgid "Stop selling the product"
+msgstr "Produkt nicht mehr verkaufen"
+
+msgid "The code batch \"%s\" is empty: new vouchers get random codes."
+msgstr "Der Code-Stapel „%s“ ist leer: Neue Gutscheine erhalten Zufallscodes."
+
+msgid "The code batch \"%s\" is empty: the product cannot be bought until you import more codes."
+msgstr "Der Code-Stapel „%s“ ist leer: Das Produkt kann erst wieder gekauft werden, wenn Sie weitere Codes importieren."
+
+msgid "The file is not a valid spreadsheet archive."
+msgstr "Die Datei ist kein gültiges Tabellenarchiv."
+
+msgid "The fixed expiry date %s has passed: vouchers sold now would already be expired, so the product can no longer be bought. Set a new date or another expiry."
+msgstr "Das feste Ablaufdatum %s ist überschritten: Jetzt verkaufte Gutscheine wären bereits abgelaufen, daher kann das Produkt nicht mehr gekauft werden. Setzen Sie ein neues Datum oder einen anderen Ablauf."
+
+msgid "The imported code batch of these voucher products is empty (products set to \"stop selling\" cannot be bought, the others get random codes). Import more codes under Vouchers → Import codes:"
+msgstr "Der importierte Code-Stapel dieser Gutscheinprodukte ist leer (Produkte mit „nicht mehr verkaufen“ sind nicht kaufbar, die anderen erhalten Zufallscodes). Importieren Sie weitere Codes unter Gutscheine → Codes importieren:"
+
+msgid "The imported code batch of these voucher products is running low:"
+msgstr "Der importierte Code-Stapel dieser Gutscheinprodukte geht zur Neige:"
+
+msgid "The page \"%s\" was created and published. Adjust it like any other page."
+msgstr "Die Seite „%s“ wurde angelegt und veröffentlicht. Sie können sie wie jede andere Seite anpassen."
+
+msgid "The page could not be created."
+msgstr "Die Seite konnte nicht angelegt werden."
+
+msgid "The recipient email was changed. Use \"Email recipient\" if the new address should receive the voucher now."
+msgstr "Die Empfänger-E-Mail wurde geändert. Verwenden Sie „E-Mail an Empfänger“, wenn die neue Adresse den Gutschein jetzt erhalten soll."
+
+msgid "The spreadsheet XML could not be parsed."
+msgstr "Das XML der Tabelle konnte nicht gelesen werden."
+
+msgid "The spreadsheet archive has too many entries."
+msgstr "Das Tabellenarchiv enthält zu viele Einträge."
+
+msgid "The spreadsheet is too large to import. Please split it into smaller files."
+msgstr "Die Tabelle ist für den Import zu groß. Bitte teilen Sie sie in kleinere Dateien auf."
+
+msgid "The voucher email was not sent: %s."
+msgstr "Die Gutschein-E-Mail wurde nicht gesendet: %s."
+
+msgid "The voucher is sent to you, not to this address. Only this address can redeem it (yours, if you leave it empty)."
+msgstr "Der Gutschein wird an Sie gesendet, nicht an diese Adresse. Nur diese Adresse kann ihn einlösen (Ihre, wenn Sie das Feld leer lassen)."
+
+msgid "The voucher is sent to you, not to this address. Only this address or yours can redeem it."
+msgstr "Der Gutschein wird an Sie gesendet, nicht an diese Adresse. Nur diese Adresse oder Ihre kann ihn einlösen."
+
+msgid "There is no recipient email: emails for this voucher go to the buyer."
+msgstr "Es ist keine Empfänger-E-Mail hinterlegt: E-Mails zu diesem Gutschein gehen an die kaufende Person."
+
+msgid "These voucher products have a fixed expiry date that has passed (or is missing) and can no longer be bought:"
+msgstr "Diese Gutscheinprodukte haben ein festes Ablaufdatum, das überschritten ist (oder fehlt), und können nicht mehr gekauft werden:"
+
+msgid "This gift card is set to \"Single use (whole value at once)\": whatever is not used in the first order is lost. Gift cards usually keep their remaining value – choose \"Multi-use with stored balance (gift card)\" under Usage."
+msgstr "Diese Geschenkkarte ist auf „Einmalig (gesamter Wert auf einmal)“ eingestellt: Was in der ersten Bestellung nicht verbraucht wird, verfällt. Geschenkkarten behalten üblicherweise ihren Restwert – wählen Sie unter „Verwendung“ die Option „Mehrfach verwendbar mit gespeichertem Guthaben (Geschenkkarte)“."
+
+msgid "This is more than the face value of %s."
+msgstr "Das ist mehr als der Nennwert von %s."
+
+msgid "This voucher is set to go to the buyer only. Send it to %s anyway? \"Send to\" is changed to \"Recipient\", so later emails go there too."
+msgstr "Dieser Gutschein geht laut Einstellung nur an die kaufende Person. Trotzdem an %s senden? „Senden an“ wird auf „Empfänger“ umgestellt, spätere E-Mails gehen ebenfalls dorthin."
+
+msgid "Unpaid statuses (e.g. \"On hold\" for bank transfer) issue nothing until the payment is recorded – remove them and keep \"Processing\" and \"Completed\"."
+msgstr "Unbezahlte Status (z. B. „In Wartestellung“ bei Überweisung) stellen nichts aus, bis die Zahlung erfasst ist – entfernen Sie diese und behalten Sie „In Bearbeitung“ und „Abgeschlossen“."
+
+msgid "Unsupported file type."
+msgstr "Nicht unterstützter Dateityp."
+
+msgid "Up to %s (the remaining refundable total). Refunding all of it sets the order to \"Refunded\"."
+msgstr "Bis zu %s (der noch erstattbare Betrag). Wird alles erstattet, erhält die Bestellung den Status „Erstattet“."
+
+msgid "Use codes imported under Vouchers → Import codes."
+msgstr "Codes verwenden, die unter Gutscheine → Codes importieren eingelesen wurden."
+
+msgid "Voucher %1$s: only %2$s of %3$s is used in this order. The voucher can be redeemed only once – the remaining %4$s will be lost. Add more items to use its full value."
+msgstr "Gutschein %1$s: In dieser Bestellung werden nur %2$s von %3$s angerechnet. Der Gutschein kann nur einmal eingelöst werden – der Restwert von %4$s verfällt. Legen Sie weitere Artikel in den Warenkorb, um den vollen Wert zu nutzen."
+
+msgid "Voucher Captain – first steps"
+msgstr "Voucher Captain – erste Schritte"
+
+msgid "Voucher email sent to %s."
+msgstr "Gutschein-E-Mail an %s gesendet."
+
+msgid "Voucher products can be sold"
+msgstr "Gutscheinprodukte sind verkaufbar"
+
+msgid "Voucher products with an empty code batch:"
+msgstr "Gutscheinprodukte mit leerem Code-Stapel:"
+
+msgid "Vouchers are sent by email as PDF. Tick \"Virtual\" at the top of the product data box – otherwise WooCommerce asks for a shipping address and may charge shipping for the voucher."
+msgstr "Gutscheine werden als PDF per E-Mail versendet. Kreuzen Sie oben in der Produktdaten-Box „Virtuell“ an – sonst fragt WooCommerce nach einer Lieferadresse und berechnet womöglich Versandkosten für den Gutschein."
+
+msgid "Warn at free codes"
+msgstr "Warnen ab freien Codes"
+
+msgid "When the batch is empty"
+msgstr "Wenn der Stapel leer ist"
+
+msgid "Who may redeem"
+msgstr "Wer darf einlösen"
+
+msgid "With \"Buyer only\" nothing is sent to a recipient, so the product page does not ask for a recipient email – unless \"Who may redeem\" uses the recipient email; then the field only decides who can redeem."
+msgstr "Bei „Nur Käufer“ wird nichts an eine beschenkte Person gesendet, daher fragt die Produktseite nicht nach einer Empfänger-E-Mail – außer „Wer darf einlösen“ nutzt die Empfänger-E-Mail; dann legt das Feld nur fest, wer einlösen darf."
+
+msgid "no valid buyer email address is stored"
+msgstr "es ist keine gültige Käufer-E-Mail-Adresse hinterlegt"
+
+msgid "no valid recipient email address is stored"
+msgstr "es ist keine gültige Empfänger-E-Mail-Adresse hinterlegt"
+
+msgid "the email \"%s\" is disabled under WooCommerce → Settings → Emails"
+msgstr "die E-Mail „%s“ ist unter WooCommerce → Einstellungen → E-Mails deaktiviert"
+
+msgid "the mail system did not accept the email (see Tools → Site Health)"
+msgstr "das Mailsystem hat die E-Mail nicht angenommen (siehe Werkzeuge → Website-Zustand)"
+
+msgid "the mail system reported: %s"
+msgstr "das Mailsystem meldete: %s"
+
+msgid "the voucher email is not registered (another plugin may have removed it)"
+msgstr "die Gutschein-E-Mail ist nicht registriert (möglicherweise von einem anderen Plugin entfernt)"
+
+msgid "%d voucher could not be sent (no valid address, email disabled or mail error) – see its history."
+msgid_plural "%d vouchers could not be sent (no valid address, email disabled or mail error) – see their history."
+msgstr[0] "%d Gutschein konnte nicht gesendet werden (keine gültige Adresse, E-Mail deaktiviert oder Mailfehler) – siehe Verlauf."
+msgstr[1] "%d Gutscheine konnten nicht gesendet werden (keine gültige Adresse, E-Mail deaktiviert oder Mailfehler) – siehe Verlauf."
+
+msgid "%d voucher sent again."
+msgid_plural "%d vouchers sent again."
+msgstr[0] "%d Gutschein erneut gesendet."
+msgstr[1] "%d Gutscheine erneut gesendet."
+
+msgid "Only %d voucher of this kind is still available."
+msgid_plural "Only %d vouchers of this kind are still available."
+msgstr[0] "Von diesem Gutschein ist nur noch %d Stück verfügbar."
+msgstr[1] "Von diesem Gutschein sind nur noch %d Stück verfügbar."
+
+msgid "Requested by the customer, sent to %d address"
+msgid_plural "Requested by the customer, sent to %d addresses"
+msgstr[0] "Von der Kundin oder dem Kunden angefordert, an %d Adresse gesendet"
+msgstr[1] "Von der Kundin oder dem Kunden angefordert, an %d Adressen gesendet"
+
+msgid "Sent again from the order to %d address"
+msgid_plural "Sent again from the order to %d addresses"
+msgstr[0] "Aus der Bestellung erneut an %d Adresse gesendet"
+msgstr[1] "Aus der Bestellung erneut an %d Adressen gesendet"
+
+msgid "Sent to %d address"
+msgid_plural "Sent to %d addresses"
+msgstr[0] "An %d Adresse gesendet"
+msgstr[1] "An %d Adressen gesendet"
+
+msgid "The code batch \"%1$s\" has only %2$d free code left."
+msgid_plural "The code batch \"%1$s\" has only %2$d free codes left."
+msgstr[0] "Der Code-Stapel „%1$s“ hat nur noch %2$d freien Code."
+msgstr[1] "Der Code-Stapel „%1$s“ hat nur noch %2$d freie Codes."
