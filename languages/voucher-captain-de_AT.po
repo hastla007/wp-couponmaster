@@ -3791,3 +3791,6 @@ msgstr "Erneut senden aus der Bestellung: keine E-Mail versendet."
 
 msgid "Not sent (email disabled or no valid address): %s"
 msgstr "Nicht gesendet (E-Mail deaktiviert oder keine gültige Adresse): %s"
+
+msgid "Expiry reminder could not be sent; it is retried on the next run."
+msgstr "Die Ablauf-Erinnerung konnte nicht gesendet werden; sie wird beim nächsten Lauf erneut versucht."

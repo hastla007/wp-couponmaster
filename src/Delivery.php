@@ -256,10 +256,18 @@ final class Delivery {
 			if ( ! apply_filters( 'vcap_send_expiry_reminder', true, $voucher ) ) {
 				continue;
 			}
-			// Logged first: a crash after sending must not lead to a second reminder.
-			$this->repo->log( $voucher->id, 'expiry_reminder', null, $voucher->balance, '' );
+			// Claimed first (a parallel run or a crash after sending never leads to a second reminder), recorded
+			// only after a successful send; a failed send gives the claim back and is retried on the next run.
+			$claim = 'expiry-reminder:' . $voucher->id;
+			if ( ! Claim::take( $claim ) ) {
+				continue;
+			}
 			if ( $email->trigger( $voucher ) ) {
+				$this->repo->log( $voucher->id, 'expiry_reminder', null, $voucher->balance, '' );
 				++$sent;
+			} else {
+				Claim::release( $claim );
+				$this->repo->log( $voucher->id, 'delivery_failed', null, null, __( 'Expiry reminder could not be sent; it is retried on the next run.', 'voucher-captain' ) );
 			}
 		}
 		return $sent;
