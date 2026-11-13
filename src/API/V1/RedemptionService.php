@@ -84,7 +84,7 @@ final class RedemptionService {
 			return self::error( 'vcap_not_found', __( 'This voucher code is not valid.', 'voucher-captain' ), 404 );
 		}
 		$this->record_success( $user_id );
-		$target = isset( $args['target'] ) ? $this->clean_target( (string) $args['target'] ) : '';
+		$target = isset( $args['target'] ) ? self::clean_target( (string) $args['target'] ) : '';
 		$amount = isset( $args['amount'] ) ? (float) $args['amount'] : null;
 		$check  = $this->eligibility( $voucher, $target, $amount, $user_id, (string) ( $args['email'] ?? '' ) );
 		if ( is_wp_error( $check ) ) {
@@ -110,7 +110,7 @@ final class RedemptionService {
 	 */
 	public function reserve( string $code, array $args ) {
 		$key    = (string) ( $args['key'] ?? '' );
-		$target = $this->clean_target( (string) ( $args['target'] ?? '' ) );
+		$target = self::clean_target( (string) ( $args['target'] ?? '' ) );
 		if ( ! preg_match( self::KEY_PATTERN, $key ) ) {
 			return self::error( 'vcap_invalid_request', __( 'A redemption key of 8–64 characters (letters, digits, . _ : -) is required.', 'voucher-captain' ), 400 );
 		}
@@ -722,7 +722,7 @@ final class RedemptionService {
 	 * @param string $target Target.
 	 * @return string
 	 */
-	private function clean_target( string $target ): string {
+	public static function clean_target( string $target ): string {
 		return substr( (string) preg_replace( '/[^A-Za-z0-9._:\/\-]/', '', $target ), 0, 191 );
 	}
 
