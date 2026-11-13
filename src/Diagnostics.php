@@ -7,8 +7,9 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Support information in Tools → Site Health → Info → "Voucher Captain" (also part of "Copy site info to clipboard"):
- * edition, license status, snapshot age, locked features, database version, schema errors, WP Pass Captain version
- * and the "multi-purpose vouchers as payment" setting. Contains no license key, secret or customer data.
+ * edition, license status, snapshot age, locked features, database version, schema errors, WP Pass Captain version,
+ * the last run of each daily maintenance step, the number of given-up deliveries and the "multi-purpose vouchers as
+ * payment" setting. Contains no license key, secret or customer data.
  */
 final class Diagnostics {
 	public function register(): void {
@@ -69,12 +70,35 @@ final class Diagnostics {
 			'label' => __( 'WP Pass Captain', 'voucher-captain' ),
 			'value' => Compat\PassCaptain::active() ? ( defined( 'WPCAP_VERSION' ) ? (string) WPCAP_VERSION : __( 'Active', 'voucher-captain' ) ) : __( 'Not active', 'voucher-captain' ),
 		);
+		$fields['maintenance'] = array(
+			'label' => __( 'Daily maintenance (last run per step)', 'voucher-captain' ),
+			'value' => self::maintenance_summary(),
+		);
+		$fields['deliveries_given_up'] = array(
+			'label' => __( 'Deliveries given up after repeated failures', 'voucher-captain' ),
+			'value' => (string) vcap()->vouchers->given_up_count(),
+		);
 		$fields['payment_after_tax'] = array(
 			'label' => __( 'Multi-purpose vouchers as payment', 'voucher-captain' ),
 			'value' => PaymentVouchers::enabled() ? __( 'On', 'voucher-captain' ) : __( 'Off', 'voucher-captain' ),
 			'debug' => PaymentVouchers::enabled() ? 'yes' : 'no',
 		);
 		return $fields;
+	}
+
+	/** "step: date ok|failed (error)" per maintenance step (Delivery::MAINTENANCE_STEPS), technical names for support. */
+	private static function maintenance_summary(): string {
+		$parts = array();
+		foreach ( Delivery::last_runs() as $step => $run ) {
+			if ( ! $run ) {
+				$parts[] = $step . ': —';
+				continue;
+			}
+			$state   = $run['ok'] ? 'ok' : 'failed';
+			$note    = '' !== (string) $run['note'] ? ' (' . $run['note'] . ')' : '';
+			$parts[] = $step . ': ' . gmdate( 'Y-m-d H:i', (int) $run['time'] ) . ' UTC ' . $state . $note;
+		}
+		return implode( '; ', $parts );
 	}
 
 	/** License status of the signed local snapshot (no server call while Site Health loads). */

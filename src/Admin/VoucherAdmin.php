@@ -80,14 +80,21 @@ final class VoucherAdmin {
 		if ( $count < 1 ) {
 			return;
 		}
-		$url = add_query_arg( array( 'page' => 'vcap-vouchers', 'undelivered' => 'yes' ), admin_url( 'admin.php' ) );
-		echo '<div class="notice notice-warning"><p>' . esc_html(
-			sprintf(
+		$url      = add_query_arg( array( 'page' => 'vcap-vouchers', 'undelivered' => 'yes' ), admin_url( 'admin.php' ) );
+		$given_up = min( $count, $this->repo->given_up_count() );
+		$text     = sprintf(
+			/* translators: %d: number of vouchers */
+			_n( '%d voucher has not been delivered (email failed, no valid address or email disabled). Delivery is retried automatically with growing pauses; you can also send it again yourself.', '%d vouchers have not been delivered (email failed, no valid address or email disabled). Delivery is retried automatically with growing pauses; you can also send them again yourself.', $count, 'voucher-captain' ),
+			$count
+		);
+		if ( $given_up > 0 ) {
+			$text .= ' ' . sprintf(
 				/* translators: %d: number of vouchers */
-				_n( '%d voucher has not been delivered (email failed, no valid address or email disabled). It is retried automatically every day for 30 days; you can also send it again yourself.', '%d vouchers have not been delivered (email failed, no valid address or email disabled). They are retried automatically every day for 30 days; you can also send them again yourself.', $count, 'voucher-captain' ),
-				$count
-			)
-		) . ' <a href="' . esc_url( $url ) . '">' . esc_html__( 'Show them', 'voucher-captain' ) . '</a></p></div>';
+				_n( '%d of them is no longer retried after repeated failures and has to be sent again by hand.', '%d of them are no longer retried after repeated failures and have to be sent again by hand.', $given_up, 'voucher-captain' ),
+				$given_up
+			);
+		}
+		echo '<div class="notice ' . ( $given_up > 0 ? 'notice-error' : 'notice-warning' ) . '"><p>' . esc_html( $text ) . ' <a href="' . esc_url( $url ) . '">' . esc_html__( 'Show them', 'voucher-captain' ) . '</a></p></div>';
 	}
 
 	public function page(): void {
