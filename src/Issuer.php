@@ -19,8 +19,18 @@ final class Issuer {
 	) {}
 
 	public function register(): void {
-		foreach ( (array) $this->settings->get( 'vcap_issue_statuses' ) as $status ) {
-			add_action( 'woocommerce_order_status_' . sanitize_key( $status ), array( $this, 'on_status' ), 20, 2 );
+		$statuses = array_map( 'sanitize_key', (array) $this->settings->get( 'vcap_issue_statuses' ) );
+		foreach ( $statuses as $status ) {
+			add_action( 'woocommerce_order_status_' . $status, array( $this, 'on_status' ), 20, 3 );
+		}
+		// Offline payments (cash on delivery, bank transfer, cheque) are confirmed later: when the payment is
+		// recorded or the order is completed. Both run idempotently (one voucher per item slot).
+		add_action( 'woocommerce_pre_payment_complete', array( $this, 'on_pre_payment_complete' ), 5 );
+		add_action( 'woocommerce_payment_complete', array( $this, 'on_payment_complete' ), 20 );
+		// payment_complete() on an order that is already "Processing" (cash on delivery) fires only this hook.
+		add_action( 'woocommerce_payment_complete_order_status_processing', array( $this, 'on_payment_complete' ), 20 );
+		if ( $statuses && ! in_array( 'completed', $statuses, true ) ) {
+			add_action( 'woocommerce_order_status_completed', array( $this, 'on_completed' ), 20, 2 );
 		}
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'on_purchase_cancelled' ), 30, 2 );
 		add_action( 'woocommerce_order_status_refunded', array( $this, 'on_purchase_cancelled' ), 30, 2 );
@@ -29,9 +39,26 @@ final class Issuer {
 		add_action( 'vcap_issue_order', array( $this, 'issue_async' ) );
 	}
 
-	public function on_status( $order_id, $order = null ): void {
+	/**
+	 * @param int|string     $order_id   Order id.
+	 * @param \WC_Order|null $order      Order.
+	 * @param array          $transition Status transition (WooCommerce: from, to, note, manual).
+	 */
+	public function on_status( $order_id, $order = null, $transition = array() ): void {
 		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
-		if ( ! $order || ! self::payment_ok( $order ) || ! apply_filters( 'vcap_should_issue_for_order', true, $order ) ) {
+		if ( ! $order ) {
+			return;
+		}
+		// Payment being recorded right now, or the shop set the order to a paid status by hand.
+		$how = self::$confirmed[ $order->get_id() ] ?? ( self::manual_paid_transition( $transition ) ? 'manual' : '' );
+		if ( '' !== $how && self::offline_payment( $order ) ) {
+			self::confirm_payment( $order, $how );
+		}
+		if ( ! self::payment_ok( $order ) ) {
+			$this->await_payment( $order );
+			return;
+		}
+		if ( ! apply_filters( 'vcap_should_issue_for_order', true, $order ) ) {
 			return;
 		}
 		$this->issue_for_order( $order );
@@ -44,17 +71,128 @@ final class Issuer {
 		}
 	}
 
+	/** payment_complete() starts: the status hooks it fires already count the order as paid. */
+	public function on_pre_payment_complete( $order_id ): void {
+		self::$confirmed[ (int) $order_id ] = 'payment_complete';
+	}
+
+	/** WooCommerce recorded the payment (also for an offline payment method, e.g. by a bank import). */
+	public function on_payment_complete( $order_id ): void {
+		$order = wc_get_order( (int) $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			return;
+		}
+		if ( self::offline_payment( $order ) ) {
+			self::confirm_payment( $order, 'payment_complete' );
+		}
+		$this->issue_when_confirmed( $order );
+	}
+
+	/** Completed while "Completed" is not an issue status: issues what waited for an offline payment. */
+	public function on_completed( $order_id, $order = null ): void {
+		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
+		if ( $order instanceof \WC_Order ) {
+			$this->issue_when_confirmed( $order );
+		}
+	}
+
+	/** Issues when automatic issuing applies to the order: it has an issue status or waited for its payment. */
+	private function issue_when_confirmed( \WC_Order $order ): void {
+		$statuses = array_map( 'sanitize_key', (array) $this->settings->get( 'vcap_issue_statuses' ) );
+		if ( ! $statuses || ( ! $order->has_status( $statuses ) && '' === (string) $order->get_meta( self::AWAITING_PAYMENT ) ) ) {
+			return;
+		}
+		if ( ! self::payment_ok( $order ) || ! apply_filters( 'vcap_should_issue_for_order', true, $order ) ) {
+			return;
+		}
+		$this->issue_for_order( $order );
+	}
+
+	/** Order meta: how an offline payment was confirmed ("manual", "payment_complete"). */
+	public const PAYMENT_CONFIRMED = '_vcap_payment_confirmed';
+	/** Order meta: the order reached an issue status, its vouchers wait for the offline payment. */
+	public const AWAITING_PAYMENT = '_vcap_awaiting_payment';
+
+	/** @var array<int, string> Offline payments confirmed in this request (order id => how). */
+	private static array $confirmed = array();
+
+	/**
+	 * Payment methods that set an order to "Processing" (or let the shop do it) before any money arrived: cash
+	 * on delivery, bank transfer, cheque. Filter "vcap_offline_payment_methods" (gateway ids) adds e.g. invoice or
+	 * pay-at-pickup gateways.
+	 */
+	public static function offline_payment( \WC_Order $order ): bool {
+		$methods = array_map( 'strval', (array) apply_filters( 'vcap_offline_payment_methods', array( 'cod', 'bacs', 'cheque' ), $order ) );
+		return '' !== $order->get_payment_method() && in_array( $order->get_payment_method(), $methods, true );
+	}
+
+	/** Whether a status transition was made by hand (order screen, bulk action, REST) to a paid status. */
+	public static function manual_paid_transition( $transition ): bool {
+		return is_array( $transition ) && ! empty( $transition['manual'] ) && in_array( (string) ( $transition['to'] ?? '' ), wc_get_is_paid_statuses(), true );
+	}
+
+	public static function confirm_payment( \WC_Order $order, string $how ): void {
+		self::$confirmed[ $order->get_id() ] = $how;
+		if ( '' === (string) $order->get_meta( self::PAYMENT_CONFIRMED ) ) {
+			$order->update_meta_data( self::PAYMENT_CONFIRMED, $how );
+			$order->save_meta_data();
+		}
+	}
+
+	/** Remembers (once, with an order note) that the vouchers of an order wait for its offline payment. */
+	private function await_payment( \WC_Order $order ): void {
+		if ( ! self::offline_payment( $order ) || '' !== (string) $order->get_meta( self::AWAITING_PAYMENT ) || ! $this->has_voucher_items( $order ) ) {
+			return;
+		}
+		$order->update_meta_data( self::AWAITING_PAYMENT, (string) time() );
+		$order->save_meta_data();
+		$order->add_order_note(
+			sprintf(
+				/* translators: %s: payment method title, e.g. "Cash on delivery" */
+				__( 'Vouchers are not issued yet: the payment (%s) has not been received. Once the money has arrived, mark the order as completed (or set a paid status by hand) and the vouchers are issued – or issue them now with the order action "Generate vouchers".', 'voucher-captain' ),
+				$order->get_payment_method_title() ? $order->get_payment_method_title() : $order->get_payment_method()
+			)
+		);
+	}
+
+	private function has_voucher_items( \WC_Order $order ): bool {
+		foreach ( $order->get_items() as $item ) {
+			$product = $item instanceof \WC_Order_Item_Product ? $item->get_product() : null;
+			if ( $product && ProductConfig::is_voucher( $product ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/**
 	 * Automatic issuing waits for the payment: an order counts as paid when its status is a paid status
 	 * (processing, completed, or one a plugin adds via "woocommerce_order_is_paid_statuses") or WooCommerce
 	 * recorded a payment date. So an issue status such as "On hold" (bank transfer) never sends vouchers before
 	 * the money arrived. Filter "vcap_issue_requires_payment" (default true; false = issue on the status alone).
+	 *
+	 * Offline payment methods (see offline_payment()) are different: cash on delivery sets "Processing" at
+	 * checkout and WooCommerce then records a payment date as well, although nothing was paid. Their orders count
+	 * as paid only when completed, when WooCommerce recorded the payment ("woocommerce_payment_complete"), or when
+	 * the shop set a paid status by hand ($transition, or remembered in the order meta). Bonus vouchers follow
+	 * the same rule.
+	 *
+	 * @param array $transition Status transition of the current hook (WooCommerce: from, to, note, manual).
 	 */
-	public static function payment_ok( \WC_Order $order ): bool {
+	public static function payment_ok( \WC_Order $order, $transition = array() ): bool {
 		if ( ! apply_filters( 'vcap_issue_requires_payment', true, $order ) ) {
 			return true;
 		}
+		if ( self::offline_payment( $order ) ) {
+			return $order->has_status( 'completed' ) || self::manual_paid_transition( $transition ) || isset( self::$confirmed[ $order->get_id() ] ) || '' !== (string) $order->get_meta( self::PAYMENT_CONFIRMED );
+		}
 		return $order->is_paid() || null !== $order->get_date_paid();
+	}
+
+	/** Whether cash on delivery is offered for virtual products (vouchers would wait for the delivery). */
+	public static function cod_for_virtual(): bool {
+		$cod = get_option( 'woocommerce_cod_settings', array() );
+		return is_array( $cod ) && 'yes' === ( $cod['enabled'] ?? 'no' ) && 'no' !== ( $cod['enable_for_virtual'] ?? 'yes' );
 	}
 
 	/**

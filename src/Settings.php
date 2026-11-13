@@ -284,6 +284,10 @@ final class Settings {
 					$statuses[ $status ] = $label;
 				}
 				$issue_desc = __( 'Vouchers are created once per purchased item the first time an order reaches one of these statuses. Leave empty to issue manually only.', 'voucher-captain' );
+				$issue_desc .= ' ' . __( 'Orders paid by cash on delivery, bank transfer or cheque issue vouchers only once the payment is confirmed: the order is completed, the payment is recorded, or a paid status is set by hand.', 'voucher-captain' );
+				if ( Issuer::cod_for_virtual() ) {
+					$issue_desc .= ' ' . __( 'Cash on delivery is offered for virtual products: vouchers of such orders wait until the order is completed. Consider switching off "Accept for virtual orders" in the cash on delivery settings.', 'voucher-captain' );
+				}
 				if ( array_intersect( $saved, $unpaid ) ) {
 					$issue_desc .= ' ' . __( 'Unpaid statuses (e.g. "On hold" for bank transfer) issue nothing until the payment is recorded – remove them and keep "Processing" and "Completed".', 'voucher-captain' );
 				}
