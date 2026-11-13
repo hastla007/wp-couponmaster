@@ -178,20 +178,16 @@ final class CouponManager {
 		$coupon->set_product_categories( array_map( 'intval', (array) $config['category_ids'] ) );
 		$coupon->set_excluded_product_categories( array_map( 'intval', (array) $config['exclude_category_ids'] ) );
 
-		$emails   = array();
 		$restrict = (string) $config['email_restrict'];
 		if ( ! $voucher->transferable && 'none' === $restrict ) {
 			$restrict = 'both'; // Personal voucher: only buyer and named recipient.
 		}
 		$config['email_restrict'] = $restrict;
-		if ( 'recipient' === $config['email_restrict'] && is_email( $voucher->recipient_email ) ) {
-			$emails[] = $voucher->recipient_email;
-		} elseif ( 'buyer' === $config['email_restrict'] && is_email( $voucher->buyer_email ) ) {
-			$emails[] = $voucher->buyer_email;
-		} elseif ( 'both' === $config['email_restrict'] ) {
-			$emails = array_filter( array( $voucher->buyer_email, $voucher->recipient_email ), 'is_email' );
+		$coupon->set_email_restrictions( self::email_restrictions( $voucher, $restrict ) );
+		$coupon->update_meta_data( '_vcap_email_restrict', $restrict );
+		if ( 'recipient' === $restrict && ! is_email( $voucher->recipient_email ) && $voucher->id ) {
+			$this->repo->log( $voucher->id, 'note', null, null, __( 'No recipient email was given: redemption is limited to the buyer email instead.', 'voucher-captain' ) );
 		}
-		$coupon->set_email_restrictions( array_values( array_unique( $emails ) ) );
 
 		$coupon->update_meta_data( '_vcap_voucher', 'yes' );
 		$coupon->update_meta_data( '_vcap_voucher_code', $voucher->code );
@@ -203,6 +199,57 @@ final class CouponManager {
 		$coupon = apply_filters( 'vcap_coupon_before_save', $coupon, $voucher, $config );
 		$coupon->save();
 		return (int) $coupon->get_id();
+	}
+
+	/**
+	 * Email addresses a voucher's coupon is limited to for a "who may redeem" setting (none, recipient, buyer,
+	 * both). "recipient" without a valid recipient address falls back to the buyer – never silently unrestricted.
+	 *
+	 * @return string[]
+	 */
+	public static function email_restrictions( Voucher $voucher, string $restrict ): array {
+		$emails = array();
+		if ( 'recipient' === $restrict ) {
+			$emails[] = is_email( $voucher->recipient_email ) ? $voucher->recipient_email : $voucher->buyer_email;
+		} elseif ( 'buyer' === $restrict ) {
+			$emails[] = $voucher->buyer_email;
+		} elseif ( 'both' === $restrict ) {
+			$emails = array( $voucher->buyer_email, $voucher->recipient_email );
+		}
+		return array_values( array_unique( array_filter( $emails, 'is_email' ) ) );
+	}
+
+	/**
+	 * Recompute the email restriction of a voucher's coupon after buyer or recipient addresses changed. The
+	 * setting comes from the coupon (meta "_vcap_email_restrict"); older coupons are read from their addresses.
+	 *
+	 * @param string $old_recipient Recipient email before the change.
+	 */
+	public function refresh_email_restrictions( Voucher $voucher, string $old_recipient = '' ): bool {
+		if ( ! $voucher->coupon_id ) {
+			return true;
+		}
+		$coupon = new \WC_Coupon( $voucher->coupon_id );
+		if ( ! $coupon->get_id() ) {
+			return false;
+		}
+		$current  = array_map( 'strtolower', (array) $coupon->get_email_restrictions() );
+		$restrict = (string) $coupon->get_meta( '_vcap_email_restrict' );
+		if ( '' === $restrict ) {
+			if ( ! $current ) {
+				return true; // Never restricted: stays transferable.
+			}
+			$has_buyer     = in_array( strtolower( $voucher->buyer_email ), $current, true );
+			$has_recipient = '' !== $old_recipient && in_array( strtolower( $old_recipient ), $current, true );
+			$restrict      = $has_buyer && $has_recipient ? 'both' : ( $has_recipient ? 'recipient' : ( $has_buyer ? 'buyer' : '' ) );
+			if ( '' === $restrict ) {
+				return true; // Addresses set by hand: leave them alone.
+			}
+		}
+		$coupon->set_email_restrictions( self::email_restrictions( $voucher, $restrict ) );
+		$coupon->update_meta_data( '_vcap_email_restrict', $restrict );
+		$coupon->save();
+		return true;
 	}
 
 	public function set_coupon_enabled( Voucher $voucher, bool $enabled ): bool {

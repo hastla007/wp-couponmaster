@@ -44,6 +44,8 @@ final class ProductConfig {
 		'code_prefix'         => '',
 		'code_suffix'         => '',
 		'code_length'         => '',
+		'code_pool_low'       => '',
+		'code_pool_empty'     => 'random',
 		'max_checkins'        => 1,
 		'event_date'          => '',
 		'event_location'      => '',
@@ -92,6 +94,9 @@ final class ProductConfig {
 					$config[ $key ] = is_array( $default ) ? array_filter( (array) $value, 'strlen' ) : $value;
 				}
 			}
+			if ( ! $base->meta_exists( self::meta_key( 'usage' ) ) ) {
+				$config['usage'] = self::default_usage( (string) $config['type'] );
+			}
 		}
 		if ( $product->is_type( 'variation' ) ) {
 			foreach ( self::VARIATION_KEYS as $key ) {
@@ -103,7 +108,12 @@ final class ProductConfig {
 			if ( '' !== (string) $product->get_meta( self::meta_key( 'amount' ) ) ) {
 				$config['amount_source'] = 'fixed';
 			}
+			// A variation's "Valid for (days)" is a validity in days, also when the product uses the global default.
+			if ( (int) $product->get_meta( self::meta_key( 'expiry_days' ) ) > 0 && in_array( $config['expiry_mode'], array( 'default', 'days' ), true ) ) {
+				$config['expiry_mode'] = 'days';
+			}
 		}
+		$config = self::normalise_restriction( $config );
 		$config['per_item']     = max( 1, (int) $config['per_item'] );
 		$config['max_checkins'] = max( 1, (int) $config['max_checkins'] );
 		$config['template']     = (int) $config['template'] ?: (int) get_option( 'vcap_default_template', 0 );
@@ -114,8 +124,62 @@ final class ProductConfig {
 	}
 
 	/**
-	 * Redemption conditions: product text, otherwise the shop default.
+	 * Usage of a product without a saved usage: gift cards keep their remaining value (stored balance), other
+	 * vouchers are redeemed at once.
 	 */
+	public static function default_usage( string $type ): string {
+		return 'giftcard' === $type ? 'balance' : 'single';
+	}
+
+	/**
+	 * Who may redeem a voucher of this product ("email_restrict"):
+	 *  - none      anyone with the code (transferable),
+	 *  - both      the buyer's or the recipient's email address,
+	 *  - recipient the recipient's email address (the buyer's when no recipient address was given),
+	 *  - buyer     the buyer's email address.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function redemption_choices(): array {
+		return array(
+			'none'      => __( 'Anyone with the code (transferable)', 'voucher-captain' ),
+			'both'      => __( 'Only with the buyer or recipient email (personal)', 'voucher-captain' ),
+			'recipient' => __( 'Only with the recipient email (buyer email if none was entered)', 'voucher-captain' ),
+			'buyer'     => __( 'Only with the buyer email', 'voucher-captain' ),
+		);
+	}
+
+	/** Customer-facing text for a "who may redeem" setting (same wording as on the voucher). */
+	public static function restriction_label( string $restrict ): string {
+		switch ( $restrict ) {
+			case 'buyer':
+				return __( 'Personal – only the buyer can redeem it.', 'voucher-captain' );
+			case 'recipient':
+				return __( 'Personal – only the named recipient can redeem it.', 'voucher-captain' );
+			case 'both':
+				return __( 'Personal – only the buyer or the named recipient can redeem it.', 'voucher-captain' );
+		}
+		return __( 'Transferable – anyone with the code can redeem it.', 'voucher-captain' );
+	}
+
+	/**
+	 * One setting decides who may redeem: "email_restrict". Products saved before it replaced the separate
+	 * "Transferable" checkbox are read compatibly (not transferable + no restriction = buyer or recipient);
+	 * "transferable" is derived from it, so labels and coupon restrictions never contradict each other.
+	 */
+	public static function normalise_restriction( array $config ): array {
+		$restrict = (string) ( $config['email_restrict'] ?? 'none' );
+		if ( ! isset( self::redemption_choices()[ $restrict ] ) ) {
+			$restrict = 'none';
+		}
+		if ( 'none' === $restrict && 'no' === (string) ( $config['transferable'] ?? 'yes' ) ) {
+			$restrict = 'both';
+		}
+		$config['email_restrict'] = $restrict;
+		$config['transferable']   = 'none' === $restrict ? 'yes' : 'no';
+		return $config;
+	}
+
 	/**
 	 * Redemption conditions: the product's own, else the shop default for the customer's country, else the
 	 * general shop default.
@@ -372,12 +436,41 @@ final class ProductConfig {
 		return $local->setTime( 23, 59, 59 )->setTimezone( new \DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
 	}
 
+	/** End of a fixed expiry date (shop time zone) as a timestamp, null when no valid date is set. */
+	public static function fixed_expiry_timestamp( array $config ): ?int {
+		$date = (string) ( $config['expiry_date'] ?? '' );
+		if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
+			return null;
+		}
+		$ts = strtotime( $date . ' 23:59:59 ' . wp_timezone_string() );
+		return $ts ? (int) $ts : null;
+	}
+
 	/**
-	 * Expiry timestamp (UTC MySQL datetime) or null for "never".
+	 * What is wrong with the expiry setting of a product: '' (fine), "date_missing" (fixed date without a date),
+	 * "date_past" (the fixed date has passed: a voucher sold now would be expired) or "days_missing" ("days after
+	 * purchase" without a number of days – the global default is used).
 	 */
+	public static function expiry_problem( array $config, ?int $now = null ): string {
+		$now = $now ?? time();
+		if ( 'date' === $config['expiry_mode'] ) {
+			$ts = self::fixed_expiry_timestamp( $config );
+			if ( null === $ts ) {
+				return 'date_missing';
+			}
+			return $ts < $now ? 'date_past' : '';
+		}
+		if ( 'days' === $config['expiry_mode'] && (int) $config['expiry_days'] <= 0 ) {
+			return 'days_missing';
+		}
+		return '';
+	}
+
 	/**
-	 * Expiry of a new voucher. $country: the buyer's country – the statutory default validity follows the law of the
-	 * buyer's country (consumer contract), not the shop's; empty = shop country.
+	 * Expiry of a new voucher (UTC MySQL datetime) or null for "never". $country: the buyer's country – the
+	 * statutory default validity follows the law of the buyer's country (consumer contract), not the shop's;
+	 * empty = shop country. "Global default" ignores a number of days left in the product; "days after purchase"
+	 * without a number of days uses the global default as well (never "never expires" by accident).
 	 */
 	public static function expiry_for( array $config, ?int $from = null, string $country = '' ): ?string {
 		$from = $from ?? time();
@@ -385,22 +478,19 @@ final class ProductConfig {
 			case 'never':
 				return null;
 			case 'date':
-				if ( $config['expiry_date'] ) {
-					$ts = strtotime( $config['expiry_date'] . ' 23:59:59 ' . wp_timezone_string() );
-					return $ts ? gmdate( 'Y-m-d H:i:s', $ts ) : null;
-				}
-				return null;
+				$ts = self::fixed_expiry_timestamp( $config );
+				return $ts ? gmdate( 'Y-m-d H:i:s', $ts ) : null;
 			case 'days':
 				$days = (int) $config['expiry_days'];
-				break;
-			default:
-				if ( '' !== (string) $config['expiry_days'] && null !== $config['expiry_days'] ) {
-					$days = (int) $config['expiry_days'];
-				} elseif ( 'statutory' === self::default_expiry_rule() ) {
-					return self::statutory_expiry( $from, $country );
-				} else {
-					$days = (int) get_option( 'vcap_default_expiry_days', 365 );
+				if ( $days > 0 ) {
+					break;
 				}
+				// No number of days: fall through to the global default.
+			default:
+				if ( 'statutory' === self::default_expiry_rule() ) {
+					return self::statutory_expiry( $from, $country );
+				}
+				$days = (int) get_option( 'vcap_default_expiry_days', 365 );
 		}
 		if ( $days <= 0 ) {
 			return null;

@@ -97,7 +97,7 @@ final class Downloads {
 		}
 		set_transient( $key, $count + 1, HOUR_IN_SECONDS );
 		$sent = vcap()->delivery->send( $voucher );
-		$this->repo->log( $voucher->id, 'resent', null, null, sprintf( 'Requested by customer, %d recipient(s)', count( $sent ) ) );
+		$this->repo->log( $voucher->id, 'resent', null, null, sprintf( /* translators: %d: number of addresses */ _n( 'Requested by the customer, sent to %d address', 'Requested by the customer, sent to %d addresses', count( $sent ), 'voucher-captain' ), count( $sent ) ) );
 		if ( $sent ) {
 			wc_add_notice( __( 'The voucher email has been sent again.', 'voucher-captain' ) );
 		} else {

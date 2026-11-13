@@ -31,7 +31,7 @@ final class Issuer {
 
 	public function on_status( $order_id, $order = null ): void {
 		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
-		if ( ! $order || ! apply_filters( 'vcap_should_issue_for_order', true, $order ) ) {
+		if ( ! $order || ! self::payment_ok( $order ) || ! apply_filters( 'vcap_should_issue_for_order', true, $order ) ) {
 			return;
 		}
 		$this->issue_for_order( $order );
@@ -39,9 +39,22 @@ final class Issuer {
 
 	public function issue_async( $order_id ): void {
 		$order = wc_get_order( (int) $order_id );
-		if ( $order ) {
+		if ( $order && self::payment_ok( $order ) ) {
 			$this->issue_for_order( $order );
 		}
+	}
+
+	/**
+	 * Automatic issuing waits for the payment: an order counts as paid when its status is a paid status
+	 * (processing, completed, or one a plugin adds via "woocommerce_order_is_paid_statuses") or WooCommerce
+	 * recorded a payment date. So an issue status such as "On hold" (bank transfer) never sends vouchers before
+	 * the money arrived. Filter "vcap_issue_requires_payment" (default true; false = issue on the status alone).
+	 */
+	public static function payment_ok( \WC_Order $order ): bool {
+		if ( ! apply_filters( 'vcap_issue_requires_payment', true, $order ) ) {
+			return true;
+		}
+		return $order->is_paid() || null !== $order->get_date_paid();
 	}
 
 	/**

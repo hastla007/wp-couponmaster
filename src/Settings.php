@@ -267,9 +267,25 @@ final class Settings {
 				break;
 
 			default:
+				// Unpaid statuses are not offered: vouchers are means of payment and must not go out before the
+				// money arrived. A previously saved one stays visible (and marked) so it can be removed.
+				$saved    = array_map( 'strval', (array) $this->get( 'vcap_issue_statuses' ) );
+				$unpaid   = array( 'pending', 'on-hold', 'failed', 'cancelled', 'refunded', 'checkout-draft' );
 				$statuses = array();
 				foreach ( wc_get_order_statuses() as $key => $label ) {
-					$statuses[ substr( $key, 3 ) ] = $label;
+					$status = substr( $key, 3 );
+					if ( in_array( $status, $unpaid, true ) ) {
+						if ( in_array( $status, $saved, true ) ) {
+							/* translators: %s: order status */
+							$statuses[ $status ] = sprintf( __( '%s (not paid – vouchers wait for the payment)', 'voucher-captain' ), $label );
+						}
+						continue;
+					}
+					$statuses[ $status ] = $label;
+				}
+				$issue_desc = __( 'Vouchers are created once per purchased item the first time an order reaches one of these statuses. Leave empty to issue manually only.', 'voucher-captain' );
+				if ( array_intersect( $saved, $unpaid ) ) {
+					$issue_desc .= ' ' . __( 'Unpaid statuses (e.g. "On hold" for bank transfer) issue nothing until the payment is recorded – remove them and keep "Processing" and "Completed".', 'voucher-captain' );
 				}
 				$fields = array(
 					array( 'type' => 'title', 'title' => __( 'Voucher issuing', 'voucher-captain' ), 'id' => 'vcap_general' ),
@@ -280,7 +296,7 @@ final class Settings {
 						'class'   => 'wc-enhanced-select',
 						'options' => $statuses,
 						'default' => array( 'processing', 'completed' ),
-						'desc'    => __( 'Vouchers are created once per purchased item the first time an order reaches one of these statuses. Leave empty to issue manually only.', 'voucher-captain' ),
+						'desc'    => $issue_desc,
 					),
 					array(
 						'title'    => __( 'Default redemption conditions', 'voucher-captain' ),
@@ -318,7 +334,7 @@ final class Settings {
 						'id'       => 'vcap_default_expiry_rule',
 						'type'     => 'select',
 						'options'  => array(
-							'statutory' => __( 'Statutory default for the shop country (Germany: 3 years to the end of the year, Austria: 30 years)', 'voucher-captain' ),
+							'statutory' => __( 'Statutory default for the buyer\'s country (Germany: 3 years to the end of the year, Austria: 30 years)', 'voucher-captain' ),
 							'days'      => __( 'Fixed number of days (below)', 'voucher-captain' ),
 						),
 						'default'  => ProductConfig::default_expiry_rule(),

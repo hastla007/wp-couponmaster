@@ -183,11 +183,36 @@ final class Voucher {
 		return self::statuses()[ $this->status ] ?? $this->status;
 	}
 
-	/** Human readable transferability. */
+	/**
+	 * Human readable transferability, from the restriction that is in effect: the email addresses on the
+	 * WooCommerce coupon (the snapshot flag only for vouchers without a coupon, e.g. tickets).
+	 */
 	public function transferable_label(): string {
-		return $this->transferable
-			? __( 'Transferable – anyone with the code can redeem it.', 'voucher-captain' )
-			: __( 'Personal – only the buyer or the named recipient can redeem it.', 'voucher-captain' );
+		$emails = null;
+		if ( $this->coupon_id && class_exists( '\WC_Coupon' ) ) {
+			$coupon = new \WC_Coupon( $this->coupon_id );
+			$emails = $coupon->get_id() ? array_map( 'strtolower', (array) $coupon->get_email_restrictions() ) : null;
+		}
+		if ( null === $emails ) {
+			return $this->transferable
+				? __( 'Transferable – anyone with the code can redeem it.', 'voucher-captain' )
+				: __( 'Personal – only the buyer or the named recipient can redeem it.', 'voucher-captain' );
+		}
+		if ( ! $emails ) {
+			return __( 'Transferable – anyone with the code can redeem it.', 'voucher-captain' );
+		}
+		$buyer     = '' !== $this->buyer_email && in_array( strtolower( $this->buyer_email ), $emails, true );
+		$recipient = '' !== $this->recipient_email && in_array( strtolower( $this->recipient_email ), $emails, true );
+		if ( $recipient && ! $buyer ) {
+			return __( 'Personal – only the named recipient can redeem it.', 'voucher-captain' );
+		}
+		if ( $buyer && ! $recipient ) {
+			return __( 'Personal – only the buyer can redeem it.', 'voucher-captain' );
+		}
+		if ( ! $buyer && ! $recipient ) {
+			return __( 'Personal – only the email addresses stored with the voucher can redeem it.', 'voucher-captain' );
+		}
+		return __( 'Personal – only the buyer or the named recipient can redeem it.', 'voucher-captain' );
 	}
 
 	public function field( string $key ): string {
