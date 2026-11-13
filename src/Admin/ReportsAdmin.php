@@ -249,6 +249,9 @@ final class ReportsAdmin {
 				return;
 			endif;
 			?>
+			<?php if ( 'table' === ( $result['source'] ?? '' ) ) : ?>
+				<div class="notice notice-warning inline"><p><?php esc_html_e( 'This version of WP Pass Captain has no reconciliation interface yet, so its order table is read directly as a fallback. Please update WP Pass Captain.', 'voucher-captain' ); ?></p></div>
+			<?php endif; ?>
 			<p class="description">
 				<?php
 				/* translators: %d: number of Pass Captain orders checked */
