@@ -86,7 +86,8 @@ final class StoreCredit {
 	/** Creates the account's WooCommerce coupon and stores its id; false (and no coupon left) on failure. */
 	private function attach_coupon( Voucher $v ): bool {
 		$coupon_id = $this->coupons->create_coupon( $v, ProductConfig::DEFAULTS );
-		if ( ! $coupon_id ) {
+		// Verify the stored post itself: after a failed insert WooCommerce can still report an id.
+		if ( ! $coupon_id || 'shop_coupon' !== get_post_type( $coupon_id ) || 0 !== strcasecmp( (string) get_post_field( 'post_title', $coupon_id ), $v->code ) ) {
 			return false;
 		}
 		$coupon = new \WC_Coupon( $coupon_id );
