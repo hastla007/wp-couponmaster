@@ -96,6 +96,7 @@ final class Plugin {
 		( new Compat\PassCaptainScanner() )->register();
 
 		if ( is_admin() ) {
+			( new Licensing\AdminPage() )->register();
 			( new Admin\Menu() )->register();
 			( new Admin\OrderAdmin( $this->vouchers, $this->issuer ) )->register();
 			( new Admin\VoucherAdmin( $this->vouchers ) )->register();
