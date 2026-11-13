@@ -848,7 +848,9 @@ final class CouponManager {
 			throw new \Exception( esc_html__( 'This voucher has expired.', 'voucher-captain' ), 9003 );
 		}
 		if ( ! Channels::allowed( $voucher, Channels::SHOP ) ) {
-			throw new \Exception( esc_html__( 'This voucher cannot be redeemed in the shop.', 'voucher-captain' ), 9006 );
+			/** Message for a voucher that is not redeemable in the shop (e.g. a ticket voucher: where to use it instead). */
+			$message = (string) apply_filters( 'vcap_shop_channel_refused_message', __( 'This voucher cannot be redeemed in the shop.', 'voucher-captain' ), $voucher );
+			throw new \Exception( esc_html( $message ), 9006 );
 		}
 		return $valid;
 	}

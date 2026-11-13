@@ -175,6 +175,14 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	$tv = vcap()->vouchers->for_order( $tv_order->get_id() )[0] ?? null;
 	$tv_target = $tv ? VCAP\Compat\PassCaptainTickets::target( $tv ) : null;
 	vcap_pc_assert( $tv_target && $ticket_type === $tv_target['ticket_type_id'] && 2 === $tv_target['quantity'], 'the sold voucher stores its ticket target with the order line' );
+	vcap_pc_assert( ! VCAP\Channels::allowed( $tv, VCAP\Channels::SHOP ) && ! VCAP\Channels::allowed( $tv, VCAP\Channels::COUNTER ) && VCAP\Channels::allowed( $tv, 'passcaptain' ), 'a ticket voucher sold without a channel selection is only redeemable via Pass Captain (not in the cart or at the counter)' );
+	vcap_pc_assert( str_contains( (string) apply_filters( 'vcap_shop_channel_refused_message', 'x', $tv ), 'exchanged for tickets' ), 'the cart explains where a ticket voucher is redeemed' );
+	$tv_quote = Bridge::provider()->quote( array( 'code' => $tv->code, 'currency' => get_woocommerce_currency(), 'amount_minor' => 7000, 'order_reference' => 'tv-test' ) );
+	vcap_pc_assert( is_wp_error( $tv_quote ) && 'vcap_ticket_voucher' === $tv_quote->get_error_code(), 'a ticket voucher cannot pay for a Pass Captain checkout as a value voucher' );
+	$as_value = static fn() => true;
+	add_filter( 'vcap_passcaptain_ticket_voucher_as_value', $as_value );
+	vcap_pc_assert( VCAP\Channels::allowed( $tv, VCAP\Channels::SHOP ), 'the value use of ticket vouchers can be switched on' );
+	remove_filter( 'vcap_passcaptain_ticket_voucher_as_value', $as_value );
 
 	$redeem_page = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'publish', 'post_title' => 'Redeem', 'post_content' => '[vcap_redeem]' ) );
 	delete_transient( 'vcap_redeem_page_guess' );

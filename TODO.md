@@ -286,11 +286,11 @@ Fünf parallele Prüfungen (Sicherheit, Geld/Buchungen, Steuer/Recht/Datenschutz
 - [ ] Rate-Limit Einlösen/Guthaben zählt Erfolge und jeden Schritt, gleitendes Fenster und globaler Zähler können alle Kunden sperren (Plugin.php); nur Fehlversuche zählen, festes Fenster.
 - [ ] Festtermin-Ticketgutscheine: Kontingent beim Verkauf prüfen/halten, Einlösefrist bis Eventbeginn, Erinnerung vor dem Event.
 - [x] Bereits umgewandelter Gutschein zeigt bei erneuter Eingabe die volle Empfängeradresse und „wurden gesendet“; maskieren und „bereits eingelöst am …“ melden. — *erledigt (5db3db9).*
-- [ ] Ticketgutscheine standardmäßig nur Kanal „passcaptain“, nicht als Wertgutschein im Warenkorb/PC-Checkout.
+- [x] Ticketgutscheine standardmäßig nur Kanal „passcaptain“, nicht als Wertgutschein im Warenkorb/PC-Checkout. — *erledigt: ohne Kanalauswahl nur Umtausch; Warenkorb-Hinweis auf die Einlöseseite, PC-Checkout lehnt ab; Wertnutzung nur mit „Shop“ oder Filter `vcap_passcaptain_ticket_voucher_as_value`.*
+- [x] Massenaktion „Ungültig machen“ mit Bestätigung (widerruft PC-Tickets). — *erledigt (4f3d8a4).*
 - [ ] `[vcap_balance]` zeigt Prozentgutscheine als Eurobetrag und Ticketgutscheine als Geldguthaben; typgerecht anzeigen mit Einlöselink.
 - [ ] Admin-Hinweis, wenn Ticketgutscheine verkauft werden, aber keine gültige Einlöseseite existiert; gewählte Seite auf Shortcode/Block prüfen.
 - [ ] Admin-Aktionen für umgewandelte Gutscheine: Tickets erneut/an andere E-Mail senden, Umwandlung rückgängig, Termin ändern; Fehler vor der Reservierung im Verlauf protokollieren.
 - [ ] Fehlgeschlagene Zustellungen: Listenfilter, Dashboard-Hinweis, automatischer Retry; Kunden über wiederhergestellten Gutschein nach PC-Absage informieren.
-- [ ] Massenaktion „Ungültig machen“ mit Bestätigung (widerruft PC-Tickets).
 - [ ] Verbindlichkeitenbericht zum Stichtag und Einlösejournal für die Buchhaltung; Guthaben-Aufladung von Geschenkkarten.
 - [ ] Website-Zustand-Prüfungen (Cron, Action Scheduler, Mail) und Protokoll fehlgeschlagener Mails (`wp_mail_failed`).

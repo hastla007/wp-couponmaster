@@ -51,6 +51,10 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 			return new \WP_Error( 'vcap_currency_mismatch', __( 'This voucher is in a different currency.', 'voucher-captain' ) );
 		}
 		$voucher  = $this->vouchers->get_by_code( (string) $check['code'] );
+		if ( $voucher && PassCaptainTickets::target( $voucher ) && ! PassCaptainTickets::value_use_allowed( $voucher ) ) {
+			// A ticket voucher stands for tickets, not for money: it is exchanged on the redeem page.
+			return new \WP_Error( 'vcap_ticket_voucher', __( 'This voucher is exchanged for tickets on the voucher redemption page and cannot pay for an order.', 'voucher-captain' ), array( 'status' => 422 ) );
+		}
 		$decimals = self::decimals( $currency );
 		$order    = self::to_major( $total, $decimals );
 		if ( null !== $check['balance'] ) {

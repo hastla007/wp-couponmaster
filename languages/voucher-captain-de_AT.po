@@ -3797,3 +3797,15 @@ msgstr "Die Ablauf-Erinnerung konnte nicht gesendet werden; sie wird beim nächs
 
 msgid "Void the selected vouchers? They can no longer be redeemed; tickets they were exchanged for in WP Pass Captain are revoked and not reissued when a voucher is reactivated."
 msgstr "Ausgewählte Gutscheine ungültig machen? Sie können danach nicht mehr eingelöst werden; dafür in WP Pass Captain eingetauschte Tickets werden storniert und beim Reaktivieren eines Gutscheins nicht neu ausgestellt."
+
+msgid "Exchange each voucher for tickets of this ticket type (redeem page or voucher admin). The voucher is then only exchanged for its tickets; to let it also pay as a value voucher, tick \"Shop\" under \"Redeemable via\"."
+msgstr "Jeder Gutschein wird gegen Tickets dieser Ticketart eingetauscht (Einlöseseite oder Gutscheinverwaltung). Er ist dann nur gegen seine Tickets eintauschbar; soll er zusätzlich wie ein Wertgutschein bezahlen können, wählen Sie unter „Einlösbar über“ den Shop aus."
+
+msgid "This voucher is exchanged for tickets on the voucher redemption page and cannot pay for an order."
+msgstr "Dieser Gutschein wird auf der Einlöseseite gegen Tickets eingetauscht und kann keine Bestellung bezahlen."
+
+msgid "This voucher is exchanged for tickets, not used as payment. Please redeem it on %s."
+msgstr "Dieser Gutschein wird gegen Tickets eingetauscht, nicht als Zahlungsmittel verwendet. Bitte lösen Sie ihn hier ein: %s"
+
+msgid "This voucher is exchanged for tickets, not used as payment. Please redeem it on the voucher redemption page."
+msgstr "Dieser Gutschein wird gegen Tickets eingetauscht, nicht als Zahlungsmittel verwendet. Bitte lösen Sie ihn auf der Einlöseseite ein."

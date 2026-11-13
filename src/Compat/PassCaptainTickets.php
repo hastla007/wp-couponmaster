@@ -2,6 +2,7 @@
 namespace VCAP\Compat;
 
 use VCAP\API\V1\RedemptionService;
+use VCAP\Channels;
 use VCAP\Issuer;
 use VCAP\Voucher;
 use VCAP\VoucherRepository;
@@ -39,6 +40,8 @@ final class PassCaptainTickets {
 		add_action( 'vcap_product_settings_fields', array( $this, 'product_fields' ) );
 		add_action( 'vcap_product_settings_save', array( $this, 'product_save' ), 10, 2 );
 		add_filter( 'vcap_line_snapshot', array( $this, 'snapshot' ), 10, 2 );
+		add_filter( 'vcap_redemption_channel_allowed', array( $this, 'channel_allowed' ), 10, 4 );
+		add_filter( 'vcap_shop_channel_refused_message', array( $this, 'shop_refused_message' ), 10, 2 );
 		add_filter( 'vcap_redeem_code', array( $this, 'redeem_page' ), 10, 2 );
 		add_filter( 'vcap_redeem_prefill', array( $this, 'redeem_prefill' ) );
 		add_action( 'vcap_redeem_form_fields', array( $this, 'redeem_fields' ) );
@@ -339,6 +342,35 @@ final class PassCaptainTickets {
 			'quantity'       => max( 1, min( 10, absint( $target['quantity'] ?? 1 ) ) ),
 			'label'          => (string) ( $target['label'] ?? '' ),
 		);
+	}
+
+	/**
+	 * Whether a ticket voucher may also be spent as a value voucher (cart, Pass Captain checkout, scanner). Only
+	 * when the product explicitly allows the shop as a redemption channel; by default a ticket voucher is only
+	 * exchanged for its tickets on the redeem page.
+	 */
+	public static function value_use_allowed( Voucher $voucher ): bool {
+		$allowed = in_array( Channels::SHOP, Channels::of_voucher( $voucher ), true );
+		return (bool) apply_filters( 'vcap_passcaptain_ticket_voucher_as_value', $allowed, $voucher );
+	}
+
+	/** Ticket vouchers sold without a channel selection are redeemable via Pass Captain only. */
+	public function channel_allowed( $allowed, $voucher, $channel, $channels ) {
+		if ( ! $allowed || $channels || PassCaptain::CHANNEL === $channel || ! $voucher instanceof Voucher || ! self::target( $voucher ) ) {
+			return $allowed;
+		}
+		return self::value_use_allowed( $voucher );
+	}
+
+	public function shop_refused_message( $message, $voucher ) {
+		if ( ! $voucher instanceof Voucher || ! self::target( $voucher ) ) {
+			return $message;
+		}
+		$url = \VCAP\Shortcodes::redeem_url();
+		return '' !== $url
+			/* translators: %s: URL of the voucher redemption page */
+			? sprintf( __( 'This voucher is exchanged for tickets, not used as payment. Please redeem it on %s.', 'voucher-captain' ), $url )
+			: __( 'This voucher is exchanged for tickets, not used as payment. Please redeem it on the voucher redemption page.', 'voucher-captain' );
 	}
 
 	/**
@@ -806,7 +838,7 @@ final class PassCaptainTickets {
 				'options'     => $options,
 				'value'       => $event ? 'event:' . $event : ( $current ? (string) $current : '' ),
 				'desc_tip'    => true,
-				'description' => __( 'Exchange each voucher for tickets of this ticket type (redeem page or voucher admin). The voucher becomes redeemable via WP Pass Captain.', 'voucher-captain' ),
+				'description' => __( 'Exchange each voucher for tickets of this ticket type (redeem page or voucher admin). The voucher is then only exchanged for its tickets; to let it also pay as a value voucher, tick "Shop" under "Redeemable via".', 'voucher-captain' ),
 			)
 		);
 		woocommerce_wp_text_input(
