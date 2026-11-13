@@ -20,7 +20,7 @@ Event tickets, seats and admission belong to the separate plugin WP Pass Captain
 
 = Editions =
 
-The free edition and the premium edition are built from the same code. In the premium edition, promotions and bonus vouchers, refer a friend, gift card top-up, reports and the WP Pass Captain integration need an active license (WP License Captain); without one they are switched off. Vouchers that were already sold stay valid and redeemable.
+The free edition and the premium edition are built from the same code. In the premium edition, promotions and bonus vouchers, refer a friend, gift card top-up, reports and the WP Pass Captain integration need an active license (WP License Captain); without one they are switched off. Gift cards, vouchers and store credit that were already sold stay redeemable in the shop checkout.
 
 == Installation ==
 
@@ -161,7 +161,7 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 == Upgrade Notice ==
 
 = Unreleased =
-Premium edition: after the update, promotions, bonus vouchers, refer a friend, gift card top-up, reports and the WP Pass Captain integration work only with an active license – activate it on the license page. Sold vouchers stay valid. New optional setting "Multi-purpose vouchers as payment" (off by default).
+Premium edition: after the update, promotions, bonus vouchers, refer a friend, gift card top-up, reports and the WP Pass Captain integration work only with an active license – activate it on the license page. Gift cards and vouchers already sold stay redeemable in the shop. New optional setting "Multi-purpose vouchers as payment" (off by default).
 
 = 1.1.0 =
 Requires WooCommerce 8.9 or newer.

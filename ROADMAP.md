@@ -1,6 +1,6 @@
 # WP Voucher Captain – 50-Punkte-Roadmap
 
-Abgehakte Punkte sind im aktuellen PR implementiert und/oder durch die aufgeführten CI-Läufe abgedeckt. Offene Punkte bleiben die nächsten Umsetzungsschritte.
+Abgehakte Punkte sind implementiert und durch die aufgeführten CI-Jobs (`.github/workflows/plugin-smoke.yml`) abgedeckt. Offene Punkte bleiben die nächsten Umsetzungsschritte. Detailbefunde und ihr Stand stehen in TODO.md. Stand: 13.11.2026.
 
 ## Zielplattform
 
@@ -39,7 +39,7 @@ Abgehakte Punkte sind im aktuellen PR implementiert und/oder durch die aufgefüh
 
 21. [x] Plugin auf WordPress 7.1.4 und WooCommerce 11.2.2 mit HPOS installieren und aktualisieren.
 22. [x] Klassische Kasse und Checkout-Blöcke separat mit bezahlten und unbezahlten Bestellungen prüfen.
-23. [ ] Payment-Retry für bestehende Bestellungen ist hook-level abgedeckt; Gateway-Redirects und Webhook-Wiederholungen mit realen Gateways als E2E testen.
+23. [ ] Payment-Retry für bestehende Bestellungen ist hook-level abgedeckt; Stripe und PayPal Payments laufen auf Plugin-Ebene in CI (`ecosystem`). Offen: Gateway-Redirects und Webhook-Wiederholungen mit echten Sandbox-Konten (manuelle Release-Prüfung).
 24. [x] Kompatibilität mit PHP 8.1 und 8.4 durch vollständige Lint- und Smoke-Läufe bestätigen.
 25. [x] MySQL- und MariaDB-Tabellenengine nach Aktivierung und Upgrade verifizieren.
 26. [x] Datenbankmigration von vorhandenen MyISAM-Tabellen unter realistischen Datenmengen testen.
@@ -57,25 +57,32 @@ Abgehakte Punkte sind im aktuellen PR implementiert und/oder durch die aufgefüh
 35. [x] Aufbewahrungsfristen, Anonymisierung und Audit-Protokoll gemeinsam prüfen.
 36. [x] PDF-Downloads und Gastlinks auf Zugriffsschutz und Ablauf testen.
 37. [x] Abhängigkeiten und Composer-Lockdatei regelmäßig auf bekannte Schwachstellen prüfen.
-38. [x] PHPCS mit WordPress- und WooCommerce-Regeln in CI ergänzen.
-39. [x] Statische Analyse für PHP 8.1-Typen, Nullwerte und Datenbank-Rückgaben einführen.
+38. [x] PHPCS mit WordPress- und WooCommerce-Regeln in CI ergänzen. (Streng für `src/API/V1` und `src/Contracts` im Job `quality`; ganzes Plugin mit WordPress-Extra, I18n und Security report-only im Job `quality-wide`, Altlasten-Abbau siehe RELEASE.md → Static analysis.)
+39. [x] Statische Analyse für PHP 8.1-Typen, Nullwerte und Datenbank-Rückgaben einführen. (PHPStan Level 0 streng für API/Verträge; Level 1 für das ganze Plugin mit Baseline, report-only, `quality-wide`; WordPress Plugin Check report-only, `plugin-check`.)
 40. [x] Geheimnisse, Debug-Ausgaben und sensible Bestell-/Empfängerdaten in Logs prüfen.
 
-## Umsetzung in diesem PR
+## Stand
 
-Punkte 31–43 und 49–50 sind durch Sicherheits-/Datenschutztests, den versionierten PHP-Providervertrag, Qualitätsprüfungen in CI und den Release-ZIP-Installations-/Deinstallationslauf umgesetzt. Die CI-Matrix muss für den aktuellen Commit grün sein, bevor dieser PR freigegeben wird.
+Punkte 1–22, 24–44, 46 und 49–50 sind umgesetzt und in CI abgedeckt (darunter Yoast-Browser-E2E, 28, und der WP-Pass-Captain-Vertrag mit gemeinsamem Plugin-Test, 44). Der `Release`-Workflow baut ein Tag nur, wenn `Plugin smoke tests` für genau diesen Commit grün ist (RELEASE.md).
 
-Offen bleiben reale Gateway-Redirects/Webhooks (23), Yoast-Browser-E2E (28), der separate Ticket-Captain-Adapter und gemeinsame Plugin-Test (44), Learnboating-Spezifikation/Connector (45), vom Händler freizugebende Gutscheinbedingungen (46), steuerliche Fachentscheidung (47) und Accessibility-Browserprüfung (48).
+Offen bleiben reale Gateway-Sandboxen (23), der Learnboating-Connector im Kursplugin (45), die steuerliche Freigabe je Gutscheinart (47) und der echte Screenreader-Test (48).
+
+Außerhalb der 50 Punkte, Stand Release und Lizenz:
+
+- [x] Lizenzierung über WP License Captain (Premium-Edition, fail-closed, signierter Offline-Cache) und Premium-Updates mit SHA-256-Prüfung; Abnahme gegen einen echten Lizenzserver (`license-acceptance`).
+- [ ] Aufteilung Free/Premium (`config/premium-features.php`) und Update-Kanal der Free-Edition – Entscheidung des Betreibers.
+- [x] Release-ZIP mit Lizenzdateien aller Bibliotheken und `THIRD-PARTY-NOTICES.txt` (geprüft im Job `quality`).
+- [ ] wordpress.org-Tauglichkeit: Befunde von Plugin Check und der breiten PHPCS/PHPStan-Prüfung abarbeiten, danach die Jobs blockierend schalten.
 
 ## P2 – Produktreife und Betrieb
 
 41. [x] Öffentlichen, versionierten PHP-Service für Gutscheinprüfung und -einlösung definieren.
 42. [x] Einlöse-Provider-Schnittstelle ohne Abhängigkeit auf interne Tabellen spezifizieren.
 43. [x] Idempotency-Key und stabile Fehlercodes für externe Connectoren festlegen.
-44. [x] Voucher Captain und Ticket Captain über dokumentierten, optionalen Vertrag integrieren. (Pass-Captain-Checkout und Gutschein → Ticket)
-45. [ ] Learnboating-Connector als separates Add-on mit wiederholbarer Grant-Verarbeitung planen.
+44. [x] Voucher Captain und WP Pass Captain (früher „Ticket Captain“) über dokumentierten, optionalen Vertrag integrieren. (Pass-Captain-Checkout, Gutschein → Ticket, gemeinsamer Scanner; Job `pass-captain`)
+45. [ ] Learnboating-Connector als separates Add-on mit wiederholbarer Grant-Verarbeitung planen. (Vertrag und Grant-Service in Learnboating sind fertig, das Add-on fehlt; TODO.md → Connector für Learnboating.)
 46. [x] Ablauf-, Übertragbarkeits-, Restwert- und Einlösebedingungen im Kundenkonto erklären. (Kundenkonto-Tab, E-Mail, Produktseite; Bedingungen pro Land)
-47. [ ] Steuerbehandlung und Erstattungsreihenfolge je Gutscheinart mit Fachberatung spezifizieren.
-48. [ ] Übersetzungen, Tastaturbedienung und Screenreader-Flows für Kauf und Einlösung prüfen. (Tastatur und axe automatisiert in `browser-e2e`; offen: echter Screenreader)
+47. [ ] Steuerbehandlung und Erstattungsreihenfolge je Gutscheinart mit Fachberatung spezifizieren. (Technisch umgesetzt und in TAX.md beschrieben: Steuerbehandlung je Produkt, Einstellung „Mehrzweckgutscheine als Zahlung“; offen: Freigabe durch die Steuerberatung.)
+48. [ ] Übersetzungen, Tastaturbedienung und Screenreader-Flows für Kauf und Einlösung prüfen. (Tastatur und axe automatisiert in `browser-e2e`; Übersetzung de_DE/de_AT vollständig geprüft in `smoke`, de_DE_formal/de_CH fallen auf de_DE zurück; offen: echter Screenreader)
 49. [x] Release-ZIP in sauberer WordPress-Installation installieren, aktualisieren und deinstallieren.
-50. [x] Abnahme von VCAP allein, Ticket Captain allein und beiden Plugins gemeinsam als Release-Gate einführen.
+50. [x] Abnahme von VCAP allein, WP Pass Captain allein und beiden Plugins gemeinsam als Release-Gate einführen.

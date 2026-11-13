@@ -1,6 +1,8 @@
 # Voucher Captain
 
-WooCommerce-Plugin für personalisierte **PDF-Gutscheine, Geschenkkarten, Guthaben und Rabattcodes**. Voucher Captain verwaltet Gutscheine und Gutschein-Einlösungen. Die Eventverwaltung, Ticketkontingente, Sitzplätze, Eventbestellungen und der Einlass gehören zu [Ticket Captain](https://github.com/hastla007/wp-passmaster). Beide Plugins bleiben eigenständig; die direkte Bridge wird separat umgesetzt. Code, Namen und Gestaltung sind eigenständig.
+WooCommerce-Plugin für personalisierte **PDF-Gutscheine, Geschenkkarten, Guthaben und Rabattcodes**. Voucher Captain verwaltet Gutscheine und Gutschein-Einlösungen. Die Eventverwaltung, Ticketkontingente, Sitzplätze, Eventbestellungen und der Einlass gehören zu [WP Pass Captain](https://github.com/hastla007/wp-passmaster). Beide Plugins bleiben eigenständig; sind beide aktiv, verbindet sie ein versionierter Vertrag: Gutscheine und Geschenkkarten bezahlen Tickets in der Pass-Captain-Kasse, Ticketgutscheine werden gegen Tickets getauscht, der gemeinsame Scanner prüft beides ([API.md](API.md), [CONNECTORS.md](CONNECTORS.md)). Code, Namen und Gestaltung sind eigenständig.
+
+**Editionen.** Free- und Premium-Edition entstehen aus demselben Code (`bin/build.sh`, `VCAP_EDITION=premium`). In der Premium-Edition brauchen Aktionen/Bonusgutscheine, Freunde werben, Aufladung, Auswertungen und die WP-Pass-Captain-Anbindung eine aktive Lizenz über WP License Captain ([LICENSING.md](LICENSING.md)); Updates kommen dann vom Lizenzserver. Welche Funktionen endgültig Premium sind, entscheidet der Betreiber noch (`config/premium-features.php`).
 
 ## Funktionen
 
@@ -13,10 +15,10 @@ WooCommerce-Plugin für personalisierte **PDF-Gutscheine, Geschenkkarten, Guthab
 | **PDF-Designer** | Mehrere Vorlagen, A4/A5/A6/DL/Letter oder eigenes Format, Hoch-/Querformat, Hintergrundfarbe/-bild. Drag & Drop mit Hilfslinien/Snapping, Ebenen (sperren/ausblenden/sortieren), Rotation, Deckkraft, Undo/Redo. Elemente: Text, Überschrift, Bild, QR-Code, Barcode, Form, Linie. Schrift, Größe, Farbe, Ausrichtung, fett/kursiv/unterstrichen. Platzhalter. PDF-Vorschau im Admin und optional für Kunden (mit Wasserzeichen). |
 | **Downloads** | Auf der Bestellbestätigung, in Mein Konto (Bestellung + eigener Tab „Gutscheine“) und in E-Mails. Gastkäufe über HMAC-signierte, optional ablaufende Links. |
 | **Verwaltung** | Gutscheinliste mit Suche, Filtern und CSV-Export. Detailansicht mit Bearbeiten, Guthabenkorrektur, erneutem Versand, Stornieren und vollständigem Verlauf (Audit-Log). Metabox in der Bestellung (HPOS-kompatibel). Shortcodes und Blöcke: `[vcap_balance]`/`[vcap_voucher_status]` (Guthaben/Status), `[vcap_redeem]` (Einlöseseite), `[vcap_my_vouchers]` (Gutscheine mit erneutem Versand), `[vcap_referral]` (Freunde werben). |
-| **Gutschein- und Leistungspässe** | QR-Prüfung und Einlösung von Voucher-Captain-Gutscheinen bzw. serviceartigen Pässen. Der aktuelle Scanner bleibt für diese VCAP-Datensätze zuständig; Eventtickets und Einlassstatus verwaltet Ticket Captain. Die gemeinsame Scanner-Bridge ist geplant. |
+| **Gutschein- und Leistungspässe** | QR-Prüfung und Einlösung von Voucher-Captain-Gutscheinen bzw. serviceartigen Pässen. Der gemeinsame Scanner (*Gutscheine → Scanner*) erkennt auch WP-Pass-Captain-Tickets und checkt sie bei Pass Captain ein (Berechtigung von Pass Captain nötig); Eventtickets und Einlassstatus verwaltet weiterhin Pass Captain. |
 | **Code-Import** | CSV, XLS, XLSX, ODS (eigener schlanker Leser), Batches, Formatprüfung per Regex, Duplikate in Datei und Bestand werden erkannt. |
 | **Kompatibilität** | WooCommerce Subscriptions, WPML/WCML (`wpml-config.xml`, Vorlage je Sprache), Multi-Currency (WCML, Aelia, WOOCS, CURCY), Flexible Product Fields / Flexible Checkout Fields über `{item_meta:…}` / `{order_meta:…}`. HPOS und Block-Warenkorb/-Kasse. |
-| **Sicherheit & Datenschutz** | Capabilities, Nonces, Escaping, signierte Links, keine Remote-Bilder im PDF (SSRF-Schutz). WordPress-Datenexport/-löschung, automatische Anonymisierung nach X Tagen. Übersetzungsfertig, Deutsch (de_DE, de_AT) enthalten. |
+| **Sicherheit & Datenschutz** | Capabilities, Nonces, Escaping, signierte Links, keine Remote-Bilder im PDF (SSRF-Schutz). WordPress-Datenexport/-löschung, automatische Anonymisierung nach X Tagen. Übersetzungsfertig, Deutsch (de_DE, de_AT) enthalten; „Deutsch (Sie)“ (de_DE_formal) und Schweizerdeutsch (de_CH) nutzen die deutsche Übersetzung, solange es keine eigene Datei gibt. |
 
 ### Platzhalter
 
@@ -33,7 +35,7 @@ Eigene Platzhalter lassen sich über die Filter `vcap_placeholder_definitions` u
 
 ## Voraussetzungen
 
-WordPress 6.4+, WooCommerce 8.0+, PHP 8.1+ (mit GD, mbstring, zip).
+WordPress 6.4+, WooCommerce 8.9+ (wird beim Laden geprüft), PHP 8.1+ (mit GD, mbstring, zip). Getestet bis WordPress 7.1 und WooCommerce 11.2.
 
 ## Installation
 
@@ -56,12 +58,12 @@ Nach der Aktivierung werden zwei Startvorlagen angelegt (Geschenkkarte A5 und Gu
 
 **Kombination.** *„Guthaben mit Rabattcodes“* (Standard: erlaubt) legt fest, ob Guthaben in derselben Bestellung wie Rabattcodes genutzt werden darf. Rabattcodes und Geschenkkarten dürfen Gutscheinprodukte standardmäßig nicht verbilligen bzw. bezahlen (*„Rabattcodes auf Gutscheine“*, *„Gutscheine mit Gutscheinen bezahlen“*).
 
-**Steuer.** Geschenkkarten und Guthaben werden technisch als WooCommerce-Warenkorb-Coupon (Festbetrag) verrechnet. WooCommerce verteilt den Betrag anteilig auf die Positionen und berechnet die Steuer vom reduzierten Preis. Das entspricht einer Behandlung wie ein Preisnachlass. Ob das für Ihre Gutscheinart (Einzweck-/Mehrzweckgutschein) steuerlich passt, muss mit der Steuerberatung geklärt werden; eine Verrechnung „nach Steuer“ als Zahlungsmittel ist derzeit nicht eingebaut (offener Punkt in TODO.md). Die vollständige Beschreibung je Gutscheinart mit den Fragen an die Steuerberatung steht in [TAX.md](TAX.md).
+**Steuer.** Geschenkkarten und Guthaben werden technisch als WooCommerce-Warenkorb-Coupon (Festbetrag) verrechnet. WooCommerce verteilt den Betrag anteilig auf die Positionen und berechnet die Steuer vom reduzierten Preis. Das entspricht einer Behandlung wie ein Preisnachlass. Mit der Einstellung *„Mehrzweckgutscheine als Zahlung“* (`vcap_mpv_after_tax`, Standard: aus) zahlen Mehrzweckgutscheine, Geschenkkarten und Guthaben stattdessen nach allen Steuern, Versand und Gebühren als nicht steuerbare Zeile „Gutschein CODE“; die Bestellung behält die volle Umsatzsteuer (`src/PaymentVouchers.php`; im Block-Warenkorb wird die Zahlungszeile noch nicht angezeigt). Je Gutscheinprodukt lässt sich die Steuerbehandlung (automatisch, Mehrzweck, Einzweck, Aktion) festlegen; ein unpassender Steuerstatus wird gemeldet. Welche Variante für Ihre Gutscheinart steuerlich passt, muss mit der Steuerberatung geklärt werden. Die vollständige Beschreibung je Gutscheinart mit den Fragen an die Steuerberatung steht in [TAX.md](TAX.md).
 
 **Erstattung.**
 - *Storniert, fehlgeschlagen oder vollständig erstattet:* der in der Bestellung verwendete Gutschein-/Guthabenbetrag wird zurückgebucht (Einstellung *„Guthaben bei Stornierung wiederherstellen“*, Standard an). Ungenutzte Bonusgutscheine der Bestellung werden zurückgezogen.
-- *Teilerstattung:* WooCommerce erstattet den Betrag über die Zahlungsart; Gutschein- und Guthabensalden bleiben unverändert.
-- *Erstattung als Guthaben:* nur ausdrücklich über „Als Guthaben erstatten“ in der Bestellung (nie automatisch, nicht für Gastbestellungen).
+- *Teilerstattung:* WooCommerce erstattet den Betrag über die Zahlungsart; Gutschein- und Guthabensalden der Bestellung bleiben unverändert. Bei Gutscheinkäufen werden so viele Gutscheine gesperrt, wie erstattet wurden (ungenutzte zuerst); eine Erstattung, die bereits verbrauchten Gutscheinwert auszahlen würde, wird mit dem Höchstbetrag abgelehnt.
+- *Erstattung als Guthaben:* nur ausdrücklich über „Als Guthaben erstatten“ in der Bestellung (nie automatisch, nicht für Gastbestellungen) und nur mit protokollierter Zustimmung des Kunden.
 - Gekaufte Gutscheine werden bei vollständiger Erstattung/Stornierung der Kaufbestellung gesperrt (*„Gutscheine bei Erstattung stornieren“*).
 
 ## Integrationen und Sicherheit
@@ -72,6 +74,9 @@ Nach der Aktivierung werden zwei Startvorlagen angelegt (Geschenkkarte A5 und Gu
 - [Connector-Plugins: Einlösung, Wiederholung, Storno, Versionierung](CONNECTORS.md)
 - [Adapter für Mehrsprachigkeit, Mehrwährung, Subscriptions und Produktfelder](ADAPTERS.md)
 - [Zustandsautomat für Reservierung, Buchung, Freigabe und Erstattung](STATE_MACHINE.md)
+- [Lizenzierung und Premium-Edition](LICENSING.md)
+- [Steuerbehandlung je Gutscheinart](TAX.md)
+- [Release-Prozess, statische Analyse, Drittlizenzen](RELEASE.md)
 - [50-Punkte-Roadmap](ROADMAP.md)
 
 ## Entwicklung
