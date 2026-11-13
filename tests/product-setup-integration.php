@@ -267,6 +267,35 @@ $pooled->update_meta_data( '_vcap_code_pool_empty', 'random' );
 $pooled->save();
 vcap_ps_assert( wc_get_product( $pooled->get_id() )->is_purchasable(), 'with "random codes" it can still be bought' );
 
+/* ---- 14. Customer delivery date: coupled with the delivery ---------------------------------------------------- */
+
+// Saving: the field with "Immediately" switches to "On a date chosen by the customer"; with a fixed date it is switched off.
+$coupled = vcap_ps_product( 'PS delivery date immediate', array() );
+$_POST   = array( '_vcap_enabled' => 'yes', '_vcap_type' => 'voucher', '_vcap_delivery' => 'immediate', '_vcap_builtin_fields' => array( 'recipient_name', 'delivery_date', 'delivery_date_required' ) );
+delete_transient( 'vcap_flash_' . get_current_user_id() );
+( new VCAP\ProductSettings() )->save( $coupled );
+$coupled->save();
+$coupled = wc_get_product( $coupled->get_id() );
+vcap_ps_assert( 'customer' === $coupled->get_meta( '_vcap_delivery' ) && in_array( 'delivery_date_required', (array) $coupled->get_meta( '_vcap_builtin_fields' ), true ), 'the delivery date field with "Immediately" switches the delivery to the customer date' );
+vcap_ps_assert( in_array( 'info', array_column( Flash::pending(), 'type' ), true ), 'the shop is told that the delivery was switched' );
+$fixed_day = vcap_ps_product( 'PS delivery date fixed', array() );
+$_POST     = array( '_vcap_enabled' => 'yes', '_vcap_type' => 'voucher', '_vcap_delivery' => 'date', '_vcap_delivery_date' => wp_date( 'Y-m-d', time() + 20 * DAY_IN_SECONDS ), '_vcap_builtin_fields' => array( 'message', 'delivery_date' ) );
+( new VCAP\ProductSettings() )->save( $fixed_day );
+$fixed_day->save();
+$fixed_day = wc_get_product( $fixed_day->get_id() );
+vcap_ps_assert( 'date' === $fixed_day->get_meta( '_vcap_delivery' ) && array( 'message' ) === array_values( (array) $fixed_day->get_meta( '_vcap_builtin_fields' ) ) && in_array( 'warning', array_column( Flash::pending(), 'type' ), true ), 'with a fixed delivery date the field is switched off, with a warning' );
+$_POST = array();
+delete_transient( 'vcap_flash_' . get_current_user_id() );
+
+// Stored before the fix (field on, delivery "Immediately"): the customer's date is used and printed, and the product screen warns.
+$legacy = vcap_ps_product( 'PS delivery date legacy', array( 'delivery' => 'immediate', 'builtin_fields' => array( 'recipient_name', 'delivery_date' ), 'expiry_mode' => 'never' ) );
+vcap_ps_assert( in_array( 'warning', array_column( ProductChecks::problems( $legacy ), 'level' ), true ), 'the product screen warns that the field and the delivery do not match' );
+$wish_day = wp_date( 'Y-m-d', time() + 12 * DAY_IN_SECONDS );
+list( , $legacy_vouchers ) = vcap_ps_buy( $legacy, array( 'delivery_date' => array( 'label' => 'Delivery date', 'value' => $wish_day ) ) );
+$legacy_voucher = $legacy_vouchers[0] ?? null;
+vcap_ps_assert( $legacy_voucher && VCAP\Voucher::STATUS_SCHEDULED === $legacy_voucher->status && $wish_day === get_date_from_gmt( (string) $legacy_voucher->delivery_at, 'Y-m-d' ), 'the voucher is delivered on the date the customer chose, not right away', $legacy_voucher ? $legacy_voucher->delivery_at : null );
+vcap_ps_assert( VCAP\Placeholders::values( $legacy_voucher )['delivery_date'] === wp_date( vcap()->settings->date_format(), (int) strtotime( (string) $legacy_voucher->delivery_at . ' UTC' ) ), 'the voucher prints the date that is really used' );
+
 /* ---- 12. Onboarding ----------------------------------------------------------------------------------------- */
 
 $keep_page = get_option( 'vcap_redeem_page_id', false );

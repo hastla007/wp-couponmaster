@@ -71,7 +71,9 @@ final class Placeholders {
 			? wc_format_localized_decimal( $voucher->initial_amount ) . '%'
 			: self::money( $voucher->initial_amount, $voucher->currency );
 
-		$delivery = $voucher->delivery_at ? self::date( $voucher->delivery_at ) : ( $voucher->field( 'delivery_date' ) ? wp_date( vcap()->settings->date_format(), strtotime( $voucher->field( 'delivery_date' ) ) ) : '' );
+		// The date the voucher is (or was) really delivered: its delivery date, else – when the customer entered a
+		// date that was not in the future – the day it went out. Never a date that was not used.
+		$delivery = $voucher->delivery_at ? self::date( $voucher->delivery_at ) : ( $voucher->field( 'delivery_date' ) ? self::date( $voucher->delivered_at ?: ( $voucher->created_at ?: gmdate( 'Y-m-d H:i:s' ) ) ) : '' );
 
 		$event_date = (string) $config['event_date'];
 		if ( $event_date && strtotime( $event_date ) ) {

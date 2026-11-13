@@ -8,6 +8,7 @@ defined( 'ABSPATH' ) || exit;
  *  - a product with a fixed expiry date that has passed (or is missing) cannot be bought;
  *  - a product drawing codes from an imported batch can be set to stop selling when the batch is empty;
  *  - a single-use voucher worth more than the cart says that its remaining value is lost;
+ *  - a customer delivery date field that does not match the delivery setting is reported on the product screen;
  *  - admin notices (product screen, dashboard, voucher screens) and a Site Health test list such products.
  */
 final class ProductChecks {
@@ -202,6 +203,9 @@ final class ProductChecks {
 			case 'days_missing':
 				$out[] = array( 'level' => 'warning', 'message' => __( 'Expiry "Days after purchase" has no number of days: the global default validity is used.', 'voucher-captain' ) );
 				break;
+		}
+		if ( 'customer' !== $config['delivery'] && Delivery::customer_date_enabled( $config ) ) {
+			$out[] = array( 'level' => 'warning', 'message' => __( 'The product page field "Delivery date" is on, but the delivery is not "On a date chosen by the customer". A date the customer enters is used; save the product to make both settings match.', 'voucher-captain' ) );
 		}
 		if ( 'giftcard' === $config['type'] && 'single' === $config['usage'] ) {
 			$out[] = array( 'level' => 'warning', 'message' => __( 'This gift card is set to "Single use (whole value at once)": whatever is not used in the first order is lost. Gift cards usually keep their remaining value – choose "Multi-use with stored balance (gift card)" under Usage.', 'voucher-captain' ) );

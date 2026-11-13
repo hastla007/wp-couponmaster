@@ -46,13 +46,16 @@ final class Delivery {
 	}
 
 	/**
-	 * UTC datetime for delivery, or null for immediate.
+	 * UTC datetime for delivery, or null for immediate. A date the customer entered in the "Delivery date" field is
+	 * used whenever that field is enabled for the product, whatever the delivery mode (the voucher shows that date).
 	 */
 	public static function compute_time( array $config, array $fields, ?\WC_Order $order = null ): ?string {
-		$tz   = wp_timezone();
-		$hour = (int) apply_filters( 'vcap_delivery_hour', 8 );
-		$ts   = null;
-		switch ( $config['delivery'] ) {
+		$tz       = wp_timezone();
+		$hour     = self::delivery_hour();
+		$ts       = null;
+		$customer = (string) ( $fields['delivery_date']['value'] ?? '' );
+		$mode     = '' !== $customer && self::customer_date_enabled( $config ) ? 'customer' : (string) $config['delivery'];
+		switch ( $mode ) {
 			case 'delay':
 				$days = (int) $config['delivery_delay_days'];
 				if ( $days > 0 ) {
@@ -79,6 +82,17 @@ final class Delivery {
 	private static function local_date_ts( string $ymd, int $hour, \DateTimeZone $tz ): ?int {
 		$dt = \DateTimeImmutable::createFromFormat( '!Y-m-d', $ymd, $tz );
 		return $dt ? $dt->setTime( $hour, 0 )->getTimestamp() : null;
+	}
+
+	/** Local hour at which dated deliveries go out (filter "vcap_delivery_hour"). */
+	public static function delivery_hour(): int {
+		return max( 0, min( 23, (int) apply_filters( 'vcap_delivery_hour', 8 ) ) );
+	}
+
+	/** Does the product page ask for a delivery date (mode "customer", or the built-in field switched on)? */
+	public static function customer_date_enabled( array $config ): bool {
+		$builtin = array_map( 'strval', (array) ( $config['builtin_fields'] ?? array() ) );
+		return 'customer' === ( $config['delivery'] ?? '' ) || (bool) array_intersect( array( 'delivery_date', 'delivery_date_required' ), $builtin );
 	}
 
 	public function schedule( Voucher $voucher ): void {
