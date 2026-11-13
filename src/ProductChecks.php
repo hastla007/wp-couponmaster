@@ -97,6 +97,10 @@ final class ProductChecks {
 		$losses = array();
 		foreach ( $cart->get_applied_coupons() as $code ) {
 			$voucher = vcap()->vouchers->get_by_code( wc_format_coupon_code( $code ) );
+			if ( ! $voucher ) {
+				$coupon_id = (int) wc_get_coupon_id_by_code( $code );
+				$voucher   = $coupon_id > 0 ? vcap()->vouchers->get_by_coupon( $coupon_id ) : null;
+			}
 			if ( ! $voucher || 'single' !== $voucher->usage_mode || 'percent' === $voucher->discount_type || $voucher->is_ticket() || 'credit' === $voucher->type ) {
 				continue;
 			}
