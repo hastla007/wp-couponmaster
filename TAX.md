@@ -1,0 +1,179 @@
+# Steuerliche Behandlung von Gutscheinen – Freigabe-Dossier
+
+**Status:** Entwurf zur Prüfung durch die Steuerberatung – **nicht freigegeben**.
+**Bezug:** TODO.md, P1 „Steuerliche Zuordnung, Produkttexte und Erstattungsfolgen je Gutscheinart mit Steuerberatung
+freigeben lassen“. Folgepunkte, die von den Antworten abhängen: TODO.md Abschnitt „Entscheidungen Steuer“
+(Einzweck-Satz/Land an Pass Captain, Steuerstatus prüfen, Mehrzweck nach Steuer verrechnen).
+**Rechtsgrundlage, auf die sich der Code bezieht:** Richtlinie (EU) 2016/1065 (Gutschein-Richtlinie), umgesetzt in
+DE § 3 Abs. 13–15 UStG, AT § 4 Abs. 3a UStG 1994.
+
+Dieses Dokument beschreibt, **was das Plugin heute tatsächlich tut** – je Gutscheinart beim Verkauf, bei der Einlösung
+und bei Erstattungen –, welche Texte der Shop sieht und welche Fragen die Steuerberatung beantworten muss. Jede
+Aussage ist durch einen automatisierten Test belegt (Spalte „Nachweis“); ändert sich das Verhalten, schlägt der Test
+fehl und dieses Dokument muss angepasst werden.
+
+---
+
+## 1. Begriffe und Einstellungen im Plugin
+
+| Plugin-Wert | Bezeichnung im Produkt (Feld „VAT treatment“) | Gemeinte steuerliche Einordnung |
+|---|---|---|
+| `payment` | *Multi-purpose voucher (means of payment, VAT on redemption)* | Mehrzweckgutschein: Verkauf nicht steuerbar, USt entsteht bei Einlösung auf die gelieferte Leistung |
+| `single` | *Single-purpose voucher (VAT already charged at sale)* | Einzweckgutschein: Leistungsort und geschuldete Steuer stehen beim Verkauf fest, USt beim Verkauf |
+| `discount` | *Promotion (price reduction)* | Kein Gutschein im Sinne der Richtlinie: Preisnachlass, mindert die Bemessungsgrundlage |
+| `auto` (Standard) | *Automatic (value vouchers: multi-purpose, percentage: discount)* | Ableitung nach Abschnitt 2 |
+
+Code: `src/ProductConfig.php` → `ProductConfig::tax_treatment()`; Produktfeld in `src/ProductSettings.php`.
+Shops und Erweiterungen können die Zuordnung je Gutschein mit dem Filter `vcap_voucher_tax_treatment` ändern.
+
+**Wichtig:** Der Steuerstatus und die Steuerklasse des *Gutscheinprodukts* (WooCommerce-Felder „Steuerstatus“,
+„Steuerklasse“) bestimmen, ob beim Verkauf USt berechnet wird. Das Plugin setzt oder prüft diese Felder heute
+**nicht** gegen die Einordnung oben (offener Punkt, Abschnitt 7).
+
+## 2. Zuordnung je Gutscheinart (Einstellung „Automatisch“)
+
+| Nr. | Gutscheinart | Wie entsteht er | Automatische Einordnung | Nachweis (`tests/tax-integration.php`) |
+|---|---|---|---|---|
+| 2.1 | **Wertgutschein** (Typ „Gutschein“, Festbetrag, einmalig) | verkauft als Produkt | `payment` (Mehrzweck) | „auto: a sold value voucher …“ |
+| 2.2 | **Geschenkkarte** (Typ „Geschenkkarte“, Restguthaben) | verkauft als Produkt, auch Aufladung | `payment` (Mehrzweck) | „auto: a gift card with balance …“ |
+| 2.3 | **Prozentgutschein** | verkauft als Produkt | `discount` (Preisnachlass) | „auto: a sold percentage voucher …“ |
+| 2.4 | **Ticketgutschein** (Typ „Ticket“, mit Geldwert) | verkauft als Produkt | `payment` (wie Wertgutschein) | „auto: a sold ticket voucher …“ |
+| 2.5 | **Ticketgutschein ohne Geldwert** (Eintritt für bestimmte Veranstaltung/Termin) | verkauft als Produkt; wird auf der Einlöseseite in Tickets getauscht, bezahlt keine Bestellung | im Warenkorb und bei Pass Captain als Zahlung gesperrt (`vcap_ticket_voucher`); Tausch erzeugt eine 0‑€‑Bestellung in Pass Captain | `tests/passcaptain-integration.php` „a ticket voucher cannot pay for a Pass Captain checkout …“ |
+| 2.6 | **Kundenguthaben** (Typ „Guthaben“) | nicht verkauft: Erstattung als Guthaben, Empfehlungsprämie, manuelle Gutschrift | `payment` | „auto: store credit …“ |
+| 2.7 | **Aktions-/Kampagnencode** (Festbetrag oder Prozent, ohne Verkauf) | im Admin erzeugt (Kampagnen, Bonusgutschein, Freunde werben, Erstbestellung) | `discount` | „auto: a value code without a sale …“, „auto: a percentage code …“ |
+
+Eine ausdrückliche Einstellung am Produkt (`payment`, `single`, `discount`) gilt immer vor der Automatik
+(Nachweis: „setting … wins …“).
+
+## 3. Verkauf eines Gutscheins
+
+- Der Gutschein ist ein normales WooCommerce-Produkt. **Ob USt anfällt, entscheidet allein dessen Steuerstatus/
+  Steuerklasse** (WooCommerce-Standard).
+  - Mehrzweck richtig eingerichtet = Steuerstatus „Keiner“ → Verkauf ohne USt (Nachweis: „a multi-purpose gift card
+    sold as "not taxable" …“).
+  - Einzweck = steuerpflichtig mit dem Satz der späteren Leistung → USt beim Verkauf (Nachweis: „a single-purpose
+    voucher sold as taxable …“).
+- Je verkaufter Gutscheinposition wird beim Ausstellen ein unveränderlicher Schnappschuss gespeichert
+  (`_vcap_line`, `Issuer::line_data()`): Gutscheinart, Nennwert, Währung, Netto, Steuer, Steuerklasse, Steuerstatus
+  und ob Preise inkl. Steuer waren. Spätere Produkt- oder Steueränderungen verändern ihn nicht.
+- Nennwert: in Shops mit Bruttopreisen der Bruttopreis (Nachweis: „the voucher value is the gross price (120)“), in
+  Shops mit Nettopreisen der Nettopreis.
+- Rechnung/Beleg: erstellt WooCommerce bzw. das Rechnungs-Plugin des Shops; Voucher Captain gibt keine eigene
+  Rechnung aus.
+
+## 4. Einlösung
+
+### 4.1 Im WooCommerce-Warenkorb (alle Gutscheinarten)
+
+Jeder Gutschein wird technisch als WooCommerce-Coupon verrechnet (Wertgutschein/Geschenkkarte/Guthaben: Warenkorb-
+Festbetrag; Prozent: Prozent-Coupon). WooCommerce verteilt den Betrag anteilig auf die Positionen und **berechnet die
+USt vom reduzierten Preis**.
+
+Beispiel (Nachweis „current behaviour: WooCommerce charges VAT only on the remaining 60 …“): Ware 120 € brutto
+(20 %), Geschenkkarte 60 € → Kunde zahlt 60 €, die Bestellung weist **10 € USt** aus statt 20 €.
+
+| Einordnung | Was steuerlich gemeint ist | Was heute im Warenkorb passiert | Bewertung |
+|---|---|---|---|
+| `discount` | Preisnachlass mindert Bemessungsgrundlage | USt vom reduzierten Preis | passt |
+| `single` | USt wurde beim Verkauf berechnet; Einlösung ist keine neue steuerbare Leistung | USt nur auf den Rest | passt, **wenn** Satz und Land des Verkaufs mit der Bestellung übereinstimmen (Frage F3) |
+| `payment` | Gutschein ist Zahlungsmittel; USt auf die volle Leistung (20 € im Beispiel) | USt nur auf den Rest (10 €) | **passt nicht** – zu wenig USt ausgewiesen; Umsetzung „nach Steuer verrechnen“ offen (TODO.md, Entscheidungen Steuer) |
+
+Für Shops mit Nettopreisen zieht das Plugin Geschenkkarten und Guthaben brutto ab (60 € Guthaben bezahlen 60 € des
+Bruttobetrags, nicht 60 € netto + Steuer; Filter `vcap_balance_covers_tax`, Nachweis
+`tests/acceptance-integration.php`). An der Minderung der USt-Bemessungsgrundlage ändert das nichts.
+
+### 4.2 In WP Pass Captain (Ticketkasse)
+
+Pass Captain fragt den Gutschein über den Provider-Vertrag an und erhält `treatment` und `purpose`
+(`src/Compat/PassCaptainProvider.php`, Nachweis Abschnitt 3 des Tests):
+
+| `treatment` | `purpose` an Pass Captain | Verhalten in Pass Captain |
+|---|---|---|
+| `payment` | `multi` | Gutschein bezahlt den Bruttobetrag; USt auf die volle Ticketleistung |
+| `single` | `single` | Gutschein mindert Preis und USt |
+| `discount` | `single` | wie `single` (Preisnachlass) |
+
+Offen: Pass Captain erhält heute weder Steuersatz noch Land des Gutscheinverkaufs; ein Einzweckgutschein mit
+abweichendem Satz/Land kann daher nicht erkannt werden (Frage F3, TODO.md „Einzweckgutschein: Steuersatz und Land …“).
+
+## 5. Erstattungsfolgen
+
+### 5.1 Erstattung des Gutscheinkaufs
+
+| Fall | Verhalten | Einstellung / Nachweis |
+|---|---|---|
+| Kaufbestellung vollständig erstattet oder storniert | ausgestellte Gutscheine werden gesperrt | „Gutscheine bei Erstattung stornieren“ (`vcap_void_on_refund`, Standard an); `tests/tax-integration.php` „a fully refunded gift card purchase voids …“ |
+| Teilerstattung (Menge) | so viele Gutscheine wie erstattet werden gesperrt, ungenutzte zuerst | `Issuer::on_partial_refund()`; `tests/acceptance-integration.php` „refunding one of two gift cards …“, `tests/connector-integration.php` |
+| Gutschein schon (teilweise) eingelöst | Erstattung höchstens Bestellbetrag minus verbrauchter Wert; mehr lehnt WooCommerce mit Hinweis ab (Filter `vcap_allow_refund_of_spent_vouchers`) | `Issuer::guard_refund()`; `tests/acceptance-integration.php` „refunding value that was already spent …“ |
+| Ticketgutschein bereits in Tickets getauscht | Kauferstattung sperrt den Gutschein und storniert die Tickets | `tests/passcaptain-integration.php` „voiding the voucher (purchase refunded) revokes its tickets“ |
+
+Steuerliche Folge (vom Plugin nicht selbst gebucht): bei Einzweck Korrektur der beim Verkauf berechneten USt durch
+die Erstattung in WooCommerce; bei Mehrzweck keine USt-Folge, da beim Verkauf keine berechnet wurde (Frage F5).
+
+### 5.2 Erstattung einer mit Gutschein bezahlten Bestellung
+
+| Fall | Verhalten | Einstellung / Nachweis |
+|---|---|---|
+| Storniert, fehlgeschlagen oder vollständig erstattet | eingesetzter Gutschein-/Guthabenbetrag wird zurückgebucht; einmalige Gutscheine wieder gültig | „Guthaben bei Stornierung wiederherstellen“ (`vcap_restore_on_cancel`, Standard an); `tests/tax-integration.php` „cancelling the redemption order …“, `tests/acceptance-integration.php` „a full refund restores the used balance …“ |
+| Teilerstattung | WooCommerce erstattet über die Zahlungsart; Gutscheinsalden bleiben unverändert | README.md „Erstattung“ |
+| „Als Guthaben erstatten“ | nur ausdrücklich durch das Personal, nicht für Gastbestellungen; erzeugt Kundenguthaben (2.6) | `tests/store-credit-integration.php` (`refund_as_credit`) |
+| Geschenkkarten-Aufladung storniert/erstattet | Aufladung wird zurückgenommen, soweit das Guthaben noch vorhanden ist | `src/TopUp.php::revoke()`; `tests/acceptance-integration.php` (Aufladung) |
+| Pass Captain: Tickets einer Gutscheinzahlung erstattet | Pass Captain bucht den Gutscheinanteil genau einmal zurück; Abgleich unter Gutscheine → Auswertung → Abgleich | `tests/passcaptain-integration.php` „the voucher share of the refunded ticket returns …“ |
+
+Barauszahlung von Restguthaben ist im Plugin nicht vorgesehen (Frage F6).
+
+## 6. Texte, die Shop und Kunden sehen
+
+| Ort | Text (englischer Quelltext / deutsche Übersetzung) |
+|---|---|
+| Produkt → Gutschein → „VAT treatment“ | *Automatic (value vouchers: multi-purpose, percentage: discount)* / *Automatisch (Wertgutscheine: Mehrzweck, Prozent: Rabatt)* |
+| | *Multi-purpose voucher (means of payment, VAT on redemption)* / *Mehrzweckgutschein (Zahlungsmittel, USt bei Einlösung)* |
+| | *Single-purpose voucher (VAT already charged at sale)* / *Einzweckgutschein (USt bereits beim Verkauf abgerechnet)* |
+| | *Promotion (price reduction)* / *Rabattaktion (Preisnachlass)* |
+| Hilfetext | *How connected checkouts (e.g. WP Pass Captain) treat the voucher for VAT. Have the classification checked by your tax adviser.* |
+| Kunde | Gutscheintexte enthalten keine Steueraussage; Einlösebedingungen kommen aus den Ländertexten (Einstellungen → Bedingungen je Land) |
+
+Bekannte Textprobleme: „USt bereits beim Verkauf abgerechnet“ darf nicht für Rabattaktionen erscheinen (TODO.md
+„Einzweckgutschein …“); der Hilfetext sagt nicht, dass der WooCommerce-Warenkorb heute alle Arten als Preisnachlass
+rechnet (Abschnitt 4.1) – wird nach Freigabe angepasst.
+
+## 7. Bekannte Lücken (Umsetzung nach Freigabe)
+
+1. **Mehrzweck im WooCommerce-Warenkorb** wird als Preisnachlass verrechnet statt als Zahlungsmittel nach Steuer
+   (Abschnitt 4.1). Folge: zu wenig ausgewiesene USt auf Einlösebestellungen.
+2. **Steuerstatus des Gutscheinprodukts** wird nicht gegen die Einordnung geprüft (Mehrzweck mit Steuer verkauft =
+   doppelte Besteuerung; Einzweck ohne Steuer verkauft = keine Besteuerung).
+3. **Einzweck: Satz/Land** des Verkaufs werden nicht an Pass Captain übergeben und nicht mit der Einlösung verglichen.
+4. **Aktionscodes ohne Verkauf**, die als Festbetrag wirken (Bonus, Freunde werben), werden als Preisnachlass
+   behandelt. Ob Prämien steuerlich anders einzuordnen sind, ist offen (F4).
+
+## 8. Fragen an die Steuerberatung
+
+Bitte je Frage ankreuzen bzw. ergänzen.
+
+| Nr. | Frage | Antwort |
+|---|---|---|
+| F1 | Ist die automatische Zuordnung in Abschnitt 2 (2.1–2.7) für unsere Shops (DE/AT) richtig? Abweichungen je Zeile. | ☐ ja ☐ nein, Abweichung: |
+| F2 | Wertgutschein/Geschenkkarte für ein **gemischtes Sortiment** (unterschiedliche Steuersätze): Mehrzweck – bestätigt? | ☐ ja ☐ nein |
+| F3 | Einzweckgutschein, bei Einlösung **anderer Satz oder anderes Land** als beim Verkauf: als Mehrzweck behandeln? Oder Einlösung sperren? | ☐ Mehrzweck ☐ sperren ☐ anders: |
+| F4 | Bonus-, Empfehlungs- und Erstbestellungscodes (ohne Verkauf, Festbetrag): Preisnachlass – bestätigt? Gilt das auch für Kundenguthaben aus Empfehlungsprämien? | ☐ ja ☐ nein |
+| F5 | Kauferstattung (5.1): reicht die WooCommerce-Erstattung (USt-Korrektur bei Einzweck, keine bei Mehrzweck) oder ist ein eigener Beleg nötig? | |
+| F6 | Barauszahlung von Restguthaben (z. B. AT bei geringem Rest, Ablauf): verpflichtend/zulässig? Steuerfolge? | |
+| F7 | Verfall eines **Mehrzweck**-Gutscheins ohne Einlösung: Steuerfolge (keine USt?) und Ausweis in der Buchhaltung (Verbindlichkeitenbericht Abschnitt „Abgelaufen“)? | |
+| F8 | Verfall eines **Einzweck**-Gutscheins: bleibt die beim Verkauf abgeführte USt? | |
+| F9 | Ticketgutschein ohne Geldwert (2.5) für eine bestimmte Veranstaltung: Einzweck (Ort und Satz stehen fest)? Gilt das auch, wenn der Termin frei wählbar ist? | |
+| F10 | Prozentgutschein, der **verkauft** wird (2.3): Preisnachlass oder Gutschein? | |
+| F11 | Geschenkkarten-Aufladung: eigener Mehrzweckgutschein-Verkauf, nicht steuerbar – bestätigt? | ☐ ja ☐ nein |
+| F12 | Texte Abschnitt 6: fachlich korrekt? Gewünschte Formulierung für Kunden (z. B. auf Rechnung/Gutschein: „Mehrzweckgutschein, USt wird bei Einlösung berechnet“)? | |
+
+## 9. Freigabe
+
+| | |
+|---|---|
+| Geprüft durch (Kanzlei, Name) | |
+| Datum | |
+| Geltungsbereich (Länder, Shops) | |
+| Ergebnis | ☐ freigegeben ☐ freigegeben mit Änderungen (siehe Antworten) ☐ nicht freigegeben |
+
+Nach der Freigabe: Antworten in die Umsetzung der Lücken (Abschnitt 7) übernehmen, Tests anpassen, TODO.md-Punkt
+abhaken und auf dieses Dokument mit Datum verweisen.
