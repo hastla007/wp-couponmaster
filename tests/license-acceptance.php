@@ -5,7 +5,8 @@
  * https://licenses.test) and a shop with the Voucher Captain premium release ZIP. Run with
  * `wp eval-file tests/license-acceptance.php <mode> [args]` on the site the mode names.
  *
- * Server modes: server-setup <key-file>, server-package <version> <zip>, server-bad-checksum, server-status <status>.
+ * Server modes: server-setup <key-file>, server-releases <version>, server-bad-checksum|server-good-checksum <version>,
+ *               server-status <status>.
  * Shop modes:   shop-locked, shop-activate <key-file>, shop-active, shop-offline, shop-suspended,
  *               shop-update-rejected, shop-update, shop-updated <version>, shop-deactivate.
  */
@@ -87,37 +88,27 @@ switch ( $mode ) {
 		file_put_contents( (string) ( $args[1] ?? '' ), $key );
 		break;
 
-	case 'server-package':
-		$zip = (string) ( $args[2] ?? '' );
-		$sha = is_readable( $zip ) ? hash_file( 'sha256', $zip ) : '';
-		$check( '' !== $sha, 'update package built: ' . basename( $zip ) . ' sha256 ' . $sha );
-		update_option(
-			'vcap_acc_package',
-			array(
-				'version'      => (string) ( $args[1] ?? '' ),
-				'package_url'  => VCAP_ACC_SERVER . '/packages/' . basename( $zip ),
-				'sha256'       => $sha,
-				'requires_php' => '8.1',
-				'requires_wp'  => '6.4',
-				'tested_wp'    => '7.1',
-			),
-			false
-		);
+	case 'server-releases':
+		// Release storage: manifests made by wp-license tools/create-release-manifest.php, read by the registry
+		// (tools/license-server/wplc-release-registry.php). The newest valid release is announced.
+		echo "Server: release storage with SHA-256 manifests\n";
+		$packages = apply_filters( 'wplc_update_packages', array(), VCAP_ACC_PRODUCT );
+		$package  = $packages[ VCAP_ACC_PRODUCT ] ?? array();
+		$expected = (string) ( $args[1] ?? '' );
+		$zip      = ABSPATH . 'packages/' . basename( (string) parse_url( (string) ( $package['package_url'] ?? '' ), PHP_URL_PATH ) );
+		$check( $expected === ( $package['version'] ?? '' ), "the registry announces the newest release {$expected}", $package );
+		$check( is_readable( $zip ) && hash_equals( (string) hash_file( 'sha256', $zip ), (string) ( $package['sha256'] ?? '' ) ), 'its SHA-256 matches the stored ZIP' );
+		$check( '' !== ( $package['release_notes'] ?? '' ) && '8.1' === ( $package['requires_php'] ?? '' ) && '' !== ( $package['tested_wp'] ?? '' ), 'release notes and requirements come from the manifest' );
 		break;
 
 	case 'server-bad-checksum':
-		$package           = (array) get_option( 'vcap_acc_package', array() );
-		$package['sha256'] = str_repeat( '0', 64 );
-		update_option( 'vcap_acc_package', $package, false );
-		echo "  ok   server announces a wrong SHA-256 for the package\n";
-		break;
-
 	case 'server-good-checksum':
-		$package           = (array) get_option( 'vcap_acc_package', array() );
-		$zip               = ABSPATH . 'packages/' . basename( (string) parse_url( (string) $package['package_url'], PHP_URL_PATH ) );
-		$package['sha256'] = (string) hash_file( 'sha256', $zip );
-		update_option( 'vcap_acc_package', $package, false );
-		echo "  ok   server announces the real SHA-256 again\n";
+		$file     = WP_CONTENT_DIR . '/wplc-releases/' . VCAP_ACC_PRODUCT . '-' . (string) ( $args[1] ?? '' ) . '.json';
+		$manifest = json_decode( (string) file_get_contents( $file ), true );
+		$zip      = ABSPATH . 'packages/' . (string) $manifest['package_file'];
+		$manifest['sha256'] = 'server-bad-checksum' === $mode ? str_repeat( '0', 64 ) : (string) hash_file( 'sha256', $zip );
+		file_put_contents( $file, (string) wp_json_encode( $manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+		echo 'server-bad-checksum' === $mode ? "  ok   manifest of the release now names a wrong SHA-256\n" : "  ok   manifest names the real SHA-256 again\n";
 		break;
 
 	case 'server-status':

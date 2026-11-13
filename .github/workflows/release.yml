@@ -1,7 +1,8 @@
 name: Release
 
-# Pushing a tag vX.Y.Z (see RELEASE.md) builds the release ZIP reproducibly, checks that the tag matches the
-# plugin version, and publishes the ZIP and its SHA-256 as a GitHub release (draft – reviewed before publishing).
+# Pushing a tag vX.Y.Z (see RELEASE.md) builds the release ZIPs reproducibly (free and premium edition), checks that
+# the tag matches the plugin version, creates the licence-manager manifest of the premium ZIP (SHA-256, requirements,
+# release notes) with WP License Captain's own tool and publishes everything as a GitHub release draft.
 on:
   push:
     tags:
@@ -15,6 +16,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - name: Check out the licence server tools (WP License Captain)
+        uses: actions/checkout@v5
+        with:
+          repository: hastla007/wp-license
+          ref: 3300685a524edfc4ed0e1f3119f739c5e989b2d4
+          path: wp-license
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -26,17 +33,41 @@ jobs:
           version="$(sed -n 's/^ \* Version: *//p' voucher-captain.php | tr -d '[:space:]')"
           test "v${version}" = "${GITHUB_REF_NAME}" || { echo "Tag ${GITHUB_REF_NAME} does not match plugin version ${version}"; exit 1; }
           grep -q "^= ${version} =" readme.txt || { echo "readme.txt has no changelog section for ${version}"; exit 1; }
-      - name: Build twice and compare
+      - name: Build both editions twice and compare
         run: |
-          bin/build.sh
-          cp build/voucher-captain.zip.sha256 /tmp/first.sha256
-          bin/build.sh
-          diff /tmp/first.sha256 build/voucher-captain.zip.sha256
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          for edition in free premium; do
+            VCAP_EDITION="$edition" bin/build.sh
+            cp build/voucher-captain.zip.sha256 /tmp/first.sha256
+            VCAP_EDITION="$edition" bin/build.sh
+            diff /tmp/first.sha256 build/voucher-captain.zip.sha256
+            name="voucher-captain$( [ "$edition" = premium ] && echo "-premium-${version}" ).zip"
+            cp build/voucher-captain.zip "dist/${name}"
+            ( cd dist && sha256sum "${name}" > "${name}.sha256" )
+          done
+          awk -v v="= ${version} =" '$0==v{f=1;next} /^= /{f=0} f' readme.txt > dist/notes.md
+      - name: Licence manager manifest of the premium ZIP
+        env:
+          PACKAGE_BASE_URL: ${{ vars.WPLC_PACKAGE_BASE_URL }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [ -z "$PACKAGE_BASE_URL" ]; then
+            echo "::warning::Repository variable WPLC_PACKAGE_BASE_URL (HTTPS base URL of the release storage) is not set – no manifest."
+            exit 0
+          fi
+          php wp-license/tools/create-release-manifest.php --zip="dist/voucher-captain-premium-${version}.zip" \
+            --product-key=voucher-captain --version="${version}" \
+            --package-url="${PACKAGE_BASE_URL%/}/voucher-captain-premium-${version}.zip" \
+            --requires-php="$(sed -n 's/^ \* Requires PHP: *//p' voucher-captain.php | tr -d '[:space:]')" \
+            --requires-wp="$(sed -n 's/^ \* Requires at least: *//p' voucher-captain.php | tr -d '[:space:]')" \
+            --tested-wp="$(sed -n 's/^Tested up to: *//p' readme.txt | tr -d '[:space:]')" \
+            --changelog=dist/notes.md --output="dist/voucher-captain-${version}.json"
+          cat "dist/voucher-captain-${version}.json"
       - name: Draft the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           version="${GITHUB_REF_NAME#v}"
-          awk -v v="= ${version} =" '$0==v{f=1;next} /^= /{f=0} f' readme.txt > build/notes.md
-          gh release create "${GITHUB_REF_NAME}" build/voucher-captain.zip build/voucher-captain.zip.sha256 \
-            --draft --title "Voucher Captain ${version}" --notes-file build/notes.md
+          gh release create "${GITHUB_REF_NAME}" dist/*.zip dist/*.sha256 $(ls dist/*.json 2>/dev/null) \
+            --draft --title "Voucher Captain ${version}" --notes-file dist/notes.md

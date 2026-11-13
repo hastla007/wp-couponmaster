@@ -36,9 +36,23 @@ release notes). Entries start with **New**, **Fix** or **Fix (security)** and de
    git push origin vX.Y.Z
    ```
 
-5. The `Release` workflow checks tag ↔ version, builds the ZIP twice (identical SHA-256 required) and creates a
-   **draft** GitHub release with `voucher-captain.zip` and `voucher-captain.zip.sha256`. Review and publish it.
-6. Upload the same ZIP and its SHA-256 to the licence manager's release storage (premium updates verify the hash).
+5. The `Release` workflow checks tag ↔ version, builds the free and the premium ZIP twice each (identical SHA-256
+   required) and creates a **draft** GitHub release with `voucher-captain.zip`, `voucher-captain-premium-X.Y.Z.zip`,
+   their `.sha256` files and the licence-manager manifest `voucher-captain-X.Y.Z.json` (made by WP License
+   Captain's `tools/create-release-manifest.php`: version, HTTPS package URL, SHA-256, required PHP/WordPress,
+   tested WordPress, release notes). The package URL is the repository variable `WPLC_PACKAGE_BASE_URL` + the ZIP
+   name; without the variable the workflow warns and leaves the manifest out. Review and publish the draft.
+6. Publish the premium release in the licence manager's release storage:
+   - upload `voucher-captain-premium-X.Y.Z.zip` unchanged to the storage behind `WPLC_PACKAGE_BASE_URL` (immutable:
+     never overwrite a published version);
+   - put `voucher-captain-X.Y.Z.json` into the licence server's manifest directory (`WPLC_RELEASES_DIR`, default
+     `wp-content/wplc-releases`). The must-use plugin `tools/license-server/wplc-release-registry.php` (once per
+     licence server, copied to `wp-content/mu-plugins/`) announces the newest valid manifest per product through
+     `wplc_update_packages`; a storage host other than the licence server goes into `WPLC_RELEASE_HOSTS`;
+   - check on a test shop: new installation from the storage URL (SHA-256 against the manifest), update of the
+     previous version through the licence download grant. The CI job `license-acceptance` does exactly this on
+     every push against a real WP License Captain server (two releases, wrong SHA-256 refused, real one installed).
+   Withdrawing a release = removing its manifest; shops on that version are offered the newest remaining one.
 
 ## Reproducible ZIP
 

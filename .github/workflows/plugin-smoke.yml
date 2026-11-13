@@ -239,9 +239,11 @@ jobs:
 
   license-acceptance:
     # Acceptance against a reachable WP License Captain server with real release packages (TODO "Aktivierung,
-    # Feature-Sperren, Offline-Verhalten und Update-Installation …"): the license server (hastla007/wp-license on
-    # WordPress + WooCommerce) runs over HTTPS as https://licenses.test (own test CA), a second WordPress site
-    # installs the Voucher Captain premium release ZIP. tests/license-acceptance.php
+    # Feature-Sperren, Offline-Verhalten und Update-Installation …" and "Release-Weg"): the license server
+    # (hastla007/wp-license on WordPress + WooCommerce) runs over HTTPS as https://licenses.test (own test CA) with
+    # its release storage (premium ZIPs + SHA-256 manifests, tools/license-server/wplc-release-registry.php); a second
+    # WordPress site installs the release from that storage and updates through the licence download grant.
+    # tests/license-acceptance.php
     runs-on: ubuntu-latest
     services:
       db:
@@ -297,23 +299,35 @@ jobs:
           php wp-cli.phar --path="$SERVER" option update woocommerce_currency EUR
           ln -s "$GITHUB_WORKSPACE/wp-license" "$SERVER/wp-content/plugins/wp-license"
           php wp-cli.phar --path="$SERVER" plugin activate wp-license
-          mkdir -p "$SERVER/wp-content/mu-plugins" "$SERVER/packages"
-          cp tests/license-server-mu.php "$SERVER/wp-content/mu-plugins/"
+          mkdir -p "$SERVER/wp-content/mu-plugins" "$SERVER/wp-content/wplc-releases" "$SERVER/packages"
+          cp tools/license-server/wplc-release-registry.php "$SERVER/wp-content/mu-plugins/"
           ( cd "$SERVER" && PHP_CLI_SERVER_WORKERS=4 nohup php -S 127.0.0.1:8080 > "$RUNNER_TEMP/php-server.log" 2>&1 & )
           sudo nohup socat OPENSSL-LISTEN:443,reuseaddr,fork,cert="$RUNNER_TEMP/tls/server.pem",verify=0 TCP:127.0.0.1:8080 > "$RUNNER_TEMP/socat.log" 2>&1 &
           sleep 3
           curl --fail --silent --show-error --cacert "$RUNNER_TEMP/tls/ca.crt" https://licenses.test/wp-json/wplc/v1 | head -c 300; echo
-      - name: Release packages (premium edition) – installed version and update
+      - name: Publish two releases to the licence manager storage (ZIP + SHA-256 manifest)
         run: |
-          VCAP_EDITION=premium bin/build.sh
-          # The update: the same sources as the next release 99.0.0, built by the same release script.
+          # release(): premium build of the given sources, stored as voucher-captain-premium-X.Y.Z.zip, manifest made by
+          # the licence server's own tool (RELEASE.md step 6).
+          release() {
+            ( cd "$1" && VCAP_EDITION=premium bin/build.sh )
+            version="$(sed -n 's/^ \* Version: *//p' "$1/voucher-captain.php" | tr -d '[:space:]')"
+            cp "$1/build/voucher-captain.zip" "$SERVER/packages/voucher-captain-premium-$version.zip"
+            printf 'Voucher Captain %s (CI acceptance release).\n' "$version" > "$RUNNER_TEMP/notes-$version.md"
+            php wp-license/tools/create-release-manifest.php --zip="$SERVER/packages/voucher-captain-premium-$version.zip" \
+              --product-key=voucher-captain --version="$version" \
+              --package-url="https://licenses.test/packages/voucher-captain-premium-$version.zip" \
+              --requires-php=8.1 --requires-wp=6.4 --tested-wp=7.1 --changelog="$RUNNER_TEMP/notes-$version.md" \
+              --output="$SERVER/wp-content/wplc-releases/voucher-captain-$version.json"
+            cat "$SERVER/wp-content/wplc-releases/voucher-captain-$version.json"
+          }
+          release "$GITHUB_WORKSPACE"
+          # The next release 99.0.0: the same sources with the version raised, built by the same release script.
           rsync -a --exclude build --exclude wp-license ./ "$RUNNER_TEMP/vc-next/"
-          cd "$RUNNER_TEMP/vc-next"
-          sed -i "s/^ \* Version: .*/ * Version:           99.0.0/; s/^define( 'VCAP_VERSION', '[^']*' );/define( 'VCAP_VERSION', '99.0.0' );/" voucher-captain.php
-          sed -i "s/^Stable tag: .*/Stable tag: 99.0.0/" readme.txt
-          VCAP_EDITION=premium bin/build.sh
-          cp build/voucher-captain.zip "$SERVER/packages/voucher-captain-99.0.0.zip"
-      - name: Shop with the Voucher Captain premium release ZIP
+          sed -i "s/^ \* Version: .*/ * Version:           99.0.0/; s/^define( 'VCAP_VERSION', '[^']*' );/define( 'VCAP_VERSION', '99.0.0' );/" "$RUNNER_TEMP/vc-next/voucher-captain.php"
+          sed -i "s/^Stable tag: .*/Stable tag: 99.0.0/" "$RUNNER_TEMP/vc-next/readme.txt"
+          release "$RUNNER_TEMP/vc-next"
+      - name: New installation from the licence manager storage (download, SHA-256 against the manifest)
         run: |
           php wp-cli.phar core download --path="$SHOP" --version=7.1.4
           printf "define( 'FS_METHOD', 'direct' );\n" | php wp-cli.phar config create --path="$SHOP" --dbname=shop --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check --extra-php
@@ -321,7 +335,13 @@ jobs:
           php wp-cli.phar --path="$SHOP" plugin install woocommerce --version=11.2.2 --activate
           # WordPress verifies HTTPS against its own CA bundle: trust the test CA of licenses.test.
           cat "$RUNNER_TEMP/tls/ca.crt" >> "$SHOP/wp-includes/certificates/ca-bundle.crt"
-          php wp-cli.phar --path="$SHOP" plugin install build/voucher-captain.zip --activate
+          version="$(sed -n 's/^ \* Version: *//p' voucher-captain.php | tr -d '[:space:]')"
+          manifest="$SERVER/wp-content/wplc-releases/voucher-captain-$version.json"
+          url="$(php -r 'echo json_decode(file_get_contents($argv[1]), true)["package_url"];' "$manifest")"
+          sha="$(php -r 'echo json_decode(file_get_contents($argv[1]), true)["sha256"];' "$manifest")"
+          curl --fail --silent --show-error --cacert "$RUNNER_TEMP/tls/ca.crt" -o "$RUNNER_TEMP/download.zip" "$url"
+          echo "$sha  $RUNNER_TEMP/download.zip" | sha256sum -c -
+          php wp-cli.phar --path="$SHOP" plugin install "$RUNNER_TEMP/download.zip" --activate
           php wp-cli.phar --path="$SHOP" plugin list
       - name: Acceptance – activation, feature gate, offline, suspension, update, deactivation
         run: |
@@ -330,7 +350,7 @@ jobs:
           shop() { php wp-cli.phar --path="$SHOP" --user=admin eval-file "$T" "$@"; }
           tls_up() { sudo nohup socat OPENSSL-LISTEN:443,reuseaddr,fork,cert="$RUNNER_TEMP/tls/server.pem",verify=0 TCP:127.0.0.1:8080 >> "$RUNNER_TEMP/socat.log" 2>&1 & sleep 2; }
           server server-setup "$RUNNER_TEMP/license.key"
-          server server-package 99.0.0 "$SERVER/packages/voucher-captain-99.0.0.zip"
+          server server-releases 99.0.0
           shop shop-locked
           shop shop-activate "$RUNNER_TEMP/license.key"
           shop shop-active
@@ -341,9 +361,9 @@ jobs:
           shop shop-suspended
           server server-status active
           shop shop-reactivated
-          server server-bad-checksum
+          server server-bad-checksum 99.0.0
           shop shop-update-rejected
-          server server-good-checksum
+          server server-good-checksum 99.0.0
           shop shop-update
           shop shop-updated 99.0.0
           shop shop-deactivate
