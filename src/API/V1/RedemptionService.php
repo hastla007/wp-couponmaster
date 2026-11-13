@@ -380,13 +380,6 @@ final class RedemptionService {
 	}
 
 	/**
-	 * Decimal places of a currency (ISO 4217 minor units), not the shop's price display setting: a shop that
-	 * shows whole forints still books exact amounts. Unknown or empty currency: 2 (the internal precision).
-	 *
-	 * @param string $currency ISO 4217 code.
-	 * @return int
-	 */
-	/**
 	 * Caller metadata as stored with a redemption. Keys starting with "_" are reserved for the service's own
 	 * bookkeeping (e.g. "_refunds"): a caller could otherwise pre-seed refunds and restore a voucher or lift the
 	 * refund cap. Nested values are kept as given.
@@ -406,6 +399,13 @@ final class RedemptionService {
 		return $meta;
 	}
 
+	/**
+	 * Decimal places of a currency (ISO 4217 minor units), not the shop's price display setting: a shop that
+	 * shows whole forints still books exact amounts. Unknown or empty currency: 2 (the internal precision).
+	 *
+	 * @param string $currency ISO 4217 code.
+	 * @return int
+	 */
 	public static function decimals( string $currency ): int {
 		$currency = strtoupper( $currency );
 		$zero     = array( 'BIF', 'CLP', 'DJF', 'GNF', 'ISK', 'JPY', 'KMF', 'KRW', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF' );
