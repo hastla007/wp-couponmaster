@@ -73,7 +73,12 @@ final class PassCaptainReconcile {
 			}
 			$pc_refunded = (int) ( $snapshot['refunded_minor'] ?? 0 ) / ( 10 ** $decimals );
 			$vc_refunded = array_sum( array_map( 'floatval', (array) ( $row['meta']['_refunds'] ?? array() ) ) );
-			if ( abs( $pc_refunded - $vc_refunded ) > 0.5 / ( 10 ** $decimals ) ) {
+			// Single-use: Pass Captain refunds its credited share, Voucher Captain gives the whole voucher back (or
+			// nothing for a partial refund) – only a full refund without the voucher back differs.
+			$refund_differs = $single
+				? $pc_refunded + $tolerance >= $pc_paid && $pc_paid > 0 && $vc_refunded <= $tolerance
+				: abs( $pc_refunded - $vc_refunded ) > $tolerance;
+			if ( $refund_differs ) {
 				/* translators: 1: refunded in Pass Captain, 2: given back in Voucher Captain */
 				$issues[] = self::issue( 'checkout', $ref, $key, sprintf( __( 'Refunds differ: Pass Captain refunded %1$s of the voucher share, Voucher Captain gave back %2$s.', 'voucher-captain' ), wc_format_decimal( $pc_refunded, $decimals ), wc_format_decimal( $vc_refunded, $decimals ) ) );
 			}
