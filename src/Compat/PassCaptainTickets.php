@@ -191,13 +191,27 @@ final class PassCaptainTickets {
 			return;
 		}
 		$service = self::service();
-		if ( 'issued' !== ( $state['status'] ?? '' ) || ! $service || ! method_exists( $service, 'resend_tickets' ) || ! $this->is_buyer( $voucher ) ) {
+		if ( 'issued' !== ( $state['status'] ?? '' ) || ! $service || ! method_exists( $service, 'resend_tickets' ) || ! $this->is_ticket_holder( $voucher, $state ) ) {
 			return;
 		}
 		echo '<form method="post" class="vcap-resend-tickets-form"><input type="hidden" name="vcap_resend_tickets" value="' . esc_attr( (string) $voucher->id ) . '" />';
 		wp_nonce_field( 'vcap_resend_tickets_' . $voucher->id, 'vcap_resend_tickets_nonce' );
+		// New ticket codes replace the old ones: asked explicitly (works without JavaScript).
+		echo '<label class="vcap-resend-confirm"><input type="checkbox" name="vcap_resend_confirm" value="1" required /> ' . esc_html__( 'I understand that the tickets sent so far become invalid.', 'voucher-captain' ) . '</label> ';
 		/* translators: %s: voucher code */
 		echo '<button type="submit" class="woocommerce-button button" aria-label="' . esc_attr( sprintf( __( 'Send the tickets of voucher %s again', 'voucher-captain' ), $voucher->code ) ) . '">' . esc_html__( 'Send tickets again', 'voucher-captain' ) . '</button></form>';
+	}
+
+	/**
+	 * Only whoever holds the tickets may have them sent again (new codes invalidate the old ones): the logged-in
+	 * customer whose address the tickets went to – not the buyer of a gift whose recipient already has them.
+	 */
+	private function is_ticket_holder( Voucher $voucher, array $state ): bool {
+		$user = wp_get_current_user();
+		$to   = strtolower( (string) ( $state['email'] ?? '' ) );
+		$mine = $user && $user->exists() && '' !== $to && strtolower( (string) $user->user_email ) === $to;
+		$own  = $this->is_buyer( $voucher ) && strtolower( (string) $voucher->buyer_email ) === $to;
+		return (bool) apply_filters( 'vcap_passcaptain_can_resend_tickets', $mine || $own, $voucher, $state );
 	}
 
 	/** After the exchange, "Send email again" would only resend the voucher – the tickets are what counts. */
@@ -220,8 +234,13 @@ final class PassCaptainTickets {
 			wc_add_notice( __( 'The request has expired. Please try again.', 'voucher-captain' ), 'error' );
 			return;
 		}
+		if ( empty( $_POST['vcap_resend_confirm'] ) ) {
+			wc_add_notice( __( 'Please confirm that the tickets sent so far become invalid.', 'voucher-captain' ), 'error' );
+			return;
+		}
 		$voucher = $this->vouchers->get( $id );
-		$state   = $voucher && $this->is_buyer( $voucher ) ? $this->exchange_state( $voucher ) : null;
+		$state   = $voucher ? $this->exchange_state( $voucher ) : null;
+		$state   = $state && $this->is_ticket_holder( $voucher, $state ) ? $state : null;
 		$service = self::service();
 		if ( ! $state || ! $service || ! method_exists( $service, 'resend_tickets' ) ) {
 			wc_add_notice( __( 'The tickets of this voucher cannot be sent again.', 'voucher-captain' ), 'error' );

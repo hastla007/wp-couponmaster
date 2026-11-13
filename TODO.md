@@ -277,7 +277,7 @@ Fünf parallele Prüfungen (Sicherheit, Geld/Buchungen, Steuer/Recht/Datenschutz
 - [ ] `order_coupon_object()` bei Bestellungen in Fremdwährung von Basis- in Bestellwährung umrechnen oder überspringen.
 - [x] `exchange_state()` pro Request zwischenspeichern (Kundenkonto: bis zu 50+ Abfragen je Gutschein). — *erledigt (9a5e0b9).*
 - [x] Bei Deaktivierung `vcap_release_stale_order_reservations` aus dem Action Scheduler entfernen. — *erledigt (21b6823).*
-- [ ] „Tickets erneut senden“ rotiert die Codes, die der Beschenkte schon hat: nur mit Bestätigung bzw. für den Ticketempfänger anbieten.
+- [x] „Tickets erneut senden“ rotiert die Codes, die der Beschenkte schon hat: nur mit Bestätigung bzw. für den Ticketempfänger anbieten. — *erledigt: nur für das Konto mit der Ticket-Adresse (Filter `vcap_passcaptain_can_resend_tickets`), Pflicht-Bestätigung „bisherige Tickets werden ungültig“.*
 - [ ] Multisite-Netzwerkaktivierung: Rewrite-Flush und Standardvorlage je Site; Deinstallation löscht auch `vcap_discount`-Aktionen samt `_vcap_used_by`.
 - [ ] Fähigkeit `wpcap_woocommerce_hold_fulfilment` versioniert anbieten und in VC prüfen (Hinweis, wenn PC zu alt – mit PC main werden Tickets trotz Fehlbetrag ausgestellt); E2E-Test Fehlbetrag mit beiden Plugins; CI-Matrix auf existierende PC-Refs inkl. Arbeits-/Release-Branch umstellen (der Ref `claude/woocommerce-ticket-plugin-8q4m8q` existiert nicht mehr).
 

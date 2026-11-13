@@ -221,6 +221,23 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	$pc_details = method_exists( VCAP\Compat\PassCaptainTickets::service(), 'resend_tickets' );
 	vcap_pc_assert( $pc_details ? str_contains( $tv_status, '2 tickets for' ) && str_contains( $tv_status, 't***@example.com' ) : str_contains( $tv_status, '2 tickets' ), 'the customer account shows what the voucher was exchanged for and where the tickets went (masked)' );
 	vcap_pc_assert( ! apply_filters( 'vcap_voucher_next_steps', array(), vcap()->vouchers->get( $tv->id ) ) && false === apply_filters( 'vcap_customer_can_resend', true, vcap()->vouchers->get( $tv->id ) ), 'after the exchange there are no next steps and no voucher resend' );
+	if ( $pc_details ) {
+		// "Send tickets again" replaces the codes: only for whoever holds the tickets, and only after confirming.
+		$actions = static function () use ( $tv ) {
+			ob_start();
+			do_action( 'vcap_account_voucher_actions', vcap()->vouchers->get( $tv->id ) );
+			return (string) ob_get_clean();
+		};
+		$holder = get_user_by( 'email', 'ticket-buyer@example.com' );
+		$holder = $holder ? $holder->ID : wp_create_user( 'tv-holder-' . wp_generate_password( 5, false ), wp_generate_password(), 'ticket-buyer@example.com' );
+		$other  = wp_create_user( 'tv-other-' . wp_generate_password( 5, false ), wp_generate_password(), 'someone-else-' . wp_generate_password( 5, false ) . '@example.com' );
+		wp_set_current_user( $holder );
+		$own_html = $actions();
+		wp_set_current_user( $other );
+		$other_html = $actions();
+		vcap_pc_assert( str_contains( $own_html, 'vcap_resend_tickets' ) && str_contains( $own_html, 'name="vcap_resend_confirm"' ) && ! str_contains( $other_html, 'vcap_resend_tickets' ), 'only the ticket holder can have the tickets sent again, after confirming that the old ones become invalid' );
+		wp_set_current_user( 0 );
+	}
 	wp_delete_post( $redeem_page, true );
 
 	wp_set_current_user( 1 );

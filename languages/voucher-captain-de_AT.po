@@ -3846,3 +3846,9 @@ msgstr "Dort tauschen Kunden Ticketgutscheine gegen Tickets ein, und die Gutsche
 
 msgid "Choose the redeem page"
 msgstr "Einlöseseite wählen"
+
+msgid "I understand that the tickets sent so far become invalid."
+msgstr "Mir ist bewusst, dass die bisher gesendeten Tickets ungültig werden."
+
+msgid "Please confirm that the tickets sent so far become invalid."
+msgstr "Bitte bestätigen Sie, dass die bisher gesendeten Tickets ungültig werden."
