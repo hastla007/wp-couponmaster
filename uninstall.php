@@ -61,6 +61,8 @@ function vcap_uninstall_site(): bool {
 	$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'vcap\_%' OR option_name LIKE '\_vcap\_claim\_%' OR option_name LIKE '\_vcap\_scan\_%' OR option_name LIKE '\_transient\_vcap\_%' OR option_name LIKE '\_transient\_timeout\_vcap\_%'" ); // phpcs:ignore
 	// Voucher settings of products and variations ("_vcap_*" meta); coupons keep theirs, like the coupons themselves.
 	$wpdb->query( $wpdb->prepare( "DELETE m FROM {$wpdb->postmeta} m INNER JOIN {$wpdb->posts} p ON p.ID = m.post_id WHERE p.post_type IN ('product', 'product_variation') AND m.meta_key LIKE %s", $wpdb->esc_like( '_vcap_' ) . '%' ) ); // phpcs:ignore
+	// Referral coupon id and count of this site's customers (per-site user options, VCAP\Referrals).
+	vcap_uninstall_referral_meta( array( $wpdb->get_blog_prefix() . '_vcap_referral_coupon', $wpdb->get_blog_prefix() . '_vcap_referral_count' ) );
 	foreach ( array( 'administrator', 'shop_manager' ) as $role_name ) {
 		$role = get_role( $role_name );
 		if ( $role ) {
@@ -84,17 +86,27 @@ function vcap_uninstall_site(): bool {
 }
 
 /**
- * Removes the referral data stored with the users (personal referral coupon and reward count). Users are shared
- * by all sites of a network, so on a network only when every site opted in.
+ * Deletes the given user meta keys of all users.
+ *
+ * @param string[] $keys Meta keys.
  */
-function vcap_uninstall_user_meta(): void {
+function vcap_uninstall_referral_meta( array $keys ): void {
 	global $wpdb;
-	foreach ( array( '_vcap_referral_coupon', '_vcap_referral_count' ) as $key ) {
+	foreach ( $keys as $key ) {
 		$wpdb->delete( $wpdb->usermeta, array( 'meta_key' => $key ) ); // phpcs:ignore
 	}
 	if ( function_exists( 'wp_cache_supports' ) && wp_cache_supports( 'flush_group' ) ) {
 		wp_cache_flush_group( 'user_meta' );
 	}
+}
+
+/**
+ * Removes the referral data earlier versions stored network-wide with the users (personal referral coupon and
+ * reward count, now per site). Users are shared by all sites of a network, so on a network only when every site
+ * opted in.
+ */
+function vcap_uninstall_user_meta(): void {
+	vcap_uninstall_referral_meta( array( '_vcap_referral_coupon', '_vcap_referral_count' ) );
 }
 
 delete_site_transient( 'vcap_update_check' ); // Cached update check (VCAP\Licensing\PremiumUpdater).

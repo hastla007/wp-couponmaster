@@ -12,6 +12,12 @@ final class Referrals {
 	/** Scheduled retry of a reward withdrawal that failed with a booking error. */
 	public const RETRY_HOOK = 'vcap_referral_revoke_retry';
 	public const OWNER      = '_vcap_referral_owner';
+	/**
+	 * Per-site user options (user meta with the site's table prefix, update_user_option()): the referral coupon id
+	 * and the number of rewarded referrals belong to one site – coupon ids of one site mean another coupon (or
+	 * nothing) on the other sites of a network. Earlier versions stored them network-wide under the plain key; such
+	 * values are adopted once by the main site (the only site of a single-site install), after a check.
+	 */
 	public const USER_META  = '_vcap_referral_coupon';
 	public const COUNT_META = '_vcap_referral_count';
 	public const REWARDED   = '_vcap_referral_rewarded';
@@ -80,15 +86,94 @@ final class Referrals {
 		return $this->settings->yes( 'vcap_referral_enabled' );
 	}
 
+	/** The site's user meta key of a per-site referral value (what update_user_option() writes on this site). */
+	public static function site_key( string $key ): string {
+		global $wpdb;
+		return $wpdb->get_blog_prefix() . $key;
+	}
+
 	/**
-	 * The customer's referral coupon (created on demand); its value follows the current settings.
+	 * Whether this site takes over the network-wide values of earlier versions: the main site of a network, or
+	 * a single site (where they are simply moved to the per-site key).
+	 */
+	private static function adopts_legacy(): bool {
+		return ! is_multisite() || is_main_site();
+	}
+
+	/**
+	 * Whether the coupon is the customer's referral coupon on this site: a coupon of this site, not in the trash,
+	 * created as the referral code of exactly this customer. Anything else is never used or changed as such.
+	 */
+	public static function is_referral_coupon_of( int $coupon_id, int $user_id ): bool {
+		return $coupon_id > 0 && $user_id > 0
+			&& 'shop_coupon' === get_post_type( $coupon_id )
+			&& 'trash' !== get_post_status( $coupon_id )
+			&& (int) get_post_meta( $coupon_id, self::OWNER, true ) === $user_id;
+	}
+
+	/**
+	 * Id of the customer's referral coupon on this site, 0 for none. The stored id is only returned after
+	 * is_referral_coupon_of(). On the main site (single site) a value of an earlier version stored network-wide is
+	 * adopted when it passes the same check (and, with $migrate, moved to the per-site key).
+	 */
+	public static function coupon_id( int $user_id, bool $migrate = true ): int {
+		if ( $user_id <= 0 ) {
+			return 0;
+		}
+		$id = (int) get_user_meta( $user_id, self::site_key( self::USER_META ), true );
+		if ( $id ) {
+			return self::is_referral_coupon_of( $id, $user_id ) ? $id : 0;
+		}
+		if ( ! self::adopts_legacy() ) {
+			return 0;
+		}
+		$legacy = (int) get_user_meta( $user_id, self::USER_META, true );
+		if ( ! $legacy || ! self::is_referral_coupon_of( $legacy, $user_id ) ) {
+			return 0;
+		}
+		if ( $migrate ) {
+			update_user_option( $user_id, self::USER_META, $legacy );
+			delete_user_meta( $user_id, self::USER_META );
+		}
+		return $legacy;
+	}
+
+	/**
+	 * Number of friends whose order rewarded the customer on this site; null when nothing was ever counted. On the
+	 * main site (single site) the network-wide counter of an earlier version is adopted (and, with $migrate, moved).
+	 */
+	public static function count( int $user_id, bool $migrate = true ): ?int {
+		if ( $user_id <= 0 ) {
+			return null;
+		}
+		$raw = get_user_meta( $user_id, self::site_key( self::COUNT_META ), true );
+		if ( '' === (string) $raw && self::adopts_legacy() ) {
+			$raw = get_user_meta( $user_id, self::COUNT_META, true );
+			if ( '' !== (string) $raw && $migrate ) {
+				update_user_option( $user_id, self::COUNT_META, max( 0, (int) $raw ) );
+				delete_user_meta( $user_id, self::COUNT_META );
+			}
+		}
+		return '' === (string) $raw ? null : max( 0, (int) $raw );
+	}
+
+	/** Changes the customer's referral counter on this site by $delta (never below 0). */
+	private static function add_to_count( int $user_id, int $delta ): void {
+		update_user_option( $user_id, self::COUNT_META, max( 0, (int) self::count( $user_id ) + $delta ) );
+	}
+
+	/**
+	 * The customer's referral coupon on this site (created on demand); its value follows the current settings.
+	 * Only a coupon that passes is_referral_coupon_of() is reused and updated – a stored id that names another
+	 * coupon (another site's id, a deleted or foreign coupon) is ignored and a new referral coupon is created.
 	 */
 	public function coupon_for( int $user_id, bool $create = true ): ?\WC_Coupon {
 		if ( $user_id <= 0 ) {
 			return null;
 		}
-		$id     = (int) get_user_meta( $user_id, self::USER_META, true );
-		$coupon = $id && 'shop_coupon' === get_post_type( $id ) && 'trash' !== get_post_status( $id ) ? new \WC_Coupon( $id ) : null;
+		$id     = self::coupon_id( $user_id );
+		$coupon = $id ? new \WC_Coupon( $id ) : null;
+		$coupon = $coupon && $coupon->get_id() ? $coupon : null;
 		if ( ! $coupon && ! $create ) {
 			return null;
 		}
@@ -114,7 +199,9 @@ final class Referrals {
 			$coupon->set_minimum_amount( $min > 0 ? $min : '' );
 			$coupon->set_usage_limit_per_user( 1 );
 			$coupon->save();
-			update_user_meta( $user_id, self::USER_META, $coupon->get_id() );
+			if ( $coupon->get_id() ) {
+				update_user_option( $user_id, self::USER_META, $coupon->get_id() );
+			}
 		}
 		return $coupon;
 	}
@@ -174,7 +261,7 @@ final class Referrals {
 		}
 		$order->update_meta_data( self::REWARDED, $owner );
 		$order->save_meta_data();
-		update_user_meta( $owner, self::COUNT_META, (int) get_user_meta( $owner, self::COUNT_META, true ) + 1 );
+		self::add_to_count( $owner, 1 );
 
 		if ( 'credit' === $this->settings->get( 'vcap_referral_reward_as' ) && $this->credit->enabled() ) {
 			/* translators: %s: order number */
@@ -256,7 +343,7 @@ final class Referrals {
 			}
 		}
 		if ( $owner ) {
-			update_user_meta( $owner, self::COUNT_META, max( 0, (int) get_user_meta( $owner, self::COUNT_META, true ) - 1 ) );
+			self::add_to_count( $owner, -1 );
 		}
 		$reward['revoked'] = time();
 		$order->update_meta_data( self::REWARD, $reward );
@@ -297,7 +384,7 @@ final class Referrals {
 		$friend = 'percent' === $coupon->get_discount_type() ? wc_format_localized_decimal( (string) (float) $coupon->get_amount() ) . ' %' : wp_strip_all_tags( wc_price( (float) $coupon->get_amount() ) );
 		$reward = wp_strip_all_tags( wc_price( (float) $this->settings->get( 'vcap_referral_reward_amount' ) ) );
 		$link   = $this->settings->yes( 'vcap_coupon_link' ) ? add_query_arg( (string) $this->settings->get( 'vcap_coupon_link_param' ), rawurlencode( $code ), home_url( '/' ) ) : '';
-		$count  = (int) get_user_meta( get_current_user_id(), self::COUNT_META, true );
+		$count  = (int) self::count( get_current_user_id() );
 		echo '<section class="vcap-referral"><h2>' . esc_html__( 'Refer a friend', 'voucher-captain' ) . '</h2><p>';
 		/* translators: 1: friend discount, 2: reward */
 		echo esc_html( sprintf( __( 'Your friends get %1$s off their first order with your code, and you receive %2$s once their order is completed.', 'voucher-captain' ), $friend, $reward ) );
