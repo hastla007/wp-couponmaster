@@ -50,8 +50,9 @@ release notes). Entries start with **New**, **Fix** or **Fix (security)** and de
    name; without the variable the workflow warns and leaves the manifest out. Review and publish the draft.
    Editions (LICENSING.md): the free ZIP is built with `VCAP_EDITION=free`, the premium ZIP with
    `VCAP_EDITION=premium VCAP_LICENSE_SERVER=https://<licence server>` (repository variable; optional
-   `VCAP_UPDATE_URI`, default `<server>/voucher-captain`). A tag build without `VCAP_EDITION` fails; without
-   `VCAP_LICENSE_SERVER` the premium ZIP points to the placeholder `https://licenses.example.com`.
+   `VCAP_UPDATE_URI`, default `<server>/voucher-captain`). A tag build without `VCAP_EDITION` fails, and the
+   release workflow stops when the repository variable `VCAP_LICENSE_SERVER` is not set (a local premium build
+   without it points to the placeholder `https://licenses.example.com`).
 6. Publish the premium release in the licence manager's release storage:
    - upload `voucher-captain-premium-X.Y.Z.zip` unchanged to the storage behind `WPLC_PACKAGE_BASE_URL` (immutable:
      never overwrite a published version);
