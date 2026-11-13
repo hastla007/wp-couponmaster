@@ -32,14 +32,14 @@ final class CodePool {
 		return null;
 	}
 
-	public function attach( string $code, int $voucher_id ): void {
+	public function attach( string $code, int $voucher_id ): bool {
 		global $wpdb;
-		$wpdb->update( $this->table, array( 'voucher_id' => $voucher_id ), array( 'code' => $code ) ); // phpcs:ignore
+		return false !== $wpdb->update( $this->table, array( 'voucher_id' => $voucher_id ), array( 'code' => $code ) ); // phpcs:ignore
 	}
 
-	public function release( string $code ): void {
+	public function release( string $code ): bool {
 		global $wpdb;
-		$wpdb->update( $this->table, array( 'voucher_id' => 0, 'used_at' => null ), array( 'code' => $code ) ); // phpcs:ignore
+		return false !== $wpdb->update( $this->table, array( 'voucher_id' => 0, 'used_at' => null ), array( 'code' => $code ) ); // phpcs:ignore
 	}
 
 	public function exists( string $code ): bool {

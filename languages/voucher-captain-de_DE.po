@@ -3773,3 +3773,12 @@ msgstr "Ein Gutschein für „%s“ konnte nicht erstellt werden (WooCommerce-Gu
 
 msgid "Voucher %s was issued, but its history entry could not be written."
 msgstr "Gutschein %s wurde ausgestellt, der Verlaufseintrag konnte aber nicht geschrieben werden."
+
+msgid "Voucher Captain could not create or protect its private folder %s (PDFs, fonts). Check the folder permissions; until then PDF vouchers may fail or be reachable without protection."
+msgstr "Voucher Captain konnte seinen privaten Ordner %s (PDFs, Schriften) nicht anlegen oder schützen. Bitte prüfen Sie die Ordnerrechte; bis dahin können PDF-Gutscheine fehlschlagen oder ungeschützt erreichbar sein."
+
+msgid "Imported code could not be linked to this voucher in the code pool."
+msgstr "Der importierte Code konnte im Code-Pool nicht mit diesem Gutschein verknüpft werden."
+
+msgid "Imported code %s could not be returned to the code pool."
+msgstr "Der importierte Code %s konnte nicht in den Code-Pool zurückgegeben werden."

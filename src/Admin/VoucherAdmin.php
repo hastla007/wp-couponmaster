@@ -25,6 +25,11 @@ final class VoucherAdmin {
 	}
 
 	public function notices(): void {
+		$upload_error = (string) get_option( 'vcap_upload_dir_error', '' );
+		if ( '' !== $upload_error && current_user_can( 'manage_woocommerce' ) ) {
+			/* translators: %s: folder path */
+			echo '<div class="notice notice-error"><p>' . esc_html( sprintf( __( 'Voucher Captain could not create or protect its private folder %s (PDFs, fonts). Check the folder permissions; until then PDF vouchers may fail or be reachable without protection.', 'voucher-captain' ), $upload_error ) ) . '</p></div>';
+		}
 		if ( empty( $_GET['vcap_msg'] ) || ! $this->can() ) { // phpcs:ignore WordPress.Security.NonceVerification
 			return;
 		}

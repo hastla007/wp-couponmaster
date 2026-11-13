@@ -125,7 +125,11 @@ final class Delivery {
 			// (email disabled, invalid address). The download link and the admin "resend" still work.
 			if ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
 				$table = Install::tables()['vouchers'];
-				$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'active', updated_at = %s WHERE id = %d AND status = 'scheduled'", $now, $voucher_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$activated = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'active', updated_at = %s WHERE id = %d AND status = 'scheduled'", $now, $voucher_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				if ( 1 !== (int) $activated ) {
+					// Voided or changed meanwhile (or a database error): do not enable its coupon, try again later.
+					return;
+				}
 				vcap()->coupons->set_coupon_enabled( $voucher, true );
 				$voucher->status = Voucher::STATUS_ACTIVE;
 			}

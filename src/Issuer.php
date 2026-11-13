@@ -235,8 +235,9 @@ final class Issuer {
 			}
 			return null;
 		}
-		if ( $from_pool ) {
-			$this->pool->attach( $code, $voucher->id );
+		if ( $from_pool && ! $this->pool->attach( $code, $voucher->id ) ) {
+			// The code is taken (used_at set) but not linked: the pool list would show it unassigned. Say so.
+			$this->repo->log( $voucher->id, 'note', null, null, __( 'Imported code could not be linked to this voucher in the code pool.', 'voucher-captain' ) );
 		}
 
 		$create_coupon = 'ticket' !== $voucher->type || $voucher->initial_amount > 0;
@@ -249,8 +250,9 @@ final class Issuer {
 					wp_delete_post( $voucher->coupon_id, true );
 				}
 				$this->repo->delete( $voucher->id );
-				if ( $from_pool ) {
-					$this->pool->release( $code );
+				if ( $from_pool && ! $this->pool->release( $code ) ) {
+					/* translators: %s: code */
+					$order->add_order_note( sprintf( __( 'Imported code %s could not be returned to the code pool.', 'voucher-captain' ), $code ) );
 				}
 				/* translators: %s: product name */
 				$order->add_order_note( sprintf( __( 'A voucher for "%s" could not be created (WooCommerce coupon not saved). It will be issued on the next attempt.', 'voucher-captain' ), $item->get_name() ) );

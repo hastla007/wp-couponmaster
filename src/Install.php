@@ -278,18 +278,31 @@ final class Install {
 		return trailingslashit( $uploads['basedir'] ) . 'vcap';
 	}
 
-	public static function ensure_upload_dir(): void {
+	/**
+	 * Creates the private upload folders (PDFs, fonts, temp files) with their protection files.
+	 *
+	 * @return bool False when a folder or protection file could not be written (remembered for an admin notice).
+	 */
+	public static function ensure_upload_dir(): bool {
 		$dir = self::upload_dir();
+		$ok  = true;
 		foreach ( array( $dir, $dir . '/fonts', $dir . '/tmp' ) as $d ) {
-			if ( ! is_dir( $d ) ) {
-				wp_mkdir_p( $d );
+			if ( ! is_dir( $d ) && ! wp_mkdir_p( $d ) ) {
+				$ok = false;
+				continue;
 			}
-			if ( ! file_exists( $d . '/index.html' ) ) {
-				@file_put_contents( $d . '/index.html', '' ); // phpcs:ignore
+			if ( ! file_exists( $d . '/index.html' ) && false === @file_put_contents( $d . '/index.html', '' ) ) { // phpcs:ignore
+				$ok = false;
 			}
-			if ( ! file_exists( $d . '/.htaccess' ) ) {
-				@file_put_contents( $d . '/.htaccess', "Deny from all\n" ); // phpcs:ignore
+			if ( ! file_exists( $d . '/.htaccess' ) && false === @file_put_contents( $d . '/.htaccess', "Deny from all\n" ) ) { // phpcs:ignore
+				$ok = false;
 			}
 		}
+		if ( $ok ) {
+			delete_option( 'vcap_upload_dir_error' );
+		} else {
+			update_option( 'vcap_upload_dir_error', $dir, false );
+		}
+		return $ok;
 	}
 }
