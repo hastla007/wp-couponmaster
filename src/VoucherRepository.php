@@ -165,19 +165,31 @@ final class VoucherRepository {
 		if ( $user_id <= 0 ) {
 			return array();
 		}
-		$order_ids = wc_get_orders(
-			array(
-				'customer_id' => $user_id,
-				'limit'       => 500,
-				'return'      => 'ids',
-			)
-		);
-		if ( ! $order_ids ) {
-			return array();
+		// Page through all of the customer's orders (newest first) until enough vouchers are found: customers
+		// with many orders (e.g. regulars) must still see vouchers bought long ago.
+		$rows = array();
+		for ( $page = 1; $page <= 200 && count( $rows ) < $limit; $page++ ) {
+			$order_ids = wc_get_orders(
+				array(
+					'customer_id' => $user_id,
+					'limit'       => 500,
+					'paged'       => $page,
+					'orderby'     => 'date',
+					'order'       => 'DESC',
+					'return'      => 'ids',
+				)
+			);
+			if ( ! $order_ids ) {
+				break;
+			}
+			$in    = implode( ',', array_map( 'intval', $order_ids ) );
+			$batch = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->table} WHERE order_id IN ($in) ORDER BY id DESC LIMIT %d", $limit - count( $rows ) ), ARRAY_A ); // phpcs:ignore
+			$rows  = array_merge( $rows, $batch ?: array() );
+			if ( count( $order_ids ) < 500 ) {
+				break;
+			}
 		}
-		$in   = implode( ',', array_map( 'intval', $order_ids ) );
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->table} WHERE order_id IN ($in) ORDER BY id DESC LIMIT %d", $limit ), ARRAY_A ); // phpcs:ignore
-		return array_map( array( Voucher::class, 'from_row' ), $rows ?: array() );
+		return array_map( array( Voucher::class, 'from_row' ), $rows );
 	}
 
 	/**
