@@ -179,7 +179,8 @@ final class Privacy {
 				'meta_query' => array( array( 'key' => Referrals::REWARDED, 'value' => (string) $user_id ) ), // phpcs:ignore WordPress.DB.SlowDBQuery
 			)
 		);
-		return array_filter( is_array( $orders ) ? $orders : array(), static fn( $o ) => $o instanceof \WC_Order );
+		// Checked again here: older WooCommerce versions ignore meta_query in wc_get_orders() for some storages.
+		return array_values( array_filter( is_array( $orders ) ? $orders : array(), static fn( $o ) => $o instanceof \WC_Order && (int) $o->get_meta( Referrals::REWARDED ) === $user_id ) );
 	}
 
 	/**
