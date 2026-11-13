@@ -242,6 +242,13 @@ final class ReportsAdmin {
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Reports', 'voucher-captain' ); ?></h1>
 			<?php self::tabs( 'reconcile' ); ?>
+			<?php if ( ! empty( $result['unavailable'] ) ) : ?>
+				<div class="notice notice-info inline"><p><?php echo esc_html( $result['unavailable'] ); ?></p></div>
+			</div>
+				<?php
+				return;
+			endif;
+			?>
 			<p class="description">
 				<?php
 				/* translators: %d: number of Pass Captain orders checked */

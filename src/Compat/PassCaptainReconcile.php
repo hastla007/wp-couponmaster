@@ -20,20 +20,78 @@ defined( 'ABSPATH' ) || exit;
 final class PassCaptainReconcile {
 	public function __construct( private RedemptionService $redemptions ) {}
 
+	/** Columns of Pass Captain's order table the reconciliation reads. */
+	private const COLUMNS = array( 'order_id', 'public_id', 'status', 'payment_status', 'payment_provider', 'provider_reference', 'currency', 'voucher_snapshot' );
+
+	/**
+	 * Whether Pass Captain is active (the report tab is shown). Whether its data can be read is unsupported_reason().
+	 */
 	public static function available(): bool {
-		global $wpdb;
-		return PassCaptain::active() && (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $wpdb->prefix . 'wpcap_orders' ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		return PassCaptain::active();
 	}
 
 	/**
-	 * @return array{checked:int, issues: array<int, array{kind:string, order:string, key:string, problem:string}>}
+	 * Why the reconciliation cannot run ('' when it can). Pass Captain offers no public listing of the orders paid
+	 * by voucher yet, so its order table is read directly – only when it has every column used here (checked
+	 * once per Pass Captain schema version). A future versioned listing can be supplied through the filter
+	 * "vcap_passcaptain_reconcile_orders" (return the rows; null keeps the table access).
+	 */
+	public static function unsupported_reason(): string {
+		if ( ! PassCaptain::active() ) {
+			return __( 'WP Pass Captain is not active.', 'voucher-captain' );
+		}
+		if ( has_filter( 'vcap_passcaptain_reconcile_orders' ) ) {
+			return '';
+		}
+		$schema = (string) get_option( 'wpcap_db_version', '' );
+		$cache  = get_transient( 'vcap_pc_reconcile_schema' );
+		if ( is_array( $cache ) && ( $cache['schema'] ?? null ) === $schema ) {
+			return (string) $cache['reason'];
+		}
+		global $wpdb;
+		$table  = $wpdb->prefix . 'wpcap_orders';
+		$reason = '';
+		if ( $table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$reason = __( 'This version of WP Pass Captain does not provide the order data needed for the reconciliation.', 'voucher-captain' );
+		} else {
+			$have    = array_map( 'strtolower', (array) $wpdb->get_col( "SHOW COLUMNS FROM {$table}" ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$missing = array_diff( self::COLUMNS, $have );
+			if ( $missing ) {
+				/* translators: %s: missing columns */
+				$reason = sprintf( __( 'This version of WP Pass Captain stores its orders differently (missing: %s); the reconciliation is not available.', 'voucher-captain' ), implode( ', ', $missing ) );
+			}
+		}
+		set_transient( 'vcap_pc_reconcile_schema', array( 'schema' => $schema, 'reason' => $reason ), DAY_IN_SECONDS );
+		return $reason;
+	}
+
+	/** Pass Captain orders paid by voucher or created by a voucher exchange, newest first. */
+	private function orders( int $limit ): array {
+		/**
+		 * Rows of Pass Captain orders with a voucher (objects with the columns of self::COLUMNS), e.g. from a
+		 * versioned Pass Captain API. Null reads Pass Captain's order table.
+		 */
+		$rows = apply_filters( 'vcap_passcaptain_reconcile_orders', null, $limit );
+		if ( is_array( $rows ) ) {
+			return array_map( static fn( $r ) => (object) $r, $rows );
+		}
+		global $wpdb;
+		$orders = $wpdb->prefix . 'wpcap_orders';
+		return $wpdb->get_results( $wpdb->prepare( "SELECT order_id, public_id, status, payment_status, payment_provider, provider_reference, currency, voucher_snapshot FROM {$orders} WHERE (voucher_snapshot IS NOT NULL AND voucher_snapshot <> '') OR provider_reference LIKE %s ORDER BY order_id DESC LIMIT %d", $wpdb->esc_like( 'voucher:' ) . '%', max( 1, $limit ) ) ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	}
+
+	/**
+	 * @return array{checked:int, issues: array<int, array{kind:string, order:string, key:string, problem:string}>, unavailable?:string}
 	 */
 	public function run( int $limit = 2000 ): array {
 		global $wpdb;
-		$orders = $wpdb->prefix . 'wpcap_orders';
+		$reason = self::unsupported_reason();
+		if ( '' !== $reason ) {
+			return array( 'checked' => 0, 'issues' => array(), 'unavailable' => $reason );
+		}
 		$issues = array();
 		$seen   = array();
-		$rows   = $wpdb->get_results( $wpdb->prepare( "SELECT order_id, public_id, status, payment_status, payment_provider, provider_reference, currency, voucher_snapshot FROM {$orders} WHERE (voucher_snapshot IS NOT NULL AND voucher_snapshot <> '') OR provider_reference LIKE %s ORDER BY order_id DESC LIMIT %d", $wpdb->esc_like( 'voucher:' ) . '%', max( 1, $limit ) ) ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows   = $this->orders( $limit );
 		foreach ( $rows as $o ) {
 			$ref = (string) $o->public_id;
 			if ( 0 === strpos( (string) $o->provider_reference, 'voucher:' ) ) {
@@ -114,6 +172,9 @@ final class PassCaptainReconcile {
 	/** Exchange orders reference the Pass Captain idempotency key, not the redemption key: look both up. */
 	private function exchange_order_exists( string $key ): bool {
 		global $wpdb;
+		if ( has_filter( 'vcap_passcaptain_reconcile_orders' ) ) {
+			return false; // Only the supplied rows are known.
+		}
 		return (bool) $wpdb->get_var( $wpdb->prepare( "SELECT order_id FROM {$wpdb->prefix}wpcap_orders WHERE provider_reference = %s LIMIT 1", 'voucher:' . $key ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
