@@ -21,7 +21,40 @@ final class Install {
 		// '1.1.0' => 'migrate_1_1_0',
 	);
 
-	public static function activate(): void {
+	/**
+	 * Activation hook. Network activation sets up every site (each site has its own tables, options and
+	 * coupons); sites added later, and sites beyond the first 500, are set up on their first request by
+	 * maybe_upgrade().
+	 */
+	public static function activate( $network_wide = false ): void {
+		if ( is_multisite() && $network_wide ) {
+			self::for_each_site( array( self::class, 'activate_site' ) );
+			return;
+		}
+		self::activate_site();
+	}
+
+	public static function deactivate( $network_wide = false ): void {
+		if ( is_multisite() && $network_wide ) {
+			self::for_each_site( array( self::class, 'deactivate_site' ) );
+			return;
+		}
+		self::deactivate_site();
+	}
+
+	/** Runs a callback in the context of each site of the network (at most 500 per call). */
+	private static function for_each_site( callable $callback ): void {
+		foreach ( get_sites( array( 'fields' => 'ids', 'number' => 500 ) ) as $site_id ) {
+			switch_to_blog( (int) $site_id );
+			try {
+				$callback();
+			} finally {
+				restore_current_blog();
+			}
+		}
+	}
+
+	public static function activate_site(): void {
 		self::create_tables();
 		self::add_caps();
 		self::ensure_upload_dir();
@@ -34,7 +67,7 @@ final class Install {
 		self::restore_balance_coupons();
 	}
 
-	public static function deactivate(): void {
+	public static function deactivate_site(): void {
 		if ( function_exists( 'as_unschedule_all_actions' ) ) {
 			as_unschedule_all_actions( 'vcap_daily_maintenance' );
 			as_unschedule_all_actions( 'vcap_release_stale_order_reservations' );
@@ -91,6 +124,11 @@ final class Install {
 	public static function maybe_upgrade(): void {
 		$installed = get_option( self::OPTION_DB_VERSION );
 		if ( VCAP_DB_VERSION === $installed || get_transient( 'vcap_schema_retry' ) ) {
+			return;
+		}
+		if ( ! $installed ) {
+			// Never activated on this site (a network-activated plugin on a new or not yet visited site).
+			self::activate_site();
 			return;
 		}
 		self::create_tables();

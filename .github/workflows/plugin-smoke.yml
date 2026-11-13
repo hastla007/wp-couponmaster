@@ -161,6 +161,61 @@ jobs:
           VCAP_EXPECT_HPOS: ''
         run: tests/run-integration.sh
 
+  multisite:
+    # Network activation sets up every site (own tables and options per site), new sites are set up on their
+    # first request, and a network uninstall removes data only on the sites that opted in.
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --password=root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, gd, mbstring, mysqli, xml, zip
+          coverage: none
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist
+      - name: Download WP-CLI
+        run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
+      - name: Multisite network with Voucher Captain network-activated
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          php wp-cli.phar core download --path=wp-test --version=7.1.4
+          php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
+          $WP core multisite-install --url=http://localhost --title="Voucher Captain network" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
+          $WP site create --slug=before --title="Existing site"
+          $WP plugin install woocommerce --version=11.2.2 --activate-network
+          bin/build.sh
+          $WP plugin install build/voucher-captain.zip --activate-network
+          $WP site create --slug=after --title="New site"
+          check='global $wpdb; $ok = $wpdb->get_var( "SHOW TABLES LIKE \"{$wpdb->prefix}vcap_vouchers\"" ) && VCAP_DB_VERSION === get_option( "vcap_db_version" ) && get_option( "vcap_secret" ); echo get_current_blog_id(), " ", $wpdb->prefix, " ", $ok ? "ok" : "missing", "\n"; exit( $ok ? 0 : 1 );'
+          $WP eval "$check"
+          $WP --url=http://localhost/before/ eval "$check"
+          $WP --url=http://localhost/after/ eval "$check"
+      - name: Network uninstall deletes data only on sites that opted in
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          $WP --url=http://localhost/after/ option update vcap_delete_on_uninstall yes
+          $WP plugin deactivate voucher-captain --network
+          $WP plugin uninstall voucher-captain
+          has='global $wpdb; echo $wpdb->get_var( "SHOW TABLES LIKE \"{$wpdb->prefix}vcap_vouchers\"" ) ? "kept" : "deleted";'
+          test "$($WP eval "$has")" = "kept"
+          test "$($WP --url=http://localhost/before/ eval "$has")" = "kept"
+          test "$($WP --url=http://localhost/after/ eval "$has")" = "deleted"
+
   pass-captain:
     # Voucher Captain as voucher provider of WP Pass Captain: released main and the current work branch
     # of hastla007/wp-passmaster (a ref that no longer exists is skipped).

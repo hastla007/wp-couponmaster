@@ -15,6 +15,10 @@ The CI integration suite installs WordPress 7.1.4, WooCommerce 11.2.2, Yoast SEO
 
 The CI job `minimum-versions` installs WordPress 6.4.5 and WooCommerce 8.9.0 on PHP 8.1 **without** Yoast SEO and runs the full integration suite, so the minimums are tested, not assumed. Update both columns with every release.
 
+## Multisite
+
+Supported per site. Each site has its own voucher tables (`{site prefix}vcap_*`), settings, WooCommerce coupons and private upload folder; vouchers are never shared between sites. Network activation sets up every site (up to 500 at once; any further or later-created site is set up on its first request). Network deactivation suspends the balance coupons of every site. A network uninstall removes data only on the sites whose own "Delete data on uninstall" setting is enabled – the others keep their tables. CI job `multisite` checks network activation, a site created afterwards and the per-site uninstall.
+
 ## Bundled libraries
 
 Voucher Captain bundles dompdf, php-font-lib, php-svg-lib, html5, php-qrcode and php-barcode-generator. Libraries that other plugins also ship are moved into the `VCAP\Vendor` namespace when the release ZIP is built (`bin/scope-vendor.php`), so two versions can never collide. This is currently `sabberworm/php-css-parser`: WooCommerce 8.x bundles an older, incompatible version, and loading both ended in a fatal error. The build fails if an unprefixed reference remains; `tests/scoping-integration.php` checks the installed ZIP.
