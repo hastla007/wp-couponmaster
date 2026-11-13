@@ -4956,3 +4956,6 @@ msgstr "Diese Version von WP Pass Captain speichert ihre Bestellungen anders (es
 
 msgid "The response is not signed by the license server of this product."
 msgstr "Die Antwort ist nicht vom Lizenzserver dieses Produkts signiert."
+
+msgid "This version of WP Pass Captain has no reconciliation interface yet, so its order table is read directly as a fallback. Please update WP Pass Captain."
+msgstr "Diese Version von WP Pass Captain bietet noch keine Schnittstelle für den Abgleich, daher wird ersatzweise direkt die Bestelltabelle von WP Pass Captain gelesen. Bitte aktualisieren Sie WP Pass Captain."
