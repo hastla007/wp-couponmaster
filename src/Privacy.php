@@ -303,6 +303,10 @@ final class Privacy {
 				$retained = true;
 			}
 		}
+		// Failed-mail log of Site Health (masked address, kept up to 7 days).
+		if ( 1 === $page && Health::erase_mail_failures( $email ) ) {
+			$removed = true;
+		}
 		// Unlink external redemptions from the user and drop integration details (amounts stay for accounting).
 		$user = get_user_by( 'email', $email );
 		if ( $user ) {

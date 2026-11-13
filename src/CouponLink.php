@@ -16,6 +16,9 @@ final class CouponLink {
 	public function __construct( private Settings $settings ) {}
 
 	public function register(): void {
+		// Rate limit of WooCommerce's own coupon entry (cart form, AJAX, Store API): registered with the other
+		// code entry points, independently of the link setting.
+		( new CouponGuard() )->register();
 		add_action( 'wp_loaded', array( $this, 'handle_request' ), 30 );
 		add_action( 'woocommerce_add_to_cart', array( $this, 'apply_pending' ), 30, 0 );
 		add_action( 'woocommerce_cart_loaded_from_session', array( $this, 'apply_pending' ), 30, 0 );
@@ -66,6 +69,7 @@ final class CouponLink {
 			wc_add_notice( __( 'This voucher link is not valid.', 'voucher-captain' ), 'error' );
 			return false;
 		}
+		Plugin::rate_limit_success( 'couponlink', 10 * MINUTE_IN_SECONDS );
 		if ( ! WC()->session->has_session() ) {
 			WC()->session->set_customer_session_cookie( true ); // Guests need a session to keep the code.
 		}

@@ -149,13 +149,16 @@ for ( $i = 0; $i < 15; $i++ ) {
 }
 $blocked = VCAP\Plugin::rate_limited( $bucket, 15, 300, HOUR_IN_SECONDS );
 vcap_security_assert( $allowed && $blocked, 'public balance lookup rate limit rejects the request after the visitor quota' );
-// Failure-only mode: checking alone never locks anyone out; only failed attempts count (atomic, fixed window).
+// Lookup mode: each attempt counts before the lookup (atomic); existing codes give it back, so only failed
+// attempts use up the quota (fixed window). More cases in tests/rate-limit-integration.php.
 $fail_bucket = 'security-fail-' . strtolower( wp_generate_password( 8, false, false ) );
 $never = true;
 for ( $i = 0; $i < 40; $i++ ) {
 	$never = $never && ! VCAP\Plugin::rate_limited( $fail_bucket, 5, 300, HOUR_IN_SECONDS, false );
+	VCAP\Plugin::rate_limit_success( $fail_bucket, HOUR_IN_SECONDS );
 }
 for ( $i = 0; $i < 5; $i++ ) {
+	VCAP\Plugin::rate_limited( $fail_bucket, 5, 300, HOUR_IN_SECONDS, false );
 	VCAP\Plugin::rate_limit_failure( $fail_bucket, HOUR_IN_SECONDS );
 }
 vcap_security_assert( $never && VCAP\Plugin::rate_limited( $fail_bucket, 5, 300, HOUR_IN_SECONDS, false ), 'valid lookups are never throttled; repeated failed codes are' );
@@ -222,5 +225,48 @@ update_option( 'vcap_scanner_show_holder', 'yes' );
 vcap_security_assert( 'Privacy Test Recipient' === vcap()->tickets->describe( vcap()->vouchers->get( $scan_voucher->id ) )['holder'], 'the holder name is shown when enabled' );
 delete_option( 'vcap_scanner_show_holder' );
 wp_set_current_user( 0 );
+
+// Order details hook (also used by the order tracking page): full codes and PDF links only for the order's customer.
+$owner_id    = wp_insert_user( array( 'user_login' => 'vcap-owner-' . wp_generate_password( 6, false, false ), 'user_pass' => wp_generate_password( 20 ), 'role' => 'customer' ) );
+$stranger_id = wp_insert_user( array( 'user_login' => 'vcap-stranger-' . wp_generate_password( 6, false, false ), 'user_pass' => wp_generate_password( 20 ), 'role' => 'customer' ) );
+$tracked     = wc_create_order( array( 'customer_id' => $owner_id ) );
+$tracked->set_billing_email( 'tracked@example.test' );
+$tracked->set_status( 'completed' );
+$tracked->save();
+$tracked_voucher           = vcap_security_create_voucher( 'tracked@example.test', 900300 + random_int( 1, 9999 ) );
+$tracked_voucher->order_id = $tracked->get_id();
+vcap()->vouchers->update( $tracked_voucher );
+$render_order = static function () use ( $tracked ): string {
+	ob_start();
+	vcap()->downloads->order_downloads( wc_get_order( $tracked->get_id() ) );
+	return (string) ob_get_clean();
+};
+wp_set_current_user( 0 );
+$guest_html = $render_order();
+vcap_security_assert( ! str_contains( $guest_html, $tracked_voucher->code ) && ! str_contains( $guest_html, 'vcap_pdf=' ) && str_contains( $guest_html, VCAP\Downloads::masked_code( $tracked_voucher->code ) ), 'order tracking (guest) shows only masked codes without PDF links' );
+wp_set_current_user( $stranger_id );
+$stranger_html = $render_order();
+vcap_security_assert( ! str_contains( $stranger_html, $tracked_voucher->code ) && ! str_contains( $stranger_html, 'vcap_pdf=' ), 'another logged-in customer sees only masked codes' );
+wp_set_current_user( $owner_id );
+$owner_html = $render_order();
+vcap_security_assert( str_contains( $owner_html, $tracked_voucher->code ) && str_contains( $owner_html, 'vcap_pdf=' ), 'the order\'s customer sees the codes and PDF links' );
+wp_set_current_user( 0 );
+
+// Failed-mail log (Site Health): only Voucher Captain mails, no personal data, pruned, included in the erasure.
+delete_option( VCAP\Health::MAIL_LOG );
+do_action( 'wp_mail_failed', new WP_Error( 'wp_mail_failed', 'SMTP connect() failed.', array( 'to' => array( 'someone@example.test' ), 'subject' => 'Password reset' ) ) );
+vcap_security_assert( array() === VCAP\Health::mail_failures(), 'failed mails of other plugins are not recorded' );
+VCAP\Health::mail_begin( 'Voucher to recipient' );
+do_action( 'wp_mail_failed', new WP_Error( 'wp_mail_failed', 'SMTP Error: The following recipients failed: jane.roe@example.test', array( 'to' => array( 'jane.roe@example.test' ), 'subject' => 'Jane Roe sends you a voucher' ) ) );
+VCAP\Health::mail_end();
+$mail_log = VCAP\Health::mail_failures();
+$mail_raw = wp_json_encode( get_option( VCAP\Health::MAIL_LOG ) );
+vcap_security_assert( 1 === count( $mail_log ) && ! str_contains( $mail_raw, 'jane.roe' ) && ! str_contains( $mail_raw, 'Jane Roe' ) && str_contains( $mail_log[0]['error'], 'j***@example.test' ) && 'Voucher to recipient' === $mail_log[0]['email'], 'a failed voucher mail is recorded without addresses (also in the error text) or the subject' );
+update_option( VCAP\Health::MAIL_LOG, array_merge( $mail_log, array( array( 'time' => time() - 8 * DAY_IN_SECONDS, 'to' => 'o***@example.test', 'error' => 'old' ) ) ), false );
+VCAP\Health::prune_mail_failures();
+vcap_security_assert( 1 === count( (array) get_option( VCAP\Health::MAIL_LOG ) ), 'entries older than 7 days are removed by the daily maintenance' );
+$privacy->erase( 'jane.roe@example.test', 1 );
+vcap_security_assert( array() === VCAP\Health::mail_failures(), 'the privacy eraser removes the failed-mail entries of the address' );
+delete_option( VCAP\Health::MAIL_LOG );
 
 echo "Voucher Captain security and privacy checks passed.\n";

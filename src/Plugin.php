@@ -189,30 +189,61 @@ final class Plugin {
 	/**
 	 * Fixed-window rate limit for public endpoints (code guessing, expensive PDF previews).
 	 *
-	 * Counters live per visitor and site-wide in an atomic store (object cache increment, else one
-	 * INSERT … ON DUPLICATE KEY UPDATE row in wp_options), so parallel requests and several web nodes count
-	 * correctly. The window is fixed: hitting the limit does not extend it. With $count = false only the check
-	 * runs – callers then count failed attempts with rate_limit_failure(), so customers who enter valid codes
-	 * are never locked out and the site-wide cap only reacts to guessing.
+	 * Counters live in an atomic store (object cache increment, else one INSERT … ON DUPLICATE KEY UPDATE row in
+	 * wp_options), so parallel requests and several web nodes count correctly. The window is fixed: hitting the
+	 * limit does not extend it. Visitors are told apart by their address (IPv6 by its /64 network, which one
+	 * connection usually owns entirely) or by an explicit $visitor key (e.g. "u42" for a user).
 	 *
+	 * $count = true (expensive actions such as PDF previews): every request counts per visitor and site-wide and
+	 * is refused once either quota is used up.
+	 *
+	 * $count = false (code lookups): the visitor's attempt is counted BEFORE the lookup, so parallel requests
+	 * cannot all pass the check together. The caller then reports the outcome: rate_limit_success() gives the
+	 * attempt back when the code exists, rate_limit_failure() books an unknown code on the site-wide counter.
+	 * Valid codes therefore never use up a quota, and the site-wide counter never refuses a lookup by itself:
+	 * while it is full (guessing from many addresses) it only brakes, i.e. every visitor's quota shrinks to a
+	 * fifth. Shop managers and logged-in customers with vouchers of their own keep the full quota.
+	 *
+	 * @param string $visitor Visitor key; '' = the client address.
 	 * @return bool true when the request must be rejected
 	 */
-	public static function rate_limited( string $bucket, int $per_visitor, int $site_wide, int $window, bool $count = true ): bool {
-		$blocked = false;
-		foreach ( self::rate_keys( $bucket, $per_visitor, $site_wide ) as $key => $limit ) {
-			$current = $count ? self::rate_increment( $key, $window ) - 1 : self::rate_read( $key, $window );
-			if ( $current >= $limit ) {
-				$blocked = true;
-			}
+	public static function rate_limited( string $bucket, int $per_visitor, int $site_wide, int $window, bool $count = true, string $visitor = '' ): bool {
+		$own  = self::rate_visitor_key( $bucket, $visitor );
+		$all  = self::rate_site_key( $bucket );
+		$used = self::rate_increment( $own, $window );
+		if ( $count ) {
+			return $used > $per_visitor || self::rate_increment( $all, $window ) > $site_wide;
 		}
-		return $blocked;
+		$limit = $per_visitor;
+		if ( $site_wide > 0 && self::rate_read( $all, $window ) >= $site_wide && ! self::rate_brake_exempt() ) {
+			/** Quota per visitor while the site-wide failure counter is full (default: a fifth, at least 1). */
+			$limit = (int) apply_filters( 'vcap_rate_limit_brake', max( 1, (int) ceil( $per_visitor / 5 ) ), $bucket, $per_visitor );
+		}
+		return $used > $limit;
 	}
 
-	/** Counts a failed attempt (unknown code, wrong value) for rate_limited( …, false ). */
+	/** The looked-up code exists: gives the attempt counted by rate_limited( …, false ) back. */
+	public static function rate_limit_success( string $bucket, int $window, string $visitor = '' ): void {
+		self::rate_decrement( self::rate_visitor_key( $bucket, $visitor ), $window );
+	}
+
+	/**
+	 * Counts a failed attempt (unknown code) of rate_limited( …, false ) site-wide; the visitor's attempt was
+	 * already counted before the lookup.
+	 */
 	public static function rate_limit_failure( string $bucket, int $window ): void {
-		foreach ( array_keys( self::rate_keys( $bucket, 0, 0 ) ) as $key ) {
-			self::rate_increment( $key, $window );
+		self::rate_increment( self::rate_site_key( $bucket ), $window );
+	}
+
+	/** Resets a visitor's counter of the current window (support, tests). */
+	public static function rate_limit_reset( string $bucket, int $window, string $visitor = '' ): void {
+		$name = self::rate_option( self::rate_visitor_key( $bucket, $visitor ), $window );
+		if ( wp_using_ext_object_cache() ) {
+			wp_cache_delete( $name, 'vcap_rate' );
+			return;
 		}
+		global $wpdb;
+		$wpdb->delete( $wpdb->options, array( 'option_name' => $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	/**
@@ -224,12 +255,51 @@ final class Plugin {
 		return (string) apply_filters( 'vcap_client_ip', $ip );
 	}
 
-	/** @return array<string,int> counter key => limit */
-	private static function rate_keys( string $bucket, int $per_visitor, int $site_wide ): array {
-		return array(
-			md5( $bucket . '|' . self::client_ip() ) => $per_visitor,
-			md5( $bucket . '|all' )                  => $site_wide,
-		);
+	/**
+	 * Network of an address for rate limits: IPv4 as is, IPv6 by its /64 prefix (a single connection usually
+	 * gets a whole /64, so rotating addresses inside it must not reset the counter).
+	 */
+	public static function client_network( string $ip ): string {
+		if ( ! filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6 ) ) {
+			return $ip;
+		}
+		$packed = inet_pton( $ip );
+		if ( false === $packed ) {
+			return $ip;
+		}
+		if ( str_starts_with( $packed, str_repeat( "\0", 10 ) . "\xff\xff" ) ) {
+			return (string) inet_ntop( substr( $packed, 12 ) ); // IPv4-mapped address.
+		}
+		return bin2hex( substr( $packed, 0, 8 ) ) . '::/64';
+	}
+
+	private static function rate_visitor_key( string $bucket, string $visitor ): string {
+		return md5( $bucket . '|' . ( '' !== $visitor ? $visitor : self::client_network( self::client_ip() ) ) );
+	}
+
+	private static function rate_site_key( string $bucket ): string {
+		return md5( $bucket . '|all' );
+	}
+
+	/** Shop managers and customers with vouchers of their own are not slowed down by the site-wide brake. */
+	private static function rate_brake_exempt(): bool {
+		static $cache = array();
+		$user_id = get_current_user_id();
+		if ( $user_id <= 0 ) {
+			return false;
+		}
+		if ( ! isset( $cache[ $user_id ] ) ) {
+			global $wpdb;
+			$exempt = current_user_can( 'manage_woocommerce' ) || current_user_can( 'vcap_manage_vouchers' ); // phpcs:ignore WordPress.WP.Capabilities.Unknown -- Registered by Install / WooCommerce.
+			if ( ! $exempt ) {
+				$table  = Install::tables()['vouchers'];
+				$exempt = (bool) $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE user_id = %d LIMIT 1", $user_id ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					|| ( isset( vcap()->vouchers ) && array() !== vcap()->vouchers->for_customer( $user_id, 1 ) );
+			}
+			/** Whether the current user keeps the full rate-limit quota while the site-wide brake is on. */
+			$cache[ $user_id ] = (bool) apply_filters( 'vcap_rate_limit_brake_exempt', $exempt, $user_id );
+		}
+		return $cache[ $user_id ];
 	}
 
 	/** Option name of a counter in the current window: vcap_rl_{window end}_{key} (cleanup compares names). */
@@ -248,6 +318,18 @@ final class Plugin {
 		global $wpdb;
 		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, '1', 'no') ON DUPLICATE KEY UPDATE option_value = option_value + 1", $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		return self::rate_read( $key, $window );
+	}
+
+	private static function rate_decrement( string $key, int $window ): void {
+		$name = self::rate_option( $key, $window );
+		if ( wp_using_ext_object_cache() ) {
+			if ( (int) wp_cache_get( $name, 'vcap_rate' ) > 0 ) {
+				wp_cache_decr( $name, 1, 'vcap_rate' );
+			}
+			return;
+		}
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = option_value - 1 WHERE option_name = %s AND option_value > 0", $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	private static function rate_read( string $key, int $window ): int {

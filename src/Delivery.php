@@ -289,6 +289,7 @@ final class Delivery {
 		}
 		Install::ensure_upload_dir();
 		Plugin::purge_rate_limits();
+		Health::prune_mail_failures();
 		Tickets::purge_scan_keys();
 		foreach ( glob( Install::upload_dir() . '/tmp/*.pdf' ) ?: array() as $file ) {
 			if ( filemtime( $file ) < time() - HOUR_IN_SECONDS ) {

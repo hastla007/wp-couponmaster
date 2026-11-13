@@ -28,9 +28,29 @@ final class Health {
 		return $tests;
 	}
 
-	/** Records a failed mail (address masked, no content); the newest 20 of the last 7 days are kept. */
+	/** Depth of Voucher Captain mails being sent right now (only their failures are recorded). */
+	private static int $sending = 0;
+	/** @var string[] Kind of the mail being sent (e.g. "Voucher to recipient"), innermost last. */
+	private static array $kinds = array();
+
+	/** Marks the start of a Voucher Captain mail (called by the VC email classes around WC_Email::send()). */
+	public static function mail_begin( string $kind = '' ): void {
+		++self::$sending;
+		self::$kinds[] = $kind;
+	}
+
+	public static function mail_end(): void {
+		self::$sending = max( 0, self::$sending - 1 );
+		array_pop( self::$kinds );
+	}
+
+	/**
+	 * Records a failed Voucher Captain mail – other mails of the site are not ours to report. No content and no
+	 * personal data: recipients and any address in the error text are masked, instead of the subject (which can
+	 * contain names) only the kind of mail is kept. The newest 20 of the last 7 days are kept.
+	 */
 	public function record_mail_failure( $error ): void {
-		if ( ! $error instanceof \WP_Error ) {
+		if ( ! $error instanceof \WP_Error || self::$sending <= 0 ) {
 			return;
 		}
 		$data = (array) $error->get_error_data();
@@ -39,19 +59,47 @@ final class Health {
 		array_unshift(
 			$log,
 			array(
-				'time'    => time(),
-				'to'      => implode( ', ', array_map( array( Compat\PassCaptainTickets::class, 'mask_email' ), $to ) ),
-				'subject' => mb_substr( wp_strip_all_tags( (string) ( $data['subject'] ?? '' ) ), 0, 120 ),
-				'error'   => mb_substr( wp_strip_all_tags( $error->get_error_message() ), 0, 300 ),
+				'time'  => time(),
+				'to'    => implode( ', ', array_map( array( Compat\PassCaptainTickets::class, 'mask_email' ), $to ) ),
+				'email' => mb_substr( wp_strip_all_tags( (string) end( self::$kinds ) ), 0, 80 ),
+				'error' => self::mask_addresses( mb_substr( wp_strip_all_tags( $error->get_error_message() ), 0, 300 ) ),
 			)
 		);
 		update_option( self::MAIL_LOG, array_slice( $log, 0, self::LOG_SIZE ), false );
 	}
 
-	/** @return array<int, array{time:int,to:string,subject:string,error:string}> recent failures, newest first. */
+	/** "Could not send to jane@example.com" → "Could not send to j***@example.com". */
+	public static function mask_addresses( string $text ): string {
+		return (string) preg_replace_callback( '/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i', static fn( $m ) => Compat\PassCaptainTickets::mask_email( $m[0] ), $text );
+	}
+
+	/** @return array<int, array{time:int,to:string,email?:string,error:string}> recent failures, newest first. */
 	public static function mail_failures(): array {
 		$cutoff = time() - 7 * DAY_IN_SECONDS;
 		return array_values( array_filter( (array) get_option( self::MAIL_LOG, array() ), static fn( $e ) => is_array( $e ) && (int) ( $e['time'] ?? 0 ) >= $cutoff ) );
+	}
+
+	/** Drops entries older than 7 days (daily maintenance), also when no mail failed since. */
+	public static function prune_mail_failures(): void {
+		$stored = (array) get_option( self::MAIL_LOG, array() );
+		$kept   = array_slice( self::mail_failures(), 0, self::LOG_SIZE );
+		if ( ! $kept ) {
+			delete_option( self::MAIL_LOG );
+		} elseif ( count( $kept ) !== count( $stored ) ) {
+			update_option( self::MAIL_LOG, $kept, false );
+		}
+	}
+
+	/** Privacy erasure: removes the entries that name this address (masked). @return bool whether entries were removed */
+	public static function erase_mail_failures( string $email ): bool {
+		$masked = strtolower( Compat\PassCaptainTickets::mask_email( $email ) );
+		$log    = self::mail_failures();
+		$kept   = array_values( array_filter( $log, static fn( $e ) => ! str_contains( strtolower( (string) ( $e['to'] ?? '' ) . ' ' . (string) ( $e['error'] ?? '' ) ), $masked ) ) );
+		if ( count( $kept ) === count( $log ) ) {
+			return false;
+		}
+		update_option( self::MAIL_LOG, $kept, false );
+		return true;
 	}
 
 	public function test_schema(): array {

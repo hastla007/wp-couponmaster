@@ -60,6 +60,16 @@ class BonusEmail extends \WC_Email {
 		return $sent;
 	}
 
+	/** Marks the mail as a Voucher Captain mail, so Site Health records it if it fails (see Health). */
+	public function send( $to, $subject, $message, $headers, $attachments ) {
+		\VCAP\Health::mail_begin( (string) $this->get_title() );
+		try {
+			return parent::send( $to, $subject, $message, $headers, $attachments );
+		} finally {
+			\VCAP\Health::mail_end();
+		}
+	}
+
 	private function fill( string $promotion ): void {
 		$coupon  = $this->coupon;
 		$expires = $coupon ? $coupon->get_date_expires() : null;

@@ -189,10 +189,13 @@ for ( $i = 0; $i < 3; $i++ ) {
 	$service->check( 'does-not-exist-' . $i );
 }
 vcap_redeem_assert( 'vcap_rate_limited' === vcap_redeem_code( $service->check( $filtered->code ) ), 'too many invalid codes are rate limited per user' );
-delete_transient( 'vcap_rl_redeem_u' . $user_b );
+VCAP\Plugin::rate_limit_reset( 'redemption', 900, 'u' . $user_b );
 update_option( 'vcap_redemption_max_failures', 10 );
 
 // --- REST: authentication, identity from the session, ownership.
+// Customers redeem over REST only for targets a connector registered (here the test connector "test:").
+$test_prefixes = static fn( array $prefixes ) => array_merge( $prefixes, array( 'test:' ) );
+add_filter( 'vcap_rest_redemption_target_prefixes', $test_prefixes );
 wp_set_current_user( 0 );
 list( $rest_voucher ) = vcap_redeem_voucher( 'single', 15.0 );
 $key6     = 'it-' . wp_generate_uuid4();
@@ -211,6 +214,32 @@ vcap_redeem_assert( 200 === $response->get_status() && 'committed' === $response
 $response = vcap_redeem_rest( 'POST', '/vcap/v1/redemptions/check', array( 'code' => $rest_voucher->code ) );
 vcap_redeem_assert( 409 === $response->get_status() && 'vcap_already_redeemed' === $response->get_data()['code'], 'REST check returns the stable error code with an HTTP status' );
 vcap_redeem_assert( 404 === vcap_redeem_rest( 'GET', '/vcap/v1/redemptions/it-unknown-key-123' )->get_status(), 'unknown redemption keys return 404' );
+
+// --- REST targets: customers only for registered prefixes, nobody for internal ones (Pass Captain).
+list( $target_voucher ) = vcap_redeem_voucher( 'single', 12.0 );
+wp_set_current_user( $user_a );
+$response = vcap_redeem_rest( 'POST', '/vcap/v1/redemptions', array( 'code' => $target_voucher->code, 'key' => 'it-' . wp_generate_uuid4(), 'target' => 'other-plugin:course:1' ) );
+vcap_redeem_assert( 403 === $response->get_status() && 'vcap_not_allowed' === $response->get_data()['code'], 'customers cannot redeem for targets no connector registered for them' );
+foreach ( array( 'passcaptain:ticket:5', 'pass captain:order' ) as $internal ) {
+	$response = vcap_redeem_rest( 'POST', '/vcap/v1/redemptions', array( 'code' => $target_voucher->code, 'key' => 'it-' . wp_generate_uuid4(), 'target' => $internal ) );
+	vcap_redeem_assert( 403 === $response->get_status(), 'customers cannot redeem for internal target ' . $internal );
+}
+vcap_redeem_assert( 403 === vcap_redeem_rest( 'POST', '/vcap/v1/redemptions/check', array( 'code' => $target_voucher->code, 'target' => 'passcaptain:order' ) )->get_status(), 'internal targets are refused in the REST check as well' );
+$manager = wp_insert_user( array( 'user_login' => 'vcap_rd_mgr_' . strtolower( wp_generate_password( 6, false, false ) ), 'user_pass' => wp_generate_password( 24 ), 'role' => 'shop_manager' ) );
+wp_set_current_user( $manager );
+vcap_redeem_assert( 403 === vcap_redeem_rest( 'POST', '/vcap/v1/redemptions', array( 'code' => $target_voucher->code, 'key' => 'it-' . wp_generate_uuid4(), 'target' => 'passcaptain:order' ) )->get_status(), 'shop managers cannot use internal targets over REST either' );
+$mgr_key  = 'it-' . wp_generate_uuid4();
+$response = vcap_redeem_rest( 'POST', '/vcap/v1/redemptions', array( 'code' => $target_voucher->code, 'key' => $mgr_key, 'target' => 'pos:till:1' ) );
+vcap_redeem_assert( 201 === $response->get_status(), 'shop managers (connectors with an application password) may use their own targets' );
+vcap_redeem_rest( 'POST', '/vcap/v1/redemptions/' . $mgr_key . '/release' );
+// A connector reserved on the customer's behalf (PHP): the customer cannot commit it over REST before delivery.
+list( $connector_voucher ) = vcap_redeem_voucher( 'single', 9.0 );
+$conn_key = 'it-' . wp_generate_uuid4();
+$service->reserve( $connector_voucher->code, array( 'key' => $conn_key, 'target' => 'premium:unlock', 'user_id' => $user_a ) );
+wp_set_current_user( $user_a );
+vcap_redeem_assert( 403 === vcap_redeem_rest( 'POST', '/vcap/v1/redemptions/' . $conn_key . '/commit' )->get_status() && 200 === vcap_redeem_rest( 'GET', '/vcap/v1/redemptions/' . $conn_key )->get_status(), 'customers may read but not commit a connector\'s redemption for an unregistered target' );
+$service->release( $conn_key );
+remove_filter( 'vcap_rest_redemption_target_prefixes', $test_prefixes );
 
 // --- Privacy erasure unlinks redemptions from the user.
 $erasure = ( new VCAP\Privacy( $repo ) )->erase( get_userdata( $user_a )->user_email );

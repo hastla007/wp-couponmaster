@@ -19,6 +19,9 @@ final class Shortcodes {
 		'vcap/referral'    => 'vcap_referral',
 	);
 
+	/** Code of a redeem link, kept in the WooCommerce session to fill in the redeem form. */
+	public const PREFILL_KEY = 'vcap_redeem_prefill';
+
 	public function __construct( private Downloads $downloads, private Referrals $referrals ) {}
 
 	public function register(): void {
@@ -27,6 +30,7 @@ final class Shortcodes {
 		add_action( 'save_post_page', static fn() => delete_transient( 'vcap_redeem_page_guess' ) );
 		add_shortcode( 'vcap_my_vouchers', array( $this, 'my_vouchers_shortcode' ) );
 		add_shortcode( 'vcap_referral', array( $this, 'referral_shortcode' ) );
+		add_action( 'template_redirect', array( $this, 'redeem_link' ), 7 );
 		add_action( 'template_redirect', array( $this, 'handle_redeem' ), 8 );
 		add_action( 'init', array( $this, 'blocks' ) );
 	}
@@ -71,7 +75,8 @@ final class Shortcodes {
 	 * 'rejected' (WooCommerce refused it) or 'limited' (too many attempts).
 	 */
 	public function redeem( string $raw ): string {
-		// Only unknown codes count: a customer redeeming real vouchers is never locked out.
+		// The attempt counts before the lookup and is given back for an existing code: a customer redeeming real
+		// vouchers is never locked out, and the site-wide counter only brakes guessing (see Plugin::rate_limited()).
 		if ( Plugin::rate_limited( 'redeem', 15, 300, 15 * MINUTE_IN_SECONDS, false ) ) {
 			wc_add_notice( __( 'Too many attempts. Please try again later.', 'voucher-captain' ), 'error' );
 			return 'limited';
@@ -82,6 +87,7 @@ final class Shortcodes {
 			wc_add_notice( __( 'Voucher code not found.', 'voucher-captain' ), 'error' );
 			return 'invalid';
 		}
+		Plugin::rate_limit_success( 'redeem', 15 * MINUTE_IN_SECONDS );
 		/** Connectors may handle a code themselves (e.g. exchange it for tickets): return a result string. */
 		$handled = apply_filters( 'vcap_redeem_code', null, $code );
 		if ( is_string( $handled ) && '' !== $handled ) {
@@ -110,11 +116,60 @@ final class Shortcodes {
 			wc_add_notice( __( 'The request has expired. Please try again.', 'voucher-captain' ), 'error' );
 			return;
 		}
+		if ( WC()->session ) {
+			WC()->session->set( self::PREFILL_KEY, null ); // The link's code was used (or replaced) by the customer.
+		}
 		$result = $this->redeem( wp_unslash( (string) $_POST['vcap_redeem_code'] ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised in redeem().
 		if ( 'applied' === $result ) {
 			wp_safe_redirect( wc_get_cart_url() );
 			exit;
 		}
+	}
+
+	/**
+	 * Redeem links (?vcap_code=… in emails, PDFs and the customer account) carry the code in the URL. The code is
+	 * moved into the WooCommerce session and the visitor is redirected to the clean URL (like CouponLink), so it
+	 * does not stay in the browser history, server or CDN logs, analytics or Referer headers. The redeem page is
+	 * sent with "Referrer-Policy: no-referrer" and, while it shows a code from the session, is not cached.
+	 */
+	public function redeem_link(): void {
+		if ( is_admin() || wp_doing_ajax() || ! function_exists( 'WC' ) ) {
+			return;
+		}
+		$session = WC()->session;
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- a public link; the code only fills in the form.
+		if ( isset( $_GET['vcap_code'] ) && is_string( $_GET['vcap_code'] ) && $session ) {
+			$code = substr( sanitize_text_field( wp_unslash( $_GET['vcap_code'] ) ), 0, 100 );
+			if ( ! $session->has_session() ) {
+				$session->set_customer_session_cookie( true ); // Guests need a session to keep the code.
+			}
+			$session->set( self::PREFILL_KEY, '' !== $code ? $code : null );
+			nocache_headers();
+			header( 'Referrer-Policy: no-referrer' );
+			wp_safe_redirect( remove_query_arg( 'vcap_code' ) );
+			exit;
+		}
+		// phpcs:enable
+		if ( ! is_singular() || ! self::page_has_redeem_form( (int) get_queried_object_id() ) || headers_sent() ) {
+			return;
+		}
+		header( 'Referrer-Policy: no-referrer' );
+		if ( $session && '' !== (string) $session->get( self::PREFILL_KEY, '' ) ) {
+			if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+				define( 'DONOTCACHEPAGE', true );
+			}
+			nocache_headers();
+		}
+	}
+
+	/** Code to fill in the redeem form: from a redeem link (session), else from the URL (no session). */
+	public static function link_code(): string {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- only fills in the form.
+		$code = isset( $_GET['vcap_code'] ) && is_string( $_GET['vcap_code'] ) ? sanitize_text_field( wp_unslash( $_GET['vcap_code'] ) ) : '';
+		if ( '' === $code && function_exists( 'WC' ) && WC()->session ) {
+			$code = (string) WC()->session->get( self::PREFILL_KEY, '' );
+		}
+		return substr( $code, 0, 100 );
 	}
 
 	/**
@@ -170,7 +225,7 @@ final class Shortcodes {
 			<?php // Default button for Enter (implicit submission uses the first submit button; connector steps such as "Cancel" come before the visible one). ?>
 			<button type="submit" class="vcap-default-submit" tabindex="-1" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;"><?php echo esc_html( $atts['button'] ); ?></button>
 			<label for="vcap-redeem-code"><?php esc_html_e( 'Voucher code', 'voucher-captain' ); ?></label>
-			<input type="text" id="vcap-redeem-code" name="vcap_redeem_code" required autocomplete="off" maxlength="100" value="<?php echo esc_attr( (string) apply_filters( 'vcap_redeem_prefill', isset( $_GET['vcap_code'] ) ? substr( sanitize_text_field( wp_unslash( $_GET['vcap_code'] ) ), 0, 100 ) : '' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- only pre-fills the field. ?>" />
+			<input type="text" id="vcap-redeem-code" name="vcap_redeem_code" required autocomplete="off" maxlength="100" value="<?php echo esc_attr( (string) apply_filters( 'vcap_redeem_prefill', self::link_code() ) ); ?>" />
 			<?php
 			/** Extra fields of connectors (e.g. the date for a ticket voucher), posted with the code. */
 			do_action( 'vcap_redeem_form_fields' );

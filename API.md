@@ -80,6 +80,8 @@ PHP callers may pass `user_id`; otherwise the logged-in user is used. For guest 
 
 Authentication: browsers of logged-in users send the WordPress REST nonce (`X-WP-Nonce`, from `wp_create_nonce( 'wp_rest' )`); external servers use WordPress Application Passwords for a dedicated technical user. Anonymous requests receive `401`. Narrow access with the `vcap_rest_can_redeem` filter.
 
+Targets over REST: shop managers (`manage_woocommerce` / `vcap_manage_vouchers`, e.g. the technical user of a connector server) may use any target; customers only targets whose prefix a connector registered with `vcap_rest_redemption_target_prefixes` (e.g. `add_filter( 'vcap_rest_redemption_target_prefixes', fn( $p ) => array_merge( $p, array( 'learnboating:' ) ) )`) – without one, customers can check codes but not reserve them over REST, and they cannot commit or release a redemption a connector made for them with an unregistered target. Targets of built-in integrations (`passcaptain:…`, filter `vcap_internal_redemption_target_prefixes`) are refused over REST for everybody (`403 vcap_not_allowed`). PHP callers are not affected.
+
 Redemption data: `redemption_key`, `state` (`reserved`, `committed`, `released`), `voucher_id`, `code`, `user_id`, `target`, `amount`, `currency`, `balance_after` (gift cards), `expires_at` (while reserved), `created_at`, `committed_at` (UTC), `meta`.
 
 ### Error codes
@@ -98,7 +100,7 @@ Redemption data: `redemption_key`, `state` (`reserved`, `committed`, `released`)
 | `vcap_idempotency_conflict` | 409 | Key reused for a different request |
 | `vcap_expired` / `vcap_cancelled` | 410 | Voucher expired / voided |
 | `vcap_not_redeemable` | 422 | Tickets and shop-only (reusable) vouchers |
-| `vcap_rate_limited` | 429 | Too many invalid codes (setting, default 10 per 15 minutes) |
+| `vcap_rate_limited` | 429 | Too many invalid codes (setting, default 10 per user and 15 minutes; while many invalid codes arrive site-wide – filter `vcap_redemption_site_wide_failures`, default 300 – every caller without vouchers of their own gets a fifth) |
 | `vcap_temporary_failure` | 503 | Database/lock problem – retry with the same key |
 
 ### Rules for integrations

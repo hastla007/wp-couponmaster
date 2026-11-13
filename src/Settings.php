@@ -352,6 +352,7 @@ final class Settings {
 						'id'                => 'vcap_code_length',
 						'type'              => 'number',
 						'default'           => 12,
+						'desc'              => __( 'Voucher codes are made at least as long as needed to be safe from guessing (about 2^50 combinations): 10 letters and digits, 11 letters or 16 digits.', 'voucher-captain' ),
 						'custom_attributes' => array( 'min' => 8, 'max' => 40, 'step' => 1 ),
 					),
 					array(

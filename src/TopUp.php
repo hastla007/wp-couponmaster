@@ -173,6 +173,7 @@ final class TopUp {
 			wc_add_notice( $result, 'error' );
 			return false;
 		}
+		Plugin::rate_limit_success( 'topup', 15 * MINUTE_IN_SECONDS );
 		return $passed;
 	}
 

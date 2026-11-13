@@ -57,6 +57,26 @@ $product->save();
 WC()->cart->add_to_cart( $product->get_id(), 1 );
 vcap_sc_assert( 'applied' === $sc->redeem( 'redeem-' . $tag ) && WC()->cart->has_discount( 'redeem-' . $tag ), 'with products in the cart the code is applied' );
 
+// Redeem links: the code moves from the URL into the session (redirect to the clean URL) and fills in the form.
+$_GET['vcap_code']      = 'LINK-' . strtoupper( $tag );
+$_SERVER['REQUEST_URI'] = '/einloesen/?vcap_code=LINK-' . strtoupper( $tag ) . '&utm_source=mail';
+$stop_redirect          = static function ( $location ) {
+	throw new RuntimeException( 'redirect:' . $location );
+};
+add_filter( 'wp_redirect', $stop_redirect );
+$redirected = '';
+try {
+	$sc->redeem_link();
+} catch ( RuntimeException $e ) {
+	$redirected = substr( $e->getMessage(), strlen( 'redirect:' ) );
+}
+remove_filter( 'wp_redirect', $stop_redirect );
+unset( $_GET['vcap_code'] );
+vcap_sc_assert( '' !== $redirected && ! str_contains( $redirected, 'vcap_code' ) && str_contains( $redirected, 'utm_source=mail' ), 'a redeem link redirects to the URL without the code' );
+vcap_sc_assert( 'LINK-' . strtoupper( $tag ) === WC()->session->get( VCAP\Shortcodes::PREFILL_KEY ) && str_contains( do_shortcode( '[vcap_redeem]' ), 'value="LINK-' . strtoupper( $tag ) . '"' ), 'the code from the link fills in the redeem form from the session' );
+WC()->session->set( VCAP\Shortcodes::PREFILL_KEY, null );
+wc_clear_notices();
+
 WC()->cart->empty_cart();
 wc_clear_notices();
 // [vcap_balance] describes each kind of voucher by what it is worth.
