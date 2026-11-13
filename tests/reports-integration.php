@@ -70,7 +70,7 @@ vcap_report_assert( ! is_wp_error( $refund ), 'a refund can be recorded' );
 $rows = ( new VCAP\Reports() )->collect( wp_date( 'Y-m-d', time() - DAY_IN_SECONDS ), wp_date( 'Y-m-d', time() + DAY_IN_SECONDS ) );
 vcap_report_assert( 35.0 === $rows[ 'campaign:' . $campaign ]['revenue'], 'refunds are subtracted from the revenue' );
 $csv = VCAP\Reports::csv_rows( $rows );
-vcap_report_assert( 'type' === $csv[0][0] && count( $csv ) === count( $rows ) + 1, 'the CSV export has a header and one line per group' );
+vcap_report_assert( __( 'Type', 'voucher-captain' ) === $csv[0][0] && count( $csv ) === count( $rows ) + 1, 'the CSV export has a header and one line per group' );
 // Ledger: outstanding value at a date and the redemption journal (own currency so other fixtures do not count).
 $ledger_new = static function ( string $mode, float $value ) use ( $tag ) {
 	$v                 = new VCAP\Voucher();
@@ -101,6 +101,49 @@ vcap_report_assert( empty( $ledger->liability( $yesterday )['totals']['XTS'] ), 
 $journal = array_values( array_filter( $ledger->journal( $today, $today ), static fn( $r ) => 'XTS' === $r['currency'] && 'redeemed' === $r['event'] ) );
 vcap_report_assert( 2 === count( $journal ) && 30.0 === (float) $journal[0]['balance_after'], 'the journal lists the redemptions of the day with amount and balance' );
 $jcsv = VCAP\Ledger::journal_csv( $journal );
-vcap_report_assert( 'date_utc' === $jcsv[0][0] && 3 === count( $jcsv ), 'the journal exports as CSV' );
+vcap_report_assert( VCAP\Ledger::journal_header()[0] === $jcsv[0][0] && 3 === count( $jcsv ), 'the journal exports as CSV' );
+
+// The liability totals are summed in SQL with the same rules as the streamed per-voucher detail.
+$voided = $ledger_new( 'single', 7 );
+vcap()->vouchers->log( $voided->id, 'voided', null, null, '' );
+$back = $ledger_new( 'single', 4 );
+vcap()->vouchers->log( $back->id, 'voided', null, null, '' );
+vcap()->vouchers->log( $back->id, 'reactivated', null, null, '' );
+$liability = $ledger->liability( $today )['totals']['XTS'] ?? array();
+$detail    = array_values( array_filter( iterator_to_array( $ledger->liability_rows( $today ), false ), static fn( $r ) => 'XTS' === $r['currency'] ) );
+vcap_report_assert( 29.0 === (float) ( $liability['voucher']['amount'] ?? 0 ) && 2 === (int) ( $liability['voucher']['count'] ?? 0 ), 'a voided voucher carries no value, a reactivated one does again' );
+vcap_report_assert( 3 === count( $detail ) && abs( 59.0 - array_sum( array_column( $detail, 'outstanding' ) ) ) < 0.001, 'the streamed liability detail matches the totals' );
+vcap_report_assert( 3 === count( $jcsv ) && 3 === count( VCAP\Ledger::journal_csv( new ArrayIterator( $journal ) ) ), 'the journal CSV also takes a stream of bookings' );
+$all = iterator_to_array( $ledger->journal_all( $today, $today, 1 ), false );
+vcap_report_assert( count( $all ) === $ledger->journal_count( $today, $today ) && count( $all ) >= 2, 'the journal export reads every booking in batches' );
+
+// CSV format: German Excel gets semicolons and a decimal comma; negative numbers are not mistaken for formulas.
+$german = static fn() => array( 'separator' => ';', 'decimal' => ',' );
+add_filter( 'vcap_csv_format', $german );
+VCAP\Csv::reset();
+vcap_report_assert( '12,50' === VCAP\Csv::number( 12.5, 2 ) && ';' === VCAP\Csv::format()['separator'], 'the CSV format follows the filter (semicolon, decimal comma)' );
+remove_filter( 'vcap_csv_format', $german );
+VCAP\Csv::reset();
+vcap_report_assert( array( '-12,50', "'-1+1", "'=SUM(A1)" ) === VCAP\Csv::safe_row( array( '-12,50', '-1+1', '=SUM(A1)' ) ), 'negative numbers stay numbers, formulas are neutralised' );
+
+// A voucher used as a payment after tax (fee line) counts in the report.
+$voucher_group = 'voucher:' . __( 'Vouchers and gift cards', 'voucher-captain' );
+$range         = array( wp_date( 'Y-m-d', time() - DAY_IN_SECONDS ), wp_date( 'Y-m-d', time() + DAY_IN_SECONDS ) );
+$before        = ( new VCAP\Reports() )->collect( $range[0], $range[1] )[ $voucher_group ]['discount'] ?? 0.0;
+$pay_coupon    = new WC_Coupon();
+$pay_coupon->set_code( 'vcap-pay-' . strtolower( wp_generate_password( 8, false, false ) ) );
+$pay_coupon->update_meta_data( '_vcap_voucher', 'yes' );
+$pay_coupon->save();
+$paid = wc_create_order();
+$fee  = new WC_Order_Item_Fee();
+$fee->set_name( 'Voucher' );
+$fee->set_total( '-15' );
+$fee->add_meta_data( VCAP\PaymentVouchers::FEE_META, $pay_coupon->get_code(), true );
+$paid->add_item( $fee );
+$paid->set_total( '20' );
+$paid->set_status( 'completed' );
+$paid->save();
+$after = ( new VCAP\Reports() )->collect( $range[0], $range[1] )[ $voucher_group ]['discount'] ?? 0.0;
+vcap_report_assert( abs( 15.0 - ( $after - $before ) ) < 0.001, 'vouchers used as a payment after tax are reported with the amount paid' );
 
 echo "Voucher Captain report checks passed.\n";

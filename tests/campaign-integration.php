@@ -36,7 +36,7 @@ vcap_camp_assert(
 	'generated coupons copy the template settings and start unused'
 );
 $rows = $campaigns->campaign_rows( $name );
-vcap_camp_assert( 6 === count( $rows ) && 'code' === $rows[0][0] && in_array( strtolower( $codes[0] ), array_map( 'strtolower', array_column( array_slice( $rows, 1 ), 0 ) ), true ), 'the campaign CSV lists every code' );
+vcap_camp_assert( 6 === count( $rows ) && __( 'Code', 'voucher-captain' ) === $rows[0][0] && in_array( strtolower( $codes[0] ), array_map( 'strtolower', array_column( array_slice( $rows, 1 ), 0 ) ), true ), 'the campaign CSV lists every code' );
 vcap_camp_assert( in_array( $name, array_column( $campaigns->campaigns(), 'campaign' ), true ), 'the campaign appears in the campaign list' );
 
 $voucher_template = new WC_Coupon();

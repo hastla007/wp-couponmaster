@@ -71,7 +71,8 @@ final class ReportsAdmin {
 			return;
 		}
 		list( $from, $to ) = self::range( $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only filter.
-		$rows              = ( new Reports() )->collect( $from, $to );
+		$reports           = new Reports();
+		$rows              = $reports->collect( $from, $to );
 		$csv               = wp_nonce_url( add_query_arg( array( 'action' => 'vcap_report_csv', 'from' => $from, 'to' => $to ), admin_url( 'admin-post.php' ) ), 'vcap_report_csv' );
 		?>
 		<div class="wrap">
@@ -84,7 +85,15 @@ final class ReportsAdmin {
 				<button class="button"><?php esc_html_e( 'Show', 'voucher-captain' ); ?></button>
 				<a class="button" href="<?php echo esc_url( $csv ); ?>"><?php esc_html_e( 'Export CSV', 'voucher-captain' ); ?></a>
 			</form>
-			<p class="description"><?php esc_html_e( 'Paid and refunded orders created in this period. Discount = what customers saved (incl. tax); revenue = order total minus refunds. An order with several codes counts for each of them. "Codes issued" is the total for code campaigns and bonus promotions.', 'voucher-captain' ); ?></p>
+			<p class="description"><?php esc_html_e( 'Paid and refunded orders created in this period. Discount = what customers saved (incl. tax); revenue = order total minus refunds. An order with several codes counts for each of them. "Codes issued" is the total for code campaigns and bonus promotions.', 'voucher-captain' ); ?> <?php esc_html_e( 'Vouchers used as a payment after tax count with the amount paid.', 'voucher-captain' ); ?></p>
+			<?php if ( $reports->truncated ) : ?>
+				<div class="notice notice-warning inline"><p>
+					<?php
+					/* translators: %s: maximum number of orders */
+					echo esc_html( sprintf( __( 'Only the newest %s orders of this period were evaluated. Choose a shorter period for complete figures.', 'voucher-captain' ), number_format_i18n( Reports::MAX_ORDERS ) ) );
+					?>
+				</p></div>
+			<?php endif; ?>
 			<table class="widefat striped">
 				<thead><tr>
 					<th><?php esc_html_e( 'Type', 'voucher-captain' ); ?></th>
@@ -167,7 +176,9 @@ final class ReportsAdmin {
 	/** Every booking that moved voucher value in a period. */
 	private function journal_page(): void {
 		list( $from, $to ) = self::range( $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only filter.
-		$journal = ( new Ledger( vcap()->vouchers ) )->journal( $from, $to, 1000 );
+		$ledger  = new Ledger( vcap()->vouchers );
+		$journal = $ledger->journal( $from, $to, 1000 );
+		$total   = count( $journal ) < 1000 ? count( $journal ) : $ledger->journal_count( $from, $to );
 		$csv     = wp_nonce_url( add_query_arg( array( 'action' => 'vcap_report_csv', 'view' => 'journal', 'from' => $from, 'to' => $to ), admin_url( 'admin-post.php' ) ), 'vcap_report_csv' );
 		$labels  = \VCAP\VoucherRepository::event_labels();
 		?>
@@ -181,7 +192,15 @@ final class ReportsAdmin {
 				<button class="button"><?php esc_html_e( 'Show', 'voucher-captain' ); ?></button>
 				<a class="button" href="<?php echo esc_url( $csv ); ?>"><?php esc_html_e( 'Export CSV', 'voucher-captain' ); ?></a>
 			</form>
-			<p class="description"><?php esc_html_e( 'Redemptions, refunds, credits and corrections with their amount, in booking order. The page shows the first 1,000 bookings; the CSV contains up to 50,000.', 'voucher-captain' ); ?></p>
+			<p class="description"><?php esc_html_e( 'Redemptions, refunds, credits and corrections with their amount, in booking order. The page shows the first 1,000 bookings; the CSV export contains all of them.', 'voucher-captain' ); ?></p>
+			<?php if ( $total > count( $journal ) ) : ?>
+				<div class="notice notice-warning inline"><p>
+					<?php
+					/* translators: 1: bookings shown, 2: bookings in the period */
+					echo esc_html( sprintf( __( 'Showing %1$s of %2$s bookings. Export the CSV for the complete journal.', 'voucher-captain' ), number_format_i18n( count( $journal ) ), number_format_i18n( $total ) ) );
+					?>
+				</p></div>
+			<?php endif; ?>
 			<table class="widefat striped">
 				<thead><tr>
 					<th><?php esc_html_e( 'Date', 'voucher-captain' ); ?></th>
@@ -266,14 +285,20 @@ final class ReportsAdmin {
 		}
 		$view   = self::view();
 		$ledger = new Ledger( vcap()->vouchers );
+		// Streamed in batches: no row limit and no full report in memory.
 		if ( 'liability' === $view ) {
 			$date = self::date_param( 'date', wp_date( 'Y-m-d' ) );
-			Campaigns::send_csv( 'voucher-liability-' . $date . '.csv', Ledger::liability_csv( $ledger->liability( $date ), $date ) );
+			Campaigns::send_csv( 'voucher-liability-' . $date . '.csv', Ledger::liability_csv( $ledger->liability_rows( $date ), $date ) );
 			exit;
 		}
 		list( $from, $to ) = self::range( $_GET );
 		if ( 'journal' === $view ) {
-			Campaigns::send_csv( 'voucher-journal-' . $from . '-' . $to . '.csv', Ledger::journal_csv( $ledger->journal( $from, $to ) ) );
+			$out = \VCAP\Csv::open( 'voucher-journal-' . $from . '-' . $to . '.csv' );
+			\VCAP\Csv::write( $out, Ledger::journal_header() );
+			foreach ( $ledger->journal_all( $from, $to ) as $row ) {
+				\VCAP\Csv::write( $out, Ledger::journal_line( $row ) );
+			}
+			fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions
 			exit;
 		}
 		Campaigns::send_csv( 'voucher-report-' . $from . '-' . $to . '.csv', Reports::csv_rows( ( new Reports() )->collect( $from, $to ) ) );
