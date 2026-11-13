@@ -141,6 +141,11 @@ final class Voucher {
 		return $row;
 	}
 
+	/** Decimal places for booking this voucher's amounts: ISO 4217 minor units, not the shop's display setting. */
+	public function decimals(): int {
+		return API\V1\RedemptionService::decimals( '' !== $this->currency ? $this->currency : (string) get_option( 'woocommerce_currency' ) );
+	}
+
 	public function is_ticket(): bool {
 		return 'ticket' === $this->type;
 	}

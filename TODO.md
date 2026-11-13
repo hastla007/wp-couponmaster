@@ -258,7 +258,7 @@ Fünf parallele Prüfungen (Sicherheit, Geld/Buchungen, Steuer/Recht/Datenschutz
 ### Geld, Buchungen und Nebenläufigkeit
 
 - [x] Rundungstoleranz in `reserve_order()` akzeptieren statt Checkout-Abbruch „Guthaben geändert“ (Währungsumrechnung, Netto-Shop mit vollem Guthaben). — *erledigt (fed93a8).*
-- [ ] Eine Dezimalstellenregel (ISO 4217) für Shop-Buchungen (reserve/release/deduct/write_balance) und Einlöse-API – heute `wc_get_price_decimals()` vs. ISO.
+- [x] Eine Dezimalstellenregel (ISO 4217) für Shop-Buchungen (reserve/release/deduct/write_balance) und Einlöse-API – heute `wc_get_price_decimals()` vs. ISO. — *erledigt: `Voucher::decimals()` (ISO 4217 der Gutscheinwährung, Filter `vcap_currency_decimals`) für Reservieren, Freigeben, Abbuchen, Guthaben schreiben, Coupon-Betrag, Fehlbetrag, Guthabenkonto, Ausstellung und Erstattungsprüfung; nur die Warenkorb-Rundung bleibt bei WooCommerce.*
 - [x] `PassCaptainProvider::reserve()` bei Wiederholung nur Zustand `reserved` als Erfolg melden (nicht released/committed). — *erledigt (68eecb6).*
 - [ ] Abgleichbericht: VC-Einlösungen vs. PC-Snapshots (committed/released/refunded) und offene Gutschein-Rückbuchungen.
 

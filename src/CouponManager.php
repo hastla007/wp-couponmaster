@@ -423,7 +423,7 @@ final class CouponManager {
 			}
 
 			$fresh = $this->repo->get( $voucher->id );
-			$requested = round( $requested, wc_get_price_decimals() );
+			$requested = round( $requested, $voucher->decimals() );
 			if ( $fresh && $fresh->balance < $requested && $requested - $fresh->balance <= (float) apply_filters( 'vcap_balance_rounding_tolerance', max( 0.05, $fresh->balance * 0.001 ), $fresh ) ) {
 				// Currency round trips (order currency → base currency) can exceed the full balance by a few cents.
 				$requested = $fresh->balance;
@@ -432,7 +432,7 @@ final class CouponManager {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				return null;
 			}
-			$fresh->balance = max( 0.0, round( $fresh->balance - $requested, wc_get_price_decimals() ) );
+			$fresh->balance = max( 0.0, round( $fresh->balance - $requested, $fresh->decimals() ) );
 			if ( $fresh->balance <= 0 ) {
 				$fresh->status = Voucher::STATUS_REDEEMED;
 			}
@@ -544,7 +544,7 @@ final class CouponManager {
 				return false;
 			}
 			$amount         = (float) $latest['amount'];
-			$fresh->balance = round( $fresh->balance + $amount, wc_get_price_decimals() );
+			$fresh->balance = round( $fresh->balance + $amount, $fresh->decimals() );
 			if ( Voucher::STATUS_REDEEMED === $fresh->status ) {
 				$fresh->status = $fresh->is_expired() ? Voucher::STATUS_EXPIRED : Voucher::STATUS_ACTIVE;
 			}
@@ -685,7 +685,7 @@ final class CouponManager {
 				return false;
 			}
 			$before            = (float) $fresh->balance;
-			$balance           = max( 0.0, round( (float) $compute( $before ), wc_get_price_decimals() ) );
+			$balance           = max( 0.0, round( (float) $compute( $before ), $fresh->decimals() ) );
 			$amount            = $amount ?? abs( $balance - $before );
 			$fresh->usage_mode = $voucher->usage_mode;
 			$fresh->balance    = $balance;
@@ -763,8 +763,8 @@ final class CouponManager {
 				return null;
 			}
 
-			$amount          = min( $fresh->balance, max( 0.0, round( $requested, wc_get_price_decimals() ) ) );
-			$fresh->balance  = max( 0.0, round( $fresh->balance - $amount, wc_get_price_decimals() ) );
+			$amount          = min( $fresh->balance, max( 0.0, round( $requested, $fresh->decimals() ) ) );
+			$fresh->balance  = max( 0.0, round( $fresh->balance - $amount, $fresh->decimals() ) );
 			if ( $fresh->balance <= 0 ) {
 				$fresh->status = Voucher::STATUS_REDEEMED;
 			}
@@ -903,7 +903,7 @@ final class CouponManager {
 		} else {
 			return $coupon;
 		}
-		$coupon->set_amount( round( $amount, wc_get_price_decimals() ) );
+		$coupon->set_amount( round( $amount, $voucher->decimals() ) );
 		return $coupon;
 	}
 
@@ -974,7 +974,7 @@ final class CouponManager {
 		if ( $order instanceof \WC_Order && $order->get_currency() && $order->get_currency() !== get_option( 'woocommerce_currency' ) ) {
 			$amount = (float) apply_filters( 'vcap_amount_to_base_currency', $amount, $order->get_currency(), $order );
 		}
-		return round( $amount, wc_get_price_decimals() );
+		return round( $amount, API\V1\RedemptionService::decimals( (string) get_option( 'woocommerce_currency' ) ) );
 	}
 
 	/**
@@ -1116,7 +1116,7 @@ final class CouponManager {
 			$voucher->balance = $deduction['balance'];
 			if ( $amount + 0.0001 < $requested ) {
 				$shortfall        = true;
-				$missing[ $code ] = round( $requested - $amount, wc_get_price_decimals() );
+				$missing[ $code ] = round( $requested - $amount, $voucher->decimals() );
 				$order->add_order_note( __( 'A stored-value voucher balance changed during checkout. Review this order and adjust the charge before fulfilment.', 'voucher-captain' ) );
 			}
 			$applied[ $code ] = $amount;
@@ -1188,7 +1188,7 @@ final class CouponManager {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				return false;
 			}
-			$fresh->balance = round( $fresh->balance + $amount, wc_get_price_decimals() );
+			$fresh->balance = round( $fresh->balance + $amount, $fresh->decimals() );
 			if ( Voucher::STATUS_REDEEMED === $fresh->status ) {
 				$fresh->status = $fresh->is_expired() ? Voucher::STATUS_EXPIRED : Voucher::STATUS_ACTIVE;
 			}

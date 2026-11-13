@@ -93,7 +93,7 @@ final class StoreCredit {
 	 */
 	public function adjust( int $user_id, float $amount, string $reason, int $order_id = 0, string $event = '' ) {
 		$reason = trim( sanitize_text_field( $reason ) );
-		$amount = round( $amount, wc_get_price_decimals() );
+		$amount = round( $amount, API\V1\RedemptionService::decimals( (string) get_option( 'woocommerce_currency' ) ) );
 		if ( 0.0 === $amount || '' === $reason ) {
 			return new \WP_Error( 'vcap_credit_input', __( 'Please enter an amount and a reason.', 'voucher-captain' ) );
 		}
@@ -117,7 +117,7 @@ final class StoreCredit {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				return new \WP_Error( 'vcap_insufficient_balance', __( 'The store credit is not sufficient.', 'voucher-captain' ) );
 			}
-			$fresh->balance = max( 0.0, round( $fresh->balance + $amount, wc_get_price_decimals() ) );
+			$fresh->balance = max( 0.0, round( $fresh->balance + $amount, $fresh->decimals() ) );
 			if ( $fresh->balance > 0 && in_array( $fresh->status, array( Voucher::STATUS_REDEEMED, Voucher::STATUS_EXPIRED ), true ) ) {
 				$fresh->status = Voucher::STATUS_ACTIVE;
 			}
@@ -156,7 +156,7 @@ final class StoreCredit {
 	public function refund_as_credit( \WC_Order $order, float $amount, string $reason ) {
 		$user_id = (int) $order->get_customer_id();
 		$reason  = trim( sanitize_text_field( $reason ) );
-		$amount  = round( $amount, wc_get_price_decimals() );
+		$amount  = round( $amount, API\V1\RedemptionService::decimals( (string) get_option( 'woocommerce_currency' ) ) );
 		if ( ! $this->enabled() ) {
 			return new \WP_Error( 'vcap_credit_disabled', __( 'Store credit is not enabled.', 'voucher-captain' ) );
 		}

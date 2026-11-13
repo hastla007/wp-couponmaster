@@ -163,7 +163,8 @@ final class Issuer {
 			// Paid / entered in the order currency; coupons are stored in the shop base currency.
 			$amount = (float) apply_filters( 'vcap_amount_to_base_currency', $amount, $order->get_currency(), $order );
 		}
-		return round( (float) apply_filters( 'vcap_voucher_amount', $amount, $item, $config, $order ), wc_get_price_decimals() );
+		// Vouchers are kept in the shop base currency, booked with its ISO 4217 decimals.
+		return round( (float) apply_filters( 'vcap_voucher_amount', $amount, $item, $config, $order ), API\V1\RedemptionService::decimals( (string) get_option( 'woocommerce_currency' ) ) );
 	}
 
 	private function create_voucher( \WC_Order $order, \WC_Order_Item_Product $item, \WC_Product $product, array $config, int $index ): ?Voucher {
@@ -340,11 +341,12 @@ final class Issuer {
 		};
 		$remaining_base = $to_base( $remaining );
 		$max_base       = $remaining_base - $spent;
-		$tolerance      = 0.5 / ( 10 ** wc_get_price_decimals() );
+		$decimals       = API\V1\RedemptionService::decimals( (string) $order->get_currency() );
+		$tolerance      = 0.5 / ( 10 ** $decimals );
 		if ( $to_base( $amount ) <= $max_base + $tolerance || apply_filters( 'vcap_allow_refund_of_spent_vouchers', false, $order, $amount, $spent ) ) {
 			return;
 		}
-		$max   = $remaining_base > 0 ? round( $remaining * max( 0.0, $max_base ) / $remaining_base, wc_get_price_decimals() ) : 0.0;
+		$max   = $remaining_base > 0 ? round( $remaining * max( 0.0, $max_base ) / $remaining_base, $decimals ) : 0.0;
 		$spent = $remaining_base > 0 ? $remaining * $spent / $remaining_base : $spent;
 		throw new \Exception(
 			sprintf(
