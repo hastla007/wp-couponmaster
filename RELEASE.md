@@ -17,8 +17,14 @@ The version lives in three places that must agree – `bin/build.sh` refuses to 
 ## Changelog
 
 `readme.txt` → `== Changelog ==` is the changelog. Work in progress collects under `= Unreleased =`; at release
-time that heading becomes `= X.Y.Z =` (the release workflow refuses a tag without that section and uses it as the
-release notes). Entries start with **New**, **Fix** or **Fix (security)** and describe the effect for the shop.
+time that heading becomes `= X.Y.Z =` (the release workflow uses it as the release notes). Entries start with **New**,
+**Fix** or **Fix (security)** and describe the effect for the shop.
+
+The release workflow (job `version`, `bin/release-gate.sh version|newer`) refuses a tag when header, `VCAP_VERSION`
+or `Stable tag` differ from the tag, when an `= Unreleased =` section is left in the changelog or the upgrade notice,
+when `= X.Y.Z =` is missing in `== Changelog ==` or in `== Upgrade Notice ==` (at most 300 characters), when the
+version is not greater than the newest existing `vX.Y.Z` tag (shops would not be offered it) and when the premium ZIP
+of that version is already in the release storage.
 
 ## Cutting a release
 
@@ -27,8 +33,9 @@ release notes). Entries start with **New**, **Fix** or **Fix (security)** and de
    `main` (or another branch CI runs on): the release workflow checks exactly that commit.
 2. Work through `RELEASE_CHECKLIST.md` (the manual checks).
 3. Bump the version in the three places above, rename `= Unreleased =` to `= X.Y.Z =` in `== Changelog ==` and in
-   `== Upgrade Notice ==` (one or two sentences: what a shop must do after updating; leave the section out when
-   nothing), check that `Tested up to`, `Requires at least`, `Requires PHP` and the WooCommerce lines of `readme.txt`
+   `== Upgrade Notice ==` (one or two sentences, at most 300 characters: what a shop must do after updating, or
+   "Bug fixes; no action needed."), regenerate `languages/voucher-captain.pot` (`php bin/make-pot.php`, the header
+   names the version), check that `Tested up to`, `Requires at least`, `Requires PHP` and the WooCommerce lines of `readme.txt`
    match the plugin header, commit.
 4. Tag that commit and push the tag:
 
@@ -40,17 +47,24 @@ release notes). Entries start with **New**, **Fix** or **Fix (security)** and de
    git push origin vX.Y.Z
    ```
 
-5. The `Release` workflow first waits for the push run of `Plugin smoke tests` on the tagged commit (job `ci-green`,
+   Before the first premium release and after every change of the licence server: the production licence server runs
+   WP License Captain with Ed25519 response signatures and the route `GET /wplc/v1/signing-keys` (branch
+   `claude/youthful-bardeen-7ejd7a`, commit 150fb17 or newer, merged and deployed) – the same commit the CI job
+   `license-acceptance` and the manifest step of the release workflow use.
+5. The `Release` workflow checks the version first (job `version`, see Changelog), then waits for the push run of `Plugin smoke tests` on the tagged commit (job `ci-green`,
    up to about two hours) and stops unless it finished with *success*; no run, a failed or a cancelled run blocks the
-   release (re-run CI, then re-run the release workflow). It then checks tag ↔ version, builds the free and the premium ZIP twice each (identical SHA-256
-   required) and creates a **draft** GitHub release with `voucher-captain.zip`, `voucher-captain-premium-X.Y.Z.zip`,
+   release (re-run CI, then re-run the release workflow). It then builds the free and the premium ZIP twice each
+   (identical SHA-256 required), checks that the premium ZIP pins the production licence server's current signing key
+   (`bin/release-gate.sh keys`: `GET <VCAP_LICENSE_SERVER>/wp-json/wplc/v1/signing-keys`; a mismatch stops the release,
+   because every shop would reject the server and the update that could fix it) and creates a **draft** GitHub release with `voucher-captain.zip`, `voucher-captain-premium-X.Y.Z.zip`,
    their `.sha256` files and the licence-manager manifest `voucher-captain-X.Y.Z.json` (made by WP License
    Captain's `tools/create-release-manifest.php`: version, HTTPS package URL, SHA-256, required PHP/WordPress,
    tested WordPress, release notes). The package URL is the repository variable `WPLC_PACKAGE_BASE_URL` + the ZIP
    name; without the variable the workflow warns and leaves the manifest out. Review and publish the draft.
    Editions (LICENSING.md): the free ZIP is built with `VCAP_EDITION=free`, the premium ZIP with
    `VCAP_EDITION=premium VCAP_LICENSE_SERVER=https://<licence server> VCAP_LICENSE_PUBLIC_KEY=<wp wplc signing-key --field=public_key>`
-   (repository variables, both required for tag builds; optional
+   (repository variables, both required for tag builds; during a key rotation `VCAP_LICENSE_PUBLIC_KEY` holds
+   `<current>,<next>` – see "Signing key rotation" below; optional
    `VCAP_UPDATE_URI`, default `<server>/voucher-captain`). A tag build without `VCAP_EDITION` fails, and the
    release workflow stops when the repository variable `VCAP_LICENSE_SERVER` is not set (a local premium build
    without it points to the placeholder `https://licenses.example.com`).
@@ -65,6 +79,23 @@ release notes). Entries start with **New**, **Fix** or **Fix (security)** and de
      previous version through the licence download grant. The CI job `license-acceptance` does exactly this on
      every push against a real WP License Captain server (two releases, wrong SHA-256 refused, real one installed).
    Withdrawing a release = removing its manifest; shops on that version are offered the newest remaining one.
+
+## Signing key rotation
+
+Premium builds pin the licence server's Ed25519 public key set (LICENSING.md → Key rotation). A key the installed
+builds do not pin locks shops out of their rights and of updates, so:
+
+1. Prepare: `wp wplc signing-key --next --field=public_key` on the licence server (or `WPLC_RESPONSE_SIGNING_KEY_NEXT`
+   in `wp-config.php`); the server now signs with both keys. Back up the secret offline.
+2. Release with both keys pinned: repository variable `VCAP_LICENSE_PUBLIC_KEY=<current>,<next>`.
+3. Wait until the customers run a build that pins the next key.
+4. Promote: `wp wplc signing-key --promote` (constants: move the next value into `WPLC_RESPONSE_SIGNING_KEY`).
+   The release check passes with the new key as current; drop the old key from the variable with the next release.
+
+Emergency (key lost or compromised): promote the pinned next key at once (step 4) and prepare a new next key for the
+following release. Without a pinned next key: new key on the server (`--rotate` or new constant), release with the new
+key, and tell premium customers to reinstall the plugin manually from the new premium ZIP – their old build rejects the
+server and cannot update itself. Keep a pinned next key in every release to avoid this.
 
 ## Static analysis
 

@@ -22,6 +22,7 @@ no successful push run of `Plugin smoke tests` (RELEASE.md → Cutting a release
 
 ## Manual release checks
 
+- [ ] The production licence server runs WP License Captain with Ed25519 response signatures and `GET /wplc/v1/signing-keys` (branch `claude/youthful-bardeen-7ejd7a`, commit 150fb17 or newer – the commit pinned in `plugin-smoke.yml` and `release.yml`, merged and deployed); `wp wplc signing-key` there shows the key in the repository variable `VCAP_LICENSE_PUBLIC_KEY` (the release workflow checks it again).
 - [ ] Complete a real gateway payment, redirect return, webhook retry, and refund on the supported gateway set. Plugin-level flows with Stripe and PayPal Payments installed are automated (CI job `ecosystem`); this check covers the provider's real sandbox/live account.
 - [ ] With WooCommerce Subscriptions (commercial, not in CI) installed: a renewal issues vouchers only when *Subscription renewals* is on, and renewal orders carry no `_vcap_*` meta.
 - [ ] Check Yoast SEO admin, checkout, and customer account pages in a browser.

@@ -38,8 +38,11 @@ final class LicenseClient {
 	/** Context string of the server's Ed25519 response signature (WP License Captain docs/API-V1.md). */
 	public const SIGNED_CONTEXT = 'wplc-response-v1';
 
-	/** @var string Ed25519 signature of the last verified authenticated response (kept with the cache). */
-	private string $last_server_signature = '';
+	/** Most pinned keys and envelope signatures looked at (a key set is current + next, rarely more). */
+	private const MAX_KEYS = 8;
+
+	/** @var array{signature_ed25519:string,key_id:string} Server signature of the last verified response (kept with the cache). */
+	private array $last_server_signature = array( 'signature_ed25519' => '', 'key_id' => '' );
 
 	public function __construct( string $server_url, string $product_key, string $product_version, string $option_key ) {
 		$this->server_url = untrailingslashit( esc_url_raw( $server_url, array( 'https' ) ) );
@@ -161,8 +164,10 @@ final class LicenseClient {
 				'cached_at' => $now,
 				'expires_at' => $expires,
 				'signature' => hash_hmac( 'sha256', $json, $credentials['installation_secret'] ),
-				// The server's own signature travels with the snapshot: a pinned build re-checks it offline.
-				'signature_ed25519' => $this->last_server_signature,
+				// The server's own signature (the one that matched a pinned key) travels with the snapshot: a pinned
+				// build re-checks it offline.
+				'signature_ed25519' => $this->last_server_signature['signature_ed25519'],
+				'key_id' => $this->last_server_signature['key_id'],
 			),
 			false
 		);
@@ -185,7 +190,7 @@ final class LicenseClient {
 		if ( ! is_string( $cache['signature'] ?? null ) || ! hash_equals( $expected, $cache['signature'] ) ) {
 			return new \WP_Error( 'wplc_cache_signature_invalid', __( 'The offline entitlement cache could not be verified.', 'voucher-captain' ) );
 		}
-		if ( ! self::server_signature_valid( false === $json ? '' : $json, (string) ( $cache['signature_ed25519'] ?? '' ), (string) $credentials['installation_id'] ) ) {
+		if ( ! self::server_signature_valid( false === $json ? '' : $json, (string) ( $cache['signature_ed25519'] ?? '' ), (string) $credentials['installation_id'], (string) ( $cache['key_id'] ?? '' ) ) ) {
 			return new \WP_Error( 'wplc_cache_signature_invalid', __( 'The offline entitlement cache could not be verified.', 'voucher-captain' ) );
 		}
 		return $cache['data'];
@@ -288,8 +293,17 @@ final class LicenseClient {
 		if ( is_wp_error( $response ) ) {
 			return $response;
 		}
-		$verified = self::verify_envelope( $response, $credentials['installation_secret'], (string) $credentials['installation_id'] );
-		$this->last_server_signature = is_wp_error( $verified ) ? '' : (string) ( $response['signature_ed25519'] ?? '' );
+		$match    = null;
+		$verified = self::verify_envelope( $response, $credentials['installation_secret'], (string) $credentials['installation_id'], $match );
+		if ( is_wp_error( $verified ) ) {
+			$this->last_server_signature = array( 'signature_ed25519' => '', 'key_id' => '' );
+		} else {
+			// Unpinned builds (development) keep the server's main signature as received.
+			$this->last_server_signature = $match ?? array(
+				'signature_ed25519' => is_string( $response['signature_ed25519'] ?? null ) ? $response['signature_ed25519'] : '',
+				'key_id' => is_string( $response['key_id'] ?? null ) ? $response['key_id'] : '',
+			);
+		}
 		return $verified;
 	}
 
@@ -386,60 +400,170 @@ final class LicenseClient {
 
 	/**
 	 * Verify the response before exposing entitlement data to product code: the HMAC with the installation secret
-	 * and – when the build pins the server's public key (VCAP_LICENSE_PUBLIC_KEY) – the server's Ed25519 signature of
-	 * "wplc-response-v1\n{installation}\n{JSON}". Only the license server can produce the latter, so a server of
-	 * one's own or written options cannot unlock anything.
+	 * and – when the build pins the server's public key(s) (VCAP_LICENSE_PUBLIC_KEY) – the server's Ed25519 signature
+	 * of "wplc-response-v1\n{installation}\n{JSON}". Only the license server can produce the latter, so a server of
+	 * one's own or written options cannot unlock anything. During a key rotation the envelope carries `signatures`
+	 * (one per server key); any of them made with a pinned key is enough.
 	 *
 	 * @param array<string,mixed> $envelope Response wrapper.
 	 * @param string $secret Installation secret.
 	 * @param string $installation_id Installation UUID the data must be for.
+	 * @param array{signature_ed25519:string,key_id:string}|null $match Set to the signature that matched a pinned key.
 	 * @return array<string,mixed>|\WP_Error
 	 */
-	private static function verify_envelope( array $envelope, string $secret, string $installation_id = '' ) {
+	private static function verify_envelope( array $envelope, string $secret, string $installation_id = '', ?array &$match = null ) {
 		$json = wp_json_encode( $envelope['data'] ?? null, JSON_UNESCAPED_SLASHES );
 		$json = false === $json ? '' : $json;
 		$expected = hash_hmac( 'sha256', $json, $secret );
 		if ( ! is_string( $envelope['signature'] ?? null ) || ! hash_equals( $expected, $envelope['signature'] ) ) {
 			return new \WP_Error( 'wplc_signature_invalid', __( 'The license server response signature could not be verified.', 'voucher-captain' ) );
 		}
-		if ( ! self::server_signature_valid( $json, (string) ( $envelope['signature_ed25519'] ?? '' ), $installation_id ) ) {
-			return new \WP_Error( 'wplc_server_signature_invalid', __( 'The response is not signed by the license server of this product.', 'voucher-captain' ) );
+		if ( array() !== self::pinned_public_keys() ) {
+			$match = self::server_signature_match( $json, self::envelope_signatures( $envelope ), $installation_id );
+			if ( null === $match ) {
+				return new \WP_Error( 'wplc_server_signature_invalid', __( 'The response is not signed by the license server of this product.', 'voucher-captain' ) );
+			}
 		}
 		return is_array( $envelope['data'] ?? null ) ? $envelope['data'] : array();
 	}
 
-	/** Base64 Ed25519 public key of the license server pinned by the build ('' = not pinned). */
-	public static function pinned_public_key(): string {
-		if ( ! defined( 'VCAP_LICENSE_PUBLIC_KEY' ) ) {
-			return '';
+	/**
+	 * Server signatures of an envelope: the entries of `signatures` (key rotation: one per server key) and the main
+	 * `signature_ed25519`/`key_id` pair.
+	 *
+	 * @param array<string,mixed> $envelope Response wrapper.
+	 * @return list<array{signature_ed25519:string,key_id:string}>
+	 */
+	public static function envelope_signatures( array $envelope ): array {
+		$candidates = array();
+		foreach ( is_array( $envelope['signatures'] ?? null ) ? array_slice( $envelope['signatures'], 0, self::MAX_KEYS ) : array() as $entry ) {
+			if ( is_array( $entry ) && is_string( $entry['signature_ed25519'] ?? null ) ) {
+				$candidates[] = array(
+					'signature_ed25519' => $entry['signature_ed25519'],
+					'key_id' => is_string( $entry['key_id'] ?? null ) ? $entry['key_id'] : '',
+				);
+			}
 		}
-		$key = base64_decode( (string) VCAP_LICENSE_PUBLIC_KEY, true );
-		// A malformed pinned key must not silently disable the check: it then matches nothing (fail-closed).
-		return false !== $key && 32 === strlen( $key ) ? (string) VCAP_LICENSE_PUBLIC_KEY : 'invalid';
+		if ( is_string( $envelope['signature_ed25519'] ?? null ) ) {
+			$candidates[] = array(
+				'signature_ed25519' => $envelope['signature_ed25519'],
+				'key_id' => is_string( $envelope['key_id'] ?? null ) ? $envelope['key_id'] : '',
+			);
+		}
+		return $candidates;
+	}
+
+	/** Key id of a raw Ed25519 public key: first 16 hex characters of its SHA-256 (as WP License Captain names it). */
+	public static function key_id( string $raw_public_key ): string {
+		return substr( hash( 'sha256', $raw_public_key ), 0, 16 );
 	}
 
 	/**
-	 * Whether the server's Ed25519 signature is valid – always true when the build pins no public key.
+	 * Base64 Ed25519 public keys of the license server pinned by the build (empty = not pinned).
+	 *
+	 * VCAP_LICENSE_PUBLIC_KEY holds one key or a set (current and next key during a rotation) separated by commas or
+	 * whitespace. A malformed key in the set must not silently disable the check: the whole set is then
+	 * array( 'invalid' ), which matches nothing (fail-closed).
+	 *
+	 * @return list<string>
+	 */
+	public static function pinned_public_keys(): array {
+		if ( ! defined( 'VCAP_LICENSE_PUBLIC_KEY' ) ) {
+			return array();
+		}
+		$keys = preg_split( '/[\s,]+/', trim( (string) VCAP_LICENSE_PUBLIC_KEY ), -1, PREG_SPLIT_NO_EMPTY );
+		if ( ! is_array( $keys ) || array() === $keys || count( $keys ) > self::MAX_KEYS ) {
+			return array( 'invalid' );
+		}
+		foreach ( $keys as $key ) {
+			$raw = base64_decode( $key, true );
+			if ( false === $raw || 32 !== strlen( $raw ) ) {
+				return array( 'invalid' );
+			}
+		}
+		return array_values( array_unique( $keys ) );
+	}
+
+	/** First pinned public key ('' = not pinned, 'invalid' = malformed set). */
+	public static function pinned_public_key(): string {
+		return self::pinned_public_keys()[0] ?? '';
+	}
+
+	/**
+	 * Whether the server's Ed25519 signature is valid for one of the pinned keys – always true when the build pins
+	 * no public key.
 	 *
 	 * @param string $json            JSON of the data.
 	 * @param string $signature       Base64 signature.
 	 * @param string $installation_id Installation UUID.
+	 * @param string $key_id          Key id named by the server ('' = unknown: every pinned key is tried).
 	 */
-	public static function server_signature_valid( string $json, string $signature, string $installation_id ): bool {
-		$public_key = self::pinned_public_key();
-		if ( '' === $public_key ) {
+	public static function server_signature_valid( string $json, string $signature, string $installation_id, string $key_id = '' ): bool {
+		if ( array() === self::pinned_public_keys() ) {
 			return true;
 		}
-		$key = base64_decode( $public_key, true );
-		$sig = base64_decode( $signature, true );
-		if ( false === $key || false === $sig || 32 !== strlen( $key ) || 64 !== strlen( $sig ) || ! function_exists( 'sodium_crypto_sign_verify_detached' ) ) {
-			return false;
+		return null !== self::server_signature_match(
+			$json,
+			array(
+				array(
+					'signature_ed25519' => $signature,
+					'key_id' => $key_id,
+				),
+			),
+			$installation_id
+		);
+	}
+
+	/**
+	 * The first server signature that a pinned key verifies. For each signature the pinned key whose key id the
+	 * server names is tried first, then the other pinned keys (a missing or unknown key id is no reason to fail).
+	 *
+	 * @param string                                                 $json            JSON of the data.
+	 * @param list<array{signature_ed25519:string,key_id:string}> $candidates      Signatures of the envelope.
+	 * @param string                                                 $installation_id Installation UUID.
+	 * @return array{signature_ed25519:string,key_id:string}|null The signature and the key id of the pinned key, or null.
+	 */
+	public static function server_signature_match( string $json, array $candidates, string $installation_id ): ?array {
+		if ( ! function_exists( 'sodium_crypto_sign_verify_detached' ) ) {
+			return null;
 		}
-		try {
-			return sodium_crypto_sign_verify_detached( $sig, self::SIGNED_CONTEXT . "\n" . strtolower( $installation_id ) . "\n" . $json, $key );
-		} catch ( \Throwable $e ) {
-			return false;
+		$pinned = array();
+		foreach ( self::pinned_public_keys() as $encoded ) {
+			$raw = base64_decode( $encoded, true );
+			if ( false === $raw || 32 !== strlen( $raw ) ) {
+				return null;
+			}
+			$pinned[] = array( self::key_id( $raw ), $raw );
 		}
+		$message = self::SIGNED_CONTEXT . "\n" . strtolower( $installation_id ) . "\n" . $json;
+		foreach ( array_slice( $candidates, 0, self::MAX_KEYS + 1 ) as $candidate ) {
+			$sig = base64_decode( (string) ( $candidate['signature_ed25519'] ?? '' ), true );
+			if ( false === $sig || 64 !== strlen( $sig ) ) {
+				continue;
+			}
+			// The key the server names first, then the others (stable order otherwise).
+			$named = strtolower( (string) ( $candidate['key_id'] ?? '' ) );
+			$keys  = $pinned;
+			usort(
+				$keys,
+				static function ( array $a, array $b ) use ( $named ): int {
+					return (int) ( $b[0] === $named ) - (int) ( $a[0] === $named );
+				}
+			);
+			foreach ( $keys as list( $id, $raw ) ) {
+				try {
+					if ( sodium_crypto_sign_verify_detached( $sig, $message, $raw ) ) {
+						return array(
+							'signature_ed25519' => (string) $candidate['signature_ed25519'],
+							'key_id' => $id,
+						);
+					}
+				} catch ( \Throwable $e ) {
+					continue;
+				}
+			}
+		}
+		return null;
 	}
 
 	/**

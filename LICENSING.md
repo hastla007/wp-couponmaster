@@ -52,13 +52,43 @@ activation; Pass Captain part in the `pass-captain` job), `tests/run.php` → Ed
 
 **Server signature (Ed25519):** besides the HMAC (installation secret – it protects transport and the cache, but the
 shop knows the secret), every answer of WP License Captain carries `signature_ed25519` over
-`wplc-response-v1\n{installation UUID}\n{JSON of data}` (server branch `claude/youthful-bardeen-7ejd7a`, fc26a96). The
-premium build pins the server's public key (`VCAP_LICENSE_PUBLIC_KEY`, from `wp wplc signing-key --field=public_key`;
-`bin/build.sh` refuses a tag build without it). The client then accepts answers and offline snapshots only with a
-valid server signature for exactly this installation – a server of one's own, written options or a snapshot copied
-from another shop unlock nothing (`LicenseClient::server_signature_valid()`, test vector in `tests/run.php`,
-forged-snapshot check in `license-acceptance`). A malformed pinned key fails closed. Rotating the server key needs a
-release with the new public key.
+`wplc-response-v1\n{installation UUID}\n{JSON of data}` (server branch `claude/youthful-bardeen-7ejd7a`, 150fb17 –
+must be merged and deployed on the production licence server before a release, RELEASE.md). The premium build pins
+the server's public key set (`VCAP_LICENSE_PUBLIC_KEY`, from `wp wplc signing-key --field=public_key`; `bin/build.sh`
+refuses a tag build without it and checks every key: base64, 32 bytes). The client then accepts answers and offline
+snapshots only with a valid server signature for exactly this installation – a server of one's own, written options or
+a snapshot copied from another shop unlock nothing (`LicenseClient::server_signature_match()`, test vectors in
+`tests/run.php`, forged-snapshot check in `license-acceptance`). A malformed key in the set fails closed (nothing
+verifies). The release workflow compares the pinned set with the production server's public route
+`GET /wp-json/wplc/v1/signing-keys` and stops when the server's current key is not pinned (`bin/release-gate.sh keys`).
+
+### Key rotation
+
+The update channel needs a valid server signature too, so a server key that an installed build does not pin locks the
+shop out of its rights **and** of the update that would fix it. Therefore the key is changed only with overlap:
+
+- **Key set.** `VCAP_LICENSE_PUBLIC_KEY` may hold several keys separated by commas or whitespace – normally the
+  current and the next key. The server names its key in `key_id` (first 16 hex characters of SHA-256 of the raw
+  public key); the client tries the pinned key with that id first, then every other pinned key. While the server has a
+  next key it signs every answer with both keys (`signatures: [{key_id, signature_ed25519}, …]`, current first, plus
+  the old single fields for older builds); any signature made with a pinned key is enough. The offline snapshot keeps
+  the signature that matched and its `key_id`.
+- **Procedure.**
+  1. On the licence server: `wp wplc signing-key --next --field=public_key` (or a seed in
+     `WPLC_RESPONSE_SIGNING_KEY_NEXT`, recommended for production). Keep an offline backup of the secret.
+  2. Set the repository variable `VCAP_LICENSE_PUBLIC_KEY` to `<current>,<next>` and release (`bin/release-gate.sh
+     keys` checks that the current key is pinned and warns when the server's next key is not).
+  3. Wait until the customers run that release (licence server statistics of product versions; the old build stops
+     working at step 4).
+  4. `wp wplc signing-key --promote` (with constants: move the value of `WPLC_RESPONSE_SIGNING_KEY_NEXT` into
+     `WPLC_RESPONSE_SIGNING_KEY` and remove the former). Then set the variable to the new key alone, or already to
+     `<new current>,<new next>` for the following rotation.
+- **Emergency (key lost or compromised).** Keep a pinned next key in every release: then promote it at once – shops
+  on a build that pins it continue without an update; the compromised key is gone from the server (and from the
+  pinned set of the next release). Without a pinned spare, `wp wplc signing-key --rotate` (or a new constant) plus a
+  release with the new key is the only way; shops whose build pins only the old key are locked and receive no update
+  until the plugin is reinstalled manually with the new premium ZIP (notify the customers). A compromised key must be
+  replaced even so – whoever holds it can unlock any shop that pins it.
 
 **Uninstall:** with "Delete data on uninstall" the site's activation is released on the licence server first
 (best effort, 5 s; `uninstall.php`, `license-acceptance` → `shop-uninstall`), then the credentials are deleted.

@@ -275,7 +275,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: hastla007/wp-license
-          ref: fc26a96cd4bb179de0f6279e05cf3ab5d2c68732
+          ref: 150fb177d88dfed9537d6cb1f62550987fa4349e
           path: wp-license
       - name: Set up PHP 8.4
         uses: shivammathur/setup-php@v2
@@ -341,6 +341,9 @@ jobs:
           sed -i "s/^ \* Version: .*/ * Version:           99.0.0/; s/^define( 'VCAP_VERSION', '[^']*' );/define( 'VCAP_VERSION', '99.0.0' );/" "$RUNNER_TEMP/vc-next/voucher-captain.php"
           sed -i "s/^Stable tag: .*/Stable tag: 99.0.0/" "$RUNNER_TEMP/vc-next/readme.txt"
           release "$RUNNER_TEMP/vc-next"
+          # Release gate of release.yml against this server: the premium ZIP pins the server's current signing key,
+          # read from its public route GET /wplc/v1/signing-keys.
+          CURL_CA_BUNDLE="$RUNNER_TEMP/tls/ca.crt" bin/release-gate.sh keys "$SERVER/packages/voucher-captain-premium-99.0.0.zip" https://licenses.test
       - name: New installation from the licence manager storage (download, SHA-256 against the manifest)
         run: |
           php wp-cli.phar core download --path="$SHOP" --version=7.1.4
@@ -378,6 +381,13 @@ jobs:
           shop shop-suspended
           server server-status active
           shop shop-reactivated
+          # Key rotation, step 1 (LICENSING.md → Key rotation): the server gets a next key and from now on signs every
+          # answer with both keys (signatures[]); builds that pin only the current key keep working (update,
+          # deactivation and new activation below).
+          php wp-cli.phar --path="$SERVER" wplc signing-key --next --field=public_key
+          keys="$(curl --fail --silent --show-error --cacert "$RUNNER_TEMP/tls/ca.crt" https://licenses.test/wp-json/wplc/v1/signing-keys)"
+          echo "$keys"
+          case "$keys" in *'"next":{"public_key"'*) ;; *) echo "The server lists no next key"; exit 1 ;; esac
           server server-bad-checksum 99.0.0
           shop shop-update-rejected
           server server-good-checksum 99.0.0
