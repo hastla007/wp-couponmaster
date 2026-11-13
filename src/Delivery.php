@@ -134,12 +134,27 @@ final class Delivery {
 				$voucher->status = Voucher::STATUS_ACTIVE;
 			}
 
-			$sent = $this->send( $voucher );
+			// A retry after a partial failure only mails who is still missing (no duplicate for the others).
+			$pending_key = 'vcap_delivery_missing_' . $voucher->id;
+			$pending     = (array) get_transient( $pending_key );
+			$only        = 1 === count( $pending ) ? (string) reset( $pending ) : null;
+			$required    = $this->required_roles( $voucher );
+			$sent_roles  = array();
+			$sent        = $this->send( $voucher, $only, $sent_roles );
 			if ( ! $sent ) {
 				// Retried by the daily maintenance until 30 days after the due date (VoucherRepository::due_for_delivery()).
 				$this->repo->log( $voucher->id, 'delivery_failed', null, null, __( 'No email was sent (email disabled or no valid address).', 'voucher-captain' ) );
 				return;
 			}
+			$missing = array_values( array_diff( null === $only ? $required : array( $only ), $sent_roles ) );
+			if ( $missing ) {
+				// "Send to buyer and recipient": delivered only when both got it; the rest is retried later.
+				set_transient( $pending_key, $missing, 31 * DAY_IN_SECONDS );
+				/* translators: %s: buyer/recipient */
+				$this->repo->log( $voucher->id, 'delivery_failed', null, null, sprintf( __( 'Not delivered to: %s (will be retried).', 'voucher-captain' ), implode( ', ', $missing ) ) );
+				return;
+			}
+			delete_transient( $pending_key );
 
 			$table   = Install::tables()['vouchers'];
 			$updated = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -172,7 +187,25 @@ final class Delivery {
 	 *
 	 * @return string[] addresses mailed
 	 */
-	public function send( Voucher $voucher, ?string $only = null ): array {
+	/**
+	 * Who must receive the voucher for it to count as delivered ('recipient', 'buyer'); a buyer copy next to a
+	 * gift for the recipient is a courtesy and not required.
+	 *
+	 * @return string[]
+	 */
+	public function required_roles( Voucher $voucher ): array {
+		$to_recipient = in_array( $voucher->send_to, array( 'recipient', 'both' ), true ) && is_email( $voucher->recipient_email );
+		$roles        = $to_recipient ? array( 'recipient' ) : array();
+		if ( ! $to_recipient || 'both' === $voucher->send_to ) {
+			$roles[] = 'buyer';
+		}
+		return $roles;
+	}
+
+	/**
+	 * @param string[] $sent_roles Filled with the roles that were mailed ('recipient', 'buyer').
+	 */
+	public function send( Voucher $voucher, ?string $only = null, array &$sent_roles = array() ): array {
 		$mailer = WC()->mailer();
 		$emails = $mailer->get_emails();
 		$sent   = array();
@@ -183,12 +216,14 @@ final class Delivery {
 
 		if ( $to_recipient && ( null === $only || 'recipient' === $only ) && isset( $emails['VCAP_Email_Voucher_Recipient'] ) ) {
 			if ( $emails['VCAP_Email_Voucher_Recipient']->trigger( $voucher ) ) {
-				$sent[] = $voucher->recipient_email;
+				$sent[]       = $voucher->recipient_email;
+				$sent_roles[] = 'recipient';
 			}
 		}
 		if ( $to_buyer && ( null === $only || 'buyer' === $only ) && isset( $emails['VCAP_Email_Voucher_Buyer'] ) ) {
 			if ( $emails['VCAP_Email_Voucher_Buyer']->trigger( $voucher ) ) {
-				$sent[] = $voucher->buyer_email;
+				$sent[]       = $voucher->buyer_email;
+				$sent_roles[] = 'buyer';
 			}
 		}
 		return $sent;

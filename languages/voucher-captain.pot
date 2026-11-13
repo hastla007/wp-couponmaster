@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-13 00:12+0000\n"
+"POT-Creation-Date: 2026-11-13 00:13+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:75 src/API/V1/RedemptionService.php:117
@@ -481,10 +481,20 @@ msgstr ""
 msgid "Generate vouchers: all vouchers for this order already exist."
 msgstr ""
 
+#: src/Admin/OrderAdmin.php:123
+msgid "Resend from the order: no email was sent."
+msgstr ""
+
 #. translators: %d: number of vouchers
-#: src/Admin/OrderAdmin.php:124
+#: src/Admin/OrderAdmin.php:130
 #, php-format
 msgid "Voucher emails resent for %d voucher(s)."
+msgstr ""
+
+#. translators: %s: voucher codes
+#: src/Admin/OrderAdmin.php:133
+#, php-format
+msgid "Not sent (email disabled or no valid address): %s"
 msgstr ""
 
 #: src/Admin/ReportsAdmin.php:39 src/Discounts/Admin.php:206
@@ -1730,11 +1740,17 @@ msgstr ""
 msgid "On a date chosen by the customer"
 msgstr ""
 
-#: src/Delivery.php:140
+#: src/Delivery.php:146
 msgid "No email was sent (email disabled or no valid address)."
 msgstr ""
 
-#: src/Delivery.php:155
+#. translators: %s: buyer/recipient
+#: src/Delivery.php:154
+#, php-format
+msgid "Not delivered to: %s (will be retried)."
+msgstr ""
+
+#: src/Delivery.php:170
 msgid "Voucher email was sent but its delivery state could not be saved."
 msgstr ""
 

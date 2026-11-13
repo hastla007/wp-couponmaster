@@ -111,16 +111,27 @@ final class OrderAdmin {
 	}
 
 	public function resend( \WC_Order $order ): void {
-		$count = 0;
+		$count  = 0;
+		$failed = array();
 		foreach ( $this->repo->for_order( $order->get_id() ) as $v ) {
 			if ( Voucher::STATUS_VOID === $v->status ) {
 				continue;
 			}
-			vcap()->delivery->send( $v );
-			$this->repo->log( $v->id, 'resent' );
+			$sent = vcap()->delivery->send( $v );
+			if ( ! $sent ) {
+				$failed[] = $v->code;
+				$this->repo->log( $v->id, 'delivery_failed', null, null, __( 'Resend from the order: no email was sent.', 'voucher-captain' ) );
+				continue;
+			}
+			$this->repo->log( $v->id, 'resent', null, null, sprintf( 'Sent to %d recipient(s)', count( $sent ) ) );
 			++$count;
 		}
 		/* translators: %d: number of vouchers */
-		$order->add_order_note( sprintf( __( 'Voucher emails resent for %d voucher(s).', 'voucher-captain' ), $count ) );
+		$note = sprintf( __( 'Voucher emails resent for %d voucher(s).', 'voucher-captain' ), $count );
+		if ( $failed ) {
+			/* translators: %s: voucher codes */
+			$note .= ' ' . sprintf( __( 'Not sent (email disabled or no valid address): %s', 'voucher-captain' ), implode( ', ', $failed ) );
+		}
+		$order->add_order_note( $note );
 	}
 }

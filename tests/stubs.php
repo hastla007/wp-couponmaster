@@ -128,3 +128,4 @@ function get_post_status( $id = null ) { return false; }
 function get_permalink( $id = 0 ) { return ''; }
 function did_action( $h ) { return 0; }
 function delete_option( $k ) { unset( $GLOBALS['vcap_test_options'][ $k ] ); return true; }
+function delete_transient( $k ) { unset( $GLOBALS['vcap_test_transients'][ $k ] ); return true; }

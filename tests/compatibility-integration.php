@@ -208,6 +208,37 @@ try {
 }
 vcap_compat_assert( null !== vcap()->vouchers->get( $mail_voucher->id )->delivered_at, 'failed delivery is retried and marked only after successful mail' );
 
+// "Send to buyer and recipient": delivered only when both got it; the retry mails only who is missing.
+list( $both_voucher ) = vcap_compat_voucher( 50, 'both-buyer@example.test' );
+$both_voucher->send_to         = 'both';
+$both_voucher->recipient_email = 'both-recipient@example.test';
+vcap()->vouchers->update( $both_voucher );
+$mailed      = array();
+$recipient_down = static function ( $pre, $atts ) use ( &$mailed ) {
+	$to = implode( ',', (array) $atts['to'] );
+	if ( str_contains( $to, 'both-recipient@' ) ) {
+		return false;
+	}
+	$mailed[] = $to;
+	return true;
+};
+add_filter( 'pre_wp_mail', $recipient_down, 999, 2 );
+try {
+	vcap()->delivery->deliver( $both_voucher->id );
+} finally {
+	remove_filter( 'pre_wp_mail', $recipient_down, 999 );
+}
+vcap_compat_assert( null === vcap()->vouchers->get( $both_voucher->id )->delivered_at, 'buyer and recipient: the voucher is not delivered while the recipient mail failed' );
+$mailed   = array();
+$all_up   = static function ( $pre, $atts ) use ( &$mailed ) { $mailed[] = implode( ',', (array) $atts['to'] ); return true; };
+add_filter( 'pre_wp_mail', $all_up, 999, 2 );
+try {
+	vcap()->delivery->deliver( $both_voucher->id );
+} finally {
+	remove_filter( 'pre_wp_mail', $all_up, 999 );
+}
+vcap_compat_assert( null !== vcap()->vouchers->get( $both_voucher->id )->delivered_at && 1 === count( $mailed ) && str_contains( $mailed[0], 'both-recipient@' ), 'the retry mails only the missing recipient and then marks the voucher delivered' );
+
 // Simulate a large legacy MyISAM installation and verify upgrade preserves rows while restoring InnoDB.
 list( $legacy_voucher ) = vcap_compat_voucher();
 for ( $i = 0; $i < 1000; $i++ ) {

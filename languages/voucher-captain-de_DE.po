@@ -3782,3 +3782,12 @@ msgstr "Der importierte Code konnte im Code-Pool nicht mit diesem Gutschein verk
 
 msgid "Imported code %s could not be returned to the code pool."
 msgstr "Der importierte Code %s konnte nicht in den Code-Pool zurückgegeben werden."
+
+msgid "Not delivered to: %s (will be retried)."
+msgstr "Nicht zugestellt an: %s (wird erneut versucht)."
+
+msgid "Resend from the order: no email was sent."
+msgstr "Erneut senden aus der Bestellung: keine E-Mail versendet."
+
+msgid "Not sent (email disabled or no valid address): %s"
+msgstr "Nicht gesendet (E-Mail deaktiviert oder keine gültige Adresse): %s"
