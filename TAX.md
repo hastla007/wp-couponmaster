@@ -88,7 +88,12 @@ keinen zusätzlichen Rabatt. Einzweckgutscheine und Rabattaktionen bleiben Preis
 `vcap_voucher_pays_after_tax( $applies, $coupon, $voucher )`. Nachweis: `tests/tax-integration.php` Abschnitt 8
 (Warenkorb 120 € inkl. 20 % USt, Karte 60 € → Zahlbetrag 60 €, USt 20 €; Zahlungszeile −60 € ohne Steuer; Bestellung,
 Abbuchung genau 60 €, Storno gibt 60 € zurück; 200‑€‑Karte zahlt höchstens 120 €; Einzweckgutschein bleibt Rabatt).
-Hinweis: In den Warenkorb-/Kassenblöcken erscheint der Code mit 0 € Rabatt, die Zahlung als Gebührenzeile.
+Warenkorb-/Kassenblöcke: Die Store API liefert Zahlungen, Restguthaben und den Guthaben-Hinweis unter
+`extensions["voucher-captain"]` (`CartBlocks`); `assets/js/cart-blocks.js` zeigt je Gutschein die Zeile „Gutschein CODE
+−x“ und das Restguthaben unter den Rabatten (Slot `ExperimentalDiscountsMeta`), ergänzt den Coupon um „zahlt als
+Gutscheinzahlung (siehe unten)“ (Filter `coupons`) und zeigt „Guthaben verwenden“ (Slot `ExperimentalOrderMeta`).
+Die Rabattsumme des Blocks bleibt bei 0 (dafür bietet WooCommerce keinen Filter); in der Bestellung ist die Zahlung
+eine Gebührenzeile. Nachweis: `tests/blocks-integration.php`.
 
 **Was der Gutschein bezahlen darf** (`PaymentVouchers::payments_for()`): nur den Bruttobetrag (Zeilensumme nach
 anderen Rabatten + deren USt) der Positionen, auf die WooCommerce den Coupon anwenden würde, und davon nur die, die

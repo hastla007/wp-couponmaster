@@ -1,0 +1,96 @@
+/*
+ * Voucher Captain – cart and checkout blocks (no build step: plain script on the WordPress/WooCommerce globals).
+ * Shows what the classic cart prints with PHP hooks, from the Store API cart data extensions["voucher-captain"]:
+ * - one row "Voucher CODE −x" per voucher that pays after tax, and the remaining balances of applied gift cards
+ *   (slot ExperimentalDiscountsMeta, below the discounts of the totals);
+ * - a note on the coupon of such a voucher instead of a bare 0 discount (checkout filter "coupons");
+ * - the "use store credit" hint (slot ExperimentalOrderMeta).
+ * All texts come translated from PHP (VCAP\CartBlocks).
+ */
+( function ( wp, wc ) {
+	'use strict';
+	if ( ! wp || ! wp.element || ! wp.plugins || ! wc || ! wc.blocksCheckout ) {
+		return;
+	}
+	var el = wp.element.createElement;
+	var checkout = wc.blocksCheckout;
+	var NAMESPACE = 'voucher-captain';
+	var TotalsItem = checkout.TotalsItem || ( wc.blocksComponents && wc.blocksComponents.TotalsItem );
+	var TotalsWrapper = checkout.TotalsWrapper || ( wc.blocksComponents && wc.blocksComponents.TotalsWrapper );
+
+	function data( extensions ) {
+		return ( extensions && extensions[ NAMESPACE ] ) || {};
+	}
+
+	function row( key, className, label, formatted ) {
+		var value = el( 'span', { className: 'vcap-block-amount' }, formatted );
+		if ( TotalsItem ) {
+			return el( TotalsItem, { key: key, className: className, label: label, value: value } );
+		}
+		return el(
+			'div',
+			{ key: key, className: 'wc-block-components-totals-item ' + className },
+			el( 'span', { className: 'wc-block-components-totals-item__label' }, label ),
+			el( 'span', { className: 'wc-block-components-totals-item__value' }, value )
+		);
+	}
+
+	/** Voucher payments after tax and remaining balances. */
+	function Payments( props ) {
+		var d = data( props.extensions );
+		var rows = [];
+		( d.payments || [] ).forEach( function ( payment ) {
+			rows.push( row( 'payment-' + payment.code, 'vcap-voucher-payment', payment.label, payment.formatted ) );
+		} );
+		( d.balances || [] ).forEach( function ( balance ) {
+			rows.push( row( 'balance-' + balance.code, 'vcap-balance', balance.label, balance.formatted ) );
+		} );
+		if ( ! rows.length ) {
+			return null;
+		}
+		return TotalsWrapper ? el( TotalsWrapper, { className: 'vcap-voucher-payments' }, rows ) : el( 'div', { className: 'wc-block-components-totals-wrapper vcap-voucher-payments' }, rows );
+	}
+
+	/** "You have X store credit. Use store credit" (the link applies it, like in the classic cart). */
+	function StoreCreditHint( props ) {
+		var credit = data( props.extensions ).store_credit;
+		if ( ! credit || ! credit.url ) {
+			return null;
+		}
+		return el(
+			'div',
+			{ className: 'wc-block-components-totals-wrapper vcap-store-credit-hint' },
+			el( 'p', null, credit.text + ' ', el( 'a', { href: credit.url, className: 'vcap-use-store-credit' }, credit.link_label ) )
+		);
+	}
+
+	if ( checkout.registerCheckoutFilters ) {
+		checkout.registerCheckoutFilters( NAMESPACE, {
+			coupons: function ( coupons, extensions ) {
+				var d = data( extensions );
+				var paying = d.paying_coupons || [];
+				if ( ! paying.length || ! Array.isArray( coupons ) ) {
+					return coupons;
+				}
+				return coupons.map( function ( coupon ) {
+					if ( ! coupon || paying.indexOf( String( coupon.code ).toLowerCase() ) === -1 ) {
+						return coupon;
+					}
+					return Object.assign( {}, coupon, { label: ( coupon.label || coupon.code ) + ' · ' + d.coupon_note } );
+				} );
+			},
+		} );
+	}
+
+	wp.plugins.registerPlugin( 'voucher-captain-cart', {
+		scope: 'woocommerce-checkout',
+		render: function () {
+			return el(
+				wp.element.Fragment,
+				null,
+				checkout.ExperimentalDiscountsMeta ? el( checkout.ExperimentalDiscountsMeta, null, el( Payments ) ) : null,
+				checkout.ExperimentalOrderMeta ? el( checkout.ExperimentalOrderMeta, null, el( StoreCreditHint ) ) : null
+			);
+		},
+	} );
+} )( window.wp, window.wc );
