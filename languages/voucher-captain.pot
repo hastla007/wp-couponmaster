@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-13 11:06+0000\n"
+"POT-Creation-Date: 2026-11-13 20:07+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:75 src/API/V1/RedemptionService.php:117
@@ -617,7 +617,7 @@ msgstr ""
 msgid "Amount"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:191 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:246 src/StoreCredit.php:369
+#: src/Admin/ReportsAdmin.php:191 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:246 src/StoreCredit.php:370
 msgid "Balance after"
 msgstr ""
 
@@ -743,7 +743,7 @@ msgstr ""
 msgid "Request failed."
 msgstr ""
 
-#: src/Admin/Scanner.php:44 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:246 src/Privacy.php:71 src/StoreCredit.php:369
+#: src/Admin/Scanner.php:44 src/Admin/StoreCreditAdmin.php:60 src/Admin/VoucherAdmin.php:246 src/Privacy.php:71 src/StoreCredit.php:370
 msgid "Event"
 msgstr ""
 
@@ -787,7 +787,7 @@ msgstr ""
 msgid "Check in tickets automatically after scan"
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:36 src/Settings.php:425 src/StoreCredit.php:362 src/Voucher.php:80
+#: src/Admin/StoreCreditAdmin.php:36 src/Settings.php:425 src/StoreCredit.php:363 src/Voucher.php:80
 msgid "Store credit"
 msgstr ""
 
@@ -928,7 +928,7 @@ msgid "Void this voucher? It can no longer be redeemed; tickets it was exchanged
 msgstr ""
 
 #. translators: %s: voucher code
-#: src/Admin/VoucherAdmin.php:135 src/PaymentVouchers.php:80
+#: src/Admin/VoucherAdmin.php:135 src/PaymentVouchers.php:100 src/PaymentVouchers.php:127
 #, php-format
 msgid "Voucher %s"
 msgstr ""
@@ -3362,7 +3362,11 @@ msgstr ""
 msgid "The update package checksum did not match. Installation was stopped."
 msgstr ""
 
-#: src/PaymentVouchers.php:103
+#: src/PaymentVouchers.php:100
+msgid "Voucher payment"
+msgstr ""
+
+#: src/PaymentVouchers.php:178
 msgid "pays as voucher payment (see below)"
 msgstr ""
 
@@ -4495,37 +4499,37 @@ msgid "Store credit was added but the refund could not be recorded, and the cred
 msgstr ""
 
 #. translators: %s: amount
-#: src/StoreCredit.php:262
+#: src/StoreCredit.php:263
 #, php-format
 msgid "%s refunded as store credit."
 msgstr ""
 
 #. translators: 1: how the customer agreed (e.g. "By email"), 2: optional note
-#: src/StoreCredit.php:265
+#: src/StoreCredit.php:266
 #, php-format
 msgid "Customer consent to store credit: %1$s%2$s."
 msgstr ""
 
-#: src/StoreCredit.php:288
+#: src/StoreCredit.php:289
 msgid "This store credit belongs to another customer account."
 msgstr ""
 
-#: src/StoreCredit.php:291
+#: src/StoreCredit.php:292
 msgid "Store credit cannot be combined with discount codes."
 msgstr ""
 
 #. translators: 1: balance, 2: link
-#: src/StoreCredit.php:345
+#: src/StoreCredit.php:346
 #, php-format
 msgid "You have %1$s store credit. %2$s"
 msgstr ""
 
-#: src/StoreCredit.php:347 src/StoreCredit.php:367
+#: src/StoreCredit.php:348 src/StoreCredit.php:368
 msgid "Use store credit"
 msgstr ""
 
 #. translators: %s: coupon code
-#: src/StoreCredit.php:365
+#: src/StoreCredit.php:366
 #, php-format
 msgid "Code for the cart: %s"
 msgstr ""

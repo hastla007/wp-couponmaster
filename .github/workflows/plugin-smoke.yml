@@ -258,8 +258,10 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     env:
-      SERVER: ${{ github.workspace }}/../license-server
-      SHOP: ${{ github.workspace }}/../license-shop
+      # Absolute paths without "..": WordPress guesses its address from the path and would end up at
+      # https://licenses.test./license-server/ (the package host would no longer count as the server's own).
+      SERVER: /home/runner/wplc-server
+      SHOP: /home/runner/wplc-shop
     steps:
       - uses: actions/checkout@v5
       - name: Check out the license server (WP License Captain)
@@ -292,7 +294,7 @@ jobs:
         run: |
           mysql -h 127.0.0.1 -uroot -proot -e "CREATE DATABASE licenses; CREATE DATABASE shop;"
           php wp-cli.phar core download --path="$SERVER" --version=7.1.4
-          printf "\$_SERVER['HTTPS'] = 'on';\n" | php wp-cli.phar config create --path="$SERVER" --dbname=licenses --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check --extra-php
+          printf "\$_SERVER['HTTPS'] = 'on';\ndefine( 'WP_HOME', 'https://licenses.test' );\ndefine( 'WP_SITEURL', 'https://licenses.test' );\n" | php wp-cli.phar config create --path="$SERVER" --dbname=licenses --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check --extra-php
           php wp-cli.phar core install --path="$SERVER" --url=https://licenses.test --title="License server" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
           php wp-cli.phar --path="$SERVER" rewrite structure '/%postname%/'
           php wp-cli.phar --path="$SERVER" plugin install woocommerce --version=11.2.2 --activate
@@ -332,7 +334,7 @@ jobs:
       - name: New installation from the licence manager storage (download, SHA-256 against the manifest)
         run: |
           php wp-cli.phar core download --path="$SHOP" --version=7.1.4
-          printf "define( 'FS_METHOD', 'direct' );\n" | php wp-cli.phar config create --path="$SHOP" --dbname=shop --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check --extra-php
+          printf "define( 'FS_METHOD', 'direct' );\ndefine( 'WP_HOME', 'http://shop.test' );\ndefine( 'WP_SITEURL', 'http://shop.test' );\n" | php wp-cli.phar config create --path="$SHOP" --dbname=shop --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check --extra-php
           php wp-cli.phar core install --path="$SHOP" --url=http://shop.test --title="Shop" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
           php wp-cli.phar --path="$SHOP" plugin install woocommerce --version=11.2.2 --activate
           # WordPress verifies HTTPS against its own CA bundle: trust the test CA of licenses.test.

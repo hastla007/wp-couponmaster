@@ -4392,3 +4392,6 @@ msgstr "Die Gutscheingültigkeit ist nicht kürzer als die gesetzliche Frist"
 
 msgid "– how? (required) –"
 msgstr "– wie? (Pflichtfeld) –"
+
+msgid "Voucher payment"
+msgstr "Gutscheinzahlung"

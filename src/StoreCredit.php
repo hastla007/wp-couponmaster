@@ -253,7 +253,8 @@ final class StoreCredit {
 		);
 		$refund->update_meta_data( '_vcap_credit_consent', $record );
 		$refund->save_meta_data();
-		$consents   = (array) $order->get_meta( '_vcap_credit_consents' );
+		$consents   = $order->get_meta( '_vcap_credit_consents' );
+		$consents   = is_array( $consents ) ? $consents : array();
 		$consents[] = $record;
 		$order->update_meta_data( '_vcap_credit_consents', $consents );
 		$order->save_meta_data();
