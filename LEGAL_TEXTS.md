@@ -51,12 +51,12 @@ dass die Vorlage aktuell ist und jeder Text noch existiert). Prüfung durch die 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) | Fundstelle | Freigabe |
 |---|---|---|---|---|
 | Valid until %s | Gültig bis %s | Gültig bis %s | templates/emails/plain/voucher.php:29 templates/emails/voucher.php:36 | ☐ |
-| Valid until: %s | Gültig bis: %s | Gültig bis: %s | src/Downloads.php:277 | ☐ |
-| unlimited | unbegrenzt | unbegrenzt | src/Downloads.php:277 src/Placeholders.php:86 | ☐ |
-| no expiry | unbegrenzt | unbegrenzt | src/Emails/BonusEmail.php:68 | ☐ |
+| Valid until: %s | Gültig bis: %s | Gültig bis: %s | src/Downloads.php:316 | ☐ |
+| unlimited | unbegrenzt | unbegrenzt | src/Downloads.php:316 src/Placeholders.php:86 | ☐ |
+| no expiry | unbegrenzt | unbegrenzt | src/Emails/BonusEmail.php:78 | ☐ |
 | Your voucher from {site_title} expires on {expiry_date} | Ihr Gutschein von {site_title} läuft am {expiry_date} ab | Ihr Gutschein von {site_title} läuft am {expiry_date} ab | src/Emails/ExpiryReminderEmail.php:24 | ☐ |
 | Your voucher {coupon_code} is valid until {expiry_date}. Remaining value: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | src/Emails/ExpiryReminderEmail.php:32 | ☐ |
-| This voucher has expired. | Dieser Gutschein ist abgelaufen. | Dieser Gutschein ist abgelaufen. | src/API/V1/RedemptionService.php:635 src/CouponManager.php:848 | ☐ |
+| This voucher has expired. | Dieser Gutschein ist abgelaufen. | Dieser Gutschein ist abgelaufen. | src/API/V1/RedemptionService.php:642 src/CouponManager.php:848 | ☐ |
 
 ### Übertragbarkeit
 
@@ -70,16 +70,16 @@ dass die Vorlage aktuell ist und jeder Text noch existiert). Prüfung durch die 
 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) | Fundstelle | Freigabe |
 |---|---|---|---|---|
-| Balance: %s | Guthaben: %s | Guthaben: %s | src/Downloads.php:271 templates/myaccount/vouchers-table.php:45 | ☐ |
+| Balance: %s | Guthaben: %s | Guthaben: %s | src/Downloads.php:310 templates/myaccount/vouchers-table.php:45 | ☐ |
 | Remaining balance | Restguthaben | Restguthaben | src/Placeholders.php:20 | ☐ |
 
 ### Erstattung und Widerruf
 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) | Fundstelle | Freigabe |
 |---|---|---|---|---|
-| Vouchers from this order were already used (%1$s, value used: %2$s). At most %3$s can be refunded; the unused vouchers are voided. | Gutscheine aus dieser Bestellung wurden bereits verwendet (%1$s, verbrauchter Wert: %2$s). Erstattet werden können höchstens %3$s; die unverbrauchten Gutscheine werden entwertet. | Gutscheine aus dieser Bestellung wurden bereits verwendet (%1$s, verbrauchter Wert: %2$s). Erstattet werden können höchstens %3$s; die unverbrauchten Gutscheine werden entwertet. | src/Issuer.php:361 | ☐ |
+| Vouchers from this order were already used (%1$s, value used: %2$s). At most %3$s can be refunded; the unused vouchers are voided. | Gutscheine aus dieser Bestellung wurden bereits verwendet (%1$s, verbrauchter Wert: %2$s). Erstattet werden können höchstens %3$s; die unverbrauchten Gutscheine werden entwertet. | Gutscheine aus dieser Bestellung wurden bereits verwendet (%1$s, verbrauchter Wert: %2$s). Erstattet werden können höchstens %3$s; die unverbrauchten Gutscheine werden entwertet. | src/Issuer.php:373 | ☐ |
 | %s refunded as store credit. | %s als Guthaben erstattet. | %s als Guthaben erstattet. | src/StoreCredit.php:263 | ☐ |
-| This voucher has been cancelled. | Dieser Gutschein wurde storniert. | Dieser Gutschein wurde storniert. | src/API/V1/RedemptionService.php:531 src/API/V1/RedemptionService.php:622 | ☐ |
+| This voucher has been cancelled. | Dieser Gutschein wurde storniert. | Dieser Gutschein wurde storniert. | src/API/V1/RedemptionService.php:538 src/API/V1/RedemptionService.php:629 | ☐ |
 
 ### Einlösung
 

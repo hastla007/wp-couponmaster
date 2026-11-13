@@ -4243,9 +4243,6 @@ msgstr "Es sind keine geprüften Offline-Lizenzrechte vorhanden."
 msgid "Paid through"
 msgstr "Bezahlt bis"
 
-msgid "Sites"
-msgstr "Websites"
-
 msgid "The license key is used once for activation and is not stored by this plugin. Activation credentials are stored locally without autoloading."
 msgstr "Der Lizenzschlüssel wird nur einmal zur Aktivierung verwendet und nicht gespeichert. Die Aktivierungsdaten werden lokal und ohne Autoload gespeichert."
 
@@ -4293,9 +4290,6 @@ msgstr "Diese Installation ist noch nicht aktiviert."
 
 msgid "This site was deactivated."
 msgstr "Diese Website wurde deaktiviert."
-
-msgid "Voucher Captain premium features are switched off until the license is active: %s."
-msgstr "Premium-Funktionen von Voucher Captain sind ausgeschaltet, bis die Lizenz aktiv ist: %s."
 
 msgid "You are not allowed to manage this license."
 msgstr "Sie dürfen diese Lizenz nicht verwalten."
@@ -4395,3 +4389,212 @@ msgstr "– wie? (Pflichtfeld) –"
 
 msgid "Voucher payment"
 msgstr "Gutscheinzahlung"
+
+msgid "Value from this order was already spent (%1$s, value used: %2$s). At most %3$s can be refunded; unused vouchers are voided and unspent top-ups are taken back from the gift card."
+msgstr "Wert aus dieser Bestellung wurde bereits verbraucht (%1$s, verbrauchter Wert: %2$s). Erstattet werden können höchstens %3$s; unverbrauchte Gutscheine werden entwertet und nicht verbrauchte Aufladungen von der Geschenkkarte zurückgebucht."
+
+msgid "The gift card top-up of this order was already spent from the card (%1$s). At most %2$s can be refunded now."
+msgstr "Die Aufladung aus dieser Bestellung wurde bereits von der Geschenkkarte verbraucht (%1$s). Erstattet werden können jetzt höchstens %2$s."
+
+msgid "Please enter the code of the gift card to top up."
+msgstr "Bitte geben Sie den Code der aufzuladenden Geschenkkarte ein."
+
+msgid "\"%s\" needs the code of the gift card to top up. Please remove it from the cart and add it again on the product page."
+msgstr "„%s“ benötigt den Code der aufzuladenden Geschenkkarte. Bitte entfernen Sie den Artikel aus dem Warenkorb und legen Sie ihn auf der Produktseite erneut hinein."
+
+msgid "The line \"%s\" has no gift card code, so no new gift card was issued for it."
+msgstr "Die Position „%s“ hat keinen Geschenkkarten-Code, daher wurde dafür keine neue Geschenkkarte ausgestellt."
+
+msgid "%1$d of %2$d"
+msgstr "%1$d von %2$d"
+
+msgid "%1$s (expected: %2$s)"
+msgstr "%1$s (erwartet: %2$s)"
+
+msgid "%s is included in Voucher Captain Premium."
+msgstr "%s ist in Voucher Captain Premium enthalten."
+
+msgid "%s needs an active Voucher Captain license."
+msgstr "%s benötigt eine aktive Voucher-Captain-Lizenz."
+
+msgid "Activation and the twice-daily license check send this website's address, an installation ID and the WordPress, PHP and Voucher Captain versions to the license server."
+msgstr "Die Aktivierung und die zweimal tägliche Lizenzprüfung übermitteln die Adresse dieser Website, eine Installations-ID sowie die Versionen von WordPress, PHP und Voucher Captain an den Lizenzserver."
+
+msgid "Database setup error"
+msgstr "Fehler bei der Datenbankeinrichtung"
+
+msgid "Database version"
+msgstr "Datenbankversion"
+
+msgid "Deactivate the license on this website? Premium features are switched off until the license is activated again. Vouchers sold earlier keep working."
+msgstr "Lizenz auf dieser Website deaktivieren? Premium-Funktionen sind ausgeschaltet, bis die Lizenz wieder aktiviert wird. Bereits verkaufte Gutscheine funktionieren weiter."
+
+msgid "Development (all features)"
+msgstr "Entwicklung (alle Funktionen)"
+
+msgid "Edition"
+msgstr "Edition"
+
+msgid "Gift card top-up"
+msgstr "Geschenkkarten aufladen"
+
+msgid "Gift cards, vouchers and store credit for WooCommerce. Premium updates are delivered by the license server after the license check."
+msgstr "Geschenkkarten, Gutscheine und Kundenguthaben für WooCommerce. Premium-Updates liefert der Lizenzserver nach der Lizenzprüfung."
+
+msgid "Last checked"
+msgstr "Zuletzt geprüft"
+
+msgid "License server"
+msgstr "Lizenzserver"
+
+msgid "License snapshot age"
+msgstr "Alter des Lizenz-Snapshots"
+
+msgid "License status"
+msgstr "Lizenzstatus"
+
+msgid "Locked premium features"
+msgstr "Gesperrte Premium-Funktionen"
+
+msgid "Manage license"
+msgstr "Lizenz verwalten"
+
+msgid "No end date"
+msgstr "Kein Enddatum"
+
+msgid "No release notes are available for this version."
+msgstr "Für diese Version sind keine Versionshinweise verfügbar."
+
+msgid "No valid license snapshot (premium features locked)"
+msgstr "Kein gültiger Lizenz-Snapshot (Premium-Funktionen gesperrt)"
+
+msgid "Not activated"
+msgstr "Nicht aktiviert"
+
+msgid "Not active"
+msgstr "Nicht aktiv"
+
+msgid "Off"
+msgstr "Aus"
+
+msgid "On"
+msgstr "Ein"
+
+msgid "Payment overdue"
+msgstr "Zahlung überfällig"
+
+msgid "Premium"
+msgstr "Premium"
+
+msgid "Promotions (rule-based discounts and bonus vouchers)"
+msgstr "Aktionen (regelbasierte Rabatte und Bonusgutscheine)"
+
+msgid "Reports, liability and booking journal"
+msgstr "Berichte, Verbindlichkeiten und Buchungsjournal"
+
+msgid "Revoked"
+msgstr "Widerrufen"
+
+msgid "Suspended"
+msgstr "Gesperrt"
+
+msgid "The license server is fixed in this build."
+msgstr "Der Lizenzserver ist in dieser Version fest eingestellt."
+
+msgid "Unknown"
+msgstr "Unbekannt"
+
+msgid "Version"
+msgstr "Version"
+
+msgid "Voucher Captain premium features are switched off until the license is active: %s. Vouchers, top-ups and rewards sold earlier keep working."
+msgstr "Premium-Funktionen von Voucher Captain sind ausgeschaltet, bis die Lizenz aktiv ist: %s. Bereits verkaufte Gutscheine, Aufladungen und Prämien funktionieren weiter."
+
+msgid "WP Pass Captain integration (ticket vouchers, shared scanner)"
+msgstr "WP-Pass-Captain-Integration (Ticketgutscheine, gemeinsamer Scanner)"
+
+msgid "Websites"
+msgstr "Websites"
+
+msgid "included"
+msgstr "enthalten"
+
+msgid "not included"
+msgstr "nicht enthalten"
+
+msgid "Sell personalised PDF vouchers, gift cards and store credit with WooCommerce: visual PDF designer, recipient fields, scheduled delivery, balance-tracked gift cards, code import and redemption in the shop, by API or in WP Pass Captain."
+msgstr "Verkaufen Sie personalisierte PDF-Gutscheine, Geschenkkarten und Kundenguthaben mit WooCommerce: visueller PDF-Designer, Empfängerfelder, zeitgesteuerter Versand, Geschenkkarten mit Restwert, Code-Import und Einlösung im Shop, per API oder in WP Pass Captain."
+
+msgid "For security reasons the full codes are shown only in the customer account of the buyer and in the voucher email."
+msgstr "Aus Sicherheitsgründen werden die vollständigen Codes nur im Kundenkonto des Käufers und in der Gutschein-E-Mail angezeigt."
+
+msgid "Codes too easy to guess skipped: %d"
+msgstr "Zu leicht erratbare Codes übersprungen: %d"
+
+msgid "Codes of vouchers with a value must have at least about 2^50 combinations (e.g. 10 letters and digits or 16 digits besides a common prefix), otherwise they can be found by trying. Use longer codes, or tick \"Accept codes that are easy to guess\" if the codes are protected otherwise."
+msgstr "Codes von Gutscheinen mit Wert brauchen mindestens etwa 2^50 Kombinationen (z. B. 10 Buchstaben und Ziffern oder 16 Ziffern neben einem gemeinsamen Präfix), sonst lassen sie sich durch Ausprobieren finden. Verwenden Sie längere Codes oder aktivieren Sie „Leicht erratbare Codes akzeptieren“, wenn die Codes anderweitig geschützt sind."
+
+msgid "Show codes that are too easy to guess"
+msgstr "Zu leicht erratbare Codes anzeigen"
+
+msgid "Warning: %d imported code is easy to guess."
+msgid_plural "Warning: %d imported codes are easy to guess."
+msgstr[0] "Achtung: %d importierter Code ist leicht zu erraten."
+msgstr[1] "Achtung: %d importierte Codes sind leicht zu erraten."
+
+msgid "Accept codes that are easy to guess (not recommended)"
+msgstr "Leicht erratbare Codes akzeptieren (nicht empfohlen)"
+
+msgid "Codes with fewer than about 2^50 combinations (e.g. 8 digits) are skipped by default: they could be found by trying."
+msgstr "Codes mit weniger als etwa 2^50 Kombinationen (z. B. 8 Ziffern) werden standardmäßig übersprungen, da sie sich durch Ausprobieren finden ließen."
+
+msgid "Voucher codes are made at least as long as needed to be safe from guessing (about 2^50 combinations): 10 letters and digits, 11 letters or 16 digits."
+msgstr "Gutscheincodes werden mindestens so lang erzeugt, dass sie nicht erraten werden können (etwa 2^50 Kombinationen): 10 Buchstaben und Ziffern, 11 Buchstaben oder 16 Ziffern."
+
+msgid "This redemption target is managed by an integration."
+msgstr "Dieses Einlöseziel wird von einer Integration verwaltet."
+
+msgid "Vouchers cannot be redeemed for this target here."
+msgstr "Gutscheine können für dieses Ziel hier nicht eingelöst werden."
+
+msgid "https://github.com/hastla007/wp-couponmaster"
+msgstr "https://github.com/hastla007/wp-couponmaster"
+
+msgid "CouponMaster"
+msgstr "CouponMaster"
+
+msgid "Referral code"
+msgstr "Empfehlungscode"
+
+msgid "Friends who ordered"
+msgstr "Geworbene Freunde mit Bestellung"
+
+msgid "Amount or code"
+msgstr "Betrag oder Code"
+
+msgid "Withdrawn"
+msgstr "Zurückgenommen"
+
+msgid "No"
+msgstr "Nein"
+
+msgid "Vouchers, gift cards and store credit keep a history of every change of their balance (issue, payment in an order, refund, top-up, manual correction) with the date, the amount, the order number and, when a voucher is used by another customer, that customer's email address. Store credit is linked to your customer account. We keep this history as long as the voucher or credit can be used and as long as we are required to keep accounting records."
+msgstr "Gutscheine, Geschenkkarten und Guthaben führen einen Verlauf jeder Änderung ihres Werts (Ausstellung, Zahlung in einer Bestellung, Erstattung, Aufladung, manuelle Korrektur) mit Datum, Betrag, Bestellnummer und – wenn ein Gutschein von einer anderen Person eingelöst wird – deren E-Mail-Adresse. Guthaben ist mit Ihrem Kundenkonto verknüpft. Wir bewahren diesen Verlauf auf, solange der Gutschein oder das Guthaben eingelöst werden kann und solange wir zur Aufbewahrung von Buchhaltungsunterlagen verpflichtet sind."
+
+msgid "Refer a friend: if you take part, we store your personal referral code, how many friends have ordered with it and which rewards you received. A friend's order that used your code is linked to your customer account so that we can give you the reward and take it back if the order is cancelled or refunded."
+msgstr "Freunde werben: Wenn Sie teilnehmen, speichern wir Ihren persönlichen Empfehlungscode, wie viele Freunde damit bestellt haben und welche Prämien Sie erhalten haben. Die Bestellung eines Freundes, in der Ihr Code verwendet wurde, wird mit Ihrem Kundenkonto verknüpft, damit wir Ihnen die Prämie gutschreiben und sie zurücknehmen können, wenn die Bestellung storniert oder erstattet wird."
+
+msgid "When a voucher is redeemed outside the shop checkout, for example by a booking or ticket system on this website that is connected to our vouchers, we record the redemption with the connected service, the amount, the date, your customer account and the details that service passes on (for example its order or booking number)."
+msgstr "Wird ein Gutschein außerhalb der Shop-Kasse eingelöst, zum Beispiel über ein mit unseren Gutscheinen verbundenes Buchungs- oder Ticketsystem auf dieser Website, speichern wir die Einlösung mit dem angebundenen Dienst, dem Betrag, dem Datum, Ihrem Kundenkonto und den Angaben, die dieser Dienst übermittelt (zum Beispiel seine Bestell- oder Buchungsnummer)."
+
+msgid "Tickets: when you exchange a ticket voucher for tickets or pay for tickets with a gift card, the voucher code, the amount, your name and email address and the attendee names you enter are passed to the ticket system on this website (WP Pass Captain), which issues and sends the tickets. Its privacy information applies to the tickets."
+msgstr "Tickets: Wenn Sie einen Ticketgutschein gegen Tickets eintauschen oder Tickets mit einer Geschenkkarte bezahlen, werden der Gutscheincode, der Betrag, Ihr Name und Ihre E-Mail-Adresse sowie die von Ihnen eingegebenen Namen der Teilnehmenden an das Ticketsystem auf dieser Website (WP Pass Captain) übergeben, das die Tickets ausstellt und versendet. Für die Tickets gelten dessen Datenschutzhinweise."
+
+msgid "At the entrance or the counter, our staff may scan the code of your voucher or ticket. We record the time, the staff member and the result (redeemed, checked in or refused) in the voucher history."
+msgstr "Am Einlass oder an der Kasse kann unser Personal den Code Ihres Gutscheins oder Tickets scannen. Wir speichern die Uhrzeit, die Mitarbeiterin bzw. den Mitarbeiter und das Ergebnis (eingelöst, eingecheckt oder abgelehnt) im Verlauf des Gutscheins."
+
+msgid "To protect voucher codes against guessing, we count failed code entries per visitor for a short time window (at most 15 minutes). For this we store the counter under a hashed (pseudonymised) form of your IP address, never the address itself; the counters are deleted automatically after the window."
+msgstr "Zum Schutz der Gutscheincodes vor Erraten zählen wir fehlgeschlagene Code-Eingaben je Besucher für ein kurzes Zeitfenster (höchstens 15 Minuten). Dazu speichern wir den Zähler unter einem gehashten (pseudonymisierten) Wert Ihrer IP-Adresse, nie unter der Adresse selbst; die Zähler werden nach Ablauf des Zeitfensters automatisch gelöscht."
+
+msgid "License check (premium edition): to check the license and offer updates, this website sends its address (URL), the WordPress, PHP and plugin versions, the license key and a random installation ID to the license server of the plugin vendor when the license is activated, about twice a day and when updates are checked. No data about customers or orders is sent."
+msgstr "Lizenzprüfung (Premium-Edition): Um die Lizenz zu prüfen und Updates anzubieten, sendet diese Website ihre Adresse (URL), die Versionen von WordPress, PHP und dem Plugin, den Lizenzschlüssel und eine zufällige Installations-ID an den Lizenzserver des Plugin-Anbieters – bei der Aktivierung der Lizenz, etwa zweimal täglich und bei der Suche nach Updates. Daten über Kundinnen, Kunden oder Bestellungen werden nicht übertragen."
