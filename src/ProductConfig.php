@@ -202,14 +202,15 @@ final class ProductConfig {
 	 *
 	 * @return array<string, array{product:string, statutory:string}> country => both expiry dates (UTC) for a sale today
 	 */
-	public static function short_validity( $product ): array {
+	public static function short_validity( $product, ?array $selling = null ): array {
 		$product = $product instanceof \WC_Product ? $product : wc_get_product( $product );
 		if ( ! $product || ! self::is_voucher( $product ) ) {
 			return array();
 		}
 		$config    = self::get( $product );
 		$base      = strtoupper( strtok( (string) get_option( 'woocommerce_default_country', '' ), ':' ) ?: '' );
-		$countries = array_unique( array_filter( array_merge( array( $base ), array_keys( Markets::readiness() ) ) ) );
+		// $selling: the EU selling countries when the caller checks many products (array_keys( Markets::readiness() )).
+		$countries = array_unique( array_filter( array_merge( array( $base ), $selling ?? array_keys( Markets::readiness() ) ) ) );
 		$now       = time();
 		$short     = array();
 		foreach ( $countries as $country ) {
