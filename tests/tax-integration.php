@@ -97,7 +97,7 @@ if ( interface_exists( 'PassCaptain\\Integrations\\Vouchers\\ProviderInterface' 
 	$quote = $provider->quote( array( 'code' => vcap_tax_voucher( 'voucher', 'single', 'fixed_cart', $single->get_id() )->code, 'currency' => get_woocommerce_currency(), 'amount_minor' => 80 * $minor, 'order_reference' => 'tax-test' ) );
 	vcap_tax_assert( is_array( $quote ) && 'single' === $quote['treatment'] && 'single' === $quote['purpose'], 'Pass Captain gets treatment "single" / purpose "single" for a single-purpose voucher' );
 	$quote = $provider->quote( array( 'code' => vcap_tax_voucher( 'voucher', 'single', 'fixed_cart' )->code, 'currency' => get_woocommerce_currency(), 'amount_minor' => 80 * $minor, 'order_reference' => 'tax-test' ) );
-	vcap_tax_assert( is_array( $quote ) && 'discount' === $quote['treatment'] && 'single' === $quote['purpose'], 'Pass Captain gets treatment "discount" (purpose "single": reduces price and VAT) for a promotion code' );
+	vcap_tax_assert( is_array( $quote ) && 'discount' === $quote['treatment'] && 'discount' === $quote['purpose'] && ! isset( $quote['sale_tax'] ), 'Pass Captain gets purpose "discount" for a promotion code (reduces price and VAT, never labelled "VAT already charged at sale")' );
 } else {
 	echo "SKIP: Pass Captain is not installed – quote checks run in the pass-captain job\n";
 }
@@ -140,6 +140,12 @@ $line2 = VCAP\Issuer::line_data( current( $buy2->get_items() ) );
 vcap_tax_assert( abs( 20.0 - (float) $buy2->get_total_tax() ) < 0.01 && 'taxable' === ( $line2['tax_status'] ?? '' ) && abs( 20.0 - (float) $line2['total_tax'] ) < 0.01 && true === $line2['prices_include_tax'], 'a single-purpose voucher sold as taxable charges VAT at sale (20 of 120) and records it' );
 $spv = vcap()->vouchers->for_order( $buy2->get_id() );
 vcap_tax_assert( 1 === count( $spv ) && abs( 120.0 - (float) $spv[0]->initial_amount ) < 0.001, 'in a tax-inclusive shop the voucher value is the gross price (120)' );
+vcap_tax_assert( 2000 === ( $line2['tax_rate_bp'] ?? null ) && 'AT' === ( $line2['tax_country'] ?? null ), 'the line snapshot records the VAT of the sale: 20 % (2000 bp), taxed in AT', $line2 );
+vcap_tax_assert( array( 'rate_bp' => 2000, 'country' => 'AT' ) === ProductConfig::sale_tax( $spv[0] ), 'sale_tax() of the sold single-purpose voucher: 2000 bp in AT' );
+if ( interface_exists( 'PassCaptain\\Integrations\\Vouchers\\ProviderInterface' ) ) {
+	$quote = ( new VCAP\Compat\PassCaptainProvider( vcap()->redemptions, vcap()->vouchers ) )->quote( array( 'code' => $spv[0]->code, 'currency' => get_woocommerce_currency(), 'amount_minor' => 50 * 10 ** wc_get_price_decimals(), 'order_reference' => 'tax-sale-tax' ) );
+	vcap_tax_assert( is_array( $quote ) && 'single' === $quote['purpose'] && array( 'rate_bp' => 2000, 'country' => 'AT' ) === ( $quote['sale_tax'] ?? null ), 'Pass Captain gets the rate and country of the sale with a single-purpose voucher', $quote );
+}
 
 /* ---- 5. Redemption in the WooCommerce cart (current behaviour: price reduction) --------------------- */
 

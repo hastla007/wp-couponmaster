@@ -196,6 +196,63 @@ final class ProductConfig {
 	}
 
 	/**
+	 * Pass Captain's term for the VAT treatment: "multi" (multi-purpose voucher, means of payment), "single"
+	 * (single-purpose voucher, VAT was charged at the sale) or "discount" (promotion code: a plain price reduction,
+	 * no VAT was charged in advance – never labelled as single-purpose voucher).
+	 */
+	public static function purpose( Voucher $voucher ): string {
+		$treatment = self::tax_treatment( $voucher );
+		return 'payment' === $treatment ? 'multi' : ( 'single' === $treatment ? 'single' : 'discount' );
+	}
+
+	/**
+	 * VAT of the sale of a voucher: rate in basis points (1900 = 19 %) and the country whose VAT was charged. From
+	 * the line snapshot (Issuer::LINE_META), for older vouchers from the sale order line; null without a sale line.
+	 *
+	 * @return array{rate_bp:int, country:string}|null
+	 */
+	public static function sale_tax( Voucher $voucher ): ?array {
+		$order = $voucher->order();
+		$item  = $order && $voucher->order_item_id ? $order->get_item( $voucher->order_item_id ) : null;
+		if ( ! $item instanceof \WC_Order_Item_Product ) {
+			return null;
+		}
+		$line = Issuer::line_data( $item );
+		if ( isset( $line['tax_rate_bp'], $line['tax_country'] ) ) {
+			return array( 'rate_bp' => (int) $line['tax_rate_bp'], 'country' => (string) $line['tax_country'] );
+		}
+		return self::line_tax( $order, $item );
+	}
+
+	/**
+	 * VAT rate (basis points) and taxing country of an order line: the country of the tax rate WooCommerce applied,
+	 * else the order's tax location ("Calculate tax based on": billing, shipping or shop address).
+	 *
+	 * @return array{rate_bp:int, country:string}
+	 */
+	public static function line_tax( \WC_Order $order, \WC_Order_Item_Product $item ): array {
+		$net     = (float) $item->get_subtotal();
+		$rate_bp = $net > 0 ? (int) round( (float) $item->get_subtotal_tax() / $net * 10000 ) : 0;
+		$country = '';
+		$applied = array_keys( array_filter( (array) ( $item->get_taxes()['subtotal'] ?? array() ), static fn( $v ) => '' !== (string) $v && 0.0 !== (float) $v ) );
+		foreach ( $order->get_items( 'tax' ) as $tax ) {
+			if ( in_array( (int) $tax->get_rate_id(), array_map( 'intval', $applied ), true ) && class_exists( '\WC_Tax' ) ) {
+				$country = strtoupper( (string) ( \WC_Tax::_get_tax_rate( (int) $tax->get_rate_id() )['tax_rate_country'] ?? '' ) );
+				if ( '' !== $country ) {
+					break;
+				}
+			}
+		}
+		if ( '' === $country ) {
+			$based_on = (string) get_option( 'woocommerce_tax_based_on', 'shipping' );
+			$base     = strtoupper( strtok( (string) get_option( 'woocommerce_default_country', '' ), ':' ) ?: '' );
+			$country  = 'base' === $based_on ? $base : strtoupper( (string) ( 'shipping' === $based_on && $order->get_shipping_country() ? $order->get_shipping_country() : $order->get_billing_country() ) );
+			$country  = '' !== $country ? $country : $base;
+		}
+		return array( 'rate_bp' => $rate_bp, 'country' => $country );
+	}
+
+	/**
 	 * Global default for products without their own expiry: "statutory" (by the shop's country) or "days"
 	 * (vcap_default_expiry_days). Shops that saved a number of days before this setting existed keep it.
 	 */

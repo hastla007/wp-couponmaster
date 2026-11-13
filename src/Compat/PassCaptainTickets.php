@@ -4,6 +4,7 @@ namespace VCAP\Compat;
 use VCAP\API\V1\RedemptionService;
 use VCAP\Channels;
 use VCAP\Issuer;
+use VCAP\ProductConfig;
 use VCAP\Voucher;
 use VCAP\VoucherRepository;
 
@@ -609,6 +610,9 @@ final class PassCaptainTickets {
 				'voucher_id'     => $voucher->id,
 				'redemption_key' => $key,
 				'code_hint'      => substr( $voucher->code, -4 ),
+				// VAT treatment as in the checkout quote; single-purpose vouchers with the VAT of their sale.
+				'purpose'        => ProductConfig::purpose( $voucher ),
+				'sale_tax'       => 'single' === ProductConfig::purpose( $voucher ) ? ProductConfig::sale_tax( $voucher ) : null,
 			),
 			self::exchange_key( $voucher, $attempt ),
 			array_filter(

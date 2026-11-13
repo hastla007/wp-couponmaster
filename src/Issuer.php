@@ -104,8 +104,9 @@ final class Issuer {
 		if ( is_array( $item->get_meta( self::LINE_META ) ) ) {
 			return;
 		}
-		$product = $item->get_product();
-		$core    = array(
+		$product  = $item->get_product();
+		$sale_tax = ProductConfig::line_tax( $order, $item );
+		$core     = array(
 			'version'            => 1,
 			'voucher_type'       => (string) $config['type'],
 			'discount_type'      => (string) $config['discount_type'],
@@ -123,6 +124,9 @@ final class Issuer {
 			'tax_class'          => (string) $item->get_tax_class(),
 			'tax_status'         => $product ? (string) $product->get_tax_status() : '',
 			'prices_include_tax' => (bool) $order->get_prices_include_tax(),
+			// VAT of the sale (single-purpose vouchers: Pass Captain compares it with the goods it is redeemed for).
+			'tax_rate_bp'        => $sale_tax['rate_bp'],
+			'tax_country'        => $sale_tax['country'],
 			// Kept as configured, even for channels whose plugin is not active right now (never widen access).
 			'channels'           => array_values( array_filter( array_map( 'sanitize_key', (array) ( $config['channels'] ?? array() ) ) ) ),
 			'recorded_at'        => time(),

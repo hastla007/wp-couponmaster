@@ -69,7 +69,8 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 			return new \WP_Error( 'vcap_no_value', __( 'This voucher has no value left.', 'voucher-captain' ) );
 		}
 		$treatment = $voucher ? ProductConfig::tax_treatment( $voucher ) : 'discount';
-		return array(
+		$purpose   = $voucher ? ProductConfig::purpose( $voucher ) : 'discount';
+		return array_filter( array(
 			'version'      => 1,
 			'code'         => (string) $check['code'],
 			'currency'     => $currency,
@@ -78,11 +79,15 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 			'balance'      => null !== $check['balance'],
 			// VAT treatment for the ticket checkout: "payment" keeps the VAT, "single"/"discount" reduce it.
 			'treatment'    => $treatment,
-			// Pass Captain's terms: multi-purpose voucher (means of payment) or single-purpose (reduces price and VAT).
-			'purpose'      => 'payment' === $treatment ? 'multi' : 'single',
+			// Pass Captain's terms: multi-purpose voucher (means of payment), single-purpose voucher (VAT charged at the
+			// sale: reduces price and VAT) or promotion code ("discount": reduces price and VAT, nothing charged before).
+			'purpose'      => $purpose,
+			// Single-purpose only: VAT rate and country of the sale – Pass Captain treats the voucher as multi-purpose
+			// when the tickets carry another rate or are taxed in another country.
+			'sale_tax'     => 'single' === $purpose && $voucher ? ProductConfig::sale_tax( $voucher ) : null,
 			'target'       => $target,
 			'email'        => $email,
-		);
+		), static fn( $v ) => null !== $v );
 	}
 
 	/**

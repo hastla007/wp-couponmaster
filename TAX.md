@@ -3,7 +3,7 @@
 **Status:** Entwurf zur Prüfung durch die Steuerberatung – **nicht freigegeben**.
 **Bezug:** TODO.md, P1 „Steuerliche Zuordnung, Produkttexte und Erstattungsfolgen je Gutscheinart mit Steuerberatung
 freigeben lassen“. Folgepunkte, die von den Antworten abhängen: TODO.md Abschnitt „Entscheidungen Steuer“
-(Einzweck-Satz/Land an Pass Captain, Steuerstatus prüfen, Mehrzweck nach Steuer verrechnen).
+(Steuerstatus prüfen, Mehrzweck nach Steuer verrechnen; Einzweck-Satz/Land an Pass Captain: Abschnitt 4.2).
 **Rechtsgrundlage, auf die sich der Code bezieht:** Richtlinie (EU) 2016/1065 (Gutschein-Richtlinie), umgesetzt in
 DE § 3 Abs. 13–15 UStG, AT § 4 Abs. 3a UStG 1994.
 
@@ -90,11 +90,18 @@ Pass Captain fragt den Gutschein über den Provider-Vertrag an und erhält `trea
 | `treatment` | `purpose` an Pass Captain | Verhalten in Pass Captain |
 |---|---|---|
 | `payment` | `multi` | Gutschein bezahlt den Bruttobetrag; USt auf die volle Ticketleistung |
-| `single` | `single` | Gutschein mindert Preis und USt |
-| `discount` | `single` | wie `single` (Preisnachlass) |
+| `single` | `single` + `sale_tax` | Gutschein mindert Preis und USt – nur wenn Satz und Land der Tickets dem Verkauf entsprechen, sonst wie `multi` |
+| `discount` | `discount` | Preisnachlass (mindert Preis und USt); Rechnung: „Eingelöster Rabattcode …“, **keine** Aussage „USt bereits beim Verkauf abgerechnet“ |
 
-Offen: Pass Captain erhält heute weder Steuersatz noch Land des Gutscheinverkaufs; ein Einzweckgutschein mit
-abweichendem Satz/Land kann daher nicht erkannt werden (Frage F3, TODO.md „Einzweckgutschein: Steuersatz und Land …“).
+`sale_tax` = Umsatzsteuer des Gutscheinverkaufs: `rate_bp` (Basispunkte, 2000 = 20 %) und `country` (Land des
+angewandten Steuersatzes, sonst Steuerort der Bestellung nach „Steuer berechnen auf Basis von“). Festgehalten im
+Zeilen-Snapshot (`tax_rate_bp`, `tax_country`), für ältere Gutscheine aus der Verkaufsposition berechnet
+(`ProductConfig::sale_tax()`). Pass Captain vergleicht mit dem Satz jeder Ticketposition und seinem Steuerland
+(`seller_country`); bei Abweichung gilt der Gutschein als Mehrzweckgutschein, die Bestellung vermerkt
+`purpose_changed` (`single_rate`/`single_country`). Gleiches gilt beim Tausch von Ticketgutscheinen.
+Nachweis: `tests/tax-integration.php` („the line snapshot records the VAT of the sale …“, „Pass Captain gets the rate
+and country of the sale …“, „purpose "discount" for a promotion code“) und in WP Pass Captain
+`tests/integration/modules/zz_voucher_purpose.php` (Abweichung Satz/Land, Rabattcode-Rechnung, Tausch).
 
 ## 5. Erstattungsfolgen
 
