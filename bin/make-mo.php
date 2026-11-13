@@ -69,7 +69,9 @@ foreach ( glob( "$root/languages/*.po" ) as $po ) {
 	$header_size = 28;
 	$ids_offset  = $header_size + $n * 16;
 	$strs_offset = $ids_offset + strlen( $ids );
-	$mo          = pack( 'V7', 0x950412de, 0, $n, $header_size, $header_size + $n * 8, 0, $ids_offset + strlen( $ids ) + strlen( $strs ) );
+	// No hash table (size 0); its offset must be where the strings start: WordPress before 6.5 (POMO MO) derives the
+	// translation table length from it and rejects the file otherwise.
+	$mo          = pack( 'V7', 0x950412de, 0, $n, $header_size, $header_size + $n * 8, 0, $ids_offset );
 	foreach ( $id_tab as $t ) {
 		$mo .= pack( 'VV', $t[0], $ids_offset + $t[1] );
 	}

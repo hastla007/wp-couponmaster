@@ -194,6 +194,9 @@ switch ( $mode ) {
 			$check( in_array( 'wplc_checksum_mismatch', $codes, true ), 'stopped with wplc_checksum_mismatch', $codes );
 		} else {
 			$check( true === $result, 'update downloaded through the grant, checksum verified and installed', is_wp_error( $result ) ? $result->get_error_message() : $result );
+			// The upgrader deactivates the plugin before installing; wp-admin/update.php reactivates it afterwards.
+			$reactivated = activate_plugin( VCAP_ACC_BASENAME );
+			$check( ! is_wp_error( $reactivated ), 'updated plugin reactivated as after an update in the admin', is_wp_error( $reactivated ) ? $reactivated->get_error_message() : null );
 			echo "  info installed version {$after} (was {$before})\n";
 		}
 		break;
