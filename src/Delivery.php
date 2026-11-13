@@ -136,7 +136,9 @@ final class Delivery {
 
 			// A retry after a partial failure only mails who is still missing (no duplicate for the others).
 			$pending_key = 'vcap_delivery_missing_' . $voucher->id;
-			$pending     = (array) get_transient( $pending_key );
+			$pending     = get_transient( $pending_key );
+			// (array) false would be array( false ): no transient means "send to everyone".
+			$pending     = is_array( $pending ) ? array_values( array_intersect( $pending, array( 'recipient', 'buyer' ) ) ) : array();
 			$only        = 1 === count( $pending ) ? (string) reset( $pending ) : null;
 			$required    = $this->required_roles( $voucher );
 			$sent_roles  = array();
