@@ -32,7 +32,8 @@ final class CustomAmount {
 		$min     = (float) $config['custom_min'];
 		$max     = (float) $config['custom_max'];
 		$step    = (float) $config['custom_step'] ?: 1;
-		$presets = array_filter( array_map( 'trim', explode( ',', (string) $config['custom_presets'] ) ), 'is_numeric' );
+		// Only suggestions the customer can actually buy (a misconfigured one would be refused at add to cart).
+		$presets = array_filter( self::presets( $config ), static fn( $preset ) => null === self::error_for( $config, $preset ) );
 		$value   = isset( $_POST['vcap_amount'] ) ? wc_format_decimal( wp_unslash( $_POST['vcap_amount'] ) ) : ( $presets ? reset( $presets ) : ( $min ?: '' ) ); // phpcs:ignore
 		?>
 		<div class="vcap-amount">
@@ -47,7 +48,8 @@ final class CustomAmount {
 			<input type="number" id="vcap-amount" name="vcap_amount" class="input-text" required aria-describedby="vcap-amount-help"
 				value="<?php echo esc_attr( (string) $value ); ?>"
 				step="<?php echo esc_attr( (string) $step ); ?>"
-				<?php echo $min > 0 ? 'min="' . esc_attr( (string) $min ) . '"' : 'min="0.01"'; ?>
+				<?php // The browser counts steps from min: without a minimum from 0, so 25, 50, 100 fit a step of 1 or 5. ?>
+				min="<?php echo esc_attr( (string) ( $min > 0 ? $min : 0 ) ); ?>"
 				<?php echo $max > 0 ? 'max="' . esc_attr( (string) $max ) . '"' : ''; ?> />
 			<span class="description" id="vcap-amount-help">
 				<?php
@@ -78,7 +80,20 @@ final class CustomAmount {
 	 * @return string|null error message, null when the amount is acceptable
 	 */
 	private function amount_error( \WC_Product $product, string $raw ): ?string {
-		$config = ProductConfig::get( $product );
+		return self::error_for( ProductConfig::get( $product ), $raw );
+	}
+
+	/** Suggested amounts of a configuration (numeric entries of the comma separated list). @return string[] */
+	public static function presets( array $config ): array {
+		return array_values( array_filter( array_map( 'trim', explode( ',', str_replace( ';', ',', (string) $config['custom_presets'] ) ) ), 'is_numeric' ) );
+	}
+
+	/**
+	 * Is an amount acceptable for a "customer chooses the amount" configuration?
+	 *
+	 * @return string|null error message, null when the amount is acceptable
+	 */
+	public static function error_for( array $config, string $raw ): ?string {
 		$amount = (float) $raw;
 		$min    = (float) $config['custom_min'];
 		$max    = (float) $config['custom_max'];
@@ -90,14 +105,44 @@ final class CustomAmount {
 			return __( 'The voucher amount is outside the allowed range.', 'voucher-captain' );
 		}
 		if ( $step > 0 ) {
-			// Match the HTML number input: step increments are anchored at min, or at 0.01 when min is unset.
-			$step_base = $min > 0 ? $min : 0.01;
+			// Match the HTML number input: steps count from the minimum, or from 0 when there is none.
+			$step_base = $min > 0 ? $min : 0.0;
 			$steps     = ( $amount - $step_base ) / $step;
-			if ( abs( $steps - round( $steps ) ) > 1e-8 ) {
+			if ( abs( $steps - round( $steps ) ) > 1e-6 ) {
 				return __( 'Please enter an amount matching the allowed increment.', 'voucher-captain' );
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * Configuration mistakes that make amounts unbuyable: minimum above maximum, suggested amounts outside the
+	 * range or off the step grid. Shown on the product screen.
+	 *
+	 * @return string[]
+	 */
+	public static function config_errors( array $config ): array {
+		if ( 'custom' !== $config['amount_source'] ) {
+			return array();
+		}
+		$errors = array();
+		$min    = (float) $config['custom_min'];
+		$max    = (float) $config['custom_max'];
+		if ( $min > 0 && $max > 0 && $min > $max ) {
+			$errors[] = __( 'Customer chooses the amount: the minimum amount is higher than the maximum amount, so no amount can be bought.', 'voucher-captain' );
+		}
+		if ( '' !== (string) $config['custom_step'] && (float) $config['custom_step'] <= 0 ) {
+			$errors[] = __( 'Customer chooses the amount: the step must be greater than 0 (e.g. 1 for whole amounts).', 'voucher-captain' );
+		}
+		$invalid = array_filter( self::presets( $config ), static fn( $preset ) => null !== self::error_for( $config, $preset ) );
+		if ( $invalid ) {
+			$errors[] = sprintf(
+				/* translators: %s: comma separated amounts */
+				__( 'Customer chooses the amount: the suggested amounts %s are outside the minimum/maximum or do not match the step and are not shown.', 'voucher-captain' ),
+				implode( ', ', $invalid )
+			);
+		}
+		return $errors;
 	}
 
 	public function validate( $passed, $product_id, $quantity, $variation_id = 0, $variations = array(), $cart_item_data = array() ) {
