@@ -120,6 +120,68 @@ vcap_blocks_assert( null === ( $block_ext['store_credit'] ?? null ), 'Store API 
 WC()->cart->empty_cart();
 update_option( VCAP\PaymentVouchers::OPTION, 'no' );
 
+// A single-use voucher worth more than the cart loses its remaining value: the blocks get the same warning as the
+// classic cart totals (ProductChecks::residual_notice()) under extensions["voucher-captain"]["forfeits"].
+function vcap_blocks_voucher( WC_Product $product, float $amount, string $usage, string $type ): VCAP\Voucher {
+	$coupon = new WC_Coupon();
+	$coupon->set_code( 'vcap-forfeit-' . strtolower( wp_generate_password( 10, false, false ) ) );
+	$coupon->set_discount_type( 'fixed_cart' );
+	$coupon->set_amount( $amount );
+	$coupon->update_meta_data( '_vcap_voucher', 'yes' );
+	$coupon->save();
+	$voucher                 = new VCAP\Voucher();
+	$voucher->code           = wc_format_coupon_code( $coupon->get_code() );
+	$voucher->coupon_id      = $coupon->get_id();
+	$voucher->order_item_id  = 97000000 + $coupon->get_id();
+	$voucher->product_id     = $product->get_id();
+	$voucher->type           = $type;
+	$voucher->usage_mode     = $usage;
+	$voucher->discount_type  = 'fixed_cart';
+	$voucher->initial_amount = $amount;
+	$voucher->balance        = $amount;
+	$voucher->currency       = get_woocommerce_currency();
+	$voucher->status         = VCAP\Voucher::STATUS_ACTIVE;
+	$voucher->send_to        = 'buyer';
+	$voucher->token          = VCAP\VoucherRepository::new_token();
+	$voucher->id             = vcap()->vouchers->insert( $voucher );
+	return $voucher;
+}
+
+function vcap_blocks_cart_ext(): array {
+	$cart = json_decode( (string) wp_json_encode( rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/cart' ) )->get_data() ), true );
+	return array( $cart, $cart['extensions']['voucher-captain'] ?? array() );
+}
+
+$single_product = new WC_Product_Simple();
+$single_product->set_name( 'Block single-use voucher' );
+$single_product->set_regular_price( '50' );
+$single_product->set_virtual( true );
+$single_product->update_meta_data( '_vcap_enabled', 'yes' );
+$single_product->update_meta_data( '_vcap_type', 'voucher' );
+$single_product->update_meta_data( '_vcap_usage', 'single' );
+$single_product->save();
+$single_50 = vcap_blocks_voucher( $single_product, 50, 'single', 'voucher' );
+WC()->cart->add_to_cart( $block_goods->get_id(), 1 );
+WC()->cart->apply_coupon( $single_50->code );
+list( , $forfeit_ext ) = vcap_blocks_cart_ext();
+$forfeits              = $forfeit_ext['forfeits'] ?? array();
+vcap_blocks_assert( 1 === count( $forfeits ) && $single_50->code === $forfeits[0]['code'] && (string) ( 10 * $minor ) === $forfeits[0]['amount'] && '' !== $forfeits[0]['formatted'], 'Store API cart: a 50 single-use voucher on a 40 cart reports the lost remainder (10)' );
+$classic_losses = VCAP\ProductChecks::residual_losses( WC()->cart );
+vcap_blocks_assert( 1 === count( $classic_losses ) && VCAP\ProductChecks::residual_notice( $classic_losses[0], true ) === $forfeits[0]['text'] && false !== strpos( $forfeits[0]['text'], $single_50->code ) && false === strpos( $forfeits[0]['text'], '<' ), 'Store API cart: the warning is the classic cart text, as plain text' );
+WC()->cart->remove_coupons();
+
+$single_30 = vcap_blocks_voucher( $single_product, 30, 'single', 'voucher' );
+WC()->cart->apply_coupon( $single_30->code );
+list( , $forfeit_ext ) = vcap_blocks_cart_ext();
+vcap_blocks_assert( array() === ( $forfeit_ext['forfeits'] ?? null ), 'Store API cart: no warning for a single-use voucher worth less than the cart' );
+WC()->cart->remove_coupons();
+
+$card_50 = vcap_blocks_voucher( $card_product, 50, 'balance', 'giftcard' );
+WC()->cart->apply_coupon( $card_50->code );
+list( , $forfeit_ext ) = vcap_blocks_cart_ext();
+vcap_blocks_assert( array() === ( $forfeit_ext['forfeits'] ?? null ), 'Store API cart: no warning for a gift card worth more than the cart (it keeps its balance)' );
+WC()->cart->empty_cart();
+
 update_option( 'vcap_store_credit', 'yes' );
 $block_user = wp_insert_user(
 	array(

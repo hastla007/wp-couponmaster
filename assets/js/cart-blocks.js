@@ -4,7 +4,10 @@
  * - one row "Voucher CODE −x" per voucher that pays after tax, and the remaining balances of applied gift cards
  *   (slot ExperimentalDiscountsMeta, below the discounts of the totals);
  * - a note on the coupon of such a voucher instead of a bare 0 discount (checkout filter "coupons");
- * - the "use store credit" hint (slot ExperimentalOrderMeta).
+ * - the "use store credit" hint (slot ExperimentalOrderMeta);
+ * - the warning that a single-use voucher worth more than the cart loses its remaining value (slot
+ *   ExperimentalDiscountsMeta, in a polite live region that is always rendered, so screen readers announce the
+ *   warning when it appears after a coupon is applied or the cart changes).
  * All texts come translated from PHP (VCAP\CartBlocks).
  */
 ( function ( wp, wc ) {
@@ -51,6 +54,31 @@
 		return TotalsWrapper ? el( TotalsWrapper, { className: 'vcap-voucher-payments' }, rows ) : el( 'div', { className: 'wc-block-components-totals-wrapper vcap-voucher-payments' }, rows );
 	}
 
+	/**
+	 * "Voucher CODE: only x of y is used … the remaining z will be lost." (ProductChecks::residual_notice()). The live
+	 * region stays mounted and empty while there is nothing to say; only its content changes.
+	 */
+	function Forfeits( props ) {
+		var forfeits = data( props.extensions ).forfeits || [];
+		return el(
+			'div',
+			{ className: 'vcap-forfeits', role: 'status', 'aria-live': 'polite' },
+			forfeits.length
+				? el(
+						'div',
+						{ className: 'wc-block-components-totals-wrapper' },
+						forfeits.map( function ( forfeit ) {
+							return el(
+								'div',
+								{ key: 'forfeit-' + forfeit.code, className: 'wc-block-components-notice-banner is-info vcap-residual-warning' },
+								el( 'div', { className: 'wc-block-components-notice-banner__content' }, forfeit.text )
+							);
+						} )
+				  )
+				: null
+		);
+	}
+
 	/** "You have X store credit. Use store credit" (the link applies it, like in the classic cart). */
 	function StoreCreditHint( props ) {
 		var credit = data( props.extensions ).store_credit;
@@ -88,7 +116,7 @@
 			return el(
 				wp.element.Fragment,
 				null,
-				checkout.ExperimentalDiscountsMeta ? el( checkout.ExperimentalDiscountsMeta, null, el( Payments ) ) : null,
+				checkout.ExperimentalDiscountsMeta ? el( checkout.ExperimentalDiscountsMeta, null, el( Payments ), el( Forfeits ) ) : null,
 				checkout.ExperimentalOrderMeta ? el( checkout.ExperimentalOrderMeta, null, el( StoreCreditHint ) ) : null
 			);
 		},
