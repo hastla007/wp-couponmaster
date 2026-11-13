@@ -20,7 +20,20 @@ final class Referrals {
 	public function __construct( private Settings $settings, private StoreCredit $credit ) {}
 
 	public function register(): void {
+		$this->register_lifecycle();
+		$this->register_features();
+	}
+
+	/** Customer screen (My Account) – only with the premium right "referrals". */
+	public function register_features(): void {
 		add_action( 'vcap_account_vouchers_top', array( $this, 'account_block' ), 20 );
+	}
+
+	/**
+	 * Always registered: the own-code check (refuses referral codes while the right is locked), rewards for orders
+	 * that already used a code, and their withdrawal on cancellation or refund (with retries).
+	 */
+	public function register_lifecycle(): void {
 		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'validate' ), 28, 3 );
 		add_action( 'woocommerce_order_status_completed', array( $this, 'reward' ), 30 );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'revoke' ), 30 );
@@ -114,7 +127,7 @@ final class Referrals {
 		if ( ! $valid || ! $coupon instanceof \WC_Coupon || ! self::owner( $coupon ) ) {
 			return $valid;
 		}
-		if ( ! $this->enabled() ) {
+		if ( ! $this->enabled() || ! Licensing\Entitlements::allows( 'referrals' ) ) {
 			throw new \Exception( esc_html__( 'Referral codes are currently not available.', 'voucher-captain' ), 9060 );
 		}
 		$object = $discounts instanceof \WC_Discounts ? $discounts->get_object() : null;

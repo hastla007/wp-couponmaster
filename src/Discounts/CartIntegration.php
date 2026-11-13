@@ -40,8 +40,12 @@ final class CartIntegration {
 		add_action( 'woocommerce_checkout_create_order_coupon_item', array( $this, 'order_item' ), 10, 4 );
 	}
 
+	/**
+	 * Whether new promotions are applied (setting and premium right "promotions"). Off: no promotion is added to a
+	 * cart and no bonus voucher is issued; existing orders keep their promotion discount when recalculated.
+	 */
 	public function enabled(): bool {
-		return $this->settings->yes( 'vcap_campaigns_enabled' );
+		return $this->settings->yes( 'vcap_campaigns_enabled' ) && \VCAP\Licensing\Entitlements::allows( 'promotions' );
 	}
 
 	public static function code( int $id ): string {

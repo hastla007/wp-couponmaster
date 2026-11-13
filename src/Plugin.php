@@ -39,7 +39,10 @@ final class Plugin {
 
 	private function boot(): void {
 		Install::maybe_upgrade();
-		( new Licensing\PremiumUpdater() )->register_hooks();
+		if ( Licensing\Entitlements::is_premium() ) {
+			// Free and development builds have no premium updater (and no license page).
+			( new Licensing\PremiumUpdater() )->register_hooks();
+		}
 
 		$this->settings  = new Settings();
 		$this->vouchers  = new VoucherRepository();
@@ -64,27 +67,38 @@ final class Plugin {
 		( new Emails() )->register();
 		( new Privacy( $this->vouchers ) )->register();
 		( new Health() )->register();
+		( new Diagnostics() )->register();
 		Licensing\Entitlements::register();
+
+		// Premium features (Licensing\Entitlements): a locked feature (free edition, premium without an active
+		// license) only stops what is new – configuration, sales, customer screens. Lifecycle hooks of what was
+		// sold earlier (top-up booking and reversal, reward and bonus withdrawal, promotion holds, Pass Captain
+		// reservations, refunds and ticket exchanges, coupon types) are always registered.
+		$topup = new TopUp( $this->vouchers, $this->coupons );
+		$topup->register_lifecycle();
 		if ( Licensing\Entitlements::allows( 'topup' ) ) {
-			( new TopUp( $this->vouchers, $this->coupons ) )->register();
+			$topup->register_features();
+		} else {
+			$topup->register_locked();
 		}
 		( new CouponLink( $this->settings ) )->register();
 		( new VoucherPurchaseRules( $this->settings ) )->register();
 		( new FirstOrderCoupons() )->register();
 		( new CouponSkuRules() )->register();
 		$referrals = new Referrals( $this->settings, $this->store_credit );
+		$referrals->register_lifecycle();
 		if ( Licensing\Entitlements::allows( 'referrals' ) ) {
-			$referrals->register();
+			$referrals->register_features();
 		}
 		( new Shortcodes( $this->downloads, $referrals ) )->register();
 		$promotions = new Discounts\Repository();
 		$promotions->register();
-		if ( Licensing\Entitlements::allows( 'promotions' ) ) {
-			( new Discounts\Usage( $promotions ) )->register();
-			$promotion_cart = new Discounts\CartIntegration( $this->settings, $promotions );
-			$promotion_cart->register();
-			( new Discounts\Bonus( $promotions, $promotion_cart ) )->register();
-		}
+		// Promotions check the license at runtime (CartIntegration::enabled()): no new promotion in a cart and no
+		// new bonus voucher while locked; held uses, existing order discounts and withdrawals keep working.
+		( new Discounts\Usage( $promotions ) )->register();
+		$promotion_cart = new Discounts\CartIntegration( $this->settings, $promotions );
+		$promotion_cart->register();
+		( new Discounts\Bonus( $promotions, $promotion_cart ) )->register();
 		( new Discounts\Admin( $promotions ) )->register();
 
 		$this->settings->register();
@@ -103,14 +117,21 @@ final class Plugin {
 		( new Compat\Wpml() )->register();
 		( new Compat\MultiCurrency() )->register();
 		( new Compat\AffiliateCaptain() )->register();
+		// Pass Captain: provider (reserve/commit/release/refund), channel and ticket exchange always; product
+		// settings, new ticket-voucher sales and the shared scanner only with the right.
+		( new Compat\PassCaptain() )->register();
+		$this->passcaptain_tickets->register_lifecycle();
 		if ( Licensing\Entitlements::allows( 'passcaptain' ) ) {
-			( new Compat\PassCaptain() )->register();
-			$this->passcaptain_tickets->register();
+			$this->passcaptain_tickets->register_features();
 			( new Compat\PassCaptainScanner() )->register();
+		} else {
+			$this->passcaptain_tickets->register_locked();
 		}
 
 		if ( is_admin() ) {
-			( new Licensing\AdminPage() )->register();
+			if ( Licensing\Entitlements::is_premium() ) {
+				( new Licensing\AdminPage() )->register();
+			}
 			( new Admin\Menu() )->register();
 			( new Admin\OrderAdmin( $this->vouchers, $this->issuer ) )->register();
 			( new Admin\VoucherAdmin( $this->vouchers ) )->register();
@@ -119,6 +140,9 @@ final class Plugin {
 			( new Admin\CampaignAdmin( new Campaigns( $this->code_pool, $this->vouchers ) ) )->register();
 			if ( Licensing\Entitlements::allows( 'reports' ) ) {
 				( new Admin\ReportsAdmin() )->register();
+			} else {
+				// A bookmarked CSV link explains the lock instead of ending on a blank admin-post page.
+				add_action( 'admin_post_vcap_report_csv', static fn() => wp_die( esc_html( Licensing\Entitlements::locked_message( 'reports' ) ), '', array( 'response' => 403, 'back_link' => true ) ) );
 			}
 		}
 

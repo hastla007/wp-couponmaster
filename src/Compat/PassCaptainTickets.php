@@ -38,15 +38,42 @@ final class PassCaptainTickets {
 	public function __construct( private RedemptionService $redemptions, private VoucherRepository $vouchers ) {}
 
 	public function register(): void {
+		$this->register_lifecycle();
+		$this->register_features();
+	}
+
+	/** New ticket vouchers: product settings and sale checks (only with the premium right "passcaptain"). */
+	public function register_features(): void {
 		add_action( 'vcap_product_settings_fields', array( $this, 'product_fields' ) );
 		add_action( 'vcap_product_settings_save', array( $this, 'product_save' ), 10, 2 );
-		add_filter( 'vcap_line_snapshot', array( $this, 'snapshot' ), 10, 2 );
-		add_filter( 'vcap_voucher_expires_at', array( $this, 'expires_at_event' ), 10, 2 );
 		add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'check_fixed_date_capacity' ), 25, 3 );
 		add_action( 'woocommerce_check_cart_items', array( $this, 'check_cart_capacity' ) );
+		add_action( 'admin_notices', array( $this, 'redeem_page_notice' ) );
+	}
+
+	/** Without the right: ticket-voucher products are not sold; sold ones are still exchanged. */
+	public function register_locked(): void {
+		add_filter( 'woocommerce_is_purchasable', array( $this, 'not_purchasable' ), 20, 2 );
+		add_filter( 'woocommerce_variation_is_purchasable', array( $this, 'not_purchasable' ), 20, 2 );
+	}
+
+	public function not_purchasable( $purchasable, $product ) {
+		$base = $product instanceof \WC_Product && $product->is_type( 'variation' ) ? wc_get_product( $product->get_parent_id() ) : $product;
+		if ( ! $purchasable || ! $base instanceof \WC_Product ) {
+			return $purchasable;
+		}
+		return absint( $base->get_meta( self::META_TYPE ) ) || absint( $base->get_meta( self::META_EVENT ) ) ? false : $purchasable;
+	}
+
+	/**
+	 * Sold ticket vouchers: always registered, also while the premium right is locked – line snapshot at issue,
+	 * exchange (redeem page, admin, account), channel rules, revocation, emails and placeholders.
+	 */
+	public function register_lifecycle(): void {
+		add_filter( 'vcap_line_snapshot', array( $this, 'snapshot' ), 10, 2 );
+		add_filter( 'vcap_voucher_expires_at', array( $this, 'expires_at_event' ), 10, 2 );
 		add_filter( 'vcap_redemption_channel_allowed', array( $this, 'channel_allowed' ), 10, 4 );
 		add_filter( 'vcap_shop_channel_refused_message', array( $this, 'shop_refused_message' ), 10, 2 );
-		add_action( 'admin_notices', array( $this, 'redeem_page_notice' ) );
 		add_filter( 'vcap_redeem_code', array( $this, 'redeem_page' ), 10, 2 );
 		add_filter( 'vcap_redeem_prefill', array( $this, 'redeem_prefill' ) );
 		add_action( 'vcap_redeem_form_fields', array( $this, 'redeem_fields' ) );

@@ -18,11 +18,34 @@ final class TopUp {
 	public function __construct( private VoucherRepository $repo, private CouponManager $coupons ) {}
 
 	public function register(): void {
+		$this->register_lifecycle();
+		$this->register_features();
+	}
+
+	/** New sales: product setting, code field, add to cart (only with the premium right "topup"). */
+	public function register_features(): void {
 		add_action( 'vcap_product_settings_fields', array( $this, 'product_field' ) );
 		add_action( 'vcap_product_settings_save', array( $this, 'product_save' ), 10, 2 );
 		add_action( 'woocommerce_before_add_to_cart_button', array( $this, 'code_field' ) );
 		add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'validate' ), 20, 2 );
 		add_filter( 'woocommerce_add_cart_item_data', array( $this, 'cart_item_data' ), 10, 2 );
+	}
+
+	/** Without the right: top-up products are not sold (they would otherwise issue new gift cards). */
+	public function register_locked(): void {
+		add_filter( 'woocommerce_is_purchasable', array( $this, 'not_purchasable' ), 20, 2 );
+		add_filter( 'woocommerce_variation_is_purchasable', array( $this, 'not_purchasable' ), 20, 2 );
+	}
+
+	public function not_purchasable( $purchasable, $product ) {
+		return $purchasable && self::is_topup( $product ) ? false : $purchasable;
+	}
+
+	/**
+	 * Top-ups already in carts and orders: always registered, also while the premium right is locked – the paid
+	 * value is booked onto the card (never a new card), cancellations and refunds take it back.
+	 */
+	public function register_lifecycle(): void {
 		add_filter( 'woocommerce_get_item_data', array( $this, 'item_data' ), 10, 2 );
 		add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'order_item_meta' ), 10, 3 );
 		add_filter( 'vcap_vouchers_per_item', array( $this, 'top_up_instead' ), 5, 2 );

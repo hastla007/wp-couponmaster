@@ -130,6 +130,13 @@ jobs:
           php wp-cli.phar --path=wp-test plugin deactivate voucher-captain
           php wp-cli.phar --path=wp-test plugin uninstall voucher-captain
           php wp-cli.phar --path=wp-test eval 'global $wpdb; if ($wpdb->get_var("SHOW TABLES LIKE \"{$wpdb->prefix}vcap_vouchers\"")) { exit(1); }'
+      - name: Free edition – premium features locked, sold goods still processed
+        run: |
+          # The free release ZIP (VCAP_EDITION=free): no license page or updater, the five premium features locked,
+          # lifecycle hooks of top-ups, referrals, promotions and Pass Captain registered (tests/license-lifecycle-integration.php).
+          VCAP_EDITION=free bin/build.sh
+          php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --force --activate
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/license-lifecycle-integration.php" free
 
   minimum-versions:
     # Oldest supported platform (plugin header) without Yoast SEO: WordPress 6.4, WooCommerce 8.9, PHP 8.1.
@@ -314,7 +321,8 @@ jobs:
           # release(): premium build of the given sources, stored as voucher-captain-premium-X.Y.Z.zip, manifest made by
           # the licence server's own tool (RELEASE.md step 6).
           release() {
-            ( cd "$1" && VCAP_EDITION=premium bin/build.sh )
+            # The premium build fixes the license server (VCAP_LICENSE_SERVER) and its "Update URI" header.
+            ( cd "$1" && VCAP_EDITION=premium VCAP_LICENSE_SERVER=https://licenses.test bin/build.sh )
             version="$(sed -n 's/^ \* Version: *//p' "$1/voucher-captain.php" | tr -d '[:space:]')"
             cp "$1/build/voucher-captain.zip" "$SERVER/packages/voucher-captain-premium-$version.zip"
             printf 'Voucher Captain %s (CI acceptance release).\n' "$version" > "$RUNNER_TEMP/notes-$version.md"
@@ -356,6 +364,8 @@ jobs:
           server server-setup "$RUNNER_TEMP/license.key"
           server server-releases 99.0.0
           shop shop-locked
+          # Locked premium build: refunds, reversals and promotion holds of sold goods keep working.
+          php wp-cli.phar --path="$SHOP" eval-file "$GITHUB_WORKSPACE/tests/license-lifecycle-integration.php" premium
           shop shop-activate "$RUNNER_TEMP/license.key"
           shop shop-active
           sudo pkill -f "socat OPENSSL-LISTEN:443" && sleep 1
@@ -490,6 +500,8 @@ jobs:
           php wp-cli.phar --path=wp-test plugin get wp-pass-captain --field=version
           php bin/check-coexistence.php wp-test/wp-content/plugins/voucher-captain wp-test/wp-content/plugins/wp-pass-captain
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/passcaptain-integration.php"
+          # Locked premium right: sold ticket vouchers are still exchanged (development build, locked by the test hook).
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/license-lifecycle-integration.php"
           # Tax classification incl. what Pass Captain receives in the quote (TAX.md 4.2).
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/tax-integration.php"
 
