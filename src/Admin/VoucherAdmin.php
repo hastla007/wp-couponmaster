@@ -113,8 +113,10 @@ final class VoucherAdmin {
 		$order   = $v->order();
 		$product = $v->product();
 		$back    = admin_url( 'admin.php?page=vcap-vouchers' );
-		$form    = static function ( string $do, string $label, string $class = 'button', array $extra = array() ) use ( $v ): void {
-			$confirm = 'void' === $do ? __( 'Void this voucher? It can no longer be redeemed; tickets it was exchanged for in WP Pass Captain are revoked.', 'voucher-captain' ) : '';
+		$form    = static function ( string $do, string $label, string $class = 'button', array $extra = array(), string $confirm = '' ) use ( $v ): void {
+			if ( '' === $confirm && 'void' === $do ) {
+				$confirm = __( 'Void this voucher? It can no longer be redeemed; tickets it was exchanged for in WP Pass Captain are revoked.', 'voucher-captain' );
+			}
 			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="vcap-inline-form"' . ( '' !== $confirm ? ' data-confirm="' . esc_attr( $confirm ) . '"' : '' ) . '>';
 			echo '<input type="hidden" name="action" value="vcap_voucher_action" /><input type="hidden" name="do" value="' . esc_attr( $do ) . '" /><input type="hidden" name="id" value="' . esc_attr( (string) $v->id ) . '" />';
 			foreach ( $extra as $k => $val ) {
@@ -168,7 +170,7 @@ final class VoucherAdmin {
 						} else {
 							$form( 'void', __( 'Void voucher', 'voucher-captain' ), 'button button-link-delete' );
 						}
-						/** Extra buttons for connectors: call $form( $do, $label ) and handle $do in vcap_voucher_admin_action. */
+						/** Extra buttons for connectors: call $form( $do, $label, $class, $extra_fields, $confirm_text ) and handle $do in vcap_voucher_admin_action. */
 						do_action( 'vcap_voucher_admin_actions', $v, $form );
 						?>
 					</p>

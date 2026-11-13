@@ -3878,3 +3878,27 @@ msgstr "Der Kunde konnte nicht informiert werden, dass der Gutschein wieder gül
 
 msgid "Customer told that the voucher is valid again"
 msgstr "Kunde über wieder gültigen Gutschein informiert"
+
+msgid "Send the tickets again? New ticket codes are issued; the tickets sent so far become invalid."
+msgstr "Tickets erneut senden? Es werden neue Ticketcodes ausgestellt; die bisher gesendeten Tickets werden ungültig."
+
+msgid "Undo exchange (e.g. to change the date)"
+msgstr "Umtausch rückgängig machen (z. B. um den Termin zu ändern)"
+
+msgid "Undo the exchange? Its tickets are cancelled in WP Pass Captain and the voucher becomes valid again, so it can be exchanged for another date."
+msgstr "Umtausch rückgängig machen? Die Tickets werden in WP Pass Captain storniert und der Gutschein wird wieder gültig, sodass er gegen einen anderen Termin eingetauscht werden kann."
+
+msgid "The exchange could not be undone completely: tickets that were already checked in stay valid."
+msgstr "Der Umtausch konnte nicht vollständig rückgängig gemacht werden: bereits eingecheckte Tickets bleiben gültig."
+
+msgid "The tickets were sent again with new codes."
+msgstr "Die Tickets wurden mit neuen Codes erneut gesendet."
+
+msgid "The tickets could not be sent again. The reason is in the voucher history."
+msgstr "Die Tickets konnten nicht erneut gesendet werden. Der Grund steht im Verlauf des Gutscheins."
+
+msgid "Exchange undone: the tickets are cancelled and the voucher is valid again."
+msgstr "Umtausch rückgängig gemacht: Die Tickets sind storniert und der Gutschein ist wieder gültig."
+
+msgid "The exchange could not be undone. The reason is in the voucher history."
+msgstr "Der Umtausch konnte nicht rückgängig gemacht werden. Der Grund steht im Verlauf des Gutscheins."

@@ -274,6 +274,19 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 		vcap_pc_assert( 1 === count( $restore_mails ) && 1 === ( $restored_events['passcaptain_restore_notified'] ?? 0 ) && str_contains( (string) $restore_mails[0]['message'], $full->code ), 'the customer is told once that the voucher is valid again' );
 		$third_try = vcap()->passcaptain_tickets->exchange( $full->code );
 		vcap_pc_assert( is_array( $third_try ) && 2 === $third_try['tickets'] && $third_try['order_public_id'] !== $second_try['order_public_id'] && VCAP\Voucher::STATUS_REDEEMED === vcap()->vouchers->get( $full->id )->status, 'the restored voucher can be exchanged again for new tickets' );
+		// Admin: undo the exchange (e.g. to change the date), then exchange again.
+		$undo = apply_filters( 'vcap_voucher_admin_action', '', 'passcaptain_undo', vcap()->vouchers->get( $full->id ) );
+		$third_order = (int) $wpdb->get_var( $wpdb->prepare( "SELECT order_id FROM {$wpdb->prefix}wpcap_orders WHERE public_id=%s", $third_try['order_public_id'] ) );
+		vcap_pc_assert( 'passcaptain_undone' === $undo && VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $full->id )->status && 0 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}wpcap_tickets WHERE order_id=%d AND status='valid'", $third_order ) ), 'the admin can undo an exchange: tickets cancelled, voucher valid again' );
+		$fourth_try = vcap()->passcaptain_tickets->exchange( $full->code );
+		vcap_pc_assert( is_array( $fourth_try ) && $fourth_try['order_public_id'] !== $third_try['order_public_id'], 'after undoing, the voucher can be exchanged for another date' );
+		if ( method_exists( VCAP\Compat\PassCaptainTickets::service(), 'resend_tickets' ) ) {
+			$mail_ok = static fn() => true;
+			add_filter( 'pre_wp_mail', $mail_ok );
+			$resend = apply_filters( 'vcap_voucher_admin_action', '', 'passcaptain_resend', vcap()->vouchers->get( $full->id ) );
+			remove_filter( 'pre_wp_mail', $mail_ok );
+			vcap_pc_assert( 'passcaptain_resent' === $resend, 'the admin can send the tickets of an exchange again' );
+		}
 	}
 	remove_filter( 'vcap_passcaptain_ticket_target', $give, 10 );
 	vcap_pc_assert( is_wp_error( vcap()->passcaptain_tickets->exchange( vcap_pc_voucher( 'single', 10 )->code ) ), 'vouchers without a ticket target are not exchanged' );

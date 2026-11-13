@@ -281,18 +281,27 @@ final class PassCaptainTickets {
 		if ( ! $voucher || Voucher::STATUS_VOID === $voucher->status || ! apply_filters( 'vcap_passcaptain_restore_on_revoke', true, $voucher, $info ) ) {
 			return;
 		}
-		$order_ref  = preg_replace( '/[^a-f0-9]/', '', strtolower( (string) ( $info['order_public_id'] ?? '' ) ) );
+		if ( $this->restore( $key, $row, $voucher, (string) ( $info['order_public_id'] ?? '' ) ) ) {
+			$this->notify_restored( $this->vouchers->get( $voucher->id ) ?? $voucher );
+		}
+	}
+
+	/** Gives the voucher of a committed exchange back (refund of the redemption; idempotent per PC order). */
+	private function restore( string $key, array $row, Voucher $voucher, string $order_public_id ): bool {
+		$order_ref  = preg_replace( '/[^a-f0-9]/', '', strtolower( $order_public_id ) );
 		$refund_key = 'passcaptain:restore:' . substr( '' !== $order_ref ? $order_ref : md5( $key ), 0, 32 );
 		$amount     = (float) $row['amount'];
 		$refunded   = array_sum( array_map( 'floatval', (array) ( $row['meta']['_refunds'] ?? array() ) ) );
 		if ( $amount <= 0 || $refunded + 0.0001 >= $amount ) {
-			return;
+			return false;
 		}
 		$result = $this->redemptions->refund( $key, $amount - $refunded, $refund_key );
-		if ( ! is_wp_error( $result ) && ! empty( $result['restored'] ) ) {
-			$this->vouchers->log( $voucher->id, 'passcaptain_tickets_restored', (float) $result['restored'], null, (string) ( $info['order_public_id'] ?? '' ) );
-			$this->notify_restored( $this->vouchers->get( $voucher->id ) ?? $voucher );
+		if ( is_wp_error( $result ) || empty( $result['restored'] ) ) {
+			return false;
 		}
+		$this->forget_states();
+		$this->vouchers->log( $voucher->id, 'passcaptain_tickets_restored', (float) $result['restored'], null, $order_public_id );
+		return true;
 	}
 
 	/**
@@ -997,7 +1006,14 @@ final class PassCaptainTickets {
 		}
 		$redemption = $this->attempt( $voucher )[1];
 		if ( $redemption && RedemptionService::STATE_COMMITTED === $redemption['state'] ) {
-			return; // Already exchanged: see the voucher history.
+			// Exchanged: send the tickets again, or undo the exchange (e.g. to choose another date).
+			if ( method_exists( self::service(), 'resend_tickets' ) ) {
+				$form( 'passcaptain_resend', __( 'Send tickets again', 'voucher-captain' ), 'button', array(), __( 'Send the tickets again? New ticket codes are issued; the tickets sent so far become invalid.', 'voucher-captain' ) );
+			}
+			if ( Voucher::STATUS_VOID !== $voucher->status ) {
+				$form( 'passcaptain_undo', __( 'Undo exchange (e.g. to change the date)', 'voucher-captain' ), 'button', array(), __( 'Undo the exchange? Its tickets are cancelled in WP Pass Captain and the voucher becomes valid again, so it can be exchanged for another date.', 'voucher-captain' ) );
+			}
+			return;
 		}
 		if ( ! in_array( $voucher->status, array( Voucher::STATUS_ACTIVE, Voucher::STATUS_RESERVED ), true ) ) {
 			return;
@@ -1024,20 +1040,78 @@ final class PassCaptainTickets {
 	}
 
 	public function admin_action( $msg, $do, $voucher ) {
-		if ( 'passcaptain_tickets' !== $do || ! $voucher instanceof Voucher ) {
+		if ( ! $voucher instanceof Voucher ) {
+			return $msg;
+		}
+		if ( 'passcaptain_resend' === $do || 'passcaptain_undo' === $do ) {
+			return 'passcaptain_resend' === $do ? $this->admin_resend( $voucher ) : $this->admin_undo( $voucher );
+		}
+		if ( 'passcaptain_tickets' !== $do ) {
 			return $msg;
 		}
 		$email  = is_email( $voucher->recipient_email ) ? $voucher->recipient_email : $voucher->buyer_email;
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in VoucherAdmin::handle_action().
 		$choice = isset( $_POST['vcap_ticket_choice'] ) ? absint( wp_unslash( $_POST['vcap_ticket_choice'] ) ) : 0;
+		$before = count( $this->failures( $voucher ) );
 		$result = $this->exchange( $voucher->code, array( 'email' => $email, 'user_id' => 0, 'ticket_type_id' => $choice ) );
+		if ( is_wp_error( $result ) && count( $this->failures( $voucher ) ) === $before ) {
+			// Refused before anything was reserved (sold out, no date chosen, …): the admin message points to the history.
+			$this->vouchers->log( $voucher->id, 'passcaptain_tickets_failed', null, null, $result->get_error_code() . ': ' . $result->get_error_message() );
+		}
 		return is_wp_error( $result ) ? 'passcaptain_tickets_failed' : 'passcaptain_tickets_issued';
+	}
+
+	private function failures( Voucher $voucher ): array {
+		return array_filter( (array) $this->vouchers->events( $voucher->id ), static fn( $e ) => 'passcaptain_tickets_failed' === ( $e['event'] ?? '' ) );
+	}
+
+	/** Admin: send the tickets of an exchange again (new codes). */
+	private function admin_resend( Voucher $voucher ): string {
+		$service = self::service();
+		[ $attempt, $redemption ] = $this->attempt( $voucher );
+		if ( ! $service || ! method_exists( $service, 'resend_tickets' ) || ! $redemption || RedemptionService::STATE_COMMITTED !== $redemption['state'] ) {
+			return 'passcaptain_resend_failed';
+		}
+		$result = $service->resend_tickets( self::exchange_key( $voucher, $attempt ) );
+		if ( is_wp_error( $result ) ) {
+			$this->vouchers->log( $voucher->id, 'passcaptain_tickets_failed', null, null, $result->get_error_code() . ': ' . $result->get_error_message() );
+			return 'passcaptain_resend_failed';
+		}
+		$this->vouchers->log( $voucher->id, 'passcaptain_tickets_resent', null, null, 'Requested by admin: ' . self::mask_email( (string) ( $result['email'] ?? '' ) ) );
+		return 'passcaptain_resent';
+	}
+
+	/**
+	 * Admin: undo an exchange. The tickets are cancelled in Pass Captain and the voucher becomes valid again (then
+	 * it can be exchanged for another date). Refused while checked-in tickets remain (they stay valid).
+	 */
+	private function admin_undo( Voucher $voucher ): string {
+		$service = self::service();
+		[ $attempt, $redemption ] = $this->attempt( $voucher );
+		if ( ! $service || ! $redemption || RedemptionService::STATE_COMMITTED !== $redemption['state'] || Voucher::STATUS_VOID === $voucher->status ) {
+			return 'passcaptain_undo_failed';
+		}
+		$key = self::exchange_key( $voucher, $attempt );
+		$service->revoke_tickets( $key, 'voucher_exchange_undone' );
+		$this->forget_states();
+		$state = $service->get( $key );
+		if ( is_array( $state ) && ( 'revoked' !== ( $state['status'] ?? '' ) || ! empty( $state['ticket_ids'] ) ) ) {
+			$this->vouchers->log( $voucher->id, 'passcaptain_tickets_failed', null, null, __( 'The exchange could not be undone completely: tickets that were already checked in stay valid.', 'voucher-captain' ) );
+			return 'passcaptain_undo_failed';
+		}
+		$this->vouchers->log( $voucher->id, 'passcaptain_tickets_revoked', null, null, (string) ( $state['order_public_id'] ?? '' ) );
+		$restored = $this->restore( self::key( $voucher, $attempt ), $redemption, $voucher, (string) ( $state['order_public_id'] ?? '' ) );
+		return $restored ? 'passcaptain_undone' : 'passcaptain_undo_failed';
 	}
 
 	public function admin_messages( array $messages ): array {
 		return $messages + array(
 			'passcaptain_tickets_issued' => __( 'Tickets issued in WP Pass Captain and sent by email.', 'voucher-captain' ),
 			'passcaptain_tickets_failed' => __( 'The tickets could not be issued. The reason is in the voucher history.', 'voucher-captain' ),
+			'passcaptain_resent'         => __( 'The tickets were sent again with new codes.', 'voucher-captain' ),
+			'passcaptain_resend_failed'  => __( 'The tickets could not be sent again. The reason is in the voucher history.', 'voucher-captain' ),
+			'passcaptain_undone'         => __( 'Exchange undone: the tickets are cancelled and the voucher is valid again.', 'voucher-captain' ),
+			'passcaptain_undo_failed'    => __( 'The exchange could not be undone. The reason is in the voucher history.', 'voucher-captain' ),
 		);
 	}
 
