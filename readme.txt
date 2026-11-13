@@ -6,7 +6,7 @@ Tested up to: 7.1
 Requires PHP: 8.1
 WC requires at least: 8.9
 WC tested up to: 11.2
-Stable tag: 1.1.0
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -76,9 +76,10 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 
 == Changelog ==
 
-= Unreleased =
+= 1.2.0 =
 * New: premium edition with licensing through WP License Captain – promotions and bonus vouchers, refer a friend, gift card top-up, reports and the WP Pass Captain integration need an active license there and are switched off without one (fail-closed; a signed 14-day offline cache bridges server outages). License page to activate or deactivate the site.
 * New: premium updates come from the license server's release storage; every package is checked against its SHA-256 before it is installed.
+* New: the premium edition trusts the license server's current and next signing key, so the server can change its key without locking shops out of license checks and updates; every release checks the pinned key against the live license server.
 * New: setting "Multi-purpose vouchers as payment" (off by default) – multi-purpose vouchers, gift cards and store credit pay the order total after tax, shipping and fees as an untaxed payment line "Voucher CODE" instead of a discount before tax.
 * New: gift card top-up – a product marked "Top up" adds the paid value to an existing card; refunds take the top-up back as far as the balance allows.
 * New: Reports – outstanding voucher value at a date (with CSV), redemption journal and, with WP Pass Captain, a reconciliation of voucher payments.
@@ -160,7 +161,7 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 
 == Upgrade Notice ==
 
-= Unreleased =
+= 1.2.0 =
 Premium: promotions, refer a friend, top-ups, reports and the WP Pass Captain integration need an active license (Vouchers → License). Vouchers already sold keep working. Database update 1.4.0 – make a backup first.
 
 = 1.1.0 =
