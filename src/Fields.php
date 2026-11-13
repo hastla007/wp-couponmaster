@@ -115,6 +115,18 @@ final class Fields {
 		if ( 'customer' === $config['delivery'] && ! in_array( 'delivery_date', $enabled, true ) ) {
 			$enabled[] = 'delivery_date';
 		}
+		if ( 'buyer' === ( $config['send_to'] ?? '' ) ) {
+			// "Buyer only": nothing is ever sent to a recipient address. Ask for it only when it decides who may
+			// redeem the voucher, and say so.
+			$restrict = (string) ( $config['email_restrict'] ?? 'none' );
+			if ( 'recipient' === $restrict ) {
+				$defs['recipient_email']['tooltip'] = __( 'The voucher is sent to you, not to this address. Only this address can redeem it (yours, if you leave it empty).', 'voucher-captain' );
+			} elseif ( 'both' === $restrict ) {
+				$defs['recipient_email']['tooltip'] = __( 'The voucher is sent to you, not to this address. Only this address or yours can redeem it.', 'voucher-captain' );
+			} else {
+				$enabled = array_diff( $enabled, array( 'recipient_email', 'recipient_email_required' ) );
+			}
+		}
 		$out = array();
 		foreach ( $enabled as $key ) {
 			$base = preg_replace( '/_required$/', '', (string) $key );

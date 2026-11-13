@@ -17,6 +17,7 @@ final class ProductSettings {
 		add_action( 'woocommerce_admin_process_variation_object', array( $this, 'save_variation' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'assets' ) );
 		add_action( 'admin_notices', array( $this, 'tax_status_notice' ) );
+		( new ProductChecks() )->register();
 	}
 
 	public function assets( string $hook ): void {
@@ -58,6 +59,7 @@ final class ProductSettings {
 
 	private function batch_options(): array {
 		$options = array( '' => __( 'Generate random codes', 'voucher-captain' ) );
+		ProductChecks::flush();
 		foreach ( vcap()->code_pool->batches() as $b ) {
 			/* translators: 1: batch, 2: free codes, 3: total */
 			$options[ $b['batch'] ] = sprintf( __( 'Imported batch "%1$s" (%2$d of %3$d free)', 'voucher-captain' ), $b['batch'], $b['free'], $b['total'] );
@@ -66,7 +68,18 @@ final class ProductSettings {
 	}
 
 	private function v( \WC_Product $product, string $key ) {
-		return $product->meta_exists( '_vcap_' . $key ) ? $product->get_meta( '_vcap_' . $key ) : ProductConfig::DEFAULTS[ $key ];
+		if ( $product->meta_exists( '_vcap_' . $key ) ) {
+			return $product->get_meta( '_vcap_' . $key );
+		}
+		if ( 'usage' === $key ) {
+			return ProductConfig::default_usage( (string) $this->v( $product, 'type' ) );
+		}
+		return ProductConfig::DEFAULTS[ $key ];
+	}
+
+	/** A hint below a field, shown by product-admin.js while its condition holds ($class names the condition). */
+	private function hint( string $class, string $text, bool $alert = false ): void {
+		echo '<p class="form-field vcap-hint ' . esc_attr( $class ) . '" style="display:none"' . ( $alert ? ' role="alert"' : '' ) . '><span class="description"' . ( $alert ? ' style="color:#b32d2e"' : '' ) . '>' . esc_html( $text ) . '</span></p>';
 	}
 
 	public function panel(): void {
@@ -112,6 +125,7 @@ final class ProductSettings {
 				'description' => __( 'Show a "Preview voucher" button on the product page.', 'voucher-captain' ),
 			)
 		);
+		$this->hint( 'vcap-hint-virtual', __( 'Vouchers are sent by email as PDF. Tick "Virtual" at the top of the product data box – otherwise WooCommerce asks for a shipping address and may charge shipping for the voucher.', 'voucher-captain' ) );
 		echo '</div>';
 
 		echo '<div class="options_group"><h4 class="vcap-group-title">' . esc_html__( 'Value', 'voucher-captain' ) . '</h4>';
@@ -208,6 +222,8 @@ final class ProductSettings {
 				'description' => __( 'Gift cards keep the remaining balance after each purchase until it is used up.', 'voucher-captain' ),
 			)
 		);
+		$this->hint( 'vcap-hint-giftcard-single', __( 'Gift card with single use: whatever the customer does not use in the first order is lost. Gift cards usually keep their remaining value – choose "Multi-use with stored balance (gift card)".', 'voucher-captain' ), true );
+		$this->hint( 'vcap-hint-value-single', __( 'Single use: the whole value must be used in one order, a remaining value is lost (the customer is told so in the cart). Choose "Multi-use with stored balance" if the remaining value should be kept.', 'voucher-captain' ) );
 		woocommerce_wp_text_input(
 			array(
 				'id'                => '_vcap_usage_limit',
@@ -240,6 +256,8 @@ final class ProductSettings {
 				'value'             => $this->v( $p, 'expiry_days' ),
 				'custom_attributes' => array( 'min' => 1, 'step' => 1 ),
 				'wrapper_class'     => 'vcap-show-expiry-days',
+				'desc_tip'          => true,
+				'description'       => __( 'Required for "Days after purchase". Without a number of days the global default validity is used.', 'voucher-captain' ),
 			)
 		);
 		woocommerce_wp_text_input(
@@ -249,14 +267,19 @@ final class ProductSettings {
 				'type'          => 'date',
 				'value'         => $this->v( $p, 'expiry_date' ),
 				'wrapper_class' => 'vcap-show-expiry-date',
+				'desc_tip'      => true,
+				'description'   => __( 'Required. Vouchers expire at the end of this day; after it the product can no longer be bought.', 'voucher-captain' ),
 			)
 		);
-		woocommerce_wp_checkbox(
+		// One choice for "who may redeem" (replaces the former "Transferable" checkbox, read compatibly).
+		woocommerce_wp_select(
 			array(
-				'id'          => '_vcap_transferable',
-				'label'       => __( 'Transferable', 'voucher-captain' ),
-				'value'       => $this->v( $p, 'transferable' ),
-				'description' => __( 'Anyone with the code may redeem it. Untick to restrict redemption to the buyer and the named recipient (their email addresses).', 'voucher-captain' ),
+				'id'          => '_vcap_email_restrict',
+				'label'       => __( 'Who may redeem', 'voucher-captain' ),
+				'value'       => ProductConfig::normalise_restriction( array( 'email_restrict' => $this->v( $p, 'email_restrict' ), 'transferable' => $this->v( $p, 'transferable' ) ) )['email_restrict'],
+				'options'     => ProductConfig::redemption_choices(),
+				'desc_tip'    => true,
+				'description' => __( 'Personal vouchers can only be redeemed by a customer logged in or checking out with one of these email addresses. The voucher text {transferable} follows this setting.', 'voucher-captain' ),
 			)
 		);
 		$channels = (array) ProductConfig::get( $p )['channels'];
@@ -313,19 +336,6 @@ final class ProductSettings {
 		$this->product_search( '_vcap_exclude_product_ids', __( 'Exclude products', 'voucher-captain' ), (array) $this->v( $p, 'exclude_product_ids' ) );
 		$this->category_select( '_vcap_category_ids', __( 'Valid for categories', 'voucher-captain' ), (array) $this->v( $p, 'category_ids' ) );
 		$this->category_select( '_vcap_exclude_category_ids', __( 'Exclude categories', 'voucher-captain' ), (array) $this->v( $p, 'exclude_category_ids' ) );
-		woocommerce_wp_select(
-			array(
-				'id'      => '_vcap_email_restrict',
-				'label'   => __( 'Restrict to email', 'voucher-captain' ),
-				'value'   => $this->v( $p, 'email_restrict' ),
-				'options' => array(
-					'none'      => __( 'Anyone with the code', 'voucher-captain' ),
-					'recipient' => __( 'Recipient email only', 'voucher-captain' ),
-					'buyer'     => __( 'Buyer email only', 'voucher-captain' ),
-					'both'      => __( 'Buyer or recipient', 'voucher-captain' ),
-				),
-			)
-		);
 		echo '</div>';
 
 		echo '<div class="options_group"><h4 class="vcap-group-title">' . esc_html__( 'Codes', 'voucher-captain' ) . '</h4>';
@@ -336,7 +346,32 @@ final class ProductSettings {
 				'value'       => $this->v( $p, 'code_batch' ),
 				'options'     => $this->batch_options(),
 				'desc_tip'    => true,
-				'description' => __( 'Use codes imported under Vouchers → Import codes. Random codes are generated when the batch is empty.', 'voucher-captain' ),
+				'description' => __( 'Use codes imported under Vouchers → Import codes.', 'voucher-captain' ),
+			)
+		);
+		woocommerce_wp_select(
+			array(
+				'id'            => '_vcap_code_pool_empty',
+				'label'         => __( 'When the batch is empty', 'voucher-captain' ),
+				'value'         => $this->v( $p, 'code_pool_empty' ),
+				'options'       => array(
+					'random' => __( 'Generate random codes', 'voucher-captain' ),
+					'stop'   => __( 'Stop selling the product', 'voucher-captain' ),
+				),
+				'wrapper_class' => 'vcap-show-batch',
+			)
+		);
+		woocommerce_wp_text_input(
+			array(
+				'id'                => '_vcap_code_pool_low',
+				'label'             => __( 'Warn at free codes', 'voucher-captain' ),
+				'type'              => 'number',
+				'value'             => $this->v( $p, 'code_pool_low' ),
+				'placeholder'       => (string) ProductChecks::LOW_CODES_DEFAULT,
+				'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
+				'wrapper_class'     => 'vcap-show-batch',
+				'desc_tip'          => true,
+				'description'       => __( 'A notice on the dashboard and the voucher screens warns when the batch has this many free codes or fewer.', 'voucher-captain' ),
 			)
 		);
 		foreach ( array( 'code_prefix' => __( 'Code prefix', 'voucher-captain' ), 'code_suffix' => __( 'Code suffix', 'voucher-captain' ) ) as $key => $label ) {
@@ -428,6 +463,7 @@ final class ProductSettings {
 				),
 			)
 		);
+		$this->hint( 'vcap-hint-buyer-recipient', __( 'With "Buyer only" nothing is sent to a recipient, so the product page does not ask for a recipient email – unless "Who may redeem" uses the recipient email; then the field only decides who can redeem.', 'voucher-captain' ) );
 		woocommerce_wp_checkbox(
 			array(
 				'id'          => '_vcap_buyer_copy',
@@ -528,7 +564,7 @@ final class ProductSettings {
 			return;
 		}
 		$post = wp_unslash( $_POST );
-		$text = array( 'type', 'template', 'amount_source', 'custom_presets', 'discount_type', 'tax_treatment', 'usage', 'expiry_mode', 'email_restrict', 'code_batch', 'code_prefix', 'code_suffix', 'delivery', 'send_to', 'event_location' );
+		$text = array( 'type', 'template', 'amount_source', 'custom_presets', 'discount_type', 'tax_treatment', 'usage', 'expiry_mode', 'email_restrict', 'code_batch', 'code_prefix', 'code_suffix', 'delivery', 'send_to', 'event_location', 'code_pool_empty' );
 		foreach ( $text as $key ) {
 			$product->update_meta_data( '_vcap_' . $key, sanitize_text_field( (string) ( $post[ '_vcap_' . $key ] ?? '' ) ) );
 		}
@@ -537,7 +573,7 @@ final class ProductSettings {
 			$value = (string) ( $post[ '_vcap_' . $key ] ?? '' );
 			$product->update_meta_data( '_vcap_' . $key, '' === $value ? '' : wc_format_decimal( $value ) );
 		}
-		$ints = array( 'per_item', 'usage_limit', 'expiry_days', 'code_length', 'delivery_delay_days', 'max_checkins', 'message_maxlength' );
+		$ints = array( 'per_item', 'usage_limit', 'expiry_days', 'code_length', 'delivery_delay_days', 'max_checkins', 'message_maxlength', 'code_pool_low' );
 		foreach ( $ints as $key ) {
 			$value = (string) ( $post[ '_vcap_' . $key ] ?? '' );
 			$product->update_meta_data( '_vcap_' . $key, '' === $value ? '' : absint( $value ) );
@@ -549,8 +585,23 @@ final class ProductSettings {
 		$event = (string) ( $post['_vcap_event_date'] ?? '' );
 		$product->update_meta_data( '_vcap_event_date', preg_match( '/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/', $event ) ? $event : '' );
 		$product->update_meta_data( '_vcap_redemption_terms', sanitize_textarea_field( (string) ( $post['_vcap_redemption_terms'] ?? '' ) ) );
-		foreach ( array( 'free_shipping', 'individual_use', 'exclude_sale', 'preview', 'buyer_copy', 'transferable' ) as $key ) {
+		foreach ( array( 'free_shipping', 'individual_use', 'exclude_sale', 'preview', 'buyer_copy' ) as $key ) {
 			$product->update_meta_data( '_vcap_' . $key, isset( $post[ '_vcap_' . $key ] ) ? 'yes' : 'no' );
+		}
+		// "Who may redeem" decides; "transferable" is stored as its consequence (read by older code and exports).
+		$restrict = (string) $product->get_meta( '_vcap_email_restrict' );
+		$restrict = isset( ProductConfig::redemption_choices()[ $restrict ] ) ? $restrict : 'none';
+		$product->update_meta_data( '_vcap_email_restrict', $restrict );
+		$product->update_meta_data( '_vcap_transferable', 'none' === $restrict ? 'yes' : 'no' );
+		// "Valid for (days)" only applies to "Days after purchase": never a hidden override of the global default.
+		if ( 'days' !== $product->get_meta( '_vcap_expiry_mode' ) ) {
+			$product->update_meta_data( '_vcap_expiry_days', '' );
+		}
+		if ( 'date' !== $product->get_meta( '_vcap_expiry_mode' ) ) {
+			$product->update_meta_data( '_vcap_expiry_date', '' );
+		}
+		if ( ! in_array( $product->get_meta( '_vcap_code_pool_empty' ), array( 'random', 'stop' ), true ) ) {
+			$product->update_meta_data( '_vcap_code_pool_empty', 'random' );
 		}
 		$registered = array_keys( Channels::all() );
 		$channels   = array_intersect( array_map( 'sanitize_key', (array) ( $post['_vcap_channels'] ?? array() ) ), $registered );
