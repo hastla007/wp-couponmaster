@@ -19,7 +19,7 @@ final class Health {
 
 	public function tests( $tests ) {
 		$tests = (array) $tests;
-		foreach ( array( 'scheduler', 'mail', 'upload_dir', 'redeem_page' ) as $id ) {
+		foreach ( array( 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page' ) as $id ) {
 			$tests['direct'][ 'vcap_' . $id ] = array(
 				'label' => __( 'Voucher Captain', 'voucher-captain' ),
 				'test'  => array( $this, 'test_' . $id ),
@@ -52,6 +52,15 @@ final class Health {
 	public static function mail_failures(): array {
 		$cutoff = time() - 7 * DAY_IN_SECONDS;
 		return array_values( array_filter( (array) get_option( self::MAIL_LOG, array() ), static fn( $e ) => is_array( $e ) && (int) ( $e['time'] ?? 0 ) >= $cutoff ) );
+	}
+
+	public function test_schema(): array {
+		$error = (string) get_option( Install::SCHEMA_ERROR_OPTION, '' );
+		if ( '' === $error ) {
+			return self::result( 'schema', 'good', __( 'The voucher database tables are complete', 'voucher-captain' ), __( 'All voucher tables, columns and unique keys exist and support transactions.', 'voucher-captain' ) );
+		}
+		/* translators: %s: technical details */
+		return self::result( 'schema', 'critical', __( 'The voucher database update is incomplete', 'voucher-captain' ), sprintf( __( 'Missing: %s. The update is retried automatically; check the database permissions.', 'voucher-captain' ), $error ) );
 	}
 
 	public function test_scheduler(): array {

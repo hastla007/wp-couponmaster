@@ -12,6 +12,8 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Install {
 	public const OPTION_DB_VERSION = 'vcap_db_version';
+	/** Set while the database schema is incomplete (cleared once an upgrade verified it). */
+	public const SCHEMA_ERROR_OPTION = 'vcap_schema_error';
 	private static ?bool $transactional_tables = null;
 
 	/** @var array<string, callable-string> */
@@ -23,7 +25,7 @@ final class Install {
 		self::create_tables();
 		self::add_caps();
 		self::ensure_upload_dir();
-		update_option( self::OPTION_DB_VERSION, VCAP_DB_VERSION );
+		self::finish_schema();
 		if ( ! get_option( 'vcap_secret' ) ) {
 			update_option( 'vcap_secret', wp_generate_password( 64, true, true ), false );
 		}
@@ -88,7 +90,7 @@ final class Install {
 
 	public static function maybe_upgrade(): void {
 		$installed = get_option( self::OPTION_DB_VERSION );
-		if ( VCAP_DB_VERSION === $installed ) {
+		if ( VCAP_DB_VERSION === $installed || get_transient( 'vcap_schema_retry' ) ) {
 			return;
 		}
 		self::create_tables();
@@ -102,7 +104,7 @@ final class Install {
 		if ( ! get_option( 'vcap_secret' ) ) {
 			update_option( 'vcap_secret', wp_generate_password( 64, true, true ), false );
 		}
-		update_option( self::OPTION_DB_VERSION, VCAP_DB_VERSION );
+		self::finish_schema();
 	}
 
 	public static function tables(): array {
@@ -151,116 +153,164 @@ final class Install {
 		}
 	}
 
-	public static function create_tables(): void {
+	/** CREATE TABLE statements (dbDelta format) per table key. */
+	private static function schema(): array {
 		global $wpdb;
-		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		$collate = $wpdb->get_charset_collate();
 		$t       = self::tables();
+		// redemptions: external (order-less) redemptions, see API\V1\RedemptionService; redemption_key is the caller's idempotency key.
+		return array(
+			'vouchers' => "CREATE TABLE {$t['vouchers']} (
+					id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+					code varchar(100) NOT NULL,
+					coupon_id bigint(20) unsigned NOT NULL DEFAULT 0,
+					type varchar(20) NOT NULL DEFAULT 'voucher',
+					status varchar(20) NOT NULL DEFAULT 'active',
+					order_id bigint(20) unsigned NOT NULL DEFAULT 0,
+					order_item_id bigint(20) unsigned NOT NULL DEFAULT 0,
+					item_index int(11) unsigned NOT NULL DEFAULT 0,
+					product_id bigint(20) unsigned NOT NULL DEFAULT 0,
+					variation_id bigint(20) unsigned NOT NULL DEFAULT 0,
+					template_id bigint(20) unsigned NOT NULL DEFAULT 0,
+					usage_mode varchar(20) NOT NULL DEFAULT 'single',
+					discount_type varchar(20) NOT NULL DEFAULT 'fixed_cart',
+					initial_amount decimal(19,4) NOT NULL DEFAULT 0,
+					balance decimal(19,4) NOT NULL DEFAULT 0,
+					currency varchar(10) NOT NULL DEFAULT '',
+					expires_at datetime NULL DEFAULT NULL,
+					buyer_name varchar(200) NOT NULL DEFAULT '',
+					buyer_email varchar(200) NOT NULL DEFAULT '',
+					user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+					recipient_name varchar(200) NOT NULL DEFAULT '',
+					recipient_email varchar(200) NOT NULL DEFAULT '',
+					message text NULL,
+					fields longtext NULL,
+					send_to varchar(20) NOT NULL DEFAULT 'buyer',
+					delivery_at datetime NULL DEFAULT NULL,
+					delivered_at datetime NULL DEFAULT NULL,
+					token varchar(64) NOT NULL,
+					transferable tinyint(1) NOT NULL DEFAULT 1,
+					terms text NULL,
+					max_checkins int(11) unsigned NOT NULL DEFAULT 1,
+					checkins int(11) unsigned NOT NULL DEFAULT 0,
+					last_checkin_at datetime NULL DEFAULT NULL,
+					created_at datetime NOT NULL,
+					updated_at datetime NOT NULL,
+					PRIMARY KEY  (id),
+					UNIQUE KEY code (code),
+					UNIQUE KEY token (token),
+					UNIQUE KEY order_item_slot (order_item_id,item_index),
+					KEY order_id (order_id),
+					KEY coupon_id (coupon_id),
+					KEY status (status),
+					KEY product_id (product_id),
+					KEY recipient_email (recipient_email(100)),
+					KEY buyer_email (buyer_email(100)),
+					KEY user_type (user_id,type)
+				) ENGINE=InnoDB $collate;",
+			'events' => "CREATE TABLE {$t['events']} (
+					id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+					voucher_id bigint(20) unsigned NOT NULL,
+					event varchar(30) NOT NULL,
+					amount decimal(19,4) NULL DEFAULT NULL,
+					balance_after decimal(19,4) NULL DEFAULT NULL,
+					order_id bigint(20) unsigned NOT NULL DEFAULT 0,
+					user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+					note text NULL,
+					created_at datetime NOT NULL,
+					PRIMARY KEY  (id),
+					KEY voucher_id (voucher_id),
+					KEY event (event)
+				) ENGINE=InnoDB $collate;",
+			'pool' => "CREATE TABLE {$t['pool']} (
+					id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+					code varchar(100) NOT NULL,
+					batch varchar(100) NOT NULL DEFAULT '',
+					voucher_id bigint(20) unsigned NOT NULL DEFAULT 0,
+					imported_at datetime NOT NULL,
+					used_at datetime NULL DEFAULT NULL,
+					PRIMARY KEY  (id),
+					UNIQUE KEY code (code),
+					KEY batch_free (batch,voucher_id)
+				) ENGINE=InnoDB $collate;",
+			'redemptions' => "CREATE TABLE {$t['redemptions']} (
+					id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+					redemption_key varchar(64) NOT NULL,
+					voucher_id bigint(20) unsigned NOT NULL,
+					user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+					target varchar(191) NOT NULL DEFAULT '',
+					amount decimal(19,4) NOT NULL DEFAULT 0,
+					state varchar(20) NOT NULL DEFAULT 'reserved',
+					request_hash char(64) NOT NULL,
+					meta longtext NULL,
+					expires_at datetime NULL DEFAULT NULL,
+					created_at datetime NOT NULL,
+					updated_at datetime NOT NULL,
+					PRIMARY KEY  (id),
+					UNIQUE KEY redemption_key (redemption_key),
+					KEY voucher_id (voucher_id),
+					KEY user_id (user_id),
+					KEY state_expires (state,expires_at)
+				) ENGINE=InnoDB $collate;",
+		);
+	}
 
-		dbDelta(
-			"CREATE TABLE {$t['vouchers']} (
-				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-				code varchar(100) NOT NULL,
-				coupon_id bigint(20) unsigned NOT NULL DEFAULT 0,
-				type varchar(20) NOT NULL DEFAULT 'voucher',
-				status varchar(20) NOT NULL DEFAULT 'active',
-				order_id bigint(20) unsigned NOT NULL DEFAULT 0,
-				order_item_id bigint(20) unsigned NOT NULL DEFAULT 0,
-				item_index int(11) unsigned NOT NULL DEFAULT 0,
-				product_id bigint(20) unsigned NOT NULL DEFAULT 0,
-				variation_id bigint(20) unsigned NOT NULL DEFAULT 0,
-				template_id bigint(20) unsigned NOT NULL DEFAULT 0,
-				usage_mode varchar(20) NOT NULL DEFAULT 'single',
-				discount_type varchar(20) NOT NULL DEFAULT 'fixed_cart',
-				initial_amount decimal(19,4) NOT NULL DEFAULT 0,
-				balance decimal(19,4) NOT NULL DEFAULT 0,
-				currency varchar(10) NOT NULL DEFAULT '',
-				expires_at datetime NULL DEFAULT NULL,
-				buyer_name varchar(200) NOT NULL DEFAULT '',
-				buyer_email varchar(200) NOT NULL DEFAULT '',
-				user_id bigint(20) unsigned NOT NULL DEFAULT 0,
-				recipient_name varchar(200) NOT NULL DEFAULT '',
-				recipient_email varchar(200) NOT NULL DEFAULT '',
-				message text NULL,
-				fields longtext NULL,
-				send_to varchar(20) NOT NULL DEFAULT 'buyer',
-				delivery_at datetime NULL DEFAULT NULL,
-				delivered_at datetime NULL DEFAULT NULL,
-				token varchar(64) NOT NULL,
-				transferable tinyint(1) NOT NULL DEFAULT 1,
-				terms text NULL,
-				max_checkins int(11) unsigned NOT NULL DEFAULT 1,
-				checkins int(11) unsigned NOT NULL DEFAULT 0,
-				last_checkin_at datetime NULL DEFAULT NULL,
-				created_at datetime NOT NULL,
-				updated_at datetime NOT NULL,
-				PRIMARY KEY  (id),
-				UNIQUE KEY code (code),
-				UNIQUE KEY token (token),
-				UNIQUE KEY order_item_slot (order_item_id,item_index),
-				KEY order_id (order_id),
-				KEY coupon_id (coupon_id),
-				KEY status (status),
-				KEY product_id (product_id),
-				KEY recipient_email (recipient_email(100)),
-				KEY buyer_email (buyer_email(100)),
-				KEY user_type (user_id,type)
-			) ENGINE=InnoDB $collate;"
-		);
+	public static function create_tables(): void {
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+		foreach ( self::schema() as $sql ) {
+			dbDelta( $sql );
+		}
+		self::ensure_transactional_tables( self::tables() );
+	}
 
-		dbDelta(
-			"CREATE TABLE {$t['events']} (
-				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-				voucher_id bigint(20) unsigned NOT NULL,
-				event varchar(30) NOT NULL,
-				amount decimal(19,4) NULL DEFAULT NULL,
-				balance_after decimal(19,4) NULL DEFAULT NULL,
-				order_id bigint(20) unsigned NOT NULL DEFAULT 0,
-				user_id bigint(20) unsigned NOT NULL DEFAULT 0,
-				note text NULL,
-				created_at datetime NOT NULL,
-				PRIMARY KEY  (id),
-				KEY voucher_id (voucher_id),
-				KEY event (event)
-			) ENGINE=InnoDB $collate;"
-		);
+	/**
+	 * Checks the installed schema against schema(): every table, column and unique key exists and the ledger
+	 * tables are InnoDB (transactions). Returns the problems found ([] = complete).
+	 *
+	 * @return string[]
+	 */
+	public static function verify_schema(): array {
+		global $wpdb;
+		$problems = array();
+		$tables   = self::tables();
+		foreach ( self::schema() as $key => $sql ) {
+			$table = $tables[ $key ];
+			if ( $table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$problems[] = sprintf( 'table %s is missing', $table );
+				continue;
+			}
+			$have = array_map( 'strtolower', (array) $wpdb->get_col( "SHOW COLUMNS FROM {$table}" ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			preg_match_all( '/^\s*([a-z_]+) (?:bigint|int|varchar|char|decimal|datetime|text|longtext|tinyint)/m', $sql, $cols );
+			foreach ( array_diff( $cols[1], $have ) as $missing ) {
+				$problems[] = sprintf( 'column %s.%s is missing', $table, $missing );
+			}
+			$indexes = array_map( 'strtolower', array_unique( (array) $wpdb->get_col( "SHOW INDEX FROM {$table}", 2 ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			preg_match_all( '/UNIQUE KEY ([a-z_]+)/', $sql, $uniques );
+			foreach ( array_diff( $uniques[1], $indexes ) as $missing ) {
+				$problems[] = sprintf( 'unique key %s.%s is missing', $table, $missing );
+			}
+		}
+		self::$transactional_tables = null;
+		if ( ! $problems && ! self::tables_support_transactions() ) {
+			$problems[] = 'the voucher tables are not InnoDB (transactions unavailable)';
+		}
+		return $problems;
+	}
 
-		dbDelta(
-			"CREATE TABLE {$t['pool']} (
-				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-				code varchar(100) NOT NULL,
-				batch varchar(100) NOT NULL DEFAULT '',
-				voucher_id bigint(20) unsigned NOT NULL DEFAULT 0,
-				imported_at datetime NOT NULL,
-				used_at datetime NULL DEFAULT NULL,
-				PRIMARY KEY  (id),
-				UNIQUE KEY code (code),
-				KEY batch_free (batch,voucher_id)
-			) ENGINE=InnoDB $collate;"
-		);
-		// External (order-less) redemptions, see API\V1\RedemptionService. redemption_key is the caller's idempotency key.
-		dbDelta(
-			"CREATE TABLE {$t['redemptions']} (
-				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-				redemption_key varchar(64) NOT NULL,
-				voucher_id bigint(20) unsigned NOT NULL,
-				user_id bigint(20) unsigned NOT NULL DEFAULT 0,
-				target varchar(191) NOT NULL DEFAULT '',
-				amount decimal(19,4) NOT NULL DEFAULT 0,
-				state varchar(20) NOT NULL DEFAULT 'reserved',
-				request_hash char(64) NOT NULL,
-				meta longtext NULL,
-				expires_at datetime NULL DEFAULT NULL,
-				created_at datetime NOT NULL,
-				updated_at datetime NOT NULL,
-				PRIMARY KEY  (id),
-				UNIQUE KEY redemption_key (redemption_key),
-				KEY voucher_id (voucher_id),
-				KEY user_id (user_id),
-				KEY state_expires (state,expires_at)
-			) ENGINE=InnoDB $collate;"
-		);
-		self::ensure_transactional_tables( $t );
+	/**
+	 * Records the schema state: the version option is only set when the schema is complete, so a failed or
+	 * partial upgrade is retried (at most every five minutes) and shown to administrators.
+	 */
+	private static function finish_schema(): bool {
+		$problems = self::verify_schema();
+		if ( $problems ) {
+			update_option( self::SCHEMA_ERROR_OPTION, implode( '; ', $problems ), false );
+			set_transient( 'vcap_schema_retry', 1, 5 * MINUTE_IN_SECONDS );
+			return false;
+		}
+		delete_option( self::SCHEMA_ERROR_OPTION );
+		update_option( self::OPTION_DB_VERSION, VCAP_DB_VERSION );
+		return true;
 	}
 
 	public static function add_caps(): void {

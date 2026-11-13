@@ -25,6 +25,11 @@ final class VoucherAdmin {
 	}
 
 	public function notices(): void {
+		$schema_error = (string) get_option( \VCAP\Install::SCHEMA_ERROR_OPTION, '' );
+		if ( '' !== $schema_error && current_user_can( 'manage_woocommerce' ) ) {
+			/* translators: %s: technical details */
+			echo '<div class="notice notice-error"><p>' . esc_html( sprintf( __( 'Voucher Captain could not complete its database update (%s). Vouchers may not be redeemed reliably until it succeeds; the update is retried automatically. Check the database permissions or contact your host.', 'voucher-captain' ), $schema_error ) ) . '</p></div>';
+		}
 		$upload_error = (string) get_option( 'vcap_upload_dir_error', '' );
 		if ( '' !== $upload_error && current_user_can( 'manage_woocommerce' ) ) {
 			/* translators: %s: folder path */

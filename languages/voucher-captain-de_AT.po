@@ -3963,3 +3963,18 @@ msgstr "Die Einlöseseite für Gutscheine braucht Aufmerksamkeit"
 
 msgid "Voucher settings"
 msgstr "Gutschein-Einstellungen"
+
+msgid "Voucher Captain could not complete its database update (%s). Vouchers may not be redeemed reliably until it succeeds; the update is retried automatically. Check the database permissions or contact your host."
+msgstr "Voucher Captain konnte die Datenbank-Aktualisierung nicht abschließen (%s). Bis dahin werden Gutscheine möglicherweise nicht zuverlässig eingelöst; die Aktualisierung wird automatisch wiederholt. Prüfen Sie die Datenbankrechte oder wenden Sie sich an Ihren Hoster."
+
+msgid "The voucher database tables are complete"
+msgstr "Die Gutschein-Datenbanktabellen sind vollständig"
+
+msgid "All voucher tables, columns and unique keys exist and support transactions."
+msgstr "Alle Gutschein-Tabellen, Spalten und eindeutigen Schlüssel sind vorhanden und unterstützen Transaktionen."
+
+msgid "The voucher database update is incomplete"
+msgstr "Die Gutschein-Datenbank-Aktualisierung ist unvollständig"
+
+msgid "Missing: %s. The update is retried automatically; check the database permissions."
+msgstr "Es fehlt: %s. Die Aktualisierung wird automatisch wiederholt; prüfen Sie die Datenbankrechte."

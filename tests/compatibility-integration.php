@@ -258,6 +258,20 @@ vcap_compat_assert( $before === $after && VCAP\Install::tables_support_transacti
 update_option( VCAP\Install::OPTION_DB_VERSION, '1.0.0' );
 VCAP\Install::maybe_upgrade();
 vcap_compat_assert( VCAP_DB_VERSION === get_option( VCAP\Install::OPTION_DB_VERSION ), 'plugin database upgrade path reaches the current schema version' );
+vcap_compat_assert( array() === VCAP\Install::verify_schema(), 'the installed schema is verified complete' );
+
+// A failed schema change (here: an ALTER the database refuses) keeps the old version so the upgrade is retried.
+$wpdb->query( "ALTER TABLE {$tables['pool']} DROP COLUMN used_at" );
+$block_alter = static fn( $q ) => ( str_starts_with( ltrim( (string) $q ), 'ALTER TABLE ' . $tables['pool'] ) && str_contains( (string) $q, 'used_at' ) ) ? 'SELECT 1' : $q;
+add_filter( 'query', $block_alter );
+update_option( VCAP\Install::OPTION_DB_VERSION, '1.0.0' );
+delete_transient( 'vcap_schema_retry' );
+VCAP\Install::maybe_upgrade();
+remove_filter( 'query', $block_alter );
+vcap_compat_assert( '1.0.0' === get_option( VCAP\Install::OPTION_DB_VERSION ) && str_contains( (string) get_option( VCAP\Install::SCHEMA_ERROR_OPTION ), 'used_at' ), 'an incomplete schema upgrade does not set the version and is reported' );
+delete_transient( 'vcap_schema_retry' );
+VCAP\Install::maybe_upgrade();
+vcap_compat_assert( VCAP_DB_VERSION === get_option( VCAP\Install::OPTION_DB_VERSION ) && false === get_option( VCAP\Install::SCHEMA_ERROR_OPTION ), 'the retried upgrade completes the schema' );
 
 // Site Health: failed mails are recorded (masked) and reported; the checks are registered.
 delete_option( VCAP\Health::MAIL_LOG );
