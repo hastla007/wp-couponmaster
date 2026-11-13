@@ -3969,9 +3969,6 @@ msgstr "Abgelaufener Wert"
 msgid "No outstanding voucher value on this day."
 msgstr "An diesem Tag gab es keinen offenen Gutscheinwert."
 
-msgid "Redemptions, refunds, credits and corrections with their amount, in booking order. The page shows the first 1,000 bookings; the CSV contains up to 50,000."
-msgstr "Einlösungen, Erstattungen, Gutschriften und Korrekturen mit Betrag, in Buchungsreihenfolge. Die Seite zeigt die ersten 1.000 Buchungen, die CSV-Datei bis zu 50.000."
-
 msgid "Booking"
 msgstr "Buchung"
 
@@ -4902,3 +4899,57 @@ msgid "The code batch \"%1$s\" has only %2$d free code left."
 msgid_plural "The code batch \"%1$s\" has only %2$d free codes left."
 msgstr[0] "Der Code-Stapel „%1$s“ hat nur noch %2$d freien Code."
 msgstr[1] "Der Code-Stapel „%1$s“ hat nur noch %2$d freie Codes."
+
+msgid "Gift cards and store credit cannot be redeemed at the moment. Please try again later or contact the shop."
+msgstr "Geschenkkarten und Kundenguthaben können derzeit nicht eingelöst werden. Bitte versuchen Sie es später erneut oder wenden Sie sich an den Shop."
+
+msgid "Until then, gift cards and store credit are refused at checkout, because their balance cannot be deducted."
+msgstr "Bis dahin werden Geschenkkarten und Kundenguthaben an der Kasse abgelehnt, weil ihr Restwert nicht abgebucht werden kann."
+
+msgid "Voucher Captain: the voucher database was updated by a newer plugin version (database version %1$s; this version expects %2$s). The data is left unchanged. Install the newer version again, or restore the backup taken before the update together with this version."
+msgstr "Voucher Captain: Die Gutschein-Datenbank wurde von einer neueren Plugin-Version aktualisiert (Datenbankversion %1$s; diese Version erwartet %2$s). Die Daten bleiben unverändert. Installieren Sie die neuere Version erneut oder spielen Sie die vor dem Update erstellte Sicherung zusammen mit dieser Version ein."
+
+msgid "Lets customers check the status, balance and expiry of a voucher code."
+msgstr "Lässt Kunden Status, Restwert und Ablaufdatum eines Gutscheincodes prüfen."
+
+msgid "Lets customers enter a voucher code; it is applied to the cart now or as soon as it has products."
+msgstr "Lässt Kunden einen Gutscheincode eingeben; er wird sofort auf den Warenkorb angewendet oder sobald dieser Produkte enthält."
+
+msgid "The logged-in customer's vouchers with PDF download and \"send again\"."
+msgstr "Die Gutscheine des angemeldeten Kunden mit PDF-Download und „Erneut senden“."
+
+msgid "The logged-in customer's personal referral code."
+msgstr "Der persönliche Empfehlungscode des angemeldeten Kunden."
+
+msgid "Used on"
+msgstr "Verwendet am"
+
+msgid "Maximum check-ins"
+msgstr "Maximale Check-ins"
+
+msgid "Created"
+msgstr "Erstellt"
+
+msgid "Vouchers used as a payment after tax count with the amount paid."
+msgstr "Gutscheine, die als Zahlung nach Steuern verwendet wurden, zählen mit dem bezahlten Betrag."
+
+msgid "Only the newest %s orders of this period were evaluated. Choose a shorter period for complete figures."
+msgstr "Nur die neuesten %s Bestellungen dieses Zeitraums wurden ausgewertet. Wählen Sie einen kürzeren Zeitraum für vollständige Zahlen."
+
+msgid "Redemptions, refunds, credits and corrections with their amount, in booking order. The page shows the first 1,000 bookings; the CSV export contains all of them."
+msgstr "Einlösungen, Erstattungen, Gutschriften und Korrekturen mit ihrem Betrag, in Buchungsreihenfolge. Die Seite zeigt die ersten 1.000 Buchungen; der CSV-Export enthält alle."
+
+msgid "Showing %1$s of %2$s bookings. Export the CSV for the complete journal."
+msgstr "%1$s von %2$s Buchungen werden angezeigt. Exportieren Sie die CSV-Datei für das vollständige Journal."
+
+msgid "Only the first %d voucher products were checked."
+msgstr "Nur die ersten %d Gutscheinprodukte wurden geprüft."
+
+msgid "WP Pass Captain is not active."
+msgstr "WP Pass Captain ist nicht aktiv."
+
+msgid "This version of WP Pass Captain does not provide the order data needed for the reconciliation."
+msgstr "Diese Version von WP Pass Captain stellt die für den Abgleich nötigen Bestelldaten nicht bereit."
+
+msgid "This version of WP Pass Captain stores its orders differently (missing: %s); the reconciliation is not available."
+msgstr "Diese Version von WP Pass Captain speichert ihre Bestellungen anders (es fehlt: %s); der Abgleich ist nicht verfügbar."
