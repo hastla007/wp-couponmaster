@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Voucher Captain
  * Plugin URI:        https://github.com/hastla007/wp-couponmaster
- * Description:       Sell personalised PDF vouchers, gift cards and event tickets with WooCommerce: visual PDF designer, recipient fields, scheduled delivery, balance-tracked gift cards, QR ticket check-in and code import.
+ * Description:       Sell personalised PDF vouchers, gift cards and store credit with WooCommerce: visual PDF designer, recipient fields, scheduled delivery, balance-tracked gift cards, code import and redemption in the shop, by API or in WP Pass Captain.
  * Version:           1.1.0
  * Requires at least: 6.4
  * Requires PHP:      8.1
@@ -19,6 +19,8 @@
 defined( 'ABSPATH' ) || exit;
 
 define( 'VCAP_VERSION', '1.1.0' );
+// Edition constants (VCAP_EDITION, VCAP_LICENSE_REQUIRED, VCAP_LICENSE_SERVER) and the "Update URI" header of the
+// premium build are added by bin/build.sh; a checkout without them runs as the development edition (LICENSING.md).
 define( 'VCAP_DB_VERSION', '1.3.0' );
 define( 'VCAP_FILE', __FILE__ );
 define( 'VCAP_PATH', plugin_dir_path( __FILE__ ) );

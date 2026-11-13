@@ -26,6 +26,8 @@ final class LicenseClient {
 	private $product_version;
 	/** @var string */
 	private $option_key;
+	/** @var int Seconds to wait for the license server. */
+	private $timeout = 20;
 
 	/**
 	 * @param string $server_url WP License Captain site URL.
@@ -38,6 +40,12 @@ final class LicenseClient {
 		$this->product_key = sanitize_key( $product_key );
 		$this->product_version = sanitize_text_field( $product_version );
 		$this->option_key = sanitize_key( $option_key );
+	}
+
+	/** Shorter timeout for background checks (update checks must never stall the admin or cron). */
+	public function set_timeout( int $seconds ): self {
+		$this->timeout = max( 1, $seconds );
+		return $this;
 	}
 
 	/**
@@ -297,17 +305,26 @@ final class LicenseClient {
 			$headers['X-WPLC-Nonce'] = $nonce;
 			$headers['X-WPLC-Signature'] = hash_hmac( 'sha256', $canonical, $secret );
 		}
-		$http = wp_remote_request(
-			$this->server_url . '/wp-json' . $route,
-			array(
-				'method' => $method,
-				'timeout' => 20,
-				'redirection' => 0,
-				'sslverify' => true,
-				'headers' => $headers,
-				'body' => $body,
-			)
-		);
+		// wp_safe_remote_request(): no redirects to or requests against internal addresses. Only the license server
+		// pinned at build time may resolve to a private address (e.g. a test server on 127.0.0.1).
+		$allow = self::allow_pinned_host( $this->server_url );
+		try {
+			$http = wp_safe_remote_request(
+				$this->server_url . '/wp-json' . $route,
+				array(
+					'method' => $method,
+					'timeout' => $this->timeout,
+					'redirection' => 0,
+					'sslverify' => true,
+					'headers' => $headers,
+					'body' => $body,
+				)
+			);
+		} finally {
+			if ( $allow ) {
+				remove_filter( 'http_request_host_is_external', $allow, 10 );
+			}
+		}
 		if ( is_wp_error( $http ) ) {
 			return $http;
 		}
@@ -325,6 +342,29 @@ final class LicenseClient {
 			return $data;
 		}
 		return new \WP_Error( 'wplc_response_invalid', __( 'The license server response is missing its signature envelope.', 'voucher-captain' ) );
+	}
+
+	/**
+	 * Lets wp_safe_remote_*() reach the license server fixed at build time (VCAP_LICENSE_SERVER) even when its name
+	 * resolves to a private address. Any other host keeps WordPress' protection against internal addresses.
+	 *
+	 * @param string $url URL that will be requested.
+	 * @return callable|null The filter that was added (remove it after the request), or null.
+	 */
+	public static function allow_pinned_host( string $url ): ?callable {
+		if ( ! defined( 'VCAP_LICENSE_SERVER' ) ) {
+			return null;
+		}
+		$pinned = strtolower( (string) wp_parse_url( (string) VCAP_LICENSE_SERVER, PHP_URL_HOST ) );
+		$host   = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
+		if ( '' === $pinned || $pinned !== $host ) {
+			return null;
+		}
+		$allow = static function ( $external, $requested ) use ( $pinned ) {
+			return $external || strtolower( trim( (string) $requested, '.' ) ) === $pinned;
+		};
+		add_filter( 'http_request_host_is_external', $allow, 10, 2 );
+		return $allow;
 	}
 
 	/**

@@ -29,6 +29,19 @@ const VCAP_ACC_SERVER   = 'https://licenses.test';
 const VCAP_ACC_PRODUCT  = 'voucher-captain';
 const VCAP_ACC_BASENAME = 'voucher-captain/voucher-captain.php';
 
+/** Whether $hook has a callback [instance of $class, $method]. */
+$hooked = static function ( string $hook, string $class, string $method ): bool {
+	global $wp_filter;
+	foreach ( isset( $wp_filter[ $hook ] ) ? $wp_filter[ $hook ]->callbacks : array() as $callbacks ) {
+		foreach ( $callbacks as $callback ) {
+			if ( is_array( $callback['function'] ) && $method === $callback['function'][1] && $callback['function'][0] instanceof $class ) {
+				return true;
+			}
+		}
+	}
+	return false;
+};
+
 /** Fresh view of the gate (the snapshot is read once per request otherwise). */
 $allows = static function ( string $feature ): bool {
 	VCAP\Licensing\Entitlements::reset();
@@ -120,9 +133,19 @@ switch ( $mode ) {
 
 	case 'shop-locked':
 		echo "Shop: premium build before activation\n";
-		$check( defined( 'VCAP_LICENSE_REQUIRED' ) && VCAP\Licensing\Entitlements::required(), 'premium release ZIP requires a license (VCAP_LICENSE_REQUIRED)' );
+		$check( defined( 'VCAP_LICENSE_REQUIRED' ) && VCAP\Licensing\Entitlements::required() && 'premium' === VCAP\Licensing\Entitlements::edition(), 'premium release ZIP requires a license (edition premium, VCAP_LICENSE_REQUIRED)' );
+		$check( VCAP_ACC_SERVER === VCAP\Licensing\Entitlements::server_url() && VCAP\Licensing\Entitlements::server_pinned(), 'the license server is fixed in the build (VCAP_LICENSE_SERVER)' );
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		$header = get_plugin_data( WP_PLUGIN_DIR . '/' . VCAP_ACC_BASENAME, false, false );
+		$check( 'licenses.test' === wp_parse_url( (string) $header['UpdateURI'], PHP_URL_HOST ), 'plugin header "Update URI" names the license server (no WordPress.org updates)', $header['UpdateURI'] );
 		$check( array() === array_diff( array( 'promotions', 'referrals', 'topup', 'reports', 'passcaptain' ), VCAP\Licensing\Entitlements::locked() ), 'every premium feature is locked without activation', VCAP\Licensing\Entitlements::locked() );
-		$check( false === has_filter( 'woocommerce_coupon_discount_types' ), 'locked promotions are not registered (no promotion coupon type)' );
+		add_filter( 'vcap_license_required', '__return_false' );
+		add_filter( 'vcap_premium_feature_allowed', '__return_true' );
+		$check( ! $allows( 'promotions' ) && VCAP\Licensing\Entitlements::required(), 'no filter unlocks a premium feature in the premium build' );
+		remove_filter( 'vcap_license_required', '__return_false' );
+		remove_filter( 'vcap_premium_feature_allowed', '__return_true' );
+		$check( ! $hooked( 'vcap_product_settings_fields', 'VCAP\TopUp', 'product_field' ) && $hooked( 'woocommerce_order_status_refunded', 'VCAP\TopUp', 'revoke' ), 'locked: new top-up sales are not registered, the reversal of sold top-ups is' );
+		$check( false !== has_filter( 'woocommerce_coupon_discount_types' ), 'locked: the promotion coupon type stays registered for existing orders' );
 		break;
 
 	case 'shop-activate':
@@ -145,7 +168,7 @@ switch ( $mode ) {
 
 	case 'shop-active':
 		echo "Shop: next request after activation\n";
-		$check( false !== has_filter( 'woocommerce_coupon_discount_types' ), 'promotions are registered in a new request (gate reads the snapshot, no server call)' );
+		$check( $allows( 'promotions' ) && $hooked( 'vcap_product_settings_fields', 'VCAP\TopUp', 'product_field' ), 'premium features are registered in a new request (gate reads the snapshot, no server call)' );
 		$check( array( 'referrals' ) === VCAP\Licensing\Entitlements::locked(), 'only refer-a-friend is locked', VCAP\Licensing\Entitlements::locked() );
 		break;
 
@@ -155,7 +178,7 @@ switch ( $mode ) {
 		$check( is_wp_error( $online ), 'the server cannot be reached', is_wp_error( $online ) ? $online->get_error_code() : $online );
 		VCAP\Licensing\Entitlements::refresh();
 		$check( $allows( 'promotions' ) && ! $allows( 'referrals' ), 'the signed offline snapshot keeps the rights during the outage' );
-		$check( false !== has_filter( 'woocommerce_coupon_discount_types' ), 'premium features keep working while the server is down' );
+		$check( $hooked( 'woocommerce_before_add_to_cart_button', 'VCAP\TopUp', 'code_field' ), 'premium features keep working while the server is down' );
 		break;
 
 	case 'shop-suspended':
@@ -177,12 +200,23 @@ switch ( $mode ) {
 		require_once ABSPATH . 'wp-admin/includes/file.php';
 		require_once ABSPATH . 'wp-admin/includes/misc.php';
 		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
-		wp_set_current_user( 1 );
 		$before = get_plugin_data( WP_PLUGIN_DIR . '/' . VCAP_ACC_BASENAME, false, false )['Version'];
+		// Like WP-Cron (wp_update_plugins event): no current user.
+		wp_set_current_user( 0 );
 		delete_site_transient( 'update_plugins' );
 		wp_update_plugins();
 		$offer = get_site_transient( 'update_plugins' )->response[ VCAP_ACC_BASENAME ] ?? null;
-		$check( is_object( $offer ) && ! empty( $offer->wplc_managed ) && false !== strpos( (string) $offer->package, VCAP_ACC_SERVER . '/wp-json/wplc/v1/updates/download/' ), 'update offered by the license server with a one-time download grant', $offer );
+		$check( is_object( $offer ) && ! empty( $offer->wplc_managed ) && false !== strpos( (string) $offer->package, VCAP_ACC_SERVER . '/wp-json/wplc/v1/updates/download/' ), 'update offered by the license server with a one-time download grant – also without a current user (cron)', $offer );
+		$asked = 0;
+		$count = static function ( $response, $context, $class, $request_args, $url ) use ( &$asked ) {
+			$asked += str_contains( (string) $url, '/wplc/v1/updates/check' ) ? 1 : 0;
+		};
+		add_action( 'http_api_debug', $count, 10, 5 );
+		set_site_transient( 'update_plugins', get_site_transient( 'update_plugins' ) ); // Next cron run / admin page load.
+		remove_action( 'http_api_debug', $count, 10 );
+		$cron_offer = get_site_transient( 'update_plugins' )->response[ VCAP_ACC_BASENAME ] ?? null;
+		$check( 0 === $asked && is_object( $cron_offer ) && $cron_offer->package === $offer->package, 'the offer survives the next transient refresh from the cache, without asking the license server again', $asked );
+		wp_set_current_user( 1 );
 		$upgrader = new Plugin_Upgrader( new WP_Ajax_Upgrader_Skin() ); // collects errors (get_errors()).
 		$result   = $upgrader->upgrade( VCAP_ACC_BASENAME );
 		wp_clean_plugins_cache();

@@ -201,6 +201,10 @@ final class Shortcodes {
 	}
 
 	public function referral_shortcode(): string {
+		if ( ! Licensing\Entitlements::allows( 'referrals' ) ) {
+			// Locked premium feature: customers see nothing, shop managers see why.
+			return current_user_can( 'manage_woocommerce' ) ? '<p class="vcap-license-locked">' . esc_html( Licensing\Entitlements::locked_message( 'referrals' ) ) . '</p>' : '';
+		}
 		if ( ! is_user_logged_in() ) {
 			return self::login_hint();
 		}

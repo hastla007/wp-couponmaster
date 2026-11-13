@@ -45,6 +45,7 @@ function esc_html( $s ) { return htmlspecialchars( (string) $s, ENT_QUOTES, 'UTF
 function esc_attr( $s ) { return htmlspecialchars( (string) $s, ENT_QUOTES, 'UTF-8' ); }
 function esc_textarea( $s ) { return esc_html( $s ); }
 function esc_url( $s ) { return filter_var( (string) $s, FILTER_SANITIZE_URL ); }
+function wp_kses_post( $s ) { return (string) $s; }
 function esc_url_raw( $s ) { $s = (string) $s; return preg_match( '#^(https?:)?//#i', $s ) || '' === $s ? $s : ''; }
 function esc_js( $s ) { return addslashes( (string) $s ); }
 function sanitize_text_field( $s ) { return trim( preg_replace( '/[\r\n\t ]+/', ' ', strip_tags( (string) $s ) ) ); }
@@ -130,6 +131,9 @@ function get_permalink( $id = 0 ) { return ''; }
 function did_action( $h ) { return 0; }
 function delete_option( $k ) { unset( $GLOBALS['vcap_test_options'][ $k ] ); return true; }
 function delete_transient( $k ) { unset( $GLOBALS['vcap_test_transients'][ $k ] ); return true; }
+function get_site_transient( $k ) { return $GLOBALS['vcap_test_site_transients'][ $k ] ?? false; }
+function set_site_transient( $k, $v, $e = 0 ) { $GLOBALS['vcap_test_site_transients'][ $k ] = $v; return true; }
+function delete_site_transient( $k ) { do_action( 'delete_site_transient_' . $k, $k ); unset( $GLOBALS['vcap_test_site_transients'][ $k ] ); return true; }
 
 if ( ! class_exists( 'WP_Error' ) ) {
 	class WP_Error {
@@ -150,6 +154,11 @@ if ( ! function_exists( 'wp_remote_request' ) ) {
 	function wp_remote_request( $url, $args = array() ) { $h = $GLOBALS['vcap_test_http'] ?? null; return $h ? $h( $url, $args ) : new WP_Error( 'http_request_failed', 'no transport' ); }
 	function wp_remote_retrieve_response_code( $r ) { return is_array( $r ) ? (int) $r['code'] : 0; }
 	function wp_remote_retrieve_body( $r ) { return is_array( $r ) ? (string) $r['body'] : ''; }
+}
+/** wp_safe_remote_*(): same fake transport; the URL check of WordPress is not part of the unit tests. */
+if ( ! function_exists( 'wp_safe_remote_request' ) ) {
+	function wp_safe_remote_request( $url, $args = array() ) { $GLOBALS['vcap_test_http_log'][] = $url; return wp_remote_request( $url, $args ); }
+	function wp_safe_remote_get( $url, $args = array() ) { $GLOBALS['vcap_test_http_log'][] = $url; return wp_remote_get( $url, $args ); }
 }
 if ( ! function_exists( 'remove_filter' ) ) {
 	function remove_filter( $hook, $cb, $prio = 10 ) {

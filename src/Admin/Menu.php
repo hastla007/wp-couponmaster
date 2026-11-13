@@ -36,12 +36,21 @@ final class Menu {
 		add_submenu_page( 'vcap-vouchers', __( 'Issued vouchers', 'voucher-captain' ), __( 'Issued vouchers', 'voucher-captain' ), self::cap(), 'vcap-vouchers', array( $voucher_admin, 'page' ) );
 		add_submenu_page( 'vcap-vouchers', __( 'Import codes', 'voucher-captain' ), __( 'Import codes', 'voucher-captain' ), self::cap(), 'vcap-import', array( new Import( vcap()->code_pool ), 'page' ) );
 		add_submenu_page( 'vcap-vouchers', __( 'Generate codes', 'voucher-captain' ), __( 'Generate codes', 'voucher-captain' ), self::cap(), 'vcap-generate', array( new CampaignAdmin( new \VCAP\Campaigns( vcap()->code_pool, vcap()->vouchers ) ), 'page' ) );
-		add_submenu_page( 'vcap-vouchers', __( 'Reports', 'voucher-captain' ), __( 'Reports', 'voucher-captain' ), self::cap(), 'vcap-reports', array( new ReportsAdmin(), 'page' ) );
+		$reports = \VCAP\Licensing\Entitlements::allows( 'reports' ) ? array( new ReportsAdmin(), 'page' ) : array( $this, 'reports_locked' );
+		add_submenu_page( 'vcap-vouchers', __( 'Reports', 'voucher-captain' ), __( 'Reports', 'voucher-captain' ), self::cap(), 'vcap-reports', $reports );
 		add_submenu_page( 'vcap-vouchers', __( 'Scanner', 'voucher-captain' ), __( 'Scanner', 'voucher-captain' ), self::scan_cap(), 'vcap-scanner', array( new Scanner(), 'page' ) );
 		if ( \VCAP\Compat\PassCaptain::active() ) {
 			// Link into Pass Captain's own menu (both plugins keep their menus).
 			add_submenu_page( 'vcap-vouchers', __( 'WP Pass Captain', 'voucher-captain' ), __( 'WP Pass Captain ↗', 'voucher-captain' ), 'wpcap_checkin', 'admin.php?page=wp-pass-captain' );
 		}
+	}
+
+	/** Reports without the premium right: explain why instead of showing the reports. */
+	public function reports_locked(): void {
+		if ( ! current_user_can( self::cap() ) ) {
+			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
+		}
+		echo '<div class="wrap"><h1>' . esc_html__( 'Reports', 'voucher-captain' ) . '</h1>' . \VCAP\Licensing\Entitlements::locked_notice( 'reports' ) . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in locked_notice().
 	}
 
 	public function settings_link(): void {

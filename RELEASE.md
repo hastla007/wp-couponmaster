@@ -48,6 +48,10 @@ release notes). Entries start with **New**, **Fix** or **Fix (security)** and de
    Captain's `tools/create-release-manifest.php`: version, HTTPS package URL, SHA-256, required PHP/WordPress,
    tested WordPress, release notes). The package URL is the repository variable `WPLC_PACKAGE_BASE_URL` + the ZIP
    name; without the variable the workflow warns and leaves the manifest out. Review and publish the draft.
+   Editions (LICENSING.md): the free ZIP is built with `VCAP_EDITION=free`, the premium ZIP with
+   `VCAP_EDITION=premium VCAP_LICENSE_SERVER=https://<licence server>` (repository variable; optional
+   `VCAP_UPDATE_URI`, default `<server>/voucher-captain`). A tag build without `VCAP_EDITION` fails; without
+   `VCAP_LICENSE_SERVER` the premium ZIP points to the placeholder `https://licenses.example.com`.
 6. Publish the premium release in the licence manager's release storage:
    - upload `voucher-captain-premium-X.Y.Z.zip` unchanged to the storage behind `WPLC_PACKAGE_BASE_URL` (immutable:
      never overwrite a published version);
