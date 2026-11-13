@@ -29,7 +29,7 @@ php "$ROOT/bin/make-pot.php"
 php "$ROOT/bin/make-mo.php"
 
 # Copy plugin files (no dev tooling).
-cp -R "$ROOT/assets" "$ROOT/languages" "$ROOT/src" "$ROOT/templates" "$DEST/"
+cp -R "$ROOT/assets" "$ROOT/config" "$ROOT/languages" "$ROOT/src" "$ROOT/templates" "$DEST/"
 cp "$ROOT/voucher-captain.php" "$ROOT/uninstall.php" "$ROOT/readme.txt" "$ROOT/wpml-config.xml" "$ROOT/LICENSE" "$ROOT/composer.json" "$ROOT/composer.lock" "$DEST/"
 
 # Production dependencies only.

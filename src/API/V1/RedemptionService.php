@@ -407,10 +407,19 @@ final class RedemptionService {
 	 * @return int
 	 */
 	public static function decimals( string $currency ): int {
+		static $minor = null;
+		if ( null === $minor ) {
+			// ISO 4217 data (config/currencies.php): minor units that differ from 2.
+			$file  = dirname( __DIR__, 3 ) . '/config/currencies.php';
+			$minor = is_readable( $file ) ? (array) include $file : array();
+		}
 		$currency = strtoupper( $currency );
-		$zero     = array( 'BIF', 'CLP', 'DJF', 'GNF', 'ISK', 'JPY', 'KMF', 'KRW', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF' );
-		$three    = array( 'BHD', 'IQD', 'JOD', 'KWD', 'LYD', 'OMR', 'TND' );
-		$decimals = in_array( $currency, $zero, true ) ? 0 : ( in_array( $currency, $three, true ) ? 3 : 2 );
+		$decimals = 2;
+		foreach ( $minor as $units => $codes ) {
+			if ( in_array( $currency, (array) $codes, true ) ) {
+				$decimals = (int) $units;
+			}
+		}
 		/**
 		 * Decimal places used for voucher amounts of a currency.
 		 *

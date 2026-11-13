@@ -208,8 +208,9 @@ final class ProductConfig {
 	}
 
 	/**
-	 * Statutory default validity for the shop's base country: Germany 3 years to the end of the year
-	 * (§§ 195, 199 BGB), Austria 30 years (OGH case law), other countries 3 years to the end of the year.
+	 * Statutory default validity for a country (default: the shop's base country). The rule is configuration, not
+	 * code: setting "Statutory validity per country", else the verified market data (config/markets.php: Germany
+	 * 3 years to the end of the year, §§ 195, 199 BGB; Austria 30 years), else 3 years to the end of the year.
 	 * Filter "vcap_statutory_expiry" (array{years:int, end_of_year:bool}, country code); years 0 = never.
 	 *
 	 * @return array{years:int, end_of_year:bool}
@@ -218,11 +219,8 @@ final class ProductConfig {
 		if ( '' === $country ) {
 			$country = strtoupper( strtok( (string) get_option( 'woocommerce_default_country', '' ), ':' ) ?: '' );
 		}
-		$rules = array(
-			'AT' => array( 'years' => 30, 'end_of_year' => false ),
-			'DE' => array( 'years' => 3, 'end_of_year' => true ),
-		);
-		$rule = (array) apply_filters( 'vcap_statutory_expiry', $rules[ $country ] ?? array( 'years' => 3, 'end_of_year' => true ), $country );
+		$known = Markets::expiry_rule( $country );
+		$rule  = (array) apply_filters( 'vcap_statutory_expiry', $known ? array( 'years' => $known['years'], 'end_of_year' => $known['end_of_year'] ) : array( 'years' => 3, 'end_of_year' => true ), $country );
 		return array( 'years' => max( 0, (int) ( $rule['years'] ?? 3 ) ), 'end_of_year' => ! empty( $rule['end_of_year'] ) );
 	}
 

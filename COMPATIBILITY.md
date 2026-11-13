@@ -19,6 +19,22 @@ The CI job `minimum-versions` installs WordPress 6.4.5 and WooCommerce 8.9.0 on 
 
 Supported per site. Each site has its own voucher tables (`{site prefix}vcap_*`), settings, WooCommerce coupons and private upload folder; vouchers are never shared between sites. Network activation sets up every site (up to 500 at once; any further or later-created site is set up on its first request). Network deactivation suspends the balance coupons of every site. A network uninstall removes data only on the sites whose own "Delete data on uninstall" setting is enabled – the others keep their tables. CI job `multisite` checks network activation, a site created afterwards and the per-site uninstall.
 
+## EU target market
+
+Country-specific data is configuration, not code:
+
+| What | Where |
+|---|---|
+| Currency and main locale of each of the 27 EU countries; verified statutory voucher validity (Germany 3 years to the end of the year, Austria 30 years) | `config/markets.php` (data file), filter `vcap_markets` |
+| Statutory validity of further countries (or different rules) | setting *Vouchers → Settings → Statutory validity per country* (`DE: 3 end`, `AT: 30`) – countries without a rule use 3 years to the end of the year |
+| Redemption conditions / consumer information per country | setting *Redemption conditions per country*; the billing country decides and the text is fixed on the voucher |
+| Currency minor units (ISO 4217) | `config/currencies.php`, filter `vcap_currency_decimals` |
+| VAT rates, OSS, place of supply | WooCommerce tax settings only – Voucher Captain stores no rates (TAX.md) |
+| Languages | translation files `languages/voucher-captain-{locale}.mo` (included: de_DE, de_AT; POT for further languages) |
+
+*Tools → Site Health* checks every EU country in WooCommerce's selling locations: verified validity, conditions and a
+translation (test "Some EU selling countries need voucher settings"). `tests/run.php` covers the configuration.
+
 ## Bundled libraries
 
 Voucher Captain bundles dompdf, php-font-lib, php-svg-lib, html5, php-qrcode and php-barcode-generator. Libraries that other plugins also ship are moved into the `VCAP\Vendor` namespace when the release ZIP is built (`bin/scope-vendor.php`), so two versions can never collide. This is currently `sabberworm/php-css-parser`: WooCommerce 8.x bundles an older, incompatible version, and loading both ended in a fatal error. The build fails if an unprefixed reference remains; `tests/scoping-integration.php` checks the installed ZIP.

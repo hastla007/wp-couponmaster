@@ -44,6 +44,7 @@ final class Settings {
 		'vcap_credit_with_coupons'     => 'yes',
 		'vcap_credit_apply_order'      => 'last',
 		'vcap_terms_by_country'        => '',
+		'vcap_expiry_by_country'       => '',
 		'vcap_referral_enabled'        => 'no',
 		'vcap_referral_friend_type'    => 'fixed_cart',
 		'vcap_referral_friend_amount'  => 10,
@@ -296,6 +297,14 @@ final class Settings {
 						'default'  => '',
 						'css'      => 'min-width:400px;height:120px;',
 						'desc'     => __( 'Optional, for shops selling to several countries. One block per country, starting with the two-letter country code and a colon, e.g. "AT: Valid for 30 years." The billing country of the order decides; products with their own conditions and countries without a block use the conditions above. Have the texts checked legally for each country.', 'voucher-captain' ),
+					),
+					array(
+						'title'    => __( 'Statutory validity per country', 'voucher-captain' ),
+						'id'       => Markets::EXPIRY_OPTION,
+						'type'     => 'textarea',
+						'default'  => '',
+						'css'      => 'min-width:400px;height:80px;',
+						'desc'     => __( 'Optional. One line per country: two-letter code, colon, years, and "end" for "to the end of the year" (0 = never expires), e.g. "DE: 3 end" or "AT: 30". Used for vouchers with the statutory validity; overrides the verified defaults (Germany 3 years to the end of the year, Austria 30 years). Countries without a rule use 3 years to the end of the year. Have the rules checked legally for each country.', 'voucher-captain' ),
 					),
 					array(
 						'title'   => __( 'Default template', 'voucher-captain' ),

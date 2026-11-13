@@ -4173,3 +4173,30 @@ msgstr "Hallo, {buyer_name} hat Ihnen {product_name} geschenkt."
 
 msgid "Hello, you received {product_name} as a gift."
 msgstr "Hallo, Sie haben {product_name} geschenkt bekommen."
+
+msgid "Each selling country has a verified voucher validity, redemption conditions and a translation."
+msgstr "Für jedes Verkaufsland sind eine geprüfte Gutscheingültigkeit, Einlösebedingungen und eine Übersetzung vorhanden."
+
+msgid "Optional. One line per country: two-letter code, colon, years, and \"end\" for \"to the end of the year\" (0 = never expires), e.g. \"DE: 3 end\" or \"AT: 30\". Used for vouchers with the statutory validity; overrides the verified defaults (Germany 3 years to the end of the year, Austria 30 years). Countries without a rule use 3 years to the end of the year. Have the rules checked legally for each country."
+msgstr "Optional. Eine Zeile pro Land: Ländercode mit zwei Buchstaben, Doppelpunkt, Jahre und „end“ für „zum Jahresende“ (0 = unbegrenzt), z. B. „DE: 3 end“ oder „AT: 30“. Gilt für Gutscheine mit gesetzlicher Gültigkeit und ersetzt die geprüften Standardwerte (Deutschland 3 Jahre zum Jahresende, Österreich 30 Jahre). Länder ohne Regel erhalten 3 Jahre zum Jahresende. Lassen Sie die Regeln für jedes Land rechtlich prüfen."
+
+msgid "Set the statutory validity and conditions per country under Vouchers → Settings (have them checked legally) and add translations: %s"
+msgstr "Legen Sie unter Gutscheine → Einstellungen die gesetzliche Gültigkeit und die Bedingungen pro Land fest (rechtlich prüfen lassen) und ergänzen Sie Übersetzungen: %s"
+
+msgid "Some EU selling countries need voucher settings"
+msgstr "Für einige EU-Verkaufsländer fehlen Gutschein-Einstellungen"
+
+msgid "Statutory validity per country"
+msgstr "Gesetzliche Gültigkeit pro Land"
+
+msgid "Voucher rules are set for every EU country you sell to"
+msgstr "Für jedes EU-Verkaufsland sind Gutscheinregeln festgelegt"
+
+msgid "no redemption conditions"
+msgstr "keine Einlösebedingungen"
+
+msgid "no translation (%s)"
+msgstr "keine Übersetzung (%s)"
+
+msgid "statutory validity not verified (3 years to the end of the year is used)"
+msgstr "gesetzliche Gültigkeit nicht geprüft (es gelten 3 Jahre zum Jahresende)"

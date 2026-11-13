@@ -19,7 +19,7 @@ final class Health {
 
 	public function tests( $tests ) {
 		$tests = (array) $tests;
-		foreach ( array( 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page' ) as $id ) {
+		foreach ( array( 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets' ) as $id ) {
 			$tests['direct'][ 'vcap_' . $id ] = array(
 				'label' => __( 'Voucher Captain', 'voucher-captain' ),
 				'test'  => array( $this, 'test_' . $id ),
@@ -121,6 +121,32 @@ final class Health {
 			return self::result( 'redeem_page', 'good', __( 'The voucher redeem page is set up', 'voucher-captain' ), __( 'Voucher emails and ticket vouchers link to a page with the redeem form.', 'voucher-captain' ) );
 		}
 		return self::result( 'redeem_page', 'recommended', __( 'The voucher redeem page needs attention', 'voucher-captain' ), $problem );
+	}
+
+	/** EU countries the shop sells to: verified voucher validity, country conditions and a translation for each. */
+	public function test_markets(): array {
+		$gaps = array();
+		foreach ( Markets::readiness() as $country => $state ) {
+			$missing = array();
+			if ( ! $state['validity'] ) {
+				$missing[] = __( 'statutory validity not verified (3 years to the end of the year is used)', 'voucher-captain' );
+			}
+			if ( ! $state['terms'] ) {
+				$missing[] = __( 'no redemption conditions', 'voucher-captain' );
+			}
+			if ( ! $state['translation'] ) {
+				/* translators: %s: locale, e.g. fr_FR */
+				$missing[] = sprintf( __( 'no translation (%s)', 'voucher-captain' ), $state['locale'] );
+			}
+			if ( $missing ) {
+				$gaps[] = $country . ': ' . implode( ', ', $missing );
+			}
+		}
+		if ( ! $gaps ) {
+			return self::result( 'markets', 'good', __( 'Voucher rules are set for every EU country you sell to', 'voucher-captain' ), __( 'Each selling country has a verified voucher validity, redemption conditions and a translation.', 'voucher-captain' ) );
+		}
+		/* translators: %s: list of countries with what is missing */
+		return self::result( 'markets', 'recommended', __( 'Some EU selling countries need voucher settings', 'voucher-captain' ), sprintf( __( 'Set the statutory validity and conditions per country under Vouchers → Settings (have them checked legally) and add translations: %s', 'voucher-captain' ), implode( '; ', $gaps ) ) );
 	}
 
 	private static function result( string $id, string $status, string $label, string $text ): array {
