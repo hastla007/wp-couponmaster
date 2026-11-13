@@ -76,7 +76,7 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 - [ ] Reale Zahlungsanbieter sowie die konkret unterstützten Mehrwährungs- und Subscription-Plugins durch E2E-/Kompatibilitätstests freigeben.
 - [x] Build-ZIP in sauberer WordPress-Installation installieren, aktivieren, aktualisieren und deinstallieren. — *Nachweis: CI-Schritt „Build, install, and update the release ZIP“ plus Deinstallationsprüfung.*
 - [ ] Gemeinsame Installation von Voucher Captain und Ticket Captain auf Klassen-/Vendor-Konflikte und gemeinsame Abläufe final freigeben.
-- [ ] Pass-Captain-CI-Matrix auf einen gültigen, unterstützten Branch/Release-Ref ausrichten oder den defekten Ref bis zur Reparatur aus der Matrix nehmen; aktuell scheitert `claude/woocommerce-ticket-plugin-8q4m8q` beim Laden mit fehlender Klasse `PassCaptain\Partners\Sales`. Danach die ausstehenden CI-Läufe erneut ausführen.
+- [x] Pass-Captain-CI-Matrix auf einen gültigen, unterstützten Branch/Release-Ref ausrichten oder den defekten Ref bis zur Reparatur aus der Matrix nehmen; aktuell scheitert `claude/woocommerce-ticket-plugin-8q4m8q` beim Laden mit fehlender Klasse `PassCaptain\Partners\Sales`. Danach die ausstehenden CI-Läufe erneut ausführen. — *erledigt: Matrix testet `main` und den Arbeits-Branch `claude/youthful-bardeen-7ejd7a`.*
 - [ ] `RELEASE_CHECKLIST.md` mit den aktuellen CI-/Browser-Nachweisen abgleichen, widersprüchliche Statusangaben zu Pass Captain auflösen und belegte Release-Gates erst nach erfolgreichem Lauf abhaken.
 - [x] Datenschutzexport/-löschung, Berechtigungen, Nonces, Rate-Limits und E-Mail-Funktionen implementieren und automatisiert prüfen. — *Nachweis: tests/security-integration.php, tests/account-integration.php und tests/reminder-integration.php.*
 - [ ] Übersetzungsabdeckung und die finalen Admin-/Kunden-E-Mail-Texte für den Release freigeben.
@@ -271,8 +271,8 @@ Fünf parallele Prüfungen (Sicherheit, Geld/Buchungen, Steuer/Recht/Datenschutz
 
 ### WooCommerce und Plugin-Zusammenspiel
 
-- [ ] Integration (P1): Reservierungen und Aktions-Holds erst nach allen Fremd-Validierungen setzen (Priorität ≥ 50, nach Pass Captains Kontingent-Hold) und Holds der vorherigen unbezahlten Sitzungsbestellung (`order_awaiting_payment`/`store_api_draft_order`) bei neuer Checkout-Bestellung freigeben; Test: PC ausverkauft → Geschenkkarte sofort wieder nutzbar.
-- [ ] Integration (P1): Teil-Fehlbetrag wird beim nächsten Wechsel auf processing/completed (z. B. zweites `payment_complete()` aus on-hold) automatisch gelöscht und dann ausgeliefert; Soll/Ist je Code speichern, Freigabe nur nach voller Belastung oder `accept_shortfall`; Test.
+- [x] Integration (P1): Reservierungen und Aktions-Holds erst nach allen Fremd-Validierungen setzen (Priorität ≥ 50, nach Pass Captains Kontingent-Hold) und Holds der vorherigen unbezahlten Sitzungsbestellung (`order_awaiting_payment`/`store_api_draft_order`) bei neuer Checkout-Bestellung freigeben; Test: PC ausverkauft → Geschenkkarte sofort wieder nutzbar. — *erledigt (a5e668d): Priorität 50/51, vorherige unbezahlte Sitzungsbestellung wird freigegeben; Akzeptanztest.*
+- [x] Integration (P1): Teil-Fehlbetrag wird beim nächsten Wechsel auf processing/completed (z. B. zweites `payment_complete()` aus on-hold) automatisch gelöscht und dann ausgeliefert; Soll/Ist je Code speichern, Freigabe nur nach voller Belastung oder `accept_shortfall`; Test. — *erledigt (62f3014): Fehlbetrag je Code gespeichert, Freigabe nur per „Fehlbetrag akzeptieren“; Akzeptanztest.*
 - [ ] `vcap_balance_deduct_statuses` zur Laufzeit im Callback auswerten statt bei `plugins_loaded` (Filter auf „nur completed“ wird sonst ignoriert).
 - [ ] `order_coupon_object()` bei Bestellungen in Fremdwährung von Basis- in Bestellwährung umrechnen oder überspringen.
 - [ ] `exchange_state()` pro Request zwischenspeichern (Kundenkonto: bis zu 50+ Abfragen je Gutschein).
