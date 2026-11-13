@@ -60,6 +60,7 @@ final class Plugin {
 		( new Emails() )->register();
 		( new Privacy( $this->vouchers ) )->register();
 		( new Health() )->register();
+		( new TopUp( $this->vouchers, $this->coupons ) )->register();
 		( new CouponLink( $this->settings ) )->register();
 		( new VoucherPurchaseRules( $this->settings ) )->register();
 		( new FirstOrderCoupons() )->register();

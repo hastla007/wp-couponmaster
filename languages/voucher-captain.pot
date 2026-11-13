@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-13 00:53+0000\n"
+"POT-Creation-Date: 2026-11-13 00:55+0000\n"
 "X-Domain: voucher-captain\n"
 
 #: src/API/V1/RedemptionService.php:75 src/API/V1/RedemptionService.php:117
@@ -445,7 +445,7 @@ msgstr ""
 msgid "WP Pass Captain ↗"
 msgstr ""
 
-#: src/Admin/Menu.php:48 src/Admin/Menu.php:48 src/Plugin.php:118
+#: src/Admin/Menu.php:48 src/Admin/Menu.php:48 src/Plugin.php:119
 msgid "Settings"
 msgstr ""
 
@@ -1858,7 +1858,7 @@ msgstr ""
 msgid "Voucher amount (%s)"
 msgstr ""
 
-#: src/CustomAmount.php:39 src/Fields.php:328 src/Fields.php:342 src/ProductSettings.php:370
+#: src/CustomAmount.php:39 src/Fields.php:328 src/Fields.php:342 src/ProductSettings.php:370 src/TopUp.php:67
 msgid "required"
 msgstr ""
 
@@ -2424,7 +2424,7 @@ msgstr ""
 msgid "unlimited"
 msgstr ""
 
-#: src/Downloads.php:292 src/Shortcodes.php:76
+#: src/Downloads.php:292 src/Shortcodes.php:76 src/TopUp.php:95
 msgid "Too many attempts. Please try again later."
 msgstr ""
 
@@ -3061,12 +3061,12 @@ msgid "Redeem page link with the code"
 msgstr ""
 
 #. translators: %s: comma separated table names
-#: src/Plugin.php:134
+#: src/Plugin.php:135
 #, php-format
 msgid "Voucher Captain: the voucher database tables do not support transactions (InnoDB). Gift card balances cannot be redeemed until these tables are converted to InnoDB: %s"
 msgstr ""
 
-#: src/Plugin.php:142
+#: src/Plugin.php:143
 msgid "Voucher Captain: the PDF libraries are missing. Install the release ZIP or run \"composer install --no-dev\" in the plugin folder."
 msgstr ""
 
@@ -4532,6 +4532,90 @@ msgstr ""
 
 #: src/Tickets.php:398 src/Voucher.php:64 src/VoucherRepository.php:448
 msgid "Redeemed"
+msgstr ""
+
+#: src/TopUp.php:31
+msgid "Topped up"
+msgstr ""
+
+#: src/TopUp.php:31
+msgid "Top-up reversed"
+msgstr ""
+
+#: src/TopUp.php:46
+msgid "Top up"
+msgstr ""
+
+#: src/TopUp.php:48
+msgid "Top up an existing gift card instead of issuing a new one (the customer enters the card code)."
+msgstr ""
+
+#: src/TopUp.php:67
+msgid "Gift card code to top up"
+msgstr ""
+
+#: src/TopUp.php:76
+msgid "This gift card code was not found."
+msgstr ""
+
+#: src/TopUp.php:79
+msgid "Only gift cards with a balance can be topped up."
+msgstr ""
+
+#: src/TopUp.php:82
+msgid "This gift card is no longer valid and cannot be topped up."
+msgstr ""
+
+#: src/TopUp.php:85
+msgid "This gift card is in another currency."
+msgstr ""
+
+#: src/TopUp.php:119
+msgid "Tops up gift card"
+msgstr ""
+
+#. translators: %s: reason
+#: src/TopUp.php:150
+#, php-format
+msgid "Gift card top-up not booked: %s Please refund or top up by hand."
+msgstr ""
+
+#. translators: %s: order number
+#: src/TopUp.php:159
+#, php-format
+msgid "Topped up with order #%s"
+msgstr ""
+
+#: src/TopUp.php:161
+msgid "Gift card top-up could not be booked; it is tried again when the order is processed again."
+msgstr ""
+
+#. translators: 1: amount, 2: masked card code
+#: src/TopUp.php:167
+#, php-format
+msgid "Gift card …%2$s topped up by %1$s."
+msgstr ""
+
+#. translators: %s: order number
+#: src/TopUp.php:189
+#, php-format
+msgid "Top-up of order #%s reversed"
+msgstr ""
+
+#: src/TopUp.php:191
+msgid "The gift card top-up could not be reversed. Please check the card balance."
+msgstr ""
+
+#. translators: 1: amount taken back, 2: amount already spent
+#: src/TopUp.php:197
+#, php-format
+msgid "Gift card top-up reversed: %1$s taken back, %2$s had already been spent."
+msgstr ""
+
+#. translators: %s: amount
+#: src/TopUp.php:199
+#, php-format
+msgid "Gift card top-up reversed: %s taken back."
 msgstr ""
 
 #: src/Voucher.php:62

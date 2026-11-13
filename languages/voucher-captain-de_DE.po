@@ -4044,3 +4044,57 @@ msgstr "Buchung"
 
 msgid "No bookings in this period."
 msgstr "Keine Buchungen in diesem Zeitraum."
+
+msgid "Topped up"
+msgstr "Aufgeladen"
+
+msgid "Top-up reversed"
+msgstr "Aufladung zurückgenommen"
+
+msgid "Top up"
+msgstr "Aufladen"
+
+msgid "Top up an existing gift card instead of issuing a new one (the customer enters the card code)."
+msgstr "Eine vorhandene Geschenkkarte aufladen, statt eine neue auszustellen (der Kunde gibt den Kartencode ein)."
+
+msgid "Gift card code to top up"
+msgstr "Code der aufzuladenden Geschenkkarte"
+
+msgid "This gift card code was not found."
+msgstr "Dieser Geschenkkarten-Code wurde nicht gefunden."
+
+msgid "Only gift cards with a balance can be topped up."
+msgstr "Nur Geschenkkarten mit Guthaben können aufgeladen werden."
+
+msgid "This gift card is no longer valid and cannot be topped up."
+msgstr "Diese Geschenkkarte ist nicht mehr gültig und kann nicht aufgeladen werden."
+
+msgid "This gift card is in another currency."
+msgstr "Diese Geschenkkarte lautet auf eine andere Währung."
+
+msgid "Tops up gift card"
+msgstr "Lädt Geschenkkarte auf"
+
+msgid "Gift card top-up not booked: %s Please refund or top up by hand."
+msgstr "Aufladung der Geschenkkarte nicht gebucht: %s Bitte erstatten oder von Hand aufladen."
+
+msgid "Topped up with order #%s"
+msgstr "Aufgeladen mit Bestellung #%s"
+
+msgid "Gift card top-up could not be booked; it is tried again when the order is processed again."
+msgstr "Die Aufladung der Geschenkkarte konnte nicht gebucht werden; sie wird erneut versucht, wenn die Bestellung wieder verarbeitet wird."
+
+msgid "Gift card …%2$s topped up by %1$s."
+msgstr "Geschenkkarte …%2$s um %1$s aufgeladen."
+
+msgid "Top-up of order #%s reversed"
+msgstr "Aufladung aus Bestellung #%s zurückgenommen"
+
+msgid "The gift card top-up could not be reversed. Please check the card balance."
+msgstr "Die Aufladung der Geschenkkarte konnte nicht zurückgenommen werden. Bitte prüfen Sie das Kartenguthaben."
+
+msgid "Gift card top-up reversed: %1$s taken back, %2$s had already been spent."
+msgstr "Aufladung zurückgenommen: %1$s zurückgebucht, %2$s war bereits ausgegeben."
+
+msgid "Gift card top-up reversed: %s taken back."
+msgstr "Aufladung zurückgenommen: %s zurückgebucht."

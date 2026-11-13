@@ -239,4 +239,30 @@ vcap_acc_assert( 0 === wc_get_coupon_id_by_code( $idle_card->code ) && 'draft' =
 VCAP\Install::restore_balance_coupons();
 vcap_acc_assert( $idle_card->coupon_id === wc_get_coupon_id_by_code( $idle_card->code ) && 'publish' === get_post_status( $idle_card->coupon_id ), 'reactivating publishes exactly the suspended coupons again' );
 
+// Top-up of an existing gift card: no new card, the paid value goes onto the card; cancelling takes it back.
+$topup_card    = vcap_acc_card( 20 );
+$topup_product = new WC_Product_Simple();
+$topup_product->set_name( 'Gift card top-up' );
+$topup_product->set_regular_price( '30' );
+$topup_product->set_virtual( true );
+$topup_product->update_meta_data( '_vcap_enabled', 'yes' );
+$topup_product->update_meta_data( '_vcap_type', 'giftcard' );
+$topup_product->update_meta_data( '_vcap_usage', 'balance' );
+$topup_product->update_meta_data( VCAP\TopUp::PRODUCT_META, 'yes' );
+$topup_product->save();
+$topup_order = wc_create_order();
+$topup_line  = $topup_order->get_item( $topup_order->add_product( $topup_product, 1 ) );
+$topup_line->add_meta_data( VCAP\TopUp::ITEM_META, $topup_card->code, true );
+$topup_line->save();
+$topup_order->set_billing_email( 'topup@example.com' );
+$topup_order->calculate_totals();
+$topup_order->set_status( 'processing' );
+$topup_order->save();
+vcap()->issuer->issue_for_order( wc_get_order( $topup_order->get_id() ), true );
+vcap()->issuer->issue_for_order( wc_get_order( $topup_order->get_id() ), true ); // Repeated issuing runs book it once.
+vcap_acc_assert( 50.0 === (float) vcap()->vouchers->get( $topup_card->id )->balance && array() === vcap()->vouchers->for_order( $topup_order->get_id() ), 'a top-up adds the paid 30 to the existing card once and issues no new card' );
+vcap_acc_assert( is_string( ( new VCAP\TopUp( vcap()->vouchers, vcap()->coupons ) )->card( 'no-such-card' ) ), 'unknown codes cannot be topped up' );
+wc_get_order( $topup_order->get_id() )->update_status( 'cancelled' );
+vcap_acc_assert( 20.0 === (float) vcap()->vouchers->get( $topup_card->id )->balance, 'cancelling the top-up order takes the 30 back' );
+
 echo "Voucher Captain acceptance checks passed.\n";
