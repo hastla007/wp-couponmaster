@@ -70,12 +70,14 @@ add_action(
 			return;
 		}
 		if ( defined( 'WC_VERSION' ) && version_compare( WC_VERSION, '8.9', '<' ) ) {
+			// The plugin does not run: nothing would deduct gift card balances, so their coupons are refused.
+			add_filter( 'woocommerce_coupon_is_valid', array( '\VCAP\Install', 'refuse_balance_coupon' ), 1000, 2 );
 			add_action(
 				'admin_notices',
 				static function (): void {
 					if ( current_user_can( 'activate_plugins' ) ) {
 						/* translators: %s: installed WooCommerce version */
-						echo '<div class="notice notice-error"><p>' . esc_html( sprintf( __( 'Voucher Captain requires WooCommerce 8.9 or newer (installed: %s). Please update WooCommerce.', 'voucher-captain' ), WC_VERSION ) ) . '</p></div>';
+						echo '<div class="notice notice-error"><p>' . esc_html( sprintf( __( 'Voucher Captain requires WooCommerce 8.9 or newer (installed: %s). Please update WooCommerce.', 'voucher-captain' ), WC_VERSION ) ) . ' ' . esc_html__( 'Until then, gift cards and store credit are refused at checkout, because their balance cannot be deducted.', 'voucher-captain' ) . '</p></div>';
 					}
 				}
 			);

@@ -28,30 +28,63 @@ final class Install {
 	 */
 	public static function activate( $network_wide = false ): void {
 		if ( is_multisite() && $network_wide ) {
-			self::for_each_site( array( self::class, 'activate_site' ) );
+			self::for_each_site( array( self::class, 'activate_site' ), 500 );
 			return;
 		}
 		self::activate_site();
 	}
 
+	/**
+	 * Deactivation hook. A network deactivation must reach every site: without the plugin, balance coupons of a
+	 * site that was skipped would stay usable for their full balance on every order (see suspend_balance_coupons()).
+	 */
 	public static function deactivate( $network_wide = false ): void {
 		if ( is_multisite() && $network_wide ) {
+			if ( function_exists( 'wp_raise_memory_limit' ) ) {
+				wp_raise_memory_limit( 'admin' );
+			}
+			if ( function_exists( 'set_time_limit' ) ) {
+				@set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors,Squiz.PHP.DiscouragedFunctions -- large networks, best effort.
+			}
 			self::for_each_site( array( self::class, 'deactivate_site' ) );
 			return;
 		}
 		self::deactivate_site();
 	}
 
-	/** Runs a callback in the context of each site of the network (at most 500 per call). */
-	private static function for_each_site( callable $callback ): void {
-		foreach ( get_sites( array( 'fields' => 'ids', 'number' => 500 ) ) as $site_id ) {
-			switch_to_blog( (int) $site_id );
-			try {
-				$callback();
-			} finally {
-				restore_current_blog();
+	/**
+	 * Runs a callback in the context of each site of the network, in batches of 100 sites.
+	 *
+	 * @param int $limit Maximum number of sites (0 = all).
+	 */
+	private static function for_each_site( callable $callback, int $limit = 0 ): void {
+		$batch  = 100;
+		$offset = 0;
+		do {
+			$number = $limit > 0 ? min( $batch, $limit - $offset ) : $batch;
+			if ( $number <= 0 ) {
+				break;
 			}
-		}
+			$ids = get_sites(
+				array(
+					'fields'                 => 'ids',
+					'number'                 => $number,
+					'offset'                 => $offset,
+					'orderby'                => 'id',
+					'order'                  => 'ASC',
+					'update_site_meta_cache' => false,
+				)
+			);
+			foreach ( $ids as $site_id ) {
+				switch_to_blog( (int) $site_id );
+				try {
+					$callback();
+				} finally {
+					restore_current_blog();
+				}
+			}
+			$offset += count( $ids );
+		} while ( count( $ids ) === $number );
 	}
 
 	public static function activate_site(): void {
@@ -68,6 +101,9 @@ final class Install {
 	}
 
 	public static function deactivate_site(): void {
+		if ( ! get_option( self::OPTION_DB_VERSION ) ) {
+			return; // Never set up on this site (network activation reaches other sites lazily): no coupons, no tasks.
+		}
 		if ( function_exists( 'as_unschedule_all_actions' ) ) {
 			as_unschedule_all_actions( 'vcap_daily_maintenance' );
 			as_unschedule_all_actions( 'vcap_release_stale_order_reservations' );
@@ -98,6 +134,35 @@ final class Install {
 			}
 		}
 		self::flush_coupon_cache();
+	}
+
+	/**
+	 * Fail-safe while the plugin is active but does not boot (e.g. WooCommerce older than required): balance
+	 * coupons are refused at checkout, because nothing would deduct their balance. Registered by the version gate
+	 * in voucher-captain.php only; with the plugin running, CouponManager validates these coupons instead.
+	 *
+	 * @param bool       $valid  Validity so far.
+	 * @param \WC_Coupon $coupon Coupon.
+	 * @throws \Exception For a gift card or store credit coupon (WooCommerce shows the message).
+	 */
+	public static function refuse_balance_coupon( $valid, $coupon ) {
+		if ( ! $valid || ! $coupon instanceof \WC_Coupon || ! $coupon->get_id() || 'yes' !== $coupon->get_meta( '_vcap_voucher' ) ) {
+			return $valid;
+		}
+		if ( self::is_balance_coupon( (int) $coupon->get_id() ) ) {
+			throw new \Exception( esc_html__( 'Gift cards and store credit cannot be redeemed at the moment. Please try again later or contact the shop.', 'voucher-captain' ), 9090 );
+		}
+		return $valid;
+	}
+
+	/** Whether a coupon belongs to a gift card or store credit account (one indexed lookup). */
+	public static function is_balance_coupon( int $coupon_id ): bool {
+		global $wpdb;
+		$table    = self::tables()['vouchers'];
+		$suppress = $wpdb->suppress_errors( true );
+		$mode     = $wpdb->get_var( $wpdb->prepare( "SELECT usage_mode FROM {$table} WHERE coupon_id = %d LIMIT 1", $coupon_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->suppress_errors( $suppress );
+		return 'balance' === $mode;
 	}
 
 	/** WooCommerce caches "code → coupon id"; a cached id would keep a suspended coupon usable. */
