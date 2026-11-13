@@ -12,7 +12,7 @@ final class Scanner {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ) );
 		}
 		wp_enqueue_style( 'vcap-admin', VCAP_URL . 'assets/css/admin.css', array(), VCAP_VERSION );
-		wp_enqueue_script( 'vcap-jsqr', VCAP_URL . 'assets/vendor/jsQR.js', array(), '1.4.0', true );
+		wp_enqueue_script( 'vcap-jsqr', VCAP_URL . 'assets/vendor/jsqr/jsQR.js', array(), '1.4.0', true );
 		wp_enqueue_script( 'vcap-scanner', VCAP_URL . 'assets/js/scanner.js', array( 'vcap-jsqr' ), VCAP_VERSION, true );
 		wp_localize_script(
 			'vcap-scanner',

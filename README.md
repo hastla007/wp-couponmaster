@@ -120,4 +120,4 @@ Voucher Captain: GPL-2.0-or-later ([LICENSE](LICENSE)). Das Release-ZIP enthält
 | DejaVu-Schriften (mit dompdf) | Bitstream-Vera- und Arev-Lizenz, DejaVu-Änderungen gemeinfrei | `licenses/DejaVu-Fonts-LICENSE.txt` |
 | Adobe-Core-14-Fontmetriken (`*.afm`, mit dompdf) | Adobe-Hinweis in jeder Datei | |
 
-Der Kamera-Scanner nutzt den nativen `BarcodeDetector` und, falls vorhanden, `jsQR` (Apache-2.0) als Rückfall; jsQR liegt derzeit nicht im Repository/ZIP.
+Der Kamera-Scanner nutzt den nativen `BarcodeDetector` und fällt sonst (iOS/Safari, Firefox) auf das mitgelieferte jsQR 1.4.0 (Apache-2.0, `assets/vendor/jsqr/` mit LICENSE) zurück.

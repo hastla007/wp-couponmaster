@@ -138,6 +138,10 @@ if ( is_file( "$root/vendor/dompdf/dompdf/lib/res/sRGB2014.icc.LICENSE" ) ) {
 	$out .= "sRGB2014.icc colour profile (vendor/dompdf/dompdf/lib/res/sRGB2014.icc)\n";
 	$out .= "  Licence:  International Color Consortium, see sRGB2014.icc.LICENSE next to it.\n\n";
 }
+if ( is_file( "$root/assets/vendor/jsqr/jsQR.js" ) ) {
+	$out .= "jsQR 1.4.0 (assets/vendor/jsqr/jsQR.js, QR fallback of the admin scanner)\n";
+	$out .= "  Licence:  Apache-2.0, see assets/vendor/jsqr/LICENSE. Source: https://github.com/cozmo/jsQR\n\n";
+}
 $out .= "3. Licence texts\n----------------\n\n";
 $out .= "GPL-2.0-or-later (Voucher Captain): LICENSE\n";
 $out .= "GPL-3.0: licenses/GPL-3.0.txt – the LGPL-3.0 adds permissions to the GPL-3.0, so both texts apply to\n";
