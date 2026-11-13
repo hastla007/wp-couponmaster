@@ -25,16 +25,23 @@ Voucher Captain bundles dompdf, php-font-lib, php-svg-lib, html5, php-qrcode and
 
 ## Optional integrations
 
+CI job `ecosystem` installs each third-party plugin below from wordpress.org (latest release at run time; the job log
+prints the version) next to WooCommerce 11.2.2 and Voucher Captain and runs `tests/ecosystem-integration.php`.
+
 | Integration | Contract | CI coverage |
 |---|---|---|
-| WooCommerce Subscriptions | Subscription products may issue vouchers. Renewal issuance is opt-in via `vcap_subscription_renewals` (default off); voucher-only order metadata is removed from renewal orders. | Renewal metadata filtering is tested without requiring the paid extension. |
-| WooCommerce Multilingual (WCML) | Converts order-currency amounts with `unconvert_price_amount()`. | Adapter shape is documented; WCML itself is not bundled in CI. |
-| Aelia Currency Switcher | Uses `wc_aelia_cs_convert` to convert the order amount to the shop base currency. | Converter filter contract is exercised with a deterministic test callback. |
-| WOOCS | Converts by dividing by the selected currency rate returned by `get_currencies()`. | Provider is optional and not installed in CI. |
-| CURCY (VillaTheme) | Converts by dividing by the selected currency rate from `get_list_currencies()`. | Provider is optional and not installed in CI. |
+| **WooCommerce Stripe Gateway** (`woocommerce-gateway-stripe`) | Gateway-agnostic: vouchers are issued and balances charged on WooCommerce's paid statuses, never by the gateway itself. | `ecosystem (stripe)`: gateway registered; payment pending at the provider (on-hold) issues nothing; confirmation issues once, a repeated confirmation (webhook + return) not again; gift card + gateway with a failed attempt and a retry charges the card once; refund recorded without calling the provider voids the voucher; full refund of a redemption order gives the balance back. |
+| **WooCommerce PayPal Payments** (`woocommerce-paypal-payments`) | as above | `ecosystem (paypal)`: the same flows with the `ppcp-gateway` gateway. |
+| WooCommerce Subscriptions | Subscription products may issue vouchers. Renewal issuance is opt-in via `vcap_subscription_renewals` (default off); voucher-only order metadata is removed from renewal orders. | Renewal metadata filtering is tested without the extension (commercial, not installable in CI); a renewal with the real extension is a release acceptance check (`RELEASE_CHECKLIST.md`). Other subscription plugins are not supported out of the box (use `vcap_should_issue_for_order`, ADAPTERS.md 3). |
+| **WooCommerce Multilingual** (WCML, `woocommerce-multilingual`, multi-currency without WPML) | Converts order-currency amounts with `unconvert_price_amount()`. | `ecosystem (wcml)`: rate read from WCML (1 EUR = 1.10 USD); a voucher paid with 55 USD is worth 50 EUR; an EUR gift card used on a USD order is charged the EUR value; cancelling gives it back. |
+| **WOOCS** (`woocommerce-currency-switcher`) | Converts by dividing by the currency rate from `get_currencies()`. | `ecosystem (woocs)`: the same checks with WOOCS rates. |
+| **CURCY** (`woo-multi-currency`, free edition; premium uses the same settings API) | Converts by dividing by the currency rate from `get_list_currencies()` (`WOOMULTI_CURRENCY_F_Data` free, `WOOMULTI_CURRENCY_Data` premium). | `ecosystem (curcy)`: the same checks with CURCY rates. |
+| Aelia Currency Switcher | Uses `wc_aelia_cs_convert` to convert the order amount to the shop base currency. | Commercial, not installable in CI; the converter filter contract is exercised with a deterministic test callback. |
 | Other currency switchers | Implement `vcap_amount_to_base_currency`; the fallback can use order meta `_vcap_exchange_rate`. | Unknown-provider fallback is tested. |
 
-Provider integrations are optional. Each store should verify its currency switcher’s rate direction and rounding rules before sales in additional currencies.
+Real payments (card, PayPal account, redirects, the provider's webhooks against its sandbox) need the shop's own
+provider accounts: they are a release acceptance check per shop (`RELEASE_CHECKLIST.md`). Each store should verify its
+currency switcher's rate direction and rounding rules with one test order per currency before selling.
 
 ## Checkout and product fields
 

@@ -18,7 +18,8 @@ the release commit.
 
 ## Manual release checks
 
-- [ ] Complete a real gateway payment, redirect return, webhook retry, and refund on the supported gateway set.
+- [ ] Complete a real gateway payment, redirect return, webhook retry, and refund on the supported gateway set. Plugin-level flows with Stripe and PayPal Payments installed are automated (CI job `ecosystem`); this check covers the provider's real sandbox/live account.
+- [ ] With WooCommerce Subscriptions (commercial, not in CI) installed: a renewal issues vouchers only when *Subscription renewals* is on, and renewal orders carry no `_vcap_*` meta.
 - [ ] Check Yoast SEO admin, checkout, and customer account pages in a browser.
 - [ ] Review keyboard and screen-reader flows for voucher purchase, balance check, account downloads, and scanner actions.
 - [ ] Approve the customer email texts in `EMAILS.md` (generated, EN/DE/AT; CI job `smoke` fails when it is out of date). Translation coverage and placeholders are checked automatically (`tests/run.php` → Translations).
