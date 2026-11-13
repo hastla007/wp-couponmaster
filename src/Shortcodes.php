@@ -130,8 +130,8 @@ final class Shortcodes {
 				WC()->session->set_customer_session_cookie( true );
 			}
 			WC()->session->set( CouponLink::SESSION_KEY, $code );
-			/* translators: %s: coupon code */
-			wc_add_notice( sprintf( __( 'The voucher %s will be applied as soon as you add products to your cart.', 'voucher-captain' ), strtoupper( $code ) ) );
+			self::no_cache();
+			wc_add_notice( CouponLink::waiting_text( $code ) );
 			return 'saved';
 		}
 		if ( WC()->cart->has_discount( $code ) ) {
