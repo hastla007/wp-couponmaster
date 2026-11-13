@@ -26,7 +26,10 @@ release notes). Entries start with **New**, **Fix** or **Fix (security)** and de
    minimum-versions, ecosystem, license-acceptance, Pass Captain and browser jobs. Tag only a commit that was pushed to
    `main` (or another branch CI runs on): the release workflow checks exactly that commit.
 2. Work through `RELEASE_CHECKLIST.md` (the manual checks).
-3. Bump the version in the three places above, rename `= Unreleased =` to `= X.Y.Z =`, commit.
+3. Bump the version in the three places above, rename `= Unreleased =` to `= X.Y.Z =` in `== Changelog ==` and in
+   `== Upgrade Notice ==` (one or two sentences: what a shop must do after updating; leave the section out when
+   nothing), check that `Tested up to`, `Requires at least`, `Requires PHP` and the WooCommerce lines of `readme.txt`
+   match the plugin header, commit.
 4. Tag that commit and push the tag:
 
    ```bash

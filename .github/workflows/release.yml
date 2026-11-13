@@ -94,7 +94,9 @@ jobs:
             cp build/voucher-captain.zip "dist/${name}"
             ( cd dist && sha256sum "${name}" > "${name}.sha256" )
           done
-          awk -v v="= ${version} =" '$0==v{f=1;next} /^= /{f=0} f' readme.txt > dist/notes.md
+          # Release notes: the "= X.Y.Z =" section of "== Changelog ==" only (not the Upgrade Notice).
+          awk -v v="= ${version} =" '/^== /{sec=$0; f=0; next} sec=="== Changelog ==" && $0==v{f=1; next} /^=/{f=0} f' readme.txt > dist/notes.md
+          test -s dist/notes.md || { echo "Empty release notes for ${version}"; exit 1; }
       - name: Licence manager manifest of the premium ZIP
         env:
           PACKAGE_BASE_URL: ${{ vars.WPLC_PACKAGE_BASE_URL }}
