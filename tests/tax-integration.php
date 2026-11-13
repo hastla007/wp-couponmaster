@@ -228,7 +228,7 @@ vcap_tax_assert( abs( 115.0 - (float) $mixed->get_total_tax() - array_sum( array
 // 7.2 Same with net prices: the card still pays gross (net share + its VAT), across both rates.
 update_option( 'woocommerce_prices_include_tax', 'no' );
 list( $mixed_net, $left ) = $pay_with_card( $order_with( array( array( $goods, 100 ), array( $goods_reduced, 100 ) ), 'AT', 'tax-mixed-net@example.com' ), 115 );
-vcap_tax_assert( abs( 115.0 - (float) $mixed_net->get_total() ) < 0.05 && $left < 0.05, 'mixed rates, net prices: a 115 card pays 115 of the 230 gross total and is used up exactly' );
+vcap_tax_assert( abs( 115.0 - (float) $mixed_net->get_total() ) < 0.05 && $left < 0.05, 'mixed rates, net prices: a 115 card pays 115 of the 230 gross total and is used up exactly', array( 'total' => $mixed_net->get_total(), 'card_left' => $left, 'discount' => $mixed_net->get_discount_total(), 'discount_tax' => $mixed_net->get_discount_tax(), 'subtotal' => $mixed_net->get_subtotal(), 'tax' => $mixed_net->get_total_tax() ) );
 
 // 7.3 Place of supply in another EU country (OSS): the order is taxed at the buyer's rate, the card pays gross.
 update_option( 'woocommerce_prices_include_tax', 'yes' );
