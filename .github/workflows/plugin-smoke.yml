@@ -168,6 +168,69 @@ jobs:
           VCAP_EXPECT_HPOS: ''
         run: tests/run-integration.sh
 
+  ecosystem:
+    # Real third-party plugins from wordpress.org next to Voucher Captain: payment gateways and currency switchers
+    # (latest releases; the job prints the installed versions). tests/ecosystem-integration.php
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: stripe
+            slug: woocommerce-gateway-stripe
+          - key: paypal
+            slug: woocommerce-paypal-payments
+          - key: woocs
+            slug: woocommerce-currency-switcher
+          - key: curcy
+            slug: woo-multi-currency
+          - key: wcml
+            slug: woocommerce-multilingual
+    name: ecosystem (${{ matrix.key }})
+    services:
+      db:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --password=root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, gd, mbstring, mysqli, xml, zip
+          coverage: none
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist
+      - name: Download WP-CLI
+        run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
+      - name: Install WordPress, WooCommerce, ${{ matrix.slug }} and the release ZIP
+        run: |
+          php wp-cli.phar core download --path=wp-test --version=7.1.4
+          php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
+          php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher Captain ecosystem" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
+          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.2.2 --activate
+          php wp-cli.phar --path=wp-test option update woocommerce_currency EUR
+          bin/build.sh
+          php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
+          php wp-cli.phar --path=wp-test plugin install ${{ matrix.slug }} --activate
+          php wp-cli.phar --path=wp-test plugin list
+      - name: Voucher Captain with ${{ matrix.slug }}
+        run: |
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/ecosystem-integration.php" setup ${{ matrix.key }}
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/ecosystem-integration.php" run ${{ matrix.key }}
+          # Both plugins still load without PHP errors on a front-end request.
+          php wp-cli.phar --path=wp-test eval 'echo "ok\n";' 2>&1 | tee load.log
+          ! grep -E "PHP (Fatal|Warning)" load.log
+
   multisite:
     # Network activation sets up every site (own tables and options per site), new sites are set up on their
     # first request, and a network uninstall removes data only on the sites that opted in.

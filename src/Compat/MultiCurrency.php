@@ -6,7 +6,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Multi-currency: vouchers bought in a foreign currency are converted to the shop base currency,
  * because WooCommerce coupons are stored in the base currency (currency switchers convert them on the fly).
- * Supported: WooCommerce Multilingual (WCML), Aelia Currency Switcher, WOOCS, CURCY; others via the
+ * Supported: WooCommerce Multilingual (WCML), Aelia Currency Switcher, WOOCS, CURCY (free and premium); others via the
  * `vcap_amount_to_base_currency` filter.
  */
 final class MultiCurrency {
@@ -42,13 +42,15 @@ final class MultiCurrency {
 			}
 		}
 
-		// CURCY (VillaTheme).
-		if ( class_exists( '\WOOMULTI_CURRENCY_Data' ) ) {
-			$settings = \WOOMULTI_CURRENCY_Data::get_ins();
-			$rates    = method_exists( $settings, 'get_list_currencies' ) ? $settings->get_list_currencies() : array();
-			$rate     = (float) ( $rates[ $currency ]['rate'] ?? 0 );
-			if ( $rate > 0 ) {
-				return $amount / $rate;
+		// CURCY (VillaTheme): premium and free (wordpress.org "woo-multi-currency") edition.
+		foreach ( array( '\WOOMULTI_CURRENCY_Data', '\WOOMULTI_CURRENCY_F_Data' ) as $class ) {
+			if ( class_exists( $class ) && method_exists( $class, 'get_ins' ) ) {
+				$settings = $class::get_ins();
+				$rates    = method_exists( $settings, 'get_list_currencies' ) ? (array) $settings->get_list_currencies() : array();
+				$rate     = (float) ( $rates[ $currency ]['rate'] ?? 0 );
+				if ( $rate > 0 ) {
+					return $amount / $rate;
+				}
 			}
 		}
 
