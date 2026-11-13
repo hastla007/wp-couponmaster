@@ -149,6 +149,19 @@ final class ProductConfig {
 		);
 	}
 
+	/** Customer-facing text for a "who may redeem" setting (same wording as on the voucher). */
+	public static function restriction_label( string $restrict ): string {
+		switch ( $restrict ) {
+			case 'buyer':
+				return __( 'Personal – only the buyer can redeem it.', 'voucher-captain' );
+			case 'recipient':
+				return __( 'Personal – only the named recipient can redeem it.', 'voucher-captain' );
+			case 'both':
+				return __( 'Personal – only the buyer or the named recipient can redeem it.', 'voucher-captain' );
+		}
+		return __( 'Transferable – anyone with the code can redeem it.', 'voucher-captain' );
+	}
+
 	/**
 	 * One setting decides who may redeem: "email_restrict". Products saved before it replaced the separate
 	 * "Transferable" checkbox are read compatibly (not transferable + no restriction = buyer or recipient);

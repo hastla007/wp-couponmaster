@@ -289,7 +289,7 @@ final class Fields {
 			if ( '' !== $terms || 'no' === $config['transferable'] ) {
 				echo '<details class="vcap-terms"><summary>' . esc_html__( 'Redemption conditions', 'voucher-captain' ) . '</summary>';
 				if ( 'no' === $config['transferable'] ) {
-					echo '<p>' . esc_html__( 'Personal – only the buyer or the named recipient can redeem it.', 'voucher-captain' ) . '</p>';
+					echo '<p>' . esc_html( ProductConfig::restriction_label( (string) $config['email_restrict'] ) ) . '</p>';
 				}
 				if ( '' !== $terms ) {
 					echo wp_kses_post( wpautop( esc_html( $terms ) ) );
