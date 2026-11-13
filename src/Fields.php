@@ -471,8 +471,9 @@ final class Fields {
 				$errors[] = sprintf( __( '%s is not a valid email address.', 'voucher-captain' ), $label );
 			}
 			if ( 'date' === $type ) {
-				$ts = strtotime( $raw );
-				if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $raw ) || ! $ts ) {
+				// A local date (shop time zone), not UTC midnight as strtotime() would read it.
+				$ts = LocalDate::timestamp( $raw );
+				if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $raw ) || null === $ts ) {
 					/* translators: %s: field label */
 					$errors[] = sprintf( __( '%s is not a valid date.', 'voucher-captain' ), $label );
 				} elseif ( 'delivery_date' === $key && ( $raw < wp_date( 'Y-m-d' ) || $ts > time() + YEAR_IN_SECONDS + DAY_IN_SECONDS ) ) {
