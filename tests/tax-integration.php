@@ -166,6 +166,109 @@ wc_get_order( $buy->get_id() )->update_status( 'refunded' );
 vcap_tax_assert( Voucher::STATUS_VOID === vcap()->vouchers->get( $issued[0]->id )->status, 'a fully refunded gift card purchase voids the unused gift card' );
 
 WC_Tax::_delete_tax_rate( $rate_id );
+
+/* ---- 7. Tax cases (TAX.md section 10): rates, place of supply (OSS), same gross price, small business -- */
+
+$keep_country = get_option( 'woocommerce_default_country' );
+$keep_based   = get_option( 'woocommerce_tax_based_on' );
+update_option( 'woocommerce_default_country', 'AT' );
+update_option( 'woocommerce_tax_based_on', 'billing' );
+$rate = static fn( string $country, string $percent, string $class = '' ) => WC_Tax::_insert_tax_rate( array( 'tax_rate_country' => $country, 'tax_rate_state' => '', 'tax_rate' => $percent, 'tax_rate_name' => "VAT {$country} {$percent}", 'tax_rate_priority' => 1, 'tax_rate_compound' => 0, 'tax_rate_shipping' => 1, 'tax_rate_order' => 1, 'tax_rate_class' => $class ) );
+$rates = array( $rate( 'AT', '20.0000' ), $rate( 'AT', '10.0000', 'reduced-rate' ), $rate( 'DE', '19.0000' ), $rate( 'DE', '7.0000', 'reduced-rate' ) );
+$goods_reduced = new WC_Product_Simple();
+$goods_reduced->set_name( 'Reduced-rate goods' );
+$goods_reduced->set_regular_price( '110' );
+$goods_reduced->set_tax_class( 'reduced-rate' );
+$goods_reduced->set_virtual( true );
+$goods_reduced->save();
+
+/** Order with the given lines (product => [net, tax-class rate country]), taxes by the billing country. */
+$order_with = static function ( array $lines, string $country, string $email ): WC_Order {
+	$order = wc_create_order();
+	foreach ( $lines as $line ) {
+		list( $product, $net ) = $line;
+		$item_id = $order->add_product( $product, 1 );
+		$item    = $order->get_item( $item_id );
+		$item->set_subtotal( $net );
+		$item->set_total( $net );
+		$item->save();
+	}
+	$order->set_billing_email( $email );
+	$order->set_billing_country( $country );
+	$order->save();
+	$order->calculate_totals( true );
+	return wc_get_order( $order->get_id() );
+};
+$pay_with_card = static function ( WC_Order $order, float $value ) use ( $auto_card ): array {
+	$card = vcap_tax_voucher( 'giftcard', 'balance', 'fixed_cart', $auto_card->get_id(), $value );
+	$order->apply_coupon( $card->code );
+	vcap()->coupons->reserve_order( wc_get_order( $order->get_id() ) );
+	wc_get_order( $order->get_id() )->payment_complete( 'txn-' . $card->code );
+	return array( wc_get_order( $order->get_id() ), (float) vcap()->vouchers->get( $card->id )->balance );
+};
+
+// 7.1 Different rates in one order (tax-inclusive prices): the card is spread over both lines by value,
+// each line keeps its own rate, the card is charged exactly what it paid.
+update_option( 'woocommerce_prices_include_tax', 'yes' );
+list( $mixed, $left ) = $pay_with_card( $order_with( array( array( $goods, 100 ), array( $goods_reduced, 100 ) ), 'AT', 'tax-mixed@example.com' ), 115 );
+vcap_tax_assert( abs( 230.0 - (float) $mixed->get_subtotal() - ( (float) $mixed->get_cart_tax() + (float) $mixed->get_discount_tax() ) ) < 0.05, 'mixed-rate order: 120 at 20 % + 110 at 10 % = 230 gross before the card' );
+vcap_tax_assert( abs( 115.0 - (float) $mixed->get_total() ) < 0.03 && $left < 0.03, 'mixed rates, gross prices: a 115 card pays 115 of 230 and is used up exactly' );
+vcap_tax_assert( abs( 15.0 - (float) $mixed->get_total_tax() ) < 0.05, 'mixed rates, gross prices: each line keeps its rate on the remaining half (10 + 5 VAT)' );
+
+// 7.2 Same with net prices: the card still pays gross (net share + its VAT), across both rates.
+update_option( 'woocommerce_prices_include_tax', 'no' );
+list( $mixed_net, $left ) = $pay_with_card( $order_with( array( array( $goods, 100 ), array( $goods_reduced, 100 ) ), 'AT', 'tax-mixed-net@example.com' ), 115 );
+vcap_tax_assert( abs( 115.0 - (float) $mixed_net->get_total() ) < 0.05 && $left < 0.05, 'mixed rates, net prices: a 115 card pays 115 of the 230 gross total and is used up exactly' );
+
+// 7.3 Place of supply in another EU country (OSS): the order is taxed at the buyer's rate, the card pays gross.
+update_option( 'woocommerce_prices_include_tax', 'yes' );
+list( $oss, $left ) = $pay_with_card( $order_with( array( array( $goods, 100 ) ), 'DE', 'tax-oss@example.com' ), 50 );
+vcap_tax_assert( abs( 69.0 - (float) $oss->get_total() ) < 0.03 && $left < 0.03, 'OSS: a DE order (100 net + 19 %) paid with a 50 card leaves 69 and uses the card up exactly' );
+$oss_rates = array_values( array_unique( array_map( static fn( $t ) => (int) $t->get_rate_id(), array_values( $oss->get_items( 'tax' ) ) ) ) );
+vcap_tax_assert( array( (int) $rates[2] ) === $oss_rates, 'OSS: only the buyer country rate (DE 19 %) is on the order' );
+vcap_tax_assert( abs( 69.0 / 1.19 * 0.19 - (float) $oss->get_total_tax() ) < 0.03, 'OSS: VAT is the DE share of the remaining 69 (current price-reduction behaviour, TAX.md 4.1)' );
+
+// 7.4 Same gross price in every country vs. the WooCommerce default: a voucher bought for "50" is worth what
+// the buyer actually paid (gross), whatever rate applied.
+$taxable_card = vcap_tax_product( 'single' );
+$taxable_card->set_regular_price( '50' );
+$taxable_card->set_tax_status( 'taxable' );
+$taxable_card->save();
+$same_gross = $order_with( array( array( $taxable_card, round( 50 / 1.19, 2 ) ) ), 'DE', 'tax-gross@example.com' );
+$same_gross->payment_complete( 'txn-tax-gross' );
+$v_same = vcap()->vouchers->for_order( $same_gross->get_id() );
+vcap_tax_assert( abs( 50.0 - (float) wc_get_order( $same_gross->get_id() )->get_total() ) < 0.02 && 1 === count( $v_same ) && abs( 50.0 - (float) $v_same[0]->initial_amount ) < 0.02, 'same gross price: a DE buyer pays 50 incl. 19 % and gets a 50 voucher' );
+$default_gross = $order_with( array( array( $taxable_card, round( 50 / 1.2, 2 ) ) ), 'DE', 'tax-net@example.com' );
+$default_gross->payment_complete( 'txn-tax-net' );
+$paid_gross = (float) wc_get_order( $default_gross->get_id() )->get_total();
+$v_default  = vcap()->vouchers->for_order( $default_gross->get_id() );
+vcap_tax_assert( abs( 49.58 - $paid_gross ) < 0.02 && 1 === count( $v_default ) && abs( $paid_gross - (float) $v_default[0]->initial_amount ) < 0.001, 'WooCommerce default (net kept, DE rate added): the DE buyer pays 49.58 and the voucher is worth exactly that' );
+$non_taxable = $order_with( array( array( $sold_card, 60 ) ), 'DE', 'tax-mpv-de@example.com' );
+$non_taxable->payment_complete( 'txn-tax-mpv-de' );
+$v_mpv = vcap()->vouchers->for_order( $non_taxable->get_id() );
+vcap_tax_assert( 0.0 === (float) wc_get_order( $non_taxable->get_id() )->get_total_tax() && 1 === count( $v_mpv ) && abs( 60.0 - (float) $v_mpv[0]->initial_amount ) < 0.001, 'a multi-purpose card sold as not taxable costs and is worth 60 in every country' );
+
+// 7.5 Small business (no VAT charged): taxes off – sale and redemption carry no VAT, the card pays its value.
+update_option( 'woocommerce_calc_taxes', 'no' );
+$small_buy = wc_create_order();
+$small_buy->add_product( $taxable_card, 1 );
+$small_buy->set_billing_email( 'tax-small@example.com' );
+$small_buy->calculate_totals();
+$small_buy->payment_complete( 'txn-tax-small' );
+$v_small = vcap()->vouchers->for_order( $small_buy->get_id() );
+vcap_tax_assert( 0.0 === (float) wc_get_order( $small_buy->get_id() )->get_total_tax() && 1 === count( $v_small ) && abs( 50.0 - (float) $v_small[0]->initial_amount ) < 0.001, 'small business: a 50 voucher is sold for 50 without VAT' );
+$small_spend = wc_create_order();
+$small_spend->add_product( $goods, 1 );
+$small_spend->set_billing_email( 'tax-small-spend@example.com' );
+$small_spend->calculate_totals();
+list( $small_spend, $left ) = $pay_with_card( $small_spend, 50 );
+vcap_tax_assert( 0.0 === (float) $small_spend->get_total_tax() && abs( 70.0 - (float) $small_spend->get_total() ) < 0.001 && $left < 0.001, 'small business: a 50 card pays 50 of 120, no VAT anywhere' );
+
+foreach ( $rates as $id ) {
+	WC_Tax::_delete_tax_rate( $id );
+}
+update_option( 'woocommerce_default_country', $keep_country );
+update_option( 'woocommerce_tax_based_on', $keep_based );
 update_option( 'woocommerce_calc_taxes', 'no' );
 update_option( 'woocommerce_prices_include_tax', 'no' );
 echo "Voucher Captain tax classification checks passed.\n";

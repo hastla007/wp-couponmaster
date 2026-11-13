@@ -166,6 +166,31 @@ Bitte je Frage ankreuzen bzw. ergänzen.
 | F11 | Geschenkkarten-Aufladung: eigener Mehrzweckgutschein-Verkauf, nicht steuerbar – bestätigt? | ☐ ja ☐ nein |
 | F12 | Texte Abschnitt 6: fachlich korrekt? Gewünschte Formulierung für Kunden (z. B. auf Rechnung/Gutschein: „Mehrzweckgutschein, USt wird bei Einlösung berechnet“)? | |
 
+## 10. Steuerfälle: Sätze, Leistungsort (OSS), gleicher Bruttopreis, Kleinunternehmer
+
+Voucher Captain rechnet **keine Steuersätze selbst**: Sätze, Länder und Klassen kommen aus WooCommerce
+(WooCommerce → Einstellungen → Steuer). Das Plugin legt fest, *welcher Wert* ein Gutschein hat und *wie viel* von
+ihm abgebucht wird. Spezifikation und Nachweis (`tests/tax-integration.php`, Abschnitt 7):
+
+| Nr. | Fall | Festgelegtes Verhalten | Nachweis |
+|---|---|---|---|
+| 10.1 | **Mehrere Steuersätze in einer Bestellung** (z. B. 20 % und 10 %), Bruttopreise | Gutscheinbetrag wird nach Wert auf die Positionen verteilt; jede Position behält ihren Satz; abgebucht wird genau der bezahlte Betrag. Beispiel: 120 € (20 %) + 110 € (10 %), Karte 115 € → Rest 115 €, USt 10 € + 5 €, Karte 0 €. | „mixed rates, gross prices …“ |
+| 10.2 | Mehrere Steuersätze, **Nettopreise** | Karte bezahlt brutto (Nettoanteil + dessen USt) über beide Sätze; abgebucht wird genau der Kartenwert. | „mixed rates, net prices …“ |
+| 10.3 | **Leistungsort im anderen EU-Land (OSS)**, Steuer nach Rechnungsland | Die Bestellung trägt nur den Satz des Käuferlands (z. B. DE 19 %); die Karte bezahlt brutto und wird genau um den bezahlten Betrag belastet. Der Gutscheinwert bleibt in der Shop-Basiswährung; das Land der Einlösung spielt für den Wert keine Rolle. | „OSS: …“ (3 Prüfungen) |
+| 10.4 | **Gleicher Bruttopreis in allen Ländern** (WooCommerce-Filter `woocommerce_adjust_non_base_location_prices` = false) | Ein steuerpflichtiger Gutschein für „50 €“ kostet überall 50 € brutto und ist 50 € wert. | „same gross price …“ |
+| 10.5 | **WooCommerce-Standard** (Netto bleibt, Satz des Käuferlands kommt dazu) | Bei steuerpflichtigem Gutscheinprodukt zahlt ein DE-Käufer 49,58 € statt 50 € (Basis AT 20 %). Der Gutschein ist **genau das wert, was bezahlt wurde** (nie mehr). Für Gutscheine mit festem Nennwert daher Mehrzweck mit Steuerstatus „Keiner“ (10.6) oder gleichen Bruttopreis (10.4) verwenden. | „WooCommerce default …“ |
+| 10.6 | Mehrzweckgutschein **nicht steuerbar** verkauft | Kostet und ist in jedem Land gleich viel wert (keine Länderanpassung ohne Steuer). | „a multi-purpose card sold as not taxable …“ |
+| 10.7 | **Kleinunternehmer** (Steuer im Shop aus) | Verkauf und Einlösung ohne USt; Gutschein ist den bezahlten Betrag wert und bezahlt genau diesen. Die Einordnung Einzweck/Mehrzweck hat keine Steuerwirkung. Pass Captain übernimmt seinen Kleinunternehmer-Hinweis selbst. | „small business: …“ (2 Prüfungen) |
+| 10.8 | **Fremdwährung** (Mehrwährungs-Plugin) | Gutscheinwerte und Salden in der Basiswährung, Umrechnung über `vcap_amount_to_base_currency`; Freigabe je Plugin unter TODO.md „Reale Zahlungsanbieter, Mehrwährungs- …“ | `tests/acceptance-integration.php` |
+
+Offene Fragen dazu an die Steuerberatung:
+
+| Nr. | Frage | Antwort |
+|---|---|---|
+| F13 | 10.3: Ist ein in AT verkaufter **Einzweck**gutschein bei Einlösung durch einen DE-Kunden (anderer Leistungsort) als Mehrzweck zu behandeln? (Folgepunkt TODO.md „Einzweckgutschein: Steuersatz und Land …“) | |
+| F14 | 10.5: Soll der Shop bei steuerpflichtigen Gutscheinen „gleicher Bruttopreis“ (10.4) verwenden, oder ist der WooCommerce-Standard akzeptabel? | ☐ 10.4 ☐ Standard |
+| F15 | 10.7: Wechsel vom Kleinunternehmer zur Regelbesteuerung – wie sind vorher verkaufte, später eingelöste Gutscheine zu behandeln? | |
+
 ## 9. Freigabe
 
 | | |
