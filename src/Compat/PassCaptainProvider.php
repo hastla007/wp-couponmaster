@@ -16,13 +16,15 @@ defined( 'ABSPATH' ) || exit;
  * redemption key; commit/release use it from the reservation, refunds use Pass Captain's refund key.
  */
 final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\ProviderInterface {
-	private const ZERO_DECIMAL = array( 'BIF', 'CLP', 'DJF', 'GNF', 'ISK', 'JPY', 'KMF', 'KRW', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF' );
-
 	public function __construct( private RedemptionService $redemptions, private VoucherRepository $vouchers ) {}
 
-	/** ISO 4217 minor units (as Pass Captain uses them) – never the shop's display decimals. */
+	/**
+	 * ISO 4217 minor units (as Pass Captain uses them) – never the shop's display decimals. The same table as the
+	 * redemption API (config/currencies.php incl. three-decimal currencies, filter "vcap_currency_decimals"), so
+	 * amounts in minor units and stored amounts always agree.
+	 */
 	public static function decimals( string $currency ): int {
-		return in_array( strtoupper( $currency ), self::ZERO_DECIMAL, true ) ? 0 : 2;
+		return RedemptionService::decimals( $currency );
 	}
 
 	private static function to_minor( float $amount, int $decimals ): int {

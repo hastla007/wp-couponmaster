@@ -148,8 +148,27 @@ final class Plugin {
 		}
 
 		add_action( 'init', array( $this, 'load_textdomain' ), 0 );
+		add_action( 'init', array( $this, 'ensure_schedules' ), 20 );
 		add_filter( 'plugin_action_links_' . plugin_basename( VCAP_FILE ), array( $this, 'action_links' ) );
 		add_action( 'admin_notices', array( $this, 'dependency_notice' ) );
+	}
+
+	/**
+	 * Makes sure the recurring tasks exist: checked once a day (autoloaded marker, no Action Scheduler query on
+	 * ordinary requests) and right after activation or an update, which delete the marker.
+	 */
+	public function ensure_schedules(): void {
+		$checked = (int) get_option( Install::SCHEDULES_OPTION, 0 );
+		if ( $checked > time() - DAY_IN_SECONDS || ! function_exists( 'as_has_scheduled_action' ) ) {
+			return;
+		}
+		update_option( Install::SCHEDULES_OPTION, time(), true );
+		$this->delivery->schedule_maintenance();
+		$this->coupons->schedule_stale_release();
+		if ( 'yes' === get_option( Install::RESTORE_TASKS_OPTION ) ) {
+			delete_option( Install::RESTORE_TASKS_OPTION );
+			$this->delivery->restore_tasks();
+		}
 	}
 
 	public function load_textdomain(): void {

@@ -123,17 +123,20 @@ final class Campaigns {
 				'order'       => 'ASC',
 			)
 		);
-		$rows = array( array( 'code', 'discount_type', 'amount', 'expires', 'usage_count', 'usage_limit', 'status' ) );
+		$rows     = array( array( __( 'Code', 'voucher-captain' ), __( 'Discount type', 'voucher-captain' ), __( 'Amount', 'voucher-captain' ), __( 'Expires', 'voucher-captain' ), __( 'Uses', 'voucher-captain' ), __( 'Usage limit', 'voucher-captain' ), __( 'Status', 'voucher-captain' ) ) );
+		$types    = wc_get_coupon_types();
+		$statuses = get_post_statuses();
 		foreach ( $ids as $id ) {
 			$c      = new \WC_Coupon( $id );
+			$status = (string) get_post_status( $id );
 			$rows[] = array(
 				$c->get_code(),
-				$c->get_discount_type(),
-				(float) $c->get_amount(),
-				$c->get_date_expires() ? $c->get_date_expires()->date( 'Y-m-d' ) : '',
+				$types[ $c->get_discount_type() ] ?? $c->get_discount_type(),
+				Csv::number( $c->get_amount(), wc_get_price_decimals() ),
+				$c->get_date_expires() ? $c->get_date_expires()->date_i18n( 'Y-m-d' ) : '',
 				(int) $c->get_usage_count(),
 				(int) $c->get_usage_limit(),
-				(string) get_post_status( $id ),
+				$statuses[ $status ] ?? $status,
 			);
 		}
 		return $rows;
@@ -149,29 +152,23 @@ final class Campaigns {
 		$table = Install::tables()['pool'];
 		$v     = Install::tables()['vouchers'];
 		$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT p.code, p.used_at, v.order_id FROM {$table} p LEFT JOIN {$v} v ON v.id = p.voucher_id WHERE p.batch = %s ORDER BY p.id", $batch ), ARRAY_A ); // phpcs:ignore
-		$out   = array( array( 'code', 'status', 'used_at', 'order' ) );
+		$out   = array( array( __( 'Code', 'voucher-captain' ), __( 'Status', 'voucher-captain' ), __( 'Used on', 'voucher-captain' ), __( 'Order', 'voucher-captain' ) ) );
 		foreach ( $rows ? $rows : array() as $r ) {
-			$out[] = array( (string) $r['code'], $r['used_at'] ? 'used' : 'free', (string) $r['used_at'], $r['order_id'] ? (string) $r['order_id'] : '' );
+			$out[] = array( (string) $r['code'], $r['used_at'] ? __( 'Used', 'voucher-captain' ) : __( 'Free', 'voucher-captain' ), Csv::date( $r['used_at'] ), $r['order_id'] ? (string) $r['order_id'] : '' );
 		}
 		return $out;
 	}
 
 	/**
-	 * Stream rows as CSV (UTF-8 BOM for Excel, formula injection neutralised).
+	 * Stream rows as CSV (see Csv: UTF-8 BOM, separator and decimal comma per locale, formula injection neutralised).
+	 *
+	 * @param iterable<array> $rows Header row first.
 	 */
-	public static function send_csv( string $filename, array $rows ): void {
-		nocache_headers();
-		header( 'Content-Type: text/csv; charset=utf-8' );
-		header( 'Content-Disposition: attachment; filename="' . sanitize_file_name( $filename ) . '"' );
-		$out = fopen( 'php://output', 'w' );
-		fwrite( $out, "\xEF\xBB\xBF" ); // phpcs:ignore
-		foreach ( $rows as $row ) {
-			fputcsv( $out, self::safe_row( $row ) );
-		}
-		fclose( $out ); // phpcs:ignore
+	public static function send_csv( string $filename, iterable $rows ): void {
+		Csv::send( $filename, $rows );
 	}
 
 	public static function safe_row( array $row ): array {
-		return array_map( static fn( $c ) => is_string( $c ) && preg_match( '/^[=+\-@\t\r]/', $c ) ? "'" . $c : $c, $row );
+		return Csv::safe_row( $row );
 	}
 }

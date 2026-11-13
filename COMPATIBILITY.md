@@ -9,7 +9,7 @@ The CI integration suite installs WordPress 7.1.4, WooCommerce 11.2.2, Yoast SEO
 | | Minimum (plugin header, enforced) | Test baseline |
 |---|---|---|
 | WordPress | 6.4 | 7.1.4 |
-| WooCommerce | 8.9 (first version with the `woocommerce_coupon_get_items_to_apply` filter used by promotions, purchase rules and SKU rules – verified against the 8.8.0–10.0.0 releases; older versions show an admin notice and the plugin stays inactive) | 11.2.2 |
+| WooCommerce | 8.9 (first version with the `woocommerce_coupon_get_items_to_apply` filter used by promotions, purchase rules and SKU rules – verified against the 8.8.0–10.0.0 releases; older versions show an admin notice and the plugin stays inactive; gift card and store credit coupons are then refused at checkout, because nothing would deduct their balance) | 11.2.2 |
 | PHP | 8.1 | 8.4 |
 | Yoast SEO | not required | 28.8 (optional, tested alongside) |
 
@@ -17,7 +17,25 @@ The CI job `minimum-versions` installs WordPress 6.4.5 and WooCommerce 8.9.0 on 
 
 ## Multisite
 
-Supported per site. Each site has its own voucher tables (`{site prefix}vcap_*`), settings, WooCommerce coupons and private upload folder; vouchers are never shared between sites. Network activation sets up every site (up to 500 at once; any further or later-created site is set up on its first request). Network deactivation suspends the balance coupons of every site. A network uninstall removes data only on the sites whose own "Delete data on uninstall" setting is enabled – the others keep their tables. CI job `multisite` checks network activation, a site created afterwards and the per-site uninstall.
+Supported per site. Each site has its own voucher tables (`{site prefix}vcap_*`), settings, WooCommerce coupons and private upload folder; vouchers are never shared between sites. Network activation sets up every site (up to 500 at once; any further or later-created site is set up on its first request). Network deactivation walks through every site in batches of 100 and suspends its balance coupons (sites that were never set up are skipped). A network uninstall removes data only on the sites whose own "Delete data on uninstall" setting is enabled – the others keep their tables. CI job `multisite` checks network activation, a site created afterwards, the suspension of a subsite's gift card on network deactivation and the per-site uninstall. Referral data stored with users (shared by all sites) is removed only when every site opted in.
+
+## Updates, downgrades and rollback
+
+- The schema is upgraded on the first request after an update, by one request at a time (upgrade lock in the options table, taken over after five minutes if its request died); other requests keep working with the old schema meanwhile. Data migrations run in batches with a time budget and continue on the next request; `vcap_db_version` is set only when the schema is verified complete.
+- Schema 1.4.0 (release after 1.1.0): promotion uses (`vcap_promotion_usage`) and claims (`vcap_claims`) get their own tables, vouchers remember who already received them (`delivered_roles`), the ledger gets the indexes `voucher_order` and `created_at`. Old `_vcap_used_by` post meta and `_vcap_claim_*` options are moved in the background and counted until then.
+- A newer `vcap_db_version` than the running code expects is never lowered; administrators see a notice. Releases up to 1.1.0 do not have this guard and set the version back when they run on a newer database.
+- **Rollback:** take a database backup before every update. To go back, install the previous release ZIP over the current one. It keeps working on the newer tables (new columns and tables are ignored), but it counts promotion uses and claims only from its own storage, so usage limits can be exceeded while it runs; uses it records are moved again by the next update. For a clean rollback restore the backup together with the previous release.
+- CI job `upgrade` installs the release before the last schema change with data, updates to the current ZIP, verifies data and schema, rolls back, writes data with the old version and updates again.
+
+## Caching and page builders
+
+- The redeem page (the configured page, any page with the redeem block/shortcode, links with `?vcap_code=`) is never cached: `DONOTCACHEPAGE` plus no-cache headers. The redeem form, a balance result and "My vouchers" set `DONOTCACHEPAGE` wherever they render; action `vcap_no_cache` fires for cache plugins that need their own call.
+- Balance check and product preview need no nonce for guests (read-only, rate limited), so cached product and balance pages keep working.
+- Blocks are registered from `assets/blocks/*/block.json` (apiVersion 3). Storefront CSS/JS are enqueued where the output renders (shortcodes, blocks, voucher fields), so `[product_page]` and page-builder add-to-cart widgets work; a quick view loaded by AJAX needs the script on the page already.
+
+## CSV exports
+
+UTF-8 with BOM, local shop time, translated column headers and values. German admin languages get `;` as separator and a decimal comma (Swiss German: decimal point); filter `vcap_csv_format` changes it. Exports are streamed without a row limit.
 
 ## EU target market
 

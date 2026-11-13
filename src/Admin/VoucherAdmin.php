@@ -578,21 +578,35 @@ final class VoucherAdmin {
 		}
 		$table = new VouchersListTable( $this->repo );
 		$args  = array_merge( $table->filter_args(), array( 'per_page' => 500 ) );
-		nocache_headers();
-		header( 'Content-Type: text/csv; charset=utf-8' );
-		header( 'Content-Disposition: attachment; filename="vouchers-' . gmdate( 'Y-m-d' ) . '.csv"' );
-		$out = fopen( 'php://output', 'w' );
-		fwrite( $out, "\xEF\xBB\xBF" ); // phpcs:ignore -- UTF-8 BOM for Excel.
-		fputcsv( $out, array( 'code', 'type', 'status', 'product', 'value', 'balance', 'currency', 'expires', 'order', 'buyer_name', 'buyer_email', 'recipient_name', 'recipient_email', 'checkins', 'max_checkins', 'created' ) );
+		$out   = \VCAP\Csv::open( 'vouchers-' . wp_date( 'Y-m-d' ) . '.csv' );
+		$types = Voucher::types();
+		\VCAP\Csv::write(
+			$out,
+			array(
+				__( 'Code', 'voucher-captain' ),
+				__( 'Type', 'voucher-captain' ),
+				__( 'Status', 'voucher-captain' ),
+				__( 'Product', 'voucher-captain' ),
+				__( 'Value', 'voucher-captain' ),
+				__( 'Balance', 'voucher-captain' ),
+				__( 'Currency', 'voucher-captain' ),
+				__( 'Expires', 'voucher-captain' ),
+				__( 'Order', 'voucher-captain' ),
+				__( 'Buyer name', 'voucher-captain' ),
+				__( 'Buyer email', 'voucher-captain' ),
+				__( 'Recipient name', 'voucher-captain' ),
+				__( 'Recipient email', 'voucher-captain' ),
+				__( 'Check-ins', 'voucher-captain' ),
+				__( 'Maximum check-ins', 'voucher-captain' ),
+				__( 'Created', 'voucher-captain' ),
+			)
+		);
 		$page = 1;
 		do {
 			$result = $this->repo->query( array_merge( $args, array( 'page' => $page ) ) );
 			foreach ( $result['items'] as $v ) {
 				$product = $v->product();
-				$row     = array( $v->code, $v->type, $v->status_label(), $product ? $product->get_name() : '', $v->initial_amount, $v->balance, $v->currency, $v->expires_at ? get_date_from_gmt( $v->expires_at, 'Y-m-d' ) : '', $v->order_id, $v->buyer_name, $v->buyer_email, $v->recipient_name, $v->recipient_email, $v->checkins, $v->max_checkins, get_date_from_gmt( $v->created_at, 'Y-m-d H:i' ) );
-				// Neutralise spreadsheet formula injection.
-				$row = array_map( static fn( $c ) => is_string( $c ) && preg_match( '/^[=+\-@\t\r]/', $c ) ? "'" . $c : $c, $row );
-				fputcsv( $out, $row );
+				\VCAP\Csv::write( $out, array( $v->code, $types[ $v->type ] ?? $v->type, $v->status_label(), $product ? $product->get_name() : '', \VCAP\Csv::number( $v->initial_amount, $v->decimals() ), \VCAP\Csv::number( $v->balance, $v->decimals() ), $v->currency, \VCAP\Csv::date( $v->expires_at, false ), $v->order_id ?: '', $v->buyer_name, $v->buyer_email, $v->recipient_name, $v->recipient_email, $v->checkins, $v->max_checkins, \VCAP\Csv::date( $v->created_at ) ) );
 			}
 			++$page;
 		} while ( count( $result['items'] ) === 500 );

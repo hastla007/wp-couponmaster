@@ -14,19 +14,67 @@ final class Health {
 
 	public function register(): void {
 		add_filter( 'site_status_tests', array( $this, 'tests' ) );
+		add_action( 'rest_api_init', array( $this, 'rest_routes' ) );
 		add_action( 'wp_mail_failed', array( $this, 'record_mail_failure' ) );
 	}
 
+	/** Checks that go through all voucher products: run asynchronously (REST), so Site Health opens at once. */
+	private const ASYNC = array( 'validity', 'tax_status' );
+	/** Voucher products checked at most per test (the result says when there are more). */
+	private const MAX_PRODUCTS = 500;
+
 	public function tests( $tests ) {
 		$tests = (array) $tests;
-		foreach ( array( 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets', 'tax_status', 'validity' ) as $id ) {
+		foreach ( array( 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets' ) as $id ) {
 			$tests['direct'][ 'vcap_' . $id ] = array(
 				'label' => __( 'Voucher Captain', 'voucher-captain' ),
 				'test'  => array( $this, 'test_' . $id ),
 			);
 		}
+		foreach ( self::ASYNC as $id ) {
+			$tests['async'][ 'vcap_' . $id ] = array(
+				'label'             => __( 'Voucher Captain', 'voucher-captain' ),
+				'test'              => rest_url( 'vcap/v1/site-health/' . str_replace( '_', '-', $id ) ),
+				'has_rest'          => true,
+				'async_direct_test' => array( $this, 'test_' . $id ),
+			);
+		}
 		return $tests;
 	}
+
+	/** REST endpoints of the asynchronous checks (same permission as Site Health's own checks). */
+	public function rest_routes(): void {
+		foreach ( self::ASYNC as $id ) {
+			register_rest_route(
+				'vcap/v1',
+				'/site-health/' . str_replace( '_', '-', $id ),
+				array(
+					'methods'             => 'GET',
+					'callback'            => fn() => rest_ensure_response( $this->{'test_' . $id}() ),
+					'permission_callback' => static fn() => current_user_can( 'view_site_health_checks' ),
+				)
+			);
+		}
+	}
+
+	/**
+	 * Voucher products (and their variations) of the given post types, at most MAX_PRODUCTS.
+	 *
+	 * @param string[] $post_types Post types.
+	 * @return array{0:int[],1:bool} ids, whether there are more
+	 */
+	private static function voucher_products( array $post_types ): array {
+		$ids = get_posts( array( 'post_type' => $post_types, 'post_status' => array( 'publish', 'private', 'draft' ), 'fields' => 'ids', 'numberposts' => self::MAX_PRODUCTS + 1, 'orderby' => 'ID', 'order' => 'ASC', 'meta_key' => '_vcap_enabled', 'meta_value' => 'yes' ) ); // phpcs:ignore WordPress.DB.SlowDBQuery
+		$ids = array_map( 'intval', $ids );
+		return array( array_slice( $ids, 0, self::MAX_PRODUCTS ), count( $ids ) > self::MAX_PRODUCTS );
+	}
+
+	/** Sentence added to a result when not every voucher product was checked. */
+	private static function truncation_note( bool $more ): string {
+		/* translators: %d: number of products checked */
+		return $more ? ' ' . sprintf( __( 'Only the first %d voucher products were checked.', 'voucher-captain' ), self::MAX_PRODUCTS ) : '';
+	}
+
 
 	/** Depth of Voucher Captain mails being sent right now (only their failures are recorded). */
 	private static int $sending = 0;
@@ -199,29 +247,37 @@ final class Health {
 
 	/** Voucher products whose validity ends before the statutory limitation period in the shop or a selling country. */
 	public function test_validity(): array {
-		$ids   = get_posts( array( 'post_type' => 'product', 'post_status' => array( 'publish', 'private', 'draft' ), 'fields' => 'ids', 'numberposts' => 500, 'meta_key' => '_vcap_enabled', 'meta_value' => 'yes' ) ); // phpcs:ignore WordPress.DB.SlowDBQuery
-		$names = array();
+		list( $ids, $more ) = self::voucher_products( array( 'product' ) );
+		$selling = array_keys( Markets::readiness() ); // Once for all products.
+		$names   = array();
 		foreach ( $ids as $id ) {
-			$short = ProductConfig::short_validity( $id );
+			$short = ProductConfig::short_validity( $id, $selling );
 			if ( $short ) {
 				$names[] = get_the_title( $id ) . ' (' . implode( ', ', array_keys( $short ) ) . ')';
 			}
 		}
 		if ( ! $names ) {
-			return self::result( 'validity', 'good', __( 'Voucher validity is not shorter than the statutory period', 'voucher-captain' ), __( 'No voucher product ends before the statutory limitation period of the shop country or an EU selling country.', 'voucher-captain' ) );
+			return self::result( 'validity', 'good', __( 'Voucher validity is not shorter than the statutory period', 'voucher-captain' ), __( 'No voucher product ends before the statutory limitation period of the shop country or an EU selling country.', 'voucher-captain' ) . self::truncation_note( $more ) );
 		}
 		/* translators: %s: products with the countries concerned */
-		return self::result( 'validity', 'recommended', __( 'Some vouchers are valid for less than the statutory period', 'voucher-captain' ), sprintf( __( 'A validity shorter than the statutory limitation period is often invalid in voucher conditions. Check legally or switch to the statutory validity: %s', 'voucher-captain' ), implode( '; ', $names ) ) );
+		return self::result( 'validity', 'recommended', __( 'Some vouchers are valid for less than the statutory period', 'voucher-captain' ), sprintf( __( 'A validity shorter than the statutory limitation period is often invalid in voucher conditions. Check legally or switch to the statutory validity: %s', 'voucher-captain' ), implode( '; ', $names ) ) . self::truncation_note( $more ) );
 	}
 
 	/** Voucher products whose tax status does not fit the voucher kind (multi-purpose: none, single-purpose: taxable). */
 	public function test_tax_status(): array {
-		$ids   = get_posts( array( 'post_type' => array( 'product', 'product_variation' ), 'post_status' => array( 'publish', 'private', 'draft' ), 'fields' => 'ids', 'numberposts' => 500, 'meta_key' => '_vcap_enabled', 'meta_value' => 'yes' ) ); // phpcs:ignore WordPress.DB.SlowDBQuery
-		$names = array();
+		list( $ids, $more ) = self::voucher_products( array( 'product', 'product_variation' ) );
+		$names   = array();
+		$checked = array();
 		foreach ( $ids as $id ) {
 			$product = wc_get_product( $id );
-			foreach ( $product ? array_merge( array( $product ), $product->is_type( 'variable' ) ? array_filter( array_map( 'wc_get_product', $product->get_children() ) ) : array() ) : array() as $item ) {
-				$conflict = ProductConfig::tax_status_conflict( $item );
+			$items   = $product ? array_merge( array( $product ), $product->is_type( 'variable' ) ? array_filter( array_map( 'wc_get_product', $product->get_children() ) ) : array() ) : array();
+			foreach ( $items as $item ) {
+				// A variation is found on its own (own voucher setting) and as a child of its product: check it once.
+				if ( isset( $checked[ $item->get_id() ] ) ) {
+					continue;
+				}
+				$checked[ $item->get_id() ] = true;
+				$conflict                   = ProductConfig::tax_status_conflict( $item );
 				if ( $conflict ) {
 					/* translators: 1: product name, 2: expected tax status ("none" or "taxable") */
 					$names[] = sprintf( __( '%1$s (tax status should be "%2$s")', 'voucher-captain' ), $item->get_name(), 'none' === $conflict['expected'] ? __( 'None', 'voucher-captain' ) : __( 'Taxable', 'voucher-captain' ) );
@@ -229,10 +285,10 @@ final class Health {
 			}
 		}
 		if ( ! $names ) {
-			return self::result( 'tax_status', 'good', __( 'Voucher products have a tax status that fits their VAT treatment', 'voucher-captain' ), __( 'Multi-purpose vouchers are sold without VAT, single-purpose vouchers with VAT.', 'voucher-captain' ) );
+			return self::result( 'tax_status', 'good', __( 'Voucher products have a tax status that fits their VAT treatment', 'voucher-captain' ), __( 'Multi-purpose vouchers are sold without VAT, single-purpose vouchers with VAT.', 'voucher-captain' ) . self::truncation_note( $more ) );
 		}
 		/* translators: %s: list of products */
-		return self::result( 'tax_status', 'recommended', __( 'Some voucher products have a tax status that does not fit their VAT treatment', 'voucher-captain' ), sprintf( __( 'Multi-purpose vouchers are sold without VAT (tax status "None"), single-purpose vouchers with VAT ("Taxable"). Check with your tax adviser and correct: %s', 'voucher-captain' ), implode( '; ', $names ) ) );
+		return self::result( 'tax_status', 'recommended', __( 'Some voucher products have a tax status that does not fit their VAT treatment', 'voucher-captain' ), sprintf( __( 'Multi-purpose vouchers are sold without VAT (tax status "None"), single-purpose vouchers with VAT ("Taxable"). Check with your tax adviser and correct: %s', 'voucher-captain' ), implode( '; ', $names ) ) . self::truncation_note( $more ) );
 	}
 
 	private static function result( string $id, string $status, string $label, string $text ): array {

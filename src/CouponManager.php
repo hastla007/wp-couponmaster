@@ -43,7 +43,6 @@ final class CouponManager {
 		add_action( 'wp_trash_post', array( $this, 'release_deleted_order' ), 5 );
 		add_action( 'before_delete_post', array( $this, 'release_deleted_order' ), 5 );
 		add_action( 'vcap_release_stale_order_reservations', array( $this, 'release_stale_order_reservations' ) );
-		add_action( 'init', array( $this, 'schedule_stale_release' ), 20 );
 	}
 
 	/**
@@ -66,6 +65,7 @@ final class CouponManager {
 		}
 	}
 
+	/** Called by Plugin::ensure_schedules() (once a day and after activation or an update, not on every request). */
 	public function schedule_stale_release(): void {
 		if ( function_exists( 'as_has_scheduled_action' ) && ! as_has_scheduled_action( 'vcap_release_stale_order_reservations', array(), 'vcap' ) ) {
 			as_schedule_recurring_action( time() + HOUR_IN_SECONDS, HOUR_IN_SECONDS, 'vcap_release_stale_order_reservations', array(), 'vcap' );
@@ -83,26 +83,30 @@ final class CouponManager {
 		if ( $minutes <= 0 ) {
 			return;
 		}
-		// Orders whose latest ledger entry for a voucher is still an open checkout hold (own table, works with
-		// HPOS and the legacy order store alike).
-		global $wpdb;
-		$events    = Install::tables()['events'];
-		// Walk through all open holds in batches (cursor), so on-hold orders that keep their hold can never block
-		// the release of abandoned pending orders behind them.
-		$cursor = (int) get_option( 'vcap_stale_release_cursor', 0 );
-		$rows   = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			$wpdb->prepare(
-				"SELECT e.id, e.order_id FROM {$events} e
-				INNER JOIN ( SELECT MAX(id) AS id FROM {$events} WHERE order_id > 0 GROUP BY voucher_id, order_id ) latest ON latest.id = e.id
-				WHERE e.event = 'reserved' AND e.id > %d ORDER BY e.id ASC LIMIT 200",
-				$cursor
-			),
-			ARRAY_A
-		);
-		$rows      = $rows ? $rows : array();
-		$order_ids = array_values( array_unique( array_column( $rows, 'order_id' ) ) );
-		update_option( 'vcap_stale_release_cursor', count( $rows ) < 200 ? 0 : (int) end( $rows )['id'], false );
-		$cutoff = time() - $minutes * MINUTE_IN_SECONDS;
+		// Open holds are the "_vcap_reservations" map of unpaid orders (removed once the hold is charged or
+		// released): pending orders not changed since the cutoff, found through the order meta index (HPOS and the
+		// legacy order store alike) instead of scanning the ledger. Pages of 200, so holds that cannot be
+		// released right now never block the orders behind them.
+		$cutoff    = time() - $minutes * MINUTE_IN_SECONDS;
+		$order_ids = array();
+		for ( $page = 1; $page <= 5; $page++ ) {
+			$ids = wc_get_orders(
+				array(
+					'status'        => 'pending',
+					'limit'         => 200,
+					'paged'         => $page,
+					'orderby'       => 'ID',
+					'order'         => 'ASC',
+					'return'        => 'ids',
+					'date_modified' => '<' . $cutoff,
+					'meta_query'    => array( array( 'key' => '_vcap_reservations', 'compare' => 'EXISTS' ) ), // phpcs:ignore WordPress.DB.SlowDBQuery
+				)
+			);
+			$order_ids = array_merge( $order_ids, (array) $ids );
+			if ( count( (array) $ids ) < 200 ) {
+				break;
+			}
+		}
 		foreach ( array_map( 'intval', $order_ids ? $order_ids : array() ) as $order_id ) {
 			$order = wc_get_order( $order_id );
 			if ( ! $order instanceof \WC_Order || 'pending' !== $order->get_status() ) {

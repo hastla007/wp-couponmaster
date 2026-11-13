@@ -14,7 +14,6 @@ final class Delivery {
 	public function register(): void {
 		add_action( 'vcap_deliver_voucher', array( $this, 'deliver' ), 10, 1 );
 		add_action( 'vcap_daily_maintenance', array( $this, 'maintenance' ) );
-		add_action( 'init', array( $this, 'schedule_maintenance' ), 20 );
 	}
 
 	public static function delivery_modes(): array {
@@ -85,6 +84,8 @@ final class Delivery {
 			$voucher->status = Voucher::STATUS_SCHEDULED;
 		}
 		$this->repo->update_columns( $voucher, array( 'delivery_at', 'delivered_at' ), $from_status );
+		// A new delivery goes to everyone again.
+		$this->store_delivered_roles( $voucher->id, array(), array() );
 		if ( Voucher::STATUS_SCHEDULED === $voucher->status && Voucher::STATUS_SCHEDULED !== $from_status ) {
 			// Only once the stored row really is scheduled (a concurrent redemption wins).
 			vcap()->coupons->set_coupon_enabled( $voucher, false );
@@ -134,29 +135,28 @@ final class Delivery {
 				$voucher->status = Voucher::STATUS_ACTIVE;
 			}
 
-			// A retry after a partial failure only mails who is still missing (no duplicate for the others).
-			$pending_key = 'vcap_delivery_missing_' . $voucher->id;
-			$pending     = get_transient( $pending_key );
-			// (array) false would be array( false ): no transient means "send to everyone".
-			$pending     = is_array( $pending ) ? array_values( array_intersect( $pending, array( 'recipient', 'buyer' ) ) ) : array();
-			$only        = 1 === count( $pending ) ? (string) reset( $pending ) : null;
-			$required    = $this->required_roles( $voucher );
-			$sent_roles  = array();
-			$sent        = $this->send( $voucher, $only, $sent_roles );
-			if ( ! $sent ) {
+			// A retry after a partial failure only mails who is still missing (no duplicate for the others): who
+			// already got it is stored with the voucher (delivered_roles), so a cache flush cannot cause a second mail.
+			$required  = $this->required_roles( $voucher );
+			$delivered = $this->delivered_roles( $voucher );
+			$pending   = array_values( array_diff( $required, $delivered ) );
+			$only      = $delivered && 1 === count( $pending ) ? (string) reset( $pending ) : null;
+			$sent_roles = array();
+			$sent       = $delivered && ! $pending ? array() : $this->send( $voucher, $only, $sent_roles );
+			if ( ! $sent && $pending ) {
 				// Retried by the daily maintenance until 30 days after the due date (VoucherRepository::due_for_delivery()).
 				$this->repo->log( $voucher->id, 'delivery_failed', null, null, __( 'No email was sent (email disabled or no valid address).', 'voucher-captain' ) );
 				return;
 			}
-			$missing = array_values( array_diff( null === $only ? $required : array( $only ), $sent_roles ) );
+			$delivered = array_values( array_unique( array_merge( $delivered, $sent_roles ) ) );
+			$missing   = array_values( array_diff( $required, $delivered ) );
+			$this->store_delivered_roles( $voucher->id, $delivered, $missing );
 			if ( $missing ) {
 				// "Send to buyer and recipient": delivered only when both got it; the rest is retried later.
-				set_transient( $pending_key, $missing, 31 * DAY_IN_SECONDS );
 				/* translators: %s: buyer/recipient */
 				$this->repo->log( $voucher->id, 'delivery_failed', null, null, sprintf( __( 'Not delivered to: %s (will be retried).', 'voucher-captain' ), implode( ', ', $missing ) ) );
 				return;
 			}
-			delete_transient( $pending_key );
 
 			$table   = Install::tables()['vouchers'];
 			$updated = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -182,6 +182,50 @@ final class Delivery {
 			throw $e;
 		} finally {
 			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+	}
+
+	/**
+	 * Roles ('recipient', 'buyer') that already received this voucher in an earlier, partly failed attempt.
+	 *
+	 * @return string[]
+	 */
+	private function delivered_roles( Voucher $voucher ): array {
+		if ( Install::storage_ready() ) {
+			global $wpdb;
+			$table = Install::tables()['vouchers'];
+			$roles = (string) $wpdb->get_var( $wpdb->prepare( "SELECT delivered_roles FROM {$table} WHERE id = %d", $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$roles = array_values( array_intersect( array_filter( explode( ',', $roles ) ), array( 'recipient', 'buyer' ) ) );
+			if ( $roles ) {
+				return $roles;
+			}
+		}
+		// Before schema 1.4 (or a retry recorded by an older version) a transient listed who was still missing.
+		$missing = get_transient( 'vcap_delivery_missing_' . $voucher->id );
+		// (array) false would be array( false ): no transient means nobody got it yet.
+		$missing = is_array( $missing ) ? array_values( array_intersect( $missing, array( 'recipient', 'buyer' ) ) ) : array();
+		return $missing ? array_values( array_diff( $this->required_roles( $voucher ), $missing ) ) : array();
+	}
+
+	/**
+	 * Remembers who got the voucher. Before schema 1.4 only the missing roles are kept, in a transient.
+	 *
+	 * @param string[] $delivered Roles mailed so far.
+	 * @param string[] $missing   Required roles still missing.
+	 */
+	private function store_delivered_roles( int $voucher_id, array $delivered, array $missing ): void {
+		$key = 'vcap_delivery_missing_' . $voucher_id;
+		if ( Install::storage_ready() ) {
+			global $wpdb;
+			$table = Install::tables()['vouchers'];
+			$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET delivered_roles = %s WHERE id = %d", implode( ',', $delivered ), $voucher_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			delete_transient( $key );
+			return;
+		}
+		if ( $missing ) {
+			set_transient( $key, $missing, 31 * DAY_IN_SECONDS );
+		} else {
+			delete_transient( $key );
 		}
 	}
 
@@ -232,9 +276,54 @@ final class Delivery {
 		return $sent;
 	}
 
+	/** Called by Plugin::ensure_schedules() (once a day and after activation or an update, not on every request). */
 	public function schedule_maintenance(): void {
 		if ( function_exists( 'as_has_scheduled_action' ) && ! as_has_scheduled_action( 'vcap_daily_maintenance', array(), self::GROUP ) ) {
 			as_schedule_recurring_action( strtotime( 'tomorrow 03:15' ), DAY_IN_SECONDS, 'vcap_daily_maintenance', array(), self::GROUP );
+		}
+	}
+
+	/**
+	 * After a reactivation: schedules again what the deactivation removed – deliveries with a future date, the
+	 * release of open external reservations and pending referral withdrawals. Deliveries that became due meanwhile
+	 * are sent by the daily maintenance (due_for_delivery()).
+	 */
+	public function restore_tasks(): void {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			return;
+		}
+		global $wpdb;
+		$tables = Install::tables();
+		$now    = $this->repo->now();
+		$due    = $wpdb->get_results( $wpdb->prepare( "SELECT id, delivery_at FROM {$tables['vouchers']} WHERE delivered_at IS NULL AND status = 'scheduled' AND delivery_at > %s ORDER BY delivery_at LIMIT 2000", $now ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		foreach ( $due ? $due : array() as $row ) {
+			$args = array( 'voucher_id' => (int) $row['id'] );
+			if ( ! as_has_scheduled_action( 'vcap_deliver_voucher', $args, self::GROUP ) ) {
+				as_schedule_single_action( strtotime( $row['delivery_at'] . ' UTC' ), 'vcap_deliver_voucher', $args, self::GROUP );
+			}
+		}
+		$held = $wpdb->get_results( $wpdb->prepare( "SELECT id, expires_at FROM {$tables['redemptions']} WHERE state = %s AND expires_at IS NOT NULL ORDER BY expires_at LIMIT 2000", API\V1\RedemptionService::STATE_RESERVED ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		foreach ( $held ? $held : array() as $row ) {
+			$args = array( 'redemption_id' => (int) $row['id'] );
+			if ( ! as_has_scheduled_action( 'vcap_release_expired_redemption', $args, self::GROUP ) ) {
+				as_schedule_single_action( max( time(), (int) strtotime( $row['expires_at'] . ' UTC' ) ) + MINUTE_IN_SECONDS, 'vcap_release_expired_redemption', $args, self::GROUP );
+			}
+		}
+		$orders = wc_get_orders(
+			array(
+				'status'     => array( 'cancelled', 'refunded' ),
+				'limit'      => 200,
+				'return'     => 'ids',
+				'meta_query' => array( array( 'key' => Referrals::REWARD, 'compare' => 'EXISTS' ) ), // phpcs:ignore WordPress.DB.SlowDBQuery
+			)
+		);
+		foreach ( (array) $orders as $order_id ) {
+			$order  = wc_get_order( $order_id );
+			$reward = $order instanceof \WC_Order ? $order->get_meta( Referrals::REWARD ) : null;
+			$tries  = is_array( $reward ) ? (int) ( $reward['revoke_attempts'] ?? 0 ) : 0;
+			if ( $tries > 0 && $tries < 5 && empty( $reward['revoked'] ) && ! as_has_scheduled_action( Referrals::RETRY_HOOK, array( (int) $order_id ), self::GROUP ) ) {
+				as_schedule_single_action( time() + HOUR_IN_SECONDS, Referrals::RETRY_HOOK, array( (int) $order_id ), self::GROUP );
+			}
 		}
 	}
 
@@ -291,6 +380,8 @@ final class Delivery {
 		Plugin::purge_rate_limits();
 		Health::prune_mail_failures();
 		Tickets::purge_scan_keys();
+		Claim::purge();
+		Install::move_legacy_rows( 20.0 );
 		foreach ( glob( Install::upload_dir() . '/tmp/*.pdf' ) ?: array() as $file ) {
 			if ( filemtime( $file ) < time() - HOUR_IN_SECONDS ) {
 				wp_delete_file( $file );

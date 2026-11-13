@@ -1,0 +1,15 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "vcap/balance",
+	"title": "Voucher balance",
+	"category": "widgets",
+	"icon": "search",
+	"description": "Lets customers check the status, balance and expiry of a voucher code.",
+	"textdomain": "voucher-captain",
+	"supports": {
+		"html": false
+	},
+	"editorScript": "vcap-blocks",
+	"style": "vcap-frontend"
+}

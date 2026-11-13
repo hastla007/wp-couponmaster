@@ -11,7 +11,11 @@ defined( 'ABSPATH' ) || exit;
  * and revenue (order total minus refunds) of paid orders in a date range.
  */
 final class Reports {
-	public const MAX_ORDERS = 5000;
+	/** Orders of the period that are evaluated at most (newest first); beyond, $truncated is set and shown. */
+	public const MAX_ORDERS = 50000;
+
+	/** Whether the last collect() stopped at MAX_ORDERS. */
+	public bool $truncated = false;
 
 	/** Paid statuses that count for reports. */
 	public static function statuses(): array {
@@ -58,30 +62,45 @@ final class Reports {
 	}
 
 	/**
+	 * Codes used in paid orders of the period: coupon lines, and vouchers used as a payment after tax (fee lines
+	 * with "_vcap_payment_code", see PaymentVouchers – counted with the amount paid). Only orders that have such
+	 * lines are loaded (found in the order item tables, which both order stores share).
+	 *
 	 * @return array<string, array{type:string,name:string,orders:int,uses:int,discount:float,revenue:float,issued:?int}>
 	 */
 	public function collect( string $from, string $to ): array {
-		$ids  = wc_get_orders(
+		$ids             = (array) wc_get_orders(
 			array(
 				'type'         => 'shop_order',
 				'status'       => self::statuses(),
 				'date_created' => $from . '...' . $to,
-				'limit'        => self::MAX_ORDERS,
+				'limit'        => self::MAX_ORDERS + 1,
 				'return'       => 'ids',
 				'orderby'      => 'date',
 				'order'        => 'DESC',
 			)
 		);
-		$rows = array();
-		foreach ( $ids as $id ) {
+		$this->truncated = count( $ids ) > self::MAX_ORDERS;
+		$rows            = array();
+		foreach ( self::orders_with_codes( array_slice( $ids, 0, self::MAX_ORDERS ) ) as $id ) {
 			$order = wc_get_order( $id );
 			if ( ! $order instanceof \WC_Order ) {
 				continue;
 			}
 			$seen     = array();
 			$currency = $order->get_currency();
+			$uses     = array();
 			foreach ( $order->get_items( 'coupon' ) as $item ) {
-				$group = $this->group( (string) $item->get_code() );
+				$uses[] = array( (string) $item->get_code(), (float) $item->get_discount() + (float) $item->get_discount_tax() );
+			}
+			foreach ( $order->get_items( 'fee' ) as $item ) {
+				$code = (string) $item->get_meta( PaymentVouchers::FEE_META );
+				if ( '' !== $code ) {
+					$uses[] = array( $code, abs( (float) $item->get_total() ) );
+				}
+			}
+			foreach ( $uses as list( $code, $amount ) ) {
+				$group = $this->group( $code );
 				$key   = $group['type'] . ':' . $group['name'];
 				if ( $currency && get_woocommerce_currency() !== $currency ) {
 					// Amounts in other currencies are never added to shop-currency amounts.
@@ -92,7 +111,7 @@ final class Reports {
 					$rows[ $key ] = $group + array( 'orders' => 0, 'uses' => 0, 'discount' => 0.0, 'revenue' => 0.0, 'issued' => null );
 				}
 				++$rows[ $key ]['uses'];
-				$rows[ $key ]['discount'] += (float) $item->get_discount() + (float) $item->get_discount_tax();
+				$rows[ $key ]['discount'] += $amount;
 				if ( ! isset( $seen[ $key ] ) ) {
 					$seen[ $key ] = true;
 					++$rows[ $key ]['orders'];
@@ -107,6 +126,37 @@ final class Reports {
 			$row['revenue']  = round( $row['revenue'], wc_get_price_decimals() );
 		}
 		return $rows;
+	}
+
+	/**
+	 * The orders among $ids that have a coupon line or a voucher payment line.
+	 *
+	 * @param int[] $ids Order ids.
+	 * @return int[]
+	 */
+	private static function orders_with_codes( array $ids ): array {
+		global $wpdb;
+		$items = $wpdb->prefix . 'woocommerce_order_items';
+		$meta  = $wpdb->prefix . 'woocommerce_order_itemmeta';
+		$out   = array();
+		foreach ( array_chunk( array_map( 'intval', $ids ), 1000 ) as $chunk ) {
+			$in  = implode( ',', $chunk );
+			$out = array_merge(
+				$out,
+				array_map(
+					'intval',
+					(array) $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+						$wpdb->prepare(
+							// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids and table names.
+							"SELECT DISTINCT oi.order_id FROM {$items} oi WHERE oi.order_id IN ({$in}) AND ( oi.order_item_type = 'coupon' OR ( oi.order_item_type = 'fee' AND EXISTS ( SELECT 1 FROM {$meta} m WHERE m.order_item_id = oi.order_item_id AND m.meta_key = %s ) ) )",
+							PaymentVouchers::FEE_META
+						)
+					)
+				)
+			);
+		}
+		// Keep the order of $ids (newest first).
+		return array_values( array_intersect( array_map( 'intval', $ids ), $out ) );
 	}
 
 	/** Number of codes issued per code campaign and bonus promotion (also listed without redemptions). */
@@ -143,11 +193,11 @@ final class Reports {
 		return $labels[ $type ] ?? $type;
 	}
 
-	/** CSV rows for export. */
+	/** CSV rows for export (header first). */
 	public static function csv_rows( array $rows ): array {
-		$out = array( array( 'type', 'name', 'codes_issued', 'uses', 'orders', 'discount', 'revenue', 'currency' ) );
+		$out = array( array( __( 'Type', 'voucher-captain' ), __( 'Name', 'voucher-captain' ), __( 'Codes issued', 'voucher-captain' ), __( 'Uses', 'voucher-captain' ), __( 'Orders', 'voucher-captain' ), __( 'Discount', 'voucher-captain' ), __( 'Revenue', 'voucher-captain' ), __( 'Currency', 'voucher-captain' ) ) );
 		foreach ( $rows as $r ) {
-			$out[] = array( $r['type'], $r['name'], null === $r['issued'] ? '' : $r['issued'], $r['uses'], $r['orders'], $r['discount'], $r['revenue'], get_woocommerce_currency() );
+			$out[] = array( self::type_label( $r['type'] ), $r['name'], null === $r['issued'] ? '' : $r['issued'], $r['uses'], $r['orders'], Csv::number( $r['discount'], wc_get_price_decimals() ), Csv::number( $r['revenue'], wc_get_price_decimals() ), get_woocommerce_currency() );
 		}
 		return $out;
 	}

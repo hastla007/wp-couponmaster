@@ -1,0 +1,15 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "vcap/referral",
+	"title": "Refer a friend",
+	"category": "widgets",
+	"icon": "groups",
+	"description": "The logged-in customer's personal referral code.",
+	"textdomain": "voucher-captain",
+	"supports": {
+		"html": false
+	},
+	"editorScript": "vcap-blocks",
+	"style": "vcap-frontend"
+}

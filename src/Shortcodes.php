@@ -32,34 +32,66 @@ final class Shortcodes {
 		add_shortcode( 'vcap_referral', array( $this, 'referral_shortcode' ) );
 		add_action( 'template_redirect', array( $this, 'redeem_link' ), 7 );
 		add_action( 'template_redirect', array( $this, 'handle_redeem' ), 8 );
+		add_action( 'template_redirect', array( $this, 'maybe_no_cache' ), 9 );
 		add_action( 'init', array( $this, 'blocks' ) );
 	}
 
+	/**
+	 * Blocks from assets/blocks/{name}/block.json (apiVersion 3, editor script "vcap-blocks", style
+	 * "vcap-frontend"), rendered on the server through the shortcodes. Titles and descriptions come from PHP so
+	 * they use the plugin's translations.
+	 */
 	public function blocks(): void {
 		if ( ! function_exists( 'register_block_type' ) ) {
 			return;
 		}
+		Downloads::register_assets();
 		wp_register_script( 'vcap-blocks', VCAP_URL . 'assets/js/blocks.js', array( 'wp-blocks', 'wp-element', 'wp-block-editor', 'wp-server-side-render' ), VCAP_VERSION, true );
-		wp_localize_script(
-			'vcap-blocks',
-			'vcapBlocks',
-			array(
-				'vcap/balance'     => __( 'Voucher balance', 'voucher-captain' ),
-				'vcap/redeem'      => __( 'Redeem voucher', 'voucher-captain' ),
-				'vcap/my-vouchers' => __( 'My vouchers', 'voucher-captain' ),
-				'vcap/referral'    => __( 'Refer a friend', 'voucher-captain' ),
-			)
+		$texts = array(
+			'vcap/balance'     => array( __( 'Voucher balance', 'voucher-captain' ), __( 'Lets customers check the status, balance and expiry of a voucher code.', 'voucher-captain' ) ),
+			'vcap/redeem'      => array( __( 'Redeem voucher', 'voucher-captain' ), __( 'Lets customers enter a voucher code; it is applied to the cart now or as soon as it has products.', 'voucher-captain' ) ),
+			'vcap/my-vouchers' => array( __( 'My vouchers', 'voucher-captain' ), __( 'The logged-in customer\'s vouchers with PDF download and "send again".', 'voucher-captain' ) ),
+			'vcap/referral'    => array( __( 'Refer a friend', 'voucher-captain' ), __( 'The logged-in customer\'s personal referral code.', 'voucher-captain' ) ),
 		);
 		foreach ( self::BLOCKS as $name => $shortcode ) {
 			register_block_type(
-				$name,
+				VCAP_PATH . 'assets/blocks/' . substr( $name, strlen( 'vcap/' ) ),
 				array(
-					'api_version'     => 2,
-					'editor_script'   => 'vcap-blocks',
+					'title'           => $texts[ $name ][0],
+					'description'     => $texts[ $name ][1],
 					'render_callback' => static fn() => do_shortcode( '[' . $shortcode . ']' ),
-					'supports'        => array( 'html' => false ),
 				)
 			);
+		}
+	}
+
+	/**
+	 * Keeps the current page out of full-page caches: it shows session data (a waiting code, a guest email,
+	 * notices) or a form whose nonce is tied to the visitor's session. Sets DONOTCACHEPAGE (respected by the common
+	 * cache plugins) and sends no-cache headers while they can still be sent.
+	 */
+	public static function no_cache(): void {
+		if ( function_exists( 'wc_maybe_define_constant' ) ) {
+			wc_maybe_define_constant( 'DONOTCACHEPAGE', true );
+		} elseif ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', true );
+		}
+		if ( ! headers_sent() ) {
+			nocache_headers();
+		}
+		/** Fires when a page must not be cached (hook for cache plugins without DONOTCACHEPAGE support). */
+		do_action( 'vcap_no_cache' );
+	}
+
+	/**
+	 * The redeem page is never cached: decided before any output, so the no-cache headers can still be sent
+	 * (the shortcode alone could only set DONOTCACHEPAGE).
+	 */
+	public function maybe_no_cache(): void {
+		$id = is_singular() ? (int) get_queried_object_id() : 0;
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- only decides about caching.
+		if ( isset( $_GET['vcap_code'] ) || ( $id > 0 && ( (int) get_option( 'vcap_redeem_page_id', 0 ) === $id || self::page_has_redeem_form( $id ) ) ) ) {
+			self::no_cache();
 		}
 	}
 
@@ -218,6 +250,8 @@ final class Shortcodes {
 
 	public function redeem_shortcode( $atts = array() ): string {
 		$atts = shortcode_atts( array( 'button' => __( 'Redeem', 'voucher-captain' ) ), (array) $atts, 'vcap_redeem' );
+		self::no_cache();
+		Downloads::enqueue_style();
 		ob_start();
 		?>
 		<form method="post" class="vcap-redeem-form">
@@ -250,6 +284,8 @@ final class Shortcodes {
 		if ( ! is_user_logged_in() ) {
 			return self::login_hint();
 		}
+		self::no_cache();
+		Downloads::enqueue_style();
 		ob_start();
 		$this->downloads->account_page();
 		return self::notices() . ob_get_clean();
@@ -263,6 +299,7 @@ final class Shortcodes {
 		if ( ! is_user_logged_in() ) {
 			return self::login_hint();
 		}
+		Downloads::enqueue_style();
 		ob_start();
 		$this->referrals->account_block();
 		return (string) ob_get_clean();

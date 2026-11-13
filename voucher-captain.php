@@ -21,7 +21,7 @@ defined( 'ABSPATH' ) || exit;
 define( 'VCAP_VERSION', '1.1.0' );
 // Edition constants (VCAP_EDITION, VCAP_LICENSE_REQUIRED, VCAP_LICENSE_SERVER) and the "Update URI" header of the
 // premium build are added by bin/build.sh; a checkout without them runs as the development edition (LICENSING.md).
-define( 'VCAP_DB_VERSION', '1.3.0' );
+define( 'VCAP_DB_VERSION', '1.4.0' );
 define( 'VCAP_FILE', __FILE__ );
 define( 'VCAP_PATH', plugin_dir_path( __FILE__ ) );
 define( 'VCAP_URL', plugin_dir_url( __FILE__ ) );
@@ -72,12 +72,14 @@ add_action(
 			return;
 		}
 		if ( defined( 'WC_VERSION' ) && version_compare( WC_VERSION, '8.9', '<' ) ) {
+			// The plugin does not run: nothing would deduct gift card balances, so their coupons are refused.
+			add_filter( 'woocommerce_coupon_is_valid', array( '\VCAP\Install', 'refuse_balance_coupon' ), 1000, 2 );
 			add_action(
 				'admin_notices',
 				static function (): void {
 					if ( current_user_can( 'activate_plugins' ) ) {
 						/* translators: %s: installed WooCommerce version */
-						echo '<div class="notice notice-error"><p>' . esc_html( sprintf( __( 'Voucher Captain requires WooCommerce 8.9 or newer (installed: %s). Please update WooCommerce.', 'voucher-captain' ), WC_VERSION ) ) . '</p></div>';
+						echo '<div class="notice notice-error"><p>' . esc_html( sprintf( __( 'Voucher Captain requires WooCommerce 8.9 or newer (installed: %s). Please update WooCommerce.', 'voucher-captain' ), WC_VERSION ) ) . ' ' . esc_html__( 'Until then, gift cards and store credit are refused at checkout, because their balance cannot be deducted.', 'voucher-captain' ) . '</p></div>';
 					}
 				}
 			);
