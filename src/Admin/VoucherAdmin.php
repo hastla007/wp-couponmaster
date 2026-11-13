@@ -35,6 +35,7 @@ final class VoucherAdmin {
 			'reactivated' => __( 'Voucher reactivated.', 'voucher-captain' ),
 			'adjusted'    => __( 'Balance updated.', 'voucher-captain' ),
 			'adjust_failed' => __( 'Balance could not be saved. Check the database tables and try again.', 'voucher-captain' ),
+			'action_failed' => __( 'The change could not be saved completely. Check the voucher history and the WooCommerce coupon.', 'voucher-captain' ),
 			'bulk'        => __( 'Bulk action completed.', 'voucher-captain' ),
 			'issued'      => __( 'Vouchers generated.', 'voucher-captain' ),
 			'none'        => __( 'No new vouchers were needed for this order.', 'voucher-captain' ),
@@ -264,12 +265,10 @@ final class VoucherAdmin {
 				$this->redirect( 'saved', $id );
 				break;
 			case 'void':
-				vcap()->issuer->void( $v, __( 'Voided by admin', 'voucher-captain' ) );
-				$this->redirect( 'voided', $id );
+				$this->redirect( vcap()->issuer->void( $v, __( 'Voided by admin', 'voucher-captain' ) ) ? 'voided' : 'action_failed', $id );
 				break;
 			case 'reactivate':
-				vcap()->issuer->reactivate( $v );
-				$this->redirect( 'reactivated', $id );
+				$this->redirect( vcap()->issuer->reactivate( $v ) ? 'reactivated' : 'action_failed', $id );
 				break;
 			case 'adjust':
 				$amount = (float) wc_format_decimal( wp_unslash( (string) ( $_POST['amount'] ?? 0 ) ) );

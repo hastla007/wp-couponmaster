@@ -3758,3 +3758,12 @@ msgstr "Dieser Gutschein kann nicht vor Ort eingelöst werden."
 
 msgid "Voucher uses"
 msgstr "Gutscheinverwendungen"
+
+msgid "(WooCommerce coupon could not be disabled – disable it manually)"
+msgstr "(WooCommerce-Gutschein konnte nicht deaktiviert werden – bitte manuell deaktivieren)"
+
+msgid "WooCommerce coupon could not be enabled – enable it manually"
+msgstr "WooCommerce-Gutschein konnte nicht aktiviert werden – bitte manuell aktivieren"
+
+msgid "The change could not be saved completely. Check the voucher history and the WooCommerce coupon."
+msgstr "Die Änderung konnte nicht vollständig gespeichert werden. Bitte prüfen Sie den Verlauf des Gutscheins und den WooCommerce-Gutschein."

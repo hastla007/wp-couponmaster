@@ -405,30 +405,43 @@ final class Issuer {
 		}
 	}
 
-	public function void( Voucher $voucher, string $note = '' ): void {
+	/** @return bool False when the voucher could not be voided (nothing logged, the coupon stays as it was). */
+	public function void( Voucher $voucher, string $note = '' ): bool {
 		if ( Voucher::STATUS_VOID === $voucher->status ) {
-			return;
+			return true;
+		}
+		if ( ! $this->repo->update_status( $voucher->id, Voucher::STATUS_VOID ) ) {
+			return false;
 		}
 		$voucher->status = Voucher::STATUS_VOID;
-		$this->repo->update_status( $voucher->id, Voucher::STATUS_VOID );
-		$this->coupons->set_coupon_enabled( $voucher, false );
+		if ( ! $this->coupons->set_coupon_enabled( $voucher, false ) ) {
+			// The voucher is void but its coupon still works: say so loudly instead of pretending success.
+			$this->repo->log( $voucher->id, 'voided', null, $voucher->balance, trim( $note . ' ' . __( '(WooCommerce coupon could not be disabled – disable it manually)', 'voucher-captain' ) ) );
+			return false;
+		}
 		$this->repo->log( $voucher->id, 'voided', null, $voucher->balance, $note );
 		if ( function_exists( 'as_unschedule_all_actions' ) ) {
 			as_unschedule_all_actions( 'vcap_deliver_voucher', array( 'voucher_id' => $voucher->id ), 'vcap' );
 		}
+		return true;
 	}
 
-	public function reactivate( Voucher $voucher ): void {
+	/** @return bool False when the status or the coupon could not be restored. */
+	public function reactivate( Voucher $voucher ): bool {
 		$fresh   = $this->repo->get( $voucher->id ) ?? $voucher;
 		$coupon  = $fresh->coupon_id ? new \WC_Coupon( $fresh->coupon_id ) : null;
 		$used_up = $fresh->is_multi_use()
 			? $fresh->balance <= 0
 			: ( $coupon && $coupon->get_id() && $coupon->get_usage_limit() > 0 && $coupon->get_usage_count() >= $coupon->get_usage_limit() );
 		// A single-use voucher that was already redeemed (shop or externally) stays redeemed.
-		$voucher->status = $used_up ? Voucher::STATUS_REDEEMED : Voucher::STATUS_ACTIVE;
+		$status = $used_up ? Voucher::STATUS_REDEEMED : Voucher::STATUS_ACTIVE;
+		if ( ! $this->repo->update_status( $voucher->id, $status ) ) {
+			return false;
+		}
+		$voucher->status  = $status;
 		$voucher->balance = $fresh->balance;
-		$this->repo->update_status( $voucher->id, $voucher->status );
-		$this->coupons->set_coupon_enabled( $voucher, true );
-		$this->repo->log( $voucher->id, 'reactivated', null, $voucher->balance );
+		$enabled          = $this->coupons->set_coupon_enabled( $voucher, true );
+		$this->repo->log( $voucher->id, 'reactivated', null, $voucher->balance, $enabled ? '' : __( 'WooCommerce coupon could not be enabled – enable it manually', 'voucher-captain' ) );
+		return $enabled;
 	}
 }

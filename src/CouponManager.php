@@ -205,20 +205,22 @@ final class CouponManager {
 		return (int) $coupon->get_id();
 	}
 
-	public function set_coupon_enabled( Voucher $voucher, bool $enabled ): void {
+	public function set_coupon_enabled( Voucher $voucher, bool $enabled ): bool {
 		if ( ! $voucher->coupon_id ) {
-			return;
+			return true;
 		}
-		wp_update_post(
+		$updated = wp_update_post(
 			array(
 				'ID'          => $voucher->coupon_id,
 				'post_status' => $enabled ? 'publish' : 'draft',
-			)
+			),
+			true
 		);
 		// WooCommerce caches code → ID lookups; drop it so a persistent object cache cannot keep a disabled coupon alive.
 		if ( class_exists( '\WC_Cache_Helper' ) ) {
 			wp_cache_delete( \WC_Cache_Helper::get_cache_prefix( 'coupons' ) . 'coupon_id_from_code_' . wc_format_coupon_code( $voucher->code ), 'coupons' );
 		}
+		return ! is_wp_error( $updated ) && $updated;
 	}
 
 	/**
