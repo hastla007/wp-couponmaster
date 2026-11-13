@@ -2725,9 +2725,6 @@ msgstr "Grund"
 msgid "Reason (required)"
 msgstr "Grund (Pflichtfeld)"
 
-msgid "Records a refund without paying money back and credits the customer account instead. Use only if the customer chose store credit."
-msgstr "Erfasst eine Erstattung ohne Rückzahlung und schreibt den Betrag stattdessen dem Kundenkonto gut. Nur verwenden, wenn der Kunde Guthaben gewählt hat."
-
 msgid "Refund as store credit"
 msgstr "Als Guthaben erstatten"
 
@@ -4341,3 +4338,57 @@ msgstr "Mehrzweckgutscheine (Geschenkkarten, Wertgutscheine) nach Steuer als Zah
 
 msgid "pays as voucher payment (see below)"
 msgstr "wird als Gutscheinzahlung verrechnet (siehe unten)"
+
+msgid "A validity shorter than the statutory limitation period is often invalid in voucher conditions. Check legally or switch to the statutory validity: %s"
+msgstr "Eine Gültigkeit unterhalb der gesetzlichen Verjährungsfrist ist in Gutscheinbedingungen häufig unwirksam. Bitte rechtlich prüfen lassen oder auf die gesetzliche Gültigkeit umstellen: %s"
+
+msgid "By email"
+msgstr "Per E-Mail"
+
+msgid "By phone"
+msgstr "Telefonisch"
+
+msgid "Consent note"
+msgstr "Notiz zur Zustimmung"
+
+msgid "Customer agreed to store credit"
+msgstr "Kunde hat dem Guthaben zugestimmt"
+
+msgid "Customer consent to store credit: %1$s%2$s."
+msgstr "Zustimmung des Kunden zum Guthaben: %1$s%2$s."
+
+msgid "In person"
+msgstr "Persönlich"
+
+msgid "In the customer account"
+msgstr "Im Kundenkonto"
+
+msgid "In writing (letter, form)"
+msgstr "Schriftlich (Brief, Formular)"
+
+msgid "No voucher product ends before the statutory limitation period of the shop country or an EU selling country."
+msgstr "Kein Gutscheinprodukt endet vor der gesetzlichen Verjährungsfrist des Shoplands oder eines EU-Verkaufslands."
+
+msgid "Note, e.g. date of the email"
+msgstr "Notiz, z. B. Datum der E-Mail"
+
+msgid "Record how the customer agreed to store credit instead of a money refund."
+msgstr "Bitte erfassen, wie der Kunde dem Guthaben statt einer Geldrückzahlung zugestimmt hat."
+
+msgid "Records a refund without paying money back and credits the customer account instead. Use only if the customer chose store credit; how they agreed is recorded with the refund."
+msgstr "Erfasst eine Erstattung ohne Geldrückzahlung und schreibt den Betrag stattdessen dem Kundenkonto gut. Nur verwenden, wenn der Kunde Guthaben gewählt hat; wie er zugestimmt hat, wird mit der Erstattung gespeichert."
+
+msgid "Some vouchers are valid for less than the statutory period"
+msgstr "Einige Gutscheine sind kürzer gültig als die gesetzliche Frist"
+
+msgid "The validity of vouchers sold now ends before the statutory limitation period (%s). A shorter validity in the voucher conditions is often invalid – have it checked legally or use the statutory validity."
+msgstr "Die Gültigkeit jetzt verkaufter Gutscheine endet vor der gesetzlichen Verjährungsfrist (%s). Eine kürzere Gültigkeit in den Gutscheinbedingungen ist häufig unwirksam – rechtlich prüfen lassen oder die gesetzliche Gültigkeit verwenden."
+
+msgid "Voucher Captain – validity"
+msgstr "Voucher Captain – Gültigkeit"
+
+msgid "Voucher validity is not shorter than the statutory period"
+msgstr "Die Gutscheingültigkeit ist nicht kürzer als die gesetzliche Frist"
+
+msgid "– how? (required) –"
+msgstr "– wie? (Pflichtfeld) –"

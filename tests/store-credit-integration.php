@@ -77,15 +77,18 @@ vcap_sc_assert( 5.0 === $credit->balance( $alice ), 'the used credit is deducted
 $paid = vcap_sc_order( $product, $alice );
 $paid->set_status( 'completed' );
 $paid->save();
-$refunded = $credit->refund_as_credit( $paid, 8, 'Customer chose credit' );
+vcap_sc_assert( 'vcap_credit_consent' === ( ( $no_consent = $credit->refund_as_credit( $paid, 8, 'Customer chose credit' ) ) instanceof WP_Error ? $no_consent->get_error_code() : '' ), 'a refund as credit without recorded customer consent is refused' );
+$refunded = $credit->refund_as_credit( $paid, 8, 'Customer chose credit', array( 'channel' => 'email', 'note' => 'Mail of 12 Nov' ) );
+$consents = (array) wc_get_order( $paid->get_id() )->get_meta( '_vcap_credit_consents' );
+vcap_sc_assert( 1 === count( $consents ) && 'email' === $consents[0]['channel'] && 'Mail of 12 Nov' === $consents[0]['note'] && 8.0 === (float) $consents[0]['amount'] && (int) $consents[0]['refund_id'] > 0 && 'email' === ( wc_get_order( (int) $consents[0]['refund_id'] )->get_meta( '_vcap_credit_consent' )['channel'] ?? '' ), 'the consent is recorded on the order and on the refund (how, note, amount)' );
 $paid     = wc_get_order( $paid->get_id() );
 vcap_sc_assert( ! is_wp_error( $refunded ) && 13.0 === $credit->balance( $alice ), 'a refund as store credit adds to the balance' );
 vcap_sc_assert( 8.0 === (float) $paid->get_total_refunded() && 12.0 === (float) $paid->get_remaining_refund_amount(), 'WooCommerce records the refund' );
-vcap_sc_assert( is_wp_error( $credit->refund_as_credit( $paid, 50, 'Too much' ) ), 'refunds above the refundable total are refused' );
+vcap_sc_assert( is_wp_error( $credit->refund_as_credit( $paid, 50, 'Too much', array( 'channel' => 'email' ) ) ), 'refunds above the refundable total are refused' );
 $guest = vcap_sc_order( $product, 0 );
 $guest->set_status( 'completed' );
 $guest->save();
-vcap_sc_assert( is_wp_error( $credit->refund_as_credit( $guest, 5, 'Guest' ) ), 'guest orders cannot be refunded as credit' );
+vcap_sc_assert( is_wp_error( $credit->refund_as_credit( $guest, 5, 'Guest', array( 'channel' => 'email' ) ) ), 'guest orders cannot be refunded as credit' );
 
 // Fault injection: WooCommerce cannot record the refund – the credit added first is booked back, nothing else changes.
 $before_fail  = $credit->balance( $alice );
@@ -94,7 +97,7 @@ $break_refund = static function () {
 	throw new Exception( 'Injected refund failure' );
 };
 add_action( 'woocommerce_create_refund', $break_refund );
-$failed_refund = $credit->refund_as_credit( wc_get_order( $paid->get_id() ), 4, 'Customer chose credit' );
+$failed_refund = $credit->refund_as_credit( wc_get_order( $paid->get_id() ), 4, 'Customer chose credit', array( 'channel' => 'phone' ) );
 remove_action( 'woocommerce_create_refund', $break_refund );
 $paid_after = wc_get_order( $paid->get_id() );
 $journal    = array_column( vcap()->vouchers->events( $credit->account( $alice )->id ), 'event' );
@@ -106,7 +109,7 @@ $spend_it = static function () use ( $credit, $alice ) {
 	throw new Exception( 'Injected refund failure' );
 };
 add_action( 'woocommerce_create_refund', $spend_it );
-$spent_refund = $credit->refund_as_credit( wc_get_order( $paid->get_id() ), 4, 'Customer chose credit' );
+$spent_refund = $credit->refund_as_credit( wc_get_order( $paid->get_id() ), 4, 'Customer chose credit', array( 'channel' => 'phone' ) );
 remove_action( 'woocommerce_create_refund', $spend_it );
 $notes = array_map( static fn( $n ) => $n->content, wc_get_order_notes( array( 'order_id' => $paid->get_id() ) ) );
 vcap_sc_assert( is_wp_error( $spent_refund ) && (bool) array_filter( $notes, static fn( $n ) => str_contains( $n, 'could not be booked back' ) ), 'credit that was already spent when the refund failed is flagged on the order' );

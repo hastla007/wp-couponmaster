@@ -181,15 +181,33 @@ final class StoreCredit {
 		);
 	}
 
+	/** How the customer agreed to store credit instead of money (recorded with every refund as credit). */
+	public static function consent_channels(): array {
+		return array(
+			'email'     => __( 'By email', 'voucher-captain' ),
+			'phone'     => __( 'By phone', 'voucher-captain' ),
+			'written'   => __( 'In writing (letter, form)', 'voucher-captain' ),
+			'in_person' => __( 'In person', 'voucher-captain' ),
+			'account'   => __( 'In the customer account', 'voucher-captain' ),
+		);
+	}
+
 	/**
 	 * Refund part of an order as store credit. Explicit only: WooCommerce records the refund without paying money
-	 * back, and the amount is credited to the customer's account.
+	 * back, and the amount is credited to the customer's account. A money refund is the customer's right, so the
+	 * customer's consent to credit instead is required and recorded (how, note, who recorded it, when) on the order
+	 * (meta _vcap_credit_consents), on the refund and as an order note.
 	 *
+	 * @param array{channel?:string, note?:string} $consent How the customer agreed (see consent_channels()).
 	 * @return array{balance:float,amount:float}|\WP_Error
 	 */
-	public function refund_as_credit( \WC_Order $order, float $amount, string $reason ) {
+	public function refund_as_credit( \WC_Order $order, float $amount, string $reason, array $consent = array() ) {
 		$user_id = (int) $order->get_customer_id();
 		$reason  = trim( sanitize_text_field( $reason ) );
+		$channel = sanitize_key( (string) ( $consent['channel'] ?? '' ) );
+		if ( ! isset( self::consent_channels()[ $channel ] ) ) {
+			return new \WP_Error( 'vcap_credit_consent', __( 'Record how the customer agreed to store credit instead of a money refund.', 'voucher-captain' ) );
+		}
 		$amount  = round( $amount, API\V1\RedemptionService::decimals( (string) get_option( 'woocommerce_currency' ) ) );
 		if ( ! $this->enabled() ) {
 			return new \WP_Error( 'vcap_credit_disabled', __( 'Store credit is not enabled.', 'voucher-captain' ) );
@@ -225,9 +243,29 @@ final class StoreCredit {
 			}
 			return $refund;
 		}
+		$record   = array(
+			'refund_id'   => (int) $refund->get_id(),
+			'amount'      => $amount,
+			'channel'     => $channel,
+			'note'        => mb_substr( sanitize_textarea_field( (string) ( $consent['note'] ?? '' ) ), 0, 500 ),
+			'recorded_by' => get_current_user_id(),
+			'recorded_at' => gmdate( 'Y-m-d H:i:s' ),
+		);
+		$refund->update_meta_data( '_vcap_credit_consent', $record );
+		$refund->save_meta_data();
+		$consents   = (array) $order->get_meta( '_vcap_credit_consents' );
+		$consents[] = $record;
+		$order->update_meta_data( '_vcap_credit_consents', $consents );
+		$order->save_meta_data();
 		$order->add_order_note(
 			/* translators: %s: amount */
 			sprintf( __( '%s refunded as store credit.', 'voucher-captain' ), wp_strip_all_tags( wc_price( $amount, array( 'currency' => $order->get_currency() ) ) ) )
+			. ' ' . sprintf(
+				/* translators: 1: how the customer agreed (e.g. "By email"), 2: optional note */
+				__( 'Customer consent to store credit: %1$s%2$s.', 'voucher-captain' ),
+				self::consent_channels()[ $channel ],
+				'' !== $record['note'] ? ' – ' . $record['note'] : ''
+			)
 		);
 		return $result;
 	}

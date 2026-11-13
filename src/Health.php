@@ -19,7 +19,7 @@ final class Health {
 
 	public function tests( $tests ) {
 		$tests = (array) $tests;
-		foreach ( array( 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets', 'tax_status' ) as $id ) {
+		foreach ( array( 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets', 'tax_status', 'validity' ) as $id ) {
 			$tests['direct'][ 'vcap_' . $id ] = array(
 				'label' => __( 'Voucher Captain', 'voucher-captain' ),
 				'test'  => array( $this, 'test_' . $id ),
@@ -147,6 +147,23 @@ final class Health {
 		}
 		/* translators: %s: list of countries with what is missing */
 		return self::result( 'markets', 'recommended', __( 'Some EU selling countries need voucher settings', 'voucher-captain' ), sprintf( __( 'Set the statutory validity and conditions per country under Vouchers → Settings (have them checked legally) and add translations: %s', 'voucher-captain' ), implode( '; ', $gaps ) ) );
+	}
+
+	/** Voucher products whose validity ends before the statutory limitation period in the shop or a selling country. */
+	public function test_validity(): array {
+		$ids   = get_posts( array( 'post_type' => 'product', 'post_status' => array( 'publish', 'private', 'draft' ), 'fields' => 'ids', 'numberposts' => 500, 'meta_key' => '_vcap_enabled', 'meta_value' => 'yes' ) ); // phpcs:ignore WordPress.DB.SlowDBQuery
+		$names = array();
+		foreach ( $ids as $id ) {
+			$short = ProductConfig::short_validity( $id );
+			if ( $short ) {
+				$names[] = get_the_title( $id ) . ' (' . implode( ', ', array_keys( $short ) ) . ')';
+			}
+		}
+		if ( ! $names ) {
+			return self::result( 'validity', 'good', __( 'Voucher validity is not shorter than the statutory period', 'voucher-captain' ), __( 'No voucher product ends before the statutory limitation period of the shop country or an EU selling country.', 'voucher-captain' ) );
+		}
+		/* translators: %s: products with the countries concerned */
+		return self::result( 'validity', 'recommended', __( 'Some vouchers are valid for less than the statutory period', 'voucher-captain' ), sprintf( __( 'A validity shorter than the statutory limitation period is often invalid in voucher conditions. Check legally or switch to the statutory validity: %s', 'voucher-captain' ), implode( '; ', $names ) ) );
 	}
 
 	/** Voucher products whose tax status does not fit the voucher kind (multi-purpose: none, single-purpose: taxable). */

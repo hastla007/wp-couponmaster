@@ -105,10 +105,20 @@ final class StoreCreditAdmin {
 		?>
 		<hr>
 		<p><strong><?php esc_html_e( 'Refund as store credit', 'voucher-captain' ); ?></strong></p>
-		<p class="description"><?php esc_html_e( 'Records a refund without paying money back and credits the customer account instead. Use only if the customer chose store credit.', 'voucher-captain' ); ?></p>
+		<p class="description"><?php esc_html_e( 'Records a refund without paying money back and credits the customer account instead. Use only if the customer chose store credit; how they agreed is recorded with the refund.', 'voucher-captain' ); ?></p>
 		<p>
 			<input type="text" class="short" name="vcap_refund_credit_amount" form="vcap-refund-credit" inputmode="decimal" placeholder="<?php echo esc_attr( wc_format_localized_price( $order->get_remaining_refund_amount() ) ); ?>" aria-label="<?php esc_attr_e( 'Amount', 'voucher-captain' ); ?>" />
 			<input type="text" name="vcap_refund_credit_reason" form="vcap-refund-credit" placeholder="<?php esc_attr_e( 'Reason (required)', 'voucher-captain' ); ?>" aria-label="<?php esc_attr_e( 'Reason', 'voucher-captain' ); ?>" />
+		</p>
+		<p>
+			<label for="vcap-refund-credit-consent"><?php esc_html_e( 'Customer agreed to store credit', 'voucher-captain' ); ?></label><br>
+			<select id="vcap-refund-credit-consent" name="vcap_refund_credit_consent" form="vcap-refund-credit" required>
+				<option value=""><?php esc_html_e( '– how? (required) –', 'voucher-captain' ); ?></option>
+				<?php foreach ( \VCAP\StoreCredit::consent_channels() as $value => $label ) : ?>
+					<option value="<?php echo esc_attr( $value ); ?>"><?php echo esc_html( $label ); ?></option>
+				<?php endforeach; ?>
+			</select>
+			<input type="text" name="vcap_refund_credit_consent_note" form="vcap-refund-credit" maxlength="500" placeholder="<?php esc_attr_e( 'Note, e.g. date of the email', 'voucher-captain' ); ?>" aria-label="<?php esc_attr_e( 'Consent note', 'voucher-captain' ); ?>" />
 		</p>
 		<?php
 		// The metabox sits inside the order <form>; this separate form is placed after it and linked via form="".
@@ -135,7 +145,15 @@ final class StoreCreditAdmin {
 			wp_die( esc_html__( 'Order not found.', 'voucher-captain' ), 404 );
 		}
 		$amount = (float) wc_format_decimal( sanitize_text_field( wp_unslash( $_POST['vcap_refund_credit_amount'] ?? '' ) ) );
-		$result = $this->credit->refund_as_credit( $order, $amount, sanitize_text_field( wp_unslash( $_POST['vcap_refund_credit_reason'] ?? '' ) ) );
+		$result = $this->credit->refund_as_credit(
+			$order,
+			$amount,
+			sanitize_text_field( wp_unslash( $_POST['vcap_refund_credit_reason'] ?? '' ) ),
+			array(
+				'channel' => sanitize_key( wp_unslash( $_POST['vcap_refund_credit_consent'] ?? '' ) ),
+				'note'    => sanitize_textarea_field( wp_unslash( $_POST['vcap_refund_credit_consent_note'] ?? '' ) ),
+			)
+		);
 		if ( is_wp_error( $result ) ) {
 			$order->add_order_note( __( 'Refund as store credit failed:', 'voucher-captain' ) . ' ' . $result->get_error_message() );
 		}

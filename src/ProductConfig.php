@@ -195,6 +195,47 @@ final class ProductConfig {
 		return (string) apply_filters( 'vcap_voucher_tax_treatment', $treatment, $voucher );
 	}
 
+	/**
+	 * Countries in which the validity of a voucher sold by this product ends before the statutory limitation period
+	 * (shop country and the EU countries the shop sells to). A validity shorter than the statutory period is often
+	 * invalid in standard terms (e.g. Germany: 3 years to the end of the year) – the admin is warned, not blocked.
+	 *
+	 * @return array<string, array{product:string, statutory:string}> country => both expiry dates (UTC) for a sale today
+	 */
+	public static function short_validity( $product ): array {
+		$product = $product instanceof \WC_Product ? $product : wc_get_product( $product );
+		if ( ! $product || ! self::is_voucher( $product ) ) {
+			return array();
+		}
+		$config    = self::get( $product );
+		$base      = strtoupper( strtok( (string) get_option( 'woocommerce_default_country', '' ), ':' ) ?: '' );
+		$countries = array_unique( array_filter( array_merge( array( $base ), array_keys( Markets::readiness() ) ) ) );
+		$now       = time();
+		$short     = array();
+		foreach ( $countries as $country ) {
+			$statutory = self::statutory_expiry( $now, (string) $country );
+			$own       = self::expiry_for( $config, $now, (string) $country );
+			if ( null !== $statutory && null !== $own && $own < $statutory ) {
+				$short[ (string) $country ] = array( 'product' => $own, 'statutory' => $statutory );
+			}
+		}
+		return $short;
+	}
+
+	/** Admin text for short_validity(), empty when the validity is long enough everywhere. */
+	public static function short_validity_message( $product ): string {
+		$short = self::short_validity( $product );
+		if ( ! $short ) {
+			return '';
+		}
+		$parts = array();
+		foreach ( $short as $country => $dates ) {
+			$parts[] = $country . ' ' . wp_date( get_option( 'date_format' ), (int) strtotime( $dates['statutory'] . ' UTC' ) );
+		}
+		/* translators: %s: countries with the statutory end date, e.g. "DE 31/12/2029" */
+		return sprintf( __( 'The validity of vouchers sold now ends before the statutory limitation period (%s). A shorter validity in the voucher conditions is often invalid – have it checked legally or use the statutory validity.', 'voucher-captain' ), implode( ', ', $parts ) );
+	}
+
 	/** VAT treatment configured for a voucher product ("auto": percentage vouchers are discounts, the rest multi-purpose). */
 	public static function product_treatment( $product ): string {
 		$config  = self::get( $product );
@@ -334,7 +375,11 @@ final class ProductConfig {
 	/**
 	 * Expiry timestamp (UTC MySQL datetime) or null for "never".
 	 */
-	public static function expiry_for( array $config, ?int $from = null ): ?string {
+	/**
+	 * Expiry of a new voucher. $country: the buyer's country – the statutory default validity follows the law of the
+	 * buyer's country (consumer contract), not the shop's; empty = shop country.
+	 */
+	public static function expiry_for( array $config, ?int $from = null, string $country = '' ): ?string {
 		$from = $from ?? time();
 		switch ( $config['expiry_mode'] ) {
 			case 'never':
@@ -352,7 +397,7 @@ final class ProductConfig {
 				if ( '' !== (string) $config['expiry_days'] && null !== $config['expiry_days'] ) {
 					$days = (int) $config['expiry_days'];
 				} elseif ( 'statutory' === self::default_expiry_rule() ) {
-					return self::statutory_expiry( $from );
+					return self::statutory_expiry( $from, $country );
 				} else {
 					$days = (int) get_option( 'vcap_default_expiry_days', 365 );
 				}

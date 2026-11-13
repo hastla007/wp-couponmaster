@@ -183,9 +183,13 @@ final class ProductSettings {
 				'description' => __( 'How connected checkouts (e.g. WP Pass Captain) treat the voucher for VAT. Have the classification checked by your tax adviser.', 'voucher-captain' ),
 			)
 		);
-		$conflict = ProductConfig::tax_status_conflict( $p );
+		$short_validity = $p->get_id() ? ProductConfig::short_validity_message( $p ) : '';
+		$conflict       = ProductConfig::tax_status_conflict( $p );
 		if ( $conflict ) {
 			echo '<p class="form-field vcap-tax-conflict" role="alert" style="color:#b32d2e">' . esc_html( $conflict['message'] ) . '</p>';
+		}
+		if ( '' !== $short_validity ) {
+			echo '<p class="form-field vcap-short-validity" role="alert" style="color:#b32d2e">' . esc_html( $short_validity ) . '</p>';
 		}
 		echo '</div>';
 
@@ -509,6 +513,10 @@ final class ProductSettings {
 		}
 		foreach ( $conflicts as $message ) {
 			echo '<div class="notice notice-warning"><p><strong>' . esc_html__( 'Voucher Captain – VAT', 'voucher-captain' ) . ':</strong> ' . esc_html( $message ) . '</p></div>';
+		}
+		$short = ProductConfig::short_validity_message( $product );
+		if ( '' !== $short ) {
+			echo '<div class="notice notice-warning"><p><strong>' . esc_html__( 'Voucher Captain – validity', 'voucher-captain' ) . ':</strong> ' . esc_html( $short ) . '</p></div>';
 		}
 	}
 
