@@ -31,11 +31,53 @@ php "$ROOT/bin/make-mo.php"
 # Copy plugin files (no dev tooling).
 cp -R "$ROOT/assets" "$ROOT/config" "$ROOT/languages" "$ROOT/src" "$ROOT/templates" "$DEST/"
 cp "$ROOT/voucher-captain.php" "$ROOT/uninstall.php" "$ROOT/readme.txt" "$ROOT/wpml-config.xml" "$ROOT/LICENSE" "$ROOT/composer.json" "$ROOT/composer.lock" "$DEST/"
-# Premium edition (VCAP_EDITION=premium): premium features need an active WP License Captain license (fail-closed).
-if [ "${VCAP_EDITION:-}" = "premium" ]; then
-	sed -i "s/^define( 'VCAP_VERSION', .*/&\ndefine( 'VCAP_LICENSE_REQUIRED', true );/" "$DEST/voucher-captain.php"
+# Edition (LICENSING.md):
+#   VCAP_EDITION=free     premium features permanently locked (sold goods keep being processed), no license page,
+#                         no premium updater;
+#   VCAP_EDITION=premium  premium features need an active WP License Captain license (fail-closed); the license
+#                         server is fixed: VCAP_LICENSE_SERVER (https://host, placeholder https://licenses.example.com)
+#                         and the plugin header "Update URI" (VCAP_UPDATE_URI, default <server>/voucher-captain);
+#   unset/development     no edition constant: every feature on (CI integration tests, local development).
+#                         Release builds (tag pipelines) must name free or premium.
+EDITION="${VCAP_EDITION:-}"
+case "$EDITION" in
+	free|premium|development) ;;
+	"")
+		if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+			echo "Release build without VCAP_EDITION: set VCAP_EDITION=free or VCAP_EDITION=premium." >&2
+			exit 1
+		fi
+		EDITION="development"
+		;;
+	*)
+		echo "Unknown VCAP_EDITION '$EDITION' (free, premium or development)." >&2
+		exit 1
+		;;
+esac
+if [ "$EDITION" = "free" ]; then
+	sed -i "s/^define( 'VCAP_VERSION', .*/&\ndefine( 'VCAP_EDITION', 'free' );/" "$DEST/voucher-captain.php"
+	grep -q "define( 'VCAP_EDITION', 'free' );" "$DEST/voucher-captain.php" || { echo "Free edition flag missing" >&2; exit 1; }
+elif [ "$EDITION" = "premium" ]; then
+	SERVER="${VCAP_LICENSE_SERVER:-https://licenses.example.com}"
+	SERVER="${SERVER%/}"
+	if ! printf '%s' "$SERVER" | grep -qE '^https://[A-Za-z0-9.-]+(:[0-9]+)?$'; then
+		echo "VCAP_LICENSE_SERVER must be https://host[:port] without a path, got '$SERVER'." >&2
+		exit 1
+	fi
+	if [ -z "${VCAP_LICENSE_SERVER:-}" ]; then
+		echo "Warning: VCAP_LICENSE_SERVER is not set; the premium build uses the placeholder $SERVER." >&2
+	fi
+	UPDATE_URI="${VCAP_UPDATE_URI:-$SERVER/voucher-captain}"
+	if ! printf '%s' "$UPDATE_URI" | grep -qE '^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?$'; then
+		echo "VCAP_UPDATE_URI must be an https URL, got '$UPDATE_URI'." >&2
+		exit 1
+	fi
+	sed -i "s|^define( 'VCAP_VERSION', .*|&\ndefine( 'VCAP_EDITION', 'premium' );\ndefine( 'VCAP_LICENSE_REQUIRED', true );\ndefine( 'VCAP_LICENSE_SERVER', '$SERVER' );|" "$DEST/voucher-captain.php"
+	sed -i "s|^ \* License URI: .*|&\n * Update URI:        $UPDATE_URI|" "$DEST/voucher-captain.php"
 	grep -q "VCAP_LICENSE_REQUIRED" "$DEST/voucher-captain.php" || { echo "Premium flag missing" >&2; exit 1; }
+	grep -q "^ \* Update URI: " "$DEST/voucher-captain.php" || { echo "Update URI header missing" >&2; exit 1; }
 fi
+echo "Edition: $EDITION"
 
 # Production dependencies only.
 ( cd "$DEST" && composer config --no-interaction autoloader-suffix "VoucherCaptain${VERSION//./_}" && composer install --no-dev --optimize-autoloader --no-interaction --quiet )
