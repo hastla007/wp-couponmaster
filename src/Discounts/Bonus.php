@@ -18,8 +18,11 @@ final class Bonus {
 	public function __construct( private Repository $campaigns, private CartIntegration $cart ) {}
 
 	public function register(): void {
-		add_action( 'woocommerce_order_status_processing', array( $this, 'issue' ), 25 );
-		add_action( 'woocommerce_order_status_completed', array( $this, 'issue' ), 25 );
+		add_action( 'woocommerce_order_status_processing', array( $this, 'issue' ), 25, 3 );
+		add_action( 'woocommerce_order_status_completed', array( $this, 'issue' ), 25, 3 );
+		// Offline payments (cash on delivery, bank transfer, …) count once recorded; see Issuer::payment_ok().
+		add_action( 'woocommerce_payment_complete', array( $this, 'issue' ), 25, 1 );
+		add_action( 'woocommerce_payment_complete_order_status_processing', array( $this, 'issue' ), 25, 1 );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'withdraw' ), 25 );
 		add_action( 'woocommerce_order_status_refunded', array( $this, 'withdraw' ), 25 );
 	}
@@ -62,12 +65,22 @@ final class Bonus {
 	}
 
 	/**
+	 * Issues the bonus vouchers of a paid order. Paid follows the voucher rule (Issuer::payment_ok()): cash on
+	 * delivery and other offline payments only once the order is completed, the payment is recorded or a paid
+	 * status was set by hand – a bonus is worth money as well.
+	 *
+	 * @param int|string     $order_id   Order id.
+	 * @param \WC_Order|null $order      Order (status hooks).
+	 * @param array          $transition Status transition (status hooks).
 	 * @return array<int, int> campaign id => new coupon id
 	 */
-	public function issue( $order_id ): array {
+	public function issue( $order_id, $order = null, $transition = array() ): array {
 		$order = wc_get_order( $order_id );
 		if ( ! $order instanceof \WC_Order || ! $this->cart->enabled() || $order->get_parent_id() ) {
 			return array();
+		}
+		if ( ! \VCAP\Issuer::payment_ok( $order, $transition ) ) {
+			return array(); // Follows when the payment is confirmed (completed, payment recorded, set by hand).
 		}
 		if ( \VCAP\CouponManager::has_shortfall( $order ) ) {
 			return array(); // Gift card not charged yet: bonus follows when the order is fulfilled after the review.

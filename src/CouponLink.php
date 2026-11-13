@@ -20,8 +20,40 @@ final class CouponLink {
 		// code entry points, independently of the link setting.
 		( new CouponGuard() )->register();
 		add_action( 'wp_loaded', array( $this, 'handle_request' ), 30 );
+		add_action( 'wp_loaded', array( $this, 'no_cache_while_pending' ), 40 );
 		add_action( 'woocommerce_add_to_cart', array( $this, 'apply_pending' ), 30, 0 );
 		add_action( 'woocommerce_cart_loaded_from_session', array( $this, 'apply_pending' ), 30, 0 );
+		add_action( 'template_redirect', array( $this, 'waiting_notice_on_cart' ), 20 );
+	}
+
+	/** The code remembered for this visitor ('' when none). */
+	private static function pending(): string {
+		return function_exists( 'WC' ) && WC()->session ? (string) WC()->session->get( self::SESSION_KEY, '' ) : '';
+	}
+
+	/**
+	 * While a code waits in the session, every page is personal: it is kept out of full-page caches before any
+	 * output (the cart is still empty, so cache plugins see no cart cookie that would make them skip the page).
+	 */
+	public function no_cache_while_pending(): void {
+		if ( '' !== self::pending() && ! is_admin() ) {
+			Shortcodes::no_cache();
+		}
+	}
+
+	/**
+	 * Cart and checkout say that a code waits for products – only there, and with the code masked (last four
+	 * characters): other pages may still end up in a cache that ignores the no-cache signals.
+	 */
+	public function waiting_notice_on_cart(): void {
+		$code = self::pending();
+		if ( '' === $code || ! WC()->cart || ! WC()->cart->is_empty() || ! ( is_cart() || is_checkout() ) ) {
+			return;
+		}
+		Shortcodes::no_cache();
+		if ( ! wc_has_notice( $this->waiting_notice( $code ), 'notice' ) ) {
+			wc_add_notice( $this->waiting_notice( $code ), 'notice' );
+		}
 	}
 
 	public function enabled(): bool {
@@ -46,6 +78,12 @@ final class CouponLink {
 		}
 		$this->capture( (string) wp_unslash( $_GET[ $param ] ) ); // phpcs:ignore WordPress.Security.NonceVerification, WordPress.Security.ValidatedSanitizedInput
 		$this->apply_pending();
+		// The redirect depends on the visitor (session, rate limit): never cached by a CDN or page cache, and the
+		// code in the link is not passed on as Referer.
+		if ( ! headers_sent() ) {
+			nocache_headers();
+			header( 'Referrer-Policy: no-referrer' );
+		}
 		wp_safe_redirect( remove_query_arg( $param ) );
 		exit;
 	}
@@ -89,10 +127,7 @@ final class CouponLink {
 			return;
 		}
 		if ( WC()->cart->is_empty() ) {
-			if ( ! wc_has_notice( $this->waiting_notice( $code ), 'notice' ) && did_action( 'wp_loaded' ) ) {
-				wc_add_notice( $this->waiting_notice( $code ), 'notice' );
-			}
-			return;
+			return; // Waits; cart and checkout say so (waiting_notice_on_cart()), no page is cached meanwhile.
 		}
 		WC()->session->set( self::SESSION_KEY, null ); // Once only – also if WooCommerce rejects the code.
 		if ( ! WC()->cart->has_discount( $code ) ) {
@@ -101,7 +136,12 @@ final class CouponLink {
 	}
 
 	private function waiting_notice( string $code ): string {
-		/* translators: %s: coupon code */
-		return sprintf( __( 'The voucher %s will be applied as soon as you add products to your cart.', 'voucher-captain' ), strtoupper( $code ) );
+		return self::waiting_text( $code );
+	}
+
+	/** "The voucher …ABCD will be applied …": the code masked, a notice may end up in a page cache. */
+	public static function waiting_text( string $code ): string {
+		/* translators: %s: masked voucher code, e.g. "…7QX2" */
+		return sprintf( __( 'The voucher %s will be applied as soon as you add products to your cart.', 'voucher-captain' ), Downloads::masked_code( $code ) );
 	}
 }

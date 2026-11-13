@@ -25,7 +25,7 @@ final class Health {
 
 	public function tests( $tests ) {
 		$tests = (array) $tests;
-		foreach ( array( 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets' ) as $id ) {
+		foreach ( array( 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets', 'offline_payment' ) as $id ) {
 			$tests['direct'][ 'vcap_' . $id ] = array(
 				'label' => __( 'Voucher Captain', 'voucher-captain' ),
 				'test'  => array( $this, 'test_' . $id ),
@@ -243,6 +243,17 @@ final class Health {
 		}
 		/* translators: %s: list of countries with what is missing */
 		return self::result( 'markets', 'recommended', __( 'Some EU selling countries need voucher settings', 'voucher-captain' ), sprintf( __( 'Set the statutory validity and conditions per country under Vouchers → Settings (have them checked legally) and add translations: %s', 'voucher-captain' ), implode( '; ', $gaps ) ) );
+	}
+
+	/**
+	 * Cash on delivery for virtual products: such voucher orders are "Processing" without payment, so their
+	 * vouchers wait until the order is completed (Issuer::payment_ok()). Worth knowing, or switching off.
+	 */
+	public function test_offline_payment(): array {
+		if ( ! Issuer::cod_for_virtual() ) {
+			return self::result( 'offline_payment', 'good', __( 'Vouchers are not sold with cash on delivery', 'voucher-captain' ), __( 'Cash on delivery is not offered for virtual products. Orders paid by bank transfer or cheque issue vouchers once the payment is confirmed.', 'voucher-captain' ) );
+		}
+		return self::result( 'offline_payment', 'recommended', __( 'Cash on delivery is offered for virtual products', 'voucher-captain' ), __( 'Voucher orders paid by cash on delivery are "Processing" before any money arrived. Their vouchers are issued only when the order is completed (or the payment is recorded), so the customer waits. Switch off "Accept for virtual orders" under WooCommerce → Settings → Payments → Cash on delivery if vouchers should only be sold with immediate payment.', 'voucher-captain' ) );
 	}
 
 	/** Voucher products whose validity ends before the statutory limitation period in the shop or a selling country. */

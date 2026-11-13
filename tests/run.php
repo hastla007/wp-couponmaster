@@ -67,7 +67,75 @@ check( 'other codes keep the configured length', (bool) preg_match( '/^\d{8}$/',
 check( 'estimated guessing space of imported codes (8 digits weak, 16 digits / 10 alphanumerics enough)', CodeGenerator::estimated_bits( '12345678' ) < 50 && CodeGenerator::estimated_bits( '1234-5678-9012-3456' ) >= 50 && CodeGenerator::estimated_bits( 'K7QM2X9ZPA' ) >= 50 );
 $affixes = CodeGenerator::common_affixes( array( 'SHOP-2026-48151623', 'shop-2026-99990000', 'SHOP-2026-12121212' ) );
 check( 'a prefix shared by the whole batch does not count', array( 'shop-2026-', '' ) === $affixes && CodeGenerator::estimated_bits( 'SHOP-2026-48151623', $affixes[0], $affixes[1] ) < 50, json_encode( $affixes ) );
-check( 'random codes that start alike by chance keep their full length', array( '', '' ) === CodeGenerator::common_affixes( array( '1234567890123456', '1299999999999999' ) ) );
+$affixes = CodeGenerator::common_affixes( array( 'GIFT2026000001', 'gift2026000002', 'GIFT2026000317' ) );
+check( 'the shared prefix is taken away character by character, not only up to a separator', array( 'gift2026000', '' ) === $affixes && CodeGenerator::estimated_bits( 'GIFT2026000317', $affixes[0], $affixes[1] ) < 15, json_encode( $affixes ) );
+check( 'a shared suffix is found after the prefix', array( 'a-', '-x' ) === CodeGenerator::common_affixes( array( 'A-12-X', 'a-34-x', 'A-56-X' ) ) );
+$random_batch = array();
+for ( $i = 0; $i < 50; $i++ ) {
+	$random_batch[] = CodeGenerator::random( 12 );
+}
+check( 'random codes share no prefix or suffix and keep their full length', array( '', '' ) === CodeGenerator::common_affixes( $random_batch ) );
+$rated = CodeGenerator::analyse_batch( $random_batch );
+check( 'a batch of random codes is strong and no series', ! $rated['sequential'] && min( $rated['bits'] ) >= 50, json_encode( array( $rated['sequential'], min( $rated['bits'] ) ) ) );
+$digits_batch = array();
+for ( $i = 0; $i < 50; $i++ ) {
+	$digits_batch[] = 'CARD-' . CodeGenerator::random( 18, 'numeric' );
+}
+$rated = CodeGenerator::analyse_batch( $digits_batch );
+check( 'random 18-digit numbers are no series', ! $rated['sequential'] && ! $rated['check_digit'] && min( $rated['bits'] ) >= 50 );
+$series = array();
+for ( $i = 0; $i < 40; $i++ ) {
+	$series[] = sprintf( 'GIFT-%016d', 4000123412340000 + 7919 * $i );
+}
+$rated = CodeGenerator::analyse_batch( $series );
+check( 'evenly spaced numbers are a series and count as weak', $rated['sequential'] && 0.0 === max( $rated['bits'] ) );
+$wide = array();
+for ( $i = 0; $i < 30; $i++ ) {
+	$wide[] = sprintf( '%016d', 1000000000000000 + 299999999999989 * $i ); // No shared prefix, 16 digits each.
+}
+$rated = CodeGenerator::analyse_batch( $wide );
+check( 'a series with a large step is found although no prefix is shared', '' === $rated['prefix'] && $rated['sequential'] && 0.0 === max( $rated['bits'] ) );
+$jitter = array();
+$next   = 5000000000000000;
+for ( $i = 0; $i < 30; $i++ ) {
+	$next    += 100000000000000 + random_int( 0, 1000000000000 );
+	$jitter[] = (string) $next;
+}
+check( 'nearly constant steps (low variance) are a series', CodeGenerator::analyse_batch( $jitter )['sequential'] );
+$close = array();
+$next  = 7300000000000000;
+for ( $i = 0; $i < 30; $i++ ) {
+	$next   += random_int( 1, 40 );
+	$close[] = 'X' . $next . 'Y';
+}
+$close[] = 'X' . CodeGenerator::random( 16, 'numeric' ) . 'Y'; // One random number in the file keeps the prefix empty.
+$rated = CodeGenerator::analyse_batch( $close );
+check( 'numbers much closer together than random ones are part of a series', count( array_filter( $rated['bits'], static fn( $b ) => $b < 50 ) ) >= 30, json_encode( $rated['prefix'] ) );
+$luhn = array();
+foreach ( range( 1, 20 ) as $i ) {
+	$base = CodeGenerator::random( 15, 'numeric' );
+	for ( $d = 0; $d < 10 && ! CodeGenerator::luhn_valid( $base . $d ); $d++ ) {
+	}
+	$luhn[] = $base . $d;
+}
+$rated = CodeGenerator::analyse_batch( $luhn );
+check( 'a Luhn check digit is recognised and adds no guessing space (16 digits with check digit are weak)', CodeGenerator::luhn_valid( '4111111111111111' ) && ! CodeGenerator::luhn_valid( '4111111111111112' ) && $rated['check_digit'] && max( $rated['bits'] ) < 50 && max( $rated['bits'] ) > 49 );
+check( 'GS1/EAN check digits are recognised', CodeGenerator::gs1_valid( '4006381333931' ) && ! CodeGenerator::gs1_valid( '4006381333932' ) );
+$mixed = array();
+for ( $i = 1; $i <= 20; $i++ ) {
+	$mixed[] = 'KQ' . CodeGenerator::random( 12, 'alpha_upper' ) . '-' . sprintf( '%05d', $i );
+}
+$rated = CodeGenerator::analyse_batch( $mixed );
+check( 'a numbered part counts as 0 bits, random letters around it still count', $rated['sequential'] && min( $rated['bits'] ) > 50 && min( $rated['bits'] ) < 12 * log( 26, 2 ) + 1 );
+$existing = array();
+for ( $i = 0; $i < 20; $i++ ) {
+	$existing[] = sprintf( 'GIFT-%016d', 4000123412340000 + $i );
+}
+$single = CodeGenerator::analyse_batch( array( 7 => 'GIFT-4000123412340020' ), $existing );
+check( 'a single code is rated with the structure of the codes already in the batch', 'gift-40001234123400' === $single['prefix'] && $single['bits'][7] < 50, json_encode( $single ) );
+$single = CodeGenerator::analyse_batch( array( 'GIFT-' . CodeGenerator::random( 20, 'numeric' ) ), array( 'GIFT-' . CodeGenerator::random( 20, 'numeric' ), 'GIFT-' . CodeGenerator::random( 20, 'numeric' ) ) );
+check( 'a single random code next to random codes of the batch stays strong', ! $single['sequential'] && $single['bits'][0] >= 50, json_encode( $single ) );
+check( 'a single code without other codes keeps its full length', CodeGenerator::analyse_batch( array( '1234567890123456' ) )['bits'][0] >= 50 );
 
 echo "Design sanitising\n";
 $dirty = array(

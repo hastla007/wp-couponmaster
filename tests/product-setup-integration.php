@@ -250,6 +250,85 @@ foreach ( $fields as $field ) {
 }
 vcap_ps_assert( isset( $options['processing'] ) && ! isset( $options['pending'] ) && ! isset( $options['failed'] ) && ( ! isset( $options['on-hold'] ) || in_array( 'on-hold', (array) get_option( 'vcap_issue_statuses', array() ), true ) ), 'unpaid statuses are not offered as issue status', array_keys( $options ) );
 
+/* ---- 8b. Offline payments (cash on delivery, bank transfer, cheque) wait for the money ------------------- */
+
+/** Order for $single paid with an offline gateway, created unpaid. */
+function vcap_ps_offline_order( WC_Product $product, string $method, string $email ): WC_Order {
+	$order = wc_create_order();
+	$order->add_product( $product, 1 );
+	$order->set_billing_email( $email );
+	$order->set_payment_method( $method );
+	$order->set_payment_method_title( 'cod' === $method ? 'Cash on delivery' : 'Direct bank transfer' );
+	$order->calculate_totals();
+	$order->save();
+	return $order;
+}
+
+$cod = vcap_ps_offline_order( $single, 'cod', 'ps-cod@example.com' );
+$cod->update_status( 'processing', 'Payment to be made upon delivery.' ); // What the COD gateway does at checkout.
+$cod = wc_get_order( $cod->get_id() );
+vcap_ps_assert( $cod->is_paid() && ! VCAP\Issuer::payment_ok( $cod ) && ! vcap()->vouchers->for_order( $cod->get_id() ), 'cash on delivery: "Processing" is not paid, no voucher is issued' );
+vcap_ps_assert( '' !== (string) $cod->get_meta( VCAP\Issuer::AWAITING_PAYMENT ) && (bool) array_filter( wc_get_order_notes( array( 'order_id' => $cod->get_id() ) ), static fn( $n ) => false !== strpos( $n->content, 'Vouchers are not issued yet' ) ), 'the order remembers that its vouchers wait and says so in a note' );
+$cod->update_status( 'completed' );
+vcap_ps_assert( 1 === count( vcap()->vouchers->for_order( $cod->get_id() ) ), 'cash on delivery: the voucher is issued when the order is completed' );
+wc_get_order( $cod->get_id() )->update_status( 'completed' );
+vcap_ps_assert( 1 === count( vcap()->vouchers->for_order( $cod->get_id() ) ), 'a repeated completion issues nothing more' );
+
+$cod_paid = vcap_ps_offline_order( $single, 'cod', 'ps-cod-paid@example.com' );
+$cod_paid->update_status( 'processing' );
+vcap_ps_assert( ! vcap()->vouchers->for_order( $cod_paid->get_id() ), 'cash on delivery: no voucher before the payment' );
+wc_get_order( $cod_paid->get_id() )->payment_complete( 'cod-collected-1' ); // Already "Processing": WooCommerce fires woocommerce_payment_complete_order_status_processing.
+vcap_ps_assert( 1 === count( vcap()->vouchers->for_order( $cod_paid->get_id() ) ) && 'payment_complete' === wc_get_order( $cod_paid->get_id() )->get_meta( VCAP\Issuer::PAYMENT_CONFIRMED ), 'a payment recorded later (payment_complete) issues the waiting voucher' );
+$cheque = vcap_ps_offline_order( $single, 'cheque', 'ps-cheque@example.com' );
+$cheque->update_status( 'on-hold' );
+wc_get_order( $cheque->get_id() )->payment_complete( 'cheque-cashed-1' ); // On hold: the regular woocommerce_payment_complete.
+vcap_ps_assert( 1 === count( vcap()->vouchers->for_order( $cheque->get_id() ) ), 'cheque: a recorded payment issues the voucher' );
+
+$bacs = vcap_ps_offline_order( $single, 'bacs', 'ps-bacs@example.com' );
+$bacs->update_status( 'on-hold', 'Awaiting BACS payment' );
+vcap_ps_assert( ! vcap()->vouchers->for_order( $bacs->get_id() ), 'bank transfer on hold: no voucher' );
+wc_get_order( $bacs->get_id() )->update_status( 'processing', 'Money arrived.', true ); // By hand (order screen, bulk action).
+vcap_ps_assert( 1 === count( vcap()->vouchers->for_order( $bacs->get_id() ) ) && 'manual' === wc_get_order( $bacs->get_id() )->get_meta( VCAP\Issuer::PAYMENT_CONFIRMED ), 'bank transfer: setting "Processing" by hand confirms the payment and issues the voucher' );
+
+$invoice = vcap_ps_offline_order( $single, 'vcap-test-invoice', 'ps-invoice@example.com' );
+$offline = static fn( $methods ) => array_merge( (array) $methods, array( 'vcap-test-invoice' ) );
+add_filter( 'vcap_offline_payment_methods', $offline );
+$invoice->update_status( 'processing' );
+vcap_ps_assert( ! vcap()->vouchers->for_order( $invoice->get_id() ), 'the filter "vcap_offline_payment_methods" adds gateways (e.g. invoice) to the rule' );
+remove_filter( 'vcap_offline_payment_methods', $offline );
+
+// "Completed" not an issue status: the completion still issues what waited for the money.
+$late = vcap_ps_offline_order( $single, 'cod', 'ps-cod-late@example.com' );
+$late->update_status( 'processing' );
+$hooks = array();
+foreach ( array( 'on_status', 'on_completed' ) as $method ) {
+	if ( has_action( 'woocommerce_order_status_completed', array( vcap()->issuer, $method ) ) ) {
+		$hooks[] = $method;
+		remove_action( 'woocommerce_order_status_completed', array( vcap()->issuer, $method ), 20 );
+	}
+}
+wc_get_order( $late->get_id() )->update_status( 'completed' );
+vcap_ps_assert( ! vcap()->vouchers->for_order( $late->get_id() ), '(without the completed status hooks nothing is issued)' );
+vcap()->issuer->on_completed( $late->get_id() );
+foreach ( $hooks as $method ) {
+	add_action( 'woocommerce_order_status_completed', array( vcap()->issuer, $method ), 20, 'on_status' === $method ? 3 : 2 );
+}
+vcap_ps_assert( 1 === count( vcap()->vouchers->for_order( $late->get_id() ) ), 'the completion hook issues the vouchers that waited for the payment' );
+$desc     = '';
+$keep_cod = get_option( 'woocommerce_cod_settings', false );
+update_option( 'woocommerce_cod_settings', array( 'enabled' => 'yes', 'enable_for_virtual' => 'yes' ) );
+$health = ( new VCAP\Health() )->test_offline_payment();
+$fields = vcap()->settings->fields( '' );
+foreach ( $fields as $field ) {
+	if ( 'vcap_issue_statuses' === ( $field['id'] ?? '' ) ) {
+		$desc = (string) $field['desc'];
+	}
+}
+vcap_ps_assert( VCAP\Issuer::cod_for_virtual() && 'recommended' === $health['status'] && false !== strpos( $desc, 'Cash on delivery is offered for virtual products' ), 'cash on delivery for virtual products is pointed out in the settings and in Site Health' );
+update_option( 'woocommerce_cod_settings', array( 'enabled' => 'yes', 'enable_for_virtual' => 'no' ) );
+vcap_ps_assert( ! VCAP\Issuer::cod_for_virtual() && 'good' === ( new VCAP\Health() )->test_offline_payment()['status'], 'without cash on delivery for virtual products there is no hint' );
+false === $keep_cod ? delete_option( 'woocommerce_cod_settings' ) : update_option( 'woocommerce_cod_settings', $keep_cod );
+
 /* ---- 13. Empty code batch --------------------------------------------------------------------------------- */
 
 $batch = 'ps-batch-' . strtolower( wp_generate_password( 5, false, false ) );
