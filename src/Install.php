@@ -121,6 +121,8 @@ final class Install {
 					self::ensure_upload_dir();
 					if ( self::run_migrations( $installed ) ) {
 						self::finish_schema();
+					} else {
+						self::note_incomplete_schema();
 					}
 				}
 			}
@@ -270,6 +272,8 @@ final class Install {
 			// A data migration that stopped after its time budget continues on the next request.
 			if ( self::run_migrations( $installed ) ) {
 				self::finish_schema();
+			} else {
+				self::note_incomplete_schema();
 			}
 			// Recurring tasks are checked again after an update (see Plugin::ensure_schedules()).
 			delete_option( self::SCHEDULES_OPTION );
@@ -382,6 +386,13 @@ final class Install {
 	 * into their own tables. New rows go to the tables from now on; the old rows are moved in batches.
 	 */
 	private static function migrate_1_4_0(): bool {
+		global $wpdb;
+		$tables = self::tables();
+		foreach ( array( 'usage', 'claims' ) as $key ) {
+			if ( $tables[ $key ] !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $tables[ $key ] ) ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return false; // Never switch to tables that could not be created (finish_schema() reports them).
+			}
+		}
 		// Also after a rollback to an older version, which wrote the old way again: read and move those rows.
 		if ( ! self::legacy_rows() ) {
 			update_option( self::LEGACY_OPTION, time() );
@@ -390,7 +401,8 @@ final class Install {
 			update_option( self::STORAGE_OPTION, '1.4.0' );
 			delete_option( 'vcap_stale_release_cursor' ); // The hourly sweep reads order meta now, not the ledger.
 		}
-		return self::move_legacy_rows( 8.0 );
+		// Storefront requests spend little time on it; admin, cron and WP-CLI more.
+		return self::move_legacy_rows( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ? 8.0 : 2.0 );
 	}
 
 	/**
@@ -732,6 +744,18 @@ final class Install {
 			update_option( self::OPTION_DB_VERSION, VCAP_DB_VERSION );
 		}
 		return true;
+	}
+
+	/**
+	 * A migration stopped: a broken schema is reported and retried in five minutes; otherwise (time budget) the
+	 * next request simply continues.
+	 */
+	private static function note_incomplete_schema(): void {
+		$problems = self::verify_schema();
+		if ( $problems ) {
+			update_option( self::SCHEMA_ERROR_OPTION, implode( '; ', $problems ), false );
+			set_transient( 'vcap_schema_retry', 1, 5 * MINUTE_IN_SECONDS );
+		}
 	}
 
 	public static function add_caps(): void {
