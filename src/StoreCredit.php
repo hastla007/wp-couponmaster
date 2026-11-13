@@ -314,7 +314,7 @@ final class StoreCredit {
 
 	// ------------------------------------------------------------------ customer UI.
 
-	private function apply_url(): string {
+	public function apply_url(): string {
 		return wp_nonce_url( add_query_arg( 'vcap_apply_credit', '1', wc_get_cart_url() ), 'vcap_apply_credit' );
 	}
 

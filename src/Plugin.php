@@ -111,6 +111,7 @@ final class Plugin {
 		$this->redemptions->register();
 		$this->store_credit->register();
 		$this->payments->register();
+		( new CartBlocks( $this->vouchers, $this->payments, $this->store_credit ) )->register();
 		( new API\V1\RestController( $this->redemptions ) )->register();
 
 		( new Compat\Subscriptions() )->register();

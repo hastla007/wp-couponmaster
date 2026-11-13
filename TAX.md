@@ -88,7 +88,39 @@ keinen zusätzlichen Rabatt. Einzweckgutscheine und Rabattaktionen bleiben Preis
 `vcap_voucher_pays_after_tax( $applies, $coupon, $voucher )`. Nachweis: `tests/tax-integration.php` Abschnitt 8
 (Warenkorb 120 € inkl. 20 % USt, Karte 60 € → Zahlbetrag 60 €, USt 20 €; Zahlungszeile −60 € ohne Steuer; Bestellung,
 Abbuchung genau 60 €, Storno gibt 60 € zurück; 200‑€‑Karte zahlt höchstens 120 €; Einzweckgutschein bleibt Rabatt).
-Hinweis: In den Warenkorb-/Kassenblöcken erscheint der Code mit 0 € Rabatt, die Zahlung als Gebührenzeile.
+Warenkorb-/Kassenblöcke: Die Store API liefert Zahlungen, Restguthaben und den Guthaben-Hinweis unter
+`extensions["voucher-captain"]` (`CartBlocks`); `assets/js/cart-blocks.js` zeigt je Gutschein die Zeile „Gutschein CODE
+−x“ und das Restguthaben unter den Rabatten (Slot `ExperimentalDiscountsMeta`), ergänzt den Coupon um „zahlt als
+Gutscheinzahlung (siehe unten)“ (Filter `coupons`) und zeigt „Guthaben verwenden“ (Slot `ExperimentalOrderMeta`).
+Die Rabattsumme des Blocks bleibt bei 0 (dafür bietet WooCommerce keinen Filter); in der Bestellung ist die Zahlung
+eine Gebührenzeile. Nachweis: `tests/blocks-integration.php`.
+
+**Was der Gutschein bezahlen darf** (`PaymentVouchers::payments_for()`): nur den Bruttobetrag (Zeilensumme nach
+anderen Rabatten + deren USt) der Positionen, auf die WooCommerce den Coupon anwenden würde, und davon nur die, die
+die Beschränkungen des Coupons erfüllen:
+
+- Filter `woocommerce_coupon_get_items_to_apply` – damit gilt „Gutscheine kaufen keine Gutscheine“ (auch keine
+  Aufladungen, `VoucherPurchaseRules`, Einstellung `vcap_vouchers_buy_vouchers`) und die SKU-Regeln;
+- Produkt-, Kategorie-, Ausschluss- und Sale-Beschränkungen des Coupons wie bei einem Produkt-Coupon
+  (`WC_Coupon::is_valid_for_product()`; WooCommerce selbst prüft sie bei Warenkorb-Festbeträgen nur als
+  „muss im Warenkorb sein“).
+
+**Versand und Gebühren** bezahlt ein Gutschein nur, wenn er nicht auf bestimmte Produkte oder Kategorien beschränkt
+ist (ein freies Zahlungsmittel zahlt die ganze Bestellung, ein Kategoriegutschein nur seine Waren; ein
+WooCommerce-Festbetrag-Coupon würde Versand nie mindern). Filter
+`vcap_voucher_pays_shipping_and_fees( $pays, $coupon, $cart )`. Mehrere Gutscheine zahlen denselben Betrag nie
+doppelt; jeder zahlt höchstens seinen Wert und den noch offenen Betrag.
+
+**Nur der Hauptwarenkorb zahlt** (`WC()->cart`): weitere Warenkorb-Instanzen – WooCommerce Subscriptions berechnet
+seine Abo-Warenkörbe als Klone des Hauptwarenkorbs – behalten ihre Summe und überschreiben die Zahlungen des
+Hauptwarenkorbs nicht. Ein Gutschein bezahlt die Bestellung, auf die er angewendet wird, nie eine Verlängerung. Bei der
+Bestellanlage (klassisch `woocommerce_checkout_create_order`, Store API
+`woocommerce_store_api_checkout_update_order_meta`) werden die Zahlungen aus dem Hauptwarenkorb neu berechnet (nicht
+aus der Session), die Zahlungszeilen angehängt und die Summe gesetzt, ohne die Bestellung vorzeitig zu speichern.
+Nachweis: `tests/tax-integration.php` 8.1 (Ware 120 + Geschenkkarten-Produkt 50, Karte 200 → zahlt 120, offen 50;
+Kategoriegutschein zahlt nur die 60 der Kategorie, keine fremde Ware, keine Gebühr; freier Gutschein zahlt auch die
+Gebühr) und 8.2 (zweite Warenkorb-Berechnung als Klon ohne Gutschein ändert nichts; Bestellung aus dem
+Hauptwarenkorb trotz falscher Session-Daten richtig; keine vorzeitige Speicherung).
 
 Für Shops mit Nettopreisen zieht das Plugin Geschenkkarten und Guthaben brutto ab (60 € Guthaben bezahlen 60 € des
 Bruttobetrags, nicht 60 € netto + Steuer; Filter `vcap_balance_covers_tax`, Nachweis
@@ -124,6 +156,7 @@ and country of the sale …“, „purpose "discount" for a promotion code“) u
 | Kaufbestellung vollständig erstattet oder storniert | ausgestellte Gutscheine werden gesperrt | „Gutscheine bei Erstattung stornieren“ (`vcap_void_on_refund`, Standard an); `tests/tax-integration.php` „a fully refunded gift card purchase voids …“ |
 | Teilerstattung (Menge) | so viele Gutscheine wie erstattet werden gesperrt, ungenutzte zuerst | `Issuer::on_partial_refund()`; `tests/acceptance-integration.php` „refunding one of two gift cards …“, `tests/connector-integration.php` |
 | Gutschein schon (teilweise) eingelöst | Erstattung höchstens Bestellbetrag minus verbrauchter Wert; mehr lehnt WooCommerce mit Hinweis ab (Filter `vcap_allow_refund_of_spent_vouchers`) | `Issuer::guard_refund()`; `tests/acceptance-integration.php` „refunding value that was already spent …“ |
+| Aufladung einer Geschenkkarte erstattet (ganz oder teilweise) | Teilerstattung nimmt den erstatteten Anteil der Aufladeposition von der Karte zurück (Positionserstattung über `_refunded_item_id`; ein Betrag ohne Positionen erstattet zuerst die übrigen Waren, erst der Rest die Aufladung), Storno/Vollerstattung den Rest; bereits ausgegebenes Aufladeguthaben ist nicht erstattbar – mehr als das Kartenguthaben hergibt, lehnt WooCommerce mit Höchstbetrag ab (Filter `vcap_allow_refund_of_spent_top_ups`; bestellweit zählt es in `Issuer::guard_refund()` mit, auch ohne `vcap_void_on_refund`) | `TopUp::reverse_refunded()`, `TopUp::guard_refund()`; `tests/topup-integration.php` Abschnitte 1–4 |
 | Ticketgutschein bereits in Tickets getauscht | Kauferstattung sperrt den Gutschein und storniert die Tickets | `tests/passcaptain-integration.php` „voiding the voucher (purchase refunded) revokes its tickets“ |
 
 Steuerliche Folge (vom Plugin nicht selbst gebucht): bei Einzweck Korrektur der beim Verkauf berechneten USt durch

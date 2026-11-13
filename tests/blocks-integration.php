@@ -68,4 +68,72 @@ sort( $emails );
 vcap_blocks_assert( array( 'block@example.com', 'other@example.com' ) === $emails, 'checkout writes the fields onto the order lines' );
 
 WC()->cart->empty_cart();
+
+// Cart and checkout blocks: voucher payments after tax, remaining balance and the store credit hint come with
+// the Store API cart (extensions["voucher-captain"]), not only from the classic PHP hooks.
+update_option( VCAP\PaymentVouchers::OPTION, 'yes' );
+$card_product = new WC_Product_Simple();
+$card_product->set_name( 'Block gift card' );
+$card_product->set_regular_price( '30' );
+$card_product->set_virtual( true );
+$card_product->update_meta_data( '_vcap_enabled', 'yes' );
+$card_product->update_meta_data( '_vcap_type', 'giftcard' );
+$card_product->update_meta_data( '_vcap_usage', 'balance' );
+$card_product->update_meta_data( '_vcap_tax_treatment', 'payment' );
+$card_product->save();
+$block_coupon = new WC_Coupon();
+$block_coupon->set_code( 'vcap-block-' . strtolower( wp_generate_password( 10, false, false ) ) );
+$block_coupon->set_discount_type( 'fixed_cart' );
+$block_coupon->set_amount( 30 );
+$block_coupon->update_meta_data( '_vcap_voucher', 'yes' );
+$block_coupon->save();
+$block_card                 = new VCAP\Voucher();
+$block_card->code           = wc_format_coupon_code( $block_coupon->get_code() );
+$block_card->coupon_id      = $block_coupon->get_id();
+$block_card->order_item_id  = 96000000 + $block_coupon->get_id();
+$block_card->product_id     = $card_product->get_id();
+$block_card->type           = 'giftcard';
+$block_card->usage_mode     = 'balance';
+$block_card->discount_type  = 'fixed_cart';
+$block_card->initial_amount = 30;
+$block_card->balance        = 30;
+$block_card->currency       = get_woocommerce_currency();
+$block_card->status         = VCAP\Voucher::STATUS_ACTIVE;
+$block_card->send_to        = 'buyer';
+$block_card->token          = VCAP\VoucherRepository::new_token();
+$block_card->id             = vcap()->vouchers->insert( $block_card );
+$block_goods = new WC_Product_Simple();
+$block_goods->set_name( 'Block goods' );
+$block_goods->set_regular_price( '40' );
+$block_goods->set_virtual( true );
+$block_goods->save();
+WC()->cart->add_to_cart( $block_goods->get_id(), 1 );
+WC()->cart->apply_coupon( $block_card->code );
+$block_cart = rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/cart' ) )->get_data();
+$block_ext  = $block_cart['extensions']['voucher-captain'] ?? array();
+$minor      = 10 ** wc_get_price_decimals();
+vcap_blocks_assert( isset( $block_ext['payments'][0] ) && $block_card->code === $block_ext['payments'][0]['code'] && (string) ( 30 * $minor ) === $block_ext['payments'][0]['amount'] && false !== strpos( $block_ext['payments'][0]['label'], strtoupper( $block_card->code ) ), 'Store API cart: the voucher payment row "Voucher CODE" with its amount (30)' );
+vcap_blocks_assert( (string) ( 10 * $minor ) === (string) ( $block_cart['totals']['total_price'] ?? '' ), 'Store API cart: the total is what is left after the voucher payment (40 − 30 = 10)' );
+vcap_blocks_assert( in_array( $block_card->code, $block_ext['paying_coupons'] ?? array(), true ) && '' !== (string) ( $block_ext['coupon_note'] ?? '' ), 'Store API cart: the paying coupon is marked, with the note for its coupon row' );
+vcap_blocks_assert( isset( $block_ext['balances'][0] ) && $block_card->code === $block_ext['balances'][0]['code'] && '' !== $block_ext['balances'][0]['formatted'], 'Store API cart: the remaining balance of the applied gift card' );
+vcap_blocks_assert( null === ( $block_ext['store_credit'] ?? null ), 'Store API cart: no store credit hint for guests' );
+WC()->cart->empty_cart();
+update_option( VCAP\PaymentVouchers::OPTION, 'no' );
+
+update_option( 'vcap_store_credit', 'yes' );
+$block_user = wp_insert_user(
+	array(
+		'user_login' => 'vcap-block-' . wp_generate_password( 6, false, false ),
+		'user_email' => 'vcap-block-' . wp_generate_password( 6, false, false ) . '@example.com',
+		'user_pass'  => wp_generate_password(),
+		'role'       => 'customer',
+	)
+);
+wp_set_current_user( $block_user );
+vcap()->store_credit->adjust( $block_user, 15, 'Block test' );
+WC()->cart->add_to_cart( $block_goods->get_id(), 1 );
+$credit_ext = rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/cart' ) )->get_data()['extensions']['voucher-captain'] ?? array();
+vcap_blocks_assert( is_array( $credit_ext['store_credit'] ?? null ) && false !== strpos( $credit_ext['store_credit']['url'], 'vcap_apply_credit' ) && '' !== $credit_ext['store_credit']['text'], 'Store API cart: the "use store credit" hint with its link for a customer with credit' );
+wp_set_current_user( 0 );
+WC()->cart->empty_cart();
 echo "Voucher Captain block checks passed.\n";

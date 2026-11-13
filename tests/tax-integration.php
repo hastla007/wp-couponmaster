@@ -330,6 +330,82 @@ $big_order->calculate_totals( true );
 $big_order = wc_get_order( $big_order->get_id() );
 vcap_tax_assert( abs( (float) $big_order->get_total() ) < 0.01 && abs( 20.0 - (float) $big_order->get_total_tax() ) < 0.01 && abs( 120.0 - (float) VCAP\PaymentVouchers::paid_amount( $big_order, $big_card->code ) ) < 0.01, 'an order paid fully by the card stays at 0 with 20 VAT after a recalculation (WooCommerce would cap the line at the net 100)', array( 'total' => $big_order->get_total(), 'tax' => $big_order->get_total_tax() ) );
 $big_order->update_status( 'cancelled' );
+
+// 8.1 The voucher pays only what it may pay for: vouchers do not buy vouchers or top-ups (purchase rules) …
+$mixed_card = vcap_tax_voucher( 'giftcard', 'balance', 'fixed_cart', $auto_card->get_id(), 200 );
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart( $goods->get_id(), 1 );
+WC()->cart->add_to_cart( $auto_card->get_id(), 1 );
+WC()->cart->apply_coupon( $mixed_card->code );
+WC()->cart->calculate_totals();
+$mixed_state = array( 'total' => WC()->cart->get_total( 'edit' ), 'payments' => vcap()->payments->cart_payments(), 'coupons' => WC()->cart->get_applied_coupons() );
+vcap_tax_assert( array( wc_format_coupon_code( $mixed_card->code ) => 120.0 ) === vcap()->payments->cart_payments() && abs( 50.0 - (float) WC()->cart->get_total( 'edit' ) ) < 0.01, 'goods 120 + a 50 gift card product, 200 card: the card pays only the 120 goods, the gift card product stays to pay', $mixed_state );
+$mixed_order = wc_get_order( WC()->checkout()->create_order( array( 'billing_email' => 'tax-after-mixed@example.com', 'billing_country' => 'AT', 'payment_method' => 'bacs' ) ) );
+vcap_tax_assert( abs( 50.0 - (float) $mixed_order->get_total() ) < 0.01 && abs( 120.0 - (float) VCAP\PaymentVouchers::paid_amount( $mixed_order, $mixed_card->code ) ) < 0.01, 'the order of that cart: payment line 120, total 50', array( 'total' => $mixed_order->get_total() ) );
+$mixed_order->update_status( 'cancelled' );
+
+// … and a voucher limited to a category pays only the products of that category (and no shipping or fees).
+$pay_cat   = wp_insert_term( 'Voucher payment category ' . wp_generate_password( 6, false, false ), 'product_cat' );
+$cat_goods = new WC_Product_Simple();
+$cat_goods->set_name( 'Category goods' );
+$cat_goods->set_regular_price( '60' );
+$cat_goods->set_virtual( true );
+$cat_goods->set_category_ids( array( (int) $pay_cat['term_id'] ) );
+$cat_goods->save();
+$cat_card   = vcap_tax_voucher( 'giftcard', 'balance', 'fixed_cart', $auto_card->get_id(), 200 );
+$cat_coupon = new WC_Coupon( $cat_card->coupon_id );
+$cat_coupon->set_product_categories( array( (int) $pay_cat['term_id'] ) );
+$cat_coupon->save();
+$cat_fee = static function ( $cart ) {
+	$cart->add_fee( 'Handling', 10, true );
+};
+add_action( 'woocommerce_cart_calculate_fees', $cat_fee );
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart( $goods->get_id(), 1 );
+WC()->cart->add_to_cart( $cat_goods->get_id(), 1 );
+WC()->cart->apply_coupon( $cat_card->code );
+WC()->cart->calculate_totals();
+$cat_state = array( 'total' => WC()->cart->get_total( 'edit' ), 'payments' => vcap()->payments->cart_payments(), 'coupons' => WC()->cart->get_applied_coupons(), 'fees' => WC()->cart->get_fee_total() );
+vcap_tax_assert( array( wc_format_coupon_code( $cat_card->code ) => 60.0 ) === vcap()->payments->cart_payments(), 'a card limited to a category pays only the 60 of the product in it, not the other goods or the fee', $cat_state );
+remove_action( 'woocommerce_cart_calculate_fees', $cat_fee );
+$open_card = vcap_tax_voucher( 'giftcard', 'balance', 'fixed_cart', $auto_card->get_id(), 500 );
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart( $goods->get_id(), 1 );
+add_action( 'woocommerce_cart_calculate_fees', $cat_fee );
+WC()->cart->apply_coupon( $open_card->code );
+WC()->cart->calculate_totals();
+remove_action( 'woocommerce_cart_calculate_fees', $cat_fee );
+$open_state = array( 'total' => WC()->cart->get_total( 'edit' ), 'payments' => vcap()->payments->cart_payments(), 'fees' => WC()->cart->get_fee_total(), 'fee_tax' => WC()->cart->get_fee_tax() );
+vcap_tax_assert( abs( (float) WC()->cart->get_total( 'edit' ) ) < 0.01 && abs( 132.0 - (float) ( vcap()->payments->cart_payments()[ wc_format_coupon_code( $open_card->code ) ] ?? 0 ) ) < 0.02, 'an unrestricted card also pays the fees (goods 120 + fee 10 + 20 % VAT = 132)', $open_state );
+
+// 8.2 Other cart instances (WooCommerce Subscriptions calculates its recurring carts as clones of the main cart,
+// without the voucher) neither pay nor overwrite the payments of the main cart.
+$clone_card = vcap_tax_voucher( 'giftcard', 'balance', 'fixed_cart', $auto_card->get_id(), 50 );
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart( $goods->get_id(), 1 );
+WC()->cart->apply_coupon( $clone_card->code );
+WC()->cart->calculate_totals();
+$recurring = clone WC()->cart;
+$recurring->set_applied_coupons( array() );
+$recurring->calculate_totals();
+$clone_code  = wc_format_coupon_code( $clone_card->code );
+$clone_state = array( 'payments' => vcap()->payments->cart_payments(), 'session' => WC()->session->get( 'vcap_voucher_payments' ), 'recurring' => $recurring->get_total( 'edit' ), 'main' => WC()->cart->get_total( 'edit' ) );
+vcap_tax_assert( array( $clone_code => 50.0 ) === vcap()->payments->cart_payments() && array( $clone_code => 50.0 ) === WC()->session->get( 'vcap_voucher_payments' ) && abs( 120.0 - (float) $recurring->get_total( 'edit' ) ) < 0.01 && abs( 70.0 - (float) WC()->cart->get_total( 'edit' ) ) < 0.01, 'a second cart calculation (clone without the card) keeps the main cart payment of 50 and pays nothing itself', $clone_state );
+$recurring_with = clone WC()->cart;
+$recurring_with->calculate_totals();
+vcap_tax_assert( abs( 120.0 - (float) $recurring_with->get_total( 'edit' ) ) < 0.01 && array( $clone_code => 50.0 ) === vcap()->payments->cart_payments(), 'a cloned cart that still carries the card does not pay with it (a voucher pays the order it is applied to, not a renewal)', array( 'recurring' => $recurring_with->get_total( 'edit' ) ) );
+WC()->session->set( 'vcap_voucher_payments', array( $clone_code => 1.0 ) );
+$saved_id    = -1;
+$saved_early = static function ( $order ) use ( &$saved_id ) {
+	$saved_id = (int) $order->get_id();
+};
+add_action( 'woocommerce_checkout_create_order', $saved_early, 30 );
+$clone_order = wc_get_order( WC()->checkout()->create_order( array( 'billing_email' => 'tax-after-clone@example.com', 'billing_country' => 'AT', 'payment_method' => 'bacs' ) ) );
+vcap_tax_assert( abs( 70.0 - (float) $clone_order->get_total() ) < 0.01 && abs( 50.0 - (float) VCAP\PaymentVouchers::paid_amount( $clone_order, $clone_code ) ) < 0.01 && 1 === count( $clone_order->get_items( 'fee' ) ), 'the order is created with the payment line recalculated from the main cart (not from the session): total 70, card 50', array( 'total' => $clone_order->get_total() ) );
+remove_action( 'woocommerce_checkout_create_order', $saved_early, 30 );
+vcap_tax_assert( 0 === $saved_id, 'adding the payment lines does not save the new order early (it is saved once, after every woocommerce_checkout_create_order callback)', $saved_id );
+$clone_order->update_status( 'cancelled' );
+
 $spv_after = vcap_tax_voucher( 'voucher', 'single', 'fixed_cart', $single->get_id(), 60 );
 WC()->cart->empty_cart();
 WC()->cart->add_to_cart( $goods->get_id(), 1 );
