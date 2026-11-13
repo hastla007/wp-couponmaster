@@ -441,7 +441,9 @@ final class PdfRenderer {
 			if ( str_starts_with( $test, $base ) ) {
 				$rel  = rawurldecode( substr( $test, strlen( $base ) ) );
 				$file = realpath( trailingslashit( $map[1] ) . $rel );
-				if ( $file && str_starts_with( $file, realpath( $map[1] ) ) && is_readable( $file ) ) {
+				$root = realpath( $map[1] );
+				// Directory boundary: ".../uploads" must not match a sibling ".../uploads-private".
+				if ( $file && $root && str_starts_with( $file, trailingslashit( $root ) ) && is_readable( $file ) ) {
 					return $file;
 				}
 			}
