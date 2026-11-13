@@ -90,6 +90,33 @@ keinen zusätzlichen Rabatt. Einzweckgutscheine und Rabattaktionen bleiben Preis
 Abbuchung genau 60 €, Storno gibt 60 € zurück; 200‑€‑Karte zahlt höchstens 120 €; Einzweckgutschein bleibt Rabatt).
 Hinweis: In den Warenkorb-/Kassenblöcken erscheint der Code mit 0 € Rabatt, die Zahlung als Gebührenzeile.
 
+**Was der Gutschein bezahlen darf** (`PaymentVouchers::payments_for()`): nur den Bruttobetrag (Zeilensumme nach
+anderen Rabatten + deren USt) der Positionen, auf die WooCommerce den Coupon anwenden würde, und davon nur die, die
+die Beschränkungen des Coupons erfüllen:
+
+- Filter `woocommerce_coupon_get_items_to_apply` – damit gilt „Gutscheine kaufen keine Gutscheine“ (auch keine
+  Aufladungen, `VoucherPurchaseRules`, Einstellung `vcap_vouchers_buy_vouchers`) und die SKU-Regeln;
+- Produkt-, Kategorie-, Ausschluss- und Sale-Beschränkungen des Coupons wie bei einem Produkt-Coupon
+  (`WC_Coupon::is_valid_for_product()`; WooCommerce selbst prüft sie bei Warenkorb-Festbeträgen nur als
+  „muss im Warenkorb sein“).
+
+**Versand und Gebühren** bezahlt ein Gutschein nur, wenn er nicht auf bestimmte Produkte oder Kategorien beschränkt
+ist (ein freies Zahlungsmittel zahlt die ganze Bestellung, ein Kategoriegutschein nur seine Waren; ein
+WooCommerce-Festbetrag-Coupon würde Versand nie mindern). Filter
+`vcap_voucher_pays_shipping_and_fees( $pays, $coupon, $cart )`. Mehrere Gutscheine zahlen denselben Betrag nie
+doppelt; jeder zahlt höchstens seinen Wert und den noch offenen Betrag.
+
+**Nur der Hauptwarenkorb zahlt** (`WC()->cart`): weitere Warenkorb-Instanzen – WooCommerce Subscriptions berechnet
+seine Abo-Warenkörbe als Klone des Hauptwarenkorbs – behalten ihre Summe und überschreiben die Zahlungen des
+Hauptwarenkorbs nicht. Ein Gutschein bezahlt die Bestellung, auf die er angewendet wird, nie eine Verlängerung. Bei der
+Bestellanlage (klassisch `woocommerce_checkout_create_order`, Store API
+`woocommerce_store_api_checkout_update_order_meta`) werden die Zahlungen aus dem Hauptwarenkorb neu berechnet (nicht
+aus der Session), die Zahlungszeilen angehängt und die Summe gesetzt, ohne die Bestellung vorzeitig zu speichern.
+Nachweis: `tests/tax-integration.php` 8.1 (Ware 120 + Geschenkkarten-Produkt 50, Karte 200 → zahlt 120, offen 50;
+Kategoriegutschein zahlt nur die 60 der Kategorie, keine fremde Ware, keine Gebühr; freier Gutschein zahlt auch die
+Gebühr) und 8.2 (zweite Warenkorb-Berechnung als Klon ohne Gutschein ändert nichts; Bestellung aus dem
+Hauptwarenkorb trotz falscher Session-Daten richtig; keine vorzeitige Speicherung).
+
 Für Shops mit Nettopreisen zieht das Plugin Geschenkkarten und Guthaben brutto ab (60 € Guthaben bezahlen 60 € des
 Bruttobetrags, nicht 60 € netto + Steuer; Filter `vcap_balance_covers_tax`, Nachweis
 `tests/acceptance-integration.php`). An der Minderung der USt-Bemessungsgrundlage ändert das nichts.
