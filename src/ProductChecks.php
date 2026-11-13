@@ -92,10 +92,14 @@ final class ProductChecks {
 	 * Single-use vouchers whose value exceeds what the cart can take: the remaining value is lost. Shared by the
 	 * classic cart (residual_rows()) and the cart and checkout blocks (CartBlocks, Store API "forfeits").
 	 *
+	 * What a voucher uses is its coupon discount plus what it pays after tax ("Multi-purpose vouchers as payment":
+	 * such a coupon discounts 0 and pays with a payment row instead, PaymentVouchers).
+	 *
 	 * @return array<int, array{code:string, value:float, used:float, currency:string}>
 	 */
 	public static function residual_losses( \WC_Cart $cart ): array {
 		$losses = array();
+		$paid   = PaymentVouchers::enabled() && function_exists( 'WC' ) && WC()->cart === $cart ? vcap()->payments->cart_payments() : array();
 		foreach ( $cart->get_applied_coupons() as $code ) {
 			$voucher = vcap()->vouchers->get_by_code( wc_format_coupon_code( $code ) );
 			if ( ! $voucher ) {
@@ -108,7 +112,7 @@ final class ProductChecks {
 			if ( '' !== $voucher->currency && function_exists( 'get_woocommerce_currency' ) && get_woocommerce_currency() !== $voucher->currency ) {
 				continue; // Converted by a currency switcher: amounts are not comparable.
 			}
-			$used  = (float) $cart->get_coupon_discount_amount( $code, ! wc_prices_include_tax() );
+			$used  = (float) $cart->get_coupon_discount_amount( $code, ! wc_prices_include_tax() ) + (float) ( $paid[ wc_format_coupon_code( $code ) ] ?? 0 );
 			$value = (float) $voucher->initial_amount;
 			if ( $value - $used > 0.009 ) {
 				$losses[] = array( 'code' => $voucher->code, 'value' => $value, 'used' => $used, 'currency' => $voucher->currency );

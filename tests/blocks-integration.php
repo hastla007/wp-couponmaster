@@ -180,6 +180,16 @@ $card_50 = vcap_blocks_voucher( $card_product, 50, 'balance', 'giftcard' );
 WC()->cart->apply_coupon( $card_50->code );
 list( , $forfeit_ext ) = vcap_blocks_cart_ext();
 vcap_blocks_assert( array() === ( $forfeit_ext['forfeits'] ?? null ), 'Store API cart: no warning for a gift card worth more than the cart (it keeps its balance)' );
+WC()->cart->remove_coupons();
+
+// "Multi-purpose vouchers as payment": the single-use value voucher discounts 0 and pays 40 after tax – only the
+// 10 it cannot pay is lost (not its whole value).
+update_option( VCAP\PaymentVouchers::OPTION, 'yes' );
+WC()->cart->apply_coupon( $single_50->code );
+list( $forfeit_cart, $forfeit_ext ) = vcap_blocks_cart_ext();
+vcap_blocks_assert( isset( $forfeit_ext['payments'][0] ) && (string) ( 40 * $minor ) === $forfeit_ext['payments'][0]['amount'] && '0' === (string) ( $forfeit_cart['totals']['total_price'] ?? '' ), 'Store API cart: the single-use voucher pays 40 after tax' );
+vcap_blocks_assert( 1 === count( $forfeit_ext['forfeits'] ?? array() ) && (string) ( 10 * $minor ) === $forfeit_ext['forfeits'][0]['amount'], 'Store API cart: a paying single-use voucher loses only what it cannot pay (10)' );
+update_option( VCAP\PaymentVouchers::OPTION, 'no' );
 WC()->cart->empty_cart();
 
 update_option( 'vcap_store_credit', 'yes' );
