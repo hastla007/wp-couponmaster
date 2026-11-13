@@ -382,8 +382,11 @@ final class Install {
 	 * into their own tables. New rows go to the tables from now on; the old rows are moved in batches.
 	 */
 	private static function migrate_1_4_0(): bool {
-		if ( ! self::storage_ready() ) {
+		// Also after a rollback to an older version, which wrote the old way again: read and move those rows.
+		if ( ! self::legacy_rows() ) {
 			update_option( self::LEGACY_OPTION, time() );
+		}
+		if ( ! self::storage_ready() ) {
 			update_option( self::STORAGE_OPTION, '1.4.0' );
 			delete_option( 'vcap_stale_release_cursor' ); // The hourly sweep reads order meta now, not the ledger.
 		}

@@ -426,12 +426,79 @@ jobs:
         run: |
           WP="php wp-cli.phar --path=wp-test"
           $WP --url=http://localhost/after/ option update vcap_delete_on_uninstall yes
+          # A gift card on a subsite: network deactivation must suspend it on every site (no plugin = no deduction).
+          card='$c = new WC_Coupon(); $c->set_code( "vcap-ms-" . strtolower( wp_generate_password( 8, false, false ) ) ); $c->update_meta_data( "_vcap_voucher", "yes" ); $c->save(); $v = new VCAP\Voucher(); $v->code = $c->get_code(); $v->coupon_id = $c->get_id(); $v->order_item_id = 99000000 + $c->get_id(); $v->type = "giftcard"; $v->usage_mode = "balance"; $v->initial_amount = 10; $v->balance = 10; $v->currency = get_woocommerce_currency(); $v->status = "active"; $v->token = VCAP\VoucherRepository::new_token(); vcap()->vouchers->insert( $v ); echo "coupon:", $c->get_id(), "\n";'
+          coupon="$($WP --url=http://localhost/before/ eval "$card" | sed -n 's/^coupon://p')"
+          test -n "$coupon"
           $WP plugin deactivate voucher-captain --network
+          test "$($WP --url=http://localhost/before/ eval "echo get_post_status( $coupon );")" = "draft"
           $WP plugin uninstall voucher-captain
           has='global $wpdb; echo $wpdb->get_var( "SHOW TABLES LIKE \"{$wpdb->prefix}vcap_vouchers\"" ) ? "kept" : "deleted";'
           test "$($WP eval "$has")" = "kept"
           test "$($WP --url=http://localhost/before/ eval "$has")" = "kept"
           test "$($WP --url=http://localhost/after/ eval "$has")" = "deleted"
+
+  upgrade:
+    # Previous schema with data -> current release ZIP (upgrade under the lock, data and old rows moved), then a
+    # rollback to the previous release and the update again. "Previous" is the parent of the last commit that
+    # changed VCAP_DB_VERSION, built from this repository's history.
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --password=root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Set up PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, gd, mbstring, mysqli, xml, zip
+          coverage: none
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist
+      - name: Download WP-CLI
+        run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
+      - name: Build the previous and the current release ZIP
+        run: |
+          prev="$(git log -1 --format=%H -G"VCAP_DB_VERSION', '" -- voucher-captain.php)^"
+          echo "Previous schema: $(git show "$prev:voucher-captain.php" | grep VCAP_DB_VERSION) ($prev)"
+          git worktree add "$RUNNER_TEMP/previous" "$prev"
+          ( cd "$RUNNER_TEMP/previous" && bin/build.sh )
+          cp "$RUNNER_TEMP/previous/build/voucher-captain.zip" "$RUNNER_TEMP/voucher-captain-previous.zip"
+          bin/build.sh
+      - name: Install WordPress, WooCommerce and the previous release with data
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          php wp-cli.phar core download --path=wp-test --version=7.1.4
+          php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
+          $WP core install --url=http://localhost --title="Voucher Captain upgrade" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
+          $WP plugin install woocommerce --version=11.2.2 --activate
+          $WP plugin install "$RUNNER_TEMP/voucher-captain-previous.zip" --activate
+          $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" setup
+      - name: Update to the current release and verify data and schema
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          $WP plugin install build/voucher-captain.zip --force
+          $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" verify
+      - name: Roll back to the previous release and update again
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          $WP plugin install "$RUNNER_TEMP/voucher-captain-previous.zip" --force
+          $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" rollback
+          $WP plugin install build/voucher-captain.zip --force
+          $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" verify
 
   pass-captain:
     # Voucher Captain as voucher provider of WP Pass Captain: released main and the current work branch
