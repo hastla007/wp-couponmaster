@@ -569,12 +569,16 @@ final class Fields {
 
 	public function loop_add_to_cart_text( $text, $product ) {
 		if ( $product instanceof \WC_Product && $product->is_type( 'simple' ) && ProductConfig::is_voucher( $product ) && $this->has_required_or_custom( $product ) ) {
-			return __( 'Personalise', 'voucher-captain' );
+			return TopUp::is_topup( $product ) ? __( 'Top up', 'voucher-captain' ) : __( 'Personalise', 'voucher-captain' );
 		}
 		return $text;
 	}
 
+	/** Whether the product page has to be filled in first: a custom amount, voucher fields or a top-up card code. */
 	private function has_required_or_custom( \WC_Product $product ): bool {
+		if ( TopUp::is_topup( $product ) ) {
+			return true;
+		}
 		$config = ProductConfig::get( $product );
 		return 'custom' === $config['amount_source'] || (bool) $this->flat_definitions( $product );
 	}

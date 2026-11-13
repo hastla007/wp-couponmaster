@@ -309,6 +309,8 @@ final class Issuer {
 	 * Before a refund of a voucher purchase is saved: refunding more than the order minus the value already
 	 * spent from its vouchers would pay back goods the customer already received. Such refunds are refused
 	 * with the maximum amount (filter "vcap_allow_refund_of_spent_vouchers" to allow them knowingly).
+	 * Gift card top-ups of the order count as well (always, also without "void on refund"): what was spent from
+	 * the card since cannot be taken back (TopUp::spent_value(); the limit per top-up line is in TopUp).
 	 *
 	 * @param \WC_Order_Refund $refund Refund about to be saved.
 	 * @param array            $args   wc_create_refund() arguments.
@@ -316,18 +318,23 @@ final class Issuer {
 	 */
 	public function guard_refund( $refund, $args ): void {
 		$order = wc_get_order( (int) ( $args['order_id'] ?? ( $refund instanceof \WC_Order_Refund ? $refund->get_parent_id() : 0 ) ) );
-		if ( ! $order instanceof \WC_Order || ! $this->settings->yes( 'vcap_void_on_refund' ) ) {
+		if ( ! $order instanceof \WC_Order ) {
 			return;
 		}
 		$spent = 0.0;
 		$codes = array();
-		foreach ( $this->repo->for_order( $order->get_id() ) as $voucher ) {
-			$used = self::spent_value( $voucher );
-			if ( $used > 0 ) {
-				$spent  += $used;
-				$codes[] = $voucher->code;
+		if ( $this->settings->yes( 'vcap_void_on_refund' ) ) {
+			foreach ( $this->repo->for_order( $order->get_id() ) as $voucher ) {
+				$used = self::spent_value( $voucher );
+				if ( $used > 0 ) {
+					$spent  += $used;
+					$codes[] = $voucher->code;
+				}
 			}
 		}
+		list( $topup_spent, $topup_codes ) = TopUp::spent_value( $order, $this->repo );
+		$spent += $topup_spent;
+		$codes  = array_merge( $codes, $topup_codes );
 		if ( $spent <= 0 ) {
 			return;
 		}
@@ -357,8 +364,11 @@ final class Issuer {
 		$spent = $remaining_base > 0 ? $remaining * $spent / $remaining_base : $spent;
 		throw new \Exception(
 			sprintf(
-				/* translators: 1: voucher codes, 2: spent value, 3: maximum refund */
-				__( 'Vouchers from this order were already used (%1$s, value used: %2$s). At most %3$s can be refunded; the unused vouchers are voided.', 'voucher-captain' ),
+				$topup_spent > 0
+					/* translators: 1: voucher codes and masked gift card codes, 2: spent value, 3: maximum refund */
+					? __( 'Value from this order was already spent (%1$s, value used: %2$s). At most %3$s can be refunded; unused vouchers are voided and unspent top-ups are taken back from the gift card.', 'voucher-captain' )
+					/* translators: 1: voucher codes, 2: spent value, 3: maximum refund */
+					: __( 'Vouchers from this order were already used (%1$s, value used: %2$s). At most %3$s can be refunded; the unused vouchers are voided.', 'voucher-captain' ),
 				implode( ', ', $codes ),
 				html_entity_decode( wp_strip_all_tags( wc_price( $spent, array( 'currency' => $order->get_currency() ) ) ) ),
 				html_entity_decode( wp_strip_all_tags( wc_price( max( 0, $max ), array( 'currency' => $order->get_currency() ) ) ) )
