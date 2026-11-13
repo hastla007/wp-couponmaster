@@ -69,7 +69,8 @@ final class VoucherAdmin {
 		echo ' <a class="page-title-action" href="' . esc_url( admin_url( 'admin.php?page=vcap-scanner' ) ) . '">' . esc_html__( 'Open scanner', 'voucher-captain' ) . '</a><hr class="wp-header-end">';
 		$table->views();
 		// Single GET form (like core list tables): search, filters, pagination and bulk actions.
-		echo '<form method="get"><input type="hidden" name="page" value="vcap-vouchers" />';
+		// Bulk "Void" revokes Pass Captain tickets and cannot be undone by reactivating: ask first (assets/js/admin.js).
+		echo '<form method="get" class="vcap-list-form" data-bulk-void-confirm="' . esc_attr__( 'Void the selected vouchers? They can no longer be redeemed; tickets they were exchanged for in WP Pass Captain are revoked and not reissued when a voucher is reactivated.', 'voucher-captain' ) . '"><input type="hidden" name="page" value="vcap-vouchers" />';
 		if ( ! empty( $_GET['status'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
 			echo '<input type="hidden" name="status" value="' . esc_attr( sanitize_key( $_GET['status'] ) ) . '" />'; // phpcs:ignore WordPress.Security.NonceVerification
 		}

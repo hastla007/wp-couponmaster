@@ -3794,3 +3794,6 @@ msgstr "Nicht gesendet (E-Mail deaktiviert oder keine gültige Adresse): %s"
 
 msgid "Expiry reminder could not be sent; it is retried on the next run."
 msgstr "Die Ablauf-Erinnerung konnte nicht gesendet werden; sie wird beim nächsten Lauf erneut versucht."
+
+msgid "Void the selected vouchers? They can no longer be redeemed; tickets they were exchanged for in WP Pass Captain are revoked and not reissued when a voucher is reactivated."
+msgstr "Ausgewählte Gutscheine ungültig machen? Sie können danach nicht mehr eingelöst werden; dafür in WP Pass Captain eingetauschte Tickets werden storniert und beim Reaktivieren eines Gutscheins nicht neu ausgestellt."
