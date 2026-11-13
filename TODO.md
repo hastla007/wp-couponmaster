@@ -172,16 +172,41 @@ Befund im Kursplugin: `/wp-json/boatingschool/v1/coupons/redeem` ist derzeit fü
 - [ ] Barrierefreiheit der genannten Flows zusätzlich mit einem echten Screenreader prüfen.
 
 
-## Separater Arbeitsstrang: WP License Captain
+## Kern-Plugin frei, Premium als getrenntes Add-on (Entscheidung 13.11.2026)
 
-Stand 12.11.2026: Die Aktivierung, Premium-Berechtigungen und Updates werden in gestapelten offenen PRs vorbereitet. Keine der folgenden Arbeiten gilt als fertig oder in Voucher Captain ausgeliefert, bis die PRs gemergt und die Abnahme abgeschlossen sind.
+**Entscheidung:** Voucher Captain bleibt als Kern-Plugin vollständig kostenlos, ohne Lizenzprüfung und ohne gesperrte Funktionen, und wird so für WordPress.org geeignet. Premiumfunktionen kommen in ein getrenntes Add-on-Plugin, das über den eigenen Shop verkauft und aktualisiert wird. Nur das Add-on spricht mit dem Lizenzserver WP License Captain.
 
-- [ ] PR #10: signierten WP-License-Captain-Client, Lizenzseite, Aktivierung/Deaktivierung und sichere lokale Speicherung integrieren.
-- [ ] PR #12: fail-closed Berechtigungsprüfung in den tatsächlichen Premium-Funktionen verdrahten; der aktuelle Helper allein schaltet noch keine Features.
-- [ ] PR #13: signierten Offline-Berechtigungscache integrieren und gegen die Lizenzserver-/Ausfallfälle abnehmen.
-- [ ] PR #11: Premium-Updates mit einmaligem Download-Grant, HTTPS-Allowlist und SHA-256-Prüfung integrieren.
-- [ ] Alle Lizenz-PRs auf eine konsistente Basis bringen, aktuelle CI-Fehler beheben und grüne CI-Läufe abwarten.
-- [ ] Aktivierung, Feature-Sperren, Offline-Verhalten und Update-Installation gegen einen erreichbaren Lizenzserver und echte Release-Pakete abnehmen.
+**Folge für die offenen Lizenz-PRs #10–#13:** Sie bauen Lizenzclient, Rechteprüfung und eigenen Updater in dieses Plugin ein. Das ist für WordPress.org unzulässig (Richtlinie 5: keine gesperrten Funktionen oder Trialware; Richtlinie 8: keine Updates von fremden Servern). Die PRs werden deshalb **nicht** nach `main` gemergt; ihr Code wandert ins Add-on.
+
+Stand in `main` am 13.11.2026: kein Lizenzcode vorhanden (per Suche nach `LicenseClient`, `wplc`, `allows_entitlement` und Update-Transient-Hooks geprüft).
+
+### A. Kern-Plugin (dieses Repository)
+
+- [ ] **A1 · Lizenz-PRs schließen.** PR #10 (Client und Lizenzseite), #11 (Updater), #12 (Rechte-Helfer) und #13 (Offline-Cache) nach dem Übertrag ins Add-on (B2) schließen, die Branches `codex/wplc-*` löschen.
+- [ ] **A2 · Wächtertest in CI.** Ein Test schlägt fehl, sobald im Kern-Plugin Lizenzcode auftaucht: Klassen oder Aufrufe mit `LicenseClient`, die Route `wplc/v1`, ein Header `Update URI`, eigene Filter auf `pre_set_site_transient_update_plugins` oder `plugins_api`, Abfragen wie `allows_entitlement`.
+- [ ] **A3 · Funktionsinventar festschreiben.** Jede vorhandene Funktion als „Kern, dauerhaft frei“ dokumentieren (`docs/FREE-PREMIUM.md`). Bereits ausgelieferte Funktionen werden nie nachträglich gesperrt oder ins Add-on verschoben.
+- [ ] **A4 · Erweiterungspunkte für das Add-on.** Die vorhandenen öffentlichen Schnittstellen (`VCAP\\Contracts\\RedemptionProvider`, Filter `vcap_redemption_providers`, `vcap_voucher_types`, Ereignis `vcap_voucher_redeemed`) als Andockpunkte festlegen und fehlende Hooks für Admin-Menü, Einstellungen, Vorlagen und Berichte ergänzen. Jeden Hook dokumentieren, als öffentliche API versionieren und mit einem Test absichern.
+- [ ] **A5 · Kern funktioniert allein.** Automatischer Test: alle Kernabläufe laufen ohne installiertes Add-on und ohne Netzwerkzugriff; das Kern-Plugin ruft den Lizenzserver nie auf.
+- [ ] **A6 · Hinweise auf das Add-on.** Höchstens dezent, wegklickbar und nur auf den eigenen Adminseiten (Richtlinie 11). Keine Menüpunkte, Schalter oder Felder, die sichtbar sind und erst nach Kauf funktionieren.
+- [ ] **A7 · readme.txt für WordPress.org.** Abschnitt `== External services ==` für jeden externen Aufruf des Kerns, korrekte Header (`Tested up to`, `Stable tag`, Lizenz GPL-2.0-or-later), keine Aussage, die eine Lizenz voraussetzt.
+- [ ] **A7b · Name und Slug prüfen.** Vor der Einreichung Namen, Slug und Textdomain `voucher-captain` gegen die Marken- und Namensregeln von WordPress.org prüfen.
+- [ ] **A8 · Plugin Check.** Das offizielle Prüfwerkzeug „Plugin Check“ ohne Fehler durchlaufen lassen und als CI-Schritt aufnehmen.
+- [ ] **A9 · Einreichung.** Plugin bei WordPress.org einreichen, Rückfragen des Review-Teams abarbeiten, danach Veröffentlichung per SVN-Deploy aus der CI einrichten.
+- [ ] **A10 · Doku angleichen.** README, ROADMAP und Release-Checkliste von „Lizenzaktivierung im Plugin“ auf „Kern frei, Premium im Add-on“ umstellen.
+
+### B. Premium-Add-on (neues, eigenes Repository)
+
+- [ ] **B1 · Repository und Plugin-Grundgerüst.** Neues Repository (Arbeitstitel `voucher-captain-pro`) mit eigenem Slug, eigener Textdomain und eigenem Namespace. Plugin-Header: `Requires Plugins:` mit dem Slug des Kern-Plugins, `Update URI` auf den eigenen Shop (damit WordPress das Add-on nie mit einem WordPress.org-Plugin verwechselt), `Requires PHP: 8.1`. Beim Laden die Mindestversion des Kern-Plugins prüfen und sonst mit Admin-Hinweis sauber aussteigen.
+- [ ] **B2 · Code aus den PRs #10–#13 übertragen.** Lizenzseite mit Aktivierung und Deaktivierung, Rechte-Helfer, Offline-Cache und Updater ins Add-on übernehmen. Die zugehörigen Auditbefunde aus dieser Datei ziehen mit um.
+- [ ] **B3 · Client auf den aktuellen Serverstand bringen.** `LicenseClient` aus `hastla007/wp-license`, Datei `src/Client/LicenseClient.php`, neu übernehmen. Die PR-Fassungen sind älter als der Server: Antworten tragen jetzt zusätzlich `payload` und `payload_signature`, die der Client über den rohen String prüft; `activate()` liefert eine bestehende gültige Aktivierung zurück, statt eine neue anzulegen (neuer optionaler vierter Parameter `force` erzwingt eine neue). Namespace mit Add-on-Präfix versehen und die Textdomain `wp-license` durch die des Add-ons ersetzen.
+- [ ] **B4 · `product_key` festlegen.** Der Wert muss exakt dem Produktschlüssel im Katalog des Lizenzservers entsprechen (Vorschlag `voucher`). Tarife: Solo 1, Business 5, Agency 25 Live-Websites.
+- [ ] **B5 · Premiumfunktionen und Rechte.** Premiumfunktionen im Add-on neu bauen, nicht aus dem Kern herausschneiden. Jede Funktion an genau einen Rechteschlüssel mit Präfix `voucher.` binden und die Liste mit `docs/ENTITLEMENTS.md` im Lizenzserver-Repository abgleichen. Fehlt ein Recht, ist nur diese Add-on-Funktion aus (fail-closed); der Kern bleibt unberührt.
+- [ ] **B6 · Verhalten bei Ablauf, Sperre und Serverausfall.** Abgelaufene oder widerrufene Lizenz schaltet nur Add-on-Funktionen ab; bereits erzeugte Daten bleiben les- und nutzbar. Bei Serverausfall gilt der signierte Offline-Cache höchstens 14 Tage. Der Server gewährt bei laufender Verlängerung zusätzlich 14 Tage Kulanz; der Client übernimmt die Antwort des Servers und rechnet nicht selbst.
+- [ ] **B7 · Updater.** Updates nur im Add-on: Abfrage über `/wplc/v1/updates/check`, einmaliger Download, SHA-256-Prüfung vor der Installation, Größenlimit für das ZIP, Abbruch ohne Schaden bei Fehlern. Die Update-Erkennung darf nicht von einem angemeldeten Admin abhängen.
+- [ ] **B8 · Deaktivierung und Deinstallation.** Beim Deinstallieren des Add-ons die Aktivierung beim Server freigeben und die gespeicherten Zugangsdaten löschen. Daten des Kern-Plugins nicht anfassen.
+- [ ] **B9 · Datenschutz.** Dokumentieren, was das Add-on an den Lizenzserver sendet (Lizenzschlüssel, Site-URL, Plugin-, WordPress- und PHP-Version) und was nie gesendet wird (Bestellungen, Kundendaten).
+- [ ] **B10 · Tests.** Gemeinsame Client-Fixtures gegen den Lizenzserver, Tests für abgelaufene, widerrufene und fremde Lizenz, manipulierten Cache, Serverfehler und fehlgeschlagenes Update. CI auf der PHP-Mindestversion 8.1.
+- [ ] **B11 · Release.** ZIP in CI bauen, Version und SHA-256 erzeugen und als Release im Lizenzserver unter „WooCommerce → License releases“ einstellen. Erst danach Kauf, Aktivierung, Rechteprüfung und Update einmal vollständig im Testshop durchspielen.
 
 
 ## Zusätzliche technische Abschlusslücken (Code-/CI-Abgleich vom 12.11.2026)
