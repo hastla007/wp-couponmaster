@@ -139,12 +139,9 @@ final class Plugin {
 			( new Admin\Import( $this->code_pool ) )->register();
 			( new Admin\StoreCreditAdmin( $this->store_credit, $this->vouchers ) )->register();
 			( new Admin\CampaignAdmin( new Campaigns( $this->code_pool, $this->vouchers ) ) )->register();
-			if ( Licensing\Entitlements::allows( 'reports' ) ) {
-				( new Admin\ReportsAdmin() )->register();
-			} else {
-				// A bookmarked CSV link explains the lock instead of ending on a blank admin-post page.
-				add_action( 'admin_post_vcap_report_csv', static fn() => wp_die( esc_html( Licensing\Entitlements::locked_message( 'reports' ) ), '', array( 'response' => 403, 'back_link' => true ) ) );
-			}
+			// Always: the outstanding value and the redemption journal (with their CSV) are the accounting record of
+			// vouchers already sold; only the campaign and partner evaluation needs the premium right (ReportsAdmin).
+			( new Admin\ReportsAdmin() )->register();
 		}
 
 		add_action( 'init', array( $this, 'load_textdomain' ), 0 );

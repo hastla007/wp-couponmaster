@@ -9,7 +9,9 @@ use VCAP\Voucher;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Vouchers → Reports: redemptions, discount and revenue per code campaign/partner, promotion, bonus and coupon.
+ * Vouchers → Reports: redemptions, discount and revenue per code campaign/partner, promotion, bonus and coupon
+ * (premium right "reports"), and – in every edition and without a license – the outstanding value at a date, the
+ * redemption journal and the Pass Captain reconciliation: the accounting record of vouchers already sold.
  */
 final class ReportsAdmin {
 	public function register(): void {
@@ -30,14 +32,28 @@ final class ReportsAdmin {
 		return $from <= $to ? array( $from, $to ) : array( $to, $from );
 	}
 
-	/** Current report view: campaigns (default), liability or journal. */
-	private static function view(): string {
+	/**
+	 * Is this report view locked? Only the campaign and partner evaluation needs the premium right; the outstanding
+	 * value, the journal and the reconciliation (and their CSV) stay available, also after a license ended.
+	 */
+	public static function locked( string $view ): bool {
+		return 'campaigns' === $view && ! \VCAP\Licensing\Entitlements::allows( 'reports' );
+	}
+
+	/**
+	 * Current report view: campaigns (default), liability, journal or reconcile. The page opens on the liability
+	 * while campaigns are locked; a CSV link without a view is always the campaign report.
+	 */
+	private static function view( bool $page = true ): string {
 		$view = sanitize_key( wp_unslash( $_GET['view'] ?? '' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only.
-		$views = array( 'liability', 'journal' );
+		$views = array( 'campaigns', 'liability', 'journal' );
 		if ( \VCAP\Compat\PassCaptainReconcile::available() ) {
 			$views[] = 'reconcile';
 		}
-		return in_array( $view, $views, true ) ? $view : 'campaigns';
+		if ( in_array( $view, $views, true ) ) {
+			return $view;
+		}
+		return $page && self::locked( 'campaigns' ) ? 'liability' : 'campaigns';
 	}
 
 	private static function tabs( string $current ): void {
@@ -72,6 +88,12 @@ final class ReportsAdmin {
 		}
 		if ( 'reconcile' === $view ) {
 			$this->reconcile_page();
+			return;
+		}
+		if ( self::locked( $view ) ) {
+			echo '<div class="wrap"><h1>' . esc_html__( 'Reports', 'voucher-captain' ) . '</h1>';
+			self::tabs( $view );
+			echo \VCAP\Licensing\Entitlements::locked_notice( 'reports' ) . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in locked_notice().
 			return;
 		}
 		list( $from, $to ) = self::range( $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only filter.
@@ -297,7 +319,7 @@ final class ReportsAdmin {
 		if ( ! current_user_can( Menu::cap() ) ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
-		$view   = self::view();
+		$view   = self::view( false );
 		$ledger = new Ledger( vcap()->vouchers );
 		// Streamed in batches: no row limit and no full report in memory.
 		if ( 'liability' === $view ) {
@@ -314,6 +336,10 @@ final class ReportsAdmin {
 			}
 			fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions
 			exit;
+		}
+		if ( self::locked( 'campaigns' ) ) {
+			// A bookmarked CSV link of the campaign report explains the lock instead of ending on a blank page.
+			wp_die( esc_html( \VCAP\Licensing\Entitlements::locked_message( 'reports' ) ), '', array( 'response' => 403, 'back_link' => true ) );
 		}
 		Campaigns::send_csv( 'voucher-report-' . $from . '-' . $to . '.csv', Reports::csv_rows( ( new Reports() )->collect( $from, $to ) ) );
 		exit;

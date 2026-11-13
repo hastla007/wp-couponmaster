@@ -801,6 +801,9 @@ check( 'free build: all five premium features are locked', array( 'promotions', 
 add_filter( 'vcap_license_required', '__return_true' );
 check( 'free build: features outside the premium list are never locked', VCAP\Licensing\Entitlements::allows( 'store_credit' ) );
 check( 'free build: the lock names the premium edition', str_contains( VCAP\Licensing\Entitlements::locked_message( 'topup' ), 'included in Voucher Captain Premium' ) );
+check( 'free build: outstanding value, redemption journal and reconciliation stay available, only the campaign report is locked', VCAP\Admin\ReportsAdmin::locked( 'campaigns' ) && ! VCAP\Admin\ReportsAdmin::locked( 'liability' ) && ! VCAP\Admin\ReportsAdmin::locked( 'journal' ) && ! VCAP\Admin\ReportsAdmin::locked( 'reconcile' ) );
+$plugin_src = (string) file_get_contents( dirname( __DIR__ ) . '/src/Plugin.php' );
+check( 'every edition registers the report export (liability and journal CSV are the accounting record of sold vouchers)', (bool) preg_match( '/if \( is_admin\(\) \) \{.*?\n\t\t\t\( new Admin\\\\ReportsAdmin\(\) \)->register\(\);/s', $plugin_src ) && ! str_contains( $plugin_src, "allows( 'reports' )" ) );
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );
