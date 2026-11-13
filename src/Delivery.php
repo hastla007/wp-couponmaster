@@ -14,7 +14,6 @@ final class Delivery {
 	public function register(): void {
 		add_action( 'vcap_deliver_voucher', array( $this, 'deliver' ), 10, 1 );
 		add_action( 'vcap_daily_maintenance', array( $this, 'maintenance' ) );
-		add_action( 'init', array( $this, 'schedule_maintenance' ), 20 );
 	}
 
 	public static function delivery_modes(): array {
@@ -277,9 +276,54 @@ final class Delivery {
 		return $sent;
 	}
 
+	/** Called by Plugin::ensure_schedules() (once a day and after activation or an update, not on every request). */
 	public function schedule_maintenance(): void {
 		if ( function_exists( 'as_has_scheduled_action' ) && ! as_has_scheduled_action( 'vcap_daily_maintenance', array(), self::GROUP ) ) {
 			as_schedule_recurring_action( strtotime( 'tomorrow 03:15' ), DAY_IN_SECONDS, 'vcap_daily_maintenance', array(), self::GROUP );
+		}
+	}
+
+	/**
+	 * After a reactivation: schedules again what the deactivation removed – deliveries with a future date, the
+	 * release of open external reservations and pending referral withdrawals. Deliveries that became due meanwhile
+	 * are sent by the daily maintenance (due_for_delivery()).
+	 */
+	public function restore_tasks(): void {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			return;
+		}
+		global $wpdb;
+		$tables = Install::tables();
+		$now    = $this->repo->now();
+		$due    = $wpdb->get_results( $wpdb->prepare( "SELECT id, delivery_at FROM {$tables['vouchers']} WHERE delivered_at IS NULL AND status = 'scheduled' AND delivery_at > %s ORDER BY delivery_at LIMIT 2000", $now ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		foreach ( $due ? $due : array() as $row ) {
+			$args = array( 'voucher_id' => (int) $row['id'] );
+			if ( ! as_has_scheduled_action( 'vcap_deliver_voucher', $args, self::GROUP ) ) {
+				as_schedule_single_action( strtotime( $row['delivery_at'] . ' UTC' ), 'vcap_deliver_voucher', $args, self::GROUP );
+			}
+		}
+		$held = $wpdb->get_results( $wpdb->prepare( "SELECT id, expires_at FROM {$tables['redemptions']} WHERE state = %s AND expires_at IS NOT NULL ORDER BY expires_at LIMIT 2000", API\V1\RedemptionService::STATE_RESERVED ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		foreach ( $held ? $held : array() as $row ) {
+			$args = array( 'redemption_id' => (int) $row['id'] );
+			if ( ! as_has_scheduled_action( 'vcap_release_expired_redemption', $args, self::GROUP ) ) {
+				as_schedule_single_action( max( time(), (int) strtotime( $row['expires_at'] . ' UTC' ) ) + MINUTE_IN_SECONDS, 'vcap_release_expired_redemption', $args, self::GROUP );
+			}
+		}
+		$orders = wc_get_orders(
+			array(
+				'status'     => array( 'cancelled', 'refunded' ),
+				'limit'      => 200,
+				'return'     => 'ids',
+				'meta_query' => array( array( 'key' => Referrals::REWARD, 'compare' => 'EXISTS' ) ), // phpcs:ignore WordPress.DB.SlowDBQuery
+			)
+		);
+		foreach ( (array) $orders as $order_id ) {
+			$order  = wc_get_order( $order_id );
+			$reward = $order instanceof \WC_Order ? $order->get_meta( Referrals::REWARD ) : null;
+			$tries  = is_array( $reward ) ? (int) ( $reward['revoke_attempts'] ?? 0 ) : 0;
+			if ( $tries > 0 && $tries < 5 && empty( $reward['revoked'] ) && ! as_has_scheduled_action( Referrals::RETRY_HOOK, array( (int) $order_id ), self::GROUP ) ) {
+				as_schedule_single_action( time() + HOUR_IN_SECONDS, Referrals::RETRY_HOOK, array( (int) $order_id ), self::GROUP );
+			}
 		}
 	}
 

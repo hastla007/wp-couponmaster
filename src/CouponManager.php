@@ -43,7 +43,6 @@ final class CouponManager {
 		add_action( 'wp_trash_post', array( $this, 'release_deleted_order' ), 5 );
 		add_action( 'before_delete_post', array( $this, 'release_deleted_order' ), 5 );
 		add_action( 'vcap_release_stale_order_reservations', array( $this, 'release_stale_order_reservations' ) );
-		add_action( 'init', array( $this, 'schedule_stale_release' ), 20 );
 	}
 
 	/**
@@ -66,6 +65,7 @@ final class CouponManager {
 		}
 	}
 
+	/** Called by Plugin::ensure_schedules() (once a day and after activation or an update, not on every request). */
 	public function schedule_stale_release(): void {
 		if ( function_exists( 'as_has_scheduled_action' ) && ! as_has_scheduled_action( 'vcap_release_stale_order_reservations', array(), 'vcap' ) ) {
 			as_schedule_recurring_action( time() + HOUR_IN_SECONDS, HOUR_IN_SECONDS, 'vcap_release_stale_order_reservations', array(), 'vcap' );

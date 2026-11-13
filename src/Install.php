@@ -18,6 +18,10 @@ final class Install {
 	public const UPGRADE_LOCK = 'vcap_upgrade_lock';
 	/** Marker of Plugin::ensure_schedules() (deleted to have the recurring tasks checked again). */
 	public const SCHEDULES_OPTION = 'vcap_schedules_checked';
+	/** Whether the ledger tables are InnoDB ('yes'/'no'), stored by verify_schema(). */
+	public const INNODB_OPTION = 'vcap_tables_innodb';
+	/** Set on activation: tasks removed on deactivation are scheduled again (Plugin::ensure_schedules()). */
+	public const RESTORE_TASKS_OPTION = 'vcap_restore_tasks';
 	private const LOCK_SECONDS = 300;
 	private static ?bool $transactional_tables = null;
 	private static ?string $lock_value = null;
@@ -123,6 +127,9 @@ final class Install {
 			}
 			add_option( 'vcap_needs_default_template', 'yes' );
 			update_option( 'vcap_flush_rewrite', 'yes' );
+			// Recurring tasks and the tasks removed on deactivation are scheduled on the next request.
+			delete_option( self::SCHEDULES_OPTION );
+			update_option( self::RESTORE_TASKS_OPTION, 'yes', false );
 			self::restore_balance_coupons();
 		} finally {
 			if ( $locked ) {
@@ -135,10 +142,15 @@ final class Install {
 		if ( ! get_option( self::OPTION_DB_VERSION ) ) {
 			return; // Never set up on this site (network activation reaches other sites lazily): no coupons, no tasks.
 		}
+		// Pending tasks would fail without the plugin: remove the whole group (deliveries, retries, reservation
+		// releases, recurring maintenance); activation schedules them again (Delivery::restore_tasks()).
 		if ( function_exists( 'as_unschedule_all_actions' ) ) {
+			as_unschedule_all_actions( '', array(), Delivery::GROUP );
 			as_unschedule_all_actions( 'vcap_daily_maintenance' );
 			as_unschedule_all_actions( 'vcap_release_stale_order_reservations' );
 		}
+		wp_clear_scheduled_hook( Licensing\Entitlements::REFRESH_HOOK );
+		delete_option( self::SCHEDULES_OPTION );
 		self::suspend_balance_coupons();
 	}
 
@@ -474,12 +486,27 @@ final class Install {
 		return false;
 	}
 
+	/**
+	 * Whether the ledger tables are InnoDB (transactions). The answer is stored in an option by verify_schema()
+	 * (activation, upgrade), so checkouts and admin pages do not query information_schema; a stored "no" is
+	 * checked again at most every ten minutes, so tables converted by hand are noticed.
+	 */
 	public static function tables_support_transactions(): bool {
 		if ( null !== self::$transactional_tables ) {
 			return self::$transactional_tables;
 		}
+		$stored = get_option( self::INNODB_OPTION );
+		if ( 'yes' === $stored || ( 'no' === $stored && get_transient( 'vcap_innodb_recheck' ) ) ) {
+			return self::$transactional_tables = 'yes' === $stored;
+		}
+		return self::store_engine_state();
+	}
+
+	/** Reads the table engines from information_schema and stores the result. */
+	private static function store_engine_state(): bool {
 		global $wpdb;
 		$tables = self::tables();
+		$ok     = true;
 		foreach ( array( 'vouchers', 'events', 'redemptions' ) as $key ) {
 			$engine = $wpdb->get_var(
 				$wpdb->prepare(
@@ -488,10 +515,15 @@ final class Install {
 				)
 			);
 			if ( 'innodb' !== strtolower( (string) $engine ) ) {
-				return self::$transactional_tables = false;
+				$ok = false;
+				break;
 			}
 		}
-		return self::$transactional_tables = true;
+		update_option( self::INNODB_OPTION, $ok ? 'yes' : 'no', true );
+		if ( ! $ok ) {
+			set_transient( 'vcap_innodb_recheck', 1, 10 * MINUTE_IN_SECONDS );
+		}
+		return self::$transactional_tables = $ok;
 	}
 
 	private static function ensure_transactional_tables( array $tables ): void {
@@ -508,6 +540,7 @@ final class Install {
 				$wpdb->query( "ALTER TABLE {$tables[ $key ]} ENGINE=InnoDB" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			}
 		}
+		delete_option( self::INNODB_OPTION );
 	}
 
 	/** CREATE TABLE statements (dbDelta format) per table key. */
@@ -670,7 +703,7 @@ final class Install {
 			}
 		}
 		self::$transactional_tables = null;
-		if ( ! $problems && ! self::tables_support_transactions() ) {
+		if ( ! self::store_engine_state() && ! $problems ) {
 			$problems[] = 'the voucher tables are not InnoDB (transactions unavailable)';
 		}
 		return $problems;
