@@ -3,7 +3,10 @@
  * Shows what the classic cart prints with PHP hooks, from the Store API cart data extensions["voucher-captain"]:
  * - one row "Voucher CODE −x" per voucher that pays after tax, and the remaining balances of applied gift cards
  *   (slot ExperimentalDiscountsMeta, below the discounts of the totals);
- * - a note on the coupon of such a voucher instead of a bare 0 discount (checkout filter "coupons");
+ * - a note on the coupon of such a voucher, whose own discount is 0, saying that it pays below (checkout filter
+ *   "coupons", which can change the coupon label only). The 0 of the discount row itself stays: it comes from the
+ *   Store API cart (totals.total_discount, coupons[].totals.total_discount), which WooCommerce offers no filter
+ *   for, and the coupon markup has no class per coupon that CSS could hide for paying coupons alone (TAX.md 4.1);
  * - the "use store credit" hint (slot ExperimentalOrderMeta);
  * - the warning that a single-use voucher worth more than the cart loses its remaining value (slot
  *   ExperimentalDiscountsMeta, in a polite live region that is always rendered, so screen readers announce the
@@ -92,6 +95,12 @@
 		);
 	}
 
+	/** Whether the coupon itself discounts nothing (Store API amounts are strings in minor units). */
+	function discountsNothing( coupon ) {
+		var totals = coupon.totals || {};
+		return ! parseInt( totals.total_discount || 0, 10 ) && ! parseInt( totals.total_discount_tax || 0, 10 );
+	}
+
 	if ( checkout.registerCheckoutFilters ) {
 		checkout.registerCheckoutFilters( NAMESPACE, {
 			coupons: function ( coupons, extensions ) {
@@ -101,7 +110,7 @@
 					return coupons;
 				}
 				return coupons.map( function ( coupon ) {
-					if ( ! coupon || paying.indexOf( String( coupon.code ).toLowerCase() ) === -1 ) {
+					if ( ! coupon || paying.indexOf( String( coupon.code ).toLowerCase() ) === -1 || ! discountsNothing( coupon ) ) {
 						return coupon;
 					}
 					return Object.assign( {}, coupon, { label: ( coupon.label || coupon.code ) + ' · ' + d.coupon_note } );

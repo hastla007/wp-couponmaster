@@ -115,6 +115,10 @@ $minor      = 10 ** wc_get_price_decimals();
 vcap_blocks_assert( isset( $block_ext['payments'][0] ) && $block_card->code === $block_ext['payments'][0]['code'] && (string) ( 30 * $minor ) === $block_ext['payments'][0]['amount'] && false !== strpos( $block_ext['payments'][0]['label'], strtoupper( $block_card->code ) ), 'Store API cart: the voucher payment row "Voucher CODE" with its amount (30)' );
 vcap_blocks_assert( (string) ( 10 * $minor ) === (string) ( $block_cart['totals']['total_price'] ?? '' ), 'Store API cart: the total is what is left after the voucher payment (40 − 30 = 10)' );
 vcap_blocks_assert( in_array( $block_card->code, $block_ext['paying_coupons'] ?? array(), true ) && '' !== (string) ( $block_ext['coupon_note'] ?? '' ), 'Store API cart: the paying coupon is marked, with the note for its coupon row' );
+$block_coupons = array_values( array_filter( $block_cart['coupons'] ?? array(), static fn( $c ) => wc_format_coupon_code( (string) ( $c['code'] ?? '' ) ) === $block_card->code ) );
+// cart-blocks.js labels a paying coupon only while its own discount is 0; the voucher pays in the payment row.
+vcap_blocks_assert( 1 === count( $block_coupons ) && '0' === (string) ( $block_coupons[0]['totals']['total_discount'] ?? '' ) && '0' === (string) ( $block_coupons[0]['totals']['total_discount_tax'] ?? '' ), 'Store API cart: the paying coupon itself discounts 0 (its coupon row gets the payment note)' );
+vcap_blocks_assert( '0' === (string) ( $block_cart['totals']['total_discount'] ?? '' ) && '0' === (string) ( $block_cart['totals']['total_discount_tax'] ?? '' ), 'Store API cart: the discount total stays 0, the voucher is not counted twice (discount and payment)' );
 vcap_blocks_assert( isset( $block_ext['balances'][0] ) && $block_card->code === $block_ext['balances'][0]['code'] && '' !== $block_ext['balances'][0]['formatted'], 'Store API cart: the remaining balance of the applied gift card' );
 vcap_blocks_assert( null === ( $block_ext['store_credit'] ?? null ), 'Store API cart: no store credit hint for guests' );
 WC()->cart->empty_cart();
