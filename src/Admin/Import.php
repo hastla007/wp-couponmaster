@@ -19,6 +19,21 @@ final class Import {
 		add_action( 'admin_post_vcap_delete_batch', array( $this, 'delete_batch' ) );
 	}
 
+	/**
+	 * Formats a code must match to be imported ("custom": the admin's own regular expression).
+	 *
+	 * @return array<string, array{label:string, regex:string}>
+	 */
+	public static function formats(): array {
+		return array(
+			'standard' => array( 'label' => __( 'Letters, digits, dot, hyphen, underscore (4–64 characters)', 'voucher-captain' ), 'regex' => '^[A-Za-z0-9._-]{4,64}$' ),
+			'alnum'    => array( 'label' => __( 'Letters and digits only (4–64 characters)', 'voucher-captain' ), 'regex' => '^[A-Za-z0-9]{4,64}$' ),
+			'digits'   => array( 'label' => __( 'Digits only (4–64 characters)', 'voucher-captain' ), 'regex' => '^[0-9]{4,64}$' ),
+			'any'      => array( 'label' => __( 'Any code without spaces (1–100 characters)', 'voucher-captain' ), 'regex' => '^\S{1,100}$' ),
+			'custom'   => array( 'label' => __( 'Own format (regular expression below)', 'voucher-captain' ), 'regex' => '' ),
+		);
+	}
+
 	private function can(): bool {
 		return current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' );
 	}
@@ -83,9 +98,15 @@ final class Import {
 							</td>
 						</tr>
 						<tr>
-							<th scope="row"><label for="vcap-pattern"><?php esc_html_e( 'Allowed format', 'voucher-captain' ); ?></label></th>
-							<td><input type="text" id="vcap-pattern" name="pattern" value="^[A-Za-z0-9._-]{4,64}$" class="regular-text code" />
-								<p class="description"><?php esc_html_e( 'Regular expression each code must match.', 'voucher-captain' ); ?></p></td>
+							<th scope="row"><label for="vcap-format"><?php esc_html_e( 'Allowed format', 'voucher-captain' ); ?></label></th>
+							<td><select id="vcap-format" name="format">
+									<?php foreach ( self::formats() as $key => $format ) : ?>
+										<option value="<?php echo esc_attr( $key ); ?>"><?php echo esc_html( $format['label'] ); ?></option>
+									<?php endforeach; ?>
+								</select>
+								<p><label for="vcap-pattern"><?php esc_html_e( 'Own regular expression (only for "Own format")', 'voucher-captain' ); ?></label><br>
+								<input type="text" id="vcap-pattern" name="pattern" value="" placeholder="^[A-Z0-9]{8}$" class="regular-text code" /></p>
+								<p class="description"><?php esc_html_e( 'Codes that do not match are skipped and listed in the import report.', 'voucher-captain' ); ?></p></td>
 						</tr>
 					</table>
 					<?php submit_button( __( 'Import codes', 'voucher-captain' ) ); ?>
@@ -176,6 +197,10 @@ final class Import {
 		}
 
 		$pattern = wp_unslash( (string) ( $_POST['pattern'] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- used as regex only.
+		$format  = sanitize_key( wp_unslash( (string) ( $_POST['format'] ?? '' ) ) );
+		if ( isset( self::formats()[ $format ] ) && 'custom' !== $format ) {
+			$pattern = self::formats()[ $format ]['regex'];
+		}
 		$regex   = "\x01" . str_replace( "\x01", '', $pattern ?: '^[A-Za-z0-9._-]{4,64}$' ) . "\x01u"; // Control-char delimiter: the pattern needs no escaping.
 		if ( false === @preg_match( $regex, '' ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors
 			$report['error'] = __( 'The "Allowed format" is not a valid regular expression.', 'voucher-captain' );
