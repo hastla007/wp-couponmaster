@@ -74,14 +74,29 @@ elif [ "$EDITION" = "premium" ]; then
 	fi
 	sed -i "s|^define( 'VCAP_VERSION', .*|&\ndefine( 'VCAP_EDITION', 'premium' );\ndefine( 'VCAP_LICENSE_REQUIRED', true );\ndefine( 'VCAP_LICENSE_SERVER', '$SERVER' );|" "$DEST/voucher-captain.php"
 	sed -i "s|^ \* License URI: .*|&\n * Update URI:        $UPDATE_URI|" "$DEST/voucher-captain.php"
-	# Ed25519 public key of the license server (wp wplc signing-key --field=public_key): responses and offline
-	# snapshots must carry the server's signature for exactly this installation.
-	PUBLIC_KEY="${VCAP_LICENSE_PUBLIC_KEY:-}"
-	if [ -n "$PUBLIC_KEY" ]; then
-		if ! printf '%s' "$PUBLIC_KEY" | grep -qE '^[A-Za-z0-9+/]{43}=$'; then
-			echo "VCAP_LICENSE_PUBLIC_KEY must be the base64 Ed25519 public key (44 characters), got '$PUBLIC_KEY'." >&2
+	# Ed25519 public key(s) of the license server (wp wplc signing-key --field=public_key): responses and offline
+	# snapshots must carry the server's signature for exactly this installation. During a key rotation the set holds
+	# the current and the next key (wp wplc signing-key --next --field=public_key), separated by commas or whitespace
+	# (LICENSING.md → Key rotation). Every key must be base64 of 32 bytes; the build pins them comma-separated.
+	PUBLIC_KEY=""
+	KEY_COUNT=0
+	for KEY in $(printf '%s' "${VCAP_LICENSE_PUBLIC_KEY:-}" | tr ',' ' '); do
+		if ! printf '%s' "$KEY" | grep -qE '^[A-Za-z0-9+/]{43}=$' || [ "$(printf '%s' "$KEY" | base64 -d 2>/dev/null | wc -c)" -ne 32 ]; then
+			echo "VCAP_LICENSE_PUBLIC_KEY must hold base64 Ed25519 public keys (44 characters, 32 bytes each, separated by commas or whitespace), got '$KEY'." >&2
 			exit 1
 		fi
+		case ",$PUBLIC_KEY," in
+			*",$KEY,"*) continue ;;
+		esac
+		PUBLIC_KEY="${PUBLIC_KEY:+$PUBLIC_KEY,}$KEY"
+		KEY_COUNT=$((KEY_COUNT + 1))
+	done
+	if [ "$KEY_COUNT" -gt 8 ]; then
+		echo "VCAP_LICENSE_PUBLIC_KEY holds $KEY_COUNT keys; at most 8 are used (current and next key)." >&2
+		exit 1
+	fi
+	if [ -n "$PUBLIC_KEY" ]; then
+		echo "Pinned license server keys: $KEY_COUNT"
 		sed -i "s|^define( 'VCAP_LICENSE_SERVER', .*|&\ndefine( 'VCAP_LICENSE_PUBLIC_KEY', '$PUBLIC_KEY' );|" "$DEST/voucher-captain.php"
 		grep -q "VCAP_LICENSE_PUBLIC_KEY" "$DEST/voucher-captain.php" || { echo "License public key missing" >&2; exit 1; }
 	elif [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then

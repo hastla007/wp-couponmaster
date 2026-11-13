@@ -543,6 +543,83 @@ check( 'pinned key: the server signature of the documented vector is accepted (i
 check( 'pinned key: other data, another installation or a missing signature are rejected', '[true,true,false,false,false]' === trim( $sig_out ), $sig_out );
 check( 'without a pinned key the HMAC alone decides (development and free builds)', VCAP\Licensing\LicenseClient::server_signature_valid( '{}', '', 'x' ) );
 
+echo "License server key set (rotation: current + next key, key_id, signatures[])\n";
+// Deterministic keys from seeds (WP License Captain docs/API-V1.md → Key rotation): K1 = 32 × 0x01 (current),
+// K2 = 32 × 0x02 (next), K3 = 32 × 0x03 (a key nobody pinned). A fake server answers activation and entitlement
+// checks in the given mode; the child process pins the key set given as argument.
+$keyset_code = <<<'PHP'
+define( 'VCAP_LICENSE_PUBLIC_KEY', $argv[2] );
+require $argv[1];
+$c    = VCAP\Licensing\LicenseClient::class;
+$seed = static fn( int $b ) => sodium_crypto_sign_secretkey( sodium_crypto_sign_seed_keypair( str_repeat( chr( $b ), 32 ) ) );
+$kid  = static fn( int $b ) => $c::key_id( sodium_crypto_sign_publickey_from_secretkey( $seed( $b ) ) );
+$mode = $argv[3];
+$GLOBALS['vcap_test_http'] = static function ( $url, $args ) use ( $seed, $kid, $mode, &$secret ) {
+	$body = json_decode( (string) $args['body'], true ) ?: array();
+	if ( str_contains( $url, '/activations' ) ) {
+		$secret = $body['installation_secret'];
+		$id     = $body['installation_id'];
+		$data   = array( 'activation_id' => 7 );
+	} else {
+		$id   = $args['headers']['X-WPLC-Installation-Id'];
+		$data = array( 'license_status' => 'active', 'entitlements' => array( 'voucher.promotions' => true ), 'cache_expires_at' => gmdate( 'Y-m-d H:i:s', time() + 30 * DAY_IN_SECONDS ) );
+	}
+	$json = json_encode( $data, JSON_UNESCAPED_SLASHES );
+	$msg  = "wplc-response-v1\n" . strtolower( $id ) . "\n" . $json;
+	$sig  = static fn( int $b ) => base64_encode( sodium_crypto_sign_detached( $msg, $seed( $b ) ) );
+	$env  = array( 'data' => $data, 'signature' => hash_hmac( 'sha256', $json, $secret ) );
+	switch ( $mode ) {
+		case 'rotation': // current key K1 in the main fields, both keys in signatures[] (current first)
+			$env += array( 'signature_ed25519' => $sig( 1 ), 'key_id' => $kid( 1 ), 'signatures' => array( array( 'key_id' => $kid( 1 ), 'signature_ed25519' => $sig( 1 ) ), array( 'key_id' => $kid( 2 ), 'signature_ed25519' => $sig( 2 ) ) ) );
+			break;
+		case 'promoted': // K2 became the current key, K1 is gone
+			$env += array( 'signature_ed25519' => $sig( 2 ), 'key_id' => $kid( 2 ) );
+			break;
+		case 'mislabelled': // K2 signs, but the key id names K1 (or is missing): every pinned key is tried
+			$env += array( 'signature_ed25519' => $sig( 2 ), 'key_id' => $kid( 1 ), 'signatures' => array( array( 'signature_ed25519' => $sig( 2 ) ) ) );
+			break;
+		case 'foreign': // a key of one's own, labelled with the pinned key's id
+			$env += array( 'signature_ed25519' => $sig( 3 ), 'key_id' => $kid( 1 ), 'signatures' => array( array( 'key_id' => $kid( 2 ), 'signature_ed25519' => $sig( 3 ) ) ) );
+			break;
+	}
+	return array( 'code' => 200, 'body' => json_encode( $env ) );
+};
+$client = new VCAP\Licensing\LicenseClient( 'https://licenses.example.test', 'voucher-captain', '1.0', 'vcap_keyset' );
+$act    = $client->activate( 'KEY-1' );
+$online = is_wp_error( $act ) ? $act : $client->get_entitlements();
+$cache  = get_option( 'vcap_keyset_entitlements_cache' );
+$names  = array( $kid( 1 ) => 'K1', $kid( 2 ) => 'K2' );
+echo json_encode( array(
+	'pinned'    => count( $c::pinned_public_keys() ) . ( array( 'invalid' ) === $c::pinned_public_keys() ? ' invalid' : '' ),
+	'activate'  => is_wp_error( $act ) ? $act->get_error_code() : 'ok',
+	'snapshot'  => is_array( $cache ) ? ( $names[ $cache['key_id'] ] ?? '?' ) . ( 88 === strlen( $cache['signature_ed25519'] ) ? '' : ' no signature' ) : 'none',
+	'offline'   => is_array( $client->cached_entitlements() ) ? 'ok' : 'refused',
+) );
+PHP;
+$keyset_file = $out . '/license-keyset.php';
+file_put_contents( $keyset_file, '<?php ' . $keyset_code );
+$k1 = 'iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w=';
+$k2 = 'gTl3Dqh9F19Wo1Rmw0x+zMuNipG07jeiXfYPW4/Js5Q=';
+$keyset = static function ( string $pinned, string $mode ) use ( $keyset_file, $sig_prepend ): string {
+	return trim( (string) shell_exec( escapeshellarg( PHP_BINARY ) . ( '' !== $sig_prepend ? ' -d auto_prepend_file=' . escapeshellarg( $sig_prepend ) : '' ) . ' ' . escapeshellarg( $keyset_file ) . ' ' . escapeshellarg( __DIR__ . '/stubs.php' ) . ' ' . escapeshellarg( $pinned ) . ' ' . escapeshellarg( $mode ) . ' 2>&1' ) );
+};
+$r = $keyset( "$k1, $k2", 'rotation' );
+check( 'key set current+next, server signs with both: accepted, the snapshot keeps the current key\'s signature', '{"pinned":"2","activate":"ok","snapshot":"K1","offline":"ok"}' === $r, $r );
+$r = $keyset( $k2, 'rotation' );
+check( 'build pinning only the next key: the matching entry of signatures[] is used and kept with the snapshot', '{"pinned":"1","activate":"ok","snapshot":"K2","offline":"ok"}' === $r, $r );
+$r = $keyset( "$k1\n$k2", 'promoted' );
+check( 'after the promotion (server signs with the next key only) a build pinning both keys keeps working', '{"pinned":"2","activate":"ok","snapshot":"K2","offline":"ok"}' === $r, $r );
+$r = $keyset( $k1, 'promoted' );
+check( 'a build pinning only the old key refuses the promoted key', '{"pinned":"1","activate":"wplc_server_signature_invalid","snapshot":"none","offline":"refused"}' === $r, $r );
+$r = $keyset( "$k1 $k2", 'mislabelled' );
+check( 'a wrong or missing key_id falls back to every pinned key (snapshot names the key that verified)', '{"pinned":"2","activate":"ok","snapshot":"K2","offline":"ok"}' === $r, $r );
+$r = $keyset( "$k1,$k2", 'foreign' );
+check( 'a signature of an unpinned key is refused even when it names a pinned key_id', '{"pinned":"2","activate":"wplc_server_signature_invalid","snapshot":"none","offline":"refused"}' === $r, $r );
+$r = $keyset( "$k1, not-a-key", 'rotation' );
+check( 'a malformed key in the set fails closed (nothing verifies)', '{"pinned":"1 invalid","activate":"wplc_server_signature_invalid","snapshot":"none","offline":"refused"}' === $r, $r );
+$r = $keyset( ' , ', 'rotation' );
+check( 'an empty key set fails closed', '{"pinned":"1 invalid","activate":"wplc_server_signature_invalid","snapshot":"none","offline":"refused"}' === $r, $r );
+
 echo "Editions (constants set by bin/build.sh)\n";
 // Premium build in a child process (constants cannot be undone here): no filter unlocks anything.
 $premium_code = <<<'PHP'
