@@ -217,7 +217,7 @@ final class Downloads {
 			$product = $voucher->product();
 			echo '<li>' . esc_html( ( $product ? $product->get_name() : __( 'Voucher', 'voucher-captain' ) ) . ' · ' . self::masked_code( $voucher->code ) . ' · ' . $voucher->status_label() ) . '</li>';
 		}
-		echo '</ul><p class="vcap-masked-hint">' . esc_html__( 'For security reasons the codes are shown in full only in your customer account and in the voucher email.', 'voucher-captain' ) . '</p></section>';
+		echo '</ul><p class="vcap-masked-hint">' . esc_html__( 'For security reasons the full codes are shown only in the customer account of the buyer and in the voucher email.', 'voucher-captain' ) . '</p></section>';
 	}
 
 	private function order_has_voucher_products( \WC_Order $order ): bool {

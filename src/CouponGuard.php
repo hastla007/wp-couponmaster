@@ -4,9 +4,9 @@ namespace VCAP;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Rate limit for WooCommerce's own coupon entry: the cart form, `?wc-ajax=apply_coupon` (cart and checkout) and the
- * Store API (`cart/apply-coupon`, `cart/coupons`, also inside `batch`). Without it, voucher and gift card codes
- * could be guessed there without any limit, around the limits of the Voucher Captain forms.
+ * Rate limit for WooCommerce's own coupon entry: the cart form, `?wc-ajax=apply_coupon` (cart and checkout, also
+ * through admin-ajax.php) and the Store API (`cart/apply-coupon`, `cart/coupons`, also inside `batch`). Without it,
+ * voucher and gift card codes could be guessed there without any limit, around the limits of the plugin's forms.
  *
  * Same rules as Plugin::rate_limited( …, false ): each application counts per visitor before WooCommerce looks
  * the code up; an existing code gives the attempt back, an unknown code (or another customer's store credit) is
@@ -30,6 +30,8 @@ final class CouponGuard {
 	public function register(): void {
 		add_action( 'wp_loaded', array( $this, 'from_cart_form' ), 19 ); // WC_Form_Handler::update_cart_action runs at 20.
 		add_action( 'wc_ajax_apply_coupon', array( $this, 'from_ajax' ), 1 );
+		add_action( 'wp_ajax_woocommerce_apply_coupon', array( $this, 'from_ajax' ), 1 );
+		add_action( 'wp_ajax_nopriv_woocommerce_apply_coupon', array( $this, 'from_ajax' ), 1 );
 		add_filter( 'rest_request_before_callbacks', array( $this, 'rest_before' ), 10, 3 );
 		add_filter( 'rest_request_after_callbacks', array( $this, 'rest_after' ), 10, 3 );
 		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'refuse_when_limited' ), 1, 3 );
