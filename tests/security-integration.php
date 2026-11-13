@@ -73,6 +73,18 @@ $privacy->erase( $user_email, 1 );
 $use_note = $wpdb->get_var( $wpdb->prepare( 'SELECT note FROM ' . VCAP\Install::tables()['events'] . ' WHERE voucher_id = %d ORDER BY id DESC LIMIT 1', $foreign->id ) );
 vcap_security_assert( '[personal data removed]' === $use_note, 'erasure removes the customer from the history of other people\'s vouchers' );
 
+// External redemptions are paged as well: more than one batch, and none of the customer's own vouchers.
+$redeemer_email = 'privacy-redeemer-' . strtolower( wp_generate_password( 8, false, false ) ) . '@example.test';
+$redeemer       = wp_create_user( 'privacy-redeemer-' . wp_generate_password( 6, false, false ), wp_generate_password(), $redeemer_email );
+$redemption_tbl = VCAP\Install::tables()['redemptions'];
+for ( $i = 0; $i < 501; $i++ ) {
+	$wpdb->insert( $redemption_tbl, array( 'redemption_key' => 'privacy-' . $redeemer . '-' . $i, 'voucher_id' => 999999, 'user_id' => $redeemer, 'target' => 'test', 'amount' => 1, 'state' => 'committed', 'request_hash' => str_repeat( 'a', 64 ), 'created_at' => gmdate( 'Y-m-d H:i:s' ), 'updated_at' => gmdate( 'Y-m-d H:i:s' ) ) );
+}
+$red_first  = $privacy->export( $redeemer_email, 1 );
+$red_second = $privacy->export( $redeemer_email, 2 );
+vcap_security_assert( 500 === count( $red_first['data'] ) && ! $red_first['done'] && 1 === count( $red_second['data'] ) && $red_second['done'], 'the export pages through all 501 external redemptions (no own vouchers)' );
+$wpdb->query( $wpdb->prepare( "DELETE FROM {$redemption_tbl} WHERE user_id = %d", $redeemer ) );
+
 // Erasing the only allowed address must not turn a personal voucher into one anybody can use.
 $personal_email = 'privacy-personal-' . strtolower( wp_generate_password( 8, false, false ) ) . '@example.test';
 $personal       = vcap_security_create_voucher( $personal_email, 900200 );

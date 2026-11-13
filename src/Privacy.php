@@ -31,9 +31,13 @@ final class Privacy {
 		return $erasers;
 	}
 
+	/** Records per export page and source (vouchers, uses of other vouchers, external redemptions). */
+	public const EXPORT_PAGE = 500;
+
 	public function export( string $email, int $page = 1 ): array {
-		$items = array();
-		$vouchers = $this->repo->for_email( $email, 500, max( 0, ( $page - 1 ) * 500 ) );
+		$items    = array();
+		$offset   = max( 0, ( $page - 1 ) * self::EXPORT_PAGE );
+		$vouchers = $this->repo->for_email( $email, self::EXPORT_PAGE, $offset );
 		foreach ( $vouchers as $voucher ) {
 			$data = array(
 				array( 'name' => __( 'Code', 'voucher-captain' ), 'value' => $voucher->code ),
@@ -54,36 +58,38 @@ final class Privacy {
 				'data'        => $data,
 			);
 		}
-		if ( 1 === $page ) {
-			// Uses of other people's vouchers: WooCommerce records the redeeming customer ("used by") in their history.
-			foreach ( $this->repo->events_noting( $email ) as $row ) {
-				$items[] = array(
-					'group_id'    => 'vcap-voucher-uses',
-					'group_label' => __( 'Voucher uses', 'voucher-captain' ),
-					'item_id'     => 'vcap-event-' . $row['id'],
-					'data'        => array(
-						array( 'name' => __( 'Event', 'voucher-captain' ), 'value' => $row['event'] ),
-						array( 'name' => __( 'Amount', 'voucher-captain' ), 'value' => (string) $row['amount'] ),
-						array( 'name' => __( 'Date', 'voucher-captain' ), 'value' => $row['created_at'] ),
-					),
-				);
-			}
-			foreach ( $this->redemptions_of( $email ) as $row ) {
-				$items[] = array(
-					'group_id'    => 'vcap-redemptions',
-					'group_label' => __( 'Voucher redemptions', 'voucher-captain' ),
-					'item_id'     => 'vcap-redemption-' . $row['id'],
-					'data'        => array(
-						array( 'name' => __( 'Redemption key', 'voucher-captain' ), 'value' => $row['redemption_key'] ),
-						array( 'name' => __( 'Target', 'voucher-captain' ), 'value' => $row['target'] ),
-						array( 'name' => __( 'Status', 'voucher-captain' ), 'value' => $row['state'] ),
-						array( 'name' => __( 'Date', 'voucher-captain' ), 'value' => $row['created_at'] ),
-						array( 'name' => __( 'Details', 'voucher-captain' ), 'value' => (string) $row['meta'] ),
-					),
-				);
-			}
+		// All three sources are paged alike; the export is done only when every one of them is exhausted.
+		$uses        = $this->repo->events_noting( $email, self::EXPORT_PAGE, $offset );
+		$redemptions = $this->redemptions_of( $email, self::EXPORT_PAGE, $offset );
+		// Uses of other people's vouchers: WooCommerce records the redeeming customer ("used by") in their history.
+		foreach ( $uses as $row ) {
+			$items[] = array(
+				'group_id'    => 'vcap-voucher-uses',
+				'group_label' => __( 'Voucher uses', 'voucher-captain' ),
+				'item_id'     => 'vcap-event-' . $row['id'],
+				'data'        => array(
+					array( 'name' => __( 'Event', 'voucher-captain' ), 'value' => $row['event'] ),
+					array( 'name' => __( 'Amount', 'voucher-captain' ), 'value' => (string) $row['amount'] ),
+					array( 'name' => __( 'Date', 'voucher-captain' ), 'value' => $row['created_at'] ),
+				),
+			);
 		}
-		return array( 'data' => $items, 'done' => count( $vouchers ) < 500 );
+		foreach ( $redemptions as $row ) {
+			$items[] = array(
+				'group_id'    => 'vcap-redemptions',
+				'group_label' => __( 'Voucher redemptions', 'voucher-captain' ),
+				'item_id'     => 'vcap-redemption-' . $row['id'],
+				'data'        => array(
+					array( 'name' => __( 'Redemption key', 'voucher-captain' ), 'value' => $row['redemption_key'] ),
+					array( 'name' => __( 'Target', 'voucher-captain' ), 'value' => $row['target'] ),
+					array( 'name' => __( 'Status', 'voucher-captain' ), 'value' => $row['state'] ),
+					array( 'name' => __( 'Date', 'voucher-captain' ), 'value' => $row['created_at'] ),
+					array( 'name' => __( 'Details', 'voucher-captain' ), 'value' => (string) $row['meta'] ),
+				),
+			);
+		}
+		$done = count( $vouchers ) < self::EXPORT_PAGE && count( $uses ) < self::EXPORT_PAGE && count( $redemptions ) < self::EXPORT_PAGE;
+		return array( 'data' => $items, 'done' => $done );
 	}
 
 	/**
@@ -92,14 +98,14 @@ final class Privacy {
 	 * @param string $email Email.
 	 * @return array<int, array<string, mixed>>
 	 */
-	private function redemptions_of( string $email ): array {
+	private function redemptions_of( string $email, int $limit, int $offset ): array {
 		global $wpdb;
 		$user = get_user_by( 'email', $email );
 		if ( ! $user ) {
 			return array();
 		}
 		$table = Install::tables()['redemptions'];
-		return $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE user_id = %d ORDER BY id LIMIT 1000", $user->ID ), ARRAY_A ) ?: array(); // phpcs:ignore
+		return $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE user_id = %d ORDER BY id LIMIT %d OFFSET %d", $user->ID, max( 1, $limit ), max( 0, $offset ) ), ARRAY_A ) ?: array(); // phpcs:ignore
 	}
 
 	public function erase( string $email, int $page = 1 ): array {
