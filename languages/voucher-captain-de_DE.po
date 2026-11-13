@@ -5074,3 +5074,42 @@ msgstr "Voucher Captain: Das Produktseiten-Feld „Zustelldatum“ wurde ausgesc
 
 msgid "Vouchers sold now would be delivered on %1$s but expire on %2$s: the recipient would get an expired voucher (it is then not sent; the order gets a note). Choose an earlier delivery or a longer validity."
 msgstr "Jetzt verkaufte Gutscheine würden am %1$s zugestellt, laufen aber am %2$s ab: Der Empfänger bekäme einen abgelaufenen Gutschein (er wird dann nicht gesendet; die Bestellung erhält eine Notiz). Wählen Sie eine frühere Zustellung oder eine längere Gültigkeit."
+
+msgid "Cash on delivery is not offered for virtual products. Orders paid by bank transfer or cheque issue vouchers once the payment is confirmed."
+msgstr "Nachnahme wird für virtuelle Produkte nicht angeboten. Bei Bestellungen per Überweisung oder Scheck werden Gutscheine ausgestellt, sobald die Zahlung bestätigt ist."
+
+msgid "Cash on delivery is offered for virtual products"
+msgstr "Nachnahme wird für virtuelle Produkte angeboten"
+
+msgid "Cash on delivery is offered for virtual products: vouchers of such orders wait until the order is completed. Consider switching off \"Accept for virtual orders\" in the cash on delivery settings."
+msgstr "Nachnahme wird für virtuelle Produkte angeboten: Gutscheine solcher Bestellungen warten, bis die Bestellung abgeschlossen ist. Erwägen Sie, „Für virtuelle Bestellungen akzeptieren“ in den Nachnahme-Einstellungen auszuschalten."
+
+msgid "Codes that are easy to guess were skipped although \"Accept codes that are easy to guess\" was ticked: please also tick the confirmation below it."
+msgstr "Leicht erratbare Codes wurden übersprungen, obwohl „Leicht erratbare Codes akzeptieren“ aktiviert war: Bitte aktivieren Sie auch die Bestätigung darunter."
+
+msgid "I confirm: codes sold as vouchers with a value can be redeemed by anyone who guesses them, and I accept this risk (e.g. because the cards are protected by a separate PIN)."
+msgstr "Ich bestätige: Codes, die als Gutscheine mit Wert verkauft werden, kann jeder einlösen, der sie errät, und ich nehme dieses Risiko in Kauf (z. B. weil die Karten mit einer eigenen PIN geschützt sind)."
+
+msgid "Numbered series (e.g. consecutive card numbers) and check digits count as easy to guess: whoever knows one code can work out others. Both boxes must be ticked to import such codes."
+msgstr "Nummernserien (z. B. fortlaufende Kartennummern) und Prüfziffern gelten als leicht erratbar: Wer einen Code kennt, kann andere ableiten. Für den Import solcher Codes müssen beide Kästchen aktiviert sein."
+
+msgid "Orders paid by cash on delivery, bank transfer or cheque issue vouchers only once the payment is confirmed: the order is completed, the payment is recorded, or a paid status is set by hand."
+msgstr "Bei Bestellungen per Nachnahme, Überweisung oder Scheck werden Gutscheine erst ausgestellt, wenn die Zahlung bestätigt ist: Die Bestellung ist abgeschlossen, die Zahlung ist erfasst oder ein bezahlter Status wird von Hand gesetzt."
+
+msgid "The codes end with a check digit; it follows from the other digits and does not count towards the guessing space."
+msgstr "Die Codes enden mit einer Prüfziffer; sie ergibt sich aus den übrigen Ziffern und zählt nicht zu den möglichen Kombinationen."
+
+msgid "The codes form a numbered series (consecutive or evenly spaced numbers): whoever buys or sees one code can work out others. They count as easy to guess."
+msgstr "Die Codes bilden eine Nummernserie (fortlaufende oder gleichmäßig verteilte Zahlen): Wer einen Code kauft oder sieht, kann andere ableiten. Sie gelten als leicht erratbar."
+
+msgid "This voucher cannot be redeemed: its voucher record is missing. Please contact the shop."
+msgstr "Dieser Gutschein kann nicht eingelöst werden: Sein Gutscheindatensatz fehlt. Bitte wenden Sie sich an den Shop."
+
+msgid "Voucher orders paid by cash on delivery are \"Processing\" before any money arrived. Their vouchers are issued only when the order is completed (or the payment is recorded), so the customer waits. Switch off \"Accept for virtual orders\" under WooCommerce → Settings → Payments → Cash on delivery if vouchers should only be sold with immediate payment."
+msgstr "Gutscheinbestellungen per Nachnahme stehen auf „In Bearbeitung“, bevor Geld eingegangen ist. Ihre Gutscheine werden erst ausgestellt, wenn die Bestellung abgeschlossen ist (oder die Zahlung erfasst wurde), der Kunde wartet also. Schalten Sie „Für virtuelle Bestellungen akzeptieren“ unter WooCommerce → Einstellungen → Zahlungen → Nachnahme aus, wenn Gutscheine nur mit sofortiger Zahlung verkauft werden sollen."
+
+msgid "Vouchers are not issued yet: the payment (%s) has not been received. Once the money has arrived, mark the order as completed (or set a paid status by hand) and the vouchers are issued – or issue them now with the order action \"Generate vouchers\"."
+msgstr "Gutscheine werden noch nicht ausgestellt: Die Zahlung (%s) ist noch nicht eingegangen. Sobald das Geld da ist, schließen Sie die Bestellung ab (oder setzen Sie einen bezahlten Status von Hand), dann werden die Gutscheine ausgestellt – oder stellen Sie sie jetzt mit der Bestellaktion „Gutscheine erzeugen“ aus."
+
+msgid "Vouchers are not sold with cash on delivery"
+msgstr "Gutscheine werden nicht per Nachnahme verkauft"
