@@ -288,6 +288,7 @@ final class Delivery {
 			$this->repo->anonymise_older_than( $days );
 		}
 		Install::ensure_upload_dir();
+		Plugin::purge_rate_limits();
 		foreach ( glob( Install::upload_dir() . '/tmp/*.pdf' ) ?: array() as $file ) {
 			if ( filemtime( $file ) < time() - HOUR_IN_SECONDS ) {
 				wp_delete_file( $file );

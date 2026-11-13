@@ -6,7 +6,7 @@ This document records the controls exercised by the current integration suite. I
 
 Voucher administration and import/export handlers check capabilities and WordPress nonces. PDF admin downloads require both a nonce and voucher-management capability. Scanner REST routes require a scanner capability (or WooCommerce management capability); the integration suite checks unauthenticated lookup, check-in, and redemption requests.
 
-The public balance shortcode requires a nonce and applies per-visitor and site-wide fixed-window rate limits before voucher lookup. Rate limits reduce code enumeration; they are not a substitute for edge-level abuse protection under distributed traffic.
+The public balance shortcode requires a nonce and applies per-visitor and site-wide fixed-window rate limits before voucher lookup. Balance check, redeem form and coupon links count only failed (unknown) codes, so customers entering real vouchers are never locked out; the PDF preview counts every request (rendering is expensive). Counters are atomic (object-cache increment, else one `INSERT … ON DUPLICATE KEY UPDATE` row per window in `wp_options`, purged daily) and therefore hold across parallel requests and several web nodes. The visitor is identified by `REMOTE_ADDR` only – forwarded headers can be forged; behind a trusted reverse proxy or CDN supply the real client address with the `vcap_client_ip` filter (otherwise all visitors share the proxy's counter). Rate limits reduce code enumeration; they are not a substitute for edge-level abuse protection under distributed traffic.
 
 ## Deactivation
 
@@ -26,4 +26,4 @@ Delivery and resend audit entries record recipient counts or recipient roles, no
 
 The security integration script exercises 501-record export and erasure, retention anonymization, scanner permissions, rate limiting, guest-link signing, selected admin nonce/capability guards, and the PHP redemption-service idempotency contract. CI also runs Composer vulnerability auditing, scoped WordPress Coding Standards, and PHPStan over the new API contract.
 
-External gateway redirect/webhook flows, browser accessibility, multi-node rate-limit behavior, and connectors installed in separate repositories remain release-time checks.
+External gateway redirect/webhook flows, browser accessibility and connectors installed in separate repositories remain release-time checks.

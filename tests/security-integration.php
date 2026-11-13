@@ -114,10 +114,27 @@ foreach ( array( array( 'GET', '/vcap/v1/lookup' ), array( 'POST', '/vcap/v1/che
 $bucket = 'security-test-' . strtolower( wp_generate_password( 8, false, false ) );
 $allowed = true;
 for ( $i = 0; $i < 15; $i++ ) {
-	$allowed = $allowed && ! VCAP\Plugin::rate_limited( $bucket, 15, 300, 60 );
+	$allowed = $allowed && ! VCAP\Plugin::rate_limited( $bucket, 15, 300, HOUR_IN_SECONDS );
 }
-$blocked = VCAP\Plugin::rate_limited( $bucket, 15, 300, 60 );
+$blocked = VCAP\Plugin::rate_limited( $bucket, 15, 300, HOUR_IN_SECONDS );
 vcap_security_assert( $allowed && $blocked, 'public balance lookup rate limit rejects the request after the visitor quota' );
+// Failure-only mode: checking alone never locks anyone out; only failed attempts count (atomic, fixed window).
+$fail_bucket = 'security-fail-' . strtolower( wp_generate_password( 8, false, false ) );
+$never = true;
+for ( $i = 0; $i < 40; $i++ ) {
+	$never = $never && ! VCAP\Plugin::rate_limited( $fail_bucket, 5, 300, HOUR_IN_SECONDS, false );
+}
+for ( $i = 0; $i < 5; $i++ ) {
+	VCAP\Plugin::rate_limit_failure( $fail_bucket, HOUR_IN_SECONDS );
+}
+vcap_security_assert( $never && VCAP\Plugin::rate_limited( $fail_bucket, 5, 300, HOUR_IN_SECONDS, false ), 'valid lookups are never throttled; repeated failed codes are' );
+$spoof = static fn() => '203.0.113.9';
+$_SERVER['HTTP_X_FORWARDED_FOR'] = '198.51.100.' . random_int( 1, 254 );
+vcap_security_assert( VCAP\Plugin::rate_limited( $fail_bucket, 5, 300, HOUR_IN_SECONDS, false ), 'a forged X-Forwarded-For header does not reset the visitor counter' );
+unset( $_SERVER['HTTP_X_FORWARDED_FOR'] );
+add_filter( 'vcap_client_ip', $spoof );
+vcap_security_assert( ! VCAP\Plugin::rate_limited( $fail_bucket, 5, 300, HOUR_IN_SECONDS, false ), 'behind a trusted proxy the real client address can be supplied (vcap_client_ip)' );
+remove_filter( 'vcap_client_ip', $spoof );
 
 // Signed guest downloads bind the voucher token and expiry to the site secret.
 $download_voucher = new VCAP\Voucher();

@@ -67,7 +67,7 @@ Abgehakt sind nur Punkte, die im Code umgesetzt **und** automatisch geprüft sin
 - [x] Regeln für Rückerstattung/Storno vor und nach einer externen Einlösung definieren. — *Nachweis: CONNECTORS.md Abschnitt 3; stornierte Gutscheine können während einer Reservierung nicht mehr bestätigt werden (`vcap_cancelled`), tests/connector-integration.php*
 - [x] Fehlgeschlagene externe Freischaltungen wiederholbar machen, ohne Gutscheinverbrauch oder Zugriff zu duplizieren. — *Nachweis: Muster in CONNECTORS.md Abschnitt 2 und Beispiel-Connector mit Wiederholungsjob und Freigabe nach Limit; tests/example-connector-integration.php*
 - [x] Integrationsdokumentation, Beispiel-Connector und öffentliche API-Versionspolitik veröffentlichen. — *Nachweis: CONNECTORS.md (inkl. Versionspolitik), ADAPTERS.md, examples/vcap-example-connector*
-- [ ] **P2 · BESTÄTIGT** Atomare Rate-Limits für parallele und mehrere Web-/PHP-Knoten sicherstellen (src/Plugin.php:150-164; Aufrufer: src/Downloads.php:253, src/Preview.php:65, src/CouponLink.php:59, src/Shortcodes.php:73). Der aktuelle Transient-Read-then-Write-Ablauf erlaubt parallelen Requests denselben Zählerstand zu lesen und Limits für Saldoabfrage, PDF-Vorschau, Coupon-Link und Einlösung zu überschreiten. **Maßnahme:** atomare Zähler/Locks mit gemeinsamem persistentem Speicher und Ablauf; Burst-, Multi-Node- und Cache-Ausfalltests ergänzen.
+- [x] **P2 · BESTÄTIGT** Atomare Rate-Limits für parallele und mehrere Web-/PHP-Knoten sicherstellen (src/Plugin.php:150-164; Aufrufer: src/Downloads.php:253, src/Preview.php:65, src/CouponLink.php:59, src/Shortcodes.php:73). Der aktuelle Transient-Read-then-Write-Ablauf erlaubt parallelen Requests denselben Zählerstand zu lesen und Limits für Saldoabfrage, PDF-Vorschau, Coupon-Link und Einlösung zu überschreiten. **Maßnahme:** atomare Zähler/Locks mit gemeinsamem persistentem Speicher und Ablauf; Burst-, Multi-Node- und Cache-Ausfalltests ergänzen. — *erledigt: atomarer Zähler (Objekt-Cache-Inkrement bzw. `INSERT … ON DUPLICATE KEY UPDATE`), festes Fenster, tägliches Aufräumen; Test in security-integration.php.*
 
 ## P2 – Qualitätssicherung und Veröffentlichung
 
@@ -283,7 +283,7 @@ Fünf parallele Prüfungen (Sicherheit, Geld/Buchungen, Steuer/Recht/Datenschutz
 
 ### Bedienung, Barrierefreiheit und Betrieb
 
-- [ ] Rate-Limit Einlösen/Guthaben zählt Erfolge und jeden Schritt, gleitendes Fenster und globaler Zähler können alle Kunden sperren (Plugin.php); nur Fehlversuche zählen, festes Fenster.
+- [x] Rate-Limit Einlösen/Guthaben zählt Erfolge und jeden Schritt, gleitendes Fenster und globaler Zähler können alle Kunden sperren (Plugin.php); nur Fehlversuche zählen, festes Fenster. — *erledigt: nur unbekannte Codes zählen (Guthaben, Einlöseformular, Coupon-Link), festes Fenster, nur `REMOTE_ADDR` (Filter `vcap_client_ip` für vertrauenswürdige Proxys).*
 - [ ] Festtermin-Ticketgutscheine: Kontingent beim Verkauf prüfen/halten, Einlösefrist bis Eventbeginn, Erinnerung vor dem Event.
 - [x] Bereits umgewandelter Gutschein zeigt bei erneuter Eingabe die volle Empfängeradresse und „wurden gesendet“; maskieren und „bereits eingelöst am …“ melden. — *erledigt (5db3db9).*
 - [x] Ticketgutscheine standardmäßig nur Kanal „passcaptain“, nicht als Wertgutschein im Warenkorb/PC-Checkout. — *erledigt: ohne Kanalauswahl nur Umtausch; Warenkorb-Hinweis auf die Einlöseseite, PC-Checkout lehnt ab; Wertnutzung nur mit „Shop“ oder Filter `vcap_passcaptain_ticket_voucher_as_value`.*

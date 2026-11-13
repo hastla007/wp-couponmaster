@@ -143,26 +143,82 @@ final class Plugin {
 	}
 
 	/**
-	 * Simple fixed-window rate limit for public endpoints. The per-visitor bucket can be evaded by spoofing
-	 * proxy headers, so a site-wide bucket caps the total as well.
+	 * Fixed-window rate limit for public endpoints (code guessing, expensive PDF previews).
+	 *
+	 * Counters live per visitor and site-wide in an atomic store (object cache increment, else one
+	 * INSERT … ON DUPLICATE KEY UPDATE row in wp_options), so parallel requests and several web nodes count
+	 * correctly. The window is fixed: hitting the limit does not extend it. With $count = false only the check
+	 * runs – callers then count failed attempts with rate_limit_failure(), so customers who enter valid codes
+	 * are never locked out and the site-wide cap only reacts to guessing.
 	 *
 	 * @return bool true when the request must be rejected
 	 */
-	public static function rate_limited( string $bucket, int $per_visitor, int $site_wide, int $window ): bool {
-		$ip   = (string) \WC_Geolocation::get_ip_address();
-		$keys = array(
-			'vcap_rl_' . $bucket . '_' . md5( $ip ) => $per_visitor,
-			'vcap_rl_' . $bucket . '_all'            => $site_wide,
-		);
+	public static function rate_limited( string $bucket, int $per_visitor, int $site_wide, int $window, bool $count = true ): bool {
 		$blocked = false;
-		foreach ( $keys as $key => $limit ) {
-			$count = (int) get_transient( $key );
-			if ( $count >= $limit ) {
+		foreach ( self::rate_keys( $bucket, $per_visitor, $site_wide ) as $key => $limit ) {
+			$current = $count ? self::rate_increment( $key, $window ) - 1 : self::rate_read( $key, $window );
+			if ( $current >= $limit ) {
 				$blocked = true;
 			}
-			set_transient( $key, $count + 1, $window );
 		}
 		return $blocked;
+	}
+
+	/** Counts a failed attempt (unknown code, wrong value) for rate_limited( …, false ). */
+	public static function rate_limit_failure( string $bucket, int $window ): void {
+		foreach ( array_keys( self::rate_keys( $bucket, 0, 0 ) ) as $key ) {
+			self::rate_increment( $key, $window );
+		}
+	}
+
+	/**
+	 * Visitor address for rate limits: REMOTE_ADDR only, because X-Forwarded-For and similar headers can be
+	 * spoofed. Behind a trusted reverse proxy or CDN return the real client address with "vcap_client_ip".
+	 */
+	public static function client_ip(): string {
+		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+		return (string) apply_filters( 'vcap_client_ip', $ip );
+	}
+
+	/** @return array<string,int> counter key => limit */
+	private static function rate_keys( string $bucket, int $per_visitor, int $site_wide ): array {
+		return array(
+			md5( $bucket . '|' . self::client_ip() ) => $per_visitor,
+			md5( $bucket . '|all' )                  => $site_wide,
+		);
+	}
+
+	/** Option name of a counter in the current window: vcap_rl_{window end}_{key} (cleanup compares names). */
+	private static function rate_option( string $key, int $window ): string {
+		$window = max( 1, $window );
+		$end    = ( intdiv( time(), $window ) + 1 ) * $window;
+		return 'vcap_rl_' . sprintf( '%010d', $end ) . '_' . $key;
+	}
+
+	private static function rate_increment( string $key, int $window ): int {
+		$name = self::rate_option( $key, $window );
+		if ( wp_using_ext_object_cache() ) {
+			wp_cache_add( $name, 0, 'vcap_rate', $window );
+			return (int) wp_cache_incr( $name, 1, 'vcap_rate' );
+		}
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, '1', 'no') ON DUPLICATE KEY UPDATE option_value = option_value + 1", $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		return self::rate_read( $key, $window );
+	}
+
+	private static function rate_read( string $key, int $window ): int {
+		$name = self::rate_option( $key, $window );
+		if ( wp_using_ext_object_cache() ) {
+			return (int) wp_cache_get( $name, 'vcap_rate' );
+		}
+		global $wpdb;
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
+
+	/** Removes counters of finished windows (daily maintenance). */
+	public static function purge_rate_limits(): void {
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND option_name < %s", $wpdb->esc_like( 'vcap_rl_' ) . '%', 'vcap_rl_' . sprintf( '%010d', time() ) . '_' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	/**

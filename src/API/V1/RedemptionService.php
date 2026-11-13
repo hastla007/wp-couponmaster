@@ -826,7 +826,7 @@ final class RedemptionService {
 	 * @return string
 	 */
 	private function failure_key( int $user_id ): string {
-		return 'vcap_rl_redeem_' . ( $user_id ? 'u' . $user_id : md5( (string) \WC_Geolocation::get_ip_address() ) );
+		return 'vcap_rl_redeem_' . ( $user_id ? 'u' . $user_id : md5( \VCAP\Plugin::client_ip() ) );
 	}
 
 	/**

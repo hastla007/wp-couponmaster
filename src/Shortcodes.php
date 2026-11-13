@@ -71,12 +71,14 @@ final class Shortcodes {
 	 * 'rejected' (WooCommerce refused it) or 'limited' (too many attempts).
 	 */
 	public function redeem( string $raw ): string {
-		if ( Plugin::rate_limited( 'redeem', 15, 300, 15 * MINUTE_IN_SECONDS ) ) {
+		// Only unknown codes count: a customer redeeming real vouchers is never locked out.
+		if ( Plugin::rate_limited( 'redeem', 15, 300, 15 * MINUTE_IN_SECONDS, false ) ) {
 			wc_add_notice( __( 'Too many attempts. Please try again later.', 'voucher-captain' ), 'error' );
 			return 'limited';
 		}
 		$code = wc_format_coupon_code( sanitize_text_field( $raw ) );
 		if ( '' === $code || strlen( $code ) > 100 || ! wc_get_coupon_id_by_code( $code ) ) {
+			Plugin::rate_limit_failure( 'redeem', 15 * MINUTE_IN_SECONDS );
 			wc_add_notice( __( 'Voucher code not found.', 'voucher-captain' ), 'error' );
 			return 'invalid';
 		}
