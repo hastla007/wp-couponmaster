@@ -244,5 +244,28 @@ file_put_contents( $csv, "\xEF\xBB\xBFcode;note\nAAA-111;x\nBBB-222;y\n\n\"CCC;3
 $rows = SpreadsheetReader::read( $csv, 'csv' );
 check( 'CSV with BOM + semicolon delimiter', array( 'code', 'AAA-111', 'BBB-222', 'CCC;333' ) === array_column( $rows, 0 ), json_encode( $rows ) );
 
+if ( class_exists( 'ZipArchive' ) ) {
+	// Zip bomb: a tiny archive whose worksheet unpacks to far more than the limit is refused before reading.
+	$bomb = "$out/bomb.xlsx";
+	$zip  = new ZipArchive();
+	$zip->open( $bomb, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+	$zip->addFromString( 'xl/worksheets/sheet1.xml', '<worksheet><sheetData>' . str_repeat( ' ', 80 * 1024 * 1024 ) . '</sheetData></worksheet>' );
+	$zip->close();
+	$refused = '';
+	try {
+		SpreadsheetReader::read( $bomb, 'xlsx' );
+	} catch ( RuntimeException $e ) {
+		$refused = $e->getMessage();
+	}
+	check( 'XLSX zip bomb is refused before it is unpacked', str_contains( $refused, 'too large' ), $refused );
+	$ok_file = "$out/small.xlsx";
+	$zip     = new ZipArchive();
+	$zip->open( $ok_file, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+	$zip->addFromString( 'xl/worksheets/sheet1.xml', '<worksheet><sheetData><row><c t="inlineStr"><is><t>CODE-1</t></is></c></row></sheetData></worksheet>' );
+	$zip->close();
+	check( 'a normal XLSX is still read', array( array( 'CODE-1' ) ) === SpreadsheetReader::read( $ok_file, 'xlsx' ) );
+	unlink( $bomb );
+}
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

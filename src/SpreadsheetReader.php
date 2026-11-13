@@ -63,14 +63,50 @@ final class SpreadsheetReader {
 
 	// ---------------------------------------------------------------- XLSX.
 
+	/** Most entries a spreadsheet archive may have. */
+	public const MAX_ZIP_ENTRIES = 5000;
+	/** Largest compression ratio accepted for entries over 1 MB (real spreadsheets stay far below). */
+	public const MAX_ZIP_RATIO = 200;
+
+	/** Largest unpacked size of one archive entry (filter "vcap_import_max_unzipped_bytes", default 64 MB). */
+	public static function max_entry_bytes(): int {
+		return max( 1024, (int) apply_filters( 'vcap_import_max_unzipped_bytes', 64 * 1024 * 1024 ) );
+	}
+
+	/**
+	 * One entry of an XLSX/ODS archive, guarded against zip bombs: entry count, unpacked size and compression
+	 * ratio are checked before reading, and reading stops at the limit even when the archive lies about sizes.
+	 */
 	private static function zip_entry( string $file, string $name ): ?string {
 		$zip = new \ZipArchive();
 		if ( true !== $zip->open( $file ) ) {
 			throw new \RuntimeException( 'The file is not a valid spreadsheet archive.' );
 		}
-		$data = $zip->getFromName( $name );
-		$zip->close();
-		return false === $data ? null : $data;
+		try {
+			if ( $zip->numFiles > self::MAX_ZIP_ENTRIES ) {
+				throw new \RuntimeException( 'The spreadsheet archive has too many entries.' );
+			}
+			$stat = $zip->statName( $name );
+			if ( false === $stat ) {
+				return null;
+			}
+			$limit = self::max_entry_bytes();
+			$size  = (int) $stat['size'];
+			$comp  = max( 1, (int) $stat['comp_size'] );
+			if ( $size > $limit || ( $size > 1024 * 1024 && $size / $comp > self::MAX_ZIP_RATIO ) ) {
+				throw new \RuntimeException( 'The spreadsheet is too large to import. Please split it into smaller files.' );
+			}
+			$data = $zip->getFromName( $name, $limit + 1 );
+			if ( false === $data ) {
+				return null;
+			}
+			if ( strlen( $data ) > $limit ) {
+				throw new \RuntimeException( 'The spreadsheet is too large to import. Please split it into smaller files.' );
+			}
+			return $data;
+		} finally {
+			$zip->close();
+		}
 	}
 
 	private static function xml( string $data ): \SimpleXMLElement {
