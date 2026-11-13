@@ -1,0 +1,85 @@
+name: Scheduled checks
+
+# Weekly (and on demand): known vulnerabilities in the locked dependencies, and the integration suite against
+# the newest PHP, WordPress and WooCommerce releases – early warning before customers update.
+on:
+  schedule:
+    - cron: '27 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+      - name: Audit Composer dependencies (release and development)
+        run: composer audit --locked --no-interaction
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Audit browser test dependencies
+        working-directory: tests/e2e
+        run: npm audit --audit-level=high
+
+  forward-compatibility:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: newest releases
+            php: '8.5'
+            wordpress: latest
+          - name: WordPress nightly
+            php: '8.4'
+            wordpress: nightly
+    name: forward-compatibility (${{ matrix.name }})
+    services:
+      db:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --password=root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: dom, gd, mbstring, mysqli, xml, zip
+          coverage: none
+      - name: Install PDF inspection tools
+        run: sudo apt-get update && sudo apt-get install --yes poppler-utils
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist
+      - name: Download WP-CLI
+        run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
+      - name: Install WordPress (${{ matrix.wordpress }}) and the newest WooCommerce
+        run: |
+          php wp-cli.phar core download --path=wp-test --version=${{ matrix.wordpress }}
+          php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
+          php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher Captain forward check" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
+          php wp-cli.phar --path=wp-test plugin install woocommerce wordpress-seo --activate
+          php wp-cli.phar --path=wp-test core version --extra
+          php wp-cli.phar --path=wp-test plugin list --name=woocommerce --fields=name,version
+          bin/build.sh
+          php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
+      - name: Run the integration suite
+        env:
+          VCAP_EXPECT_HPOS: 'yes'
+        run: VCAP_WITH_COMPAT=1 tests/run-integration.sh

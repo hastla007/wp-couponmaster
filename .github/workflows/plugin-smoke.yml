@@ -16,7 +16,7 @@ jobs:
       matrix:
         php: ['8.1', '8.4']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -69,7 +69,7 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up PHP 8.4
         uses: shivammathur/setup-php@v2
         with:
@@ -135,7 +135,7 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up PHP 8.1
         uses: shivammathur/setup-php@v2
         with:
@@ -183,7 +183,7 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up PHP 8.4
         uses: shivammathur/setup-php@v2
         with:
@@ -234,7 +234,7 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up PHP 8.4
         uses: shivammathur/setup-php@v2
         with:
@@ -260,13 +260,13 @@ jobs:
           php wp-cli.phar --path=wp-test rewrite structure '/%postname%/'
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/e2e/setup.php"
           php wp-cli.phar --path=wp-test rewrite flush
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
       - name: Install Playwright and axe
         working-directory: tests/e2e
         run: |
-          npm install --no-audit --no-fund
+          npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
       - name: Start the web server
         run: |
@@ -301,7 +301,7 @@ jobs:
           fi
       - name: Upload browser test results
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: browser-e2e-results
           path: |
@@ -313,7 +313,7 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up PHP 8.4
         uses: shivammathur/setup-php@v2
         with:
