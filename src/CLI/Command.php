@@ -158,7 +158,7 @@ final class Command {
 				self::warning( sprintf( 'Order %d not found.', $order_id ) );
 				continue;
 			}
-			$created = vcap()->issuer->issue_for_order( $order, true );
+			$created = vcap()->issuer->issue_for_order( $order, true, false ); // All at once (B4: no background batches).
 			$failed  = vcap()->issuer->last_failures;
 			self::line( sprintf( 'Order %d: %d issued, %d failed.', $order_id, count( $created ), $failed ) );
 		}

@@ -169,6 +169,17 @@ final class VoucherRepository {
 		return $row ? Voucher::from_row( $row ) : null;
 	}
 
+	/**
+	 * Item indexes of an order item that hold a voucher: one query for the whole line instead of one per slot (B4).
+	 *
+	 * @return array<int, true>
+	 */
+	public function taken_slots( int $order_item_id ): array {
+		global $wpdb;
+		$rows = (array) $wpdb->get_col( $wpdb->prepare( "SELECT item_index FROM {$this->table()} WHERE order_item_id = %d", $order_item_id ) ); // phpcs:ignore
+		return array_fill_keys( array_map( 'intval', $rows ), true );
+	}
+
 	/** @return Voucher[] */
 	public function for_order( int $order_id ): array {
 		global $wpdb;
