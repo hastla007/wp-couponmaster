@@ -79,7 +79,7 @@ final class VouchersListTable extends \WP_List_Table {
 			echo '<option value="' . esc_attr( $key ) . '"' . selected( $type, $key, false ) . '>' . esc_html( $label ) . '</option>';
 		}
 		echo '</select>';
-		echo '<label><input type="checkbox" name="expiring" value="soon" ' . checked( $expiring, 'soon', false ) . '> ' . esc_html__( 'Expiring within 30 days', 'voucher-captain' ) . '</label> ';
+		echo '<label><input type="checkbox" name="expiring" value="soon" ' . checked( $expiring, 'soon', false ) . '> ' . esc_html__( 'Expiring within 30 days (usable, with remaining value)', 'voucher-captain' ) . '</label> ';
 		echo '<label><input type="checkbox" name="undelivered" value="yes" ' . checked( $undeliv, 'yes', false ) . '> ' . esc_html__( 'Not delivered', 'voucher-captain' ) . '</label> ';
 		submit_button( __( 'Filter', 'voucher-captain' ), '', 'filter_action', false );
 		$args = $this->filter_args();

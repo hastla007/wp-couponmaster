@@ -267,4 +267,14 @@ vcap_redeem_assert( ! vcap()->tickets->redeem_single( $stale, 'Second till' ) &&
 list( $free ) = vcap_redeem_voucher( 'unlimited', 10.0 );
 vcap_redeem_assert( vcap()->tickets->redeem_single( $free, 'No limit' ) && vcap()->tickets->redeem_single( vcap()->vouchers->get( $free->id ), 'No limit' ), 'Q5: without a usage limit reusable vouchers can still be redeemed again and again' );
 
+// H15: "Expiring within 30 days" lists only usable vouchers with a remaining value.
+$soon_at = gmdate( 'Y-m-d H:i:s', time() + 10 * DAY_IN_SECONDS );
+list( $soon_ok )    = vcap_redeem_voucher( 'balance', 30.0, array( 'expires_at' => $soon_at ) );
+list( $soon_used )  = vcap_redeem_voucher( 'single', 30.0, array( 'expires_at' => $soon_at, 'status' => VCAP\Voucher::STATUS_REDEEMED ) );
+list( $soon_void )  = vcap_redeem_voucher( 'single', 30.0, array( 'expires_at' => $soon_at, 'status' => VCAP\Voucher::STATUS_VOID ) );
+list( $soon_empty ) = vcap_redeem_voucher( 'balance', 30.0, array( 'expires_at' => $soon_at ) );
+$wpdb->update( VCAP\Install::tables()['vouchers'], array( 'balance' => 0 ), array( 'id' => $soon_empty->id ) );
+$soon_ids = array_map( static fn( $v ) => $v->id, vcap()->vouchers->query( array( 'expiring' => 'soon', 'per_page' => 1000 ) )['items'] );
+vcap_redeem_assert( in_array( $soon_ok->id, $soon_ids, true ) && ! array_intersect( array( $soon_used->id, $soon_void->id, $soon_empty->id ), $soon_ids ), 'H15: the expiry filter (and its export) leaves out redeemed, void and empty vouchers' );
+
 echo "Voucher Captain redemption API checks passed.\n";
