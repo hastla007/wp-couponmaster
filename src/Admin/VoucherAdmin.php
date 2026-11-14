@@ -211,7 +211,13 @@ final class VoucherAdmin {
 						if ( Voucher::STATUS_VOID === $v->status ) {
 							$form( 'reactivate', __( 'Reactivate', 'voucher-captain' ) );
 						} else {
-							$form( 'void', __( 'Void voucher', 'voucher-captain' ), 'button button-link-delete' );
+							// Voiding needs a reason: it is kept in the history and the CSV export (audit).
+							echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="vcap-inline-form">';
+							echo '<input type="hidden" name="action" value="vcap_voucher_action" /><input type="hidden" name="do" value="void" /><input type="hidden" name="id" value="' . esc_attr( (string) $v->id ) . '" />';
+							wp_nonce_field( 'vcap_voucher_' . $v->id );
+							echo '<label class="screen-reader-text" for="vcap-void-reason">' . esc_html__( 'Reason', 'voucher-captain' ) . '</label>';
+							echo '<input type="text" id="vcap-void-reason" name="reason" required maxlength="200" placeholder="' . esc_attr__( 'Reason (required)', 'voucher-captain' ) . '" /> ';
+							echo '<button type="submit" class="button button-link-delete">' . esc_html__( 'Void voucher', 'voucher-captain' ) . '</button></form>';
 						}
 						/** Extra buttons for connectors: call $form( $do, $label, $class, $extra_fields, $confirm_text ) and handle $do in vcap_voucher_admin_action. */
 						do_action( 'vcap_voucher_admin_actions', $v, $form );
@@ -255,6 +261,13 @@ final class VoucherAdmin {
 							<?php
 							/* translators: 1: remaining value, 2: face value */
 							echo esc_html( sprintf( __( 'Remaining value: %1$s of %2$s.', 'voucher-captain' ), self::money( (float) $v->balance, $v->currency ), self::money( $face, $v->currency ) ) );
+							$held = $v->is_multi_use() ? vcap()->coupons->open_holds( $v ) : 0.0;
+							if ( $held > 0 ) {
+								echo ' ' . esc_html(
+									/* translators: %s: reserved amount */
+									sprintf( __( 'In addition, %s is reserved for unpaid orders or external redemptions (returned to the remaining value if they are not completed).', 'voucher-captain' ), self::money( $held, $v->currency ) )
+								);
+							}
 							?>
 						</p>
 						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="vcap-balance-adjust"
@@ -271,16 +284,17 @@ final class VoucherAdmin {
 							<?php echo FormToken::field(); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in field(). ?>
 							<label class="screen-reader-text" for="vcap-adj-mode"><?php esc_html_e( 'Mode', 'voucher-captain' ); ?></label>
 							<select name="mode" id="vcap-adj-mode">
-								<option value="subtract"><?php esc_html_e( 'Deduct', 'voucher-captain' ); ?></option>
+								<option value="redeem"><?php esc_html_e( 'Redeem in store', 'voucher-captain' ); ?></option>
+								<option value="subtract"><?php esc_html_e( 'Correction: deduct', 'voucher-captain' ); ?></option>
 								<?php if ( self::can_increase() ) : ?>
-									<option value="add"><?php esc_html_e( 'Add', 'voucher-captain' ); ?></option>
+									<option value="add"><?php esc_html_e( 'Correction: add', 'voucher-captain' ); ?></option>
 								<?php endif; ?>
-								<option value="set"><?php esc_html_e( 'Set to', 'voucher-captain' ); ?></option>
+								<option value="set"><?php esc_html_e( 'Correction: set to', 'voucher-captain' ); ?></option>
 							</select>
 							<label class="screen-reader-text" for="vcap-adj-amount"><?php esc_html_e( 'Amount', 'voucher-captain' ); ?></label>
 							<input type="text" class="wc_input_price short" id="vcap-adj-amount" name="amount" required />
 							<label class="screen-reader-text" for="vcap-adj-note"><?php esc_html_e( 'Note', 'voucher-captain' ); ?></label>
-							<input type="text" id="vcap-adj-note" name="note" placeholder="<?php esc_attr_e( 'Note (e.g. redeemed in store)', 'voucher-captain' ); ?>" />
+							<input type="text" id="vcap-adj-note" name="note" placeholder="<?php esc_attr_e( 'Reason (required for corrections)', 'voucher-captain' ); ?>" maxlength="200" />
 							<button type="submit" class="button"><?php esc_html_e( 'Apply', 'voucher-captain' ); ?></button>
 						</form>
 						<?php
@@ -373,7 +387,8 @@ final class VoucherAdmin {
 				$this->redirect( 'saved', $id );
 				break;
 			case 'void':
-				$this->redirect( vcap()->issuer->void( $v, __( 'Voided by admin', 'voucher-captain' ) ) ? 'voided' : 'action_failed', $id );
+				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above.
+				$this->redirect( $this->void( $v, sanitize_text_field( wp_unslash( (string) ( $_POST['reason'] ?? '' ) ) ) ), $id );
 				break;
 			case 'reactivate':
 				$this->redirect( vcap()->issuer->reactivate( $v ) ? 'reactivated' : 'action_failed', $id );
@@ -473,11 +488,12 @@ final class VoucherAdmin {
 	public function adjust( Voucher $v ): string {
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified in handle_action().
 		$raw     = trim( sanitize_text_field( wp_unslash( (string) ( $_POST['amount'] ?? '' ) ) ) );
-		$mode    = sanitize_key( $_POST['mode'] ?? 'subtract' );
-		$note    = sanitize_text_field( wp_unslash( $_POST['note'] ?? '' ) );
+		$mode    = sanitize_key( $_POST['mode'] ?? 'redeem' );
+		$note    = trim( sanitize_text_field( wp_unslash( $_POST['note'] ?? '' ) ) );
 		$confirm = ! empty( $_POST['confirm_above'] );
 		// phpcs:enable
-		$mode    = in_array( $mode, array( 'subtract', 'add', 'set' ), true ) ? $mode : 'subtract';
+		// "redeem": used in the store (journal: redeemed); "subtract", "add", "set": corrections (journal: adjusted).
+		$mode    = in_array( $mode, array( 'redeem', 'subtract', 'add', 'set' ), true ) ? $mode : 'redeem';
 		// Strict like the scanner: "2,50" is never 250, "−5" never +5, "1e3" never 13 (see \VCAP\Amount).
 		$parsed = \VCAP\Amount::parse(
 			$raw,
@@ -497,9 +513,21 @@ final class VoucherAdmin {
 			return '';
 		}
 		$amount = $parsed['value'];
+		if ( 'redeem' !== $mode && '' === $note ) {
+			Flash::add( 'error', __( 'Please enter the reason for this correction; it is kept in the history. Nothing was changed.', 'voucher-captain' ) );
+			return '';
+		}
 		$fresh   = $this->repo->get( $v->id ) ?? $v;
 		$current = (float) $fresh->balance;
-		if ( 'subtract' === $mode && $amount > $current + 0.000001 ) {
+		$held    = 'set' === $mode ? vcap()->coupons->open_holds( $fresh ) : 0.0;
+		if ( $held > 0 ) {
+			// A hold is given back on top of the balance when it is released: "Set to" would count it twice (or
+			// leave it out once it is charged). Corrections by an amount work on the free balance.
+			/* translators: %s: reserved amount */
+			Flash::add( 'error', sprintf( __( '%s of this voucher is reserved for unpaid orders or external redemptions right now. "Set to" is possible once they are paid or released; use a correction by an amount instead. Nothing was changed.', 'voucher-captain' ), self::money( $held, $v->currency ) ) );
+			return '';
+		}
+		if ( in_array( $mode, array( 'redeem', 'subtract' ), true ) && $amount > $current + 0.000001 ) {
 			/* translators: 1: available remaining value, 2: amount entered */
 			Flash::add( 'error', sprintf( __( 'Only %1$s is available – %2$s cannot be deducted. Nothing was changed.', 'voucher-captain' ), self::money( $current, $v->currency ), self::money( $amount, $v->currency ) ) );
 			return '';
@@ -526,7 +554,7 @@ final class VoucherAdmin {
 		// Add/subtract apply to the balance as it is when the row is locked, not as the form showed it.
 		$ok = 'set' === $mode
 			? vcap()->coupons->set_balance( $v, $amount, 'adjusted', null, $note )
-			: vcap()->coupons->adjust_balance( $v, 'add' === $mode ? $amount : -$amount, 'subtract' === $mode ? 'redeemed' : 'adjusted', $note );
+			: vcap()->coupons->adjust_balance( $v, 'add' === $mode ? $amount : -$amount, 'redeem' === $mode ? 'redeemed' : 'adjusted', '' !== $note || 'redeem' !== $mode ? $note : __( 'Redeemed in the store by an admin', 'voucher-captain' ) );
 		if ( ! $ok ) {
 			return 'adjust_failed';
 		}
@@ -535,6 +563,21 @@ final class VoucherAdmin {
 		/* translators: %s: new remaining value */
 		Flash::add( 'success', sprintf( __( 'Balance updated. New remaining value: %s.', 'voucher-captain' ), self::money( $after ? (float) $after->balance : $amount, $v->currency ) ) );
 		return '';
+	}
+
+	/**
+	 * "Void voucher" on the detail page: only with a reason, which goes into the history (and its CSV export).
+	 *
+	 * @return string message key ('' when a notice was queued)
+	 */
+	public function void( Voucher $v, string $reason ): string {
+		$reason = trim( $reason );
+		if ( '' === $reason ) {
+			Flash::add( 'error', __( 'Please enter a reason for voiding the voucher. Nothing was changed.', 'voucher-captain' ) );
+			return '';
+		}
+		/* translators: %s: reason entered by the admin */
+		return vcap()->issuer->void( $v, sprintf( __( 'Voided by admin: %s', 'voucher-captain' ), mb_substr( $reason, 0, 200 ) ) ) ? 'voided' : 'action_failed';
 	}
 
 	/**

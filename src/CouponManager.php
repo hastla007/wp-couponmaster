@@ -885,6 +885,21 @@ final class CouponManager {
 		return true;
 	}
 
+	/**
+	 * Value of a stored balance that is held right now and not part of the balance: reservations of unpaid orders
+	 * (latest ledger event "reserved") and open external reservations. Released holds return to the balance.
+	 */
+	public function open_holds( Voucher $voucher ): float {
+		global $wpdb;
+		if ( ! $voucher->is_multi_use() ) {
+			return 0.0;
+		}
+		$t      = Install::tables();
+		$orders = (float) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE( SUM( e.amount ), 0 ) FROM {$t['events']} e WHERE e.voucher_id = %d AND e.event = 'reserved' AND e.order_id > 0 AND NOT EXISTS ( SELECT 1 FROM {$t['events']} x WHERE x.voucher_id = e.voucher_id AND x.order_id = e.order_id AND x.id > e.id )", $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$api    = (float) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE( SUM( amount ), 0 ) FROM {$t['redemptions']} WHERE voucher_id = %d AND state = %s", $voucher->id, API\V1\RedemptionService::STATE_RESERVED ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return round( $orders + $api, $voucher->decimals() );
+	}
+
 	/** Amount of the order's hold on the voucher when its latest ledger event is an open reservation, else null. */
 	private function open_hold( Voucher $voucher, int $order_id ): ?float {
 		global $wpdb;
