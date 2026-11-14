@@ -36,6 +36,8 @@ final class Fields {
 		add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'save_order_item' ), 10, 4 );
 		add_filter( 'woocommerce_order_again_cart_item_data', array( $this, 'order_again' ), 10, 3 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'assets' ) );
+		add_action( 'woocommerce_after_shop_loop_item', array( $this, 'loop_assets' ) );
+		add_filter( 'woocommerce_blocks_product_grid_item_html', array( $this, 'grid_assets' ), 10, 3 );
 		add_filter( 'woocommerce_product_add_to_cart_url', array( $this, 'loop_add_to_cart_url' ), 10, 2 );
 		add_filter( 'woocommerce_product_supports', array( $this, 'loop_ajax_support' ), 10, 3 );
 		add_filter( 'woocommerce_product_add_to_cart_text', array( $this, 'loop_add_to_cart_text' ), 10, 2 );
@@ -251,8 +253,29 @@ final class Fields {
 	}
 
 	/**
-	 * Style and script of the voucher fields. Enqueued on voucher product pages and whenever the fields render,
-	 * so [product_page], page builder add-to-cart widgets and quick views get them as well (printed in the footer).
+	 * Shop pages, categories and product shortcodes: quick views (Astra, Flatsome, YITH, Woodmart …) load the
+	 * product form by AJAX, without the scripts of a product page. With a voucher product in the loop, the script
+	 * is printed in the footer, so suggested amounts, character counters and the preview work in the quick view.
+	 */
+	public function loop_assets(): void {
+		global $product;
+		if ( $product instanceof \WC_Product && ProductConfig::is_voucher( $product ) ) {
+			self::enqueue_assets();
+		}
+	}
+
+	/** Same for the product grid blocks (WooCommerce "All products", "Products by category" …). */
+	public function grid_assets( $html, $data = null, $product = null ) {
+		if ( $product instanceof \WC_Product && ProductConfig::is_voucher( $product ) ) {
+			self::enqueue_assets();
+		}
+		return $html;
+	}
+
+	/**
+	 * Style and script of the voucher fields. Enqueued on voucher product pages, on shop pages with voucher
+	 * products (quick views) and whenever the fields render, so [product_page] and page builder add-to-cart
+	 * widgets get them as well (printed in the footer).
 	 */
 	public static function enqueue_assets(): void {
 		Downloads::enqueue_style();
@@ -299,14 +322,29 @@ final class Fields {
 			$this->render_field( $key, $field, $config );
 		}
 		if ( 'before_button' === $position ) {
-			$terms = ProductConfig::terms( $config, ProductConfig::country_of( WC()->customer ) );
-			if ( '' !== $terms || 'no' === $config['transferable'] ) {
+			// The same HTML for every visitor (product pages are cached): conditions per country are all shown,
+			// each under its country, instead of the variant of the visitor's (geolocated) country.
+			$variants = ProductConfig::terms_variants( $config );
+			if ( $variants || 'no' === $config['transferable'] ) {
 				echo '<details class="vcap-terms"><summary>' . esc_html__( 'Redemption conditions', 'voucher-captain' ) . '</summary>';
 				if ( 'no' === $config['transferable'] ) {
 					echo '<p>' . esc_html( ProductConfig::restriction_label( (string) $config['email_restrict'] ) ) . '</p>';
 				}
-				if ( '' !== $terms ) {
-					echo wp_kses_post( wpautop( esc_html( $terms ) ) );
+				foreach ( $variants as $country => $text ) {
+					$country  = (string) $country;
+					$labelled = '' !== $country || count( $variants ) > 1;
+					if ( $labelled ) {
+						$name  = WC()->countries ? ( WC()->countries->get_countries()[ $country ] ?? $country ) : $country;
+						$title = '' === $country
+							? __( 'Billing address in another country:', 'voucher-captain' )
+							/* translators: %s: country name */
+							: sprintf( __( 'Billing address in %s:', 'voucher-captain' ), $name );
+						echo '<div class="vcap-terms-country" data-country="' . esc_attr( $country ) . '"><p><strong>' . esc_html( $title ) . '</strong></p>';
+					}
+					echo wp_kses_post( wpautop( esc_html( $text ) ) );
+					if ( $labelled ) {
+						echo '</div>';
+					}
 				}
 				echo '</details>';
 			}
@@ -320,6 +358,9 @@ final class Fields {
 	/** @var array<string, mixed>|null field values of a Store API request (blocks), used instead of $_POST */
 	private ?array $override = null;
 
+	/** @var array<string, string> first error per field of the last errors() call (marked when the form shows again) */
+	private array $invalid = array();
+
 	private function posted_value( string $key ): string {
 		if ( null !== $this->override ) {
 			$raw = $this->override[ $key ] ?? null;
@@ -331,7 +372,8 @@ final class Fields {
 	}
 
 	private function render_field( string $key, array $field, array $config = array() ): void {
-		$id       = 'vcap-field-' . sanitize_html_class( $key );
+		// Unique on the page (two product forms, quick views): the first form keeps "vcap-field-{key}".
+		$id       = Shortcodes::unique_id( 'vcap-field-' . sanitize_html_class( $key ) );
 		$name     = 'vcap_fields[' . esc_attr( $key ) . ']';
 		$type     = in_array( $field['type'] ?? 'text', self::TYPES, true ) ? ( $field['type'] ?? 'text' ) : 'text';
 		$required = ! empty( $field['required'] );
@@ -340,8 +382,14 @@ final class Fields {
 		if ( '' === $value && isset( $field['default'] ) ) {
 			$value = (string) $field['default'];
 		}
-		$desc_id = $id . '-desc';
-		$attrs   = sprintf( 'id="%s" name="%s"%s%s', esc_attr( $id ), $name, $required ? ' required aria-required="true"' : '', ! empty( $field['tooltip'] ) ? ' aria-describedby="' . esc_attr( $desc_id ) . '"' : '' );
+		$desc_id  = $id . '-desc';
+		$error    = $this->invalid[ $key ] ?? '';
+		// After a refused add to cart the field is marked invalid and names its error (the first one gets focus).
+		$describe = trim( ( ! empty( $field['tooltip'] ) ? $desc_id : '' ) . ( '' !== $error ? ' ' . $id . '-error' : '' ) );
+		$attrs    = sprintf( 'id="%s" name="%s"%s%s', esc_attr( $id ), $name, $required ? ' required aria-required="true"' : '', '' !== $describe ? ' aria-describedby="' . esc_attr( $describe ) . '"' : '' );
+		if ( '' !== $error ) {
+			$attrs .= ' aria-invalid="true"' . ( array_key_first( $this->invalid ) === $key ? ' data-vcap-focus="1"' : '' );
+		}
 		if ( $max > 0 && in_array( $type, array( 'text', 'textarea', 'email' ), true ) ) {
 			$attrs .= ' maxlength="' . esc_attr( (string) $max ) . '" data-vcap-counter="1"';
 		}
@@ -377,6 +425,9 @@ final class Fields {
 		}
 		if ( ! empty( $field['tooltip'] ) ) {
 			echo '<span class="description vcap-field-help" id="' . esc_attr( $desc_id ) . '">' . esc_html( $field['tooltip'] ) . '</span>';
+		}
+		if ( '' !== $error ) {
+			echo '<span class="vcap-field-error" id="' . esc_attr( $id . '-error' ) . '">' . esc_html( $error ) . '</span>';
 		}
 		echo '</p>';
 	}
@@ -468,13 +519,16 @@ final class Fields {
 	 * @return string[]
 	 */
 	public function errors( \WC_Product $product ): array {
-		$errors = array();
+		$errors        = array();
+		$this->invalid = array();
 		foreach ( $this->flat_definitions( $product ) as $key => $field ) {
-			$raw   = trim( $this->posted_value( (string) $key ) );
-			$label = (string) ( $field['label'] ?? $key );
+			$raw    = trim( $this->posted_value( (string) $key ) );
+			$label  = (string) ( $field['label'] ?? $key );
+			$before = count( $errors );
 			if ( ! empty( $field['required'] ) && '' === $raw ) {
 				/* translators: %s: field label */
-				$errors[] = sprintf( __( '%s is a required field.', 'voucher-captain' ), $label );
+				$errors[]                       = sprintf( __( '%s is a required field.', 'voucher-captain' ), $label );
+				$this->invalid[ (string) $key ] = end( $errors );
 				continue;
 			}
 			if ( '' === $raw ) {
@@ -518,6 +572,9 @@ final class Fields {
 			if ( $max > 0 && mb_strlen( $raw ) > $max ) {
 				/* translators: 1: field label, 2: max length */
 				$errors[] = sprintf( __( '%1$s may contain at most %2$d characters.', 'voucher-captain' ), $label, $max );
+			}
+			if ( count( $errors ) > $before ) {
+				$this->invalid[ (string) $key ] = $errors[ $before ];
 			}
 		}
 		return $errors;
@@ -644,7 +701,7 @@ final class Fields {
 			return;
 		}
 		wp_enqueue_style( 'vcap-admin', VCAP_URL . 'assets/css/admin.css', array(), VCAP_VERSION );
-		wp_enqueue_script( 'vcap-field-groups', VCAP_URL . 'assets/js/field-groups.js', array( 'jquery', 'jquery-ui-sortable', 'wc-enhanced-select' ), VCAP_VERSION, true );
+		wp_enqueue_script( 'vcap-field-groups', VCAP_URL . 'assets/js/field-groups.js', array( 'jquery', 'jquery-ui-sortable', 'wc-enhanced-select', 'wp-a11y' ), VCAP_VERSION, true );
 		wp_enqueue_style( 'woocommerce_admin_styles' );
 		wp_localize_script(
 			'vcap-field-groups',
@@ -669,6 +726,13 @@ final class Fields {
 					'tooltip'     => __( 'Help text', 'voucher-captain' ),
 					'options'     => __( 'Options (one per line)', 'voucher-captain' ),
 					'remove'      => __( 'Remove field', 'voucher-captain' ),
+					'moveUp'      => __( 'Move up', 'voucher-captain' ),
+					'moveDown'    => __( 'Move down', 'voucher-captain' ),
+					/* translators: %d: position of the field in the list */
+					'field'       => __( 'Field %d', 'voucher-captain' ),
+					/* translators: 1: field label, 2: new position in the list */
+					'moved'       => __( '%1$s moved to position %2$d.', 'voucher-captain' ),
+					'removed'     => __( 'Field removed.', 'voucher-captain' ),
 					'placeholderToken' => __( 'PDF placeholder:', 'voucher-captain' ),
 				),
 			)

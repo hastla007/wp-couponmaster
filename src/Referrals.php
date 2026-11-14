@@ -178,9 +178,23 @@ final class Referrals {
 			return null;
 		}
 		if ( ! $coupon ) {
+			// Two requests at the same time (two tabs, a block and the account page) would create two codes: only
+			// the request holding the claim creates one (the claim is per 5 minutes, so a crashed request does not
+			// block the customer for good). The others show no code this time.
+			$claim = 'referral-code:' . $user_id . ':' . (int) floor( time() / 300 );
+			if ( ! Claim::take( $claim ) ) {
+				return null;
+			}
+			$id = self::coupon_id( $user_id ); // Created by another request meanwhile?
+			if ( $id ) {
+				Claim::release( $claim );
+				$coupon = new \WC_Coupon( $id );
+				return $coupon->get_id() ? $coupon : null;
+			}
 			try {
 				$code = CodeGenerator::unique( array( 'prefix' => (string) apply_filters( 'vcap_referral_code_prefix', 'FRIEND' ), 'length' => 8 ), static fn( $c ) => wc_get_coupon_id_by_code( $c ) > 0 );
 			} catch ( \RuntimeException $e ) {
+				Claim::release( $claim );
 				return null;
 			}
 			$coupon = new \WC_Coupon();
@@ -202,6 +216,9 @@ final class Referrals {
 			if ( $coupon->get_id() ) {
 				update_user_option( $user_id, self::USER_META, $coupon->get_id() );
 			}
+		}
+		if ( isset( $claim ) ) {
+			Claim::release( $claim );
 		}
 		return $coupon;
 	}
@@ -373,7 +390,10 @@ final class Referrals {
 	}
 
 	public function account_block(): void {
-		if ( ! $this->enabled() || ! is_user_logged_in() ) {
+		static $shown = false;
+		// Once per page (e.g. "My vouchers" and "Refer a friend" blocks on one page); never in an editor's
+		// preview, which would create a referral code for the editor.
+		if ( $shown || ! $this->enabled() || ! is_user_logged_in() || Shortcodes::is_editor_preview() ) {
 			return;
 		}
 		$coupon = $this->coupon_for( get_current_user_id() );
@@ -385,6 +405,7 @@ final class Referrals {
 		$reward = wp_strip_all_tags( wc_price( (float) $this->settings->get( 'vcap_referral_reward_amount' ) ) );
 		$link   = $this->settings->yes( 'vcap_coupon_link' ) ? add_query_arg( (string) $this->settings->get( 'vcap_coupon_link_param' ), rawurlencode( $code ), home_url( '/' ) ) : '';
 		$count  = (int) self::count( get_current_user_id() );
+		$shown  = true;
 		echo '<section class="vcap-referral"><h2>' . esc_html__( 'Refer a friend', 'voucher-captain' ) . '</h2><p>';
 		/* translators: 1: friend discount, 2: reward */
 		echo esc_html( sprintf( __( 'Your friends get %1$s off their first order with your code, and you receive %2$s once their order is completed.', 'voucher-captain' ), $friend, $reward ) );

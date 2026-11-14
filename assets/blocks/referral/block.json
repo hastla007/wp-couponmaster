@@ -6,10 +6,17 @@
 	"category": "widgets",
 	"icon": "groups",
 	"description": "The logged-in customer's personal referral code.",
+	"keywords": [
+		"referral",
+		"friend",
+		"coupon",
+		"code"
+	],
 	"textdomain": "voucher-captain",
 	"supports": {
 		"html": false
 	},
 	"editorScript": "vcap-blocks",
-	"style": "vcap-frontend"
+	"example": {},
+	"editorStyle": "vcap-frontend"
 }

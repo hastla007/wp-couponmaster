@@ -20,7 +20,31 @@ foreach ( array_keys( VCAP\Shortcodes::BLOCKS ) as $block ) {
 }
 $render = static fn( string $name ) => render_block( array( 'blockName' => $name, 'attrs' => array(), 'innerBlocks' => array(), 'innerHTML' => '', 'innerContent' => array() ) );
 vcap_sc_assert( false !== strpos( $render( 'vcap/balance' ), 'vcap-balance-form' ), 'the balance block renders the balance form' );
-vcap_sc_assert( false !== strpos( $render( 'vcap/redeem' ), 'vcap_redeem_nonce' ), 'the redeem block renders a protected form' );
+wp_set_current_user( 0 );
+$guest_form = $render( 'vcap/redeem' );
+vcap_sc_assert( str_contains( $guest_form, 'vcap-redeem-form' ) && ! str_contains( $guest_form, 'vcap_redeem_nonce' ) && str_contains( $guest_form, '<div class="woocommerce"' ), 'the redeem block renders the guest form without nonce (cacheable), inside div.woocommerce' );
+$no_cache = did_action( 'vcap_no_cache' );
+do_shortcode( '[vcap_redeem]' );
+vcap_sc_assert( did_action( 'vcap_no_cache' ) === $no_cache, 'an empty guest redeem form (e.g. in a header template part) keeps the page cacheable' );
+$member_tag = strtolower( wp_generate_password( 6, false ) );
+wp_set_current_user( wp_create_user( 'sc-member-' . $member_tag, wp_generate_password(), 'sc-member-' . $member_tag . '@example.com' ) );
+vcap_sc_assert( str_contains( $render( 'vcap/redeem' ), 'vcap_redeem_nonce' ), 'logged-in customers get a protected redeem form' );
+vcap_sc_assert( str_contains( render_block( array( 'blockName' => 'vcap/redeem', 'attrs' => array( 'buttonText' => 'Jetzt einlösen' ), 'innerBlocks' => array(), 'innerHTML' => '', 'innerContent' => array() ) ), 'Jetzt einlösen' ), 'the redeem block passes its button text' );
+wp_set_current_user( 0 );
+
+// Block output passes do_shortcode() after the blocks: a code from a redeem link must not run a shortcode.
+$GLOBALS['vcap_sc_ran'] = 0;
+add_shortcode( 'vcap_sc_probe', static function () {
+	++$GLOBALS['vcap_sc_ran'];
+	return 'PROBE-RAN';
+} );
+wc_load_cart();
+WC()->session->set( VCAP\Shortcodes::PREFILL_KEY, '[vcap_sc_probe]' );
+$_GET['vcap_code'] = '[vcap_sc_probe]';
+$content           = apply_filters( 'the_content', '<!-- wp:vcap/redeem /-->' );
+unset( $_GET['vcap_code'] );
+WC()->session->set( VCAP\Shortcodes::PREFILL_KEY, null );
+vcap_sc_assert( 0 === $GLOBALS['vcap_sc_ran'] && ! str_contains( $content, 'PROBE-RAN' ), 'a redeem link cannot run a shortcode through the block output' );
 
 wp_set_current_user( 0 );
 vcap_sc_assert( false !== strpos( do_shortcode( '[vcap_my_vouchers]' ), 'vcap-login-hint' ), 'guests are asked to log in for their vouchers' );
@@ -106,5 +130,15 @@ $single = $check( array( 'usage_mode' => 'single', 'initial' => 30, 'balance' =>
 vcap_sc_assert( str_contains( $single, '30' ), 'a single-use voucher shows its value' );
 $ticket = $check( array( 'type' => 'ticket', 'usage_mode' => 'single', 'initial' => 20, 'balance' => 20 ) );
 vcap_sc_assert( ! str_contains( $ticket, '20' ), 'an admission ticket is not shown as an amount of money' );
+
+// A balance check is evaluated once per request, however often the form is rendered (a form without id, as
+// in markup of an earlier version, gets the result in the first form).
+$_POST      = array( 'vcap_balance_code' => 'nope-' . $tag );
+$sc_balance = new VCAP\Downloads( vcap()->settings, vcap()->vouchers, vcap()->pdf );
+$sc_balance->handle_balance();
+$sc_balance->handle_balance();
+$twice = $sc_balance->balance_shortcode() . $sc_balance->balance_shortcode();
+$_POST = array();
+vcap_sc_assert( 1 === substr_count( $twice, 'Voucher code not found.' ) && 1 === substr_count( $twice, 'aria-invalid="true"' ) && str_contains( $twice, 'data-vcap-focus' ), 'two balance forms on a page: one check, the result (focused) only in the sent form' );
 
 echo "Voucher Captain shortcode checks passed.\n";

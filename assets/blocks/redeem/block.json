@@ -6,10 +6,25 @@
 	"category": "widgets",
 	"icon": "tickets-alt",
 	"description": "Lets customers enter a voucher code; it is applied to the cart now or as soon as it has products.",
+	"keywords": [
+		"voucher",
+		"coupon",
+		"gift card",
+		"code"
+	],
 	"textdomain": "voucher-captain",
+	"attributes": {
+		"buttonText": {
+			"type": "string",
+			"default": ""
+		}
+	},
 	"supports": {
 		"html": false
 	},
 	"editorScript": "vcap-blocks",
-	"style": "vcap-frontend"
+	"example": {
+		"attributes": {}
+	},
+	"editorStyle": "vcap-frontend"
 }

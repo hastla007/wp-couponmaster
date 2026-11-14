@@ -216,8 +216,7 @@ final class PassCaptainTickets {
 		if ( ! $state ) {
 			$url = $voucher->is_usable() ? \VCAP\Shortcodes::redeem_url( $voucher->code ) : '';
 			if ( '' !== $url ) {
-				/* translators: %s: voucher code */
-				echo '<a class="woocommerce-button button vcap-exchange-button" href="' . esc_url( $url ) . '" aria-label="' . esc_attr( sprintf( __( 'Exchange voucher %s for tickets', 'voucher-captain' ), $voucher->code ) ) . '">' . esc_html__( 'Exchange for tickets', 'voucher-captain' ) . '</a> ';
+				echo '<a class="woocommerce-button button vcap-exchange-button" href="' . esc_url( $url ) . '">' . esc_html__( 'Exchange for tickets', 'voucher-captain' ) . \VCAP\Shortcodes::voucher_suffix( $voucher->code ) . '</a> ';
 			}
 			return;
 		}
@@ -229,8 +228,7 @@ final class PassCaptainTickets {
 		wp_nonce_field( 'vcap_resend_tickets_' . $voucher->id, 'vcap_resend_tickets_nonce' );
 		// New ticket codes replace the old ones: asked explicitly (works without JavaScript).
 		echo '<label class="vcap-resend-confirm"><input type="checkbox" name="vcap_resend_confirm" value="1" required /> ' . esc_html__( 'I understand that the tickets sent so far become invalid.', 'voucher-captain' ) . '</label> ';
-		/* translators: %s: voucher code */
-		echo '<button type="submit" class="woocommerce-button button" aria-label="' . esc_attr( sprintf( __( 'Send the tickets of voucher %s again', 'voucher-captain' ), $voucher->code ) ) . '">' . esc_html__( 'Send tickets again', 'voucher-captain' ) . '</button></form>';
+		echo '<button type="submit" class="woocommerce-button button">' . esc_html__( 'Send tickets again', 'voucher-captain' ) . \VCAP\Shortcodes::voucher_suffix( $voucher->code ) . '</button></form>';
 	}
 
 	/**
@@ -723,7 +721,7 @@ final class PassCaptainTickets {
 		}
 		$session = function_exists( 'WC' ) ? WC()->session : null;
 		$pending = $session && (string) $session->get( self::SESSION_CODE ) === (string) $code;
-		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified in Shortcodes::handle_redeem().
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified in Shortcodes::handle_redeem() for logged-in customers; guests send no nonce (rate limited, the code itself authorises the exchange).
 		if ( isset( $_POST['vcap_ticket_reset'] ) ) {
 			// "Choose another date" / "Cancel": start this code over (or forget it).
 			$this->clear_session();
@@ -838,8 +836,9 @@ final class PassCaptainTickets {
 		if ( ! is_user_logged_in() ) {
 			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- display only.
 			$typed = isset( $_POST['vcap_ticket_email'] ) ? sanitize_email( wp_unslash( $_POST['vcap_ticket_email'] ) ) : ( $session ? (string) $session->get( 'vcap_ticket_email' ) : '' );
-			echo '<label for="vcap-ticket-email">' . esc_html__( 'Send the tickets to (email)', 'voucher-captain' ) . '</label>';
-			echo '<input type="email" id="vcap-ticket-email" name="vcap_ticket_email" required autocomplete="email" maxlength="190" value="' . esc_attr( $typed ) . '" />';
+			$email_id = \VCAP\Shortcodes::unique_id( 'vcap-ticket-email' );
+			echo '<label for="' . esc_attr( $email_id ) . '">' . esc_html__( 'Send the tickets to (email)', 'voucher-captain' ) . '</label>';
+			echo '<input type="email" id="' . esc_attr( $email_id ) . '" name="vcap_ticket_email" required autocomplete="email" maxlength="190" value="' . \VCAP\Shortcodes::esc_attr_text( $typed ) . '" />'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_attr_text().
 		}
 		echo '<p class="vcap-ticket-steps">';
 		if ( $target['event_id'] && $choice ) {
@@ -855,8 +854,9 @@ final class PassCaptainTickets {
 		if ( ! $options ) {
 			return;
 		}
-		echo '<label for="vcap-ticket-choice">' . esc_html__( 'Date', 'voucher-captain' ) . '</label>';
-		echo '<select id="vcap-ticket-choice" name="vcap_ticket_choice" required>';
+		$choice_id = \VCAP\Shortcodes::unique_id( 'vcap-ticket-choice' );
+		echo '<label for="' . esc_attr( $choice_id ) . '">' . esc_html__( 'Date', 'voucher-captain' ) . '</label>';
+		echo '<select id="' . esc_attr( $choice_id ) . '" name="vcap_ticket_choice" required>';
 		echo '<option value="">' . esc_html__( '— Choose a date —', 'voucher-captain' ) . '</option>';
 		foreach ( $options as $o ) {
 			echo '<option value="' . esc_attr( (string) $o['ticket_type_id'] ) . '">' . esc_html( (string) $o['date_label'] ) . '</option>';
@@ -879,7 +879,7 @@ final class PassCaptainTickets {
 			/* translators: %d: ticket number */
 			echo '<fieldset class="vcap-ticket-attendee"><legend>' . esc_html( sprintf( __( 'Ticket %d', 'voucher-captain' ), $i + 1 ) ) . '</legend>';
 			foreach ( $fields as $f ) {
-				$id   = 'vcap-attendee-' . $i . '-' . sanitize_key( $f['key'] );
+				$id   = \VCAP\Shortcodes::unique_id( 'vcap-attendee-' . $i . '-' . sanitize_key( $f['key'] ) );
 				$name = 'vcap_attendees[' . $i . '][' . sanitize_key( $f['key'] ) . ']';
 				$req  = ! empty( $f['required'] ) ? ' required' : '';
 				$old  = isset( $posted[ $i ][ sanitize_key( $f['key'] ) ] ) && is_scalar( $posted[ $i ][ sanitize_key( $f['key'] ) ] ) ? (string) $posted[ $i ][ sanitize_key( $f['key'] ) ] : '';
@@ -889,9 +889,10 @@ final class PassCaptainTickets {
 				}
 				echo '<label for="' . esc_attr( $id ) . '">' . esc_html( $f['label'] ) . '</label>';
 				if ( 'textarea' === $f['type'] ) {
-					echo '<textarea id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" rows="3"' . esc_attr( $req ) . '>' . esc_textarea( $old ) . '</textarea>';
+					// Brackets as entities: posted text must not run a shortcode (block output passes do_shortcode()).
+					echo '<textarea id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" rows="3"' . esc_attr( $req ) . '>' . \VCAP\Shortcodes::esc_html_text( $old ) . '</textarea>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_html_text().
 				} else {
-					echo '<input type="' . ( 'email' === $f['type'] ? 'email' : 'text' ) . '" id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" maxlength="190"' . esc_attr( $req ) . ' value="' . esc_attr( $old ) . '" />';
+					echo '<input type="' . ( 'email' === $f['type'] ? 'email' : 'text' ) . '" id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" maxlength="190"' . esc_attr( $req ) . ' value="' . \VCAP\Shortcodes::esc_attr_text( $old ) . '" />'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_attr_text().
 				}
 			}
 			echo '</fieldset>';

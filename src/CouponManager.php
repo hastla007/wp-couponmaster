@@ -987,13 +987,11 @@ final class CouponManager {
 		foreach ( WC()->cart->get_applied_coupons() as $code ) {
 			$voucher = $this->repo->get_by_code( wc_format_coupon_code( $code ) ) ?? $this->repo->get_by_code( $code );
 			if ( $voucher && $voucher->is_multi_use() ) {
-				echo '<tr class="vcap-balance"><th>' . esc_html(
-					sprintf(
-						/* translators: %s: voucher code */
-						__( 'Voucher %s balance', 'voucher-captain' ),
-						$voucher->code
-					)
-				) . '</th><td>' . wp_kses_post( wc_price( $voucher->balance, array( 'currency' => $voucher->currency ) ) ) . '</td></tr>';
+				/* translators: %s: voucher code */
+				$label = sprintf( __( 'Voucher %s balance', 'voucher-captain' ), $voucher->code );
+				// data-title: the label in front of the amount on small screens (responsive table); styled as a note,
+				// not as a second total (frontend.css).
+				echo '<tr class="vcap-balance"><th scope="row">' . esc_html( $label ) . '</th><td data-title="' . esc_attr( $label ) . '"><small>' . wp_kses_post( wc_price( $voucher->balance, array( 'currency' => $voucher->currency ) ) ) . '</small></td></tr>';
 			}
 		}
 	}

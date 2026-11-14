@@ -7,6 +7,9 @@ defined( 'ABSPATH' ) || exit;
  * Native "customer chooses the amount" gift cards (min/max/step and preset buttons).
  */
 final class CustomAmount {
+	/** Error of the amount refused in this request (the field is marked when the form shows again). */
+	private string $error = '';
+
 	public function register(): void {
 		add_action( 'vcap_before_fields', array( $this, 'render' ) );
 		add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'validate' ), 5, 6 );
@@ -24,6 +27,11 @@ final class CustomAmount {
 		return ProductConfig::is_voucher( $product ) && 'custom' === ProductConfig::get( $product )['amount_source'];
 	}
 
+	/**
+	 * Amount input with the suggested amounts as a radio group (works without JavaScript: a typed amount wins,
+	 * else the chosen suggestion; frontend.js keeps both in step). Ids are unique on the page (two product forms,
+	 * quick views).
+	 */
 	public function render( \WC_Product $product ): void {
 		if ( ! $this->is_custom( $product ) ) {
 			return;
@@ -33,25 +41,38 @@ final class CustomAmount {
 		$max     = (float) $config['custom_max'];
 		$step    = (float) $config['custom_step'] ?: 1;
 		// Only suggestions the customer can actually buy (a misconfigured one would be refused at add to cart).
-		$presets = array_filter( self::presets( $config ), static fn( $preset ) => null === self::error_for( $config, $preset ) );
-		$value   = isset( $_POST['vcap_amount'] ) ? wc_format_decimal( wp_unslash( $_POST['vcap_amount'] ) ) : ( $presets ? reset( $presets ) : ( $min ?: '' ) ); // phpcs:ignore
+		$presets = array_values( array_filter( self::presets( $config ), static fn( $preset ) => null === self::error_for( $config, $preset ) ) );
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- refills the form after a failed add to cart.
+		$typed   = isset( $_POST['vcap_amount'] ) && is_scalar( $_POST['vcap_amount'] ) ? (string) wc_format_decimal( wp_unslash( $_POST['vcap_amount'] ) ) : '';
+		$chosen  = isset( $_POST['vcap_amount_preset'] ) && is_scalar( $_POST['vcap_amount_preset'] ) ? (string) wc_format_decimal( wp_unslash( $_POST['vcap_amount_preset'] ) ) : '';
+		// phpcs:enable
+		if ( ! isset( $_POST['vcap_amount'] ) && ! isset( $_POST['vcap_amount_preset'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$chosen = $presets ? (string) $presets[0] : '';
+			$typed  = $presets ? '' : ( $min ? (string) $min : '' );
+		}
+		$id      = Shortcodes::unique_id( 'vcap-amount' );
 		?>
 		<div class="vcap-amount">
-			<label for="vcap-amount"><?php echo esc_html( sprintf( /* translators: %s: currency symbol */ __( 'Voucher amount (%s)', 'voucher-captain' ), html_entity_decode( get_woocommerce_currency_symbol() ) ) ); ?> <abbr class="required" title="<?php esc_attr_e( 'required', 'voucher-captain' ); ?>">*</abbr></label>
 			<?php if ( $presets ) : ?>
-				<div class="vcap-amount-presets" role="group" aria-label="<?php esc_attr_e( 'Suggested amounts', 'voucher-captain' ); ?>">
-					<?php foreach ( $presets as $preset ) : ?>
-						<button type="button" class="button vcap-amount-preset" data-amount="<?php echo esc_attr( $preset ); ?>"><?php echo wp_kses_post( wc_price( (float) $preset ) ); ?></button>
+				<fieldset class="vcap-amount-presets">
+					<legend><?php esc_html_e( 'Suggested amounts', 'voucher-captain' ); ?></legend>
+					<?php foreach ( $presets as $i => $preset ) : ?>
+						<span class="vcap-amount-preset">
+							<input type="radio" id="<?php echo esc_attr( $id . '-preset-' . $i ); ?>" name="vcap_amount_preset" value="<?php echo esc_attr( $preset ); ?>"<?php checked( '' === $typed && abs( (float) $chosen - (float) $preset ) < 0.0001 ); ?> />
+							<label for="<?php echo esc_attr( $id . '-preset-' . $i ); ?>"><?php echo wp_kses_post( wc_price( (float) $preset ) ); ?></label>
+						</span>
 					<?php endforeach; ?>
-				</div>
+				</fieldset>
 			<?php endif; ?>
-			<input type="number" id="vcap-amount" name="vcap_amount" class="input-text" required aria-describedby="vcap-amount-help"
-				value="<?php echo esc_attr( (string) $value ); ?>"
+			<label for="<?php echo esc_attr( $id ); ?>"><?php echo esc_html( sprintf( /* translators: %s: currency symbol */ __( 'Voucher amount (%s)', 'voucher-captain' ), html_entity_decode( get_woocommerce_currency_symbol() ) ) ); ?><?php echo $presets ? '' : ' <abbr class="required" title="' . esc_attr__( 'required', 'voucher-captain' ) . '">*</abbr>'; ?></label>
+			<?php // With suggestions, an empty field means "the chosen suggestion" (the server checks the amount either way). ?>
+			<input type="number" id="<?php echo esc_attr( $id ); ?>" name="vcap_amount" class="input-text"<?php echo $presets ? '' : ' required'; ?> aria-describedby="<?php echo esc_attr( trim( $id . '-help' . ( '' !== $this->error ? ' ' . $id . '-error' : '' ) ) ); ?>"<?php echo '' !== $this->error ? ' aria-invalid="true" data-vcap-focus="1"' : ''; ?>
+				value="<?php echo esc_attr( $typed ); ?>"
 				step="<?php echo esc_attr( (string) $step ); ?>"
 				<?php // The browser counts steps from min: without a minimum from 0, so 25, 50, 100 fit a step of 1 or 5. ?>
 				min="<?php echo esc_attr( (string) ( $min > 0 ? $min : 0 ) ); ?>"
 				<?php echo $max > 0 ? 'max="' . esc_attr( (string) $max ) . '"' : ''; ?> />
-			<span class="description" id="vcap-amount-help">
+			<span class="description" id="<?php echo esc_attr( $id . '-help' ); ?>">
 				<?php
 				if ( $min > 0 && $max > 0 ) {
 					/* translators: 1: min, 2: max */
@@ -59,21 +80,45 @@ final class CustomAmount {
 				} elseif ( $min > 0 ) {
 					/* translators: %s: min */
 					printf( esc_html__( 'Minimum %s.', 'voucher-captain' ), wp_kses_post( wc_price( $min ) ) );
+				} elseif ( $max > 0 ) {
+					/* translators: %s: max */
+					printf( esc_html__( 'Maximum %s.', 'voucher-captain' ), wp_kses_post( wc_price( $max ) ) );
 				}
 				?>
 			</span>
+			<?php if ( '' !== $this->error ) : ?>
+				<span class="vcap-field-error" id="<?php echo esc_attr( $id . '-error' ); ?>"><?php echo esc_html( $this->error ); ?></span>
+			<?php endif; ?>
 		</div>
 		<?php
 	}
 
 	/**
+	 * Amount of an add-to-cart request: a typed amount wins, else the chosen suggestion (only one of the
+	 * configuration's suggested amounts counts).
+	 */
+	public static function posted_amount( array $config, array $request ): string {
+		$typed = isset( $request['vcap_amount'] ) && is_scalar( $request['vcap_amount'] ) ? trim( (string) $request['vcap_amount'] ) : '';
+		if ( '' !== $typed ) {
+			return (string) wc_format_decimal( $typed );
+		}
+		$chosen = isset( $request['vcap_amount_preset'] ) && is_scalar( $request['vcap_amount_preset'] ) ? (string) wc_format_decimal( (string) $request['vcap_amount_preset'] ) : '';
+		foreach ( '' !== $chosen && is_numeric( $chosen ) ? self::presets( $config ) : array() as $preset ) {
+			if ( abs( (float) $preset - (float) $chosen ) < 0.0001 ) {
+				return (string) wc_format_decimal( $preset );
+			}
+		}
+		return '';
+	}
+
+	/**
 	 * Requested amount: from existing cart item data ("order again", programmatic adds) or the request.
 	 */
-	private function requested_amount( $cart_item_data ): string {
+	private function requested_amount( $cart_item_data, \WC_Product $product ): string {
 		if ( is_array( $cart_item_data ) && isset( $cart_item_data['vcap_amount'] ) ) {
 			return (string) wc_format_decimal( $cart_item_data['vcap_amount'] );
 		}
-		return isset( $_REQUEST['vcap_amount'] ) && is_scalar( $_REQUEST['vcap_amount'] ) ? (string) wc_format_decimal( wp_unslash( $_REQUEST['vcap_amount'] ) ) : ''; // phpcs:ignore
+		return self::posted_amount( ProductConfig::get( $product ), wp_unslash( $_REQUEST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- add to cart; WooCommerce handles the request.
 	}
 
 	/**
@@ -150,8 +195,9 @@ final class CustomAmount {
 		if ( ! $product || ! $this->is_custom( $product ) ) {
 			return $passed;
 		}
-		$error = $this->amount_error( $product, $this->requested_amount( $cart_item_data ) );
+		$error = $this->amount_error( $product, $this->requested_amount( $cart_item_data, $product ) );
 		if ( $error ) {
+			$this->error = $error;
 			wc_add_notice( $error, 'error' );
 			return false;
 		}
@@ -168,7 +214,7 @@ final class CustomAmount {
 			unset( $data['vcap_amount'] );
 			return $data;
 		}
-		$raw   = $this->requested_amount( $data );
+		$raw   = $this->requested_amount( $data, $product );
 		$error = $this->amount_error( $product, $raw );
 		if ( $error ) {
 			throw new \Exception( esc_html( $error ) );

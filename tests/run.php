@@ -772,6 +772,78 @@ check( 'a malformed key in the set fails closed (nothing verifies)', '{"pinned":
 $r = $keyset( ' , ', 'rotation' );
 check( 'an empty key set fails closed', '{"pinned":"1 invalid","activate":"wplc_server_signature_invalid","snapshot":"none","offline":"refused"}' === $r, $r );
 
+echo "Storefront output (shortcodes, blocks, forms)\n";
+if ( ! function_exists( 'has_shortcode' ) ) {
+	function has_shortcode( $content, $tag ) { return str_contains( (string) $content, '[' . $tag ); }
+}
+if ( ! function_exists( 'get_post_field' ) ) {
+	function get_post_field( $field, $id ) { return $GLOBALS['vcap_test_posts'][ (int) $id ][ $field ] ?? ''; }
+}
+if ( ! function_exists( 'get_post_type' ) ) {
+	function get_post_type( $id = null ) { return $GLOBALS['vcap_test_posts'][ (int) $id ]['post_type'] ?? false; }
+}
+if ( ! function_exists( 'parse_blocks' ) ) {
+	// Only what the test content uses: synced pattern references at the top level and inside a group.
+	function parse_blocks( $content ) {
+		$blocks = array();
+		preg_match_all( '/<!-- wp:block \{"ref":(\d+)\} \/-->/', (string) $content, $m );
+		foreach ( $m[1] as $ref ) {
+			$blocks[] = array( 'blockName' => 'core/group', 'attrs' => array(), 'innerBlocks' => array( array( 'blockName' => 'core/block', 'attrs' => array( 'ref' => (int) $ref ), 'innerBlocks' => array() ) ) );
+		}
+		return $blocks;
+	}
+}
+$escaped = VCAP\Shortcodes::escape_shortcodes( '<input value="[vcap_referral]" /><script>var a = [1, 2];</script><p>[x]</p>' );
+check( 'block output: brackets become entities, so do_shortcode() runs no shortcode from visitor text', '<input value="&#91;vcap_referral&#93;" /><script>var a = [1, 2];</script><p>&#91;x&#93;</p>' === $escaped, $escaped );
+check( 'visitor text in attributes and text has its brackets escaped', '&#91;vcap_referral&#93; &quot;x&quot;' === VCAP\Shortcodes::esc_attr_text( '[vcap_referral] "x"' ) && '&lt;b&gt;&#91;a&#93;' === VCAP\Shortcodes::esc_html_text( '<b>[a]' ) );
+check( 'a code from a redeem link keeps only code characters', 'vcap_referral' === VCAP\Shortcodes::clean_code( '[vcap_referral]' ) && 'GIFT-ABC 12' === VCAP\Shortcodes::clean_code( " GIFT-ABC 12\"'<>`\\ " ) && 100 === strlen( VCAP\Shortcodes::clean_code( str_repeat( 'A', 150 ) ) ) );
+$first  = VCAP\Shortcodes::unique_id( 'vcap-test-field' );
+$second = VCAP\Shortcodes::unique_id( 'vcap-test-field' );
+check( 'ids are unique on the page and the first form keeps its id', 'vcap-test-field' === $first && 'vcap-test-field-2' === $second && 'vcap-test-field-3' === VCAP\Shortcodes::unique_id( 'vcap-test-field' ) );
+$suffix = VCAP\Shortcodes::voucher_suffix( 'GIFT-[1]' );
+check( 'buttons of a voucher list name the voucher in hidden text, not in aria-label (label in name)', '<span class="screen-reader-text"> – voucher GIFT-&#91;1&#93;</span>' === $suffix, $suffix );
+check( 'shortcode output is wrapped in div.woocommerce (WooCommerce styles on any page)', '<div class="woocommerce" id="vcap-redeem"><form></form></div>' === VCAP\Shortcodes::wrap( '<form></form>', 'vcap-redeem' ) && 'button' === VCAP\Shortcodes::button_class() );
+
+$GLOBALS['vcap_test_posts'] = array(
+	501 => array( 'post_type' => 'wp_block', 'post_content' => '<!-- wp:vcap/redeem /-->' ),
+	502 => array( 'post_type' => 'wp_block', 'post_content' => '<!-- wp:block {"ref":501} /-->' ),
+	503 => array( 'post_type' => 'page', 'post_content' => '<!-- wp:block {"ref":502} /-->' ),
+	504 => array( 'post_type' => 'page', 'post_content' => '<!-- wp:paragraph --><p>Hi</p><!-- /wp:paragraph -->' ),
+	505 => array( 'post_type' => 'page', 'post_content' => '' ),
+	506 => array( 'post_type' => 'post', 'post_content' => '<!-- wp:vcap/redeem /-->' ),
+	507 => array( 'post_type' => 'page', 'post_content' => '<!-- wp:block {"ref":506} /-->' ),
+);
+$GLOBALS['vcap_test_meta'][505]['_elementor_data'] = '[{"widgetType":"shortcode","settings":{"shortcode":"[vcap_redeem]"}}]';
+check( 'the redeem form is found in synced patterns, also nested ones', VCAP\Shortcodes::page_has_redeem_form( 503 ) && ! VCAP\Shortcodes::page_has_redeem_form( 504 ) );
+check( 'only synced patterns are followed, not other posts', ! VCAP\Shortcodes::page_has_redeem_form( 507 ) );
+check( 'the redeem form is found in Elementor data', VCAP\Shortcodes::page_has_redeem_form( 505 ) );
+unset( $GLOBALS['vcap_test_posts'], $GLOBALS['vcap_test_meta'][505] );
+
+$amount_config = array( 'custom_presets' => '25, 50;100' ) + ProductConfig::DEFAULTS;
+check( 'suggested amount chosen without JavaScript (radio button) is the amount', '50' === VCAP\CustomAmount::posted_amount( $amount_config, array( 'vcap_amount_preset' => '50', 'vcap_amount' => '' ) ) );
+check( 'a typed amount wins over the chosen suggestion', '37' === VCAP\CustomAmount::posted_amount( $amount_config, array( 'vcap_amount_preset' => '50', 'vcap_amount' => '37' ) ) );
+check( 'only configured suggestions count', '' === VCAP\CustomAmount::posted_amount( $amount_config, array( 'vcap_amount_preset' => '5000' ) ) && '' === VCAP\CustomAmount::posted_amount( $amount_config, array( 'vcap_amount_preset' => array( '50' ) ) ) );
+
+$GLOBALS['vcap_test_options']['vcap_terms_by_country'] = "AT: Austria terms\nDE: Germany terms";
+$GLOBALS['vcap_test_options']['vcap_default_terms']    = 'General terms';
+check( 'product pages list every country variant of the conditions (same HTML for every visitor, cacheable)', array( 'AT' => 'Austria terms', 'DE' => 'Germany terms', '' => 'General terms' ) === ProductConfig::terms_variants( ProductConfig::DEFAULTS ) );
+check( 'the product\'s own conditions are the only variant', array( '' => 'Own' ) === ProductConfig::terms_variants( array( 'redemption_terms' => 'Own' ) + ProductConfig::DEFAULTS ) );
+unset( $GLOBALS['vcap_test_options']['vcap_terms_by_country'], $GLOBALS['vcap_test_options']['vcap_default_terms'] );
+
+if ( ! class_exists( 'WP_REST_Request' ) ) {
+	class WP_REST_Request {
+		public function __construct( private string $method = 'GET', private string $route = '', private array $params = array() ) {}
+		public function get_route() { return $this->route; }
+		public function get_param( $key ) { return $this->params[ $key ] ?? null; }
+	}
+}
+$promotions = new VCAP\Discounts\Repository();
+( new ReflectionProperty( $promotions, 'cache' ) )->setValue( $promotions, array( 12 => array( 'id' => 12, 'title' => 'Summer sale', 'priority' => 0, 'rules' => array() ) ) );
+$promotion_cart = new VCAP\Discounts\CartIntegration( new VCAP\Settings(), $promotions );
+$refused        = $promotion_cart->refuse_removal( null, null, new WP_REST_Request( 'POST', '/wc/store/v1/cart/remove-coupon', array( 'code' => 'vcap-campaign-12' ) ) );
+check( 'cart block: removing an automatic promotion is refused with a message', $refused instanceof WP_Error && 'vcap_promotion_not_removable' === $refused->get_error_code() && 400 === $refused->get_error_data()['status'] );
+check( 'cart block: other coupons and routes are not affected', null === $promotion_cart->refuse_removal( null, null, new WP_REST_Request( 'POST', '/wc/store/v1/cart/remove-coupon', array( 'code' => 'summer10' ) ) ) && null === $promotion_cart->refuse_removal( null, null, new WP_REST_Request( 'POST', '/wc/store/v1/cart/apply-coupon', array( 'code' => 'vcap-campaign-12' ) ) ) );
+
 echo "Editions (constants set by bin/build.sh)\n";
 // Premium build in a child process (constants cannot be undone here): no filter unlocks anything.
 $premium_code = <<<'PHP'

@@ -129,7 +129,8 @@ final class ProductChecks {
 			return;
 		}
 		foreach ( self::residual_losses( WC()->cart ) as $loss ) {
-			echo '<tr class="vcap-residual-warning"><td colspan="2"><div class="woocommerce-info" role="status">' . wp_kses_post( self::residual_notice( $loss ) ) . '</div></td></tr>';
+			// A note across the whole row; data-title for the responsive table (its label is hidden by frontend.css).
+			echo '<tr class="vcap-residual-warning"><td colspan="2" data-title="' . esc_attr__( 'Remaining value', 'voucher-captain' ) . '"><div class="woocommerce-info" role="status">' . wp_kses_post( self::residual_notice( $loss ) ) . '</div></td></tr>';
 		}
 	}
 

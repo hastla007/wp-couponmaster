@@ -100,8 +100,9 @@ final class TopUp {
 			return;
 		}
 		$value = isset( $_POST[ self::FIELD ] ) ? sanitize_text_field( wp_unslash( $_POST[ self::FIELD ] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- refills the field after a failed add-to-cart.
-		echo '<p class="form-row vcap-topup-field"><label for="vcap-topup-code">' . esc_html__( 'Gift card code to top up', 'voucher-captain' ) . ' <abbr class="required" title="' . esc_attr__( 'required', 'voucher-captain' ) . '">*</abbr></label>';
-		echo '<input type="text" class="input-text" id="vcap-topup-code" name="' . esc_attr( self::FIELD ) . '" value="' . esc_attr( $value ) . '" required autocomplete="off" maxlength="100" /></p>';
+		$id    = Shortcodes::unique_id( 'vcap-topup-code' ); // Unique on the page (two product forms, quick views).
+		echo '<p class="form-row vcap-topup-field"><label for="' . esc_attr( $id ) . '">' . esc_html__( 'Gift card code to top up', 'voucher-captain' ) . ' <abbr class="required" title="' . esc_attr__( 'required', 'voucher-captain' ) . '">*</abbr></label>';
+		echo '<input type="text" class="input-text" id="' . esc_attr( $id ) . '" name="' . esc_attr( self::FIELD ) . '" value="' . Shortcodes::esc_attr_text( $value ) . '" required autocomplete="off" maxlength="100" /></p>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_attr_text().
 	}
 
 	/** @return Voucher|string The gift card that can be topped up, or why not. */
