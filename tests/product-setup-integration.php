@@ -239,21 +239,21 @@ delete_transient( 'vcap_flash_' . get_current_user_id() );
 /* ---- 10. Adjust balance ----------------------------------------------------------------------------------- */
 
 $gift = vcap()->vouchers->get( $card_vouchers[0]->id );
-$_POST = array( 'mode' => 'subtract', 'amount' => '80', 'note' => '' );
+$_POST = array( 'mode' => 'redeem', 'amount' => '80', 'note' => '' );
 $admin->adjust( $gift );
 $flash = Flash::pending();
 vcap_ps_assert( 50.0 === (float) vcap()->vouchers->get( $gift->id )->balance && false !== strpos( (string) ( end( $flash )['message'] ?? '' ), '80' ), 'deducting more than the remaining value is refused with a message', $flash );
 $_POST = array( 'mode' => 'add', 'amount' => '-5', 'note' => '' );
 $admin->adjust( $gift );
 vcap_ps_assert( 50.0 === (float) vcap()->vouchers->get( $gift->id )->balance, 'a negative amount is refused' );
-$_POST = array( 'mode' => 'set', 'amount' => '70', 'note' => '' );
+$_POST = array( 'mode' => 'set', 'amount' => '70', 'note' => 'Correction' );
 $admin->adjust( $gift );
 vcap_ps_assert( 50.0 === (float) vcap()->vouchers->get( $gift->id )->balance, '"Set to" above the face value needs a confirmation' );
-$_POST = array( 'mode' => 'subtract', 'amount' => '20', 'note' => 'In store' );
+$_POST = array( 'mode' => 'redeem', 'amount' => '20', 'note' => 'In store' );
 $admin->adjust( $gift );
 $flash = Flash::pending();
 vcap_ps_assert( 30.0 === (float) vcap()->vouchers->get( $gift->id )->balance && 'success' === ( end( $flash )['type'] ?? '' ) && false !== strpos( (string) end( $flash )['message'], '30' ), 'a valid deduction is booked and the new remaining value is shown', $flash );
-$_POST = array( 'mode' => 'subtract', 'amount' => '2,50', 'note' => '' );
+$_POST = array( 'mode' => 'redeem', 'amount' => '2,50', 'note' => '' );
 $admin->adjust( $gift );
 vcap_ps_assert( 27.5 === (float) vcap()->vouchers->get( $gift->id )->balance, 'Q7: "2,50" deducts 2.50, not 250' );
 foreach ( array( '−5', '1e3', '1.500' ) as $bad_amount ) {
@@ -262,6 +262,35 @@ foreach ( array( '−5', '1e3', '1.500' ) as $bad_amount ) {
 	$flash = Flash::pending();
 	vcap_ps_assert( 27.5 === (float) vcap()->vouchers->get( $gift->id )->balance && 'error' === ( end( $flash )['type'] ?? '' ), 'Q7: "' . $bad_amount . '" is refused with a reason instead of being reinterpreted', $flash );
 }
+// H9: "Redeem in store" and corrections are booked apart; a correction and a voiding need a reason.
+$h9_events = static fn() => vcap()->vouchers->events( $gift->id );
+$_POST     = array( 'mode' => 'subtract', 'amount' => '1', 'note' => '' );
+$admin->adjust( $gift );
+$flash = Flash::pending();
+vcap_ps_assert( 27.5 === (float) vcap()->vouchers->get( $gift->id )->balance && 'error' === ( end( $flash )['type'] ?? '' ), 'H9: a correction without a reason is refused', $flash );
+$_POST = array( 'mode' => 'subtract', 'amount' => '1', 'note' => 'Counted twice at the till' );
+$admin->adjust( $gift );
+$h9_last = array_slice( $h9_events(), -1 )[0];
+vcap_ps_assert( 26.5 === (float) vcap()->vouchers->get( $gift->id )->balance && 'adjusted' === $h9_last['event'] && 'Counted twice at the till' === $h9_last['note'], 'H9: a correction is booked as "adjusted" with its reason, not as a redemption' );
+$_POST = array( 'mode' => 'redeem', 'amount' => '1,50', 'note' => '' );
+$admin->adjust( $gift );
+$h9_last = array_slice( $h9_events(), -1 )[0];
+vcap_ps_assert( 25.0 === (float) vcap()->vouchers->get( $gift->id )->balance && 'redeemed' === $h9_last['event'] && '' !== (string) $h9_last['note'], '"Redeem in store" is booked as a redemption (journal)' );
+// T12: "Set to" while part of the value is held by an unpaid order would count the hold twice once it is released.
+$t12_order = wc_create_order();
+$t12_order->save();
+vcap()->coupons->reserve_voucher_balance( vcap()->vouchers->get( $gift->id ), 10, $t12_order );
+$_POST = array( 'mode' => 'set', 'amount' => '25', 'note' => 'Correction', 'confirm_above' => '1' );
+$admin->adjust( vcap()->vouchers->get( $gift->id ) );
+$flash = Flash::pending();
+vcap_ps_assert( 10.0 === vcap()->coupons->open_holds( vcap()->vouchers->get( $gift->id ) ) && 15.0 === (float) vcap()->vouchers->get( $gift->id )->balance && 'error' === ( end( $flash )['type'] ?? '' ) && false !== strpos( (string) end( $flash )['message'], '10' ), 'T12: "Set to" is refused while a hold is open, naming the reserved amount', $flash );
+vcap()->coupons->release_voucher_reservation( vcap()->vouchers->get( $gift->id ), $t12_order );
+$admin->adjust( vcap()->vouchers->get( $gift->id ) );
+vcap_ps_assert( 0.0 === vcap()->coupons->open_holds( vcap()->vouchers->get( $gift->id ) ) && 25.0 === (float) vcap()->vouchers->get( $gift->id )->balance, 'T12: without open holds "Set to" works again' );
+$h9_void = vcap()->vouchers->get( $no_recipient[0]->id );
+vcap_ps_assert( '' === $admin->void( $h9_void, '  ' ) && VCAP\Voucher::STATUS_VOID !== vcap()->vouchers->get( $h9_void->id )->status, 'H9: voiding without a reason is refused' );
+vcap_ps_assert( 'voided' === $admin->void( $h9_void, 'Chargeback on the purchase' ) && in_array( 'Voided by admin: Chargeback on the purchase', array_column( vcap()->vouchers->events( $h9_void->id ), 'note' ), true ), 'H9: the reason for voiding is kept in the history' );
+delete_transient( 'vcap_flash_' . get_current_user_id() );
 $_POST = array( VCAP\Admin\FormToken::FIELD => VCAP\Admin\FormToken::generate() );
 vcap_ps_assert( VCAP\Admin\FormToken::claim( 'adjust-' . $gift->id ) && ! VCAP\Admin\FormToken::claim( 'adjust-' . $gift->id ), 'Q6: a balance adjustment form is accepted once; the double submission is refused' );
 VCAP\Admin\FormToken::release( 'adjust-' . $gift->id );

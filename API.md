@@ -54,7 +54,7 @@ Register a provider only when its external system is available. This hook define
 ### Flow
 
 1. `check( $code, [ 'target' => …, 'amount' => … ] )` – optional pre-check, reserves nothing.
-2. `reserve( $code, [ 'key' => …, 'target' => …, 'amount' => …, 'meta' => [] ] )` – locks the voucher (single-use: status `reserved`; gift card: the amount is deducted). The reservation expires after the configured lifetime (WooCommerce → Settings → Vouchers → Integrations, default 15 minutes) and is then released automatically.
+2. `reserve( $code, [ 'key' => …, 'target' => …, 'amount' => …, 'meta' => [] ] )` – locks the voucher (single-use: status `reserved`; gift card: the amount is deducted). The reservation expires after the configured lifetime (WooCommerce → Settings → Vouchers → Integrations, default 15 minutes) and is then released automatically – by a background job, and also right away wherever the voucher or redemption is read (`check()`, `reserve()`, `get()`, the cart), so it does not depend on WP-Cron. An expired reservation can no longer be committed (`vcap_reservation_missing`). `meta` may hold at most 8 KB (as JSON) in at most 3 levels (`vcap_invalid_request` otherwise).
 3. Deliver your service (grant the course, issue the ticket …).
 4. `commit( $key )` makes the redemption final and fires `vcap_voucher_redeemed` exactly once – or `release( $key )` gives the value back (fires `vcap_redemption_released`).
 
@@ -62,7 +62,7 @@ Register a provider only when its external system is available. This hook define
 
 ### Idempotency
 
-The caller supplies the key (8–64 characters `A–Z a–z 0–9 . _ : -`, e.g. a UUID or `learnboating:grant:1234`). Repeating `reserve()` with the same key and the same request returns the existing redemption; the same key with a different voucher, target, amount or user returns `vcap_idempotency_conflict`. `commit()` and `release()` are idempotent. Store the key before calling `reserve()` so a timeout can be retried safely.
+The caller supplies the key (8–64 characters `A–Z a–z 0–9 . _ : -`, e.g. a UUID or `learnboating:grant:1234`). Repeating `reserve()` with the same key and the same request returns the existing redemption while it is `reserved` or `committed` (marked `replayed: true`; REST answers `200` instead of `201`); a reservation that was released or expired answers `vcap_redemption_released` (409) – it holds nothing, so do not deliver for it: revoke and redeem again under a new key. The same key with a different voucher, target, amount or user returns `vcap_idempotency_conflict`. `commit()` and `release()` are idempotent. Store the key before calling `reserve()` so a timeout can be retried safely.
 
 ### Identity
 
@@ -73,14 +73,14 @@ PHP callers may pass `user_id`; otherwise the logged-in user is used. For guest 
 | Method | Route | Body | Success |
 |---|---|---|---|
 | POST | `/wp-json/vcap/v1/redemptions/check` | `code`, `target`, `amount` | 200 voucher data |
-| POST | `/wp-json/vcap/v1/redemptions` | `code`, `key`, `target`, `amount`, `meta` | 201 redemption |
+| POST | `/wp-json/vcap/v1/redemptions` | `code`, `key`, `target`, `amount`, `meta` | 201 redemption (200 for a repeated request) |
 | GET | `/wp-json/vcap/v1/redemptions/{key}` | – | 200 redemption |
 | POST | `/wp-json/vcap/v1/redemptions/{key}/commit` | – | 200 redemption |
 | POST | `/wp-json/vcap/v1/redemptions/{key}/release` | – | 200 redemption |
 
 Authentication: browsers of logged-in users send the WordPress REST nonce (`X-WP-Nonce`, from `wp_create_nonce( 'wp_rest' )`); external servers use WordPress Application Passwords for a dedicated technical user. Anonymous requests receive `401`. Narrow access with the `vcap_rest_can_redeem` filter.
 
-Targets over REST: shop managers (`manage_woocommerce` / `vcap_manage_vouchers`, e.g. the technical user of a connector server) may use any target; customers only targets whose prefix a connector registered with `vcap_rest_redemption_target_prefixes` (e.g. `add_filter( 'vcap_rest_redemption_target_prefixes', fn( $p ) => array_merge( $p, array( 'learnboating:' ) ) )`) – without one, customers can check codes but not reserve them over REST, and they cannot commit or release a redemption a connector made for them with an unregistered target. Targets of built-in integrations (`passcaptain:…`, filter `vcap_internal_redemption_target_prefixes`) are refused over REST for everybody (`403 vcap_not_allowed`). PHP callers are not affected.
+Targets over REST: shop managers (`manage_woocommerce` / `vcap_manage_vouchers`, e.g. the technical user of a connector server) may use any target; customers only targets whose prefix a connector registered with `vcap_rest_redemption_target_prefixes` (e.g. `add_filter( 'vcap_rest_redemption_target_prefixes', fn( $p ) => array_merge( $p, array( 'learnboating:' ) ) )`) – without one, customers can check codes but not reserve them over REST, and they cannot commit or release a redemption a connector made for them with an unregistered target. Targets of built-in integrations (`passcaptain:…`, filter `vcap_internal_redemption_target_prefixes`) are refused over REST for everybody (`403 vcap_not_allowed`). Keys are global, so over REST a key with a prefix (`system:…`) must start with the prefix of its target (`400 vcap_invalid_request`; UUID keys are free), and keys a connector creates on the server (Pass Captain `wpcap-…`/`passcaptain:…`, Learnboating `learnboating:grant:…`) are never accepted over REST – connectors add theirs with `vcap_internal_redemption_key_prefixes`. PHP callers are not affected.
 
 Redemption data: `redemption_key`, `state` (`reserved`, `committed`, `released`), `voucher_id`, `code`, `user_id`, `target`, `amount`, `currency`, `balance_after` (gift cards), `expires_at` (while reserved), `created_at`, `committed_at` (UTC), `meta`.
 
@@ -98,6 +98,7 @@ Redemption data: `redemption_key`, `state` (`reserved`, `committed`, `released`)
 | `vcap_not_active` | 409 | Voucher scheduled for later delivery |
 | `vcap_target_unavailable` | 409 | Refused by `vcap_redemption_target_available` |
 | `vcap_idempotency_conflict` | 409 | Key reused for a different request |
+| `vcap_redemption_released` | 409 | `reserve()` repeated for a key whose reservation was released or expired – redeem again with a new key |
 | `vcap_expired` / `vcap_cancelled` | 410 | Voucher expired / voided |
 | `vcap_not_redeemable` | 422 | Tickets and shop-only (reusable) vouchers |
 | `vcap_rate_limited` | 429 | Too many invalid codes (setting, default 10 per user and 15 minutes; while many invalid codes arrive site-wide – filter `vcap_redemption_site_wide_failures`, default 300 – every caller without vouchers of their own gets a fifth) |

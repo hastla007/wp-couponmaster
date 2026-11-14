@@ -523,6 +523,20 @@ $o8_pending_voucher = vcap_security_single();
 $o8_hold = add_post_meta( $o8_pending_voucher->coupon_id, '_coupon_held_' . ( time() + 600 ) . '_o8test', '' ); // As check_and_hold_coupon() stores it.
 $o8_held = vcap()->tickets->describe( vcap()->vouchers->get( $o8_pending_voucher->id ) );
 vcap_security_assert( $o8_hold && VCAP\CouponManager::held_by_pending_order( vcap()->vouchers->get( $o8_pending_voucher->id ) ) && 'warning' === $o8_held['state'] && false === ( $o8_held['redeemable'] ?? null ), 'O8: a single-use voucher held by an unpaid shop order (checkout) is shown as not redeemable' );
+// O2: after WooCommerce's short hold has run out, the unpaid order itself still holds the voucher (pay link).
+$o2_voucher = vcap_security_single();
+$o2_order   = wc_create_order();
+$o2_line    = new WC_Order_Item_Coupon();
+$o2_line->set_code( $o2_voucher->code );
+$o2_line->set_discount( 20 );
+$o2_order->add_item( $o2_line );
+$o2_order->set_status( 'pending' );
+$o2_order->save();
+$o2_fresh = vcap()->vouchers->get( $o2_voucher->id );
+$o2_api   = vcap()->redemptions->check( $o2_fresh->code, array( 'user_id' => 0 ) );
+vcap_security_assert( '' !== vcap()->tickets->counter_refusal_reason( $o2_fresh ) && is_wp_error( $o2_api ) && 'vcap_reserved' === $o2_api->get_error_code(), 'O2: a single-use voucher in an unpaid order (no WooCommerce hold any more) is refused at the counter and by the API' );
+$o2_order->update_status( 'cancelled' );
+vcap_security_assert( '' === vcap()->tickets->counter_refusal_reason( vcap()->vouchers->get( $o2_voucher->id ) ), 'O2: once that order is cancelled the counter may redeem the voucher' );
 $o8_plain = vcap()->tickets->describe( vcap()->vouchers->get( vcap_security_single()->id ) );
 vcap_security_assert( 'ok' === $o8_plain['state'] && ! array_key_exists( 'redeemable', $o8_plain ), 'O8: an unrestricted voucher stays "Valid"' );
 wp_set_current_user( 0 );

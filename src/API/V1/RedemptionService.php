@@ -84,6 +84,9 @@ final class RedemptionService {
 			return self::error( 'vcap_not_found', __( 'This voucher code is not valid.', 'voucher-captain' ), 404 );
 		}
 		$this->record_success( $user_id );
+		if ( $this->release_expired_for( $voucher ) ) {
+			$voucher = $this->vouchers->get( $voucher->id ) ?? $voucher;
+		}
 		$target = isset( $args['target'] ) ? self::clean_target( (string) $args['target'] ) : '';
 		$amount = isset( $args['amount'] ) ? (float) $args['amount'] : null;
 		$check  = $this->eligibility( $voucher, $target, $amount, $user_id, (string) ( $args['email'] ?? '' ) );
@@ -117,6 +120,10 @@ final class RedemptionService {
 		if ( '' === $target ) {
 			return self::error( 'vcap_invalid_request', __( 'A redemption target is required.', 'voucher-captain' ), 400 );
 		}
+		if ( ! self::meta_acceptable( $args['meta'] ?? null ) ) {
+			/* translators: 1: maximum size in KB, 2: maximum nesting depth */
+			return self::error( 'vcap_invalid_request', sprintf( __( 'The redemption metadata is too large (at most %1$d KB and %2$d levels).', 'voucher-captain' ), (int) ( self::META_MAX_BYTES / 1024 ), self::META_MAX_DEPTH ), 400 );
+		}
 		$user_id = $this->user_id( $args );
 		if ( $this->too_many_failures( $user_id ) ) {
 			return self::error( 'vcap_rate_limited', __( 'Too many invalid voucher codes. Please try again later.', 'voucher-captain' ), 429 );
@@ -134,11 +141,14 @@ final class RedemptionService {
 			return self::error( 'vcap_not_found', __( 'This voucher code is not valid.', 'voucher-captain' ), 404 );
 		}
 		$this->record_success( $user_id );
+		if ( ! $existing && $this->release_expired_for( $voucher ) ) {
+			$voucher = $this->vouchers->get( $voucher->id ) ?? $voucher;
+		}
 		$amount = $voucher->is_multi_use() ? round( (float) ( $args['amount'] ?? 0 ), self::decimals( $voucher->currency ) ) : round( $voucher->initial_amount, self::decimals( $voucher->currency ) );
 		$hash   = $this->request_hash( $voucher->id, $target, $amount, $user_id );
 		if ( $existing ) {
 			return hash_equals( (string) $existing['request_hash'], $hash )
-				? $this->redemption_data( $existing )
+				? $this->replay( $existing )
 				: self::error( 'vcap_idempotency_conflict', __( 'This redemption key was already used for another request.', 'voucher-captain' ), 409 );
 		}
 		if ( $voucher->is_multi_use() && $amount <= 0 ) {
@@ -200,7 +210,7 @@ final class RedemptionService {
 				$row = $this->get_row( $key );
 				if ( $row ) {
 					return hash_equals( (string) $row['request_hash'], $hash )
-						? $this->redemption_data( $row )
+						? $this->replay( $row )
 						: self::error( 'vcap_idempotency_conflict', __( 'This redemption key was already used for another request.', 'voucher-captain' ), 409 );
 				}
 				return $this->temporary();
@@ -234,6 +244,82 @@ final class RedemptionService {
 		 */
 		do_action( 'vcap_redemption_reserved', $data );
 		return $data;
+	}
+
+	/**
+	 * Answer to a repeated reserve() with a known key and the same request: the open reservation (replayed = true),
+	 * the completed redemption (replayed = true; REST 200 instead of 201), or – when the reservation was released
+	 * or expired – the error vcap_redemption_released (409): it holds nothing any more, so a connector must not
+	 * deliver its service for it but revoke and ask the user to redeem again (with a new key).
+	 *
+	 * @param array $row Redemption row.
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	private function replay( array $row ) {
+		if ( self::STATE_RESERVED === $row['state'] && strtotime( (string) $row['expires_at'] . ' UTC' ) <= time() ) {
+			// Expired, but the release job has not run yet: release it now, then answer like any released one.
+			$this->transition( (string) $row['redemption_key'], self::STATE_RELEASED, array(), true );
+			$row = $this->get_row( (string) $row['redemption_key'] ) ?? $row;
+		}
+		if ( self::STATE_RELEASED === $row['state'] ) {
+			return self::error( 'vcap_redemption_released', __( 'This voucher reservation was already released. Please redeem the voucher again.', 'voucher-captain' ), 409 );
+		}
+		return $this->redemption_data( $row ) + array( 'replayed' => true );
+	}
+
+	/** Largest caller metadata (JSON) and nesting depth accepted with a reservation. */
+	public const META_MAX_BYTES = 8192;
+	public const META_MAX_DEPTH = 3;
+
+	/**
+	 * Whether caller metadata stays within META_MAX_BYTES (as JSON) and META_MAX_DEPTH levels.
+	 *
+	 * @param mixed $meta Caller metadata.
+	 * @return bool
+	 */
+	public static function meta_acceptable( $meta ): bool {
+		if ( null === $meta || array() === $meta || ! is_array( $meta ) ) {
+			return true; // Anything else is stored as an empty list (caller_meta()).
+		}
+		$depth = static function ( $value, int $level ) use ( &$depth ): bool {
+			if ( ! is_array( $value ) ) {
+				return true;
+			}
+			if ( $level > self::META_MAX_DEPTH ) {
+				return false;
+			}
+			foreach ( $value as $item ) {
+				if ( ! $depth( $item, $level + 1 ) ) {
+					return false;
+				}
+			}
+			return true;
+		};
+		$json = wp_json_encode( $meta );
+		return false !== $json && strlen( (string) $json ) <= self::META_MAX_BYTES && $depth( $meta, 1 );
+	}
+
+	/**
+	 * Release this voucher's external reservations whose lifetime is over, right away (the scheduled release may
+	 * not run: WP-Cron off, loopback blocked). Called where the voucher is read for a redemption.
+	 *
+	 * @param Voucher $voucher Voucher.
+	 * @return bool Whether a reservation was released.
+	 */
+	public function release_expired_for( Voucher $voucher ): bool {
+		global $wpdb;
+		if ( ! $voucher->id || ( ! $voucher->is_multi_use() && Voucher::STATUS_RESERVED !== $voucher->status ) ) {
+			return false;
+		}
+		$now   = gmdate( 'Y-m-d H:i:s' );
+		$table = Install::tables()['redemptions'];
+		$keys  = $wpdb->get_col( $wpdb->prepare( "SELECT redemption_key FROM {$table} WHERE voucher_id = %d AND state = %s AND expires_at <= %s LIMIT 50", $voucher->id, self::STATE_RESERVED, $now ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$done  = false;
+		foreach ( $keys ? $keys : array() as $key ) {
+			$result = $this->transition( (string) $key, self::STATE_RELEASED, array(), true );
+			$done   = $done || ( ! is_wp_error( $result ) && self::STATE_RELEASED === ( $result['state'] ?? '' ) );
+		}
+		return $done;
 	}
 
 	/**
@@ -445,6 +531,11 @@ final class RedemptionService {
 	 */
 	public function get( string $key ) {
 		$row = preg_match( self::KEY_PATTERN, $key ) ? $this->get_row( $key ) : null;
+		if ( $row && self::STATE_RESERVED === $row['state'] && strtotime( (string) $row['expires_at'] . ' UTC' ) <= time() ) {
+			// Past its lifetime: released now instead of waiting for the background job.
+			$this->transition( $key, self::STATE_RELEASED, array(), true );
+			$row = $this->get_row( $key ) ?? $row;
+		}
 		return $row ? $this->redemption_data( $row ) : self::error( 'vcap_reservation_missing', __( 'No redemption exists for this key.', 'voucher-captain' ), 404 );
 	}
 
@@ -532,6 +623,12 @@ final class RedemptionService {
 			/* translators: 1: redemption key, 2: target */
 			$note = sprintf( __( 'Redemption %1$s for %2$s', 'voucher-captain' ), $key, $row['target'] );
 
+			if ( self::STATE_COMMITTED === $to && strtotime( (string) $row['expires_at'] . ' UTC' ) <= time() ) {
+				// Past its lifetime (release job not run yet): released, never completed.
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$this->transition( $key, self::STATE_RELEASED, array(), true );
+				return self::error( 'vcap_reservation_missing', __( 'This reservation has expired or was cancelled. Please redeem the voucher again.', 'voucher-captain' ), 409 );
+			}
 			if ( self::STATE_COMMITTED === $to && Voucher::STATUS_VOID === $voucher->status ) {
 				// Voided while reserved (e.g. the purchase order was refunded): never complete the redemption.
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -654,7 +751,12 @@ final class RedemptionService {
 		// Email-restricted coupons (e.g. "recipient only") also restrict external redemption.
 		if ( $voucher->coupon_id ) {
 			$coupon = new \WC_Coupon( $voucher->coupon_id );
-			$emails = $coupon->get_id() ? array_map( 'strtolower', (array) $coupon->get_email_restrictions() ) : array();
+			if ( ! $coupon->get_id() || 'trash' === $coupon->get_status() ) {
+				// Without its coupon the restriction is unknown: fail closed (a personal voucher must not become
+				// redeemable for every account because its coupon was deleted).
+				return self::error( 'vcap_not_redeemable', __( 'This voucher cannot be redeemed right now. Please contact the shop.', 'voucher-captain' ), 422 );
+			}
+			$emails = array_map( 'strtolower', (array) $coupon->get_email_restrictions() );
 			if ( $emails ) {
 				$user     = $user_id ? get_userdata( $user_id ) : null;
 				$accepted = array_filter( array( $user ? strtolower( (string) $user->user_email ) : '', strtolower( trim( $email ) ) ) );
@@ -811,13 +913,15 @@ final class RedemptionService {
 		if ( ! $voucher->coupon_id ) {
 			return;
 		}
+		if ( $voucher->is_multi_use() ) {
+			\VCAP\CouponManager::sync_coupon_amount( $voucher ); // Under the row lock, with the latest balance.
+			return;
+		}
 		$coupon = new \WC_Coupon( $voucher->coupon_id );
 		if ( ! $coupon->get_id() ) {
 			return;
 		}
-		if ( $voucher->is_multi_use() ) {
-			$coupon->set_amount( $voucher->balance );
-		} elseif ( Voucher::STATUS_REDEEMED === $voucher->status ) {
+		if ( Voucher::STATUS_REDEEMED === $voucher->status ) {
 			// Used up outside the cart: make WooCommerce's own usage limit refuse it too.
 			$coupon->set_usage_count( max( 1, (int) $coupon->get_usage_count() ) );
 			$coupon->set_usage_limit( max( 1, (int) $coupon->get_usage_count() ) );

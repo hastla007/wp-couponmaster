@@ -33,7 +33,7 @@ A complete, tested reference implementation is in [`examples/vcap-example-connec
 ## 2. Redemption flow (copy this)
 
 1. **Derive a stable key** from what identifies the request, e.g. `myplugin:{user}:{hash(code)}` or `myplugin:grant:{grant id}`. Store it before calling Voucher Captain. A double click, a reload or a retry after a timeout must reuse the same key.
-2. **`reserve( $code, [ 'key', 'target', 'user_id' ] )`** – locks the voucher. Same key + same request ⇒ same answer.
+2. **`reserve( $code, [ 'key', 'target', 'user_id' ] )`** – locks the voucher. Same key + same request ⇒ same answer while the redemption is `reserved` or `committed` (`replayed: true`); once it was released or expired the key answers `vcap_redemption_released`. Register server-side key prefixes (e.g. `myplugin:grant:`) with `vcap_internal_redemption_key_prefixes`, so nobody can claim them over REST in advance.
 3. **Deliver your service idempotently**: store the redemption key with what you grant; if the key is already there, do nothing.
 4. **`commit( $key )`** – final. Repeating it is harmless.
 5. Only if you cannot deliver: **`release( $key )`** – the voucher becomes usable again.
@@ -47,6 +47,7 @@ A complete, tested reference implementation is in [`examples/vcap-example-connec
 | `vcap_reservation_missing` on commit | The reservation expired (lifetime setting, default 15 min) and was released. Revoke anything you granted for this key; ask the user to redeem again |
 | `vcap_cancelled` on commit | The voucher was voided while reserved (purchase refunded). Revoke, `release()`, tell the user |
 | `vcap_already_redeemed` on reserve | Check whether *you* hold the grant for this key (completed by a retry) – then it is a success |
+| `vcap_redemption_released` (409) on reserve | The reservation under this key was released or expired: nothing is reserved. Revoke anything granted for the key, forget it and – if the user wants to redeem again – use a **new** key (the example connector appends an attempt number) |
 | Any other error | Show the message; nothing was reserved |
 
 Retry jobs read the current state with `get( $key )` and continue from there: `reserved` ⇒ deliver + commit; `committed` ⇒ make sure the grant exists; `released` ⇒ revoke and forget the key. Make the reservation lifetime longer than your longest retry window, or expect `vcap_reservation_missing`.
