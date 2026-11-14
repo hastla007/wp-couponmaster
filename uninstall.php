@@ -13,14 +13,15 @@ defined( 'WP_UNINSTALL_PLUGIN' ) || defined( 'VCAP_UNINSTALL_FUNCTIONS_ONLY' ) |
  * does not keep using a place of the license. Best effort with a short timeout: an unreachable server never blocks
  * the uninstall (the activation can still be released in the customer account on the license server).
  */
-function vcap_uninstall_release_license(): void {
-	$credentials = get_option( 'vcap_wplc_credentials' ); // VCAP\Licensing\Entitlements::CREDENTIALS_OPTION.
+function vcap_uninstall_release_license( bool $network = false ): void {
+	// VCAP\Licensing\Entitlements::CREDENTIALS_OPTION; a network license is stored network-wide.
+	$credentials = $network ? get_site_option( 'vcap_wplc_credentials' ) : get_option( 'vcap_wplc_credentials' );
 	if ( ! is_array( $credentials ) || empty( $credentials['activation_id'] ) ) {
 		return;
 	}
 	$server = (string) ( $credentials['server_url'] ?? '' );
 	if ( '' === $server ) {
-		$server = (string) get_option( 'vcap_wplc_server_url', '' );
+		$server = (string) ( $network ? get_site_option( 'vcap_wplc_server_url', '' ) : get_option( 'vcap_wplc_server_url', '' ) );
 	}
 	if ( '' === $server && is_readable( __DIR__ . '/voucher-captain.php' ) && preg_match( "/define\\( 'VCAP_LICENSE_SERVER', '([^']+)' \\);/", (string) file_get_contents( __DIR__ . '/voucher-captain.php' ), $m ) ) {
 		$server = $m[1]; // Premium build: the server is fixed in the plugin file.
@@ -32,9 +33,22 @@ function vcap_uninstall_release_license(): void {
 	if ( ! class_exists( 'VCAP\\Licensing\\LicenseClient' ) ) {
 		return;
 	}
-	$client = new VCAP\Licensing\LicenseClient( $server, 'voucher-captain', '0', 'vcap_wplc_credentials' );
+	// deactivate() refuses an activation copied from another website: a copy never releases the original's place.
+	$client = new VCAP\Licensing\LicenseClient( $server, 'voucher-captain', '0', 'vcap_wplc_credentials', $network ? 'network' : '' );
 	$client->set_timeout( 5 );
 	$client->deactivate();
+}
+
+/**
+ * Network license (plugin was network-activated): released and its network options deleted only when every site
+ * opted in to data deletion.
+ */
+function vcap_uninstall_network_license(): void {
+	vcap_uninstall_release_license( true );
+	foreach ( array( '', '_entitlements_cache', '_pending', '_last_check', '_copy_of', '_migrated' ) as $suffix ) {
+		delete_site_option( 'vcap_wplc_credentials' . $suffix );
+	}
+	delete_site_option( 'vcap_wplc_server_url' );
 }
 
 /**
@@ -204,6 +218,7 @@ if ( is_multisite() ) {
 	}
 	if ( $vcap_all_opted_in ) {
 		vcap_uninstall_user_meta();
+		vcap_uninstall_network_license();
 	}
 } elseif ( vcap_uninstall_site() ) {
 	vcap_uninstall_user_meta();

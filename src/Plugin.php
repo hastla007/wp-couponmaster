@@ -165,6 +165,7 @@ final class Plugin {
 		update_option( Install::SCHEDULES_OPTION, time(), true );
 		$this->delivery->schedule_maintenance();
 		$this->coupons->schedule_stale_release();
+		Licensing\Entitlements::schedule_refresh(); // Second schedule of the license check besides WP-Cron.
 		if ( 'yes' === get_option( Install::RESTORE_TASKS_OPTION ) ) {
 			delete_option( Install::RESTORE_TASKS_OPTION );
 			// In Action Scheduler batches, not in this (arbitrary) request.

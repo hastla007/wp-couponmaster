@@ -576,11 +576,13 @@ final class Settings {
 	);
 
 	/**
-	 * Settings of a locked premium feature are shown read-only with the reason ("included in Voucher Captain
-	 * Premium" / "needs an active license") and are never saved, so the stored choice survives until the feature
-	 * is available again.
+	 * Settings of a locked premium feature are shown read-only and are never saved, so the stored choice survives
+	 * until the feature is available again. The reason ("included in Voucher Captain Premium" with the upgrade link /
+	 * "needs an active license" with the license page) is shown once per feature – in its section title, else at
+	 * its first field – not repeated at every field.
 	 */
 	private static function lock_premium( array $fields ): array {
+		$explained = array();
 		foreach ( $fields as $i => $field ) {
 			$id      = (string) ( $field['id'] ?? '' );
 			$feature = '';
@@ -593,14 +595,17 @@ final class Settings {
 			if ( '' === $feature || Licensing\Entitlements::allows( $feature ) || 'sectionend' === ( $field['type'] ?? '' ) ) {
 				continue;
 			}
-			$message = Licensing\Entitlements::locked_message( $feature );
+			$message = isset( $explained[ $feature ] ) ? '' : Licensing\Entitlements::locked_html( $feature );
+			$explained[ $feature ] = true;
 			if ( 'title' === ( $field['type'] ?? '' ) ) {
-				$fields[ $i ]['desc'] = trim( (string) ( $field['desc'] ?? '' ) . '<br /><strong>' . esc_html( $message ) . '</strong>' );
+				$fields[ $i ]['desc'] = trim( (string) ( $field['desc'] ?? '' ) . ( '' !== $message ? '<br /><strong>' . $message . '</strong>' : '' ) );
 				continue;
 			}
 			$fields[ $i ]['is_option']         = false;
 			$fields[ $i ]['custom_attributes'] = array( 'disabled' => 'disabled' ) + (array) ( $field['custom_attributes'] ?? array() );
-			$fields[ $i ]['desc']              = '' !== (string) ( $field['desc'] ?? '' ) ? $field['desc'] . ' – ' . $message : $message;
+			if ( '' !== $message ) {
+				$fields[ $i ]['desc'] = '' !== (string) ( $field['desc'] ?? '' ) ? $field['desc'] . ' – ' . $message : $message;
+			}
 		}
 		return $fields;
 	}
