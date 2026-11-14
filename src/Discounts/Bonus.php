@@ -116,8 +116,8 @@ final class Bonus {
 			$order->update_meta_data( self::ORDER_META, $issued );
 			$order->save_meta_data();
 			$coupon = new \WC_Coupon( $coupon_id );
-			/* translators: 1: coupon code, 2: promotion title */
-			$order->add_order_note( sprintf( __( 'Bonus voucher %1$s issued (promotion "%2$s").', 'voucher-captain' ), $coupon->get_code(), $campaign['title'] ) );
+			/* translators: 1: masked coupon code (last four characters), 2: promotion title */
+			$order->add_order_note( sprintf( __( 'Bonus voucher %1$s issued (promotion "%2$s").', 'voucher-captain' ), \VCAP\Downloads::masked_code( (string) $coupon->get_code() ), $campaign['title'] ) );
 			$this->send( $coupon, $order, $campaign );
 		}
 		return $created;
@@ -191,14 +191,14 @@ final class Bonus {
 			}
 			if ( $coupon->get_usage_count() > 0 ) {
 				/* translators: %s: coupon code */
-				$order->add_order_note( sprintf( __( 'Bonus voucher %s was already used and stays valid.', 'voucher-captain' ), $coupon->get_code() ) );
+				$order->add_order_note( sprintf( __( 'Bonus voucher %s was already used and stays valid.', 'voucher-captain' ), \VCAP\Downloads::masked_code( (string) $coupon->get_code() ) ) );
 				continue;
 			}
 			wp_trash_post( $coupon_id );
 			Usage::remove( (int) $campaign_id, Usage::order_key( $order ), (int) $order->get_id() );
 			unset( $left[ $campaign_id ] );
 			/* translators: %s: coupon code */
-			$order->add_order_note( sprintf( __( 'Unused bonus voucher %s withdrawn.', 'voucher-captain' ), $coupon->get_code() ) );
+			$order->add_order_note( sprintf( __( 'Unused bonus voucher %s withdrawn.', 'voucher-captain' ), \VCAP\Downloads::masked_code( (string) $coupon->get_code() ) ) );
 		}
 		// Keep withdrawn campaigns marked, so a later status change does not issue the bonus again.
 		$order->update_meta_data( self::ORDER_META, $issued );

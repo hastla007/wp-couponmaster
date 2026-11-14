@@ -570,6 +570,9 @@ final class VoucherAdmin {
 		if ( strtolower( $old_recipient ) !== strtolower( $v->recipient_email ) ) {
 			// Personal vouchers: the coupon must accept the new address (and no longer the old one).
 			vcap()->coupons->refresh_email_restrictions( $v, $old_recipient );
+			if ( vcap()->coupons->restriction_kept ) {
+				Flash::add( 'warning', __( 'This personal voucher has no valid buyer or recipient email, so it stays restricted to its previous address (or to none that anyone can use). Enter a valid recipient email to let the new holder redeem it.', 'voucher-captain' ) );
+			}
 			if ( in_array( $v->send_to, array( 'recipient', 'both' ), true ) && is_email( $v->recipient_email ) ) {
 				Flash::add( 'info', __( 'The recipient email was changed. Use "Email recipient" if the new address should receive the voucher now.', 'voucher-captain' ) );
 			}

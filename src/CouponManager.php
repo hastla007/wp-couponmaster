@@ -276,11 +276,23 @@ final class CouponManager {
 				return true; // Addresses set by hand: leave them alone.
 			}
 		}
-		$coupon->set_email_restrictions( self::email_restrictions( $voucher, $restrict ) );
+		$emails                 = self::email_restrictions( $voucher, $restrict );
+		$this->restriction_kept = false;
+		if ( ! $emails ) {
+			// Neither address is usable (erased buyer, placeholder): a personal voucher must never silently become
+			// transferable. The previous restriction stays, else an address nobody can have, until an
+			// administrator enters a valid address (VoucherAdmin shows a warning).
+			$emails                 = $current ? $current : array( 'unassigned-' . $voucher->id . '@invalid.invalid' );
+			$this->restriction_kept = true;
+		}
+		$coupon->set_email_restrictions( $emails );
 		$coupon->update_meta_data( '_vcap_email_restrict', $restrict );
 		$coupon->save();
 		return true;
 	}
+
+	/** Whether the last refresh_email_restrictions() kept the old restriction for want of a valid address. */
+	public bool $restriction_kept = false;
 
 	public function set_coupon_enabled( Voucher $voucher, bool $enabled ): bool {
 		if ( ! $voucher->coupon_id ) {
@@ -1522,7 +1534,7 @@ final class CouponManager {
 		/* translators: %s: order number */
 		if ( $days > 0 && TopUp::extend_validity( $repo, $card, gmdate( 'Y-m-d H:i:s', time() + $days * DAY_IN_SECONDS ), sprintf( __( 'Balance of order #%s booked back', 'voucher-captain' ), $order->get_order_number() ), $order->get_id() ) ) {
 			/* translators: 1: voucher code, 2: expiry date */
-			$order->add_order_note( sprintf( __( 'Voucher %1$s had expired: its validity was extended to %2$s so the booked-back amount can be used.', 'voucher-captain' ), $card->code, wp_date( (string) get_option( 'date_format' ), (int) strtotime( $card->expires_at . ' UTC' ) ) ) );
+			$order->add_order_note( sprintf( __( 'Voucher %1$s had expired: its validity was extended to %2$s so the booked-back amount can be used.', 'voucher-captain' ), Downloads::masked_code( (string) $card->code ), wp_date( (string) get_option( 'date_format' ), (int) strtotime( $card->expires_at . ' UTC' ) ) ) );
 			return;
 		}
 		$money = wp_strip_all_tags( wc_price( $amount, array( 'currency' => $card->currency ) ) );
@@ -1572,7 +1584,7 @@ final class CouponManager {
 			$order->update_meta_data( '_vcap_single_use_returned', $done );
 			$order->save_meta_data();
 			/* translators: %s: voucher codes */
-			$order->add_order_note( sprintf( __( 'Order refunded: single-use vouchers %s can be used again.', 'voucher-captain' ), implode( ', ', $codes ) ) );
+			$order->add_order_note( sprintf( __( 'Order refunded: single-use vouchers %s can be used again.', 'voucher-captain' ), implode( ', ', array_map( array( Downloads::class, 'masked_code' ), $codes ) ) ) );
 		}
 	}
 
@@ -1594,7 +1606,7 @@ final class CouponManager {
 		if ( $this->given_back && $order instanceof \WC_Order ) {
 			if ( $this->keep_single_use ) {
 				/* translators: %s: voucher codes */
-				$order->add_order_note( sprintf( __( 'Order cancelled: single-use vouchers %s stay redeemed ("Restore balance on cancellation" is off).', 'voucher-captain' ), implode( ', ', wp_list_pluck( $this->given_back, 'code' ) ) ) );
+				$order->add_order_note( sprintf( __( 'Order cancelled: single-use vouchers %s stay redeemed ("Restore balance on cancellation" is off).', 'voucher-captain' ), implode( ', ', array_map( array( Downloads::class, 'masked_code' ), array_map( 'strval', wp_list_pluck( $this->given_back, 'code' ) ) ) ) ) );
 			} else {
 				foreach ( $this->given_back as $voucher ) {
 					self::check_restored_card( $this->repo, $order, $voucher, (float) $voucher->initial_amount );

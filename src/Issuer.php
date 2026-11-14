@@ -383,10 +383,12 @@ final class Issuer {
 		if ( $created ) {
 			$order->add_order_note(
 				sprintf(
-					/* translators: 1: count, 2: codes */
+					/* translators: 1: count, 2: masked codes (last four characters) */
 					_n( '%1$d voucher issued: %2$s', '%1$d vouchers issued: %2$s', count( $created ), 'voucher-captain' ),
 					count( $created ),
-					implode( ', ', wp_list_pluck( $created, 'code' ) )
+					// Masked: order notes reach ERP/CRM/shipping connectors (REST) and every member of staff; the
+					// full code is shown on the voucher's detail page only.
+					implode( ', ', array_map( static fn( $v ) => Downloads::masked_code( (string) $v->code ), $created ) )
 				) . ( $manual ? ' ' . __( '(manual)', 'voucher-captain' ) : '' )
 			);
 			foreach ( $created as $voucher ) {
@@ -595,7 +597,7 @@ final class Issuer {
 				$this->repo->delete( $voucher->id );
 				if ( $from_pool && ! $this->pool->release( $code ) ) {
 					/* translators: %s: code */
-					$order->add_order_note( sprintf( __( 'Imported code %s could not be returned to the code pool.', 'voucher-captain' ), $code ) );
+					$order->add_order_note( sprintf( __( 'Imported code %s could not be returned to the code pool.', 'voucher-captain' ), Downloads::masked_code( $code ) ) );
 				}
 				/* translators: %s: product name */
 				$order->add_order_note( sprintf( __( 'A voucher for "%s" could not be created (WooCommerce coupon not saved). It will be issued on the next attempt.', 'voucher-captain' ), $item->get_name() ) );
@@ -607,7 +609,7 @@ final class Issuer {
 			}
 		}
 		if ( ! $this->repo->log( $voucher->id, 'issued', $voucher->initial_amount, $voucher->balance, '', $order->get_id() ) ) {
-			$order->add_order_note( sprintf( /* translators: %s: code */ __( 'Voucher %s was issued, but its history entry could not be written.', 'voucher-captain' ), $voucher->code ) );
+			$order->add_order_note( sprintf( /* translators: %s: code */ __( 'Voucher %s was issued, but its history entry could not be written.', 'voucher-captain' ), Downloads::masked_code( (string) $voucher->code ) ) );
 		}
 		return $voucher;
 	}
@@ -972,7 +974,7 @@ final class Issuer {
 		$order = wc_get_order( (int) $voucher->order_id );
 		if ( $order instanceof \WC_Order ) {
 			/* translators: %s: voucher code */
-			$order->add_order_note( sprintf( __( 'Voucher %s voided (retried after the refund or cancellation).', 'voucher-captain' ), $voucher->code ) );
+			$order->add_order_note( sprintf( __( 'Voucher %s voided (retried after the refund or cancellation).', 'voucher-captain' ), Downloads::masked_code( (string) $voucher->code ) ) );
 		}
 	}
 
