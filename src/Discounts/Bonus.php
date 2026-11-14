@@ -373,7 +373,32 @@ final class Bonus {
 		$coupon->update_meta_data( self::COUPON_ORDER, $order->get_id() );
 		$coupon->update_meta_data( self::COUPON_SOURCE, (int) $campaign['id'] );
 		$coupon = apply_filters( 'vcap_bonus_coupon', $coupon, $campaign, $order );
-		return (int) $coupon->save();
+		return self::save_new_coupon( $coupon );
+	}
+
+	/**
+	 * Saves a new coupon with the post status it carries. WooCommerce before 9.x always inserts new coupons as
+	 * "publish" (its data store ignores the status prop on create), which would make a waiting-period bonus usable
+	 * at once – so the status is passed to the insert itself, never published even for a moment.
+	 */
+	private static function save_new_coupon( \WC_Coupon $coupon ): int {
+		$status = (string) $coupon->get_status( 'edit' );
+		if ( $coupon->get_id() || '' === $status || 'publish' === $status ) {
+			return (int) $coupon->save();
+		}
+		$code   = $coupon->get_code( 'edit' );
+		$insert = static function ( $data ) use ( $code, $status ) {
+			if ( is_array( $data ) && 'shop_coupon' === ( $data['post_type'] ?? '' ) && $code === ( $data['post_title'] ?? null ) ) {
+				$data['post_status'] = $status;
+			}
+			return $data;
+		};
+		add_filter( 'woocommerce_new_coupon_data', $insert, PHP_INT_MAX );
+		try {
+			return (int) $coupon->save();
+		} finally {
+			remove_filter( 'woocommerce_new_coupon_data', $insert, PHP_INT_MAX );
+		}
 	}
 
 	private function send( \WC_Coupon $coupon, \WC_Order $order, array $campaign ): void {
