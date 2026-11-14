@@ -163,6 +163,8 @@ final class ProductSettings {
 					'data_type'     => 'price',
 					'value'         => $this->v( $p, $key ),
 					'wrapper_class' => 'vcap-show-custom',
+					// V7: without an own maximum the shop's default maximum applies (WooCommerce → Settings → Vouchers).
+					'placeholder'   => 'custom_max' === $key && (float) Settings::value( 'vcap_custom_max_default' ) > 0 ? wc_format_localized_price( (string) Settings::value( 'vcap_custom_max_default' ) ) : '',
 				)
 			);
 		}

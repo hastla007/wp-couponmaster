@@ -70,6 +70,13 @@ Nach der Aktivierung werden zwei Startvorlagen angelegt (Geschenkkarte A5 und Gu
 - *Erstattung als Guthaben:* nur ausdrücklich über „Als Guthaben erstatten“ in der Bestellung (nie automatisch, nicht für Gastbestellungen) und nur mit protokollierter Zustimmung des Kunden.
 - Gekaufte Gutscheine werden bei vollständiger Erstattung/Stornierung der Kaufbestellung gesperrt (*„Gutscheine bei Erstattung stornieren“*).
 
+**Missbrauchsschutz (Standard an, unter WooCommerce → Einstellungen → Gutscheine änderbar; 0 schaltet jede Grenze ab).**
+- *Wunschbetrag:* Produkte ohne eigenen Höchstbetrag sind auf *„Standard-Höchstbetrag für Wunschbeträge“* begrenzt (`vcap_custom_max_default`, Standard 500 in Shopwährung, nie unter dem Mindestbetrag des Produkts); ein eigener Höchstbetrag bleibt.
+- *Gutscheinwert je Kunde und 24 Stunden:* höchstens 1.000 (`vcap_customer_daily_limit`) – Gutscheine im Warenkorb plus in den letzten 24 Stunden bestellte (wartend, in Bearbeitung, abgeschlossen) desselben Kontos oder derselben normalisierten Rechnungs-E-Mail; die Kasse lehnt darüber ab.
+- *Haltefrist für Neukunden:* Gutscheine einer Erstbestellung über 250 (`vcap_hold_new_customer_above`) werden ausgestellt, aber erst nach 24 Stunden ab Zahlung (`vcap_hold_hours`) zugestellt und einlösbar (geplante Zustellung, Coupon bis dahin Entwurf). Neukunde = keine andere wartende/bezahlte Bestellung desselben Kontos bzw. derselben E-Mail, die älter als die Haltefrist ist. Danke-Seite, Bestellmails und Konto nennen den Termin; Code und PDF erscheinen erst danach. „Jetzt zustellen“ am Gutschein gibt früher frei.
+- *Freunde werben:* Prämie erst 14 Tage nach Zahlung der abgeschlossenen Freundesbestellung (`vcap_referral_wait_days`, geplante Aktion; Storno/Erstattung in der Frist verwirft sie), höchstens 10 Prämien je Werber in 30 Tagen (`vcap_referral_max_rewards`), keine Prämie bei Bestellsumme 0, unbezahlter Nachnahme/Vorkasse oder gleicher Rechnungs-/Lieferadresse wie der Werber (`vcap_referral_address_check`). Mindestbestellwert des Freundescodes: leer = doppelter Festrabatt; ein Festrabatt verlangt immer mehr als den Rabatt (mindestens Rabatt + 1).
+- *Bonusgutscheine:* gültig und versendet erst 14 Tage nach Zahlung (`vcap_bonus_wait_days`; bis dahin Entwurf, Gültigkeit ab diesem Tag). Eine Teilerstattung unter die Aktionsschwelle zieht einen ungenutzten Bonus zurück; ist er schon eingelöst, wird die Erstattung um den genutzten Bonus gekürzt (Filter `vcap_allow_refund_of_used_bonus`).
+
 ## Integrationen und Sicherheit
 
 - [Versionierte PHP-API und Providervertrag](API.md)

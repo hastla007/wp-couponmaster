@@ -73,9 +73,16 @@ final class NextSteps {
 			}
 			$config  = ProductConfig::get( $product );
 			$fields  = is_array( $item->get_meta( '_vcap_fields' ) ) ? $item->get_meta( '_vcap_fields' ) : array();
+			$when    = Delivery::compute_time( $config, $fields, $order );
+			$held    = Delivery::with_hold( $when, $order );
+			$text    = self::summary( $config, $fields, $buyer, $held );
+			if ( $held !== $when ) {
+				// V7: say why a voucher bought for "right away" comes later.
+				$text .= ' ' . __( 'For your security, vouchers of a first order of this value are delivered and redeemable after a short waiting period.', 'voucher-captain' );
+			}
 			$lines[] = array(
 				'name' => (string) $item->get_name(),
-				'text' => self::summary( $config, $fields, $buyer, Delivery::compute_time( $config, $fields, $order ) ),
+				'text' => $text,
 			);
 		}
 		return $lines;

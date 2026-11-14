@@ -17,6 +17,141 @@ final class VoucherPurchaseRules {
 	public function register(): void {
 		add_filter( 'woocommerce_coupon_get_items_to_apply', array( $this, 'items_to_apply' ), 10, 2 );
 		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'validate' ), 30, 3 );
+		// V7: the same customer behind several addresses (aliases) is found again by the normalised email.
+		add_action( 'woocommerce_before_order_object_save', array( self::class, 'stamp_customer_key' ) );
+		// V7: velocity limit at checkout (classic and block checkout both run this hook after taking the address).
+		add_action( 'woocommerce_check_cart_items', array( $this, 'check_daily_limit' ) );
+	}
+
+	/** Order meta: keyed hash of the normalised billing email (CustomerEmail::key()). */
+	public const CUSTOMER_KEY_META = '_vcap_customer_key';
+	/** Order statuses whose vouchers count for the 24-hour limit and as earlier orders (unpaid "pending" does not). */
+	private const COUNTED_STATUSES = array( 'wc-on-hold', 'wc-processing', 'wc-completed' );
+
+	/** Keeps CUSTOMER_KEY_META in step with the billing email of every order (any way it is created). */
+	public static function stamp_customer_key( $order ): void {
+		if ( ! $order instanceof \WC_Order || $order instanceof \WC_Order_Refund ) {
+			return;
+		}
+		$email = (string) $order->get_billing_email();
+		$key   = '' !== trim( $email ) ? CustomerEmail::key( $email ) : '';
+		if ( (string) $order->get_meta( self::CUSTOMER_KEY_META ) !== $key ) {
+			$order->update_meta_data( self::CUSTOMER_KEY_META, $key );
+		}
+	}
+
+	/**
+	 * Value of the voucher products of an order: what the lines cost before discounts (with tax where prices
+	 * include tax), in the order currency.
+	 */
+	public static function voucher_value( \WC_Order $order ): float {
+		$value = 0.0;
+		foreach ( $order->get_items() as $item ) {
+			if ( $item instanceof \WC_Order_Item_Product && $item->get_product() && ProductConfig::is_voucher( $item->get_product() ) ) {
+				$value += (float) $item->get_subtotal() + ( $order->get_prices_include_tax() ? (float) $item->get_subtotal_tax() : 0.0 );
+			}
+		}
+		return $value;
+	}
+
+	/**
+	 * Orders of one customer (account, normalised billing email, or the exact address for orders saved before
+	 * the key existed) with a counted status, created at or after $since (0 = any time) and before $until.
+	 *
+	 * @return int[] order ids
+	 */
+	public static function customer_orders( int $user_id, string $email, int $since = 0, int $until = 0, int $exclude = 0 ): array {
+		$base = array(
+			'type'   => 'shop_order',
+			'status' => self::COUNTED_STATUSES,
+			'limit'  => 200,
+			'return' => 'ids',
+		);
+		if ( $since > 0 || $until > 0 ) {
+			$base['date_created'] = $until > 0 ? ( $since > 0 ? $since . '...' . $until : '<' . $until ) : '>=' . $since;
+		}
+		$queries = array();
+		if ( $user_id > 0 ) {
+			$queries[] = $base + array( 'customer_id' => $user_id );
+		}
+		if ( '' !== trim( $email ) ) {
+			$queries[] = $base + array( 'meta_query' => array( array( 'key' => self::CUSTOMER_KEY_META, 'value' => CustomerEmail::key( $email ) ) ) ); // phpcs:ignore WordPress.DB.SlowDBQuery
+			$queries[] = $base + array( 'billing_email' => strtolower( trim( $email ) ) );
+		}
+		$ids = array();
+		foreach ( $queries as $query ) {
+			$ids = array_merge( $ids, array_map( 'intval', (array) wc_get_orders( $query ) ) );
+		}
+		return array_values( array_diff( array_unique( $ids ), array( $exclude ) ) );
+	}
+
+	/**
+	 * V7: whether the order is a new customer's: no other order of the same account or email that was placed
+	 * at least $established seconds before it and is still on hold, processing or completed. Two quick orders
+	 * of a new customer are both new.
+	 */
+	public static function is_new_customer( \WC_Order $order, int $established ): bool {
+		$created = $order->get_date_created() ? $order->get_date_created()->getTimestamp() : time();
+		$earlier = self::customer_orders( (int) $order->get_customer_id(), (string) $order->get_billing_email(), 0, $created - max( 0, $established ), $order->get_id() );
+		return (bool) apply_filters( 'vcap_is_new_customer', ! $earlier, $order );
+	}
+
+	/** Voucher value of the cart (line subtotals of voucher products, as displayed). */
+	private static function cart_voucher_value( \WC_Cart $cart ): float {
+		$value = 0.0;
+		foreach ( $cart->get_cart() as $values ) {
+			$product = $values['data'] ?? null;
+			if ( $product instanceof \WC_Product && ProductConfig::is_voucher( $product ) ) {
+				$value += (float) ( $values['line_subtotal'] ?? 0 ) + ( wc_prices_include_tax() ? (float) ( $values['line_subtotal_tax'] ?? 0 ) : 0.0 );
+			}
+		}
+		return $value;
+	}
+
+	/**
+	 * Voucher value one customer ordered in the last 24 hours (on hold, processing, completed; refunded lines
+	 * no longer count).
+	 */
+	public static function ordered_last_day( int $user_id, string $email ): float {
+		$value = 0.0;
+		foreach ( self::customer_orders( $user_id, $email, time() - DAY_IN_SECONDS ) as $id ) {
+			$order = wc_get_order( $id );
+			if ( $order instanceof \WC_Order ) {
+				$share  = (float) $order->get_total() > 0 ? max( 0.0, 1 - (float) $order->get_total_refunded() / (float) $order->get_total() ) : 1.0;
+				$value += self::voucher_value( $order ) * $share;
+			}
+		}
+		return $value;
+	}
+
+	/**
+	 * V7: "maximum voucher value per customer and 24 hours" (vcap_customer_daily_limit, default 1000, 0 = off):
+	 * the vouchers in the cart plus those the same account or billing email (normalised) ordered in the last
+	 * 24 hours. The order cannot be placed above it.
+	 */
+	public function check_daily_limit(): void {
+		$limit = (float) $this->settings->get( 'vcap_customer_daily_limit' );
+		$cart  = function_exists( 'WC' ) && WC()->cart ? WC()->cart : null;
+		if ( $limit <= 0 || ! $cart ) {
+			return;
+		}
+		$in_cart = self::cart_voucher_value( $cart );
+		if ( $in_cart <= 0 ) {
+			return;
+		}
+		$email = WC()->customer ? (string) WC()->customer->get_billing_email() : '';
+		$total = $in_cart + self::ordered_last_day( get_current_user_id(), $email );
+		$limit = (float) apply_filters( 'vcap_customer_daily_limit', $limit, $total, $in_cart );
+		if ( $limit > 0 && $total > $limit + 0.00001 ) {
+			wc_add_notice(
+				sprintf(
+					/* translators: %s: maximum voucher value */
+					__( 'Vouchers can be ordered for at most %s per customer within 24 hours. Please reduce the voucher amount or contact us.', 'voucher-captain' ),
+					wp_strip_all_tags( wc_price( $limit ) )
+				),
+				'error'
+			);
+		}
 	}
 
 	/**

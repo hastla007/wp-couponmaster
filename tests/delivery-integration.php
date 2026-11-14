@@ -410,6 +410,60 @@ $z12m_item->save();
 $z12m_fields = ( new WC_Order_Item_Product( $z12m_item->get_id() ) )->get_meta( '_vcap_fields' );
 vcap_dlv_assert( 'ben@gmail.com' === ( $z12m_fields['recipient_email']['value'] ?? '' ), 'Z12: an invalid address typed into the visible copy is not taken over', $z12m_fields );
 
+// P12 · V7: vouchers of a new customer's first order above 250 are held for 24 hours (scheduled delivery).
+$v7_product = new WC_Product_Simple();
+$v7_product->set_name( 'V7 hold voucher' );
+$v7_product->set_regular_price( '300' );
+$v7_product->set_virtual( true );
+$v7_product->update_meta_data( '_vcap_enabled', 'yes' );
+$v7_product->save();
+$v7_small = new WC_Product_Simple();
+$v7_small->set_name( 'V7 small voucher' );
+$v7_small->set_regular_price( '100' );
+$v7_small->set_virtual( true );
+$v7_small->update_meta_data( '_vcap_enabled', 'yes' );
+$v7_small->save();
+$v7_order = static function ( WC_Product $product, string $email, int $created = 0 ): WC_Order {
+	$order = wc_create_order();
+	$order->add_product( $product, 1 );
+	$order->set_billing_email( $email );
+	if ( $created ) {
+		$order->set_date_created( $created );
+	}
+	$order->calculate_totals();
+	$order->save();
+	$order->update_status( 'processing' );
+	return wc_get_order( $order->get_id() );
+};
+$v7_held = $v7_order( $v7_product, "v7-new-{$tag}@example.com" );
+$v7_vouchers = $repo->for_order( $v7_held->get_id() );
+$v7_paid     = $v7_held->get_date_paid() ? $v7_held->get_date_paid()->getTimestamp() : time();
+vcap_dlv_assert( 1 === count( $v7_vouchers ) && Voucher::STATUS_SCHEDULED === $v7_vouchers[0]->status && abs( strtotime( $v7_vouchers[0]->delivery_at . ' UTC' ) - ( $v7_paid + DAY_IN_SECONDS ) ) < 120, 'V7: a new customer\'s first order above 250 is issued, but delivered 24 hours after the payment', $v7_vouchers );
+vcap_dlv_assert( 'draft' === get_post_status( $v7_vouchers[0]->coupon_id ) && Delivery::is_held( $v7_vouchers[0] ) && (int) $v7_held->get_meta( Delivery::HOLD_META ) > time() && as_has_scheduled_action( 'vcap_deliver_voucher', array( 'voucher_id' => $v7_vouchers[0]->id ), Delivery::GROUP ), 'V7: the held voucher is not redeemable until then and its delivery is scheduled' );
+$v7_next = implode( ' ', wp_list_pluck( VCAP\NextSteps::for_order( $v7_held ), 'text' ) );
+vcap_dlv_assert( str_contains( $v7_next, 'short waiting period' ) && str_contains( $v7_next, VCAP\LocalDate::from_utc( $v7_vouchers[0]->delivery_at, vcap()->settings->date_format() ) ), 'V7: the thank-you page and order emails say when the held voucher comes', $v7_next );
+$v7_notes = implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $v7_held->get_id() ) ), 'content' ) );
+vcap_dlv_assert( str_contains( $v7_notes, 'Security hold' ), 'V7: the order note explains the hold', $v7_notes );
+ob_start();
+VCAP\Plugin::template( 'myaccount/vouchers-table.php', array( 'vouchers' => $v7_vouchers, 'downloads' => vcap()->downloads, 'title' => '' ) );
+$v7_table = (string) ob_get_clean();
+vcap_dlv_assert( ! str_contains( $v7_table, $v7_vouchers[0]->code ) && str_contains( $v7_table, 'Security check' ) && ! str_contains( $v7_table, 'vcap-download-button' ), 'V7: the voucher list shows neither the code nor the PDF of a held voucher' );
+vcap()->delivery->deliver_now( $repo->get( $v7_vouchers[0]->id ) );
+vcap_dlv_assert( Voucher::STATUS_ACTIVE === $repo->get( $v7_vouchers[0]->id )->status && ! Delivery::is_held( $repo->get( $v7_vouchers[0]->id ) ), 'V7: "Deliver now" releases a held voucher early' );
+
+$v7_low = $v7_order( $v7_small, "v7-low-{$tag}@example.com" );
+vcap_dlv_assert( Voucher::STATUS_ACTIVE === ( $repo->for_order( $v7_low->get_id() )[0]->status ?? '' ), 'V7: a first order up to 250 is delivered at once' );
+$v7_order( $v7_small, "v7-known-{$tag}@example.com", time() - 3 * DAY_IN_SECONDS );
+$v7_known = $v7_order( $v7_product, "V7-Known-{$tag}+shop@example.com" );
+vcap_dlv_assert( Voucher::STATUS_ACTIVE === ( $repo->for_order( $v7_known->get_id() )[0]->status ?? '' ) && '0' === (string) $v7_known->get_meta( Delivery::HOLD_META ), 'V7: a customer with an earlier order (also under an alias of the address) is not held' );
+$v7_quick_first = $v7_order( $v7_small, "v7-quick-{$tag}@example.com" );
+$v7_quick       = $v7_order( $v7_product, "v7-quick-{$tag}@example.com" );
+vcap_dlv_assert( Voucher::STATUS_SCHEDULED === ( $repo->for_order( $v7_quick->get_id() )[0]->status ?? '' ), 'V7: an earlier order of minutes ago does not make a customer known' );
+update_option( 'vcap_hold_new_customer_above', 0 );
+$v7_off = $v7_order( $v7_product, "v7-off-{$tag}@example.com" );
+delete_option( 'vcap_hold_new_customer_above' );
+vcap_dlv_assert( Voucher::STATUS_ACTIVE === ( $repo->for_order( $v7_off->get_id() )[0]->status ?? '' ), 'V7: 0 switches the hold off' );
+
 // D10: the diagnostics name the counters support needs.
 $d10 = ( new VCAP\Diagnostics() )->fields();
 vcap_dlv_assert( ! array_diff( array( 'undelivered', 'failed_actions', 'open_reservations', 'attention', 'shortfalls', 'innodb', 'legacy_rows', 'adapters', 'issuing', 'retention', 'verbose_log' ), array_keys( $d10 ) ), 'D10: the diagnostics list failed tasks, undelivered vouchers, reservations, open cases, shortfalls, InnoDB, adapters, issuing and retention', array_keys( $d10 ) );

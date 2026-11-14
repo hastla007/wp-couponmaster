@@ -622,7 +622,8 @@ final class Issuer {
 		$voucher->fields          = $fields;
 
 		$voucher->send_to     = $voucher->recipient_email && 'buyer' !== $config['send_to'] ? $config['send_to'] : 'buyer';
-		$voucher->delivery_at = Delivery::compute_time( $config, $fields, $order );
+		// V7: a new customer's first order above the hold value is delivered (and redeemable) after the hold.
+		$voucher->delivery_at = Delivery::with_hold( Delivery::compute_time( $config, $fields, $order ), $order, true );
 		$voucher->status      = $voucher->delivery_at && strtotime( $voucher->delivery_at . ' UTC' ) > time() ? Voucher::STATUS_SCHEDULED : Voucher::STATUS_ACTIVE;
 
 		// Code: imported batch first, generated fallback.

@@ -48,11 +48,31 @@ final class Settings {
 		'vcap_referral_enabled'        => 'no',
 		'vcap_referral_friend_type'    => 'fixed_cart',
 		'vcap_referral_friend_amount'  => 10,
-		'vcap_referral_min_spend'      => 0,
+		// V3: empty = automatic (twice a fixed friend discount); a fixed discount always needs a higher order value.
+		'vcap_referral_min_spend'      => '',
 		'vcap_referral_reward_amount'  => 10,
 		'vcap_referral_reward_as'      => 'coupon',
 		'vcap_referral_reward_days'    => 90,
+		// P12 abuse protection, safe defaults (0 switches each one off).
+		'vcap_referral_wait_days'      => 14,
+		'vcap_referral_max_rewards'    => 10,
+		'vcap_referral_address_check'  => 'yes',
+		'vcap_bonus_wait_days'         => 14,
+		'vcap_custom_max_default'      => 500,
+		'vcap_customer_daily_limit'    => 1000,
+		'vcap_hold_new_customer_above' => 250,
+		'vcap_hold_hours'              => 24,
 	);
+
+	/**
+	 * A setting outside of an instance (static helpers such as ProductConfig): the same value Settings::get()
+	 * returns – the stored option, else the default, through the filter "vcap_setting_{key}".
+	 *
+	 * @return mixed
+	 */
+	public static function value( string $key ) {
+		return apply_filters( 'vcap_setting_' . $key, get_option( $key, self::DEFAULTS[ $key ] ?? null ) );
+	}
 
 	public function register(): void {
 		add_filter( 'woocommerce_settings_tabs_array', array( $this, 'add_tab' ), 60 );
@@ -419,6 +439,49 @@ final class Settings {
 					),
 					array( 'type' => 'sectionend', 'id' => 'vcap_general' ),
 
+					array(
+						'type'  => 'title',
+						'title' => __( 'Abuse protection', 'voucher-captain' ),
+						'desc'  => __( 'Limits against vouchers bought with stolen payment details. 0 switches a limit off.', 'voucher-captain' ),
+						'id'    => 'vcap_abuse',
+					),
+					array(
+						'title'             => __( 'Default maximum of customer-chosen amounts', 'voucher-captain' ),
+						'id'                => 'vcap_custom_max_default',
+						'type'              => 'number',
+						'default'           => 500,
+						'css'               => 'width:90px',
+						'custom_attributes' => array( 'min' => 0, 'step' => '0.01' ),
+						'desc_tip'          => __( 'Applies to "customer chooses the amount" products without their own maximum (shop currency). 0 = no limit.', 'voucher-captain' ),
+					),
+					array(
+						'title'             => __( 'Maximum voucher value per customer and 24 hours', 'voucher-captain' ),
+						'id'                => 'vcap_customer_daily_limit',
+						'type'              => 'number',
+						'default'           => 1000,
+						'css'               => 'width:90px',
+						'custom_attributes' => array( 'min' => 0, 'step' => '0.01' ),
+						'desc_tip'          => __( 'Checked at checkout: vouchers in the cart plus vouchers ordered in the last 24 hours by the same account or billing email (shop currency). 0 = no limit.', 'voucher-captain' ),
+					),
+					array(
+						'title'             => __( 'Hold vouchers of new customers above', 'voucher-captain' ),
+						'id'                => 'vcap_hold_new_customer_above',
+						'type'              => 'number',
+						'default'           => 250,
+						'css'               => 'width:90px',
+						'custom_attributes' => array( 'min' => 0, 'step' => '0.01' ),
+						'desc_tip'          => __( 'Vouchers of a first order above this value are issued, but delivered and redeemable only after the hold below. 0 = off.', 'voucher-captain' ),
+					),
+					array(
+						'title'             => __( 'Hold for (hours)', 'voucher-captain' ),
+						'id'                => 'vcap_hold_hours',
+						'type'              => 'number',
+						'default'           => 24,
+						'css'               => 'width:90px',
+						'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
+					),
+					array( 'type' => 'sectionend', 'id' => 'vcap_abuse' ),
+
 					array( 'type' => 'title', 'title' => __( 'Coupon codes', 'voucher-captain' ), 'id' => 'vcap_codes' ),
 					array(
 						'title'             => __( 'Prefix', 'voucher-captain' ),
@@ -513,6 +576,15 @@ final class Settings {
 						'desc'    => __( 'Apply published promotions (Vouchers → Promotions) automatically in the cart. The discount is shown as its own line in the cart and the order; catalog prices do not change.', 'voucher-captain' ),
 					),
 					array(
+						'title'             => __( 'Bonus vouchers valid after (days)', 'voucher-captain' ),
+						'id'                => 'vcap_bonus_wait_days',
+						'type'              => 'number',
+						'default'           => 14,
+						'css'               => 'width:90px',
+						'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
+						'desc_tip'          => __( 'A bonus voucher is created when the order is paid, but sent and redeemable only after this many days; a cancelled or refunded order withdraws it before. 0 = at once.', 'voucher-captain' ),
+					),
+					array(
 						'title'   => __( 'Store credit', 'voucher-captain' ),
 						'id'      => 'vcap_store_credit',
 						'type'    => 'checkbox',
@@ -570,7 +642,7 @@ final class Settings {
 					array(
 						'type'  => 'title',
 						'title' => __( 'Refer a friend', 'voucher-captain' ),
-						'desc'  => __( 'Customers find their personal code in My Account → Vouchers. Friends use it on their first order; the referring customer is rewarded once that order is completed. Own codes cannot be used.', 'voucher-captain' ),
+						'desc'  => __( 'Customers find their personal code in My Account → Vouchers. Friends use it on their first order; the referring customer is rewarded after the waiting period once that order is completed and paid. Own codes cannot be used.', 'voucher-captain' ),
 						'id'    => 'vcap_referral',
 					),
 					array(
@@ -602,9 +674,11 @@ final class Settings {
 						'title'             => __( 'Minimum order value for the friend', 'voucher-captain' ),
 						'id'                => 'vcap_referral_min_spend',
 						'type'              => 'number',
-						'default'           => 0,
+						'default'           => '',
 						'css'               => 'width:90px',
+						'placeholder'       => __( 'automatic', 'voucher-captain' ),
 						'custom_attributes' => array( 'min' => 0, 'step' => '0.01' ),
+						'desc_tip'          => __( 'Empty: twice a fixed discount. A fixed discount always needs an order value above it (at least the discount plus 1).', 'voucher-captain' ),
 					),
 					array(
 						'title'             => __( 'Reward for the referrer', 'voucher-captain' ),
@@ -631,6 +705,31 @@ final class Settings {
 						'default'           => 90,
 						'css'               => 'width:90px',
 						'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
+					),
+					array(
+						'title'             => __( 'Waiting period before the reward (days)', 'voucher-captain' ),
+						'id'                => 'vcap_referral_wait_days',
+						'type'              => 'number',
+						'default'           => 14,
+						'css'               => 'width:90px',
+						'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
+						'desc_tip'          => __( 'Counted from the payment of the friend\'s order (e.g. the withdrawal period). A cancelled or refunded order earns nothing. 0 = at once.', 'voucher-captain' ),
+					),
+					array(
+						'title'             => __( 'Rewards per referrer and 30 days', 'voucher-captain' ),
+						'id'                => 'vcap_referral_max_rewards',
+						'type'              => 'number',
+						'default'           => 10,
+						'css'               => 'width:90px',
+						'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
+						'desc_tip'          => __( '0 = unlimited.', 'voucher-captain' ),
+					),
+					array(
+						'title'   => __( 'Address check', 'voucher-captain' ),
+						'id'      => 'vcap_referral_address_check',
+						'type'    => 'checkbox',
+						'default' => 'yes',
+						'desc'    => __( 'No reward when the friend\'s billing address is the referrer\'s own address', 'voucher-captain' ),
 					),
 					array( 'type' => 'sectionend', 'id' => 'vcap_referral' ),
 				);

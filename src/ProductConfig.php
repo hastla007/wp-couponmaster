@@ -121,7 +121,26 @@ final class ProductConfig {
 		if ( ! $config['template'] ) {
 			$config['template'] = TemplatePostType::first_template_id();
 		}
+		$config['custom_max'] = self::effective_custom_max( $config );
 		return apply_filters( 'vcap_product_config', $config, $product );
+	}
+
+	/**
+	 * V7: maximum of a customer-chosen amount. A product's own maximum is kept; without one (empty or 0) the
+	 * setting "vcap_custom_max_default" applies (default 500 in the shop currency, 0 = no limit) – never below the
+	 * product's minimum, so a product with a higher minimum stays buyable.
+	 *
+	 * @return string|float '' for no limit.
+	 */
+	public static function effective_custom_max( array $config ) {
+		if ( (float) ( $config['custom_max'] ?? 0 ) > 0 ) {
+			return $config['custom_max'];
+		}
+		$default = (float) Settings::value( 'vcap_custom_max_default' );
+		if ( $default <= 0 ) {
+			return '';
+		}
+		return max( $default, (float) ( $config['custom_min'] ?? 0 ) );
 	}
 
 	/**

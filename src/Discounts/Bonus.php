@@ -9,11 +9,22 @@ defined( 'ABSPATH' ) || exit;
  * "Bonus voucher" promotions: after a qualifying order is paid, the customer receives a new single-use coupon
  * (restricted to their billing email) by email. Rules (products, categories, customer group, minimum value, period,
  * usage limits) are the same as for cart promotions. Cancelled or refunded orders take back an unused bonus.
+ *
+ * V5: the bonus becomes valid only after "vcap_bonus_wait_days" (default 14): it is created as a draft coupon
+ * (WooCommerce does not find drafts, and coupons have no start date) and published and mailed by a scheduled
+ * action (with a daily sweep as fallback). A partial refund below the promotion's threshold withdraws an unused
+ * bonus; a refund that would do so while the bonus is already used is reduced by the used bonus (guard_refund()).
  */
 final class Bonus {
 	public const ORDER_META    = '_vcap_bonus_coupons';
 	public const COUPON_ORDER  = '_vcap_bonus_order';
 	public const COUPON_SOURCE = '_vcap_bonus_campaign';
+	/** Coupon meta: Unix time from which a bonus is valid (it stays a draft until then). */
+	public const VALID_FROM    = '_vcap_bonus_valid_from';
+	/** Action Scheduler hook that publishes and sends a bonus once it is valid (args: coupon id). */
+	public const ACTIVATE_HOOK = 'vcap_bonus_activate';
+	/** Order meta: campaigns whose bonus was withdrawn. */
+	public const WITHDRAWN     = '_vcap_bonus_withdrawn';
 
 	public function __construct( private Repository $campaigns, private CartIntegration $cart ) {}
 
@@ -25,6 +36,15 @@ final class Bonus {
 		add_action( 'woocommerce_payment_complete_order_status_processing', array( $this, 'issue' ), 25, 1 );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'withdraw' ), 25 );
 		add_action( 'woocommerce_order_status_refunded', array( $this, 'withdraw' ), 25 );
+		add_action( 'woocommerce_order_partially_refunded', array( $this, 'withdraw_below_threshold' ), 25, 1 );
+		add_action( 'woocommerce_create_refund', array( $this, 'guard_refund' ), 12, 2 );
+		add_action( self::ACTIVATE_HOOK, array( $this, 'activate' ) );
+		add_action( 'vcap_daily_maintenance', array( $this, 'activate_overdue' ) );
+	}
+
+	/** V5: days after the payment until a bonus is valid (0 = at once). */
+	public static function wait_days(): int {
+		return max( 0, (int) \VCAP\Settings::value( 'vcap_bonus_wait_days' ) );
 	}
 
 	/**
@@ -116,11 +136,191 @@ final class Bonus {
 			$order->update_meta_data( self::ORDER_META, $issued );
 			$order->save_meta_data();
 			$coupon = new \WC_Coupon( $coupon_id );
+			$from   = (int) $coupon->get_meta( self::VALID_FROM );
+			if ( $from > time() ) {
+				if ( function_exists( 'as_schedule_single_action' ) ) {
+					as_schedule_single_action( $from, self::ACTIVATE_HOOK, array( $coupon_id ), \VCAP\Delivery::GROUP );
+				}
+				/* translators: 1: masked coupon code (last four characters), 2: promotion title, 3: date */
+				$order->add_order_note( sprintf( __( 'Bonus voucher %1$s created (promotion "%2$s"); it is sent and valid from %3$s unless the order is cancelled or refunded before.', 'voucher-captain' ), \VCAP\Downloads::masked_code( (string) $coupon->get_code() ), $campaign['title'], wp_date( vcap()->settings->date_format(), $from ) ) );
+				continue;
+			}
 			/* translators: 1: masked coupon code (last four characters), 2: promotion title */
 			$order->add_order_note( sprintf( __( 'Bonus voucher %1$s issued (promotion "%2$s").', 'voucher-captain' ), \VCAP\Downloads::masked_code( (string) $coupon->get_code() ), $campaign['title'] ) );
 			$this->send( $coupon, $order, $campaign );
 		}
 		return $created;
+	}
+
+	/**
+	 * V5: a waiting bonus becomes valid – published (WooCommerce finds it from now on) and sent – if its order is
+	 * still paid and the bonus was not withdrawn meanwhile.
+	 *
+	 * @param int|string $coupon_id Coupon id.
+	 */
+	public function activate( $coupon_id ): bool {
+		$coupon_id = (int) $coupon_id;
+		$from      = (int) get_post_meta( $coupon_id, self::VALID_FROM, true );
+		if ( ! $from || 'shop_coupon' !== get_post_type( $coupon_id ) || 'draft' !== get_post_status( $coupon_id ) || $from > time() + MINUTE_IN_SECONDS ) {
+			return false;
+		}
+		$order       = wc_get_order( (int) get_post_meta( $coupon_id, self::COUPON_ORDER, true ) );
+		$campaign_id = (int) get_post_meta( $coupon_id, self::COUPON_SOURCE, true );
+		if ( ! $order instanceof \WC_Order || ! in_array( $coupon_id, self::issued( $order ), true ) ) {
+			return false;
+		}
+		if ( ! $order->has_status( wc_get_is_paid_statuses() ) || in_array( $campaign_id, array_map( 'intval', (array) $order->get_meta( self::WITHDRAWN ) ), true ) ) {
+			$this->withdraw( $order->get_id() ); // Cancelled, refunded or failed meanwhile: never valid.
+			return false;
+		}
+		if ( ! \VCAP\Claim::take( 'bonus-activate:' . $coupon_id ) ) {
+			return false;
+		}
+		$updated = wp_update_post( array( 'ID' => $coupon_id, 'post_status' => 'publish' ), true );
+		if ( is_wp_error( $updated ) || ! $updated ) {
+			\VCAP\Claim::release( 'bonus-activate:' . $coupon_id );
+			return false;
+		}
+		$coupon = new \WC_Coupon( $coupon_id );
+		if ( class_exists( '\WC_Cache_Helper' ) ) {
+			wp_cache_delete( \WC_Cache_Helper::get_cache_prefix( 'coupons' ) . 'coupon_id_from_code_' . wc_format_coupon_code( (string) $coupon->get_code() ), 'coupons' );
+		}
+		$campaign = $this->campaigns->get_any( $campaign_id );
+		$title    = $campaign ? (string) $campaign['title'] : '';
+		/* translators: 1: masked coupon code (last four characters), 2: promotion title */
+		$order->add_order_note( sprintf( __( 'Bonus voucher %1$s issued (promotion "%2$s").', 'voucher-captain' ), \VCAP\Downloads::masked_code( (string) $coupon->get_code() ), $title ) );
+		$this->send( $coupon, $order, array( 'title' => $title ) );
+		return true;
+	}
+
+	/** Daily: bonus vouchers whose scheduled activation was lost (at most 100 per run). */
+	public function activate_overdue(): void {
+		$ids = get_posts(
+			array(
+				'post_type'   => 'shop_coupon',
+				'post_status' => 'draft',
+				'numberposts' => 100,
+				'fields'      => 'ids',
+				'meta_query'  => array( array( 'key' => self::VALID_FROM, 'value' => time(), 'compare' => '<=', 'type' => 'NUMERIC' ) ), // phpcs:ignore WordPress.DB.SlowDBQuery
+			)
+		);
+		foreach ( $ids as $id ) {
+			$this->activate( (int) $id );
+		}
+	}
+
+	/**
+	 * Share (0–1) of the order still paid after its refunds, plus $extra being refunded now.
+	 */
+	private static function kept_share( \WC_Order $order, float $extra = 0.0 ): float {
+		$total = (float) $order->get_total();
+		if ( $total <= 0 ) {
+			return 1.0;
+		}
+		return max( 0.0, min( 1.0, ( $total - (float) $order->get_total_refunded() - $extra ) / $total ) );
+	}
+
+	/**
+	 * Whether the bonus of a campaign still qualifies when only $share of the order is kept (lines scaled).
+	 */
+	private function qualifies( \WC_Order $order, int $campaign_id, float $share ): bool {
+		if ( $share <= 0.0 ) {
+			return false;
+		}
+		$campaign = $this->campaigns->get_any( $campaign_id );
+		if ( ! $campaign ) {
+			return $share >= 1.0;
+		}
+		$lines = array_map(
+			static function ( array $line ) use ( $share ) {
+				$line['unit'] = (float) $line['unit'] * $share;
+				return $line;
+			},
+			self::order_lines( $order )
+		);
+		return '' === Engine::bonus_blocker( $campaign['rules'], $lines, $this->cart->context( $order ) );
+	}
+
+	/** Value a used bonus coupon took off (its discounts; a fixed bonus at most its amount). */
+	public static function used_value( \WC_Coupon $coupon ): float {
+		global $wpdb;
+		$lookup = $wpdb->prefix . 'wc_order_coupon_lookup';
+		$sum    = null;
+		if ( $lookup === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $lookup ) ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$sum = $wpdb->get_var( $wpdb->prepare( "SELECT SUM(discount_amount) FROM {$lookup} WHERE coupon_id = %d", $coupon->get_id() ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		}
+		if ( 'percent' === $coupon->get_discount_type() ) {
+			return max( 0.0, (float) $sum );
+		}
+		return null !== $sum && (float) $sum > 0 ? min( (float) $coupon->get_amount(), (float) $sum ) : (float) $coupon->get_amount();
+	}
+
+	/** Bonus coupons of the order that are not withdrawn: campaign id => coupon. */
+	private static function live_bonuses( \WC_Order $order ): array {
+		$withdrawn = array_map( 'intval', (array) $order->get_meta( self::WITHDRAWN ) );
+		$out       = array();
+		foreach ( self::issued( $order ) as $campaign_id => $coupon_id ) {
+			$coupon = new \WC_Coupon( $coupon_id );
+			if ( ! in_array( (int) $campaign_id, $withdrawn, true ) && $coupon->get_id() && 'trash' !== get_post_status( $coupon_id ) ) {
+				$out[ (int) $campaign_id ] = $coupon;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * V5 refund guard (like the top-up guard): a refund that takes the order below a promotion's threshold while
+	 * its bonus is already used is refused above "order rest minus used bonus" – the customer would keep the
+	 * bonus for a purchase they gave back. Filter "vcap_allow_refund_of_used_bonus" (default false) allows it.
+	 *
+	 * @param \WC_Order_Refund $refund Refund being created (not saved yet).
+	 * @param array            $args   wc_create_refund() arguments.
+	 */
+	public function guard_refund( $refund, $args ): void {
+		$order = wc_get_order( (int) ( $args['order_id'] ?? ( $refund instanceof \WC_Order_Refund ? $refund->get_parent_id() : 0 ) ) );
+		if ( ! $order instanceof \WC_Order ) {
+			return;
+		}
+		$amount = (float) ( $args['amount'] ?? 0 );
+		$share  = self::kept_share( $order, $amount );
+		$used   = 0.0;
+		$codes  = array();
+		foreach ( self::live_bonuses( $order ) as $campaign_id => $coupon ) {
+			if ( $coupon->get_usage_count() > 0 && ! $this->qualifies( $order, $campaign_id, $share ) ) {
+				$used   += self::used_value( $coupon );
+				$codes[] = \VCAP\Downloads::masked_code( (string) $coupon->get_code() );
+			}
+		}
+		$max = max( 0.0, round( (float) $order->get_total() - (float) $order->get_total_refunded() - $used, wc_get_price_decimals() ) );
+		if ( ! $codes || $amount <= $max + 0.00001 || apply_filters( 'vcap_allow_refund_of_used_bonus', false, $order, $amount, $used ) ) {
+			return;
+		}
+		throw new \Exception(
+			sprintf(
+				/* translators: 1: masked bonus codes, 2: maximum refund */
+				esc_html__( 'The bonus voucher of this order was already used (%1$s); the order would no longer qualify for it. At most %2$s can be refunded now.', 'voucher-captain' ),
+				esc_html( implode( ', ', $codes ) ),
+				esc_html( html_entity_decode( wp_strip_all_tags( wc_price( $max, array( 'currency' => $order->get_currency() ) ) ) ) )
+			)
+		);
+	}
+
+	/** V5: a partial refund below a promotion's threshold withdraws its unused bonus. */
+	public function withdraw_below_threshold( $order_id ): void {
+		$order = wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			return;
+		}
+		$share = self::kept_share( $order );
+		$drop  = array();
+		foreach ( self::live_bonuses( $order ) as $campaign_id => $coupon ) {
+			if ( 0 === $coupon->get_usage_count() && ! $this->qualifies( $order, $campaign_id, $share ) ) {
+				$drop[] = $campaign_id;
+			}
+		}
+		if ( $drop ) {
+			$this->withdraw( $order->get_id(), $drop );
+		}
 	}
 
 	private function create_coupon( array $campaign, \WC_Order $order ): int {
@@ -146,8 +346,14 @@ final class Bonus {
 		if ( $r['bonus_min_spend'] > 0 ) {
 			$coupon->set_minimum_amount( $r['bonus_min_spend'] );
 		}
+		// V5: valid only after the waiting period – a draft until then, its validity counted from that day.
+		$from = time() + self::wait_days() * DAY_IN_SECONDS;
+		if ( $from > time() ) {
+			$coupon->set_status( 'draft' );
+			$coupon->update_meta_data( self::VALID_FROM, $from );
+		}
 		if ( $r['bonus_days'] > 0 ) {
-			$coupon->set_date_expires( time() + $r['bonus_days'] * DAY_IN_SECONDS );
+			$coupon->set_date_expires( $from + $r['bonus_days'] * DAY_IN_SECONDS );
 		}
 		if ( is_email( $order->get_billing_email() ) ) {
 			$coupon->set_email_restrictions( array( strtolower( $order->get_billing_email() ) ) );
@@ -170,16 +376,22 @@ final class Bonus {
 
 	/**
 	 * Cancelled/refunded order: unused bonus coupons are moved to the trash and the use is given back.
+	 *
+	 * @param int|string $order_id Order id.
+	 * @param int[]|null $only     Only these campaigns (partial refund below their threshold).
 	 */
-	public function withdraw( $order_id ): void {
+	public function withdraw( $order_id, $only = null ): void {
 		$order = wc_get_order( $order_id );
 		if ( ! $order instanceof \WC_Order ) {
 			return;
 		}
 		$issued    = self::issued( $order );
 		$left      = $issued;
-		$withdrawn = array_map( 'intval', (array) $order->get_meta( '_vcap_bonus_withdrawn' ) );
+		$withdrawn = array_map( 'intval', (array) $order->get_meta( self::WITHDRAWN ) );
 		foreach ( $issued as $campaign_id => $coupon_id ) {
+			if ( is_array( $only ) && ! in_array( (int) $campaign_id, array_map( 'intval', $only ), true ) ) {
+				continue;
+			}
 			if ( in_array( (int) $campaign_id, $withdrawn, true ) ) {
 				unset( $left[ $campaign_id ] ); // Already withdrawn (cancelled, then refunded): never give back another order's use.
 				continue;
@@ -194,6 +406,9 @@ final class Bonus {
 				$order->add_order_note( sprintf( __( 'Bonus voucher %s was already used and stays valid.', 'voucher-captain' ), \VCAP\Downloads::masked_code( (string) $coupon->get_code() ) ) );
 				continue;
 			}
+			if ( function_exists( 'as_unschedule_all_actions' ) ) {
+				as_unschedule_all_actions( self::ACTIVATE_HOOK, array( (int) $coupon_id ), \VCAP\Delivery::GROUP );
+			}
 			wp_trash_post( $coupon_id );
 			Usage::remove( (int) $campaign_id, Usage::order_key( $order ), (int) $order->get_id() );
 			unset( $left[ $campaign_id ] );
@@ -202,7 +417,7 @@ final class Bonus {
 		}
 		// Keep withdrawn campaigns marked, so a later status change does not issue the bonus again.
 		$order->update_meta_data( self::ORDER_META, $issued );
-		$order->update_meta_data( '_vcap_bonus_withdrawn', array_values( array_unique( array_merge( $withdrawn, array_map( 'intval', array_keys( array_diff_key( $issued, $left ) ) ) ) ) ) );
+		$order->update_meta_data( self::WITHDRAWN, array_values( array_unique( array_merge( $withdrawn, array_map( 'intval', array_keys( array_diff_key( $issued, $left ) ) ) ) ) ) );
 		$order->save_meta_data();
 	}
 }
