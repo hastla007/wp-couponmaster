@@ -343,11 +343,12 @@ final class Issuer {
 		$voucher->expires_at    = ProductConfig::expiry_for( $config, $order->get_date_paid() ? $order->get_date_paid()->getTimestamp() : time(), ProductConfig::country_of( $order ) );
 		/** Expiry (UTC "Y-m-d H:i:s" or null) of a voucher being issued, e.g. no later than the event it is for. */
 		$voucher->expires_at    = apply_filters( 'vcap_voucher_expires_at', $voucher->expires_at, $item, $config, $order );
-		$voucher->buyer_name    = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() );
+		$voucher->buyer_name    = trim( $order->get_formatted_billing_full_name() ); // Name order of the shop language.
 		$voucher->buyer_email   = (string) $order->get_billing_email();
 		$voucher->max_checkins  = (int) $config['max_checkins'];
 		$voucher->transferable  = 'no' !== $config['transferable'];
-		$voucher->terms         = ProductConfig::terms( $config, ProductConfig::country_of( $order ) );
+		// In the order language: the payment may be confirmed in another one (admin, gateway callback).
+		$voucher->terms         = Compat\Multilingual::in_order_language( $order, static fn() => ProductConfig::terms( $config, ProductConfig::country_of( $order ) ) );
 
 		$fields                   = is_array( $item->get_meta( '_vcap_fields' ) ) ? $item->get_meta( '_vcap_fields' ) : array();
 		$voucher->recipient_name  = (string) ( $fields['recipient_name']['value'] ?? '' );

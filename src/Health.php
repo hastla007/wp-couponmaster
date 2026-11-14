@@ -155,8 +155,13 @@ final class Health {
 		if ( '' === $error ) {
 			return self::result( 'schema', 'good', __( 'The voucher database tables are complete', 'voucher-captain' ), __( 'All voucher tables, columns and unique keys exist and support transactions.', 'voucher-captain' ) );
 		}
-		/* translators: %s: technical details */
-		return self::result( 'schema', 'critical', __( 'The voucher database update is incomplete', 'voucher-captain' ), sprintf( __( 'Missing: %s. The update is retried automatically; check the database permissions.', 'voucher-captain' ), $error ) );
+		return self::result(
+			'schema',
+			'critical',
+			__( 'The voucher database update is incomplete', 'voucher-captain' ),
+			/* translators: %s: technical details */
+			sprintf( __( 'Missing: %s. The update is retried automatically; check the database permissions.', 'voucher-captain' ), $error )
+		);
 	}
 
 	public function test_scheduler(): array {
@@ -207,8 +212,13 @@ final class Health {
 		if ( '' === $error ) {
 			return self::result( 'upload_dir', 'good', __( 'The private voucher folder is protected', 'voucher-captain' ), __( 'PDF vouchers and fonts are stored in a folder that cannot be opened from the web.', 'voucher-captain' ) );
 		}
-		/* translators: %s: folder path */
-		return self::result( 'upload_dir', 'critical', __( 'The private voucher folder is missing or unprotected', 'voucher-captain' ), sprintf( __( 'Voucher Captain could not create or protect %s. Check the folder permissions.', 'voucher-captain' ), $error ) );
+		return self::result(
+			'upload_dir',
+			'critical',
+			__( 'The private voucher folder is missing or unprotected', 'voucher-captain' ),
+			/* translators: %s: folder path */
+			sprintf( __( 'Voucher Captain could not create or protect %s. Check the folder permissions.', 'voucher-captain' ), $error )
+		);
 	}
 
 	public function test_redeem_page(): array {
@@ -241,8 +251,13 @@ final class Health {
 		if ( ! $gaps ) {
 			return self::result( 'markets', 'good', __( 'Voucher rules are set for every EU country you sell to', 'voucher-captain' ), __( 'Each selling country has a verified voucher validity, redemption conditions and a translation.', 'voucher-captain' ) );
 		}
-		/* translators: %s: list of countries with what is missing */
-		return self::result( 'markets', 'recommended', __( 'Some EU selling countries need voucher settings', 'voucher-captain' ), sprintf( __( 'Set the statutory validity and conditions per country under Vouchers → Settings (have them checked legally) and add translations: %s', 'voucher-captain' ), implode( '; ', $gaps ) ) );
+		return self::result(
+			'markets',
+			'recommended',
+			__( 'Some EU selling countries need voucher settings', 'voucher-captain' ),
+			/* translators: %s: list of countries with what is missing */
+			sprintf( __( 'Set the statutory validity and conditions per country under Vouchers → Settings (have them checked legally) and add translations: %s', 'voucher-captain' ), implode( '; ', $gaps ) )
+		);
 	}
 
 	/**
@@ -270,8 +285,13 @@ final class Health {
 		if ( ! $names ) {
 			return self::result( 'validity', 'good', __( 'Voucher validity is not shorter than the statutory period', 'voucher-captain' ), __( 'No voucher product ends before the statutory limitation period of the shop country or an EU selling country.', 'voucher-captain' ) . self::truncation_note( $more ) );
 		}
-		/* translators: %s: products with the countries concerned */
-		return self::result( 'validity', 'recommended', __( 'Some vouchers are valid for less than the statutory period', 'voucher-captain' ), sprintf( __( 'A validity shorter than the statutory limitation period is often invalid in voucher conditions. Check legally or switch to the statutory validity: %s', 'voucher-captain' ), implode( '; ', $names ) ) . self::truncation_note( $more ) );
+		return self::result(
+			'validity',
+			'recommended',
+			__( 'Some vouchers are valid for less than the statutory period', 'voucher-captain' ),
+			/* translators: %s: products with the countries concerned */
+			sprintf( __( 'A validity shorter than the statutory limitation period is often invalid in voucher conditions. Check legally or switch to the statutory validity: %s', 'voucher-captain' ), implode( '; ', $names ) ) . self::truncation_note( $more )
+		);
 	}
 
 	/** Voucher products whose tax status does not fit the voucher kind (multi-purpose: none, single-purpose: taxable). */
@@ -298,8 +318,13 @@ final class Health {
 		if ( ! $names ) {
 			return self::result( 'tax_status', 'good', __( 'Voucher products have a tax status that fits their VAT treatment', 'voucher-captain' ), __( 'Multi-purpose vouchers are sold without VAT, single-purpose vouchers with VAT.', 'voucher-captain' ) . self::truncation_note( $more ) );
 		}
-		/* translators: %s: list of products */
-		return self::result( 'tax_status', 'recommended', __( 'Some voucher products have a tax status that does not fit their VAT treatment', 'voucher-captain' ), sprintf( __( 'Multi-purpose vouchers are sold without VAT (tax status "None"), single-purpose vouchers with VAT ("Taxable"). Check with your tax adviser and correct: %s', 'voucher-captain' ), implode( '; ', $names ) ) . self::truncation_note( $more ) );
+		return self::result(
+			'tax_status',
+			'recommended',
+			__( 'Some voucher products have a tax status that does not fit their VAT treatment', 'voucher-captain' ),
+			/* translators: %s: list of products */
+			sprintf( __( 'Multi-purpose vouchers are sold without VAT (tax status "None"), single-purpose vouchers with VAT ("Taxable"). Check with your tax adviser and correct: %s', 'voucher-captain' ), implode( '; ', $names ) ) . self::truncation_note( $more )
+		);
 	}
 
 	private static function result( string $id, string $status, string $label, string $text ): array {

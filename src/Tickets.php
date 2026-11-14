@@ -130,7 +130,7 @@ final class Tickets {
 			'order'          => $manager && $voucher->order() ? $voucher->order()->get_order_number() : '',
 			'checkins'       => $voucher->checkins,
 			'max_checkins'   => $voucher->max_checkins,
-			'last_checkin'   => $voucher->last_checkin_at ? get_date_from_gmt( $voucher->last_checkin_at, get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) : '',
+			'last_checkin'   => $voucher->last_checkin_at ? LocalDate::from_utc( $voucher->last_checkin_at, get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) : '',
 			'multi_use'      => $voucher->is_multi_use(),
 			'balance'        => $voucher->balance,
 			'balance_html'   => self::money_text( $voucher->balance, $voucher->currency ),
@@ -138,8 +138,8 @@ final class Tickets {
 			'currency'        => $currency,
 			'currency_symbol' => html_entity_decode( get_woocommerce_currency_symbol( $currency ) ),
 			'decimals'        => $voucher->decimals(),
-			'value_html'     => ! $manager ? '' : ( 'percent' === $voucher->discount_type ? $voucher->initial_amount . '%' : html_entity_decode( wp_strip_all_tags( wc_price( $voucher->initial_amount, array( 'currency' => $voucher->currency ) ) ) ) ),
-			'expires'        => $voucher->expires_at ? get_date_from_gmt( $voucher->expires_at, get_option( 'date_format' ) ) : '',
+			'value_html'     => ! $manager ? '' : ( 'percent' === $voucher->discount_type ? Format::percent( $voucher->initial_amount ) : html_entity_decode( wp_strip_all_tags( wc_price( $voucher->initial_amount, array( 'currency' => $voucher->currency ) ) ) ) ),
+			'expires'        => $voucher->expires_at ? LocalDate::from_utc( $voucher->expires_at, get_option( 'date_format' ) ) : '',
 			'admin_url'      => admin_url( 'admin.php?page=vcap-vouchers&voucher=' . $voucher->id ),
 		);
 		/** Connector details for the scanner (e.g. "ticket voucher – exchange first", redeemable false). */

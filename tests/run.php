@@ -772,6 +772,101 @@ check( 'a malformed key in the set fails closed (nothing verifies)', '{"pinned":
 $r = $keyset( ' , ', 'rotation' );
 check( 'an empty key set fails closed', '{"pinned":"1 invalid","activate":"wplc_server_signature_invalid","snapshot":"none","offline":"refused"}' === $r, $r );
 
+echo "Languages and customer mails (multilingual shops, recipients, delivery notes)\n";
+$wpml = (string) file_get_contents( dirname( __DIR__ ) . '/wpml-config.xml' );
+$product_metas = array_map( array( ProductConfig::class, 'meta_key' ), array_keys( ProductConfig::DEFAULTS ) );
+$product_metas = array_merge( $product_metas, array( '_vcap_enabled', VCAP\TopUp::PRODUCT_META ) );
+$unlisted      = array_values( array_filter( $product_metas, static fn( $key ) => ! preg_match( '#<custom-field action="(copy|copy-once|translate)">' . preg_quote( $key, '#' ) . '</custom-field>#', $wpml ) ) );
+check( 'wpml-config.xml lists every voucher setting of a product (ProductConfig::DEFAULTS, enabled, top-up)', ! $unlisted, implode( ', ', $unlisted ) );
+check( 'wpml-config.xml: redemption conditions and event location are translated per language', str_contains( $wpml, '<custom-field action="translate">_vcap_redemption_terms</custom-field>' ) && str_contains( $wpml, '<custom-field action="translate">_vcap_event_location</custom-field>' ) );
+$email_ids = array();
+foreach ( glob( dirname( __DIR__ ) . '/src/Emails/*.php' ) as $file ) {
+	if ( preg_match_all( "/this->id\\s*=\\s*(?:\\\$this->id \\? \\\$this->id : )?'([a-z_]+)'/", (string) file_get_contents( $file ), $m ) ) {
+		$email_ids = array_merge( $email_ids, $m[1] );
+	}
+}
+sort( $email_ids );
+$known_ids = VCAP\Compat\Multilingual::EMAIL_IDS;
+sort( $known_ids );
+check( 'every customer email of the plugin is in the list of translatable email texts', $email_ids === $known_ids, implode( ',', $email_ids ) );
+$admin_texts = true;
+foreach ( VCAP\Compat\Multilingual::OPTIONS as $option ) {
+	$admin_texts = $admin_texts && str_contains( $wpml, '<key name="' . $option . '" />' );
+}
+foreach ( VCAP\Compat\Multilingual::EMAIL_IDS as $id ) {
+	$block       = preg_match( '#<key name="woocommerce_' . $id . '_settings">(.*?)</key>\s*(?=<key name="woocommerce_|</admin-texts>)#s', $wpml, $m ) ? $m[1] : '';
+	foreach ( VCAP\Compat\Multilingual::EMAIL_KEYS as $key ) {
+		$admin_texts = $admin_texts && str_contains( $block, '<key name="' . $key . '" />' );
+	}
+}
+check( 'wpml-config.xml registers the redemption conditions and the email texts for string translation', $admin_texts );
+
+check( 'the email locale falls back to the site language', 'de_DE' === VCAP\Compat\Multilingual::email_locale( null ) );
+add_filter( 'vcap_order_language', static fn( $lang ) => 'en' );
+add_filter( 'vcap_email_locale', static fn( $locale ) => 'en_GB', 10, 1 );
+check( 'filter "vcap_email_locale" chooses the locale of a customer mail', 'en_GB' === VCAP\Compat\Multilingual::email_locale( null ) && 'en' === VCAP\Compat\Multilingual::order_language( null ) );
+unset( $GLOBALS['vcap_test_filters']['vcap_email_locale'], $GLOBALS['vcap_test_filters']['vcap_order_language'] );
+$state = VCAP\Compat\Multilingual::switch_to( '', 'fr' );
+$inner = VCAP\Compat\Multilingual::mail_language();
+VCAP\Compat\Multilingual::restore( $state );
+check( 'the language of a mail is known while it is prepared and forgotten afterwards', 'fr' === $inner && '' === VCAP\Compat\Multilingual::mail_language() && $state['ready'] );
+
+$intro = static fn() => __( 'Hi {buyer_name}, thank you for your order #{order_number}. Your voucher for {product_name} is ready.', 'voucher-captain' );
+check( 'the translation files are read for the default texts', count( VCAP\I18n::read_mo( dirname( __DIR__ ) . '/languages/voucher-captain-de_DE.mo' ) ) > 1000 );
+check( 'a saved default email body is recognised in English and in German', VCAP\I18n::is_default_text( ' Hi {buyer_name}, thank you for your order #{order_number}. Your voucher for {product_name} is ready.', $intro ) && VCAP\I18n::is_default_text( 'Hallo {buyer_name}, vielen Dank für Ihre Bestellung #{order_number}. Ihr Gutschein für {product_name} ist bereit.', $intro ) && VCAP\I18n::is_default_text( '', $intro ) );
+check( 'an email body of the shop is kept', ! VCAP\I18n::is_default_text( 'Danke für Ihren Einkauf, {buyer_name}!', $intro ) );
+
+check( 'stored UTC dates are shown in the shop time zone with wp_date()', '24.12.2026 09:00' === VCAP\LocalDate::from_utc( '2026-12-24 08:00:00', 'd.m.Y H:i' ) && '' === VCAP\LocalDate::from_utc( '', 'd.m.Y' ) && '' === VCAP\LocalDate::from_utc( null, 'd.m.Y' ) );
+check( 'percentages use the decimal separator of the shop', '12,5%' === VCAP\Format::percent( '12.5' ) && '15%' === VCAP\Format::percent( 15 ) );
+
+$gift                  = clone $v;
+$gift->recipient_name  = '';
+$gift->buyer_name      = 'Max Käufer';
+$names                 = Placeholders::values( $gift );
+check( '{recipient_name} is empty without a recipient name, {holder_name} names the buyer', '' === $names['recipient_name'] && 'Max Käufer' === $names['holder_name'] && 'Max Käufer' === $names['buyer_name'] );
+check( 'a text whose placeholders are all empty is recognised, other texts are not', Placeholders::all_empty( 'For: {recipient_name}', $gift ) && ! Placeholders::all_empty( 'For: {recipient_name} {buyer_name}', $gift ) && ! Placeholders::all_empty( 'GIFT VOUCHER', $gift ) );
+$pdf_gift = vcap()->pdf->html( $gift, TemplatePostType::default_designs()['giftcard'] );
+$pdf_named = vcap()->pdf->html( $v, TemplatePostType::default_designs()['giftcard'] );
+check( 'the PDF leaves out "For:" without a recipient name and never names the buyer there', ! str_contains( $pdf_gift, 'For:' ) && ! str_contains( $pdf_gift, 'Max Käufer' ) && str_contains( $pdf_named, 'For: Jörg Empfänger' ) );
+check( 'the ticket names its holder (recipient, else buyer)', str_contains( vcap()->pdf->html( $gift, TemplatePostType::default_designs()['ticket'] ), 'Guest: Max Käufer' ) );
+
+$routed                  = new Voucher();
+$routed->send_to         = 'recipient';
+$routed->buyer_email     = 'Anna@Example.com';
+$routed->recipient_email = ' anna@example.com';
+check( 'a gift to the buyer\'s own address goes only to the buyer', ! Delivery::to_recipient( $routed ) && Delivery::same_address( 'Anna@Example.com ', 'anna@example.com' ) );
+$delivery = ( new ReflectionClass( Delivery::class ) )->newInstanceWithoutConstructor();
+check( '… and the buyer is the one who must receive it', array( 'buyer' ) === $delivery->required_roles( $routed ) );
+$routed->recipient_email = 'ben@example.com';
+check( 'a gift to another address goes to the recipient', Delivery::to_recipient( $routed ) && array( 'recipient' ) === $delivery->required_roles( $routed ) );
+check( 'additional recipients: valid, without the main address and duplicates, each separately', array( 'archive@shop.test', 'Office@shop.test' ) === Delivery::extra_addresses( 'archive@shop.test, nonsense, BEN@example.com, Office@shop.test, office@shop.test', 'ben@example.com' ) );
+
+check( 'line breaks of a message count as one character (CRLF → LF)', "Hallo\nWelt\nzwei" === VCAP\Fields::normalize_newlines( "Hallo\r\nWelt\rzwei" ) && 300 === mb_strlen( VCAP\Fields::normalize_newlines( str_repeat( "ab\r\n", 100 ) ) ) );
+
+$cfg = array( 'send_to' => 'recipient' ) + ProductConfig::DEFAULTS;
+check( 'the buyer learns where and when a gift goes', 'The voucher will be emailed to ben@example.com on 24.12.2026.' === VCAP\NextSteps::summary( $cfg, array( 'recipient_email' => array( 'value' => 'ben@example.com' ) ), 'anna@example.com', '2026-12-24 08:00:00' ) );
+check( '… right after payment, to the buyer when no other recipient is entered', 'The voucher will be emailed to you right after payment.' === VCAP\NextSteps::summary( $cfg, array( 'recipient_email' => array( 'value' => 'anna@example.com' ) ), 'anna@example.com', null ) && 'The voucher will be emailed to ben@example.com right after payment.' === VCAP\NextSteps::summary( $cfg, array( 'recipient_email' => array( 'value' => 'ben@example.com' ) ), '', null ) );
+check( 'the product page names a delivery delay', 'The voucher is sent by email 3 days after the purchase.' === VCAP\NextSteps::product_hint( array( 'delivery' => 'delay', 'delivery_delay_days' => 3 ) + ProductConfig::DEFAULTS ) && '' === VCAP\NextSteps::product_hint( ProductConfig::DEFAULTS ) );
+
+// Translator comments belong to the string with the placeholders (make-pot attaches a comment to the next string).
+$pot_file = $out . '/check.pot';
+exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( dirname( __DIR__ ) . '/bin/make-pot.php' ) . ' ' . escapeshellarg( $pot_file ), $ignored, $pot_status );
+$uncommented = array();
+$misplaced   = array();
+foreach ( preg_split( "/\n\s*\n/", (string) @file_get_contents( $pot_file ) ) as $block ) {
+	if ( ! preg_match( '/^msgid "(.+)"$/m', $block, $m ) ) {
+		continue;
+	}
+	$has_placeholder = (bool) preg_match( '/%(\d+\$)?[sdf]/', $m[1] );
+	$has_comment     = (bool) preg_match( '/^#\. translators:/mi', $block );
+	if ( $has_placeholder && ! $has_comment ) {
+		$uncommented[] = $m[1];
+	} elseif ( ! $has_placeholder && $has_comment ) {
+		$misplaced[] = $m[1];
+	}
+}
+check( 'every text with placeholders has a translators comment, and no comment sits on a text without one', 0 === $pot_status && ! $uncommented && ! $misplaced, implode( ' | ', array_slice( array_merge( $uncommented, $misplaced ), 0, 5 ) ) );
+
 echo "Editions (constants set by bin/build.sh)\n";
 // Premium build in a child process (constants cannot be undone here): no filter unlocks anything.
 $premium_code = <<<'PHP'

@@ -158,7 +158,7 @@ final class VoucherAdmin {
 						<tr><th><?php esc_html_e( 'Type', 'voucher-captain' ); ?></th><td><?php echo esc_html( Voucher::types()[ $v->type ] ?? $v->type ); ?></td></tr>
 						<tr><th><?php esc_html_e( 'Product', 'voucher-captain' ); ?></th><td><?php echo $product ? '<a href="' . esc_url( get_edit_post_link( $v->product_id ) ?: '' ) . '">' . esc_html( $product->get_name() ) . '</a>' : '–'; ?></td></tr>
 						<tr><th><?php esc_html_e( 'Order', 'voucher-captain' ); ?></th><td><?php echo $order ? '<a href="' . esc_url( $order->get_edit_order_url() ) . '">#' . esc_html( $order->get_order_number() ) . '</a>' : '–'; ?></td></tr>
-						<tr><th><?php esc_html_e( 'Value', 'voucher-captain' ); ?></th><td><?php echo 'percent' === $v->discount_type ? esc_html( $v->initial_amount . '%' ) : wp_kses_post( wc_price( $v->initial_amount, array( 'currency' => $v->currency ) ) ); ?></td></tr>
+						<tr><th><?php esc_html_e( 'Value', 'voucher-captain' ); ?></th><td><?php echo 'percent' === $v->discount_type ? esc_html( \VCAP\Format::percent( $v->initial_amount ) ) : wp_kses_post( wc_price( $v->initial_amount, array( 'currency' => $v->currency ) ) ); ?></td></tr>
 						<?php if ( $v->is_multi_use() ) : ?>
 							<tr><th><?php esc_html_e( 'Balance', 'voucher-captain' ); ?></th><td><strong><?php echo wp_kses_post( wc_price( $v->balance, array( 'currency' => $v->currency ) ) ); ?></strong></td></tr>
 						<?php endif; ?>
@@ -171,7 +171,7 @@ final class VoucherAdmin {
 						<?php endif; ?>
 						<tr><th><?php esc_html_e( 'Usage', 'voucher-captain' ); ?></th><td><?php echo esc_html( array( 'single' => __( 'Single use', 'voucher-captain' ), 'balance' => __( 'Stored balance', 'voucher-captain' ), 'unlimited' => __( 'Reusable', 'voucher-captain' ) )[ $v->usage_mode ] ?? $v->usage_mode ); ?></td></tr>
 						<tr><th><?php esc_html_e( 'Coupon', 'voucher-captain' ); ?></th><td><?php echo $v->coupon_id ? '<a href="' . esc_url( get_edit_post_link( $v->coupon_id ) ?: '' ) . '">#' . esc_html( (string) $v->coupon_id ) . '</a>' : esc_html__( 'none (ticket)', 'voucher-captain' ); ?></td></tr>
-						<tr><th><?php esc_html_e( 'Delivered', 'voucher-captain' ); ?></th><td><?php echo $v->delivered_at ? esc_html( get_date_from_gmt( $v->delivered_at, get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ) : '–'; ?></td></tr>
+						<tr><th><?php esc_html_e( 'Delivered', 'voucher-captain' ); ?></th><td><?php echo $v->delivered_at ? esc_html( \VCAP\LocalDate::from_utc( $v->delivered_at, get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ) : '–'; ?></td></tr>
 						<tr><th><?php esc_html_e( 'Buyer', 'voucher-captain' ); ?></th><td><?php echo esc_html( trim( $v->buyer_name . ' <' . $v->buyer_email . '>' ) ); ?></td></tr>
 					</table>
 					<p class="vcap-actions">
@@ -293,7 +293,7 @@ final class VoucherAdmin {
 						$user = $e['user_id'] ? get_userdata( (int) $e['user_id'] ) : null;
 						?>
 						<tr>
-							<td><?php echo esc_html( get_date_from_gmt( $e['created_at'], get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ); ?></td>
+							<td><?php echo esc_html( \VCAP\LocalDate::from_utc( $e['created_at'], get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ); ?></td>
 							<td><?php echo esc_html( $labels[ $e['event'] ] ?? $e['event'] ); ?></td>
 							<td><?php echo null !== $e['amount'] && 'checkin' !== $e['event'] && 'checkin_undo' !== $e['event'] ? wp_kses_post( wc_price( (float) $e['amount'], array( 'currency' => $v->currency ) ) ) : esc_html( null !== $e['amount'] ? (string) (int) $e['amount'] : '' ); ?></td>
 							<td><?php echo null !== $e['balance_after'] ? wp_kses_post( wc_price( (float) $e['balance_after'], array( 'currency' => $v->currency ) ) ) : ''; ?></td>

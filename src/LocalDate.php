@@ -37,6 +37,16 @@ final class LocalDate {
 		return $date ? $date->setTime( $hour, $minute, $second ) : null;
 	}
 
+	/**
+	 * A stored UTC date ("Y-m-d H:i:s") in the shop's time zone for display, with translated month and day names
+	 * (wp_date(); get_date_from_gmt() would print "24. December" on a German site). '' for an empty value.
+	 */
+	public static function from_utc( ?string $utc, string $format ): string {
+		$utc = trim( (string) $utc );
+		$ts  = '' !== $utc ? strtotime( $utc . ' UTC' ) : false;
+		return false !== $ts ? (string) wp_date( $format, $ts ) : '';
+	}
+
 	/** Unix timestamp of the local date (time), null when it is not a valid one. */
 	public static function timestamp( string $value, ?\DateTimeZone $tz = null ): ?int {
 		$date = self::parse( $value, $tz );

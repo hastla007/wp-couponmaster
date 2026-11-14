@@ -1,6 +1,8 @@
 <?php
 namespace VCAP\Emails;
 
+use VCAP\Compat\Multilingual;
+use VCAP\I18n;
 use VCAP\Placeholders;
 use VCAP\Plugin;
 use VCAP\Voucher;
@@ -31,28 +33,96 @@ abstract class VoucherEmail extends \WC_Email {
 	}
 
 	/**
+	 * Sends the mail in the order language (WPML/Polylang, filter "vcap_email_locale"; else the site language).
+	 * "Additional recipients" get their own copy: only the main address decides whether the mail was sent, a copy
+	 * that fails is logged (an archive address the mail server refuses must not make the gift count as undelivered,
+	 * and the customer never sees those addresses).
+	 *
 	 * @return bool sent
 	 */
 	public function trigger( Voucher $voucher ): bool {
-		$this->setup_locale();
-		$this->voucher   = $voucher;
-		$this->object    = $voucher->order();
-		$this->recipient = $this->recipient_address( $voucher );
-
-		$extra = array_filter( array_map( 'trim', explode( ',', (string) $this->get_option( 'extra_recipients', '' ) ) ), 'is_email' );
-		if ( $extra ) {
-			$this->recipient = implode( ',', array_merge( array( $this->recipient ), $extra ) );
+		$state = Multilingual::switch_to( Multilingual::email_locale( $voucher, null, $this ), Multilingual::order_language( $voucher->order() ) );
+		if ( ! $state['ready'] ) {
+			$this->setup_locale();
 		}
-
-		$this->placeholders = array_merge( $this->placeholders, Placeholders::email_map( $voucher ) );
-
-		$sent = false;
-		if ( $this->is_enabled() && $this->get_recipient() ) {
-			$sent = (bool) $this->send( $this->get_recipient(), $this->get_subject(), $this->get_content(), $this->get_headers(), $this->get_attachments() );
+		if ( defined( 'ICL_SITEPRESS_VERSION' ) ) {
+			$this->init_settings(); // WPML translates the texts (wpml-config.xml) in the language now active.
 		}
-		$this->cleanup();
-		$this->restore_locale();
-		return $sent;
+		try {
+			$this->voucher      = $voucher;
+			$this->object       = $voucher->order();
+			$this->recipient    = $this->recipient_address( $voucher );
+			$this->placeholders = array_merge( $this->placeholders, Placeholders::email_map( $voucher ) );
+
+			$sent = false;
+			if ( $this->is_enabled() && $this->get_recipient() ) {
+				$to          = $this->get_recipient();
+				$subject     = $this->get_subject();
+				$content     = $this->get_content();
+				$headers     = $this->get_headers();
+				$attachments = $this->get_attachments();
+				$sent        = (bool) $this->send( $to, $subject, $content, $headers, $attachments );
+				if ( $sent ) {
+					foreach ( $this->extra_recipients( $to ) as $copy ) {
+						if ( ! $this->send( $copy, $subject, $content, $headers, $attachments ) ) {
+							\VCAP\Logger::warning( 'Copy of a voucher email to an additional recipient could not be sent.', array( 'voucher_id' => $voucher->id, 'email' => $this->id ) );
+						}
+					}
+				}
+			}
+			return $sent;
+		} finally {
+			$this->cleanup();
+			if ( ! $state['ready'] ) {
+				$this->restore_locale();
+			}
+			Multilingual::restore( $state );
+			if ( defined( 'ICL_SITEPRESS_VERSION' ) ) {
+				$this->init_settings();
+			}
+		}
+	}
+
+	/**
+	 * Valid "Additional recipients" other than the main address(es).
+	 *
+	 * @return string[]
+	 */
+	public function extra_recipients( string $main = '' ): array {
+		return \VCAP\Delivery::extra_addresses( (string) $this->get_option( 'extra_recipients', '' ), $main );
+	}
+
+	/**
+	 * Default subjects this email chooses from per voucher (callables returning the __() text), e.g. with or
+	 * without the giver's name.
+	 *
+	 * @return callable[]
+	 */
+	protected function default_subject_variants(): array {
+		return array();
+	}
+
+	/**
+	 * Settings texts in the language of the mail (Polylang; WPML translates the option itself).
+	 *
+	 * WooCommerce caches the first default it hands out in the settings (WC_Settings_API::get_option()), which
+	 * would freeze a subject with variants to the first voucher's. As long as the shop keeps a default (in any
+	 * language), the subject is chosen per voucher.
+	 */
+	public function get_option( $key, $empty_value = null ) {
+		if ( 'subject' === $key && $this->default_subject_variants() ) {
+			if ( empty( $this->settings ) ) {
+				$this->init_settings();
+			}
+			$stored = (string) ( $this->settings['subject'] ?? '' );
+			foreach ( $this->default_subject_variants() as $variant ) {
+				if ( I18n::is_default_text( $stored, $variant ) ) {
+					return $this->get_default_subject();
+				}
+			}
+		}
+		$value = parent::get_option( $key, $empty_value );
+		return is_string( $value ) && in_array( $key, Multilingual::EMAIL_KEYS, true ) ? Multilingual::translate( $value, true ) : $value;
 	}
 
 	/** Marks the mail as a Voucher Captain mail, so Site Health records it if it fails (see Health). */
@@ -124,7 +194,16 @@ abstract class VoucherEmail extends \WC_Email {
 	 */
 	protected function intro_text( Voucher $voucher ): string {
 		$stored = trim( (string) $this->get_option( 'intro', '' ) );
-		return '' === $stored || $stored === $this->get_default_intro() ? $this->default_intro_for( $voucher ) : $stored;
+		return I18n::is_default_text( $stored, array( $this, 'get_default_intro' ) ) ? $this->default_intro_for( $voucher ) : $stored;
+	}
+
+	/**
+	 * "Email body" saved as shipped (in whatever language the admin saw it): stored empty, so every mail gets the
+	 * default that fits its voucher, in the mail's language.
+	 */
+	public function validate_intro_field( $key, $value ) {
+		$value = (string) $this->validate_textarea_field( $key, $value );
+		return I18n::is_default_text( $value, array( $this, 'get_default_intro' ) ) ? '' : $value;
 	}
 
 	/** Default body for one voucher (subclasses adapt it to the voucher). */
@@ -158,14 +237,15 @@ abstract class VoucherEmail extends \WC_Email {
 				'type'        => 'textarea',
 				'css'         => 'width:400px; height: 90px;',
 				'placeholder' => $this->get_default_intro(),
-				'default'     => $this->get_default_intro(),
+				// Empty = the default in the mail's language (a translated default would be frozen once saved).
+				'default'     => '',
 				'description' => $placeholder_text,
 			),
 			'additional_content' => $this->form_fields['additional_content'],
 			'extra_recipients'   => array(
 				'title'       => __( 'Additional recipients', 'voucher-captain' ),
 				'type'        => 'text',
-				'description' => __( 'Comma separated addresses that also receive this email (e.g. for your records).', 'voucher-captain' ),
+				'description' => __( 'Comma separated addresses that each receive their own copy of this email (e.g. for your records). Whether the voucher counts as delivered depends only on the customer\'s address.', 'voucher-captain' ),
 				'default'     => '',
 				'desc_tip'    => true,
 			),

@@ -170,7 +170,17 @@ final class Downloads {
 		if ( $log ) {
 			$this->repo->log( $voucher->id, 'downloaded' );
 		}
-		Preview::stream( $this->pdf->render( $voucher ), $this->pdf->filename( $voucher ), ! $download );
+		// Staff (admin download) print the customer's voucher: in the order/site language, as it was mailed, not
+		// in the language of their profile.
+		$state = $log ? null : Compat\Multilingual::switch_to( Compat\Multilingual::email_locale( $voucher ), Compat\Multilingual::order_language( $voucher->order() ) );
+		try {
+			$pdf = $this->pdf->render( $voucher );
+		} finally {
+			if ( $state ) {
+				Compat\Multilingual::restore( $state );
+			}
+		}
+		Preview::stream( $pdf, $this->pdf->filename( $voucher ), ! $download );
 	}
 
 	/**
@@ -324,7 +334,7 @@ final class Downloads {
 			$parts['value'] = __( 'Admission ticket (shown at the entrance)', 'voucher-captain' );
 		} elseif ( 'percent' === $voucher->discount_type ) {
 			/* translators: %s: percentage */
-			$parts['value'] = sprintf( __( 'Discount: %s', 'voucher-captain' ), wc_format_localized_decimal( $voucher->initial_amount ) . '%' );
+			$parts['value'] = sprintf( __( 'Discount: %s', 'voucher-captain' ), Format::percent( $voucher->initial_amount ) );
 		} elseif ( $voucher->is_multi_use() ) {
 			/* translators: %s: remaining balance */
 			$parts['value'] = sprintf( __( 'Balance: %s', 'voucher-captain' ), $money( $voucher->balance ) );

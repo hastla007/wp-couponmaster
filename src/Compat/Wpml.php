@@ -8,7 +8,8 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * WPML / WooCommerce Multilingual: the PDF uses the template translation matching the order language.
- * Post type / meta translation settings live in wpml-config.xml; WCML already sends customer emails in the order language.
+ * Post type / meta / settings text translation lives in wpml-config.xml; emails switch to the order language in
+ * Multilingual (WCML does not know Voucher Captain's emails sent later by Action Scheduler or cron).
  */
 final class Wpml {
 	public function register(): void {
@@ -19,8 +20,7 @@ final class Wpml {
 	}
 
 	public static function order_language( Voucher $voucher ): string {
-		$order = $voucher->order();
-		$lang  = $order ? (string) $order->get_meta( 'wpml_language' ) : '';
+		$lang = Multilingual::order_language( $voucher->order() );
 		return $lang ?: (string) apply_filters( 'wpml_current_language', null );
 	}
 

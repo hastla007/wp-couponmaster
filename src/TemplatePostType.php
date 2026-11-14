@@ -120,7 +120,7 @@ final class TemplatePostType {
 					array( 'id' => 't1', 'type' => 'rect', 'name' => 'Header', 'x' => 0, 'y' => 0, 'w' => 105, 'h' => 38, 'fill' => '#5b2a86' ),
 					array( 'id' => 't2', 'type' => 'heading', 'name' => 'Event', 'x' => 6, 'y' => 8, 'w' => 93, 'h' => 14, 'text' => '{product_name}', 'font' => 'DejaVu Sans', 'size' => 16, 'color' => '#ffffff', 'bold' => true ),
 					array( 'id' => 't3', 'type' => 'text', 'name' => 'When', 'x' => 6, 'y' => 24, 'w' => 93, 'h' => 10, 'text' => '{event_date} · {event_location}', 'font' => 'DejaVu Sans', 'size' => 9, 'color' => '#e9dcf5' ),
-					array( 'id' => 't4', 'type' => 'text', 'name' => 'Guest', 'x' => 6, 'y' => 44, 'w' => 93, 'h' => 8, 'text' => __( 'Guest: {recipient_name}', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 10, 'color' => '#222222' ),
+					array( 'id' => 't4', 'type' => 'text', 'name' => 'Guest', 'x' => 6, 'y' => 44, 'w' => 93, 'h' => 8, 'text' => __( 'Guest: {holder_name}', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 10, 'color' => '#222222' ),
 					array( 'id' => 't5', 'type' => 'text', 'name' => 'Admissions', 'x' => 6, 'y' => 52, 'w' => 93, 'h' => 8, 'text' => __( 'Admissions: {ticket_admissions}', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 10, 'color' => '#222222' ),
 					array( 'id' => 't6', 'type' => 'qrcode', 'name' => 'Check-in QR', 'x' => 25, 'y' => 64, 'w' => 55, 'h' => 55, 'qrContent' => 'checkin', 'color' => '#000000' ),
 					array( 'id' => 't7', 'type' => 'text', 'name' => 'Code', 'x' => 6, 'y' => 122, 'w' => 93, 'h' => 8, 'text' => '{coupon_code}', 'font' => 'DejaVu Sans Mono', 'size' => 11, 'color' => '#5b2a86', 'align' => 'center', 'bold' => true ),
@@ -138,6 +138,16 @@ final class TemplatePostType {
 		if ( self::first_template_id() ) {
 			return;
 		}
+		// The texts are stored in the design: in the site language, not in the profile language of this admin.
+		$state = Compat\Multilingual::switch_to( (string) get_locale() );
+		try {
+			$this->create_defaults();
+		} finally {
+			Compat\Multilingual::restore( $state );
+		}
+	}
+
+	private function create_defaults(): void {
 		$titles = array(
 			'giftcard' => __( 'Gift card (A5 landscape)', 'voucher-captain' ),
 			'ticket'   => __( 'Event ticket (A6)', 'voucher-captain' ),

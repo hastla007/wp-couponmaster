@@ -103,6 +103,23 @@ list( , $body ) = vcap_mail_send( 'VCAP_Email_Voucher_Recipient', $custom );
 vcap_mail_assert( str_contains( $body, 'Custom text for ' . $custom->code . '.' ), 'a custom body text is kept', $body );
 $emails['VCAP_Email_Voucher_Recipient']->settings['intro'] = '';
 
+// The buyer's copy of a gift says where the gift went (not "your voucher is ready").
+$copy          = vcap_mail_voucher( array( 'buyer_name' => 'Anna', 'recipient_name' => 'Lea' ) );
+$copy->send_to = 'recipient';
+list( $subject, $body ) = vcap_mail_send( 'VCAP_Email_Voucher_Buyer', $copy );
+vcap_mail_assert( str_starts_with( $subject, 'Your gift for Lea is on its way' ) && str_contains( $body, 'Hi Anna, your gift for Lea is on its way to mail-recipient@example.com.' ), 'the buyer copy of a gift reads as a confirmation', array( $subject, $body ) );
+
+// "Additional recipients" get their own copy; a refused copy does not make the mail count as failed.
+$emails['VCAP_Email_Voucher_Buyer']->settings['extra_recipients'] = 'archive@example.com, MAIL-BUYER@example.com';
+$refuse_archive = static fn( $pre, $atts ) => str_contains( implode( ',', (array) $atts['to'] ), 'archive@' ) ? false : $pre;
+add_filter( 'pre_wp_mail', $refuse_archive, 20, 2 );
+$before = count( $captured );
+$sent   = $emails['VCAP_Email_Voucher_Buyer']->trigger( vcap_mail_voucher( array( 'buyer_name' => 'Anna' ) ) );
+remove_filter( 'pre_wp_mail', $refuse_archive, 20 );
+$tos = array_map( static fn( $m ) => implode( ',', (array) $m['to'] ), array_slice( $captured, $before ) );
+vcap_mail_assert( $sent && array( 'mail-buyer@example.com', 'archive@example.com' ) === $tos, 'each additional recipient gets an own mail, the main address alone decides', $tos );
+$emails['VCAP_Email_Voucher_Buyer']->settings['extra_recipients'] = '';
+
 // German: the same texts are translated (formal "Sie").
 add_filter( 'woocommerce_email_setup_locale', '__return_false' );
 unload_textdomain( 'voucher-captain' );
@@ -114,7 +131,10 @@ $email->settings['enabled']    = 'yes';
 $email->trigger( vcap_mail_voucher( array( 'buyer_name' => 'Max', 'recipient_name' => 'Lea', 'discount_type' => 'percent', 'amount' => 15 ) ) );
 $last = end( $captured );
 vcap_mail_assert( str_contains( wp_strip_all_tags( (string) $last['message'] ), 'Hallo Lea, Max hat Ihnen einen Gutschein über' ), 'the German recipient email is translated', $last['message'] ?? '' );
+// A body saved as the English default (an admin with an English profile) is still the German default.
+$email->settings['intro'] = 'Hi {recipient_name}, {buyer_name} sent you a voucher worth {coupon_value}.';
 $email->trigger( vcap_mail_voucher( array( 'amount' => 30 ) ) );
+$email->settings['intro'] = '';
 $last = end( $captured );
 vcap_mail_assert( str_starts_with( (string) $last['subject'], 'Sie haben ein Geschenk von' ) && str_contains( wp_strip_all_tags( (string) $last['message'] ), 'Hallo, Sie haben einen Gutschein im Wert von' ), 'the neutral German variant reads correctly', $last );
 unload_textdomain( 'voucher-captain' );

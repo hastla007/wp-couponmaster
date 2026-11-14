@@ -1,6 +1,9 @@
 <?php
 namespace VCAP\Emails;
 
+use VCAP\Compat\Multilingual;
+use VCAP\I18n;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -42,22 +45,50 @@ class BonusEmail extends \WC_Email {
 
 	public static function amount_text( \WC_Coupon $coupon ): string {
 		return 'percent' === $coupon->get_discount_type()
-			? wc_format_localized_decimal( (string) (float) $coupon->get_amount() ) . ' %'
+			? \VCAP\Format::percent( $coupon->get_amount() )
 			: wp_strip_all_tags( wc_price( (float) $coupon->get_amount() ) );
 	}
 
+	/** Sent in the order language (WPML/Polylang, filter "vcap_email_locale"; else the site language). */
 	public function trigger( \WC_Coupon $coupon, \WC_Order $order, string $promotion, string $recipient = '' ): bool {
-		$this->setup_locale();
-		$this->coupon    = $coupon;
-		$this->object    = $order;
-		$this->recipient = '' !== $recipient ? $recipient : (string) $order->get_billing_email();
-		$this->fill( $promotion );
-		$sent = false;
-		if ( $this->is_enabled() && $this->get_recipient() ) {
-			$sent = (bool) $this->send( $this->get_recipient(), $this->get_subject(), $this->get_content(), $this->get_headers(), $this->get_attachments() );
+		$state = Multilingual::switch_to( Multilingual::email_locale( null, $order, $this ), Multilingual::order_language( $order ) );
+		if ( ! $state['ready'] ) {
+			$this->setup_locale();
 		}
-		$this->restore_locale();
-		return $sent;
+		if ( defined( 'ICL_SITEPRESS_VERSION' ) ) {
+			$this->init_settings(); // WPML translates the texts (wpml-config.xml) in the language now active.
+		}
+		try {
+			$this->coupon    = $coupon;
+			$this->object    = $order;
+			$this->recipient = '' !== $recipient ? $recipient : (string) $order->get_billing_email();
+			$this->fill( $promotion );
+			$sent = false;
+			if ( $this->is_enabled() && $this->get_recipient() ) {
+				$sent = (bool) $this->send( $this->get_recipient(), $this->get_subject(), $this->get_content(), $this->get_headers(), $this->get_attachments() );
+			}
+			return $sent;
+		} finally {
+			if ( ! $state['ready'] ) {
+				$this->restore_locale();
+			}
+			Multilingual::restore( $state );
+			if ( defined( 'ICL_SITEPRESS_VERSION' ) ) {
+				$this->init_settings();
+			}
+		}
+	}
+
+	/** Settings texts in the language of the mail (Polylang; WPML translates the option itself). */
+	public function get_option( $key, $empty_value = null ) {
+		$value = parent::get_option( $key, $empty_value );
+		return is_string( $value ) && in_array( $key, Multilingual::EMAIL_KEYS, true ) ? Multilingual::translate( $value, true ) : $value;
+	}
+
+	/** "Email body" saved as shipped (in whatever language): stored empty, so each mail gets it in its language. */
+	public function validate_intro_field( $key, $value ) {
+		$value = (string) $this->validate_textarea_field( $key, $value );
+		return I18n::is_default_text( $value, array( $this, 'get_default_intro' ) ) ? '' : $value;
 	}
 
 	/** Marks the mail as a Voucher Captain mail, so Site Health records it if it fails (see Health). */
@@ -84,7 +115,8 @@ class BonusEmail extends \WC_Email {
 		if ( ! $this->coupon ) {
 			$this->fill( __( 'Promotion', 'voucher-captain' ) ); // WooCommerce email preview.
 		}
-		$intro = $this->format_string( (string) $this->get_option( 'intro', $this->get_default_intro() ) );
+		$stored = trim( (string) $this->get_option( 'intro', '' ) );
+		$intro  = $this->format_string( I18n::is_default_text( $stored, array( $this, 'get_default_intro' ) ) ? $this->get_default_intro() : $stored );
 		$code  = $this->placeholders['{coupon_code}'];
 		$extra = $this->get_additional_content();
 		if ( $plain ) {
@@ -125,7 +157,8 @@ class BonusEmail extends \WC_Email {
 				'type'        => 'textarea',
 				'css'         => 'width:400px; height: 90px;',
 				'placeholder' => $this->get_default_intro(),
-				'default'     => $this->get_default_intro(),
+				// Empty = the default in the mail's language (a translated default would be frozen once saved).
+				'default'     => '',
 				'description' => $help,
 			),
 		);

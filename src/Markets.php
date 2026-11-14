@@ -82,6 +82,9 @@ final class Markets {
 		$countries = function_exists( 'WC' ) && WC()->countries ? array_keys( (array) WC()->countries->get_allowed_countries() ) : array();
 		$terms     = ProductConfig::terms_by_country( (string) get_option( 'vcap_terms_by_country', '' ) );
 		$general   = '' !== trim( (string) get_option( 'vcap_default_terms', '' ) );
+		// Customers get the shop's languages (site language, WPML/Polylang): a translation for a country's locale
+		// only matters when the shop offers that language.
+		$offered   = Compat\Multilingual::shop_locales();
 		$out       = array();
 		foreach ( $countries as $country ) {
 			$market = self::get( (string) $country );
@@ -92,7 +95,7 @@ final class Markets {
 			$out[ (string) $country ] = array(
 				'validity'    => null !== self::expiry_rule( (string) $country ),
 				'terms'       => isset( $terms[ strtoupper( (string) $country ) ] ) || $general,
-				'translation' => 'en_GB' === $locale || 'en_US' === $locale || self::has_translation( $locale ),
+				'translation' => 'en_GB' === $locale || 'en_US' === $locale || ! in_array( $locale, $offered, true ) || self::has_translation( $locale ),
 				'locale'      => $locale,
 			);
 		}
