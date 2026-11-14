@@ -43,7 +43,7 @@ test.describe( 'Product page', () => {
 		await button.focus();
 		await expect( button ).toBeFocused();
 		const [ response ] = await Promise.all( [
-			context.waitForEvent( 'response', ( r ) => r.url().includes( 'admin-ajax.php' ) && 'POST' === r.request().method() ),
+			context.waitForEvent( 'response', ( r ) => ( r.url().includes( 'wc-ajax=vcap_product_preview' ) || r.url().includes( 'admin-ajax.php' ) ) && 'POST' === r.request().method() ),
 			page.keyboard.press( 'Enter' ),
 		] );
 		expect( response.status() ).toBe( 200 );
