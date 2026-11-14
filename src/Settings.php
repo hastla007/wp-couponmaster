@@ -461,7 +461,7 @@ final class Settings {
 						'id'      => PaymentVouchers::OPTION,
 						'type'    => 'checkbox',
 						'default' => 'no',
-						'desc'    => __( 'Settle multi-purpose vouchers (gift cards, value vouchers) as a payment after tax: the order keeps the full VAT and the voucher pays part of the total as a separate line. Off: the voucher is a coupon and lowers price and VAT (previous behaviour). Have the switch confirmed by your tax adviser.', 'voucher-captain' ),
+						'desc'    => __( 'Settle multi-purpose vouchers (gift cards, value vouchers sold in the shop, store credit) as a payment after tax: the order keeps the full VAT and the voucher pays part of the total as a separate line. This applies only to vouchers with the VAT treatment "Multi-purpose voucher" (or automatic) and the discount type "Fixed cart discount"; single-purpose vouchers, promotions, percentages, "Fixed product discount" and ticket vouchers keep lowering price and VAT. Off: every voucher is a coupon and lowers price and VAT (previous behaviour). Have the switch confirmed by your tax adviser.', 'voucher-captain' ) . $this->not_settled_note(),
 					),
 					array(
 						'title'   => __( 'Void vouchers on refund', 'voucher-captain' ),
@@ -601,6 +601,15 @@ final class Settings {
 				);
 		}
 		return apply_filters( 'vcap_settings_fields', $fields, $section );
+	}
+
+	/** Voucher products the setting "Multi-purpose vouchers as payment" leaves out (only on the settings page). */
+	private function not_settled_note(): string {
+		if ( ! is_admin() || ! current_user_can( 'manage_woocommerce' ) ) {
+			return '';
+		}
+		$note = PaymentVouchers::not_settled_note();
+		return '' !== $note ? '<br><strong>' . $note . '</strong>' : '';
 	}
 
 	public function date_format(): string {

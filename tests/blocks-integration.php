@@ -4,9 +4,9 @@
  *   wp eval-file tests/blocks-integration.php
  */
 
-function vcap_blocks_assert( bool $condition, string $message ): void {
+function vcap_blocks_assert( bool $condition, string $message, $detail = null ): void {
 	if ( ! $condition ) {
-		throw new RuntimeException( 'FAIL: ' . $message );
+		throw new RuntimeException( 'FAIL: ' . $message . ( null === $detail ? '' : ' – ' . wp_json_encode( $detail ) ) );
 	}
 	echo "PASS: {$message}\n";
 }
@@ -184,6 +184,13 @@ $card_50 = vcap_blocks_voucher( $card_product, 50, 'balance', 'giftcard' );
 WC()->cart->apply_coupon( $card_50->code );
 list( , $forfeit_ext ) = vcap_blocks_cart_ext();
 vcap_blocks_assert( array() === ( $forfeit_ext['forfeits'] ?? null ), 'Store API cart: no warning for a gift card worth more than the cart (it keeps its balance)' );
+// The balance shown is what is left after this order (50 − 40 = 10), as a note – classic cart and blocks alike.
+$remaining_text = VCAP\CouponManager::remaining_balance_note( $card_50, 10.0 );
+vcap_blocks_assert( isset( $forfeit_ext['balances'][0] ) && $remaining_text === ( $forfeit_ext['balances'][0]['text'] ?? '' ) && false !== strpos( $forfeit_ext['balances'][0]['formatted'], '10' ), 'Store API cart: the gift card note shows the balance after this order (50 − 40 = 10), not the 50 before it', $forfeit_ext['balances'] ?? null );
+ob_start();
+vcap()->coupons->cart_balance_notice();
+$classic_balance = (string) ob_get_clean();
+vcap_blocks_assert( false !== strpos( html_entity_decode( $classic_balance, ENT_QUOTES, 'UTF-8' ), $remaining_text ) && false !== strpos( $classic_balance, 'colspan="2"' ), 'classic cart: the same note across the totals table (balance after this order: 10)', $classic_balance );
 WC()->cart->remove_coupons();
 
 // "Multi-purpose vouchers as payment": the single-use value voucher discounts 0 and pays 40 after tax – only the
@@ -210,6 +217,16 @@ vcap()->store_credit->adjust( $block_user, 15, 'Block test' );
 WC()->cart->add_to_cart( $block_goods->get_id(), 1 );
 $credit_ext = json_decode( (string) wp_json_encode( rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/cart' ) )->get_data() ), true )['extensions']['voucher-captain'] ?? array();
 vcap_blocks_assert( is_array( $credit_ext['store_credit'] ?? null ) && false !== strpos( $credit_ext['store_credit']['url'], 'vcap_apply_credit' ) && '' !== $credit_ext['store_credit']['text'], 'Store API cart: the "use store credit" hint with its link for a customer with credit' );
+// The link is data for React (href as is): a raw "&", not HTML-escaped "&amp;" (PHP would read "amp;_wpnonce").
+$credit_url = (string) ( $credit_ext['store_credit']['url'] ?? '' );
+wp_parse_str( (string) wp_parse_url( $credit_url, PHP_URL_QUERY ), $credit_query );
+vcap_blocks_assert( false === strpos( $credit_url, '&amp;' ) && '1' === ( $credit_query['vcap_apply_credit'] ?? '' ) && false !== wp_verify_nonce( (string) ( $credit_query['_wpnonce'] ?? '' ), 'vcap_apply_credit' ), 'Store API cart: the store credit link carries a valid _wpnonce (unescaped URL)' );
+// A Store API GET only reads: an account whose coupon is missing is not repaired while answering it.
+$credit_account = vcap()->store_credit->account( $block_user );
+wp_delete_post( $credit_account->coupon_id, true );
+rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/cart' ) );
+vcap_blocks_assert( 0 === (int) wc_get_coupon_id_by_code( $credit_account->code ), 'Store API cart: answering a GET request does not recreate a missing store credit coupon' );
+vcap_blocks_assert( (int) vcap()->store_credit->account( $block_user )->coupon_id > 0 && (int) wc_get_coupon_id_by_code( $credit_account->code ) > 0, 'the store credit account still repairs its coupon outside the Store API answer' );
 wp_set_current_user( 0 );
 WC()->cart->empty_cart();
 echo "Voucher Captain block checks passed.\n";

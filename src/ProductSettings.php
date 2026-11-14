@@ -197,7 +197,7 @@ final class ProductSettings {
 					'discount' => __( 'Promotion (price reduction)', 'voucher-captain' ),
 				),
 				'desc_tip'    => true,
-				'description' => __( 'How connected checkouts (e.g. WP Pass Captain) treat the voucher for VAT. Have the classification checked by your tax adviser.', 'voucher-captain' ),
+				'description' => __( 'How the voucher is treated for VAT when it is redeemed: by the shop with the setting "Multi-purpose vouchers as payment" (multi-purpose vouchers with "Fixed cart discount" then pay after tax and the full VAT stays; single-purpose vouchers and promotions keep lowering price and VAT) and by connected checkouts (e.g. WP Pass Captain). Have the classification checked by your tax adviser.', 'voucher-captain' ),
 			)
 		);
 		$short_validity = $p->get_id() ? ProductConfig::short_validity_message( $p ) : '';

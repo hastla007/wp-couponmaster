@@ -303,6 +303,20 @@ $after_pay  = vcap()->payments->cart_payments();
 $after_cart = array( 'total' => WC()->cart->get_total( 'edit' ), 'tax' => WC()->cart->get_total_tax(), 'fees' => count( WC()->cart->get_fees() ), 'payments' => $after_pay, 'discount' => WC()->cart->get_coupon_discount_amount( wc_format_coupon_code( $after_card->code ), false ) );
 vcap_tax_assert( abs( 60.0 - (float) WC()->cart->get_total( 'edit' ) ) < 0.01 && abs( 20.0 - (float) WC()->cart->get_total_tax() ) < 0.01, 'after tax: goods 120 incl. 20 % VAT, card 60 → the customer pays 60 and the order keeps the full 20 VAT', $after_cart );
 vcap_tax_assert( array( wc_format_coupon_code( $after_card->code ) => 60.0 ) === $after_pay && 0.0 === (float) $after_cart['discount'] && 0 === $after_cart['fees'], 'the card pays 60 after tax; its coupon lowers no price and there is no taxed fee', $after_cart );
+// Called per coupon × line × calculation: once looked up, the voucher costs no further query in this request,
+// and a WooCommerce coupon that is no voucher none at all.
+global $wpdb;
+$memo_coupon = new WC_Coupon( $after_card->code );
+vcap()->payments->applies( $memo_coupon );
+$plain_code = new WC_Coupon();
+$plain_code->set_code( 'vcap-plain-' . strtolower( wp_generate_password( 8, false, false ) ) );
+$plain_code->set_discount_type( 'fixed_cart' );
+$plain_code->set_amount( 5 );
+$plain_code->save();
+$plain_code = new WC_Coupon( $plain_code->get_id() );
+$memo_before = $wpdb->num_queries;
+$memo_again  = vcap()->payments->applies( $memo_coupon ) && ! vcap()->payments->applies( $plain_code );
+vcap_tax_assert( $memo_again && $memo_before === $wpdb->num_queries, 'applies() answers repeated calls and non-voucher coupons without database queries', $wpdb->num_queries - $memo_before );
 ob_start();
 vcap()->payments->payment_rows();
 vcap_tax_assert( false !== strpos( (string) ob_get_clean(), strtoupper( $after_card->code ) ), 'cart and checkout show a payment row "Voucher CODE"' );
@@ -310,6 +324,8 @@ $after_id = WC()->checkout()->create_order( array( 'billing_email' => 'tax-after
 $after    = wc_get_order( $after_id );
 $after_fee = $after ? current( $after->get_items( 'fee' ) ) : null;
 vcap_tax_assert( $after && abs( 60.0 - (float) $after->get_total() ) < 0.01 && abs( 20.0 - (float) $after->get_total_tax() ) < 0.01 && $after_fee && wc_format_coupon_code( $after_card->code ) === $after_fee->get_meta( VCAP\PaymentVouchers::FEE_META ) && abs( 60.0 - (float) VCAP\PaymentVouchers::paid_amount( $after, $after_card->code ) ) < 0.01, 'the order: total 60, VAT 20, a payment line marked with the card code', $after ? array( 'total' => $after->get_total(), 'tax' => $after->get_total_tax() ) : $after_id );
+// The line name appears in emails, My Account and invoices: masked code only (whoever sees it could spend the rest).
+vcap_tax_assert( false === stripos( $after_fee->get_name(), $after_card->code ) && false !== strpos( $after_fee->get_name(), '…' . substr( strtoupper( $after_card->code ), -4 ) ), 'the payment line is named with the masked code ("Voucher …ABCD"), the full code only in its meta', $after_fee->get_name() );
 $after_recalc = wc_get_order( $after_id );
 $after_recalc->calculate_totals( true );
 $after_recalc = wc_get_order( $after_id );
@@ -406,12 +422,91 @@ remove_action( 'woocommerce_checkout_create_order', $saved_early, 30 );
 vcap_tax_assert( 0 === $saved_id, 'adding the payment lines does not save the new order early (it is saved once, after every woocommerce_checkout_create_order callback)', $saved_id );
 $clone_order->update_status( 'cancelled' );
 
+// 8.3 Order context: recalculating, removing or adding a paying voucher on an existing order (admin "Apply coupon" /
+// "Remove", Store API "pay for order") never turns the payment into a price reduction as well.
+$k1_single = vcap_tax_voucher( 'voucher', 'single', 'fixed_cart', $auto_value->get_id(), 50 );
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart( $goods->get_id(), 1 );
+WC()->cart->apply_coupon( $k1_single->code );
+WC()->cart->calculate_totals();
+$k1_id    = WC()->checkout()->create_order( array( 'billing_email' => 'tax-k1@example.com', 'billing_country' => 'AT', 'payment_method' => 'bacs' ) );
+$k1_order = wc_get_order( $k1_id );
+vcap_tax_assert( abs( 70.0 - (float) $k1_order->get_total() ) < 0.01 && abs( 50.0 - (float) VCAP\PaymentVouchers::paid_amount( $k1_order, $k1_single->code ) ) < 0.01, 'a single-use value voucher (50) pays after tax: order total 70', array( 'total' => $k1_order->get_total() ) );
+$k1_order->recalculate_coupons();
+$k1_order = wc_get_order( $k1_id );
+$k1_state = array( 'total' => $k1_order->get_total(), 'tax' => $k1_order->get_total_tax(), 'discount' => $k1_order->get_discount_total() );
+vcap_tax_assert( abs( 70.0 - (float) $k1_order->get_total() ) < 0.01 && abs( 20.0 - (float) $k1_order->get_total_tax() ) < 0.01 && abs( (float) $k1_order->get_discount_total() ) < 0.01, 'recalculating the coupons of that order keeps total 70 and VAT 20 (the single-use voucher does not discount 50 on top of its payment line)', $k1_state );
+$k1_order->remove_coupon( $k1_single->code );
+$k1_order = wc_get_order( $k1_id );
+$k1_state = array( 'total' => $k1_order->get_total(), 'tax' => $k1_order->get_total_tax(), 'fees' => count( $k1_order->get_items( 'fee' ) ) );
+vcap_tax_assert( null === VCAP\PaymentVouchers::paid_amount( $k1_order, $k1_single->code ) && 0 === count( $k1_order->get_items( 'fee' ) ) && abs( 120.0 - (float) $k1_order->get_total() ) < 0.01 && abs( 20.0 - (float) $k1_order->get_total_tax() ) < 0.01, 'removing the voucher from the order removes its payment line: total 120 again', $k1_state );
+$k1_order->update_status( 'cancelled' );
+$k1_card  = vcap_tax_voucher( 'giftcard', 'balance', 'fixed_cart', $auto_card->get_id(), 50 );
+$k1_admin = wc_create_order( array( 'customer_id' => 0 ) );
+$k1_admin->set_billing_email( 'tax-k1-admin@example.com' );
+$k1_admin->set_billing_country( 'AT' );
+$k1_admin->set_shipping_country( 'AT' );
+$k1_admin->add_product( $goods, 1 );
+$k1_admin->calculate_totals( true );
+vcap_tax_assert( abs( 120.0 - (float) $k1_admin->get_total() ) < 0.01 && abs( 20.0 - (float) $k1_admin->get_total_tax() ) < 0.01, 'an order created in the admin: goods 120 incl. 20 VAT', array( 'total' => $k1_admin->get_total(), 'tax' => $k1_admin->get_total_tax() ) );
+$k1_applied = $k1_admin->apply_coupon( $k1_card->code );
+$k1_admin   = wc_get_order( $k1_admin->get_id() );
+$k1_state   = array( 'applied' => is_wp_error( $k1_applied ) ? $k1_applied->get_error_message() : $k1_applied, 'total' => $k1_admin->get_total(), 'tax' => $k1_admin->get_total_tax(), 'discount' => $k1_admin->get_discount_total(), 'paid' => VCAP\PaymentVouchers::paid_amount( $k1_admin, $k1_card->code ) );
+vcap_tax_assert( true === $k1_applied && abs( 70.0 - (float) $k1_admin->get_total() ) < 0.01 && abs( 20.0 - (float) $k1_admin->get_total_tax() ) < 0.01 && abs( (float) $k1_admin->get_discount_total() ) < 0.01 && abs( 50.0 - (float) VCAP\PaymentVouchers::paid_amount( $k1_admin, $k1_card->code ) ) < 0.01, 'a paying gift card applied to an order in the admin gets a payment line of 50: total 70, VAT stays 20, no discount', $k1_state );
+$k1_admin->update_status( 'cancelled' );
+
 $spv_after = vcap_tax_voucher( 'voucher', 'single', 'fixed_cart', $single->get_id(), 60 );
 WC()->cart->empty_cart();
 WC()->cart->add_to_cart( $goods->get_id(), 1 );
 WC()->cart->apply_coupon( $spv_after->code );
 WC()->cart->calculate_totals();
 vcap_tax_assert( array() === vcap()->payments->cart_payments() && abs( 10.0 - (float) WC()->cart->get_total_tax() ) < 0.01, 'a single-purpose voucher stays a price reduction (VAT 10 on the remaining 60)', array( 'tax' => WC()->cart->get_total_tax() ) );
+WC()->cart->empty_cart();
+
+// The setting lists the voucher products it leaves out (they keep lowering price and VAT).
+$unsettled_ids = array_map( static fn( $row ) => $row['product']->get_id(), VCAP\PaymentVouchers::not_settled_products( 1000 ) );
+vcap_tax_assert( in_array( $single->get_id(), $unsettled_ids, true ) && in_array( $promo->get_id(), $unsettled_ids, true ) && in_array( $auto_percent->get_id(), $unsettled_ids, true ) && ! in_array( $auto_card->get_id(), $unsettled_ids, true ) && ! in_array( $auto_value->get_id(), $unsettled_ids, true ), 'the setting names the single-purpose, promotion and percentage products it does not settle as payment, not gift cards or value vouchers' );
+$keep_user = get_current_user_id();
+wp_set_current_user( 1 );
+$unsettled_link = (string) get_edit_post_link( $single->get_id(), 'raw' );
+vcap_tax_assert( '' !== $unsettled_link && str_contains( VCAP\PaymentVouchers::not_settled_note(), esc_url( $unsettled_link ) ), 'the note under the setting links the products it leaves out' );
+wp_set_current_user( $keep_user );
+
+// 8.4 A discount code marked "Individual use only" does not push out multi-purpose vouchers (a means of payment),
+// in the classic cart and through the Store API; single-purpose vouchers stay discounts and are removed.
+$solo = new WC_Coupon();
+$solo->set_code( 'vcap-solo-' . strtolower( wp_generate_password( 8, false, false ) ) );
+$solo->set_discount_type( 'percent' );
+$solo->set_amount( 10 );
+$solo->set_individual_use( true );
+$solo->save();
+$solo_card = vcap_tax_voucher( 'giftcard', 'balance', 'fixed_cart', $auto_card->get_id(), 20 );
+$solo_spv  = vcap_tax_voucher( 'voucher', 'single', 'fixed_cart', $single->get_id(), 5 );
+WC()->cart->add_to_cart( $goods->get_id(), 1 );
+WC()->cart->apply_coupon( $solo_card->code );
+WC()->cart->apply_coupon( $solo_spv->code );
+WC()->cart->apply_coupon( $solo->get_code() );
+$solo_applied = WC()->cart->get_applied_coupons();
+vcap_tax_assert( in_array( wc_format_coupon_code( $solo_card->code ), $solo_applied, true ) && in_array( $solo->get_code(), $solo_applied, true ) && ! in_array( wc_format_coupon_code( $solo_spv->code ), $solo_applied, true ), 'classic cart: an individual-use code keeps the gift card and removes the single-purpose voucher', $solo_applied );
+WC()->cart->remove_coupon( $solo_card->code );
+wc_clear_notices();
+vcap_tax_assert( true === WC()->cart->apply_coupon( $solo_card->code ) && false === WC()->cart->apply_coupon( $solo_spv->code ), 'classic cart: a gift card may join an individual-use code, a single-purpose voucher may not', WC()->cart->get_applied_coupons() );
+wc_clear_notices();
+WC()->cart->remove_coupons();
+add_filter( 'woocommerce_store_api_disable_nonce_check', '__return_true' );
+$solo_api = static function ( string $code ) {
+	$request = new WP_REST_Request( 'POST', '/wc/store/v1/cart/apply-coupon' );
+	$request->set_param( 'code', $code );
+	return rest_do_request( $request );
+};
+$solo_first = $solo_api( $solo->get_code() );
+$solo_join  = $solo_api( $solo_card->code );
+vcap_tax_assert( ! $solo_first->is_error() && ! $solo_join->is_error() && in_array( wc_format_coupon_code( $solo_card->code ), WC()->cart->get_applied_coupons(), true ), 'Store API: a gift card may join an individual-use code', $solo_join->get_data() );
+WC()->cart->remove_coupons();
+$solo_api( $solo_card->code );
+$solo_api( $solo->get_code() );
+vcap_tax_assert( in_array( wc_format_coupon_code( $solo_card->code ), WC()->cart->get_applied_coupons(), true ), 'Store API: applying an individual-use code keeps the gift card', WC()->cart->get_applied_coupons() );
+remove_filter( 'woocommerce_store_api_disable_nonce_check', '__return_true' );
 WC()->cart->empty_cart();
 update_option( VCAP\PaymentVouchers::OPTION, 'no' );
 

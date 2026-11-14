@@ -15,6 +15,10 @@ final class CouponManager {
 		add_filter( 'woocommerce_coupon_get_items_to_apply', array( $this, 'prepare_gross_balance' ), 20, 2 );
 		add_filter( 'woocommerce_coupon_get_amount', array( $this, 'gross_balance_amount' ), 20, 2 );
 		add_filter( 'woocommerce_order_recalculate_coupons_coupon_object', array( $this, 'order_coupon_object' ), 10, 4 );
+		// A code marked "Individual use only" does not push out gift cards, store credit and other multi-purpose
+		// vouchers: they are a means of payment, not a discount (classic cart and Store API use both filters).
+		add_filter( 'woocommerce_apply_individual_use_coupon', array( $this, 'keep_payment_means' ), 10, 3 );
+		add_filter( 'woocommerce_apply_with_individual_use_coupon', array( $this, 'allow_payment_means' ), 10, 4 );
 		// Late priority: other plugins (e.g. Pass Captain's capacity hold at 10) validate first, so a checkout they
 		// refuse never leaves a balance reservation behind. A previous unpaid checkout order of the same session
 		// gives its holds back first (classic checkout creates a new order after a failed attempt).
@@ -40,6 +44,9 @@ final class CouponManager {
 		foreach ( array( 'pending', 'on-hold', 'processing', 'completed' ) as $status ) {
 			add_action( 'woocommerce_order_status_' . $status, array( $this, 'check_single_use_conflicts' ), 9, 2 );
 		}
+		// WooCommerce before 9.x keeps the coupon usage of a failed order counted, so the check above skips it: an
+		// unpaid order that is paid now is checked once more for vouchers voided meanwhile (before order_status_changed()).
+		add_action( 'woocommerce_order_status_changed', array( $this, 'check_single_use_conflicts_on_payment' ), 5, 4 );
 		add_action( 'woocommerce_decrease_coupon_usage_count', array( $this, 'usage_decreased' ), 10, 3 );
 		// WooCommerce gives coupon uses back on "Cancelled" (priority 10): with "Restore balance on cancellation"
 		// off, single-use vouchers stay redeemed like balances.
@@ -382,7 +389,8 @@ final class CouponManager {
 				}
 				$order->delete_meta_data( '_vcap_reservations' );
 				$order->save();
-				throw new \Exception( esc_html__( 'A voucher balance changed while checkout was processing. Your order was not sent for payment. Refresh the cart and try again.', 'voucher-captain' ) );
+				$this->balance_gone = $voucher;
+				throw new \Exception( esc_html__( 'A voucher balance changed while checkout was processing. Your order was not sent for payment. Refresh the cart and try again.', 'voucher-captain' ), self::BALANCE_CHANGED ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- the message is escaped, the second argument is the integer exception code.
 			}
 			$made[ $code ] = $reservation['amount'];
 			// Persist after each successful reserve so an interrupted checkout can resume safely.
@@ -409,6 +417,7 @@ final class CouponManager {
 		}
 		$previous_id = absint( $session->get( self::SESSION_ORDER ) );
 		$session->set( self::SESSION_ORDER, $order->get_id() );
+		$this->release_account_orders_with_same_vouchers( $order, $previous_id );
 		if ( ! $previous_id || $previous_id === $order->get_id() ) {
 			return;
 		}
@@ -416,11 +425,42 @@ final class CouponManager {
 		if ( ! $previous instanceof \WC_Order || ! $previous->has_status( array( 'pending', 'failed', 'checkout-draft' ) ) || $previous->is_paid() ) {
 			return;
 		}
-		if ( (int) $previous->get_customer_id() !== (int) $order->get_customer_id() ) {
+		// Same session: the same customer, or the guest who logged in (or the account that logged out) with the
+		// same billing email; the session alone is not enough for orders of different people.
+		$same_email = '' !== (string) $order->get_billing_email() && 0 === strcasecmp( (string) $previous->get_billing_email(), (string) $order->get_billing_email() );
+		if ( (int) $previous->get_customer_id() !== (int) $order->get_customer_id() && ! $same_email ) {
 			return;
 		}
 		$this->release_order_reservations( $previous );
 		( new Discounts\Usage() )->revert( $previous->get_id() );
+	}
+
+	/**
+	 * A customer account's new checkout releases its own unpaid earlier orders that hold a reservation of a voucher
+	 * this order uses (e.g. an order placed before logging out, whose session is gone). Paying such an order later
+	 * through its pay link reserves again (reserve_retry_order()).
+	 */
+	private function release_account_orders_with_same_vouchers( \WC_Order $order, int $skip ): void {
+		$customer = (int) $order->get_customer_id();
+		$codes    = array_map( 'wc_format_coupon_code', $order->get_coupon_codes() );
+		if ( $customer <= 0 || ! $codes ) {
+			return;
+		}
+		$earlier = wc_get_orders(
+			array(
+				'customer_id' => $customer,
+				'status'      => array( 'pending', 'failed', 'checkout-draft' ),
+				'exclude'     => array_filter( array( $order->get_id(), $skip ) ),
+				'limit'       => 20,
+				'orderby'     => 'date',
+				'order'       => 'DESC',
+			)
+		);
+		foreach ( $earlier as $previous ) {
+			if ( $previous instanceof \WC_Order && ! $previous->is_paid() && array_intersect( array_keys( self::order_map( $previous, '_vcap_reservations' ) ), $codes ) ) {
+				$this->release_order_reservations( $previous );
+			}
+		}
 	}
 
 	/**
@@ -433,7 +473,7 @@ final class CouponManager {
 	public function reserve_store_api_order( $order ): void {
 		try {
 			if ( $order instanceof \WC_Order ) {
-				$conflicts = $this->single_use_conflicts( $order );
+				$conflicts = $this->single_use_conflicts( $order, true );
 				if ( $conflicts ) {
 					throw new \Exception( esc_html( self::single_use_conflict_message( $conflicts[0]['voucher'] ) ) );
 				}
@@ -447,20 +487,49 @@ final class CouponManager {
 		}
 	}
 
+	/** Exception code of reserve_order(): a gift card no longer has the balance the order uses. */
+	public const BALANCE_CHANGED = 9102;
+
+	/** The voucher whose balance was missing in the last failed reserve_order() (pay page message and note). */
+	private ?Voucher $balance_gone = null;
+
 	/**
 	 * Re-reserve voucher balances before a customer retries payment for a failed order.
 	 */
 	public function reserve_retry_order( $order ): void {
 		if ( $order instanceof \WC_Order ) {
-			foreach ( $this->single_use_conflicts( $order ) as $conflict ) {
+			foreach ( $this->single_use_conflicts( $order, true ) as $conflict ) {
 				wc_add_notice( self::single_use_conflict_message( $conflict['voucher'] ), 'error' );
 			}
 		}
 		try {
 			$this->reserve_order( $order );
 		} catch ( \Throwable $e ) {
-			wc_add_notice( $e->getMessage(), 'error' );
+			wc_add_notice( $this->pay_page_message( $e, $order ), 'error' );
 		}
+	}
+
+	/**
+	 * Message for paying an existing order (pay page, Store API "pay for order"): there is no cart to refresh, so a
+	 * gift card whose balance was used elsewhere meanwhile gets its own message, and the order a note for the shop.
+	 */
+	private function pay_page_message( \Throwable $e, $order ): string {
+		if ( self::BALANCE_CHANGED !== $e->getCode() || ! $order instanceof \WC_Order ) {
+			return $e->getMessage();
+		}
+		$code = $this->balance_gone ? $this->balance_gone->code : '';
+		$order->add_order_note(
+			sprintf(
+				/* translators: %s: voucher code */
+				__( 'Payment attempt refused: voucher %s no longer has the balance this order uses (it was used elsewhere). Contact the customer, or edit or cancel the order.', 'voucher-captain' ),
+				$code
+			)
+		);
+		return sprintf(
+			/* translators: %s: voucher code */
+			__( 'Voucher %s no longer has enough balance for this order (it was used elsewhere meanwhile). This order cannot be paid as it is. Please contact us to complete it.', 'voucher-captain' ),
+			$code
+		);
 	}
 
 	/** Customer message: a single-use voucher of an unpaid order can no longer be used (single_use_conflicts()). */
@@ -1040,20 +1109,88 @@ final class CouponManager {
 		return $valid;
 	}
 
+	/**
+	 * Whether this coupon is a multi-purpose voucher (gift card, store credit, sold value voucher: VAT treatment
+	 * "payment", fixed amount), i.e. a means of payment that an "Individual use only" code must not exclude.
+	 * Single-purpose vouchers, percentages and promotions stay discounts. Filter vcap_voucher_is_means_of_payment.
+	 */
+	public function is_payment_means( $coupon ): bool {
+		if ( ! $coupon instanceof \WC_Coupon || 'fixed_cart' !== $coupon->get_discount_type() || 'yes' !== $coupon->get_meta( '_vcap_voucher' ) ) {
+			return false;
+		}
+		$voucher = $this->repo->get_by_code( wc_format_coupon_code( $coupon->get_code() ) );
+		$means   = $voucher && ! $voucher->is_ticket() && 'payment' === ProductConfig::tax_treatment( $voucher );
+		return (bool) apply_filters( 'vcap_voucher_is_means_of_payment', $means, $coupon, $voucher );
+	}
+
+	/**
+	 * An "Individual use only" code is applied: the multi-purpose vouchers already in the cart stay.
+	 *
+	 * @param string[]   $keep    Codes to keep.
+	 * @param \WC_Coupon $coupon  The individual-use coupon being applied.
+	 * @param string[]   $applied Codes in the cart.
+	 */
+	public function keep_payment_means( $keep, $coupon = null, $applied = array() ) {
+		$keep = is_array( $keep ) ? $keep : array();
+		foreach ( (array) $applied as $code ) {
+			if ( ! in_array( $code, $keep, true ) && $this->is_payment_means( new \WC_Coupon( (string) $code ) ) ) {
+				$keep[] = $code;
+			}
+		}
+		return $keep;
+	}
+
+	/**
+	 * A multi-purpose voucher may join a cart that holds an "Individual use only" code.
+	 *
+	 * @param bool       $allow      Whether the coupon may be applied.
+	 * @param \WC_Coupon $coupon     The coupon being applied.
+	 * @param \WC_Coupon $individual The individual-use coupon in the cart.
+	 */
+	public function allow_payment_means( $allow, $coupon = null, $individual = null, $applied = array() ) {
+		return $allow || $this->is_payment_means( $coupon );
+	}
+
 	public function cart_balance_notice(): void {
 		if ( ! WC()->cart ) {
 			return;
 		}
+		$payments = function_exists( 'vcap' ) ? vcap()->payments->cart_payments() : array();
 		foreach ( WC()->cart->get_applied_coupons() as $code ) {
 			$voucher = $this->repo->get_by_code( wc_format_coupon_code( $code ) ) ?? $this->repo->get_by_code( $code );
 			if ( $voucher && $voucher->is_multi_use() ) {
-				/* translators: %s: voucher code */
-				$label = sprintf( __( 'Voucher %s balance', 'voucher-captain' ), $voucher->code );
-				// data-title: the label in front of the amount on small screens (responsive table); styled as a note,
-				// not as a second total (frontend.css).
-				echo '<tr class="vcap-balance"><th scope="row">' . esc_html( $label ) . '</th><td data-title="' . esc_attr( $label ) . '"><small>' . wp_kses_post( wc_price( $voucher->balance, array( 'currency' => $voucher->currency ) ) ) . '</small></td></tr>';
+				// A note across the totals table, not a second amount column next to the order total (frontend.css).
+				echo '<tr class="vcap-balance"><td colspan="2"><small>' . esc_html( self::remaining_balance_note( $voucher, self::remaining_after_cart( $voucher, WC()->cart, (string) $code, $payments ) ) ) . '</small></td></tr>';
 			}
 		}
+	}
+
+	/**
+	 * What remains on a stored-balance voucher once this cart is paid: its balance minus what it pays here (the
+	 * payment after tax, or its discount incl. the tax it removes, as used_amount() deducts it at checkout).
+	 *
+	 * @param array<string, float> $payments PaymentVouchers::cart_payments().
+	 */
+	public static function remaining_after_cart( Voucher $voucher, \WC_Cart $cart, string $code, array $payments ): float {
+		$code = wc_format_coupon_code( $code );
+		if ( isset( $payments[ $code ] ) ) {
+			$used = (float) $payments[ $code ];
+		} else {
+			$with_tax = (bool) apply_filters( 'vcap_balance_deduct_tax', wc_prices_include_tax() || apply_filters( 'vcap_balance_covers_tax', true, null ), null );
+			$used     = (float) $cart->get_coupon_discount_amount( $code, ! $with_tax );
+		}
+		$used = Compat\MultiCurrency::to_base( $used, get_woocommerce_currency() ) ?? $used;
+		return max( 0.0, round( (float) $voucher->balance - $used, $voucher->decimals() ) );
+	}
+
+	/** "Remaining balance of voucher CODE after this order: 20.00" (plain text). */
+	public static function remaining_balance_note( Voucher $voucher, float $remaining ): string {
+		return sprintf(
+			/* translators: 1: voucher code, 2: amount */
+			__( 'Remaining balance of voucher %1$s after this order: %2$s', 'voucher-captain' ),
+			$voucher->code,
+			html_entity_decode( wp_strip_all_tags( wc_price( $remaining, array( 'currency' => $voucher->currency ) ) ), ENT_QUOTES, 'UTF-8' )
+		);
 	}
 
 	/**
@@ -1071,14 +1208,15 @@ final class CouponManager {
 		if ( ! $coupon instanceof \WC_Coupon || ! $order instanceof \WC_Order ) {
 			return $coupon;
 		}
-		$code    = wc_format_coupon_code( (string) $code );
-		$voucher = $this->find_voucher_for_code( $code );
-		if ( ! $voucher || ! $voucher->is_multi_use() ) {
+		$code = wc_format_coupon_code( (string) $code );
+		if ( null !== PaymentVouchers::paid_amount( $order, $code ) ) {
+			// Paid after tax by its fee line (single-use vouchers too): a recalculation must not turn it into a
+			// discount as well.
+			$coupon->set_amount( 0 );
 			return $coupon;
 		}
-		if ( null !== PaymentVouchers::paid_amount( $order, $code ) ) {
-			// Paid after tax by its fee line: a recalculation must not turn it into a discount as well.
-			$coupon->set_amount( 0 );
+		$voucher = $this->find_voucher_for_code( $code );
+		if ( ! $voucher || ! $voucher->is_multi_use() ) {
 			return $coupon;
 		}
 		$redeemed = (float) ( self::order_map( $order, '_vcap_redemptions' )[ $code ] ?? 0 );
@@ -1678,23 +1816,30 @@ final class CouponManager {
 	 * Single-use vouchers on an order that has not counted its coupons yet (unpaid, failed, or paid right now)
 	 * which were voided, redeemed or reserved elsewhere since the checkout.
 	 *
+	 * @param bool $unpaid The order was not paid yet (pay form, or paid right now from pending/failed). Older
+	 *                     WooCommerce versions keep the coupon usage of a failed order counted, so such an order
+	 *                     has its vouchers counted although it never paid: a voided voucher still conflicts.
 	 * @return array<int, array{voucher: Voucher, item: \WC_Order_Item_Coupon}>
 	 */
-	public function single_use_conflicts( \WC_Order $order ): array {
+	public function single_use_conflicts( \WC_Order $order, bool $unpaid = false ): array {
 		if ( $order instanceof \WC_Order_Refund ) {
 			return array();
 		}
-		$store = $order->get_data_store();
-		if ( ! $store->has_callable( 'get_recorded_coupon_usage_counts' ) || $store->get_recorded_coupon_usage_counts( $order ) ) {
+		$store    = $order->get_data_store();
+		$recorded = ! $store->has_callable( 'get_recorded_coupon_usage_counts' ) || $store->get_recorded_coupon_usage_counts( $order );
+		if ( $recorded && ! $unpaid ) {
 			return array(); // Counted already: the voucher was (or is still) redeemed by this order.
 		}
-		$out = array();
+		// Counted by this unpaid order: it holds the voucher itself (redeemed or reserved by it), only a voided
+		// voucher is gone.
+		$statuses = $recorded ? array( Voucher::STATUS_VOID ) : array( Voucher::STATUS_VOID, Voucher::STATUS_REDEEMED, Voucher::STATUS_RESERVED );
+		$out      = array();
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
 			/** @var \WC_Order_Item_Coupon $item */
 			$code = wc_format_coupon_code( $item->get_code() );
 			// A voided voucher's coupon is a draft that WooCommerce no longer finds by code: look up the voucher.
 			$voucher = $this->find_voucher_for_code( $code ) ?? $this->repo->get_by_code( strtoupper( $code ) );
-			if ( $voucher && ! $voucher->is_multi_use() && in_array( $voucher->status, array( Voucher::STATUS_VOID, Voucher::STATUS_REDEEMED, Voucher::STATUS_RESERVED ), true ) ) {
+			if ( $voucher && ! $voucher->is_multi_use() && in_array( $voucher->status, $statuses, true ) ) {
 				$out[] = array( 'voucher' => $voucher, 'item' => $item );
 			}
 		}
@@ -1712,6 +1857,23 @@ final class CouponManager {
 			return;
 		}
 		foreach ( $this->single_use_conflicts( $order ) as $conflict ) {
+			$this->flag_double_use( $order, $conflict['voucher'], $conflict['item'] );
+		}
+	}
+
+	/**
+	 * An unpaid order (pending, failed) that is paid now: vouchers voided meanwhile, also where WooCommerce kept the
+	 * order's coupon usage counted (check_single_use_conflicts() skips those). flag_double_use() runs once per code.
+	 */
+	public function check_single_use_conflicts_on_payment( $order_id, $from, $to, $order = null ): void {
+		if ( ! in_array( $from, array( 'pending', 'failed', 'checkout-draft' ), true ) || ! in_array( $to, array( 'on-hold', 'processing', 'completed' ), true ) ) {
+			return;
+		}
+		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			return;
+		}
+		foreach ( $this->single_use_conflicts( $order, true ) as $conflict ) {
 			$this->flag_double_use( $order, $conflict['voucher'], $conflict['item'] );
 		}
 	}

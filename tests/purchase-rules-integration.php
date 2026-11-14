@@ -91,6 +91,29 @@ vcap_rules_assert( WC()->cart->apply_coupon( $card->get_code() ), 'paying vouche
 
 delete_option( 'vcap_discounts_on_vouchers' );
 delete_option( 'vcap_vouchers_buy_vouchers' );
+
+// Minimum spend of a discount code: voucher products do not count ("20 off from 50" with a 50 voucher + a 20
+// product would otherwise be unlocked by a voucher whose purchase can be withdrawn).
+$min_code = vcap_rules_coupon( 'fixed_cart', 10, false );
+$min_code->set_minimum_amount( 50 );
+$min_code->save();
+WC()->cart->empty_cart();
+wc_clear_notices();
+WC()->cart->add_to_cart( $gift_product->get_id(), 1 );
+WC()->cart->add_to_cart( $normal->get_id(), 1 );
+WC()->cart->calculate_totals();
+vcap_rules_assert( ! WC()->cart->apply_coupon( $min_code->get_code() ), 'the minimum spend of a discount code ignores voucher products (50 voucher + 20 product < 50)' );
+WC()->cart->empty_cart();
+wc_clear_notices();
+WC()->cart->add_to_cart( $normal->get_id(), 3 );
+WC()->cart->calculate_totals();
+vcap_rules_assert( WC()->cart->apply_coupon( $min_code->get_code() ), 'the minimum spend is met by other products (60)' );
+$min_order = wc_create_order();
+$min_order->add_product( $gift_product, 1 );
+$min_order->add_product( $normal, 1 );
+$min_order->calculate_totals();
+vcap_rules_assert( is_wp_error( $min_order->apply_coupon( $min_code->get_code() ) ), 'the same minimum applies to an order edited in the admin' );
+
 WC()->cart->empty_cart();
 wc_clear_notices();
 echo "Voucher Captain purchase rule checks passed.\n";

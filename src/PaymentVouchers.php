@@ -40,17 +40,115 @@ final class PaymentVouchers {
 		add_action( 'woocommerce_store_api_checkout_update_order_meta', array( $this, 'add_order_payments' ), 20 );
 		add_action( 'woocommerce_order_item_fee_after_calculate_taxes', array( $this, 'untaxed_payment_line' ) );
 		add_action( 'woocommerce_order_after_calculate_totals', array( $this, 'restore_payment_lines' ), 10, 2 );
+		// A voucher added to an existing order (admin "Apply coupon", WC_Order::apply_coupon()) pays after tax too.
+		add_action( 'woocommerce_order_applied_coupon', array( $this, 'add_applied_payment' ), 10, 2 );
 		add_filter( 'woocommerce_cart_totals_coupon_html', array( $this, 'coupon_html' ), 30, 2 );
 	}
 
-	/** Is this coupon a voucher that pays after tax (setting on, fixed amount, VAT treatment "payment")? */
+	/**
+	 * Is this coupon a voucher that pays after tax (setting on, fixed amount, VAT treatment "payment")?
+	 *
+	 * Called per coupon, cart line and totals calculation (woocommerce_coupon_get_discount_amount): coupons that
+	 * are no Voucher Captain coupons are answered from their meta, and the voucher and its VAT treatment are
+	 * looked up once per request and code (forgotten when the voucher changes).
+	 */
 	public function applies( $coupon ): bool {
-		if ( ! self::enabled() || ! $coupon instanceof \WC_Coupon || 'fixed_cart' !== $coupon->get_discount_type() ) {
+		if ( ! self::enabled() || ! $coupon instanceof \WC_Coupon || 'fixed_cart' !== $coupon->get_discount_type() || 'yes' !== $coupon->get_meta( '_vcap_voucher' ) ) {
 			return false;
 		}
-		$voucher = $this->repo->get_by_code( wc_format_coupon_code( $coupon->get_code() ) );
-		$applies = $voucher && ! $voucher->is_ticket() && 'payment' === ProductConfig::tax_treatment( $voucher );
+		$code = wc_format_coupon_code( $coupon->get_code() );
+		if ( ! isset( $this->treatments[ $code ] ) ) {
+			$voucher = $this->repo->get_by_code( $code );
+			if ( ! $voucher ) {
+				return (bool) apply_filters( 'vcap_voucher_pays_after_tax', false, $coupon, null );
+			}
+			if ( ! $this->forget_hooked ) {
+				$this->forget_hooked = true;
+				add_action( 'vcap_voucher_updated', array( $this, 'forget' ) );
+			}
+			$this->treatments[ $code ] = array( $voucher, ! $voucher->is_ticket() && 'payment' === ProductConfig::tax_treatment( $voucher ) );
+		}
+		list( $voucher, $applies ) = $this->treatments[ $code ];
 		return (bool) apply_filters( 'vcap_voucher_pays_after_tax', $applies, $coupon, $voucher );
+	}
+
+	/** @var array<string, array{0: Voucher, 1: bool}> code => voucher and whether it pays after tax (this request) */
+	private array $treatments = array();
+
+	private bool $forget_hooked = false;
+
+	/** A voucher changed (status, product, type): look it up again. */
+	public function forget( $voucher = null ): void {
+		if ( $voucher instanceof Voucher ) {
+			unset( $this->treatments[ wc_format_coupon_code( $voucher->code ) ] );
+		} else {
+			$this->treatments = array();
+		}
+	}
+
+	/**
+	 * Voucher products whose vouchers are not settled as a payment after tax with the setting on (they keep
+	 * lowering price and VAT), with the reason: VAT treatment single-purpose or promotion, a discount type other
+	 * than "Fixed cart discount", or ticket vouchers. Shown under the setting (Settings).
+	 *
+	 * @return array<int, array{product: \WC_Product, reason: string}>
+	 */
+	public static function not_settled_products( int $limit = 200 ): array {
+		$ids = get_posts(
+			array(
+				'post_type'      => 'product',
+				'post_status'    => array( 'publish', 'private', 'draft', 'pending', 'future' ),
+				'posts_per_page' => $limit,
+				'fields'         => 'ids',
+				'meta_key'       => '_vcap_enabled', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value'     => 'yes', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			)
+		);
+		$out = array();
+		foreach ( $ids as $id ) {
+			$product = wc_get_product( $id );
+			if ( ! $product ) {
+				continue;
+			}
+			$config    = ProductConfig::get( $product );
+			$treatment = ProductConfig::product_treatment( $product );
+			$type      = 'balance' === (string) $config['usage'] ? 'fixed_cart' : (string) $config['discount_type'];
+			$reason    = '';
+			if ( 'ticket' === (string) $config['type'] ) {
+				$reason = __( 'ticket voucher', 'voucher-captain' );
+			} elseif ( 'single' === $treatment ) {
+				$reason = __( 'VAT treatment "Single-purpose voucher"', 'voucher-captain' );
+			} elseif ( 'discount' === $treatment ) {
+				$reason = __( 'VAT treatment "Promotion" or a percentage', 'voucher-captain' );
+			} elseif ( 'fixed_cart' !== $type ) {
+				$reason = __( 'discount type other than "Fixed cart discount"', 'voucher-captain' );
+			}
+			if ( '' !== $reason ) {
+				$out[] = array(
+					'product' => $product,
+					'reason'  => $reason,
+				);
+			}
+		}
+		return $out;
+	}
+
+	/** Note under the setting: how many voucher products are not settled as a payment, with links (HTML). */
+	public static function not_settled_note(): string {
+		$products = self::not_settled_products();
+		if ( ! $products ) {
+			return '';
+		}
+		$links = array();
+		foreach ( array_slice( $products, 0, 10 ) as $row ) {
+			$links[] = '<a href="' . esc_url( (string) get_edit_post_link( $row['product']->get_id(), 'raw' ) ) . '">' . esc_html( $row['product']->get_name() ) . '</a> (' . esc_html( $row['reason'] ) . ')';
+		}
+		return sprintf(
+			/* translators: 1: number of products, 2: list of product links */
+			_n( 'Not settled as payment (keeps lowering price and VAT): %1$d voucher product – %2$s', 'Not settled as payment (keep lowering price and VAT): %1$d voucher products – %2$s', count( $products ), 'voucher-captain' ),
+			count( $products ),
+			implode( ', ', $links ) . ( count( $products ) > 10 ? ' …' : '' )
+		);
 	}
 
 	/** The coupon itself lowers no line (the payment after tax does the work). */
@@ -105,21 +203,14 @@ final class PaymentVouchers {
 			if ( ! $this->applies( $coupon ) ) {
 				continue;
 			}
-			$open    ??= self::open_amounts( $cart );
-			$eligible  = $this->eligible_parts( $coupon, $cart, array_keys( $open ) );
-			$covered   = array_sum( array_intersect_key( $open, array_flip( $eligible ) ) );
-			$amount    = round( min( max( 0.0, $due ), (float) $coupon->get_amount(), $covered ), $decimals );
-			if ( $amount <= 0 ) {
+			$value = self::value_in( $coupon, (string) get_woocommerce_currency() );
+			if ( null === $value ) {
 				continue;
 			}
-			$left = $amount;
-			foreach ( $eligible as $part ) {
-				$take          = min( $left, $open[ $part ] );
-				$open[ $part ] = $open[ $part ] - $take;
-				$left         -= $take;
-				if ( $left <= 0 ) {
-					break;
-				}
+			$open  ??= self::open_amounts( $cart );
+			$amount  = $this->take_payment( $coupon, $cart, $open, $due, $value );
+			if ( $amount <= 0 ) {
+				continue;
 			}
 			$payments[ wc_format_coupon_code( $code ) ] = $amount;
 			$due = round( $due - $amount, $decimals );
@@ -127,25 +218,88 @@ final class PaymentVouchers {
 		return $payments;
 	}
 
-	/** @return array<string, float> part ("item:KEY", "shipping", "fee:ID") => gross amount still open in the cart */
-	private static function open_amounts( \WC_Cart $cart ): array {
+	/**
+	 * What the voucher is worth in $currency (cart or order currency). Coupon amounts are kept in the shop base
+	 * currency; in another currency the stored amount is converted with a known exchange rate
+	 * (Compat\MultiCurrency), never taken 1:1 and independently of whether a currency switcher converts coupon
+	 * amounts itself in this request (WCML does so only where it loaded its frontend filters). Null without a rate.
+	 *
+	 * @param \WC_Order|null $order Order whose stored exchange rate counts.
+	 */
+	private static function value_in( \WC_Coupon $coupon, string $currency, $order = null ): ?float {
+		if ( '' === $currency || get_option( 'woocommerce_currency' ) === $currency ) {
+			return (float) $coupon->get_amount();
+		}
+		$stored = $coupon->get_id() ? get_post_meta( $coupon->get_id(), 'coupon_amount', true ) : '';
+		$base   = '' !== (string) $stored ? (float) $stored : (float) $coupon->get_amount( 'edit' );
+		$probe  = 1000.0; // Base value of 1000 units: keeps a switcher's rounding out of the rate.
+		$unit   = Compat\MultiCurrency::to_base( $probe, $currency, $order );
+		if ( null === $unit || $unit <= 0 ) {
+			return null;
+		}
+		return $base * $probe / $unit;
+	}
+
+	/**
+	 * What one paying voucher pays: at most $due and its $value, at most the open gross amount of the parts it may
+	 * pay for. Takes that amount out of $open, so the next voucher never pays the same part again.
+	 *
+	 * @param \WC_Cart|\WC_Order   $object Cart or order.
+	 * @param array<string, float> $open   open_amounts() of the object, reduced by earlier payments.
+	 */
+	private function take_payment( \WC_Coupon $coupon, $object, array &$open, float $due, float $value ): float {
+		$eligible = $this->eligible_parts( $coupon, $object, array_keys( $open ) );
+		$covered  = array_sum( array_intersect_key( $open, array_flip( $eligible ) ) );
+		$amount   = round( min( max( 0.0, $due ), max( 0.0, $value ), $covered ), wc_get_price_decimals() );
+		$left     = $amount;
+		foreach ( $eligible as $part ) {
+			if ( $left <= 0 ) {
+				break;
+			}
+			$take          = min( $left, $open[ $part ] );
+			$open[ $part ] = $open[ $part ] - $take;
+			$left         -= $take;
+		}
+		return $amount;
+	}
+
+	/**
+	 * @param \WC_Cart|\WC_Order $object Cart or order (voucher payment lines of an order do not count).
+	 * @return array<string, float> part ("item:KEY", "shipping", "fee:ID") => gross amount still open
+	 */
+	private static function open_amounts( $object ): array {
 		$open = array();
-		foreach ( $cart->get_cart() as $key => $values ) {
+		if ( $object instanceof \WC_Order ) {
+			$open['shipping'] = 0.0;
+			foreach ( $object->get_items( array( 'line_item', 'shipping', 'fee' ) ) as $id => $item ) {
+				$gross = max( 0.0, (float) $item->get_total() + (float) $item->get_total_tax() );
+				if ( $item instanceof \WC_Order_Item_Product ) {
+					$open[ 'item:' . $id ] = $gross;
+				} elseif ( $item instanceof \WC_Order_Item_Shipping ) {
+					$open['shipping'] += $gross;
+				} elseif ( '' === (string) $item->get_meta( self::FEE_META ) ) {
+					$open[ 'fee:' . $id ] = $gross;
+				}
+			}
+			return $open;
+		}
+		foreach ( $object->get_cart() as $key => $values ) {
 			$open[ 'item:' . $key ] = max( 0.0, (float) ( $values['line_total'] ?? 0 ) + (float) ( $values['line_tax'] ?? 0 ) );
 		}
-		$open['shipping'] = max( 0.0, (float) $cart->get_shipping_total() + (float) $cart->get_shipping_tax() );
-		foreach ( $cart->get_fees() as $fee ) {
+		$open['shipping'] = max( 0.0, (float) $object->get_shipping_total() + (float) $object->get_shipping_tax() );
+		foreach ( $object->get_fees() as $fee ) {
 			$open[ 'fee:' . $fee->id ] = max( 0.0, (float) $fee->total + (float) $fee->tax );
 		}
 		return $open;
 	}
 
 	/**
-	 * @param string[] $parts All parts of the cart (open_amounts() keys).
+	 * @param \WC_Cart|\WC_Order $object Cart or order.
+	 * @param string[]           $parts  All parts of the cart or order (open_amounts() keys).
 	 * @return string[] The parts this voucher may pay, in cart order.
 	 */
-	private function eligible_parts( \WC_Coupon $coupon, \WC_Cart $cart, array $parts ): array {
-		$discounts = new \WC_Discounts( $cart );
+	private function eligible_parts( \WC_Coupon $coupon, $object, array $parts ): array {
+		$discounts = new \WC_Discounts( $object );
 		$items     = apply_filters( 'woocommerce_coupon_get_items_to_apply', $discounts->get_items_to_validate(), $coupon, $discounts );
 		// WooCommerce checks product restrictions only for product coupon types: ask the same question as one.
 		$probe = clone $coupon;
@@ -158,7 +312,7 @@ final class PaymentVouchers {
 		}
 		$restricted = $coupon->get_product_ids() || $coupon->get_product_categories();
 		/** Whether a voucher paying after tax may also pay shipping and fees (default: when it is not limited to products or categories). */
-		$extras = (bool) apply_filters( 'vcap_voucher_pays_shipping_and_fees', ! $restricted, $coupon, $cart );
+		$extras = (bool) apply_filters( 'vcap_voucher_pays_shipping_and_fees', ! $restricted, $coupon, $object );
 		return array_values(
 			array_filter(
 				$parts,
@@ -216,16 +370,7 @@ final class PaymentVouchers {
 			return;
 		}
 		foreach ( $payments as $code => $amount ) {
-			$fee = new \WC_Order_Item_Fee();
-			/* translators: %s: voucher code */
-			$fee->set_name( sprintf( __( 'Voucher %s', 'voucher-captain' ), strtoupper( (string) $code ) ) );
-			$fee->set_tax_status( 'none' );
-			$fee->set_tax_class( '' );
-			$fee->set_total( (string) -abs( (float) $amount ) );
-			$fee->set_taxes( false );
-			$fee->add_meta_data( self::FEE_META, wc_format_coupon_code( (string) $code ), true );
-			$fee->add_meta_data( self::AMOUNT_META, (string) abs( (float) $amount ), true );
-			$order->add_item( $fee );
+			$order->add_item( self::payment_line( (string) $code, (float) $amount ) );
 		}
 		$order->set_total( (string) max( 0.0, round( $gross - array_sum( array_map( 'floatval', $payments ) ), wc_get_price_decimals() ) ) );
 	}
@@ -255,17 +400,79 @@ final class PaymentVouchers {
 	}
 
 	/**
+	 * A paying voucher added to an existing order (admin "Apply coupon", WC_Order::apply_coupon()) gets its payment
+	 * line as at checkout, right before WooCommerce recalculates the coupons: order_coupon_object() then sees the
+	 * line and lets the coupon discount 0, so the VAT stays on the full price. It pays at most its value and what the
+	 * order still owes for the parts it may pay for (as payments_for() in the cart). WC_Order::apply_coupon() saves
+	 * the order right after this action.
+	 *
+	 * @param \WC_Coupon $coupon Applied coupon.
+	 * @param \WC_Order  $order  Order.
+	 */
+	public function add_applied_payment( $coupon, $order ): void {
+		if ( ! $order instanceof \WC_Order || ! $this->applies( $coupon ) ) {
+			return;
+		}
+		$code = wc_format_coupon_code( $coupon->get_code() );
+		if ( null !== self::paid_amount( $order, $code ) ) {
+			return;
+		}
+		$value = self::value_in( $coupon, (string) $order->get_currency(), $order );
+		if ( null === $value ) {
+			return;
+		}
+		$due = self::order_gross( $order );
+		foreach ( $order->get_items( 'fee' ) as $fee ) {
+			if ( '' !== (string) $fee->get_meta( self::FEE_META ) ) {
+				$due -= abs( (float) $fee->get_total() ); // What other vouchers already pay.
+			}
+		}
+		$open   = self::open_amounts( $order );
+		$amount = $this->take_payment( $coupon, $order, $open, round( $due, wc_get_price_decimals() ), $value );
+		if ( $amount > 0 ) {
+			$order->add_item( self::payment_line( $code, $amount ) );
+		}
+	}
+
+	/**
+	 * The non-taxable, negative payment line of the voucher with this code. Its name shows the code masked
+	 * ("Voucher …7KQ2"): the line appears in order emails, My Account, invoices and order tracking, and whoever sees
+	 * it could otherwise spend the rest of a gift card. The full code is kept in FEE_META only.
+	 */
+	private static function payment_line( string $code, float $amount ): \WC_Order_Item_Fee {
+		$fee = new \WC_Order_Item_Fee();
+		/* translators: %s: voucher code */
+		$fee->set_name( sprintf( __( 'Voucher %s', 'voucher-captain' ), Downloads::masked_code( $code ) ) );
+		$fee->set_tax_status( 'none' );
+		$fee->set_tax_class( '' );
+		$fee->set_total( (string) -abs( $amount ) );
+		$fee->set_taxes( false );
+		$fee->add_meta_data( self::FEE_META, wc_format_coupon_code( $code ), true );
+		$fee->add_meta_data( self::AMOUNT_META, (string) abs( $amount ), true );
+		return $fee;
+	}
+
+	/**
 	 * WooCommerce caps negative fee lines at the net total when it recalculates an order, so a voucher that pays the
 	 * whole gross amount would shrink to the net amount. The payment line keeps what was paid, the total follows.
+	 * A payment line whose voucher is no longer on the order (admin removed the coupon) goes: the voucher no longer
+	 * pays, so the customer owes that amount again.
 	 */
 	public function restore_payment_lines( $and_taxes, $order ): void {
 		if ( ! $order instanceof \WC_Order ) {
 			return;
 		}
-		$diff = 0.0;
-		foreach ( $order->get_items( 'fee' ) as $fee ) {
+		$diff    = 0.0;
+		$applied = array_map( 'wc_format_coupon_code', $order->get_coupon_codes() );
+		foreach ( $order->get_items( 'fee' ) as $item_id => $fee ) {
+			$code = (string) $fee->get_meta( self::FEE_META );
+			if ( '' !== $code && ! in_array( wc_format_coupon_code( $code ), $applied, true ) ) {
+				$diff -= (float) $fee->get_total();
+				$order->remove_item( $item_id );
+				continue;
+			}
 			$paid = (string) $fee->get_meta( self::AMOUNT_META );
-			if ( '' === (string) $fee->get_meta( self::FEE_META ) || '' === $paid ) {
+			if ( '' === $code || '' === $paid ) {
 				continue;
 			}
 			$want = -abs( (float) $paid );
