@@ -389,7 +389,8 @@ final class CouponManager {
 				}
 				$order->delete_meta_data( '_vcap_reservations' );
 				$order->save();
-				throw new \Exception( esc_html__( 'A voucher balance changed while checkout was processing. Your order was not sent for payment. Refresh the cart and try again.', 'voucher-captain' ) );
+				$this->balance_gone = $voucher;
+				throw new \Exception( esc_html__( 'A voucher balance changed while checkout was processing. Your order was not sent for payment. Refresh the cart and try again.', 'voucher-captain' ), self::BALANCE_CHANGED );
 			}
 			$made[ $code ] = $reservation['amount'];
 			// Persist after each successful reserve so an interrupted checkout can resume safely.
@@ -454,6 +455,12 @@ final class CouponManager {
 		}
 	}
 
+	/** Exception code of reserve_order(): a gift card no longer has the balance the order uses. */
+	public const BALANCE_CHANGED = 9102;
+
+	/** The voucher whose balance was missing in the last failed reserve_order() (pay page message and note). */
+	private ?Voucher $balance_gone = null;
+
 	/**
 	 * Re-reserve voucher balances before a customer retries payment for a failed order.
 	 */
@@ -466,8 +473,31 @@ final class CouponManager {
 		try {
 			$this->reserve_order( $order );
 		} catch ( \Throwable $e ) {
-			wc_add_notice( $e->getMessage(), 'error' );
+			wc_add_notice( $this->pay_page_message( $e, $order ), 'error' );
 		}
+	}
+
+	/**
+	 * Message for paying an existing order (pay page, Store API "pay for order"): there is no cart to refresh, so a
+	 * gift card whose balance was used elsewhere meanwhile gets its own message, and the order a note for the shop.
+	 */
+	private function pay_page_message( \Throwable $e, $order ): string {
+		if ( self::BALANCE_CHANGED !== $e->getCode() || ! $order instanceof \WC_Order ) {
+			return $e->getMessage();
+		}
+		$code = $this->balance_gone ? $this->balance_gone->code : '';
+		$order->add_order_note(
+			sprintf(
+				/* translators: %s: voucher code */
+				__( 'Payment attempt refused: voucher %s no longer has the balance this order uses (it was used elsewhere). Contact the customer, or edit or cancel the order.', 'voucher-captain' ),
+				$code
+			)
+		);
+		return sprintf(
+			/* translators: %s: voucher code */
+			__( 'Voucher %s no longer has enough balance for this order (it was used elsewhere meanwhile). This order cannot be paid as it is. Please contact us to complete it.', 'voucher-captain' ),
+			$code
+		);
 	}
 
 	/** Customer message: a single-use voucher of an unpaid order can no longer be used (single_use_conflicts()). */

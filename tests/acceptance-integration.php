@@ -350,4 +350,21 @@ $single_why = 'status ' . $single_use->get_status() . ', shortfall ' . ( VCAP\Co
 vcap_acc_assert( 'on-hold' === $single_use->get_status() && VCAP\CouponManager::has_shortfall( $single_use ) && isset( $single_map[ wc_format_coupon_code( $single->code ) ] ), 'paying the order after the voucher was voided holds it with a shortfall instead of fulfilling the discount (' . $single_why . ')' );
 vcap_acc_assert( in_array( 'double_use', array_column( vcap()->vouchers->events( $single->id ), 'event' ), true ), 'the double use is in the voucher history' );
 
+// Pay page of a failed order whose gift card balance was used elsewhere meanwhile: no "refresh the cart" (there is
+// no cart there), a message that says what happened, and an order note for the shop.
+$gone_card  = vcap_acc_card( 30 );
+$gone_order = wc_create_order();
+$gone_order->add_product( $product, 1 );
+$gone_order->set_billing_email( 'acceptance-gone@example.com' );
+$gone_order->calculate_totals();
+$gone_order->apply_coupon( $gone_card->code );
+wc_get_order( $gone_order->get_id() )->update_status( 'failed', 'Card declined.' );
+vcap()->coupons->adjust_balance( vcap()->vouchers->get( $gone_card->id ), -30, 'redeem', 'Spent in the shop' );
+wc_clear_notices();
+vcap()->coupons->reserve_retry_order( wc_get_order( $gone_order->get_id() ) );
+$gone_notices = implode( ' ', array_map( static fn( $n ) => wp_strip_all_tags( is_array( $n ) ? (string) $n['notice'] : (string) $n ), wc_get_notices( 'error' ) ) );
+wc_clear_notices();
+$gone_notes = implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $gone_order->get_id() ) ), 'content' ) );
+vcap_acc_assert( str_contains( $gone_notices, $gone_card->code ) && ! str_contains( $gone_notices, 'Refresh the cart' ) && str_contains( $gone_notes, $gone_card->code ), 'the pay page refuses an order whose gift card balance was used elsewhere with its own message (no "refresh the cart") and an order note (' . $gone_notices . ')' );
+
 echo "Voucher Captain acceptance checks passed.\n";
