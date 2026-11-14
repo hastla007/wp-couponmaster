@@ -20,16 +20,23 @@ final class CodeGenerator {
 	 */
 	public const MIN_BITS = 50;
 
-	/** Bits of a random code: length × log2(alphabet size). */
-	public static function bits( int $length, string $charset = 'alnum_upper' ): float {
+	/**
+	 * Characters of a charset that are told apart when a code is entered. WooCommerce codes are case-insensitive,
+	 * so "a" and "A" are one character: the mixed-case set has 33, not 56 (estimated_bits() folds the same way).
+	 */
+	public static function effective_alphabet( string $charset = 'alnum_upper' ): int {
 		$chars = self::CHARSETS[ $charset ] ?? self::CHARSETS['alnum_upper'];
-		return $length * log( strlen( $chars ), 2 );
+		return count( array_unique( str_split( strtolower( $chars ) ) ) );
+	}
+
+	/** Bits of a random code: length × log2(effective alphabet size). */
+	public static function bits( int $length, string $charset = 'alnum_upper' ): float {
+		return $length * log( self::effective_alphabet( $charset ), 2 );
 	}
 
 	/** Shortest random part of a charset that reaches $bits (e.g. 10 letters/digits, 16 digits for 2^50). */
 	public static function min_length( string $charset = 'alnum_upper', int $bits = self::MIN_BITS ): int {
-		$chars = self::CHARSETS[ $charset ] ?? self::CHARSETS['alnum_upper'];
-		return (int) ceil( $bits / log( strlen( $chars ), 2 ) - 1e-9 );
+		return (int) ceil( $bits / log( self::effective_alphabet( $charset ), 2 ) - 1e-9 );
 	}
 
 	/**
