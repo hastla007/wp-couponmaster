@@ -303,6 +303,20 @@ $after_pay  = vcap()->payments->cart_payments();
 $after_cart = array( 'total' => WC()->cart->get_total( 'edit' ), 'tax' => WC()->cart->get_total_tax(), 'fees' => count( WC()->cart->get_fees() ), 'payments' => $after_pay, 'discount' => WC()->cart->get_coupon_discount_amount( wc_format_coupon_code( $after_card->code ), false ) );
 vcap_tax_assert( abs( 60.0 - (float) WC()->cart->get_total( 'edit' ) ) < 0.01 && abs( 20.0 - (float) WC()->cart->get_total_tax() ) < 0.01, 'after tax: goods 120 incl. 20 % VAT, card 60 → the customer pays 60 and the order keeps the full 20 VAT', $after_cart );
 vcap_tax_assert( array( wc_format_coupon_code( $after_card->code ) => 60.0 ) === $after_pay && 0.0 === (float) $after_cart['discount'] && 0 === $after_cart['fees'], 'the card pays 60 after tax; its coupon lowers no price and there is no taxed fee', $after_cart );
+// Called per coupon × line × calculation: once looked up, the voucher costs no further query in this request,
+// and a WooCommerce coupon that is no voucher none at all.
+global $wpdb;
+$memo_coupon = new WC_Coupon( $after_card->code );
+vcap()->payments->applies( $memo_coupon );
+$plain_code = new WC_Coupon();
+$plain_code->set_code( 'vcap-plain-' . strtolower( wp_generate_password( 8, false, false ) ) );
+$plain_code->set_discount_type( 'fixed_cart' );
+$plain_code->set_amount( 5 );
+$plain_code->save();
+$plain_code = new WC_Coupon( $plain_code->get_id() );
+$memo_before = $wpdb->num_queries;
+$memo_again  = vcap()->payments->applies( $memo_coupon ) && ! vcap()->payments->applies( $plain_code );
+vcap_tax_assert( $memo_again && $memo_before === $wpdb->num_queries, 'applies() answers repeated calls and non-voucher coupons without database queries', $wpdb->num_queries - $memo_before );
 ob_start();
 vcap()->payments->payment_rows();
 vcap_tax_assert( false !== strpos( (string) ob_get_clean(), strtoupper( $after_card->code ) ), 'cart and checkout show a payment row "Voucher CODE"' );

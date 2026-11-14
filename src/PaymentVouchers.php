@@ -45,14 +45,45 @@ final class PaymentVouchers {
 		add_filter( 'woocommerce_cart_totals_coupon_html', array( $this, 'coupon_html' ), 30, 2 );
 	}
 
-	/** Is this coupon a voucher that pays after tax (setting on, fixed amount, VAT treatment "payment")? */
+	/**
+	 * Is this coupon a voucher that pays after tax (setting on, fixed amount, VAT treatment "payment")?
+	 *
+	 * Called per coupon, cart line and totals calculation (woocommerce_coupon_get_discount_amount): coupons that
+	 * are no Voucher Captain coupons are answered from their meta, and the voucher and its VAT treatment are
+	 * looked up once per request and code (forgotten when the voucher changes).
+	 */
 	public function applies( $coupon ): bool {
-		if ( ! self::enabled() || ! $coupon instanceof \WC_Coupon || 'fixed_cart' !== $coupon->get_discount_type() ) {
+		if ( ! self::enabled() || ! $coupon instanceof \WC_Coupon || 'fixed_cart' !== $coupon->get_discount_type() || 'yes' !== $coupon->get_meta( '_vcap_voucher' ) ) {
 			return false;
 		}
-		$voucher = $this->repo->get_by_code( wc_format_coupon_code( $coupon->get_code() ) );
-		$applies = $voucher && ! $voucher->is_ticket() && 'payment' === ProductConfig::tax_treatment( $voucher );
+		$code = wc_format_coupon_code( $coupon->get_code() );
+		if ( ! isset( $this->treatments[ $code ] ) ) {
+			$voucher = $this->repo->get_by_code( $code );
+			if ( ! $voucher ) {
+				return (bool) apply_filters( 'vcap_voucher_pays_after_tax', false, $coupon, null );
+			}
+			if ( ! $this->forget_hooked ) {
+				$this->forget_hooked = true;
+				add_action( 'vcap_voucher_updated', array( $this, 'forget' ) );
+			}
+			$this->treatments[ $code ] = array( $voucher, ! $voucher->is_ticket() && 'payment' === ProductConfig::tax_treatment( $voucher ) );
+		}
+		list( $voucher, $applies ) = $this->treatments[ $code ];
 		return (bool) apply_filters( 'vcap_voucher_pays_after_tax', $applies, $coupon, $voucher );
+	}
+
+	/** @var array<string, array{0: Voucher, 1: bool}> code => voucher and whether it pays after tax (this request) */
+	private array $treatments = array();
+
+	private bool $forget_hooked = false;
+
+	/** A voucher changed (status, product, type): look it up again. */
+	public function forget( $voucher = null ): void {
+		if ( $voucher instanceof Voucher ) {
+			unset( $this->treatments[ wc_format_coupon_code( $voucher->code ) ] );
+		} else {
+			$this->treatments = array();
+		}
 	}
 
 	/** The coupon itself lowers no line (the payment after tax does the work). */

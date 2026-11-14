@@ -29,9 +29,10 @@ final class StoreCredit {
 	}
 
 	/**
-	 * The customer's credit account, optionally created on first use.
+	 * The customer's credit account, optionally created on first use. $repair false: only read (no missing coupon
+	 * is created again), e.g. while answering a Store API GET request.
 	 */
-	public function account( int $user_id, bool $create = false ): ?Voucher {
+	public function account( int $user_id, bool $create = false, bool $repair = true ): ?Voucher {
 		if ( $user_id <= 0 ) {
 			return null;
 		}
@@ -42,7 +43,7 @@ final class StoreCredit {
 			$account = Voucher::from_row( $row );
 			// An account whose WooCommerce coupon is missing (failed save, deleted by hand) cannot be used in
 			// the cart: give it a coupon again.
-			return $account->coupon_id && get_post_status( $account->coupon_id ) ? $account : $this->repair_coupon( $account );
+			return ! $repair || ( $account->coupon_id && get_post_status( $account->coupon_id ) ) ? $account : $this->repair_coupon( $account );
 		}
 		if ( ! $create ) {
 			return null;

@@ -221,6 +221,12 @@ vcap_blocks_assert( is_array( $credit_ext['store_credit'] ?? null ) && false !==
 $credit_url = (string) ( $credit_ext['store_credit']['url'] ?? '' );
 wp_parse_str( (string) wp_parse_url( $credit_url, PHP_URL_QUERY ), $credit_query );
 vcap_blocks_assert( false === strpos( $credit_url, '&amp;' ) && '1' === ( $credit_query['vcap_apply_credit'] ?? '' ) && false !== wp_verify_nonce( (string) ( $credit_query['_wpnonce'] ?? '' ), 'vcap_apply_credit' ), 'Store API cart: the store credit link carries a valid _wpnonce (unescaped URL)' );
+// A Store API GET only reads: an account whose coupon is missing is not repaired while answering it.
+$credit_account = vcap()->store_credit->account( $block_user );
+wp_delete_post( $credit_account->coupon_id, true );
+rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/cart' ) );
+vcap_blocks_assert( 0 === (int) wc_get_coupon_id_by_code( $credit_account->code ), 'Store API cart: answering a GET request does not recreate a missing store credit coupon' );
+vcap_blocks_assert( (int) vcap()->store_credit->account( $block_user )->coupon_id > 0 && (int) wc_get_coupon_id_by_code( $credit_account->code ) > 0, 'the store credit account still repairs its coupon outside the Store API answer' );
 wp_set_current_user( 0 );
 WC()->cart->empty_cart();
 echo "Voucher Captain block checks passed.\n";

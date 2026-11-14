@@ -114,7 +114,7 @@ final class CartBlocks {
 			);
 		}
 		if ( $this->credit->enabled() && is_user_logged_in() ) {
-			$account = $this->credit->account( get_current_user_id() );
+			$account = $this->credit->account( get_current_user_id(), false, false ); // Read only: a GET response writes nothing.
 			if ( $account && $account->balance > 0 && ! $cart->has_discount( $account->code ) ) {
 				$data['store_credit'] = array(
 					/* translators: 1: balance, 2: link */
