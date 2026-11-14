@@ -9,6 +9,12 @@ defined( 'ABSPATH' ) || exit;
 final class TemplatePostType {
 	public const POST_TYPE = 'vcap_template';
 	public const META      = '_vcap_design';
+	/** Earlier designs: list of [ 'until' => Unix time the design was replaced, 'design' => JSON ], oldest first. */
+	public const HISTORY_META = '_vcap_design_history';
+	/** Unix time the current design took effect. */
+	public const SINCE_META = '_vcap_design_since';
+	/** Option prefix keeping the designs of a deleted template for the vouchers issued with it. */
+	public const ARCHIVE_OPTION = 'vcap_template_archive_';
 
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_post_type' ) );
@@ -22,6 +28,7 @@ final class TemplatePostType {
 		add_filter( 'manage_' . self::POST_TYPE . '_posts_columns', array( $this, 'columns' ) );
 		add_action( 'manage_' . self::POST_TYPE . '_posts_custom_column', array( $this, 'column' ), 10, 2 );
 		add_filter( 'admin_body_class', array( $this, 'body_class' ) );
+		add_action( 'before_delete_post', array( $this, 'archive_deleted' ), 10, 2 );
 	}
 
 	public function register_post_type(): void {
@@ -83,6 +90,92 @@ final class TemplatePostType {
 			$design = self::default_designs()['giftcard'];
 		}
 		return apply_filters( 'vcap_template_design', $design, $template_id );
+	}
+
+	/**
+	 * The design a voucher was issued with: the template's design at the voucher's issue time (created_at), so a
+	 * redesign or changed static texts (branch, deadlines) never alter vouchers already sold – also after the
+	 * template was deleted. Vouchers without an issue time (previews) get the current design.
+	 */
+	public static function design_for_voucher( int $template_id, Voucher $voucher ): array {
+		$issued = $voucher->id && '' !== $voucher->created_at ? strtotime( $voucher->created_at . ' UTC' ) : false;
+		if ( $template_id && false !== $issued ) {
+			$history = get_post_meta( $template_id, self::HISTORY_META, true );
+			$history = is_array( $history ) ? $history : array();
+			if ( ! get_post_meta( $template_id, self::META, true ) ) {
+				$archive = get_option( self::ARCHIVE_OPTION . $template_id );
+				if ( is_array( $archive ) && $issued < (int) ( $archive['deleted'] ?? 0 ) ) {
+					$history   = is_array( $archive['history'] ?? null ) ? $archive['history'] : array();
+					$history[] = array(
+						'until'  => (int) $archive['deleted'],
+						'design' => (string) ( $archive['design'] ?? '' ),
+					);
+				}
+			}
+			foreach ( $history as $entry ) {
+				if ( is_array( $entry ) && $issued < (int) ( $entry['until'] ?? 0 ) ) {
+					$design = json_decode( (string) ( $entry['design'] ?? '' ), true );
+					if ( is_array( $design ) && ! empty( $design['page'] ) ) {
+						return apply_filters( 'vcap_template_design', $design, $template_id );
+					}
+				}
+			}
+		}
+		return self::get_design( $template_id );
+	}
+
+	/**
+	 * Keeps the replaced design for the vouchers issued with it. Not needed when no voucher at all was issued
+	 * while it was the current design (a template being worked on); "apply to issued vouchers" drops the history.
+	 *
+	 * @param string $old_json The design being replaced.
+	 * @param bool   $used     Whether any voucher was issued since it took effect.
+	 */
+	public static function record_design_change( int $post_id, string $old_json, string $new_json, bool $used, bool $apply_to_issued = false ): void {
+		if ( $old_json === $new_json && ! $apply_to_issued ) {
+			return;
+		}
+		if ( $apply_to_issued ) {
+			delete_post_meta( $post_id, self::HISTORY_META );
+		} elseif ( '' !== $old_json && $used ) {
+			$history   = get_post_meta( $post_id, self::HISTORY_META, true );
+			$history   = is_array( $history ) ? $history : array();
+			$history[] = array(
+				'until'  => time(),
+				'design' => $old_json,
+			);
+			update_post_meta( $post_id, self::HISTORY_META, wp_slash( $history ) );
+		}
+		update_post_meta( $post_id, self::SINCE_META, time() );
+	}
+
+	/** Whether a voucher was issued at or after a Unix time (0: ever). */
+	private static function vouchers_issued_since( int $since ): bool {
+		global $wpdb;
+		$table = Install::tables()['vouchers'];
+		return (bool) $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE created_at >= %s LIMIT 1", gmdate( 'Y-m-d H:i:s', $since ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from Install.
+	}
+
+	/** A template is deleted for good: keep its designs for the vouchers issued with it (not autoloaded). */
+	public function archive_deleted( $post_id, $post = null ): void {
+		$post_id = (int) $post_id;
+		if ( self::POST_TYPE !== get_post_type( $post_id ) ) {
+			return;
+		}
+		$design = (string) get_post_meta( $post_id, self::META, true );
+		if ( '' === $design || ! self::vouchers_issued_since( 0 ) ) {
+			return;
+		}
+		$history = get_post_meta( $post_id, self::HISTORY_META, true );
+		update_option(
+			self::ARCHIVE_OPTION . $post_id,
+			array(
+				'deleted' => time(),
+				'design'  => $design,
+				'history' => is_array( $history ) ? $history : array(),
+			),
+			false
+		);
 	}
 
 	/**
@@ -185,6 +278,7 @@ final class TemplatePostType {
 		echo '<textarea name="vcap_design" id="vcap-design-json" hidden>' . esc_textarea( wp_json_encode( $design ) ) . '</textarea>';
 		echo '<div id="vcap-designer" class="vcap-designer" aria-label="' . esc_attr__( 'Template designer', 'voucher-captain' ) . '"><p>' . esc_html__( 'Loading designer…', 'voucher-captain' ) . '</p></div>';
 		echo '<noscript>' . esc_html__( 'The designer requires JavaScript.', 'voucher-captain' ) . '</noscript>';
+		echo '<p class="vcap-design-apply"><label><input type="checkbox" name="vcap_design_apply_issued" value="1" /> ' . esc_html__( 'Also use this design for vouchers already issued', 'voucher-captain' ) . '</label><br><span class="description">' . esc_html__( 'Vouchers keep the design they were issued with. Tick this to show the saved design on every voucher of this template, including those already sold.', 'voucher-captain' ) . '</span></p>';
 	}
 
 	public function assets( string $hook ): void {
@@ -376,7 +470,13 @@ final class TemplatePostType {
 		$raw    = isset( $_POST['vcap_design'] ) ? wp_unslash( $_POST['vcap_design'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised in sanitize_design().
 		$design = json_decode( (string) $raw, true );
 		if ( is_array( $design ) ) {
-			update_post_meta( $post_id, self::META, wp_slash( wp_json_encode( self::sanitize_design( $design ) ) ) );
+			$old   = (string) get_post_meta( $post_id, self::META, true );
+			$new   = (string) wp_json_encode( self::sanitize_design( $design ) );
+			$apply = ! empty( $_POST['vcap_design_apply_issued'] );
+			if ( $old !== $new || $apply ) {
+				self::record_design_change( $post_id, $old, $new, '' !== $old && self::vouchers_issued_since( (int) get_post_meta( $post_id, self::SINCE_META, true ) ), $apply );
+			}
+			update_post_meta( $post_id, self::META, wp_slash( $new ) );
 		}
 	}
 
