@@ -433,6 +433,38 @@ $over = vcap_ps_product( 'PS percent 150', array( 'discount_type' => 'percent', 
 list( , $over_vouchers ) = vcap_ps_buy( $over );
 vcap_ps_assert( ! $over_vouchers, 'a percentage above 100 is refused before any voucher is inserted' );
 
+// Variations: a percentage product whose variation value is above 100 (e.g. values set before the product was
+// switched to "Percentage discount", or by an import) – that variation cannot be bought or issued, the others can;
+// saving the variation form keeps the previous value.
+$pct_variable = new WC_Product_Variable();
+$pct_variable->set_name( 'PS percent variable' );
+$pct_variable->set_status( 'publish' );
+foreach ( array( 'enabled' => 'yes', 'discount_type' => 'percent', 'amount_source' => 'fixed', 'amount' => '20' ) as $key => $value ) {
+	$pct_variable->update_meta_data( '_vcap_' . $key, $value );
+}
+$pct_variable->save();
+$pct_variations = array();
+foreach ( array( '150', '30' ) as $value ) {
+	$v = new WC_Product_Variation();
+	$v->set_parent_id( $pct_variable->get_id() );
+	$v->set_regular_price( '40' );
+	$v->set_virtual( true );
+	$v->set_status( 'publish' );
+	$v->update_meta_data( '_vcap_amount', $value );
+	$v->save();
+	$pct_variations[ $value ] = wc_get_product( $v->get_id() );
+}
+vcap_ps_assert( 'discount_invalid' === ProductChecks::unsellable_reason( $pct_variations['150'] ) && ! $pct_variations['150']->is_purchasable() && $pct_variations['30']->is_purchasable(), 'a variation worth 150 % cannot be bought, one worth 30 % can' );
+vcap_ps_assert( in_array( $pct_variable->get_id(), array_map( static fn( $p ) => $p->get_id(), ProductChecks::shop_problems()['invalid'] ), true ), 'the shop notices name the product of the invalid variation' );
+list( , $var_bad ) = vcap_ps_buy( $pct_variations['150'] );
+list( , $var_ok )  = vcap_ps_buy( $pct_variations['30'] );
+vcap_ps_assert( ! $var_bad && 1 === count( $var_ok ) && 30.0 === (float) ( new WC_Coupon( $var_ok[0]->coupon_id ) )->get_amount() && 'percent' === ( new WC_Coupon( $var_ok[0]->coupon_id ) )->get_discount_type(), 'an order of the 150 % variation issues nothing, the 30 % variation a 30 % coupon' );
+$_POST = array( 'vcap_variation_enabled' => array( 0 => '1' ), 'vcap_var' => array( 0 => array( 'amount' => '120' ) ) );
+( new VCAP\ProductSettings() )->save_variation( $pct_variations['30'], 0 );
+$pct_variations['30']->save();
+$_POST = array();
+vcap_ps_assert( '30' === (string) wc_get_product( $pct_variations['30']->get_id() )->get_meta( '_vcap_amount' ), 'saving 120 as the value of a percentage variation keeps the previous 30' );
+
 // WooCommerce refuses the coupon (WC_Data_Exception): the voucher row is rolled back, the slot is free again.
 $refuse = static function () {
 	throw new WC_Data_Exception( 'vcap_test_refused', 'Refused by the test' );
