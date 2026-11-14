@@ -43,8 +43,8 @@ final class CustomAmount {
 		// Only suggestions the customer can actually buy (a misconfigured one would be refused at add to cart).
 		$presets = array_values( array_filter( self::presets( $config ), static fn( $preset ) => null === self::error_for( $config, $preset ) ) );
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- refills the form after a failed add to cart.
-		$typed   = isset( $_POST['vcap_amount'] ) && is_scalar( $_POST['vcap_amount'] ) ? (string) wc_format_decimal( wp_unslash( $_POST['vcap_amount'] ) ) : '';
-		$chosen  = isset( $_POST['vcap_amount_preset'] ) && is_scalar( $_POST['vcap_amount_preset'] ) ? (string) wc_format_decimal( wp_unslash( $_POST['vcap_amount_preset'] ) ) : '';
+		$typed   = isset( $_POST['vcap_amount'] ) && is_scalar( $_POST['vcap_amount'] ) ? self::normalise( sanitize_text_field( wp_unslash( (string) $_POST['vcap_amount'] ) ) ) : '';
+		$chosen  = isset( $_POST['vcap_amount_preset'] ) && is_scalar( $_POST['vcap_amount_preset'] ) ? self::normalise( sanitize_text_field( wp_unslash( (string) $_POST['vcap_amount_preset'] ) ) ) : '';
 		// phpcs:enable
 		if ( ! isset( $_POST['vcap_amount'] ) && ! isset( $_POST['vcap_amount_preset'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			$chosen = $presets ? (string) $presets[0] : '';
@@ -84,6 +84,10 @@ final class CustomAmount {
 					/* translators: %s: max */
 					printf( esc_html__( 'Maximum %s.', 'voucher-captain' ), wp_kses_post( wc_price( $max ) ) );
 				}
+				if ( (float) $config['custom_step'] > 0 && abs( (float) $config['custom_step'] - 1.0 ) > 1e-9 ) {
+					/* translators: %s: step, e.g. 5,00 € */
+					echo ' ' . esc_html( sprintf( __( 'In steps of %s.', 'voucher-captain' ), self::plain_price( (float) $config['custom_step'] ) ) );
+				}
 				?>
 			</span>
 			<?php if ( '' !== $this->error ) : ?>
@@ -100,15 +104,34 @@ final class CustomAmount {
 	public static function posted_amount( array $config, array $request ): string {
 		$typed = isset( $request['vcap_amount'] ) && is_scalar( $request['vcap_amount'] ) ? trim( (string) $request['vcap_amount'] ) : '';
 		if ( '' !== $typed ) {
-			return (string) wc_format_decimal( $typed );
+			// Parsed strictly: what cannot be read unambiguously is handed on as typed and refused by error_for().
+			return self::normalise( $typed );
 		}
-		$chosen = isset( $request['vcap_amount_preset'] ) && is_scalar( $request['vcap_amount_preset'] ) ? (string) wc_format_decimal( (string) $request['vcap_amount_preset'] ) : '';
+		$chosen = isset( $request['vcap_amount_preset'] ) && is_scalar( $request['vcap_amount_preset'] ) ? self::normalise( (string) $request['vcap_amount_preset'] ) : '';
 		foreach ( '' !== $chosen && is_numeric( $chosen ) ? self::presets( $config ) : array() as $preset ) {
 			if ( abs( (float) $preset - (float) $chosen ) < 0.0001 ) {
-				return (string) wc_format_decimal( $preset );
+				return $preset;
 			}
 		}
 		return '';
+	}
+
+	/**
+	 * A typed amount as a plain number ("12,50 €" → "12.5"), parsed strictly with the shop's decimals (see
+	 * Amount::parse()); anything ambiguous or invalid is returned unchanged, so error_for() names the problem.
+	 */
+	public static function normalise( string $raw ): string {
+		$parsed = Amount::parse( $raw, array( 'allow_zero' => true ) );
+		return $parsed['ok'] ? self::number( $parsed['value'] ) : trim( $raw );
+	}
+
+	private static function number( float $value ): string {
+		return (string) round( $value, wc_get_price_decimals() );
+	}
+
+	/** Price without markup, for messages ("5,00 €"). */
+	private static function plain_price( float $amount ): string {
+		return html_entity_decode( wp_strip_all_tags( wc_price( $amount ) ), ENT_QUOTES, 'UTF-8' );
 	}
 
 	/**
@@ -116,7 +139,9 @@ final class CustomAmount {
 	 */
 	private function requested_amount( $cart_item_data, \WC_Product $product ): string {
 		if ( is_array( $cart_item_data ) && isset( $cart_item_data['vcap_amount'] ) ) {
-			return (string) wc_format_decimal( $cart_item_data['vcap_amount'] );
+			$given = $cart_item_data['vcap_amount'];
+			// Numbers come from code ("order again", Store API extensions); text is parsed like a typed amount.
+			return is_int( $given ) || is_float( $given ) ? self::number( (float) $given ) : ( is_scalar( $given ) ? self::normalise( (string) $given ) : '' );
 		}
 		return self::posted_amount( ProductConfig::get( $product ), wp_unslash( $_REQUEST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- add to cart; WooCommerce handles the request.
 	}
@@ -128,9 +153,12 @@ final class CustomAmount {
 		return self::error_for( ProductConfig::get( $product ), $raw );
 	}
 
-	/** Suggested amounts of a configuration (numeric entries of the comma separated list). @return string[] */
+	/**
+	 * Suggested amounts of a configuration as plain numbers: separated by ";" or line breaks, so "12,50" is one
+	 * amount (legacy comma lists such as "10, 25, 50" still work, see Amount::parse_list()). @return string[]
+	 */
 	public static function presets( array $config ): array {
-		return array_values( array_filter( array_map( 'trim', explode( ',', str_replace( ';', ',', (string) $config['custom_presets'] ) ) ), 'is_numeric' ) );
+		return array_map( array( self::class, 'number' ), Amount::parse_list( (string) $config['custom_presets'] )['values'] );
 	}
 
 	/**
@@ -139,22 +167,37 @@ final class CustomAmount {
 	 * @return string|null error message, null when the amount is acceptable
 	 */
 	public static function error_for( array $config, string $raw ): ?string {
-		$amount = (float) $raw;
-		$min    = (float) $config['custom_min'];
-		$max    = (float) $config['custom_max'];
-		$step   = (float) $config['custom_step'];
-		if ( '' === $raw || ! is_numeric( $raw ) || $amount <= 0 ) {
-			return __( 'Please enter a voucher amount.', 'voucher-captain' );
+		$min  = (float) $config['custom_min'];
+		$max  = (float) $config['custom_max'];
+		$step = (float) $config['custom_step'];
+		$parsed = Amount::parse( $raw );
+		if ( ! $parsed['ok'] ) {
+			return 'empty' === $parsed['error'] ? __( 'Please enter a voucher amount.', 'voucher-captain' ) : Amount::message( $parsed['error'] );
 		}
-		if ( ( $min > 0 && $amount < $min ) || ( $max > 0 && $amount > $max ) ) {
-			return __( 'The voucher amount is outside the allowed range.', 'voucher-captain' );
+		$amount = $parsed['value'];
+		if ( ( $min > 0 && $amount < $min - 1e-9 ) || ( $max > 0 && $amount > $max + 1e-9 ) ) {
+			if ( $min > 0 && $max > 0 ) {
+				/* translators: 1: minimum amount, 2: maximum amount */
+				return sprintf( __( 'The voucher amount must be between %1$s and %2$s.', 'voucher-captain' ), self::plain_price( $min ), self::plain_price( $max ) );
+			}
+			return $min > 0
+				/* translators: %s: minimum amount */
+				? sprintf( __( 'The voucher amount must be at least %s.', 'voucher-captain' ), self::plain_price( $min ) )
+				/* translators: %s: maximum amount */
+				: sprintf( __( 'The voucher amount must not be more than %s.', 'voucher-captain' ), self::plain_price( $max ) );
 		}
 		if ( $step > 0 ) {
 			// Match the HTML number input: steps count from the minimum, or from 0 when there is none.
 			$step_base = $min > 0 ? $min : 0.0;
 			$steps     = ( $amount - $step_base ) / $step;
 			if ( abs( $steps - round( $steps ) ) > 1e-6 ) {
-				return __( 'Please enter an amount matching the allowed increment.', 'voucher-captain' );
+				$below = $step_base + floor( $steps ) * $step;
+				$above = $step_base + ceil( $steps ) * $step;
+				return $below > 0
+					/* translators: 1: step, 2: nearest allowed amount below, 3: nearest allowed amount above */
+					? sprintf( __( 'Please enter an amount in steps of %1$s, e.g. %2$s or %3$s.', 'voucher-captain' ), self::plain_price( $step ), self::plain_price( $below ), self::plain_price( $above ) )
+					/* translators: %s: step */
+					: sprintf( __( 'Please enter an amount in steps of %s.', 'voucher-captain' ), self::plain_price( $step ) );
 			}
 		}
 		return null;
@@ -178,6 +221,14 @@ final class CustomAmount {
 		}
 		if ( '' !== (string) $config['custom_step'] && (float) $config['custom_step'] <= 0 ) {
 			$errors[] = __( 'Customer chooses the amount: the step must be greater than 0 (e.g. 1 for whole amounts).', 'voucher-captain' );
+		}
+		$unreadable = Amount::parse_list( (string) $config['custom_presets'] )['invalid'];
+		if ( $unreadable ) {
+			$errors[] = sprintf(
+				/* translators: %s: entries of the suggested amounts that are not amounts */
+				__( 'Customer chooses the amount: the suggested amounts %s cannot be read as amounts and are not shown. Separate amounts with a semicolon, e.g. 12,50; 25; 50.', 'voucher-captain' ),
+				'"' . implode( '", "', $unreadable ) . '"'
+			);
 		}
 		$invalid = array_filter( self::presets( $config ), static fn( $preset ) => null !== self::error_for( $config, $preset ) );
 		if ( $invalid ) {
@@ -219,7 +270,7 @@ final class CustomAmount {
 		if ( $error ) {
 			throw new \Exception( esc_html( $error ) );
 		}
-		$data['vcap_amount'] = round( (float) $raw, wc_get_price_decimals() );
+		$data['vcap_amount'] = round( Amount::parse( $raw )['value'], wc_get_price_decimals() );
 		return $data;
 	}
 

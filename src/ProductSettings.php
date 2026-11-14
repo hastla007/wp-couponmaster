@@ -171,10 +171,10 @@ final class ProductSettings {
 				'id'            => '_vcap_custom_presets',
 				'label'         => __( 'Suggested amounts', 'voucher-captain' ),
 				'value'         => $this->v( $p, 'custom_presets' ),
-				'placeholder'   => '25, 50, 100',
+				'placeholder'   => '25; 50; 100',
 				'wrapper_class' => 'vcap-show-custom',
 				'desc_tip'      => true,
-				'description'   => __( 'Comma separated amounts shown as quick-pick buttons.', 'voucher-captain' ),
+				'description'   => __( 'Amounts shown as quick-pick buttons, separated by semicolons (e.g. 12,50; 25; 50).', 'voucher-captain' ),
 			)
 		);
 		woocommerce_wp_select(

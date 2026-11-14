@@ -11,6 +11,9 @@ defined( 'ABSPATH' ) || exit;
  * Issued vouchers: list/search/filter/export, detail view, edits, balance adjustments, resend, void.
  */
 final class VoucherAdmin {
+	/** Whether the last adjust() booked a change (a refused form may be sent again, see FormToken). */
+	private bool $booked = false;
+
 	public function __construct( private VoucherRepository $repo ) {}
 
 	public function register(): void {
@@ -265,6 +268,7 @@ final class VoucherAdmin {
 							<input type="hidden" name="confirm_above" value="" />
 							<input type="hidden" name="id" value="<?php echo esc_attr( (string) $v->id ); ?>" />
 							<?php wp_nonce_field( 'vcap_voucher_' . $v->id ); ?>
+							<?php echo FormToken::field(); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in field(). ?>
 							<label class="screen-reader-text" for="vcap-adj-mode"><?php esc_html_e( 'Mode', 'voucher-captain' ); ?></label>
 							<select name="mode" id="vcap-adj-mode">
 								<option value="subtract"><?php esc_html_e( 'Deduct', 'voucher-captain' ); ?></option>
@@ -375,7 +379,17 @@ final class VoucherAdmin {
 				$this->redirect( vcap()->issuer->reactivate( $v ) ? 'reactivated' : 'action_failed', $id );
 				break;
 			case 'adjust':
-				$this->redirect( $this->adjust( $v ), $id );
+				// One booking per rendered form: a double click or a resent form must not book the amount twice.
+				if ( ! FormToken::claim( 'adjust-' . $id ) ) {
+					Flash::add( 'warning', __( 'This balance adjustment was already submitted and has not been booked again. Check the history below before entering it once more.', 'voucher-captain' ) );
+					$this->redirect( '', $id );
+				}
+				$this->booked = false;
+				$msg          = $this->adjust( $v );
+				if ( ! $this->booked ) {
+					FormToken::release( 'adjust-' . $id ); // Nothing was booked: the corrected form may be sent again.
+				}
+				$this->redirect( $msg, $id );
 				break;
 			case 'redeem_store':
 				$this->redirect( $this->redeem_store( $v ), $id );
@@ -464,12 +478,25 @@ final class VoucherAdmin {
 		$confirm = ! empty( $_POST['confirm_above'] );
 		// phpcs:enable
 		$mode    = in_array( $mode, array( 'subtract', 'add', 'set' ), true ) ? $mode : 'subtract';
-		$decimal = '' !== $raw ? (string) wc_format_decimal( $raw ) : '';
-		$amount  = round( (float) $decimal, $v->decimals() );
-		if ( '' === $decimal || ! is_numeric( $decimal ) || $amount < 0 || ( 'set' !== $mode && $amount <= 0 ) ) {
-			Flash::add( 'error', 'set' === $mode ? __( 'Please enter the new remaining value (0 or more).', 'voucher-captain' ) : __( 'Please enter an amount greater than 0.', 'voucher-captain' ) );
+		// Strict like the scanner: "2,50" is never 250, "−5" never +5, "1e3" never 13 (see \VCAP\Amount).
+		$parsed = \VCAP\Amount::parse(
+			$raw,
+			array(
+				'decimals'   => $v->decimals(),
+				'strip'      => array( $v->currency, html_entity_decode( get_woocommerce_currency_symbol( $v->currency ), ENT_QUOTES, 'UTF-8' ) ),
+				'allow_zero' => 'set' === $mode,
+			)
+		);
+		if ( ! $parsed['ok'] ) {
+			if ( in_array( $parsed['error'], array( 'empty', 'zero' ), true ) ) {
+				Flash::add( 'error', 'set' === $mode ? __( 'Please enter the new remaining value (0 or more).', 'voucher-captain' ) : __( 'Please enter an amount greater than 0.', 'voucher-captain' ) );
+			} else {
+				/* translators: 1: what was entered, 2: why it was refused */
+				Flash::add( 'error', sprintf( __( '"%1$s" was not accepted: %2$s Nothing was changed.', 'voucher-captain' ), $raw, \VCAP\Amount::message( $parsed['error'], $v->decimals() ) ) );
+			}
 			return '';
 		}
+		$amount = $parsed['value'];
 		$fresh   = $this->repo->get( $v->id ) ?? $v;
 		$current = (float) $fresh->balance;
 		if ( 'subtract' === $mode && $amount > $current + 0.000001 ) {
@@ -503,7 +530,8 @@ final class VoucherAdmin {
 		if ( ! $ok ) {
 			return 'adjust_failed';
 		}
-		$after = $this->repo->get( $v->id );
+		$this->booked = true;
+		$after        = $this->repo->get( $v->id );
 		/* translators: %s: new remaining value */
 		Flash::add( 'success', sprintf( __( 'Balance updated. New remaining value: %s.', 'voucher-captain' ), self::money( $after ? (float) $after->balance : $amount, $v->currency ) ) );
 		return '';

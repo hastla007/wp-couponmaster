@@ -129,8 +129,13 @@ final class Onboarding {
 		if ( 'dismiss' === $do ) {
 			update_option( self::DISMISSED, 'yes', false );
 		} elseif ( in_array( $do, array( 'redeem_page', 'balance_page' ), true ) ) {
-			$page = self::create_page( $do );
-			if ( $page ) {
+			$existing = self::existing_page( $do );
+			$page     = $existing ?: self::create_page( $do );
+			if ( $existing ) {
+				// A double click or a second tab: the first request already created the page.
+				/* translators: %s: page title */
+				Flash::add( 'info', sprintf( __( 'The page "%s" already exists; no second page was created.', 'voucher-captain' ), get_the_title( $existing ) ) );
+			} elseif ( $page ) {
 				/* translators: %s: page title */
 				Flash::add( 'success', sprintf( __( 'The page "%s" was created and published. Adjust it like any other page.', 'voucher-captain' ), get_the_title( $page ) ) );
 			} else {
@@ -141,8 +146,37 @@ final class Onboarding {
 		exit;
 	}
 
-	/** Create and publish the redeem or balance page; the redeem page is also selected in the settings. */
+	/** Published page that already does the job of the redeem or balance page (0 when there is none). */
+	public static function existing_page( string $which ): int {
+		if ( 'redeem_page' === $which ) {
+			$selected = (int) get_option( 'vcap_redeem_page_id', 0 );
+			return $selected > 0 && 'publish' === get_post_status( $selected ) ? $selected : self::page_with( array( 'vcap_redeem' ), 'vcap/redeem' );
+		}
+		return self::page_with( array( 'vcap_balance', 'vcap_voucher_status' ), 'vcap/balance' );
+	}
+
+	/**
+	 * Create and publish the redeem or balance page; the redeem page is also selected in the settings. Requests
+	 * running at the same time create one page: the existence check and the insert run under a lock.
+	 */
 	public static function create_page( string $which ): int {
+		global $wpdb;
+		$lock = 'vcap_onboarding_' . $which;
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 10)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return 0;
+		}
+		try {
+			$existing = self::existing_page( $which );
+			if ( $existing && 'redeem_page' === $which ) {
+				update_option( 'vcap_redeem_page_id', $existing );
+			}
+			return $existing ?: self::insert_page( $which );
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+	}
+
+	private static function insert_page( string $which ): int {
 		$redeem = 'redeem_page' === $which;
 		$id     = wp_insert_post(
 			array(
