@@ -563,7 +563,32 @@ final class Fields {
 			wc_add_notice( $message, 'error' );
 			$passed = false;
 		}
+		if ( $passed ) {
+			foreach ( $this->print_warnings( $product ) as $message ) {
+				wc_add_notice( $message, 'notice' ); // Accepted, but the customer knows how the PDF will look.
+			}
+		}
 		return $passed;
+	}
+
+	/**
+	 * Notices for submitted text values the voucher PDF cannot print as entered (characters without a glyph such
+	 * as emoji or Chinese letters, right-to-left text).
+	 *
+	 * @return string[]
+	 */
+	public function print_warnings( \WC_Product $product ): array {
+		$warnings = array();
+		foreach ( $this->flat_definitions( $product ) as $key => $field ) {
+			if ( ! in_array( $field['type'] ?? 'text', array( 'text', 'textarea' ), true ) ) {
+				continue;
+			}
+			$warning = PdfRenderer::print_warning( (string) ( $field['label'] ?? $key ), trim( $this->posted_value( (string) $key ) ) );
+			if ( '' !== $warning ) {
+				$warnings[] = $warning;
+			}
+		}
+		return $warnings;
 	}
 
 	/**

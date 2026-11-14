@@ -351,6 +351,95 @@ final class PdfRenderer {
 		return (string) apply_filters( 'vcap_pdf_element_html', '', $el, $voucher, $values );
 	}
 
+	/** @var array<string,bool> "font|style|char" => whether a font of the stack has the glyph. */
+	private static array $glyphs = array();
+
+	/**
+	 * Characters of a text that no font of the PDF font stack can draw (they would print as empty boxes), e.g.
+	 * Chinese names or emoji with the bundled DejaVu fonts. Spaces, control and zero-width characters are ignored.
+	 *
+	 * @return string[]
+	 */
+	public static function unsupported_chars( string $text, string $font = 'DejaVu Sans', bool $bold = false, bool $italic = false ): array {
+		if ( ! preg_match( '/[^\x00-\x7E]/', $text ) ) {
+			return array(); // ASCII: every font has it.
+		}
+		$metrics = self::font_metrics();
+		if ( ! $metrics ) {
+			return array();
+		}
+		$style   = $bold && $italic ? 'bold_italic' : ( $bold ? 'bold' : ( $italic ? 'italic' : 'normal' ) );
+		$canvas  = $metrics->getCanvas();
+		$files   = array();
+		foreach ( self::font_families( $font ) as $family ) {
+			$file = $metrics->getFont( $family, $style ) ?: $metrics->getFont( $family, 'normal' );
+			if ( $file ) {
+				$files[] = (string) $file;
+			}
+		}
+		$missing = array();
+		foreach ( array_unique( mb_str_split( $text ) ) as $char ) {
+			if ( preg_match( '/^[\x00-\x20\x7F\x{00A0}\x{00AD}\x{200B}-\x{200F}\x{2028}-\x{202F}\x{2060}\x{FE00}-\x{FE0F}\x{FEFF}]$/u', $char ) ) {
+				continue;
+			}
+			$key = $font . '|' . $style . '|' . $char;
+			if ( ! isset( self::$glyphs[ $key ] ) ) {
+				self::$glyphs[ $key ] = false;
+				foreach ( $files as $file ) {
+					try {
+						if ( $canvas->font_supports_char( $file, $char ) ) {
+							self::$glyphs[ $key ] = true;
+							break;
+						}
+					} catch ( \Throwable $e ) {
+						self::$glyphs[ $key ] = true; // Unknown: do not warn.
+						break;
+					}
+				}
+			}
+			if ( ! self::$glyphs[ $key ] ) {
+				$missing[] = $char;
+			}
+		}
+		return $missing;
+	}
+
+	/** Right-to-left scripts: dompdf prints them left to right and, for Arabic, without joining the letters. */
+	public static function has_rtl( string $text ): bool {
+		return (bool) preg_match( '/[\x{0590}-\x{08FF}\x{FB1D}-\x{FDFF}\x{FE70}-\x{FEFF}]/u', $text );
+	}
+
+	/**
+	 * Emoji and pictographs (with their joiners, variation selectors and skin tones) that no font can draw are
+	 * left out instead of printing as empty boxes. Other missing characters (e.g. a Chinese name) are kept: the
+	 * customer was warned when entering them, and a fallback font can be added (COMPATIBILITY.md).
+	 */
+	public static function strip_unprintable_emoji( string $text, string $font = 'DejaVu Sans', bool $bold = false, bool $italic = false ): string {
+		$missing = array_filter( self::unsupported_chars( $text, $font, $bold, $italic ), static fn( $c ) => (bool) preg_match( '/^[\x{1F000}-\x{1FAFF}\x{2300}-\x{23FF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{1F1E6}-\x{1F1FF}]$/u', $c ) );
+		if ( ! $missing ) {
+			return $text;
+		}
+		$text = str_replace( array_merge( $missing, array( "\u{200D}", "\u{FE0F}" ) ), '', $text );
+		return trim( (string) preg_replace( '/[ \t]{2,}/', ' ', $text ), " \t" );
+	}
+
+	/**
+	 * Warning for a personalisation value the PDF cannot print as entered ('' when it can): characters without a
+	 * glyph (boxes; emoji are left out) or right-to-left text (printed reversed and unjoined).
+	 */
+	public static function print_warning( string $label, string $text ): string {
+		$missing = self::unsupported_chars( $text );
+		if ( $missing ) {
+			/* translators: 1: field label, 2: the characters */
+			return sprintf( __( '%1$s contains characters the voucher PDF cannot print (%2$s). Emoji are left out, other characters appear as empty boxes.', 'voucher-captain' ), $label, implode( ' ', array_slice( $missing, 0, 10 ) ) );
+		}
+		if ( self::has_rtl( $text ) ) {
+			/* translators: %s: field label */
+			return sprintf( __( '%s contains right-to-left text (e.g. Arabic or Hebrew). The voucher PDF prints it left to right and with unjoined letters.', 'voucher-captain' ), $label );
+		}
+		return '';
+	}
+
 	/** Smallest share of the designed font size a text is shrunk to before it is cut off. */
 	public const MIN_FIT_SCALE = 0.5;
 
@@ -433,6 +522,7 @@ final class PdfRenderer {
 		$valign = in_array( $valign, array( 'top', 'middle', 'bottom' ), true ) ? $valign : 'top';
 		$lh     = max( 0.8, min( 3, (float) ( $el['lineHeight'] ?? 1.25 ) ) );
 		$bold   = ! empty( $el['bold'] ) || ( 'heading' === $el['type'] && ! isset( $el['bold'] ) );
+		$text   = self::strip_unprintable_emoji( $text, (string) $font, $bold, ! empty( $el['italic'] ) );
 		// A long message or code is set smaller until it fits its box instead of being cut off without a trace.
 		$fitted = self::fit_size( $text, (string) $font, $size, $lh, $bold, ! empty( $el['italic'] ), (float) ( $el['letterSpacing'] ?? 0 ), max( 1, (float) ( $el['w'] ?? 50 ) ), max( 1, (float) ( $el['h'] ?? 10 ) ) );
 		if ( $fitted['size'] < $size ) {
