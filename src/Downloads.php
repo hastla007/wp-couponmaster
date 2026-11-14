@@ -442,12 +442,17 @@ final class Downloads {
 		if ( $extras ) {
 			do_action( 'vcap_account_vouchers_top', $user );
 		}
-		$list = $this->repo->for_customer( (int) $user->ID );
-		// Products of the list loaded together (one query for posts and meta, not one per voucher).
+		// B15: one page of the list (newest first); one more voucher is read to know whether a next page exists.
+		$page = max( 1, absint( wp_unslash( $_GET[ self::PAGE_ARG ] ?? 1 ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- only selects a page of the customer's own list.
+		$list = $this->repo->for_customer( (int) $user->ID, self::PER_PAGE + 1, ( $page - 1 ) * self::PER_PAGE );
+		$more = count( $list ) > self::PER_PAGE;
+		$list = array_slice( $list, 0, self::PER_PAGE );
+		// Products and orders of the page loaded together (one query each, not one per voucher).
 		$products = array_values( array_unique( array_filter( array_map( static fn( $v ) => (int) ( $v->variation_id ?: $v->product_id ), $list ) ) ) );
 		if ( $products ) {
 			_prime_post_caches( $products, false, true );
 		}
+		Voucher::prime_orders( $list );
 		Plugin::template(
 			'myaccount/vouchers-table.php',
 			array(
@@ -457,7 +462,22 @@ final class Downloads {
 				'show_order'=> true,
 			)
 		);
+		Voucher::forget_orders();
+		if ( $more || $page > 1 ) {
+			echo '<nav class="woocommerce-pagination vcap-vouchers-pagination">';
+			if ( $page > 1 ) {
+				echo '<a class="woocommerce-button woocommerce-button--previous button" href="' . esc_url( add_query_arg( self::PAGE_ARG, $page - 1 ) ) . '">' . esc_html__( 'Newer vouchers', 'voucher-captain' ) . '</a> ';
+			}
+			if ( $more ) {
+				echo '<a class="woocommerce-button woocommerce-button--next button" href="' . esc_url( add_query_arg( self::PAGE_ARG, $page + 1 ) ) . '">' . esc_html__( 'Older vouchers', 'voucher-captain' ) . '</a>';
+			}
+			echo '</nav>';
+		}
 	}
+
+	/** B15: vouchers per page of My Account → Vouchers, and the query argument of the page. */
+	public const PER_PAGE = 20;
+	public const PAGE_ARG = 'vcap_page';
 
 	/**
 	 * [vcap_balance] – lets customers check the remaining value of a voucher code.

@@ -168,8 +168,37 @@ final class Voucher {
 	}
 
 	public function order(): ?\WC_Order {
+		if ( $this->order_id && isset( self::$primed_orders[ $this->order_id ] ) ) {
+			return self::$primed_orders[ $this->order_id ];
+		}
 		$order = $this->order_id ? wc_get_order( $this->order_id ) : null;
 		return $order instanceof \WC_Order ? $order : null;
+	}
+
+	/** @var array<int, \WC_Order> orders loaded together for a list (prime_orders()), until forget_orders() */
+	private static array $primed_orders = array();
+
+	/**
+	 * B15: loads the orders of a voucher list with one query (not one wc_get_order() per row). Only for rendering
+	 * a list: call forget_orders() afterwards, so later code reads the orders fresh.
+	 *
+	 * @param Voucher[] $vouchers
+	 */
+	public static function prime_orders( array $vouchers ): void {
+		$ids = array_values( array_unique( array_filter( array_map( static fn( $v ) => (int) $v->order_id, $vouchers ) ) ) );
+		if ( ! $ids || ! function_exists( 'wc_get_orders' ) ) {
+			return;
+		}
+		foreach ( (array) wc_get_orders( array( 'post__in' => $ids, 'limit' => count( $ids ), 'type' => 'shop_order', 'status' => array_keys( wc_get_order_statuses() ) ) ) as $order ) {
+			if ( $order instanceof \WC_Order ) {
+				self::$primed_orders[ $order->get_id() ] = $order;
+			}
+		}
+	}
+
+	/** Forgets the orders of prime_orders(). */
+	public static function forget_orders(): void {
+		self::$primed_orders = array();
 	}
 
 	public function delivery_email(): string {

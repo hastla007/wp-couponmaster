@@ -216,7 +216,7 @@ final class VoucherAdmin {
 								);
 							}
 						}
-						if ( $v->expires_at && ! in_array( 'expiry_reminder', array_column( $this->repo->events( $v->id ), 'event' ), true ) ) {
+						if ( $v->expires_at && ! $this->repo->has_event( $v->id, 'expiry_reminder' ) ) {
 							$form( 'suppress_reminder', __( 'No expiry reminder', 'voucher-captain' ) );
 						}
 						if ( ! $v->is_ticket() && ! $v->is_multi_use() && Voucher::STATUS_ACTIVE === $v->status && ! $v->is_expired() ) {
@@ -338,7 +338,10 @@ final class VoucherAdmin {
 					<tbody>
 					<?php
 					$labels = VoucherRepository::event_labels();
-					foreach ( array_reverse( $this->repo->events( $v->id ) ) as $e ) :
+					// B15: the history in pages of HISTORY_PER_PAGE, newest first.
+					$h_pages = max( 1, (int) ceil( $this->repo->event_count( $v->id ) / self::HISTORY_PER_PAGE ) );
+					$h_page  = min( $h_pages, max( 1, absint( $_GET['history_page'] ?? 1 ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- only selects a page.
+					foreach ( $this->repo->events_page( $v->id, self::HISTORY_PER_PAGE, $h_page ) as $e ) :
 						$user = $e['user_id'] ? get_userdata( (int) $e['user_id'] ) : null;
 						// A redemption without an order (counter, admin deduction) can be cancelled with a reason.
 						$reversible = '' === \VCAP\Tickets::reversal_refusal( $e, $v, get_current_user_id(), true, time(), \VCAP\Tickets::is_reversed( (int) $e['id'] ) );
@@ -366,10 +369,24 @@ final class VoucherAdmin {
 					<?php endforeach; ?>
 					</tbody>
 				</table>
+				<?php if ( $h_pages > 1 ) : ?>
+					<p class="vcap-history-pages">
+						<?php if ( $h_page > 1 ) : ?>
+							<a class="button" href="<?php echo esc_url( add_query_arg( 'history_page', $h_page - 1 ) ); ?>"><?php esc_html_e( 'Newer entries', 'voucher-captain' ); ?></a>
+						<?php endif; ?>
+						<?php /* translators: 1: current page, 2: number of pages */ echo esc_html( sprintf( __( 'Page %1$d of %2$d', 'voucher-captain' ), $h_page, $h_pages ) ); ?>
+						<?php if ( $h_page < $h_pages ) : ?>
+							<a class="button" href="<?php echo esc_url( add_query_arg( 'history_page', $h_page + 1 ) ); ?>"><?php esc_html_e( 'Older entries', 'voucher-captain' ); ?></a>
+						<?php endif; ?>
+					</p>
+				<?php endif; ?>
 			</div>
 		</div>
 		<?php
 	}
+
+	/** B15: history entries per page on the voucher detail screen. */
+	public const HISTORY_PER_PAGE = 50;
 
 	private function redirect( string $msg, int $id = 0 ): void {
 		$args = array( 'page' => 'vcap-vouchers', 'vcap_msg' => $msg );

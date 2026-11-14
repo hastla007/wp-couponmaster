@@ -190,11 +190,14 @@ final class VoucherRepository {
 	 * Vouchers bought by a customer. Deliberately NOT matched by recipient email: WooCommerce account emails are
 	 * unverified, so that would let anyone list gifts addressed to an email they merely claim.
 	 */
-	public function for_customer( int $user_id, int $limit = 200 ): array {
+	public function for_customer( int $user_id, int $limit = 200, int $offset = 0 ): array {
 		global $wpdb;
 		if ( $user_id <= 0 ) {
 			return array();
 		}
+		// B15: a page of the list ($offset vouchers skipped, newest first).
+		$offset = max( 0, $offset );
+		$limit += $offset;
 		// Page through all of the customer's orders (newest first) until enough vouchers are found: customers
 		// with many orders (e.g. regulars) must still see vouchers bought long ago.
 		$rows = array();
@@ -219,7 +222,7 @@ final class VoucherRepository {
 				break;
 			}
 		}
-		return array_map( array( Voucher::class, 'from_row' ), $rows );
+		return array_map( array( Voucher::class, 'from_row' ), array_slice( $rows, $offset ) );
 	}
 
 	/**
@@ -735,6 +738,24 @@ final class VoucherRepository {
 			return array_reverse( $rows );
 		}
 		return $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->events_table()} WHERE voucher_id = %d ORDER BY id ASC", $voucher_id ), ARRAY_A ) ?: array(); // phpcs:ignore
+	}
+
+	/**
+	 * B15: one page of a voucher's history, newest first ($page from 1), through the (voucher_id, id) index.
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function events_page( int $voucher_id, int $per_page, int $page = 1 ): array {
+		global $wpdb;
+		$per_page = max( 1, $per_page );
+		$offset   = ( max( 1, $page ) - 1 ) * $per_page;
+		return $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->events_table()} WHERE voucher_id = %d ORDER BY id DESC LIMIT %d OFFSET %d", $voucher_id, $per_page, $offset ), ARRAY_A ) ?: array(); // phpcs:ignore
+	}
+
+	/** B15: whether the voucher's history has an entry of this kind (without loading the history). */
+	public function has_event( int $voucher_id, string $event ): bool {
+		global $wpdb;
+		return (bool) $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$this->events_table()} WHERE voucher_id = %d AND event = %s LIMIT 1", $voucher_id, $event ) ); // phpcs:ignore
 	}
 
 	/** Number of ledger rows of a voucher. */

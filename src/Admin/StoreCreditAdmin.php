@@ -77,7 +77,7 @@ final class StoreCreditAdmin {
 			<table class="widefat striped" style="max-width:900px">
 				<thead><tr><th><?php esc_html_e( 'Date', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'Event', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'Amount', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'Balance after', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'Order', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'User', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'Note', 'voucher-captain' ); ?></th></tr></thead>
 				<tbody>
-				<?php foreach ( array_slice( array_reverse( $this->repo->events( $account->id ) ), 0, 50 ) as $e ) : ?>
+				<?php foreach ( $this->repo->events_page( $account->id, 50 ) as $e ) : // B15: the newest 50 only. ?>
 					<?php $by = $e['user_id'] ? get_userdata( (int) $e['user_id'] ) : null; ?>
 					<tr>
 						<td><?php echo esc_html( \VCAP\LocalDate::from_utc( $e['created_at'], get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ); ?></td>

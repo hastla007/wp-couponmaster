@@ -129,6 +129,49 @@ vcap()->downloads->account_page( false );
 $f3_empty = (string) ob_get_clean();
 vcap_acct_assert( str_contains( $f3_empty, 'You have no vouchers yet.' ) && ! str_contains( $f3_empty, '<table' ), 'F3: a customer without vouchers sees an empty state instead of an empty table' );
 
+// B15: My Account → Vouchers in pages of 20, the orders of a page loaded together (not one read per row).
+$b15_product = vcap_acct_product( array() );
+for ( $i = 0; $i < 21; $i++ ) {
+	$b15_order           = vcap_acct_order( $b15_product, $buyer, $login . '@example.com' );
+	$b15_v               = new VCAP\Voucher();
+	$b15_v->code         = 'B15-' . strtoupper( wp_generate_password( 10, false, false ) );
+	$b15_v->order_id     = $b15_order->get_id();
+	$b15_v->order_item_id = 97000000 + $b15_order->get_id();
+	$b15_v->product_id   = $b15_product->get_id();
+	$b15_v->type         = 'voucher';
+	$b15_v->usage_mode   = 'single';
+	$b15_v->initial_amount = 10;
+	$b15_v->balance      = 10;
+	$b15_v->currency     = get_woocommerce_currency();
+	$b15_v->status       = VCAP\Voucher::STATUS_ACTIVE;
+	$b15_v->buyer_email  = $login . '@example.com';
+	vcap_acct_assert( vcap()->vouchers->insert( $b15_v ) > 0, 'B15: (setup) voucher ' . $i . ' stored' );
+}
+$b15_all = vcap()->vouchers->for_customer( $buyer );
+$b15_p2  = vcap()->vouchers->for_customer( $buyer, 5, 20 );
+vcap_acct_assert( count( $b15_all ) >= 23 && array_column( array_slice( $b15_all, 20, 5 ), 'id' ) === array_column( $b15_p2, 'id' ), 'B15: for_customer( user, limit, offset ) returns the requested page of the list' );
+wp_set_current_user( $buyer );
+wp_cache_flush();
+$b15_reads = 0;
+$b15_log   = static function ( $q ) use ( &$b15_reads ) {
+	$b15_reads += preg_match( '/FROM\s+`?\w*wc_orders`?\s/i', $q ) ? 1 : 0;
+	return $q;
+};
+add_filter( 'query', $b15_log );
+ob_start();
+vcap()->downloads->account_page( false );
+$b15_page1 = (string) ob_get_clean();
+remove_filter( 'query', $b15_log );
+vcap_acct_assert( 20 === substr_count( $b15_page1, 'vcap-download actions' ) && str_contains( $b15_page1, 'vcap_page=2' ) && ! str_contains( $b15_page1, 'Newer vouchers' ), 'B15: the first page shows 20 vouchers and links to the older ones' );
+vcap_acct_assert( $b15_reads <= 10, 'B15: the orders of the page are read together, not once per voucher (' . $b15_reads . ' order queries for 20 rows)' );
+$_GET[ VCAP\Downloads::PAGE_ARG ] = '2';
+ob_start();
+vcap()->downloads->account_page( false );
+$b15_page2 = (string) ob_get_clean();
+unset( $_GET[ VCAP\Downloads::PAGE_ARG ] );
+vcap_acct_assert( count( $b15_all ) - 20 === substr_count( $b15_page2, 'vcap-download actions' ) && str_contains( $b15_page2, 'Newer vouchers' ) && ! str_contains( $b15_page2, 'vcap_page=3' ), 'B15: the second page shows the rest and links back' );
+wp_set_current_user( 0 );
+
 // G8: "My vouchers" block with showExtras = false leaves out store credit and referral code; with both blocks on a
 // page each extra section is shown once. F3: the store credit history is a responsive table as well.
 $g8_keep = array( 'vcap_referral_enabled' => get_option( 'vcap_referral_enabled', false ), 'vcap_store_credit' => get_option( 'vcap_store_credit', false ) );

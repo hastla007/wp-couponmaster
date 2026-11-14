@@ -449,6 +449,10 @@ for ( $i = 1; $i <= 30; $i++ ) {
 }
 $p6_latest = vcap()->vouchers->events( $p6_card->id, 25 );
 vcap_inst_assert( 25 === count( $p6_latest ) && 30.0 === (float) end( $p6_latest )['balance_after'] && (int) $p6_latest[0]['id'] < (int) $p6_latest[1]['id'], 'B15: events( id, 25 ) returns the newest 25 entries, oldest first' );
+$p6_page1 = vcap()->vouchers->events_page( $p6_card->id, 10, 1 );
+$p6_page2 = vcap()->vouchers->events_page( $p6_card->id, 10, 2 );
+vcap_inst_assert( 10 === count( $p6_page1 ) && 30.0 === (float) $p6_page1[0]['balance_after'] && 20.0 === (float) $p6_page2[0]['balance_after'] && (int) $p6_page1[9]['id'] > (int) $p6_page2[0]['id'], 'B15: events_page() pages through the history, newest first' );
+vcap_inst_assert( vcap()->vouchers->has_event( $p6_card->id, 'adjusted' ) && ! vcap()->vouchers->has_event( $p6_card->id, 'expiry_reminder' ), 'B15: has_event() answers without loading the history' );
 
 // A5: in the migration window post meta is counted before the table: a batch moved in between is counted twice
 // (limit reached early), never not at all.
