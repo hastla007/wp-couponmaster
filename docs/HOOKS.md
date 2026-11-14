@@ -20,6 +20,7 @@ are described in CONNECTORS.md and API.md.
 | `vcap_no_cache` | `src/Shortcodes.php` | Fires when a page must not be cached (hook for cache plugins without DONOTCACHEPAGE support). |
 | `vcap_order_metabox_after` | `src/Admin/OrderAdmin.php` | – |
 | `vcap_passcaptain_tickets_issued` | `src/Compat/PassCaptainTickets.php` | – |
+| `vcap_product_availability_changed` | `src/ProductChecks.php` | A voucher product became purchasable or stopped being purchasable (date passed, batch empty or refilled, discount setup). Its WordPress and WooCommerce caches have been cleared; full-page caches can purge its URL here. Arguments: the product, the new unsellable reason ('' = purchasable again; date_past, date_missing, codes_empty, discount_invalid) and the previous reason ('' = was purchasable). |
 | `vcap_product_settings_fields` | `src/ProductSettings.php` | Extra product fields of connectors (saved in vcap_product_settings_save). |
 | `vcap_product_settings_save` | `src/ProductSettings.php` | – |
 | `vcap_rate_limit_hit` | `src/Plugin.php` | Fires the first time a visitor exceeds the limit of a bucket in a window. |

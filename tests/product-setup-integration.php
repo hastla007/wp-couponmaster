@@ -423,6 +423,34 @@ ProductChecks::flush();
 vcap_ps_assert( $pooled_vouchers && strtoupper( $batch ) . '-1' === $pooled_vouchers[0]->code, 'the imported code is used' );
 $pooled = wc_get_product( $pooled->get_id() );
 vcap_ps_assert( 'codes_empty' === ProductChecks::unsellable_reason( $pooled ) && ! $pooled->is_purchasable(), 'with "stop selling" an empty batch makes the product unpurchasable' );
+// C12: the purchasability changed without a product save – the product's caches are cleared and listeners told.
+$c12_events = array();
+$c12_listen = static function ( $product, $reason, $old ) use ( &$c12_events ) {
+	$c12_events[] = array( $product->get_id(), $reason, $old );
+};
+add_action( 'vcap_product_availability_changed', $c12_listen, 10, 3 );
+$c12_cleaned = array();
+$c12_clean   = static function ( $post_id ) use ( &$c12_cleaned ) {
+	$c12_cleaned[] = (int) $post_id;
+};
+add_action( 'clean_post_cache', $c12_clean );
+$c12_changed = ProductChecks::sync_availability();
+vcap_ps_assert( in_array( $pooled->get_id(), $c12_changed, true ) && in_array( array( $pooled->get_id(), 'codes_empty', '' ), $c12_events, true ) && in_array( $pooled->get_id(), $c12_cleaned, true ), 'C12: the batch running empty clears the product caches and fires vcap_product_availability_changed', array( $c12_changed, $c12_events ) );
+vcap_ps_assert( array() === ProductChecks::sync_availability(), 'C12: nothing is checked again without a new code change' );
+vcap()->code_pool->add( strtoupper( $batch ) . '-2', $batch );
+$c12_cleaned = array();
+$c12_events  = array();
+ProductChecks::sync_availability();
+vcap_ps_assert( array( array( $pooled->get_id(), '', 'codes_empty' ) ) === $c12_events && in_array( $pooled->get_id(), $c12_cleaned, true ) && wc_get_product( $pooled->get_id() )->is_purchasable(), 'C12: refilling the batch makes it purchasable again and clears the caches', $c12_events );
+$c12_dated = vcap_ps_product( 'PS C12 dated', array( 'expiry_mode' => 'date', 'expiry_date' => gmdate( 'Y-m-d', strtotime( '+2 days' ) ) ) );
+ProductChecks::sync_dated_products();
+$c12_events = array();
+update_post_meta( $c12_dated->get_id(), '_vcap_expiry_date', gmdate( 'Y-m-d', strtotime( '-2 days' ) ) ); // The date passes (no product save).
+ProductChecks::sync_dated_products();
+vcap_ps_assert( array( array( $c12_dated->get_id(), 'date_past', '' ) ) === $c12_events, 'C12: the daily run notices a fixed date that has passed', $c12_events );
+remove_action( 'vcap_product_availability_changed', $c12_listen, 10 );
+remove_action( 'clean_post_cache', $c12_clean );
+$c12_dated->delete( true );
 $pooled->update_meta_data( '_vcap_code_pool_empty', 'random' );
 $pooled->save();
 vcap_ps_assert( wc_get_product( $pooled->get_id() )->is_purchasable(), 'with "random codes" it can still be bought' );

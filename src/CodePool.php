@@ -39,6 +39,7 @@ final class CodePool {
 					break;
 				}
 				if ( 1 === (int) $updated ) {
+					ProductChecks::batch_touched( $batch );
 					$id = (int) $wpdb->get_var( 'SELECT LAST_INSERT_ID()' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 					return $id > 0 ? (string) $wpdb->get_var( $wpdb->prepare( "SELECT code FROM {$this->table()} WHERE id = %d", $id ) ) : null; // phpcs:ignore
 				}
@@ -67,6 +68,7 @@ final class CodePool {
 
 	public function release( string $code ): bool {
 		global $wpdb;
+		ProductChecks::batch_touched( (string) $wpdb->get_var( $wpdb->prepare( "SELECT batch FROM {$this->table()} WHERE code = %s", $code ) ) ); // phpcs:ignore
 		return false !== $wpdb->update( $this->table(), array( 'voucher_id' => 0, 'used_at' => null ), array( 'code' => $code ) ); // phpcs:ignore
 	}
 
@@ -78,6 +80,7 @@ final class CodePool {
 	public function add( string $code, string $batch ): bool {
 		global $wpdb;
 		ProductChecks::flush();
+		ProductChecks::batch_touched( $batch );
 		return (bool) $wpdb->insert( // phpcs:ignore
 			$this->table(),
 			array(
@@ -111,6 +114,7 @@ final class CodePool {
 	public function delete_free( string $batch ): int {
 		global $wpdb;
 		ProductChecks::flush();
+		ProductChecks::batch_touched( $batch );
 		return (int) $wpdb->query( $wpdb->prepare( "DELETE FROM {$this->table()} WHERE batch = %s AND used_at IS NULL", $batch ) ); // phpcs:ignore
 	}
 }

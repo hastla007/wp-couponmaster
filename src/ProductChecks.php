@@ -30,6 +30,7 @@ final class ProductChecks {
 		add_action( 'admin_notices', array( $this, 'admin_notices' ) );
 		add_action( 'admin_post_vcap_expired_product', array( $this, 'handle_expired_product' ) );
 		add_filter( 'site_status_tests', array( $this, 'health_tests' ) );
+		add_action( 'vcap_daily_maintenance', array( self::class, 'sync_dated_products' ), 40, 0 );
 		// The cached shop_problems() is recalculated after a product or its voucher settings change.
 		foreach ( array( 'woocommerce_new_product', 'woocommerce_update_product', 'woocommerce_delete_product', 'woocommerce_trash_product', 'save_post_product' ) as $hook ) {
 			add_action( $hook, array( self::class, 'flush' ) );
@@ -259,6 +260,127 @@ final class ProductChecks {
 	/** Free codes from which the product's batch counts as running low. */
 	public static function low_codes_threshold( array $config ): int {
 		return '' !== (string) $config['code_pool_low'] ? max( 0, (int) $config['code_pool_low'] ) : self::LOW_CODES_DEFAULT;
+	}
+
+	// ----------------------------------------------------------------- Availability changes (C12).
+
+	/** Product meta: the last known unsellable_reason() ('' = sellable), to notice when it changes. */
+	public const AVAILABILITY_META = '_vcap_availability';
+
+	/** @var array<string, true> batches whose free codes changed in this request */
+	private static array $touched_batches = array();
+
+	/**
+	 * C12: the free codes of a batch changed (code claimed, released, added, deleted). The products drawing from
+	 * it are checked once at the end of the request (an import adds thousands of codes).
+	 */
+	public static function batch_touched( string $batch ): void {
+		if ( '' === $batch ) {
+			return;
+		}
+		if ( ! self::$touched_batches ) {
+			add_action( 'shutdown', array( self::class, 'sync_availability' ), 5, 0 );
+		}
+		self::$touched_batches[ $batch ] = true;
+	}
+
+	/**
+	 * C12: re-check the products of the batches touched in this request (or the given products) and clear the page
+	 * caches of those whose purchasability changed.
+	 *
+	 * @param int[]|null $product_ids null = products of the touched batches
+	 * @return int[] ids of the products whose availability changed
+	 */
+	public static function sync_availability( ?array $product_ids = null ): array {
+		if ( null === $product_ids ) {
+			$batches               = array_keys( self::$touched_batches );
+			self::$touched_batches = array();
+			if ( ! $batches ) {
+				return array();
+			}
+			self::$free_codes = null;
+			$product_ids      = get_posts(
+				array(
+					'post_type'      => array( 'product', 'product_variation' ),
+					'post_status'    => 'any',
+					'fields'         => 'ids',
+					'posts_per_page' => -1,
+					'no_found_rows'  => true,
+					'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- only on code changes, deferred to the end of the request.
+						array(
+							'key'     => ProductConfig::meta_key( 'code_batch' ),
+							'value'   => array_map( 'strval', $batches ),
+							'compare' => 'IN',
+						),
+					),
+				)
+			);
+		}
+		$changed = array();
+		foreach ( array_unique( array_map( 'intval', $product_ids ) ) as $id ) {
+			$product = wc_get_product( $id );
+			if ( $product && self::refresh_availability( $product ) ) {
+				$changed[] = $id;
+			}
+		}
+		return $changed;
+	}
+
+	/**
+	 * C12: daily – fixed-date products whose date passed since the last run change their purchasability without
+	 * any save; their caches are cleared here.
+	 *
+	 * @return int[] ids of the products whose availability changed
+	 */
+	public static function sync_dated_products(): array {
+		$ids = get_posts(
+			array(
+				'post_type'      => 'product',
+				'post_status'    => 'any',
+				'fields'         => 'ids',
+				'posts_per_page' => -1,
+				'no_found_rows'  => true,
+				'meta_key'       => ProductConfig::meta_key( 'expiry_mode' ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- daily maintenance.
+				'meta_value'     => 'date', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- daily maintenance.
+			)
+		);
+		return self::sync_availability( array_map( 'intval', $ids ) );
+	}
+
+	/** Compare a product's purchasability with the last known state; on a change clear its caches. */
+	public static function refresh_availability( \WC_Product $product ): bool {
+		if ( ! ProductConfig::is_voucher( $product ) ) {
+			return false;
+		}
+		$id     = $product->get_id();
+		$reason = self::unsellable_reason( $product );
+		$known  = metadata_exists( 'post', $id, self::AVAILABILITY_META );
+		$old    = $known ? (string) get_post_meta( $id, self::AVAILABILITY_META, true ) : '';
+		if ( $known && $old === $reason ) {
+			return false;
+		}
+		update_post_meta( $id, self::AVAILABILITY_META, $reason );
+		$ids = array_filter( array( $id, $product->get_parent_id() ) );
+		if ( $product->is_type( 'variable' ) ) {
+			$ids = array_merge( $ids, $product->get_children() );
+		}
+		foreach ( $ids as $post_id ) {
+			clean_post_cache( (int) $post_id );
+			if ( function_exists( 'wc_delete_product_transients' ) ) {
+				wc_delete_product_transients( (int) $post_id );
+			}
+		}
+		if ( ! $known && '' === $reason ) {
+			return false; // First check of a sellable product: caches cleared, nothing changed for listeners.
+		}
+		/**
+		 * A voucher product became purchasable or stopped being purchasable (date passed, batch empty or refilled,
+		 * discount setup). Its WordPress and WooCommerce caches have been cleared; full-page caches can purge its
+		 * URL here. Arguments: the product, the new unsellable reason ('' = purchasable again; date_past,
+		 * date_missing, codes_empty, discount_invalid) and the previous reason ('' = was purchasable).
+		 */
+		do_action( 'vcap_product_availability_changed', $product, $reason, $old );
+		return true;
 	}
 
 	// ----------------------------------------------------------------- Admin.
