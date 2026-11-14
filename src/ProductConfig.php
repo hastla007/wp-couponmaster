@@ -154,11 +154,11 @@ final class ProductConfig {
 	public static function restriction_label( string $restrict ): string {
 		switch ( $restrict ) {
 			case 'buyer':
-				return __( 'Personal – only the buyer can redeem it.', 'voucher-captain' );
+				return __( 'Personal – only the buyer can redeem it.', 'voucher-captain' ) . ' ' . PersonalVoucher::login_hint();
 			case 'recipient':
-				return __( 'Personal – only the named recipient can redeem it.', 'voucher-captain' );
+				return __( 'Personal – only the named recipient can redeem it.', 'voucher-captain' ) . ' ' . PersonalVoucher::login_hint();
 			case 'both':
-				return __( 'Personal – only the buyer or the named recipient can redeem it.', 'voucher-captain' );
+				return __( 'Personal – only the buyer or the named recipient can redeem it.', 'voucher-captain' ) . ' ' . PersonalVoucher::login_hint();
 		}
 		return __( 'Transferable – anyone with the code can redeem it.', 'voucher-captain' );
 	}

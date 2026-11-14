@@ -11,6 +11,7 @@ A complete, tested reference implementation is in [`examples/vcap-example-connec
 | Own kind of voucher (e.g. "course voucher") | `vcap_voucher_types` filter – appears in the product's *Type* select |
 | Redeem only in your plugin, not in the shop | Own channel via `vcap_redemption_channels` + `vcap_redemption_channel_for_target`; the merchant ticks it under *Redeemable via* |
 | Decide what a voucher may unlock | `vcap_redemption_allowed` (voucher, target, user) – return `WP_Error` to refuse |
+| Personal vouchers (restricted to buyer/recipient email) | Redeemed only for a user whose account email matches (`user_id`, REST: the authenticated user). For a guest, pass `email` **and** `email_verified => true` only when your plugin vouches for the identity (its own logged-in customer, an OTP sent to that address, staff who checked the ID); a typed guest email alone answers `vcap_login_required` (403) with "Please log in with j***@example.com …" – show it. Counter redemptions by staff stay allowed. Filter `vcap_personal_voucher_email_verified` (`bool`, `WP_User`) for shops with their own account verification. See SECURITY.md → Personal vouchers |
 | Target must still exist | `vcap_redemption_target_available` |
 | Redeem | `vcap()->redemptions` – `check`, `reserve`, `get`, `commit`, `release` (PHP) or `/wp-json/vcap/v1/redemptions` (REST) |
 | React to completion / release | `vcap_voucher_redeemed` (array with `channel`: `external` for the redemption API, `shop` for orders, `counter` for scanner/till/admin; shop and counter entries have an empty `redemption_key`), `vcap_redemption_released` |
@@ -47,6 +48,7 @@ A complete, tested reference implementation is in [`examples/vcap-example-connec
 | `vcap_reservation_missing` on commit | The reservation expired (lifetime setting, default 15 min) and was released. Revoke anything you granted for this key; ask the user to redeem again |
 | `vcap_cancelled` on commit | The voucher was voided while reserved (purchase refunded). Revoke, `release()`, tell the user |
 | `vcap_already_redeemed` on reserve | Check whether *you* hold the grant for this key (completed by a retry) – then it is a success |
+| `vcap_login_required` (403) | A personal voucher and no verified identity: ask the customer to log in with the masked address from the message, then retry |
 | `vcap_redemption_released` (409) on reserve | The reservation under this key was released or expired: nothing is reserved. Revoke anything granted for the key, forget it and – if the user wants to redeem again – use a **new** key (the example connector appends an attempt number) |
 | Any other error | Show the message; nothing was reserved |
 
@@ -97,4 +99,5 @@ Voucher Captain does not know what a customer owns in another plugin. Use the ex
 - [ ] Handling of `vcap_reservation_missing`, `vcap_cancelled`, `vcap_already_redeemed`
 - [ ] Refund policy after redemption decided and documented
 - [ ] Own channel registered; merchant documentation tells them to tick it
+- [ ] Personal vouchers: `email_verified` passed only for identities your plugin verified; `vcap_login_required` handled
 - [ ] Two-plugin integration test (Voucher Captain + connector) in CI, including a forced outage

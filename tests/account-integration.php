@@ -70,6 +70,43 @@ vcap_acct_assert( false === $voucher->transferable && 'Nicht bar auszahlbar.' ==
 $coupon = new WC_Coupon( $voucher->coupon_id );
 vcap_acct_assert( array( $login . '@example.com' ) === array_values( $coupon->get_email_restrictions() ), 'a personal voucher restricts the coupon to the buyer (and recipient) email' );
 
+// V6: a personal voucher is redeemed only logged in with the matching account – a guest typing the buyer's email at
+// checkout (classic cart, order) is refused with the masked address to log in with.
+wc_load_cart();
+$v6_live  = vcap()->vouchers->get( $voucher->id );
+if ( VCAP\Voucher::STATUS_ACTIVE !== $v6_live->status ) {
+	$v6_live->status = VCAP\Voucher::STATUS_ACTIVE;
+	vcap()->vouchers->update( $v6_live );
+}
+$v6_masked = substr( $login, 0, 1 ) . '***@example.com';
+$v6_goods  = new WC_Product_Simple();
+$v6_goods->set_name( 'V6 goods' );
+$v6_goods->set_regular_price( '80' );
+$v6_goods->set_virtual( true );
+$v6_goods->save();
+$v6_valid  = static function ( $object ) use ( $voucher ) {
+	return ( new WC_Discounts( $object ) )->is_coupon_valid( new WC_Coupon( $voucher->code ) );
+};
+wp_set_current_user( 0 );
+WC()->customer->set_billing_email( $login . '@example.com' );
+$v6_guest = $v6_valid( WC()->cart );
+vcap_acct_assert( is_wp_error( $v6_guest ) && str_contains( $v6_guest->get_error_message(), 'Please log in with ' . $v6_masked . ' to use this personal voucher.' ), 'V6: a guest (with the buyer\'s billing email) cannot use a personal voucher in the cart – "Please log in with ' . $v6_masked . '"' );
+$v6_guest_order = vcap_acct_order( $v6_goods, 0, $login . '@example.com' );
+$v6_guest_order_valid = $v6_valid( $v6_guest_order );
+vcap_acct_assert( is_wp_error( $v6_guest_order_valid ) && str_contains( $v6_guest_order_valid->get_error_message(), 'Please log in with' ), 'V6: nor in a guest order with the buyer\'s billing email' );
+wp_set_current_user( $other );
+$v6_other = $v6_valid( WC()->cart );
+vcap_acct_assert( is_wp_error( $v6_other ) && str_contains( $v6_other->get_error_message(), 'belongs to another customer account' ), 'V6: another logged-in customer is refused' );
+wp_set_current_user( $buyer );
+vcap_acct_assert( true === $v6_valid( WC()->cart ), 'V6: logged in with the matching account the personal voucher is valid' );
+wp_set_current_user( 0 );
+vcap_acct_assert( true === $v6_valid( vcap_acct_order( $v6_goods, $buyer, $login . '@example.com' ) ), 'V6: an order of the matching account stays valid (e.g. recalculated later without a login)' );
+$v6_admin_order = vcap_acct_order( $v6_goods, 0, $login . '@example.com' );
+$v6_admin_order->set_created_via( 'admin' );
+$v6_admin_order->save();
+vcap_acct_assert( true === $v6_valid( $v6_admin_order ), 'V6: an order staff created in wp-admin may carry the personal voucher (staff checked the holder)' );
+vcap_acct_assert( str_contains( $voucher->transferable_label(), 'Online redemption requires logging in to the customer account with that email address.' ), 'V6: the voucher text says that online redemption requires the customer account' );
+
 // V11: order notes reach connectors and all staff – the issued code appears masked only.
 $notes = implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ) );
 vcap_acct_assert( ! str_contains( strtoupper( $notes ), strtoupper( $voucher->code ) ) && str_contains( $notes, VCAP\Downloads::masked_code( $voucher->code ) ), 'the "vouchers issued" order note shows the code masked, never in full' );

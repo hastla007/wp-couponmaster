@@ -45,7 +45,12 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 			return new \WP_Error( 'vcap_invalid_request', __( 'Please enter a voucher code.', 'voucher-captain' ) );
 		}
 		$email = sanitize_email( (string) ( $context['customer_email'] ?? '' ) );
-		$check = $this->redemptions->check( $code, array( 'target' => $target, 'email' => $email, 'user_id' => 0 ) );
+		// V6: the address typed in Pass Captain's checkout is no proof of identity. A personal voucher is accepted
+		// only for the logged-in customer's (verified) account email; the reservation still belongs to the
+		// integration (user_id 0), so only Pass Captain commits or releases it.
+		$verified = is_user_logged_in() ? \VCAP\PersonalVoucher::verified_email( wp_get_current_user() ) : '';
+		$identity = '' !== $verified ? array( 'email' => $verified, 'email_verified' => true ) : array( 'email' => $email );
+		$check    = $this->redemptions->check( $code, array( 'target' => $target, 'user_id' => 0 ) + $identity );
 		if ( is_wp_error( $check ) ) {
 			return $check;
 		}
@@ -88,7 +93,9 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 			// when the tickets carry another rate or are taxed in another country.
 			'sale_tax'     => 'single' === $purpose && $voucher ? ProductConfig::sale_tax( $voucher ) : null,
 			'target'       => $target,
-			'email'        => $email,
+			'email'        => $identity['email'],
+			// Set only when the address is the logged-in customer's account email (V6), see reserve().
+			'email_verified' => ! empty( $identity['email_verified'] ) ? true : null,
 		), static fn( $v ) => null !== $v );
 	}
 
@@ -115,6 +122,8 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 			'meta'        => array( 'source' => 'passcaptain' ),
 			'ttl_minutes' => self::hold_minutes(),
 			'email'       => (string) ( $quote['email'] ?? '' ),
+			// V6: only the logged-in customer's account address (computed by quote()) unlocks a personal voucher.
+			'email_verified' => ! empty( $quote['email_verified'] ),
 			// Owned by the integration, not by the logged-in buyer: only Pass Captain commits or releases it.
 			'user_id'     => 0,
 		);

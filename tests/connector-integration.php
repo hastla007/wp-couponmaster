@@ -170,10 +170,20 @@ $credit = vcap_conn_voucher( 'credit', 'balance', 40 );
 $refused = $service->check( $credit->code, array( 'target' => 'test:credit' ) );
 vcap_conn_assert( is_wp_error( $refused ) && 'vcap_not_redeemable' === $refused->get_error_code(), 'store credit cannot be redeemed through the redemption API' );
 
-// Personal vouchers: a trusted PHP caller (guest checkout of a connector) may pass the customer email.
+// Personal vouchers (V6): an email a guest typed is no proof of identity. Only the logged-in account's email, or an
+// address the trusted PHP caller vouches for (email_verified), unlocks them.
 $personal = vcap_conn_voucher( 'voucher', 'single', 20, array( 'guest-buyer@example.com' ) );
-vcap_conn_assert( is_wp_error( $service->check( $personal->code, array( 'target' => 'test:personal' ) ) ), 'a personal voucher is refused without the customer email' );
-vcap_conn_assert( ! is_wp_error( $service->check( $personal->code, array( 'target' => 'test:personal', 'email' => 'Guest-Buyer@example.com' ) ) ), 'a personal voucher is accepted with the matching customer email' );
+vcap_conn_assert( is_wp_error( $service->check( $personal->code, array( 'target' => 'test:personal', 'user_id' => 0 ) ) ), 'a personal voucher is refused without the customer email' );
+$v6_guest = $service->check( $personal->code, array( 'target' => 'test:personal', 'user_id' => 0, 'email' => 'Guest-Buyer@example.com' ) );
+vcap_conn_assert( is_wp_error( $v6_guest ) && 'vcap_login_required' === $v6_guest->get_error_code() && 403 === $v6_guest->get_error_data()['status'] && str_contains( $v6_guest->get_error_message(), 'Please log in with g***@example.com' ), 'V6: a guest email passed without email_verified does not unlock a personal voucher ("Please log in with g***@example.com")' );
+vcap_conn_assert( ! is_wp_error( $service->check( $personal->code, array( 'target' => 'test:personal', 'user_id' => 0, 'email' => 'Guest-Buyer@example.com', 'email_verified' => true ) ) ), 'a personal voucher is accepted with the matching customer email the caller vouches for (email_verified)' );
+$v6_owner = wp_create_user( 'conn-v6-' . strtolower( wp_generate_password( 6, false ) ), wp_generate_password(), 'Guest-Buyer@example.com' );
+vcap_conn_assert( ! is_wp_error( $service->check( $personal->code, array( 'target' => 'test:personal', 'user_id' => $v6_owner ) ) ), 'V6: the account with the matching email may redeem the personal voucher' );
+add_filter( 'vcap_personal_voucher_email_verified', '__return_false' );
+vcap_conn_assert( is_wp_error( $service->check( $personal->code, array( 'target' => 'test:personal', 'user_id' => $v6_owner ) ) ), 'V6: vcap_personal_voucher_email_verified can require a verification of its own' );
+remove_filter( 'vcap_personal_voucher_email_verified', '__return_false' );
+require_once ABSPATH . 'wp-admin/includes/user.php';
+wp_delete_user( $v6_owner );
 
 // Reactivating a voided single-use voucher that was already redeemed keeps it redeemed.
 $single = vcap_conn_voucher( 'voucher', 'single', 25 );
