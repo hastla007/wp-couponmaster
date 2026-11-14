@@ -313,6 +313,31 @@ check( 'remote images are never fetched', null === vcap()->pdf->image_path( 0, '
 check( 'uploads URL maps to local file', $png === vcap()->pdf->image_path( 0, 'https://shop.test/wp-content/uploads/2026/11/logo.png' ) );
 check( 'path traversal blocked', null === vcap()->pdf->image_path( 0, 'https://shop.test/wp-content/uploads/../../../../etc/passwd' ) );
 
+echo "PDF temp files, templates and designer (P8)\n";
+$p8_design = array( 'page' => array( 'format' => 'A6' ), 'elements' => array( array( 'type' => 'text', 'x' => 5, 'y' => 5, 'w' => 90, 'h' => 10, 'text' => '{coupon_code}' ) ) );
+// Q14: a parallel delivery with the same file name writes its PDF while this one renders.
+$p8_target = VCAP\Install::upload_dir() . '/tmp/' . vcap()->pdf->filename( $v );
+@unlink( $p8_target );
+$GLOBALS['vcap_test_filters']['vcap_pdf_html'] = array(
+	array(
+		static function ( $html ) use ( $p8_target ) {
+			if ( ! file_exists( $p8_target ) ) {
+				file_put_contents( $p8_target, 'OTHER VOUCHER' );
+			}
+			return $html;
+		},
+		1,
+	),
+);
+$p8_file = vcap()->pdf->to_temp_file( $v, $p8_design );
+unset( $GLOBALS['vcap_test_filters']['vcap_pdf_html'] );
+check( 'Q14: a temp PDF never overwrites or shares the file of a parallel delivery with the same name', is_string( $p8_file ) && $p8_file !== $p8_target && 'OTHER VOUCHER' === file_get_contents( $p8_target ) && str_starts_with( (string) file_get_contents( $p8_file ), '%PDF-' ) && str_ends_with( $p8_file, '-' . basename( $p8_target ) ), (string) $p8_file );
+@unlink( $p8_target );
+@unlink( (string) $p8_file );
+$p8_file = vcap()->pdf->to_temp_file( $v, $p8_design );
+check( 'Q14: a free file name is kept for the attachment', $p8_file === $p8_target, (string) $p8_file );
+@unlink( (string) $p8_file );
+
 echo "Redemption API\n";
 $valid_keys   = array( 'it-' . str_repeat( 'a', 20 ), 'learnboating:grant:1234', '550e8400-e29b-41d4-a716-446655440000' );
 $invalid_keys = array( 'short', '-leading-dash', str_repeat( 'x', 65 ), 'has space 12345', "nl\n12345678" );

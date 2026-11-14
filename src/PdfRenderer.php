@@ -145,16 +145,31 @@ final class PdfRenderer {
 
 	/**
 	 * Write the PDF to a private temp file (for email attachments). Caller deletes it.
+	 *
+	 * The file is created exclusively (fopen "x") after rendering: two deliveries at the same time with the same
+	 * file name pattern (e.g. "{order_number}") can never share, overwrite or attach each other's file. The
+	 * attachment keeps the configured name where it is free, otherwise it gets a random prefix.
 	 */
-	public function to_temp_file( Voucher $voucher ): ?string {
+	public function to_temp_file( Voucher $voucher, ?array $design = null ): ?string {
 		Install::ensure_upload_dir();
-		$dir  = Install::upload_dir() . '/tmp';
-		$file = $dir . '/' . $this->filename( $voucher ) ;
-		if ( file_exists( $file ) ) {
-			$file = $dir . '/' . wp_generate_password( 6, false ) . '-' . $this->filename( $voucher );
+		$bytes = $this->render( $voucher, $design );
+		$dir   = Install::upload_dir() . '/tmp';
+		$name  = $this->filename( $voucher );
+		for ( $try = 0; $try < 5; $try++ ) {
+			$file   = $dir . '/' . ( $try ? wp_generate_password( 12, false ) . '-' : '' ) . $name;
+			$handle = @fopen( $file, 'xb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions,WordPress.PHP.NoSilencedErrors -- exclusive create: fails when the file exists.
+			if ( false === $handle ) {
+				continue;
+			}
+			$ok = false !== fwrite( $handle, $bytes ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+			fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+			if ( $ok ) {
+				return $file;
+			}
+			wp_delete_file( $file );
+			return null;
 		}
-		$bytes = $this->render( $voucher );
-		return false !== file_put_contents( $file, $bytes ) ? $file : null; // phpcs:ignore
+		return null;
 	}
 
 	public function filename( Voucher $voucher ): string {
