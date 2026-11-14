@@ -70,7 +70,9 @@ final class RedemptionService {
 	 *
 	 * @param string $code    Voucher code.
 	 * @param array  $args    Optional: target (string), amount (float), user_id (int, PHP callers only),
-	 *                        email (string, PHP callers only: customer email of a guest, for personal vouchers).
+	 *                        email (string, PHP callers only: customer email of a guest, for personal vouchers – only
+	 *                        with email_verified), email_verified (bool, PHP callers only: the caller vouches that the
+	 *                        customer controls this address, e.g. its own logged-in account or staff checked the ID).
 	 * @return array<string, mixed>|\WP_Error
 	 */
 	public function check( string $code, array $args = array() ) {
@@ -89,7 +91,7 @@ final class RedemptionService {
 		}
 		$target = isset( $args['target'] ) ? self::clean_target( (string) $args['target'] ) : '';
 		$amount = isset( $args['amount'] ) ? (float) $args['amount'] : null;
-		$check  = $this->eligibility( $voucher, $target, $amount, $user_id, (string) ( $args['email'] ?? '' ) );
+		$check  = $this->eligibility( $voucher, $target, $amount, $user_id, (string) ( $args['email'] ?? '' ), ! empty( $args['email_verified'] ) );
 		if ( is_wp_error( $check ) ) {
 			return $check;
 		}
@@ -107,7 +109,8 @@ final class RedemptionService {
 	 *                     user_id (int, PHP callers only; REST always uses the authenticated user), meta (array),
 	 *                     ttl_minutes (int, PHP callers only: how long the reservation is held before it is released
 	 *                     automatically; default the "Reservation lifetime" setting, at most 60 days),
-	 *                     email (string, PHP callers only: verified customer email of a guest, for personal vouchers).
+	 *                     email (string, PHP callers only: verified customer email of a guest, for personal vouchers),
+	 *                     email_verified (bool, PHP callers only: required for email to unlock a personal voucher, V6).
 	 * @return array<string, mixed>|\WP_Error
 	 * @throws \Throwable Database errors are re-thrown after the transaction was rolled back.
 	 */
@@ -174,7 +177,7 @@ final class RedemptionService {
 				\VCAP\Db::rollback_if_error( 'api_reserve', array( 'voucher_id' => $voucher->id ) );
 				return $this->temporary();
 			}
-			$check = $this->eligibility( $fresh, $target, $fresh->is_multi_use() ? $amount : null, $user_id, (string) ( $args['email'] ?? '' ) );
+			$check = $this->eligibility( $fresh, $target, $fresh->is_multi_use() ? $amount : null, $user_id, (string) ( $args['email'] ?? '' ), ! empty( $args['email_verified'] ) );
 			if ( is_wp_error( $check ) ) {
 				\VCAP\Db::rollback_if_error( 'api_reserve', array( 'voucher_id' => $voucher->id ) );
 				return $check;
@@ -714,9 +717,10 @@ final class RedemptionService {
 	 * @param float|null $amount  Requested gift card amount (null = whole voucher / not checked).
 	 * @param int        $user_id User id.
 	 * @param string     $email   Customer email given by a trusted PHP caller (e.g. a guest checkout), else ''.
+	 * @param bool       $email_verified Whether the caller vouches for $email (V6: only then it unlocks personal vouchers).
 	 * @return true|\WP_Error
 	 */
-	private function eligibility( Voucher $voucher, string $target, ?float $amount, int $user_id, string $email = '' ) {
+	private function eligibility( Voucher $voucher, string $target, ?float $amount, int $user_id, string $email = '', bool $email_verified = false ) {
 		if ( 'credit' === $voucher->type ) {
 			// Store credit belongs to one customer account and is only used in the shop (owner check there).
 			return self::error( 'vcap_not_redeemable', __( 'Store credit can only be used in the shop.', 'voucher-captain' ), 422 );
@@ -763,11 +767,18 @@ final class RedemptionService {
 				// redeemable for every account because its coupon was deleted).
 				return self::error( 'vcap_not_redeemable', __( 'This voucher cannot be redeemed right now. Please contact the shop.', 'voucher-captain' ), 422 );
 			}
-			$emails = array_map( 'strtolower', (array) $coupon->get_email_restrictions() );
+			// V6: the account's (verified) email of the acting user, or an email the trusted PHP caller vouches for
+			// (email_verified: its own authenticated customer, staff who checked the holder) – never an address a
+			// guest only typed in.
+			$emails = \VCAP\PersonalVoucher::restrictions( $coupon );
 			if ( $emails ) {
 				$user     = $user_id ? get_userdata( $user_id ) : null;
-				$accepted = array_filter( array( $user ? strtolower( (string) $user->user_email ) : '', strtolower( trim( $email ) ) ) );
-				if ( ! array_intersect( $accepted, $emails ) ) {
+				$user     = $user instanceof \WP_User ? $user : null;
+				$accepted = \VCAP\PersonalVoucher::allowed_for_user( $emails, $user ) || ( $email_verified && \VCAP\PersonalVoucher::matches( $email, $emails ) );
+				if ( ! $accepted ) {
+					if ( ! $user ) {
+						return self::error( 'vcap_login_required', \VCAP\PersonalVoucher::refusal( $emails, false ), 403 );
+					}
 					return self::error( 'vcap_not_allowed', __( 'This voucher is not valid for your account.', 'voucher-captain' ), 403 );
 				}
 			}

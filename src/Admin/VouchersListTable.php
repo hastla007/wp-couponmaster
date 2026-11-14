@@ -51,6 +51,7 @@ final class VouchersListTable extends \WP_List_Table {
 			'resend'     => __( 'Resend email', 'voucher-captain' ),
 			'void'       => __( 'Void', 'voucher-captain' ),
 			'reactivate' => __( 'Reactivate', 'voucher-captain' ),
+			'reissue'    => __( 'Reissue code (no email)', 'voucher-captain' ),
 		);
 	}
 

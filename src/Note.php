@@ -139,6 +139,10 @@ final class Note {
 				return __( 'Expired (the validity ended).', 'voucher-captain' );
 			case 'edited':
 				return self::changes( $a( 0 ) );
+			case 'reissued':
+				/* translators: 1: old code (masked), 2: new code (masked) */
+				$text = sprintf( __( 'Reissued: the code %1$s was replaced by %2$s. The old code and its download links no longer work.', 'voucher-captain' ), (string) $a( 0 ), (string) $a( 1 ) );
+				return '' !== (string) $a( 2 ) ? $text . ' ' . (string) $a( 2 ) : $text;
 		}
 		return $code;
 	}

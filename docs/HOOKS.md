@@ -42,6 +42,7 @@ are described in CONNECTORS.md and API.md.
 | `vcap_voucher_event` | `src/VoucherRepository.php` | A history entry was written (args: voucher id, event, amount, balance after, note as text, order id). |
 | `vcap_voucher_expired` | `src/VoucherRepository.php` | Vouchers whose validity ended were marked as expired (one call per batch of the daily maintenance). |
 | `vcap_voucher_redeemed` | `src/API/V1/RedemptionService.php`, `src/VoucherRepository.php` | Fires once when an external redemption is completed. |
+| `vcap_voucher_reissued` | `src/Reissue.php` | Fires after a voucher was reissued with a new code and token (V10). The old code is no longer redeemable. |
 | `vcap_voucher_updated` | `src/Tickets.php`, `src/VoucherRepository.php` | A voucher was saved (args: Voucher as stored). May fire inside a database transaction, see CONNECTORS.md. |
 | `vcap_vouchers_issued` | `src/Issuer.php` | Vouchers of an order were issued (args: Voucher[] $created, WC_Order $order). |
 
@@ -102,7 +103,7 @@ are described in CONNECTORS.md and API.md.
 | `vcap_line_snapshot` | `src/Issuer.php` | Extra snapshot keys of connectors (e.g. the ticket a voucher is exchanged for); core keys always win. |
 | `vcap_maintenance_time_budget` | `src/Delivery.php` | – |
 | `vcap_markets` | `src/Markets.php` | – |
-| `vcap_min_code_bits` | `src/Admin/Import.php`, `src/Campaigns.php`, `src/Issuer.php` | This filter is documented in src/Issuer.php |
+| `vcap_min_code_bits` | `src/Admin/Import.php`, `src/Campaigns.php`, `src/Issuer.php`, `src/Reissue.php` | This filter is documented in src/Issuer.php |
 | `vcap_next_steps_emails` | `src/NextSteps.php` | WooCommerce order emails that show the delivery of the order's vouchers. |
 | `vcap_note_text` | `src/Note.php` | Text of a coded history note (connectors can translate their own codes). |
 | `vcap_offline_payment_methods` | `src/Issuer.php` | – |
@@ -128,6 +129,7 @@ are described in CONNECTORS.md and API.md.
 | `vcap_pdf_html` | `src/PdfRenderer.php` | HTML a voucher PDF is rendered from (args: string $html, Voucher $voucher, array $design). |
 | `vcap_pdf_image_mimes` | `src/PdfRenderer.php` | – |
 | `vcap_pdf_remote_hosts` | `src/PdfRenderer.php` | – |
+| `vcap_personal_voucher_email_verified` | `src/PersonalVoucher.php` | Whether the account email of a customer counts as verified for personal vouchers (V6). Default true: the account was created through WordPress/WooCommerce, which sends the set-password link to that address. |
 | `vcap_placeholder_definitions` | `src/Placeholders.php` | – |
 | `vcap_placeholders` | `src/Placeholders.php` | – |
 | `vcap_product_config` | `src/ProductConfig.php` | – |

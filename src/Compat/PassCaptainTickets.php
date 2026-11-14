@@ -563,8 +563,10 @@ final class PassCaptainTickets {
 	 * Exchange a voucher for its Pass Captain tickets.
 	 *
 	 * @param string $code Voucher code.
-	 * @param array  $args email (string, trusted PHP callers: the ticket recipient and the address personal
-	 *                     vouchers are checked against; default: logged-in user, else voucher recipient/buyer),
+	 * @param array  $args email (string, trusted PHP callers: the ticket recipient and – with email_verified – the
+	 *                     address personal vouchers are checked against; default: logged-in user, else voucher
+	 *                     recipient/buyer), email_verified (bool: the caller vouches that the holder controls
+	 *                     email, e.g. staff checked the ID; V6),
 	 *                     name (string), user_id (int, default current user), attendees (array, passed to
 	 *                     Pass Captain for ticket types with required attendee fields), ticket_type_id (int,
 	 *                     the chosen date of a "customer chooses the date" voucher – one of options()),
@@ -660,6 +662,9 @@ final class PassCaptainTickets {
 				'target'      => 'passcaptain:ticket:' . $ticket_type,
 				'user_id'     => $user_id,
 				'email'       => $check,
+				// V6: the caller vouches for the address (staff action, own verified customer); else only the
+				// logged-in account (user_id) unlocks a personal voucher.
+				'email_verified' => ! empty( $args['email_verified'] ),
 				'meta'        => array( 'email' => $email, 'tickets' => $target['quantity'] ),
 				// Long enough to retry a Pass Captain outage without losing the voucher in between.
 				'ttl_minutes' => (int) apply_filters( 'vcap_passcaptain_ticket_reservation_minutes', DAY_IN_SECONDS / MINUTE_IN_SECONDS ),
@@ -1212,7 +1217,8 @@ final class PassCaptainTickets {
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in VoucherAdmin::handle_action().
 		$choice = isset( $_POST['vcap_ticket_choice'] ) ? absint( wp_unslash( $_POST['vcap_ticket_choice'] ) ) : 0;
 		$before = count( $this->failures( $voucher ) );
-		$result = $this->exchange( $voucher->code, array( 'email' => $email, 'user_id' => 0, 'ticket_type_id' => $choice ) );
+		// Staff action (V6: staff vouch for the holder, like at the counter).
+		$result = $this->exchange( $voucher->code, array( 'email' => $email, 'email_verified' => true, 'user_id' => 0, 'ticket_type_id' => $choice ) );
 		if ( is_wp_error( $result ) && count( $this->failures( $voucher ) ) === $before ) {
 			// Refused before anything was reserved (sold out, no date chosen, …): the admin message points to the history.
 			$this->vouchers->log( $voucher->id, 'passcaptain_tickets_failed', null, null, $result->get_error_code() . ': ' . $result->get_error_message() );

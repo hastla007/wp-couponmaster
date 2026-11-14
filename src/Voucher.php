@@ -233,15 +233,15 @@ final class Voucher {
 		$buyer     = '' !== $this->buyer_email && in_array( strtolower( $this->buyer_email ), $emails, true );
 		$recipient = '' !== $this->recipient_email && in_array( strtolower( $this->recipient_email ), $emails, true );
 		if ( $recipient && ! $buyer ) {
-			return __( 'Personal – only the named recipient can redeem it.', 'voucher-captain' );
+			return __( 'Personal – only the named recipient can redeem it.', 'voucher-captain' ) . ' ' . PersonalVoucher::login_hint();
 		}
 		if ( $buyer && ! $recipient ) {
-			return __( 'Personal – only the buyer can redeem it.', 'voucher-captain' );
+			return __( 'Personal – only the buyer can redeem it.', 'voucher-captain' ) . ' ' . PersonalVoucher::login_hint();
 		}
 		if ( ! $buyer && ! $recipient ) {
-			return __( 'Personal – only the email addresses stored with the voucher can redeem it.', 'voucher-captain' );
+			return __( 'Personal – only the email addresses stored with the voucher can redeem it.', 'voucher-captain' ) . ' ' . PersonalVoucher::login_hint();
 		}
-		return __( 'Personal – only the buyer or the named recipient can redeem it.', 'voucher-captain' );
+		return __( 'Personal – only the buyer or the named recipient can redeem it.', 'voucher-captain' ) . ' ' . PersonalVoucher::login_hint();
 	}
 
 	public function field( string $key ): string {

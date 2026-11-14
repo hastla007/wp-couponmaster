@@ -74,6 +74,8 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 == Changelog ==
 
 = 1.2.0 =
+* Fix (security): personal vouchers (only buyer/recipient) are redeemed online only by a customer logged in with the matching account email – a guest typing the buyer's address at checkout (also in the cart/checkout blocks, connectors and the WP Pass Captain checkout) is asked to log in with the masked address. Staff at the counter and in wp-admin are not affected; transferable vouchers neither.
+* New: "Reissue code" on the voucher page (and as a bulk action): new code and token, remaining value carried over, the old code and its download links stop working, optionally the new code is mailed. Email download links now expire after 90 days by default (a lifetime saved before is kept).
 * New: role "Voucher cashier" (scanner only, no access to orders or customers); WooCommerce no longer sends scanner staff away from wp-admin. Raising a remaining value needs its own right "vcap_increase_balance" (administrators and shop managers); "Add" above the face value asks first. "Refund as store credit" needs WooCommerce's right to edit orders.
 * New: cancel a counter redemption (wrong card, wrong amount) – in the scanner right after booking (the cashier within 15 minutes) or in the voucher history (managers), always with a reason; the value is booked back, a single-use voucher becomes active again and its coupon counter goes back. Shown in the redemption journal.
 * New: "Mark as redeemed (store)" on the voucher page of a single-use voucher, booked like a scanner redemption. The scanner keeps a receipt number and the till/branch of the device with each redemption and can print the result.

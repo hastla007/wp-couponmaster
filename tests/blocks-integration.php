@@ -230,6 +230,47 @@ vcap_blocks_assert( (int) vcap()->store_credit->account( $block_user )->coupon_i
 wp_set_current_user( 0 );
 WC()->cart->empty_cart();
 
+// V6: a personal voucher is refused for guests in the Store API (cart/checkout blocks), whatever billing email is
+// entered, with the masked address to log in with; the account with that email may use it.
+$v6_tag   = strtolower( wp_generate_password( 6, false, false ) );
+$v6_mail  = 'v6-block-' . $v6_tag . '@example.com';
+$v6_owner = (int) wp_insert_user( array( 'user_login' => 'v6block' . $v6_tag, 'user_pass' => wp_generate_password( 24 ), 'user_email' => $v6_mail, 'role' => 'customer' ) );
+$v6_coupon = new WC_Coupon();
+$v6_coupon->set_code( 'vcap-v6-block-' . $v6_tag );
+$v6_coupon->set_discount_type( 'fixed_cart' );
+$v6_coupon->set_amount( 10 );
+$v6_coupon->set_usage_limit( 1 );
+$v6_coupon->set_email_restrictions( array( $v6_mail ) );
+$v6_coupon->update_meta_data( '_vcap_voucher', 'yes' );
+$v6_coupon->update_meta_data( '_vcap_email_restrict', 'buyer' );
+$v6_coupon->save();
+$v6_card                 = clone $block_card;
+$v6_card->id             = 0;
+$v6_card->code           = wc_format_coupon_code( $v6_coupon->get_code() );
+$v6_card->coupon_id      = $v6_coupon->get_id();
+$v6_card->order_item_id  = 96500000 + $v6_coupon->get_id();
+$v6_card->type           = 'voucher';
+$v6_card->usage_mode     = 'single';
+$v6_card->initial_amount = 10;
+$v6_card->balance        = 10;
+$v6_card->buyer_email    = $v6_mail;
+$v6_card->transferable   = false;
+$v6_card->token          = VCAP\VoucherRepository::new_token();
+$v6_card->id             = vcap()->vouchers->insert( $v6_card );
+wp_set_current_user( 0 );
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart( $block_goods->get_id(), 1 );
+WC()->customer->set_billing_email( $v6_mail );
+$v6_request = new WP_REST_Request( 'POST', '/wc/store/v1/cart/apply-coupon' );
+$v6_request->set_param( 'code', $v6_card->code );
+$v6_guest = rest_do_request( $v6_request );
+vcap_blocks_assert( $v6_guest->is_error() && str_contains( wp_json_encode( $v6_guest->get_data() ), 'Please log in with v***@example.com to use this personal voucher.' ) && ! in_array( $v6_card->code, WC()->cart->get_applied_coupons(), true ), 'V6: Store API – a guest with the buyer\'s billing email cannot apply a personal voucher ("Please log in with v***@example.com …")', $v6_guest->get_data() );
+wp_set_current_user( $v6_owner );
+$v6_mine = rest_do_request( $v6_request );
+vcap_blocks_assert( ! $v6_mine->is_error() && in_array( $v6_card->code, WC()->cart->get_applied_coupons(), true ), 'V6: Store API – logged in with the matching account the personal voucher is applied', $v6_mine->get_data() );
+WC()->cart->empty_cart();
+wp_set_current_user( 0 );
+
 // G12: the cart blocks script also loads in the editor, with sample voucher rows there; no script translations.
 $g12 = new VCAP\Compat\CartBlocksIntegration();
 $g12->initialize();

@@ -70,6 +70,43 @@ vcap_acct_assert( false === $voucher->transferable && 'Nicht bar auszahlbar.' ==
 $coupon = new WC_Coupon( $voucher->coupon_id );
 vcap_acct_assert( array( $login . '@example.com' ) === array_values( $coupon->get_email_restrictions() ), 'a personal voucher restricts the coupon to the buyer (and recipient) email' );
 
+// V6: a personal voucher is redeemed only logged in with the matching account – a guest typing the buyer's email at
+// checkout (classic cart, order) is refused with the masked address to log in with.
+wc_load_cart();
+$v6_live  = vcap()->vouchers->get( $voucher->id );
+if ( VCAP\Voucher::STATUS_ACTIVE !== $v6_live->status ) {
+	$v6_live->status = VCAP\Voucher::STATUS_ACTIVE;
+	vcap()->vouchers->update( $v6_live );
+}
+$v6_masked = substr( $login, 0, 1 ) . '***@example.com';
+$v6_goods  = new WC_Product_Simple();
+$v6_goods->set_name( 'V6 goods' );
+$v6_goods->set_regular_price( '80' );
+$v6_goods->set_virtual( true );
+$v6_goods->save();
+$v6_valid  = static function ( $object ) use ( $voucher ) {
+	return ( new WC_Discounts( $object ) )->is_coupon_valid( new WC_Coupon( $voucher->code ) );
+};
+wp_set_current_user( 0 );
+WC()->customer->set_billing_email( $login . '@example.com' );
+$v6_guest = $v6_valid( WC()->cart );
+vcap_acct_assert( is_wp_error( $v6_guest ) && str_contains( $v6_guest->get_error_message(), 'Please log in with ' . $v6_masked . ' to use this personal voucher.' ), 'V6: a guest (with the buyer\'s billing email) cannot use a personal voucher in the cart – "Please log in with ' . $v6_masked . '"' );
+$v6_guest_order = vcap_acct_order( $v6_goods, 0, $login . '@example.com' );
+$v6_guest_order_valid = $v6_valid( $v6_guest_order );
+vcap_acct_assert( is_wp_error( $v6_guest_order_valid ) && str_contains( $v6_guest_order_valid->get_error_message(), 'Please log in with' ), 'V6: nor in a guest order with the buyer\'s billing email' );
+wp_set_current_user( $other );
+$v6_other = $v6_valid( WC()->cart );
+vcap_acct_assert( is_wp_error( $v6_other ) && str_contains( $v6_other->get_error_message(), 'belongs to another customer account' ), 'V6: another logged-in customer is refused' );
+wp_set_current_user( $buyer );
+vcap_acct_assert( true === $v6_valid( WC()->cart ), 'V6: logged in with the matching account the personal voucher is valid' );
+wp_set_current_user( 0 );
+vcap_acct_assert( true === $v6_valid( vcap_acct_order( $v6_goods, $buyer, $login . '@example.com' ) ), 'V6: an order of the matching account stays valid (e.g. recalculated later without a login)' );
+$v6_admin_order = vcap_acct_order( $v6_goods, 0, $login . '@example.com' );
+$v6_admin_order->set_created_via( 'admin' );
+$v6_admin_order->save();
+vcap_acct_assert( true === $v6_valid( $v6_admin_order ), 'V6: an order staff created in wp-admin may carry the personal voucher (staff checked the holder)' );
+vcap_acct_assert( str_contains( $voucher->transferable_label(), 'Online redemption requires logging in to the customer account with that email address.' ), 'V6: the voucher text says that online redemption requires the customer account' );
+
 // V11: order notes reach connectors and all staff – the issued code appears masked only.
 $notes = implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ) );
 vcap_acct_assert( ! str_contains( strtoupper( $notes ), strtoupper( $voucher->code ) ) && str_contains( $notes, VCAP\Downloads::masked_code( $voucher->code ) ), 'the "vouchers issued" order note shows the code masked, never in full' );
@@ -314,5 +351,63 @@ vcap_acct_assert( array( 'Recipient name', 'Anna' ) === ( $m10_meta['vcap_recipi
 $h11_cart = ( new VCAP\Fields() )->display_item_data( array(), array( 'vcap_fields' => array( 'delivery_date' => array( 'label' => 'Delivery date', 'value' => '2026-12-24' ) ) ) );
 vcap_acct_assert( wp_date( vcap()->settings->date_format(), (int) strtotime( '2026-12-24 12:00:00 ' . wp_timezone_string() ) ) === ( $h11_cart[0]['value'] ?? '' ), 'H11: the cart shows the delivery date in the voucher date format, not "2026-12-24"', $h11_cart );
 vcap_acct_assert( 'Anna' === VCAP\Placeholders::replace( '{item_meta:vcap_recipient_name}', (function () use ( $m10_order, $m10_item ) { $v = new VCAP\Voucher(); $v->order_id = $m10_order->get_id(); $v->order_item_id = $m10_item->get_id(); return $v; })() ), 'M10: {item_meta:vcap_recipient_name} works in every language' );
+
+// V10: email download links get a default lifetime of 90 days (a value saved before is kept) and carry the
+// voucher's link version; "Reissue code" gives a new code and token, carries the remaining value over, deletes the
+// old coupon and invalidates old links.
+$v10_saved = get_option( 'vcap_download_link_days', null );
+delete_option( 'vcap_download_link_days' );
+$v10_args = array();
+wp_parse_str( (string) wp_parse_url( vcap()->downloads->signed_url( vcap()->vouchers->get( $voucher->id ), true ), PHP_URL_QUERY ), $v10_args );
+vcap_acct_assert( abs( (int) $v10_args['exp'] - ( time() + 90 * DAY_IN_SECONDS ) ) < 120, 'V10: email download links expire after 90 days when the setting was never saved' );
+update_option( 'vcap_download_link_days', 0 );
+wp_parse_str( (string) wp_parse_url( vcap()->downloads->signed_url( vcap()->vouchers->get( $voucher->id ), true ), PHP_URL_QUERY ), $v10_args );
+vcap_acct_assert( '0' === (string) $v10_args['exp'], 'V10: a lifetime saved before (0 = never) is kept' );
+null === $v10_saved ? delete_option( 'vcap_download_link_days' ) : update_option( 'vcap_download_link_days', $v10_saved );
+
+$v10_product = vcap_acct_product( array( 'type' => 'giftcard', 'usage' => 'balance', 'email_restrict' => 'buyer' ) );
+$v10_order   = vcap_acct_order( $v10_product, $buyer, $login . '@example.com' );
+$v10_issued  = vcap()->issuer->issue_for_order( $v10_order );
+$v10         = vcap()->vouchers->get( $v10_issued[0]->id );
+$v10->status = VCAP\Voucher::STATUS_ACTIVE;
+vcap()->vouchers->update( $v10 );
+$v10_pay = vcap_acct_order( $v6_goods, $buyer, $login . '@example.com' ); // Paid partly with the card before the reissue.
+vcap()->coupons->adjust_balance( $v10, -15, 'redeemed', 'V10 partial use', $v10_pay->get_id() );
+$v10_pay->update_meta_data( '_vcap_redemptions', array( wc_format_coupon_code( $v10->code ) => 15.0 ) );
+$v10_pay->save();
+$v10         = vcap()->vouchers->get( $v10->id );
+$v10_old     = array( 'code' => $v10->code, 'token' => $v10->token, 'coupon' => $v10->coupon_id, 'balance' => $v10->balance );
+$v10_link    = array();
+wp_parse_str( (string) wp_parse_url( vcap()->downloads->signed_url( $v10, true ), PHP_URL_QUERY ), $v10_link );
+$v10_valid   = new ReflectionMethod( VCAP\Downloads::class, 'valid_guest_link' );
+$v10_valid->setAccessible( true );
+$v10_sign    = new ReflectionMethod( VCAP\Downloads::class, 'sign' );
+$v10_sign->setAccessible( true );
+vcap_acct_assert( true === $v10_valid->invoke( vcap()->downloads, $v10->token, (int) $v10_link['exp'], (string) $v10_link['sig'], vcap()->downloads->link_version( $v10 ) ) && 0 === vcap()->downloads->link_version( $v10 ), 'V10: a link of a voucher never reissued is valid (version 0 signs as before)' );
+
+$v10_reissue = new VCAP\Reissue( vcap()->settings, vcap()->vouchers, vcap()->coupons );
+$v10_void    = clone $v10;
+$v10_void->status = VCAP\Voucher::STATUS_VOID;
+vcap_acct_assert( '' !== $v10_reissue->refusal( $v10_void ) && '' === $v10_reissue->refusal( $v10 ), 'V10: void vouchers cannot be reissued, active ones can' );
+wp_set_current_user( $buyer ); // Flash notices are per user.
+$v10_ok  = ( new VCAP\Admin\VoucherAdmin( vcap()->vouchers ) )->reissue( $v10, false, 'Wrong address' );
+$v10_new = vcap()->vouchers->get( $v10->id );
+wp_set_current_user( 0 );
+$v10_coupon = new WC_Coupon( $v10_new->coupon_id );
+vcap_acct_assert( $v10_ok && $v10_new->code !== $v10_old['code'] && $v10_new->token !== $v10_old['token'] && $v10_new->coupon_id !== $v10_old['coupon'] && abs( $v10_new->balance - $v10_old['balance'] ) < 0.001 && VCAP\Voucher::STATUS_ACTIVE === $v10_new->status, 'V10: reissue gives a new code, token and coupon and keeps the remaining value and state' );
+vcap_acct_assert( null === get_post( $v10_old['coupon'] ) && 0 === (int) wc_get_coupon_id_by_code( $v10_old['code'] ) && null === vcap()->vouchers->get_by_code( $v10_old['code'] ) && null === vcap()->vouchers->get_by_token( $v10_old['token'] ), 'V10: the old WooCommerce coupon is deleted – the old code and token are unknown' );
+vcap_acct_assert( strtolower( $v10_new->code ) === strtolower( $v10_coupon->get_code() ) && abs( (float) $v10_coupon->get_amount() - $v10_old['balance'] ) < 0.001 && array( $login . '@example.com' ) === array_values( $v10_coupon->get_email_restrictions() ) && 'yes' === $v10_coupon->get_meta( '_vcap_voucher' ), 'V10: the new coupon carries the remaining value and the restrictions over' );
+$v10_events = wp_list_pluck( vcap()->vouchers->events( $v10->id ), 'event' );
+$v10_notes  = implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $v10_order->get_id() ) ), 'content' ) );
+vcap_acct_assert( in_array( 'reissued', $v10_events, true ) && str_contains( $v10_notes, 'was reissued as ' . VCAP\Downloads::masked_code( $v10_new->code ) ) && ! str_contains( strtoupper( $v10_notes ), strtoupper( $v10_new->code ) ), 'V10: the reissue is in the voucher history and (masked) in an order note' );
+vcap_acct_assert( 1 === vcap()->downloads->link_version( $v10_new ) && false === $v10_valid->invoke( vcap()->downloads, $v10_new->token, (int) $v10_link['exp'], (string) $v10_sign->invoke( vcap()->downloads, $v10_new->token, (int) $v10_link['exp'], 0 ), vcap()->downloads->link_version( $v10_new ) ), 'V10: after a reissue the link version is 1 – a signature without it is refused' );
+wp_parse_str( (string) wp_parse_url( vcap()->downloads->signed_url( $v10_new, true ), PHP_URL_QUERY ), $v10_link );
+vcap_acct_assert( true === $v10_valid->invoke( vcap()->downloads, $v10_new->token, (int) $v10_link['exp'], (string) $v10_link['sig'], vcap()->downloads->link_version( $v10_new ) ), 'V10: fresh links (My Account, new email) work with the new token' );
+$v10_discounts = new WC_Discounts( vcap_acct_order( $v6_goods, $buyer, $login . '@example.com' ) );
+vcap_acct_assert( is_wp_error( $v10_discounts->is_coupon_valid( new WC_Coupon( $v10_old['code'] ) ) ), 'V10: the old code can no longer be redeemed' );
+$v10_by_old = VCAP\Reissue::voucher_of_previous_code( vcap()->vouchers, $v10_old['code'] );
+vcap_acct_assert( $v10_by_old && $v10_by_old->id === $v10->id, 'V10: refunds of orders paid with the old code still find the voucher (previous code on the new coupon)' );
+vcap()->coupons->restore_order( wc_get_order( $v10_pay->get_id() ) );
+vcap_acct_assert( abs( vcap()->vouchers->get( $v10->id )->balance - ( $v10_old['balance'] + 15 ) ) < 0.001, 'V10: cancelling an order paid with the old code books the value back onto the reissued voucher' );
 
 echo "Voucher Captain account checks passed.\n";

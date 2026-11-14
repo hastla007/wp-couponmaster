@@ -282,7 +282,7 @@ final class ProductSettings {
 				'value'       => ProductConfig::normalise_restriction( array( 'email_restrict' => $this->v( $p, 'email_restrict' ), 'transferable' => $this->v( $p, 'transferable' ) ) )['email_restrict'],
 				'options'     => ProductConfig::redemption_choices(),
 				'desc_tip'    => true,
-				'description' => __( 'Personal vouchers can only be redeemed by a customer logged in or checking out with one of these email addresses. The voucher text {transferable} follows this setting.', 'voucher-captain' ),
+				'description' => __( 'Personal vouchers can only be redeemed online by a customer logged in to a customer account with one of these email addresses (guest checkout with the address is refused); at the counter staff check the holder\'s identity. The voucher text {transferable} follows this setting.', 'voucher-captain' ),
 			)
 		);
 		$channels = (array) ProductConfig::get( $p )['channels'];

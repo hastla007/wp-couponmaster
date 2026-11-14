@@ -19,7 +19,7 @@ final class Settings {
 		'vcap_default_expiry_days'   => 365,
 		'vcap_restore_on_cancel'     => 'yes',
 		'vcap_void_on_refund'        => 'yes',
-		'vcap_download_link_days'    => 0,
+		'vcap_download_link_days'    => 90, // V10: for shops that never saved it; a saved value (also 0) is kept.
 		'vcap_show_thankyou'         => 'yes',
 		'vcap_show_myaccount'        => 'yes',
 		'vcap_myaccount_tab'         => 'yes',
@@ -194,9 +194,9 @@ final class Settings {
 						'title'             => __( 'Download link lifetime (days)', 'voucher-captain' ),
 						'id'                => 'vcap_download_link_days',
 						'type'              => 'number',
-						'default'           => 0,
+						'default'           => self::DEFAULTS['vcap_download_link_days'],
 						'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
-						'desc_tip'          => __( 'Signed links in emails expire after this many days. Links shown to logged-in customers are always re-signed. 0 = never expire.', 'voucher-captain' ),
+						'desc_tip'          => __( 'Signed links in emails expire after this many days (default 90). Customers get a fresh link in My Account at any time; reissuing a voucher invalidates its old links. 0 = never expire (not recommended).', 'voucher-captain' ),
 					),
 					array(
 						'title'             => __( 'Expiry reminder (days before)', 'voucher-captain' ),

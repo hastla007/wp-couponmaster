@@ -1305,7 +1305,13 @@ final class CouponManager {
 	 * only right together with the voucher, so they are never redeemed as ordinary coupons.
 	 */
 	public function validate( $valid, $coupon, $discounts = null ) {
-		if ( ! $valid || ! $coupon instanceof \WC_Coupon || 'yes' !== $coupon->get_meta( '_vcap_voucher' ) ) {
+		if ( ! $valid || ! $coupon instanceof \WC_Coupon ) {
+			return $valid;
+		}
+		if ( 'yes' !== $coupon->get_meta( '_vcap_voucher' ) ) {
+			if ( '' !== (string) $coupon->get_meta( '_vcap_referral_reward_for' ) ) {
+				$this->check_personal( $coupon, $discounts ); // V6: referral rewards belong to the referrer's account.
+			}
 			return $valid;
 		}
 		$voucher = $this->repo->get_by_coupon( $coupon->get_id() );
@@ -1354,7 +1360,35 @@ final class CouponManager {
 			$message = (string) apply_filters( 'vcap_shop_channel_refused_message', __( 'This voucher cannot be redeemed in the shop.', 'voucher-captain' ), $voucher );
 			throw new \Exception( esc_html( $message ), 9006 );
 		}
+		$this->check_personal( $coupon, $discounts );
 		return $valid;
+	}
+
+	/**
+	 * V6: a personal voucher (coupon restricted to email addresses) is redeemed only by a customer logged in with an
+	 * account whose (verified) email matches – never by a guest who types the address at checkout (classic cart,
+	 * Store API/blocks). Orders: the order's customer account counts, and staff editing an order in wp-admin or
+	 * an order created there pass (they check the holder's identity, like at the counter). See PersonalVoucher.
+	 *
+	 * @throws \Exception With the "log in with …" message.
+	 */
+	private function check_personal( \WC_Coupon $coupon, $discounts ): void {
+		$restrictions = PersonalVoucher::restrictions( $coupon );
+		if ( ! $restrictions ) {
+			return;
+		}
+		$object = $discounts instanceof \WC_Discounts ? $discounts->get_object() : null;
+		if ( $object instanceof \WC_Order ) {
+			$customer = $object->get_customer_id() ? get_userdata( (int) $object->get_customer_id() ) : null;
+			if ( PersonalVoucher::staff_context() || 'admin' === $object->get_created_via() || PersonalVoucher::allowed_for_user( $restrictions, $customer ? $customer : null ) ) {
+				return;
+			}
+		}
+		$user = is_user_logged_in() ? wp_get_current_user() : null;
+		if ( PersonalVoucher::allowed_for_user( $restrictions, $user ) ) {
+			return;
+		}
+		throw new \Exception( esc_html( PersonalVoucher::refusal( $restrictions, null !== $user ) ), 9008 );
 	}
 
 	/**
@@ -2063,7 +2097,9 @@ final class CouponManager {
 
 	private function find_voucher_for_code( string $code ): ?Voucher {
 		$coupon_id = wc_get_coupon_id_by_code( $code );
-		return $coupon_id ? $this->repo->get_by_coupon( (int) $coupon_id ) : $this->repo->get_by_code( $code );
+		$voucher   = $coupon_id ? $this->repo->get_by_coupon( (int) $coupon_id ) : $this->repo->get_by_code( $code );
+		// V10: an order paid with a code that was reissued since still charges/books back the same voucher.
+		return $voucher ?? Reissue::voucher_of_previous_code( $this->repo, $code );
 	}
 
 	/**
