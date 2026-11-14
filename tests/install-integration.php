@@ -217,9 +217,10 @@ $_POST = array();
 vcap_inst_assert( str_contains( $html, 'vcap-balance-result' ), 'a guest balance check works without a nonce' );
 vcap_inst_assert( wp_style_is( 'vcap-frontend', 'enqueued' ), 'shortcodes enqueue the storefront style where they render' );
 
-// Blocks come from block.json with apiVersion 3.
+// Blocks come from block.json with apiVersion 3. The storefront style is the editor style only: on the front end the
+// render callbacks (the shortcodes) enqueue it where a block renders (checked above), not on every page.
 $block = WP_Block_Type_Registry::get_instance()->get_registered( 'vcap/redeem' );
-vcap_inst_assert( $block && 3 === (int) $block->api_version && in_array( 'vcap-frontend', (array) $block->style_handles, true ), 'blocks are registered from block.json (apiVersion 3, storefront style)' );
+vcap_inst_assert( $block && 3 === (int) $block->api_version && in_array( 'vcap-frontend', (array) $block->editor_style_handles, true ) && ! in_array( 'vcap-frontend', (array) $block->style_handles, true ), 'blocks are registered from block.json (apiVersion 3, storefront style in the editor)' );
 
 // Site Health: the product checks run asynchronously through REST.
 $health = apply_filters( 'site_status_tests', array( 'direct' => array(), 'async' => array() ) );
