@@ -50,6 +50,8 @@ if ( $next_steps ) {
 	if ( $redeem_url ) {
 		echo esc_html__( 'Redeem now:', 'voucher-captain' ) . ' ' . esc_url_raw( $redeem_url ) . "\n";
 	}
+} elseif ( '' !== \VCAP\Channels::instructions( $voucher ) ) {
+	echo "\n" . esc_html( \VCAP\Channels::instructions( $voucher ) ) . "\n";
 }
 echo "\n=================================================================\n\n";
 

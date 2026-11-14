@@ -484,6 +484,29 @@ $p8_sold->template_id = 501;
 $p8_new->template_id  = 501;
 check( 'Z13: vouchers issued with a template deleted later keep its design, newer ones get the fallback', 'DELETED {coupon_code}' === $p8_label( TemplatePostType::design_for_voucher( 501, $p8_sold ) ) && TemplatePostType::default_designs()['giftcard']['page'] === TemplatePostType::design_for_voucher( 501, $p8_new )['page'] );
 unset( $GLOBALS['vcap_test_meta'][500], $GLOBALS['vcap_test_options'][ TemplatePostType::ARCHIVE_OPTION . 501 ] );
+// H6: how to redeem follows the voucher's redemption channels in the mail, the PDF and My Account.
+if ( ! function_exists( 'wc_get_order_item_meta' ) ) {
+	function wc_get_order_item_meta( $id, $key, $single = true ) { return $GLOBALS['vcap_test_item_meta'][ $id ][ $key ] ?? ''; }
+}
+$p8_ch = static function ( array $channels, string $type = 'giftcard' ) use ( $v ): VCAP\Voucher {
+	$c                = clone $v;
+	$c->type          = $type;
+	$c->order_item_id = 7001 + count( $GLOBALS['vcap_test_item_meta'] ?? array() );
+	$GLOBALS['vcap_test_item_meta'][ $c->order_item_id ][ VCAP\Issuer::LINE_META ] = array( 'channels' => $channels );
+	return $c;
+};
+$p8_spa = $p8_ch( array( VCAP\Channels::COUNTER ) );
+check( 'H6: without a channel selection the code is entered in the cart', 'Enter the code in the cart or at checkout on Café Süß & Co to redeem it.' === VCAP\Channels::instructions( $p8_ch( array() ) ) );
+check( 'H6: a voucher only for the counter (spa) is not sent to the cart', str_contains( VCAP\Channels::instructions( $p8_spa ), 'at the counter of Café Süß & Co' ) && ! str_contains( VCAP\Channels::instructions( $p8_spa ), 'cart or at checkout' ) );
+check( 'H6: shop + counter names both, external only points to the redeem page, tickets get none', str_contains( VCAP\Channels::instructions( $p8_ch( array( 'shop', 'counter' ) ) ), 'or show this voucher at the counter' ) && str_contains( VCAP\Channels::instructions( $p8_ch( array( 'external' ) ) ), 'redeem page' ) && '' === VCAP\Channels::instructions( $p8_ch( array(), 'ticket' ) ) );
+check( 'H6: the shop name is linked and escaped in the HTML mail text', str_contains( VCAP\Channels::instructions_html( $p8_ch( array() ) ), '<a href="https://shop.test/">Café Süß &amp; Co</a>' ) );
+$p8_gift = TemplatePostType::default_designs()['giftcard'];
+$p8_html = vcap()->pdf->html( $p8_spa, $p8_gift );
+check( 'H6: the default gift card PDF shows the shop URL, how to redeem (per channel), transferability and conditions', str_contains( $p8_html, 'https://shop.test/' ) && str_contains( $p8_html, 'at the counter of Café Süß &amp; Co' ) && str_contains( $p8_html, 'Transferable' ) && str_contains( implode( ' ', array_column( $p8_gift['elements'], 'text' ) ), '{redemption_terms}' ) );
+$p8_mail = (string) file_get_contents( VCAP_PATH . 'templates/emails/voucher.php' );
+check( 'H6: the mails and My Account use the channel instructions, not the fixed cart sentence', ! str_contains( $p8_mail, "Enter the code in the cart or at checkout on %s to redeem it." ) && str_contains( $p8_mail, 'Channels::instructions_html( $voucher )' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'templates/emails/plain/voucher.php' ), 'Channels::instructions( $voucher )' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'templates/myaccount/vouchers-table.php' ), 'Channels::instructions( $voucher )' ) );
+check( 'H6: {redeem_instructions} is offered as a placeholder', isset( Placeholders::definitions()['redeem_instructions'] ) );
+unset( $GLOBALS['vcap_test_item_meta'] );
 $p8_js = (string) file_get_contents( VCAP_PATH . 'assets/js/designer.js' );
 check( 'H16: the designer shrinks overflowing texts like the PDF and marks texts that are still cut off', str_contains( $p8_js, 'function fitText( inner )' ) && str_contains( $p8_js, "classList.toggle( 'is-overflowing'" ) );
 check( 'Z14: the designer gives custom PDF fonts their own font stack', str_contains( $p8_js, "FONT_STACKS[ family ] = '\"' +" ) );

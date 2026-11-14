@@ -41,6 +41,7 @@ final class Placeholders {
 			'site_name'         => __( 'Site name', 'voucher-captain' ),
 			'site_url'          => __( 'Site URL', 'voucher-captain' ),
 			'redeem_url'        => __( 'Redeem page link with the code', 'voucher-captain' ),
+			'redeem_instructions' => __( 'How to redeem (from the redemption channels)', 'voucher-captain' ),
 			'redemption_terms'  => __( 'Redemption conditions', 'voucher-captain' ),
 			'transferable'      => __( 'Transferability', 'voucher-captain' ),
 		);
@@ -123,6 +124,7 @@ final class Placeholders {
 			'site_name'         => wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ),
 			'site_url'          => home_url( '/' ),
 			'redeem_url'        => $voucher->code ? Shortcodes::redeem_url( $voucher->code ) : '',
+			'redeem_instructions' => Channels::instructions( $voucher ),
 			'redemption_terms'  => '' !== $voucher->terms ? $voucher->terms : ProductConfig::terms( $config ),
 			'transferable'      => $voucher->transferable_label(),
 		);
