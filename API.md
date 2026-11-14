@@ -1,6 +1,6 @@
 # Voucher Captain PHP API v1
 
-Voucher Captain exposes an in-process PHP service at `vcap()->api_v1`. This is a plugin integration contract, not a public REST API. Calls must run after the plugin has booted and WooCommerce is available.
+Voucher Captain exposes an in-process PHP service at `vcap()->api_v1`. This is a plugin integration contract, not a public REST API. Calls must run after the plugin has booted and WooCommerce is available: from the action `vcap_loaded` on (since 1.2.0; `vcap()` is defined only then, see CONNECTORS.md).
 
 ## Methods
 

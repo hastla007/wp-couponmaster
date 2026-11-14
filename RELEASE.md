@@ -14,6 +14,13 @@ The version lives in three places that must agree – `bin/build.sh` refuses to 
 2. `define( 'VCAP_VERSION', … )` in the same file,
 3. `Stable tag:` in `readme.txt`.
 
+**Rollback to an older release** (support instructions): install the older ZIP *over* the current one (Plugins → Add
+New → Upload, "Replace current with uploaded"), or deactivate and activate again afterwards. Never delete the plugin
+to go back: "Delete" runs `uninstall.php`, which releases the license activation and – with "Delete data on
+uninstall" – drops the voucher tables. A release that does not know the deactivation marker (1.1.0 and older) leaves
+the coupons suspended by a deactivation as drafts; the next update to a current release publishes them again on its
+first request (also without an activation, e.g. by upload or auto-update).
+
 ## Changelog
 
 `readme.txt` → `== Changelog ==` is the changelog. Work in progress collects under `= Unreleased =`; at release

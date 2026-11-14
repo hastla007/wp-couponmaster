@@ -25,7 +25,7 @@ The free edition and the premium edition are built from the same code. In the pr
 == Installation ==
 
 1. Install and activate WooCommerce 8.9 or newer.
-2. Upload the release ZIP under Plugins → Add New → Upload Plugin and activate Voucher Captain. PHP 8.1 or newer with the GD, mbstring and zip extensions is required.
+2. Upload the release ZIP under Plugins → Add New → Upload Plugin and activate Voucher Captain. PHP 8.1 or newer with the mbstring and dom extensions is required (activation stops without them); GD (QR codes, barcodes and images in PDFs), zip (Excel import) and iconv are needed for those features. Tools → Site Health shows what is missing.
 3. Premium edition: open the Voucher Captain license page, enter the license key and activate this site.
 4. Check WooCommerce → Settings → Vouchers (issuing status, validity, delivery, store credit, VAT treatment).
 5. Edit a product, tick "Voucher" and configure the "Voucher" tab. Two PDF templates (gift card A5, voucher/service pass A6) are created on activation; edit them in the Vouchers menu.
@@ -129,6 +129,14 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 * Fix: refer a friend – own codes are refused for email aliases (+tag, Gmail dots); the reward is withdrawn when the friend's order is cancelled or refunded (unused coupon trashed, store credit debited).
 * Fix: parallel requests for the same order status change count uses, bonus vouchers and referral rewards only once.
 * Fix: Reports no longer count trashed bonus vouchers as issued.
+* Fix: deactivation also suspends vouchers that may not be redeemed in the shop and coupons with rules only Voucher Captain checks (first order only, referral codes, SKU rules); each suspended coupon is marked, only marked coupons are published again, also on a reinstall.
+* Fix: after a reactivation, orders paid, cancelled or refunded while the plugin was off are caught up in the background (vouchers issued or voided, referral rewards, top-ups).
+* Fix: a deactivation that never got its activation (network deactivation stopped by a time-out, update by upload after a rollback) no longer leaves gift cards suspended: the running plugin publishes them again.
+* Fix: network activation sets up 25 sites at once (the others on their first request); deleting a site of a network drops its voucher tables; named database locks are per site.
+* Fix: database updates run in admin, cron and WP-CLI requests or the background action vcap_migrate, never in shop requests; tables are created and checked once per update; the schema check covers every index.
+* Fix: an uninstall always releases the license activation; a network uninstall releases all sites first within 30 seconds.
+* New: Site Health check for the PHP extensions mbstring, dom, gd, zip and iconv; activation stops without mbstring or dom.
+* Dev: vcap() is defined only when WooCommerce is active in a supported version; new action vcap_loaded and VCAP\Plugin::ready().
 
 = 1.1.0 =
 * New: redeem vouchers and gift cards outside the shop (courses, tickets, memberships) through the PHP service vcap()->redemptions or the REST API /wp-json/vcap/v1/redemptions – reserve, commit, release, with idempotency keys, stable error codes and automatic release of expired reservations.
