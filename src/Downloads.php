@@ -102,27 +102,27 @@ final class Downloads {
 		}
 		$id = absint( $_POST['vcap_resend'] );
 		if ( ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_resend_nonce'] ) ), 'vcap_resend_' . $id ) ) {
-			wc_add_notice( __( 'The request has expired. Please try again.', 'voucher-captain' ), 'error' );
+			wc_add_notice( __( 'The request has expired. Please try again.', 'voucher-captain' ), 'error', Shortcodes::ACCOUNT_NOTICE );
 			return;
 		}
 		$voucher = $this->repo->get( $id );
 		if ( ! $voucher || ! $this->customer_can_resend( $voucher ) ) {
-			wc_add_notice( __( 'This voucher cannot be sent again.', 'voucher-captain' ), 'error' );
+			wc_add_notice( __( 'This voucher cannot be sent again.', 'voucher-captain' ), 'error', Shortcodes::ACCOUNT_NOTICE );
 			return;
 		}
 		$key   = 'vcap_resend_' . $voucher->id;
 		$count = (int) get_transient( $key );
 		if ( $count >= 3 ) {
-			wc_add_notice( __( 'This voucher was sent several times already. Please try again later.', 'voucher-captain' ), 'error' );
+			wc_add_notice( __( 'This voucher was sent several times already. Please try again later.', 'voucher-captain' ), 'error', Shortcodes::ACCOUNT_NOTICE );
 			return;
 		}
 		set_transient( $key, $count + 1, HOUR_IN_SECONDS );
 		$sent = vcap()->delivery->send( $voucher );
 		$this->repo->log( $voucher->id, 'resent', null, null, sprintf( /* translators: %d: number of addresses */ _n( 'Requested by the customer, sent to %d address', 'Requested by the customer, sent to %d addresses', count( $sent ), 'voucher-captain' ), count( $sent ) ) );
 		if ( $sent ) {
-			wc_add_notice( __( 'The voucher email has been sent again.', 'voucher-captain' ) );
+			wc_add_notice( __( 'The voucher email has been sent again.', 'voucher-captain' ), 'success', Shortcodes::ACCOUNT_NOTICE );
 		} else {
-			wc_add_notice( __( 'The voucher email could not be sent. Please contact us.', 'voucher-captain' ), 'error' );
+			wc_add_notice( __( 'The voucher email could not be sent. Please contact us.', 'voucher-captain' ), 'error', Shortcodes::ACCOUNT_NOTICE );
 		}
 		wp_safe_redirect( wp_get_referer() ? wp_get_referer() : wc_get_account_endpoint_url( self::ENDPOINT ) );
 		exit;

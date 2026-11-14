@@ -246,11 +246,11 @@ final class PassCaptainTickets {
 		}
 		$id = absint( $_POST['vcap_resend_tickets'] );
 		if ( ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_resend_tickets_nonce'] ) ), 'vcap_resend_tickets_' . $id ) ) {
-			wc_add_notice( __( 'The request has expired. Please try again.', 'voucher-captain' ), 'error' );
+			wc_add_notice( __( 'The request has expired. Please try again.', 'voucher-captain' ), 'error', \VCAP\Shortcodes::ACCOUNT_NOTICE );
 			return;
 		}
 		if ( empty( $_POST['vcap_resend_confirm'] ) ) {
-			wc_add_notice( __( 'Please confirm that the tickets sent so far become invalid.', 'voucher-captain' ), 'error' );
+			wc_add_notice( __( 'Please confirm that the tickets sent so far become invalid.', 'voucher-captain' ), 'error', \VCAP\Shortcodes::ACCOUNT_NOTICE );
 			return;
 		}
 		$voucher = $this->vouchers->get( $id );
@@ -258,17 +258,17 @@ final class PassCaptainTickets {
 		$state   = $state && $this->is_ticket_holder( $voucher, $state ) ? $state : null;
 		$service = self::service();
 		if ( ! $state || ! $service || ! method_exists( $service, 'resend_tickets' ) ) {
-			wc_add_notice( __( 'The tickets of this voucher cannot be sent again.', 'voucher-captain' ), 'error' );
+			wc_add_notice( __( 'The tickets of this voucher cannot be sent again.', 'voucher-captain' ), 'error', \VCAP\Shortcodes::ACCOUNT_NOTICE );
 			return;
 		}
 		$result = $service->resend_tickets( $state['key'] );
 		if ( is_wp_error( $result ) ) {
 			$this->vouchers->log( $voucher->id, 'passcaptain_tickets_failed', null, null, __( 'Sending the tickets again (requested by the customer) failed:', 'voucher-captain' ) . ' ' . $result->get_error_code() . ': ' . $result->get_error_message() );
-			wc_add_notice( $result->get_error_message(), 'error' );
+			wc_add_notice( $result->get_error_message(), 'error', \VCAP\Shortcodes::ACCOUNT_NOTICE );
 		} else {
 			$this->vouchers->log( $voucher->id, 'passcaptain_tickets_resent', null, null, __( 'Requested by the customer', 'voucher-captain' ) );
 			/* translators: %s: masked email */
-			wc_add_notice( sprintf( __( 'The tickets were sent again to %s. Only the new tickets are valid.', 'voucher-captain' ), self::mask_email( (string) ( $result['email'] ?? '' ) ) ) );
+			wc_add_notice( sprintf( __( 'The tickets were sent again to %s. Only the new tickets are valid.', 'voucher-captain' ), self::mask_email( (string) ( $result['email'] ?? '' ) ) ), 'success', \VCAP\Shortcodes::ACCOUNT_NOTICE );
 		}
 		wp_safe_redirect( wp_get_referer() ? wp_get_referer() : wc_get_account_endpoint_url( \VCAP\Downloads::ENDPOINT ) );
 		exit;
