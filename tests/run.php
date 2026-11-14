@@ -1020,5 +1020,159 @@ add_filter( 'vcap_license_required', '__return_true' );
 check( 'free build: features outside the premium list are never locked', VCAP\Licensing\Entitlements::allows( 'store_credit' ) );
 check( 'free build: the lock names the premium edition', str_contains( VCAP\Licensing\Entitlements::locked_message( 'topup' ), 'included in Voucher Captain Premium' ) );
 
+echo "Lifecycle and multisite (deactivation, upgrade, site tables)\n";
+/** Records the queries of the code under test; $answers maps a query pattern (regex) to its result. */
+final class VCAP_Test_Wpdb {
+	public string $prefix   = 'wp_';
+	public string $posts    = 'wp_posts';
+	public string $postmeta = 'wp_postmeta';
+	public string $options  = 'wp_options';
+	public int $rows_affected = 0;
+	public array $log     = array();
+	public array $answers = array();
+	public function prepare( $query, ...$args ) {
+		$args = isset( $args[0] ) && is_array( $args[0] ) ? $args[0] : $args;
+		return vsprintf( str_replace( array( '%d', '%s' ), array( '%d', "'%s'" ), $query ), $args );
+	}
+	public function esc_like( $s ) { return addcslashes( (string) $s, '_%\\' ); }
+	public function suppress_errors( $s = true ) { return false; }
+	public function get_blog_prefix( $id = null ) { return 'wp_' . ( (int) $id > 1 ? (int) $id . '_' : '' ); }
+	public function get_charset_collate() { return ''; }
+	private function answer( $query, $default ) {
+		$this->log[] = $query;
+		foreach ( $this->answers as $pattern => $result ) {
+			if ( preg_match( $pattern, $query ) ) {
+				return is_callable( $result ) ? $result( $query ) : $result;
+			}
+		}
+		return $default;
+	}
+	public function query( $q ) { return $this->answer( $q, 1 ); }
+	public function get_var( $q ) { return $this->answer( $q, null ); }
+	public function get_row( $q, $o = null ) { return $this->answer( $q, null ); }
+	public function get_col( $q, $i = 0 ) { return $this->answer( $q, array() ); }
+	public function get_results( $q, $o = null ) { return $this->answer( $q, array() ); }
+}
+defined( 'ARRAY_A' ) || define( 'ARRAY_A', 'ARRAY_A' );
+if ( ! function_exists( 'clean_post_cache' ) ) {
+	function clean_post_cache( $id ) { $GLOBALS['vcap_test_cleaned'][] = (int) $id; }
+	function wp_cache_delete( $k, $g = '' ) { return true; }
+	function maybe_unserialize( $v ) { return is_string( $v ) && false !== ( $u = @unserialize( $v ) ) ? $u : $v; } // phpcs:ignore
+}
+$saved_wpdb      = $GLOBALS['wpdb'] ?? null;
+$GLOBALS['wpdb'] = new VCAP_Test_Wpdb();
+
+// M6: table names follow switch_to_blog() (the repository keeps no prefix of its own).
+$repo                    = new VCAP\VoucherRepository();
+$GLOBALS['wpdb']->prefix = 'wp_7_';
+$repo->get( 5 );
+$GLOBALS['wpdb']->prefix = 'wp_';
+check( 'a repository built on one site reads the tables of the site switched to', str_contains( (string) end( $GLOBALS['wpdb']->log ), 'FROM wp_7_vcap_vouchers ' ) );
+
+// A11: deleting a site drops its voucher tables.
+$dropped = VCAP\Install::drop_site_tables( array( 'wp_3_posts' ), 3 );
+check( 'a deleted site takes its six voucher tables with it', 7 === count( $dropped ) && in_array( 'wp_3_vcap_vouchers', $dropped, true ) && in_array( 'wp_3_vcap_claims', $dropped, true ) && ! in_array( 'wp_vcap_vouchers', $dropped, true ) );
+
+// A6: named MySQL locks are server-wide: the site's table prefix keeps them apart.
+$lock_a                  = VCAP\Install::lock_name( 'delivery_42' );
+$GLOBALS['wpdb']->prefix = 'wp_2_';
+$lock_b                  = VCAP\Install::lock_name( 'delivery_42' );
+$GLOBALS['wpdb']->prefix = 'wp_';
+check( 'the same voucher id on two sites uses two different locks (at most 64 characters)', $lock_a !== $lock_b && strlen( $lock_a ) <= 64 && str_ends_with( $lock_a, '_delivery_42' ) );
+check( 'deliveries and promotion holds use the per-site lock name', str_contains( (string) file_get_contents( VCAP_PATH . 'src/Delivery.php' ), "Install::lock_name( 'delivery_'" ) && 2 === substr_count( (string) file_get_contents( VCAP_PATH . 'src/Discounts/Usage.php' ), "Install::lock_name( 'usage_'" ) );
+
+// L10/L4: the marker of a suspended coupon is written first; without it the coupon is not drafted.
+$GLOBALS['vcap_test_cleaned'] = array();
+$GLOBALS['wpdb']->log         = array();
+$suspended                    = VCAP\Install::suspend_balance_coupons( array( 11, 12, 12 ) );
+$sql                          = implode( "\n", $GLOBALS['wpdb']->log );
+check( 'deactivation marks each coupon before it sets it to draft', 2 === $suspended && preg_match( "/INSERT INTO wp_postmeta .*\\(11, '_vcap_suspended', '1'\\),\\(12, /", $sql ) && strpos( $sql, 'INSERT INTO wp_postmeta' ) < strpos( $sql, "SET post_status = 'draft'" ) && array( 11, 12 ) === $GLOBALS['vcap_test_cleaned'] );
+$GLOBALS['wpdb']->answers = array( '/^INSERT INTO wp_postmeta/' => false );
+$GLOBALS['wpdb']->log     = array();
+$suspended                = VCAP\Install::suspend_balance_coupons( array( 13 ) );
+check( 'a coupon whose marker could not be written stays published (reactivation would not find it)', 0 === $suspended && ! preg_grep( "/SET post_status = 'draft'/", $GLOBALS['wpdb']->log ) );
+
+// L4: besides gift cards: vouchers not redeemable in the shop and coupons with rules only Voucher Captain checks.
+$GLOBALS['wpdb']->answers = array(
+	'/^SHOW TABLES LIKE/'               => 'wp_vcap_vouchers',
+	"/v\\.usage_mode = 'balance'/"      => array( '21' ),
+	'/woocommerce_order_itemmeta/'      => array(
+		array( 'ID' => '22', 'meta_value' => serialize( array( 'channels' => array( 'counter' ) ) ) ),
+		array( 'ID' => '23', 'meta_value' => serialize( array( 'channels' => array( 'shop', 'counter' ) ) ) ),
+	),
+	'/_vcap_first_order/'               => array( '24', '21' ),
+);
+$GLOBALS['wpdb']->log = array();
+$selected             = VCAP\Install::suspendable_coupon_ids();
+$meta_sql             = (string) current( preg_grep( '/_vcap_first_order/', $GLOBALS['wpdb']->log ) );
+check( 'deactivation also suspends counter-only vouchers and first-order, referral and SKU coupons', array( 21, 22, 24 ) === $selected && str_contains( $meta_sql, '_vcap_referral_owner' ) && str_contains( $meta_sql, '_vcap_skus' ) && str_contains( $meta_sql, '_vcap_exclude_skus' ), json_encode( $selected ) );
+
+// L2: the id list of earlier releases publishes only coupons that still belong to a gift card or store credit.
+$GLOBALS['vcap_test_options'][ VCAP\Install::SUSPENDED_OPTION ] = array( 31, 32 );
+$GLOBALS['wpdb']->answers = array(
+	'/^SHOW TABLES LIKE/'                   => 'wp_vcap_vouchers',
+	'/SELECT DISTINCT coupon_id FROM wp_vcap_vouchers/' => array( '31' ),
+	'/^SELECT post_id FROM wp_postmeta/'    => static fn( $q ) => str_contains( $q, 'post_id > 0 ' ) ? array( '41', '42' ) : array(),
+);
+$GLOBALS['wpdb']->log = array();
+VCAP\Install::restore_balance_coupons();
+$published = array_values( preg_grep( "/SET post_status = 'publish'/", $GLOBALS['wpdb']->log ) );
+check( 'reactivation publishes marked coupons and listed ids with a gift card row only', 2 === count( $published ) && str_contains( $published[0], 'IN (31)' ) && str_contains( $published[1], 'IN (41,42)' ) && ! isset( $GLOBALS['vcap_test_options'][ VCAP\Install::SUSPENDED_OPTION ] ) && preg_grep( "/^DELETE FROM wp_postmeta WHERE post_id IN \\(41,42\\) AND meta_key = '_vcap_suspended'/", $GLOBALS['wpdb']->log ), json_encode( $published ) );
+
+// L12: every index of the schema is verified, not only the unique keys.
+$GLOBALS['wpdb']->answers = array(
+	'/^SHOW TABLES LIKE/'           => static fn( $q ) => preg_match( "/LIKE '([a-z_0-9\\\\]+)'/", $q, $m ) ? stripslashes( $m[1] ) : null,
+	'/^SHOW COLUMNS FROM/'          => static function ( $q ) {
+		preg_match( '/FROM (\S+)/', $q, $m );
+		return array( 'id', 'code', 'coupon_id', 'type', 'status', 'order_id', 'order_item_id', 'item_index', 'product_id', 'variation_id', 'template_id', 'usage_mode', 'discount_type', 'initial_amount', 'balance', 'currency', 'expires_at', 'buyer_name', 'buyer_email', 'user_id', 'recipient_name', 'recipient_email', 'message', 'fields', 'send_to', 'delivery_at', 'delivered_at', 'token', 'transferable', 'terms', 'max_checkins', 'checkins', 'last_checkin_at', 'delivered_roles', 'created_at', 'updated_at', 'voucher_id', 'event', 'amount', 'balance_after', 'note', 'batch', 'imported_at', 'used_at', 'redemption_key', 'target', 'state', 'request_hash', 'meta', 'campaign_id', 'customer_key', 'claim_key', 'kind' );
+	},
+	'/^SHOW INDEX FROM wp_vcap_events$/' => array( 'PRIMARY', 'voucher_id', 'voucher_order', 'event' ),
+	'/^SHOW INDEX FROM/'            => static function ( $q ) {
+		return array( 'PRIMARY', 'code', 'token', 'order_item_slot', 'order_id', 'coupon_id', 'status', 'product_id', 'recipient_email', 'buyer_email', 'user_type', 'batch_free', 'redemption_key', 'voucher_id', 'user_id', 'state_expires', 'campaign_customer', 'order_campaign', 'kind_created' );
+	},
+	'/information_schema/'          => 'InnoDB',
+);
+$problems = VCAP\Install::verify_schema();
+check( 'a missing ordinary index is reported by the schema check', array( 'index wp_vcap_events.created_at is missing' ) === $problems, json_encode( $problems ) );
+$GLOBALS['wpdb']->answers = array();
+
+// L5: after a reactivation only Voucher Captain's own handlers of an order hook run again.
+final class VCAP_Test_Foreign_Handler {
+	public static array $calls = array();
+	public static function handle( ...$args ) { self::$calls[] = $args; }
+}
+$hook = (object) array(
+	'callbacks' => array(
+		30 => array( 'own' => array( 'function' => array( VCAP\Install::class, 'lock_name' ), 'accepted_args' => 1 ) ),
+		10 => array(
+			'foreign' => array( 'function' => array( 'VCAP_Test_Foreign_Handler', 'handle' ), 'accepted_args' => 3 ),
+			'closure' => array( 'function' => static function () {}, 'accepted_args' => 1 ),
+			'string'  => array( 'function' => 'VCAP\\Install::missing_extensions', 'accepted_args' => 1 ),
+		),
+	),
+);
+$own = VCAP\CatchUp::own_callbacks( $hook );
+check( 'the catch-up replays only callbacks from the plugin\'s src/, by priority (no foreign emails or webhooks)', 2 === count( $own ) && 'VCAP\\Install::missing_extensions' === $own[0]['function'] && 'lock_name' === $own[1]['function'][1] );
+$GLOBALS['wp_filter'] = array( 'vcap_test_hook' => (object) array( 'callbacks' => array( 10 => array( 'foreign' => array( 'function' => array( 'VCAP_Test_Foreign_Handler', 'handle' ), 'accepted_args' => 1 ) ) ) ) );
+VCAP\CatchUp::replay( 'vcap_test_hook', array( 1, 2 ) );
+check( 'foreign handlers are never called by the catch-up', array() === VCAP_Test_Foreign_Handler::$calls );
+unset( $GLOBALS['wp_filter'] );
+
+// L8: without WooCommerce the plugin does not boot (no vcap() for connectors, no fatal error later).
+$refused = false;
+try {
+	VCAP\Plugin::instance();
+} catch ( LogicException $e ) {
+	$refused = true;
+}
+check( 'without WooCommerce Plugin::instance() refuses to boot and ready() stays false', $refused && ! VCAP\Plugin::requirements_met() && ! VCAP\Plugin::ready() );
+$main = (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' );
+check( 'vcap() is defined only after the WooCommerce check, followed by the action vcap_loaded', strpos( $main, 'requirements_met()' ) < strpos( $main, 'function vcap()' ) && strpos( $main, 'function vcap()' ) < strpos( $main, "do_action( 'vcap_loaded'" ) );
+
+// L9 / A3.
+check( 'missing PHP extensions are named (activation and Site Health)', array( 'vcap_no_such_extension' ) === VCAP\Install::missing_extensions( array( 'pcre', 'vcap_no_such_extension' ) ) && array( 'mbstring', 'dom' ) === VCAP\Install::REQUIRED_EXTENSIONS );
+check( 'a network activation sets up at most 25 sites in its own request', 25 === VCAP\Install::NETWORK_ACTIVATION_SITES );
+$GLOBALS['wpdb'] = $saved_wpdb;
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

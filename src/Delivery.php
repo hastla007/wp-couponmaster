@@ -198,9 +198,13 @@ final class Delivery {
 
 		// A connection-scoped lock is released automatically if a worker crashes.
 		global $wpdb;
-		$lock_name = 'vcap_delivery_' . $voucher_id;
+		$lock_name = Install::lock_name( 'delivery_' . $voucher_id );
 		$locked    = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $lock_name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( 1 !== (int) $locked ) {
+			// Another worker delivers this voucher right now. Should it stop before sending, a retry follows.
+			if ( function_exists( 'as_schedule_single_action' ) && ! as_has_scheduled_action( self::RETRY_HOOK, array( 'voucher_id' => $voucher_id ), self::GROUP ) ) {
+				as_schedule_single_action( time() + 5 * MINUTE_IN_SECONDS, self::RETRY_HOOK, array( 'voucher_id' => $voucher_id ), self::GROUP );
+			}
 			return;
 		}
 
@@ -746,7 +750,7 @@ final class Delivery {
 				}
 				return true;
 			case 'legacy_rows':
-				Install::move_legacy_rows( $budget );
+				Install::move_legacy_rows_locked( $budget );
 				return true;
 			case 'delivery_net':
 				return $this->deliver_due( $budget );

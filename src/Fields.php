@@ -147,9 +147,10 @@ final class Fields {
 
 	/** @return array<int, array{id:int,title:string,position:string,fields:array,assign:array}> */
 	public static function groups(): array {
-		static $cache = null;
-		if ( null !== $cache ) {
-			return $cache;
+		static $by_site = array(); // Per site: switch_to_blog() must not return another site's groups.
+		$site = get_current_blog_id();
+		if ( isset( $by_site[ $site ] ) ) {
+			return $by_site[ $site ];
 		}
 		$cache = array();
 		foreach ( get_posts( array( 'post_type' => self::POST_TYPE, 'post_status' => 'publish', 'numberposts' => 100, 'orderby' => 'menu_order', 'order' => 'ASC' ) ) as $post ) {
@@ -163,7 +164,7 @@ final class Fields {
 				'assign'   => is_array( $assign ) ? $assign : array( 'mode' => 'all' ),
 			);
 		}
-		return $cache;
+		return $by_site[ $site ] = $cache;
 	}
 
 	public static function group_applies( array $group, \WC_Product $product ): bool {

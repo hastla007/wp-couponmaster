@@ -447,6 +447,15 @@ jobs:
           $WP eval "$check"
           $WP --url=http://localhost/before/ eval "$check"
           $WP --url=http://localhost/after/ eval "$check"
+      - name: Deleting a site drops its voucher tables
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          gone="$($WP site create --slug=gone --title="Deleted site" --porcelain)"
+          tables='global $wpdb; echo (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME LIKE %s", $wpdb->esc_like( $wpdb->base_prefix . getenv( "VCAP_SITE" ) . "_vcap_" ) . "%" ) );'
+          $WP --url=http://localhost/gone/ eval 'echo VCAP\Install::verify_schema() ? "incomplete" : "ok";'
+          test "$(VCAP_SITE="$gone" $WP eval "$tables")" = "6"
+          $WP site delete "$gone" --yes
+          test "$(VCAP_SITE="$gone" $WP eval "$tables")" = "0"
       - name: Referral code and reward counter stay per site (one customer, two sites)
         run: |
           WP="php wp-cli.phar --path=wp-test"

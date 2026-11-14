@@ -45,6 +45,8 @@ spl_autoload_register(
 
 register_activation_hook( __FILE__, array( '\VCAP\Install', 'activate' ) );
 register_deactivation_hook( __FILE__, array( '\VCAP\Install', 'deactivate' ) );
+// Multisite: deleting a site drops its voucher tables too (they hold buyer and recipient data).
+add_filter( 'wpmu_drop_tables', array( '\VCAP\Install', 'drop_site_tables' ), 10, 2 );
 
 // Declare HPOS + block cart/checkout compatibility.
 add_action(
@@ -71,7 +73,7 @@ add_action(
 			);
 			return;
 		}
-		if ( defined( 'WC_VERSION' ) && version_compare( WC_VERSION, '8.9', '<' ) ) {
+		if ( ! \VCAP\Plugin::requirements_met() ) {
 			// The plugin does not run: nothing would deduct gift card balances, so their coupons are refused.
 			add_filter( 'woocommerce_coupon_is_valid', array( '\VCAP\Install', 'refuse_balance_coupon' ), 1000, 2 );
 			add_action(
@@ -85,13 +87,22 @@ add_action(
 			);
 			return;
 		}
-		\VCAP\Plugin::instance();
+		if ( ! function_exists( 'vcap' ) ) {
+			/**
+			 * Convenience accessor of the running plugin. Defined only once WooCommerce passed the check above, so
+			 * connectors can rely on function_exists( 'vcap' ) – or better, hook into "vcap_loaded".
+			 */
+			function vcap(): \VCAP\Plugin {
+				return \VCAP\Plugin::instance();
+			}
+		}
+		$vcap_plugin = \VCAP\Plugin::instance();
+		/**
+		 * Voucher Captain has booted: vcap() and its services (api_v1, redemptions …) can be used from here on.
+		 *
+		 * @since 1.2.0
+		 * @param \VCAP\Plugin $vcap_plugin The running plugin.
+		 */
+		do_action( 'vcap_loaded', $vcap_plugin );
 	}
 );
-
-/**
- * Convenience accessor.
- */
-function vcap(): \VCAP\Plugin {
-	return \VCAP\Plugin::instance();
-}

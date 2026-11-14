@@ -82,7 +82,7 @@ Voucher Captain does not know what a customer owns in another plugin. Use the ex
 - Within **v1** changes are additive only: new methods, new optional arguments, new array keys, new hooks, new error codes for new situations. Existing keys, error codes, HTTP statuses and hook arguments keep their meaning.
 - Breaking changes get a new version side by side (`api_v2`, `vcap/v2`). The previous version stays available for at least two minor releases and six months, with a deprecation notice (`_deprecated_function` and a changelog entry).
 - Every public method and hook carries `@since`. Everything else (classes without a documented contract, database tables, private meta) is internal and may change in any release – never query Voucher Captain's tables directly.
-- Connectors should check `defined( 'VCAP_VERSION' ) && version_compare( VCAP_VERSION, '1.1.0', '>=' )` and `function_exists( 'vcap' )` before registering hooks.
+- Connectors should check `defined( 'VCAP_VERSION' ) && version_compare( VCAP_VERSION, '1.1.0', '>=' )` and `function_exists( 'vcap' )` before registering hooks. Since 1.2.0, `vcap()` exists only once Voucher Captain has booted (WooCommerce active in a supported version), so `function_exists( 'vcap' )` from `plugins_loaded` priority 11 on is a reliable check; better, register in the action `vcap_loaded` (argument: the running `VCAP\Plugin`), which fires exactly then. `VCAP\Plugin::ready()` tells whether the plugin booted; `VCAP\Plugin::instance()` throws a `LogicException` without a supported WooCommerce.
 
 ## 7. Checklist for a connector release
 

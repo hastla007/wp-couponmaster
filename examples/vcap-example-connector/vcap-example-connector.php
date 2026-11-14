@@ -22,6 +22,8 @@ final class VCAP_Example_Connector {
 	const MAX_TRIES = 5;
 
 	public static function boot(): void {
+		// vcap() exists only once Voucher Captain booted (WooCommerce active in a supported version). Since 1.2.0
+		// the action "vcap_loaded" fires at that moment; plugins_loaded (priority 20) works with 1.1 as well.
 		if ( ! function_exists( 'vcap' ) ) {
 			return;
 		}
