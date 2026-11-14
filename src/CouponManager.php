@@ -59,6 +59,127 @@ final class CouponManager {
 		add_action( 'wp_trash_post', array( $this, 'release_deleted_order' ), 5 );
 		add_action( 'before_delete_post', array( $this, 'release_deleted_order' ), 5 );
 		add_action( 'vcap_release_stale_order_reservations', array( $this, 'release_stale_order_reservations' ) );
+		// A voucher's coupon follows the voucher row: an amount edited or saved in WooCommerce is set back to the
+		// balance, and trashing or deleting it in wp-admin or over the REST API is refused (logged otherwise).
+		add_action( 'woocommerce_update_coupon', array( $this, 'coupon_saved' ), 20, 2 );
+		add_filter( 'pre_trash_post', array( $this, 'protect_coupon' ), 10, 2 );
+		add_filter( 'pre_delete_post', array( $this, 'protect_coupon' ), 10, 2 );
+		add_action( 'wp_trash_post', array( $this, 'log_coupon_removed' ), 20 );
+		add_action( 'before_delete_post', array( $this, 'log_coupon_removed' ), 20 );
+	}
+
+	/** @var bool Set while sync_coupon_amount() saves a coupon (its own save hook must not sync again). */
+	private static bool $syncing = false;
+
+	/**
+	 * Write the voucher's current balance to its WooCommerce coupon. Bookings change the balance under the voucher
+	 * row lock but save the coupon after their COMMIT, so two bookings could save in the opposite order and leave an
+	 * old amount on the coupon (then every checkout with the card fails until the next booking). The coupon is
+	 * therefore saved under the row lock again, with the balance read under it: the last save always carries the
+	 * latest balance, whatever the passed (possibly stale) voucher object says.
+	 */
+	public static function sync_coupon_amount( Voucher $voucher ): bool {
+		global $wpdb;
+		if ( ! $voucher->coupon_id || self::$syncing || ! class_exists( '\WC_Coupon' ) ) {
+			return false;
+		}
+		$table = Install::tables()['vouchers'];
+		$tx    = Install::tables_support_transactions() && false !== $wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		self::$syncing = true;
+		try {
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT balance, usage_mode, currency FROM {$table} WHERE id = %d" . ( $tx ? ' FOR UPDATE' : '' ), $voucher->id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$ok  = false;
+			if ( $row && 'balance' === $row['usage_mode'] ) {
+				// Read the coupon under the lock, past this request's cache (another process may have saved it).
+				wp_cache_delete( $voucher->coupon_id, 'posts' );
+				wp_cache_delete( $voucher->coupon_id, 'post_meta' );
+				$coupon = new \WC_Coupon( $voucher->coupon_id );
+				if ( $coupon->get_id() ) {
+					$balance = round( max( 0.0, (float) $row['balance'] ), API\V1\RedemptionService::decimals( (string) $row['currency'] ) );
+					if ( abs( (float) $coupon->get_amount( 'edit' ) - $balance ) > 0.000001 ) {
+						$coupon->set_amount( $balance );
+						$coupon->save();
+					}
+					$ok = true;
+				}
+			}
+			if ( $tx ) {
+				$wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			}
+			return $ok;
+		} catch ( \Throwable $e ) {
+			if ( $tx ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			}
+			throw $e;
+		} finally {
+			self::$syncing = false;
+		}
+	}
+
+	/**
+	 * A voucher coupon was saved in WooCommerce (coupon editor, REST API, another plugin): a stored balance is kept
+	 * by the voucher row, so a different amount is set back to it (an edited or failed save would otherwise send
+	 * every checkout into a shortfall).
+	 *
+	 * @param int        $coupon_id Coupon id.
+	 * @param \WC_Coupon $coupon    Coupon.
+	 */
+	public function coupon_saved( $coupon_id, $coupon = null ): void {
+		if ( self::$syncing || ! $coupon instanceof \WC_Coupon || 'yes' !== $coupon->get_meta( '_vcap_voucher' ) ) {
+			return;
+		}
+		$voucher = $this->repo->get_by_coupon( (int) $coupon_id );
+		if ( $voucher && $voucher->is_multi_use() && abs( (float) $coupon->get_amount( 'edit' ) - (float) $voucher->balance ) > 0.000001 ) {
+			self::sync_coupon_amount( $voucher );
+		}
+	}
+
+	/** Voucher whose coupon this post is (null for every other post). */
+	private function voucher_of_coupon_post( $post ): ?Voucher {
+		$post = get_post( $post );
+		if ( ! $post instanceof \WP_Post || 'shop_coupon' !== $post->post_type || 'yes' !== get_post_meta( $post->ID, '_vcap_voucher', true ) ) {
+			return null;
+		}
+		return $this->repo->get_by_coupon( (int) $post->ID );
+	}
+
+	/**
+	 * Refuse trashing or deleting the coupon of an existing voucher in wp-admin and over the REST API: the voucher
+	 * would still look usable (liability, reminders) while its code no longer works, or vice versa. Plugin code
+	 * (repairs, rollbacks) may still remove coupons; filter "vcap_protect_voucher_coupons".
+	 *
+	 * @param mixed    $check Short-circuit value of pre_trash_post / pre_delete_post.
+	 * @param \WP_Post $post  Post.
+	 * @return mixed
+	 */
+	public function protect_coupon( $check, $post = null ) {
+		if ( null !== $check ) {
+			return $check;
+		}
+		$voucher = $this->voucher_of_coupon_post( $post );
+		if ( ! $voucher ) {
+			return $check;
+		}
+		$interactive = is_admin() || ( defined( 'REST_REQUEST' ) && REST_REQUEST );
+		/**
+		 * Whether trashing/deleting a voucher's WooCommerce coupon is refused (default: in wp-admin and REST requests).
+		 *
+		 * @param bool    $protect Refuse the removal.
+		 * @param Voucher $voucher Voucher.
+		 */
+		if ( apply_filters( 'vcap_protect_voucher_coupons', $interactive, $voucher ) ) {
+			return false;
+		}
+		return $check;
+	}
+
+	/** A voucher coupon that is trashed or deleted anyway is recorded in the voucher's history. */
+	public function log_coupon_removed( $post_id ): void {
+		$voucher = $this->voucher_of_coupon_post( $post_id );
+		if ( $voucher ) {
+			$this->repo->log( $voucher->id, 'coupon_removed', null, null, 'wp_trash_post' === current_action() ? __( 'WooCommerce coupon moved to the trash', 'voucher-captain' ) : __( 'WooCommerce coupon deleted', 'voucher-captain' ) );
+		}
 	}
 
 	/**
@@ -751,14 +872,7 @@ final class CouponManager {
 	}
 
 	private function sync_balance_coupon( Voucher $voucher ): void {
-		if ( ! $voucher->coupon_id ) {
-			return;
-		}
-		$coupon = new \WC_Coupon( $voucher->coupon_id );
-		if ( $coupon->get_id() ) {
-			$coupon->set_amount( $voucher->balance );
-			$coupon->save();
-		}
+		self::sync_coupon_amount( $voucher );
 	}
 
 	/**
@@ -976,9 +1090,15 @@ final class CouponManager {
 					ARRAY_A
 				); // phpcs:ignore
 				if ( $prior && in_array( $prior['event'], array( 'reserved', 'committed', 'redeemed' ), true ) ) {
-					if ( 'reserved' === $prior['event'] && ! $this->repo->log( $voucher->id, 'committed', (float) $prior['amount'], (float) $prior['balance_after'], $note, $order_id ) ) {
-						$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-						return null;
+					if ( 'reserved' === $prior['event'] ) {
+						// The balance read under the lock now, not the one after the reservation (other bookings
+						// may have changed it since): the journal and the liability read balance_after.
+						$locked_voucher         = $this->repo->get( $voucher->id );
+						$prior['balance_after'] = $locked_voucher ? (float) $locked_voucher->balance : (float) $prior['balance_after'];
+						if ( ! $this->repo->log( $voucher->id, 'committed', (float) $prior['amount'], (float) $prior['balance_after'], $note, $order_id ) ) {
+							$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+							return null;
+						}
 					}
 					if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 						$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -1040,13 +1160,7 @@ final class CouponManager {
 			throw $e;
 		}
 
-		if ( $fresh->coupon_id ) {
-			$coupon = new \WC_Coupon( $fresh->coupon_id );
-			if ( $coupon->get_id() ) {
-				$coupon->set_amount( $fresh->balance );
-				$coupon->save();
-			}
-		}
+		self::sync_coupon_amount( $fresh );
 		$reason = '';
 		return array(
 			'amount'    => $amount,
@@ -1087,6 +1201,11 @@ final class CouponManager {
 		if ( ! $voucher ) {
 			throw new \Exception( esc_html__( 'This voucher cannot be redeemed: its voucher record is missing. Please contact the shop.', 'voucher-captain' ), 9007 );
 		}
+		// External reservations past their lifetime are given back right here, not only by the background job
+		// (which may not run: WP-Cron off, loopback blocked, full-page cache).
+		if ( function_exists( 'vcap' ) && isset( vcap()->redemptions ) && vcap()->redemptions->release_expired_for( $voucher ) ) {
+			$voucher = $this->repo->get( $voucher->id ) ?? $voucher;
+		}
 		if ( Voucher::STATUS_VOID === $voucher->status ) {
 			throw new \Exception( esc_html__( 'This voucher has been cancelled.', 'voucher-captain' ), 9001 );
 		}
@@ -1112,6 +1231,12 @@ final class CouponManager {
 				Compat\MultiCurrency::record_unknown( $currency );
 				throw new \Exception( esc_html( self::currency_message( $currency ) ), 9007 );
 			}
+		}
+		if ( $voucher->is_multi_use() && ! ( $discounts instanceof \WC_Discounts && $discounts->get_object() instanceof \WC_Order ) && (float) $coupon->get_amount( 'edit' ) > (float) $voucher->balance + 0.000001 ) {
+			// The cart never grants more than the stored balance, even if the coupon amount is out of date (edited in
+			// WooCommerce, failed save): otherwise every checkout with it ends in a shortfall. Orders keep their
+			// own amount (order_coupon_object()).
+			$coupon->set_amount( $voucher->balance );
 		}
 		if ( ! Channels::allowed( $voucher, Channels::SHOP ) ) {
 			/** Message for a voucher that is not redeemable in the shop (e.g. a ticket voucher: where to use it instead). */
@@ -1777,8 +1902,10 @@ final class CouponManager {
 	 * Single-use vouchers: mark redeemed once WooCommerce's usage limit is reached.
 	 */
 	/**
-	 * Whether a single-use voucher is held by a shop order that is not paid yet (WooCommerce's tentative coupon
-	 * usage). Such a voucher must not be redeemed elsewhere at the same time.
+	 * Whether a single-use voucher is held by a shop order that is not paid yet: WooCommerce's tentative coupon
+	 * usage right after checkout, and – because that hold lasts only the "hold stock" minutes – any unpaid order
+	 * (pending, failed, on hold; open_orders_with()) that carries its code and can still be paid later with the
+	 * discount. Such a voucher must not be redeemed elsewhere (counter, API) at the same time.
 	 */
 	public static function held_by_pending_order( Voucher $voucher ): bool {
 		if ( $voucher->is_multi_use() || ! $voucher->coupon_id ) {
@@ -1786,7 +1913,10 @@ final class CouponManager {
 		}
 		$coupon = new \WC_Coupon( $voucher->coupon_id );
 		$store  = $coupon->get_id() ? $coupon->get_data_store() : null;
-		return $store && $store->has_callable( 'get_tentative_usage_count' ) && (int) $store->get_tentative_usage_count( $coupon->get_id() ) > 0;
+		if ( $store && $store->has_callable( 'get_tentative_usage_count' ) && (int) $store->get_tentative_usage_count( $coupon->get_id() ) > 0 ) {
+			return true;
+		}
+		return (bool) self::open_orders_with( $voucher );
 	}
 
 	/** @var array<int, true> Orders to put on hold once their status transition is through. */

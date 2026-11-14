@@ -322,6 +322,11 @@ $h = \VCAP\API\V1\RedemptionService::request_hash( 7, 'course:1', 30, 5 );
 check( 'request fingerprint is stable and amount-normalised', $h === \VCAP\API\V1\RedemptionService::request_hash( 7, 'course:1', 30.0000, 5 ) );
 check( 'request fingerprint changes with target, amount or user', count( array_unique( array( $h, \VCAP\API\V1\RedemptionService::request_hash( 7, 'course:2', 30, 5 ), \VCAP\API\V1\RedemptionService::request_hash( 7, 'course:1', 30.01, 5 ), \VCAP\API\V1\RedemptionService::request_hash( 7, 'course:1', 30, 6 ) ) ) ) === 4 );
 
+$p13_deep = array( 'a' => array( 'b' => array( 'c' => array( 'd' => 1 ) ) ) );
+check( 'P13: caller metadata is limited to 8 KB and 3 levels', \VCAP\API\V1\RedemptionService::meta_acceptable( array( 'a' => array( 'b' => array( 'c' => 1 ) ) ) ) && ! \VCAP\API\V1\RedemptionService::meta_acceptable( $p13_deep ) && ! \VCAP\API\V1\RedemptionService::meta_acceptable( array( 'x' => str_repeat( 'y', 8200 ) ) ) && \VCAP\API\V1\RedemptionService::meta_acceptable( null ) );
+check( 'P13: a REST key with a prefix must use the prefix of its target; UUID keys are free', \VCAP\API\V1\RestController::key_matches_target( 'learnboating:u5:abc', 'learnboating:product:1' ) && ! \VCAP\API\V1\RestController::key_matches_target( 'learnboating:grant:1234', 'test:course:1' ) && \VCAP\API\V1\RestController::key_matches_target( '550e8400-e29b-41d4-a716-446655440000', 'test:course:1' ) && ! \VCAP\API\V1\RestController::key_matches_target( 'pos:1234567', 'posx:till' ) );
+check( 'P13: the Learnboating grant keys are internal (never created over REST)', \VCAP\API\V1\RestController::is_internal_key( 'learnboating:grant:1234' ) && ! \VCAP\API\V1\RestController::is_internal_key( 'learnboating:u5:abc' ) );
+
 echo "Counter redemption (scanner): plausibility and refusal reasons\n";
 check( 'an amount within the balance may be booked', '' === Tickets::counter_amount_error( 12.5, 50, 2, false ) && '' === Tickets::counter_amount_error( 50, 50, 2, false ) );
 check( 'an amount above the balance is refused unless a partial booking is asked for', 'exceeds_balance' === Tickets::counter_amount_error( 80, 50, 2, false ) && '' === Tickets::counter_amount_error( 80, 50, 2, true ) );

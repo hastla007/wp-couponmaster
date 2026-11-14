@@ -168,13 +168,7 @@ final class StoreCredit {
 			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			throw $e;
 		}
-		if ( $fresh->coupon_id ) {
-			$coupon = new \WC_Coupon( $fresh->coupon_id );
-			if ( $coupon->get_id() ) {
-				$coupon->set_amount( $fresh->balance );
-				$coupon->save();
-			}
-		}
+		CouponManager::sync_coupon_amount( $fresh );
 		do_action( 'vcap_store_credit_changed', $user_id, $amount, $fresh->balance, $event, $reason, $order_id );
 		return array(
 			'balance' => $fresh->balance,

@@ -152,7 +152,7 @@ final class RestController {
 		 * @since 1.2.0
 		 * @param string[] $prefixes Prefixes.
 		 */
-		$prefixes = (array) apply_filters( 'vcap_internal_redemption_key_prefixes', array( 'wpcap-', 'passcaptain:' ) );
+		$prefixes = (array) apply_filters( 'vcap_internal_redemption_key_prefixes', array( 'wpcap-', 'passcaptain:', 'learnboating:grant:' ) );
 		return self::has_prefix( $key, $prefixes );
 	}
 
@@ -306,6 +306,10 @@ final class RestController {
 		if ( true !== $target ) {
 			return $target;
 		}
+		if ( ! self::key_matches_target( (string) $request['key'], (string) $request['target'] ) ) {
+			// Keys are global: "learnboating:…" with a "test:…" target would occupy a connector's key in advance.
+			return new \WP_Error( 'vcap_invalid_request', __( 'A redemption key with a prefix ("system:…") must use the prefix of its target.', 'voucher-captain' ), array( 'status' => 400 ) );
+		}
 		$result = $this->service->reserve(
 			(string) $request['code'],
 			array(
@@ -320,8 +324,26 @@ final class RestController {
 			return $result;
 		}
 		$response = rest_ensure_response( $result );
-		$response->set_status( 201 );
+		// 201 only for a new reservation; a repeated request answers 200 with the stored state ("replayed").
+		$response->set_status( empty( $result['replayed'] ) ? 201 : 200 );
 		return $response;
+	}
+
+	/**
+	 * A key with a namespace ("system:…", the part before the first colon) must belong to the target's namespace,
+	 * so a REST caller cannot claim another connector's keys; keys without a colon (UUIDs) are free.
+	 *
+	 * @param string $key    Redemption key.
+	 * @param string $target Redemption target.
+	 * @return bool
+	 */
+	public static function key_matches_target( string $key, string $target ): bool {
+		$colon = strpos( $key, ':' );
+		if ( false === $colon ) {
+			return true;
+		}
+		$target = RedemptionService::clean_target( $target );
+		return 0 === strncasecmp( $target, substr( $key, 0, $colon + 1 ), $colon + 1 );
 	}
 
 	/**

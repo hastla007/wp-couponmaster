@@ -122,6 +122,8 @@ vcap_redeem_assert( 'committed' === $service->commit( $key1 )['state'], 'repeati
 vcap_redeem_assert( array( $key1 ) === $redeemed, 'vcap_voucher_redeemed fires exactly once' );
 vcap_redeem_assert( 'vcap_already_redeemed' === vcap_redeem_code( $service->release( $key1 ) ), 'a committed redemption cannot be released' );
 vcap_redeem_assert( 'vcap_already_redeemed' === vcap_redeem_code( $service->reserve( $single->code, array( 'key' => 'it-' . wp_generate_uuid4(), 'target' => 'test:course:1' ) ) ), 'a redeemed voucher cannot be reserved again' );
+$p5_committed = $service->reserve( $single->code, array( 'key' => $key1, 'target' => 'test:course:1' ) );
+vcap_redeem_assert( ! is_wp_error( $p5_committed ) && 'committed' === $p5_committed['state'] && ! empty( $p5_committed['replayed'] ), 'P5: repeating the reservation of a completed redemption answers it as committed (replayed)' );
 
 // --- Release returns the voucher to the cart.
 list( $released, $released_coupon ) = vcap_redeem_voucher( 'single', 25.0 );
@@ -157,6 +159,59 @@ $wpdb->update( VCAP\Install::tables()['redemptions'], array( 'expires_at' => gmd
 $service->release_all_expired();
 $stale_after = $repo->get( $stale_card->id );
 vcap_redeem_assert( 'released' === $service->get( $key5 )['state'] && 50.0 === (float) $stale_after->balance && VCAP\Voucher::STATUS_ACTIVE === $stale_after->status, 'expired reservations return the full balance' );
+
+// --- P5: a repeated reserve() only succeeds while the reservation holds something.
+list( $p5_card ) = vcap_redeem_voucher( 'single', 18.0 );
+$p5_key          = 'it-' . wp_generate_uuid4();
+$service->reserve( $p5_card->code, array( 'key' => $p5_key, 'target' => 'test:course:1' ) );
+$p5_again = $service->reserve( $p5_card->code, array( 'key' => $p5_key, 'target' => 'test:course:1' ) );
+vcap_redeem_assert( ! is_wp_error( $p5_again ) && 'reserved' === $p5_again['state'] && ! empty( $p5_again['replayed'] ), 'P5: repeating an open reservation answers it, marked as replayed' );
+$service->release( $p5_key );
+$p5_released = $service->reserve( $p5_card->code, array( 'key' => $p5_key, 'target' => 'test:course:1' ) );
+vcap_redeem_assert( 'vcap_redemption_released' === vcap_redeem_code( $p5_released ) && 409 === ( $p5_released->get_error_data()['status'] ?? 0 ) && VCAP\Voucher::STATUS_ACTIVE === $repo->get( $p5_card->id )->status, 'P5: repeating a released reservation is vcap_redemption_released (409), not a success; nothing is reserved' );
+
+// --- C3: an expired reservation is released where it is read, without the background job.
+list( $c3_single, $c3_coupon ) = vcap_redeem_voucher( 'single', 22.0 );
+$c3_key = 'it-' . wp_generate_uuid4();
+$service->reserve( $c3_single->code, array( 'key' => $c3_key, 'target' => 'test:course:1' ) );
+$wpdb->update( VCAP\Install::tables()['redemptions'], array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ), array( 'redemption_key' => $c3_key ) );
+vcap_redeem_assert( ! vcap_redeem_cart_rejects( $c3_coupon ) && VCAP\Voucher::STATUS_ACTIVE === $repo->get( $c3_single->id )->status && 'released' === $service->get( $c3_key )['state'], 'C3: the cart releases an expired external reservation right away and accepts the voucher' );
+$c3_key2 = 'it-' . wp_generate_uuid4();
+$service->reserve( $c3_single->code, array( 'key' => $c3_key2, 'target' => 'test:course:1' ) );
+$wpdb->update( VCAP\Install::tables()['redemptions'], array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ), array( 'redemption_key' => $c3_key2 ) );
+vcap_redeem_assert( 'vcap_reservation_missing' === vcap_redeem_code( $service->commit( $c3_key2 ) ) && VCAP\Voucher::STATUS_ACTIVE === $repo->get( $c3_single->id )->status, 'C3: an expired reservation cannot be committed any more; it is released' );
+list( $c3_card ) = vcap_redeem_voucher( 'balance', 40.0 );
+$c3_key3 = 'it-' . wp_generate_uuid4();
+$service->reserve( $c3_card->code, array( 'key' => $c3_key3, 'target' => 'test:course:1', 'amount' => 40 ) );
+$wpdb->update( VCAP\Install::tables()['redemptions'], array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ), array( 'redemption_key' => $c3_key3 ) );
+$c3_check = $service->check( $c3_card->code, array( 'amount' => 40 ) );
+vcap_redeem_assert( ! is_wp_error( $c3_check ) && 40.0 === (float) $c3_check['balance'], 'C3: check() gives an expired gift card reservation back before answering' );
+
+// --- T9: the coupon amount is written under the row lock from the stored balance, never from a stale object.
+list( $t9_card, $t9_coupon ) = vcap_redeem_voucher( 'balance', 70.0 );
+$t9_stale = $repo->get( $t9_card->id );
+$wpdb->update( VCAP\Install::tables()['vouchers'], array( 'balance' => 50 ), array( 'id' => $t9_card->id ) ); // A later booking committed 50.
+VCAP\CouponManager::sync_coupon_amount( $t9_stale ); // The earlier booking saves its coupon last, holding 70.
+vcap_redeem_assert( 50.0 === (float) ( new WC_Coupon( $t9_coupon->get_id() ) )->get_amount( 'edit' ), 'T9: a coupon saved late by an earlier booking still carries the latest balance' );
+// P3: an amount edited in WooCommerce is set back to the balance; the cart never grants more than the balance.
+$t9_edit = new WC_Coupon( $t9_coupon->get_id() );
+$t9_edit->set_amount( 99 );
+$t9_edit->save();
+vcap_redeem_assert( 50.0 === (float) ( new WC_Coupon( $t9_coupon->get_id() ) )->get_amount( 'edit' ), 'P3: saving another amount on a gift card coupon in WooCommerce restores the balance' );
+$t9_cart = new WC_Coupon( $t9_coupon->get_id() );
+$t9_cart->set_amount( 99 ); // Out of date, e.g. a failed save.
+vcap()->coupons->validate( true, $t9_cart );
+vcap_redeem_assert( 50.0 === (float) $t9_cart->get_amount( 'edit' ), 'P3: the cart caps an out-of-date coupon amount at the stored balance' );
+
+// --- P3: a personal voucher whose coupon is gone fails closed; trashing a voucher coupon in wp-admin/REST is refused.
+list( $p3_personal, $p3_coupon ) = vcap_redeem_voucher( 'single', 10.0, array( 'emails' => array( 'owner@example.com' ) ) );
+$p3_protect = static fn() => true; // As in wp-admin or a REST request.
+add_filter( 'vcap_protect_voucher_coupons', $p3_protect );
+$p3_trashed = wp_trash_post( $p3_coupon->get_id() );
+remove_filter( 'vcap_protect_voucher_coupons', $p3_protect );
+vcap_redeem_assert( ! $p3_trashed && 'publish' === get_post_status( $p3_coupon->get_id() ), 'P3: trashing a voucher\'s coupon in wp-admin or over REST is refused' );
+wp_delete_post( $p3_coupon->get_id(), true ); // Plugin code / WP-CLI: allowed, but recorded.
+vcap_redeem_assert( 'vcap_not_redeemable' === vcap_redeem_code( $service->check( $p3_personal->code ) ) && in_array( 'coupon_removed', array_column( $repo->events( $p3_personal->id ), 'event' ), true ), 'P3: without its coupon a personal voucher is refused by the API (fail closed) and the removal is in its history' );
 
 // --- Business rules and stable error codes.
 list( $expired ) = vcap_redeem_voucher( 'single', 10.0, array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS ) ) );
@@ -205,6 +260,12 @@ wp_set_current_user( $user_a );
 $response = vcap_redeem_rest( 'POST', '/vcap/v1/redemptions', array( 'code' => $rest_voucher->code, 'key' => $key6, 'target' => 'test:course:1', 'user_id' => $user_b ) );
 $data     = $response->get_data();
 vcap_redeem_assert( 201 === $response->get_status() && $user_a === (int) $data['user_id'], 'REST reservation uses the authenticated user and ignores a user_id parameter' );
+$replay = vcap_redeem_rest( 'POST', '/vcap/v1/redemptions', array( 'code' => $rest_voucher->code, 'key' => $key6, 'target' => 'test:course:1' ) );
+vcap_redeem_assert( 200 === $replay->get_status() && 'reserved' === $replay->get_data()['state'], 'P5: REST answers a repeated reservation with 200 (201 only for a new one)' );
+$p13_key = vcap_redeem_rest( 'POST', '/vcap/v1/redemptions', array( 'code' => $rest_voucher->code, 'key' => 'learnboating:u1:' . wp_generate_password( 10, false, false ), 'target' => 'test:course:1' ) );
+vcap_redeem_assert( 400 === $p13_key->get_status(), 'P13: a key of another connector\'s namespace cannot be used over REST' );
+$p13_meta = vcap_redeem_rest( 'POST', '/vcap/v1/redemptions', array( 'code' => $rest_voucher->code, 'key' => 'it-' . wp_generate_uuid4(), 'target' => 'test:course:1', 'meta' => array( 'a' => array( 'b' => array( 'c' => array( 'd' => 1 ) ) ) ) ) );
+vcap_redeem_assert( 400 === $p13_meta->get_status(), 'P13: metadata deeper than 3 levels is refused' );
 wp_set_current_user( $user_b );
 vcap_redeem_assert( 403 === vcap_redeem_rest( 'POST', '/vcap/v1/redemptions/' . $key6 . '/commit' )->get_status(), 'REST commit by another user is forbidden' );
 vcap_redeem_assert( 403 === vcap_redeem_rest( 'GET', '/vcap/v1/redemptions/' . $key6 )->get_status(), 'REST read by another user is forbidden' );
