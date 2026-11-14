@@ -217,6 +217,7 @@ final class TemplatePostType {
 				'sample'       => Preview::sample_values(),
 				'previewUrl'   => admin_url( 'admin-ajax.php?action=vcap_template_preview' ),
 				'previewNonce' => wp_create_nonce( 'vcap_template_preview' ),
+				'minFitScale'  => PdfRenderer::MIN_FIT_SCALE,
 				'postId'       => get_the_ID(),
 				'i18n'         => array(
 					'text'        => __( 'Text', 'voucher-captain' ),
@@ -272,6 +273,7 @@ final class TemplatePostType {
 					'value'       => __( 'Value', 'voucher-captain' ),
 					'barcodeType' => __( 'Barcode type', 'voucher-captain' ),
 					'showText'    => __( 'Show text', 'voucher-captain' ),
+					'textCut'     => __( 'This text does not fit its box even at half the font size and is cut off. Make the box larger.', 'voucher-captain' ),
 					'barcodeFallback' => __( 'EAN-13 needs 12 or 13 digits, Code 39 only capital letters, digits and - . $ / + %. Values that do not fit (e.g. generated voucher codes) are printed as Code 128.', 'voucher-captain' ),
 					'name'        => __( 'Layer name', 'voucher-captain' ),
 					'lock'        => __( 'Lock', 'voucher-captain' ),
@@ -471,6 +473,20 @@ final class TemplatePostType {
 		return sanitize_hex_color( $value ) ?: '#000000';
 	}
 
+	/**
+	 * Sample voucher of the template preview with a worst-case message (as long as products allow by default),
+	 * so the preview shows whether long greetings still fit their box.
+	 */
+	public static function preview_voucher(): Voucher {
+		$voucher = Preview::sample_voucher();
+		$max     = (int) ProductConfig::DEFAULTS['message_maxlength'];
+		$message = trim( $voucher->message );
+		if ( '' !== $message && $max > mb_strlen( $message ) ) {
+			$voucher->message = mb_substr( trim( str_repeat( $message . ' ', (int) ceil( $max / ( mb_strlen( $message ) + 1 ) ) ) ), 0, $max );
+		}
+		return $voucher;
+	}
+
 	public function ajax_preview(): void {
 		check_ajax_referer( 'vcap_template_preview', 'nonce' );
 		if ( ! current_user_can( 'edit_products' ) ) {
@@ -478,7 +494,7 @@ final class TemplatePostType {
 		}
 		$design = json_decode( wp_unslash( (string) ( $_POST['design'] ?? '' ) ), true ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised below.
 		$design = is_array( $design ) ? self::sanitize_design( $design ) : self::get_design( absint( $_POST['post_id'] ?? 0 ) );
-		$voucher = Preview::sample_voucher();
+		$voucher = self::preview_voucher();
 		Preview::stream( vcap()->pdf->render( $voucher, $design ), 'template-preview.pdf' );
 	}
 

@@ -146,6 +146,23 @@
 		} );
 	}
 
+	/**
+	 * Like the PDF (PdfRenderer::fit_size): a text that does not fit its box is set smaller in steps, down to half
+	 * the designed size, and is marked when it is cut off even then.
+	 */
+	function fitText( inner ) {
+		var size = parseFloat( inner.style.fontSize );
+		var min = size * ( cfg.minFitScale || 0.5 );
+		while ( inner.scrollHeight > inner.clientHeight + 1 && size > min ) {
+			size = Math.max( min, size * 0.94 );
+			inner.style.fontSize = size + 'px';
+		}
+		inner.parentNode.classList.toggle( 'is-overflowing', inner.scrollHeight > inner.clientHeight + 1 );
+		if ( inner.parentNode.classList.contains( 'is-overflowing' ) ) {
+			inner.parentNode.title = t.textCut || '';
+		}
+	}
+
 	// ------------------------------------------------------------------ history.
 
 	var commitTimer = null;
@@ -423,6 +440,7 @@
 					inner.style.textDecoration = item.underline ? 'underline' : 'none';
 					inner.style.letterSpacing = item.letterSpacing ? item.letterSpacing * PT_TO_MM * s + 'px' : 'normal';
 					inner.style.whiteSpace = 'pre-line'; // Like the PDF: line breaks kept, runs of spaces collapsed.
+					inner.style.overflowWrap = 'break-word'; // Like the PDF: long words (codes) break inside.
 					inner.style.background = item.fill && 'transparent' !== item.fill ? item.fill : 'transparent';
 					inner.style.display = 'flex';
 					inner.style.flexDirection = 'column';
@@ -468,6 +486,9 @@
 			node.appendChild( inner );
 
 			page.appendChild( node );
+			if ( 'text' === item.type || 'heading' === item.type ) {
+				fitText( inner );
+			}
 			if ( item.id === state.selected ) {
 				selNode = { node: node, item: item };
 			}
@@ -1133,6 +1154,12 @@
 	state.history.push( store.value );
 	fitZoom();
 	renderAll();
+	if ( document.fonts && document.fonts.ready ) {
+		// The DejaVu web fonts change line breaks: fit the texts again once they are loaded.
+		document.fonts.ready.then( function () {
+			renderCanvas();
+		} );
+	}
 	window.addEventListener( 'resize', function () {
 		if ( ! drag && ! state.userZoom ) {
 			fitZoom();

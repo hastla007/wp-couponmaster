@@ -351,6 +351,71 @@ final class PdfRenderer {
 		return (string) apply_filters( 'vcap_pdf_element_html', '', $el, $voucher, $values );
 	}
 
+	/** Smallest share of the designed font size a text is shrunk to before it is cut off. */
+	public const MIN_FIT_SCALE = 0.5;
+
+	/**
+	 * Font size at which a text fits its box (lines × line pitch ≤ box height), measured with dompdf's metrics:
+	 * the designed size when it fits, else smaller in steps down to MIN_FIT_SCALE (at least 4 pt).
+	 *
+	 * @param float $line_height CSS line height as designed (the pitch is size × line height, as on the canvas).
+	 * @return array{size: float, fits: bool}
+	 */
+	public static function fit_size( string $text, string $font, float $size, float $line_height, bool $bold, bool $italic, float $spacing, float $w_mm, float $h_mm ): array {
+		$metrics = '' !== trim( $text ) ? self::font_metrics() : null;
+		$style   = $bold && $italic ? 'bold_italic' : ( $bold ? 'bold' : ( $italic ? 'italic' : 'normal' ) );
+		$file    = $metrics ? $metrics->getFont( $font, $style ) : null;
+		if ( ! $metrics || ! $file ) {
+			return array( 'size' => $size, 'fits' => true );
+		}
+		$width  = $w_mm * self::MM_TO_PT - 0.5; // A little room for rounding in dompdf's own line breaking.
+		$height = $h_mm * self::MM_TO_PT + 0.5;
+		$min    = min( $size, max( 4, $size * self::MIN_FIT_SCALE ) );
+		for ( $s = $size; ; $s = max( $min, round( $s * 0.94, 2 ) ) ) {
+			if ( self::count_lines( $metrics, (string) $file, $text, $s, $spacing, $width ) * $s * $line_height <= $height ) {
+				return array( 'size' => $s, 'fits' => true );
+			}
+			if ( $s <= $min ) {
+				return array( 'size' => $min, 'fits' => false );
+			}
+		}
+	}
+
+	/**
+	 * Lines dompdf needs for a text in a box of $width pt: breaks at line breaks, after spaces and hyphens, and
+	 * inside words longer than a line (word-wrap: break-word).
+	 */
+	private static function count_lines( \Dompdf\FontMetrics $metrics, string $file, string $text, float $size, float $spacing, float $width ): int {
+		$lines = 0;
+		foreach ( preg_split( '/\r\n|\r|\n/', $text ) as $para ) {
+			$para  = trim( (string) preg_replace( '/[ \t]+/', ' ', (string) $para ) );
+			$count = 1;
+			$line  = 0.0;
+			foreach ( '' === $para ? array() : (array) preg_split( '/(?<=[ -])/u', $para, -1, PREG_SPLIT_NO_EMPTY ) as $token ) {
+				$full = $metrics->getTextWidth( (string) $token, $file, $size, 0.0, $spacing );
+				$trim = $metrics->getTextWidth( rtrim( (string) $token ), $file, $size, 0.0, $spacing );
+				if ( $line > 0 && $line + $trim > $width ) {
+					++$count;
+					$line = 0.0;
+				}
+				if ( $trim > $width ) {
+					foreach ( mb_str_split( (string) $token ) as $char ) {
+						$w = $metrics->getTextWidth( $char, $file, $size, 0.0, $spacing );
+						if ( $line > 0 && $line + $w > $width ) {
+							++$count;
+							$line = 0.0;
+						}
+						$line += $w;
+					}
+					continue;
+				}
+				$line += $full;
+			}
+			$lines += $count;
+		}
+		return max( 1, $lines );
+	}
+
 	private function text_element( array $el, Voucher $voucher, array $values ): string {
 		if ( Placeholders::all_empty( (string) ( $el['text'] ?? '' ), $voucher, $values ) ) {
 			return ''; // "For: {recipient_name}" without a name: no lone label.
@@ -368,6 +433,14 @@ final class PdfRenderer {
 		$valign = in_array( $valign, array( 'top', 'middle', 'bottom' ), true ) ? $valign : 'top';
 		$lh     = max( 0.8, min( 3, (float) ( $el['lineHeight'] ?? 1.25 ) ) );
 		$bold   = ! empty( $el['bold'] ) || ( 'heading' === $el['type'] && ! isset( $el['bold'] ) );
+		// A long message or code is set smaller until it fits its box instead of being cut off without a trace.
+		$fitted = self::fit_size( $text, (string) $font, $size, $lh, $bold, ! empty( $el['italic'] ), (float) ( $el['letterSpacing'] ?? 0 ), max( 1, (float) ( $el['w'] ?? 50 ) ), max( 1, (float) ( $el['h'] ?? 10 ) ) );
+		if ( $fitted['size'] < $size ) {
+			$size = $fitted['size'];
+		}
+		if ( ! $fitted['fits'] ) {
+			Logger::warning( sprintf( 'PDF text element "%s" does not fit its box even at %s pt and is cut off.', (string) ( $el['name'] ?? ( $el['id'] ?? '' ) ), $this->num( $size ) ), array( 'voucher' => $voucher->id ) );
+		}
 		$lh    /= self::font_height_ratio( (string) $font, $bold, ! empty( $el['italic'] ) );
 
 		$style  = $this->box_style( $el );
