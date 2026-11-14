@@ -62,6 +62,32 @@ final class Settings {
 		foreach ( array( 'vcap_code_prefix', 'vcap_code_suffix', 'vcap_code_separator' ) as $affix ) {
 			add_filter( 'woocommerce_admin_settings_sanitize_option_' . $affix, array( $this, 'sanitize_affix' ), 10, 2 );
 		}
+		add_filter( 'woocommerce_admin_settings_sanitize_option_vcap_terms_by_country', array( $this, 'report_country_lines' ), 10, 2 );
+		add_filter( 'woocommerce_admin_settings_sanitize_option_' . Markets::EXPIRY_OPTION, array( $this, 'report_country_lines' ), 10, 2 );
+	}
+
+	/**
+	 * Q12: the country settings are saved as entered, but lines that are not used are reported – text before the
+	 * first country block of the conditions, validity lines that are not "CC: years [end]".
+	 *
+	 * @param mixed $value
+	 * @param array $option
+	 * @return mixed
+	 */
+	public function report_country_lines( $value, $option = array() ) {
+		$id     = (string) ( $option['id'] ?? '' );
+		$lines  = Markets::EXPIRY_OPTION === $id ? Markets::unparsed_expiry_lines( (string) $value ) : ProductConfig::unassigned_terms_lines( (string) $value );
+		if ( $lines && class_exists( '\WC_Admin_Settings' ) ) {
+			\WC_Admin_Settings::add_error(
+				sprintf(
+					/* translators: 1: setting name, 2: lines that are not used */
+					__( '%1$s: these lines are not used because they do not start with a country code (e.g. "AT:") or are not in the expected format: %2$s', 'voucher-captain' ),
+					(string) ( $option['title'] ?? $id ),
+					implode( ' | ', array_slice( $lines, 0, 5 ) )
+				)
+			);
+		}
+		return $value;
 	}
 
 	/**

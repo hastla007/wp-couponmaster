@@ -235,7 +235,8 @@ final class ProductConfig {
 	}
 
 	/**
-	 * Parse "AT: text" blocks (a block runs until the next line starting with a two-letter country code and a colon).
+	 * Parse "AT: text" blocks (a block runs until the next line starting with a country code and a colon). Q12: only
+	 * ISO country codes start a block – "NB: …" or "OK: …" inside the conditions stays part of them.
 	 *
 	 * @return array<string, string>
 	 */
@@ -243,7 +244,7 @@ final class ProductConfig {
 		$out     = array();
 		$current = '';
 		foreach ( preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-			if ( preg_match( '/^\s*([A-Za-z]{2})\s*:\s*(.*)$/', $line, $m ) ) {
+			if ( preg_match( '/^\s*([A-Za-z]{2})\s*:\s*(.*)$/', $line, $m ) && Markets::is_country_code( $m[1] ) ) {
 				$current         = strtoupper( $m[1] );
 				$out[ $current ] = $m[2];
 				continue;
@@ -253,6 +254,25 @@ final class ProductConfig {
 			}
 		}
 		return array_filter( array_map( 'trim', $out ), 'strlen' );
+	}
+
+	/**
+	 * Q12: text of the setting "Redemption conditions per country" before the first country block – it belongs to
+	 * no country and would be dropped (reported on save).
+	 *
+	 * @return string[]
+	 */
+	public static function unassigned_terms_lines( string $raw ): array {
+		$out = array();
+		foreach ( preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
+			if ( preg_match( '/^\s*([A-Za-z]{2})\s*:/', $line, $m ) && Markets::is_country_code( $m[1] ) ) {
+				break;
+			}
+			if ( '' !== trim( $line ) ) {
+				$out[] = trim( $line );
+			}
+		}
+		return $out;
 	}
 
 	/** Country for country-specific conditions: billing, else shipping, else the shop's base country. */

@@ -28,6 +28,9 @@ function check( string $name, bool $ok, string $detail = '' ): void {
 echo "Country conditions\n";
 $parsed = ProductConfig::terms_by_country( "at: Gültig 30 Jahre.\nKeine Barauszahlung.\nDE: Gültig 3 Jahre.\n\nxx-invalid line" );
 check( 'conditions per country are parsed in blocks', array( 'AT' => "Gültig 30 Jahre.\nKeine Barauszahlung.", 'DE' => "Gültig 3 Jahre.\n\nxx-invalid line" ) === $parsed, json_encode( $parsed ) );
+$q12 = ProductConfig::terms_by_country( "DE: Gültig 3 Jahre.\nNB: Keine Barauszahlung.\nOK: gilt auch online.\nAT: Gültig 30 Jahre." );
+check( 'Q12: only ISO country codes start a block – "NB: …" stays part of the German conditions', array( 'DE' => "Gültig 3 Jahre.\nNB: Keine Barauszahlung.\nOK: gilt auch online.", 'AT' => 'Gültig 30 Jahre.' ) === $q12, json_encode( $q12 ) );
+check( 'Q12: lines that are not used are found for the save notice (text before the first block, unreadable validity lines)', array( 'Allgemein: gilt überall' ) === ProductConfig::unassigned_terms_lines( "Allgemein: gilt überall\n\nDE: x" ) && array( 'DE: drei Jahre', 'NB: 5' ) === VCAP\Markets::unparsed_expiry_lines( "DE: drei Jahre\nAT: 30\n\nNB: 5" ) && ! VCAP\Markets::is_country_code( 'NB' ) && VCAP\Markets::is_country_code( 'ch' ) );
 $GLOBALS['vcap_test_options']['vcap_terms_by_country'] = "AT: Austria terms";
 $GLOBALS['vcap_test_options']['vcap_default_terms']    = 'General terms';
 check( 'the billing country picks its conditions', 'Austria terms' === ProductConfig::terms( ProductConfig::DEFAULTS, 'at' ) );

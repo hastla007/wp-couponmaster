@@ -12,8 +12,50 @@ final class Markets {
 	/** Setting: one line per country, "AT: 30" or "DE: 3 end" (years, optional "end" = to the end of the year; 0 = never). */
 	public const EXPIRY_OPTION = 'vcap_expiry_by_country';
 
+	/** ISO 3166-1 alpha-2 codes (as WooCommerce lists them), used where WooCommerce's country list is not loaded. */
+	private const ISO_COUNTRIES = ' '
+		. 'AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS '
+		. 'BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE '
+		. 'EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM '
+		. 'HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC '
+		. 'LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA '
+		. 'NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW '
+		. 'SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO '
+		. 'TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW ';
+
 	/** @var array<string, array<string, mixed>>|null */
 	private static ?array $data = null;
+
+	/** Q12: whether $code is a country code ("AT"), not just two letters ("NB: …" in a text). */
+	public static function is_country_code( string $code ): bool {
+		$code = strtoupper( trim( $code ) );
+		if ( 2 !== strlen( $code ) ) {
+			return false;
+		}
+		if ( function_exists( 'WC' ) && WC()->countries ) {
+			$known = (array) WC()->countries->get_countries();
+			if ( $known ) {
+				return isset( $known[ $code ] );
+			}
+		}
+		return str_contains( self::ISO_COUNTRIES, ' ' . $code . ' ' );
+	}
+
+	/**
+	 * Q12: lines of the setting "Statutory validity per country" that parse_expiry() cannot read (reported on save
+	 * instead of being ignored silently). Empty lines do not count.
+	 *
+	 * @return string[]
+	 */
+	public static function unparsed_expiry_lines( string $raw ): array {
+		$out = array();
+		foreach ( preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
+			if ( '' !== trim( $line ) && ! self::parse_expiry( $line ) ) {
+				$out[] = trim( $line );
+			}
+		}
+		return $out;
+	}
 
 	/** @return array<string, array{currency:string, locale:string, voucher_expiry:?array}> */
 	public static function all(): array {
@@ -48,7 +90,7 @@ final class Markets {
 	public static function parse_expiry( string $raw ): array {
 		$out = array();
 		foreach ( preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-			if ( preg_match( '/^\s*([A-Za-z]{2})\s*[:=]\s*(\d{1,3})\s*(end|eoy|jahresende|year-end)?\s*$/i', $line, $m ) ) {
+			if ( preg_match( '/^\s*([A-Za-z]{2})\s*[:=]\s*(\d{1,3})\s*(end|eoy|jahresende|year-end)?\s*$/i', $line, $m ) && self::is_country_code( $m[1] ) ) {
 				$out[ strtoupper( $m[1] ) ] = array( 'years' => (int) $m[2], 'end_of_year' => ! empty( $m[3] ) );
 			}
 		}
