@@ -272,7 +272,10 @@ final class CartIntegration {
 						$lines[] = self::line( (string) $key, $item['data'], (int) $item['quantity'], (float) $item['data']->get_price() );
 					}
 				}
-				$available = array_values( array_filter( $this->campaigns->active(), static fn( $c ) => '' === self::usage_blocker( $c, $cart ) ) );
+				$active = $this->campaigns->active();
+				// B12: the totals of all limited promotions in one read of their counters (memo of this request).
+				Usage::prime_counts( array_map( static fn( $c ) => (int) $c['id'], array_filter( $active, static fn( $c ) => ! empty( $c['rules']['usage_limit'] ) ) ) );
+				$available = array_values( array_filter( $active, static fn( $c ) => '' === self::usage_blocker( $c, $cart ) ) );
 				foreach ( Engine::select( $available, $lines, $this->context( $cart ) ) as $id ) {
 					$desired[] = self::code( $id );
 				}

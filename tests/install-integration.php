@@ -146,6 +146,47 @@ vcap_inst_assert( 0 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) F
 VCAP\Discounts\Usage::remove( $promo, 'e:locked@example.com', 556 );
 delete_option( VCAP\Install::LEGACY_OPTION );
 
+// B12/B16: schema 1.7 – promotion counters filled from the usage table, rate limit counters and scanner keys moved
+// out of wp_options (before the switch both still use the old storage).
+$r1_tables  = VCAP\Install::tables();
+$r1_storage = get_option( VCAP\Install::STORAGE_OPTION );
+$r1_flag    = get_option( VCAP\Install::LEGACY_THROTTLE_OPTION, false );
+$r1_promo   = wp_insert_post( array( 'post_type' => 'vcap_discount', 'post_status' => 'publish', 'post_title' => 'R1 counter promotion' ) );
+update_option( VCAP\Install::STORAGE_OPTION, '1.6.0' );
+VCAP\Discounts\Usage::add( $r1_promo, 'o:r1-a', 7001 );
+VCAP\Discounts\Usage::add( $r1_promo, 'o:r1-b', 7002 );
+VCAP\Discounts\Usage::add( $r1_promo, 'o:r1-c', 7003 );
+VCAP\Discounts\Usage::remove( $r1_promo, 'o:r1-c', 7003 );
+$wpdb->replace( $r1_tables['counts'], array( 'campaign_id' => $r1_promo, 'uses' => 50 ) ); // Stale row (e.g. a rollback in between).
+$r1_old_count = VCAP\Discounts\Usage::count( $r1_promo );
+$r1_bucket    = 'r1-' . wp_generate_password( 6, false, false );
+add_filter( 'vcap_client_ip', $r1_ip = static fn() => '203.0.113.171' );
+VCAP\Plugin::rate_limited( $r1_bucket, 10, 0, HOUR_IN_SECONDS );
+VCAP\Plugin::rate_limited( $r1_bucket, 10, 0, HOUR_IN_SECONDS );
+$r1_rate_options = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( 'vcap_rl_' ) . '%' ) );
+$wpdb->insert( $wpdb->options, array( 'option_name' => 'vcap_rl_' . sprintf( '%010d', time() - 60 ) . '_' . str_repeat( 'c', 64 ), 'option_value' => '9', 'autoload' => 'no' ) );
+$wpdb->insert( $wpdb->options, array( 'option_name' => '_vcap_scan_' . md5( 'r1-fresh' ), 'option_value' => time() . '|' . md5( 'sig' ) . '#42|{"success":true}', 'autoload' => 'no' ) );
+$wpdb->insert( $wpdb->options, array( 'option_name' => '_vcap_scan_' . md5( 'r1-running' ), 'option_value' => time() . '|' . md5( 'sig' ) . '|', 'autoload' => 'no' ) );
+$wpdb->insert( $wpdb->options, array( 'option_name' => '_vcap_scan_' . md5( 'r1-old' ), 'option_value' => ( time() - 3 * DAY_IN_SECONDS ) . '|' . md5( 'sig' ) . '#1|{}', 'autoload' => 'no' ) );
+vcap_inst_assert( 2 === $r1_old_count && 0 < $r1_rate_options, 'B12/B16: before the 1.7 switch uses are counted from the usage table and rate limits still count in wp_options' );
+$r1_migrate = new ReflectionMethod( VCAP\Install::class, 'migrate_1_7_0' );
+$r1_migrate->setAccessible( true );
+vcap_inst_assert( true === $r1_migrate->invoke( null ) && VCAP\Install::counters_ready(), 'B12/B16: the 1.7.0 migration switches to the counter tables' );
+vcap_inst_assert( 2 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT uses FROM {$r1_tables['counts']} WHERE campaign_id = %d", $r1_promo ) ) && 2 === VCAP\Discounts\Usage::count( $r1_promo ), 'B12: the migration fills the promotion counters from the usage table (a stale counter is replaced)' );
+$r1_left = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s", $wpdb->esc_like( 'vcap_rl_' ) . '%', $wpdb->esc_like( '_vcap_scan_' ) . '%' ) );
+$r1_scan  = $wpdb->get_results( "SELECT key_hash, event_mark, response FROM {$r1_tables['scan']}", OBJECT_K );
+vcap_inst_assert( 0 === $r1_left && ! $wpdb->get_var( $wpdb->prepare( "SELECT hits FROM {$r1_tables['rate']} WHERE counter_key = %s", str_repeat( 'c', 64 ) ) ), 'B16: rate limit and scanner key options are moved (finished windows dropped), none is left in wp_options' );
+vcap_inst_assert( isset( $r1_scan[ md5( 'r1-fresh' ) ], $r1_scan[ md5( 'r1-running' ) ] ) && '{"success":true}' === $r1_scan[ md5( 'r1-fresh' ) ]->response && 42 === (int) $r1_scan[ md5( 'r1-fresh' ) ]->event_mark && null === $r1_scan[ md5( 'r1-running' ) ]->response && null === $r1_scan[ md5( 'r1-running' ) ]->event_mark && ! isset( $r1_scan[ md5( 'r1-old' ) ] ), 'B16: scanner keys keep their answer, event mark and running state; keys older than two days are not moved' );
+$r1_third = VCAP\Plugin::rate_limited( $r1_bucket, 2, 0, HOUR_IN_SECONDS );
+vcap_inst_assert( true === $r1_third, 'B16: a running window keeps its count across the move (third attempt over a limit of 2 is refused)' );
+remove_filter( 'vcap_client_ip', $r1_ip );
+wp_delete_post( $r1_promo, true );
+$wpdb->delete( $r1_tables['scan'], array( 'key_hash' => md5( 'r1-fresh' ) ) );
+$wpdb->delete( $r1_tables['scan'], array( 'key_hash' => md5( 'r1-running' ) ) );
+VCAP\Plugin::reset_rate_limits();
+update_option( VCAP\Install::STORAGE_OPTION, $r1_storage );
+false === $r1_flag ? delete_option( VCAP\Install::LEGACY_THROTTLE_OPTION ) : update_option( VCAP\Install::LEGACY_THROTTLE_OPTION, $r1_flag );
+
 // Claims: table rows, released again, finished kinds purged after the retention period.
 $claim = 'usage:' . wp_generate_password( 8, false, false );
 vcap_inst_assert( VCAP\Claim::take( $claim ) && ! VCAP\Claim::take( $claim ), 'a claim is taken exactly once' );
@@ -461,7 +502,7 @@ add_post_meta( $p6_promo, '_vcap_used_by', 'e:race@example.com' );
 update_option( VCAP\Install::LEGACY_OPTION, time() );
 $p6_counts = 0;
 $p6_move   = static function ( $q ) use ( &$p6_counts, $p6_promo ) {
-	if ( preg_match( '/^SELECT COUNT\(\*\) FROM \S+ WHERE (post_id|campaign_id) = ' . $p6_promo . '\b/', $q ) && 2 === ++$p6_counts ) {
+	if ( preg_match( '/^SELECT (COUNT\(\*\)|uses) FROM \S+ WHERE (post_id|campaign_id) = ' . $p6_promo . '\b/', $q ) && 2 === ++$p6_counts ) {
 		// The migration moves the row after the first count, before the second.
 		$batch = new ReflectionMethod( VCAP\Install::class, 'move_usage_batch' );
 		$batch->setAccessible( true );

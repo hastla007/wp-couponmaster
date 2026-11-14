@@ -480,7 +480,7 @@ $o6_card  = vcap_security_create_voucher( 'o6-' . strtolower( wp_generate_passwo
 $o6_mark  = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(MAX(id), 0) FROM {$events_table} WHERE voucher_id = %d", $o6_card->id ) ); // phpcs:ignore
 $o6_claim = static function ( string $key, float $amount ) use ( $wpdb, $o6_card, $events_table ) {
 	$o6_mark = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(MAX(id), 0) FROM {$events_table} WHERE voucher_id = %d", $o6_card->id ) ); // phpcs:ignore -- newest event when the claim was taken.
-	$wpdb->insert( $wpdb->options, array( 'option_name' => '_vcap_scan_' . md5( $key ), 'option_value' => ( time() - 300 ) . '|' . md5( 'redeem|' . $o6_card->id . '|' . round( $amount, 4 ) ) . '#' . $o6_mark . '|', 'autoload' => 'no' ) );
+	$wpdb->insert( VCAP\Install::tables()['scan'], array( 'key_hash' => md5( $key ), 'signature' => md5( 'redeem|' . $o6_card->id . '|' . round( $amount, 4 ) ), 'event_mark' => $o6_mark, 'claimed_at' => time() - 300 ) );
 };
 $o6_redeem = static function ( string $key, float $amount ) use ( $o6_card ) {
 	$req = new WP_REST_Request( 'POST', '/vcap/v1/redeem' );
@@ -503,9 +503,27 @@ $o6_retry = $o6_redeem( $o6_key_lost, 4 );
 vcap_security_assert( is_array( $o6_retry ) && ! empty( $o6_retry['success'] ) && empty( $o6_retry['recovered'] ) && 16.0 === (float) vcap()->vouchers->get( $o6_card->id )->balance, 'O6: an abandoned claim without a booking is taken over and the redemption is booked once' );
 // A fresh claim (another request still running) is answered with 409, not a red error.
 $o6_key_busy = wp_generate_uuid4();
-$wpdb->insert( $wpdb->options, array( 'option_name' => '_vcap_scan_' . md5( $o6_key_busy ), 'option_value' => time() . '|' . md5( 'redeem|' . $o6_card->id . '|3' ) . '#' . $o6_mark . '|', 'autoload' => 'no' ) );
+$wpdb->insert( VCAP\Install::tables()['scan'], array( 'key_hash' => md5( $o6_key_busy ), 'signature' => md5( 'redeem|' . $o6_card->id . '|3' ), 'event_mark' => $o6_mark, 'claimed_at' => time() ) );
 $o6_busy = $o6_redeem( $o6_key_busy, 3 );
 vcap_security_assert( is_wp_error( $o6_busy ) && 'vcap_in_progress' === $o6_busy->get_error_code() && 409 === ( $o6_busy->get_error_data()['status'] ?? 0 ) && 16.0 === (float) vcap()->vouchers->get( $o6_card->id )->balance, 'O6: a claim still in progress is answered with 409 and books nothing' );
+// B16: scanner keys are rows of their own table, not wp_options; options of the old storage are still recognised.
+$b16_scan    = VCAP\Install::tables()['scan'];
+$b16_options = static fn() => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( '_vcap_scan_' ) . '%' ) );
+$b16_before  = $b16_options();
+$b16_key     = wp_generate_uuid4();
+$b16_first   = $o6_redeem( $b16_key, 2 );
+$b16_again   = $o6_redeem( $b16_key, 2 );
+vcap_security_assert( ! empty( $b16_first['success'] ) && ! empty( $b16_again['replayed'] ) && 14.0 === (float) vcap()->vouchers->get( $o6_card->id )->balance && $b16_before === $b16_options() && null !== $wpdb->get_var( $wpdb->prepare( "SELECT response FROM {$b16_scan} WHERE key_hash = %s", md5( $b16_key ) ) ), 'B16: a scanner key and its answer are stored in vcap_scan_keys (no option row), the repeat is replayed and books once' );
+$b16_legacy_key = wp_generate_uuid4();
+$b16_keep_flag  = get_option( VCAP\Install::LEGACY_THROTTLE_OPTION, false );
+$wpdb->insert( $wpdb->options, array( 'option_name' => '_vcap_scan_' . md5( $b16_legacy_key ), 'option_value' => time() . '|' . md5( 'redeem|' . $o6_card->id . '|1' ) . '#' . $o6_mark . '|', 'autoload' => 'no' ) );
+update_option( VCAP\Install::LEGACY_THROTTLE_OPTION, time() );
+$b16_busy = $o6_redeem( $b16_legacy_key, 1 );
+vcap_security_assert( is_wp_error( $b16_busy ) && 'vcap_in_progress' === $b16_busy->get_error_code() && 14.0 === (float) vcap()->vouchers->get( $o6_card->id )->balance && $b16_before === $b16_options() && 1 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$b16_scan} WHERE key_hash = %s", md5( $b16_legacy_key ) ) ), 'B16: a key claimed as option just before the switch is moved into the table and still answered with 409 (no second booking)' );
+false === $b16_keep_flag ? delete_option( VCAP\Install::LEGACY_THROTTLE_OPTION ) : update_option( VCAP\Install::LEGACY_THROTTLE_OPTION, $b16_keep_flag );
+$wpdb->update( $b16_scan, array( 'claimed_at' => time() - 3 * DAY_IN_SECONDS ), array( 'key_hash' => md5( $b16_key ) ) );
+VCAP\Tickets::purge_scan_keys( 5.0 );
+vcap_security_assert( null === $wpdb->get_var( $wpdb->prepare( "SELECT key_hash FROM {$b16_scan} WHERE key_hash = %s", md5( $b16_key ) ) ) && null !== $wpdb->get_var( $wpdb->prepare( "SELECT key_hash FROM {$b16_scan} WHERE key_hash = %s", md5( $b16_legacy_key ) ) ), 'B16: the daily purge removes scanner keys older than two days from the table, newer ones stay' );
 wp_set_current_user( 0 );
 
 // O8: the lookup applies the counter refusal rules – no green "Valid" for what the redemption would refuse.

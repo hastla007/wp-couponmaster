@@ -222,8 +222,8 @@ final class Plugin {
 		echo '<div class="notice notice-error"><p>' . esc_html__( 'Voucher Captain: the PDF libraries are missing. Install the release ZIP or run "composer install --no-dev" in the plugin folder.', 'voucher-captain' ) . '</p></div>';
 	}
 
-	/** Option name prefix of the rate limit counters (cleanup and reset compare names). */
-	public const RATE_PREFIX = 'vcap_rl_';
+	/** Option name prefix of the rate limit counters before schema 1.7, and of their object cache keys. */
+	public const RATE_PREFIX = Install::LEGACY_RATE_PREFIX;
 	/** Option with the buckets whose limit was reached: bucket => array{last:int, windows:int} (Site Health). */
 	public const RATE_HITS_OPTION = 'vcap_rate_limit_hits';
 
@@ -233,8 +233,8 @@ final class Plugin {
 	/**
 	 * Fixed-window rate limit for public endpoints (code guessing, expensive PDF previews).
 	 *
-	 * Counters live in the database by default: one INSERT … ON DUPLICATE KEY UPDATE row in wp_options, atomic and
-	 * shared by all web nodes. A persistent object cache is used only on request (filter "vcap_rate_limit_backend"
+	 * Counters live in the database by default: one INSERT … ON DUPLICATE KEY UPDATE row per counter and window in
+	 * the table vcap_rate_limits (B16; wp_options before schema 1.7), atomic and shared by all web nodes. A persistent object cache is used only on request (filter "vcap_rate_limit_backend"
 	 * = 'object_cache'); when it does not count (outage, no atomic increment, evicted key) the database counts.
 	 * The window is fixed: hitting the limit does not extend it. Visitors are told apart by their address (IPv6
 	 * by its /64 network, which one connection usually owns entirely, and additionally by its /48 with a larger
@@ -315,6 +315,9 @@ final class Plugin {
 		foreach ( array_keys( self::rate_visitor_keys( $bucket, $visitor ) ) as $key ) {
 			$name = self::rate_option( $key, $window );
 			wp_cache_delete( $name, 'vcap_rate' );
+			if ( Install::counters_ready() ) {
+				$wpdb->delete( Install::tables()['rate'], array( 'window_end' => self::rate_window_end( $window ), 'counter_key' => $key ), array( '%d', '%s' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			}
 			$wpdb->delete( $wpdb->options, array( 'option_name' => $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
 	}
@@ -330,6 +333,9 @@ final class Plugin {
 	 */
 	public static function reset_rate_limits(): void {
 		global $wpdb;
+		if ( Install::counters_ready() ) {
+			$wpdb->query( 'DELETE FROM ' . Install::tables()['rate'] ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared -- table name from Install.
+		}
 		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( self::RATE_PREFIX ) . '%' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( function_exists( 'wp_cache_supports' ) && wp_cache_supports( 'flush_group' ) ) {
 			wp_cache_flush_group( 'vcap_rate' );
@@ -440,11 +446,18 @@ final class Plugin {
 		return $cache[ $key ];
 	}
 
-	/** Option name of a counter in the current window: vcap_rl_{window end}_{key} (cleanup compares names). */
-	private static function rate_option( string $key, int $window ): string {
+	/** End of the current window of a counter (unix time; the counter belongs to [end - window, end)). */
+	private static function rate_window_end( int $window ): int {
 		$window = max( 1, $window );
-		$end    = ( intdiv( time(), $window ) + 1 ) * $window;
-		return self::RATE_PREFIX . sprintf( '%010d', $end ) . '_' . $key;
+		return ( intdiv( time(), $window ) + 1 ) * $window;
+	}
+
+	/**
+	 * Name of a counter in the current window: vcap_rl_{window end}_{key}. The object cache key, and the option
+	 * name of the counters before schema 1.7 (cleanup compares names).
+	 */
+	private static function rate_option( string $key, int $window ): string {
+		return self::RATE_PREFIX . sprintf( '%010d', self::rate_window_end( $window ) ) . '_' . $key;
 	}
 
 	/**
@@ -468,8 +481,14 @@ final class Plugin {
 		}
 		self::$rate_backend[ $name ] = 'db';
 		global $wpdb;
-		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, '1', 'no') ON DUPLICATE KEY UPDATE option_value = option_value + 1", $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		return self::rate_db_read( $name );
+		if ( Install::counters_ready() ) {
+			// B16: one row of the table vcap_rate_limits per counter and window, counted atomically.
+			$table = Install::tables()['rate'];
+			$wpdb->query( $wpdb->prepare( "INSERT INTO {$table} (window_end, counter_key, hits) VALUES (%d, %s, 1) ON DUPLICATE KEY UPDATE hits = hits + 1", self::rate_window_end( $window ), $key ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		} else {
+			$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, '1', 'no') ON DUPLICATE KEY UPDATE option_value = option_value + 1", $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		return self::rate_db_read( $key, $window );
 	}
 
 	private static function rate_decrement( string $key, int $window ): void {
@@ -482,27 +501,37 @@ final class Plugin {
 			return;
 		}
 		global $wpdb;
+		if ( Install::counters_ready() ) {
+			$table = Install::tables()['rate'];
+			$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET hits = hits - 1 WHERE window_end = %d AND counter_key = %s AND hits > 0", self::rate_window_end( $window ), $key ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			return;
+		}
 		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = option_value - 1 WHERE option_name = %s AND option_value > 0", $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	private static function rate_read( string $key, int $window ): int {
-		$name = self::rate_option( $key, $window );
 		if ( self::rate_uses_cache() ) {
-			$count = wp_cache_get( $name, 'vcap_rate' );
+			$count = wp_cache_get( self::rate_option( $key, $window ), 'vcap_rate' );
 			if ( is_numeric( $count ) && (int) $count > 0 ) {
 				return (int) $count;
 			}
 		}
-		return self::rate_db_read( $name );
+		return self::rate_db_read( $key, $window );
 	}
 
-	private static function rate_db_read( string $name ): int {
+	private static function rate_db_read( string $key, int $window ): int {
 		global $wpdb;
-		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( Install::counters_ready() ) {
+			$table = Install::tables()['rate'];
+			return (int) $wpdb->get_var( $wpdb->prepare( "SELECT hits FROM {$table} WHERE window_end = %d AND counter_key = %s", self::rate_window_end( $window ), $key ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		}
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::rate_option( $key, $window ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	/**
-	 * Removes counters of finished windows (daily maintenance), in batches until done or $budget seconds are used.
+	 * Removes counters of finished windows (daily maintenance), in batches until done or $budget seconds are used:
+	 * rows of the table vcap_rate_limits and options of the storage before schema 1.7 (left by a request that still
+	 * wrote them during the upgrade, or by an older version after a rollback).
 	 *
 	 * @return bool true when all finished windows are removed.
 	 */
@@ -510,8 +539,15 @@ final class Plugin {
 		global $wpdb;
 		$start = microtime( true );
 		$limit = 1000;
+		$table = Install::counters_ready() ? Install::tables()['rate'] : '';
 		do {
-			$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND option_name < %s LIMIT %d", $wpdb->esc_like( self::RATE_PREFIX ) . '%', self::RATE_PREFIX . sprintf( '%010d', time() ) . '_', $limit ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$deleted = 0;
+			if ( '' !== $table ) {
+				$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE window_end <= %d LIMIT %d", time(), $limit ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			}
+			if ( false !== $deleted && (int) $deleted < $limit ) {
+				$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND option_name < %s LIMIT %d", $wpdb->esc_like( self::RATE_PREFIX ) . '%', self::RATE_PREFIX . sprintf( '%010d', time() ) . '_', $limit ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			}
 			if ( false === $deleted ) {
 				throw new \RuntimeException( 'Rate limit counters could not be removed: ' . esc_html( $wpdb->last_error ) );
 			}
