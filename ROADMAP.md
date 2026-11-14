@@ -69,8 +69,7 @@ Offen bleiben reale Gateway-Sandboxen (23), der Learnboating-Connector im Kurspl
 
 Außerhalb der 50 Punkte, Stand Release und Lizenz:
 
-- [x] Lizenzierung über WP License Captain (Premium-Edition, fail-closed, signierter Offline-Cache) und Premium-Updates mit SHA-256-Prüfung; Abnahme gegen einen echten Lizenzserver (`license-acceptance`).
-- [ ] Aufteilung Free/Premium (`config/premium-features.php`) und Update-Kanal der Free-Edition – Entscheidung des Betreibers.
+- [x] Entscheidung Free/Premium (13.11.2026): Kern frei mit allen Funktionen (WordPress.org), kein Lizenz-/Update-Code im Kern; Premium als getrenntes Add-on ([docs/FREE-PREMIUM.md](docs/FREE-PREMIUM.md)).
 - [x] Release-ZIP mit Lizenzdateien aller Bibliotheken und `THIRD-PARTY-NOTICES.txt` (geprüft im Job `quality`).
 - [ ] wordpress.org-Tauglichkeit: Befunde von Plugin Check und der breiten PHPCS/PHPStan-Prüfung abarbeiten, danach die Jobs blockierend schalten.
 

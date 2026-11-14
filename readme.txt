@@ -14,29 +14,21 @@ Sell personalised PDF vouchers, gift cards and store credit with WooCommerce: ba
 
 == Description ==
 
-Visual PDF designer, recipient fields and custom field groups, scheduled delivery, balance-tracked gift cards and store credit, QR voucher and service-pass scanner, coupon code import (CSV/XLS/XLSX/ODS), outstanding value and redemption journal, WPML, multi-currency and Subscriptions support. Premium edition: promotions and bonus vouchers, refer a friend, gift card top-up and campaign reports (see Editions). Built for shops in Germany and Austria: statutory validity per buyer country, VAT treatment per voucher kind (single-purpose / multi-purpose) and German translations.
+Visual PDF designer, recipient fields and custom field groups, scheduled delivery, balance-tracked gift cards and store credit, QR voucher and service-pass scanner, coupon code import (CSV/XLS/XLSX/ODS), outstanding value and redemption journal, WPML, multi-currency and Subscriptions support. Promotions and bonus vouchers, refer a friend, gift card top-up and campaign reports are included. Built for shops in Germany and Austria: statutory validity per buyer country, VAT treatment per voucher kind (single-purpose / multi-purpose) and German translations.
 
 Event tickets, seats and admission belong to the separate plugin WP Pass Captain. When both are active, vouchers and gift cards pay for tickets in its checkout, ticket vouchers are exchanged for tickets and the scanner checks in both.
 
-= Editions =
+= Free, complete core =
 
-The free edition and the premium edition are built from the same code.
-
-* Both editions: PDF vouchers and the PDF designer, recipient fields, scheduled delivery, gift cards with balance, store credit, scanner, code import and code campaigns, redemption API, VAT treatment, outstanding voucher value and redemption journal (with CSV), payment with vouchers and gift cards in the WP Pass Captain checkout, WPML, multi-currency and Subscriptions support.
-* Premium only (active license through WP License Captain): promotions and bonus vouchers, refer a friend, gift card top-up, campaign and partner reports, ticket vouchers and the shared scanner for WP Pass Captain.
-
-Without an active license (free edition, or premium with an expired license) the premium features are switched off for new configuration and new sales. What was sold earlier keeps being processed: gift cards, vouchers and store credit stay redeemable, refunds and cancellations reverse top-ups, referral rewards and bonus vouchers, and the outstanding value and journal stay available for your accounts.
-
-Coming from 1.1.0 (where everything was included) and installing the free edition: running promotions are no longer applied to carts, referral codes customers already shared are refused ("Referral codes are currently not available."; rewards for orders that already used one are still granted or withdrawn), top-up products can no longer be bought and the campaign report is locked. Install the premium edition and activate a license to keep them.
+Every feature is included and free (GPL-2.0-or-later): there is no license key, no locked feature and no upgrade notice. This includes promotions and bonus vouchers, refer a friend, gift card top-up, campaign and partner reports, and the ticket vouchers and shared scanner for WP Pass Captain. Any paid offer would be a separate add-on plugin.
 
 == Installation ==
 
 1. Install and activate WooCommerce 8.9 or newer.
 2. Upload the release ZIP under Plugins → Add New → Upload Plugin and activate Voucher Captain. PHP 8.1 or newer with the mbstring and dom extensions is required (activation stops without them); GD (QR codes, barcodes and images in PDFs), zip (Excel import) and iconv are needed for those features. Tools → Site Health shows what is missing.
-3. Premium edition: open the Voucher Captain license page, enter the license key and activate this site.
-4. Check WooCommerce → Settings → Vouchers (issuing status, validity, delivery, store credit, VAT treatment).
-5. Edit a product, tick "Voucher" and configure the "Voucher" tab. Two PDF templates (gift card A5, voucher/service pass A6) are created on activation; edit them in the Vouchers menu.
-6. Optional: create pages with the shortcodes [vcap_redeem] (redeem page), [vcap_balance] (balance check) and [vcap_my_vouchers].
+3. Check WooCommerce → Settings → Vouchers (issuing status, validity, delivery, store credit, VAT treatment).
+4. Edit a product, tick "Voucher" and configure the "Voucher" tab. Two PDF templates (gift card A5, voucher/service pass A6) are created on activation; edit them in the Vouchers menu.
+5. Optional: create pages with the shortcodes [vcap_redeem] (redeem page), [vcap_balance] (balance check) and [vcap_my_vouchers].
 
 == Frequently Asked Questions ==
 
@@ -75,9 +67,7 @@ See "External services" below. Customer data stays on your site; the suggested p
 
 == External services ==
 
-The free edition connects to no external service. The plugin bundles all its libraries and fonts; PDFs never load remote images.
-
-Premium edition only – license server (WP License Captain, run by the plugin vendor; its address is fixed in the premium build and shown on the license page): to activate the license, keep the premium features unlocked and offer updates, the site sends its address (home URL), the WordPress, PHP and plugin versions, the environment (production) and a random installation ID. The license key is sent once, when the license is activated, and is not stored on the site. The site contacts the server when the license is activated or deactivated, about twice a day in the background, when the license page is opened and when WordPress checks for updates; when the plugin is deleted with "Delete data on uninstall", it releases its activation there. The server's answers are only accepted with its Ed25519 signature; update packages are downloaded from the license server's release storage and checked with SHA-256. No customer, order or voucher data is sent. The license terms and privacy policy of the vendor apply.
+Voucher Captain connects to no external service. The plugin bundles all its libraries and fonts; PDFs never load remote images.
 
 On the same site (no external transfer): with WP Pass Captain active, ticket exchanges and ticket payments pass the voucher code, amount, the customer's name and email address and attendee names to WP Pass Captain.
 
@@ -94,13 +84,7 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 * Fix: reverting a check-in is limited to one's own check-in within 10 minutes; later only managers with a reason, never for cancelled or expired tickets.
 * Fix: ticket QR page – the check-in form redirects after posting and carries a one-time key (reload, double tap or resending never admit twice); a refused check-in is shown in red.
 * Fix: WP Pass Captain – failures to cancel tickets, release a reservation or give a voucher back are recorded in the history ("passcaptain_revoke_failed", "passcaptain_restore_failed") and shown to the admins; a failed "send tickets again" from the customer account is recorded too.
-* New: premium edition with licensing through WP License Captain – promotions and bonus vouchers, refer a friend, gift card top-up, campaign and partner reports and the WP Pass Captain ticket vouchers need an active license there and are switched off without one (fail-closed; a signed 14-day offline cache bridges server outages). License page to activate or deactivate the site. The outstanding voucher value and the redemption journal stay available in every edition.
-* New: the free edition carries an "Update URI" header, so WordPress never offers a WordPress.org plugin of the same name as its update.
-* New: premium updates come from the license server's release storage; every package is checked against its SHA-256 before it is installed.
-* New: the premium edition trusts the license server's current and next signing key, so the server can change its key without locking shops out of license checks and updates; every release checks the pinned key against the live license server.
-* New: the license is bound to the website's address – a copied activation (database copy, staging site) unlocks nothing and never releases the original's place; the copy can be activated as staging site, a moved site keeps its activation. Activation retries never take a second place.
-* New: license check also through the Action Scheduler and on an administrator's page load when WP-Cron does not run; warning from 3 days without confirmation, Site Health test "license check overdue". Offline license data is only valid as long as its signed server time allows.
-* New: multisite – a network-activated plugin uses one network license; premium updates use the same activation on every site.
+* Change: every feature stays free and included – no license, no locked features; license data stored by pre-release builds is removed on update and uninstall.
 * New: setting "Multi-purpose vouchers as payment" (off by default) – multi-purpose vouchers, gift cards and store credit pay the order total after tax, shipping and fees as an untaxed payment line "Voucher CODE" instead of a discount before tax.
 * New: gift card top-up – a product marked "Top up" adds the paid value to an existing card; refunds take the top-up back as far as the balance allows.
 * New: Reports – outstanding voucher value at a date (with CSV), redemption journal and, with WP Pass Captain, a reconciliation of voucher payments.
@@ -116,7 +100,7 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 * Fix: gift card and store credit coupons are suspended while the plugin is deactivated, so they cannot take their full balance off orders.
 * Fix (security): rate limits are atomic, count failures only and ignore forged forwarding headers; XLSX/ODS imports refuse zip bombs.
 * Fix: recipient emails choose their default subject per voucher.
-* Privacy: referral data is included in the personal data export and erasure; the suggested privacy policy text covers the balance history, referrals, external redemptions, WP Pass Captain, the scanner, rate-limit counters and the license check.
+* Privacy: referral data is included in the personal data export and erasure; the suggested privacy policy text covers the balance history, referrals, external redemptions, WP Pass Captain, the scanner and rate-limit counters.
 * New: VAT treatment per voucher product (automatic, multi-purpose, single-purpose, promotion). Pass Captain keeps the VAT for multi-purpose vouchers and shows them as a payment on its invoices.
 * New: default validity by the buyer's billing country (the shop country when it is unknown) when a product has no expiry of its own – Germany 3 years to the end of the year, Austria 30 years (filter vcap_statutory_expiry). Shops that saved a default in days keep it.
 * New: ticket vouchers are given back automatically when Pass Captain cancels or refunds the exchanged tickets (date or event cancelled); the voucher can then be exchanged again.
@@ -173,7 +157,6 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 * Fix: a deactivation that never got its activation (network deactivation stopped by a time-out, update by upload after a rollback) no longer leaves gift cards suspended: the running plugin publishes them again.
 * Fix: network activation sets up 25 sites at once (the others on their first request); deleting a site of a network drops its voucher tables; named database locks are per site.
 * Fix: database updates run in admin, cron and WP-CLI requests or the background action vcap_migrate, never in shop requests; tables are created and checked once per update; the schema check covers every index.
-* Fix: an uninstall always releases the license activation; a network uninstall releases all sites first within 30 seconds.
 * New: Site Health check for the PHP extensions mbstring, dom, gd, zip and iconv; activation stops without mbstring or dom.
 * Dev: vcap() is defined only when WooCommerce is active in a supported version; new action vcap_loaded and VCAP\Plugin::ready().
 * Fix (security): text from visitors (code of a redeem link, recipient name, attendee fields) can no longer run shortcodes through block output.
@@ -218,7 +201,7 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 == Upgrade Notice ==
 
 = 1.2.0 =
-Promotions, refer a friend (shared codes are refused), top-ups, campaign reports and ticket vouchers are now Premium (Vouchers → License); the free edition switches them off. Sold vouchers, outstanding value and journal keep working. Database update 1.4.0 – back up first.
+All features stay free, including the new gift card top-up and multi-purpose vouchers as payment. Database update 1.4.0 – back up first.
 
 = 1.1.0 =
 Requires WooCommerce 8.9 or newer.

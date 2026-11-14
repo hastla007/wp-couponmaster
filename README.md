@@ -2,18 +2,7 @@
 
 WooCommerce-Plugin für personalisierte **PDF-Gutscheine, Geschenkkarten, Guthaben und Rabattcodes**. Voucher Captain verwaltet Gutscheine und Gutschein-Einlösungen. Die Eventverwaltung, Ticketkontingente, Sitzplätze, Eventbestellungen und der Einlass gehören zu [WP Pass Captain](https://github.com/hastla007/wp-passmaster). Beide Plugins bleiben eigenständig; sind beide aktiv, verbindet sie ein versionierter Vertrag: Gutscheine und Geschenkkarten bezahlen Tickets in der Pass-Captain-Kasse, Ticketgutscheine werden gegen Tickets getauscht, der gemeinsame Scanner prüft beides ([API.md](API.md), [CONNECTORS.md](CONNECTORS.md)). Code, Namen und Gestaltung sind eigenständig.
 
-**Editionen.** Free- und Premium-Edition entstehen aus demselben Code (`bin/build.sh`, `VCAP_EDITION=free|premium`, Liste in `config/premium-features.php`, Details in [LICENSING.md](LICENSING.md)). Premium-Updates kommen vom Lizenzserver; auch die Free-Edition trägt einen `Update URI`-Header (Standard `false`, `VCAP_FREE_UPDATE_URI`), damit WordPress nie ein gleichnamiges wordpress.org-Plugin als Update anbietet.
-
-| Funktion | Free | Premium (aktive Lizenz) |
-|---|---|---|
-| PDF-Gutscheine, Designer, Personalisierung, Zustellung, Geschenkkarten mit Restwert, Kundenguthaben, Scanner, Code-Import und Code-Kampagnen, Einlöse-API, Steuerbehandlung | ja | ja |
-| Offener Gutscheinwert zum Stichtag, Einlösejournal (mit CSV), Pass-Captain-Abgleich | ja | ja |
-| Bezahlen mit Gutscheinen und Geschenkkarten in der WP-Pass-Captain-Kasse | ja | ja |
-| Aktionen und Bonusgutscheine, Freunde werben, Aufladung von Geschenkkarten | – | ja |
-| Auswertung nach Kampagnen und Partnern | – | ja |
-| Ticketgutscheine und gemeinsamer Scanner mit WP Pass Captain | – | ja |
-
-Ohne aktive Lizenz wird Verkauftes weiter abgewickelt (Einlösung, Erstattung, Rückbuchung von Aufladungen, Prämien und Bonusgutscheinen). Bestandskunden von 1.1.0 auf der Free-Edition: laufende Aktionen greifen nicht mehr, bereits verteilte Empfehlungscodes werden abgelehnt (Prämien für Bestellungen, die schon einen Code genutzt haben, werden weiter gutgeschrieben bzw. zurückgenommen), Aufladeprodukte sind nicht mehr kaufbar.
+**Kern frei.** Voucher Captain ist vollständig frei (GPL-2.0-or-later) und enthält keinen Lizenz- oder Update-Code: Alle Funktionen – auch Aktionen und Bonusgutscheine, Freunde werben, Aufladung von Geschenkkarten, Auswertung nach Kampagnen und Partnern sowie Ticketgutscheine und gemeinsamer Scanner mit WP Pass Captain – sind ohne Einschränkung verfügbar. Ein mögliches Premium-Angebot entsteht als getrenntes Add-on über die öffentlichen Erweiterungspunkte ([docs/FREE-PREMIUM.md](docs/FREE-PREMIUM.md)).
 
 ## Funktionen
 
@@ -89,7 +78,7 @@ Nach der Aktivierung werden zwei Startvorlagen angelegt (Geschenkkarte A5 und Gu
 - [Connector-Plugins: Einlösung, Wiederholung, Storno, Versionierung](CONNECTORS.md)
 - [Adapter für Mehrsprachigkeit, Mehrwährung, Subscriptions und Produktfelder](ADAPTERS.md)
 - [Zustandsautomat für Reservierung, Buchung, Freigabe und Erstattung](STATE_MACHINE.md)
-- [Lizenzierung und Premium-Edition](LICENSING.md)
+- [Freier Kern und getrenntes Premium-Add-on](docs/FREE-PREMIUM.md)
 - [Steuerbehandlung je Gutscheinart](TAX.md)
 - [Release-Prozess, statische Analyse, Drittlizenzen](RELEASE.md)
 - [50-Punkte-Roadmap](ROADMAP.md)
