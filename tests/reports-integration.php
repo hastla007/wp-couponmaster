@@ -117,6 +117,44 @@ vcap_report_assert( 3 === count( $jcsv ) && 3 === count( VCAP\Ledger::journal_cs
 $all = iterator_to_array( $ledger->journal_all( $today, $today, 1 ), false );
 vcap_report_assert( count( $all ) === $ledger->journal_count( $today, $today ) && count( $all ) >= 2, 'the journal export reads every booking in batches' );
 
+// T14: open holds (unpaid order, external reservation) are still owed: liability = balance + open holds.
+$t14_new = static function ( string $mode, float $value, array $props = array() ) {
+	$v                 = new VCAP\Voucher();
+	$v->code           = 'ledger-t14-' . strtolower( wp_generate_password( 8, false, false ) );
+	$v->order_item_id  = 94000000 + random_int( 1, 9999999 );
+	$v->type           = $props['type'] ?? ( 'balance' === $mode ? 'giftcard' : 'voucher' );
+	$v->usage_mode     = $mode;
+	$v->discount_type  = $props['discount_type'] ?? 'fixed_cart';
+	$v->initial_amount = $value;
+	$v->balance        = $value;
+	$v->currency       = 'XTT';
+	$v->status         = VCAP\Voucher::STATUS_ACTIVE;
+	$v->token          = VCAP\VoucherRepository::new_token();
+	$v->id             = vcap()->vouchers->insert( $v );
+	vcap()->vouchers->log( $v->id, 'issued', $value, 'balance' === $mode ? $value : null, '' );
+	return $v;
+};
+$t14_value = static function () use ( $ledger, $today ): array {
+	$sql    = (float) ( $ledger->liability( $today )['totals']['XTT']['giftcard']['amount'] ?? 0 );
+	$detail = array_sum( array_column( array_filter( iterator_to_array( $ledger->liability_rows( $today ), false ), static fn( $r ) => 'XTT' === $r['currency'] ), 'outstanding' ) );
+	return array( $sql, round( $detail, 2 ) );
+};
+$t14_card = $t14_new( 'balance', 50 );
+vcap()->vouchers->log( $t14_card->id, 'reserved', 20, 30, 'Reserved for order', 777001 );
+vcap()->vouchers->log( $t14_card->id, 'api_reserved', 10, 20, 'Redemption x' );
+vcap_report_assert( array( 50.0, 50.0 ) === $t14_value(), 'T14: a gift card with an order hold and an external reservation still owes its full 50 (SQL total and detail)' );
+vcap()->vouchers->log( $t14_card->id, 'committed', 20, 20, '', 777001 );
+vcap()->vouchers->log( $t14_card->id, 'api_released', 10, 30, 'Redemption x' );
+vcap_report_assert( array( 30.0, 30.0 ) === $t14_value(), 'T14: once the order hold is charged and the external reservation released, 30 remain' );
+
+// O10: percentage and reusable discount vouchers move no money: their uses never appear in the journal.
+$o10_percent  = $t14_new( 'single', 10, array( 'discount_type' => 'percent' ) );
+$o10_reusable = $t14_new( 'unlimited', 5 );
+vcap()->vouchers->log( $o10_percent->id, 'redeemed', 10, 0, 'Counter' );
+vcap()->vouchers->log( $o10_reusable->id, 'redeemed', 5, null, 'Counter' );
+$o10_codes = array_column( iterator_to_array( $ledger->journal_all( $today, $today ), false ), 'code' );
+vcap_report_assert( ! array_intersect( array( $o10_percent->code, $o10_reusable->code ), $o10_codes ) && in_array( $t14_card->code, $o10_codes, true ) && count( $o10_codes ) === $ledger->journal_count( $today, $today ), 'O10: a 10 % voucher and a reusable code are not booked as redeemed money in the journal (value vouchers are)' );
+
 // CSV format: German Excel gets semicolons and a decimal comma; negative numbers are not mistaken for formulas.
 $german = static fn() => array( 'separator' => ';', 'decimal' => ',' );
 add_filter( 'vcap_csv_format', $german );

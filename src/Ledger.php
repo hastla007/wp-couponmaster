@@ -7,7 +7,7 @@ defined( 'ABSPATH' ) || exit;
  * Accounting views of the voucher ledger (events table):
  *
  * - liability( $date ): outstanding voucher value at the end of a day – gift cards and store credit with their
- *   balance then, single-use value vouchers with their value while not yet redeemed or voided. Expired value is
+ *   balance then plus the holds still open (reserved for unpaid orders or external redemptions), single-use value vouchers with their value while not yet redeemed or voided. Expired value is
  *   listed separately. Percentage and ticket vouchers carry no monetary liability and are left out.
  * - journal( $from, $to ): every booking that moved value (redemptions, refunds, credits, adjustments) in a period.
  *
@@ -19,6 +19,19 @@ final class Ledger {
 	/** Events after which a single-use voucher no longer carries value (until restored or reactivated). */
 	private const USED_EVENTS = array( 'redeemed', 'committed', 'api_committed', 'voided' );
 	private const BACK_EVENTS = array( 'restored', 'api_refunded', 'reactivated', 'passcaptain_tickets_restored', 'redeem_reversed' );
+	/**
+	 * Holds on a stored balance: they lower balance_after but the value is still owed until the hold is charged.
+	 * Each hold event is followed by at most one closing event with the same amount, so the open holds at a point
+	 * in time are the sum of the holds minus the sum of the closings up to then.
+	 */
+	/**
+	 * Vouchers whose bookings are money (same set as the liability): the "amount" of a percentage voucher is its
+	 * percentage, a reusable discount code's use or a ticket's check-in moves no value – they stay in the voucher
+	 * history but never appear in the journal as redeemed money.
+	 */
+	private const VALUE_VOUCHERS = "v.discount_type <> 'percent' AND v.type <> 'ticket' AND v.usage_mode IN ('single','balance')";
+	private const HOLD_EVENTS  = array( 'reserved', 'api_reserved' );
+	private const CLOSE_EVENTS = array( 'committed', 'reservation_released', 'api_committed', 'api_released' );
 
 	public function __construct( private VoucherRepository $repo ) {}
 
@@ -39,20 +52,24 @@ final class Ledger {
 		$until = self::utc_range( $date, $date )[1];
 		$used  = self::in_list( self::USED_EVENTS );
 		$both  = self::in_list( array_merge( self::USED_EVENTS, self::BACK_EVENTS ) );
-		// Same rules as value_at(): voided (until reactivated) = 0; gift cards: last balance at that time;
+		$holds = self::in_list( self::HOLD_EVENTS );
+		$all   = self::in_list( array_merge( self::HOLD_EVENTS, self::CLOSE_EVENTS ) );
+		// Same rules as value_at(): voided (until reactivated) = 0; gift cards: last balance at that time plus the
+		// holds still open then (reserved for an unpaid order or an external redemption = still owed);
 		// single-use: full value unless the last use/give-back event was a use.
 		$sql  = "SELECT currency, type, expired, COUNT(*) AS cnt, SUM(outstanding) AS amount FROM (
 				SELECT v.currency, v.type, ( v.expires_at IS NOT NULL AND v.expires_at <= %s ) AS expired,
 					CASE
 						WHEN 'voided' = ( SELECT e.event FROM {$t['events']} e WHERE e.voucher_id = v.id AND e.created_at <= %s AND e.event IN ('voided','reactivated') ORDER BY e.id DESC LIMIT 1 ) THEN 0
 						WHEN v.usage_mode = 'balance' THEN GREATEST( 0, COALESCE( ( SELECT e.balance_after FROM {$t['events']} e WHERE e.voucher_id = v.id AND e.created_at <= %s AND e.balance_after IS NOT NULL ORDER BY e.id DESC LIMIT 1 ), v.initial_amount ) )
+							+ GREATEST( 0, COALESCE( ( SELECT SUM( CASE WHEN e.event IN ({$holds}) THEN e.amount ELSE -e.amount END ) FROM {$t['events']} e WHERE e.voucher_id = v.id AND e.created_at <= %s AND e.event IN ({$all}) AND e.amount IS NOT NULL ), 0 ) )
 						WHEN ( SELECT e.event FROM {$t['events']} e WHERE e.voucher_id = v.id AND e.created_at <= %s AND e.event IN ({$both}) ORDER BY e.id DESC LIMIT 1 ) IN ({$used}) THEN 0
 						ELSE v.initial_amount
 					END AS outstanding
 				FROM {$t['vouchers']} v
 				WHERE v.created_at <= %s AND v.discount_type <> 'percent' AND v.type <> 'ticket' AND v.usage_mode IN ('single','balance')
 			) x WHERE outstanding > 0.00001 GROUP BY currency, type, expired";
-		$rows   = $wpdb->get_results( $wpdb->prepare( $sql, $until, $until, $until, $until, $until ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
+		$rows   = $wpdb->get_results( $wpdb->prepare( $sql, $until, $until, $until, $until, $until, $until ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
 		$totals = array();
 		foreach ( $rows ? $rows : array() as $r ) {
 			$currency = '' !== (string) $r['currency'] ? (string) $r['currency'] : (string) get_option( 'woocommerce_currency' );
@@ -85,7 +102,7 @@ final class Ledger {
 			$last   = end( $ids );
 			$events = array();
 			$in     = implode( ',', $ids );
-			foreach ( (array) $wpdb->get_results( $wpdb->prepare( "SELECT voucher_id, event, balance_after FROM {$tables['events']} WHERE voucher_id IN ({$in}) AND created_at <= %s ORDER BY id", $until ), ARRAY_A ) as $e ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			foreach ( (array) $wpdb->get_results( $wpdb->prepare( "SELECT voucher_id, event, amount, balance_after FROM {$tables['events']} WHERE voucher_id IN ({$in}) AND created_at <= %s ORDER BY id", $until ), ARRAY_A ) as $e ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$events[ (int) $e['voucher_id'] ][] = $e;
 			}
 			foreach ( $vouchers as $row ) {
@@ -129,12 +146,20 @@ final class Ledger {
 		}
 		if ( $v->is_multi_use() ) {
 			$balance = null;
+			$held    = 0.0;
 			foreach ( $events as $e ) {
 				if ( null !== $e['balance_after'] ) {
 					$balance = (float) $e['balance_after'];
 				}
+				if ( isset( $e['amount'] ) && null !== $e['amount'] ) {
+					if ( in_array( $e['event'], self::HOLD_EVENTS, true ) ) {
+						$held += (float) $e['amount'];
+					} elseif ( in_array( $e['event'], self::CLOSE_EVENTS, true ) ) {
+						$held -= (float) $e['amount'];
+					}
+				}
 			}
-			return max( 0.0, null === $balance ? (float) $v->initial_amount : $balance );
+			return round( max( 0.0, null === $balance ? (float) $v->initial_amount : $balance ) + max( 0.0, $held ), $v->decimals() );
 		}
 		$used = false;
 		foreach ( $events as $e ) {
@@ -158,7 +183,7 @@ final class Ledger {
 		$tables = Install::tables();
 		list( $start, $end ) = self::utc_range( $from, $to );
 		$events = self::in_list( (array) apply_filters( 'vcap_ledger_money_events', self::MONEY_EVENTS ) );
-		return $wpdb->get_results( $wpdb->prepare( "SELECT e.id, e.created_at, e.event, e.amount, e.balance_after, e.order_id, e.note, v.code, v.type, v.currency FROM {$tables['events']} e INNER JOIN {$tables['vouchers']} v ON v.id = e.voucher_id WHERE e.created_at BETWEEN %s AND %s AND e.event IN ({$events}) AND e.amount IS NOT NULL AND e.id > %d ORDER BY e.id LIMIT %d", $start, $end, max( 0, $after_id ), max( 1, $limit ) ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return $wpdb->get_results( $wpdb->prepare( "SELECT e.id, e.created_at, e.event, e.amount, e.balance_after, e.order_id, e.note, v.code, v.type, v.currency FROM {$tables['events']} e INNER JOIN {$tables['vouchers']} v ON v.id = e.voucher_id WHERE e.created_at BETWEEN %s AND %s AND e.event IN ({$events}) AND e.amount IS NOT NULL AND " . self::VALUE_VOUCHERS . " AND e.id > %d ORDER BY e.id LIMIT %d", $start, $end, max( 0, $after_id ), max( 1, $limit ) ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 
 	/** Number of bookings in the period (shown when the page lists only the first ones). */
@@ -167,7 +192,7 @@ final class Ledger {
 		$tables = Install::tables();
 		list( $start, $end ) = self::utc_range( $from, $to );
 		$events = self::in_list( (array) apply_filters( 'vcap_ledger_money_events', self::MONEY_EVENTS ) );
-		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$tables['events']} e WHERE e.created_at BETWEEN %s AND %s AND e.event IN ({$events}) AND e.amount IS NOT NULL", $start, $end ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$tables['events']} e INNER JOIN {$tables['vouchers']} v ON v.id = e.voucher_id WHERE e.created_at BETWEEN %s AND %s AND e.event IN ({$events}) AND e.amount IS NOT NULL AND " . self::VALUE_VOUCHERS, $start, $end ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 
 	/**
