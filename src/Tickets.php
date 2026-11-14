@@ -1064,7 +1064,9 @@ final class Tickets {
 		if ( ! $voucher ) {
 			status_header( 404 );
 		}
-		nocache_headers();
+		// DONOTCACHEPAGE as well as no-cache headers: page caches such as LiteSpeed Cache must never keep a
+		// "valid" status of a ticket that has been checked in since.
+		Shortcodes::no_cache();
 		header( 'X-Robots-Tag: noindex, nofollow' );
 
 		$data = $voucher ? $this->describe( $voucher ) : null;

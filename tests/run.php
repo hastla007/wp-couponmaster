@@ -1050,5 +1050,17 @@ check( 'missing PHP extensions are named (activation and Site Health)', array( '
 check( 'a network activation sets up at most 25 sites in its own request', 25 === VCAP\Install::NETWORK_ACTIVATION_SITES );
 $GLOBALS['wpdb'] = $saved_wpdb;
 
+// C8 / C13: PDF output and the ticket status page are kept out of page caches with DONOTCACHEPAGE (not only
+// no-cache headers), and the PDF stream empties output buffers and switches compression off.
+$vcap_source = static function ( string $class, string $method ): string {
+	$ref   = new ReflectionMethod( $class, $method );
+	$lines = file( (string) $ref->getFileName() );
+	return implode( '', array_slice( (array) $lines, $ref->getStartLine() - 1, $ref->getEndLine() - $ref->getStartLine() + 1 ) );
+};
+$stream = $vcap_source( 'VCAP\\Preview', 'stream' );
+$ticket = $vcap_source( 'VCAP\\Tickets', 'ticket_page' );
+check( 'PDF stream and ticket status page use Shortcodes::no_cache() (DONOTCACHEPAGE), not only nocache_headers()', str_contains( $stream, 'Shortcodes::no_cache()' ) && str_contains( $ticket, 'Shortcodes::no_cache()' ) && ! str_contains( $ticket, 'nocache_headers()' ) );
+check( 'the PDF stream cleans output buffers and switches zlib compression off before Content-Length', str_contains( $stream, 'wc_clean_buffers()' ) && str_contains( $stream, 'zlib.output_compression' ) && strpos( $stream, 'wc_clean_buffers()' ) < strpos( $stream, 'Content-Length' ) );
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

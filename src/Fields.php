@@ -289,7 +289,9 @@ final class Fields {
 			'vcap-frontend',
 			'vcapFront',
 			array(
-				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+				'ajaxUrl'    => admin_url( 'admin-ajax.php' ),
+				// The preview goes through WooCommerce's front-end AJAX endpoint (also with a protected /wp-admin).
+				'previewUrl' => class_exists( '\\WC_AJAX' ) ? \WC_AJAX::get_endpoint( 'vcap_product_preview' ) : admin_url( 'admin-ajax.php' ),
 				// Only for logged-in customers (product pages of guests stay cacheable, see Preview::product_preview()).
 				'nonce'   => is_user_logged_in() ? wp_create_nonce( 'vcap_preview' ) : '',
 				'i18n'    => array(

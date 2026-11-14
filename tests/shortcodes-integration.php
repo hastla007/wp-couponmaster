@@ -101,6 +101,34 @@ vcap_sc_assert( 'LINK-' . strtoupper( $tag ) === WC()->session->get( VCAP\Shortc
 WC()->session->set( VCAP\Shortcodes::PREFILL_KEY, null );
 wc_clear_notices();
 
+// C11: a visitor without a session gets no 48-hour WooCommerce session from a redeem link: the code waits in a
+// short-lived cookie of its own; empty or implausible codes (link scanners) leave nothing.
+$session_before   = WC()->session;
+$fresh            = new WC_Session_Handler();
+$fresh->init();
+WC()->session     = $fresh;
+$follow           = static function ( string $code ) use ( $sc, $stop_redirect ) {
+	$_GET['vcap_code']      = $code;
+	$_SERVER['REQUEST_URI'] = '/einloesen/?vcap_code=' . rawurlencode( $code );
+	add_filter( 'wp_redirect', $stop_redirect );
+	try {
+		$sc->redeem_link();
+	} catch ( RuntimeException $e ) {
+		unset( $e );
+	}
+	remove_filter( 'wp_redirect', $stop_redirect );
+	unset( $_GET['vcap_code'] );
+};
+unset( $_COOKIE[ VCAP\Shortcodes::PREFILL_COOKIE ] );
+$follow( '' );
+$follow( 'x' );
+vcap_sc_assert( ! WC()->session->has_session() && ! isset( $_COOKIE[ VCAP\Shortcodes::PREFILL_COOKIE ] ), 'an empty or implausible redeem link starts no session and sets no cookie' );
+$follow( 'COOKIE-' . strtoupper( $tag ) );
+vcap_sc_assert( ! WC()->session->has_session() && 'COOKIE-' . strtoupper( $tag ) === VCAP\Shortcodes::prefill_cookie() && str_contains( do_shortcode( '[vcap_redeem]' ), 'value="COOKIE-' . strtoupper( $tag ) . '"' ), 'a redeem link of a visitor without a session keeps the code in a short-lived cookie (no WooCommerce session) and fills in the form' );
+VCAP\Shortcodes::set_prefill_cookie( '' );
+vcap_sc_assert( '' === VCAP\Shortcodes::prefill_cookie(), 'the cookie is removed once the form is used' );
+WC()->session = $session_before;
+
 WC()->cart->empty_cart();
 wc_clear_notices();
 // [vcap_balance] describes each kind of voucher by what it is worth.
