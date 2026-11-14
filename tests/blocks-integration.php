@@ -210,6 +210,10 @@ vcap()->store_credit->adjust( $block_user, 15, 'Block test' );
 WC()->cart->add_to_cart( $block_goods->get_id(), 1 );
 $credit_ext = json_decode( (string) wp_json_encode( rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/cart' ) )->get_data() ), true )['extensions']['voucher-captain'] ?? array();
 vcap_blocks_assert( is_array( $credit_ext['store_credit'] ?? null ) && false !== strpos( $credit_ext['store_credit']['url'], 'vcap_apply_credit' ) && '' !== $credit_ext['store_credit']['text'], 'Store API cart: the "use store credit" hint with its link for a customer with credit' );
+// The link is data for React (href as is): a raw "&", not HTML-escaped "&amp;" (PHP would read "amp;_wpnonce").
+$credit_url = (string) ( $credit_ext['store_credit']['url'] ?? '' );
+wp_parse_str( (string) wp_parse_url( $credit_url, PHP_URL_QUERY ), $credit_query );
+vcap_blocks_assert( false === strpos( $credit_url, '&amp;' ) && '1' === ( $credit_query['vcap_apply_credit'] ?? '' ) && false !== wp_verify_nonce( (string) ( $credit_query['_wpnonce'] ?? '' ), 'vcap_apply_credit' ), 'Store API cart: the store credit link carries a valid _wpnonce (unescaped URL)' );
 wp_set_current_user( 0 );
 WC()->cart->empty_cart();
 echo "Voucher Captain block checks passed.\n";

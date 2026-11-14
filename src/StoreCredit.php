@@ -361,8 +361,19 @@ final class StoreCredit {
 
 	// ------------------------------------------------------------------ customer UI.
 
+	/**
+	 * Link that applies the customer's store credit (apply_from_link()). A raw URL with "&", not wp_nonce_url()'s
+	 * HTML-escaped "&amp;": the Store API hands it to the cart block as data and React puts it into href verbatim,
+	 * so an escaped link would arrive as "amp;_wpnonce" and fail the nonce check. HTML output escapes it with esc_url().
+	 */
 	public function apply_url(): string {
-		return wp_nonce_url( add_query_arg( 'vcap_apply_credit', '1', wc_get_cart_url() ), 'vcap_apply_credit' );
+		return add_query_arg(
+			array(
+				'vcap_apply_credit' => '1',
+				'_wpnonce'          => wp_create_nonce( 'vcap_apply_credit' ),
+			),
+			wc_get_cart_url()
+		);
 	}
 
 	public function apply_from_link(): void {
