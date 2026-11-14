@@ -32,6 +32,18 @@ A complete, tested reference implementation is in [`examples/vcap-example-connec
 | Codes of another plugin in the scanner | `vcap_scanner_lookup` / `vcap_scanner_checkin` (`null`, `$code`) – called only for codes Voucher Captain does not know; return a scanner payload with your own `type` (see `Compat\PassCaptainScanner::view()`) or `null` |
 | Scanner rules and texts | `vcap_scanner_redeem_refused` (`''`, `Voucher`) – reason why the counter refuses a voucher (also shown on lookup), `vcap_scanner_describe` (scanner payload), `vcap_checkin_undo_minutes` (default 10), `vcap_counter_reversal_minutes` (default 15), action `vcap_redemption_reversed` (`$voucher_id`, `$event_id`, `$amount`, `$reason`) |
 
+### Event timing (transactions)
+
+Voucher Captain changes balances and states in short database transactions with a row lock (`SELECT … FOR UPDATE`). All of them run through one helper (`VCAP\Db::begin()` / `commit()` / `rollback()`, or `Db::transaction( callable )`; nested calls use savepoints). The contract for listeners (D6):
+
+- **Side-effect actions fire only after a successful COMMIT.** `vcap_voucher_updated`, `vcap_voucher_event`, `vcap_voucher_created`, `vcap_voucher_deleted`, `vcap_voucher_expired`, `vcap_voucher_redeemed`, `vcap_redemption_reserved` / `_released` / `_refunded` / `_reversed`, `vcap_store_credit_changed`, `vcap_gift_card_topped_up` and `vcap_ticket_checked_in` are buffered while a transaction is open and dispatched once, in the order they happened, after the outermost COMMIT. On ROLLBACK they are discarded – a listener never reacts to a change that did not happen. Outside a transaction they fire immediately, as before. [docs/HOOKS.md](docs/HOOKS.md) marks these actions with *after COMMIT*.
+- **Listeners see committed data.** When the action runs, other connections already see the new balance or state, and no row lock of Voucher Captain is held. A listener may make remote calls, start its own transaction, or call `vcap()->redemptions` / `VoucherRepository` again (their actions follow that transaction's own COMMIT). A listener can no longer commit or roll back the change that fired it.
+- **Arguments are snapshots.** A `Voucher` argument shows the voucher as it was saved at that point; several saves in one transaction fire several actions, each with its own state.
+- **A failing listener does not undo the change.** The data is committed when the listener runs: an exception thrown by a listener of a buffered action is logged (WooCommerce → Status → Logs, source `voucher-captain`) and the remaining listeners still run. Repair your side from the ledger (`vcap_voucher_event` history) or `vcap()->redemptions->get( $key )`.
+- **Deciding filters cannot be deferred.** `vcap_redemption_allowed` and `vcap_redemption_target_available` decide whether a redemption happens, so they run synchronously. `reserve()` evaluates them **before** it locks the voucher row (on the voucher as read then; status, balance and owner are checked again under the lock); `check()` holds no lock. They may still run while a caller's transaction is open (e.g. a connector that calls `reserve()` inside its own transaction). Keep them fast and local: no remote calls that can take long, no own transaction, no writes – answer from data you already have and do slow checks before calling `reserve()`.
+
+Your own code: when you call `reserve()` / `commit()` inside a transaction of your plugin, use `VCAP\Db::transaction()` (or `Db::begin()` / `Db::commit()`) instead of a raw `START TRANSACTION`, so Voucher Captain's work nests as a savepoint and its actions wait for your COMMIT. A raw `START TRANSACTION` inside an open transaction commits it implicitly (MySQL/MariaDB).
+
 ## 2. Redemption flow (copy this)
 
 1. **Derive a stable key** from what identifies the request, e.g. `myplugin:{user}:{hash(code)}` or `myplugin:grant:{grant id}`. Store it before calling Voucher Captain. A double click, a reload or a retry after a timeout must reuse the same key.
@@ -101,4 +113,5 @@ Voucher Captain does not know what a customer owns in another plugin. Use the ex
 - [ ] Refund policy after redemption decided and documented
 - [ ] Own channel registered; merchant documentation tells them to tick it
 - [ ] Personal vouchers: `email_verified` passed only for identities your plugin verified; `vcap_login_required` handled
+- [ ] Listeners of `vcap_voucher_event` & co. expect to run after the COMMIT; `vcap_redemption_allowed` / `_target_available` stay fast and local (see *Event timing*)
 - [ ] Two-plugin integration test (Voucher Captain + connector) in CI, including a forced outage

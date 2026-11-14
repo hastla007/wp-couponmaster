@@ -118,9 +118,11 @@ add_filter( 'vcap_redemption_allowed', function ( $allowed, VCAP\Voucher $vouche
 // Refuse targets that no longer exist.
 add_filter( 'vcap_redemption_target_available', fn( $available, string $target ) => $available && my_course_exists( $target ), 10, 2 );
 
-// React once per completed redemption.
+// React once per completed redemption (runs after the COMMIT, see below).
 add_action( 'vcap_voucher_redeemed', function ( array $redemption ) { /* audit, notify … */ } );
 ```
+
+**Timing (D6).** Actions that report a change (`vcap_voucher_redeemed`, `vcap_redemption_reserved` / `_released` / `_refunded`, `vcap_voucher_updated`, `vcap_voucher_event`, `vcap_store_credit_changed` …) fire only after the database transaction that made the change was committed, exactly once, and never for a change that was rolled back; outside a transaction they fire immediately. The filters `vcap_redemption_allowed` and `vcap_redemption_target_available` decide and therefore run synchronously: `reserve()` evaluates them before it locks the voucher row (status, balance and owner are re-checked under the lock), but they can still run inside a caller's transaction – keep them fast, without remote calls or own transactions. Integrations that call the API inside their own transaction use `VCAP\Db::transaction( callable $work, string $context )` (or `Db::begin()` / `Db::commit()` / `Db::rollback_if_error()`): the call nests as a savepoint and its actions wait for the outermost COMMIT. Details: CONNECTORS.md → *Event timing*.
 
 ## Extension points for connector plugins (since 1.1.0)
 
