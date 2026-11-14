@@ -140,7 +140,7 @@ final class Onboarding {
 		if ( ! array_filter( $steps, static fn( $step ) => ! $step['done'] ) ) {
 			return;
 		}
-		echo '<div class="notice notice-info vcap-onboarding"><p><strong>' . esc_html__( 'Voucher Captain – first steps', 'voucher-captain' ) . '</strong></p><ul style="list-style:none;margin-left:0">';
+		echo '<div class="notice notice-info vcap-onboarding"><p><strong>' . esc_html__( 'Voucher Captain – first steps', 'voucher-captain' ) . '</strong></p><ul style="list-style:none;margin-inline-start:0">';
 		foreach ( $steps as $key => $step ) {
 			echo '<li>' . ( $step['done'] ? '<span aria-hidden="true">&#10003;</span> <span class="screen-reader-text">' . esc_html__( 'Done:', 'voucher-captain' ) . '</span>' : '<span aria-hidden="true">&#9675;</span> ' ) . esc_html( $step['label'] );
 			if ( ! $step['done'] ) {

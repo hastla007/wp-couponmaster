@@ -68,6 +68,7 @@ final class Admin {
 			array(
 				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 				'nonce'   => wp_create_nonce( 'vcap_campaign_preview' ),
+				'error'   => __( 'The preview could not be loaded. Please try again.', 'voucher-captain' ),
 			)
 		);
 	}

@@ -95,6 +95,11 @@
 			$post.appendTo( document.body ).trigger( 'submit' ).remove();
 		} );
 
+		// The referral link is selected when focused, ready to copy (no inline handler: Content Security Policy).
+		$( document ).on( 'focus', '.vcap-referral-link', function () {
+			this.select();
+		} );
+
 		// The result of a form sent before this page load (balance check, redeem): focused, so screen readers read it.
 		var $result = $( '[data-vcap-focus]' ).first();
 		if ( $result.length ) {

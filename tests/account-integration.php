@@ -145,6 +145,7 @@ $g8_credit = substr( $g8_page, (int) strpos( $g8_page, '<section class="vcap-sto
 $g8_credit = substr( $g8_credit, 0, (int) strpos( $g8_credit, '</section>' ) );
 preg_match_all( '/<td\b[^>]*>/', $g8_credit, $g8_td );
 vcap_acct_assert( str_contains( $g8_credit, '<th scope="col">' ) && $g8_td[0] && count( $g8_td[0] ) === count( preg_grep( '/data-title="[^"]+"/', $g8_td[0] ) ), 'F3: the store credit history has column headers with scope and data-title on every cell' );
+vcap_acct_assert( ! str_contains( $g8_page, 'onfocus' ) && str_contains( $g8_page, '<div class="wp-block-vcap-my-vouchers"' ), 'F16: blocks render with their block wrapper attributes, the referral link without an inline handler' );
 foreach ( $g8_keep as $g8_option => $g8_value ) {
 	false === $g8_value ? delete_option( $g8_option ) : update_option( $g8_option, $g8_value );
 }

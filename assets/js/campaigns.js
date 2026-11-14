@@ -46,7 +46,7 @@
 			$.post( cfg.ajaxUrl, $.param( data ) ).done( function ( res ) {
 				$out.html( res && res.success ? res.data : ( res && res.data ? $( '<p>' ).text( res.data ) : '' ) );
 			} ).fail( function () {
-				$out.text( 'Error' );
+				$out.text( cfg.error || 'Error' );
 			} );
 		} );
 	} );

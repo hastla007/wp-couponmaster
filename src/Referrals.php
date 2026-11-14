@@ -413,7 +413,10 @@ final class Referrals {
 		echo esc_html( sprintf( __( 'Your friends get %1$s off their first order with your code, and you receive %2$s once their order is completed.', 'voucher-captain' ), $friend, $reward ) );
 		echo '</p><p><strong class="vcap-referral-code">' . esc_html( $code ) . '</strong>';
 		if ( $link ) {
-			echo ' · <input type="text" readonly class="input-text" value="' . esc_attr( $link ) . '" onfocus="this.select()" aria-label="' . esc_attr__( 'Link to share', 'voucher-captain' ) . '" style="max-width:100%;width:28em" />';
+			// F16: labelled, and selected on focus by frontend.js instead of an inline handler (Content Security Policy).
+			Downloads::register_assets();
+			wp_enqueue_script( 'vcap-frontend' );
+			echo ' · <label class="screen-reader-text" for="vcap-referral-link">' . esc_html__( 'Link to share', 'voucher-captain' ) . '</label><input type="text" readonly id="vcap-referral-link" class="input-text vcap-referral-link" value="' . esc_attr( $link ) . '" style="max-width:100%;width:28em" />';
 		}
 		/* translators: %d: number of completed referrals */
 		echo '</p><p>' . esc_html( sprintf( _n( '%d friend has ordered so far.', '%d friends have ordered so far.', $count, 'voucher-captain' ), $count ) ) . '</p></section>';
