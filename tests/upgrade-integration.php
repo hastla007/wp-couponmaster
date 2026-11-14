@@ -88,7 +88,7 @@ vcap_up_assert( ! empty( $fixture['vouchers'] ), 'fixture data from the previous
 /** The installed ZIP is the free core: no "Update URI" header, no license gate, no license data of earlier builds. */
 function vcap_up_free_core(): void {
 	$uri = (string) get_file_data( VCAP_FILE, array( 'uri' => 'Update URI' ) )['uri'];
-	vcap_up_assert( '' === $uri && ! defined( 'VCAP_EDITION' ) && ! class_exists( 'VCAP\Licensing\Entitlements' ), 'the installed ZIP is the free core (no Update URI header, no license gate)' );
+	vcap_up_assert( '' === $uri && ! defined( 'VCAP_EDITION' ) && ! class_exists( 'VCAP\Licensing\Entitlements', false ) && ! is_dir( VCAP_PATH . 'src/Licensing' ), 'the installed ZIP is the free core (no Update URI header, no license gate)' );
 	$left = array_filter( VCAP\Install::LEGACY_LICENSE_OPTIONS, static fn( $o ) => false !== get_option( $o ) );
 	vcap_up_assert( ! $left && ! wp_next_scheduled( VCAP\Install::LEGACY_LICENSE_HOOK ), 'no license data of earlier builds is left' );
 }

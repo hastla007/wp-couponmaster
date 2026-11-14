@@ -245,7 +245,7 @@ $inst_own = static function ( string $hook ): array {
 };
 vcap_inst_assert( ! $inst_own( 'pre_set_site_transient_update_plugins' ) && ! $inst_own( 'plugins_api' ), 'no update handler of its own' );
 vcap_inst_assert( (bool) $inst_own( 'vcap_account_vouchers_top' ) && count( $inst_own( 'vcap_product_settings_fields' ) ) >= 2 && (bool) $inst_own( 'vcap_scanner_lookup' ), 'referrals, top-up, ticket vouchers and the shared scanner are registered' );
-vcap_inst_assert( ! method_exists( 'VCAP\\Admin\\ReportsAdmin', 'locked' ) && ! class_exists( 'VCAP\\Licensing\\Entitlements' ), 'no locked report view and no license gate' );
+vcap_inst_assert( ! method_exists( 'VCAP\\Admin\\ReportsAdmin', 'locked' ) && ! class_exists( 'VCAP\\Licensing\\Entitlements', false ) && ! is_dir( VCAP_PATH . 'src/Licensing' ), 'no locked report view and no license gate' );
 $inst_locked = array();
 foreach ( array( '', 'delivery', 'privacy', 'api' ) as $inst_section ) {
 	foreach ( vcap()->settings->fields( $inst_section ) as $inst_field ) {
