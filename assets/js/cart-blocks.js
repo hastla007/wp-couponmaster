@@ -27,8 +27,12 @@
 	var TotalsItem = checkout.TotalsItem || ( wc.blocksComponents && wc.blocksComponents.TotalsItem );
 	var TotalsWrapper = checkout.TotalsWrapper || ( wc.blocksComponents && wc.blocksComponents.TotalsWrapper );
 
+	// Sample rows for the editor, whose preview cart carries no voucher (VCAP\CartBlocks::preview_data()).
+	var settings = wc.wcSettings && wc.wcSettings.getSetting ? wc.wcSettings.getSetting( NAMESPACE + '_data', {} ) : {};
+	var preview = ( settings && settings.preview ) || null;
+
 	function data( extensions ) {
-		return ( extensions && extensions[ NAMESPACE ] ) || {};
+		return ( extensions && extensions[ NAMESPACE ] ) || preview || {};
 	}
 
 	function row( key, className, label, formatted ) {

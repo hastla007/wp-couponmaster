@@ -668,6 +668,12 @@ final class Shortcodes {
 		if ( ! is_user_logged_in() ) {
 			return self::login_hint();
 		}
+		if ( ! $this->referrals->enabled() ) {
+			// G9: customers see nothing; the shop staff learn why instead of an empty spot.
+			return current_user_can( 'manage_woocommerce' )
+				? self::wrap( self::preview_note( __( 'The "Refer a friend" program is switched off (WooCommerce → Settings → Vouchers), so customers see nothing here. Only shop managers see this note.', 'voucher-captain' ) ) )
+				: '';
+		}
 		Downloads::enqueue_style();
 		ob_start();
 		$this->referrals->account_block();

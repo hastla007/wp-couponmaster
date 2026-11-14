@@ -77,6 +77,10 @@ vcap_sc_assert( false === strpos( do_shortcode( '[vcap_my_vouchers]' ), 'vcap-lo
 update_option( 'vcap_referral_enabled', 'yes' );
 vcap_sc_assert( false !== strpos( do_shortcode( '[vcap_referral]' ), 'vcap-referral-code' ), 'the referral shortcode shows the personal code' );
 update_option( 'vcap_referral_enabled', 'no' );
+vcap_sc_assert( '' === do_shortcode( '[vcap_referral]' ), 'G9: with the program switched off customers see nothing' );
+$g9_manager = wp_insert_user( array( 'user_login' => 'sc-g9-' . $tag, 'user_pass' => wp_generate_password(), 'user_email' => 'sc-g9-' . $tag . '@example.com', 'role' => 'shop_manager' ) );
+wp_set_current_user( $g9_manager );
+vcap_sc_assert( str_contains( do_shortcode( '[vcap_referral]' ), 'switched off' ), 'G9: a shop manager is told that the referral program is switched off' );
 wp_set_current_user( 0 );
 
 wc_load_cart();
