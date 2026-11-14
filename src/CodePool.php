@@ -14,40 +14,40 @@ final class CodePool {
 
 	/**
 	 * Claim a free code of a batch atomically, in random order: the file order (often numbered cards) does not
-	 * tell a buyer which codes the next customers get. A random id between the lowest and highest free id picks
-	 * the next free code from there (two index lookups, no full scan); the optimistic UPDATE below makes sure
-	 * that only one process gets a code, a process that lost the race tries another random position.
+	 * tell a buyer which codes the next customers get. A random id between the lowest and highest free id is the
+	 * starting point; one UPDATE takes the next free code from there (ORDER BY id LIMIT 1) and records its id
+	 * with LAST_INSERT_ID(id), read back on the same connection. Parallel claims never fail on each other: InnoDB
+	 * re-checks "used_at IS NULL" after waiting for a row another claim locked and moves on to the next free
+	 * code, so a batch only reports empty when it is (works on every MySQL and MariaDB version).
 	 */
 	public function claim( string $batch, int $voucher_id = 0 ): ?string {
 		global $wpdb;
-		for ( $i = 0; $i < 5; $i++ ) {
-			$row = $this->random_free( $batch );
-			if ( ! $row ) {
+		// A statement that failed (deadlock of two claims scanning towards each other) is tried again.
+		for ( $attempt = 0; $attempt < 3; $attempt++ ) {
+			$bounds = $wpdb->get_row( $wpdb->prepare( "SELECT MIN(id) AS lo, MAX(id) AS hi FROM {$this->table()} WHERE batch = %s AND voucher_id = 0", $batch ), ARRAY_A ); // phpcs:ignore
+			if ( ! $bounds || null === $bounds['lo'] ) {
 				return null;
 			}
-			// Optimistic lock: only one process can flip used_at from NULL.
-			$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET used_at = %s, voucher_id = %d WHERE id = %d AND used_at IS NULL", gmdate( 'Y-m-d H:i:s' ), $voucher_id, $row['id'] ) ); // phpcs:ignore
-			if ( 1 === (int) $updated ) {
-				return (string) $row['code'];
+			$pivot  = random_int( (int) $bounds['lo'], max( (int) $bounds['lo'], (int) $bounds['hi'] ) );
+			$now    = gmdate( 'Y-m-d H:i:s' );
+			$failed = false;
+			// From the pivot upwards, then (none left above) downwards.
+			foreach ( array( 'id >= %d ORDER BY id ASC', 'id < %d ORDER BY id DESC' ) as $range ) {
+				$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET used_at = %s, voucher_id = %d, id = LAST_INSERT_ID(id) WHERE batch = %s AND voucher_id = 0 AND used_at IS NULL AND {$range} LIMIT 1", $now, $voucher_id, $batch, $pivot ) ); // phpcs:ignore
+				if ( false === $updated ) {
+					$failed = true;
+					break;
+				}
+				if ( 1 === (int) $updated ) {
+					$id = (int) $wpdb->get_var( 'SELECT LAST_INSERT_ID()' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					return $id > 0 ? (string) $wpdb->get_var( $wpdb->prepare( "SELECT code FROM {$this->table()} WHERE id = %d", $id ) ) : null; // phpcs:ignore
+				}
+			}
+			if ( ! $failed ) {
+				return null; // Both directions found no free code: the batch is empty.
 			}
 		}
 		return null;
-	}
-
-	/** @return array{id:string|int,code:string}|null a free code of the batch at a random position */
-	private function random_free( string $batch ): ?array {
-		global $wpdb;
-		// Bounds from the (batch, voucher_id) index only; claimed codes in between are skipped by the lookup.
-		$bounds = $wpdb->get_row( $wpdb->prepare( "SELECT MIN(id) AS lo, MAX(id) AS hi FROM {$this->table()} WHERE batch = %s AND voucher_id = 0", $batch ), ARRAY_A ); // phpcs:ignore
-		if ( ! $bounds || null === $bounds['lo'] ) {
-			return null;
-		}
-		$pivot = random_int( (int) $bounds['lo'], max( (int) $bounds['lo'], (int) $bounds['hi'] ) );
-		$row   = $wpdb->get_row( $wpdb->prepare( "SELECT id, code FROM {$this->table()} WHERE batch = %s AND voucher_id = 0 AND used_at IS NULL AND id >= %d ORDER BY id ASC LIMIT 1", $batch, $pivot ), ARRAY_A ); // phpcs:ignore
-		if ( ! $row ) {
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, code FROM {$this->table()} WHERE batch = %s AND voucher_id = 0 AND used_at IS NULL AND id < %d ORDER BY id DESC LIMIT 1", $batch, $pivot ), ARRAY_A ); // phpcs:ignore
-		}
-		return $row ?: null;
 	}
 
 	/**
@@ -77,6 +77,7 @@ final class CodePool {
 
 	public function add( string $code, string $batch ): bool {
 		global $wpdb;
+		ProductChecks::flush();
 		return (bool) $wpdb->insert( // phpcs:ignore
 			$this->table(),
 			array(
@@ -85,6 +86,12 @@ final class CodePool {
 				'imported_at' => gmdate( 'Y-m-d H:i:s' ),
 			)
 		);
+	}
+
+	/** Free codes of one batch, counted on the (batch, used_at) index (no scan of the other batches). */
+	public function free_count( string $batch ): int {
+		global $wpdb;
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$this->table()} WHERE batch = %s AND used_at IS NULL", $batch ) ); // phpcs:ignore
 	}
 
 	/** @return array<int, array{batch:string,total:int,free:int}> */
@@ -103,6 +110,7 @@ final class CodePool {
 
 	public function delete_free( string $batch ): int {
 		global $wpdb;
+		ProductChecks::flush();
 		return (int) $wpdb->query( $wpdb->prepare( "DELETE FROM {$this->table()} WHERE batch = %s AND used_at IS NULL", $batch ) ); // phpcs:ignore
 	}
 }

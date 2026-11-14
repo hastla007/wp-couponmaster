@@ -38,7 +38,7 @@ vcap_camp_assert(
 	&& $copy->get_date_expires()->getTimestamp() === $template->get_date_expires()->getTimestamp() && 0 === (int) $copy->get_usage_count(),
 	'generated coupons copy the template settings and start unused'
 );
-$rows = $campaigns->campaign_rows( $name );
+$rows = iterator_to_array( $campaigns->campaign_rows( $name ), false );
 vcap_camp_assert( 6 === count( $rows ) && __( 'Code', 'voucher-captain' ) === $rows[0][0] && in_array( strtolower( $codes[0] ), array_map( 'strtolower', array_column( array_slice( $rows, 1 ), 0 ) ), true ), 'the campaign CSV lists every code' );
 vcap_camp_assert( in_array( $name, array_column( $campaigns->campaigns(), 'campaign' ), true ), 'the campaign appears in the campaign list' );
 
@@ -62,5 +62,61 @@ for ( $i = 0; $i < 10; $i++ ) {
 vcap_camp_assert( 10 === count( array_unique( array_filter( $claimed ) ) ) && ! array_diff( $claimed, $pool ) && null === vcap()->code_pool->claim( $batch ), 'every pool code is claimed exactly once, then the batch is empty' );
 vcap_camp_assert( array_values( array_intersect( $pool, $claimed ) ) !== $claimed, 'pool codes are handed out in random order, not in file order' );
 vcap_camp_assert( array( "'=HYPERLINK(1)", 'ok' ) === VCAP\Campaigns::safe_row( array( '=HYPERLINK(1)', 'ok' ) ), 'CSV cells cannot inject spreadsheet formulas' );
+
+// B10: parallel claims never fail on each other – here a competing request takes a free code right before each
+// claim statement; the claim still gets one of the remaining codes while any is left (before: five lost rounds
+// returned null although codes were free).
+global $wpdb;
+$b10_batch = 'B10-' . strtolower( wp_generate_password( 6, false, false ) );
+$b10_codes = $campaigns->generate_pool( $b10_batch, 12, array( 'length' => 12 ) );
+$b10_pool  = VCAP\Install::tables()['pool'];
+$b10_busy  = false;
+$b10_rival = static function ( $q ) use ( &$b10_busy, $wpdb, $b10_pool, $b10_batch ) {
+	if ( $b10_busy || ! preg_match( '/^UPDATE ' . preg_quote( $b10_pool, '/' ) . ' SET used_at/', $q ) ) {
+		return $q;
+	}
+	$b10_busy = true;
+	// The competitor takes the very code this claim aims at when the statement names it, else the next free one.
+	$target = preg_match( '/WHERE id = (\d+)/', $q, $m ) ? (int) $m[1] : (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$b10_pool} WHERE batch = %s AND used_at IS NULL ORDER BY id LIMIT 1", $b10_batch ) ); // phpcs:ignore
+	$wpdb->query( $wpdb->prepare( "UPDATE {$b10_pool} SET used_at = %s, voucher_id = 999999 WHERE id = %d AND used_at IS NULL", gmdate( 'Y-m-d H:i:s' ), $target ) ); // phpcs:ignore
+	$b10_busy = false;
+	return $q;
+};
+add_filter( 'query', $b10_rival );
+$b10_got = array();
+for ( $i = 0; $i < 4; $i++ ) {
+	$b10_got[] = vcap()->code_pool->claim( $b10_batch );
+}
+remove_filter( 'query', $b10_rival );
+vcap_camp_assert( 4 === count( array_unique( array_filter( $b10_got ) ) ) && ! array_diff( array_filter( $b10_got ), $b10_codes ), 'B10: claims racing with a competitor for the same code still get a free code of the batch' );
+
+// A8: the free codes of a batch are counted on the (batch, used_at) index for that batch only (no GROUP BY over
+// the whole pool on every product view), once per request.
+VCAP\ProductChecks::flush();
+$a8_expected = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$b10_pool} WHERE batch = %s AND used_at IS NULL", $b10_batch ) ); // phpcs:ignore
+$a8_queries  = array();
+$a8_log     = static function ( $q ) use ( &$a8_queries ) {
+	$a8_queries[] = $q;
+	return $q;
+};
+add_filter( 'query', $a8_log );
+$a8_free  = VCAP\ProductChecks::free_codes( $b10_batch );
+$a8_again = VCAP\ProductChecks::free_codes( $b10_batch );
+remove_filter( 'query', $a8_log );
+$a8_pool = array_values( preg_grep( '/' . preg_quote( $b10_pool, '/' ) . '/', $a8_queries ) );
+vcap_camp_assert( $a8_expected > 0 && $a8_expected === $a8_free && $a8_expected === $a8_again, 'A8: the free codes of the batch are counted (' . $a8_free . ')' );
+vcap_camp_assert( 1 === count( $a8_pool ) && ! str_contains( $a8_pool[0], 'GROUP BY' ) && str_contains( $a8_pool[0], 'batch = ' ), 'A8: one indexed count of that batch per request, no GROUP BY over the pool' );
+$a8_queries = array();
+VCAP\ProductChecks::shop_problems();
+add_filter( 'query', $a8_log );
+VCAP\ProductChecks::shop_problems();
+remove_filter( 'query', $a8_log );
+vcap_camp_assert( ! preg_grep( '/_vcap_enabled/', $a8_queries ), 'A8: the shop problems shown on admin screens are cached (no product search on the next screen)' );
+
+// B8: the campaign export reads its coupons in chunks with their meta (not one query per field and coupon).
+wp_cache_flush();
+$b8_before = $wpdb->num_queries;
+$b8_rows   = iterator_to_array( $campaigns->campaign_rows( $name ), false );
+vcap_camp_assert( 6 === count( $b8_rows ) && $wpdb->num_queries - $b8_before <= 12, 'B8: the campaign export of five coupons reads them in a chunk (' . ( $wpdb->num_queries - $b8_before ) . ' queries)' );
 
 echo "Voucher Captain campaign checks passed.\n";
