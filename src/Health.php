@@ -16,6 +16,65 @@ final class Health {
 		add_filter( 'site_status_tests', array( $this, 'tests' ) );
 		add_action( 'rest_api_init', array( $this, 'rest_routes' ) );
 		add_action( 'wp_mail_failed', array( $this, 'record_mail_failure' ) );
+		add_action( 'admin_post_vcap_reset_rate_limits', array( $this, 'reset_rate_limits' ) );
+	}
+
+	/** Site Health action: removes all rate limit counters (e.g. after fixing the proxy setup). */
+	public function reset_rate_limits(): void {
+		check_admin_referer( 'vcap_reset_rate_limits' );
+		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
+		}
+		Plugin::reset_rate_limits();
+		wp_safe_redirect( admin_url( 'site-health.php?vcap_rate_limits_reset=1' ) );
+		exit;
+	}
+
+	/**
+	 * Whether the request looks like it came through a reverse proxy or CDN while the rate limits still use
+	 * REMOTE_ADDR (no "vcap_client_ip" filter): then all customers share the proxy's counter.
+	 *
+	 * @param array<string, mixed> $server $_SERVER.
+	 */
+	public static function proxy_without_client_ip( array $server ): bool {
+		$remote = isset( $server['REMOTE_ADDR'] ) && is_string( $server['REMOTE_ADDR'] ) ? $server['REMOTE_ADDR'] : '';
+		if ( (string) apply_filters( 'vcap_client_ip', $remote ) !== $remote ) { // Same filter as Plugin::client_ip().
+			return false; // The filter "vcap_client_ip" gives the visitor's address.
+		}
+		foreach ( array( 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'HTTP_CF_CONNECTING_IP', 'HTTP_TRUE_CLIENT_IP', 'HTTP_FORWARDED', 'HTTP_X_CLUSTER_CLIENT_IP', 'HTTP_FASTLY_CLIENT_IP' ) as $header ) {
+			if ( ! empty( $server[ $header ] ) ) {
+				return true;
+			}
+		}
+		return '' !== $remote && false === filter_var( $remote, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE );
+	}
+
+	/** Rate limits: visitor addresses behind a proxy, and limits reached in the last day. */
+	public function test_rate_limits(): array {
+		$hits = get_option( Plugin::RATE_HITS_OPTION, array() );
+		$hits = is_array( $hits ) ? $hits : array();
+		$recent = array();
+		foreach ( $hits as $bucket => $hit ) {
+			if ( is_array( $hit ) && (int) ( $hit['last'] ?? 0 ) > time() - DAY_IN_SECONDS ) {
+				$recent[] = (string) $bucket;
+			}
+		}
+		$proxy  = self::proxy_without_client_ip( $_SERVER ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- only checks which headers exist.
+		$reset  = '<p><a class="button" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=vcap_reset_rate_limits' ), 'vcap_reset_rate_limits' ) ) . '">' . esc_html__( 'Reset rate limits', 'voucher-captain' ) . '</a></p>';
+		if ( ! $proxy && ! $recent ) {
+			return self::result( 'rate_limits', 'good', __( 'Code entry rate limits see each visitor', 'voucher-captain' ), __( 'Failed code entries and PDF previews are limited per visitor address; no limit was reached in the last 24 hours.', 'voucher-captain' ) );
+		}
+		$text = array();
+		if ( $proxy ) {
+			$text[] = __( 'This site seems to run behind a reverse proxy or CDN, but the rate limits count by the address of the proxy. All customers then share one counter and may see "Too many attempts". Return the real visitor address with the filter "vcap_client_ip" (only from headers your proxy sets).', 'voucher-captain' );
+		}
+		if ( $recent ) {
+			/* translators: %s: list of rate limit names, e.g. "code, preview" */
+			$text[] = sprintf( __( 'Rate limits reached in the last 24 hours: %s. Details are in the WooCommerce log (source "voucher-captain"). If customers were affected, reset the counters.', 'voucher-captain' ), implode( ', ', $recent ) );
+		}
+		$result            = self::result( 'rate_limits', 'recommended', __( 'Code entry rate limits need attention', 'voucher-captain' ), implode( ' ', $text ) );
+		$result['actions'] = current_user_can( 'manage_woocommerce' ) ? $reset : '';
+		return $result;
 	}
 
 	/** Checks that go through all voucher products: run asynchronously (REST), so Site Health opens at once. */
@@ -25,7 +84,7 @@ final class Health {
 
 	public function tests( $tests ) {
 		$tests = (array) $tests;
-		foreach ( array( 'extensions', 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets', 'offline_payment', 'currency' ) as $id ) {
+		foreach ( array( 'extensions', 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets', 'offline_payment', 'currency', 'rate_limits' ) as $id ) {
 			$tests['direct'][ 'vcap_' . $id ] = array(
 				'label' => __( 'Voucher Captain', 'voucher-captain' ),
 				'test'  => array( $this, 'test_' . $id ),

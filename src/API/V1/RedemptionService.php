@@ -836,7 +836,8 @@ final class RedemptionService {
 	}
 
 	/**
-	 * Visitor key of the failed-code rate limit: the user (connectors and logged-in customers), else the address.
+	 * Visitor key of the per-caller failed-code limit: the user (connectors and logged-in customers); '' = none
+	 * (PHP callers without a user count by address only).
 	 *
 	 * @param int $user_id User id.
 	 * @return string
@@ -854,45 +855,95 @@ final class RedemptionService {
 		return (int) get_option( 'vcap_redemption_max_failures', 10 );
 	}
 
+	/** @var array{user:bool, address:bool} which counters the current lookup was counted in */
+	private array $counted = array(
+		'user'    => false,
+		'address' => false,
+	);
+
+	/**
+	 * Whether the caller's attempts also count by address, in the bucket shared with the plugin's code forms
+	 * (CodeLookup): every caller except staff (connectors with voucher management rights) and requests without a
+	 * client address (cron, WP-CLI). Self-registered customer accounts therefore cannot multiply the quota.
+	 *
+	 * @return bool
+	 */
+	private function counts_by_address(): bool {
+		$staff = current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' ); // phpcs:ignore WordPress.WP.Capabilities.Unknown -- Registered by Install / WooCommerce.
+		return ! $staff && '' !== \VCAP\Plugin::client_ip();
+	}
+
 	/**
 	 * Counts the attempt before the code lookup (atomic, see Plugin::rate_limited()) and tells whether the caller
-	 * exceeded the number of invalid codes. Existing codes give the attempt back (record_success()).
+	 * exceeded the number of invalid codes: per user (setting "vcap_redemption_max_failures") and per address in
+	 * the bucket of all code forms. Existing codes give the attempts back (record_success()).
 	 *
 	 * @param int $user_id User id.
 	 * @return bool
 	 */
 	private function too_many_failures( int $user_id ): bool {
+		$this->counted = array(
+			'user'    => false,
+			'address' => false,
+		);
 		$max = $this->max_failures();
-		if ( $max <= 0 ) {
-			return false;
+		if ( $max > 0 && $user_id ) {
+			/**
+			 * Invalid codes per 15 minutes across all callers; above it every caller's quota shrinks (brake).
+			 *
+			 * @since 1.2.0
+			 * @param int $site_wide Default 300.
+			 */
+			$site_wide = (int) apply_filters( 'vcap_redemption_site_wide_failures', 300 );
+			if ( \VCAP\Plugin::rate_limited( self::RATE_BUCKET, $max, $site_wide, self::RATE_WINDOW, false, $this->rate_visitor( $user_id ) ) ) {
+				return true;
+			}
+			$this->counted['user'] = true;
 		}
-		/**
-		 * Invalid codes per 15 minutes across all callers; above it every caller's quota shrinks (brake).
-		 *
-		 * @since 1.2.0
-		 * @param int $site_wide Default 300.
-		 */
-		$site_wide = (int) apply_filters( 'vcap_redemption_site_wide_failures', 300 );
-		return \VCAP\Plugin::rate_limited( self::RATE_BUCKET, $max, $site_wide, self::RATE_WINDOW, false, $this->rate_visitor( $user_id ) );
+		if ( $this->counts_by_address() ) {
+			if ( \VCAP\CodeLookup::begin() ) {
+				if ( $this->counted['user'] ) {
+					\VCAP\Plugin::rate_limit_success( self::RATE_BUCKET, self::RATE_WINDOW, $this->rate_visitor( $user_id ) ); // Refused, not a failed code.
+					$this->counted['user'] = false;
+				}
+				return true;
+			}
+			$this->counted['address'] = true;
+		}
+		return false;
 	}
 
 	/**
-	 * The code exists: give the counted attempt back.
+	 * The code exists: give the counted attempts back.
 	 *
 	 * @param int $user_id User id.
 	 */
 	private function record_success( int $user_id ): void {
-		if ( $this->max_failures() > 0 ) {
+		if ( $this->counted['user'] ) {
 			\VCAP\Plugin::rate_limit_success( self::RATE_BUCKET, self::RATE_WINDOW, $this->rate_visitor( $user_id ) );
 		}
+		if ( $this->counted['address'] ) {
+			\VCAP\CodeLookup::found();
+		}
+		$this->counted = array(
+			'user'    => false,
+			'address' => false,
+		);
 	}
 
 	/**
-	 * Count an invalid code site-wide (the caller's attempt is already counted).
+	 * Count an invalid code site-wide (the caller's attempts are already counted).
 	 */
 	private function record_failure(): void {
-		if ( $this->max_failures() > 0 ) {
+		if ( $this->counted['user'] ) {
 			\VCAP\Plugin::rate_limit_failure( self::RATE_BUCKET, self::RATE_WINDOW );
 		}
+		if ( $this->counted['address'] ) {
+			\VCAP\CodeLookup::failed();
+		}
+		$this->counted = array(
+			'user'    => false,
+			'address' => false,
+		);
 	}
 }

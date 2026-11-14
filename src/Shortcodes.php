@@ -293,19 +293,20 @@ final class Shortcodes {
 	 * 'rejected' (WooCommerce refused it) or 'limited' (too many attempts).
 	 */
 	public function redeem( string $raw ): string {
-		// The attempt counts before the lookup and is given back for an existing code: a customer redeeming real
-		// vouchers is never locked out, and the site-wide counter only brakes guessing (see Plugin::rate_limited()).
-		if ( Plugin::rate_limited( 'redeem', 15, 300, 15 * MINUTE_IN_SECONDS, false ) ) {
-			wc_add_notice( __( 'Too many attempts. Please try again later.', 'voucher-captain' ), 'error' );
+		// The attempt counts before the lookup (one bucket for all code forms) and is given back for an existing
+		// code: a customer redeeming real vouchers is never locked out, and the site-wide counter only brakes
+		// guessing (see CodeLookup, Plugin::rate_limited()). Another customer's store credit reads as unknown.
+		if ( CodeLookup::begin() ) {
+			wc_add_notice( CodeLookup::limited_message(), 'error' );
 			return 'limited';
 		}
 		$code = wc_format_coupon_code( sanitize_text_field( $raw ) );
-		if ( '' === $code || strlen( $code ) > 100 || ! wc_get_coupon_id_by_code( $code ) ) {
-			Plugin::rate_limit_failure( 'redeem', 15 * MINUTE_IN_SECONDS );
-			wc_add_notice( __( 'Voucher code not found.', 'voucher-captain' ), 'error' );
+		if ( ! CodeLookup::confirms( $code ) ) {
+			CodeLookup::failed();
+			wc_add_notice( CodeLookup::not_found_message(), 'error' );
 			return 'invalid';
 		}
-		Plugin::rate_limit_success( 'redeem', 15 * MINUTE_IN_SECONDS );
+		CodeLookup::found();
 		/** Connectors may handle a code themselves (e.g. exchange it for tickets): return a result string. */
 		$handled = apply_filters( 'vcap_redeem_code', null, $code );
 		if ( is_string( $handled ) && '' !== $handled ) {
@@ -352,6 +353,7 @@ final class Shortcodes {
 		if ( WC()->session ) {
 			WC()->session->set( self::PREFILL_KEY, null ); // The link's code was used (or replaced) by the customer.
 		}
+		self::set_prefill_cookie( '' );
 		$this->result = $this->redeem( wp_unslash( (string) $_POST['vcap_redeem_code'] ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised in redeem().
 		if ( 'applied' === $this->result ) {
 			wp_safe_redirect( wc_get_cart_url() );
@@ -372,11 +374,15 @@ final class Shortcodes {
 		$session = WC()->session;
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- a public link; the code only fills in the form.
 		if ( isset( $_GET['vcap_code'] ) && is_string( $_GET['vcap_code'] ) && $session ) {
-			$code = self::clean_code( wp_unslash( $_GET['vcap_code'] ) );
-			if ( ! $session->has_session() ) {
-				$session->set_customer_session_cookie( true ); // Guests need a session to keep the code.
+			$code = self::clean_code( sanitize_text_field( wp_unslash( $_GET['vcap_code'] ) ) );
+			if ( $session->has_session() ) {
+				$session->set( self::PREFILL_KEY, '' !== $code ? $code : null );
+			} elseif ( self::plausible_code( $code ) ) {
+				// No WooCommerce session is started for a link (48 hours, and hosts skip their page cache for
+				// it): the code waits in a short-lived cookie of its own until the form is used. Empty or
+				// implausible codes (mail link scanners, broken links) leave no cookie at all.
+				self::set_prefill_cookie( $code );
 			}
-			$session->set( self::PREFILL_KEY, '' !== $code ? $code : null );
 			if ( ! headers_sent() ) {
 				nocache_headers();
 				header( 'Referrer-Policy: no-referrer' );
@@ -385,7 +391,7 @@ final class Shortcodes {
 			exit;
 		}
 		// phpcs:enable
-		$prefill = $session && '' !== (string) $session->get( self::PREFILL_KEY, '' );
+		$prefill = ( $session && '' !== (string) $session->get( self::PREFILL_KEY, '' ) ) || '' !== self::prefill_cookie();
 		$on_page = is_singular() && self::page_has_redeem_form( (int) get_queried_object_id() );
 		if ( headers_sent() || ! ( $on_page || ( $prefill && self::request_shows_redeem_form() ) ) ) {
 			return;
@@ -402,11 +408,58 @@ final class Shortcodes {
 	/** Code to fill in the redeem form: from a redeem link (session), else from the URL (no session). */
 	public static function link_code(): string {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- only fills in the form.
-		$code = isset( $_GET['vcap_code'] ) && is_string( $_GET['vcap_code'] ) ? wp_unslash( $_GET['vcap_code'] ) : '';
+		$code = isset( $_GET['vcap_code'] ) && is_string( $_GET['vcap_code'] ) ? sanitize_text_field( wp_unslash( $_GET['vcap_code'] ) ) : '';
 		if ( '' === $code && function_exists( 'WC' ) && WC()->session ) {
 			$code = (string) WC()->session->get( self::PREFILL_KEY, '' );
 		}
+		if ( '' === $code ) {
+			$code = self::prefill_cookie();
+		}
 		return self::clean_code( $code );
+	}
+
+	/** Cookie that keeps the code of a redeem link for a visitor without a WooCommerce session. */
+	public const PREFILL_COOKIE = 'vcap_redeem_code';
+	/** Lifetime of that cookie (seconds). */
+	public const PREFILL_COOKIE_TTL = 30 * MINUTE_IN_SECONDS;
+
+	/** Whether a code from a link looks like a voucher or coupon code (letters or digits, 4 to 100 characters). */
+	public static function plausible_code( string $code ): bool {
+		return strlen( $code ) >= 4 && strlen( $code ) <= 100 && (bool) preg_match( '/[A-Za-z0-9]/', $code );
+	}
+
+	/** The code waiting in the redeem link cookie ('' = none). */
+	public static function prefill_cookie(): string {
+		$raw = isset( $_COOKIE[ self::PREFILL_COOKIE ] ) && is_string( $_COOKIE[ self::PREFILL_COOKIE ] ) ? sanitize_text_field( wp_unslash( $_COOKIE[ self::PREFILL_COOKIE ] ) ) : '';
+		return self::clean_code( $raw );
+	}
+
+	/** Keeps a redeem link's code in a short-lived, HTTP-only cookie ('' removes it). */
+	public static function set_prefill_cookie( string $code ): void {
+		if ( '' === $code ) {
+			if ( ! isset( $_COOKIE[ self::PREFILL_COOKIE ] ) ) {
+				return;
+			}
+			unset( $_COOKIE[ self::PREFILL_COOKIE ] );
+			$expires = time() - YEAR_IN_SECONDS;
+		} else {
+			$_COOKIE[ self::PREFILL_COOKIE ] = $code;
+			$expires                         = time() + self::PREFILL_COOKIE_TTL;
+		}
+		if ( ! headers_sent() ) {
+			setcookie(
+				self::PREFILL_COOKIE,
+				$code,
+				array(
+					'expires'  => $expires,
+					'path'     => defined( 'COOKIEPATH' ) && COOKIEPATH ? COOKIEPATH : '/',
+					'domain'   => defined( 'COOKIE_DOMAIN' ) && COOKIE_DOMAIN ? COOKIE_DOMAIN : '',
+					'secure'   => is_ssl(),
+					'httponly' => true,
+					'samesite' => 'Lax',
+				)
+			);
+		}
 	}
 
 	/**

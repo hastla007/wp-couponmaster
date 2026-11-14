@@ -110,13 +110,11 @@ final class Downloads {
 			wc_add_notice( __( 'This voucher cannot be sent again.', 'voucher-captain' ), 'error' );
 			return;
 		}
-		$key   = 'vcap_resend_' . $voucher->id;
-		$count = (int) get_transient( $key );
-		if ( $count >= 3 ) {
+		// Atomic counter (parallel clicks cannot send more than 3 mails an hour).
+		if ( Plugin::rate_limited( 'resend', 3, 0, HOUR_IN_SECONDS, true, 'v' . $voucher->id ) ) {
 			wc_add_notice( __( 'This voucher was sent several times already. Please try again later.', 'voucher-captain' ), 'error' );
 			return;
 		}
-		set_transient( $key, $count + 1, HOUR_IN_SECONDS );
 		$sent = vcap()->delivery->send( $voucher );
 		$this->repo->log( $voucher->id, 'resent', null, null, sprintf( /* translators: %d: number of addresses */ _n( 'Requested by the customer, sent to %d address', 'Requested by the customer, sent to %d addresses', count( $sent ), 'voucher-captain' ), count( $sent ) ) );
 		if ( $sent ) {
@@ -140,7 +138,12 @@ final class Downloads {
 		$exp   = absint( $_GET['exp'] ?? 0 ); // phpcs:ignore WordPress.Security.NonceVerification
 		$sig   = sanitize_key( wp_unslash( $_GET['sig'] ?? '' ) ); // phpcs:ignore WordPress.Security.NonceVerification
 
-		$valid = $this->valid_guest_link( $token, $exp, $sig );
+		// A leaked link must not keep the server rendering PDFs: per visitor and per link (the cached PDF below
+		// makes repeated downloads cheap; the limits stop floods from one or many addresses).
+		if ( Plugin::rate_limited( 'pdf', 30, 600, 10 * MINUTE_IN_SECONDS ) || Plugin::rate_limited( 'pdf_link', 60, 0, HOUR_IN_SECONDS, true, 't' . $token ) ) {
+			wp_die( esc_html__( 'Too many downloads. Please try again later.', 'voucher-captain' ), esc_html__( 'Download unavailable', 'voucher-captain' ), array( 'response' => 429 ) );
+		}
+		$valid   = $this->valid_guest_link( $token, $exp, $sig );
 		$voucher = $valid ? $this->repo->get_by_token( $token ) : null;
 		if ( ! $voucher ) {
 			wp_die( esc_html__( 'This download link is invalid or has expired. Please log in to your account or contact us for a new link.', 'voucher-captain' ), esc_html__( 'Download unavailable', 'voucher-captain' ), array( 'response' => 403 ) );
@@ -168,20 +171,45 @@ final class Downloads {
 		if ( ! class_exists( '\Dompdf\Dompdf' ) ) {
 			wp_die( esc_html__( 'PDF generation is not available.', 'voucher-captain' ), 500 );
 		}
-		if ( $log ) {
-			$this->repo->log( $voucher->id, 'downloaded' );
+		if ( $log && ! $this->downloaded_recently( $voucher->id ) ) {
+			$this->repo->log( $voucher->id, 'downloaded' ); // At most once an hour: a link opened again and again does not flood the history.
 		}
-		// Staff (admin download) print the customer's voucher: in the order/site language, as it was mailed, not
-		// in the language of their profile.
-		$state = $log ? null : Compat\Multilingual::switch_to( Compat\Multilingual::email_locale( $voucher ), Compat\Multilingual::order_language( $voucher->order() ) );
-		try {
-			$pdf = $this->pdf->render( $voucher );
-		} finally {
-			if ( $state ) {
-				Compat\Multilingual::restore( $state );
+		$cache = $log ? $this->cached_pdf_file( $voucher ) : '';
+		$pdf   = '' !== $cache && is_readable( $cache ) && filemtime( $cache ) > time() - HOUR_IN_SECONDS ? (string) file_get_contents( $cache ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- private local file.
+		if ( '' === $pdf ) {
+			// Staff (admin download) print the customer's voucher: in the order/site language, as it was mailed, not
+			// in the language of their profile.
+			$state = $log ? null : Compat\Multilingual::switch_to( Compat\Multilingual::email_locale( $voucher ), Compat\Multilingual::order_language( $voucher->order() ) );
+			try {
+				$pdf = $this->pdf->render( $voucher );
+			} finally {
+				if ( $state ) {
+					Compat\Multilingual::restore( $state );
+				}
+			}
+			if ( '' !== $cache && Install::ensure_upload_dir() ) {
+				file_put_contents( $cache, $pdf ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- private folder, removed by the daily maintenance after an hour.
 			}
 		}
 		Preview::stream( $pdf, $this->pdf->filename( $voucher ), ! $download );
+	}
+
+	/** Whether a customer download of the voucher was logged within the last hour. */
+	public function downloaded_recently( int $voucher_id ): bool {
+		global $wpdb;
+		$table = Install::tables()['events'];
+		return (bool) $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE voucher_id = %d AND event = 'downloaded' AND created_at > %s LIMIT 1", $voucher_id, gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from Install.
+	}
+
+	/**
+	 * Private file of a rendered customer PDF, for at most an hour (the temp folder is emptied by the daily
+	 * maintenance). The name changes with everything the PDF shows (voucher data, template, language, plugin
+	 * version), so a changed or cancelled voucher is never served from an old file.
+	 */
+	public function cached_pdf_file( Voucher $voucher ): string {
+		$template    = (int) $voucher->template_id;
+		$fingerprint = wp_json_encode( get_object_vars( $voucher ) ) . '|' . ( $template ? (string) get_post_modified_time( 'U', true, $template ) : '' ) . '|' . determine_locale() . '|' . ( defined( 'VCAP_VERSION' ) ? VCAP_VERSION : '' );
+		return Install::upload_dir() . '/tmp/dl-' . hash_hmac( 'sha256', $fingerprint, $this->settings->secret() ) . '.pdf';
 	}
 
 	/**
@@ -227,7 +255,7 @@ final class Downloads {
 	 */
 	public function may_see_codes( \WC_Order $order ): bool {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- the order key is the credential here.
-		$key     = isset( $_GET['key'] ) ? wc_clean( wp_unslash( (string) $_GET['key'] ) ) : '';
+		$key     = isset( $_GET['key'] ) && is_string( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : '';
 		$allowed = ( is_order_received_page() && '' !== $key && hash_equals( (string) $order->get_order_key(), (string) $key ) )
 			|| ( is_user_logged_in() && (int) $order->get_customer_id() > 0 && (int) $order->get_customer_id() === get_current_user_id() );
 		/** Whether the current visitor may see the full voucher codes and PDF links of an order (default: order key or own order). */
@@ -366,7 +394,7 @@ final class Downloads {
 	 * Evaluates a sent balance check once per request (before any output, so the no-cache headers can still be
 	 * sent): two balance blocks on a page or a builder rendering the content twice count one attempt, not two.
 	 * Guests send it without a nonce: it only reads (rate limited) and a nonce in a cached page would expire or
-	 * belong to another visitor's session. Logged-in customers keep the nonce check.
+	 * belong to another visitor's session. Logged-in customers without a valid nonce are answered like guests.
 	 */
 	public function handle_balance(): void {
 		if ( ! isset( $_POST['vcap_balance_code'] ) || ! is_string( $_POST['vcap_balance_code'] ) ) {
@@ -378,9 +406,9 @@ final class Downloads {
 		if ( $this->balance && $key === $this->balance['key'] ) {
 			return; // Already checked in this request.
 		}
-		if ( is_user_logged_in() && ! ( isset( $_POST['vcap_balance_nonce'] ) && wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_balance_nonce'] ) ), 'vcap_balance' ) ) ) {
-			return;
-		}
+		// A logged-in customer's form carries a nonce. A missing or expired one (cached page) does not drop the
+		// check silently: it is answered like a guest's, i.e. without the account's own store credit.
+		$verified = is_user_logged_in() && isset( $_POST['vcap_balance_nonce'] ) && wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_balance_nonce'] ) ), 'vcap_balance' );
 		Shortcodes::no_cache();
 		$this->balance = array(
 			'key'   => $key,
@@ -389,18 +417,18 @@ final class Downloads {
 			'error' => true,
 			'shown' => false,
 		);
-		if ( Plugin::rate_limited( 'balance', 15, 300, 15 * MINUTE_IN_SECONDS, false ) ) {
-			$this->balance['html'] = '<p class="woocommerce-error" role="alert">' . esc_html__( 'Too many attempts. Please try again later.', 'voucher-captain' ) . '</p>';
+		if ( CodeLookup::begin() ) {
+			$this->balance['html'] = '<p class="woocommerce-error" role="alert">' . esc_html( CodeLookup::limited_message() ) . '</p>';
 			return;
 		}
 		$code    = wc_format_coupon_code( sanitize_text_field( wp_unslash( $_POST['vcap_balance_code'] ) ) );
-		$voucher = '' !== $code ? ( $this->repo->get_by_code( $code ) ?? $this->repo->get_by_code( strtoupper( $code ) ) ) : null;
-		if ( ! $voucher ) {
-			Plugin::rate_limit_failure( 'balance', 15 * MINUTE_IN_SECONDS );
-			$this->balance['html'] = '<p class="woocommerce-error" role="alert">' . esc_html__( 'Voucher code not found.', 'voucher-captain' ) . '</p>';
+		$voucher = '' !== $code && strlen( $code ) <= 100 ? ( $this->repo->get_by_code( $code ) ?? $this->repo->get_by_code( strtoupper( $code ) ) ) : null;
+		if ( ! CodeLookup::visible( $voucher, $verified ? get_current_user_id() : 0 ) ) {
+			CodeLookup::failed(); // Unknown, or another customer's store credit: the same answer.
+			$this->balance['html'] = '<p class="woocommerce-error" role="alert">' . esc_html( CodeLookup::not_found_message() ) . '</p>';
 			return;
 		}
-		Plugin::rate_limit_success( 'balance', 15 * MINUTE_IN_SECONDS );
+		CodeLookup::found();
 		$this->balance['html']  = $this->balance_result( $voucher );
 		$this->balance['error'] = false;
 	}

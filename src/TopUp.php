@@ -145,17 +145,16 @@ final class TopUp {
 		}
 		if ( '' === trim( sanitize_text_field( $raw ) ) ) {
 			$result = __( 'Please enter the code of the gift card to top up.', 'voucher-captain' ); // Not a guess: no attempt counted.
-		} elseif ( Plugin::rate_limited( 'topup', 15, 300, 15 * MINUTE_IN_SECONDS, false ) ) {
-			$result = __( 'Too many attempts. Please try again later.', 'voucher-captain' );
+		} elseif ( CodeLookup::begin() ) {
+			$result = CodeLookup::limited_message();
 		} else {
-			$card   = $this->card( $raw );
-			$result = $card instanceof Voucher ? self::remaining_validity_error( $card ) : $card;
+			// One answer for every code that cannot be topped up (unknown, another kind of voucher, void, expired,
+			// other currency): the form does not tell which codes exist. Only a card that can be topped up gives
+			// the attempt back; the order note of a held line keeps the exact reason (card()).
+			$card = $this->card( $raw );
+			CodeLookup::finish( $card instanceof Voucher );
+			$result = $card instanceof Voucher ? self::remaining_validity_error( $card ) : __( 'This code is not a gift card that can be topped up. Please check the code.', 'voucher-captain' );
 			$result = '' === $result ? true : $result;
-			if ( $card instanceof Voucher ) {
-				Plugin::rate_limit_success( 'topup', 15 * MINUTE_IN_SECONDS ); // An existing card gives the attempt back.
-			} else {
-				Plugin::rate_limit_failure( 'topup', 15 * MINUTE_IN_SECONDS );
-			}
 		}
 		if ( null !== $memo ) {
 			$this->checked[ $memo ] = $result;

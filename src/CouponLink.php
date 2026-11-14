@@ -97,17 +97,17 @@ final class CouponLink {
 		if ( ! function_exists( 'WC' ) || ! WC()->session ) {
 			return false;
 		}
-		if ( Plugin::rate_limited( 'couponlink', 20, 600, 10 * MINUTE_IN_SECONDS, false ) ) {
-			wc_add_notice( __( 'Too many voucher links opened. Please try again later.', 'voucher-captain' ), 'error' );
+		if ( CodeLookup::begin() ) {
+			wc_add_notice( CodeLookup::limited_message(), 'error' );
 			return false;
 		}
 		$code = wc_format_coupon_code( sanitize_text_field( $raw ) );
-		if ( '' === $code || strlen( $code ) > 100 || ! wc_get_coupon_id_by_code( $code ) ) {
-			Plugin::rate_limit_failure( 'couponlink', 10 * MINUTE_IN_SECONDS );
+		if ( ! CodeLookup::confirms( $code ) ) {
+			CodeLookup::failed();
 			wc_add_notice( __( 'This voucher link is not valid.', 'voucher-captain' ), 'error' );
 			return false;
 		}
-		Plugin::rate_limit_success( 'couponlink', 10 * MINUTE_IN_SECONDS );
+		CodeLookup::found();
 		if ( ! WC()->session->has_session() ) {
 			WC()->session->set_customer_session_cookie( true ); // Guests need a session to keep the code.
 		}
