@@ -847,6 +847,23 @@ foreach ( array( 'de_DE', 'de_AT' ) as $locale ) {
 	check( "{$locale}: no translations for texts the plugin no longer uses", ! $obsolete, implode( ' | ', array_slice( array_keys( $obsolete ), 0, 5 ) ) );
 	$mo = dirname( __DIR__ ) . "/languages/voucher-captain-{$locale}.mo";
 	check( "{$locale}: the compiled .mo file is there", is_file( $mo ) && filesize( $mo ) > 1000 );
+	// U11: glossary – store credit "Kundenguthaben", a voucher's balance "Restwert", coupon "WooCommerce-Code",
+	// reward "Prämie", buyer "Käufer"; bare "Guthaben" is neither and not used.
+	$u11_off    = array();
+	$u11_credit = array();
+	foreach ( $po as $key => $translation ) {
+		$source = substr( $key, strpos( $key, "\x04" ) + 1 );
+		foreach ( $translation[0] as $form ) {
+			if ( preg_match( '/(?<![Kk]unden)(?<![Kk]unden-)[Gg]uthaben|WooCommerce-Gutschein|kaufenden? Person|[Bb]elohnung|gespeichert\w* Guthaben/u', $form, $u11_m ) ) {
+				$u11_off[] = $u11_m[0] . ': ' . $source;
+			}
+			if ( preg_match( '/store credit/i', $source ) && ! str_contains( $form, 'Kundenguthaben' ) ) {
+				$u11_credit[] = $source;
+			}
+		}
+	}
+	check( "U11: {$locale} uses the glossary (no bare \"Guthaben\", \"WooCommerce-Gutschein\", \"kaufende Person\", \"Belohnung\")", ! $u11_off, implode( ' | ', array_slice( $u11_off, 0, 5 ) ) );
+	check( "U11: {$locale} translates every \"store credit\" as \"Kundenguthaben\"", ! $u11_credit, implode( ' | ', array_slice( array_unique( $u11_credit ), 0, 5 ) ) );
 }
 
 // Locale fallback (VCAP\I18n): German variants without their own file load the German translation.

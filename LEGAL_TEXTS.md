@@ -65,7 +65,7 @@ dass die Vorlage aktuell ist und jeder Text noch existiert). Prüfung durch die 
 | Transferable – anyone with the code can redeem it. | Übertragbar – jede Person mit dem Code kann ihn einlösen. | Übertragbar – jede Person mit dem Code kann ihn einlösen. | src/ProductConfig.php:163 src/Voucher.php:198 | ☐ |
 | Personal – only the buyer or the named recipient can redeem it. | Persönlich – nur Käufer oder genannte Empfänger können ihn einlösen. | Persönlich – nur Käufer oder genannte Empfänger können ihn einlösen. | src/ProductConfig.php:161 src/Voucher.php:199 | ☐ |
 | Personal – only the named recipient can redeem it. | Persönlich – nur die genannte beschenkte Person kann ihn einlösen. | Persönlich – nur die genannte beschenkte Person kann ihn einlösen. | src/ProductConfig.php:159 src/Voucher.php:207 | ☐ |
-| Personal – only the buyer can redeem it. | Persönlich – nur die kaufende Person kann ihn einlösen. | Persönlich – nur die kaufende Person kann ihn einlösen. | src/ProductConfig.php:157 src/Voucher.php:210 | ☐ |
+| Personal – only the buyer can redeem it. | Persönlich – nur der Käufer kann ihn einlösen. | Persönlich – nur der Käufer kann ihn einlösen. | src/ProductConfig.php:157 src/Voucher.php:210 | ☐ |
 
 ### Restwert
 
