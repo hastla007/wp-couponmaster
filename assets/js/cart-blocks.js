@@ -3,10 +3,11 @@
  * Shows what the classic cart prints with PHP hooks, from the Store API cart data extensions["voucher-captain"]:
  * - one row "Voucher CODE −x" per voucher that pays after tax, and the remaining balances of applied gift cards
  *   (slot ExperimentalDiscountsMeta, below the discounts of the totals; the balance left after this order as a note);
- * - a note on the coupon of such a voucher, whose own discount is 0, saying that it pays below (checkout filter
- *   "coupons", which can change the coupon label only). The 0 of the discount row itself stays: it comes from the
- *   Store API cart (totals.total_discount, coupons[].totals.total_discount), which WooCommerce offers no filter
- *   for, and the coupon markup has no class per coupon that CSS could hide for paying coupons alone (TAX.md 4.1);
+ * - a note per coupon of such a voucher, whose own discount is 0, saying that it pays below ("CODE pays as voucher
+ *   payment (see below)", same slot, right under the coupons). Not through the checkout filter "coupons": newer
+ *   cart blocks show coupons as chips with their code only, so a changed label would never be seen. A 0 discount
+ *   row of older blocks stays: it comes from the Store API cart totals, which WooCommerce offers no filter for
+ *   (TAX.md 4.1);
  * - the title of an automatic promotion instead of its virtual coupon code "vcap-campaign-ID" (filter "coupons";
  *   removing it is refused by the Store API with a message, see Discounts\CartIntegration::refuse_removal());
  * - the "use store credit" hint (slot ExperimentalOrderMeta);
@@ -47,6 +48,15 @@
 	function Payments( props ) {
 		var d = data( props.extensions );
 		var rows = [];
+		( d.paying_coupons || [] ).forEach( function ( code ) {
+			rows.push(
+				el(
+					'div',
+					{ key: 'note-' + code, className: 'wc-block-components-totals-item vcap-coupon-note' },
+					el( 'small', null, String( code ).toUpperCase() + ' ' + ( d.coupon_note || '' ) )
+				)
+			);
+		} );
 		( d.payments || [] ).forEach( function ( payment ) {
 			rows.push( row( 'payment-' + payment.code, 'vcap-voucher-payment', payment.label, payment.formatted ) );
 		} );
@@ -104,34 +114,21 @@
 		);
 	}
 
-	/** Whether the coupon itself discounts nothing (Store API amounts are strings in minor units). */
-	function discountsNothing( coupon ) {
-		var totals = coupon.totals || {};
-		return ! parseInt( totals.total_discount || 0, 10 ) && ! parseInt( totals.total_discount_tax || 0, 10 );
-	}
-
 	if ( checkout.registerCheckoutFilters ) {
 		checkout.registerCheckoutFilters( NAMESPACE, {
 			coupons: function ( coupons, extensions ) {
 				var d = data( extensions );
-				var paying = d.paying_coupons || [];
 				var promotions = {};
 				( d.promotions || [] ).forEach( function ( promotion ) {
 					promotions[ String( promotion.code ).toLowerCase() ] = promotion.label;
 				} );
-				if ( ( ! paying.length && ! Object.keys( promotions ).length ) || ! Array.isArray( coupons ) ) {
+				if ( ! Object.keys( promotions ).length || ! Array.isArray( coupons ) ) {
 					return coupons;
 				}
 				return coupons.map( function ( coupon ) {
 					var code = coupon ? String( coupon.code ).toLowerCase() : '';
-					if ( coupon && promotions[ code ] ) {
-						// An automatic promotion: its title instead of "vcap-campaign-12".
-						return Object.assign( {}, coupon, { label: promotions[ code ] } );
-					}
-					if ( ! coupon || paying.indexOf( code ) === -1 || ! discountsNothing( coupon ) ) {
-						return coupon;
-					}
-					return Object.assign( {}, coupon, { label: ( coupon.label || coupon.code ) + ' · ' + d.coupon_note } );
+					// An automatic promotion: its title instead of "vcap-campaign-12".
+					return coupon && promotions[ code ] ? Object.assign( {}, coupon, { label: promotions[ code ] } ) : coupon;
 				} );
 			},
 		} );
