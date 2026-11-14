@@ -406,6 +406,39 @@ remove_action( 'woocommerce_checkout_create_order', $saved_early, 30 );
 vcap_tax_assert( 0 === $saved_id, 'adding the payment lines does not save the new order early (it is saved once, after every woocommerce_checkout_create_order callback)', $saved_id );
 $clone_order->update_status( 'cancelled' );
 
+// 8.3 Order context: recalculating, removing or adding a paying voucher on an existing order (admin "Apply coupon" /
+// "Remove", Store API "pay for order") never turns the payment into a price reduction as well.
+$k1_single = vcap_tax_voucher( 'voucher', 'single', 'fixed_cart', $auto_value->get_id(), 50 );
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart( $goods->get_id(), 1 );
+WC()->cart->apply_coupon( $k1_single->code );
+WC()->cart->calculate_totals();
+$k1_id    = WC()->checkout()->create_order( array( 'billing_email' => 'tax-k1@example.com', 'billing_country' => 'AT', 'payment_method' => 'bacs' ) );
+$k1_order = wc_get_order( $k1_id );
+vcap_tax_assert( abs( 70.0 - (float) $k1_order->get_total() ) < 0.01 && abs( 50.0 - (float) VCAP\PaymentVouchers::paid_amount( $k1_order, $k1_single->code ) ) < 0.01, 'a single-use value voucher (50) pays after tax: order total 70', array( 'total' => $k1_order->get_total() ) );
+$k1_order->recalculate_coupons();
+$k1_order = wc_get_order( $k1_id );
+$k1_state = array( 'total' => $k1_order->get_total(), 'tax' => $k1_order->get_total_tax(), 'discount' => $k1_order->get_discount_total() );
+vcap_tax_assert( abs( 70.0 - (float) $k1_order->get_total() ) < 0.01 && abs( 20.0 - (float) $k1_order->get_total_tax() ) < 0.01 && abs( (float) $k1_order->get_discount_total() ) < 0.01, 'recalculating the coupons of that order keeps total 70 and VAT 20 (the single-use voucher does not discount 50 on top of its payment line)', $k1_state );
+$k1_order->remove_coupon( $k1_single->code );
+$k1_order = wc_get_order( $k1_id );
+$k1_state = array( 'total' => $k1_order->get_total(), 'tax' => $k1_order->get_total_tax(), 'fees' => count( $k1_order->get_items( 'fee' ) ) );
+vcap_tax_assert( null === VCAP\PaymentVouchers::paid_amount( $k1_order, $k1_single->code ) && 0 === count( $k1_order->get_items( 'fee' ) ) && abs( 120.0 - (float) $k1_order->get_total() ) < 0.01 && abs( 20.0 - (float) $k1_order->get_total_tax() ) < 0.01, 'removing the voucher from the order removes its payment line: total 120 again', $k1_state );
+$k1_order->update_status( 'cancelled' );
+$k1_card  = vcap_tax_voucher( 'giftcard', 'balance', 'fixed_cart', $auto_card->get_id(), 50 );
+$k1_admin = wc_create_order( array( 'customer_id' => 0 ) );
+$k1_admin->set_billing_email( 'tax-k1-admin@example.com' );
+$k1_admin->set_billing_country( 'AT' );
+$k1_admin->set_shipping_country( 'AT' );
+$k1_admin->add_product( $goods, 1 );
+$k1_admin->calculate_totals( true );
+vcap_tax_assert( abs( 120.0 - (float) $k1_admin->get_total() ) < 0.01 && abs( 20.0 - (float) $k1_admin->get_total_tax() ) < 0.01, 'an order created in the admin: goods 120 incl. 20 VAT', array( 'total' => $k1_admin->get_total(), 'tax' => $k1_admin->get_total_tax() ) );
+$k1_applied = $k1_admin->apply_coupon( $k1_card->code );
+$k1_admin   = wc_get_order( $k1_admin->get_id() );
+$k1_state   = array( 'applied' => is_wp_error( $k1_applied ) ? $k1_applied->get_error_message() : $k1_applied, 'total' => $k1_admin->get_total(), 'tax' => $k1_admin->get_total_tax(), 'discount' => $k1_admin->get_discount_total(), 'paid' => VCAP\PaymentVouchers::paid_amount( $k1_admin, $k1_card->code ) );
+vcap_tax_assert( true === $k1_applied && abs( 70.0 - (float) $k1_admin->get_total() ) < 0.01 && abs( 20.0 - (float) $k1_admin->get_total_tax() ) < 0.01 && abs( (float) $k1_admin->get_discount_total() ) < 0.01 && abs( 50.0 - (float) VCAP\PaymentVouchers::paid_amount( $k1_admin, $k1_card->code ) ) < 0.01, 'a paying gift card applied to an order in the admin gets a payment line of 50: total 70, VAT stays 20, no discount', $k1_state );
+$k1_admin->update_status( 'cancelled' );
+
 $spv_after = vcap_tax_voucher( 'voucher', 'single', 'fixed_cart', $single->get_id(), 60 );
 WC()->cart->empty_cart();
 WC()->cart->add_to_cart( $goods->get_id(), 1 );

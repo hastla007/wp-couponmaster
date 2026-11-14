@@ -1071,14 +1071,15 @@ final class CouponManager {
 		if ( ! $coupon instanceof \WC_Coupon || ! $order instanceof \WC_Order ) {
 			return $coupon;
 		}
-		$code    = wc_format_coupon_code( (string) $code );
-		$voucher = $this->find_voucher_for_code( $code );
-		if ( ! $voucher || ! $voucher->is_multi_use() ) {
+		$code = wc_format_coupon_code( (string) $code );
+		if ( null !== PaymentVouchers::paid_amount( $order, $code ) ) {
+			// Paid after tax by its fee line (single-use vouchers too): a recalculation must not turn it into a
+			// discount as well.
+			$coupon->set_amount( 0 );
 			return $coupon;
 		}
-		if ( null !== PaymentVouchers::paid_amount( $order, $code ) ) {
-			// Paid after tax by its fee line: a recalculation must not turn it into a discount as well.
-			$coupon->set_amount( 0 );
+		$voucher = $this->find_voucher_for_code( $code );
+		if ( ! $voucher || ! $voucher->is_multi_use() ) {
 			return $coupon;
 		}
 		$redeemed = (float) ( self::order_map( $order, '_vcap_redemptions' )[ $code ] ?? 0 );
