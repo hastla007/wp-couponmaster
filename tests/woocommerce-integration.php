@@ -162,4 +162,30 @@ vcap_integration_assert( 1 === (int) $other_lock && $before_rows === $after_rows
 vcap()->delivery->deliver( $delivery_voucher->id );
 vcap_integration_assert( null === $repo->get( $delivery_voucher->id )->delivered_at, 'unsent email remains eligible for delivery retry' );
 
+// Z13: saving a redesign keeps the design vouchers were issued with; deleting the template keeps it as well.
+$z13_admin = get_users( array( 'role' => 'administrator', 'number' => 1, 'fields' => 'ID' ) );
+wp_set_current_user( (int) ( $z13_admin[0] ?? 1 ) );
+$z13_tpl    = wp_insert_post( array( 'post_type' => VCAP\TemplatePostType::POST_TYPE, 'post_status' => 'publish', 'post_title' => 'Z13 template' ) );
+$z13_design = static fn( string $label ) => wp_json_encode( array( 'page' => array( 'format' => 'A6' ), 'elements' => array( array( 'id' => 't', 'type' => 'text', 'x' => 5, 'y' => 5, 'w' => 90, 'h' => 10, 'text' => $label ) ) ) );
+$z13_save   = static function ( string $label, bool $apply = false ) use ( $z13_tpl, $z13_design ): void {
+	$_POST = array( 'vcap_design_nonce' => wp_create_nonce( 'vcap_save_design' ), 'vcap_design' => wp_slash( $z13_design( $label ) ) ) + ( $apply ? array( 'vcap_design_apply_issued' => '1' ) : array() );
+	( new VCAP\TemplatePostType() )->save( (int) $z13_tpl, get_post( $z13_tpl ) );
+	$_POST = array();
+};
+$z13_save( 'Christmas design' );
+sleep( 1 );
+list( $z13_voucher ) = vcap_integration_create_voucher( 25.0, '' );
+$z13_voucher->template_id = (int) $z13_tpl;
+$repo->update( $z13_voucher );
+$z13_voucher = $repo->get( $z13_voucher->id );
+sleep( 1 );
+$z13_save( 'January design' );
+$z13_label = static fn( array $d ) => (string) ( $d['elements'][0]['text'] ?? '' );
+vcap_integration_assert( 'Christmas design' === $z13_label( VCAP\TemplatePostType::design_for_voucher( (int) $z13_tpl, $z13_voucher ) ) && 'January design' === $z13_label( VCAP\TemplatePostType::get_design( (int) $z13_tpl ) ), 'Z13: a voucher sold before a redesign keeps the design it was issued with' );
+vcap_integration_assert( str_contains( vcap()->pdf->html( $z13_voucher, VCAP\TemplatePostType::design_for_voucher( (int) $z13_tpl, $z13_voucher ) ), 'Christmas design' ), 'Z13: its PDF shows the old design' );
+wp_delete_post( (int) $z13_tpl, true );
+vcap_integration_assert( 'Christmas design' === $z13_label( VCAP\TemplatePostType::design_for_voucher( (int) $z13_tpl, $z13_voucher ) ), 'Z13: the design survives the deletion of the template' );
+delete_option( VCAP\TemplatePostType::ARCHIVE_OPTION . $z13_tpl );
+wp_set_current_user( 0 );
+
 echo "WooCommerce integration checks passed.\n";

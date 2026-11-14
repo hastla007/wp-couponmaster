@@ -84,7 +84,7 @@ final class Health {
 
 	public function tests( $tests ) {
 		$tests = (array) $tests;
-		foreach ( array( 'extensions', 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets', 'offline_payment', 'currency', 'rate_limits' ) as $id ) {
+		foreach ( array( 'extensions', 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets', 'offline_payment', 'currency', 'rate_limits', 'template_images' ) as $id ) {
 			$tests['direct'][ 'vcap_' . $id ] = array(
 				'label' => __( 'Voucher Captain', 'voucher-captain' ),
 				'test'  => array( $this, 'test_' . $id ),
@@ -295,6 +295,21 @@ final class Health {
 			/* translators: %s: folder path */
 			sprintf( __( 'Voucher Captain could not create or protect %s. Check the folder permissions.', 'voucher-captain' ), $error )
 		);
+	}
+
+	/** Template images the PDFs cannot read (offloaded media, CDN, missing files) or draw (AVIF, HEIC, …). */
+	public function test_template_images(): array {
+		$problems = array();
+		$ids      = get_posts( array( 'post_type' => TemplatePostType::POST_TYPE, 'post_status' => 'publish', 'fields' => 'ids', 'numberposts' => 100, 'orderby' => 'ID', 'order' => 'ASC' ) );
+		foreach ( array_map( 'intval', (array) $ids ) as $id ) {
+			foreach ( TemplatePostType::design_warnings( TemplatePostType::get_design( $id ), true ) as $warning ) {
+				$problems[] = get_the_title( $id ) . ': ' . $warning;
+			}
+		}
+		if ( ! $problems ) {
+			return self::result( 'template_images', 'good', __( 'The PDF template images can be read', 'voucher-captain' ), __( 'Every image of the published PDF templates is a readable JPEG, PNG or GIF file on this server.', 'voucher-captain' ) );
+		}
+		return self::result( 'template_images', 'recommended', __( 'PDF template images are missing from voucher PDFs', 'voucher-captain' ), implode( ' ', array_slice( $problems, 0, 10 ) ) );
 	}
 
 	public function test_redeem_page(): array {

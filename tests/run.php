@@ -313,6 +313,204 @@ check( 'remote images are never fetched', null === vcap()->pdf->image_path( 0, '
 check( 'uploads URL maps to local file', $png === vcap()->pdf->image_path( 0, 'https://shop.test/wp-content/uploads/2026/11/logo.png' ) );
 check( 'path traversal blocked', null === vcap()->pdf->image_path( 0, 'https://shop.test/wp-content/uploads/../../../../etc/passwd' ) );
 
+echo "PDF temp files, templates and designer (P8)\n";
+$p8_design = array( 'page' => array( 'format' => 'A6' ), 'elements' => array( array( 'type' => 'text', 'x' => 5, 'y' => 5, 'w' => 90, 'h' => 10, 'text' => '{coupon_code}' ) ) );
+// Q14: a parallel delivery with the same file name writes its PDF while this one renders.
+$p8_target = VCAP\Install::upload_dir() . '/tmp/' . vcap()->pdf->filename( $v );
+@unlink( $p8_target );
+$GLOBALS['vcap_test_filters']['vcap_pdf_html'] = array(
+	array(
+		static function ( $html ) use ( $p8_target ) {
+			if ( ! file_exists( $p8_target ) ) {
+				file_put_contents( $p8_target, 'OTHER VOUCHER' );
+			}
+			return $html;
+		},
+		1,
+	),
+);
+$p8_file = vcap()->pdf->to_temp_file( $v, $p8_design );
+unset( $GLOBALS['vcap_test_filters']['vcap_pdf_html'] );
+check( 'Q14: a temp PDF never overwrites or shares the file of a parallel delivery with the same name', is_string( $p8_file ) && $p8_file !== $p8_target && 'OTHER VOUCHER' === file_get_contents( $p8_target ) && str_starts_with( (string) file_get_contents( $p8_file ), '%PDF-' ) && str_ends_with( $p8_file, '-' . basename( $p8_target ) ), (string) $p8_file );
+@unlink( $p8_target );
+@unlink( (string) $p8_file );
+$p8_file = vcap()->pdf->to_temp_file( $v, $p8_design );
+check( 'Q14: a free file name is kept for the attachment', $p8_file === $p8_target, (string) $p8_file );
+@unlink( (string) $p8_file );
+
+// Z11: QR codes and barcodes are vector SVG (no GD) and the printed QR modules are those of the payload.
+$p8_payload = 'https://shop.test/redeem/?vcap_code=ab12-Cd34';
+$p8_qr      = array( 'page' => array( 'format' => 'A6' ), 'elements' => array( array( 'type' => 'qrcode', 'x' => 10, 'y' => 10, 'w' => 60, 'h' => 60, 'qrContent' => 'custom', 'qrValue' => $p8_payload, 'color' => '#000000' ) ) );
+$p8_html    = vcap()->pdf->html( $v, $p8_qr );
+check( 'Z11: the QR code is an SVG image, not a GD PNG', str_contains( $p8_html, 'data:image/svg+xml;base64,' ) && ! str_contains( $p8_html, 'image/png' ) );
+file_put_contents( "$out/p8-qr.pdf", vcap()->pdf->render( $v, $p8_qr ) );
+shell_exec( 'pdftoppm -png -r 300 -singlefile ' . escapeshellarg( "$out/p8-qr.pdf" ) . ' ' . escapeshellarg( "$out/p8-qr" ) . ' 2>/dev/null' );
+if ( is_readable( "$out/p8-qr.png" ) ) {
+	$p8_ref = new chillerlan\QRCode\QRCode( new chillerlan\QRCode\QROptions( array( 'eccLevel' => chillerlan\QRCode\Common\EccLevel::M, 'addQuietzone' => true, 'quietzoneSize' => 2 ) ) );
+	foreach ( chillerlan\QRCode\Common\Mode::INTERFACES as $p8_mode ) {
+		if ( $p8_mode::validateString( $p8_payload ) ) {
+			$p8_ref->addSegment( new $p8_mode( $p8_payload ) );
+			break;
+		}
+	}
+	$p8_grid  = $p8_ref->getQRMatrix()->getMatrix( true );
+	$p8_n     = count( $p8_grid );
+	$p8_img   = imagecreatefrompng( "$out/p8-qr.png" );
+	$p8_px    = 300 / 25.4;
+	$p8_wrong = 0;
+	foreach ( $p8_grid as $p8_y => $p8_row ) {
+		foreach ( $p8_row as $p8_x => $p8_dark ) {
+			$p8_rgb   = imagecolorat( $p8_img, (int) round( ( 10 + ( $p8_x + 0.5 ) * 60 / $p8_n ) * $p8_px ), (int) round( ( 10 + ( $p8_y + 0.5 ) * 60 / $p8_n ) * $p8_px ) );
+			$p8_lum   = ( ( $p8_rgb >> 16 ) & 255 ) + ( ( $p8_rgb >> 8 ) & 255 ) + ( $p8_rgb & 255 );
+			$p8_wrong += ( $p8_lum < 384 ) !== $p8_dark ? 1 : 0;
+		}
+	}
+	check( "Z11: every printed QR module matches the payload's QR matrix ({$p8_n}×{$p8_n})", 0 === $p8_wrong, "$p8_wrong wrong modules" );
+}
+$p8_bc = static fn( string $type, string $value ) => vcap()->pdf->html( $v, array( 'page' => array( 'format' => 'A6' ), 'elements' => array( array( 'type' => 'barcode', 'x' => 5, 'y' => 5, 'w' => 60, 'h' => 15, 'barcodeType' => $type, 'qrValue' => $value ) ) ) );
+check( 'Z11: barcodes are SVG images, not GD PNGs', str_contains( $p8_bc( 'C128', '{coupon_code}' ), 'data:image/svg+xml;base64,' ) && ! str_contains( $p8_bc( 'C128', '{coupon_code}' ), 'image/png' ) );
+check( 'Z11: an EAN-13 barcode of a code that is no EAN (GIFT-ABCD-1234) is printed as Code 128, never left empty', str_contains( $p8_bc( 'EAN13', '{coupon_code}' ), 'data:image/svg+xml;base64,' ) && str_contains( $p8_bc( 'EAN13', '{coupon_code}' ), 'GIFT-ABCD-1234' ) );
+check( 'Z11: EAN-13 takes 12 digits or 13 with a valid check digit, Code 39 no lower case', PdfRenderer::barcode_fits( 'EAN13', '400638133393' ) && PdfRenderer::barcode_fits( 'EAN13', '4006381333931' ) && ! PdfRenderer::barcode_fits( 'EAN13', '4006381333932' ) && ! PdfRenderer::barcode_fits( 'EAN13', '1234567890123456' ) && ! PdfRenderer::barcode_fits( 'C39', 'gift-1' ) && PdfRenderer::barcode_fits( 'C39', 'GIFT-1' ) );
+$p8_clean = TemplatePostType::sanitize_design( array( 'elements' => array( array( 'type' => 'barcode', 'barcodeType' => 'EAN13', 'qrValue' => 'SHOP-1' ), array( 'type' => 'barcode', 'barcodeType' => 'EAN13', 'qrValue' => '400638133393' ), array( 'type' => 'barcode', 'barcodeType' => 'EAN13', 'qrValue' => '{product_sku}' ) ) ) );
+check( 'Z11: saving switches a fixed value that EAN-13 cannot carry to Code 128 and keeps fitting values and placeholders', 'C128' === $p8_clean['elements'][0]['barcodeType'] && 'EAN13' === $p8_clean['elements'][1]['barcodeType'] && 'EAN13' === $p8_clean['elements'][2]['barcodeType'] );
+
+// Z14: a custom font (vcap_pdf_fonts) is measured with the render options, not with a bare dompdf that does not know it.
+$p8_font = $GLOBALS['vcap_test_uploads'] . '/fonts-test/TestMono.ttf';
+@mkdir( dirname( $p8_font ), 0777, true );
+copy( VCAP_PATH . 'vendor/dompdf/dompdf/lib/fonts/DejaVuSansMono.ttf', $p8_font );
+$GLOBALS['vcap_test_filters']['vcap_pdf_fonts'] = array( array( static fn( $fonts ) => array( 'Test Mono' => array( 'normal' => $p8_font ) ) + (array) $fonts, 1 ) );
+$p8_ratio = PdfRenderer::font_height_ratio( 'Test Mono', false, false );
+check( 'Z14: a custom font gets its own line-height ratio (same as the TTF it is, not 1.0)', abs( $p8_ratio - PdfRenderer::font_height_ratio( 'DejaVu Sans Mono', false, false ) ) < 0.001 && abs( $p8_ratio - 1.0 ) > 0.05, (string) $p8_ratio );
+file_put_contents( "$out/p8-font.pdf", vcap()->pdf->render( $v, array( 'page' => array( 'format' => 'A6' ), 'elements' => array( array( 'type' => 'text', 'x' => 5, 'y' => 5, 'w' => 90, 'h' => 10, 'text' => 'Custom {coupon_code}', 'font' => 'Test Mono' ) ) ) ) );
+$p8_fonts = (string) shell_exec( 'pdffonts ' . escapeshellarg( "$out/p8-font.pdf" ) . ' 2>/dev/null' );
+if ( '' !== $p8_fonts ) {
+	check( 'Z14: the custom font is embedded in the PDF', str_contains( $p8_fonts, 'DejaVuSansMono' ), $p8_fonts );
+}
+unset( $GLOBALS['vcap_test_filters']['vcap_pdf_fonts'] );
+$p8_css = TemplatePostType::designer_font_css();
+check( 'Z14: the designer loads the DejaVu fonts dompdf prints with as web fonts (all 12 styles)', 12 === substr_count( $p8_css, '@font-face' ) && str_contains( $p8_css, "font-family:'DejaVu Serif';font-weight:normal;font-style:italic;src:url('https://shop.test/wp-content/plugins/voucher-captain/vendor/dompdf/dompdf/lib/fonts/DejaVuSerif-Italic.ttf')" ), $p8_css );
+// H16: a long message and a long code are set smaller until they fit, the last words are printed.
+$p8_long          = clone $v;
+$p8_long->message = trim( str_repeat( 'Liebe Anna, wir wünschen dir alles Gute, viel Freude und einen wunderbaren Tag mit allen, die du gern hast. ', 5 ) ) . "\nHerzlich, deine Familie ENDGRUSS";
+$p8_long->code    = 'GIFT-K7QM2X9ZPA-ABCDEFGHJKLMNPQR-2026';
+file_put_contents( "$out/p8-long.pdf", vcap()->pdf->render( $p8_long, TemplatePostType::default_designs()['giftcard'] ) );
+$p8_text = preg_replace( '/\s+/', ' ', (string) shell_exec( 'pdftotext -raw ' . escapeshellarg( "$out/p8-long.pdf" ) . ' - 2>/dev/null' ) );
+if ( '' !== trim( (string) $p8_text ) ) {
+	// pdftotext also extracts clipped text: the word's position must lie inside the message box (y 56–86 mm).
+	$p8_bbox = (string) shell_exec( 'pdftotext -bbox ' . escapeshellarg( "$out/p8-long.pdf" ) . ' - 2>/dev/null' );
+	$p8_end  = preg_match( '/yMax="([\d.]+)">ENDGRUSS</', $p8_bbox, $p8_m ) ? (float) $p8_m[1] : 999.0;
+	check( 'H16: the last line of a long message is printed inside its box, not cut off', str_contains( (string) $p8_text, 'deine Familie ENDGRUSS' ) && $p8_end <= 86 * PdfRenderer::MM_TO_PT, 'yMax ' . $p8_end . ' pt' );
+	check( 'H16: a long code is printed whole on one line', str_contains( (string) $p8_text, 'GIFT-K7QM2X9ZPA-ABCDEFGHJKLMNPQR-2026' ), (string) $p8_text );
+}
+$p8_fit = PdfRenderer::fit_size( 'Kurz', 'DejaVu Serif', 11, 1.25, false, true, 0, 120, 30 );
+$p8_cut = PdfRenderer::fit_size( str_repeat( 'Wort ', 2000 ), 'DejaVu Serif', 11, 1.25, false, true, 0, 120, 30 );
+check( 'H16: a text that fits keeps its size; one that cannot fit stops at half the size and says so', array( 'size' => 11.0, 'fits' => true ) === $p8_fit && 5.5 === $p8_cut['size'] && false === $p8_cut['fits'], json_encode( array( $p8_fit, $p8_cut ) ) );
+check( 'H16: the template preview shows a worst-case message as long as products allow by default', 300 === mb_strlen( TemplatePostType::preview_voucher()->message ) );
+// M8: characters without a glyph are found before the PDF prints boxes; emoji are left out; RTL text is reported.
+$p8_missing = PdfRenderer::unsupported_chars( 'Jörg 张伟 – Alles Gute 🎉 ✓ €' );
+check( 'M8: Chinese letters and emoji have no glyph in the PDF fonts, umlauts, ✓ and € do', array( '张', '伟', '🎉' ) === $p8_missing, json_encode( $p8_missing, JSON_UNESCAPED_UNICODE ) );
+$p8_emoji          = clone $v;
+$p8_emoji->message = "Alles Gute 🎉🎁 und 👍🏽 viel Spaß ❤️\nDein Team ✓";
+$p8_html           = vcap()->pdf->html( $p8_emoji, array( 'page' => array( 'format' => 'A6' ), 'elements' => array( array( 'type' => 'text', 'x' => 5, 'y' => 5, 'w' => 90, 'h' => 30, 'text' => '{message}' ) ) ) );
+check( 'M8: emoji without a glyph are left out of the PDF instead of printing empty boxes, the rest of the text stays', str_contains( $p8_html, 'Alles Gute und viel Spaß' ) && str_contains( $p8_html, 'Dein Team ✓' ) && ! preg_match( '/[\x{1F300}-\x{1FAFF}\x{FE0F}\x{200D}]/u', $p8_html ), $p8_html );
+check( 'M8: the customer is warned about characters the PDF cannot print and about right-to-left text', str_contains( PdfRenderer::print_warning( 'Message', 'Für 张伟 🎉' ), '张 伟 🎉' ) && str_contains( PdfRenderer::print_warning( 'Message', 'שלום' ), 'right-to-left' ) && '' === PdfRenderer::print_warning( 'Message', 'Jörg Müller ✓' ) );
+check( 'M8: the add-to-cart validation shows the print warnings as notices', str_contains( (string) file_get_contents( VCAP_PATH . 'src/Fields.php' ), "foreach ( \$this->print_warnings( \$product ) as \$message ) {\n\t\t\t\twc_add_notice( \$message, 'notice' )" ) );
+$GLOBALS['vcap_test_filters']['vcap_pdf_fonts']          = array( array( static fn( $fonts ) => array( 'Test Mono' => array( 'normal' => $p8_font ) ), 1 ) );
+$GLOBALS['vcap_test_filters']['vcap_pdf_fallback_fonts'] = array( array( static fn() => array( 'Test Mono', 'Not Registered' ), 1 ) );
+check( 'M8: fallback fonts (vcap_pdf_fallback_fonts) follow DejaVu Sans in every font stack, unregistered families are ignored', "'DejaVu Serif', 'DejaVu Sans', 'Test Mono'" === PdfRenderer::font_stack( 'DejaVu Serif' ), PdfRenderer::font_stack( 'DejaVu Serif' ) );
+unset( $GLOBALS['vcap_test_filters']['vcap_pdf_fonts'], $GLOBALS['vcap_test_filters']['vcap_pdf_fallback_fonts'] );
+check( 'M8: COMPATIBILITY.md documents fallback fonts and the right-to-left limit', str_contains( (string) file_get_contents( VCAP_PATH . 'COMPATIBILITY.md' ), 'vcap_pdf_fallback_fonts' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'COMPATIBILITY.md' ), 'no bidirectional layout' ) );
+// Z10: image types dompdf cannot draw (AVIF, HEIC) are left out, refused in the designer and reported.
+$p8_avif = $GLOBALS['vcap_test_uploads'] . '/2026/11/photo.avif';
+file_put_contents( $p8_avif, "\0\0\0\x1cftypavif\0\0\0\0avifmif1miaf" . str_repeat( "\0", 64 ) );
+$GLOBALS['vcap_test_attachments'][79] = $p8_avif;
+$p8_img_design = array( 'page' => array( 'format' => 'A6', 'backgroundImageId' => 79 ), 'elements' => array( array( 'id' => 'i1', 'type' => 'image', 'name' => 'Photo', 'imageId' => 79, 'x' => 0, 'y' => 0, 'w' => 50, 'h' => 50 ) ) );
+check( 'Z10: an AVIF image is left out of the PDF instead of printing a broken-image frame', null === vcap()->pdf->image_path( 79, '' ) && ! str_contains( vcap()->pdf->html( $v, $p8_img_design ), '<img' ) && $png === vcap()->pdf->image_path( 77, '' ) );
+check( 'Z10: only JPEG, PNG, GIF (and WebP with GD support) can be chosen', array_slice( PdfRenderer::image_mimes(), 0, 3 ) === array( 'image/jpeg', 'image/png', 'image/gif' ) && ! in_array( 'image/avif', PdfRenderer::image_mimes(), true ) && str_contains( (string) file_get_contents( VCAP_PATH . 'assets/js/designer.js' ), 'library: { type: mimes }' ) );
+$p8_warn = TemplatePostType::design_warnings( $p8_img_design );
+check( 'Z10: the designer warns about the AVIF background and image', 2 === count( $p8_warn ) && str_contains( $p8_warn[1], 'Image "Photo" is of type avif' ), json_encode( $p8_warn ) );
+// C7: missing local files are reported; images of allowed hosts (offloaded media / CDN) are downloaded.
+$GLOBALS['vcap_test_attachments'][80] = $GLOBALS['vcap_test_uploads'] . '/2026/11/offloaded.png';
+$p8_warn = TemplatePostType::design_warnings( array( 'page' => array( 'format' => 'A6' ), 'elements' => array( array( 'type' => 'image', 'name' => 'Logo', 'imageId' => 80, 'src' => 'https://cdn.shop.test/2026/11/offloaded.png' ) ) ) );
+check( 'C7: an image without a local file is reported in the designer and Site Health', 1 === count( $p8_warn ) && str_contains( $p8_warn[0], 'Image "Logo" cannot be read' ), json_encode( $p8_warn ) );
+$GLOBALS['vcap_test_http_log'] = array();
+$GLOBALS['vcap_test_http']     = static fn( $url ) => array( 'code' => 200, 'body' => (string) file_get_contents( $png ), 'headers' => array() );
+check( 'C7: without an allowed host nothing is downloaded', null === vcap()->pdf->image_path( 80, 'https://cdn.shop.test/2026/11/offloaded.png' ) && array() === $GLOBALS['vcap_test_http_log'] );
+$GLOBALS['vcap_test_filters']['vcap_pdf_remote_hosts'] = array( array( static fn() => array( 'cdn.shop.test' ), 1 ) );
+$p8_remote = vcap()->pdf->image_path( 80, 'https://cdn.shop.test/2026/11/offloaded.png' );
+check( 'C7: an offloaded image is downloaded from an allowed host into the private temp folder and printed', is_string( $p8_remote ) && str_starts_with( $p8_remote, VCAP\Install::upload_dir() . '/tmp/' ) && file_get_contents( $p8_remote ) === file_get_contents( $png ) && array( 'https://cdn.shop.test/2026/11/offloaded.png' ) === $GLOBALS['vcap_test_http_log'] );
+$GLOBALS['vcap_test_http_log'] = array();
+check( 'C7: the download is reused (no second request) and other hosts stay blocked', $p8_remote === vcap()->pdf->image_path( 80, 'https://cdn.shop.test/2026/11/offloaded.png' ) && null === vcap()->pdf->image_path( 0, 'https://evil.test/x.png' ) && array() === $GLOBALS['vcap_test_http_log'] );
+$GLOBALS['vcap_test_http'] = static fn( $url ) => array( 'code' => 200, 'body' => '<html>not an image</html>', 'headers' => array() );
+check( 'C7: a download that is no image is not used', null === vcap()->pdf->image_path( 0, 'https://cdn.shop.test/other.png' ) );
+unset( $GLOBALS['vcap_test_filters']['vcap_pdf_remote_hosts'], $GLOBALS['vcap_test_http'] );
+@unlink( (string) $p8_remote );
+check( 'C7: Site Health checks the template images', method_exists( VCAP\Health::class, 'test_template_images' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Health.php' ), "'rate_limits', 'template_images' )" ) );
+// Z13: a voucher keeps the design of its template at issue time (also after a redesign or deletion).
+if ( ! function_exists( 'update_post_meta' ) ) {
+	function update_post_meta( $id, $k, $v ) { $GLOBALS['vcap_test_meta'][ $id ][ $k ] = $v; return true; }
+}
+if ( ! function_exists( 'delete_post_meta' ) ) {
+	function delete_post_meta( $id, $k ) { unset( $GLOBALS['vcap_test_meta'][ $id ][ $k ] ); return true; }
+}
+$p8_tpl = static fn( string $label ) => (string) wp_json_encode( array( 'page' => array( 'format' => 'A6' ), 'elements' => array( array( 'type' => 'text', 'x' => 5, 'y' => 5, 'w' => 90, 'h' => 10, 'text' => $label . ' {coupon_code}' ) ) ) );
+$p8_label = static fn( array $design ) => (string) ( $design['elements'][0]['text'] ?? '' );
+$GLOBALS['vcap_test_meta'][500][ TemplatePostType::META ] = $p8_tpl( 'CHRISTMAS' );
+TemplatePostType::record_design_change( 500, $p8_tpl( 'CHRISTMAS' ), $p8_tpl( 'JANUARY' ), true );
+$GLOBALS['vcap_test_meta'][500][ TemplatePostType::META ] = $p8_tpl( 'JANUARY' );
+$p8_hist = $GLOBALS['vcap_test_meta'][500][ TemplatePostType::HISTORY_META ] ?? array();
+$p8_sold                = clone $v;
+$p8_sold->id            = 41;
+$p8_sold->template_id   = 500;
+$p8_sold->created_at    = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
+$p8_new                 = clone $p8_sold;
+$p8_new->id             = 42;
+$p8_new->created_at     = gmdate( 'Y-m-d H:i:s', time() + 5 );
+$p8_preview             = clone $p8_sold;
+$p8_preview->id         = 0;
+check( 'Z13: a replaced design that vouchers were issued with is kept with the time it was replaced', 1 === count( $p8_hist ) && $p8_tpl( 'CHRISTMAS' ) === $p8_hist[0]['design'] && abs( $p8_hist[0]['until'] - time() ) < 5 );
+check( 'Z13: a voucher sold before the redesign keeps its design, later vouchers and previews get the new one', 'CHRISTMAS {coupon_code}' === $p8_label( TemplatePostType::design_for_voucher( 500, $p8_sold ) ) && 'JANUARY {coupon_code}' === $p8_label( TemplatePostType::design_for_voucher( 500, $p8_new ) ) && 'JANUARY {coupon_code}' === $p8_label( TemplatePostType::design_for_voucher( 500, $p8_preview ) ) );
+file_put_contents( "$out/p8-sold.pdf", vcap()->pdf->render( $p8_sold ) );
+$p8_text = (string) shell_exec( 'pdftotext ' . escapeshellarg( "$out/p8-sold.pdf" ) . ' - 2>/dev/null' );
+if ( '' !== trim( $p8_text ) ) {
+	check( 'Z13: the PDF of the sold voucher shows the design it was issued with', str_contains( $p8_text, 'CHRISTMAS GIFT-ABCD-1234' ) && ! str_contains( $p8_text, 'JANUARY' ), $p8_text );
+}
+TemplatePostType::record_design_change( 500, $p8_tpl( 'JANUARY' ), $p8_tpl( 'DRAFT' ), false );
+check( 'Z13: a design no voucher was issued with is not kept', 1 === count( $GLOBALS['vcap_test_meta'][500][ TemplatePostType::HISTORY_META ] ) );
+TemplatePostType::record_design_change( 500, $p8_tpl( 'DRAFT' ), $p8_tpl( 'DRAFT' ), true, true );
+check( 'Z13: "Also use this design for vouchers already issued" drops the kept designs', ! isset( $GLOBALS['vcap_test_meta'][500][ TemplatePostType::HISTORY_META ] ) && 'JANUARY {coupon_code}' === $p8_label( TemplatePostType::design_for_voucher( 500, $p8_sold ) ) );
+$GLOBALS['vcap_test_options'][ TemplatePostType::ARCHIVE_OPTION . 501 ] = array( 'deleted' => time() - 60, 'design' => $p8_tpl( 'DELETED' ), 'history' => array() );
+$p8_sold->template_id = 501;
+$p8_new->template_id  = 501;
+check( 'Z13: vouchers issued with a template deleted later keep its design, newer ones get the fallback', 'DELETED {coupon_code}' === $p8_label( TemplatePostType::design_for_voucher( 501, $p8_sold ) ) && TemplatePostType::default_designs()['giftcard']['page'] === TemplatePostType::design_for_voucher( 501, $p8_new )['page'] );
+unset( $GLOBALS['vcap_test_meta'][500], $GLOBALS['vcap_test_options'][ TemplatePostType::ARCHIVE_OPTION . 501 ] );
+// H6: how to redeem follows the voucher's redemption channels in the mail, the PDF and My Account.
+if ( ! function_exists( 'wc_get_order_item_meta' ) ) {
+	function wc_get_order_item_meta( $id, $key, $single = true ) { return $GLOBALS['vcap_test_item_meta'][ $id ][ $key ] ?? ''; }
+}
+$p8_ch = static function ( array $channels, string $type = 'giftcard' ) use ( $v ): VCAP\Voucher {
+	$c                = clone $v;
+	$c->type          = $type;
+	$c->order_item_id = 7001 + count( $GLOBALS['vcap_test_item_meta'] ?? array() );
+	$GLOBALS['vcap_test_item_meta'][ $c->order_item_id ][ VCAP\Issuer::LINE_META ] = array( 'channels' => $channels );
+	return $c;
+};
+$p8_spa = $p8_ch( array( VCAP\Channels::COUNTER ) );
+check( 'H6: without a channel selection the code is entered in the cart', 'Enter the code in the cart or at checkout on Café Süß & Co to redeem it.' === VCAP\Channels::instructions( $p8_ch( array() ) ) );
+check( 'H6: a voucher only for the counter (spa) is not sent to the cart', str_contains( VCAP\Channels::instructions( $p8_spa ), 'at the counter of Café Süß & Co' ) && ! str_contains( VCAP\Channels::instructions( $p8_spa ), 'cart or at checkout' ) );
+check( 'H6: shop + counter names both, external only points to the redeem page, tickets get none', str_contains( VCAP\Channels::instructions( $p8_ch( array( 'shop', 'counter' ) ) ), 'or show this voucher at the counter' ) && str_contains( VCAP\Channels::instructions( $p8_ch( array( 'external' ) ) ), 'redeem page' ) && '' === VCAP\Channels::instructions( $p8_ch( array(), 'ticket' ) ) );
+check( 'H6: the shop name is linked and escaped in the HTML mail text', str_contains( VCAP\Channels::instructions_html( $p8_ch( array() ) ), '<a href="https://shop.test/">Café Süß &amp; Co</a>' ) );
+$p8_gift = TemplatePostType::default_designs()['giftcard'];
+$p8_html = vcap()->pdf->html( $p8_spa, $p8_gift );
+check( 'H6: the default gift card PDF shows the shop URL, how to redeem (per channel), transferability and conditions', str_contains( $p8_html, 'https://shop.test/' ) && str_contains( $p8_html, 'at the counter of Café Süß &amp; Co' ) && str_contains( $p8_html, 'Transferable' ) && str_contains( implode( ' ', array_column( $p8_gift['elements'], 'text' ) ), '{redemption_terms}' ) );
+$p8_mail = (string) file_get_contents( VCAP_PATH . 'templates/emails/voucher.php' );
+check( 'H6: the mails and My Account use the channel instructions, not the fixed cart sentence', ! str_contains( $p8_mail, "Enter the code in the cart or at checkout on %s to redeem it." ) && str_contains( $p8_mail, 'Channels::instructions_html( $voucher )' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'templates/emails/plain/voucher.php' ), 'Channels::instructions( $voucher )' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'templates/myaccount/vouchers-table.php' ), 'Channels::instructions( $voucher )' ) );
+check( 'H6: {redeem_instructions} is offered as a placeholder', isset( Placeholders::definitions()['redeem_instructions'] ) );
+unset( $GLOBALS['vcap_test_item_meta'] );
+$p8_js = (string) file_get_contents( VCAP_PATH . 'assets/js/designer.js' );
+check( 'H16: the designer shrinks overflowing texts like the PDF and marks texts that are still cut off', str_contains( $p8_js, 'function fitText( inner )' ) && str_contains( $p8_js, "classList.toggle( 'is-overflowing'" ) );
+check( 'Z14: the designer gives custom PDF fonts their own font stack', str_contains( $p8_js, "FONT_STACKS[ family ] = '\"' +" ) );
+
 echo "Redemption API\n";
 $valid_keys   = array( 'it-' . str_repeat( 'a', 20 ), 'learnboating:grant:1234', '550e8400-e29b-41d4-a716-446655440000' );
 $invalid_keys = array( 'short', '-leading-dash', str_repeat( 'x', 65 ), 'has space 12345', "nl\n12345678" );

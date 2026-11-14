@@ -57,6 +57,15 @@ Country-specific data is configuration, not code:
 *Tools → Site Health* checks every EU country in WooCommerce's selling locations: verified validity, conditions and a
 translation (test "Some EU selling countries need voucher settings"). `tests/run.php` covers the configuration.
 
+## PDF fonts, scripts and images
+
+- **Fonts:** the PDFs use the bundled DejaVu fonts (Latin, Greek, Cyrillic, many symbols) and the PDF core fonts. Characters missing in the chosen font come from DejaVu Sans. There is **no Chinese, Japanese or Korean font** and no colour emoji: such characters have no glyph.
+- **Own and fallback fonts:** filter `vcap_pdf_fonts` registers TTF files – `[ 'Family' => [ 'normal' => '/path/Font.ttf', 'bold' => …, 'italic' => …, 'bold_italic' => … ] ]` (inside the WordPress folder, so dompdf may read them and the designer can load them as web fonts). Families named with the filter `vcap_pdf_fallback_fonts` (e.g. `[ 'Noto Sans SC' ]`, registered with `vcap_pdf_fonts`) are tried after DejaVu Sans for every text, so Chinese names print with e.g. Noto Sans CJK. Large CJK fonts make each PDF bigger and slower.
+- **Warnings:** a customer who enters characters without a glyph (or right-to-left text) gets a notice when adding the voucher to the cart. In the PDF, emoji without a glyph are left out; other missing characters print as empty boxes.
+- **Right-to-left scripts:** dompdf has no bidirectional layout and no Arabic shaping. Hebrew and Arabic print left to right, Arabic letters unjoined. Not supported for voucher texts.
+- **Images:** JPEG, PNG and GIF (WebP only where PHP's GD has WebP support); AVIF, HEIC, SVG and other formats cannot be chosen in the designer and are left out of the PDF. Images are read from the local uploads folder. With media offloaded to a cloud storage or CDN (WP Offload Media, WP-Stateless), name the image hosts with the filter `vcap_pdf_remote_hosts` (`[ 'cdn.example.com' ]`): images whose local file is missing are then downloaded from those hosts only (`wp_safe_remote_get`, cached for an hour). A missing image is logged (WooCommerce → Status → Logs, source `voucher-captain`), shown in the designer, and Site Health checks the template images.
+- **QR codes and barcodes** are drawn as vector graphics (SVG) and need no GD. EAN-13 and Code 39 values that the type cannot carry (generated voucher codes are longer than 13 digits) are printed as Code 128.
+
 ## Bundled libraries
 
 Voucher Captain bundles dompdf, php-font-lib, php-svg-lib, html5, php-qrcode and php-barcode-generator. Libraries that other plugins also ship are moved into the `VCAP\Vendor` namespace when the release ZIP is built (`bin/scope-vendor.php`), so two versions can never collide. This is currently `sabberworm/php-css-parser`: WooCommerce 8.x bundles an older, incompatible version, and loading both ended in a fatal error. The build fails if an unprefixed reference remains; `tests/scoping-integration.php` checks the installed ZIP.

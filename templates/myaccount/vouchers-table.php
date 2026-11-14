@@ -67,6 +67,9 @@ $show_order = ! empty( $show_order );
 					<?php if ( ! $voucher->transferable ) : ?>
 						<br><small><?php esc_html_e( 'Personal, not transferable', 'voucher-captain' ); ?></small>
 					<?php endif; ?>
+					<?php if ( \VCAP\Voucher::STATUS_ACTIVE === $voucher->status && '' !== \VCAP\Channels::instructions( $voucher ) ) : ?>
+						<br><small class="vcap-redeem-instructions"><?php echo esc_html( \VCAP\Channels::instructions( $voucher ) ); ?></small>
+					<?php endif; ?>
 					<?php if ( '' !== $voucher->terms ) : ?>
 						<details class="vcap-terms"><summary><?php esc_html_e( 'Redemption conditions', 'voucher-captain' ); ?></summary><?php echo wp_kses_post( wpautop( esc_html( $voucher->terms ) ) ); ?></details>
 					<?php endif; ?>
