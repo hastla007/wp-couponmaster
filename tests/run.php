@@ -783,6 +783,13 @@ check( 'H8: a two-letter header ("ID") is found as a name first, not read as col
 $col = VCAP\Admin\Import::resolve_column( array( array( 'Name', 'Code' ) ), 'B', true );
 check( 'H8: a column letter still works', 1 === $col['index'] && '' === $col['error'] );
 check( 'H8: an unknown column name is an error', '' !== VCAP\Admin\Import::resolve_column( array( array( 'Name' ) ), 'Gutscheincode', true )['error'] );
+$b4_report = VCAP\Admin\Import::empty_report( 'b' );
+for ( $i = 0; $i < 250; $i++ ) {
+	VCAP\Jobs::add_error( $b4_report, 'invalid', "Row {$i}" );
+}
+check( 'B4: an import error list keeps at most 100 rows and counts all of them', VCAP\Jobs::MAX_ERRORS === count( $b4_report['invalid'] ) && 250 === VCAP\Jobs::count( $b4_report, 'invalid' ) && 'Row 99' === end( $b4_report['invalid'] ) );
+check( 'B4: a report stored before the cap is counted by its list', 3 === VCAP\Jobs::count( array( 'weak' => array( 'a', 'b', 'c' ) ), 'weak' ) && 0 === VCAP\Jobs::count( array(), 'not_saved' ) );
+check( 'B4: progress of a background job in percent', 40 === VCAP\Jobs::percent( array( 'done' => 100, 'total' => 250 ) ) && 100 === VCAP\Jobs::percent( array( 'done' => 260, 'total' => 250 ) ) && 0 === VCAP\Jobs::percent( array( 'done' => 0, 'total' => 0 ) ) );
 check( 'Q2: prefix/suffix/separator only take letters, digits, dot, hyphen, underscore', VCAP\CodeGenerator::valid_affix( 'SHOP_2026.X-' ) && ! VCAP\CodeGenerator::valid_affix( 'B&B' ) && ! VCAP\CodeGenerator::valid_affix( 'Ä' ) && ! VCAP\CodeGenerator::valid_affix( str_repeat( 'A', 21 ) ) && ! VCAP\CodeGenerator::valid_affix( '----', true ) && VCAP\CodeGenerator::valid_affix( '', true ) );
 $built = VCAP\CodeGenerator::build( array( 'prefix' => 'B&B Hotel', 'suffix' => str_repeat( 'Z', 40 ), 'order_ref' => str_repeat( '9', 40 ), 'length' => 40, 'separator' => ' & ' ) );
 check( 'Q2: generated codes never contain characters WooCommerce changes and stay within 100 characters', strlen( $built ) <= 100 && wc_format_coupon_code( $built ) === strtolower( $built ) && str_starts_with( $built, 'BBHotel' ), $built );
