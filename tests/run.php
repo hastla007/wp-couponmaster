@@ -501,7 +501,69 @@ if ( class_exists( 'ZipArchive' ) ) {
 	$zip->close();
 	check( 'a normal XLSX is still read', array( array( 'CODE-1' ) ) === SpreadsheetReader::read( $ok_file, 'xlsx' ) );
 	unlink( $bomb );
+
+	$far  = "$out/far.xlsx";
+	$zip  = new ZipArchive();
+	$zip->open( $far, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+	$zip->addFromString( 'xl/worksheets/sheet1.xml', '<worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>CODE-1</t></is></c><c r="ZZZZZZ1" t="inlineStr"><is><t>x</t></is></c></row></sheetData></worksheet>' );
+	$zip->close();
+	$refused = '';
+	$peak    = memory_get_usage();
+	try {
+		SpreadsheetReader::read( $far, 'xlsx' );
+	} catch ( RuntimeException $e ) {
+		$refused = $e->getMessage();
+	}
+	check( 'Q9: a cell "ZZZZZZ1" is refused with a message instead of padding the row until memory runs out', str_contains( $refused, 'beyond the last column' ) && memory_get_usage() - $peak < 5 * 1024 * 1024, $refused );
+	$gap = "$out/gap.xlsx";
+	$zip = new ZipArchive();
+	$zip->open( $gap, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+	$zip->addFromString( 'xl/worksheets/sheet1.xml', '<worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>CODE-1</t></is></c><c r="XFD1" t="inlineStr"><is><t>last</t></is></c></row></sheetData></worksheet>' );
+	$zip->close();
+	$gap_rows = SpreadsheetReader::read( $gap, 'xlsx' );
+	check( 'Q9: gaps are not filled (column XFD is read without 16382 empty cells)', 2 === count( $gap_rows[0] ) && 'last' === $gap_rows[0][16383] && 'CODE-1' === $gap_rows[0][0], json_encode( array_keys( $gap_rows[0] ) ) );
+	unlink( $far );
+	unlink( $gap );
 }
+
+$ole = "$out/broken.xls";
+file_put_contents( $ole, "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1" . str_repeat( "\0", 22 ) . pack( 'v', 30 ) . str_repeat( "\xFF", 600 ) );
+$refused = '';
+try {
+	SpreadsheetReader::read( $ole, 'xls' );
+} catch ( RuntimeException $e ) {
+	$refused = $e->getMessage();
+}
+check( 'Q9: an XLS with an impossible sector size is refused as damaged', str_contains( $refused, 'damaged' ), $refused );
+unlink( $ole );
+
+$utf16 = "$out/unicode.txt";
+file_put_contents( $utf16, "\xFF\xFE" . mb_convert_encoding( "code\tnote\r\nÄBC-123\tx\r\nDEF-456\ty\r\n", 'UTF-16LE', 'UTF-8' ) );
+$u_rows = SpreadsheetReader::read( $utf16, 'txt' );
+check( 'Q10: Excel "Unicode text" (UTF-16LE with BOM) is read without NUL bytes', array( 'code', 'ÄBC-123', 'DEF-456' ) === array_column( $u_rows, 0 ), json_encode( $u_rows ) );
+file_put_contents( $utf16, "\xFE\xFF" . mb_convert_encoding( "code\nGHI-789\n", 'UTF-16BE', 'UTF-8' ) );
+check( 'Q10: UTF-16BE with BOM is read as well', array( 'code', 'GHI-789' ) === array_column( SpreadsheetReader::read( $utf16, 'txt' ), 0 ) );
+file_put_contents( $utf16, mb_convert_encoding( "code\nJKL-012\n", 'UTF-16LE', 'UTF-8' ) );
+check( 'Q10: UTF-16LE without BOM is recognised by its NUL bytes', array( 'code', 'JKL-012' ) === array_column( SpreadsheetReader::read( $utf16, 'txt' ), 0 ) );
+file_put_contents( $utf16, "code\n\xC4BC-1\n" );
+check( 'Windows-1252 files are still converted', 'ÄBC-1' === SpreadsheetReader::read( $utf16, 'txt' )[1][0] );
+unlink( $utf16 );
+
+echo "Code import checks (Q2, Q10, H8)\n";
+$fmt_any = "\x01^\\S{1,100}$\x01u";
+check( 'Q2: WC stub formats like WooCommerce 11.3 ("B&B" → "b&amp;b")', 'b&amp;b-1' === wc_format_coupon_code( 'B&B-1' ) && 'abc' === wc_format_coupon_code( ' ABC ' ) );
+check( 'Q2: an imported code WooCommerce would change ("B&B-…", "<b>…") is refused with the reason', str_contains( VCAP\Admin\Import::code_problem( 'B&B-12345678', $fmt_any ), 'b&amp;b' ) && '' !== VCAP\Admin\Import::code_problem( 'X<b>Y</b>', $fmt_any ) );
+check( 'Q2: a code longer than 100 characters is refused before the insert', str_contains( VCAP\Admin\Import::code_problem( str_repeat( 'A', 101 ), "\x01^\\S{1,200}$\x01u" ), '100' ) && '' === VCAP\Admin\Import::code_problem( str_repeat( 'A', 100 ), $fmt_any ) );
+check( 'Q10: codes with control characters (NUL from a misread file) are refused', '' !== VCAP\Admin\Import::code_problem( "A\0B\0C\0", $fmt_any ) && '' !== VCAP\Admin\Import::code_problem( "AB\x7FC", $fmt_any ) );
+check( 'Q2: ordinary codes pass; the format is still checked', '' === VCAP\Admin\Import::code_problem( 'GIFT-K7QM2X9ZPA', $fmt_any ) && str_contains( VCAP\Admin\Import::code_problem( 'ab', "\x01^[A-Z]{4,}$\x01u" ), 'format' ) );
+$col = VCAP\Admin\Import::resolve_column( array( array( 'Name', 'ID', 'Nr' ), array( 'x', 'K7QM2X9ZPA', '1' ) ), 'ID', false );
+check( 'H8: a two-letter header ("ID") is found as a name first, not read as column letters', 1 === $col['index'] && true === $col['header'] && '' === $col['error'], json_encode( $col ) );
+$col = VCAP\Admin\Import::resolve_column( array( array( 'Name', 'Code' ) ), 'B', true );
+check( 'H8: a column letter still works', 1 === $col['index'] && '' === $col['error'] );
+check( 'H8: an unknown column name is an error', '' !== VCAP\Admin\Import::resolve_column( array( array( 'Name' ) ), 'Gutscheincode', true )['error'] );
+check( 'Q2: prefix/suffix/separator only take letters, digits, dot, hyphen, underscore', VCAP\CodeGenerator::valid_affix( 'SHOP_2026.X-' ) && ! VCAP\CodeGenerator::valid_affix( 'B&B' ) && ! VCAP\CodeGenerator::valid_affix( 'Ä' ) && ! VCAP\CodeGenerator::valid_affix( str_repeat( 'A', 21 ) ) && ! VCAP\CodeGenerator::valid_affix( '----', true ) && VCAP\CodeGenerator::valid_affix( '', true ) );
+$built = VCAP\CodeGenerator::build( array( 'prefix' => 'B&B Hotel', 'suffix' => str_repeat( 'Z', 40 ), 'order_ref' => str_repeat( '9', 40 ), 'length' => 40, 'separator' => ' & ' ) );
+check( 'Q2: generated codes never contain characters WooCommerce changes and stay within 100 characters', strlen( $built ) <= 100 && wc_format_coupon_code( $built ) === strtolower( $built ) && str_starts_with( $built, 'BBHotel' ), $built );
 
 echo "Translations\n";
 /** @return array<string, array{0: string[], 1: ?string, 2: bool}> key (context \x04 msgid) => [msgstr forms, msgid_plural, fuzzy] */

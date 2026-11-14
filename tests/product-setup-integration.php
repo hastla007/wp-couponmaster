@@ -361,6 +361,40 @@ $pooled->update_meta_data( '_vcap_code_pool_empty', 'random' );
 $pooled->save();
 vcap_ps_assert( wc_get_product( $pooled->get_id() )->is_purchasable(), 'with "random codes" it can still be bought' );
 
+// Code prefix/suffix/separator (Q2): only characters WooCommerce keeps unchanged.
+$keep_prefix = get_option( 'vcap_code_prefix', false );
+update_option( 'vcap_code_prefix', 'SHOP' );
+$settings_obj = new VCAP\Settings();
+vcap_ps_assert( 'SHOP' === $settings_obj->sanitize_affix( 'B&B', array( 'id' => 'vcap_code_prefix', 'title' => 'Prefix' ) ) && 'GIFT-26' === $settings_obj->sanitize_affix( ' GIFT-26 ', array( 'id' => 'vcap_code_prefix' ) ), 'Q2: a prefix "B&B" is refused (the previous one kept), a valid one is saved' );
+vcap_ps_assert( (string) $settings_obj->get( 'vcap_code_separator' ) === $settings_obj->sanitize_affix( 'x y z', array( 'id' => 'vcap_code_separator' ) ), 'Q2: a separator with spaces is refused' );
+false === $keep_prefix ? delete_option( 'vcap_code_prefix' ) : update_option( 'vcap_code_prefix', $keep_prefix );
+$affix_product = vcap_ps_product( 'PS affix', array( 'code_prefix' => 'OK' ) );
+$_POST         = array( '_vcap_enabled' => 'yes', '_vcap_type' => 'voucher', '_vcap_code_prefix' => 'B&B', '_vcap_code_suffix' => 'END' );
+( new VCAP\ProductSettings() )->save( $affix_product );
+$affix_product->save();
+$_POST         = array();
+$affix_product = wc_get_product( $affix_product->get_id() );
+vcap_ps_assert( 'OK' === $affix_product->get_meta( '_vcap_code_prefix' ) && 'END' === $affix_product->get_meta( '_vcap_code_suffix' ), 'Q2: a product code prefix "B&B" is not saved, a valid suffix is' );
+
+// Import report (H8, Q2, Q10).
+$importer   = new VCAP\Admin\Import( vcap()->code_pool );
+$imp_batch  = 'ps-import-' . wp_generate_password( 6, false, false );
+$imp_code   = static fn() => 'PS-' . strtoupper( wp_generate_password( 12, false, false ) );
+$imp_rows   = array( array( 'Name', 'ID' ), array( 'Anna', $imp_code() ), array( 'Ben', 'B&B-' . strtoupper( wp_generate_password( 12, false, false ) ) ), array( 'Cleo', $imp_code() ) );
+$imp_report = $importer->process( $imp_rows, array( 'batch' => $imp_batch, 'column' => 'ID', 'header' => false, 'format' => 'any' ) );
+vcap_ps_assert( 2 === $imp_report['imported'] && 1 === count( $imp_report['invalid'] ) && str_contains( $imp_report['invalid'][0], 'b&amp;b' ) && 3 === count( $imp_report['preview'] ), 'H8/Q2: the header "ID" is found by name, a code WooCommerce would change is refused with the reason', $imp_report );
+$imp_report = $importer->process( array( array( 'Code', 'Note' ), array( '', 'x' ), array( '', 'y' ) ), array( 'batch' => $imp_batch, 'column' => 'Code', 'header' => true, 'format' => 'any' ) );
+vcap_ps_assert( 0 === $imp_report['imported'] && str_contains( $imp_report['error'], 'Column Code is empty' ), 'H8: an empty column is an error, not a green "0 codes imported"', $imp_report );
+$fail_insert = static function ( $query ) {
+	return str_starts_with( ltrim( $query ), 'INSERT INTO `' . VCAP\Install::tables()['pool'] ) ? 'INSERT INTO vcap_no_such_table_ps (x) VALUES (1)' : $query;
+};
+add_filter( 'query', $fail_insert );
+$GLOBALS['wpdb']->suppress_errors( true );
+$imp_report = $importer->process( array( array( $imp_code() ) ), array( 'batch' => $imp_batch, 'column' => 'A', 'header' => false, 'format' => 'any', 'allow_weak' => true, 'confirm_weak' => true ) );
+$GLOBALS['wpdb']->suppress_errors( false );
+remove_filter( 'query', $fail_insert );
+vcap_ps_assert( 0 === $imp_report['imported'] && 0 === $imp_report['dupes_existing'] && 1 === count( $imp_report['not_saved'] ) && str_contains( $imp_report['not_saved'][0], 'vcap_no_such_table_ps' ), 'Q10: a code the database refused is reported as "not saved" with the reason, not as "already existing"', $imp_report );
+
 /* ---- 14. Customer delivery date: coupled with the delivery, never after the expiry --------------------------- */
 
 // Saving: the field with "Immediately" switches to "On a date chosen by the customer"; with a fixed date it is switched off.

@@ -59,6 +59,36 @@ final class Settings {
 		add_action( 'woocommerce_settings_vcap', array( $this, 'output' ) );
 		add_action( 'woocommerce_settings_save_vcap', array( $this, 'save' ) );
 		add_action( 'woocommerce_sections_vcap', array( $this, 'sections' ) );
+		foreach ( array( 'vcap_code_prefix', 'vcap_code_suffix', 'vcap_code_separator' ) as $affix ) {
+			add_filter( 'woocommerce_admin_settings_sanitize_option_' . $affix, array( $this, 'sanitize_affix' ), 10, 2 );
+		}
+	}
+
+	/**
+	 * Prefix, suffix and separator of generated codes: letters, digits, ".", "_" and "-" only (prefix/suffix up
+	 * to 20, separator up to 3 characters). Anything else ("B&B", spaces, umlauts) is changed by WooCommerce's
+	 * code formatting, so the code would never be found again; the previous value is kept and an error shown.
+	 *
+	 * @param mixed $value
+	 * @param array $option
+	 */
+	public function sanitize_affix( $value, $option = array() ) {
+		$id    = (string) ( $option['id'] ?? '' );
+		$value = trim( (string) $value );
+		if ( CodeGenerator::valid_affix( $value, 'vcap_code_separator' === $id ) ) {
+			return $value;
+		}
+		if ( class_exists( '\WC_Admin_Settings' ) ) {
+			\WC_Admin_Settings::add_error(
+				sprintf(
+					/* translators: 1: setting name, 2: value entered */
+					__( '%1$s "%2$s" was not saved: use only letters, digits, dot, hyphen and underscore (up to 20 characters, separator up to 3).', 'voucher-captain' ),
+					(string) ( $option['title'] ?? $id ),
+					$value
+				)
+			);
+		}
+		return $this->get( $id );
 	}
 
 	public function get( string $key ) {
@@ -356,16 +386,20 @@ final class Settings {
 
 					array( 'type' => 'title', 'title' => __( 'Coupon codes', 'voucher-captain' ), 'id' => 'vcap_codes' ),
 					array(
-						'title'   => __( 'Prefix', 'voucher-captain' ),
-						'id'      => 'vcap_code_prefix',
-						'type'    => 'text',
-						'default' => '',
+						'title'             => __( 'Prefix', 'voucher-captain' ),
+						'id'                => 'vcap_code_prefix',
+						'type'              => 'text',
+						'default'           => '',
+						'desc_tip'          => __( 'Letters, digits, dot, hyphen and underscore, up to 20 characters.', 'voucher-captain' ),
+						'custom_attributes' => array( 'maxlength' => 20, 'pattern' => '[A-Za-z0-9._\-]*' ),
 					),
 					array(
-						'title'   => __( 'Suffix', 'voucher-captain' ),
-						'id'      => 'vcap_code_suffix',
-						'type'    => 'text',
-						'default' => '',
+						'title'             => __( 'Suffix', 'voucher-captain' ),
+						'id'                => 'vcap_code_suffix',
+						'type'              => 'text',
+						'default'           => '',
+						'desc_tip'          => __( 'Letters, digits, dot, hyphen and underscore, up to 20 characters.', 'voucher-captain' ),
+						'custom_attributes' => array( 'maxlength' => 20, 'pattern' => '[A-Za-z0-9._\-]*' ),
 					),
 					array(
 						'title'             => __( 'Random part length', 'voucher-captain' ),
@@ -388,11 +422,12 @@ final class Settings {
 						),
 					),
 					array(
-						'title'   => __( 'Separator', 'voucher-captain' ),
-						'id'      => 'vcap_code_separator',
-						'type'    => 'text',
-						'default' => '-',
-						'css'     => 'width:60px',
+						'title'             => __( 'Separator', 'voucher-captain' ),
+						'id'                => 'vcap_code_separator',
+						'type'              => 'text',
+						'default'           => '-',
+						'css'               => 'width:60px',
+						'custom_attributes' => array( 'maxlength' => 3, 'pattern' => '[A-Za-z0-9._\-]*' ),
 					),
 					array(
 						'title'   => __( 'Include order number', 'voucher-captain' ),

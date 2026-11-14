@@ -380,10 +380,11 @@ final class ProductSettings {
 		foreach ( array( 'code_prefix' => __( 'Code prefix', 'voucher-captain' ), 'code_suffix' => __( 'Code suffix', 'voucher-captain' ) ) as $key => $label ) {
 			woocommerce_wp_text_input(
 				array(
-					'id'          => '_vcap_' . $key,
-					'label'       => $label,
-					'value'       => $this->v( $p, $key ),
-					'placeholder' => __( 'Global setting', 'voucher-captain' ),
+					'id'                => '_vcap_' . $key,
+					'label'             => $label,
+					'value'             => $this->v( $p, $key ),
+					'placeholder'       => __( 'Global setting', 'voucher-captain' ),
+					'custom_attributes' => array( 'maxlength' => 20, 'pattern' => '[A-Za-z0-9._\-]*' ),
 				)
 			);
 		}
@@ -573,7 +574,16 @@ final class ProductSettings {
 		}
 		$text = array( 'type', 'template', 'amount_source', 'custom_presets', 'discount_type', 'tax_treatment', 'usage', 'expiry_mode', 'email_restrict', 'code_batch', 'code_prefix', 'code_suffix', 'delivery', 'send_to', 'event_location', 'code_pool_empty' );
 		foreach ( $text as $key ) {
-			$product->update_meta_data( '_vcap_' . $key, sanitize_text_field( (string) ( $post[ '_vcap_' . $key ] ?? '' ) ) );
+			$value = sanitize_text_field( (string) ( $post[ '_vcap_' . $key ] ?? '' ) );
+			if ( in_array( $key, array( 'code_prefix', 'code_suffix' ), true ) && ! CodeGenerator::valid_affix( trim( $value ) ) ) {
+				// "B&B" would be changed by WooCommerce's code formatting: the code could never be found again.
+				self::save_error(
+					/* translators: %s: value entered */
+					sprintf( __( 'Code prefix/suffix "%s" was not saved: use only letters, digits, dot, hyphen and underscore (up to 20 characters).', 'voucher-captain' ), $value )
+				);
+				continue;
+			}
+			$product->update_meta_data( '_vcap_' . $key, 'code_prefix' === $key || 'code_suffix' === $key ? trim( $value ) : $value );
 		}
 		$decimals = array( 'amount', 'custom_min', 'custom_max', 'custom_step', 'min_spend', 'max_spend' );
 		foreach ( $decimals as $key ) {

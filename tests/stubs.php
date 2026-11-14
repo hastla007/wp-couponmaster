@@ -94,7 +94,13 @@ function wc_format_localized_decimal( $n ) { return str_replace( '.', ',', (stri
 function wc_price( $amount, $args = array() ) { return '<span class="amount">' . number_format( (float) $amount, 2, ',', '.' ) . '&nbsp;&euro;</span>'; }
 function wc_get_product( $id ) { return null; }
 function wc_get_order( $id ) { return null; }
-function wc_format_coupon_code( $c ) { return strtolower( trim( (string) $c ) ); }
+// Like WooCommerce 11.3: html_entity_decode, sanitize_post_field( post_title, db ) (trim), wp_kses( …, 'entities' )
+// (tags removed, a bare "&" becomes "&amp;"), wc_strtolower. "B&B" → "b&amp;b".
+function wc_format_coupon_code( $c ) {
+	$v = trim( strip_tags( html_entity_decode( (string) $c, ENT_COMPAT, 'UTF-8' ) ) );
+	$v = (string) preg_replace( '/&(?![A-Za-z][A-Za-z0-9]*;|#\d+;|#x[0-9A-Fa-f]+;)/', '&amp;', $v );
+	return mb_strtolower( $v, 'UTF-8' );
+}
 function get_post_meta( $id, $k = '', $s = false ) { return $GLOBALS['vcap_test_meta'][ $id ][ $k ] ?? ''; }
 function get_posts( $a = array() ) { return array(); }
 function is_wp_error( $v ) { return $v instanceof WP_Error; }
