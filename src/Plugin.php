@@ -61,10 +61,6 @@ final class Plugin {
 
 	private function boot(): void {
 		Install::maybe_upgrade();
-		if ( Licensing\Entitlements::is_premium() ) {
-			// Free and development builds have no premium updater (and no license page).
-			( new Licensing\PremiumUpdater() )->register_hooks();
-		}
 
 		$this->settings  = new Settings();
 		$this->vouchers  = new VoucherRepository();
@@ -91,35 +87,21 @@ final class Plugin {
 		( new Health() )->register();
 		( new Attention() )->register();
 		( new Diagnostics() )->register();
-		Licensing\Entitlements::register();
 		( new CatchUp() )->register();
 		add_action( Install::MIGRATE_HOOK, array( Install::class, 'run_queued_migration' ) );
 
-		// Premium features (Licensing\Entitlements): a locked feature (free edition, premium without an active
-		// license) only stops what is new – configuration, sales, customer screens. Lifecycle hooks of what was
-		// sold earlier (top-up booking and reversal, reward and bonus withdrawal, promotion holds, Pass Captain
-		// reservations, refunds and ticket exchanges, coupon types) are always registered.
-		$topup = new TopUp( $this->vouchers, $this->coupons );
-		$topup->register_lifecycle();
-		if ( Licensing\Entitlements::allows( 'topup' ) ) {
-			$topup->register_features();
-		} else {
-			$topup->register_locked();
-		}
+		( new TopUp( $this->vouchers, $this->coupons ) )->register();
 		( new CouponLink( $this->settings ) )->register();
 		( new VoucherPurchaseRules( $this->settings ) )->register();
 		( new FirstOrderCoupons() )->register();
 		( new CouponSkuRules() )->register();
 		$referrals = new Referrals( $this->settings, $this->store_credit );
-		$referrals->register_lifecycle();
-		if ( Licensing\Entitlements::allows( 'referrals' ) ) {
-			$referrals->register_features();
-		}
+		$referrals->register();
 		( new Shortcodes( $this->downloads, $referrals ) )->register();
 		$promotions = new Discounts\Repository();
 		$promotions->register();
-		// Promotions check the license at runtime (CartIntegration::enabled()): no new promotion in a cart and no
-		// new bonus voucher while locked; held uses, existing order discounts and withdrawals keep working.
+		// Promotions follow their setting at runtime (CartIntegration::enabled()): no new promotion in a cart and
+		// no new bonus voucher while switched off; held uses, existing order discounts and withdrawals keep working.
 		( new Discounts\Usage( $promotions ) )->register();
 		$promotion_cart = new Discounts\CartIntegration( $this->settings, $promotions );
 		$promotion_cart->register();
@@ -146,29 +128,19 @@ final class Plugin {
 		( new Compat\Multilingual() )->register();
 		( new Compat\MultiCurrency() )->register();
 		( new Compat\AffiliateCaptain() )->register();
-		// Pass Captain: provider (reserve/commit/release/refund), channel and ticket exchange always; product
-		// settings, new ticket-voucher sales and the shared scanner only with the right.
+		// Pass Captain: provider (reserve/commit/release/refund), channel, ticket exchange, product settings, ticket
+		// vouchers and the shared scanner.
 		( new Compat\PassCaptain() )->register();
-		$this->passcaptain_tickets->register_lifecycle();
-		if ( Licensing\Entitlements::allows( 'passcaptain' ) ) {
-			$this->passcaptain_tickets->register_features();
-			( new Compat\PassCaptainScanner() )->register();
-		} else {
-			$this->passcaptain_tickets->register_locked();
-		}
+		$this->passcaptain_tickets->register();
+		( new Compat\PassCaptainScanner() )->register();
 
 		if ( is_admin() ) {
-			if ( Licensing\Entitlements::is_premium() ) {
-				( new Licensing\AdminPage() )->register();
-			}
 			( new Admin\Menu() )->register();
 			( new Admin\OrderAdmin( $this->vouchers, $this->issuer ) )->register();
 			( new Admin\VoucherAdmin( $this->vouchers ) )->register();
 			( new Admin\Import( $this->code_pool ) )->register();
 			( new Admin\StoreCreditAdmin( $this->store_credit, $this->vouchers ) )->register();
 			( new Admin\CampaignAdmin( new Campaigns( $this->code_pool, $this->vouchers ) ) )->register();
-			// Always: the outstanding value and the redemption journal (with their CSV) are the accounting record of
-			// vouchers already sold; only the campaign and partner evaluation needs the premium right (ReportsAdmin).
 			( new Admin\ReportsAdmin() )->register();
 		}
 
@@ -200,7 +172,6 @@ final class Plugin {
 		update_option( Install::SCHEDULES_OPTION, time(), true );
 		$this->delivery->schedule_maintenance();
 		$this->coupons->schedule_stale_release();
-		Licensing\Entitlements::schedule_refresh(); // Second schedule of the license check besides WP-Cron.
 		if ( 'yes' === get_option( Install::RESTORE_TASKS_OPTION ) ) {
 			delete_option( Install::RESTORE_TASKS_OPTION );
 			// In Action Scheduler batches, not in this (arbitrary) request.

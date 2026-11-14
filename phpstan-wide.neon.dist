@@ -19,6 +19,4 @@ parameters:
   scanFiles:
     - vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
     - vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
-  dynamicConstantNames:
-    - VCAP_LICENSE_REQUIRED
   reportUnmatchedIgnoredErrors: false
