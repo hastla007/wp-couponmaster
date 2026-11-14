@@ -256,6 +256,7 @@ final class CouponManager {
 			$this->release_order_reservations( $order );
 			$order->add_order_note( __( 'Unpaid order: voucher balance reservations released.', 'voucher-captain' ) );
 		}
+		$this->release_orphaned_holds( $cutoff );
 	}
 
 	/**
@@ -513,14 +514,27 @@ final class CouponManager {
 			$short_by = $reservation ? $amount - (float) $reservation['amount'] : 0.0;
 			$tolerant = $reservation && $short_by > -0.0001 && $short_by <= (float) apply_filters( 'vcap_balance_rounding_tolerance', max( 0.05, $amount * 0.001 ), $voucher );
 			if ( ! $reservation || 'reserved' !== $reservation['state'] || ! $tolerant ) {
-				$this->release_reservation_atomic( $voucher, $order->get_id(), __( 'Checkout reservation rolled back', 'voucher-captain' ) );
-				foreach ( $made as $reserved_code => $reserved_amount ) {
-					$reserved_voucher = $this->find_voucher_for_code( $reserved_code );
-					if ( $reserved_voucher ) {
-						$this->release_reservation_atomic( $reserved_voucher, $order->get_id(), __( 'Checkout reservation rolled back', 'voucher-captain' ) );
+				// Roll back this attempt's holds. A hold that cannot be released stays in the order's map (so the
+				// stale-order sweep, a cancellation or deleting the order still finds it) and gets an order note.
+				$kept = array();
+				if ( ! $this->release_reservation_atomic( $voucher, $order->get_id(), __( 'Checkout reservation rolled back', 'voucher-captain' ) ) ) {
+					$held = $this->open_hold( $voucher, $order->get_id() );
+					if ( null !== $held ) {
+						$kept[ $code ] = $held;
 					}
 				}
-				$order->delete_meta_data( '_vcap_reservations' );
+				foreach ( $made as $reserved_code => $reserved_amount ) {
+					$reserved_voucher = $this->find_voucher_for_code( $reserved_code );
+					if ( ! $reserved_voucher || ! $this->release_reservation_atomic( $reserved_voucher, $order->get_id(), __( 'Checkout reservation rolled back', 'voucher-captain' ) ) ) {
+						$kept[ $reserved_code ] = (float) $reserved_amount;
+					}
+				}
+				if ( $kept ) {
+					$order->update_meta_data( '_vcap_reservations', $kept );
+					$order->add_order_note( __( 'Some voucher reservations could not be released. Review this order.', 'voucher-captain' ) );
+				} else {
+					$order->delete_meta_data( '_vcap_reservations' );
+				}
 				$order->save();
 				$this->balance_gone = $voucher;
 				throw new \Exception( esc_html__( 'A voucher balance changed while checkout was processing. Your order was not sent for payment. Refresh the cart and try again.', 'voucher-captain' ), self::BALANCE_CHANGED ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- the message is escaped, the second argument is the integer exception code.
@@ -869,6 +883,79 @@ final class CouponManager {
 		}
 		$this->sync_balance_coupon( $fresh );
 		return true;
+	}
+
+	/** Amount of the order's hold on the voucher when its latest ledger event is an open reservation, else null. */
+	private function open_hold( Voucher $voucher, int $order_id ): ?float {
+		global $wpdb;
+		$events = Install::tables()['events'];
+		$latest = $wpdb->get_row( $wpdb->prepare( "SELECT event, amount FROM {$events} WHERE voucher_id = %d AND order_id = %d ORDER BY id DESC LIMIT 1", $voucher->id, $order_id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return $latest && 'reserved' === $latest['event'] ? (float) $latest['amount'] : null;
+	}
+
+	/**
+	 * Ledger-based reconciliation: holds whose latest event is still "reserved" although their order is gone,
+	 * cancelled, refunded or failed, or still pending past the cutoff without the hold in its "_vcap_reservations"
+	 * map (e.g. a crash between the reservation's COMMIT and the order save). The map-based sweep cannot see those,
+	 * so they would lower the balance for good. Paid orders (processing, completed, on hold) are left alone: their
+	 * holds are charged by deduct_order(). Looks back 90 days (filter "vcap_orphaned_hold_days").
+	 *
+	 * @return int number of holds released
+	 */
+	public function release_orphaned_holds( int $cutoff ): int {
+		global $wpdb;
+		$events = Install::tables()['events'];
+		$days   = max( 1, (int) apply_filters( 'vcap_orphaned_hold_days', 90 ) );
+		$rows   = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				"SELECT e.voucher_id, e.order_id FROM {$events} e WHERE e.event = 'reserved' AND e.order_id > 0 AND e.created_at >= %s
+					AND NOT EXISTS ( SELECT 1 FROM {$events} x WHERE x.voucher_id = e.voucher_id AND x.order_id = e.order_id AND x.id > e.id )
+					ORDER BY e.id LIMIT 200", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS )
+			),
+			ARRAY_A
+		);
+		$released = 0;
+		foreach ( $rows ? $rows : array() as $row ) {
+			$voucher = $this->repo->get( (int) $row['voucher_id'] );
+			$order   = wc_get_order( (int) $row['order_id'] );
+			if ( ! $voucher ) {
+				continue;
+			}
+			$code = wc_format_coupon_code( $voucher->code );
+			if ( $order instanceof \WC_Order ) {
+				if ( $order instanceof \WC_Order_Refund || $order->is_paid() || $order->has_status( array( 'processing', 'completed', 'on-hold' ) ) ) {
+					continue;
+				}
+				if ( $order->has_status( array( 'pending', 'checkout-draft' ) ) ) {
+					$modified = $order->get_date_modified() ? $order->get_date_modified()->getTimestamp() : 0;
+					if ( $modified > $cutoff || isset( self::order_map( $order, '_vcap_reservations' )[ $code ] ) ) {
+						continue; // Checkout in progress, or the map-based sweep handles it.
+					}
+				}
+			}
+			/* translators: %s: order id */
+			$note = sprintf( __( 'Orphaned reservation of order #%s released', 'voucher-captain' ), (int) $row['order_id'] );
+			if ( ! $this->release_reservation_atomic( $voucher, (int) $row['order_id'], $note ) ) {
+				continue;
+			}
+			++$released;
+			if ( $order instanceof \WC_Order ) {
+				$map = self::order_map( $order, '_vcap_reservations' );
+				if ( isset( $map[ $code ] ) ) {
+					unset( $map[ $code ] );
+					if ( $map ) {
+						$order->update_meta_data( '_vcap_reservations', $map );
+					} else {
+						$order->delete_meta_data( '_vcap_reservations' );
+					}
+					$order->save();
+				}
+				/* translators: %s: voucher code */
+				$order->add_order_note( sprintf( __( 'A voucher reservation of %s that was left open has been released.', 'voucher-captain' ), Downloads::masked_code( $voucher->code ) ) );
+			}
+		}
+		return $released;
 	}
 
 	private function sync_balance_coupon( Voucher $voucher ): void {
