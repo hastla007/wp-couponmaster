@@ -97,7 +97,7 @@ final class Bonus {
 			if ( '' !== Engine::bonus_blocker( $campaign['rules'], $lines, $context ) ) {
 				continue;
 			}
-			if ( '' !== Usage::blocker( $campaign, (int) $order->get_customer_id(), (string) $order->get_billing_email() ) ) {
+			if ( '' !== Usage::blocker( $campaign, (int) $order->get_customer_id(), (string) $order->get_billing_email(), true ) ) {
 				continue;
 			}
 			// Processing and completed can fire in parallel requests: only one may issue the bonus.

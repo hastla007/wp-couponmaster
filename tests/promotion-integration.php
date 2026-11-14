@@ -194,4 +194,33 @@ wp_update_post( array( 'ID' => $per, 'post_status' => 'draft' ) );
 update_option( 'vcap_campaigns_enabled', 'no' );
 WC()->cart->empty_cart();
 wc_clear_notices();
+// B12: cart checks read the usage counts of a promotion once per request (totals are calculated several times);
+// a use added in the request is seen at once, and the checkout hold always reads the database.
+global $wpdb;
+$b12_id       = wp_insert_post( array( 'post_type' => 'vcap_discount', 'post_status' => 'publish', 'post_title' => 'B12 memo promotion' ) );
+$b12_campaign = array( 'id' => $b12_id, 'title' => 'B12', 'rules' => array( 'usage_limit' => 2, 'usage_limit_per_customer' => 1 ) );
+$b12_table    = VCAP\Install::tables()['usage'];
+$b12_queries  = array();
+$b12_log      = static function ( $q ) use ( &$b12_queries, $b12_table ) {
+	if ( str_contains( $q, $b12_table ) ) {
+		$b12_queries[] = $q;
+	}
+	return $q;
+};
+add_filter( 'query', $b12_log );
+for ( $i = 0; $i < 4; $i++ ) {
+	VCAP\Discounts\Usage::blocker( $b12_campaign, 0, 'b12@example.com' );
+}
+$b12_cart = count( $b12_queries );
+VCAP\Discounts\Usage::add( $b12_id, VCAP\Discounts\Usage::email_key( 'b12@example.com' ), 0 );
+$b12_after = VCAP\Discounts\Usage::blocker( $b12_campaign, 0, 'b12@example.com' );
+$b12_queries = array();
+VCAP\Discounts\Usage::blocker( $b12_campaign, 0, 'b12@example.com', true );
+$b12_fresh = count( preg_grep( '/^SELECT COUNT/', $b12_queries ) );
+remove_filter( 'query', $b12_log );
+vcap_promo_assert( 2 === $b12_cart, 'B12: four cart checks read the total and the customer count once each (' . $b12_cart . ' queries)' );
+vcap_promo_assert( 'usage_limit_customer' === $b12_after, 'B12: a use added in the request is counted at once (memo forgotten)' );
+vcap_promo_assert( $b12_fresh >= 1, 'B12: the check that decides under the lock reads the database' );
+wp_delete_post( $b12_id, true );
+
 echo "Voucher Captain promotion checks passed.\n";

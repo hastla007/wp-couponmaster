@@ -48,6 +48,7 @@ final class Usage {
 			return;
 		}
 		global $wpdb;
+		self::forget_counts( (int) $post_id );
 		$wpdb->delete( \VCAP\Install::tables()['usage'], array( 'campaign_id' => (int) $post_id ), array( '%d' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
@@ -128,17 +129,22 @@ final class Usage {
 		return $done;
 	}
 
+	/**
+	 * Uses of a promotion. While rows of the old storage may exist, post meta is counted BEFORE the table: a batch
+	 * the migration moves in between is then counted twice (a limit is reached early, the safe error) instead of
+	 * not at all (a limit could be exceeded).
+	 */
 	public static function count( int $campaign_id ): int {
 		global $wpdb;
-		$count = 0;
-		if ( \VCAP\Install::storage_ready() ) {
-			$table = \VCAP\Install::tables()['usage'];
-			$count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE campaign_id = %d", $campaign_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			if ( ! \VCAP\Install::legacy_rows() ) {
-				return $count;
-			}
+		$ready  = \VCAP\Install::storage_ready();
+		$legacy = ! $ready || \VCAP\Install::legacy_rows()
+			? (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s", $campaign_id, self::META ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			: 0;
+		if ( ! $ready ) {
+			return $legacy;
 		}
-		return $count + (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s", $campaign_id, self::META ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$table = \VCAP\Install::tables()['usage'];
+		return $legacy + (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE campaign_id = %d", $campaign_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 
 	public static function count_for( int $campaign_id, array $keys ): int {
@@ -149,32 +155,63 @@ final class Usage {
 		// Plain-text email keys (earlier versions, callers) also count in their stored, hashed form.
 		$keys  = array_values( array_unique( array_merge( array_map( 'strval', $keys ), array_map( static fn( $k ) => self::stored_key( (string) $k ), $keys ) ) ) );
 		$keys  = array_values( array_map( static fn( $k ) => substr( $k, 0, 200 ), $keys ) );
-		$in    = implode( ',', array_fill( 0, count( $keys ), '%s' ) );
-		$count = 0;
-		if ( \VCAP\Install::storage_ready() ) {
-			$table = \VCAP\Install::tables()['usage'];
+		$in     = implode( ',', array_fill( 0, count( $keys ), '%s' ) );
+		$ready  = \VCAP\Install::storage_ready();
+		$legacy = 0;
+		if ( ! $ready || \VCAP\Install::legacy_rows() ) {
+			// Post meta first, then the table (see count()).
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built above.
-			$count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE campaign_id = %d AND customer_key IN ($in)", array_merge( array( $campaign_id ), $keys ) ) );
-			if ( ! \VCAP\Install::legacy_rows() ) {
-				return $count;
-			}
+			$legacy = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s AND meta_value IN ($in)", array_merge( array( $campaign_id, self::META ), $keys ) ) );
 		}
+		if ( ! $ready ) {
+			return $legacy;
+		}
+		$table = \VCAP\Install::tables()['usage'];
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built above.
-		return $count + (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s AND meta_value IN ($in)", array_merge( array( $campaign_id, self::META ), $keys ) ) );
+		return $legacy + (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE campaign_id = %d AND customer_key IN ($in)", array_merge( array( $campaign_id ), $keys ) ) );
+	}
+
+	/** @var array<int, array<string, int>> Counts read in this request, per promotion (see blocker()). */
+	private static array $memo = array();
+
+	/** A count of this request, read once (cart totals are calculated several times per request). */
+	private static function memo( int $campaign_id, string $key, callable $read ): int {
+		if ( ! isset( self::$memo[ $campaign_id ][ $key ] ) ) {
+			self::$memo[ $campaign_id ][ $key ] = (int) $read();
+		}
+		return self::$memo[ $campaign_id ][ $key ];
+	}
+
+	/** Forgets the counts of this request (all, or of one promotion after a use was added or given back). */
+	public static function forget_counts( int $campaign_id = 0 ): void {
+		if ( $campaign_id > 0 ) {
+			unset( self::$memo[ $campaign_id ] );
+		} else {
+			self::$memo = array();
+		}
 	}
 
 	/**
-	 * Why a promotion cannot be used any more ('' when it can).
+	 * Why a promotion cannot be used any more ('' when it can). Cart checks read each count once per request
+	 * (memo, forgotten when this request adds or gives back a use); $fresh reads the database – for the checks
+	 * that decide, under the promotion's lock, whether a use may be taken (hold(), bonus).
 	 */
-	public static function blocker( array $campaign, int $user_id, string $email ): string {
+	public static function blocker( array $campaign, int $user_id, string $email, bool $fresh = false ): string {
 		$rules = $campaign['rules'];
-		if ( $rules['usage_limit'] > 0 && self::count( (int) $campaign['id'] ) >= $rules['usage_limit'] ) {
-			return 'usage_limit';
+		$id    = (int) $campaign['id'];
+		if ( $rules['usage_limit'] > 0 ) {
+			$used = $fresh ? self::count( $id ) : self::memo( $id, 'all', static fn() => self::count( $id ) );
+			if ( $used >= $rules['usage_limit'] ) {
+				return 'usage_limit';
+			}
 		}
 		if ( $rules['usage_limit_per_customer'] > 0 ) {
 			$keys = self::customer_keys( $user_id, $email );
-			if ( $keys && self::count_for( (int) $campaign['id'], $keys ) >= $rules['usage_limit_per_customer'] ) {
-				return 'usage_limit_customer';
+			if ( $keys ) {
+				$used = $fresh ? self::count_for( $id, $keys ) : self::memo( $id, 'k:' . md5( implode( '|', $keys ) ), static fn() => self::count_for( $id, $keys ) );
+				if ( $used >= $rules['usage_limit_per_customer'] ) {
+					return 'usage_limit_customer';
+				}
 			}
 		}
 		return '';
@@ -186,6 +223,7 @@ final class Usage {
 	 * @param int $order_id Order that used the promotion (0 when unknown).
 	 */
 	public static function add( int $campaign_id, string $key, int $order_id = 0 ): void {
+		self::forget_counts( $campaign_id );
 		$key = self::stored_key( $key );
 		if ( ! \VCAP\Install::storage_ready() ) {
 			add_post_meta( $campaign_id, self::META, $key );
@@ -212,6 +250,7 @@ final class Usage {
 	 */
 	public static function remove( int $campaign_id, string $key, int $order_id = 0 ): void {
 		global $wpdb;
+		self::forget_counts( $campaign_id );
 		if ( \VCAP\Install::storage_ready() ) {
 			$table = \VCAP\Install::tables()['usage'];
 			if ( $order_id > 0 && $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE campaign_id = %d AND order_id = %d LIMIT 1", $campaign_id, $order_id ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -317,7 +356,7 @@ final class Usage {
 				}
 				throw new \Exception( esc_html__( 'The promotion could not be checked right now. Please try again in a moment.', 'voucher-captain' ) );
 			}
-			$blocker = $limited ? self::blocker( $campaign, (int) $order->get_customer_id(), (string) $order->get_billing_email() ) : '';
+			$blocker = $limited ? self::blocker( $campaign, (int) $order->get_customer_id(), (string) $order->get_billing_email(), true ) : '';
 			if ( '' === $blocker && \VCAP\Claim::take( 'usage:' . $order->get_id() . ':' . $id ) ) {
 				self::add( $id, $key, (int) $order->get_id() );
 				$held[] = $id;
@@ -390,17 +429,30 @@ final class Usage {
 			return;
 		}
 		$cutoff = ( is_numeric( $now ) ? (int) $now : time() ) - $minutes * MINUTE_IN_SECONDS;
-		$orders = wc_get_orders(
-			array(
-				'status'     => 'pending',
-				'limit'      => 200,
-				'orderby'    => 'date',
-				'order'      => 'ASC',
-				'meta_query' => array( array( 'key' => self::ORDER_META, 'compare' => 'EXISTS' ) ), // phpcs:ignore WordPress.DB.SlowDBQuery
-			)
-		);
-		foreach ( $orders as $order ) {
-			if ( ! $order instanceof \WC_Order || ! $order->get_meta( self::ORDER_META ) ) {
+		// Only unpaid orders that hold uses and were not changed since the cutoff, read from the order store in use
+		// (wc_get_orders() ignores meta_query for the classic store), in keyset batches of 200 (at most 1000 a run).
+		$ids   = array();
+		$after = 0;
+		for ( $page = 1; $page <= 5; $page++ ) {
+			$batch = \VCAP\OrderLookup::ids_with_meta(
+				self::ORDER_META,
+				null,
+				array(
+					'status'          => 'pending',
+					'limit'           => 200,
+					'after_id'        => $after,
+					'modified_before' => $cutoff + 1,
+				)
+			);
+			$ids = array_merge( $ids, $batch );
+			if ( count( $batch ) < 200 ) {
+				break;
+			}
+			$after = (int) end( $batch );
+		}
+		foreach ( $ids as $order_id ) {
+			$order = wc_get_order( $order_id );
+			if ( ! $order instanceof \WC_Order || 'pending' !== $order->get_status() || ! $order->get_meta( self::ORDER_META ) ) {
 				continue;
 			}
 			$changed = $order->get_date_modified() ? $order->get_date_modified() : $order->get_date_created();
