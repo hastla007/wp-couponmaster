@@ -14,6 +14,7 @@ final class Emails {
 	public function classes( array $emails ): array {
 		$emails['VCAP_Email_Voucher_Buyer']     = new Emails\BuyerEmail();
 		$emails['VCAP_Email_Voucher_Recipient'] = new Emails\RecipientEmail();
+		$emails['VCAP_Email_Voucher_Bundle']    = new Emails\BundleEmail();
 		$emails['VCAP_Email_Voucher_Expiry']    = new Emails\ExpiryReminderEmail();
 		$emails['VCAP_Email_Bonus']             = new Emails\BonusEmail();
 		$emails['VCAP_Email_Referral']          = new Emails\ReferralEmail();

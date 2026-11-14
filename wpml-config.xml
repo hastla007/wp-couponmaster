@@ -76,6 +76,12 @@
 			<key name="intro" />
 			<key name="additional_content" />
 		</key>
+		<key name="woocommerce_vcap_voucher_bundle_settings">
+			<key name="subject" />
+			<key name="heading" />
+			<key name="intro" />
+			<key name="additional_content" />
+		</key>
 		<key name="woocommerce_vcap_voucher_expiry_settings">
 			<key name="subject" />
 			<key name="heading" />
