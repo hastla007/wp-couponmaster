@@ -67,8 +67,54 @@ $b13_queried = $b13_orders;
 vcap_first_order( $product, $newcomer, "n-{$tag}@example.com", 'completed' );
 $b13_after = VCAP\FirstOrderCoupons::has_previous_order( $newcomer, "n-{$tag}@example.com", 0 );
 remove_filter( 'woocommerce_order_query_args', $b13_count );
-vcap_first_assert( array( false, false, false, false ) === $b13_answers && 2 === $b13_queried, 'B13: four checks of the same customer run the two order queries (account, email) once (' . $b13_queried . ')' );
+vcap_first_assert( array( false, false, false, false ) === $b13_answers && 4 === $b13_queried, 'B13: four checks of the same customer run the order queries (account/emails and mailbox hash, each for counting and refunded/cancelled orders) once (' . $b13_queried . ')' );
 vcap_first_assert( true === $b13_after, 'B13: an order completed in the request is counted at once' );
+
+// V4: the email is compared as mailbox – "+tags" and Gmail dots do not make a new customer.
+vcap_first_order( $product, 0, "v4.max{$tag}+shop@gmail.com", 'processing' );
+vcap_first_assert( ! vcap_first_valid( $coupon, vcap_first_order( $product, 0, "V4Max{$tag}@GoogleMail.com", 'pending' ) ), 'V4: a Gmail address without dots and +tag is the same customer as "v4.max+shop@gmail.com"' );
+vcap_first_order( $product, 0, "plus-{$tag}+a@example.com", 'completed' );
+vcap_first_assert( ! vcap_first_valid( $coupon, vcap_first_order( $product, 0, "plus-{$tag}+b@example.com", 'pending' ) ), 'V4: "name+b@…" is the same customer as "name+a@…"' );
+vcap_first_assert( vcap_first_valid( $coupon, vcap_first_order( $product, 0, "plus-other-{$tag}@example.com", 'pending' ) ), 'V4: a different mailbox is still a new customer' );
+// An order from before V4 (no mailbox hash yet) is found by its normalised address, and by the hash once the daily
+// run stamped it.
+$v4_old = vcap_first_order( $product, 0, "old-{$tag}+x@example.com", 'completed' );
+$v4_old->delete_meta_data( VCAP\FirstOrderCoupons::CUSTOMER_META );
+$v4_old->save_meta_data();
+VCAP\FirstOrderCoupons::forget();
+vcap_first_assert( '' === (string) wc_get_order( $v4_old->get_id() )->get_meta( VCAP\FirstOrderCoupons::CUSTOMER_META ) && vcap_first_valid( $coupon, vcap_first_order( $product, 0, "old-{$tag}+y@example.com", 'pending' ) ), 'V4: (setup) an unstamped older order is not found under a different +tag' );
+while ( VCAP\FirstOrderCoupons::stamp_older_orders( 200 ) >= 200 ) {
+	// All older orders of the test shop.
+}
+VCAP\FirstOrderCoupons::forget();
+vcap_first_assert( ! vcap_first_valid( $coupon, vcap_first_order( $product, 0, "old-{$tag}+z@example.com", 'pending' ) ), 'V4: once the daily run stamped older orders, their +tag twins are recognised' );
+// Refunded/cancelled orders that used a discount count as earlier orders.
+$v4_discount = new WC_Coupon();
+$v4_discount->set_code( 'vcap-v4-' . strtolower( wp_generate_password( 8, false, false ) ) );
+$v4_discount->set_discount_type( 'percent' );
+$v4_discount->set_amount( 10 );
+$v4_discount->save();
+$v4_discounted = static function ( string $email, string $status, bool $paid ) use ( $product, $v4_discount ): WC_Order {
+	$order = wc_create_order( array( 'customer_id' => 0 ) );
+	$order->add_product( $product, 1 );
+	$order->set_billing_email( $email );
+	$order->apply_coupon( $v4_discount->get_code() );
+	$order->calculate_totals();
+	if ( $paid ) {
+		$order->set_date_paid( time() - 60 );
+	}
+	$order->set_status( $status );
+	$order->save();
+	return $order;
+};
+$v4_discounted( "refund-{$tag}@example.com", 'refunded', true );
+vcap_first_assert( ! vcap_first_valid( $coupon, vcap_first_order( $product, 0, "refund-{$tag}+again@example.com", 'pending' ) ), 'V4: a refunded earlier order that used a discount counts – a refund does not make the customer new again' );
+$v4_discounted( "paidcancel-{$tag}@example.com", 'cancelled', true );
+vcap_first_assert( ! vcap_first_valid( $coupon, vcap_first_order( $product, 0, "paidcancel-{$tag}@example.com", 'pending' ) ), 'V4: a paid order with a discount that was cancelled later counts' );
+$v4_discounted( "abandoned-{$tag}@example.com", 'cancelled', false );
+vcap_first_assert( vcap_first_valid( $coupon, vcap_first_order( $product, 0, "abandoned-{$tag}@example.com", 'pending' ) ), 'V4: a cancelled order that was never paid (abandoned payment) does not count' );
+vcap_first_order( $product, 0, "refundplain-{$tag}@example.com", 'refunded' );
+vcap_first_assert( vcap_first_valid( $coupon, vcap_first_order( $product, 0, "refundplain-{$tag}@example.com", 'pending' ) ), 'V4: a refunded order without any discount does not count' );
 
 // Coupons never change catalog prices; the discount only appears in the cart.
 wc_load_cart();

@@ -89,6 +89,7 @@ are described in CONNECTORS.md and API.md.
 | `vcap_field_definitions` | `src/Fields.php` | – |
 | `vcap_field_group_applies` | `src/Fields.php` | – |
 | `vcap_first_order_counting_statuses` | `src/FirstOrderCoupons.php` | – |
+| `vcap_first_order_counts_undone_order` | `src/FirstOrderCoupons.php` | Whether a refunded/cancelled order counts as earlier order for "first order only" (bool, WC_Order). |
 | `vcap_import_max_unzipped_bytes` | `src/SpreadsheetReader.php` | – |
 | `vcap_internal_redemption_key_prefixes` | `src/API/V1/RestController.php` | Key prefixes reserved for built-in integrations (never created or driven over REST). |
 | `vcap_internal_redemption_target_prefixes` | `src/API/V1/RestController.php` | Target prefixes reserved for built-in integrations (never used over REST). |

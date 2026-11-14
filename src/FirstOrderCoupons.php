@@ -8,9 +8,15 @@ defined( 'ABSPATH' ) || exit;
  *
  * A customer qualifies when no earlier order of theirs (by account or billing email) was paid or is awaiting
  * fulfilment. Guests are checked by billing email as soon as WooCommerce knows it (cart, checkout, Store API).
+ * V4: the email is compared as mailbox (CustomerEmail::normalize(): "max+1@…", "m.ax@gmail.com"), through a keyed
+ * hash every order carries (CUSTOMER_META); a refunded order, or a paid order cancelled later, that used a discount
+ * counts as an earlier order too (an unpaid order that was cancelled does not: nothing was bought).
  */
 final class FirstOrderCoupons {
 	public const META = '_vcap_first_order';
+
+	/** Order meta: CustomerEmail::key() of the billing email (V4), to find earlier orders of the same mailbox. */
+	public const CUSTOMER_META = '_vcap_customer_email_key';
 
 	public function register(): void {
 		add_action( 'woocommerce_coupon_options_usage_restriction', array( $this, 'field' ), 10, 2 );
@@ -21,6 +27,54 @@ final class FirstOrderCoupons {
 		foreach ( array( 'woocommerce_new_order', 'woocommerce_update_order', 'woocommerce_order_status_changed', 'woocommerce_delete_order', 'woocommerce_trash_order' ) as $hook ) {
 			add_action( $hook, array( self::class, 'forget' ) );
 		}
+		add_action( 'woocommerce_before_order_object_save', array( self::class, 'stamp' ) );
+		add_action( 'vcap_daily_maintenance', array( self::class, 'stamp_older_orders' ), 45, 0 );
+	}
+
+	/** V4: an order remembers the hashed mailbox of its billing email (set whenever the email is set or changed). */
+	public static function stamp( $order ): void {
+		if ( ! $order instanceof \WC_Order || $order instanceof \WC_Order_Refund ) {
+			return;
+		}
+		$email = (string) $order->get_billing_email();
+		$key   = is_email( $email ) ? CustomerEmail::key( $email ) : '-';
+		if ( (string) $order->get_meta( self::CUSTOMER_META ) !== $key ) {
+			$order->update_meta_data( self::CUSTOMER_META, $key );
+		}
+	}
+
+	/**
+	 * V4: daily, orders from before V4 get their hashed mailbox in batches, so their "max+1@…" twins are found too
+	 * (until then they are found by their exact and their normalised address).
+	 *
+	 * @return int orders stamped
+	 */
+	public static function stamp_older_orders( int $limit = 200 ): int {
+		if ( ! function_exists( 'wc_get_orders' ) ) {
+			return 0;
+		}
+		$orders = wc_get_orders(
+			array(
+				'type'       => 'shop_order',
+				'status'     => array_keys( wc_get_order_statuses() ),
+				'limit'      => $limit,
+				'meta_query' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- daily maintenance, batches.
+					array(
+						'key'     => self::CUSTOMER_META,
+						'compare' => 'NOT EXISTS',
+					),
+				),
+			)
+		);
+		$done = 0;
+		foreach ( (array) $orders as $order ) {
+			if ( $order instanceof \WC_Order ) {
+				self::stamp( $order );
+				$order->save_meta_data();
+				++$done;
+			}
+		}
+		return $done;
 	}
 
 	/** @var array<string, bool> Answers of has_previous_order() in this request. */
@@ -55,22 +109,40 @@ final class FirstOrderCoupons {
 		$statuses = apply_filters( 'vcap_first_order_counting_statuses', array( 'processing', 'completed', 'on-hold' ) );
 		// Cart totals are calculated several times per request, each validating the coupon: the order queries run
 		// once per customer, order and statuses (forgotten when an order is created or changes, see register()).
-		$memo = md5( (string) wp_json_encode( array( $user_id, strtolower( $email ), $exclude_order_id, $before, $statuses ) ) );
+		$memo = md5( (string) wp_json_encode( array( $user_id, CustomerEmail::normalize( $email ), $exclude_order_id, $before, $statuses ) ) );
 		if ( ! isset( self::$memo[ $memo ] ) ) {
 			self::$memo[ $memo ] = self::find_previous_order( $user_id, $email, $exclude_order_id, $before, (array) $statuses );
 		}
 		return self::$memo[ $memo ];
 	}
 
-	/** has_previous_order() without the memo: by account first, then by billing email. */
+	/**
+	 * has_previous_order() without the memo: by account, exact and normalised billing email, then by the hashed
+	 * mailbox orders carry (V4). Refunded/cancelled orders count when they used a discount (undone_counts()).
+	 */
 	private static function find_previous_order( int $user_id, string $email, int $exclude_order_id, int $before, array $statuses ): bool {
-		foreach ( array_filter( array( $user_id ?: null, is_email( $email ) ? strtolower( $email ) : null ) ) as $customer ) {
-			$query = array(
-				'customer' => $customer,
-				'status'   => $statuses,
-				'limit'    => 2,
-				'return'   => 'ids',
-				'type'     => 'shop_order',
+		$criteria = array();
+		$customer = array_values( array_unique( array_filter( array( $user_id ?: null, is_email( $email ) ? strtolower( trim( $email ) ) : null, is_email( $email ) ? CustomerEmail::normalize( $email ) : null ) ) ) );
+		if ( $customer ) {
+			$criteria[] = array( 'customer' => $customer );
+		}
+		if ( is_email( $email ) ) {
+			$criteria[] = array(
+				'meta_query' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- memoised per request.
+					array(
+						'key'   => self::CUSTOMER_META,
+						'value' => CustomerEmail::key( $email ),
+					),
+				),
+			);
+		}
+		$undone = array_values( array_diff( array( 'refunded', 'cancelled' ), array_map( static fn( $s ) => str_replace( 'wc-', '', (string) $s ), $statuses ) ) );
+		foreach ( $criteria as $criterion ) {
+			$query = $criterion + array(
+				'status' => $statuses,
+				'limit'  => 2,
+				'return' => 'ids',
+				'type'   => 'shop_order',
 			);
 			if ( $before > 0 ) {
 				$query['date_created'] = '<' . $before; // Only orders placed before the one being recalculated.
@@ -79,8 +151,31 @@ final class FirstOrderCoupons {
 			if ( array_diff( array_map( 'intval', $ids ), array( $exclude_order_id ) ) ) {
 				return true;
 			}
+			if ( ! $undone ) {
+				continue;
+			}
+			$query['status'] = $undone;
+			$query['limit']  = 20;
+			$query['return'] = 'objects';
+			foreach ( (array) wc_get_orders( $query ) as $order ) {
+				if ( $order instanceof \WC_Order && $order->get_id() !== $exclude_order_id && self::undone_counts( $order ) ) {
+					return true;
+				}
+			}
 		}
 		return false;
+	}
+
+	/**
+	 * V4: a refunded order, or one cancelled after it was paid, counts as earlier order when it used a discount –
+	 * otherwise a refund would make the customer "new" again. A cancelled order that was never paid (abandoned
+	 * payment) does not count.
+	 */
+	public static function undone_counts( \WC_Order $order ): bool {
+		$discounted = (bool) $order->get_coupon_codes() || (float) $order->get_discount_total() > 0;
+		$bought     = $order->has_status( 'refunded' ) || null !== $order->get_date_paid();
+		/** Whether a refunded/cancelled order counts as earlier order for "first order only" (bool, WC_Order). */
+		return (bool) apply_filters( 'vcap_first_order_counts_undone_order', $discounted && $bought, $order );
 	}
 
 	/**

@@ -218,6 +218,17 @@ $b12_queries = array();
 VCAP\Discounts\Usage::blocker( $b12_campaign, 0, 'b12@example.com', true );
 $b12_fresh = count( preg_grep( '/^SELECT COUNT/', $b12_queries ) );
 remove_filter( 'query', $b12_log );
+// V4: per-customer keys compare the mailbox ("+tag", Gmail dots); hashes stored before V4 still count.
+$v4_tag = strtolower( wp_generate_password( 6, false, false ) );
+VCAP\Discounts\Usage::add( 990004, VCAP\Discounts\Usage::customer_keys( 0, "v4.p{$v4_tag}+a@gmail.com" )[0], 0 );
+vcap_promo_assert( 1 === VCAP\Discounts\Usage::count_for( 990004, VCAP\Discounts\Usage::customer_keys( 0, "V4P{$v4_tag}@googlemail.com" ) ) && 1 === VCAP\Discounts\Usage::count_for( 990004, VCAP\Discounts\Usage::customer_keys( 0, "v4p{$v4_tag}+b@gmail.com" ) ) && 0 === VCAP\Discounts\Usage::count_for( 990004, VCAP\Discounts\Usage::customer_keys( 0, "v4q{$v4_tag}@gmail.com" ) ), 'V4: a promotion use counts for the same mailbox under another +tag or with Gmail dots' );
+VCAP\Discounts\Usage::add( 990004, VCAP\CustomerEmail::legacy_key( "Legacy.{$v4_tag}+x@Example.com" ), 0 );
+vcap_promo_assert( 1 === VCAP\Discounts\Usage::count_for( 990004, VCAP\Discounts\Usage::customer_keys( 0, "legacy.{$v4_tag}+x@example.com" ) ), 'V4: a guest key stored before V4 (hash of the address only lowered) still counts' );
+$v4_user = (int) wp_insert_user( array( 'user_login' => "vcap_v4_{$v4_tag}", 'user_pass' => wp_generate_password( 20 ), 'user_email' => "acct{$v4_tag}@example.com" ) );
+VCAP\Discounts\Usage::add( 990004, VCAP\Discounts\Usage::customer_keys( $v4_user, "acct{$v4_tag}@example.com" )[0], 0 );
+vcap_promo_assert( 1 === VCAP\Discounts\Usage::count_for( 990004, VCAP\Discounts\Usage::customer_keys( 0, "acct{$v4_tag}+guest@example.com" ) ), 'V4: a guest order with "+tag" of an account email counts for that account' );
+$wpdb->delete( VCAP\Install::tables()['usage'], array( 'campaign_id' => 990004 ) );
+wp_delete_user( $v4_user );
 vcap_promo_assert( 2 === $b12_cart, 'B12: four cart checks read the total and the customer count once each (' . $b12_cart . ' queries)' );
 vcap_promo_assert( 'usage_limit_customer' === $b12_after, 'B12: a use added in the request is counted at once (memo forgotten)' );
 vcap_promo_assert( $b12_fresh >= 1, 'B12: the check that decides under the lock reads the database' );

@@ -61,7 +61,9 @@ final class Usage {
 		$keys  = array();
 		$email = strtolower( trim( $email ) );
 		if ( $user_id <= 0 && is_email( $email ) ) {
+			// V4: "max+1@…" is the guest twin of the account "max@…" as well.
 			$owner   = get_user_by( 'email', $email );
+			$owner   = $owner ? $owner : get_user_by( 'email', \VCAP\CustomerEmail::normalize( $email ) );
 			$user_id = $owner ? (int) $owner->ID : 0;
 		}
 		$emails = array();
@@ -76,8 +78,13 @@ final class Usage {
 			$emails[] = $email;
 		}
 		$emails = array_values( array_unique( $emails ) );
+		// V4: hashed keys of the normalised mailbox ("max+1@…", "m.ax@gmail.com" are one customer) …
 		foreach ( $emails as $address ) {
 			$keys[] = self::email_key( $address );
+		}
+		// … and, still counted, the hashes stored before V4 (of the address only lowered).
+		foreach ( $emails as $address ) {
+			$keys[] = \VCAP\CustomerEmail::legacy_key( $address );
 		}
 		// Plain-text keys of earlier versions, still counted until the maintenance has converted them (never
 		// used to store a new use: the first key is).
@@ -92,7 +99,7 @@ final class Usage {
 	 * customer is still recognised by the same address.
 	 */
 	public static function email_key( string $email ): string {
-		return 'h:' . hash_hmac( 'sha256', strtolower( trim( $email ) ), wp_salt( 'auth' ) );
+		return \VCAP\CustomerEmail::key( $email ); // V4: of the normalised mailbox.
 	}
 
 	/** The stored form of a key: plain-text email keys of earlier versions become hashed keys. */

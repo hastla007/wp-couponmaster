@@ -52,17 +52,7 @@ final class Referrals {
 	 * lower case, "+tag" removed, and for Gmail the dots of the local part removed.
 	 */
 	public static function normalize_email( string $email ): string {
-		$email = strtolower( trim( $email ) );
-		if ( ! str_contains( $email, '@' ) ) {
-			return $email;
-		}
-		[ $local, $domain ] = explode( '@', $email, 2 );
-		$local = explode( '+', $local, 2 )[0];
-		if ( in_array( $domain, array( 'gmail.com', 'googlemail.com' ), true ) ) {
-			$local  = str_replace( '.', '', $local );
-			$domain = 'gmail.com';
-		}
-		return $local . '@' . $domain;
+		return CustomerEmail::normalize( $email ); // V4: shared by all per-customer keys.
 	}
 
 	/** Whether the customer (account or email) is the owner of the referral code. */
