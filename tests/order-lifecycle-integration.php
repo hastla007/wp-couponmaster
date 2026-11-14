@@ -154,4 +154,123 @@ $card->balance    = 10;
 $coupon_id        = vcap()->coupons->create_coupon( $card, VCAP\ProductConfig::DEFAULTS );
 vcap_life_assert( 'fixed_cart' === ( new WC_Coupon( $coupon_id ) )->get_discount_type(), 'stored-balance coupons are created as fixed_cart' );
 
+// E2: partial return of an order paid with a gift card (guest, total 0): part of the charge is booked back.
+list( $ret, $ret_coupon ) = vcap_life_voucher( 100.0 );
+$ret_order = vcap_life_order( array( $ret_coupon->get_code() => 60 ) );
+$manager->order_status_changed( $ret_order->get_id(), 'pending', 'processing', $ret_order );
+vcap_life_assert( 40.0 === (float) $repo->get( $ret->id )->balance, 'the order charges 60 to the card' );
+$returns = new VCAP\OrderReturn( $repo, $manager );
+$back    = $returns->book_back( wc_get_order( $ret_order->get_id() ), $ret_coupon->get_code(), 20, 'One item returned' );
+vcap_life_assert( ! is_wp_error( $back ) && 60.0 === (float) $repo->get( $ret->id )->balance, 'a returned item is booked back onto the card (guest order)' );
+vcap_life_assert( is_wp_error( $returns->book_back( wc_get_order( $ret_order->get_id() ), $ret_coupon->get_code(), 41, 'Too much' ) ), 'more than the charge minus earlier returns cannot be booked back' );
+vcap_life_assert( in_array( VCAP\CouponManager::RETURNED_EVENT, array_column( $repo->events( $ret->id ), 'event' ), true ), 'the return is a ledger event of its own' );
+$ret_order = wc_get_order( $ret_order->get_id() );
+$manager->order_status_changed( $ret_order->get_id(), 'processing', 'cancelled', $ret_order );
+vcap_life_assert( 100.0 === (float) $repo->get( $ret->id )->balance, 'cancelling afterwards books back only the rest (never twice)' );
+
+// T6: the charge goes back onto a card that has expired meanwhile – never silently.
+list( $old, $old_coupon ) = vcap_life_voucher( 50.0 );
+$old_order = vcap_life_order( array( $old_coupon->get_code() => 50 ) );
+$manager->order_status_changed( $old_order->get_id(), 'pending', 'processing', $old_order );
+$old_card             = $repo->get( $old->id );
+$old_card->expires_at = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
+$repo->update_columns( $old_card, array( 'expires_at' ) );
+$old_order = wc_get_order( $old_order->get_id() );
+$manager->order_status_changed( $old_order->get_id(), 'processing', 'cancelled', $old_order );
+vcap_life_assert( 50.0 === (float) $repo->get( $old->id )->balance && VCAP\Attention::has( $old_order->get_id(), 'restored:' . $old->id ), 'a balance booked back onto an expired card is listed for the shop' );
+VCAP\Attention::resolve( $old_order->get_id(), 'restored:' . $old->id );
+add_filter( 'vcap_restore_extension_days', static fn() => 30 );
+list( $ext, $ext_coupon ) = vcap_life_voucher( 50.0 );
+$ext_order = vcap_life_order( array( $ext_coupon->get_code() => 50 ) );
+$manager->order_status_changed( $ext_order->get_id(), 'pending', 'processing', $ext_order );
+$ext_card             = $repo->get( $ext->id );
+$ext_card->expires_at = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
+$repo->update_columns( $ext_card, array( 'expires_at' ) );
+$manager->order_status_changed( $ext_order->get_id(), 'processing', 'cancelled', wc_get_order( $ext_order->get_id() ) );
+vcap_life_assert( ! $repo->get( $ext->id )->is_expired() && VCAP\Voucher::STATUS_ACTIVE === $repo->get( $ext->id )->status, 'with "vcap_restore_extension_days" the expired card is extended' );
+remove_all_filters( 'vcap_restore_extension_days' );
+
+/** A single-use 20 voucher (coupon usage limit 1), optionally bought in $order_id. */
+function vcap_life_single( int $order_id = 0 ): VCAP\Voucher {
+	$coupon = new WC_Coupon();
+	$coupon->set_code( 'vcap-single-' . strtolower( wp_generate_password( 12, false, false ) ) );
+	$coupon->set_discount_type( 'fixed_cart' );
+	$coupon->set_amount( 20 );
+	$coupon->set_usage_limit( 1 );
+	$coupon->update_meta_data( '_vcap_voucher', 'yes' );
+	$coupon->save();
+	$v                 = new VCAP\Voucher();
+	$v->code           = wc_format_coupon_code( $coupon->get_code() );
+	$v->coupon_id      = $coupon->get_id();
+	$v->order_id       = $order_id;
+	$v->order_item_id  = 71000000 + $coupon->get_id();
+	$v->type           = 'voucher';
+	$v->usage_mode     = 'single';
+	$v->discount_type  = 'fixed_cart';
+	$v->initial_amount = 20;
+	$v->balance        = 20;
+	$v->currency       = get_woocommerce_currency();
+	$v->status         = VCAP\Voucher::STATUS_ACTIVE;
+	$v->send_to        = 'buyer';
+	$v->token          = VCAP\VoucherRepository::new_token();
+	$v->id             = vcap()->vouchers->insert( $v );
+	return $v;
+}
+
+// P9: a paid voucher order cancelled by hand (no refund): unused vouchers are voided, used ones stay.
+$bought = wc_create_order( array( 'status' => 'processing' ) );
+$bought->set_billing_email( 'p9@example.com' );
+$bought->save();
+$unused_single = vcap_life_single( $bought->get_id() );
+$used_single   = vcap_life_single( $bought->get_id() );
+$repo->update_status( $used_single->id, VCAP\Voucher::STATUS_REDEEMED );
+wc_get_order( $bought->get_id() )->update_status( 'cancelled' );
+vcap_life_assert( VCAP\Voucher::STATUS_VOID === $repo->get( $unused_single->id )->status, 'P9: cancelling a paid order voids its unused vouchers' );
+vcap_life_assert( VCAP\Voucher::STATUS_REDEEMED === $repo->get( $used_single->id )->status, 'P9: a voucher already used stays as it is when the order is cancelled without a refund' );
+
+// T5: a fully refunded order gives its single-use voucher back (WooCommerce does so only for cancelled orders).
+$single   = vcap_life_single();
+$goods_t5 = new WC_Product_Simple();
+$goods_t5->set_name( 'T5 goods' );
+$goods_t5->set_regular_price( '80' );
+$goods_t5->set_virtual( true );
+$goods_t5->save();
+$t5 = wc_create_order();
+$t5->add_product( $goods_t5, 1 );
+$t5->set_billing_email( 't5@example.com' );
+$t5->apply_coupon( $single->code );
+$t5->calculate_totals( false );
+$t5->set_status( 'processing' );
+$t5->save();
+vcap_life_assert( VCAP\Voucher::STATUS_REDEEMED === $repo->get( $single->id )->status, 'T5: paying the order redeems the single-use voucher' );
+wc_create_refund( array( 'order_id' => $t5->get_id(), 'amount' => wc_get_order( $t5->get_id() )->get_total() ) );
+vcap_life_assert( wc_get_order( $t5->get_id() )->has_status( 'refunded' ), 'T5: the order is fully refunded' );
+vcap_life_assert( VCAP\Voucher::STATUS_ACTIVE === $repo->get( $single->id )->status && 0 === ( new WC_Coupon( $single->coupon_id ) )->get_usage_count(), 'T5: the single-use voucher can be used again after the full refund' );
+
+// K3: "On hold" as the only issue status (older setups), bank transfer: the vouchers come once the order is paid.
+$keep_statuses = get_option( 'vcap_issue_statuses' );
+update_option( 'vcap_issue_statuses', array( 'on-hold' ) );
+$k3_product = new WC_Product_Simple();
+$k3_product->set_name( 'K3 voucher' );
+$k3_product->set_regular_price( '30' );
+$k3_product->set_virtual( true );
+$k3_product->update_meta_data( '_vcap_enabled', 'yes' );
+$k3_product->update_meta_data( '_vcap_type', 'voucher' );
+$k3_product->save();
+$k3 = wc_create_order();
+$k3->add_product( $k3_product, 1 );
+$k3->set_billing_email( 'k3@example.com' );
+$k3->set_payment_method( 'bacs' );
+$k3->calculate_totals( false );
+$k3->set_status( 'on-hold' );
+$k3->save();
+vcap()->issuer->on_status( $k3->get_id(), wc_get_order( $k3->get_id() ), array( 'from' => 'pending', 'to' => 'on-hold' ) );
+vcap_life_assert( ! $repo->for_order( $k3->get_id() ), 'K3: nothing is issued while the bank transfer is open' );
+$k3 = wc_get_order( $k3->get_id() );
+$k3->set_status( 'processing' );
+$k3->save();
+vcap()->issuer->on_paid_status( $k3->get_id(), wc_get_order( $k3->get_id() ), array( 'from' => 'on-hold', 'to' => 'processing', 'manual' => true ) );
+vcap_life_assert( 1 === count( $repo->for_order( $k3->get_id() ) ), 'K3: setting the order to "Processing" by hand issues the voucher that waited for the payment' );
+update_option( 'vcap_issue_statuses', $keep_statuses );
+
 echo "Voucher Captain order lifecycle checks passed.\n";

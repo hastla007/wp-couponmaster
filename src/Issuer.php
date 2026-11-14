@@ -37,6 +37,14 @@ final class Issuer {
 		add_action( 'woocommerce_create_refund', array( $this, 'guard_refund' ), 10, 2 );
 		add_action( 'woocommerce_order_partially_refunded', array( $this, 'on_partial_refund' ), 20, 2 );
 		add_action( 'vcap_issue_order', array( $this, 'issue_async' ) );
+		add_action( self::VOID_RETRY_HOOK, array( $this, 'retry_void' ), 10, 2 );
+		// Vouchers that waited for the payment (e.g. "On hold" as the only issue status, bank transfer): issued
+		// when the order reaches a paid status later, also by hand – once per item slot.
+		foreach ( array_diff( self::paid_statuses(), $statuses ) as $status ) {
+			if ( 'completed' !== $status ) {
+				add_action( 'woocommerce_order_status_' . $status, array( $this, 'on_paid_status' ), 20, 3 );
+			}
+		}
 		add_action( 'woocommerce_order_status_changed', array( $this, 'hold_after_transition' ), 30, 4 );
 	}
 
@@ -46,6 +54,10 @@ final class Issuer {
 	public const CONFIG_REFUSED_META = '_vcap_config_refused';
 	/** Ledger event: the unspent purchased value was taken off a gift card whose purchase was refunded. */
 	public const PURCHASE_REFUNDED_EVENT = 'purchase_refunded';
+	/** Action Scheduler hook: retries voiding a voucher whose purchase was refunded or cancelled. */
+	public const VOID_RETRY_HOOK = 'vcap_retry_void';
+	/** Attempts of the void retry (15 minutes apart, then an hour each). */
+	private const VOID_RETRIES = 5;
 
 	/** Whether issuing runs inside a status transition (status changes wait until it is through). */
 	private bool $in_transition = false;
@@ -187,6 +199,42 @@ final class Issuer {
 		}
 	}
 
+	/**
+	 * Paid status (e.g. "Processing") that is not an issue status: issues what waited for the payment – an order
+	 * that reached an unpaid issue status first (e.g. only "On hold" selected, bank transfer) and is paid now.
+	 *
+	 * @param array $transition Status transition (WooCommerce: from, to, note, manual).
+	 */
+	public function on_paid_status( $order_id, $order = null, $transition = array() ): void {
+		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			return;
+		}
+		if ( '' === (string) $order->get_meta( self::AWAITING_PAYMENT ) ) {
+			// Orders from before the payment was remembered: coming straight from an (unpaid) issue status.
+			$statuses = array_map( 'sanitize_key', (array) $this->settings->get( 'vcap_issue_statuses' ) );
+			if ( ! is_array( $transition ) || ! in_array( (string) ( $transition['from'] ?? '' ), $statuses, true ) || ! $this->has_voucher_items( $order ) ) {
+				return;
+			}
+			$order->update_meta_data( self::AWAITING_PAYMENT, (string) time() );
+			$order->save_meta_data();
+		}
+		if ( self::offline_payment( $order ) && ( isset( self::$confirmed[ $order->get_id() ] ) || self::manual_paid_transition( $transition ) ) ) {
+			self::confirm_payment( $order, self::$confirmed[ $order->get_id() ] ?? 'manual' );
+		}
+		$this->in_transition = true;
+		try {
+			$this->issue_when_confirmed( $order );
+		} finally {
+			$this->in_transition = false;
+		}
+	}
+
+	/** Paid order statuses (WooCommerce default: processing, completed). */
+	private static function paid_statuses(): array {
+		return function_exists( 'wc_get_is_paid_statuses' ) ? array_map( 'sanitize_key', (array) wc_get_is_paid_statuses() ) : array( 'processing', 'completed' );
+	}
+
 	/** Issues when automatic issuing applies to the order: it has an issue status or waited for its payment. */
 	private function issue_when_confirmed( \WC_Order $order ): void {
 		$statuses = array_map( 'sanitize_key', (array) $this->settings->get( 'vcap_issue_statuses' ) );
@@ -230,9 +278,13 @@ final class Issuer {
 		}
 	}
 
-	/** Remembers (once, with an order note) that the vouchers of an order wait for its offline payment. */
+	/**
+	 * Remembers (once, with an order note) that the vouchers of an order wait for its payment: an offline payment
+	 * method, or an unpaid issue status such as "On hold". They are issued when the payment is recorded or the
+	 * order reaches a paid status (on_payment_complete(), on_paid_status(), on_completed()).
+	 */
 	private function await_payment( \WC_Order $order ): void {
-		if ( ! self::offline_payment( $order ) || '' !== (string) $order->get_meta( self::AWAITING_PAYMENT ) || ! $this->has_voucher_items( $order ) ) {
+		if ( '' !== (string) $order->get_meta( self::AWAITING_PAYMENT ) || ! $this->has_voucher_items( $order ) ) {
 			return;
 		}
 		$order->update_meta_data( self::AWAITING_PAYMENT, (string) time() );
@@ -561,15 +613,44 @@ final class Issuer {
 
 	/**
 	 * Purchase order cancelled/refunded → void its vouchers.
+	 *
+	 * "Refunded": the money went back (refunds of value already spent are refused, guard_refund()), so every
+	 * voucher is voided. "Cancelled" by hand records no refund: only unused vouchers are voided; vouchers already
+	 * used (redeemed in the shop or by a connector, partly spent, being redeemed) stay valid, and an order note
+	 * names them so the shop decides (void by hand after refunding the rest).
 	 */
 	public function on_purchase_cancelled( $order_id, $order = null ): void {
 		if ( ! $this->settings->yes( 'vcap_void_on_refund' ) ) {
 			return;
 		}
-		$order = wc_get_order( (int) $order_id );
+		$order    = wc_get_order( (int) $order_id );
+		$order    = $order instanceof \WC_Order ? $order : null;
+		$refunded = $order && $order->has_status( 'refunded' );
+		$kept     = array();
 		foreach ( $this->repo->for_order( (int) $order_id ) as $voucher ) {
-			$this->void_purchase( $voucher, __( 'Purchase order cancelled or refunded', 'voucher-captain' ), $order instanceof \WC_Order ? $order : null );
+			if ( ! $refunded && Voucher::STATUS_VOID !== $voucher->status && $this->in_use( $voucher ) ) {
+				$kept[] = $voucher->code;
+				continue;
+			}
+			$this->void_purchase( $voucher, __( 'Purchase order cancelled or refunded', 'voucher-captain' ), $order );
 		}
+		if ( $kept && $order ) {
+			$order->add_order_note(
+				sprintf(
+					/* translators: %s: voucher codes */
+					__( 'Order cancelled without a refund: vouchers already used (%s) stay valid, the unused ones were voided. If money is paid back for them, void them by hand on the voucher screen.', 'voucher-captain' ),
+					implode( ', ', $kept )
+				)
+			);
+		}
+	}
+
+	/** Whether a voucher was used up completely: a redeemed single-use voucher, a gift card without balance. */
+	private function used_up( Voucher $voucher ): bool {
+		if ( Voucher::STATUS_RESERVED === $voucher->status || Voucher::STATUS_VOID === $voucher->status ) {
+			return false;
+		}
+		return $voucher->is_multi_use() ? (float) $voucher->balance <= 0 && self::spent_value( $voucher, $this->repo ) > 0 : self::spent_value( $voucher, $this->repo ) > 0;
 	}
 
 	/** Whether a voucher was (partly) used or is being redeemed right now. */
@@ -686,7 +767,10 @@ final class Issuer {
 
 	/**
 	 * Partial refund of voucher lines: as many vouchers as the refunded quantity covers are voided, unused
-	 * ones first (newest first). Used vouchers are only voided when no unused one is left for that line.
+	 * ones first (newest first). Partly used gift cards follow when no unused voucher is left for that line (their
+	 * unspent value is what the refund pays back). Vouchers used up completely (redeemed single-use vouchers,
+	 * gift cards without balance) are never voided by a partial refund: their value was not refundable
+	 * (guard_refund()), and a connector would revoke a service already delivered – an order note names them.
 	 */
 	public function on_partial_refund( $order_id, $refund_id = 0 ): void {
 		$order = wc_get_order( (int) $order_id );
@@ -737,8 +821,26 @@ final class Issuer {
 				fn( Voucher $a, Voucher $b ) => array( $this->in_use( $a ) ? 1 : 0, -$a->item_index ) <=> array( $this->in_use( $b ) ? 1 : 0, -$b->item_index )
 			);
 			foreach ( array_slice( $open, 0, $void_target - $voided ) as $voucher ) {
+				if ( $this->used_up( $voucher ) ) {
+					if ( 'yes' !== (string) $order->get_meta( '_vcap_used_kept_' . $voucher->id ) ) {
+						$order->update_meta_data( '_vcap_used_kept_' . $voucher->id, 'yes' );
+						$order->save_meta_data();
+						$order->add_order_note(
+							sprintf(
+								/* translators: %s: voucher code */
+								__( 'Voucher %s was already used up and stays as it is (partial refund): its value was not refundable. Void it by hand only if the service it was used for is cancelled as well.', 'voucher-captain' ),
+								$voucher->code
+							)
+						);
+					}
+					continue;
+				}
+				$ok = true;
 				/* translators: %d: refund id */
-				$kept = $this->void_purchase( $voucher, sprintf( __( 'Partial refund #%d of the purchase order', 'voucher-captain' ), (int) $refund_id ), $order );
+				$kept = $this->void_purchase( $voucher, sprintf( __( 'Partial refund #%d of the purchase order', 'voucher-captain' ), (int) $refund_id ), $order, $ok );
+				if ( ! $ok ) {
+					continue; // void_or_retry() wrote the note and scheduled a retry.
+				}
 				if ( Voucher::STATUS_VOID === $voucher->status ) {
 					$order->add_order_note(
 						sprintf(
@@ -784,9 +886,10 @@ final class Issuer {
 	 *
 	 * @return float Topped-up value that stays on the card (0 when the voucher was voided or nothing changed).
 	 */
-	public function void_purchase( Voucher $voucher, string $note = '', ?\WC_Order $order = null ): float {
+	public function void_purchase( Voucher $voucher, string $note = '', ?\WC_Order $order = null, ?bool &$ok = null ): float {
+		$ok = true;
 		if ( Voucher::STATUS_VOID === $voucher->status || ! $voucher->is_multi_use() ) {
-			$this->void( $voucher, $note );
+			$ok = $this->void_or_retry( $voucher, $note, $order );
 			return 0.0;
 		}
 		$fresh = $this->repo->get( $voucher->id ) ?? $voucher;
@@ -795,7 +898,7 @@ final class Issuer {
 		}
 		$shares = TopUp::card_shares( $fresh, $this->repo );
 		if ( $shares['topup_unspent'] <= 0.5 / ( 10 ** $fresh->decimals() ) ) {
-			$this->void( $voucher, $note );
+			$ok = $this->void_or_retry( $voucher, $note, $order );
 			return 0.0;
 		}
 		$take     = round( $shares['purchase_unspent'], $fresh->decimals() );
@@ -806,13 +909,70 @@ final class Issuer {
 			: $this->repo->log( $fresh->id, self::PURCHASE_REFUNDED_EVENT, 0.0, (float) $fresh->balance, $text, $order_id );
 		if ( ! $done ) {
 			// The balance could not be changed: lock the whole card rather than pay out the purchased value twice.
-			$this->void( $voucher, $note );
+			$ok = $this->void_or_retry( $voucher, $note, $order );
 			return 0.0;
 		}
 		$after            = $this->repo->get( $voucher->id ) ?? $fresh;
 		$voucher->balance = $after->balance;
 		$voucher->status  = $after->status;
 		return (float) $after->balance;
+	}
+
+	/**
+	 * Voids the voucher of a refunded or cancelled purchase. When that fails (database error, coupon not saved),
+	 * the refund is not undone: the order gets a note, the case is listed for the shop (Attention) and the void is
+	 * retried in the background until it works.
+	 */
+	private function void_or_retry( Voucher $voucher, string $note, ?\WC_Order $order, int $attempt = 0 ): bool {
+		if ( $this->void( $voucher, $note ) ) {
+			return true;
+		}
+		$order_id = $order ? $order->get_id() : (int) $voucher->order_id;
+		$order    = $order ?? ( $order_id ? wc_get_order( $order_id ) : null );
+		if ( 0 === $attempt && $order instanceof \WC_Order ) {
+			$order->add_order_note(
+				sprintf(
+					/* translators: %s: voucher code */
+					__( 'Voucher %s could NOT be voided after the refund or cancellation – it may still be redeemable. It is tried again automatically; until then disable it by hand on the voucher screen.', 'voucher-captain' ),
+					$voucher->code
+				)
+			);
+		}
+		Attention::add(
+			$order_id,
+			'void:' . $voucher->id,
+			/* translators: %s: voucher code */
+			sprintf( __( 'Voucher %s could not be voided after its purchase was refunded or cancelled. Disable it on the voucher screen.', 'voucher-captain' ), $voucher->code )
+		);
+		if ( $attempt < self::VOID_RETRIES && function_exists( 'as_schedule_single_action' ) ) {
+			as_schedule_single_action( time() + ( $attempt < 2 ? 15 * MINUTE_IN_SECONDS : HOUR_IN_SECONDS ), self::VOID_RETRY_HOOK, array( 'voucher_id' => (int) $voucher->id, 'attempt' => $attempt + 1 ), 'vcap' );
+		}
+		return false;
+	}
+
+	/** Action Scheduler: void a voucher again whose void failed after a refund (void_or_retry()). */
+	public function retry_void( $voucher_id, $attempt = 1 ): void {
+		$voucher = $this->repo->get( (int) $voucher_id );
+		if ( ! $voucher || ! Attention::has( (int) $voucher->order_id, 'void:' . $voucher->id ) ) {
+			return; // Gone, or the shop marked the case as done (e.g. decided to keep the voucher).
+		}
+		if ( Voucher::STATUS_VOID === $voucher->status ) {
+			// Voided, but its coupon stayed enabled: disable it now (shop checkout refuses void vouchers anyway).
+			if ( ! $this->coupons->set_coupon_enabled( $voucher, false ) ) {
+				if ( (int) $attempt < self::VOID_RETRIES && function_exists( 'as_schedule_single_action' ) ) {
+					as_schedule_single_action( time() + HOUR_IN_SECONDS, self::VOID_RETRY_HOOK, array( 'voucher_id' => (int) $voucher->id, 'attempt' => (int) $attempt + 1 ), 'vcap' );
+				}
+				return;
+			}
+		} elseif ( ! $this->void_or_retry( $voucher, __( 'Purchase order cancelled or refunded (retried)', 'voucher-captain' ), null, max( 1, (int) $attempt ) ) ) {
+			return;
+		}
+		Attention::resolve( (int) $voucher->order_id, 'void:' . $voucher->id );
+		$order = wc_get_order( (int) $voucher->order_id );
+		if ( $order instanceof \WC_Order ) {
+			/* translators: %s: voucher code */
+			$order->add_order_note( sprintf( __( 'Voucher %s voided (retried after the refund or cancellation).', 'voucher-captain' ), $voucher->code ) );
+		}
 	}
 
 	/** @return bool False when the voucher could not be voided (nothing logged, the coupon stays as it was). */

@@ -141,6 +141,7 @@ final class StoreCreditAdmin {
 				echo '<form id="vcap-refund-credit" method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" data-confirm="' . esc_attr( $confirm ) . '">';
 				echo '<input type="hidden" name="action" value="vcap_refund_credit" /><input type="hidden" name="order_id" value="' . esc_attr( (string) $order->get_id() ) . '" />';
 				wp_nonce_field( 'vcap_refund_credit_' . $order->get_id() );
+				echo '<input type="hidden" name="vcap_refund_credit_key" value="' . esc_attr( StoreCredit::request_key() ) . '" />';
 				echo '</form>';
 				// Confirmation with the amount entered: the refund cannot be undone.
 				echo "<script>document.getElementById('vcap-refund-credit').addEventListener('submit',function(e){var a=document.querySelector('[name=\"vcap_refund_credit_amount\"]');if(!window.confirm(this.getAttribute('data-confirm').replace('%s',a?a.value:''))){e.preventDefault();}});</script>";
@@ -167,7 +168,8 @@ final class StoreCreditAdmin {
 			array(
 				'channel' => sanitize_key( wp_unslash( $_POST['vcap_refund_credit_consent'] ?? '' ) ),
 				'note'    => sanitize_textarea_field( wp_unslash( $_POST['vcap_refund_credit_consent_note'] ?? '' ) ),
-			)
+			),
+			sanitize_key( wp_unslash( $_POST['vcap_refund_credit_key'] ?? '' ) )
 		);
 		if ( is_wp_error( $result ) ) {
 			Flash::add( 'error', __( 'Refund as store credit failed:', 'voucher-captain' ) . ' ' . $result->get_error_message() );

@@ -18,6 +18,10 @@ final class TopUp {
 	public const REVERSED_META = '_vcap_topup_reversed';
 	/** A top-up line without card code that was held instead of issuing a new card. */
 	public const MISSING_META  = '_vcap_topup_missing';
+	/** A top-up line that could not be booked (card no longer valid, no value): held for the shop, not retried. */
+	public const HELD_META     = '_vcap_topup_held';
+	/** Default minimum remaining validity (days) of a card to be topped up (filter "vcap_topup_min_remaining_days"). */
+	public const MIN_REMAINING_DAYS = 30;
 	private const FIELD        = 'vcap_topup_code';
 
 	public function __construct( private VoucherRepository $repo, private CouponManager $coupons ) {}
@@ -59,12 +63,13 @@ final class TopUp {
 		add_action( 'woocommerce_check_cart_items', array( $this, 'check_cart_items' ) );
 		add_filter( 'woocommerce_get_item_data', array( $this, 'item_data' ), 10, 2 );
 		add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'order_item_meta' ), 10, 3 );
-		add_filter( 'vcap_vouchers_per_item', array( $this, 'top_up_instead' ), 5, 2 );
+		add_filter( 'vcap_vouchers_per_item', array( $this, 'top_up_instead' ), 5, 3 );
+		add_action( 'woocommerce_order_status_changed', array( $this, 'hold_after_transition' ), 30, 4 );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'revoke' ), 20 );
 		add_action( 'woocommerce_order_status_refunded', array( $this, 'revoke' ), 20 );
 		add_action( 'woocommerce_order_partially_refunded', array( $this, 'reverse_refunded' ), 20, 2 );
 		add_action( 'woocommerce_create_refund', array( $this, 'guard_refund' ), 11, 2 );
-		add_filter( 'vcap_event_labels', static fn( array $l ) => $l + array( 'topup' => __( 'Topped up', 'voucher-captain' ), 'topup_reversed' => __( 'Top-up reversed', 'voucher-captain' ), Issuer::PURCHASE_REFUNDED_EVENT => __( 'Purchase refunded: purchased value taken off', 'voucher-captain' ) ) );
+		add_filter( 'vcap_event_labels', static fn( array $l ) => $l + array( 'topup' => __( 'Topped up', 'voucher-captain' ), 'topup_reversed' => __( 'Top-up reversed', 'voucher-captain' ), Issuer::PURCHASE_REFUNDED_EVENT => __( 'Purchase refunded: purchased value taken off', 'voucher-captain' ), self::EXTENDED_EVENT => __( 'Validity extended', 'voucher-captain' ) ) );
 		add_filter( 'vcap_ledger_money_events', static fn( array $e ) => array_merge( $e, array( 'topup', 'topup_reversed', Issuer::PURCHASE_REFUNDED_EVENT ) ) );
 	}
 
@@ -153,8 +158,9 @@ final class TopUp {
 			$result = __( 'Too many attempts. Please try again later.', 'voucher-captain' );
 		} else {
 			$card   = $this->card( $raw );
-			$result = $card instanceof Voucher ? true : $card;
-			if ( true === $result ) {
+			$result = $card instanceof Voucher ? self::remaining_validity_error( $card ) : $card;
+			$result = '' === $result ? true : $result;
+			if ( $card instanceof Voucher ) {
 				Plugin::rate_limit_success( 'topup', 15 * MINUTE_IN_SECONDS ); // An existing card gives the attempt back.
 			} else {
 				Plugin::rate_limit_failure( 'topup', 15 * MINUTE_IN_SECONDS );
@@ -164,6 +170,28 @@ final class TopUp {
 			$this->checked[ $memo ] = $result;
 		}
 		return $result;
+	}
+
+	/**
+	 * A card that expires soon is not topped up (the new value would expire with it): '' when the card is valid
+	 * for at least the minimum remaining days (filter "vcap_topup_min_remaining_days", default 30; 0 = any valid
+	 * card), otherwise the message for the customer.
+	 */
+	public static function remaining_validity_error( Voucher $card, ?int $now = null ): string {
+		if ( ! $card->expires_at ) {
+			return '';
+		}
+		$days = max( 0, (int) apply_filters( 'vcap_topup_min_remaining_days', self::MIN_REMAINING_DAYS, $card ) );
+		$ends = strtotime( $card->expires_at . ' UTC' );
+		if ( $ends - ( $now ?? time() ) >= $days * DAY_IN_SECONDS ) {
+			return '';
+		}
+		return sprintf(
+			/* translators: 1: expiry date, 2: number of days */
+			_n( 'This gift card expires on %1$s and can no longer be topped up (a top-up needs at least %2$d day of remaining validity). Please buy a new gift card instead.', 'This gift card expires on %1$s and can no longer be topped up (a top-up needs at least %2$d days of remaining validity). Please buy a new gift card instead.', $days, 'voucher-captain' ),
+			wp_date( (string) get_option( 'date_format', 'Y-m-d' ), $ends ),
+			$days
+		);
 	}
 
 	public function validate( $passed, $product_id, $quantity = 1, $variation_id = 0, $variations = array(), $cart_item_data = array() ) {
@@ -249,14 +277,21 @@ final class TopUp {
 		}
 	}
 
-	/** Cart and checkout show the card only masked (the code is a means of payment). */
+	/** Cart and checkout show the card only masked (the code is a means of payment) and how long it is valid. */
 	public function item_data( $data, $cart_item ) {
 		if ( ! empty( $cart_item[ self::FIELD ] ) ) {
 			$code   = strtoupper( (string) $cart_item[ self::FIELD ] );
+			$card   = $this->repo->get_by_code( wc_format_coupon_code( $code ) ) ?? $this->repo->get_by_code( $code );
 			$data[] = array(
 				'key'   => __( 'Tops up gift card', 'voucher-captain' ),
 				'value' => '…' . substr( $code, -4 ),
 			);
+			if ( $card instanceof Voucher && $card->expires_at ) {
+				$data[] = array(
+					'key'   => __( 'Gift card valid until', 'voucher-captain' ),
+					'value' => wp_date( (string) get_option( 'date_format' ), (int) strtotime( $card->expires_at . ' UTC' ) ),
+				);
+			}
 		}
 		return $data;
 	}
@@ -270,30 +305,42 @@ final class TopUp {
 	/* ---- Order lifecycle --------------------------------------------------------------------------- */
 
 	/**
-	 * Called where the order's vouchers are issued: a top-up line issues none and adds its paid value to the
-	 * card instead (once per line).
+	 * Called where the order's vouchers are issued: a top-up line issues none and adds its value to the card
+	 * instead (once per line). The value follows the same rule as a new gift card (line_value()): its face value,
+	 * not what was paid – a top-up paid with another gift card or a discount still adds its full value.
+	 * A line that cannot be booked (card no longer valid, no value) is held: order on hold, note to the customer,
+	 * listed for the shop (Attention) – never retried silently.
 	 */
-	public function top_up_instead( $count, $item ) {
+	public function top_up_instead( $count, $item, $config = array() ) {
 		if ( ! $item instanceof \WC_Order_Item_Product ) {
 			return $count;
 		}
 		if ( '' === (string) $item->get_meta( self::ITEM_META ) ) {
 			return self::is_topup( $item->get_product() ) ? $this->hold_without_code( $item ) : $count;
 		}
-		if ( $item->get_meta( self::DONE_META ) || ! Claim::take( 'topup:' . $item->get_id() ) ) {
+		if ( $item->get_meta( self::DONE_META ) || $item->get_meta( self::HELD_META ) || ! Claim::take( 'topup:' . $item->get_id() ) ) {
 			return 0;
 		}
 		$order = $item->get_order();
-		$card  = $this->card( (string) $item->get_meta( self::ITEM_META ) );
-		if ( ! $order instanceof \WC_Order || ! $card instanceof Voucher ) {
-			if ( $order instanceof \WC_Order ) {
-				/* translators: %s: reason */
-				$order->add_order_note( sprintf( __( 'Gift card top-up not booked: %s Please refund or top up by hand.', 'voucher-captain' ), is_string( $card ) ? $card : '' ) );
-			}
+		if ( ! $order instanceof \WC_Order ) {
+			Claim::release( 'topup:' . $item->get_id() );
 			return 0;
 		}
-		$paid = (float) $item->get_total() + (float) $item->get_total_tax();
-		$base = Compat\MultiCurrency::to_base( $paid, (string) $order->get_currency(), $order );
+		$card = $this->card( (string) $item->get_meta( self::ITEM_META ) );
+		if ( ! $card instanceof Voucher ) {
+			$this->hold_line( $order, $item, is_string( $card ) ? $card : '' );
+			return 0;
+		}
+		$config = is_array( $config ) && $config ? $config + ProductConfig::DEFAULTS : ( $item->get_product() ? ProductConfig::get( $item->get_product() ) : ProductConfig::DEFAULTS );
+		list( $value, $in_base ) = self::line_value(
+			$config,
+			(int) $item->get_quantity(),
+			(float) $item->get_subtotal(),
+			(float) $item->get_subtotal_tax(),
+			function_exists( 'wc_prices_include_tax' ) && wc_prices_include_tax(),
+			(string) $item->get_meta( '_vcap_custom_amount' )
+		);
+		$base = $in_base ? $value : Compat\MultiCurrency::to_base( $value, (string) $order->get_currency(), $order );
 		if ( null === $base ) {
 			// Never booked 1:1 from a foreign currency (Issuer holds such orders before it gets here).
 			Claim::release( 'topup:' . $item->get_id() );
@@ -302,20 +349,150 @@ final class TopUp {
 			return 0;
 		}
 		$amount = round( $base, $card->decimals() );
-		/** Value added to the card for a top-up line (default: what was paid, converted to the base currency). */
-		$amount = (float) apply_filters( 'vcap_topup_amount', $amount, $item, $card, $order );
-		/* translators: %s: order number */
-		if ( $amount <= 0 || ! $this->coupons->adjust_balance( $card, $amount, 'topup', sprintf( __( 'Topped up with order #%s', 'voucher-captain' ), $order->get_order_number() ), $order->get_id() ) ) {
-			Claim::release( 'topup:' . $item->get_id() );
-			$order->add_order_note( __( 'Gift card top-up could not be booked; it is tried again when the order is processed again.', 'voucher-captain' ) );
+		/** Value added to the card for a top-up line (default: its face value like a new gift card, in the base currency). */
+		$amount = round( (float) apply_filters( 'vcap_topup_amount', $amount, $item, $card, $order ), $card->decimals() );
+		if ( $amount <= 0 ) {
+			$this->hold_line( $order, $item, __( 'The line has no value to add to the card.', 'voucher-captain' ) );
 			return 0;
 		}
+		/* translators: %s: order number */
+		if ( ! $this->coupons->adjust_balance( $card, $amount, 'topup', sprintf( __( 'Topped up with order #%s', 'voucher-captain' ), $order->get_order_number() ), $order->get_id() ) ) {
+			Claim::release( 'topup:' . $item->get_id() );
+			$order->add_order_note( __( 'Gift card top-up could not be booked; it is tried again when the order is processed again.', 'voucher-captain' ) );
+			Attention::add( $order->get_id(), 'topup:' . $item->get_id(), __( 'A gift card top-up could not be booked (database error). Process the order again (order action "Generate vouchers") or top up the card by hand.', 'voucher-captain' ) );
+			return 0;
+		}
+		Attention::resolve( $order->get_id(), 'topup:' . $item->get_id() );
 		$item->update_meta_data( self::DONE_META, $amount );
 		$item->save_meta_data();
+		$card = $this->repo->get( $card->id ) ?? $card;
+		$this->extend_after_top_up( $card, $order, $item );
 		/* translators: 1: amount, 2: masked card code */
 		$order->add_order_note( sprintf( __( 'Gift card …%2$s topped up by %1$s.', 'voucher-captain' ), wp_strip_all_tags( wc_price( $amount ) ), substr( strtoupper( $card->code ), -4 ) ) );
+		/** Whether the customer gets an order note (email) confirming the top-up (default true). */
+		if ( apply_filters( 'vcap_topup_customer_note', true, $card, $order, $item ) ) {
+			$order->add_order_note( self::confirmation( $card, $amount ), 1 );
+		}
 		do_action( 'vcap_gift_card_topped_up', $card, $amount, $order, $item );
 		return 0;
+	}
+
+	/** Customer confirmation of a top-up: masked card, amount, new balance and validity. */
+	public static function confirmation( Voucher $card, float $amount ): string {
+		$money = static fn( float $v ): string => html_entity_decode( wp_strip_all_tags( wc_price( $v, array( 'currency' => $card->currency ) ) ), ENT_QUOTES, 'UTF-8' );
+		$text  = sprintf(
+			/* translators: 1: masked gift card code, 2: amount added, 3: new balance */
+			__( 'Your gift card …%1$s was topped up by %2$s. New balance: %3$s.', 'voucher-captain' ),
+			substr( strtoupper( $card->code ), -4 ),
+			$money( $amount ),
+			$money( (float) $card->balance )
+		);
+		if ( $card->expires_at ) {
+			/* translators: %s: expiry date */
+			$text .= ' ' . sprintf( __( 'Valid until %s.', 'voucher-captain' ), wp_date( (string) get_option( 'date_format', 'Y-m-d' ), (int) strtotime( $card->expires_at . ' UTC' ) ) );
+		}
+		return $text;
+	}
+
+	/**
+	 * Value of a top-up line in the order currency – the rule of Issuer::voucher_amount() for a new gift card:
+	 * a fixed product amount (already in the base currency), the amount the customer entered, or the line price
+	 * before discounts (gross where shop prices include tax, net otherwise). Never what was paid after coupons.
+	 *
+	 * @return array{0: float, 1: bool} value, whether it is in the base currency already
+	 */
+	public static function line_value( array $config, int $qty, float $subtotal, float $subtotal_tax, bool $prices_include_tax, string $custom = '' ): array {
+		$qty   = max( 1, $qty );
+		$units = $qty * max( 1, (int) ( $config['per_item'] ?? 1 ) );
+		if ( 'fixed' === ( $config['amount_source'] ?? '' ) ) {
+			return array( (float) wc_format_decimal( (string) ( $config['amount'] ?? 0 ) ) * $units, true );
+		}
+		if ( 'custom' === ( $config['amount_source'] ?? '' ) && '' !== $custom ) {
+			return array( (float) $custom * $units, false );
+		}
+		return array( $subtotal + ( $prices_include_tax ? $subtotal_tax : 0.0 ), false );
+	}
+
+	/** Ledger event: the validity of a gift card was extended (top-up, balance booked back). */
+	public const EXTENDED_EVENT = 'validity_extended';
+
+	/**
+	 * After a top-up: the card's validity may be extended (filter "vcap_topup_expires_at": new expiry in UTC
+	 * "Y-m-d H:i:s", default unchanged – rules differ by country, see LEGAL_TEXTS.md). Never shortened.
+	 */
+	private function extend_after_top_up( Voucher $card, \WC_Order $order, \WC_Order_Item_Product $item ): void {
+		$until = apply_filters( 'vcap_topup_expires_at', $card->expires_at, $card, $order, $item );
+		if ( is_string( $until ) && '' !== $until && $until !== $card->expires_at ) {
+			/* translators: %s: order number */
+			self::extend_validity( $this->repo, $card, $until, sprintf( __( 'Topped up with order #%s', 'voucher-captain' ), $order->get_order_number() ), $order->get_id() );
+		}
+	}
+
+	/**
+	 * Extends a voucher's validity to $until (UTC "Y-m-d H:i:s"; never shortens it): column, status (expired →
+	 * active), WooCommerce coupon expiry and a ledger entry.
+	 */
+	public static function extend_validity( VoucherRepository $repo, Voucher $voucher, string $until, string $note = '', int $order_id = 0 ): bool {
+		$ends = strtotime( $until . ' UTC' );
+		if ( ! $ends || ( $voucher->expires_at && $ends <= strtotime( $voucher->expires_at . ' UTC' ) ) ) {
+			return false;
+		}
+		$from               = $voucher->status;
+		$voucher->expires_at = gmdate( 'Y-m-d H:i:s', $ends );
+		if ( Voucher::STATUS_EXPIRED === $voucher->status && $ends > time() ) {
+			$voucher->status = Voucher::STATUS_ACTIVE;
+		}
+		if ( ! $repo->update_columns( $voucher, array( 'expires_at' ), $from ) ) {
+			return false;
+		}
+		if ( $voucher->coupon_id && class_exists( '\WC_Coupon' ) ) {
+			$coupon = new \WC_Coupon( $voucher->coupon_id );
+			if ( $coupon->get_id() ) {
+				$coupon->set_date_expires( $ends );
+				$coupon->save();
+			}
+		}
+		$repo->log( $voucher->id, self::EXTENDED_EVENT, null, null, trim( $note . ' → ' . $voucher->expires_at ), $order_id );
+		return true;
+	}
+
+	/** @var array<int, true> Orders to put on hold once their status transition is through. */
+	private array $hold = array();
+
+	/**
+	 * A top-up line that could not be booked: held (not retried), the order goes on hold with a note, the customer
+	 * is told by an order note (email), and the shop sees it in the admin notice and Site Health.
+	 */
+	private function hold_line( \WC_Order $order, \WC_Order_Item_Product $item, string $reason ): void {
+		$item->update_meta_data( self::HELD_META, 'yes' );
+		$item->save_meta_data();
+		/* translators: %s: reason */
+		$order->add_order_note( sprintf( __( 'Gift card top-up not booked: %s Please refund or top up by hand.', 'voucher-captain' ), $reason ) );
+		$order->add_order_note( __( 'Your gift card could not be topped up. We will contact you and refund the amount or top up the card by hand.', 'voucher-captain' ), 1 );
+		Attention::add(
+			$order->get_id(),
+			'topup:' . $item->get_id(),
+			/* translators: %s: reason */
+			sprintf( __( 'Gift card top-up not booked: %s Refund the line or top up the card by hand.', 'voucher-captain' ), $reason )
+		);
+		do_action( 'vcap_topup_held', $item, $reason );
+		if ( function_exists( 'doing_action' ) && doing_action( 'woocommerce_order_status_' . $order->get_status() ) ) {
+			$this->hold[ $order->get_id() ] = true; // Inside a status transition: change the status once it is through.
+		} elseif ( ! $order->has_status( array( 'on-hold', 'cancelled', 'refunded', 'failed' ) ) ) {
+			$order->update_status( 'on-hold', __( 'A gift card top-up could not be booked.', 'voucher-captain' ) );
+		}
+	}
+
+	/** After the status transition: an order with a held top-up line goes on hold. */
+	public function hold_after_transition( $order_id, $from = '', $to = '', $order = null ): void {
+		if ( ! isset( $this->hold[ (int) $order_id ] ) ) {
+			return;
+		}
+		unset( $this->hold[ (int) $order_id ] );
+		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
+		if ( $order instanceof \WC_Order && ! $order->has_status( array( 'on-hold', 'cancelled', 'refunded', 'failed' ) ) ) {
+			$order->update_status( 'on-hold', __( 'A gift card top-up could not be booked.', 'voucher-captain' ) );
+		}
 	}
 
 	/**

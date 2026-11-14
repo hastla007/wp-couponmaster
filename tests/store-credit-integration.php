@@ -85,6 +85,18 @@ $paid     = wc_get_order( $paid->get_id() );
 vcap_sc_assert( ! is_wp_error( $refunded ) && 13.0 === $credit->balance( $alice ), 'a refund as store credit adds to the balance' );
 vcap_sc_assert( 8.0 === (float) $paid->get_total_refunded() && 12.0 === (float) $paid->get_remaining_refund_amount(), 'WooCommerce records the refund' );
 vcap_sc_assert( is_wp_error( $credit->refund_as_credit( $paid, 50, 'Too much', array( 'channel' => 'email' ) ) ), 'refunds above the refundable total are refused' );
+// S12: the same form sent twice (resubmitted POST, double click) books the credit once.
+$twice_key   = VCAP\StoreCredit::request_key();
+$twice_order = vcap_sc_order( $product, $alice );
+$twice_order->set_status( 'completed' );
+$twice_order->save();
+$twice_before = $credit->balance( $alice );
+$twice_first  = $credit->refund_as_credit( $twice_order, 3, 'Customer chose credit', array( 'channel' => 'email' ), $twice_key );
+$twice_second = $credit->refund_as_credit( wc_get_order( $twice_order->get_id() ), 3, 'Customer chose credit', array( 'channel' => 'email' ), $twice_key );
+vcap_sc_assert( ! is_wp_error( $twice_first ) && $twice_second instanceof WP_Error && 'vcap_credit_duplicate' === $twice_second->get_error_code(), 'a resubmitted refund form is refused as a duplicate' );
+vcap_sc_assert( round( $twice_before + 3, 2 ) === round( $credit->balance( $alice ), 2 ) && 3.0 === (float) wc_get_order( $twice_order->get_id() )->get_total_refunded(), 'the credit and the refund are booked once' );
+$stale = $credit->refund_as_credit( $twice_order, 18, 'Stale page', array( 'channel' => 'email' ), VCAP\StoreCredit::request_key() );
+vcap_sc_assert( is_wp_error( $stale ), 'a second form with a stale remaining total is checked against the current refunds' );
 $guest = vcap_sc_order( $product, 0 );
 $guest->set_status( 'completed' );
 $guest->save();

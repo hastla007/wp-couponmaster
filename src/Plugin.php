@@ -67,6 +67,7 @@ final class Plugin {
 		( new Emails() )->register();
 		( new Privacy( $this->vouchers ) )->register();
 		( new Health() )->register();
+		( new Attention() )->register();
 		( new Diagnostics() )->register();
 		Licensing\Entitlements::register();
 
@@ -110,6 +111,7 @@ final class Plugin {
 		$this->tickets->register();
 		$this->redemptions->register();
 		$this->store_credit->register();
+		( new OrderReturn( $this->vouchers, $this->coupons ) )->register();
 		$this->payments->register();
 		( new CartBlocks( $this->vouchers, $this->payments, $this->store_credit ) )->register();
 		( new API\V1\RestController( $this->redemptions ) )->register();
