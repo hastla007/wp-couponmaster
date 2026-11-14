@@ -855,7 +855,11 @@ final class RedemptionService {
 		return (int) get_option( 'vcap_redemption_max_failures', 10 );
 	}
 
-	/** @var array{user:bool, address:bool} which counters the current lookup was counted in */
+	/**
+	 * Which counters the current lookup was counted in.
+	 *
+	 * @var array{user:bool, address:bool}
+	 */
 	private array $counted = array(
 		'user'    => false,
 		'address' => false,
@@ -886,7 +890,7 @@ final class RedemptionService {
 			'user'    => false,
 			'address' => false,
 		);
-		$max = $this->max_failures();
+		$max           = $this->max_failures();
 		if ( $max > 0 && $user_id ) {
 			/**
 			 * Invalid codes per 15 minutes across all callers; above it every caller's quota shrinks (brake).

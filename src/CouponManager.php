@@ -18,7 +18,7 @@ final class CouponManager {
 		// A code marked "Individual use only" does not push out gift cards, store credit and other multi-purpose
 		// vouchers: they are a means of payment, not a discount (classic cart and Store API use both filters).
 		add_filter( 'woocommerce_apply_individual_use_coupon', array( $this, 'keep_payment_means' ), 10, 3 );
-		add_filter( 'woocommerce_apply_with_individual_use_coupon', array( $this, 'allow_payment_means' ), 10, 4 );
+		add_filter( 'woocommerce_apply_with_individual_use_coupon', array( $this, 'allow_payment_means' ), 10, 2 );
 		// Late priority: other plugins (e.g. Pass Captain's capacity hold at 10) validate first, so a checkout they
 		// refuse never leaves a balance reservation behind. A previous unpaid checkout order of the same session
 		// gives its holds back first (classic checkout creates a new order after a failed attempt).
@@ -50,7 +50,7 @@ final class CouponManager {
 		add_action( 'woocommerce_decrease_coupon_usage_count', array( $this, 'usage_decreased' ), 10, 3 );
 		// WooCommerce gives coupon uses back on "Cancelled" (priority 10): with "Restore balance on cancellation"
 		// off, single-use vouchers stay redeemed like balances.
-		add_action( 'woocommerce_order_status_cancelled', array( $this, 'keep_single_use_start' ), 1, 2 );
+		add_action( 'woocommerce_order_status_cancelled', array( $this, 'keep_single_use_start' ), 1, 1 );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'keep_single_use_end' ), 99, 2 );
 		add_action( 'woocommerce_cart_totals_after_order_total', array( $this, 'cart_balance_notice' ) );
 		// Free balance holds of unpaid orders that are trashed, deleted or abandoned.
@@ -1155,11 +1155,10 @@ final class CouponManager {
 	/**
 	 * A multi-purpose voucher may join a cart that holds an "Individual use only" code.
 	 *
-	 * @param bool       $allow      Whether the coupon may be applied.
-	 * @param \WC_Coupon $coupon     The coupon being applied.
-	 * @param \WC_Coupon $individual The individual-use coupon in the cart.
+	 * @param bool       $allow  Whether the coupon may be applied.
+	 * @param \WC_Coupon $coupon The coupon being applied.
 	 */
-	public function allow_payment_means( $allow, $coupon = null, $individual = null, $applied = array() ) {
+	public function allow_payment_means( $allow, $coupon = null ) {
 		return $allow || $this->is_payment_means( $coupon );
 	}
 
@@ -1733,7 +1732,7 @@ final class CouponManager {
 	/** @var Voucher[] Single-use vouchers given back (or kept) in that cancellation. */
 	private array $given_back = array();
 
-	public function keep_single_use_start( $order_id, $order = null ): void {
+	public function keep_single_use_start( $order_id ): void {
 		$this->cancelling      = (int) $order_id;
 		$this->keep_single_use = ! $this->settings->yes( 'vcap_restore_on_cancel' );
 		$this->given_back      = array();

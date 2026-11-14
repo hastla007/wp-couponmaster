@@ -63,8 +63,8 @@ final class VoucherPurchaseRules {
 		// keeps counting them (stricter, so nothing is unlocked by a voucher purchase either).
 		$minimum = (float) $coupon->get_minimum_amount();
 		if ( $minimum > 0 ) {
-			$object   = $discounts->get_object();
-			$subtotal = self::subtotal_without_vouchers( $object );
+			$subject   = $discounts->get_object();
+			$subtotal = self::subtotal_without_vouchers( $subject );
 			if ( null !== $subtotal && $minimum > $subtotal + 0.00001 ) {
 				throw new \Exception(
 					sprintf(
@@ -84,24 +84,24 @@ final class VoucherPurchaseRules {
 	 * The subtotal WooCommerce compares with a coupon's minimum spend (WC_Discounts::get_object_subtotal()),
 	 * without voucher products; null for other objects.
 	 *
-	 * @param mixed $object Cart or order.
+	 * @param mixed $subject Cart or order.
 	 */
-	private static function subtotal_without_vouchers( $object ): ?float {
+	private static function subtotal_without_vouchers( $subject ): ?float {
 		$voucher = static fn( $product ) => $product instanceof \WC_Product && ProductConfig::is_voucher( $product );
-		if ( $object instanceof \WC_Cart ) {
-			$subtotal = (float) $object->get_displayed_subtotal();
-			foreach ( $object->get_cart() as $values ) {
+		if ( $subject instanceof \WC_Cart ) {
+			$subtotal = (float) $subject->get_displayed_subtotal();
+			foreach ( $subject->get_cart() as $values ) {
 				if ( $voucher( $values['data'] ?? null ) ) {
-					$subtotal -= (float) ( $values['line_subtotal'] ?? 0 ) + ( $object->display_prices_including_tax() ? (float) ( $values['line_subtotal_tax'] ?? 0 ) : 0.0 );
+					$subtotal -= (float) ( $values['line_subtotal'] ?? 0 ) + ( $subject->display_prices_including_tax() ? (float) ( $values['line_subtotal_tax'] ?? 0 ) : 0.0 );
 				}
 			}
 			return $subtotal;
 		}
-		if ( $object instanceof \WC_Order ) {
-			$subtotal = (float) $object->get_subtotal() + ( $object->get_prices_include_tax() ? round( (float) $object->get_total_tax(), wc_get_price_decimals() ) : 0.0 );
-			foreach ( $object->get_items() as $item ) {
+		if ( $subject instanceof \WC_Order ) {
+			$subtotal = (float) $subject->get_subtotal() + ( $subject->get_prices_include_tax() ? round( (float) $subject->get_total_tax(), wc_get_price_decimals() ) : 0.0 );
+			foreach ( $subject->get_items() as $item ) {
 				if ( $item instanceof \WC_Order_Item_Product && $voucher( $item->get_product() ) ) {
-					$subtotal -= (float) $item->get_subtotal() + ( $object->get_prices_include_tax() ? (float) $item->get_subtotal_tax() : 0.0 );
+					$subtotal -= (float) $item->get_subtotal() + ( $subject->get_prices_include_tax() ? (float) $item->get_subtotal_tax() : 0.0 );
 				}
 			}
 			return $subtotal;
