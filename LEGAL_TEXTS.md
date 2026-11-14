@@ -51,8 +51,8 @@ dass die Vorlage aktuell ist und jeder Text noch existiert). Prüfung durch die 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) | Fundstelle | Freigabe |
 |---|---|---|---|---|
 | Valid until %s | Gültig bis %s | Gültig bis %s | templates/emails/plain/voucher.php:29 templates/emails/voucher.php:38 | ☐ |
-| Valid until: %s | Gültig bis: %s | Gültig bis: %s | src/Downloads.php:491 | ☐ |
-| unlimited | unbegrenzt | unbegrenzt | src/Downloads.php:491 src/Placeholders.php:102 | ☐ |
+| Valid until: %s | Gültig bis: %s | Gültig bis: %s | src/Downloads.php:512 | ☐ |
+| unlimited | unbegrenzt | unbegrenzt | src/Downloads.php:512 src/Placeholders.php:102 | ☐ |
 | no expiry | unbegrenzt | unbegrenzt | src/Emails/BonusEmail.php:109 | ☐ |
 | Your voucher from {site_title} expires on {expiry_date} | Ihr Gutschein von {site_title} läuft am {expiry_date} ab | Ihr Gutschein von {site_title} läuft am {expiry_date} ab | src/Emails/ExpiryReminderEmail.php:24 | ☐ |
 | Your voucher {coupon_code} is valid until {expiry_date}. Remaining value: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | src/Emails/ExpiryReminderEmail.php:32 | ☐ |
@@ -62,16 +62,16 @@ dass die Vorlage aktuell ist und jeder Text noch existiert). Prüfung durch die 
 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) | Fundstelle | Freigabe |
 |---|---|---|---|---|
-| Transferable – anyone with the code can redeem it. | Übertragbar – jede Person mit dem Code kann ihn einlösen. | Übertragbar – jede Person mit dem Code kann ihn einlösen. | src/ProductConfig.php:163 src/Voucher.php:198 | ☐ |
-| Personal – only the buyer or the named recipient can redeem it. | Persönlich – nur Käufer oder genannte Empfänger können ihn einlösen. | Persönlich – nur Käufer oder genannte Empfänger können ihn einlösen. | src/ProductConfig.php:161 src/Voucher.php:199 | ☐ |
-| Personal – only the named recipient can redeem it. | Persönlich – nur die genannte beschenkte Person kann ihn einlösen. | Persönlich – nur die genannte beschenkte Person kann ihn einlösen. | src/ProductConfig.php:159 src/Voucher.php:207 | ☐ |
-| Personal – only the buyer can redeem it. | Persönlich – nur der Käufer kann ihn einlösen. | Persönlich – nur der Käufer kann ihn einlösen. | src/ProductConfig.php:157 src/Voucher.php:210 | ☐ |
+| Transferable – anyone with the code can redeem it. | Übertragbar – jede Person mit dem Code kann ihn einlösen. | Übertragbar – jede Person mit dem Code kann ihn einlösen. | src/ProductConfig.php:163 src/Voucher.php:227 | ☐ |
+| Personal – only the buyer or the named recipient can redeem it. | Persönlich – nur Käufer oder genannte Empfänger können ihn einlösen. | Persönlich – nur Käufer oder genannte Empfänger können ihn einlösen. | src/ProductConfig.php:161 src/Voucher.php:228 | ☐ |
+| Personal – only the named recipient can redeem it. | Persönlich – nur die genannte beschenkte Person kann ihn einlösen. | Persönlich – nur die genannte beschenkte Person kann ihn einlösen. | src/ProductConfig.php:159 src/Voucher.php:236 | ☐ |
+| Personal – only the buyer can redeem it. | Persönlich – nur der Käufer kann ihn einlösen. | Persönlich – nur der Käufer kann ihn einlösen. | src/ProductConfig.php:157 src/Voucher.php:239 | ☐ |
 
 ### Restwert
 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) | Fundstelle | Freigabe |
 |---|---|---|---|---|
-| Balance: %s | Restwert: %s | Restwert: %s | src/Downloads.php:485 templates/myaccount/vouchers-table.php:45 | ☐ |
+| Balance: %s | Restwert: %s | Restwert: %s | src/Downloads.php:506 templates/myaccount/vouchers-table.php:45 | ☐ |
 | Remaining balance | Restwert | Restwert | src/Placeholders.php:20 | ☐ |
 
 ### Erstattung und Widerruf
