@@ -181,7 +181,7 @@ final class VoucherAdmin {
 							<tr><th><?php esc_html_e( 'Redemption conditions', 'voucher-captain' ); ?></th><td><?php echo wp_kses_post( nl2br( esc_html( $v->terms ) ) ); ?></td></tr>
 						<?php endif; ?>
 						<tr><th><?php esc_html_e( 'Usage', 'voucher-captain' ); ?></th><td><?php echo esc_html( array( 'single' => __( 'Single use', 'voucher-captain' ), 'balance' => __( 'Stored balance', 'voucher-captain' ), 'unlimited' => __( 'Reusable', 'voucher-captain' ) )[ $v->usage_mode ] ?? $v->usage_mode ); ?></td></tr>
-						<tr><th><?php esc_html_e( 'Coupon', 'voucher-captain' ); ?></th><td><?php echo $v->coupon_id ? '<a href="' . esc_url( get_edit_post_link( $v->coupon_id ) ?: '' ) . '">#' . esc_html( (string) $v->coupon_id ) . '</a>' : esc_html__( 'none (ticket)', 'voucher-captain' ); ?></td></tr>
+						<tr><th><?php esc_html_e( 'Coupon', 'voucher-captain' ); ?></th><td><?php echo $v->coupon_id ? '<a href="' . esc_url( get_edit_post_link( $v->coupon_id ) ?: '' ) . '"><code>' . esc_html( strtoupper( $v->code ) ) . '</code></a>' : esc_html__( 'none (ticket)', 'voucher-captain' ); // U11: the code people know, not the internal post ID. ?></td></tr>
 						<tr><th><?php esc_html_e( 'Delivered', 'voucher-captain' ); ?></th><td><?php echo $v->delivered_at ? esc_html( \VCAP\LocalDate::from_utc( $v->delivered_at, get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ) : '–'; ?></td></tr>
 						<tr><th><?php esc_html_e( 'Buyer', 'voucher-captain' ); ?></th><td><?php echo esc_html( trim( $v->buyer_name . ' <' . $v->buyer_email . '>' ) ); ?></td></tr>
 					</table>

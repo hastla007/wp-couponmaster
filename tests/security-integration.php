@@ -407,6 +407,14 @@ vcap_security_assert( 1 === $u4_result['done'] && array( $u4_broken->code ) === 
 vcap_security_assert( (bool) wp_list_filter( $u4_flash, array( 'type' => 'success' ) ), 'U4: the vouchers that were voided are reported as a success count' );
 delete_transient( 'vcap_flash_' . get_current_user_id() );
 
+// U11: the voucher detail names the WooCommerce code by its code, not by the internal post ID ("#4567").
+$_GET['voucher'] = $u4_ok->id;
+ob_start();
+$u10_admin->page();
+$u11_html = (string) ob_get_clean();
+unset( $_GET['voucher'] );
+vcap_security_assert( str_contains( $u11_html, '<code>' . esc_html( strtoupper( $u4_ok->code ) ) . '</code></a>' ) && ! str_contains( $u11_html, '>#' . $u4_ok->coupon_id . '</a>' ), 'U11: the voucher detail shows the WooCommerce code itself, not its post ID' );
+
 // F11: every row checkbox of the voucher list has a hidden label naming the voucher (like the core lists).
 require_once ABSPATH . 'wp-admin/includes/class-wp-screen.php';
 require_once ABSPATH . 'wp-admin/includes/screen.php';
