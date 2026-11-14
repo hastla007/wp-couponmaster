@@ -125,23 +125,32 @@ $b3_coupon->set_code( 'report-b3-' . $tag );
 $b3_coupon->set_discount_type( 'fixed_cart' );
 $b3_coupon->set_amount( '2' );
 $b3_coupon->save();
-for ( $i = 0; $i < 25; $i++ ) {
-	$b3_order = wc_create_order();
-	$b3_order->add_product( $product, 1 );
-	$b3_order->calculate_totals();
-	$b3_order->apply_coupon( 'report-b3-' . $tag );
-	$b3_order->set_status( 'completed' );
-	$b3_order->save();
-}
-wp_cache_flush();
-$b3_from    = wp_date( 'Y-m-d', time() - 3 * DAY_IN_SECONDS );
-$b3_to      = wp_date( 'Y-m-d', time() + 3 * DAY_IN_SECONDS );
-$b3_before  = $wpdb->num_queries;
-$b3_rows    = ( new VCAP\Reports() )->collect( $b3_from, $b3_to );
-$b3_queries = $wpdb->num_queries - $b3_before;
-$b3_row     = $b3_rows[ 'coupon:' . strtoupper( 'report-b3-' . $tag ) ] ?? null;
+$b3_add = static function ( int $count ) use ( $product, $tag ) {
+	for ( $i = 0; $i < $count; $i++ ) {
+		$order = wc_create_order();
+		$order->add_product( $product, 1 );
+		$order->calculate_totals();
+		$order->apply_coupon( 'report-b3-' . $tag );
+		$order->set_status( 'completed' );
+		$order->save();
+	}
+	return $order;
+};
+$b3_measure = static function ( string $from, string $to ) use ( $wpdb ): array {
+	wp_cache_flush();
+	$before = $wpdb->num_queries;
+	$rows   = ( new VCAP\Reports() )->collect( $from, $to );
+	return array( $rows, $wpdb->num_queries - $before );
+};
+$b3_order = $b3_add( 5 );
+$b3_to    = wp_date( 'Y-m-d', time() + 3 * DAY_IN_SECONDS );
+list( , $b3_small ) = $b3_measure( wp_date( 'Y-m-d', time() - 4 * DAY_IN_SECONDS ), $b3_to );
+$b3_order = $b3_add( 20 );
+$b3_from  = wp_date( 'Y-m-d', time() - 3 * DAY_IN_SECONDS );
+list( $b3_rows, $b3_large ) = $b3_measure( $b3_from, $b3_to );
+$b3_row = $b3_rows[ 'coupon:' . strtoupper( 'report-b3-' . $tag ) ] ?? null;
 vcap_report_assert( null !== $b3_row && 25 === $b3_row['orders'] && 50.0 === $b3_row['discount'] && 950.0 === $b3_row['revenue'], 'B3: 25 orders with a coupon are summed (discount 25 × 2, revenue 25 × 38)' );
-vcap_report_assert( $b3_queries < 25, 'B3: the report needs fewer queries than it has orders (' . $b3_queries . ' for 25+ orders; no order object is loaded)' );
+vcap_report_assert( $b3_large - $b3_small <= 3, 'B3: 20 more orders cost no more queries (' . $b3_small . ' → ' . $b3_large . '; no order object is loaded)' );
 $b3_before = $wpdb->num_queries;
 $b3_again  = ( new VCAP\Reports() )->collect( $b3_from, $b3_to );
 vcap_report_assert( $b3_again === $b3_rows && $wpdb->num_queries - $b3_before <= 4, 'B3: a repeated call is served from the cache (' . ( $wpdb->num_queries - $b3_before ) . ' queries)' );
