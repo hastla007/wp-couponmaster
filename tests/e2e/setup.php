@@ -62,5 +62,43 @@ $order->set_status( 'processing' );
 $order->save();
 vcap()->store_credit->adjust( (int) $customer, 15, 'E2E credit' );
 
+// Goods to pay for with vouchers in the block checkout (03-block-checkout.spec.js): a gift card (20 balance) and a
+// single-use voucher worth more than the goods (50).
+$goods = new WC_Product_Simple();
+$goods->set_name( 'E2E Mug' );
+$goods->set_slug( 'e2e-mug' );
+$goods->set_regular_price( '30' );
+$goods->set_virtual( true );
+$goods->set_status( 'publish' );
+$goods->save();
+$state['goods_product'] = $goods->get_id();
+
+/** A voucher as the plugin issues it (coupon + voucher row), without an order. */
+function vcap_e2e_voucher( string $type, string $usage, float $value ): string {
+	$coupon = new WC_Coupon();
+	$coupon->set_code( 'e2e-' . $type . '-' . strtolower( wp_generate_password( 12, false, false ) ) );
+	$coupon->set_discount_type( 'fixed_cart' );
+	$coupon->set_amount( $value );
+	$coupon->update_meta_data( '_vcap_voucher', 'yes' );
+	$coupon->save();
+	$v                 = new VCAP\Voucher();
+	$v->code           = wc_format_coupon_code( $coupon->get_code() );
+	$v->coupon_id      = $coupon->get_id();
+	$v->order_item_id  = 96000000 + $coupon->get_id();
+	$v->type           = $type;
+	$v->usage_mode     = $usage;
+	$v->discount_type  = 'fixed_cart';
+	$v->initial_amount = $value;
+	$v->balance        = $value;
+	$v->currency       = get_woocommerce_currency();
+	$v->status         = VCAP\Voucher::STATUS_ACTIVE;
+	$v->send_to        = 'buyer';
+	$v->token          = VCAP\VoucherRepository::new_token();
+	vcap()->vouchers->insert( $v );
+	return strtoupper( $v->code );
+}
+$state['gift_card']      = vcap_e2e_voucher( 'giftcard', 'balance', 20 );
+$state['single_voucher'] = vcap_e2e_voucher( 'voucher', 'single', 50 );
+
 file_put_contents( __DIR__ . '/.state.json', wp_json_encode( $state ) );
 echo "E2E shop prepared.\n";

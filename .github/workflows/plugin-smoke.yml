@@ -730,12 +730,14 @@ jobs:
         run: |
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/e2e/pages.php" classic
           cd tests/e2e && npx playwright test 02-classic-checkout.spec.js
-      - name: Browser tests – cart and checkout blocks
+      - name: Browser tests – cart and checkout blocks (voucher purchase, gift card payment, single-use voucher warning, store credit)
         env:
           CI: 'true'
           E2E_CHECKOUT: blocks
         run: |
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/e2e/pages.php" blocks
+          # Gift cards and store credit pay after tax (payment rows of assets/js/cart-blocks.js).
+          php wp-cli.phar --path=wp-test option update vcap_mpv_after_tax yes
           cd tests/e2e && npx playwright test 03-block-checkout.spec.js
       - name: Verify issued vouchers and PHP notices
         run: |
