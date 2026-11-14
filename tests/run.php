@@ -914,6 +914,17 @@ check( 'H12: the step error names the step and the nearest allowed amounts', fal
 check( 'Q7/H12: an ambiguous amount says why instead of "outside the range"', false !== strpos( (string) VCAP\CustomAmount::error_for( $range_config, '1.500' ), 'ambiguous' ) );
 check( 'Q7: number fields are read strictly ("2,50" = 2.5, "1e3" refused)', '2.5' === VCAP\Fields::parse_number( '2,50' ) && null === VCAP\Fields::parse_number( '1e3' ) && '-3' === VCAP\Fields::parse_number( '−3' ) );
 
+echo "CSV export format (A15)\n";
+check( 'A15: decimal comma for fr/it/es/nl/pl/de, point for de_CH(_informal) and en', ',' === VCAP\Csv::locale_decimal( 'fr_FR' ) && ',' === VCAP\Csv::locale_decimal( 'it_IT' ) && ',' === VCAP\Csv::locale_decimal( 'es_ES' ) && ',' === VCAP\Csv::locale_decimal( 'nl_NL' ) && ',' === VCAP\Csv::locale_decimal( 'pl_PL' ) && ',' === VCAP\Csv::locale_decimal( 'de_DE_formal' ) && '.' === VCAP\Csv::locale_decimal( 'de_CH_informal' ) && '.' === VCAP\Csv::locale_decimal( 'de_CH' ) && '.' === VCAP\Csv::locale_decimal( 'en_US' ) && '.' === VCAP\Csv::locale_decimal( 'es_MX' ) );
+$GLOBALS['wp_locale'] = (object) array( 'number_format' => array( 'decimal_point' => ',', 'thousands_sep' => ' ' ) );
+check( 'A15: an unknown language follows WordPress\' number format of the current locale', ',' === VCAP\Csv::locale_decimal( 'xx_XX' ) );
+unset( $GLOBALS['wp_locale'] );
+VCAP\Csv::reset();
+check( 'A15: a decimal comma comes with ";" as the field separator', array( 'separator' => ';', 'decimal' => ',' ) === VCAP\Csv::format() );
+$report_csv = VCAP\Reports::csv_rows( array( array( 'type' => 'coupon', 'name' => 'X (JPY)', 'issued' => null, 'uses' => 1, 'orders' => 1, 'discount' => 500.0, 'revenue' => 4500.0, 'currency' => 'JPY' ), array( 'type' => 'coupon', 'name' => 'Y', 'issued' => null, 'uses' => 1, 'orders' => 1, 'discount' => 5.0, 'revenue' => 45.0 ) ) );
+check( 'A15: the report CSV names each row\'s own currency (with its decimals)', 'JPY' === $report_csv[1][7] && '500' === $report_csv[1][5] && 'EUR' === $report_csv[2][7] && '5,00' === $report_csv[2][5], json_encode( $report_csv ) );
+VCAP\Csv::reset();
+
 echo "Expiry date on the edit form (Q13)\n";
 $pe   = array( VCAP\Admin\VoucherAdmin::class, 'parse_expiry' );
 $next = ( (int) wp_date( 'Y' ) + 1 ) . '-06-30';
