@@ -108,6 +108,7 @@ are described in CONNECTORS.md and API.md.
 | `vcap_order_codes_visible` | `src/Downloads.php` | Whether the current visitor may see the full voucher codes and PDF links of an order (default: order key or own order). |
 | `vcap_order_language` | `src/Compat/Multilingual.php` | Language code of an order (e.g. for another multilingual plugin); '' = the site language. |
 | `vcap_order_lines` | `src/API/V1/VoucherService.php` | Filters the per-line order data handed to connector plugins. |
+| `vcap_orphaned_hold_days` | `src/CouponManager.php` | – |
 | `vcap_page_has_redeem_form` | `src/Shortcodes.php` | Whether the page shows the redeem form (e.g. true when a theme template renders it). |
 | `vcap_passcaptain_can_resend_tickets` | `src/Compat/PassCaptainTickets.php` | – |
 | `vcap_passcaptain_check_fixed_date_capacity` | `src/Compat/PassCaptainTickets.php` | – |
@@ -128,6 +129,7 @@ are described in CONNECTORS.md and API.md.
 | `vcap_placeholder_definitions` | `src/Placeholders.php` | – |
 | `vcap_placeholders` | `src/Placeholders.php` | – |
 | `vcap_product_config` | `src/ProductConfig.php` | – |
+| `vcap_protect_voucher_coupons` | `src/CouponManager.php` | Whether trashing/deleting a voucher's WooCommerce coupon is refused (default: in wp-admin and REST requests). |
 | `vcap_purgeable_claim_kinds` | `src/Claim.php` | – |
 | `vcap_rate_limit_backend` | `src/Plugin.php` | – |
 | `vcap_rate_limit_brake` | `src/Plugin.php` | Quota per visitor while the site-wide counter is full (default: a fifth, at least 1). |
