@@ -1536,5 +1536,36 @@ $p12_pct = $p12_ref->effective_min_spend();
 unset( $GLOBALS['vcap_test_options']['vcap_referral_min_spend'], $GLOBALS['vcap_test_options']['vcap_referral_friend_type'] );
 check( 'V3: the friend\'s code needs an order above the discount: automatic 2 × 10 = 20, an entered 0 becomes 11, 35 stays 35, percentages as entered', 20.0 === $p12_auto && 11.0 === $p12_zero && 35.0 === $p12_own_min && 0.0 === $p12_pct, var_export( array( $p12_auto, $p12_zero, $p12_own_min, $p12_pct ), true ) );
 
+// D15: the API v1 facades declare their documented return types natively; the provider interface stays untyped (BC).
+$d15_type  = static fn( string $class, string $method ): string => (string) ( new ReflectionMethod( $class, $method ) )->getReturnType();
+$d15_types = array();
+foreach ( array( 'check', 'reserve', 'commit', 'release', 'refund', 'get' ) as $d15_m ) {
+	$d15_types[ 'redemptions::' . $d15_m ] = $d15_type( VCAP\API\V1\RedemptionService::class, $d15_m );
+}
+foreach ( array( 'lookup', 'reserve', 'commit', 'release' ) as $d15_m ) {
+	$d15_types[ 'api_v1::' . $d15_m ]   = $d15_type( VCAP\API\V1\VoucherService::class, $d15_m );
+	$d15_types[ 'provider::' . $d15_m ] = $d15_type( VCAP\API\V1\WooCommerceRedemptionProvider::class, $d15_m );
+}
+foreach ( array( 'check', 'reserve', 'get', 'commit', 'release' ) as $d15_m ) {
+	$d15_types[ 'rest::' . $d15_m ] = $d15_type( VCAP\API\V1\RestController::class, $d15_m );
+}
+$d15_rest = array_filter( $d15_types, static fn( $t, $k ) => str_starts_with( $k, 'rest::' ), ARRAY_FILTER_USE_BOTH );
+$d15_data = array_diff_key( $d15_types, $d15_rest );
+check( 'D15: RedemptionService, VoucherService and the built-in provider return array|WP_Error natively', array() === array_filter( $d15_data, static fn( $t ) => ! in_array( $t, array( 'WP_Error|array', 'array|WP_Error' ), true ) ), var_export( $d15_data, true ) );
+check( 'D15: the REST callbacks return WP_REST_Response|WP_Error and the permission callbacks bool|WP_Error natively', array() === array_filter( $d15_rest, static fn( $t ) => 'WP_REST_Response|WP_Error' !== $t ) && 'WP_Error|bool' === $d15_type( VCAP\API\V1\RestController::class, 'can_redeem' ) && 'WP_Error|bool' === $d15_type( VCAP\API\V1\RestController::class, 'can_access' ), var_export( $d15_rest, true ) . $d15_type( VCAP\API\V1\RestController::class, 'can_access' ) );
+$d15_iface = array();
+foreach ( array( 'lookup', 'reserve', 'commit', 'release' ) as $d15_m ) {
+	$d15_iface[ $d15_m ] = ( new ReflectionMethod( VCAP\Contracts\RedemptionProvider::class, $d15_m ) )->hasReturnType();
+}
+check( 'D15: the RedemptionProvider interface keeps lookup/reserve/commit/release without native return types (existing providers stay compatible within v1)', array( false ) === array_values( array_unique( $d15_iface ) ) && 'bool' === $d15_type( VCAP\Contracts\RedemptionProvider::class, 'supports' ), var_export( $d15_iface, true ) );
+$d15_legacy = new class() implements VCAP\Contracts\RedemptionProvider {
+	public function supports( string $code ): bool { return true; }
+	public function lookup( string $code ) { return array(); }
+	public function reserve( string $code, float $amount, \WC_Order $order ) { return array(); }
+	public function commit( string $code, \WC_Order $order ) { return array(); }
+	public function release( string $code, \WC_Order $order ) { return array(); }
+};
+check( 'D15: an untyped provider written against the 1.1 contract still implements the interface', $d15_legacy instanceof VCAP\Contracts\RedemptionProvider );
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

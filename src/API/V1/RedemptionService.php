@@ -75,7 +75,7 @@ final class RedemptionService {
 	 *                        customer controls this address, e.g. its own logged-in account or staff checked the ID).
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	public function check( string $code, array $args = array() ) {
+	public function check( string $code, array $args = array() ): array|\WP_Error {
 		$user_id = $this->user_id( $args );
 		if ( $this->too_many_failures( $user_id ) ) {
 			return self::error( 'vcap_rate_limited', __( 'Too many invalid voucher codes. Please try again later.', 'voucher-captain' ), 429 );
@@ -114,7 +114,7 @@ final class RedemptionService {
 	 * @return array<string, mixed>|\WP_Error
 	 * @throws \Throwable Database errors are re-thrown after the transaction was rolled back.
 	 */
-	public function reserve( string $code, array $args ) {
+	public function reserve( string $code, array $args ): array|\WP_Error {
 		$key    = (string) ( $args['key'] ?? '' );
 		$target = self::clean_target( (string) ( $args['target'] ?? '' ) );
 		if ( ! preg_match( self::KEY_PATTERN, $key ) ) {
@@ -258,7 +258,7 @@ final class RedemptionService {
 	 * @param array $row Redemption row.
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	private function replay( array $row ) {
+	private function replay( array $row ): array|\WP_Error {
 		if ( self::STATE_RESERVED === $row['state'] && strtotime( (string) $row['expires_at'] . ' UTC' ) <= time() ) {
 			// Expired, but the release job has not run yet: release it now, then answer like any released one.
 			$this->transition( (string) $row['redemption_key'], self::STATE_RELEASED, array(), true );
@@ -280,7 +280,7 @@ final class RedemptionService {
 	 * @param mixed $meta Caller metadata.
 	 * @return bool
 	 */
-	public static function meta_acceptable( $meta ): bool {
+	public static function meta_acceptable( mixed $meta ): bool {
 		if ( null === $meta || array() === $meta || ! is_array( $meta ) ) {
 			return true; // Anything else is stored as an empty list (caller_meta()).
 		}
@@ -332,7 +332,7 @@ final class RedemptionService {
 	 * @param array  $args user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	public function commit( string $key, array $args = array() ) {
+	public function commit( string $key, array $args = array() ): array|\WP_Error {
 		return $this->transition( $key, self::STATE_COMMITTED, $args );
 	}
 
@@ -343,7 +343,7 @@ final class RedemptionService {
 	 * @param array  $args user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	public function release( string $key, array $args = array() ) {
+	public function release( string $key, array $args = array() ): array|\WP_Error {
 		return $this->transition( $key, self::STATE_RELEASED, $args );
 	}
 
@@ -362,7 +362,7 @@ final class RedemptionService {
 	 * @return array<string, mixed>|\WP_Error Redemption data plus refunded (total) and restored (this call).
 	 * @throws \Throwable Database errors are re-thrown after the transaction was rolled back.
 	 */
-	public function refund( string $key, float $amount, string $refund_key, array $args = array() ) {
+	public function refund( string $key, float $amount, string $refund_key, array $args = array() ): array|\WP_Error {
 		$amount = (float) $amount; // Rounded to the voucher currency below.
 		if ( ! preg_match( self::KEY_PATTERN, $key ) || ! preg_match( self::KEY_PATTERN, $refund_key ) ) {
 			return self::error( 'vcap_invalid_request', __( 'A redemption key, a refund key and a positive amount are required.', 'voucher-captain' ), 400 );
@@ -483,7 +483,7 @@ final class RedemptionService {
 	 * @param mixed $meta Caller metadata.
 	 * @return array<string, mixed>
 	 */
-	public static function caller_meta( $meta ): array {
+	public static function caller_meta( mixed $meta ): array {
 		if ( ! is_array( $meta ) ) {
 			return array();
 		}
@@ -532,7 +532,7 @@ final class RedemptionService {
 	 * @param string $key Redemption key.
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	public function get( string $key ) {
+	public function get( string $key ): array|\WP_Error {
 		$row = preg_match( self::KEY_PATTERN, $key ) ? $this->get_row( $key ) : null;
 		if ( $row && self::STATE_RESERVED === $row['state'] && strtotime( (string) $row['expires_at'] . ' UTC' ) <= time() ) {
 			// Past its lifetime: released now instead of waiting for the background job.
@@ -581,7 +581,7 @@ final class RedemptionService {
 	 * @return array<string, mixed>|\WP_Error
 	 * @throws \Throwable Database errors are re-thrown after the transaction was rolled back.
 	 */
-	private function transition( string $key, string $to, array $args, bool $expired = false ) {
+	private function transition( string $key, string $to, array $args, bool $expired = false ): array|\WP_Error {
 		if ( ! preg_match( self::KEY_PATTERN, $key ) ) {
 			return self::error( 'vcap_invalid_request', __( 'Invalid redemption key.', 'voucher-captain' ), 400 );
 		}
@@ -720,7 +720,7 @@ final class RedemptionService {
 	 * @param bool       $email_verified Whether the caller vouches for $email (V6: only then it unlocks personal vouchers).
 	 * @return true|\WP_Error
 	 */
-	private function eligibility( Voucher $voucher, string $target, ?float $amount, int $user_id, string $email = '', bool $email_verified = false ) {
+	private function eligibility( Voucher $voucher, string $target, ?float $amount, int $user_id, string $email = '', bool $email_verified = false ): bool|\WP_Error {
 		if ( 'credit' === $voucher->type ) {
 			// Store credit belongs to one customer account and is only used in the shop (owner check there).
 			return self::error( 'vcap_not_redeemable', __( 'Store credit can only be used in the shop.', 'voucher-captain' ), 422 );

@@ -42,7 +42,7 @@ final class WooCommerceRedemptionProvider implements RedemptionProvider {
 	 * @param string $code Voucher code.
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	public function lookup( string $code ) {
+	public function lookup( string $code ): array|\WP_Error {
 		$voucher = $this->find( $code );
 		if ( ! $voucher ) {
 			return new \WP_Error( 'vcap_not_found', __( 'Voucher not found.', 'voucher-captain' ), array( 'status' => 404 ) );
@@ -67,7 +67,7 @@ final class WooCommerceRedemptionProvider implements RedemptionProvider {
 	 * @param \WC_Order $order Saved WooCommerce order.
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	public function reserve( string $code, float $amount, \WC_Order $order ) {
+	public function reserve( string $code, float $amount, \WC_Order $order ): array|\WP_Error {
 		$voucher = $this->find( $code );
 		if ( ! $voucher ) {
 			return new \WP_Error( 'vcap_not_found', __( 'Voucher not found.', 'voucher-captain' ), array( 'status' => 404 ) );
@@ -110,7 +110,7 @@ final class WooCommerceRedemptionProvider implements RedemptionProvider {
 	 * @param \WC_Order $order Saved WooCommerce order.
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	public function commit( string $code, \WC_Order $order ) {
+	public function commit( string $code, \WC_Order $order ): array|\WP_Error {
 		$voucher = $this->find( $code );
 		if ( ! $voucher ) {
 			return new \WP_Error( 'vcap_not_found', __( 'Voucher not found.', 'voucher-captain' ), array( 'status' => 404 ) );
@@ -148,7 +148,7 @@ final class WooCommerceRedemptionProvider implements RedemptionProvider {
 	 * @param \WC_Order $order Saved WooCommerce order.
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	public function release( string $code, \WC_Order $order ) {
+	public function release( string $code, \WC_Order $order ): array|\WP_Error {
 		$voucher = $this->find( $code );
 		if ( ! $voucher ) {
 			return new \WP_Error( 'vcap_not_found', __( 'Voucher not found.', 'voucher-captain' ), array( 'status' => 404 ) );

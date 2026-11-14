@@ -10,6 +10,7 @@ namespace VCAP\API\V1;
 use VCAP\Contracts\RedemptionProvider;
 use VCAP\CouponManager;
 use VCAP\Issuer;
+use VCAP\Logger;
 use VCAP\VoucherRepository;
 
 defined( 'ABSPATH' ) || exit;
@@ -34,9 +35,9 @@ final class VoucherService {
 	 * @param string $code Voucher code.
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	public function lookup( string $code ) {
+	public function lookup( string $code ): array|\WP_Error {
 		$provider = $this->provider( $code );
-		return is_wp_error( $provider ) ? $provider : $provider->lookup( $code );
+		return is_wp_error( $provider ) ? $provider : self::checked( $provider->lookup( $code ), $provider );
 	}
 
 	/**
@@ -47,9 +48,9 @@ final class VoucherService {
 	 * @param \WC_Order $order Saved WooCommerce order.
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	public function reserve( string $code, float $amount, \WC_Order $order ) {
+	public function reserve( string $code, float $amount, \WC_Order $order ): array|\WP_Error {
 		$provider = $this->provider( $code );
-		return is_wp_error( $provider ) ? $provider : $provider->reserve( $code, $amount, $order );
+		return is_wp_error( $provider ) ? $provider : self::checked( $provider->reserve( $code, $amount, $order ), $provider );
 	}
 
 	/**
@@ -59,9 +60,9 @@ final class VoucherService {
 	 * @param \WC_Order $order Saved WooCommerce order.
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	public function commit( string $code, \WC_Order $order ) {
+	public function commit( string $code, \WC_Order $order ): array|\WP_Error {
 		$provider = $this->provider( $code );
-		return is_wp_error( $provider ) ? $provider : $provider->commit( $code, $order );
+		return is_wp_error( $provider ) ? $provider : self::checked( $provider->commit( $code, $order ), $provider );
 	}
 
 	/**
@@ -71,9 +72,26 @@ final class VoucherService {
 	 * @param \WC_Order $order Saved WooCommerce order.
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	public function release( string $code, \WC_Order $order ) {
+	public function release( string $code, \WC_Order $order ): array|\WP_Error {
 		$provider = $this->provider( $code );
-		return is_wp_error( $provider ) ? $provider : $provider->release( $code, $order );
+		return is_wp_error( $provider ) ? $provider : self::checked( $provider->release( $code, $order ), $provider );
+	}
+
+	/**
+	 * Third-party providers implement the untyped v1 contract (RedemptionProvider declares no native return types,
+	 * so existing providers keep working): a result that is neither an array nor a WP_Error is turned into a
+	 * WP_Error here instead of a TypeError at the typed API boundary.
+	 *
+	 * @param mixed              $result   Provider result.
+	 * @param RedemptionProvider $provider Provider that produced it.
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	private static function checked( mixed $result, RedemptionProvider $provider ): array|\WP_Error {
+		if ( is_array( $result ) || $result instanceof \WP_Error ) {
+			return $result;
+		}
+		Logger::error( 'A redemption provider returned neither an array nor a WP_Error.', array( 'provider' => get_class( $provider ) ) );
+		return new \WP_Error( 'vcap_provider_invalid_response', __( 'The voucher system returned an invalid response.', 'voucher-captain' ), array( 'status' => 502 ) );
 	}
 
 	/**
@@ -155,7 +173,7 @@ final class VoucherService {
 	 * @param string $code Voucher code.
 	 * @return RedemptionProvider|\WP_Error
 	 */
-	private function provider( string $code ) {
+	private function provider( string $code ): RedemptionProvider|\WP_Error {
 		/**
 		 * Filters the redemption providers available for a voucher code.
 		 *

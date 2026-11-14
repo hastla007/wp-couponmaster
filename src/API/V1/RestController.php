@@ -124,7 +124,7 @@ final class RestController {
 	 * @param \WP_REST_Request $request Request.
 	 * @return bool|\WP_Error
 	 */
-	public function can_redeem( \WP_REST_Request $request ) {
+	public function can_redeem( \WP_REST_Request $request ): bool|\WP_Error {
 		if ( ! is_user_logged_in() ) {
 			return new \WP_Error( 'vcap_not_allowed', __( 'Please log in to redeem a voucher.', 'voucher-captain' ), array( 'status' => 401 ) );
 		}
@@ -185,7 +185,7 @@ final class RestController {
 	 * @param \WP_REST_Request $request Request.
 	 * @return true|\WP_Error
 	 */
-	private function target_allowed( string $target, \WP_REST_Request $request ) {
+	private function target_allowed( string $target, \WP_REST_Request $request ): bool|\WP_Error {
 		$target = RedemptionService::clean_target( $target ); // As stored: "pass captain:" must not slip through.
 		if ( self::is_internal_target( $target ) ) {
 			return new \WP_Error( 'vcap_not_allowed', __( 'This redemption target is managed by an integration.', 'voucher-captain' ), array( 'status' => 403 ) );
@@ -230,7 +230,7 @@ final class RestController {
 	 * @param \WP_REST_Request $request Request.
 	 * @return bool|\WP_Error
 	 */
-	public function can_access( \WP_REST_Request $request ) {
+	public function can_access( \WP_REST_Request $request ): bool|\WP_Error {
 		$allowed = $this->can_redeem( $request );
 		if ( true !== $allowed ) {
 			return $allowed;
@@ -276,7 +276,7 @@ final class RestController {
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function check( \WP_REST_Request $request ) {
+	public function check( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		if ( '' !== (string) $request['target'] ) {
 			$target = $this->target_allowed( (string) $request['target'], $request );
 			if ( true !== $target ) {
@@ -296,7 +296,7 @@ final class RestController {
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function reserve( \WP_REST_Request $request ) {
+	public function reserve( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		if ( self::is_internal_key( (string) $request['key'] ) ) {
 			// Keys of built-in integrations (Pass Captain checkout and ticket vouchers) are never created over REST,
 			// so nobody can claim them in advance and block or hijack those redemptions.
@@ -352,7 +352,7 @@ final class RestController {
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function get( \WP_REST_Request $request ) {
+	public function get( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		return rest_ensure_response( $this->service->get( (string) $request['key'] ) );
 	}
 
@@ -362,7 +362,7 @@ final class RestController {
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function commit( \WP_REST_Request $request ) {
+	public function commit( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		return rest_ensure_response( $this->service->commit( (string) $request['key'] ) );
 	}
 
@@ -372,7 +372,7 @@ final class RestController {
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public function release( \WP_REST_Request $request ) {
+	public function release( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		return rest_ensure_response( $this->service->release( (string) $request['key'] ) );
 	}
 }

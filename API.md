@@ -38,6 +38,8 @@ Always use the same saved `WC_Order` for retries. The order ID and voucher ID fo
 
 The `VCAP\\Contracts\\RedemptionProvider` interface is the boundary for external voucher stores. Add providers through the `vcap_redemption_providers` filter. Each provider must implement `supports`, `lookup`, `reserve`, `commit`, and `release`; return arrays with the documented operation result or a `WP_Error`. Providers must enforce their own atomic reservation and retry semantics.
 
+Native types (since 1.2.0): the facades `VoucherService`, `RedemptionService` and `RestController` declare their return types natively (`array|\WP_Error`, `bool|\WP_Error`, `\WP_REST_Response|\WP_Error`), exactly the types they already documented; all of them are `final`, so this changes nothing for callers. The `RedemptionProvider` interface stays without native return types on purpose: adding them would force every existing provider to change its method signatures, which is a breaking change reserved for API v2. Your provider may declare `: array|\WP_Error` itself (PHP allows narrowing an untyped interface method). A provider result that is neither an array nor a `WP_Error` is answered by `VoucherService` with the error `vcap_provider_invalid_response` (HTTP status 502) and logged.
+
 ```php
 add_filter( 'vcap_redemption_providers', function( array $providers, string $code, $service ): array {
     array_unshift( $providers, new My_Ticket_Captain_Provider() );
