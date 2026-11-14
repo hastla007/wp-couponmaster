@@ -16,7 +16,6 @@ defined( 'VCAP_DB_VERSION' ) || define( 'VCAP_DB_VERSION', '0.0.0' );
 defined( 'VCAP_FILE' ) || define( 'VCAP_FILE', dirname( __DIR__ ) . '/voucher-captain.php' );
 defined( 'VCAP_PATH' ) || define( 'VCAP_PATH', dirname( __DIR__ ) . '/' );
 defined( 'VCAP_URL' ) || define( 'VCAP_URL', 'https://example.test/wp-content/plugins/voucher-captain/' );
-defined( 'VCAP_LICENSE_REQUIRED' ) || define( 'VCAP_LICENSE_REQUIRED', false );
 if ( ! function_exists( 'vcap' ) ) {
 	/** Declared by voucher-captain.php once WooCommerce passed its check (inside the plugins_loaded callback). */
 	function vcap(): \VCAP\Plugin {

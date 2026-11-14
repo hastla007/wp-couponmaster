@@ -1,14 +1,11 @@
 name: Release
 
-# Pushing a tag vX.Y.Z (see RELEASE.md) builds the release ZIPs reproducibly (free and premium edition) – but only
-# for a commit on main after the CI workflow "Plugin smoke tests" finished with every blocking job green on exactly
-# the tagged commit (job ci-green) and the version
-# gate passed (job version: tag = plugin version, changelog and upgrade notice for it, no "= Unreleased =" left,
-# newer than the last release tag). After building it checks that the premium ZIP pins the production licence
-# server's current signing key, creates the licence-manager manifest of the premium ZIP (SHA-256, requirements,
-# release notes) with WP License Captain's own tool and a CycloneDX SBOM per ZIP, and publishes everything as a GitHub
-# release draft. The release smoke against the production licence server (workflow release-smoke.yml) must pass
-# before the draft is published (RELEASE.md step 6).
+# Pushing a tag vX.Y.Z (see RELEASE.md) builds the release ZIP reproducibly (one build: the free core, see
+# docs/FREE-PREMIUM.md) – but only for a commit on main after the CI workflow "Plugin smoke tests" finished with every
+# blocking job green on exactly the tagged commit (job ci-green) and the version gate passed (job version: tag =
+# plugin version, changelog and upgrade notice for it, no "= Unreleased =" left, newer than the last release tag).
+# It creates a CycloneDX SBOM of the ZIP and publishes both as a GitHub release draft. The release smoke (workflow
+# release-smoke.yml) must pass before the draft is published (RELEASE.md).
 on:
   push:
     tags:
@@ -33,23 +30,10 @@ jobs:
         run: |
           git fetch --force --tags --quiet origin
           bin/release-gate.sh newer "${GITHUB_REF_NAME#v}"
-      - name: Not published in the release storage yet
-        env:
-          PACKAGE_BASE_URL: ${{ vars.WPLC_PACKAGE_BASE_URL }}
-        run: |
-          # Published packages are immutable (RELEASE.md step 6): a version that is already in the storage is not built again.
-          version="${GITHUB_REF_NAME#v}"
-          if [ -z "$PACKAGE_BASE_URL" ]; then echo "WPLC_PACKAGE_BASE_URL not set – storage not checked."; exit 0; fi
-          code="$(curl --silent --output /dev/null --write-out '%{http_code}' --head --max-time 30 "${PACKAGE_BASE_URL%/}/voucher-captain-premium-${version}.zip" || true)"
-          if [ "$code" = "200" ]; then
-            echo "::error::voucher-captain-premium-${version}.zip is already in the release storage – raise the version."
-            exit 1
-          fi
-          echo "Storage answers ${code} for ${version} – not published yet."
 
   ci-green:
     # Release gate: the tagged commit must have a completed, successful push run of plugin-smoke.yml (all jobs,
-    # including integration, multisite, license-acceptance, ecosystem, Pass Captain and browser tests). Waits while
+    # including integration, multisite, ecosystem, Pass Captain and browser tests). Waits while
     # that run is still in progress (tag pushed together with the commit); fails when there is none or it failed.
     name: CI green for the tagged commit
     needs: version
@@ -135,30 +119,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Check out the licence server tools (WP License Captain)
-        uses: actions/checkout@v5
-        with:
-          repository: hastla007/wp-license
-          # Same commit as the CI job license-acceptance (plugin-smoke.yml; tests/run.php checks both are equal): the
-          # manifest tool that was tested. The production licence server must run this version or newer (Ed25519
-          # signatures, GET /wplc/v1/signing-keys).
-          ref: 150fb177d88dfed9537d6cb1f62550987fa4349e
-          path: wp-license
-          fetch-depth: 0
-      - name: The tested licence server commit is merged into WP License Captain's default branch
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # A release must not depend on an unmerged server branch: the production server is deployed from the default
-          # branch, and an older server without Ed25519 signatures would make every premium activation fail.
-          ref="$(git -C wp-license rev-parse HEAD)"
-          branch="$(gh api repos/hastla007/wp-license --jq .default_branch)"
-          git -C wp-license fetch --quiet origin "$branch"
-          if ! git -C wp-license merge-base --is-ancestor "$ref" FETCH_HEAD; then
-            echo "::error::WP License Captain ${ref} (pinned in release.yml and plugin-smoke.yml) is not merged into hastla007/wp-license ${branch}. Merge and deploy it on the production licence server first (RELEASE_CHECKLIST.md)."
-            exit 1
-          fi
-          echo "WP License Captain ${ref} is part of ${branch}."
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -167,62 +127,26 @@ jobs:
           coverage: none
       - name: Tag matches the plugin version
         run: bin/release-gate.sh version "${GITHUB_REF_NAME#v}"
-      - name: Build both editions twice and compare
-        env:
-          # Premium build: license server (HTTPS) pinned into the plugin, also the "Update URI" (LICENSING.md).
-          VCAP_LICENSE_SERVER: ${{ vars.VCAP_LICENSE_SERVER }}
-          VCAP_UPDATE_URI: ${{ vars.VCAP_UPDATE_URI }}
-          # Ed25519 public key(s) of the license server (wp wplc signing-key --field=public_key on the server); during a
-          # key rotation the current and the next key, separated by a comma (LICENSING.md → Key rotation).
-          VCAP_LICENSE_PUBLIC_KEY: ${{ vars.VCAP_LICENSE_PUBLIC_KEY }}
+      - name: Build twice and compare
         run: |
-          if [ -z "${VCAP_LICENSE_PUBLIC_KEY}" ]; then echo "::error::Repository variable VCAP_LICENSE_PUBLIC_KEY (wp wplc signing-key --field=public_key) is not set."; exit 1; fi
-          if [ -z "${VCAP_LICENSE_SERVER}" ]; then echo "::error::Repository variable VCAP_LICENSE_SERVER (https://license-server) is not set – the premium build would point to a placeholder."; exit 1; fi
           version="${GITHUB_REF_NAME#v}"
           mkdir -p dist
-          for edition in free premium; do
-            VCAP_EDITION="$edition" bin/build.sh
-            cp build/voucher-captain.zip.sha256 /tmp/first.sha256
-            VCAP_EDITION="$edition" bin/build.sh
-            diff /tmp/first.sha256 build/voucher-captain.zip.sha256
-            name="voucher-captain$( [ "$edition" = premium ] && echo "-premium-${version}" ).zip"
-            cp build/voucher-captain.zip "dist/${name}"
-            ( cd dist && sha256sum "${name}" > "${name}.sha256" )
-            # Software bill of materials of exactly this ZIP (CycloneDX JSON, SECURITY.md): Composer packages and
-            # bundled libraries such as jsQR, same timestamp as the ZIP.
-            SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" php bin/sbom.php build/voucher-captain "dist/${name%.zip}.cdx.json"
-          done
+          bin/build.sh
+          cp build/voucher-captain.zip.sha256 /tmp/first.sha256
+          bin/build.sh
+          diff /tmp/first.sha256 build/voucher-captain.zip.sha256
+          cp build/voucher-captain.zip dist/voucher-captain.zip
+          ( cd dist && sha256sum voucher-captain.zip > voucher-captain.zip.sha256 )
+          # Software bill of materials of exactly this ZIP (CycloneDX JSON, SECURITY.md): Composer packages and
+          # bundled libraries such as jsQR, same timestamp as the ZIP.
+          SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" php bin/sbom.php build/voucher-captain dist/voucher-captain.cdx.json
           # Release notes: the "= X.Y.Z =" section of "== Changelog ==" only (not the Upgrade Notice).
           awk -v v="= ${version} =" '/^== /{sec=$0; f=0; next} sec=="== Changelog ==" && $0==v{f=1; next} /^=/{f=0} f' readme.txt > dist/notes.md
           test -s dist/notes.md || { echo "Empty release notes for ${version}"; exit 1; }
-      - name: The premium ZIP pins the production licence server's signing key
-        env:
-          VCAP_LICENSE_SERVER: ${{ vars.VCAP_LICENSE_SERVER }}
-        run: |
-          # GET <server>/wp-json/wplc/v1/signing-keys (public): its current key must be in the pinned set, otherwise
-          # every shop would reject the server's answers – and the update that could fix it (RELEASE.md).
-          bin/release-gate.sh keys "dist/voucher-captain-premium-${GITHUB_REF_NAME#v}.zip" "${VCAP_LICENSE_SERVER}"
-      - name: Licence manager manifest of the premium ZIP
-        env:
-          PACKAGE_BASE_URL: ${{ vars.WPLC_PACKAGE_BASE_URL }}
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          if [ -z "$PACKAGE_BASE_URL" ]; then
-            echo "::warning::Repository variable WPLC_PACKAGE_BASE_URL (HTTPS base URL of the release storage) is not set – no manifest."
-            exit 0
-          fi
-          php wp-license/tools/create-release-manifest.php --zip="dist/voucher-captain-premium-${version}.zip" \
-            --product-key=voucher-captain --version="${version}" \
-            --package-url="${PACKAGE_BASE_URL%/}/voucher-captain-premium-${version}.zip" \
-            --requires-php="$(sed -n 's/^ \* Requires PHP: *//p' voucher-captain.php | tr -d '[:space:]')" \
-            --requires-wp="$(sed -n 's/^ \* Requires at least: *//p' voucher-captain.php | tr -d '[:space:]')" \
-            --tested-wp="$(sed -n 's/^Tested up to: *//p' readme.txt | tr -d '[:space:]')" \
-            --changelog=dist/notes.md --output="dist/voucher-captain-${version}.json"
-          cat "dist/voucher-captain-${version}.json"
       - name: Draft the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           version="${GITHUB_REF_NAME#v}"
-          gh release create "${GITHUB_REF_NAME}" dist/*.zip dist/*.sha256 dist/*.cdx.json $(ls dist/voucher-captain-[0-9]*.json 2>/dev/null) \
+          gh release create "${GITHUB_REF_NAME}" dist/*.zip dist/*.sha256 dist/*.cdx.json \
             --draft --title "Voucher Captain ${version}" --notes-file dist/notes.md

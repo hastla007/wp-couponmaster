@@ -5,8 +5,8 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Writes to the WooCommerce log (WooCommerce → Status → Logs, source "voucher-captain"). Used for problems the
- * shop owner or support must be able to trace later: license checks, premium updates, integrations.
- * Never log license keys, installation secrets, voucher codes or personal data.
+ * shop owner or support must be able to trace later: deliveries, migrations, integrations.
+ * Never log secrets, voucher codes or personal data.
  */
 final class Logger {
 	public const SOURCE = 'voucher-captain';

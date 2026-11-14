@@ -8,9 +8,8 @@ and records the controls exercised by the current integration suite. It is not a
 Please do **not** open a public issue, pull request or forum post for a security problem.
 
 - **Where:** privately through GitHub's vulnerability reporting of this repository (*Security → Report a
-  vulnerability*, `https://github.com/hastla007/wp-couponmaster/security/advisories/new`). Premium customers can
-  also use the vendor's support channel named in their licence; it forwards the report to the same place.
-- **What:** affected version and edition (free/premium), the steps or a proof of concept, the impact you see, and
+  vulnerability*, `https://github.com/hastla007/wp-couponmaster/security/advisories/new`).
+- **What:** affected version, the steps or a proof of concept, the impact you see, and
   whether the problem is already known to others or exploited.
 - **Our timeline:** acknowledgement within 5 working days, a first assessment (confirmed, severity, affected
   versions) within 10 working days, a fix for confirmed vulnerabilities as fast as the severity requires and at the
@@ -27,12 +26,11 @@ Please do **not** open a public issue, pull request or forum post for a security
 
 | Version | Security fixes |
 | --- | --- |
-| 1.2.x (current minor, free and premium) | yes |
+| 1.2.x (current minor) | yes |
 | 1.1.x | until 6 months after the release of 1.2.0 – please update |
 | < 1.1 | no |
 
-Fixes ship as a new patch release of the current minor version (free ZIP on GitHub, premium through the licence
-server's update channel).
+Fixes ship as a new patch release of the current minor version (ZIP on GitHub and WordPress.org).
 
 ### What a release ships for security review
 

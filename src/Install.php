@@ -34,6 +34,23 @@ final class Install {
 	public const SCHEMA_STEP_OPTION = 'vcap_schema_step';
 	/** Action Scheduler action that continues an upgrade outside shop requests. */
 	public const MIGRATE_HOOK = 'vcap_migrate';
+	/** Set once the license data of earlier (licensed) builds has been removed from this site (autoloaded). */
+	public const LICENSE_CLEANUP_OPTION = 'vcap_license_data_removed';
+	/**
+	 * Options of the license client of earlier builds (site and network options): server, credentials and the
+	 * stored entitlement snapshot. The plugin no longer has a license; they are removed on upgrade and uninstall.
+	 */
+	public const LEGACY_LICENSE_OPTIONS = array(
+		'vcap_wplc_server_url',
+		'vcap_wplc_credentials',
+		'vcap_wplc_credentials_entitlements_cache',
+		'vcap_wplc_credentials_pending',
+		'vcap_wplc_credentials_last_check',
+		'vcap_wplc_credentials_copy_of',
+		'vcap_wplc_credentials_migrated',
+	);
+	/** Background license check of earlier builds (WP-Cron event and recurring Action Scheduler action). */
+	public const LEGACY_LICENSE_HOOK = 'vcap_license_refresh';
 	/** Sites a network activation sets up at once; the others are set up on their first request (maybe_upgrade()). */
 	public const NETWORK_ACTIVATION_SITES = 25;
 	/** PHP extensions without which Voucher Captain cannot work (PDF rendering, text handling). */
@@ -103,8 +120,6 @@ final class Install {
 	 * already handled heals itself while the plugin stays active (Plugin::ensure_schedules(), resume()).
 	 */
 	public static function deactivate( $network_wide = false ): void {
-		// Cached update check of the premium updater (network-wide; Licensing\PremiumUpdater cache).
-		delete_site_transient( 'vcap_update_check' );
 		if ( is_multisite() && $network_wide ) {
 			if ( function_exists( 'wp_raise_memory_limit' ) ) {
 				wp_raise_memory_limit( 'admin' );
@@ -226,7 +241,7 @@ final class Install {
 			as_unschedule_all_actions( 'vcap_daily_maintenance' );
 			as_unschedule_all_actions( 'vcap_release_stale_order_reservations' );
 		}
-		wp_clear_scheduled_hook( Licensing\Entitlements::REFRESH_HOOK );
+		wp_clear_scheduled_hook( self::LEGACY_LICENSE_HOOK );
 		delete_option( self::SCHEDULES_OPTION );
 		// The first deactivation counts (a network deactivation run again keeps it): orders since then are caught up.
 		add_option( self::DEACTIVATED_OPTION, time() );
@@ -416,6 +431,14 @@ final class Install {
 	 * migrations would otherwise run twice after the next update. Administrators see a notice instead.
 	 */
 	public static function maybe_upgrade(): void {
+		if ( ! get_option( self::LICENSE_CLEANUP_OPTION ) ) {
+			// Once per site after the update from a licensed build; Action Scheduler is ready from "init" on.
+			if ( did_action( 'init' ) ) {
+				self::remove_license_data();
+			} else {
+				add_action( 'init', array( self::class, 'remove_license_data' ), 30 );
+			}
+		}
 		$installed = (string) get_option( self::OPTION_DB_VERSION );
 		if ( VCAP_DB_VERSION === $installed ) {
 			return;
@@ -454,6 +477,34 @@ final class Install {
 			}
 		} finally {
 			self::unlock();
+		}
+	}
+
+	/**
+	 * Removes what the license client of earlier builds left on this site (options, WP-Cron event, Action
+	 * Scheduler action, cached update check) and, on a multisite, the network license options. Voucher data is not
+	 * touched. Idempotent; runs once per site after the update (LICENSE_CLEANUP_OPTION) and on uninstall.
+	 *
+	 * @param bool $mark Remember that this site is clean (not during an uninstall, which removes everything).
+	 */
+	public static function remove_license_data( bool $mark = true ): void {
+		foreach ( self::LEGACY_LICENSE_OPTIONS as $option ) {
+			delete_option( $option );
+		}
+		if ( function_exists( 'is_multisite' ) && is_multisite() ) {
+			foreach ( self::LEGACY_LICENSE_OPTIONS as $option ) {
+				delete_site_option( $option );
+			}
+		}
+		delete_site_transient( 'vcap_update_check' );
+		if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
+			wp_clear_scheduled_hook( self::LEGACY_LICENSE_HOOK );
+		}
+		if ( function_exists( 'as_unschedule_all_actions' ) ) {
+			as_unschedule_all_actions( self::LEGACY_LICENSE_HOOK );
+		}
+		if ( $mark ) {
+			update_option( self::LICENSE_CLEANUP_OPTION, time(), true );
 		}
 	}
 

@@ -19,8 +19,6 @@
 defined( 'ABSPATH' ) || exit;
 
 define( 'VCAP_VERSION', '1.2.0' );
-// Edition constants (VCAP_EDITION, VCAP_LICENSE_REQUIRED, VCAP_LICENSE_SERVER) and the "Update URI" header of the
-// premium build are added by bin/build.sh; a checkout without them runs as the development edition (LICENSING.md).
 define( 'VCAP_DB_VERSION', '1.4.0' );
 define( 'VCAP_FILE', __FILE__ );
 define( 'VCAP_PATH', plugin_dir_path( __FILE__ ) );

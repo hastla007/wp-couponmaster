@@ -33,6 +33,8 @@ jobs:
         run: find . -path './vendor' -prune -o -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: Run plugin smoke tests
         run: php tests/run.php
+      - name: No licensing or update code in the shipped files (free core, docs/FREE-PREMIUM.md)
+        run: php tests/license-guard.php
       - name: Translation template, email texts and legal text template are up to date
         run: |
           php bin/make-pot.php
@@ -130,13 +132,6 @@ jobs:
           php wp-cli.phar --path=wp-test plugin deactivate voucher-captain
           php wp-cli.phar --path=wp-test plugin uninstall voucher-captain
           php wp-cli.phar --path=wp-test eval 'global $wpdb; if ($wpdb->get_var("SHOW TABLES LIKE \"{$wpdb->prefix}vcap_vouchers\"")) { exit(1); }'
-      - name: Free edition – premium features locked, sold goods still processed
-        run: |
-          # The free release ZIP (VCAP_EDITION=free): no license page or updater, the five premium features locked,
-          # lifecycle hooks of top-ups, referrals, promotions and Pass Captain registered (tests/license-lifecycle-integration.php).
-          VCAP_EDITION=free bin/build.sh
-          php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --force --activate
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/license-lifecycle-integration.php" free
 
   minimum-versions:
     # Oldest supported platform (plugin header) without Yoast SEO: WordPress 6.4, WooCommerce 8.9, PHP 8.1.
@@ -246,165 +241,6 @@ jobs:
           php wp-cli.phar --path=wp-test eval 'echo "ok\n";' 2>&1 | tee load.log
           ! grep -E "PHP (Fatal|Warning)" load.log
 
-  license-acceptance:
-    # Acceptance against a reachable WP License Captain server with real release packages (TODO "Aktivierung,
-    # Feature-Sperren, Offline-Verhalten und Update-Installation …" and "Release-Weg"): the license server
-    # (hastla007/wp-license on WordPress + WooCommerce) runs over HTTPS as https://licenses.test (own test CA) with
-    # its release storage (premium ZIPs + SHA-256 manifests, tools/license-server/wplc-release-registry.php); a second
-    # WordPress site installs the release from that storage and updates through the licence download grant.
-    # tests/license-acceptance.php
-    runs-on: ubuntu-latest
-    services:
-      db:
-        image: mysql:8.4
-        env:
-          MYSQL_ROOT_PASSWORD: root
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --password=root"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-    env:
-      # Absolute paths without "..": WordPress guesses its address from the path and would end up at
-      # https://licenses.test./license-server/ (the package host would no longer count as the server's own).
-      SERVER: /home/runner/wplc-server
-      SHOP: /home/runner/wplc-shop
-    steps:
-      - uses: actions/checkout@v5
-      - name: Check out the license server (WP License Captain)
-        uses: actions/checkout@v5
-        with:
-          repository: hastla007/wp-license
-          ref: 150fb177d88dfed9537d6cb1f62550987fa4349e
-          path: wp-license
-      - name: Set up PHP 8.4
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-          extensions: dom, gd, intl, mbstring, mysqli, xml, zip
-          coverage: none
-      - name: Install Composer dependencies
-        run: composer install --no-interaction --prefer-dist
-      - name: Download WP-CLI
-        run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
-      - name: HTTPS for licenses.test with a test CA
-        run: |
-          echo "127.0.0.1 licenses.test" | sudo tee -a /etc/hosts
-          sudo apt-get update -qq && sudo apt-get install -y -qq socat
-          mkdir -p "$RUNNER_TEMP/tls" && cd "$RUNNER_TEMP/tls"
-          openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj "/CN=Voucher Captain CI test CA" -keyout ca.key -out ca.crt -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
-          openssl req -newkey rsa:2048 -nodes -subj "/CN=licenses.test" -keyout server.key -out server.csr
-          printf "subjectAltName=DNS:licenses.test\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n" > ext.cnf
-          openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 2 -sha256 -extfile ext.cnf -out server.crt
-          cat server.crt server.key > server.pem
-      - name: License server on https://licenses.test
-        run: |
-          mysql -h 127.0.0.1 -uroot -proot -e "CREATE DATABASE licenses; CREATE DATABASE shop;"
-          php wp-cli.phar core download --path="$SERVER" --version=7.1.4
-          printf "\$_SERVER['HTTPS'] = 'on';\ndefine( 'WP_HOME', 'https://licenses.test' );\ndefine( 'WP_SITEURL', 'https://licenses.test' );\n" | php wp-cli.phar config create --path="$SERVER" --dbname=licenses --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check --extra-php
-          php wp-cli.phar core install --path="$SERVER" --url=https://licenses.test --title="License server" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
-          php wp-cli.phar --path="$SERVER" rewrite structure '/%postname%/'
-          php wp-cli.phar --path="$SERVER" plugin install woocommerce --version=11.2.2 --activate
-          php wp-cli.phar --path="$SERVER" option update woocommerce_currency EUR
-          # The plugin loads its classes through Composer's autoloader (PSR-4, no third-party packages needed).
-          composer dump-autoload --no-dev --working-dir=wp-license --no-interaction
-          ln -s "$GITHUB_WORKSPACE/wp-license" "$SERVER/wp-content/plugins/wp-license"
-          php wp-cli.phar --path="$SERVER" plugin activate wp-license
-          mkdir -p "$SERVER/wp-content/mu-plugins" "$SERVER/wp-content/wplc-releases" "$SERVER/packages"
-          cp tools/license-server/wplc-release-registry.php "$SERVER/wp-content/mu-plugins/"
-          ( cd "$SERVER" && PHP_CLI_SERVER_WORKERS=4 nohup php -S 127.0.0.1:8080 > "$RUNNER_TEMP/php-server.log" 2>&1 & )
-          sudo nohup socat OPENSSL-LISTEN:443,reuseaddr,fork,cert="$RUNNER_TEMP/tls/server.pem",verify=0 TCP:127.0.0.1:8080 > "$RUNNER_TEMP/socat.log" 2>&1 &
-          sleep 3
-          curl --fail --silent --show-error --cacert "$RUNNER_TEMP/tls/ca.crt" https://licenses.test/wp-json/wplc/v1 | head -c 300; echo
-      - name: Publish two releases to the licence manager storage (ZIP + SHA-256 manifest)
-        run: |
-          # release(): premium build of the given sources, stored as voucher-captain-premium-X.Y.Z.zip, manifest made by
-          # the licence server's own tool (RELEASE.md step 6).
-          release() {
-            # The premium build fixes the license server (VCAP_LICENSE_SERVER) and its "Update URI" header.
-            # and pins its Ed25519 public key (VCAP_LICENSE_PUBLIC_KEY, from wp wplc signing-key).
-            public_key="$(php wp-cli.phar --path="$SERVER" wplc signing-key --field=public_key)"
-            ( cd "$1" && VCAP_EDITION=premium VCAP_LICENSE_SERVER=https://licenses.test VCAP_LICENSE_PUBLIC_KEY="$public_key" bin/build.sh )
-            version="$(sed -n 's/^ \* Version: *//p' "$1/voucher-captain.php" | tr -d '[:space:]')"
-            cp "$1/build/voucher-captain.zip" "$SERVER/packages/voucher-captain-premium-$version.zip"
-            printf 'Voucher Captain %s (CI acceptance release).\n' "$version" > "$RUNNER_TEMP/notes-$version.md"
-            php wp-license/tools/create-release-manifest.php --zip="$SERVER/packages/voucher-captain-premium-$version.zip" \
-              --product-key=voucher-captain --version="$version" \
-              --package-url="https://licenses.test/packages/voucher-captain-premium-$version.zip" \
-              --requires-php=8.1 --requires-wp=6.4 --tested-wp=7.1 --changelog="$RUNNER_TEMP/notes-$version.md" \
-              --output="$SERVER/wp-content/wplc-releases/voucher-captain-$version.json"
-            cat "$SERVER/wp-content/wplc-releases/voucher-captain-$version.json"
-          }
-          release "$GITHUB_WORKSPACE"
-          # The next release 99.0.0: the same sources with the version raised, built by the same release script.
-          rsync -a --exclude build --exclude wp-license ./ "$RUNNER_TEMP/vc-next/"
-          sed -i "s/^ \* Version: .*/ * Version:           99.0.0/; s/^define( 'VCAP_VERSION', '[^']*' );/define( 'VCAP_VERSION', '99.0.0' );/" "$RUNNER_TEMP/vc-next/voucher-captain.php"
-          sed -i "s/^Stable tag: .*/Stable tag: 99.0.0/" "$RUNNER_TEMP/vc-next/readme.txt"
-          release "$RUNNER_TEMP/vc-next"
-          # Release gate of release.yml against this server: the premium ZIP pins the server's current signing key,
-          # read from its public route GET /wplc/v1/signing-keys.
-          CURL_CA_BUNDLE="$RUNNER_TEMP/tls/ca.crt" bin/release-gate.sh keys "$SERVER/packages/voucher-captain-premium-99.0.0.zip" https://licenses.test
-      - name: New installation from the licence manager storage (download, SHA-256 against the manifest)
-        run: |
-          php wp-cli.phar core download --path="$SHOP" --version=7.1.4
-          printf "define( 'FS_METHOD', 'direct' );\ndefine( 'WP_HOME', 'http://shop.test' );\ndefine( 'WP_SITEURL', 'http://shop.test' );\n" | php wp-cli.phar config create --path="$SHOP" --dbname=shop --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check --extra-php
-          php wp-cli.phar core install --path="$SHOP" --url=http://shop.test --title="Shop" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
-          php wp-cli.phar --path="$SHOP" plugin install woocommerce --version=11.2.2 --activate
-          # WordPress verifies HTTPS against its own CA bundle: trust the test CA of licenses.test.
-          cat "$RUNNER_TEMP/tls/ca.crt" >> "$SHOP/wp-includes/certificates/ca-bundle.crt"
-          version="$(sed -n 's/^ \* Version: *//p' voucher-captain.php | tr -d '[:space:]')"
-          manifest="$SERVER/wp-content/wplc-releases/voucher-captain-$version.json"
-          url="$(php -r 'echo json_decode(file_get_contents($argv[1]), true)["package_url"];' "$manifest")"
-          sha="$(php -r 'echo json_decode(file_get_contents($argv[1]), true)["sha256"];' "$manifest")"
-          curl --fail --silent --show-error --cacert "$RUNNER_TEMP/tls/ca.crt" -o "$RUNNER_TEMP/download.zip" "$url"
-          echo "$sha  $RUNNER_TEMP/download.zip" | sha256sum -c -
-          php wp-cli.phar --path="$SHOP" plugin install "$RUNNER_TEMP/download.zip" --activate
-          php wp-cli.phar --path="$SHOP" plugin list
-      - name: Acceptance – activation, feature gate, offline, suspension, update, deactivation
-        run: |
-          T="$GITHUB_WORKSPACE/tests/license-acceptance.php"
-          server() { php wp-cli.phar --path="$SERVER" eval-file "$T" "$@"; }
-          shop() { php wp-cli.phar --path="$SHOP" --user=admin eval-file "$T" "$@"; }
-          tls_up() { sudo nohup socat OPENSSL-LISTEN:443,reuseaddr,fork,cert="$RUNNER_TEMP/tls/server.pem",verify=0 TCP:127.0.0.1:8080 >> "$RUNNER_TEMP/socat.log" 2>&1 & sleep 2; }
-          server server-setup "$RUNNER_TEMP/license.key"
-          server server-releases 99.0.0
-          shop shop-locked
-          # Locked premium build: refunds, reversals and promotion holds of sold goods keep working.
-          php wp-cli.phar --path="$SHOP" eval-file "$GITHUB_WORKSPACE/tests/license-lifecycle-integration.php" premium
-          shop shop-activate "$RUNNER_TEMP/license.key"
-          shop shop-active
-          sudo pkill -f "socat OPENSSL-LISTEN:443" && sleep 1
-          shop shop-offline
-          shop shop-forged-cache
-          tls_up
-          server server-status suspended
-          shop shop-suspended
-          server server-status active
-          shop shop-reactivated
-          # Key rotation, step 1 (LICENSING.md → Key rotation): the server gets a next key and from now on signs every
-          # answer with both keys (signatures[]); builds that pin only the current key keep working (update,
-          # deactivation and new activation below).
-          php wp-cli.phar --path="$SERVER" wplc signing-key --next --field=public_key
-          keys="$(curl --fail --silent --show-error --cacert "$RUNNER_TEMP/tls/ca.crt" https://licenses.test/wp-json/wplc/v1/signing-keys)"
-          echo "$keys"
-          case "$keys" in *'"next":{"public_key"'*) ;; *) echo "The server lists no next key"; exit 1 ;; esac
-          server server-bad-checksum 99.0.0
-          shop shop-update-rejected
-          server server-good-checksum 99.0.0
-          shop shop-update
-          shop shop-updated 99.0.0
-          shop shop-deactivate
-          shop shop-activate "$RUNNER_TEMP/license.key"
-          shop shop-uninstall
-          ! grep -E "PHP (Fatal|Warning)" "$RUNNER_TEMP/php-server.log"
-      - name: Server logs
-        if: failure()
-        run: |
-          tail -n 80 "$RUNNER_TEMP/php-server.log" || true
-          tail -n 40 "$RUNNER_TEMP/socat.log" || true
-
   multisite:
     # Network activation sets up every site (own tables and options per site), new sites are set up on their
     # first request, and a network uninstall removes data only on the sites that opted in.
@@ -484,10 +320,10 @@ jobs:
   upgrade:
     # Updates as shops get them (COMPATIBILITY.md → Updates, RELEASE.md → Rollback), each with data, followed by a
     # rollback to the version before and the update again:
-    # - release → free / premium: from the last released version (newest vX.Y.Z tag below the current version; until
-    #   the first tag, the 1.1.0 release commit in PREVIOUS_RELEASE) to the current free or premium edition ZIP;
-    # - schema: from the parent of the last commit that changed VCAP_DB_VERSION (the schema right before the change);
-    # - free → premium: the current free ZIP with data replaced by the premium ZIP of the same version.
+    # - release → current: from the last released version (newest vX.Y.Z tag below the current version; until the
+    #   first tag, the 1.1.0 release commit in PREVIOUS_RELEASE) to the current ZIP;
+    # - schema → development: from the parent of the last commit that changed VCAP_DB_VERSION (the schema right
+    #   before the change) to the current ZIP.
     runs-on: ubuntu-latest
     env:
       # Voucher Captain 1.1.0 as released (merge "Voucher Captain 1.1.0 (#2)", schema 1.3.0): fallback while the
@@ -498,14 +334,10 @@ jobs:
       matrix:
         include:
           - from: release
-            edition: free
-          - from: release
-            edition: premium
+            to: current
           - from: schema
-            edition: development
-          - from: free
-            edition: premium
-    name: upgrade (${{ matrix.from }} → ${{ matrix.edition }})
+            to: development
+    name: upgrade (${{ matrix.from }} → ${{ matrix.to }})
     services:
       db:
         image: mysql:8.4
@@ -536,9 +368,7 @@ jobs:
       - name: Build the previous and the current release ZIP
         env:
           FROM: ${{ matrix.from }}
-          EDITION: ${{ matrix.edition }}
         run: |
-          build() { if [ "$EDITION" = development ]; then bin/build.sh; else VCAP_EDITION="$EDITION" bin/build.sh; fi; }
           current="$(sed -n 's/^ \* Version: *//p' voucher-captain.php | tr -d '[:space:]')"
           case "$FROM" in
             release)
@@ -549,20 +379,12 @@ jobs:
               prev="${prev:-$PREVIOUS_RELEASE}"
               ;;
             schema) prev="$(git log -1 --format=%H -G"VCAP_DB_VERSION', '" -- voucher-captain.php)^" ;;
-            free) prev="" ;;
           esac
-          if [ -n "$prev" ]; then
-            echo "Previous: $prev – $(git show "$prev:voucher-captain.php" | grep -E "^ \* Version:|VCAP_DB_VERSION'" | tr -s ' ' | tr '\n' ' ')"
-            git worktree add "$RUNNER_TEMP/previous" "$prev"
-            # Same edition as the current ZIP (releases before 1.2.0 have no editions and ignore VCAP_EDITION).
-            ( cd "$RUNNER_TEMP/previous" && build )
-            cp "$RUNNER_TEMP/previous/build/voucher-captain.zip" "$RUNNER_TEMP/voucher-captain-previous.zip"
-          else
-            echo "Previous: the free edition of this version"
-            VCAP_EDITION=free bin/build.sh
-            cp build/voucher-captain.zip "$RUNNER_TEMP/voucher-captain-previous.zip"
-          fi
-          build
+          echo "Previous: $prev – $(git show "$prev:voucher-captain.php" | grep -E "^ \* Version:|VCAP_DB_VERSION'" | tr -s ' ' | tr '\n' ' ')"
+          git worktree add "$RUNNER_TEMP/previous" "$prev"
+          ( cd "$RUNNER_TEMP/previous" && bin/build.sh )
+          cp "$RUNNER_TEMP/previous/build/voucher-captain.zip" "$RUNNER_TEMP/voucher-captain-previous.zip"
+          bin/build.sh
       - name: Install WordPress, WooCommerce and the previous release with data
         run: |
           WP="php wp-cli.phar --path=wp-test"
@@ -576,24 +398,14 @@ jobs:
         run: |
           WP="php wp-cli.phar --path=wp-test"
           $WP plugin install build/voucher-captain.zip --force
-          if [ "${{ matrix.from }}" = free ]; then
-            $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" edition premium
-          else
-            $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" verify ${{ matrix.edition }}
-          fi
+          $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" verify
       - name: Roll back to the previous release and update again
         run: |
           WP="php wp-cli.phar --path=wp-test"
           $WP plugin install "$RUNNER_TEMP/voucher-captain-previous.zip" --force
-          if [ "${{ matrix.from }}" = free ]; then
-            $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" edition free
-            $WP plugin install build/voucher-captain.zip --force
-            $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" edition premium
-          else
-            $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" rollback
-            $WP plugin install build/voucher-captain.zip --force
-            $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" verify ${{ matrix.edition }}
-          fi
+          $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" rollback
+          $WP plugin install build/voucher-captain.zip --force
+          $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" verify
 
   pass-captain:
     # Voucher Captain as voucher provider of WP Pass Captain (hastla007/wp-passmaster): a pinned release (tag commit,
@@ -667,8 +479,6 @@ jobs:
           php wp-cli.phar --path=wp-test plugin get wp-pass-captain --field=version
           php bin/check-coexistence.php wp-test/wp-content/plugins/voucher-captain wp-test/wp-content/plugins/wp-pass-captain
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/passcaptain-integration.php"
-          # Locked premium right: sold ticket vouchers are still exchanged (development build, locked by the test hook).
-          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/license-lifecycle-integration.php"
           # Tax classification incl. what Pass Captain receives in the quote (TAX.md 4.2).
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/tax-integration.php"
 
@@ -791,13 +601,11 @@ jobs:
         run: phpcs --standard=WooCommerce-Core --extensions=php --exclude=WordPress.Files.FileName src/API/V1 src/Contracts
       - name: Analyze API and contract types
         run: phpstan analyse --configuration=phpstan.neon.dist --no-progress
-      - name: Release ZIPs (free and premium edition, as shipped) carry a licence file for every bundled package, the notices and an SBOM
+      - name: Release ZIP (as shipped) carries a licence file for every bundled package, the notices and an SBOM
         run: |
-          for edition in free premium; do
-            VCAP_EDITION="$edition" bin/build.sh
-            php bin/third-party-notices.php --check-zip build/voucher-captain.zip
-            php bin/sbom.php build/voucher-captain "sbom-${edition}.cdx.json"
-          done
+          bin/build.sh
+          php bin/third-party-notices.php --check-zip build/voucher-captain.zip
+          php bin/sbom.php build/voucher-captain sbom.cdx.json
 
   quality-wide:
     # Wide scan of the whole plugin (src/, templates/, config/, main and uninstall file): PHPCS with phpcs.xml.dist
@@ -896,16 +704,11 @@ jobs:
           if-no-files-found: ignore
 
   plugin-check:
-    # WordPress Plugin Check (PCP, the wordpress.org review tool) against the installed release ZIP of each edition as
-    # shipped (free, premium). Report-only for now (RELEASE.md → Static analysis); the result table is in the job
-    # summary and the artifact plugin-check-<edition>.
+    # WordPress Plugin Check (PCP, the wordpress.org review tool) against the installed release ZIP as shipped.
+    # Report-only for now (RELEASE.md → Static analysis); the result table is in the job summary and the artifact
+    # plugin-check.
     runs-on: ubuntu-latest
     continue-on-error: true
-    strategy:
-      fail-fast: false
-      matrix:
-        edition: [free, premium]
-    name: plugin-check (${{ matrix.edition }})
     services:
       db:
         image: mysql:8.4
@@ -936,7 +739,7 @@ jobs:
           php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher Captain plugin check" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
           php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.2.2 --activate
           php wp-cli.phar --path=wp-test plugin install plugin-check --activate
-          VCAP_EDITION=${{ matrix.edition }} bin/build.sh
+          bin/build.sh
           php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
           php wp-cli.phar --path=wp-test plugin list
       - name: Plugin Check (static and runtime checks)
@@ -947,7 +750,7 @@ jobs:
           status=$?
           cat plugin-check.csv
           {
-            echo '### Plugin Check – ${{ matrix.edition }} edition (report-only)'
+            echo '### Plugin Check (report-only)'
             echo "Errors: $(grep -c ',ERROR,' plugin-check.csv || true), warnings: $(grep -c ',WARNING,' plugin-check.csv || true)"
           } >> "$GITHUB_STEP_SUMMARY"
           if grep -q ',ERROR,' plugin-check.csv; then exit 1; fi
@@ -956,6 +759,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: plugin-check-${{ matrix.edition }}
+          name: plugin-check
           path: plugin-check.csv
           if-no-files-found: ignore

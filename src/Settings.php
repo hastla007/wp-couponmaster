@@ -565,49 +565,7 @@ final class Settings {
 					array( 'type' => 'sectionend', 'id' => 'vcap_referral' ),
 				);
 		}
-		return apply_filters( 'vcap_settings_fields', self::lock_premium( $fields ), $section );
-	}
-
-	/** Setting id (or id prefix) => premium feature it configures. */
-	private const PREMIUM_SETTINGS = array(
-		'vcap_campaigns_enabled' => 'promotions',
-		'vcap_referral'          => 'referrals',
-		'vcap_passcaptain'       => 'passcaptain',
-	);
-
-	/**
-	 * Settings of a locked premium feature are shown read-only and are never saved, so the stored choice survives
-	 * until the feature is available again. The reason ("included in Voucher Captain Premium" with the upgrade link /
-	 * "needs an active license" with the license page) is shown once per feature – in its section title, else at
-	 * its first field – not repeated at every field.
-	 */
-	private static function lock_premium( array $fields ): array {
-		$explained = array();
-		foreach ( $fields as $i => $field ) {
-			$id      = (string) ( $field['id'] ?? '' );
-			$feature = '';
-			foreach ( self::PREMIUM_SETTINGS as $prefix => $key ) {
-				if ( '' !== $id && str_starts_with( $id, $prefix ) ) {
-					$feature = $key;
-					break;
-				}
-			}
-			if ( '' === $feature || Licensing\Entitlements::allows( $feature ) || 'sectionend' === ( $field['type'] ?? '' ) ) {
-				continue;
-			}
-			$message = isset( $explained[ $feature ] ) ? '' : Licensing\Entitlements::locked_html( $feature );
-			$explained[ $feature ] = true;
-			if ( 'title' === ( $field['type'] ?? '' ) ) {
-				$fields[ $i ]['desc'] = trim( (string) ( $field['desc'] ?? '' ) . ( '' !== $message ? '<br /><strong>' . $message . '</strong>' : '' ) );
-				continue;
-			}
-			$fields[ $i ]['is_option']         = false;
-			$fields[ $i ]['custom_attributes'] = array( 'disabled' => 'disabled' ) + (array) ( $field['custom_attributes'] ?? array() );
-			if ( '' !== $message ) {
-				$fields[ $i ]['desc'] = '' !== (string) ( $field['desc'] ?? '' ) ? $field['desc'] . ' – ' . $message : $message;
-			}
-		}
-		return $fields;
+		return apply_filters( 'vcap_settings_fields', $fields, $section );
 	}
 
 	public function date_format(): string {

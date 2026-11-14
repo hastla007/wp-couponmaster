@@ -391,9 +391,6 @@ final class Privacy {
 			__( 'At the entrance or the counter, our staff may scan the code of your voucher or ticket. We record the time, the staff member and the result (redeemed, checked in or refused) in the voucher history.', 'voucher-captain' ),
 			__( 'To protect voucher codes against guessing, we count failed code entries per visitor for a short time window (at most 15 minutes). For this we store the counter under a hashed (pseudonymised) form of your IP address, never the address itself; the counters are deleted automatically after the window.', 'voucher-captain' ),
 		);
-		if ( Licensing\Entitlements::required() ) {
-			$paragraphs[] = __( 'License check (premium edition): to check the license and offer updates, this website sends its address (URL), the WordPress, PHP and plugin versions and a random installation ID to the license server of the plugin vendor when the license is activated or deactivated, about twice a day and when updates are checked. The license key is sent only once, on activation, and is not stored on this website. No data about customers or orders is sent.', 'voucher-captain' );
-		}
 		return $paragraphs;
 	}
 }

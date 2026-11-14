@@ -1,9 +1,10 @@
 <?php
 /**
- * Uninstall: only removes data when "Delete data on uninstall" is enabled. Always: the license activation is
- * released, gift card and store credit coupons and coupons with rules only Voucher Captain checks are suspended
- * (draft) – without the plugin nothing would deduct their balance or check their rules; with data deletion all
- * Voucher Captain coupons go to the trash (restorable there), the other WooCommerce coupons are kept.
+ * Uninstall: only removes data when "Delete data on uninstall" is enabled. Always: leftovers of the license client
+ * of earlier builds are removed, gift card and store credit coupons and coupons with rules only Voucher Captain
+ * checks are suspended (draft) – without the plugin nothing would deduct their balance or check their rules; with
+ * data deletion all Voucher Captain coupons go to the trash (restorable there), the other WooCommerce coupons are
+ * kept.
  */
 
 // VCAP_UNINSTALL_FUNCTIONS_ONLY: tests/install-integration.php loads the functions without uninstalling.
@@ -11,7 +12,7 @@ defined( 'WP_UNINSTALL_PLUGIN' ) || defined( 'VCAP_UNINSTALL_FUNCTIONS_ONLY' ) |
 
 /**
  * Loads the plugin's classes (Composer autoloader and its own PSR-4 loader for src/), for the shared selection of
- * coupons to suspend (VCAP\Install) and the license client.
+ * coupons to suspend and the cleanup of earlier license data (VCAP\Install).
  */
 function vcap_uninstall_autoload(): void {
 	static $done = false;
@@ -32,61 +33,23 @@ function vcap_uninstall_autoload(): void {
 			}
 		}
 	);
-	// Premium build: the license server is fixed in the plugin file; defined here as well, so the license client
-	// pins its host for the release request (the plugin file itself is not loaded during an uninstall).
-	if ( ! defined( 'VCAP_LICENSE_SERVER' ) && is_readable( __DIR__ . '/voucher-captain.php' ) && preg_match( "/define\\( 'VCAP_LICENSE_SERVER', '([^']+)' \\);/", (string) file_get_contents( __DIR__ . '/voucher-captain.php' ), $m ) ) {
-		define( 'VCAP_LICENSE_SERVER', $m[1] );
-	}
 }
 
 /**
- * Releases this site's license activation on the license server and deletes its credentials – on every uninstall,
- * also when the data is kept, so the site does not keep using a place of the license. Best effort with a short
- * timeout: an unreachable server never blocks the uninstall (the activation can still be released in the customer
- * account on the license server).
+ * Removes what the license client of earlier builds stored (options, background check, cached update check) on the
+ * current site, or the network license options. Voucher data is not touched.
  *
- * @param float $deadline microtime() by which all releases of this uninstall must be done (0 = no common limit).
- * @param bool  $network  The network license (plugin network-activated) instead of this site's.
+ * @param bool $network The network options (plugin was network-activated) instead of this site's.
  */
-function vcap_uninstall_release_license( float $deadline = 0.0, bool $network = false ): void {
-	// VCAP\Licensing\Entitlements::CREDENTIALS_OPTION; a network license is stored network-wide.
-	$credentials = $network ? get_site_option( 'vcap_wplc_credentials' ) : get_option( 'vcap_wplc_credentials' );
-	if ( is_array( $credentials ) && ! empty( $credentials['activation_id'] ) ) {
-		vcap_uninstall_autoload();
-		$server = (string) ( $credentials['server_url'] ?? '' );
-		if ( '' === $server ) {
-			$server = (string) ( $network ? get_site_option( 'vcap_wplc_server_url', '' ) : get_option( 'vcap_wplc_server_url', '' ) );
-		}
-		if ( '' === $server && defined( 'VCAP_LICENSE_SERVER' ) ) {
-			$server = (string) VCAP_LICENSE_SERVER;
-		}
-		$timeout = $deadline > 0 ? (int) floor( min( 5.0, $deadline - microtime( true ) ) ) : 5;
-		if ( '' !== $server && $timeout >= 1 && class_exists( 'VCAP\\Licensing\\LicenseClient' ) ) {
-			// deactivate() refuses an activation copied from another website: a copy never releases the original's place.
-			$client = new VCAP\Licensing\LicenseClient( $server, 'voucher-captain', '0', 'vcap_wplc_credentials', $network ? 'network' : '' );
-			$client->set_timeout( $timeout );
-			$client->deactivate();
-		}
-	}
-	// Removed also when the server could not be reached: the plugin and its license page are gone.
+function vcap_uninstall_license_data( bool $network = false ): void {
+	vcap_uninstall_autoload();
 	if ( $network ) {
-		foreach ( array( '', '_entitlements_cache', '_pending', '_last_check', '_copy_of', '_migrated' ) as $suffix ) {
-			delete_site_option( 'vcap_wplc_credentials' . $suffix );
+		foreach ( VCAP\Install::LEGACY_LICENSE_OPTIONS as $option ) {
+			delete_site_option( $option );
 		}
-		delete_site_option( 'vcap_wplc_server_url' );
-	} else {
-		foreach ( array( '', '_entitlements_cache', '_pending', '_last_check', '_copy_of' ) as $suffix ) {
-			delete_option( 'vcap_wplc_credentials' . $suffix );
-		}
+		return;
 	}
-}
-
-/**
- * Network license (plugin was network-activated): released and its network options deleted on every network
- * uninstall, within the common time budget.
- */
-function vcap_uninstall_network_license( float $deadline = 0.0 ): void {
-	vcap_uninstall_release_license( $deadline, true );
+	VCAP\Install::remove_license_data( false );
 }
 
 /**
@@ -150,14 +113,13 @@ function vcap_uninstall_coupons( bool $delete_data ): array {
 }
 
 /**
- * Removes Voucher Captain's data of the current site (only when that site opted in). The background license
- * check is removed and the balance coupons are suspended on every site (see vcap_uninstall_coupons()).
+ * Removes Voucher Captain's data of the current site (only when that site opted in). Leftover license data of
+ * earlier builds is removed and the balance coupons are suspended on every site (see vcap_uninstall_coupons()).
  *
  * @return bool Whether the site opted in.
  */
 function vcap_uninstall_site(): bool {
-	wp_clear_scheduled_hook( 'vcap_license_refresh' ); // VCAP\Licensing\Entitlements::REFRESH_HOOK.
-	vcap_uninstall_release_license(); // Every uninstall (a network uninstall released them before, with a time budget).
+	vcap_uninstall_license_data(); // Every uninstall, also when the data is kept.
 	$delete_data = 'yes' === get_option( 'vcap_delete_on_uninstall', 'no' );
 	vcap_uninstall_coupons( $delete_data ); // First: needs the voucher table, which data deletion drops.
 	if ( ! $delete_data ) {
@@ -240,21 +202,13 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	return; // Functions only (VCAP_UNINSTALL_FUNCTIONS_ONLY).
 }
 
-delete_site_transient( 'vcap_update_check' ); // Cached update check (VCAP\Licensing\PremiumUpdater).
+delete_site_transient( 'vcap_update_check' ); // Cached update check of earlier (licensed) builds.
 delete_site_option( 'vcap_network_deactivating' ); // Heartbeat of a network deactivation (VCAP\Install).
 
 if ( is_multisite() ) {
 	// Network-wide uninstall: every site decides for itself (its own "Delete data on uninstall" setting).
 	$vcap_sites = array_map( 'intval', get_sites( array( 'fields' => 'ids', 'number' => 0 ) ) );
-	// License releases first, all together within 30 seconds (one slow server must not use up the request before
-	// the coupons of every site are suspended); sites left over drop their credentials without a release.
-	$vcap_release_deadline = microtime( true ) + 30;
-	vcap_uninstall_network_license( $vcap_release_deadline );
-	foreach ( $vcap_sites as $vcap_site_id ) {
-		switch_to_blog( $vcap_site_id );
-		vcap_uninstall_release_license( $vcap_release_deadline );
-		restore_current_blog();
-	}
+	vcap_uninstall_license_data( true ); // Network license options of earlier builds.
 	$vcap_all_opted_in = true;
 	foreach ( $vcap_sites as $vcap_site_id ) {
 		switch_to_blog( (int) $vcap_site_id );

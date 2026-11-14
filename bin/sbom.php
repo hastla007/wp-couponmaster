@@ -23,7 +23,6 @@ $packages  = is_array( $installed ) ? ( $installed['packages'] ?? $installed ) :
 $dev       = is_array( $installed ) ? ( $installed['dev-package-names'] ?? array() ) : array();
 $main      = (string) file_get_contents( "$root/voucher-captain.php" );
 $version   = preg_match( '/^ \* Version:\s*(\S+)/m', $main, $m ) ? $m[1] : '';
-$edition   = preg_match( "/define\\( 'VCAP_EDITION', '([a-z]+)' \\);/", $main, $m ) ? $m[1] : 'development';
 
 $licenses = static fn( array $ids ): array => array_map( static fn( $id ) => array( 'license' => array( 'id' => (string) $id ) ), array_values( $ids ) );
 
@@ -86,7 +85,6 @@ $bom  = array(
 			'name'     => 'voucher-captain',
 			'version'  => $version,
 			'licenses' => $licenses( array( 'GPL-2.0-or-later' ) ),
-			'properties' => array( array( 'name' => 'voucher-captain:edition', 'value' => $edition ) ),
 		),
 	),
 	'components'   => $components,

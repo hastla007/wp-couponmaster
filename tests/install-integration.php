@@ -2,8 +2,9 @@
 /**
  * Install, upgrade and lifecycle checks: upgrade lock, downgrade guard, schema 1.4 storage (promotion usage,
  * claims, ledger indexes), the fail-safe for balance coupons, deactivation/reactivation of tasks, scheduling
- * marker, uninstall (coupons suspended or trashed), voucher coupons without voucher, page-cache rules and the
- * asynchronous Site Health checks.
+ * marker, uninstall (coupons suspended or trashed), voucher coupons without voucher, page-cache rules, the
+ * asynchronous Site Health checks and the free core (no license page, no Update URI, license data of earlier builds
+ * removed on upgrade and uninstall).
  *   wp eval-file tests/install-integration.php
  */
 
@@ -114,10 +115,10 @@ vcap_inst_assert( $refused && true === VCAP\Install::refuse_balance_coupon( true
 // Deactivation suspends balance coupons and removes all tasks; activation restores both.
 $future = vcap_inst_voucher( 'single', array( 'status' => VCAP\Voucher::STATUS_SCHEDULED, 'delivery_at' => gmdate( 'Y-m-d H:i:s', time() + 5 * DAY_IN_SECONDS ) ) );
 as_schedule_single_action( time() + 5 * DAY_IN_SECONDS, 'vcap_deliver_voucher', array( 'voucher_id' => $future->id ), 'vcap' );
-wp_schedule_single_event( time() + HOUR_IN_SECONDS, VCAP\Licensing\Entitlements::REFRESH_HOOK );
+wp_schedule_single_event( time() + HOUR_IN_SECONDS, VCAP\Install::LEGACY_LICENSE_HOOK );
 VCAP\Install::deactivate_site();
 vcap_inst_assert( 'draft' === get_post_status( $card->coupon_id ) && 'publish' === get_post_status( $single->coupon_id ), 'deactivation suspends balance coupons only' );
-vcap_inst_assert( ! as_has_scheduled_action( 'vcap_deliver_voucher', array( 'voucher_id' => $future->id ), 'vcap' ) && ! wp_next_scheduled( VCAP\Licensing\Entitlements::REFRESH_HOOK ), 'deactivation removes the voucher tasks and the license refresh' );
+vcap_inst_assert( ! as_has_scheduled_action( 'vcap_deliver_voucher', array( 'voucher_id' => $future->id ), 'vcap' ) && ! wp_next_scheduled( VCAP\Install::LEGACY_LICENSE_HOOK ), 'deactivation removes the voucher tasks and a license refresh of earlier builds' );
 vcap_inst_assert( (int) get_option( VCAP\Install::DEACTIVATED_OPTION ) > time() - MINUTE_IN_SECONDS && '1' === get_post_meta( $card->coupon_id, VCAP\Install::SUSPENDED_META, true ), 'deactivation remembers its time and marks the suspended coupon' );
 VCAP\Install::activate_site();
 vcap_inst_assert( is_array( get_option( VCAP\Install::CATCH_UP_OPTION ) ) && false === get_option( VCAP\Install::DEACTIVATED_OPTION ), 'activation plans the catch-up of the orders since the deactivation' );
@@ -226,5 +227,59 @@ vcap_inst_assert( $block && 3 === (int) $block->api_version && in_array( 'vcap-f
 $health = apply_filters( 'site_status_tests', array( 'direct' => array(), 'async' => array() ) );
 vcap_inst_assert( isset( $health['async']['vcap_validity'], $health['async']['vcap_tax_status'] ) && ! isset( $health['direct']['vcap_validity'] ) && ! empty( $health['async']['vcap_validity']['has_rest'] ), 'the product checks are asynchronous Site Health tests' );
 vcap_inst_assert( isset( rest_get_server()->get_routes()['/vcap/v1/site-health/validity'] ), 'the asynchronous checks have their REST route' );
+
+// Free core (docs/FREE-PREMIUM.md): no license page or update handler, every feature on, no "Update URI" header.
+require_once ABSPATH . 'wp-admin/includes/plugin.php';
+$inst_header = get_plugin_data( VCAP_FILE, false, false );
+vcap_inst_assert( '' === (string) ( $inst_header['UpdateURI'] ?? '' ) && ! defined( 'VCAP_EDITION' ) && ! defined( 'VCAP_LICENSE_REQUIRED' ), 'the plugin has no "Update URI" header and no edition constants' );
+$inst_own = static function ( string $hook ): array {
+	global $wp_filter;
+	$found = array();
+	foreach ( isset( $wp_filter[ $hook ] ) ? $wp_filter[ $hook ]->callbacks : array() as $callbacks ) {
+		foreach ( $callbacks as $callback ) {
+			if ( is_array( $callback['function'] ) && str_starts_with( is_object( $callback['function'][0] ) ? get_class( $callback['function'][0] ) : (string) $callback['function'][0], 'VCAP\\' ) ) {
+				$found[] = $callback['function'];
+			}
+		}
+	}
+	return $found;
+};
+vcap_inst_assert( ! $inst_own( 'pre_set_site_transient_update_plugins' ) && ! $inst_own( 'plugins_api' ), 'no update handler of its own' );
+vcap_inst_assert( (bool) $inst_own( 'vcap_account_vouchers_top' ) && count( $inst_own( 'vcap_product_settings_fields' ) ) >= 2 && (bool) $inst_own( 'vcap_scanner_lookup' ), 'referrals, top-up, ticket vouchers and the shared scanner are registered' );
+vcap_inst_assert( ! method_exists( 'VCAP\\Admin\\ReportsAdmin', 'locked' ) && ! class_exists( 'VCAP\\Licensing\\Entitlements', false ) && ! is_dir( VCAP_PATH . 'src/Licensing' ), 'no locked report view and no license gate' );
+$inst_locked = array();
+foreach ( array( '', 'delivery', 'privacy', 'api' ) as $inst_section ) {
+	foreach ( vcap()->settings->fields( $inst_section ) as $inst_field ) {
+		if ( isset( $inst_field['id'] ) && ( isset( $inst_field['custom_attributes']['disabled'] ) || ( array_key_exists( 'is_option', $inst_field ) && false === $inst_field['is_option'] ) ) ) {
+			$inst_locked[] = $inst_field['id'];
+		}
+	}
+}
+vcap_inst_assert( ! array_filter( $inst_locked, static fn( $id ) => (bool) preg_match( '/^vcap_(campaigns_enabled|referral|passcaptain)/', $id ) ), 'no setting of promotions, referrals or Pass Captain is locked' );
+
+// Upgrade from a licensed build: its options (site and network), WP-Cron event and Action Scheduler action are
+// removed once; voucher data stays.
+foreach ( VCAP\Install::LEGACY_LICENSE_OPTIONS as $inst_option ) {
+	update_option( $inst_option, array( 'activation_id' => 7 ), false );
+}
+if ( is_multisite() ) {
+	update_site_option( 'vcap_wplc_credentials', array( 'activation_id' => 8 ) );
+}
+set_site_transient( 'vcap_update_check', array( 'x' => 1 ), HOUR_IN_SECONDS );
+wp_schedule_event( time() + HOUR_IN_SECONDS, 'twicedaily', VCAP\Install::LEGACY_LICENSE_HOOK );
+as_schedule_recurring_action( time() + 600, 12 * HOUR_IN_SECONDS, VCAP\Install::LEGACY_LICENSE_HOOK, array(), 'vcap' );
+delete_option( VCAP\Install::LICENSE_CLEANUP_OPTION );
+$inst_vouchers = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$tables['vouchers']}" ); // phpcs:ignore
+VCAP\Install::maybe_upgrade();
+$inst_left = array_filter( VCAP\Install::LEGACY_LICENSE_OPTIONS, static fn( $o ) => false !== get_option( $o ) );
+vcap_inst_assert( ! $inst_left && ( ! is_multisite() || false === get_site_option( 'vcap_wplc_credentials' ) ) && false === get_site_transient( 'vcap_update_check' ), 'the upgrade removes the license options of earlier builds' );
+vcap_inst_assert( ! wp_next_scheduled( VCAP\Install::LEGACY_LICENSE_HOOK ) && ! as_has_scheduled_action( VCAP\Install::LEGACY_LICENSE_HOOK ), 'the upgrade removes the license check event and action' );
+vcap_inst_assert( (int) get_option( VCAP\Install::LICENSE_CLEANUP_OPTION ) > 0 && $inst_vouchers === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$tables['vouchers']}" ), 'the cleanup runs once and keeps the vouchers' ); // phpcs:ignore
+// Uninstall removes them as well, also when the data is kept.
+update_option( 'vcap_wplc_credentials', array( 'activation_id' => 9 ), false );
+wp_schedule_event( time() + HOUR_IN_SECONDS, 'twicedaily', VCAP\Install::LEGACY_LICENSE_HOOK );
+vcap_uninstall_license_data();
+vcap_inst_assert( false === get_option( 'vcap_wplc_credentials' ) && ! wp_next_scheduled( VCAP\Install::LEGACY_LICENSE_HOOK ) && $inst_vouchers === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$tables['vouchers']}" ), 'uninstall removes leftover license data and keeps the vouchers' ); // phpcs:ignore
+update_option( VCAP\Install::LICENSE_CLEANUP_OPTION, time(), true );
 
 echo "Voucher Captain install checks passed.\n";

@@ -573,10 +573,6 @@ final class Shortcodes {
 	}
 
 	public function referral_shortcode(): string {
-		if ( ! Licensing\Entitlements::allows( 'referrals' ) ) {
-			// Locked premium feature: customers see nothing, shop managers see why.
-			return current_user_can( 'manage_woocommerce' ) ? self::wrap( '<p class="vcap-license-locked">' . esc_html( Licensing\Entitlements::locked_message( 'referrals' ) ) . '</p>' ) : '';
-		}
 		if ( self::is_editor_preview() ) {
 			return self::wrap( self::preview_note( __( 'Preview: logged-in customers see their personal referral code here.', 'voucher-captain' ) ) );
 		}

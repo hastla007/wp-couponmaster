@@ -71,7 +71,7 @@ Voucher Captain and WP Pass Captain are separate plugins with separate WordPress
 | --- | --- |
 | PDF engine and minimum versions | Decided: dompdf (bundled, scoped where needed); WordPress 6.4, WooCommerce 8.9, PHP 8.1 (plugin header, checked on load, CI job `minimum-versions`). |
 | Custom denominations | Decided: native custom amount per product (minimum, maximum, step, suggested amounts). |
-| Commercial licensing and update delivery | Implemented: free and premium edition from one code base; the premium edition gates its features fail-closed through WP License Captain (signed entitlements, 14-day offline cache) and updates from the license server's release storage with SHA-256 checks (LICENSING.md, RELEASE.md). **Open: the product owner still has to confirm which features are premium** (`config/premium-features.php`) and how the free edition is distributed and updated. |
+| Commercial licensing and update delivery | Decided (13.11.2026): the core is free (GPL-2.0-or-later, WordPress.org) with every feature and contains no licensing or update code; premium is a separate add-on that uses the public extension points (docs/FREE-PREMIUM.md). |
 | Ticket check-in workflows | Decided: Voucher Captain redeems its own vouchers and service passes (single use or balance); event tickets are checked in by WP Pass Captain, reached through the shared scanner. Partial admission belongs to WP Pass Captain. |
 
 ## Optional feature expansions
