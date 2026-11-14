@@ -2,7 +2,8 @@
 
 Actions and filters of Voucher Captain (`vcap_*`), generated from the code by `php bin/hooks.php` – do not edit by hand.
 CI checks that this file is current (`php bin/hooks.php --check`). Connector contracts (when hooks fire, transactions)
-are described in CONNECTORS.md and API.md.
+are described in CONNECTORS.md and API.md. Actions marked "after COMMIT" are buffered while a database transaction
+is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 
 ## Actions
 
@@ -15,7 +16,7 @@ are described in CONNECTORS.md and API.md.
 | `vcap_before_fields` | `src/Fields.php` | – |
 | `vcap_campaigns_table_cell` | `src/Admin/CampaignAdmin.php` | Extra cells of the campaign table (e.g. the partner of WP Affiliate Captain). |
 | `vcap_campaigns_table_header` | `src/Admin/CampaignAdmin.php` | – |
-| `vcap_gift_card_topped_up` | `src/TopUp.php` | A gift card was topped up by an order (args: Voucher $card, float $amount, WC_Order $order, order item). |
+| `vcap_gift_card_topped_up` | `src/TopUp.php` | A gift card was topped up by an order (args: Voucher $card, float $amount, WC_Order $order, order item). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_loaded` | `voucher-captain.php` | Voucher Captain has booted: vcap() and its services (api_v1, redemptions …) can be used from here on. |
 | `vcap_no_cache` | `src/Shortcodes.php` | Fires when a page must not be cached (hook for cache plugins without DONOTCACHEPAGE support). |
 | `vcap_order_metabox_after` | `src/Admin/OrderAdmin.php` | – |
@@ -25,25 +26,25 @@ are described in CONNECTORS.md and API.md.
 | `vcap_product_settings_save` | `src/ProductSettings.php` | – |
 | `vcap_rate_limit_hit` | `src/Plugin.php` | Fires the first time a visitor exceeds the limit of a bucket in a window. |
 | `vcap_redeem_form_fields` | `src/Shortcodes.php` | Extra fields of connectors (e.g. the date for a ticket voucher), posted with the code. |
-| `vcap_redemption_refunded` | `src/API/V1/RedemptionService.php` | Fires once per refund of a completed external redemption. |
-| `vcap_redemption_released` | `src/API/V1/RedemptionService.php` | Fires when a reservation was released (cancelled by the caller or expired). |
-| `vcap_redemption_reserved` | `src/API/V1/RedemptionService.php` | Fires after a voucher was reserved for an external redemption. |
-| `vcap_redemption_reversed` | `src/Tickets.php` | A counter redemption was cancelled (amount booked back). |
-| `vcap_store_credit_changed` | `src/StoreCredit.php` | The store credit of a customer changed (args: user id, amount, balance after, event, reason, order id). |
-| `vcap_ticket_checked_in` | `src/Tickets.php` | – |
+| `vcap_redemption_refunded` | `src/API/V1/RedemptionService.php` | Fires once per refund of a completed external redemption. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
+| `vcap_redemption_released` | `src/API/V1/RedemptionService.php` | Fires when a reservation was released (cancelled by the caller or expired). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
+| `vcap_redemption_reserved` | `src/API/V1/RedemptionService.php` | Fires after a voucher was reserved for an external redemption. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
+| `vcap_redemption_reversed` | `src/Tickets.php` | A counter redemption was cancelled (amount booked back). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
+| `vcap_store_credit_changed` | `src/StoreCredit.php` | The store credit of a customer changed (args: user id, amount, balance after, event, reason, order id). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
+| `vcap_ticket_checked_in` | `src/Tickets.php` | – *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_topup_held` | `src/TopUp.php` | – |
 | `vcap_topup_without_code` | `src/TopUp.php` | A top-up line without card code was held (no card issued, no top-up booked). |
 | `vcap_voucher_admin_actions` | `src/Admin/VoucherAdmin.php` | Extra buttons for connectors: call $form( $do, $label, $class, $extra_fields, $confirm_text ) and handle $do in vcap_voucher_admin_action. |
-| `vcap_voucher_created` | `src/VoucherRepository.php` | A voucher row was inserted (args: Voucher). If its issuing fails afterwards, vcap_voucher_deleted follows. |
-| `vcap_voucher_deleted` | `src/VoucherRepository.php` | A voucher was removed again (its issuing failed after "vcap_voucher_created"). |
+| `vcap_voucher_created` | `src/VoucherRepository.php` | A voucher row was inserted (args: Voucher). If its issuing fails afterwards, vcap_voucher_deleted follows. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
+| `vcap_voucher_deleted` | `src/VoucherRepository.php` | A voucher was removed again (its issuing failed after "vcap_voucher_created"). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_delivered` | `src/Delivery.php` | A voucher was delivered to everyone it is meant for (args: Voucher $voucher, string[] $addresses). |
 | `vcap_voucher_delivery_given_up` | `src/Delivery.php` | A delivery was given up after $failures failed attempts. |
 | `vcap_voucher_double_use` | `src/CouponManager.php` | – |
-| `vcap_voucher_event` | `src/VoucherRepository.php` | A history entry was written (args: voucher id, event, amount, balance after, note as text, order id). |
-| `vcap_voucher_expired` | `src/VoucherRepository.php` | Vouchers whose validity ended were marked as expired (one call per batch of the daily maintenance). |
-| `vcap_voucher_redeemed` | `src/API/V1/RedemptionService.php`, `src/VoucherRepository.php` | Fires once when an external redemption is completed. |
+| `vcap_voucher_event` | `src/VoucherRepository.php` | A history entry was written (args: voucher id, event, amount, balance after, note as text, order id). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
+| `vcap_voucher_expired` | `src/VoucherRepository.php` | Vouchers whose validity ended were marked as expired (one call per batch of the daily maintenance). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
+| `vcap_voucher_redeemed` | `src/API/V1/RedemptionService.php`, `src/VoucherRepository.php` | Fires once when an external redemption is completed. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_reissued` | `src/Reissue.php` | Fires after a voucher was reissued with a new code and token (V10). The old code is no longer redeemable. |
-| `vcap_voucher_updated` | `src/Tickets.php`, `src/VoucherRepository.php` | A voucher was saved (args: Voucher as stored). May fire inside a database transaction, see CONNECTORS.md. |
+| `vcap_voucher_updated` | `src/Tickets.php`, `src/VoucherRepository.php` | A voucher was saved (args: Voucher as stored, see CONNECTORS.md "Event timing"). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_vouchers_issued` | `src/Issuer.php` | Vouchers of an order were issued (args: Voucher[] $created, WC_Order $order). |
 
 ## Filters
@@ -147,13 +148,13 @@ are described in CONNECTORS.md and API.md.
 | `vcap_redeem_instructions` | `src/Channels.php` | – |
 | `vcap_redeem_prefill` | `src/Shortcodes.php` | – |
 | `vcap_redeem_url` | `src/Shortcodes.php` | Redeem page link of a code ('' = none). |
-| `vcap_redemption_allowed` | `src/API/V1/RedemptionService.php` | Filters whether a voucher may be redeemed for a target (e.g. "only course vouchers unlock courses"). Return false or a WP_Error to refuse. |
+| `vcap_redemption_allowed` | `src/API/V1/RedemptionService.php` | Filters whether a voucher may be redeemed for a target (e.g. "only course vouchers unlock courses"). Return false or a WP_Error to refuse. Runs before the voucher row is locked (D6), but may still run inside a caller's transaction: no remote calls that can take long, no own transaction (CONNECTORS.md). |
 | `vcap_redemption_channel_allowed` | `src/Channels.php` | – |
 | `vcap_redemption_channel_for_target` | `src/Channels.php` | – |
 | `vcap_redemption_channels` | `src/Channels.php` | – |
 | `vcap_redemption_providers` | `src/API/V1/VoucherService.php` | Filters the redemption providers available for a voucher code. |
 | `vcap_redemption_site_wide_failures` | `src/API/V1/RedemptionService.php` | Invalid codes per 15 minutes across all callers; above it every caller's quota shrinks (brake). |
-| `vcap_redemption_target_available` | `src/API/V1/RedemptionService.php` | Filters whether the redemption target is currently available (e.g. the course still exists). |
+| `vcap_redemption_target_available` | `src/API/V1/RedemptionService.php` | Filters whether the redemption target is currently available (e.g. the course still exists). Same timing rules as vcap_redemption_allowed. |
 | `vcap_referral_code_prefix` | `src/Referrals.php` | – |
 | `vcap_referral_min_spend` | `src/Referrals.php` | Minimum order value of referral codes (V3). |
 | `vcap_referral_same_address` | `src/Referrals.php` | – |

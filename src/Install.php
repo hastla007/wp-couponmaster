@@ -938,22 +938,11 @@ final class Install {
 
 	/**
 	 * Runs $work in a transaction: committed when it returns true, rolled back otherwise. D2: a database error is
-	 * logged with $context and a reference (migration batches otherwise only report -1).
+	 * logged with $context and a reference (migration batches otherwise only report -1). D6: through the shared
+	 * helper Db::transaction() (savepoint when nested, buffered actions only after COMMIT).
 	 */
 	private static function in_transaction( callable $work, string $context = 'migration_batch' ): bool {
-		global $wpdb;
-		$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		try {
-			$ok = (bool) $work();
-		} catch ( \Throwable $e ) {
-			Db::rollback( $context, array(), $e );
-			throw $e;
-		}
-		if ( $ok && false !== $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			return true;
-		}
-		Db::rollback_if_error( $context );
-		return false;
+		return Db::transaction( $work, $context );
 	}
 
 	/**

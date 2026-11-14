@@ -161,13 +161,20 @@ final class RedemptionService {
 		if ( ! Install::tables_support_transactions() ) {
 			return self::error( 'vcap_temporary_failure', __( 'Voucher redemption is temporarily unavailable.', 'voucher-captain' ), 503 );
 		}
+		// D6: the deciding filters (vcap_redemption_allowed, vcap_redemption_target_available) run here, before the
+		// row lock, on the voucher as read now; a slow or remote listener then holds no lock. Under the lock the
+		// state-dependent rules (status, balance, owner) are checked again without them.
+		$check = $this->eligibility( $voucher, $target, $voucher->is_multi_use() ? $amount : null, $user_id, (string) ( $args['email'] ?? '' ), ! empty( $args['email_verified'] ) );
+		if ( is_wp_error( $check ) ) {
+			return $check;
+		}
 
 		global $wpdb;
 		$tables = Install::tables();
 		$ttl    = max( 1, min( 60 * 24 * 60, (int) ( $args['ttl_minutes'] ?? get_option( 'vcap_redemption_ttl', 15 ) ) ) ) * MINUTE_IN_SECONDS;
 		$now    = gmdate( 'Y-m-d H:i:s' );
 		$id     = 0;
-		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( ! \VCAP\Db::begin() ) {
 			return $this->temporary();
 		}
 		try {
@@ -177,7 +184,7 @@ final class RedemptionService {
 				\VCAP\Db::rollback_if_error( 'api_reserve', array( 'voucher_id' => $voucher->id ) );
 				return $this->temporary();
 			}
-			$check = $this->eligibility( $fresh, $target, $fresh->is_multi_use() ? $amount : null, $user_id, (string) ( $args['email'] ?? '' ), ! empty( $args['email_verified'] ) );
+			$check = $this->eligibility( $fresh, $target, $fresh->is_multi_use() ? $amount : null, $user_id, (string) ( $args['email'] ?? '' ), ! empty( $args['email_verified'] ), false );
 			if ( is_wp_error( $check ) ) {
 				\VCAP\Db::rollback_if_error( 'api_reserve', array( 'voucher_id' => $voucher->id ) );
 				return $check;
@@ -209,7 +216,7 @@ final class RedemptionService {
 			);
 			if ( ! $inserted ) {
 				// Same key inserted concurrently (unique index): answer like an idempotent retry (no failure to log).
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_silently();
 				$row = $this->get_row( $key );
 				if ( $row ) {
 					return hash_equals( (string) $row['request_hash'], $hash )
@@ -225,7 +232,7 @@ final class RedemptionService {
 				\VCAP\Db::rollback_if_error( 'api_reserve', array( 'voucher_id' => $voucher->id ) );
 				return $this->temporary();
 			}
-			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			if ( ! \VCAP\Db::commit() ) {
 				\VCAP\Db::rollback_if_error( 'api_reserve', array( 'voucher_id' => $voucher->id ) );
 				return $this->temporary();
 			}
@@ -245,7 +252,7 @@ final class RedemptionService {
 		 * @since 1.1.0
 		 * @param array $data Redemption data (see API.md).
 		 */
-		do_action( 'vcap_redemption_reserved', $data );
+		\VCAP\Db::action( 'vcap_redemption_reserved', $data );
 		return $data;
 	}
 
@@ -394,7 +401,7 @@ final class RedemptionService {
 
 		global $wpdb;
 		$tables = Install::tables();
-		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( ! \VCAP\Db::begin() ) {
 			return $this->temporary();
 		}
 		try {
@@ -450,7 +457,7 @@ final class RedemptionService {
 				\VCAP\Db::rollback_if_error( 'api_refund', array( 'redemption_key' => $key ) );
 				return $this->temporary();
 			}
-			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			if ( ! \VCAP\Db::commit() ) {
 				\VCAP\Db::rollback_if_error( 'api_refund', array( 'redemption_key' => $key ) );
 				return $this->temporary();
 			}
@@ -471,7 +478,7 @@ final class RedemptionService {
 		 * @param array $data   Redemption data with refunded (total) and restored (this call).
 		 * @param float $amount Amount refunded with this call.
 		 */
-		do_action( 'vcap_redemption_refunded', $data, $give );
+		\VCAP\Db::action( 'vcap_redemption_refunded', $data, $give );
 		return $data;
 	}
 
@@ -606,7 +613,7 @@ final class RedemptionService {
 
 		global $wpdb;
 		$tables = Install::tables();
-		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( ! \VCAP\Db::begin() ) {
 			return $this->temporary();
 		}
 		try {
@@ -667,7 +674,7 @@ final class RedemptionService {
 				\VCAP\Db::rollback_if_error( 'api_transition', array( 'redemption_key' => $key ) );
 				return $this->temporary();
 			}
-			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			if ( ! \VCAP\Db::commit() ) {
 				\VCAP\Db::rollback_if_error( 'api_transition', array( 'redemption_key' => $key ) );
 				return $this->temporary();
 			}
@@ -688,7 +695,7 @@ final class RedemptionService {
 			 *                    redemptions fire it too, with channel "shop" or "counter", see
 			 *                    VoucherRepository::fire_redeemed()).
 			 */
-			do_action(
+			\VCAP\Db::action(
 				'vcap_voucher_redeemed',
 				$data + array(
 					'channel'  => 'external',
@@ -704,7 +711,7 @@ final class RedemptionService {
 			 * @param array $data    Redemption data.
 			 * @param bool  $expired Whether the reservation expired.
 			 */
-			do_action( 'vcap_redemption_released', $data, $expired );
+			\VCAP\Db::action( 'vcap_redemption_released', $data, $expired );
 		}
 		return $data;
 	}
@@ -718,9 +725,11 @@ final class RedemptionService {
 	 * @param int        $user_id User id.
 	 * @param string     $email   Customer email given by a trusted PHP caller (e.g. a guest checkout), else ''.
 	 * @param bool       $email_verified Whether the caller vouches for $email (V6: only then it unlocks personal vouchers).
+	 * @param bool       $filters        Whether the deciding filters run (false for the re-check under the row lock,
+	 *                                   D6: they already ran before the lock was taken).
 	 * @return true|\WP_Error
 	 */
-	private function eligibility( Voucher $voucher, string $target, ?float $amount, int $user_id, string $email = '', bool $email_verified = false ) {
+	private function eligibility( Voucher $voucher, string $target, ?float $amount, int $user_id, string $email = '', bool $email_verified = false, bool $filters = true ) {
 		if ( 'credit' === $voucher->type ) {
 			// Store credit belongs to one customer account and is only used in the shop (owner check there).
 			return self::error( 'vcap_not_redeemable', __( 'Store credit can only be used in the shop.', 'voucher-captain' ), 422 );
@@ -783,9 +792,13 @@ final class RedemptionService {
 				}
 			}
 		}
+		if ( ! $filters ) {
+			return true;
+		}
 		/**
 		 * Filters whether a voucher may be redeemed for a target (e.g. "only course vouchers unlock courses").
-		 * Return false or a WP_Error to refuse.
+		 * Return false or a WP_Error to refuse. Runs before the voucher row is locked (D6), but may still run inside
+		 * a caller's transaction: no remote calls that can take long, no own transaction (CONNECTORS.md).
 		 *
 		 * @since 1.1.0
 		 * @param true|\WP_Error|bool $allowed Current decision.
@@ -801,7 +814,8 @@ final class RedemptionService {
 			return self::error( 'vcap_not_allowed', __( 'This voucher cannot be used for this purpose.', 'voucher-captain' ), 403 );
 		}
 		/**
-		 * Filters whether the redemption target is currently available (e.g. the course still exists).
+		 * Filters whether the redemption target is currently available (e.g. the course still exists). Same
+		 * timing rules as vcap_redemption_allowed.
 		 *
 		 * @since 1.1.0
 		 * @param bool    $available Whether the target can be delivered.

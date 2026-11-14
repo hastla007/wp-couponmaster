@@ -233,8 +233,23 @@ $unavailable = static function ( $available, $target ) {
 add_filter( 'vcap_redemption_target_available', $unavailable, 10, 2 );
 vcap_redeem_assert( 'vcap_not_allowed' === vcap_redeem_code( $service->check( $filtered->code, array( 'target' => 'test:forbidden' ) ) ), 'vcap_redemption_allowed can refuse a target' );
 vcap_redeem_assert( 'vcap_target_unavailable' === vcap_redeem_code( $service->check( $filtered->code, array( 'target' => 'test:gone' ) ) ), 'vcap_redemption_target_available reports unavailable targets' );
+vcap_redeem_assert( 'vcap_not_allowed' === vcap_redeem_code( $service->reserve( $filtered->code, array( 'key' => 'it-' . wp_generate_uuid4(), 'target' => 'test:forbidden' ) ) ) && VCAP\Voucher::STATUS_ACTIVE === $repo->get( $filtered->id )->status, 'vcap_redemption_allowed refuses a reservation (nothing reserved)' );
 remove_filter( 'vcap_redemption_allowed', $deny, 10 );
 remove_filter( 'vcap_redemption_target_available', $unavailable, 10 );
+// D6: the deciding filters run before the voucher row is locked (no transaction of the plugin is open), and once.
+$d6_calls  = array();
+$d6_filter = static function ( $allowed ) use ( &$d6_calls ) {
+	$d6_calls[] = VCAP\Db::in_transaction();
+	return $allowed;
+};
+add_filter( 'vcap_redemption_allowed', $d6_filter );
+add_filter( 'vcap_redemption_target_available', $d6_filter );
+$d6_key      = 'it-' . wp_generate_uuid4();
+$d6_reserved = $service->reserve( $filtered->code, array( 'key' => $d6_key, 'target' => 'test:course:9' ) );
+remove_filter( 'vcap_redemption_allowed', $d6_filter );
+remove_filter( 'vcap_redemption_target_available', $d6_filter );
+vcap_redeem_assert( ! is_wp_error( $d6_reserved ) && array( false, false ) === $d6_calls, 'D6: vcap_redemption_allowed and vcap_redemption_target_available run once per reservation, before the row lock' );
+$service->release( $d6_key );
 vcap_redeem_assert( 'vcap_invalid_request' === vcap_redeem_code( $service->reserve( $filtered->code, array( 'key' => 'short', 'target' => 'x' ) ) ), 'malformed redemption keys are rejected' );
 
 // --- Failed-code rate limit.
