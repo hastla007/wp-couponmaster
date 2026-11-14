@@ -179,6 +179,9 @@ final class TemplatePostType {
 	public function designer_box( \WP_Post $post ): void {
 		$design = self::get_design( $post->ID );
 		wp_nonce_field( 'vcap_save_design', 'vcap_design_nonce' );
+		foreach ( self::design_warnings( $design ) as $warning ) {
+			echo '<div class="notice notice-warning inline vcap-design-warning"><p>' . esc_html( $warning ) . '</p></div>';
+		}
 		echo '<textarea name="vcap_design" id="vcap-design-json" hidden>' . esc_textarea( wp_json_encode( $design ) ) . '</textarea>';
 		echo '<div id="vcap-designer" class="vcap-designer" aria-label="' . esc_attr__( 'Template designer', 'voucher-captain' ) . '"><p>' . esc_html__( 'Loading designer…', 'voucher-captain' ) . '</p></div>';
 		echo '<noscript>' . esc_html__( 'The designer requires JavaScript.', 'voucher-captain' ) . '</noscript>';
@@ -218,6 +221,7 @@ final class TemplatePostType {
 				'previewUrl'   => admin_url( 'admin-ajax.php?action=vcap_template_preview' ),
 				'previewNonce' => wp_create_nonce( 'vcap_template_preview' ),
 				'minFitScale'  => PdfRenderer::MIN_FIT_SCALE,
+				'imageMimes'   => PdfRenderer::image_mimes(),
 				'postId'       => get_the_ID(),
 				'i18n'         => array(
 					'text'        => __( 'Text', 'voucher-captain' ),
@@ -273,6 +277,7 @@ final class TemplatePostType {
 					'value'       => __( 'Value', 'voucher-captain' ),
 					'barcodeType' => __( 'Barcode type', 'voucher-captain' ),
 					'showText'    => __( 'Show text', 'voucher-captain' ),
+					'imageType'   => __( 'The PDF cannot show this image type. Please choose a JPEG or PNG image.', 'voucher-captain' ),
 					'textCut'     => __( 'This text does not fit its box even at half the font size and is cut off. Make the box larger.', 'voucher-captain' ),
 					'barcodeFallback' => __( 'EAN-13 needs 12 or 13 digits, Code 39 only capital letters, digits and - . $ / + %. Values that do not fit (e.g. generated voucher codes) are printed as Code 128.', 'voucher-captain' ),
 					'name'        => __( 'Layer name', 'voucher-captain' ),
@@ -463,6 +468,44 @@ final class TemplatePostType {
 			),
 			$design
 		);
+	}
+
+	/**
+	 * Problems the PDF of a design will have: images it cannot read (offloaded media, CDN, missing file) or draw
+	 * (AVIF, HEIC, …), and barcode types the voucher codes do not fit.
+	 *
+	 * @param bool $images_only Only the image problems (Site Health).
+	 * @return string[]
+	 */
+	public static function design_warnings( array $design, bool $images_only = false ): array {
+		$warnings = array();
+		$images   = array();
+		$page     = (array) ( $design['page'] ?? array() );
+		if ( ! empty( $page['backgroundImageId'] ) || ! empty( $page['backgroundImage'] ) ) {
+			$images[] = array( __( 'Background image', 'voucher-captain' ), $page['backgroundImageId'] ?? 0, (string) ( $page['backgroundImage'] ?? '' ) );
+		}
+		foreach ( (array) ( $design['elements'] ?? array() ) as $el ) {
+			$el   = (array) $el;
+			$name = '' !== (string) ( $el['name'] ?? '' ) ? (string) $el['name'] : (string) ( $el['id'] ?? '' );
+			if ( 'image' === ( $el['type'] ?? '' ) && ( ! empty( $el['imageId'] ) || ! empty( $el['src'] ) ) ) {
+				$images[] = array( $name, $el['imageId'] ?? 0, (string) ( $el['src'] ?? '' ) );
+			}
+			if ( ! $images_only && 'barcode' === ( $el['type'] ?? '' ) && in_array( $el['barcodeType'] ?? '', array( 'EAN13', 'C39' ), true ) && str_contains( (string) ( $el['qrValue'] ?? '{coupon_code}' ), '{coupon_code}' ) ) {
+				/* translators: %s: layer name */
+				$warnings[] = sprintf( __( 'Barcode "%s": generated voucher codes do not fit EAN-13 or Code 39 and are printed as Code 128.', 'voucher-captain' ), $name );
+			}
+		}
+		foreach ( $images as $image ) {
+			$status = vcap()->pdf->image_status( $image[1], $image[2] );
+			if ( 'missing' === $status['problem'] ) {
+				/* translators: %s: layer name */
+				$warnings[] = sprintf( __( 'Image "%s" cannot be read from this server\'s uploads folder and is left out of the PDF (e.g. media offloaded to a cloud storage or CDN). Upload it again, or allow its host with the filter vcap_pdf_remote_hosts.', 'voucher-captain' ), $image[0] );
+			} elseif ( 'format' === $status['problem'] ) {
+				/* translators: 1: layer name, 2: image type */
+				$warnings[] = sprintf( __( 'Image "%1$s" is of type %2$s, which the PDF cannot show. Use a JPEG or PNG image.', 'voucher-captain' ), $image[0], $status['mime'] );
+			}
+		}
+		return $warnings;
 	}
 
 	public static function sanitize_color( $value ): string {

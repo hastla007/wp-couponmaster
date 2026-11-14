@@ -681,17 +681,110 @@ final class PdfRenderer {
 	}
 
 	/**
-	 * Resolve an image to a local file (remote fetching is disabled for security).
+	 * Image types dompdf can draw: JPEG, PNG, GIF, and WebP only with GD's WebP support. AVIF and HEIC (accepted by
+	 * the media library since WordPress 6.5) would print as a "broken image" frame.
+	 *
+	 * @return string[] MIME types
+	 */
+	public static function image_mimes(): array {
+		$mimes = array( 'image/jpeg', 'image/png', 'image/gif' );
+		if ( function_exists( 'imagecreatefromwebp' ) ) {
+			$mimes[] = 'image/webp';
+		}
+		return array_values( array_intersect( (array) apply_filters( 'vcap_pdf_image_mimes', $mimes ), array( 'image/jpeg', 'image/png', 'image/gif', 'image/webp' ) ) );
+	}
+
+	/**
+	 * Resolve an image to a local file the PDF can draw, or null (logged): a missing file (offloaded media, CDN
+	 * URL, other server) or an image type dompdf cannot draw.
 	 */
 	public function image_path( $attachment_id, $url ): ?string {
-		$attachment_id = (int) $attachment_id;
+		$status = $this->image_status( $attachment_id, $url );
+		if ( '' !== $status['problem'] ) {
+			static $logged = array();
+			$key = $status['problem'] . '|' . (int) $attachment_id . '|' . $url;
+			if ( ! isset( $logged[ $key ] ) ) {
+				$logged[ $key ] = true;
+				Logger::warning( sprintf( 'PDF template image left out (%s): attachment %d, %s', 'format' === $status['problem'] ? 'image type ' . $status['mime'] . ' cannot be printed' : 'no readable local file', (int) $attachment_id, (string) $url ) );
+			}
+		}
+		return $status['path'];
+	}
+
+	/**
+	 * @return array{path: ?string, problem: string, mime: string} problem: '' (fine), 'none' (no image set),
+	 *                                                              'missing' or 'format'.
+	 */
+	public function image_status( $attachment_id, $url ): array {
+		$url  = (string) $url;
+		$file = $this->local_image( (int) $attachment_id, $url ) ?? $this->remote_image( (int) $attachment_id, $url );
+		if ( null === $file ) {
+			return array( 'path' => null, 'problem' => (int) $attachment_id || '' !== $url ? 'missing' : 'none', 'mime' => '' );
+		}
+		$info = @getimagesize( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- unreadable images are reported below.
+		$mime = is_array( $info ) ? (string) $info['mime'] : '';
+		if ( ! in_array( $mime, self::image_mimes(), true ) ) {
+			return array( 'path' => null, 'problem' => 'format', 'mime' => '' !== $mime ? $mime : (string) pathinfo( $file, PATHINFO_EXTENSION ) );
+		}
+		return array( 'path' => $file, 'problem' => '', 'mime' => $mime );
+	}
+
+	/**
+	 * Images whose local file is missing (WP Offload Media, WP-Stateless, CDN-rewritten URLs, servers without shared
+	 * uploads) are downloaded – only from hosts named with "vcap_pdf_remote_hosts" – into the private temp folder
+	 * and reused for an hour.
+	 */
+	private function remote_image( int $attachment_id, string $url ): ?string {
+		$hosts = array_filter( array_map( static fn( $h ) => strtolower( trim( (string) $h ) ), (array) apply_filters( 'vcap_pdf_remote_hosts', array() ) ) );
+		if ( ! $hosts ) {
+			return null;
+		}
+		$candidates = array( $url );
+		if ( $attachment_id && function_exists( 'wp_get_attachment_url' ) ) {
+			$candidates[] = (string) wp_get_attachment_url( $attachment_id );
+		}
+		foreach ( array_unique( array_filter( $candidates ) ) as $candidate ) {
+			$scheme = strtolower( (string) wp_parse_url( $candidate, PHP_URL_SCHEME ) );
+			$host   = strtolower( (string) wp_parse_url( $candidate, PHP_URL_HOST ) );
+			if ( ! in_array( $scheme, array( 'https', 'http' ), true ) || ! in_array( $host, $hosts, true ) ) {
+				continue;
+			}
+			$dir   = Install::upload_dir() . '/tmp';
+			$cache = $dir . '/img-' . md5( $candidate ) . '.img';
+			if ( is_readable( $cache ) && filemtime( $cache ) > time() - HOUR_IN_SECONDS ) {
+				return $cache;
+			}
+			$response = wp_safe_remote_get(
+				$candidate,
+				array(
+					'timeout'             => 10,
+					'redirection'         => 2,
+					'limit_response_size' => 10 * 1024 * 1024,
+				)
+			);
+			$body = is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ? '' : (string) wp_remote_retrieve_body( $response );
+			$info = '' !== $body ? @getimagesizefromstring( $body ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors -- not an image: skipped.
+			if ( ! is_array( $info ) ) {
+				Logger::warning( sprintf( 'PDF template image could not be downloaded from %s.', $host ) );
+				continue;
+			}
+			Install::ensure_upload_dir();
+			$part = $cache . '.' . wp_generate_password( 8, false );
+			if ( false !== file_put_contents( $part, $body ) && rename( $part, $cache ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions
+				return $cache;
+			}
+			wp_delete_file( $part );
+		}
+		return null;
+	}
+
+	private function local_image( int $attachment_id, string $url ): ?string {
 		if ( $attachment_id ) {
 			$file = get_attached_file( $attachment_id );
 			if ( $file && is_readable( $file ) ) {
 				return $file;
 			}
 		}
-		$url = (string) $url;
 		if ( '' === $url ) {
 			return null;
 		}

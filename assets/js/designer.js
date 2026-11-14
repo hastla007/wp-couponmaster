@@ -809,9 +809,15 @@
 		if ( ! window.wp || ! wp.media ) {
 			return;
 		}
-		var frame = wp.media( { title: t.choose, multiple: false, library: { type: 'image' } } );
+		// Only the image types the PDF can draw (no AVIF/HEIC/SVG; WebP only with GD support).
+		var mimes = cfg.imageMimes && cfg.imageMimes.length ? cfg.imageMimes : [ 'image/jpeg', 'image/png' ];
+		var frame = wp.media( { title: t.choose, multiple: false, library: { type: mimes } } );
 		frame.on( 'select', function () {
 			var att = frame.state().get( 'selection' ).first().toJSON();
+			if ( att.mime && -1 === mimes.indexOf( att.mime ) ) {
+				window.alert( t.imageType );
+				return;
+			}
 			done( att );
 		} );
 		frame.open();
