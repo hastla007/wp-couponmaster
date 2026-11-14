@@ -150,7 +150,7 @@ vcap_integration_assert( 100.0 === (float) $repo->get( $audit_voucher->id )->bal
 
 // Delivery locks are connection-scoped, and a no-recipient attempt must remain eligible for retry.
 list( $delivery_voucher ) = vcap_integration_create_voucher( 100.0, '' );
-$lock_name   = 'vcap_delivery_' . $delivery_voucher->id;
+$lock_name   = VCAP\Install::lock_name( 'delivery_' . $delivery_voucher->id ); // The per-site name the worker uses.
 $other_db    = new wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
 $other_lock  = $other_db->get_var( $other_db->prepare( 'SELECT GET_LOCK(%s, 0)', $lock_name ) );
 $before_rows = count( $repo->events( $delivery_voucher->id ) );
