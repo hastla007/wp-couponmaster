@@ -332,7 +332,8 @@ vcap_acc_assert( ! is_wp_error( $single_forced ) && VCAP\Voucher::STATUS_VOID ==
 wc_get_order( $single_use->get_id() )->payment_complete( 'txn-single-late' );
 $single_use = wc_get_order( $single_use->get_id() );
 $single_map = VCAP\CouponManager::order_map( $single_use, VCAP\CouponManager::SHORTFALL_AMOUNTS_META );
-vcap_acc_assert( 'on-hold' === $single_use->get_status() && VCAP\CouponManager::has_shortfall( $single_use ) && isset( $single_map[ wc_format_coupon_code( $single->code ) ] ), 'paying the order after the voucher was voided holds it with a shortfall instead of fulfilling the discount' );
+$single_why = 'status ' . $single_use->get_status() . ', shortfall ' . ( VCAP\CouponManager::has_shortfall( $single_use ) ? 'yes' : 'no' ) . ', map ' . wp_json_encode( $single_map ) . ', voucher ' . vcap()->vouchers->get( $single->id )->status . ', coupons ' . wp_json_encode( $single_use->get_coupon_codes() ) . ', WC ' . WC_VERSION . ', notes: ' . implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $single_use->get_id() ) ), 'content' ) );
+vcap_acc_assert( 'on-hold' === $single_use->get_status() && VCAP\CouponManager::has_shortfall( $single_use ) && isset( $single_map[ wc_format_coupon_code( $single->code ) ] ), 'paying the order after the voucher was voided holds it with a shortfall instead of fulfilling the discount (' . $single_why . ')' );
 vcap_acc_assert( in_array( 'double_use', array_column( vcap()->vouchers->events( $single->id ), 'event' ), true ), 'the double use is in the voucher history' );
 
 echo "Voucher Captain acceptance checks passed.\n";
