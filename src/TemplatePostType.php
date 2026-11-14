@@ -271,6 +271,7 @@ final class TemplatePostType {
 					'value'       => __( 'Value', 'voucher-captain' ),
 					'barcodeType' => __( 'Barcode type', 'voucher-captain' ),
 					'showText'    => __( 'Show text', 'voucher-captain' ),
+					'barcodeFallback' => __( 'EAN-13 needs 12 or 13 digits, Code 39 only capital letters, digits and - . $ / + %. Values that do not fit (e.g. generated voucher codes) are printed as Code 128.', 'voucher-captain' ),
 					'name'        => __( 'Layer name', 'voucher-captain' ),
 					'lock'        => __( 'Lock', 'voucher-captain' ),
 					'hide'        => __( 'Hide', 'voucher-captain' ),
@@ -390,6 +391,11 @@ final class TemplatePostType {
 				if ( isset( $el[ $key ] ) && in_array( $el[ $key ], $allowed, true ) ) {
 					$clean[ $key ] = $el[ $key ];
 				}
+			}
+			// A fixed barcode value the chosen type cannot carry (e.g. letters as EAN-13) would print no barcode.
+			$value = (string) ( $clean['qrValue'] ?? '{coupon_code}' );
+			if ( 'barcode' === $clean['type'] && isset( $clean['barcodeType'] ) && ! str_contains( $value, '{' ) && ! PdfRenderer::barcode_fits( $clean['barcodeType'], $value ) ) {
+				$clean['barcodeType'] = 'C128';
 			}
 			$elements[] = $clean;
 		}

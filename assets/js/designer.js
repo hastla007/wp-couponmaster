@@ -991,7 +991,10 @@
 			grid.appendChild( field( t.color, colorInput( item, 'color' ) ) );
 		} else if ( 'barcode' === item.type ) {
 			grid.appendChild( field( t.value, textInput( item, 'qrValue' ), true ) );
-			grid.appendChild( field( t.barcodeType, selectInput( item, 'barcodeType', { C128: 'Code 128', C39: 'Code 39', EAN13: 'EAN-13' } ) ) );
+			grid.appendChild( field( t.barcodeType, selectInput( item, 'barcodeType', { C128: 'Code 128', C39: 'Code 39', EAN13: 'EAN-13' }, function () { renderProps(); } ) ) );
+			if ( 'EAN13' === item.barcodeType || 'C39' === item.barcodeType ) {
+				grid.appendChild( el( 'p', { class: 'description is-wide vcap-d-hint', text: t.barcodeFallback } ) );
+			}
 			grid.appendChild( field( t.color, colorInput( item, 'color' ) ) );
 			grid.appendChild( el( 'div', { class: 'vcap-d-field is-wide' }, [ toggle( item, 'showText', t.showText ) ] ) );
 		} else if ( 'rect' === item.type ) {

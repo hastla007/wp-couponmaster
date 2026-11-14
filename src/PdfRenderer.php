@@ -354,17 +354,18 @@ final class PdfRenderer {
 		if ( '' === $payload ) {
 			return '';
 		}
-		$dark    = $this->rgb( $el['color'] ?? '#000000' );
+		// SVG (vector): needs no GD, prints sharp at any size, and dompdf draws it as paths.
+		$dark    = $this->color( $el['color'] ?? '#000000' );
+		$dark    = 'transparent' === $dark ? '#000000' : $dark;
 		$options = new QROptions(
 			array(
-				'outputType'       => QROutputInterface::GDIMAGE_PNG,
+				'outputType'       => QROutputInterface::MARKUP_SVG,
 				'outputBase64'     => true,
 				'eccLevel'         => EccLevel::M,
-				'scale'            => 12,
 				'addQuietzone'     => true,
 				'quietzoneSize'    => 2,
-				'imageTransparent' => true,
 				'drawLightModules' => false,
+				'connectPaths'     => true,
 				'moduleValues'     => array(
 					// Dark modules in the chosen colour.
 					\chillerlan\QRCode\Data\QRMatrix::M_DATA_DARK      => $dark,
@@ -396,8 +397,22 @@ final class PdfRenderer {
 		);
 	}
 
+	/**
+	 * Whether a value can be printed as the given barcode type. EAN-13 takes only 12 digits (check digit added)
+	 * or 13 digits with a valid check digit; Code 39 only upper-case letters, digits and - . $ / + % space.
+	 */
+	public static function barcode_fits( string $type, string $value ): bool {
+		switch ( $type ) {
+			case 'EAN13':
+				return (bool) preg_match( '/^\d{12}$/', $value ) || ( (bool) preg_match( '/^\d{13}$/', $value ) && CodeGenerator::gs1_valid( $value ) );
+			case 'C39':
+				return (bool) preg_match( '/^[0-9A-Z \-.$\/+%]+$/', $value );
+		}
+		return '' !== $value;
+	}
+
 	private function barcode_element( array $el, Voucher $voucher, array $values ): string {
-		if ( ! class_exists( '\Picqer\Barcode\BarcodeGeneratorPNG' ) ) {
+		if ( ! class_exists( '\Picqer\Barcode\BarcodeGeneratorSVG' ) ) {
 			return '';
 		}
 		$payload = Placeholders::replace( (string) ( $el['qrValue'] ?? '{coupon_code}' ), $voucher, $values );
@@ -409,28 +424,31 @@ final class PdfRenderer {
 			'C39'  => \Picqer\Barcode\BarcodeGenerator::TYPE_CODE_39,
 			'EAN13' => \Picqer\Barcode\BarcodeGenerator::TYPE_EAN_13,
 		);
-		$type = $types[ $el['barcodeType'] ?? 'C128' ] ?? $types['C128'];
+		$chosen = isset( $types[ $el['barcodeType'] ?? '' ] ) ? (string) $el['barcodeType'] : 'C128';
+		if ( ! self::barcode_fits( $chosen, $payload ) ) {
+			// A code the chosen type cannot carry (e.g. a 16-character voucher code as EAN-13) is printed as
+			// Code 128, which every scanner reads, instead of leaving the voucher without a barcode.
+			Logger::warning( sprintf( 'PDF barcode: the value does not fit %s, printed as Code 128 instead.', $chosen ), array( 'voucher' => $voucher->id ) );
+			$chosen = 'C128';
+		}
+		$color = $this->color( $el['color'] ?? '#000000' );
 		try {
-			$png = ( new \Picqer\Barcode\BarcodeGeneratorPNG() )->getBarcode( $payload, $type, 3, 120, $this->rgb( $el['color'] ?? '#000000' ) );
+			// SVG (vector): needs no GD and prints sharp.
+			$svg = ( new \Picqer\Barcode\BarcodeGeneratorSVG() )->getBarcode( $payload, $types[ $chosen ], 3, 120, 'transparent' === $color ? '#000000' : $color );
 		} catch ( \Throwable $e ) {
 			return '';
 		}
+		// No external DTD; the bars stretch to the element box like the designer shows them.
+		$svg   = (string) preg_replace( '/<!DOCTYPE[^>]*>\s*/i', '', $svg );
+		$svg   = (string) preg_replace( '/<svg /', '<svg preserveAspectRatio="none" ', $svg, 1 );
 		$style = $this->box_style( $el );
 		$show  = ! isset( $el['showText'] ) || ! empty( $el['showText'] );
 		$bar_h = $show ? max( 1, (float) $el['h'] - 4.5 ) : (float) $el['h'];
-		$html  = sprintf( '<img src="data:image/png;base64,%s" style="width:%smm;height:%smm;" />', base64_encode( $png ), $this->num( $el['w'] ), $this->num( $bar_h ) );
+		$html  = sprintf( '<img src="data:image/svg+xml;base64,%s" style="width:%smm;height:%smm;" />', base64_encode( $svg ), $this->num( $el['w'] ), $this->num( $bar_h ) );
 		if ( $show ) {
 			$html .= sprintf( '<div style="font-family:\'DejaVu Sans Mono\';font-size:8pt;text-align:center;color:%s;line-height:1.2;">%s</div>', $this->color( $el['color'] ?? '#000000' ), esc_html( $payload ) );
 		}
 		return '<div class="el" style="' . esc_attr( $style ) . '">' . $html . '</div>';
-	}
-
-	private function rgb( $hex ): array {
-		$hex = ltrim( $this->color( $hex ), '#' );
-		if ( 3 === strlen( $hex ) ) {
-			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
-		}
-		return array( hexdec( substr( $hex, 0, 2 ) ), hexdec( substr( $hex, 2, 2 ) ), hexdec( substr( $hex, 4, 2 ) ) );
 	}
 
 	/**
