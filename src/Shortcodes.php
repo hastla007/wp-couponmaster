@@ -278,6 +278,37 @@ final class Shortcodes {
 		return (string) wc_print_notices( true );
 	}
 
+	/** Notice data marking notices of the voucher list's own forms ("send again"), see account_notices(). */
+	public const ACCOUNT_NOTICE = array( 'vcap_account' => 1 );
+
+	/**
+	 * Notices of the voucher list's own forms only (marked with ACCOUNT_NOTICE): "My vouchers" on any page must
+	 * not take other notices ("added to cart", field errors) from the page. The other notices stay in the session.
+	 */
+	private static function account_notices(): string {
+		if ( ! function_exists( 'wc_get_notices' ) || ! WC()->session ) {
+			return '';
+		}
+		$own  = array();
+		$rest = array();
+		foreach ( (array) wc_get_notices() as $type => $notices ) {
+			foreach ( (array) $notices as $notice ) {
+				if ( is_array( $notice ) && ! empty( $notice['data']['vcap_account'] ) ) {
+					$own[ $type ][] = $notice;
+				} else {
+					$rest[ $type ][] = $notice;
+				}
+			}
+		}
+		if ( ! $own ) {
+			return '';
+		}
+		wc_set_notices( $own );
+		$html = (string) wc_print_notices( true );
+		wc_set_notices( $rest );
+		return $html;
+	}
+
 	/** The result of a form a visitor just sent: focused on load (frontend.js), so screen readers read it. */
 	public static function result_region( string $html, string $id ): string {
 		if ( '' === trim( $html ) ) {
@@ -569,7 +600,7 @@ final class Shortcodes {
 		Downloads::enqueue_style();
 		ob_start();
 		$this->downloads->account_page( 'no' !== $atts['extras'] );
-		return self::wrap( self::notices() . ob_get_clean() );
+		return self::wrap( self::account_notices() . ob_get_clean() );
 	}
 
 	public function referral_shortcode(): string {

@@ -59,6 +59,49 @@ $wpdb->update( $wpdb->options, array( 'option_value' => (string) ( time() - 10 )
 VCAP\Install::maybe_upgrade();
 vcap_inst_assert( VCAP_DB_VERSION === get_option( VCAP\Install::OPTION_DB_VERSION ) && ! $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name = %s", VCAP\Install::UPGRADE_LOCK ) ), 'an expired lock is taken over, the upgrade finishes and gives the lock back' );
 
+// A4: the tables are created and verified once per upgrade step; without the migration budget (shop requests)
+// the version stays and the data migration continues in the vcap_migrate action.
+$inst_ddl = 0;
+$inst_count_ddl = static function ( $queries ) use ( &$inst_ddl ) {
+	++$inst_ddl;
+	return $queries;
+};
+add_filter( 'dbdelta_queries', $inst_count_ddl );
+update_option( VCAP\Install::OPTION_DB_VERSION, '1.3.0' );
+delete_option( VCAP\Install::SCHEMA_STEP_OPTION );
+delete_transient( 'vcap_schema_retry' );
+delete_transient( 'vcap_migrate_queued' );
+$inst_keep_legacy = get_option( VCAP\Install::LEGACY_OPTION, false );
+$inst_upgrade     = new ReflectionMethod( VCAP\Install::class, 'upgrade_schema' );
+$inst_upgrade->setAccessible( true );
+$inst_first = $inst_upgrade->invoke( null, '1.3.0', false );
+$inst_ddl_first = $inst_ddl;
+vcap_inst_assert( false === $inst_first && $inst_ddl_first > 0 && '1.3.0>' . VCAP_DB_VERSION === get_option( VCAP\Install::SCHEMA_STEP_OPTION ) && '1.3.0' === get_option( VCAP\Install::OPTION_DB_VERSION ), 'A4: the first upgrade run creates and verifies the tables once and remembers the step; without migration budget the version stays' );
+$inst_second = $inst_upgrade->invoke( null, '1.3.0', false );
+vcap_inst_assert( false === $inst_second && $inst_ddl_first === $inst_ddl, 'A4: further runs of the same step run no DDL (no dbDelta) and no migration batch' );
+$inst_queue = new ReflectionMethod( VCAP\Install::class, 'queue_migration' );
+$inst_queue->setAccessible( true );
+$inst_queue->invoke( null );
+vcap_inst_assert( as_has_scheduled_action( VCAP\Install::MIGRATE_HOOK, array(), VCAP\Delivery::GROUP ) && get_transient( 'vcap_migrate_queued' ), 'A4: the data migration is queued as Action Scheduler action vcap_migrate (once per five minutes)' );
+VCAP\Install::run_queued_migration();
+vcap_inst_assert( VCAP_DB_VERSION === get_option( VCAP\Install::OPTION_DB_VERSION ) && false === get_option( VCAP\Install::SCHEMA_STEP_OPTION ) && $inst_ddl_first === $inst_ddl, 'A4: the vcap_migrate action finishes the migration without running the DDL again' );
+remove_filter( 'dbdelta_queries', $inst_count_ddl );
+as_unschedule_all_actions( VCAP\Install::MIGRATE_HOOK, array(), VCAP\Delivery::GROUP );
+delete_transient( 'vcap_migrate_queued' );
+false === $inst_keep_legacy ? delete_option( VCAP\Install::LEGACY_OPTION ) : update_option( VCAP\Install::LEGACY_OPTION, $inst_keep_legacy );
+
+// L3: a first installation whose schema check failed (empty version, schema error) retries only the schema –
+// no rewrite flush, no task or coupon restore on every attempt.
+delete_option( VCAP\Install::OPTION_DB_VERSION );
+update_option( VCAP\Install::SCHEMA_ERROR_OPTION, 'test: missing index', false );
+delete_option( VCAP\Install::SCHEMA_STEP_OPTION );
+delete_option( 'vcap_flush_rewrite' );
+delete_option( VCAP\Install::RESTORE_TASKS_OPTION );
+delete_transient( 'vcap_schema_retry' );
+VCAP\Install::maybe_upgrade();
+vcap_inst_assert( VCAP_DB_VERSION === get_option( VCAP\Install::OPTION_DB_VERSION ) && false === get_option( VCAP\Install::SCHEMA_ERROR_OPTION ), 'L3: a failed first installation retries the schema and stores the version once it is complete' );
+vcap_inst_assert( false === get_option( 'vcap_flush_rewrite' ) && false === get_option( VCAP\Install::RESTORE_TASKS_OPTION ), 'L3: the retry runs no activation (no rewrite flush, no task restore)' );
+
 // Downgrade: a newer stored version is never lowered.
 update_option( VCAP\Install::OPTION_DB_VERSION, '99.0.0' );
 VCAP\Install::maybe_upgrade();
@@ -88,6 +131,19 @@ vcap_inst_assert( 3 === VCAP\Discounts\Usage::count( $promo ) && 0 === (int) $wp
 VCAP\Discounts\Usage::remove( $promo, 'e:legacy@example.com', 555 );
 vcap_inst_assert( 2 === VCAP\Discounts\Usage::count( $promo ), 'a moved use (without order) is given back for its customer' );
 vcap_inst_assert( ! VCAP\Claim::take( $legacy_claim ) && ! $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( '_vcap_claim_' ) . '%' ) ), 'moved claims stay taken and no claim options are left' );
+delete_option( VCAP\Install::LEGACY_OPTION );
+
+// L11: the daily maintenance moves old rows only under the upgrade lock (never alongside the migration).
+add_post_meta( $promo, '_vcap_used_by', 'e:locked@example.com' );
+update_option( VCAP\Install::LEGACY_OPTION, time() );
+$wpdb->replace( $wpdb->options, array( 'option_name' => VCAP\Install::UPGRADE_LOCK, 'option_value' => (string) ( time() + 300 ), 'autoload' => 'no' ) );
+VCAP\Install::move_legacy_rows_locked( 5.0 );
+vcap_inst_assert( 1 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = '_vcap_used_by'", $promo ) ) && 3 === VCAP\Discounts\Usage::count( $promo ), 'L11: while another request holds the upgrade lock the maintenance moves nothing' );
+$wpdb->delete( $wpdb->options, array( 'option_name' => VCAP\Install::UPGRADE_LOCK ) );
+wp_cache_delete( VCAP\Install::UPGRADE_LOCK, 'options' );
+VCAP\Install::move_legacy_rows_locked( 5.0 );
+vcap_inst_assert( 0 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = '_vcap_used_by'", $promo ) ) && 3 === VCAP\Discounts\Usage::count( $promo ) && ! $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name = %s", VCAP\Install::UPGRADE_LOCK ) ), 'L11: with the lock free the row is moved once and the lock is given back' );
+VCAP\Discounts\Usage::remove( $promo, 'e:locked@example.com', 556 );
 delete_option( VCAP\Install::LEGACY_OPTION );
 
 // Claims: table rows, released again, finished kinds purged after the retention period.
@@ -125,6 +181,16 @@ vcap_inst_assert( is_array( get_option( VCAP\Install::CATCH_UP_OPTION ) ) && fal
 vcap()->ensure_schedules();
 vcap_inst_assert( 'publish' === get_post_status( $card->coupon_id ) && '' === get_post_meta( $card->coupon_id, VCAP\Install::SUSPENDED_META, true ), 'activation publishes the suspended coupons again' );
 vcap_inst_assert( as_has_scheduled_action( VCAP\CatchUp::HOOK, null, 'vcap' ) && false === get_option( VCAP\Install::CATCH_UP_OPTION ), 'the catch-up runs as Action Scheduler action' );
+as_unschedule_all_actions( VCAP\CatchUp::HOOK, null, 'vcap' );
+
+// L3: deactivation stops only on sites without tables – an empty version (failed first installation) still
+// suspends the coupons.
+delete_option( VCAP\Install::OPTION_DB_VERSION );
+VCAP\Install::deactivate_site();
+vcap_inst_assert( 'draft' === get_post_status( $card->coupon_id ) && (int) get_option( VCAP\Install::DEACTIVATED_OPTION ) > 0, 'L3: deactivation with an empty database version still suspends balance coupons' );
+VCAP\Install::activate_site();
+vcap()->ensure_schedules();
+vcap_inst_assert( 'publish' === get_post_status( $card->coupon_id ) && VCAP_DB_VERSION === get_option( VCAP\Install::OPTION_DB_VERSION ), 'L3: activation afterwards completes the version and publishes the coupons again' );
 as_unschedule_all_actions( VCAP\CatchUp::HOOK, null, 'vcap' );
 
 // Coupons with rules only Voucher Captain checks are suspended as well (first order only, referral, SKU rules).

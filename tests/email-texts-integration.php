@@ -34,6 +34,97 @@ function vcap_mail_send( string $class, VCAP\Voucher $voucher ): array {
 }
 $GLOBALS['vcap_mail_captured'] = &$captured;
 
+// M4 / M9 (first in this suite: the template lookup is cached per request): staff with an English profile on a German site. Default PDF templates are created and admin PDFs rendered in
+// the site language. The test site has no core language packs: de_DE is made "available" for switch_to_locale().
+global $wpdb;
+$lang_available = static fn( $languages ) => array_values( array_unique( array_merge( (array) $languages, array( 'de_DE' ) ) ) );
+add_filter( 'get_available_languages', $lang_available );
+$lang_switcher_before          = $GLOBALS['wp_locale_switcher'];
+$GLOBALS['wp_locale_switcher'] = new WP_Locale_Switcher();
+$GLOBALS['wp_locale_switcher']->init();
+$lang_wplang = get_option( 'WPLANG', '' );
+update_option( 'WPLANG', 'de_DE' );
+unset( $GLOBALS['locale'] );
+$lang_admin = (int) wp_insert_user( array( 'user_login' => 'vcap-lang-' . wp_generate_password( 6, false, false ), 'user_pass' => wp_generate_password( 20 ), 'role' => 'administrator', 'locale' => 'en_US' ) );
+wp_set_current_user( $lang_admin );
+require_once ABSPATH . 'wp-admin/includes/class-wp-screen.php';
+require_once ABSPATH . 'wp-admin/includes/screen.php';
+set_current_screen( 'edit-vcap_template' ); // wp-admin: translations follow the profile language (determine_locale()).
+unload_textdomain( 'voucher-captain' );
+load_plugin_textdomain( 'voucher-captain', false, dirname( plugin_basename( VCAP_FILE ) ) . '/languages' );
+vcap_mail_assert( 'de_DE' === get_locale() && 'en_US' === determine_locale() && 'GIFT VOUCHER' === __( 'GIFT VOUCHER', 'voucher-captain' ), 'M4: (setup) German site, English admin profile, plugin texts in English' );
+
+// M4: no template yet (hidden from the lookup) → the defaults are created with German texts.
+$lang_hide = static function ( $query ) {
+	if ( VCAP\TemplatePostType::POST_TYPE === $query->get( 'post_type' ) ) {
+		$query->set( 'post__in', array( 0 ) );
+	}
+};
+add_action( 'pre_get_posts', $lang_hide );
+$lang_default_before = get_option( 'vcap_default_template', false );
+$lang_last_id        = (int) $wpdb->get_var( "SELECT MAX(ID) FROM {$wpdb->posts}" ); // phpcs:ignore
+update_option( 'vcap_needs_default_template', 'yes' );
+( new VCAP\TemplatePostType() )->maybe_create_defaults();
+remove_action( 'pre_get_posts', $lang_hide );
+$lang_created = $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_type = %s AND ID > %d ORDER BY ID", VCAP\TemplatePostType::POST_TYPE, $lang_last_id ) ); // phpcs:ignore
+$lang_design  = $lang_created ? implode( "\n", array_column( (array) ( json_decode( (string) get_post_meta( (int) $lang_created[0], VCAP\TemplatePostType::META, true ), true )['elements'] ?? array() ), 'text' ) ) : '';
+vcap_mail_assert( 2 === count( $lang_created ) && 'Geschenkkarte (A5 quer)' === get_the_title( (int) $lang_created[0] ) && str_contains( $lang_design, 'GESCHENKGUTSCHEIN' ) && str_contains( $lang_design, 'Gültig bis {expiry_date}' ) && ! str_contains( $lang_design, 'GIFT VOUCHER' ), 'M4: default PDF templates are created in the site language, not in the admin\'s profile language' );
+vcap_mail_assert( 'en_US' === determine_locale() && 'GIFT VOUCHER' === __( 'GIFT VOUCHER', 'voucher-captain' ), 'M4: the admin\'s language is restored afterwards' );
+foreach ( $lang_created as $lang_id ) {
+	wp_delete_post( (int) $lang_id, true );
+}
+false === $lang_default_before ? delete_option( 'vcap_default_template' ) : update_option( 'vcap_default_template', $lang_default_before );
+
+$lang_voucher = vcap_mail_voucher( array() );
+// M9: the admin PDF of a customer voucher is rendered in the site (order) language.
+$lang_seen = array();
+$lang_stop = static function ( $template_id ) use ( &$lang_seen ) {
+	$lang_seen = array( determine_locale(), __( 'Valid until {expiry_date}', 'voucher-captain' ) );
+	throw new RuntimeException( 'vcap-lang-stop' ); // Stop before the PDF is streamed (exit).
+};
+add_filter( 'vcap_render_template_id', $lang_stop );
+$lang_serve = new ReflectionMethod( VCAP\Downloads::class, 'serve' );
+$lang_serve->setAccessible( true );
+try {
+	$lang_serve->invoke( vcap()->downloads, vcap()->vouchers->get( $lang_voucher->id ), false, false );
+} catch ( RuntimeException $e ) {
+	$lang_stopped = 'vcap-lang-stop' === $e->getMessage();
+}
+remove_filter( 'vcap_render_template_id', $lang_stop );
+vcap_mail_assert( ! empty( $lang_stopped ) && array( 'de_DE', 'Gültig bis {expiry_date}' ) === $lang_seen, 'M9: the admin PDF is rendered in the site language (de_DE), not in the admin\'s profile language' );
+vcap_mail_assert( 'en_US' === determine_locale() && 'GIFT VOUCHER' === __( 'GIFT VOUCHER', 'voucher-captain' ), 'M9: the admin\'s language is restored after rendering' );
+
+// Back to the test site's language.
+$GLOBALS['current_screen'] = null;
+update_option( 'WPLANG', $lang_wplang );
+unset( $GLOBALS['locale'] );
+$GLOBALS['wp_locale_switcher'] = $lang_switcher_before;
+remove_filter( 'get_available_languages', $lang_available );
+unload_textdomain( 'voucher-captain' );
+load_plugin_textdomain( 'voucher-captain', false, dirname( plugin_basename( VCAP_FILE ) ) . '/languages' );
+wp_set_current_user( 0 );
+
+// M12: the buyer name follows the name order of the shop language (WooCommerce's "full name" format).
+$lang_order_name = static fn( $translation, $text, $context, $domain ) => ( 'full name' === $context && 'woocommerce' === $domain ) ? '%2$s %1$s' : $translation;
+add_filter( 'gettext_with_context', $lang_order_name, 10, 4 );
+$m12_order = wc_create_order();
+$m12_product = new WC_Product_Simple();
+$m12_product->set_name( 'M12 voucher' );
+$m12_product->set_regular_price( '10' );
+$m12_product->set_virtual( true );
+$m12_product->update_meta_data( '_vcap_enabled', 'yes' );
+$m12_product->save();
+$m12_order->add_product( $m12_product, 1 );
+$m12_order->set_billing_first_name( 'János' );
+$m12_order->set_billing_last_name( 'Kovács' );
+$m12_order->set_billing_email( 'm12@example.com' );
+$m12_order->calculate_totals();
+$m12_order->save();
+$m12_issued = vcap()->issuer->issue_for_order( $m12_order );
+remove_filter( 'gettext_with_context', $lang_order_name, 10 );
+vcap_mail_assert( $m12_issued && 'Kovács János' === vcap()->vouchers->get( $m12_issued[0]->id )->buyer_name, 'M12: the buyer name uses the localised name order (get_formatted_billing_full_name)' );
+
+
 function vcap_mail_voucher( array $props ): VCAP\Voucher {
 	$product = new WC_Product_Simple();
 	$product->set_name( $props['product'] ?? 'Gift voucher' );

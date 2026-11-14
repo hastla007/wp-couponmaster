@@ -247,6 +247,108 @@ wc_create_refund( array( 'order_id' => $t5->get_id(), 'amount' => wc_get_order( 
 vcap_life_assert( wc_get_order( $t5->get_id() )->has_status( 'refunded' ), 'T5: the order is fully refunded' );
 vcap_life_assert( VCAP\Voucher::STATUS_ACTIVE === $repo->get( $single->id )->status && 0 === ( new WC_Coupon( $single->coupon_id ) )->get_usage_count(), 'T5: the single-use voucher can be used again after the full refund' );
 
+// T5: with "Restore balance on cancellation" off a cancelled order keeps its single-use voucher redeemed.
+$keep_restore = get_option( 'vcap_restore_on_cancel', false );
+update_option( 'vcap_restore_on_cancel', 'no' );
+$kept_single = vcap_life_single();
+$t5c         = wc_create_order();
+$t5c->add_product( $goods_t5, 1 );
+$t5c->set_billing_email( 't5c@example.com' );
+$t5c->apply_coupon( $kept_single->code );
+$t5c->calculate_totals( false );
+$t5c->set_status( 'processing' );
+$t5c->save();
+vcap_life_assert( VCAP\Voucher::STATUS_REDEEMED === $repo->get( $kept_single->id )->status && 1 === ( new WC_Coupon( $kept_single->coupon_id ) )->get_usage_count(), 'T5: paying the second order redeems its single-use voucher' );
+wc_get_order( $t5c->get_id() )->update_status( 'cancelled' );
+$t5c_refused = 0;
+try {
+	$manager->validate( true, new WC_Coupon( $kept_single->coupon_id ) );
+} catch ( Exception $e ) {
+	$t5c_refused = $e->getCode();
+}
+vcap_life_assert( VCAP\Voucher::STATUS_REDEEMED === $repo->get( $kept_single->id )->status && 9002 === $t5c_refused, 'T5: with vcap_restore_on_cancel = no the single-use voucher stays redeemed when the order is cancelled (the shop refuses the code)' );
+vcap_life_assert( str_contains( implode( "\n", array_map( static fn( $n ) => (string) $n->content, wc_get_order_notes( array( 'order_id' => $t5c->get_id() ) ) ) ), 'stay redeemed' ), 'T5: the order note says the single-use voucher stays redeemed' );
+false === $keep_restore ? delete_option( 'vcap_restore_on_cancel' ) : update_option( 'vcap_restore_on_cancel', $keep_restore );
+
+/** Order notes of an order as plain strings. */
+function vcap_life_notes( int $order_id ): array {
+	return array_map( static fn( $note ) => (string) $note->content, wc_get_order_notes( array( 'order_id' => $order_id ) ) );
+}
+
+/** Makes every coupon post update fail (wp_update_post() returns a WP_Error) – a void that cannot disable its coupon. */
+function vcap_life_block_coupon_updates( $empty, $postarr ) {
+	return ( isset( $postarr['ID'] ) && 'shop_coupon' === get_post_type( (int) $postarr['ID'] ) ) ? true : $empty;
+}
+
+// P7: a void that fails after a refund is reported (order note, Attention) and retried by Action Scheduler.
+$p7 = wc_create_order( array( 'status' => 'processing' ) );
+$p7->set_billing_email( 'p7@example.com' );
+$p7->save();
+$p7_voucher = vcap_life_single( $p7->get_id() );
+add_filter( 'wp_insert_post_empty_content', 'vcap_life_block_coupon_updates', 10, 2 );
+wc_get_order( $p7->get_id() )->update_status( 'refunded' );
+remove_filter( 'wp_insert_post_empty_content', 'vcap_life_block_coupon_updates', 10 );
+$p7_notes = implode( "\n", vcap_life_notes( $p7->get_id() ) );
+vcap_life_assert( 'publish' === get_post_status( $p7_voucher->coupon_id ) && str_contains( $p7_notes, 'could NOT be voided' ), 'P7: a void that fails after the refund leaves an order note' );
+vcap_life_assert( VCAP\Attention::has( $p7->get_id(), 'void:' . $p7_voucher->id ), 'P7: the failed void is listed for the shop (admin notice / Site Health)' );
+vcap_life_assert( (bool) as_next_scheduled_action( VCAP\Issuer::VOID_RETRY_HOOK, array( 'voucher_id' => (int) $p7_voucher->id, 'attempt' => 1 ), 'vcap' ), 'P7: the void is retried by an Action Scheduler action' );
+vcap()->issuer->retry_void( $p7_voucher->id, 1 );
+vcap_life_assert( 'draft' === get_post_status( $p7_voucher->coupon_id ) && VCAP\Voucher::STATUS_VOID === $repo->get( $p7_voucher->id )->status && ! VCAP\Attention::has( $p7->get_id(), 'void:' . $p7_voucher->id ), 'P7: the retry disables the coupon and resolves the case' );
+vcap_life_assert( str_contains( implode( "\n", vcap_life_notes( $p7->get_id() ) ), 'voided (retried after the refund or cancellation)' ), 'P7: the successful retry is noted on the order' );
+as_unschedule_all_actions( VCAP\Issuer::VOID_RETRY_HOOK, null, 'vcap' );
+
+// P7 (partial refund): no "voided (refunded)" note when the void failed.
+$p7_goods = new WC_Product_Simple();
+$p7_goods->set_name( 'P7 voucher line' );
+$p7_goods->set_regular_price( '20' );
+$p7_goods->set_virtual( true );
+$p7_goods->save();
+$p7p = wc_create_order();
+$p7p_line = $p7p->add_product( $p7_goods, 2 );
+$p7p->set_billing_email( 'p7p@example.com' );
+$p7p->calculate_totals( false );
+$p7p->set_status( 'processing' );
+$p7p->save();
+$p7p_vouchers = array();
+foreach ( array( 0, 1 ) as $p7_index ) {
+	$p7p_v                = vcap_life_single( $p7p->get_id() );
+	$p7p_v->order_item_id = $p7p_line;
+	$p7p_v->item_index    = $p7_index;
+	$repo->update_columns( $p7p_v, array( 'order_item_id', 'item_index' ) );
+	$p7p_vouchers[] = $p7p_v;
+}
+add_filter( 'wp_insert_post_empty_content', 'vcap_life_block_coupon_updates', 10, 2 );
+$p7_refund = wc_create_refund( array( 'order_id' => $p7p->get_id(), 'amount' => 20, 'line_items' => array( $p7p_line => array( 'qty' => 1, 'refund_total' => 20 ) ) ) );
+remove_filter( 'wp_insert_post_empty_content', 'vcap_life_block_coupon_updates', 10 );
+$p7p_notes = implode( "\n", vcap_life_notes( $p7p->get_id() ) );
+vcap_life_assert( ! is_wp_error( $p7_refund ) && str_contains( $p7p_notes, 'could NOT be voided' ) && ! str_contains( $p7p_notes, 'voided (refunded)' ), 'P7: a partial refund whose void failed notes the failure, not "voided (refunded)"' );
+foreach ( $p7p_vouchers as $p7p_v ) {
+	VCAP\Attention::resolve( $p7p->get_id(), 'void:' . $p7p_v->id );
+}
+as_unschedule_all_actions( VCAP\Issuer::VOID_RETRY_HOOK, null, 'vcap' );
+
+// P8: a partial refund of a voucher line never voids a voucher that was used up completely.
+$p8_goods = new WC_Product_Simple();
+$p8_goods->set_name( 'P8 goods' );
+$p8_goods->set_regular_price( '80' );
+$p8_goods->set_virtual( true );
+$p8_goods->save();
+$p8 = wc_create_order();
+$p8_line = $p8->add_product( $p7_goods, 1 );
+$p8->add_product( $p8_goods, 1 );
+$p8->set_billing_email( 'p8@example.com' );
+$p8->calculate_totals( false );
+$p8->set_status( 'processing' );
+$p8->save();
+$p8_used                = vcap_life_single( $p8->get_id() );
+$p8_used->order_item_id = $p8_line;
+$repo->update_columns( $p8_used, array( 'order_item_id' ) );
+$repo->update_status( $p8_used->id, VCAP\Voucher::STATUS_REDEEMED );
+$p8_refund = wc_create_refund( array( 'order_id' => $p8->get_id(), 'amount' => 10, 'line_items' => array( $p8_line => array( 'qty' => 1, 'refund_total' => 10 ) ) ) );
+vcap_life_assert( ! is_wp_error( $p8_refund ) && ! wc_get_order( $p8->get_id() )->has_status( 'refunded' ), 'P8: the order is partly refunded (quantity of the voucher line)' );
+vcap_life_assert( VCAP\Voucher::STATUS_REDEEMED === $repo->get( $p8_used->id )->status && 'publish' === get_post_status( $p8_used->coupon_id ) && ! in_array( 'voided', array_column( $repo->events( $p8_used->id ), 'event' ), true ), 'P8: a used-up voucher is not voided by a partial refund (no "voided" event for connectors)' );
+vcap_life_assert( str_contains( implode( "\n", vcap_life_notes( $p8->get_id() ) ), 'was already used up and stays as it is' ), 'P8: an order note names the used-up voucher' );
+
 // K3: "On hold" as the only issue status (older setups), bank transfer: the vouchers come once the order is paid.
 $keep_statuses = get_option( 'vcap_issue_statuses', false );
 update_option( 'vcap_issue_statuses', array( 'on-hold' ) );
