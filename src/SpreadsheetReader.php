@@ -47,8 +47,8 @@ final class SpreadsheetReader {
 			}
 		}
 		$rows   = array();
-		$handle = fopen( 'php://temp', 'r+' );
-		fwrite( $handle, $content );
+		$handle = fopen( 'php://temp', 'r+' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- in-memory stream for fgetcsv(); WP_Filesystem has no stream API.
+		fwrite( $handle, $content ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- writes to the php://temp stream above.
 		rewind( $handle );
 		while ( false !== ( $row = fgetcsv( $handle, 0, $delimiter, '"', '\\' ) ) ) {
 			if ( array( null ) === $row ) {
@@ -59,7 +59,7 @@ final class SpreadsheetReader {
 				break;
 			}
 		}
-		fclose( $handle );
+		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- closes the php://temp stream above.
 		return $rows;
 	}
 
@@ -243,7 +243,7 @@ final class SpreadsheetReader {
 				if ( count( $paras ) ) {
 					$parts = array();
 					foreach ( $paras as $p ) {
-						$parts[] = trim( strip_tags( $p->asXML() ) );
+						$parts[] = trim( wp_strip_all_tags( $p->asXML() ) );
 					}
 					$value = implode( "\n", $parts );
 				} else {

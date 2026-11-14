@@ -129,7 +129,7 @@ final class PdfRenderer {
 		$options->set( 'dpi', 150 );
 		$options->set( 'fontDir', $tmp );
 		$options->set( 'fontCache', $tmp );
-		$options->set( 'tempDir', is_writable( $tmp ) ? $tmp : sys_get_temp_dir() );
+		$options->set( 'tempDir', wp_is_writable( $tmp ) ? $tmp : sys_get_temp_dir() );
 		$uploads = wp_upload_dir( null, false );
 		$options->set( 'chroot', array_values( array_filter( array( VCAP_PATH, $uploads['basedir'], ABSPATH ) ) ) );
 		$options = apply_filters( 'vcap_dompdf_options', $options );

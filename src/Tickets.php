@@ -580,7 +580,7 @@ final class Tickets {
 		do {
 			$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) < %d LIMIT %d", $wpdb->esc_like( self::SCAN_PREFIX ) . '%', time() - 2 * DAY_IN_SECONDS, $limit ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			if ( false === $deleted ) {
-				throw new \RuntimeException( 'Scanner keys could not be removed: ' . $wpdb->last_error );
+				throw new \RuntimeException( 'Scanner keys could not be removed: ' . esc_html( $wpdb->last_error ) );
 			}
 		} while ( (int) $deleted >= $limit && microtime( true ) - $start < $budget );
 		return (int) $deleted < $limit;
