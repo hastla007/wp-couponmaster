@@ -46,29 +46,47 @@ function vcap_uninstall_autoload(): void {
  * account on the license server).
  *
  * @param float $deadline microtime() by which all releases of this uninstall must be done (0 = no common limit).
+ * @param bool  $network  The network license (plugin network-activated) instead of this site's.
  */
-function vcap_uninstall_release_license( float $deadline = 0.0 ): void {
-	$credentials = get_option( 'vcap_wplc_credentials' ); // VCAP\Licensing\Entitlements::CREDENTIALS_OPTION.
-	if ( ! is_array( $credentials ) || empty( $credentials['activation_id'] ) ) {
-		return;
-	}
-	vcap_uninstall_autoload();
-	$server = (string) ( $credentials['server_url'] ?? '' );
-	if ( '' === $server ) {
-		$server = (string) get_option( 'vcap_wplc_server_url', '' );
-	}
-	if ( '' === $server && defined( 'VCAP_LICENSE_SERVER' ) ) {
-		$server = (string) VCAP_LICENSE_SERVER;
-	}
-	$timeout = $deadline > 0 ? (int) floor( min( 5.0, $deadline - microtime( true ) ) ) : 5;
-	if ( '' !== $server && $timeout >= 1 && class_exists( 'VCAP\\Licensing\\LicenseClient' ) ) {
-		$client = new VCAP\Licensing\LicenseClient( $server, 'voucher-captain', '0', 'vcap_wplc_credentials' );
-		$client->set_timeout( $timeout );
-		$client->deactivate();
+function vcap_uninstall_release_license( float $deadline = 0.0, bool $network = false ): void {
+	// VCAP\Licensing\Entitlements::CREDENTIALS_OPTION; a network license is stored network-wide.
+	$credentials = $network ? get_site_option( 'vcap_wplc_credentials' ) : get_option( 'vcap_wplc_credentials' );
+	if ( is_array( $credentials ) && ! empty( $credentials['activation_id'] ) ) {
+		vcap_uninstall_autoload();
+		$server = (string) ( $credentials['server_url'] ?? '' );
+		if ( '' === $server ) {
+			$server = (string) ( $network ? get_site_option( 'vcap_wplc_server_url', '' ) : get_option( 'vcap_wplc_server_url', '' ) );
+		}
+		if ( '' === $server && defined( 'VCAP_LICENSE_SERVER' ) ) {
+			$server = (string) VCAP_LICENSE_SERVER;
+		}
+		$timeout = $deadline > 0 ? (int) floor( min( 5.0, $deadline - microtime( true ) ) ) : 5;
+		if ( '' !== $server && $timeout >= 1 && class_exists( 'VCAP\\Licensing\\LicenseClient' ) ) {
+			// deactivate() refuses an activation copied from another website: a copy never releases the original's place.
+			$client = new VCAP\Licensing\LicenseClient( $server, 'voucher-captain', '0', 'vcap_wplc_credentials', $network ? 'network' : '' );
+			$client->set_timeout( $timeout );
+			$client->deactivate();
+		}
 	}
 	// Removed also when the server could not be reached: the plugin and its license page are gone.
-	delete_option( 'vcap_wplc_credentials' );
-	delete_option( 'vcap_wplc_credentials_entitlements_cache' );
+	if ( $network ) {
+		foreach ( array( '', '_entitlements_cache', '_pending', '_last_check', '_copy_of', '_migrated' ) as $suffix ) {
+			delete_site_option( 'vcap_wplc_credentials' . $suffix );
+		}
+		delete_site_option( 'vcap_wplc_server_url' );
+	} else {
+		foreach ( array( '', '_entitlements_cache', '_pending', '_last_check', '_copy_of' ) as $suffix ) {
+			delete_option( 'vcap_wplc_credentials' . $suffix );
+		}
+	}
+}
+
+/**
+ * Network license (plugin was network-activated): released and its network options deleted on every network
+ * uninstall, within the common time budget.
+ */
+function vcap_uninstall_network_license( float $deadline = 0.0 ): void {
+	vcap_uninstall_release_license( $deadline, true );
 }
 
 /**
@@ -231,6 +249,7 @@ if ( is_multisite() ) {
 	// License releases first, all together within 30 seconds (one slow server must not use up the request before
 	// the coupons of every site are suspended); sites left over drop their credentials without a release.
 	$vcap_release_deadline = microtime( true ) + 30;
+	vcap_uninstall_network_license( $vcap_release_deadline );
 	foreach ( $vcap_sites as $vcap_site_id ) {
 		switch_to_blog( $vcap_site_id );
 		vcap_uninstall_release_license( $vcap_release_deadline );

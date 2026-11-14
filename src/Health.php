@@ -31,6 +31,12 @@ final class Health {
 				'test'  => array( $this, 'test_' . $id ),
 			);
 		}
+		if ( Licensing\Entitlements::is_premium() ) {
+			$tests['direct']['vcap_license'] = array(
+				'label' => __( 'Voucher Captain', 'voucher-captain' ),
+				'test'  => array( $this, 'test_license' ),
+			);
+		}
 		foreach ( self::ASYNC as $id ) {
 			$tests['async'][ 'vcap_' . $id ] = array(
 				'label'             => __( 'Voucher Captain', 'voucher-captain' ),
@@ -208,6 +214,12 @@ final class Health {
 		return self::result( 'scheduler', 'recommended', __( 'Voucher tasks are not running on time', 'voucher-captain' ), $text . ' ' . __( 'Check that WP-Cron or a server cron job runs, and look at WooCommerce → Status → Scheduled Actions (group "vcap").', 'voucher-captain' ) );
 	}
 
+	/** License check of the premium edition: overdue when the snapshot is older than a day (WP-Cron/AS not running). */
+	public function test_license(): array {
+		$health = Licensing\Entitlements::health() ?? array( 'status' => 'good', 'label' => __( 'No license needed', 'voucher-captain' ), 'description' => '' );
+		return self::result( 'license', $health['status'], $health['label'], $health['description'] );
+	}
+
 	public function test_mail(): array {
 		$failures = self::mail_failures();
 		if ( ! $failures ) {
@@ -379,7 +391,9 @@ final class Health {
 			'status'      => $status,
 			'badge'       => array( 'label' => __( 'Vouchers', 'voucher-captain' ), 'color' => 'good' === $status ? 'blue' : ( 'critical' === $status ? 'red' : 'orange' ) ),
 			'description' => '<p>' . esc_html( $text ) . '</p>',
-			'actions'     => 'mail' === $id || 'good' === $status ? '' : '<p><a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=vcap' ) ) . '">' . esc_html__( 'Voucher settings', 'voucher-captain' ) . '</a></p>',
+			'actions'     => 'mail' === $id || 'good' === $status ? '' : ( 'license' === $id
+				? '<p><a href="' . esc_url( Licensing\Entitlements::page_url() ) . '">' . esc_html__( 'Manage license', 'voucher-captain' ) . '</a></p>'
+				: '<p><a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=vcap' ) ) . '">' . esc_html__( 'Voucher settings', 'voucher-captain' ) . '</a></p>' ),
 			'test'        => 'vcap_' . $id,
 		);
 	}

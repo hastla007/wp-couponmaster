@@ -103,12 +103,12 @@ final class Diagnostics {
 
 	/** License status of the signed local snapshot (no server call while Site Health loads). */
 	private function license_fields(): array {
-		$credentials = get_option( Entitlements::CREDENTIALS_OPTION, array() );
 		$client      = Entitlements::client();
+		$credentials = $client ? $client->stored_credentials() : array();
 		$snapshot    = $client ? $client->cached_entitlements() : null;
-		$cache       = get_option( Entitlements::CREDENTIALS_OPTION . '_entitlements_cache', array() );
-		$cached_at   = is_array( $cache ) ? absint( $cache['cached_at'] ?? 0 ) : 0;
-		if ( ! is_array( $credentials ) || empty( $credentials['activation_id'] ) ) {
+		// Age from the server's signed time of the snapshot (what its validity depends on).
+		$cached_at = is_array( $snapshot ) ? Licensing\LicenseClient::snapshot_time( $snapshot ) : 0;
+		if ( empty( $credentials['activation_id'] ) ) {
 			$status = __( 'Not activated', 'voucher-captain' );
 		} elseif ( is_array( $snapshot ) ) {
 			$status = Licensing\AdminPage::status_label( (string) ( $snapshot['license_status'] ?? '' ) );

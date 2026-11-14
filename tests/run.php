@@ -504,24 +504,39 @@ if ( class_exists( 'ZipArchive' ) ) {
 }
 
 echo "License (WP License Captain): client, offline cache, fail-closed gate\n";
-// Fake license server: signs each answer with the installation secret (HMAC over the JSON data).
-$lic = array( 'secret' => '', 'mode' => 'ok', 'status' => 'active', 'rights' => array( 'voucher.promotions' => true, 'voucher.referrals' => false, 'voucher.reports' => 0, 'pass.tickets' => true ) );
-$GLOBALS['vcap_test_http'] = static function ( $url, $args ) use ( &$lic ) {
+// Fake license server: signs each answer with the installation secret (HMAC over the JSON data), sends the signed
+// server time and the site the activation is bound to, records the installations and request bodies it saw.
+$lic = array( 'secret' => '', 'mode' => 'ok', 'status' => 'active', 'site' => 'https://shop.test', 'ids' => array(), 'bodies' => array(), 'rights' => array( 'voucher.promotions' => true, 'voucher.referrals' => false, 'voucher.reports' => 0, 'pass.tickets' => true ) );
+$lic_errors = array(
+	'403'      => array( 403, '{"code":"license_revoked","message":"revoked"}' ),
+	'404'      => array( 404, '{"code":"license_not_found","message":"The license record could not be found."}' ),
+	'401'      => array( 401, '{"code":"activation_not_found","message":"The installation is not active."}' ),
+	'site'     => array( 409, '{"code":"site_mismatch","message":"other site"}' ),
+	'429'      => array( 429, '{"code":"rate_limited","message":"slow down"}' ),
+	'replayed' => array( 409, '{"code":"request_replayed","message":"nonce used"}' ),
+	'clock'    => array( 401, '{"code":"request_expired","message":"clock"}' ),
+	'waf'      => array( 403, '<html>Access denied</html>' ),
+	'noroute'  => array( 404, '{"code":"rest_no_route","message":"No route"}' ),
+	'503'      => array( 503, '{"code":"maintenance","message":"down"}' ),
+);
+$GLOBALS['vcap_test_http'] = static function ( $url, $args ) use ( &$lic, $lic_errors ) {
+	$body           = json_decode( (string) ( $args['body'] ?? '' ), true ) ?: array();
+	$lic['bodies'][] = $body;
 	if ( 'down' === $lic['mode'] ) {
 		return new WP_Error( 'http_request_failed', 'cURL error 28: timeout' );
 	}
-	if ( '503' === $lic['mode'] ) {
-		return array( 'code' => 503, 'body' => '{"code":"maintenance","message":"down"}' );
+	if ( isset( $lic_errors[ $lic['mode'] ] ) ) {
+		return array( 'code' => $lic_errors[ $lic['mode'] ][0], 'body' => $lic_errors[ $lic['mode'] ][1] );
 	}
-	if ( '403' === $lic['mode'] ) {
-		return array( 'code' => 403, 'body' => '{"code":"license_revoked","message":"revoked"}' );
-	}
-	$body = json_decode( (string) $args['body'], true ) ?: array();
 	if ( str_contains( $url, '/activations' ) && 'POST' === $args['method'] ) {
+		$lic['ids'][]  = $body['installation_id'];
 		$lic['secret'] = $body['installation_secret'];
-		$data          = array( 'activation_id' => 7 );
+		if ( 'lost' === $lic['mode'] ) { // Created on the server, but the answer never arrives.
+			return new WP_Error( 'http_request_failed', 'cURL error 28: timeout' );
+		}
+		$data = array( 'activation_id' => 7 );
 	} else {
-		$data = array( 'license_status' => $lic['status'], 'entitlements' => $lic['rights'], 'cache_expires_at' => gmdate( 'Y-m-d H:i:s', time() + 30 * DAY_IN_SECONDS ) );
+		$data = array( 'license_status' => $lic['status'], 'site_url' => $lic['site'], 'entitlements' => $lic['rights'], 'server_time' => gmdate( 'Y-m-d H:i:s' ), 'cache_expires_at' => gmdate( 'Y-m-d H:i:s', time() + 14 * DAY_IN_SECONDS ) );
 	}
 	$sig = hash_hmac( 'sha256', json_encode( $data, JSON_UNESCAPED_SLASHES ), 'forged' === $lic['mode'] ? 'wrong-secret' : $lic['secret'] );
 	return array( 'code' => 200, 'body' => json_encode( array( 'data' => $data, 'signature' => $sig ) ) );
@@ -530,12 +545,21 @@ $GLOBALS['vcap_test_options']['vcap_wplc_server_url'] = 'https://licenses.exampl
 $client = new VCAP\Licensing\LicenseClient( 'https://licenses.example.test', 'voucher-captain', '1.0', 'vcap_wplc_credentials' );
 $lic['mode'] = 'forged';
 check( 'a forged activation answer is refused and nothing is stored', is_wp_error( $client->activate( 'KEY-1' ) ) && ! get_option( 'vcap_wplc_credentials' ) );
+$lic['mode'] = 'lost';
+$client->activate( 'key-1' );
 $lic['mode'] = 'ok';
 $act = $client->activate( 'key-1' );
 $cred = get_option( 'vcap_wplc_credentials' );
 check( 'activation stores installation id, secret and activation id – never the license key', is_array( $act ) && 7 === $cred['activation_id'] && 64 === strlen( $cred['installation_secret'] ) && ! str_contains( (string) json_encode( $cred ), 'KEY-1' ) );
+check( 'P4: retries (refused answer, timeout after the server created it) send the same installation again – no second place', 1 === count( array_unique( $lic['ids'] ) ) && 3 === count( $lic['ids'] ) && $cred['installation_id'] === $lic['ids'][0] && false === get_option( 'vcap_wplc_credentials_pending' ), json_encode( $lic['ids'] ) );
+check( 'S4: the activation is bound to this website\'s address', 'https://shop.test' === $cred['site_url'] && 'https://shop.test' === end( $lic['bodies'] )['site_url'] );
+$again = $client->activate( 'key-1' );
+check( 'P4: activating an activated site sends its own installation again (never a new one)', is_array( $again ) && 1 === count( array_unique( $lic['ids'] ) ) );
+$other = $client->activate( 'key-1', 'development' );
+check( 'P4: an activated site never starts a second installation', is_wp_error( $other ) && 'wplc_already_activated' === $other->get_error_code() && 1 === count( array_unique( $lic['ids'] ) ) );
 $online = $client->get_entitlements();
 check( 'online check returns the signed rights and stores a signed snapshot', is_array( $online ) && is_array( get_option( 'vcap_wplc_credentials_entitlements_cache' ) ) );
+check( 'S4: every authenticated request names this website (site_url in the signed body)', 'https://shop.test' === ( end( $lic['bodies'] )['site_url'] ?? '' ) );
 check( 'rights: true allows; false, 0, missing and foreign-product keys deny', $client->allows_entitlement( 'voucher.promotions', $online ) && ! $client->allows_entitlement( 'voucher.referrals', $online ) && ! $client->allows_entitlement( 'voucher.reports', $online ) && ! $client->allows_entitlement( 'voucher.topup', $online ) && ! $client->allows_entitlement( 'pass.tickets', $online ) );
 check( 'development checkout (no edition constant): every premium feature stays on', VCAP\Licensing\Entitlements::allows( 'referrals' ) && VCAP\Licensing\Entitlements::allows( 'topup' ) );
 $required = static fn() => true;
@@ -545,37 +569,114 @@ check( 'premium edition: allowed rights work, others are locked', VCAP\Licensing
 $lic['mode'] = 'down';
 $offline = $client->get_entitlements();
 check( 'server unreachable: the signed snapshot keeps the rights (offline)', is_array( $offline ) && $client->allows_entitlement( 'voucher.promotions', $offline ) );
-$lic['mode'] = '503';
-check( 'server error 5xx: the signed snapshot keeps the rights', is_array( $client->get_entitlements() ) );
 $cache = get_option( 'vcap_wplc_credentials_entitlements_cache' );
+$kept  = array();
+foreach ( array( '503', '429', 'replayed', 'clock', 'waf', 'noroute' ) as $mode ) {
+	$lic['mode'] = $mode;
+	if ( ! is_array( $client->get_entitlements() ) || $cache !== get_option( 'vcap_wplc_credentials_entitlements_cache' ) ) {
+		$kept[] = $mode;
+	}
+}
+check( 'S3: outages keep the snapshot (5xx, 429, replayed nonce, clock skew, firewall page, missing route)', array() === $kept, implode( ',', $kept ) );
+$last = $client->last_check();
+check( 'P10: the last failed check is recorded with its cause', ! $last['ok'] && 'rest_no_route' === $last['code'] && $last['time'] >= time() - 5 && 'active' === $last['status'] && str_contains( VCAP\Licensing\Entitlements::error_hint( 'request_expired' ), 'clock' ) && str_contains( VCAP\Licensing\Entitlements::error_hint( 'wplc_http_error' ), 'firewall' ) );
 $tampered = $cache;
 $tampered['data']['entitlements']['voucher.referrals'] = true;
 update_option( 'vcap_wplc_credentials_entitlements_cache', $tampered );
 VCAP\Licensing\Entitlements::reset();
+$lic['mode'] = 'down';
 check( 'a tampered snapshot is refused (fail-closed)', is_wp_error( $client->get_entitlements() ) && ! VCAP\Licensing\Entitlements::allows( 'promotions' ) );
-$expired = $cache;
-$expired['cached_at'] = time() - 20 * DAY_IN_SECONDS;
-$expired['expires_at'] = time() - DAY_IN_SECONDS;
-update_option( 'vcap_wplc_credentials_entitlements_cache', $expired );
+// S2: a snapshot is as old as the server's signed time says, whatever the local timestamps claim.
+$resign = static function ( array $snapshot, array $changes ) use ( &$lic ): array {
+	$snapshot['data']      = array_merge( $snapshot['data'], $changes );
+	$snapshot['signature'] = hash_hmac( 'sha256', json_encode( $snapshot['data'], JSON_UNESCAPED_SLASHES ), $lic['secret'] );
+	return $snapshot;
+};
+$old = $resign( $cache, array( 'server_time' => gmdate( 'Y-m-d H:i:s', time() - 15 * DAY_IN_SECONDS ), 'cache_expires_at' => gmdate( 'Y-m-d H:i:s', time() + 10 * DAY_IN_SECONDS ) ) );
+$old['cached_at']  = time();
+$old['expires_at'] = time() + 14 * DAY_IN_SECONDS;
+update_option( 'vcap_wplc_credentials_entitlements_cache', $old );
 VCAP\Licensing\Entitlements::reset();
-check( 'an expired snapshot (more than 14 days offline) locks the features', is_wp_error( $client->get_entitlements() ) && ! VCAP\Licensing\Entitlements::allows( 'promotions' ) );
-$long = $cache;
-$long['expires_at'] = $long['cached_at'] + 30 * DAY_IN_SECONDS;
-update_option( 'vcap_wplc_credentials_entitlements_cache', $long );
-check( 'a snapshot claiming more than 14 days is refused', is_wp_error( $client->get_entitlements() ) );
+check( 'S2: an old snapshot with fresh local timestamps stays expired (14 days after the signed server time)', is_wp_error( $client->get_entitlements() ) && ! VCAP\Licensing\Entitlements::allows( 'promotions' ) );
+update_option( 'vcap_wplc_credentials_entitlements_cache', $resign( $cache, array( 'cache_expires_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ) ) );
+check( 'S2: the signed cache_expires_at ends the snapshot', is_wp_error( $client->cached_entitlements() ) );
+update_option( 'vcap_wplc_credentials_entitlements_cache', $resign( $cache, array( 'server_time' => gmdate( 'Y-m-d H:i:s', time() + DAY_IN_SECONDS ) ) ) );
+check( 'S2: a signed server time in the future (clock set back) is refused', is_wp_error( $client->cached_entitlements() ) );
+$no_time = $cache;
+unset( $no_time['data']['server_time'] );
+update_option( 'vcap_wplc_credentials_entitlements_cache', $resign( $no_time, array() ) );
+check( 'S2: a snapshot without signed server time is refused', is_wp_error( $client->cached_entitlements() ) );
+$aging = $resign( $cache, array( 'server_time' => gmdate( 'Y-m-d H:i:s', time() - 4 * DAY_IN_SECONDS ) ) );
+update_option( 'vcap_wplc_credentials_entitlements_cache', $aging );
+VCAP\Licensing\Entitlements::reset();
+$state = VCAP\Licensing\Entitlements::check_state();
+check( 'P10: a snapshot older than 3 days names the last confirmation, the cause and the lock date', $state['valid'] && $state['checked'] < time() - VCAP\Licensing\Entitlements::WARN_AGE && abs( $state['locks_at'] - ( time() + 10 * DAY_IN_SECONDS ) ) < 5 && str_contains( VCAP\Licensing\Entitlements::overdue_text( $state ), 'could not be reached' ), VCAP\Licensing\Entitlements::overdue_text( $state ) );
 update_option( 'vcap_wplc_credentials_entitlements_cache', $cache );
-$lic['mode'] = '403';
+// S3: refusals of the license server delete the snapshot at once.
+foreach ( array( '403', '404' ) as $mode ) {
+	update_option( 'vcap_wplc_credentials_entitlements_cache', $cache );
+	$lic['mode'] = $mode;
+	VCAP\Licensing\Entitlements::reset();
+	check( "S3: license refused by the server ($mode): snapshot deleted, no offline fallback, features locked", is_wp_error( $client->get_entitlements() ) && false === get_option( 'vcap_wplc_credentials_entitlements_cache' ) && ! VCAP\Licensing\Entitlements::allows( 'promotions' ) && is_array( get_option( 'vcap_wplc_credentials' ) ) );
+}
+// S4: a credential copied into another website.
+update_option( 'vcap_wplc_credentials_entitlements_cache', $cache );
+$lic['mode'] = 'site';
 VCAP\Licensing\Entitlements::reset();
-check( 'license refused by the server (4xx): no offline fallback', is_wp_error( $client->get_entitlements() ) );
+check( 'S4: the server refuses the site (409 site_mismatch): snapshot deleted, credentials kept', is_wp_error( $client->get_entitlements() ) && false === get_option( 'vcap_wplc_credentials_entitlements_cache' ) && is_array( get_option( 'vcap_wplc_credentials' ) ) && ! VCAP\Licensing\Entitlements::allows( 'promotions' ) );
 $lic['mode'] = 'ok';
+$lic['site'] = 'https://original.test';
+check( 'S4: signed data of another website is refused', is_wp_error( $client->get_entitlements() ) && false === get_option( 'vcap_wplc_credentials_entitlements_cache' ) );
+update_option( 'vcap_wplc_credentials_entitlements_cache', $resign( $cache, array( 'site_url' => 'https://original.test' ) ) );
+check( 'S4: an offline snapshot of another website unlocks nothing', is_wp_error( $client->cached_entitlements() ) );
+$lic['site'] = 'https://shop.test';
+update_option( 'vcap_wplc_credentials_entitlements_cache', $cache );
+$legacy = $cred;
+unset( $legacy['site_url'] );
+update_option( 'vcap_wplc_credentials', $legacy );
+$client->get_entitlements();
+check( 'S4: an activation from before the binding takes the site the server confirms', 'https://shop.test' === ( get_option( 'vcap_wplc_credentials' )['site_url'] ?? '' ) );
+check( 'S4: same site despite scheme, www, case, default port and trailing slash', 'shop.test/de' === VCAP\Licensing\LicenseClient::site_identity( 'HTTP://WWW.Shop.Test:80/de/' ) && VCAP\Licensing\LicenseClient::site_identity( 'https://shop.test' ) !== VCAP\Licensing\LicenseClient::site_identity( 'https://staging.shop.test' ) && '' === VCAP\Licensing\LicenseClient::site_identity( 'ftp://shop.test' ) );
+$copied             = $cred;
+$copied['site_url'] = 'https://original.test';
+update_option( 'vcap_wplc_credentials', $copied );
+$requests = count( $lic['bodies'] );
+VCAP\Licensing\Entitlements::reset();
+check( 'S4: credentials copied from another website: locked, no request sent, deactivation refused', is_wp_error( $client->cached_entitlements() ) && is_wp_error( $client->get_entitlements() ) && ! VCAP\Licensing\Entitlements::allows( 'promotions' ) && 'site_mismatch' === $client->deactivate()->get_error_code() && count( $lic['bodies'] ) === $requests && 'https://original.test' === $client->foreign_site() );
+$client->forget_locally();
+$copy_of = $client->copy_of();
+check( 'S4: "Remove locally" on a copy keeps the original\'s installation for a staging activation', false === get_option( 'vcap_wplc_credentials' ) && $cred['installation_id'] === ( $copy_of['installation_id'] ?? '' ) );
+$staging = $client->activate( 'key-1', 'staging', $copy_of['installation_id'] );
+$sent    = end( $lic['bodies'] );
+check( 'S4: the copy activates as staging site of the original with a new installation', is_array( $staging ) && 'staging' === $sent['environment'] && $cred['installation_id'] === $sent['staging_parent_installation_id'] && $cred['installation_id'] !== $sent['installation_id'] && array() === $client->copy_of() );
+// S3: a released installation (401 activation_not_found) deletes the credential too.
+$client->get_entitlements();
+$lic['mode'] = '401';
+check( 'S3: installation released on the server (401): snapshot and credentials deleted', is_wp_error( $client->get_entitlements() ) && false === get_option( 'vcap_wplc_credentials' ) && false === get_option( 'vcap_wplc_credentials_entitlements_cache' ) );
+$lic['mode'] = 'ok';
+$client->activate( 'key-1' );
 $lic['status'] = 'expired';
 $client->get_entitlements();
 VCAP\Licensing\Entitlements::reset();
 check( 'license no longer active: snapshot deleted, premium features locked', false === get_option( 'vcap_wplc_credentials_entitlements_cache' ) && ! VCAP\Licensing\Entitlements::allows( 'promotions' ) );
+check( 'U13: an inactive license says why each feature is locked instead of "not included"', str_contains( VCAP\Licensing\AdminPage::right_label( 'Reports', 'past_due', false ), 'until the payment' ) && str_contains( VCAP\Licensing\AdminPage::right_label( 'Reports', 'suspended', false ), 'not active' ) && str_contains( VCAP\Licensing\AdminPage::right_label( 'Reports', 'active', false ), 'not included' ) );
+$lock = new ReflectionMethod( VCAP\Settings::class, 'lock_premium' );
+$locked_fields = $lock->invoke( null, array(
+	array( 'type' => 'title', 'id' => 'vcap_referral', 'desc' => 'Intro' ),
+	array( 'type' => 'checkbox', 'id' => 'vcap_referral_enabled' ),
+	array( 'type' => 'number', 'id' => 'vcap_referral_reward_amount', 'desc' => 'Amount' ),
+	array( 'type' => 'sectionend', 'id' => 'vcap_referral' ),
+	array( 'type' => 'checkbox', 'id' => 'vcap_campaigns_enabled', 'desc' => 'Promotions' ),
+) );
+$messages = substr_count( (string) json_encode( array_column( $locked_fields, 'desc' ) ), 'Premium' );
+check( 'U13: one lock hint per section (title), fields only read-only', 2 === $messages && 'Amount' === $locked_fields[2]['desc'] && false === $locked_fields[2]['is_option'] && str_contains( (string) $locked_fields[4]['desc'], 'Premium' ), json_encode( array_column( $locked_fields, 'desc' ) ) );
 delete_option( 'vcap_wplc_credentials' );
 VCAP\Licensing\Entitlements::reset();
 check( 'not activated: locked', ! VCAP\Licensing\Entitlements::allows( 'promotions' ) );
 remove_filter( 'vcap_license_required', $required );
+foreach ( array( '_pending', '_last_check', '_copy_of', '_entitlements_cache' ) as $suffix ) {
+	delete_option( 'vcap_wplc_credentials' . $suffix );
+}
 unset( $GLOBALS['vcap_test_http'], $GLOBALS['vcap_test_options']['vcap_wplc_server_url'] );
 VCAP\Licensing\Entitlements::reset();
 
@@ -640,6 +741,21 @@ $offer['sha256']      = 'not-a-checksum';
 PremiumUpdater::flush();
 check( 'an offer without a valid SHA-256 is not offered', ! isset( $updater->inject_update( (object) array( 'response' => array() ) )->response[ $basename ] ) );
 $offer['sha256'] = hash( 'sha256', $zip );
+PremiumUpdater::flush();
+$updater->inject_update( (object) array( 'response' => array() ) );
+$up_mode = 503;
+$GLOBALS['vcap_test_http'] = static function ( $url, $args ) use ( &$up_mode ) {
+	return array( 'code' => $up_mode, 'body' => 403 === $up_mode ? '{"code":"license_inactive","message":"inactive"}' : '{"code":"maintenance","message":"down"}' );
+};
+PremiumUpdater::flush();
+$kept = $updater->inject_update( (object) array( 'response' => array() ) );
+check( 'P11: a license server outage keeps the last valid offer (version and SHA-256)', isset( $kept->response[ $basename ] ) && '9.9.9' === $kept->response[ $basename ]->new_version && hash( 'sha256', $zip ) === $updater->update_info()['sha256'] );
+$up_mode = 403;
+PremiumUpdater::flush();
+check( 'P11: a refusal of the license server drops the offer', ! isset( $updater->inject_update( (object) array( 'response' => array() ) )->response[ $basename ] ) );
+$GLOBALS['vcap_test_http'] = static function ( $url, $args ) use ( &$offer, $upd_secret ) {
+	return array( 'code' => 200, 'body' => json_encode( array( 'data' => $offer, 'signature' => hash_hmac( 'sha256', json_encode( $offer, JSON_UNESCAPED_SLASHES ), $upd_secret ) ) ) );
+};
 $offer['update_available'] = false;
 PremiumUpdater::flush();
 $GLOBALS['vcap_test_http'] = static function ( $url, $args ) use ( &$offer, $upd_secret ) {
@@ -777,7 +893,7 @@ $GLOBALS['vcap_test_http'] = static function ( $url, $args ) use ( $seed, $kid, 
 		$data   = array( 'activation_id' => 7 );
 	} else {
 		$id   = $args['headers']['X-WPLC-Installation-Id'];
-		$data = array( 'license_status' => 'active', 'entitlements' => array( 'voucher.promotions' => true ), 'cache_expires_at' => gmdate( 'Y-m-d H:i:s', time() + 30 * DAY_IN_SECONDS ) );
+		$data = array( 'license_status' => 'active', 'entitlements' => array( 'voucher.promotions' => true ), 'server_time' => gmdate( 'Y-m-d H:i:s' ), 'cache_expires_at' => gmdate( 'Y-m-d H:i:s', time() + 30 * DAY_IN_SECONDS ) );
 	}
 	$json = json_encode( $data, JSON_UNESCAPED_SLASHES );
 	$msg  = "wplc-response-v1\n" . strtolower( $id ) . "\n" . $json;
@@ -1134,6 +1250,70 @@ check( 'attention: at most 100 cases, the oldest dropped first', 100 === count( 
 delete_option( VCAP\Attention::OPTION );
 // S12: every store-credit refund form gets its own one-time key.
 check( 'refund as store credit: one-time form keys differ', VCAP\StoreCredit::request_key() !== VCAP\StoreCredit::request_key() && 32 === strlen( VCAP\StoreCredit::request_key() ) );
+echo "Multisite license (network option, network-wide updates)\n";
+// Child process: a network whose current site is blog 2; blog 1 is the main site. Network options and other sites'
+// options live in memory, the current site's options are the stubs' options.
+$ms_code = <<<'PHP'
+$GLOBALS['ms_site']  = array();
+$GLOBALS['ms_blogs'] = array( 1 => array() );
+function is_multisite() { return true; }
+function get_current_blog_id() { return 2; }
+function get_main_site_id() { return 1; }
+function is_main_site() { return false; }
+function network_home_url( $p = '' ) { return 'https://network.test' . $p; }
+function get_home_url( $id = null, $p = '' ) { return 1 === $id ? 'https://network.test' : 'https://shop.test'; }
+function get_site_option( $k, $d = false ) { return $GLOBALS['ms_site'][ $k ] ?? $d; }
+function update_site_option( $k, $v ) { $GLOBALS['ms_site'][ $k ] = $v; return true; }
+function delete_site_option( $k ) { unset( $GLOBALS['ms_site'][ $k ] ); return true; }
+function get_blog_option( $id, $k, $d = false ) { return 2 === $id ? get_option( $k, $d ) : ( $GLOBALS['ms_blogs'][ $id ][ $k ] ?? $d ); }
+function update_blog_option( $id, $k, $v ) { $GLOBALS['ms_blogs'][ $id ][ $k ] = $v; return true; }
+function delete_blog_option( $id, $k ) { unset( $GLOBALS['ms_blogs'][ $id ][ $k ] ); return true; }
+require $argv[1];
+$secret = str_repeat( 'a', 64 );
+$seen   = array();
+$GLOBALS['vcap_test_http'] = static function ( $url, $args ) use ( $secret, &$seen ) {
+	$body   = json_decode( (string) $args['body'], true ) ?: array();
+	$seen[] = array( $args['headers']['X-WPLC-Installation-Id'] ?? '', $body['site_url'] ?? '' );
+	$data   = str_contains( $url, '/updates/check' )
+		? array( 'update_available' => false )
+		: array( 'license_status' => 'active', 'site_url' => $body['site_url'] ?? '', 'entitlements' => array( 'voucher.promotions' => true ), 'server_time' => gmdate( 'Y-m-d H:i:s' ), 'cache_expires_at' => gmdate( 'Y-m-d H:i:s', time() + 14 * DAY_IN_SECONDS ) );
+	return array( 'code' => 200, 'body' => json_encode( array( 'data' => $data, 'signature' => hash_hmac( 'sha256', json_encode( $data, JSON_UNESCAPED_SLASHES ), $secret ) ) ) );
+};
+add_filter( 'vcap_license_required', static fn() => true );
+$e    = VCAP\Licensing\Entitlements::class;
+$main = array( 'installation_id' => '11111111-0000-4000-8000-000000000001', 'installation_secret' => $secret, 'activation_id' => 5, 'server_url' => 'https://licenses.example.test', 'site_url' => 'https://network.test' );
+$GLOBALS['ms_blogs'][1] = array( 'vcap_wplc_credentials' => $main, 'vcap_wplc_server_url' => 'https://licenses.example.test' );
+// Network activation: the main site's earlier activation becomes the network license.
+$GLOBALS['ms_site']['active_sitewide_plugins'] = array( plugin_basename( VCAP_FILE ) => time() );
+$client = $e::client();
+$out    = array( 'network' => $e::network(), 'capability' => $e::capability(), 'migrated' => isset( $GLOBALS['ms_site']['vcap_wplc_credentials'] ) && ! isset( $GLOBALS['ms_blogs'][1]['vcap_wplc_credentials'] ) );
+$client->get_entitlements();
+$e::reset();
+$out['snapshot_network'] = isset( $GLOBALS['ms_site']['vcap_wplc_credentials_entitlements_cache'] ) && false === get_option( 'vcap_wplc_credentials_entitlements_cache' );
+$out['allows_on_subsite'] = $e::allows( 'promotions' );
+$out['bound_to_network']  = 'https://network.test' === end( $seen )[1];
+$updates = $e::update_client();
+$out['updates_network'] = $updates && 5 === (int) ( $updates->stored_credentials()['activation_id'] ?? 0 );
+// Activation per site: updates (one list for the network) use the main site's activation on every site.
+unset( $GLOBALS['ms_site']['active_sitewide_plugins'] );
+$GLOBALS['ms_blogs'][1] = array( 'vcap_wplc_credentials' => $main, 'vcap_wplc_server_url' => 'https://licenses.example.test', 'active_plugins' => array( plugin_basename( VCAP_FILE ) ) );
+update_option( 'vcap_wplc_server_url', 'https://licenses.example.test' );
+update_option( 'vcap_wplc_credentials', array( 'installation_id' => '22222222-0000-4000-8000-000000000002', 'installation_secret' => $secret, 'activation_id' => 6, 'site_url' => 'https://shop.test' ) );
+$updates = $e::update_client();
+$updates && $updates->check_update();
+$out['per_site_updates_main'] = $updates && '11111111-0000-4000-8000-000000000001' === end( $seen )[0] && 'https://network.test' === end( $seen )[1];
+$out['per_site_gate_own']     = 6 === (int) ( $e::client()->stored_credentials()['activation_id'] ?? 0 ) && 'manage_options' === $e::capability();
+$GLOBALS['ms_blogs'][1]['active_plugins'] = array();
+$out['no_updates_without_main'] = null === $e::update_client();
+echo json_encode( $out );
+PHP;
+$ms_file = $out . '/license-multisite.php';
+file_put_contents( $ms_file, '<?php ' . $ms_code );
+$ms_out = trim( (string) shell_exec( escapeshellarg( PHP_BINARY ) . ( '' !== $sig_prepend ? ' -d auto_prepend_file=' . escapeshellarg( $sig_prepend ) : '' ) . ' ' . escapeshellarg( $ms_file ) . ' ' . escapeshellarg( __DIR__ . '/stubs.php' ) . ' 2>&1' ) );
+$ms     = json_decode( $ms_out, true );
+check( 'R11: network activation: the main site\'s activation becomes the network license (super admins manage it)', is_array( $ms ) && true === $ms['network'] && 'manage_network_options' === $ms['capability'] && true === $ms['migrated'], $ms_out );
+check( 'R11: network license: one snapshot in the network options, bound to the network address, valid on every site', is_array( $ms ) && $ms['snapshot_network'] && $ms['allows_on_subsite'] && $ms['bound_to_network'] && $ms['updates_network'], $ms_out );
+check( 'R11: activation per site: the gate uses the site\'s own activation, updates the main site\'s on every site', is_array( $ms ) && $ms['per_site_updates_main'] && $ms['per_site_gate_own'] && $ms['no_updates_without_main'], $ms_out );
 
 echo "Editions (constants set by bin/build.sh)\n";
 // Premium build in a child process (constants cannot be undone here): no filter unlocks anything.
@@ -1155,6 +1335,68 @@ $prepend      = (string) ini_get( 'auto_prepend_file' );
 $premium_out  = (string) shell_exec( escapeshellarg( PHP_BINARY ) . ( '' !== $prepend ? ' -d auto_prepend_file=' . escapeshellarg( $prepend ) : '' ) . ' ' . escapeshellarg( $premium_file ) . ' ' . escapeshellarg( __DIR__ . '/stubs.php' ) . ' 2>&1' );
 check( 'premium build: license required, filters cannot unlock, all five features locked without activation', '["premium",true,false,5,"https:\/\/licenses.pinned.test",true]' === trim( $premium_out ), $premium_out );
 check( 'premium build: the license server is the one fixed at build time (stored option ignored)', str_contains( $premium_out, 'licenses.pinned.test' ) && ! str_contains( $premium_out, 'evil' ), $premium_out );
+// Premium build: license check schedules (WP-Cron + Action Scheduler + admin fallback) and Site Health.
+$check_code = <<<'PHP'
+define( 'VCAP_EDITION', 'premium' );
+define( 'VCAP_LICENSE_REQUIRED', true );
+define( 'VCAP_LICENSE_SERVER', 'https://licenses.pinned.test' );
+$GLOBALS['as_scheduled'] = array();
+function as_has_scheduled_action( $hook, $args = null, $group = '' ) { return false; }
+function as_schedule_recurring_action( $ts, $interval, $hook, $args = array(), $group = '' ) { $GLOBALS['as_scheduled'][] = array( $hook, $interval, $group ); return 1; }
+require $argv[1];
+$e      = VCAP\Licensing\Entitlements::class;
+$status = 'active';
+$asked  = 0;
+$secret = '';
+$GLOBALS['vcap_test_http'] = static function ( $url, $args ) use ( &$status, &$asked, &$secret ) {
+	++$asked;
+	$body = json_decode( (string) $args['body'], true ) ?: array();
+	if ( str_contains( $url, '/activations' ) ) {
+		$secret = $body['installation_secret'];
+		$data   = array( 'activation_id' => 3 );
+	} else {
+		$data = array( 'license_status' => $status, 'site_url' => 'https://shop.test', 'entitlements' => 'active' === $status ? array( 'voucher.promotions' => true ) : array(), 'server_time' => gmdate( 'Y-m-d H:i:s' ), 'cache_expires_at' => gmdate( 'Y-m-d H:i:s', time() + 14 * DAY_IN_SECONDS ) );
+	}
+	return array( 'code' => 200, 'body' => json_encode( array( 'data' => $data, 'signature' => hash_hmac( 'sha256', json_encode( $data, JSON_UNESCAPED_SLASHES ), $secret ) ) ) );
+};
+$e::register();
+$e::schedule_refresh();
+$out = array(
+	'hooks'      => has_filter( 'vcap_license_refresh' ) && has_filter( 'admin_init' ) && has_filter( 'admin_notices' ),
+	'as'         => array( array( 'vcap_license_refresh', 12 * HOUR_IN_SECONDS, 'vcap' ) ) === $GLOBALS['as_scheduled'],
+	'not_active' => $e::health()['status'],
+);
+$e::client()->activate( 'KEY-1' );
+$e::refresh();
+$out['good'] = $e::health()['status'];
+$asked = 0;
+do_action( 'vcap_license_refresh' );
+$out['throttled'] = 0 === $asked;
+$name  = 'vcap_wplc_credentials_entitlements_cache';
+$cache = get_option( $name );
+$cache['data']['server_time'] = gmdate( 'Y-m-d H:i:s', time() - 2 * DAY_IN_SECONDS );
+$cache['signature'] = hash_hmac( 'sha256', json_encode( $cache['data'], JSON_UNESCAPED_SLASHES ), $secret );
+update_option( $name, $cache );
+$overdue = $e::health();
+$out['overdue'] = $overdue['status'] . ( str_contains( $overdue['label'], 'overdue' ) ? ' overdue' : '' );
+$last = get_option( 'vcap_wplc_credentials_last_check' );
+$last['time'] -= 2 * HOUR_IN_SECONDS;
+update_option( 'vcap_wplc_credentials_last_check', $last );
+$status = 'past_due';
+do_action( 'vcap_license_refresh' );
+$e::reset();
+$out['scheduled'] = 1 === $asked && ! $e::allows( 'promotions' );
+$out['past_due']  = str_contains( $e::locked_message( 'promotions' ), 'overdue license payment' );
+$out['critical']  = $e::health()['status'];
+echo json_encode( $out );
+PHP;
+$check_file = $out . '/edition-premium-check.php';
+file_put_contents( $check_file, '<?php ' . $check_code );
+$check_out  = trim( (string) shell_exec( escapeshellarg( PHP_BINARY ) . ( '' !== $prepend ? ' -d auto_prepend_file=' . escapeshellarg( $prepend ) : '' ) . ' ' . escapeshellarg( $check_file ) . ' ' . escapeshellarg( __DIR__ . '/stubs.php' ) . ' 2>&1' ) );
+check( 'C5: the license check runs as WP-Cron event, recurring Action Scheduler action (12 h, group vcap) and admin fallback', '{"hooks":true,"as":true,' === substr( $check_out, 0, 24 ), $check_out );
+check( 'C5: background checks within an hour of the last one do not ask the server again; later ones do', str_contains( $check_out, '"throttled":true' ) && str_contains( $check_out, '"scheduled":true' ), $check_out );
+check( 'C5: Site Health: not activated, good, overdue after a day without check, critical without valid snapshot', str_contains( $check_out, '"not_active":"recommended","good":"good"' ) && str_contains( $check_out, '"overdue":"recommended overdue"' ) && str_contains( $check_out, '"critical":"critical"' ), $check_out );
+check( 'U13: payment overdue: features are "locked until the payment has been received"', str_contains( $check_out, '"past_due":true' ), $check_out );
 // Free build (last block of this file: the constant stays defined).
 define( 'VCAP_EDITION', 'free' );
 VCAP\Licensing\Entitlements::reset();
@@ -1321,6 +1563,7 @@ check( 'vcap() is defined only after the WooCommerce check, followed by the acti
 check( 'missing PHP extensions are named (activation and Site Health)', array( 'vcap_no_such_extension' ) === VCAP\Install::missing_extensions( array( 'pcre', 'vcap_no_such_extension' ) ) && array( 'mbstring', 'dom' ) === VCAP\Install::REQUIRED_EXTENSIONS );
 check( 'a network activation sets up at most 25 sites in its own request', 25 === VCAP\Install::NETWORK_ACTIVATION_SITES );
 $GLOBALS['wpdb'] = $saved_wpdb;
+check( 'U13: free build: the lock links the upgrade to Premium', str_contains( VCAP\Licensing\Entitlements::locked_html( 'topup' ), 'href="https://' ) && str_contains( VCAP\Licensing\Entitlements::locked_html( 'topup' ), 'Upgrade to Premium' ) );
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

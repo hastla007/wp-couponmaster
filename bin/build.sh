@@ -34,6 +34,7 @@ cp "$ROOT/voucher-captain.php" "$ROOT/uninstall.php" "$ROOT/readme.txt" "$ROOT/w
 # Edition (LICENSING.md):
 #   VCAP_EDITION=free     premium features permanently locked (sold goods keep being processed), no license page,
 #                         no premium updater; plugin header "Update URI" (VCAP_FREE_UPDATE_URI, default false);
+#                         optional VCAP_UPGRADE_URL (https) for the "Upgrade to Premium" link;
 #   VCAP_EDITION=premium  premium features need an active WP License Captain license (fail-closed); the license
 #                         server is fixed: VCAP_LICENSE_SERVER (https://host, placeholder https://licenses.example.com)
 #                         and the plugin header "Update URI" (VCAP_UPDATE_URI, default <server>/voucher-captain);
@@ -67,6 +68,14 @@ if [ "$EDITION" = "free" ]; then
 	fi
 	sed -i "s|^ \* License URI: .*|&\n * Update URI:        $FREE_UPDATE_URI|" "$DEST/voucher-captain.php"
 	grep -q "^ \* Update URI: " "$DEST/voucher-captain.php" || { echo "Update URI header missing" >&2; exit 1; }
+	# Optional "Upgrade to Premium" link of the free edition (default: the product page).
+	if [ -n "${VCAP_UPGRADE_URL:-}" ]; then
+		if ! printf '%s' "$VCAP_UPGRADE_URL" | grep -qE '^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/?=&%-]*)?$'; then
+			echo "VCAP_UPGRADE_URL must be an https URL, got '$VCAP_UPGRADE_URL'." >&2
+			exit 1
+		fi
+		sed -i "s|^define( 'VCAP_EDITION', 'free' );|&\ndefine( 'VCAP_UPGRADE_URL', '$VCAP_UPGRADE_URL' );|" "$DEST/voucher-captain.php"
+	fi
 elif [ "$EDITION" = "premium" ]; then
 	SERVER="${VCAP_LICENSE_SERVER:-https://licenses.example.com}"
 	SERVER="${SERVER%/}"

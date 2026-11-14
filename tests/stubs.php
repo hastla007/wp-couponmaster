@@ -99,7 +99,9 @@ function get_posts( $a = array() ) { return array(); }
 function is_wp_error( $v ) { return $v instanceof WP_Error; }
 function current_user_can( $c ) { return false; }
 function get_current_user_id() { return 0; }
-function get_current_blog_id() { return (int) ( $GLOBALS['vcap_test_blog_id'] ?? 1 ); }
+if ( ! function_exists( 'get_current_blog_id' ) ) {
+	function get_current_blog_id() { return (int) ( $GLOBALS['vcap_test_blog_id'] ?? 1 ); }
+}
 function wp_generate_password( $l = 12, $s = true, $e = false ) { return substr( bin2hex( random_bytes( $l ) ), 0, $l ); }
 
 require_once VCAP_PATH . 'vendor/autoload.php';

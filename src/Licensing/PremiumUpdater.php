@@ -19,7 +19,10 @@ if ( ! defined( 'ABSPATH' ) ) {
  * - The update check runs in the background as well (WP-Cron has no current user) and is cached: 12 hours after a
  *   successful answer, 1 hour after a failure, 5 seconds timeout. The cache key contains the installed version, the
  *   license server, the activation and the license status of the signed snapshot, so activation, deactivation and
- *   status changes invalidate it; a forced check ("Check again", deleted update transient) bypasses it.
+ *   status changes invalidate it; a forced check ("Check again", deleted update transient) bypasses it. An outage of
+ *   the license server keeps the last valid offer (version and SHA-256; the download asks for a fresh grant).
+ * - Multisite: WordPress keeps one update list for the network, so every site uses the same activation
+ *   (Entitlements::update_client(): the network license or the main site's activation).
  * - Only packages of the license server's one-time download grant are offered (plugin header "Update URI" names the
  *   same host; any other offer for this plugin, e.g. from WordPress.org, is removed). Every download is checked
  *   against the SHA-256 of the signed update answer before WordPress installs it.
@@ -30,6 +33,8 @@ final class PremiumUpdater {
 	public const SUCCESS_TTL   = 12 * HOUR_IN_SECONDS;
 	public const FAILURE_TTL   = HOUR_IN_SECONDS;
 	public const CHECK_TIMEOUT = 5;
+	/** How long the last answer is kept (as fallback during outages; its freshness is "until"). */
+	public const KEEP_TTL      = 7 * DAY_IN_SECONDS;
 
 	private $plugin_file;
 	private $product_key;
@@ -51,8 +56,13 @@ final class PremiumUpdater {
 		add_action( 'delete_site_transient_update_plugins', array( self::class, 'flush' ) );
 	}
 
+	/** Next update_info() asks the license server again; the last valid offer stays as fallback for an outage. */
 	public static function flush(): void {
-		delete_site_transient( self::CACHE );
+		$cached = get_site_transient( self::CACHE );
+		if ( is_array( $cached ) && 0 !== (int) ( $cached['until'] ?? 0 ) ) {
+			$cached['until'] = 0;
+			set_site_transient( self::CACHE, $cached, self::KEEP_TTL );
+		}
 	}
 
 	public function inject_update( $transient ) {
@@ -98,13 +108,14 @@ final class PremiumUpdater {
 	 * @return array{version:string,package:string,sha256:string,requires_php:string,requires_wp:string,tested_wp:string,release_notes:string}|null
 	 */
 	public function update_info( bool $fresh = false ): ?array {
-		$client = Entitlements::client();
+		$client = Entitlements::update_client();
 		if ( ! $client ) {
 			return null;
 		}
 		$key    = $this->cache_key( $client );
-		$cached = $fresh ? null : get_site_transient( self::CACHE );
-		if ( is_array( $cached ) && ( $cached['key'] ?? '' ) === $key && (int) ( $cached['until'] ?? 0 ) > time() ) {
+		$cached = get_site_transient( self::CACHE );
+		$same   = is_array( $cached ) && ( $cached['key'] ?? '' ) === $key;
+		if ( ! $fresh && $same && (int) ( $cached['until'] ?? 0 ) > time() ) {
 			return is_array( $cached['update'] ?? null ) ? $cached['update'] : null;
 		}
 		$answer = $client->set_timeout( self::CHECK_TIMEOUT )->check_update();
@@ -114,6 +125,11 @@ final class PremiumUpdater {
 			$ttl = self::FAILURE_TTL;
 			if ( 'wplc_not_activated' !== $answer->get_error_code() ) {
 				Logger::wp_error( 'Premium update check failed.', $answer );
+			}
+			// An outage must not hide an update (security fixes, auto-updates) for hours: keep the last valid offer.
+			$previous = $same && is_array( $cached['update'] ?? null ) ? $cached['update'] : null;
+			if ( $previous && LicenseClient::is_temporary_error( $answer ) && version_compare( (string) $previous['version'], $this->version, '>' ) ) {
+				$update = $previous;
 			}
 		} elseif ( ! empty( $answer['update_available'] ) ) {
 			$update = $this->validated( $answer );
@@ -129,7 +145,7 @@ final class PremiumUpdater {
 				'until'  => time() + $ttl,
 				'update' => $update,
 			),
-			$ttl
+			self::KEEP_TTL
 		);
 		return $update;
 	}
@@ -154,7 +170,7 @@ final class PremiumUpdater {
 	}
 
 	private function cache_key( LicenseClient $client ): string {
-		$credentials = get_option( Entitlements::CREDENTIALS_OPTION, array() );
+		$credentials = $client->stored_credentials();
 		$snapshot    = $client->cached_entitlements();
 		return md5(
 			implode(
@@ -162,7 +178,7 @@ final class PremiumUpdater {
 				array(
 					$this->version,
 					Entitlements::server_url(),
-					is_array( $credentials ) ? (string) ( $credentials['activation_id'] ?? '' ) : '',
+					(string) ( $credentials['activation_id'] ?? '' ),
 					is_array( $snapshot ) ? (string) ( $snapshot['license_status'] ?? '' ) : 'none',
 				)
 			)
@@ -225,7 +241,7 @@ final class PremiumUpdater {
 	}
 
 	private function refresh_package() {
-		if ( ! Entitlements::client() ) {
+		if ( ! Entitlements::update_client() ) {
 			return new \WP_Error( 'wplc_update_not_configured', __( 'The license server URL is not configured.', 'voucher-captain' ) );
 		}
 		$update = $this->update_info( true );
