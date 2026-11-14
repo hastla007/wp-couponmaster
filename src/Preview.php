@@ -91,7 +91,7 @@ final class Preview {
 		// The name the order would carry (billing name), as Placeholders gives it for the real voucher.
 		$customer           = is_user_logged_in() && function_exists( 'WC' ) && WC()->customer ? WC()->customer : null;
 		// WooCommerce's own name format, as WC_Order::get_formatted_billing_full_name().
-		$billing            = $customer ? trim( sprintf( _x( '%1$s %2$s', 'full name', 'woocommerce' ), $customer->get_billing_first_name(), $customer->get_billing_last_name() ) ) : ''; // phpcs:ignore WordPress.WP.I18n.TextDomainMismatch
+		$billing            = $customer ? trim( sprintf( translate_with_gettext_context( '%1$s %2$s', 'full name', 'woocommerce' ), $customer->get_billing_first_name(), $customer->get_billing_last_name() ) ) : ''; // phpcs:ignore WordPress.WP.I18n -- WooCommerce's own string.
 		$v->buyer_name      = '' !== $billing ? $billing : ( is_user_logged_in() ? wp_get_current_user()->display_name : '' );
 		$v->buyer_email     = '';
 		$v->recipient_name  = (string) ( $fields['recipient_name']['value'] ?? '' );
