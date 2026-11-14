@@ -965,6 +965,12 @@ check( 'a converter on the public filter counts as a known rate (1000 CZK = 40 E
 check( 'other currencies stay unknown', ! VCAP\Compat\MultiCurrency::can_convert( 'HUF' ) );
 add_filter( 'vcap_currency_rate_known', static fn( $known, $currency ) => $known || 'DKK' === $currency, 10, 2 );
 check( 'vcap_currency_rate_known declares a 1:1 peg as known', VCAP\Compat\MultiCurrency::can_convert( 'DKK' ) && 10.0 === VCAP\Compat\MultiCurrency::to_base( 10.0, 'DKK' ) );
+// A switcher without a rate list (Aelia, WCML) returns amounts of a currency it does not know unchanged: that
+// currency has no rate (an order in it, e.g. created by hand, must not be taken 1:1), the configured one has.
+$GLOBALS['vcap_test_filters']['wc_aelia_cs_convert'] = array( array( static fn( $amount, $from ) => 'USD' === $from ? $amount / 2 : $amount, 3 ) );
+check( 'Aelia: a configured currency converts (50 USD = 25 EUR)', VCAP\Compat\MultiCurrency::can_convert( 'USD' ) && 25.0 === VCAP\Compat\MultiCurrency::to_base( 50.0, 'USD' ) );
+check( 'Aelia: a currency it returns unchanged is not converted 1:1', ! VCAP\Compat\MultiCurrency::can_convert( 'PLN' ) && null === VCAP\Compat\MultiCurrency::to_base( 100.0, 'PLN' ) );
+unset( $GLOBALS['vcap_test_filters']['wc_aelia_cs_convert'] );
 $GLOBALS['vcap_test_filters']['vcap_amount_to_base_currency'] = $fx_filters;
 $GLOBALS['vcap_test_filters']['vcap_currency_rate_known']     = $fx_known;
 if ( null === $fx_filters ) {

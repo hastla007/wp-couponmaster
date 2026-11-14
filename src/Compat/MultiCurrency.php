@@ -11,7 +11,8 @@ defined( 'ABSPATH' ) || exit;
  *
  * Money is never taken 1:1 from a foreign currency. Whether a rate is known is decided by can_convert():
  * the base currency, an exchange rate stored on the order at checkout (RATE_META: order-currency units per
- * base-currency unit), a supported switcher, or another callback of `vcap_amount_to_base_currency` that changes
+ * base-currency unit), a supported switcher that knows the currency (WCML and Aelia publish no rate list: they
+ * must change a probe amount as well), or another callback of `vcap_amount_to_base_currency` that changes
  * a probe amount (a converter returning the amount unchanged counts as "no rate"). Filter
  * `vcap_currency_rate_known` (bool, currency, order) overrides the result, e.g. for a converter whose rate is
  * exactly 1. Without a rate the money operation is refused: voucher sales are held (Issuer), store-credit
@@ -147,19 +148,15 @@ final class MultiCurrency {
 			return true;
 		}
 		$known = ( $order instanceof \WC_Order && (float) $order->get_meta( self::RATE_META ) > 0 )
-			|| '' !== self::adapter() && ( self::switcher_rate( $currency ) > 0 || ! self::rate_listing_adapter() );
+			|| self::switcher_rate( $currency ) > 0;
 		if ( ! $known ) {
-			// Another converter on the public filter: it changes the probe (ours returns it unchanged here).
+			// A switcher without a rate list (WCML, Aelia) or another converter on the public filter: it changes the
+			// probe. WCML and Aelia return amounts of a currency they do not know unchanged – that is no rate either.
 			$probe = (float) apply_filters( 'vcap_amount_to_base_currency', self::PROBE, $currency, $order );
 			$known = $probe > 0 && abs( $probe - self::PROBE ) > 1e-9;
 		}
 		/** Whether amounts in this currency can be converted to the shop base currency (bool, currency, order). */
 		return (bool) apply_filters( 'vcap_currency_rate_known', $known, $currency, $order );
-	}
-
-	/** Whether the active adapter publishes a rate list (a missing currency then means "no rate"). */
-	private static function rate_listing_adapter(): bool {
-		return in_array( self::adapter(), array( 'WOOCS', 'CURCY', 'WooPayments Multi-Currency' ), true );
 	}
 
 	/**
