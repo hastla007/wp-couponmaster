@@ -28,6 +28,24 @@ jobs:
       - name: Audit browser test dependencies
         working-directory: tests/e2e
         run: npm audit --audit-level=high
+      - name: Known vulnerabilities of libraries bundled outside Composer (jsQR …, OSV database)
+        run: |
+          # bin/bundled-assets.json lists them with ecosystem, name and version (also the source of the SBOM); Composer
+          # audit and npm audit do not see them. OSV answers {} when no advisory affects that version.
+          php -r 'foreach ( json_decode( file_get_contents( "bin/bundled-assets.json" ), true ) as $a ) { echo $a["ecosystem"], "\t", $a["name"], "\t", $a["version"], "\n"; }' > bundled.tsv
+          found=0
+          while IFS=$'\t' read -r ecosystem name version; do
+            answer="$(curl --fail --silent --show-error --retry 3 --max-time 30 -H 'Content-Type: application/json' \
+              -d "{\"package\":{\"ecosystem\":\"${ecosystem}\",\"name\":\"${name}\"},\"version\":\"${version}\"}" https://api.osv.dev/v1/query)"
+            ids="$(printf '%s' "$answer" | php -r '$d = json_decode( stream_get_contents( STDIN ), true ); if ( ! is_array( $d ) ) { exit( 2 ); } echo implode( " ", array_column( $d["vulns"] ?? array(), "id" ) );')"
+            if [ -n "$ids" ]; then
+              echo "::error::${name} ${version} (${ecosystem}) is affected by: ${ids} – update the bundled file and bin/bundled-assets.json."
+              found=1
+            else
+              echo "${name} ${version} (${ecosystem}): no known vulnerabilities."
+            fi
+          done < bundled.tsv
+          exit $found
 
   forward-compatibility:
     runs-on: ubuntu-latest

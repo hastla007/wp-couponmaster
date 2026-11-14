@@ -1,6 +1,46 @@
 # Security and privacy controls
 
-This document records the controls exercised by the current integration suite. It is not a security certification.
+This document is the security policy of Voucher Captain (how to report a vulnerability, which versions get fixes)
+and records the controls exercised by the current integration suite. It is not a security certification.
+
+## Reporting a vulnerability
+
+Please do **not** open a public issue, pull request or forum post for a security problem.
+
+- **Where:** privately through GitHub's vulnerability reporting of this repository (*Security → Report a
+  vulnerability*, `https://github.com/hastla007/wp-couponmaster/security/advisories/new`). Premium customers can
+  also use the vendor's support channel named in their licence; it forwards the report to the same place.
+- **What:** affected version and edition (free/premium), the steps or a proof of concept, the impact you see, and
+  whether the problem is already known to others or exploited.
+- **Our timeline:** acknowledgement within 5 working days, a first assessment (confirmed, severity, affected
+  versions) within 10 working days, a fix for confirmed vulnerabilities as fast as the severity requires and at the
+  latest within 90 days. We coordinate the publication date with you, publish a GitHub security advisory with the
+  fixed version and credit you unless you prefer otherwise. Please give us that time before publishing.
+- **Actively exploited vulnerabilities and severe incidents** are reported by the vendor as the EU Cyber Resilience
+  Act requires (since 11 September 2026: early warning within 24 hours, notification within 72 hours, final report
+  within 14 days after a fix is available, through the single reporting platform/CSIRT), and shops are told what to
+  do in the advisory and the release notes ("Fix (security)" entries, RELEASE.md).
+- **security.txt:** the vendor's website publishes `/.well-known/security.txt` (RFC 9116) pointing to the reporting
+  address above (RELEASE_CHECKLIST.md → manual checks).
+
+### Supported versions
+
+| Version | Security fixes |
+| --- | --- |
+| 1.2.x (current minor, free and premium) | yes |
+| 1.1.x | until 6 months after the release of 1.2.0 – please update |
+| < 1.1 | no |
+
+Fixes ship as a new patch release of the current minor version (free ZIP on GitHub, premium through the licence
+server's update channel).
+
+### What a release ships for security review
+
+Every GitHub release has, per ZIP, the SHA-256 (`*.sha256`) and a software bill of materials in CycloneDX JSON
+(`*.cdx.json`, `bin/sbom.php`): all bundled Composer packages with version, licence and source commit, and the
+libraries bundled outside Composer (`bin/bundled-assets.json`, e.g. jsQR in `assets/vendor/jsqr/`) with the SHA-256
+of the shipped file. Known vulnerabilities are checked weekly (`scheduled.yml` → `dependency-audit`: Composer audit,
+npm audit of the browser tests, and the OSV database for the bundled libraries) and on every push (`composer audit`).
 
 ## Admin and scanner access
 
@@ -44,6 +84,6 @@ Site Health keeps a short log of failed Voucher Captain mails (option `vcap_mail
 
 ## CI coverage
 
-The security integration script exercises 501-record export and erasure, retention anonymization, scanner permissions, rate limiting, guest-link signing, code visibility on order pages, the failed-mail log, selected admin nonce/capability guards, and the PHP redemption-service idempotency contract. The rate-limit script covers atomic counting, the site-wide brake with valid codes, IPv6 /64 and WooCommerce's Store API coupon entry; the redemption script covers REST targets. CI also runs Composer vulnerability auditing, scoped WordPress Coding Standards, and PHPStan over the new API contract.
+The security integration script exercises 501-record export and erasure, retention anonymization, scanner permissions, rate limiting, guest-link signing, code visibility on order pages, the failed-mail log, selected admin nonce/capability guards, and the PHP redemption-service idempotency contract. The rate-limit script covers atomic counting, the site-wide brake with valid codes, IPv6 /64 and WooCommerce's Store API coupon entry; the redemption script covers REST targets. CI also runs Composer vulnerability auditing, scoped WordPress Coding Standards and PHPStan over the API contract, and the `WordPress.Security.*` sniffs over the whole plugin (blocking, job `quality-wide`).
 
 External gateway redirect/webhook flows, browser accessibility and connectors installed in separate repositories remain release-time checks.

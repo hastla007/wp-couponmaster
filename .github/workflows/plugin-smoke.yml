@@ -471,10 +471,30 @@ jobs:
           test "$($WP --url=http://localhost/after/ eval "$has")" = "deleted"
 
   upgrade:
-    # Previous schema with data -> current release ZIP (upgrade under the lock, data and old rows moved), then a
-    # rollback to the previous release and the update again. "Previous" is the parent of the last commit that
-    # changed VCAP_DB_VERSION, built from this repository's history.
+    # Updates as shops get them (COMPATIBILITY.md → Updates, RELEASE.md → Rollback), each with data, followed by a
+    # rollback to the version before and the update again:
+    # - release → free / premium: from the last released version (newest vX.Y.Z tag below the current version; until
+    #   the first tag, the 1.1.0 release commit in PREVIOUS_RELEASE) to the current free or premium edition ZIP;
+    # - schema: from the parent of the last commit that changed VCAP_DB_VERSION (the schema right before the change);
+    # - free → premium: the current free ZIP with data replaced by the premium ZIP of the same version.
     runs-on: ubuntu-latest
+    env:
+      # Voucher Captain 1.1.0 as released (merge "Voucher Captain 1.1.0 (#2)", schema 1.3.0): fallback while the
+      # repository has no vX.Y.Z tag yet.
+      PREVIOUS_RELEASE: 1fb789d03211f2446d7304a78e03b75e4d96566a
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - from: release
+            edition: free
+          - from: release
+            edition: premium
+          - from: schema
+            edition: development
+          - from: free
+            edition: premium
+    name: upgrade (${{ matrix.from }} → ${{ matrix.edition }})
     services:
       db:
         image: mysql:8.4
@@ -503,13 +523,35 @@ jobs:
       - name: Download WP-CLI
         run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
       - name: Build the previous and the current release ZIP
+        env:
+          FROM: ${{ matrix.from }}
+          EDITION: ${{ matrix.edition }}
         run: |
-          prev="$(git log -1 --format=%H -G"VCAP_DB_VERSION', '" -- voucher-captain.php)^"
-          echo "Previous schema: $(git show "$prev:voucher-captain.php" | grep VCAP_DB_VERSION) ($prev)"
-          git worktree add "$RUNNER_TEMP/previous" "$prev"
-          ( cd "$RUNNER_TEMP/previous" && bin/build.sh )
-          cp "$RUNNER_TEMP/previous/build/voucher-captain.zip" "$RUNNER_TEMP/voucher-captain-previous.zip"
-          bin/build.sh
+          build() { if [ "$EDITION" = development ]; then bin/build.sh; else VCAP_EDITION="$EDITION" bin/build.sh; fi; }
+          current="$(sed -n 's/^ \* Version: *//p' voucher-captain.php | tr -d '[:space:]')"
+          case "$FROM" in
+            release)
+              git fetch --force --tags --quiet origin || true
+              tag="$(git tag -l 'v*' | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | grep -vxF "$current" \
+                | while read -r v; do [ "$(printf '%s\n%s\n' "$v" "$current" | sort -V | head -n 1)" = "$v" ] && echo "$v"; done | sort -V | tail -n 1 || true)"
+              prev="${tag:+v$tag}"
+              prev="${prev:-$PREVIOUS_RELEASE}"
+              ;;
+            schema) prev="$(git log -1 --format=%H -G"VCAP_DB_VERSION', '" -- voucher-captain.php)^" ;;
+            free) prev="" ;;
+          esac
+          if [ -n "$prev" ]; then
+            echo "Previous: $prev – $(git show "$prev:voucher-captain.php" | grep -E "^ \* Version:|VCAP_DB_VERSION'" | tr -s ' ' | tr '\n' ' ')"
+            git worktree add "$RUNNER_TEMP/previous" "$prev"
+            # Same edition as the current ZIP (releases before 1.2.0 have no editions and ignore VCAP_EDITION).
+            ( cd "$RUNNER_TEMP/previous" && build )
+            cp "$RUNNER_TEMP/previous/build/voucher-captain.zip" "$RUNNER_TEMP/voucher-captain-previous.zip"
+          else
+            echo "Previous: the free edition of this version"
+            VCAP_EDITION=free bin/build.sh
+            cp build/voucher-captain.zip "$RUNNER_TEMP/voucher-captain-previous.zip"
+          fi
+          build
       - name: Install WordPress, WooCommerce and the previous release with data
         run: |
           WP="php wp-cli.phar --path=wp-test"
@@ -523,23 +565,44 @@ jobs:
         run: |
           WP="php wp-cli.phar --path=wp-test"
           $WP plugin install build/voucher-captain.zip --force
-          $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" verify
+          if [ "${{ matrix.from }}" = free ]; then
+            $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" edition premium
+          else
+            $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" verify ${{ matrix.edition }}
+          fi
       - name: Roll back to the previous release and update again
         run: |
           WP="php wp-cli.phar --path=wp-test"
           $WP plugin install "$RUNNER_TEMP/voucher-captain-previous.zip" --force
-          $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" rollback
-          $WP plugin install build/voucher-captain.zip --force
-          $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" verify
+          if [ "${{ matrix.from }}" = free ]; then
+            $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" edition free
+            $WP plugin install build/voucher-captain.zip --force
+            $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" edition premium
+          else
+            $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" rollback
+            $WP plugin install build/voucher-captain.zip --force
+            $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" verify ${{ matrix.edition }}
+          fi
 
   pass-captain:
-    # Voucher Captain as voucher provider of WP Pass Captain: released main and the current work branch
-    # of hastla007/wp-passmaster (a ref that no longer exists is skipped).
+    # Voucher Captain as voucher provider of WP Pass Captain (hastla007/wp-passmaster): a pinned release (tag commit,
+    # reproducible), released main and the current work branch. A download that fails (codeload 5xx, rate limit, ref
+    # gone) fails the job for the release and main; only the work branch may be skipped, with a warning.
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        pass_captain_ref: ['main', 'claude/youthful-bardeen-7ejd7a']
+        include:
+          - pass_captain_ref: v1.4.0
+            archive: 90c972ab681b32254887a945a11e17325e0a801c
+            required: true
+          - pass_captain_ref: main
+            archive: refs/heads/main
+            required: true
+          - pass_captain_ref: claude/youthful-bardeen-7ejd7a
+            archive: refs/heads/claude/youthful-bardeen-7ejd7a
+            required: false
+    name: pass-captain (${{ matrix.pass_captain_ref }})
     services:
       db:
         image: mysql:8.4
@@ -571,8 +634,12 @@ jobs:
           php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
           php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher + Pass Captain" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
           php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.2.2 --activate
-          if ! curl --fail --silent --show-error --location --output pass-captain.zip "https://codeload.github.com/hastla007/wp-passmaster/zip/refs/heads/${{ matrix.pass_captain_ref }}"; then
-            echo "Pass Captain ref ${{ matrix.pass_captain_ref }} is not available; skipping."
+          if ! curl --fail --silent --show-error --location --retry 4 --retry-all-errors --retry-delay 15 --output pass-captain.zip "https://codeload.github.com/hastla007/wp-passmaster/zip/${{ matrix.archive }}"; then
+            if [ "${{ matrix.required }}" = "true" ]; then
+              echo "::error::WP Pass Captain ${{ matrix.pass_captain_ref }} could not be downloaded – the cross-plugin gate cannot pass without it (re-run the job)."
+              exit 1
+            fi
+            echo "::warning::WP Pass Captain work branch ${{ matrix.pass_captain_ref }} is not available (deleted or download failed); its checks are skipped. The pinned release and main still ran."
             echo "VCAP_SKIP_PASS_CAPTAIN=1" >> "$GITHUB_ENV"
             exit 0
           fi
@@ -718,13 +785,15 @@ jobs:
 
   quality-wide:
     # Wide scan of the whole plugin (src/, templates/, config/, main and uninstall file): PHPCS with phpcs.xml.dist
-    # (WordPress-Extra, I18n text domain, Security) and PHPStan level 1 with phpstan-wide.neon.dist + baseline.
-    # Report-only until the existing findings are worked off (RELEASE.md → Static analysis); the strict scan of the
-    # API and contracts in the job quality stays blocking.
+    # (WordPress-Extra, I18n text domain, Security) and PHPStan level 1 with phpstan-wide.neon.dist + baseline
+    # (RELEASE.md → Static analysis). Blocking are: every WordPress.Security.* finding, and a growth of the PHPCS or
+    # PHPStan findings against the base commit (ratchet: pull request base, or the previous commit of a push). The
+    # full reports stay informational until the existing findings are worked off.
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - name: Set up PHP 8.4
         uses: shivammathur/setup-php@v2
         with:
@@ -738,16 +807,63 @@ jobs:
           composer global config allow-plugins.dealerdirect/phpcodesniffer-composer-installer true
           composer global require --no-interaction squizlabs/php_codesniffer:^3.13 wp-coding-standards/wpcs:^3.0 phpstan/phpstan:^2.1
           echo "$(composer global config bin-dir --absolute)" >> "$GITHUB_PATH"
-      - name: PHPCS (WordPress-Extra, I18n, Security) on the whole plugin
+      - name: WordPress.Security sniffs on the whole plugin (blocking)
         run: |
-          set +e
-          phpcs --report-full=phpcs-full.txt --report-summary=phpcs-summary.txt --report-source=phpcs-source.txt --report-json=phpcs.json
-          status=$?
-          { echo '### PHPCS (wide scan, report-only)'; echo '```'; cat phpcs-source.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-          exit $status
-      - name: PHPStan level 1 on the whole plugin (findings beyond phpstan-baseline.neon)
-        if: always()
-        run: phpstan analyse --configuration=phpstan-wide.neon.dist --no-progress --memory-limit=1G
+          # Escaping, nonces, sanitising, safe redirects: no finding may reach a release. A justified exception gets an
+          # inline "phpcs:ignore WordPress.Security.<Sniff> -- reason" next to the code.
+          phpcs --sniffs=WordPress.Security.EscapeOutput,WordPress.Security.NonceVerification,WordPress.Security.PluginMenuSlug,WordPress.Security.SafeRedirect,WordPress.Security.ValidatedSanitizedInput --report-full --report-summary
+      - name: PHPCS (WordPress-Extra, I18n, Security) on the whole plugin (report)
+        run: |
+          phpcs --report-full=phpcs-full.txt --report-summary=phpcs-summary.txt --report-source=phpcs-source.txt --report-json=phpcs.json || true
+          { echo '### PHPCS (wide scan)'; echo '```'; cat phpcs-source.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          test -s phpcs.json
+      - name: PHPStan level 1 on the whole plugin (findings beyond phpstan-baseline.neon, report)
+        run: |
+          phpstan analyse --configuration=phpstan-wide.neon.dist --no-progress --memory-limit=1G --error-format=json > phpstan.json || true
+          phpstan analyse --configuration=phpstan-wide.neon.dist --no-progress --memory-limit=1G || true
+          test -s phpstan.json
+      - name: Findings must not grow (ratchet against the base commit)
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          count_phpcs() { php -r '$d = json_decode( file_get_contents( $argv[1] ), true ); echo (int) ( $d["totals"]["errors"] ?? -1 ) + (int) ( $d["totals"]["warnings"] ?? 0 );' "$1"; }
+          count_phpstan() { php -r '$d = json_decode( file_get_contents( $argv[1] ), true ); echo (int) ( $d["totals"]["errors"] ?? -1 ) + (int) ( $d["totals"]["file_errors"] ?? 0 );' "$1"; }
+          head_cs="$(count_phpcs phpcs.json)"
+          head_stan="$(count_phpstan phpstan.json)"
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            BASE="$(git rev-parse HEAD^ 2>/dev/null || true)"
+          fi
+          if [ -z "$BASE" ]; then echo "::warning::No base commit – ratchet skipped."; exit 0; fi
+          git worktree add --quiet "$RUNNER_TEMP/base" "$BASE"
+          ln -s "$GITHUB_WORKSPACE/vendor" "$RUNNER_TEMP/base/vendor"
+          base_cs=""; base_stan=""
+          if [ -f "$RUNNER_TEMP/base/phpcs.xml.dist" ]; then
+            ( cd "$RUNNER_TEMP/base" && phpcs --report-json="$RUNNER_TEMP/base-phpcs.json" -q > /dev/null || true )
+            base_cs="$(count_phpcs "$RUNNER_TEMP/base-phpcs.json")"
+          fi
+          if [ -f "$RUNNER_TEMP/base/phpstan-wide.neon.dist" ]; then
+            ( cd "$RUNNER_TEMP/base" && phpstan analyse --configuration=phpstan-wide.neon.dist --no-progress --memory-limit=1G --error-format=json > "$RUNNER_TEMP/base-phpstan.json" || true )
+            base_stan="$(count_phpstan "$RUNNER_TEMP/base-phpstan.json")"
+          fi
+          {
+            echo '### Findings ratchet'
+            echo "| Scan | base ${BASE:0:7} | this commit |"
+            echo '| --- | --- | --- |'
+            echo "| PHPCS (errors + warnings) | ${base_cs:-n/a} | ${head_cs} |"
+            echo "| PHPStan level 1 (beyond the baseline) | ${base_stan:-n/a} | ${head_stan} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          fail=0
+          if [ "$head_cs" -lt 0 ] || [ "$head_stan" -lt 0 ]; then echo "::error::A scan of this commit produced no report."; fail=1; fi
+          if [ -n "$base_cs" ] && [ "$base_cs" -ge 0 ] && [ "$head_cs" -gt "$base_cs" ]; then
+            echo "::error::PHPCS findings grew from ${base_cs} to ${head_cs} (see phpcs-full.txt in the artifact phpstan-baseline). Fix the new findings."
+            fail=1
+          fi
+          if [ -n "$base_stan" ] && [ "$base_stan" -ge 0 ] && [ "$head_stan" -gt "$base_stan" ]; then
+            echo "::error::PHPStan findings grew from ${base_stan} to ${head_stan}. Fix them – never add baseline entries for new code."
+            fail=1
+          fi
+          echo "PHPCS ${base_cs:-n/a} -> ${head_cs}, PHPStan ${base_stan:-n/a} -> ${head_stan}"
+          exit $fail
       - name: Generate a PHPStan baseline of the current findings
         if: always()
         run: phpstan analyse --configuration=phpstan-wide.neon.dist --no-progress --memory-limit=1G --generate-baseline=phpstan-baseline.generated.neon --allow-empty-baseline || true
@@ -759,6 +875,7 @@ jobs:
           path: |
             phpcs-*.txt
             phpcs.json
+            phpstan.json
             phpstan-baseline.generated.neon
           if-no-files-found: ignore
 

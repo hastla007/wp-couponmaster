@@ -138,9 +138,14 @@ if ( is_file( "$root/vendor/dompdf/dompdf/lib/res/sRGB2014.icc.LICENSE" ) ) {
 	$out .= "sRGB2014.icc colour profile (vendor/dompdf/dompdf/lib/res/sRGB2014.icc)\n";
 	$out .= "  Licence:  International Color Consortium, see sRGB2014.icc.LICENSE next to it.\n\n";
 }
-if ( is_file( "$root/assets/vendor/jsqr/jsQR.js" ) ) {
-	$out .= "jsQR 1.4.0 (assets/vendor/jsqr/jsQR.js, QR fallback of the admin scanner)\n";
-	$out .= "  Licence:  Apache-2.0, see assets/vendor/jsqr/LICENSE. Source: https://github.com/cozmo/jsQR\n\n";
+// Libraries bundled outside Composer: name, version and SHA-256 in bin/bundled-assets.json (also used by the SBOM
+// and the weekly vulnerability check, scheduled.yml).
+$assets = json_decode( (string) file_get_contents( __DIR__ . '/bundled-assets.json' ), true );
+foreach ( is_array( $assets ) ? $assets : array() as $asset ) {
+	if ( is_file( "$root/{$asset['path']}" ) ) {
+		$out .= "{$asset['title']} {$asset['version']} ({$asset['path']}, {$asset['used_by']})\n";
+		$out .= "  Licence:  {$asset['license']}, see {$asset['license_file']}. Source: {$asset['source']}\n\n";
+	}
 }
 $out .= "3. Licence texts\n----------------\n\n";
 $out .= "GPL-2.0-or-later (Voucher Captain): LICENSE\n";
