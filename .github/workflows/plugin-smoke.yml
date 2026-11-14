@@ -179,7 +179,8 @@ jobs:
 
   ecosystem:
     # Real third-party plugins from wordpress.org next to Voucher Captain: payment gateways and currency switchers
-    # (latest releases; the job prints the installed versions), each also with "Multi-purpose vouchers as payment"
+    # (pinned releases, so the release gate is reproducible – raise them deliberately; the job prints the installed
+    # versions), each also with "Multi-purpose vouchers as payment"
     # (vcap_mpv_after_tax: partial and full payment next to the gateway, foreign-currency cart).
     # tests/ecosystem-integration.php
     runs-on: ubuntu-latest
@@ -189,14 +190,19 @@ jobs:
         include:
           - key: stripe
             slug: woocommerce-gateway-stripe
+            version: '11.2.0'
           - key: paypal
             slug: woocommerce-paypal-payments
+            version: '4.2.2'
           - key: woocs
             slug: woocommerce-currency-switcher
+            version: '1.5.7'
           - key: curcy
             slug: woo-multi-currency
+            version: '2.2.22'
           - key: wcml
             slug: woocommerce-multilingual
+            version: '5.6.3'
     name: ecosystem (${{ matrix.key }})
     services:
       db:
@@ -223,7 +229,7 @@ jobs:
         run: composer install --no-interaction --prefer-dist
       - name: Download WP-CLI
         run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
-      - name: Install WordPress, WooCommerce, ${{ matrix.slug }} and the release ZIP
+      - name: Install WordPress, WooCommerce, ${{ matrix.slug }} ${{ matrix.version }} and the release ZIP
         run: |
           php wp-cli.phar core download --path=wp-test --version=7.1.4
           php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
@@ -232,7 +238,7 @@ jobs:
           php wp-cli.phar --path=wp-test option update woocommerce_currency EUR
           bin/build.sh
           php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
-          php wp-cli.phar --path=wp-test plugin install ${{ matrix.slug }} --activate
+          php wp-cli.phar --path=wp-test plugin install ${{ matrix.slug }} --version=${{ matrix.version }} --activate
           php wp-cli.phar --path=wp-test plugin list
       - name: Voucher Captain with ${{ matrix.slug }}
         run: |

@@ -20,12 +20,12 @@
 .vcap-preview-row { clear: both; margin: .5em 0 0; }
 .vcap-vouchers { margin: 2em 0; }
 .vcap-vouchers-table code { font-size: 1em; letter-spacing: .05em; }
-.vcap-download { text-align: right; }
+.vcap-download { text-align: end; }
 .vcap-form-result:focus { outline: none; }
 .vcap-preview-note { margin: 0; }
 /* Cart totals: the voucher balance is a note, not a second total; the remaining-value warning spans the row. */
 .vcap-balance th, .vcap-balance td { font-weight: normal; }
-.woocommerce table.shop_table_responsive tr.vcap-residual-warning td { text-align: left; }
+.woocommerce table.shop_table_responsive tr.vcap-residual-warning td { text-align: start; }
 .woocommerce table.shop_table_responsive tr.vcap-residual-warning td::before { content: none; display: none; }
 .vcap-terms-country + .vcap-terms-country { margin-top: .6em; }
 /* Hidden text for screen readers (themes without this core class). */

@@ -219,5 +219,33 @@ vcap_dlv_assert( Voucher::STATUS_EXPIRED === $stored->status && 'publish' !== ge
 vcap_dlv_assert( str_contains( vcap_dlv_notes( $late_order->get_id() ), $late->code ), 'the order gets a note for the shop' );
 vcap_dlv_assert( ! in_array( $late->id, $repo->due_for_delivery( 1000 ), true ), 'the safety net does not pick it up again' );
 
+// U12: one routing choice fixed on the voucher – the old "Buyer copy" flag of the product no longer reaches sold vouchers.
+$u12_product = new WC_Product_Simple();
+$u12_product->set_name( 'U12 gift' );
+$u12_product->set_regular_price( '25' );
+$u12_product->set_virtual( true );
+$u12_product->update_meta_data( '_vcap_enabled', 'yes' );
+$u12_product->update_meta_data( '_vcap_send_to', 'recipient' );
+$u12_product->save();
+vcap_dlv_assert( 'both' === VCAP\ProductConfig::get( $u12_product )['send_to'], 'U12: "recipient" with the old default buyer copy reads as "Recipient and buyer"' );
+$u12_route = static function ( string $send_to, string $created ) use ( $u12_product, $tag ) {
+	$v = vcap_dlv_voucher( "u12-buyer-{$tag}@example.com", array( 'created_at' => $created ) );
+	$v->product_id      = $u12_product->get_id();
+	$v->recipient_email = "u12-recipient-{$tag}@example.com";
+	$v->send_to         = $send_to;
+	vcap()->vouchers->update( $v );
+	return vcap()->vouchers->get( $v->id );
+};
+$u12_only = $u12_route( 'recipient', gmdate( 'Y-m-d H:i:s', time() + MINUTE_IN_SECONDS ) );
+$mails    = array();
+vcap()->delivery->send( $u12_only );
+vcap_dlv_assert( array( "u12-recipient-{$tag}@example.com" ) === $mails, 'U12: a voucher issued for "recipient only" is not copied to the buyer although the product still has the old buyer copy flag', $mails );
+$mails = array();
+vcap()->delivery->send( $u12_route( 'both', gmdate( 'Y-m-d H:i:s', time() + MINUTE_IN_SECONDS ) ) );
+vcap_dlv_assert( 2 === count( $mails ), 'U12: "Recipient and buyer" on the voucher mails both', $mails );
+$mails = array();
+vcap()->delivery->send( $u12_route( 'recipient', '2020-01-01 00:00:00' ) );
+vcap_dlv_assert( 2 === count( $mails ), 'U12: vouchers issued before the change keep the buyer copy of their product', $mails );
+
 remove_filter( 'pre_wp_mail', $catch, 999 );
 echo "Voucher Captain delivery checks passed.\n";

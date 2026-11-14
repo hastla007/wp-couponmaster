@@ -16,12 +16,14 @@ defined( 'ABSPATH' ) || exit;
 
 do_action( 'woocommerce_email_header', $email_heading, $email );
 
+// F15: the start side for right-to-left languages (email clients know no logical CSS properties).
+$vcap_start = is_rtl() ? 'right' : 'left';
 $value = 'percent' === $voucher->discount_type
 	? \VCAP\Format::percent( $voucher->initial_amount )
 	: wc_price( $voucher->initial_amount, array( 'currency' => $voucher->currency ) );
 ?>
 
-<p><?php echo wp_kses_post( wpautop( wptexturize( $intro ) ) ); ?></p>
+<div><?php echo wp_kses_post( wpautop( wptexturize( $intro ) ) ); ?></div>
 
 <table cellspacing="0" cellpadding="12" border="0" style="width:100%;border:2px dashed #c9b28a;margin:16px 0;" role="presentation">
 	<tr>
@@ -29,7 +31,7 @@ $value = 'percent' === $voucher->discount_type
 			<?php if ( ! $voucher->is_ticket() || $voucher->initial_amount > 0 ) : ?>
 				<div style="font-size:28px;font-weight:bold;margin-bottom:6px;"><?php echo wp_kses_post( $value ); ?></div>
 			<?php endif; ?>
-			<div style="font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#777;"><?php esc_html_e( 'Your code', 'voucher-captain' ); ?></div>
+			<div style="font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#666;"><?php esc_html_e( 'Your code', 'voucher-captain' ); ?></div>
 			<div style="font-family:monospace;font-size:22px;font-weight:bold;letter-spacing:2px;margin:4px 0 8px;"><?php echo esc_html( $voucher->code ); ?></div>
 			<?php if ( $voucher->expires_at ) : ?>
 				<div style="font-size:13px;color:#555;">
@@ -50,7 +52,7 @@ $value = 'percent' === $voucher->discount_type
 <?php endif; ?>
 
 <?php if ( $voucher->message ) : ?>
-	<blockquote style="border-left:4px solid #c9b28a;margin:0 0 16px;padding:8px 14px;font-style:italic;">
+	<blockquote style="border-<?php echo esc_attr( $vcap_start ); ?>:4px solid #c9b28a;margin:0 0 16px;padding:8px 14px;font-style:italic;">
 		<?php echo wp_kses_post( nl2br( esc_html( $voucher->message ) ) ); ?>
 		<?php if ( $voucher->buyer_name ) : ?>
 			<br>— <?php echo esc_html( $voucher->buyer_name ); ?>
@@ -59,11 +61,14 @@ $value = 'percent' === $voucher->discount_type
 <?php endif; ?>
 
 <?php if ( $download_url ) : ?>
-	<p style="text-align:center;margin:20px 0;">
-		<a href="<?php echo esc_url( $download_url ); ?>" style="display:inline-block;padding:12px 22px;background:#1f3a4d;color:#ffffff;text-decoration:none;border-radius:4px;font-weight:bold;">
-			<?php echo $voucher->is_ticket() ? esc_html__( 'Download ticket (PDF)', 'voucher-captain' ) : esc_html__( 'Download voucher (PDF)', 'voucher-captain' ); ?>
-		</a>
-	</p>
+	<?php // F16: "bulletproof" button – the colour sits on the table cell, so Outlook shows it as well. ?>
+	<table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:20px auto;"><tr>
+		<td bgcolor="#1f3a4d" style="background:#1f3a4d;border-radius:4px;text-align:center;">
+			<a class="vcap-email-button" href="<?php echo esc_url( $download_url ); ?>" style="display:inline-block;padding:12px 22px;border:1px solid #1f3a4d;border-radius:4px;background:#1f3a4d;color:#ffffff;text-decoration:none;font-weight:bold;">
+				<?php echo $voucher->is_ticket() ? esc_html__( 'Download ticket (PDF)', 'voucher-captain' ) : esc_html__( 'Download voucher (PDF)', 'voucher-captain' ); ?>
+			</a>
+		</td>
+	</tr></table>
 <?php endif; ?>
 
 <?php
@@ -76,15 +81,17 @@ $redeem_url = $voucher->id ? \VCAP\Shortcodes::redeem_url( $voucher->code ) : ''
 ?>
 <?php if ( $next_steps ) : ?>
 	<h3 style="margin:16px 0 8px;"><?php esc_html_e( 'What happens next', 'voucher-captain' ); ?></h3>
-	<ol style="margin:0 0 16px;padding-left:20px;">
+	<ol style="margin:0 0 16px;padding-<?php echo esc_attr( $vcap_start ); ?>:20px;">
 		<?php foreach ( $next_steps as $step ) : ?>
 			<li style="margin-bottom:4px;"><?php echo esc_html( $step ); ?></li>
 		<?php endforeach; ?>
 	</ol>
 	<?php if ( $redeem_url ) : ?>
-		<p style="text-align:center;margin:20px 0;">
-			<a href="<?php echo esc_url( $redeem_url ); ?>" style="display:inline-block;padding:12px 22px;background:#1f3a4d;color:#ffffff;text-decoration:none;border-radius:4px;font-weight:bold;"><?php esc_html_e( 'Redeem now', 'voucher-captain' ); ?></a>
-		</p>
+		<table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:20px auto;"><tr>
+			<td bgcolor="#1f3a4d" style="background:#1f3a4d;border-radius:4px;text-align:center;">
+				<a class="vcap-email-button" href="<?php echo esc_url( $redeem_url ); ?>" style="display:inline-block;padding:12px 22px;border:1px solid #1f3a4d;border-radius:4px;background:#1f3a4d;color:#ffffff;text-decoration:none;font-weight:bold;"><?php esc_html_e( 'Redeem now', 'voucher-captain' ); ?></a>
+			</td>
+		</tr></table>
 	<?php endif; ?>
 <?php elseif ( '' !== \VCAP\Channels::instructions( $voucher ) ) : ?>
 	<p style="font-size:13px;color:#555;">

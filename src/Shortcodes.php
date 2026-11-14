@@ -101,6 +101,11 @@ final class Shortcodes {
 			default:
 				$html = '';
 		}
+		// F16: the block wrapper carries the block's classes and styles (alignment, custom class name) like core blocks.
+		$wrapper = '' !== $html && function_exists( 'get_block_wrapper_attributes' ) && class_exists( 'WP_Block_Supports' ) && ! empty( \WP_Block_Supports::$block_to_render ) ? get_block_wrapper_attributes() : '';
+		if ( '' !== $wrapper ) {
+			$html = '<div ' . $wrapper . '>' . $html . '</div>';
+		}
 		return self::escape_shortcodes( $html );
 	}
 
@@ -610,7 +615,7 @@ final class Shortcodes {
 			?>
 			<input type="hidden" name="vcap_redeem_form" value="<?php echo esc_attr( $form_id ); ?>" />
 			<?php // Default button for Enter (implicit submission uses the first submit button; connector steps such as "Cancel" come before the visible one). ?>
-			<button type="submit" class="vcap-default-submit" tabindex="-1" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;"><?php echo esc_html( $atts['button'] ); ?></button>
+			<button type="submit" class="vcap-default-submit" tabindex="-1" aria-hidden="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);clip-path:inset(50%);white-space:nowrap;"><?php echo esc_html( $atts['button'] ); ?></button>
 			<label for="<?php echo esc_attr( $form_id . '-code' ); ?>"><?php esc_html_e( 'Voucher code', 'voucher-captain' ); ?></label>
 			<input type="text" id="<?php echo esc_attr( $form_id . '-code' ); ?>" name="vcap_redeem_code" required autocomplete="off" maxlength="100" value="<?php echo self::esc_attr_text( $value ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_attr_text(). ?>"<?php echo $invalid ? ' aria-invalid="true" aria-describedby="' . esc_attr( $form_id . '-result' ) . '"' : ''; ?> />
 			<?php
@@ -662,6 +667,12 @@ final class Shortcodes {
 		}
 		if ( ! is_user_logged_in() ) {
 			return self::login_hint();
+		}
+		if ( ! $this->referrals->enabled() ) {
+			// G9: customers see nothing; the shop staff learn why instead of an empty spot.
+			return current_user_can( 'manage_woocommerce' )
+				? self::wrap( self::preview_note( __( 'The "Refer a friend" program is switched off (WooCommerce → Settings → Vouchers), so customers see nothing here. Only shop managers see this note.', 'voucher-captain' ) ) )
+				: '';
 		}
 		Downloads::enqueue_style();
 		ob_start();

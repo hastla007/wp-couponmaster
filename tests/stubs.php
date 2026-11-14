@@ -68,6 +68,7 @@ function wp_specialchars_decode( $s, $q = ENT_NOQUOTES ) { return htmlspecialcha
 function wp_unslash( $v ) { return $v; }
 function wp_slash( $v ) { return $v; }
 function wp_parse_args( $a, $d = array() ) { return array_merge( $d, (array) $a ); }
+function remove_accents( $s ) { return strtr( (string) $s, array( 'ä' => 'a', 'ö' => 'o', 'ü' => 'u', 'Ä' => 'A', 'Ö' => 'O', 'Ü' => 'U', 'é' => 'e', 'è' => 'e', 'à' => 'a', 'ç' => 'c', 'ñ' => 'n', 'ß' => 'ss' ) ); }
 function get_option( $k, $d = false ) { return $GLOBALS['vcap_test_options'][ $k ] ?? $d; }
 function update_option( $k, $v, $a = null ) { $GLOBALS['vcap_test_options'][ $k ] = $v; return true; }
 function add_option( $k, $v ) { if ( ! isset( $GLOBALS['vcap_test_options'][ $k ] ) ) { $GLOBALS['vcap_test_options'][ $k ] = $v; } }

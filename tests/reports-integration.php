@@ -176,6 +176,35 @@ iterator_to_array( $ledger->journal_all( $today, $today, 1 ), false );
 remove_filter( 'query', $b14_log );
 $b14_batches = preg_grep( '/^SELECT e\.id, e\.created_at/', $b14_queries );
 vcap_report_assert( $b14_batches && count( preg_grep( '/e\.id > \d+ AND e\.id <= \d+ AND e\.created_at/', $b14_batches ) ) === count( $b14_batches ) && 1 === count( preg_grep( '/SELECT MIN\(id\) AS lo, MAX\(id\) AS hi/', $b14_queries ) ), 'B14: every journal batch is a primary-key range within the period bounds, read once' );
+// U6: journal amounts carry their direction; an admin correction is logged with its sign.
+$u6_card = $ledger_new( 'balance', 40 );
+vcap()->coupons->adjust_balance( $u6_card, -15, 'adjusted', 'U6 correction' );
+$u6_rows = array_values( array_filter( $ledger->journal( $today, $today ), static fn( $r ) => (string) $r['code'] === $u6_card->code ) );
+$u6_adj  = array_values( array_filter( $u6_rows, static fn( $r ) => 'adjusted' === $r['event'] ) );
+vcap_report_assert( 1 === count( $u6_adj ) && -15.0 === (float) $u6_adj[0]['amount'] && 25.0 === (float) $u6_adj[0]['balance_after'], 'U6: lowering a balance by 15 is logged as -15 ("adjusted" with sign)' );
+$u6_header = VCAP\Ledger::journal_header();
+$u6_amount = array_search( __( 'Amount', 'voucher-captain' ), $u6_header, true );
+$u6_redeem = VCAP\Ledger::journal_line( $journal[0] );
+vcap_report_assert( VCAP\Csv::number( -20, 2 ) === $u6_redeem[ $u6_amount ] && VCAP\Csv::number( -15, 2 ) === VCAP\Ledger::journal_line( $u6_adj[0] )[ $u6_amount ], 'U6: in the journal CSV a redemption and a lowering correction are negative' );
+$u6_sum = array_sum( array_map( static fn( $r ) => VCAP\Ledger::signed_amount( (string) $r['event'], $r['amount'] ), $u6_rows ) );
+vcap_report_assert( abs( 25.0 - $u6_sum ) < 0.001, 'U6: the signed journal of a card sums to its remaining value (40 issued − 15 corrected)' );
+
+// U5: order number (sequential numbers plugins) and order ID as two CSV columns; the journal page links the number.
+$u5_order  = wc_create_order();
+$u5_order->save();
+$u5_number = static fn( $number, $order ) => 'R-2026-' . $order->get_id();
+add_filter( 'woocommerce_order_number', $u5_number, 10, 2 );
+vcap()->vouchers->log( $u6_card->id, 'redeemed', 5, 20, 'U5', $u5_order->get_id() );
+$u5_row  = array_values( array_filter( $ledger->journal( $today, $today ), static fn( $r ) => (int) $r['order_id'] === $u5_order->get_id() ) );
+$u5_line = $u5_row ? VCAP\Ledger::journal_line( $u5_row[0] ) : array();
+$u5_num  = array_search( __( 'Order number', 'voucher-captain' ), $u6_header, true );
+$u5_id   = array_search( __( 'Order ID', 'voucher-captain' ), $u6_header, true );
+vcap_report_assert( false !== $u5_num && false !== $u5_id && 'R-2026-' . $u5_order->get_id() === ( $u5_line[ $u5_num ] ?? '' ) && $u5_order->get_id() === (int) ( $u5_line[ $u5_id ] ?? 0 ), 'U5: the journal CSV has the order number and the order ID in two columns' );
+$u5_link = VCAP\Format::order_link( $u5_order->get_id() );
+vcap_report_assert( str_contains( $u5_link, '#R-2026-' . $u5_order->get_id() . '</a>' ) && str_contains( $u5_link, '<a href=' ), 'U5: admin tables link the order number to the order' );
+$u5_liab = VCAP\Ledger::liability_header();
+vcap_report_assert( in_array( __( 'Order number', 'voucher-captain' ), $u5_liab, true ) && in_array( __( 'Order ID', 'voucher-captain' ), $u5_liab, true ) && count( $u5_liab ) === count( VCAP\Ledger::liability_line( array( 'code' => 'x', 'type' => 'voucher', 'currency' => 'XTS', 'issued' => null, 'expires' => '', 'order_id' => $u5_order->get_id(), 'outstanding' => 1, 'expired' => false ), $today ) ), 'U5: the liability CSV has order number and ID as well' );
+remove_filter( 'woocommerce_order_number', $u5_number, 10 );
 
 // CSV format: German Excel gets semicolons and a decimal comma; negative numbers are not mistaken for formulas.
 $german = static fn() => array( 'separator' => ';', 'decimal' => ',' );

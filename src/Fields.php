@@ -34,6 +34,8 @@ final class Fields {
 		add_filter( 'woocommerce_add_cart_item_data', array( $this, 'cart_item_data' ), 10, 3 );
 		add_filter( 'woocommerce_get_item_data', array( $this, 'display_item_data' ), 10, 2 );
 		add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'save_order_item' ), 10, 4 );
+		add_filter( 'woocommerce_order_item_display_meta_key', array( $this, 'display_meta_key' ), 10, 3 );
+		add_filter( 'woocommerce_order_item_display_meta_value', array( $this, 'display_meta_value' ), 10, 3 );
 		add_filter( 'woocommerce_order_again_cart_item_data', array( $this, 'order_again' ), 10, 3 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'assets' ) );
 		add_action( 'woocommerce_after_shop_loop_item', array( $this, 'loop_assets' ) );
@@ -110,7 +112,8 @@ final class Fields {
 				'required'    => false,
 				'maxlength'   => 10,
 				'placeholder' => '',
-				'tooltip'     => __( 'The voucher is emailed on this day. Leave empty to send it right away.', 'voucher-captain' ),
+				/* translators: %s: time of day (e.g. 8:00 am) */
+				'tooltip'     => sprintf( __( 'The voucher is emailed on this day at about %s (shop time). Leave empty to send it right away.', 'voucher-captain' ), self::delivery_time_text() ),
 			),
 		);
 		$enabled = (array) $config['builtin_fields'];
@@ -151,7 +154,8 @@ final class Fields {
 	/** Help text of a required built-in field: no "leave empty to …", which a required field does not allow. */
 	private static function required_tooltip( string $key, string $tooltip, array $config ): string {
 		if ( 'delivery_date' === $key ) {
-			return __( 'The voucher is emailed on this day.', 'voucher-captain' );
+			/* translators: %s: time of day (e.g. 8:00 am) */
+			return sprintf( __( 'The voucher is emailed on this day at about %s (shop time).', 'voucher-captain' ), self::delivery_time_text() );
 		}
 		if ( 'recipient_email' === $key ) {
 			if ( 'buyer' !== ( $config['send_to'] ?? '' ) ) {
@@ -468,7 +472,8 @@ final class Fields {
 				echo '<label for="' . esc_attr( $id ) . '" class="checkbox"><input type="checkbox" value="1" ' . $attrs . checked( '1', $value, false ) . ' /> ' . esc_html( $field['label'] ?? $key ) . ( $required ? ' <abbr class="required" title="' . esc_attr__( 'required', 'voucher-captain' ) . '">*</abbr>' : '' ) . '</label>'; // phpcs:ignore WordPress.Security.EscapeOutput
 				break;
 			case 'date':
-				$min  = 'delivery_date' === $key ? wp_date( 'Y-m-d', time() + DAY_IN_SECONDS ) : '';
+				// H11: from today, like the server rule in errors() (a day already past the delivery hour sends at once).
+				$min  = 'delivery_date' === $key ? wp_date( 'Y-m-d' ) : '';
 				$maxd = 'delivery_date' === $key ? self::max_delivery_date( $config ) : '';
 				echo '<input type="date" ' . $attrs . ' value="' . esc_attr( $value ) . '"' . ( $min ? ' min="' . esc_attr( $min ) . '" max="' . esc_attr( $maxd ) . '"' : '' ) . ' />'; // phpcs:ignore WordPress.Security.EscapeOutput
 				break;
@@ -713,7 +718,7 @@ final class Fields {
 		foreach ( $fields as $field ) {
 			$item_data[] = array(
 				'key'   => $field['label'],
-				'value' => $field['value'],
+				'value' => self::display_value( (string) $field['value'] ),
 			);
 		}
 		// When and where the voucher goes (the buyer otherwise learns it only on the delivery day).
@@ -734,12 +739,71 @@ final class Fields {
 			return;
 		}
 		$item->add_meta_data( '_vcap_fields', $values['vcap_fields'], true );
-		// Visible copy (admin order screen, emails, {item_meta:Label} placeholders).
-		foreach ( $values['vcap_fields'] as $field ) {
+		// Visible copy (admin order screen, emails, {item_meta:…} placeholders). M10: under a stable key
+		// ("vcap_recipient_name"), whatever the language of the order; the label is shown by display_meta_key().
+		foreach ( $values['vcap_fields'] as $key => $field ) {
 			if ( '' !== (string) $field['value'] ) {
-				$item->add_meta_data( wp_strip_all_tags( $field['label'] ), $field['value'], true );
+				$item->add_meta_data( self::item_meta_key( (string) $key ), $field['value'], true );
 			}
 		}
+	}
+
+	/** M10: order item meta key of a field's visible copy. */
+	public static function item_meta_key( string $field_key ): string {
+		return self::ITEM_META_PREFIX . sanitize_key( $field_key );
+	}
+
+	/** Prefix of the visible order item meta of voucher fields (M10). */
+	public const ITEM_META_PREFIX = 'vcap_';
+
+	/**
+	 * H11/M10: a field value as people read it – a date in the voucher date format ("24.12.2026" instead of
+	 * "2026-12-24"), anything else unchanged.
+	 */
+	public static function display_value( string $value ): string {
+		if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $value ) ) {
+			return $value;
+		}
+		$ts = LocalDate::timestamp( $value . 'T12:00' );
+		return null === $ts ? $value : wp_date( function_exists( 'vcap' ) ? vcap()->settings->date_format() : (string) get_option( 'date_format' ), $ts );
+	}
+
+	/** H11: the local time of day dated deliveries go out ("8:00 am"), for the help texts. */
+	public static function delivery_time_text(): string {
+		$dt = new \DateTimeImmutable( 'today', wp_timezone() );
+		return wp_date( (string) get_option( 'time_format', 'H:i' ), $dt->setTime( Delivery::delivery_hour(), 0 )->getTimestamp() );
+	}
+
+	/**
+	 * M10: label of a field's visible order item meta, from the field as ordered (_vcap_fields).
+	 *
+	 * @param string $display_key
+	 * @param object $meta WC_Meta_Data
+	 * @param mixed  $item
+	 */
+	public function display_meta_key( $display_key, $meta, $item = null ) {
+		$key = is_object( $meta ) && isset( $meta->key ) ? (string) $meta->key : '';
+		if ( ! str_starts_with( $key, self::ITEM_META_PREFIX ) || ! $item instanceof \WC_Order_Item ) {
+			return $display_key;
+		}
+		$fields = $item->get_meta( '_vcap_fields' );
+		$field  = is_array( $fields ) ? ( $fields[ substr( $key, strlen( self::ITEM_META_PREFIX ) ) ] ?? null ) : null;
+		return is_array( $field ) && '' !== (string) ( $field['label'] ?? '' ) ? wp_strip_all_tags( (string) $field['label'] ) : $display_key;
+	}
+
+	/**
+	 * M10/H11: dates of voucher fields (also the label-keyed copies of older orders) in the voucher date format.
+	 *
+	 * @param string $display_value
+	 * @param object $meta WC_Meta_Data
+	 * @param mixed  $item
+	 */
+	public function display_meta_value( $display_value, $meta, $item = null ) {
+		if ( ! $item instanceof \WC_Order_Item || ! is_object( $meta ) || ! is_scalar( $meta->value ?? null ) || ! is_array( $item->get_meta( '_vcap_fields' ) ) ) {
+			return $display_value;
+		}
+		$formatted = self::display_value( (string) $meta->value );
+		return $formatted !== (string) $meta->value ? esc_html( $formatted ) : $display_value;
 	}
 
 	public function order_again( $data, $item, $order ) {
@@ -904,6 +968,24 @@ final class Fields {
 		<?php
 	}
 
+	/**
+	 * M11: the {field:KEY} key of a field – the key entered, else the label, as lowercase ASCII with "_"; labels
+	 * without Latin letters (Greek, Bulgarian …) get "field_N" (N = position in the group). Same rule as slug() in
+	 * assets/js/field-groups.js, so the token shown while editing is the key saved. '' for an empty row.
+	 */
+	public static function field_key( string $key, string $label, int $position ): string {
+		$raw = '' !== trim( $key ) ? $key : $label;
+		if ( '' === trim( $raw ) ) {
+			return '';
+		}
+		$slug = strtolower( remove_accents( str_replace( 'ß', 'ss', $raw ) ) );
+		$slug = trim( (string) preg_replace( '/[^a-z0-9]+/', '_', $slug ), '_' );
+		if ( '' === $slug ) {
+			return 'field_' . max( 1, $position );
+		}
+		return ctype_digit( $slug ) ? 'field_' . $slug : $slug;
+	}
+
 	public function save_group( int $post_id, \WP_Post $post ): void {
 		if ( ! isset( $_POST['vcap_field_group_nonce'] ) || ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_field_group_nonce'] ) ), 'vcap_field_group' ) ) {
 			return;
@@ -914,14 +996,10 @@ final class Fields {
 		$fields_in = json_decode( wp_unslash( (string) ( $_POST['vcap_fields_json'] ?? '' ) ), true ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised below.
 		$fields    = array();
 		$reserved  = array( 'recipient_name', 'recipient_email', 'message', 'delivery_date' );
-		foreach ( is_array( $fields_in ) ? $fields_in : array() as $f ) {
-			$key = sanitize_key( $f['key'] ?? '' ) ?: sanitize_key( sanitize_title( $f['label'] ?? '' ) );
-			$key = str_replace( '-', '_', $key );
+		foreach ( array_values( is_array( $fields_in ) ? $fields_in : array() ) as $index => $f ) {
+			$key = self::field_key( (string) ( $f['key'] ?? '' ), (string) ( $f['label'] ?? '' ), $index + 1 );
 			if ( '' === $key ) {
 				continue;
-			}
-			if ( is_numeric( $key ) ) {
-				$key = 'field_' . $key;
 			}
 			// Never drop a field silently: make reserved or duplicate keys unique instead.
 			$base = $key;

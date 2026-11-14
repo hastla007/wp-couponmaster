@@ -229,4 +229,17 @@ vcap_blocks_assert( 0 === (int) wc_get_coupon_id_by_code( $credit_account->code 
 vcap_blocks_assert( (int) vcap()->store_credit->account( $block_user )->coupon_id > 0 && (int) wc_get_coupon_id_by_code( $credit_account->code ) > 0, 'the store credit account still repairs its coupon outside the Store API answer' );
 wp_set_current_user( 0 );
 WC()->cart->empty_cart();
+
+// G12: the cart blocks script also loads in the editor, with sample voucher rows there; no script translations.
+$g12 = new VCAP\Compat\CartBlocksIntegration();
+$g12->initialize();
+$g12_script = wp_scripts()->registered[ VCAP\Compat\CartBlocksIntegration::HANDLE ] ?? null;
+vcap_blocks_assert( array( VCAP\Compat\CartBlocksIntegration::HANDLE ) === $g12->get_editor_script_handles() && $g12_script && ! in_array( 'wp-i18n', $g12_script->deps, true ) && empty( $g12_script->textdomain ), 'G12: the cart blocks script is an editor handle as well and loads no script translations' );
+vcap_blocks_assert( null === $g12->get_script_data()['preview'], 'G12: the storefront gets no sample rows' );
+require_once ABSPATH . 'wp-admin/includes/class-wp-screen.php';
+require_once ABSPATH . 'wp-admin/includes/screen.php';
+set_current_screen( 'post' );
+$g12_preview = $g12->get_script_data()['preview'];
+vcap_blocks_assert( is_array( $g12_preview ) && ! empty( $g12_preview['payments'][0]['label'] ) && ! empty( $g12_preview['balances'][0]['text'] ), 'G12: in the editor the blocks get a sample voucher payment and balance' );
+$GLOBALS['current_screen'] = null;
 echo "Voucher Captain block checks passed.\n";

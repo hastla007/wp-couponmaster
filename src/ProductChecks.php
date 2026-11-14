@@ -28,6 +28,7 @@ final class ProductChecks {
 		add_action( 'woocommerce_cart_totals_after_order_total', array( $this, 'residual_rows' ) );
 		add_action( 'woocommerce_review_order_after_order_total', array( $this, 'residual_rows' ) );
 		add_action( 'admin_notices', array( $this, 'admin_notices' ) );
+		add_action( 'admin_post_vcap_expired_product', array( $this, 'handle_expired_product' ) );
 		add_filter( 'site_status_tests', array( $this, 'health_tests' ) );
 		// The cached shop_problems() is recalculated after a product or its voucher settings change.
 		foreach ( array( 'woocommerce_new_product', 'woocommerce_update_product', 'woocommerce_delete_product', 'woocommerce_trash_product', 'save_post_product' ) as $hook ) {
@@ -43,6 +44,61 @@ final class ProductChecks {
 		if ( is_string( $meta_key ) && str_starts_with( $meta_key, '_vcap_' ) ) {
 			self::flush();
 		}
+	}
+
+	/** Product meta: the fixed expiry date whose "expired" notice the admin hid (a new date shows it again). */
+	public const EXPIRED_HIDDEN_META = '_vcap_expired_notice_hidden';
+
+	/**
+	 * U8: whether an expired fixed-date product still deserves the shop-wide notice – only products customers
+	 * could otherwise buy (published, visible in the catalog, in stock) whose notice was not hidden for this date.
+	 */
+	public static function expired_notice_due( \WC_Product $product, array $config ): bool {
+		if ( 'hidden' === $product->get_catalog_visibility() || ! $product->is_in_stock() ) {
+			return false;
+		}
+		$hidden = (string) $product->get_meta( self::EXPIRED_HIDDEN_META );
+		return '' === $hidden || (string) $config['expiry_date'] !== $hidden;
+	}
+
+	/**
+	 * U8: act on an expired product from the notice: "hide" the notice for its current date, or "draft" it
+	 * (unpublish the season product).
+	 */
+	public static function dismiss_expired( \WC_Product $product, string $how ): bool {
+		if ( 'draft' === $how ) {
+			$product->set_status( 'draft' );
+			return (bool) $product->save();
+		}
+		if ( 'hide' === $how ) {
+			$product->update_meta_data( self::EXPIRED_HIDDEN_META, (string) ProductConfig::get( $product )['expiry_date'] );
+			return (bool) $product->save();
+		}
+		return false;
+	}
+
+	public function handle_expired_product(): void {
+		$id = absint( $_GET['product'] ?? 0 ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- checked below.
+		check_admin_referer( 'vcap_expired_product_' . $id );
+		if ( ! current_user_can( 'edit_product', $id ) ) {
+			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
+		}
+		$product = wc_get_product( $id );
+		if ( $product ) {
+			self::dismiss_expired( $product, sanitize_key( wp_unslash( $_GET['how'] ?? '' ) ) );
+		}
+		wp_safe_redirect( wp_get_referer() ? wp_get_referer() : admin_url( 'edit.php?post_type=product' ) );
+		exit;
+	}
+
+	/** Escaped HTML: product links, each with "Hide notice" and "Set to draft" (U8). */
+	private static function expired_links( array $products ): string {
+		$out = array();
+		foreach ( $products as $p ) {
+			$url   = static fn( string $how ) => wp_nonce_url( add_query_arg( array( 'action' => 'vcap_expired_product', 'product' => $p->get_id(), 'how' => $how ), admin_url( 'admin-post.php' ) ), 'vcap_expired_product_' . $p->get_id() );
+			$out[] = self::product_links( array( $p ) ) . ' (<a href="' . esc_url( $url( 'hide' ) ) . '">' . esc_html__( 'Hide notice', 'voucher-captain' ) . '</a> | <a href="' . esc_url( $url( 'draft' ) ) . '">' . esc_html__( 'Set to draft', 'voucher-captain' ) . '</a>)';
+		}
+		return implode( ', ', $out );
 	}
 
 	// ----------------------------------------------------------------- Sale.
@@ -278,6 +334,17 @@ final class ProductChecks {
 				);
 			}
 		}
+		// U3: a voucher that is not virtual makes the checkout ask for a shipping address and charge shipping. A
+		// variable product has no virtual flag of its own; each variation is checked (they default to not virtual).
+		if ( ( $product->is_type( 'simple' ) || $product->is_type( 'variation' ) ) && ! $product->is_virtual() ) {
+			$out[] = array(
+				'level'   => 'warning',
+				'message' => $product->is_type( 'variation' )
+					/* translators: %s: variation name */
+					? sprintf( __( 'The variation "%s" is not virtual: WooCommerce asks for a shipping address and may charge shipping for the voucher. Tick "Virtual" on the variation.', 'voucher-captain' ), wp_strip_all_tags( $product->get_formatted_name() ) )
+					: __( 'Vouchers are sent by email as PDF. Tick "Virtual" at the top of the product data box – otherwise WooCommerce asks for a shipping address and may charge shipping for the voucher.', 'voucher-captain' ),
+			);
+		}
 		return $out;
 	}
 
@@ -344,7 +411,7 @@ final class ProductChecks {
 				continue;
 			}
 			$config = ProductConfig::get( $product );
-			if ( in_array( ProductConfig::expiry_problem( $config ), array( 'date_past', 'date_missing' ), true ) ) {
+			if ( in_array( ProductConfig::expiry_problem( $config ), array( 'date_past', 'date_missing' ), true ) && self::expired_notice_due( $product, $config ) ) {
 				$out['expired'][] = $product;
 			}
 			$batch = (string) $config['code_batch'];
@@ -432,7 +499,7 @@ final class ProductChecks {
 			echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'Voucher Captain', 'voucher-captain' ) . ':</strong> ' . esc_html__( 'These voucher products have an invalid discount setup (a percentage that is not a fixed value between 0 and 100, or "Fixed product discount") and cannot be bought until it is corrected:', 'voucher-captain' ) . ' ' . self::product_links( $problems['invalid'] ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in product_links().
 		}
 		if ( $problems['expired'] ) {
-			echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'Voucher Captain', 'voucher-captain' ) . ':</strong> ' . esc_html__( 'These voucher products have a fixed expiry date that has passed (or is missing) and can no longer be bought:', 'voucher-captain' ) . ' ' . self::product_links( $problems['expired'] ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in product_links().
+			echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'Voucher Captain', 'voucher-captain' ) . ':</strong> ' . esc_html__( 'These voucher products have a fixed expiry date that has passed (or is missing) and can no longer be bought:', 'voucher-captain' ) . ' ' . self::expired_links( $problems['expired'] ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in expired_links().
 		}
 		$empty = array_filter( $problems['codes'], static fn( $row ) => $row['free'] < 1 );
 		$low   = array_filter( $problems['codes'], static fn( $row ) => $row['free'] >= 1 );

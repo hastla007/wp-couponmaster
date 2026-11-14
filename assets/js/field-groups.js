@@ -97,14 +97,19 @@
 			$row.find( '.vcap-fg-up' ).prop( 'disabled', 0 === index );
 			$row.find( '.vcap-fg-down' ).prop( 'disabled', index === $rows.length - 1 );
 		} );
-		$rows.each( function () {
+		$rows.each( function ( index ) {
 			var $r = $( this );
 			var f = {};
 			$r.find( '[data-k]' ).each( function () {
 				f[ $( this ).data( 'k' ) ] = 'checkbox' === this.type ? this.checked : $( this ).val();
 			} );
 			// Same rules as Fields::save_group(): the token shown is exactly the key that will be saved.
-			f.key = slug( f.key || f.label || '' );
+			var raw = $.trim( f.key || '' ) ? f.key : ( f.label || '' );
+			f.key = slug( raw );
+			// Labels without Latin letters (Greek, Bulgarian …): "field_N" by position, like Fields::field_key().
+			if ( ! f.key && $.trim( raw ) ) {
+				f.key = 'field_' + ( index + 1 );
+			}
 			if ( f.key ) {
 				if ( /^[0-9]+$/.test( f.key ) ) {
 					f.key = 'field_' + f.key;

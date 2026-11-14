@@ -7,6 +7,9 @@ defined( 'ABSPATH' ) || exit;
  * Admin menu: Vouchers (list/detail), PDF templates, Field groups, Import codes, Scanner, Settings.
  */
 final class Menu {
+	/** Screens of the order edit page (posts storage, HPOS). */
+	public const ORDER_SCREENS = array( 'shop_order', 'woocommerce_page_wc-orders' );
+
 	public function register(): void {
 		add_action( 'admin_menu', array( $this, 'menu' ), 9 );
 		add_action( 'admin_menu', array( $this, 'settings_link' ), 99 );
@@ -59,7 +62,9 @@ final class Menu {
 	}
 
 	public function assets( string $hook ): void {
-		if ( ! str_contains( $hook, 'vcap' ) ) {
+		// F14: also on the order screens (legacy and HPOS) – the voucher meta box uses the status marks.
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! str_contains( $hook, 'vcap' ) && ! ( $screen && in_array( $screen->id, self::ORDER_SCREENS, true ) ) ) {
 			return;
 		}
 		wp_enqueue_style( 'vcap-admin', VCAP_URL . 'assets/css/admin.css', array(), VCAP_VERSION );

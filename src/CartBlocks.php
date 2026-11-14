@@ -193,6 +193,42 @@ final class CartBlocks {
 		);
 	}
 
+	/**
+	 * G12: sample data for the cart and checkout blocks in the editor (the editor's preview cart carries no voucher):
+	 * one voucher payment and the remaining balance note, in the shape of cart_data().
+	 */
+	public static function preview_data(): array {
+		$code    = 'GIFT-XXXX-XXXX';
+		$voucher = new Voucher();
+		$voucher->code     = $code;
+		$voucher->currency = (string) get_woocommerce_currency();
+		return array(
+			'payments'       => array(
+				array(
+					'code'      => strtolower( $code ),
+					/* translators: %s: voucher code */
+					'label'     => sprintf( __( 'Voucher %s', 'voucher-captain' ), $code ),
+					'amount'    => (string) ( 20 * ( 10 ** wc_get_price_decimals() ) ),
+					'formatted' => self::plain_price( -20.0 ),
+				),
+			),
+			'paying_coupons' => array(),
+			'coupon_note'    => __( 'pays as voucher payment (see below)', 'voucher-captain' ),
+			'balances'       => array(
+				array(
+					'code'      => strtolower( $code ),
+					/* translators: %s: voucher code */
+					'label'     => sprintf( __( 'Voucher %s balance', 'voucher-captain' ), $code ),
+					'formatted' => self::plain_price( 30.0 ),
+					'text'      => CouponManager::remaining_balance_note( $voucher, 30.0 ),
+				),
+			),
+			'store_credit'   => null,
+			'forfeits'       => array(),
+			'promotions'     => array(),
+		);
+	}
+
 	private static function plain_price( float $amount, string $currency = '' ): string {
 		return html_entity_decode( wp_strip_all_tags( wc_price( $amount, '' !== $currency ? array( 'currency' => $currency ) : array() ) ), ENT_QUOTES, 'UTF-8' );
 	}

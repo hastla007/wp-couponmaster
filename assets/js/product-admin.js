@@ -35,12 +35,17 @@
 		$( '.vcap-hint-giftcard-single' ).toggle( on && single && 'giftcard' === type );
 		$( '.vcap-hint-value-single' ).toggle( on && single && 'voucher' === type );
 		$( '.vcap-hint-buyer-recipient' ).toggle( on && recipientField && 'buyer' === $( '#_vcap_send_to' ).val() && 'recipient' !== restrict && 'both' !== restrict );
-		$( '.vcap-hint-virtual' ).toggle( on && 'simple' === $( '#product-type' ).val() && $( '#_virtual' ).length > 0 && ! $( '#_virtual' ).is( ':checked' ) );
+		var productType = $( '#product-type' ).val();
+		// Variations of a variable product (the usual price levels) are not virtual by default either (U3).
+		var physicalVariation = 'variable' === productType && $( 'input.variable_is_virtual' ).filter( function () {
+			return ! $( this ).is( ':checked' );
+		} ).length > 0;
+		$( '.vcap-hint-virtual' ).toggle( on && ( ( 'simple' === productType && $( '#_virtual' ).length > 0 && ! $( '#_virtual' ).is( ':checked' ) ) || physicalVariation ) );
 	}
 	$( function () {
 		$( '#_vcap_enabled' ).on( 'change', toggleTab );
 		$( '#woocommerce-product-data' ).on( 'change', '#_vcap_amount_source, #_vcap_usage, #_vcap_expiry_mode, #_vcap_delivery, #_vcap_type, #_vcap_code_batch', toggleFields );
-		$( '#woocommerce-product-data' ).on( 'change', '#_vcap_discount_type, #_vcap_send_to, #_vcap_email_restrict, input[name="_vcap_builtin_fields[]"], #_virtual, #product-type', toggleHints );
+		$( '#woocommerce-product-data' ).on( 'change', '#_vcap_discount_type, #_vcap_send_to, #_vcap_email_restrict, input[name="_vcap_builtin_fields[]"], #_virtual, #product-type, input.variable_is_virtual', toggleHints );
 		// Switching the expiry mode clears a number of days that would otherwise linger unseen.
 		$( '#woocommerce-product-data' ).on( 'change', '#_vcap_expiry_mode', function () {
 			if ( 'days' !== $( this ).val() ) {

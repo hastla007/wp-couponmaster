@@ -197,9 +197,10 @@ final class PassCaptainReconcile {
 				$issues[] = self::issue( 'checkout', $ref, $key, __( 'Pass Captain could not confirm the voucher payment (commit failed) – check the order.', 'voucher-captain' ) );
 			} elseif ( isset( $expected[ $pc_state ] ) && $expected[ $pc_state ] !== $row['state'] ) {
 				/* translators: 1: state in Pass Captain, 2: state in Voucher Captain */
-				$issues[] = self::issue( 'checkout', $ref, $key, sprintf( __( 'State differs: Pass Captain "%1$s", Voucher Captain "%2$s".', 'voucher-captain' ), $pc_state, $row['state'] ) );
+				$issues[] = self::issue( 'checkout', $ref, $key, sprintf( __( 'State differs: Pass Captain "%1$s", Voucher Captain "%2$s".', 'voucher-captain' ), self::state_label( $pc_state ), self::state_label( (string) $row['state'] ) ) );
 			}
-			$decimals = RedemptionService::decimals( (string) ( $o->currency ?: $row['currency'] ) );
+			$currency = (string) ( $o->currency ?: $row['currency'] );
+			$decimals = RedemptionService::decimals( $currency );
 			// amount_minor is the voucher's share in both treatments (amount_paid_by_voucher is 0 for single-purpose vouchers).
 			$pc_paid  = (int) ( $snapshot['amount_minor'] ?? 0 ) / ( 10 ** $decimals );
 			$tolerance = 0.5 / ( 10 ** $decimals );
@@ -208,7 +209,7 @@ final class PassCaptainReconcile {
 			$differs   = $single ? (float) $row['amount'] + $tolerance < $pc_paid : abs( $pc_paid - (float) $row['amount'] ) > $tolerance;
 			if ( RedemptionService::STATE_COMMITTED === $row['state'] && $differs ) {
 				/* translators: 1: amount in Pass Captain, 2: amount in Voucher Captain */
-				$issues[] = self::issue( 'checkout', $ref, $key, sprintf( __( 'Amount differs: Pass Captain %1$s, Voucher Captain %2$s.', 'voucher-captain' ), wc_format_decimal( $pc_paid, $decimals ), wc_format_decimal( (float) $row['amount'], $decimals ) ) );
+				$issues[] = self::issue( 'checkout', $ref, $key, sprintf( __( 'Amount differs: Pass Captain %1$s, Voucher Captain %2$s.', 'voucher-captain' ), \VCAP\Tickets::money_text( $pc_paid, $currency ), \VCAP\Tickets::money_text( (float) $row['amount'], $currency ) ) );
 			}
 			$pc_refunded = (int) ( $snapshot['refunded_minor'] ?? 0 ) / ( 10 ** $decimals );
 			$vc_refunded = array_sum( array_map( 'floatval', (array) ( $row['meta']['_refunds'] ?? array() ) ) );
@@ -219,7 +220,7 @@ final class PassCaptainReconcile {
 				: abs( $pc_refunded - $vc_refunded ) > $tolerance;
 			if ( $refund_differs ) {
 				/* translators: 1: refunded in Pass Captain, 2: given back in Voucher Captain */
-				$issues[] = self::issue( 'checkout', $ref, $key, sprintf( __( 'Refunds differ: Pass Captain refunded %1$s of the voucher share, Voucher Captain gave back %2$s.', 'voucher-captain' ), wc_format_decimal( $pc_refunded, $decimals ), wc_format_decimal( $vc_refunded, $decimals ) ) );
+				$issues[] = self::issue( 'checkout', $ref, $key, sprintf( __( 'Refunds differ: Pass Captain refunded %1$s of the voucher share, Voucher Captain gave back %2$s.', 'voucher-captain' ), \VCAP\Tickets::money_text( $pc_refunded, $currency ), \VCAP\Tickets::money_text( $vc_refunded, $currency ) ) );
 			}
 		}
 		// Redemptions here that point to Pass Captain without an order there (reserved or committed only).
@@ -299,6 +300,17 @@ final class PassCaptainReconcile {
 		}
 		set_transient( 'vcap_pc_orphans', array( 'source' => $source, 'missing' => array_slice( $missing, -5000, null, true ) ), self::ORPHAN_CACHE_SECONDS );
 		return array_filter( $found );
+	}
+
+	/** U14: a redemption state as shop staff read it ("committed" → "Confirmed"); unknown states stay as they are. */
+	public static function state_label( string $state ): string {
+		$labels = array(
+			RedemptionService::STATE_RESERVED  => __( 'Reserved', 'voucher-captain' ),
+			RedemptionService::STATE_COMMITTED => __( 'Confirmed', 'voucher-captain' ),
+			RedemptionService::STATE_RELEASED  => __( 'Released', 'voucher-captain' ),
+			'commit_failed'                    => __( 'Confirmation failed', 'voucher-captain' ),
+		);
+		return $labels[ $state ] ?? $state;
 	}
 
 	private static function issue( string $kind, string $order, string $key, string $problem ): array {

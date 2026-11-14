@@ -204,7 +204,7 @@ final class ReportsAdmin {
 				<button class="button"><?php esc_html_e( 'Show', 'voucher-captain' ); ?></button>
 				<a class="button" href="<?php echo esc_url( $csv ); ?>"><?php esc_html_e( 'Export CSV', 'voucher-captain' ); ?></a>
 			</form>
-			<p class="description"><?php esc_html_e( 'Redemptions, refunds, credits and corrections with their amount, in booking order. The page shows the first 1,000 bookings; the CSV export contains all of them.', 'voucher-captain' ); ?></p>
+			<p class="description"><?php esc_html_e( 'Redemptions, refunds, credits and corrections with their amount, in booking order. Value taken off a voucher is negative, value added is positive. The page shows the first 1,000 bookings; the CSV export contains all of them.', 'voucher-captain' ); ?></p>
 			<?php if ( $total > count( $journal ) ) : ?>
 				<div class="notice notice-warning inline"><p>
 					<?php
@@ -231,9 +231,9 @@ final class ReportsAdmin {
 						<td><?php echo esc_html( \VCAP\LocalDate::from_utc( $r['created_at'], get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ); ?></td>
 						<td><?php echo esc_html( strtoupper( (string) $r['code'] ) ); ?></td>
 						<td><?php echo esc_html( $labels[ $r['event'] ] ?? $r['event'] ); ?></td>
-						<td><?php echo wp_kses_post( wc_price( (float) $r['amount'], array( 'currency' => $r['currency'] ) ) ); ?></td>
+						<td><?php echo wp_kses_post( wc_price( \VCAP\Ledger::signed_amount( (string) $r['event'], $r['amount'] ), array( 'currency' => $r['currency'] ) ) ); ?></td>
 						<td><?php echo null === $r['balance_after'] ? '–' : wp_kses_post( wc_price( (float) $r['balance_after'], array( 'currency' => $r['currency'] ) ) ); ?></td>
-						<td><?php echo $r['order_id'] ? '#' . esc_html( (string) $r['order_id'] ) : '–'; ?></td>
+						<td><?php echo \VCAP\Format::order_link( $r['order_id'], '–' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in order_link(). ?></td>
 					</tr>
 				<?php endforeach; ?>
 				</tbody>

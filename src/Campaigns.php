@@ -170,9 +170,9 @@ final class Campaigns {
 		$table = Install::tables()['pool'];
 		$v     = Install::tables()['vouchers'];
 		$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT p.code, p.used_at, v.order_id FROM {$table} p LEFT JOIN {$v} v ON v.id = p.voucher_id WHERE p.batch = %s ORDER BY p.id", $batch ), ARRAY_A ); // phpcs:ignore
-		$out   = array( array( __( 'Code', 'voucher-captain' ), __( 'Status', 'voucher-captain' ), __( 'Used on', 'voucher-captain' ), __( 'Order', 'voucher-captain' ) ) );
+		$out   = array( array( __( 'Code', 'voucher-captain' ), __( 'Status', 'voucher-captain' ), __( 'Used on', 'voucher-captain' ), __( 'Order number', 'voucher-captain' ), __( 'Order ID', 'voucher-captain' ) ) );
 		foreach ( $rows ? $rows : array() as $r ) {
-			$out[] = array( (string) $r['code'], $r['used_at'] ? __( 'Used', 'voucher-captain' ) : __( 'Free', 'voucher-captain' ), Csv::date( $r['used_at'] ), $r['order_id'] ? (string) $r['order_id'] : '' );
+			$out[] = array( (string) $r['code'], $r['used_at'] ? __( 'Used', 'voucher-captain' ) : __( 'Free', 'voucher-captain' ), Csv::date( $r['used_at'] ), Format::order_number( $r['order_id'] ), $r['order_id'] ? (string) $r['order_id'] : '' );
 		}
 		return $out;
 	}

@@ -122,6 +122,7 @@ preg_match_all( '/<td\b[^>]*>/', $f3_list, $f3_td );
 vcap_acct_assert( count( $f3_th[0] ) >= 5 && count( $f3_th[0] ) === substr_count( $f3_list, '<th scope="col"' ), 'F3: every column header of the voucher list has scope="col"' );
 vcap_acct_assert( $f3_td[0] && count( $f3_td[0] ) === count( preg_grep( '/data-title="[^"]+"/', $f3_td[0] ) ), 'F3: every cell of the voucher list carries data-title (column name on small screens)' );
 vcap_acct_assert( (bool) preg_match( '/<td class="[^"]*\bactions\b[^"]*" data-title="Actions"/', $f3_list ) && ! str_contains( $f3_list, 'data-title="Download"' ), 'F3: the actions cell has the class "actions" and is named "Actions", not "Download"' );
+vcap_acct_assert( str_contains( $f3_list, 'Personal – only the buyer can redeem it.' ) && ! str_contains( $f3_list, 'Personal, not transferable' ), 'U15: My Account names who may redeem the voucher (transferable_label), not a fixed "Personal, not transferable"' );
 wp_set_current_user( $other );
 ob_start();
 vcap()->downloads->account_page( false );
@@ -144,6 +145,7 @@ $g8_credit = substr( $g8_page, (int) strpos( $g8_page, '<section class="vcap-sto
 $g8_credit = substr( $g8_credit, 0, (int) strpos( $g8_credit, '</section>' ) );
 preg_match_all( '/<td\b[^>]*>/', $g8_credit, $g8_td );
 vcap_acct_assert( str_contains( $g8_credit, '<th scope="col">' ) && $g8_td[0] && count( $g8_td[0] ) === count( preg_grep( '/data-title="[^"]+"/', $g8_td[0] ) ), 'F3: the store credit history has column headers with scope and data-title on every cell' );
+vcap_acct_assert( ! str_contains( $g8_page, 'onfocus' ) && str_contains( $g8_page, '<div class="wp-block-vcap-my-vouchers"' ), 'F16: blocks render with their block wrapper attributes, the referral link without an inline handler' );
 foreach ( $g8_keep as $g8_option => $g8_value ) {
 	false === $g8_value ? delete_option( $g8_option ) : update_option( $g8_option, $g8_value );
 }
@@ -212,5 +214,62 @@ vcap_acct_assert( (bool) preg_match( '/<tr class="vcap-residual-warning"><td col
 WC()->cart->empty_cart();
 wc_clear_notices();
 wp_set_current_user( 0 );
+
+// H10: until delivery the buyer may correct the recipient email and the delivery date; logged; coupon follows.
+$h10_order   = vcap_acct_order( $personal, $buyer, $login . '@example.com' );
+$h10_voucher = vcap()->issuer->issue_for_order( $h10_order )[0];
+$h10_voucher                  = vcap()->vouchers->get( $h10_voucher->id );
+$h10_voucher->recipient_email = 'anna@gmial.com';
+$h10_voucher->send_to         = 'recipient';
+vcap()->vouchers->update( $h10_voucher );
+vcap()->coupons->refresh_email_restrictions( $h10_voucher, '' );
+vcap()->delivery->reschedule( vcap()->vouchers->get( $h10_voucher->id ), gmdate( 'Y-m-d H:i:s', time() + 5 * DAY_IN_SECONDS ) );
+$h10_voucher = vcap()->vouchers->get( $h10_voucher->id );
+wp_set_current_user( $other );
+vcap_acct_assert( ! vcap()->downloads->customer_can_change( $h10_voucher ) && '' !== vcap()->downloads->change_delivery( $h10_voucher, 'anna@gmail.com', '' ), 'H10: another customer cannot change the gift' );
+wp_set_current_user( $buyer );
+vcap_acct_assert( VCAP\Voucher::STATUS_SCHEDULED === $h10_voucher->status && vcap()->downloads->customer_can_change( $h10_voucher ), 'H10: the buyer may change a scheduled gift' );
+vcap_acct_assert( '' !== vcap()->downloads->change_delivery( $h10_voucher, 'not-an-email', '' ) && 'anna@gmial.com' === vcap()->vouchers->get( $h10_voucher->id )->recipient_email, 'H10: an invalid address is refused and nothing changes' );
+$h10_day = wp_date( 'Y-m-d', time() + 9 * DAY_IN_SECONDS );
+$h10_err = vcap()->downloads->change_delivery( $h10_voucher, 'anna@gmail.com', $h10_day );
+$h10_new = vcap()->vouchers->get( $h10_voucher->id );
+$h10_restrict = array_map( 'strtolower', ( new WC_Coupon( $h10_new->coupon_id ) )->get_email_restrictions() );
+vcap_acct_assert( '' === $h10_err && 'anna@gmail.com' === $h10_new->recipient_email && in_array( 'anna@gmail.com', $h10_restrict, true ) && ! in_array( 'anna@gmial.com', $h10_restrict, true ), 'H10: the new recipient is stored and the coupon restriction follows it', array( $h10_err, $h10_restrict ) );
+vcap_acct_assert( $h10_day === VCAP\LocalDate::from_utc( (string) $h10_new->delivery_at, 'Y-m-d' ) && VCAP\Voucher::STATUS_SCHEDULED === $h10_new->status, 'H10: the delivery is planned for the new date' );
+$h10_log = VCAP\Tickets::last_event( vcap()->vouchers->events( $h10_new->id ), array( 'edited' ) );
+vcap_acct_assert( $h10_log && str_contains( (string) $h10_log['note'], 'anna@gmial.com' ) && str_contains( (string) $h10_log['note'], 'anna@gmail.com' ) && $buyer === (int) $h10_log['user_id'], 'H10: the history records the change with old and new values and who made it' );
+$h10_new->delivered_at = gmdate( 'Y-m-d H:i:s' );
+$h10_new->status       = VCAP\Voucher::STATUS_ACTIVE;
+vcap()->vouchers->update( $h10_new );
+vcap_acct_assert( ! vcap()->downloads->customer_can_change( vcap()->vouchers->get( $h10_new->id ) ) && '' !== vcap()->downloads->change_delivery( $h10_new, 'x@example.com', '' ), 'H10: after delivery the gift can no longer be changed' );
+wp_set_current_user( 0 );
+
+// M10/H11: the visible copy of voucher fields has a stable key; label and a formatted date are only for display.
+$m10_order = wc_create_order();
+$m10_item  = new WC_Order_Item_Product();
+$m10_item->set_name( 'M10 voucher' );
+( new VCAP\Fields() )->save_order_item(
+	$m10_item,
+	'm10',
+	array(
+		'vcap_fields' => array(
+			'recipient_name' => array( 'label' => 'Recipient name', 'value' => 'Anna' ),
+			'delivery_date'  => array( 'label' => 'Delivery date', 'value' => '2026-12-24' ),
+		),
+	),
+	$m10_order
+);
+$m10_order->add_item( $m10_item );
+$m10_order->save();
+$m10_item = $m10_order->get_item( $m10_item->get_id() );
+$m10_meta = array();
+foreach ( $m10_item->get_formatted_meta_data() as $m10_row ) {
+	$m10_meta[ $m10_row->key ] = array( wp_strip_all_tags( $m10_row->display_key ), trim( wp_strip_all_tags( $m10_row->display_value ) ) );
+}
+vcap_acct_assert( 'Anna' === $m10_item->get_meta( 'vcap_recipient_name' ) && '2026-12-24' === $m10_item->get_meta( 'vcap_delivery_date' ) && '' === $m10_item->get_meta( 'Recipient name' ), 'M10: the visible field copy is stored under a stable key (vcap_recipient_name), whatever the language of the order' );
+vcap_acct_assert( array( 'Recipient name', 'Anna' ) === ( $m10_meta['vcap_recipient_name'] ?? null ) && array( 'Delivery date', wp_date( vcap()->settings->date_format(), (int) strtotime( '2026-12-24 12:00:00 ' . wp_timezone_string() ) ) ) === ( $m10_meta['vcap_delivery_date'] ?? null ), 'M10/H11: the order screen and emails show the field label and the date in the voucher date format', $m10_meta );
+$h11_cart = ( new VCAP\Fields() )->display_item_data( array(), array( 'vcap_fields' => array( 'delivery_date' => array( 'label' => 'Delivery date', 'value' => '2026-12-24' ) ) ) );
+vcap_acct_assert( wp_date( vcap()->settings->date_format(), (int) strtotime( '2026-12-24 12:00:00 ' . wp_timezone_string() ) ) === ( $h11_cart[0]['value'] ?? '' ), 'H11: the cart shows the delivery date in the voucher date format, not "2026-12-24"', $h11_cart );
+vcap_acct_assert( 'Anna' === VCAP\Placeholders::replace( '{item_meta:vcap_recipient_name}', (function () use ( $m10_order, $m10_item ) { $v = new VCAP\Voucher(); $v->order_id = $m10_order->get_id(); $v->order_item_id = $m10_item->get_id(); return $v; })() ), 'M10: {item_meta:vcap_recipient_name} works in every language' );
 
 echo "Voucher Captain account checks passed.\n";

@@ -11,9 +11,15 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Onboarding {
 	public const DISMISSED = 'vcap_onboarding_dismissed';
+	/** Steps the admin marked as done by hand (U9), e.g. "issue status" checked and left at the default. */
+	public const DONE = 'vcap_onboarding_done';
+
+	/** L13: the admin answered the one-time question "statutory validity or keep the days" ('statutory'/'days'). */
+	public const VALIDITY_CHOICE = 'vcap_validity_choice';
 
 	public function register(): void {
 		add_action( 'admin_notices', array( $this, 'notice' ) );
+		add_action( 'admin_notices', array( $this, 'validity_notice' ) );
 		add_action( 'admin_post_vcap_onboarding', array( $this, 'handle' ) );
 	}
 
@@ -48,7 +54,7 @@ final class Onboarding {
 				'meta_value'  => 'yes', // phpcs:ignore WordPress.DB.SlowDBQuery
 			)
 		);
-		return array(
+		$steps = array(
 			'redeem_page'  => array(
 				'label'  => __( 'A page where customers check and redeem their voucher codes (links in emails and PDFs lead there)', 'voucher-captain' ),
 				'done'   => '' !== Shortcodes::redeem_url(),
@@ -79,12 +85,51 @@ final class Onboarding {
 			),
 			'terms'        => array(
 				'label'  => __( 'Redemption conditions printed on vouchers and shown in emails (have them checked legally)', 'voucher-captain' ),
-				'done'   => '' !== trim( (string) get_option( 'vcap_default_terms', '' ) ),
+				'done'   => self::has_terms(),
 				'action' => '',
 				'url'    => $settings,
 				'button' => __( 'Open settings', 'voucher-captain' ),
 			),
 		);
+		$manual = (array) get_option( self::DONE, array() );
+		foreach ( $steps as $key => $step ) {
+			$steps[ $key ]['done'] = $step['done'] || in_array( $key, $manual, true );
+		}
+		return $steps;
+	}
+
+	/**
+	 * U9: redemption conditions exist where ProductConfig::terms() looks for them – general conditions, conditions
+	 * per country (e.g. only "AT: …") or a voucher product's own conditions.
+	 */
+	private static function has_terms(): bool {
+		if ( '' !== trim( (string) get_option( 'vcap_default_terms', '' ) ) || \VCAP\ProductConfig::terms_by_country( (string) get_option( 'vcap_terms_by_country', '' ) ) ) {
+			return true;
+		}
+		return (bool) get_posts(
+			array(
+				'post_type'   => array( 'product', 'product_variation' ),
+				'post_status' => array( 'publish', 'draft', 'private' ),
+				'numberposts' => 1,
+				'fields'      => 'ids',
+				'meta_query'  => array( // phpcs:ignore WordPress.DB.SlowDBQuery
+					array( 'key' => '_vcap_redemption_terms', 'value' => '', 'compare' => '!=' ),
+				),
+			)
+		);
+	}
+
+	/** U9: mark one step of the checklist as done by hand. */
+	public static function mark_done( string $step ): bool {
+		if ( ! isset( self::steps()[ $step ] ) ) {
+			return false;
+		}
+		$manual = (array) get_option( self::DONE, array() );
+		if ( ! in_array( $step, $manual, true ) ) {
+			$manual[] = $step;
+			update_option( self::DONE, array_values( $manual ), false );
+		}
+		return true;
 	}
 
 	public function notice(): void {
@@ -99,8 +144,8 @@ final class Onboarding {
 		if ( ! array_filter( $steps, static fn( $step ) => ! $step['done'] ) ) {
 			return;
 		}
-		echo '<div class="notice notice-info vcap-onboarding"><p><strong>' . esc_html__( 'Voucher Captain – first steps', 'voucher-captain' ) . '</strong></p><ul style="list-style:none;margin-left:0">';
-		foreach ( $steps as $step ) {
+		echo '<div class="notice notice-info vcap-onboarding"><p><strong>' . esc_html__( 'Voucher Captain – first steps', 'voucher-captain' ) . '</strong></p><ul style="list-style:none;margin-inline-start:0">';
+		foreach ( $steps as $key => $step ) {
 			echo '<li>' . ( $step['done'] ? '<span aria-hidden="true">&#10003;</span> <span class="screen-reader-text">' . esc_html__( 'Done:', 'voucher-captain' ) . '</span>' : '<span aria-hidden="true">&#9675;</span> ' ) . esc_html( $step['label'] );
 			if ( ! $step['done'] ) {
 				if ( '' !== $step['action'] ) {
@@ -108,10 +153,48 @@ final class Onboarding {
 				} else {
 					echo ' <a class="button button-small" href="' . esc_url( $step['url'] ) . '">' . esc_html( $step['button'] ) . '</a>';
 				}
+				echo ' ' . $this->button( 'done_' . $key, __( 'Mark as done', 'voucher-captain' ), 'button-link' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in button().
 			}
 			echo '</li>';
 		}
 		echo '</ul><p>' . $this->button( 'dismiss', __( 'Hide this checklist', 'voucher-captain' ), 'button-link' ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in button().
+	}
+
+	/**
+	 * L13: shops from before the statutory default validity keep their number of days – also when WooCommerce merely
+	 * re-saved the untouched 365 with the settings page. Ask once which one should apply.
+	 */
+	public static function needs_validity_choice(): bool {
+		return '' === (string) get_option( self::VALIDITY_CHOICE, '' )
+			&& false !== get_option( 'vcap_default_expiry_days', false )
+			&& 'days' === \VCAP\ProductConfig::default_expiry_rule();
+	}
+
+	/** L13: apply the admin's answer ('statutory' or 'days'); it is asked only once. */
+	public static function choose_validity( string $rule ): bool {
+		if ( ! in_array( $rule, array( 'statutory', 'days' ), true ) ) {
+			return false;
+		}
+		update_option( 'vcap_default_expiry_rule', $rule );
+		update_option( self::VALIDITY_CHOICE, $rule, false );
+		return true;
+	}
+
+	public function validity_notice(): void {
+		if ( ! $this->can() || ! self::needs_validity_choice() ) {
+			return;
+		}
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! $screen || ! ( in_array( $screen->id, array( 'dashboard', 'plugins', 'woocommerce_page_wc-settings' ), true ) || str_contains( (string) $screen->id, 'vcap' ) ) ) {
+			return;
+		}
+		$days = (int) get_option( 'vcap_default_expiry_days', 365 );
+		echo '<div class="notice notice-warning vcap-validity-choice"><p><strong>' . esc_html__( 'Voucher Captain', 'voucher-captain' ) . ':</strong> ';
+		/* translators: %d: number of days */
+		echo esc_html( sprintf( _n( 'Vouchers of products without their own expiry are valid for %d day (stored default from before the statutory validity existed). In Germany vouchers are valid for 3 years to the end of the year by law; shorter periods can be invalid towards consumers. Which default should apply?', 'Vouchers of products without their own expiry are valid for %d days (stored default from before the statutory validity existed). In Germany vouchers are valid for 3 years to the end of the year by law; shorter periods can be invalid towards consumers. Which default should apply?', $days, 'voucher-captain' ), $days ) );
+		echo '</p><p>' . $this->button( 'validity_statutory', __( 'Use the statutory validity', 'voucher-captain' ), 'button button-primary' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in button().
+		/* translators: %d: number of days */
+		echo ' ' . $this->button( 'validity_days', sprintf( _n( 'Keep %d day', 'Keep %d days', $days, 'voucher-captain' ), $days ), 'button' ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in button().
 	}
 
 	private function button( string $do, string $label, string $class = 'button button-small' ): string {
@@ -128,6 +211,10 @@ final class Onboarding {
 		$back = wp_get_referer() ?: admin_url();
 		if ( 'dismiss' === $do ) {
 			update_option( self::DISMISSED, 'yes', false );
+		} elseif ( 'validity_statutory' === $do || 'validity_days' === $do ) {
+			self::choose_validity( substr( $do, 9 ) );
+		} elseif ( str_starts_with( $do, 'done_' ) ) {
+			self::mark_done( substr( $do, 5 ) );
 		} elseif ( in_array( $do, array( 'redeem_page', 'balance_page' ), true ) ) {
 			$existing = self::existing_page( $do );
 			$page     = $existing ?: self::create_page( $do );

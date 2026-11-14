@@ -114,6 +114,7 @@ final class ProductConfig {
 			}
 		}
 		$config = self::normalise_restriction( $config );
+		$config = self::normalise_routing( $config );
 		$config['per_item']     = max( 1, (int) $config['per_item'] );
 		$config['max_checkins'] = max( 1, (int) $config['max_checkins'] );
 		$config['template']     = (int) $config['template'] ?: (int) get_option( 'vcap_default_template', 0 );
@@ -167,6 +168,22 @@ final class ProductConfig {
 	 * "Transferable" checkbox are read compatibly (not transferable + no restriction = buyer or recipient);
 	 * "transferable" is derived from it, so labels and coupon restrictions never contradict each other.
 	 */
+	/**
+	 * U12: one routing choice. Products saved before it had "Send to: recipient" plus a "Buyer copy" checkbox (on
+	 * by default); that pair reads as "Recipient and buyer", so the copy is part of send_to and fixed on the
+	 * voucher when it is issued.
+	 */
+	public static function normalise_routing( array $config ): array {
+		$send_to = (string) ( $config['send_to'] ?? 'recipient' );
+		$send_to = in_array( $send_to, array( 'recipient', 'both', 'buyer' ), true ) ? $send_to : 'recipient';
+		if ( 'recipient' === $send_to && 'yes' === (string) ( $config['buyer_copy'] ?? 'no' ) ) {
+			$send_to = 'both';
+		}
+		$config['send_to']    = $send_to;
+		$config['buyer_copy'] = 'both' === $send_to ? 'yes' : 'no';
+		return $config;
+	}
+
 	public static function normalise_restriction( array $config ): array {
 		$restrict = (string) ( $config['email_restrict'] ?? 'none' );
 		if ( ! isset( self::redemption_choices()[ $restrict ] ) ) {
@@ -218,7 +235,8 @@ final class ProductConfig {
 	}
 
 	/**
-	 * Parse "AT: text" blocks (a block runs until the next line starting with a two-letter country code and a colon).
+	 * Parse "AT: text" blocks (a block runs until the next line starting with a country code and a colon). Q12: only
+	 * ISO country codes start a block – "NB: …" or "OK: …" inside the conditions stays part of them.
 	 *
 	 * @return array<string, string>
 	 */
@@ -226,7 +244,7 @@ final class ProductConfig {
 		$out     = array();
 		$current = '';
 		foreach ( preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-			if ( preg_match( '/^\s*([A-Za-z]{2})\s*:\s*(.*)$/', $line, $m ) ) {
+			if ( preg_match( '/^\s*([A-Za-z]{2})\s*:\s*(.*)$/', $line, $m ) && Markets::is_country_code( $m[1] ) ) {
 				$current         = strtoupper( $m[1] );
 				$out[ $current ] = $m[2];
 				continue;
@@ -236,6 +254,25 @@ final class ProductConfig {
 			}
 		}
 		return array_filter( array_map( 'trim', $out ), 'strlen' );
+	}
+
+	/**
+	 * Q12: text of the setting "Redemption conditions per country" before the first country block – it belongs to
+	 * no country and would be dropped (reported on save).
+	 *
+	 * @return string[]
+	 */
+	public static function unassigned_terms_lines( string $raw ): array {
+		$out = array();
+		foreach ( preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
+			if ( preg_match( '/^\s*([A-Za-z]{2})\s*:/', $line, $m ) && Markets::is_country_code( $m[1] ) ) {
+				break;
+			}
+			if ( '' !== trim( $line ) ) {
+				$out[] = trim( $line );
+			}
+		}
+		return $out;
 	}
 
 	/** Country for country-specific conditions: billing, else shipping, else the shop's base country. */

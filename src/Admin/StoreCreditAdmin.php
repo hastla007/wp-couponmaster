@@ -84,7 +84,7 @@ final class StoreCreditAdmin {
 						<td><?php echo esc_html( $labels[ $e['event'] ] ?? $e['event'] ); ?></td>
 						<td><?php echo null !== $e['amount'] ? wp_kses_post( wc_price( (float) $e['amount'], array( 'currency' => $account->currency ) ) ) : ''; ?></td>
 						<td><?php echo null !== $e['balance_after'] ? wp_kses_post( wc_price( (float) $e['balance_after'], array( 'currency' => $account->currency ) ) ) : ''; ?></td>
-						<td><?php echo $e['order_id'] ? '#' . esc_html( (string) $e['order_id'] ) : ''; ?></td>
+						<td><?php echo \VCAP\Format::order_link( $e['order_id'] ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in order_link(). ?></td>
 						<td><?php echo $by ? esc_html( $by->display_name ) : '—'; ?></td>
 						<td><?php echo esc_html( (string) $e['note'] ); ?></td>
 					</tr>
