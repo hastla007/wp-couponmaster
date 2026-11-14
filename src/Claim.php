@@ -54,7 +54,6 @@ final class Claim {
 	 * @return int Claims removed.
 	 */
 	public static function purge( float $budget = 10.0 ): int {
-		global $wpdb;
 		$days = (int) apply_filters( 'vcap_claim_retention_days', 180 );
 		if ( $days <= 0 || ! Install::storage_ready() ) {
 			return 0;
@@ -63,10 +62,29 @@ final class Claim {
 		if ( ! $kinds ) {
 			return 0;
 		}
+		$start   = microtime( true );
+		$removed = self::delete_older( $kinds, $days, $budget, $start );
+		// Claims moved from the options of schema < 1.4 ("legacy") no longer tell their kind: they guarded order
+		// hooks that ran before the update, so they are removed after a longer period (filter
+		// "vcap_legacy_claim_retention_days", default 365 days and never shorter than the period above; 0 keeps them).
+		$legacy = (int) apply_filters( 'vcap_legacy_claim_retention_days', max( 365, $days ) );
+		if ( $legacy > 0 && microtime( true ) - $start < $budget ) {
+			$removed += self::delete_older( array( 'legacy' ), max( $legacy, $days ), $budget, $start );
+		}
+		return $removed;
+	}
+
+	/**
+	 * Deletes claims of $kinds older than $days, 1000 rows per statement (index kind_created), until none is left
+	 * or the budget since $start is used up.
+	 *
+	 * @param string[] $kinds
+	 */
+	private static function delete_older( array $kinds, int $days, float $budget, float $start ): int {
+		global $wpdb;
 		$table   = Install::tables()['claims'];
 		$in      = implode( ',', array_fill( 0, count( $kinds ), '%s' ) );
 		$args    = array_merge( $kinds, array( gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS ), 1000 ) );
-		$start   = microtime( true );
 		$removed = 0;
 		do {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built above.

@@ -215,10 +215,30 @@ final class VoucherRepository {
 		);
 		$where = array( '1=1' );
 		$vals  = array();
-		if ( '' !== $args['search'] ) {
-			$like    = '%' . $wpdb->esc_like( $args['search'] ) . '%';
-			$where[] = '(code LIKE %s OR buyer_email LIKE %s OR recipient_email LIKE %s OR buyer_name LIKE %s OR recipient_name LIKE %s OR order_id = %d)';
-			array_push( $vals, $like, $like, $like, $like, $like, (int) $args['search'] );
+		$search = trim( (string) $args['search'] );
+		if ( '' !== $search ) {
+			$prefix = $wpdb->esc_like( $search ) . '%';
+			if ( str_contains( $search, '@' ) ) {
+				// An address: its start on the email columns (indexed), nothing else.
+				$where[] = '(buyer_email LIKE %s OR recipient_email LIKE %s)';
+				array_push( $vals, $prefix, $prefix );
+			} else {
+				// Code by its start (UNIQUE code index), email addresses by their start, names anywhere; an order
+				// number only for a number (a word must never match the vouchers without order, order_id = 0).
+				$like    = '%' . $wpdb->esc_like( $search ) . '%';
+				$parts   = array( 'code LIKE %s', 'buyer_email LIKE %s', 'recipient_email LIKE %s', 'buyer_name LIKE %s', 'recipient_name LIKE %s' );
+				array_push( $vals, $prefix, $prefix, $prefix, $like, $like );
+				if ( ctype_digit( $search ) && (int) $search > 0 ) {
+					$parts[] = 'order_id = %d';
+					$vals[]  = (int) $search;
+				}
+				$where[] = '(' . implode( ' OR ', $parts ) . ')';
+			}
+		}
+		if ( ! empty( $args['before_id'] ) ) {
+			// Keyset paging of exports (ORDER BY id DESC): no OFFSET, no rows skipped or repeated.
+			$where[] = 'id < %d';
+			$vals[]  = (int) $args['before_id'];
 		}
 		if ( 'expired' === $args['status'] ) {
 			$where[] = "(status = 'expired' OR (status = 'active' AND expires_at IS NOT NULL AND expires_at < %s))";
@@ -256,8 +276,10 @@ final class VoucherRepository {
 		$limit   = max( 1, (int) $args['per_page'] );
 		$offset  = max( 0, ( (int) $args['page'] - 1 ) * $limit );
 
+		// id as tie-breaker: rows with the same value keep a stable order across pages.
+		$tie       = 'id' === $orderby ? '' : ", id $order";
 		$count_sql = "SELECT COUNT(*) FROM {$this->table()} WHERE $sql";
-		$list_sql  = "SELECT * FROM {$this->table()} WHERE $sql ORDER BY $orderby $order LIMIT $limit OFFSET $offset";
+		$list_sql  = "SELECT * FROM {$this->table()} WHERE $sql ORDER BY $orderby $order{$tie} LIMIT $limit OFFSET $offset";
 		if ( $vals ) {
 			$count_sql = $wpdb->prepare( $count_sql, $vals ); // phpcs:ignore
 			$list_sql  = $wpdb->prepare( $list_sql, $vals ); // phpcs:ignore
@@ -265,8 +287,28 @@ final class VoucherRepository {
 		$rows = $wpdb->get_results( $list_sql, ARRAY_A ); // phpcs:ignore
 		return array(
 			'items' => array_map( array( Voucher::class, 'from_row' ), $rows ?: array() ),
-			'total' => (int) $wpdb->get_var( $count_sql ), // phpcs:ignore
+			'total' => empty( $args['no_count'] ) ? (int) $wpdb->get_var( $count_sql ) : -1, // phpcs:ignore
 		);
+	}
+
+	/**
+	 * Every voucher matching the filters of query(), newest first, read in keyset batches (id < last id; no
+	 * OFFSET, no COUNT per batch), for CSV exports of any size.
+	 *
+	 * @return \Generator<Voucher>
+	 */
+	public function export( array $args, int $batch = 500 ): \Generator {
+		$before = 0;
+		do {
+			$page = $this->query( array_merge( $args, array( 'orderby' => 'id', 'order' => 'DESC', 'per_page' => $batch, 'page' => 1, 'before_id' => $before, 'no_count' => true ) ) );
+			foreach ( $page['items'] as $voucher ) {
+				$before = $voucher->id;
+				yield $voucher;
+			}
+			if ( function_exists( 'wp_cache_flush_runtime' ) ) {
+				wp_cache_flush_runtime(); // Products and orders read for the rows are not kept for the whole export.
+			}
+		} while ( count( $page['items'] ) === $batch );
 	}
 
 	public function code_exists( string $code ): bool {
@@ -367,77 +409,173 @@ final class VoucherRepository {
 	}
 
 	/**
-	 * Delivered, usable vouchers with remaining value that expire within $days and were not reminded yet.
+	 * Delivered, usable vouchers with remaining value that expire within $days and were not reminded yet, found
+	 * through the (status, expires_at) index. A voucher whose reminder (or another mail) failed within the last
+	 * day waits a day (backoff), so failures never crowd out the others; $exclude: ids already handled in this run.
 	 *
+	 * @param int[] $exclude
 	 * @return Voucher[]
 	 */
-	public function due_for_expiry_reminder( int $days, int $limit = 200 ): array {
+	public function due_for_expiry_reminder( int $days, int $limit = 200, array $exclude = array() ): array {
 		global $wpdb;
-		$rows = $wpdb->get_results( // phpcs:ignore
+		$exclude = array_values( array_filter( array_map( 'intval', $exclude ) ) );
+		$not_in  = $exclude ? ' AND v.id NOT IN (' . implode( ',', $exclude ) . ')' : '';
+		$rows    = $wpdb->get_results( // phpcs:ignore
 			$wpdb->prepare(
 				"SELECT v.* FROM {$this->table()} v
-				WHERE v.status = 'active' AND v.delivered_at IS NOT NULL AND v.type <> 'ticket'
-				AND v.expires_at IS NOT NULL AND v.expires_at > %s AND v.expires_at <= %s
-				AND ( v.usage_mode <> 'balance' OR v.balance > 0 )
+				WHERE v.status = 'active' AND v.expires_at > %s AND v.expires_at <= %s
+				AND v.delivered_at IS NOT NULL AND v.type <> 'ticket'
+				AND ( v.usage_mode <> 'balance' OR v.balance > 0 ){$not_in}
 				AND NOT EXISTS ( SELECT 1 FROM {$this->events_table()} e WHERE e.voucher_id = v.id AND e.event = 'expiry_reminder' )
-				ORDER BY v.expires_at ASC LIMIT %d",
+				AND NOT EXISTS ( SELECT 1 FROM {$this->events_table()} f WHERE f.voucher_id = v.id AND f.event = 'delivery_failed' AND f.created_at > %s )
+				ORDER BY v.expires_at ASC, v.id ASC LIMIT %d",
 				$this->now(),
 				gmdate( 'Y-m-d H:i:s', time() + $days * DAY_IN_SECONDS ),
-				$limit
+				gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS ),
+				max( 1, $limit )
 			),
 			ARRAY_A
 		);
 		return array_map( array( Voucher::class, 'from_row' ), $rows ? $rows : array() );
 	}
 
-	public function expire_overdue(): int {
+	/** Vouchers one batch of the daily maintenance changes at most (one short statement each, see expire_overdue()). */
+	public const MAINTENANCE_BATCH = 500;
+
+	/**
+	 * Marks active vouchers past their expiry as expired, in batches of MAINTENANCE_BATCH ids found through the
+	 * (status, expires_at) index, so a run never locks the whole active range (balance checkouts and new vouchers
+	 * keep working meanwhile).
+	 *
+	 * @param float    $budget   Seconds; 0 = until done.
+	 * @param bool|null $finished Set to false when the budget ran out with vouchers left.
+	 * @return int Vouchers expired.
+	 */
+	public function expire_overdue( float $budget = 0.0, ?bool &$finished = null ): int {
 		global $wpdb;
-		return (int) $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = 'expired', updated_at = %s WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < %s", $this->now(), $this->now() ) ); // phpcs:ignore
+		$start    = microtime( true );
+		$total    = 0;
+		$finished = true;
+		do {
+			$now = $this->now();
+			$ids = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$this->table()} WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < %s ORDER BY expires_at LIMIT %d", $now, self::MAINTENANCE_BATCH ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( ! $ids ) {
+				break;
+			}
+			$in   = implode( ',', $ids );
+			$done = $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = 'expired', updated_at = %s WHERE id IN ({$in}) AND status = 'active' AND expires_at IS NOT NULL AND expires_at < %s", $now, $now ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( false === $done ) {
+				throw new \RuntimeException( 'Expired vouchers could not be updated: ' . esc_html( $wpdb->last_error ) );
+			}
+			$total += (int) $done;
+			if ( $budget > 0 && count( $ids ) === self::MAINTENANCE_BATCH && microtime( true ) - $start >= $budget ) {
+				$finished = false;
+				break;
+			}
+		} while ( count( $ids ) === self::MAINTENANCE_BATCH );
+		return $total;
 	}
 
-	/** Erase personal data of vouchers that ended more than $days ago. */
-	public function anonymise_older_than( int $days ): int {
+	/**
+	 * Erase personal data of vouchers that ended more than $days ago: candidates found through the indexes
+	 * (status, updated_at) and expires_at, MAINTENANCE_BATCH ids per short transaction (notes, then the voucher
+	 * row), so checkouts never wait for one long lock over the whole tables. A database error is thrown (the
+	 * maintenance step records it, see Delivery::run_maintenance_step()), never swallowed.
+	 *
+	 * @param float     $budget   Seconds; 0 = until done.
+	 * @param bool|null $finished Set to false when the budget ran out with vouchers left.
+	 * @return int Vouchers anonymised.
+	 * @throws \RuntimeException When a batch could not be written.
+	 */
+	public function anonymise_older_than( int $days, float $budget = 0.0, ?bool &$finished = null ): int {
 		global $wpdb;
-		if ( $days <= 0 || ! Install::tables_support_transactions() || false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$finished = true;
+		if ( $days <= 0 ) {
 			return 0;
 		}
 		$cutoff      = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
 		$eligibility = "( (v.status IN ('expired','redeemed','void') AND v.updated_at < %s) OR (v.expires_at IS NOT NULL AND v.expires_at < %s) )";
-		try {
-			$notes = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				$wpdb->prepare(
-					"UPDATE {$this->events_table()} AS e INNER JOIN {$this->table()} AS v ON v.id = e.voucher_id
-					SET e.note = '[personal data removed by retention]'
-					WHERE (v.buyer_email <> '' OR v.recipient_email <> '') AND {$eligibility} AND e.note <> ''",
-					$cutoff,
-					$cutoff
-				)
-			);
-			if ( false === $notes ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				return 0;
+		$personal    = "(v.buyer_email <> '' OR v.recipient_email <> '' OR v.buyer_name <> '' OR v.recipient_name <> '')";
+		$transaction = Install::tables_support_transactions();
+		$start       = microtime( true );
+		$total       = 0;
+		$after       = 0;
+		do {
+			// Two index ranges (ended by status, past expiry), each with personal data left; merged by id.
+			$ended   = (array) $wpdb->get_col( $wpdb->prepare( "SELECT v.id FROM {$this->table()} v WHERE v.status IN ('expired','redeemed','void') AND v.updated_at < %s AND v.id > %d AND {$personal} ORDER BY v.id LIMIT %d", $cutoff, $after, self::MAINTENANCE_BATCH ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$expired = (array) $wpdb->get_col( $wpdb->prepare( "SELECT v.id FROM {$this->table()} v WHERE v.expires_at < %s AND v.id > %d AND {$personal} ORDER BY v.id LIMIT %d", $cutoff, $after, self::MAINTENANCE_BATCH ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$ids     = array_unique( array_map( 'intval', array_merge( $ended, $expired ) ) );
+			sort( $ids );
+			$ids = array_slice( $ids, 0, self::MAINTENANCE_BATCH );
+			if ( ! $ids ) {
+				break;
 			}
-			$updated = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				$wpdb->prepare(
-					"UPDATE {$this->table()} AS v SET buyer_name = '', buyer_email = '', recipient_name = '', recipient_email = '', message = '', fields = '[]', updated_at = %s
-					WHERE (v.buyer_email <> '' OR v.recipient_email <> '') AND {$eligibility}",
-					$this->now(),
-					$cutoff,
-					$cutoff
-				)
-			);
-			if ( false === $updated || false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				return 0;
+			$after = (int) end( $ids );
+			$in    = implode( ',', $ids );
+			if ( $transaction && false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				throw new \RuntimeException( 'Retention: transaction could not be started: ' . esc_html( $wpdb->last_error ) );
 			}
-			return (int) $updated;
-		} catch ( \Throwable $e ) {
-			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			throw $e;
-		}
+			try {
+				$notes   = $wpdb->query( "UPDATE {$this->events_table()} SET note = '[personal data removed by retention]', actor_email_hash = '' WHERE voucher_id IN ({$in}) AND note <> ''" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+				$updated = false === $notes ? false : $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					$wpdb->prepare(
+						"UPDATE {$this->table()} AS v SET buyer_name = '', buyer_email = '', recipient_name = '', recipient_email = '', message = '', fields = '[]', updated_at = %s
+						WHERE v.id IN ({$in}) AND {$eligibility}", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids and constant SQL.
+						$this->now(),
+						$cutoff,
+						$cutoff
+					)
+				);
+				if ( false === $updated || ( $transaction && false === $wpdb->query( 'COMMIT' ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					$error = $wpdb->last_error;
+					if ( $transaction ) {
+						$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					}
+					throw new \RuntimeException( 'Retention: personal data could not be removed: ' . esc_html( $error ) );
+				}
+			} catch ( \Throwable $e ) {
+				if ( $transaction ) {
+					$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				}
+				throw $e;
+			}
+			$total += (int) $updated;
+			if ( $budget > 0 && microtime( true ) - $start >= $budget ) {
+				$finished = false;
+				break;
+			}
+		} while ( true );
+		return $total;
 	}
 
-	/** Redact free-text audit notes while retaining event type, amount, balance and timestamp. */
+	/**
+	 * Hash of a ledger note that is exactly an e-mail address (WooCommerce "used by"), stored in actor_email_hash
+	 * so exports and erasures find the notes of an address through an index; '' for any other note.
+	 */
+	public static function note_hash( string $note ): string {
+		$note = strtolower( trim( $note ) );
+		return '' !== $note && strlen( $note ) <= 200 && is_email( $note ) ? hash( 'sha256', $note ) : '';
+	}
+
+	/**
+	 * Ledger rows naming an address: by actor_email_hash (index), and after the cursor of the hash migration
+	 * (Install::hash_event_notes()) also by the note itself – rows written before the hash was set, e.g. by an
+	 * older version after a rollback; a primary-key range of at most a day. Two index lookups, never a scan of
+	 * every note.
+	 *
+	 * @param string $columns Columns to select.
+	 * @param int    $after   Only rows after this id.
+	 * @return array{0:string, 1:array} SQL of a derived table and its values.
+	 */
+	private function noting_rows( string $email, string $columns, int $after = 0 ): array {
+		$cursor = max( $after, (int) get_option( Install::EVENT_HASH_CURSOR, 0 ) );
+		$table  = $this->events_table();
+		return array(
+			"( SELECT {$columns} FROM {$table} WHERE actor_email_hash = %s AND id > %d ) UNION ( SELECT {$columns} FROM {$table} WHERE id > %d AND LOWER(note) = %s )",
+			array( hash( 'sha256', $email ), $after, $cursor, $email ),
+		);
+	}
+
 	/** History entries whose note is exactly this e-mail address (WooCommerce "used by"). */
 	public function events_noting( string $email, int $limit = 1000, int $offset = 0 ): array {
 		global $wpdb;
@@ -445,20 +583,37 @@ final class VoucherRepository {
 		if ( ! is_email( $email ) ) {
 			return array();
 		}
-		return $wpdb->get_results( $wpdb->prepare( "SELECT id, voucher_id, event, amount, created_at FROM {$this->events_table()} WHERE LOWER(note) = %s ORDER BY id LIMIT %d OFFSET %d", $email, max( 1, $limit ), max( 0, $offset ) ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		list( $rows, $args ) = $this->noting_rows( $email, 'id, voucher_id, event, amount, created_at' );
+		return $wpdb->get_results( $wpdb->prepare( "SELECT * FROM ( {$rows} ) x ORDER BY id LIMIT %d OFFSET %d", array_merge( $args, array( max( 1, $limit ), max( 0, $offset ) ) ) ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 
+	/** Redacts the notes naming this address, in batches of 500 ids (short statements, no lock over the ledger). */
 	public function erase_event_notes( string $email ): bool {
 		global $wpdb;
 		$email = strtolower( trim( $email ) );
-		return is_email( $email ) && false !== $wpdb->query( $wpdb->prepare( "UPDATE {$this->events_table()} SET note = '[personal data removed]' WHERE LOWER(note) = %s", $email ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( ! is_email( $email ) ) {
+			return false;
+		}
+		$after = 0;
+		do {
+			list( $rows, $args ) = $this->noting_rows( $email, 'id', $after );
+			$ids = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( "SELECT id FROM ( {$rows} ) x ORDER BY id LIMIT 500", $args ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( ! $ids ) {
+				return true;
+			}
+			$after = (int) end( $ids );
+			if ( false === $wpdb->query( "UPDATE {$this->events_table()} SET note = '[personal data removed]', actor_email_hash = '' WHERE id IN (" . implode( ',', $ids ) . ')' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+				return false;
+			}
+		} while ( count( $ids ) === 500 );
+		return true;
 	}
 
 	public function anonymise_event_notes( int $voucher_id ): bool {
 		global $wpdb;
 		return false !== $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prepare(
-				"UPDATE {$this->events_table()} SET note = '[personal data removed]' WHERE voucher_id = %d AND note <> ''",
+				"UPDATE {$this->events_table()} SET note = '[personal data removed]', actor_email_hash = '' WHERE voucher_id = %d AND note <> ''",
 				$voucher_id
 			)
 		);
@@ -476,6 +631,7 @@ final class VoucherRepository {
 				'order_id'      => $order_id,
 				'user_id'       => get_current_user_id(),
 				'note'          => $note,
+				'actor_email_hash' => self::note_hash( $note ),
 				'created_at'    => $this->now(),
 			)
 		);
@@ -485,9 +641,23 @@ final class VoucherRepository {
 		return $inserted;
 	}
 
-	public function events( int $voucher_id ): array {
+	/**
+	 * Ledger rows of a voucher, oldest first. With $limit only the newest $limit rows (still oldest first), read
+	 * through the (voucher_id, id) index – for histories that show the latest entries only.
+	 */
+	public function events( int $voucher_id, int $limit = 0 ): array {
 		global $wpdb;
+		if ( $limit > 0 ) {
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->events_table()} WHERE voucher_id = %d ORDER BY id DESC LIMIT %d", $voucher_id, $limit ), ARRAY_A ) ?: array(); // phpcs:ignore
+			return array_reverse( $rows );
+		}
 		return $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->events_table()} WHERE voucher_id = %d ORDER BY id ASC", $voucher_id ), ARRAY_A ) ?: array(); // phpcs:ignore
+	}
+
+	/** Number of ledger rows of a voucher. */
+	public function event_count( int $voucher_id ): int {
+		global $wpdb;
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$this->events_table()} WHERE voucher_id = %d", $voucher_id ) ); // phpcs:ignore
 	}
 
 	public static function event_labels(): array {
