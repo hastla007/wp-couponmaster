@@ -51,43 +51,43 @@ dass die Vorlage aktuell ist und jeder Text noch existiert). Prüfung durch die 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) | Fundstelle | Freigabe |
 |---|---|---|---|---|
 | Valid until %s | Gültig bis %s | Gültig bis %s | templates/emails/plain/voucher.php:29 templates/emails/voucher.php:38 | ☐ |
-| Valid until: %s | Gültig bis: %s | Gültig bis: %s | src/Downloads.php:512 | ☐ |
-| unlimited | unbegrenzt | unbegrenzt | src/Downloads.php:512 src/Placeholders.php:102 | ☐ |
+| Valid until: %s | Gültig bis: %s | Gültig bis: %s | src/Downloads.php:531 | ☐ |
+| unlimited | unbegrenzt | unbegrenzt | src/Downloads.php:531 src/Placeholders.php:102 | ☐ |
 | no expiry | unbegrenzt | unbegrenzt | src/Emails/BonusEmail.php:109 | ☐ |
 | Your voucher from {site_title} expires on {expiry_date} | Ihr Gutschein von {site_title} läuft am {expiry_date} ab | Ihr Gutschein von {site_title} läuft am {expiry_date} ab | src/Emails/ExpiryReminderEmail.php:24 | ☐ |
 | Your voucher {coupon_code} is valid until {expiry_date}. Remaining value: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | src/Emails/ExpiryReminderEmail.php:32 | ☐ |
-| This voucher has expired. | Dieser Gutschein ist abgelaufen. | Dieser Gutschein ist abgelaufen. | src/API/V1/RedemptionService.php:748 src/CouponManager.php:1334 | ☐ |
+| This voucher has expired. | Dieser Gutschein ist abgelaufen. | Dieser Gutschein ist abgelaufen. | src/API/V1/RedemptionService.php:752 src/CouponManager.php:1340 | ☐ |
 
 ### Übertragbarkeit
 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) | Fundstelle | Freigabe |
 |---|---|---|---|---|
-| Transferable – anyone with the code can redeem it. | Übertragbar – jede Person mit dem Code kann ihn einlösen. | Übertragbar – jede Person mit dem Code kann ihn einlösen. | src/ProductConfig.php:163 src/Voucher.php:227 | ☐ |
-| Personal – only the buyer or the named recipient can redeem it. | Persönlich – nur Käufer oder genannte Empfänger können ihn einlösen. | Persönlich – nur Käufer oder genannte Empfänger können ihn einlösen. | src/ProductConfig.php:161 src/Voucher.php:228 | ☐ |
-| Personal – only the named recipient can redeem it. | Persönlich – nur die genannte beschenkte Person kann ihn einlösen. | Persönlich – nur die genannte beschenkte Person kann ihn einlösen. | src/ProductConfig.php:159 src/Voucher.php:236 | ☐ |
-| Personal – only the buyer can redeem it. | Persönlich – nur der Käufer kann ihn einlösen. | Persönlich – nur der Käufer kann ihn einlösen. | src/ProductConfig.php:157 src/Voucher.php:239 | ☐ |
+| Transferable – anyone with the code can redeem it. | Übertragbar – jede Person mit dem Code kann ihn einlösen. | Übertragbar – jede Person mit dem Code kann ihn einlösen. | src/ProductConfig.php:182 src/Voucher.php:227 | ☐ |
+| Personal – only the buyer or the named recipient can redeem it. | Persönlich – nur Käufer oder genannte Empfänger können ihn einlösen. | Persönlich – nur Käufer oder genannte Empfänger können ihn einlösen. | src/ProductConfig.php:180 src/Voucher.php:228 | ☐ |
+| Personal – only the named recipient can redeem it. | Persönlich – nur die genannte beschenkte Person kann ihn einlösen. | Persönlich – nur die genannte beschenkte Person kann ihn einlösen. | src/ProductConfig.php:178 src/Voucher.php:236 | ☐ |
+| Personal – only the buyer can redeem it. | Persönlich – nur der Käufer kann ihn einlösen. | Persönlich – nur der Käufer kann ihn einlösen. | src/ProductConfig.php:176 src/Voucher.php:239 | ☐ |
 
 ### Restwert
 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) | Fundstelle | Freigabe |
 |---|---|---|---|---|
-| Balance: %s | Restwert: %s | Restwert: %s | src/Downloads.php:506 templates/myaccount/vouchers-table.php:45 | ☐ |
+| Balance: %s | Restwert: %s | Restwert: %s | src/Downloads.php:525 templates/myaccount/vouchers-table.php:47 | ☐ |
 | Remaining balance | Restwert | Restwert | src/Placeholders.php:20 | ☐ |
 
 ### Erstattung und Widerruf
 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) | Fundstelle | Freigabe |
 |---|---|---|---|---|
-| Vouchers from this order were already used (%1$s, value used: %2$s). At most %3$s can be refunded; the unused vouchers are voided. | Gutscheine aus dieser Bestellung wurden bereits verwendet (%1$s, verbrauchter Wert: %2$s). Erstattet werden können höchstens %3$s; die unverbrauchten Gutscheine werden entwertet. | Gutscheine aus dieser Bestellung wurden bereits verwendet (%1$s, verbrauchter Wert: %2$s). Erstattet werden können höchstens %3$s; die unverbrauchten Gutscheine werden entwertet. | src/Issuer.php:867 | ☐ |
+| Vouchers from this order were already used (%1$s, value used: %2$s). At most %3$s can be refunded; the unused vouchers are voided. | Gutscheine aus dieser Bestellung wurden bereits verwendet (%1$s, verbrauchter Wert: %2$s). Erstattet werden können höchstens %3$s; die unverbrauchten Gutscheine werden entwertet. | Gutscheine aus dieser Bestellung wurden bereits verwendet (%1$s, verbrauchter Wert: %2$s). Erstattet werden können höchstens %3$s; die unverbrauchten Gutscheine werden entwertet. | src/Issuer.php:868 | ☐ |
 | %s refunded as store credit. | %s als Kundenguthaben erstattet. | %s als Kundenguthaben erstattet. | src/StoreCredit.php:306 | ☐ |
-| This voucher has been cancelled. | Dieser Gutschein wurde storniert. | Dieser Gutschein wurde storniert. | src/API/V1/RedemptionService.php:635 src/API/V1/RedemptionService.php:735 | ☐ |
+| This voucher has been cancelled. | Dieser Gutschein wurde storniert. | Dieser Gutschein wurde storniert. | src/API/V1/RedemptionService.php:638 src/API/V1/RedemptionService.php:739 | ☐ |
 
 ### Einlösung
 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) | Fundstelle | Freigabe |
 |---|---|---|---|---|
 | Enter the code in the cart or at checkout on %s to redeem it. | Geben Sie den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. | Geben Sie den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. | src/Channels.php:71 | ☐ |
-| This voucher has already been fully redeemed. | Dieser Gutschein wurde bereits vollständig eingelöst. | Dieser Gutschein wurde bereits vollständig eingelöst. | src/CouponManager.php:1331 | ☐ |
+| This voucher has already been fully redeemed. | Dieser Gutschein wurde bereits vollständig eingelöst. | Dieser Gutschein wurde bereits vollständig eingelöst. | src/CouponManager.php:1337 | ☐ |
 
 ## 4. Freigabe
 
