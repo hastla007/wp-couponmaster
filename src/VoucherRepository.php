@@ -7,13 +7,14 @@ defined( 'ABSPATH' ) || exit;
  * Persistence for issued vouchers and their audit trail.
  */
 final class VoucherRepository {
-	private string $table;
-	private string $events;
+	/** Voucher table of the current site (never kept: switch_to_blog() changes it). */
+	private function table(): string {
+		return Install::tables()['vouchers'];
+	}
 
-	public function __construct() {
-		$t            = Install::tables();
-		$this->table  = $t['vouchers'];
-		$this->events = $t['events'];
+	/** Ledger table of the current site. */
+	private function events_table(): string {
+		return Install::tables()['events'];
 	}
 
 	public function now(): string {
@@ -27,7 +28,7 @@ final class VoucherRepository {
 		if ( '' === $voucher->token ) {
 			$voucher->token = self::new_token();
 		}
-		$ok = $wpdb->insert( $this->table, $voucher->to_row() ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$ok = $wpdb->insert( $this->table(), $voucher->to_row() ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( ! $ok ) {
 			return 0;
 		}
@@ -39,7 +40,7 @@ final class VoucherRepository {
 	public function update( Voucher $voucher ): bool {
 		global $wpdb;
 		$voucher->updated_at = $this->now();
-		$ok                  = false !== $wpdb->update( $this->table, $voucher->to_row(), array( 'id' => $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$ok                  = false !== $wpdb->update( $this->table(), $voucher->to_row(), array( 'id' => $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( $ok ) {
 			do_action( 'vcap_voucher_updated', $voucher );
 		}
@@ -59,9 +60,9 @@ final class VoucherRepository {
 		$row                 = $voucher->to_row();
 		$data                = array_intersect_key( $row, array_flip( array_diff( $columns, array( 'status' ) ) ) );
 		$data['updated_at']  = $voucher->updated_at;
-		$ok                  = false !== $wpdb->update( $this->table, $data, array( 'id' => $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$ok                  = false !== $wpdb->update( $this->table(), $data, array( 'id' => $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( $ok && null !== $from_status && $from_status !== $voucher->status ) {
-			$wpdb->update( $this->table, array( 'status' => $voucher->status ), array( 'id' => $voucher->id, 'status' => $from_status ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->update( $this->table(), array( 'status' => $voucher->status ), array( 'id' => $voucher->id, 'status' => $from_status ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
 		if ( $ok ) {
 			$fresh = $this->get( $voucher->id );
@@ -78,7 +79,7 @@ final class VoucherRepository {
 	/** Mark a single-use voucher redeemed only if it is still active (atomic; false when someone else won). */
 	public function redeem_single_if_active( int $id ): bool {
 		global $wpdb;
-		$done = (int) $wpdb->query( $wpdb->prepare( "UPDATE {$this->table} SET status = %s, balance = 0, updated_at = %s WHERE id = %d AND status = %s", Voucher::STATUS_REDEEMED, $this->now(), $id, Voucher::STATUS_ACTIVE ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$done = (int) $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = %s, balance = 0, updated_at = %s WHERE id = %d AND status = %s", Voucher::STATUS_REDEEMED, $this->now(), $id, Voucher::STATUS_ACTIVE ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		if ( 1 === $done ) {
 			$fresh = $this->get( $id );
 			if ( $fresh ) {
@@ -91,7 +92,7 @@ final class VoucherRepository {
 	/** Change only the status column (never overwrites a balance changed concurrently by a transaction). */
 	public function update_status( int $id, string $status ): bool {
 		global $wpdb;
-		$ok = false !== $wpdb->update( $this->table, array( 'status' => $status, 'updated_at' => $this->now() ), array( 'id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$ok = false !== $wpdb->update( $this->table(), array( 'status' => $status, 'updated_at' => $this->now() ), array( 'id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( $ok ) {
 			$fresh = $this->get( $id );
 			if ( $fresh ) {
@@ -103,8 +104,8 @@ final class VoucherRepository {
 
 	public function delete( int $id ): void {
 		global $wpdb;
-		$wpdb->delete( $this->table, array( 'id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		$wpdb->delete( $this->events, array( 'voucher_id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->delete( $this->table(), array( 'id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->delete( $this->events_table(), array( 'voucher_id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	public static function new_token(): string {
@@ -113,7 +114,7 @@ final class VoucherRepository {
 
 	private function get_by( string $column, $value ): ?Voucher {
 		global $wpdb;
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$this->table} WHERE {$column} = %s LIMIT 1", $value ), ARRAY_A ); // phpcs:ignore
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$this->table()} WHERE {$column} = %s LIMIT 1", $value ), ARRAY_A ); // phpcs:ignore
 		return $row ? Voucher::from_row( $row ) : null;
 	}
 
@@ -135,14 +136,14 @@ final class VoucherRepository {
 
 	public function get_slot( int $order_item_id, int $index ): ?Voucher {
 		global $wpdb;
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$this->table} WHERE order_item_id = %d AND item_index = %d", $order_item_id, $index ), ARRAY_A ); // phpcs:ignore
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$this->table()} WHERE order_item_id = %d AND item_index = %d", $order_item_id, $index ), ARRAY_A ); // phpcs:ignore
 		return $row ? Voucher::from_row( $row ) : null;
 	}
 
 	/** @return Voucher[] */
 	public function for_order( int $order_id ): array {
 		global $wpdb;
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->table} WHERE order_id = %d ORDER BY order_item_id, item_index", $order_id ), ARRAY_A ); // phpcs:ignore
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->table()} WHERE order_id = %d ORDER BY order_item_id, item_index", $order_id ), ARRAY_A ); // phpcs:ignore
 		return array_map( array( Voucher::class, 'from_row' ), $rows ?: array() );
 	}
 
@@ -151,7 +152,7 @@ final class VoucherRepository {
 		global $wpdb;
 		$limit  = max( 1, $limit );
 		$offset = max( 0, $offset );
-		$rows   = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->table} WHERE buyer_email = %s OR recipient_email = %s ORDER BY id DESC LIMIT %d OFFSET %d", $email, $email, $limit, $offset ), ARRAY_A ); // phpcs:ignore
+		$rows   = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->table()} WHERE buyer_email = %s OR recipient_email = %s ORDER BY id DESC LIMIT %d OFFSET %d", $email, $email, $limit, $offset ), ARRAY_A ); // phpcs:ignore
 		return array_map( array( Voucher::class, 'from_row' ), $rows ?: array() );
 	}
 
@@ -183,7 +184,7 @@ final class VoucherRepository {
 				break;
 			}
 			$in    = implode( ',', array_map( 'intval', $order_ids ) );
-			$batch = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->table} WHERE order_id IN ($in) ORDER BY id DESC LIMIT %d", $limit - count( $rows ) ), ARRAY_A ); // phpcs:ignore
+			$batch = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->table()} WHERE order_id IN ($in) ORDER BY id DESC LIMIT %d", $limit - count( $rows ) ), ARRAY_A ); // phpcs:ignore
 			$rows  = array_merge( $rows, $batch ?: array() );
 			if ( count( $order_ids ) < 500 ) {
 				break;
@@ -253,8 +254,8 @@ final class VoucherRepository {
 		$limit   = max( 1, (int) $args['per_page'] );
 		$offset  = max( 0, ( (int) $args['page'] - 1 ) * $limit );
 
-		$count_sql = "SELECT COUNT(*) FROM {$this->table} WHERE $sql";
-		$list_sql  = "SELECT * FROM {$this->table} WHERE $sql ORDER BY $orderby $order LIMIT $limit OFFSET $offset";
+		$count_sql = "SELECT COUNT(*) FROM {$this->table()} WHERE $sql";
+		$list_sql  = "SELECT * FROM {$this->table()} WHERE $sql ORDER BY $orderby $order LIMIT $limit OFFSET $offset";
 		if ( $vals ) {
 			$count_sql = $wpdb->prepare( $count_sql, $vals ); // phpcs:ignore
 			$list_sql  = $wpdb->prepare( $list_sql, $vals ); // phpcs:ignore
@@ -268,7 +269,7 @@ final class VoucherRepository {
 
 	public function code_exists( string $code ): bool {
 		global $wpdb;
-		return (bool) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$this->table} WHERE code = %s", $code ) ); // phpcs:ignore
+		return (bool) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$this->table()} WHERE code = %s", $code ) ); // phpcs:ignore
 	}
 
 	/** Number of vouchers that are due but were never delivered (cached for ten minutes). */
@@ -298,12 +299,12 @@ final class VoucherRepository {
 			'intval',
 			$wpdb->get_col( // phpcs:ignore
 				$wpdb->prepare(
-					"SELECT v.id FROM {$this->table} v
+					"SELECT v.id FROM {$this->table()} v
 					WHERE v.delivered_at IS NULL AND v.status IN ('scheduled','active')
 					AND ( ( v.delivery_at IS NOT NULL AND v.delivery_at <= %s AND v.delivery_at >= %s ) OR ( v.delivery_at IS NULL AND v.created_at <= %s AND v.created_at >= %s ) )
 					AND NOT EXISTS ( " . $this->given_up_sql( 'v' ) . " ){$not_in}
-					ORDER BY ( SELECT MAX(f.id) FROM {$this->events} f WHERE f.voucher_id = v.id AND f.event = 'delivery_failed' ) IS NOT NULL,
-					( SELECT MAX(f.id) FROM {$this->events} f WHERE f.voucher_id = v.id AND f.event = 'delivery_failed' ) ASC,
+					ORDER BY ( SELECT MAX(f.id) FROM {$this->events_table()} f WHERE f.voucher_id = v.id AND f.event = 'delivery_failed' ) IS NOT NULL,
+					( SELECT MAX(f.id) FROM {$this->events_table()} f WHERE f.voucher_id = v.id AND f.event = 'delivery_failed' ) ASC,
 					COALESCE( v.delivery_at, v.created_at ) ASC, v.id ASC
 					LIMIT %d",
 					$this->now(),
@@ -324,8 +325,8 @@ final class VoucherRepository {
 
 	/** Subquery (for EXISTS): a "delivery_given_up" of voucher alias $v after its last reset event. */
 	private function given_up_sql( string $v ): string {
-		return "SELECT 1 FROM {$this->events} g WHERE g.voucher_id = {$v}.id AND g.event = 'delivery_given_up'
-			AND g.id > COALESCE( ( SELECT MAX(r.id) FROM {$this->events} r WHERE r.voucher_id = {$v}.id AND r.event IN (" . self::DELIVERY_RESET_EVENTS . ') ), 0 )';
+		return "SELECT 1 FROM {$this->events_table()} g WHERE g.voucher_id = {$v}.id AND g.event = 'delivery_given_up'
+			AND g.id > COALESCE( ( SELECT MAX(r.id) FROM {$this->events_table()} r WHERE r.voucher_id = {$v}.id AND r.event IN (" . self::DELIVERY_RESET_EVENTS . ') ), 0 )';
 	}
 
 	/**
@@ -336,7 +337,7 @@ final class VoucherRepository {
 	 */
 	public function delivery_attempts( int $voucher_id ): array {
 		global $wpdb;
-		$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT event, created_at FROM {$this->events} WHERE voucher_id = %d AND event IN ('delivery_failed','delivery_given_up'," . self::DELIVERY_RESET_EVENTS . ') ORDER BY id DESC LIMIT 500', $voucher_id ), ARRAY_A ); // phpcs:ignore
+		$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT event, created_at FROM {$this->events_table()} WHERE voucher_id = %d AND event IN ('delivery_failed','delivery_given_up'," . self::DELIVERY_RESET_EVENTS . ') ORDER BY id DESC LIMIT 500', $voucher_id ), ARRAY_A ); // phpcs:ignore
 		$state = array( 'failures' => 0, 'last_attempt' => null, 'given_up' => false );
 		foreach ( $rows ? $rows : array() as $row ) {
 			if ( 'delivery_failed' === $row['event'] ) {
@@ -356,7 +357,7 @@ final class VoucherRepository {
 		$count = get_transient( 'vcap_given_up_count' );
 		if ( false === $count ) {
 			global $wpdb;
-			$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table} v WHERE v.delivered_at IS NULL AND v.status IN ('scheduled','active') AND EXISTS ( " . $this->given_up_sql( 'v' ) . ' )' ); // phpcs:ignore
+			$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table()} v WHERE v.delivered_at IS NULL AND v.status IN ('scheduled','active') AND EXISTS ( " . $this->given_up_sql( 'v' ) . ' )' ); // phpcs:ignore
 			set_transient( 'vcap_given_up_count', $count, 10 * MINUTE_IN_SECONDS );
 		}
 		return (int) $count;
@@ -371,11 +372,11 @@ final class VoucherRepository {
 		global $wpdb;
 		$rows = $wpdb->get_results( // phpcs:ignore
 			$wpdb->prepare(
-				"SELECT v.* FROM {$this->table} v
+				"SELECT v.* FROM {$this->table()} v
 				WHERE v.status = 'active' AND v.delivered_at IS NOT NULL AND v.type <> 'ticket'
 				AND v.expires_at IS NOT NULL AND v.expires_at > %s AND v.expires_at <= %s
 				AND ( v.usage_mode <> 'balance' OR v.balance > 0 )
-				AND NOT EXISTS ( SELECT 1 FROM {$this->events} e WHERE e.voucher_id = v.id AND e.event = 'expiry_reminder' )
+				AND NOT EXISTS ( SELECT 1 FROM {$this->events_table()} e WHERE e.voucher_id = v.id AND e.event = 'expiry_reminder' )
 				ORDER BY v.expires_at ASC LIMIT %d",
 				$this->now(),
 				gmdate( 'Y-m-d H:i:s', time() + $days * DAY_IN_SECONDS ),
@@ -388,7 +389,7 @@ final class VoucherRepository {
 
 	public function expire_overdue(): int {
 		global $wpdb;
-		return (int) $wpdb->query( $wpdb->prepare( "UPDATE {$this->table} SET status = 'expired', updated_at = %s WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < %s", $this->now(), $this->now() ) ); // phpcs:ignore
+		return (int) $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = 'expired', updated_at = %s WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < %s", $this->now(), $this->now() ) ); // phpcs:ignore
 	}
 
 	/** Erase personal data of vouchers that ended more than $days ago. */
@@ -402,7 +403,7 @@ final class VoucherRepository {
 		try {
 			$notes = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				$wpdb->prepare(
-					"UPDATE {$this->events} AS e INNER JOIN {$this->table} AS v ON v.id = e.voucher_id
+					"UPDATE {$this->events_table()} AS e INNER JOIN {$this->table()} AS v ON v.id = e.voucher_id
 					SET e.note = '[personal data removed by retention]'
 					WHERE (v.buyer_email <> '' OR v.recipient_email <> '') AND {$eligibility} AND e.note <> ''",
 					$cutoff,
@@ -415,7 +416,7 @@ final class VoucherRepository {
 			}
 			$updated = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				$wpdb->prepare(
-					"UPDATE {$this->table} AS v SET buyer_name = '', buyer_email = '', recipient_name = '', recipient_email = '', message = '', fields = '[]', updated_at = %s
+					"UPDATE {$this->table()} AS v SET buyer_name = '', buyer_email = '', recipient_name = '', recipient_email = '', message = '', fields = '[]', updated_at = %s
 					WHERE (v.buyer_email <> '' OR v.recipient_email <> '') AND {$eligibility}",
 					$this->now(),
 					$cutoff,
@@ -441,20 +442,20 @@ final class VoucherRepository {
 		if ( ! is_email( $email ) ) {
 			return array();
 		}
-		return $wpdb->get_results( $wpdb->prepare( "SELECT id, voucher_id, event, amount, created_at FROM {$this->events} WHERE LOWER(note) = %s ORDER BY id LIMIT %d OFFSET %d", $email, max( 1, $limit ), max( 0, $offset ) ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		return $wpdb->get_results( $wpdb->prepare( "SELECT id, voucher_id, event, amount, created_at FROM {$this->events_table()} WHERE LOWER(note) = %s ORDER BY id LIMIT %d OFFSET %d", $email, max( 1, $limit ), max( 0, $offset ) ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	public function erase_event_notes( string $email ): bool {
 		global $wpdb;
 		$email = strtolower( trim( $email ) );
-		return is_email( $email ) && false !== $wpdb->query( $wpdb->prepare( "UPDATE {$this->events} SET note = '[personal data removed]' WHERE LOWER(note) = %s", $email ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		return is_email( $email ) && false !== $wpdb->query( $wpdb->prepare( "UPDATE {$this->events_table()} SET note = '[personal data removed]' WHERE LOWER(note) = %s", $email ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	public function anonymise_event_notes( int $voucher_id ): bool {
 		global $wpdb;
 		return false !== $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prepare(
-				"UPDATE {$this->events} SET note = '[personal data removed]' WHERE voucher_id = %d AND note <> ''",
+				"UPDATE {$this->events_table()} SET note = '[personal data removed]' WHERE voucher_id = %d AND note <> ''",
 				$voucher_id
 			)
 		);
@@ -463,7 +464,7 @@ final class VoucherRepository {
 	public function log( int $voucher_id, string $event, ?float $amount = null, ?float $balance_after = null, string $note = '', int $order_id = 0 ): bool {
 		global $wpdb;
 		$inserted = false !== $wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			$this->events,
+			$this->events_table(),
 			array(
 				'voucher_id'    => $voucher_id,
 				'event'         => $event,
@@ -483,7 +484,7 @@ final class VoucherRepository {
 
 	public function events( int $voucher_id ): array {
 		global $wpdb;
-		return $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->events} WHERE voucher_id = %d ORDER BY id ASC", $voucher_id ), ARRAY_A ) ?: array(); // phpcs:ignore
+		return $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->events_table()} WHERE voucher_id = %d ORDER BY id ASC", $voucher_id ), ARRAY_A ) ?: array(); // phpcs:ignore
 	}
 
 	public static function event_labels(): array {

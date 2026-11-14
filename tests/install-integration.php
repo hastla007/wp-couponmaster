@@ -118,9 +118,31 @@ wp_schedule_single_event( time() + HOUR_IN_SECONDS, VCAP\Licensing\Entitlements:
 VCAP\Install::deactivate_site();
 vcap_inst_assert( 'draft' === get_post_status( $card->coupon_id ) && 'publish' === get_post_status( $single->coupon_id ), 'deactivation suspends balance coupons only' );
 vcap_inst_assert( ! as_has_scheduled_action( 'vcap_deliver_voucher', array( 'voucher_id' => $future->id ), 'vcap' ) && ! wp_next_scheduled( VCAP\Licensing\Entitlements::REFRESH_HOOK ), 'deactivation removes the voucher tasks and the license refresh' );
+vcap_inst_assert( (int) get_option( VCAP\Install::DEACTIVATED_OPTION ) > time() - MINUTE_IN_SECONDS && '1' === get_post_meta( $card->coupon_id, VCAP\Install::SUSPENDED_META, true ), 'deactivation remembers its time and marks the suspended coupon' );
 VCAP\Install::activate_site();
+vcap_inst_assert( is_array( get_option( VCAP\Install::CATCH_UP_OPTION ) ) && false === get_option( VCAP\Install::DEACTIVATED_OPTION ), 'activation plans the catch-up of the orders since the deactivation' );
 vcap()->ensure_schedules();
-vcap_inst_assert( 'publish' === get_post_status( $card->coupon_id ), 'activation publishes the suspended coupons again' );
+vcap_inst_assert( 'publish' === get_post_status( $card->coupon_id ) && '' === get_post_meta( $card->coupon_id, VCAP\Install::SUSPENDED_META, true ), 'activation publishes the suspended coupons again' );
+vcap_inst_assert( as_has_scheduled_action( VCAP\CatchUp::HOOK, null, 'vcap' ) && false === get_option( VCAP\Install::CATCH_UP_OPTION ), 'the catch-up runs as Action Scheduler action' );
+as_unschedule_all_actions( VCAP\CatchUp::HOOK, null, 'vcap' );
+
+// Coupons with rules only Voucher Captain checks are suspended as well (first order only, referral, SKU rules).
+$first_order = new WC_Coupon();
+$first_order->set_code( 'vcap-inst-first-' . strtolower( wp_generate_password( 8, false, false ) ) );
+$first_order->set_amount( 10 );
+$first_order->update_meta_data( VCAP\FirstOrderCoupons::META, 'yes' );
+$first_order->save();
+// A deactivation that never got its activation (network deactivation stopped, update by upload after a rollback):
+// the running plugin heals itself once the deactivation is older than 15 minutes.
+VCAP\Install::deactivate_site();
+vcap_inst_assert( 'draft' === get_post_status( $first_order->get_id() ) && 'draft' === get_post_status( $card->coupon_id ), 'deactivation suspends first-order coupons too' );
+vcap()->ensure_schedules();
+vcap_inst_assert( 'draft' === get_post_status( $card->coupon_id ), 'a deactivation that may still be running is left alone' );
+update_option( VCAP\Install::DEACTIVATED_OPTION, time() - HOUR_IN_SECONDS );
+vcap()->ensure_schedules();
+vcap_inst_assert( 'publish' === get_post_status( $card->coupon_id ) && 'publish' === get_post_status( $first_order->get_id() ) && as_has_scheduled_action( 'vcap_daily_maintenance', array(), 'vcap' ), 'an active plugin publishes coupons of an unfinished deactivation again and schedules its tasks' );
+wp_delete_post( $first_order->get_id(), true );
+as_unschedule_all_actions( VCAP\CatchUp::HOOK, null, 'vcap' );
 vcap_inst_assert( as_has_scheduled_action( VCAP\Delivery::RESTORE_HOOK, array( 'phase' => 'vouchers', 'after' => 0 ), 'vcap' ), 'the removed tasks are restored by an Action Scheduler action, not in the request' );
 // What that action does, batch by batch (500 vouchers each), until the vouchers are done.
 $restore = array( 'vouchers', 0 );
@@ -150,7 +172,7 @@ $u_plain->set_amount( 10 );
 $u_plain->save();
 $u_changed = vcap_uninstall_coupons( false );
 vcap_inst_assert( 'draft' === get_post_status( $u_card->coupon_id ) && 'publish' === get_post_status( $u_single->coupon_id ) && 'publish' === get_post_status( $u_orphan->get_id() ) && 'publish' === get_post_status( $u_plain->get_id() ), 'uninstall without data deletion suspends balance coupons only' );
-vcap_inst_assert( in_array( $u_card->coupon_id, array_map( 'intval', (array) get_option( VCAP\Install::SUSPENDED_OPTION ) ), true ) && isset( $u_changed[ $u_card->coupon_id ] ) && ! isset( $u_changed[ $u_single->coupon_id ] ), 'the suspended coupons are remembered for a reinstall' );
+vcap_inst_assert( '1' === get_post_meta( $u_card->coupon_id, VCAP\Install::SUSPENDED_META, true ) && isset( $u_changed[ $u_card->coupon_id ] ) && ! isset( $u_changed[ $u_single->coupon_id ] ), 'the suspended coupons are marked for a reinstall' );
 VCAP\Install::restore_balance_coupons();
 vcap_inst_assert( 'publish' === get_post_status( $u_card->coupon_id ), 'a reinstall publishes the suspended coupons again' );
 $u_changed = vcap_uninstall_coupons( true );
@@ -161,6 +183,7 @@ foreach ( $u_changed as $u_id => $u_status ) {
 	$wpdb->update( $wpdb->posts, array( 'post_status' => $u_status ), array( 'ID' => (int) $u_id ) );
 	delete_post_meta( (int) $u_id, '_wp_trash_meta_status' );
 	delete_post_meta( (int) $u_id, '_wp_trash_meta_time' );
+	delete_post_meta( (int) $u_id, VCAP\Install::SUSPENDED_META );
 	clean_post_cache( (int) $u_id );
 }
 WC_Cache_Helper::invalidate_cache_group( 'coupons' );

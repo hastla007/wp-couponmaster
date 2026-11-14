@@ -27,12 +27,34 @@ final class Plugin {
 	/** Multi-purpose vouchers as a payment after tax (setting "vcap_mpv_after_tax"). */
 	public PaymentVouchers $payments;
 
+	/** Oldest WooCommerce version Voucher Captain runs with (header "WC requires at least"). */
+	public const MIN_WC_VERSION = '8.9';
+
+	/**
+	 * The running plugin. Boots it on the first call; only after requirements_met() (voucher-captain.php checks
+	 * it before it defines vcap()). Connectors use vcap() from the action "vcap_loaded" on, or check ready().
+	 *
+	 * @throws \LogicException When WooCommerce is missing or too old (the plugin does not run then).
+	 */
 	public static function instance(): Plugin {
 		if ( null === self::$instance ) {
+			if ( ! self::requirements_met() ) {
+				throw new \LogicException( 'Voucher Captain does not run: WooCommerce ' . self::MIN_WC_VERSION . ' or newer is required.' );
+			}
 			self::$instance = new self();
 			self::$instance->boot();
 		}
 		return self::$instance;
+	}
+
+	/** Whether the plugin has booted (vcap() and its services can be used). */
+	public static function ready(): bool {
+		return null !== self::$instance;
+	}
+
+	/** Whether WooCommerce is active in a supported version. */
+	public static function requirements_met(): bool {
+		return class_exists( 'WooCommerce' ) && ( ! defined( 'WC_VERSION' ) || version_compare( WC_VERSION, self::MIN_WC_VERSION, '>=' ) );
 	}
 
 	private function __construct() {}
@@ -69,6 +91,8 @@ final class Plugin {
 		( new Health() )->register();
 		( new Diagnostics() )->register();
 		Licensing\Entitlements::register();
+		( new CatchUp() )->register();
+		add_action( Install::MIGRATE_HOOK, array( Install::class, 'run_queued_migration' ) );
 
 		// Premium features (Licensing\Entitlements): a locked feature (free edition, premium without an active
 		// license) only stops what is new – configuration, sales, customer screens. Lifecycle hooks of what was
@@ -162,6 +186,16 @@ final class Plugin {
 		if ( $checked > time() - DAY_IN_SECONDS || ! function_exists( 'as_has_scheduled_action' ) ) {
 			return;
 		}
+		// The plugin runs, but a deactivation was not followed by an activation: a network deactivation that
+		// stopped half-way, or an update by upload after a rollback (no activation hook). Undo it here, unless a
+		// deactivation may still be running (within the last 15 minutes): checked again on a later request.
+		$deactivated = (int) get_option( Install::DEACTIVATED_OPTION, 0 );
+		if ( $deactivated > 0 || Install::has_suspended_coupons() ) {
+			if ( $deactivated > time() - 15 * MINUTE_IN_SECONDS || Install::network_deactivation_running() ) {
+				return;
+			}
+			Install::resume();
+		}
 		update_option( Install::SCHEDULES_OPTION, time(), true );
 		$this->delivery->schedule_maintenance();
 		$this->coupons->schedule_stale_release();
@@ -169,6 +203,12 @@ final class Plugin {
 			delete_option( Install::RESTORE_TASKS_OPTION );
 			// In Action Scheduler batches, not in this (arbitrary) request.
 			$this->delivery->queue_restore_tasks();
+		}
+		$catch_up = get_option( Install::CATCH_UP_OPTION );
+		if ( is_array( $catch_up ) ) {
+			delete_option( Install::CATCH_UP_OPTION );
+			// Orders of the time the plugin was off: issue, void, reward (Action Scheduler batches).
+			CatchUp::queue( (int) ( $catch_up['since'] ?? 0 ), (int) ( $catch_up['until'] ?? 0 ) );
 		}
 	}
 
@@ -308,7 +348,8 @@ final class Plugin {
 		if ( $user_id <= 0 ) {
 			return false;
 		}
-		if ( ! isset( $cache[ $user_id ] ) ) {
+		$key = get_current_blog_id() . ':' . $user_id; // Per site: vouchers and roles differ between sites.
+		if ( ! isset( $cache[ $key ] ) ) {
 			global $wpdb;
 			$exempt = current_user_can( 'manage_woocommerce' ) || current_user_can( 'vcap_manage_vouchers' ); // phpcs:ignore WordPress.WP.Capabilities.Unknown -- Registered by Install / WooCommerce.
 			if ( ! $exempt ) {
@@ -317,9 +358,9 @@ final class Plugin {
 					|| ( isset( vcap()->vouchers ) && array() !== vcap()->vouchers->for_customer( $user_id, 1 ) );
 			}
 			/** Whether the current user keeps the full rate-limit quota while the site-wide brake is on. */
-			$cache[ $user_id ] = (bool) apply_filters( 'vcap_rate_limit_brake_exempt', $exempt, $user_id );
+			$cache[ $key ] = (bool) apply_filters( 'vcap_rate_limit_brake_exempt', $exempt, $user_id );
 		}
-		return $cache[ $user_id ];
+		return $cache[ $key ];
 	}
 
 	/** Option name of a counter in the current window: vcap_rl_{window end}_{key} (cleanup compares names). */

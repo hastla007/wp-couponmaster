@@ -58,9 +58,10 @@ final class TemplatePostType {
 	}
 
 	public static function first_template_id(): int {
-		static $cached = null;
-		if ( null !== $cached ) {
-			return $cached;
+		static $by_site = array(); // Per site: switch_to_blog() must not return another site's template.
+		$site = get_current_blog_id();
+		if ( isset( $by_site[ $site ] ) ) {
+			return $by_site[ $site ];
 		}
 		$ids = get_posts(
 			array(
@@ -72,8 +73,7 @@ final class TemplatePostType {
 				'post_status' => 'publish',
 			)
 		);
-		$cached = $ids ? (int) $ids[0] : 0;
-		return $cached;
+		return $by_site[ $site ] = $ids ? (int) $ids[0] : 0;
 	}
 
 	public static function get_design( int $template_id ): array {

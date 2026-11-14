@@ -25,7 +25,7 @@ final class Health {
 
 	public function tests( $tests ) {
 		$tests = (array) $tests;
-		foreach ( array( 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets', 'offline_payment' ) as $id ) {
+		foreach ( array( 'extensions', 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets', 'offline_payment' ) as $id ) {
 			$tests['direct'][ 'vcap_' . $id ] = array(
 				'label' => __( 'Voucher Captain', 'voucher-captain' ),
 				'test'  => array( $this, 'test_' . $id ),
@@ -150,10 +150,25 @@ final class Health {
 		return true;
 	}
 
+	/** PHP extensions: mbstring and dom are needed for PDFs at all, gd for QR codes and barcodes, zip for imports. */
+	public function test_extensions(): array {
+		$required    = Install::missing_extensions( Install::REQUIRED_EXTENSIONS );
+		$recommended = Install::missing_extensions( Install::RECOMMENDED_EXTENSIONS );
+		if ( ! $required && ! $recommended ) {
+			return self::result( 'extensions', 'good', __( 'The PHP extensions for vouchers are available', 'voucher-captain' ), __( 'mbstring, dom, gd, zip and iconv are loaded: PDFs with QR codes and barcodes and spreadsheet imports work.', 'voucher-captain' ) );
+		}
+		if ( $required ) {
+			/* translators: %s: comma separated PHP extension names */
+			return self::result( 'extensions', 'critical', __( 'PHP extensions for vouchers are missing', 'voucher-captain' ), sprintf( __( 'Without the PHP extensions %s, voucher PDFs cannot be created and voucher emails fail. Ask your host to enable them.', 'voucher-captain' ), implode( ', ', array_merge( $required, $recommended ) ) ) );
+		}
+		/* translators: %s: comma separated PHP extension names */
+		return self::result( 'extensions', 'recommended', __( 'Some PHP extensions for vouchers are missing', 'voucher-captain' ), sprintf( __( 'Missing PHP extensions: %s. Without gd, voucher PDFs have no QR codes, barcodes or images (scanners cannot read them); without zip, Excel files cannot be imported. Ask your host to enable them.', 'voucher-captain' ), implode( ', ', $recommended ) ) );
+	}
+
 	public function test_schema(): array {
 		$error = (string) get_option( Install::SCHEMA_ERROR_OPTION, '' );
 		if ( '' === $error ) {
-			return self::result( 'schema', 'good', __( 'The voucher database tables are complete', 'voucher-captain' ), __( 'All voucher tables, columns and unique keys exist and support transactions.', 'voucher-captain' ) );
+			return self::result( 'schema', 'good', __( 'The voucher database tables are complete', 'voucher-captain' ), __( 'All voucher tables, columns and indexes exist and support transactions.', 'voucher-captain' ) );
 		}
 		/* translators: %s: technical details */
 		return self::result( 'schema', 'critical', __( 'The voucher database update is incomplete', 'voucher-captain' ), sprintf( __( 'Missing: %s. The update is retried automatically; check the database permissions.', 'voucher-captain' ), $error ) );

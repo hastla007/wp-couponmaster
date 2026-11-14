@@ -22,8 +22,27 @@ final class Install {
 	public const INNODB_OPTION = 'vcap_tables_innodb';
 	/** Set on activation: tasks removed on deactivation are scheduled again (Plugin::ensure_schedules()). */
 	public const RESTORE_TASKS_OPTION = 'vcap_restore_tasks';
+	/** Time of the deactivation of this site (cleared on activation; orders since then are caught up, see CatchUp). */
+	public const DEACTIVATED_OPTION = 'vcap_deactivated_at';
+	/** Orders to catch up after a reactivation: array{since:int, until:int} (queued by Plugin::ensure_schedules()). */
+	public const CATCH_UP_OPTION = 'vcap_catch_up';
+	/** Network option: time a network deactivation last worked on a site (no self-healing while it runs). */
+	public const NETWORK_DEACTIVATING_OPTION = 'vcap_network_deactivating';
+	/** Marker (post meta) of a coupon set to draft by suspend_balance_coupons(); only these are published again. */
+	public const SUSPENDED_META = '_vcap_suspended';
+	/** Schema step whose tables were created and verified ("{from}>{to}"); the data migrations continue without DDL. */
+	public const SCHEMA_STEP_OPTION = 'vcap_schema_step';
+	/** Action Scheduler action that continues an upgrade outside shop requests. */
+	public const MIGRATE_HOOK = 'vcap_migrate';
+	/** Sites a network activation sets up at once; the others are set up on their first request (maybe_upgrade()). */
+	public const NETWORK_ACTIVATION_SITES = 25;
+	/** PHP extensions without which Voucher Captain cannot work (PDF rendering, text handling). */
+	public const REQUIRED_EXTENSIONS = array( 'mbstring', 'dom' );
+	/** PHP extensions some features need: QR codes, barcodes and images in PDFs (gd), spreadsheet import (zip). */
+	public const RECOMMENDED_EXTENSIONS = array( 'gd', 'zip', 'iconv' );
 	private const LOCK_SECONDS = 300;
-	private static ?bool $transactional_tables = null;
+	/** @var array<int, bool> InnoDB state per site (switch_to_blog() changes the tables). */
+	private static array $transactional_tables = array();
 	private static ?string $lock_value = null;
 
 	/**
@@ -41,21 +60,47 @@ final class Install {
 	public const LEGACY_OPTION = 'vcap_legacy_rows';
 
 	/**
-	 * Activation hook. Network activation sets up every site (each site has its own tables, options and
-	 * coupons); sites added later, and sites beyond the first 500, are set up on their first request by
-	 * maybe_upgrade().
+	 * Activation hook. Network activation sets up the first NETWORK_ACTIVATION_SITES sites at once (each site has
+	 * its own tables, options and coupons; more would risk a timeout of the activation request); the other sites,
+	 * and sites added later, are set up on their first request by maybe_upgrade().
 	 */
 	public static function activate( $network_wide = false ): void {
+		$missing = self::missing_extensions( self::REQUIRED_EXTENSIONS );
+		if ( $missing ) {
+			wp_die(
+				esc_html(
+					sprintf(
+						/* translators: %s: comma separated PHP extension names */
+						__( 'Voucher Captain needs the PHP extensions %s, which are not available on this server. Please ask your host to enable them, then activate the plugin again.', 'voucher-captain' ),
+						implode( ', ', $missing )
+					)
+				),
+				esc_html__( 'Plugin could not be activated', 'voucher-captain' ),
+				array( 'back_link' => true )
+			);
+		}
 		if ( is_multisite() && $network_wide ) {
-			self::for_each_site( array( self::class, 'activate_site' ), 500 );
+			self::for_each_site( array( self::class, 'activate_site' ), self::NETWORK_ACTIVATION_SITES );
 			return;
 		}
 		self::activate_site();
 	}
 
 	/**
+	 * PHP extensions of $extensions that are not loaded.
+	 *
+	 * @param string[] $extensions Extension names.
+	 * @return string[]
+	 */
+	public static function missing_extensions( array $extensions ): array {
+		return array_values( array_filter( $extensions, static fn( string $ext ): bool => ! extension_loaded( $ext ) ) );
+	}
+
+	/**
 	 * Deactivation hook. A network deactivation must reach every site: without the plugin, balance coupons of a
 	 * site that was skipped would stay usable for their full balance on every order (see suspend_balance_coupons()).
+	 * Each site is idempotent, so a network deactivation that stopped (time-out) can simply be run again; a site it
+	 * already handled heals itself while the plugin stays active (Plugin::ensure_schedules(), resume()).
 	 */
 	public static function deactivate( $network_wide = false ): void {
 		// Cached update check of the premium updater (network-wide; Licensing\PremiumUpdater cache).
@@ -67,10 +112,22 @@ final class Install {
 			if ( function_exists( 'set_time_limit' ) ) {
 				@set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors,Squiz.PHP.DiscouragedFunctions -- large networks, best effort.
 			}
-			self::for_each_site( array( self::class, 'deactivate_site' ) );
+			self::for_each_site(
+				static function (): void {
+					// Heartbeat: sites handled already do not heal themselves while this request still runs.
+					update_site_option( self::NETWORK_DEACTIVATING_OPTION, time() );
+					self::deactivate_site();
+				}
+			);
+			delete_site_option( self::NETWORK_DEACTIVATING_OPTION );
 			return;
 		}
 		self::deactivate_site();
+	}
+
+	/** Whether a network deactivation worked on a site in the last 15 minutes (it may still be running). */
+	public static function network_deactivation_running(): bool {
+		return is_multisite() && (int) get_site_option( self::NETWORK_DEACTIVATING_OPTION, 0 ) > time() - 15 * MINUTE_IN_SECONDS;
 	}
 
 	/**
@@ -116,14 +173,8 @@ final class Install {
 				$installed = self::stored_version();
 				// After a downgrade the newer schema stays as it is (see maybe_upgrade()).
 				if ( '' === $installed || version_compare( $installed, VCAP_DB_VERSION, '<=' ) ) {
-					self::create_tables();
-					self::add_caps();
-					self::ensure_upload_dir();
-					if ( self::run_migrations( $installed ) ) {
-						self::finish_schema();
-					} else {
-						self::note_incomplete_schema();
-					}
+					delete_option( self::SCHEMA_STEP_OPTION ); // Activation always checks the tables again.
+					self::upgrade_schema( $installed );
 				}
 			}
 			if ( ! get_option( 'vcap_secret' ) ) {
@@ -131,10 +182,7 @@ final class Install {
 			}
 			add_option( 'vcap_needs_default_template', 'yes' );
 			update_option( 'vcap_flush_rewrite', 'yes' );
-			// Recurring tasks and the tasks removed on deactivation are scheduled on the next request.
-			delete_option( self::SCHEDULES_OPTION );
-			update_option( self::RESTORE_TASKS_OPTION, 'yes', false );
-			self::restore_balance_coupons();
+			self::resume();
 		} finally {
 			if ( $locked ) {
 				self::unlock();
@@ -142,8 +190,33 @@ final class Install {
 		}
 	}
 
+	/**
+	 * Undoes a deactivation of this site: publishes the suspended coupons, has the removed tasks scheduled again
+	 * and the orders of the time in between caught up (both on the next request, Plugin::ensure_schedules()).
+	 * Called on activation, and on a request of an active plugin that finds a deactivation which never completed
+	 * (network deactivation stopped half-way) or was never followed by an activation hook (update by upload after
+	 * a rollback): Plugin::ensure_schedules().
+	 */
+	public static function resume(): void {
+		$since = (int) get_option( self::DEACTIVATED_OPTION, 0 );
+		if ( $since > 0 ) {
+			update_option( self::CATCH_UP_OPTION, array( 'since' => $since, 'until' => time() ), false );
+			delete_option( self::DEACTIVATED_OPTION );
+		}
+		// Recurring tasks and the tasks removed on deactivation are scheduled on the next request.
+		delete_option( self::SCHEDULES_OPTION );
+		update_option( self::RESTORE_TASKS_OPTION, 'yes', false );
+		self::restore_balance_coupons();
+	}
+
+	/** Whether coupons suspended by a deactivation (or an uninstall that kept the data) are still drafts. */
+	public static function has_suspended_coupons(): bool {
+		global $wpdb;
+		return (bool) get_option( self::SUSPENDED_OPTION ) || (bool) $wpdb->get_var( $wpdb->prepare( "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s LIMIT 1", self::SUSPENDED_META ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.SlowDBQuery
+	}
+
 	public static function deactivate_site(): void {
-		if ( ! get_option( self::OPTION_DB_VERSION ) ) {
+		if ( ! self::table_exists( self::tables()['vouchers'] ) ) {
 			return; // Never set up on this site (network activation reaches other sites lazily): no coupons, no tasks.
 		}
 		// Pending tasks would fail without the plugin: remove the whole group (deliveries, retries, reservation
@@ -155,32 +228,94 @@ final class Install {
 		}
 		wp_clear_scheduled_hook( Licensing\Entitlements::REFRESH_HOOK );
 		delete_option( self::SCHEDULES_OPTION );
+		// The first deactivation counts (a network deactivation run again keeps it): orders since then are caught up.
+		add_option( self::DEACTIVATED_OPTION, time() );
 		self::suspend_balance_coupons();
 	}
 
+	/** Whether a table exists (one SHOW TABLES). */
+	private static function table_exists( string $table ): bool {
+		global $wpdb;
+		return $table === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
+
+	/** Ids of coupons drafted by releases before the per-coupon marker (and their uninstall), read on restore only. */
 	public const SUSPENDED_OPTION = 'vcap_suspended_coupons';
 
 	/**
-	 * Gift cards and store credit are WooCommerce coupons without a usage limit whose amount is the remaining
-	 * balance; only Voucher Captain deducts that balance. Without the plugin every such code would take its
-	 * full balance off every order, so they are set to draft (WooCommerce refuses them) until reactivation.
+	 * Takes the coupons out of use that would be wrong without the plugin, by setting them to draft (WooCommerce
+	 * refuses them) until reactivation:
+	 * - gift cards and store credit: coupons without a usage limit whose amount is the remaining balance; only
+	 *   Voucher Captain deducts that balance, without it every code would take its full balance off every order;
+	 * - vouchers that may not be redeemed in the shop (redemption channels of their order line);
+	 * - coupons with rules only Voucher Captain checks: "First order only", referral codes (not with their owner),
+	 *   SKU rules.
+	 * Each coupon gets the marker SUSPENDED_META first; only a coupon whose marker was written is set to draft, so a
+	 * reactivation finds every one of them (no list in one option that could grow beyond what MySQL accepts).
+	 *
+	 * @param int[]|null $ids Coupons to suspend (default: suspendable_coupon_ids()).
+	 * @return int Coupons suspended.
 	 */
-	public static function suspend_balance_coupons(): void {
+	public static function suspend_balance_coupons( ?array $ids = null ): int {
 		global $wpdb;
-		$tables = self::tables();
-		$ids    = array_map( 'intval', (array) $wpdb->get_col( "SELECT p.ID FROM {$wpdb->posts} p INNER JOIN {$tables['vouchers']} v ON v.coupon_id = p.ID WHERE p.post_type = 'shop_coupon' AND p.post_status = 'publish' AND v.usage_mode = 'balance'" ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		if ( ! $ids ) {
-			return;
-		}
-		$known = array_map( 'intval', (array) get_option( self::SUSPENDED_OPTION, array() ) );
-		update_option( self::SUSPENDED_OPTION, array_values( array_unique( array_merge( $known, $ids ) ) ), false );
+		$ids  = array_values( array_unique( array_filter( array_map( 'intval', $ids ?? self::suspendable_coupon_ids() ) ) ) );
+		$done = 0;
 		foreach ( array_chunk( $ids, 500 ) as $chunk ) {
-			$wpdb->query( "UPDATE {$wpdb->posts} SET post_status = 'draft' WHERE ID IN (" . implode( ',', $chunk ) . ") AND post_status = 'publish'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+			$in     = implode( ',', $chunk );
+			$values = implode( ',', array_map( static fn( int $id ): string => $wpdb->prepare( '(%d, %s, %s)', $id, self::SUSPENDED_META, '1' ), $chunk ) );
+			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE post_id IN ({$in}) AND meta_key = %s", self::SUSPENDED_META ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+			if ( false === $wpdb->query( "INSERT INTO {$wpdb->postmeta} (post_id, meta_key, meta_value) VALUES {$values}" ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared -- prepared rows.
+				Logger::error( 'Deactivation: coupons could not be marked as suspended and stay published.', array( 'coupons' => count( $chunk ) ) );
+				continue;
+			}
+			$wpdb->query( "UPDATE {$wpdb->posts} SET post_status = 'draft' WHERE ID IN ({$in}) AND post_status = 'publish'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
 			foreach ( $chunk as $id ) {
 				clean_post_cache( $id );
 			}
+			$done += count( $chunk );
 		}
-		self::flush_coupon_cache();
+		if ( $done ) {
+			self::flush_coupon_cache();
+		}
+		return $done;
+	}
+
+	/**
+	 * Published coupons that suspend_balance_coupons() takes out of use (see there).
+	 *
+	 * @return int[]
+	 */
+	public static function suspendable_coupon_ids(): array {
+		global $wpdb;
+		$vouchers = self::tables()['vouchers'];
+		$ids      = array();
+		$suppress = $wpdb->suppress_errors( true );
+		if ( self::table_exists( $vouchers ) ) {
+			$ids = (array) $wpdb->get_col( "SELECT p.ID FROM {$wpdb->posts} p INNER JOIN {$vouchers} v ON v.coupon_id = p.ID WHERE p.post_type = 'shop_coupon' AND p.post_status = 'publish' AND v.usage_mode = 'balance'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			// Vouchers with redemption channels (order line "_vcap_line"): suspended unless the shop is one of them.
+			$itemmeta = $wpdb->prefix . 'woocommerce_order_itemmeta';
+			$rows     = (array) $wpdb->get_results( $wpdb->prepare( "SELECT p.ID, im.meta_value FROM {$wpdb->posts} p INNER JOIN {$vouchers} v ON v.coupon_id = p.ID INNER JOIN {$itemmeta} im ON im.order_item_id = v.order_item_id AND im.meta_key = %s WHERE p.post_type = 'shop_coupon' AND p.post_status = 'publish' AND v.order_item_id > 0 AND v.usage_mode <> 'balance' AND im.meta_value LIKE %s", Issuer::LINE_META, '%' . $wpdb->esc_like( 's:8:"channels";a:' ) . '%' ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			foreach ( $rows as $row ) {
+				$line = maybe_unserialize( (string) $row['meta_value'] );
+				if ( is_array( $line ) && ! empty( $line['channels'] ) && ! in_array( Channels::SHOP, (array) $line['channels'], true ) ) {
+					$ids[] = $row['ID'];
+				}
+			}
+		}
+		$ids = array_merge(
+			$ids,
+			(array) $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->prepare(
+					"SELECT DISTINCT p.ID FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID WHERE p.post_type = 'shop_coupon' AND p.post_status = 'publish' AND ( ( m.meta_key = %s AND m.meta_value = 'yes' ) OR ( m.meta_key = %s AND m.meta_value NOT IN ('', '0') ) OR ( m.meta_key IN (%s, %s) AND m.meta_value <> '' ) )", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					FirstOrderCoupons::META,
+					Referrals::OWNER,
+					CouponSkuRules::META,
+					CouponSkuRules::META_EXCLUDE
+				)
+			)
+		);
+		$wpdb->suppress_errors( $suppress );
+		return array_values( array_unique( array_map( 'intval', $ids ) ) );
 	}
 
 	/**
@@ -219,25 +354,66 @@ final class Install {
 		}
 	}
 
-	/** Publishes the coupons suspended on deactivation again (only those, never coupons drafted by hand). */
+	/**
+	 * Publishes the coupons suspended on deactivation again: only those with the marker SUSPENDED_META, never
+	 * coupons drafted by hand. The id list of earlier releases ("vcap_suspended_coupons") is read as well, but
+	 * only ids that still belong to a gift card or store credit coupon count – a list left over in an object cache
+	 * after an uninstall must not publish coupons whose voucher is gone.
+	 */
 	public static function restore_balance_coupons(): void {
 		global $wpdb;
-		$ids = array_values( array_filter( array_map( 'intval', (array) get_option( self::SUSPENDED_OPTION, array() ) ) ) );
-		foreach ( array_chunk( $ids, 500 ) as $chunk ) {
-			$wpdb->query( "UPDATE {$wpdb->posts} SET post_status = 'publish' WHERE ID IN (" . implode( ',', $chunk ) . ") AND post_type = 'shop_coupon' AND post_status = 'draft'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
-			foreach ( $chunk as $id ) {
-				clean_post_cache( $id );
+		$changed = false;
+		$legacy  = array_values( array_filter( array_map( 'intval', (array) get_option( self::SUSPENDED_OPTION, array() ) ) ) );
+		if ( $legacy && self::table_exists( self::tables()['vouchers'] ) ) {
+			$vouchers = self::tables()['vouchers'];
+			foreach ( array_chunk( $legacy, 500 ) as $chunk ) {
+				$valid = array_map( 'intval', (array) $wpdb->get_col( "SELECT DISTINCT coupon_id FROM {$vouchers} WHERE usage_mode = 'balance' AND coupon_id IN (" . implode( ',', $chunk ) . ')' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+				$changed = self::publish_drafts( $valid ) || $changed;
 			}
 		}
 		delete_option( self::SUSPENDED_OPTION );
-		self::flush_coupon_cache();
+		$after = 0;
+		do {
+			$ids = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s AND post_id > %d ORDER BY post_id LIMIT 500", self::SUSPENDED_META, $after ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.SlowDBQuery
+			if ( ! $ids ) {
+				break;
+			}
+			$changed = self::publish_drafts( $ids ) || $changed;
+			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE post_id IN (" . implode( ',', $ids ) . ') AND meta_key = %s', self::SUSPENDED_META ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+			foreach ( $ids as $id ) {
+				wp_cache_delete( $id, 'post_meta' );
+			}
+			$after = (int) end( $ids );
+		} while ( 500 === count( $ids ) );
+		if ( $changed ) {
+			self::flush_coupon_cache();
+		}
+	}
+
+	/**
+	 * Publishes the given coupons that are drafts.
+	 *
+	 * @param int[] $ids Coupon ids.
+	 */
+	private static function publish_drafts( array $ids ): bool {
+		global $wpdb;
+		if ( ! $ids ) {
+			return false;
+		}
+		$wpdb->query( "UPDATE {$wpdb->posts} SET post_status = 'publish' WHERE ID IN (" . implode( ',', $ids ) . ") AND post_type = 'shop_coupon' AND post_status = 'draft'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+		foreach ( $ids as $id ) {
+			clean_post_cache( $id );
+		}
+		return true;
 	}
 
 	/**
 	 * Brings the schema of this site to VCAP_DB_VERSION. Runs on every request until the stored version matches,
 	 * but only one request at a time does the work (upgrade lock); the others carry on with the old schema.
-	 * A newer stored version (the plugin was downgraded) is never lowered: migrations would otherwise run twice
-	 * after the next update. Administrators see a notice instead.
+	 * The tables are created and verified once per upgrade (SCHEMA_STEP_OPTION; the new code needs them at once),
+	 * the data migrations then continue in batches without DDL – only in admin, cron and WP-CLI requests and the
+	 * Action Scheduler action MIGRATE_HOOK, which shop requests (front end, REST) queue instead of migrating. A newer stored version (the plugin was downgraded) is never lowered:
+	 * migrations would otherwise run twice after the next update. Administrators see a notice instead.
 	 */
 	public static function maybe_upgrade(): void {
 		$installed = (string) get_option( self::OPTION_DB_VERSION );
@@ -248,7 +424,15 @@ final class Install {
 			add_action( 'admin_notices', array( self::class, 'downgrade_notice' ) );
 			return;
 		}
-		if ( get_transient( 'vcap_schema_retry' ) || ! self::lock() ) {
+		if ( get_transient( 'vcap_schema_retry' ) ) {
+			return;
+		}
+		$background = self::background_context();
+		if ( '' !== $installed && ! $background && get_option( self::SCHEMA_STEP_OPTION ) === $installed . '>' . VCAP_DB_VERSION ) {
+			self::queue_migration(); // Tables are ready; the data migration continues in the background.
+			return;
+		}
+		if ( ! self::lock() ) {
 			return;
 		}
 		try {
@@ -257,29 +441,92 @@ final class Install {
 			if ( VCAP_DB_VERSION === $installed || ( '' !== $installed && version_compare( $installed, VCAP_DB_VERSION, '>' ) ) ) {
 				return;
 			}
-			if ( '' === $installed ) {
+			if ( '' === $installed && ! get_option( self::SCHEMA_ERROR_OPTION ) ) {
 				// Never activated on this site (a network-activated plugin on a new or not yet visited site).
 				self::unlock();
 				self::activate_site();
 				return;
 			}
+			// An upgrade, or a first installation whose tables could not be completed: only the schema is retried
+			// (no rewrite flush, no task or coupon restore on every attempt).
+			if ( ! self::upgrade_schema( $installed, '' === $installed || $background ) && '' !== $installed ) {
+				self::queue_migration();
+			}
+		} finally {
+			self::unlock();
+		}
+	}
+
+	/** Whether this request may do schema and migration work (admin, cron, Action Scheduler, WP-CLI). */
+	private static function background_context(): bool {
+		return is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI );
+	}
+
+	/** Has the upgrade continued by an Action Scheduler action (queued at most every five minutes). */
+	private static function queue_migration(): void {
+		if ( get_transient( 'vcap_migrate_queued' ) ) {
+			return;
+		}
+		$queue = static function (): void {
+			if ( function_exists( 'as_has_scheduled_action' ) && ! as_has_scheduled_action( self::MIGRATE_HOOK, array(), Delivery::GROUP ) ) {
+				as_enqueue_async_action( self::MIGRATE_HOOK, array(), Delivery::GROUP );
+			}
+			set_transient( 'vcap_migrate_queued', 1, 5 * MINUTE_IN_SECONDS );
+		};
+		// Action Scheduler accepts actions once its data store is initialised (init).
+		did_action( 'init' ) ? $queue() : add_action( 'init', $queue, 30 );
+	}
+
+	/** Action MIGRATE_HOOK: continues the upgrade; plans itself again (in a minute) while work is left. */
+	public static function run_queued_migration(): void {
+		delete_transient( 'vcap_migrate_queued' );
+		self::maybe_upgrade();
+		if ( VCAP_DB_VERSION !== self::stored_version() && ! get_transient( 'vcap_schema_retry' ) && function_exists( 'as_schedule_single_action' ) ) {
+			as_schedule_single_action( time() + MINUTE_IN_SECONDS, self::MIGRATE_HOOK, array(), Delivery::GROUP );
+			set_transient( 'vcap_migrate_queued', 1, 5 * MINUTE_IN_SECONDS );
+		}
+	}
+
+	/**
+	 * Schema work of an activation or upgrade (under the upgrade lock): tables created and verified once per
+	 * upgrade step, then the data migrations; the version is stored when both are complete.
+	 *
+	 * @param bool $migrate Whether this request runs the data migrations (not in shop requests).
+	 * @return bool Whether the schema is complete now.
+	 */
+	private static function upgrade_schema( string $installed, bool $migrate = true ): bool {
+		$step = $installed . '>' . VCAP_DB_VERSION;
+		if ( get_option( self::SCHEMA_STEP_OPTION ) !== $step ) {
 			self::create_tables();
 			self::add_caps();
 			self::ensure_upload_dir();
 			if ( ! get_option( 'vcap_secret' ) ) {
 				update_option( 'vcap_secret', wp_generate_password( 64, true, true ), false );
 			}
-			// A data migration that stopped after its time budget continues on the next request.
-			if ( self::run_migrations( $installed ) ) {
-				self::finish_schema();
-			} else {
-				self::note_incomplete_schema();
-			}
 			// Recurring tasks are checked again after an update (see Plugin::ensure_schedules()).
 			delete_option( self::SCHEDULES_OPTION );
-		} finally {
-			self::unlock();
+			$problems = self::verify_schema();
+			if ( $problems ) {
+				// Reported to administrators and retried in five minutes; the version stays, so nothing is skipped.
+				update_option( self::SCHEMA_ERROR_OPTION, implode( '; ', $problems ), false );
+				set_transient( 'vcap_schema_retry', 1, 5 * MINUTE_IN_SECONDS );
+				return false;
+			}
+			delete_option( self::SCHEMA_ERROR_OPTION );
+			update_option( self::SCHEMA_STEP_OPTION, $step, false );
 		}
+		// A data migration that stopped after its time budget continues on the next run.
+		$pending = '' !== $installed && array_filter( array_keys( self::MIGRATIONS ), static fn( $version ): bool => version_compare( $installed, (string) $version, '<' ) );
+		if ( ( $pending && ! $migrate ) || ! self::run_migrations( $installed ) ) {
+			return false;
+		}
+		$stored = self::stored_version();
+		if ( '' === $stored || version_compare( $stored, VCAP_DB_VERSION, '<' ) ) {
+			// Never lowered (downgrade), see maybe_upgrade().
+			update_option( self::OPTION_DB_VERSION, VCAP_DB_VERSION );
+		}
+		delete_option( self::SCHEMA_STEP_OPTION );
+		return true;
 	}
 
 	/**
@@ -356,16 +603,48 @@ final class Install {
 		) . '</p></div>';
 	}
 
-	public static function tables(): array {
+	/**
+	 * Table names of the current site (read on every call, never kept: switch_to_blog() changes the prefix).
+	 *
+	 * @param string|null $prefix Table prefix of another site (default: the current one).
+	 */
+	public static function tables( ?string $prefix = null ): array {
 		global $wpdb;
+		$prefix = $prefix ?? $wpdb->prefix;
 		return array(
-			'vouchers' => $wpdb->prefix . 'vcap_vouchers',
-			'events'   => $wpdb->prefix . 'vcap_events',
-			'pool'     => $wpdb->prefix . 'vcap_code_pool',
-			'redemptions' => $wpdb->prefix . 'vcap_redemptions',
-			'usage'       => $wpdb->prefix . 'vcap_promotion_usage',
-			'claims'      => $wpdb->prefix . 'vcap_claims',
+			'vouchers' => $prefix . 'vcap_vouchers',
+			'events'   => $prefix . 'vcap_events',
+			'pool'     => $prefix . 'vcap_code_pool',
+			'redemptions' => $prefix . 'vcap_redemptions',
+			'usage'       => $prefix . 'vcap_promotion_usage',
+			'claims'      => $prefix . 'vcap_claims',
 		);
+	}
+
+	/**
+	 * Multisite: a deleted site takes its voucher tables with it (filter "wpmu_drop_tables").
+	 *
+	 * @param string[] $tables  Tables WordPress drops.
+	 * @param int      $site_id Site being deleted.
+	 * @return string[]
+	 */
+	public static function drop_site_tables( $tables, $site_id = 0 ): array {
+		global $wpdb;
+		$tables = (array) $tables;
+		if ( (int) $site_id > 0 ) {
+			$tables = array_values( array_unique( array_merge( $tables, array_values( self::tables( $wpdb->get_blog_prefix( (int) $site_id ) ) ) ) ) );
+		}
+		return $tables;
+	}
+
+	/**
+	 * Name of a MySQL named lock (GET_LOCK) for this site: named locks are server-wide, so the database name and the
+	 * table prefix keep sites of a network and shops sharing a MySQL server apart. At most 64 characters.
+	 */
+	public static function lock_name( string $name ): string {
+		global $wpdb;
+		$scope = substr( md5( ( defined( 'DB_NAME' ) ? DB_NAME : '' ) . '|' . $wpdb->prefix ), 0, 12 );
+		return substr( 'vcap_' . $scope . '_' . $name, 0, 64 );
 	}
 
 	/**
@@ -390,7 +669,7 @@ final class Install {
 		$tables = self::tables();
 		foreach ( array( 'usage', 'claims' ) as $key ) {
 			if ( $tables[ $key ] !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $tables[ $key ] ) ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				return false; // Never switch to tables that could not be created (finish_schema() reports them).
+				return false; // Never switch to tables that could not be created (upgrade_schema() reports them).
 			}
 		}
 		// Also after a rollback to an older version, which wrote the old way again: read and move those rows.
@@ -432,6 +711,24 @@ final class Install {
 			}
 		} while ( microtime( true ) - $start < $budget );
 		return false;
+	}
+
+	/**
+	 * move_legacy_rows() for the daily maintenance: only under the upgrade lock, so it never runs alongside the
+	 * migration (rows moved twice would count promotion uses twice). Skipped while another request holds the lock.
+	 */
+	public static function move_legacy_rows_locked( float $budget ): bool {
+		if ( ! self::storage_ready() || ! self::legacy_rows() ) {
+			return true;
+		}
+		if ( ! self::lock() ) {
+			return true; // The request holding the lock moves them.
+		}
+		try {
+			return self::move_legacy_rows( $budget );
+		} finally {
+			self::unlock();
+		}
 	}
 
 	/** @return int Rows moved, -1 on a database error. */
@@ -509,12 +806,12 @@ final class Install {
 	 * checked again at most every ten minutes, so tables converted by hand are noticed.
 	 */
 	public static function tables_support_transactions(): bool {
-		if ( null !== self::$transactional_tables ) {
-			return self::$transactional_tables;
+		if ( isset( self::$transactional_tables[ get_current_blog_id() ] ) ) {
+			return self::$transactional_tables[ get_current_blog_id() ];
 		}
 		$stored = get_option( self::INNODB_OPTION );
 		if ( 'yes' === $stored || ( 'no' === $stored && get_transient( 'vcap_innodb_recheck' ) ) ) {
-			return self::$transactional_tables = 'yes' === $stored;
+			return self::$transactional_tables[ get_current_blog_id() ] = 'yes' === $stored;
 		}
 		return self::store_engine_state();
 	}
@@ -540,12 +837,12 @@ final class Install {
 		if ( ! $ok ) {
 			set_transient( 'vcap_innodb_recheck', 1, 10 * MINUTE_IN_SECONDS );
 		}
-		return self::$transactional_tables = $ok;
+		return self::$transactional_tables[ get_current_blog_id() ] = $ok;
 	}
 
 	private static function ensure_transactional_tables( array $tables ): void {
 		global $wpdb;
-		self::$transactional_tables = null;
+		unset( self::$transactional_tables[ get_current_blog_id() ] );
 		foreach ( array( 'vouchers', 'events', 'redemptions' ) as $key ) {
 			$engine = $wpdb->get_var(
 				$wpdb->prepare(
@@ -693,8 +990,8 @@ final class Install {
 	}
 
 	/**
-	 * Checks the installed schema against schema(): every table, column and unique key exists and the ledger
-	 * tables are InnoDB (transactions). Returns the problems found ([] = complete).
+	 * Checks the installed schema against schema(): every table, column, unique key and index exists and the
+	 * ledger tables are InnoDB (transactions). Returns the problems found ([] = complete).
 	 *
 	 * @return string[]
 	 */
@@ -714,48 +1011,18 @@ final class Install {
 				$problems[] = sprintf( 'column %s.%s is missing', $table, $missing );
 			}
 			$indexes = array_map( 'strtolower', array_unique( (array) $wpdb->get_col( "SHOW INDEX FROM {$table}", 2 ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			preg_match_all( '/UNIQUE KEY ([a-z_]+)/', $sql, $uniques );
-			foreach ( array_diff( $uniques[1], $indexes ) as $missing ) {
-				$problems[] = sprintf( 'unique key %s.%s is missing', $table, $missing );
+			preg_match_all( '/(UNIQUE )?KEY ([a-z_]+) \(/', $sql, $keys, PREG_SET_ORDER );
+			foreach ( $keys as $key ) {
+				if ( ! in_array( $key[2], $indexes, true ) ) {
+					$problems[] = sprintf( '' !== $key[1] ? 'unique key %s.%s is missing' : 'index %s.%s is missing', $table, $key[2] );
+				}
 			}
 		}
-		self::$transactional_tables = null;
+		unset( self::$transactional_tables[ get_current_blog_id() ] );
 		if ( ! self::store_engine_state() && ! $problems ) {
 			$problems[] = 'the voucher tables are not InnoDB (transactions unavailable)';
 		}
 		return $problems;
-	}
-
-	/**
-	 * Records the schema state: the version option is only set when the schema is complete, so a failed or
-	 * partial upgrade is retried (at most every five minutes) and shown to administrators.
-	 */
-	private static function finish_schema(): bool {
-		$problems = self::verify_schema();
-		if ( $problems ) {
-			update_option( self::SCHEMA_ERROR_OPTION, implode( '; ', $problems ), false );
-			set_transient( 'vcap_schema_retry', 1, 5 * MINUTE_IN_SECONDS );
-			return false;
-		}
-		delete_option( self::SCHEMA_ERROR_OPTION );
-		$installed = self::stored_version();
-		if ( '' === $installed || version_compare( $installed, VCAP_DB_VERSION, '<' ) ) {
-			// Never lowered (downgrade), see maybe_upgrade().
-			update_option( self::OPTION_DB_VERSION, VCAP_DB_VERSION );
-		}
-		return true;
-	}
-
-	/**
-	 * A migration stopped: a broken schema is reported and retried in five minutes; otherwise (time budget) the
-	 * next request simply continues.
-	 */
-	private static function note_incomplete_schema(): void {
-		$problems = self::verify_schema();
-		if ( $problems ) {
-			update_option( self::SCHEMA_ERROR_OPTION, implode( '; ', $problems ), false );
-			set_transient( 'vcap_schema_retry', 1, 5 * MINUTE_IN_SECONDS );
-		}
 	}
 
 	public static function add_caps(): void {

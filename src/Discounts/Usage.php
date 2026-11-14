@@ -341,15 +341,15 @@ final class Usage {
 		}
 	}
 
-	/** Named database lock per promotion (count + add must not interleave with another checkout). */
+	/** Named database lock per promotion (count + add must not interleave with another checkout); per site, see Install::lock_name(). */
 	private static function lock( int $id ): bool {
 		global $wpdb;
-		return 1 === (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 10)', 'vcap_usage_' . $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		return 1 === (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 10)', \VCAP\Install::lock_name( 'usage_' . $id ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	private static function unlock( int $id ): void {
 		global $wpdb;
-		$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', 'vcap_usage_' . $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', \VCAP\Install::lock_name( 'usage_' . $id ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	public function reverted_to_pending( $order_id, $from, $to ): void {
