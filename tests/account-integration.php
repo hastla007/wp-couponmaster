@@ -148,7 +148,7 @@ foreach ( $g8_keep as $g8_option => $g8_value ) {
 	false === $g8_value ? delete_option( $g8_option ) : update_option( $g8_option, $g8_value );
 }
 
-// F3: the gift card balance row in the cart totals is a labelled row (th scope="row", data-title), not a second total.
+// F3: the gift card balance in the cart totals is not a second total (since U2 a full-width note row).
 wc_load_cart();
 WC()->cart->empty_cart();
 $f3_goods = new WC_Product_Simple();
@@ -181,7 +181,8 @@ WC()->cart->apply_coupon( $f3_card->code );
 ob_start();
 vcap()->coupons->cart_balance_notice();
 $f3_row = (string) ob_get_clean();
-vcap_acct_assert( (bool) preg_match( '/<tr class="vcap-balance"><th scope="row">[^<]+<\/th><td data-title="[^"]+">/', $f3_row ), 'F3: the gift card balance row in the cart totals has th scope="row" and data-title' );
+// U2 turned the row into a full-width note that names the voucher and says what the amount means (no second total).
+vcap_acct_assert( (bool) preg_match( '/<tr class="vcap-balance"><td colspan="2"><small>[^<]*' . preg_quote( $f3_card->code, '/' ) . '[^<]*<\/small><\/td><\/tr>/i', $f3_row ) && ! str_contains( $f3_row, '<th' ), 'F3/U2: the gift card balance in the cart totals is one self-describing note row spanning the table, not a second total' );
 WC()->cart->empty_cart();
 $f3_single_coupon = new WC_Coupon();
 $f3_single_coupon->set_code( 'vcap-f3-single-' . strtolower( wp_generate_password( 8, false, false ) ) );
