@@ -5212,3 +5212,176 @@ msgstr "WooCommerce hat den Coupon eines Gutscheins für „%1$s“ abgelehnt: %
 
 msgid "a currency switcher"
 msgstr "ein Währungsumschalter"
+
+msgid "The camera only works on HTTPS pages. Open the scanner via https:// – or use the input field or a USB scanner."
+msgstr "Die Kamera funktioniert nur auf HTTPS-Seiten. Öffnen Sie den Scanner über https:// – oder nutzen Sie das Eingabefeld bzw. einen USB-Scanner."
+
+msgid "Camera access was denied. Allow the camera for this site in the browser settings – or use the input field or a USB scanner."
+msgstr "Der Kamerazugriff wurde verweigert. Erlauben Sie die Kamera für diese Seite in den Browser-Einstellungen – oder nutzen Sie das Eingabefeld bzw. einen USB-Scanner."
+
+msgid "Checking…"
+msgstr "Wird geprüft …"
+
+msgid "Result unclear: no answer from the server. The booking may have been made – query the code again before repeating it."
+msgstr "Ergebnis unklar: keine Antwort vom Server. Die Buchung kann erfolgt sein – fragen Sie den Code erneut ab, bevor Sie sie wiederholen."
+
+msgid "Query again"
+msgstr "Erneut abfragen"
+
+msgid "Reason for reverting this check-in (required):"
+msgstr "Grund für die Rücknahme des Check-ins (Pflicht):"
+
+msgid "Cancel this redemption"
+msgstr "Diese Einlösung stornieren"
+
+msgid "Reason for cancelling this redemption (required), e.g. wrong card or wrong amount:"
+msgstr "Grund für die Stornierung (Pflicht), z. B. falsche Karte oder falscher Betrag:"
+
+msgid "Nothing was changed: a reason is required."
+msgstr "Nichts geändert: Ein Grund ist erforderlich."
+
+msgid "Receipt no."
+msgstr "Beleg-Nr."
+
+msgid "Print"
+msgstr "Drucken"
+
+msgid "Till / branch of this device"
+msgstr "Kasse / Filiale dieses Geräts"
+
+msgid "Saved on this device and kept with every redemption."
+msgstr "Wird auf diesem Gerät gespeichert und bei jeder Einlösung vermerkt."
+
+msgid "Voucher marked as redeemed in the store."
+msgstr "Gutschein als im Laden eingelöst markiert."
+
+msgid "The voucher was not redeemed: it is no longer active."
+msgstr "Der Gutschein wurde nicht eingelöst: Er ist nicht mehr aktiv."
+
+msgid "Redemption cancelled; the value was booked back."
+msgstr "Einlösung storniert; der Wert wurde zurückgebucht."
+
+msgid "Mark as redeemed (store)"
+msgstr "Als eingelöst markieren (Laden)"
+
+msgid "Mark this voucher as redeemed in the store? It can then no longer be used; the redemption is recorded in the history and the redemption journal."
+msgstr "Diesen Gutschein als im Laden eingelöst markieren? Er kann dann nicht mehr verwendet werden; die Einlösung wird im Verlauf und im Einlösejournal festgehalten."
+
+msgid "Add %s to the remaining value? The change is recorded in the history."
+msgstr "%s zum Restwert hinzufügen? Die Änderung wird im Verlauf festgehalten."
+
+msgid "Cancel this redemption and book the value back to the voucher? This is recorded in the history and the redemption journal."
+msgstr "Diese Einlösung stornieren und den Wert auf den Gutschein zurückbuchen? Das wird im Verlauf und im Einlösejournal festgehalten."
+
+msgid "Cancel redemption"
+msgstr "Einlösung stornieren"
+
+msgid "You may lower remaining values but not raise them (this needs the right to increase balances). Nothing was changed."
+msgstr "Sie dürfen Restwerte senken, aber nicht erhöhen (dafür ist das Recht „Restwert erhöhen“ nötig). Es wurde nichts geändert."
+
+msgid "Marked as redeemed in the store by an admin"
+msgstr "Im Adminbereich als im Laden eingelöst markiert"
+
+msgid "Sending the tickets again (requested by the customer) failed:"
+msgstr "Erneutes Senden der Tickets (auf Kundenwunsch) fehlgeschlagen:"
+
+msgid "WP Pass Captain tickets could not be cancelled or a voucher could not be given back. The customer may hold valid tickets while the voucher is free again (or the other way round). Check these vouchers and their history:"
+msgstr "WP-Pass-Captain-Tickets konnten nicht storniert oder ein Gutschein nicht zurückgegeben werden. Möglicherweise sind die Tickets noch gültig, während der Gutschein wieder frei ist (oder umgekehrt). Prüfen Sie diese Gutscheine und ihren Verlauf:"
+
+msgid "Pass Captain tickets could not be cancelled – check them"
+msgstr "Pass-Captain-Tickets konnten nicht storniert werden – bitte prüfen"
+
+msgid "Voucher could not be given back after the tickets were cancelled – check it"
+msgstr "Gutschein konnte nach der Ticketstornierung nicht zurückgegeben werden – bitte prüfen"
+
+msgid "Voucher cashier"
+msgstr "Gutschein-Kasse"
+
+msgid "Reserved in an unpaid shop order"
+msgstr "In einer unbezahlten Shop-Bestellung reserviert"
+
+msgid "Reserved since"
+msgstr "Reserviert seit"
+
+msgid "Reserved until"
+msgstr "Reserviert bis"
+
+msgid "about %s, unless the order is paid"
+msgstr "ca. %s, sofern die Bestellung nicht bezahlt wird"
+
+msgid "Delivery planned for"
+msgstr "Zustellung geplant für"
+
+msgid "Last use"
+msgstr "Letzte Nutzung"
+
+msgid "Where"
+msgstr "Wo"
+
+msgid "Shop order #%s"
+msgstr "Shop-Bestellung #%s"
+
+msgid "Shop order"
+msgstr "Shop-Bestellung"
+
+msgid "External system"
+msgstr "Externes System"
+
+msgid "In store"
+msgstr "Im Laden"
+
+msgid "By"
+msgstr "Von"
+
+msgid "This check-in cannot be reverted here: only your own check-in can be reverted within a few minutes, and never for cancelled or expired tickets. Please ask a manager."
+msgstr "Dieser Check-in kann hier nicht zurückgenommen werden: Nur den eigenen Check-in können Sie innerhalb weniger Minuten zurücknehmen, nie bei stornierten oder abgelaufenen Tickets. Bitte wenden Sie sich an die Leitung."
+
+msgid "Please enter a reason for reverting this check-in."
+msgstr "Bitte geben Sie einen Grund für die Rücknahme des Check-ins an."
+
+msgid "This action was already booked (found in the voucher history). Do not repeat it."
+msgstr "Diese Aktion wurde bereits gebucht (im Gutscheinverlauf gefunden). Bitte nicht wiederholen."
+
+msgid "Receipt %s"
+msgstr "Beleg %s"
+
+msgid "Till %s"
+msgstr "Kasse %s"
+
+msgid "Please enter a reason for the cancellation."
+msgstr "Bitte geben Sie einen Grund für die Stornierung an."
+
+msgid "This redemption belongs to a shop order. Cancel or refund the order instead."
+msgstr "Diese Einlösung gehört zu einer Shop-Bestellung. Stornieren oder erstatten Sie stattdessen die Bestellung."
+
+msgid "This redemption has already been cancelled."
+msgstr "Diese Einlösung wurde bereits storniert."
+
+msgid "The voucher has been cancelled; its redemptions cannot be cancelled any more."
+msgstr "Der Gutschein wurde storniert; seine Einlösungen können nicht mehr storniert werden."
+
+msgid "Only a manager, or the person who booked it shortly before, can cancel this redemption."
+msgstr "Nur die Leitung oder die Person, die kurz zuvor gebucht hat, kann diese Einlösung stornieren."
+
+msgid "The voucher has been used again since then. Correct the balance instead."
+msgstr "Der Gutschein wurde seitdem erneut verwendet. Korrigieren Sie stattdessen den Restwert."
+
+msgid "The cancellation could not be saved. Please try again."
+msgstr "Die Stornierung konnte nicht gespeichert werden. Bitte versuchen Sie es erneut."
+
+msgid "This redemption cannot be cancelled."
+msgstr "Diese Einlösung kann nicht storniert werden."
+
+msgid "Cancels redemption #%1$d: %2$s"
+msgstr "Storniert Einlösung #%1$d: %2$s"
+
+msgid "Redemption cancelled: %s booked back."
+msgstr "Einlösung storniert: %s zurückgebucht."
+
+msgid "Checked in (%d admission)"
+msgid_plural "Checked in (%d admissions)"
+msgstr[0] "Eingecheckt (%d Einlass)"
+msgstr[1] "Eingecheckt (%d Einlässe)"
+
+msgid "Redemption cancelled (value booked back)"
+msgstr "Einlösung storniert (Wert zurückgebucht)"
