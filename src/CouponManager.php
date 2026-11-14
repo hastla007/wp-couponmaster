@@ -90,7 +90,8 @@ final class CouponManager {
 		$tx    = Install::tables_support_transactions() && false !== $wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		self::$syncing = true;
 		try {
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT balance, usage_mode, currency FROM {$table} WHERE id = %d" . ( $tx ? ' FOR UPDATE' : '' ), $voucher->id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$lock = $tx ? ' FOR UPDATE' : '';
+			$row  = $wpdb->get_row( $wpdb->prepare( "SELECT balance, usage_mode, currency FROM {$table} WHERE id = %d{$lock}", $voucher->id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$ok  = false;
 			if ( $row && 'balance' === $row['usage_mode'] ) {
 				// Read the coupon under the lock, past this request's cache (another process may have saved it).

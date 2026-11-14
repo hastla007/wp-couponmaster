@@ -431,7 +431,8 @@ $p8_img_design = array( 'page' => array( 'format' => 'A6', 'backgroundImageId' =
 check( 'Z10: an AVIF image is left out of the PDF instead of printing a broken-image frame', null === vcap()->pdf->image_path( 79, '' ) && ! str_contains( vcap()->pdf->html( $v, $p8_img_design ), '<img' ) && $png === vcap()->pdf->image_path( 77, '' ) );
 check( 'Z10: only JPEG, PNG, GIF (and WebP with GD support) can be chosen', array_slice( PdfRenderer::image_mimes(), 0, 3 ) === array( 'image/jpeg', 'image/png', 'image/gif' ) && ! in_array( 'image/avif', PdfRenderer::image_mimes(), true ) && str_contains( (string) file_get_contents( VCAP_PATH . 'assets/js/designer.js' ), 'library: { type: mimes }' ) );
 $p8_warn = TemplatePostType::design_warnings( $p8_img_design );
-check( 'Z10: the designer warns about the AVIF background and image', 2 === count( $p8_warn ) && str_contains( $p8_warn[1], 'Image "Photo" is of type avif' ), json_encode( $p8_warn ) );
+// getimagesize() names AVIF as image/avif on PHP 8.1; newer versions refuse the stub file, then the extension is shown.
+check( 'Z10: the designer warns about the AVIF background and image', 2 === count( $p8_warn ) && (bool) preg_match( '~Image "Photo" is of type (image/)?avif,~', $p8_warn[1] ), json_encode( $p8_warn ) );
 // C7: missing local files are reported; images of allowed hosts (offloaded media / CDN) are downloaded.
 $GLOBALS['vcap_test_attachments'][80] = $GLOBALS['vcap_test_uploads'] . '/2026/11/offloaded.png';
 $p8_warn = TemplatePostType::design_warnings( array( 'page' => array( 'format' => 'A6' ), 'elements' => array( array( 'type' => 'image', 'name' => 'Logo', 'imageId' => 80, 'src' => 'https://cdn.shop.test/2026/11/offloaded.png' ) ) ) );

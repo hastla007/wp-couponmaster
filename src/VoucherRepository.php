@@ -681,7 +681,8 @@ final class VoucherRepository {
 				return true;
 			}
 			$after = (int) end( $ids );
-			if ( false === $wpdb->query( "UPDATE {$this->events_table()} SET note = '[personal data removed]', actor_email_hash = '' WHERE id IN (" . implode( ',', $ids ) . ')' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+			$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+			if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$this->events_table()} SET note = '[personal data removed]', actor_email_hash = '' WHERE id IN ({$placeholders})", array_map( 'intval', $ids ) ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
 				return false;
 			}
 		} while ( count( $ids ) === 500 );
