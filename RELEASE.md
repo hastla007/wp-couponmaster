@@ -36,8 +36,8 @@ of that version is already in the release storage.
 ## Cutting a release
 
 1. Merge the release branch into `main`; CI (`Plugin smoke tests`) must be green, including the multisite,
-   minimum-versions, ecosystem, license-acceptance, Pass Captain and browser jobs. Tag only a commit that was pushed to
-   `main` (or another branch CI runs on): the release workflow checks exactly that commit.
+   minimum-versions, ecosystem, upgrade, license-acceptance, Pass Captain, quality-wide and browser jobs. Tag only a
+   commit on `main`: the release workflow refuses a tag whose commit is not on `main` and checks exactly that commit.
 2. Work through `RELEASE_CHECKLIST.md` (the manual checks).
 3. Bump the version in the three places above, rename `= Unreleased =` to `= X.Y.Z =` in `== Changelog ==` and in
    `== Upgrade Notice ==` (one or two sentences, at most 300 characters: what a shop must do after updating, or
@@ -55,16 +55,20 @@ of that version is already in the release storage.
    ```
 
    Before the first premium release and after every change of the licence server: the production licence server runs
-   WP License Captain with Ed25519 response signatures and the route `GET /wplc/v1/signing-keys` (branch
-   `claude/youthful-bardeen-7ejd7a`, commit 150fb17 or newer, merged and deployed) – the same commit the CI job
-   `license-acceptance` and the manifest step of the release workflow use.
-5. The `Release` workflow checks the version first (job `version`, see Changelog), then waits for the push run of `Plugin smoke tests` on the tagged commit (job `ci-green`,
-   up to about two hours) and stops unless it finished with *success*; no run, a failed or a cancelled run blocks the
-   release (re-run CI, then re-run the release workflow). It then builds the free and the premium ZIP twice each
+   WP License Captain with Ed25519 response signatures and the route `GET /wplc/v1/signing-keys` (commit 150fb17 or
+   newer, merged into WP License Captain's default branch and deployed) – the same commit the CI job
+   `license-acceptance` and the manifest step of the release workflow use (`tests/run.php` keeps both pins equal).
+   The release workflow stops while that commit is not merged into the server's default branch.
+5. The `Release` workflow checks the version first (job `version`, see Changelog), then that the tagged commit is
+   on `main` and waits for the push run of `Plugin smoke tests` on it (job `ci-green`, up to about two hours). It
+   stops unless the run finished with *success* **and every job of it** succeeded (or was skipped) – a job with
+   `continue-on-error` that failed counts as failed; only the report-only `plugin-check` gives a warning. No run, a
+   failed or a cancelled run blocks the release (re-run CI, then re-run the release workflow). It then builds the free and the premium ZIP twice each
    (identical SHA-256 required), checks that the premium ZIP pins the production licence server's current signing key
    (`bin/release-gate.sh keys`: `GET <VCAP_LICENSE_SERVER>/wp-json/wplc/v1/signing-keys`; a mismatch stops the release,
-   because every shop would reject the server and the update that could fix it) and creates a **draft** GitHub release with `voucher-captain.zip`, `voucher-captain-premium-X.Y.Z.zip`,
-   their `.sha256` files and the licence-manager manifest `voucher-captain-X.Y.Z.json` (made by WP License
+   because every shop would reject the server and the update that could fix it), refuses a WP License Captain commit
+   that is not merged, and creates a **draft** GitHub release with `voucher-captain.zip`, `voucher-captain-premium-X.Y.Z.zip`,
+   their `.sha256` files, a CycloneDX SBOM per ZIP (`*.cdx.json`, `bin/sbom.php`, SECURITY.md) and the licence-manager manifest `voucher-captain-X.Y.Z.json` (made by WP License
    Captain's `tools/create-release-manifest.php`: version, HTTPS package URL, SHA-256, required PHP/WordPress,
    tested WordPress, release notes). The package URL is the repository variable `WPLC_PACKAGE_BASE_URL` + the ZIP
    name; without the variable the workflow warns and leaves the manifest out. Review and publish the draft.
@@ -75,6 +79,11 @@ of that version is already in the release storage.
    `VCAP_UPDATE_URI`, default `<server>/voucher-captain`). A tag build without `VCAP_EDITION` fails, and the
    release workflow stops when the repository variable `VCAP_LICENSE_SERVER` is not set (a local premium build
    without it points to the placeholder `https://licenses.example.com`).
+   Release smoke, stage `activate` (workflow `Release smoke (production licence server)`, run by hand with the tag;
+   GitHub environment `release-smoke` with required reviewers, secret `VCAP_SMOKE_LICENSE_KEY` = a licence reserved
+   for the smoke test): installs the draft's premium ZIP on a throw-away shop, checks server, `Update URI` and pinned
+   key, activates it against the **production** licence server and releases the activation again. Do not publish
+   anything before it is green.
 6. Publish the premium release in the licence manager's release storage:
    - upload `voucher-captain-premium-X.Y.Z.zip` unchanged to the storage behind `WPLC_PACKAGE_BASE_URL` (immutable:
      never overwrite a published version);
@@ -85,7 +94,32 @@ of that version is already in the release storage.
    - check on a test shop: new installation from the storage URL (SHA-256 against the manifest), update of the
      previous version through the licence download grant. The CI job `license-acceptance` does exactly this on
      every push against a real WP License Captain server (two releases, wrong SHA-256 refused, real one installed).
+   - right after the upload run the release smoke, stage `update`: the previous published premium release is
+     activated against the production server, which must offer and install the new version through the download
+     grant (SHA-256 checked). Then publish the GitHub draft.
    Withdrawing a release = removing its manifest; shops on that version are offered the newest remaining one.
+
+### Emergency: a release that must not reach (more) shops
+
+- **Release smoke `update` fails, or problems reported right after publishing:** remove the manifest
+  `voucher-captain-X.Y.Z.json` from the manifest directory at once – the server stops offering X.Y.Z; shops that
+  already updated keep running. Leave the published ZIP in the storage (immutable), set the GitHub release back to
+  draft or mark it as such in its notes.
+- **Shops are locked out (wrong server or key in the build):** the update channel needs a valid server signature, so
+  a broken build cannot repair itself. Fix the cause, release X.Y.Z+1 and tell premium customers to install that ZIP
+  by hand (Plugins → Add New → Upload, "Replace current with uploaded"); their data and activation stay.
+- **Security fix:** follow SECURITY.md (advisory, reporting duties), release a patch version through the normal path;
+  the release smoke still runs.
+
+## Rollback (shops)
+
+A shop goes back to the previous version by installing the previous release ZIP over the current one (free: from the
+GitHub release, premium: the previous `voucher-captain-premium-X.Y.Z.zip`, which the licence server keeps). Take a
+database backup before every update – rollback details per schema version are in COMPATIBILITY.md → Updates,
+downgrades and rollback. Newer tables and columns are kept and ignored by the older version; a newer
+`vcap_db_version` is never lowered by 1.2.0 and later. Switching editions of the same version (free ↔ premium) needs no
+migration. The CI job `upgrade` checks each path with data on every push: last release → free ZIP and → premium ZIP,
+previous schema → current, free → premium of the same version, each followed by a rollback and the update again.
 
 ## Signing key rotation
 
@@ -109,11 +143,12 @@ server and cannot update itself. Keep a pinned next key in every release to avoi
 | Job | Scope | Configuration | Blocking |
 | --- | --- | --- | --- |
 | `quality` | `src/API/V1`, `src/Contracts` – PHPCS WordPress and WooCommerce-Core, PHPStan level 0 | `phpstan.neon.dist` | yes |
-| `quality-wide` | whole plugin (`voucher-captain.php`, `uninstall.php`, `config/`, `src/`, `templates/`) – PHPCS WordPress-Extra incl. `WordPress.WP.I18n` (text domain `voucher-captain`), `WordPress.Security.*`, prefix check; PHPStan level 1 | `phpcs.xml.dist`, `phpstan-wide.neon.dist` + `phpstan-baseline.neon` | no (report-only) |
-| `plugin-check` | installed release ZIP – WordPress Plugin Check (PCP), static and runtime checks | – | no (report-only) |
+| `quality-wide` | whole plugin (`voucher-captain.php`, `uninstall.php`, `config/`, `src/`, `templates/`) – PHPCS WordPress-Extra incl. `WordPress.WP.I18n` (text domain `voucher-captain`), `WordPress.Security.*`, prefix check; PHPStan level 1 | `phpcs.xml.dist`, `phpstan-wide.neon.dist` + `phpstan-baseline.neon` | `WordPress.Security.*`: yes (every finding); all other findings: must not grow against the base commit (ratchet), the full report is informational |
+| `plugin-check` | installed release ZIP of each edition (free, premium) – WordPress Plugin Check (PCP), static and runtime checks | – | no (report-only) |
 
-The wide scans were introduced on an existing code base and report its findings without turning CI red
-(`continue-on-error`). This is technical debt with a plan:
+The wide scans were introduced on an existing code base. Security findings block at once; the other findings are
+technical debt that may only shrink: the job counts the PHPCS and PHPStan findings of the commit and of its base (pull
+request base, or the previous commit of a push) and fails when either count grows. Plan:
 
 - **PHPCS**: `phpcs.xml.dist` excludes only formatting rules (alignment, Yoda conditions, doc-comment style, short
   ternaries – listed there as debt) and the PSR-4 file names. Security, I18n, deprecated-API and prefix sniffs are never
@@ -123,10 +158,10 @@ The wide scans were introduced on an existing code base and report its findings 
 - **PHPStan**: the job uploads a baseline of the current findings (`phpstan-baseline.generated.neon`). Review it and
   commit it as `phpstan-baseline.neon`; from then on every new finding is visible in the step "PHPStan level 1". Never
   add baseline entries by hand for new code.
-- **Plugin Check**: the result table is in the job summary and the artifact `plugin-check`. Errors there must be
+- **Plugin Check**: the result table is in the job summary and the artifacts `plugin-check-free` and `plugin-check-premium`. Errors there must be
   resolved (or documented as not applicable for a non-wordpress.org premium build) before a wordpress.org submission.
-- When a scan has no findings left (or only baselined ones), remove `continue-on-error` from its job so it gates
-  releases like the others.
+- When a scan has no findings left (or only baselined ones), make its whole report blocking. `plugin-check` keeps
+  `continue-on-error` until then; the release job `ci-green` lists its failures as a warning.
 
 ## Third-party licences
 

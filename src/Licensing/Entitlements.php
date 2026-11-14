@@ -98,7 +98,7 @@ final class Entitlements {
 			case 'topup':
 				return __( 'Gift card top-up', 'voucher-captain' );
 			case 'reports':
-				return __( 'Reports, liability and booking journal', 'voucher-captain' );
+				return __( 'Campaign and partner reports', 'voucher-captain' );
 			case 'passcaptain':
 				return __( 'WP Pass Captain integration (ticket vouchers, shared scanner)', 'voucher-captain' );
 		}

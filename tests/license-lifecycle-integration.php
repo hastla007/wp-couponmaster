@@ -128,11 +128,15 @@ if ( Entitlements::DEVELOPMENT !== $expect ) {
 	vcap_lc_assert( ! vcap_lc_hooked( 'vcap_product_settings_fields', TopUp::class, 'product_field' ) && ! vcap_lc_hooked( 'woocommerce_before_add_to_cart_button', TopUp::class, 'code_field' ), 'top-up product setting and code field are not registered' );
 	vcap_lc_assert( ! vcap_lc_hooked( 'vcap_account_vouchers_top', Referrals::class, 'account_block' ), 'the refer-a-friend block in My Account is not registered' );
 	vcap_lc_assert( ! vcap_lc_hooked( 'vcap_product_settings_fields', PassCaptainTickets::class, 'product_fields' ) && ! vcap_lc_hooked( 'vcap_scanner_lookup', VCAP\Compat\PassCaptainScanner::class, 'lookup' ), 'ticket-voucher product settings and the shared scanner are not registered' );
-	vcap_lc_assert( ! vcap_lc_hooked( 'admin_post_vcap_report_csv', VCAP\Admin\ReportsAdmin::class, 'export' ), 'the report export is not registered' );
 }
+// Reports: the accounting record of sold vouchers stays (outstanding value, journal and their CSV); only the
+// campaign and partner evaluation is locked (Plugin::boot() registers ReportsAdmin in every edition, admin only).
+vcap_lc_assert( VCAP\Admin\ReportsAdmin::locked( 'campaigns' ) && ! VCAP\Admin\ReportsAdmin::locked( 'liability' ) && ! VCAP\Admin\ReportsAdmin::locked( 'journal' ) && ! VCAP\Admin\ReportsAdmin::locked( 'reconcile' ), 'only the campaign report is locked; outstanding value, journal and reconciliation stay available' );
 if ( Entitlements::FREE === $expect ) {
 	vcap_lc_assert( ! vcap_lc_hooked( 'pre_set_site_transient_update_plugins', VCAP\Licensing\PremiumUpdater::class, 'inject_update' ) && false === has_action( Entitlements::REFRESH_HOOK ) && null === Entitlements::client(), 'free edition: no premium updater, no license refresh, no license server' );
 	vcap_lc_assert( str_contains( Entitlements::locked_message( 'promotions' ), 'Premium' ), 'free edition: locked features point to Voucher Captain Premium' );
+	$update_uri = (string) get_file_data( VCAP_FILE, array( 'uri' => 'Update URI' ) )['uri'];
+	vcap_lc_assert( '' !== $update_uri && ! preg_match( '#(^|//)(w\.org|wordpress\.org)(/|$)#i', $update_uri ), "free edition: header Update URI ({$update_uri}) keeps WordPress.org from offering a plugin of the same name as an update" );
 }
 
 /* ------------------------------------------------------------------ top-up */

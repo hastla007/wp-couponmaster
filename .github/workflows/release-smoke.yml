@@ -1,0 +1,137 @@
+name: Release smoke (production licence server)
+
+# Manual, gated check of a release draft against the PRODUCTION licence server (RELEASE.md step 6) – the one path no
+# other job covers: the premium ZIP exactly as shipped (production server, pinned keys, release tooling) activated
+# against the real server, and the previous premium release updated to it through the real update channel.
+#
+# Run it from the Actions tab with the tag of the draft:
+# 1. stage "activate" BEFORE publishing anything: installs the draft's premium ZIP and activates it with the smoke
+#    licence, then releases the activation again;
+# 2. stage "update" right after the ZIP and its manifest are in the release storage (RELEASE.md step 6): installs the
+#    previous published premium release, activates it and lets the server offer and install the new version.
+#    If this stage fails, follow RELEASE.md → Emergency: withdraw the manifest at once.
+#
+# Runs in the GitHub environment "release-smoke" (configure required reviewers there). Secrets and variables are
+# referenced by name only:
+#   secret   VCAP_SMOKE_LICENSE_KEY  a licence of the production server reserved for this smoke test (product
+#                                    voucher-captain, at least one free site, plan with premium rights)
+#   variable VCAP_LICENSE_SERVER     the production licence server (as for release.yml)
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag of the draft, e.g. v1.2.0
+        required: true
+        type: string
+      stage:
+        description: activate (before publishing) or update (after the upload to the release storage)
+        required: true
+        type: choice
+        options:
+          - activate
+          - update
+
+permissions:
+  contents: write  # read the release draft
+  actions: read
+
+concurrency:
+  group: release-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Release smoke (${{ inputs.stage }}) for ${{ inputs.tag }}
+    runs-on: ubuntu-latest
+    environment: release-smoke
+    services:
+      db:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --password=root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      TAG: ${{ inputs.tag }}
+      SERVER: ${{ vars.VCAP_LICENSE_SERVER }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Set up PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, gd, mbstring, mysqli, xml, zip
+          coverage: none
+      - name: Download the premium ZIPs (draft and previous release) and check their SHA-256
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::Tag '$TAG' is not vX.Y.Z."; exit 1; }
+          [ -n "$SERVER" ] || { echo "::error::Repository variable VCAP_LICENSE_SERVER is not set."; exit 1; }
+          version="${TAG#v}"
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/zips/new" "$RUNNER_TEMP/zips/previous"
+          gh release download "$TAG" --dir "$RUNNER_TEMP/zips/new" --pattern "voucher-captain-premium-${version}.zip" --pattern "voucher-captain-premium-${version}.zip.sha256"
+          ( cd "$RUNNER_TEMP/zips/new" && sha256sum -c "voucher-captain-premium-${version}.zip.sha256" )
+          if [ "${{ inputs.stage }}" = update ]; then
+            previous="$(gh release list --exclude-drafts --exclude-pre-releases --limit 50 --json tagName --jq '.[].tagName' | grep -vxF "$TAG" \
+              | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | awk -v v="$version" '{ split($0, a, "."); split(v, b, "."); if (a[1]*1000000+a[2]*1000+a[3] < b[1]*1000000+b[2]*1000+b[3]) last=$0 } END { print last }')"
+            if [ -z "$previous" ]; then
+              echo "::error::No earlier published release with a premium ZIP – the update stage needs one (first premium release: run only the activate stage and check the update by hand, RELEASE.md)."
+              exit 1
+            fi
+            if ! gh release download "v${previous}" --dir "$RUNNER_TEMP/zips/previous" --pattern "voucher-captain-premium-${previous}.zip" --pattern "voucher-captain-premium-${previous}.zip.sha256"; then
+              echo "::error::Release v${previous} has no premium ZIP (releases before 1.2.0 have none) – check the update of the first premium release by hand (RELEASE.md)."
+              exit 1
+            fi
+            ( cd "$RUNNER_TEMP/zips/previous" && sha256sum -c "voucher-captain-premium-${previous}.zip.sha256" )
+            echo "PREVIOUS=${previous}" >> "$GITHUB_ENV"
+          fi
+      - name: Download WP-CLI
+        run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
+      - name: Throw-away shop with WooCommerce
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          php wp-cli.phar core download --path=wp-test --version=7.1.4
+          printf "define( 'FS_METHOD', 'direct' );\n" | php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check --extra-php
+          # A unique, recognisable site address for the licence server's activation list.
+          $WP core install --url="https://release-smoke-${GITHUB_RUN_ID}.invalid" --title="Voucher Captain release smoke" --admin_user=admin --admin_password="$(openssl rand -hex 16)" --admin_email=ci@example.test --skip-email
+          $WP plugin install woocommerce --version=11.2.2 --activate
+      - name: Stage "activate" – the draft's premium ZIP against the production licence server
+        if: inputs.stage == 'activate'
+        env:
+          LICENSE_KEY: ${{ secrets.VCAP_SMOKE_LICENSE_KEY }}
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          T="$GITHUB_WORKSPACE/tests/release-smoke.php"
+          $WP plugin install "$RUNNER_TEMP/zips/new/voucher-captain-premium-${VERSION}.zip" --activate
+          $WP eval-file "$T" installed "$VERSION" "$SERVER"
+          ( umask 077 && printf '%s' "$LICENSE_KEY" > "$RUNNER_TEMP/license.key" )
+          $WP --user=admin eval-file "$T" activate "$RUNNER_TEMP/license.key"
+      - name: Stage "update" – previous premium release updated by the production licence server
+        if: inputs.stage == 'update'
+        env:
+          LICENSE_KEY: ${{ secrets.VCAP_SMOKE_LICENSE_KEY }}
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          T="$GITHUB_WORKSPACE/tests/release-smoke.php"
+          $WP plugin install "$RUNNER_TEMP/zips/previous/voucher-captain-premium-${PREVIOUS}.zip" --activate
+          $WP eval-file "$T" installed "$PREVIOUS" "$SERVER"
+          ( umask 077 && printf '%s' "$LICENSE_KEY" > "$RUNNER_TEMP/license.key" )
+          $WP --user=admin eval-file "$T" activate "$RUNNER_TEMP/license.key"
+          $WP --user=admin eval-file "$T" update "$VERSION"
+      - name: Release the smoke activation on the licence server
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/license.key"
+          if [ -d wp-test/wp-content/plugins/voucher-captain ]; then
+            php wp-cli.phar --path=wp-test --user=admin eval-file "$GITHUB_WORKSPACE/tests/release-smoke.php" deactivate
+          fi

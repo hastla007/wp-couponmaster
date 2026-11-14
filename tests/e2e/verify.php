@@ -27,3 +27,16 @@ foreach ( array( 'classic' => 'e2e-classic@example.test', 'block' => 'e2e-block@
 	}
 	echo "PASS: {$flow} checkout issued voucher {$vouchers[0]->code} for {$expected} (order status {$order->get_status()}).\n";
 }
+
+// Block checkout paid partly with a gift card after tax (03-block-checkout.spec.js, vcap_mpv_after_tax=yes): goods
+// 30, card 20 as an untaxed payment line, 10 left for the gateway.
+$orders = wc_get_orders( array( 'billing_email' => 'e2e-block-giftcard@example.test', 'limit' => 1, 'orderby' => 'date', 'order' => 'DESC' ) );
+$state  = json_decode( (string) file_get_contents( __DIR__ . '/.state.json' ), true );
+if ( ! $orders ) {
+	throw new RuntimeException( 'FAIL: no block checkout order paid with the gift card found.' );
+}
+$paid = VCAP\PaymentVouchers::paid_amount( $orders[0], (string) $state['gift_card'] );
+if ( abs( 10.0 - (float) $orders[0]->get_total() ) > 0.001 || null === $paid || abs( 20.0 - $paid ) > 0.001 ) {
+	throw new RuntimeException( 'FAIL: the gift card order should total 10 with a payment line of 20, got total ' . $orders[0]->get_total() . ' and payment ' . wp_json_encode( $paid ) . '.' );
+}
+echo "PASS: block checkout with the gift card: payment line 20, order total 10.\n";

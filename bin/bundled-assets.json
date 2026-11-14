@@ -1,0 +1,14 @@
+[
+	{
+		"name": "jsqr",
+		"title": "jsQR",
+		"version": "1.4.0",
+		"ecosystem": "npm",
+		"path": "assets/vendor/jsqr/jsQR.js",
+		"license": "Apache-2.0",
+		"license_file": "assets/vendor/jsqr/LICENSE",
+		"source": "https://github.com/cozmo/jsQR",
+		"sha256": "bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859",
+		"used_by": "QR fallback of the admin scanner"
+	}
+]

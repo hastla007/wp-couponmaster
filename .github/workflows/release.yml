@@ -1,11 +1,14 @@
 name: Release
 
 # Pushing a tag vX.Y.Z (see RELEASE.md) builds the release ZIPs reproducibly (free and premium edition) – but only
-# after the CI workflow "Plugin smoke tests" finished green on exactly the tagged commit (job ci-green) and the version
+# for a commit on main after the CI workflow "Plugin smoke tests" finished with every blocking job green on exactly
+# the tagged commit (job ci-green) and the version
 # gate passed (job version: tag = plugin version, changelog and upgrade notice for it, no "= Unreleased =" left,
 # newer than the last release tag). After building it checks that the premium ZIP pins the production licence
 # server's current signing key, creates the licence-manager manifest of the premium ZIP (SHA-256, requirements,
-# release notes) with WP License Captain's own tool and publishes everything as a GitHub release draft.
+# release notes) with WP License Captain's own tool and a CycloneDX SBOM per ZIP, and publishes everything as a GitHub
+# release draft. The release smoke against the production licence server (workflow release-smoke.yml) must pass
+# before the draft is published (RELEASE.md step 6).
 on:
   push:
     tags:
@@ -53,12 +56,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
-      - name: Wait for "Plugin smoke tests" on ${{ github.sha }} and require success
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: The tagged commit is on main
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          # Releases come from main only (RELEASE.md step 1), never from a work branch that CI also runs on.
+          git fetch --quiet origin main
+          if ! git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "::error::The tagged commit ${SHA} is not on main. Merge the release branch into main, wait for CI and tag the merged commit (RELEASE.md)."
+            exit 1
+          fi
+          echo "${SHA} is on main."
+      - name: Wait for "Plugin smoke tests" on ${{ github.sha }} and require every job green
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
+          # Jobs that may fail without blocking a release (continue-on-error in plugin-smoke.yml, RELEASE.md →
+          # Static analysis). Every other job must end with success (or be skipped).
+          REPORT_ONLY: plugin-check
         run: |
+          # The run conclusion alone is not enough: a job with continue-on-error fails while the run is "success".
           # A run must appear within 15 minutes and complete within 140 minutes.
           start="$(date +%s)"
           while :; do
@@ -75,7 +96,26 @@ jobs:
               IFS=$'\t' read -r id status conclusion url <<< "$run"
               if [ "$status" = "completed" ]; then
                 if [ "$conclusion" = "success" ]; then
-                  echo "CI run ${id} for ${SHA} is green: ${url}"
+                  # Every job of the run (matrix entries included): name and conclusion.
+                  jobs="$(gh api --paginate "repos/${REPO}/actions/runs/${id}/jobs?per_page=100" --jq '.jobs[] | [.name, (.conclusion // "none")] | @tsv')"
+                  red=""
+                  while IFS=$'\t' read -r job result; do
+                    [ -n "$job" ] || continue
+                    case "$result" in success|skipped) continue ;; esac
+                    base="${job%% (*}"
+                    case " ${REPORT_ONLY} " in
+                      *" ${base} "*)
+                        echo "::warning::Report-only job '${job}' ended with '${result}' – review it before publishing (RELEASE_CHECKLIST.md)."
+                        continue
+                        ;;
+                    esac
+                    red="${red}${job} (${result}); "
+                  done <<< "$jobs"
+                  if [ -n "$red" ]; then
+                    echo "::error::CI run ${id} for ${SHA} is 'success', but these jobs are not: ${red}${url}"
+                    exit 1
+                  fi
+                  echo "CI run ${id} for ${SHA} is green, every blocking job succeeded: ${url}"
                   exit 0
                 fi
                 echo "::error::CI run ${id} for ${SHA} ended with '${conclusion}': ${url}. Fix (or re-run) it, then re-run this release workflow."
@@ -99,10 +139,26 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: hastla007/wp-license
-          # Same commit as the CI job license-acceptance (plugin-smoke.yml): the manifest tool that was tested. The
-          # production licence server must run this version or newer (Ed25519 signatures, GET /wplc/v1/signing-keys).
+          # Same commit as the CI job license-acceptance (plugin-smoke.yml; tests/run.php checks both are equal): the
+          # manifest tool that was tested. The production licence server must run this version or newer (Ed25519
+          # signatures, GET /wplc/v1/signing-keys).
           ref: 150fb177d88dfed9537d6cb1f62550987fa4349e
           path: wp-license
+          fetch-depth: 0
+      - name: The tested licence server commit is merged into WP License Captain's default branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A release must not depend on an unmerged server branch: the production server is deployed from the default
+          # branch, and an older server without Ed25519 signatures would make every premium activation fail.
+          ref="$(git -C wp-license rev-parse HEAD)"
+          branch="$(gh api repos/hastla007/wp-license --jq .default_branch)"
+          git -C wp-license fetch --quiet origin "$branch"
+          if ! git -C wp-license merge-base --is-ancestor "$ref" FETCH_HEAD; then
+            echo "::error::WP License Captain ${ref} (pinned in release.yml and plugin-smoke.yml) is not merged into hastla007/wp-license ${branch}. Merge and deploy it on the production licence server first (RELEASE_CHECKLIST.md)."
+            exit 1
+          fi
+          echo "WP License Captain ${ref} is part of ${branch}."
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -132,6 +188,9 @@ jobs:
             name="voucher-captain$( [ "$edition" = premium ] && echo "-premium-${version}" ).zip"
             cp build/voucher-captain.zip "dist/${name}"
             ( cd dist && sha256sum "${name}" > "${name}.sha256" )
+            # Software bill of materials of exactly this ZIP (CycloneDX JSON, SECURITY.md): Composer packages and
+            # bundled libraries such as jsQR, same timestamp as the ZIP.
+            SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" php bin/sbom.php build/voucher-captain "dist/${name%.zip}.cdx.json"
           done
           # Release notes: the "= X.Y.Z =" section of "== Changelog ==" only (not the Upgrade Notice).
           awk -v v="= ${version} =" '/^== /{sec=$0; f=0; next} sec=="== Changelog ==" && $0==v{f=1; next} /^=/{f=0} f' readme.txt > dist/notes.md
@@ -165,5 +224,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version="${GITHUB_REF_NAME#v}"
-          gh release create "${GITHUB_REF_NAME}" dist/*.zip dist/*.sha256 $(ls dist/*.json 2>/dev/null) \
+          gh release create "${GITHUB_REF_NAME}" dist/*.zip dist/*.sha256 dist/*.cdx.json $(ls dist/voucher-captain-[0-9]*.json 2>/dev/null) \
             --draft --title "Voucher Captain ${version}" --notes-file dist/notes.md

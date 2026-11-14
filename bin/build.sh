@@ -33,7 +33,7 @@ cp -R "$ROOT/assets" "$ROOT/config" "$ROOT/languages" "$ROOT/src" "$ROOT/templat
 cp "$ROOT/voucher-captain.php" "$ROOT/uninstall.php" "$ROOT/readme.txt" "$ROOT/wpml-config.xml" "$ROOT/LICENSE" "$ROOT/composer.json" "$ROOT/composer.lock" "$DEST/"
 # Edition (LICENSING.md):
 #   VCAP_EDITION=free     premium features permanently locked (sold goods keep being processed), no license page,
-#                         no premium updater;
+#                         no premium updater; plugin header "Update URI" (VCAP_FREE_UPDATE_URI, default false);
 #   VCAP_EDITION=premium  premium features need an active WP License Captain license (fail-closed); the license
 #                         server is fixed: VCAP_LICENSE_SERVER (https://host, placeholder https://licenses.example.com)
 #                         and the plugin header "Update URI" (VCAP_UPDATE_URI, default <server>/voucher-captain);
@@ -57,6 +57,16 @@ esac
 if [ "$EDITION" = "free" ]; then
 	sed -i "s/^define( 'VCAP_VERSION', .*/&\ndefine( 'VCAP_EDITION', 'free' );/" "$DEST/voucher-captain.php"
 	grep -q "define( 'VCAP_EDITION', 'free' );" "$DEST/voucher-captain.php" || { echo "Free edition flag missing" >&2; exit 1; }
+	# "Update URI" also in the free build: WordPress (5.8+) then never offers a WordPress.org plugin of the same name as
+	# an update. VCAP_FREE_UPDATE_URI (optional): "false" (default, the value WordPress documents for "no updates from
+	# WordPress.org") or an https URL of the vendor; the free build installs no update handler of its own.
+	FREE_UPDATE_URI="${VCAP_FREE_UPDATE_URI:-false}"
+	if [ "$FREE_UPDATE_URI" != "false" ] && ! printf '%s' "$FREE_UPDATE_URI" | grep -qE '^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?$'; then
+		echo "VCAP_FREE_UPDATE_URI must be 'false' or an https URL, got '$FREE_UPDATE_URI'." >&2
+		exit 1
+	fi
+	sed -i "s|^ \* License URI: .*|&\n * Update URI:        $FREE_UPDATE_URI|" "$DEST/voucher-captain.php"
+	grep -q "^ \* Update URI: " "$DEST/voucher-captain.php" || { echo "Update URI header missing" >&2; exit 1; }
 elif [ "$EDITION" = "premium" ]; then
 	SERVER="${VCAP_LICENSE_SERVER:-https://licenses.example.com}"
 	SERVER="${SERVER%/}"

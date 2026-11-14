@@ -10,7 +10,7 @@ Voucher Captain integrates the signed WP License Captain client (PRs #10–#13, 
 
 | Edition | Build | Premium features | License page / updater |
 |---|---|---|---|
-| **free** | `VCAP_EDITION=free bin/build.sh` → `define( 'VCAP_EDITION', 'free' )` | permanently locked for new configuration, new sales and customer screens; hint "included in Voucher Captain Premium" | none; no contact with any license server |
+| **free** | `VCAP_EDITION=free bin/build.sh` → `define( 'VCAP_EDITION', 'free' )` | permanently locked for new configuration, new sales and customer screens; hint "included in Voucher Captain Premium" | none; no contact with any license server; header `Update URI: false` (`VCAP_FREE_UPDATE_URI` sets a vendor URL instead), so no WordPress.org plugin of the same name is offered as an update |
 | **premium** | `VCAP_EDITION=premium VCAP_LICENSE_SERVER=https://licenses.example.com bin/build.sh` → `VCAP_EDITION 'premium'`, `VCAP_LICENSE_REQUIRED`, `VCAP_LICENSE_SERVER`, header `Update URI` | on while the license grants them (fail-closed); hint "needs an active license" + link | Vouchers → License; updates only from the license server |
 | **development** | no `VCAP_EDITION` (git checkout, CI integration jobs) | all on | none |
 
@@ -33,7 +33,7 @@ sold earlier is a legal obligation and keeps being processed:
 | topup | product setting, code field, add to cart; top-up products are not purchasable | booking of paid top-up lines onto the card (never a new card), reversal on cancellation/refund, ledger labels |
 | referrals | My Account block, `[vcap_referral]`/block, settings; referral codes are refused | rewards for orders that already used a code, withdrawal on cancellation/refund, retry hook |
 | promotions | no promotion added to carts, no new bonus voucher, settings read-only, notice on the promotions screen | coupon type `vcap_campaign`/virtual coupon (orders keep their discount when recalculated), usage holds/records/reverts, release of abandoned holds, bonus withdrawal |
-| reports | Reports page shows the hint, CSV export answers with the hint | – |
+| reports | campaign and partner report (tab "Campaigns and codes" shows the hint, its CSV export answers with the hint) | outstanding value at a date, redemption journal, Pass Captain reconciliation and their CSV exports – the accounting record of sold vouchers (year-end closing) is never locked |
 | passcaptain | ticket-voucher product settings, capacity checks, new ticket-voucher sales (not purchasable), shared scanner | voucher provider for the Pass Captain checkout (quote/reserve/commit/release/refund), channel `passcaptain`, ticket exchange (redeem page, admin, account), revocation, emails/placeholders |
 
 Tests: `tests/license-lifecycle-integration.php` (development build with the test lock, free ZIP, premium ZIP before

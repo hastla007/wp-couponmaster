@@ -12,4 +12,6 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// 'reports' locks the campaign and partner evaluation only: the outstanding value and the redemption journal (with
+// their CSV) are the accounting record of sold vouchers and stay available in every edition.
 return array( 'promotions', 'referrals', 'topup', 'reports', 'passcaptain' );

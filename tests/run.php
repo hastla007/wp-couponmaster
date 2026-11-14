@@ -989,6 +989,30 @@ foreach ( preg_split( "/\n\s*\n/", (string) @file_get_contents( $pot_file ) ) as
 	}
 }
 check( 'every text with placeholders has a translators comment, and no comment sits on a text without one', 0 === $pot_status && ! $uncommented && ! $misplaced, implode( ' | ', array_slice( array_merge( $uncommented, $misplaced ), 0, 5 ) ) );
+echo "Release tooling (workflows, SBOM, bundled libraries)\n";
+$root     = dirname( __DIR__ );
+$smoke_yml = (string) file_get_contents( "$root/.github/workflows/plugin-smoke.yml" );
+$release_yml = (string) file_get_contents( "$root/.github/workflows/release.yml" );
+$wplc_ref = static fn( string $yml ): array => preg_match_all( '/repository: hastla007\/wp-license\s*\n(?:\s*#[^\n]*\n)*\s*ref: ([0-9a-f]{40})/', $yml, $m ) ? array_unique( $m[1] ) : array();
+check( 'release.yml builds the manifest with the WP License Captain commit the CI job license-acceptance tested', 1 === count( $wplc_ref( $smoke_yml ) ) && $wplc_ref( $smoke_yml ) === $wplc_ref( $release_yml ), json_encode( array( $wplc_ref( $smoke_yml ), $wplc_ref( $release_yml ) ) ) );
+check( 'release.yml refuses a tag that is not on main and a licence server commit that is not merged', str_contains( $release_yml, 'merge-base --is-ancestor "$SHA" origin/main' ) && str_contains( $release_yml, 'merge-base --is-ancestor "$ref" FETCH_HEAD' ) );
+check( 'ci-green checks every job of the CI run, not only the run conclusion', str_contains( $release_yml, 'actions/runs/${id}/jobs' ) && str_contains( $release_yml, 'REPORT_ONLY: plugin-check' ) );
+check( 'only the Pass Captain work branch may be skipped; the pinned release and main must be downloaded', (bool) preg_match( '/pass_captain_ref: v\d+\.\d+\.\d+\s*\n\s*archive: [0-9a-f]{40}\s*\n\s*required: true/', $smoke_yml ) && (bool) preg_match( '/pass_captain_ref: main\s*\n\s*archive: refs\/heads\/main\s*\n\s*required: true/', $smoke_yml ) && str_contains( $smoke_yml, 'if [ "${{ matrix.required }}" = "true" ]; then' ) );
+check( 'quality-wide blocks on WordPress.Security findings and on growing findings (no continue-on-error)', (bool) preg_match( '/\n  quality-wide:\n(?:(?!\n  [a-z-]+:\n).)*WordPress\.Security\.EscapeOutput(?:(?!\n  [a-z-]+:\n).)*Findings must not grow/s', $smoke_yml ) && ! preg_match( '/\n  quality-wide:\n(?:(?!\n  [a-z-]+:\n).)*continue-on-error/s', $smoke_yml ) );
+$smoke_release = (string) file_get_contents( "$root/.github/workflows/release-smoke.yml" );
+check( 'the release smoke against the production licence server is manual, gated by an environment, key only from a secret', str_contains( $smoke_release, "on:\n  workflow_dispatch:" ) && ! preg_match( '/^\s+(push|pull_request|schedule):/m', $smoke_release ) && str_contains( $smoke_release, 'environment: release-smoke' ) && str_contains( $smoke_release, '${{ secrets.VCAP_SMOKE_LICENSE_KEY }}' ) && str_contains( $smoke_release, 'if: always()' ) && is_file( "$root/tests/release-smoke.php" ) );
+$bundled = json_decode( (string) file_get_contents( "$root/bin/bundled-assets.json" ), true );
+$jsqr    = is_array( $bundled ) ? current( array_filter( $bundled, static fn( $a ) => 'jsqr' === $a['name'] ) ) : null;
+check( 'bin/bundled-assets.json records the shipped jsQR file (SHA-256) – a replaced file needs a new version entry', $jsqr && hash_file( 'sha256', "$root/{$jsqr['path']}" ) === $jsqr['sha256'] );
+check( 'the scanner enqueues jsQR with the version recorded for the SBOM and the vulnerability check', $jsqr && str_contains( (string) file_get_contents( "$root/src/Admin/Scanner.php" ), "'assets/vendor/jsqr/jsQR.js', array(), '{$jsqr['version']}'" ) );
+$sbom_file = $out . '/sbom.cdx.json';
+@unlink( $sbom_file );
+shell_exec( 'SOURCE_DATE_EPOCH=1700000000 ' . escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( "$root/bin/sbom.php" ) . ' ' . escapeshellarg( $root ) . ' ' . escapeshellarg( $sbom_file ) . ' 2>&1' );
+$sbom  = is_file( $sbom_file ) ? json_decode( (string) file_get_contents( $sbom_file ), true ) : null;
+$purls = is_array( $sbom ) ? array_column( $sbom['components'], 'purl' ) : array();
+check( 'SBOM: CycloneDX 1.5 with the plugin, its Composer packages and jsQR (npm purl with SHA-256)', is_array( $sbom ) && 'CycloneDX' === $sbom['bomFormat'] && '1.5' === $sbom['specVersion'] && ( preg_match( '/^ \* Version:\s*(\S+)/m', (string) file_get_contents( "$root/voucher-captain.php" ), $vm ) ? $vm[1] : '?' ) === $sbom['metadata']['component']['version'] && in_array( 'pkg:npm/jsqr@1.4.0', $purls, true ) && (bool) preg_grep( '#^pkg:composer/dompdf/dompdf@#', $purls ) && ! preg_grep( '#phpstan|php-stubs#', $purls ), json_encode( $purls ) );
+$sbom_again = (string) shell_exec( 'SOURCE_DATE_EPOCH=1700000000 ' . escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( "$root/bin/sbom.php" ) . ' ' . escapeshellarg( $root ) . ' 2>&1' );
+check( 'SBOM is reproducible (same sources and SOURCE_DATE_EPOCH, same file and serial number)', is_file( $sbom_file ) && file_get_contents( $sbom_file ) === $sbom_again );
 
 echo "Editions (constants set by bin/build.sh)\n";
 // Premium build in a child process (constants cannot be undone here): no filter unlocks anything.
@@ -1019,6 +1043,9 @@ check( 'free build: all five premium features are locked', array( 'promotions', 
 add_filter( 'vcap_license_required', '__return_true' );
 check( 'free build: features outside the premium list are never locked', VCAP\Licensing\Entitlements::allows( 'store_credit' ) );
 check( 'free build: the lock names the premium edition', str_contains( VCAP\Licensing\Entitlements::locked_message( 'topup' ), 'included in Voucher Captain Premium' ) );
+check( 'free build: outstanding value, redemption journal and reconciliation stay available, only the campaign report is locked', VCAP\Admin\ReportsAdmin::locked( 'campaigns' ) && ! VCAP\Admin\ReportsAdmin::locked( 'liability' ) && ! VCAP\Admin\ReportsAdmin::locked( 'journal' ) && ! VCAP\Admin\ReportsAdmin::locked( 'reconcile' ) );
+$plugin_src = (string) file_get_contents( dirname( __DIR__ ) . '/src/Plugin.php' );
+check( 'every edition registers the report export (liability and journal CSV are the accounting record of sold vouchers)', (bool) preg_match( '/if \( is_admin\(\) \) \{.*?\n\t\t\t\( new Admin\\\\ReportsAdmin\(\) \)->register\(\);/s', $plugin_src ) && ! str_contains( $plugin_src, "allows( 'reports' )" ) );
 
 echo "Lifecycle and multisite (deactivation, upgrade, site tables)\n";
 /** Records the queries of the code under test; $answers maps a query pattern (regex) to its result. */

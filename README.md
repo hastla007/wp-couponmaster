@@ -2,7 +2,18 @@
 
 WooCommerce-Plugin für personalisierte **PDF-Gutscheine, Geschenkkarten, Guthaben und Rabattcodes**. Voucher Captain verwaltet Gutscheine und Gutschein-Einlösungen. Die Eventverwaltung, Ticketkontingente, Sitzplätze, Eventbestellungen und der Einlass gehören zu [WP Pass Captain](https://github.com/hastla007/wp-passmaster). Beide Plugins bleiben eigenständig; sind beide aktiv, verbindet sie ein versionierter Vertrag: Gutscheine und Geschenkkarten bezahlen Tickets in der Pass-Captain-Kasse, Ticketgutscheine werden gegen Tickets getauscht, der gemeinsame Scanner prüft beides ([API.md](API.md), [CONNECTORS.md](CONNECTORS.md)). Code, Namen und Gestaltung sind eigenständig.
 
-**Editionen.** Free- und Premium-Edition entstehen aus demselben Code (`bin/build.sh`, `VCAP_EDITION=premium`). In der Premium-Edition brauchen Aktionen/Bonusgutscheine, Freunde werben, Aufladung, Auswertungen und die WP-Pass-Captain-Anbindung eine aktive Lizenz über WP License Captain ([LICENSING.md](LICENSING.md)); Updates kommen dann vom Lizenzserver. Welche Funktionen endgültig Premium sind, entscheidet der Betreiber noch (`config/premium-features.php`).
+**Editionen.** Free- und Premium-Edition entstehen aus demselben Code (`bin/build.sh`, `VCAP_EDITION=free|premium`, Liste in `config/premium-features.php`, Details in [LICENSING.md](LICENSING.md)). Premium-Updates kommen vom Lizenzserver; auch die Free-Edition trägt einen `Update URI`-Header (Standard `false`, `VCAP_FREE_UPDATE_URI`), damit WordPress nie ein gleichnamiges wordpress.org-Plugin als Update anbietet.
+
+| Funktion | Free | Premium (aktive Lizenz) |
+|---|---|---|
+| PDF-Gutscheine, Designer, Personalisierung, Zustellung, Geschenkkarten mit Restwert, Kundenguthaben, Scanner, Code-Import und Code-Kampagnen, Einlöse-API, Steuerbehandlung | ja | ja |
+| Offener Gutscheinwert zum Stichtag, Einlösejournal (mit CSV), Pass-Captain-Abgleich | ja | ja |
+| Bezahlen mit Gutscheinen und Geschenkkarten in der WP-Pass-Captain-Kasse | ja | ja |
+| Aktionen und Bonusgutscheine, Freunde werben, Aufladung von Geschenkkarten | – | ja |
+| Auswertung nach Kampagnen und Partnern | – | ja |
+| Ticketgutscheine und gemeinsamer Scanner mit WP Pass Captain | – | ja |
+
+Ohne aktive Lizenz wird Verkauftes weiter abgewickelt (Einlösung, Erstattung, Rückbuchung von Aufladungen, Prämien und Bonusgutscheinen). Bestandskunden von 1.1.0 auf der Free-Edition: laufende Aktionen greifen nicht mehr, bereits verteilte Empfehlungscodes werden abgelehnt (Prämien für Bestellungen, die schon einen Code genutzt haben, werden weiter gutgeschrieben bzw. zurückgenommen), Aufladeprodukte sind nicht mehr kaufbar.
 
 ## Funktionen
 
