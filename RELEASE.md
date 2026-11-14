@@ -137,7 +137,7 @@ server and cannot update itself. Keep a pinned next key in every release to avoi
 | --- | --- | --- | --- |
 | `quality` | `src/API/V1`, `src/Contracts` – PHPCS WordPress and WooCommerce-Core, PHPStan level 0 | `phpstan.neon.dist` | yes |
 | `quality-wide` | whole plugin (`voucher-captain.php`, `uninstall.php`, `config/`, `src/`, `templates/`) – PHPCS WordPress-Extra incl. `WordPress.WP.I18n` (text domain `voucher-captain`), `WordPress.Security.*`, prefix check; PHPStan level 1 | `phpcs.xml.dist`, `phpstan-wide.neon.dist` + `phpstan-baseline.neon` | `WordPress.Security.*`: yes (every finding); all other findings: must not grow against the base commit (ratchet), the full report is informational |
-| `plugin-check` | installed release ZIP – WordPress Plugin Check (PCP), static and runtime checks | – | no (report-only) |
+| `plugin-check` | installed release ZIP of each edition (free, premium) – WordPress Plugin Check (PCP), static and runtime checks | – | no (report-only) |
 
 The wide scans were introduced on an existing code base. Security findings block at once; the other findings are
 technical debt that may only shrink: the job counts the PHPCS and PHPStan findings of the commit and of its base (pull
@@ -151,7 +151,7 @@ request base, or the previous commit of a push) and fails when either count grow
 - **PHPStan**: the job uploads a baseline of the current findings (`phpstan-baseline.generated.neon`). Review it and
   commit it as `phpstan-baseline.neon`; from then on every new finding is visible in the step "PHPStan level 1". Never
   add baseline entries by hand for new code.
-- **Plugin Check**: the result table is in the job summary and the artifact `plugin-check`. Errors there must be
+- **Plugin Check**: the result table is in the job summary and the artifacts `plugin-check-free` and `plugin-check-premium`. Errors there must be
   resolved (or documented as not applicable for a non-wordpress.org premium build) before a wordpress.org submission.
 - When a scan has no findings left (or only baselined ones), make its whole report blocking. `plugin-check` keeps
   `continue-on-error` until then; the release job `ci-green` lists its failures as a warning.

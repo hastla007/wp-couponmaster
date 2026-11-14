@@ -11,6 +11,11 @@
  * issue and charge vouchers exactly once. Currency switchers: the built-in adapter reads the rate from the real
  * plugin (base EUR, 1 EUR = 1.10 USD), a voucher bought in USD is worth its EUR value and a gift card used in
  * USD is charged its EUR value.
+ *
+ * Both kinds also run with "Multi-purpose vouchers as payment" (vcap_mpv_after_tax=yes, TAX.md 4.1): a gift card pays
+ * part of and the whole order after tax as a negative, untaxed payment line next to the gateway (the order lines
+ * still add up to the total the gateway charges), and in a foreign-currency cart a 50 EUR card pays the USD value of
+ * 50 EUR – not 50 USD – and is charged 50 EUR.
  */
 
 $mode   = $args[0] ?? 'run';
@@ -105,6 +110,30 @@ function vcap_eco_balance( VCAP\Voucher $card ): float {
 	return (float) vcap()->vouchers->get( $card->id )->balance;
 }
 
+/** What the gateway is asked to charge: sum of the order lines (items, shipping, fees incl. payment lines, taxes). */
+function vcap_eco_lines_total( WC_Order $order ): float {
+	$sum = 0.0;
+	foreach ( $order->get_items( array( 'line_item', 'shipping', 'fee' ) ) as $item ) {
+		$sum += (float) $item->get_total() + (float) $item->get_total_tax();
+	}
+	return round( $sum, 2 );
+}
+
+/** Cart → checkout order with the card applied, under "Multi-purpose vouchers as payment". */
+function vcap_eco_mpv_order( WC_Product $goods, VCAP\Voucher $card, string $payment_method, string $email ): array {
+	WC()->cart->empty_cart();
+	WC()->cart->add_to_cart( $goods->get_id(), 1 );
+	WC()->cart->apply_coupon( $card->code );
+	WC()->cart->calculate_totals();
+	$cart  = array(
+		'total'    => (float) WC()->cart->get_total( 'edit' ),
+		'payment'  => (float) ( vcap()->payments->cart_payments()[ wc_format_coupon_code( $card->code ) ] ?? 0 ),
+		'currency' => get_woocommerce_currency(),
+	);
+	$order = wc_get_order( WC()->checkout()->create_order( array( 'billing_email' => $email, 'billing_country' => 'DE', 'payment_method' => $payment_method ) ) );
+	return array( $cart, $order );
+}
+
 if ( ! function_exists( 'get_plugins' ) ) {
 	require_once ABSPATH . 'wp-admin/includes/plugin.php';
 }
@@ -167,6 +196,30 @@ if ( isset( $gateways[ $plugin ] ) ) {
 	vcap_eco_assert( VCAP\Voucher::STATUS_VOID === vcap()->vouchers->get( $issued[0]->id )->status, 'the refunded voucher is voided' );
 	wc_get_order( $spend->get_id() )->update_status( 'refunded' );
 	vcap_eco_assert( abs( 25.0 - vcap_eco_balance( $card ) ) < 0.001, 'a fully refunded redemption order gives the 25 back to the gift card' );
+
+	// "Multi-purpose vouchers as payment": the card pays after tax as an untaxed negative line next to the gateway.
+	update_option( VCAP\PaymentVouchers::OPTION, 'yes' );
+	wc_load_cart();
+	WC()->customer->set_billing_country( 'DE' );
+	$part_card = vcap_eco_card( 25 );
+	list( $cart, $part ) = vcap_eco_mpv_order( $goods, $part_card, $id, "eco-{$plugin}-mpv@example.com" );
+	vcap_eco_assert( abs( 25.0 - $cart['payment'] ) < 0.001 && abs( 35.0 - $cart['total'] ) < 0.001, 'payment after tax: the card pays 25 of 60 in the cart, the gateway is left 35', $cart );
+	vcap_eco_assert( $part && abs( 35.0 - (float) $part->get_total() ) < 0.001 && abs( 25.0 - (float) VCAP\PaymentVouchers::paid_amount( $part, $part_card->code ) ) < 0.001 && $id === $part->get_payment_method(), "payment after tax: the {$plugin} order has total 35 and a payment line of 25", $part ? array( 'total' => $part->get_total() ) : null );
+	vcap_eco_assert( abs( (float) $part->get_total() - vcap_eco_lines_total( $part ) ) < 0.011, 'payment after tax: the order lines the gateway may send add up to the charged total', array( 'lines' => vcap_eco_lines_total( $part ), 'total' => $part->get_total() ) );
+	vcap()->coupons->reserve_order( $part );
+	wc_get_order( $part->get_id() )->payment_complete( "{$plugin}-mpv-1" );
+	wc_get_order( $part->get_id() )->payment_complete( "{$plugin}-mpv-1" );
+	vcap_eco_assert( vcap_eco_balance( $part_card ) < 0.001, 'payment after tax: the confirmed payment charges the card its 25 exactly once' );
+	$full_card = vcap_eco_card( 100 );
+	list( $cart, $full ) = vcap_eco_mpv_order( $goods, $full_card, $id, "eco-{$plugin}-mpv-full@example.com" );
+	vcap_eco_assert( abs( 60.0 - $cart['payment'] ) < 0.001 && abs( $cart['total'] ) < 0.001 && $full && abs( (float) $full->get_total() ) < 0.001 && abs( 60.0 - (float) VCAP\PaymentVouchers::paid_amount( $full, $full_card->code ) ) < 0.001, 'payment after tax: a 100 card pays the whole 60, nothing is left for the gateway', $cart );
+	vcap()->coupons->reserve_order( $full );
+	wc_get_order( $full->get_id() )->payment_complete( "{$plugin}-mpv-2" );
+	vcap_eco_assert( abs( 40.0 - vcap_eco_balance( $full_card ) ) < 0.001, 'payment after tax: the card keeps 40' );
+	wc_get_order( $full->get_id() )->update_status( 'cancelled' );
+	vcap_eco_assert( abs( 100.0 - vcap_eco_balance( $full_card ) ) < 0.001, 'payment after tax: cancelling gives the 60 back' );
+	WC()->cart->empty_cart();
+	update_option( VCAP\PaymentVouchers::OPTION, 'no' );
 	echo "Voucher Captain + {$plugin} checks passed.\n";
 	return;
 }
@@ -223,6 +276,45 @@ if ( in_array( $plugin, array( 'woocs', 'curcy', 'wcml' ), true ) ) {
 	vcap_eco_assert( $discount > 0 && abs( $discount / VCAP_ECO_RATE - $charged ) < 0.02, 'the gift card is charged the EUR value of the USD discount', array( 'discount_usd' => $discount, 'charged_eur' => $charged ) );
 	wc_get_order( $spend->get_id() )->update_status( 'cancelled' );
 	vcap_eco_assert( abs( 50.0 - vcap_eco_balance( $card ) ) < 0.02, 'cancelling the USD order gives the EUR value back' );
+
+	// "Multi-purpose vouchers as payment" in a USD cart: the 50 EUR card pays the USD value of 50 EUR (55 USD), not
+	// 50 USD, and is charged 50 EUR. The cart is switched through the plugin's own API.
+	$switch = static function ( string $currency ) use ( $plugin ): bool {
+		global $WOOCS, $woocommerce_wpml; // phpcs:ignore WordPress.NamingConventions.ValidVariableName
+		if ( 'woocs' === $plugin && is_object( $WOOCS ) && method_exists( $WOOCS, 'set_currency' ) ) { // phpcs:ignore WordPress.NamingConventions.ValidVariableName
+			$WOOCS->set_currency( $currency ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName
+		} elseif ( 'curcy' === $plugin ) {
+			foreach ( array( 'WOOMULTI_CURRENCY_F_Data', 'WOOMULTI_CURRENCY_Data' ) as $class ) {
+				if ( class_exists( $class ) && method_exists( $class, 'get_ins' ) && method_exists( $class::get_ins(), 'set_current_currency' ) ) {
+					$class::get_ins()->set_current_currency( $currency );
+				}
+			}
+		} elseif ( 'wcml' === $plugin && isset( $woocommerce_wpml->multi_currency ) && method_exists( $woocommerce_wpml->multi_currency, 'set_client_currency' ) ) {
+			$woocommerce_wpml->multi_currency->set_client_currency( $currency );
+		}
+		return $currency === get_woocommerce_currency();
+	};
+	update_option( VCAP\PaymentVouchers::OPTION, 'yes' );
+	wc_load_cart();
+	WC()->customer->set_billing_country( 'DE' );
+	if ( $switch( 'USD' ) ) {
+		$mpv_card = vcap_eco_card( 50 );
+		list( $cart, $mpv ) = vcap_eco_mpv_order( $goods, $mpv_card, 'bacs', "eco-{$plugin}-mpv@example.com" );
+		$expected = round( 50.0 * VCAP_ECO_RATE, 2 );
+		vcap_eco_assert( 'USD' === $cart['currency'] && abs( $expected - $cart['payment'] ) < 0.02, "payment after tax in USD: the 50 EUR card pays {$expected} USD (its EUR value), not 50 USD", $cart );
+		vcap_eco_assert( $mpv && 'USD' === $mpv->get_currency() && abs( (float) $mpv->get_total() - vcap_eco_lines_total( $mpv ) ) < 0.011, 'payment after tax in USD: the order lines add up to the charged total', $mpv ? array( 'total' => $mpv->get_total(), 'lines' => vcap_eco_lines_total( $mpv ) ) : null );
+		vcap()->coupons->reserve_order( $mpv );
+		wc_get_order( $mpv->get_id() )->payment_complete( "{$plugin}-usd-mpv" );
+		vcap_eco_assert( vcap_eco_balance( $mpv_card ) < 0.02, 'payment after tax in USD: the card is charged its 50 EUR', vcap_eco_balance( $mpv_card ) );
+		wc_get_order( $mpv->get_id() )->update_status( 'cancelled' );
+		vcap_eco_assert( abs( 50.0 - vcap_eco_balance( $mpv_card ) ) < 0.02, 'payment after tax in USD: cancelling gives the 50 EUR back' );
+	} else {
+		// Not a pass: the job summary shows it, and the checklist item stays open until the cart can be switched.
+		echo "::warning::{$plugin}: the cart could not be switched to USD from WP-CLI – payment after tax in a foreign currency NOT checked.\n";
+	}
+	$switch( 'EUR' );
+	WC()->cart->empty_cart();
+	update_option( VCAP\PaymentVouchers::OPTION, 'no' );
 	echo "Voucher Captain + {$plugin} checks passed.\n";
 	return;
 }

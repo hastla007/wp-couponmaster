@@ -183,7 +183,9 @@ jobs:
 
   ecosystem:
     # Real third-party plugins from wordpress.org next to Voucher Captain: payment gateways and currency switchers
-    # (latest releases; the job prints the installed versions). tests/ecosystem-integration.php
+    # (latest releases; the job prints the installed versions), each also with "Multi-purpose vouchers as payment"
+    # (vcap_mpv_after_tax: partial and full payment next to the gateway, foreign-currency cart).
+    # tests/ecosystem-integration.php
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -778,10 +780,13 @@ jobs:
         run: phpcs --standard=WooCommerce-Core --extensions=php --exclude=WordPress.Files.FileName src/API/V1 src/Contracts
       - name: Analyze API and contract types
         run: phpstan analyse --configuration=phpstan.neon.dist --no-progress
-      - name: Release ZIP ships a licence file for every bundled package and the third-party notices
+      - name: Release ZIPs (free and premium edition, as shipped) carry a licence file for every bundled package, the notices and an SBOM
         run: |
-          bin/build.sh
-          php bin/third-party-notices.php --check-zip build/voucher-captain.zip
+          for edition in free premium; do
+            VCAP_EDITION="$edition" bin/build.sh
+            php bin/third-party-notices.php --check-zip build/voucher-captain.zip
+            php bin/sbom.php build/voucher-captain "sbom-${edition}.cdx.json"
+          done
 
   quality-wide:
     # Wide scan of the whole plugin (src/, templates/, config/, main and uninstall file): PHPCS with phpcs.xml.dist
@@ -880,10 +885,16 @@ jobs:
           if-no-files-found: ignore
 
   plugin-check:
-    # WordPress Plugin Check (PCP, the wordpress.org review tool) against the installed release ZIP. Report-only for
-    # now (RELEASE.md → Static analysis); the result table is in the job summary and the artifact plugin-check.
+    # WordPress Plugin Check (PCP, the wordpress.org review tool) against the installed release ZIP of each edition as
+    # shipped (free, premium). Report-only for now (RELEASE.md → Static analysis); the result table is in the job
+    # summary and the artifact plugin-check-<edition>.
     runs-on: ubuntu-latest
     continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [free, premium]
+    name: plugin-check (${{ matrix.edition }})
     services:
       db:
         image: mysql:8.4
@@ -914,7 +925,7 @@ jobs:
           php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher Captain plugin check" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
           php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.2.2 --activate
           php wp-cli.phar --path=wp-test plugin install plugin-check --activate
-          bin/build.sh
+          VCAP_EDITION=${{ matrix.edition }} bin/build.sh
           php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
           php wp-cli.phar --path=wp-test plugin list
       - name: Plugin Check (static and runtime checks)
@@ -925,7 +936,7 @@ jobs:
           status=$?
           cat plugin-check.csv
           {
-            echo '### Plugin Check (report-only)'
+            echo '### Plugin Check – ${{ matrix.edition }} edition (report-only)'
             echo "Errors: $(grep -c ',ERROR,' plugin-check.csv || true), warnings: $(grep -c ',WARNING,' plugin-check.csv || true)"
           } >> "$GITHUB_STEP_SUMMARY"
           if grep -q ',ERROR,' plugin-check.csv; then exit 1; fi
@@ -934,6 +945,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: plugin-check
+          name: plugin-check-${{ matrix.edition }}
           path: plugin-check.csv
           if-no-files-found: ignore
