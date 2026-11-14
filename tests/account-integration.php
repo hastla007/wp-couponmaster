@@ -215,4 +215,32 @@ WC()->cart->empty_cart();
 wc_clear_notices();
 wp_set_current_user( 0 );
 
+// M10/H11: the visible copy of voucher fields has a stable key; label and a formatted date are only for display.
+$m10_order = wc_create_order();
+$m10_item  = new WC_Order_Item_Product();
+$m10_item->set_name( 'M10 voucher' );
+( new VCAP\Fields() )->save_order_item(
+	$m10_item,
+	'm10',
+	array(
+		'vcap_fields' => array(
+			'recipient_name' => array( 'label' => 'Recipient name', 'value' => 'Anna' ),
+			'delivery_date'  => array( 'label' => 'Delivery date', 'value' => '2026-12-24' ),
+		),
+	),
+	$m10_order
+);
+$m10_order->add_item( $m10_item );
+$m10_order->save();
+$m10_item = $m10_order->get_item( $m10_item->get_id() );
+$m10_meta = array();
+foreach ( $m10_item->get_formatted_meta_data() as $m10_row ) {
+	$m10_meta[ $m10_row->key ] = array( wp_strip_all_tags( $m10_row->display_key ), trim( wp_strip_all_tags( $m10_row->display_value ) ) );
+}
+vcap_acct_assert( 'Anna' === $m10_item->get_meta( 'vcap_recipient_name' ) && '2026-12-24' === $m10_item->get_meta( 'vcap_delivery_date' ) && '' === $m10_item->get_meta( 'Recipient name' ), 'M10: the visible field copy is stored under a stable key (vcap_recipient_name), whatever the language of the order' );
+vcap_acct_assert( array( 'Recipient name', 'Anna' ) === ( $m10_meta['vcap_recipient_name'] ?? null ) && array( 'Delivery date', wp_date( vcap()->settings->date_format(), (int) strtotime( '2026-12-24 12:00:00 ' . wp_timezone_string() ) ) ) === ( $m10_meta['vcap_delivery_date'] ?? null ), 'M10/H11: the order screen and emails show the field label and the date in the voucher date format', $m10_meta );
+$h11_cart = ( new VCAP\Fields() )->display_item_data( array(), array( 'vcap_fields' => array( 'delivery_date' => array( 'label' => 'Delivery date', 'value' => '2026-12-24' ) ) ) );
+vcap_acct_assert( wp_date( vcap()->settings->date_format(), (int) strtotime( '2026-12-24 12:00:00 ' . wp_timezone_string() ) ) === ( $h11_cart[0]['value'] ?? '' ), 'H11: the cart shows the delivery date in the voucher date format, not "2026-12-24"', $h11_cart );
+vcap_acct_assert( 'Anna' === VCAP\Placeholders::replace( '{item_meta:vcap_recipient_name}', (function () use ( $m10_order, $m10_item ) { $v = new VCAP\Voucher(); $v->order_id = $m10_order->get_id(); $v->order_item_id = $m10_item->get_id(); return $v; })() ), 'M10: {item_meta:vcap_recipient_name} works in every language' );
+
 echo "Voucher Captain account checks passed.\n";
