@@ -7,6 +7,8 @@
  *   "coupons", which can change the coupon label only). The 0 of the discount row itself stays: it comes from the
  *   Store API cart (totals.total_discount, coupons[].totals.total_discount), which WooCommerce offers no filter
  *   for, and the coupon markup has no class per coupon that CSS could hide for paying coupons alone (TAX.md 4.1);
+ * - the title of an automatic promotion instead of its virtual coupon code "vcap-campaign-ID" (filter "coupons";
+ *   removing it is refused by the Store API with a message, see Discounts\CartIntegration::refuse_removal());
  * - the "use store credit" hint (slot ExperimentalOrderMeta);
  * - the warning that a single-use voucher worth more than the cart loses its remaining value (slot
  *   ExperimentalDiscountsMeta, in a polite live region that is always rendered, so screen readers announce the
@@ -106,11 +108,20 @@
 			coupons: function ( coupons, extensions ) {
 				var d = data( extensions );
 				var paying = d.paying_coupons || [];
-				if ( ! paying.length || ! Array.isArray( coupons ) ) {
+				var promotions = {};
+				( d.promotions || [] ).forEach( function ( promotion ) {
+					promotions[ String( promotion.code ).toLowerCase() ] = promotion.label;
+				} );
+				if ( ( ! paying.length && ! Object.keys( promotions ).length ) || ! Array.isArray( coupons ) ) {
 					return coupons;
 				}
 				return coupons.map( function ( coupon ) {
-					if ( ! coupon || paying.indexOf( String( coupon.code ).toLowerCase() ) === -1 || ! discountsNothing( coupon ) ) {
+					var code = coupon ? String( coupon.code ).toLowerCase() : '';
+					if ( coupon && promotions[ code ] ) {
+						// An automatic promotion: its title instead of "vcap-campaign-12".
+						return Object.assign( {}, coupon, { label: promotions[ code ] } );
+					}
+					if ( ! coupon || paying.indexOf( code ) === -1 || ! discountsNothing( coupon ) ) {
 						return coupon;
 					}
 					return Object.assign( {}, coupon, { label: ( coupon.label || coupon.code ) + ' · ' + d.coupon_note } );

@@ -61,6 +61,7 @@ final class CartBlocks {
 			'balances'       => array(),
 			'store_credit'   => null,
 			'forfeits'       => array(),
+			'promotions'     => array(),
 		);
 		$cart = function_exists( 'WC' ) ? WC()->cart : null;
 		if ( ! $cart instanceof \WC_Cart ) {
@@ -84,6 +85,18 @@ final class CartBlocks {
 					/* translators: %s: voucher code */
 					'label'     => sprintf( __( 'Voucher %s balance', 'voucher-captain' ), $voucher->code ),
 					'formatted' => self::plain_price( (float) $voucher->balance, (string) $voucher->currency ),
+				);
+			}
+		}
+		// Automatic promotions (virtual coupons "vcap-campaign-ID"): their title instead of the code, and they
+		// cannot be removed (Discounts\CartIntegration::refuse_removal()).
+		foreach ( $cart->get_applied_coupons() as $code ) {
+			if ( Discounts\CartIntegration::id_from_code( (string) $code ) ) {
+				/** Label of a coupon in the cart totals (Discounts\CartIntegration::label() gives a promotion's title). */
+				$label = wp_strip_all_tags( (string) apply_filters( 'woocommerce_cart_totals_coupon_label', (string) $code, new \WC_Coupon( (string) $code ) ) );
+				$data['promotions'][] = array(
+					'code'  => wc_format_coupon_code( (string) $code ),
+					'label' => '' !== $label ? $label : (string) $code,
 				);
 			}
 		}
@@ -165,6 +178,12 @@ final class CartBlocks {
 					'amount'    => $string,
 					'formatted' => $string,
 					'text'      => $string,
+				)
+			),
+			'promotions'     => $rows(
+				array(
+					'code'  => $string,
+					'label' => $string,
 				)
 			),
 		);
