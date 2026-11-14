@@ -58,6 +58,17 @@ Eine ausdrückliche Einstellung am Produkt (`payment`, `single`, `discount`) gil
   und ob Preise inkl. Steuer waren. Spätere Produkt- oder Steueränderungen verändern ihn nicht.
 - Nennwert: in Shops mit Bruttopreisen der Bruttopreis (Nachweis: „the voucher value is the gross price (120)“), in
   Shops mit Nettopreisen der Nettopreis.
+  - **Ausnahme Guthabenkarte mit USt verkauft (Shops mit Nettopreisen, TODO T7):** Eine Karte mit Restguthaben,
+    deren Verkauf besteuert wurde und die *nicht* als Mehrzweckgutschein eingeordnet ist (Einordnung `single`, auch
+    `discount` oder per Filter), ist den **bezahlten Bruttobetrag** wert: Verkauf 50 € + 20 % USt = 60 € → Wert und
+    Guthaben 60 €; bei der Einlösung bezahlt sie 60 € des Bruttobetrags (4.1). Vorher war sie nur 50 € (netto) wert,
+    deckte bei der Einlösung 50 € brutto, und der Kunde musste die beim Kauf bezahlte USt nachzahlen.
+    Code: `Issuer::balance_sold_with_vat()`. Nachweis: `tests/tax-integration.php` 9.1 („net prices (T7): …“).
+  - Mehrzweckgutscheine behalten ihr Verhalten (Wert = Nettopreis; richtig eingerichtet werden sie ohne USt verkauft,
+    dann ist netto = bezahlt). Auch eine versehentlich steuerpflichtig verkaufte Mehrzweck-Karte bleibt beim Nettowert
+    (Abschnitt 7 Nr. 2). Einmal-Wertgutscheine (ohne Restguthaben) sind nicht betroffen: ihr Festbetrag mindert im
+    Netto-Shop den Nettopreis, die USt darauf entfällt zusätzlich – sie decken also bereits netto + USt.
+  - **Die Einordnung als Einzweckgutschein (und damit dieser Bruttowert) muss die Steuerberatung bestätigen (F13).**
 - Rechnung/Beleg: erstellt WooCommerce bzw. das Rechnungs-Plugin des Shops; Voucher Captain gibt keine eigene
   Rechnung aus.
 
@@ -132,6 +143,18 @@ Hauptwarenkorb trotz falscher Session-Daten richtig; keine vorzeitige Speicherun
 Für Shops mit Nettopreisen zieht das Plugin Geschenkkarten und Guthaben brutto ab (60 € Guthaben bezahlen 60 € des
 Bruttobetrags, nicht 60 € netto + Steuer; Filter `vcap_balance_covers_tax`, Nachweis
 `tests/acceptance-integration.php`). An der Minderung der USt-Bemessungsgrundlage ändert das nichts.
+Umrechnung (TODO T8, T15; `CouponManager::prepare_gross_balance()`, `GrossBalanceSplit`): Das Plugin spielt die
+Verteilung von WooCommerce nach (Festbetrag gleichmäßig je Stück auf die Preise **nach** vorher angewandten Rabatten,
+USt je Position mit ihrem Satz, gerundet wie Warenkorb bzw. Bestellung) und wählt den größten Nettobetrag, bei dem
+Netto + USt **genau** dem Guthaben entspricht. Damit zieht eine 100‑€‑Karte auch bei gemischten Sätzen und einem
+vorher angewandten Rabattcode nie mehr als 100 € brutto ab und wird ausgeschöpft (vorher z. B. 103,15 € –
+der Checkout brach ab), und es bleiben keine Cent-Reste durch Abrunden (50‑€‑Karte: netto 41,67 + USt 8,33).
+Lässt die Steuerrundung keinen exakten Betrag zu (1 Cent netto mehr ergibt 2 Cent brutto mehr), bezahlt die Karte
+einen Cent weniger; hat der Kunde den Rest der Bestellung selbst bezahlt, wird dieser Rest (höchstens eine
+Preis-Nachkommastelle, auch ältere Sub-Cent-Reste) als eigenes Journal-Ereignis `rounding_written_off` „Rundungsrest
+ausgebucht“ auf 0 gebucht; Storno/Erstattung der Bestellung gibt ihn mit der Abbuchung zurück. Eine Karte, die
+größer als die Bestellung ist, behält ihren Rest. Nachweis: `tests/tax-integration.php` 9.2 („net prices, mixed
+rates, code + card (T8 …)“, klassischer Warenkorb und Bestellung) und 9.3 („net prices (T15): …“).
 
 ### 4.2 In WP Pass Captain (Ticketkasse)
 
@@ -228,6 +251,7 @@ Bitte je Frage ankreuzen bzw. ergänzen.
 | F10 | Prozentgutschein, der **verkauft** wird (2.3): Preisnachlass oder Gutschein? | |
 | F11 | Geschenkkarten-Aufladung: eigener Mehrzweckgutschein-Verkauf, nicht steuerbar – bestätigt? | ☐ ja ☐ nein |
 | F12 | Texte Abschnitt 6: fachlich korrekt? Gewünschte Formulierung für Kunden (z. B. auf Rechnung/Gutschein: „Mehrzweckgutschein, USt wird bei Einlösung berechnet“)? | |
+| F13 | Shops mit Nettopreisen: Guthabenkarte **mit USt verkauft** (Einzweck, Abschnitt 3 „Ausnahme“): Wert = bezahlter Bruttobetrag (50 € + USt = 60 €), bei Einlösung bezahlt sie 60 € brutto – bestätigt? Ist eine Karte mit Restguthaben überhaupt als Einzweckgutschein zulässig (Teileinlösungen, ggf. andere Sätze bei Einlösung, vgl. F3)? | ☐ ja ☐ nein, stattdessen: |
 
 ## 10. Steuerfälle: Sätze, Leistungsort (OSS), gleicher Bruttopreis, Kleinunternehmer
 
@@ -238,7 +262,7 @@ ihm abgebucht wird. Spezifikation und Nachweis (`tests/tax-integration.php`, Abs
 | Nr. | Fall | Festgelegtes Verhalten | Nachweis |
 |---|---|---|---|
 | 10.1 | **Mehrere Steuersätze in einer Bestellung** (z. B. 20 % und 10 %), Bruttopreise | WooCommerce verteilt den Gutscheinbetrag anteilig auf die Positionen; jede Position behält ihren Satz; abgebucht wird genau der bezahlte Betrag. Beispiel: 120 € (20 %) + 110 € (10 %), Karte 115 € → Rest 115 € (netto + USt beider Positionen), Karte 0 €. Die Aufteilung der USt auf die Sätze folgt der WooCommerce-Verteilung. | „mixed rates, gross prices …“ (3 Prüfungen) |
-| 10.2 | Mehrere Steuersätze, **Nettopreise** | Karte bezahlt brutto (Nettoanteil + dessen USt) über beide Sätze; abgebucht wird genau der Kartenwert. | „mixed rates, net prices …“ |
+| 10.2 | Mehrere Steuersätze, **Nettopreise** | Karte bezahlt brutto (Nettoanteil + dessen USt) über beide Sätze; abgebucht wird genau der Kartenwert – auch wenn vorher ein Rabattcode angewandt wurde (Umrechnung aus den rabattierten Positionspreisen je Satz, 4.1). | „mixed rates, net prices …“, „net prices, mixed rates, code + card (T8 …)“ |
 | 10.3 | **Leistungsort im anderen EU-Land (OSS)**, Steuer nach Rechnungsland | Die Bestellung trägt nur den Satz des Käuferlands (z. B. DE 19 %); die Karte bezahlt brutto und wird genau um den bezahlten Betrag belastet. Der Gutscheinwert bleibt in der Shop-Basiswährung; das Land der Einlösung spielt für den Wert keine Rolle. | „OSS: …“ (3 Prüfungen) |
 | 10.4 | **Gleicher Bruttopreis in allen Ländern** (WooCommerce-Filter `woocommerce_adjust_non_base_location_prices` = false) | Ein steuerpflichtiger Gutschein für „50 €“ kostet überall 50 € brutto und ist 50 € wert. | „same gross price …“ |
 | 10.5 | **WooCommerce-Standard** (Netto bleibt, Satz des Käuferlands kommt dazu) | Bei steuerpflichtigem Gutscheinprodukt zahlt ein DE-Käufer 49,58 € statt 50 € (Basis AT 20 %). Der Gutschein ist **genau das wert, was bezahlt wurde** (nie mehr). Für Gutscheine mit festem Nennwert daher Mehrzweck mit Steuerstatus „Keiner“ (10.6) oder gleichen Bruttopreis (10.4) verwenden. | „WooCommerce default …“ |

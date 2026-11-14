@@ -12,7 +12,7 @@ final class CouponManager {
 	public function register(): void {
 		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'validate' ), 20, 3 );
 		add_filter( 'woocommerce_coupon_sort', array( $this, 'sort' ), 20, 2 );
-		add_filter( 'woocommerce_coupon_get_items_to_apply', array( $this, 'prepare_gross_balance' ), 20, 2 );
+		add_filter( 'woocommerce_coupon_get_items_to_apply', array( $this, 'prepare_gross_balance' ), 20, 3 );
 		add_filter( 'woocommerce_coupon_get_amount', array( $this, 'gross_balance_amount' ), 20, 2 );
 		add_filter( 'woocommerce_order_recalculate_coupons_coupon_object', array( $this, 'order_coupon_object' ), 10, 4 );
 		// A code marked "Individual use only" does not push out gift cards, store credit and other multi-purpose
@@ -1504,14 +1504,17 @@ final class CouponManager {
 	/**
 	 * Tax-exclusive shops apply a fixed cart coupon to net prices and then reduce the tax as well, so a
 	 * balance of 50 would pay 50 net + tax. A stored balance is money (a multi-purpose voucher pays the
-	 * gross price), so right before WooCommerce distributes the coupon its amount is converted to net with
-	 * the tax ratio of the discounted lines: the customer saves exactly the balance, and exactly that is
-	 * deducted (net + tax, see used_amount()). Filter "vcap_balance_covers_tax" (false = old behaviour).
+	 * gross price), so right before WooCommerce distributes the coupon its amount is converted to net: the
+	 * largest net amount whose saving (net + the VAT it removes, at each line's rate and on the prices after
+	 * earlier coupons) is exactly the balance – GrossBalanceSplit replays WooCommerce's distribution for that
+	 * (T8, T15). The customer saves exactly the balance, and exactly that is deducted (net + tax, see
+	 * used_amount()). Filter "vcap_balance_covers_tax" (false = old behaviour).
 	 *
-	 * @param array      $items  Items the coupon applies to (WC_Discounts items).
-	 * @param \WC_Coupon $coupon Coupon.
+	 * @param array             $items     Items the coupon applies to (WC_Discounts items).
+	 * @param \WC_Coupon        $coupon    Coupon.
+	 * @param \WC_Discounts|null $discounts The running discount calculation (WooCommerce 8.8+).
 	 */
-	public function prepare_gross_balance( $items, $coupon ) {
+	public function prepare_gross_balance( $items, $coupon, $discounts = null ) {
 		if ( ! $coupon instanceof \WC_Coupon ) {
 			return $items;
 		}
@@ -1524,20 +1527,18 @@ final class CouponManager {
 		if ( ! $voucher || ! $voucher->is_multi_use() || ( PaymentVouchers::enabled() && ( new PaymentVouchers( $this->repo ) )->applies( $coupon ) ) ) {
 			return $items; // Paid after tax as a fee line: nothing to convert.
 		}
-		$net = 0.0;
-		$tax = 0.0;
-		foreach ( (array) $items as $item ) {
-			if ( isset( $item->subtotal, $item->subtotal_tax ) ) { // Cart totals items (same precision for both).
-				$net += (float) $item->subtotal;
-				$tax += (float) $item->subtotal_tax;
-			} elseif ( isset( $item->object ) && $item->object instanceof \WC_Order_Item_Product ) {
-				$net += (float) $item->object->get_subtotal();
-				$tax += (float) $item->object->get_subtotal_tax();
-			}
+		$taxed = array_filter(
+			(array) $items,
+			static fn( $item ) => is_object( $item ) && ( isset( $item->subtotal, $item->subtotal_tax ) || ( isset( $item->object ) && $item->object instanceof \WC_Order_Item_Product ) )
+		);
+		if ( ! $taxed ) {
+			return $items; // Validation-only item lists (no tax data): WooCommerce does not distribute here.
 		}
-		if ( $net > 0 && $tax > 0 ) {
+		$split = new GrossBalanceSplit( $coupon, $taxed, $discounts instanceof \WC_Discounts ? $discounts : null );
+		if ( $split->has_tax() ) {
 			$factor                     = 10 ** wc_get_price_decimals();
-			$this->net_amounts[ $code ] = floor( (float) $coupon->get_amount( 'edit' ) / ( 1 + $tax / $net ) * $factor ) / $factor;
+			$gross                      = (int) round( (float) $coupon->get_amount( 'edit' ) * $factor );
+			$this->net_amounts[ $code ] = $split->net_for( $gross ) / $factor;
 		}
 		return $items;
 	}
@@ -1787,6 +1788,60 @@ final class CouponManager {
 				$order->update_status( 'on-hold', __( 'Voucher balance shortfall requires manual review before fulfilment.', 'voucher-captain' ) );
 			}
 		}
+		if ( ! $shortfall && ! $missing ) {
+			$this->write_off_rounding_rest( $order, $applied );
+		}
+	}
+
+	/** Ledger event: a rest of at most one price unit left on a card by the net-price conversion, booked off (T15). */
+	public const WRITTEN_OFF_EVENT = 'rounding_written_off';
+	/** Order meta: code => rest booked off by write_off_rounding_rest(); given back with the charge on restore_order(). */
+	public const WRITTEN_OFF_META = '_vcap_rounding_written_off';
+
+	/**
+	 * T15: in a tax-exclusive shop the net amount of a stored balance is chosen so that net + VAT is exactly the
+	 * balance (GrossBalanceSplit). Where the tax rounding makes that impossible (net + 1 cent adds 2 cents gross),
+	 * one minor unit stays on the card although the customer paid the rest of the order himself - a rest the card
+	 * keeps showing in reports and reminder mails. Such a rest (at most one unit of the shop's price decimals, also
+	 * sub-cent rests of older balances) is booked off with its own ledger event; cancelling or refunding the order
+	 * gives it back together with the charge.
+	 */
+	private function write_off_rounding_rest( \WC_Order $order, array $applied ): void {
+		if ( ! $applied || ! wc_tax_enabled() || wc_prices_include_tax() || (float) $order->get_total() <= 0 || ! apply_filters( 'vcap_balance_covers_tax', true, null ) ) {
+			return; // Only where the conversion runs, and only when the cards did not cover the whole order.
+		}
+		$done    = self::order_map( $order, self::WRITTEN_OFF_META );
+		$unit    = 1 / ( 10 ** wc_get_price_decimals() ) + 0.000001;
+		$changed = false;
+		foreach ( $applied as $code => $amount ) {
+			$code = (string) $code;
+			if ( isset( $done[ $code ] ) || (float) $amount <= 0 || null !== PaymentVouchers::paid_amount( $order, $code ) ) {
+				continue;
+			}
+			$voucher = $this->find_voucher_for_code( $code );
+			$fresh   = $voucher && $voucher->is_multi_use() ? $this->repo->get( $voucher->id ) : null;
+			if ( ! $fresh || Voucher::STATUS_ACTIVE !== $fresh->status || $fresh->balance <= 0 || $fresh->balance > $unit || $this->open_holds( $fresh ) > 0 ) {
+				continue;
+			}
+			$rest = (float) $fresh->balance;
+			$note = sprintf(
+				/* translators: %s: order number */
+				__( 'Rounding rest of the net-price conversion in order #%s booked off', 'voucher-captain' ),
+				$order->get_order_number()
+			);
+			// Logged without the order id: the order's own ledger rows (charge, restore) stay the latest per order.
+			if ( $this->write_balance( $fresh, static fn( float $current ) => $current <= $unit ? 0.0 : $current, self::WRITTEN_OFF_EVENT, null, $note, 0 ) ) {
+				$after = $this->repo->get( $fresh->id );
+				if ( $after && $after->balance <= 0 ) {
+					$done[ $code ] = $rest;
+					$changed       = true;
+				}
+			}
+		}
+		if ( $changed ) {
+			$order->update_meta_data( self::WRITTEN_OFF_META, $done );
+			$order->save();
+		}
 	}
 
 	/**
@@ -1861,10 +1916,12 @@ final class CouponManager {
 		}
 		// Parts already booked back by hand (partial return, OrderReturn): only the rest goes back now.
 		$returned = self::order_map( $order, self::RETURNED_META );
+		// A rounding rest booked off after the charge (T15) goes back with it.
+		$rests    = self::order_map( $order, self::WRITTEN_OFF_META );
 		$restored = 0;
 		foreach ( $applied as $code => $amount ) {
 			$voucher = $this->find_voucher_for_code( (string) $code );
-			$back    = (float) $amount - (float) ( $returned[ $code ] ?? 0 );
+			$back    = (float) $amount - (float) ( $returned[ $code ] ?? 0 ) + (float) ( $rests[ $code ] ?? 0 );
 			if ( $voucher && $this->restore_balance_atomic(
 				$voucher,
 				$back,
@@ -1880,6 +1937,7 @@ final class CouponManager {
 		}
 		if ( $restored === count( $applied ) ) {
 			$order->delete_meta_data( '_vcap_redemptions' );
+			$order->delete_meta_data( self::WRITTEN_OFF_META );
 			$order->save();
 		} else {
 			$order->add_order_note( __( 'Some voucher balances could not be restored. Review this order and retry the refund handling.', 'voucher-captain' ) );
