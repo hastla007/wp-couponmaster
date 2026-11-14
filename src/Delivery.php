@@ -275,7 +275,7 @@ final class Delivery {
 		if ( function_exists( 'as_unschedule_all_actions' ) ) {
 			as_unschedule_all_actions( 'vcap_deliver_voucher', array( 'voucher_id' => $voucher->id ), self::GROUP );
 		}
-		$this->deliver( $voucher->id );
+		$this->deliver( $voucher->id, false );
 		$fresh = $this->repo->get( $voucher->id );
 		return $fresh && null !== $fresh->delivered_at;
 	}
@@ -307,8 +307,10 @@ final class Delivery {
 	 * Action Scheduler callback. Idempotent: a delivered voucher is never mailed twice by the scheduler.
 	 *
 	 * @param int|array $voucher_id
+	 * @param bool      $bundle     Whether vouchers due together may go out in one bundled email (Z6); false
+	 *                              delivers exactly this voucher (e.g. "Deliver now" on one voucher).
 	 */
-	public function deliver( $voucher_id ): void {
+	public function deliver( $voucher_id, bool $bundle = true ): void {
 		$voucher_id = is_array( $voucher_id ) ? (int) ( $voucher_id['voucher_id'] ?? 0 ) : (int) $voucher_id;
 		if ( $voucher_id <= 0 ) {
 			return;
@@ -316,13 +318,19 @@ final class Delivery {
 
 		// A connection-scoped lock is released automatically if a worker crashes.
 		global $wpdb;
+		// Z6: a voucher that may be part of a bundled email locks its order first (before its own lock), so the
+		// worker that bundles the order can lock every voucher of it; a parallel worker steps back instead.
+		$order_lock = $bundle ? $this->take_bundle_lock( $voucher_id ) : '';
+		if ( null === $order_lock ) {
+			$this->retry_soon( $voucher_id );
+			return;
+		}
 		$lock_name = Install::lock_name( 'delivery_' . $voucher_id );
 		$locked    = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $lock_name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( 1 !== (int) $locked ) {
 			// Another worker delivers this voucher right now. Should it stop before sending, a retry follows.
-			if ( function_exists( 'as_schedule_single_action' ) && ! as_has_scheduled_action( self::RETRY_HOOK, array( 'voucher_id' => $voucher_id ), self::GROUP ) ) {
-				as_schedule_single_action( time() + 5 * MINUTE_IN_SECONDS, self::RETRY_HOOK, array( 'voucher_id' => $voucher_id ), self::GROUP );
-			}
+			$this->release_lock( $order_lock );
+			$this->retry_soon( $voucher_id );
 			return;
 		}
 
@@ -341,17 +349,16 @@ final class Delivery {
 				return;
 			}
 
+			// Z6: a large quantity of the same order line for the same recipient goes out as one bundled email.
+			if ( '' !== $order_lock && $this->deliver_bundle( $voucher ) ) {
+				return;
+			}
+
 			// The delivery date has passed: the gift becomes redeemable even if no email can be sent
 			// (email disabled, invalid address). The download link and the admin "resend" still work.
-			if ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
-				$table = Install::tables()['vouchers'];
-				$activated = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'active', updated_at = %s WHERE id = %d AND status = 'scheduled'", $now, $voucher_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				if ( 1 !== (int) $activated ) {
-					// Voided or changed meanwhile (or a database error): do not enable its coupon, try again later.
-					return;
-				}
-				vcap()->coupons->set_coupon_enabled( $voucher, true );
-				$voucher->status = Voucher::STATUS_ACTIVE;
+			if ( ! $this->activate_due( $voucher, $now ) ) {
+				// Voided or changed meanwhile (or a database error): do not enable its coupon, try again later.
+				return;
 			}
 
 			// A retry after a partial failure only mails who is still missing (no duplicate for the others): who
@@ -364,47 +371,7 @@ final class Delivery {
 			$failures    = array();
 			$without_pdf = array();
 			$sent        = $delivered && ! $pending ? array() : $this->send( $voucher, $only, $sent_roles, $failures, $without_pdf );
-			Logger::debug( 'Delivery attempt.', array( 'voucher_id' => $voucher->id, 'required' => $required, 'delivered_before' => $delivered, 'sent' => $sent_roles, 'failed' => $failures, 'without_pdf' => $without_pdf ) );
-			if ( $without_pdf ) {
-				// D5: the mail went out, but without the PDF it should carry – said so instead of a plain "sent".
-				$this->repo->log( $voucher->id, 'delivered_without_pdf', null, null, Note::make( 'delivered_without_pdf', array( implode( ',', $without_pdf ) ) ) );
-			}
-			if ( ! $sent && $pending ) {
-				// Retried with growing pauses (retry_later()); the daily safety net catches retries that got lost.
-				// The reason per role (D4): email disabled, no address and a mail system error are different tasks.
-				$this->repo->log( $voucher->id, 'delivery_failed', null, null, Note::make( 'delivery_not_sent', array( (string) wp_json_encode( $failures ) ) ) );
-				$this->retry_later( $voucher );
-				return;
-			}
-			$delivered = array_values( array_unique( array_merge( $delivered, $sent_roles ) ) );
-			$missing   = array_values( array_diff( $required, $delivered ) );
-			$this->store_delivered_roles( $voucher->id, $delivered, $missing );
-			if ( $missing ) {
-				// "Send to buyer and recipient": delivered only when both got it; the rest is retried later.
-				$this->repo->log( $voucher->id, 'delivery_failed', null, null, Note::make( 'delivery_partial', array( implode( ',', $missing ), (string) wp_json_encode( array_intersect_key( $failures, array_flip( $missing ) ) ) ) ) );
-				$this->retry_later( $voucher );
-				return;
-			}
-
-			$table   = Install::tables()['vouchers'];
-			$updated = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				$wpdb->prepare(
-					"UPDATE {$table} SET delivered_at = %s, status = CASE WHEN status = 'scheduled' THEN 'active' ELSE status END, updated_at = %s
-					WHERE id = %d AND delivered_at IS NULL AND status IN ('scheduled','active')",
-					$now,
-					$now,
-					$voucher_id
-				)
-			);
-			if ( 1 !== (int) $updated ) {
-				throw new \RuntimeException( __( 'Voucher email was sent but its delivery state could not be saved.', 'voucher-captain' ) );
-			}
-			$voucher->delivered_at = $now;
-			delete_transient( 'vcap_undelivered_count' );
-			delete_transient( 'vcap_given_up_count' );
-			$this->repo->log( $voucher->id, 'delivered', null, null, Note::make( 'delivered', array( count( $sent ), implode( ',', $sent_roles ) ) ) );
-			/** A voucher was delivered to everyone it is meant for (args: Voucher $voucher, string[] $addresses). */
-			do_action( 'vcap_voucher_delivered', $voucher, $sent );
+			$this->record_attempt( $voucher, $required, $delivered, $sent, $sent_roles, $failures, $without_pdf, $now );
 		} catch ( \Throwable $e ) {
 			Logger::error( 'Voucher delivery failed: ' . Health::mask_addresses( $e->getMessage() ), array( 'voucher_id' => $voucher_id ) );
 			if ( isset( $voucher ) && $voucher instanceof Voucher ) {
@@ -418,7 +385,350 @@ final class Delivery {
 			}
 			throw $e;
 		} finally {
-			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$this->release_lock( $lock_name );
+			$this->release_lock( $order_lock );
+		}
+	}
+
+	/** Another worker holds a lock this delivery needs: it is tried again in five minutes (one retry per voucher). */
+	private function retry_soon( int $voucher_id ): void {
+		if ( function_exists( 'as_schedule_single_action' ) && ! as_has_scheduled_action( self::RETRY_HOOK, array( 'voucher_id' => $voucher_id ), self::GROUP ) ) {
+			as_schedule_single_action( time() + 5 * MINUTE_IN_SECONDS, self::RETRY_HOOK, array( 'voucher_id' => $voucher_id ), self::GROUP );
+		}
+	}
+
+	private function release_lock( ?string $name ): void {
+		if ( null === $name || '' === $name ) {
+			return;
+		}
+		global $wpdb;
+		$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
+
+	/**
+	 * Activates a scheduled voucher whose delivery date has passed (status and coupon), so the gift is redeemable
+	 * even if no email can be sent. False when the row changed meanwhile (voided, or a database error).
+	 */
+	private function activate_due( Voucher $voucher, string $now ): bool {
+		if ( Voucher::STATUS_SCHEDULED !== $voucher->status ) {
+			return true;
+		}
+		global $wpdb;
+		$table     = Install::tables()['vouchers'];
+		$activated = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'active', updated_at = %s WHERE id = %d AND status = 'scheduled'", $now, $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( 1 !== (int) $activated ) {
+			return false;
+		}
+		vcap()->coupons->set_coupon_enabled( $voucher, true );
+		$voucher->status = Voucher::STATUS_ACTIVE;
+		return true;
+	}
+
+	/**
+	 * Records one delivery attempt of a voucher: the roles that got it, the ledger entry ("delivered",
+	 * "delivered_without_pdf", "delivery_failed"), a retry for who is still missing, the delivered state and the
+	 * action "vcap_voucher_delivered". Shared by the single and the bundled delivery (Z6), so both keep the same
+	 * per-voucher state and history.
+	 *
+	 * @param string[]              $required    Roles that must get it.
+	 * @param string[]              $delivered   Roles that got it in earlier attempts.
+	 * @param string[]              $sent        Addresses mailed now.
+	 * @param string[]              $sent_roles  Roles mailed now.
+	 * @param array<string, string> $failures    Reason per role not mailed now.
+	 * @param string[]              $without_pdf Roles mailed now without the PDF they should carry.
+	 * @param int                   $batch       Vouchers in the email (bundled delivery), 1 for its own email.
+	 */
+	private function record_attempt( Voucher $voucher, array $required, array $delivered, array $sent, array $sent_roles, array $failures, array $without_pdf, string $now, int $batch = 1 ): void {
+		global $wpdb;
+		$pending = array_values( array_diff( $required, $delivered ) );
+		Logger::debug( 'Delivery attempt.', array( 'voucher_id' => $voucher->id, 'required' => $required, 'delivered_before' => $delivered, 'sent' => $sent_roles, 'failed' => $failures, 'without_pdf' => $without_pdf, 'bundle' => $batch ) );
+		if ( $without_pdf ) {
+			// D5: the mail went out, but without the PDF it should carry – said so instead of a plain "sent".
+			$this->repo->log( $voucher->id, 'delivered_without_pdf', null, null, Note::make( 'delivered_without_pdf', array( implode( ',', $without_pdf ) ) ) );
+		}
+		if ( ! $sent && $pending ) {
+			// Retried with growing pauses (retry_later()); the daily safety net catches retries that got lost.
+			// The reason per role (D4): email disabled, no address and a mail system error are different tasks.
+			$this->repo->log( $voucher->id, 'delivery_failed', null, null, Note::make( 'delivery_not_sent', array( (string) wp_json_encode( $failures ) ) ) );
+			$this->retry_later( $voucher );
+			return;
+		}
+		$delivered = array_values( array_unique( array_merge( $delivered, $sent_roles ) ) );
+		$missing   = array_values( array_diff( $required, $delivered ) );
+		$this->store_delivered_roles( $voucher->id, $delivered, $missing );
+		if ( $missing ) {
+			// "Send to buyer and recipient": delivered only when both got it; the rest is retried later.
+			$this->repo->log( $voucher->id, 'delivery_failed', null, null, Note::make( 'delivery_partial', array( implode( ',', $missing ), (string) wp_json_encode( array_intersect_key( $failures, array_flip( $missing ) ) ) ) ) );
+			$this->retry_later( $voucher );
+			return;
+		}
+
+		$table   = Install::tables()['vouchers'];
+		$updated = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				"UPDATE {$table} SET delivered_at = %s, status = CASE WHEN status = 'scheduled' THEN 'active' ELSE status END, updated_at = %s
+				WHERE id = %d AND delivered_at IS NULL AND status IN ('scheduled','active')", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$now,
+				$now,
+				$voucher->id
+			)
+		);
+		if ( 1 !== (int) $updated ) {
+			throw new \RuntimeException( esc_html__( 'Voucher email was sent but its delivery state could not be saved.', 'voucher-captain' ) );
+		}
+		$voucher->delivered_at = $now;
+		delete_transient( 'vcap_undelivered_count' );
+		delete_transient( 'vcap_given_up_count' );
+		$args = array( count( $sent ), implode( ',', $sent_roles ) );
+		if ( $batch > 1 ) {
+			$args[] = $batch;
+		}
+		$this->repo->log( $voucher->id, 'delivered', null, null, Note::make( 'delivered', $args ) );
+		/** A voucher was delivered to everyone it is meant for (args: Voucher $voucher, string[] $addresses). */
+		do_action( 'vcap_voucher_delivered', $voucher, $sent );
+	}
+
+	/**
+	 * Z6: number of due vouchers of the same order line for the same recipient from which they go out together in
+	 * one email with a code table and one PDF (setting "vcap_bundle_threshold", default 5; filter
+	 * "vcap_bundle_threshold" with the voucher; 0 = every voucher gets its own email). At least 2.
+	 */
+	public static function bundle_threshold( ?Voucher $voucher = null ): int {
+		/** Vouchers of one order line and recipient from which they are bundled into one email (0 = never). */
+		$threshold = (int) apply_filters( 'vcap_bundle_threshold', (int) Settings::value( 'vcap_bundle_threshold' ), $voucher );
+		return $threshold > 0 ? max( 2, $threshold ) : 0;
+	}
+
+	/**
+	 * Z6: a bundled email with more vouchers than this carries no PDF but a download link per voucher (and the
+	 * link to My Account) instead (setting "vcap_bundle_pdf_limit", default 50; filter "vcap_bundle_pdf_limit"
+	 * with the vouchers; 0 = never a PDF in a bundled email).
+	 *
+	 * @param Voucher[] $vouchers
+	 */
+	public static function bundle_pdf_limit( array $vouchers = array() ): int {
+		/** Most vouchers a bundled email attaches the PDF for; above it, download links only (0 = never a PDF). */
+		return max( 0, (int) apply_filters( 'vcap_bundle_pdf_limit', (int) Settings::value( 'vcap_bundle_pdf_limit' ), $vouchers ) );
+	}
+
+	/** Z6: vouchers with the same key may share one email: the same order line, routing and main address. */
+	public static function bundle_key( Voucher $voucher ): string {
+		$address = self::to_recipient( $voucher ) ? $voucher->recipient_email : $voucher->buyer_email;
+		return $voucher->order_item_id . '|' . $voucher->send_to . '|' . strtolower( trim( $address ) );
+	}
+
+	/**
+	 * Roles a first delivery attempt mails ('recipient', 'buyer'), the buyer's courtesy copy of a gift included
+	 * (the same routing as send()).
+	 *
+	 * @return string[]
+	 */
+	private static function wanted_roles( Voucher $voucher ): array {
+		$to_recipient = self::to_recipient( $voucher );
+		$roles        = $to_recipient ? array( 'recipient' ) : array();
+		if ( ! $to_recipient || 'both' === $voucher->send_to || self::legacy_buyer_copy( $voucher ) ) {
+			$roles[] = 'buyer';
+		}
+		return $roles;
+	}
+
+	/** The bundled email when it is registered and switched on (else every voucher gets its own email). */
+	private static function bundle_email(): ?Emails\BundleEmail {
+		if ( ! function_exists( 'WC' ) ) {
+			return null;
+		}
+		$email = WC()->mailer()->get_emails()['VCAP_Email_Voucher_Bundle'] ?? null;
+		return $email instanceof Emails\BundleEmail && $email->is_enabled() ? $email : null;
+	}
+
+	/** Z6: whether a voucher (as read) is due for its delivery now and may join a bundle. */
+	private static function bundle_candidate( Voucher $voucher ): bool {
+		return $voucher->order_item_id > 0
+			&& null === $voucher->delivered_at
+			&& in_array( $voucher->status, array( Voucher::STATUS_SCHEDULED, Voucher::STATUS_ACTIVE ), true )
+			&& ( ! $voucher->delivery_at || strtotime( $voucher->delivery_at . ' UTC' ) <= time() )
+			&& ( ! $voucher->expires_at || strtotime( $voucher->expires_at . ' UTC' ) >= time() );
+	}
+
+	/**
+	 * Z6: the order lock of a voucher that may go out in a bundled email (its order line has at least
+	 * bundle_threshold() due, undelivered vouchers and the bundled email is switched on).
+	 *
+	 * @return string|null The lock held ('' = no bundle possible, nothing locked), null when another worker holds it.
+	 */
+	private function take_bundle_lock( int $voucher_id ): ?string {
+		$voucher   = $this->repo->get( $voucher_id );
+		$threshold = $voucher ? self::bundle_threshold( $voucher ) : 0;
+		if ( ! $voucher || ! $threshold || $voucher->order_id <= 0 || ! self::bundle_candidate( $voucher ) || ! self::bundle_email() ) {
+			return '';
+		}
+		global $wpdb;
+		$table = Install::tables()['vouchers'];
+		$due   = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE order_item_id = %d AND delivered_at IS NULL AND status IN ('scheduled','active') AND ( delivery_at IS NULL OR delivery_at <= %s )", $voucher->order_item_id, $this->repo->now() ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( $due < $threshold ) {
+			return '';
+		}
+		$name = Install::lock_name( 'delivery_order_' . $voucher->order_id );
+		return 1 === (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $name ) ) ? $name : null; // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
+
+	/**
+	 * Z6: delivers the vouchers of the order that are due now in bundled emails – one email per order line and
+	 * recipient with a code table and one multi-page PDF (above bundle_pdf_limit() download links instead), and
+	 * one buyer copy for all of them instead of one per voucher. Only lines with at least bundle_threshold() due
+	 * vouchers for the same recipient are bundled; vouchers due at another time wait for their own delivery.
+	 *
+	 * Every voucher keeps its own state: it is locked, activated, recorded (delivered_roles, delivered_at, ledger)
+	 * and retried on its own, so a failed bundle is retried for the vouchers and roles that are still missing.
+	 * The caller holds the order lock and the entry voucher's lock.
+	 *
+	 * @return bool false when the voucher is not part of a bundle (it is then delivered on its own).
+	 */
+	private function deliver_bundle( Voucher $entry ): bool {
+		$email = self::bundle_email();
+		if ( ! $email ) {
+			return false;
+		}
+		global $wpdb;
+		$groups = array();
+		foreach ( $this->repo->for_order( $entry->order_id ) as $candidate ) {
+			if ( $candidate->id === $entry->id ) {
+				$candidate = $entry;
+			} elseif ( ! self::bundle_candidate( $candidate ) ) {
+				continue;
+			}
+			$groups[ self::bundle_key( $candidate ) ][] = $candidate;
+		}
+		$entry_key = self::bundle_key( $entry );
+		$groups    = array_filter( $groups, static fn( $members ) => self::bundle_threshold( $members[0] ) > 0 && count( $members ) >= self::bundle_threshold( $members[0] ) );
+		if ( ! isset( $groups[ $entry_key ] ) ) {
+			return false;
+		}
+
+		$locks = array();
+		try {
+			foreach ( $groups as $key => $members ) {
+				$kept = array();
+				foreach ( $members as $member ) {
+					if ( $member->id === $entry->id ) {
+						$kept[] = $entry;
+						continue;
+					}
+					$name = Install::lock_name( 'delivery_' . $member->id );
+					if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $name ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+						continue; // Delivered by another worker right now.
+					}
+					$locks[] = $name;
+					$fresh   = $this->repo->get( $member->id );
+					// A given-up delivery waits for the shop (it is not mailed again with the others).
+					if ( $fresh && self::bundle_candidate( $fresh ) && self::bundle_key( $fresh ) === $key && ! $this->repo->delivery_attempts( $fresh->id )['given_up'] ) {
+						$kept[] = $fresh;
+					}
+				}
+				if ( count( $kept ) < self::bundle_threshold( $kept[0] ?? $members[0] ) ) {
+					unset( $groups[ $key ] ); // Too few left: each one gets its own email from its own action.
+					continue;
+				}
+				$groups[ $key ] = $kept;
+			}
+			if ( ! isset( $groups[ $entry_key ] ) ) {
+				return false;
+			}
+
+			$now     = $this->repo->now();
+			$members = array_merge( ...array_values( $groups ) );
+			$plan = array();
+			foreach ( $members as $member ) {
+				if ( ! $this->activate_due( $member, $now ) ) {
+					continue; // Voided or changed meanwhile.
+				}
+				$required  = $this->required_roles( $member );
+				$delivered = $this->delivered_roles( $member );
+				$pending   = array_values( array_diff( $required, $delivered ) );
+				// A retry after a partial failure only mails who is still missing (as for a single voucher).
+				$plan[ $member->id ] = array(
+					'voucher'     => $member,
+					'required'    => $required,
+					'delivered'   => $delivered,
+					'wanted'      => $delivered ? $pending : self::wanted_roles( $member ),
+					'sent'        => array(),
+					'sent_roles'  => array(),
+					'failures'    => array(),
+					'without_pdf' => array(),
+					'batch'       => 1,
+				);
+			}
+
+			// One email per order line and recipient; one buyer copy (per buyer address) for the whole order.
+			$mails = array(
+				'recipient' => array(),
+				'buyer'     => array(),
+			);
+			foreach ( $plan as $item ) {
+				$voucher = $item['voucher'];
+				if ( in_array( 'recipient', $item['wanted'], true ) ) {
+					$mails['recipient'][ self::bundle_key( $voucher ) ][] = $voucher;
+				}
+				if ( in_array( 'buyer', $item['wanted'], true ) ) {
+					$mails['buyer'][ strtolower( trim( $voucher->buyer_email ) ) ][] = $voucher;
+				}
+			}
+			foreach ( $mails as $role => $lists ) {
+				foreach ( $lists as $list ) {
+					$sent   = false;
+					$reason = 'mail_failed';
+					try {
+						$sent   = $email->trigger_bundle( $list, $role );
+						$reason = '' !== $email->last_failure ? $email->last_failure : 'mail_failed';
+					} catch ( \Throwable $e ) {
+						Logger::error( 'Bundled voucher email failed: ' . Health::mask_addresses( $e->getMessage() ), array( 'voucher_ids' => array_map( static fn( $v ) => $v->id, $list ), 'role' => $role ) );
+					}
+					foreach ( $list as $voucher ) {
+						$item = &$plan[ $voucher->id ];
+						if ( $sent ) {
+							$item['sent'][]       = 'recipient' === $role ? $voucher->recipient_email : $voucher->buyer_email;
+							$item['sent_roles'][] = $role;
+							if ( $email->pdf_failed ) {
+								$item['without_pdf'][] = $role;
+							}
+						} else {
+							$item['failures'][ $role ] = $reason;
+						}
+						$item['batch'] = max( $item['batch'], count( $list ) );
+						unset( $item );
+					}
+				}
+			}
+			if ( array_filter( array_column( $plan, 'failures' ) ) ) {
+				Logger::warning( 'Bundled voucher email not sent.', array( 'order_id' => $entry->order_id, 'vouchers' => count( $plan ) ) );
+			}
+
+			$error = null;
+			foreach ( $plan as $id => $item ) {
+				try {
+					$this->record_attempt( $item['voucher'], $item['required'], $item['delivered'], $item['sent'], $item['sent_roles'], $item['failures'], $item['without_pdf'], $now, $item['batch'] );
+				} catch ( \Throwable $e ) {
+					if ( $id === $entry->id ) {
+						$error = $e; // deliver() records it and plans the retry.
+						continue;
+					}
+					Logger::error( 'Voucher delivery failed: ' . Health::mask_addresses( $e->getMessage() ), array( 'voucher_id' => $id ) );
+					$this->repo->log( $id, 'delivery_failed', null, null, Note::make( 'delivery_error', array( Health::mask_addresses( mb_substr( wp_strip_all_tags( $e->getMessage() ), 0, 300 ) ) ) ) );
+					try {
+						$this->retry_later( $item['voucher'] );
+					} catch ( \Throwable $retry_error ) {
+						Logger::error( 'Voucher delivery retry could not be scheduled: ' . $retry_error->getMessage(), array( 'voucher_id' => $id ) );
+					}
+				}
+			}
+			if ( $error ) {
+				throw $error;
+			}
+			return true;
+		} finally {
+			foreach ( $locks as $name ) {
+				$this->release_lock( $name );
+			}
 		}
 	}
 

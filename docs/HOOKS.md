@@ -64,6 +64,8 @@ are described in CONNECTORS.md and API.md.
 | `vcap_bonus_code_prefix` | `src/Discounts/Bonus.php` | – |
 | `vcap_bonus_coupon` | `src/Discounts/Bonus.php` | – |
 | `vcap_builtin_fields` | `src/Fields.php` | – |
+| `vcap_bundle_pdf_limit` | `src/Delivery.php` | Most vouchers a bundled email attaches the PDF for; above it, download links only (0 = never a PDF). |
+| `vcap_bundle_threshold` | `src/Delivery.php` | Vouchers of one order line and recipient from which they are bundled into one email (0 = never). |
 | `vcap_checkin_undo_minutes` | `src/Tickets.php` | – |
 | `vcap_claim_retention_days` | `src/Claim.php` | – |
 | `vcap_client_ip` | `src/Health.php`, `src/Plugin.php` | – |

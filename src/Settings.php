@@ -62,6 +62,9 @@ final class Settings {
 		'vcap_customer_daily_limit'    => 1000,
 		'vcap_hold_new_customer_above' => 250,
 		'vcap_hold_hours'              => 24,
+		// Z6: bundled delivery of large quantities (0 switches each one off).
+		'vcap_bundle_threshold'        => 5,
+		'vcap_bundle_pdf_limit'        => 50,
 	);
 
 	/**
@@ -262,6 +265,29 @@ final class Settings {
 						'desc_tip' => __( 'PHP date format used in PDFs and emails. Leave empty to use the WordPress date format.', 'voucher-captain' ),
 					),
 					array( 'type' => 'sectionend', 'id' => 'vcap_delivery' ),
+					array(
+						'type'  => 'title',
+						'title' => __( 'Bulk orders', 'voucher-captain' ),
+						'id'    => 'vcap_bundle',
+						'desc'  => __( 'Many vouchers of one order line for the same recipient are sent in one email with a list of all codes instead of one email per voucher; the buyer gets one copy per order. Vouchers with different delivery dates are sent separately. The email text is edited under WooCommerce → Settings → Emails → "Vouchers (bulk order)"; switching that email off sends every voucher on its own again.', 'voucher-captain' ),
+					),
+					array(
+						'title'             => __( 'One email from (vouchers)', 'voucher-captain' ),
+						'id'                => 'vcap_bundle_threshold',
+						'type'              => 'number',
+						'default'           => self::DEFAULTS['vcap_bundle_threshold'],
+						'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
+						'desc_tip'          => __( 'From this many vouchers of the same order line and recipient, due at the same time, they are sent together in one email (default 5). 0 = always one email per voucher.', 'voucher-captain' ),
+					),
+					array(
+						'title'             => __( 'One PDF up to (vouchers)', 'voucher-captain' ),
+						'id'                => 'vcap_bundle_pdf_limit',
+						'type'              => 'number',
+						'default'           => self::DEFAULTS['vcap_bundle_pdf_limit'],
+						'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
+						'desc_tip'          => __( 'A bundled email with up to this many vouchers carries one PDF with a page per voucher (default 50). Larger bundles carry no attachment but a download link per voucher and the link to My Account. 0 = never attach a PDF to a bundled email.', 'voucher-captain' ),
+					),
+					array( 'type' => 'sectionend', 'id' => 'vcap_bundle' ),
 				);
 				break;
 
