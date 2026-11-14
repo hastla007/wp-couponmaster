@@ -248,7 +248,7 @@ vcap_life_assert( wc_get_order( $t5->get_id() )->has_status( 'refunded' ), 'T5: 
 vcap_life_assert( VCAP\Voucher::STATUS_ACTIVE === $repo->get( $single->id )->status && 0 === ( new WC_Coupon( $single->coupon_id ) )->get_usage_count(), 'T5: the single-use voucher can be used again after the full refund' );
 
 // K3: "On hold" as the only issue status (older setups), bank transfer: the vouchers come once the order is paid.
-$keep_statuses = get_option( 'vcap_issue_statuses' );
+$keep_statuses = get_option( 'vcap_issue_statuses', false );
 update_option( 'vcap_issue_statuses', array( 'on-hold' ) );
 $k3_product = new WC_Product_Simple();
 $k3_product->set_name( 'K3 voucher' );
@@ -271,6 +271,7 @@ $k3->set_status( 'processing' );
 $k3->save();
 vcap()->issuer->on_paid_status( $k3->get_id(), wc_get_order( $k3->get_id() ), array( 'from' => 'on-hold', 'to' => 'processing', 'manual' => true ) );
 vcap_life_assert( 1 === count( $repo->for_order( $k3->get_id() ) ), 'K3: setting the order to "Processing" by hand issues the voucher that waited for the payment' );
-update_option( 'vcap_issue_statuses', $keep_statuses );
+// Unset before: delete it again (storing false would leave "" = issue manually only for every later suite).
+false === $keep_statuses ? delete_option( 'vcap_issue_statuses' ) : update_option( 'vcap_issue_statuses', $keep_statuses );
 
 echo "Voucher Captain order lifecycle checks passed.\n";
