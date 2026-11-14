@@ -72,7 +72,7 @@ final class Claim {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built above.
 			$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE kind IN ({$in}) AND created_at < %s LIMIT %d", $args ) );
 			if ( false === $deleted ) {
-				throw new \RuntimeException( 'Claims could not be purged: ' . $wpdb->last_error );
+				throw new \RuntimeException( 'Claims could not be purged: ' . esc_html( $wpdb->last_error ) );
 			}
 			$removed += (int) $deleted;
 		} while ( (int) $deleted >= 1000 && microtime( true ) - $start < $budget );

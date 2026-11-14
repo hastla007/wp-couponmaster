@@ -63,6 +63,7 @@ function is_email( $s ) { return (bool) filter_var( (string) $s, FILTER_VALIDATE
 function absint( $n ) { return abs( (int) $n ); }
 function wp_json_encode( $v, $f = 0 ) { return json_encode( $v, $f | JSON_UNESCAPED_UNICODE ); }
 function wp_strip_all_tags( $s ) { return trim( strip_tags( (string) $s ) ); }
+function wp_is_writable( $p ) { return is_writable( (string) $p ); }
 function wp_specialchars_decode( $s, $q = ENT_NOQUOTES ) { return htmlspecialchars_decode( (string) $s, $q ); }
 function wp_unslash( $v ) { return $v; }
 function wp_slash( $v ) { return $v; }

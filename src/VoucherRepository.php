@@ -295,6 +295,7 @@ final class VoucherRepository {
 		$exclude = array_values( array_filter( array_map( 'intval', $exclude ) ) );
 		$not_in  = $exclude ? ' AND v.id NOT IN (' . implode( ',', $exclude ) . ')' : '';
 		$since   = gmdate( 'Y-m-d H:i:s', time() - 30 * DAY_IN_SECONDS );
+		$given_up = $this->given_up_sql( 'v' ); // Internal SQL without user input (table names and constants only).
 		return array_map(
 			'intval',
 			$wpdb->get_col( // phpcs:ignore
@@ -302,7 +303,7 @@ final class VoucherRepository {
 					"SELECT v.id FROM {$this->table()} v
 					WHERE v.delivered_at IS NULL AND v.status IN ('scheduled','active')
 					AND ( ( v.delivery_at IS NOT NULL AND v.delivery_at <= %s AND v.delivery_at >= %s ) OR ( v.delivery_at IS NULL AND v.created_at <= %s AND v.created_at >= %s ) )
-					AND NOT EXISTS ( " . $this->given_up_sql( 'v' ) . " ){$not_in}
+					AND NOT EXISTS ( {$given_up} ){$not_in}
 					ORDER BY ( SELECT MAX(f.id) FROM {$this->events_table()} f WHERE f.voucher_id = v.id AND f.event = 'delivery_failed' ) IS NOT NULL,
 					( SELECT MAX(f.id) FROM {$this->events_table()} f WHERE f.voucher_id = v.id AND f.event = 'delivery_failed' ) ASC,
 					COALESCE( v.delivery_at, v.created_at ) ASC, v.id ASC

@@ -327,7 +327,7 @@ final class CouponManager {
 			}
 			$amount = $this->used_amount( $item );
 			if ( null === $amount ) {
-				throw new \Exception( self::currency_message( (string) $order->get_currency() ) );
+				throw new \Exception( esc_html( self::currency_message( (string) $order->get_currency() ) ) );
 			}
 			if ( $amount > 0 ) {
 				$coupons[ $code ] = array( 'voucher' => $voucher, 'amount' => $amount );
@@ -349,7 +349,7 @@ final class CouponManager {
 			}
 			$reserved_voucher = $this->find_voucher_for_code( (string) $code );
 			if ( ! $reserved_voucher || ! $this->release_reservation_atomic( $reserved_voucher, $order->get_id(), __( 'Checkout reservation reconciled', 'voucher-captain' ) ) ) {
-				throw new \Exception( __( 'An earlier voucher reservation could not be released. Please contact the store before trying again.', 'voucher-captain' ) );
+				throw new \Exception( esc_html__( 'An earlier voucher reservation could not be released. Please contact the store before trying again.', 'voucher-captain' ) );
 			}
 			unset( $reservations[ $code ] );
 			$order->update_meta_data( '_vcap_reservations', $reservations );
@@ -382,7 +382,7 @@ final class CouponManager {
 				}
 				$order->delete_meta_data( '_vcap_reservations' );
 				$order->save();
-				throw new \Exception( __( 'A voucher balance changed while checkout was processing. Your order was not sent for payment. Refresh the cart and try again.', 'voucher-captain' ) );
+				throw new \Exception( esc_html__( 'A voucher balance changed while checkout was processing. Your order was not sent for payment. Refresh the cart and try again.', 'voucher-captain' ) );
 			}
 			$made[ $code ] = $reservation['amount'];
 			// Persist after each successful reserve so an interrupted checkout can resume safely.
@@ -435,13 +435,13 @@ final class CouponManager {
 			if ( $order instanceof \WC_Order ) {
 				$conflicts = $this->single_use_conflicts( $order );
 				if ( $conflicts ) {
-					throw new \Exception( self::single_use_conflict_message( $conflicts[0]['voucher'] ) );
+					throw new \Exception( esc_html( self::single_use_conflict_message( $conflicts[0]['voucher'] ) ) );
 				}
 			}
 			$this->reserve_order( $order );
 		} catch ( \Throwable $e ) {
 			if ( class_exists( \Automattic\WooCommerce\StoreApi\Exceptions\RouteException::class ) ) {
-				throw new \Automattic\WooCommerce\StoreApi\Exceptions\RouteException( 'vcap_voucher_reservation_failed', $e->getMessage(), 409 );
+				throw new \Automattic\WooCommerce\StoreApi\Exceptions\RouteException( 'vcap_voucher_reservation_failed', esc_html( $e->getMessage() ), 409 );
 			}
 			throw $e;
 		}

@@ -202,7 +202,7 @@ final class PassCaptainTickets {
 		if ( ! $state ) {
 			$url = $voucher->is_usable() ? \VCAP\Shortcodes::redeem_url( $voucher->code ) : '';
 			if ( '' !== $url ) {
-				echo '<a class="woocommerce-button button vcap-exchange-button" href="' . esc_url( $url ) . '">' . esc_html__( 'Exchange for tickets', 'voucher-captain' ) . \VCAP\Shortcodes::voucher_suffix( $voucher->code ) . '</a> ';
+				echo '<a class="woocommerce-button button vcap-exchange-button" href="' . esc_url( $url ) . '">' . esc_html__( 'Exchange for tickets', 'voucher-captain' ) . wp_kses( \VCAP\Shortcodes::voucher_suffix( $voucher->code ), array( 'span' => array( 'class' => true ) ) ) . '</a> ';
 			}
 			return;
 		}
@@ -214,7 +214,7 @@ final class PassCaptainTickets {
 		wp_nonce_field( 'vcap_resend_tickets_' . $voucher->id, 'vcap_resend_tickets_nonce' );
 		// New ticket codes replace the old ones: asked explicitly (works without JavaScript).
 		echo '<label class="vcap-resend-confirm"><input type="checkbox" name="vcap_resend_confirm" value="1" required /> ' . esc_html__( 'I understand that the tickets sent so far become invalid.', 'voucher-captain' ) . '</label> ';
-		echo '<button type="submit" class="woocommerce-button button">' . esc_html__( 'Send tickets again', 'voucher-captain' ) . \VCAP\Shortcodes::voucher_suffix( $voucher->code ) . '</button></form>';
+		echo '<button type="submit" class="woocommerce-button button">' . esc_html__( 'Send tickets again', 'voucher-captain' ) . wp_kses( \VCAP\Shortcodes::voucher_suffix( $voucher->code ), array( 'span' => array( 'class' => true ) ) ) . '</button></form>';
 	}
 
 	/**

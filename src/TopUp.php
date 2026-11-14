@@ -764,9 +764,9 @@ final class TopUp {
 		throw new \Exception(
 			sprintf(
 				/* translators: 1: masked gift card codes, 2: maximum refund */
-				__( 'The gift card top-up of this order was already spent from the card (%1$s). At most %2$s can be refunded now.', 'voucher-captain' ),
-				implode( ', ', $codes ),
-				html_entity_decode( wp_strip_all_tags( wc_price( $max, array( 'currency' => $order->get_currency() ) ) ) )
+				esc_html__( 'The gift card top-up of this order was already spent from the card (%1$s). At most %2$s can be refunded now.', 'voucher-captain' ),
+				esc_html( implode( ', ', $codes ) ),
+				esc_html( html_entity_decode( wp_strip_all_tags( wc_price( $max, array( 'currency' => $order->get_currency() ) ) ) ) )
 			)
 		);
 	}

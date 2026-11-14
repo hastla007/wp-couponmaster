@@ -738,9 +738,9 @@ final class Issuer {
 			throw new \Exception(
 				sprintf(
 					/* translators: 1: voucher codes, 2: order currency */
-					__( 'Value from this order was already spent (%1$s), and no exchange rate for %2$s is known to work out how much can still be refunded. Set up the exchange rate first.', 'voucher-captain' ),
-					implode( ', ', $codes ),
-					(string) $order->get_currency()
+					esc_html__( 'Value from this order was already spent (%1$s), and no exchange rate for %2$s is known to work out how much can still be refunded. Set up the exchange rate first.', 'voucher-captain' ),
+					esc_html( implode( ', ', $codes ) ),
+					esc_html( (string) $order->get_currency() )
 				)
 			);
 		}
@@ -756,12 +756,12 @@ final class Issuer {
 			sprintf(
 				$topup_spent > 0
 					/* translators: 1: voucher codes and masked gift card codes, 2: spent value, 3: maximum refund */
-					? __( 'Value from this order was already spent (%1$s, value used: %2$s). At most %3$s can be refunded; unused vouchers are voided and unspent top-ups are taken back from the gift card.', 'voucher-captain' )
+					? esc_html__( 'Value from this order was already spent (%1$s, value used: %2$s). At most %3$s can be refunded; unused vouchers are voided and unspent top-ups are taken back from the gift card.', 'voucher-captain' )
 					/* translators: 1: voucher codes, 2: spent value, 3: maximum refund */
-					: __( 'Vouchers from this order were already used (%1$s, value used: %2$s). At most %3$s can be refunded; the unused vouchers are voided.', 'voucher-captain' ),
-				implode( ', ', $codes ),
-				html_entity_decode( wp_strip_all_tags( wc_price( $spent, array( 'currency' => $order->get_currency() ) ) ) ),
-				html_entity_decode( wp_strip_all_tags( wc_price( max( 0, $max ), array( 'currency' => $order->get_currency() ) ) ) )
+					: esc_html__( 'Vouchers from this order were already used (%1$s, value used: %2$s). At most %3$s can be refunded; the unused vouchers are voided.', 'voucher-captain' ),
+				esc_html( implode( ', ', $codes ) ),
+				esc_html( html_entity_decode( wp_strip_all_tags( wc_price( $spent, array( 'currency' => $order->get_currency() ) ) ) ) ),
+				esc_html( html_entity_decode( wp_strip_all_tags( wc_price( max( 0, $max ), array( 'currency' => $order->get_currency() ) ) ) ) )
 			)
 		);
 	}

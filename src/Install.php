@@ -382,7 +382,8 @@ final class Install {
 		if ( $legacy && self::table_exists( self::tables()['vouchers'] ) ) {
 			$vouchers = self::tables()['vouchers'];
 			foreach ( array_chunk( $legacy, 500 ) as $chunk ) {
-				$valid = array_map( 'intval', (array) $wpdb->get_col( "SELECT DISTINCT coupon_id FROM {$vouchers} WHERE usage_mode = 'balance' AND coupon_id IN (" . implode( ',', $chunk ) . ')' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+				$in    = implode( ',', array_fill( 0, count( $chunk ), '%d' ) );
+				$valid = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT coupon_id FROM {$vouchers} WHERE usage_mode = 'balance' AND coupon_id IN ({$in})", $chunk ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
 				$changed = self::publish_drafts( $valid ) || $changed;
 			}
 		}
@@ -394,7 +395,8 @@ final class Install {
 				break;
 			}
 			$changed = self::publish_drafts( $ids ) || $changed;
-			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE post_id IN (" . implode( ',', $ids ) . ') AND meta_key = %s', self::SUSPENDED_META ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+			$in = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE post_id IN ({$in}) AND meta_key = %s", array_merge( $ids, array( self::SUSPENDED_META ) ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built above.
 			foreach ( $ids as $id ) {
 				wp_cache_delete( $id, 'post_meta' );
 			}
@@ -415,7 +417,9 @@ final class Install {
 		if ( ! $ids ) {
 			return false;
 		}
-		$wpdb->query( "UPDATE {$wpdb->posts} SET post_status = 'publish' WHERE ID IN (" . implode( ',', $ids ) . ") AND post_type = 'shop_coupon' AND post_status = 'draft'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+		$ids = array_map( 'intval', $ids );
+		$in  = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET post_status = 'publish' WHERE ID IN ({$in}) AND post_type = 'shop_coupon' AND post_status = 'draft'", $ids ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
 		foreach ( $ids as $id ) {
 			clean_post_cache( $id );
 		}
@@ -796,11 +800,13 @@ final class Install {
 			$values[] = '(%d, %s, 0, %s)';
 			array_push( $args, (int) $row['post_id'], substr( (string) $row['meta_value'], 0, 200 ), $now );
 		}
-		$ids   = implode( ',', array_map( 'intval', array_column( $rows, 'meta_id' ) ) );
-		$table = self::tables()['usage'];
-		$ok    = self::in_transaction(
-			static fn() => false !== $wpdb->query( $wpdb->prepare( "INSERT INTO {$table} (campaign_id, customer_key, order_id, created_at) VALUES " . implode( ',', $values ), $args ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				&& false !== $wpdb->query( "DELETE FROM {$wpdb->postmeta} WHERE meta_id IN ({$ids})" ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+		$ids    = array_map( 'intval', array_column( $rows, 'meta_id' ) );
+		$in     = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+		$values = implode( ',', $values );
+		$table  = self::tables()['usage'];
+		$ok     = self::in_transaction(
+			static fn() => false !== $wpdb->query( $wpdb->prepare( "INSERT INTO {$table} (campaign_id, customer_key, order_id, created_at) VALUES {$values}", $args ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- $values holds only placeholder groups built above.
+				&& false !== $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE meta_id IN ({$in})", $ids ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
 		);
 		foreach ( array_unique( array_map( 'intval', array_column( $rows, 'post_id' ) ) ) as $post_id ) {
 			wp_cache_delete( $post_id, 'post_meta' );
@@ -822,11 +828,13 @@ final class Install {
 			$values[] = '(%s, %s, %s)';
 			array_push( $args, substr( (string) $row['option_name'], strlen( '_vcap_claim_' ), 32 ), 'legacy', gmdate( 'Y-m-d H:i:s', $time > 0 ? $time : time() ) );
 		}
-		$ids   = implode( ',', array_map( 'intval', array_column( $rows, 'option_id' ) ) );
-		$table = self::tables()['claims'];
-		$ok    = self::in_transaction(
-			static fn() => false !== $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$table} (claim_key, kind, created_at) VALUES " . implode( ',', $values ), $args ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				&& false !== $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_id IN ({$ids})" ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+		$ids    = array_map( 'intval', array_column( $rows, 'option_id' ) );
+		$in     = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+		$values = implode( ',', $values );
+		$table  = self::tables()['claims'];
+		$ok     = self::in_transaction(
+			static fn() => false !== $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$table} (claim_key, kind, created_at) VALUES {$values}", $args ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- $values holds only placeholder groups built above.
+				&& false !== $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_id IN ({$in})", $ids ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
 		);
 		foreach ( array_column( $rows, 'option_name' ) as $name ) {
 			wp_cache_delete( (string) $name, 'options' );

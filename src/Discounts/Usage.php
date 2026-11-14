@@ -246,7 +246,7 @@ final class Usage {
 					self::remove( $undo, $key, (int) $order->get_id() );
 					\VCAP\Claim::release( 'usage:' . $order->get_id() . ':' . $undo );
 				}
-				throw new \Exception( __( 'The promotion could not be checked right now. Please try again in a moment.', 'voucher-captain' ) );
+				throw new \Exception( esc_html__( 'The promotion could not be checked right now. Please try again in a moment.', 'voucher-captain' ) );
 			}
 			$blocker = $limited ? self::blocker( $campaign, (int) $order->get_customer_id(), (string) $order->get_billing_email() ) : '';
 			if ( '' === $blocker && \VCAP\Claim::take( 'usage:' . $order->get_id() . ':' . $id ) ) {
@@ -264,8 +264,8 @@ final class Usage {
 				throw new \Exception(
 					sprintf(
 						/* translators: %s: promotion title */
-						__( 'The promotion "%s" has reached its usage limit. Please remove it from your cart and try again.', 'voucher-captain' ),
-						(string) ( $campaign['title'] ?? '' )
+						esc_html__( 'The promotion "%s" has reached its usage limit. Please remove it from your cart and try again.', 'voucher-captain' ),
+						esc_html( (string) ( $campaign['title'] ?? '' ) )
 					)
 				);
 			}
@@ -291,7 +291,7 @@ final class Usage {
 			$this->hold( $order );
 		} catch ( \Exception $e ) {
 			if ( class_exists( \Automattic\WooCommerce\StoreApi\Exceptions\RouteException::class ) ) {
-				throw new \Automattic\WooCommerce\StoreApi\Exceptions\RouteException( 'vcap_promotion_usage_limit', $e->getMessage(), 409 );
+				throw new \Automattic\WooCommerce\StoreApi\Exceptions\RouteException( 'vcap_promotion_usage_limit', esc_html( $e->getMessage() ), 409 );
 			}
 			throw $e;
 		}

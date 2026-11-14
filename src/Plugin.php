@@ -39,7 +39,7 @@ final class Plugin {
 	public static function instance(): Plugin {
 		if ( null === self::$instance ) {
 			if ( ! self::requirements_met() ) {
-				throw new \LogicException( 'Voucher Captain does not run: WooCommerce ' . self::MIN_WC_VERSION . ' or newer is required.' );
+				throw new \LogicException( 'Voucher Captain does not run: WooCommerce ' . esc_html( self::MIN_WC_VERSION ) . ' or newer is required.' );
 			}
 			self::$instance = new self();
 			self::$instance->boot();
@@ -387,7 +387,7 @@ final class Plugin {
 		do {
 			$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND option_name < %s LIMIT %d", $wpdb->esc_like( 'vcap_rl_' ) . '%', 'vcap_rl_' . sprintf( '%010d', time() ) . '_', $limit ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			if ( false === $deleted ) {
-				throw new \RuntimeException( 'Rate limit counters could not be removed: ' . $wpdb->last_error );
+				throw new \RuntimeException( 'Rate limit counters could not be removed: ' . esc_html( $wpdb->last_error ) );
 			}
 		} while ( (int) $deleted >= $limit && microtime( true ) - $start < $budget );
 		return (int) $deleted < $limit;
