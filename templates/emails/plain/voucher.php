@@ -18,7 +18,7 @@ echo "=================================================================\n\n";
 echo esc_html( wp_strip_all_tags( wptexturize( $intro ) ) ) . "\n\n";
 
 if ( ! $voucher->is_ticket() || $voucher->initial_amount > 0 ) {
-	$value = 'percent' === $voucher->discount_type ? wc_format_localized_decimal( $voucher->initial_amount ) . '%' : html_entity_decode( wp_strip_all_tags( wc_price( $voucher->initial_amount, array( 'currency' => $voucher->currency ) ) ) );
+	$value = 'percent' === $voucher->discount_type ? \VCAP\Format::percent( $voucher->initial_amount ) : html_entity_decode( wp_strip_all_tags( wc_price( $voucher->initial_amount, array( 'currency' => $voucher->currency ) ) ) );
 	/* translators: %s: value */
 	echo esc_html( sprintf( __( 'Value: %s', 'voucher-captain' ), $value ) ) . "\n";
 }

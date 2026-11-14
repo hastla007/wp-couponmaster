@@ -140,7 +140,15 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 * Fix: parallel requests for the same order status change count uses, bonus vouchers and referral rewards only once.
 * Fix: Reports no longer count trashed bonus vouchers as issued.
 * Fix: money safety – foreign-currency amounts are never taken 1:1 (rate stored at checkout, sale held or refused without a rate, Site Health test, WooPayments Multi-Currency adapter); gift card refunds count top-ups (a refunded purchase keeps the topped-up value); single-use vouchers in unpaid orders count as used and a late payment after voiding or redemption is held; sold percentage vouchers only with a fixed value of 0–100 %, "Fixed product discount" blocked, refused coupons roll the voucher back.
-
+* Fix: with WPML or Polylang, voucher emails and their PDF (texts, dates, links) are sent in the order language – also for scheduled deliveries, reminders and resends; filter vcap_email_locale. Polylang gets the template translation of the order language too.
+* Fix: the email body follows the mail's language: a saved default text (in any language) is treated as the default, new installs store none.
+* Fix: redemption conditions and email texts can be translated (WPML string translation via wpml-config.xml, Polylang strings); wpml-config.xml lists every voucher product setting (top-up, tax treatment, code batch stop, transferability, conditions translated) – checked in CI.
+* Fix: default PDF templates are created in the site language, staff print PDFs in the order/site language, dates show translated month names, percentages use the shop's number format.
+* Fix: "Additional recipients" get their own copy; only the customer's address decides whether a voucher counts as delivered.
+* Fix: a gift sent to the buyer's own address is mailed once (buyer mail only).
+* Change: {recipient_name} no longer falls back to the buyer – the PDF leaves out an element whose placeholders are all empty ("For:" without a name); new placeholder {holder_name} (recipient, else buyer) for tickets.
+* New: the buyer learns when and where vouchers go – note on the product page (delivery delay/date), in the cart, in WooCommerce's order emails and on the order received page ("What happens next"); the buyer's copy of a gift says it is on its way to the recipient.
+* Fix: line breaks in the personal message count as one character, as in the browser's counter.
 
 = 1.1.0 =
 * New: redeem vouchers and gift cards outside the shop (courses, tickets, memberships) through the PHP service vcap()->redemptions or the REST API /wp-json/vcap/v1/redemptions – reserve, commit, release, with idempotency keys, stable error codes and automatic release of expired reservations.

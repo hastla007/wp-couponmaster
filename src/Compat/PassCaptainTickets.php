@@ -735,8 +735,9 @@ final class PassCaptainTickets {
 			$this->vouchers->log( $voucher->id, 'passcaptain_tickets_failed', null, null, $committed->get_error_code() );
 			return $committed;
 		}
+		$tickets = count( (array) ( $issued['ticket_ids'] ?? array() ) );
 		/* translators: 1: number of tickets, 2: Pass Captain order id, 3: email */
-		$this->vouchers->log( $voucher->id, 'passcaptain_tickets', null, null, sprintf( __( '%1$d ticket(s), Pass Captain order %2$s, sent to %3$s', 'voucher-captain' ), count( (array) ( $issued['ticket_ids'] ?? array() ) ), (string) ( $issued['order_public_id'] ?? '' ), $email ) );
+		$this->vouchers->log( $voucher->id, 'passcaptain_tickets', null, null, sprintf( _n( '%1$d ticket, Pass Captain order %2$s, sent to %3$s', '%1$d tickets, Pass Captain order %2$s, sent to %3$s', $tickets, 'voucher-captain' ), $tickets, (string) ( $issued['order_public_id'] ?? '' ), $email ) );
 		do_action( 'vcap_passcaptain_tickets_issued', $voucher, $issued, $email );
 		return $this->result( $voucher, $issued, $email );
 	}
@@ -843,13 +844,13 @@ final class PassCaptainTickets {
 		$own   = array_filter( array( strtolower( $guest_email ), is_user_logged_in() ? strtolower( (string) wp_get_current_user()->user_email ) : '' ) );
 		$shown = in_array( strtolower( (string) $result['email'] ), $own, true ) ? $result['email'] : self::mask_email( $result['email'] );
 		if ( ! empty( $result['reused'] ) ) {
-			$when = '' !== (string) ( $result['exchanged_at'] ?? '' ) ? get_date_from_gmt( (string) $result['exchanged_at'], (string) get_option( 'date_format' ) ) : '';
+			$when = '' !== (string) ( $result['exchanged_at'] ?? '' ) ? \VCAP\LocalDate::from_utc( (string) $result['exchanged_at'], (string) get_option( 'date_format' ) ) : '';
 			wc_add_notice(
 				'' !== $when
 					/* translators: 1: date, 2: number of tickets, 3: (masked) email */
-					? sprintf( __( 'This voucher was already exchanged on %1$s: %2$d ticket(s) went to %3$s.', 'voucher-captain' ), $when, $result['tickets'], $shown )
+					? sprintf( _n( 'This voucher was already exchanged on %1$s: %2$d ticket went to %3$s.', 'This voucher was already exchanged on %1$s: %2$d tickets went to %3$s.', (int) $result['tickets'], 'voucher-captain' ), $when, $result['tickets'], $shown )
 					/* translators: 1: number of tickets, 2: (masked) email */
-					: sprintf( __( 'This voucher was already exchanged: %1$d ticket(s) went to %2$s.', 'voucher-captain' ), $result['tickets'], $shown ),
+					: sprintf( _n( 'This voucher was already exchanged: %1$d ticket went to %2$s.', 'This voucher was already exchanged: %1$d tickets went to %2$s.', (int) $result['tickets'], 'voucher-captain' ), $result['tickets'], $shown ),
 				'notice'
 			);
 			return 'exchanged';

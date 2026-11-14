@@ -76,6 +76,108 @@ final class I18n {
 	}
 
 	/**
+	 * Whether a stored settings text is a default text of the plugin – in the current language, in English (the
+	 * source) or in any translation shipped with the plugin or installed as a language pack. A default saved once
+	 * (WooCommerce stores the form as shown, in the admin's language) is then treated like an empty setting, so
+	 * every mail gets the default in its own language.
+	 *
+	 * @param callable(): string $default Returns the default text through __().
+	 */
+	public static function is_default_text( string $stored, callable $default ): bool {
+		$stored = trim( $stored );
+		if ( '' === $stored ) {
+			return true;
+		}
+		foreach ( self::in_all_languages( $default ) as $text ) {
+			if ( trim( $text ) === $stored ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * A text of the plugin in the current language, in English and in every available translation.
+	 *
+	 * @param callable(): string $text Returns the text through __().
+	 * @return string[]
+	 */
+	public static function in_all_languages( callable $text ): array {
+		$source = static function ( $translation, $original = '', $domain = '' ) {
+			return self::DOMAIN === $domain ? $original : $translation;
+		};
+		$current = (string) $text();
+		add_filter( 'gettext', $source, PHP_INT_MAX, 3 );
+		try {
+			$english = (string) $text();
+		} finally {
+			remove_filter( 'gettext', $source, PHP_INT_MAX );
+		}
+		$texts = array( $current, $english );
+		foreach ( self::catalogs() as $catalog ) {
+			if ( isset( $catalog[ $english ] ) && '' !== $catalog[ $english ] ) {
+				$texts[] = $catalog[ $english ];
+			}
+		}
+		return array_values( array_unique( $texts ) );
+	}
+
+	/**
+	 * The plugin's translation files (languages/ and the language packs), read once per request.
+	 *
+	 * @return array<string, array<string, string>> file => msgid => translation (singular, without context)
+	 */
+	private static function catalogs(): array {
+		static $catalogs = null;
+		if ( null === $catalogs ) {
+			$catalogs = array();
+			$files    = glob( self::own_dir() . self::DOMAIN . '-*.mo' );
+			$files    = is_array( $files ) ? $files : array();
+			if ( defined( 'WP_LANG_DIR' ) ) {
+				$packs = glob( WP_LANG_DIR . '/plugins/' . self::DOMAIN . '-*.mo' );
+				$files = array_merge( $files, is_array( $packs ) ? $packs : array() );
+			}
+			foreach ( $files as $file ) {
+				$catalogs[ $file ] = self::read_mo( $file );
+			}
+		}
+		return $catalogs;
+	}
+
+	/**
+	 * Singular entries without context of a .mo file.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function read_mo( string $file ): array {
+		$data = is_readable( $file ) ? (string) file_get_contents( $file ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		if ( strlen( $data ) < 28 ) {
+			return array();
+		}
+		$magic = unpack( 'V', substr( $data, 0, 4 ) )[1];
+		$order = 0x950412de === $magic ? 'V' : ( 0xde120495 === $magic ? 'N' : '' );
+		if ( '' === $order ) {
+			return array();
+		}
+		$head  = unpack( $order . '5', substr( $data, 4, 20 ) ); // revision, count, originals, translations, hash size.
+		$count = (int) $head[2];
+		$out   = array();
+		for ( $i = 0; $i < $count; $i++ ) {
+			$o = unpack( $order . '2', substr( $data, (int) $head[3] + 8 * $i, 8 ) );
+			$t = unpack( $order . '2', substr( $data, (int) $head[4] + 8 * $i, 8 ) );
+			if ( ! $o || ! $t ) {
+				break;
+			}
+			$original = substr( $data, (int) $o[2], (int) $o[1] );
+			if ( '' === $original || str_contains( $original, "\x04" ) ) {
+				continue; // Header, or an entry with context.
+			}
+			$out[ explode( "\0", $original )[0] ] = explode( "\0", substr( $data, (int) $t[2], (int) $t[1] ) )[0];
+		}
+		return $out;
+	}
+
+	/**
 	 * Filter "lang_dir_for_domain": without a file for the locale WordPress finds no folder and loads nothing just in
 	 * time; point it to the plugin's languages/ folder when a fallback file exists there (mofile() then picks it).
 	 */

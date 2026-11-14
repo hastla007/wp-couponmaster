@@ -107,6 +107,7 @@ final class Plugin {
 		$this->delivery->register();
 		$this->issuer->register();
 		$this->fields->register();
+		( new NextSteps() )->register();
 		$this->tickets->register();
 		$this->redemptions->register();
 		$this->store_credit->register();
@@ -116,6 +117,7 @@ final class Plugin {
 
 		( new Compat\Subscriptions() )->register();
 		( new Compat\Wpml() )->register();
+		( new Compat\Multilingual() )->register();
 		( new Compat\MultiCurrency() )->register();
 		( new Compat\AffiliateCaptain() )->register();
 		// Pass Captain: provider (reserve/commit/release/refund), channel and ticket exchange always; product

@@ -39,7 +39,7 @@ $show_order = ! empty( $show_order );
 		<?php foreach ( $vouchers as $voucher ) : ?>
 			<?php
 			$product = $voucher->product();
-			$value   = 'percent' === $voucher->discount_type ? wc_format_localized_decimal( $voucher->initial_amount ) . '%' : wc_price( $voucher->initial_amount, array( 'currency' => $voucher->currency ) );
+			$value   = 'percent' === $voucher->discount_type ? \VCAP\Format::percent( $voucher->initial_amount ) : wc_price( $voucher->initial_amount, array( 'currency' => $voucher->currency ) );
 			if ( $voucher->is_multi_use() ) {
 				/* translators: %s: remaining balance */
 				$value .= '<br><small>' . sprintf( esc_html__( 'Balance: %s', 'voucher-captain' ), wc_price( $voucher->balance, array( 'currency' => $voucher->currency ) ) ) . '</small>';
@@ -70,7 +70,7 @@ $show_order = ! empty( $show_order );
 						<details class="vcap-terms"><summary><?php esc_html_e( 'Redemption conditions', 'voucher-captain' ); ?></summary><?php echo wp_kses_post( wpautop( esc_html( $voucher->terms ) ) ); ?></details>
 					<?php endif; ?>
 					<?php if ( \VCAP\Voucher::STATUS_SCHEDULED === $voucher->status && $voucher->delivery_at ) : ?>
-						<br><small><?php /* translators: %s: date */ printf( esc_html__( 'Delivery on %s', 'voucher-captain' ), esc_html( get_date_from_gmt( $voucher->delivery_at, vcap()->settings->date_format() ) ) ); ?></small>
+						<br><small><?php /* translators: %s: date */ printf( esc_html__( 'Delivery on %s', 'voucher-captain' ), esc_html( \VCAP\LocalDate::from_utc( $voucher->delivery_at, vcap()->settings->date_format() ) ) ); ?></small>
 					<?php endif; ?>
 				</td>
 				<?php if ( $show_order ) : ?>

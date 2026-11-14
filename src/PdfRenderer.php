@@ -271,6 +271,9 @@ final class PdfRenderer {
 	}
 
 	private function text_element( array $el, Voucher $voucher, array $values ): string {
+		if ( Placeholders::all_empty( (string) ( $el['text'] ?? '' ), $voucher, $values ) ) {
+			return ''; // "For: {recipient_name}" without a name: no lone label.
+		}
 		$text = Placeholders::replace( (string) ( $el['text'] ?? '' ), $voucher, $values );
 		if ( ! empty( $el['uppercase'] ) ) {
 			$text = mb_strtoupper( $text );

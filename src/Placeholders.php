@@ -28,6 +28,7 @@ final class Placeholders {
 			'buyer_name'        => __( 'Buyer name', 'voucher-captain' ),
 			'buyer_email'       => __( 'Buyer email', 'voucher-captain' ),
 			'recipient_name'    => __( 'Recipient name', 'voucher-captain' ),
+			'holder_name'       => __( 'Holder name (recipient, else buyer)', 'voucher-captain' ),
 			'recipient_email'   => __( 'Recipient email', 'voucher-captain' ),
 			'message'           => __( 'Personal message', 'voucher-captain' ),
 			'delivery_date'     => __( 'Delivery date', 'voucher-captain' ),
@@ -82,7 +83,7 @@ final class Placeholders {
 		$config  = $product ? ProductConfig::get( $product ) : ProductConfig::DEFAULTS;
 
 		$value = 'percent' === $voucher->discount_type
-			? wc_format_localized_decimal( $voucher->initial_amount ) . '%'
+			? Format::percent( $voucher->initial_amount )
 			: self::money( $voucher->initial_amount, $voucher->currency );
 
 		// The date the voucher is (or was) really delivered: its delivery date, else – when the customer entered a
@@ -90,6 +91,7 @@ final class Placeholders {
 		$delivery = $voucher->delivery_at ? self::date( $voucher->delivery_at ) : ( $voucher->field( 'delivery_date' ) ? self::date( $voucher->delivered_at ?: ( $voucher->created_at ?: gmdate( 'Y-m-d H:i:s' ) ) ) : '' );
 
 		$event_date = self::local_date( (string) $config['event_date'] );
+		$buyer      = '' !== trim( $voucher->buyer_name ) ? trim( $voucher->buyer_name ) : ( $order ? trim( $order->get_formatted_billing_full_name() ) : '' );
 
 		$values = array(
 			'coupon_code'       => $voucher->code,
@@ -104,9 +106,11 @@ final class Placeholders {
 			'product_sku'       => $product ? (string) $product->get_sku() : '',
 			'product_short_description' => $product ? wp_strip_all_tags( (string) ( $product->get_short_description() ?: ( $product->is_type( 'variation' ) ? $product->get_description() : '' ) ) ) : '',
 			// Vouchers created before names were stored (or by hand) fall back to the order's billing name.
-			'buyer_name'        => '' !== trim( $voucher->buyer_name ) ? $voucher->buyer_name : ( $order ? trim( $order->get_formatted_billing_full_name() ) : '' ),
+			'buyer_name'        => $buyer,
 			'buyer_email'       => $voucher->buyer_email,
-			'recipient_name'    => $voucher->recipient_name ?: ( '' !== trim( $voucher->buyer_name ) ? $voucher->buyer_name : ( $order ? trim( $order->get_formatted_billing_full_name() ) : '' ) ),
+			// Only the recipient's own name (a gift without one is not "For: <the buyer>"); {holder_name} falls back.
+			'recipient_name'    => trim( $voucher->recipient_name ),
+			'holder_name'       => '' !== trim( $voucher->recipient_name ) ? trim( $voucher->recipient_name ) : $buyer,
 			'recipient_email'   => $voucher->recipient_email,
 			'message'           => $voucher->message,
 			'delivery_date'     => $delivery,
@@ -140,6 +144,23 @@ final class Placeholders {
 			$text
 		);
 		return (string) $text;
+	}
+
+	/**
+	 * Whether every placeholder in $text is empty for this voucher (false for a text without placeholders), e.g.
+	 * "For: {recipient_name}" of a gift without a recipient name: the PDF leaves such an element out.
+	 */
+	public static function all_empty( string $text, Voucher $voucher, ?array $values = null ): bool {
+		if ( ! preg_match_all( '/\{[a-z0-9_]+(?::[^}]+)?\}/i', $text, $m ) ) {
+			return false;
+		}
+		$values = $values ?? self::values( $voucher );
+		foreach ( array_unique( $m[0] ) as $token ) {
+			if ( '' !== trim( self::replace( $token, $voucher, $values ) ) ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	private static function dynamic( string $token, ?string $arg, Voucher $voucher, string $original ): string {

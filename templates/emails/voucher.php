@@ -17,7 +17,7 @@ defined( 'ABSPATH' ) || exit;
 do_action( 'woocommerce_email_header', $email_heading, $email );
 
 $value = 'percent' === $voucher->discount_type
-	? wc_format_localized_decimal( $voucher->initial_amount ) . '%'
+	? \VCAP\Format::percent( $voucher->initial_amount )
 	: wc_price( $voucher->initial_amount, array( 'currency' => $voucher->currency ) );
 ?>
 

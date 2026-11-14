@@ -22,7 +22,7 @@ WooCommerce-Plugin für personalisierte **PDF-Gutscheine, Geschenkkarten, Guthab
 
 ### Platzhalter
 
-`{coupon_code}` `{coupon_value}` `{coupon_balance}` `{expiry_date}` `{issue_date}` `{product_name}` `{product_price}` `{buyer_name}` `{buyer_email}` `{recipient_name}` `{recipient_email}` `{message}` `{delivery_date}` `{order_number}` `{order_date}` `{event_date}` `{event_location}` `{ticket_admissions}` `{site_name}` `{site_url}` `{redeem_url}` (redeem page with the code filled in) and, for Pass Captain ticket vouchers, `{ticket_event}` `{ticket_quantity}`
+`{coupon_code}` `{coupon_value}` `{coupon_balance}` `{expiry_date}` `{issue_date}` `{product_name}` `{product_price}` `{buyer_name}` `{buyer_email}` `{recipient_name}` (only the recipient's own name) `{holder_name}` (recipient, else buyer) `{recipient_email}` `{message}` `{delivery_date}` `{order_number}` `{order_date}` `{event_date}` `{event_location}` `{ticket_admissions}` `{site_name}` `{site_url}` `{redeem_url}` (redeem page with the code filled in) and, for Pass Captain ticket vouchers, `{ticket_event}` `{ticket_quantity}`
 
 Dynamische Platzhalter:
 
@@ -30,6 +30,8 @@ Dynamische Platzhalter:
 - `{item_meta:Name}` für Positions-Meta, z. B. aus Flexible Product Fields
 - `{order_meta:_feld}` für Bestell-Meta, z. B. aus Flexible Checkout Fields
 - `{billing_company}` und `{shipping_…}` für Adressfelder
+
+Ein PDF-Textelement, dessen Platzhalter alle leer sind (z. B. „Für: {recipient_name}“ ohne Empfängernamen), wird nicht gedruckt.
 
 Eigene Platzhalter lassen sich über die Filter `vcap_placeholder_definitions` und `vcap_placeholders` ergänzen.
 

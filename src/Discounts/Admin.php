@@ -336,16 +336,16 @@ final class Admin {
 			case 'fixed':
 				return sprintf( /* translators: %s: amount */ __( '%s off', 'voucher-captain' ), wp_strip_all_tags( wc_price( $r['amount'] ) ) );
 			case 'tiered':
-				return __( 'Tiered:', 'voucher-captain' ) . ' ' . implode( ', ', array_map( static fn( $t ) => $t['min_qty'] . '+ → ' . $t['percent'] . ' %', $r['tiers'] ) );
+				return __( 'Tiered:', 'voucher-captain' ) . ' ' . implode( ', ', array_map( static fn( $t ) => $t['min_qty'] . '+ → ' . \VCAP\Format::percent( $t['percent'] ), $r['tiers'] ) );
 			case 'bonus':
-				$value = 'percent' === $r['bonus_type'] ? $r['bonus_amount'] . ' %' : wp_strip_all_tags( wc_price( $r['bonus_amount'] ) );
+				$value = 'percent' === $r['bonus_type'] ? \VCAP\Format::percent( $r['bonus_amount'] ) : wp_strip_all_tags( wc_price( $r['bonus_amount'] ) );
 				/* translators: %s: bonus voucher value */
 				return sprintf( __( 'Bonus voucher %s', 'voucher-captain' ), $value );
 			case 'bxgy':
 				/* translators: 1: buy quantity, 2: get quantity, 3: percent */
 				return sprintf( __( 'Buy %1$d, get %2$d at %3$s %% off', 'voucher-captain' ), $r['buy_qty'], $r['get_qty'], $r['get_percent'] );
 			default:
-				return $r['percent'] . ' %';
+				return \VCAP\Format::percent( $r['percent'] );
 		}
 	}
 
@@ -401,7 +401,7 @@ final class Admin {
 		);
 		if ( 'bonus' === $rules['action'] ) {
 			$blocker = Engine::bonus_blocker( $rules, $lines, $context );
-			$value   = 'percent' === $rules['bonus_type'] ? $rules['bonus_amount'] . ' %' : wp_strip_all_tags( wc_price( $rules['bonus_amount'] ) );
+			$value   = 'percent' === $rules['bonus_type'] ? \VCAP\Format::percent( $rules['bonus_amount'] ) : wp_strip_all_tags( wc_price( $rules['bonus_amount'] ) );
 			wp_send_json_success(
 				'' === $blocker
 					/* translators: %s: bonus voucher value */

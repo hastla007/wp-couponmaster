@@ -436,10 +436,38 @@ final class Delivery {
 	}
 
 	/**
-	 * Send the voucher emails according to the voucher's routing.
-	 *
-	 * @return string[] addresses mailed
+	 * Whether the voucher goes to a recipient of its own: "Send to" names the recipient, the address is valid and
+	 * it is not the buyer's own (a gift to one's own address gets only the buyer's mail, not "X sent you a gift"
+	 * next to "Your voucher" in the same inbox).
 	 */
+	public static function to_recipient( Voucher $voucher ): bool {
+		return in_array( $voucher->send_to, array( 'recipient', 'both' ), true ) && is_email( $voucher->recipient_email ) && ! self::same_address( $voucher->recipient_email, $voucher->buyer_email );
+	}
+
+	/**
+	 * Valid addresses of a comma separated list ("Additional recipients" of an email), without the main address(es)
+	 * and without duplicates: each gets its own copy.
+	 *
+	 * @return string[]
+	 */
+	public static function extra_addresses( string $list, string $main = '' ): array {
+		$seen = array_filter( array_map( static fn( $a ) => strtolower( trim( $a ) ), explode( ',', $main ) ) );
+		$out  = array();
+		foreach ( array_map( 'trim', explode( ',', $list ) ) as $address ) {
+			if ( is_email( $address ) && ! in_array( strtolower( $address ), $seen, true ) ) {
+				$seen[] = strtolower( $address );
+				$out[]  = $address;
+			}
+		}
+		return $out;
+	}
+
+	/** Two email addresses are the same inbox (case and surrounding spaces ignored). */
+	public static function same_address( string $a, string $b ): bool {
+		$a = strtolower( trim( $a ) );
+		return '' !== $a && strtolower( trim( $b ) ) === $a;
+	}
+
 	/**
 	 * Who must receive the voucher for it to count as delivered ('recipient', 'buyer'); a buyer copy next to a
 	 * gift for the recipient is a courtesy and not required.
@@ -447,7 +475,7 @@ final class Delivery {
 	 * @return string[]
 	 */
 	public function required_roles( Voucher $voucher ): array {
-		$to_recipient = in_array( $voucher->send_to, array( 'recipient', 'both' ), true ) && is_email( $voucher->recipient_email );
+		$to_recipient = self::to_recipient( $voucher );
 		$roles        = $to_recipient ? array( 'recipient' ) : array();
 		if ( ! $to_recipient || 'both' === $voucher->send_to ) {
 			$roles[] = 'buyer';
@@ -456,7 +484,10 @@ final class Delivery {
 	}
 
 	/**
+	 * Send the voucher emails according to the voucher's routing.
+	 *
 	 * @param string[] $sent_roles Filled with the roles that were mailed ('recipient', 'buyer').
+	 * @return string[] addresses mailed
 	 */
 	public function send( Voucher $voucher, ?string $only = null, array &$sent_roles = array() ): array {
 		$mailer = WC()->mailer();
@@ -464,7 +495,7 @@ final class Delivery {
 		$sent   = array();
 		$config = ProductConfig::get( $voucher->variation_id ?: $voucher->product_id );
 
-		$to_recipient = in_array( $voucher->send_to, array( 'recipient', 'both' ), true ) && is_email( $voucher->recipient_email );
+		$to_recipient = self::to_recipient( $voucher );
 		$to_buyer     = ! $to_recipient || 'both' === $voucher->send_to || 'yes' === $config['buyer_copy'];
 
 		if ( $to_recipient && ( null === $only || 'recipient' === $only ) && isset( $emails['VCAP_Email_Voucher_Recipient'] ) ) {

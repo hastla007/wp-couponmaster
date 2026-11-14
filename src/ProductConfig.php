@@ -189,12 +189,13 @@ final class ProductConfig {
 		if ( '' !== $terms ) {
 			return $terms;
 		}
-		$by_country = self::terms_by_country( (string) get_option( 'vcap_terms_by_country', '' ) );
+		// Shop-wide conditions in the customer's language (WPML translates the options, Polylang the strings).
+		$by_country = self::terms_by_country( Compat\Multilingual::translate( (string) get_option( 'vcap_terms_by_country', '' ) ) );
 		$country    = strtoupper( $country );
 		if ( '' !== $country && isset( $by_country[ $country ] ) ) {
 			return $by_country[ $country ];
 		}
-		return trim( (string) get_option( 'vcap_default_terms', '' ) );
+		return trim( Compat\Multilingual::translate( (string) get_option( 'vcap_default_terms', '' ) ) );
 	}
 
 	/**

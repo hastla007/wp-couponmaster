@@ -40,7 +40,7 @@ final class CampaignAdmin {
 		$out = array();
 		foreach ( $ids as $id ) {
 			$coupon      = new \WC_Coupon( $id );
-			$out[ $id ] = $coupon->get_code() . ' – ' . ( 'percent' === $coupon->get_discount_type() ? $coupon->get_amount() . '%' : wp_strip_all_tags( wc_price( (float) $coupon->get_amount() ) ) );
+			$out[ $id ] = $coupon->get_code() . ' – ' . ( 'percent' === $coupon->get_discount_type() ? \VCAP\Format::percent( $coupon->get_amount() ) : wp_strip_all_tags( wc_price( (float) $coupon->get_amount() ) ) );
 		}
 		return $out;
 	}

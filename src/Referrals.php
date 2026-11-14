@@ -381,7 +381,7 @@ final class Referrals {
 			return;
 		}
 		$code   = strtoupper( $coupon->get_code() );
-		$friend = 'percent' === $coupon->get_discount_type() ? wc_format_localized_decimal( (string) (float) $coupon->get_amount() ) . ' %' : wp_strip_all_tags( wc_price( (float) $coupon->get_amount() ) );
+		$friend = 'percent' === $coupon->get_discount_type() ? Format::percent( $coupon->get_amount() ) : wp_strip_all_tags( wc_price( (float) $coupon->get_amount() ) );
 		$reward = wp_strip_all_tags( wc_price( (float) $this->settings->get( 'vcap_referral_reward_amount' ) ) );
 		$link   = $this->settings->yes( 'vcap_coupon_link' ) ? add_query_arg( (string) $this->settings->get( 'vcap_coupon_link_param' ), rawurlencode( $code ), home_url( '/' ) ) : '';
 		$count  = (int) self::count( get_current_user_id() );

@@ -68,7 +68,7 @@ final class StoreCreditAdmin {
 				<?php foreach ( array_slice( array_reverse( $this->repo->events( $account->id ) ), 0, 50 ) as $e ) : ?>
 					<?php $by = $e['user_id'] ? get_userdata( (int) $e['user_id'] ) : null; ?>
 					<tr>
-						<td><?php echo esc_html( get_date_from_gmt( $e['created_at'], get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ); ?></td>
+						<td><?php echo esc_html( \VCAP\LocalDate::from_utc( $e['created_at'], get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ); ?></td>
 						<td><?php echo esc_html( $labels[ $e['event'] ] ?? $e['event'] ); ?></td>
 						<td><?php echo null !== $e['amount'] ? wp_kses_post( wc_price( (float) $e['amount'], array( 'currency' => $account->currency ) ) ) : ''; ?></td>
 						<td><?php echo null !== $e['balance_after'] ? wp_kses_post( wc_price( (float) $e['balance_after'], array( 'currency' => $account->currency ) ) ) : ''; ?></td>

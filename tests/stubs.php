@@ -39,6 +39,9 @@ function apply_filters( $hook, $value, ...$args ) {
 function do_action( $hook, ...$args ) { foreach ( $GLOBALS['vcap_test_filters'][ $hook ] ?? array() as $f ) { call_user_func_array( $f[0], array_slice( $args, 0, $f[1] ) ); } }
 function __( $s, $d = null ) { return $s; }
 function _n( $a, $b, $n, $d = null ) { return 1 === $n ? $a : $b; }
+function _x( $s, $c, $d = null ) { return $s; }
+function get_locale() { return 'de_DE'; }
+function is_admin() { return false; }
 function esc_html__( $s, $d = null ) { return esc_html( $s ); }
 function esc_attr__( $s, $d = null ) { return esc_attr( $s ); }
 function esc_html( $s ) { return htmlspecialchars( (string) $s, ENT_QUOTES, 'UTF-8' ); }

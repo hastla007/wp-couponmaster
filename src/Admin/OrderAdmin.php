@@ -127,7 +127,7 @@ final class OrderAdmin {
 			++$count;
 		}
 		/* translators: %d: number of vouchers */
-		$note = sprintf( __( 'Voucher emails resent for %d voucher(s).', 'voucher-captain' ), $count );
+		$note = sprintf( _n( 'Voucher emails resent for %d voucher.', 'Voucher emails resent for %d vouchers.', $count, 'voucher-captain' ), $count );
 		if ( $failed ) {
 			/* translators: %s: voucher codes */
 			$note .= ' ' . sprintf( __( 'Not sent (email disabled or no valid address): %s', 'voucher-captain' ), implode( ', ', $failed ) );

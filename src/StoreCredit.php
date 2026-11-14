@@ -385,7 +385,7 @@ final class StoreCredit {
 			if ( null === $e['amount'] || 'issued' === $e['event'] ) {
 				continue;
 			}
-			echo '<tr><td>' . esc_html( get_date_from_gmt( $e['created_at'], get_option( 'date_format' ) ) ) . '</td><td>' . esc_html( $labels[ $e['event'] ] ?? $e['event'] ) . '</td><td>' . wp_kses_post( wc_price( (float) $e['amount'], array( 'currency' => $account->currency ) ) ) . '</td><td>' . ( null !== $e['balance_after'] ? wp_kses_post( wc_price( (float) $e['balance_after'], array( 'currency' => $account->currency ) ) ) : '' ) . '</td></tr>';
+			echo '<tr><td>' . esc_html( LocalDate::from_utc( $e['created_at'], get_option( 'date_format' ) ) ) . '</td><td>' . esc_html( $labels[ $e['event'] ] ?? $e['event'] ) . '</td><td>' . wp_kses_post( wc_price( (float) $e['amount'], array( 'currency' => $account->currency ) ) ) . '</td><td>' . ( null !== $e['balance_after'] ? wp_kses_post( wc_price( (float) $e['balance_after'], array( 'currency' => $account->currency ) ) ) : '' ) . '</td></tr>';
 		}
 		echo '</tbody></table></section>';
 	}

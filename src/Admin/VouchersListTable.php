@@ -149,7 +149,7 @@ final class VouchersListTable extends \WP_List_Table {
 
 	protected function column_value( Voucher $v ): string {
 		if ( 'percent' === $v->discount_type ) {
-			return esc_html( wc_format_localized_decimal( $v->initial_amount ) . '%' );
+			return esc_html( \VCAP\Format::percent( $v->initial_amount ) );
 		}
 		$out = wc_price( $v->initial_amount, array( 'currency' => $v->currency ) );
 		if ( $v->is_multi_use() ) {
@@ -165,7 +165,7 @@ final class VouchersListTable extends \WP_List_Table {
 		$status = Voucher::STATUS_ACTIVE === $v->status && $v->is_expired() ? Voucher::STATUS_EXPIRED : $v->status;
 		$out    = '<mark class="vcap-status vcap-status--' . esc_attr( $status ) . '"><span>' . esc_html( $v->status_label() ) . '</span></mark>';
 		if ( Voucher::STATUS_SCHEDULED === $v->status && $v->delivery_at ) {
-			$out .= '<br><small>' . esc_html( get_date_from_gmt( $v->delivery_at, get_option( 'date_format' ) ) ) . '</small>';
+			$out .= '<br><small>' . esc_html( \VCAP\LocalDate::from_utc( $v->delivery_at, get_option( 'date_format' ) ) ) . '</small>';
 		}
 		return $out;
 	}
@@ -184,11 +184,11 @@ final class VouchersListTable extends \WP_List_Table {
 	}
 
 	protected function column_expires( Voucher $v ): string {
-		return $v->expires_at ? esc_html( get_date_from_gmt( $v->expires_at, get_option( 'date_format' ) ) ) : esc_html__( 'Never', 'voucher-captain' );
+		return $v->expires_at ? esc_html( \VCAP\LocalDate::from_utc( $v->expires_at, get_option( 'date_format' ) ) ) : esc_html__( 'Never', 'voucher-captain' );
 	}
 
 	protected function column_created( Voucher $v ): string {
-		return esc_html( get_date_from_gmt( $v->created_at, get_option( 'date_format' ) ) );
+		return esc_html( \VCAP\LocalDate::from_utc( $v->created_at, get_option( 'date_format' ) ) );
 	}
 
 	public function no_items(): void {

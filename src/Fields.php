@@ -311,6 +311,12 @@ final class Fields {
 				echo '</details>';
 			}
 		}
+		if ( 'before_button' === $position ) {
+			$hint = NextSteps::product_hint( $config );
+			if ( '' !== $hint ) {
+				echo '<p class="vcap-delivery-hint">' . esc_html( $hint ) . '</p>';
+			}
+		}
 		if ( 'before_button' === $position && 'yes' === $config['preview'] ) {
 			echo '<p class="vcap-preview-row"><button type="button" class="button vcap-preview-button" data-product="' . esc_attr( (string) $product->get_id() ) . '">' . esc_html__( 'Preview voucher', 'voucher-captain' ) . '</button></p>';
 		}
@@ -323,11 +329,19 @@ final class Fields {
 	private function posted_value( string $key ): string {
 		if ( null !== $this->override ) {
 			$raw = $this->override[ $key ] ?? null;
-			return is_scalar( $raw ) ? (string) $raw : '';
+			return is_scalar( $raw ) ? self::normalize_newlines( (string) $raw ) : '';
 		}
 		// phpcs:ignore WordPress.Security.NonceVerification -- Add-to-cart form; WooCommerce handles the request.
 		$raw = isset( $_POST['vcap_fields'][ $key ] ) ? wp_unslash( $_POST['vcap_fields'][ $key ] ) : ( isset( $_REQUEST['vcap_fields'][ $key ] ) ? wp_unslash( $_REQUEST['vcap_fields'][ $key ] ) : null ); // phpcs:ignore
-		return is_scalar( $raw ) ? (string) $raw : '';
+		return is_scalar( $raw ) ? self::normalize_newlines( (string) $raw ) : '';
+	}
+
+	/**
+	 * Line breaks as "\n": browsers submit a textarea's breaks as "\r\n" but count them as one character (counter,
+	 * maxlength), so the length check and the shortening count them as one as well.
+	 */
+	public static function normalize_newlines( string $value ): string {
+		return str_replace( array( "\r\n", "\r" ), "\n", $value );
 	}
 
 	private function render_field( string $key, array $field, array $config = array() ): void {
@@ -574,10 +588,21 @@ final class Fields {
 	}
 
 	public function display_item_data( $item_data, $cart_item ) {
-		foreach ( (array) ( $cart_item['vcap_fields'] ?? array() ) as $field ) {
+		$fields = (array) ( $cart_item['vcap_fields'] ?? array() );
+		foreach ( $fields as $field ) {
 			$item_data[] = array(
 				'key'   => $field['label'],
 				'value' => $field['value'],
+			);
+		}
+		// When and where the voucher goes (the buyer otherwise learns it only on the delivery day).
+		$product = $cart_item['data'] ?? null;
+		if ( $product instanceof \WC_Product && ProductConfig::is_voucher( $product ) && ! TopUp::is_topup( $product ) ) {
+			$config      = ProductConfig::get( $product );
+			$buyer       = function_exists( 'WC' ) && WC()->customer ? (string) WC()->customer->get_billing_email() : '';
+			$item_data[] = array(
+				'key'   => __( 'Delivery', 'voucher-captain' ),
+				'value' => NextSteps::summary( $config, $fields, $buyer, Delivery::compute_time( $config, $fields ) ),
 			);
 		}
 		return $item_data;

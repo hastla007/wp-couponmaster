@@ -191,8 +191,10 @@ final class Tickets {
 			$context[] = array( __( 'Reserved since', 'voucher-captain' ), self::local_time( (string) $reserved['created_at'] ) );
 			$until     = self::reservation_until( (int) $reserved['order_id'] );
 			if ( $until ) {
+				$label     = __( 'Reserved until', 'voucher-captain' );
 				/* translators: %s: time */
-				$context[] = array( __( 'Reserved until', 'voucher-captain' ), sprintf( __( 'about %s, unless the order is paid', 'voucher-captain' ), wp_date( (string) get_option( 'time_format' ), $until ) ) );
+				$text      = __( 'about %s, unless the order is paid', 'voucher-captain' );
+				$context[] = array( $label, sprintf( $text, wp_date( (string) get_option( 'time_format' ), $until ) ) );
 			}
 		} elseif ( ! $voucher->is_ticket() && Voucher::STATUS_REDEEMED === $voucher->status ) {
 			$state   = 'warning';
@@ -248,8 +250,8 @@ final class Tickets {
 			'currency'        => $currency,
 			'currency_symbol' => html_entity_decode( get_woocommerce_currency_symbol( $currency ) ),
 			'decimals'        => $voucher->decimals(),
-			'value_html'     => 'percent' === $voucher->discount_type ? $voucher->initial_amount . '%' : self::money_text( $voucher->initial_amount, $voucher->currency ),
-			'expires'        => $voucher->expires_at ? get_date_from_gmt( $voucher->expires_at, get_option( 'date_format' ) ) : '',
+			'value_html'     => 'percent' === $voucher->discount_type ? Format::percent( $voucher->initial_amount ) : self::money_text( $voucher->initial_amount, $voucher->currency ),
+			'expires'        => $voucher->expires_at ? LocalDate::from_utc( $voucher->expires_at, get_option( 'date_format' ) ) : '',
 			'admin_url'      => $manager ? admin_url( 'admin.php?page=vcap-vouchers&voucher=' . $voucher->id ) : '',
 		);
 		if ( '' !== $refusal ) {
@@ -261,7 +263,7 @@ final class Tickets {
 
 	/** Local date and time of a stored UTC time. */
 	private static function local_time( string $utc ): string {
-		return get_date_from_gmt( $utc, get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) );
+		return LocalDate::from_utc( $utc, get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) );
 	}
 
 	/** Newest event of the given kinds, or null. */
@@ -308,8 +310,10 @@ final class Tickets {
 		}
 		$rows = array( array( __( 'Last use', 'voucher-captain' ), $when ) );
 		if ( (int) $e['order_id'] > 0 ) {
+			$label  = __( 'Where', 'voucher-captain' );
 			/* translators: %s: order number */
-			$rows[] = array( __( 'Where', 'voucher-captain' ), $manager ? sprintf( __( 'Shop order #%s', 'voucher-captain' ), (int) $e['order_id'] ) : __( 'Shop order', 'voucher-captain' ) );
+			$order  = __( 'Shop order #%s', 'voucher-captain' );
+			$rows[] = array( $label, $manager ? sprintf( $order, (int) $e['order_id'] ) : __( 'Shop order', 'voucher-captain' ) );
 		} elseif ( 'api_committed' === $e['event'] ) {
 			$rows[] = array( __( 'Where', 'voucher-captain' ), __( 'External system', 'voucher-captain' ) );
 		} elseif ( $staff ) {

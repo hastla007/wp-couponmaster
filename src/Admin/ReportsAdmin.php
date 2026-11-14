@@ -220,7 +220,7 @@ final class ReportsAdmin {
 				<?php endif; ?>
 				<?php foreach ( $journal as $r ) : ?>
 					<tr>
-						<td><?php echo esc_html( get_date_from_gmt( $r['created_at'], get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ); ?></td>
+						<td><?php echo esc_html( \VCAP\LocalDate::from_utc( $r['created_at'], get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ); ?></td>
 						<td><?php echo esc_html( strtoupper( (string) $r['code'] ) ); ?></td>
 						<td><?php echo esc_html( $labels[ $r['event'] ] ?? $r['event'] ); ?></td>
 						<td><?php echo wp_kses_post( wc_price( (float) $r['amount'], array( 'currency' => $r['currency'] ) ) ); ?></td>
