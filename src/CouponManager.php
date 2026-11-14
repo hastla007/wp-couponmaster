@@ -425,9 +425,19 @@ final class CouponManager {
 
 	/**
 	 * Convert reservation failures into Store API client errors instead of uncaught server errors.
+	 *
+	 * The Store API also pays existing orders ("Pay for order" through checkout/{id}): like the classic pay form
+	 * (reserve_retry_order()), a single-use voucher of the order that was cancelled, redeemed or reserved elsewhere
+	 * since the checkout refuses the payment instead of letting the order be paid with its discount.
 	 */
 	public function reserve_store_api_order( $order ): void {
 		try {
+			if ( $order instanceof \WC_Order ) {
+				$conflicts = $this->single_use_conflicts( $order );
+				if ( $conflicts ) {
+					throw new \Exception( self::single_use_conflict_message( $conflicts[0]['voucher'] ) );
+				}
+			}
 			$this->reserve_order( $order );
 		} catch ( \Throwable $e ) {
 			if ( class_exists( \Automattic\WooCommerce\StoreApi\Exceptions\RouteException::class ) ) {
@@ -443,11 +453,7 @@ final class CouponManager {
 	public function reserve_retry_order( $order ): void {
 		if ( $order instanceof \WC_Order ) {
 			foreach ( $this->single_use_conflicts( $order ) as $conflict ) {
-				wc_add_notice(
-					/* translators: %s: voucher code */
-					sprintf( __( 'Voucher %s can no longer be used (it was cancelled or redeemed elsewhere). Please contact us to complete this order.', 'voucher-captain' ), $conflict['voucher']->code ),
-					'error'
-				);
+				wc_add_notice( self::single_use_conflict_message( $conflict['voucher'] ), 'error' );
 			}
 		}
 		try {
@@ -455,6 +461,12 @@ final class CouponManager {
 		} catch ( \Throwable $e ) {
 			wc_add_notice( $e->getMessage(), 'error' );
 		}
+	}
+
+	/** Customer message: a single-use voucher of an unpaid order can no longer be used (single_use_conflicts()). */
+	private static function single_use_conflict_message( Voucher $voucher ): string {
+		/* translators: %s: voucher code */
+		return sprintf( __( 'Voucher %s can no longer be used (it was cancelled or redeemed elsewhere). Please contact us to complete this order.', 'voucher-captain' ), $voucher->code );
 	}
 	/**
 	 * Atomically reserve stored balance for a specific order.

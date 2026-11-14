@@ -329,6 +329,20 @@ add_filter( 'vcap_allow_refund_of_spent_vouchers', '__return_true' );
 $single_forced = wc_create_refund( array( 'order_id' => $single_buy->get_id(), 'amount' => 30 ) );
 remove_filter( 'vcap_allow_refund_of_spent_vouchers', '__return_true' );
 vcap_acc_assert( ! is_wp_error( $single_forced ) && VCAP\Voucher::STATUS_VOID === vcap()->vouchers->get( $single->id )->status, 'refunded knowingly anyway, the voucher is voided' );
+// "Pay for order" refuses the voided voucher: the classic pay form with an error notice (no payment is taken while
+// one is shown), the Store API (checkout/{order id}) with a client error.
+wc_clear_notices();
+vcap()->coupons->reserve_retry_order( wc_get_order( $single_use->get_id() ) );
+$single_notices = wc_get_notices( 'error' );
+wc_clear_notices();
+vcap_acc_assert( (bool) array_filter( $single_notices, static fn( $n ) => str_contains( wp_strip_all_tags( is_array( $n ) ? (string) $n['notice'] : (string) $n ), $single->code ) ), 'the classic pay form refuses an order whose single-use voucher was voided' );
+$single_store_api = '';
+try {
+	vcap()->coupons->reserve_store_api_order( wc_get_order( $single_use->get_id() ) );
+} catch ( \Throwable $e ) {
+	$single_store_api = $e->getMessage();
+}
+vcap_acc_assert( str_contains( $single_store_api, $single->code ), 'paying the order through the Store API is refused while its single-use voucher is voided (' . $single_store_api . ')' );
 wc_get_order( $single_use->get_id() )->payment_complete( 'txn-single-late' );
 $single_use = wc_get_order( $single_use->get_id() );
 $single_map = VCAP\CouponManager::order_map( $single_use, VCAP\CouponManager::SHORTFALL_AMOUNTS_META );
