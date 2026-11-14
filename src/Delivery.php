@@ -85,6 +85,67 @@ final class Delivery {
 		return $ts && $ts > time() ? gmdate( 'Y-m-d H:i:s', (int) $ts ) : null;
 	}
 
+	/** Order meta: V7 hold of a new customer's vouchers – Unix time until which they are held, 0 for none. */
+	public const HOLD_META = '_vcap_delivery_hold';
+
+	/**
+	 * V7: until when the vouchers of an order are held (null = not held). A first order (no earlier order of the
+	 * account or email that is at least the hold period old, see VoucherPurchaseRules::is_new_customer()) whose
+	 * vouchers are worth more than "vcap_hold_new_customer_above" (default 250, 0 = off) is held for
+	 * "vcap_hold_hours" (default 24, 0 = off) from the payment: the vouchers are issued, but delivered and
+	 * redeemable only then (a scheduled delivery). With $persist the decision is stored once on the order (the
+	 * first issuing run decides; later orders of the customer do not change it).
+	 */
+	public static function hold_until( \WC_Order $order, bool $persist = false ): ?int {
+		$stored = $order->get_meta( self::HOLD_META );
+		if ( '' !== (string) $stored ) {
+			return (int) $stored > 0 ? (int) $stored : null;
+		}
+		$above = (float) Settings::value( 'vcap_hold_new_customer_above' );
+		$hours = (float) Settings::value( 'vcap_hold_hours' );
+		$until = null;
+		if ( $above > 0 && $hours > 0 && VoucherPurchaseRules::voucher_value( $order ) > $above + 0.00001 && VoucherPurchaseRules::is_new_customer( $order, (int) round( $hours * HOUR_IN_SECONDS ) ) ) {
+			$base  = $order->get_date_paid() ? $order->get_date_paid()->getTimestamp() : time();
+			$until = $base + (int) round( $hours * HOUR_IN_SECONDS );
+		}
+		/** Until when (Unix time, null = not held) the vouchers of a new customer's order are held. */
+		$until = apply_filters( 'vcap_delivery_hold_until', $until, $order );
+		$until = $until && (int) $until > time() ? (int) $until : null;
+		if ( $persist ) {
+			$order->update_meta_data( self::HOLD_META, (string) (int) $until );
+			$order->save_meta_data();
+			if ( $until ) {
+				$order->add_order_note(
+					sprintf(
+						/* translators: 1: date and time, 2: amount */
+						__( 'Security hold: the vouchers of this first order (above %2$s) are delivered and redeemable from %1$s. Use "Deliver now" on a voucher to release it earlier, or void it.', 'voucher-captain' ),
+						LocalDate::from_utc( gmdate( 'Y-m-d H:i:s', $until ), vcap()->settings->date_format() . ' H:i' ),
+						wp_strip_all_tags( wc_price( $above, array( 'currency' => $order->get_currency() ) ) )
+					)
+				);
+			}
+		}
+		return $until;
+	}
+
+	/** Delivery time (UTC) of a voucher of the order: its own time, but never before the order's hold ends. */
+	public static function with_hold( ?string $delivery_at, \WC_Order $order, bool $persist = false ): ?string {
+		$hold = self::hold_until( $order, $persist );
+		if ( ! $hold || ( $delivery_at && strtotime( $delivery_at . ' UTC' ) >= $hold ) ) {
+			return $delivery_at;
+		}
+		return gmdate( 'Y-m-d H:i:s', $hold );
+	}
+
+	/** Whether a voucher is still held for its order's security check (scheduled, hold not over). */
+	public static function is_held( Voucher $voucher ): bool {
+		if ( Voucher::STATUS_SCHEDULED !== $voucher->status || ! $voucher->order_id ) {
+			return false;
+		}
+		$order = wc_get_order( $voucher->order_id );
+		return $order instanceof \WC_Order && (int) $order->get_meta( self::HOLD_META ) > time();
+	}
+
 	private static function local_date_ts( string $ymd, int $hour, \DateTimeZone $tz ): ?int {
 		$dt = \DateTimeImmutable::createFromFormat( '!Y-m-d', $ymd, $tz );
 		return $dt ? $dt->setTime( $hour, 0 )->getTimestamp() : null;

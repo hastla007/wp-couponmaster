@@ -52,6 +52,7 @@ are described in CONNECTORS.md and API.md.
 | `vcap_affiliate_commission_on_voucher_sales` | `src/Compat/AffiliateCaptain.php` | – |
 | `vcap_allow_refund_of_spent_top_ups` | `src/TopUp.php` | – |
 | `vcap_allow_refund_of_spent_vouchers` | `src/Issuer.php` | – |
+| `vcap_allow_refund_of_used_bonus` | `src/Discounts/Bonus.php` | – |
 | `vcap_amount_to_base_currency` | `src/Compat/MultiCurrency.php`, `src/CouponManager.php`, `src/Issuer.php` | – |
 | `vcap_balance_covers_tax` | `src/CouponManager.php` | – |
 | `vcap_balance_deduct_statuses` | `src/CouponManager.php` | – |
@@ -75,7 +76,9 @@ are described in CONNECTORS.md and API.md.
 | `vcap_custom_amount_price` | `src/CustomAmount.php` | – |
 | `vcap_customer_can_change` | `src/Downloads.php` | – |
 | `vcap_customer_can_resend` | `src/Downloads.php` | – |
+| `vcap_customer_daily_limit` | `src/VoucherPurchaseRules.php` | – |
 | `vcap_customer_preview_design` | `src/Preview.php` | – |
+| `vcap_delivery_hold_until` | `src/Delivery.php` | Until when (Unix time, null = not held) the vouchers of a new customer's order are held. |
 | `vcap_delivery_hour` | `src/Delivery.php` | – |
 | `vcap_delivery_max_attempts` | `src/Delivery.php` | – |
 | `vcap_delivery_min_validity_days` | `src/Delivery.php` | – |
@@ -94,6 +97,7 @@ are described in CONNECTORS.md and API.md.
 | `vcap_internal_redemption_key_prefixes` | `src/API/V1/RestController.php` | Key prefixes reserved for built-in integrations (never created or driven over REST). |
 | `vcap_internal_redemption_target_prefixes` | `src/API/V1/RestController.php` | Target prefixes reserved for built-in integrations (never used over REST). |
 | `vcap_is_editor_preview` | `src/Shortcodes.php` | Whether shortcodes and blocks render an editor's preview (example data, no side effects). |
+| `vcap_is_new_customer` | `src/VoucherPurchaseRules.php` | – |
 | `vcap_is_voucher_product` | `src/ProductConfig.php` | – |
 | `vcap_issue_requires_payment` | `src/Issuer.php` | – |
 | `vcap_issue_retry_delay` | `src/Issuer.php` | – |
@@ -149,6 +153,8 @@ are described in CONNECTORS.md and API.md.
 | `vcap_redemption_site_wide_failures` | `src/API/V1/RedemptionService.php` | Invalid codes per 15 minutes across all callers; above it every caller's quota shrinks (brake). |
 | `vcap_redemption_target_available` | `src/API/V1/RedemptionService.php` | Filters whether the redemption target is currently available (e.g. the course still exists). |
 | `vcap_referral_code_prefix` | `src/Referrals.php` | – |
+| `vcap_referral_min_spend` | `src/Referrals.php` | Minimum order value of referral codes (V3). |
+| `vcap_referral_same_address` | `src/Referrals.php` | – |
 | `vcap_render_template_id` | `src/PdfRenderer.php` | – |
 | `vcap_report_group` | `src/Reports.php` | – |
 | `vcap_report_statuses` | `src/Reports.php` | – |

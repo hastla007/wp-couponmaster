@@ -133,7 +133,10 @@ final class Downloads {
 			if ( $fresh->expires_at && $local >= strtotime( $fresh->expires_at . ' UTC' ) ) {
 				return __( 'The voucher would already have expired on this delivery date. Please choose an earlier date.', 'voucher-captain' );
 			}
-			$utc = gmdate( 'Y-m-d H:i:s', $local );
+			$utc   = gmdate( 'Y-m-d H:i:s', $local );
+			$order = $fresh->order();
+			// V7: a new date never ends the security hold of the order early.
+			$utc = $order instanceof \WC_Order ? Delivery::with_hold( $utc, $order ) : $utc;
 		}
 		$old_email = (string) $fresh->recipient_email;
 		$old_at    = (string) $fresh->delivery_at;
@@ -258,6 +261,10 @@ final class Downloads {
 		}
 		if ( Voucher::STATUS_VOID === $voucher->status ) {
 			wp_die( esc_html__( 'This voucher has been cancelled.', 'voucher-captain' ), '', array( 'response' => 410 ) );
+		}
+		if ( Delivery::is_held( $voucher ) ) {
+			// V7: held for the security check of a new customer's order – the PDF carries the code.
+			wp_die( esc_html__( 'This voucher is not available yet. It is delivered by email once released.', 'voucher-captain' ), esc_html__( 'Download unavailable', 'voucher-captain' ), array( 'response' => 403 ) );
 		}
 		$this->serve( $voucher, ! empty( $_GET['dl'] ) ); // phpcs:ignore WordPress.Security.NonceVerification
 	}

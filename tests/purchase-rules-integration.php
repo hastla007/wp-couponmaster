@@ -114,6 +114,34 @@ $min_order->add_product( $normal, 1 );
 $min_order->calculate_totals();
 vcap_rules_assert( is_wp_error( $min_order->apply_coupon( $min_code->get_code() ) ), 'the same minimum applies to an order edited in the admin' );
 
+// P12 · V7: at most 1000 of vouchers per customer (account or normalised billing email) within 24 hours.
+$v7_tag   = strtolower( wp_generate_password( 6, false, false ) );
+$v7_limit = static function ( int $qty ) use ( $gift_product ): string {
+	WC()->cart->empty_cart();
+	wc_clear_notices();
+	WC()->cart->add_to_cart( $gift_product->get_id(), $qty );
+	WC()->cart->calculate_totals();
+	do_action( 'woocommerce_check_cart_items' );
+	$errors = implode( ' ', wp_list_pluck( wc_get_notices( 'error' ), 'notice' ) );
+	wc_clear_notices();
+	return $errors;
+};
+WC()->customer->set_billing_email( "velo-{$v7_tag}@example.com" );
+vcap_rules_assert( '' === $v7_limit( 20 ), 'V7: vouchers for 1000 in the cart can be ordered (default limit 1000)' );
+vcap_rules_assert( str_contains( $v7_limit( 21 ), '24 hours' ), 'V7: vouchers for 1050 in the cart are refused at checkout' );
+$v7_earlier = wc_create_order();
+$v7_earlier->add_product( $gift_product, 15 );
+$v7_earlier->set_billing_email( "Velo-{$v7_tag}+second@example.com" );
+$v7_earlier->calculate_totals();
+$v7_earlier->save();
+$v7_earlier->update_status( 'on-hold' );
+vcap_rules_assert( str_contains( $v7_limit( 6 ), '24 hours' ), 'V7: an order of 750 in the last 24 hours under an alias of the address counts (750 + 300 > 1000)' );
+vcap_rules_assert( '' === $v7_limit( 5 ), 'V7: 750 + 250 = 1000 is still allowed' );
+update_option( 'vcap_customer_daily_limit', 0 );
+vcap_rules_assert( '' === $v7_limit( 40 ), 'V7: 0 switches the limit off' );
+delete_option( 'vcap_customer_daily_limit' );
+WC()->customer->set_billing_email( '' );
+
 WC()->cart->empty_cart();
 wc_clear_notices();
 echo "Voucher Captain purchase rule checks passed.\n";

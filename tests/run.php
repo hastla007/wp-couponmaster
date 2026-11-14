@@ -1510,5 +1510,30 @@ check( 'D13: docs/HOOKS.md is generated from the code and up to date (php bin/ho
 $d9 = new ReflectionClass( 'VCAP\\CLI\\Command' );
 check( 'D9: "wp vcap" has doctor, migrate, deliver, issue, sync, ratelimit, diagnostics', ! array_diff( array( 'doctor', 'migrate', 'deliver', 'issue', 'sync', 'ratelimit', 'diagnostics' ), array_map( static fn( $m ) => $m->getName(), $d9->getMethods( ReflectionMethod::IS_PUBLIC ) ) ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Plugin.php' ), "defined( 'WP_CLI' ) && WP_CLI" ) );
 
+echo "P12 abuse protection (safe defaults)\n";
+$p12_defaults = VCAP\Settings::DEFAULTS;
+check( 'V3/V5/V7: abuse limits are on by default (14 days wait, 10 rewards per 30 days, address check, 500 custom max, 1000 per 24 h, hold above 250 for 24 h)', 14 === $p12_defaults['vcap_referral_wait_days'] && 10 === $p12_defaults['vcap_referral_max_rewards'] && 'yes' === $p12_defaults['vcap_referral_address_check'] && 14 === $p12_defaults['vcap_bonus_wait_days'] && 500 === $p12_defaults['vcap_custom_max_default'] && 1000 === $p12_defaults['vcap_customer_daily_limit'] && 250 === $p12_defaults['vcap_hold_new_customer_above'] && 24 === $p12_defaults['vcap_hold_hours'] && '' === $p12_defaults['vcap_referral_min_spend'] );
+$p12_custom = array( 'amount_source' => 'custom', 'custom_min' => '', 'custom_max' => '', 'custom_step' => '1' ) + ProductConfig::DEFAULTS;
+$p12_max    = (float) ProductConfig::effective_custom_max( $p12_custom );
+$p12_own    = (string) ProductConfig::effective_custom_max( array( 'custom_max' => '2000' ) + $p12_custom );
+$p12_minhi  = (float) ProductConfig::effective_custom_max( array( 'custom_min' => '800' ) + $p12_custom );
+$GLOBALS['vcap_test_options']['vcap_custom_max_default'] = 0;
+$p12_off = ProductConfig::effective_custom_max( $p12_custom );
+unset( $GLOBALS['vcap_test_options']['vcap_custom_max_default'] );
+check( 'V7: a custom amount without own maximum is limited to 500 by default; an own maximum is kept; never below the minimum; 0 = no limit', 500.0 === $p12_max && '2000' === $p12_own && 800.0 === $p12_minhi && '' === $p12_off, var_export( array( $p12_max, $p12_own, $p12_minhi, $p12_off ), true ) );
+check( 'V7: 600 is refused for a product without own maximum (default 500)', null !== VCAP\CustomAmount::error_for( array( 'custom_max' => $p12_max ) + $p12_custom, '600' ) && null === VCAP\CustomAmount::error_for( array( 'custom_max' => $p12_max ) + $p12_custom, '500' ) );
+$p12_ref = ( new ReflectionClass( VCAP\Referrals::class ) )->newInstanceWithoutConstructor();
+( new ReflectionProperty( VCAP\Referrals::class, 'settings' ) )->setValue( $p12_ref, new VCAP\Settings() );
+$p12_auto = $p12_ref->effective_min_spend();
+$GLOBALS['vcap_test_options']['vcap_referral_min_spend'] = '0';
+$p12_zero = $p12_ref->effective_min_spend();
+$GLOBALS['vcap_test_options']['vcap_referral_min_spend'] = '35';
+$p12_own_min = $p12_ref->effective_min_spend();
+$GLOBALS['vcap_test_options']['vcap_referral_friend_type'] = 'percent';
+$GLOBALS['vcap_test_options']['vcap_referral_min_spend']   = '';
+$p12_pct = $p12_ref->effective_min_spend();
+unset( $GLOBALS['vcap_test_options']['vcap_referral_min_spend'], $GLOBALS['vcap_test_options']['vcap_referral_friend_type'] );
+check( 'V3: the friend\'s code needs an order above the discount: automatic 2 × 10 = 20, an entered 0 becomes 11, 35 stays 35, percentages as entered', 20.0 === $p12_auto && 11.0 === $p12_zero && 35.0 === $p12_own_min && 0.0 === $p12_pct, var_export( array( $p12_auto, $p12_zero, $p12_own_min, $p12_pct ), true ) );
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );
