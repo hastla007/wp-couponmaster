@@ -1636,7 +1636,7 @@ final class CouponManager {
 		}
 		$coupon = new \WC_Coupon( $voucher->coupon_id );
 		$store  = $coupon->get_id() ? $coupon->get_data_store() : null;
-		return $store && method_exists( $store, 'get_tentative_usage_count' ) && (int) $store->get_tentative_usage_count( $coupon->get_id() ) > 0;
+		return $store && $store->has_callable( 'get_tentative_usage_count' ) && (int) $store->get_tentative_usage_count( $coupon->get_id() ) > 0;
 	}
 
 	/** @var array<int, true> Orders to put on hold once their status transition is through. */
