@@ -232,6 +232,43 @@ $second_try->save();
 vcap()->coupons->release_previous_checkout_order( $second_try );
 vcap_acc_assert( 5.0 === $reserved_balance && 25.0 === (float) vcap()->vouchers->get( $retry_card->id )->balance, 'a new checkout order of the session releases the abandoned order\'s reservation (gift card usable again at once)' );
 
+// Guest checkout, then the guest logs in (same session, same billing email) and checks out again as a customer.
+$login_user  = wp_insert_user( array( 'user_login' => 'vcap-acc-' . wp_generate_password( 6, false, false ), 'user_email' => 'acceptance-login-' . wp_generate_password( 6, false, false ) . '@example.com', 'user_pass' => wp_generate_password(), 'role' => 'customer' ) );
+$login_card  = vcap_acc_card( 25 );
+$guest_try   = wc_create_order();
+$guest_try->add_product( $product, 1 );
+$guest_try->set_billing_email( 'acceptance-login@example.com' );
+$guest_try->calculate_totals();
+$guest_try->apply_coupon( $login_card->code );
+$guest_try = wc_get_order( $guest_try->get_id() );
+vcap()->coupons->release_previous_checkout_order( $guest_try );
+vcap()->coupons->reserve_order( $guest_try->get_id(), array(), $guest_try );
+$login_try = wc_create_order( array( 'customer_id' => $login_user ) );
+$login_try->add_product( $product, 1 );
+$login_try->set_billing_email( 'Acceptance-Login@example.com' );
+$login_try->save();
+vcap()->coupons->release_previous_checkout_order( $login_try );
+vcap_acc_assert( 25.0 === (float) vcap()->vouchers->get( $login_card->id )->balance, 'after logging in, the new checkout order releases the guest order\'s reservation of the same session (same billing email)' );
+
+// An unpaid order of the account whose session is gone (placed before logging out) is released when the account
+// checks out again with the same gift card.
+$away_card  = vcap_acc_card( 25 );
+$away_order = wc_create_order( array( 'customer_id' => $login_user ) );
+$away_order->add_product( $product, 1 );
+$away_order->set_billing_email( 'acceptance-login@example.com' );
+$away_order->calculate_totals();
+$away_order->apply_coupon( $away_card->code );
+vcap()->coupons->reserve_order( wc_get_order( $away_order->get_id() ) );
+$away_reserved = (float) vcap()->vouchers->get( $away_card->id )->balance;
+WC()->session->set( VCAP\CouponManager::SESSION_ORDER, 0 );
+$back_order = wc_create_order( array( 'customer_id' => $login_user ) );
+$back_order->add_product( $product, 1 );
+$back_order->set_billing_email( 'acceptance-login@example.com' );
+$back_order->calculate_totals();
+$back_order->apply_coupon( $away_card->code );
+vcap()->coupons->release_previous_checkout_order( wc_get_order( $back_order->get_id() ) );
+vcap_acc_assert( 5.0 === $away_reserved && 25.0 === (float) vcap()->vouchers->get( $away_card->id )->balance, 'a new checkout of the account releases its earlier unpaid order holding the same gift card (session gone after logout)' );
+
 // Deactivation: without Voucher Captain nobody deducts balances, so balance coupons must not work.
 $idle_card = vcap_acc_card( 40 );
 VCAP\Install::suspend_balance_coupons();

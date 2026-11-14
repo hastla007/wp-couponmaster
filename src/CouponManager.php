@@ -417,6 +417,7 @@ final class CouponManager {
 		}
 		$previous_id = absint( $session->get( self::SESSION_ORDER ) );
 		$session->set( self::SESSION_ORDER, $order->get_id() );
+		$this->release_account_orders_with_same_vouchers( $order, $previous_id );
 		if ( ! $previous_id || $previous_id === $order->get_id() ) {
 			return;
 		}
@@ -424,11 +425,42 @@ final class CouponManager {
 		if ( ! $previous instanceof \WC_Order || ! $previous->has_status( array( 'pending', 'failed', 'checkout-draft' ) ) || $previous->is_paid() ) {
 			return;
 		}
-		if ( (int) $previous->get_customer_id() !== (int) $order->get_customer_id() ) {
+		// Same session: the same customer, or the guest who logged in (or the account that logged out) with the
+		// same billing email; the session alone is not enough for orders of different people.
+		$same_email = '' !== (string) $order->get_billing_email() && 0 === strcasecmp( (string) $previous->get_billing_email(), (string) $order->get_billing_email() );
+		if ( (int) $previous->get_customer_id() !== (int) $order->get_customer_id() && ! $same_email ) {
 			return;
 		}
 		$this->release_order_reservations( $previous );
 		( new Discounts\Usage() )->revert( $previous->get_id() );
+	}
+
+	/**
+	 * A customer account's new checkout releases its own unpaid earlier orders that hold a reservation of a voucher
+	 * this order uses (e.g. an order placed before logging out, whose session is gone). Paying such an order later
+	 * through its pay link reserves again (reserve_retry_order()).
+	 */
+	private function release_account_orders_with_same_vouchers( \WC_Order $order, int $skip ): void {
+		$customer = (int) $order->get_customer_id();
+		$codes    = array_map( 'wc_format_coupon_code', $order->get_coupon_codes() );
+		if ( $customer <= 0 || ! $codes ) {
+			return;
+		}
+		$earlier = wc_get_orders(
+			array(
+				'customer_id' => $customer,
+				'status'      => array( 'pending', 'failed', 'checkout-draft' ),
+				'exclude'     => array_filter( array( $order->get_id(), $skip ) ),
+				'limit'       => 20,
+				'orderby'     => 'date',
+				'order'       => 'DESC',
+			)
+		);
+		foreach ( $earlier as $previous ) {
+			if ( $previous instanceof \WC_Order && ! $previous->is_paid() && array_intersect( array_keys( self::order_map( $previous, '_vcap_reservations' ) ), $codes ) ) {
+				$this->release_order_reservations( $previous );
+			}
+		}
 	}
 
 	/**
