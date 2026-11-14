@@ -295,7 +295,7 @@ final class RedemptionService {
 			}
 			return true;
 		};
-		$json = wp_json_encode( $meta );
+		$json  = wp_json_encode( $meta );
 		return false !== $json && strlen( (string) $json ) <= self::META_MAX_BYTES && $depth( $meta, 1 );
 	}
 
@@ -685,7 +685,14 @@ final class RedemptionService {
 			 *                    redemptions fire it too, with channel "shop" or "counter", see
 			 *                    VoucherRepository::fire_redeemed()).
 			 */
-			do_action( 'vcap_voucher_redeemed', $data + array( 'channel' => 'external', 'order_id' => 0, 'source' => \VCAP\Source::current() ) );
+			do_action(
+				'vcap_voucher_redeemed',
+				$data + array(
+					'channel'  => 'external',
+					'order_id' => 0,
+					'source'   => \VCAP\Source::current(),
+				)
+			);
 		} else {
 			/**
 			 * Fires when a reservation was released (cancelled by the caller or expired).

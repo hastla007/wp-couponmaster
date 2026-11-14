@@ -11,7 +11,7 @@ $root = dirname( __DIR__ );
 /** Texts per topic (source strings as in the code). */
 $topics = array(
 	'Gültigkeit und Ablauf'                       => array( 'Valid until %s', 'Valid until: %s', 'unlimited', 'no expiry', 'Your voucher from {site_title} expires on {expiry_date}', 'Your voucher {coupon_code} is valid until {expiry_date}. Remaining value: {coupon_balance}.', 'This voucher has expired.' ),
-	'Übertragbarkeit'                             => array( 'Transferable – anyone with the code can redeem it.', 'Personal – only the buyer or the named recipient can redeem it.', 'Personal, not transferable' ),
+	'Übertragbarkeit'                             => array( 'Transferable – anyone with the code can redeem it.', 'Personal – only the buyer or the named recipient can redeem it.', 'Personal – only the named recipient can redeem it.', 'Personal – only the buyer can redeem it.' ),
 	'Restwert'                                    => array( 'Balance: %s', 'Remaining balance' ),
 	'Erstattung und Widerruf'                     => array( 'Vouchers from this order were already used (%1$s, value used: %2$s). At most %3$s can be refunded; the unused vouchers are voided.', '%s refunded as store credit.', 'This voucher has been cancelled.' ),
 	'Einlösung'                                   => array( 'Enter the code in the cart or at checkout on %s to redeem it.', 'This voucher has already been fully redeemed.' ),

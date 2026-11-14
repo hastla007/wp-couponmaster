@@ -112,6 +112,5 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 | Download ticket (PDF) | Ticket herunterladen (PDF) | Ticket herunterladen (PDF) |
 | Download voucher (PDF) | Gutschein herunterladen (PDF) | Gutschein herunterladen (PDF) |
 | Redeem now | Jetzt einlösen | Jetzt einlösen |
-| Enter the code in the cart or at checkout on %s to redeem it. | Geben Sie den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. | Geben Sie den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. |
 
-67 Texte.
+66 Texte.
