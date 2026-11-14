@@ -86,6 +86,71 @@ final class PaymentVouchers {
 		}
 	}
 
+	/**
+	 * Voucher products whose vouchers are not settled as a payment after tax with the setting on (they keep
+	 * lowering price and VAT), with the reason: VAT treatment single-purpose or promotion, a discount type other
+	 * than "Fixed cart discount", or ticket vouchers. Shown under the setting (Settings).
+	 *
+	 * @return array<int, array{product: \WC_Product, reason: string}>
+	 */
+	public static function not_settled_products( int $limit = 200 ): array {
+		$ids = get_posts(
+			array(
+				'post_type'      => 'product',
+				'post_status'    => array( 'publish', 'private', 'draft', 'pending', 'future' ),
+				'posts_per_page' => $limit,
+				'fields'         => 'ids',
+				'meta_key'       => '_vcap_enabled', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value'     => 'yes', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			)
+		);
+		$out = array();
+		foreach ( $ids as $id ) {
+			$product = wc_get_product( $id );
+			if ( ! $product ) {
+				continue;
+			}
+			$config    = ProductConfig::get( $product );
+			$treatment = ProductConfig::product_treatment( $product );
+			$type      = 'balance' === (string) $config['usage'] ? 'fixed_cart' : (string) $config['discount_type'];
+			$reason    = '';
+			if ( 'ticket' === (string) $config['type'] ) {
+				$reason = __( 'ticket voucher', 'voucher-captain' );
+			} elseif ( 'single' === $treatment ) {
+				$reason = __( 'VAT treatment "Single-purpose voucher"', 'voucher-captain' );
+			} elseif ( 'discount' === $treatment ) {
+				$reason = __( 'VAT treatment "Promotion" or a percentage', 'voucher-captain' );
+			} elseif ( 'fixed_cart' !== $type ) {
+				$reason = __( 'discount type other than "Fixed cart discount"', 'voucher-captain' );
+			}
+			if ( '' !== $reason ) {
+				$out[] = array(
+					'product' => $product,
+					'reason'  => $reason,
+				);
+			}
+		}
+		return $out;
+	}
+
+	/** Note under the setting: how many voucher products are not settled as a payment, with links (HTML). */
+	public static function not_settled_note(): string {
+		$products = self::not_settled_products();
+		if ( ! $products ) {
+			return '';
+		}
+		$links = array();
+		foreach ( array_slice( $products, 0, 10 ) as $row ) {
+			$links[] = '<a href="' . esc_url( (string) get_edit_post_link( $row['product']->get_id(), 'raw' ) ) . '">' . esc_html( $row['product']->get_name() ) . '</a> (' . esc_html( $row['reason'] ) . ')';
+		}
+		return sprintf(
+			/* translators: 1: number of products, 2: list of product links */
+			_n( 'Not settled as payment (keeps lowering price and VAT): %1$d voucher product – %2$s', 'Not settled as payment (keep lowering price and VAT): %1$d voucher products – %2$s', count( $products ), 'voucher-captain' ),
+			count( $products ),
+			implode( ', ', $links ) . ( count( $products ) > 10 ? ' …' : '' )
+		);
+	}
+
 	/** The coupon itself lowers no line (the payment after tax does the work). */
 	public function no_discount( $discount, $price = 0, $item = null, $single = false, $coupon = null ) {
 		return $this->applies( $coupon ) ? 0.0 : $discount;

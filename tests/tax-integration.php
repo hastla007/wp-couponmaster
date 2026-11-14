@@ -463,6 +463,15 @@ WC()->cart->calculate_totals();
 vcap_tax_assert( array() === vcap()->payments->cart_payments() && abs( 10.0 - (float) WC()->cart->get_total_tax() ) < 0.01, 'a single-purpose voucher stays a price reduction (VAT 10 on the remaining 60)', array( 'tax' => WC()->cart->get_total_tax() ) );
 WC()->cart->empty_cart();
 
+// The setting lists the voucher products it leaves out (they keep lowering price and VAT).
+$unsettled_ids = array_map( static fn( $row ) => $row['product']->get_id(), VCAP\PaymentVouchers::not_settled_products( 1000 ) );
+vcap_tax_assert( in_array( $single->get_id(), $unsettled_ids, true ) && in_array( $promo->get_id(), $unsettled_ids, true ) && in_array( $auto_percent->get_id(), $unsettled_ids, true ) && ! in_array( $auto_card->get_id(), $unsettled_ids, true ) && ! in_array( $auto_value->get_id(), $unsettled_ids, true ), 'the setting names the single-purpose, promotion and percentage products it does not settle as payment, not gift cards or value vouchers' );
+$keep_user = get_current_user_id();
+wp_set_current_user( 1 );
+$unsettled_link = (string) get_edit_post_link( $single->get_id(), 'raw' );
+vcap_tax_assert( '' !== $unsettled_link && str_contains( VCAP\PaymentVouchers::not_settled_note(), esc_url( $unsettled_link ) ), 'the note under the setting links the products it leaves out' );
+wp_set_current_user( $keep_user );
+
 // 8.4 A discount code marked "Individual use only" does not push out multi-purpose vouchers (a means of payment),
 // in the classic cart and through the Store API; single-purpose vouchers stay discounts and are removed.
 $solo = new WC_Coupon();
