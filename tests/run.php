@@ -852,6 +852,14 @@ check( 'H12: the step error names the step and the nearest allowed amounts', fal
 check( 'Q7/H12: an ambiguous amount says why instead of "outside the range"', false !== strpos( (string) VCAP\CustomAmount::error_for( $range_config, '1.500' ), 'ambiguous' ) );
 check( 'Q7: number fields are read strictly ("2,50" = 2.5, "1e3" refused)', '2.5' === VCAP\Fields::parse_number( '2,50' ) && null === VCAP\Fields::parse_number( '1e3' ) && '-3' === VCAP\Fields::parse_number( '−3' ) );
 
+echo "Expiry date on the edit form (Q13)\n";
+$pe   = array( VCAP\Admin\VoucherAdmin::class, 'parse_expiry' );
+$next = ( (int) wp_date( 'Y' ) + 1 ) . '-06-30';
+check( 'Q13: a plausible date is taken', array( 'ok' => true, 'date' => $next, 'error' => '' ) === $pe( $next, false, '2030-01-01' ) );
+check( 'Q13: "0026-12-31" (year typed as "26") and a date 60 years ahead are refused', ! $pe( '0026-12-31', false, '' )['ok'] && ! $pe( ( (int) wp_date( 'Y' ) + 60 ) . '-01-01', false, '' )['ok'] && ! $pe( '2027-02-30', false, '' )['ok'] );
+check( 'Q13: an emptied field is not "never expires" – only the checkbox is', ! $pe( '', false, '2030-01-01' )['ok'] && array( 'ok' => true, 'date' => null, 'error' => '' ) === $pe( '', true, '2030-01-01' ) && $pe( '', false, '' )['ok'] );
+check( 'Q13: an unchanged old date of an expired voucher can still be saved', array( 'ok' => true, 'date' => '2019-12-31', 'error' => '' ) === $pe( '2019-12-31', false, '2019-12-31' ) );
+
 echo "Required field hints (H14)\n";
 $req_defs = VCAP\Fields::builtin_definitions( array_merge( ProductConfig::DEFAULTS, array( 'builtin_fields' => array( 'recipient_email', 'recipient_email_required', 'delivery_date', 'delivery_date_required' ) ) ) );
 check( 'H14: required recipient email and delivery date do not say "leave empty"', true === $req_defs['recipient_email']['required'] && false === stripos( $req_defs['recipient_email']['tooltip'], 'leave empty' ) && false === stripos( $req_defs['delivery_date']['tooltip'], 'leave empty' ) && '' !== $req_defs['delivery_date']['tooltip'], json_encode( array( $req_defs['recipient_email']['tooltip'], $req_defs['delivery_date']['tooltip'] ) ) );
