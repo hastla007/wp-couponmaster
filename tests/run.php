@@ -767,6 +767,8 @@ file_put_contents( $utf16, "code\n\xC4BC-1\n" );
 check( 'Windows-1252 files are still converted', 'ÄBC-1' === SpreadsheetReader::read( $utf16, 'txt' )[1][0] );
 unlink( $utf16 );
 
+$q10_masked = VCAP\Downloads::masked_code( 'gutschein-äöüé' );
+check( 'Q10: the masked code keeps whole multibyte characters (no broken UTF-8)', '…ÄÖÜÉ' === $q10_masked && mb_check_encoding( $q10_masked, 'UTF-8' ) && '…X-ÄÖ' === VCAP\Downloads::masked_code( 'abx-äö' ), $q10_masked );
 echo "Code import checks (Q2, Q10, H8)\n";
 $fmt_any = "\x01^\\S{1,100}$\x01u";
 check( 'Q2: WC stub formats like WooCommerce 11.3 ("B&B" → "b&amp;b")', 'b&amp;b-1' === wc_format_coupon_code( 'B&B-1' ) && 'abc' === wc_format_coupon_code( ' ABC ' ) );

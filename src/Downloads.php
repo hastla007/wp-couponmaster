@@ -372,7 +372,8 @@ final class Downloads {
 
 	/** Last four characters of a code, e.g. "…7KQ2" (the code is a means of payment). */
 	public static function masked_code( string $code ): string {
-		return '…' . substr( strtoupper( $code ), -4 );
+		// Q10: cut whole characters – a byte cut would split multibyte codes (Ä, €) into invalid UTF-8.
+		return '…' . mb_substr( mb_strtoupper( $code, 'UTF-8' ), -4, null, 'UTF-8' );
 	}
 
 	/**
