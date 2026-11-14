@@ -390,7 +390,7 @@ final class CouponManager {
 				$order->delete_meta_data( '_vcap_reservations' );
 				$order->save();
 				$this->balance_gone = $voucher;
-				throw new \Exception( esc_html__( 'A voucher balance changed while checkout was processing. Your order was not sent for payment. Refresh the cart and try again.', 'voucher-captain' ), self::BALANCE_CHANGED );
+				throw new \Exception( esc_html__( 'A voucher balance changed while checkout was processing. Your order was not sent for payment. Refresh the cart and try again.', 'voucher-captain' ), self::BALANCE_CHANGED ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- the message is escaped, the second argument is the integer exception code.
 			}
 			$made[ $code ] = $reservation['amount'];
 			// Persist after each successful reserve so an interrupted checkout can resume safely.
