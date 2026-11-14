@@ -176,7 +176,7 @@ final class Tickets {
 			$message = __( 'Cancelled', 'voucher-captain' );
 			$voided  = self::last_event( $events, array( 'voided' ) );
 			if ( $voided && '' !== (string) $voided['note'] ) {
-				$context[] = array( __( 'Reason', 'voucher-captain' ), (string) $voided['note'] );
+				$context[] = array( __( 'Reason', 'voucher-captain' ), Note::render( (string) $voided['note'] ) );
 			}
 		} elseif ( $voucher->is_expired() || Voucher::STATUS_EXPIRED === $voucher->status ) {
 			$state   = 'error';
@@ -324,7 +324,7 @@ final class Tickets {
 		}
 		// Notes of shop orders may hold the customer's email address: managers only.
 		if ( '' !== (string) $e['note'] && ( $staff || $manager ) ) {
-			$rows[] = array( __( 'Note', 'voucher-captain' ), (string) $e['note'] );
+			$rows[] = array( __( 'Note', 'voucher-captain' ), Note::render( (string) $e['note'] ) );
 		}
 		return $rows;
 	}
@@ -833,6 +833,7 @@ final class Tickets {
 				return false;
 			}
 			$this->repo->log( $voucher->id, 'redeemed', $voucher->initial_amount, null, $note );
+			VoucherRepository::fire_redeemed( $voucher, (float) $voucher->initial_amount, 'counter' );
 			return true;
 		}
 		if ( ! $this->repo->redeem_single_if_active( $voucher->id ) ) {
@@ -841,6 +842,7 @@ final class Tickets {
 		$voucher->status  = Voucher::STATUS_REDEEMED;
 		$voucher->balance = 0;
 		$this->repo->log( $voucher->id, 'redeemed', $voucher->initial_amount, 0, $note );
+		VoucherRepository::fire_redeemed( $voucher, (float) $voucher->initial_amount, 'counter' );
 		if ( $voucher->coupon_id ) {
 			$coupon = new \WC_Coupon( $voucher->coupon_id );
 			if ( $coupon->get_id() ) {

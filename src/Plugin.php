@@ -87,6 +87,9 @@ final class Plugin {
 		( new Health() )->register();
 		( new Attention() )->register();
 		( new Diagnostics() )->register();
+		if ( defined( 'WP_CLI' ) && WP_CLI ) {
+			CLI\Command::register(); // "wp vcap …" (D9).
+		}
 		( new CatchUp() )->register();
 		add_action( Install::MIGRATE_HOOK, array( Install::class, 'run_queued_migration' ) );
 

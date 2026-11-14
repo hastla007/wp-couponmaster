@@ -363,6 +363,7 @@ final class TopUp {
 		if ( apply_filters( 'vcap_topup_customer_note', true, $card, $order, $item ) ) {
 			$order->add_order_note( self::confirmation( $card, $amount ), 1 );
 		}
+		/** A gift card was topped up by an order (args: Voucher $card, float $amount, WC_Order $order, order item). */
 		do_action( 'vcap_gift_card_topped_up', $card, $amount, $order, $item );
 		return 0;
 	}

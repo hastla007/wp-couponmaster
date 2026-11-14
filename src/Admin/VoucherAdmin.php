@@ -188,18 +188,33 @@ final class VoucherAdmin {
 					<p class="vcap-actions">
 						<a class="button" target="_blank" href="<?php echo esc_url( vcap()->downloads->admin_url( $v ) ); ?>"><?php esc_html_e( 'View PDF', 'voucher-captain' ); ?></a>
 						<?php
-						$form( 'resend_buyer', __( 'Email buyer', 'voucher-captain' ) );
-						if ( is_email( $v->recipient_email ) ) {
+						if ( Voucher::STATUS_SCHEDULED === $v->status ) {
+							// H7: a scheduled gift is not sent early by accident – only brought forward on purpose.
 							$form(
-								'resend_recipient',
-								__( 'Email recipient', 'voucher-captain' ),
+								'deliver_now',
+								__( 'Send now (bring delivery forward)', 'voucher-captain' ),
 								'button',
 								array(),
-								'buyer' === $v->send_to
-									/* translators: %s: email address */
-									? sprintf( __( 'This voucher is set to go to the buyer only. Send it to %s anyway? "Send to" is changed to "Recipient", so later emails go there too.', 'voucher-captain' ), $v->recipient_email )
-									: ''
+								sprintf(
+									/* translators: %s: delivery date */
+									__( 'This voucher is scheduled for %s. Send it now? It becomes redeemable at once and is not sent again on that date.', 'voucher-captain' ),
+									$v->delivery_at ? \VCAP\LocalDate::from_utc( $v->delivery_at, get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) : '–'
+								)
 							);
+						} elseif ( '' === self::resend_refusal( $v ) ) {
+							$form( 'resend_buyer', __( 'Email buyer', 'voucher-captain' ) );
+							if ( is_email( $v->recipient_email ) ) {
+								$form(
+									'resend_recipient',
+									__( 'Email recipient', 'voucher-captain' ),
+									'button',
+									array(),
+									'buyer' === $v->send_to
+										/* translators: %s: email address */
+										? sprintf( __( 'This voucher is set to go to the buyer only. Send it to %s anyway? "Send to" is changed to "Recipient", so later emails go there too.', 'voucher-captain' ), $v->recipient_email )
+										: ''
+								);
+							}
 						}
 						if ( $v->expires_at && ! in_array( 'expiry_reminder', array_column( $this->repo->events( $v->id ), 'event' ), true ) ) {
 							$form( 'suppress_reminder', __( 'No expiry reminder', 'voucher-captain' ) );
@@ -320,9 +335,9 @@ final class VoucherAdmin {
 							<td><?php echo null !== $e['amount'] && 'checkin' !== $e['event'] && 'checkin_undo' !== $e['event'] ? wp_kses_post( wc_price( (float) $e['amount'], array( 'currency' => $v->currency ) ) ) : esc_html( null !== $e['amount'] ? (string) (int) $e['amount'] : '' ); ?></td>
 							<td><?php echo null !== $e['balance_after'] ? wp_kses_post( wc_price( (float) $e['balance_after'], array( 'currency' => $v->currency ) ) ) : ''; ?></td>
 							<td><?php echo \VCAP\Format::order_link( $e['order_id'] ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in order_link(). ?></td>
-							<td><?php echo $user ? esc_html( $user->display_name ) : '—'; ?></td>
+							<td><?php echo $user ? esc_html( $user->display_name ) : '—'; ?><?php echo ! empty( $e['source'] ) ? ' <small>(' . esc_html( \VCAP\Source::labels()[ $e['source'] ] ?? (string) $e['source'] ) . ')</small>' : ''; ?></td>
 							<td>
-								<?php echo esc_html( (string) $e['note'] ); ?>
+								<?php echo esc_html( \VCAP\Note::render( (string) $e['note'] ) ); ?>
 								<?php if ( $reversible ) : ?>
 									<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="vcap-inline-form vcap-reverse-form" data-confirm="<?php echo esc_attr__( 'Cancel this redemption and book the value back to the voucher? This is recorded in the history and the redemption journal.', 'voucher-captain' ); ?>">
 										<input type="hidden" name="action" value="vcap_voucher_action" /><input type="hidden" name="do" value="reverse_redemption" /><input type="hidden" name="id" value="<?php echo esc_attr( (string) $v->id ); ?>" /><input type="hidden" name="event_id" value="<?php echo esc_attr( (string) $e['id'] ); ?>" />
@@ -363,6 +378,14 @@ final class VoucherAdmin {
 		}
 		$do = sanitize_key( $_POST['do'] ?? '' );
 		switch ( $do ) {
+			case 'deliver_now':
+				if ( vcap()->delivery->deliver_now( $v ) ) {
+					Flash::add( 'success', __( 'The voucher was sent now and is redeemable.', 'voucher-captain' ) );
+				} else {
+					Flash::add( 'error', Voucher::STATUS_SCHEDULED === $v->status ? __( 'The voucher could not be delivered now – see its history for the reason. It is retried automatically.', 'voucher-captain' ) : __( 'This voucher is not scheduled (any more).', 'voucher-captain' ) );
+				}
+				$this->redirect( '', $id );
+				break;
 			case 'resend_buyer':
 			case 'resend_recipient':
 				$this->resend( $v, 'resend_buyer' === $do ? 'buyer' : 'recipient' );
@@ -421,11 +444,36 @@ final class VoucherAdmin {
 	 * its reason. Sending to the recipient of a "buyer only" voucher (the admin confirmed it) switches "Send to"
 	 * to the recipient.
 	 */
+	/**
+	 * Why a voucher must not be emailed by hand (H7), '' when it may: a scheduled gift would arrive early with a
+	 * code that does not work yet (use "Send now" instead), a void, expired or used-up voucher is no gift any more.
+	 */
+	public static function resend_refusal( Voucher $v ): string {
+		switch ( $v->status ) {
+			case Voucher::STATUS_SCHEDULED:
+				return __( 'the voucher is scheduled for later – use "Send now" to bring the delivery forward', 'voucher-captain' );
+			case Voucher::STATUS_VOID:
+				return __( 'the voucher is void', 'voucher-captain' );
+			case Voucher::STATUS_EXPIRED:
+				return __( 'the voucher has expired', 'voucher-captain' );
+			case Voucher::STATUS_REDEEMED:
+				return __( 'the voucher has been redeemed', 'voucher-captain' );
+			case Voucher::STATUS_RESERVED:
+				return __( 'the voucher is being redeemed right now', 'voucher-captain' );
+		}
+		return $v->is_expired() ? __( 'the voucher has expired', 'voucher-captain' ) : '';
+	}
+
 	public function resend( Voucher $v, string $role ): bool {
 		$address = 'recipient' === $role ? $v->recipient_email : $v->buyer_email;
 		$emails  = function_exists( 'WC' ) ? WC()->mailer()->get_emails() : array();
 		$email   = $emails[ 'recipient' === $role ? 'VCAP_Email_Voucher_Recipient' : 'VCAP_Email_Voucher_Buyer' ] ?? null;
-		$reason  = '';
+		$reason  = self::resend_refusal( $v );
+		if ( '' !== $reason ) {
+			/* translators: %s: reason */
+			Flash::add( 'error', sprintf( __( 'The voucher email was not sent: %s.', 'voucher-captain' ), $reason ) );
+			return false;
+		}
 		if ( ! is_email( $address ) ) {
 			$reason = 'recipient' === $role ? __( 'no valid recipient email address is stored', 'voucher-captain' ) : __( 'no valid buyer email address is stored', 'voucher-captain' );
 		} elseif ( ! $email ) {
@@ -441,12 +489,10 @@ final class VoucherAdmin {
 		if ( '' === $reason ) {
 			$started = time();
 			if ( $email->trigger( $v ) ) {
-				$note = 'recipient' === $role
-					/* translators: %s: email address */
-					? sprintf( __( 'Sent to the recipient (%s) by an admin', 'voucher-captain' ), $address )
-					/* translators: %s: email address */
-					: sprintf( __( 'Sent to the buyer (%s) by an admin', 'voucher-captain' ), $address );
-				$this->repo->log( $v->id, 'resent', null, null, $note );
+				// Masked (SECURITY.md, D8): the history is seen by all staff and exported.
+				$this->repo->log( $v->id, 'resent', null, null, \VCAP\Note::make( 'resent', array( $role, \VCAP\Compat\PassCaptainTickets::mask_email( $address ) ) ) );
+				// A first delivery by hand counts as the delivery (H7): the daily safety net does not send it again.
+				vcap()->delivery->record_manual_send( $v, array( $role ) );
 				/* translators: %s: email address */
 				Flash::add( 'success', sprintf( __( 'Voucher email sent to %s.', 'voucher-captain' ), $address ) );
 				return true;
@@ -459,7 +505,7 @@ final class VoucherAdmin {
 		}
 		/* translators: %s: reason */
 		$message = sprintf( __( 'The voucher email was not sent: %s.', 'voucher-captain' ), $reason );
-		$this->repo->log( $v->id, 'delivery_failed', null, null, $message );
+		$this->repo->log( $v->id, 'delivery_failed', null, null, \VCAP\Note::make( 'resend_failed', array( \VCAP\Health::mask_addresses( $reason ) ) ) );
 		Flash::add( 'error', $message );
 		return false;
 	}
@@ -593,9 +639,40 @@ final class VoucherAdmin {
 		return array( 'ok' => true, 'date' => $raw, 'error' => '' );
 	}
 
+	/**
+	 * What an edit changed, for the history (D8): before → after per field. Addresses are masked and the message
+	 * is only marked as changed (the history is seen by all staff and exported, SECURITY.md).
+	 *
+	 * @return array<string, array{0:string, 1:string}>
+	 */
+	public static function edit_diff( Voucher $before, Voucher $after ): array {
+		$show = static function ( Voucher $v, string $field ): string {
+			switch ( $field ) {
+				case 'expires_at':
+					return $v->expires_at ? (string) get_date_from_gmt( $v->expires_at, 'Y-m-d' ) : '';
+				case 'recipient_email':
+					return \VCAP\Compat\PassCaptainTickets::mask_email( (string) $v->recipient_email );
+				case 'message':
+					return '' !== (string) $v->message ? '…' . substr( md5( (string) $v->message ), 0, 6 ) : '';
+				default:
+					return (string) $v->$field;
+			}
+		};
+		$diff = array();
+		foreach ( array( 'expires_at', 'recipient_name', 'recipient_email', 'message', 'send_to', 'status', 'max_checkins' ) as $field ) {
+			$from = $show( $before, $field );
+			$to   = $show( $after, $field );
+			if ( $from !== $to ) {
+				$diff[ $field ] = array( $from, $to );
+			}
+		}
+		return $diff;
+	}
+
 	public function save( Voucher $v ): bool {
 		$from_status   = $v->status;
 		$old_recipient = $v->recipient_email;
+		$before        = clone $v;
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified in handle_action().
 		$current = $v->expires_at ? get_date_from_gmt( $v->expires_at, 'Y-m-d' ) : '';
 		$expiry  = self::parse_expiry( sanitize_text_field( wp_unslash( $_POST['expires_at'] ?? '' ) ), ! empty( $_POST['expires_never'] ), $current );
@@ -634,8 +711,13 @@ final class VoucherAdmin {
 		}
 		$delivery = sanitize_text_field( wp_unslash( $_POST['delivery_at'] ?? '' ) );
 		// phpcs:enable
-		$this->repo->update_columns( $v, array( 'recipient_name', 'recipient_email', 'message', 'send_to', 'fields', 'max_checkins', 'expires_at' ), $from_status );
-		$this->repo->log( $v->id, 'edited' );
+		if ( ! $this->repo->update_columns( $v, array( 'recipient_name', 'recipient_email', 'message', 'send_to', 'fields', 'max_checkins', 'expires_at' ), $from_status ) ) {
+			$error = \VCAP\Db::fail( 'voucher_edit', array( 'voucher_id' => $v->id ) );
+			/* translators: %s: error with reference id */
+			Flash::add( 'error', sprintf( __( 'The voucher was not saved. %s', 'voucher-captain' ), $error->get_error_message() ) );
+			return false;
+		}
+		$this->repo->log( $v->id, 'edited', null, null, \VCAP\Note::make( 'edited', array( (string) wp_json_encode( self::edit_diff( $before, $v ) ) ) ) );
 		if ( strtolower( $old_recipient ) !== strtolower( $v->recipient_email ) ) {
 			// Personal vouchers: the coupon must accept the new address (and no longer the old one).
 			vcap()->coupons->refresh_email_restrictions( $v, $old_recipient );
@@ -683,19 +765,22 @@ final class VoucherAdmin {
 			return;
 		}
 		$result = $this->bulk( $action, $ids );
-		$this->redirect( $result['done'] || $result['failed'] ? '' : 'bulk' );
+		$this->redirect( $result['done'] || $result['failed'] || $result['skipped'] ? '' : 'bulk' );
 	}
 
 	/**
 	 * Run a bulk action and report its outcome as flash notices: successes as one count, failures (U4) as an error
-	 * that names the codes – a voided voucher whose WooCommerce code could not be disabled stays redeemable.
+	 * that names the codes – a voided voucher whose WooCommerce code could not be disabled stays redeemable. A bulk
+	 * resend skips vouchers that must not be mailed (H7: scheduled, void, expired, used up) with a warning.
 	 *
 	 * @param int[] $ids
-	 * @return array{done:int, failed:string[]} number of vouchers changed/sent and the codes that failed.
+	 * @return array{done:int, failed:string[], skipped:int} number of vouchers changed/sent, the codes that failed
+	 *                                                         and the number of vouchers skipped by a resend.
 	 */
 	public function bulk( string $action, array $ids ): array {
-		$done   = 0;
-		$failed = array();
+		$done    = 0;
+		$failed  = array();
+		$skipped = 0;
 		foreach ( $ids as $id ) {
 			$v = $this->repo->get( (int) $id );
 			if ( ! $v ) {
@@ -709,13 +794,19 @@ final class VoucherAdmin {
 			} elseif ( 'reactivate' === $action && Voucher::STATUS_VOID === $v->status ) {
 				$ok = vcap()->issuer->reactivate( $v );
 			} elseif ( 'resend' === $action ) {
-				$addresses = vcap()->delivery->send( $v );
+				if ( '' !== self::resend_refusal( $v ) ) {
+					++$skipped; // H7: scheduled, void, expired or used-up vouchers are not mailed by a bulk action.
+					continue;
+				}
+				$roles     = array();
+				$failures  = array();
+				$addresses = vcap()->delivery->send( $v, null, $roles, $failures );
 				$ok        = (bool) $addresses;
 				if ( $addresses ) {
-					/* translators: %s: email addresses */
-					$this->repo->log( $v->id, 'resent', null, null, sprintf( __( 'Sent to %s by an admin (bulk action)', 'voucher-captain' ), implode( ', ', $addresses ) ) );
+					$this->repo->log( $v->id, 'resent', null, null, \VCAP\Note::make( 'resent_bulk', array( implode( ',', $roles ) ) ) );
+					vcap()->delivery->record_manual_send( $v, $roles );
 				} else {
-					$this->repo->log( $v->id, 'delivery_failed', null, null, __( 'Bulk resend: the email was not sent (no valid address, email disabled or mail error).', 'voucher-captain' ) );
+					$this->repo->log( $v->id, 'delivery_failed', null, null, \VCAP\Note::make( 'delivery_not_sent', array( (string) wp_json_encode( $failures ) ) ) );
 				}
 			} else {
 				continue;
@@ -728,6 +819,10 @@ final class VoucherAdmin {
 		}
 		$codes = implode( ', ', array_slice( $failed, 0, 20 ) ) . ( count( $failed ) > 20 ? ', …' : '' );
 		if ( 'resend' === $action ) {
+			if ( $skipped ) {
+				/* translators: %d: number of vouchers */
+				Flash::add( 'warning', sprintf( _n( '%d voucher was skipped: it is scheduled, void, expired or used up.', '%d vouchers were skipped: they are scheduled, void, expired or used up.', $skipped, 'voucher-captain' ), $skipped ) );
+			}
 			if ( $done ) {
 				/* translators: %d: number of vouchers */
 				Flash::add( 'success', sprintf( _n( '%d voucher sent again.', '%d vouchers sent again.', $done, 'voucher-captain' ), $done ) );
@@ -736,7 +831,7 @@ final class VoucherAdmin {
 				/* translators: %d: number of vouchers */
 				Flash::add( 'error', sprintf( _n( '%d voucher could not be sent (no valid address, email disabled or mail error) – see its history.', '%d vouchers could not be sent (no valid address, email disabled or mail error) – see their history.', count( $failed ), 'voucher-captain' ), count( $failed ) ) . ' ' . $codes );
 			}
-			return array( 'done' => $done, 'failed' => $failed );
+			return array( 'done' => $done, 'failed' => $failed, 'skipped' => $skipped );
 		}
 		if ( $done ) {
 			Flash::add(
@@ -758,7 +853,7 @@ final class VoucherAdmin {
 					: sprintf( _n( '%1$d voucher could not be fully reactivated (status or WooCommerce code) – check its history: %2$s', '%1$d vouchers could not be fully reactivated (status or WooCommerce code) – check their history: %2$s', count( $failed ), 'voucher-captain' ), count( $failed ), $codes )
 			);
 		}
-		return array( 'done' => $done, 'failed' => $failed );
+		return array( 'done' => $done, 'failed' => $failed, 'skipped' => $skipped );
 	}
 
 	public function export(): void {

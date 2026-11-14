@@ -10,6 +10,46 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Logger {
 	public const SOURCE = 'voucher-captain';
+	/** Setting "Verbose log" (D16): 'yes' switches detailed logging on for VERBOSE_HOURS hours. */
+	public const VERBOSE_OPTION = 'vcap_debug_log';
+	/** Time until which the verbose log is on (set when the setting is switched on). */
+	public const VERBOSE_UNTIL_OPTION = 'vcap_debug_log_until';
+	/** Hours the verbose log stays on after it was switched on in the settings. */
+	public const VERBOSE_HOURS = 24;
+
+	/**
+	 * Whether detailed entries are written (D16): constant VCAP_DEBUG, or the setting "Verbose log" switched on
+	 * less than VERBOSE_HOURS hours ago (it switches itself off, so it is never forgotten on a live shop).
+	 */
+	public static function verbose(): bool {
+		if ( defined( 'VCAP_DEBUG' ) && VCAP_DEBUG ) {
+			return true;
+		}
+		return function_exists( 'get_option' ) && 'yes' === get_option( self::VERBOSE_OPTION, 'no' ) && (int) get_option( self::VERBOSE_UNTIL_OPTION, 0 ) > time();
+	}
+
+	/**
+	 * Settings save of "Verbose log": switching it on starts the VERBOSE_HOURS window, saving it while on keeps the
+	 * running one (an expired window is started again).
+	 *
+	 * @param mixed $value Checkbox value ('yes'/'no' or null).
+	 */
+	public static function sanitize_verbose( $value ) {
+		$on = in_array( $value, array( 'yes', '1', 1, true ), true );
+		if ( $on && ( 'yes' !== get_option( self::VERBOSE_OPTION, 'no' ) || (int) get_option( self::VERBOSE_UNTIL_OPTION, 0 ) <= time() ) ) {
+			update_option( self::VERBOSE_UNTIL_OPTION, time() + self::VERBOSE_HOURS * HOUR_IN_SECONDS, false );
+		} elseif ( ! $on ) {
+			delete_option( self::VERBOSE_UNTIL_OPTION );
+		}
+		return $on ? 'yes' : 'no';
+	}
+
+	/** Detailed entry, written only while verbose() (level "info", marked "[debug]"). */
+	public static function debug( string $message, array $context = array() ): void {
+		if ( self::verbose() ) {
+			self::log( 'info', '[debug] ' . $message, $context );
+		}
+	}
 
 	public static function error( string $message, array $context = array() ): void {
 		self::log( 'error', $message, $context );

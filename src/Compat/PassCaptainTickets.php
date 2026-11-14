@@ -720,7 +720,7 @@ final class PassCaptainTickets {
 		}
 		$tickets = count( (array) ( $issued['ticket_ids'] ?? array() ) );
 		/* translators: 1: number of tickets, 2: Pass Captain order id, 3: email */
-		$this->vouchers->log( $voucher->id, 'passcaptain_tickets', null, null, sprintf( _n( '%1$d ticket, Pass Captain order %2$s, sent to %3$s', '%1$d tickets, Pass Captain order %2$s, sent to %3$s', $tickets, 'voucher-captain' ), $tickets, (string) ( $issued['order_public_id'] ?? '' ), $email ) );
+		$this->vouchers->log( $voucher->id, 'passcaptain_tickets', null, null, sprintf( _n( '%1$d ticket, Pass Captain order %2$s, sent to %3$s', '%1$d tickets, Pass Captain order %2$s, sent to %3$s', $tickets, 'voucher-captain' ), $tickets, (string) ( $issued['order_public_id'] ?? '' ), self::mask_email( (string) $email ) ) );
 		do_action( 'vcap_passcaptain_tickets_issued', $voucher, $issued, $email );
 		return $this->result( $voucher, $issued, $email );
 	}

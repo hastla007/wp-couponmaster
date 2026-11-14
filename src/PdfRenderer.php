@@ -80,6 +80,7 @@ final class PdfRenderer {
 		$options->set( 'tempDir', wp_is_writable( $tmp ) ? $tmp : sys_get_temp_dir() );
 		$uploads = wp_upload_dir( null, false );
 		$options->set( 'chroot', array_values( array_filter( array( VCAP_PATH, $uploads['basedir'], ABSPATH ) ) ) );
+		/** Dompdf options used to render voucher PDFs (args: Dompdf\\Options). */
 		return apply_filters( 'vcap_dompdf_options', $options );
 	}
 
@@ -233,9 +234,35 @@ final class PdfRenderer {
 				return $file;
 			}
 			wp_delete_file( $file );
+			self::write_failed( $voucher );
 			return null;
 		}
+		self::write_failed( $voucher );
 		return null;
+	}
+
+	/** D5: the mail would go out without its PDF – leave a trace with the voucher. */
+	private static function write_failed( Voucher $voucher ): void {
+		Logger::error( 'Voucher PDF could not be written to the private temp folder (disk full or no write permission).', array( 'voucher_id' => (int) $voucher->id, 'element' => 'pdf_file' ) );
+	}
+
+	/**
+	 * Why a barcode type cannot encode this value ('' when it can): EAN-13 takes 12 or 13 digits only, Code 39
+	 * upper-case letters, digits and - . $ / + % and space. Shown in the template preview and logged on render (D5).
+	 */
+	public static function barcode_problem( string $type, string $payload ): string {
+		switch ( $type ) {
+			case 'EAN13':
+				return preg_match( '/^\d{12,13}$/', $payload ) ? '' : __( 'EAN-13 barcodes need a code of 12 or 13 digits; this code cannot be printed as EAN-13 (use Code 128).', 'voucher-captain' );
+			case 'C39':
+				return preg_match( '/^[A-Z0-9\-. $\/+%]+$/', $payload ) ? '' : __( 'Code 39 barcodes only take upper-case letters, digits and - . $ / + % (use Code 128).', 'voucher-captain' );
+		}
+		return '';
+	}
+
+	/** An element (QR code, barcode) could not be drawn: logged with the voucher and the element type (D5). */
+	private static function element_failed( string $element, Voucher $voucher, string $why ): void {
+		Logger::error( sprintf( 'Voucher PDF: the %s could not be drawn: %s', $element, Health::mask_addresses( $why ) ), array( 'voucher_id' => (int) $voucher->id, 'element' => $element ) );
 	}
 
 	public function filename( Voucher $voucher ): string {
@@ -282,6 +309,7 @@ final class PdfRenderer {
 			$out .= $this->element( (array) $el, $voucher, $values );
 		}
 		$out .= '</div></body></html>';
+		/** HTML a voucher PDF is rendered from (args: string $html, Voucher $voucher, array $design). */
 		return (string) apply_filters( 'vcap_pdf_html', $out, $voucher, $design );
 	}
 
@@ -611,6 +639,7 @@ final class PdfRenderer {
 		try {
 			$uri = ( new QRCode( $options ) )->render( $payload );
 		} catch ( \Throwable $e ) {
+			self::element_failed( 'qr', $voucher, $e->getMessage() );
 			return '';
 		}
 		$size  = min( (float) $el['w'], (float) $el['h'] );
@@ -665,6 +694,8 @@ final class PdfRenderer {
 			// SVG (vector): needs no GD and prints sharp.
 			$svg = ( new \Picqer\Barcode\BarcodeGeneratorSVG() )->getBarcode( $payload, $types[ $chosen ], 3, 120, 'transparent' === $color ? '#000000' : $color );
 		} catch ( \Throwable $e ) {
+			$problem = self::barcode_problem( (string) ( $el['barcodeType'] ?? 'C128' ), $payload );
+			self::element_failed( 'barcode', $voucher, '' !== $problem ? $problem : $e->getMessage() );
 			return '';
 		}
 		// No external DTD; the bars stretch to the element box like the designer shows them.

@@ -71,7 +71,35 @@ final class Install {
 	private const MIGRATIONS = array(
 		'1.4.0' => 'migrate_1_4_0',
 		'1.5.0' => 'migrate_1_5_0',
+		'1.6.0' => 'migrate_1_6_0',
 	);
+	/** Schema version that added the "source" column of the ledger (D8). */
+	public const EVENT_SOURCE_VERSION = '1.6.0';
+
+	/**
+	 * Whether the ledger has its "source" column: the schema of EVENT_SOURCE_VERSION is installed, or its tables
+	 * were created by an upgrade whose data migrations still run (SCHEMA_STEP_OPTION).
+	 */
+	public static function event_source_ready(): bool {
+		$installed = version_compare( (string) get_option( self::OPTION_DB_VERSION, '0' ), self::EVENT_SOURCE_VERSION, '>=' );
+		$step      = (string) get_option( self::SCHEMA_STEP_OPTION, '' );
+		$to        = (string) substr( (string) strrchr( $step, '>' ), 1 );
+		if ( ! $installed && ( '' === $to || version_compare( $to, self::EVENT_SOURCE_VERSION, '<' ) ) ) {
+			return false;
+		}
+		// The column itself is checked once per site and request: a ledger write must never fail on a schema that
+		// is not what the version says (e.g. a failed or interrupted upgrade).
+		$site = function_exists( 'get_current_blog_id' ) ? get_current_blog_id() : 0;
+		if ( ! isset( self::$event_source[ $site ] ) ) {
+			global $wpdb;
+			self::$event_source[ $site ] = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM ' . self::tables()['events'] . ' LIKE %s', 'source' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
+		}
+		return self::$event_source[ $site ];
+	}
+
+	/** @var array<int, bool> Whether the ledger of a site has its "source" column (event_source_ready()). */
+	private static array $event_source = array();
+
 	/**
 	 * Indexes of earlier schemas that a later one replaced (dbDelta never drops an index): table key => names.
 	 * events.voucher_id is covered by voucher_ledger, vouchers.status by status_expires (both 1.5.0).
@@ -858,6 +886,16 @@ final class Install {
 	 * privacy exports and erasures find them through an index instead of scanning every note. New rows are
 	 * written with the hash; existing ones are filled in id batches.
 	 */
+	/**
+	 * 1.6.0: the ledger column "source" (D8, created by the schema step). Earlier rows keep '' – their source is
+	 * unknown and shown without one; nothing to fill. The column is written as soon as it exists
+	 * (event_source_ready()), so this step only re-checks it after the DDL.
+	 */
+	private static function migrate_1_6_0(): bool {
+		self::$event_source = array();
+		return true;
+	}
+
 	private static function migrate_1_5_0(): bool {
 		return self::hash_event_notes( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ? 8.0 : 2.0 );
 	}
@@ -1037,6 +1075,7 @@ final class Install {
 					balance_after decimal(19,4) NULL DEFAULT NULL,
 					order_id bigint(20) unsigned NOT NULL DEFAULT 0,
 					user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+					source varchar(20) NOT NULL DEFAULT '',
 					note text NULL,
 					actor_email_hash char(64) NOT NULL DEFAULT '',
 					created_at datetime NOT NULL,
@@ -1101,6 +1140,7 @@ final class Install {
 	}
 
 	public static function create_tables(): void {
+		self::$event_source = array();
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		foreach ( self::schema() as $sql ) {
 			dbDelta( $sql );

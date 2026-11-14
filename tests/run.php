@@ -1339,7 +1339,7 @@ $GLOBALS['wpdb']->answers = array(
 	'/^SHOW TABLES LIKE/'           => static fn( $q ) => preg_match( "/LIKE '([a-z_0-9\\\\]+)'/", $q, $m ) ? stripslashes( $m[1] ) : null,
 	'/^SHOW COLUMNS FROM/'          => static function ( $q ) {
 		preg_match( '/FROM (\S+)/', $q, $m );
-		return array( 'id', 'code', 'coupon_id', 'type', 'status', 'order_id', 'order_item_id', 'item_index', 'product_id', 'variation_id', 'template_id', 'usage_mode', 'discount_type', 'initial_amount', 'balance', 'currency', 'expires_at', 'buyer_name', 'buyer_email', 'user_id', 'recipient_name', 'recipient_email', 'message', 'fields', 'send_to', 'delivery_at', 'delivered_at', 'token', 'transferable', 'terms', 'max_checkins', 'checkins', 'last_checkin_at', 'delivered_roles', 'created_at', 'updated_at', 'voucher_id', 'event', 'amount', 'balance_after', 'note', 'actor_email_hash', 'batch', 'imported_at', 'used_at', 'redemption_key', 'target', 'state', 'request_hash', 'meta', 'campaign_id', 'customer_key', 'claim_key', 'kind' );
+		return array( 'id', 'code', 'coupon_id', 'type', 'status', 'order_id', 'order_item_id', 'item_index', 'product_id', 'variation_id', 'template_id', 'usage_mode', 'discount_type', 'initial_amount', 'balance', 'currency', 'expires_at', 'buyer_name', 'buyer_email', 'user_id', 'recipient_name', 'recipient_email', 'message', 'fields', 'send_to', 'delivery_at', 'delivered_at', 'token', 'transferable', 'terms', 'max_checkins', 'checkins', 'last_checkin_at', 'delivered_roles', 'created_at', 'updated_at', 'voucher_id', 'event', 'amount', 'balance_after', 'source', 'note', 'actor_email_hash', 'batch', 'imported_at', 'used_at', 'redemption_key', 'target', 'state', 'request_hash', 'meta', 'campaign_id', 'customer_key', 'claim_key', 'kind' );
 	},
 	'/^SHOW INDEX FROM wp_vcap_events$/' => array( 'PRIMARY', 'voucher_ledger', 'voucher_order', 'actor_email_hash', 'event' ),
 	'/^SHOW INDEX FROM/'            => static function ( $q ) {
@@ -1430,6 +1430,60 @@ $stream = $vcap_source( 'VCAP\\Preview', 'stream' );
 $ticket = $vcap_source( 'VCAP\\Tickets', 'ticket_page' );
 check( 'PDF stream and ticket status page use Shortcodes::no_cache() (DONOTCACHEPAGE), not only nocache_headers()', str_contains( $stream, 'Shortcodes::no_cache()' ) && str_contains( $ticket, 'Shortcodes::no_cache()' ) && ! str_contains( $ticket, 'nocache_headers()' ) );
 check( 'the PDF stream cleans output buffers and switches zlib compression off before Content-Length', str_contains( $stream, 'wc_clean_buffers()' ) && str_contains( $stream, 'zlib.output_compression' ) && strpos( $stream, 'wc_clean_buffers()' ) < strpos( $stream, 'Content-Length' ) );
+
+echo "Support, logging and audit trail (P7)\n";
+// M13: notes are stored as code + arguments and translated when shown; plain notes of earlier versions stay.
+$m13_note = VCAP\Note::make( 'delivery_partial', array( 'buyer', wp_json_encode( array( 'buyer' => 'mail_failed' ) ) ) );
+check( 'M13: a coded note is stored without the sentence and rendered with role labels, never the internal role key', VCAP\Note::is_coded( $m13_note ) && ! str_contains( $m13_note, 'Not delivered' ) && 'Not delivered to: Buyer (will be retried). Buyer: the mail system did not accept the email' === VCAP\Note::render( $m13_note ), VCAP\Note::render( $m13_note ) );
+check( 'M13: plain-text notes of earlier versions and staff notes are shown unchanged', 'Not delivered to: recipient (will be retried).' === VCAP\Note::render( 'Not delivered to: recipient (will be retried).' ) && '@vcap:broken' === VCAP\Note::render( '@vcap:broken' ) );
+check( 'M13: "Sent to 2 addresses" names the roles', 'Sent to 2 addresses (Recipient, Buyer)' === VCAP\Note::render( VCAP\Note::make( 'delivered', array( 2, 'recipient,buyer' ) ) ) );
+// D4: the reason per role is kept – disabled, no address and mail system error read differently.
+$d4_text = VCAP\Note::render( VCAP\Note::make( 'delivery_not_sent', array( wp_json_encode( array( 'recipient' => 'disabled', 'buyer' => 'mail_failed' ) ) ) ) );
+check( 'D4: a failed delivery names the reason per role (email disabled vs. mail system)', 'No email was sent (Recipient: email disabled; Buyer: the mail system did not accept the email).' === $d4_text, $d4_text );
+$d4_mail = (string) file_get_contents( dirname( __DIR__ ) . '/src/Emails/VoucherEmail.php' );
+check( 'D4: VoucherEmail::trigger() records disabled / no_recipient / mail_failed', str_contains( $d4_mail, "'disabled'" ) && str_contains( $d4_mail, "'no_recipient'" ) && str_contains( $d4_mail, "'mail_failed'" ) );
+check( 'D4: the mail failure log keeps the voucher id', str_contains( $vcap_source( 'VCAP\\Health', 'record_mail_failure' ), "'voucher_id'" ) );
+// D8: edit diff with masked addresses, the message only marked as changed.
+$d8_before                  = new Voucher();
+$d8_before->recipient_email = 'anna@gmial.com';
+$d8_before->message         = 'Happy birthday';
+$d8_before->send_to         = 'recipient';
+$d8_before->status          = Voucher::STATUS_ACTIVE;
+$d8_after                   = clone $d8_before;
+$d8_after->recipient_email  = 'anna@gmail.com';
+$d8_after->message          = 'Happy birthday, Anna';
+$d8_diff                    = VCAP\Admin\VoucherAdmin::edit_diff( $d8_before, $d8_after );
+$d8_text                    = VCAP\Note::render( VCAP\Note::make( 'edited', array( wp_json_encode( $d8_diff ) ) ) );
+check( 'D8: "edited" records before → after with masked addresses and no message text', array( 'recipient_email', 'message' ) === array_keys( $d8_diff ) && str_contains( $d8_text, 'Recipient email: a***@gmial.com → a***@gmail.com' ) && ! str_contains( $d8_text, 'birthday' ), $d8_text );
+check( 'D8: the ledger has a source column and log() stores Source::current()', str_contains( $vcap_source( 'VCAP\\VoucherRepository', 'log' ), "Source::current()" ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Install.php' ), "source varchar(20) NOT NULL DEFAULT ''" ) && '1.6.0' === VCAP\Install::EVENT_SOURCE_VERSION );
+check( 'D8: WP-CLI is recorded as source "cli"', ( defined( 'WP_CLI' ) && WP_CLI ? 'cli' : VCAP\Source::with( 'cli', static fn() => VCAP\Source::current() ) ) === 'cli' && isset( VCAP\Source::labels()['scanner'] ) );
+// H7: manual sends check the status.
+$h7 = new Voucher();
+$h7->status = Voucher::STATUS_SCHEDULED;
+$h7_scheduled = VCAP\Admin\VoucherAdmin::resend_refusal( $h7 );
+$h7->status = Voucher::STATUS_VOID;
+$h7_void = VCAP\Admin\VoucherAdmin::resend_refusal( $h7 );
+$h7->status = Voucher::STATUS_ACTIVE;
+check( 'H7: a scheduled or void voucher is not emailed by hand, an active one is', '' !== $h7_scheduled && str_contains( $h7_scheduled, 'Send now' ) && '' !== $h7_void && '' === VCAP\Admin\VoucherAdmin::resend_refusal( $h7 ) );
+// D5: barcode type vs. code.
+check( 'D5: EAN-13 refuses letters, Code 39 lower case; Code 128 takes anything', '' !== PdfRenderer::barcode_problem( 'EAN13', 'GIFT-K7QM2X9ZPA' ) && '' === PdfRenderer::barcode_problem( 'EAN13', '4006381333931' ) && '' !== PdfRenderer::barcode_problem( 'C39', 'abc' ) && '' === PdfRenderer::barcode_problem( 'C128', 'gift-äöü' ) );
+check( 'D5: failed QR codes, barcodes and temp files are logged with the voucher id and element', str_contains( $vcap_source( 'VCAP\\PdfRenderer', 'to_temp_file' ), 'write_failed' ) && str_contains( $vcap_source( 'VCAP\\PdfRenderer', 'write_failed' ), "'voucher_id'" ) && str_contains( $vcap_source( 'VCAP\\PdfRenderer', 'element_failed' ), "'element'" ) && str_contains( $vcap_source( 'VCAP\\Delivery', 'deliver' ), "'delivered_without_pdf'" ) );
+// D16: verbose log with an expiry.
+$GLOBALS['vcap_test_options'][ VCAP\Logger::VERBOSE_OPTION ]       = 'yes';
+$GLOBALS['vcap_test_options'][ VCAP\Logger::VERBOSE_UNTIL_OPTION ] = time() + 60;
+$d16_on = VCAP\Logger::verbose();
+$GLOBALS['vcap_test_options'][ VCAP\Logger::VERBOSE_UNTIL_OPTION ] = time() - 1;
+$d16_expired = VCAP\Logger::verbose();
+unset( $GLOBALS['vcap_test_options'][ VCAP\Logger::VERBOSE_OPTION ], $GLOBALS['vcap_test_options'][ VCAP\Logger::VERBOSE_UNTIL_OPTION ] );
+check( 'D16: the verbose log is on while its window runs and switches itself off', $d16_on && ! $d16_expired && ( defined( 'VCAP_DEBUG' ) || ! VCAP\Logger::verbose() ) );
+// Z12: values typed into the visible order item meta.
+check( 'Z12: a corrected recipient email is taken over, an invalid one or a bad date is not', 'anna@gmail.com' === VCAP\Fields::visible_value( 'recipient_email', ' anna@gmail.com ' ) && null === VCAP\Fields::visible_value( 'recipient_email', 'anna(at)gmail' ) && null === VCAP\Fields::visible_value( 'delivery_date', '24.12.2026' ) && '2026-12-24' === VCAP\Fields::visible_value( 'delivery_date', '2026-12-24' ) );
+// D13: the hook reference is generated and current.
+exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( dirname( __DIR__ ) . '/bin/hooks.php' ) . ' --check 2>&1', $d13_out, $d13_rc );
+check( 'D13: docs/HOOKS.md is generated from the code and up to date (php bin/hooks.php --check)', 0 === $d13_rc && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/docs/HOOKS.md' ), '`vcap_voucher_deleted`' ), implode( "\n", $d13_out ) );
+// D9: WP-CLI commands exist and are registered only under WP-CLI.
+$d9 = new ReflectionClass( 'VCAP\\CLI\\Command' );
+check( 'D9: "wp vcap" has doctor, migrate, deliver, issue, sync, ratelimit, diagnostics', ! array_diff( array( 'doctor', 'migrate', 'deliver', 'issue', 'sync', 'ratelimit', 'diagnostics' ), array_map( static fn( $m ) => $m->getName(), $d9->getMethods( ReflectionMethod::IS_PUBLIC ) ) ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Plugin.php' ), "defined( 'WP_CLI' ) && WP_CLI" ) );
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

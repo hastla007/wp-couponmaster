@@ -36,6 +36,7 @@ final class Fields {
 		add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'save_order_item' ), 10, 4 );
 		add_filter( 'woocommerce_order_item_display_meta_key', array( $this, 'display_meta_key' ), 10, 3 );
 		add_filter( 'woocommerce_order_item_display_meta_value', array( $this, 'display_meta_value' ), 10, 3 );
+		add_action( 'woocommerce_before_order_item_object_save', array( $this, 'sync_visible_meta' ), 10, 1 );
 		add_filter( 'woocommerce_order_again_cart_item_data', array( $this, 'order_again' ), 10, 3 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'assets' ) );
 		add_action( 'woocommerce_after_shop_loop_item', array( $this, 'loop_assets' ) );
@@ -804,6 +805,72 @@ final class Fields {
 		}
 		$formatted = self::display_value( (string) $meta->value );
 		return $formatted !== (string) $meta->value ? esc_html( $formatted ) : $display_value;
+	}
+
+	/**
+	 * The visible copy of the personalisation (e.g. "Recipient email") can be edited on the order screen while the
+	 * order waits for its payment, but vouchers are issued from "_vcap_fields" (Z12). A corrected value is taken
+	 * over into "_vcap_fields" as long as no voucher of the line exists yet; an emptied or invalid value is not
+	 * (a typo such as "gmial.com" is corrected, a voucher never goes to an address that is not one).
+	 *
+	 * @param \WC_Order_Item $item Order item about to be saved.
+	 */
+	public function sync_visible_meta( $item ): void {
+		if ( ! $item instanceof \WC_Order_Item_Product || ! $item->get_id() ) {
+			return;
+		}
+		$fields = $item->get_meta( '_vcap_fields' );
+		if ( ! is_array( $fields ) || ! $fields || vcap()->vouchers->get_slot( (int) $item->get_id(), 0 ) ) {
+			return;
+		}
+		$changed = false;
+		foreach ( $fields as $key => $field ) {
+			if ( ! is_array( $field ) ) {
+				continue;
+			}
+			$visible = self::visible_meta( $item, (string) $key, $field );
+			if ( ! is_scalar( $visible ) || '' === (string) $visible || (string) $visible === (string) ( $field['value'] ?? '' ) ) {
+				continue;
+			}
+			$value = self::visible_value( (string) $key, (string) $visible );
+			if ( null === $value || $value === (string) ( $field['value'] ?? '' ) ) {
+				continue;
+			}
+			$fields[ $key ]['value'] = $value;
+			$changed                 = true;
+		}
+		if ( $changed ) {
+			$item->update_meta_data( '_vcap_fields', $fields );
+		}
+	}
+
+	/**
+	 * Z12/M10: the visible copy of a field on an order line – under its stable key ("vcap_recipient_email") or,
+	 * for orders placed before M10, under the field's label.
+	 *
+	 * @return mixed The value, '' when the line has no visible copy of the field.
+	 */
+	private static function visible_meta( \WC_Order_Item $item, string $key, array $field ) {
+		$stable = self::item_meta_key( $key );
+		if ( $item->meta_exists( $stable ) ) {
+			return $item->get_meta( $stable );
+		}
+		$label = wp_strip_all_tags( (string) ( $field['label'] ?? '' ) );
+		return '' !== $label ? $item->get_meta( $label ) : '';
+	}
+
+	/** A value typed into the visible order item meta, sanitised for its field (null: not accepted). */
+	public static function visible_value( string $key, string $value ): ?string {
+		$value = trim( $value );
+		if ( str_contains( $key, 'email' ) ) {
+			$email = sanitize_email( $value );
+			return is_email( $email ) ? $email : null;
+		}
+		if ( 'delivery_date' === $key ) {
+			$date = \DateTimeImmutable::createFromFormat( '!Y-m-d', $value );
+			return $date && $date->format( 'Y-m-d' ) === $value ? $value : null;
+		}
+		return sanitize_textarea_field( $value );
 	}
 
 	public function order_again( $data, $item, $order ) {

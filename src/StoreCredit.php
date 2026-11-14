@@ -175,6 +175,7 @@ final class StoreCredit {
 				$coupon->save();
 			}
 		}
+		/** The store credit of a customer changed (args: user id, amount, balance after, event, reason, order id). */
 		do_action( 'vcap_store_credit_changed', $user_id, $amount, $fresh->balance, $event, $reason, $order_id );
 		return array(
 			'balance' => $fresh->balance,

@@ -247,5 +247,172 @@ $mails = array();
 vcap()->delivery->send( $u12_route( 'recipient', '2020-01-01 00:00:00' ) );
 vcap_dlv_assert( 2 === count( $mails ), 'U12: vouchers issued before the change keep the buyer copy of their product', $mails );
 
+/* ---- 8. P7: failure reasons, PDF trace, expiry and redemption hooks, issuing retry, manual sends --------------- */
+
+$p7_last_note = static function ( int $voucher_id, string $event ) use ( $repo ): array {
+	$rows = array_values( array_filter( $repo->events( $voucher_id ), static fn( $e ) => $event === $e['event'] ) );
+	$row  = $rows ? end( $rows ) : array();
+	return array( (string) ( $row['note'] ?? '' ), $row );
+};
+
+// D4: the reason of a failed delivery is kept per role (mail system vs. email disabled).
+$d4 = vcap_dlv_voucher( "d4-{$tag}@example.com" );
+add_filter( 'pre_wp_mail', $fail, 1000 );
+vcap()->delivery->deliver( $d4->id );
+remove_filter( 'pre_wp_mail', $fail, 1000 );
+list( $d4_note ) = $p7_last_note( $d4->id, 'delivery_failed' );
+vcap_dlv_assert( VCAP\Note::is_coded( $d4_note ) && str_contains( $d4_note, 'mail_failed' ) && str_contains( VCAP\Note::render( $d4_note ), 'the mail system did not accept the email' ), 'D4: a refused mail is recorded as "mail system" failure, not as "no valid address"', VCAP\Note::render( $d4_note ) );
+$d4_off = static fn() => false;
+add_filter( 'woocommerce_email_enabled_vcap_voucher_buyer', $d4_off, 999 );
+vcap()->delivery->deliver( $d4->id );
+remove_filter( 'woocommerce_email_enabled_vcap_voucher_buyer', $d4_off, 999 );
+list( $d4_note ) = $p7_last_note( $d4->id, 'delivery_failed' );
+vcap_dlv_assert( str_contains( VCAP\Note::render( $d4_note ), 'Buyer: email disabled' ), 'D4: a disabled email is recorded as such', VCAP\Note::render( $d4_note ) );
+as_unschedule_all_actions( Delivery::RETRY_HOOK, array( 'voucher_id' => $d4->id ), Delivery::GROUP );
+
+// D5: a mail that goes out without its PDF says so in the history.
+if ( class_exists( '\Dompdf\Dompdf' ) ) {
+	$d5       = vcap_dlv_voucher( "d5-{$tag}@example.com" );
+	$d5_throw = static function () {
+		throw new RuntimeException( 'pdf template broken' );
+	};
+	add_filter( 'vcap_pdf_html', $d5_throw );
+	vcap()->delivery->deliver( $d5->id );
+	remove_filter( 'vcap_pdf_html', $d5_throw );
+	vcap_dlv_assert( null !== $repo->get( $d5->id )->delivered_at && 1 === vcap_dlv_events( $d5->id, 'delivered_without_pdf' ), 'D5: a voucher mailed without its PDF is delivered and the history records "delivered without PDF"' );
+}
+
+// D7: expiry writes an "expired" entry per voucher and fires vcap_voucher_expired once per batch.
+$d7         = vcap_dlv_voucher( "d7-{$tag}@example.com", array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS ) ) );
+$d7_expired = array();
+$d7_listen  = static function ( array $vouchers ) use ( &$d7_expired ) {
+	$d7_expired = array_merge( $d7_expired, array_map( static fn( $v ) => (int) $v->id, $vouchers ) );
+};
+add_action( 'vcap_voucher_expired', $d7_listen );
+$repo->expire_overdue();
+remove_action( 'vcap_voucher_expired', $d7_listen );
+vcap_dlv_assert( Voucher::STATUS_EXPIRED === $repo->get( $d7->id )->status && 1 === vcap_dlv_events( $d7->id, 'expired' ) && in_array( $d7->id, $d7_expired, true ), 'D7: an overdue voucher expires with an "expired" history entry and vcap_voucher_expired' );
+
+// D7 / D8: counter and shop redemptions fire vcap_voucher_redeemed with their channel; the shop one keeps its order.
+$redeemed  = array();
+$d7_hook   = static function ( array $data ) use ( &$redeemed ) {
+	$redeemed[] = $data;
+};
+add_action( 'vcap_voucher_redeemed', $d7_hook );
+$d7_single = vcap_dlv_voucher( "d7s-{$tag}@example.com" );
+$wpdb->update( VCAP\Install::tables()['vouchers'], array( 'usage_mode' => 'single' ), array( 'id' => $d7_single->id ) );
+vcap()->tickets->redeem_single( $repo->get( $d7_single->id ), 'till 1' );
+$d8_shop   = vcap_dlv_voucher( "d8s-{$tag}@example.com" );
+$wpdb->update( VCAP\Install::tables()['vouchers'], array( 'usage_mode' => 'single' ), array( 'id' => $d8_shop->id ) );
+$d8_coupon = new WC_Coupon( $d8_shop->coupon_id );
+$d8_coupon->set_usage_limit( 1 );
+$d8_coupon->save();
+$d8_order  = vcap_dlv_order();
+$d8_item = new WC_Order_Item_Coupon();
+$d8_item->set_code( $d8_shop->code );
+$d8_order->add_item( $d8_item );
+$d8_order->save();
+vcap()->coupons->remember_usage_order( $d8_order->get_id() );
+$d8_coupon = new WC_Coupon( $d8_shop->coupon_id );
+$d8_coupon->increase_usage_count( 'dlv-order@example.com', $d8_order );
+remove_action( 'vcap_voucher_redeemed', $d7_hook );
+$d7_channels = array_column( $redeemed, 'channel', 'voucher_id' );
+list( , $d8_row ) = $p7_last_note( $d8_shop->id, 'redeemed' );
+vcap_dlv_assert( 'counter' === ( $d7_channels[ $d7_single->id ] ?? '' ) && 'shop' === ( $d7_channels[ $d8_shop->id ] ?? '' ), 'D7: vcap_voucher_redeemed fires for counter and shop redemptions with their channel', $d7_channels );
+vcap_dlv_assert( (int) ( $d8_row['order_id'] ?? 0 ) === $d8_order->get_id(), 'D8: a single-use voucher redeemed in the shop is recorded with its order', $d8_row );
+vcap_dlv_assert( 'cli' === ( $d8_row['source'] ?? '' ), 'D8: the history entry records its source (here WP-CLI)', $d8_row );
+
+// D3: a voucher whose coupon cannot be saved is undone with vcap_voucher_deleted, the order is listed and retried.
+$d3_product = new WC_Product_Simple();
+$d3_product->set_name( 'D3 voucher' );
+$d3_product->set_regular_price( '20' );
+$d3_product->set_virtual( true );
+$d3_product->update_meta_data( '_vcap_enabled', 'yes' );
+$d3_product->update_meta_data( '_vcap_type', 'voucher' );
+$d3_product->save();
+$d3_order = wc_create_order();
+$d3_order->add_product( $d3_product, 1 );
+$d3_order->set_billing_email( "d3-{$tag}@example.com" );
+$d3_order->calculate_totals( false );
+$d3_deleted = array();
+$d3_listen  = static function ( $voucher ) use ( &$d3_deleted ) {
+	$d3_deleted[] = (int) $voucher->id;
+};
+$d3_break   = static function ( $data ) {
+	if ( $data instanceof WC_Coupon && ! $data->get_id() ) {
+		throw new RuntimeException( 'coupon save refused' );
+	}
+};
+add_action( 'vcap_voucher_deleted', $d3_listen );
+add_action( 'woocommerce_before_data_object_save', $d3_break );
+$d3_order->set_status( 'processing' ); // Issues through the status hook.
+$d3_order->save();
+remove_action( 'woocommerce_before_data_object_save', $d3_break );
+remove_action( 'vcap_voucher_deleted', $d3_listen );
+$d3_created = $repo->for_order( $d3_order->get_id() );
+$d3_next = as_next_scheduled_action( VCAP\Issuer::ISSUE_RETRY_HOOK, array( 'order_id' => $d3_order->get_id() ), Delivery::GROUP );
+vcap_dlv_assert( ! $d3_created && 1 === vcap()->issuer->last_failures && 1 === count( $d3_deleted ), 'D3: a voucher undone after its coupon failed fires vcap_voucher_deleted', array( count( $d3_created ), vcap()->issuer->last_failures, $d3_deleted ) );
+vcap_dlv_assert( is_int( $d3_next ) && $d3_next > time() && VCAP\Attention::has( $d3_order->get_id(), 'issue' ), 'D3: the order is listed as paid without voucher and the promised retry is scheduled', $d3_next );
+vcap()->issuer->issue_async( array( 'order_id' => $d3_order->get_id() ) );
+vcap_dlv_assert( 1 === count( $repo->for_order( $d3_order->get_id() ) ) && ! VCAP\Attention::has( $d3_order->get_id(), 'issue' ) && ! as_next_scheduled_action( VCAP\Issuer::ISSUE_RETRY_HOOK, array( 'order_id' => $d3_order->get_id() ), Delivery::GROUP ), 'D3: the retry issues the voucher and clears the listing' );
+foreach ( $repo->for_order( $d3_order->get_id() ) as $d3_voucher ) {
+	as_unschedule_all_actions( 'vcap_deliver_voucher', array( 'voucher_id' => $d3_voucher->id ), Delivery::GROUP );
+}
+
+// H7: manual sends respect the status; "Send now" brings a scheduled gift forward; a first manual send counts.
+$h7_admin = new VCAP\Admin\VoucherAdmin( $repo );
+$h7_sched = vcap_dlv_voucher( "h7s-{$tag}@example.com", array( 'status' => Voucher::STATUS_SCHEDULED, 'delivery_at' => gmdate( 'Y-m-d H:i:s', time() + 10 * DAY_IN_SECONDS ) ) );
+vcap()->coupons->set_coupon_enabled( $h7_sched, false );
+$mails = array();
+vcap_dlv_assert( false === $h7_admin->resend( $repo->get( $h7_sched->id ), 'buyer' ) && ! in_array( "h7s-{$tag}@example.com", $mails, true ), 'H7: "Email buyer" does not send a scheduled gift early' );
+vcap_dlv_assert( vcap()->delivery->deliver_now( $repo->get( $h7_sched->id ) ) && Voucher::STATUS_ACTIVE === $repo->get( $h7_sched->id )->status && null !== $repo->get( $h7_sched->id )->delivered_at && 'publish' === get_post_status( $h7_sched->coupon_id ), 'H7: "Send now" activates, mails and marks the scheduled voucher delivered' );
+$h7_void = vcap_dlv_voucher( "h7v-{$tag}@example.com", array( 'status' => Voucher::STATUS_VOID ) );
+$mails   = array();
+vcap_dlv_assert( false === $h7_admin->resend( $repo->get( $h7_void->id ), 'buyer' ) && ! $mails, 'H7: a void voucher is not mailed by hand' );
+$h7_first = vcap_dlv_voucher( "h7f-{$tag}@example.com" );
+as_unschedule_all_actions( 'vcap_deliver_voucher', array( 'voucher_id' => $h7_first->id ), Delivery::GROUP );
+vcap_dlv_assert( $h7_admin->resend( $repo->get( $h7_first->id ), 'buyer' ) && null !== $repo->get( $h7_first->id )->delivered_at && ! in_array( $h7_first->id, $repo->due_for_delivery( 1000 ), true ), 'H7: a first delivery by hand marks the voucher delivered (the safety net does not send it again)' );
+list( $h7_note ) = $p7_last_note( $h7_first->id, 'resent' );
+vcap_dlv_assert( ! str_contains( $h7_note, "h7f-{$tag}@example.com" ) && str_contains( VCAP\Note::render( $h7_note ), 'h***@example.com' ), 'D8: the resend note masks the address', VCAP\Note::render( $h7_note ) );
+vcap()->delivery->reschedule( $repo->get( $h7_first->id ), gmdate( 'Y-m-d H:i:s', time() + 5 * DAY_IN_SECONDS ) );
+vcap_dlv_assert( Voucher::STATUS_ACTIVE === $repo->get( $h7_first->id )->status && 'publish' === get_post_status( $h7_first->coupon_id ), 'H7: planning the email of a delivered voucher again does not lock its card' );
+as_unschedule_all_actions( 'vcap_deliver_voucher', array( 'voucher_id' => $h7_first->id ), Delivery::GROUP );
+
+// Z12: a corrected recipient address on the order item is used for the voucher.
+$z12_order = wc_create_order();
+$z12_order->add_product( $d3_product, 1 );
+$z12_order->save();
+$z12_item = current( $z12_order->get_items() );
+$z12_item->add_meta_data( '_vcap_fields', array( 'recipient_email' => array( 'label' => 'Recipient email', 'value' => 'anna@gmial.com' ) ), true );
+$z12_item->add_meta_data( 'Recipient email', 'anna@gmial.com', true );
+$z12_item->save();
+$z12_item = new WC_Order_Item_Product( $z12_item->get_id() );
+$z12_item->update_meta_data( 'Recipient email', 'anna@gmail.com' );
+$z12_item->save();
+$z12_fields = ( new WC_Order_Item_Product( $z12_item->get_id() ) )->get_meta( '_vcap_fields' );
+vcap_dlv_assert( 'anna@gmail.com' === ( $z12_fields['recipient_email']['value'] ?? '' ), 'Z12: the corrected label-keyed (pre-M10 order) visible "Recipient email" is taken over into the fields vouchers are issued from', $z12_fields );
+
+// Z12 with M10: orders placed since M10 keep the visible copy under the stable key "vcap_<field_key>".
+$z12m_order = wc_create_order();
+$z12m_order->add_product( $d3_product, 1 );
+$z12m_order->save();
+$z12m_item = current( $z12m_order->get_items() );
+$z12m_item->add_meta_data( '_vcap_fields', array( 'recipient_email' => array( 'label' => 'Recipient email', 'value' => 'ben@gmial.com' ) ), true );
+$z12m_item->add_meta_data( VCAP\Fields::item_meta_key( 'recipient_email' ), 'ben@gmial.com', true );
+$z12m_item->save();
+$z12m_item = new WC_Order_Item_Product( $z12m_item->get_id() );
+$z12m_item->update_meta_data( VCAP\Fields::item_meta_key( 'recipient_email' ), 'ben@gmail.com' );
+$z12m_item->save();
+$z12m_fields = ( new WC_Order_Item_Product( $z12m_item->get_id() ) )->get_meta( '_vcap_fields' );
+vcap_dlv_assert( 'ben@gmail.com' === ( $z12m_fields['recipient_email']['value'] ?? '' ), 'Z12/M10: a corrected value under the stable key vcap_recipient_email is taken over as well', $z12m_fields );
+$z12m_item->update_meta_data( VCAP\Fields::item_meta_key( 'recipient_email' ), 'not-an-address' );
+$z12m_item->save();
+$z12m_fields = ( new WC_Order_Item_Product( $z12m_item->get_id() ) )->get_meta( '_vcap_fields' );
+vcap_dlv_assert( 'ben@gmail.com' === ( $z12m_fields['recipient_email']['value'] ?? '' ), 'Z12: an invalid address typed into the visible copy is not taken over', $z12m_fields );
+
+// D10: the diagnostics name the counters support needs.
+$d10 = ( new VCAP\Diagnostics() )->fields();
+vcap_dlv_assert( ! array_diff( array( 'undelivered', 'failed_actions', 'open_reservations', 'attention', 'shortfalls', 'innodb', 'legacy_rows', 'adapters', 'issuing', 'retention', 'verbose_log' ), array_keys( $d10 ) ), 'D10: the diagnostics list failed tasks, undelivered vouchers, reservations, open cases, shortfalls, InnoDB, adapters, issuing and retention', array_keys( $d10 ) );
+
 remove_filter( 'pre_wp_mail', $catch, 999 );
 echo "Voucher Captain delivery checks passed.\n";
