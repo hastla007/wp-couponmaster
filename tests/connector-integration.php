@@ -188,4 +188,38 @@ vcap()->issuer->void( vcap()->vouchers->get( $unused->id ), 'Purchase order refu
 vcap()->issuer->reactivate( vcap()->vouchers->get( $unused->id ) );
 vcap_conn_assert( VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $unused->id )->status, 'reactivating an unused voucher makes it active again' );
 
+// D12 (Pass Captain connector, without Pass Captain: a stub ticket service): taking tickets back checks the answers
+// of revoke_tickets() and release(); a failed restore after revoked tickets is logged – never silently.
+$d12_service = new class() {
+	public function issue_tickets( ...$args ) {
+		return array();
+	}
+	public function revoke_tickets( $key, $reason ) {
+		return new WP_Error( 'pc_down', 'Pass Captain unavailable' );
+	}
+	public function get( $key ) {
+		return null;
+	}
+};
+$d12_filter = static fn() => $d12_service;
+add_filter( VCAP\Compat\PassCaptainTickets::SERVICE_FILTER, $d12_filter );
+$d12_card  = vcap()->vouchers->get( $card->id );
+$d12_key   = 'passcaptain:ticket:d12-' . wp_generate_uuid4();
+$service->reserve( $d12_card->code, array( 'key' => $d12_key, 'target' => 'passcaptain:test', 'amount' => 5 ) );
+$service->commit( $d12_key );
+delete_option( VCAP\Compat\PassCaptainTickets::ATTENTION_OPTION );
+$d12_revoke = new ReflectionMethod( VCAP\Compat\PassCaptainTickets::class, 'revoke_checked' );
+$d12_revoke->setAccessible( true );
+$d12_ok     = $d12_revoke->invoke( vcap()->passcaptain_tickets, $d12_card, 'd12-exchange', 'test', $d12_key );
+$d12_events = array_values( array_filter( vcap()->vouchers->events( $d12_card->id ), static fn( $e ) => 'passcaptain_revoke_failed' === ( $e['event'] ?? '' ) ) );
+$d12_note   = (string) ( end( $d12_events )['note'] ?? '' );
+vcap_conn_assert( false === $d12_ok && str_contains( $d12_note, 'revoke_tickets pc_down' ) && str_contains( $d12_note, 'release ' ), 'D12: a failed revoke_tickets() and a refused release() are logged as passcaptain_revoke_failed with their error codes' );
+vcap_conn_assert( in_array( (int) $d12_card->id, array_map( 'intval', (array) get_option( VCAP\Compat\PassCaptainTickets::ATTENTION_OPTION ) ), true ), 'D12: the voucher is listed in the admin notice' );
+$d12_restore = new ReflectionMethod( VCAP\Compat\PassCaptainTickets::class, 'restore' );
+$d12_restore->setAccessible( true );
+$d12_restored = $d12_restore->invoke( vcap()->passcaptain_tickets, 'passcaptain:ticket:d12-missing-' . wp_generate_uuid4(), array( 'amount' => 5, 'meta' => array() ), $d12_card, 'abc123' );
+vcap_conn_assert( false === $d12_restored && in_array( 'passcaptain_restore_failed', array_column( vcap()->vouchers->events( $d12_card->id ), 'event' ), true ), 'D12: a failed restore (refund) after revoked tickets is logged as passcaptain_restore_failed' );
+remove_filter( VCAP\Compat\PassCaptainTickets::SERVICE_FILTER, $d12_filter );
+delete_option( VCAP\Compat\PassCaptainTickets::ATTENTION_OPTION );
+
 echo "Voucher Captain connector checks passed.\n";
