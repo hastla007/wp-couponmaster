@@ -114,6 +114,7 @@ final class ProductConfig {
 			}
 		}
 		$config = self::normalise_restriction( $config );
+		$config = self::normalise_routing( $config );
 		$config['per_item']     = max( 1, (int) $config['per_item'] );
 		$config['max_checkins'] = max( 1, (int) $config['max_checkins'] );
 		$config['template']     = (int) $config['template'] ?: (int) get_option( 'vcap_default_template', 0 );
@@ -167,6 +168,22 @@ final class ProductConfig {
 	 * "Transferable" checkbox are read compatibly (not transferable + no restriction = buyer or recipient);
 	 * "transferable" is derived from it, so labels and coupon restrictions never contradict each other.
 	 */
+	/**
+	 * U12: one routing choice. Products saved before it had "Send to: recipient" plus a "Buyer copy" checkbox (on
+	 * by default); that pair reads as "Recipient and buyer", so the copy is part of send_to and fixed on the
+	 * voucher when it is issued.
+	 */
+	public static function normalise_routing( array $config ): array {
+		$send_to = (string) ( $config['send_to'] ?? 'recipient' );
+		$send_to = in_array( $send_to, array( 'recipient', 'both', 'buyer' ), true ) ? $send_to : 'recipient';
+		if ( 'recipient' === $send_to && 'yes' === (string) ( $config['buyer_copy'] ?? 'no' ) ) {
+			$send_to = 'both';
+		}
+		$config['send_to']    = $send_to;
+		$config['buyer_copy'] = 'both' === $send_to ? 'yes' : 'no';
+		return $config;
+	}
+
 	public static function normalise_restriction( array $config ): array {
 		$restrict = (string) ( $config['email_restrict'] ?? 'none' );
 		if ( ! isset( self::redemption_choices()[ $restrict ] ) ) {

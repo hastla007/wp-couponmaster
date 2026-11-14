@@ -459,23 +459,15 @@ final class ProductSettings {
 			array(
 				'id'          => '_vcap_send_to',
 				'label'       => __( 'Send voucher to', 'voucher-captain' ),
-				'value'       => $this->v( $p, 'send_to' ),
+				'value'       => ProductConfig::normalise_routing( array( 'send_to' => $this->v( $p, 'send_to' ), 'buyer_copy' => $this->v( $p, 'buyer_copy' ) ) )['send_to'],
 				'options'     => array(
-					'recipient' => __( 'Recipient (if an email was entered), otherwise buyer', 'voucher-captain' ),
 					'both'      => __( 'Recipient and buyer', 'voucher-captain' ),
+					'recipient' => __( 'Recipient (if an email was entered), otherwise buyer', 'voucher-captain' ),
 					'buyer'     => __( 'Buyer only (no email to recipient)', 'voucher-captain' ),
 				),
 			)
 		);
 		$this->hint( 'vcap-hint-buyer-recipient', __( 'With "Buyer only" nothing is sent to a recipient, so the product page does not ask for a recipient email – unless "Who may redeem" uses the recipient email; then the field only decides who can redeem.', 'voucher-captain' ) );
-		woocommerce_wp_checkbox(
-			array(
-				'id'          => '_vcap_buyer_copy',
-				'label'       => __( 'Buyer copy', 'voucher-captain' ),
-				'value'       => $this->v( $p, 'buyer_copy' ),
-				'description' => __( 'Also send the voucher to the buyer when it goes to a recipient.', 'voucher-captain' ),
-			)
-		);
 		echo '</div>';
 
 		echo '<div class="options_group vcap-show-ticket"><h4 class="vcap-group-title">' . esc_html__( 'Ticket', 'voucher-captain' ) . '</h4>';
@@ -602,9 +594,13 @@ final class ProductSettings {
 		$event = (string) ( $post['_vcap_event_date'] ?? '' );
 		$product->update_meta_data( '_vcap_event_date', preg_match( '/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/', $event ) ? $event : '' );
 		$product->update_meta_data( '_vcap_redemption_terms', sanitize_textarea_field( (string) ( $post['_vcap_redemption_terms'] ?? '' ) ) );
-		foreach ( array( 'free_shipping', 'individual_use', 'exclude_sale', 'preview', 'buyer_copy' ) as $key ) {
+		foreach ( array( 'free_shipping', 'individual_use', 'exclude_sale', 'preview' ) as $key ) {
 			$product->update_meta_data( '_vcap_' . $key, isset( $post[ '_vcap_' . $key ] ) ? 'yes' : 'no' );
 		}
+		// U12: one routing choice; the old "Buyer copy" flag is stored as its consequence (read by older code).
+		$routing = ProductConfig::normalise_routing( array( 'send_to' => (string) $product->get_meta( '_vcap_send_to' ), 'buyer_copy' => 'no' ) );
+		$product->update_meta_data( '_vcap_send_to', $routing['send_to'] );
+		$product->update_meta_data( '_vcap_buyer_copy', $routing['buyer_copy'] );
 		// "Who may redeem" decides; "transferable" is stored as its consequence (read by older code and exports).
 		$restrict = (string) $product->get_meta( '_vcap_email_restrict' );
 		$restrict = isset( ProductConfig::redemption_choices()[ $restrict ] ) ? $restrict : 'none';

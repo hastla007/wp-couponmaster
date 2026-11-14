@@ -28,7 +28,13 @@ final class Delivery {
 
 	public function __construct( private Settings $settings, private VoucherRepository $repo ) {}
 
+	/** UTC time from which vouchers carry their routing (buyer copy) themselves (U12); older ones read the product. */
+	public const ROUTING_SINCE_OPTION = 'vcap_routing_fixed_since';
+
 	public function register(): void {
+		if ( false === get_option( self::ROUTING_SINCE_OPTION ) ) {
+			add_option( self::ROUTING_SINCE_OPTION, gmdate( 'Y-m-d H:i:s' ) );
+		}
 		add_action( 'vcap_deliver_voucher', array( $this, 'deliver' ), 10, 1 );
 		add_action( self::RETRY_HOOK, array( $this, 'deliver' ), 10, 1 );
 		add_action( 'vcap_daily_maintenance', array( $this, 'maintenance' ) );
@@ -497,10 +503,9 @@ final class Delivery {
 		$mailer = WC()->mailer();
 		$emails = $mailer->get_emails();
 		$sent   = array();
-		$config = ProductConfig::get( $voucher->variation_id ?: $voucher->product_id );
 
 		$to_recipient = self::to_recipient( $voucher );
-		$to_buyer     = ! $to_recipient || 'both' === $voucher->send_to || 'yes' === $config['buyer_copy'];
+		$to_buyer     = ! $to_recipient || 'both' === $voucher->send_to || self::legacy_buyer_copy( $voucher );
 
 		if ( $to_recipient && ( null === $only || 'recipient' === $only ) && isset( $emails['VCAP_Email_Voucher_Recipient'] ) ) {
 			if ( $emails['VCAP_Email_Voucher_Recipient']->trigger( $voucher ) ) {
@@ -515,6 +520,20 @@ final class Delivery {
 			}
 		}
 		return $sent;
+	}
+
+	/**
+	 * U12: the buyer copy is fixed on the voucher (send_to "both"). Vouchers issued before that read the product's
+	 * old "Buyer copy" flag as they always did, so gifts already scheduled keep their copy.
+	 */
+	private static function legacy_buyer_copy( Voucher $voucher ): bool {
+		$since = (string) get_option( self::ROUTING_SINCE_OPTION, '' );
+		if ( 'recipient' !== $voucher->send_to || '' === $since || '' === $voucher->created_at || $voucher->created_at >= $since ) {
+			return false;
+		}
+		$product = wc_get_product( $voucher->variation_id ?: $voucher->product_id );
+		$base    = $product && $product->is_type( 'variation' ) ? wc_get_product( $product->get_parent_id() ) : $product;
+		return $base && 'no' !== $base->get_meta( '_vcap_buyer_copy' );
 	}
 
 	/** Called by Plugin::ensure_schedules() (once a day and after activation or an update, not on every request). */
