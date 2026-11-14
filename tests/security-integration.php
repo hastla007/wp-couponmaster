@@ -351,4 +351,158 @@ $privacy->erase( 'jane.roe@example.test', 1 );
 vcap_security_assert( array() === VCAP\Health::mail_failures(), 'the privacy eraser removes the failed-mail entries of the address' );
 delete_option( VCAP\Health::MAIL_LOG );
 
+/** A single-use voucher with its WooCommerce coupon (usage limit 1). */
+function vcap_security_single( float $value = 20.0, string $type = 'voucher' ): VCAP\Voucher {
+	$coupon = new WC_Coupon();
+	$coupon->set_code( 'vcap-sec-single-' . strtolower( wp_generate_password( 10, false, false ) ) );
+	$coupon->set_discount_type( 'fixed_cart' );
+	$coupon->set_amount( $value );
+	$coupon->set_usage_limit( 1 );
+	$coupon->update_meta_data( '_vcap_voucher', 'yes' );
+	$coupon->save();
+	$v                 = new VCAP\Voucher();
+	$v->code           = wc_format_coupon_code( $coupon->get_code() );
+	$v->coupon_id      = $coupon->get_id();
+	$v->order_item_id  = 93000000 + $coupon->get_id();
+	$v->type           = $type;
+	$v->usage_mode     = 'single';
+	$v->discount_type  = 'fixed_cart';
+	$v->initial_amount = $value;
+	$v->balance        = $value;
+	$v->currency       = get_woocommerce_currency();
+	$v->status         = VCAP\Voucher::STATUS_ACTIVE;
+	$v->send_to        = 'buyer';
+	$v->token          = VCAP\VoucherRepository::new_token();
+	$v->id             = vcap()->vouchers->insert( $v );
+	return $v;
+}
+$sec_admin = (int) wp_insert_user( array( 'user_login' => 'vcap-sec-admin-' . wp_generate_password( 6, false, false ), 'user_pass' => wp_generate_password( 20 ), 'role' => 'shop_manager' ) );
+
+// U10: "Mark as redeemed (store)" books a single-use voucher like the scanner (history, journal, coupon used up).
+wp_set_current_user( $sec_admin );
+$u10_admin   = new VCAP\Admin\VoucherAdmin( vcap()->vouchers );
+$u10_voucher = vcap_security_single();
+$u10_result  = $u10_admin->redeem_store( vcap()->vouchers->get( $u10_voucher->id ) );
+$u10_after   = vcap()->vouchers->get( $u10_voucher->id );
+$u10_coupon  = new WC_Coupon( $u10_voucher->coupon_id );
+$u10_event   = VCAP\Tickets::last_event( vcap()->vouchers->events( $u10_voucher->id ), array( 'redeemed' ) );
+vcap_security_assert( 'redeemed_store' === $u10_result && VCAP\Voucher::STATUS_REDEEMED === $u10_after->status && 1 === $u10_coupon->get_usage_count() && 1 === $u10_coupon->get_usage_limit(), 'U10: "Mark as redeemed (store)" redeems a single-use voucher and uses up its coupon' );
+vcap_security_assert( $u10_event && 20.0 === (float) $u10_event['amount'] && $sec_admin === (int) $u10_event['user_id'] && in_array( 'redeemed', VCAP\Ledger::MONEY_EVENTS, true ), 'U10: the store redemption is a "redeemed" event with the value, by the admin (redemption journal)' );
+vcap_security_assert( 'redeem_failed' === $u10_admin->redeem_store( vcap()->vouchers->get( $u10_voucher->id ) ), 'U10: a redeemed voucher cannot be marked again' );
+$u10_credit = vcap_security_single( 20.0, 'credit' );
+$u10_admin->redeem_store( vcap()->vouchers->get( $u10_credit->id ) );
+vcap_security_assert( VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $u10_credit->id )->status, 'U10: the counter refusal rules apply (store credit is not marked as redeemed)' );
+
+// F11: every row checkbox of the voucher list has a hidden label naming the voucher (like the core lists).
+require_once ABSPATH . 'wp-admin/includes/class-wp-screen.php';
+require_once ABSPATH . 'wp-admin/includes/screen.php';
+require_once ABSPATH . 'wp-admin/includes/template.php';
+set_current_screen( 'toplevel_page_vcap-vouchers' );
+$f11_table = new VCAP\Admin\VouchersListTable( vcap()->vouchers );
+$f11_cb    = new ReflectionMethod( $f11_table, 'column_cb' );
+$f11_cb->setAccessible( true );
+$f11_html = (string) $f11_cb->invoke( $f11_table, $u10_after );
+vcap_security_assert( (bool) preg_match( '/^<label class="screen-reader-text" for="cb-select-' . $u10_after->id . '">Select voucher ' . preg_quote( $u10_after->code, '/' ) . '<\/label><input type="checkbox" id="cb-select-' . $u10_after->id . '" name="voucher_ids\[\]"/', $f11_html ), 'F11: the row checkbox has a screen-reader label "Select voucher CODE" linked by id' );
+
+// O3: a counter redemption of a single-use voucher is cancelled: active again, coupon counter back to 0 (limit 1).
+$o3_cashier = (int) wp_insert_user( array( 'user_login' => 'vcap-o3-' . wp_generate_password( 6, false, false ), 'user_pass' => wp_generate_password( 20 ), 'role' => VCAP\Install::CASHIER_ROLE ) );
+wp_set_current_user( $o3_cashier );
+$o3_voucher = vcap_security_single();
+$o3_booked  = $scan_with( $o3_voucher, array( 'receipt' => 'R-O3' ) );
+$o3_coupon  = new WC_Coupon( $o3_voucher->coupon_id );
+vcap_security_assert( is_array( $o3_booked ) && ! empty( $o3_booked['success'] ) && VCAP\Voucher::STATUS_REDEEMED === vcap()->vouchers->get( $o3_voucher->id )->status && 1 === $o3_coupon->get_usage_count(), 'O3: the cashier redeems the single-use voucher at the counter' );
+$o3_reversed = vcap()->tickets->reverse_redemption( vcap()->vouchers->get( $o3_voucher->id ), (int) $o3_booked['event_id'], 'wrong voucher scanned' );
+$o3_after    = vcap()->vouchers->get( $o3_voucher->id );
+$o3_coupon   = new WC_Coupon( $o3_voucher->coupon_id );
+vcap_security_assert( 20.0 === $o3_reversed && VCAP\Voucher::STATUS_ACTIVE === $o3_after->status && 20.0 === (float) $o3_after->balance && 0 === $o3_coupon->get_usage_count() && 1 === $o3_coupon->get_usage_limit(), 'O3: cancelling it makes the voucher active again and puts the coupon counter back (0 of 1)' );
+vcap_security_assert( true === vcap()->coupons->validate( true, $o3_coupon ) && in_array( 'redeem_reversed', array_column( vcap()->vouchers->events( $o3_voucher->id ), 'event' ), true ), 'O3: the shop accepts the code again; the cancellation is a redeem_reversed event' );
+
+// O5: role "Voucher cashier" – scanner only, admitted to wp-admin; raising balances and refunds need own rights.
+$o5_role = get_role( VCAP\Install::CASHIER_ROLE );
+vcap_security_assert( $o5_role && ! empty( $o5_role->capabilities['vcap_scan_tickets'] ) && ! empty( $o5_role->capabilities['read'] ) && empty( $o5_role->capabilities['manage_woocommerce'] ) && empty( $o5_role->capabilities['edit_shop_orders'] ) && empty( $o5_role->capabilities['vcap_manage_vouchers'] ), 'O5: the role "Voucher cashier" has the scanner right only (no orders, customers or voucher management)' );
+vcap_security_assert( false === VCAP\Tickets::allow_scanner_admin( true ) && ! VCAP\Tickets::is_manager(), 'O5: WooCommerce does not send the cashier away from wp-admin (scanner page); no manager view' );
+$o5_view = vcap()->tickets->describe( vcap()->vouchers->get( $o3_voucher->id ) );
+vcap_security_assert( '' !== $o5_view['value_html'] && '' === $o5_view['admin_url'] && '' === $o5_view['order'], 'O5: the cashier sees the value of a single-use voucher, not the admin link or order' );
+$o5_manager = (int) wp_insert_user( array( 'user_login' => 'vcap-o5-' . wp_generate_password( 6, false, false ), 'user_pass' => wp_generate_password( 20 ), 'role' => 'subscriber' ) );
+( new WP_User( $o5_manager ) )->add_cap( 'vcap_manage_vouchers' );
+wp_set_current_user( $o5_manager );
+$o5_card = vcap_security_create_voucher( 'o5-' . strtolower( wp_generate_password( 6, false, false ) ) . '@example.test', 980000 + random_int( 1, 9999 ) );
+$_POST   = array( 'amount' => '10', 'mode' => 'add', 'note' => 'O5' );
+$u10_admin->adjust( vcap()->vouchers->get( $o5_card->id ) );
+$o5_after_add = (float) vcap()->vouchers->get( $o5_card->id )->balance;
+$_POST        = array( 'amount' => '5', 'mode' => 'subtract', 'note' => 'O5' );
+$u10_admin->adjust( vcap()->vouchers->get( $o5_card->id ) );
+$_POST = array();
+vcap_security_assert( ! VCAP\Admin\VoucherAdmin::can_increase() && 25.0 === $o5_after_add && 20.0 === (float) vcap()->vouchers->get( $o5_card->id )->balance, 'O5: without vcap_increase_balance a voucher manager may lower a remaining value but not raise it' );
+( new WP_User( $o5_manager ) )->add_cap( 'vcap_increase_balance' );
+wp_set_current_user( 0 );
+wp_set_current_user( $o5_manager );
+$_POST = array( 'amount' => '3', 'mode' => 'add', 'note' => 'O5' );
+$u10_admin->adjust( vcap()->vouchers->get( $o5_card->id ) );
+$_POST = array();
+vcap_security_assert( VCAP\Admin\VoucherAdmin::can_increase() && 23.0 === (float) vcap()->vouchers->get( $o5_card->id )->balance, 'O5: with vcap_increase_balance the remaining value can be raised (up to the face value)' );
+$o5_refund = new ReflectionMethod( VCAP\Admin\StoreCreditAdmin::class, 'can_refund' );
+$o5_refund->setAccessible( true );
+$o5_credit_admin = new VCAP\Admin\StoreCreditAdmin( vcap()->store_credit, vcap()->vouchers );
+$o5_without      = $o5_refund->invoke( $o5_credit_admin );
+( new WP_User( $o5_manager ) )->add_cap( 'edit_shop_orders' );
+wp_set_current_user( 0 );
+wp_set_current_user( $o5_manager );
+$o5_with = $o5_refund->invoke( $o5_credit_admin );
+vcap_security_assert( false === $o5_without && true === $o5_with, 'O5: "Refund as store credit" needs edit_shop_orders besides the voucher right' );
+wp_set_current_user( 0 );
+
+// O6: an idempotency claim left without an answer (PHP stopped after or before booking) is resolved from the history.
+wp_set_current_user( $o3_cashier );
+$o6_card  = vcap_security_create_voucher( 'o6-' . strtolower( wp_generate_password( 6, false, false ) ) . '@example.test', 990000 + random_int( 1, 9999 ) );
+$o6_mark  = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(MAX(id), 0) FROM {$events_table} WHERE voucher_id = %d", $o6_card->id ) ); // phpcs:ignore
+$o6_claim = static function ( string $key, float $amount ) use ( $wpdb, $o6_card, $events_table ) {
+	$o6_mark = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(MAX(id), 0) FROM {$events_table} WHERE voucher_id = %d", $o6_card->id ) ); // phpcs:ignore -- newest event when the claim was taken.
+	$wpdb->insert( $wpdb->options, array( 'option_name' => '_vcap_scan_' . md5( $key ), 'option_value' => ( time() - 300 ) . '|' . md5( 'redeem|' . $o6_card->id . '|' . round( $amount, 4 ) ) . '#' . $o6_mark . '|', 'autoload' => 'no' ) );
+};
+$o6_redeem = static function ( string $key, float $amount ) use ( $o6_card ) {
+	$req = new WP_REST_Request( 'POST', '/vcap/v1/redeem' );
+	$req->set_param( 'q', $o6_card->code );
+	$req->set_param( 'amount', $amount );
+	$req->set_param( 'idempotency_key', $key );
+	$res = vcap()->tickets->rest_redeem( $req );
+	return is_wp_error( $res ) ? $res : $res->get_data();
+};
+// Booked, but the answer was never stored: the repeat finds the booking and does not deduct again.
+$o6_key_booked = wp_generate_uuid4();
+$o6_claim( $o6_key_booked, 5 );
+vcap()->coupons->adjust_balance( vcap()->vouchers->get( $o6_card->id ), -5, 'redeemed', 'booked before the request died' );
+$o6_again = $o6_redeem( $o6_key_booked, 5 );
+vcap_security_assert( is_array( $o6_again ) && ! empty( $o6_again['recovered'] ) && ! empty( $o6_again['success'] ) && 20.0 === (float) vcap()->vouchers->get( $o6_card->id )->balance, 'O6: an abandoned claim whose booking is in the history is answered as booked (no second deduction)' );
+// Nothing booked: the repeat takes the abandoned claim over and books once.
+$o6_key_lost = wp_generate_uuid4();
+$o6_claim( $o6_key_lost, 4 );
+$o6_retry = $o6_redeem( $o6_key_lost, 4 );
+vcap_security_assert( is_array( $o6_retry ) && ! empty( $o6_retry['success'] ) && empty( $o6_retry['recovered'] ) && 16.0 === (float) vcap()->vouchers->get( $o6_card->id )->balance, 'O6: an abandoned claim without a booking is taken over and the redemption is booked once' );
+// A fresh claim (another request still running) is answered with 409, not a red error.
+$o6_key_busy = wp_generate_uuid4();
+$wpdb->insert( $wpdb->options, array( 'option_name' => '_vcap_scan_' . md5( $o6_key_busy ), 'option_value' => time() . '|' . md5( 'redeem|' . $o6_card->id . '|3' ) . '#' . $o6_mark . '|', 'autoload' => 'no' ) );
+$o6_busy = $o6_redeem( $o6_key_busy, 3 );
+vcap_security_assert( is_wp_error( $o6_busy ) && 'vcap_in_progress' === $o6_busy->get_error_code() && 409 === ( $o6_busy->get_error_data()['status'] ?? 0 ) && 16.0 === (float) vcap()->vouchers->get( $o6_card->id )->balance, 'O6: a claim still in progress is answered with 409 and books nothing' );
+wp_set_current_user( 0 );
+
+// O8: the lookup applies the counter refusal rules – no green "Valid" for what the redemption would refuse.
+wp_set_current_user( $o3_cashier );
+$o8_credit = vcap()->tickets->describe( vcap()->vouchers->get( $u10_credit->id ) );
+vcap_security_assert( 'warning' === $o8_credit['state'] && false === ( $o8_credit['redeemable'] ?? null ) && 'Store credit can only be used in the shop.' === $o8_credit['message'], 'O8: store credit is shown as not redeemable at the counter, with the reason' );
+$o8_shop_only = vcap_security_single();
+$o8_channel   = static fn( $allowed, $voucher, $channel ) => ( (int) $voucher->id === (int) $o8_shop_only->id && VCAP\Channels::COUNTER === $channel ) ? false : $allowed;
+add_filter( 'vcap_redemption_channel_allowed', $o8_channel, 10, 3 );
+$o8_view = vcap()->tickets->describe( vcap()->vouchers->get( $o8_shop_only->id ) );
+remove_filter( 'vcap_redemption_channel_allowed', $o8_channel, 10 );
+vcap_security_assert( 'warning' === $o8_view['state'] && false === ( $o8_view['redeemable'] ?? null ) && 'This voucher cannot be redeemed at the counter.' === $o8_view['message'], 'O8: a voucher restricted to other channels is not shown as valid at the counter' );
+$o8_pending_voucher = vcap_security_single();
+// Checkout holds the coupon for the unpaid order (WooCommerce's tentative usage) until it is paid or released.
+$o8_hold = add_post_meta( $o8_pending_voucher->coupon_id, '_coupon_held_' . ( time() + 600 ) . '_o8test', '' ); // As check_and_hold_coupon() stores it.
+$o8_held = vcap()->tickets->describe( vcap()->vouchers->get( $o8_pending_voucher->id ) );
+vcap_security_assert( $o8_hold && VCAP\CouponManager::held_by_pending_order( vcap()->vouchers->get( $o8_pending_voucher->id ) ) && 'warning' === $o8_held['state'] && false === ( $o8_held['redeemable'] ?? null ), 'O8: a single-use voucher held by an unpaid shop order (checkout) is shown as not redeemable' );
+$o8_plain = vcap()->tickets->describe( vcap()->vouchers->get( vcap_security_single()->id ) );
+vcap_security_assert( 'ok' === $o8_plain['state'] && ! array_key_exists( 'redeemable', $o8_plain ), 'O8: an unrestricted voucher stays "Valid"' );
+wp_set_current_user( 0 );
+
 echo "Voucher Captain security and privacy checks passed.\n";
