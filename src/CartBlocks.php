@@ -80,11 +80,14 @@ final class CartBlocks {
 		foreach ( $cart->get_applied_coupons() as $code ) {
 			$voucher = $this->repo->get_by_code( wc_format_coupon_code( $code ) ) ?? $this->repo->get_by_code( $code );
 			if ( $voucher && $voucher->is_multi_use() ) {
+				// What is left after this order, shown as a note (not as an amount row between the discounts).
+				$remaining          = CouponManager::remaining_after_cart( $voucher, $cart, (string) $code, $this->payments->cart_payments() );
 				$data['balances'][] = array(
 					'code'      => wc_format_coupon_code( $code ),
 					/* translators: %s: voucher code */
 					'label'     => sprintf( __( 'Voucher %s balance', 'voucher-captain' ), $voucher->code ),
-					'formatted' => self::plain_price( (float) $voucher->balance, (string) $voucher->currency ),
+					'formatted' => self::plain_price( $remaining, (string) $voucher->currency ),
+					'text'      => CouponManager::remaining_balance_note( $voucher, $remaining ),
 				);
 			}
 		}
@@ -160,6 +163,7 @@ final class CartBlocks {
 					'code'      => $string,
 					'label'     => $string,
 					'formatted' => $string,
+					'text'      => $string,
 				)
 			),
 			'store_credit'   => array(

@@ -4,9 +4,9 @@
  *   wp eval-file tests/blocks-integration.php
  */
 
-function vcap_blocks_assert( bool $condition, string $message ): void {
+function vcap_blocks_assert( bool $condition, string $message, $detail = null ): void {
 	if ( ! $condition ) {
-		throw new RuntimeException( 'FAIL: ' . $message );
+		throw new RuntimeException( 'FAIL: ' . $message . ( null === $detail ? '' : ' – ' . wp_json_encode( $detail ) ) );
 	}
 	echo "PASS: {$message}\n";
 }
@@ -184,6 +184,13 @@ $card_50 = vcap_blocks_voucher( $card_product, 50, 'balance', 'giftcard' );
 WC()->cart->apply_coupon( $card_50->code );
 list( , $forfeit_ext ) = vcap_blocks_cart_ext();
 vcap_blocks_assert( array() === ( $forfeit_ext['forfeits'] ?? null ), 'Store API cart: no warning for a gift card worth more than the cart (it keeps its balance)' );
+// The balance shown is what is left after this order (50 − 40 = 10), as a note – classic cart and blocks alike.
+$remaining_text = VCAP\CouponManager::remaining_balance_note( $card_50, 10.0 );
+vcap_blocks_assert( isset( $forfeit_ext['balances'][0] ) && $remaining_text === ( $forfeit_ext['balances'][0]['text'] ?? '' ) && false !== strpos( $forfeit_ext['balances'][0]['formatted'], '10' ), 'Store API cart: the gift card note shows the balance after this order (50 − 40 = 10), not the 50 before it', $forfeit_ext['balances'] ?? null );
+ob_start();
+vcap()->coupons->cart_balance_notice();
+$classic_balance = (string) ob_get_clean();
+vcap_blocks_assert( false !== strpos( html_entity_decode( $classic_balance, ENT_QUOTES, 'UTF-8' ), $remaining_text ) && false !== strpos( $classic_balance, 'colspan="2"' ), 'classic cart: the same note across the totals table (balance after this order: 10)', $classic_balance );
 WC()->cart->remove_coupons();
 
 // "Multi-purpose vouchers as payment": the single-use value voucher discounts 0 and pays 40 after tax – only the

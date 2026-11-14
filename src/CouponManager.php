@@ -1044,16 +1044,42 @@ final class CouponManager {
 		if ( ! WC()->cart ) {
 			return;
 		}
+		$payments = function_exists( 'vcap' ) ? vcap()->payments->cart_payments() : array();
 		foreach ( WC()->cart->get_applied_coupons() as $code ) {
 			$voucher = $this->repo->get_by_code( wc_format_coupon_code( $code ) ) ?? $this->repo->get_by_code( $code );
 			if ( $voucher && $voucher->is_multi_use() ) {
-				/* translators: %s: voucher code */
-				$label = sprintf( __( 'Voucher %s balance', 'voucher-captain' ), $voucher->code );
-				// data-title: the label in front of the amount on small screens (responsive table); styled as a note,
-				// not as a second total (frontend.css).
-				echo '<tr class="vcap-balance"><th scope="row">' . esc_html( $label ) . '</th><td data-title="' . esc_attr( $label ) . '"><small>' . wp_kses_post( wc_price( $voucher->balance, array( 'currency' => $voucher->currency ) ) ) . '</small></td></tr>';
+				// A note across the totals table, not a second amount column next to the order total (frontend.css).
+				echo '<tr class="vcap-balance"><td colspan="2"><small>' . esc_html( self::remaining_balance_note( $voucher, self::remaining_after_cart( $voucher, WC()->cart, (string) $code, $payments ) ) ) . '</small></td></tr>';
 			}
 		}
+	}
+
+	/**
+	 * What remains on a stored-balance voucher once this cart is paid: its balance minus what it pays here (the
+	 * payment after tax, or its discount incl. the tax it removes, as used_amount() deducts it at checkout).
+	 *
+	 * @param array<string, float> $payments PaymentVouchers::cart_payments().
+	 */
+	public static function remaining_after_cart( Voucher $voucher, \WC_Cart $cart, string $code, array $payments ): float {
+		$code = wc_format_coupon_code( $code );
+		if ( isset( $payments[ $code ] ) ) {
+			$used = (float) $payments[ $code ];
+		} else {
+			$with_tax = (bool) apply_filters( 'vcap_balance_deduct_tax', wc_prices_include_tax() || apply_filters( 'vcap_balance_covers_tax', true, null ), null );
+			$used     = (float) $cart->get_coupon_discount_amount( $code, ! $with_tax );
+		}
+		$used = Compat\MultiCurrency::to_base( $used, get_woocommerce_currency() ) ?? $used;
+		return max( 0.0, round( (float) $voucher->balance - $used, $voucher->decimals() ) );
+	}
+
+	/** "Remaining balance of voucher CODE after this order: 20.00" (plain text). */
+	public static function remaining_balance_note( Voucher $voucher, float $remaining ): string {
+		return sprintf(
+			/* translators: 1: voucher code, 2: amount */
+			__( 'Remaining balance of voucher %1$s after this order: %2$s', 'voucher-captain' ),
+			$voucher->code,
+			html_entity_decode( wp_strip_all_tags( wc_price( $remaining, array( 'currency' => $voucher->currency ) ) ), ENT_QUOTES, 'UTF-8' )
+		);
 	}
 
 	/**

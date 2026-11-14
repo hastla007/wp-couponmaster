@@ -2,7 +2,7 @@
  * Voucher Captain – cart and checkout blocks (no build step: plain script on the WordPress/WooCommerce globals).
  * Shows what the classic cart prints with PHP hooks, from the Store API cart data extensions["voucher-captain"]:
  * - one row "Voucher CODE −x" per voucher that pays after tax, and the remaining balances of applied gift cards
- *   (slot ExperimentalDiscountsMeta, below the discounts of the totals);
+ *   (slot ExperimentalDiscountsMeta, below the discounts of the totals; the balance left after this order as a note);
  * - a note on the coupon of such a voucher, whose own discount is 0, saying that it pays below (checkout filter
  *   "coupons", which can change the coupon label only). The 0 of the discount row itself stays: it comes from the
  *   Store API cart (totals.total_discount, coupons[].totals.total_discount), which WooCommerce offers no filter
@@ -50,8 +50,15 @@
 		( d.payments || [] ).forEach( function ( payment ) {
 			rows.push( row( 'payment-' + payment.code, 'vcap-voucher-payment', payment.label, payment.formatted ) );
 		} );
+		// "Remaining balance of voucher X after this order: 20.00" – a note, not an amount row between the discounts.
 		( d.balances || [] ).forEach( function ( balance ) {
-			rows.push( row( 'balance-' + balance.code, 'vcap-balance', balance.label, balance.formatted ) );
+			rows.push(
+				el(
+					'div',
+					{ key: 'balance-' + balance.code, className: 'wc-block-components-totals-item vcap-balance' },
+					el( 'small', null, balance.text || balance.label + ': ' + balance.formatted )
+				)
+			);
 		} );
 		if ( ! rows.length ) {
 			return null;

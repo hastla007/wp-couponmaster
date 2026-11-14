@@ -71,7 +71,8 @@ test.describe( 'cart and checkout blocks', () => {
 		const payment = page.locator( '.vcap-voucher-payment' ).filter( { hasText: code } );
 		await expect( payment ).toBeVisible();
 		await expect( payment ).toContainText( /20[.,]00/ );
-		await expect( page.locator( '.vcap-balance' ).filter( { hasText: new RegExp( code, 'i' ) } ) ).toBeVisible();
+		// The note shows what is left after this order (20.00 card pays 20.00 → 0.00), not the balance before it.
+		await expect( page.locator( '.vcap-balance' ).filter( { hasText: new RegExp( code, 'i' ) } ) ).toContainText( /after this order:\s*\D*0[.,]00/i );
 		await expect( page.getByText( /pays as voucher payment/i ).first() ).toBeVisible();
 		await expect( orderTotal( page ) ).toContainText( /10[.,]00/ );
 		await page.goto( '/checkout/' );
