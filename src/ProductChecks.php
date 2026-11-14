@@ -30,6 +30,7 @@ final class ProductChecks {
 		add_action( 'admin_notices', array( $this, 'admin_notices' ) );
 		add_action( 'admin_post_vcap_expired_product', array( $this, 'handle_expired_product' ) );
 		add_filter( 'site_status_tests', array( $this, 'health_tests' ) );
+		add_action( 'rest_api_init', array( $this, 'health_route' ) );
 		add_action( 'vcap_daily_maintenance', array( self::class, 'sync_dated_products' ), 40, 0 );
 		// The cached shop_problems() is recalculated after a product or its voucher settings change.
 		foreach ( array( 'woocommerce_new_product', 'woocommerce_update_product', 'woocommerce_delete_product', 'woocommerce_trash_product', 'save_post_product' ) as $hook ) {
@@ -633,13 +634,29 @@ final class ProductChecks {
 		}
 	}
 
+	/** A8: the voucher product test loads up to 200 products – asynchronous (REST), so Site Health opens at once. */
 	public function health_tests( $tests ) {
 		$tests = (array) $tests;
-		$tests['direct']['vcap_voucher_products'] = array(
-			'label' => __( 'Voucher Captain', 'voucher-captain' ),
-			'test'  => array( $this, 'test_voucher_products' ),
+		$tests['async']['vcap_voucher_products'] = array(
+			'label'             => __( 'Voucher Captain', 'voucher-captain' ),
+			'test'              => rest_url( 'vcap/v1/site-health/voucher-products' ),
+			'has_rest'          => true,
+			'async_direct_test' => array( $this, 'test_voucher_products' ),
 		);
 		return $tests;
+	}
+
+	/** REST endpoint of the asynchronous test (same permission as Site Health's own checks). */
+	public function health_route(): void {
+		register_rest_route(
+			'vcap/v1',
+			'/site-health/voucher-products',
+			array(
+				'methods'             => 'GET',
+				'callback'            => fn() => rest_ensure_response( $this->test_voucher_products() ),
+				'permission_callback' => static fn() => current_user_can( 'view_site_health_checks' ),
+			)
+		);
 	}
 
 	/** Site Health: expired fixed-date voucher products and empty code batches. */

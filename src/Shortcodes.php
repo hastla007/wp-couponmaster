@@ -28,6 +28,9 @@ final class Shortcodes {
 		add_shortcode( 'vcap_voucher_status', array( $this->downloads, 'balance_shortcode' ) );
 		add_shortcode( 'vcap_redeem', array( $this, 'redeem_shortcode' ) );
 		add_action( 'save_post_page', static fn() => delete_transient( 'vcap_redeem_page_guess' ) );
+		// A8: the onboarding checklist's cached page lookup (also edits through REST, outside wp-admin).
+		add_action( 'save_post_page', array( Admin\Onboarding::class, 'forget_pages' ) );
+		add_action( 'deleted_post', array( Admin\Onboarding::class, 'forget_pages' ) );
 		foreach ( array( 'save_post', 'deleted_post', 'update_option_widget_block', 'update_option_widget_text', 'update_option_widget_custom_html' ) as $hook ) {
 			add_action( $hook, array( self::class, 'forget_redeem_templates' ) );
 		}

@@ -27,8 +27,32 @@ final class Onboarding {
 		return current_user_can( 'manage_woocommerce' );
 	}
 
-	/** Published page containing one of the shortcodes or blocks, 0 when there is none. */
-	private static function page_with( array $shortcodes, string $block ): int {
+	/** Transient of page_with() results (A8: no post_content LIKE scan on every admin screen). */
+	public const PAGES_CACHE = 'vcap_onboarding_pages';
+
+	/** A page was saved or deleted: the pages found by page_with() are looked up again. */
+	public static function forget_pages(): void {
+		delete_transient( self::PAGES_CACHE );
+	}
+
+	/**
+	 * Published page containing one of the shortcodes or blocks, 0 when there is none. Cached for a day (forgotten
+	 * when a page is saved or deleted); $fresh reads the database (page creation under its lock).
+	 */
+	private static function page_with( array $shortcodes, string $block, bool $fresh = false ): int {
+		$key   = md5( implode( ',', $shortcodes ) . '|' . $block );
+		$cache = get_transient( self::PAGES_CACHE );
+		$cache = is_array( $cache ) ? $cache : array();
+		if ( ! $fresh && isset( $cache[ $key ] ) && ( 0 === (int) $cache[ $key ] || 'publish' === get_post_status( (int) $cache[ $key ] ) ) ) {
+			return (int) $cache[ $key ];
+		}
+		$cache[ $key ] = self::find_page_with( $shortcodes, $block );
+		set_transient( self::PAGES_CACHE, $cache, DAY_IN_SECONDS );
+		return $cache[ $key ];
+	}
+
+	/** page_with() without the cache. */
+	private static function find_page_with( array $shortcodes, string $block ): int {
 		global $wpdb;
 		$where = array( $wpdb->prepare( 'post_content LIKE %s', '%<!-- wp:' . $wpdb->esc_like( $block ) . '%' ) );
 		foreach ( $shortcodes as $shortcode ) {
@@ -234,12 +258,12 @@ final class Onboarding {
 	}
 
 	/** Published page that already does the job of the redeem or balance page (0 when there is none). */
-	public static function existing_page( string $which ): int {
+	public static function existing_page( string $which, bool $fresh = false ): int {
 		if ( 'redeem_page' === $which ) {
 			$selected = (int) get_option( 'vcap_redeem_page_id', 0 );
-			return $selected > 0 && 'publish' === get_post_status( $selected ) ? $selected : self::page_with( array( 'vcap_redeem' ), 'vcap/redeem' );
+			return $selected > 0 && 'publish' === get_post_status( $selected ) ? $selected : self::page_with( array( 'vcap_redeem' ), 'vcap/redeem', $fresh );
 		}
-		return self::page_with( array( 'vcap_balance', 'vcap_voucher_status' ), 'vcap/balance' );
+		return self::page_with( array( 'vcap_balance', 'vcap_voucher_status' ), 'vcap/balance', $fresh );
 	}
 
 	/**
@@ -253,7 +277,7 @@ final class Onboarding {
 			return 0;
 		}
 		try {
-			$existing = self::existing_page( $which );
+			$existing = self::existing_page( $which, true );
 			if ( $existing && 'redeem_page' === $which ) {
 				update_option( 'vcap_redeem_page_id', $existing );
 			}

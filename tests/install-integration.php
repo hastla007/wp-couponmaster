@@ -293,6 +293,7 @@ vcap_inst_assert( $block && 3 === (int) $block->api_version && in_array( 'vcap-f
 $health = apply_filters( 'site_status_tests', array( 'direct' => array(), 'async' => array() ) );
 vcap_inst_assert( isset( $health['async']['vcap_validity'], $health['async']['vcap_tax_status'] ) && ! isset( $health['direct']['vcap_validity'] ) && ! empty( $health['async']['vcap_validity']['has_rest'] ), 'the product checks are asynchronous Site Health tests' );
 vcap_inst_assert( isset( rest_get_server()->get_routes()['/vcap/v1/site-health/validity'] ), 'the asynchronous checks have their REST route' );
+vcap_inst_assert( isset( $health['async']['vcap_voucher_products'], rest_get_server()->get_routes()['/vcap/v1/site-health/voucher-products'] ) && ! isset( $health['direct']['vcap_voucher_products'] ) && ! empty( $health['async']['vcap_voucher_products']['has_rest'] ), 'A8: the voucher product test (shop problems) runs asynchronously through REST' );
 
 // Free core (docs/FREE-PREMIUM.md): no license page or update handler, every feature on, no "Update URI" header.
 require_once ABSPATH . 'wp-admin/includes/plugin.php';

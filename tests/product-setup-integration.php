@@ -650,6 +650,23 @@ vcap_ps_assert( $page > 0 && $page === (int) get_option( 'vcap_redeem_page_id' )
 $pages_before = count( get_posts( array( 'post_type' => 'page', 'post_status' => 'publish', 'numberposts' => -1, 'fields' => 'ids' ) ) );
 $again        = VCAP\Admin\Onboarding::create_page( 'redeem_page' );
 vcap_ps_assert( $again === $page && count( get_posts( array( 'post_type' => 'page', 'post_status' => 'publish', 'numberposts' => -1, 'fields' => 'ids' ) ) ) === $pages_before, 'Q6: a second click (double submission) creates no second redeem page' );
+// A8: the checklist looks for the pages once, not with a post_content LIKE scan on every admin screen.
+VCAP\Admin\Onboarding::forget_pages();
+$a8_like = 0;
+$a8_log  = static function ( $q ) use ( &$a8_like ) {
+	$a8_like += str_contains( $q, 'post_content LIKE' ) ? 1 : 0;
+	return $q;
+};
+add_filter( 'query', $a8_log );
+VCAP\Admin\Onboarding::steps();
+$a8_first = $a8_like;
+VCAP\Admin\Onboarding::steps();
+VCAP\Admin\Onboarding::steps();
+remove_filter( 'query', $a8_log );
+vcap_ps_assert( $a8_first > 0 && $a8_first === $a8_like, 'A8: the onboarding page lookup scans post_content once, later checklists use the cache (' . $a8_first . '/' . $a8_like . ')' );
+$a8_page = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'draft', 'post_title' => 'A8', 'post_content' => '[vcap_balance]' ) );
+vcap_ps_assert( false === get_transient( VCAP\Admin\Onboarding::PAGES_CACHE ), 'A8: saving a page forgets the cached lookup' );
+wp_delete_post( $a8_page, true );
 $balance_existed = VCAP\Admin\Onboarding::existing_page( 'balance_page' );
 $balance_page    = VCAP\Admin\Onboarding::create_page( 'balance_page' );
 vcap_ps_assert( $balance_page > 0 && VCAP\Admin\Onboarding::create_page( 'balance_page' ) === $balance_page && ( ! $balance_existed || $balance_existed === $balance_page ), 'Q6: the balance page is created once as well' );
