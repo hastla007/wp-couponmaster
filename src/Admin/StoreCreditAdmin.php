@@ -11,6 +11,14 @@ defined( 'ABSPATH' ) || exit;
  * credit" on the order screen. Every change needs the voucher capability, a nonce and a reason.
  */
 final class StoreCreditAdmin {
+	/**
+	 * Credit/debit entered on a profile form, waiting until WordPress saved the profile (user id => amount,
+	 * reason and refusal). Booked on "profile_update" only: a profile that fails validation books nothing.
+	 *
+	 * @var array<int, array{amount:float, reason:string, error:string}>
+	 */
+	private array $pending = array();
+
 	public function __construct( private StoreCredit $credit, private VoucherRepository $repo ) {}
 
 	public function register(): void {
@@ -18,6 +26,8 @@ final class StoreCreditAdmin {
 		add_action( 'edit_user_profile', array( $this, 'profile' ) );
 		add_action( 'personal_options_update', array( $this, 'save_profile' ) );
 		add_action( 'edit_user_profile_update', array( $this, 'save_profile' ) );
+		add_action( 'user_profile_update_errors', array( $this, 'profile_errors' ), 10, 3 );
+		add_action( 'profile_update', array( $this, 'book_profile_credit' ), 10, 1 );
 		add_action( 'admin_post_vcap_refund_credit', array( $this, 'refund' ) );
 		add_action( 'vcap_order_metabox_after', array( $this, 'order_form' ) );
 		Flash::register();
@@ -54,7 +64,9 @@ final class StoreCreditAdmin {
 				<th><label for="vcap-credit-amount"><?php esc_html_e( 'Credit / debit', 'voucher-captain' ); ?></label></th>
 				<td>
 					<?php wp_nonce_field( 'vcap_credit_' . $user->ID, 'vcap_credit_nonce' ); ?>
-					<input type="text" class="small-text" id="vcap-credit-amount" name="vcap_credit_amount" placeholder="+10 / -5" inputmode="decimal" />
+					<?php echo FormToken::field(); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in field(). ?>
+					<input type="text" class="small-text" id="vcap-credit-amount" name="vcap_credit_amount" placeholder="+10 / -5" inputmode="decimal"
+						data-confirm="<?php /* translators: %s: amount entered, e.g. +10 or -5 */ echo esc_attr__( 'Book %s as store credit for this customer (a minus sign removes credit)? The change is recorded with your user and the reason.', 'voucher-captain' ); ?>" />
 					<label class="screen-reader-text" for="vcap-credit-reason"><?php esc_html_e( 'Reason', 'voucher-captain' ); ?></label>
 					<input type="text" class="regular-text" id="vcap-credit-reason" name="vcap_credit_reason" placeholder="<?php esc_attr_e( 'Reason (required)', 'voucher-captain' ); ?>" />
 					<p class="description"><?php esc_html_e( 'Positive amounts add credit, negative amounts remove it. Every change is recorded with your user and the reason.', 'voucher-captain' ); ?></p>
@@ -81,27 +93,87 @@ final class StoreCreditAdmin {
 			</table>
 		<?php endif; ?>
 		<?php
+		// Plausibility check before the profile is saved: the amount as typed, with its sign.
+		wp_print_inline_script_tag( "(function(){var f=document.getElementById('vcap-credit-amount');if(!f||!f.form){return;}f.form.addEventListener('submit',function(e){var v=(f.value||'').trim();if(v&&!window.confirm(f.getAttribute('data-confirm').replace('%s',v))){e.preventDefault();}});})();" );
 	}
 
+	/**
+	 * Profile form submitted (before WordPress validates it): the credit/debit is checked and kept until the
+	 * profile was saved (book_profile_credit()); a refused amount is reported as a profile error.
+	 */
 	public function save_profile( int $user_id ): void {
-		if ( ! isset( $_POST['vcap_credit_nonce'] ) || '' === trim( (string) wp_unslash( $_POST['vcap_credit_amount'] ?? '' ) ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		unset( $this->pending[ $user_id ] );
+		if ( ! isset( $_POST['vcap_credit_nonce'] ) || ! is_scalar( $_POST['vcap_credit_amount'] ?? '' ) || '' === trim( (string) wp_unslash( $_POST['vcap_credit_amount'] ?? '' ) ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 			return;
 		}
 		if ( ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_credit_nonce'] ) ), 'vcap_credit_' . $user_id ) || ! $this->can() || ! $this->credit->enabled() ) {
 			return;
 		}
-		$amount = (float) wc_format_decimal( sanitize_text_field( wp_unslash( $_POST['vcap_credit_amount'] ) ) );
-		$reason = sanitize_text_field( wp_unslash( $_POST['vcap_credit_reason'] ?? '' ) );
-		$result = $this->credit->adjust( $user_id, $amount, $reason );
-		if ( is_wp_error( $result ) ) {
-			add_filter(
-				'user_profile_update_errors',
-				static function ( $errors ) use ( $result ) {
-					$errors->add( 'vcap_credit', $result->get_error_message() );
-					return $errors;
-				}
-			);
+		$raw    = sanitize_text_field( wp_unslash( (string) $_POST['vcap_credit_amount'] ) );
+		$parsed = self::parse_amount( $raw, true );
+		$reason = trim( sanitize_text_field( wp_unslash( (string) ( $_POST['vcap_credit_reason'] ?? '' ) ) ) );
+		$error  = $parsed['ok'] ? ( '' === $reason ? __( 'Please enter an amount and a reason.', 'voucher-captain' ) : '' ) : self::refusal( $raw, $parsed['error'] );
+		$this->pending[ $user_id ] = array(
+			'amount' => $parsed['value'],
+			'reason' => $reason,
+			'error'  => $error,
+		);
+	}
+
+	/** A refused credit/debit stops the profile from being saved, so it can be corrected and sent again. */
+	public function profile_errors( $errors, $update = true, $user = null ): void {
+		$user_id = is_object( $user ) && isset( $user->ID ) ? (int) $user->ID : 0;
+		if ( $errors instanceof \WP_Error && '' !== ( $this->pending[ $user_id ]['error'] ?? '' ) ) {
+			$errors->add( 'vcap_credit', $this->pending[ $user_id ]['error'] );
 		}
+	}
+
+	/**
+	 * The profile was saved: book the credit/debit once per rendered form (a resent form books nothing).
+	 *
+	 * @return array{balance:float}|\WP_Error|null null when nothing was pending
+	 */
+	public function book_profile_credit( int $user_id ) {
+		$pending = $this->pending[ $user_id ] ?? null;
+		unset( $this->pending[ $user_id ] );
+		if ( ! $pending || '' !== $pending['error'] ) {
+			return null;
+		}
+		$scope = 'credit-' . $user_id;
+		if ( ! FormToken::claim( $scope ) ) {
+			Flash::add( 'warning', __( 'This store credit change was already submitted and has not been booked again. Check the journal below before entering it once more.', 'voucher-captain' ) );
+			return new \WP_Error( 'vcap_credit_duplicate', 'duplicate' );
+		}
+		$result = $this->credit->adjust( $user_id, $pending['amount'], $pending['reason'] );
+		if ( is_wp_error( $result ) ) {
+			FormToken::release( $scope );
+			Flash::add( 'error', __( 'The store credit was not changed:', 'voucher-captain' ) . ' ' . $result->get_error_message() );
+		}
+		return $result;
+	}
+
+	/**
+	 * Strictly parsed amount of a store credit form (see \VCAP\Amount): "2,50" is never 250, "1e3" never 13.
+	 * With $signed a leading "+" or minus sign (also "−", "–") is accepted for credit/debit.
+	 *
+	 * @return array{ok:bool, value:float, minor:int, error:string}
+	 */
+	public static function parse_amount( string $raw, bool $signed, string $currency = '' ): array {
+		$currency = '' !== $currency ? $currency : (string) get_option( 'woocommerce_currency' );
+		return \VCAP\Amount::parse(
+			$raw,
+			array(
+				'decimals'       => \VCAP\API\V1\RedemptionService::decimals( $currency ),
+				'strip'          => array( $currency, html_entity_decode( get_woocommerce_currency_symbol( $currency ), ENT_QUOTES, 'UTF-8' ) ),
+				'allow_negative' => $signed,
+			)
+		);
+	}
+
+	private static function refusal( string $raw, string $error, string $currency = '' ): string {
+		$currency = '' !== $currency ? $currency : (string) get_option( 'woocommerce_currency' );
+		/* translators: 1: what was entered, 2: why it was refused */
+		return sprintf( __( '"%1$s" was not accepted: %2$s Nothing was changed.', 'voucher-captain' ), $raw, \VCAP\Amount::message( $error, \VCAP\API\V1\RedemptionService::decimals( $currency ) ) );
 	}
 
 	public function order_form( \WC_Order $order ): void {
@@ -165,7 +237,14 @@ final class StoreCreditAdmin {
 		if ( ! $order instanceof \WC_Order ) {
 			wp_die( esc_html__( 'Order not found.', 'voucher-captain' ), 404 );
 		}
-		$amount = (float) wc_format_decimal( sanitize_text_field( wp_unslash( $_POST['vcap_refund_credit_amount'] ?? '' ) ) );
+		$raw    = sanitize_text_field( wp_unslash( $_POST['vcap_refund_credit_amount'] ?? '' ) );
+		$parsed = self::parse_amount( $raw, false, (string) $order->get_currency() );
+		if ( ! $parsed['ok'] ) {
+			Flash::add( 'error', __( 'Refund as store credit failed:', 'voucher-captain' ) . ' ' . self::refusal( $raw, $parsed['error'], (string) $order->get_currency() ) );
+			wp_safe_redirect( $order->get_edit_order_url() );
+			exit;
+		}
+		$amount = $parsed['value'];
 		$result = $this->credit->refund_as_credit(
 			$order,
 			$amount,

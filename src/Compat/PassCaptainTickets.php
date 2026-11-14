@@ -774,12 +774,13 @@ final class PassCaptainTickets {
 		if ( isset( $_POST['vcap_ticket_reset'] ) ) {
 			// "Choose another date" / "Cancel": start this code over (or forget it).
 			$this->clear_session();
-			if ( 'date' === sanitize_key( wp_unslash( $_POST['vcap_ticket_reset'] ) ) && $session ) {
+			if ( is_string( $_POST['vcap_ticket_reset'] ) && 'date' === sanitize_key( wp_unslash( $_POST['vcap_ticket_reset'] ) ) && $session ) {
 				$session->set( self::SESSION_CODE, (string) $code );
 			}
 			return 'choose';
 		}
-		$guest_email = isset( $_POST['vcap_ticket_email'] ) ? sanitize_email( wp_unslash( $_POST['vcap_ticket_email'] ) ) : '';
+		// Public form: anything but a string (e.g. "vcap_ticket_email[]=x") is an invalid address, not a fatal error.
+		$guest_email = isset( $_POST['vcap_ticket_email'] ) && is_scalar( $_POST['vcap_ticket_email'] ) ? sanitize_email( wp_unslash( (string) $_POST['vcap_ticket_email'] ) ) : '';
 		if ( ! is_user_logged_in() && ! is_email( $guest_email ) ) {
 			// Guests say where the tickets go (never silently the buyer's address of a gift voucher).
 			if ( $session ) {
@@ -884,7 +885,7 @@ final class PassCaptainTickets {
 		$type    = $target['event_id'] ? $choice : $target['ticket_type_id'];
 		if ( ! is_user_logged_in() ) {
 			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- display only.
-			$typed = isset( $_POST['vcap_ticket_email'] ) ? sanitize_email( wp_unslash( $_POST['vcap_ticket_email'] ) ) : ( $session ? (string) $session->get( 'vcap_ticket_email' ) : '' );
+			$typed = isset( $_POST['vcap_ticket_email'] ) ? ( is_scalar( $_POST['vcap_ticket_email'] ) ? sanitize_email( wp_unslash( (string) $_POST['vcap_ticket_email'] ) ) : '' ) : ( $session ? (string) $session->get( 'vcap_ticket_email' ) : '' );
 			$email_id = \VCAP\Shortcodes::unique_id( 'vcap-ticket-email' );
 			echo '<label for="' . esc_attr( $email_id ) . '">' . esc_html__( 'Send the tickets to (email)', 'voucher-captain' ) . '</label>';
 			echo '<input type="email" id="' . esc_attr( $email_id ) . '" name="vcap_ticket_email" required autocomplete="email" maxlength="190" value="' . \VCAP\Shortcodes::esc_attr_text( $typed ) . '" />'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_attr_text().

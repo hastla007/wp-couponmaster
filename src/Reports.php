@@ -108,7 +108,7 @@ final class Reports {
 					$group['name'] .= ' (' . $currency . ')';
 				}
 				if ( ! isset( $rows[ $key ] ) ) {
-					$rows[ $key ] = $group + array( 'orders' => 0, 'uses' => 0, 'discount' => 0.0, 'revenue' => 0.0, 'issued' => null );
+					$rows[ $key ] = $group + array( 'orders' => 0, 'uses' => 0, 'discount' => 0.0, 'revenue' => 0.0, 'issued' => null, 'currency' => $currency ? $currency : get_woocommerce_currency() );
 				}
 				++$rows[ $key ]['uses'];
 				$rows[ $key ]['discount'] += $amount;
@@ -197,7 +197,10 @@ final class Reports {
 	public static function csv_rows( array $rows ): array {
 		$out = array( array( __( 'Type', 'voucher-captain' ), __( 'Name', 'voucher-captain' ), __( 'Codes issued', 'voucher-captain' ), __( 'Uses', 'voucher-captain' ), __( 'Orders', 'voucher-captain' ), __( 'Discount', 'voucher-captain' ), __( 'Revenue', 'voucher-captain' ), __( 'Currency', 'voucher-captain' ) ) );
 		foreach ( $rows as $r ) {
-			$out[] = array( self::type_label( $r['type'] ), $r['name'], null === $r['issued'] ? '' : $r['issued'], $r['uses'], $r['orders'], Csv::number( $r['discount'], wc_get_price_decimals() ), Csv::number( $r['revenue'], wc_get_price_decimals() ), get_woocommerce_currency() );
+			// Each row in its own currency: amounts of orders in other currencies are kept apart (see collect()).
+			$currency = (string) ( $r['currency'] ?? get_woocommerce_currency() );
+			$decimals = API\V1\RedemptionService::decimals( $currency );
+			$out[]    = array( self::type_label( $r['type'] ), $r['name'], null === $r['issued'] ? '' : $r['issued'], $r['uses'], $r['orders'], Csv::number( $r['discount'], $decimals ), Csv::number( $r['revenue'], $decimals ), $currency );
 		}
 		return $out;
 	}

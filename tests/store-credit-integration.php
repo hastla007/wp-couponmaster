@@ -165,6 +165,52 @@ delete_option( 'vcap_credit_with_coupons' );
 WC()->cart->empty_cart();
 wp_set_current_user( 0 );
 
+// Profile credit (Q6/Q7): booked only after the profile was saved, once per form, amounts read strictly.
+$sc_admin_login = 'vcap_sc_admin_' . strtolower( wp_generate_password( 6, false, false ) );
+$sc_admin_id    = (int) wp_insert_user( array( 'user_login' => $sc_admin_login, 'user_pass' => wp_generate_password( 20 ), 'user_email' => $sc_admin_login . '@example.com', 'role' => 'administrator' ) );
+vcap_sc_assert( $sc_admin_id > 0, 'admin for the profile checks' );
+wp_set_current_user( $sc_admin_id );
+$profile_admin = new VCAP\Admin\StoreCreditAdmin( $credit, vcap()->vouchers );
+$dave          = vcap_sc_user( 'dave' );
+$profile_post  = static fn( string $amount, string $token, string $reason = 'Goodwill' ) => array(
+	'vcap_credit_nonce'  => wp_create_nonce( 'vcap_credit_' . $dave ),
+	'vcap_credit_amount' => $amount,
+	'vcap_credit_reason' => $reason,
+	VCAP\Admin\FormToken::FIELD => $token,
+);
+$token = VCAP\Admin\FormToken::generate();
+$_POST = $profile_post( '2,50', $token );
+$profile_admin->save_profile( $dave );
+vcap_sc_assert( 0.0 === $credit->balance( $dave ), 'Q6: nothing is booked before WordPress saved the profile' );
+$profile_errors = new WP_Error();
+$profile_admin->profile_errors( $profile_errors, true, get_userdata( $dave ) );
+vcap_sc_assert( ! $profile_errors->has_errors(), 'a valid credit adds no profile error' );
+$profile_admin->book_profile_credit( $dave );
+vcap_sc_assert( 2.5 === $credit->balance( $dave ), 'Q7: "2,50" on the profile is 2.50 store credit, not 250' );
+$profile_admin->save_profile( $dave );
+$profile_admin->book_profile_credit( $dave );
+vcap_sc_assert( 2.5 === $credit->balance( $dave ), 'Q6: the same form sent again (double click, reload) is not booked twice' );
+$_POST = $profile_post( '−1', VCAP\Admin\FormToken::generate() );
+$profile_admin->save_profile( $dave );
+$profile_admin->book_profile_credit( $dave );
+vcap_sc_assert( 1.5 === $credit->balance( $dave ), 'Q7: a Unicode minus removes credit instead of adding it' );
+$_POST = $profile_post( '1e3', VCAP\Admin\FormToken::generate() );
+$profile_admin->save_profile( $dave );
+$profile_errors = new WP_Error();
+$profile_admin->profile_errors( $profile_errors, true, get_userdata( $dave ) );
+$profile_admin->book_profile_credit( $dave );
+vcap_sc_assert( $profile_errors->has_errors() && 1.5 === $credit->balance( $dave ), 'Q7: "1e3" is refused as a profile error (the profile is not saved) and books nothing' );
+$_POST = $profile_post( '5', VCAP\Admin\FormToken::generate() );
+$profile_admin->save_profile( $dave );
+// Another profile error (e.g. a taken email address): WordPress does not save, profile_update never fires.
+$_POST = $profile_post( '5', $_POST[ VCAP\Admin\FormToken::FIELD ] );
+$profile_admin->save_profile( $dave );
+$profile_admin->book_profile_credit( $dave );
+vcap_sc_assert( 6.5 === $credit->balance( $dave ), 'Q6: a profile that failed once and is sent again books the credit once' );
+$_POST = array();
+delete_transient( 'vcap_flash_' . get_current_user_id() );
+wp_set_current_user( 0 );
+
 // Disabled feature: credit coupons stop working.
 update_option( 'vcap_store_credit', 'no' );
 $late = vcap_sc_order( $product, $alice );

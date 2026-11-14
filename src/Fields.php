@@ -141,10 +141,45 @@ final class Fields {
 				$base = substr( (string) $key, 0, -9 );
 				if ( isset( $out[ $base ] ) ) {
 					$out[ $base ]['required'] = true;
+					$out[ $base ]['tooltip']  = self::required_tooltip( $base, $out[ $base ]['tooltip'], $config );
 				}
 			}
 		}
 		return apply_filters( 'vcap_builtin_fields', $out, $config );
+	}
+
+	/** Help text of a required built-in field: no "leave empty to …", which a required field does not allow. */
+	private static function required_tooltip( string $key, string $tooltip, array $config ): string {
+		if ( 'delivery_date' === $key ) {
+			return __( 'The voucher is emailed on this day.', 'voucher-captain' );
+		}
+		if ( 'recipient_email' === $key ) {
+			if ( 'buyer' !== ( $config['send_to'] ?? '' ) ) {
+				return '';
+			}
+			if ( 'recipient' === (string) ( $config['email_restrict'] ?? 'none' ) ) {
+				return __( 'The voucher is sent to you, not to this address. Only this address can redeem it.', 'voucher-captain' );
+			}
+		}
+		return $tooltip;
+	}
+
+	/**
+	 * Value of a "number" field, read strictly like amounts ("2,50" and "2.50" are 2.5; "1e3", "1.500" and
+	 * "12,50; 25" are refused instead of guessed). Null when it is empty or not one unambiguous number.
+	 */
+	public static function parse_number( string $raw ): ?string {
+		$parsed = Amount::parse(
+			$raw,
+			array(
+				'decimals'       => 4,
+				'decimal_sep'    => function_exists( 'wc_get_price_decimal_separator' ) ? wc_get_price_decimal_separator() : '.',
+				'strip'          => array(),
+				'allow_negative' => true,
+				'allow_zero'     => true,
+			)
+		);
+		return $parsed['ok'] ? (string) $parsed['value'] : null;
 	}
 
 	/** @return array<int, array{id:int,title:string,position:string,fields:array,assign:array}> */
@@ -487,7 +522,8 @@ final class Fields {
 					$value = sanitize_email( $raw );
 					break;
 				case 'number':
-					$value = '' === $raw ? '' : (string) wc_format_decimal( $raw );
+					$number = self::parse_number( $raw );
+					$value  = null === $number ? '' : $number;
 					break;
 				case 'date':
 					$value = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $raw ) ? $raw : '';
@@ -575,7 +611,7 @@ final class Fields {
 					}
 				}
 			}
-			if ( 'number' === $type && ! is_numeric( wc_format_decimal( $raw ) ) ) {
+			if ( 'number' === $type && '' !== trim( $raw ) && null === self::parse_number( $raw ) ) {
 				/* translators: %s: field label */
 				$errors[] = sprintf( __( '%s must be a number.', 'voucher-captain' ), $label );
 			}

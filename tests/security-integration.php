@@ -504,5 +504,30 @@ vcap_security_assert( $o8_hold && VCAP\CouponManager::held_by_pending_order( vca
 $o8_plain = vcap()->tickets->describe( vcap()->vouchers->get( vcap_security_single()->id ) );
 vcap_security_assert( 'ok' === $o8_plain['state'] && ! array_key_exists( 'redeemable', $o8_plain ), 'O8: an unrestricted voucher stays "Valid"' );
 wp_set_current_user( 0 );
+// Q11: arrays on the public ticket redeem form are refused, not a TypeError (fatal error, recovery-mode mail).
+$q11_voucher             = vcap_security_create_voucher( 'q11-ticket@example.test', 990000 + random_int( 1, 9999 ) );
+$q11_voucher->usage_mode = 'single';
+vcap()->vouchers->update_columns( $q11_voucher, array( 'usage_mode' ) );
+$q11_target = static fn( $target, $v ) => (int) $v->id === (int) $q11_voucher->id ? array( 'ticket_type_id' => 1, 'quantity' => 1 ) : $target;
+add_filter( 'vcap_passcaptain_ticket_target', $q11_target, 10, 2 );
+$q11_user = get_current_user_id();
+wp_set_current_user( 0 );
+foreach ( array( array( 'vcap_ticket_email' => array( 'x' ) ), array( 'vcap_ticket_reset' => array( 'date' ) ) ) as $q11_post ) {
+	$_POST = $q11_post;
+	$q11_error = '';
+	try {
+		$q11_step = vcap()->passcaptain_tickets->redeem_page( null, $q11_voucher->code );
+	} catch ( \TypeError $e ) {
+		$q11_error = $e->getMessage();
+		$q11_step  = null;
+	}
+	$_POST = array();
+	vcap_security_assert( '' === $q11_error && 'choose' === $q11_step, 'Q11: an array posted as "' . key( $q11_post ) . '" on the public ticket redeem form is refused instead of a fatal error' . ( '' !== $q11_error ? ' (' . $q11_error . ')' : '' ) );
+}
+if ( function_exists( 'wc_clear_notices' ) && function_exists( 'WC' ) && WC()->session ) {
+	wc_clear_notices();
+}
+wp_set_current_user( $q11_user );
+remove_filter( 'vcap_passcaptain_ticket_target', $q11_target, 10 );
 
 echo "Voucher Captain security and privacy checks passed.\n";

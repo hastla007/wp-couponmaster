@@ -6,8 +6,9 @@ defined( 'ABSPATH' ) || exit;
 /**
  * CSV exports for spreadsheets: UTF-8 with BOM, streamed row by row, spreadsheet formula injection neutralised.
  *
- * The format follows the administrator's language: German locales get a semicolon separator and a decimal
- * comma (what German Excel opens in columns), all others a comma and a decimal point. Filter "vcap_csv_format"
+ * The format follows the administrator's language: locales with a decimal comma (WordPress' number format,
+ * e.g. de_DE, fr_FR, nl_NL, pl_PL; not de_CH) get a semicolon separator and a decimal comma (what Excel there
+ * opens in columns), all others a comma and a decimal point. Filter "vcap_csv_format"
  * changes it, e.g. array( 'separator' => ';', 'decimal' => ',' ). Dates are local shop time.
  */
 final class Csv {
@@ -17,11 +18,12 @@ final class Csv {
 	/** @return array{separator:string, decimal:string} */
 	public static function format(): array {
 		if ( null === self::$format ) {
-			$locale = function_exists( 'get_user_locale' ) ? (string) get_user_locale() : (string) get_locale();
-			$german = str_starts_with( strtolower( $locale ), 'de' );
-			$format = array(
-				'separator' => $german ? ';' : ',',
-				'decimal'   => $german && 'de_CH' !== $locale ? ',' : '.',
+			$locale  = function_exists( 'get_user_locale' ) ? (string) get_user_locale() : (string) get_locale();
+			$decimal = self::locale_decimal( $locale );
+			$format  = array(
+				// Excel in a decimal-comma locale splits columns at ";", not at ",".
+				'separator' => ',' === $decimal ? ';' : ',',
+				'decimal'   => $decimal,
 			);
 			/**
 			 * CSV format of the exports.
@@ -36,6 +38,42 @@ final class Csv {
 			);
 		}
 		return self::$format;
+	}
+
+	/**
+	 * Decimal separator of a locale: a comma when the locale's language writes one (CLDR: fr, it, es, nl, pl, de
+	 * … but not de_CH/de_LI, "de_CH_informal" included) or when WordPress' translated number format of the
+	 * current locale says so ($wp_locale); otherwise a point. (An untranslated site reports "." for every
+	 * locale, so the language decides first.)
+	 */
+	public static function locale_decimal( string $locale ): string {
+		global $wp_locale;
+		if ( self::comma_language( $locale ) ) {
+			return ',';
+		}
+		$current = function_exists( 'determine_locale' ) ? (string) determine_locale() : $locale;
+		$point   = is_object( $wp_locale ) && isset( $wp_locale->number_format['decimal_point'] ) ? (string) $wp_locale->number_format['decimal_point'] : '';
+		return ',' === $point && $current === $locale && ! preg_match( '/^(de|it)_(ch|li)/i', $locale ) ? ',' : '.';
+	}
+
+	/** Languages/regions that write a decimal comma (CLDR), when WordPress does not say otherwise. */
+	private static function comma_language( string $locale ): bool {
+		$parts  = explode( '_', strtolower( $locale ) );
+		$lang   = $parts[0];
+		$region = $parts[1] ?? '';
+		if ( 'de' === $lang && in_array( $region, array( 'ch', 'li' ), true ) ) {
+			return false;
+		}
+		if ( 'it' === $lang && 'ch' === $region ) {
+			return false;
+		}
+		if ( 'es' === $lang && in_array( $region, array( 'mx', 'us', 'pr', 'do', 'gt', 'hn', 'ni', 'pa', 'sv' ), true ) ) {
+			return false;
+		}
+		if ( 'pt' === $lang && '' === $region ) {
+			return true;
+		}
+		return in_array( $lang, array( 'de', 'fr', 'it', 'es', 'nl', 'pl', 'pt', 'cs', 'sk', 'sl', 'hr', 'hu', 'ro', 'bg', 'el', 'da', 'fi', 'sv', 'nb', 'nn', 'et', 'lv', 'lt', 'ru', 'uk', 'tr', 'id', 'ca', 'gl', 'eu', 'is', 'sr', 'bs', 'mk', 'sq', 'az', 'kk', 'be', 'vi' ), true );
 	}
 
 	/** Forget the cached format (tests, locale switches). */

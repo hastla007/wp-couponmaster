@@ -216,6 +216,21 @@ $_POST = array( 'mode' => 'subtract', 'amount' => '20', 'note' => 'In store' );
 $admin->adjust( $gift );
 $flash = Flash::pending();
 vcap_ps_assert( 30.0 === (float) vcap()->vouchers->get( $gift->id )->balance && 'success' === ( end( $flash )['type'] ?? '' ) && false !== strpos( (string) end( $flash )['message'], '30' ), 'a valid deduction is booked and the new remaining value is shown', $flash );
+$_POST = array( 'mode' => 'subtract', 'amount' => '2,50', 'note' => '' );
+$admin->adjust( $gift );
+vcap_ps_assert( 27.5 === (float) vcap()->vouchers->get( $gift->id )->balance, 'Q7: "2,50" deducts 2.50, not 250' );
+foreach ( array( '−5', '1e3', '1.500' ) as $bad_amount ) {
+	$_POST = array( 'mode' => 'add', 'amount' => $bad_amount, 'note' => '' );
+	$admin->adjust( $gift );
+	$flash = Flash::pending();
+	vcap_ps_assert( 27.5 === (float) vcap()->vouchers->get( $gift->id )->balance && 'error' === ( end( $flash )['type'] ?? '' ), 'Q7: "' . $bad_amount . '" is refused with a reason instead of being reinterpreted', $flash );
+}
+$_POST = array( VCAP\Admin\FormToken::FIELD => VCAP\Admin\FormToken::generate() );
+vcap_ps_assert( VCAP\Admin\FormToken::claim( 'adjust-' . $gift->id ) && ! VCAP\Admin\FormToken::claim( 'adjust-' . $gift->id ), 'Q6: a balance adjustment form is accepted once; the double submission is refused' );
+VCAP\Admin\FormToken::release( 'adjust-' . $gift->id );
+vcap_ps_assert( VCAP\Admin\FormToken::claim( 'adjust-' . $gift->id ), 'Q6: a refused (unbooked) form may be sent again after correcting it' );
+$_POST = array( VCAP\Admin\FormToken::FIELD => VCAP\Admin\FormToken::generate() );
+vcap_ps_assert( VCAP\Admin\FormToken::claim( 'adjust-' . $gift->id ), 'Q6: a newly rendered form has its own token' );
 $_POST = array();
 delete_transient( 'vcap_flash_' . get_current_user_id() );
 
@@ -345,6 +360,40 @@ vcap_ps_assert( 'codes_empty' === ProductChecks::unsellable_reason( $pooled ) &&
 $pooled->update_meta_data( '_vcap_code_pool_empty', 'random' );
 $pooled->save();
 vcap_ps_assert( wc_get_product( $pooled->get_id() )->is_purchasable(), 'with "random codes" it can still be bought' );
+
+// Code prefix/suffix/separator (Q2): only characters WooCommerce keeps unchanged.
+$keep_prefix = get_option( 'vcap_code_prefix', false );
+update_option( 'vcap_code_prefix', 'SHOP' );
+$settings_obj = new VCAP\Settings();
+vcap_ps_assert( 'SHOP' === $settings_obj->sanitize_affix( 'B&B', array( 'id' => 'vcap_code_prefix', 'title' => 'Prefix' ) ) && 'GIFT-26' === $settings_obj->sanitize_affix( ' GIFT-26 ', array( 'id' => 'vcap_code_prefix' ) ), 'Q2: a prefix "B&B" is refused (the previous one kept), a valid one is saved' );
+vcap_ps_assert( (string) $settings_obj->get( 'vcap_code_separator' ) === $settings_obj->sanitize_affix( 'x y z', array( 'id' => 'vcap_code_separator' ) ), 'Q2: a separator with spaces is refused' );
+false === $keep_prefix ? delete_option( 'vcap_code_prefix' ) : update_option( 'vcap_code_prefix', $keep_prefix );
+$affix_product = vcap_ps_product( 'PS affix', array( 'code_prefix' => 'OK' ) );
+$_POST         = array( '_vcap_enabled' => 'yes', '_vcap_type' => 'voucher', '_vcap_code_prefix' => 'B&B', '_vcap_code_suffix' => 'END' );
+( new VCAP\ProductSettings() )->save( $affix_product );
+$affix_product->save();
+$_POST         = array();
+$affix_product = wc_get_product( $affix_product->get_id() );
+vcap_ps_assert( 'OK' === $affix_product->get_meta( '_vcap_code_prefix' ) && 'END' === $affix_product->get_meta( '_vcap_code_suffix' ), 'Q2: a product code prefix "B&B" is not saved, a valid suffix is' );
+
+// Import report (H8, Q2, Q10).
+$importer   = new VCAP\Admin\Import( vcap()->code_pool );
+$imp_batch  = 'ps-import-' . wp_generate_password( 6, false, false );
+$imp_code   = static fn() => 'PS-' . strtoupper( wp_generate_password( 12, false, false ) );
+$imp_rows   = array( array( 'Name', 'ID' ), array( 'Anna', $imp_code() ), array( 'Ben', 'B&B-' . strtoupper( wp_generate_password( 12, false, false ) ) ), array( 'Cleo', $imp_code() ) );
+$imp_report = $importer->process( $imp_rows, array( 'batch' => $imp_batch, 'column' => 'ID', 'header' => false, 'format' => 'any' ) );
+vcap_ps_assert( 2 === $imp_report['imported'] && 1 === count( $imp_report['invalid'] ) && str_contains( $imp_report['invalid'][0], 'b&amp;b' ) && 3 === count( $imp_report['preview'] ), 'H8/Q2: the header "ID" is found by name, a code WooCommerce would change is refused with the reason', $imp_report );
+$imp_report = $importer->process( array( array( 'Code', 'Note' ), array( '', 'x' ), array( '', 'y' ) ), array( 'batch' => $imp_batch, 'column' => 'Code', 'header' => true, 'format' => 'any' ) );
+vcap_ps_assert( 0 === $imp_report['imported'] && str_contains( $imp_report['error'], 'Column Code is empty' ), 'H8: an empty column is an error, not a green "0 codes imported"', $imp_report );
+$fail_insert = static function ( $query ) {
+	return str_starts_with( ltrim( $query ), 'INSERT INTO `' . VCAP\Install::tables()['pool'] ) ? 'INSERT INTO vcap_no_such_table_ps (x) VALUES (1)' : $query;
+};
+add_filter( 'query', $fail_insert );
+$GLOBALS['wpdb']->suppress_errors( true );
+$imp_report = $importer->process( array( array( $imp_code() ) ), array( 'batch' => $imp_batch, 'column' => 'A', 'header' => false, 'format' => 'any', 'allow_weak' => true, 'confirm_weak' => true ) );
+$GLOBALS['wpdb']->suppress_errors( false );
+remove_filter( 'query', $fail_insert );
+vcap_ps_assert( 0 === $imp_report['imported'] && 0 === $imp_report['dupes_existing'] && 1 === count( $imp_report['not_saved'] ) && str_contains( $imp_report['not_saved'][0], 'vcap_no_such_table_ps' ), 'Q10: a code the database refused is reported as "not saved" with the reason, not as "already existing"', $imp_report );
 
 /* ---- 14. Customer delivery date: coupled with the delivery, never after the expiry --------------------------- */
 
@@ -496,9 +545,27 @@ vcap_ps_assert( 'percent' === $form->get_meta( '_vcap_discount_type' ) && '25' =
 /* ---- 12. Onboarding ----------------------------------------------------------------------------------------- */
 
 $keep_page = get_option( 'vcap_redeem_page_id', false );
+// Pages with the form left by other suites are moved aside, so a new page is created.
+$aside = array_map( 'intval', $GLOBALS['wpdb']->get_col( "SELECT ID FROM {$GLOBALS['wpdb']->posts} WHERE post_type = 'page' AND post_status = 'publish' AND ( post_content LIKE '%[vcap_redeem%' OR post_content LIKE '%<!-- wp:vcap/redeem%' )" ) );
+foreach ( $aside as $aside_id ) {
+	wp_update_post( array( 'ID' => $aside_id, 'post_status' => 'draft' ) );
+}
+delete_option( 'vcap_redeem_page_id' );
 $page      = VCAP\Admin\Onboarding::create_page( 'redeem_page' );
 vcap_ps_assert( $page > 0 && $page === (int) get_option( 'vcap_redeem_page_id' ) && VCAP\Shortcodes::page_has_redeem_form( $page ) && VCAP\Admin\Onboarding::steps()['redeem_page']['done'], 'the checklist creates the redeem page and selects it' );
+$pages_before = count( get_posts( array( 'post_type' => 'page', 'post_status' => 'publish', 'numberposts' => -1, 'fields' => 'ids' ) ) );
+$again        = VCAP\Admin\Onboarding::create_page( 'redeem_page' );
+vcap_ps_assert( $again === $page && count( get_posts( array( 'post_type' => 'page', 'post_status' => 'publish', 'numberposts' => -1, 'fields' => 'ids' ) ) ) === $pages_before, 'Q6: a second click (double submission) creates no second redeem page' );
+$balance_existed = VCAP\Admin\Onboarding::existing_page( 'balance_page' );
+$balance_page    = VCAP\Admin\Onboarding::create_page( 'balance_page' );
+vcap_ps_assert( $balance_page > 0 && VCAP\Admin\Onboarding::create_page( 'balance_page' ) === $balance_page && ( ! $balance_existed || $balance_existed === $balance_page ), 'Q6: the balance page is created once as well' );
+if ( ! $balance_existed ) {
+	wp_delete_post( $balance_page, true );
+}
 wp_delete_post( $page, true );
+foreach ( $aside as $aside_id ) {
+	wp_update_post( array( 'ID' => $aside_id, 'post_status' => 'publish' ) );
+}
 false === $keep_page ? delete_option( 'vcap_redeem_page_id' ) : update_option( 'vcap_redeem_page_id', $keep_page );
 delete_transient( 'vcap_redeem_page_guess' );
 

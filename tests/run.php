@@ -59,7 +59,8 @@ $taken = array( 'A' => true );
 $calls = 0;
 $unique = CodeGenerator::unique( array( 'length' => 4 ), function ( $c ) use ( &$calls ) { return ++$calls < 3; } );
 check( 'unique() retries on collision', 3 === $calls && 4 === strlen( $unique ) );
-check( 'minimum length for 2^50: 10 letters/digits, 11 letters, 16 digits, 9 mixed case', 10 === CodeGenerator::min_length( 'alnum_upper' ) && 11 === CodeGenerator::min_length( 'alpha_upper' ) && 16 === CodeGenerator::min_length( 'numeric' ) && 9 === CodeGenerator::min_length( 'alnum' ) );
+check( 'minimum length for 2^50: 10 letters/digits, 11 letters, 16 digits, 10 mixed case', 10 === CodeGenerator::min_length( 'alnum_upper' ) && 11 === CodeGenerator::min_length( 'alpha_upper' ) && 16 === CodeGenerator::min_length( 'numeric' ) && 10 === CodeGenerator::min_length( 'alnum' ) );
+check( 'K5: mixed case counts case-insensitively like WooCommerce codes (33 characters, 9 of them only ≈ 45 bits)', 33 === CodeGenerator::effective_alphabet( 'alnum' ) && CodeGenerator::bits( 9, 'alnum' ) < 50 && CodeGenerator::bits( 10, 'alnum' ) >= 50 && abs( CodeGenerator::bits( 10, 'alnum' ) - CodeGenerator::estimated_bits( 'ab3defghjk' ) ) < 1.5 );
 $money_code = CodeGenerator::build( array( 'prefix' => 'GIFT', 'length' => 8, 'charset' => 'numeric', 'min_bits' => CodeGenerator::MIN_BITS ) );
 check( 'codes that carry money are lengthened to the minimum guessing space', (bool) preg_match( '/^GIFT-\d{16}$/', $money_code ), $money_code );
 check( 'other codes keep the configured length', (bool) preg_match( '/^\d{8}$/', CodeGenerator::build( array( 'length' => 8, 'charset' => 'numeric' ) ) ) );
@@ -500,7 +501,69 @@ if ( class_exists( 'ZipArchive' ) ) {
 	$zip->close();
 	check( 'a normal XLSX is still read', array( array( 'CODE-1' ) ) === SpreadsheetReader::read( $ok_file, 'xlsx' ) );
 	unlink( $bomb );
+
+	$far  = "$out/far.xlsx";
+	$zip  = new ZipArchive();
+	$zip->open( $far, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+	$zip->addFromString( 'xl/worksheets/sheet1.xml', '<worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>CODE-1</t></is></c><c r="ZZZZZZ1" t="inlineStr"><is><t>x</t></is></c></row></sheetData></worksheet>' );
+	$zip->close();
+	$refused = '';
+	$peak    = memory_get_usage();
+	try {
+		SpreadsheetReader::read( $far, 'xlsx' );
+	} catch ( RuntimeException $e ) {
+		$refused = $e->getMessage();
+	}
+	check( 'Q9: a cell "ZZZZZZ1" is refused with a message instead of padding the row until memory runs out', str_contains( $refused, 'beyond the last column' ) && memory_get_usage() - $peak < 5 * 1024 * 1024, $refused );
+	$gap = "$out/gap.xlsx";
+	$zip = new ZipArchive();
+	$zip->open( $gap, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+	$zip->addFromString( 'xl/worksheets/sheet1.xml', '<worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>CODE-1</t></is></c><c r="XFD1" t="inlineStr"><is><t>last</t></is></c></row></sheetData></worksheet>' );
+	$zip->close();
+	$gap_rows = SpreadsheetReader::read( $gap, 'xlsx' );
+	check( 'Q9: gaps are not filled (column XFD is read without 16382 empty cells)', 2 === count( $gap_rows[0] ) && 'last' === $gap_rows[0][16383] && 'CODE-1' === $gap_rows[0][0], json_encode( array_keys( $gap_rows[0] ) ) );
+	unlink( $far );
+	unlink( $gap );
 }
+
+$ole = "$out/broken.xls";
+file_put_contents( $ole, "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1" . str_repeat( "\0", 22 ) . pack( 'v', 30 ) . str_repeat( "\xFF", 600 ) );
+$refused = '';
+try {
+	SpreadsheetReader::read( $ole, 'xls' );
+} catch ( RuntimeException $e ) {
+	$refused = $e->getMessage();
+}
+check( 'Q9: an XLS with an impossible sector size is refused as damaged', str_contains( $refused, 'damaged' ), $refused );
+unlink( $ole );
+
+$utf16 = "$out/unicode.txt";
+file_put_contents( $utf16, "\xFF\xFE" . mb_convert_encoding( "code\tnote\r\nÄBC-123\tx\r\nDEF-456\ty\r\n", 'UTF-16LE', 'UTF-8' ) );
+$u_rows = SpreadsheetReader::read( $utf16, 'txt' );
+check( 'Q10: Excel "Unicode text" (UTF-16LE with BOM) is read without NUL bytes', array( 'code', 'ÄBC-123', 'DEF-456' ) === array_column( $u_rows, 0 ), json_encode( $u_rows ) );
+file_put_contents( $utf16, "\xFE\xFF" . mb_convert_encoding( "code\nGHI-789\n", 'UTF-16BE', 'UTF-8' ) );
+check( 'Q10: UTF-16BE with BOM is read as well', array( 'code', 'GHI-789' ) === array_column( SpreadsheetReader::read( $utf16, 'txt' ), 0 ) );
+file_put_contents( $utf16, mb_convert_encoding( "code\nJKL-012\n", 'UTF-16LE', 'UTF-8' ) );
+check( 'Q10: UTF-16LE without BOM is recognised by its NUL bytes', array( 'code', 'JKL-012' ) === array_column( SpreadsheetReader::read( $utf16, 'txt' ), 0 ) );
+file_put_contents( $utf16, "code\n\xC4BC-1\n" );
+check( 'Windows-1252 files are still converted', 'ÄBC-1' === SpreadsheetReader::read( $utf16, 'txt' )[1][0] );
+unlink( $utf16 );
+
+echo "Code import checks (Q2, Q10, H8)\n";
+$fmt_any = "\x01^\\S{1,100}$\x01u";
+check( 'Q2: WC stub formats like WooCommerce 11.3 ("B&B" → "b&amp;b")', 'b&amp;b-1' === wc_format_coupon_code( 'B&B-1' ) && 'abc' === wc_format_coupon_code( ' ABC ' ) );
+check( 'Q2: an imported code WooCommerce would change ("B&B-…", "<b>…") is refused with the reason', str_contains( VCAP\Admin\Import::code_problem( 'B&B-12345678', $fmt_any ), 'b&amp;b' ) && '' !== VCAP\Admin\Import::code_problem( 'X<b>Y</b>', $fmt_any ) );
+check( 'Q2: a code longer than 100 characters is refused before the insert', str_contains( VCAP\Admin\Import::code_problem( str_repeat( 'A', 101 ), "\x01^\\S{1,200}$\x01u" ), '100' ) && '' === VCAP\Admin\Import::code_problem( str_repeat( 'A', 100 ), $fmt_any ) );
+check( 'Q10: codes with control characters (NUL from a misread file) are refused', '' !== VCAP\Admin\Import::code_problem( "A\0B\0C\0", $fmt_any ) && '' !== VCAP\Admin\Import::code_problem( "AB\x7FC", $fmt_any ) );
+check( 'Q2: ordinary codes pass; the format is still checked', '' === VCAP\Admin\Import::code_problem( 'GIFT-K7QM2X9ZPA', $fmt_any ) && str_contains( VCAP\Admin\Import::code_problem( 'ab', "\x01^[A-Z]{4,}$\x01u" ), 'format' ) );
+$col = VCAP\Admin\Import::resolve_column( array( array( 'Name', 'ID', 'Nr' ), array( 'x', 'K7QM2X9ZPA', '1' ) ), 'ID', false );
+check( 'H8: a two-letter header ("ID") is found as a name first, not read as column letters', 1 === $col['index'] && true === $col['header'] && '' === $col['error'], json_encode( $col ) );
+$col = VCAP\Admin\Import::resolve_column( array( array( 'Name', 'Code' ) ), 'B', true );
+check( 'H8: a column letter still works', 1 === $col['index'] && '' === $col['error'] );
+check( 'H8: an unknown column name is an error', '' !== VCAP\Admin\Import::resolve_column( array( array( 'Name' ) ), 'Gutscheincode', true )['error'] );
+check( 'Q2: prefix/suffix/separator only take letters, digits, dot, hyphen, underscore', VCAP\CodeGenerator::valid_affix( 'SHOP_2026.X-' ) && ! VCAP\CodeGenerator::valid_affix( 'B&B' ) && ! VCAP\CodeGenerator::valid_affix( 'Ä' ) && ! VCAP\CodeGenerator::valid_affix( str_repeat( 'A', 21 ) ) && ! VCAP\CodeGenerator::valid_affix( '----', true ) && VCAP\CodeGenerator::valid_affix( '', true ) );
+$built = VCAP\CodeGenerator::build( array( 'prefix' => 'B&B Hotel', 'suffix' => str_repeat( 'Z', 40 ), 'order_ref' => str_repeat( '9', 40 ), 'length' => 40, 'separator' => ' & ' ) );
+check( 'Q2: generated codes never contain characters WooCommerce changes and stay within 100 characters', strlen( $built ) <= 100 && wc_format_coupon_code( $built ) === strtolower( $built ) && str_starts_with( $built, 'BBHotel' ), $built );
 
 echo "Translations\n";
 /** @return array<string, array{0: string[], 1: ?string, 2: bool}> key (context \x04 msgid) => [msgstr forms, msgid_plural, fuzzy] */
@@ -826,6 +889,57 @@ $amount_config = array( 'custom_presets' => '25, 50;100' ) + ProductConfig::DEFA
 check( 'suggested amount chosen without JavaScript (radio button) is the amount', '50' === VCAP\CustomAmount::posted_amount( $amount_config, array( 'vcap_amount_preset' => '50', 'vcap_amount' => '' ) ) );
 check( 'a typed amount wins over the chosen suggestion', '37' === VCAP\CustomAmount::posted_amount( $amount_config, array( 'vcap_amount_preset' => '50', 'vcap_amount' => '37' ) ) );
 check( 'only configured suggestions count', '' === VCAP\CustomAmount::posted_amount( $amount_config, array( 'vcap_amount_preset' => '5000' ) ) && '' === VCAP\CustomAmount::posted_amount( $amount_config, array( 'vcap_amount_preset' => array( '50' ) ) ) );
+
+echo "Strict amounts (Q7, H12, H13)\n";
+$amt = static fn( $raw, array $o = array() ) => VCAP\Amount::parse( $raw, $o + array( 'decimals' => 2, 'decimal_sep' => '.', 'strip' => array( 'EUR', '€' ) ) );
+check( 'Q7: "2,50" in a shop with a decimal point is 2.50, never 250', 250 === $amt( '2,50' )['minor'] && 2.5 === $amt( '2,50' )['value'] );
+check( 'Q7: "12,50 €", "€ 1.234,50" and "1 234,50" are read like the scanner', 1250 === $amt( '12,50 €' )['minor'] && 123450 === $amt( '€ 1.234,50' )['minor'] && 123450 === $amt( '1 234,50' )['minor'] && 123450 === $amt( "1'234.50" )['minor'] );
+check( 'Q7: a Unicode minus or dash is "negative", not +5', 'negative' === $amt( '−5' )['error'] && 'negative' === $amt( '–5' )['error'] && 'negative' === $amt( '-5' )['error'] );
+check( 'Q7: with a sign allowed, "−5" is -5 and "+10" is 10', -5.0 === $amt( '−5', array( 'allow_negative' => true ) )['value'] && 10.0 === $amt( '+10', array( 'allow_negative' => true ) )['value'] && 'invalid' === $amt( '+10' )['error'] );
+check( 'Q7: "1e3", "12,50; 25", "1..5" and "abc" are invalid instead of 13 / 12 / guesses', 'invalid' === $amt( '1e3' )['error'] && 'invalid' === $amt( '12,50; 25' )['error'] && 'invalid' === $amt( '1..5' )['error'] && 'invalid' === $amt( 'abc' )['error'] && 'invalid' === $amt( array( '5' ) )['error'] );
+check( 'Q7: "1.500" is ambiguous with two decimals, 1.5 with three decimals and a decimal point', 'ambiguous' === $amt( '1.500' )['error'] && 1500 === $amt( '1.500', array( 'decimals' => 3 ) )['minor'] && 'ambiguous' === $amt( '1,500', array( 'decimals' => 3 ) )['error'] );
+check( 'Q7: too many decimals, zero and empty are refused with their reason', 'decimals' === $amt( '0,999' )['error'] && 'zero' === $amt( '0' )['error'] && 'empty' === $amt( ' € ' )['error'] && $amt( '0', array( 'allow_zero' => true ) )['ok'] );
+check( 'Q7: the reason is explained (e.g. ambiguous with an example)', false !== strpos( VCAP\Amount::message( 'ambiguous', 2 ), 'ambiguous' ) && false !== strpos( VCAP\Amount::message( 'decimals', 0 ), 'no decimal' ) );
+check( 'H13: suggested amounts are separated by semicolons, "12,50" stays one amount', array( 12.5, 25.0 ) === VCAP\Amount::parse_list( '12,50; 25' )['values'] && array( 12.5, 25.0, 50.0 ) === VCAP\Amount::parse_list( "12,50\n25\n50" )['values'] );
+check( 'H13: legacy comma lists still work ("10, 25, 50", "10,25,50")', array( 10.0, 25.0, 50.0 ) === VCAP\Amount::parse_list( '10, 25, 50' )['values'] && array( 10.0, 25.0, 50.0 ) === VCAP\Amount::parse_list( '10,25,50' )['values'] );
+$preset_config = array( 'amount_source' => 'custom', 'custom_presets' => '12,50; 25; zehn', 'custom_min' => '', 'custom_max' => '', 'custom_step' => '0.5' ) + ProductConfig::DEFAULTS;
+check( 'H13: presets become plain numbers; an unreadable entry is reported on the product screen', array( '12.5', '25' ) === VCAP\CustomAmount::presets( $preset_config ) && (bool) array_filter( VCAP\CustomAmount::config_errors( $preset_config ), static fn( $e ) => false !== strpos( $e, '"zehn"' ) && false !== strpos( $e, 'semicolon' ) ), json_encode( VCAP\CustomAmount::config_errors( $preset_config ) ) );
+check( 'Q7: a typed "12,50" is the amount 12.50; "1e3" is handed on and refused', '12.5' === VCAP\CustomAmount::posted_amount( $preset_config, array( 'vcap_amount' => '12,50' ) ) && null !== VCAP\CustomAmount::error_for( $preset_config, VCAP\CustomAmount::posted_amount( $preset_config, array( 'vcap_amount' => '1e3' ) ) ) );
+$range_config = array( 'amount_source' => 'custom', 'custom_presets' => '', 'custom_min' => '10', 'custom_max' => '200', 'custom_step' => '5' ) + ProductConfig::DEFAULTS;
+$range_error  = (string) VCAP\CustomAmount::error_for( $range_config, '250' );
+check( 'H12: the range error names both limits', false !== strpos( $range_error, '10,00' ) && false !== strpos( $range_error, '200,00' ), $range_error );
+check( 'H12: a minimum or maximum alone is named as well', false !== strpos( (string) VCAP\CustomAmount::error_for( array( 'custom_max' => '' ) + $range_config, '5' ), 'at least 10,00' ) && false !== strpos( (string) VCAP\CustomAmount::error_for( array( 'custom_min' => '' ) + $range_config, '250' ), 'more than 200,00' ) );
+$step_error = (string) VCAP\CustomAmount::error_for( $range_config, '12' );
+check( 'H12: the step error names the step and the nearest allowed amounts', false !== strpos( $step_error, 'steps of 5,00' ) && false !== strpos( $step_error, '10,00' ) && false !== strpos( $step_error, '15,00' ), $step_error );
+check( 'Q7/H12: an ambiguous amount says why instead of "outside the range"', false !== strpos( (string) VCAP\CustomAmount::error_for( $range_config, '1.500' ), 'ambiguous' ) );
+check( 'Q7: number fields are read strictly ("2,50" = 2.5, "1e3" refused)', '2.5' === VCAP\Fields::parse_number( '2,50' ) && null === VCAP\Fields::parse_number( '1e3' ) && '-3' === VCAP\Fields::parse_number( '−3' ) );
+
+echo "CSV export format (A15)\n";
+check( 'A15: decimal comma for fr/it/es/nl/pl/de, point for de_CH(_informal) and en', ',' === VCAP\Csv::locale_decimal( 'fr_FR' ) && ',' === VCAP\Csv::locale_decimal( 'it_IT' ) && ',' === VCAP\Csv::locale_decimal( 'es_ES' ) && ',' === VCAP\Csv::locale_decimal( 'nl_NL' ) && ',' === VCAP\Csv::locale_decimal( 'pl_PL' ) && ',' === VCAP\Csv::locale_decimal( 'de_DE_formal' ) && '.' === VCAP\Csv::locale_decimal( 'de_CH_informal' ) && '.' === VCAP\Csv::locale_decimal( 'de_CH' ) && '.' === VCAP\Csv::locale_decimal( 'en_US' ) && '.' === VCAP\Csv::locale_decimal( 'es_MX' ) );
+$GLOBALS['wp_locale'] = (object) array( 'number_format' => array( 'decimal_point' => ',', 'thousands_sep' => ' ' ) );
+check( 'A15: an unknown language follows WordPress\' number format of the current locale', ',' === VCAP\Csv::locale_decimal( 'xx_XX' ) );
+unset( $GLOBALS['wp_locale'] );
+VCAP\Csv::reset();
+check( 'A15: a decimal comma comes with ";" as the field separator', array( 'separator' => ';', 'decimal' => ',' ) === VCAP\Csv::format() );
+$report_csv = VCAP\Reports::csv_rows( array( array( 'type' => 'coupon', 'name' => 'X (JPY)', 'issued' => null, 'uses' => 1, 'orders' => 1, 'discount' => 500.0, 'revenue' => 4500.0, 'currency' => 'JPY' ), array( 'type' => 'coupon', 'name' => 'Y', 'issued' => null, 'uses' => 1, 'orders' => 1, 'discount' => 5.0, 'revenue' => 45.0 ) ) );
+check( 'A15: the report CSV names each row\'s own currency (with its decimals)', 'JPY' === $report_csv[1][7] && '500' === $report_csv[1][5] && 'EUR' === $report_csv[2][7] && '5,00' === $report_csv[2][5], json_encode( $report_csv ) );
+VCAP\Csv::reset();
+
+echo "Expiry date on the edit form (Q13)\n";
+$pe   = array( VCAP\Admin\VoucherAdmin::class, 'parse_expiry' );
+$next = ( (int) wp_date( 'Y' ) + 1 ) . '-06-30';
+check( 'Q13: a plausible date is taken', array( 'ok' => true, 'date' => $next, 'error' => '' ) === $pe( $next, false, '2030-01-01' ) );
+check( 'Q13: "0026-12-31" (year typed as "26") and a date 60 years ahead are refused', ! $pe( '0026-12-31', false, '' )['ok'] && ! $pe( ( (int) wp_date( 'Y' ) + 60 ) . '-01-01', false, '' )['ok'] && ! $pe( '2027-02-30', false, '' )['ok'] );
+check( 'Q13: an emptied field is not "never expires" – only the checkbox is', ! $pe( '', false, '2030-01-01' )['ok'] && array( 'ok' => true, 'date' => null, 'error' => '' ) === $pe( '', true, '2030-01-01' ) && $pe( '', false, '' )['ok'] );
+check( 'Q13: an unchanged old date of an expired voucher can still be saved', array( 'ok' => true, 'date' => '2019-12-31', 'error' => '' ) === $pe( '2019-12-31', false, '2019-12-31' ) );
+
+echo "Required field hints (H14)\n";
+$req_defs = VCAP\Fields::builtin_definitions( array_merge( ProductConfig::DEFAULTS, array( 'builtin_fields' => array( 'recipient_email', 'recipient_email_required', 'delivery_date', 'delivery_date_required' ) ) ) );
+check( 'H14: required recipient email and delivery date do not say "leave empty"', true === $req_defs['recipient_email']['required'] && false === stripos( $req_defs['recipient_email']['tooltip'], 'leave empty' ) && false === stripos( $req_defs['delivery_date']['tooltip'], 'leave empty' ) && '' !== $req_defs['delivery_date']['tooltip'], json_encode( array( $req_defs['recipient_email']['tooltip'], $req_defs['delivery_date']['tooltip'] ) ) );
+$opt_defs = VCAP\Fields::builtin_definitions( array_merge( ProductConfig::DEFAULTS, array( 'builtin_fields' => array( 'recipient_email', 'delivery_date' ) ) ) );
+check( 'H14: optional fields keep the "leave empty" hint', false !== stripos( $opt_defs['recipient_email']['tooltip'], 'leave empty' ) && false !== stripos( $opt_defs['delivery_date']['tooltip'], 'leave empty' ) );
+$req_buyer = VCAP\Fields::builtin_definitions( array_merge( ProductConfig::DEFAULTS, array( 'send_to' => 'buyer', 'email_restrict' => 'recipient', 'builtin_fields' => array( 'recipient_email', 'recipient_email_required' ) ) ) );
+check( 'H14: "buyer only" with a required address drops "(yours, if you leave it empty)"', false === stripos( $req_buyer['recipient_email']['tooltip'], 'leave it empty' ) && false !== strpos( $req_buyer['recipient_email']['tooltip'], 'Only this address' ) );
 
 $GLOBALS['vcap_test_options']['vcap_terms_by_country'] = "AT: Austria terms\nDE: Germany terms";
 $GLOBALS['vcap_test_options']['vcap_default_terms']    = 'General terms';

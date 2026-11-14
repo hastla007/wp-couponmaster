@@ -11,6 +11,9 @@ defined( 'ABSPATH' ) || exit;
  * Issued vouchers: list/search/filter/export, detail view, edits, balance adjustments, resend, void.
  */
 final class VoucherAdmin {
+	/** Whether the last adjust() booked a change (a refused form may be sent again, see FormToken). */
+	private bool $booked = false;
+
 	public function __construct( private VoucherRepository $repo ) {}
 
 	public function register(): void {
@@ -234,7 +237,7 @@ final class VoucherAdmin {
 									<?php endforeach; ?>
 								</select>
 							</td></tr>
-							<tr><th><label for="vcap-exp"><?php esc_html_e( 'Expiry date', 'voucher-captain' ); ?></label></th><td><input type="date" id="vcap-exp" name="expires_at" value="<?php echo esc_attr( $v->expires_at ? get_date_from_gmt( $v->expires_at, 'Y-m-d' ) : '' ); ?>" /> <span class="description"><?php esc_html_e( 'Empty = never', 'voucher-captain' ); ?></span></td></tr>
+							<tr><th><label for="vcap-exp"><?php esc_html_e( 'Expiry date', 'voucher-captain' ); ?></label></th><td><input type="date" id="vcap-exp" name="expires_at" min="<?php echo esc_attr( self::expiry_bounds()[0] ); ?>" max="<?php echo esc_attr( self::expiry_bounds()[1] ); ?>" value="<?php echo esc_attr( $v->expires_at ? get_date_from_gmt( $v->expires_at, 'Y-m-d' ) : '' ); ?>" /> <label><input type="checkbox" name="expires_never" value="1" <?php checked( ! $v->expires_at ); ?> /> <?php esc_html_e( 'Never expires', 'voucher-captain' ); ?></label></td></tr>
 							<tr><th><label for="vcap-del"><?php esc_html_e( 'Delivery date', 'voucher-captain' ); ?></label></th><td><input type="datetime-local" id="vcap-del" name="delivery_at" value="<?php echo esc_attr( $v->delivery_at && ! $v->delivered_at ? get_date_from_gmt( $v->delivery_at, 'Y-m-d\TH:i' ) : '' ); ?>" /> <span class="description"><?php esc_html_e( 'Set a future date to (re)schedule delivery.', 'voucher-captain' ); ?></span></td></tr>
 							<?php if ( $v->is_ticket() ) : ?>
 								<tr><th><label for="vcap-mc"><?php esc_html_e( 'Admissions', 'voucher-captain' ); ?></label></th><td><input type="number" min="1" id="vcap-mc" name="max_checkins" value="<?php echo esc_attr( (string) $v->max_checkins ); ?>" /></td></tr>
@@ -265,6 +268,7 @@ final class VoucherAdmin {
 							<input type="hidden" name="confirm_above" value="" />
 							<input type="hidden" name="id" value="<?php echo esc_attr( (string) $v->id ); ?>" />
 							<?php wp_nonce_field( 'vcap_voucher_' . $v->id ); ?>
+							<?php echo FormToken::field(); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in field(). ?>
 							<label class="screen-reader-text" for="vcap-adj-mode"><?php esc_html_e( 'Mode', 'voucher-captain' ); ?></label>
 							<select name="mode" id="vcap-adj-mode">
 								<option value="subtract"><?php esc_html_e( 'Deduct', 'voucher-captain' ); ?></option>
@@ -375,7 +379,17 @@ final class VoucherAdmin {
 				$this->redirect( vcap()->issuer->reactivate( $v ) ? 'reactivated' : 'action_failed', $id );
 				break;
 			case 'adjust':
-				$this->redirect( $this->adjust( $v ), $id );
+				// One booking per rendered form: a double click or a resent form must not book the amount twice.
+				if ( ! FormToken::claim( 'adjust-' . $id ) ) {
+					Flash::add( 'warning', __( 'This balance adjustment was already submitted and has not been booked again. Check the history below before entering it once more.', 'voucher-captain' ) );
+					$this->redirect( '', $id );
+				}
+				$this->booked = false;
+				$msg          = $this->adjust( $v );
+				if ( ! $this->booked ) {
+					FormToken::release( 'adjust-' . $id ); // Nothing was booked: the corrected form may be sent again.
+				}
+				$this->redirect( $msg, $id );
 				break;
 			case 'redeem_store':
 				$this->redirect( $this->redeem_store( $v ), $id );
@@ -464,12 +478,25 @@ final class VoucherAdmin {
 		$confirm = ! empty( $_POST['confirm_above'] );
 		// phpcs:enable
 		$mode    = in_array( $mode, array( 'subtract', 'add', 'set' ), true ) ? $mode : 'subtract';
-		$decimal = '' !== $raw ? (string) wc_format_decimal( $raw ) : '';
-		$amount  = round( (float) $decimal, $v->decimals() );
-		if ( '' === $decimal || ! is_numeric( $decimal ) || $amount < 0 || ( 'set' !== $mode && $amount <= 0 ) ) {
-			Flash::add( 'error', 'set' === $mode ? __( 'Please enter the new remaining value (0 or more).', 'voucher-captain' ) : __( 'Please enter an amount greater than 0.', 'voucher-captain' ) );
+		// Strict like the scanner: "2,50" is never 250, "−5" never +5, "1e3" never 13 (see \VCAP\Amount).
+		$parsed = \VCAP\Amount::parse(
+			$raw,
+			array(
+				'decimals'   => $v->decimals(),
+				'strip'      => array( $v->currency, html_entity_decode( get_woocommerce_currency_symbol( $v->currency ), ENT_QUOTES, 'UTF-8' ) ),
+				'allow_zero' => 'set' === $mode,
+			)
+		);
+		if ( ! $parsed['ok'] ) {
+			if ( in_array( $parsed['error'], array( 'empty', 'zero' ), true ) ) {
+				Flash::add( 'error', 'set' === $mode ? __( 'Please enter the new remaining value (0 or more).', 'voucher-captain' ) : __( 'Please enter an amount greater than 0.', 'voucher-captain' ) );
+			} else {
+				/* translators: 1: what was entered, 2: why it was refused */
+				Flash::add( 'error', sprintf( __( '"%1$s" was not accepted: %2$s Nothing was changed.', 'voucher-captain' ), $raw, \VCAP\Amount::message( $parsed['error'], $v->decimals() ) ) );
+			}
 			return '';
 		}
+		$amount = $parsed['value'];
 		$fresh   = $this->repo->get( $v->id ) ?? $v;
 		$current = (float) $fresh->balance;
 		if ( 'subtract' === $mode && $amount > $current + 0.000001 ) {
@@ -503,7 +530,8 @@ final class VoucherAdmin {
 		if ( ! $ok ) {
 			return 'adjust_failed';
 		}
-		$after = $this->repo->get( $v->id );
+		$this->booked = true;
+		$after        = $this->repo->get( $v->id );
 		/* translators: %s: new remaining value */
 		Flash::add( 'success', sprintf( __( 'Balance updated. New remaining value: %s.', 'voucher-captain' ), self::money( $after ? (float) $after->balance : $amount, $v->currency ) ) );
 		return '';
@@ -528,10 +556,53 @@ final class VoucherAdmin {
 		return $tickets->redeem_single( $v, __( 'Marked as redeemed in the store by an admin', 'voucher-captain' ) ) ? 'redeemed_store' : 'redeem_failed';
 	}
 
+	/** @return array{0:string,1:string} earliest and latest expiry date an admin may enter (Y-m-d, site time). */
+	public static function expiry_bounds(): array {
+		$year = (int) wp_date( 'Y' );
+		return array( ( $year - 1 ) . wp_date( '-m-d' ), ( $year + 50 ) . wp_date( '-m-d' ) );
+	}
+
+	/**
+	 * Expiry entered on the edit form: a real date within [today − 1 year, today + 50 years] ("0026-12-31" from a
+	 * year typed as "26" is refused), "never" only via its own checkbox (an emptied field is not "never").
+	 *
+	 * @return array{ok:bool, date:?string, error:string} date: Y-m-d, null = never expires
+	 */
+	public static function parse_expiry( string $raw, bool $never, string $current ): array {
+		if ( $never ) {
+			return array( 'ok' => true, 'date' => null, 'error' => '' );
+		}
+		$raw = trim( $raw );
+		if ( '' === $raw ) {
+			return '' === $current
+				? array( 'ok' => true, 'date' => null, 'error' => '' ) // Unchanged: it never expired before either.
+				: array( 'ok' => false, 'date' => null, 'error' => __( 'Please enter an expiry date, or tick "Never expires". The voucher was not saved.', 'voucher-captain' ) );
+		}
+		if ( $raw === $current ) {
+			return array( 'ok' => true, 'date' => $raw, 'error' => '' ); // Unchanged (also an old date of an expired voucher).
+		}
+		list( $min, $max ) = self::expiry_bounds();
+		if ( ! preg_match( '/^(\d{4})-(\d{2})-(\d{2})$/', $raw, $m ) || ! checkdate( (int) $m[2], (int) $m[3], (int) $m[1] ) || $raw < $min || $raw > $max ) {
+			return array(
+				'ok'    => false,
+				'date'  => null,
+				/* translators: 1: date entered, 2: earliest allowed date, 3: latest allowed date */
+				'error' => sprintf( __( 'The expiry date "%1$s" is not plausible: please enter a date between %2$s and %3$s. The voucher was not saved.', 'voucher-captain' ), $raw, $min, $max ),
+			);
+		}
+		return array( 'ok' => true, 'date' => $raw, 'error' => '' );
+	}
+
 	public function save( Voucher $v ): bool {
 		$from_status   = $v->status;
 		$old_recipient = $v->recipient_email;
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified in handle_action().
+		$current = $v->expires_at ? get_date_from_gmt( $v->expires_at, 'Y-m-d' ) : '';
+		$expiry  = self::parse_expiry( sanitize_text_field( wp_unslash( $_POST['expires_at'] ?? '' ) ), ! empty( $_POST['expires_never'] ), $current );
+		if ( ! $expiry['ok'] ) {
+			Flash::add( 'error', $expiry['error'] );
+			return false;
+		}
 		$email_raw = trim( sanitize_text_field( wp_unslash( $_POST['recipient_email'] ?? '' ) ) );
 		if ( '' !== $email_raw && ! is_email( sanitize_email( $email_raw ) ) ) {
 			/* translators: %s: what was entered */
@@ -554,11 +625,9 @@ final class VoucherAdmin {
 				$v->status = Voucher::STATUS_ACTIVE;
 			}
 		}
-		$exp = sanitize_text_field( wp_unslash( $_POST['expires_at'] ?? '' ) );
-		$current       = $v->expires_at ? get_date_from_gmt( $v->expires_at, 'Y-m-d' ) : '';
-		if ( $exp !== $current ) {
+		if ( (string) $expiry['date'] !== $current ) {
 			// Only touch the stored time when the date was actually changed.
-			$v->expires_at = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $exp ) ? get_gmt_from_date( $exp . ' 23:59:59' ) : null;
+			$v->expires_at = null !== $expiry['date'] ? get_gmt_from_date( $expiry['date'] . ' 23:59:59' ) : null;
 		}
 		if ( Voucher::STATUS_EXPIRED === $v->status && ! $v->is_expired() ) {
 			$v->status = Voucher::STATUS_ACTIVE;

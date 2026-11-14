@@ -20,16 +20,40 @@ final class CodeGenerator {
 	 */
 	public const MIN_BITS = 50;
 
-	/** Bits of a random code: length × log2(alphabet size). */
-	public static function bits( int $length, string $charset = 'alnum_upper' ): float {
+	/** Longest code the voucher table and WooCommerce lookups take (vouchers.code is varchar(100)). */
+	public const MAX_CODE_LENGTH = 100;
+	/** Characters a prefix, suffix or separator may use: they survive wc_format_coupon_code() unchanged. */
+	public const AFFIX_PATTERN = '/^[A-Za-z0-9._-]{0,20}$/';
+	/** Separators are kept short so that prefix, order number, random part and suffix fit MAX_CODE_LENGTH. */
+	public const SEPARATOR_PATTERN = '/^[A-Za-z0-9._-]{0,3}$/';
+
+	/** Whether a prefix/suffix (or, with $separator, a separator) may be used in codes. */
+	public static function valid_affix( string $value, bool $separator = false ): bool {
+		return (bool) preg_match( $separator ? self::SEPARATOR_PATTERN : self::AFFIX_PATTERN, $value );
+	}
+
+	/** Removes what a code part may not contain (settings saved before the check, filters). */
+	private static function clean_part( string $value, int $max ): string {
+		return substr( (string) preg_replace( '/[^A-Za-z0-9._-]/', '', $value ), 0, $max );
+	}
+
+	/**
+	 * Characters of a charset that are told apart when a code is entered. WooCommerce codes are case-insensitive,
+	 * so "a" and "A" are one character: the mixed-case set has 33, not 56 (estimated_bits() folds the same way).
+	 */
+	public static function effective_alphabet( string $charset = 'alnum_upper' ): int {
 		$chars = self::CHARSETS[ $charset ] ?? self::CHARSETS['alnum_upper'];
-		return $length * log( strlen( $chars ), 2 );
+		return count( array_unique( str_split( strtolower( $chars ) ) ) );
+	}
+
+	/** Bits of a random code: length × log2(effective alphabet size). */
+	public static function bits( int $length, string $charset = 'alnum_upper' ): float {
+		return $length * log( self::effective_alphabet( $charset ), 2 );
 	}
 
 	/** Shortest random part of a charset that reaches $bits (e.g. 10 letters/digits, 16 digits for 2^50). */
 	public static function min_length( string $charset = 'alnum_upper', int $bits = self::MIN_BITS ): int {
-		$chars = self::CHARSETS[ $charset ] ?? self::CHARSETS['alnum_upper'];
-		return (int) ceil( $bits / log( strlen( $chars ), 2 ) - 1e-9 );
+		return (int) ceil( $bits / log( self::effective_alphabet( $charset ), 2 ) - 1e-9 );
 	}
 
 	/**
@@ -313,22 +337,18 @@ final class CodeGenerator {
 	 *        min_bits: the random part is made long enough for this guessing space (codes that carry money).
 	 */
 	public static function build( array $opts ): string {
-		$sep     = (string) ( $opts['separator'] ?? '-' );
+		// Only characters WooCommerce keeps as they are ("B&B" would become "b&amp;b" and never be found again).
+		$sep     = self::clean_part( (string) ( $opts['separator'] ?? '-' ), 3 );
 		$charset = (string) ( $opts['charset'] ?? 'alnum_upper' );
 		$length  = max( 4, min( 40, (int) ( $opts['length'] ?? 12 ) ) );
 		if ( ! empty( $opts['min_bits'] ) ) {
 			$length = max( $length, min( 40, self::min_length( $charset, (int) $opts['min_bits'] ) ) );
 		}
-		$parts = array_filter(
-			array(
-				trim( (string) ( $opts['prefix'] ?? '' ) ),
-				trim( (string) ( $opts['order_ref'] ?? '' ) ),
-				self::random( $length, $charset ),
-				trim( (string) ( $opts['suffix'] ?? '' ) ),
-			),
-			'strlen'
-		);
-		return implode( $sep, $parts );
+		$prefix = self::clean_part( trim( (string) ( $opts['prefix'] ?? '' ) ), 20 );
+		$ref    = self::clean_part( trim( (string) ( $opts['order_ref'] ?? '' ) ), 20 );
+		$suffix = self::clean_part( trim( (string) ( $opts['suffix'] ?? '' ) ), 20 );
+		$parts  = array_filter( array( $prefix, $ref, self::random( $length, $charset ), $suffix ), 'strlen' );
+		return substr( implode( $sep, $parts ), 0, self::MAX_CODE_LENGTH ); // At most 20+20+40+20+3×3 = 109: trimmed at the end.
 	}
 
 	/**

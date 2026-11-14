@@ -79,6 +79,7 @@ final class CampaignAdmin {
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 					<input type="hidden" name="action" value="vcap_generate_codes" />
 					<?php wp_nonce_field( 'vcap_generate_codes' ); ?>
+					<?php echo FormToken::field(); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in field(). ?>
 					<table class="form-table" role="presentation">
 						<tr>
 							<th scope="row"><?php esc_html_e( 'Create', 'voucher-captain' ); ?></th>
@@ -162,6 +163,22 @@ final class CampaignAdmin {
 		if ( ! $this->can() ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
+		// One run per rendered form: a retried request ("1000 codes" twice) must not generate 2000 codes.
+		if ( ! FormToken::claim( 'generate' ) ) {
+			set_transient(
+				self::REPORT . get_current_user_id(),
+				array(
+					'error'   => '',
+					'message' => __( 'This form was already submitted; no further codes were generated. The codes of the first run are listed below.', 'voucher-captain' ),
+					'count'   => 0,
+					'name'    => '',
+					'target'  => '',
+				),
+				10 * MINUTE_IN_SECONDS
+			);
+			wp_safe_redirect( admin_url( 'admin.php?page=vcap-generate' ) );
+			exit;
+		}
 		$target = 'pool' === sanitize_key( wp_unslash( $_POST['target'] ?? '' ) ) ? 'pool' : 'coupons';
 		$name   = Campaigns::clean_name( wp_unslash( (string) ( $_POST['name'] ?? '' ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		$count  = absint( $_POST['count'] ?? 0 );
@@ -173,6 +190,9 @@ final class CampaignAdmin {
 		$result = 'pool' === $target
 			? $this->campaigns->generate_pool( $name, $count, $opts )
 			: $this->campaigns->generate_coupons( absint( $_POST['template'] ?? 0 ), $name, $count, $opts );
+		if ( is_wp_error( $result ) ) {
+			FormToken::release( 'generate' ); // Nothing was generated: the corrected form may be sent again.
+		}
 		set_transient(
 			self::REPORT . get_current_user_id(),
 			array(

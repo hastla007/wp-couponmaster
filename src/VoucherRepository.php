@@ -244,7 +244,9 @@ final class VoucherRepository {
 			$vals[]  = gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS );
 		}
 		if ( 'soon' === $args['expiring'] ) {
-			$where[] = 'expires_at BETWEEN %s AND %s';
+			// Only vouchers that can still be used and are worth something (the list to write to before they expire):
+			// active or scheduled, with a remaining value or, for tickets, admissions left.
+			$where[] = "expires_at BETWEEN %s AND %s AND status IN ('active','scheduled') AND ( balance > 0 OR ( type = 'ticket' AND checkins < max_checkins ) )";
 			array_push( $vals, $this->now(), gmdate( 'Y-m-d H:i:s', time() + 30 * DAY_IN_SECONDS ) );
 		}
 		$allowed = array( 'id', 'code', 'balance', 'initial_amount', 'expires_at', 'created_at', 'status', 'order_id' );

@@ -51,7 +51,8 @@ final class Import {
 			<p><?php esc_html_e( 'Upload a list of pre-generated codes (e.g. printed cards or codes from a partner). Assign the batch to a voucher product under Product data → Voucher → Code source; each sale uses the next free code.', 'voucher-captain' ); ?></p>
 
 			<?php if ( is_array( $report ) ) : ?>
-				<div class="notice <?php echo $report['error'] ? 'notice-error' : 'notice-success'; ?>">
+				<?php $report += self::empty_report(); ?>
+				<div class="notice <?php echo $report['error'] || ! $report['imported'] ? 'notice-error' : 'notice-success'; ?>">
 					<?php if ( $report['error'] ) : ?>
 						<p><?php echo esc_html( $report['error'] ); ?></p>
 					<?php else : ?>
@@ -60,6 +61,9 @@ final class Import {
 							<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Duplicates within the file skipped: %d', 'voucher-captain' ), $report['dupes_file'] ) ); ?></li>
 							<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Already existing codes skipped: %d', 'voucher-captain' ), $report['dupes_existing'] ) ); ?></li>
 							<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Invalid codes skipped: %d', 'voucher-captain' ), count( $report['invalid'] ) ) ); ?></li>
+							<?php if ( $report['not_saved'] ) : ?>
+								<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Codes not saved (database error): %d', 'voucher-captain' ), count( $report['not_saved'] ) ) ); ?></li>
+							<?php endif; ?>
 							<?php if ( ! empty( $report['weak'] ) ) : ?>
 								<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Codes too easy to guess skipped: %d', 'voucher-captain' ), count( $report['weak'] ) ) ); ?></li>
 							<?php endif; ?>
@@ -87,6 +91,14 @@ final class Import {
 								<ul><?php foreach ( array_slice( $report['invalid'], 0, 100 ) as $row ) : ?><li><?php echo esc_html( $row ); ?></li><?php endforeach; ?></ul>
 							</details>
 						<?php endif; ?>
+						<?php if ( $report['not_saved'] ) : ?>
+							<details><summary><?php esc_html_e( 'Show codes that were not saved', 'voucher-captain' ); ?></summary>
+								<ul><?php foreach ( array_slice( $report['not_saved'], 0, 100 ) as $row ) : ?><li><?php echo esc_html( $row ); ?></li><?php endforeach; ?></ul>
+							</details>
+						<?php endif; ?>
+					<?php endif; ?>
+					<?php if ( $report['preview'] ) : ?>
+						<p><?php echo esc_html( sprintf( /* translators: 1: column, 2: first values of the column */ __( 'First values read from column %1$s: %2$s', 'voucher-captain' ), $report['column'], implode( ', ', $report['preview'] ) ) ); ?></p>
 					<?php endif; ?>
 				</div>
 			<?php endif; ?>
@@ -183,19 +195,7 @@ final class Import {
 		if ( ! $this->can() ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
-		$report = array(
-			'error'            => '',
-			'batch'            => '',
-			'imported'         => 0,
-			'dupes_file'       => 0,
-			'dupes_existing'   => 0,
-			'invalid'          => array(),
-			'weak'             => array(),
-			'weak_imported'    => 0,
-			'sequential'       => false,
-			'check_digit'      => false,
-			'weak_unconfirmed' => false,
-		);
+		$report = self::empty_report();
 		$batch = sanitize_text_field( wp_unslash( $_POST['batch'] ?? '' ) );
 		if ( '' === $batch ) {
 			$report['error'] = __( 'Please enter a batch name.', 'voucher-captain' );
@@ -226,55 +226,171 @@ final class Import {
 			$this->finish( $report );
 		}
 
-		$pattern = wp_unslash( (string) ( $_POST['pattern'] ?? '' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- used as regex only.
-		$format  = sanitize_key( wp_unslash( (string) ( $_POST['format'] ?? '' ) ) );
-		if ( isset( self::formats()[ $format ] ) && 'custom' !== $format ) {
-			$pattern = self::formats()[ $format ]['regex'];
-		}
-		$regex   = "\x01" . str_replace( "\x01", '', $pattern ?: '^[A-Za-z0-9._-]{4,64}$' ) . "\x01u"; // Control-char delimiter: the pattern needs no escaping.
-		if ( false === @preg_match( $regex, '' ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors
-			$report['error'] = __( 'The "Allowed format" is not a valid regular expression.', 'voucher-captain' );
-			$this->finish( $report );
-		}
+		$this->finish(
+			$this->process(
+				$rows,
+				array(
+					'batch'        => $batch,
+					'column'       => sanitize_text_field( wp_unslash( $_POST['column'] ?? 'A' ) ),
+					'header'       => ! empty( $_POST['header'] ),
+					'uppercase'    => ! empty( $_POST['uppercase'] ),
+					'allow_weak'   => ! empty( $_POST['allow_weak'] ),
+					'confirm_weak' => ! empty( $_POST['confirm_weak'] ),
+					'format'       => sanitize_key( wp_unslash( (string) ( $_POST['format'] ?? '' ) ) ),
+					'pattern'      => wp_unslash( (string) ( $_POST['pattern'] ?? '' ) ), // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- used as regex only.
+				)
+			)
+		);
+	}
 
-		$column = trim( sanitize_text_field( wp_unslash( $_POST['column'] ?? 'A' ) ) );
-		$index  = 0;
-		$header = ! empty( $_POST['header'] );
-		if ( preg_match( '/^[A-Za-z]{1,2}$/', $column ) ) {
+	/** Empty import report. */
+	public static function empty_report( string $batch = '' ): array {
+		return array(
+			'error'            => '',
+			'batch'            => $batch,
+			'imported'         => 0,
+			'dupes_file'       => 0,
+			'dupes_existing'   => 0,
+			'invalid'          => array(),
+			'not_saved'        => array(),
+			'weak'             => array(),
+			'weak_imported'    => 0,
+			'sequential'       => false,
+			'check_digit'      => false,
+			'weak_unconfirmed' => false,
+			'column'           => '',
+			'preview'          => array(),
+		);
+	}
+
+	/**
+	 * Column of the codes: a header name is looked for first ("ID", "Nr" are names, not column letters), then
+	 * a column letter (A … XFD). A header name means the first row is a header.
+	 *
+	 * @param array<int, array<int, string>> $rows
+	 * @return array{index:int, header:bool, label:string, error:string}
+	 */
+	public static function resolve_column( array $rows, string $column, bool $header ): array {
+		$column = trim( $column );
+		if ( '' === $column ) {
+			return array( 'index' => 0, 'header' => $header, 'label' => 'A', 'error' => '' );
+		}
+		$first = $rows ? array_map( static fn( $cell ) => strtolower( trim( (string) $cell ) ), (array) reset( $rows ) ) : array();
+		$found = array_search( strtolower( $column ), $first, true );
+		if ( false !== $found ) {
+			return array( 'index' => (int) $found, 'header' => true, 'label' => $column, 'error' => '' );
+		}
+		if ( preg_match( '/^[A-Za-z]{1,3}$/', $column ) ) {
 			$index = 0;
 			foreach ( str_split( strtoupper( $column ) ) as $ch ) {
 				$index = $index * 26 + ( ord( $ch ) - 64 );
 			}
-			--$index;
-		} elseif ( '' !== $column && $rows ) {
-			$found = array_search( strtolower( $column ), array_map( 'strtolower', $rows[0] ), true );
-			if ( false === $found ) {
-				$report['error'] = __( 'The column header was not found in the first row.', 'voucher-captain' );
-				$this->finish( $report );
+			if ( $index <= SpreadsheetReader::MAX_COLUMNS ) {
+				return array( 'index' => $index - 1, 'header' => $header, 'label' => strtoupper( $column ), 'error' => '' );
 			}
-			$index  = (int) $found;
-			$header = true;
 		}
+		return array(
+			'index'  => 0,
+			'header' => $header,
+			'label'  => $column,
+			/* translators: %s: column name entered */
+			'error'  => sprintf( __( 'The column "%s" was not found: it is neither a header in the first row nor a column letter (A, B, …).', 'voucher-captain' ), $column ),
+		);
+	}
+
+	/**
+	 * Why a code cannot be imported ('' when it can): control characters (e.g. a "Unicode text" file read the
+	 * wrong way), more than 100 characters (the code column), characters WooCommerce's code formatting changes
+	 * ("B&B" becomes "b&amp;b": the code would never be found again), or not the allowed format.
+	 */
+	public static function code_problem( string $code, string $regex ): string {
+		if ( preg_match( '/[\x00-\x1F\x7F]/', $code ) || ! mb_check_encoding( $code, 'UTF-8' ) || preg_match( '/\p{Cc}/u', $code ) ) {
+			return __( 'contains control characters or invalid characters', 'voucher-captain' );
+		}
+		if ( strlen( $code ) > CodeGenerator::MAX_CODE_LENGTH ) {
+			/* translators: %d: maximum length */
+			return sprintf( __( 'longer than %d characters', 'voucher-captain' ), CodeGenerator::MAX_CODE_LENGTH );
+		}
+		$formatted = (string) wc_format_coupon_code( $code );
+		if ( $formatted !== mb_strtolower( $code, 'UTF-8' ) ) {
+			/* translators: %s: code as WooCommerce would store it */
+			return sprintf( __( 'WooCommerce would change it to "%s" (characters such as & < > or quotes)', 'voucher-captain' ), mb_substr( $formatted, 0, 80 ) );
+		}
+		if ( ! preg_match( $regex, $code ) ) {
+			return __( 'does not match the allowed format', 'voucher-captain' );
+		}
+		return '';
+	}
+
+	/**
+	 * Imports the codes of the read rows into a batch and returns the report.
+	 *
+	 * @param array<int, array<int, string>> $rows
+	 * @param array{batch:string, column?:string, header?:bool, uppercase?:bool, allow_weak?:bool, confirm_weak?:bool, format?:string, pattern?:string} $opts
+	 */
+	public function process( array $rows, array $opts ): array {
+		$batch  = (string) $opts['batch'];
+		$report = self::empty_report( $batch );
+
+		$pattern = (string) ( $opts['pattern'] ?? '' );
+		$format  = (string) ( $opts['format'] ?? '' );
+		if ( isset( self::formats()[ $format ] ) && 'custom' !== $format ) {
+			$pattern = self::formats()[ $format ]['regex'];
+		}
+		$regex = "\x01" . str_replace( "\x01", '', $pattern ?: '^[A-Za-z0-9._-]{4,64}$' ) . "\x01u"; // Control-char delimiter: the pattern needs no escaping.
+		if ( false === @preg_match( $regex, '' ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors
+			$report['error'] = __( 'The "Allowed format" is not a valid regular expression.', 'voucher-captain' );
+			return $report;
+		}
+
+		$col = self::resolve_column( $rows, (string) ( $opts['column'] ?? 'A' ), ! empty( $opts['header'] ) );
+		if ( '' !== $col['error'] ) {
+			$report['error'] = $col['error'];
+			return $report;
+		}
+		$index            = $col['index'];
+		$header           = $col['header'];
+		$report['column'] = $col['label'];
+		$rows             = array_values( $rows );
 		if ( $header ) {
 			array_shift( $rows );
 		}
+		foreach ( $rows as $row ) {
+			$value = trim( (string) ( $row[ $index ] ?? '' ) );
+			if ( '' !== $value ) {
+				$report['preview'][] = mb_substr( $value, 0, 80 );
+				if ( count( $report['preview'] ) >= 5 ) {
+					break;
+				}
+			}
+		}
+		if ( ! $report['preview'] ) {
+			$report['error'] = sprintf(
+				/* translators: %s: column letter or header name */
+				__( 'Column %s is empty: no codes were found, nothing was imported. Check the column (letter or header name) and the "First row is a header" option.', 'voucher-captain' ),
+				$col['label']
+			);
+			return $report;
+		}
 
-		$upper      = ! empty( $_POST['uppercase'] );
-		$allow_weak = ! empty( $_POST['allow_weak'] );
+		$upper      = ! empty( $opts['uppercase'] );
+		$allow_weak = ! empty( $opts['allow_weak'] );
 		$seen       = array();
 		$candidates = array();
+		$row_number = static fn( int $n ): int => $n + ( $header ? 2 : 1 );
 		foreach ( $rows as $n => $row ) {
 			$code = trim( (string) ( $row[ $index ] ?? '' ) );
 			if ( '' === $code ) {
 				continue;
 			}
-			$code = $upper ? strtoupper( $code ) : $code;
-			$key  = wc_format_coupon_code( $code ); // WooCommerce codes are case-insensitive.
-			if ( ! preg_match( $regex, $code ) ) {
-				/* translators: 1: row number, 2: value */
-				$report['invalid'][] = sprintf( __( 'Row %1$d: "%2$s"', 'voucher-captain' ), $n + ( $header ? 2 : 1 ), mb_substr( $code, 0, 80 ) );
+			$code    = $upper ? strtoupper( $code ) : $code;
+			$problem = self::code_problem( $code, $regex );
+			if ( '' !== $problem ) {
+				/* translators: 1: row number, 2: value, 3: reason */
+				$report['invalid'][] = sprintf( __( 'Row %1$d: "%2$s" – %3$s', 'voucher-captain' ), $row_number( $n ), mb_substr( (string) preg_replace( '/[\x00-\x1F\x7F]/', '?', $code ), 0, 80 ), $problem );
 				continue;
 			}
+			$key = wc_format_coupon_code( $code ); // WooCommerce codes are case-insensitive.
 			if ( isset( $seen[ $key ] ) ) {
 				++$report['dupes_file'];
 				continue;
@@ -290,7 +406,7 @@ final class Import {
 		$min_bits = (int) apply_filters( 'vcap_min_code_bits', CodeGenerator::MIN_BITS );
 		$analysis = CodeGenerator::analyse_batch( $candidates, $this->pool->sample( $batch ), $min_bits );
 		// Weak codes carry money once sold: "Accept" alone is not enough, the risk must be confirmed as well.
-		$accept_weak                = $allow_weak && ! empty( $_POST['confirm_weak'] );
+		$accept_weak                = $allow_weak && ! empty( $opts['confirm_weak'] );
 		$report['sequential']       = $analysis['sequential'];
 		$report['check_digit']      = $analysis['check_digit'];
 		$report['weak_unconfirmed'] = $allow_weak && ! $accept_weak;
@@ -298,7 +414,7 @@ final class Import {
 			if ( $analysis['bits'][ $n ] < $min_bits ) {
 				if ( ! $accept_weak ) {
 					/* translators: 1: row number, 2: value */
-					$report['weak'][] = sprintf( __( 'Row %1$d: "%2$s"', 'voucher-captain' ), $n + ( $header ? 2 : 1 ), mb_substr( $code, 0, 80 ) );
+					$report['weak'][] = sprintf( __( 'Row %1$d: "%2$s"', 'voucher-captain' ), $row_number( $n ), mb_substr( $code, 0, 80 ) );
 					continue;
 				}
 				++$report['weak_imported'];
@@ -310,10 +426,14 @@ final class Import {
 			if ( $this->pool->add( $code, $batch ) ) {
 				++$report['imported'];
 			} else {
-				++$report['dupes_existing'];
+				// Not a duplicate (checked above): the database refused the row. Say why.
+				global $wpdb;
+				$reason = '' !== (string) $wpdb->last_error ? (string) $wpdb->last_error : __( 'the database did not save it', 'voucher-captain' );
+				/* translators: 1: row number, 2: value, 3: reason */
+				$report['not_saved'][] = sprintf( __( 'Row %1$d: "%2$s" – %3$s', 'voucher-captain' ), $row_number( $n ), mb_substr( $code, 0, 80 ), $reason );
 			}
 		}
-		$this->finish( $report );
+		return $report;
 	}
 
 	public function delete_batch(): void {
