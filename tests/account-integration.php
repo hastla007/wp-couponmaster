@@ -383,7 +383,7 @@ $v10_valid   = new ReflectionMethod( VCAP\Downloads::class, 'valid_guest_link' )
 $v10_valid->setAccessible( true );
 $v10_sign    = new ReflectionMethod( VCAP\Downloads::class, 'sign' );
 $v10_sign->setAccessible( true );
-vcap_acct_assert( true === $v10_valid->invoke( vcap()->downloads, $v10, (int) $v10_link['exp'], (string) $v10_link['sig'] ) && 0 === vcap()->downloads->link_version( $v10 ), 'V10: a link of a voucher never reissued is valid (version 0 signs as before)' );
+vcap_acct_assert( true === $v10_valid->invoke( vcap()->downloads, $v10->token, (int) $v10_link['exp'], (string) $v10_link['sig'], vcap()->downloads->link_version( $v10 ) ) && 0 === vcap()->downloads->link_version( $v10 ), 'V10: a link of a voucher never reissued is valid (version 0 signs as before)' );
 
 $v10_reissue = new VCAP\Reissue( vcap()->settings, vcap()->vouchers, vcap()->coupons );
 $v10_void    = clone $v10;
@@ -400,9 +400,9 @@ vcap_acct_assert( strtolower( $v10_new->code ) === strtolower( $v10_coupon->get_
 $v10_events = wp_list_pluck( vcap()->vouchers->events( $v10->id ), 'event' );
 $v10_notes  = implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $v10_order->get_id() ) ), 'content' ) );
 vcap_acct_assert( in_array( 'reissued', $v10_events, true ) && str_contains( $v10_notes, 'was reissued as ' . VCAP\Downloads::masked_code( $v10_new->code ) ) && ! str_contains( strtoupper( $v10_notes ), strtoupper( $v10_new->code ) ), 'V10: the reissue is in the voucher history and (masked) in an order note' );
-vcap_acct_assert( 1 === vcap()->downloads->link_version( $v10_new ) && false === $v10_valid->invoke( vcap()->downloads, $v10_new, (int) $v10_link['exp'], (string) $v10_sign->invoke( vcap()->downloads, $v10_new->token, (int) $v10_link['exp'], 0 ) ), 'V10: after a reissue the link version is 1 – a signature without it is refused' );
+vcap_acct_assert( 1 === vcap()->downloads->link_version( $v10_new ) && false === $v10_valid->invoke( vcap()->downloads, $v10_new->token, (int) $v10_link['exp'], (string) $v10_sign->invoke( vcap()->downloads, $v10_new->token, (int) $v10_link['exp'], 0 ), vcap()->downloads->link_version( $v10_new ) ), 'V10: after a reissue the link version is 1 – a signature without it is refused' );
 wp_parse_str( (string) wp_parse_url( vcap()->downloads->signed_url( $v10_new, true ), PHP_URL_QUERY ), $v10_link );
-vcap_acct_assert( true === $v10_valid->invoke( vcap()->downloads, $v10_new, (int) $v10_link['exp'], (string) $v10_link['sig'] ), 'V10: fresh links (My Account, new email) work with the new token' );
+vcap_acct_assert( true === $v10_valid->invoke( vcap()->downloads, $v10_new->token, (int) $v10_link['exp'], (string) $v10_link['sig'], vcap()->downloads->link_version( $v10_new ) ), 'V10: fresh links (My Account, new email) work with the new token' );
 $v10_discounts = new WC_Discounts( vcap_acct_order( $v6_goods, $buyer, $login . '@example.com' ) );
 vcap_acct_assert( is_wp_error( $v10_discounts->is_coupon_valid( new WC_Coupon( $v10_old['code'] ) ) ), 'V10: the old code can no longer be redeemed' );
 $v10_by_old = VCAP\Reissue::voucher_of_previous_code( vcap()->vouchers, $v10_old['code'] );

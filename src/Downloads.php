@@ -66,8 +66,8 @@ final class Downloads {
 		return $voucher->id ? $this->repo->count_event( $voucher->id, Reissue::EVENT ) : 0;
 	}
 
-	private function valid_guest_link( Voucher $voucher, int $exp, string $signature ): bool {
-		return hash_equals( $this->sign( $voucher->token, $exp, $this->link_version( $voucher ) ), $signature ) && ( 0 === $exp || $exp >= time() );
+	private function valid_guest_link( string $token, int $exp, string $signature, int $version = 0 ): bool {
+		return hash_equals( $this->sign( $token, $exp, $version ), $signature ) && ( 0 === $exp || $exp >= time() );
 	}
 
 	/**
@@ -262,7 +262,7 @@ final class Downloads {
 			wp_die( esc_html__( 'Too many downloads. Please try again later.', 'voucher-captain' ), esc_html__( 'Download unavailable', 'voucher-captain' ), array( 'response' => 429 ) );
 		}
 		$voucher = '' !== $sig ? $this->repo->get_by_token( $token ) : null;
-		if ( $voucher && ! $this->valid_guest_link( $voucher, $exp, $sig ) ) {
+		if ( $voucher && ! $this->valid_guest_link( $voucher->token, $exp, $sig, $this->link_version( $voucher ) ) ) {
 			$voucher = null;
 		}
 		if ( ! $voucher ) {
