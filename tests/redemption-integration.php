@@ -246,4 +246,25 @@ $erasure = ( new VCAP\Privacy( $repo ) )->erase( get_userdata( $user_a )->user_e
 $linked  = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . VCAP\Install::tables()['redemptions'] . ' WHERE user_id = %d', $user_a ) );
 vcap_redeem_assert( $erasure['items_removed'] && 0 === $linked, 'privacy erasure removes the user link from redemptions' );
 
+// Q5: a reusable voucher (10-visit card) is never redeemed beyond its usage limit, also by two tills at once.
+list( $visits, $visits_coupon ) = vcap_redeem_voucher( 'unlimited', 10.0 );
+$visits_coupon->set_usage_limit( 2 );
+$visits_coupon->save();
+$visit_results = array();
+for ( $i = 0; $i < 3; $i++ ) {
+	$visit_results[] = vcap()->tickets->redeem_single( vcap()->vouchers->get( $visits->id ), 'Visit' );
+}
+$visit_events = count( array_filter( vcap()->vouchers->events( $visits->id ), static fn( $e ) => 'redeemed' === $e['event'] ) );
+vcap_redeem_assert( array( true, true, false ) === $visit_results && 2 === ( new WC_Coupon( $visits_coupon->get_id() ) )->get_usage_count() && 2 === $visit_events, 'Q5: a reusable voucher with 2 uses is redeemed twice; the third scan is refused and not booked' );
+// A till that loaded the voucher before the other till booked the last use: the conditional UPDATE decides.
+list( $race, $race_coupon ) = vcap_redeem_voucher( 'unlimited', 10.0 );
+$race_coupon->set_usage_limit( 1 );
+$race_coupon->save();
+$stale = vcap()->vouchers->get( $race->id );
+$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->postmeta} SET meta_value = '1' WHERE post_id = %d AND meta_key = 'usage_count'", $race_coupon->get_id() ) );
+wp_cache_delete( $race_coupon->get_id(), 'post_meta' );
+vcap_redeem_assert( ! vcap()->tickets->redeem_single( $stale, 'Second till' ) && 1 === ( new WC_Coupon( $race_coupon->get_id() ) )->get_usage_count(), 'Q5: the second till scanning the last use at the same time is refused (no 11th visit)' );
+list( $free ) = vcap_redeem_voucher( 'unlimited', 10.0 );
+vcap_redeem_assert( vcap()->tickets->redeem_single( $free, 'No limit' ) && vcap()->tickets->redeem_single( vcap()->vouchers->get( $free->id ), 'No limit' ), 'Q5: without a usage limit reusable vouchers can still be redeemed again and again' );
+
 echo "Voucher Captain redemption API checks passed.\n";

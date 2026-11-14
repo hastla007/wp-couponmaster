@@ -826,14 +826,13 @@ final class Tickets {
 			return false;
 		}
 		if ( 'unlimited' === $voucher->usage_mode ) {
-			// Reusable vouchers: count one use, WooCommerce's usage limit decides when it is used up.
-			$this->repo->log( $voucher->id, 'redeemed', $voucher->initial_amount, null, $note );
-			if ( $voucher->coupon_id ) {
-				$coupon = new \WC_Coupon( $voucher->coupon_id );
-				if ( $coupon->get_id() ) {
-					$coupon->increase_usage_count();
-				}
+			// Reusable vouchers: count one use, WooCommerce's usage limit decides when it is used up. The use is
+			// counted with a conditional UPDATE first: of two tills scanning the last use of a 10-visit card at
+			// the same time only one succeeds (no 11th visit), and only that one is booked.
+			if ( $voucher->coupon_id && ! self::take_coupon_use( (int) $voucher->coupon_id ) ) {
+				return false;
 			}
+			$this->repo->log( $voucher->id, 'redeemed', $voucher->initial_amount, null, $note );
 			return true;
 		}
 		if ( ! $this->repo->redeem_single_if_active( $voucher->id ) ) {
@@ -850,6 +849,34 @@ final class Tickets {
 				$coupon->save();
 			}
 		}
+		return true;
+	}
+
+	/**
+	 * Counts one use of a WooCommerce coupon atomically, only while it is below its usage limit (none = no
+	 * limit). False when the coupon is used up (or gone).
+	 */
+	public static function take_coupon_use( int $coupon_id ): bool {
+		global $wpdb;
+		if ( 'shop_coupon' !== get_post_type( $coupon_id ) ) {
+			return false;
+		}
+		$limit = (int) get_post_meta( $coupon_id, 'usage_limit', true );
+		if ( $limit > 0 ) {
+			$done = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->postmeta} SET meta_value = CAST(meta_value AS UNSIGNED) + 1 WHERE post_id = %d AND meta_key = 'usage_count' AND CAST(meta_value AS UNSIGNED) < %d", $coupon_id, $limit ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.SlowDBQuery
+		} else {
+			$done = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->postmeta} SET meta_value = CAST(meta_value AS UNSIGNED) + 1 WHERE post_id = %d AND meta_key = 'usage_count'", $coupon_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.SlowDBQuery
+		}
+		if ( 1 !== (int) $done ) {
+			$has_count = null !== $wpdb->get_var( $wpdb->prepare( "SELECT meta_id FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = 'usage_count' LIMIT 1", $coupon_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.SlowDBQuery
+			// A coupon without a usage count row yet: the first use creates it.
+			if ( $has_count || ! add_post_meta( $coupon_id, 'usage_count', 1, true ) ) {
+				wp_cache_delete( $coupon_id, 'post_meta' );
+				return false;
+			}
+		}
+		wp_cache_delete( $coupon_id, 'post_meta' );
+		clean_post_cache( $coupon_id );
 		return true;
 	}
 
