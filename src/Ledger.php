@@ -37,6 +37,14 @@ final class Ledger {
 		global $wpdb;
 		$t     = Install::tables();
 		$until = self::utc_range( $date, $date )[1];
+		// Cached per day: every change of value or validity writes a ledger row (edits included), so the newest
+		// ledger and voucher ids are part of the key.
+		$state     = $wpdb->get_row( "SELECT ( SELECT MAX(id) FROM {$t['events']} ) AS e, ( SELECT MAX(id) FROM {$t['vouchers']} ) AS v", ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$cache_key = 'vcap_liability_' . md5( (string) wp_json_encode( array( $until, $state, get_option( 'woocommerce_currency' ) ) ) );
+		$cached    = get_transient( $cache_key );
+		if ( is_array( $cached ) && isset( $cached['totals'] ) ) {
+			return $cached;
+		}
 		$used  = self::in_list( self::USED_EVENTS );
 		$both  = self::in_list( array_merge( self::USED_EVENTS, self::BACK_EVENTS ) );
 		// Same rules as value_at(): voided (until reactivated) = 0; gift cards: last balance at that time;
@@ -63,6 +71,7 @@ final class Ledger {
 			$bucket[ $expired ? 'expired_amount' : 'amount' ] = round( $bucket[ $expired ? 'expired_amount' : 'amount' ] + (float) $r['amount'], API\V1\RedemptionService::decimals( $currency ) );
 			unset( $bucket );
 		}
+		set_transient( $cache_key, array( 'totals' => $totals ), HOUR_IN_SECONDS );
 		return array( 'totals' => $totals );
 	}
 
@@ -153,12 +162,31 @@ final class Ledger {
 	 * @param int $after_id Only bookings after this ledger id (paging).
 	 * @return array<int, array<string, mixed>>
 	 */
-	public function journal( string $from, string $to, int $limit = 50000, int $after_id = 0 ): array {
+	public function journal( string $from, string $to, int $limit = 50000, int $after_id = 0, ?array $bounds = null ): array {
 		global $wpdb;
 		$tables = Install::tables();
 		list( $start, $end ) = self::utc_range( $from, $to );
+		// The id range of the period (from the created_at index, once per export), so each batch is a primary-key
+		// range read in order instead of a filesort of the whole period.
+		list( $lo, $hi ) = $bounds ?? $this->journal_bounds( $from, $to );
+		if ( $hi <= 0 || $hi <= $after_id ) {
+			return array();
+		}
 		$events = self::in_list( (array) apply_filters( 'vcap_ledger_money_events', self::MONEY_EVENTS ) );
-		return $wpdb->get_results( $wpdb->prepare( "SELECT e.id, e.created_at, e.event, e.amount, e.balance_after, e.order_id, e.note, v.code, v.type, v.currency FROM {$tables['events']} e INNER JOIN {$tables['vouchers']} v ON v.id = e.voucher_id WHERE e.created_at BETWEEN %s AND %s AND e.event IN ({$events}) AND e.amount IS NOT NULL AND e.id > %d ORDER BY e.id LIMIT %d", $start, $end, max( 0, $after_id ), max( 1, $limit ) ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return $wpdb->get_results( $wpdb->prepare( "SELECT e.id, e.created_at, e.event, e.amount, e.balance_after, e.order_id, e.note, v.code, v.type, v.currency FROM {$tables['events']} e INNER JOIN {$tables['vouchers']} v ON v.id = e.voucher_id WHERE e.id > %d AND e.id <= %d AND e.created_at BETWEEN %s AND %s AND e.event IN ({$events}) AND e.amount IS NOT NULL ORDER BY e.id LIMIT %d", max( $lo - 1, $after_id, 0 ), $hi, $start, $end, max( 1, $limit ) ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	}
+
+	/**
+	 * Lowest and highest ledger id written in the period (local days), read from the created_at index.
+	 *
+	 * @return array{0:int, 1:int} [0, 0] when the period has no rows.
+	 */
+	public function journal_bounds( string $from, string $to ): array {
+		global $wpdb;
+		$tables = Install::tables();
+		list( $start, $end ) = self::utc_range( $from, $to );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT MIN(id) AS lo, MAX(id) AS hi FROM {$tables['events']} WHERE created_at BETWEEN %s AND %s", $start, $end ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return array( (int) ( $row['lo'] ?? 0 ), (int) ( $row['hi'] ?? 0 ) );
 	}
 
 	/** Number of bookings in the period (shown when the page lists only the first ones). */
@@ -176,9 +204,10 @@ final class Ledger {
 	 * @return \Generator<array<string, mixed>>
 	 */
 	public function journal_all( string $from, string $to, int $batch = 2000 ): \Generator {
-		$after = 0;
+		$after  = 0;
+		$bounds = $this->journal_bounds( $from, $to );
 		do {
-			$rows = $this->journal( $from, $to, $batch, $after );
+			$rows = $this->journal( $from, $to, $batch, $after, $bounds );
 			foreach ( $rows as $row ) {
 				yield $row;
 			}

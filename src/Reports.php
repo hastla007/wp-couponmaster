@@ -61,14 +61,26 @@ final class Reports {
 		return $this->groups[ $code ] = $group;
 	}
 
+	/** Seconds a calculated report is kept (also recalculated as soon as an order or refund is added). */
+	public const CACHE_SECONDS = 10 * MINUTE_IN_SECONDS;
+
 	/**
 	 * Codes used in paid orders of the period: coupon lines, and vouchers used as a payment after tax (fee lines
 	 * with "_vcap_payment_code", see PaymentVouchers – counted with the amount paid). Only orders that have such
-	 * lines are loaded (found in the order item tables, which both order stores share).
+	 * lines are read (found in the order item tables, which both order stores share), and only their figures –
+	 * code lines, currency, total and refunds are summed per chunk of 1000 orders in SQL, no order object is
+	 * loaded. The result is cached for CACHE_SECONDS per period (key with the newest order id, so a new order or
+	 * refund is included at once).
 	 *
 	 * @return array<string, array{type:string,name:string,orders:int,uses:int,discount:float,revenue:float,issued:?int}>
 	 */
 	public function collect( string $from, string $to ): array {
+		$cache_key = 'vcap_report_' . md5( wp_json_encode( array( $from, $to, self::statuses(), get_woocommerce_currency(), self::newest_order_id(), get_locale() ) ) );
+		$cached    = get_transient( $cache_key );
+		if ( is_array( $cached ) && isset( $cached['rows'] ) ) {
+			$this->truncated = ! empty( $cached['truncated'] );
+			return (array) $cached['rows'];
+		}
 		$ids             = (array) wc_get_orders(
 			array(
 				'type'         => 'shop_order',
@@ -82,40 +94,33 @@ final class Reports {
 		);
 		$this->truncated = count( $ids ) > self::MAX_ORDERS;
 		$rows            = array();
-		foreach ( self::orders_with_codes( array_slice( $ids, 0, self::MAX_ORDERS ) ) as $id ) {
-			$order = wc_get_order( $id );
-			if ( ! $order instanceof \WC_Order ) {
-				continue;
-			}
-			$seen     = array();
-			$currency = $order->get_currency();
-			$uses     = array();
-			foreach ( $order->get_items( 'coupon' ) as $item ) {
-				$uses[] = array( (string) $item->get_code(), (float) $item->get_discount() + (float) $item->get_discount_tax() );
-			}
-			foreach ( $order->get_items( 'fee' ) as $item ) {
-				$code = (string) $item->get_meta( PaymentVouchers::FEE_META );
-				if ( '' !== $code ) {
-					$uses[] = array( $code, abs( (float) $item->get_total() ) );
+		foreach ( array_chunk( self::orders_with_codes( array_slice( $ids, 0, self::MAX_ORDERS ) ), 1000 ) as $chunk ) {
+			$totals = self::order_totals( $chunk );
+			$lines  = self::code_lines( $chunk );
+			foreach ( $chunk as $id ) {
+				if ( ! isset( $totals[ $id ] ) || empty( $lines[ $id ] ) ) {
+					continue;
 				}
-			}
-			foreach ( $uses as list( $code, $amount ) ) {
-				$group = $this->group( $code );
-				$key   = $group['type'] . ':' . $group['name'];
-				if ( $currency && get_woocommerce_currency() !== $currency ) {
-					// Amounts in other currencies are never added to shop-currency amounts.
-					$key          .= ':' . $currency;
-					$group['name'] .= ' (' . $currency . ')';
-				}
-				if ( ! isset( $rows[ $key ] ) ) {
-					$rows[ $key ] = $group + array( 'orders' => 0, 'uses' => 0, 'discount' => 0.0, 'revenue' => 0.0, 'issued' => null, 'currency' => $currency ? $currency : get_woocommerce_currency() );
-				}
-				++$rows[ $key ]['uses'];
-				$rows[ $key ]['discount'] += $amount;
-				if ( ! isset( $seen[ $key ] ) ) {
-					$seen[ $key ] = true;
-					++$rows[ $key ]['orders'];
-					$rows[ $key ]['revenue'] += (float) $order->get_total() - (float) $order->get_total_refunded();
+				$seen     = array();
+				$currency = $totals[ $id ]['currency'];
+				foreach ( $lines[ $id ] as list( $code, $amount ) ) {
+					$group = $this->group( $code );
+					$key   = $group['type'] . ':' . $group['name'];
+					if ( $currency && get_woocommerce_currency() !== $currency ) {
+						// Amounts in other currencies are never added to shop-currency amounts.
+						$key           .= ':' . $currency;
+						$group['name'] .= ' (' . $currency . ')';
+					}
+					if ( ! isset( $rows[ $key ] ) ) {
+						$rows[ $key ] = $group + array( 'orders' => 0, 'uses' => 0, 'discount' => 0.0, 'revenue' => 0.0, 'issued' => null, 'currency' => $currency ? $currency : get_woocommerce_currency() );
+					}
+					++$rows[ $key ]['uses'];
+					$rows[ $key ]['discount'] += $amount;
+					if ( ! isset( $seen[ $key ] ) ) {
+						$seen[ $key ] = true;
+						++$rows[ $key ]['orders'];
+						$rows[ $key ]['revenue'] += $totals[ $id ]['total'] - $totals[ $id ]['refunded'];
+					}
 				}
 			}
 		}
@@ -125,7 +130,113 @@ final class Reports {
 			$row['discount'] = round( $row['discount'], wc_get_price_decimals() );
 			$row['revenue']  = round( $row['revenue'], wc_get_price_decimals() );
 		}
+		unset( $row );
+		set_transient( $cache_key, array( 'rows' => $rows, 'truncated' => $this->truncated ), self::CACHE_SECONDS );
 		return $rows;
+	}
+
+	/** Newest order or refund id (part of the cache key: a new order or refund recalculates the report). */
+	private static function newest_order_id(): int {
+		global $wpdb;
+		if ( OrderLookup::hpos() ) {
+			return (int) $wpdb->get_var( "SELECT MAX(id) FROM {$wpdb->prefix}wc_orders" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		return (int) $wpdb->get_var( "SELECT MAX(ID) FROM {$wpdb->posts} WHERE post_type IN ('shop_order','shop_order_refund')" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
+
+	/**
+	 * Currency, total and refunded amount of orders, from the order store in use (the values of
+	 * WC_Order::get_currency(), get_total() and get_total_refunded()).
+	 *
+	 * @param int[] $ids
+	 * @return array<int, array{currency:string,total:float,refunded:float}>
+	 */
+	private static function order_totals( array $ids ): array {
+		global $wpdb;
+		$ids = array_map( 'intval', $ids );
+		if ( ! $ids ) {
+			return array();
+		}
+		$in  = implode( ',', $ids );
+		$out = array();
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids and table names.
+		if ( OrderLookup::hpos() ) {
+			$orders = $wpdb->prefix . 'wc_orders';
+			foreach ( (array) $wpdb->get_results( "SELECT id, currency, total_amount FROM {$orders} WHERE id IN ({$in})", ARRAY_A ) as $r ) {
+				$out[ (int) $r['id'] ] = array( 'currency' => (string) $r['currency'], 'total' => (float) $r['total_amount'], 'refunded' => 0.0 );
+			}
+			$refunds = (array) $wpdb->get_results( $wpdb->prepare( "SELECT parent_order_id AS id, SUM(total_amount) AS amount FROM {$orders} WHERE type = %s AND parent_order_id IN ({$in}) GROUP BY parent_order_id", 'shop_order_refund' ), ARRAY_A );
+			$sign    = -1.0; // Refunds are stored with a negative total.
+		} else {
+			foreach ( (array) $wpdb->get_results( "SELECT post_id, meta_key, meta_value FROM {$wpdb->postmeta} WHERE post_id IN ({$in}) AND meta_key IN ('_order_currency','_order_total')", ARRAY_A ) as $r ) {
+				$id         = (int) $r['post_id'];
+				$out[ $id ] = ( $out[ $id ] ?? array( 'currency' => '', 'total' => 0.0, 'refunded' => 0.0 ) );
+				if ( '_order_currency' === $r['meta_key'] ) {
+					$out[ $id ]['currency'] = (string) $r['meta_value'];
+				} else {
+					$out[ $id ]['total'] = (float) $r['meta_value'];
+				}
+			}
+			$refunds = (array) $wpdb->get_results( $wpdb->prepare( "SELECT p.post_parent AS id, SUM(m.meta_value) AS amount FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = '_refund_amount' WHERE p.post_type = %s AND p.post_parent IN ({$in}) GROUP BY p.post_parent", 'shop_order_refund' ), ARRAY_A );
+			$sign    = 1.0;
+		}
+		// phpcs:enable
+		foreach ( $refunds as $r ) {
+			if ( isset( $out[ (int) $r['id'] ] ) ) {
+				$out[ (int) $r['id'] ]['refunded'] = $sign * (float) $r['amount'];
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Code lines of orders: coupon lines (code, discount incl. tax) first, then voucher payment lines (code,
+	 * amount paid), each in item order – what WC_Order::get_items() gives, read from the order item tables.
+	 *
+	 * @param int[] $ids
+	 * @return array<int, array<int, array{0:string,1:float}>>
+	 */
+	private static function code_lines( array $ids ): array {
+		global $wpdb;
+		$ids = array_map( 'intval', $ids );
+		if ( ! $ids ) {
+			return array();
+		}
+		$items = $wpdb->prefix . 'woocommerce_order_items';
+		$meta  = $wpdb->prefix . 'woocommerce_order_itemmeta';
+		$in    = implode( ',', $ids );
+		$rows  = (array) $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids and table names.
+				"SELECT oi.order_id, oi.order_item_id, oi.order_item_type, oi.order_item_name, m.meta_key, m.meta_value FROM {$items} oi LEFT JOIN {$meta} m ON m.order_item_id = oi.order_item_id AND m.meta_key IN ('discount_amount','discount_amount_tax','_line_total',%s) WHERE oi.order_id IN ({$in}) AND oi.order_item_type IN ('coupon','fee') ORDER BY oi.order_id, oi.order_item_id",
+				PaymentVouchers::FEE_META
+			),
+			ARRAY_A
+		);
+		$found = array();
+		foreach ( $rows as $r ) {
+			$item = (int) $r['order_item_id'];
+			if ( ! isset( $found[ $item ] ) ) {
+				$found[ $item ] = array( 'order' => (int) $r['order_id'], 'type' => (string) $r['order_item_type'], 'name' => (string) $r['order_item_name'], 'meta' => array() );
+			}
+			if ( null !== $r['meta_key'] ) {
+				$found[ $item ]['meta'][ (string) $r['meta_key'] ] = (string) $r['meta_value'];
+			}
+		}
+		$coupons = array();
+		$fees    = array();
+		foreach ( $found as $item ) {
+			if ( 'coupon' === $item['type'] ) {
+				$coupons[ $item['order'] ][] = array( $item['name'], (float) ( $item['meta']['discount_amount'] ?? 0 ) + (float) ( $item['meta']['discount_amount_tax'] ?? 0 ) );
+			} elseif ( '' !== (string) ( $item['meta'][ PaymentVouchers::FEE_META ] ?? '' ) ) {
+				$fees[ $item['order'] ][] = array( (string) $item['meta'][ PaymentVouchers::FEE_META ], abs( (float) ( $item['meta']['_line_total'] ?? 0 ) ) );
+			}
+		}
+		$out = array();
+		foreach ( $ids as $id ) {
+			$out[ $id ] = array_merge( $coupons[ $id ] ?? array(), $fees[ $id ] ?? array() );
+		}
+		return $out;
 	}
 
 	/**

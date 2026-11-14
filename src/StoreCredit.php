@@ -437,7 +437,8 @@ final class StoreCredit {
 			'balance' => __( 'Balance after', 'voucher-captain' ),
 		);
 		$rows   = '';
-		foreach ( array_slice( array_reverse( $this->repo->events( $account->id ) ), 0, 25 ) as $e ) {
+		// The newest 25 entries only, read through the (voucher_id, id) index (not the whole history).
+		foreach ( array_reverse( $this->repo->events( $account->id, 25 ) ) as $e ) {
 			if ( null === $e['amount'] || 'issued' === $e['event'] ) {
 				continue;
 			}
