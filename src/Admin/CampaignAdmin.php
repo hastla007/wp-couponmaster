@@ -114,6 +114,7 @@ final class CampaignAdmin {
 								<label><?php esc_html_e( 'Prefix', 'voucher-captain' ); ?> <input type="text" name="prefix" class="small-text" maxlength="20" /></label>
 								<label><?php esc_html_e( 'Random part length', 'voucher-captain' ); ?> <input type="number" name="length" value="12" min="6" max="40" class="small-text" /></label>
 								<label><?php esc_html_e( 'Suffix', 'voucher-captain' ); ?> <input type="text" name="suffix" class="small-text" maxlength="20" /></label>
+								<p class="description"><?php esc_html_e( 'Codes that give a discount and voucher codes are made long enough that they cannot be guessed (at least 10 random letters and digits); a shorter length is raised.', 'voucher-captain' ); ?></p>
 							</td>
 						</tr>
 					</table>

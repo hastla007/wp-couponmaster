@@ -96,6 +96,10 @@ $rewards = get_posts( array( 'post_type' => 'shop_coupon', 'numberposts' => -1, 
 vcap_ref_assert( 1 === count( $rewards ), 'one reward coupon is created' );
 $reward = new WC_Coupon( $rewards[0] );
 vcap_ref_assert( 15.0 === (float) $reward->get_amount() && array( 'ref-' . $tag . '@example.com' ) === $reward->get_email_restrictions() && 1 === $reward->get_usage_limit(), 'the reward coupon has the value, single use and the referrer email' );
+$friend_notes = implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $friend_order->get_id() ) ), 'content' ) );
+vcap_ref_assert( str_contains( $friend_notes, 'Referral reward' ) && ! str_contains( $friend_notes, 'ref-' . $tag . '@example.com' ) && ! str_contains( strtoupper( $friend_notes ), strtoupper( $reward->get_code() ) ) && str_contains( $friend_notes, '#' . $referrer ), 'the reward note in the friend\'s order names the referrer by account number and masks the reward code' );
+// A note as written by earlier versions (address and full code), to be redacted on erasure.
+$friend_order->add_order_note( 'Referral reward: coupon ' . $reward->get_code() . ' for ref-' . $tag . '@example.com.' );
 
 $friend_order->update_status( 'processing' );
 $friend_order->update_status( 'completed' );
@@ -156,6 +160,8 @@ $erased = $privacy->erase( $referrer_email, 1 );
 $friend_order = wc_get_order( $friend_order->get_id() );
 vcap_ref_assert( $erased['items_removed'] && false === get_user_option( VCAP\Referrals::USER_META, $referrer ) && false === get_user_option( VCAP\Referrals::COUNT_META, $referrer ) && null === VCAP\Referrals::count( $referrer ), 'erasure removes the referral code and counter from the account' );
 vcap_ref_assert( 'trash' === get_post_status( $coupon->get_id() ) && '' === (string) get_post_meta( $coupon->get_id(), VCAP\Referrals::OWNER, true ), 'the personal referral code is withdrawn and no longer names the customer' );
+$erased_notes = implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $friend_order->get_id() ) ), 'content' ) );
+vcap_ref_assert( ! str_contains( $erased_notes, $referrer_email ) && ! str_contains( strtoupper( $erased_notes ), strtoupper( $reward->get_code() ) ), 'erasure redacts the address and the reward code in existing notes of friend orders' );
 vcap_ref_assert( 'erased' === $friend_order->get_meta( VCAP\Referrals::REWARDED ) && 0 === (int) ( $friend_order->get_meta( VCAP\Referrals::REWARD )['user'] ?? -1 ), 'friend orders no longer point to the erased customer' );
 vcap_ref_assert( ! in_array( $referrer_email, ( new WC_Coupon( $rewards[0] ) )->get_email_restrictions(), true ), 'reward coupons are no longer restricted to the erased address' );
 vcap_ref_assert( ! array_filter( $privacy->export( $referrer_email, 1 )['data'], static fn( $i ) => 'vcap-referrals' === $i['group_id'] ), 'nothing is exported after the erasure' );

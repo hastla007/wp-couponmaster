@@ -529,5 +529,94 @@ if ( function_exists( 'wc_clear_notices' ) && function_exists( 'WC' ) && WC()->s
 }
 wp_set_current_user( $q11_user );
 remove_filter( 'vcap_passcaptain_ticket_target', $q11_target, 10 );
+// --- V13: customer preview – amount within the product's range, QR codes as placeholder, covering watermark.
+$preview_product = new WC_Product_Simple();
+$preview_product->set_name( 'Preview gift card' );
+$preview_product->set_regular_price( '10' );
+$preview_product->set_virtual( true );
+$preview_product->set_status( 'publish' );
+foreach ( array( 'enabled' => 'yes', 'type' => 'giftcard', 'amount_source' => 'custom', 'custom_min' => '10', 'custom_max' => '200', 'custom_step' => '', 'preview' => 'yes' ) as $key => $value ) {
+	$preview_product->update_meta_data( VCAP\ProductConfig::meta_key( $key ), $value );
+}
+$preview_product->save();
+$foreign_qr = static function ( $design ) {
+	$design['elements'][] = array( 'id' => 'evil-qr', 'type' => 'qrcode', 'x' => 1, 'y' => 1, 'w' => 20, 'h' => 20, 'qrContent' => 'custom', 'qrValue' => 'https://phish.example/{message}' );
+	$design['elements'][] = array( 'id' => 'evil-bar', 'type' => 'barcode', 'x' => 1, 'y' => 30, 'w' => 40, 'h' => 15, 'qrValue' => '{message}' );
+	return $design;
+};
+add_filter( 'vcap_template_design', $foreign_qr );
+$previewer          = new VCAP\Preview( vcap()->pdf );
+list( $pv, $design ) = $previewer->preview( $preview_product, '10000', false );
+list( $ok_v )        = $previewer->preview( $preview_product, '50', false );
+remove_filter( 'vcap_template_design', $foreign_qr );
+$codes      = array_filter( $design['elements'], static fn( $el ) => in_array( $el['type'] ?? '', array( 'qrcode', 'barcode' ), true ) );
+$watermarks = array_filter( $design['elements'], static fn( $el ) => str_starts_with( (string) ( $el['id'] ?? '' ), 'vcap-watermark' ) );
+vcap_security_assert( 10.0 === (float) $pv->initial_amount && 50.0 === (float) $ok_v->initial_amount, 'customer preview: an amount above the product maximum is shown as the minimum, an allowed amount as entered' );
+vcap_security_assert( count( $codes ) >= 3 && array() === array_filter( $codes, static fn( $el ) => 'PREVIEW' !== ( $el['qrValue'] ?? '' ) || 'custom' !== ( $el['qrContent'] ?? '' ) ), 'customer preview: every QR code and barcode carries the fixed placeholder (no foreign link)' );
+vcap_security_assert( count( $watermarks ) >= 3 && array() === array_filter( $watermarks, static fn( $el ) => (float) $el['opacity'] < 0.5 ), 'customer preview: the watermark covers the page in several rows' );
+
+// --- C13: a failed read of the site secret never replaces it (all PDF links already sent stay valid).
+$secret_before = vcap()->settings->secret();
+add_filter( 'pre_option_vcap_secret', '__return_empty_string' );
+$secret_glitch = vcap()->settings->secret();
+remove_filter( 'pre_option_vcap_secret', '__return_empty_string' );
+wp_cache_delete( 'vcap_secret', 'options' );
+vcap_security_assert( $secret_before === $secret_glitch && $secret_before === (string) get_option( 'vcap_secret' ), 'the site secret is read again, not overwritten, when a read returns nothing' );
+
+// --- V12: guest PDF downloads – rate limited, "downloaded" at most hourly, rendered PDF cached per voucher state.
+$dl_voucher = vcap_security_create_voucher( 'download-' . wp_generate_password( 6, false, false ) . '@example.test', 990 );
+$downloads  = vcap()->downloads;
+vcap_security_assert( ! $downloads->downloaded_recently( $dl_voucher->id ), 'no download logged yet' );
+vcap()->vouchers->log( $dl_voucher->id, 'downloaded' );
+vcap_security_assert( $downloads->downloaded_recently( $dl_voucher->id ), 'a download within the last hour is known (no second "downloaded" event)' );
+$file_a              = $downloads->cached_pdf_file( $dl_voucher );
+$dl_voucher->balance = 5;
+$file_b              = $downloads->cached_pdf_file( $dl_voucher );
+vcap_security_assert( $file_a !== $file_b && str_contains( $file_a, '/vcap/tmp/dl-' ) && ! str_contains( $file_a, $dl_voucher->token ), 'the cached PDF is private, does not name the token and changes with the voucher' );
+$die_handler = static fn() => static function ( $message, $title = '', $args = array() ) {
+	throw new RuntimeException( 'die:' . (int) ( is_array( $args ) ? ( $args['response'] ?? 0 ) : 0 ) );
+};
+add_filter( 'wp_die_handler', $die_handler );
+add_filter( 'vcap_client_ip', static fn() => '203.0.113.150' );
+$_GET     = array( 'vcap_pdf' => str_repeat( 'a', 48 ), 'exp' => '0', 'sig' => 'bad' );
+$statuses = array();
+for ( $i = 0; $i < 31; $i++ ) {
+	try {
+		$downloads->maybe_serve();
+	} catch ( RuntimeException $e ) {
+		$statuses[] = $e->getMessage();
+	}
+}
+$_GET = array();
+remove_filter( 'wp_die_handler', $die_handler );
+remove_all_filters( 'vcap_client_ip' );
+vcap_security_assert( 'die:403' === $statuses[0] && 'die:429' === $statuses[30], 'guest PDF links are rate limited per visitor (30 per 10 minutes)' );
+
+// --- C9: a logged-in customer with an expired nonce (cached page) gets an answer instead of nothing.
+$c9_user = wp_insert_user( array( 'user_login' => 'vcap-c9-' . wp_generate_password( 6, false, false ), 'user_pass' => wp_generate_password( 20 ), 'role' => 'customer' ) );
+wp_set_current_user( $c9_user );
+$_POST         = array( 'vcap_balance_code' => $dl_voucher->code, 'vcap_balance_nonce' => 'expired' );
+$c9_downloads  = new VCAP\Downloads( vcap()->settings, vcap()->vouchers, vcap()->pdf );
+$c9_downloads->handle_balance();
+$_POST = array();
+$c9_answer = $c9_downloads->balance_shortcode();
+wp_set_current_user( 0 );
+vcap_security_assert( str_contains( $c9_answer, 'vcap-balance-result' ), 'balance check: a logged-in customer whose nonce expired is answered like a guest' );
+
+// --- R6: promotion limits per customer keep no plain-text email addresses.
+$r6_email = 'r6-' . strtolower( wp_generate_password( 6, false, false ) ) . '@example.test';
+$r6_keys  = VCAP\Discounts\Usage::customer_keys( 0, $r6_email );
+vcap_security_assert( str_starts_with( $r6_keys[0], 'h:' ) && ! str_contains( $r6_keys[0], $r6_email ), 'the stored customer key of a guest is a keyed hash, not the address' );
+VCAP\Discounts\Usage::add( 990001, $r6_keys[0], 0 );
+$usage_table = VCAP\Install::tables()['usage'];
+$wpdb->insert( $usage_table, array( 'campaign_id' => 990001, 'customer_key' => 'e:' . $r6_email, 'order_id' => 0, 'created_at' => gmdate( 'Y-m-d H:i:s' ) ) );
+vcap_security_assert( 2 === VCAP\Discounts\Usage::count_for( 990001, $r6_keys ), 'uses under the hashed key and plain-text keys of earlier versions both count' );
+$privacy->erase( $r6_email, 1 );
+$plain = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$usage_table} WHERE customer_key LIKE %s", '%' . $wpdb->esc_like( $r6_email ) . '%' ) );
+vcap_security_assert( 0 === $plain && 2 === VCAP\Discounts\Usage::count_for( 990001, $r6_keys ), 'the eraser converts plain-text keys: the address is gone, the limit still counts' );
+$wpdb->insert( $usage_table, array( 'campaign_id' => 990001, 'customer_key' => 'e:other-' . $r6_email, 'order_id' => 0, 'created_at' => gmdate( 'Y-m-d H:i:s' ) ) );
+VCAP\Discounts\Usage::hash_legacy_keys();
+vcap_security_assert( 0 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$usage_table} WHERE customer_key LIKE %s", 'e:%' ) ), 'the daily maintenance converts all plain-text keys' );
+$wpdb->delete( $usage_table, array( 'campaign_id' => 990001 ) );
 
 echo "Voucher Captain security and privacy checks passed.\n";

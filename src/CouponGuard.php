@@ -8,17 +8,18 @@ defined( 'ABSPATH' ) || exit;
  * through admin-ajax.php) and the Store API (`cart/apply-coupon`, `cart/coupons`, also inside `batch`). Without it,
  * voucher and gift card codes could be guessed there without any limit, around the limits of the plugin's forms.
  *
- * Same rules as Plugin::rate_limited( …, false ): each application counts per visitor before WooCommerce looks
+ * Same rules and bucket as the plugin's forms (CodeLookup): each application counts per visitor before WooCommerce looks
  * the code up; an existing code gives the attempt back, an unknown code (or another customer's store credit) is
  * booked as a failure. Once the visitor's quota is used up, every application in that request is refused with
  * the same message – whether the code exists or not, so the answer reveals nothing. Coupons already in the cart
  * and coupons applied by code (promotions, coupon links) are never touched.
  */
 final class CouponGuard {
-	public const BUCKET      = 'coupon';
-	public const PER_VISITOR = 15;
-	public const SITE_WIDE   = 300;
-	public const WINDOW      = 900;
+	/** The shared bucket of all code entries (CodeLookup): the quotas of the forms do not add up. */
+	public const BUCKET      = CodeLookup::BUCKET;
+	public const PER_VISITOR = CodeLookup::PER_VISITOR;
+	public const SITE_WIDE   = CodeLookup::SITE_WIDE;
+	public const WINDOW      = CodeLookup::WINDOW;
 	/** Exception code of the refusal (WC_Coupon errors are numbers; VC uses 90xx). */
 	public const E_LIMITED = 9040;
 
@@ -57,15 +58,32 @@ final class CouponGuard {
 		// phpcs:enable
 	}
 
-	/** Store API (block cart and checkout, headless shops). */
+	/**
+	 * Store API (block cart and checkout, headless shops). Recognised by the route's handler class, else by the
+	 * route path compared case-insensitively – WordPress matches REST routes case-insensitively, so
+	 * "/wc/store/v1/Cart/Apply-Coupon" reaches the same handler (also through ?rest_route= and batch requests).
+	 */
 	public function rest_before( $response, $handler, $request ) {
-		if ( $request instanceof \WP_REST_Request && 'POST' === $request->get_method() && preg_match( '#^/wc/store(?:/v\d+)?/cart/(?:apply-coupon|coupons)/?$#', (string) $request->get_route() ) ) {
+		if ( $request instanceof \WP_REST_Request && 'POST' === strtoupper( $request->get_method() ) && self::applies_coupon( $handler, (string) $request->get_route() ) ) {
 			$code = $request->get_param( 'code' );
 			if ( is_string( $code ) && '' !== $code ) {
 				$this->begin( wc_format_coupon_code( $code ) );
 			}
 		}
 		return $response;
+	}
+
+	/** Whether a Store API request adds a coupon to the cart (handler CartApplyCoupon or CartCoupons). */
+	public static function applies_coupon( $handler, string $route ): bool {
+		$callback = is_array( $handler ) ? ( $handler['callback'] ?? null ) : null;
+		if ( is_array( $callback ) && isset( $callback[0] ) && is_object( $callback[0] ) ) {
+			$class = get_class( $callback[0] );
+			$short = substr( (string) strrchr( '\\' . $class, '\\' ), 1 );
+			if ( in_array( $short, array( 'CartApplyCoupon', 'CartCoupons' ), true ) && str_contains( $class, 'StoreApi' ) ) {
+				return true;
+			}
+		}
+		return (bool) preg_match( '#^/wc/store(?:/v\d+)?/cart/(?:apply-coupon|coupons)/?$#i', $route );
 	}
 
 	public function rest_after( $response, $handler, $request ) {
@@ -81,7 +99,7 @@ final class CouponGuard {
 		}
 		$this->code    = $code;
 		$this->failed  = false;
-		$this->limited = Plugin::rate_limited( self::BUCKET, self::PER_VISITOR, self::SITE_WIDE, self::WINDOW, false );
+		$this->limited = CodeLookup::begin();
 	}
 
 	/** Books the outcome of the application of this request: failure, or the attempt is given back. */
@@ -90,11 +108,7 @@ final class CouponGuard {
 			return;
 		}
 		if ( ! $this->limited ) {
-			if ( $this->failed ) {
-				Plugin::rate_limit_failure( self::BUCKET, self::WINDOW );
-			} else {
-				Plugin::rate_limit_success( self::BUCKET, self::WINDOW );
-			}
+			CodeLookup::finish( ! $this->failed );
 		}
 		$this->code    = '';
 		$this->limited = false;
@@ -139,6 +153,6 @@ final class CouponGuard {
 	}
 
 	public static function message(): string {
-		return __( 'Too many attempts. Please try again later.', 'voucher-captain' );
+		return CodeLookup::limited_message();
 	}
 }

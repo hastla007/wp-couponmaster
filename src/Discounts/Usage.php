@@ -7,7 +7,8 @@ defined( 'ABSPATH' ) || exit;
  * Usage counting and limits for promotions.
  *
  * Every use is one row of the table vcap_promotion_usage (promotion, customer key "u:{user id}" or
- * "e:{billing email}", order), so concurrent orders never overwrite each other's count and carts read only counts
+ * "h:{keyed hash of the billing email}", order; rows of earlier versions stored "e:{email}" in plain text and are
+ * converted by the daily maintenance and on erasure), so concurrent orders never overwrite each other's count and carts read only counts
  * (until schema 1.4 it was one "_vcap_used_by" post meta row per use, which every cart loaded; those rows are
  * moved by Install and still counted until they are gone).
  * A use is held when the order is placed (classic and Store API checkout, retried payment), under a named
@@ -37,6 +38,17 @@ final class Usage {
 		// Back to pending only from a paid/on-hold state (not checkout-draft → pending in the block checkout,
 		// which would give back the use that was just held).
 		add_action( 'woocommerce_order_status_changed', array( $this, 'reverted_to_pending' ), 20, 3 );
+		add_action( 'vcap_daily_maintenance', array( self::class, 'hash_legacy_keys' ), 30, 0 );
+		add_action( 'deleted_post', array( self::class, 'forget_campaign' ), 10, 2 );
+	}
+
+	/** A deleted promotion takes its usage records (customer keys) with it. */
+	public static function forget_campaign( $post_id, $post = null ): void {
+		if ( ! $post instanceof \WP_Post || Repository::POST_TYPE !== $post->post_type || ! \VCAP\Install::storage_ready() ) {
+			return;
+		}
+		global $wpdb;
+		$wpdb->delete( \VCAP\Install::tables()['usage'], array( 'campaign_id' => (int) $post_id ), array( '%d' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	/**
@@ -51,17 +63,69 @@ final class Usage {
 			$owner   = get_user_by( 'email', $email );
 			$user_id = $owner ? (int) $owner->ID : 0;
 		}
+		$emails = array();
 		if ( $user_id > 0 ) {
 			$keys[] = 'u:' . $user_id;
 			$user   = get_userdata( $user_id );
 			if ( $user && is_email( $user->user_email ) ) {
-				$keys[] = 'e:' . strtolower( (string) $user->user_email );
+				$emails[] = strtolower( (string) $user->user_email );
 			}
 		}
 		if ( is_email( $email ) ) {
-			$keys[] = 'e:' . $email;
+			$emails[] = $email;
+		}
+		$emails = array_values( array_unique( $emails ) );
+		foreach ( $emails as $address ) {
+			$keys[] = self::email_key( $address );
+		}
+		// Plain-text keys of earlier versions, still counted until the maintenance has converted them (never
+		// used to store a new use: the first key is).
+		foreach ( $emails as $address ) {
+			$keys[] = 'e:' . $address;
 		}
 		return array_values( array_unique( $keys ) );
+	}
+
+	/**
+	 * Customer key of an email address: a keyed hash (site salt), so the usage table holds no addresses but a
+	 * customer is still recognised by the same address.
+	 */
+	public static function email_key( string $email ): string {
+		return 'h:' . hash_hmac( 'sha256', strtolower( trim( $email ) ), wp_salt( 'auth' ) );
+	}
+
+	/** The stored form of a key: plain-text email keys of earlier versions become hashed keys. */
+	public static function stored_key( string $key ): string {
+		return str_starts_with( $key, 'e:' ) ? self::email_key( substr( $key, 2 ) ) : $key;
+	}
+
+	/**
+	 * Converts plain-text email keys of earlier versions into hashed keys (daily maintenance, erasure), in
+	 * batches. $email limits it to one address.
+	 *
+	 * @return bool true when no plain-text key is left (of the address)
+	 */
+	public static function hash_legacy_keys( string $email = '', int $limit = 500 ): bool {
+		global $wpdb;
+		$done = true;
+		if ( \VCAP\Install::storage_ready() ) {
+			$table = \VCAP\Install::tables()['usage'];
+			// phpcs:disable WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from Install.
+			$rows = '' !== $email
+				? $wpdb->get_results( $wpdb->prepare( "SELECT id, customer_key FROM {$table} WHERE customer_key = %s LIMIT %d", 'e:' . strtolower( trim( $email ) ), $limit ) )
+				: $wpdb->get_results( $wpdb->prepare( "SELECT id, customer_key FROM {$table} WHERE customer_key LIKE %s LIMIT %d", 'e:%', $limit ) );
+			foreach ( (array) $rows as $row ) {
+				$wpdb->update( $table, array( 'customer_key' => self::stored_key( (string) $row->customer_key ) ), array( 'id' => (int) $row->id ), array( '%s' ), array( '%d' ) );
+			}
+			// phpcs:enable
+			$done = count( (array) $rows ) < $limit;
+		}
+		if ( '' !== $email ) {
+			// Uses still kept as post meta (before schema 1.4).
+			$legacy = 'e:' . strtolower( trim( $email ) );
+			$wpdb->update( $wpdb->postmeta, array( 'meta_value' => self::email_key( $email ) ), array( 'meta_key' => self::META, 'meta_value' => $legacy ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.SlowDBQuery
+		}
+		return $done;
 	}
 
 	public static function count( int $campaign_id ): int {
@@ -82,7 +146,9 @@ final class Usage {
 		if ( ! $keys ) {
 			return 0;
 		}
-		$keys  = array_values( array_map( static fn( $k ) => substr( (string) $k, 0, 200 ), $keys ) );
+		// Plain-text email keys (earlier versions, callers) also count in their stored, hashed form.
+		$keys  = array_values( array_unique( array_merge( array_map( 'strval', $keys ), array_map( static fn( $k ) => self::stored_key( (string) $k ), $keys ) ) ) );
+		$keys  = array_values( array_map( static fn( $k ) => substr( $k, 0, 200 ), $keys ) );
 		$in    = implode( ',', array_fill( 0, count( $keys ), '%s' ) );
 		$count = 0;
 		if ( \VCAP\Install::storage_ready() ) {
@@ -120,6 +186,7 @@ final class Usage {
 	 * @param int $order_id Order that used the promotion (0 when unknown).
 	 */
 	public static function add( int $campaign_id, string $key, int $order_id = 0 ): void {
+		$key = self::stored_key( $key );
 		if ( ! \VCAP\Install::storage_ready() ) {
 			add_post_meta( $campaign_id, self::META, $key );
 			return;
@@ -151,23 +218,25 @@ final class Usage {
 				return;
 			}
 			$scope = $order_id > 0 ? ' AND order_id = 0' : '';
-			if ( $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE campaign_id = %d AND customer_key = %s{$scope} LIMIT 1", $campaign_id, substr( $key, 0, 200 ) ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				return;
+			foreach ( array_unique( array( self::stored_key( $key ), $key ) ) as $form ) {
+				if ( $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE campaign_id = %d AND customer_key = %s{$scope} LIMIT 1", $campaign_id, substr( $form, 0, 200 ) ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					return;
+				}
 			}
 			if ( ! \VCAP\Install::legacy_rows() ) {
 				return;
 			}
 		}
-		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s AND meta_value = %s LIMIT 1", $campaign_id, self::META, $key ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s AND meta_value IN (%s, %s) LIMIT 1", $campaign_id, self::META, $key, self::stored_key( $key ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		wp_cache_delete( $campaign_id, 'post_meta' );
 	}
 
 	/** The key a use of this order is stored under (kept on the order, so later email changes do not matter). */
 	public static function order_key( \WC_Order $order ): string {
 		$key = (string) $order->get_meta( self::ORDER_KEY );
-		if ( '' === $key ) {
+		if ( '' === $key || str_starts_with( $key, 'e:' ) ) {
 			$keys = self::customer_keys( (int) $order->get_customer_id(), (string) $order->get_billing_email() );
-			$key  = $keys ? $keys[0] : 'o:' . $order->get_id();
+			$key  = '' !== $key ? self::stored_key( $key ) : ( $keys ? $keys[0] : 'o:' . $order->get_id() );
 			$order->update_meta_data( self::ORDER_KEY, $key );
 		}
 		return $key;

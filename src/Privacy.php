@@ -252,6 +252,10 @@ final class Privacy {
 			}
 			foreach ( $this->referral_reward_orders( $user->ID ) as $order ) {
 				$reward = $order->get_meta( Referrals::REWARD );
+				$code   = is_array( $reward ) && ! empty( $reward['coupon'] ) ? (string) get_post_field( 'post_title', (int) $reward['coupon'] ) : '';
+				if ( ! self::redact_order_notes( $order->get_id(), array( $email, (string) $user->user_email ), $code ) ) {
+					$retained = true;
+				}
 				if ( is_array( $reward ) ) {
 					$reward['user']   = 0;
 					$reward['erased'] = time();
@@ -290,6 +294,44 @@ final class Privacy {
 			}
 		}
 		return array( $removed, $retained );
+	}
+
+	/**
+	 * Removes an address (and a reward code) from the notes of an order: reward notes of earlier versions named
+	 * the referrer's email address and the full code in the friend's order.
+	 *
+	 * @param string[] $emails Addresses to remove.
+	 * @param string   $code   Code to mask ('' = none).
+	 * @return bool false when a note could not be changed
+	 */
+	public static function redact_order_notes( int $order_id, array $emails, string $code = '' ): bool {
+		$emails = array_values( array_unique( array_filter( array_map( 'strval', $emails ) ) ) );
+		if ( ! $emails && '' === $code ) {
+			return true;
+		}
+		$ok    = true;
+		$notes = function_exists( 'wc_get_order_notes' ) ? wc_get_order_notes( array( 'order_id' => $order_id ) ) : array();
+		foreach ( (array) $notes as $note ) {
+			if ( ! is_object( $note ) || empty( $note->id ) ) {
+				continue;
+			}
+			$text = (string) $note->content;
+			$new  = $text;
+			foreach ( $emails as $address ) {
+				$new = (string) str_ireplace( $address, __( '[erased]', 'voucher-captain' ), $new );
+			}
+			if ( '' !== $code ) {
+				$new = (string) str_ireplace( $code, Downloads::masked_code( $code ), $new );
+			}
+			if ( $new === $text ) {
+				continue;
+			}
+			$updated = wp_update_comment( array( 'comment_ID' => (int) $note->id, 'comment_content' => $new ), true );
+			if ( false === $updated || is_wp_error( $updated ) ) {
+				$ok = false;
+			}
+		}
+		return $ok;
 	}
 
 	public function erase( string $email, int $page = 1 ): array {
@@ -359,6 +401,11 @@ final class Privacy {
 				$removed = true;
 			}
 		}
+		// Promotion limits per customer: plain-text email keys of earlier versions become keyed hashes (the use
+		// keeps counting against the limit, the address is gone), also the key remembered on the orders.
+		if ( is_email( $email ) && $this->erase_promotion_keys( $email ) ) {
+			$removed = true;
+		}
 		list( $referrals_removed, $referrals_retained ) = $this->erase_referrals( $email );
 		$removed  = $removed || $referrals_removed;
 		$retained = $retained || $referrals_retained;
@@ -368,6 +415,36 @@ final class Privacy {
 			'messages'       => $retained ? array( __( 'Some voucher records could not be fully anonymised. Please retry the erasure request.', 'voucher-captain' ) ) : array(),
 			'done'           => count( $vouchers ) < 500,
 		);
+	}
+
+	/** Converts the plain-text promotion usage keys of an address (see Discounts\Usage::hash_legacy_keys()). */
+	private function erase_promotion_keys( string $email ): bool {
+		global $wpdb;
+		$legacy  = 'e:' . strtolower( trim( $email ) );
+		$changed = false;
+		if ( Install::storage_ready() ) {
+			$table   = Install::tables()['usage'];
+			$changed = (bool) $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE customer_key = %s LIMIT 1", $legacy ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		}
+		Discounts\Usage::hash_legacy_keys( $email, 5000 );
+		if ( function_exists( 'wc_get_orders' ) ) {
+			$orders = wc_get_orders(
+				array(
+					'limit'      => 500,
+					'type'       => 'shop_order',
+					'status'     => 'any',
+					'meta_query' => array( array( 'key' => Discounts\Usage::ORDER_KEY, 'value' => $legacy ) ), // phpcs:ignore WordPress.DB.SlowDBQuery
+				)
+			);
+			foreach ( is_array( $orders ) ? $orders : array() as $order ) {
+				if ( $order instanceof \WC_Order && $legacy === (string) $order->get_meta( Discounts\Usage::ORDER_KEY ) ) {
+					$order->update_meta_data( Discounts\Usage::ORDER_KEY, Discounts\Usage::email_key( $email ) );
+					$order->save_meta_data();
+					$changed = true;
+				}
+			}
+		}
+		return $changed;
 	}
 
 	public function policy(): void {
@@ -389,7 +466,8 @@ final class Privacy {
 			__( 'When a voucher is redeemed outside the shop checkout, for example by a booking or ticket system on this website that is connected to our vouchers, we record the redemption with the connected service, the amount, the date, your customer account and the details that service passes on (for example its order or booking number).', 'voucher-captain' ),
 			__( 'Tickets: when you exchange a ticket voucher for tickets or pay for tickets with a gift card, the voucher code, the amount, your name and email address and the attendee names you enter are passed to the ticket system on this website (WP Pass Captain), which issues and sends the tickets. Its privacy information applies to the tickets.', 'voucher-captain' ),
 			__( 'At the entrance or the counter, our staff may scan the code of your voucher or ticket. We record the time, the staff member and the result (redeemed, checked in or refused) in the voucher history.', 'voucher-captain' ),
-			__( 'To protect voucher codes against guessing, we count failed code entries per visitor for a short time window (at most 15 minutes). For this we store the counter under a hashed (pseudonymised) form of your IP address, never the address itself; the counters are deleted automatically after the window.', 'voucher-captain' ),
+			__( 'Promotion limits per customer: when a promotion may be used only a limited number of times per customer, we record each use with your customer account or, for guest orders, with a keyed hash of your email address (not the address itself), so that the limit also applies to later orders. These records are deleted together with the promotion.', 'voucher-captain' ),
+			__( 'To protect voucher codes against guessing and our server against overload, we count code entries, PDF previews and downloads per visitor for a short time window (at most one hour). For this we store the counter under a keyed hash of your IP address (made with a secret key of this website, so it cannot be turned back into the address), never the address itself. The counters are deleted by the daily cleanup, at the latest about one day after the window has ended.', 'voucher-captain' ),
 		);
 		return $paragraphs;
 	}

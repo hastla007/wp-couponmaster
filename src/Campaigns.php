@@ -57,6 +57,11 @@ final class Campaigns {
 			unset( $data[ $key ] );
 		}
 		$options = $this->code_options( $opts );
+		if ( (float) $template->get_amount() > 0 || $template->get_free_shipping() ) {
+			// Each code carries a discount and is valid on its own: as hard to guess as voucher codes, so the
+			// rate limits make finding one of a thousand codes hopeless (6 characters would give about 2^30).
+			$options['min_bits'] = (int) apply_filters( 'vcap_min_code_bits', CodeGenerator::MIN_BITS );
+		}
 		$codes   = array();
 		for ( $i = 0; $i < $count; $i++ ) {
 			$code   = CodeGenerator::unique( $options, array( $this, 'taken' ) );

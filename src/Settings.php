@@ -617,12 +617,36 @@ final class Settings {
 		return '' !== $format ? $format : (string) get_option( 'date_format', 'Y-m-d' );
 	}
 
+	/**
+	 * Site secret for signed links. Created once with add_option(), which never overwrites: when a read fails
+	 * for a moment (database hiccup, stale cache), the stored secret is read again instead of being replaced –
+	 * replacing it would invalidate every PDF link already sent. If it still cannot be read, a secret for this
+	 * request only is used (links signed with it simply do not validate) and nothing is stored.
+	 */
 	public function secret(): string {
+		static $runtime = '';
 		$secret = (string) get_option( 'vcap_secret' );
-		if ( '' === $secret ) {
-			$secret = wp_generate_password( 64, true, true );
-			update_option( 'vcap_secret', $secret, false );
+		if ( '' !== $secret ) {
+			return $secret;
 		}
-		return $secret;
+		$new = wp_generate_password( 64, true, true );
+		if ( add_option( 'vcap_secret', $new, '', false ) ) {
+			return $new;
+		}
+		wp_cache_delete( 'vcap_secret', 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+		global $wpdb;
+		$stored = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", 'vcap_secret' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( is_string( $stored ) && '' !== $stored ) {
+			return $stored;
+		}
+		if ( '' === $stored && update_option( 'vcap_secret', $new, false ) ) {
+			return $new; // The row exists but is empty: no link can have been signed with it.
+		}
+		if ( '' === $runtime ) {
+			$runtime = wp_generate_password( 64, true, true );
+		}
+		return $runtime;
 	}
 }

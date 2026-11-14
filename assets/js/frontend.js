@@ -77,7 +77,7 @@
 		$( document ).on( 'click', '.vcap-preview-button', function ( e ) {
 			e.preventDefault();
 			var $form = $( this ).closest( 'form.cart' );
-			var $post = $( '<form method="post" target="_blank" style="display:none"></form>' ).attr( 'action', cfg.ajaxUrl );
+			var $post = $( '<form method="post" target="_blank" style="display:none"></form>' ).attr( 'action', cfg.previewUrl || cfg.ajaxUrl );
 			var add = function ( name, value ) {
 				$( '<input type="hidden">' ).attr( 'name', name ).val( value ).appendTo( $post );
 			};

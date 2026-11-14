@@ -70,6 +70,18 @@ vcap_acct_assert( false === $voucher->transferable && 'Nicht bar auszahlbar.' ==
 $coupon = new WC_Coupon( $voucher->coupon_id );
 vcap_acct_assert( array( $login . '@example.com' ) === array_values( $coupon->get_email_restrictions() ), 'a personal voucher restricts the coupon to the buyer (and recipient) email' );
 
+// V11: order notes reach connectors and all staff – the issued code appears masked only.
+$notes = implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ) );
+vcap_acct_assert( ! str_contains( strtoupper( $notes ), strtoupper( $voucher->code ) ) && str_contains( $notes, VCAP\Downloads::masked_code( $voucher->code ) ), 'the "vouchers issued" order note shows the code masked, never in full' );
+
+// S10: neither address usable any more (erased buyer, no recipient): the voucher stays personal.
+$nobody                  = vcap()->vouchers->get( $voucher->id );
+$nobody->buyer_email     = '';
+$nobody->recipient_email = 'not-an-address';
+vcap()->coupons->refresh_email_restrictions( $nobody, $login . '@example.com' );
+$kept = array_values( ( new WC_Coupon( $voucher->coupon_id ) )->get_email_restrictions() );
+vcap_acct_assert( array() !== $kept && vcap()->coupons->restriction_kept, 'without a valid buyer or recipient address the coupon keeps its restriction (never silently transferable) and the admin is warned' );
+
 $personal->update_meta_data( '_vcap_redemption_terms', 'Changed later.' );
 $personal->save();
 $values = VCAP\Placeholders::values( vcap()->vouchers->get( $voucher->id ) );

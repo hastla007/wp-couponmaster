@@ -66,7 +66,7 @@ $coupon->set_amount( '10' );
 $coupon->save();
 $sc = new VCAP\Shortcodes( vcap()->downloads, new VCAP\Referrals( vcap()->settings, vcap()->store_credit ) );
 for ( $i = 0; $i < 300; $i++ ) {
-	VCAP\Plugin::rate_limit_failure( 'redeem', 15 * MINUTE_IN_SECONDS );
+	VCAP\Plugin::rate_limit_failure( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW );
 }
 vcap_rl_visitor( '198.51.100.30' );
 $works = true;
@@ -102,6 +102,7 @@ vcap_rl_assert( array( 'invalid', 'invalid', 'invalid', 'invalid' ) === $results
 wp_set_current_user( 0 );
 WC()->session->set( VCAP\CouponLink::SESSION_KEY, null );
 wc_clear_notices();
+vcap_rl_reset(); // The site-wide counter filled above would brake the next visitors.
 
 // --- WooCommerce's coupon entry (Store API): unknown codes count, a limited visitor learns nothing.
 add_filter( 'woocommerce_store_api_disable_nonce_check', '__return_true' );
@@ -117,12 +118,12 @@ $apply = static function ( string $code ) {
 	return rest_do_request( $request );
 };
 vcap_rl_visitor( '192.0.2.40' );
-$site_before = (int) $wpdb->get_var( $wpdb->prepare( "SELECT SUM(option_value) FROM {$wpdb->options} WHERE option_name LIKE %s", '%\_' . md5( VCAP\CouponGuard::BUCKET . '|all' ) ) );
+$site_before = VCAP\Plugin::rate_site_count( VCAP\CouponGuard::BUCKET, VCAP\CouponGuard::WINDOW );
 for ( $i = 0; $i < VCAP\CouponGuard::PER_VISITOR; $i++ ) {
 	$apply( 'rl-guess-' . $i . '-' . $tag );
 }
-$site_after = (int) $wpdb->get_var( $wpdb->prepare( "SELECT SUM(option_value) FROM {$wpdb->options} WHERE option_name LIKE %s", '%\_' . md5( VCAP\CouponGuard::BUCKET . '|all' ) ) );
-vcap_rl_assert( wp_using_ext_object_cache() || VCAP\CouponGuard::PER_VISITOR === $site_after - $site_before, 'unknown codes entered in the cart count as failed attempts' );
+$site_after = VCAP\Plugin::rate_site_count( VCAP\CouponGuard::BUCKET, VCAP\CouponGuard::WINDOW );
+vcap_rl_assert( VCAP\CouponGuard::PER_VISITOR === $site_after - $site_before, 'unknown codes entered in the cart count as failed attempts' );
 $refused = $apply( 'rl-valid-' . $tag );
 vcap_rl_assert( 400 === $refused->get_status() && str_contains( wp_json_encode( $refused->get_data() ), 'Too many attempts' ) && ! WC()->cart->has_discount( 'rl-valid-' . $tag ), 'a limited visitor is refused also for an existing code (the answer reveals nothing)' );
 $unknown = $apply( 'rl-guess-more-' . $tag );
@@ -136,6 +137,22 @@ for ( $i = 0; $i < 20; $i++ ) {
 	WC()->cart->remove_coupon( 'rl-valid-' . $tag );
 }
 vcap_rl_assert( 200 === $apply( 'rl-valid-' . $tag )->get_status(), 'applying an existing code again and again never counts' );
+// S1: WordPress matches REST routes case-insensitively – other spellings of the route count the same.
+vcap_rl_reset();
+vcap_rl_visitor( '192.0.2.50' );
+$before = VCAP\Plugin::rate_site_count( VCAP\CouponGuard::BUCKET, VCAP\CouponGuard::WINDOW );
+foreach ( array( '/wc/store/v1/Cart/Apply-Coupon', '/wc/store/v1/cart/APPLY-coupon' ) as $i => $route ) {
+	$request = new WP_REST_Request( 'POST', $route );
+	$request->set_param( 'code', 'rl-case-' . $i . '-' . $tag );
+	rest_do_request( $request );
+}
+vcap_rl_assert( $before + 2 === VCAP\Plugin::rate_site_count( VCAP\CouponGuard::BUCKET, VCAP\CouponGuard::WINDOW ), 'Store API routes in other upper/lower case spellings count as failed attempts' );
+$batch = new WP_REST_Request( 'POST', '/wc/store/v1/batch' );
+$batch->set_header( 'Content-Type', 'application/json' );
+$batch->set_body( wp_json_encode( array( 'requests' => array( array( 'method' => 'POST', 'path' => '/wc/store/v1/CART/APPLY-COUPON', 'body' => array( 'code' => 'rl-batch-' . $tag ) ) ) ) ) );
+rest_do_request( $batch );
+vcap_rl_assert( $before + 3 === VCAP\Plugin::rate_site_count( VCAP\CouponGuard::BUCKET, VCAP\CouponGuard::WINDOW ), 'also inside a Store API batch request' );
+vcap_rl_assert( VCAP\CouponGuard::applies_coupon( array(), '/wc/store/v1/Cart/Apply-Coupon' ) && ! VCAP\CouponGuard::applies_coupon( array(), '/wc/store/v1/cart/add-item' ), 'route check is case-insensitive and specific' );
 WC()->cart->empty_cart();
 wc_clear_notices();
 
@@ -163,6 +180,142 @@ for ( $i = 0; $i < 300; $i++ ) {
 }
 vcap_rl_assert( ! is_wp_error( vcap()->redemptions->check( $api->code ) ) && ! is_wp_error( vcap()->redemptions->check( $api->code ) ), 'redemption API: site-wide counter full, a valid code is still checked' );
 wp_set_current_user( 0 );
+
+// --- V8: the redemption API also counts per address, in the bucket shared with all code forms.
+vcap_rl_reset();
+vcap_rl_visitor( '203.0.113.80' );
+$acc_a = wp_insert_user( array( 'user_login' => 'vcap-rl-a-' . $tag, 'user_pass' => wp_generate_password( 20 ), 'role' => 'customer' ) );
+$acc_b = wp_insert_user( array( 'user_login' => 'vcap-rl-b-' . $tag, 'user_pass' => wp_generate_password( 20 ), 'role' => 'customer' ) );
+$codes = array();
+foreach ( array( $acc_a, $acc_b ) as $account ) {
+	wp_set_current_user( $account );
+	for ( $i = 0; $i < 8; $i++ ) {
+		$result  = vcap()->redemptions->check( 'rl-none-' . $account . '-' . $i . '-' . $tag );
+		$codes[] = is_wp_error( $result ) ? $result->get_error_code() : 'ok';
+	}
+}
+vcap_rl_assert( 15 === count( array_keys( array_slice( $codes, 0, 15 ), 'vcap_not_found', true ) ) && 'vcap_rate_limited' === $codes[15], 'redemption API: a second self-registered account from the same address does not get a new quota (per address, not only per account)' );
+wp_set_current_user( 0 );
+$_POST['vcap_balance_code'] = 'rl-balance-' . $tag;
+$downloads                  = new VCAP\Downloads( vcap()->settings, vcap()->vouchers, vcap()->pdf );
+$downloads->handle_balance();
+unset( $_POST['vcap_balance_code'] );
+vcap_rl_assert( str_contains( $downloads->balance_shortcode(), 'Too many attempts' ), 'one bucket for all code forms: after the API quota the balance check is limited too' );
+vcap_rl_reset();
+// Staff (connectors with voucher management rights) count only per account.
+$staff = wp_insert_user( array( 'user_login' => 'vcap-rl-staff-' . $tag, 'user_pass' => wp_generate_password( 20 ), 'role' => 'shop_manager' ) );
+update_option( 'vcap_redemption_max_failures', 30 );
+wp_set_current_user( $staff );
+for ( $i = 0; $i < 16; $i++ ) {
+	vcap()->redemptions->check( 'rl-staff-' . $i . '-' . $tag );
+}
+wp_set_current_user( 0 );
+delete_option( 'vcap_redemption_max_failures' );
+vcap_rl_assert( ! VCAP\CodeLookup::begin(), 'staff typos do not use up the address quota of the shop' );
+vcap_rl_reset();
+
+// --- V15: another customer's store credit reads like an unknown code everywhere and counts as a failure.
+$owner_id = wp_insert_user( array( 'user_login' => 'vcap-rl-owner-' . $tag, 'user_pass' => wp_generate_password( 20 ), 'user_email' => 'rl-owner-' . $tag . '@example.test', 'role' => 'customer' ) );
+$foreign  = vcap()->store_credit->account( $owner_id, true );
+vcap_rl_assert( $foreign instanceof VCAP\Voucher && '' !== $foreign->code, 'a store credit account with a coupon exists for the test' );
+vcap_rl_visitor( '203.0.113.81' );
+WC()->cart->empty_cart();
+wc_clear_notices();
+$before = VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW );
+vcap_rl_assert( 'invalid' === $sc->redeem( $foreign->code ) && $before + 1 === VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW ), 'redeem form: another customer\'s store credit is "not found" and counts as a failed attempt' );
+wc_clear_notices();
+$_POST['vcap_balance_code'] = $foreign->code;
+$downloads                  = new VCAP\Downloads( vcap()->settings, vcap()->vouchers, vcap()->pdf );
+$downloads->handle_balance();
+unset( $_POST['vcap_balance_code'] );
+$answer = $downloads->balance_shortcode();
+vcap_rl_assert( str_contains( $answer, 'Voucher code not found' ) && ! str_contains( $answer, 'Balance' ), 'balance check: another customer\'s store credit is "not found" (no balance revealed)' );
+$topup    = new VCAP\TopUp( vcap()->vouchers, vcap()->coupons );
+$check    = new ReflectionMethod( $topup, 'check' );
+$messages = array( $check->invoke( $topup, $foreign->code ), $check->invoke( $topup, 'rl-nothing-' . $tag ) );
+vcap_rl_assert( is_string( $messages[0] ) && $messages[0] === $messages[1], 'top-up: an existing code that cannot be topped up gets the same answer as an unknown code' );
+vcap_rl_reset();
+
+// --- S9: counter names are keyed hashes, not md5(bucket|address).
+vcap_rl_visitor( '198.51.100.90' );
+VCAP\CodeLookup::begin();
+$plain = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", '%\_' . md5( VCAP\CodeLookup::BUCKET . '|198.51.100.90' ) ) );
+$keyed = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", '%\_' . hash_hmac( 'sha256', VCAP\CodeLookup::BUCKET . '|198.51.100.90', wp_salt( 'auth' ) ) ) );
+vcap_rl_assert( 0 === $plain && 1 === $keyed, 'the counter of an address is stored under an HMAC with the site salt (not reversible by trying all IPv4 addresses)' );
+vcap_rl_reset();
+
+// --- V14: IPv6 also per /48, so one allocation cannot rotate through its /64 networks.
+$b48 = 'rl-48-' . wp_generate_password( 6, false, false );
+$hit = array();
+for ( $net = 1; $net <= 5; $net++ ) {
+	vcap_rl_visitor( '2001:db8:77:' . dechex( $net ) . '::1' );
+	for ( $i = 0; $i < 3; $i++ ) {
+		$hit[] = VCAP\Plugin::rate_limited( $b48, 3, 0, HOUR_IN_SECONDS, false );
+	}
+}
+vcap_rl_assert( ! in_array( true, array_slice( $hit, 0, 12 ), true ) && $hit[12], 'a /48 gets four times the quota of a /64, then every /64 in it is limited' );
+vcap_rl_visitor( '2001:db8:78:1::1' );
+vcap_rl_assert( ! VCAP\Plugin::rate_limited( $b48, 3, 0, HOUR_IN_SECONDS, false ), 'another /48 is not affected' );
+vcap_rl_reset();
+
+// --- V13: the site-wide counter of counted requests (preview) only brakes, it never switches the preview off.
+$bp = 'rl-pv-' . wp_generate_password( 6, false, false );
+vcap_rl_visitor( '203.0.113.90' );
+for ( $i = 0; $i < 5; $i++ ) {
+	VCAP\Plugin::rate_limited( $bp, 20, 5, HOUR_IN_SECONDS );
+}
+vcap_rl_visitor( '203.0.113.91' );
+vcap_rl_assert( ! VCAP\Plugin::rate_limited( $bp, 20, 5, HOUR_IN_SECONDS ) && ! VCAP\Plugin::rate_limited( $bp, 20, 5, HOUR_IN_SECONDS ) && ! VCAP\Plugin::rate_limited( $bp, 20, 5, HOUR_IN_SECONDS ) && ! VCAP\Plugin::rate_limited( $bp, 20, 5, HOUR_IN_SECONDS ) && VCAP\Plugin::rate_limited( $bp, 20, 5, HOUR_IN_SECONDS ), 'site-wide preview counter full: other visitors still get previews, with a fifth of the quota' );
+vcap_rl_reset();
+
+// --- C2: an object cache that does not count falls back to the database (opt-in backend only).
+$real_cache = $GLOBALS['wp_object_cache'];
+$broken     = new class() extends WP_Object_Cache {
+	public function incr( $key, $offset = 1, $group = 'default' ) {
+		return 'vcap_rate' === $group ? false : parent::incr( $key, $offset, $group );
+	}
+};
+$GLOBALS['wp_object_cache'] = $broken;
+$was_ext                    = wp_using_ext_object_cache( true );
+add_filter( 'vcap_rate_limit_backend', static fn() => 'object_cache' );
+$bc = 'rl-cache-' . wp_generate_password( 6, false, false );
+vcap_rl_visitor( '203.0.113.95' );
+$res = array();
+for ( $i = 0; $i < 4; $i++ ) {
+	$res[] = VCAP\Plugin::rate_limited( $bc, 3, 0, HOUR_IN_SECONDS, false );
+}
+remove_all_filters( 'vcap_rate_limit_backend' );
+wp_using_ext_object_cache( $was_ext );
+$GLOBALS['wp_object_cache'] = $real_cache;
+vcap_rl_assert( array( false, false, false, true ) === $res, 'object cache increment returns false: the database counts and the limit holds' );
+vcap_rl_reset();
+
+// --- D11: limits per bucket by filter, the first hit is logged and shown, counters can be reset.
+$bd = 'rl-d11-' . wp_generate_password( 6, false, false );
+add_filter( "vcap_rate_limit_{$bd}", static fn( $limits ) => array( 'per_visitor' => 1 ) + $limits );
+$fired = 0;
+add_action( 'vcap_rate_limit_hit', static function () use ( &$fired ) {
+	++$fired;
+} );
+vcap_rl_visitor( '203.0.113.96' );
+$res = array( VCAP\Plugin::rate_limited( $bd, 10, 0, HOUR_IN_SECONDS ), VCAP\Plugin::rate_limited( $bd, 10, 0, HOUR_IN_SECONDS ), VCAP\Plugin::rate_limited( $bd, 10, 0, HOUR_IN_SECONDS ) );
+vcap_rl_assert( array( false, true, true ) === $res, 'the filter "vcap_rate_limit_{bucket}" changes the limit of a bucket' );
+$hits = get_option( VCAP\Plugin::RATE_HITS_OPTION );
+vcap_rl_assert( 1 === $fired && is_array( $hits ) && isset( $hits[ $bd ] ) && $hits[ $bd ]['last'] > time() - 60, 'the first hit of a window is logged once and recorded for Site Health' );
+wp_set_current_user( 1 );
+$health = ( new VCAP\Health() )->test_rate_limits();
+wp_set_current_user( 0 );
+vcap_rl_assert( 'recommended' === $health['status'] && str_contains( $health['description'], $bd ) && str_contains( (string) $health['actions'], 'vcap_reset_rate_limits' ), 'Site Health names the bucket that was hit and offers the reset' );
+VCAP\Plugin::reset_rate_limits();
+vcap_rl_assert( ! VCAP\Plugin::rate_limited( $bd, 10, 0, HOUR_IN_SECONDS ) && false === get_option( VCAP\Plugin::RATE_HITS_OPTION ), 'reset removes all counters and the recorded hits' );
+remove_all_filters( "vcap_rate_limit_{$bd}" );
+remove_all_actions( 'vcap_rate_limit_hit' );
+remove_all_filters( 'vcap_client_ip' );
+vcap_rl_assert( VCAP\Health::proxy_without_client_ip( array( 'REMOTE_ADDR' => '10.0.0.5' ) ), 'Site Health: a private REMOTE_ADDR without "vcap_client_ip" means a proxy hides the visitors' );
+vcap_rl_assert( VCAP\Health::proxy_without_client_ip( array( 'REMOTE_ADDR' => '203.0.113.7', 'HTTP_X_FORWARDED_FOR' => '198.51.100.1' ) ), 'Site Health: forwarding headers without "vcap_client_ip" are reported' );
+add_filter( 'vcap_client_ip', static fn() => '198.51.100.1' );
+vcap_rl_assert( ! VCAP\Health::proxy_without_client_ip( array( 'REMOTE_ADDR' => '203.0.113.7', 'HTTP_X_FORWARDED_FOR' => '198.51.100.1' ) ), 'Site Health: no warning once "vcap_client_ip" returns the visitor address' );
+vcap_rl_reset();
 
 remove_all_filters( 'vcap_client_ip' );
 vcap_rl_reset();

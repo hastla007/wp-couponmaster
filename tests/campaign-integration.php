@@ -28,6 +28,9 @@ $codes = $campaigns->generate_coupons( $template->get_id(), $name, 5, array( 'pr
 vcap_camp_assert( is_array( $codes ) && 5 === count( $codes ) && 5 === count( array_unique( $codes ) ), 'five unique campaign codes are generated' );
 vcap_camp_assert( 5 === count( array_filter( $codes, static fn( $c ) => (bool) preg_match( '/^PART-[A-HJ-NP-Z2-9]{10}$/', $c ) ) ), 'codes follow the requested prefix and length' );
 
+$short = $campaigns->generate_coupons( $template->get_id(), $name . ' short', 3, array( 'prefix' => 'SH', 'length' => 6 ) );
+vcap_camp_assert( is_array( $short ) && 3 === count( array_filter( $short, static fn( $c ) => (bool) preg_match( '/^SH-[A-HJ-NP-Z2-9]{10}$/', $c ) ) ), 'campaign codes with a discount get at least 2^50 combinations (6 characters are raised to 10)' );
+
 $copy = new WC_Coupon( $codes[0] );
 vcap_camp_assert(
 	'percent' === $copy->get_discount_type() && 15.0 === (float) $copy->get_amount() && 1 === (int) $copy->get_usage_limit()
