@@ -191,6 +191,7 @@ final class TemplatePostType {
 		}
 		wp_enqueue_media();
 		wp_enqueue_style( 'vcap-designer', VCAP_URL . 'assets/css/designer.css', array(), VCAP_VERSION );
+		wp_add_inline_style( 'vcap-designer', self::designer_font_css() );
 		wp_enqueue_script( 'vcap-designer', VCAP_URL . 'assets/js/designer.js', array( 'jquery' ), VCAP_VERSION, true );
 
 		$placeholders = array();
@@ -303,6 +304,59 @@ final class TemplatePostType {
 				'starters'     => self::default_designs(),
 			)
 		);
+	}
+
+	/**
+	 * @font-face rules for the designer canvas: the DejaVu files dompdf prints with (not the browser's Verdana or
+	 * Georgia) and the custom fonts of "vcap_pdf_fonts" that lie inside the WordPress folder, so text wraps on the
+	 * canvas as it does in the PDF.
+	 */
+	public static function designer_font_css(): string {
+		$base  = VCAP_URL . 'vendor/dompdf/dompdf/lib/fonts/';
+		$fonts = array(
+			'DejaVu Sans'      => array( 'normal' => 'DejaVuSans', 'bold' => 'DejaVuSans-Bold', 'italic' => 'DejaVuSans-Oblique', 'bold_italic' => 'DejaVuSans-BoldOblique' ),
+			'DejaVu Serif'     => array( 'normal' => 'DejaVuSerif', 'bold' => 'DejaVuSerif-Bold', 'italic' => 'DejaVuSerif-Italic', 'bold_italic' => 'DejaVuSerif-BoldItalic' ),
+			'DejaVu Sans Mono' => array( 'normal' => 'DejaVuSansMono', 'bold' => 'DejaVuSansMono-Bold', 'italic' => 'DejaVuSansMono-Oblique', 'bold_italic' => 'DejaVuSansMono-BoldOblique' ),
+		);
+		$urls = array();
+		foreach ( $fonts as $family => $variants ) {
+			foreach ( $variants as $variant => $file ) {
+				if ( is_readable( VCAP_PATH . 'vendor/dompdf/dompdf/lib/fonts/' . $file . '.ttf' ) ) {
+					$urls[ $family ][ $variant ] = $base . $file . '.ttf';
+				}
+			}
+		}
+		$roots = array_filter(
+			array(
+				defined( 'WP_CONTENT_DIR' ) && function_exists( 'content_url' ) ? array( WP_CONTENT_DIR, content_url() ) : null,
+				function_exists( 'site_url' ) ? array( ABSPATH, site_url() ) : null,
+			)
+		);
+		foreach ( PdfRenderer::custom_fonts() as $family => $variants ) {
+			foreach ( (array) $variants as $variant => $path ) {
+				$real = realpath( (string) $path );
+				foreach ( $roots as $root ) {
+					$dir = realpath( (string) $root[0] );
+					if ( $real && $dir && str_starts_with( $real, trailingslashit( $dir ) ) ) {
+						$urls[ (string) $family ][ (string) $variant ] = trailingslashit( (string) $root[1] ) . str_replace( '%2F', '/', rawurlencode( substr( $real, strlen( trailingslashit( $dir ) ) ) ) );
+						break;
+					}
+				}
+			}
+		}
+		$css = '';
+		foreach ( $urls as $family => $variants ) {
+			foreach ( $variants as $variant => $url ) {
+				$css .= sprintf(
+					"@font-face{font-family:'%s';font-weight:%s;font-style:%s;src:url('%s') format('truetype');font-display:block;}",
+					str_replace( array( "'", '"', '\\', '<', '>', ';', '}' ), '', $family ),
+					str_contains( $variant, 'bold' ) ? 'bold' : 'normal',
+					str_contains( $variant, 'italic' ) ? 'italic' : 'normal',
+					esc_url( $url )
+				);
+			}
+		}
+		return $css;
 	}
 
 	public function save( int $post_id, \WP_Post $post ): void {

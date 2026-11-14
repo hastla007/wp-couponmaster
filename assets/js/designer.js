@@ -27,6 +27,13 @@
 		Times: '"Times New Roman", Times, serif',
 		Courier: '"Courier New", Courier, monospace'
 	};
+	// Custom PDF fonts (vcap_pdf_fonts) are loaded as web fonts (@font-face from the server); like the PDF, missing
+	// glyphs come from DejaVu Sans.
+	( cfg.fonts || [] ).forEach( function ( family ) {
+		if ( ! FONT_STACKS[ family ] ) {
+			FONT_STACKS[ family ] = '"' + String( family ).replace( /["\\]/g, '' ) + '", "DejaVu Sans", sans-serif';
+		}
+	} );
 
 	var design;
 	try {

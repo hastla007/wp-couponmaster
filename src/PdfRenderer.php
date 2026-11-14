@@ -30,33 +30,117 @@ final class PdfRenderer {
 	/** @var array<string,float> */
 	private static array $height_ratio = array();
 
+	/** Font metrics with the options of render() and the custom fonts registered, per font folder. */
+	private static array $metrics = array();
+
 	/**
 	 * CSS font-family list for dompdf. dompdf falls back per glyph to the next family, so characters missing in
 	 * the chosen font (e.g. ✓ ★ in DejaVu Serif Italic, € in the core Courier) come from DejaVu Sans instead of
-	 * rendering as empty boxes.
+	 * rendering as empty boxes, then from the fallback fonts (e.g. Noto Sans CJK, see fallback_fonts()).
+	 *
+	 * @return string[] Families in order.
 	 */
+	public static function font_families( string $font ): array {
+		$font = str_replace( array( "'", '"', ';', '<', '>' ), '', $font );
+		return array_values( array_unique( array_merge( array( $font, 'DejaVu Sans' ), self::fallback_fonts() ) ) );
+	}
+
 	public static function font_stack( string $font ): string {
-		$font  = str_replace( array( "'", '"', ';', '<', '>' ), '', $font );
-		$stack = "'" . $font . "'";
-		if ( 'DejaVu Sans' !== $font ) {
-			$stack .= ", 'DejaVu Sans'";
+		return implode( ', ', array_map( static fn( $family ) => "'" . $family . "'", self::font_families( $font ) ) );
+	}
+
+	/**
+	 * Fallback families for scripts DejaVu does not cover (Chinese, Japanese, Korean, …): custom fonts registered
+	 * with "vcap_pdf_fonts" and named with the "vcap_pdf_fallback_fonts" filter (see COMPATIBILITY.md).
+	 *
+	 * @return string[]
+	 */
+	public static function fallback_fonts(): array {
+		$custom = array_keys( self::custom_fonts() );
+		return array_values( array_intersect( array_map( 'strval', (array) apply_filters( 'vcap_pdf_fallback_fonts', array() ) ), $custom ) );
+	}
+
+	/**
+	 * dompdf options of every render: no remote files, PHP or JavaScript, fonts cached in the private upload folder.
+	 */
+	public static function dompdf_options(): Options {
+		$tmp = Install::upload_dir() . '/fonts';
+		if ( ! is_dir( $tmp ) ) {
+			wp_mkdir_p( $tmp );
 		}
-		return $stack;
+		$options = new Options();
+		$options->set( 'isRemoteEnabled', false );
+		$options->set( 'isPhpEnabled', false );
+		$options->set( 'isJavascriptEnabled', false );
+		$options->set( 'isHtml5ParserEnabled', true );
+		$options->set( 'defaultFont', 'DejaVu Sans' );
+		$options->set( 'dpi', 150 );
+		$options->set( 'fontDir', $tmp );
+		$options->set( 'fontCache', $tmp );
+		$options->set( 'tempDir', wp_is_writable( $tmp ) ? $tmp : sys_get_temp_dir() );
+		$uploads = wp_upload_dir( null, false );
+		$options->set( 'chroot', array_values( array_filter( array( VCAP_PATH, $uploads['basedir'], ABSPATH ) ) ) );
+		return apply_filters( 'vcap_dompdf_options', $options );
+	}
+
+	/**
+	 * dompdf font metrics with the same options as render() and the custom fonts registered, so that measuring
+	 * (line height, text fitting, glyph coverage) knows the fonts the PDF really uses.
+	 */
+	public static function font_metrics(): ?\Dompdf\FontMetrics {
+		$options = self::dompdf_options();
+		$key     = (string) $options->getFontDir() . '|' . md5( (string) wp_json_encode( self::custom_fonts() ) );
+		if ( ! array_key_exists( $key, self::$metrics ) ) {
+			try {
+				$metrics = ( new Dompdf( $options ) )->getFontMetrics();
+				foreach ( self::custom_fonts() as $family => $variants ) {
+					foreach ( (array) $variants as $variant => $path ) {
+						$style = self::style_of( (string) $variant );
+						if ( is_readable( (string) $path ) && ! self::has_font( $metrics, (string) $family, $style ) ) {
+							$metrics->registerFont(
+								array(
+									'family' => (string) $family,
+									'weight' => str_contains( $style, 'bold' ) ? 'bold' : 'normal',
+									'style'  => str_contains( $style, 'italic' ) ? 'italic' : 'normal',
+								),
+								(string) $path
+							);
+						}
+					}
+				}
+			} catch ( \Throwable $e ) {
+				$metrics = null;
+			}
+			self::$metrics[ $key ] = $metrics;
+			self::$height_ratio    = array();
+		}
+		return self::$metrics[ $key ];
+	}
+
+	private static function has_font( \Dompdf\FontMetrics $metrics, string $family, string $style ): bool {
+		$families = $metrics->getFontFamilies();
+		return isset( $families[ mb_strtolower( $family, 'UTF-8' ) ][ $style ] );
+	}
+
+	private static function style_of( string $variant ): string {
+		$bold   = str_contains( $variant, 'bold' );
+		$italic = str_contains( $variant, 'italic' );
+		return $bold && $italic ? 'bold_italic' : ( $bold ? 'bold' : ( $italic ? 'italic' : 'normal' ) );
 	}
 
 	/**
 	 * dompdf multiplies CSS line-height by the font's own height ratio (≈1.28 for DejaVu, 0.86 for Courier),
-	 * browsers do not. Dividing by this ratio makes the PDF line pitch equal to the designer canvas.
+	 * browsers do not. Dividing by this ratio makes the PDF line pitch equal to the designer canvas. Measured with
+	 * the render options, so custom fonts get their own ratio.
 	 */
-	private static function font_height_ratio( string $family, bool $bold, bool $italic ): float {
-		$style = $bold && $italic ? 'bold_italic' : ( $bold ? 'bold' : ( $italic ? 'italic' : 'normal' ) );
-		$key   = $family . '|' . $style;
+	public static function font_height_ratio( string $family, bool $bold, bool $italic ): float {
+		$style   = $bold && $italic ? 'bold_italic' : ( $bold ? 'bold' : ( $italic ? 'italic' : 'normal' ) );
+		$metrics = self::font_metrics();
+		$key     = $family . '|' . $style;
 		if ( ! isset( self::$height_ratio[ $key ] ) ) {
 			$ratio = 1.0;
 			try {
-				static $metrics = null;
-				$metrics = $metrics ?? ( new Dompdf() )->getFontMetrics();
-				$font    = $metrics->getFont( $family, $style );
+				$font = $metrics ? $metrics->getFont( $family, $style ) : null;
 				if ( $font ) {
 					$ratio = (float) $metrics->getFontHeight( $font, 100 ) / 100;
 				}
@@ -116,25 +200,7 @@ final class PdfRenderer {
 		$html   = $this->html( $voucher, $design );
 		list( $w, $h ) = self::page_size( $design['page'] ?? array() );
 
-		$tmp = Install::upload_dir() . '/fonts';
-		if ( ! is_dir( $tmp ) ) {
-			wp_mkdir_p( $tmp );
-		}
-		$options = new Options();
-		$options->set( 'isRemoteEnabled', false );
-		$options->set( 'isPhpEnabled', false );
-		$options->set( 'isJavascriptEnabled', false );
-		$options->set( 'isHtml5ParserEnabled', true );
-		$options->set( 'defaultFont', 'DejaVu Sans' );
-		$options->set( 'dpi', 150 );
-		$options->set( 'fontDir', $tmp );
-		$options->set( 'fontCache', $tmp );
-		$options->set( 'tempDir', wp_is_writable( $tmp ) ? $tmp : sys_get_temp_dir() );
-		$uploads = wp_upload_dir( null, false );
-		$options->set( 'chroot', array_values( array_filter( array( VCAP_PATH, $uploads['basedir'], ABSPATH ) ) ) );
-		$options = apply_filters( 'vcap_dompdf_options', $options );
-
-		$dompdf = new Dompdf( $options );
+		$dompdf = new Dompdf( self::dompdf_options() );
 		$dompdf->setPaper( array( 0, 0, $w * self::MM_TO_PT, $h * self::MM_TO_PT ) );
 		$dompdf->loadHtml( $html, 'UTF-8' );
 		$dompdf->render();
