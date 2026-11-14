@@ -51,11 +51,28 @@ final class CampaignAdmin {
 		}
 		$report = get_transient( self::REPORT . get_current_user_id() );
 		delete_transient( self::REPORT . get_current_user_id() );
+		list( $job, $running ) = JobProgress::load( Campaigns::JOB );
+		if ( $job && ! $running ) {
+			$report = array(
+				/* translators: 1: number of codes created, 2: error message */
+				'error'  => 'failed' === $job['status'] ? sprintf( __( 'Code generation stopped after %1$d codes: %2$s', 'voucher-captain' ), (int) $job['done'], (string) $job['error'] ) : '',
+				'count'  => (int) $job['done'],
+				'name'   => (string) $job['params']['name'],
+				'target' => (string) $job['params']['target'],
+			);
+		}
 		$templates = $this->template_coupons();
 		?>
 		<div class="wrap vcap-wrap">
 			<h1><?php esc_html_e( 'Generate codes', 'voucher-captain' ); ?></h1>
 			<p><?php esc_html_e( 'Create many unique codes at once, e.g. for partners, flyers or campaigns, and download them as CSV.', 'voucher-captain' ); ?></p>
+
+			<?php
+			if ( $running ) {
+				/* translators: %s: campaign or batch name */
+				JobProgress::render( $job, sprintf( __( 'Generating codes for "%s" …', 'voucher-captain' ), (string) $job['params']['name'] ) );
+			}
+			?>
 
 			<?php if ( is_array( $report ) ) : ?>
 				<div class="notice <?php echo $report['error'] ? 'notice-error' : 'notice-success'; ?>"><p>
@@ -188,9 +205,20 @@ final class CampaignAdmin {
 			'suffix' => sanitize_text_field( wp_unslash( $_POST['suffix'] ?? '' ) ),
 			'length' => absint( $_POST['length'] ?? 12 ),
 		);
-		$result = 'pool' === $target
-			? $this->campaigns->generate_pool( $name, $count, $opts )
-			: $this->campaigns->generate_coupons( absint( $_POST['template'] ?? 0 ), $name, $count, $opts );
+		$template = absint( $_POST['template'] ?? 0 );
+		if ( $count > Campaigns::STEP ) {
+			// B4: large runs are made in the background, Campaigns::STEP codes per step, with progress on this screen.
+			$queued = $this->campaigns->queue( $target, $template, $name, $count, $opts, get_current_user_id() );
+			if ( ! is_wp_error( $queued ) ) {
+				wp_safe_redirect( admin_url( 'admin.php?page=vcap-generate' ) );
+				exit;
+			}
+			$result = $queued;
+		} else {
+			$result = 'pool' === $target
+				? $this->campaigns->generate_pool( $name, $count, $opts )
+				: $this->campaigns->generate_coupons( $template, $name, $count, $opts );
+		}
 		if ( is_wp_error( $result ) ) {
 			FormToken::release( 'generate' ); // Nothing was generated: the corrected form may be sent again.
 		}

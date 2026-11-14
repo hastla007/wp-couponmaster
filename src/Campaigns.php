@@ -30,18 +30,23 @@ final class Campaigns {
 		);
 	}
 
+	/** Whether a voucher, a code pool entry or a coupon uses the code (B4: indexed own tables first, see CodeIndex). */
 	public function taken( string $code ): bool {
-		return $this->pool->exists( $code ) || $this->vouchers->code_exists( $code ) || wc_get_coupon_id_by_code( $code ) > 0;
+		return CodeIndex::taken( $code );
 	}
 
+	/** Codes made per step of a background run (and the largest run done right away in the admin request). */
+	public const STEP = 100;
+	/** Job type of background code generation (Jobs). */
+	public const JOB = 'generate';
+
 	/**
-	 * Create coupons from a template coupon.
+	 * Checks a coupon run: the template's data to copy, or an error.
 	 *
-	 * @return string[]|\WP_Error generated codes
+	 * @return array|\WP_Error template data (without id, code, usage and meta)
 	 */
-	public function generate_coupons( int $template_id, string $campaign, int $count, array $opts ) {
+	private function coupon_template( int $template_id, string $campaign, int $count ) {
 		$template = new \WC_Coupon( $template_id );
-		$campaign = self::clean_name( $campaign );
 		if ( ! $template->get_id() || 'shop_coupon' !== get_post_type( $template_id ) ) {
 			return new \WP_Error( 'vcap_campaign_template', __( 'Please choose an existing coupon as template.', 'voucher-captain' ) );
 		}
@@ -56,15 +61,50 @@ final class Campaigns {
 		foreach ( array( 'id', 'code', 'usage_count', 'used_by', 'date_created', 'date_modified', 'meta_data' ) as $key ) {
 			unset( $data[ $key ] );
 		}
-		$options = $this->code_options( $opts );
+		return $data;
+	}
+
+	/** Code options of a coupon run: codes that carry a discount get the minimum guessing space. */
+	private function coupon_options( int $template_id, array $opts ): array {
+		$template = new \WC_Coupon( $template_id );
+		$options  = $this->code_options( $opts );
 		if ( (float) $template->get_amount() > 0 || $template->get_free_shipping() ) {
 			// Each code carries a discount and is valid on its own: as hard to guess as voucher codes, so the
 			// rate limits make finding one of a thousand codes hopeless (6 characters would give about 2^30).
 			$options['min_bits'] = (int) apply_filters( 'vcap_min_code_bits', CodeGenerator::MIN_BITS );
 		}
-		$codes   = array();
-		for ( $i = 0; $i < $count; $i++ ) {
-			$code   = CodeGenerator::unique( $options, array( $this, 'taken' ) );
+		return $options;
+	}
+
+	/** Code options of a code pool run: pool codes become vouchers with a value when sold. */
+	private function pool_options( array $opts ): array {
+		$options             = $this->code_options( $opts );
+		$options['min_bits'] = (int) apply_filters( 'vcap_min_code_bits', CodeGenerator::MIN_BITS );
+		return $options;
+	}
+
+	/**
+	 * Create coupons from a template coupon.
+	 *
+	 * @return string[]|\WP_Error generated codes
+	 */
+	public function generate_coupons( int $template_id, string $campaign, int $count, array $opts ) {
+		$campaign = self::clean_name( $campaign );
+		$data     = $this->coupon_template( $template_id, $campaign, $count );
+		if ( is_wp_error( $data ) ) {
+			return $data;
+		}
+		return $this->create_coupons( $data, $campaign, $count, $this->coupon_options( $template_id, $opts ) );
+	}
+
+	/**
+	 * Saves $count coupons with the template data; the codes are checked in batches (CodeIndex::unique_many()).
+	 *
+	 * @return string[] codes of the saved coupons
+	 */
+	private function create_coupons( array $data, string $campaign, int $count, array $options ): array {
+		$codes = array();
+		foreach ( CodeIndex::unique_many( $options, $count ) as $code ) {
 			$coupon = new \WC_Coupon();
 			$coupon->set_props( $data );
 			$coupon->set_code( $code );
@@ -90,17 +130,85 @@ final class Campaigns {
 			/* translators: %d: maximum number of codes */
 			return new \WP_Error( 'vcap_campaign_input', sprintf( __( 'Please enter a batch name and between 1 and %d codes.', 'voucher-captain' ), self::MAX_RUN ) );
 		}
-		// Pool codes become vouchers with a value when sold: as hard to guess as generated voucher codes.
-		$options             = $this->code_options( $opts );
-		$options['min_bits'] = (int) apply_filters( 'vcap_min_code_bits', CodeGenerator::MIN_BITS );
-		$codes               = array();
-		for ( $i = 0; $i < $count; $i++ ) {
-			$code = CodeGenerator::unique( $options, array( $this, 'taken' ) );
+		return $this->create_pool( $batch, $count, $this->pool_options( $opts ) );
+	}
+
+	/** @return string[] codes added to the batch */
+	private function create_pool( string $batch, int $count, array $options ): array {
+		$codes = array();
+		foreach ( CodeIndex::unique_many( $options, $count ) as $code ) {
 			if ( $this->pool->add( $code, $batch ) ) {
 				$codes[] = $code;
 			}
 		}
 		return $codes;
+	}
+
+	/**
+	 * Generates codes in the background (B4): checks the input like generate_coupons()/generate_pool(), then starts a
+	 * job that makes STEP codes per step (Jobs). Refused while the user's previous run is still going.
+	 *
+	 * @return true|\WP_Error
+	 */
+	public function queue( string $target, int $template_id, string $name, int $count, array $opts, int $user_id ) {
+		$name = self::clean_name( $name );
+		if ( 'pool' === $target ) {
+			if ( '' === $name || $count < 1 || $count > self::MAX_RUN ) {
+				/* translators: %d: maximum number of codes */
+				return new \WP_Error( 'vcap_campaign_input', sprintf( __( 'Please enter a batch name and between 1 and %d codes.', 'voucher-captain' ), self::MAX_RUN ) );
+			}
+		} else {
+			$data = $this->coupon_template( $template_id, $name, $count );
+			if ( is_wp_error( $data ) ) {
+				return $data;
+			}
+		}
+		$started = Jobs::start(
+			Jobs::id( self::JOB, $user_id ),
+			array(
+				'type'   => self::JOB,
+				'total'  => $count,
+				'params' => array(
+					'target'   => 'pool' === $target ? 'pool' : 'coupons',
+					'template' => $template_id,
+					'name'     => $name,
+					'opts'     => $opts,
+				),
+			)
+		);
+		return $started ? true : new \WP_Error( 'vcap_campaign_running', __( 'Your previous code generation is still running. Please wait until it is finished.', 'voucher-captain' ) );
+	}
+
+	/**
+	 * One step of a background run (Jobs handler): up to STEP codes. The progress is saved per step, so a run cut off
+	 * in the middle of a step may make up to STEP codes more than requested, never fewer.
+	 */
+	public function job_step( array $job ): array {
+		$p    = (array) $job['params'];
+		$want = min( self::STEP, (int) $job['total'] - (int) $job['done'] );
+		if ( $want > 0 ) {
+			if ( 'pool' === $p['target'] ) {
+				$codes = $this->create_pool( (string) $p['name'], $want, $this->pool_options( (array) $p['opts'] ) );
+			} else {
+				$data = $this->coupon_template( (int) $p['template'], (string) $p['name'], $want );
+				if ( is_wp_error( $data ) ) {
+					$job['status'] = 'failed';
+					$job['error']  = $data->get_error_message();
+					return $job;
+				}
+				$codes = $this->create_coupons( $data, (string) $p['name'], $want, $this->coupon_options( (int) $p['template'], (array) $p['opts'] ) );
+			}
+			if ( ! $codes ) {
+				$job['status'] = 'failed';
+				$job['error']  = __( 'No further codes could be saved.', 'voucher-captain' );
+				return $job;
+			}
+			$job['done'] = (int) $job['done'] + count( $codes );
+		}
+		if ( (int) $job['done'] >= (int) $job['total'] ) {
+			$job['status'] = 'done';
+		}
+		return $job;
 	}
 
 	/** @return array<int, array{campaign:string,total:int}> */

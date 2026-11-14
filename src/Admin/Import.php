@@ -3,6 +3,8 @@ namespace VCAP\Admin;
 
 use VCAP\CodeGenerator;
 use VCAP\CodePool;
+use VCAP\CodeIndex;
+use VCAP\Jobs;
 use VCAP\SpreadsheetReader;
 
 defined( 'ABSPATH' ) || exit;
@@ -45,10 +47,25 @@ final class Import {
 		}
 		$report = get_transient( self::REPORT_TRANSIENT . get_current_user_id() );
 		delete_transient( self::REPORT_TRANSIENT . get_current_user_id() );
+		list( $job, $running ) = JobProgress::load( CodePool::IMPORT_JOB );
+		if ( $job && ! $running ) {
+			$report = (array) $job['report'];
+			if ( 'failed' === $job['status'] ) {
+				/* translators: %s: error message */
+				$report['error'] = sprintf( __( 'The import stopped: %s', 'voucher-captain' ), (string) $job['error'] );
+			}
+		}
 		?>
 		<div class="wrap vcap-wrap">
 			<h1><?php esc_html_e( 'Import coupon codes', 'voucher-captain' ); ?></h1>
 			<p><?php esc_html_e( 'Upload a list of pre-generated codes (e.g. printed cards or codes from a partner). Assign the batch to a voucher product under Product data → Voucher → Code source; each sale uses the next free code.', 'voucher-captain' ); ?></p>
+
+			<?php
+			if ( $running ) {
+				/* translators: %s: batch name */
+				JobProgress::render( $job, sprintf( __( 'Importing codes into batch "%s" …', 'voucher-captain' ), (string) ( $job['report']['batch'] ?? '' ) ) );
+			}
+			?>
 
 			<?php if ( is_array( $report ) ) : ?>
 				<?php $report += self::empty_report(); ?>
@@ -60,12 +77,12 @@ final class Import {
 						<ul>
 							<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Duplicates within the file skipped: %d', 'voucher-captain' ), $report['dupes_file'] ) ); ?></li>
 							<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Already existing codes skipped: %d', 'voucher-captain' ), $report['dupes_existing'] ) ); ?></li>
-							<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Invalid codes skipped: %d', 'voucher-captain' ), count( $report['invalid'] ) ) ); ?></li>
+							<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Invalid codes skipped: %d', 'voucher-captain' ), Jobs::count( $report, 'invalid' ) ) ); ?></li>
 							<?php if ( $report['not_saved'] ) : ?>
-								<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Codes not saved (database error): %d', 'voucher-captain' ), count( $report['not_saved'] ) ) ); ?></li>
+								<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Codes not saved (database error): %d', 'voucher-captain' ), Jobs::count( $report, 'not_saved' ) ) ); ?></li>
 							<?php endif; ?>
 							<?php if ( ! empty( $report['weak'] ) ) : ?>
-								<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Codes too easy to guess skipped: %d', 'voucher-captain' ), count( $report['weak'] ) ) ); ?></li>
+								<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Codes too easy to guess skipped: %d', 'voucher-captain' ), Jobs::count( $report, 'weak' ) ) ); ?></li>
 							<?php endif; ?>
 						</ul>
 						<?php if ( ! empty( $report['sequential'] ) ) : ?>
@@ -226,21 +243,59 @@ final class Import {
 			$this->finish( $report );
 		}
 
-		$this->finish(
-			$this->process(
-				$rows,
-				array(
-					'batch'        => $batch,
-					'column'       => sanitize_text_field( wp_unslash( $_POST['column'] ?? 'A' ) ),
-					'header'       => ! empty( $_POST['header'] ),
-					'uppercase'    => ! empty( $_POST['uppercase'] ),
-					'allow_weak'   => ! empty( $_POST['allow_weak'] ),
-					'confirm_weak' => ! empty( $_POST['confirm_weak'] ),
-					'format'       => sanitize_key( wp_unslash( (string) ( $_POST['format'] ?? '' ) ) ),
-					'pattern'      => wp_unslash( (string) ( $_POST['pattern'] ?? '' ) ), // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- used as regex only.
-				)
+		list( $report, $codes ) = $this->prepare(
+			$rows,
+			array(
+				'batch'        => $batch,
+				'column'       => sanitize_text_field( wp_unslash( $_POST['column'] ?? 'A' ) ),
+				'header'       => ! empty( $_POST['header'] ),
+				'uppercase'    => ! empty( $_POST['uppercase'] ),
+				'allow_weak'   => ! empty( $_POST['allow_weak'] ),
+				'confirm_weak' => ! empty( $_POST['confirm_weak'] ),
+				'format'       => sanitize_key( wp_unslash( (string) ( $_POST['format'] ?? '' ) ) ),
+				'pattern'      => wp_unslash( (string) ( $_POST['pattern'] ?? '' ) ), // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- used as regex only.
 			)
 		);
+		unset( $rows );
+		$report = $this->import_or_queue( $report, $codes, get_current_user_id() );
+		if ( empty( $report['queued'] ) ) {
+			$this->finish( $report );
+		}
+		wp_safe_redirect( admin_url( 'admin.php?page=vcap-import' ) );
+		exit;
+	}
+
+	/**
+	 * Imports checked codes (prepare()) right away, or – more than CodeIndex::CHUNK codes – starts a background
+	 * import that adds one chunk per step (B4; progress on this screen). A queued import returns the report with
+	 * "queued" set.
+	 *
+	 * @param array<int, string> $codes Row number => code.
+	 */
+	public function import_or_queue( array $report, array $codes, int $user_id ): array {
+		if ( '' !== $report['error'] ) {
+			return $report;
+		}
+		if ( count( $codes ) <= CodeIndex::CHUNK ) {
+			$this->pool->import_codes( $codes, (string) $report['batch'], $report );
+			return $report;
+		}
+		$started = Jobs::start(
+			Jobs::id( CodePool::IMPORT_JOB, $user_id ),
+			array(
+				'type'   => CodePool::IMPORT_JOB,
+				'total'  => count( $codes ),
+				'report' => $report,
+			),
+			array_chunk( $codes, CodeIndex::CHUNK, true )
+		);
+		if ( ! $started ) {
+			$report          = self::empty_report( (string) $report['batch'] );
+			$report['error'] = __( 'Your previous import is still running. Please wait until it is finished, then upload the file again.', 'voucher-captain' );
+			return $report;
+		}
+		$report['queued'] = true;
+		return $report;
 	}
 
 	/** Empty import report. */
@@ -252,8 +307,11 @@ final class Import {
 			'dupes_file'       => 0,
 			'dupes_existing'   => 0,
 			'invalid'          => array(),
+			'invalid_count'    => 0,
 			'not_saved'        => array(),
+			'not_saved_count'  => 0,
 			'weak'             => array(),
+			'weak_count'       => 0,
 			'weak_imported'    => 0,
 			'sequential'       => false,
 			'check_digit'      => false,
@@ -329,8 +387,25 @@ final class Import {
 	 * @param array{batch:string, column?:string, header?:bool, uppercase?:bool, allow_weak?:bool, confirm_weak?:bool, format?:string, pattern?:string} $opts
 	 */
 	public function process( array $rows, array $opts ): array {
+		list( $report, $codes ) = $this->prepare( $rows, $opts );
+		if ( '' === $report['error'] ) {
+			$this->pool->import_codes( $codes, (string) $report['batch'], $report );
+		}
+		return $report;
+	}
+
+	/**
+	 * Reads and checks the codes of the rows (format, duplicates in the file, guessing space of the whole file) – no
+	 * database lookups per code. The report lists at most Jobs::MAX_ERRORS rows per list and counts all of them.
+	 *
+	 * @param array<int, array<int, string>> $rows
+	 * @param array{batch:string, column?:string, header?:bool, uppercase?:bool, allow_weak?:bool, confirm_weak?:bool, format?:string, pattern?:string} $opts
+	 * @return array{0:array, 1:array<int, string>} report, codes to import (row number => code)
+	 */
+	public function prepare( array $rows, array $opts ): array {
 		$batch  = (string) $opts['batch'];
 		$report = self::empty_report( $batch );
+		$codes  = array();
 
 		$pattern = (string) ( $opts['pattern'] ?? '' );
 		$format  = (string) ( $opts['format'] ?? '' );
@@ -340,13 +415,13 @@ final class Import {
 		$regex = "\x01" . str_replace( "\x01", '', $pattern ?: '^[A-Za-z0-9._-]{4,64}$' ) . "\x01u"; // Control-char delimiter: the pattern needs no escaping.
 		if ( false === @preg_match( $regex, '' ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors
 			$report['error'] = __( 'The "Allowed format" is not a valid regular expression.', 'voucher-captain' );
-			return $report;
+			return array( $report, $codes );
 		}
 
 		$col = self::resolve_column( $rows, (string) ( $opts['column'] ?? 'A' ), ! empty( $opts['header'] ) );
 		if ( '' !== $col['error'] ) {
 			$report['error'] = $col['error'];
-			return $report;
+			return array( $report, $codes );
 		}
 		$index            = $col['index'];
 		$header           = $col['header'];
@@ -370,7 +445,7 @@ final class Import {
 				__( 'Column %s is empty: no codes were found, nothing was imported. Check the column (letter or header name) and the "First row is a header" option.', 'voucher-captain' ),
 				$col['label']
 			);
-			return $report;
+			return array( $report, $codes );
 		}
 
 		$upper      = ! empty( $opts['uppercase'] );
@@ -387,7 +462,7 @@ final class Import {
 			$problem = self::code_problem( $code, $regex );
 			if ( '' !== $problem ) {
 				/* translators: 1: row number, 2: value, 3: reason */
-				$report['invalid'][] = sprintf( __( 'Row %1$d: "%2$s" – %3$s', 'voucher-captain' ), $row_number( $n ), mb_substr( (string) preg_replace( '/[\x00-\x1F\x7F]/', '?', $code ), 0, 80 ), $problem );
+				Jobs::add_error( $report, 'invalid', sprintf( __( 'Row %1$d: "%2$s" – %3$s', 'voucher-captain' ), $row_number( $n ), mb_substr( (string) preg_replace( '/[\x00-\x1F\x7F]/', '?', $code ), 0, 80 ), $problem ) );
 				continue;
 			}
 			$key = wc_format_coupon_code( $code ); // WooCommerce codes are case-insensitive.
@@ -414,26 +489,14 @@ final class Import {
 			if ( $analysis['bits'][ $n ] < $min_bits ) {
 				if ( ! $accept_weak ) {
 					/* translators: 1: row number, 2: value */
-					$report['weak'][] = sprintf( __( 'Row %1$d: "%2$s"', 'voucher-captain' ), $row_number( $n ), mb_substr( $code, 0, 80 ) );
+					Jobs::add_error( $report, 'weak', sprintf( __( 'Row %1$d: "%2$s"', 'voucher-captain' ), $row_number( $n ), mb_substr( $code, 0, 80 ) ) );
 					continue;
 				}
 				++$report['weak_imported'];
 			}
-			if ( $this->pool->exists( $code ) || wc_get_coupon_id_by_code( $code ) || vcap()->vouchers->code_exists( $code ) ) {
-				++$report['dupes_existing'];
-				continue;
-			}
-			if ( $this->pool->add( $code, $batch ) ) {
-				++$report['imported'];
-			} else {
-				// Not a duplicate (checked above): the database refused the row. Say why.
-				global $wpdb;
-				$reason = '' !== (string) $wpdb->last_error ? (string) $wpdb->last_error : __( 'the database did not save it', 'voucher-captain' );
-				/* translators: 1: row number, 2: value, 3: reason */
-				$report['not_saved'][] = sprintf( __( 'Row %1$d: "%2$s" – %3$s', 'voucher-captain' ), $row_number( $n ), mb_substr( $code, 0, 80 ), $reason );
-			}
+			$codes[ $row_number( $n ) ] = $code;
 		}
-		return $report;
+		return array( $report, $codes );
 	}
 
 	public function delete_batch(): void {
