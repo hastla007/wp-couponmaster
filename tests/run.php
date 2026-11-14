@@ -847,6 +847,16 @@ $refused        = $promotion_cart->refuse_removal( null, null, new WP_REST_Reque
 check( 'cart block: removing an automatic promotion is refused with a message', $refused instanceof WP_Error && 'vcap_promotion_not_removable' === $refused->get_error_code() && 400 === $refused->get_error_data()['status'] );
 check( 'cart block: other coupons and routes are not affected', null === $promotion_cart->refuse_removal( null, null, new WP_REST_Request( 'POST', '/wc/store/v1/cart/remove-coupon', array( 'code' => 'summer10' ) ) ) && null === $promotion_cart->refuse_removal( null, null, new WP_REST_Request( 'POST', '/wc/store/v1/cart/apply-coupon', array( 'code' => 'vcap-campaign-12' ) ) ) );
 
+// F7 (frontend.js, no JS runtime here): the counter is the field's description, not a live region; a separate
+// live region speaks the characters left only near the limit and only after typing paused.
+$front_js = (string) file_get_contents( dirname( __DIR__ ) . '/assets/js/frontend.js' );
+check( 'F7: the character counter gets an id and is linked to its field by aria-describedby', str_contains( $front_js, "\$counter = \$( '<span class=\"vcap-counter\"></span>' ).attr( 'id', id );" ) && str_contains( $front_js, "\$input.attr( 'aria-describedby', described );" ) && ! preg_match( '/class="vcap-counter"[^>]*aria-live/', $front_js ) );
+check( 'F7: a separate live region announces only at or below 20 characters left, debounced', str_contains( $front_js, 'var ANNOUNCE_BELOW = 20;' ) && str_contains( $front_js, 'class="vcap-counter-live screen-reader-text" aria-live="polite"' ) && str_contains( $front_js, "clearTimeout( \$input.data( 'vcapAnnounce' ) );" ) && str_contains( $front_js, "\$region.text( left <= ANNOUNCE_BELOW ? text : '' );" ) && (bool) preg_match( '/var ANNOUNCE_DELAY = [5-9]\d\d;/', $front_js ) );
+check( 'F7: an unchanged counter text is not written again (no repeated announcement on focus)', str_contains( $front_js, 'if ( $counter.text() === text ) {' ) );
+// G5 (blocks.js): the server-side preview is wrapped in wp.components.Disabled (no POSTs, no downloads from the editor).
+$blocks_js = (string) file_get_contents( dirname( __DIR__ ) . '/assets/js/blocks.js' );
+check( 'G5: the block preview (ServerSideRender) is wrapped in wp.components.Disabled', str_contains( $blocks_js, 'var components = wp.components || {};' ) && str_contains( $blocks_js, 'preview = el( components.Disabled, null, preview );' ) && str_contains( $blocks_js, 'var preview = ServerSideRender ? el( ServerSideRender, {' ) );
+
 echo "Refunds, returns and top-ups (wave I)\n";
 // T11: a top-up adds its face value like a new gift card – never what was paid after coupons.
 $topup_cfg = ProductConfig::DEFAULTS;

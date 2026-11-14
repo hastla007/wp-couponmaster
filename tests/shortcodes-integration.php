@@ -50,6 +50,26 @@ wp_set_current_user( 0 );
 vcap_sc_assert( false !== strpos( do_shortcode( '[vcap_my_vouchers]' ), 'vcap-login-hint' ), 'guests are asked to log in for their vouchers' );
 vcap_sc_assert( false !== strpos( do_shortcode( '[vcap_referral]' ), 'vcap-login-hint' ), 'guests are asked to log in for their referral code' );
 
+// G3: editor and page-builder previews show notes, never a customer's data, and create no referral code.
+$g3_tag  = strtolower( wp_generate_password( 6, false ) );
+$g3_user = wp_create_user( 'sc-g3-' . $g3_tag, wp_generate_password(), 'sc-g3-' . $g3_tag . '@example.com' );
+wp_set_current_user( $g3_user );
+update_option( 'vcap_referral_enabled', 'yes' );
+wc_load_cart();
+WC()->session->set( VCAP\Shortcodes::PREFILL_KEY, 'G3-PREFILL' );
+$_GET['et_fb'] = '1';
+vcap_sc_assert( VCAP\Shortcodes::is_editor_preview(), 'G3: a page-builder preview (Divi et_fb) is recognised' );
+$g3_html = do_shortcode( '[vcap_my_vouchers][vcap_referral][vcap_redeem]' );
+unset( $_GET['et_fb'] );
+$_REQUEST['action'] = 'elementor_ajax';
+$g3_block = $render( 'vcap/referral' );
+unset( $_REQUEST['action'] );
+WC()->session->set( VCAP\Shortcodes::PREFILL_KEY, null );
+vcap_sc_assert( 2 === substr_count( $g3_html, 'vcap-preview-note' ) && str_contains( $g3_block, 'vcap-preview-note' ) && ! str_contains( $g3_html, 'vcap-referral-code' ) && ! str_contains( $g3_html, 'G3-PREFILL' ), 'G3: previews show notes instead of vouchers, referral code and a code from the session' );
+vcap_sc_assert( 0 === VCAP\Referrals::coupon_id( $g3_user ) && ! VCAP\Shortcodes::is_editor_preview(), 'G3: rendering the preview created no referral code for the editor' );
+update_option( 'vcap_referral_enabled', 'no' );
+wp_set_current_user( 0 );
+
 $tag  = strtolower( wp_generate_password( 6, false ) );
 $user = wp_create_user( 'sc-' . $tag, wp_generate_password(), 'sc-' . $tag . '@example.com' );
 wp_set_current_user( $user );
@@ -140,5 +160,41 @@ $sc_balance->handle_balance();
 $twice = $sc_balance->balance_shortcode() . $sc_balance->balance_shortcode();
 $_POST = array();
 vcap_sc_assert( 1 === substr_count( $twice, 'Voucher code not found.' ) && 1 === substr_count( $twice, 'aria-invalid="true"' ) && str_contains( $twice, 'data-vcap-focus' ), 'two balance forms on a page: one check, the result (focused) only in the sent form' );
+
+// G7: a redeem form shows notices only when it was sent; other WooCommerce notices stay for the page.
+wc_clear_notices();
+wc_add_notice( 'G7 foreign notice' );
+$g7_quiet = do_shortcode( '[vcap_redeem]' );
+vcap_sc_assert( ! str_contains( $g7_quiet, 'G7 foreign notice' ) && 1 === wc_notice_count(), 'G7: a redeem form that was not sent (e.g. in a header) prints no notices and leaves them in the session' );
+wc_clear_notices();
+$g7_sc = new VCAP\Shortcodes( vcap()->downloads, new VCAP\Referrals( vcap()->settings, vcap()->store_credit ) );
+$_POST = array( 'vcap_redeem_code' => 'nope-g7-' . $tag, 'vcap_redeem_form' => '' );
+$g7_sc->handle_redeem();
+$_POST  = array();
+$g7_two = $g7_sc->redeem_shortcode() . $g7_sc->redeem_shortcode();
+vcap_sc_assert( 1 === substr_count( $g7_two, 'Voucher code not found.' ) && 1 === substr_count( $g7_two, 'aria-invalid="true"' ), 'G7: the result of a sent redeem form appears in that form only' );
+// G7: "My vouchers" prints only the notices of its own forms ("send again"), not those of the page.
+wc_clear_notices();
+wp_set_current_user( $user );
+wc_add_notice( 'G7 added to cart' );
+wc_add_notice( 'G7 resent', 'success', VCAP\Shortcodes::ACCOUNT_NOTICE );
+$g7_list = do_shortcode( '[vcap_my_vouchers]' );
+$g7_left = array_column( (array) wc_get_notices( 'success' ), 'notice' );
+vcap_sc_assert( str_contains( $g7_list, 'G7 resent' ) && ! str_contains( $g7_list, 'G7 added to cart' ) && array( 'G7 added to cart' ) === $g7_left, 'G7: "My vouchers" prints its own notices only; other notices stay for the page' );
+wc_clear_notices();
+wp_set_current_user( 0 );
+
+// G11: the login hint links back to the page it is shown on.
+$g11_page = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'publish', 'post_title' => 'G11 vouchers', 'post_content' => '[vcap_my_vouchers]' ) );
+$GLOBALS['wp_query'] = new WP_Query( array( 'page_id' => $g11_page ) );
+$GLOBALS['post']     = get_post( $g11_page );
+$g11_hint = do_shortcode( '[vcap_my_vouchers]' );
+wp_reset_query();
+vcap_sc_assert( str_contains( $g11_hint, 'vcap-login-hint' ) && str_contains( html_entity_decode( $g11_hint ), 'redirect_to=' . rawurlencode( get_permalink( $g11_page ) ) ), 'G11: the login link returns to the page with the voucher list (redirect_to)' );
+wp_delete_post( $g11_page, true );
+
+// G5: the block preview is wrapped in wp.components.Disabled, so the editor script depends on wp-components.
+$g5_script = wp_scripts()->query( 'vcap-blocks', 'registered' );
+vcap_sc_assert( $g5_script && in_array( 'wp-components', (array) $g5_script->deps, true ) && in_array( 'wp-server-side-render', (array) $g5_script->deps, true ), 'G5: the block editor script depends on wp-components (Disabled) and wp-server-side-render' );
 
 echo "Voucher Captain shortcode checks passed.\n";

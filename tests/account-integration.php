@@ -100,4 +100,104 @@ $voucher->status       = VCAP\Voucher::STATUS_SCHEDULED;
 vcap_acct_assert( ! vcap()->downloads->customer_can_resend( $voucher ), 'a scheduled gift cannot be resent before its delivery date' );
 wp_set_current_user( 0 );
 
+// F3: responsive tables – column headers with scope, every cell named by data-title, actions cell, empty state.
+wp_set_current_user( $buyer );
+ob_start();
+vcap()->downloads->account_page( false );
+$f3_list = (string) ob_get_clean();
+preg_match_all( '/<th\b[^>]*>/', $f3_list, $f3_th );
+preg_match_all( '/<td\b[^>]*>/', $f3_list, $f3_td );
+vcap_acct_assert( count( $f3_th[0] ) >= 5 && count( $f3_th[0] ) === substr_count( $f3_list, '<th scope="col"' ), 'F3: every column header of the voucher list has scope="col"' );
+vcap_acct_assert( $f3_td[0] && count( $f3_td[0] ) === count( preg_grep( '/data-title="[^"]+"/', $f3_td[0] ) ), 'F3: every cell of the voucher list carries data-title (column name on small screens)' );
+vcap_acct_assert( (bool) preg_match( '/<td class="[^"]*\bactions\b[^"]*" data-title="Actions"/', $f3_list ) && ! str_contains( $f3_list, 'data-title="Download"' ), 'F3: the actions cell has the class "actions" and is named "Actions", not "Download"' );
+wp_set_current_user( $other );
+ob_start();
+vcap()->downloads->account_page( false );
+$f3_empty = (string) ob_get_clean();
+vcap_acct_assert( str_contains( $f3_empty, 'You have no vouchers yet.' ) && ! str_contains( $f3_empty, '<table' ), 'F3: a customer without vouchers sees an empty state instead of an empty table' );
+
+// G8: "My vouchers" block with showExtras = false leaves out store credit and referral code; with both blocks on a
+// page each extra section is shown once. F3: the store credit history is a responsive table as well.
+$g8_keep = array( 'vcap_referral_enabled' => get_option( 'vcap_referral_enabled', false ), 'vcap_store_credit' => get_option( 'vcap_store_credit', false ) );
+update_option( 'vcap_referral_enabled', 'yes' );
+update_option( 'vcap_store_credit', 'yes' );
+wp_set_current_user( $buyer );
+vcap()->store_credit->adjust( $buyer, 12, 'F3 test credit' );
+$g8_top   = did_action( 'vcap_account_vouchers_top' );
+$g8_plain = do_blocks( '<!-- wp:vcap/my-vouchers {"showExtras":false} /-->' );
+vcap_acct_assert( $g8_top === did_action( 'vcap_account_vouchers_top' ) && ! str_contains( $g8_plain, 'vcap-store-credit' ) && ! str_contains( $g8_plain, 'vcap-referral' ) && str_contains( $g8_plain, 'vcap-vouchers' ), 'G8: the "My vouchers" block with showExtras = false shows the list only' );
+$g8_page = do_blocks( '<!-- wp:vcap/my-vouchers /--><!-- wp:vcap/referral /--><!-- wp:vcap/my-vouchers /-->' );
+vcap_acct_assert( 1 === substr_count( $g8_page, '<section class="vcap-referral"' ) && 1 === substr_count( $g8_page, '<section class="vcap-store-credit"' ), 'G8: store credit and referral code are shown once per page, also with a "Refer a friend" block and a second list' );
+$g8_credit = substr( $g8_page, (int) strpos( $g8_page, '<section class="vcap-store-credit"' ) );
+$g8_credit = substr( $g8_credit, 0, (int) strpos( $g8_credit, '</section>' ) );
+preg_match_all( '/<td\b[^>]*>/', $g8_credit, $g8_td );
+vcap_acct_assert( str_contains( $g8_credit, '<th scope="col">' ) && $g8_td[0] && count( $g8_td[0] ) === count( preg_grep( '/data-title="[^"]+"/', $g8_td[0] ) ), 'F3: the store credit history has column headers with scope and data-title on every cell' );
+foreach ( $g8_keep as $g8_option => $g8_value ) {
+	false === $g8_value ? delete_option( $g8_option ) : update_option( $g8_option, $g8_value );
+}
+
+// F3: the gift card balance row in the cart totals is a labelled row (th scope="row", data-title), not a second total.
+wc_load_cart();
+WC()->cart->empty_cart();
+$f3_goods = new WC_Product_Simple();
+$f3_goods->set_name( 'F3 goods' );
+$f3_goods->set_regular_price( '100' );
+$f3_goods->set_virtual( true );
+$f3_goods->save();
+$f3_card_coupon = new WC_Coupon();
+$f3_card_coupon->set_code( 'vcap-f3-card-' . strtolower( wp_generate_password( 8, false, false ) ) );
+$f3_card_coupon->set_discount_type( 'fixed_cart' );
+$f3_card_coupon->set_amount( 30 );
+$f3_card_coupon->update_meta_data( '_vcap_voucher', 'yes' );
+$f3_card_coupon->save();
+$f3_card                 = new VCAP\Voucher();
+$f3_card->code           = wc_format_coupon_code( $f3_card_coupon->get_code() );
+$f3_card->coupon_id      = $f3_card_coupon->get_id();
+$f3_card->order_item_id  = 72000000 + $f3_card_coupon->get_id();
+$f3_card->type           = 'giftcard';
+$f3_card->usage_mode     = 'balance';
+$f3_card->discount_type  = 'fixed_cart';
+$f3_card->initial_amount = 30;
+$f3_card->balance        = 30;
+$f3_card->currency       = get_woocommerce_currency();
+$f3_card->status         = VCAP\Voucher::STATUS_ACTIVE;
+$f3_card->send_to        = 'buyer';
+$f3_card->token          = VCAP\VoucherRepository::new_token();
+$f3_card->id             = vcap()->vouchers->insert( $f3_card );
+WC()->cart->add_to_cart( $f3_goods->get_id(), 1 );
+WC()->cart->apply_coupon( $f3_card->code );
+ob_start();
+vcap()->coupons->cart_balance_notice();
+$f3_row = (string) ob_get_clean();
+vcap_acct_assert( (bool) preg_match( '/<tr class="vcap-balance"><th scope="row">[^<]+<\/th><td data-title="[^"]+">/', $f3_row ), 'F3: the gift card balance row in the cart totals has th scope="row" and data-title' );
+WC()->cart->empty_cart();
+$f3_single_coupon = new WC_Coupon();
+$f3_single_coupon->set_code( 'vcap-f3-single-' . strtolower( wp_generate_password( 8, false, false ) ) );
+$f3_single_coupon->set_discount_type( 'fixed_cart' );
+$f3_single_coupon->set_amount( 150 );
+$f3_single_coupon->set_usage_limit( 1 );
+$f3_single_coupon->update_meta_data( '_vcap_voucher', 'yes' );
+$f3_single_coupon->save();
+$f3_single                 = clone $f3_card;
+$f3_single->id             = 0;
+$f3_single->code           = wc_format_coupon_code( $f3_single_coupon->get_code() );
+$f3_single->coupon_id      = $f3_single_coupon->get_id();
+$f3_single->order_item_id  = 72000000 + $f3_single_coupon->get_id();
+$f3_single->type           = 'voucher';
+$f3_single->usage_mode     = 'single';
+$f3_single->initial_amount = 150;
+$f3_single->balance        = 150;
+$f3_single->token          = VCAP\VoucherRepository::new_token();
+$f3_single->id             = vcap()->vouchers->insert( $f3_single );
+WC()->cart->add_to_cart( $f3_goods->get_id(), 1 );
+WC()->cart->apply_coupon( $f3_single->code );
+WC()->cart->calculate_totals();
+ob_start();
+( new VCAP\ProductChecks() )->residual_rows();
+$f3_residual = (string) ob_get_clean();
+vcap_acct_assert( (bool) preg_match( '/<tr class="vcap-residual-warning"><td colspan="2" data-title="[^"]+">/', $f3_residual ), 'F3: the remaining-value warning row in the cart totals carries data-title' );
+WC()->cart->empty_cart();
+wc_clear_notices();
+wp_set_current_user( 0 );
+
 echo "Voucher Captain account checks passed.\n";
