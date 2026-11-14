@@ -7,6 +7,7 @@ on:
       - claude/youthful-bardeen-7ejd7a
       - codex/fix-voucher-audit-findings
       - claude/wp-plugin-analyse-todo-hvollo
+      - claude/wp-plugin-analyse-todo-hvollo-refactors
   pull_request:
 
 jobs:

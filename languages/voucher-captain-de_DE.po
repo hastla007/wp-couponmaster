@@ -4,7 +4,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: Voucher Captain 1.0.0\n"
-"POT-Creation-Date: 2026-11-14 23:09+0000\n"
+"POT-Creation-Date: 2026-11-14 23:48+0000\n"
 "PO-Revision-Date: 2026-11-14 16:00+0000\n"
 "Last-Translator: \n"
 "Language-Team: German\n"
@@ -247,7 +247,11 @@ msgstr ""
 "Ein Einlöseschlüssel mit Präfix („system:…“) muss das Präfix seines Ziels "
 "verwenden."
 
-#: src/API/V1/VoucherService.php:178
+#: src/API/V1/VoucherService.php:94
+msgid "The voucher system returned an invalid response."
+msgstr "Das Gutscheinsystem hat eine ungültige Antwort geliefert."
+
+#: src/API/V1/VoucherService.php:196
 #: src/API/V1/WooCommerceRedemptionProvider.php:48
 #: src/API/V1/WooCommerceRedemptionProvider.php:73
 #: src/API/V1/WooCommerceRedemptionProvider.php:116
@@ -4789,7 +4793,7 @@ msgid "Bonus voucher %1$s issued (promotion \"%2$s\")."
 msgstr "Bonusgutschein %1$s ausgegeben (Aktion „%2$s“)."
 
 #. translators: 1: masked bonus codes, 2: maximum refund
-#: src/Discounts/Bonus.php:301
+#: src/Discounts/Bonus.php:311
 #, php-format
 msgid ""
 "The bonus voucher of this order was already used (%1$s); the order would no "
@@ -4800,19 +4804,19 @@ msgstr ""
 "höchstens %2$s erstattet werden."
 
 #. translators: 1: promotion title, 2: order number
-#: src/Discounts/Bonus.php:362
+#: src/Discounts/Bonus.php:372
 #, php-format
 msgid "Bonus voucher (%1$s) for order #%2$s"
 msgstr "Bonusgutschein (%1$s) für Bestellung #%2$s"
 
 #. translators: %s: coupon code
-#: src/Discounts/Bonus.php:406
+#: src/Discounts/Bonus.php:441
 #, php-format
 msgid "Bonus voucher %s was already used and stays valid."
 msgstr "Bonusgutschein %s wurde bereits genutzt und bleibt gültig."
 
 #. translators: %s: coupon code
-#: src/Discounts/Bonus.php:416
+#: src/Discounts/Bonus.php:451
 #, php-format
 msgid "Unused bonus voucher %s withdrawn."
 msgstr "Ungenutzter Bonusgutschein %s zurückgezogen."
@@ -10243,7 +10247,7 @@ msgstr ""
 "einlösbar."
 
 #. translators: %s: maximum voucher value
-#: src/VoucherPurchaseRules.php:149
+#: src/VoucherPurchaseRules.php:166
 #, php-format
 msgid ""
 "Vouchers can be ordered for at most %s per customer within 24 hours. Please "
@@ -10253,19 +10257,19 @@ msgstr ""
 "bestellt werden. Bitte verringern Sie den Gutscheinbetrag oder kontaktieren "
 "Sie uns."
 
-#: src/VoucherPurchaseRules.php:191
+#: src/VoucherPurchaseRules.php:208
 msgid "Vouchers and gift cards cannot be used to buy vouchers."
 msgstr ""
 "Gutscheine und Geschenkkarten können nicht zum Kauf von Gutscheinen "
 "verwendet werden."
 
-#: src/VoucherPurchaseRules.php:192
+#: src/VoucherPurchaseRules.php:209
 msgid "Discount codes cannot be used to buy vouchers."
 msgstr ""
 "Rabattcodes können nicht für den Kauf von Gutscheinen verwendet werden."
 
 #. translators: 1: coupon code, 2: minimum amount
-#: src/VoucherPurchaseRules.php:207
+#: src/VoucherPurchaseRules.php:224
 #, php-format
 msgid ""
 "The minimum spend for coupon \"%1$s\" is %2$s. Voucher products in the cart "

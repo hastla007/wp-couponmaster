@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-14 23:30+0000\n"
+"POT-Creation-Date: 2026-11-14 23:48+0000\n"
 "X-Domain: voucher-captain\n"
 
 #. Plugin Name of the plugin
@@ -195,7 +195,11 @@ msgstr ""
 msgid "A redemption key with a prefix (\"system:…\") must use the prefix of its target."
 msgstr ""
 
-#: src/API/V1/VoucherService.php:178 src/API/V1/WooCommerceRedemptionProvider.php:48 src/API/V1/WooCommerceRedemptionProvider.php:73 src/API/V1/WooCommerceRedemptionProvider.php:116 src/API/V1/WooCommerceRedemptionProvider.php:154 src/Admin/VoucherAdmin.php:140
+#: src/API/V1/VoucherService.php:94
+msgid "The voucher system returned an invalid response."
+msgstr ""
+
+#: src/API/V1/VoucherService.php:196 src/API/V1/WooCommerceRedemptionProvider.php:48 src/API/V1/WooCommerceRedemptionProvider.php:73 src/API/V1/WooCommerceRedemptionProvider.php:116 src/API/V1/WooCommerceRedemptionProvider.php:154 src/Admin/VoucherAdmin.php:140
 msgid "Voucher not found."
 msgstr ""
 
