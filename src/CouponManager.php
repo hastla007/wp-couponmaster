@@ -43,6 +43,9 @@ final class CouponManager {
 		// redeemed elsewhere since checkout must not be fulfilled with its discount.
 		foreach ( array( 'pending', 'on-hold', 'processing', 'completed' ) as $status ) {
 			add_action( 'woocommerce_order_status_' . $status, array( $this, 'check_single_use_conflicts' ), 9, 2 );
+			// The order whose coupons WooCommerce counts next (priority 10): the redemption of a single-use
+			// voucher is recorded with it (D8), the usage hook itself names no order.
+			add_action( 'woocommerce_order_status_' . $status, array( $this, 'remember_usage_order' ), 8, 1 );
 		}
 		// WooCommerce before 9.x keeps the coupon usage of a failed order counted, so the check above skips it: an
 		// unpaid order that is paid now is checked once more for vouchers voided meanwhile (before order_status_changed()).
@@ -1048,6 +1051,9 @@ final class CouponManager {
 			}
 		}
 		$reason = '';
+		if ( $amount > 0 ) {
+			VoucherRepository::fire_redeemed( $fresh, $amount, $order_id > 0 ? 'shop' : 'counter', $order_id );
+		}
 		return array(
 			'amount'    => $amount,
 			'balance'   => $fresh->balance,
@@ -1916,6 +1922,27 @@ final class CouponManager {
 		do_action( 'vcap_voucher_double_use', $voucher, new \WC_Coupon( $voucher->coupon_id ), $order->get_customer_id() ? $order->get_customer_id() : $order->get_billing_email() );
 	}
 
+	/** Order whose coupon uses WooCommerce counts in this request (see remember_usage_order()). */
+	private int $usage_order = 0;
+
+	/** @param int|string $order_id */
+	public function remember_usage_order( $order_id ): void {
+		$this->usage_order = (int) $order_id;
+	}
+
+	/** The order a single-use voucher was just used in: the one being counted, if it carries the code. */
+	private function usage_order_for( Voucher $voucher ): int {
+		if ( $this->usage_order <= 0 || ! function_exists( 'wc_get_order' ) ) {
+			return 0;
+		}
+		$order = wc_get_order( $this->usage_order );
+		if ( ! $order instanceof \WC_Order ) {
+			return 0;
+		}
+		$codes = array_map( 'wc_format_coupon_code', (array) $order->get_coupon_codes() );
+		return in_array( wc_format_coupon_code( (string) $voucher->code ), $codes, true ) ? (int) $order->get_id() : 0;
+	}
+
 	public function usage_increased( $coupon, $new_count, $used_by ): void {
 		if ( ! $coupon instanceof \WC_Coupon || 'yes' !== $coupon->get_meta( '_vcap_voucher' ) ) {
 			return;
@@ -1927,7 +1954,9 @@ final class CouponManager {
 		$limit = (int) $coupon->get_usage_limit();
 		if ( $limit > 0 && (int) $new_count >= $limit && Voucher::STATUS_ACTIVE === $voucher->status ) {
 			if ( $this->repo->redeem_single_if_active( $voucher->id ) ) {
-				$this->repo->log( $voucher->id, 'redeemed', $voucher->initial_amount, 0, (string) $used_by );
+				$order_id = $this->usage_order_for( $voucher );
+				$this->repo->log( $voucher->id, 'redeemed', $voucher->initial_amount, 0, (string) $used_by, $order_id );
+				VoucherRepository::fire_redeemed( $voucher, (float) $voucher->initial_amount, 'shop', $order_id );
 			}
 		} elseif ( $limit > 0 && (int) $new_count >= $limit && Voucher::STATUS_ACTIVE !== $voucher->status && ! isset( $this->double_flagged[ $voucher->id ] ) ) {
 			// Used in the shop although it was redeemed, reserved or voided elsewhere meanwhile: make it visible

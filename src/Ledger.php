@@ -221,7 +221,7 @@ final class Ledger {
 		$labels   = $labels ?? VoucherRepository::event_labels();
 		$types    = $types ?? Voucher::types();
 		$decimals = API\V1\RedemptionService::decimals( (string) ( $r['currency'] ?: get_option( 'woocommerce_currency' ) ) );
-		return array( Csv::date( $r['created_at'] ), $r['code'], $types[ $r['type'] ] ?? $r['type'], $r['currency'], $labels[ $r['event'] ] ?? $r['event'], Csv::number( (float) $r['amount'], $decimals ), null === $r['balance_after'] ? '' : Csv::number( (float) $r['balance_after'], $decimals ), $r['order_id'] ?: '', (string) $r['note'] );
+		return array( Csv::date( $r['created_at'] ), $r['code'], $types[ $r['type'] ] ?? $r['type'], $r['currency'], $labels[ $r['event'] ] ?? $r['event'], Csv::number( (float) $r['amount'], $decimals ), null === $r['balance_after'] ? '' : Csv::number( (float) $r['balance_after'], $decimals ), $r['order_id'] ?: '', Note::render( (string) $r['note'] ) );
 	}
 
 	/**

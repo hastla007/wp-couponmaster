@@ -42,6 +42,7 @@ jobs:
           git diff --exit-code -I 'POT-Creation-Date' -I '^#: ' -- languages/voucher-captain.pot
           php bin/email-texts.php --check
           php bin/legal-texts.php --check
+          php bin/hooks.php --check
       - name: Release ZIP is reproducible (two builds, same SHA-256)
         if: matrix.php == '8.4'
         run: |

@@ -164,11 +164,62 @@ final class Delivery {
 		}
 	}
 
+	/**
+	 * After an admin sent the voucher by hand (H7): the role counts as delivered, and once every required role got
+	 * it the voucher is marked delivered – the daily safety net does not send it a second time.
+	 */
+	public function record_manual_send( Voucher $voucher, array $roles ): void {
+		if ( $voucher->delivered_at || ! in_array( $voucher->status, array( Voucher::STATUS_ACTIVE ), true ) ) {
+			return;
+		}
+		$delivered = array_values( array_unique( array_merge( $this->delivered_roles( $voucher ), array_intersect( $roles, array( 'recipient', 'buyer' ) ) ) ) );
+		$missing   = array_values( array_diff( $this->required_roles( $voucher ), $delivered ) );
+		$this->store_delivered_roles( $voucher->id, $delivered, $missing );
+		if ( $missing ) {
+			return;
+		}
+		global $wpdb;
+		$now     = $this->repo->now();
+		$table   = Install::tables()['vouchers'];
+		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET delivered_at = %s, updated_at = %s WHERE id = %d AND delivered_at IS NULL AND status = 'active'", $now, $now, $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( 1 === (int) $updated ) {
+			$voucher->delivered_at = $now;
+			delete_transient( 'vcap_undelivered_count' );
+			delete_transient( 'vcap_given_up_count' );
+			if ( function_exists( 'as_unschedule_all_actions' ) ) {
+				as_unschedule_all_actions( self::RETRY_HOOK, array( 'voucher_id' => $voucher->id ), self::GROUP );
+			}
+		}
+	}
+
+	/**
+	 * Brings a scheduled delivery forward to now on the admin's request (H7): the voucher is activated, delivered
+	 * to everyone it is meant for and marked delivered, as the scheduled delivery would have done.
+	 *
+	 * @return bool Whether it is delivered now.
+	 */
+	public function deliver_now( Voucher $voucher ): bool {
+		if ( Voucher::STATUS_SCHEDULED !== $voucher->status ) {
+			return false;
+		}
+		$voucher->delivery_at = $this->repo->now();
+		$this->repo->update_columns( $voucher, array( 'delivery_at' ) );
+		$this->repo->log( $voucher->id, 'scheduled', null, null, get_date_from_gmt( $voucher->delivery_at ) );
+		if ( function_exists( 'as_unschedule_all_actions' ) ) {
+			as_unschedule_all_actions( 'vcap_deliver_voucher', array( 'voucher_id' => $voucher->id ), self::GROUP );
+		}
+		$this->deliver( $voucher->id );
+		$fresh = $this->repo->get( $voucher->id );
+		return $fresh && null !== $fresh->delivered_at;
+	}
+
 	public function reschedule( Voucher $voucher, ?string $delivery_at_utc ): void {
 		$from_status           = $voucher->status;
+		// A voucher the holder already has stays redeemable when only its email is planned again (H7/Z2).
+		$was_delivered         = null !== $voucher->delivered_at && '' !== (string) $voucher->delivered_at;
 		$voucher->delivery_at  = $delivery_at_utc;
 		$voucher->delivered_at = null;
-		if ( $delivery_at_utc && strtotime( $delivery_at_utc . ' UTC' ) > time() && Voucher::STATUS_ACTIVE === $voucher->status ) {
+		if ( $delivery_at_utc && strtotime( $delivery_at_utc . ' UTC' ) > time() && Voucher::STATUS_ACTIVE === $voucher->status && ! $was_delivered ) {
 			$voucher->status = Voucher::STATUS_SCHEDULED;
 		}
 		$this->repo->update_columns( $voucher, array( 'delivery_at', 'delivered_at' ), $from_status );
@@ -242,11 +293,19 @@ final class Delivery {
 			$delivered = $this->delivered_roles( $voucher );
 			$pending   = array_values( array_diff( $required, $delivered ) );
 			$only      = $delivered && 1 === count( $pending ) ? (string) reset( $pending ) : null;
-			$sent_roles = array();
-			$sent       = $delivered && ! $pending ? array() : $this->send( $voucher, $only, $sent_roles );
+			$sent_roles  = array();
+			$failures    = array();
+			$without_pdf = array();
+			$sent        = $delivered && ! $pending ? array() : $this->send( $voucher, $only, $sent_roles, $failures, $without_pdf );
+			Logger::debug( 'Delivery attempt.', array( 'voucher_id' => $voucher->id, 'required' => $required, 'delivered_before' => $delivered, 'sent' => $sent_roles, 'failed' => $failures, 'without_pdf' => $without_pdf ) );
+			if ( $without_pdf ) {
+				// D5: the mail went out, but without the PDF it should carry – said so instead of a plain "sent".
+				$this->repo->log( $voucher->id, 'delivered_without_pdf', null, null, Note::make( 'delivered_without_pdf', array( implode( ',', $without_pdf ) ) ) );
+			}
 			if ( ! $sent && $pending ) {
 				// Retried with growing pauses (retry_later()); the daily safety net catches retries that got lost.
-				$this->repo->log( $voucher->id, 'delivery_failed', null, null, __( 'No email was sent (email disabled or no valid address).', 'voucher-captain' ) );
+				// The reason per role (D4): email disabled, no address and a mail system error are different tasks.
+				$this->repo->log( $voucher->id, 'delivery_failed', null, null, Note::make( 'delivery_not_sent', array( (string) wp_json_encode( $failures ) ) ) );
 				$this->retry_later( $voucher );
 				return;
 			}
@@ -255,8 +314,7 @@ final class Delivery {
 			$this->store_delivered_roles( $voucher->id, $delivered, $missing );
 			if ( $missing ) {
 				// "Send to buyer and recipient": delivered only when both got it; the rest is retried later.
-				/* translators: %s: buyer/recipient */
-				$this->repo->log( $voucher->id, 'delivery_failed', null, null, sprintf( __( 'Not delivered to: %s (will be retried).', 'voucher-captain' ), implode( ', ', $missing ) ) );
+				$this->repo->log( $voucher->id, 'delivery_failed', null, null, Note::make( 'delivery_partial', array( implode( ',', $missing ), (string) wp_json_encode( array_intersect_key( $failures, array_flip( $missing ) ) ) ) ) );
 				$this->retry_later( $voucher );
 				return;
 			}
@@ -277,12 +335,13 @@ final class Delivery {
 			$voucher->delivered_at = $now;
 			delete_transient( 'vcap_undelivered_count' );
 			delete_transient( 'vcap_given_up_count' );
-			$this->repo->log( $voucher->id, 'delivered', null, null, sprintf( /* translators: %d: number of addresses */ _n( 'Sent to %d address', 'Sent to %d addresses', count( $sent ), 'voucher-captain' ), count( $sent ) ) );
+			$this->repo->log( $voucher->id, 'delivered', null, null, Note::make( 'delivered', array( count( $sent ), implode( ',', $sent_roles ) ) ) );
+			/** A voucher was delivered to everyone it is meant for (args: Voucher $voucher, string[] $addresses). */
 			do_action( 'vcap_voucher_delivered', $voucher, $sent );
 		} catch ( \Throwable $e ) {
 			Logger::error( 'Voucher delivery failed: ' . Health::mask_addresses( $e->getMessage() ), array( 'voucher_id' => $voucher_id ) );
 			if ( isset( $voucher ) && $voucher instanceof Voucher ) {
-				$this->repo->log( $voucher->id, 'delivery_failed', null, null, $e->getMessage() );
+				$this->repo->log( $voucher->id, 'delivery_failed', null, null, Note::make( 'delivery_error', array( Health::mask_addresses( mb_substr( wp_strip_all_tags( $e->getMessage() ), 0, 300 ) ) ) ) );
 				try {
 					$this->retry_later( $voucher );
 				} catch ( \Throwable $retry_error ) {
@@ -339,14 +398,7 @@ final class Delivery {
 		if ( function_exists( 'as_unschedule_all_actions' ) ) {
 			as_unschedule_all_actions( self::RETRY_HOOK, array( 'voucher_id' => $voucher->id ), self::GROUP );
 		}
-		$this->repo->log(
-			$voucher->id,
-			'delivery_given_up',
-			null,
-			null,
-			/* translators: %d: number of failed attempts */
-			sprintf( _n( 'No more automatic attempts after %d failed delivery. Check the email address and the email settings, then send the voucher again.', 'No more automatic attempts after %d failed deliveries. Check the email address and the email settings, then send the voucher again.', $failures, 'voucher-captain' ), $failures )
-		);
+		$this->repo->log( $voucher->id, 'delivery_given_up', null, null, Note::make( 'delivery_given_up', array( $failures ) ) );
 		delete_transient( 'vcap_undelivered_count' );
 		delete_transient( 'vcap_given_up_count' );
 		$order = $voucher->order_id && function_exists( 'wc_get_order' ) ? wc_get_order( $voucher->order_id ) : null;
@@ -377,8 +429,7 @@ final class Delivery {
 			return; // Changed meanwhile, or recorded by a parallel run.
 		}
 		$expiry = wp_date( (string) get_option( 'date_format' ), (int) strtotime( $voucher->expires_at . ' UTC' ) );
-		/* translators: %s: expiry date */
-		$this->repo->log( $voucher->id, 'delivery_expired', null, null, sprintf( __( 'Not delivered: the voucher had already expired on %s.', 'voucher-captain' ), $expiry ) );
+		$this->repo->log( $voucher->id, 'delivery_expired', null, null, Note::make( 'delivery_expired', array( (string) $voucher->expires_at ) ) );
 		delete_transient( 'vcap_undelivered_count' );
 		delete_transient( 'vcap_given_up_count' );
 		$order = $voucher->order_id && function_exists( 'wc_get_order' ) ? wc_get_order( $voucher->order_id ) : null;
@@ -490,10 +541,13 @@ final class Delivery {
 	/**
 	 * Send the voucher emails according to the voucher's routing.
 	 *
-	 * @param string[] $sent_roles Filled with the roles that were mailed ('recipient', 'buyer').
+	 * @param string[]              $sent_roles  Filled with the roles that were mailed ('recipient', 'buyer').
+	 * @param array<string, string> $failures    Filled per role that was not mailed with the reason (D4):
+	 *                                           'disabled', 'no_recipient', 'mail_failed', 'not_registered'.
+	 * @param string[]              $without_pdf Filled with the roles mailed without the PDF they should carry (D5).
 	 * @return string[] addresses mailed
 	 */
-	public function send( Voucher $voucher, ?string $only = null, array &$sent_roles = array() ): array {
+	public function send( Voucher $voucher, ?string $only = null, array &$sent_roles = array(), array &$failures = array(), array &$without_pdf = array() ): array {
 		$mailer = WC()->mailer();
 		$emails = $mailer->get_emails();
 		$sent   = array();
@@ -501,18 +555,31 @@ final class Delivery {
 
 		$to_recipient = self::to_recipient( $voucher );
 		$to_buyer     = ! $to_recipient || 'both' === $voucher->send_to || 'yes' === $config['buyer_copy'];
-
-		if ( $to_recipient && ( null === $only || 'recipient' === $only ) && isset( $emails['VCAP_Email_Voucher_Recipient'] ) ) {
-			if ( $emails['VCAP_Email_Voucher_Recipient']->trigger( $voucher ) ) {
-				$sent[]       = $voucher->recipient_email;
-				$sent_roles[] = 'recipient';
+		$routes       = array(
+			'recipient' => array( $to_recipient, 'VCAP_Email_Voucher_Recipient', $voucher->recipient_email ),
+			'buyer'     => array( $to_buyer, 'VCAP_Email_Voucher_Buyer', $voucher->buyer_email ),
+		);
+		foreach ( $routes as $role => list( $wanted, $class, $address ) ) {
+			if ( ! $wanted || ( null !== $only && $role !== $only ) ) {
+				continue;
+			}
+			$email = $emails[ $class ] ?? null;
+			if ( ! $email ) {
+				$failures[ $role ] = 'not_registered';
+				continue;
+			}
+			if ( $email->trigger( $voucher ) ) {
+				$sent[]       = $address;
+				$sent_roles[] = $role;
+				if ( ! empty( $email->pdf_failed ) ) {
+					$without_pdf[] = $role;
+				}
+			} else {
+				$failures[ $role ] = isset( $email->last_failure ) && '' !== (string) $email->last_failure ? (string) $email->last_failure : 'mail_failed';
 			}
 		}
-		if ( $to_buyer && ( null === $only || 'buyer' === $only ) && isset( $emails['VCAP_Email_Voucher_Buyer'] ) ) {
-			if ( $emails['VCAP_Email_Voucher_Buyer']->trigger( $voucher ) ) {
-				$sent[]       = $voucher->buyer_email;
-				$sent_roles[] = 'buyer';
-			}
+		if ( $failures ) {
+			Logger::warning( 'Voucher email not sent.', array( 'voucher_id' => $voucher->id, 'reasons' => $failures ) );
 		}
 		return $sent;
 	}
@@ -656,7 +723,7 @@ final class Delivery {
 				++$sent;
 			} else {
 				Claim::release( $claim );
-				$this->repo->log( $voucher->id, 'delivery_failed', null, null, __( 'Expiry reminder could not be sent; it is retried on the next run.', 'voucher-captain' ) );
+				$this->repo->log( $voucher->id, 'delivery_failed', null, null, Note::make( 'reminder_failed' ) );
 			}
 		}
 		return $sent;
@@ -741,8 +808,9 @@ final class Delivery {
 				Install::ensure_upload_dir();
 				return true;
 			case 'expire_overdue':
-				$this->repo->expire_overdue();
-				return true;
+				$finished = true;
+				$this->repo->expire_overdue( $budget, $finished );
+				return $finished;
 			case 'retention':
 				$days = (int) $this->settings->get( 'vcap_retention_days' );
 				if ( $days > 0 ) {

@@ -71,6 +71,33 @@ final class Install {
 	private const MIGRATIONS = array(
 		'1.4.0' => 'migrate_1_4_0',
 	);
+	/** Schema version that added the "source" column of the ledger (D8). */
+	public const EVENT_SOURCE_VERSION = '1.6.0';
+
+	/**
+	 * Whether the ledger has its "source" column: the schema of EVENT_SOURCE_VERSION is installed, or its tables
+	 * were created by an upgrade whose data migrations still run (SCHEMA_STEP_OPTION).
+	 */
+	public static function event_source_ready(): bool {
+		$installed = version_compare( (string) get_option( self::OPTION_DB_VERSION, '0' ), self::EVENT_SOURCE_VERSION, '>=' );
+		$step      = (string) get_option( self::SCHEMA_STEP_OPTION, '' );
+		$to        = (string) substr( (string) strrchr( $step, '>' ), 1 );
+		if ( ! $installed && ( '' === $to || version_compare( $to, self::EVENT_SOURCE_VERSION, '<' ) ) ) {
+			return false;
+		}
+		// The column itself is checked once per site and request: a ledger write must never fail on a schema that
+		// is not what the version says (e.g. a failed or interrupted upgrade).
+		$site = function_exists( 'get_current_blog_id' ) ? get_current_blog_id() : 0;
+		if ( ! isset( self::$event_source[ $site ] ) ) {
+			global $wpdb;
+			self::$event_source[ $site ] = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM ' . self::tables()['events'] . ' LIKE %s', 'source' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
+		}
+		return self::$event_source[ $site ];
+	}
+
+	/** @var array<int, bool> Whether the ledger of a site has its "source" column (event_source_ready()). */
+	private static array $event_source = array();
+
 	/** Schema version of the own storage in use (promotion usage, claims, delivery state per role). */
 	public const STORAGE_OPTION = 'vcap_storage_version';
 	/** Time the storage switched while rows were still in post meta / options (cleared once they all moved). */
@@ -980,6 +1007,7 @@ final class Install {
 					balance_after decimal(19,4) NULL DEFAULT NULL,
 					order_id bigint(20) unsigned NOT NULL DEFAULT 0,
 					user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+					source varchar(20) NOT NULL DEFAULT '',
 					note text NULL,
 					created_at datetime NOT NULL,
 					PRIMARY KEY  (id),
@@ -1041,6 +1069,7 @@ final class Install {
 	}
 
 	public static function create_tables(): void {
+		self::$event_source = array();
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		foreach ( self::schema() as $sql ) {
 			dbDelta( $sql );

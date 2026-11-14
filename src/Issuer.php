@@ -36,7 +36,7 @@ final class Issuer {
 		add_action( 'woocommerce_order_status_refunded', array( $this, 'on_purchase_cancelled' ), 30, 2 );
 		add_action( 'woocommerce_create_refund', array( $this, 'guard_refund' ), 10, 2 );
 		add_action( 'woocommerce_order_partially_refunded', array( $this, 'on_partial_refund' ), 20, 2 );
-		add_action( 'vcap_issue_order', array( $this, 'issue_async' ) );
+		add_action( self::ISSUE_RETRY_HOOK, array( $this, 'issue_async' ) );
 		add_action( self::VOID_RETRY_HOOK, array( $this, 'retry_void' ), 10, 2 );
 		// Vouchers that waited for the payment (e.g. "On hold" as the only issue status, bank transfer): issued
 		// when the order reaches a paid status later, also by hand – once per item slot.
@@ -58,6 +58,14 @@ final class Issuer {
 	public const VOID_RETRY_HOOK = 'vcap_retry_void';
 	/** Attempts of the void retry (15 minutes apart, then an hour each). */
 	private const VOID_RETRIES = 5;
+	/** Action Scheduler hook: issues the vouchers of an order again after a failed attempt (args: order_id). */
+	public const ISSUE_RETRY_HOOK = 'vcap_issue_order';
+	/** Order meta: failed issuing attempts in a row (array{attempts:int, time:int, reference:string}). */
+	public const ISSUE_FAILED_META = '_vcap_issue_failed';
+	/** Automatic issuing retries after a failure (15 minutes, doubled each time, at most 6 hours apart). */
+	public const ISSUE_RETRIES = 8;
+	/** Vouchers that could not be created in the last issue_for_order() run (database or coupon error). */
+	public int $last_failures = 0;
 
 	/** Whether issuing runs inside a status transition (status changes wait until it is through). */
 	private bool $in_transition = false;
@@ -162,10 +170,56 @@ final class Issuer {
 		}
 	}
 
+	/** @param int|array $order_id Order id (or the action's args array). */
 	public function issue_async( $order_id ): void {
-		$order = wc_get_order( (int) $order_id );
+		$order_id = is_array( $order_id ) ? (int) ( $order_id['order_id'] ?? 0 ) : (int) $order_id;
+		$order    = $order_id ? wc_get_order( $order_id ) : null;
 		if ( $order && self::payment_ok( $order ) ) {
 			$this->issue_for_order( $order );
+		}
+	}
+
+	/** Pause before the next issuing attempt after $attempts failed ones (filter "vcap_issue_retry_delay"). */
+	public static function issue_retry_delay( int $attempts ): int {
+		$delay = min( 6 * HOUR_IN_SECONDS, 15 * MINUTE_IN_SECONDS * ( 2 ** max( 0, min( 10, $attempts - 1 ) ) ) );
+		return max( MINUTE_IN_SECONDS, (int) apply_filters( 'vcap_issue_retry_delay', $delay, $attempts ) );
+	}
+
+	/**
+	 * After a run in which vouchers could not be created (D3): remembers the failure on the order, lists the order
+	 * for the shop (Attention: "paid order without voucher") and plans the next attempt with a growing pause – the
+	 * order note promises it. After ISSUE_RETRIES attempts only the listing stays.
+	 */
+	private function issue_failed( \WC_Order $order, int $failed ): void {
+		$state    = $order->get_meta( self::ISSUE_FAILED_META );
+		$attempts = ( is_array( $state ) ? (int) ( $state['attempts'] ?? 0 ) : 0 ) + 1;
+		$order->update_meta_data( self::ISSUE_FAILED_META, array( 'attempts' => $attempts, 'time' => time(), 'reference' => Db::last_reference() ) );
+		$order->save_meta_data();
+		Attention::add(
+			$order->get_id(),
+			'issue',
+			/* translators: %d: number of vouchers */
+			sprintf( _n( 'Paid order without voucher: %d voucher could not be created. It is retried automatically; or use "Generate vouchers" on the order.', 'Paid order without voucher: %d vouchers could not be created. They are retried automatically; or use "Generate vouchers" on the order.', $failed, 'voucher-captain' ), $failed )
+		);
+		Logger::error( 'Vouchers could not be issued.', array( 'order_id' => $order->get_id(), 'failed' => $failed, 'attempt' => $attempts, 'reference' => Db::last_reference() ) );
+		if ( $attempts > self::ISSUE_RETRIES || ! function_exists( 'as_schedule_single_action' ) ) {
+			return;
+		}
+		$args = array( 'order_id' => $order->get_id() );
+		as_unschedule_all_actions( self::ISSUE_RETRY_HOOK, $args, Delivery::GROUP );
+		as_schedule_single_action( time() + self::issue_retry_delay( $attempts ), self::ISSUE_RETRY_HOOK, $args, Delivery::GROUP );
+	}
+
+	/** All vouchers of the order exist now: the failure state and the listing are cleared. */
+	private function issue_recovered( \WC_Order $order ): void {
+		if ( '' === $order->get_meta( self::ISSUE_FAILED_META ) && ! Attention::has( $order->get_id(), 'issue' ) ) {
+			return;
+		}
+		$order->delete_meta_data( self::ISSUE_FAILED_META );
+		$order->save_meta_data();
+		Attention::resolve( $order->get_id(), 'issue' );
+		if ( function_exists( 'as_unschedule_all_actions' ) ) {
+			as_unschedule_all_actions( self::ISSUE_RETRY_HOOK, array( 'order_id' => $order->get_id() ), Delivery::GROUP );
 		}
 	}
 
@@ -342,7 +396,8 @@ final class Issuer {
 	 * @return Voucher[] newly created vouchers
 	 */
 	public function issue_for_order( \WC_Order $order, bool $manual = false ): array {
-		$created = array();
+		$created             = array();
+		$this->last_failures = 0;
 		if ( ! Compat\MultiCurrency::can_convert( (string) $order->get_currency(), $order ) && $this->needs_conversion( $order ) ) {
 			$this->hold_for_rate( $order );
 			return $created;
@@ -376,8 +431,16 @@ final class Issuer {
 				$voucher = $this->create_voucher( $order, $item, $product, $config, $index );
 				if ( $voucher ) {
 					$created[] = $voucher;
+				} elseif ( ! $this->repo->get_slot( (int) $item_id, $index ) ) {
+					++$this->last_failures; // Not a concurrent request that took the slot: really missing.
 				}
 			}
+		}
+		Logger::debug( 'Issuing run.', array( 'order_id' => $order->get_id(), 'created' => count( $created ), 'failed' => $this->last_failures, 'manual' => $manual ) );
+		if ( $this->last_failures ) {
+			$this->issue_failed( $order, $this->last_failures );
+		} else {
+			$this->issue_recovered( $order );
 		}
 
 		if ( $created ) {
@@ -394,6 +457,7 @@ final class Issuer {
 			foreach ( $created as $voucher ) {
 				$this->delivery->schedule( $voucher );
 			}
+			/** Vouchers of an order were issued (args: Voucher[] $created, WC_Order $order). */
 			do_action( 'vcap_vouchers_issued', $created, $order );
 		}
 		return $created;
@@ -563,9 +627,19 @@ final class Issuer {
 		$voucher->code = (string) apply_filters( 'vcap_voucher_code', $code, $order, $item, $index );
 
 		if ( ! $this->repo->insert( $voucher ) ) {
-			// Slot taken by a concurrent request or code collision.
+			// Slot taken by a concurrent request or code collision – or a database error (logged with a reference).
 			if ( $from_pool ) {
 				$this->pool->release( $code );
+			}
+			if ( 'db_error' === $this->repo->last_insert_error ) {
+				$order->add_order_note(
+					sprintf(
+						/* translators: 1: product name, 2: reference id in the WooCommerce log */
+						__( 'A voucher for "%1$s" could not be saved (database error, reference %2$s). It is retried automatically.', 'voucher-captain' ),
+						wp_strip_all_tags( $item->get_name() ),
+						Db::last_reference()
+					)
+				);
 			}
 			return null;
 		}
@@ -609,6 +683,7 @@ final class Issuer {
 			}
 		}
 		if ( ! $this->repo->log( $voucher->id, 'issued', $voucher->initial_amount, $voucher->balance, '', $order->get_id() ) ) {
+			Db::fail( 'log_issued', array( 'voucher_id' => $voucher->id, 'order_id' => $order->get_id() ) );
 			$order->add_order_note( sprintf( /* translators: %s: code */ __( 'Voucher %s was issued, but its history entry could not be written.', 'voucher-captain' ), Downloads::masked_code( (string) $voucher->code ) ) );
 		}
 		return $voucher;

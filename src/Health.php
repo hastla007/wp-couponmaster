@@ -139,16 +139,20 @@ final class Health {
 	private static int $sending = 0;
 	/** @var string[] Kind of the mail being sent (e.g. "Voucher to recipient"), innermost last. */
 	private static array $kinds = array();
+	/** @var int[] Voucher of the mail being sent (0: none), innermost last. */
+	private static array $vouchers = array();
 
 	/** Marks the start of a Voucher Captain mail (called by the VC email classes around WC_Email::send()). */
-	public static function mail_begin( string $kind = '' ): void {
+	public static function mail_begin( string $kind = '', int $voucher_id = 0 ): void {
 		++self::$sending;
-		self::$kinds[] = $kind;
+		self::$kinds[]    = $kind;
+		self::$vouchers[] = $voucher_id;
 	}
 
 	public static function mail_end(): void {
 		self::$sending = max( 0, self::$sending - 1 );
 		array_pop( self::$kinds );
+		array_pop( self::$vouchers );
 	}
 
 	/**
@@ -163,16 +167,17 @@ final class Health {
 		$data = (array) $error->get_error_data();
 		$to   = array_map( 'strval', (array) ( $data['to'] ?? array() ) );
 		$log  = self::mail_failures();
-		array_unshift(
-			$log,
-			array(
-				'time'  => time(),
-				'to'    => implode( ', ', array_map( array( Compat\PassCaptainTickets::class, 'mask_email' ), $to ) ),
-				'email' => mb_substr( wp_strip_all_tags( (string) end( self::$kinds ) ), 0, 80 ),
-				'error' => self::mask_addresses( mb_substr( wp_strip_all_tags( $error->get_error_message() ), 0, 300 ) ),
-			)
+		$entry = array(
+			'time'       => time(),
+			'to'         => implode( ', ', array_map( array( Compat\PassCaptainTickets::class, 'mask_email' ), $to ) ),
+			'email'      => mb_substr( wp_strip_all_tags( (string) end( self::$kinds ) ), 0, 80 ),
+			'error'      => self::mask_addresses( mb_substr( wp_strip_all_tags( $error->get_error_message() ), 0, 300 ) ),
+			// Which voucher the failed mail was for (D4), so support finds its history.
+			'voucher_id' => (int) end( self::$vouchers ),
 		);
+		array_unshift( $log, $entry );
 		update_option( self::MAIL_LOG, array_slice( $log, 0, self::LOG_SIZE ), false );
+		Logger::error( 'Voucher email could not be sent: ' . $entry['error'], array( 'voucher_id' => $entry['voucher_id'], 'email' => $entry['email'] ) );
 	}
 
 	/** "Could not send to jane@example.com" → "Could not send to j***@example.com". */
@@ -432,13 +437,24 @@ final class Health {
 		);
 	}
 
+	/** Where a Site Health result sends the admin to fix it (D10): the place of the problem, not always the settings. */
+	public static function action_link( string $id ): string {
+		switch ( $id ) {
+			case 'scheduler':
+				return '<p><a href="' . esc_url( admin_url( 'admin.php?page=wc-status&tab=action-scheduler&status=pending&s=vcap' ) ) . '">' . esc_html__( 'Scheduled voucher tasks', 'voucher-captain' ) . '</a></p>';
+			case 'mail':
+				return '';
+		}
+		return '<p><a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=vcap' ) ) . '">' . esc_html__( 'Voucher settings', 'voucher-captain' ) . '</a></p>';
+	}
+
 	private static function result( string $id, string $status, string $label, string $text ): array {
 		return array(
 			'label'       => $label,
 			'status'      => $status,
 			'badge'       => array( 'label' => __( 'Vouchers', 'voucher-captain' ), 'color' => 'good' === $status ? 'blue' : ( 'critical' === $status ? 'red' : 'orange' ) ),
 			'description' => '<p>' . esc_html( $text ) . '</p>',
-			'actions'     => 'mail' === $id || 'good' === $status ? '' : '<p><a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=vcap' ) ) . '">' . esc_html__( 'Voucher settings', 'voucher-captain' ) . '</a></p>',
+			'actions'     => 'good' === $status ? '' : self::action_link( $id ),
 			'test'        => 'vcap_' . $id,
 		);
 	}

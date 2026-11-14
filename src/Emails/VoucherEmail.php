@@ -16,6 +16,13 @@ abstract class VoucherEmail extends \WC_Email {
 	public ?Voucher $voucher = null;
 	/** @var string[] */
 	private array $temp_files = array();
+	/**
+	 * Why the last trigger() sent nothing (D4): 'disabled' (email switched off), 'no_recipient' (no valid address),
+	 * 'mail_failed' (the mail system refused it) or '' after a successful send.
+	 */
+	public string $last_failure = '';
+	/** Whether the last trigger() was to attach the PDF but could not create it (D5: "delivered without PDF"). */
+	public bool $pdf_failed = false;
 
 	public function __construct() {
 		$this->customer_email = true;
@@ -38,9 +45,13 @@ abstract class VoucherEmail extends \WC_Email {
 	 * that fails is logged (an archive address the mail server refuses must not make the gift count as undelivered,
 	 * and the customer never sees those addresses).
 	 *
+	 * Why nothing was sent is kept in $last_failure ('disabled', 'no_recipient', 'mail_failed').
+	 *
 	 * @return bool sent
 	 */
 	public function trigger( Voucher $voucher ): bool {
+		$this->last_failure = '';
+		$this->pdf_failed   = false;
 		$state = Multilingual::switch_to( Multilingual::email_locale( $voucher, null, $this ), Multilingual::order_language( $voucher->order() ) );
 		if ( ! $state['ready'] ) {
 			$this->setup_locale();
@@ -55,14 +66,20 @@ abstract class VoucherEmail extends \WC_Email {
 			$this->placeholders = array_merge( $this->placeholders, Placeholders::email_map( $voucher ) );
 
 			$sent = false;
-			if ( $this->is_enabled() && $this->get_recipient() ) {
+			if ( ! $this->is_enabled() ) {
+				$this->last_failure = 'disabled';
+			} elseif ( ! $this->get_recipient() ) {
+				$this->last_failure = 'no_recipient';
+			} else {
 				$to          = $this->get_recipient();
 				$subject     = $this->get_subject();
 				$content     = $this->get_content();
 				$headers     = $this->get_headers();
 				$attachments = $this->get_attachments();
 				$sent        = (bool) $this->send( $to, $subject, $content, $headers, $attachments );
-				if ( $sent ) {
+				if ( ! $sent ) {
+					$this->last_failure = 'mail_failed';
+				} else {
 					foreach ( $this->extra_recipients( $to ) as $copy ) {
 						if ( ! $this->send( $copy, $subject, $content, $headers, $attachments ) ) {
 							\VCAP\Logger::warning( 'Copy of a voucher email to an additional recipient could not be sent.', array( 'voucher_id' => $voucher->id, 'email' => $this->id ) );
@@ -127,7 +144,7 @@ abstract class VoucherEmail extends \WC_Email {
 
 	/** Marks the mail as a Voucher Captain mail, so Site Health records it if it fails (see Health). */
 	public function send( $to, $subject, $message, $headers, $attachments ) {
-		\VCAP\Health::mail_begin( (string) $this->get_title() );
+		\VCAP\Health::mail_begin( (string) $this->get_title(), $this->voucher ? (int) $this->voucher->id : 0 );
 		try {
 			return parent::send( $to, $subject, $message, $headers, $attachments );
 		} finally {
@@ -143,9 +160,12 @@ abstract class VoucherEmail extends \WC_Email {
 				if ( $file ) {
 					$this->temp_files[] = $file;
 					$attachments[]      = $file;
+				} else {
+					$this->pdf_failed = true; // to_temp_file() logged why.
 				}
 			} catch ( \Throwable $e ) {
-				wc_get_logger()->error( 'PDF attachment failed: ' . $e->getMessage(), array( 'source' => 'voucher-captain' ) );
+				$this->pdf_failed = true;
+				\VCAP\Logger::error( 'PDF attachment failed: ' . \VCAP\Health::mask_addresses( $e->getMessage() ), array( 'voucher_id' => (int) $this->voucher->id, 'element' => 'pdf', 'email' => $this->id ) );
 			}
 		}
 		return $attachments;

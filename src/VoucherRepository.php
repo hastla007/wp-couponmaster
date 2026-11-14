@@ -21,8 +21,15 @@ final class VoucherRepository {
 		return gmdate( 'Y-m-d H:i:s' );
 	}
 
+	/**
+	 * Why the last insert() failed (D3): 'duplicate' (slot or code taken – a concurrent request won), 'db_error'
+	 * (logged with a reference, see Db::fail()), '' after success.
+	 */
+	public string $last_insert_error = '';
+
 	public function insert( Voucher $voucher ): int {
 		global $wpdb;
+		$this->last_insert_error = '';
 		$voucher->created_at = $voucher->created_at ?: $this->now();
 		$voucher->updated_at = $this->now();
 		if ( '' === $voucher->token ) {
@@ -30,9 +37,17 @@ final class VoucherRepository {
 		}
 		$ok = $wpdb->insert( $this->table(), $voucher->to_row() ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( ! $ok ) {
+			$error = (string) $wpdb->last_error;
+			if ( str_contains( $error, 'Duplicate entry' ) || ( $voucher->order_item_id && $this->get_slot( (int) $voucher->order_item_id, (int) $voucher->item_index ) ) ) {
+				$this->last_insert_error = 'duplicate';
+			} else {
+				$this->last_insert_error = 'db_error';
+				Db::fail( 'insert_voucher', array( 'order_id' => (int) $voucher->order_id, 'order_item_id' => (int) $voucher->order_item_id ) );
+			}
 			return 0;
 		}
 		$voucher->id = (int) $wpdb->insert_id;
+		/** A voucher row was inserted (args: Voucher). If its issuing fails afterwards, vcap_voucher_deleted follows. */
 		do_action( 'vcap_voucher_created', $voucher );
 		return $voucher->id;
 	}
@@ -42,6 +57,7 @@ final class VoucherRepository {
 		$voucher->updated_at = $this->now();
 		$ok                  = false !== $wpdb->update( $this->table(), $voucher->to_row(), array( 'id' => $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( $ok ) {
+			/** A voucher was saved (args: Voucher as stored). May fire inside a database transaction, see CONNECTORS.md. */
 			do_action( 'vcap_voucher_updated', $voucher );
 		}
 		return $ok;
@@ -102,10 +118,23 @@ final class VoucherRepository {
 		return $ok;
 	}
 
+	/**
+	 * Removes a voucher and its history (only used to undo a voucher whose issuing failed). Listeners that reacted
+	 * to "vcap_voucher_created" are told with "vcap_voucher_deleted" (D3), so they keep no ghost voucher.
+	 */
 	public function delete( int $id ): void {
 		global $wpdb;
+		$voucher = $this->get( $id );
 		$wpdb->delete( $this->table(), array( 'id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$wpdb->delete( $this->events_table(), array( 'voucher_id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( $voucher ) {
+			/**
+			 * A voucher was removed again (its issuing failed after "vcap_voucher_created").
+			 *
+			 * @param Voucher $voucher The voucher as it was stored.
+			 */
+			do_action( 'vcap_voucher_deleted', $voucher );
+		}
 	}
 
 	public static function new_token(): string {
@@ -390,9 +419,85 @@ final class VoucherRepository {
 		return array_map( array( Voucher::class, 'from_row' ), $rows ? $rows : array() );
 	}
 
-	public function expire_overdue(): int {
+	/**
+	 * Marks active vouchers whose validity ended as expired (daily maintenance). Each one gets an "expired" history
+	 * entry and "vcap_voucher_updated"; "vcap_voucher_expired" is fired once per batch with all of them (D7).
+	 *
+	 * @param float     $budget   Seconds to work (0 = until done).
+	 * @param bool|null $finished Set to false when the budget ran out before every voucher was handled.
+	 * @return int Number of vouchers expired.
+	 */
+	public function expire_overdue( float $budget = 0.0, ?bool &$finished = null ): int {
 		global $wpdb;
-		return (int) $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = 'expired', updated_at = %s WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < %s", $this->now(), $this->now() ) ); // phpcs:ignore
+		$start    = microtime( true );
+		$count    = 0;
+		$finished = true;
+		$skip     = array();
+		while ( true ) {
+			$now     = $this->now();
+			$not_in  = $skip ? ' AND id NOT IN (' . implode( ',', array_map( 'intval', $skip ) ) . ')' : '';
+			$ids     = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$this->table()} WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < %s{$not_in} ORDER BY id LIMIT 200", $now ) ) ); // phpcs:ignore
+			$expired = array();
+			foreach ( $ids as $id ) {
+				$changed = (int) $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = 'expired', updated_at = %s WHERE id = %d AND status = 'active' AND expires_at IS NOT NULL AND expires_at < %s", $now, $id, $now ) ); // phpcs:ignore
+				if ( 1 !== $changed ) {
+					$skip[] = $id; // Changed meanwhile, or a database error: not again in this run.
+					continue;
+				}
+				$voucher = $this->get( $id );
+				if ( ! $voucher ) {
+					continue;
+				}
+				$this->log( $id, 'expired', null, null === $voucher->balance ? null : (float) $voucher->balance, Note::make( 'expired' ) );
+				do_action( 'vcap_voucher_updated', $voucher );
+				$expired[] = $voucher;
+			}
+			if ( $expired ) {
+				$count += count( $expired );
+				/**
+				 * Vouchers whose validity ended were marked as expired (one call per batch of up to 200).
+				 *
+				 * @param Voucher[] $expired
+				 */
+				do_action_ref_array( 'vcap_voucher_expired', array( $expired ) ); // Not do_action(): one voucher would be unwrapped from the array.
+			}
+			if ( count( $ids ) < 200 ) {
+				return $count;
+			}
+			if ( $budget > 0 && microtime( true ) - $start >= $budget ) {
+				$finished = false;
+				return $count;
+			}
+		}
+	}
+
+	/**
+	 * One hook for every completed redemption, whatever the channel (D7): "shop" (order), "counter" (scanner,
+	 * till, admin) and "external" (redemption API, fired by RedemptionService with its own data).
+	 */
+	public static function fire_redeemed( Voucher $voucher, float $amount, string $channel, int $order_id = 0 ): void {
+		/**
+		 * Fires once per completed redemption.
+		 *
+		 * @param array $data voucher_id, code, user_id, amount, currency, order_id, channel (shop|counter|external),
+		 *                    committed_at (UTC), source (see Source).
+		 */
+		do_action(
+			'vcap_voucher_redeemed',
+			array(
+				'redemption_key' => '',
+				'target'         => '',
+				'voucher_id'   => (int) $voucher->id,
+				'code'         => (string) $voucher->code,
+				'user_id'      => get_current_user_id(),
+				'amount'       => $amount,
+				'currency'     => (string) $voucher->currency,
+				'order_id'     => $order_id,
+				'channel'      => $channel,
+				'committed_at' => gmdate( 'Y-m-d H:i:s' ),
+				'source'       => Source::current(),
+			)
+		);
 	}
 
 	/** Erase personal data of vouchers that ended more than $days ago. */
@@ -464,23 +569,30 @@ final class VoucherRepository {
 		);
 	}
 
+	/**
+	 * Writes a history entry. $note is free text or a coded note (Note::make(), translated when shown). The
+	 * source of the change (Source::current(): admin, cron, rest, scanner, checkout, cli, web) is stored with it.
+	 */
 	public function log( int $voucher_id, string $event, ?float $amount = null, ?float $balance_after = null, string $note = '', int $order_id = 0 ): bool {
 		global $wpdb;
-		$inserted = false !== $wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			$this->events_table(),
-			array(
-				'voucher_id'    => $voucher_id,
-				'event'         => $event,
-				'amount'        => $amount,
-				'balance_after' => $balance_after,
-				'order_id'      => $order_id,
-				'user_id'       => get_current_user_id(),
-				'note'          => $note,
-				'created_at'    => $this->now(),
-			)
+		$row = array(
+			'voucher_id'    => $voucher_id,
+			'event'         => $event,
+			'amount'        => $amount,
+			'balance_after' => $balance_after,
+			'order_id'      => $order_id,
+			'user_id'       => get_current_user_id(),
+			'note'          => $note,
+			'created_at'    => $this->now(),
 		);
+		if ( Install::event_source_ready() ) {
+			$row['source'] = Source::current();
+		}
+		$inserted = false !== $wpdb->insert( $this->events_table(), $row ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( $inserted ) {
-			do_action( 'vcap_voucher_event', $voucher_id, $event, $amount, $balance_after, $note, $order_id );
+			// Listeners get the note as text (a coded note in the site language).
+			/** A history entry was written (args: voucher id, event, amount, balance after, note as text, order id). */
+			do_action( 'vcap_voucher_event', $voucher_id, $event, $amount, $balance_after, Note::render( $note ), $order_id );
 		}
 		return $inserted;
 	}
@@ -506,6 +618,7 @@ final class VoucherRepository {
 			'delivery_failed' => __( 'Delivery failed', 'voucher-captain' ),
 			'delivery_given_up' => __( 'Delivery given up (no more automatic attempts)', 'voucher-captain' ),
 			'delivery_expired'  => __( 'Not delivered: already expired', 'voucher-captain' ),
+			'delivered_without_pdf' => __( 'Delivered without PDF', 'voucher-captain' ),
 			'expiry_reminder' => __( 'Expiry reminder', 'voucher-captain' ),
 			'credit'        => __( 'Credit added', 'voucher-captain' ),
 			'debit'         => __( 'Credit removed', 'voucher-captain' ),

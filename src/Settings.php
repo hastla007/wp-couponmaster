@@ -59,6 +59,7 @@ final class Settings {
 		add_action( 'woocommerce_settings_vcap', array( $this, 'output' ) );
 		add_action( 'woocommerce_settings_save_vcap', array( $this, 'save' ) );
 		add_action( 'woocommerce_sections_vcap', array( $this, 'sections' ) );
+		add_filter( 'woocommerce_admin_settings_sanitize_option_' . Logger::VERBOSE_OPTION, array( Logger::class, 'sanitize_verbose' ) );
 		foreach ( array( 'vcap_code_prefix', 'vcap_code_suffix', 'vcap_code_separator' ) as $affix ) {
 			add_filter( 'woocommerce_admin_settings_sanitize_option_' . $affix, array( $this, 'sanitize_affix' ), 10, 2 );
 		}
@@ -291,6 +292,14 @@ final class Settings {
 						'type'    => 'checkbox',
 						'default' => 'no',
 						'desc'    => __( 'Remove voucher tables, templates and settings when the plugin is deleted. WooCommerce coupons are kept.', 'voucher-captain' ),
+					),
+					array(
+						'title'   => __( 'Verbose log', 'voucher-captain' ),
+						'id'      => Logger::VERBOSE_OPTION,
+						'type'    => 'checkbox',
+						'default' => 'no',
+						/* translators: %d: hours */
+						'desc'    => sprintf( __( 'Write detailed entries about issuing and deliveries to the WooCommerce log (source "voucher-captain") for support. Switches itself off after %d hours.', 'voucher-captain' ), Logger::VERBOSE_HOURS ),
 					),
 					array( 'type' => 'sectionend', 'id' => 'vcap_privacy' ),
 				);

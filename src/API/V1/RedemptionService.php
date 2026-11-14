@@ -584,9 +584,11 @@ final class RedemptionService {
 			 *
 			 * @since 1.1.0
 			 * @param array $data Redemption data: redemption_key, voucher_id, code, user_id, target, amount,
-			 *                    currency, state, committed_at (UTC), meta.
+			 *                    currency, state, committed_at (UTC), meta; channel "external" (shop and counter
+			 *                    redemptions fire it too, with channel "shop" or "counter", see
+			 *                    VoucherRepository::fire_redeemed()).
 			 */
-			do_action( 'vcap_voucher_redeemed', $data );
+			do_action( 'vcap_voucher_redeemed', $data + array( 'channel' => 'external', 'order_id' => 0, 'source' => \VCAP\Source::current() ) );
 		} else {
 			/**
 			 * Fires when a reservation was released (cancelled by the caller or expired).

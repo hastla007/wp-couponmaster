@@ -182,6 +182,39 @@ final class TemplatePostType {
 		echo '<textarea name="vcap_design" id="vcap-design-json" hidden>' . esc_textarea( wp_json_encode( $design ) ) . '</textarea>';
 		echo '<div id="vcap-designer" class="vcap-designer" aria-label="' . esc_attr__( 'Template designer', 'voucher-captain' ) . '"><p>' . esc_html__( 'Loading designer…', 'voucher-captain' ) . '</p></div>';
 		echo '<noscript>' . esc_html__( 'The designer requires JavaScript.', 'voucher-captain' ) . '</noscript>';
+		$sample = CodeGenerator::build(
+			array(
+				'prefix'    => (string) get_option( 'vcap_code_prefix', '' ),
+				'suffix'    => (string) get_option( 'vcap_code_suffix', '' ),
+				'length'    => (int) get_option( 'vcap_code_length', 12 ),
+				'charset'   => (string) get_option( 'vcap_code_charset', 'alnum_upper' ),
+				'separator' => (string) get_option( 'vcap_code_separator', '-' ),
+			)
+		);
+		foreach ( self::barcode_warnings( $design, $sample ) as $warning ) {
+			echo '<div class="notice notice-warning inline"><p>' . esc_html( $warning ) . '</p></div>';
+		}
+	}
+
+	/**
+	 * Barcodes of a design that cannot print codes like $sample_code (D5): e.g. EAN-13 with letters in the codes –
+	 * the PDF would show no barcode and the scanner find nothing.
+	 *
+	 * @return string[]
+	 */
+	public static function barcode_warnings( array $design, string $sample_code ): array {
+		$warnings = array();
+		foreach ( (array) ( $design['elements'] ?? array() ) as $el ) {
+			if ( ! is_array( $el ) || 'barcode' !== ( $el['type'] ?? '' ) || '{coupon_code}' !== (string) ( $el['qrValue'] ?? '{coupon_code}' ) ) {
+				continue;
+			}
+			$problem = PdfRenderer::barcode_problem( (string) ( $el['barcodeType'] ?? 'C128' ), $sample_code );
+			if ( '' !== $problem ) {
+				/* translators: 1: element name, 2: problem */
+				$warnings[] = sprintf( __( 'Barcode "%1$s": %2$s', 'voucher-captain' ), (string) ( $el['name'] ?? '' ), $problem );
+			}
+		}
+		return array_values( array_unique( $warnings ) );
 	}
 
 	public function assets( string $hook ): void {
