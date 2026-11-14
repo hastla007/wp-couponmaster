@@ -12,7 +12,11 @@
 	var input = document.getElementById( 'vcap-code' );
 	var result = document.getElementById( 'vcap-result' );
 	var live = document.getElementById( 'vcap-live' );
+	var till = document.getElementById( 'vcap-till' );
 	var audio = null;
+	var TIMEOUT = 10000; // No answer within 10 s: the result is unclear, never "invalid".
+	// Phones and tablets: the on-screen keyboard would cover the result and the camera picture.
+	var coarse = !! ( window.matchMedia && window.matchMedia( '(pointer: coarse)' ).matches );
 
 	/** One AudioContext, created in a user gesture (iOS keeps contexts created later silent). */
 	function unlockAudio() {
@@ -49,27 +53,42 @@
 	var runId = 0;
 	var starting = false;
 	var current = null; // Voucher shown in the result block (amount entry, confirmation).
+	var fromField = false; // Last code came from the input field (keyboard or USB scanner), not the camera.
 
 	try {
 		auto.checked = '1' === window.localStorage.getItem( 'vcapAutoCheckin' );
+		if ( till ) {
+			till.value = window.localStorage.getItem( 'vcapTill' ) || '';
+		}
 	} catch ( e ) {}
 	auto.addEventListener( 'change', function () {
 		try {
 			window.localStorage.setItem( 'vcapAutoCheckin', auto.checked ? '1' : '0' );
 		} catch ( e ) {}
 	} );
+	if ( till ) {
+		// Till or branch of this device, kept with every counter booking.
+		till.addEventListener( 'change', function () {
+			try {
+				window.localStorage.setItem( 'vcapTill', till.value.trim() );
+			} catch ( e ) {}
+		} );
+	}
 
-	function api( path, method, body ) {
-		// With plain permalinks the REST root already contains "?rest_route=…".
-		if ( -1 !== cfg.root.indexOf( '?' ) ) {
-			path = path.replace( '?', '&' );
-		}
+	/** One request with a time limit; no answer rejects with {timeout: true} (no status). */
+	function request( path, method, body ) {
+		var ctrl = window.AbortController ? new window.AbortController() : null;
+		var timer = ctrl ? window.setTimeout( function () {
+			ctrl.abort();
+		}, TIMEOUT ) : 0;
 		return fetch( cfg.root + path, {
-			method: method || 'GET',
+			method: method,
 			credentials: 'same-origin',
 			headers: { 'X-WP-Nonce': cfg.nonce, 'Content-Type': 'application/json' },
-			body: body ? JSON.stringify( body ) : undefined
+			body: body ? JSON.stringify( body ) : undefined,
+			signal: ctrl ? ctrl.signal : undefined
 		} ).then( function ( r ) {
+			window.clearTimeout( timer );
 			return r.json().catch( function () {
 				return {};
 			} ).then( function ( data ) {
@@ -80,6 +99,38 @@
 				}
 				return data;
 			} );
+		}, function () {
+			window.clearTimeout( timer );
+			throw { timeout: true };
+		} );
+	}
+
+	/** The login nonce expires after 12–24 h: fetch a fresh one (same session) instead of "session expired". */
+	function renewNonce() {
+		if ( ! cfg.nonceUrl ) {
+			return Promise.reject( {} );
+		}
+		return fetch( cfg.nonceUrl, { credentials: 'same-origin' } ).then( function ( r ) {
+			return r.ok ? r.text() : Promise.reject( {} );
+		} ).then( function ( n ) {
+			n = String( n || '' ).trim();
+			if ( ! /^[a-f0-9]{6,}$/.test( n ) ) {
+				throw {};
+			}
+			cfg.nonce = n;
+		} );
+	}
+
+	function api( path, method, body ) {
+		return request( path, method || 'POST', body ).catch( function ( err ) {
+			if ( err && 'rest_cookie_invalid_nonce' === err.code ) {
+				return renewNonce().then( function () {
+					return request( path, method || 'POST', body );
+				}, function () {
+					throw err;
+				} );
+			}
+			throw err;
 		} );
 	}
 
@@ -177,7 +228,7 @@
 			'ticket' === d.type ? [ t.admissions, d.checkins + ' / ' + d.max_checkins ] : null,
 			[ t.expires, d.expires ],
 			d.last_checkin ? [ t.lastCheckin, d.last_checkin ] : null
-		].filter( function ( r ) { return r && r[ 1 ]; } );
+		].concat( d.context || [] ).filter( function ( r ) { return r && r[ 1 ]; } );
 		var html = '<div class="vcap-r-head vcap-r-' + esc( d.state ) + '">' + esc( d.message ) + ' · <code>' + esc( d.code ) + '</code></div><div class="vcap-r-body"><dl>';
 		rows.forEach( function ( r ) {
 			html += '<dt>' + esc( r[ 0 ] ) + '</dt><dd>' + esc( r[ 1 ] ) + '</dd>';
@@ -188,8 +239,8 @@
 				html += ( d.max_checkins - d.checkins > 1 ? '<input type="number" min="1" value="1" max="' + ( d.max_checkins - d.checkins ) + '" class="small-text" id="vcap-count" aria-label="' + esc( t.admissions ) + '">' : '' );
 				html += '<button type="button" class="button button-primary button-hero" data-act="checkin">' + esc( t.checkin ) + '</button>';
 			}
-			if ( d.checkins > 0 ) {
-				html += '<button type="button" class="button" data-act="undo">' + esc( t.undo ) + '</button>';
+			if ( d.checkins > 0 && d.undo ) {
+				html += '<button type="button" class="button" data-act="undo" data-reason="' + ( 'reason' === d.undo ? '1' : '' ) + '">' + esc( t.undo ) + '</button>';
 			}
 		} else if ( ( 'ok' === d.state || 'exceeds_balance' === d.reason ) && 'redeemed' !== d.status ) {
 			if ( false !== d.redeemable ) {
@@ -199,6 +250,7 @@
 					html += '<span class="vcap-amount-field"><input type="text" inputmode="decimal" id="vcap-amount" class="small-text" autocomplete="off" placeholder="' + esc( amounts.formatNumber( 0, decimalsOf( d ), money.decimalSep, money.thousandSep ) ) + '" aria-describedby="vcap-amount-error">';
 					html += ' <span class="vcap-amount-currency">' + esc( symbolOf( d ) ) + '</span></span>';
 				}
+				html += '<label for="vcap-receipt">' + esc( t.receipt ) + '</label> <input type="text" id="vcap-receipt" class="small-text vcap-receipt" autocomplete="off">';
 				html += '<button type="button" class="button button-primary" data-act="redeem">' + esc( t.redeem ) + '</button>';
 				if ( d.multi_use ) {
 					// Above the balance: only an explicit second action books the remaining balance.
@@ -208,18 +260,72 @@
 				}
 			}
 		}
-		html += '<a class="button-link" href="' + esc( d.admin_url ) + '">' + esc( t.details ) + '</a></div></div>';
+		if ( d.success && d.event_id && 'ticket' !== d.type ) {
+			// Wrong card or amount: the booking can be cancelled right away (with a reason).
+			html += '<button type="button" class="button" data-act="reverse" data-event="' + esc( d.event_id ) + '">' + esc( t.reverse ) + '</button>';
+			html += '<button type="button" class="button" data-act="print">' + esc( t.print ) + '</button>';
+		}
+		if ( d.admin_url ) {
+			html += '<a class="button-link" href="' + esc( d.admin_url ) + '">' + esc( t.details ) + '</a>';
+		}
+		html += '</div></div>';
 		result.innerHTML = html;
 		result.setAttribute( 'data-query', query );
 	}
 
-	function showError( err ) {
+	/** A hint that is no verdict on any code (e.g. no camera): yellow, with what to do instead. */
+	function notice( text ) {
+		result.removeAttribute( 'aria-busy' );
+		result.innerHTML = '<div class="vcap-r-head vcap-r-warning">' + esc( text ) + '</div>';
+		announce();
+	}
+
+	/** Shown while a request runs; the result block is marked busy for screen readers. */
+	function loading( text ) {
+		result.setAttribute( 'aria-busy', 'true' );
+		if ( text ) {
+			result.innerHTML = '<div class="vcap-r-head vcap-r-loading">' + esc( text ) + '</div>';
+		} else {
+			var head = result.querySelector( '.vcap-r-head' );
+			if ( head ) {
+				head.classList.add( 'vcap-r-loading' );
+			}
+		}
+	}
+
+	/**
+	 * @param {Object}  err    Error of api() (status and code of the server, or timeout).
+	 * @param {boolean} booking Whether the request could have booked something (check-in, redemption).
+	 * @param {string}  query  Code to query again.
+	 */
+	function showError( err, booking, query ) {
 		var code   = String( ( err && err.code ) || '' );
-		var system = ! err || ! err.status || err.status >= 500 || 'rest_cookie_invalid_nonce' === code || /retry|busy/.test( code );
+		var system = ! err || ! err.status || err.status >= 500 || 409 === err.status || 'rest_cookie_invalid_nonce' === code || /retry|busy/.test( code );
 		// A server fault or an expired session is no verdict on the code: yellow "try again", never red "invalid".
 		var text = system ? ( 'rest_cookie_invalid_nonce' === code ? t.sessionExpired : t.systemError ) || t.error : ( err.message || t.error );
-		result.innerHTML = '<div class="vcap-r-head ' + ( system ? 'vcap-r-warning' : 'vcap-r-error' ) + '">' + esc( text ) + '</div>';
+		var again = '';
+		if ( booking && system && ( ! err || ! err.status || err.status >= 500 ) ) {
+			// No answer to a booking: it may have been made. Look the code up before doing anything again.
+			text = t.unclear;
+			again = query ? '<div class="vcap-r-body"><div class="vcap-r-actions"><button type="button" class="button button-primary" data-act="requery">' + esc( t.queryAgain ) + '</button></div></div>' : '';
+		} else if ( 409 === ( err && err.status ) ) {
+			text = err.message || t.systemError;
+		}
+		result.removeAttribute( 'aria-busy' );
+		result.innerHTML = '<div class="vcap-r-head ' + ( system ? 'vcap-r-warning' : 'vcap-r-error' ) + '">' + esc( text ) + '</div>' + again;
+		if ( query ) {
+			result.setAttribute( 'data-query', query );
+		}
 		beep( false );
+	}
+
+	/** Back to the code field for the next scan – not on phones with the camera running (keyboard would cover it). */
+	function refocus() {
+		if ( stream || ( coarse && ! fromField ) ) {
+			return;
+		}
+		input.focus();
+		input.select();
 	}
 
 	function lookup( query ) {
@@ -227,17 +333,24 @@
 			return;
 		}
 		busy = true;
-		// Always look up first; auto check-in applies to valid tickets only (never to vouchers or gift cards).
-		var p = api( 'lookup?q=' + encodeURIComponent( query ) ).then( function ( d ) {
+		loading( t.checking );
+		var booking = false;
+		// Always look up first (POST: codes stay out of URLs and logs); auto check-in applies to valid tickets
+		// only (never to vouchers or gift cards).
+		var p = api( 'lookup', 'POST', { q: query } ).then( function ( d ) {
 			if ( auto.checked && 'ok' === d.state && ( 'ticket' === d.type || ( 'passcaptain' === d.type && d.can_checkin ) ) ) {
+				booking = true;
 				return send( 'checkin', { q: query }, 'checkin|' + query + '|1' );
 			}
 			return d;
 		} );
 		p.then( function ( d ) {
+			result.removeAttribute( 'aria-busy' );
 			render( d, query );
 			beep( 'ok' === d.state );
-		} ).catch( showError ).then( function () {
+		} ).catch( function ( err ) {
+			showError( err, booking, query );
+		} ).then( function () {
 			busy = false;
 		} );
 	}
@@ -317,8 +430,28 @@
 		if ( ! act || ! query || acting ) {
 			return; // One action at a time: a double tap never admits twice.
 		}
+		if ( 'requery' === act ) {
+			lookup( query );
+			return;
+		}
+		if ( 'print' === act ) {
+			window.print();
+			return;
+		}
 		if ( 'undo' === act && ! window.confirm( t.confirmUndo ) ) {
 			return;
+		}
+		var reason = '';
+		if ( ( 'undo' === act && e.target.getAttribute( 'data-reason' ) ) || 'reverse' === act ) {
+			reason = window.prompt( 'reverse' === act ? t.reverseReason : t.undoReason, '' );
+			if ( null === reason ) {
+				return;
+			}
+			reason = reason.trim();
+			if ( ! reason ) {
+				window.alert( t.reasonRequired );
+				return;
+			}
 		}
 		var req;
 		if ( 'checkin' === act ) {
@@ -326,7 +459,10 @@
 			var count = c ? parseInt( c.value, 10 ) || 1 : 1;
 			req = send( 'checkin', { q: query, count: count }, 'checkin|' + query + '|' + count );
 		} else if ( 'undo' === act ) {
-			req = send( 'checkin', { q: query, undo: true }, 'undo|' + query );
+			req = send( 'checkin', { q: query, undo: true, reason: reason }, 'undo|' + query );
+		} else if ( 'reverse' === act ) {
+			var eventId = parseInt( e.target.getAttribute( 'data-event' ), 10 ) || 0;
+			req = send( 'redeem/reverse', { q: query, event_id: eventId, reason: reason }, 'reverse|' + query + '|' + eventId );
 		} else if ( 'redeem' === act && current && current.multi_use ) {
 			var pb = result.querySelector( '[data-act="redeem-partial"]' );
 			var box = document.getElementById( 'vcap-amount-error' );
@@ -357,7 +493,7 @@
 			if ( ! window.confirm( fill( t.confirmRedeem, [ formatMinor( parsed.minor, current ), cardEnd( current ), formatMinor( balance - parsed.minor, current ) ] ) ) ) {
 				return;
 			}
-			req = send( 'redeem', { q: query, amount: parsed.value }, 'redeem|' + query + '|' + parsed.value );
+			req = send( 'redeem', counterBody( { q: query, amount: parsed.value } ), 'redeem|' + query + '|' + parsed.value );
 		} else if ( 'redeem-partial' === act && current && current.multi_use ) {
 			var wanted = parseFloat( e.target.getAttribute( 'data-amount' ) ) || 0;
 			var dec = decimalsOf( current );
@@ -369,30 +505,46 @@
 			if ( ! window.confirm( fill( t.confirmPartial, [ formatMinor( rest, current ), cardEnd( current ), formatMinor( open, current ), formatMinor( 0, current ) ] ) ) ) {
 				return;
 			}
-			req = send( 'redeem', { q: query, amount: wanted, allow_partial: true }, 'redeem|' + query + '|' + wanted + '|partial' );
+			req = send( 'redeem', counterBody( { q: query, amount: wanted, allow_partial: true } ), 'redeem|' + query + '|' + wanted + '|partial' );
 		} else if ( 'redeem' === act ) {
-			req = send( 'redeem', { q: query }, 'redeem|' + query + '|0' );
+			req = send( 'redeem', counterBody( { q: query } ), 'redeem|' + query + '|0' );
 		}
 		if ( req ) {
 			acting = true;
 			Array.prototype.forEach.call( result.querySelectorAll( 'button' ), function ( b ) {
 				b.disabled = true;
 			} );
+			loading( '' );
 			req.then( function ( d ) {
+				result.removeAttribute( 'aria-busy' );
 				render( d, query );
 				beep( !! d.success );
-			} ).catch( showError ).then( function () {
+			} ).catch( function ( err ) {
+				showError( err, true, query );
+			} ).then( function () {
 				acting = false;
-				input.focus(); // Ready for the next scan (USB scanners type into the focused field).
-				input.select();
+				refocus(); // Ready for the next scan (USB scanners type into the focused field).
 			} );
 		}
 	} );
 
+	/** Receipt number of the till and the till/branch of this device, kept with the booking. */
+	function counterBody( body ) {
+		var receipt = document.getElementById( 'vcap-receipt' );
+		body.receipt = receipt ? receipt.value.trim() : '';
+		body.till = till ? till.value.trim() : '';
+		return body;
+	}
+
 	form.addEventListener( 'submit', function ( e ) {
 		e.preventDefault();
+		fromField = true;
 		lookup( input.value.trim() );
-		input.select();
+		if ( stream && coarse ) {
+			input.blur(); // Hide the keyboard: the camera picture and the result stay visible.
+		} else {
+			input.select();
+		}
 	} );
 
 	function onCode( code ) {
@@ -409,6 +561,7 @@
 		}
 		lastCode = code;
 		lastTime = now;
+		fromField = false;
 		input.value = code;
 		lookup( code );
 	}
@@ -448,9 +601,21 @@
 		}, 200 );
 	}
 
+	/** Why there is no camera picture – a hint, never "system error". */
+	function noCamera( err ) {
+		var name = String( ( err && err.name ) || '' );
+		if ( false === window.isSecureContext ) {
+			notice( t.noCameraHttps ); // Browsers only allow the camera on HTTPS pages.
+		} else if ( 'NotAllowedError' === name || 'SecurityError' === name ) {
+			notice( t.cameraDenied );
+		} else {
+			notice( t.noCamera );
+		}
+	}
+
 	function start() {
 		if ( ! navigator.mediaDevices || ! navigator.mediaDevices.getUserMedia ) {
-			showError( { message: t.noCamera } );
+			noCamera( null );
 			return;
 		}
 		if ( starting ) {
@@ -464,6 +629,9 @@
 			video.play();
 			video.parentNode.classList.add( 'is-live' );
 			toggleBtn.textContent = t.stop;
+			if ( coarse && document.activeElement === input ) {
+				input.blur();
+			}
 			if ( 'BarcodeDetector' in window ) {
 				try {
 					detector = new window.BarcodeDetector( { formats: [ 'qr_code', 'code_128', 'code_39', 'ean_13' ] } );
@@ -473,9 +641,9 @@
 			}
 			runId++;
 			tick( runId );
-		} ).catch( function () {
+		} ).catch( function ( err ) {
 			starting = false;
-			showError( { message: t.noCamera } );
+			noCamera( err );
 		} );
 	}
 
@@ -487,6 +655,10 @@
 		video.srcObject = null;
 		video.parentNode.classList.remove( 'is-live' );
 		toggleBtn.textContent = t.start;
+	}
+
+	if ( ! coarse ) {
+		input.focus(); // Desktop and USB scanners: ready to scan (no keyboard popping up on phones).
 	}
 
 	toggleBtn.addEventListener( 'click', function () {

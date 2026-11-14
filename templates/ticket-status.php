@@ -9,6 +9,8 @@
  * @var bool               $staff
  * @var bool               $public
  * @var string             $notice
+ * @var string             $notice_level 'ok', 'warning' or 'error'
+ * @var string             $checkin_key  One-time key of the check-in form (a resent form never admits twice).
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -19,6 +21,12 @@ $colors = array(
 	'error'   => '#b00020',
 );
 $state  = $data['state'] ?? 'error';
+$notice_level = isset( $notice_level ) && isset( $colors[ $notice_level ] ) ? $notice_level : 'ok';
+$notice_icons = array(
+	'ok'      => '✓',
+	'warning' => '!',
+	'error'   => '✕',
+);
 ?><!DOCTYPE html>
 <html <?php language_attributes(); ?>>
 <head>
@@ -36,6 +44,8 @@ $state  = $data['state'] ?? 'error';
 		.screen-reader-text{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 		dd{margin:0;font-weight:600}
 		.notice{background:#e8f4ea;color:#1e7e34;padding:10px 14px;border-radius:6px;margin-bottom:14px;font-weight:600}
+		.notice--warning{background:#fdf1e0;color:#8a5200}
+		.notice--error{background:#fbe7ea;color:#b00020;border:2px solid #b00020}
 		form{margin-top:18px;display:flex;gap:8px}
 		input[type=number]{width:80px;padding:10px;font-size:16px}
 		button{flex:1;padding:12px;font-size:17px;font-weight:700;border:0;border-radius:8px;background:#1f3a4d;color:#fff;cursor:pointer}
@@ -51,7 +61,7 @@ $state  = $data['state'] ?? 'error';
 		<div class="state" role="status" style="background:<?php echo esc_attr( $colors[ $state ] ?? $colors['error'] ); ?>"><?php echo esc_html( $data['message'] ); ?></div>
 		<div class="body">
 			<?php if ( $notice ) : ?>
-				<div class="notice" role="alert"><?php echo esc_html( $notice ); ?></div>
+				<div class="notice notice--<?php echo esc_attr( $notice_level ); ?>" role="alert"><span aria-hidden="true"><?php echo esc_html( $notice_icons[ $notice_level ] ); ?></span> <?php echo esc_html( $notice ); ?></div>
 			<?php endif; ?>
 			<dl>
 				<dt><?php esc_html_e( 'Product', 'voucher-captain' ); ?></dt><dd><?php echo esc_html( $data['product'] ); ?></dd>
@@ -64,7 +74,9 @@ $state  = $data['state'] ?? 'error';
 				<?php if ( $staff ) : ?>
 					<dt><?php esc_html_e( 'Code', 'voucher-captain' ); ?></dt><dd><?php echo esc_html( $data['code'] ); ?></dd>
 					<dt><?php esc_html_e( 'Holder', 'voucher-captain' ); ?></dt><dd><?php echo esc_html( $data['holder'] ); ?></dd>
-					<dt><?php esc_html_e( 'Order', 'voucher-captain' ); ?></dt><dd>#<?php echo esc_html( $data['order'] ); ?></dd>
+					<?php if ( '' !== (string) $data['order'] ) : ?>
+						<dt><?php esc_html_e( 'Order', 'voucher-captain' ); ?></dt><dd>#<?php echo esc_html( $data['order'] ); ?></dd>
+					<?php endif; ?>
 					<?php if ( $data['multi_use'] ) : ?>
 						<dt><?php esc_html_e( 'Balance', 'voucher-captain' ); ?></dt><dd><?php echo esc_html( $data['balance_html'] ); ?></dd>
 					<?php endif; ?>
@@ -76,6 +88,7 @@ $state  = $data['state'] ?? 'error';
 			<?php if ( $staff && $voucher->is_ticket() && 'ok' === $state ) : ?>
 				<form method="post">
 					<?php wp_nonce_field( 'vcap_checkin_' . $voucher->id, 'vcap_checkin_nonce' ); ?>
+					<input type="hidden" name="vcap_checkin_key" value="<?php echo esc_attr( $checkin_key ?? '' ); ?>">
 					<?php if ( $voucher->max_checkins - $voucher->checkins > 1 ) : ?>
 						<label class="screen-reader-text" for="vcap-count"><?php esc_html_e( 'Admissions', 'voucher-captain' ); ?></label>
 						<input type="number" id="vcap-count" name="count" value="1" min="1" max="<?php echo esc_attr( (string) ( $voucher->max_checkins - $voucher->checkins ) ); ?>">
@@ -84,7 +97,7 @@ $state  = $data['state'] ?? 'error';
 				</form>
 			<?php endif; ?>
 			<?php if ( $staff ) : ?>
-				<p><a href="<?php echo esc_url( $data['admin_url'] ); ?>"><?php esc_html_e( 'Open in admin', 'voucher-captain' ); ?></a> · <a href="<?php echo esc_url( admin_url( 'admin.php?page=vcap-scanner' ) ); ?>"><?php esc_html_e( 'Scanner', 'voucher-captain' ); ?></a></p>
+				<p><?php if ( '' !== (string) $data['admin_url'] ) : ?><a href="<?php echo esc_url( $data['admin_url'] ); ?>"><?php esc_html_e( 'Open in admin', 'voucher-captain' ); ?></a> · <?php endif; ?><a href="<?php echo esc_url( admin_url( 'admin.php?page=vcap-scanner' ) ); ?>"><?php esc_html_e( 'Scanner', 'voucher-captain' ); ?></a></p>
 			<?php endif; ?>
 		</div>
 	<?php endif; ?>

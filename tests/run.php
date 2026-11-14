@@ -362,6 +362,69 @@ check( 'refusal messages differ per reason (no blanket "amount exceeds the balan
 check( 'the over-balance refusal names the entered amount and the remaining balance', str_contains( $counter_messages['exceeds_balance'], '80,00 €' ) && str_contains( $counter_messages['exceeds_balance'], '50,00 €' ) );
 check( 'only the over-balance refusal mentions the balance being exceeded', 1 === count( array_filter( $counter_messages, static fn( $m ) => str_contains( $m, 'exceeds' ) ) ) );
 
+echo "Scanner: code recognition, context, undo and cancellation rules\n";
+$cand = Tickets::code_candidates( 'https://shop.test/gutschein/?gutschein=ABCD-EFGH-2345&utm=x' );
+check( 'a custom QR link is read: its parameter values are looked up as codes', 'abcd-efgh-2345' === ( $cand[0] ?? '' ) && in_array( 'x', $cand, true ), json_encode( $cand ) );
+check( 'the last path segment of a link counts too', in_array( 'k7qm2x9zpa', Tickets::code_candidates( 'https://shop.test/redeem/K7QM2X9ZPA' ), true ) );
+$cand = Tickets::code_candidates( ' ABCD EFGH ' );
+check( 'spaces are removed or read as dashes, separators dropped', array( 'abcd efgh', 'abcdefgh', 'abcd-efgh' ) === array_slice( $cand, 0, 3 ), json_encode( $cand ) );
+$cand = Tickets::code_candidates( 'GIFTßYZ12' );
+check( 'USB scanner on a German keyboard: Y/Z swapped and ß read as dash, after the exact forms', 'giftßyz12' === $cand[0] && in_array( 'gift-zy12', $cand, true ) && array_search( 'gift-zy12', $cand, true ) > array_search( 'giftßyz12', $cand, true ), json_encode( $cand ) );
+check( 'at most 12 candidates, never empty ones', count( Tickets::code_candidates( 'https://shop.test/?a=1&b=2&c=3&d=4&e=5&f=6' ) ) <= 12 && array() === Tickets::code_candidates( '   ' ) );
+
+$ev = static fn( int $id, string $event, ?float $balance = null, int $order = 0, int $user = 0, string $at = '2026-01-01 10:00:00', float $amount = 10.0 ) => array( 'id' => $id, 'voucher_id' => 7, 'event' => $event, 'amount' => $amount, 'balance_after' => $balance, 'order_id' => $order, 'user_id' => $user, 'note' => '', 'created_at' => $at );
+$hist = array( $ev( 1, 'issued', 50.0 ), $ev( 2, 'reserved', 0.0, 99 ), $ev( 3, 'resent' ) );
+check( 'a balance held by an unpaid order is recognised (not "already redeemed")', 2 === ( Tickets::open_reservation( $hist )['id'] ?? 0 ) );
+check( 'once committed or released the reservation is no longer open', null === Tickets::open_reservation( array_merge( $hist, array( $ev( 4, 'committed', 0.0, 99 ) ) ) ) && null === Tickets::open_reservation( array_merge( $hist, array( $ev( 4, 'reservation_released', 50.0, 99 ) ) ) ) );
+check( 'last_event finds the newest event of a kind', 2 === Tickets::last_event( $hist, array( 'reserved', 'issued' ) )['id'] && null === Tickets::last_event( $hist, array( 'voided' ) ) );
+
+$ticket               = new Voucher();
+$ticket->id           = 7;
+$ticket->type         = 'ticket';
+$ticket->status       = Voucher::STATUS_ACTIVE;
+$ticket->max_checkins = 2;
+$ticket->checkins     = 1;
+$now                  = strtotime( '2026-01-01 10:05:00 UTC' );
+$mine                 = $ev( 5, 'checkin', null, 0, 3, '2026-01-01 10:00:00' );
+check( 'own check-in can be reverted within the time window', 'own' === Tickets::undo_mode( $ticket, $mine, 3, false, $now ) );
+check( 'after the window, or someone else\'s check-in: only managers, with a reason', '' === Tickets::undo_mode( $ticket, $mine, 3, false, $now + 3600 ) && '' === Tickets::undo_mode( $ticket, $mine, 4, false, $now ) && 'reason' === Tickets::undo_mode( $ticket, $mine, 4, true, $now ) );
+$void_ticket         = clone $ticket;
+$void_ticket->status = Voucher::STATUS_VOID;
+$old_ticket          = clone $ticket;
+$old_ticket->expires_at = '2020-01-01 00:00:00';
+check( 'cancelled or expired tickets cannot be reverted at all (no extra admissions)', '' === Tickets::undo_mode( $void_ticket, $mine, 3, true, $now ) && '' === Tickets::undo_mode( $old_ticket, $mine, 3, true, $now ) );
+
+$card             = new Voucher();
+$card->id         = 7;
+$card->usage_mode = 'balance';
+$card->status     = Voucher::STATUS_ACTIVE;
+$booking          = $ev( 8, 'redeemed', 20.0, 0, 3, '2026-01-01 10:00:00' );
+check( 'the cashier can cancel their own counter redemption shortly after', '' === Tickets::reversal_refusal( $booking, $card, 3, false, $now, false ) );
+check( 'later or by someone else only a manager may cancel it', 'forbidden' === Tickets::reversal_refusal( $booking, $card, 3, false, $now + 3600, false ) && 'forbidden' === Tickets::reversal_refusal( $booking, $card, 4, false, $now, false ) && '' === Tickets::reversal_refusal( $booking, $card, 4, true, $now + 3600, false ) );
+check(
+	'shop orders, cancelled vouchers, other events and double cancellations are refused',
+	'order' === Tickets::reversal_refusal( $ev( 8, 'redeemed', 20.0, 55, 3 ), $card, 3, true, $now, false )
+	&& 'reversed' === Tickets::reversal_refusal( $booking, $card, 3, true, $now, true )
+	&& 'not_found' === Tickets::reversal_refusal( $ev( 8, 'adjusted', 20.0 ), $card, 3, true, $now, false )
+	&& 'not_found' === Tickets::reversal_refusal( null, $card, 3, true, $now, false )
+	&& 'void' === Tickets::reversal_refusal( $booking, ( static function ( $v ) { $v->status = Voucher::STATUS_VOID; return $v; } )( clone $card ), 3, true, $now, false )
+);
+$rev_codes = array( 'reason', 'order', 'reversed', 'void', 'forbidden', 'used', 'failed', 'other' );
+check( 'every cancellation refusal has its own message', count( $rev_codes ) === count( array_unique( array_map( array( Tickets::class, 'reversal_message' ), $rev_codes ) ) ) );
+check( 'cancelled counter redemptions count in the redemption journal and give a single-use voucher its value back', in_array( 'redeem_reversed', VCAP\Ledger::MONEY_EVENTS, true ) );
+check( 'counter note keeps receipt number and till', 'Redeemed in store · Receipt 4711 · Till Filiale 2' === Tickets::counter_note( '', ' 4711 ', 'Filiale 2' ) && 'Gift · Receipt 1' === Tickets::counter_note( 'Gift', '1' ) );
+check( 'WooCommerce keeps sending users without the scanner right away from wp-admin', true === Tickets::allow_scanner_admin( true ) && false === Tickets::allow_scanner_admin( false ) );
+
+$scanner_js  = (string) file_get_contents( dirname( __DIR__ ) . '/assets/js/scanner.js' );
+$scanner_php = (string) file_get_contents( dirname( __DIR__ ) . '/src/Admin/Scanner.php' );
+$ticket_tpl  = (string) file_get_contents( dirname( __DIR__ ) . '/templates/ticket-status.php' );
+check( 'scanner: codes are posted, never put into the lookup URL', ! str_contains( $scanner_js, 'lookup?q=' ) && str_contains( $scanner_js, "api( 'lookup', 'POST'" ) );
+check( 'scanner: requests time out and an unanswered booking is shown as unclear', str_contains( $scanner_js, 'AbortController' ) && str_contains( $scanner_js, 't.unclear' ) && str_contains( $scanner_php, "'unclear'" ) );
+check( 'scanner: an expired nonce is renewed and the request repeated', str_contains( $scanner_js, 'renewNonce' ) && str_contains( $scanner_php, 'action=rest-nonce' ) );
+check( 'scanner: no camera is a hint (HTTPS, permission), not a system error', str_contains( $scanner_js, 'function noCamera' ) && ! str_contains( $scanner_js, 'showError( { message: t.noCamera } )' ) );
+check( 'scanner: no autofocus that opens the phone keyboard over the camera', ! str_contains( $scanner_php, 'autofocus' ) && str_contains( $scanner_js, 'pointer: coarse' ) );
+check( 'ticket page: check-in form carries a one-time key, refusals are red', str_contains( $ticket_tpl, 'vcap_checkin_key' ) && str_contains( $ticket_tpl, 'notice--error' ) );
+
 echo "Discount campaign engine\n";
 use VCAP\Discounts\Engine;
 $lines = array(

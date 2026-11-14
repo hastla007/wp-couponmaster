@@ -147,8 +147,10 @@ function vcap_uninstall_site(): bool {
 		if ( $role ) {
 			$role->remove_cap( 'vcap_manage_vouchers' );
 			$role->remove_cap( 'vcap_scan_tickets' );
+			$role->remove_cap( 'vcap_increase_balance' );
 		}
 	}
+	remove_role( 'vcap_cashier' );
 	if ( function_exists( 'as_unschedule_all_actions' ) ) {
 		as_unschedule_all_actions( '', array(), 'vcap' );
 	}

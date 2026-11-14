@@ -509,6 +509,7 @@ final class VoucherRepository {
 			'refund_credit_reversed' => __( 'Store credit refund reversed', 'voucher-captain' ),
 			'resent'     => __( 'Email resent', 'voucher-captain' ),
 			'redeemed'   => __( 'Redeemed', 'voucher-captain' ),
+			'redeem_reversed' => __( 'Redemption cancelled (value booked back)', 'voucher-captain' ),
 			'restored'   => __( 'Balance restored', 'voucher-captain' ),
 			'adjusted'   => __( 'Balance adjusted', 'voucher-captain' ),
 			'checkin'    => __( 'Checked in', 'voucher-captain' ),

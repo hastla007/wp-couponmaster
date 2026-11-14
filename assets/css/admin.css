@@ -39,6 +39,7 @@ mark.vcap-status--expired, mark.vcap-status--void { background: #eba3a3; color: 
 .vcap-auto { display: block; margin-bottom: 12px; }
 .vcap-result { border-radius: 8px; overflow: hidden; }
 .vcap-result .vcap-r-head { padding: 16px; color: #fff; font-size: 20px; font-weight: 700; }
+.vcap-result .vcap-r-loading { background: #50575e; }
 .vcap-result .vcap-r-ok { background: #1e7e34; }
 .vcap-result .vcap-r-warning { background: #b26a00; }
 .vcap-result .vcap-r-error { background: #b00020; }
@@ -57,4 +58,12 @@ mark.vcap-status--expired, mark.vcap-status--void { background: #eba3a3; color: 
 .vcap-result .vcap-r-ok::before { content: "\2713"; }
 .vcap-result .vcap-r-warning::before { content: "!"; }
 .vcap-result .vcap-r-error::before { content: "\2715"; }
+.vcap-result .vcap-r-head.vcap-r-loading { opacity: .7; }
+.vcap-result .vcap-r-loading::before { content: "\2026"; }
+.vcap-result .vcap-receipt { width: 8em; }
+.vcap-till { margin: 0 0 12px; }
+@media print {
+	#adminmenumain, #wpadminbar, #wpfooter, .vcap-scanner-wrap > .description, .vcap-scanner-video, .vcap-scanner-form, .vcap-auto, .vcap-till, .vcap-result .vcap-r-actions { display: none !important; }
+	#wpcontent { margin-left: 0 !important; }
+}
 .vcap-code-label { align-self: center; font-weight: 600; }

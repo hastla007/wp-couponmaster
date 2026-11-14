@@ -27,6 +27,11 @@ final class StoreCreditAdmin {
 		return current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' );
 	}
 
+	/** A refund changes the order: voucher managers also need WooCommerce's right to edit orders. */
+	private function can_refund(): bool {
+		return $this->can() && current_user_can( 'edit_shop_orders' );
+	}
+
 	public function profile( \WP_User $user ): void {
 		if ( ! $this->credit->enabled() || ! $this->can() ) {
 			return;
@@ -100,7 +105,7 @@ final class StoreCreditAdmin {
 	}
 
 	public function order_form( \WC_Order $order ): void {
-		if ( ! $this->credit->enabled() || ! $this->can() || ! $order->get_customer_id() || (float) $order->get_remaining_refund_amount() <= 0 ) {
+		if ( ! $this->credit->enabled() || ! $this->can_refund() || ! $order->get_customer_id() || (float) $order->get_remaining_refund_amount() <= 0 ) {
 			return;
 		}
 		?>
@@ -152,7 +157,7 @@ final class StoreCreditAdmin {
 	public function refund(): void {
 		$order_id = absint( $_POST['order_id'] ?? 0 );
 		check_admin_referer( 'vcap_refund_credit_' . $order_id );
-		if ( ! $this->can() ) {
+		if ( ! $this->can_refund() ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
 		$order = wc_get_order( $order_id );

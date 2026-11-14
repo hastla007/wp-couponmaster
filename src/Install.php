@@ -758,13 +758,28 @@ final class Install {
 		}
 	}
 
+	/** Role for till and entrance staff: the scanner only (no orders, customers or settings). */
+	public const CASHIER_ROLE = 'vcap_cashier';
+
 	public static function add_caps(): void {
 		foreach ( array( 'administrator', 'shop_manager' ) as $role_name ) {
 			$role = get_role( $role_name );
 			if ( $role ) {
 				$role->add_cap( 'vcap_manage_vouchers' );
 				$role->add_cap( 'vcap_scan_tickets' );
+				// Raising a remaining value ("Add", "Set to" above it) creates value: its own right.
+				$role->add_cap( 'vcap_increase_balance' );
 			}
+		}
+		if ( ! get_role( self::CASHIER_ROLE ) ) {
+			add_role(
+				self::CASHIER_ROLE,
+				__( 'Voucher cashier', 'voucher-captain' ),
+				array(
+					'read'              => true,
+					'vcap_scan_tickets' => true,
+				)
+			);
 		}
 	}
 

@@ -4,7 +4,7 @@ This document records the controls exercised by the current integration suite. I
 
 ## Admin and scanner access
 
-Voucher administration and import/export handlers check capabilities and WordPress nonces. PDF admin downloads require both a nonce and voucher-management capability. Scanner REST routes require a scanner capability (or WooCommerce management capability); the integration suite checks unauthenticated lookup, check-in, and redemption requests.
+Voucher administration and import/export handlers check capabilities and WordPress nonces. PDF admin downloads require both a nonce and voucher-management capability. Scanner REST routes require a scanner capability (or WooCommerce management capability); the integration suite checks unauthenticated lookup, check-in, and redemption requests. The role "Voucher cashier" has only the scanner capability; customer names, order numbers and the admin link are shown to voucher managers only. Cancelling a counter redemption needs a reason and is limited to managers or the booking user within 15 minutes; reverting a check-in to one's own within 10 minutes (managers with a reason). Raising a remaining value needs `vcap_increase_balance`, refunding as store credit `edit_shop_orders`. Scanner lookups are POST requests, so codes do not end up in URLs and server logs.
 
 ## Rate limits
 

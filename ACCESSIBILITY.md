@@ -19,7 +19,7 @@ Tastatur, Bildschirm nicht ansehen; Sprache der Seite Deutsch.
 | 6 | Seite mit `[vcap_redeem]`: Code einlösen | Feld- und Schaltflächenname; Hinweis nach dem Absenden angesagt | ☐ | ☐ | |
 | 7 | Ticketgutschein einlösen: Datum wählen, Teilnehmerdaten | Auswahl als Liste mit Namen, Schritte nachvollziehbar, Fehler angesagt | ☐ | ☐ | |
 | 8 | Mein Konto → Gutscheine | Tabelle mit Spaltenköpfen; „Erneut senden“ und Download-Links eindeutig benannt | ☐ | ☐ | |
-| 9 | Admin → Gutscheine → Scanner: Code scannen/eingeben + Enter | Ergebnis (gültig/ungültig/eingelöst) wird sofort angesagt (Live-Region), Fokus bleibt im Eingabefeld | ☐ | ☐ | |
+| 9 | Admin → Gutscheine → Scanner: Code scannen/eingeben + Enter | Während der Abfrage „Wird geprüft …“ (aria-busy); Ergebnis (gültig/ungültig/eingelöst) wird sofort angesagt (Live-Region), Fokus bleibt im Eingabefeld (am Smartphone mit laufender Kamera nicht – keine Bildschirmtastatur über Kamera und Ergebnis) | ☐ | ☐ | |
 | 10 | Admin → Aktionen → neue Aktion: Regeln, „Testwarenkorb“ | Felder benannt, Ergebnis des Tests wird angesagt | ☐ | ☐ | |
 | 11 | Admin → Gutschein-Designer (PDF-Vorlage) | Werkzeuge benannt, Zoomstufe angesagt; Elemente per Tastatur auswählbar | ☐ | ☐ | |
 | 12 | Kasse (klassisch und Blöcke) mit Gutscheincode | Fehlermeldungen von Voucher Captain (z. B. „bereits eingelöst“) werden angesagt | ☐ | ☐ | |

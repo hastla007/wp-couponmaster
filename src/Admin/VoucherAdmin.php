@@ -31,6 +31,11 @@ final class VoucherAdmin {
 		return current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' );
 	}
 
+	/** Raising a remaining value creates value: own right "vcap_increase_balance" (shop managers always). */
+	public static function can_increase(): bool {
+		return current_user_can( 'vcap_increase_balance' ) || current_user_can( 'manage_woocommerce' ); // phpcs:ignore WordPress.WP.Capabilities.Unknown -- Registered by Install.
+	}
+
 	public function notices(): void {
 		$schema_error = (string) get_option( \VCAP\Install::SCHEMA_ERROR_OPTION, '' );
 		if ( '' !== $schema_error && current_user_can( 'manage_woocommerce' ) ) {
@@ -53,6 +58,9 @@ final class VoucherAdmin {
 			'reactivated' => __( 'Voucher reactivated.', 'voucher-captain' ),
 			'adjusted'    => __( 'Balance updated.', 'voucher-captain' ),
 			'adjust_failed' => __( 'Balance could not be saved. Check the database tables and try again.', 'voucher-captain' ),
+			'redeemed_store' => __( 'Voucher marked as redeemed in the store.', 'voucher-captain' ),
+			'redeem_failed'  => __( 'The voucher was not redeemed: it is no longer active.', 'voucher-captain' ),
+			'reversed'       => __( 'Redemption cancelled; the value was booked back.', 'voucher-captain' ),
 			'action_failed' => __( 'The change could not be saved completely. Check the voucher history and the WooCommerce coupon.', 'voucher-captain' ),
 			'bulk'        => __( 'Bulk action completed.', 'voucher-captain' ),
 			'issued'      => __( 'Vouchers generated.', 'voucher-captain' ),
@@ -193,6 +201,10 @@ final class VoucherAdmin {
 						if ( $v->expires_at && ! in_array( 'expiry_reminder', array_column( $this->repo->events( $v->id ), 'event' ), true ) ) {
 							$form( 'suppress_reminder', __( 'No expiry reminder', 'voucher-captain' ) );
 						}
+						if ( ! $v->is_ticket() && ! $v->is_multi_use() && Voucher::STATUS_ACTIVE === $v->status && ! $v->is_expired() ) {
+							// Redeemed in the store without the scanner: booked like the scanner (redemption journal).
+							$form( 'redeem_store', __( 'Mark as redeemed (store)', 'voucher-captain' ), 'button', array(), __( 'Mark this voucher as redeemed in the store? It can then no longer be used; the redemption is recorded in the history and the redemption journal.', 'voucher-captain' ) );
+						}
 						if ( Voucher::STATUS_VOID === $v->status ) {
 							$form( 'reactivate', __( 'Reactivate', 'voucher-captain' ) );
 						} else {
@@ -244,6 +256,8 @@ final class VoucherAdmin {
 						</p>
 						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="vcap-balance-adjust"
 							data-face="<?php echo esc_attr( (string) $face ); ?>"
+							data-balance="<?php echo esc_attr( (string) $v->balance ); ?>"
+							data-confirm-add="<?php /* translators: %s: amount entered */ echo esc_attr__( 'Add %s to the remaining value? The change is recorded in the history.', 'voucher-captain' ); ?>"
 							data-confirm-set="<?php /* translators: %s: amount entered */ echo esc_attr__( 'Set the remaining value to %s? The current value is replaced and the change is recorded in the history.', 'voucher-captain' ); ?>"
 							data-confirm-above="<?php /* translators: %s: face value */ echo esc_attr( sprintf( __( 'This is more than the face value of %s.', 'voucher-captain' ), self::money( $face, $v->currency ) ) ); ?>">
 							<input type="hidden" name="action" value="vcap_voucher_action" />
@@ -254,7 +268,9 @@ final class VoucherAdmin {
 							<label class="screen-reader-text" for="vcap-adj-mode"><?php esc_html_e( 'Mode', 'voucher-captain' ); ?></label>
 							<select name="mode" id="vcap-adj-mode">
 								<option value="subtract"><?php esc_html_e( 'Deduct', 'voucher-captain' ); ?></option>
-								<option value="add"><?php esc_html_e( 'Add', 'voucher-captain' ); ?></option>
+								<?php if ( self::can_increase() ) : ?>
+									<option value="add"><?php esc_html_e( 'Add', 'voucher-captain' ); ?></option>
+								<?php endif; ?>
 								<option value="set"><?php esc_html_e( 'Set to', 'voucher-captain' ); ?></option>
 							</select>
 							<label class="screen-reader-text" for="vcap-adj-amount"><?php esc_html_e( 'Amount', 'voucher-captain' ); ?></label>
@@ -266,7 +282,7 @@ final class VoucherAdmin {
 						<?php
 						wp_add_inline_script(
 							'vcap-admin',
-							"document.addEventListener('submit',function(e){var f=e.target;if(!f.classList||!f.classList.contains('vcap-balance-adjust')||'set'!==f.elements.mode.value){return;}var raw=(f.elements.amount.value||'').replace(/[^0-9.,]/g,'');var n=parseFloat(raw.indexOf(',')>-1?raw.replace(/\\./g,'').replace(',','.'):raw);var face=parseFloat(f.getAttribute('data-face'))||0;var msg=f.getAttribute('data-confirm-set').replace('%s',f.elements.amount.value);var above=face>0&&n>face;if(above){msg+='\\n\\n'+f.getAttribute('data-confirm-above');}f.elements.confirm_above.value=above?'1':'';if(!window.confirm(msg)){e.preventDefault();f.elements.confirm_above.value='';}});"
+							"document.addEventListener('submit',function(e){var f=e.target;var m=f.elements&&f.elements.mode?f.elements.mode.value:'';if(!f.classList||!f.classList.contains('vcap-balance-adjust')||('set'!==m&&'add'!==m)){return;}var raw=(f.elements.amount.value||'').replace(/[^0-9.,]/g,'');var n=parseFloat(raw.indexOf(',')>-1?raw.replace(/\\./g,'').replace(',','.'):raw);var face=parseFloat(f.getAttribute('data-face'))||0;var after='add'===m?(parseFloat(f.getAttribute('data-balance'))||0)+n:n;var msg=f.getAttribute('add'===m?'data-confirm-add':'data-confirm-set').replace('%s',f.elements.amount.value);var above=face>0&&after>face;if(above){msg+='\\n\\n'+f.getAttribute('data-confirm-above');}f.elements.confirm_above.value=above?'1':'';if(!window.confirm(msg)){e.preventDefault();f.elements.confirm_above.value='';}});"
 						);
 						?>
 					<?php endif; ?>
@@ -291,6 +307,8 @@ final class VoucherAdmin {
 					$labels = VoucherRepository::event_labels();
 					foreach ( array_reverse( $this->repo->events( $v->id ) ) as $e ) :
 						$user = $e['user_id'] ? get_userdata( (int) $e['user_id'] ) : null;
+						// A redemption without an order (counter, admin deduction) can be cancelled with a reason.
+						$reversible = '' === \VCAP\Tickets::reversal_refusal( $e, $v, get_current_user_id(), true, time(), \VCAP\Tickets::is_reversed( (int) $e['id'] ) );
 						?>
 						<tr>
 							<td><?php echo esc_html( get_date_from_gmt( $e['created_at'], get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ); ?></td>
@@ -299,7 +317,18 @@ final class VoucherAdmin {
 							<td><?php echo null !== $e['balance_after'] ? wp_kses_post( wc_price( (float) $e['balance_after'], array( 'currency' => $v->currency ) ) ) : ''; ?></td>
 							<td><?php echo $e['order_id'] ? '#' . esc_html( (string) $e['order_id'] ) : ''; ?></td>
 							<td><?php echo $user ? esc_html( $user->display_name ) : '—'; ?></td>
-							<td><?php echo esc_html( (string) $e['note'] ); ?></td>
+							<td>
+								<?php echo esc_html( (string) $e['note'] ); ?>
+								<?php if ( $reversible ) : ?>
+									<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="vcap-inline-form vcap-reverse-form" data-confirm="<?php echo esc_attr__( 'Cancel this redemption and book the value back to the voucher? This is recorded in the history and the redemption journal.', 'voucher-captain' ); ?>">
+										<input type="hidden" name="action" value="vcap_voucher_action" /><input type="hidden" name="do" value="reverse_redemption" /><input type="hidden" name="id" value="<?php echo esc_attr( (string) $v->id ); ?>" /><input type="hidden" name="event_id" value="<?php echo esc_attr( (string) $e['id'] ); ?>" />
+										<?php wp_nonce_field( 'vcap_voucher_' . $v->id ); ?>
+										<label class="screen-reader-text" for="vcap-reverse-<?php echo esc_attr( (string) $e['id'] ); ?>"><?php esc_html_e( 'Reason', 'voucher-captain' ); ?></label>
+										<input type="text" id="vcap-reverse-<?php echo esc_attr( (string) $e['id'] ); ?>" name="reason" required maxlength="200" placeholder="<?php esc_attr_e( 'Reason (required)', 'voucher-captain' ); ?>" />
+										<button type="submit" class="button button-small"><?php esc_html_e( 'Cancel redemption', 'voucher-captain' ); ?></button>
+									</form>
+								<?php endif; ?>
+							</td>
 						</tr>
 					<?php endforeach; ?>
 					</tbody>
@@ -347,6 +376,18 @@ final class VoucherAdmin {
 				break;
 			case 'adjust':
 				$this->redirect( $this->adjust( $v ), $id );
+				break;
+			case 'redeem_store':
+				$this->redirect( $this->redeem_store( $v ), $id );
+				break;
+			case 'reverse_redemption':
+				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above.
+				$reversed = vcap()->tickets->reverse_redemption( $v, absint( $_POST['event_id'] ?? 0 ), sanitize_text_field( wp_unslash( $_POST['reason'] ?? '' ) ) );
+				if ( is_wp_error( $reversed ) ) {
+					Flash::add( 'error', $reversed->get_error_message() );
+					$this->redirect( '', $id );
+				}
+				$this->redirect( 'reversed', $id );
 				break;
 			case 'save':
 				$this->redirect( $this->save( $v ) ? 'saved' : '', $id );
@@ -436,7 +477,16 @@ final class VoucherAdmin {
 			Flash::add( 'error', sprintf( __( 'Only %1$s is available – %2$s cannot be deducted. Nothing was changed.', 'voucher-captain' ), self::money( $current, $v->currency ), self::money( $amount, $v->currency ) ) );
 			return '';
 		}
+		if ( ( 'add' === $mode || ( 'set' === $mode && $amount > $current + 0.000001 ) ) && ! self::can_increase() ) {
+			Flash::add( 'error', __( 'You may lower remaining values but not raise them (this needs the right to increase balances). Nothing was changed.', 'voucher-captain' ) );
+			return '';
+		}
 		$face = 'percent' === $v->discount_type ? 0.0 : (float) $v->initial_amount;
+		if ( 'add' === $mode && $face > 0 && $current + $amount > $face + 0.000001 && ! $confirm ) {
+			/* translators: 1: remaining value after adding, 2: face value */
+			Flash::add( 'error', sprintf( __( '%1$s is more than the face value of %2$s. Nothing was changed; confirm the dialog to set a higher value.', 'voucher-captain' ), self::money( $current + $amount, $v->currency ), self::money( $face, $v->currency ) ) );
+			return '';
+		}
 		if ( 'set' === $mode && $face > 0 && $amount > $face + 0.000001 && ! $confirm ) {
 			/* translators: 1: amount entered, 2: face value */
 			Flash::add( 'error', sprintf( __( '%1$s is more than the face value of %2$s. Nothing was changed; confirm the dialog to set a higher value.', 'voucher-captain' ), self::money( $amount, $v->currency ), self::money( $face, $v->currency ) ) );
@@ -457,6 +507,25 @@ final class VoucherAdmin {
 		/* translators: %s: new remaining value */
 		Flash::add( 'success', sprintf( __( 'Balance updated. New remaining value: %s.', 'voucher-captain' ), self::money( $after ? (float) $after->balance : $amount, $v->currency ) ) );
 		return '';
+	}
+
+	/**
+	 * "Mark as redeemed (store)": a single-use voucher redeemed in the store without the scanner, booked like
+	 * the scanner's redemption (same refusal rules, redemption journal).
+	 *
+	 * @return string message key
+	 */
+	public function redeem_store( Voucher $v ): string {
+		$tickets = vcap()->tickets;
+		$refused = $v->is_ticket() || $v->is_multi_use() || Voucher::STATUS_ACTIVE !== $v->status || $v->is_expired() ? 'not_active' : $tickets->counter_refusal_reason( $v );
+		if ( '' !== $refused ) {
+			if ( 'not_active' !== $refused ) {
+				Flash::add( 'error', $refused );
+				return '';
+			}
+			return 'redeem_failed';
+		}
+		return $tickets->redeem_single( $v, __( 'Marked as redeemed in the store by an admin', 'voucher-captain' ) ) ? 'redeemed_store' : 'redeem_failed';
 	}
 
 	public function save( Voucher $v ): bool {

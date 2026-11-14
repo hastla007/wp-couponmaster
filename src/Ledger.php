@@ -15,10 +15,10 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Ledger {
 	/** Events that move monetary value. */
-	public const MONEY_EVENTS = array( 'issued', 'redeemed', 'committed', 'restored', 'adjusted', 'credit', 'debit', 'refund_credit', 'refund_credit_reversed', 'api_committed', 'api_refunded', 'passcaptain_tickets_restored', 'topup', 'topup_reversed' );
+	public const MONEY_EVENTS = array( 'issued', 'redeemed', 'committed', 'restored', 'adjusted', 'credit', 'debit', 'refund_credit', 'refund_credit_reversed', 'api_committed', 'api_refunded', 'passcaptain_tickets_restored', 'topup', 'topup_reversed', 'redeem_reversed' );
 	/** Events after which a single-use voucher no longer carries value (until restored or reactivated). */
 	private const USED_EVENTS = array( 'redeemed', 'committed', 'api_committed', 'voided' );
-	private const BACK_EVENTS = array( 'restored', 'api_refunded', 'reactivated', 'passcaptain_tickets_restored' );
+	private const BACK_EVENTS = array( 'restored', 'api_refunded', 'reactivated', 'passcaptain_tickets_restored', 'redeem_reversed' );
 
 	public function __construct( private VoucherRepository $repo ) {}
 

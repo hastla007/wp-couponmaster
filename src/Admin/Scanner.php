@@ -22,6 +22,8 @@ final class Scanner {
 			array(
 				'root'  => esc_url_raw( rest_url( 'vcap/v1/' ) ),
 				'nonce' => wp_create_nonce( 'wp_rest' ),
+				// Fresh REST nonce for long shifts (core's "rest-nonce" Ajax action, same login session).
+				'nonceUrl' => admin_url( 'admin-ajax.php?action=rest-nonce' ),
 				// Shop defaults for amount entry; each voucher brings its own currency, symbol and decimals (describe()).
 				'money' => array(
 					'currency'    => $currency,
@@ -35,6 +37,17 @@ final class Scanner {
 					'start'      => __( 'Start camera', 'voucher-captain' ),
 					'stop'       => __( 'Stop camera', 'voucher-captain' ),
 					'noCamera'   => __( 'No camera available. Use the input field or a USB scanner.', 'voucher-captain' ),
+					'noCameraHttps' => __( 'The camera only works on HTTPS pages. Open the scanner via https:// – or use the input field or a USB scanner.', 'voucher-captain' ),
+					'cameraDenied'  => __( 'Camera access was denied. Allow the camera for this site in the browser settings – or use the input field or a USB scanner.', 'voucher-captain' ),
+					'checking'      => __( 'Checking…', 'voucher-captain' ),
+					'unclear'       => __( 'Result unclear: no answer from the server. The booking may have been made – query the code again before repeating it.', 'voucher-captain' ),
+					'queryAgain'    => __( 'Query again', 'voucher-captain' ),
+					'undoReason'    => __( 'Reason for reverting this check-in (required):', 'voucher-captain' ),
+					'reverse'       => __( 'Cancel this redemption', 'voucher-captain' ),
+					'reverseReason' => __( 'Reason for cancelling this redemption (required), e.g. wrong card or wrong amount:', 'voucher-captain' ),
+					'reasonRequired' => __( 'Nothing was changed: a reason is required.', 'voucher-captain' ),
+					'receipt'       => __( 'Receipt no.', 'voucher-captain' ),
+					'print'         => __( 'Print', 'voucher-captain' ),
 					'checkin'    => __( 'Check in', 'voucher-captain' ),
 					'undo'       => __( 'Undo check-in', 'voucher-captain' ),
 					'redeem'     => __( 'Redeem', 'voucher-captain' ),
@@ -95,10 +108,11 @@ final class Scanner {
 				</div>
 				<form id="vcap-manual" class="vcap-scanner-form">
 					<label for="vcap-code" class="vcap-code-label"><?php esc_html_e( 'Code', 'voucher-captain' ); ?></label>
-					<input type="text" id="vcap-code" autocomplete="off" autofocus placeholder="<?php esc_attr_e( 'Scan or enter code…', 'voucher-captain' ); ?>" />
+					<input type="text" id="vcap-code" autocomplete="off" placeholder="<?php esc_attr_e( 'Scan or enter code…', 'voucher-captain' ); ?>" />
 					<button type="submit" class="button button-primary"><?php esc_html_e( 'Look up', 'voucher-captain' ); ?></button>
 				</form>
 				<label class="vcap-auto"><input type="checkbox" id="vcap-auto-checkin" /> <?php esc_html_e( 'Check in tickets automatically after scan', 'voucher-captain' ); ?></label>
+				<p class="vcap-till"><label for="vcap-till"><?php esc_html_e( 'Till / branch of this device', 'voucher-captain' ); ?></label> <input type="text" id="vcap-till" class="regular-text" maxlength="40" autocomplete="off" /> <span class="description"><?php esc_html_e( 'Saved on this device and kept with every redemption.', 'voucher-captain' ); ?></span></p>
 				<div id="vcap-result" class="vcap-result"></div>
 				<p id="vcap-live" class="screen-reader-text" role="status" aria-live="assertive" aria-atomic="true"></p>
 			</div>

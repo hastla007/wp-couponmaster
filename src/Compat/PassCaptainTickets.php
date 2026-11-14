@@ -49,6 +49,7 @@ final class PassCaptainTickets {
 		add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'check_fixed_date_capacity' ), 25, 3 );
 		add_action( 'woocommerce_check_cart_items', array( $this, 'check_cart_capacity' ) );
 		add_action( 'admin_notices', array( $this, 'redeem_page_notice' ) );
+		add_action( 'admin_notices', array( $this, 'attention_notice' ) );
 	}
 
 	/** Without the right: ticket-voucher products are not sold; sold ones are still exchanged. */
@@ -279,6 +280,7 @@ final class PassCaptainTickets {
 		}
 		$result = $service->resend_tickets( $state['key'] );
 		if ( is_wp_error( $result ) ) {
+			$this->vouchers->log( $voucher->id, 'passcaptain_tickets_failed', null, null, __( 'Sending the tickets again (requested by the customer) failed:', 'voucher-captain' ) . ' ' . $result->get_error_code() . ': ' . $result->get_error_message() );
 			wc_add_notice( $result->get_error_message(), 'error' );
 		} else {
 			$this->vouchers->log( $voucher->id, 'passcaptain_tickets_resent', null, null, __( 'Requested by the customer', 'voucher-captain' ) );
@@ -328,6 +330,9 @@ final class PassCaptainTickets {
 		}
 		$result = $this->redemptions->refund( $key, $amount - $refunded, $refund_key );
 		if ( is_wp_error( $result ) || empty( $result['restored'] ) ) {
+			// Tickets are gone but the voucher is not given back: never silently.
+			$this->vouchers->log( $voucher->id, 'passcaptain_restore_failed', null, null, is_wp_error( $result ) ? $result->get_error_code() . ': ' . $result->get_error_message() : 'refund: nothing restored' );
+			self::flag_attention( $voucher->id );
 			return false;
 		}
 		$this->forget_states();
@@ -455,6 +460,65 @@ final class PassCaptainTickets {
 	}
 
 	/** Ticket vouchers are exchanged on the redeem page: warn when products sell them but the page is missing. */
+	/** Vouchers whose tickets could not be taken back or given back (shown until the voucher is opened). */
+	public const ATTENTION_OPTION = 'vcap_passcaptain_attention';
+
+	public function attention_notice(): void {
+		$ids    = array_map( 'intval', (array) get_option( self::ATTENTION_OPTION, array() ) );
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! $ids || ! $screen || ! ( current_user_can( 'manage_woocommerce' ) || current_user_can( 'vcap_manage_vouchers' ) ) || ! ( str_contains( (string) $screen->id, 'vcap' ) || 'dashboard' === $screen->id ) ) { // phpcs:ignore WordPress.WP.Capabilities.Unknown -- Registered by Install.
+			return;
+		}
+		$links = array();
+		foreach ( array_slice( $ids, 0, 10 ) as $id ) {
+			$voucher = $this->vouchers->get( $id );
+			if ( $voucher ) {
+				$links[] = '<a href="' . esc_url( admin_url( 'admin.php?page=vcap-vouchers&voucher=' . $id ) ) . '">' . esc_html( $voucher->code ) . '</a>';
+			}
+		}
+		if ( $links ) {
+			echo '<div class="notice notice-error"><p>' . esc_html__( 'WP Pass Captain tickets could not be cancelled or a voucher could not be given back. The customer may hold valid tickets while the voucher is free again (or the other way round). Check these vouchers and their history:', 'voucher-captain' ) . ' ' . implode( ', ', $links ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above.
+		}
+	}
+
+	/** Remember a voucher for the admin notice. */
+	private static function flag_attention( int $voucher_id ): void {
+		$ids = array_map( 'intval', (array) get_option( self::ATTENTION_OPTION, array() ) );
+		if ( ! in_array( $voucher_id, $ids, true ) ) {
+			$ids[] = $voucher_id;
+			update_option( self::ATTENTION_OPTION, array_slice( $ids, -50 ), false );
+		}
+	}
+
+	/**
+	 * Takes the tickets of an exchange back in Pass Captain and (optionally) releases the voucher reservation,
+	 * checking both answers: a failure is logged as "passcaptain_revoke_failed" with its error code and shown to
+	 * the admins – otherwise the customer could keep valid tickets while the voucher is free again, without a trace.
+	 */
+	private function revoke_checked( Voucher $voucher, string $exchange_key, string $reason, string $release_key = '' ): bool {
+		$service = self::service();
+		$errors  = array();
+		$revoked = $service ? $service->revoke_tickets( $exchange_key, $reason ) : new \WP_Error( 'vcap_passcaptain_inactive', __( 'WP Pass Captain is not active.', 'voucher-captain' ) );
+		if ( is_wp_error( $revoked ) ) {
+			$errors[] = 'revoke_tickets ' . $revoked->get_error_code() . ': ' . $revoked->get_error_message();
+		} elseif ( false === $revoked ) {
+			$errors[] = 'revoke_tickets: false';
+		}
+		if ( '' !== $release_key ) {
+			$released = $this->redemptions->release( $release_key );
+			// "Missing" = nothing reserved any more (expired or released before): nothing to give back.
+			if ( is_wp_error( $released ) && 'vcap_reservation_missing' !== $released->get_error_code() ) {
+				$errors[] = 'release ' . $released->get_error_code() . ': ' . $released->get_error_message();
+			}
+		}
+		if ( ! $errors ) {
+			return true;
+		}
+		$this->vouchers->log( $voucher->id, 'passcaptain_revoke_failed', null, null, implode( '; ', $errors ) );
+		self::flag_attention( $voucher->id );
+		return false;
+	}
+
 	public function redeem_page_notice(): void {
 		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
 		if ( ! $screen || ! current_user_can( 'manage_woocommerce' ) || ! ( str_contains( (string) $screen->id, 'vcap' ) || in_array( $screen->id, array( 'dashboard', 'product', 'edit-product', 'woocommerce_page_wc-settings' ), true ) ) ) {
@@ -569,8 +633,7 @@ final class PassCaptainTickets {
 			if ( $existing && RedemptionService::STATE_RESERVED === $existing['state'] && 'passcaptain:ticket:' . $ticket_type !== $existing['target'] ) {
 				// An earlier attempt for another date is still reserved (e.g. after an outage): release it and
 				// start a new attempt with fresh keys on both sides.
-				$service->revoke_tickets( self::exchange_key( $voucher, $attempt ), 'voucher_date_changed' );
-				$this->redemptions->release( $key );
+				$this->revoke_checked( $voucher, self::exchange_key( $voucher, $attempt ), 'voucher_date_changed', $key );
 				++$attempt;
 				$key = self::key( $voucher, $attempt );
 			}
@@ -668,8 +731,7 @@ final class PassCaptainTickets {
 		$committed = $this->redemptions->commit( $key );
 		if ( is_wp_error( $committed ) ) {
 			// The voucher became unusable in between (voided, reservation lost): take the tickets back.
-			$service->revoke_tickets( self::exchange_key( $voucher, $attempt ), 'voucher_not_redeemable' );
-			$this->redemptions->release( $key );
+			$this->revoke_checked( $voucher, self::exchange_key( $voucher, $attempt ), 'voucher_not_redeemable', $key );
 			$this->vouchers->log( $voucher->id, 'passcaptain_tickets_failed', null, null, $committed->get_error_code() );
 			return $committed;
 		}
@@ -706,8 +768,9 @@ final class PassCaptainTickets {
 		}
 		$state = $service->get( self::exchange_key( $voucher, $attempt ) );
 		if ( is_array( $state ) && 'revoked' !== ( $state['status'] ?? '' ) ) {
-			$service->revoke_tickets( self::exchange_key( $voucher, $attempt ), 'voucher_voided' );
-			$this->vouchers->log( $voucher->id, 'passcaptain_tickets_revoked', null, null, (string) ( $state['order_public_id'] ?? '' ) );
+			if ( $this->revoke_checked( $voucher, self::exchange_key( $voucher, $attempt ), 'voucher_voided' ) ) {
+				$this->vouchers->log( $voucher->id, 'passcaptain_tickets_revoked', null, null, (string) ( $state['order_public_id'] ?? '' ) );
+			}
 		}
 	}
 
@@ -1102,6 +1165,13 @@ final class PassCaptainTickets {
 	/* ---- Voucher admin ----------------------------------------------------------------------------- */
 
 	public function admin_button( $voucher, $form ): void {
+		if ( $voucher instanceof Voucher ) {
+			// The admin opened the voucher (history shows the failure): no longer flagged.
+			$ids = array_map( 'intval', (array) get_option( self::ATTENTION_OPTION, array() ) );
+			if ( in_array( $voucher->id, $ids, true ) ) {
+				update_option( self::ATTENTION_OPTION, array_values( array_diff( $ids, array( $voucher->id ) ) ), false );
+			}
+		}
 		if ( ! $voucher instanceof Voucher || ! is_callable( $form ) || ! self::target( $voucher ) || ! self::service() ) {
 			return;
 		}
@@ -1193,7 +1263,10 @@ final class PassCaptainTickets {
 			return 'passcaptain_undo_failed';
 		}
 		$key = self::exchange_key( $voucher, $attempt );
-		$service->revoke_tickets( $key, 'voucher_exchange_undone' );
+		if ( ! $this->revoke_checked( $voucher, $key, 'voucher_exchange_undone' ) ) {
+			$this->forget_states();
+			return 'passcaptain_undo_failed';
+		}
 		$this->forget_states();
 		$state = $service->get( $key );
 		if ( is_array( $state ) && ( 'revoked' !== ( $state['status'] ?? '' ) || ! empty( $state['ticket_ids'] ) ) ) {
@@ -1224,6 +1297,8 @@ final class PassCaptainTickets {
 			'passcaptain_tickets_restored' => __( 'Voucher restored (tickets cancelled in Pass Captain)', 'voucher-captain' ),
 			'passcaptain_tickets_resent'  => __( 'Tickets sent again', 'voucher-captain' ),
 			'passcaptain_restore_notified' => __( 'Customer told that the voucher is valid again', 'voucher-captain' ),
+			'passcaptain_revoke_failed'   => __( 'Pass Captain tickets could not be cancelled – check them', 'voucher-captain' ),
+			'passcaptain_restore_failed'  => __( 'Voucher could not be given back after the tickets were cancelled – check it', 'voucher-captain' ),
 		);
 	}
 }
