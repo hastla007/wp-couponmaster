@@ -179,6 +179,29 @@ vcap_security_assert(
 $used_up = $scan_with( $scan_card, array( 'amount' => 1 ) );
 vcap_security_assert( is_array( $used_up ) && false === $used_up['success'] && 'redeemed' === $used_up['reason'], 'a used-up card is refused as used up, not as "amount exceeds the balance"' );
 
+// Cancelling a counter redemption (wrong card): only with a reason, by the cashier shortly after or a manager;
+// the amount goes back, the card is active again and the same booking cannot be cancelled twice.
+$cashier = wp_insert_user( array( 'user_login' => 'vcap-till-' . wp_generate_password( 6, false, false ), 'user_pass' => wp_generate_password( 20 ), 'role' => 'subscriber' ) );
+( new WP_User( $cashier ) )->add_cap( 'vcap_scan_tickets' );
+wp_set_current_user( $cashier );
+$rev_card   = vcap_security_create_voucher( 'reverse-' . strtolower( wp_generate_password( 6, false, false ) ) . '@example.test', 970000 + random_int( 1, 9999 ) );
+$rev_booked = $scan_with( $rev_card, array( 'amount' => 25, 'receipt' => 'R-4711', 'till' => 'Till 2' ) );
+$rev_event  = (int) ( $rev_booked['event_id'] ?? 0 );
+$no_reason  = vcap()->tickets->reverse_redemption( vcap()->vouchers->get( $rev_card->id ), $rev_event, ' ' );
+$reversed   = vcap()->tickets->reverse_redemption( vcap()->vouchers->get( $rev_card->id ), $rev_event, 'wrong card' );
+$twice      = vcap()->tickets->reverse_redemption( vcap()->vouchers->get( $rev_card->id ), $rev_event, 'again' );
+$rev_after  = vcap()->vouchers->get( $rev_card->id );
+vcap_security_assert( $rev_event > 0 && is_wp_error( $no_reason ) && 25.0 === $reversed && is_wp_error( $twice ) && 'vcap_reversal_reversed' === $twice->get_error_code() && 25.0 === (float) $rev_after->balance && VCAP\Voucher::STATUS_ACTIVE === $rev_after->status, 'a counter redemption is cancelled once, with a reason, and the amount booked back' );
+$rev_notes = $wpdb->get_col( $wpdb->prepare( "SELECT note FROM {$events_table} WHERE voucher_id = %d AND event IN ('redeemed', 'redeem_reversed') ORDER BY id", $rev_card->id ) ); // phpcs:ignore
+vcap_security_assert( 2 === count( $rev_notes ) && str_contains( (string) $rev_notes[0], 'R-4711' ) && str_contains( (string) $rev_notes[0], 'Till 2' ) && str_contains( (string) $rev_notes[1], '#' . $rev_event ) && str_contains( (string) $rev_notes[1], 'wrong card' ), 'the redemption keeps receipt and till, the cancellation names the redemption and the reason' );
+$other = wp_insert_user( array( 'user_login' => 'vcap-till2-' . wp_generate_password( 6, false, false ), 'user_pass' => wp_generate_password( 20 ), 'role' => 'subscriber' ) );
+( new WP_User( $other ) )->add_cap( 'vcap_scan_tickets' );
+$rev_second = $scan_with( $rev_card, array( 'amount' => 5 ) );
+wp_set_current_user( $other );
+$foreign = vcap()->tickets->reverse_redemption( vcap()->vouchers->get( $rev_card->id ), (int) $rev_second['event_id'], 'not mine' );
+vcap_security_assert( is_wp_error( $foreign ) && 'vcap_reversal_forbidden' === $foreign->get_error_code(), 'another cashier cannot cancel someone else\'s redemption' );
+wp_set_current_user( 0 );
+
 // Refusal reasons are told apart (cancelled, not yet delivered, reserved) instead of one blanket message.
 $reason_card = static function ( string $status, int $index ) use ( $wpdb ) {
 	$card = vcap_security_create_voucher( 'reason-' . strtolower( wp_generate_password( 6, false, false ) ) . '@example.test', $index );
@@ -279,7 +302,7 @@ $door_user    = wp_insert_user( array( 'user_login' => 'vcap-door-' . wp_generat
 ( new WP_User( $door_user ) )->add_cap( 'vcap_scan_tickets' );
 wp_set_current_user( $door_user );
 $door_view = vcap()->tickets->describe( vcap()->vouchers->get( $scan_voucher->id ) );
-vcap_security_assert( '' === $door_view['holder'] && '' === $door_view['order'] && '' === $door_view['value_html'] && '' !== $door_view['balance_html'], 'the scanner hides name, order and value from door staff by default (balance stays for redemption)' );
+vcap_security_assert( '' === $door_view['holder'] && '' === $door_view['order'] && '' === $door_view['admin_url'] && '' !== $door_view['value_html'] && '' !== $door_view['balance_html'], 'the scanner hides name, order and admin link from door staff by default (value and balance stay for redemption)' );
 update_option( 'vcap_scanner_show_holder', 'yes' );
 vcap_security_assert( 'Privacy Test Recipient' === vcap()->tickets->describe( vcap()->vouchers->get( $scan_voucher->id ) )['holder'], 'the holder name is shown when enabled' );
 delete_option( 'vcap_scanner_show_holder' );

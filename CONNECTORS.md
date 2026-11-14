@@ -25,6 +25,7 @@ A complete, tested reference implementation is in [`examples/vcap-example-connec
 | Buttons on the voucher admin page | `vcap_voucher_admin_actions` (`Voucher`, `callable $form`) – call `$form( $do, $label )`; handle it in `vcap_voucher_admin_action` (`''`, `$do`, `Voucher`) and return a message key registered with `vcap_voucher_admin_messages` (keys ending in `_failed` show as errors) |
 | Own events in the voucher history | `VoucherRepository::log()` plus a label via `vcap_event_labels` |
 | Codes of another plugin in the scanner | `vcap_scanner_lookup` / `vcap_scanner_checkin` (`null`, `$code`) – called only for codes Voucher Captain does not know; return a scanner payload with your own `type` (see `Compat\PassCaptainScanner::view()`) or `null` |
+| Scanner rules and texts | `vcap_scanner_redeem_refused` (`''`, `Voucher`) – reason why the counter refuses a voucher (also shown on lookup), `vcap_scanner_describe` (scanner payload), `vcap_checkin_undo_minutes` (default 10), `vcap_counter_reversal_minutes` (default 15), action `vcap_redemption_reversed` (`$voucher_id`, `$event_id`, `$amount`, `$reason`) |
 
 ## 2. Redemption flow (copy this)
 
