@@ -448,6 +448,43 @@ WC()->cart->apply_coupon( $spv_after->code );
 WC()->cart->calculate_totals();
 vcap_tax_assert( array() === vcap()->payments->cart_payments() && abs( 10.0 - (float) WC()->cart->get_total_tax() ) < 0.01, 'a single-purpose voucher stays a price reduction (VAT 10 on the remaining 60)', array( 'tax' => WC()->cart->get_total_tax() ) );
 WC()->cart->empty_cart();
+
+// 8.4 A discount code marked "Individual use only" does not push out multi-purpose vouchers (a means of payment),
+// in the classic cart and through the Store API; single-purpose vouchers stay discounts and are removed.
+$solo = new WC_Coupon();
+$solo->set_code( 'vcap-solo-' . strtolower( wp_generate_password( 8, false, false ) ) );
+$solo->set_discount_type( 'percent' );
+$solo->set_amount( 10 );
+$solo->set_individual_use( true );
+$solo->save();
+$solo_card = vcap_tax_voucher( 'giftcard', 'balance', 'fixed_cart', $auto_card->get_id(), 20 );
+$solo_spv  = vcap_tax_voucher( 'voucher', 'single', 'fixed_cart', $single->get_id(), 5 );
+WC()->cart->add_to_cart( $goods->get_id(), 1 );
+WC()->cart->apply_coupon( $solo_card->code );
+WC()->cart->apply_coupon( $solo_spv->code );
+WC()->cart->apply_coupon( $solo->get_code() );
+$solo_applied = WC()->cart->get_applied_coupons();
+vcap_tax_assert( in_array( wc_format_coupon_code( $solo_card->code ), $solo_applied, true ) && in_array( $solo->get_code(), $solo_applied, true ) && ! in_array( wc_format_coupon_code( $solo_spv->code ), $solo_applied, true ), 'classic cart: an individual-use code keeps the gift card and removes the single-purpose voucher', $solo_applied );
+WC()->cart->remove_coupon( $solo_card->code );
+wc_clear_notices();
+vcap_tax_assert( true === WC()->cart->apply_coupon( $solo_card->code ) && false === WC()->cart->apply_coupon( $solo_spv->code ), 'classic cart: a gift card may join an individual-use code, a single-purpose voucher may not', WC()->cart->get_applied_coupons() );
+wc_clear_notices();
+WC()->cart->remove_coupons();
+add_filter( 'woocommerce_store_api_disable_nonce_check', '__return_true' );
+$solo_api = static function ( string $code ) {
+	$request = new WP_REST_Request( 'POST', '/wc/store/v1/cart/apply-coupon' );
+	$request->set_param( 'code', $code );
+	return rest_do_request( $request );
+};
+$solo_first = $solo_api( $solo->get_code() );
+$solo_join  = $solo_api( $solo_card->code );
+vcap_tax_assert( ! $solo_first->is_error() && ! $solo_join->is_error() && in_array( wc_format_coupon_code( $solo_card->code ), WC()->cart->get_applied_coupons(), true ), 'Store API: a gift card may join an individual-use code', $solo_join->get_data() );
+WC()->cart->remove_coupons();
+$solo_api( $solo_card->code );
+$solo_api( $solo->get_code() );
+vcap_tax_assert( in_array( wc_format_coupon_code( $solo_card->code ), WC()->cart->get_applied_coupons(), true ), 'Store API: applying an individual-use code keeps the gift card', WC()->cart->get_applied_coupons() );
+remove_filter( 'woocommerce_store_api_disable_nonce_check', '__return_true' );
+WC()->cart->empty_cart();
 update_option( VCAP\PaymentVouchers::OPTION, 'no' );
 
 foreach ( $rates as $id ) {

@@ -15,6 +15,10 @@ final class CouponManager {
 		add_filter( 'woocommerce_coupon_get_items_to_apply', array( $this, 'prepare_gross_balance' ), 20, 2 );
 		add_filter( 'woocommerce_coupon_get_amount', array( $this, 'gross_balance_amount' ), 20, 2 );
 		add_filter( 'woocommerce_order_recalculate_coupons_coupon_object', array( $this, 'order_coupon_object' ), 10, 4 );
+		// A code marked "Individual use only" does not push out gift cards, store credit and other multi-purpose
+		// vouchers: they are a means of payment, not a discount (classic cart and Store API use both filters).
+		add_filter( 'woocommerce_apply_individual_use_coupon', array( $this, 'keep_payment_means' ), 10, 3 );
+		add_filter( 'woocommerce_apply_with_individual_use_coupon', array( $this, 'allow_payment_means' ), 10, 4 );
 		// Late priority: other plugins (e.g. Pass Captain's capacity hold at 10) validate first, so a checkout they
 		// refuse never leaves a balance reservation behind. A previous unpaid checkout order of the same session
 		// gives its holds back first (classic checkout creates a new order after a failed attempt).
@@ -1041,6 +1045,48 @@ final class CouponManager {
 			throw new \Exception( esc_html( $message ), 9006 );
 		}
 		return $valid;
+	}
+
+	/**
+	 * Whether this coupon is a multi-purpose voucher (gift card, store credit, sold value voucher: VAT treatment
+	 * "payment", fixed amount), i.e. a means of payment that an "Individual use only" code must not exclude.
+	 * Single-purpose vouchers, percentages and promotions stay discounts. Filter vcap_voucher_is_means_of_payment.
+	 */
+	public function is_payment_means( $coupon ): bool {
+		if ( ! $coupon instanceof \WC_Coupon || 'fixed_cart' !== $coupon->get_discount_type() || 'yes' !== $coupon->get_meta( '_vcap_voucher' ) ) {
+			return false;
+		}
+		$voucher = $this->repo->get_by_code( wc_format_coupon_code( $coupon->get_code() ) );
+		$means   = $voucher && ! $voucher->is_ticket() && 'payment' === ProductConfig::tax_treatment( $voucher );
+		return (bool) apply_filters( 'vcap_voucher_is_means_of_payment', $means, $coupon, $voucher );
+	}
+
+	/**
+	 * An "Individual use only" code is applied: the multi-purpose vouchers already in the cart stay.
+	 *
+	 * @param string[]   $keep    Codes to keep.
+	 * @param \WC_Coupon $coupon  The individual-use coupon being applied.
+	 * @param string[]   $applied Codes in the cart.
+	 */
+	public function keep_payment_means( $keep, $coupon = null, $applied = array() ) {
+		$keep = is_array( $keep ) ? $keep : array();
+		foreach ( (array) $applied as $code ) {
+			if ( ! in_array( $code, $keep, true ) && $this->is_payment_means( new \WC_Coupon( (string) $code ) ) ) {
+				$keep[] = $code;
+			}
+		}
+		return $keep;
+	}
+
+	/**
+	 * A multi-purpose voucher may join a cart that holds an "Individual use only" code.
+	 *
+	 * @param bool       $allow      Whether the coupon may be applied.
+	 * @param \WC_Coupon $coupon     The coupon being applied.
+	 * @param \WC_Coupon $individual The individual-use coupon in the cart.
+	 */
+	public function allow_payment_means( $allow, $coupon = null, $individual = null, $applied = array() ) {
+		return $allow || $this->is_payment_means( $coupon );
 	}
 
 	public function cart_balance_notice(): void {
