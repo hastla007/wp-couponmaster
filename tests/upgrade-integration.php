@@ -56,6 +56,8 @@ if ( 'setup' === $mode ) {
 		$vouchers[] = $v->id;
 	}
 	vcap()->vouchers->log( $vouchers[0], 'redeemed', 30, 50, 'upgrade fixture', 4242 );
+	// A ledger note that is an address (WooCommerce "used by"): schema 1.5 finds it through actor_email_hash.
+	vcap()->vouchers->log( $vouchers[0], 'resent', null, null, 'upgrade-used-by@example.com' );
 	$wpdb->update( $tables['vouchers'], array( 'balance' => 50 ), array( 'id' => $vouchers[0] ) );
 
 	$promo = wp_insert_post( array( 'post_type' => 'vcap_discount', 'post_status' => 'publish', 'post_title' => 'Upgrade fixture promotion' ) );
@@ -119,4 +121,10 @@ if ( '' !== (string) $fixture['claim'] ) {
 	vcap_up_assert( ! VCAP\Claim::take( (string) $fixture['claim'] ), 'a claim taken by the previous release stays taken' );
 }
 vcap_up_assert( ! $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( '_vcap_claim_' ) . '%' ) ), 'no claim options are left' );
+if ( version_compare( VCAP_DB_VERSION, '1.5.0', '>=' ) ) {
+	// Schema 1.5: ledger notes of earlier versions get their address hash (migration, then the daily maintenance).
+	VCAP\Install::hash_event_notes( 10.0 );
+	$noted = vcap()->vouchers->events_noting( 'upgrade-used-by@example.com' );
+	vcap_up_assert( 1 <= count( $noted ) && hash( 'sha256', 'upgrade-used-by@example.com' ) === $wpdb->get_var( $wpdb->prepare( "SELECT actor_email_hash FROM {$tables['events']} WHERE id = %d", (int) $noted[0]['id'] ) ), 'ledger notes of the previous release are found through their address hash' ); // phpcs:ignore
+}
 echo "Voucher Captain upgrade checks passed.\n";

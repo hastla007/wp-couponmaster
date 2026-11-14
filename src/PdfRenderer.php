@@ -30,33 +30,118 @@ final class PdfRenderer {
 	/** @var array<string,float> */
 	private static array $height_ratio = array();
 
+	/** Font metrics with the options of render() and the custom fonts registered, per font folder. */
+	private static array $metrics = array();
+
 	/**
 	 * CSS font-family list for dompdf. dompdf falls back per glyph to the next family, so characters missing in
 	 * the chosen font (e.g. ✓ ★ in DejaVu Serif Italic, € in the core Courier) come from DejaVu Sans instead of
-	 * rendering as empty boxes.
+	 * rendering as empty boxes, then from the fallback fonts (e.g. Noto Sans CJK, see fallback_fonts()).
+	 *
+	 * @return string[] Families in order.
 	 */
+	public static function font_families( string $font ): array {
+		$font = str_replace( array( "'", '"', ';', '<', '>' ), '', $font );
+		return array_values( array_unique( array_merge( array( $font, 'DejaVu Sans' ), self::fallback_fonts() ) ) );
+	}
+
 	public static function font_stack( string $font ): string {
-		$font  = str_replace( array( "'", '"', ';', '<', '>' ), '', $font );
-		$stack = "'" . $font . "'";
-		if ( 'DejaVu Sans' !== $font ) {
-			$stack .= ", 'DejaVu Sans'";
+		return implode( ', ', array_map( static fn( $family ) => "'" . $family . "'", self::font_families( $font ) ) );
+	}
+
+	/**
+	 * Fallback families for scripts DejaVu does not cover (Chinese, Japanese, Korean, …): custom fonts registered
+	 * with "vcap_pdf_fonts" and named with the "vcap_pdf_fallback_fonts" filter (see COMPATIBILITY.md).
+	 *
+	 * @return string[]
+	 */
+	public static function fallback_fonts(): array {
+		$custom = array_keys( self::custom_fonts() );
+		return array_values( array_intersect( array_map( 'strval', (array) apply_filters( 'vcap_pdf_fallback_fonts', array() ) ), $custom ) );
+	}
+
+	/**
+	 * dompdf options of every render: no remote files, PHP or JavaScript, fonts cached in the private upload folder.
+	 */
+	public static function dompdf_options(): Options {
+		$tmp = Install::upload_dir() . '/fonts';
+		if ( ! is_dir( $tmp ) ) {
+			wp_mkdir_p( $tmp );
 		}
-		return $stack;
+		$options = new Options();
+		$options->set( 'isRemoteEnabled', false );
+		$options->set( 'isPhpEnabled', false );
+		$options->set( 'isJavascriptEnabled', false );
+		$options->set( 'isHtml5ParserEnabled', true );
+		$options->set( 'defaultFont', 'DejaVu Sans' );
+		$options->set( 'dpi', 150 );
+		$options->set( 'fontDir', $tmp );
+		$options->set( 'fontCache', $tmp );
+		$options->set( 'tempDir', wp_is_writable( $tmp ) ? $tmp : sys_get_temp_dir() );
+		$uploads = wp_upload_dir( null, false );
+		$options->set( 'chroot', array_values( array_filter( array( VCAP_PATH, $uploads['basedir'], ABSPATH ) ) ) );
+		/** Dompdf options used to render voucher PDFs (args: Dompdf\\Options). */
+		return apply_filters( 'vcap_dompdf_options', $options );
+	}
+
+	/**
+	 * dompdf font metrics with the same options as render() and the custom fonts registered, so that measuring
+	 * (line height, text fitting, glyph coverage) knows the fonts the PDF really uses.
+	 */
+	public static function font_metrics(): ?\Dompdf\FontMetrics {
+		$options = self::dompdf_options();
+		$key     = (string) $options->getFontDir() . '|' . md5( (string) wp_json_encode( self::custom_fonts() ) );
+		if ( ! array_key_exists( $key, self::$metrics ) ) {
+			try {
+				$metrics = ( new Dompdf( $options ) )->getFontMetrics();
+				foreach ( self::custom_fonts() as $family => $variants ) {
+					foreach ( (array) $variants as $variant => $path ) {
+						$style = self::style_of( (string) $variant );
+						if ( is_readable( (string) $path ) && ! self::has_font( $metrics, (string) $family, $style ) ) {
+							$metrics->registerFont(
+								array(
+									'family' => (string) $family,
+									'weight' => str_contains( $style, 'bold' ) ? 'bold' : 'normal',
+									'style'  => str_contains( $style, 'italic' ) ? 'italic' : 'normal',
+								),
+								(string) $path
+							);
+						}
+					}
+				}
+			} catch ( \Throwable $e ) {
+				$metrics = null;
+			}
+			self::$metrics[ $key ] = $metrics;
+			self::$height_ratio    = array();
+		}
+		return self::$metrics[ $key ];
+	}
+
+	private static function has_font( \Dompdf\FontMetrics $metrics, string $family, string $style ): bool {
+		$families = $metrics->getFontFamilies();
+		return isset( $families[ mb_strtolower( $family, 'UTF-8' ) ][ $style ] );
+	}
+
+	private static function style_of( string $variant ): string {
+		$bold   = str_contains( $variant, 'bold' );
+		$italic = str_contains( $variant, 'italic' );
+		return $bold && $italic ? 'bold_italic' : ( $bold ? 'bold' : ( $italic ? 'italic' : 'normal' ) );
 	}
 
 	/**
 	 * dompdf multiplies CSS line-height by the font's own height ratio (≈1.28 for DejaVu, 0.86 for Courier),
-	 * browsers do not. Dividing by this ratio makes the PDF line pitch equal to the designer canvas.
+	 * browsers do not. Dividing by this ratio makes the PDF line pitch equal to the designer canvas. Measured with
+	 * the render options, so custom fonts get their own ratio.
 	 */
-	private static function font_height_ratio( string $family, bool $bold, bool $italic ): float {
-		$style = $bold && $italic ? 'bold_italic' : ( $bold ? 'bold' : ( $italic ? 'italic' : 'normal' ) );
-		$key   = $family . '|' . $style;
+	public static function font_height_ratio( string $family, bool $bold, bool $italic ): float {
+		$style   = $bold && $italic ? 'bold_italic' : ( $bold ? 'bold' : ( $italic ? 'italic' : 'normal' ) );
+		$metrics = self::font_metrics();
+		$key     = $family . '|' . $style;
 		if ( ! isset( self::$height_ratio[ $key ] ) ) {
 			$ratio = 1.0;
 			try {
-				static $metrics = null;
-				$metrics = $metrics ?? ( new Dompdf() )->getFontMetrics();
-				$font    = $metrics->getFont( $family, $style );
+				$font = $metrics ? $metrics->getFont( $family, $style ) : null;
 				if ( $font ) {
 					$ratio = (float) $metrics->getFontHeight( $font, 100 ) / 100;
 				}
@@ -112,30 +197,11 @@ final class PdfRenderer {
 	}
 
 	public function render( Voucher $voucher, ?array $design = null ): string {
-		$design = $design ?? TemplatePostType::get_design( (int) apply_filters( 'vcap_render_template_id', $voucher->template_id, $voucher ) );
+		$design = $design ?? TemplatePostType::design_for_voucher( (int) apply_filters( 'vcap_render_template_id', $voucher->template_id, $voucher ), $voucher );
 		$html   = $this->html( $voucher, $design );
 		list( $w, $h ) = self::page_size( $design['page'] ?? array() );
 
-		$tmp = Install::upload_dir() . '/fonts';
-		if ( ! is_dir( $tmp ) ) {
-			wp_mkdir_p( $tmp );
-		}
-		$options = new Options();
-		$options->set( 'isRemoteEnabled', false );
-		$options->set( 'isPhpEnabled', false );
-		$options->set( 'isJavascriptEnabled', false );
-		$options->set( 'isHtml5ParserEnabled', true );
-		$options->set( 'defaultFont', 'DejaVu Sans' );
-		$options->set( 'dpi', 150 );
-		$options->set( 'fontDir', $tmp );
-		$options->set( 'fontCache', $tmp );
-		$options->set( 'tempDir', wp_is_writable( $tmp ) ? $tmp : sys_get_temp_dir() );
-		$uploads = wp_upload_dir( null, false );
-		$options->set( 'chroot', array_values( array_filter( array( VCAP_PATH, $uploads['basedir'], ABSPATH ) ) ) );
-		/** Dompdf options used to render voucher PDFs (args: Dompdf\\Options). */
-		$options = apply_filters( 'vcap_dompdf_options', $options );
-
-		$dompdf = new Dompdf( $options );
+		$dompdf = new Dompdf( self::dompdf_options() );
 		$dompdf->setPaper( array( 0, 0, $w * self::MM_TO_PT, $h * self::MM_TO_PT ) );
 		$dompdf->loadHtml( $html, 'UTF-8' );
 		$dompdf->render();
@@ -146,21 +212,38 @@ final class PdfRenderer {
 
 	/**
 	 * Write the PDF to a private temp file (for email attachments). Caller deletes it.
+	 *
+	 * The file is created exclusively (fopen "x") after rendering: two deliveries at the same time with the same
+	 * file name pattern (e.g. "{order_number}") can never share, overwrite or attach each other's file. The
+	 * attachment keeps the configured name where it is free, otherwise it gets a random prefix.
 	 */
-	public function to_temp_file( Voucher $voucher ): ?string {
+	public function to_temp_file( Voucher $voucher, ?array $design = null ): ?string {
 		Install::ensure_upload_dir();
-		$dir  = Install::upload_dir() . '/tmp';
-		$file = $dir . '/' . $this->filename( $voucher ) ;
-		if ( file_exists( $file ) ) {
-			$file = $dir . '/' . wp_generate_password( 6, false ) . '-' . $this->filename( $voucher );
-		}
-		$bytes = $this->render( $voucher );
-		if ( false === file_put_contents( $file, $bytes ) ) { // phpcs:ignore
-			// D5: the mail would go out without its PDF – leave a trace with the voucher.
-			Logger::error( 'Voucher PDF could not be written to the private temp folder (disk full or no write permission).', array( 'voucher_id' => (int) $voucher->id, 'element' => 'pdf_file' ) );
+		$bytes = $this->render( $voucher, $design );
+		$dir   = Install::upload_dir() . '/tmp';
+		$name  = $this->filename( $voucher );
+		for ( $try = 0; $try < 5; $try++ ) {
+			$file   = $dir . '/' . ( $try ? wp_generate_password( 12, false ) . '-' : '' ) . $name;
+			$handle = @fopen( $file, 'xb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions,WordPress.PHP.NoSilencedErrors -- exclusive create: fails when the file exists.
+			if ( false === $handle ) {
+				continue;
+			}
+			$ok = false !== fwrite( $handle, $bytes ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+			fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+			if ( $ok ) {
+				return $file;
+			}
+			wp_delete_file( $file );
+			self::write_failed( $voucher );
 			return null;
 		}
-		return $file;
+		self::write_failed( $voucher );
+		return null;
+	}
+
+	/** D5: the mail would go out without its PDF – leave a trace with the voucher. */
+	private static function write_failed( Voucher $voucher ): void {
+		Logger::error( 'Voucher PDF could not be written to the private temp folder (disk full or no write permission).', array( 'voucher_id' => (int) $voucher->id, 'element' => 'pdf_file' ) );
 	}
 
 	/**
@@ -296,6 +379,160 @@ final class PdfRenderer {
 		return (string) apply_filters( 'vcap_pdf_element_html', '', $el, $voucher, $values );
 	}
 
+	/** @var array<string,bool> "font|style|char" => whether a font of the stack has the glyph. */
+	private static array $glyphs = array();
+
+	/**
+	 * Characters of a text that no font of the PDF font stack can draw (they would print as empty boxes), e.g.
+	 * Chinese names or emoji with the bundled DejaVu fonts. Spaces, control and zero-width characters are ignored.
+	 *
+	 * @return string[]
+	 */
+	public static function unsupported_chars( string $text, string $font = 'DejaVu Sans', bool $bold = false, bool $italic = false ): array {
+		if ( ! preg_match( '/[^\x00-\x7E]/', $text ) ) {
+			return array(); // ASCII: every font has it.
+		}
+		$metrics = self::font_metrics();
+		if ( ! $metrics ) {
+			return array();
+		}
+		$style   = $bold && $italic ? 'bold_italic' : ( $bold ? 'bold' : ( $italic ? 'italic' : 'normal' ) );
+		$canvas  = $metrics->getCanvas();
+		$files   = array();
+		foreach ( self::font_families( $font ) as $family ) {
+			$file = $metrics->getFont( $family, $style ) ?: $metrics->getFont( $family, 'normal' );
+			if ( $file ) {
+				$files[] = (string) $file;
+			}
+		}
+		$missing = array();
+		foreach ( array_unique( mb_str_split( $text ) ) as $char ) {
+			if ( preg_match( '/^[\x00-\x20\x7F\x{00A0}\x{00AD}\x{200B}-\x{200F}\x{2028}-\x{202F}\x{2060}\x{FE00}-\x{FE0F}\x{FEFF}]$/u', $char ) ) {
+				continue;
+			}
+			$key = $font . '|' . $style . '|' . $char;
+			if ( ! isset( self::$glyphs[ $key ] ) ) {
+				self::$glyphs[ $key ] = false;
+				foreach ( $files as $file ) {
+					try {
+						if ( $canvas->font_supports_char( $file, $char ) ) {
+							self::$glyphs[ $key ] = true;
+							break;
+						}
+					} catch ( \Throwable $e ) {
+						self::$glyphs[ $key ] = true; // Unknown: do not warn.
+						break;
+					}
+				}
+			}
+			if ( ! self::$glyphs[ $key ] ) {
+				$missing[] = $char;
+			}
+		}
+		return $missing;
+	}
+
+	/** Right-to-left scripts: dompdf prints them left to right and, for Arabic, without joining the letters. */
+	public static function has_rtl( string $text ): bool {
+		return (bool) preg_match( '/[\x{0590}-\x{08FF}\x{FB1D}-\x{FDFF}\x{FE70}-\x{FEFF}]/u', $text );
+	}
+
+	/**
+	 * Emoji and pictographs (with their joiners, variation selectors and skin tones) that no font can draw are
+	 * left out instead of printing as empty boxes. Other missing characters (e.g. a Chinese name) are kept: the
+	 * customer was warned when entering them, and a fallback font can be added (COMPATIBILITY.md).
+	 */
+	public static function strip_unprintable_emoji( string $text, string $font = 'DejaVu Sans', bool $bold = false, bool $italic = false ): string {
+		$missing = array_filter( self::unsupported_chars( $text, $font, $bold, $italic ), static fn( $c ) => (bool) preg_match( '/^[\x{1F000}-\x{1FAFF}\x{2300}-\x{23FF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{1F1E6}-\x{1F1FF}]$/u', $c ) );
+		if ( ! $missing ) {
+			return $text;
+		}
+		$text = str_replace( array_merge( $missing, array( "\u{200D}", "\u{FE0F}" ) ), '', $text );
+		return trim( (string) preg_replace( '/[ \t]{2,}/', ' ', $text ), " \t" );
+	}
+
+	/**
+	 * Warning for a personalisation value the PDF cannot print as entered ('' when it can): characters without a
+	 * glyph (boxes; emoji are left out) or right-to-left text (printed reversed and unjoined).
+	 */
+	public static function print_warning( string $label, string $text ): string {
+		$missing = self::unsupported_chars( $text );
+		if ( $missing ) {
+			/* translators: 1: field label, 2: the characters */
+			return sprintf( __( '%1$s contains characters the voucher PDF cannot print (%2$s). Emoji are left out, other characters appear as empty boxes.', 'voucher-captain' ), $label, implode( ' ', array_slice( $missing, 0, 10 ) ) );
+		}
+		if ( self::has_rtl( $text ) ) {
+			/* translators: %s: field label */
+			return sprintf( __( '%s contains right-to-left text (e.g. Arabic or Hebrew). The voucher PDF prints it left to right and with unjoined letters.', 'voucher-captain' ), $label );
+		}
+		return '';
+	}
+
+	/** Smallest share of the designed font size a text is shrunk to before it is cut off. */
+	public const MIN_FIT_SCALE = 0.5;
+
+	/**
+	 * Font size at which a text fits its box (lines × line pitch ≤ box height), measured with dompdf's metrics:
+	 * the designed size when it fits, else smaller in steps down to MIN_FIT_SCALE (at least 4 pt).
+	 *
+	 * @param float $line_height CSS line height as designed (the pitch is size × line height, as on the canvas).
+	 * @return array{size: float, fits: bool}
+	 */
+	public static function fit_size( string $text, string $font, float $size, float $line_height, bool $bold, bool $italic, float $spacing, float $w_mm, float $h_mm ): array {
+		$metrics = '' !== trim( $text ) ? self::font_metrics() : null;
+		$style   = $bold && $italic ? 'bold_italic' : ( $bold ? 'bold' : ( $italic ? 'italic' : 'normal' ) );
+		$file    = $metrics ? $metrics->getFont( $font, $style ) : null;
+		if ( ! $metrics || ! $file ) {
+			return array( 'size' => $size, 'fits' => true );
+		}
+		$width  = $w_mm * self::MM_TO_PT - 0.5; // A little room for rounding in dompdf's own line breaking.
+		$height = $h_mm * self::MM_TO_PT + 0.5;
+		$min    = min( $size, max( 4, $size * self::MIN_FIT_SCALE ) );
+		for ( $s = $size; ; $s = max( $min, round( $s * 0.94, 2 ) ) ) {
+			if ( self::count_lines( $metrics, (string) $file, $text, $s, $spacing, $width ) * $s * $line_height <= $height ) {
+				return array( 'size' => $s, 'fits' => true );
+			}
+			if ( $s <= $min ) {
+				return array( 'size' => $min, 'fits' => false );
+			}
+		}
+	}
+
+	/**
+	 * Lines dompdf needs for a text in a box of $width pt: breaks at line breaks, after spaces and hyphens, and
+	 * inside words longer than a line (word-wrap: break-word).
+	 */
+	private static function count_lines( \Dompdf\FontMetrics $metrics, string $file, string $text, float $size, float $spacing, float $width ): int {
+		$lines = 0;
+		foreach ( preg_split( '/\r\n|\r|\n/', $text ) as $para ) {
+			$para  = trim( (string) preg_replace( '/[ \t]+/', ' ', (string) $para ) );
+			$count = 1;
+			$line  = 0.0;
+			foreach ( '' === $para ? array() : (array) preg_split( '/(?<=[ -])/u', $para, -1, PREG_SPLIT_NO_EMPTY ) as $token ) {
+				$full = $metrics->getTextWidth( (string) $token, $file, $size, 0.0, $spacing );
+				$trim = $metrics->getTextWidth( rtrim( (string) $token ), $file, $size, 0.0, $spacing );
+				if ( $line > 0 && $line + $trim > $width ) {
+					++$count;
+					$line = 0.0;
+				}
+				if ( $trim > $width ) {
+					foreach ( mb_str_split( (string) $token ) as $char ) {
+						$w = $metrics->getTextWidth( $char, $file, $size, 0.0, $spacing );
+						if ( $line > 0 && $line + $w > $width ) {
+							++$count;
+							$line = 0.0;
+						}
+						$line += $w;
+					}
+					continue;
+				}
+				$line += $full;
+			}
+			$lines += $count;
+		}
+		return max( 1, $lines );
+	}
+
 	private function text_element( array $el, Voucher $voucher, array $values ): string {
 		if ( Placeholders::all_empty( (string) ( $el['text'] ?? '' ), $voucher, $values ) ) {
 			return ''; // "For: {recipient_name}" without a name: no lone label.
@@ -313,6 +550,15 @@ final class PdfRenderer {
 		$valign = in_array( $valign, array( 'top', 'middle', 'bottom' ), true ) ? $valign : 'top';
 		$lh     = max( 0.8, min( 3, (float) ( $el['lineHeight'] ?? 1.25 ) ) );
 		$bold   = ! empty( $el['bold'] ) || ( 'heading' === $el['type'] && ! isset( $el['bold'] ) );
+		$text   = self::strip_unprintable_emoji( $text, (string) $font, $bold, ! empty( $el['italic'] ) );
+		// A long message or code is set smaller until it fits its box instead of being cut off without a trace.
+		$fitted = self::fit_size( $text, (string) $font, $size, $lh, $bold, ! empty( $el['italic'] ), (float) ( $el['letterSpacing'] ?? 0 ), max( 1, (float) ( $el['w'] ?? 50 ) ), max( 1, (float) ( $el['h'] ?? 10 ) ) );
+		if ( $fitted['size'] < $size ) {
+			$size = $fitted['size'];
+		}
+		if ( ! $fitted['fits'] ) {
+			Logger::warning( sprintf( 'PDF text element "%s" does not fit its box even at %s pt and is cut off.', (string) ( $el['name'] ?? ( $el['id'] ?? '' ) ), $this->num( $size ) ), array( 'voucher' => $voucher->id ) );
+		}
 		$lh    /= self::font_height_ratio( (string) $font, $bold, ! empty( $el['italic'] ) );
 
 		$style  = $this->box_style( $el );
@@ -365,17 +611,18 @@ final class PdfRenderer {
 		if ( '' === $payload ) {
 			return '';
 		}
-		$dark    = $this->rgb( $el['color'] ?? '#000000' );
+		// SVG (vector): needs no GD, prints sharp at any size, and dompdf draws it as paths.
+		$dark    = $this->color( $el['color'] ?? '#000000' );
+		$dark    = 'transparent' === $dark ? '#000000' : $dark;
 		$options = new QROptions(
 			array(
-				'outputType'       => QROutputInterface::GDIMAGE_PNG,
+				'outputType'       => QROutputInterface::MARKUP_SVG,
 				'outputBase64'     => true,
 				'eccLevel'         => EccLevel::M,
-				'scale'            => 12,
 				'addQuietzone'     => true,
 				'quietzoneSize'    => 2,
-				'imageTransparent' => true,
 				'drawLightModules' => false,
+				'connectPaths'     => true,
 				'moduleValues'     => array(
 					// Dark modules in the chosen colour.
 					\chillerlan\QRCode\Data\QRMatrix::M_DATA_DARK      => $dark,
@@ -408,8 +655,22 @@ final class PdfRenderer {
 		);
 	}
 
+	/**
+	 * Whether a value can be printed as the given barcode type. EAN-13 takes only 12 digits (check digit added)
+	 * or 13 digits with a valid check digit; Code 39 only upper-case letters, digits and - . $ / + % space.
+	 */
+	public static function barcode_fits( string $type, string $value ): bool {
+		switch ( $type ) {
+			case 'EAN13':
+				return (bool) preg_match( '/^\d{12}$/', $value ) || ( (bool) preg_match( '/^\d{13}$/', $value ) && CodeGenerator::gs1_valid( $value ) );
+			case 'C39':
+				return (bool) preg_match( '/^[0-9A-Z \-.$\/+%]+$/', $value );
+		}
+		return '' !== $value;
+	}
+
 	private function barcode_element( array $el, Voucher $voucher, array $values ): string {
-		if ( ! class_exists( '\Picqer\Barcode\BarcodeGeneratorPNG' ) ) {
+		if ( ! class_exists( '\Picqer\Barcode\BarcodeGeneratorSVG' ) ) {
 			return '';
 		}
 		$payload = Placeholders::replace( (string) ( $el['qrValue'] ?? '{coupon_code}' ), $voucher, $values );
@@ -421,44 +682,140 @@ final class PdfRenderer {
 			'C39'  => \Picqer\Barcode\BarcodeGenerator::TYPE_CODE_39,
 			'EAN13' => \Picqer\Barcode\BarcodeGenerator::TYPE_EAN_13,
 		);
-		$type = $types[ $el['barcodeType'] ?? 'C128' ] ?? $types['C128'];
+		$chosen = isset( $types[ $el['barcodeType'] ?? '' ] ) ? (string) $el['barcodeType'] : 'C128';
+		if ( ! self::barcode_fits( $chosen, $payload ) ) {
+			// A code the chosen type cannot carry (e.g. a 16-character voucher code as EAN-13) is printed as
+			// Code 128, which every scanner reads, instead of leaving the voucher without a barcode.
+			Logger::warning( sprintf( 'PDF barcode: the value does not fit %s, printed as Code 128 instead.', $chosen ), array( 'voucher' => $voucher->id ) );
+			$chosen = 'C128';
+		}
+		$color = $this->color( $el['color'] ?? '#000000' );
 		try {
-			$png = ( new \Picqer\Barcode\BarcodeGeneratorPNG() )->getBarcode( $payload, $type, 3, 120, $this->rgb( $el['color'] ?? '#000000' ) );
+			// SVG (vector): needs no GD and prints sharp.
+			$svg = ( new \Picqer\Barcode\BarcodeGeneratorSVG() )->getBarcode( $payload, $types[ $chosen ], 3, 120, 'transparent' === $color ? '#000000' : $color );
 		} catch ( \Throwable $e ) {
 			$problem = self::barcode_problem( (string) ( $el['barcodeType'] ?? 'C128' ), $payload );
 			self::element_failed( 'barcode', $voucher, '' !== $problem ? $problem : $e->getMessage() );
 			return '';
 		}
+		// No external DTD; the bars stretch to the element box like the designer shows them.
+		$svg   = (string) preg_replace( '/<!DOCTYPE[^>]*>\s*/i', '', $svg );
+		$svg   = (string) preg_replace( '/<svg /', '<svg preserveAspectRatio="none" ', $svg, 1 );
 		$style = $this->box_style( $el );
 		$show  = ! isset( $el['showText'] ) || ! empty( $el['showText'] );
 		$bar_h = $show ? max( 1, (float) $el['h'] - 4.5 ) : (float) $el['h'];
-		$html  = sprintf( '<img src="data:image/png;base64,%s" style="width:%smm;height:%smm;" />', base64_encode( $png ), $this->num( $el['w'] ), $this->num( $bar_h ) );
+		$html  = sprintf( '<img src="data:image/svg+xml;base64,%s" style="width:%smm;height:%smm;" />', base64_encode( $svg ), $this->num( $el['w'] ), $this->num( $bar_h ) );
 		if ( $show ) {
 			$html .= sprintf( '<div style="font-family:\'DejaVu Sans Mono\';font-size:8pt;text-align:center;color:%s;line-height:1.2;">%s</div>', $this->color( $el['color'] ?? '#000000' ), esc_html( $payload ) );
 		}
 		return '<div class="el" style="' . esc_attr( $style ) . '">' . $html . '</div>';
 	}
 
-	private function rgb( $hex ): array {
-		$hex = ltrim( $this->color( $hex ), '#' );
-		if ( 3 === strlen( $hex ) ) {
-			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+	/**
+	 * Image types dompdf can draw: JPEG, PNG, GIF, and WebP only with GD's WebP support. AVIF and HEIC (accepted by
+	 * the media library since WordPress 6.5) would print as a "broken image" frame.
+	 *
+	 * @return string[] MIME types
+	 */
+	public static function image_mimes(): array {
+		$mimes = array( 'image/jpeg', 'image/png', 'image/gif' );
+		if ( function_exists( 'imagecreatefromwebp' ) ) {
+			$mimes[] = 'image/webp';
 		}
-		return array( hexdec( substr( $hex, 0, 2 ) ), hexdec( substr( $hex, 2, 2 ) ), hexdec( substr( $hex, 4, 2 ) ) );
+		return array_values( array_intersect( (array) apply_filters( 'vcap_pdf_image_mimes', $mimes ), array( 'image/jpeg', 'image/png', 'image/gif', 'image/webp' ) ) );
 	}
 
 	/**
-	 * Resolve an image to a local file (remote fetching is disabled for security).
+	 * Resolve an image to a local file the PDF can draw, or null (logged): a missing file (offloaded media, CDN
+	 * URL, other server) or an image type dompdf cannot draw.
 	 */
 	public function image_path( $attachment_id, $url ): ?string {
-		$attachment_id = (int) $attachment_id;
+		$status = $this->image_status( $attachment_id, $url );
+		if ( '' !== $status['problem'] ) {
+			static $logged = array();
+			$key = $status['problem'] . '|' . (int) $attachment_id . '|' . $url;
+			if ( ! isset( $logged[ $key ] ) ) {
+				$logged[ $key ] = true;
+				Logger::warning( sprintf( 'PDF template image left out (%s): attachment %d, %s', 'format' === $status['problem'] ? 'image type ' . $status['mime'] . ' cannot be printed' : 'no readable local file', (int) $attachment_id, (string) $url ) );
+			}
+		}
+		return $status['path'];
+	}
+
+	/**
+	 * @return array{path: ?string, problem: string, mime: string} problem: '' (fine), 'none' (no image set),
+	 *                                                              'missing' or 'format'.
+	 */
+	public function image_status( $attachment_id, $url ): array {
+		$url  = (string) $url;
+		$file = $this->local_image( (int) $attachment_id, $url ) ?? $this->remote_image( (int) $attachment_id, $url );
+		if ( null === $file ) {
+			return array( 'path' => null, 'problem' => (int) $attachment_id || '' !== $url ? 'missing' : 'none', 'mime' => '' );
+		}
+		$info = @getimagesize( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- unreadable images are reported below.
+		$mime = is_array( $info ) ? (string) $info['mime'] : '';
+		if ( ! in_array( $mime, self::image_mimes(), true ) ) {
+			return array( 'path' => null, 'problem' => 'format', 'mime' => '' !== $mime ? $mime : (string) pathinfo( $file, PATHINFO_EXTENSION ) );
+		}
+		return array( 'path' => $file, 'problem' => '', 'mime' => $mime );
+	}
+
+	/**
+	 * Images whose local file is missing (WP Offload Media, WP-Stateless, CDN-rewritten URLs, servers without shared
+	 * uploads) are downloaded – only from hosts named with "vcap_pdf_remote_hosts" – into the private temp folder
+	 * and reused for an hour.
+	 */
+	private function remote_image( int $attachment_id, string $url ): ?string {
+		$hosts = array_filter( array_map( static fn( $h ) => strtolower( trim( (string) $h ) ), (array) apply_filters( 'vcap_pdf_remote_hosts', array() ) ) );
+		if ( ! $hosts ) {
+			return null;
+		}
+		$candidates = array( $url );
+		if ( $attachment_id && function_exists( 'wp_get_attachment_url' ) ) {
+			$candidates[] = (string) wp_get_attachment_url( $attachment_id );
+		}
+		foreach ( array_unique( array_filter( $candidates ) ) as $candidate ) {
+			$scheme = strtolower( (string) wp_parse_url( $candidate, PHP_URL_SCHEME ) );
+			$host   = strtolower( (string) wp_parse_url( $candidate, PHP_URL_HOST ) );
+			if ( ! in_array( $scheme, array( 'https', 'http' ), true ) || ! in_array( $host, $hosts, true ) ) {
+				continue;
+			}
+			$dir   = Install::upload_dir() . '/tmp';
+			$cache = $dir . '/img-' . md5( $candidate ) . '.img';
+			if ( is_readable( $cache ) && filemtime( $cache ) > time() - HOUR_IN_SECONDS ) {
+				return $cache;
+			}
+			$response = wp_safe_remote_get(
+				$candidate,
+				array(
+					'timeout'             => 10,
+					'redirection'         => 2,
+					'limit_response_size' => 10 * 1024 * 1024,
+				)
+			);
+			$body = is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ? '' : (string) wp_remote_retrieve_body( $response );
+			$info = '' !== $body ? @getimagesizefromstring( $body ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors -- not an image: skipped.
+			if ( ! is_array( $info ) ) {
+				Logger::warning( sprintf( 'PDF template image could not be downloaded from %s.', $host ) );
+				continue;
+			}
+			Install::ensure_upload_dir();
+			$part = $cache . '.' . wp_generate_password( 8, false );
+			if ( false !== file_put_contents( $part, $body ) && rename( $part, $cache ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions
+				return $cache;
+			}
+			wp_delete_file( $part );
+		}
+		return null;
+	}
+
+	private function local_image( int $attachment_id, string $url ): ?string {
 		if ( $attachment_id ) {
 			$file = get_attached_file( $attachment_id );
 			if ( $file && is_readable( $file ) ) {
 				return $file;
 			}
 		}
-		$url = (string) $url;
 		if ( '' === $url ) {
 			return null;
 		}

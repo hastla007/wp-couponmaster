@@ -86,15 +86,9 @@ $redeem_url = $voucher->id ? \VCAP\Shortcodes::redeem_url( $voucher->code ) : ''
 			<a href="<?php echo esc_url( $redeem_url ); ?>" style="display:inline-block;padding:12px 22px;background:#1f3a4d;color:#ffffff;text-decoration:none;border-radius:4px;font-weight:bold;"><?php esc_html_e( 'Redeem now', 'voucher-captain' ); ?></a>
 		</p>
 	<?php endif; ?>
-<?php elseif ( ! $voucher->is_ticket() ) : ?>
+<?php elseif ( '' !== \VCAP\Channels::instructions( $voucher ) ) : ?>
 	<p style="font-size:13px;color:#555;">
-		<?php
-		printf(
-			/* translators: %s: shop link */
-			esc_html__( 'Enter the code in the cart or at checkout on %s to redeem it.', 'voucher-captain' ),
-			'<a href="' . esc_url( $redeem_url ? $redeem_url : home_url( '/' ) ) . '">' . esc_html( wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ) ) . '</a>'
-		);
-		?>
+		<?php echo \VCAP\Channels::instructions_html( $voucher ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in instructions_html(). ?>
 	</p>
 <?php endif; ?>
 

@@ -818,7 +818,10 @@ final class VoucherAdmin {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
 		$table = new VouchersListTable( $this->repo );
-		$args  = array_merge( $table->filter_args(), array( 'per_page' => 500 ) );
+		$args  = $table->filter_args();
+		if ( function_exists( 'wc_set_time_limit' ) ) {
+			wc_set_time_limit( 0 ); // A timeout would cut the file off without an error (HTTP 200 already sent).
+		}
 		$out   = \VCAP\Csv::open( 'vouchers-' . wp_date( 'Y-m-d' ) . '.csv' );
 		$types = Voucher::types();
 		\VCAP\Csv::write(
@@ -842,15 +845,15 @@ final class VoucherAdmin {
 				__( 'Created', 'voucher-captain' ),
 			)
 		);
-		$page = 1;
-		do {
-			$result = $this->repo->query( array_merge( $args, array( 'page' => $page ) ) );
-			foreach ( $result['items'] as $v ) {
-				$product = $v->product();
-				\VCAP\Csv::write( $out, array( $v->code, $types[ $v->type ] ?? $v->type, $v->status_label(), $product ? $product->get_name() : '', \VCAP\Csv::number( $v->initial_amount, $v->decimals() ), \VCAP\Csv::number( $v->balance, $v->decimals() ), $v->currency, \VCAP\Csv::date( $v->expires_at, false ), $v->order_id ?: '', $v->buyer_name, $v->buyer_email, $v->recipient_name, $v->recipient_email, $v->checkins, $v->max_checkins, \VCAP\Csv::date( $v->created_at ) ) );
-			}
-			++$page;
-		} while ( count( $result['items'] ) === 500 );
+		$written = 0;
+		foreach ( $this->repo->export( $args ) as $v ) {
+			$product = $v->product();
+			\VCAP\Csv::write( $out, array( $v->code, $types[ $v->type ] ?? $v->type, $v->status_label(), $product ? $product->get_name() : '', \VCAP\Csv::number( $v->initial_amount, $v->decimals() ), \VCAP\Csv::number( $v->balance, $v->decimals() ), $v->currency, \VCAP\Csv::date( $v->expires_at, false ), $v->order_id ?: '', $v->buyer_name, $v->buyer_email, $v->recipient_name, $v->recipient_email, $v->checkins, $v->max_checkins, \VCAP\Csv::date( $v->created_at ) ) );
+			++$written;
+		}
+		// Closing line: a file without it was cut off (timeout, memory) and is incomplete.
+		/* translators: %d: number of vouchers in the file */
+		\VCAP\Csv::write( $out, array( sprintf( __( 'End of export: %d vouchers', 'voucher-captain' ), $written ) ) );
 		fclose( $out ); // phpcs:ignore
 		exit;
 	}

@@ -9,6 +9,12 @@ defined( 'ABSPATH' ) || exit;
 final class TemplatePostType {
 	public const POST_TYPE = 'vcap_template';
 	public const META      = '_vcap_design';
+	/** Earlier designs: list of [ 'until' => Unix time the design was replaced, 'design' => JSON ], oldest first. */
+	public const HISTORY_META = '_vcap_design_history';
+	/** Unix time the current design took effect. */
+	public const SINCE_META = '_vcap_design_since';
+	/** Option prefix keeping the designs of a deleted template for the vouchers issued with it. */
+	public const ARCHIVE_OPTION = 'vcap_template_archive_';
 
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_post_type' ) );
@@ -22,6 +28,7 @@ final class TemplatePostType {
 		add_filter( 'manage_' . self::POST_TYPE . '_posts_columns', array( $this, 'columns' ) );
 		add_action( 'manage_' . self::POST_TYPE . '_posts_custom_column', array( $this, 'column' ), 10, 2 );
 		add_filter( 'admin_body_class', array( $this, 'body_class' ) );
+		add_action( 'before_delete_post', array( $this, 'archive_deleted' ), 10, 2 );
 	}
 
 	public function register_post_type(): void {
@@ -86,6 +93,92 @@ final class TemplatePostType {
 	}
 
 	/**
+	 * The design a voucher was issued with: the template's design at the voucher's issue time (created_at), so a
+	 * redesign or changed static texts (branch, deadlines) never alter vouchers already sold – also after the
+	 * template was deleted. Vouchers without an issue time (previews) get the current design.
+	 */
+	public static function design_for_voucher( int $template_id, Voucher $voucher ): array {
+		$issued = $voucher->id && '' !== $voucher->created_at ? strtotime( $voucher->created_at . ' UTC' ) : false;
+		if ( $template_id && false !== $issued ) {
+			$history = get_post_meta( $template_id, self::HISTORY_META, true );
+			$history = is_array( $history ) ? $history : array();
+			if ( ! get_post_meta( $template_id, self::META, true ) ) {
+				$archive = get_option( self::ARCHIVE_OPTION . $template_id );
+				if ( is_array( $archive ) && $issued < (int) ( $archive['deleted'] ?? 0 ) ) {
+					$history   = is_array( $archive['history'] ?? null ) ? $archive['history'] : array();
+					$history[] = array(
+						'until'  => (int) $archive['deleted'],
+						'design' => (string) ( $archive['design'] ?? '' ),
+					);
+				}
+			}
+			foreach ( $history as $entry ) {
+				if ( is_array( $entry ) && $issued < (int) ( $entry['until'] ?? 0 ) ) {
+					$design = json_decode( (string) ( $entry['design'] ?? '' ), true );
+					if ( is_array( $design ) && ! empty( $design['page'] ) ) {
+						return apply_filters( 'vcap_template_design', $design, $template_id );
+					}
+				}
+			}
+		}
+		return self::get_design( $template_id );
+	}
+
+	/**
+	 * Keeps the replaced design for the vouchers issued with it. Not needed when no voucher at all was issued
+	 * while it was the current design (a template being worked on); "apply to issued vouchers" drops the history.
+	 *
+	 * @param string $old_json The design being replaced.
+	 * @param bool   $used     Whether any voucher was issued since it took effect.
+	 */
+	public static function record_design_change( int $post_id, string $old_json, string $new_json, bool $used, bool $apply_to_issued = false ): void {
+		if ( $old_json === $new_json && ! $apply_to_issued ) {
+			return;
+		}
+		if ( $apply_to_issued ) {
+			delete_post_meta( $post_id, self::HISTORY_META );
+		} elseif ( '' !== $old_json && $used ) {
+			$history   = get_post_meta( $post_id, self::HISTORY_META, true );
+			$history   = is_array( $history ) ? $history : array();
+			$history[] = array(
+				'until'  => time(),
+				'design' => $old_json,
+			);
+			update_post_meta( $post_id, self::HISTORY_META, wp_slash( $history ) );
+		}
+		update_post_meta( $post_id, self::SINCE_META, time() );
+	}
+
+	/** Whether a voucher was issued at or after a Unix time (0: ever). */
+	private static function vouchers_issued_since( int $since ): bool {
+		global $wpdb;
+		$table = Install::tables()['vouchers'];
+		return (bool) $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE created_at >= %s LIMIT 1", gmdate( 'Y-m-d H:i:s', $since ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from Install.
+	}
+
+	/** A template is deleted for good: keep its designs for the vouchers issued with it (not autoloaded). */
+	public function archive_deleted( $post_id, $post = null ): void {
+		$post_id = (int) $post_id;
+		if ( self::POST_TYPE !== get_post_type( $post_id ) ) {
+			return;
+		}
+		$design = (string) get_post_meta( $post_id, self::META, true );
+		if ( '' === $design || ! self::vouchers_issued_since( 0 ) ) {
+			return;
+		}
+		$history = get_post_meta( $post_id, self::HISTORY_META, true );
+		update_option(
+			self::ARCHIVE_OPTION . $post_id,
+			array(
+				'deleted' => time(),
+				'design'  => $design,
+				'history' => is_array( $history ) ? $history : array(),
+			),
+			false
+		);
+	}
+
+	/**
 	 * Built-in starter designs (also used as fallback).
 	 */
 	public static function default_designs(): array {
@@ -100,13 +193,15 @@ final class TemplatePostType {
 					array( 'id' => 'e1', 'type' => 'rect', 'name' => 'Frame', 'x' => 6, 'y' => 6, 'w' => 198, 'h' => 136, 'fill' => 'transparent', 'borderColor' => '#b8925a', 'borderWidth' => 0.8, 'radius' => 3 ),
 					array( 'id' => 'e2', 'type' => 'rect', 'name' => 'Band', 'x' => 6, 'y' => 6, 'w' => 62, 'h' => 136, 'fill' => '#1f3a4d' ),
 					array( 'id' => 'e3', 'type' => 'heading', 'name' => 'Title', 'x' => 10, 'y' => 20, 'w' => 54, 'h' => 30, 'text' => __( 'GIFT VOUCHER', 'voucher-captain' ), 'font' => 'DejaVu Serif', 'size' => 20, 'color' => '#f3e6cf', 'align' => 'center', 'bold' => true, 'letterSpacing' => 1 ),
-					array( 'id' => 'e4', 'type' => 'text', 'name' => 'Site', 'x' => 10, 'y' => 120, 'w' => 54, 'h' => 10, 'text' => '{site_name}', 'font' => 'DejaVu Sans', 'size' => 9, 'color' => '#f3e6cf', 'align' => 'center' ),
+					array( 'id' => 'e4', 'type' => 'text', 'name' => 'Site', 'x' => 10, 'y' => 118, 'w' => 54, 'h' => 16, 'text' => "{site_name}\n{site_url}", 'font' => 'DejaVu Sans', 'size' => 8, 'color' => '#f3e6cf', 'align' => 'center' ),
 					array( 'id' => 'e5', 'type' => 'text', 'name' => 'Value', 'x' => 76, 'y' => 18, 'w' => 120, 'h' => 22, 'text' => '{coupon_value}', 'font' => 'DejaVu Serif', 'size' => 34, 'color' => '#1f3a4d', 'align' => 'left', 'bold' => true ),
 					array( 'id' => 'e6', 'type' => 'text', 'name' => 'For', 'x' => 76, 'y' => 44, 'w' => 120, 'h' => 10, 'text' => __( 'For: {recipient_name}', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 12, 'color' => '#333333' ),
 					array( 'id' => 'e7', 'type' => 'text', 'name' => 'Message', 'x' => 76, 'y' => 56, 'w' => 120, 'h' => 30, 'text' => '{message}', 'font' => 'DejaVu Serif', 'size' => 11, 'color' => '#555555', 'italic' => true ),
 					array( 'id' => 'e8', 'type' => 'text', 'name' => 'Code label', 'x' => 76, 'y' => 96, 'w' => 80, 'h' => 6, 'text' => __( 'Voucher code', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 8, 'color' => '#8a8a8a', 'uppercase' => true ),
 					array( 'id' => 'e9', 'type' => 'text', 'name' => 'Code', 'x' => 76, 'y' => 102, 'w' => 90, 'h' => 10, 'text' => '{coupon_code}', 'font' => 'DejaVu Sans Mono', 'size' => 15, 'color' => '#1f3a4d', 'bold' => true ),
 					array( 'id' => 'e10', 'type' => 'text', 'name' => 'Expiry', 'x' => 76, 'y' => 118, 'w' => 90, 'h' => 8, 'text' => __( 'Valid until {expiry_date}', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 9, 'color' => '#555555' ),
+					array( 'id' => 'e12', 'type' => 'text', 'name' => 'How to redeem', 'x' => 76, 'y' => 127, 'w' => 92, 'h' => 7, 'text' => '{redeem_instructions}', 'font' => 'DejaVu Sans', 'size' => 7, 'color' => '#333333' ),
+					array( 'id' => 'e13', 'type' => 'text', 'name' => 'Conditions', 'x' => 76, 'y' => 134, 'w' => 122, 'h' => 7, 'text' => "{transferable}\n{redemption_terms}", 'font' => 'DejaVu Sans', 'size' => 6, 'color' => '#777777', 'lineHeight' => 1.15 ),
 					array( 'id' => 'e11', 'type' => 'qrcode', 'name' => 'QR code', 'x' => 170, 'y' => 100, 'w' => 28, 'h' => 28, 'qrContent' => 'code', 'color' => '#1f3a4d' ),
 				),
 			),
@@ -179,42 +274,13 @@ final class TemplatePostType {
 	public function designer_box( \WP_Post $post ): void {
 		$design = self::get_design( $post->ID );
 		wp_nonce_field( 'vcap_save_design', 'vcap_design_nonce' );
+		foreach ( self::design_warnings( $design ) as $warning ) {
+			echo '<div class="notice notice-warning inline vcap-design-warning"><p>' . esc_html( $warning ) . '</p></div>';
+		}
 		echo '<textarea name="vcap_design" id="vcap-design-json" hidden>' . esc_textarea( wp_json_encode( $design ) ) . '</textarea>';
 		echo '<div id="vcap-designer" class="vcap-designer" aria-label="' . esc_attr__( 'Template designer', 'voucher-captain' ) . '"><p>' . esc_html__( 'Loading designer…', 'voucher-captain' ) . '</p></div>';
 		echo '<noscript>' . esc_html__( 'The designer requires JavaScript.', 'voucher-captain' ) . '</noscript>';
-		$sample = CodeGenerator::build(
-			array(
-				'prefix'    => (string) get_option( 'vcap_code_prefix', '' ),
-				'suffix'    => (string) get_option( 'vcap_code_suffix', '' ),
-				'length'    => (int) get_option( 'vcap_code_length', 12 ),
-				'charset'   => (string) get_option( 'vcap_code_charset', 'alnum_upper' ),
-				'separator' => (string) get_option( 'vcap_code_separator', '-' ),
-			)
-		);
-		foreach ( self::barcode_warnings( $design, $sample ) as $warning ) {
-			echo '<div class="notice notice-warning inline"><p>' . esc_html( $warning ) . '</p></div>';
-		}
-	}
-
-	/**
-	 * Barcodes of a design that cannot print codes like $sample_code (D5): e.g. EAN-13 with letters in the codes –
-	 * the PDF would show no barcode and the scanner find nothing.
-	 *
-	 * @return string[]
-	 */
-	public static function barcode_warnings( array $design, string $sample_code ): array {
-		$warnings = array();
-		foreach ( (array) ( $design['elements'] ?? array() ) as $el ) {
-			if ( ! is_array( $el ) || 'barcode' !== ( $el['type'] ?? '' ) || '{coupon_code}' !== (string) ( $el['qrValue'] ?? '{coupon_code}' ) ) {
-				continue;
-			}
-			$problem = PdfRenderer::barcode_problem( (string) ( $el['barcodeType'] ?? 'C128' ), $sample_code );
-			if ( '' !== $problem ) {
-				/* translators: 1: element name, 2: problem */
-				$warnings[] = sprintf( __( 'Barcode "%1$s": %2$s', 'voucher-captain' ), (string) ( $el['name'] ?? '' ), $problem );
-			}
-		}
-		return array_values( array_unique( $warnings ) );
+		echo '<p class="vcap-design-apply"><label><input type="checkbox" name="vcap_design_apply_issued" value="1" /> ' . esc_html__( 'Also use this design for vouchers already issued', 'voucher-captain' ) . '</label><br><span class="description">' . esc_html__( 'Vouchers keep the design they were issued with. Tick this to show the saved design on every voucher of this template, including those already sold.', 'voucher-captain' ) . '</span></p>';
 	}
 
 	public function assets( string $hook ): void {
@@ -224,6 +290,7 @@ final class TemplatePostType {
 		}
 		wp_enqueue_media();
 		wp_enqueue_style( 'vcap-designer', VCAP_URL . 'assets/css/designer.css', array(), VCAP_VERSION );
+		wp_add_inline_style( 'vcap-designer', self::designer_font_css() );
 		wp_enqueue_script( 'vcap-designer', VCAP_URL . 'assets/js/designer.js', array( 'jquery' ), VCAP_VERSION, true );
 
 		$placeholders = array();
@@ -249,6 +316,8 @@ final class TemplatePostType {
 				'sample'       => Preview::sample_values(),
 				'previewUrl'   => admin_url( 'admin-ajax.php?action=vcap_template_preview' ),
 				'previewNonce' => wp_create_nonce( 'vcap_template_preview' ),
+				'minFitScale'  => PdfRenderer::MIN_FIT_SCALE,
+				'imageMimes'   => PdfRenderer::image_mimes(),
 				'postId'       => get_the_ID(),
 				'i18n'         => array(
 					'text'        => __( 'Text', 'voucher-captain' ),
@@ -304,6 +373,9 @@ final class TemplatePostType {
 					'value'       => __( 'Value', 'voucher-captain' ),
 					'barcodeType' => __( 'Barcode type', 'voucher-captain' ),
 					'showText'    => __( 'Show text', 'voucher-captain' ),
+					'imageType'   => __( 'The PDF cannot show this image type. Please choose a JPEG or PNG image.', 'voucher-captain' ),
+					'textCut'     => __( 'This text does not fit its box even at half the font size and is cut off. Make the box larger.', 'voucher-captain' ),
+					'barcodeFallback' => __( 'EAN-13 needs 12 or 13 digits, Code 39 only capital letters, digits and - . $ / + %. Values that do not fit (e.g. generated voucher codes) are printed as Code 128.', 'voucher-captain' ),
 					'name'        => __( 'Layer name', 'voucher-captain' ),
 					'lock'        => __( 'Lock', 'voucher-captain' ),
 					'hide'        => __( 'Hide', 'voucher-captain' ),
@@ -337,6 +409,59 @@ final class TemplatePostType {
 		);
 	}
 
+	/**
+	 * @font-face rules for the designer canvas: the DejaVu files dompdf prints with (not the browser's Verdana or
+	 * Georgia) and the custom fonts of "vcap_pdf_fonts" that lie inside the WordPress folder, so text wraps on the
+	 * canvas as it does in the PDF.
+	 */
+	public static function designer_font_css(): string {
+		$base  = VCAP_URL . 'vendor/dompdf/dompdf/lib/fonts/';
+		$fonts = array(
+			'DejaVu Sans'      => array( 'normal' => 'DejaVuSans', 'bold' => 'DejaVuSans-Bold', 'italic' => 'DejaVuSans-Oblique', 'bold_italic' => 'DejaVuSans-BoldOblique' ),
+			'DejaVu Serif'     => array( 'normal' => 'DejaVuSerif', 'bold' => 'DejaVuSerif-Bold', 'italic' => 'DejaVuSerif-Italic', 'bold_italic' => 'DejaVuSerif-BoldItalic' ),
+			'DejaVu Sans Mono' => array( 'normal' => 'DejaVuSansMono', 'bold' => 'DejaVuSansMono-Bold', 'italic' => 'DejaVuSansMono-Oblique', 'bold_italic' => 'DejaVuSansMono-BoldOblique' ),
+		);
+		$urls = array();
+		foreach ( $fonts as $family => $variants ) {
+			foreach ( $variants as $variant => $file ) {
+				if ( is_readable( VCAP_PATH . 'vendor/dompdf/dompdf/lib/fonts/' . $file . '.ttf' ) ) {
+					$urls[ $family ][ $variant ] = $base . $file . '.ttf';
+				}
+			}
+		}
+		$roots = array_filter(
+			array(
+				defined( 'WP_CONTENT_DIR' ) && function_exists( 'content_url' ) ? array( WP_CONTENT_DIR, content_url() ) : null,
+				function_exists( 'site_url' ) ? array( ABSPATH, site_url() ) : null,
+			)
+		);
+		foreach ( PdfRenderer::custom_fonts() as $family => $variants ) {
+			foreach ( (array) $variants as $variant => $path ) {
+				$real = realpath( (string) $path );
+				foreach ( $roots as $root ) {
+					$dir = realpath( (string) $root[0] );
+					if ( $real && $dir && str_starts_with( $real, trailingslashit( $dir ) ) ) {
+						$urls[ (string) $family ][ (string) $variant ] = trailingslashit( (string) $root[1] ) . str_replace( '%2F', '/', rawurlencode( substr( $real, strlen( trailingslashit( $dir ) ) ) ) );
+						break;
+					}
+				}
+			}
+		}
+		$css = '';
+		foreach ( $urls as $family => $variants ) {
+			foreach ( $variants as $variant => $url ) {
+				$css .= sprintf(
+					"@font-face{font-family:'%s';font-weight:%s;font-style:%s;src:url('%s') format('truetype');font-display:block;}",
+					str_replace( array( "'", '"', '\\', '<', '>', ';', '}' ), '', $family ),
+					str_contains( $variant, 'bold' ) ? 'bold' : 'normal',
+					str_contains( $variant, 'italic' ) ? 'italic' : 'normal',
+					esc_url( $url )
+				);
+			}
+		}
+		return $css;
+	}
+
 	public function save( int $post_id, \WP_Post $post ): void {
 		if ( ! isset( $_POST['vcap_design_nonce'] ) || ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_design_nonce'] ) ), 'vcap_save_design' ) ) {
 			return;
@@ -347,7 +472,13 @@ final class TemplatePostType {
 		$raw    = isset( $_POST['vcap_design'] ) ? wp_unslash( $_POST['vcap_design'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised in sanitize_design().
 		$design = json_decode( (string) $raw, true );
 		if ( is_array( $design ) ) {
-			update_post_meta( $post_id, self::META, wp_slash( wp_json_encode( self::sanitize_design( $design ) ) ) );
+			$old   = (string) get_post_meta( $post_id, self::META, true );
+			$new   = (string) wp_json_encode( self::sanitize_design( $design ) );
+			$apply = ! empty( $_POST['vcap_design_apply_issued'] );
+			if ( $old !== $new || $apply ) {
+				self::record_design_change( $post_id, $old, $new, '' !== $old && self::vouchers_issued_since( (int) get_post_meta( $post_id, self::SINCE_META, true ) ), $apply );
+			}
+			update_post_meta( $post_id, self::META, wp_slash( $new ) );
 		}
 	}
 
@@ -424,6 +555,11 @@ final class TemplatePostType {
 					$clean[ $key ] = $el[ $key ];
 				}
 			}
+			// A fixed barcode value the chosen type cannot carry (e.g. letters as EAN-13) would print no barcode.
+			$value = (string) ( $clean['qrValue'] ?? '{coupon_code}' );
+			if ( 'barcode' === $clean['type'] && isset( $clean['barcodeType'] ) && ! str_contains( $value, '{' ) && ! PdfRenderer::barcode_fits( $clean['barcodeType'], $value ) ) {
+				$clean['barcodeType'] = 'C128';
+			}
 			$elements[] = $clean;
 		}
 		return apply_filters(
@@ -436,12 +572,64 @@ final class TemplatePostType {
 		);
 	}
 
+	/**
+	 * Problems the PDF of a design will have: images it cannot read (offloaded media, CDN, missing file) or draw
+	 * (AVIF, HEIC, …), and barcode types the voucher codes do not fit.
+	 *
+	 * @param bool $images_only Only the image problems (Site Health).
+	 * @return string[]
+	 */
+	public static function design_warnings( array $design, bool $images_only = false ): array {
+		$warnings = array();
+		$images   = array();
+		$page     = (array) ( $design['page'] ?? array() );
+		if ( ! empty( $page['backgroundImageId'] ) || ! empty( $page['backgroundImage'] ) ) {
+			$images[] = array( __( 'Background image', 'voucher-captain' ), $page['backgroundImageId'] ?? 0, (string) ( $page['backgroundImage'] ?? '' ) );
+		}
+		foreach ( (array) ( $design['elements'] ?? array() ) as $el ) {
+			$el   = (array) $el;
+			$name = '' !== (string) ( $el['name'] ?? '' ) ? (string) $el['name'] : (string) ( $el['id'] ?? '' );
+			if ( 'image' === ( $el['type'] ?? '' ) && ( ! empty( $el['imageId'] ) || ! empty( $el['src'] ) ) ) {
+				$images[] = array( $name, $el['imageId'] ?? 0, (string) ( $el['src'] ?? '' ) );
+			}
+			if ( ! $images_only && 'barcode' === ( $el['type'] ?? '' ) && in_array( $el['barcodeType'] ?? '', array( 'EAN13', 'C39' ), true ) && str_contains( (string) ( $el['qrValue'] ?? '{coupon_code}' ), '{coupon_code}' ) ) {
+				/* translators: %s: layer name */
+				$warnings[] = sprintf( __( 'Barcode "%s": generated voucher codes do not fit EAN-13 or Code 39 and are printed as Code 128.', 'voucher-captain' ), $name );
+			}
+		}
+		foreach ( $images as $image ) {
+			$status = vcap()->pdf->image_status( $image[1], $image[2] );
+			if ( 'missing' === $status['problem'] ) {
+				/* translators: %s: layer name */
+				$warnings[] = sprintf( __( 'Image "%s" cannot be read from this server\'s uploads folder and is left out of the PDF (e.g. media offloaded to a cloud storage or CDN). Upload it again, or allow its host with the filter vcap_pdf_remote_hosts.', 'voucher-captain' ), $image[0] );
+			} elseif ( 'format' === $status['problem'] ) {
+				/* translators: 1: layer name, 2: image type */
+				$warnings[] = sprintf( __( 'Image "%1$s" is of type %2$s, which the PDF cannot show. Use a JPEG or PNG image.', 'voucher-captain' ), $image[0], $status['mime'] );
+			}
+		}
+		return $warnings;
+	}
+
 	public static function sanitize_color( $value ): string {
 		$value = (string) $value;
 		if ( 'transparent' === $value ) {
 			return 'transparent';
 		}
 		return sanitize_hex_color( $value ) ?: '#000000';
+	}
+
+	/**
+	 * Sample voucher of the template preview with a worst-case message (as long as products allow by default),
+	 * so the preview shows whether long greetings still fit their box.
+	 */
+	public static function preview_voucher(): Voucher {
+		$voucher = Preview::sample_voucher();
+		$max     = (int) ProductConfig::DEFAULTS['message_maxlength'];
+		$message = trim( $voucher->message );
+		if ( '' !== $message && $max > mb_strlen( $message ) ) {
+			$voucher->message = mb_substr( trim( str_repeat( $message . ' ', (int) ceil( $max / ( mb_strlen( $message ) + 1 ) ) ) ), 0, $max );
+		}
+		return $voucher;
 	}
 
 	public function ajax_preview(): void {
@@ -451,7 +639,7 @@ final class TemplatePostType {
 		}
 		$design = json_decode( wp_unslash( (string) ( $_POST['design'] ?? '' ) ), true ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised below.
 		$design = is_array( $design ) ? self::sanitize_design( $design ) : self::get_design( absint( $_POST['post_id'] ?? 0 ) );
-		$voucher = Preview::sample_voucher();
+		$voucher = self::preview_voucher();
 		Preview::stream( vcap()->pdf->render( $voucher, $design ), 'template-preview.pdf' );
 	}
 

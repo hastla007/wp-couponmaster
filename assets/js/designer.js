@@ -27,6 +27,13 @@
 		Times: '"Times New Roman", Times, serif',
 		Courier: '"Courier New", Courier, monospace'
 	};
+	// Custom PDF fonts (vcap_pdf_fonts) are loaded as web fonts (@font-face from the server); like the PDF, missing
+	// glyphs come from DejaVu Sans.
+	( cfg.fonts || [] ).forEach( function ( family ) {
+		if ( ! FONT_STACKS[ family ] ) {
+			FONT_STACKS[ family ] = '"' + String( family ).replace( /["\\]/g, '' ) + '", "DejaVu Sans", sans-serif';
+		}
+	} );
 
 	var design;
 	try {
@@ -137,6 +144,23 @@
 			}
 			return Object.prototype.hasOwnProperty.call( cfg.sample, key ) ? cfg.sample[ key ] : m;
 		} );
+	}
+
+	/**
+	 * Like the PDF (PdfRenderer::fit_size): a text that does not fit its box is set smaller in steps, down to half
+	 * the designed size, and is marked when it is cut off even then.
+	 */
+	function fitText( inner ) {
+		var size = parseFloat( inner.style.fontSize );
+		var min = size * ( cfg.minFitScale || 0.5 );
+		while ( inner.scrollHeight > inner.clientHeight + 1 && size > min ) {
+			size = Math.max( min, size * 0.94 );
+			inner.style.fontSize = size + 'px';
+		}
+		inner.parentNode.classList.toggle( 'is-overflowing', inner.scrollHeight > inner.clientHeight + 1 );
+		if ( inner.parentNode.classList.contains( 'is-overflowing' ) ) {
+			inner.parentNode.title = t.textCut || '';
+		}
 	}
 
 	// ------------------------------------------------------------------ history.
@@ -416,6 +440,7 @@
 					inner.style.textDecoration = item.underline ? 'underline' : 'none';
 					inner.style.letterSpacing = item.letterSpacing ? item.letterSpacing * PT_TO_MM * s + 'px' : 'normal';
 					inner.style.whiteSpace = 'pre-line'; // Like the PDF: line breaks kept, runs of spaces collapsed.
+					inner.style.overflowWrap = 'break-word'; // Like the PDF: long words (codes) break inside.
 					inner.style.background = item.fill && 'transparent' !== item.fill ? item.fill : 'transparent';
 					inner.style.display = 'flex';
 					inner.style.flexDirection = 'column';
@@ -461,6 +486,9 @@
 			node.appendChild( inner );
 
 			page.appendChild( node );
+			if ( 'text' === item.type || 'heading' === item.type ) {
+				fitText( inner );
+			}
 			if ( item.id === state.selected ) {
 				selNode = { node: node, item: item };
 			}
@@ -781,9 +809,15 @@
 		if ( ! window.wp || ! wp.media ) {
 			return;
 		}
-		var frame = wp.media( { title: t.choose, multiple: false, library: { type: 'image' } } );
+		// Only the image types the PDF can draw (no AVIF/HEIC/SVG; WebP only with GD support).
+		var mimes = cfg.imageMimes && cfg.imageMimes.length ? cfg.imageMimes : [ 'image/jpeg', 'image/png' ];
+		var frame = wp.media( { title: t.choose, multiple: false, library: { type: mimes } } );
 		frame.on( 'select', function () {
 			var att = frame.state().get( 'selection' ).first().toJSON();
+			if ( att.mime && -1 === mimes.indexOf( att.mime ) ) {
+				window.alert( t.imageType );
+				return;
+			}
 			done( att );
 		} );
 		frame.open();
@@ -991,7 +1025,10 @@
 			grid.appendChild( field( t.color, colorInput( item, 'color' ) ) );
 		} else if ( 'barcode' === item.type ) {
 			grid.appendChild( field( t.value, textInput( item, 'qrValue' ), true ) );
-			grid.appendChild( field( t.barcodeType, selectInput( item, 'barcodeType', { C128: 'Code 128', C39: 'Code 39', EAN13: 'EAN-13' } ) ) );
+			grid.appendChild( field( t.barcodeType, selectInput( item, 'barcodeType', { C128: 'Code 128', C39: 'Code 39', EAN13: 'EAN-13' }, function () { renderProps(); } ) ) );
+			if ( 'EAN13' === item.barcodeType || 'C39' === item.barcodeType ) {
+				grid.appendChild( el( 'p', { class: 'description is-wide vcap-d-hint', text: t.barcodeFallback } ) );
+			}
 			grid.appendChild( field( t.color, colorInput( item, 'color' ) ) );
 			grid.appendChild( el( 'div', { class: 'vcap-d-field is-wide' }, [ toggle( item, 'showText', t.showText ) ] ) );
 		} else if ( 'rect' === item.type ) {
@@ -1123,6 +1160,12 @@
 	state.history.push( store.value );
 	fitZoom();
 	renderAll();
+	if ( document.fonts && document.fonts.ready ) {
+		// The DejaVu web fonts change line breaks: fit the texts again once they are loaded.
+		document.fonts.ready.then( function () {
+			renderCanvas();
+		} );
+	}
 	window.addEventListener( 'resize', function () {
 		if ( ! drag && ! state.userZoom ) {
 			fitZoom();

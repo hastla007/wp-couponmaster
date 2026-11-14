@@ -39,7 +39,7 @@ are described in CONNECTORS.md and API.md.
 | `vcap_voucher_delivery_given_up` | `src/Delivery.php` | A delivery was given up after $failures failed attempts. |
 | `vcap_voucher_double_use` | `src/CouponManager.php` | – |
 | `vcap_voucher_event` | `src/VoucherRepository.php` | A history entry was written (args: voucher id, event, amount, balance after, note as text, order id). |
-| `vcap_voucher_expired` | `src/VoucherRepository.php` | Vouchers whose validity ended were marked as expired (one call per batch of up to 200). |
+| `vcap_voucher_expired` | `src/VoucherRepository.php` | Vouchers whose validity ended were marked as expired (one call per batch of the daily maintenance). |
 | `vcap_voucher_redeemed` | `src/API/V1/RedemptionService.php`, `src/VoucherRepository.php` | Fires once when an external redemption is completed. |
 | `vcap_voucher_updated` | `src/Tickets.php`, `src/VoucherRepository.php` | A voucher was saved (args: Voucher as stored). May fire inside a database transaction, see CONNECTORS.md. |
 | `vcap_vouchers_issued` | `src/Issuer.php` | Vouchers of an order were issued (args: Voucher[] $created, WC_Order $order). |
@@ -95,6 +95,7 @@ are described in CONNECTORS.md and API.md.
 | `vcap_issue_requires_payment` | `src/Issuer.php` | – |
 | `vcap_issue_retry_delay` | `src/Issuer.php` | – |
 | `vcap_ledger_money_events` | `src/Ledger.php` | – |
+| `vcap_legacy_claim_retention_days` | `src/Claim.php` | – |
 | `vcap_line_snapshot` | `src/Issuer.php` | Extra snapshot keys of connectors (e.g. the ticket a voucher is exchanged for); core keys always win. |
 | `vcap_maintenance_time_budget` | `src/Delivery.php` | – |
 | `vcap_markets` | `src/Markets.php` | – |
@@ -118,8 +119,11 @@ are described in CONNECTORS.md and API.md.
 | `vcap_passcaptain_ticket_target` | `src/Compat/PassCaptainTickets.php` | Ticket target of a voucher (e.g. for imported or generated codes); return null for none. |
 | `vcap_passcaptain_ticket_voucher_as_value` | `src/Compat/PassCaptainTickets.php` | – |
 | `vcap_pdf_element_html` | `src/PdfRenderer.php` | – |
+| `vcap_pdf_fallback_fonts` | `src/PdfRenderer.php` | – |
 | `vcap_pdf_fonts` | `src/PdfRenderer.php` | – |
 | `vcap_pdf_html` | `src/PdfRenderer.php` | HTML a voucher PDF is rendered from (args: string $html, Voucher $voucher, array $design). |
+| `vcap_pdf_image_mimes` | `src/PdfRenderer.php` | – |
+| `vcap_pdf_remote_hosts` | `src/PdfRenderer.php` | – |
 | `vcap_placeholder_definitions` | `src/Placeholders.php` | – |
 | `vcap_placeholders` | `src/Placeholders.php` | – |
 | `vcap_product_config` | `src/ProductConfig.php` | – |
@@ -129,6 +133,7 @@ are described in CONNECTORS.md and API.md.
 | `vcap_rate_limit_brake_exempt` | `src/Plugin.php` | Whether the current user keeps the full rate-limit quota while the site-wide brake is on. |
 | `vcap_rate_limit_ipv6_48_factor` | `src/Plugin.php` | – |
 | `vcap_redeem_code` | `src/Shortcodes.php` | Connectors may handle a code themselves (e.g. exchange it for tickets): return a result string. |
+| `vcap_redeem_instructions` | `src/Channels.php` | – |
 | `vcap_redeem_prefill` | `src/Shortcodes.php` | – |
 | `vcap_redeem_url` | `src/Shortcodes.php` | Redeem page link of a code ('' = none). |
 | `vcap_redemption_allowed` | `src/API/V1/RedemptionService.php` | Filters whether a voucher may be redeemed for a target (e.g. "only course vouchers unlock courses"). Return false or a WP_Error to refuse. |

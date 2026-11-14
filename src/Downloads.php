@@ -334,6 +334,11 @@ final class Downloads {
 			do_action( 'vcap_account_vouchers_top', $user );
 		}
 		$list = $this->repo->for_customer( (int) $user->ID );
+		// Products of the list loaded together (one query for posts and meta, not one per voucher).
+		$products = array_values( array_unique( array_filter( array_map( static fn( $v ) => (int) ( $v->variation_id ?: $v->product_id ), $list ) ) ) );
+		if ( $products ) {
+			_prime_post_caches( $products, false, true );
+		}
 		Plugin::template(
 			'myaccount/vouchers-table.php',
 			array(

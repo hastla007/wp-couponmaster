@@ -70,6 +70,8 @@ final class Install {
 	 */
 	private const MIGRATIONS = array(
 		'1.4.0' => 'migrate_1_4_0',
+		'1.5.0' => 'migrate_1_5_0',
+		'1.6.0' => 'migrate_1_6_0',
 	);
 	/** Schema version that added the "source" column of the ledger (D8). */
 	public const EVENT_SOURCE_VERSION = '1.6.0';
@@ -98,6 +100,16 @@ final class Install {
 	/** @var array<int, bool> Whether the ledger of a site has its "source" column (event_source_ready()). */
 	private static array $event_source = array();
 
+	/**
+	 * Indexes of earlier schemas that a later one replaced (dbDelta never drops an index): table key => names.
+	 * events.voucher_id is covered by voucher_ledger, vouchers.status by status_expires (both 1.5.0).
+	 */
+	private const OBSOLETE_INDEXES = array(
+		'events'   => array( 'voucher_id' ),
+		'vouchers' => array( 'status' ),
+	);
+	/** Highest ledger id whose actor_email_hash was filled from its note (schema 1.5.0; newer rows are written with it). */
+	public const EVENT_HASH_CURSOR = 'vcap_event_hash_cursor';
 	/** Schema version of the own storage in use (promotion usage, claims, delivery state per role). */
 	public const STORAGE_OPTION = 'vcap_storage_version';
 	/** Time the storage switched while rows were still in post meta / options (cleared once they all moved). */
@@ -869,6 +881,59 @@ final class Install {
 		return $ok ? count( $rows ) : -1;
 	}
 
+	/**
+	 * 1.5.0: ledger notes that are an e-mail address (WooCommerce "used by") get its hash in actor_email_hash, so
+	 * privacy exports and erasures find them through an index instead of scanning every note. New rows are
+	 * written with the hash; existing ones are filled in id batches.
+	 */
+	/**
+	 * 1.6.0: the ledger column "source" (D8, created by the schema step). Earlier rows keep '' – their source is
+	 * unknown and shown without one; nothing to fill. The column is written as soon as it exists
+	 * (event_source_ready()), so this step only re-checks it after the DDL.
+	 */
+	private static function migrate_1_6_0(): bool {
+		self::$event_source = array();
+		return true;
+	}
+
+	private static function migrate_1_5_0(): bool {
+		return self::hash_event_notes( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ? 8.0 : 2.0 );
+	}
+
+	/**
+	 * Fills actor_email_hash of ledger rows after EVENT_HASH_CURSOR, in batches of 2000 ids, until the newest row
+	 * or the time budget. The daily maintenance calls it again: rows an older version wrote after a rollback
+	 * (without the hash) are filled as well. Rows after the cursor are also matched by their note
+	 * (VoucherRepository::events_noting()), so nothing is missed meanwhile.
+	 *
+	 * @param float $budget Seconds.
+	 * @return bool True when every row is done.
+	 */
+	public static function hash_event_notes( float $budget ): bool {
+		global $wpdb;
+		$table = self::tables()['events'];
+		if ( ! self::table_exists( $table ) ) {
+			return false;
+		}
+		$start  = microtime( true );
+		$cursor = (int) get_option( self::EVENT_HASH_CURSOR, 0 );
+		do {
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, note, actor_email_hash FROM {$table} WHERE id > %d ORDER BY id LIMIT 2000", $cursor ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( ! $rows ) {
+				return true;
+			}
+			foreach ( $rows as $row ) {
+				$hash = VoucherRepository::note_hash( (string) $row['note'] );
+				if ( $hash !== (string) $row['actor_email_hash'] ) {
+					$wpdb->update( $table, array( 'actor_email_hash' => $hash ), array( 'id' => (int) $row['id'] ), array( '%s' ), array( '%d' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				}
+			}
+			$cursor = (int) end( $rows )['id'];
+			update_option( self::EVENT_HASH_CURSOR, $cursor, false );
+		} while ( count( $rows ) === 2000 && microtime( true ) - $start < $budget );
+		return count( $rows ) < 2000;
+	}
+
 	/** Runs $work in a transaction: committed when it returns true, rolled back otherwise. */
 	private static function in_transaction( callable $work ): bool {
 		global $wpdb;
@@ -993,7 +1058,10 @@ final class Install {
 					UNIQUE KEY order_item_slot (order_item_id,item_index),
 					KEY order_id (order_id),
 					KEY coupon_id (coupon_id),
-					KEY status (status),
+					KEY status_expires (status,expires_at),
+					KEY status_updated (status,updated_at),
+					KEY expires_at (expires_at),
+					KEY delivery_due (delivered_at,status,delivery_at),
 					KEY product_id (product_id),
 					KEY recipient_email (recipient_email(100)),
 					KEY buyer_email (buyer_email(100)),
@@ -1009,10 +1077,12 @@ final class Install {
 					user_id bigint(20) unsigned NOT NULL DEFAULT 0,
 					source varchar(20) NOT NULL DEFAULT '',
 					note text NULL,
+					actor_email_hash char(64) NOT NULL DEFAULT '',
 					created_at datetime NOT NULL,
 					PRIMARY KEY  (id),
-					KEY voucher_id (voucher_id),
+					KEY voucher_ledger (voucher_id,id,created_at,event,balance_after),
 					KEY voucher_order (voucher_id,order_id,id),
+					KEY actor_email_hash (actor_email_hash),
 					KEY event (event),
 					KEY created_at (created_at)
 				) ENGINE=InnoDB $collate;",
@@ -1025,7 +1095,8 @@ final class Install {
 					used_at datetime NULL DEFAULT NULL,
 					PRIMARY KEY  (id),
 					UNIQUE KEY code (code),
-					KEY batch_free (batch,voucher_id)
+					KEY batch_free (batch,voucher_id),
+					KEY batch_used (batch,used_at)
 				) ENGINE=InnoDB $collate;",
 			'redemptions' => "CREATE TABLE {$t['redemptions']} (
 					id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -1074,7 +1145,33 @@ final class Install {
 		foreach ( self::schema() as $sql ) {
 			dbDelta( $sql );
 		}
+		self::drop_obsolete_indexes();
 		self::ensure_transactional_tables( self::tables() );
+	}
+
+	/**
+	 * Drops indexes that a newer schema replaced by a covering one (OBSOLETE_INDEXES): each costs a write per
+	 * ledger insert or voucher change. Idempotent; only an index that exists is dropped, and only once its
+	 * replacement exists.
+	 */
+	private static function drop_obsolete_indexes(): void {
+		global $wpdb;
+		$tables = self::tables();
+		$schema = self::schema();
+		foreach ( self::OBSOLETE_INDEXES as $key => $names ) {
+			$table = $tables[ $key ];
+			if ( ! self::table_exists( $table ) ) {
+				continue;
+			}
+			$have = array_map( 'strtolower', array_unique( (array) $wpdb->get_col( "SHOW INDEX FROM {$table}", 2 ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			preg_match_all( '/KEY ([a-z_]+) \(/', $schema[ $key ], $wanted );
+			if ( array_diff( $wanted[1], $have ) ) {
+				continue; // A replacement is still missing (verify_schema() reports it): keep the old index meanwhile.
+			}
+			foreach ( array_intersect( $names, $have ) as $name ) {
+				$wpdb->query( "ALTER TABLE {$table} DROP INDEX {$name}" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.SchemaChange -- names from OBSOLETE_INDEXES.
+			}
+		}
 	}
 
 	/**

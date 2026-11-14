@@ -244,11 +244,11 @@ final class PaymentVouchers {
 	 * What one paying voucher pays: at most $due and its $value, at most the open gross amount of the parts it may
 	 * pay for. Takes that amount out of $open, so the next voucher never pays the same part again.
 	 *
-	 * @param \WC_Cart|\WC_Order   $object Cart or order.
+	 * @param \WC_Cart|\WC_Order   $subject Cart or order.
 	 * @param array<string, float> $open   open_amounts() of the object, reduced by earlier payments.
 	 */
-	private function take_payment( \WC_Coupon $coupon, $object, array &$open, float $due, float $value ): float {
-		$eligible = $this->eligible_parts( $coupon, $object, array_keys( $open ) );
+	private function take_payment( \WC_Coupon $coupon, $subject, array &$open, float $due, float $value ): float {
+		$eligible = $this->eligible_parts( $coupon, $subject, array_keys( $open ) );
 		$covered  = array_sum( array_intersect_key( $open, array_flip( $eligible ) ) );
 		$amount   = round( min( max( 0.0, $due ), max( 0.0, $value ), $covered ), wc_get_price_decimals() );
 		$left     = $amount;
@@ -264,14 +264,14 @@ final class PaymentVouchers {
 	}
 
 	/**
-	 * @param \WC_Cart|\WC_Order $object Cart or order (voucher payment lines of an order do not count).
+	 * @param \WC_Cart|\WC_Order $subject Cart or order (voucher payment lines of an order do not count).
 	 * @return array<string, float> part ("item:KEY", "shipping", "fee:ID") => gross amount still open
 	 */
-	private static function open_amounts( $object ): array {
+	private static function open_amounts( $subject ): array {
 		$open = array();
-		if ( $object instanceof \WC_Order ) {
+		if ( $subject instanceof \WC_Order ) {
 			$open['shipping'] = 0.0;
-			foreach ( $object->get_items( array( 'line_item', 'shipping', 'fee' ) ) as $id => $item ) {
+			foreach ( $subject->get_items( array( 'line_item', 'shipping', 'fee' ) ) as $id => $item ) {
 				$gross = max( 0.0, (float) $item->get_total() + (float) $item->get_total_tax() );
 				if ( $item instanceof \WC_Order_Item_Product ) {
 					$open[ 'item:' . $id ] = $gross;
@@ -283,23 +283,23 @@ final class PaymentVouchers {
 			}
 			return $open;
 		}
-		foreach ( $object->get_cart() as $key => $values ) {
+		foreach ( $subject->get_cart() as $key => $values ) {
 			$open[ 'item:' . $key ] = max( 0.0, (float) ( $values['line_total'] ?? 0 ) + (float) ( $values['line_tax'] ?? 0 ) );
 		}
-		$open['shipping'] = max( 0.0, (float) $object->get_shipping_total() + (float) $object->get_shipping_tax() );
-		foreach ( $object->get_fees() as $fee ) {
+		$open['shipping'] = max( 0.0, (float) $subject->get_shipping_total() + (float) $subject->get_shipping_tax() );
+		foreach ( $subject->get_fees() as $fee ) {
 			$open[ 'fee:' . $fee->id ] = max( 0.0, (float) $fee->total + (float) $fee->tax );
 		}
 		return $open;
 	}
 
 	/**
-	 * @param \WC_Cart|\WC_Order $object Cart or order.
+	 * @param \WC_Cart|\WC_Order $subject Cart or order.
 	 * @param string[]           $parts  All parts of the cart or order (open_amounts() keys).
 	 * @return string[] The parts this voucher may pay, in cart order.
 	 */
-	private function eligible_parts( \WC_Coupon $coupon, $object, array $parts ): array {
-		$discounts = new \WC_Discounts( $object );
+	private function eligible_parts( \WC_Coupon $coupon, $subject, array $parts ): array {
+		$discounts = new \WC_Discounts( $subject );
 		$items     = apply_filters( 'woocommerce_coupon_get_items_to_apply', $discounts->get_items_to_validate(), $coupon, $discounts );
 		// WooCommerce checks product restrictions only for product coupon types: ask the same question as one.
 		$probe = clone $coupon;
@@ -312,7 +312,7 @@ final class PaymentVouchers {
 		}
 		$restricted = $coupon->get_product_ids() || $coupon->get_product_categories();
 		/** Whether a voucher paying after tax may also pay shipping and fees (default: when it is not limited to products or categories). */
-		$extras = (bool) apply_filters( 'vcap_voucher_pays_shipping_and_fees', ! $restricted, $coupon, $object );
+		$extras = (bool) apply_filters( 'vcap_voucher_pays_shipping_and_fees', ! $restricted, $coupon, $subject );
 		return array_values(
 			array_filter(
 				$parts,

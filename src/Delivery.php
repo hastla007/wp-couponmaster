@@ -605,7 +605,7 @@ final class Delivery {
 	 * queues the next one.
 	 *
 	 * @param string|array $phase "vouchers", "redemptions" or "referrals" (or the action's args array).
-	 * @param int          $after Last id done ("referrals": the page to do).
+	 * @param int          $after Last id done (order id for "referrals").
 	 * @return array{0:string, 1:int}|null The next batch (also queued), null when everything is restored.
 	 */
 	public function restore_tasks( $phase = 'vouchers', $after = 0 ): ?array {
@@ -655,19 +655,17 @@ final class Delivery {
 					as_schedule_single_action( max( time(), (int) strtotime( $row['expires_at'] . ' UTC' ) ) + MINUTE_IN_SECONDS, 'vcap_release_expired_redemption', $args, self::GROUP );
 				}
 			}
-			return count( $rows ) >= $limit ? array( 'redemptions', (int) end( $rows )['id'] ) : array( 'referrals', 1 );
+			return count( $rows ) >= $limit ? array( 'redemptions', (int) end( $rows )['id'] ) : array( 'referrals', 0 );
 		}
 		if ( 'referrals' === $phase && function_exists( 'wc_get_orders' ) ) {
-			$page   = max( 1, $after );
-			$orders = (array) wc_get_orders(
+			// Keyset by order id ($after = last id; 1 = start), read from the order store in use (OrderLookup).
+			$orders = OrderLookup::ids_with_meta(
+				Referrals::REWARD,
+				null,
 				array(
-					'status'     => array( 'cancelled', 'refunded' ),
-					'limit'      => 200,
-					'paged'      => $page,
-					'orderby'    => 'ID',
-					'order'      => 'ASC',
-					'return'     => 'ids',
-					'meta_query' => array( array( 'key' => Referrals::REWARD, 'compare' => 'EXISTS' ) ), // phpcs:ignore WordPress.DB.SlowDBQuery
+					'status'   => array( 'cancelled', 'refunded' ),
+					'limit'    => 200,
+					'after_id' => max( 0, $after ),
 				)
 			);
 			foreach ( $orders as $order_id ) {
@@ -678,54 +676,70 @@ final class Delivery {
 					as_schedule_single_action( time() + HOUR_IN_SECONDS, Referrals::RETRY_HOOK, array( (int) $order_id ), self::GROUP );
 				}
 			}
-			return count( $orders ) >= 200 ? array( 'referrals', $page + 1 ) : null;
+			return count( $orders ) >= 200 ? array( 'referrals', (int) end( $orders ) ) : null;
 		}
 		return null;
 	}
 
 	/**
 	 * Remind holders of vouchers with remaining value before they expire. Each voucher is reminded at most once
-	 * (ledger event 'expiry_reminder'); admins can suppress the reminder per voucher.
+	 * (ledger event 'expiry_reminder'); admins can suppress the reminder per voucher. Works in batches of 200
+	 * until every due voucher was handled or $budget seconds are used (the maintenance step then continues), so
+	 * many vouchers expiring on one day (e.g. on 31 December) are all reminded in time. Nothing is tried while
+	 * the email is disabled, and vouchers without a valid address are skipped (no failed attempt each day).
 	 *
+	 * @param float     $budget   Seconds; 0 = until done.
+	 * @param bool|null $finished Set to false when the budget ran out with vouchers left.
 	 * @return int number of reminders sent
 	 */
-	public function send_expiry_reminders(): int {
-		$days = (int) $this->settings->get( 'vcap_expiry_reminder_days' );
+	public function send_expiry_reminders( float $budget = 0.0, ?bool &$finished = null ): int {
+		$finished = true;
+		$days     = (int) $this->settings->get( 'vcap_expiry_reminder_days' );
 		if ( $days <= 0 ) {
 			return 0;
 		}
 		$emails = WC()->mailer()->get_emails();
 		$email  = $emails['VCAP_Email_Voucher_Expiry'] ?? null;
-		if ( ! $email ) {
+		if ( ! $email || ! $email->is_enabled() ) {
 			return 0;
 		}
-		$sent = 0;
-		foreach ( $this->repo->due_for_expiry_reminder( $days ) as $voucher ) {
-			if ( ! apply_filters( 'vcap_send_expiry_reminder', true, $voucher ) ) {
-				continue;
+		$start = microtime( true );
+		$sent  = 0;
+		$seen  = array();
+		do {
+			$batch = $this->repo->due_for_expiry_reminder( $days, 200, $seen );
+			foreach ( $batch as $voucher ) {
+				if ( $budget > 0 && microtime( true ) - $start >= $budget ) {
+					$finished = false;
+					return $sent;
+				}
+				$seen[] = $voucher->id;
+				if ( ! is_email( $voucher->delivery_email() ) || ! apply_filters( 'vcap_send_expiry_reminder', true, $voucher ) ) {
+					continue;
+				}
+				// Claimed first (a parallel run or a crash after sending never leads to a second reminder), recorded
+				// only after a successful send; a failed send gives the claim back and is retried after a day.
+				$claim = 'expiry-reminder:' . $voucher->id;
+				if ( ! Claim::take( $claim ) ) {
+					continue;
+				}
+				try {
+					$mailed = $email->trigger( $voucher );
+				} catch ( \Throwable $e ) {
+					// One broken voucher (PDF, template, mail plugin) neither keeps its claim nor stops the others.
+					Claim::release( $claim );
+					Logger::error( 'Expiry reminder failed: ' . Health::mask_addresses( $e->getMessage() ), array( 'voucher_id' => $voucher->id ) );
+					continue;
+				}
+				if ( $mailed ) {
+					$this->repo->log( $voucher->id, 'expiry_reminder', null, $voucher->balance, '' );
+					++$sent;
+				} else {
+					Claim::release( $claim );
+					$this->repo->log( $voucher->id, 'delivery_failed', null, null, Note::make( 'reminder_failed' ) );
+				}
 			}
-			// Claimed first (a parallel run or a crash after sending never leads to a second reminder), recorded
-			// only after a successful send; a failed send gives the claim back and is retried on the next run.
-			$claim = 'expiry-reminder:' . $voucher->id;
-			if ( ! Claim::take( $claim ) ) {
-				continue;
-			}
-			try {
-				$mailed = $email->trigger( $voucher );
-			} catch ( \Throwable $e ) {
-				// One broken voucher (PDF, template, mail plugin) neither keeps its claim nor stops the others.
-				Claim::release( $claim );
-				Logger::error( 'Expiry reminder failed: ' . Health::mask_addresses( $e->getMessage() ), array( 'voucher_id' => $voucher->id ) );
-				continue;
-			}
-			if ( $mailed ) {
-				$this->repo->log( $voucher->id, 'expiry_reminder', null, $voucher->balance, '' );
-				++$sent;
-			} else {
-				Claim::release( $claim );
-				$this->repo->log( $voucher->id, 'delivery_failed', null, null, Note::make( 'reminder_failed' ) );
-			}
-		}
+		} while ( count( $batch ) === 200 );
 		return $sent;
 	}
 
@@ -808,23 +822,24 @@ final class Delivery {
 				Install::ensure_upload_dir();
 				return true;
 			case 'expire_overdue':
-				$finished = true;
 				$this->repo->expire_overdue( $budget, $finished );
 				return $finished;
 			case 'retention':
-				$days = (int) $this->settings->get( 'vcap_retention_days' );
+				$days     = (int) $this->settings->get( 'vcap_retention_days' );
+				$finished = true;
 				if ( $days > 0 ) {
-					$this->repo->anonymise_older_than( $days );
+					// Batches of short transactions; an error is thrown and recorded as the step's last run.
+					$this->repo->anonymise_older_than( $days, $budget, $finished );
 				}
-				return true;
+				return $finished;
 			case 'legacy_rows':
 				Install::move_legacy_rows_locked( $budget );
-				return true;
+				return Install::hash_event_notes( $budget );
 			case 'delivery_net':
 				return $this->deliver_due( $budget );
 			case 'expiry_reminders':
-				$this->send_expiry_reminders();
-				return true;
+				$this->send_expiry_reminders( $budget, $finished );
+				return $finished;
 		}
 		return true;
 	}

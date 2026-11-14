@@ -18,7 +18,7 @@ final class CouponManager {
 		// A code marked "Individual use only" does not push out gift cards, store credit and other multi-purpose
 		// vouchers: they are a means of payment, not a discount (classic cart and Store API use both filters).
 		add_filter( 'woocommerce_apply_individual_use_coupon', array( $this, 'keep_payment_means' ), 10, 3 );
-		add_filter( 'woocommerce_apply_with_individual_use_coupon', array( $this, 'allow_payment_means' ), 10, 4 );
+		add_filter( 'woocommerce_apply_with_individual_use_coupon', array( $this, 'allow_payment_means' ), 10, 2 );
 		// Late priority: other plugins (e.g. Pass Captain's capacity hold at 10) validate first, so a checkout they
 		// refuse never leaves a balance reservation behind. A previous unpaid checkout order of the same session
 		// gives its holds back first (classic checkout creates a new order after a failed attempt).
@@ -53,7 +53,7 @@ final class CouponManager {
 		add_action( 'woocommerce_decrease_coupon_usage_count', array( $this, 'usage_decreased' ), 10, 3 );
 		// WooCommerce gives coupon uses back on "Cancelled" (priority 10): with "Restore balance on cancellation"
 		// off, single-use vouchers stay redeemed like balances.
-		add_action( 'woocommerce_order_status_cancelled', array( $this, 'keep_single_use_start' ), 1, 2 );
+		add_action( 'woocommerce_order_status_cancelled', array( $this, 'keep_single_use_start' ), 1, 1 );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'keep_single_use_end' ), 99, 2 );
 		add_action( 'woocommerce_cart_totals_after_order_total', array( $this, 'cart_balance_notice' ) );
 		// Free balance holds of unpaid orders that are trashed, deleted or abandoned.
@@ -107,24 +107,25 @@ final class CouponManager {
 		// legacy order store alike) instead of scanning the ledger. Pages of 200, so holds that cannot be
 		// released right now never block the orders behind them.
 		$cutoff    = time() - $minutes * MINUTE_IN_SECONDS;
+		// Read from the order store in use (OrderLookup: wc_get_orders() ignores meta_query for the classic store).
 		$order_ids = array();
+		$after     = 0;
 		for ( $page = 1; $page <= 5; $page++ ) {
-			$ids = wc_get_orders(
+			$ids = OrderLookup::ids_with_meta(
+				'_vcap_reservations',
+				null,
 				array(
-					'status'        => 'pending',
-					'limit'         => 200,
-					'paged'         => $page,
-					'orderby'       => 'ID',
-					'order'         => 'ASC',
-					'return'        => 'ids',
-					'date_modified' => '<' . $cutoff,
-					'meta_query'    => array( array( 'key' => '_vcap_reservations', 'compare' => 'EXISTS' ) ), // phpcs:ignore WordPress.DB.SlowDBQuery
+					'status'          => 'pending',
+					'limit'           => 200,
+					'after_id'        => $after,
+					'modified_before' => $cutoff,
 				)
 			);
-			$order_ids = array_merge( $order_ids, (array) $ids );
-			if ( count( (array) $ids ) < 200 ) {
+			$order_ids = array_merge( $order_ids, $ids );
+			if ( count( $ids ) < 200 ) {
 				break;
 			}
+			$after = (int) end( $ids );
 		}
 		foreach ( array_map( 'intval', $order_ids ? $order_ids : array() ) as $order_id ) {
 			$order = wc_get_order( $order_id );
@@ -1161,11 +1162,10 @@ final class CouponManager {
 	/**
 	 * A multi-purpose voucher may join a cart that holds an "Individual use only" code.
 	 *
-	 * @param bool       $allow      Whether the coupon may be applied.
-	 * @param \WC_Coupon $coupon     The coupon being applied.
-	 * @param \WC_Coupon $individual The individual-use coupon in the cart.
+	 * @param bool       $allow  Whether the coupon may be applied.
+	 * @param \WC_Coupon $coupon The coupon being applied.
 	 */
-	public function allow_payment_means( $allow, $coupon = null, $individual = null, $applied = array() ) {
+	public function allow_payment_means( $allow, $coupon = null ) {
 		return $allow || $this->is_payment_means( $coupon );
 	}
 
@@ -1739,7 +1739,7 @@ final class CouponManager {
 	/** @var Voucher[] Single-use vouchers given back (or kept) in that cancellation. */
 	private array $given_back = array();
 
-	public function keep_single_use_start( $order_id, $order = null ): void {
+	public function keep_single_use_start( $order_id ): void {
 		$this->cancelling      = (int) $order_id;
 		$this->keep_single_use = ! $this->settings->yes( 'vcap_restore_on_cancel' );
 		$this->given_back      = array();

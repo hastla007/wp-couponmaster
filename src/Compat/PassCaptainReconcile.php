@@ -225,9 +225,11 @@ final class PassCaptainReconcile {
 		// Redemptions here that point to Pass Captain without an order there (reserved or committed only).
 		$table = Install::tables()['redemptions'];
 		$keys  = $wpdb->get_col( $wpdb->prepare( "SELECT redemption_key FROM {$table} WHERE target LIKE %s AND state IN ('reserved','committed') AND created_at < %s ORDER BY id DESC LIMIT %d", $wpdb->esc_like( 'passcaptain:' ) . '%', gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS ), max( 1, $limit ) ) ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		foreach ( $keys as $key ) {
-			if ( empty( $seen[ $key ] ) && ! $this->order_exists( (string) $key ) ) {
-				$issues[] = self::issue( 'orphan', '–', (string) $key, __( 'Voucher Captain holds a redemption for Pass Captain without a matching Pass Captain order.', 'voucher-captain' ) );
+		$unknown = array_values( array_filter( array_map( 'strval', $keys ), static fn( $key ) => empty( $seen[ $key ] ) ) );
+		$known   = $this->orders_existing( $unknown );
+		foreach ( $unknown as $key ) {
+			if ( empty( $known[ $key ] ) ) {
+				$issues[] = self::issue( 'orphan', '–', $key, __( 'Voucher Captain holds a redemption for Pass Captain without a matching Pass Captain order.', 'voucher-captain' ) );
 			}
 		}
 		return array( 'checked' => count( $rows ), 'issues' => $issues, 'source' => self::source() );
@@ -250,21 +252,53 @@ final class PassCaptainReconcile {
 		}
 	}
 
+	/** Seconds the answer for a key without a Pass Captain order is kept (true orphans are asked again after it). */
+	public const ORPHAN_CACHE_SECONDS = 6 * HOUR_IN_SECONDS;
+
 	/**
-	 * Whether Pass Captain has an order for the key beyond the rows checked. The API looks up checkout and
-	 * exchange orders; the table fallback only exchange orders (provider reference "voucher:<key>").
+	 * Which of the keys Pass Captain has an order for beyond the rows checked. The API looks up checkout and
+	 * exchange orders, one key at a time; the table fallback only exchange orders (provider reference
+	 * "voucher:<key>"), 500 keys per query. A key found missing is remembered for ORPHAN_CACHE_SECONDS, so every
+	 * report call does not search Pass Captain's orders for each true orphan again.
+	 *
+	 * @param string[] $keys
+	 * @return array<string, bool> key => true when an order exists
 	 */
-	private function order_exists( string $key ): bool {
+	private function orders_existing( array $keys ): array {
 		global $wpdb;
 		$source = self::source();
-		if ( 'filter' === $source ) {
-			return false; // Only the supplied rows are known.
+		$found  = array();
+		if ( ! $keys || 'filter' === $source ) {
+			return $found; // Only the supplied rows are known.
 		}
+		$cache   = get_transient( 'vcap_pc_orphans' );
+		$cache   = is_array( $cache ) && ( $cache['source'] ?? '' ) === $source ? $cache : array( 'source' => $source, 'missing' => array() );
+		$missing = array_filter( (array) $cache['missing'], static fn( $until ) => (int) $until > time() );
+		$ask     = array_values( array_filter( $keys, static fn( $key ) => ! isset( $missing[ $key ] ) ) );
 		if ( 'api' === $source ) {
-			$found = call_user_func( array( self::API, 'orders' ), array( 'redemption_key' => $key, 'limit' => 1 ) );
-			return is_array( $found ) && array() !== $found;
+			foreach ( $ask as $key ) {
+				$rows          = call_user_func( array( self::API, 'orders' ), array( 'redemption_key' => $key, 'limit' => 1 ) );
+				$found[ $key ] = is_array( $rows ) && array() !== $rows;
+			}
+		} else {
+			foreach ( array_chunk( $ask, 500 ) as $chunk ) {
+				$refs = array_map( static fn( $key ) => 'voucher:' . $key, $chunk );
+				$in   = implode( ',', array_fill( 0, count( $refs ), '%s' ) );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built above.
+				foreach ( (array) $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT provider_reference FROM {$wpdb->prefix}wpcap_orders WHERE provider_reference IN ({$in})", $refs ) ) as $ref ) {
+					$found[ substr( (string) $ref, strlen( 'voucher:' ) ) ] = true;
+				}
+			}
 		}
-		return (bool) $wpdb->get_var( $wpdb->prepare( "SELECT order_id FROM {$wpdb->prefix}wpcap_orders WHERE provider_reference = %s LIMIT 1", 'voucher:' . $key ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		foreach ( $ask as $key ) {
+			if ( empty( $found[ $key ] ) ) {
+				$missing[ $key ] = time() + self::ORPHAN_CACHE_SECONDS;
+			} else {
+				unset( $missing[ $key ] );
+			}
+		}
+		set_transient( 'vcap_pc_orphans', array( 'source' => $source, 'missing' => array_slice( $missing, -5000, null, true ) ), self::ORPHAN_CACHE_SECONDS );
+		return array_filter( $found );
 	}
 
 	private static function issue( string $kind, string $order, string $key, string $problem ): array {

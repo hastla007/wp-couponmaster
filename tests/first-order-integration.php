@@ -51,6 +51,25 @@ vcap_first_assert( ! vcap_first_valid( $coupon, vcap_first_order( $product, 0, "
 vcap_first_order( $product, 0, "cancelled-{$tag}@example.com", 'cancelled' );
 vcap_first_assert( vcap_first_valid( $coupon, vcap_first_order( $product, 0, "cancelled-{$tag}@example.com", 'pending' ) ), 'cancelled earlier orders do not count' );
 
+// B13: repeated validations of the request (cart totals run several times) query the orders once; an order
+// created in the request is seen at once.
+$b13_orders = 0;
+$b13_count  = static function ( $query ) use ( &$b13_orders ) {
+	++$b13_orders;
+	return $query;
+};
+add_filter( 'woocommerce_order_query_args', $b13_count );
+$b13_answers = array();
+for ( $i = 0; $i < 4; $i++ ) {
+	$b13_answers[] = VCAP\FirstOrderCoupons::has_previous_order( $newcomer, "n-{$tag}@example.com", 0 );
+}
+$b13_queried = $b13_orders;
+vcap_first_order( $product, $newcomer, "n-{$tag}@example.com", 'completed' );
+$b13_after = VCAP\FirstOrderCoupons::has_previous_order( $newcomer, "n-{$tag}@example.com", 0 );
+remove_filter( 'woocommerce_order_query_args', $b13_count );
+vcap_first_assert( array( false, false, false, false ) === $b13_answers && 2 === $b13_queried, 'B13: four checks of the same customer run the two order queries (account, email) once (' . $b13_queried . ')' );
+vcap_first_assert( true === $b13_after, 'B13: an order completed in the request is counted at once' );
+
 // Coupons never change catalog prices; the discount only appears in the cart.
 wc_load_cart();
 WC()->cart->empty_cart();

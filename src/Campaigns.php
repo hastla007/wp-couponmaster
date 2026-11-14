@@ -111,40 +111,53 @@ final class Campaigns {
 	}
 
 	/**
-	 * Export rows for a campaign of coupons.
+	 * Export rows for a campaign of coupons (header first), read in chunks of 500 coupons whose posts and meta are
+	 * loaded together, so campaigns of any size neither run one query per field nor keep every coupon in memory.
 	 *
-	 * @return array<int, array<int, string|int|float>>
+	 * @return \Generator<int, array<int, string|int|float>>
 	 */
-	public function campaign_rows( string $campaign ): array {
-		$ids  = get_posts(
-			array(
-				'post_type'   => 'shop_coupon',
-				'post_status' => array( 'publish', 'draft', 'pending', 'private', 'future' ),
-				'numberposts' => -1,
-				'fields'      => 'ids',
-				'meta_key'    => self::META, // phpcs:ignore WordPress.DB.SlowDBQuery
-				'meta_value'  => $campaign, // phpcs:ignore WordPress.DB.SlowDBQuery
-				'orderby'     => 'ID',
-				'order'       => 'ASC',
-			)
-		);
-		$rows     = array( array( __( 'Code', 'voucher-captain' ), __( 'Discount type', 'voucher-captain' ), __( 'Amount', 'voucher-captain' ), __( 'Expires', 'voucher-captain' ), __( 'Uses', 'voucher-captain' ), __( 'Usage limit', 'voucher-captain' ), __( 'Status', 'voucher-captain' ) ) );
+	public function campaign_rows( string $campaign ): \Generator {
+		global $wpdb;
+		yield array( __( 'Code', 'voucher-captain' ), __( 'Discount type', 'voucher-captain' ), __( 'Amount', 'voucher-captain' ), __( 'Expires', 'voucher-captain' ), __( 'Uses', 'voucher-captain' ), __( 'Usage limit', 'voucher-captain' ), __( 'Status', 'voucher-captain' ) );
 		$types    = wc_get_coupon_types();
 		$statuses = get_post_statuses();
-		foreach ( $ids as $id ) {
-			$c      = new \WC_Coupon( $id );
-			$status = (string) get_post_status( $id );
-			$rows[] = array(
-				$c->get_code(),
-				$types[ $c->get_discount_type() ] ?? $c->get_discount_type(),
-				Csv::number( $c->get_amount(), wc_get_price_decimals() ),
-				$c->get_date_expires() ? $c->get_date_expires()->date_i18n( 'Y-m-d' ) : '',
-				(int) $c->get_usage_count(),
-				(int) $c->get_usage_limit(),
-				$statuses[ $status ] ?? $status,
+		$after    = 0;
+		do {
+			$ids = array_map(
+				'intval',
+				(array) $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					$wpdb->prepare(
+						"SELECT p.ID FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = %s AND m.meta_value = %s
+						WHERE p.post_type = 'shop_coupon' AND p.post_status IN ('publish','draft','pending','private','future') AND p.ID > %d
+						GROUP BY p.ID ORDER BY p.ID ASC LIMIT 500",
+						self::META,
+						$campaign,
+						$after
+					)
+				)
 			);
-		}
-		return $rows;
+			if ( ! $ids ) {
+				break;
+			}
+			$after = (int) end( $ids );
+			_prime_post_caches( $ids, false, true );
+			foreach ( $ids as $id ) {
+				$c      = new \WC_Coupon( $id );
+				$status = (string) get_post_status( $id );
+				yield array(
+					$c->get_code(),
+					$types[ $c->get_discount_type() ] ?? $c->get_discount_type(),
+					Csv::number( $c->get_amount(), wc_get_price_decimals() ),
+					$c->get_date_expires() ? $c->get_date_expires()->date_i18n( 'Y-m-d' ) : '',
+					(int) $c->get_usage_count(),
+					(int) $c->get_usage_limit(),
+					$statuses[ $status ] ?? $status,
+				);
+			}
+			if ( function_exists( 'wp_cache_flush_runtime' ) ) {
+				wp_cache_flush_runtime();
+			}
+		} while ( count( $ids ) === 500 );
 	}
 
 	/**
