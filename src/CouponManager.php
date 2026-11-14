@@ -40,6 +40,9 @@ final class CouponManager {
 		foreach ( array( 'pending', 'on-hold', 'processing', 'completed' ) as $status ) {
 			add_action( 'woocommerce_order_status_' . $status, array( $this, 'check_single_use_conflicts' ), 9, 2 );
 		}
+		// WooCommerce before 9.x keeps the coupon usage of a failed order counted, so the check above skips it: an
+		// unpaid order that is paid now is checked once more for vouchers voided meanwhile (before order_status_changed()).
+		add_action( 'woocommerce_order_status_changed', array( $this, 'check_single_use_conflicts_on_payment' ), 5, 4 );
 		add_action( 'woocommerce_decrease_coupon_usage_count', array( $this, 'usage_decreased' ), 10, 3 );
 		// WooCommerce gives coupon uses back on "Cancelled" (priority 10): with "Restore balance on cancellation"
 		// off, single-use vouchers stay redeemed like balances.
@@ -433,7 +436,7 @@ final class CouponManager {
 	public function reserve_store_api_order( $order ): void {
 		try {
 			if ( $order instanceof \WC_Order ) {
-				$conflicts = $this->single_use_conflicts( $order );
+				$conflicts = $this->single_use_conflicts( $order, true );
 				if ( $conflicts ) {
 					throw new \Exception( esc_html( self::single_use_conflict_message( $conflicts[0]['voucher'] ) ) );
 				}
@@ -452,7 +455,7 @@ final class CouponManager {
 	 */
 	public function reserve_retry_order( $order ): void {
 		if ( $order instanceof \WC_Order ) {
-			foreach ( $this->single_use_conflicts( $order ) as $conflict ) {
+			foreach ( $this->single_use_conflicts( $order, true ) as $conflict ) {
 				wc_add_notice( self::single_use_conflict_message( $conflict['voucher'] ), 'error' );
 			}
 		}
@@ -1705,23 +1708,30 @@ final class CouponManager {
 	 * Single-use vouchers on an order that has not counted its coupons yet (unpaid, failed, or paid right now)
 	 * which were voided, redeemed or reserved elsewhere since the checkout.
 	 *
+	 * @param bool $unpaid The order was not paid yet (pay form, or paid right now from pending/failed). Older
+	 *                     WooCommerce versions keep the coupon usage of a failed order counted, so such an order
+	 *                     has its vouchers counted although it never paid: a voided voucher still conflicts.
 	 * @return array<int, array{voucher: Voucher, item: \WC_Order_Item_Coupon}>
 	 */
-	public function single_use_conflicts( \WC_Order $order ): array {
+	public function single_use_conflicts( \WC_Order $order, bool $unpaid = false ): array {
 		if ( $order instanceof \WC_Order_Refund ) {
 			return array();
 		}
-		$store = $order->get_data_store();
-		if ( ! $store->has_callable( 'get_recorded_coupon_usage_counts' ) || $store->get_recorded_coupon_usage_counts( $order ) ) {
+		$store    = $order->get_data_store();
+		$recorded = ! $store->has_callable( 'get_recorded_coupon_usage_counts' ) || $store->get_recorded_coupon_usage_counts( $order );
+		if ( $recorded && ! $unpaid ) {
 			return array(); // Counted already: the voucher was (or is still) redeemed by this order.
 		}
-		$out = array();
+		// Counted by this unpaid order: it holds the voucher itself (redeemed or reserved by it), only a voided
+		// voucher is gone.
+		$statuses = $recorded ? array( Voucher::STATUS_VOID ) : array( Voucher::STATUS_VOID, Voucher::STATUS_REDEEMED, Voucher::STATUS_RESERVED );
+		$out      = array();
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
 			/** @var \WC_Order_Item_Coupon $item */
 			$code = wc_format_coupon_code( $item->get_code() );
 			// A voided voucher's coupon is a draft that WooCommerce no longer finds by code: look up the voucher.
 			$voucher = $this->find_voucher_for_code( $code ) ?? $this->repo->get_by_code( strtoupper( $code ) );
-			if ( $voucher && ! $voucher->is_multi_use() && in_array( $voucher->status, array( Voucher::STATUS_VOID, Voucher::STATUS_REDEEMED, Voucher::STATUS_RESERVED ), true ) ) {
+			if ( $voucher && ! $voucher->is_multi_use() && in_array( $voucher->status, $statuses, true ) ) {
 				$out[] = array( 'voucher' => $voucher, 'item' => $item );
 			}
 		}
@@ -1739,6 +1749,23 @@ final class CouponManager {
 			return;
 		}
 		foreach ( $this->single_use_conflicts( $order ) as $conflict ) {
+			$this->flag_double_use( $order, $conflict['voucher'], $conflict['item'] );
+		}
+	}
+
+	/**
+	 * An unpaid order (pending, failed) that is paid now: vouchers voided meanwhile, also where WooCommerce kept the
+	 * order's coupon usage counted (check_single_use_conflicts() skips those). flag_double_use() runs once per code.
+	 */
+	public function check_single_use_conflicts_on_payment( $order_id, $from, $to, $order = null ): void {
+		if ( ! in_array( $from, array( 'pending', 'failed', 'checkout-draft' ), true ) || ! in_array( $to, array( 'on-hold', 'processing', 'completed' ), true ) ) {
+			return;
+		}
+		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			return;
+		}
+		foreach ( $this->single_use_conflicts( $order, true ) as $conflict ) {
 			$this->flag_double_use( $order, $conflict['voucher'], $conflict['item'] );
 		}
 	}
