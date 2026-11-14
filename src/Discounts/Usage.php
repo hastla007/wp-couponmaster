@@ -146,7 +146,9 @@ final class Usage {
 		if ( ! $keys ) {
 			return 0;
 		}
-		$keys  = array_values( array_map( static fn( $k ) => substr( (string) $k, 0, 200 ), $keys ) );
+		// Plain-text email keys (earlier versions, callers) also count in their stored, hashed form.
+		$keys  = array_values( array_unique( array_merge( array_map( 'strval', $keys ), array_map( static fn( $k ) => self::stored_key( (string) $k ), $keys ) ) ) );
+		$keys  = array_values( array_map( static fn( $k ) => substr( $k, 0, 200 ), $keys ) );
 		$in    = implode( ',', array_fill( 0, count( $keys ), '%s' ) );
 		$count = 0;
 		if ( \VCAP\Install::storage_ready() ) {
