@@ -318,11 +318,15 @@ final class PaymentVouchers {
 		}
 	}
 
-	/** The non-taxable, negative payment line of the voucher with this code. */
+	/**
+	 * The non-taxable, negative payment line of the voucher with this code. Its name shows the code masked
+	 * ("Voucher …7KQ2"): the line appears in order emails, My Account, invoices and order tracking, and whoever sees
+	 * it could otherwise spend the rest of a gift card. The full code is kept in FEE_META only.
+	 */
 	private static function payment_line( string $code, float $amount ): \WC_Order_Item_Fee {
 		$fee = new \WC_Order_Item_Fee();
 		/* translators: %s: voucher code */
-		$fee->set_name( sprintf( __( 'Voucher %s', 'voucher-captain' ), strtoupper( $code ) ) );
+		$fee->set_name( sprintf( __( 'Voucher %s', 'voucher-captain' ), Downloads::masked_code( $code ) ) );
 		$fee->set_tax_status( 'none' );
 		$fee->set_tax_class( '' );
 		$fee->set_total( (string) -abs( $amount ) );

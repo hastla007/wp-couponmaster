@@ -310,6 +310,8 @@ $after_id = WC()->checkout()->create_order( array( 'billing_email' => 'tax-after
 $after    = wc_get_order( $after_id );
 $after_fee = $after ? current( $after->get_items( 'fee' ) ) : null;
 vcap_tax_assert( $after && abs( 60.0 - (float) $after->get_total() ) < 0.01 && abs( 20.0 - (float) $after->get_total_tax() ) < 0.01 && $after_fee && wc_format_coupon_code( $after_card->code ) === $after_fee->get_meta( VCAP\PaymentVouchers::FEE_META ) && abs( 60.0 - (float) VCAP\PaymentVouchers::paid_amount( $after, $after_card->code ) ) < 0.01, 'the order: total 60, VAT 20, a payment line marked with the card code', $after ? array( 'total' => $after->get_total(), 'tax' => $after->get_total_tax() ) : $after_id );
+// The line name appears in emails, My Account and invoices: masked code only (whoever sees it could spend the rest).
+vcap_tax_assert( false === stripos( $after_fee->get_name(), $after_card->code ) && false !== strpos( $after_fee->get_name(), '…' . substr( strtoupper( $after_card->code ), -4 ) ), 'the payment line is named with the masked code ("Voucher …ABCD"), the full code only in its meta', $after_fee->get_name() );
 $after_recalc = wc_get_order( $after_id );
 $after_recalc->calculate_totals( true );
 $after_recalc = wc_get_order( $after_id );
