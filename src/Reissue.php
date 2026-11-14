@@ -233,7 +233,6 @@ final class Reissue {
 				'fields'           => 'ids',
 				'posts_per_page'   => 1,
 				'no_found_rows'    => true,
-				'suppress_filters' => true,
 				'meta_key'         => self::PREVIOUS_CODE_META, // phpcs:ignore WordPress.DB.SlowDBQuery -- only for codes no coupon has any more (refund of an order paid before a reissue).
 				'meta_value'       => $code, // phpcs:ignore WordPress.DB.SlowDBQuery
 			)

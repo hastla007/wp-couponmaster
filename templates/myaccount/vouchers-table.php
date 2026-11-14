@@ -40,7 +40,7 @@ $show_order = ! empty( $show_order );
 			<?php
 			$product = $voucher->product();
 			// V7: vouchers held for the security check of a new customer's order show neither code nor PDF yet.
-			$held    = \VCAP\Delivery::is_held( $voucher );
+			$vcap_held    = \VCAP\Delivery::is_held( $voucher );
 			$value   = 'percent' === $voucher->discount_type ? \VCAP\Format::percent( $voucher->initial_amount ) : wc_price( $voucher->initial_amount, array( 'currency' => $voucher->currency ) );
 			if ( $voucher->is_multi_use() ) {
 				/* translators: %s: remaining balance */
@@ -55,7 +55,7 @@ $show_order = ! empty( $show_order );
 						<br><small><?php /* translators: %s: recipient name */ printf( esc_html__( 'For %s', 'voucher-captain' ), \VCAP\Shortcodes::esc_html_text( $voucher->recipient_name ) ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_html_text(). ?></small>
 					<?php endif; ?>
 				</td>
-				<td data-title="<?php esc_attr_e( 'Code', 'voucher-captain' ); ?>"><code><?php echo esc_html( $held ? \VCAP\Downloads::masked_code( $voucher->code ) : $voucher->code ); ?></code></td>
+				<td data-title="<?php esc_attr_e( 'Code', 'voucher-captain' ); ?>"><code><?php echo esc_html( $vcap_held ? \VCAP\Downloads::masked_code( $voucher->code ) : $voucher->code ); ?></code></td>
 				<td data-title="<?php esc_attr_e( 'Value', 'voucher-captain' ); ?>"><?php echo wp_kses_post( $value ); ?></td>
 				<td data-title="<?php esc_attr_e( 'Status', 'voucher-captain' ); ?>">
 					<?php echo esc_html( $voucher->status_label() ); ?>
@@ -74,7 +74,7 @@ $show_order = ! empty( $show_order );
 					<?php if ( '' !== $voucher->terms ) : ?>
 						<details class="vcap-terms"><summary><?php esc_html_e( 'Redemption conditions', 'voucher-captain' ); ?></summary><?php echo wp_kses_post( wpautop( esc_html( $voucher->terms ) ) ); ?></details>
 					<?php endif; ?>
-					<?php if ( $held && $voucher->delivery_at ) : ?>
+					<?php if ( $vcap_held && $voucher->delivery_at ) : ?>
 						<br><small class="vcap-held"><?php /* translators: %s: date */ printf( esc_html__( 'Security check: the code is delivered and redeemable from %s.', 'voucher-captain' ), esc_html( \VCAP\LocalDate::from_utc( $voucher->delivery_at, vcap()->settings->date_format() . ' H:i' ) ) ); ?></small>
 					<?php elseif ( \VCAP\Voucher::STATUS_SCHEDULED === $voucher->status && $voucher->delivery_at ) : ?>
 						<br><small><?php /* translators: %s: date */ printf( esc_html__( 'Delivery on %s', 'voucher-captain' ), esc_html( \VCAP\LocalDate::from_utc( $voucher->delivery_at, vcap()->settings->date_format() ) ) ); ?></small>
@@ -97,7 +97,7 @@ $show_order = ! empty( $show_order );
 					/** Extra actions of connectors (e.g. "Exchange for tickets", "Send tickets again"). */
 					do_action( 'vcap_account_voucher_actions', $voucher );
 					?>
-					<?php if ( \VCAP\Voucher::STATUS_VOID !== $voucher->status && ! $held ) : ?>
+					<?php if ( \VCAP\Voucher::STATUS_VOID !== $voucher->status && ! $vcap_held ) : ?>
 						<a class="<?php echo esc_attr( \VCAP\Shortcodes::button_class( 'woocommerce-button button vcap-download-button' ) ); ?>" href="<?php echo esc_url( $downloads->signed_url( $voucher ) ); ?>" target="_blank" rel="noopener">
 							<?php esc_html_e( 'Download PDF', 'voucher-captain' ); ?><?php echo \VCAP\Shortcodes::voucher_suffix( $voucher->code ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in voucher_suffix(). ?>
 						</a>
