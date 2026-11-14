@@ -606,6 +606,18 @@ foreach ( $aside as $aside_id ) {
 false === $keep_page ? delete_option( 'vcap_redeem_page_id' ) : update_option( 'vcap_redeem_page_id', $keep_page );
 delete_transient( 'vcap_redeem_page_guess' );
 
+// U9: conditions per country count as conditions; each step can be marked as done by hand.
+$u9_keep = array( 'vcap_default_terms' => get_option( 'vcap_default_terms', false ), 'vcap_terms_by_country' => get_option( 'vcap_terms_by_country', false ), 'vcap_issue_statuses' => get_option( 'vcap_issue_statuses', false ), VCAP\Admin\Onboarding::DONE => get_option( VCAP\Admin\Onboarding::DONE, false ) );
+delete_option( 'vcap_default_terms' );
+delete_option( VCAP\Admin\Onboarding::DONE );
+update_option( 'vcap_terms_by_country', 'AT: Gültig 30 Jahre.' );
+vcap_ps_assert( VCAP\Admin\Onboarding::steps()['terms']['done'], 'U9: a shop with only country conditions ("AT: …") has the conditions step done' );
+delete_option( 'vcap_issue_statuses' );
+vcap_ps_assert( ! VCAP\Admin\Onboarding::steps()['issue_status']['done'] && VCAP\Admin\Onboarding::mark_done( 'issue_status' ) && VCAP\Admin\Onboarding::steps()['issue_status']['done'] && ! VCAP\Admin\Onboarding::mark_done( 'nonsense' ), 'U9: a checklist step can be marked as done on its own (unknown steps are refused)' );
+foreach ( $u9_keep as $u9_option => $u9_value ) {
+	false === $u9_value ? delete_option( $u9_option ) : update_option( $u9_option, $u9_value );
+}
+
 false === $keep_terms ? delete_option( 'vcap_default_terms' ) : update_option( 'vcap_default_terms', $keep_terms );
 false === $keep_rule ? delete_option( 'vcap_default_expiry_rule' ) : update_option( 'vcap_default_expiry_rule', $keep_rule );
 echo "Voucher Captain product setup checks passed.\n";

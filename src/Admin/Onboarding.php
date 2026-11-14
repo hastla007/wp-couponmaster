@@ -11,6 +11,8 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Onboarding {
 	public const DISMISSED = 'vcap_onboarding_dismissed';
+	/** Steps the admin marked as done by hand (U9), e.g. "issue status" checked and left at the default. */
+	public const DONE = 'vcap_onboarding_done';
 
 	public function register(): void {
 		add_action( 'admin_notices', array( $this, 'notice' ) );
@@ -48,7 +50,7 @@ final class Onboarding {
 				'meta_value'  => 'yes', // phpcs:ignore WordPress.DB.SlowDBQuery
 			)
 		);
-		return array(
+		$steps = array(
 			'redeem_page'  => array(
 				'label'  => __( 'A page where customers check and redeem their voucher codes (links in emails and PDFs lead there)', 'voucher-captain' ),
 				'done'   => '' !== Shortcodes::redeem_url(),
@@ -79,12 +81,51 @@ final class Onboarding {
 			),
 			'terms'        => array(
 				'label'  => __( 'Redemption conditions printed on vouchers and shown in emails (have them checked legally)', 'voucher-captain' ),
-				'done'   => '' !== trim( (string) get_option( 'vcap_default_terms', '' ) ),
+				'done'   => self::has_terms(),
 				'action' => '',
 				'url'    => $settings,
 				'button' => __( 'Open settings', 'voucher-captain' ),
 			),
 		);
+		$manual = (array) get_option( self::DONE, array() );
+		foreach ( $steps as $key => $step ) {
+			$steps[ $key ]['done'] = $step['done'] || in_array( $key, $manual, true );
+		}
+		return $steps;
+	}
+
+	/**
+	 * U9: redemption conditions exist where ProductConfig::terms() looks for them – general conditions, conditions
+	 * per country (e.g. only "AT: …") or a voucher product's own conditions.
+	 */
+	private static function has_terms(): bool {
+		if ( '' !== trim( (string) get_option( 'vcap_default_terms', '' ) ) || \VCAP\ProductConfig::terms_by_country( (string) get_option( 'vcap_terms_by_country', '' ) ) ) {
+			return true;
+		}
+		return (bool) get_posts(
+			array(
+				'post_type'   => array( 'product', 'product_variation' ),
+				'post_status' => array( 'publish', 'draft', 'private' ),
+				'numberposts' => 1,
+				'fields'      => 'ids',
+				'meta_query'  => array( // phpcs:ignore WordPress.DB.SlowDBQuery
+					array( 'key' => '_vcap_redemption_terms', 'value' => '', 'compare' => '!=' ),
+				),
+			)
+		);
+	}
+
+	/** U9: mark one step of the checklist as done by hand. */
+	public static function mark_done( string $step ): bool {
+		if ( ! isset( self::steps()[ $step ] ) ) {
+			return false;
+		}
+		$manual = (array) get_option( self::DONE, array() );
+		if ( ! in_array( $step, $manual, true ) ) {
+			$manual[] = $step;
+			update_option( self::DONE, array_values( $manual ), false );
+		}
+		return true;
 	}
 
 	public function notice(): void {
@@ -100,7 +141,7 @@ final class Onboarding {
 			return;
 		}
 		echo '<div class="notice notice-info vcap-onboarding"><p><strong>' . esc_html__( 'Voucher Captain – first steps', 'voucher-captain' ) . '</strong></p><ul style="list-style:none;margin-left:0">';
-		foreach ( $steps as $step ) {
+		foreach ( $steps as $key => $step ) {
 			echo '<li>' . ( $step['done'] ? '<span aria-hidden="true">&#10003;</span> <span class="screen-reader-text">' . esc_html__( 'Done:', 'voucher-captain' ) . '</span>' : '<span aria-hidden="true">&#9675;</span> ' ) . esc_html( $step['label'] );
 			if ( ! $step['done'] ) {
 				if ( '' !== $step['action'] ) {
@@ -108,6 +149,7 @@ final class Onboarding {
 				} else {
 					echo ' <a class="button button-small" href="' . esc_url( $step['url'] ) . '">' . esc_html( $step['button'] ) . '</a>';
 				}
+				echo ' ' . $this->button( 'done_' . $key, __( 'Mark as done', 'voucher-captain' ), 'button-link' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in button().
 			}
 			echo '</li>';
 		}
@@ -128,6 +170,8 @@ final class Onboarding {
 		$back = wp_get_referer() ?: admin_url();
 		if ( 'dismiss' === $do ) {
 			update_option( self::DISMISSED, 'yes', false );
+		} elseif ( str_starts_with( $do, 'done_' ) ) {
+			self::mark_done( substr( $do, 5 ) );
 		} elseif ( in_array( $do, array( 'redeem_page', 'balance_page' ), true ) ) {
 			$existing = self::existing_page( $do );
 			$page     = $existing ?: self::create_page( $do );
