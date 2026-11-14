@@ -205,12 +205,6 @@ msgstr "Gutschein-E-Mails erneut senden"
 msgid "Generate vouchers: all vouchers for this order already exist."
 msgstr "Gutscheine erzeugen: Alle Gutscheine für diese Bestellung sind bereits vorhanden."
 
-#. translators: %d: number of vouchers
-#: src/Admin/OrderAdmin.php:106
-#, php-format
-msgid "Voucher emails resent for %d voucher(s)."
-msgstr "Gutschein-E-Mails für %d Gutschein(e) erneut gesendet."
-
 #: src/Admin/Scanner.php:24 src/Admin/Scanner.php:53
 msgid "Start camera"
 msgstr "Kamera starten"
@@ -806,10 +800,6 @@ msgstr "E-Mail-Text"
 #: src/Emails/VoucherEmail.php:131
 msgid "Additional recipients"
 msgstr "Zusätzliche Empfänger"
-
-#: src/Emails/VoucherEmail.php:133
-msgid "Comma separated addresses that also receive this email (e.g. for your records)."
-msgstr "Kommagetrennte Adressen, die diese E-Mail ebenfalls erhalten (z. B. für Ihre Unterlagen)."
 
 #: src/Emails/VoucherEmail.php:138
 msgid "Attach PDF"
@@ -1704,10 +1694,6 @@ msgstr "Für: {recipient_name}"
 #: src/TemplatePostType.php:109
 msgid "Valid until {expiry_date}"
 msgstr "Gültig bis {expiry_date}"
-
-#: src/TemplatePostType.php:123
-msgid "Guest: {recipient_name}"
-msgstr "Gast: {recipient_name}"
 
 #: src/TemplatePostType.php:124
 msgid "Admissions: {ticket_admissions}"
@@ -3269,9 +3255,6 @@ msgstr "Partner wurde von der Kampagne entfernt."
 msgid "Partner saved. New orders with codes of this campaign are credited to the partner."
 msgstr "Partner gespeichert. Neue Bestellungen mit Codes dieser Kampagne werden dem Partner gutgeschrieben."
 
-msgid "%1$d ticket(s), Pass Captain order %2$s, sent to %3$s"
-msgstr "%1$d Ticket(s), Pass-Captain-Bestellung %2$s, gesendet an %3$s"
-
 msgid "Exchange for tickets"
 msgstr "In Tickets umwandeln"
 
@@ -3673,12 +3656,6 @@ msgstr "Sitzung abgelaufen – bitte laden Sie die Seite neu und scannen Sie ern
 
 msgid "This voucher reservation was already released. Please apply the voucher again."
 msgstr "Diese Gutschein-Reservierung wurde bereits freigegeben. Bitte lösen Sie den Gutschein erneut ein."
-
-msgid "This voucher was already exchanged on %1$s: %2$d ticket(s) went to %3$s."
-msgstr "Dieser Gutschein wurde bereits am %1$s eingelöst: %2$d Ticket(s) gingen an %3$s."
-
-msgid "This voucher was already exchanged: %1$d ticket(s) went to %2$s."
-msgstr "Dieser Gutschein wurde bereits eingelöst: %1$d Ticket(s) gingen an %2$s."
 
 msgid "At the counter (scanner)"
 msgstr "Vor Ort (Scanner)"
@@ -5385,3 +5362,74 @@ msgstr[1] "Eingecheckt (%d Einlässe)"
 
 msgid "Redemption cancelled (value booked back)"
 msgstr "Einlösung storniert (Wert zurückgebucht)"
+
+msgctxt "percentage"
+msgid "%s%%"
+msgstr "%s %%"
+
+msgid "Voucher emails resent for %d voucher."
+msgid_plural "Voucher emails resent for %d vouchers."
+msgstr[0] "Gutschein-E-Mail für %d Gutschein erneut gesendet."
+msgstr[1] "Gutschein-E-Mails für %d Gutscheine erneut gesendet."
+
+msgid "%1$d ticket, Pass Captain order %2$s, sent to %3$s"
+msgid_plural "%1$d tickets, Pass Captain order %2$s, sent to %3$s"
+msgstr[0] "%1$d Ticket, Pass-Captain-Bestellung %2$s, gesendet an %3$s"
+msgstr[1] "%1$d Tickets, Pass-Captain-Bestellung %2$s, gesendet an %3$s"
+
+msgid "This voucher was already exchanged on %1$s: %2$d ticket went to %3$s."
+msgid_plural "This voucher was already exchanged on %1$s: %2$d tickets went to %3$s."
+msgstr[0] "Dieser Gutschein wurde bereits am %1$s eingelöst: %2$d Ticket ging an %3$s."
+msgstr[1] "Dieser Gutschein wurde bereits am %1$s eingelöst: %2$d Tickets gingen an %3$s."
+
+msgid "This voucher was already exchanged: %1$d ticket went to %2$s."
+msgid_plural "This voucher was already exchanged: %1$d tickets went to %2$s."
+msgstr[0] "Dieser Gutschein wurde bereits eingelöst: %1$d Ticket ging an %2$s."
+msgstr[1] "Dieser Gutschein wurde bereits eingelöst: %1$d Tickets gingen an %2$s."
+
+msgid "Your gift for {recipient_name} is on its way"
+msgstr "Ihr Geschenk für {recipient_name} ist unterwegs"
+
+msgid "Your gift from {site_title} is on its way"
+msgstr "Ihr Geschenk von {site_title} ist unterwegs"
+
+msgid "Hi {buyer_name}, your gift for {recipient_name} is on its way to {recipient_email}. This copy is for your records."
+msgstr "Hallo {buyer_name}, Ihr Geschenk für {recipient_name} ist unterwegs an {recipient_email}. Diese Kopie ist für Ihre Unterlagen."
+
+msgid "Hi {buyer_name}, your gift is on its way to {recipient_email}. This copy is for your records."
+msgstr "Hallo {buyer_name}, Ihr Geschenk ist unterwegs an {recipient_email}. Diese Kopie ist für Ihre Unterlagen."
+
+msgid "Hello, your gift for {recipient_name} is on its way to {recipient_email}. This copy is for your records."
+msgstr "Hallo, Ihr Geschenk für {recipient_name} ist unterwegs an {recipient_email}. Diese Kopie ist für Ihre Unterlagen."
+
+msgid "Hello, your gift is on its way to {recipient_email}. This copy is for your records."
+msgstr "Hallo, Ihr Geschenk ist unterwegs an {recipient_email}. Diese Kopie ist für Ihre Unterlagen."
+
+msgid "Comma separated addresses that each receive their own copy of this email (e.g. for your records). Whether the voucher counts as delivered depends only on the customer's address."
+msgstr "Kommagetrennte Adressen, die jeweils eine eigene Kopie dieser E-Mail erhalten (z. B. für Ihre Unterlagen). Ob der Gutschein als zugestellt gilt, hängt nur von der Adresse des Kunden ab."
+
+msgid "The voucher is sent by email %d day after the purchase."
+msgid_plural "The voucher is sent by email %d days after the purchase."
+msgstr[0] "Der Gutschein wird %d Tag nach dem Kauf per E-Mail versendet."
+msgstr[1] "Der Gutschein wird %d Tage nach dem Kauf per E-Mail versendet."
+
+msgid "The voucher is sent by email on %s."
+msgstr "Der Gutschein wird am %s per E-Mail versendet."
+
+msgid "The voucher will be emailed to %1$s on %2$s."
+msgstr "Der Gutschein wird am %2$s per E-Mail an %1$s gesendet."
+
+msgid "The voucher will be emailed to %s right after payment."
+msgstr "Der Gutschein wird direkt nach der Zahlung per E-Mail an %s gesendet."
+
+msgid "The voucher will be emailed to you on %s."
+msgstr "Der Gutschein wird Ihnen am %s per E-Mail zugesendet."
+
+msgid "The voucher will be emailed to you right after payment."
+msgstr "Der Gutschein wird Ihnen direkt nach der Zahlung per E-Mail zugesendet."
+
+msgid "Holder name (recipient, else buyer)"
+msgstr "Name des Inhabers (Empfänger, sonst Käufer)"
+
+msgid "Guest: {holder_name}"
+msgstr "Gast: {holder_name}"

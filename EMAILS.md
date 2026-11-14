@@ -27,9 +27,15 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 |---|---|---|
 | Voucher (buyer) | Gutschein (Käufer) | Gutschein (Käufer) |
 | Sent to the customer with their purchased voucher, gift card or ticket. | Wird mit dem gekauften Gutschein, der Geschenkkarte oder dem Ticket an den Kunden gesendet. | Wird mit dem gekauften Gutschein, der Geschenkkarte oder dem Ticket an den Kunden gesendet. |
+| Your gift for {recipient_name} is on its way | Ihr Geschenk für {recipient_name} ist unterwegs | Ihr Geschenk für {recipient_name} ist unterwegs |
+| Your gift from {site_title} is on its way | Ihr Geschenk von {site_title} ist unterwegs | Ihr Geschenk von {site_title} ist unterwegs |
 | Your voucher from {site_title} | Ihr Gutschein von {site_title} | Ihr Gutschein von {site_title} |
 | Your voucher {coupon_code} | Ihr Gutschein {coupon_code} | Ihr Gutschein {coupon_code} |
 | Hi {buyer_name}, thank you for your order #{order_number}. Your voucher for {product_name} is ready. | Hallo {buyer_name}, vielen Dank für Ihre Bestellung #{order_number}. Ihr Gutschein für {product_name} ist bereit. | Hallo {buyer_name}, vielen Dank für Ihre Bestellung #{order_number}. Ihr Gutschein für {product_name} ist bereit. |
+| Hi {buyer_name}, your gift for {recipient_name} is on its way to {recipient_email}. This copy is for your records. | Hallo {buyer_name}, Ihr Geschenk für {recipient_name} ist unterwegs an {recipient_email}. Diese Kopie ist für Ihre Unterlagen. | Hallo {buyer_name}, Ihr Geschenk für {recipient_name} ist unterwegs an {recipient_email}. Diese Kopie ist für Ihre Unterlagen. |
+| Hi {buyer_name}, your gift is on its way to {recipient_email}. This copy is for your records. | Hallo {buyer_name}, Ihr Geschenk ist unterwegs an {recipient_email}. Diese Kopie ist für Ihre Unterlagen. | Hallo {buyer_name}, Ihr Geschenk ist unterwegs an {recipient_email}. Diese Kopie ist für Ihre Unterlagen. |
+| Hello, your gift for {recipient_name} is on its way to {recipient_email}. This copy is for your records. | Hallo, Ihr Geschenk für {recipient_name} ist unterwegs an {recipient_email}. Diese Kopie ist für Ihre Unterlagen. | Hallo, Ihr Geschenk für {recipient_name} ist unterwegs an {recipient_email}. Diese Kopie ist für Ihre Unterlagen. |
+| Hello, your gift is on its way to {recipient_email}. This copy is for your records. | Hallo, Ihr Geschenk ist unterwegs an {recipient_email}. Diese Kopie ist für Ihre Unterlagen. | Hallo, Ihr Geschenk ist unterwegs an {recipient_email}. Diese Kopie ist für Ihre Unterlagen. |
 | Hello, thank you for your order #{order_number}. Your voucher for {product_name} is ready. | Hallo, vielen Dank für Ihre Bestellung #{order_number}. Ihr Gutschein für {product_name} ist bereit. | Hallo, vielen Dank für Ihre Bestellung #{order_number}. Ihr Gutschein für {product_name} ist bereit. |
 | Hi {buyer_name}, your voucher for {product_name} is ready. | Hallo {buyer_name}, Ihr Gutschein für {product_name} ist bereit. | Hallo {buyer_name}, Ihr Gutschein für {product_name} ist bereit. |
 | Hello, your voucher for {product_name} is ready. | Hallo, Ihr Gutschein für {product_name} ist bereit. | Hallo, Ihr Gutschein für {product_name} ist bereit. |
@@ -83,7 +89,7 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) |
 |---|---|---|
 | Additional recipients | Zusätzliche Empfänger | Zusätzliche Empfänger |
-| Comma separated addresses that also receive this email (e.g. for your records). | Kommagetrennte Adressen, die diese E-Mail ebenfalls erhalten (z. B. für Ihre Unterlagen). | Kommagetrennte Adressen, die diese E-Mail ebenfalls erhalten (z. B. für Ihre Unterlagen). |
+| Comma separated addresses that each receive their own copy of this email (e.g. for your records). Whether the voucher counts as delivered depends only on the customer's address. | Kommagetrennte Adressen, die jeweils eine eigene Kopie dieser E-Mail erhalten (z. B. für Ihre Unterlagen). Ob der Gutschein als zugestellt gilt, hängt nur von der Adresse des Kunden ab. | Kommagetrennte Adressen, die jeweils eine eigene Kopie dieser E-Mail erhalten (z. B. für Ihre Unterlagen). Ob der Gutschein als zugestellt gilt, hängt nur von der Adresse des Kunden ab. |
 | Attach PDF | PDF anhängen | PDF anhängen |
 | Attach the voucher PDF | Gutschein-PDF anhängen | Gutschein-PDF anhängen |
 
@@ -92,10 +98,10 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) |
 |---|---|---|
 | Value: %s | Wert: %s | Wert: %s |
+| What happens next | So geht es weiter | So geht es weiter |
 | Code: %s | Code: %s | Code: %s |
 | Valid until %s | Gültig bis %s | Gültig bis %s |
 | Download: | Download: | Download: |
-| What happens next | So geht es weiter | So geht es weiter |
 | Redeem now: | Jetzt einlösen: | Jetzt einlösen: |
 
 ## `templates/emails/voucher.php`
@@ -108,4 +114,4 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 | Redeem now | Jetzt einlösen | Jetzt einlösen |
 | Enter the code in the cart or at checkout on %s to redeem it. | Geben Sie den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. | Geben Sie den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. |
 
-61 Texte.
+67 Texte.
