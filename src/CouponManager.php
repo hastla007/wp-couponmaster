@@ -41,6 +41,10 @@ final class CouponManager {
 			add_action( 'woocommerce_order_status_' . $status, array( $this, 'check_single_use_conflicts' ), 9, 2 );
 		}
 		add_action( 'woocommerce_decrease_coupon_usage_count', array( $this, 'usage_decreased' ), 10, 3 );
+		// WooCommerce gives coupon uses back on "Cancelled" (priority 10): with "Restore balance on cancellation"
+		// off, single-use vouchers stay redeemed like balances.
+		add_action( 'woocommerce_order_status_cancelled', array( $this, 'keep_single_use_start' ), 1, 2 );
+		add_action( 'woocommerce_order_status_cancelled', array( $this, 'keep_single_use_end' ), 99, 2 );
 		add_action( 'woocommerce_cart_totals_after_order_total', array( $this, 'cart_balance_notice' ) );
 		// Free balance holds of unpaid orders that are trashed, deleted or abandoned.
 		add_action( 'woocommerce_trash_order', array( $this, 'release_deleted_order' ), 5 );
@@ -1280,6 +1284,9 @@ final class CouponManager {
 			$this->release_order_reservations( $order );
 			if ( $this->settings->yes( 'vcap_restore_on_cancel' ) ) {
 				$this->restore_order( $order );
+				if ( 'refunded' === $to ) {
+					$this->return_single_use( $order );
+				}
 			}
 		}
 		if ( isset( $this->hold_after[ $order->get_id() ] ) ) {
@@ -1385,10 +1392,19 @@ final class CouponManager {
 		}
 	}
 
-	private function restore_balance_atomic( Voucher $voucher, float $amount, int $order_id, string $note ): bool {
+	/**
+	 * @param float $amount  Amount to book back.
+	 * @param float $charged Amount the order was charged (null: $amount); differs when part of it was booked back by
+	 *                       hand already (event "returned", ignored when looking for the charge).
+	 */
+	private function restore_balance_atomic( Voucher $voucher, float $amount, int $order_id, string $note, ?float $charged = null ): bool {
 		global $wpdb;
-		$table  = Install::tables()['vouchers'];
-		$events = Install::tables()['events'];
+		$table   = Install::tables()['vouchers'];
+		$events  = Install::tables()['events'];
+		$charged = $charged ?? $amount;
+		if ( $amount <= 0 && $charged > 0 && $order_id > 0 ) {
+			return true; // Booked back completely by hand already.
+		}
 		if ( $amount <= 0 || $order_id <= 0 || ! Install::tables_support_transactions() || false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			return false;
 		}
@@ -1400,9 +1416,11 @@ final class CouponManager {
 			}
 			$latest = $wpdb->get_row(
 				$wpdb->prepare(
-					"SELECT event, amount FROM {$events} WHERE voucher_id = %d AND order_id = %d ORDER BY id DESC LIMIT 1",
+					"SELECT event, amount FROM {$events} WHERE voucher_id = %d AND order_id = %d AND event NOT IN (%s, %s) ORDER BY id DESC LIMIT 1",
 					$voucher->id,
-					$order_id
+					$order_id,
+					self::RETURNED_EVENT,
+					TopUp::EXTENDED_EVENT
 				),
 				ARRAY_A
 			); // phpcs:ignore
@@ -1410,7 +1428,7 @@ final class CouponManager {
 				$wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				return true;
 			}
-			if ( ! $latest || ! in_array( $latest['event'], array( 'committed', 'redeemed' ), true ) || abs( (float) $latest['amount'] - $amount ) >= 0.0001 ) {
+			if ( ! $latest || ! in_array( $latest['event'], array( 'committed', 'redeemed' ), true ) || abs( (float) $latest['amount'] - $charged ) >= 0.0001 ) {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				return false;
 			}
@@ -1444,16 +1462,23 @@ final class CouponManager {
 		if ( ! $applied ) {
 			return;
 		}
+		// Parts already booked back by hand (partial return, OrderReturn): only the rest goes back now.
+		$returned = self::order_map( $order, self::RETURNED_META );
 		$restored = 0;
 		foreach ( $applied as $code => $amount ) {
 			$voucher = $this->find_voucher_for_code( (string) $code );
+			$back    = (float) $amount - (float) ( $returned[ $code ] ?? 0 );
 			if ( $voucher && $this->restore_balance_atomic(
 				$voucher,
-				(float) $amount,
+				$back,
 				$order->get_id(),
-				sprintf( /* translators: %s: order number */ __( 'Order #%s cancelled or refunded', 'voucher-captain' ), $order->get_order_number() )
+				sprintf( /* translators: %s: order number */ __( 'Order #%s cancelled or refunded', 'voucher-captain' ), $order->get_order_number() ),
+				(float) $amount
 			) ) {
 				++$restored;
+				if ( $back > 0 ) {
+					self::check_restored_card( $this->repo, $order, $voucher, $back );
+				}
 			}
 		}
 		if ( $restored === count( $applied ) ) {
@@ -1463,6 +1488,112 @@ final class CouponManager {
 			$order->add_order_note( __( 'Some voucher balances could not be restored. Review this order and retry the refund handling.', 'voucher-captain' ) );
 		}
 	}
+
+	/** Order meta: amount per code booked back onto vouchers by hand (OrderReturn), code => amount. */
+	public const RETURNED_META = '_vcap_returned_to_voucher';
+	/** Ledger event: part of an order's charge booked back onto the voucher by hand (partial return). */
+	public const RETURNED_EVENT = 'returned';
+
+	/**
+	 * Value booked back onto a card that has expired or was cancelled: the customer cannot use it, so it must not
+	 * go there silently. Filter "vcap_restore_extension_days" (default 0) extends an expired card by that many days
+	 * from now; otherwise – and always for a cancelled card – the order gets a note and the shop a notice
+	 * (Attention): extend the validity on the voucher screen, or pay the amount back (money or store credit).
+	 */
+	public static function check_restored_card( VoucherRepository $repo, \WC_Order $order, Voucher $voucher, float $amount ): void {
+		$card = $repo->get( $voucher->id ) ?? $voucher;
+		$void = Voucher::STATUS_VOID === $card->status;
+		if ( ! $void && ! $card->is_expired() && Voucher::STATUS_EXPIRED !== $card->status ) {
+			return;
+		}
+		$days = $void ? 0 : max( 0, (int) apply_filters( 'vcap_restore_extension_days', 0, $card, $order ) );
+		/* translators: %s: order number */
+		if ( $days > 0 && TopUp::extend_validity( $repo, $card, gmdate( 'Y-m-d H:i:s', time() + $days * DAY_IN_SECONDS ), sprintf( __( 'Balance of order #%s booked back', 'voucher-captain' ), $order->get_order_number() ), $order->get_id() ) ) {
+			/* translators: 1: voucher code, 2: expiry date */
+			$order->add_order_note( sprintf( __( 'Voucher %1$s had expired: its validity was extended to %2$s so the booked-back amount can be used.', 'voucher-captain' ), $card->code, wp_date( (string) get_option( 'date_format' ), (int) strtotime( $card->expires_at . ' UTC' ) ) ) );
+			return;
+		}
+		$money = wp_strip_all_tags( wc_price( $amount, array( 'currency' => $card->currency ) ) );
+		$text  = sprintf(
+			$void
+				/* translators: 1: amount, 2: voucher code */
+				? __( '%1$s were booked back onto voucher %2$s, but it is cancelled: the customer cannot use it. Reactivate it, or pay the amount back as money or store credit.', 'voucher-captain' )
+				/* translators: 1: amount, 2: voucher code */
+				: __( '%1$s were booked back onto voucher %2$s, but it has expired: the customer cannot use it. Extend its validity on the voucher screen, or pay the amount back as money or store credit.', 'voucher-captain' ),
+			$money,
+			$card->code
+		);
+		$order->add_order_note( $text );
+		Attention::add( $order->get_id(), 'restored:' . $card->id, $text );
+	}
+
+	/**
+	 * Fully refunded order: WooCommerce gives coupon uses back only for cancelled orders, so single-use vouchers
+	 * of the order are given back here (once per code): usage count lowered, voucher active again
+	 * (usage_decreased()).
+	 */
+	private function return_single_use( \WC_Order $order ): void {
+		$data_store = $order->get_data_store();
+		if ( method_exists( $data_store, 'get_recorded_coupon_usage_counts' ) && ! $data_store->get_recorded_coupon_usage_counts( $order ) ) {
+			return; // WooCommerce counted no use for this order (or gave it back already).
+		}
+		$done  = self::order_map( $order, '_vcap_single_use_returned' );
+		$codes = array();
+		foreach ( $order->get_items( 'coupon' ) as $item ) {
+			$code    = wc_format_coupon_code( $item->get_code() );
+			$voucher = isset( $done[ $code ] ) ? null : $this->find_voucher_for_code( $code );
+			if ( ! $voucher || $voucher->is_multi_use() || ! $voucher->coupon_id ) {
+				continue;
+			}
+			$coupon = new \WC_Coupon( $voucher->coupon_id );
+			if ( ! $coupon->get_id() || $coupon->get_usage_count() < 1 ) {
+				continue;
+			}
+			$coupon->decrease_usage_count( $order->get_customer_id() ? (string) $order->get_customer_id() : (string) $order->get_billing_email() );
+			$done[ $code ] = 1;
+			$codes[]       = $voucher->code;
+			if ( Voucher::STATUS_VOID !== $voucher->status ) {
+				self::check_restored_card( $this->repo, $order, $voucher, (float) $voucher->initial_amount );
+			}
+		}
+		if ( $codes ) {
+			$order->update_meta_data( '_vcap_single_use_returned', $done );
+			$order->save_meta_data();
+			/* translators: %s: voucher codes */
+			$order->add_order_note( sprintf( __( 'Order refunded: single-use vouchers %s can be used again.', 'voucher-captain' ), implode( ', ', $codes ) ) );
+		}
+	}
+
+	/** @var int Order being cancelled right now (WooCommerce gives its coupon uses back), 0 = none. */
+	private int $cancelling = 0;
+	/** @var bool Whether single-use vouchers of that order stay redeemed ("Restore balance on cancellation" off). */
+	private bool $keep_single_use = false;
+	/** @var Voucher[] Single-use vouchers given back (or kept) in that cancellation. */
+	private array $given_back = array();
+
+	public function keep_single_use_start( $order_id, $order = null ): void {
+		$this->cancelling      = (int) $order_id;
+		$this->keep_single_use = ! $this->settings->yes( 'vcap_restore_on_cancel' );
+		$this->given_back      = array();
+	}
+
+	public function keep_single_use_end( $order_id, $order = null ): void {
+		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
+		if ( $this->given_back && $order instanceof \WC_Order ) {
+			if ( $this->keep_single_use ) {
+				/* translators: %s: voucher codes */
+				$order->add_order_note( sprintf( __( 'Order cancelled: single-use vouchers %s stay redeemed ("Restore balance on cancellation" is off).', 'voucher-captain' ), implode( ', ', wp_list_pluck( $this->given_back, 'code' ) ) ) );
+			} else {
+				foreach ( $this->given_back as $voucher ) {
+					self::check_restored_card( $this->repo, $order, $voucher, (float) $voucher->initial_amount );
+				}
+			}
+		}
+		$this->cancelling      = 0;
+		$this->keep_single_use = false;
+		$this->given_back      = array();
+	}
+
 	/** Whether balance vouchers of the order are still not charged. */
 	private function open_balance_coupons( \WC_Order $order, array $applied ): bool {
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
@@ -1629,11 +1760,19 @@ final class CouponManager {
 			return;
 		}
 		$limit = (int) $coupon->get_usage_limit();
+		if ( $this->cancelling && $this->keep_single_use && Voucher::STATUS_REDEEMED === $voucher->status ) {
+			$this->given_back[] = $voucher; // Cancelled while "Restore balance on cancellation" is off: stays redeemed.
+			return;
+		}
 		if ( Voucher::STATUS_REDEEMED === $voucher->status && ( 0 === $limit || (int) $new_count < $limit ) ) {
-			$voucher->status  = Voucher::STATUS_ACTIVE;
+			// An expired voucher stays expired (check_restored_card() tells the shop when an order gave it back).
+			$voucher->status  = $voucher->is_expired() ? Voucher::STATUS_EXPIRED : Voucher::STATUS_ACTIVE;
 			$voucher->balance = $voucher->initial_amount;
 			$this->repo->update( $voucher );
 			$this->repo->log( $voucher->id, 'restored', $voucher->initial_amount, $voucher->balance, (string) $used_by );
+			if ( $this->cancelling ) {
+				$this->given_back[] = $voucher;
+			}
 		}
 	}
 }

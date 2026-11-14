@@ -1085,6 +1085,56 @@ $refused        = $promotion_cart->refuse_removal( null, null, new WP_REST_Reque
 check( 'cart block: removing an automatic promotion is refused with a message', $refused instanceof WP_Error && 'vcap_promotion_not_removable' === $refused->get_error_code() && 400 === $refused->get_error_data()['status'] );
 check( 'cart block: other coupons and routes are not affected', null === $promotion_cart->refuse_removal( null, null, new WP_REST_Request( 'POST', '/wc/store/v1/cart/remove-coupon', array( 'code' => 'summer10' ) ) ) && null === $promotion_cart->refuse_removal( null, null, new WP_REST_Request( 'POST', '/wc/store/v1/cart/apply-coupon', array( 'code' => 'vcap-campaign-12' ) ) ) );
 
+echo "Refunds, returns and top-ups (wave I)\n";
+// T11: a top-up adds its face value like a new gift card – never what was paid after coupons.
+$topup_cfg = ProductConfig::DEFAULTS;
+check( 'top-up value: line price before discounts, gross where prices include tax', array( 119.0, false ) === VCAP\TopUp::line_value( $topup_cfg, 1, 100.0, 19.0, true ) );
+check( 'top-up value in a net-price shop: the net price (like a new gift card), not net + VAT', array( 50.0, false ) === VCAP\TopUp::line_value( $topup_cfg, 1, 50.0, 9.5, false ) );
+check( 'top-up value: a fixed amount per unit, already in the base currency', array( 50.0, true ) === VCAP\TopUp::line_value( array( 'amount_source' => 'fixed', 'amount' => '25' ) + $topup_cfg, 2, 0.0, 0.0, true ) );
+check( 'top-up value: the amount the customer entered, per unit', array( 80.0, false ) === VCAP\TopUp::line_value( array( 'amount_source' => 'custom' ) + $topup_cfg, 2, 0.0, 0.0, true, '40' ) );
+check( 'top-up paid completely with another gift card still adds its value (subtotal, not total)', VCAP\TopUp::line_value( $topup_cfg, 1, 100.0, 0.0, true )[0] > 0 );
+// E4: no top-up onto a card that expires soon.
+$soon             = new Voucher();
+$soon->code       = 'GIFT-SOON';
+$soon->expires_at = gmdate( 'Y-m-d H:i:s', time() + 5 * DAY_IN_SECONDS );
+$later            = clone $soon;
+$later->expires_at = gmdate( 'Y-m-d H:i:s', time() + 60 * DAY_IN_SECONDS );
+$never            = clone $soon;
+$never->expires_at = null;
+check( 'top-up refused for a card valid less than 30 days, with its expiry date', '' !== VCAP\TopUp::remaining_validity_error( $soon ) && str_contains( VCAP\TopUp::remaining_validity_error( $soon ), wp_date( (string) get_option( 'date_format', 'Y-m-d' ), strtotime( $soon->expires_at . ' UTC' ) ) ) );
+check( 'top-up allowed for a card valid long enough or without expiry', '' === VCAP\TopUp::remaining_validity_error( $later ) && '' === VCAP\TopUp::remaining_validity_error( $never ) );
+add_filter( 'vcap_topup_min_remaining_days', static fn() => 0 );
+check( 'minimum remaining validity 0 (filter): any valid card can be topped up', '' === VCAP\TopUp::remaining_validity_error( $soon ) );
+unset( $GLOBALS['vcap_test_filters']['vcap_topup_min_remaining_days'] );
+// E5: the customer confirmation names the masked card, amount, new balance and validity.
+$conf_card             = new Voucher();
+$conf_card->code       = 'GIFT-ABCD-1234';
+$conf_card->balance    = 80.0;
+$conf_card->currency   = 'EUR';
+$conf_card->expires_at = '2029-12-31 22:59:59';
+$conf = VCAP\TopUp::confirmation( $conf_card, 50.0 );
+check( 'top-up confirmation: masked code, amount, new balance, valid until', str_contains( $conf, '…1234' ) && ! str_contains( $conf, 'ABCD' ) && str_contains( $conf, '50,00' ) && str_contains( $conf, '80,00' ) && str_contains( $conf, wp_date( (string) get_option( 'date_format', 'Y-m-d' ), strtotime( '2029-12-31 22:59:59 UTC' ) ) ), $conf );
+// E2: booking back is capped by what the order charged to the voucher and was not booked back yet.
+check( 'book back onto voucher: at most the charged amount minus earlier returns', 20.0 === VCAP\OrderReturn::cap( 50.0, 30.0 ) && 0.0 === VCAP\OrderReturn::cap( 50.0, 60.0 ) && 0.01 === VCAP\OrderReturn::cap( 0.3, 0.29 ) );
+// P7, T6, E5: cases for the shop are kept per order and kind until resolved.
+VCAP\Attention::add( 7, 'void:3', 'Voucher X could not be voided' );
+VCAP\Attention::add( 7, 'void:3', 'Voucher X could not be voided (again)' );
+VCAP\Attention::add( 8, 'topup:9', 'Top-up not booked' );
+$attention = VCAP\Attention::all();
+check( 'attention: one case per order and kind, updated in place', 2 === count( $attention ) && 'Voucher X could not be voided (again)' === ( $attention['7|void3']['text'] ?? '' ) && VCAP\Attention::has( 8, 'topup:9' ), wp_json_encode( $attention ) );
+VCAP\Attention::resolve( 7, 'void:3' );
+check( 'attention: a resolved case is gone, others stay', ! VCAP\Attention::has( 7, 'void:3' ) && VCAP\Attention::has( 8, 'topup:9' ) );
+check( 'attention: Site Health reports open cases as critical', 'critical' === ( new VCAP\Attention() )->test()['status'] );
+VCAP\Attention::resolve( 8, 'topup:9' );
+check( 'attention: no case left – Site Health good', 'good' === ( new VCAP\Attention() )->test()['status'] && array() === VCAP\Attention::all() );
+for ( $i = 1; $i <= 105; $i++ ) {
+	VCAP\Attention::add( $i, 'void:' . $i, 'case ' . $i );
+}
+check( 'attention: at most 100 cases, the oldest dropped first', 100 === count( VCAP\Attention::all() ) && ! VCAP\Attention::has( 1, 'void:1' ) && VCAP\Attention::has( 105, 'void:105' ) );
+delete_option( VCAP\Attention::OPTION );
+// S12: every store-credit refund form gets its own one-time key.
+check( 'refund as store credit: one-time form keys differ', VCAP\StoreCredit::request_key() !== VCAP\StoreCredit::request_key() && 32 === strlen( VCAP\StoreCredit::request_key() ) );
+
 echo "Editions (constants set by bin/build.sh)\n";
 // Premium build in a child process (constants cannot be undone here): no filter unlocks anything.
 $premium_code = <<<'PHP'

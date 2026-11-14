@@ -75,7 +75,9 @@ Nach der Aktivierung werden zwei Startvorlagen angelegt (Geschenkkarte A5 und Gu
 
 **Erstattung.**
 - *Storniert, fehlgeschlagen oder vollständig erstattet:* der in der Bestellung verwendete Gutschein-/Guthabenbetrag wird zurückgebucht (Einstellung *„Guthaben bei Stornierung wiederherstellen“*, Standard an). Ungenutzte Bonusgutscheine der Bestellung werden zurückgezogen.
-- *Teilerstattung:* WooCommerce erstattet den Betrag über die Zahlungsart; Gutschein- und Guthabensalden der Bestellung bleiben unverändert. Bei Gutscheinkäufen werden so viele Gutscheine gesperrt, wie erstattet wurden (ungenutzte zuerst); eine Erstattung, die bereits verbrauchten Gutscheinwert auszahlen würde, wird mit dem Höchstbetrag abgelehnt.
+- *Teilerstattung:* WooCommerce erstattet den Betrag über die Zahlungsart; Gutschein- und Guthabensalden der Bestellung bleiben unverändert. Gibt der Kunde Artikel einer mit Geschenkkarte bezahlten Bestellung zurück (auch Gast, auch Gesamtbetrag 0 €), bucht „Auf Gutschein zurückbuchen“ in der Bestellung den Betrag auf die Karte zurück (höchstens den von ihr gezahlten Anteil; spätere Stornierung bucht nur den Rest zurück). Bei Gutscheinkäufen werden so viele Gutscheine gesperrt, wie erstattet wurden (ungenutzte zuerst, vollständig verbrauchte nie); eine Erstattung, die bereits verbrauchten Gutscheinwert auszahlen würde, wird mit dem Höchstbetrag abgelehnt.
+- *Von Hand „Storniert“ (ohne Erstattung):* nur ungenutzte gekaufte Gutscheine werden gesperrt; bereits genutzte bleiben gültig (Bestellnotiz).
+- *Zurückbuchung auf abgelaufene oder gesperrte Karte:* Bestellnotiz und Admin-Hinweis (Dashboard, Bestellungen, Website-Zustand) – Gültigkeit verlängern oder als Geld/Guthaben erstatten; Filter `vcap_restore_extension_days` verlängert abgelaufene Karten automatisch.
 - *Erstattung als Guthaben:* nur ausdrücklich über „Als Guthaben erstatten“ in der Bestellung (nie automatisch, nicht für Gastbestellungen) und nur mit protokollierter Zustimmung des Kunden.
 - Gekaufte Gutscheine werden bei vollständiger Erstattung/Stornierung der Kaufbestellung gesperrt (*„Gutscheine bei Erstattung stornieren“*).
 

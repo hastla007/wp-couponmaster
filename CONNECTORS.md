@@ -53,9 +53,10 @@ Retry jobs read the current state with `get( $key )` and continue from there: `r
 | When | What Voucher Captain does | What the connector should do |
 |---|---|---|
 | Purchase order refunded/cancelled **before** any redemption | Voucher is voided (setting *Void vouchers on refund*, default on); `check`/`reserve` answer `vcap_cancelled` | Nothing |
+| Purchase order set to *Cancelled* by hand (no refund recorded) | Only unused vouchers are voided; vouchers already used (redeemed in the shop or by a connector, partly spent, reserved) stay as they are – an order note names them | Nothing; the merchant voids by hand if money is paid back |
 | … **while** a reservation is open | Voucher is voided; `commit()` answers `vcap_cancelled`; `release()` keeps it voided | Revoke, release, inform the user |
-| … **after** the redemption was committed | Voucher is voided (event `voided`); the redemption stays committed | Your policy: keep the access (service already delivered) **or** revoke it on `vcap_voucher_event` / `voided`. Document it in your terms. The example connector revokes. |
-| Partial refund of the purchase order | Vouchers stay valid | Nothing |
+| … **after** the redemption was committed | Full refund: voucher is voided (event `voided`); the redemption stays committed | Your policy: keep the access (service already delivered) **or** revoke it on `vcap_voucher_event` / `voided`. Document it in your terms. The example connector revokes. |
+| Partial refund of the purchase order (refunded quantity of a voucher line) | As many vouchers of the line as the refunded quantity covers are voided (event `voided`, note "Partial refund #…"): unused ones first, then partly spent gift cards (their unspent value is what is paid back). Vouchers **used up completely** (redeemed single-use vouchers, gift cards without balance) are **never** voided by a partial refund – their value was not refundable; an order note names them. A topped-up gift card keeps its topped-up value (event `purchase_refunded` instead of `voided`). A refund amount without quantities voids nothing | A `voided` event after a partial refund always concerns a voucher you have not committed (or only partly spent): revoke open reservations, keep completed services |
 | The service is refunded/cancelled in the connector | Nothing automatic | If the customer should get the voucher back, ask the merchant to *Reactivate* it (admin) – committed redemptions are never undone automatically |
 
 ## 4. Group packages: per seat or per package?

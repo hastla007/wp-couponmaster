@@ -198,10 +198,44 @@ final class StoreCredit {
 	 * customer's consent to credit instead is required and recorded (how, note, who recorded it, when) on the order
 	 * (meta _vcap_credit_consents), on the refund and as an order note.
 	 *
-	 * @param array{channel?:string, note?:string} $consent How the customer agreed (see consent_channels()).
+	 * Runs under a lock per order (two tabs, a resubmitted form): the remaining refundable total is read, the credit
+	 * booked and the refund recorded by one request at a time. $request_key (one per form, see request_key())
+	 * makes a resubmission of the same form a no-op instead of a second credit.
+	 *
+	 * @param array{channel?:string, note?:string} $consent     How the customer agreed (see consent_channels()).
+	 * @param string                               $request_key One-time key of the submitted form ('' = none).
 	 * @return array{balance:float,amount:float}|\WP_Error
 	 */
-	public function refund_as_credit( \WC_Order $order, float $amount, string $reason, array $consent = array() ) {
+	public function refund_as_credit( \WC_Order $order, float $amount, string $reason, array $consent = array(), string $request_key = '' ) {
+		global $wpdb;
+		$lock = 'vcap_refund_credit_' . $order->get_id();
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 10)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return new \WP_Error( 'vcap_credit_busy', __( 'Another refund of this order is being recorded right now. Please reload the order and check its refunds before trying again.', 'voucher-captain' ) );
+		}
+		$claim = '' !== $request_key ? 'refund-credit:' . $order->get_id() . ':' . sanitize_key( $request_key ) : '';
+		try {
+			if ( '' !== $claim && ! Claim::take( $claim ) ) {
+				return new \WP_Error( 'vcap_credit_duplicate', __( 'This refund as store credit was already submitted and recorded. Reload the order to see it.', 'voucher-captain' ) );
+			}
+			// Fresh from the database: the remaining refundable total may have changed since the page was loaded.
+			$fresh  = wc_get_order( $order->get_id() );
+			$result = $this->refund_as_credit_locked( $fresh instanceof \WC_Order ? $fresh : $order, $amount, $reason, $consent );
+			if ( is_wp_error( $result ) && '' !== $claim ) {
+				Claim::release( $claim ); // Nothing was booked: the corrected form may be sent again.
+			}
+			return $result;
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+	}
+
+	/** One-time key for a "refund as store credit" form (see refund_as_credit()). */
+	public static function request_key(): string {
+		return function_exists( 'wp_generate_uuid4' ) ? str_replace( '-', '', wp_generate_uuid4() ) : bin2hex( random_bytes( 16 ) );
+	}
+
+	/** @return array{balance:float,amount:float}|\WP_Error */
+	private function refund_as_credit_locked( \WC_Order $order, float $amount, string $reason, array $consent ) {
 		$user_id = (int) $order->get_customer_id();
 		$reason  = trim( sanitize_text_field( $reason ) );
 		$channel = sanitize_key( (string) ( $consent['channel'] ?? '' ) );

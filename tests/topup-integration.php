@@ -260,4 +260,33 @@ vcap_topup_assert( wc_notice_count( 'error' ) > 0, 'a top-up line that got into 
 wc_clear_notices();
 WC()->cart->empty_cart();
 
+// T11: a top-up adds its face value, also when another gift card paid for it (order total 0).
+$paying_card = vcap_topup_card( 100 );
+$target_card = vcap_topup_card( 10 );
+$face_order  = wc_create_order();
+$face_line   = $face_order->add_product( $topup_product, 1, array( 'subtotal' => 100, 'total' => 0 ) );
+$face_item   = $face_order->get_item( $face_line );
+$face_item->add_meta_data( TopUp::ITEM_META, $target_card->code, true );
+$face_item->save();
+$face_order->set_billing_email( 'topup-face@example.com' );
+$face_order->calculate_totals( false );
+$face_order->set_status( 'processing' );
+$face_order->save();
+vcap()->issuer->issue_for_order( wc_get_order( $face_order->get_id() ), true );
+vcap_topup_assert( 110.0 === vcap_topup_balance( $target_card ), 'a top-up paid with another gift card (total 0) adds its face value', vcap_topup_balance( $target_card ) );
+$face_notes = wc_get_order_notes( array( 'order_id' => $face_order->get_id(), 'type' => 'customer' ) );
+vcap_topup_assert( (bool) array_filter( $face_notes, static fn( $n ) => false !== strpos( $n->content, substr( strtoupper( $target_card->code ), -4 ) ) ), 'E5: the customer gets a confirmation of the top-up (order note)' );
+
+// E5: card voided before the payment – the line is held, the order goes on hold, customer and shop are told.
+$void_card = vcap_topup_card( 20 );
+vcap()->issuer->void( $void_card, 'test' );
+list( $held_order, $held_line ) = vcap_topup_order( $topup_product, $void_card, 30 );
+$held_order = wc_get_order( $held_order->get_id() );
+vcap_topup_assert( 20.0 === vcap_topup_balance( $void_card ) && 'yes' === wc_get_order_item_meta( $held_line, TopUp::HELD_META, true ), 'a top-up onto a voided card is not booked and the line is held' );
+vcap_topup_assert( $held_order->has_status( 'on-hold' ) && VCAP\Attention::has( $held_order->get_id(), 'topup:' . $held_line ), 'the order goes on hold and the case is listed for the shop' );
+vcap_topup_assert( (bool) wc_get_order_notes( array( 'order_id' => $held_order->get_id(), 'type' => 'customer' ) ), 'the customer is told that the top-up failed' );
+vcap()->issuer->issue_for_order( $held_order, true );
+vcap_topup_assert( 20.0 === vcap_topup_balance( $void_card ), 'a held top-up line is not retried silently' );
+VCAP\Attention::resolve( $held_order->get_id(), 'topup:' . $held_line );
+
 echo "Voucher Captain top-up checks passed.\n";

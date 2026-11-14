@@ -135,6 +135,14 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 * New: redemptions->refund() gives back (part of) a completed external redemption.
 * Fix: Pass Captain reservations are held for Pass Captain's whole payment window (late bank transfers no longer find the voucher released).
 * Fix: stacked promotions never discount a line by more than its price; recalculating an order keeps the promotions it was placed with.
+* Fix: a voucher that cannot be voided after a refund or cancellation is no longer reported as voided: the order gets a note, the case is listed in an admin notice and Site Health, and the void is retried automatically.
+* Fix: an order cancelled by hand (no refund) voids only its unused vouchers; vouchers already used stay valid. Partial refunds never void vouchers that were used up completely.
+* Fix: vouchers of orders that waited for their payment (e.g. "On hold" as the only issue status) are issued when the order reaches a paid status.
+* Fix: "Refund as store credit" runs once per order at a time and ignores a resubmitted form – no double credit.
+* New: "Book back onto voucher" on the order screen – a return of items paid with a gift card goes back onto the card, also for guest orders and orders with a total of 0.
+* Fix: a fully refunded order gives single-use vouchers back (WooCommerce does so only for cancelled orders); with "Restore balance on cancellation" off, single-use vouchers stay redeemed on cancellation too.
+* Fix: value booked back onto an expired or cancelled card is reported (order note, admin notice) instead of vanishing; filter vcap_restore_extension_days extends expired cards.
+* Fix: a gift card top-up adds its face value like a new card (net in net-price shops, also when paid with another card); a top-up that cannot be booked holds the order and tells the customer; customers get a confirmation with the new balance and validity; cards valid for less than 30 days cannot be topped up (filter vcap_topup_min_remaining_days), the validity can be extended with vcap_topup_expires_at.
 * Fix: "individual use" coupons no longer stack with promotions; gift card lines in the cart no longer count towards a promotion's minimum cart value.
 * Fix: store credit can no longer be redeemed through the redemption API or Pass Captain (it is used in the shop only).
 * Fix: Pass Captain amounts use ISO 4217 minor units, independent of the shop's price decimals setting.
