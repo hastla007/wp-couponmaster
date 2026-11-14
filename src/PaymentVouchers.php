@@ -107,8 +107,12 @@ final class PaymentVouchers {
 			if ( ! $this->applies( $coupon ) ) {
 				continue;
 			}
+			$value = self::value_in( $coupon, (string) get_woocommerce_currency() );
+			if ( null === $value ) {
+				continue;
+			}
 			$open  ??= self::open_amounts( $cart );
-			$amount  = $this->take_payment( $coupon, $cart, $open, $due, (float) $coupon->get_amount() );
+			$amount  = $this->take_payment( $coupon, $cart, $open, $due, $value );
 			if ( $amount <= 0 ) {
 				continue;
 			}
@@ -116,6 +120,28 @@ final class PaymentVouchers {
 			$due = round( $due - $amount, $decimals );
 		}
 		return $payments;
+	}
+
+	/**
+	 * What the voucher is worth in $currency (cart or order currency). Coupon amounts are kept in the shop base
+	 * currency; in another currency the stored amount is converted with a known exchange rate
+	 * (Compat\MultiCurrency), never taken 1:1 and independently of whether a currency switcher converts coupon
+	 * amounts itself in this request (WCML does so only where it loaded its frontend filters). Null without a rate.
+	 *
+	 * @param \WC_Order|null $order Order whose stored exchange rate counts.
+	 */
+	private static function value_in( \WC_Coupon $coupon, string $currency, $order = null ): ?float {
+		if ( '' === $currency || get_option( 'woocommerce_currency' ) === $currency ) {
+			return (float) $coupon->get_amount();
+		}
+		$stored = $coupon->get_id() ? get_post_meta( $coupon->get_id(), 'coupon_amount', true ) : '';
+		$base   = '' !== (string) $stored ? (float) $stored : (float) $coupon->get_amount( 'edit' );
+		$probe  = 1000.0; // Base value of 1000 units: keeps a switcher's rounding out of the rate.
+		$unit   = Compat\MultiCurrency::to_base( $probe, $currency, $order );
+		if ( null === $unit || $unit <= 0 ) {
+			return null;
+		}
+		return $base * $probe / $unit;
 	}
 
 	/**
@@ -295,15 +321,9 @@ final class PaymentVouchers {
 		if ( null !== self::paid_amount( $order, $code ) ) {
 			return;
 		}
-		$value    = (float) $coupon->get_amount();
-		$currency = (string) $order->get_currency();
-		if ( '' !== $currency && get_option( 'woocommerce_currency' ) !== $currency ) {
-			// Voucher values are kept in the base currency; without an exchange rate it cannot pay in this one.
-			$per_unit = Compat\MultiCurrency::can_convert( $currency, $order ) ? (float) apply_filters( 'vcap_amount_to_base_currency', 1.0, $currency, $order ) : 0.0;
-			if ( $per_unit <= 0 ) {
-				return;
-			}
-			$value = $value / $per_unit;
+		$value = self::value_in( $coupon, (string) $order->get_currency(), $order );
+		if ( null === $value ) {
+			return;
 		}
 		$due = self::order_gross( $order );
 		foreach ( $order->get_items( 'fee' ) as $fee ) {
