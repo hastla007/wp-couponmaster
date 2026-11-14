@@ -126,17 +126,30 @@ final class FirstOrderCoupons {
 		if ( $customer ) {
 			$criteria[] = array( 'customer' => $customer );
 		}
-		if ( is_email( $email ) ) {
-			$criteria[] = array(
-				'meta_query' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- memoised per request.
-					array(
-						'key'   => self::CUSTOMER_META,
-						'value' => CustomerEmail::key( $email ),
-					),
-				),
-			);
-		}
 		$undone = array_values( array_diff( array( 'refunded', 'cancelled' ), array_map( static fn( $s ) => str_replace( 'wc-', '', (string) $s ), $statuses ) ) );
+		// The hashed mailbox (V4) is read with OrderLookup: wc_get_orders() ignores meta_query on the classic
+		// (posts) order store and would return any order (K2).
+		if ( is_email( $email ) ) {
+			$plain = array_map( static fn( $s ) => str_replace( 'wc-', '', (string) $s ), $statuses );
+			$ids   = OrderLookup::ids_with_meta(
+				self::CUSTOMER_META,
+				CustomerEmail::key( $email ),
+				array(
+					'status' => array_merge( $plain, $undone ),
+					'order'  => 'DESC',
+					'limit'  => 50,
+				)
+			);
+			foreach ( $ids as $id ) {
+				$order = (int) $id !== $exclude_order_id ? wc_get_order( (int) $id ) : null;
+				if ( ! $order instanceof \WC_Order || ( $before > 0 && $order->get_date_created() && $order->get_date_created()->getTimestamp() >= $before ) ) {
+					continue;
+				}
+				if ( $order->has_status( $plain ) || ( $order->has_status( $undone ) && self::undone_counts( $order ) ) ) {
+					return true;
+				}
+			}
+		}
 		foreach ( $criteria as $criterion ) {
 			$query = $criterion + array(
 				'status' => $statuses,

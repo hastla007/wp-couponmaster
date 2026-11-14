@@ -67,7 +67,7 @@ $b13_queried = $b13_orders;
 vcap_first_order( $product, $newcomer, "n-{$tag}@example.com", 'completed' );
 $b13_after = VCAP\FirstOrderCoupons::has_previous_order( $newcomer, "n-{$tag}@example.com", 0 );
 remove_filter( 'woocommerce_order_query_args', $b13_count );
-vcap_first_assert( array( false, false, false, false ) === $b13_answers && 4 === $b13_queried, 'B13: four checks of the same customer run the order queries (account/emails and mailbox hash, each for counting and refunded/cancelled orders) once (' . $b13_queried . ')' );
+vcap_first_assert( array( false, false, false, false ) === $b13_answers && 2 === $b13_queried, 'B13: four checks of the same customer run the order queries once (account/emails for counting and refunded/cancelled orders via wc_get_orders; the mailbox hash via OrderLookup, which works on both order stores) once (' . $b13_queried . ')' );
 vcap_first_assert( true === $b13_after, 'B13: an order completed in the request is counted at once' );
 
 // V4: the email is compared as mailbox – "+tags" and Gmail dots do not make a new customer.
