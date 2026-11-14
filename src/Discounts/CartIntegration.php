@@ -37,6 +37,7 @@ final class CartIntegration {
 		add_action( 'woocommerce_before_calculate_totals', array( $this, 'sync_cart' ), 30 );
 		add_filter( 'woocommerce_cart_totals_coupon_label', array( $this, 'label' ), 10, 2 );
 		add_filter( 'woocommerce_cart_totals_coupon_html', array( $this, 'coupon_html' ), 10, 2 );
+		add_filter( 'rest_request_before_callbacks', array( $this, 'refuse_removal' ), 10, 3 );
 		add_action( 'woocommerce_checkout_create_order_coupon_item', array( $this, 'order_item' ), 10, 4 );
 	}
 
@@ -299,6 +300,25 @@ final class CartIntegration {
 			return (string) preg_replace( '#\s*<a [^>]*woocommerce-remove-coupon[^>]*>.*?</a>#s', '', (string) $html );
 		}
 		return $html;
+	}
+
+	/**
+	 * Cart and checkout blocks: removing an automatic promotion through the Store API is refused with a message
+	 * (it would be added again with the next calculation; the classic cart shows no remove link for it).
+	 *
+	 * @param mixed            $response
+	 * @param mixed            $handler
+	 * @param \WP_REST_Request $request
+	 */
+	public function refuse_removal( $response, $handler, $request ) {
+		if ( null !== $response || ! $request instanceof \WP_REST_Request || ! preg_match( '#^/wc/store(/v\d+)?/cart/remove-coupon$#', (string) $request->get_route() ) ) {
+			return $response;
+		}
+		$id = self::id_from_code( (string) $request->get_param( 'code' ) );
+		if ( ! $id || ! $this->campaigns->get( $id ) ) {
+			return $response;
+		}
+		return new \WP_Error( 'vcap_promotion_not_removable', __( 'This promotion is applied automatically and cannot be removed.', 'voucher-captain' ), array( 'status' => 400 ) );
 	}
 
 	public function order_item( $item, $code, $coupon, $order ): void {

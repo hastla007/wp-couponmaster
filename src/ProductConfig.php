@@ -199,6 +199,25 @@ final class ProductConfig {
 	}
 
 	/**
+	 * All variants of the redemption conditions, for HTML that is the same for every visitor (cached product
+	 * pages): country => text, '' for every other country. The product's own conditions are the only variant.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function terms_variants( array $config ): array {
+		$own = trim( (string) ( $config['redemption_terms'] ?? '' ) );
+		if ( '' !== $own ) {
+			return array( '' => $own );
+		}
+		$variants = self::terms_by_country( (string) get_option( 'vcap_terms_by_country', '' ) );
+		$default  = trim( (string) get_option( 'vcap_default_terms', '' ) );
+		if ( '' !== $default ) {
+			$variants[''] = $default;
+		}
+		return $variants;
+	}
+
+	/**
 	 * Parse "AT: text" blocks (a block runs until the next line starting with a two-letter country code and a colon).
 	 *
 	 * @return array<string, string>

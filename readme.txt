@@ -165,6 +165,15 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 * Fix: an uninstall always releases the license activation; a network uninstall releases all sites first within 30 seconds.
 * New: Site Health check for the PHP extensions mbstring, dom, gd, zip and iconv; activation stops without mbstring or dom.
 * Dev: vcap() is defined only when WooCommerce is active in a supported version; new action vcap_loaded and VCAP\Plugin::ready().
+* Fix (security): text from visitors (code of a redeem link, recipient name, attendee fields) can no longer run shortcodes through block output.
+* Fix: the redeem form needs no nonce for guests and keeps pages cacheable unless it shows data of the visitor; it is also recognised in synced patterns, template parts, widgets and builder layouts. Its notices appear only in the form that was sent.
+* Fix: editor and page builder previews show example notes and no longer create referral codes or show the editor's own vouchers; the block preview is not clickable.
+* Fix: cart and checkout blocks show the title of an automatic promotion instead of "vcap-campaign-ID" and refuse to remove it with a message.
+* Fix: product pages list the redemption conditions of every country instead of the visitor's (page caches served one visitor's conditions to all).
+* Fix: a balance check counts once per request, however many balance forms the page has.
+* Accessibility: results of the balance and redeem forms are focused after sending and marked on the field; buttons in voucher lists keep their visible text as name; character counters are field descriptions and are announced only near the limit; responsive tables label every value; field ids are unique with several product forms on a page; the field group editor can reorder fields by keyboard; voucher list checkboxes are labelled.
+* New: suggested amounts are a radio group that works without JavaScript (and in quick views on shop pages); the chosen amount is clearly marked; a maximum alone is shown as "Maximum X".
+* New: block settings – button text of "Redeem voucher", "My vouchers" with or without store credit and referral code (shortcode `[vcap_my_vouchers extras="no"]`); blocks have keywords and an inserter preview. Shortcode output is wrapped in div.woocommerce; the login hint returns to the page after logging in.
 
 = 1.1.0 =
 * New: redeem vouchers and gift cards outside the shop (courses, tickets, memberships) through the PHP service vcap()->redemptions or the REST API /wp-json/vcap/v1/redemptions – reserve, commit, release, with idempotency keys, stable error codes and automatic release of expired reservations.

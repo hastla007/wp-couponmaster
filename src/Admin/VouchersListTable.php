@@ -126,8 +126,12 @@ final class VouchersListTable extends \WP_List_Table {
 		);
 	}
 
+	/** Row checkbox with a label naming the voucher, like the core list tables (screen readers, bulk actions). */
 	protected function column_cb( $item ): string {
-		return '<input type="checkbox" name="voucher_ids[]" value="' . esc_attr( (string) $item->id ) . '" />';
+		$id = 'cb-select-' . (int) $item->id;
+		/* translators: %s: voucher code */
+		return '<label class="screen-reader-text" for="' . esc_attr( $id ) . '">' . esc_html( sprintf( __( 'Select voucher %s', 'voucher-captain' ), $item->code ) ) . '</label>'
+			. '<input type="checkbox" id="' . esc_attr( $id ) . '" name="voucher_ids[]" value="' . esc_attr( (string) $item->id ) . '" />';
 	}
 
 	protected function column_code( Voucher $v ): string {

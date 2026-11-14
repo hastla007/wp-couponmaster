@@ -5,14 +5,31 @@
 .vcap-fields label.checkbox { font-weight: 400; }
 .vcap-fields input.input-text, .vcap-fields textarea, .vcap-fields select, .vcap-amount input { width: 100%; box-sizing: border-box; }
 .vcap-field-help, .vcap-counter { display: block; font-size: .85em; opacity: .75; margin-top: .25em; }
+.vcap-field-error { display: block; font-size: .9em; font-weight: 600; color: #b81c23; margin-top: .25em; }
 .vcap-amount { margin-bottom: 1em; }
 .vcap-amount label { display: block; font-weight: 600; margin-bottom: .3em; }
-.vcap-amount-presets { display: flex; flex-wrap: wrap; gap: .4em; margin-bottom: .5em; }
-.vcap-amount-preset.is-active { outline: 2px solid currentColor; }
-.vcap-preview-row { margin: .5em 0 0; }
+/* Suggested amounts: a radio group shown as buttons; the chosen one is filled and ticked (not only outlined). */
+.vcap-amount-presets { display: flex; flex-wrap: wrap; gap: .4em; margin: 0 0 .6em; padding: 0; border: 0; min-width: 0; }
+.vcap-amount-presets legend { font-weight: 600; margin-bottom: .3em; padding: 0; }
+.vcap-amount-preset { position: relative; display: inline-block; }
+.vcap-amount-preset input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.vcap-amount-preset label { display: inline-block; margin: 0 !important; padding: .45em .9em; border: 2px solid currentColor; border-radius: 3px; cursor: pointer; font-weight: 600; }
+.vcap-amount-preset input:checked + label { background: rgba(127, 127, 127, .2); background: color-mix(in srgb, currentColor 14%, transparent); }
+.vcap-amount-preset input:checked + label::before { content: "\2713\00a0"; }
+.vcap-amount-preset input:focus-visible + label { outline: 2px solid currentColor; outline-offset: 2px; }
+.vcap-preview-row { clear: both; margin: .5em 0 0; }
 .vcap-vouchers { margin: 2em 0; }
 .vcap-vouchers-table code { font-size: 1em; letter-spacing: .05em; }
 .vcap-download { text-align: right; }
+.vcap-form-result:focus { outline: none; }
+.vcap-preview-note { margin: 0; }
+/* Cart totals: the voucher balance is a note, not a second total; the remaining-value warning spans the row. */
+.vcap-balance th, .vcap-balance td { font-weight: normal; }
+.woocommerce table.shop_table_responsive tr.vcap-residual-warning td { text-align: left; }
+.woocommerce table.shop_table_responsive tr.vcap-residual-warning td::before { content: none; display: none; }
+.vcap-terms-country + .vcap-terms-country { margin-top: .6em; }
+/* Hidden text for screen readers (themes without this core class). */
+.vcap-vouchers .screen-reader-text, .vcap-fields .screen-reader-text, .vcap-ticket-steps .screen-reader-text, .vcap-counter-live.screen-reader-text { border: 0; clip: rect(1px, 1px, 1px, 1px); clip-path: inset(50%); height: 1px; margin: -1px; overflow: hidden; padding: 0; position: absolute !important; width: 1px; word-wrap: normal !important; }
 .vcap-balance-form { display: flex; flex-wrap: wrap; gap: .5em; align-items: center; }
 .vcap-balance-form label { flex-basis: 100%; font-weight: 600; }
 

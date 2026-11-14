@@ -6,10 +6,17 @@
 	"category": "widgets",
 	"icon": "search",
 	"description": "Lets customers check the status, balance and expiry of a voucher code.",
+	"keywords": [
+		"voucher",
+		"gift card",
+		"balance",
+		"code"
+	],
 	"textdomain": "voucher-captain",
 	"supports": {
 		"html": false
 	},
 	"editorScript": "vcap-blocks",
-	"style": "vcap-frontend"
+	"example": {},
+	"editorStyle": "vcap-frontend"
 }

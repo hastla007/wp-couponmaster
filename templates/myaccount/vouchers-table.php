@@ -32,7 +32,7 @@ $show_order = ! empty( $show_order );
 				<?php if ( $show_order ) : ?>
 					<th scope="col"><?php esc_html_e( 'Order', 'voucher-captain' ); ?></th>
 				<?php endif; ?>
-				<th scope="col"><span class="screen-reader-text"><?php esc_html_e( 'Download', 'voucher-captain' ); ?></span></th>
+				<th scope="col" class="vcap-actions-header"><span class="screen-reader-text"><?php esc_html_e( 'Actions', 'voucher-captain' ); ?></span></th>
 			</tr>
 		</thead>
 		<tbody>
@@ -49,7 +49,8 @@ $show_order = ! empty( $show_order );
 				<td data-title="<?php esc_attr_e( 'Voucher', 'voucher-captain' ); ?>">
 					<?php echo esc_html( $product ? $product->get_name() : __( 'Voucher', 'voucher-captain' ) ); ?>
 					<?php if ( $voucher->recipient_name ) : ?>
-						<br><small><?php /* translators: %s: recipient name */ printf( esc_html__( 'For %s', 'voucher-captain' ), esc_html( $voucher->recipient_name ) ); ?></small>
+						<?php // Brackets as entities: the name was typed by the buyer and must not run a shortcode (the block's output passes do_shortcode()). ?>
+						<br><small><?php /* translators: %s: recipient name */ printf( esc_html__( 'For %s', 'voucher-captain' ), \VCAP\Shortcodes::esc_html_text( $voucher->recipient_name ) ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_html_text(). ?></small>
 					<?php endif; ?>
 				</td>
 				<td data-title="<?php esc_attr_e( 'Code', 'voucher-captain' ); ?>"><code><?php echo esc_html( $voucher->code ); ?></code></td>
@@ -85,21 +86,21 @@ $show_order = ! empty( $show_order );
 						?>
 					</td>
 				<?php endif; ?>
-				<td class="vcap-download">
+				<td class="vcap-download actions" data-title="<?php esc_attr_e( 'Actions', 'voucher-captain' ); ?>">
 					<?php
 					/** Extra actions of connectors (e.g. "Exchange for tickets", "Send tickets again"). */
 					do_action( 'vcap_account_voucher_actions', $voucher );
 					?>
 					<?php if ( \VCAP\Voucher::STATUS_VOID !== $voucher->status ) : ?>
-						<a class="woocommerce-button button vcap-download-button" href="<?php echo esc_url( $downloads->signed_url( $voucher ) ); ?>" target="_blank" rel="noopener" aria-label="<?php /* translators: %s: voucher code */ echo esc_attr( sprintf( __( 'Download PDF of voucher %s', 'voucher-captain' ), $voucher->code ) ); ?>">
-							<?php esc_html_e( 'Download PDF', 'voucher-captain' ); ?>
+						<a class="<?php echo esc_attr( \VCAP\Shortcodes::button_class( 'woocommerce-button button vcap-download-button' ) ); ?>" href="<?php echo esc_url( $downloads->signed_url( $voucher ) ); ?>" target="_blank" rel="noopener">
+							<?php esc_html_e( 'Download PDF', 'voucher-captain' ); ?><?php echo \VCAP\Shortcodes::voucher_suffix( $voucher->code ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in voucher_suffix(). ?>
 						</a>
 					<?php endif; ?>
 					<?php if ( $downloads->customer_can_resend( $voucher ) ) : ?>
 						<form method="post" class="vcap-resend-form">
 							<input type="hidden" name="vcap_resend" value="<?php echo esc_attr( (string) $voucher->id ); ?>" />
 							<?php wp_nonce_field( 'vcap_resend_' . $voucher->id, 'vcap_resend_nonce' ); ?>
-							<button type="submit" class="woocommerce-button button vcap-resend-button" aria-label="<?php /* translators: %s: voucher code */ echo esc_attr( sprintf( __( 'Send the email of voucher %s again', 'voucher-captain' ), $voucher->code ) ); ?>"><?php esc_html_e( 'Send email again', 'voucher-captain' ); ?></button>
+							<button type="submit" class="<?php echo esc_attr( \VCAP\Shortcodes::button_class( 'woocommerce-button button vcap-resend-button' ) ); ?>"><?php esc_html_e( 'Send email again', 'voucher-captain' ); ?><?php echo \VCAP\Shortcodes::voucher_suffix( $voucher->code ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in voucher_suffix(). ?></button>
 						</form>
 					<?php endif; ?>
 				</td>

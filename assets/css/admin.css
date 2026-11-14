@@ -21,7 +21,10 @@ mark.vcap-status--expired, mark.vcap-status--void { background: #eba3a3; color: 
 .vcap-builtin-grid .vcap-required { color: #646970; margin-left: 10px !important; }
 .vcap-variation-fields { clear: both; border-top: 1px dashed #dcdcde; padding-top: 6px; margin-top: 6px; }
 .vcap-fg-row { display: flex; gap: 10px; align-items: flex-start; background: #f6f7f7; border: 1px solid #dcdcde; border-radius: 4px; padding: 10px; margin-bottom: 8px; }
-.vcap-fg-handle { cursor: move; color: #8c8f94; margin-top: 22px; }
+.vcap-fg-move { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 18px; }
+.vcap-fg-handle { cursor: move; color: #8c8f94; }
+.vcap-fg-up, .vcap-fg-down { min-width: 24px; min-height: 24px; color: #2271b1; }
+.vcap-fg-up:disabled, .vcap-fg-down:disabled { color: #c3c4c7; cursor: default; }
 .vcap-fg-cols { flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0 12px; }
 .vcap-fg-cols p { margin: 0 0 8px; }
 .vcap-fg-cols label { display: block; font-weight: 600; margin-bottom: 2px; }

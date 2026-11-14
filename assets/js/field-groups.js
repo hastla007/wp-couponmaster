@@ -26,6 +26,12 @@
 	var cfg = window.vcapFieldGroups || { types: {}, i18n: {} };
 	var t = cfg.i18n;
 
+	function speak( message ) {
+		if ( window.wp && window.wp.a11y && window.wp.a11y.speak ) {
+			window.wp.a11y.speak( message );
+		}
+	}
+
 	function row( f ) {
 		f = $.extend( { key: '', label: '', type: 'text', required: false, maxlength: '', placeholder: '', tooltip: '', options: '' }, f || {} );
 		var id = 'f' + Math.random().toString( 36 ).slice( 2 );
@@ -35,7 +41,12 @@
 		} );
 		var $r = $(
 			'<div class="vcap-fg-row">' +
-				'<span class="vcap-fg-handle dashicons dashicons-move" aria-hidden="true"></span>' +
+				// Drag handle for the mouse; the arrow buttons move a field with the keyboard (and without dragging).
+				'<div class="vcap-fg-move">' +
+					'<span class="vcap-fg-handle dashicons dashicons-move" aria-hidden="true"></span>' +
+					'<button type="button" class="button-link vcap-fg-up"><span class="dashicons dashicons-arrow-up-alt2" aria-hidden="true"></span><span class="screen-reader-text vcap-fg-name"></span></button>' +
+					'<button type="button" class="button-link vcap-fg-down"><span class="dashicons dashicons-arrow-down-alt2" aria-hidden="true"></span><span class="screen-reader-text vcap-fg-name"></span></button>' +
+				'</div>' +
 				'<div class="vcap-fg-cols">' +
 					'<p><label for="' + id + 'l">' + t.label + '</label><input type="text" id="' + id + 'l" data-k="label"></p>' +
 					'<p><label for="' + id + 'k">' + t.key + '</label><input type="text" id="' + id + 'k" data-k="key" pattern="[a-z0-9_]+"></p>' +
@@ -46,7 +57,7 @@
 					'<p class="vcap-fg-options"><label for="' + id + 'o">' + t.options + '</label><textarea rows="3" id="' + id + 'o" data-k="options"></textarea></p>' +
 					'<p class="vcap-fg-req"><label><input type="checkbox" data-k="required"> ' + t.required + '</label><br><small class="vcap-fg-token"></small></p>' +
 				'</div>' +
-				'<button type="button" class="button-link button-link-delete vcap-fg-remove">' + t.remove + '</button>' +
+				'<button type="button" class="button-link button-link-delete vcap-fg-remove">' + t.remove + '<span class="screen-reader-text vcap-fg-name"></span></button>' +
 			'</div>'
 		);
 		$r.find( '[data-k]' ).each( function () {
@@ -66,10 +77,27 @@
 		return String( s ).toLowerCase().replace( /ß/g, 'ss' ).normalize( 'NFD' ).replace( /[̀-ͯ]/g, '' ).replace( /[^a-z0-9]+/g, '_' ).replace( /^_+|_+$/g, '' );
 	}
 
+	/** Name of a row for screen readers: its label, else its key, else "Field 3". */
+	function rowName( $r, index ) {
+		var label = $.trim( $r.find( '[data-k="label"]' ).val() || '' ) || $.trim( $r.find( '[data-k="key"]' ).val() || '' );
+		return label || ( t.field || 'Field %d' ).replace( '%d', index + 1 );
+	}
+
 	function refresh( $list ) {
 		var data = [];
 		var used = {};
-		$list.find( '.vcap-fg-row' ).each( function () {
+		var $rows = $list.find( '.vcap-fg-row' );
+		$rows.each( function ( index ) {
+			// Buttons name their field (visible text first: voice control still finds "Remove field").
+			var $row = $( this );
+			var name = rowName( $row, index );
+			$row.find( '.vcap-fg-up .vcap-fg-name' ).text( t.moveUp + ': ' + name );
+			$row.find( '.vcap-fg-down .vcap-fg-name' ).text( t.moveDown + ': ' + name );
+			$row.find( '.vcap-fg-remove .vcap-fg-name' ).text( ': ' + name );
+			$row.find( '.vcap-fg-up' ).prop( 'disabled', 0 === index );
+			$row.find( '.vcap-fg-down' ).prop( 'disabled', index === $rows.length - 1 );
+		} );
+		$rows.each( function () {
 			var $r = $( this );
 			var f = {};
 			$r.find( '[data-k]' ).each( function () {
@@ -110,9 +138,36 @@
 			$list.find( '.vcap-fg-row:last [data-k="label"]' ).trigger( 'focus' );
 		} );
 		$list.on( 'input change', '[data-k]', function () { refresh( $list ); } );
-		$list.on( 'click', '.vcap-fg-remove', function () {
-			$( this ).closest( '.vcap-fg-row' ).remove();
+		$list.on( 'click', '.vcap-fg-up, .vcap-fg-down', function () {
+			var up = $( this ).hasClass( 'vcap-fg-up' );
+			var $r = $( this ).closest( '.vcap-fg-row' );
+			var $target = up ? $r.prev( '.vcap-fg-row' ) : $r.next( '.vcap-fg-row' );
+			if ( ! $target.length ) {
+				return;
+			}
+			if ( up ) {
+				$r.insertBefore( $target );
+			} else {
+				$r.insertAfter( $target );
+			}
 			refresh( $list );
+			// Focus stays on the moved field (on its other arrow when it reached the top or the bottom).
+			var $button = $r.find( up ? '.vcap-fg-up' : '.vcap-fg-down' );
+			if ( $button.prop( 'disabled' ) ) {
+				$button = $r.find( up ? '.vcap-fg-down' : '.vcap-fg-up' );
+			}
+			$button.trigger( 'focus' );
+			var index = $list.find( '.vcap-fg-row' ).index( $r );
+			speak( ( t.moved || '%1$s: position %2$d' ).replace( '%1$s', rowName( $r, index ) ).replace( '%2$d', index + 1 ) );
+		} );
+		$list.on( 'click', '.vcap-fg-remove', function () {
+			var $r = $( this ).closest( '.vcap-fg-row' );
+			// Focus goes to the next field (or the previous one, or "Add field"), not to the page start.
+			var $next = $r.next( '.vcap-fg-row' ).length ? $r.next( '.vcap-fg-row' ) : $r.prev( '.vcap-fg-row' );
+			$r.remove();
+			refresh( $list );
+			( $next.length ? $next.find( '.vcap-fg-remove' ) : $( '#vcap-add-field' ) ).trigger( 'focus' );
+			speak( t.removed || '' );
 		} );
 		$( '#post' ).on( 'submit', function () { refresh( $list ); } );
 		refresh( $list );

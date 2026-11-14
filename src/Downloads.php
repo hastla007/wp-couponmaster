@@ -19,9 +19,10 @@ final class Downloads {
 		add_action( 'wp_loaded', array( $this, 'maybe_flush_rewrite' ) );
 		add_filter( 'woocommerce_get_query_vars', array( $this, 'query_vars' ) );
 		add_filter( 'woocommerce_account_menu_items', array( $this, 'menu_item' ) );
-		add_action( 'woocommerce_account_' . self::ENDPOINT . '_endpoint', array( $this, 'account_page' ) );
+		add_action( 'woocommerce_account_' . self::ENDPOINT . '_endpoint', array( $this, 'account_page' ), 10, 0 );
 		add_filter( 'woocommerce_endpoint_' . self::ENDPOINT . '_title', array( $this, 'endpoint_title' ) );
 		add_shortcode( 'vcap_balance', array( $this, 'balance_shortcode' ) );
+		add_action( 'template_redirect', array( $this, 'handle_balance' ), 8 );
 		add_action( 'init', array( self::class, 'register_assets' ), 5 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'styles' ) );
 	}
@@ -298,9 +299,12 @@ final class Downloads {
 		return __( 'Vouchers', 'voucher-captain' );
 	}
 
-	public function account_page(): void {
+	/** @param bool $extras Whether store credit and referral code are shown above the list (hook vcap_account_vouchers_top). */
+	public function account_page( bool $extras = true ): void {
 		$user = wp_get_current_user();
-		do_action( 'vcap_account_vouchers_top', $user );
+		if ( $extras ) {
+			do_action( 'vcap_account_vouchers_top', $user );
+		}
 		$list = $this->repo->for_customer( (int) $user->ID );
 		Plugin::template(
 			'myaccount/vouchers-table.php',
@@ -351,47 +355,87 @@ final class Downloads {
 		if ( '' !== $url ) {
 			$html .= ' <a href="' . esc_url( $url ) . '">' . esc_html__( 'Exchange for tickets', 'voucher-captain' ) . '</a>';
 		}
-		// role=status: screen readers announce the result after the form was sent (page reload).
-		return '<div class="woocommerce-info vcap-balance-result" role="status">' . $html . '</div>';
+		// Shown in a region that is focused after the page reload (Shortcodes::result_region()), so screen readers read it.
+		return '<div class="woocommerce-info vcap-balance-result">' . $html . '</div>';
+	}
+
+	/** @var array{key:string, form:string, html:string, error:bool, shown:bool}|null balance check sent in this request */
+	private ?array $balance = null;
+
+	/**
+	 * Evaluates a sent balance check once per request (before any output, so the no-cache headers can still be
+	 * sent): two balance blocks on a page or a builder rendering the content twice count one attempt, not two.
+	 * Guests send it without a nonce: it only reads (rate limited) and a nonce in a cached page would expire or
+	 * belong to another visitor's session. Logged-in customers keep the nonce check.
+	 */
+	public function handle_balance(): void {
+		if ( ! isset( $_POST['vcap_balance_code'] ) || ! is_string( $_POST['vcap_balance_code'] ) ) {
+			return;
+		}
+		// '' = a form without id (cached markup of an earlier version): the result goes to the first form.
+		$form = isset( $_POST['vcap_balance_form'] ) && is_string( $_POST['vcap_balance_form'] ) ? sanitize_key( wp_unslash( $_POST['vcap_balance_form'] ) ) : '';
+		$key  = md5( $form . '|' . wp_unslash( $_POST['vcap_balance_code'] ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- only a fingerprint.
+		if ( $this->balance && $key === $this->balance['key'] ) {
+			return; // Already checked in this request.
+		}
+		if ( is_user_logged_in() && ! ( isset( $_POST['vcap_balance_nonce'] ) && wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_balance_nonce'] ) ), 'vcap_balance' ) ) ) {
+			return;
+		}
+		Shortcodes::no_cache();
+		$this->balance = array(
+			'key'   => $key,
+			'form'  => $form,
+			'html'  => '',
+			'error' => true,
+			'shown' => false,
+		);
+		if ( Plugin::rate_limited( 'balance', 15, 300, 15 * MINUTE_IN_SECONDS, false ) ) {
+			$this->balance['html'] = '<p class="woocommerce-error" role="alert">' . esc_html__( 'Too many attempts. Please try again later.', 'voucher-captain' ) . '</p>';
+			return;
+		}
+		$code    = wc_format_coupon_code( sanitize_text_field( wp_unslash( $_POST['vcap_balance_code'] ) ) );
+		$voucher = '' !== $code ? ( $this->repo->get_by_code( $code ) ?? $this->repo->get_by_code( strtoupper( $code ) ) ) : null;
+		if ( ! $voucher ) {
+			Plugin::rate_limit_failure( 'balance', 15 * MINUTE_IN_SECONDS );
+			$this->balance['html'] = '<p class="woocommerce-error" role="alert">' . esc_html__( 'Voucher code not found.', 'voucher-captain' ) . '</p>';
+			return;
+		}
+		Plugin::rate_limit_success( 'balance', 15 * MINUTE_IN_SECONDS );
+		$this->balance['html']  = $this->balance_result( $voucher );
+		$this->balance['error'] = false;
 	}
 
 	/**
-	 * Balance check form. Guests send it without a nonce: it only reads (rate limited) and a nonce in a cached
-	 * page would expire or belong to another visitor's session. Logged-in customers keep the nonce check.
+	 * [vcap_balance]: the balance check form. The result appears in the form that was sent (focused after the
+	 * page reload, see Shortcodes::result_region()); editor previews show the form only.
 	 */
 	public function balance_shortcode(): string {
-		$result = '';
-		$posted = isset( $_POST['vcap_balance_code'] ) && ( ! is_user_logged_in() || ( isset( $_POST['vcap_balance_nonce'] ) && wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_balance_nonce'] ) ), 'vcap_balance' ) ) );
+		if ( ! did_action( 'template_redirect' ) ) {
+			$this->handle_balance(); // Rendered outside a page request (e.g. by a page builder's AJAX call).
+		}
 		self::enqueue_style();
-		if ( $posted ) {
-			Shortcodes::no_cache();
-			if ( Plugin::rate_limited( 'balance', 15, 300, 15 * MINUTE_IN_SECONDS, false ) ) {
-				$result = '<p class="woocommerce-error" role="alert">' . esc_html__( 'Too many attempts. Please try again later.', 'voucher-captain' ) . '</p>';
-			} else {
-				$code    = wc_format_coupon_code( sanitize_text_field( wp_unslash( $_POST['vcap_balance_code'] ) ) );
-				$voucher = $this->repo->get_by_code( $code ) ?? $this->repo->get_by_code( strtoupper( $code ) );
-				if ( ! $voucher ) {
-					Plugin::rate_limit_failure( 'balance', 15 * MINUTE_IN_SECONDS );
-					$result = '<p class="woocommerce-error" role="alert">' . esc_html__( 'Voucher code not found.', 'voucher-captain' ) . '</p>';
-				} else {
-					Plugin::rate_limit_success( 'balance', 15 * MINUTE_IN_SECONDS );
-					$result = $this->balance_result( $voucher );
-				}
-			}
+		$form_id = Shortcodes::unique_id( 'vcap-balance' );
+		$result  = '';
+		$error   = false;
+		if ( $this->balance && ! $this->balance['shown'] && in_array( $this->balance['form'], array( '', $form_id ), true ) && ! Shortcodes::is_editor_preview() ) {
+			$this->balance['shown'] = true;
+			$result                 = Shortcodes::result_region( $this->balance['html'], $form_id . '-result' );
+			$error                  = $this->balance['error'];
 		}
 		ob_start();
 		?>
-		<form method="post" class="vcap-balance-form">
+		<form method="post" class="vcap-balance-form" action="#<?php echo esc_attr( $form_id ); ?>">
 			<?php
 			if ( is_user_logged_in() ) {
-				wp_nonce_field( 'vcap_balance', 'vcap_balance_nonce' );
+				wp_nonce_field( 'vcap_balance', 'vcap_balance_nonce', false );
 			}
 			?>
-			<label for="vcap-balance-code"><?php esc_html_e( 'Voucher code', 'voucher-captain' ); ?></label>
-			<input type="text" id="vcap-balance-code" name="vcap_balance_code" required autocomplete="off" />
-			<button type="submit" class="button"><?php esc_html_e( 'Check balance', 'voucher-captain' ); ?></button>
+			<input type="hidden" name="vcap_balance_form" value="<?php echo esc_attr( $form_id ); ?>" />
+			<label for="<?php echo esc_attr( $form_id . '-code' ); ?>"><?php esc_html_e( 'Voucher code', 'voucher-captain' ); ?></label>
+			<input type="text" id="<?php echo esc_attr( $form_id . '-code' ); ?>" name="vcap_balance_code" required autocomplete="off" maxlength="100"<?php echo $error ? ' aria-invalid="true" aria-describedby="' . esc_attr( $form_id . '-result' ) . '"' : ''; ?> />
+			<button type="submit" class="<?php echo esc_attr( Shortcodes::button_class() ); ?>"><?php esc_html_e( 'Check balance', 'voucher-captain' ); ?></button>
 		</form>
 		<?php
-		return $result . ob_get_clean();
+		return Shortcodes::wrap( $result . ob_get_clean(), $form_id );
 	}
 }

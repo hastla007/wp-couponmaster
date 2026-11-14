@@ -365,13 +365,16 @@ final class StoreCredit {
 	}
 
 	public function account_block(): void {
-		if ( ! $this->enabled() ) {
+		static $shown = false;
+		// Once per page; not in an editor's preview (it would show, or repair, the editor's own account).
+		if ( $shown || ! $this->enabled() || Shortcodes::is_editor_preview() ) {
 			return;
 		}
 		$account = $this->account( get_current_user_id() );
 		if ( ! $account ) {
 			return;
 		}
+		$shown  = true;
 		$labels = VoucherRepository::event_labels();
 		echo '<section class="vcap-store-credit"><h2>' . esc_html__( 'Store credit', 'voucher-captain' ) . '</h2>';
 		echo '<p><strong>' . wp_kses_post( wc_price( $account->balance, array( 'currency' => $account->currency ) ) ) . '</strong> · ';
@@ -380,13 +383,39 @@ final class StoreCredit {
 		if ( $account->balance > 0 ) {
 			echo ' · <a href="' . esc_url( $this->apply_url() ) . '">' . esc_html__( 'Use store credit', 'voucher-captain' ) . '</a>';
 		}
-		echo '</p><table class="woocommerce-table shop_table shop_table_responsive"><thead><tr><th>' . esc_html__( 'Date', 'voucher-captain' ) . '</th><th>' . esc_html__( 'Event', 'voucher-captain' ) . '</th><th>' . esc_html__( 'Amount', 'voucher-captain' ) . '</th><th>' . esc_html__( 'Balance after', 'voucher-captain' ) . '</th></tr></thead><tbody>';
+		echo '</p>';
+		$titles = array(
+			'date'    => __( 'Date', 'voucher-captain' ),
+			'event'   => __( 'Event', 'voucher-captain' ),
+			'amount'  => __( 'Amount', 'voucher-captain' ),
+			'balance' => __( 'Balance after', 'voucher-captain' ),
+		);
+		$rows   = '';
 		foreach ( array_slice( array_reverse( $this->repo->events( $account->id ) ), 0, 25 ) as $e ) {
 			if ( null === $e['amount'] || 'issued' === $e['event'] ) {
 				continue;
 			}
-			echo '<tr><td>' . esc_html( LocalDate::from_utc( $e['created_at'], get_option( 'date_format' ) ) ) . '</td><td>' . esc_html( $labels[ $e['event'] ] ?? $e['event'] ) . '</td><td>' . wp_kses_post( wc_price( (float) $e['amount'], array( 'currency' => $account->currency ) ) ) . '</td><td>' . ( null !== $e['balance_after'] ? wp_kses_post( wc_price( (float) $e['balance_after'], array( 'currency' => $account->currency ) ) ) : '' ) . '</td></tr>';
+			$cells = array(
+				'date'    => esc_html( LocalDate::from_utc( $e['created_at'], get_option( 'date_format' ) ) ),
+				'event'   => esc_html( $labels[ $e['event'] ] ?? $e['event'] ),
+				'amount'  => wp_kses_post( wc_price( (float) $e['amount'], array( 'currency' => $account->currency ) ) ),
+				'balance' => null !== $e['balance_after'] ? wp_kses_post( wc_price( (float) $e['balance_after'], array( 'currency' => $account->currency ) ) ) : '',
+			);
+			$rows .= '<tr>';
+			foreach ( $cells as $key => $cell ) {
+				// data-title: the column name in front of the value on small screens (responsive table).
+				$rows .= '<td data-title="' . esc_attr( $titles[ $key ] ) . '">' . $cell . '</td>';
+			}
+			$rows .= '</tr>';
 		}
-		echo '</tbody></table></section>';
+		if ( '' === $rows ) {
+			echo '<p class="vcap-store-credit-empty">' . esc_html__( 'No store credit bookings yet.', 'voucher-captain' ) . '</p></section>';
+			return;
+		}
+		echo '<table class="woocommerce-table shop_table shop_table_responsive vcap-store-credit-table"><thead><tr>';
+		foreach ( $titles as $title ) {
+			echo '<th scope="col">' . esc_html( $title ) . '</th>';
+		}
+		echo '</tr></thead><tbody>' . $rows . '</tbody></table></section>'; // phpcs:ignore WordPress.Security.EscapeOutput -- cells escaped above.
 	}
 }

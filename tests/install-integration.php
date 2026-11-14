@@ -202,8 +202,13 @@ wp_delete_post( $u_plain->get_id(), true );
 
 // Page caches: the redeem form keeps the page out of caches; guests check balances without a nonce.
 wp_set_current_user( 0 );
+$inst_no_cache = did_action( 'vcap_no_cache' );
+vcap_inst_assert( ! str_contains( do_shortcode( '[vcap_redeem]' ), 'vcap_redeem_nonce' ) && did_action( 'vcap_no_cache' ) === $inst_no_cache, 'the guest redeem form carries no nonce and keeps the page cacheable' );
+wc_load_cart();
+WC()->session->set( VCAP\Shortcodes::PREFILL_KEY, 'INST-CODE' );
 do_shortcode( '[vcap_redeem]' );
-vcap_inst_assert( defined( 'DONOTCACHEPAGE' ) && DONOTCACHEPAGE, 'the redeem form marks the page as not cacheable' );
+WC()->session->set( VCAP\Shortcodes::PREFILL_KEY, null );
+vcap_inst_assert( did_action( 'vcap_no_cache' ) > $inst_no_cache && defined( 'DONOTCACHEPAGE' ) && DONOTCACHEPAGE, 'the redeem form with a code of this visitor marks the page as not cacheable' );
 $form = do_shortcode( '[vcap_balance]' );
 vcap_inst_assert( ! str_contains( $form, 'vcap_balance_nonce' ), 'the guest balance form carries no nonce (cacheable)' );
 $_POST = array( 'vcap_balance_code' => $card->code );

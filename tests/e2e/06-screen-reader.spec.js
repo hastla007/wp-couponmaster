@@ -53,6 +53,11 @@ test.describe( 'Screen reader: customer pages', () => {
 		await page.locator( '.vcap-balance-form' ).getByRole( 'textbox' ).fill( 'NOPE-SR-0000' );
 		await Promise.all( [ page.waitForLoadState( 'load' ), page.locator( '.vcap-balance-form' ).getByRole( 'button' ).click() ] );
 		await expect( page.getByRole( 'alert' ).filter( { hasText: /Voucher code not found/i } ) ).toBeVisible();
+		// After the reload the result has the focus and the field is marked invalid, pointing to the error.
+		await expect( page.locator( '.vcap-form-result' ).first() ).toBeFocused();
+		const field = page.locator( '.vcap-balance-form' ).getByRole( 'textbox' );
+		await expect( field ).toHaveAttribute( 'aria-invalid', 'true' );
+		await expect( field ).toHaveAccessibleDescription( /Voucher code not found/i );
 	} );
 
 	test( 'My Account voucher table has column headers', async ( { page } ) => {
@@ -87,5 +92,22 @@ test.describe( 'Screen reader: admin', () => {
 		await expectNamedControls( page, '#vcap-campaign-rules .inside' );
 		await expect( page.locator( '#vcap-campaign-preview-result' ) ).toHaveAttribute( 'aria-live', 'polite' );
 		await expect( page.getByRole( 'button', { name: /test/i } ).or( page.locator( '#vcap-campaign-preview' ) ).first() ).toBeVisible();
+	} );
+
+	test( 'field group editor: fields are reordered and removed by keyboard', async ( { page } ) => {
+		await page.goto( '/wp-admin/post-new.php?post_type=vcap_field_group' );
+		const rows = page.locator( '#vcap-field-list .vcap-fg-row' );
+		for ( const label of [ 'First field', 'Second field' ] ) {
+			await page.click( '#vcap-add-field' );
+			await page.keyboard.type( label );
+		}
+		const down = rows.first().getByRole( 'button', { name: /First field/ } ).nth( 1 );
+		await down.focus();
+		await page.keyboard.press( 'Enter' );
+		await expect( rows.first().locator( '[data-k="label"]' ) ).toHaveValue( 'Second field' );
+		await expect( rows.nth( 1 ).getByRole( 'button', { name: /First field/ } ).first() ).toBeFocused();
+		await rows.first().getByRole( 'button', { name: /Second field/ } ).last().click();
+		await expect( rows ).toHaveCount( 1 );
+		await expect( rows.first().getByRole( 'button', { name: /First field/ } ).last() ).toBeFocused();
 	} );
 } );

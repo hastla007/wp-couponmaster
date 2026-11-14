@@ -6,10 +6,25 @@
 	"category": "widgets",
 	"icon": "id-alt",
 	"description": "The logged-in customer's vouchers with PDF download and \"send again\".",
+	"keywords": [
+		"voucher",
+		"gift card",
+		"account",
+		"PDF"
+	],
 	"textdomain": "voucher-captain",
+	"attributes": {
+		"showExtras": {
+			"type": "boolean",
+			"default": true
+		}
+	},
 	"supports": {
 		"html": false
 	},
 	"editorScript": "vcap-blocks",
-	"style": "vcap-frontend"
+	"example": {
+		"attributes": {}
+	},
+	"editorStyle": "vcap-frontend"
 }
