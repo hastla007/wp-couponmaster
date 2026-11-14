@@ -142,7 +142,7 @@ final class StoreCredit {
 		global $wpdb;
 		$table = Install::tables()['vouchers'];
 		$event = '' !== $event ? $event : ( $amount > 0 ? 'credit' : 'debit' );
-		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( ! Db::begin() ) {
 			return new \WP_Error( 'vcap_temporary_failure', __( 'Store credit is temporarily unavailable.', 'voucher-captain' ) );
 		}
 		try {
@@ -160,7 +160,7 @@ final class StoreCredit {
 				Db::rollback_if_error( 'store_credit_adjust', array( 'user_id' => $user_id, 'order_id' => $order_id ) );
 				return new \WP_Error( 'vcap_temporary_failure', __( 'Store credit is temporarily unavailable.', 'voucher-captain' ) );
 			}
-			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			if ( ! Db::commit() ) {
 				Db::rollback_if_error( 'store_credit_adjust', array( 'user_id' => $user_id, 'order_id' => $order_id ) );
 				return new \WP_Error( 'vcap_temporary_failure', __( 'Store credit is temporarily unavailable.', 'voucher-captain' ) );
 			}
@@ -170,7 +170,7 @@ final class StoreCredit {
 		}
 		CouponManager::sync_coupon_amount( $fresh );
 		/** The store credit of a customer changed (args: user id, amount, balance after, event, reason, order id). */
-		do_action( 'vcap_store_credit_changed', $user_id, $amount, $fresh->balance, $event, $reason, $order_id );
+		Db::action( 'vcap_store_credit_changed', $user_id, $amount, $fresh->balance, $event, $reason, $order_id );
 		return array(
 			'balance' => $fresh->balance,
 			'amount'  => $amount,

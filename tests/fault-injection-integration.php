@@ -185,4 +185,59 @@ $single = vcap_fault_card( 25 );
 $result = vcap_fault( 'ledger', static fn() => vcap()->redemptions->reserve( $single->code, array( 'key' => 'fault-' . wp_generate_uuid4(), 'target' => 'test:fault', 'amount' => 10 ) ) );
 vcap_fault_assert( is_wp_error( $result ) && 25.0 === $repo->get( $single->id )->balance && VCAP\Voucher::STATUS_ACTIVE === $repo->get( $single->id )->status, 'a failed ledger INSERT rolls back an external reservation' );
 
+// D6: side-effect actions fired in a transaction wait for its COMMIT and are dropped on ROLLBACK.
+$d6_card    = vcap_fault_card( 50 );
+$d6_order   = wc_create_order();
+$d6_order->save();
+$d6_seen    = array();
+$d6_watch   = static function ( $voucher_id, $event = '' ) use ( &$d6_seen, $d6_card ) {
+	global $wpdb;
+	if ( (int) $voucher_id !== (int) $d6_card->id ) {
+		return;
+	}
+	// What another connection would see right now (the row is committed only after the COMMIT).
+	list( $host, $port, $socket ) = $wpdb->parse_db_host( DB_HOST );
+	$other                        = new mysqli( (string) $host, DB_USER, DB_PASSWORD, DB_NAME, $port ? (int) $port : 3306, $socket ? (string) $socket : null );
+	$row   = $other->query( 'SELECT balance FROM ' . VCAP\Install::tables()['vouchers'] . ' WHERE id = ' . (int) $voucher_id )->fetch_assoc();
+	$other->close();
+	$d6_seen[] = array( $event, VCAP\Db::in_transaction(), (float) $row['balance'] );
+};
+add_action( 'vcap_voucher_event', $d6_watch, 10, 2 );
+vcap_fault( 'voucher', static fn() => $coupons->reserve_voucher_balance( $d6_card, 20, $d6_order ) );
+vcap_fault( 'ledger', static fn() => $coupons->reserve_voucher_balance( $d6_card, 20, $d6_order ) );
+vcap_fault_assert( array() === $d6_seen, 'D6: vcap_voucher_event is not fired for a rolled back reservation' );
+$coupons->reserve_voucher_balance( $d6_card, 20, $d6_order );
+remove_action( 'vcap_voucher_event', $d6_watch, 10 );
+vcap_fault_assert( array( array( 'reserved', false, 30.0 ) ) === $d6_seen, 'D6: vcap_voucher_event fires once, after the COMMIT (another connection already sees the new balance)' );
+
+// A listener that rolls back "its own" work and opens a transaction of its own runs after the COMMIT: inside the
+// booking's transaction (before D6) its ROLLBACK undid the balance UPDATE and its START TRANSACTION committed the rest.
+$d6_listener = static function ( $voucher ) use ( $d6_card ) {
+	global $wpdb;
+	if ( $voucher instanceof VCAP\Voucher && (int) $voucher->id === (int) $d6_card->id ) {
+		$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
+};
+add_action( 'vcap_voucher_updated', $d6_listener );
+$d6_ok = $coupons->adjust_balance( $repo->get( $d6_card->id ), 5, 'adjusted', 'D6 test' );
+remove_action( 'vcap_voucher_updated', $d6_listener );
+$d6_events = array_column( $repo->events( $d6_card->id ), 'event' );
+vcap_fault_assert( $d6_ok && 35.0 === $repo->get( $d6_card->id )->balance && 'adjusted' === end( $d6_events ) && ! VCAP\Db::in_transaction(), 'D6: a listener with its own transaction can no longer commit or undo the booking that fired it' );
+
+// Nested helper calls (savepoint): the inner actions wait for the outer COMMIT, an outer ROLLBACK drops them.
+$d6_seen = array();
+add_action( 'vcap_voucher_event', $d6_watch, 10, 2 );
+VCAP\Db::begin();
+$coupons->adjust_balance( $repo->get( $d6_card->id ), 1, 'adjusted', 'D6 nested, rolled back' );
+$d6_inner = $d6_seen;
+VCAP\Db::rollback_silently();
+VCAP\Db::begin();
+$coupons->adjust_balance( $repo->get( $d6_card->id ), 2, 'adjusted', 'D6 nested' );
+$d6_inner2 = $d6_seen;
+VCAP\Db::commit();
+remove_action( 'vcap_voucher_event', $d6_watch, 10 );
+vcap_fault_assert( array() === $d6_inner && array() === $d6_inner2 && array( array( 'adjusted', false, 37.0 ) ) === $d6_seen && 37.0 === $repo->get( $d6_card->id )->balance, 'D6: nested bookings dispatch at the outermost COMMIT; the rolled back one leaves no balance and no event' );
+
 echo "Voucher Captain fault injection checks passed.\n";

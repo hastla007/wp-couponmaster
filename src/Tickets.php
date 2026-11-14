@@ -411,7 +411,7 @@ final class Tickets {
 			$fresh->status = Voucher::STATUS_REDEEMED;
 			$this->repo->update( $fresh );
 		}
-		do_action( 'vcap_ticket_checked_in', $fresh, $count );
+		Db::action( 'vcap_ticket_checked_in', $fresh, $count );
 		return true;
 	}
 
@@ -998,7 +998,7 @@ final class Tickets {
 				}
 				$fresh = $this->repo->get( $voucher->id );
 				if ( $fresh ) {
-					do_action( 'vcap_voucher_updated', $fresh );
+					Db::action( 'vcap_voucher_updated', $fresh );
 				}
 			}
 		}
@@ -1007,7 +1007,7 @@ final class Tickets {
 			return new \WP_Error( 'vcap_reversal_failed', self::reversal_message( 'failed' ), array( 'status' => 500 ) );
 		}
 		/** A counter redemption was cancelled (amount booked back). */
-		do_action( 'vcap_redemption_reversed', $voucher->id, $event_id, $amount, $reason );
+		Db::action( 'vcap_redemption_reversed', $voucher->id, $event_id, $amount, $reason );
 		return $amount;
 	}
 

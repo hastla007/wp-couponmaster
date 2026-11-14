@@ -18,6 +18,7 @@ final class VCAP_Example_Connector {
 	const TARGET    = 'example:premium';    // What is unlocked; checked by vcap_redemption_allowed.
 	const PENDING   = 'vcap_example_pending'; // user meta: redemption key => attempts (survives timeouts).
 	const ACCESS    = 'vcap_example_access';  // user meta: redemption key => voucher id (the "grant").
+	const BY_VOUCHER = 'vcap_example_voucher'; // user meta (one row per granted voucher id): finds the user of a voucher.
 	const ATTEMPTS  = 'vcap_example_attempts'; // user meta: code hash => number of released earlier redemptions.
 	const RETRY     = 'vcap_example_retry';   // Action Scheduler hook.
 	const MAX_TRIES = 5;
@@ -203,13 +204,18 @@ final class VCAP_Example_Connector {
 		if ( ! isset( $access[ $key ] ) ) {
 			$access[ $key ] = $voucher_id;
 			update_user_meta( $user_id, self::ACCESS, $access );
+			add_user_meta( $user_id, self::BY_VOUCHER, $voucher_id );
 		}
 	}
 
 	private function revoke( int $user_id, string $key ): void {
 		$access = (array) get_user_meta( $user_id, self::ACCESS, true );
+		$gone   = (int) ( $access[ $key ] ?? 0 );
 		unset( $access[ $key ] );
 		update_user_meta( $user_id, self::ACCESS, $access );
+		if ( $gone && ! in_array( $gone, array_map( 'intval', $access ), true ) ) {
+			delete_user_meta( $user_id, self::BY_VOUCHER, $gone );
+		}
 	}
 
 	public function has_access( int $user_id, string $key = '' ): bool {
@@ -225,14 +231,14 @@ final class VCAP_Example_Connector {
 		if ( 'voided' !== $event ) {
 			return;
 		}
-		global $wpdb;
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT user_id, meta_value FROM {$wpdb->usermeta} WHERE meta_key = %s", self::ACCESS ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		foreach ( $rows as $row ) {
-			$access = maybe_unserialize( $row->meta_value );
-			$left   = array_filter( (array) $access, static fn( $id ) => (int) $id !== (int) $voucher_id );
-			if ( count( $left ) !== count( (array) $access ) ) {
-				update_user_meta( (int) $row->user_id, self::ACCESS, $left );
-			}
+		// Only the users this voucher unlocked something for (reverse index written by grant(); no scan of every
+		// user's grants). Runs after Voucher Captain's COMMIT, so a rolled back void never revokes anything.
+		$users = get_users( array( 'meta_key' => self::BY_VOUCHER, 'meta_value' => (string) (int) $voucher_id, 'fields' => 'ID', 'number' => 100 ) ); // phpcs:ignore WordPress.DB.SlowDBQuery
+		foreach ( $users as $user_id ) {
+			$access = (array) get_user_meta( (int) $user_id, self::ACCESS, true );
+			$left   = array_filter( $access, static fn( $id ) => (int) $id !== (int) $voucher_id );
+			update_user_meta( (int) $user_id, self::ACCESS, $left );
+			delete_user_meta( (int) $user_id, self::BY_VOUCHER, (int) $voucher_id );
 		}
 	}
 

@@ -48,7 +48,7 @@ final class VoucherRepository {
 		}
 		$voucher->id = (int) $wpdb->insert_id;
 		/** A voucher row was inserted (args: Voucher). If its issuing fails afterwards, vcap_voucher_deleted follows. */
-		do_action( 'vcap_voucher_created', $voucher );
+		Db::action( 'vcap_voucher_created', $voucher );
 		return $voucher->id;
 	}
 
@@ -57,8 +57,8 @@ final class VoucherRepository {
 		$voucher->updated_at = $this->now();
 		$ok                  = false !== $wpdb->update( $this->table(), $voucher->to_row(), array( 'id' => $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( $ok ) {
-			/** A voucher was saved (args: Voucher as stored). May fire inside a database transaction, see CONNECTORS.md. */
-			do_action( 'vcap_voucher_updated', $voucher );
+			/** A voucher was saved (args: Voucher as stored, see CONNECTORS.md "Event timing"). */
+			Db::action( 'vcap_voucher_updated', $voucher );
 		}
 		return $ok;
 	}
@@ -86,7 +86,7 @@ final class VoucherRepository {
 				foreach ( get_object_vars( $fresh ) as $key => $value ) {
 					$voucher->$key = $value;
 				}
-				do_action( 'vcap_voucher_updated', $fresh );
+				Db::action( 'vcap_voucher_updated', $fresh );
 			}
 		}
 		return $ok;
@@ -99,7 +99,7 @@ final class VoucherRepository {
 		if ( 1 === $done ) {
 			$fresh = $this->get( $id );
 			if ( $fresh ) {
-				do_action( 'vcap_voucher_updated', $fresh );
+				Db::action( 'vcap_voucher_updated', $fresh );
 			}
 		}
 		return 1 === $done;
@@ -112,7 +112,7 @@ final class VoucherRepository {
 		if ( $ok ) {
 			$fresh = $this->get( $id );
 			if ( $fresh ) {
-				do_action( 'vcap_voucher_updated', $fresh );
+				Db::action( 'vcap_voucher_updated', $fresh );
 			}
 		}
 		return $ok;
@@ -133,7 +133,7 @@ final class VoucherRepository {
 			 *
 			 * @param Voucher $voucher The voucher as it was stored.
 			 */
-			do_action( 'vcap_voucher_deleted', $voucher );
+			Db::action( 'vcap_voucher_deleted', $voucher );
 		}
 	}
 
@@ -507,7 +507,7 @@ final class VoucherRepository {
 				$expired = array_map( array( Voucher::class, 'from_row' ), $rows ? $rows : array() );
 				foreach ( $expired as $voucher ) {
 					$this->log( (int) $voucher->id, 'expired', null, (float) $voucher->balance, Note::make( 'expired' ) );
-					do_action( 'vcap_voucher_updated', $voucher );
+					Db::action( 'vcap_voucher_updated', $voucher );
 				}
 				if ( $expired ) {
 					/**
@@ -515,7 +515,7 @@ final class VoucherRepository {
 					 *
 					 * @param Voucher[] $expired
 					 */
-					do_action_ref_array( 'vcap_voucher_expired', array( $expired ) ); // Not do_action(): one voucher would be unwrapped from the array.
+					Db::action_ref_array( 'vcap_voucher_expired', array( $expired ) ); // Not do_action(): one voucher would be unwrapped from the array.
 				}
 			}
 			if ( $budget > 0 && count( $ids ) === self::MAINTENANCE_BATCH && microtime( true ) - $start >= $budget ) {
@@ -537,7 +537,7 @@ final class VoucherRepository {
 		 * @param array $data voucher_id, code, user_id, amount, currency, order_id, channel (shop|counter|external),
 		 *                    committed_at (UTC), source (see Source).
 		 */
-		do_action(
+		Db::action(
 			'vcap_voucher_redeemed',
 			array(
 				'redemption_key' => '',
@@ -591,7 +591,7 @@ final class VoucherRepository {
 			}
 			$after = (int) end( $ids );
 			$in    = implode( ',', $ids );
-			if ( $transaction && false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			if ( $transaction && ! Db::begin() ) {
 				throw new \RuntimeException( 'Retention: transaction could not be started: ' . esc_html( $wpdb->last_error ) );
 			}
 			try {
@@ -605,16 +605,12 @@ final class VoucherRepository {
 						$cutoff
 					)
 				);
-				if ( false === $updated || ( $transaction && false === $wpdb->query( 'COMMIT' ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-					$error = $wpdb->last_error;
-					if ( $transaction ) {
-						$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-					}
-					throw new \RuntimeException( 'Retention: personal data could not be removed: ' . esc_html( $error ) );
+				if ( false === $updated || ( $transaction && ! Db::commit() ) ) {
+					throw new \RuntimeException( 'Retention: personal data could not be removed: ' . esc_html( $wpdb->last_error ) );
 				}
 			} catch ( \Throwable $e ) {
 				if ( $transaction ) {
-					$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					Db::rollback_silently();
 				}
 				throw $e;
 			}
@@ -723,7 +719,7 @@ final class VoucherRepository {
 		if ( $inserted ) {
 			// Listeners get the note as text (a coded note in the site language).
 			/** A history entry was written (args: voucher id, event, amount, balance after, note as text, order id). */
-			do_action( 'vcap_voucher_event', $voucher_id, $event, $amount, $balance_after, Note::render( $note ), $order_id );
+			Db::action( 'vcap_voucher_event', $voucher_id, $event, $amount, $balance_after, Note::render( $note ), $order_id );
 		}
 		return $inserted;
 	}

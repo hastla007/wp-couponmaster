@@ -1566,6 +1566,152 @@ $d15_legacy = new class() implements VCAP\Contracts\RedemptionProvider {
 	public function release( string $code, \WC_Order $order ) { return array(); }
 };
 check( 'D15: an untyped provider written against the 1.1 contract still implements the interface', $d15_legacy instanceof VCAP\Contracts\RedemptionProvider );
+echo "D6 event timing (actions after COMMIT)\n";
+if ( ! function_exists( 'do_action_ref_array' ) ) {
+	function do_action_ref_array( $hook, $args ) { do_action( $hook, ...$args ); }
+}
+if ( ! function_exists( 'wc_get_logger' ) ) {
+	function wc_get_logger() {
+		return new class() {
+			public function log( $level, $message, $context = array() ) { $GLOBALS['vcap_test_logged'][] = array( $level, $message ); }
+		};
+	}
+}
+/** Database double for D6: records queries; COMMIT can be refused. */
+final class VCAP_D6_Wpdb {
+	public string $prefix     = 'wp_';
+	public string $last_error = '';
+	public int $insert_id     = 1;
+	public bool $refuse_commit = false;
+	public array $log         = array();
+	public function query( $q ) { $this->log[] = $q; return $this->refuse_commit && 'COMMIT' === $q ? false : 1; }
+	public function update( ...$a ) { return 1; }
+	public function insert( ...$a ) { return 1; }
+	public function prepare( $q, ...$a ) { return $q; }
+	public function get_var( $q ) { return null; }
+	public function get_row( $q, $o = null ) { return null; }
+	public function get_results( $q, $o = null ) { return array(); }
+	public function get_col( $q, $i = 0 ) { return array(); }
+}
+$d6_saved_wpdb   = $GLOBALS['wpdb'] ?? null;
+$GLOBALS['wpdb'] = new VCAP_D6_Wpdb();
+VCAP\Db::reset();
+$d6_seen = array();
+add_action( 'vcap_d6_test', static function ( $value ) use ( &$d6_seen ) { $d6_seen[] = $value; } );
+
+VCAP\Db::action( 'vcap_d6_test', 'now' );
+check( 'D6: outside a transaction an action fires immediately', array( 'now' ) === $d6_seen );
+
+$d6_seen = array();
+VCAP\Db::begin();
+VCAP\Db::action( 'vcap_d6_test', 'a' );
+$d6_before = $d6_seen;
+VCAP\Db::commit();
+check( 'D6: an action is not visible to listeners before COMMIT and fires once after it', array() === $d6_before && array( 'a' ) === $d6_seen && array( 'START TRANSACTION', 'COMMIT' ) === $GLOBALS['wpdb']->log );
+
+$d6_seen              = array();
+$GLOBALS['wpdb']->log = array();
+VCAP\Db::begin();
+VCAP\Db::action( 'vcap_d6_test', 'gone' );
+VCAP\Db::rollback_if_error( 'd6_test' );
+VCAP\Db::begin();
+VCAP\Db::commit();
+check( 'D6: an action of a rolled back transaction is never fired (not even with the next COMMIT)', array() === $d6_seen && array( 'START TRANSACTION', 'ROLLBACK', 'START TRANSACTION', 'COMMIT' ) === $GLOBALS['wpdb']->log );
+
+$d6_seen              = array();
+$GLOBALS['wpdb']->log = array();
+VCAP\Db::begin();
+VCAP\Db::action( 'vcap_d6_test', 'outer' );
+VCAP\Db::begin();
+VCAP\Db::action( 'vcap_d6_test', 'inner' );
+VCAP\Db::commit();
+$d6_after_inner = $d6_seen;
+VCAP\Db::begin();
+VCAP\Db::action( 'vcap_d6_test', 'undone' );
+VCAP\Db::rollback_silently();
+$d6_open = VCAP\Db::in_transaction();
+VCAP\Db::commit();
+check( 'D6: nested helper calls use savepoints and dispatch at the outermost COMMIT (an inner ROLLBACK drops only its own actions)', array() === $d6_after_inner && $d6_open && array( 'outer', 'inner' ) === $d6_seen && ! VCAP\Db::in_transaction() && array( 'START TRANSACTION', 'SAVEPOINT vcap_sp_1', 'RELEASE SAVEPOINT vcap_sp_1', 'SAVEPOINT vcap_sp_1', 'ROLLBACK TO SAVEPOINT vcap_sp_1', 'COMMIT' ) === $GLOBALS['wpdb']->log, implode( ' | ', $GLOBALS['wpdb']->log ) );
+
+// A listener that opens its own transaction runs after the outer COMMIT: its START TRANSACTION can no longer
+// commit the outer one implicitly, and its own actions follow its own COMMIT.
+$d6_seen              = array();
+$GLOBALS['wpdb']->log = array();
+add_action(
+	'vcap_d6_tx_listener',
+	static function () {
+		$GLOBALS['vcap_d6_open_in_listener'] = VCAP\Db::in_transaction();
+		VCAP\Db::begin();
+		VCAP\Db::action( 'vcap_d6_test', 'from listener' );
+		VCAP\Db::commit();
+	}
+);
+VCAP\Db::begin();
+VCAP\Db::action( 'vcap_d6_tx_listener' );
+VCAP\Db::action( 'vcap_d6_test', 'outer' );
+VCAP\Db::commit();
+check( 'D6: a listener starting its own transaction runs after the outer COMMIT and no longer commits the outer one', false === $GLOBALS['vcap_d6_open_in_listener'] && array( 'START TRANSACTION', 'COMMIT', 'START TRANSACTION', 'COMMIT' ) === $GLOBALS['wpdb']->log && array( 'from listener', 'outer' ) === $d6_seen, implode( ' | ', $GLOBALS['wpdb']->log ) . ' / ' . implode( ',', $d6_seen ) );
+
+// A refused COMMIT keeps the level open for the caller's rollback; nothing is dispatched.
+$d6_seen                         = array();
+$GLOBALS['wpdb']->log            = array();
+$GLOBALS['wpdb']->refuse_commit  = true;
+VCAP\Db::begin();
+VCAP\Db::action( 'vcap_d6_test', 'lost' );
+$d6_committed = VCAP\Db::commit();
+$d6_still     = VCAP\Db::in_transaction();
+VCAP\Db::rollback_if_error( 'd6_test' );
+$GLOBALS['wpdb']->refuse_commit = false;
+check( 'D6: a failed COMMIT dispatches nothing and leaves the rollback to the caller', ! $d6_committed && $d6_still && ! VCAP\Db::in_transaction() && array() === $d6_seen && 'ROLLBACK' === end( $GLOBALS['wpdb']->log ) );
+
+// Db::transaction(): true commits, false rolls back, an exception rolls back and is thrown again.
+$d6_seen              = array();
+$GLOBALS['wpdb']->log = array();
+$d6_ok                = VCAP\Db::transaction( static function () { VCAP\Db::action( 'vcap_d6_test', 'tx' ); return true; }, 'd6' );
+$d6_no                = VCAP\Db::transaction( static function () { VCAP\Db::action( 'vcap_d6_test', 'no' ); return false; }, 'd6' );
+$d6_thrown            = false;
+try {
+	VCAP\Db::transaction( static function () { VCAP\Db::action( 'vcap_d6_test', 'boom' ); throw new RuntimeException( 'boom' ); }, 'd6' );
+} catch ( RuntimeException $e ) {
+	$d6_thrown = true;
+}
+check( 'D6: Db::transaction() commits on true, rolls back on false or an exception (actions only after the commit)', $d6_ok && ! $d6_no && $d6_thrown && array( 'tx' ) === $d6_seen && ! VCAP\Db::in_transaction() && array( 'START TRANSACTION', 'COMMIT', 'START TRANSACTION', 'ROLLBACK', 'START TRANSACTION', 'ROLLBACK' ) === $GLOBALS['wpdb']->log, implode( ' | ', $GLOBALS['wpdb']->log ) );
+
+// A listener that throws after the COMMIT is logged; the others still run (the data is committed).
+$d6_seen                     = array();
+$GLOBALS['vcap_test_logged'] = array();
+add_action( 'vcap_d6_throws', static function () { throw new RuntimeException( 'listener failed' ); } );
+VCAP\Db::begin();
+VCAP\Db::action( 'vcap_d6_throws' );
+VCAP\Db::action( 'vcap_d6_test', 'after' );
+$d6_commit = VCAP\Db::commit();
+check( 'D6: a listener failing after COMMIT is logged and does not stop the other listeners', $d6_commit && array( 'after' ) === $d6_seen && 1 === count( $GLOBALS['vcap_test_logged'] ) && str_contains( $GLOBALS['vcap_test_logged'][0][1], 'listener failed' ) );
+
+// Repository hooks: vcap_voucher_updated / vcap_voucher_event wait for the COMMIT and get the state of the call.
+$d6_updates = array();
+$d6_events  = array();
+add_action( 'vcap_voucher_updated', static function ( $v ) use ( &$d6_updates ) { $d6_updates[] = $v->balance; } );
+add_action( 'vcap_voucher_event', static function ( $id, $event ) use ( &$d6_events ) { $d6_events[] = $event; }, 10, 2 );
+$d6_repo             = new VCAP\VoucherRepository();
+$d6_voucher          = new VCAP\Voucher();
+$d6_voucher->id      = 7;
+$d6_voucher->balance = 40.0;
+VCAP\Db::begin();
+$d6_repo->update( $d6_voucher );
+$d6_repo->log( 7, 'redeemed', 10.0, 30.0, 'test' );
+$d6_voucher->balance = 30.0;
+$d6_repo->update( $d6_voucher );
+$d6_mid = array( $d6_updates, $d6_events );
+VCAP\Db::commit();
+VCAP\Db::begin();
+$d6_repo->update( $d6_voucher );
+$d6_repo->log( 7, 'voided' );
+VCAP\Db::rollback_silently();
+check( 'D6: vcap_voucher_updated and vcap_voucher_event fire after the COMMIT (each with the voucher as saved then), never after a ROLLBACK', array( array(), array() ) === $d6_mid && array( 40.0, 30.0 ) === $d6_updates && array( 'redeemed' ) === $d6_events, var_export( array( $d6_updates, $d6_events ), true ) );
+$d6_sources = implode( "\n", array_map( 'file_get_contents', array( VCAP_PATH . 'src/CouponManager.php', VCAP_PATH . 'src/API/V1/RedemptionService.php', VCAP_PATH . 'src/StoreCredit.php', VCAP_PATH . 'src/VoucherRepository.php', VCAP_PATH . 'src/Install.php' ) ) );
+check( 'D6: every transaction in src runs through the shared helper (no raw START TRANSACTION / COMMIT / ROLLBACK)', ! preg_match( "/query\\( '(START TRANSACTION|COMMIT|ROLLBACK)' \\)/", $d6_sources ) );
+VCAP\Db::reset();
+$GLOBALS['wpdb'] = $d6_saved_wpdb;
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );
