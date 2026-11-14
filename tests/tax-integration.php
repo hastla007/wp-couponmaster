@@ -510,6 +510,99 @@ remove_filter( 'woocommerce_store_api_disable_nonce_check', '__return_true' );
 WC()->cart->empty_cart();
 update_option( VCAP\PaymentVouchers::OPTION, 'no' );
 
+/* ---- 9. Tax-exclusive prices: stored balances pay gross (TAX.md 4.1, TODO T7, T8, T15) ------------------ */
+
+update_option( 'woocommerce_prices_include_tax', 'no' );
+$card_line = static function ( WC_Order $order, string $code ): float {
+	foreach ( $order->get_items( 'coupon' ) as $line ) {
+		if ( wc_format_coupon_code( $line->get_code() ) === wc_format_coupon_code( $code ) ) {
+			return round( (float) $line->get_discount() + (float) $line->get_discount_tax(), 4 );
+		}
+	}
+	return -1.0;
+};
+
+// 9.1 (T7) A single-purpose card sold WITH VAT is worth what the customer paid, gross, and pays that gross amount.
+$spv_card = vcap_tax_product( 'single', 'fixed_cart', 'giftcard', 'balance' );
+$spv_card->set_regular_price( '50' );
+$spv_card->set_tax_status( 'taxable' );
+$spv_card->save();
+$spv_buy = $order_with( array( array( $spv_card, 50 ) ), 'AT', 'tax-t7-buy@example.com' );
+$spv_buy->payment_complete( 'txn-tax-t7-buy' );
+$spv_sold = vcap()->vouchers->for_order( $spv_buy->get_id() );
+$spv_line = VCAP\Issuer::line_data( current( wc_get_order( $spv_buy->get_id() )->get_items() ) );
+vcap_tax_assert( abs( 60.0 - (float) wc_get_order( $spv_buy->get_id() )->get_total() ) < 0.001 && 1 === count( $spv_sold ) && abs( 60.0 - (float) $spv_sold[0]->initial_amount ) < 0.001 && abs( 60.0 - (float) $spv_sold[0]->balance ) < 0.001 && abs( 60.0 - (float) ( $spv_line['face_value'] ?? 0 ) ) < 0.001, 'net prices (T7): a single-purpose card sold for 50 + 20 % VAT = 60 is worth the 60 paid (gross), also in the line snapshot', array( 'value' => $spv_sold[0]->initial_amount ?? null, 'face' => $spv_line['face_value'] ?? null ) );
+$spv_spend = $order_with( array( array( $goods, 120 ) ), 'AT', 'tax-t7-spend@example.com' );
+$spv_spend->apply_coupon( $spv_sold[0]->code );
+$spv_spend = wc_get_order( $spv_spend->get_id() );
+vcap()->coupons->reserve_order( $spv_spend );
+wc_get_order( $spv_spend->get_id() )->payment_complete( 'txn-tax-t7-spend' );
+$spv_spend = wc_get_order( $spv_spend->get_id() );
+vcap_tax_assert( abs( 84.0 - (float) $spv_spend->get_total() ) < 0.001 && abs( 60.0 - $card_line( $spv_spend, $spv_sold[0]->code ) ) < 0.001 && (float) vcap()->vouchers->get( $spv_sold[0]->id )->balance < 0.001, 'net prices (T7): the 60 single-purpose card pays 60 of the 144 gross order (customer pays 84, no 10 VAT to top up) and is used up', array( 'total' => $spv_spend->get_total(), 'card' => $card_line( $spv_spend, $spv_sold[0]->code ) ) );
+$mpv_taxed = vcap_tax_product( 'payment', 'fixed_cart', 'giftcard', 'balance' );
+$mpv_taxed->set_regular_price( '50' );
+$mpv_taxed->set_tax_status( 'taxable' );
+$mpv_taxed->save();
+$mpv_buy = $order_with( array( array( $mpv_taxed, 50 ) ), 'AT', 'tax-t7-mpv@example.com' );
+$mpv_buy->payment_complete( 'txn-tax-t7-mpv' );
+$mpv_sold = vcap()->vouchers->for_order( $mpv_buy->get_id() );
+vcap_tax_assert( 1 === count( $mpv_sold ) && abs( 50.0 - (float) $mpv_sold[0]->initial_amount ) < 0.001, 'net prices (T7): a multi-purpose card keeps its current behaviour – even sold as taxable by mistake it is worth the net 50 (product tax status is not checked, TAX.md 7)', $mpv_sold[0]->initial_amount ?? null );
+
+// 9.2 (T8) Discount code first, then the card, lines with different rates: the card saves exactly its balance gross.
+// The code takes 100 off the 10 % line (110 → 10 left), so most of the card lands on the 20 % line – a ratio of
+// the undiscounted subtotals (net 230, VAT 35) would make the 100 card save 103.15 and block the checkout.
+$t8_code = new WC_Coupon();
+$t8_code->set_code( 'vcap-t8-' . strtolower( wp_generate_password( 8, false, false ) ) );
+$t8_code->set_discount_type( 'fixed_product' );
+$t8_code->set_amount( 100 );
+$t8_code->set_product_ids( array( $goods_reduced->get_id() ) );
+$t8_code->save();
+$t8_card = vcap_tax_voucher( 'giftcard', 'balance', 'fixed_cart', $auto_card->get_id(), 100 );
+WC()->customer->set_billing_country( 'AT' );
+WC()->customer->set_shipping_country( 'AT' );
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart( $goods->get_id(), 1 );
+WC()->cart->add_to_cart( $goods_reduced->get_id(), 1 );
+WC()->cart->apply_coupon( $t8_code->get_code() );
+WC()->cart->apply_coupon( $t8_card->code );
+WC()->cart->calculate_totals();
+$t8_key   = wc_format_coupon_code( $t8_card->code );
+$t8_saved = round( WC()->cart->get_coupon_discount_amount( $t8_key ) + WC()->cart->get_coupon_discount_tax_amount( $t8_key ), 4 );
+$t8_state = array( 'saved' => $t8_saved, 'total' => WC()->cart->get_total( 'edit' ), 'tax' => WC()->cart->get_total_tax() );
+vcap_tax_assert( abs( 100.0 - $t8_saved ) < 0.001 && abs( 55.0 - (float) WC()->cart->get_total( 'edit' ) ) < 0.001, 'net prices, mixed rates, code + card (T8, classic cart): the 100 card saves exactly 100 gross; 144 + 121 − 110 (code) − 100 = 55', $t8_state );
+$t8_order = wc_get_order( WC()->checkout()->create_order( array( 'billing_email' => 'tax-t8@example.com', 'billing_country' => 'AT', 'payment_method' => 'bacs' ) ) );
+vcap()->coupons->reserve_order( $t8_order );
+$t8_held = VCAP\CouponManager::order_map( wc_get_order( $t8_order->get_id() ), '_vcap_reservations' );
+vcap_tax_assert( abs( 100.0 - (float) ( $t8_held[ $t8_key ] ?? 0 ) ) < 0.001, 'net prices, mixed rates, code + card (T8): the checkout reserves exactly 100 on the card (no "balance changed" refusal)', $t8_held );
+wc_get_order( $t8_order->get_id() )->payment_complete( 'txn-tax-t8' );
+vcap_tax_assert( abs( 55.0 - (float) wc_get_order( $t8_order->get_id() )->get_total() ) < 0.001 && 0.0 === (float) vcap()->vouchers->get( $t8_card->id )->balance && ! VCAP\CouponManager::has_shortfall( wc_get_order( $t8_order->get_id() ) ), 'net prices, mixed rates, code + card (T8): order total 55, the card is used up completely, no shortfall' );
+WC()->cart->empty_cart();
+// Same in order context (admin order / recalculation: VAT rounded per line).
+$t8_card2 = vcap_tax_voucher( 'giftcard', 'balance', 'fixed_cart', $auto_card->get_id(), 100 );
+$t8_admin = $order_with( array( array( $goods, 120 ), array( $goods_reduced, 110 ) ), 'AT', 'tax-t8-admin@example.com' );
+$t8_admin->apply_coupon( $t8_code->get_code() );
+wc_get_order( $t8_admin->get_id() )->apply_coupon( $t8_card2->code );
+$t8_admin = wc_get_order( $t8_admin->get_id() );
+vcap_tax_assert( abs( 100.0 - $card_line( $t8_admin, $t8_card2->code ) ) < 0.001 && abs( 55.0 - (float) $t8_admin->get_total() ) < 0.001, 'net prices, mixed rates, code + card (T8, order): the card line is exactly 100 gross, total 55', array( 'card' => $card_line( $t8_admin, $t8_card2->code ), 'total' => $t8_admin->get_total() ) );
+vcap()->coupons->reserve_order( $t8_admin );
+wc_get_order( $t8_admin->get_id() )->payment_complete( 'txn-tax-t8-admin' );
+vcap_tax_assert( 0.0 === (float) vcap()->vouchers->get( $t8_card2->id )->balance && ! VCAP\CouponManager::has_shortfall( wc_get_order( $t8_admin->get_id() ) ), 'net prices, mixed rates, code + card (T8, order): the card is used up, no shortfall' );
+
+// 9.3 (T15) Net + VAT is exactly the balance: no cent rest from rounding the net amount down.
+list( $t15_order, $t15_left ) = $pay_with_card( $order_with( array( array( $goods, 100 ) ), 'AT', 'tax-t15@example.com' ), 50 );
+vcap_tax_assert( abs( 70.0 - (float) $t15_order->get_total() ) < 0.001 && 0.0 === $t15_left, 'net prices (T15): a 50 card pays 50 of 120 (net 41.67 + VAT 8.33) and keeps no 1-cent rest', array( 'total' => $t15_order->get_total(), 'left' => $t15_left ) );
+// 49.89: net 41.57 saves 49.88, net 41.58 already 49.90 – the rounding allows no exact amount. The cent the card
+// could not pay is booked off (own ledger event) and comes back if the order is cancelled.
+list( $t15_gap, $t15_gap_left ) = $pay_with_card( $order_with( array( array( $goods, 100 ) ), 'AT', 'tax-t15-gap@example.com' ), 49.89 );
+$t15_card   = vcap()->vouchers->get_by_code( current( $t15_gap->get_coupon_codes() ) );
+$t15_events = wp_list_pluck( vcap()->vouchers->events( $t15_card->id ), 'amount', 'event' );
+vcap_tax_assert( abs( 70.12 - (float) $t15_gap->get_total() ) < 0.001 && 0.0 === $t15_gap_left && abs( 0.01 - (float) ( $t15_events[ VCAP\CouponManager::WRITTEN_OFF_EVENT ] ?? 0 ) ) < 0.0001 && VCAP\Voucher::STATUS_REDEEMED === $t15_card->status, 'net prices (T15): a 49.89 card pays 49.88, the remaining cent is booked off with event "rounding_written_off" (card used up)', array( 'total' => $t15_gap->get_total(), 'left' => $t15_gap_left, 'events' => $t15_events ) );
+wc_get_order( $t15_gap->get_id() )->update_status( 'cancelled' );
+vcap_tax_assert( abs( 49.89 - (float) vcap()->vouchers->get( $t15_card->id )->balance ) < 0.0001, 'net prices (T15): cancelling that order gives the card its full 49.89 back (charge + booked-off cent)', vcap()->vouchers->get( $t15_card->id )->balance );
+// A card bigger than the order keeps its (legitimate) rest, also a single cent.
+list( $t15_big, $t15_big_left ) = $pay_with_card( $order_with( array( array( $goods, 100 ) ), 'AT', 'tax-t15-big@example.com' ), 120.01 );
+vcap_tax_assert( abs( (float) $t15_big->get_total() ) < 0.001 && abs( 0.01 - $t15_big_left ) < 0.0001, 'net prices (T15): a 120.01 card pays the whole 120 and keeps its 0.01 (nothing booked off when the card covered the order)', array( 'total' => $t15_big->get_total(), 'left' => $t15_big_left ) );
+
 foreach ( $rates as $id ) {
 	WC_Tax::_delete_tax_rate( $id );
 }

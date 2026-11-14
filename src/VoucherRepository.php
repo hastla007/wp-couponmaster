@@ -792,6 +792,7 @@ final class VoucherRepository {
 			'redeem_reversed' => __( 'Redemption cancelled (value booked back)', 'voucher-captain' ),
 			'restored'   => __( 'Balance restored', 'voucher-captain' ),
 			'adjusted'   => __( 'Balance adjusted', 'voucher-captain' ),
+			CouponManager::WRITTEN_OFF_EVENT => __( 'Rounding rest booked off', 'voucher-captain' ),
 			'checkin'    => __( 'Checked in', 'voucher-captain' ),
 			'checkin_undo' => __( 'Check-in reverted', 'voucher-captain' ),
 			'voided'     => __( 'Voided', 'voucher-captain' ),

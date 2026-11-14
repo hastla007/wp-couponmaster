@@ -550,12 +550,41 @@ final class Issuer {
 			default:
 				$amount = $paid / $qty / max( 1, (int) $config['per_item'] );
 		}
+		if ( 'fixed' !== $config['amount_source'] && self::balance_sold_with_vat( $item, $config ) ) {
+			// T7: a stored balance sold WITH VAT (single-purpose, not a multi-purpose voucher) in a tax-exclusive
+			// shop is worth what the customer paid, gross: 50 + 19 % VAT = 59.50, and as a stored balance it
+			// pays 59.50 of the gross price (CouponManager::prepare_gross_balance()), not only 50.
+			$amount *= ( (float) $item->get_subtotal() + (float) $item->get_subtotal_tax() ) / (float) $item->get_subtotal();
+		}
 		if ( 'percent' !== $config['discount_type'] && 'fixed' !== $config['amount_source'] ) {
 			// Paid / entered in the order currency; coupons are stored in the shop base currency.
 			$amount = (float) apply_filters( 'vcap_amount_to_base_currency', $amount, $order->get_currency(), $order );
 		}
 		// Vouchers are kept in the shop base currency, booked with its ISO 4217 decimals.
 		return round( (float) apply_filters( 'vcap_voucher_amount', $amount, $item, $config, $order ), API\V1\RedemptionService::decimals( (string) get_option( 'woocommerce_currency' ) ) );
+	}
+
+	/**
+	 * T7: a stored-value voucher (balance) whose sale was taxed in a tax-exclusive shop and that is not classified as
+	 * a multi-purpose voucher (VAT on redemption): its value is the gross amount paid. Multi-purpose vouchers keep
+	 * the net value (they are sold without VAT when set up correctly, TAX.md 3). Single-use vouchers are not
+	 * affected: their fixed amount reduces net prices and the VAT on top, i.e. they already pay net + VAT.
+	 */
+	public static function balance_sold_with_vat( \WC_Order_Item_Product $item, array $config ): bool {
+		if ( wc_prices_include_tax() || 'percent' === ( $config['discount_type'] ?? '' ) || 'balance' !== ( $config['usage'] ?? '' ) ) {
+			return false;
+		}
+		if ( (float) $item->get_subtotal() <= 0 || (float) $item->get_subtotal_tax() <= 0 ) {
+			return false; // Not taxed at sale (multi-purpose set up as "not taxable", small business, exempt buyer).
+		}
+		$probe                = new Voucher();
+		$probe->product_id    = (int) $item->get_product_id();
+		$probe->variation_id  = (int) $item->get_variation_id();
+		$probe->order_item_id = (int) $item->get_id();
+		$probe->type          = (string) ( $config['type'] ?? 'voucher' );
+		$probe->usage_mode    = 'balance';
+		$probe->discount_type = 'fixed_cart';
+		return 'payment' !== ProductConfig::tax_treatment( $probe );
 	}
 
 	private function create_voucher( \WC_Order $order, \WC_Order_Item_Product $item, \WC_Product $product, array $config, int $index ): ?Voucher {
