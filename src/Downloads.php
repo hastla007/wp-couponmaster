@@ -53,16 +53,26 @@ final class Downloads {
 		}
 	}
 
-	private function sign( string $token, int $exp ): string {
-		return hash_hmac( 'sha256', $token . '|' . $exp, $this->settings->secret() );
+	/**
+	 * V10: the signature binds token, expiry and the voucher's link version (number of reissues). Version 0 signs
+	 * as before (token|exp), so links of vouchers that were never reissued stay valid.
+	 */
+	private function sign( string $token, int $exp, int $version = 0 ): string {
+		return hash_hmac( 'sha256', $token . '|' . $exp . ( $version > 0 ? '|v' . $version : '' ), $this->settings->secret() );
 	}
 
-	private function valid_guest_link( string $token, int $exp, string $signature ): bool {
-		return hash_equals( $this->sign( $token, $exp ), $signature ) && ( 0 === $exp || $exp >= time() );
+	/** V10: link version of a voucher – how often it was reissued (each reissue invalidates the links sent before). */
+	public function link_version( Voucher $voucher ): int {
+		return $voucher->id ? $this->repo->count_event( $voucher->id, Reissue::EVENT ) : 0;
+	}
+
+	private function valid_guest_link( Voucher $voucher, int $exp, string $signature ): bool {
+		return hash_equals( $this->sign( $voucher->token, $exp, $this->link_version( $voucher ) ), $signature ) && ( 0 === $exp || $exp >= time() );
 	}
 
 	/**
-	 * @param bool $for_email Email links honour the configured lifetime; page links are short-lived and re-signed per view.
+	 * @param bool $for_email Email links honour the configured lifetime (default 90 days, V10); page links are
+	 *                        short-lived and re-signed per view.
 	 */
 	public function signed_url( Voucher $voucher, bool $for_email = false ): string {
 		if ( $for_email ) {
@@ -75,7 +85,7 @@ final class Downloads {
 			array(
 				'vcap_pdf' => $voucher->token,
 				'exp'      => $exp,
-				'sig'      => $this->sign( $voucher->token, $exp ),
+				'sig'      => $this->sign( $voucher->token, $exp, $this->link_version( $voucher ) ),
 			),
 			home_url( '/' )
 		);
@@ -251,8 +261,10 @@ final class Downloads {
 		if ( Plugin::rate_limited( 'pdf', 30, 600, 10 * MINUTE_IN_SECONDS ) || Plugin::rate_limited( 'pdf_link', 60, 0, HOUR_IN_SECONDS, true, 't' . $token ) ) {
 			wp_die( esc_html__( 'Too many downloads. Please try again later.', 'voucher-captain' ), esc_html__( 'Download unavailable', 'voucher-captain' ), array( 'response' => 429 ) );
 		}
-		$valid   = $this->valid_guest_link( $token, $exp, $sig );
-		$voucher = $valid ? $this->repo->get_by_token( $token ) : null;
+		$voucher = '' !== $sig ? $this->repo->get_by_token( $token ) : null;
+		if ( $voucher && ! $this->valid_guest_link( $voucher, $exp, $sig ) ) {
+			$voucher = null;
+		}
 		if ( ! $voucher ) {
 			wp_die( esc_html__( 'This download link is invalid or has expired. Please log in to your account or contact us for a new link.', 'voucher-captain' ), esc_html__( 'Download unavailable', 'voucher-captain' ), array( 'response' => 403 ) );
 		}

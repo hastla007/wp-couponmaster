@@ -759,6 +759,12 @@ final class VoucherRepository {
 		return (bool) $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$this->events_table()} WHERE voucher_id = %d AND event = %s LIMIT 1", $voucher_id, $event ) ); // phpcs:ignore
 	}
 
+	/** Number of ledger rows of one kind of a voucher (e.g. "reissued": the link version, see Downloads). */
+	public function count_event( int $voucher_id, string $event ): int {
+		global $wpdb;
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$this->events_table()} WHERE voucher_id = %d AND event = %s", $voucher_id, $event ) ); // phpcs:ignore
+	}
+
 	/** Number of ledger rows of a voucher. */
 	public function event_count( int $voucher_id ): int {
 		global $wpdb;
@@ -799,6 +805,7 @@ final class VoucherRepository {
 			'expired'    => __( 'Expired', 'voucher-captain' ),
 			'edited'     => __( 'Edited', 'voucher-captain' ),
 			'downloaded' => __( 'Downloaded', 'voucher-captain' ),
+			'reissued'   => __( 'Reissued with a new code', 'voucher-captain' ),
 		);
 		/** Labels of connector events in the voucher history. */
 		return (array) apply_filters( 'vcap_event_labels', $labels );

@@ -234,6 +234,7 @@ final class VoucherAdmin {
 							echo '<input type="text" id="vcap-void-reason" name="reason" required maxlength="200" placeholder="' . esc_attr__( 'Reason (required)', 'voucher-captain' ) . '" /> ';
 							echo '<button type="submit" class="button button-link-delete">' . esc_html__( 'Void voucher', 'voucher-captain' ) . '</button></form>';
 						}
+						$this->reissue_form( $v );
 						/** Extra buttons for connectors: call $form( $do, $label, $class, $extra_fields, $confirm_text ) and handle $do in vcap_voucher_admin_action. */
 						do_action( 'vcap_voucher_admin_actions', $v, $form );
 						?>
@@ -458,6 +459,16 @@ final class VoucherAdmin {
 				}
 				$this->redirect( 'reversed', $id );
 				break;
+			case 'reissue':
+				// One reissue per rendered form: a double click must not replace the new code (and mail it) again.
+				if ( ! FormToken::claim( 'reissue-' . $id ) ) {
+					Flash::add( 'warning', __( 'This reissue was already submitted. Check the code and the history below.', 'voucher-captain' ) );
+					$this->redirect( '', $id );
+				}
+				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above.
+				$this->reissue( $v, ! empty( $_POST['send'] ), sanitize_text_field( wp_unslash( (string) ( $_POST['reason'] ?? '' ) ) ) );
+				$this->redirect( '', $id );
+				break;
 			case 'save':
 				$this->redirect( $this->save( $v ) ? 'saved' : '', $id );
 				break;
@@ -540,6 +551,78 @@ final class VoucherAdmin {
 		$this->repo->log( $v->id, 'delivery_failed', null, null, \VCAP\Note::make( 'resend_failed', array( \VCAP\Health::mask_addresses( $reason ) ) ) );
 		Flash::add( 'error', $message );
 		return false;
+	}
+
+	/** Addresses the voucher email goes to (as Delivery::send() routes it), for the "send the new code" checkbox. */
+	private static function delivery_addresses( Voucher $v ): array {
+		$to_recipient = \VCAP\Delivery::to_recipient( $v );
+		$list         = array();
+		if ( $to_recipient ) {
+			$list[] = $v->recipient_email;
+		}
+		if ( ! $to_recipient || 'both' === $v->send_to ) {
+			$list[] = $v->buyer_email;
+		}
+		return array_values( array_filter( $list, 'is_email' ) );
+	}
+
+	/**
+	 * V10: "Reissue code" form on the detail page – new code and token, remaining value carried over, old code and
+	 * links invalid; optionally the voucher email with the new code (default off: e.g. after a wrong address the
+	 * admin corrects the recipient first).
+	 */
+	private function reissue_form( Voucher $v ): void {
+		$reissue = new \VCAP\Reissue( vcap()->settings, $this->repo, vcap()->coupons );
+		if ( '' !== $reissue->refusal( $v ) ) {
+			return;
+		}
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="vcap-inline-form vcap-reissue-form" data-confirm="' . esc_attr__( 'Reissue this voucher with a new code? The current code and all download links sent so far stop working at once; the remaining value moves to the new code.', 'voucher-captain' ) . '">';
+		echo '<input type="hidden" name="action" value="vcap_voucher_action" /><input type="hidden" name="do" value="reissue" /><input type="hidden" name="id" value="' . esc_attr( (string) $v->id ) . '" />';
+		wp_nonce_field( 'vcap_voucher_' . $v->id );
+		echo FormToken::field(); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in field().
+		echo '<label class="screen-reader-text" for="vcap-reissue-reason">' . esc_html__( 'Reason', 'voucher-captain' ) . '</label>';
+		echo '<input type="text" id="vcap-reissue-reason" name="reason" maxlength="200" placeholder="' . esc_attr__( 'Reason (optional, e.g. wrong address)', 'voucher-captain' ) . '" /> ';
+		$addresses = Voucher::STATUS_ACTIVE === $v->status ? self::delivery_addresses( $v ) : array();
+		if ( $addresses ) {
+			/* translators: %s: email address(es) */
+			echo '<label><input type="checkbox" name="send" value="1" /> ' . esc_html( sprintf( __( 'Send the new code to %s', 'voucher-captain' ), implode( ', ', $addresses ) ) ) . '</label> ';
+		}
+		echo '<button type="submit" class="button">' . esc_html__( 'Reissue code', 'voucher-captain' ) . '</button></form>';
+	}
+
+	/**
+	 * V10: reissue a voucher (Reissue::reissue()) and, if asked, send the voucher email with the new code.
+	 *
+	 * @return bool Whether the voucher was reissued.
+	 */
+	public function reissue( Voucher $v, bool $send, string $reason = '' ): bool {
+		$result = ( new \VCAP\Reissue( vcap()->settings, $this->repo, vcap()->coupons ) )->reissue( $v, $reason );
+		if ( is_wp_error( $result ) ) {
+			/* translators: %s: reason */
+			Flash::add( 'error', sprintf( __( 'The voucher was not reissued: %s. Nothing was changed.', 'voucher-captain' ), $result->get_error_message() ) );
+			return false;
+		}
+		/* translators: %s: new code */
+		Flash::add( 'success', sprintf( __( 'The voucher was reissued with the new code %s. The old code and its download links no longer work.', 'voucher-captain' ), strtoupper( $result->code ) ) );
+		if ( $send ) {
+			if ( '' !== self::resend_refusal( $result ) ) {
+				Flash::add( 'info', __( 'The voucher is not active yet: it is sent with the new code on its delivery date.', 'voucher-captain' ) );
+				return true;
+			}
+			$roles     = array();
+			$failures  = array();
+			$addresses = vcap()->delivery->send( $result, null, $roles, $failures );
+			if ( $addresses ) {
+				$this->repo->log( $result->id, 'resent', null, null, \VCAP\Note::make( 'resent_bulk', array( implode( ',', $roles ) ) ) );
+				vcap()->delivery->record_manual_send( $result, $roles );
+				/* translators: %s: email address(es) */
+				Flash::add( 'success', sprintf( __( 'The new code was sent to %s.', 'voucher-captain' ), implode( ', ', $addresses ) ) );
+			} else {
+				$this->repo->log( $result->id, 'delivery_failed', null, null, \VCAP\Note::make( 'delivery_not_sent', array( (string) wp_json_encode( $failures ) ) ) );
+				Flash::add( 'error', __( 'The voucher email with the new code could not be sent – see the history. Use "Email buyer" or "Email recipient" to try again.', 'voucher-captain' ) );
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -821,7 +904,7 @@ final class VoucherAdmin {
 		if ( '-1' === $action || '' === $action ) {
 			$action = sanitize_key( wp_unslash( $_REQUEST['action2'] ?? '' ) );
 		}
-		if ( ! in_array( $action, array( 'void', 'reactivate', 'resend' ), true ) ) {
+		if ( ! in_array( $action, array( 'void', 'reactivate', 'resend', 'reissue' ), true ) ) {
 			return;
 		}
 		$result = $this->bulk( $action, $ids );
@@ -853,6 +936,13 @@ final class VoucherAdmin {
 				$ok = vcap()->issuer->void( $v, __( 'Voided by admin (bulk)', 'voucher-captain' ) );
 			} elseif ( 'reactivate' === $action && Voucher::STATUS_VOID === $v->status ) {
 				$ok = vcap()->issuer->reactivate( $v );
+			} elseif ( 'reissue' === $action ) {
+				// V10: new code and token for each voucher that can be reissued; no email (resend afterwards).
+				if ( '' !== ( new \VCAP\Reissue( vcap()->settings, $this->repo, vcap()->coupons ) )->refusal( $v ) ) {
+					++$skipped;
+					continue;
+				}
+				$ok = ! is_wp_error( ( new \VCAP\Reissue( vcap()->settings, $this->repo, vcap()->coupons ) )->reissue( $v, __( 'Bulk action', 'voucher-captain' ) ) );
 			} elseif ( 'resend' === $action ) {
 				if ( '' !== self::resend_refusal( $v ) ) {
 					++$skipped; // H7: scheduled, void, expired or used-up vouchers are not mailed by a bulk action.
@@ -878,6 +968,21 @@ final class VoucherAdmin {
 			}
 		}
 		$codes = implode( ', ', array_slice( $failed, 0, 20 ) ) . ( count( $failed ) > 20 ? ', …' : '' );
+		if ( 'reissue' === $action ) {
+			if ( $skipped ) {
+				/* translators: %d: number of vouchers */
+				Flash::add( 'warning', sprintf( _n( '%d voucher was skipped: it is void, redeemed, expired, reserved or store credit.', '%d vouchers were skipped: they are void, redeemed, expired, reserved or store credit.', $skipped, 'voucher-captain' ), $skipped ) );
+			}
+			if ( $done ) {
+				/* translators: %d: number of vouchers */
+				Flash::add( 'success', sprintf( _n( '%d voucher reissued with a new code (no email sent – use "Resend email" to send the new codes).', '%d vouchers reissued with new codes (no email sent – use "Resend email" to send the new codes).', $done, 'voucher-captain' ), $done ) );
+			}
+			if ( $failed ) {
+				/* translators: 1: number of vouchers, 2: voucher codes */
+				Flash::add( 'error', sprintf( _n( '%1$d voucher could not be reissued and keeps its code: %2$s', '%1$d vouchers could not be reissued and keep their codes: %2$s', count( $failed ), 'voucher-captain' ), count( $failed ), $codes ) );
+			}
+			return array( 'done' => $done, 'failed' => $failed, 'skipped' => $skipped );
+		}
 		if ( 'resend' === $action ) {
 			if ( $skipped ) {
 				/* translators: %d: number of vouchers */

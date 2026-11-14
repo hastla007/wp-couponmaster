@@ -39,6 +39,7 @@ final class OrderReturn {
 		foreach ( $applied as $code => $amount ) {
 			$coupon  = function_exists( 'wc_get_coupon_id_by_code' ) ? (int) wc_get_coupon_id_by_code( (string) $code ) : 0;
 			$voucher = $coupon ? $this->repo->get_by_coupon( $coupon ) : $this->repo->get_by_code( (string) $code );
+			$voucher = $voucher ?? Reissue::voucher_of_previous_code( $this->repo, (string) $code ); // V10: code reissued since.
 			if ( ! $voucher || ! $voucher->is_multi_use() ) {
 				continue;
 			}

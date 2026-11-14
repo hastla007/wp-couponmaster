@@ -2039,7 +2039,9 @@ final class CouponManager {
 
 	private function find_voucher_for_code( string $code ): ?Voucher {
 		$coupon_id = wc_get_coupon_id_by_code( $code );
-		return $coupon_id ? $this->repo->get_by_coupon( (int) $coupon_id ) : $this->repo->get_by_code( $code );
+		$voucher   = $coupon_id ? $this->repo->get_by_coupon( (int) $coupon_id ) : $this->repo->get_by_code( $code );
+		// V10: an order paid with a code that was reissued since still charges/books back the same voucher.
+		return $voucher ?? Reissue::voucher_of_previous_code( $this->repo, $code );
 	}
 
 	/**
