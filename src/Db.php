@@ -36,6 +36,33 @@ final class Db {
 		);
 	}
 
+	/**
+	 * D2: rolls back the open transaction after logging why (the database error is read before the ROLLBACK,
+	 * which clears it). With $e the exception text is logged as well.
+	 */
+	public static function rollback( string $context, array $ids = array(), ?\Throwable $e = null ): \WP_Error {
+		global $wpdb;
+		if ( $e ) {
+			$ids['exception'] = Health::mask_addresses( get_class( $e ) . ': ' . $e->getMessage() );
+		}
+		$error = self::fail( $context, $ids );
+		$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		return $error;
+	}
+
+	/**
+	 * D2: rolls back the open transaction; logged (with a reference) only when the database reported an error –
+	 * a rollback for a business reason (balance too low, state changed) is no failure. Returns the error or null.
+	 */
+	public static function rollback_if_error( string $context, array $ids = array() ): ?\WP_Error {
+		global $wpdb;
+		if ( is_object( $wpdb ) && '' !== (string) $wpdb->last_error ) {
+			return self::rollback( $context, $ids );
+		}
+		$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		return null;
+	}
+
 	/** Reference id of the last failure logged by fail() in this request ('' if none). */
 	public static function last_reference(): string {
 		return self::$last_reference;

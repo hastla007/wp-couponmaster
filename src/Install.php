@@ -845,7 +845,8 @@ final class Install {
 		$table  = self::tables()['usage'];
 		$ok     = self::in_transaction(
 			static fn() => false !== $wpdb->query( $wpdb->prepare( "INSERT INTO {$table} (campaign_id, customer_key, order_id, created_at) VALUES {$values}", $args ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- $values holds only placeholder groups built above.
-				&& false !== $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE meta_id IN ({$in})", $ids ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
+				&& false !== $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE meta_id IN ({$in})", $ids ) ), // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
+			'migrate_usage_batch'
 		);
 		foreach ( array_unique( array_map( 'intval', array_column( $rows, 'post_id' ) ) ) as $post_id ) {
 			wp_cache_delete( $post_id, 'post_meta' );
@@ -873,7 +874,8 @@ final class Install {
 		$table  = self::tables()['claims'];
 		$ok     = self::in_transaction(
 			static fn() => false !== $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$table} (claim_key, kind, created_at) VALUES {$values}", $args ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- $values holds only placeholder groups built above.
-				&& false !== $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_id IN ({$in})", $ids ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
+				&& false !== $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_id IN ({$in})", $ids ) ), // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
+			'migrate_claim_batch'
 		);
 		foreach ( array_column( $rows, 'option_name' ) as $name ) {
 			wp_cache_delete( (string) $name, 'options' );
@@ -934,20 +936,23 @@ final class Install {
 		return count( $rows ) < 2000;
 	}
 
-	/** Runs $work in a transaction: committed when it returns true, rolled back otherwise. */
-	private static function in_transaction( callable $work ): bool {
+	/**
+	 * Runs $work in a transaction: committed when it returns true, rolled back otherwise. D2: a database error is
+	 * logged with $context and a reference (migration batches otherwise only report -1).
+	 */
+	private static function in_transaction( callable $work, string $context = 'migration_batch' ): bool {
 		global $wpdb;
 		$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		try {
 			$ok = (bool) $work();
 		} catch ( \Throwable $e ) {
-			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			Db::rollback( $context, array(), $e );
 			throw $e;
 		}
 		if ( $ok && false !== $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			return true;
 		}
-		$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		Db::rollback_if_error( $context );
 		return false;
 	}
 

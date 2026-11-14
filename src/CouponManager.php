@@ -720,7 +720,7 @@ final class CouponManager {
 		try {
 			$locked = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d FOR UPDATE", $voucher->id ) ); // phpcs:ignore
 			if ( ! $locked ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'reserve_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return null;
 			}
 			$latest = $wpdb->get_row(
@@ -750,7 +750,7 @@ final class CouponManager {
 				$requested = $fresh->balance;
 			}
 			if ( ! $fresh || ! $fresh->is_multi_use() || Voucher::STATUS_ACTIVE !== $fresh->status || $fresh->is_expired() || $fresh->balance < $requested ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'reserve_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return null;
 			}
 			$fresh->balance = max( 0.0, round( $fresh->balance - $requested, $fresh->decimals() ) );
@@ -758,19 +758,19 @@ final class CouponManager {
 				$fresh->status = Voucher::STATUS_REDEEMED;
 			}
 			if ( ! $this->repo->update( $fresh ) ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'reserve_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return null;
 			}
 			if ( ! $this->repo->log( $fresh->id, 'reserved', $requested, $fresh->balance, $note, $order_id ) ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'reserve_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return null;
 			}
 			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'reserve_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return null;
 			}
 		} catch ( \Throwable $e ) {
-			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			Db::rollback( 'reserve_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ), $e );
 			throw $e;
 		}
 
@@ -793,7 +793,7 @@ final class CouponManager {
 		try {
 			$locked = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d FOR UPDATE", $voucher->id ) ); // phpcs:ignore
 			if ( ! $locked ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'commit_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return null;
 			}
 			$latest = $wpdb->get_row(
@@ -805,26 +805,26 @@ final class CouponManager {
 				ARRAY_A
 			); // phpcs:ignore
 			if ( ! $latest ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'commit_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return null;
 			}
 			if ( 'committed' !== $latest['event'] && 'redeemed' !== $latest['event'] ) {
 				if ( 'reserved' !== $latest['event'] ) {
-					$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					Db::rollback_if_error( 'commit_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 					return null;
 				}
 				$fresh = $this->repo->get( $voucher->id );
 				if ( ! $fresh || ! $this->repo->log( $voucher->id, 'committed', (float) $latest['amount'], $fresh->balance, '', $order_id ) ) {
-					$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					Db::rollback_if_error( 'commit_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 					return null;
 				}
 			}
 			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'commit_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return null;
 			}
 		} catch ( \Throwable $e ) {
-			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			Db::rollback( 'commit_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ), $e );
 			throw $e;
 		}
 		$fresh = $this->repo->get( $voucher->id );
@@ -844,7 +844,7 @@ final class CouponManager {
 		try {
 			$locked = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d FOR UPDATE", $voucher->id ) ); // phpcs:ignore
 			if ( ! $locked ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'release_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;
 			}
 			$latest = $wpdb->get_row(
@@ -861,7 +861,7 @@ final class CouponManager {
 			}
 			$fresh = $this->repo->get( $voucher->id );
 			if ( ! $fresh ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'release_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;
 			}
 			$amount         = (float) $latest['amount'];
@@ -870,19 +870,19 @@ final class CouponManager {
 				$fresh->status = $fresh->is_expired() ? Voucher::STATUS_EXPIRED : Voucher::STATUS_ACTIVE;
 			}
 			if ( ! $this->repo->update( $fresh ) ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'release_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;
 			}
 			if ( ! $this->repo->log( $fresh->id, 'reservation_released', $amount, $fresh->balance, $note, $order_id ) ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'release_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;
 			}
 			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'release_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;
 			}
 		} catch ( \Throwable $e ) {
-			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			Db::rollback( 'release_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ), $e );
 			throw $e;
 		}
 		$this->sync_balance_coupon( $fresh );
@@ -1083,7 +1083,7 @@ final class CouponManager {
 			$locked = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d FOR UPDATE", $voucher->id ) ); // phpcs:ignore
 			$fresh = $locked ? $this->repo->get( $voucher->id ) : null;
 			if ( ! $fresh ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'write_balance', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;
 			}
 			$before            = (float) $fresh->balance;
@@ -1100,15 +1100,15 @@ final class CouponManager {
 				}
 			}
 			if ( ! $this->repo->update( $fresh ) || ! $this->repo->log( $fresh->id, $event, $amount, $balance, $note, $order_id ) ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'write_balance', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;
 			}
 			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'write_balance', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;
 			}
 		} catch ( \Throwable $e ) {
-			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			Db::rollback( 'write_balance', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ), $e );
 			throw $e;
 		}
 		$this->sync_balance_coupon( $fresh );
@@ -1182,7 +1182,7 @@ final class CouponManager {
 		try {
 			$locked = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d FOR UPDATE", $voucher->id ) ); // phpcs:ignore
 			if ( ! $locked ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'deduct_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				$reason = 'not_found';
 				return null;
 			}
@@ -1203,12 +1203,12 @@ final class CouponManager {
 						$locked_voucher         = $this->repo->get( $voucher->id );
 						$prior['balance_after'] = $locked_voucher ? (float) $locked_voucher->balance : (float) $prior['balance_after'];
 						if ( ! $this->repo->log( $voucher->id, 'committed', (float) $prior['amount'], (float) $prior['balance_after'], $note, $order_id ) ) {
-							$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+							Db::rollback_if_error( 'deduct_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 							return null;
 						}
 					}
 					if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-						$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+						Db::rollback_if_error( 'deduct_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 						return null;
 					}
 					$reason = '';
@@ -1224,7 +1224,7 @@ final class CouponManager {
 			$refusal = self::balance_refusal( $fresh );
 			// A used-up balance stays chargeable with 0 for orders (the caller records the shortfall).
 			if ( '' !== $refusal && ! ( 'redeemed' === $refusal && $allow_partial && Voucher::STATUS_ACTIVE === $fresh->status ) ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'deduct_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				$reason = $refusal;
 				return null;
 			}
@@ -1232,12 +1232,12 @@ final class CouponManager {
 			if ( ! $allow_partial ) {
 				$wanted = is_finite( $requested ) ? self::minor_units( $requested, $decimals ) : 0;
 				if ( $wanted <= 0 ) {
-					$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					Db::rollback_if_error( 'deduct_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 					$reason = 'invalid_amount';
 					return null;
 				}
 				if ( $wanted > self::minor_units( $fresh->balance, $decimals ) ) {
-					$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					Db::rollback_if_error( 'deduct_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 					$reason = 'exceeds_balance';
 					return null;
 				}
@@ -1249,21 +1249,21 @@ final class CouponManager {
 				$fresh->status = Voucher::STATUS_REDEEMED;
 			}
 			if ( ! $this->repo->update( $fresh ) ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'deduct_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return null;
 			}
 			if ( $amount > 0 || $order_id > 0 ) {
 				if ( ! $this->repo->log( $fresh->id, 'redeemed', $amount, $fresh->balance, $note, $order_id ) ) {
-					$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					Db::rollback_if_error( 'deduct_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 					return null;
 				}
 			}
 			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'deduct_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return null;
 			}
 		} catch ( \Throwable $e ) {
-			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			Db::rollback( 'deduct_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ), $e );
 			throw $e;
 		}
 
@@ -1807,7 +1807,7 @@ final class CouponManager {
 		try {
 			$locked = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d FOR UPDATE", $voucher->id ) ); // phpcs:ignore
 			if ( ! $locked ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'restore_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;
 			}
 			$latest = $wpdb->get_row(
@@ -1825,12 +1825,12 @@ final class CouponManager {
 				return true;
 			}
 			if ( ! $latest || ! in_array( $latest['event'], array( 'committed', 'redeemed' ), true ) || abs( (float) $latest['amount'] - $charged ) >= 0.0001 ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'restore_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;
 			}
 			$fresh = $this->repo->get( $voucher->id );
 			if ( ! $fresh ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'restore_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;
 			}
 			$fresh->balance = round( $fresh->balance + $amount, $fresh->decimals() );
@@ -1838,15 +1838,15 @@ final class CouponManager {
 				$fresh->status = $fresh->is_expired() ? Voucher::STATUS_EXPIRED : Voucher::STATUS_ACTIVE;
 			}
 			if ( ! $this->repo->update( $fresh ) || ! $this->repo->log( $fresh->id, 'restored', $amount, $fresh->balance, $note, $order_id ) ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'restore_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;
 			}
 			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'restore_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;
 			}
 		} catch ( \Throwable $e ) {
-			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			Db::rollback( 'restore_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ), $e );
 			throw $e;
 		}
 		$this->sync_balance_coupon( $fresh );

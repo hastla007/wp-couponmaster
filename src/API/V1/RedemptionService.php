@@ -171,12 +171,12 @@ final class RedemptionService {
 			$locked = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$tables['vouchers']} WHERE id = %d FOR UPDATE", $voucher->id ) ); // phpcs:ignore
 			$fresh  = $locked ? $this->vouchers->get( $voucher->id ) : null;
 			if ( ! $fresh ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_reserve', array( 'voucher_id' => $voucher->id ) );
 				return $this->temporary();
 			}
 			$check = $this->eligibility( $fresh, $target, $fresh->is_multi_use() ? $amount : null, $user_id, (string) ( $args['email'] ?? '' ) );
 			if ( is_wp_error( $check ) ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_reserve', array( 'voucher_id' => $voucher->id ) );
 				return $check;
 			}
 
@@ -205,7 +205,7 @@ final class RedemptionService {
 				)
 			);
 			if ( ! $inserted ) {
-				// Same key inserted concurrently (unique index): answer like an idempotent retry.
+				// Same key inserted concurrently (unique index): answer like an idempotent retry (no failure to log).
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				$row = $this->get_row( $key );
 				if ( $row ) {
@@ -219,15 +219,15 @@ final class RedemptionService {
 			/* translators: 1: redemption key, 2: target */
 			$note = sprintf( __( 'Redemption %1$s for %2$s', 'voucher-captain' ), $key, $target );
 			if ( ! $this->vouchers->update( $fresh ) || ! $this->vouchers->log( $fresh->id, 'api_reserved', $amount, $fresh->balance, $note ) ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_reserve', array( 'voucher_id' => $voucher->id ) );
 				return $this->temporary();
 			}
 			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_reserve', array( 'voucher_id' => $voucher->id ) );
 				return $this->temporary();
 			}
 		} catch ( \Throwable $e ) {
-			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			\VCAP\Db::rollback( 'api_reserve', array( 'voucher_id' => $voucher->id ), $e );
 			throw $e;
 		}
 
@@ -399,14 +399,14 @@ final class RedemptionService {
 			$row     = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$tables['redemptions']} WHERE redemption_key = %s FOR UPDATE", $key ), ARRAY_A ); // phpcs:ignore
 			$voucher = $row ? $this->vouchers->get( (int) $row['voucher_id'] ) : null;
 			if ( ! $row || ! $voucher ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_refund', array( 'redemption_key' => $key ) );
 				return $this->temporary();
 			}
 			$meta    = json_decode( (string) $row['meta'], true );
 			$meta    = is_array( $meta ) ? $meta : array();
 			$refunds = isset( $meta['_refunds'] ) && is_array( $meta['_refunds'] ) ? array_map( 'floatval', $meta['_refunds'] ) : array();
 			if ( isset( $refunds[ $refund_key ] ) ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_refund', array( 'redemption_key' => $key ) );
 				return $this->redemption_data( $row ) + array(
 					'refunded' => array_sum( $refunds ),
 					'restored' => 0.0,
@@ -415,7 +415,7 @@ final class RedemptionService {
 			$redeemed = (float) $row['amount'];
 			$give     = round( min( $amount, $redeemed - array_sum( $refunds ) ), self::decimals( $voucher->currency ) );
 			if ( $give <= 0 ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_refund', array( 'redemption_key' => $key ) );
 				return self::error( 'vcap_refund_exceeded', __( 'This redemption has already been refunded completely.', 'voucher-captain' ), 409 );
 			}
 			$refunds[ $refund_key ] = $give;
@@ -444,15 +444,15 @@ final class RedemptionService {
 			/* translators: 1: refund key, 2: redemption key */
 			$note = sprintf( __( 'Refund %1$s of redemption %2$s', 'voucher-captain' ), $refund_key, $key );
 			if ( 1 !== (int) $updated || ! $this->vouchers->update( $voucher ) || ! $this->vouchers->log( $voucher->id, 'api_refunded', $give, $voucher->balance, $note ) ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_refund', array( 'redemption_key' => $key ) );
 				return $this->temporary();
 			}
 			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_refund', array( 'redemption_key' => $key ) );
 				return $this->temporary();
 			}
 		} catch ( \Throwable $e ) {
-			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			\VCAP\Db::rollback( 'api_refund', array( 'redemption_key' => $key ), $e );
 			throw $e;
 		}
 
@@ -611,12 +611,12 @@ final class RedemptionService {
 			$wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$tables['vouchers']} WHERE id = %d FOR UPDATE", (int) $row['voucher_id'] ) ); // phpcs:ignore
 			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$tables['redemptions']} WHERE redemption_key = %s FOR UPDATE", $key ), ARRAY_A ); // phpcs:ignore
 			if ( ! $row || self::STATE_RESERVED !== $row['state'] ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_transition', array( 'redemption_key' => $key ) );
 				return $row && $to === $row['state'] ? $this->redemption_data( $row ) : self::error( 'vcap_reservation_missing', __( 'This reservation has expired or was cancelled. Please redeem the voucher again.', 'voucher-captain' ), 409 );
 			}
 			$voucher = $this->vouchers->get( (int) $row['voucher_id'] );
 			if ( ! $voucher ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_transition', array( 'redemption_key' => $key ) );
 				return $this->temporary();
 			}
 			$amount = (float) $row['amount'];
@@ -625,13 +625,13 @@ final class RedemptionService {
 
 			if ( self::STATE_COMMITTED === $to && strtotime( (string) $row['expires_at'] . ' UTC' ) <= time() ) {
 				// Past its lifetime (release job not run yet): released, never completed.
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_transition', array( 'redemption_key' => $key ) );
 				$this->transition( $key, self::STATE_RELEASED, array(), true );
 				return self::error( 'vcap_reservation_missing', __( 'This reservation has expired or was cancelled. Please redeem the voucher again.', 'voucher-captain' ), 409 );
 			}
 			if ( self::STATE_COMMITTED === $to && Voucher::STATUS_VOID === $voucher->status ) {
 				// Voided while reserved (e.g. the purchase order was refunded): never complete the redemption.
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_transition', array( 'redemption_key' => $key ) );
 				return self::error( 'vcap_cancelled', __( 'This voucher has been cancelled.', 'voucher-captain' ), 410 );
 			}
 			if ( self::STATE_COMMITTED === $to ) {
@@ -661,15 +661,15 @@ final class RedemptionService {
 				array( 'id' => (int) $row['id'] )
 			);
 			if ( 1 !== (int) $updated || ! $this->vouchers->update( $voucher ) || ! $this->vouchers->log( $voucher->id, $event, $amount, $voucher->balance, $note ) ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_transition', array( 'redemption_key' => $key ) );
 				return $this->temporary();
 			}
 			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_transition', array( 'redemption_key' => $key ) );
 				return $this->temporary();
 			}
 		} catch ( \Throwable $e ) {
-			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			\VCAP\Db::rollback( 'api_transition', array( 'redemption_key' => $key ), $e );
 			throw $e;
 		}
 

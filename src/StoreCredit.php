@@ -149,7 +149,7 @@ final class StoreCredit {
 			$wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d FOR UPDATE", $account->id ) ); // phpcs:ignore
 			$fresh = $this->repo->get( $account->id );
 			if ( ! $fresh || $fresh->balance + $amount < -0.00001 ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'store_credit_adjust', array( 'user_id' => $user_id, 'order_id' => $order_id ) );
 				return new \WP_Error( 'vcap_insufficient_balance', __( 'The store credit is not sufficient.', 'voucher-captain' ) );
 			}
 			$fresh->balance = max( 0.0, round( $fresh->balance + $amount, $fresh->decimals() ) );
@@ -157,15 +157,15 @@ final class StoreCredit {
 				$fresh->status = Voucher::STATUS_ACTIVE;
 			}
 			if ( ! $this->repo->update( $fresh ) || ! $this->repo->log( $fresh->id, $event, abs( $amount ), $fresh->balance, $reason, $order_id ) ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'store_credit_adjust', array( 'user_id' => $user_id, 'order_id' => $order_id ) );
 				return new \WP_Error( 'vcap_temporary_failure', __( 'Store credit is temporarily unavailable.', 'voucher-captain' ) );
 			}
 			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				Db::rollback_if_error( 'store_credit_adjust', array( 'user_id' => $user_id, 'order_id' => $order_id ) );
 				return new \WP_Error( 'vcap_temporary_failure', __( 'Store credit is temporarily unavailable.', 'voucher-captain' ) );
 			}
 		} catch ( \Throwable $e ) {
-			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			Db::rollback( 'store_credit_adjust', array( 'user_id' => $user_id, 'order_id' => $order_id ), $e );
 			throw $e;
 		}
 		CouponManager::sync_coupon_amount( $fresh );

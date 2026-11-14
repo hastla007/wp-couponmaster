@@ -95,6 +95,32 @@ $second->save();
 $result = vcap_fault( 'ledger', static fn() => $coupons->deduct_balance_atomic( $repo->get( $card->id ), 10, 'fault test', $second->get_id() ) );
 vcap_fault_assert( null === $result && 30.0 === $repo->get( $card->id )->balance, 'a failed ledger INSERT rolls back a direct deduction' );
 
+// D2: the rollback logs the database error with the voucher/order and a reference id; a refusal for a business
+// reason (balance too low) logs nothing.
+$d2_logged = array();
+$d2_log    = static function ( $message, $level, $context ) use ( &$d2_logged ) {
+	if ( 'voucher-captain' === ( $context['source'] ?? '' ) ) {
+		$d2_logged[] = array( (string) $message, (string) $level, (array) $context );
+	}
+	return $message;
+};
+add_filter( 'woocommerce_logger_log_message', $d2_log, 10, 3 );
+$d2_reason = null;
+$d2_result = vcap_fault( 'ledger', static fn() => $coupons->deduct_balance_atomic( $repo->get( $card->id ), 10, 'D2 test', $second->get_id(), true, $d2_reason ) );
+$d2_entry  = $d2_logged ? end( $d2_logged ) : array( '', '', array() );
+vcap_fault_assert( null === $d2_result && 'error' === $d2_entry[1] && str_contains( $d2_entry[0], 'deduct_balance_atomic' ) && str_contains( $d2_entry[0], 'vcap_injected_failure_missing_table' ) && VCAP\Db::last_reference() === ( $d2_entry[2]['reference'] ?? '' ) && $card->id === (int) ( $d2_entry[2]['voucher_id'] ?? 0 ) && $second->get_id() === (int) ( $d2_entry[2]['order_id'] ?? 0 ), 'D2: a rolled-back deduction logs the database error with voucher, order and the reference id' );
+$d2_logged = array();
+$d2_result = $coupons->deduct_balance_atomic( $repo->get( $card->id ), 1000, 'D2 too much', $second->get_id(), false, $d2_reason );
+vcap_fault_assert( null === $d2_result && 'exceeds_balance' === $d2_reason && ! $d2_logged, 'D2: a rollback for a business reason (more than the balance) is not logged as database error' );
+$d2_logged = array();
+$d2_tx     = new ReflectionMethod( VCAP\Install::class, 'in_transaction' );
+$d2_tx->setAccessible( true );
+$GLOBALS['wpdb']->suppress_errors( true );
+$d2_ok = $d2_tx->invoke( null, static fn() => false !== $GLOBALS['wpdb']->query( 'SELECT * FROM vcap_injected_failure_missing_table' ), 'migrate_usage_batch' );
+$GLOBALS['wpdb']->suppress_errors( false );
+vcap_fault_assert( false === $d2_ok && (bool) array_filter( $d2_logged, static fn( $e ) => str_contains( $e[0], 'in migrate_usage_batch' ) && ! empty( $e[2]['reference'] ) ), 'D2: a failed migration batch is logged with its context and a reference (not only -1)' );
+remove_filter( 'woocommerce_logger_log_message', $d2_log, 10 );
+
 $result = vcap_fault( 'ledger', static fn() => $coupons->release_voucher_reservation( $repo->get( $card->id ), $order ) );
 vcap_fault_assert( 30.0 === $repo->get( $card->id )->balance, 'releasing a committed order never changes the balance, even with failures' );
 
