@@ -215,6 +215,9 @@ final class CampaignAdmin {
 		}
 		$name   = Campaigns::clean_name( wp_unslash( (string) ( $_GET['name'] ?? '' ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		$target = 'pool' === sanitize_key( wp_unslash( $_GET['target'] ?? '' ) ) ? 'pool' : 'coupons';
+		if ( function_exists( 'wc_set_time_limit' ) ) {
+			wc_set_time_limit( 0 ); // A timeout would cut the file off without an error.
+		}
 		$rows   = 'pool' === $target ? $this->campaigns->pool_rows( $name ) : $this->campaigns->campaign_rows( $name );
 		Campaigns::send_csv( 'codes-' . sanitize_title( $name ) . '-' . gmdate( 'Y-m-d' ) . '.csv', $rows );
 		exit;

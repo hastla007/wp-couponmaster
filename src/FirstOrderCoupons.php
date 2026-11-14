@@ -17,6 +17,18 @@ final class FirstOrderCoupons {
 		add_action( 'woocommerce_coupon_options_save', array( $this, 'save' ), 10, 2 );
 		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'validate' ), 25, 3 );
 		add_action( 'woocommerce_after_checkout_validation', array( $this, 'checkout_validation' ), 10, 2 );
+		// An order created or changed in this request may change the answer of has_previous_order().
+		foreach ( array( 'woocommerce_new_order', 'woocommerce_update_order', 'woocommerce_order_status_changed', 'woocommerce_delete_order', 'woocommerce_trash_order' ) as $hook ) {
+			add_action( $hook, array( self::class, 'forget' ) );
+		}
+	}
+
+	/** @var array<string, bool> Answers of has_previous_order() in this request. */
+	private static array $memo = array();
+
+	/** Forgets the answers of this request (an order was created or changed). */
+	public static function forget(): void {
+		self::$memo = array();
 	}
 
 	public function field( $coupon_id, $coupon ): void {
@@ -41,6 +53,17 @@ final class FirstOrderCoupons {
 	 */
 	public static function has_previous_order( int $user_id, string $email, int $exclude_order_id = 0, int $before = 0 ): bool {
 		$statuses = apply_filters( 'vcap_first_order_counting_statuses', array( 'processing', 'completed', 'on-hold' ) );
+		// Cart totals are calculated several times per request, each validating the coupon: the order queries run
+		// once per customer, order and statuses (forgotten when an order is created or changes, see register()).
+		$memo = md5( (string) wp_json_encode( array( $user_id, strtolower( $email ), $exclude_order_id, $before, $statuses ) ) );
+		if ( ! isset( self::$memo[ $memo ] ) ) {
+			self::$memo[ $memo ] = self::find_previous_order( $user_id, $email, $exclude_order_id, $before, (array) $statuses );
+		}
+		return self::$memo[ $memo ];
+	}
+
+	/** has_previous_order() without the memo: by account first, then by billing email. */
+	private static function find_previous_order( int $user_id, string $email, int $exclude_order_id, int $before, array $statuses ): bool {
 		foreach ( array_filter( array( $user_id ?: null, is_email( $email ) ? strtolower( $email ) : null ) ) as $customer ) {
 			$query = array(
 				'customer' => $customer,

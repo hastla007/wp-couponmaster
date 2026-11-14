@@ -1322,11 +1322,11 @@ $GLOBALS['wpdb']->answers = array(
 	'/^SHOW TABLES LIKE/'           => static fn( $q ) => preg_match( "/LIKE '([a-z_0-9\\\\]+)'/", $q, $m ) ? stripslashes( $m[1] ) : null,
 	'/^SHOW COLUMNS FROM/'          => static function ( $q ) {
 		preg_match( '/FROM (\S+)/', $q, $m );
-		return array( 'id', 'code', 'coupon_id', 'type', 'status', 'order_id', 'order_item_id', 'item_index', 'product_id', 'variation_id', 'template_id', 'usage_mode', 'discount_type', 'initial_amount', 'balance', 'currency', 'expires_at', 'buyer_name', 'buyer_email', 'user_id', 'recipient_name', 'recipient_email', 'message', 'fields', 'send_to', 'delivery_at', 'delivered_at', 'token', 'transferable', 'terms', 'max_checkins', 'checkins', 'last_checkin_at', 'delivered_roles', 'created_at', 'updated_at', 'voucher_id', 'event', 'amount', 'balance_after', 'note', 'batch', 'imported_at', 'used_at', 'redemption_key', 'target', 'state', 'request_hash', 'meta', 'campaign_id', 'customer_key', 'claim_key', 'kind' );
+		return array( 'id', 'code', 'coupon_id', 'type', 'status', 'order_id', 'order_item_id', 'item_index', 'product_id', 'variation_id', 'template_id', 'usage_mode', 'discount_type', 'initial_amount', 'balance', 'currency', 'expires_at', 'buyer_name', 'buyer_email', 'user_id', 'recipient_name', 'recipient_email', 'message', 'fields', 'send_to', 'delivery_at', 'delivered_at', 'token', 'transferable', 'terms', 'max_checkins', 'checkins', 'last_checkin_at', 'delivered_roles', 'created_at', 'updated_at', 'voucher_id', 'event', 'amount', 'balance_after', 'note', 'actor_email_hash', 'batch', 'imported_at', 'used_at', 'redemption_key', 'target', 'state', 'request_hash', 'meta', 'campaign_id', 'customer_key', 'claim_key', 'kind' );
 	},
-	'/^SHOW INDEX FROM wp_vcap_events$/' => array( 'PRIMARY', 'voucher_id', 'voucher_order', 'event' ),
+	'/^SHOW INDEX FROM wp_vcap_events$/' => array( 'PRIMARY', 'voucher_ledger', 'voucher_order', 'actor_email_hash', 'event' ),
 	'/^SHOW INDEX FROM/'            => static function ( $q ) {
-		return array( 'PRIMARY', 'code', 'token', 'order_item_slot', 'order_id', 'coupon_id', 'status', 'product_id', 'recipient_email', 'buyer_email', 'user_type', 'batch_free', 'redemption_key', 'voucher_id', 'user_id', 'state_expires', 'campaign_customer', 'order_campaign', 'kind_created' );
+		return array( 'PRIMARY', 'code', 'token', 'order_item_slot', 'order_id', 'coupon_id', 'status_expires', 'status_updated', 'expires_at', 'delivery_due', 'product_id', 'recipient_email', 'buyer_email', 'user_type', 'batch_free', 'batch_used', 'redemption_key', 'voucher_id', 'user_id', 'state_expires', 'campaign_customer', 'order_campaign', 'kind_created' );
 	},
 	'/information_schema/'          => 'InnoDB',
 );
@@ -1370,6 +1370,36 @@ check( 'vcap() is defined only after the WooCommerce check, followed by the acti
 // L9 / A3.
 check( 'missing PHP extensions are named (activation and Site Health)', array( 'vcap_no_such_extension' ) === VCAP\Install::missing_extensions( array( 'pcre', 'vcap_no_such_extension' ) ) && array( 'mbstring', 'dom' ) === VCAP\Install::REQUIRED_EXTENSIONS );
 check( 'a network activation sets up at most 25 sites in its own request', 25 === VCAP\Install::NETWORK_ACTIVATION_SITES );
+// A13: keys without a Pass Captain order (orphans) are looked up together, 500 per query, and a missing key is
+// remembered for a while – not one LIKE/longtext query per key on every report call.
+if ( ! interface_exists( 'PassCaptain\\Integrations\\Vouchers\\ProviderInterface' ) ) {
+	eval( 'namespace PassCaptain\\Integrations\\Vouchers; interface ProviderInterface {}' ); // phpcs:ignore Squiz.PHP.Eval
+}
+$a13_keys = array( 'found-key' );
+for ( $i = 0; $i < 599; $i++ ) {
+	$a13_keys[] = 'orphan-' . $i;
+}
+$GLOBALS['wpdb']->answers = array( '/provider_reference IN/' => array( 'voucher:found-key' ) );
+$GLOBALS['wpdb']->log     = array();
+unset( $GLOBALS['vcap_test_transients']['vcap_pc_orphans'] );
+$a13_reconcile = ( new ReflectionClass( VCAP\Compat\PassCaptainReconcile::class ) )->newInstanceWithoutConstructor();
+try {
+	$a13_method = new ReflectionMethod( VCAP\Compat\PassCaptainReconcile::class, 'orders_existing' );
+	$a13_method->setAccessible( true );
+	$a13_first   = $a13_method->invoke( $a13_reconcile, $a13_keys );
+	$a13_queries = count( preg_grep( '/wpcap_orders/', $GLOBALS['wpdb']->log ) );
+	$GLOBALS['wpdb']->log = array();
+	$a13_second  = $a13_method->invoke( $a13_reconcile, $a13_keys );
+	$a13_again   = array_values( preg_grep( '/wpcap_orders/', $GLOBALS['wpdb']->log ) );
+} catch ( \ReflectionException $e ) {
+	$a13_first = $a13_second = null;
+	$a13_queries = -1;
+	$a13_again   = array( 'missing method' );
+}
+check( 'A13: 600 keys are checked in two queries (500 per IN list), only the key with an order is found', array( 'found-key' => true ) === $a13_first && 2 === $a13_queries, (string) $a13_queries );
+check( 'A13: on the next report call only the found key is asked again, orphans come from the cache', array( 'found-key' => true ) === $a13_second && 1 === count( $a13_again ) && ! str_contains( $a13_again[0], 'orphan-' ), json_encode( $a13_again ) );
+$GLOBALS['wpdb']->answers = array();
+
 $GLOBALS['wpdb'] = $saved_wpdb;
 
 // C8 / C13: PDF output and the ticket status page are kept out of page caches with DONOTCACHEPAGE (not only

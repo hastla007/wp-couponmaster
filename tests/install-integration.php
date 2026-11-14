@@ -348,4 +348,189 @@ vcap_uninstall_license_data();
 vcap_inst_assert( false === get_option( 'vcap_wplc_credentials' ) && ! wp_next_scheduled( VCAP\Install::LEGACY_LICENSE_HOOK ) && $inst_vouchers === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$tables['vouchers']}" ), 'uninstall removes leftover license data and keeps the vouchers' ); // phpcs:ignore
 update_option( VCAP\Install::LICENSE_CLEANUP_OPTION, time(), true );
 
+// ---------------------------------------------------------------- P6: database and performance at scale.
+
+// Schema 1.5.0: indexes for the daily maintenance, the delivery queries and the ledger; replaced indexes dropped.
+$p6_voucher_idx = array_map( 'strtolower', array_unique( (array) $wpdb->get_col( "SHOW INDEX FROM {$tables['vouchers']}", 2 ) ) ); // phpcs:ignore
+$p6_event_idx   = array_map( 'strtolower', array_unique( (array) $wpdb->get_col( "SHOW INDEX FROM {$tables['events']}", 2 ) ) ); // phpcs:ignore
+$p6_pool_idx    = array_map( 'strtolower', array_unique( (array) $wpdb->get_col( "SHOW INDEX FROM {$tables['pool']}", 2 ) ) ); // phpcs:ignore
+vcap_inst_assert( ! array_diff( array( 'status_expires', 'status_updated', 'expires_at', 'delivery_due' ), $p6_voucher_idx ) && ! in_array( 'status', $p6_voucher_idx, true ), 'B6/B2: vouchers have the (status, expires_at), (status, updated_at), expires_at and (delivered_at, status, delivery_at) indexes; the plain status index is gone' );
+vcap_inst_assert( ! array_diff( array( 'voucher_ledger', 'actor_email_hash' ), $p6_event_idx ) && ! in_array( 'voucher_id', $p6_event_idx, true ), 'B14/A16: the ledger has the covering (voucher_id, id, created_at, event, balance_after) index instead of the redundant voucher_id index, and the actor_email_hash index' );
+vcap_inst_assert( in_array( 'batch_used', $p6_pool_idx, true ), 'A8: the code pool has the (batch, used_at) index' );
+// The replaced index is dropped again on the next schema run (idempotent), never before its replacement exists.
+$wpdb->query( "ALTER TABLE {$tables['events']} ADD INDEX voucher_id (voucher_id)" ); // phpcs:ignore
+VCAP\Install::create_tables();
+$p6_event_idx = array_map( 'strtolower', array_unique( (array) $wpdb->get_col( "SHOW INDEX FROM {$tables['events']}", 2 ) ) ); // phpcs:ignore
+vcap_inst_assert( ! in_array( 'voucher_id', $p6_event_idx, true ) && in_array( 'voucher_ledger', $p6_event_idx, true ) && array() === VCAP\Install::verify_schema(), 'A16: a schema run drops the replaced events.voucher_id index again and the schema stays complete' );
+// The queries use them (possible keys of the optimizer).
+$p6_explain = static function ( string $sql ) use ( $wpdb ): string {
+	return strtolower( (string) implode( ',', array_column( (array) $wpdb->get_results( 'EXPLAIN ' . $sql, ARRAY_A ), 'possible_keys' ) ) ); // phpcs:ignore
+};
+vcap_inst_assert( str_contains( $p6_explain( $wpdb->prepare( "SELECT id FROM {$tables['vouchers']} WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < %s ORDER BY expires_at LIMIT 500", gmdate( 'Y-m-d H:i:s' ) ) ), 'status_expires' ), 'B6: EXPLAIN of the expiry batch query offers the (status, expires_at) index' ); // phpcs:ignore
+vcap_inst_assert( str_contains( $p6_explain( $wpdb->prepare( "SELECT id FROM {$tables['events']} WHERE actor_email_hash = %s", hash( 'sha256', 'x@example.com' ) ) ), 'actor_email_hash' ), 'B5: EXPLAIN of the lookup by address hash offers the actor_email_hash index' ); // phpcs:ignore
+
+// B6: overdue vouchers expire in batches of ids (no UPDATE over the whole active range).
+$p6_overdue = array();
+for ( $i = 0; $i < 3; $i++ ) {
+	$p6_v             = vcap_inst_voucher( 'balance' );
+	$p6_v->expires_at = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
+	vcap()->vouchers->update_columns( $p6_v, array( 'expires_at' ) );
+	$p6_overdue[] = $p6_v->id;
+}
+$p6_queries = array();
+$p6_log     = static function ( $q ) use ( &$p6_queries ) {
+	$p6_queries[] = $q;
+	return $q;
+};
+add_filter( 'query', $p6_log );
+vcap()->vouchers->expire_overdue();
+remove_filter( 'query', $p6_log );
+$p6_updates = array_values( array_filter( $p6_queries, static fn( $q ) => str_starts_with( ltrim( $q ), 'UPDATE' ) && str_contains( $q, $tables['vouchers'] ) ) );
+vcap_inst_assert( 'expired' === vcap()->vouchers->get( $p6_overdue[0] )->status && 'expired' === vcap()->vouchers->get( $p6_overdue[2] )->status, 'B6: overdue vouchers are expired' );
+vcap_inst_assert( $p6_updates && ! array_filter( $p6_updates, static fn( $q ) => ! str_contains( $q, 'WHERE id IN (' ) ), 'B6: every expiry UPDATE is limited to a batch of ids (' . count( $p6_updates ) . ' statements)' );
+
+// B2: retention anonymises in short batches by id and reports a failure instead of returning 0 silently.
+$p6_old = vcap_inst_voucher( 'single' );
+$wpdb->update( $tables['vouchers'], array( 'buyer_email' => 'p6-old@example.com', 'buyer_name' => 'Old Buyer', 'status' => 'redeemed', 'updated_at' => gmdate( 'Y-m-d H:i:s', time() - 400 * DAY_IN_SECONDS ) ), array( 'id' => $p6_old->id ) );
+vcap()->vouchers->log( $p6_old->id, 'redeemed', 10, null, 'p6-old@example.com' );
+$p6_new = vcap_inst_voucher( 'single' );
+$wpdb->update( $tables['vouchers'], array( 'buyer_email' => 'p6-new@example.com' ), array( 'id' => $p6_new->id ) );
+$p6_queries = array();
+add_filter( 'query', $p6_log );
+$p6_count = vcap()->vouchers->anonymise_older_than( 365 );
+remove_filter( 'query', $p6_log );
+$p6_old = vcap()->vouchers->get( $p6_old->id );
+vcap_inst_assert( $p6_count >= 1 && '' === $p6_old->buyer_email && '' === $p6_old->buyer_name && 'p6-new@example.com' === vcap()->vouchers->get( $p6_new->id )->buyer_email, 'B2: retention removes the personal data of ended vouchers only' );
+vcap_inst_assert( '[personal data removed by retention]' === $wpdb->get_var( $wpdb->prepare( "SELECT note FROM {$tables['events']} WHERE voucher_id = %d AND event = 'redeemed'", $p6_old->id ) ), 'B2: and redacts their ledger notes' ); // phpcs:ignore
+$p6_updates = array_values( array_filter( $p6_queries, static fn( $q ) => str_starts_with( ltrim( $q ), 'UPDATE' ) ) );
+vcap_inst_assert( $p6_updates && ! array_filter( $p6_updates, static fn( $q ) => ! preg_match( '/WHERE (v\.)?(voucher_)?id IN \(/', $q ) || str_contains( $q, 'INNER JOIN' ) ), 'B2: every retention UPDATE is limited to a batch of voucher ids (no UPDATE … JOIN over the whole tables)' );
+$p6_fail = static function ( $q ) use ( $tables ) {
+	return str_contains( $q, 'UPDATE ' . $tables['events'] ) ? 'UPDATE vcap_p6_missing_table SET x = 1' : $q;
+};
+$p6_victim = vcap_inst_voucher( 'single' );
+$wpdb->update( $tables['vouchers'], array( 'buyer_email' => 'p6-fail@example.com', 'status' => 'void', 'updated_at' => gmdate( 'Y-m-d H:i:s', time() - 400 * DAY_IN_SECONDS ) ), array( 'id' => $p6_victim->id ) );
+add_filter( 'query', $p6_fail );
+$p6_suppress = $wpdb->suppress_errors( true );
+$p6_thrown   = false;
+try {
+	vcap()->vouchers->anonymise_older_than( 365 );
+} catch ( RuntimeException $e ) {
+	$p6_thrown = true;
+}
+$wpdb->suppress_errors( $p6_suppress );
+remove_filter( 'query', $p6_fail );
+vcap_inst_assert( $p6_thrown && 'p6-fail@example.com' === vcap()->vouchers->get( $p6_victim->id )->buyer_email, 'B2: a failed batch is rolled back and thrown (recorded by the maintenance step), not reported as 0 anonymised' );
+vcap()->vouchers->anonymise_older_than( 365 );
+
+// B5: notes naming an address are found and erased through actor_email_hash; rows after the hash cursor (written
+// without the hash, e.g. by an older version after a rollback) by their note.
+$p6_mail = 'p6-user-' . strtolower( wp_generate_password( 6, false, false ) ) . '@example.com';
+$p6_card = vcap_inst_voucher( 'balance' );
+vcap()->vouchers->log( $p6_card->id, 'redeemed', 5, 15, strtoupper( $p6_mail ) );
+vcap_inst_assert( hash( 'sha256', $p6_mail ) === $wpdb->get_var( $wpdb->prepare( "SELECT actor_email_hash FROM {$tables['events']} WHERE voucher_id = %d AND event = 'redeemed'", $p6_card->id ) ), 'B5: log() stores the hash of a note that is an e-mail address' ); // phpcs:ignore
+VCAP\Install::hash_event_notes( 5.0 );
+$wpdb->insert( $tables['events'], array( 'voucher_id' => $p6_card->id, 'event' => 'redeemed', 'amount' => 5, 'balance_after' => 10, 'note' => $p6_mail, 'created_at' => gmdate( 'Y-m-d H:i:s' ) ) );
+$p6_raw     = (int) $wpdb->insert_id;
+$p6_queries = array();
+add_filter( 'query', $p6_log );
+$p6_found = vcap()->vouchers->events_noting( $p6_mail );
+remove_filter( 'query', $p6_log );
+$p6_select = implode( "\n", array_filter( $p6_queries, static fn( $q ) => str_contains( $q, 'LOWER(note)' ) ) );
+vcap_inst_assert( 2 === count( $p6_found ) && in_array( (string) $p6_raw, array_column( $p6_found, 'id' ), true ), 'B5: the export finds the hashed note and the note written without hash after the cursor' );
+vcap_inst_assert( str_contains( $p6_select, 'actor_email_hash = ' ) && preg_match( '/id > \d+ AND LOWER\(note\)/', $p6_select ), 'B5: the note itself is compared only after the hash cursor (primary-key range), never over the whole ledger' );
+VCAP\Install::hash_event_notes( 5.0 );
+vcap_inst_assert( hash( 'sha256', $p6_mail ) === $wpdb->get_var( $wpdb->prepare( "SELECT actor_email_hash FROM {$tables['events']} WHERE id = %d", $p6_raw ) ) && (int) get_option( VCAP\Install::EVENT_HASH_CURSOR ) >= $p6_raw, 'B5: the maintenance fills the hash of rows written without it and moves the cursor' ); // phpcs:ignore
+vcap_inst_assert( vcap()->vouchers->erase_event_notes( $p6_mail ) && array() === vcap()->vouchers->events_noting( $p6_mail ) && 0 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$tables['events']} WHERE actor_email_hash = %s", hash( 'sha256', $p6_mail ) ) ), 'B5: erasure redacts the notes and their hash' ); // phpcs:ignore
+
+// B15: the newest entries of a history only.
+for ( $i = 1; $i <= 30; $i++ ) {
+	vcap()->vouchers->log( $p6_card->id, 'adjusted', 1, (float) $i, '' );
+}
+$p6_latest = vcap()->vouchers->events( $p6_card->id, 25 );
+vcap_inst_assert( 25 === count( $p6_latest ) && 30.0 === (float) end( $p6_latest )['balance_after'] && (int) $p6_latest[0]['id'] < (int) $p6_latest[1]['id'], 'B15: events( id, 25 ) returns the newest 25 entries, oldest first' );
+
+// A5: in the migration window post meta is counted before the table: a batch moved in between is counted twice
+// (limit reached early), never not at all.
+$p6_promo = wp_insert_post( array( 'post_type' => 'vcap_discount', 'post_status' => 'publish', 'post_title' => 'P6 race promotion' ) );
+add_post_meta( $p6_promo, '_vcap_used_by', 'e:race@example.com' );
+update_option( VCAP\Install::LEGACY_OPTION, time() );
+$p6_counts = 0;
+$p6_move   = static function ( $q ) use ( &$p6_counts, $p6_promo ) {
+	if ( preg_match( '/^SELECT COUNT\(\*\) FROM \S+ WHERE (post_id|campaign_id) = ' . $p6_promo . '\b/', $q ) && 2 === ++$p6_counts ) {
+		// The migration moves the row after the first count, before the second.
+		$batch = new ReflectionMethod( VCAP\Install::class, 'move_usage_batch' );
+		$batch->setAccessible( true );
+		$batch->invoke( null, 500 );
+	}
+	return $q;
+};
+add_filter( 'query', $p6_move );
+$p6_race = VCAP\Discounts\Usage::count( $p6_promo );
+remove_filter( 'query', $p6_move );
+vcap_inst_assert( $p6_race >= 1 && 1 === VCAP\Discounts\Usage::count( $p6_promo ), 'A5: a use moved by the migration between the two counts is still counted (' . $p6_race . ')' );
+delete_option( VCAP\Install::LEGACY_OPTION );
+
+// A16: claims moved from options ("legacy") are purged after their own, longer period.
+$p6_claims = $tables['claims'];
+$wpdb->insert( $p6_claims, array( 'claim_key' => substr( md5( 'p6-legacy-old' ), 0, 24 ), 'kind' => 'legacy', 'created_at' => gmdate( 'Y-m-d H:i:s', time() - 400 * DAY_IN_SECONDS ) ) );
+$wpdb->insert( $p6_claims, array( 'claim_key' => substr( md5( 'p6-legacy-recent' ), 0, 24 ), 'kind' => 'legacy', 'created_at' => gmdate( 'Y-m-d H:i:s', time() - 200 * DAY_IN_SECONDS ) ) );
+VCAP\Claim::purge();
+$p6_left = (array) $wpdb->get_col( $wpdb->prepare( "SELECT claim_key FROM {$p6_claims} WHERE claim_key IN (%s, %s)", substr( md5( 'p6-legacy-old' ), 0, 24 ), substr( md5( 'p6-legacy-recent' ), 0, 24 ) ) ); // phpcs:ignore
+vcap_inst_assert( array( substr( md5( 'p6-legacy-recent' ), 0, 24 ) ) === $p6_left, 'A16: legacy claims older than a year are purged, younger ones kept' );
+$wpdb->query( $wpdb->prepare( "DELETE FROM {$p6_claims} WHERE claim_key = %s", substr( md5( 'p6-legacy-recent' ), 0, 24 ) ) ); // phpcs:ignore
+
+// K2: orders by meta come from the order store in use; the classic store (posts) is searched by its meta, so
+// more than 1000 old pending orders without the meta never hide the one that has it.
+$p6_now    = gmdate( 'Y-m-d H:i:s', time() - 3 * HOUR_IN_SECONDS );
+$p6_values = array();
+for ( $i = 0; $i < 1100; $i++ ) {
+	$p6_values[] = $wpdb->prepare( "(%s, %s, 'shop_order', 'wc-pending', %s, %s, %s, %s, '', '', '', '', '')", 'P6 order', 'p6-order-' . $i, $p6_now, $p6_now, $p6_now, $p6_now );
+}
+$wpdb->query( "INSERT INTO {$wpdb->posts} (post_title, post_name, post_type, post_status, post_date, post_date_gmt, post_modified, post_modified_gmt, post_content, post_excerpt, to_ping, pinged, post_content_filtered) VALUES " . implode( ',', $p6_values ) ); // phpcs:ignore
+$p6_first = (int) $wpdb->insert_id;
+$wpdb->insert( $wpdb->posts, array( 'post_title' => 'P6 order with hold', 'post_name' => 'p6-order-hold', 'post_type' => 'shop_order', 'post_status' => 'wc-pending', 'post_date' => $p6_now, 'post_date_gmt' => $p6_now, 'post_modified' => $p6_now, 'post_modified_gmt' => $p6_now, 'post_content' => '', 'post_excerpt' => '', 'to_ping' => '', 'pinged' => '', 'post_content_filtered' => '' ) );
+$p6_hold = (int) $wpdb->insert_id;
+add_post_meta( $p6_hold, '_vcap_reservations', array( 'X' => 1 ) );
+$p6_ids = VCAP\OrderLookup::ids_with_meta( '_vcap_reservations', null, array( 'status' => 'pending', 'modified_before' => time() - HOUR_IN_SECONDS, 'hpos' => false ) );
+vcap_inst_assert( in_array( $p6_hold, $p6_ids, true ) && ! array_intersect( range( $p6_first, $p6_first + 1099 ), $p6_ids ), 'K2: in the classic order store the pending order with the hold is found behind 1100 older pending orders without it' );
+vcap_inst_assert( array() === VCAP\OrderLookup::ids_with_meta( '_vcap_reservations', null, array( 'status' => 'pending', 'modified_before' => time() - 4 * HOUR_IN_SECONDS, 'hpos' => false ) ), 'K2: orders changed after the cutoff are left out' );
+$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE post_id = %d", $p6_hold ) ); // phpcs:ignore
+$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->posts} WHERE ID BETWEEN %d AND %d", $p6_first, $p6_hold ) ); // phpcs:ignore
+if ( VCAP\OrderLookup::hpos() ) {
+	$p6_order = wc_create_order();
+	$p6_order->update_meta_data( '_vcap_reservations', array( 'Y' => 1 ) );
+	$p6_order->save();
+	vcap_inst_assert( in_array( $p6_order->get_id(), VCAP\OrderLookup::ids_with_meta( '_vcap_reservations', null, array( 'status' => 'pending' ) ), true ), 'K2: with HPOS the order tables are searched' );
+	$p6_order->delete( true );
+}
+
+// B9: a word never matches vouchers without an order (order_id = 0); an address is searched by its start.
+$p6_tag    = strtolower( wp_generate_password( 8, false, false ) );
+$p6_plain  = vcap_inst_voucher( 'balance' ); // order_id 0
+$p6_mailer = vcap_inst_voucher( 'single' );
+$wpdb->update( $tables['vouchers'], array( 'buyer_email' => "mueller-{$p6_tag}@example.com", 'order_id' => 4711 ), array( 'id' => $p6_mailer->id ) );
+$p6_hits = array_map( static fn( $v ) => $v->id, vcap()->vouchers->query( array( 'search' => "mueller-{$p6_tag}@example.com", 'per_page' => 100 ) )['items'] );
+vcap_inst_assert( array( $p6_mailer->id ) === $p6_hits, 'B9: searching an address finds its voucher and no voucher without order' );
+$p6_hits = array_map( static fn( $v ) => $v->id, vcap()->vouchers->query( array( 'search' => "mueller-{$p6_tag}", 'per_page' => 100 ) )['items'] );
+vcap_inst_assert( array( $p6_mailer->id ) === $p6_hits && ! in_array( $p6_plain->id, $p6_hits, true ), 'B9: a word (not a number) does not list every voucher without order' );
+vcap_inst_assert( in_array( $p6_mailer->id, array_map( static fn( $v ) => $v->id, vcap()->vouchers->query( array( 'search' => '4711', 'per_page' => 100 ) )['items'] ), true ), 'B9: a number still finds the vouchers of that order' );
+
+// B8: the export reads keyset batches (id < last id, no OFFSET, no COUNT per batch) and sorts with id as tie-breaker.
+$p6_queries = array();
+add_filter( 'query', $p6_log );
+$p6_exported = iterator_to_array( vcap()->vouchers->export( array(), 2 ), false );
+remove_filter( 'query', $p6_log );
+$p6_total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$tables['vouchers']}" ); // phpcs:ignore
+$p6_ids   = array_map( static fn( $v ) => $v->id, $p6_exported );
+$p6_desc  = $p6_ids;
+rsort( $p6_desc );
+vcap_inst_assert( $p6_total === count( $p6_ids ) && count( array_unique( $p6_ids ) ) === $p6_total && $p6_desc === $p6_ids, 'B8: the export lists every voucher exactly once, newest first (' . $p6_total . ')' );
+$p6_selects = array_values( array_filter( $p6_queries, static fn( $q ) => str_contains( $q, "FROM {$tables['vouchers']}" ) ) );
+vcap_inst_assert( ! preg_grep( '/OFFSET [1-9]/', $p6_selects ) && ! preg_grep( '/COUNT\(\*\)/', $p6_selects ) && preg_grep( '/id < \d+/', $p6_selects ), 'B8: export batches use id < last id, never OFFSET or a COUNT per batch' );
+$p6_queries = array();
+add_filter( 'query', $p6_log );
+vcap()->vouchers->query( array( 'orderby' => 'balance', 'order' => 'ASC', 'per_page' => 5 ) );
+remove_filter( 'query', $p6_log );
+vcap_inst_assert( (bool) preg_grep( '/ORDER BY balance ASC, id ASC/', $p6_queries ), 'B8: list pages are sorted with id as tie-breaker (no row on two pages or none)' );
+
 echo "Voucher Captain install checks passed.\n";

@@ -117,6 +117,66 @@ vcap_report_assert( 3 === count( $jcsv ) && 3 === count( VCAP\Ledger::journal_cs
 $all = iterator_to_array( $ledger->journal_all( $today, $today, 1 ), false );
 vcap_report_assert( count( $all ) === $ledger->journal_count( $today, $today ) && count( $all ) >= 2, 'the journal export reads every booking in batches' );
 
+global $wpdb;
+// B3: the report sums code lines, totals and refunds in SQL per chunk – the number of queries does not grow with
+// the number of orders – and a repeated call comes from the cache.
+$b3_coupon = new WC_Coupon();
+$b3_coupon->set_code( 'report-b3-' . $tag );
+$b3_coupon->set_discount_type( 'fixed_cart' );
+$b3_coupon->set_amount( '2' );
+$b3_coupon->save();
+$b3_add = static function ( int $count ) use ( $product, $tag ) {
+	for ( $i = 0; $i < $count; $i++ ) {
+		$order = wc_create_order();
+		$order->add_product( $product, 1 );
+		$order->calculate_totals();
+		$order->apply_coupon( 'report-b3-' . $tag );
+		$order->set_status( 'completed' );
+		$order->save();
+	}
+	return $order;
+};
+$b3_measure = static function ( string $from, string $to ) use ( $wpdb ): array {
+	wp_cache_flush();
+	$before = $wpdb->num_queries;
+	$rows   = ( new VCAP\Reports() )->collect( $from, $to );
+	return array( $rows, $wpdb->num_queries - $before );
+};
+$b3_order = $b3_add( 5 );
+$b3_to    = wp_date( 'Y-m-d', time() + 3 * DAY_IN_SECONDS );
+list( , $b3_small ) = $b3_measure( wp_date( 'Y-m-d', time() - 4 * DAY_IN_SECONDS ), $b3_to );
+$b3_order = $b3_add( 20 );
+$b3_from  = wp_date( 'Y-m-d', time() - 3 * DAY_IN_SECONDS );
+list( $b3_rows, $b3_large ) = $b3_measure( $b3_from, $b3_to );
+$b3_row = $b3_rows[ 'coupon:' . strtoupper( 'report-b3-' . $tag ) ] ?? null;
+vcap_report_assert( null !== $b3_row && 25 === $b3_row['orders'] && 50.0 === $b3_row['discount'] && 950.0 === $b3_row['revenue'], 'B3: 25 orders with a coupon are summed (discount 25 × 2, revenue 25 × 38)' );
+vcap_report_assert( $b3_large - $b3_small <= 3, 'B3: 20 more orders cost no more queries (' . $b3_small . ' → ' . $b3_large . '; no order object is loaded)' );
+$b3_before = $wpdb->num_queries;
+$b3_again  = ( new VCAP\Reports() )->collect( $b3_from, $b3_to );
+vcap_report_assert( $b3_again === $b3_rows && $wpdb->num_queries - $b3_before <= 4, 'B3: a repeated call is served from the cache (' . ( $wpdb->num_queries - $b3_before ) . ' queries)' );
+$b3_refund = wc_create_refund( array( 'order_id' => $b3_order->get_id(), 'amount' => 8 ) );
+$b3_rows   = ( new VCAP\Reports() )->collect( $b3_from, $b3_to );
+vcap_report_assert( ! is_wp_error( $b3_refund ) && 942.0 === $b3_rows[ 'coupon:' . strtoupper( 'report-b3-' . $tag ) ]['revenue'], 'B3: a new refund is included at once (not served from the cache)' );
+
+// B14: the liability of a day is cached until the ledger changes; the journal reads the id range of the period.
+$b14_before = $wpdb->num_queries;
+$b14_first  = $ledger->liability( $today );
+$b14_mid    = $wpdb->num_queries;
+$b14_second = $ledger->liability( $today );
+vcap_report_assert( $b14_first === $b14_second && $wpdb->num_queries - $b14_mid <= 3, 'B14: the liability of a day is served from the cache while the ledger is unchanged (' . ( $wpdb->num_queries - $b14_mid ) . ' queries)' );
+vcap()->vouchers->log( $card->id, 'redeemed', 5, 25, 'Order test', 0 );
+vcap_report_assert( 25.0 === (float) ( $ledger->liability( $today )['totals']['XTS']['giftcard']['amount'] ?? 0 ), 'B14: a new ledger row recalculates the liability' );
+$b14_queries = array();
+$b14_log     = static function ( $q ) use ( &$b14_queries ) {
+	$b14_queries[] = $q;
+	return $q;
+};
+add_filter( 'query', $b14_log );
+iterator_to_array( $ledger->journal_all( $today, $today, 1 ), false );
+remove_filter( 'query', $b14_log );
+$b14_batches = preg_grep( '/^SELECT e\.id, e\.created_at/', $b14_queries );
+vcap_report_assert( $b14_batches && count( preg_grep( '/e\.id > \d+ AND e\.id <= \d+ AND e\.created_at/', $b14_batches ) ) === count( $b14_batches ) && 1 === count( preg_grep( '/SELECT MIN\(id\) AS lo, MAX\(id\) AS hi/', $b14_queries ) ), 'B14: every journal batch is a primary-key range within the period bounds, read once' );
+
 // CSV format: German Excel gets semicolons and a decimal comma; negative numbers are not mistaken for formulas.
 $german = static fn() => array( 'separator' => ';', 'decimal' => ',' );
 add_filter( 'vcap_csv_format', $german );

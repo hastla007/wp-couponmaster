@@ -200,16 +200,12 @@ final class Privacy {
 		if ( $user_id <= 0 || ! function_exists( 'wc_get_orders' ) ) {
 			return array();
 		}
-		$orders = wc_get_orders(
-			array(
-				'limit'      => 500,
-				'type'       => 'shop_order',
-				'status'     => 'any',
-				'meta_query' => array( array( 'key' => Referrals::REWARDED, 'value' => (string) $user_id ) ), // phpcs:ignore WordPress.DB.SlowDBQuery
-			)
-		);
-		// Checked again here: older WooCommerce versions ignore meta_query in wc_get_orders() for some storages.
-		return array_values( array_filter( is_array( $orders ) ? $orders : array(), static fn( $o ) => $o instanceof \WC_Order && (int) $o->get_meta( Referrals::REWARDED ) === $user_id ) );
+		// From the order store in use (wc_get_orders() ignores meta_query for the classic store: it returned the 500
+		// newest orders of anyone, and rewards in older orders were never exported or erased).
+		$ids    = OrderLookup::ids_with_meta( Referrals::REWARDED, (string) $user_id, array( 'limit' => 500, 'order' => 'DESC' ) );
+		$orders = array_map( 'wc_get_order', $ids );
+		// Checked again here (the meta value of the order object is authoritative).
+		return array_values( array_filter( $orders, static fn( $o ) => $o instanceof \WC_Order && (int) $o->get_meta( Referrals::REWARDED ) === $user_id ) );
 	}
 
 	/**
@@ -428,15 +424,8 @@ final class Privacy {
 		}
 		Discounts\Usage::hash_legacy_keys( $email, 5000 );
 		if ( function_exists( 'wc_get_orders' ) ) {
-			$orders = wc_get_orders(
-				array(
-					'limit'      => 500,
-					'type'       => 'shop_order',
-					'status'     => 'any',
-					'meta_query' => array( array( 'key' => Discounts\Usage::ORDER_KEY, 'value' => $legacy ) ), // phpcs:ignore WordPress.DB.SlowDBQuery
-				)
-			);
-			foreach ( is_array( $orders ) ? $orders : array() as $order ) {
+			$orders = array_map( 'wc_get_order', OrderLookup::ids_with_meta( Discounts\Usage::ORDER_KEY, $legacy, array( 'limit' => 500 ) ) );
+			foreach ( $orders as $order ) {
 				if ( $order instanceof \WC_Order && $legacy === (string) $order->get_meta( Discounts\Usage::ORDER_KEY ) ) {
 					$order->update_meta_data( Discounts\Usage::ORDER_KEY, Discounts\Usage::email_key( $email ) );
 					$order->save_meta_data();

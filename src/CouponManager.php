@@ -104,24 +104,25 @@ final class CouponManager {
 		// legacy order store alike) instead of scanning the ledger. Pages of 200, so holds that cannot be
 		// released right now never block the orders behind them.
 		$cutoff    = time() - $minutes * MINUTE_IN_SECONDS;
+		// Read from the order store in use (OrderLookup: wc_get_orders() ignores meta_query for the classic store).
 		$order_ids = array();
+		$after     = 0;
 		for ( $page = 1; $page <= 5; $page++ ) {
-			$ids = wc_get_orders(
+			$ids = OrderLookup::ids_with_meta(
+				'_vcap_reservations',
+				null,
 				array(
-					'status'        => 'pending',
-					'limit'         => 200,
-					'paged'         => $page,
-					'orderby'       => 'ID',
-					'order'         => 'ASC',
-					'return'        => 'ids',
-					'date_modified' => '<' . $cutoff,
-					'meta_query'    => array( array( 'key' => '_vcap_reservations', 'compare' => 'EXISTS' ) ), // phpcs:ignore WordPress.DB.SlowDBQuery
+					'status'          => 'pending',
+					'limit'           => 200,
+					'after_id'        => $after,
+					'modified_before' => $cutoff,
 				)
 			);
-			$order_ids = array_merge( $order_ids, (array) $ids );
-			if ( count( (array) $ids ) < 200 ) {
+			$order_ids = array_merge( $order_ids, $ids );
+			if ( count( $ids ) < 200 ) {
 				break;
 			}
+			$after = (int) end( $ids );
 		}
 		foreach ( array_map( 'intval', $order_ids ? $order_ids : array() ) as $order_id ) {
 			$order = wc_get_order( $order_id );

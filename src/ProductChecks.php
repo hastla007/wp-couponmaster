@@ -29,6 +29,20 @@ final class ProductChecks {
 		add_action( 'woocommerce_review_order_after_order_total', array( $this, 'residual_rows' ) );
 		add_action( 'admin_notices', array( $this, 'admin_notices' ) );
 		add_filter( 'site_status_tests', array( $this, 'health_tests' ) );
+		// The cached shop_problems() is recalculated after a product or its voucher settings change.
+		foreach ( array( 'woocommerce_new_product', 'woocommerce_update_product', 'woocommerce_delete_product', 'woocommerce_trash_product', 'save_post_product' ) as $hook ) {
+			add_action( $hook, array( self::class, 'flush' ) );
+		}
+		foreach ( array( 'added_post_meta', 'updated_post_meta', 'deleted_post_meta' ) as $hook ) {
+			add_action( $hook, array( self::class, 'meta_changed' ), 10, 3 );
+		}
+	}
+
+	/** A voucher setting of a product changed: forget the cached problems. */
+	public static function meta_changed( $meta_id, $object_id, $meta_key ): void {
+		if ( is_string( $meta_key ) && str_starts_with( $meta_key, '_vcap_' ) ) {
+			self::flush();
+		}
 	}
 
 	// ----------------------------------------------------------------- Sale.
@@ -162,18 +176,28 @@ final class ProductChecks {
 
 	/** Free codes of an imported batch (0 for an unknown batch). */
 	public static function free_codes( string $batch ): int {
+		// Counted per batch on the (batch, used_at) index, once per request – never grouped over the whole pool
+		// (this runs in "woocommerce_is_purchasable" for every product shown).
 		if ( null === self::$free_codes ) {
 			self::$free_codes = array();
-			foreach ( vcap()->code_pool->batches() as $row ) {
-				self::$free_codes[ (string) $row['batch'] ] = (int) $row['free'];
-			}
 		}
-		return self::$free_codes[ $batch ] ?? 0;
+		if ( ! isset( self::$free_codes[ $batch ] ) ) {
+			self::$free_codes[ $batch ] = '' === $batch ? 0 : vcap()->code_pool->free_count( $batch );
+		}
+		return self::$free_codes[ $batch ];
 	}
 
-	/** Forget the per-request batch counts (after codes were claimed or imported). */
+	/** Transient of shop_problems() (product ids; five minutes, forgotten when products or codes change). */
+	public const PROBLEMS_CACHE = 'vcap_shop_problems';
+	private static bool $problems_flushed = false;
+
+	/** Forget the per-request batch counts and the cached shop problems (after codes or products changed). */
 	public static function flush(): void {
 		self::$free_codes = null;
+		if ( ! self::$problems_flushed ) {
+			self::$problems_flushed = true; // Once per request (imports add thousands of codes).
+			delete_transient( self::PROBLEMS_CACHE );
+		}
 	}
 
 	/** Free codes from which the product's batch counts as running low. */
@@ -266,6 +290,36 @@ final class ProductChecks {
 	 * @return array{expired: \WC_Product[], codes: array<int, array{product:\WC_Product, free:int, stop:bool}>, invalid: \WC_Product[]}
 	 */
 	public static function shop_problems(): array {
+		// Shown on the dashboard, the product list and every voucher screen: calculated at most every five minutes
+		// (and after a product, its voucher settings or a code batch changed), stored as product ids.
+		$cached = get_transient( self::PROBLEMS_CACHE );
+		if ( ! is_array( $cached ) || ! isset( $cached['expired'], $cached['codes'], $cached['invalid'] ) ) {
+			$fresh  = self::find_shop_problems();
+			$cached = array(
+				'expired' => array_map( static fn( $p ) => $p->get_id(), $fresh['expired'] ),
+				'codes'   => array_map( static fn( $r ) => array( 'id' => $r['product']->get_id(), 'free' => $r['free'], 'stop' => $r['stop'] ), $fresh['codes'] ),
+				'invalid' => array_map( static fn( $p ) => $p->get_id(), $fresh['invalid'] ),
+			);
+			set_transient( self::PROBLEMS_CACHE, $cached, 5 * MINUTE_IN_SECONDS );
+			self::$problems_flushed = false;
+			return $fresh;
+		}
+		$codes = array();
+		foreach ( (array) $cached['codes'] as $row ) {
+			$product = wc_get_product( (int) $row['id'] );
+			if ( $product ) {
+				$codes[] = array( 'product' => $product, 'free' => (int) $row['free'], 'stop' => (bool) $row['stop'] );
+			}
+		}
+		return array(
+			'expired' => array_values( array_filter( array_map( 'wc_get_product', array_map( 'intval', (array) $cached['expired'] ) ) ) ),
+			'codes'   => $codes,
+			'invalid' => array_values( array_filter( array_map( 'wc_get_product', array_map( 'intval', (array) $cached['invalid'] ) ) ) ),
+		);
+	}
+
+	/** @return array{expired: \WC_Product[], codes: array<int, array{product:\WC_Product, free:int, stop:bool}>, invalid: \WC_Product[]} */
+	private static function find_shop_problems(): array {
 		$out = array( 'expired' => array(), 'codes' => array(), 'invalid' => self::invalid_discount_products() );
 		$ids = get_posts(
 			array(
