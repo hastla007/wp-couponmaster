@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-14 23:27+0000\n"
+"POT-Creation-Date: 2026-11-14 23:30+0000\n"
 "X-Domain: voucher-captain\n"
 
 #. Plugin Name of the plugin
@@ -3740,13 +3740,13 @@ msgid "Bonus voucher (%1$s) for order #%2$s"
 msgstr ""
 
 #. translators: %s: coupon code
-#: src/Discounts/Bonus.php:416
+#: src/Discounts/Bonus.php:441
 #, php-format
 msgid "Bonus voucher %s was already used and stays valid."
 msgstr ""
 
 #. translators: %s: coupon code
-#: src/Discounts/Bonus.php:426
+#: src/Discounts/Bonus.php:451
 #, php-format
 msgid "Unused bonus voucher %s withdrawn."
 msgstr ""
