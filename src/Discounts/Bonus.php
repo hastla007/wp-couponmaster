@@ -212,12 +212,13 @@ final class Bonus {
 	/**
 	 * Share (0–1) of the order still paid after its refunds, plus $extra being refunded now.
 	 */
-	private static function kept_share( \WC_Order $order, float $extra = 0.0 ): float {
+	private static function kept_share( \WC_Order $order, float $extra = 0.0, ?float $refunded = null ): float {
 		$total = (float) $order->get_total();
 		if ( $total <= 0 ) {
 			return 1.0;
 		}
-		return max( 0.0, min( 1.0, ( $total - (float) $order->get_total_refunded() - $extra ) / $total ) );
+		$refunded = null === $refunded ? (float) $order->get_total_refunded() : $refunded;
+		return max( 0.0, min( 1.0, ( $total - $refunded - $extra ) / $total ) );
 	}
 
 	/**
@@ -282,7 +283,16 @@ final class Bonus {
 			return;
 		}
 		$amount = (float) ( $args['amount'] ?? 0 );
-		$share  = self::kept_share( $order, $amount );
+		// wc_create_refund() may already have saved this refund before the hook (tax recalculation; always on the
+		// classic order store), so only earlier refunds count as refunded – like the voucher purchase guard.
+		$current_id = $refund instanceof \WC_Order_Refund ? (int) $refund->get_id() : 0;
+		$refunded   = 0.0;
+		foreach ( wc_get_orders( array( 'type' => 'shop_order_refund', 'parent' => $order->get_id(), 'limit' => -1 ) ) as $earlier ) {
+			if ( (int) $earlier->get_id() !== $current_id ) {
+				$refunded += abs( (float) $earlier->get_amount() );
+			}
+		}
+		$share  = self::kept_share( $order, $amount, $refunded );
 		$used   = 0.0;
 		$codes  = array();
 		foreach ( self::live_bonuses( $order ) as $campaign_id => $coupon ) {
@@ -291,7 +301,7 @@ final class Bonus {
 				$codes[] = \VCAP\Downloads::masked_code( (string) $coupon->get_code() );
 			}
 		}
-		$max = max( 0.0, round( (float) $order->get_total() - (float) $order->get_total_refunded() - $used, wc_get_price_decimals() ) );
+		$max = max( 0.0, round( (float) $order->get_total() - $refunded - $used, wc_get_price_decimals() ) );
 		if ( ! $codes || $amount <= $max + 0.00001 || apply_filters( 'vcap_allow_refund_of_used_bonus', false, $order, $amount, $used ) ) {
 			return;
 		}
