@@ -289,6 +289,7 @@ $admin_checks = array(
 	array( VCAP\Admin\VoucherAdmin::class, 'handle_bulk', 'vcap_bulk' ),
 	array( VCAP\Admin\VoucherAdmin::class, 'export', 'vcap_export' ),
 	array( VCAP\Downloads::class, 'admin_download', 'vcap_admin_pdf_' ),
+	array( VCAP\ProductChecks::class, 'handle_expired_product', 'vcap_expired_product_' ),
 );
 foreach ( $admin_checks as $check ) {
 	$source = vcap_security_method_source( $check[0], $check[1] );

@@ -97,6 +97,23 @@ $problems = ProductChecks::shop_problems();
 vcap_ps_assert( in_array( $past->get_id(), array_map( static fn( $p ) => $p->get_id(), $problems['expired'] ), true ), 'the expired product is listed for the admin notice' );
 $health = ( new ProductChecks() )->test_voucher_products();
 vcap_ps_assert( 'recommended' === $health['status'] && false !== strpos( $health['description'], 'PS expired voucher' ), 'Site Health names the expired voucher product', $health );
+// U8: the red notice only for products customers could otherwise buy; it can be hidden per product or the product drafted.
+$u8_listed = static fn( WC_Product $p ) => in_array( $p->get_id(), array_map( static fn( $x ) => $x->get_id(), ProductChecks::shop_problems()['expired'] ), true );
+$u8_sold   = vcap_ps_product( 'PS sold out season', array( 'expiry_mode' => 'date', 'expiry_date' => $yesterday ) );
+$u8_sold->set_stock_status( 'outofstock' );
+$u8_sold->save();
+$u8_hidden = vcap_ps_product( 'PS hidden season', array( 'expiry_mode' => 'date', 'expiry_date' => $yesterday ) );
+$u8_hidden->set_catalog_visibility( 'hidden' );
+$u8_hidden->save();
+vcap_ps_assert( ! $u8_listed( $u8_sold ) && ! $u8_listed( $u8_hidden ), 'U8: sold-out or hidden season products with a past fixed date raise no expiry notice' );
+$u8_dismiss = vcap_ps_product( 'PS dismissed season', array( 'expiry_mode' => 'date', 'expiry_date' => $yesterday ) );
+vcap_ps_assert( $u8_listed( $u8_dismiss ) && ProductChecks::dismiss_expired( $u8_dismiss, 'hide' ) && ! $u8_listed( wc_get_product( $u8_dismiss->get_id() ) ), 'U8: the expiry notice can be hidden for one product' );
+$u8_again = wc_get_product( $u8_dismiss->get_id() );
+$u8_again->update_meta_data( '_vcap_expiry_date', wp_date( 'Y-m-d', time() - 3 * DAY_IN_SECONDS ) );
+$u8_again->save();
+vcap_ps_assert( $u8_listed( wc_get_product( $u8_dismiss->get_id() ) ), 'U8: a new expired date shows the notice again' );
+$u8_draft = vcap_ps_product( 'PS drafted season', array( 'expiry_mode' => 'date', 'expiry_date' => $yesterday ) );
+vcap_ps_assert( ProductChecks::dismiss_expired( $u8_draft, 'draft' ) && 'draft' === get_post_status( $u8_draft->get_id() ) && ! $u8_listed( $u8_draft ), 'U8: "Set to draft" unpublishes the expired product' );
 $missing = vcap_ps_product( 'PS date missing', array( 'expiry_mode' => 'date', 'expiry_date' => '' ) );
 vcap_ps_assert( 'date_missing' === ProductChecks::unsellable_reason( $missing ) && ! $missing->is_purchasable(), '"Fixed date" without a date cannot be bought (never "never expires" by accident)' );
 $future = vcap_ps_product( 'PS future date', array( 'expiry_mode' => 'date', 'expiry_date' => $next_year ) );
@@ -118,6 +135,26 @@ $variation->set_virtual( true );
 $variation->set_status( 'publish' );
 $variation->save();
 vcap_ps_assert( ! wc_get_product( $variation->get_id() )->is_purchasable(), 'variations of an expired voucher product cannot be bought either' );
+
+// U3: a voucher that is not virtual (simple product or a variation – variations default to not virtual) is warned about.
+$u3_virtual = static fn( WC_Product $p ) => (bool) array_filter( ProductChecks::problems( $p ), static fn( $x ) => str_contains( $x['message'], 'Virtual' ) );
+$u3_simple  = vcap_ps_product( 'PS physical voucher', array( 'expiry_mode' => 'never' ) );
+vcap_ps_assert( ! $u3_virtual( $u3_simple ), 'U3: a virtual voucher product gets no shipping warning' );
+$u3_simple->set_virtual( false );
+$u3_simple->save();
+vcap_ps_assert( $u3_virtual( wc_get_product( $u3_simple->get_id() ) ), 'U3: a voucher product that is not virtual is warned about on the server side' );
+$u3_variable = new WC_Product_Variable();
+$u3_variable->set_name( 'PS levels' );
+$u3_variable->set_status( 'publish' );
+$u3_variable->update_meta_data( '_vcap_enabled', 'yes' );
+$u3_variable->update_meta_data( '_vcap_expiry_mode', 'never' );
+$u3_variable->save();
+$u3_level = new WC_Product_Variation();
+$u3_level->set_parent_id( $u3_variable->get_id() );
+$u3_level->set_regular_price( '25' );
+$u3_level->set_status( 'publish' );
+$u3_level->save();
+vcap_ps_assert( $u3_virtual( wc_get_product( $u3_level->get_id() ) ) && ! $u3_virtual( wc_get_product( $u3_variable->get_id() ) ), 'U3: a voucher variation that is not virtual is warned about (the variable parent has no flag of its own)' );
 
 /* ---- 7. Expiry "global default" ignores a leftover number of days ---------------------------------------- */
 
