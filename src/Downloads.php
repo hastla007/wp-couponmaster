@@ -14,6 +14,7 @@ final class Downloads {
 	public function register(): void {
 		add_action( 'template_redirect', array( $this, 'maybe_serve' ), 1 );
 		add_action( 'template_redirect', array( $this, 'customer_resend' ), 5 );
+		add_action( 'template_redirect', array( $this, 'customer_change' ), 5 );
 		add_action( 'admin_post_vcap_admin_pdf', array( $this, 'admin_download' ) );
 		add_action( 'woocommerce_order_details_after_order_table', array( $this, 'order_downloads' ), 5 );
 		add_action( 'wp_loaded', array( $this, 'maybe_flush_rewrite' ) );
@@ -94,6 +95,111 @@ final class Downloads {
 	}
 
 	/**
+	 * H10: the buyer may correct the recipient email and the delivery date of a gift until it is delivered
+	 * (scheduled, never delivered, own order).
+	 */
+	public function customer_can_change( Voucher $voucher ): bool {
+		$order = $voucher->order();
+		return is_user_logged_in()
+			&& $order instanceof \WC_Order
+			&& (int) $order->get_customer_id() === get_current_user_id()
+			&& Voucher::STATUS_SCHEDULED === $voucher->status
+			&& null === $voucher->delivered_at
+			&& (bool) apply_filters( 'vcap_customer_can_change', true, $voucher );
+	}
+
+	/**
+	 * H10: change recipient email and/or delivery date (local Y-m-d) of a scheduled gift. Only while it is still
+	 * scheduled (the stored row is checked, a delivery running at the same time wins); the coupon's email
+	 * restriction follows the new address, the delivery is planned anew, the history records old and new values.
+	 *
+	 * @return string '' on success, else the reason to show.
+	 */
+	public function change_delivery( Voucher $voucher, string $email, string $date ): string {
+		$fresh = $this->repo->get( $voucher->id );
+		if ( ! $fresh || ! $this->customer_can_change( $fresh ) ) {
+			return __( 'This voucher has already been sent and can no longer be changed.', 'voucher-captain' );
+		}
+		$email = sanitize_email( trim( $email ) );
+		if ( ! is_email( $email ) ) {
+			return __( 'Please enter a valid email address for the recipient.', 'voucher-captain' );
+		}
+		$utc = null;
+		if ( '' !== $date ) {
+			$local = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ? LocalDate::timestamp( $date . sprintf( 'T%02d:00', Delivery::delivery_hour() ) ) : null;
+			if ( null === $local || $local <= time() || $local > time() + YEAR_IN_SECONDS + DAY_IN_SECONDS ) {
+				return __( 'Please choose a delivery date between tomorrow and one year from now.', 'voucher-captain' );
+			}
+			if ( $fresh->expires_at && $local >= strtotime( $fresh->expires_at . ' UTC' ) ) {
+				return __( 'The voucher would already have expired on this delivery date. Please choose an earlier date.', 'voucher-captain' );
+			}
+			$utc = gmdate( 'Y-m-d H:i:s', $local );
+		}
+		$old_email = (string) $fresh->recipient_email;
+		$old_at    = (string) $fresh->delivery_at;
+		$changes   = array();
+		if ( strtolower( $old_email ) !== strtolower( $email ) ) {
+			$fresh->recipient_email = $email;
+			if ( isset( $fresh->fields['recipient_email'] ) ) {
+				$fresh->fields['recipient_email']['value'] = $email;
+			}
+			/* translators: 1: old email, 2: new email */
+			$changes[] = sprintf( __( 'recipient %1$s → %2$s', 'voucher-captain' ), '' !== $old_email ? $old_email : '–', $email );
+		}
+		if ( null !== $utc && $utc !== $old_at ) {
+			if ( isset( $fresh->fields['delivery_date'] ) ) {
+				$fresh->fields['delivery_date']['value'] = $date;
+			}
+			/* translators: 1: old delivery date, 2: new delivery date */
+			$changes[] = sprintf( __( 'delivery %1$s → %2$s', 'voucher-captain' ), '' !== $old_at ? LocalDate::from_utc( $old_at, $this->settings->date_format() ) : '–', LocalDate::from_utc( $utc, $this->settings->date_format() ) );
+		}
+		if ( ! $changes ) {
+			return '';
+		}
+		if ( ! $this->repo->update_columns( $fresh, array( 'recipient_email', 'fields' ) ) ) {
+			return __( 'The change could not be saved. Please contact us.', 'voucher-captain' );
+		}
+		if ( strtolower( $old_email ) !== strtolower( $email ) ) {
+			vcap()->coupons->refresh_email_restrictions( $fresh, $old_email );
+		}
+		if ( null !== $utc && $utc !== $old_at ) {
+			vcap()->delivery->reschedule( $fresh, $utc );
+		}
+		/* translators: %s: list of changes */
+		$this->repo->log( $fresh->id, 'edited', null, null, sprintf( __( 'Changed by the customer before delivery: %s', 'voucher-captain' ), implode( '; ', $changes ) ) );
+		return '';
+	}
+
+	/** POST handler of the "Change recipient or date" form in the voucher list (H10). */
+	public function customer_change(): void {
+		if ( empty( $_POST['vcap_change'] ) || empty( $_POST['vcap_change_nonce'] ) ) {
+			return;
+		}
+		$id = absint( $_POST['vcap_change'] );
+		if ( ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_change_nonce'] ) ), 'vcap_change_' . $id ) ) {
+			wc_add_notice( __( 'The request has expired. Please try again.', 'voucher-captain' ), 'error', Shortcodes::ACCOUNT_NOTICE );
+			return;
+		}
+		$voucher = $this->repo->get( $id );
+		if ( ! $voucher || ! $this->customer_can_change( $voucher ) ) {
+			wc_add_notice( __( 'This voucher has already been sent and can no longer be changed.', 'voucher-captain' ), 'error', Shortcodes::ACCOUNT_NOTICE );
+			return;
+		}
+		if ( Plugin::rate_limited( 'change', 5, 0, HOUR_IN_SECONDS, true, 'v' . $voucher->id ) ) {
+			wc_add_notice( __( 'This voucher was changed several times already. Please try again later.', 'voucher-captain' ), 'error', Shortcodes::ACCOUNT_NOTICE );
+			return;
+		}
+		$error = $this->change_delivery( $voucher, (string) wp_unslash( $_POST['vcap_change_email'] ?? '' ), sanitize_text_field( wp_unslash( $_POST['vcap_change_date'] ?? '' ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitize_email() in change_delivery().
+		if ( '' !== $error ) {
+			wc_add_notice( $error, 'error', Shortcodes::ACCOUNT_NOTICE );
+			return;
+		}
+		wc_add_notice( __( 'The gift has been changed. It will be sent as shown in your voucher list.', 'voucher-captain' ), 'success', Shortcodes::ACCOUNT_NOTICE );
+		wp_safe_redirect( wp_get_referer() ? wp_get_referer() : wc_get_account_endpoint_url( self::ENDPOINT ) );
+		exit;
+	}
+
+	/**
 	 * POST handler for the "Send email again" button. Limited to 3 emails per voucher and hour.
 	 */
 	public function customer_resend(): void {
@@ -115,7 +221,9 @@ final class Downloads {
 			wc_add_notice( __( 'This voucher was sent several times already. Please try again later.', 'voucher-captain' ), 'error', Shortcodes::ACCOUNT_NOTICE );
 			return;
 		}
-		$sent = vcap()->delivery->send( $voucher );
+		// H10: "to me" or "to the recipient" instead of always both roles.
+		$to   = sanitize_key( wp_unslash( $_POST['vcap_resend_to'] ?? '' ) );
+		$sent = vcap()->delivery->send( $voucher, in_array( $to, array( 'buyer', 'recipient' ), true ) ? $to : null );
 		$this->repo->log( $voucher->id, 'resent', null, null, sprintf( /* translators: %d: number of addresses */ _n( 'Requested by the customer, sent to %d address', 'Requested by the customer, sent to %d addresses', count( $sent ), 'voucher-captain' ), count( $sent ) ) );
 		if ( $sent ) {
 			wc_add_notice( __( 'The voucher email has been sent again.', 'voucher-captain' ), 'success', Shortcodes::ACCOUNT_NOTICE );

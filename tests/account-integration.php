@@ -215,6 +215,35 @@ WC()->cart->empty_cart();
 wc_clear_notices();
 wp_set_current_user( 0 );
 
+// H10: until delivery the buyer may correct the recipient email and the delivery date; logged; coupon follows.
+$h10_order   = vcap_acct_order( $personal, $buyer, $login . '@example.com' );
+$h10_voucher = vcap()->issuer->issue_for_order( $h10_order )[0];
+$h10_voucher                  = vcap()->vouchers->get( $h10_voucher->id );
+$h10_voucher->recipient_email = 'anna@gmial.com';
+$h10_voucher->send_to         = 'recipient';
+vcap()->vouchers->update( $h10_voucher );
+vcap()->coupons->refresh_email_restrictions( $h10_voucher, '' );
+vcap()->delivery->reschedule( vcap()->vouchers->get( $h10_voucher->id ), gmdate( 'Y-m-d H:i:s', time() + 5 * DAY_IN_SECONDS ) );
+$h10_voucher = vcap()->vouchers->get( $h10_voucher->id );
+wp_set_current_user( $other );
+vcap_acct_assert( ! vcap()->downloads->customer_can_change( $h10_voucher ) && '' !== vcap()->downloads->change_delivery( $h10_voucher, 'anna@gmail.com', '' ), 'H10: another customer cannot change the gift' );
+wp_set_current_user( $buyer );
+vcap_acct_assert( VCAP\Voucher::STATUS_SCHEDULED === $h10_voucher->status && vcap()->downloads->customer_can_change( $h10_voucher ), 'H10: the buyer may change a scheduled gift' );
+vcap_acct_assert( '' !== vcap()->downloads->change_delivery( $h10_voucher, 'not-an-email', '' ) && 'anna@gmial.com' === vcap()->vouchers->get( $h10_voucher->id )->recipient_email, 'H10: an invalid address is refused and nothing changes' );
+$h10_day = wp_date( 'Y-m-d', time() + 9 * DAY_IN_SECONDS );
+$h10_err = vcap()->downloads->change_delivery( $h10_voucher, 'anna@gmail.com', $h10_day );
+$h10_new = vcap()->vouchers->get( $h10_voucher->id );
+$h10_restrict = array_map( 'strtolower', ( new WC_Coupon( $h10_new->coupon_id ) )->get_email_restrictions() );
+vcap_acct_assert( '' === $h10_err && 'anna@gmail.com' === $h10_new->recipient_email && in_array( 'anna@gmail.com', $h10_restrict, true ) && ! in_array( 'anna@gmial.com', $h10_restrict, true ), 'H10: the new recipient is stored and the coupon restriction follows it', array( $h10_err, $h10_restrict ) );
+vcap_acct_assert( $h10_day === VCAP\LocalDate::from_utc( (string) $h10_new->delivery_at, 'Y-m-d' ) && VCAP\Voucher::STATUS_SCHEDULED === $h10_new->status, 'H10: the delivery is planned for the new date' );
+$h10_log = VCAP\Tickets::last_event( vcap()->vouchers->events( $h10_new->id ), array( 'edited' ) );
+vcap_acct_assert( $h10_log && str_contains( (string) $h10_log['note'], 'anna@gmial.com' ) && str_contains( (string) $h10_log['note'], 'anna@gmail.com' ) && $buyer === (int) $h10_log['user_id'], 'H10: the history records the change with old and new values and who made it' );
+$h10_new->delivered_at = gmdate( 'Y-m-d H:i:s' );
+$h10_new->status       = VCAP\Voucher::STATUS_ACTIVE;
+vcap()->vouchers->update( $h10_new );
+vcap_acct_assert( ! vcap()->downloads->customer_can_change( vcap()->vouchers->get( $h10_new->id ) ) && '' !== vcap()->downloads->change_delivery( $h10_new, 'x@example.com', '' ), 'H10: after delivery the gift can no longer be changed' );
+wp_set_current_user( 0 );
+
 // M10/H11: the visible copy of voucher fields has a stable key; label and a formatted date are only for display.
 $m10_order = wc_create_order();
 $m10_item  = new WC_Order_Item_Product();
