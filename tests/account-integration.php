@@ -122,6 +122,7 @@ preg_match_all( '/<td\b[^>]*>/', $f3_list, $f3_td );
 vcap_acct_assert( count( $f3_th[0] ) >= 5 && count( $f3_th[0] ) === substr_count( $f3_list, '<th scope="col"' ), 'F3: every column header of the voucher list has scope="col"' );
 vcap_acct_assert( $f3_td[0] && count( $f3_td[0] ) === count( preg_grep( '/data-title="[^"]+"/', $f3_td[0] ) ), 'F3: every cell of the voucher list carries data-title (column name on small screens)' );
 vcap_acct_assert( (bool) preg_match( '/<td class="[^"]*\bactions\b[^"]*" data-title="Actions"/', $f3_list ) && ! str_contains( $f3_list, 'data-title="Download"' ), 'F3: the actions cell has the class "actions" and is named "Actions", not "Download"' );
+vcap_acct_assert( str_contains( $f3_list, 'Personal – only the buyer can redeem it.' ) && ! str_contains( $f3_list, 'Personal, not transferable' ), 'U15: My Account names who may redeem the voucher (transferable_label), not a fixed "Personal, not transferable"' );
 wp_set_current_user( $other );
 ob_start();
 vcap()->downloads->account_page( false );

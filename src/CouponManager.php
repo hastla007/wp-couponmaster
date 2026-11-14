@@ -868,7 +868,8 @@ final class CouponManager {
 			}
 			$before            = (float) $fresh->balance;
 			$balance           = max( 0.0, round( (float) $compute( $before ), $fresh->decimals() ) );
-			$amount            = $amount ?? abs( $balance - $before );
+			// U6: an admin correction keeps its direction (+ raised, − lowered) so the journal can be summed.
+			$amount            = $amount ?? ( 'adjusted' === $event ? round( $balance - $before, $fresh->decimals() ) : abs( $balance - $before ) );
 			$fresh->usage_mode = $voucher->usage_mode;
 			$fresh->balance    = $balance;
 			if ( $fresh->is_multi_use() ) {

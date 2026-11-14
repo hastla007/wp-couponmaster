@@ -64,9 +64,8 @@ $show_order = ! empty( $show_order );
 					<?php if ( $voucher->expires_at ) : ?>
 						<br><small><?php /* translators: %s: date */ printf( esc_html__( 'Valid until %s', 'voucher-captain' ), esc_html( wp_date( vcap()->settings->date_format(), strtotime( $voucher->expires_at . ' UTC' ) ) ) ); ?></small>
 					<?php endif; ?>
-					<?php if ( ! $voucher->transferable ) : ?>
-						<br><small><?php esc_html_e( 'Personal, not transferable', 'voucher-captain' ); ?></small>
-					<?php endif; ?>
+					<?php // U15: who may redeem it, from the restriction in effect (buyer only, recipient only, both, anyone). ?>
+					<br><small><?php echo esc_html( $voucher->transferable_label() ); ?></small>
 					<?php if ( '' !== $voucher->terms ) : ?>
 						<details class="vcap-terms"><summary><?php esc_html_e( 'Redemption conditions', 'voucher-captain' ); ?></summary><?php echo wp_kses_post( wpautop( esc_html( $voucher->terms ) ) ); ?></details>
 					<?php endif; ?>

@@ -393,6 +393,19 @@ $u10_credit = vcap_security_single( 20.0, 'credit' );
 $u10_admin->redeem_store( vcap()->vouchers->get( $u10_credit->id ) );
 vcap_security_assert( VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $u10_credit->id )->status, 'U10: the counter refusal rules apply (store credit is not marked as redeemed)' );
 
+// U4: the bulk void counts failures and names the codes whose WooCommerce coupon could not be disabled.
+$u4_ok     = vcap_security_single();
+$u4_broken = vcap_security_single();
+$u4_broken->coupon_id = 987654321; // No such post: disabling the coupon fails.
+vcap()->vouchers->update( $u4_broken );
+delete_transient( 'vcap_flash_' . get_current_user_id() );
+$u4_result = $u10_admin->bulk( 'void', array( $u4_ok->id, $u4_broken->id ) );
+$u4_flash  = VCAP\Admin\Flash::pending();
+$u4_errors = implode( ' ', wp_list_pluck( wp_list_filter( $u4_flash, array( 'type' => 'error' ) ), 'message' ) );
+vcap_security_assert( 1 === $u4_result['done'] && array( $u4_broken->code ) === $u4_result['failed'] && str_contains( $u4_errors, $u4_broken->code ) && ! str_contains( $u4_errors, $u4_ok->code ), 'U4: a bulk void reports the voucher whose WooCommerce code could not be disabled as an error with its code' );
+vcap_security_assert( (bool) wp_list_filter( $u4_flash, array( 'type' => 'success' ) ), 'U4: the vouchers that were voided are reported as a success count' );
+delete_transient( 'vcap_flash_' . get_current_user_id() );
+
 // F11: every row checkbox of the voucher list has a hidden label naming the voucher (like the core lists).
 require_once ABSPATH . 'wp-admin/includes/class-wp-screen.php';
 require_once ABSPATH . 'wp-admin/includes/screen.php';

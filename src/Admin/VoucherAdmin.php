@@ -319,7 +319,7 @@ final class VoucherAdmin {
 							<td><?php echo esc_html( $labels[ $e['event'] ] ?? $e['event'] ); ?></td>
 							<td><?php echo null !== $e['amount'] && 'checkin' !== $e['event'] && 'checkin_undo' !== $e['event'] ? wp_kses_post( wc_price( (float) $e['amount'], array( 'currency' => $v->currency ) ) ) : esc_html( null !== $e['amount'] ? (string) (int) $e['amount'] : '' ); ?></td>
 							<td><?php echo null !== $e['balance_after'] ? wp_kses_post( wc_price( (float) $e['balance_after'], array( 'currency' => $v->currency ) ) ) : ''; ?></td>
-							<td><?php echo $e['order_id'] ? '#' . esc_html( (string) $e['order_id'] ) : ''; ?></td>
+							<td><?php echo \VCAP\Format::order_link( $e['order_id'] ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in order_link(). ?></td>
 							<td><?php echo $user ? esc_html( $user->display_name ) : '—'; ?></td>
 							<td>
 								<?php echo esc_html( (string) $e['note'] ); ?>
@@ -682,41 +682,83 @@ final class VoucherAdmin {
 		if ( ! in_array( $action, array( 'void', 'reactivate', 'resend' ), true ) ) {
 			return;
 		}
-		$sent   = 0;
-		$failed = 0;
+		$result = $this->bulk( $action, $ids );
+		$this->redirect( $result['done'] || $result['failed'] ? '' : 'bulk' );
+	}
+
+	/**
+	 * Run a bulk action and report its outcome as flash notices: successes as one count, failures (U4) as an error
+	 * that names the codes – a voided voucher whose WooCommerce code could not be disabled stays redeemable.
+	 *
+	 * @param int[] $ids
+	 * @return array{done:int, failed:string[]} number of vouchers changed/sent and the codes that failed.
+	 */
+	public function bulk( string $action, array $ids ): array {
+		$done   = 0;
+		$failed = array();
 		foreach ( $ids as $id ) {
-			$v = $this->repo->get( $id );
+			$v = $this->repo->get( (int) $id );
 			if ( ! $v ) {
 				continue;
 			}
 			if ( 'void' === $action ) {
-				vcap()->issuer->void( $v, __( 'Voided by admin (bulk)', 'voucher-captain' ) );
+				if ( Voucher::STATUS_VOID === $v->status ) {
+					continue;
+				}
+				$ok = vcap()->issuer->void( $v, __( 'Voided by admin (bulk)', 'voucher-captain' ) );
 			} elseif ( 'reactivate' === $action && Voucher::STATUS_VOID === $v->status ) {
-				vcap()->issuer->reactivate( $v );
+				$ok = vcap()->issuer->reactivate( $v );
 			} elseif ( 'resend' === $action ) {
 				$addresses = vcap()->delivery->send( $v );
+				$ok        = (bool) $addresses;
 				if ( $addresses ) {
-					++$sent;
 					/* translators: %s: email addresses */
 					$this->repo->log( $v->id, 'resent', null, null, sprintf( __( 'Sent to %s by an admin (bulk action)', 'voucher-captain' ), implode( ', ', $addresses ) ) );
 				} else {
-					++$failed;
 					$this->repo->log( $v->id, 'delivery_failed', null, null, __( 'Bulk resend: the email was not sent (no valid address, email disabled or mail error).', 'voucher-captain' ) );
 				}
+			} else {
+				continue;
+			}
+			if ( $ok ) {
+				++$done;
+			} else {
+				$failed[] = $v->code;
 			}
 		}
+		$codes = implode( ', ', array_slice( $failed, 0, 20 ) ) . ( count( $failed ) > 20 ? ', …' : '' );
 		if ( 'resend' === $action ) {
-			if ( $sent ) {
+			if ( $done ) {
 				/* translators: %d: number of vouchers */
-				Flash::add( 'success', sprintf( _n( '%d voucher sent again.', '%d vouchers sent again.', $sent, 'voucher-captain' ), $sent ) );
+				Flash::add( 'success', sprintf( _n( '%d voucher sent again.', '%d vouchers sent again.', $done, 'voucher-captain' ), $done ) );
 			}
 			if ( $failed ) {
 				/* translators: %d: number of vouchers */
-				Flash::add( 'error', sprintf( _n( '%d voucher could not be sent (no valid address, email disabled or mail error) – see its history.', '%d vouchers could not be sent (no valid address, email disabled or mail error) – see their history.', $failed, 'voucher-captain' ), $failed ) );
+				Flash::add( 'error', sprintf( _n( '%d voucher could not be sent (no valid address, email disabled or mail error) – see its history.', '%d vouchers could not be sent (no valid address, email disabled or mail error) – see their history.', count( $failed ), 'voucher-captain' ), count( $failed ) ) . ' ' . $codes );
 			}
-			$this->redirect( '' );
+			return array( 'done' => $done, 'failed' => $failed );
 		}
-		$this->redirect( 'bulk' );
+		if ( $done ) {
+			Flash::add(
+				'success',
+				'void' === $action
+					/* translators: %d: number of vouchers */
+					? sprintf( _n( '%d voucher voided.', '%d vouchers voided.', $done, 'voucher-captain' ), $done )
+					/* translators: %d: number of vouchers */
+					: sprintf( _n( '%d voucher reactivated.', '%d vouchers reactivated.', $done, 'voucher-captain' ), $done )
+			);
+		}
+		if ( $failed ) {
+			Flash::add(
+				'error',
+				'void' === $action
+					/* translators: 1: number of vouchers, 2: voucher codes */
+					? sprintf( _n( '%1$d voucher is void, but its WooCommerce code could not be disabled and can still be redeemed – disable it manually: %2$s', '%1$d vouchers are void, but their WooCommerce codes could not be disabled and can still be redeemed – disable them manually: %2$s', count( $failed ), 'voucher-captain' ), count( $failed ), $codes )
+					/* translators: 1: number of vouchers, 2: voucher codes */
+					: sprintf( _n( '%1$d voucher could not be fully reactivated (status or WooCommerce code) – check its history: %2$s', '%1$d vouchers could not be fully reactivated (status or WooCommerce code) – check their history: %2$s', count( $failed ), 'voucher-captain' ), count( $failed ), $codes )
+			);
+		}
+		return array( 'done' => $done, 'failed' => $failed );
 	}
 
 	public function export(): void {
@@ -739,7 +781,8 @@ final class VoucherAdmin {
 				__( 'Balance', 'voucher-captain' ),
 				__( 'Currency', 'voucher-captain' ),
 				__( 'Expires', 'voucher-captain' ),
-				__( 'Order', 'voucher-captain' ),
+				__( 'Order number', 'voucher-captain' ),
+				__( 'Order ID', 'voucher-captain' ),
 				__( 'Buyer name', 'voucher-captain' ),
 				__( 'Buyer email', 'voucher-captain' ),
 				__( 'Recipient name', 'voucher-captain' ),
@@ -754,7 +797,7 @@ final class VoucherAdmin {
 			$result = $this->repo->query( array_merge( $args, array( 'page' => $page ) ) );
 			foreach ( $result['items'] as $v ) {
 				$product = $v->product();
-				\VCAP\Csv::write( $out, array( $v->code, $types[ $v->type ] ?? $v->type, $v->status_label(), $product ? $product->get_name() : '', \VCAP\Csv::number( $v->initial_amount, $v->decimals() ), \VCAP\Csv::number( $v->balance, $v->decimals() ), $v->currency, \VCAP\Csv::date( $v->expires_at, false ), $v->order_id ?: '', $v->buyer_name, $v->buyer_email, $v->recipient_name, $v->recipient_email, $v->checkins, $v->max_checkins, \VCAP\Csv::date( $v->created_at ) ) );
+				\VCAP\Csv::write( $out, array( $v->code, $types[ $v->type ] ?? $v->type, $v->status_label(), $product ? $product->get_name() : '', \VCAP\Csv::number( $v->initial_amount, $v->decimals() ), \VCAP\Csv::number( $v->balance, $v->decimals() ), $v->currency, \VCAP\Csv::date( $v->expires_at, false ), \VCAP\Format::order_number( $v->order_id ), $v->order_id ?: '', $v->buyer_name, $v->buyer_email, $v->recipient_name, $v->recipient_email, $v->checkins, $v->max_checkins, \VCAP\Csv::date( $v->created_at ) ) );
 			}
 			++$page;
 		} while ( count( $result['items'] ) === 500 );

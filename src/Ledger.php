@@ -19,6 +19,8 @@ final class Ledger {
 	/** Events after which a single-use voucher no longer carries value (until restored or reactivated). */
 	private const USED_EVENTS = array( 'redeemed', 'committed', 'api_committed', 'voided' );
 	private const BACK_EVENTS = array( 'restored', 'api_refunded', 'reactivated', 'passcaptain_tickets_restored', 'redeem_reversed' );
+	/** U6: bookings that take value off a voucher (shown negative in the journal); 'adjusted' carries its own sign. */
+	public const OUT_EVENTS = array( 'redeemed', 'committed', 'debit', 'refund_credit_reversed', 'api_committed', 'topup_reversed' );
 
 	public function __construct( private VoucherRepository $repo ) {}
 
@@ -186,15 +188,28 @@ final class Ledger {
 		} while ( count( $rows ) === $batch );
 	}
 
+	/**
+	 * U6: the booking amount with its direction – value taken off a voucher is negative, value added positive, so
+	 * the journal column sums to the change of the outstanding value. The ledger stores redemptions etc. as
+	 * positive amounts; "adjusted" is stored with its sign (older adjustments were stored unsigned and stay so).
+	 */
+	public static function signed_amount( string $event, $amount ): float {
+		$amount = (float) $amount;
+		if ( 'adjusted' === $event ) {
+			return $amount;
+		}
+		return in_array( $event, self::OUT_EVENTS, true ) ? -abs( $amount ) : abs( $amount );
+	}
+
 	/** Column headers of the liability CSV. */
 	public static function liability_header(): array {
-		return array( __( 'Date', 'voucher-captain' ), __( 'Code', 'voucher-captain' ), __( 'Type', 'voucher-captain' ), __( 'Currency', 'voucher-captain' ), __( 'Issued', 'voucher-captain' ), __( 'Expires', 'voucher-captain' ), __( 'Order', 'voucher-captain' ), __( 'Outstanding value', 'voucher-captain' ), __( 'Expired', 'voucher-captain' ) );
+		return array( __( 'Date', 'voucher-captain' ), __( 'Code', 'voucher-captain' ), __( 'Type', 'voucher-captain' ), __( 'Currency', 'voucher-captain' ), __( 'Issued', 'voucher-captain' ), __( 'Expires', 'voucher-captain' ), __( 'Order number', 'voucher-captain' ), __( 'Order ID', 'voucher-captain' ), __( 'Outstanding value', 'voucher-captain' ), __( 'Expired', 'voucher-captain' ) );
 	}
 
 	/** One CSV line of liability_rows(). */
 	public static function liability_line( array $r, string $date ): array {
 		$types = Voucher::types();
-		return array( $date, $r['code'], $types[ $r['type'] ] ?? $r['type'], $r['currency'], Csv::date( $r['issued'] ), Csv::date( $r['expires'], false ), $r['order_id'] ?: '', Csv::number( $r['outstanding'], (int) ( $r['decimals'] ?? 2 ) ), $r['expired'] ? __( 'Yes', 'voucher-captain' ) : __( 'No', 'voucher-captain' ) );
+		return array( $date, $r['code'], $types[ $r['type'] ] ?? $r['type'], $r['currency'], Csv::date( $r['issued'] ), Csv::date( $r['expires'], false ), Format::order_number( $r['order_id'] ), $r['order_id'] ?: '', Csv::number( $r['outstanding'], (int) ( $r['decimals'] ?? 2 ) ), $r['expired'] ? __( 'Yes', 'voucher-captain' ) : __( 'No', 'voucher-captain' ) );
 	}
 
 	/**
@@ -212,7 +227,7 @@ final class Ledger {
 
 	/** Column headers of the journal CSV. */
 	public static function journal_header(): array {
-		return array( __( 'Date', 'voucher-captain' ), __( 'Code', 'voucher-captain' ), __( 'Type', 'voucher-captain' ), __( 'Currency', 'voucher-captain' ), __( 'Booking', 'voucher-captain' ), __( 'Amount', 'voucher-captain' ), __( 'Balance after', 'voucher-captain' ), __( 'Order', 'voucher-captain' ), __( 'Note', 'voucher-captain' ) );
+		return array( __( 'Date', 'voucher-captain' ), __( 'Code', 'voucher-captain' ), __( 'Type', 'voucher-captain' ), __( 'Currency', 'voucher-captain' ), __( 'Booking', 'voucher-captain' ), __( 'Amount', 'voucher-captain' ), __( 'Balance after', 'voucher-captain' ), __( 'Order number', 'voucher-captain' ), __( 'Order ID', 'voucher-captain' ), __( 'Note', 'voucher-captain' ) );
 	}
 
 	/** One CSV line of a journal booking. */
@@ -221,7 +236,7 @@ final class Ledger {
 		$labels   = $labels ?? VoucherRepository::event_labels();
 		$types    = $types ?? Voucher::types();
 		$decimals = API\V1\RedemptionService::decimals( (string) ( $r['currency'] ?: get_option( 'woocommerce_currency' ) ) );
-		return array( Csv::date( $r['created_at'] ), $r['code'], $types[ $r['type'] ] ?? $r['type'], $r['currency'], $labels[ $r['event'] ] ?? $r['event'], Csv::number( (float) $r['amount'], $decimals ), null === $r['balance_after'] ? '' : Csv::number( (float) $r['balance_after'], $decimals ), $r['order_id'] ?: '', (string) $r['note'] );
+		return array( Csv::date( $r['created_at'] ), $r['code'], $types[ $r['type'] ] ?? $r['type'], $r['currency'], $labels[ $r['event'] ] ?? $r['event'], Csv::number( self::signed_amount( (string) $r['event'], $r['amount'] ), $decimals ), null === $r['balance_after'] ? '' : Csv::number( (float) $r['balance_after'], $decimals ), Format::order_number( $r['order_id'] ), $r['order_id'] ?: '', (string) $r['note'] );
 	}
 
 	/**
