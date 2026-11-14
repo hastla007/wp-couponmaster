@@ -316,6 +316,54 @@ check( 'remote images are never fetched', null === vcap()->pdf->image_path( 0, '
 check( 'uploads URL maps to local file', $png === vcap()->pdf->image_path( 0, 'https://shop.test/wp-content/uploads/2026/11/logo.png' ) );
 check( 'path traversal blocked', null === vcap()->pdf->image_path( 0, 'https://shop.test/wp-content/uploads/../../../../etc/passwd' ) );
 
+echo "Bundled delivery PDF (Z6)\n";
+$z6_list = array();
+for ( $z6_i = 1; $z6_i <= 3; $z6_i++ ) {
+	$z6_v       = clone $v;
+	$z6_v->id   = 9100 + $z6_i;
+	$z6_v->code = 'BUNDLE-000' . $z6_i;
+	$z6_list[]  = $z6_v;
+}
+$z6_parts = vcap()->pdf->render_many( $z6_list );
+check( 'Z6: three vouchers of one design are rendered as one PDF document', 1 === count( $z6_parts ) && 3 === count( $z6_parts[0]['vouchers'] ) && str_starts_with( $z6_parts[0]['pdf'], '%PDF-' ) );
+file_put_contents( "$out/z6-bundle.pdf", $z6_parts[0]['pdf'] ?? '' );
+$z6_info = (string) shell_exec( 'pdfinfo ' . escapeshellarg( "$out/z6-bundle.pdf" ) . ' 2>/dev/null' );
+if ( preg_match( '/Pages:\s+(\d+)/', $z6_info, $z6_m ) ) {
+	check( 'Z6: the bundle PDF has exactly one page per voucher (no blank pages)', '3' === $z6_m[1], 'pages=' . $z6_m[1] );
+	$z6_text = (string) shell_exec( 'pdftotext ' . escapeshellarg( "$out/z6-bundle.pdf" ) . ' - 2>/dev/null' );
+	$z6_page = (string) shell_exec( 'pdftotext -f 2 -l 2 ' . escapeshellarg( "$out/z6-bundle.pdf" ) . ' - 2>/dev/null' );
+	check( 'Z6: every code is printed, each on its own page', str_contains( $z6_text, 'BUNDLE-0001' ) && str_contains( $z6_text, 'BUNDLE-0003' ) && str_contains( $z6_page, 'BUNDLE-0002' ) && ! str_contains( $z6_page, 'BUNDLE-0001' ), $z6_page );
+}
+$z6_files = vcap()->pdf->bundle_to_temp_files( $z6_list );
+check( 'Z6: the bundle PDF is written as one private temp file named after the first voucher and the count', is_array( $z6_files ) && 1 === count( $z6_files ) && str_ends_with( $z6_files[0], '-and-2-more.pdf' ) && is_file( $z6_files[0] ), wp_json_encode( $z6_files ) );
+foreach ( (array) $z6_files as $z6_file ) {
+	@unlink( $z6_file );
+}
+check( 'Z6: bundled from 5 vouchers, PDF up to 50 by default', 5 === Delivery::bundle_threshold() && 50 === Delivery::bundle_pdf_limit() );
+$GLOBALS['vcap_test_options']['vcap_bundle_threshold'] = 1;
+$z6_one = Delivery::bundle_threshold();
+$GLOBALS['vcap_test_options']['vcap_bundle_threshold'] = 0;
+$z6_off = Delivery::bundle_threshold();
+unset( $GLOBALS['vcap_test_options']['vcap_bundle_threshold'] );
+$GLOBALS['vcap_test_filters']['vcap_bundle_threshold'] = array( array( static fn() => 20, 1 ) );
+$GLOBALS['vcap_test_filters']['vcap_bundle_pdf_limit'] = array( array( static fn() => 0, 1 ) );
+check( 'Z6: setting 0 switches bundling off, 1 means 2; the filters "vcap_bundle_threshold" and "vcap_bundle_pdf_limit" decide', 2 === $z6_one && 0 === $z6_off && 20 === Delivery::bundle_threshold() && 0 === Delivery::bundle_pdf_limit() );
+unset( $GLOBALS['vcap_test_filters']['vcap_bundle_threshold'], $GLOBALS['vcap_test_filters']['vcap_bundle_pdf_limit'] );
+$z6_a                  = clone $v;
+$z6_a->order_item_id   = 55;
+$z6_a->send_to         = 'recipient';
+$z6_a->buyer_email     = 'buyer@example.com';
+$z6_a->recipient_email = 'Lea@Example.com';
+$z6_b                  = clone $z6_a;
+$z6_b->recipient_email = 'lea@example.com';
+$z6_c                  = clone $z6_a;
+$z6_c->recipient_email = 'max@example.com';
+$z6_d                  = clone $z6_a;
+$z6_d->order_item_id   = 56;
+check( 'Z6: vouchers share a bundle only with the same order line and recipient address (case ignored)', Delivery::bundle_key( $z6_a ) === Delivery::bundle_key( $z6_b ) && Delivery::bundle_key( $z6_a ) !== Delivery::bundle_key( $z6_c ) && Delivery::bundle_key( $z6_a ) !== Delivery::bundle_key( $z6_d ) );
+$z6_mail = (string) file_get_contents( VCAP_PATH . 'templates/emails/voucher-bundle.php' );
+check( 'Z6: the bundled email has its own HTML and plain template with a code table and download links', str_contains( $z6_mail, '$download_urls[ $vcap_v->id ]' ) && str_contains( $z6_mail, "woocommerce_email_header" ) && str_contains( (string) file_get_contents( VCAP_PATH . 'templates/emails/plain/voucher-bundle.php' ), '$download_urls[ $vcap_v->id ]' ) );
+
 echo "PDF temp files, templates and designer (P8)\n";
 $p8_design = array( 'page' => array( 'format' => 'A6' ), 'elements' => array( array( 'type' => 'text', 'x' => 5, 'y' => 5, 'w' => 90, 'h' => 10, 'text' => '{coupon_code}' ) ) );
 // Q14: a parallel delivery with the same file name writes its PDF while this one renders.
@@ -1493,7 +1541,7 @@ $h7->status = Voucher::STATUS_ACTIVE;
 check( 'H7: a scheduled or void voucher is not emailed by hand, an active one is', '' !== $h7_scheduled && str_contains( $h7_scheduled, 'Send now' ) && '' !== $h7_void && '' === VCAP\Admin\VoucherAdmin::resend_refusal( $h7 ) );
 // D5: barcode type vs. code.
 check( 'D5: EAN-13 refuses letters, Code 39 lower case; Code 128 takes anything', '' !== PdfRenderer::barcode_problem( 'EAN13', 'GIFT-K7QM2X9ZPA' ) && '' === PdfRenderer::barcode_problem( 'EAN13', '4006381333931' ) && '' !== PdfRenderer::barcode_problem( 'C39', 'abc' ) && '' === PdfRenderer::barcode_problem( 'C128', 'gift-äöü' ) );
-check( 'D5: failed QR codes, barcodes and temp files are logged with the voucher id and element', str_contains( $vcap_source( 'VCAP\\PdfRenderer', 'to_temp_file' ), 'write_failed' ) && str_contains( $vcap_source( 'VCAP\\PdfRenderer', 'write_failed' ), "'voucher_id'" ) && str_contains( $vcap_source( 'VCAP\\PdfRenderer', 'element_failed' ), "'element'" ) && str_contains( $vcap_source( 'VCAP\\Delivery', 'deliver' ), "'delivered_without_pdf'" ) );
+check( 'D5: failed QR codes, barcodes and temp files are logged with the voucher id and element', str_contains( $vcap_source( 'VCAP\\PdfRenderer', 'to_temp_file' ), 'write_failed' ) && str_contains( $vcap_source( 'VCAP\\PdfRenderer', 'write_failed' ), "'voucher_id'" ) && str_contains( $vcap_source( 'VCAP\\PdfRenderer', 'element_failed' ), "'element'" ) && str_contains( $vcap_source( 'VCAP\\Delivery', 'record_attempt' ), "'delivered_without_pdf'" ) );
 // D16: verbose log with an expiry.
 $GLOBALS['vcap_test_options'][ VCAP\Logger::VERBOSE_OPTION ]       = 'yes';
 $GLOBALS['vcap_test_options'][ VCAP\Logger::VERBOSE_UNTIL_OPTION ] = time() + 60;

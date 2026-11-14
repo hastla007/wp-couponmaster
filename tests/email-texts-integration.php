@@ -211,6 +211,35 @@ $tos = array_map( static fn( $m ) => implode( ',', (array) $m['to'] ), array_sli
 vcap_mail_assert( $sent && array( 'mail-buyer@example.com', 'archive@example.com' ) === $tos, 'each additional recipient gets an own mail, the main address alone decides', $tos );
 $emails['VCAP_Email_Voucher_Buyer']->settings['extra_recipients'] = '';
 
+// Z6: the bundled email speaks of the number of vouchers, per role, and keeps a heading the shop wrote itself.
+$z6_list = array();
+for ( $z6_i = 0; $z6_i < 3; $z6_i++ ) {
+	$z6_v          = vcap_mail_voucher( array( 'buyer_name' => 'Max', 'recipient_name' => 'Lea' ) );
+	$z6_v->send_to = 'recipient';
+	$z6_list[]     = $z6_v;
+}
+$z6_email                       = $emails['VCAP_Email_Voucher_Bundle'];
+$z6_email->settings['email_type'] = 'plain';
+$z6_email->settings['enabled']    = 'yes';
+$z6_email->trigger_bundle( $z6_list, 'recipient' );
+$z6_last = end( $captured );
+$z6_body = trim( (string) preg_replace( '/\s+/', ' ', wp_strip_all_tags( (string) $z6_last['message'] ) ) );
+vcap_mail_assert( 'mail-recipient@example.com' === implode( ',', (array) $z6_last['to'] ) && str_starts_with( (string) $z6_last['subject'], 'Max sent you 3 vouchers from' ) && str_contains( $z6_body, 'Hi Lea, Max sent you 3 vouchers.' ) && str_contains( $z6_body, 'You received 3 vouchers!' ) && str_contains( $z6_body, $z6_list[0]->code ) && str_contains( $z6_body, $z6_list[2]->code ), 'Z6: the bundled email to the recipient names the giver and the number of vouchers and lists every code', array( $z6_last['subject'] ?? '', $z6_body ) );
+$z6_email->trigger_bundle( $z6_list, 'buyer' );
+$z6_last = end( $captured );
+$z6_body = trim( (string) preg_replace( '/\s+/', ' ', wp_strip_all_tags( (string) $z6_last['message'] ) ) );
+vcap_mail_assert( 'mail-buyer@example.com' === implode( ',', (array) $z6_last['to'] ) && str_starts_with( (string) $z6_last['subject'], 'Your 3 gift vouchers are on their way' ) && str_contains( $z6_body, 'This copy with all codes is for your records.' ) && str_contains( $z6_body, 'Your 3 vouchers' ) && str_contains( $z6_body, 'Lea' ), 'Z6: the buyer copy of bundled gifts reads as a confirmation and names the recipient per code', array( $z6_last['subject'] ?? '', $z6_body ) );
+$z6_email->settings['heading'] = 'Codes for {recipient_name}';
+$z6_email->trigger_bundle( $z6_list, 'recipient' );
+$z6_email->settings['heading'] = '';
+vcap_mail_assert( str_contains( wp_strip_all_tags( (string) end( $captured )['message'] ), 'Codes for Lea' ), 'Z6: a heading the shop wrote itself is kept' );
+ob_start();
+$z6_email->vouchers = array();
+$z6_email->voucher  = null;
+$z6_preview         = $z6_email->get_content_html();
+ob_end_clean();
+vcap_mail_assert( str_contains( $z6_preview, '<table' ) && substr_count( $z6_preview, VCAP\Preview::sample_voucher()->code . '-' ) >= 3, 'Z6: the WooCommerce email preview of the bundled email shows a code table with sample vouchers' );
+
 // German: the same texts are translated (formal "Sie").
 add_filter( 'woocommerce_email_setup_locale', '__return_false' );
 unload_textdomain( 'voucher-captain' );
