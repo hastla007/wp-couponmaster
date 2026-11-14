@@ -1,7 +1,7 @@
 <?php
 namespace VCAP\Discounts;
 
-use VCAP\CodeGenerator;
+use VCAP\CodeIndex;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -336,12 +336,11 @@ final class Bonus {
 	private function create_coupon( array $campaign, \WC_Order $order ): int {
 		$r = $campaign['rules'];
 		try {
-			$code = CodeGenerator::unique(
+			$code = CodeIndex::unique(
 				array(
 					'prefix' => (string) apply_filters( 'vcap_bonus_code_prefix', 'BONUS', $campaign, $order ),
 					'length' => 10,
-				),
-				static fn( $c ) => wc_get_coupon_id_by_code( $c ) > 0
+				)
 			);
 		} catch ( \RuntimeException $e ) {
 			return 0;

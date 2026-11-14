@@ -278,7 +278,7 @@ final class CouponManager {
 	}
 
 	public function code_exists( string $code ): bool {
-		return $this->repo->code_exists( $code ) || wc_get_coupon_id_by_code( $code ) > 0;
+		return CodeIndex::taken( $code ); // B4: own tables first (indexed), WooCommerce last, misses cached.
 	}
 
 	/**

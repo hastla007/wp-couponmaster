@@ -226,7 +226,7 @@ final class Referrals {
 				return $coupon->get_id() ? $coupon : null;
 			}
 			try {
-				$code = CodeGenerator::unique( array( 'prefix' => (string) apply_filters( 'vcap_referral_code_prefix', 'FRIEND' ), 'length' => 8 ), static fn( $c ) => wc_get_coupon_id_by_code( $c ) > 0 );
+				$code = CodeIndex::unique( array( 'prefix' => (string) apply_filters( 'vcap_referral_code_prefix', 'FRIEND' ), 'length' => 8 ) );
 			} catch ( \RuntimeException $e ) {
 				Claim::release( $claim );
 				return null;
@@ -553,7 +553,7 @@ final class Referrals {
 
 	private function reward_coupon( \WP_User $user, float $amount, \WC_Order $order ): ?\WC_Coupon {
 		try {
-			$code = CodeGenerator::unique( array( 'prefix' => 'THANKS', 'length' => 10 ), static fn( $c ) => wc_get_coupon_id_by_code( $c ) > 0 );
+			$code = CodeIndex::unique( array( 'prefix' => 'THANKS', 'length' => 10 ) );
 		} catch ( \RuntimeException $e ) {
 			return null;
 		}

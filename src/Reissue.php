@@ -162,7 +162,7 @@ final class Reissue {
 		$product = $voucher->product();
 		$config  = $product ? ProductConfig::get( $product ) : ProductConfig::DEFAULTS;
 		$order   = $voucher->order();
-		return CodeGenerator::unique(
+		return CodeIndex::unique(
 			array(
 				'prefix'    => '' !== (string) $config['code_prefix'] ? $config['code_prefix'] : $this->settings->get( 'vcap_code_prefix' ),
 				'suffix'    => '' !== (string) $config['code_suffix'] ? $config['code_suffix'] : $this->settings->get( 'vcap_code_suffix' ),
@@ -171,8 +171,7 @@ final class Reissue {
 				'separator' => $this->settings->get( 'vcap_code_separator' ),
 				'order_ref' => $order instanceof \WC_Order && $this->settings->yes( 'vcap_code_order_ref' ) ? $order->get_order_number() : '',
 				'min_bits'  => (int) apply_filters( 'vcap_min_code_bits', CodeGenerator::MIN_BITS ),
-			),
-			array( $this->coupons, 'code_exists' )
+			)
 		);
 	}
 
