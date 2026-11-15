@@ -91,7 +91,9 @@ final class OrderAdmin {
 		do_action( 'vcap_order_metabox_after', $order );
 	}
 
-	public function actions( array $actions, $order = null ): array {
+	/** @param mixed $actions What the previous filter returned (AP-Q2-6: a non-array is normalised). */
+	public function actions( $actions, $order = null ): array {
+		$actions = is_array( $actions ) ? $actions : array();
 		$order = $order instanceof \WC_Order ? $order : self::order_from( $GLOBALS['theorder'] ?? ( $GLOBALS['post'] ?? null ) );
 		if ( $order && \VCAP\CouponManager::has_shortfall( $order ) ) {
 			$actions['vcap_accept_shortfall'] = __( 'Accept voucher shortfall and fulfil the order', 'voucher-captain' );

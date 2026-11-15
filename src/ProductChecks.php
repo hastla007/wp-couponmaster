@@ -41,9 +41,12 @@ final class ProductChecks {
 		}
 	}
 
-	/** A voucher setting of a product changed: forget the cached problems. */
+	/**
+	 * A voucher setting of a product changed: forget the cached problems. AP-P1-6: only for products and
+	 * variations – "_vcap_*" meta of coupons and other posts (e.g. a suspended coupon's marker) leaves them alone.
+	 */
 	public static function meta_changed( $meta_id, $object_id, $meta_key ): void {
-		if ( is_string( $meta_key ) && str_starts_with( $meta_key, '_vcap_' ) ) {
+		if ( is_string( $meta_key ) && str_starts_with( $meta_key, '_vcap_' ) && in_array( get_post_type( (int) $object_id ), array( 'product', 'product_variation' ), true ) ) {
 			self::flush();
 		}
 	}

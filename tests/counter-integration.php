@@ -164,7 +164,7 @@ vcap_ctr_assert( ! empty( $mgr_ok['success'] ) && empty( $mgr_no['success'] ), '
 
 // Parallel scans: while another connection holds the till's limit lock, the scan waits and is refused untouched.
 $other_db = new wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
-$lock     = Install::lock_name( 'counter_till_' . md5( $till_c ) );
+$lock     = Install::lock_name( VCAP\Counter::lock_key( 'till', strtoupper( $till_c ) . ' ' ) ); // AP-S3-5: another spelling of the same till;
 $other_db->get_var( $other_db->prepare( 'SELECT GET_LOCK(%s, 0)', $lock ) );
 wp_set_current_user( $tc_user );
 $before  = (float) vcap()->vouchers->get( $v2->id )->balance;
@@ -235,6 +235,23 @@ vcap_ctr_assert( 1 === count( $sent ) && null !== vcap()->vouchers->get( $issued
 vcap_ctr_assert( str_contains( (string) $sent[0]['message'], 'https://wallet.example/pass/' . $issued->id . '?c=email' ) && str_contains( (string) $sent[0]['message'], 'Add to Wallet' ), 'vcap_voucher_links adds its link to the voucher email' );
 $replay = vcap()->issuer->issue_standalone( array( 'amount' => 75, 'recipient_email' => 'erika-' . $tag . '@example.com', 'source' => 'company-order', 'reference' => $ref ) );
 vcap_ctr_assert( is_wp_error( $replay ) && 'vcap_reference_used' === $replay->get_error_code() && $issued->id === (int) ( $replay->get_error_data()['voucher_id'] ?? 0 ), 'a second call with the same reference issues nothing and names the voucher' );
+// AP-P1-3: a new reference is decided by its claim – no query reads the "issued" notes of every voucher.
+$p13_queries = array();
+$p13_log     = static function ( $q ) use ( &$p13_queries ) {
+	$p13_queries[] = $q;
+	return $q;
+};
+add_filter( 'query', $p13_log );
+$p13_new = vcap()->issuer->issue_standalone( array( 'amount' => 15, 'send' => false, 'source' => 'company-order', 'reference' => $ref . '-2' ) );
+remove_filter( 'query', $p13_log );
+$p13_scans = preg_grep( '/SELECT voucher_id FROM \S+ WHERE .*note = /s', $p13_queries );
+vcap_ctr_assert( $p13_new instanceof Voucher && ! $p13_scans, 'AP-P1-3: issuing with a new reference reads no ledger notes (the claim decides)', array_values( $p13_scans ) );
+$p13_queries = array();
+add_filter( 'query', $p13_log );
+$p13_replay = vcap()->issuer->issue_standalone( array( 'amount' => 15, 'send' => false, 'source' => 'company-order', 'reference' => $ref . '-2' ) );
+remove_filter( 'query', $p13_log );
+$p13_scans = array_values( preg_grep( '/SELECT voucher_id FROM \S+ WHERE .*note = /s', $p13_queries ) );
+vcap_ctr_assert( is_wp_error( $p13_replay ) && $p13_new->id === (int) ( $p13_replay->get_error_data()['voucher_id'] ?? 0 ) && 1 === count( $p13_scans ) && str_contains( $p13_scans[0], 'created_at >=' ), 'AP-P1-3: a used reference finds its voucher from the time of its claim on (created_at index)', $p13_scans );
 $quiet = vcap()->issuer->issue_standalone( array( 'amount' => 20, 'send' => false ) );
 vcap_ctr_assert( $quiet instanceof Voucher && null !== $quiet->delivered_at && 'single' === $quiet->usage_mode && ! as_has_scheduled_action( 'vcap_deliver_voucher', array( 'voucher_id' => $quiet->id ) ), 'send => false: no email, the voucher counts as handed over' );
 $bad = array(

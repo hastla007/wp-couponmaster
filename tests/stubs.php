@@ -69,9 +69,9 @@ function wp_unslash( $v ) { return $v; }
 function wp_slash( $v ) { return $v; }
 function wp_parse_args( $a, $d = array() ) { return array_merge( $d, (array) $a ); }
 function remove_accents( $s ) { return strtr( (string) $s, array( 'ä' => 'a', 'ö' => 'o', 'ü' => 'u', 'Ä' => 'A', 'Ö' => 'O', 'Ü' => 'U', 'é' => 'e', 'è' => 'e', 'à' => 'a', 'ç' => 'c', 'ñ' => 'n', 'ß' => 'ss' ) ); }
-function get_option( $k, $d = false ) { return $GLOBALS['vcap_test_options'][ $k ] ?? $d; }
+function get_option( $k, $d = false ) { $GLOBALS['vcap_test_option_reads'][ $k ] = ( $GLOBALS['vcap_test_option_reads'][ $k ] ?? 0 ) + 1; return $GLOBALS['vcap_test_options'][ $k ] ?? $d; }
 function update_option( $k, $v, $a = null ) { $GLOBALS['vcap_test_options'][ $k ] = $v; return true; }
-function add_option( $k, $v ) { if ( ! isset( $GLOBALS['vcap_test_options'][ $k ] ) ) { $GLOBALS['vcap_test_options'][ $k ] = $v; } }
+function add_option( $k, $v, $dep = '', $autoload = null ) { if ( array_key_exists( $k, $GLOBALS['vcap_test_options'] ?? array() ) ) { return false; } $GLOBALS['vcap_test_options'][ $k ] = $v; $GLOBALS['vcap_test_autoload'][ $k ] = $autoload; return true; }
 function get_bloginfo( $k ) { return 'Café Süß & Co'; }
 function home_url( $p = '' ) { return 'https://shop.test' . $p; }
 function admin_url( $p = '' ) { return 'https://shop.test/wp-admin/' . $p; }

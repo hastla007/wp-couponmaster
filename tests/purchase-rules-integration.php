@@ -140,6 +140,39 @@ vcap_rules_assert( '' === $v7_limit( 5 ), 'V7: 750 + 250 = 1000 is still allowed
 update_option( 'vcap_customer_daily_limit', 0 );
 vcap_rules_assert( '' === $v7_limit( 40 ), 'V7: 0 switches the limit off' );
 delete_option( 'vcap_customer_daily_limit' );
+
+// AP-P1-1: the 24-hour limit reads one day of orders (created_after in SQL on both order stores), once per request.
+$p11_old = wc_create_order();
+$p11_old->add_product( $gift_product, 2 );
+$p11_old->set_billing_email( "velo-{$v7_tag}@example.com" );
+$p11_old->calculate_totals();
+$p11_old->set_date_created( time() - 3 * DAY_IN_SECONDS );
+$p11_old->save();
+$p11_old->update_status( 'completed' );
+$p11_key  = VCAP\CustomerEmail::key( "velo-{$v7_tag}@example.com" );
+$p11_all  = VCAP\OrderLookup::ids_with_meta( VCAP\VoucherPurchaseRules::CUSTOMER_KEY_META, $p11_key, array( 'limit' => 50 ) );
+$p11_day  = VCAP\OrderLookup::ids_with_meta( VCAP\VoucherPurchaseRules::CUSTOMER_KEY_META, $p11_key, array( 'limit' => 50, 'created_after' => time() - DAY_IN_SECONDS ) );
+$p11_till = VCAP\OrderLookup::ids_with_meta( VCAP\VoucherPurchaseRules::CUSTOMER_KEY_META, $p11_key, array( 'limit' => 50, 'created_before' => time() - DAY_IN_SECONDS ) );
+vcap_rules_assert( in_array( $p11_old->get_id(), $p11_all, true ) && in_array( $v7_earlier->get_id(), $p11_day, true ) && ! in_array( $p11_old->get_id(), $p11_day, true ) && array( $p11_old->get_id() ) === $p11_till, 'AP-P1-1: OrderLookup bounds orders by their creation date (created_after / created_before) in SQL' );
+$p11_queries = array();
+$p11_log     = static function ( $q ) use ( &$p11_queries ) {
+	$p11_queries[] = $q;
+	return $q;
+};
+add_filter( 'query', $p11_log );
+$p11_first = VCAP\VoucherPurchaseRules::ordered_last_day( 0, "velo-{$v7_tag}@example.com" );
+$p11_count = count( $p11_queries );
+$p11_again = VCAP\VoucherPurchaseRules::ordered_last_day( 0, "velo-{$v7_tag}@example.com" );
+remove_filter( 'query', $p11_log );
+$p11_meta = preg_grep( '/' . preg_quote( VCAP\VoucherPurchaseRules::CUSTOMER_KEY_META, '/' ) . '/', $p11_queries );
+vcap_rules_assert( 750.0 === $p11_first && $p11_first === $p11_again && count( $p11_queries ) === $p11_count && $p11_meta && str_contains( (string) reset( $p11_meta ), '>= ' ), 'AP-P1-1: ordered_last_day() counts only the last 24 hours, bounds the lookup by date and is remembered for the request', array( $p11_first, $p11_again, count( $p11_queries ) - $p11_count ) );
+$p11_new = wc_create_order();
+$p11_new->add_product( $gift_product, 1 );
+$p11_new->set_billing_email( "velo-{$v7_tag}@example.com" );
+$p11_new->calculate_totals();
+$p11_new->save();
+$p11_new->update_status( 'processing' );
+vcap_rules_assert( 800.0 === VCAP\VoucherPurchaseRules::ordered_last_day( 0, "velo-{$v7_tag}@example.com" ), 'AP-P1-1: a new order of the customer is counted at once (the request memo is forgotten)' );
 WC()->customer->set_billing_email( '' );
 
 WC()->cart->empty_cart();

@@ -643,7 +643,9 @@ final class TemplatePostType {
 		Preview::stream( vcap()->pdf->render( $voucher, $design ), 'template-preview.pdf' );
 	}
 
-	public function row_actions( array $actions, \WP_Post $post ): array {
+	/** @param mixed $actions What the previous filter returned (AP-Q2-6: a non-array is normalised). */
+	public function row_actions( $actions, \WP_Post $post ): array {
+		$actions = is_array( $actions ) ? $actions : array();
 		if ( self::POST_TYPE === $post->post_type && current_user_can( 'edit_products' ) ) {
 			$url                  = wp_nonce_url( admin_url( 'admin.php?action=vcap_duplicate_template&post=' . $post->ID ), 'vcap_duplicate_' . $post->ID );
 			$actions['duplicate'] = '<a href="' . esc_url( $url ) . '">' . esc_html__( 'Duplicate', 'voucher-captain' ) . '</a>';
@@ -675,7 +677,9 @@ final class TemplatePostType {
 		exit;
 	}
 
-	public function columns( array $columns ): array {
+	/** @param mixed $columns What the previous filter returned (AP-Q2-6: a non-array is normalised). */
+	public function columns( $columns ): array {
+		$columns = is_array( $columns ) ? $columns : array();
 		$date = $columns['date'] ?? null;
 		unset( $columns['date'] );
 		$columns['vcap_format'] = __( 'Format', 'voucher-captain' );

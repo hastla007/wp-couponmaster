@@ -82,6 +82,8 @@ A personal voucher ("Who may redeem": buyer, recipient, or buyer or recipient; r
 
 *Counter:* redemption with the scanner, "Mark as redeemed (store)" and balance corrections by staff stay possible for personal vouchers – staff check the holder's identity (ID) themselves.
 
+*Counter daily limits:* the limit per staff member is enforced (the user is the authenticated scanner account). The limit per till/branch is **advisory**: the till name is sent by the scanner device, so a staff member can enter another till name and book on its count. Use the per-staff limit where a hard cap matters. Till names count case- and accent-insensitively and without surrounding spaces (as the database compares them); the booking lock of a till uses the same normalised name, so "Till 1" and "till 1 " cannot pass the check in parallel.
+
 *Reissue:* a voucher whose code was intercepted, sent to a wrong address or reported stolen is reissued on its detail page ("Reissue code"): new code and token, the remaining value carried over, the old WooCommerce coupon deleted, old download links invalid (see Guest PDF links).
 
 ## Redemption API targets

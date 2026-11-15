@@ -270,7 +270,8 @@ final class CampaignAdmin {
 		if ( function_exists( 'wc_set_time_limit' ) ) {
 			wc_set_time_limit( 0 ); // A timeout would cut the file off without an error.
 		}
-		$rows   = 'pool' === $target ? $this->campaigns->pool_rows( $name ) : $this->campaigns->campaign_rows( $name );
+		// Closing line "End of export: N" (AP-P1-2): a file cut off after the headers is recognisable.
+		$rows   = \VCAP\Csv::with_end_row( 'pool' === $target ? $this->campaigns->pool_rows( $name ) : $this->campaigns->campaign_rows( $name ) );
 		Campaigns::send_csv( 'codes-' . sanitize_title( $name ) . '-' . gmdate( 'Y-m-d' ) . '.csv', $rows );
 		exit;
 	}

@@ -55,8 +55,10 @@ final class Subscriptions {
 		return $meta;
 	}
 
-	public function type_option_classes( array $options ): array {
-		if ( isset( $options['vcap_enabled'] ) ) {
+	/** @param mixed $options What the previous filter returned (AP-Q2-6: a non-array is normalised). */
+	public function type_option_classes( $options ): array {
+		$options = is_array( $options ) ? $options : array();
+		if ( isset( $options['vcap_enabled'] ) && is_array( $options['vcap_enabled'] ) ) {
 			$options['vcap_enabled']['wrapper_class'] .= ' show_if_subscription show_if_variable-subscription';
 		}
 		return $options;

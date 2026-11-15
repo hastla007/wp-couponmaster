@@ -322,7 +322,8 @@ final class Usage {
 
 	/** Runs the recount flagged by files_replaced() in the next admin, cron or CLI request (B12). */
 	public static function reconcile_if_due(): void {
-		if ( ! get_option( self::RECONCILE_DUE_OPTION ) || ! ( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ) ) {
+		// AP-P1-7: the context first – a storefront request reads no option (the flag is not autoloaded).
+		if ( ! ( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ) || ! get_option( self::RECONCILE_DUE_OPTION ) ) {
 			return;
 		}
 		if ( \VCAP\Install::counters_ready() ) {

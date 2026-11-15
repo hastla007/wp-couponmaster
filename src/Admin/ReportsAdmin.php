@@ -394,30 +394,20 @@ final class ReportsAdmin {
 		}
 		$view   = self::view();
 		$ledger = new Ledger( vcap()->vouchers );
-		// Streamed in batches: no row limit and no full report in memory.
+		// Streamed in batches: no row limit and no full report in memory; each file ends with "End of export: N".
 		if ( 'liability' === $view ) {
 			$date = self::date_param( 'date', wp_date( 'Y-m-d' ) );
-			Campaigns::send_csv( 'voucher-liability-' . $date . '.csv', Ledger::liability_csv( $ledger->liability_rows( $date ), $date ) );
+			\VCAP\Csv::send( 'voucher-liability-' . $date . '.csv', $ledger->liability_export( $date ) );
 			exit;
 		}
 		list( $from, $to ) = self::range( $_GET );
 		if ( 'counter' === $view ) {
 			$group = self::counter_group();
-			$out   = \VCAP\Csv::open( 'voucher-counter-' . $group . '-' . $from . '-' . $to . '.csv' );
-			\VCAP\Csv::write( $out, Ledger::counter_header( $group ) );
-			foreach ( $ledger->counter_totals( $from, $to, $group ) as $row ) {
-				\VCAP\Csv::write( $out, Ledger::counter_line( $row, $group ) );
-			}
-			fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+			\VCAP\Csv::send( 'voucher-counter-' . $group . '-' . $from . '-' . $to . '.csv', $ledger->counter_export( $from, $to, $group ) );
 			exit;
 		}
 		if ( 'journal' === $view ) {
-			$out = \VCAP\Csv::open( 'voucher-journal-' . $from . '-' . $to . '.csv' );
-			\VCAP\Csv::write( $out, Ledger::journal_header() );
-			foreach ( $ledger->journal_all( $from, $to ) as $row ) {
-				\VCAP\Csv::write( $out, Ledger::journal_line( $row ) );
-			}
-			fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+			\VCAP\Csv::send( 'voucher-journal-' . $from . '-' . $to . '.csv', $ledger->journal_export( $from, $to ) );
 			exit;
 		}
 		Campaigns::send_csv( 'voucher-report-' . $from . '-' . $to . '.csv', Reports::csv_rows( ( new Reports() )->collect( $from, $to ) ) );

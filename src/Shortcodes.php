@@ -31,8 +31,12 @@ final class Shortcodes {
 		// A8: the onboarding checklist's cached page lookup (also edits through REST, outside wp-admin).
 		add_action( 'save_post_page', array( Admin\Onboarding::class, 'forget_pages' ) );
 		add_action( 'deleted_post', array( Admin\Onboarding::class, 'forget_pages' ) );
-		foreach ( array( 'save_post', 'deleted_post', 'update_option_widget_block', 'update_option_widget_text', 'update_option_widget_custom_html' ) as $hook ) {
-			add_action( $hook, array( self::class, 'forget_redeem_templates' ) );
+		// AP-P1-6: only saving a template, template part or builder layout (or a widget) can change the answer.
+		foreach ( array( 'save_post', 'deleted_post' ) as $hook ) {
+			add_action( $hook, array( self::class, 'forget_redeem_templates_for' ), 10, 2 );
+		}
+		foreach ( array( 'update_option_widget_block', 'update_option_widget_text', 'update_option_widget_custom_html' ) as $hook ) {
+			add_action( $hook, array( self::class, 'forget_redeem_templates' ), 10, 0 );
 		}
 		add_shortcode( 'vcap_my_vouchers', array( $this, 'my_vouchers_shortcode' ) );
 		add_shortcode( 'vcap_referral', array( $this, 'referral_shortcode' ) );
@@ -255,8 +259,8 @@ final class Shortcodes {
 		$found = get_transient( 'vcap_redeem_in_templates' );
 		if ( false === $found || ! in_array( $found, array( 'yes', 'no' ), true ) ) {
 			global $wpdb;
-			$types  = array( 'wp_template', 'wp_template_part', 'wp_block', 'elementor_library', 'et_template', 'et_header_layout', 'et_body_layout', 'et_footer_layout', 'fl-builder-template', 'fl-theme-layout' );
-			$in     = implode( ',', array_fill( 0, count( $types ), '%s' ) );
+			$types  = self::REDEEM_TEMPLATE_TYPES;
+			$in    = implode( ',', array_fill( 0, count( $types ), '%s' ) );
 			$like_b = '%' . $wpdb->esc_like( 'vcap/redeem' ) . '%';
 			$like_s = '%' . $wpdb->esc_like( '[vcap_redeem' ) . '%';
 			// phpcs:disable WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built above, cached in a transient.
@@ -274,8 +278,24 @@ final class Shortcodes {
 		return (bool) apply_filters( 'vcap_site_has_redeem_form', 'yes' === $found );
 	}
 
+	/** Post types of site-wide templates and builder layouts that may carry the redeem form. */
+	public const REDEEM_TEMPLATE_TYPES = array( 'wp_template', 'wp_template_part', 'wp_block', 'elementor_library', 'et_template', 'et_header_layout', 'et_body_layout', 'et_footer_layout', 'fl-builder-template', 'fl-theme-layout' );
+
 	public static function forget_redeem_templates(): void {
 		delete_transient( 'vcap_redeem_in_templates' );
+	}
+
+	/**
+	 * save_post / deleted_post: forgets site_has_redeem_template() only for a template or layout post type.
+	 *
+	 * @param int|string    $post_id
+	 * @param \WP_Post|null $post
+	 */
+	public static function forget_redeem_templates_for( $post_id, $post = null ): void {
+		$type = $post instanceof \WP_Post ? $post->post_type : (string) get_post_type( (int) $post_id );
+		if ( in_array( $type, self::REDEEM_TEMPLATE_TYPES, true ) ) {
+			self::forget_redeem_templates();
+		}
 	}
 
 	/** Notices of WooCommerce (only printed by the form a visitor just sent, see redeem_shortcode()). */

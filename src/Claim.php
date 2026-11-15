@@ -34,6 +34,17 @@ final class Claim {
 		return ! ( Install::legacy_rows() && self::option_exists( $name ) );
 	}
 
+	/** When the claim was taken (UTC "Y-m-d H:i:s"), null when it is not held or not in the claims table. */
+	public static function taken_at( string $name ): ?string {
+		global $wpdb;
+		if ( ! Install::storage_ready() ) {
+			return null;
+		}
+		$table = Install::tables()['claims'];
+		$at    = $wpdb->get_var( $wpdb->prepare( "SELECT created_at FROM {$table} WHERE claim_key = %s", self::key( $name ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return null === $at ? null : (string) $at;
+	}
+
 	/** Allow the action again (e.g. a use is counted again after a cancelled order is paid later). */
 	public static function release( string $name ): void {
 		global $wpdb;

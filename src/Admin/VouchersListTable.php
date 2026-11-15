@@ -118,6 +118,7 @@ final class VouchersListTable extends \WP_List_Table {
 			)
 		);
 		$this->items           = $result['items'];
+		self::prime( $this->items );
 		$this->_column_headers = array( $this->get_columns(), array(), $this->get_sortable_columns(), 'code' );
 		$this->set_pagination_args(
 			array(
@@ -125,6 +126,35 @@ final class VouchersListTable extends \WP_List_Table {
 				'per_page'    => $per_page,
 			)
 		);
+	}
+
+	/**
+	 * AP-P1-4: the orders of the page with one order query (Voucher::prime_orders()) and the products, variations and
+	 * coupons with one post and one meta query, instead of a few queries per row.
+	 *
+	 * @param Voucher[] $items
+	 */
+	public static function prime( array $items ): void {
+		Voucher::prime_orders( $items );
+		$posts = array();
+		foreach ( $items as $v ) {
+			$posts[] = (int) $v->product_id;
+			$posts[] = (int) $v->variation_id;
+			$posts[] = (int) $v->coupon_id;
+		}
+		$posts = array_values( array_unique( array_filter( $posts ) ) );
+		if ( $posts && function_exists( '_prime_post_caches' ) ) {
+			_prime_post_caches( $posts, false, true );
+		}
+	}
+
+	/** The rows are rendered: the primed orders are forgotten, so later code reads them fresh. */
+	public function display(): void {
+		try {
+			parent::display();
+		} finally {
+			Voucher::forget_orders();
+		}
 	}
 
 	/** Row checkbox with a label naming the voucher, like the core list tables (screen readers, bulk actions). */

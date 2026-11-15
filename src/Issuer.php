@@ -288,10 +288,15 @@ final class Issuer {
 			sprintf( _n( 'Paid order without voucher: %d voucher could not be created. It is retried automatically; or use "Generate vouchers" on the order.', 'Paid order without voucher: %d vouchers could not be created. They are retried automatically; or use "Generate vouchers" on the order.', $failed, 'voucher-captain' ), $failed )
 		);
 		Logger::error( 'Vouchers could not be issued.', array( 'order_id' => $order->get_id(), 'failed' => $failed, 'attempt' => $attempts, 'reference' => Db::last_reference() ) );
+		$args = array( 'order_id' => $order->get_id() );
 		if ( $attempts > self::ISSUE_RETRIES || ! function_exists( 'as_schedule_single_action' ) ) {
+			// Given up (AP-Q2-1): the safety net a background batch planned before it ran goes as well, otherwise
+			// it retried every 10 minutes for ever. The listing and "Generate vouchers" stay.
+			if ( function_exists( 'as_unschedule_all_actions' ) ) {
+				as_unschedule_all_actions( self::ISSUE_RETRY_HOOK, $args, Delivery::GROUP );
+			}
 			return;
 		}
-		$args = array( 'order_id' => $order->get_id() );
 		as_unschedule_all_actions( self::ISSUE_RETRY_HOOK, $args, Delivery::GROUP );
 		as_schedule_single_action( time() + self::issue_retry_delay( $attempts ), self::ISSUE_RETRY_HOOK, $args, Delivery::GROUP );
 	}
@@ -968,11 +973,12 @@ final class Issuer {
 		$source    = mb_substr( sanitize_text_field( (string) ( $args['source'] ?? '' ) ), 0, 60 );
 		$reference = mb_substr( sanitize_text_field( (string) ( $args['reference'] ?? '' ) ), 0, 100 );
 		$note      = Note::make( self::STANDALONE_NOTE, array( $source, $reference ) );
-		if ( '' !== $reference ) {
-			$existing = $this->standalone_by_note( $note );
-			if ( $existing || ! Claim::take( 'standalone:' . md5( $reference ) ) ) {
-				return new \WP_Error( 'vcap_reference_used', __( 'A voucher was already issued for this reference.', 'voucher-captain' ), array( 'status' => 409, 'voucher_id' => $existing ) );
-			}
+		if ( '' !== $reference && ! Claim::take( 'standalone:' . md5( $reference ) ) ) {
+			// AP-P1-3: the claim (kept for good, released only when the insert failed) decides; every reference
+			// issued since standalone issuing exists holds one. Only a used reference looks up its voucher, from
+			// the time the claim was taken on (created_at index) instead of reading every "issued" entry per call.
+			$existing = $this->standalone_by_note( $note, Claim::taken_at( 'standalone:' . md5( $reference ) ) );
+			return new \WP_Error( 'vcap_reference_used', __( 'A voucher was already issued for this reference.', 'voucher-captain' ), array( 'status' => 409, 'voucher_id' => $existing ) );
 		}
 		$voucher = $this->insert_standalone( $args, $config, $amount, $currency, $code, $send, $product );
 		if ( is_wp_error( $voucher ) ) {
@@ -992,10 +998,17 @@ final class Issuer {
 		return $voucher;
 	}
 
-	/** Id of the voucher whose "issued" entry carries this standalone note (0 = none). */
-	private function standalone_by_note( string $note ): int {
+	/**
+	 * Id of the voucher whose "issued" entry carries this standalone note (0 = none). With $since (when the
+	 * reference was claimed) only entries written from then on are read, by the created_at index.
+	 */
+	private function standalone_by_note( string $note, ?string $since = null ): int {
 		global $wpdb;
 		$events = Install::tables()['events'];
+		if ( null !== $since && false !== strtotime( $since . ' UTC' ) ) {
+			$from = gmdate( 'Y-m-d H:i:s', (int) strtotime( $since . ' UTC' ) - MINUTE_IN_SECONDS );
+			return (int) $wpdb->get_var( $wpdb->prepare( "SELECT voucher_id FROM {$events} WHERE created_at >= %s AND event = 'issued' AND order_id = 0 AND note = %s ORDER BY created_at, id LIMIT 1", $from, $note ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		}
 		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT voucher_id FROM {$events} WHERE event = 'issued' AND order_id = 0 AND note = %s ORDER BY id LIMIT 1", $note ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 

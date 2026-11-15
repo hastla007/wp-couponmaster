@@ -516,6 +516,42 @@ vcap_dlv_assert( array_fill( 0, 6, array( true, true ) ) === $z6_state, 'Z6: eac
 $z6_note = VCAP\Note::render( (string) ( array_values( array_filter( $repo->events( $z6_own[2]->id ), static fn( $e ) => 'delivered' === $e['event'] ) )[0]['note'] ?? '' ) );
 vcap_dlv_assert( str_contains( $z6_note, 'together with 5 other vouchers' ), 'Z6: the history says the voucher went out in one email with the others', $z6_note );
 
+// AP-P1-8: after the bundle the pending delivery actions of the other members are removed (no N-1 no-op actions).
+$p18_order = vcap_dlv_order();
+$p18       = $z6_batch( 5, array( 'order_id' => $p18_order->get_id(), 'buyer' => "p18-{$tag}@example.com" ) );
+foreach ( $p18 as $p18_v ) {
+	as_schedule_single_action( time() + MINUTE_IN_SECONDS, 'vcap_deliver_voucher', array( 'voucher_id' => $p18_v->id ), Delivery::GROUP );
+}
+$z6_mails = array();
+vcap()->delivery->deliver( $p18[0]->id );
+$p18_left = array_values( array_filter( array_slice( $p18, 1 ), static fn( $v ) => as_has_scheduled_action( 'vcap_deliver_voucher', array( 'voucher_id' => $v->id ), Delivery::GROUP ) ) );
+vcap_dlv_assert( 1 === count( $z6_mails ) && null !== $repo->get( $p18[4]->id )->delivered_at && ! $p18_left, 'AP-P1-8: the bundled email delivers all five and removes the pending actions of the four other members', array( count( $z6_mails ), count( $p18_left ) ) );
+as_unschedule_all_actions( 'vcap_deliver_voucher', array( 'voucher_id' => $p18[0]->id ), Delivery::GROUP );
+
+// AP-Q2-3: the buyer copy throws after the recipient was mailed – the recipient is recorded and not mailed again.
+$q23       = vcap_dlv_voucher( "q23-buyer-{$tag}@example.com", array( 'send_to' => 'both', 'recipient_email' => "q23-rec-{$tag}@example.com", 'recipient_name' => 'Q23' ) );
+$q23_roles = static function ( int $voucher_id ): array {
+	$read = new ReflectionMethod( vcap()->delivery, 'delivered_roles' );
+	$read->setAccessible( true );
+	return array_values( (array) $read->invoke( vcap()->delivery, vcap()->vouchers->get( $voucher_id ) ) );
+};
+$q23_throw = static function ( $recipient ) {
+	throw new RuntimeException( 'buyer copy template error' );
+};
+add_filter( 'woocommerce_email_recipient_vcap_voucher_buyer', $q23_throw, 999 );
+$z6_mails = array();
+$q23_error = '';
+try {
+	vcap()->delivery->deliver( $q23->id );
+} catch ( Throwable $e ) {
+	$q23_error = $e->getMessage();
+}
+remove_filter( 'woocommerce_email_recipient_vcap_voucher_buyer', $q23_throw, 999 );
+vcap_dlv_assert( '' === $q23_error && array( 'recipient' ) === $q23_roles( $q23->id ) && null === $repo->get( $q23->id )->delivered_at && $retry_at( $q23->id ) > time(), 'AP-Q2-3: a throwing buyer copy leaves the recipient email recorded, the voucher undelivered and a retry planned', array( $q23_error, $q23_roles( $q23->id ) ) );
+vcap()->delivery->deliver( $q23->id );
+vcap_dlv_assert( 1 === $z6_to( "q23-rec-{$tag}@" ) && 1 === $z6_to( "q23-buyer-{$tag}@" ) && null !== $repo->get( $q23->id )->delivered_at, 'AP-Q2-3: the retry mails only the buyer copy – the recipient is not mailed twice', array_column( $z6_mails, 'to' ) );
+as_unschedule_all_actions( Delivery::RETRY_HOOK, array( 'voucher_id' => $q23->id ), Delivery::GROUP );
+
 // 2. Gifts with buyer copy: one email to the recipient, exactly one copy to the buyer.
 $z6_gift_order = vcap_dlv_order();
 $z6_gifts      = $z6_batch( 5, array( 'order_id' => $z6_gift_order->get_id(), 'buyer' => "z6-giver-{$tag}@example.com", 'send_to' => 'both', 'recipient_email' => "z6-lea-{$tag}@example.com", 'recipient_name' => 'Lea' ) );

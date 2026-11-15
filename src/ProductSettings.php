@@ -31,7 +31,9 @@ final class ProductSettings {
 		}
 	}
 
-	public function type_option( array $options ): array {
+	/** @param mixed $options What the previous filter returned (AP-Q2-6: a non-array is normalised). */
+	public function type_option( $options ): array {
+		$options                 = is_array( $options ) ? $options : array();
 		$options['vcap_enabled'] = array(
 			'id'            => '_vcap_enabled',
 			'wrapper_class' => 'show_if_simple show_if_variable',
@@ -42,7 +44,9 @@ final class ProductSettings {
 		return $options;
 	}
 
-	public function tab( array $tabs ): array {
+	/** @param mixed $tabs What the previous filter returned (AP-Q2-6: a non-array is normalised). */
+	public function tab( $tabs ): array {
+		$tabs         = is_array( $tabs ) ? $tabs : array();
 		$tabs['vcap'] = array(
 			'label'    => __( 'Voucher', 'voucher-captain' ),
 			'target'   => 'vcap_product_data',

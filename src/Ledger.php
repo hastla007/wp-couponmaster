@@ -116,6 +116,7 @@ final class Ledger {
 			foreach ( (array) $wpdb->get_results( $wpdb->prepare( "SELECT voucher_id, event, amount, balance_after FROM {$tables['events']} WHERE voucher_id IN ({$in}) AND created_at <= %s ORDER BY id", $until ), ARRAY_A ) as $e ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$events[ (int) $e['voucher_id'] ][] = $e;
 			}
+			Format::prime_order_numbers( array_column( $vouchers, 'order_id' ) ); // AP-P1-2: one order query per batch.
 			foreach ( $vouchers as $row ) {
 				$v     = Voucher::from_row( $row );
 				$value = $this->value_at( $v, $events[ $v->id ] ?? array() );
@@ -134,6 +135,8 @@ final class Ledger {
 					'decimals'    => $v->decimals(),
 				);
 			}
+			unset( $events );
+			self::flush_runtime_cache();
 		} while ( count( $vouchers ) === 500 );
 	}
 
@@ -239,11 +242,63 @@ final class Ledger {
 		$bounds = $this->journal_bounds( $from, $to );
 		do {
 			$rows = $this->journal( $from, $to, $batch, $after, $bounds );
+			// AP-P1-2: one order query per batch for the order numbers; nothing read for the rows is kept.
+			Format::prime_order_numbers( array_column( $rows, 'order_id' ) );
 			foreach ( $rows as $row ) {
 				yield $row;
 			}
 			$after = $rows ? (int) end( $rows )['id'] : 0;
+			self::flush_runtime_cache();
 		} while ( count( $rows ) === $batch );
+	}
+
+	/**
+	 * CSV rows of the journal export: header, every booking of the period, "End of export: N" (AP-P1-2).
+	 *
+	 * @return \Generator<array>
+	 */
+	public function journal_export( string $from, string $to, int $batch = 2000 ): \Generator {
+		yield self::journal_header();
+		$written = 0;
+		foreach ( $this->journal_all( $from, $to, $batch ) as $row ) {
+			yield self::journal_line( $row );
+			++$written;
+		}
+		yield Csv::end_row( $written );
+	}
+
+	/**
+	 * CSV rows of the liability export: header, one line per voucher with value, "End of export: N" (AP-P1-2).
+	 *
+	 * @return \Generator<array>
+	 */
+	public function liability_export( string $date ): \Generator {
+		return Csv::with_end_row( self::liability_csv( $this->liability_rows( $date ), $date ) );
+	}
+
+	/**
+	 * CSV rows of the counter export: header, the totals, "End of export: N" (AP-P1-2).
+	 *
+	 * @return \Generator<array>
+	 */
+	public function counter_export( string $from, string $to, string $group = 'till' ): \Generator {
+		yield self::counter_header( $group );
+		$rows = $this->counter_totals( $from, $to, $group );
+		foreach ( $rows as $row ) {
+			yield self::counter_line( $row, $group );
+		}
+		yield Csv::end_row( count( $rows ) );
+	}
+
+	/** @var int Runtime cache flushes of exports (tests: memory stays flat on large exports). */
+	public static int $flushes = 0;
+
+	/** After an export batch: orders, products and options read for its rows are not kept for the whole export. */
+	public static function flush_runtime_cache(): void {
+		if ( function_exists( 'wp_cache_flush_runtime' ) ) {
+			wp_cache_flush_runtime();
+		}
+		++self::$flushes;
 	}
 
 	/** R6: groupings of the counter report => ledger columns (vetted, interpolated into the query). */

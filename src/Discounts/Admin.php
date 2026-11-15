@@ -418,7 +418,9 @@ final class Admin {
 		wp_send_json_success( $html );
 	}
 
-	public function columns( array $columns ): array {
+	/** @param mixed $columns What the previous filter returned (AP-Q2-6: a non-array is normalised). */
+	public function columns( $columns ): array {
+		$columns = is_array( $columns ) ? $columns : array();
 		$date = $columns['date'] ?? null;
 		unset( $columns['date'] );
 		$columns['vcap_discount'] = __( 'Discount', 'voucher-captain' );
