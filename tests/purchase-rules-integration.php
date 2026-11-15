@@ -153,6 +153,18 @@ $m52_health = ( new VCAP\Health() )->test_purchase_limits();
 vcap_rules_assert( 1 === $m52_once && 2 === VCAP\VoucherPurchaseRules::refusals() && 'recommended' === $m52_health['status'] && str_contains( $m52_health['description'], '2 checkouts' ), 'M12-52: checkouts refused by the daily limit are counted once per session and reported in Site Health' );
 delete_option( VCAP\VoucherPurchaseRules::REFUSALS_OPTION );
 vcap_rules_assert( 'good' === ( new VCAP\Health() )->test_purchase_limits()['status'], 'M12-52: without refusals Site Health reports nothing to do' );
+// M12-84: Site Health compares the sender domain with the shop's when no SMTP plugin sends the mails.
+$m84_from = get_option( 'woocommerce_email_from_address', false );
+$m84_smtp = static fn() => false;
+add_filter( 'vcap_smtp_plugin_active', $m84_smtp );
+update_option( 'woocommerce_email_from_address', 'shop@other-domain.example' );
+$m84_bad = ( new VCAP\Health() )->test_sender_domain();
+update_option( 'woocommerce_email_from_address', 'shop@' . preg_replace( '/^www\./', '', (string) wp_parse_url( home_url(), PHP_URL_HOST ) ) );
+$m84_good = ( new VCAP\Health() )->test_sender_domain();
+remove_filter( 'vcap_smtp_plugin_active', $m84_smtp );
+false === $m84_from ? delete_option( 'woocommerce_email_from_address' ) : update_option( 'woocommerce_email_from_address', $m84_from );
+vcap_rules_assert( 'recommended' === $m84_bad['status'] && str_contains( $m84_bad['description'], 'other-domain.example' ) && 'good' === $m84_good['status'], 'M12-84: Site Health warns about a sender address of another domain without an SMTP plugin' );
+
 // M12-52: the security hold of first orders above 250 is named on the product page and in the cart.
 $m52_cfg = VCAP\ProductConfig::get( $gift_product );
 vcap_rules_assert( '' === VCAP\NextSteps::hold_hint( $m52_cfg, 50.0 ) && str_contains( VCAP\NextSteps::hold_hint( $m52_cfg, 300.0 ), '24 hours' ) && str_contains( VCAP\NextSteps::hold_hint( array_merge( $m52_cfg, array( 'amount_source' => 'custom', 'custom_max' => '' ) ), 0.0 ), 'first order' ), 'M12-52: the product page names the hold when a voucher can be worth more than the threshold (price or custom amount)' );

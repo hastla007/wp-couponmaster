@@ -216,7 +216,9 @@ final class VoucherAdmin {
 								);
 							}
 						}
-						if ( $v->expires_at && ! $this->repo->has_event( $v->id, 'expiry_reminder' ) ) {
+						// M12-84: with several reminders the later ones can still be suppressed after the first was sent.
+						$vcap_reminders = array_column( array_filter( $this->repo->events( $v->id ), static fn( $e ) => 'expiry_reminder' === $e['event'] ), 'note' );
+						if ( $v->expires_at && ! array_filter( $vcap_reminders, static fn( $n ) => ! str_starts_with( (string) $n, \VCAP\Delivery::REMINDER_NOTE_PREFIX ) ) ) {
 							$form( 'suppress_reminder', __( 'No expiry reminder', 'voucher-captain' ) );
 						}
 						if ( ! $v->is_ticket() && ! $v->is_multi_use() && Voucher::STATUS_ACTIVE === $v->status && ! $v->is_expired() ) {
