@@ -79,12 +79,44 @@ PHP callers may pass `user_id`; otherwise the logged-in user is used. Personal v
 | GET | `/wp-json/vcap/v1/redemptions/{key}` | – | 200 redemption |
 | POST | `/wp-json/vcap/v1/redemptions/{key}/commit` | – | 200 redemption |
 | POST | `/wp-json/vcap/v1/redemptions/{key}/release` | – | 200 redemption |
+| POST | `/wp-json/vcap/v1/redemptions/{key}/refund` | `amount`, `refund_key` | 200 redemption with `refunded` (total) and `restored` (this call) |
 
 Authentication: browsers of logged-in users send the WordPress REST nonce (`X-WP-Nonce`, from `wp_create_nonce( 'wp_rest' )`); external servers use WordPress Application Passwords for a dedicated technical user. Anonymous requests receive `401`. Narrow access with the `vcap_rest_can_redeem` filter.
 
-Targets over REST: shop managers (`manage_woocommerce` / `vcap_manage_vouchers`, e.g. the technical user of a connector server) may use any target; customers only targets whose prefix a connector registered with `vcap_rest_redemption_target_prefixes` (e.g. `add_filter( 'vcap_rest_redemption_target_prefixes', fn( $p ) => array_merge( $p, array( 'learnboating:' ) ) )`) – without one, customers can check codes but not reserve them over REST, and they cannot commit or release a redemption a connector made for them with an unregistered target. Targets of built-in integrations (`passcaptain:…`, filter `vcap_internal_redemption_target_prefixes`) are refused over REST for everybody (`403 vcap_not_allowed`). Keys are global, so over REST a key with a prefix (`system:…`) must start with the prefix of its target (`400 vcap_invalid_request`; UUID keys are free), and keys a connector creates on the server (Pass Captain `wpcap-…`/`passcaptain:…`, Learnboating `learnboating:grant:…`) are never accepted over REST – connectors add theirs with `vcap_internal_redemption_key_prefixes`. PHP callers are not affected.
+Targets over REST: shop managers (`manage_woocommerce` / `vcap_manage_vouchers`, e.g. the technical user of a connector server) and accounts with the optional capability `vcap_redeem_api` (a "Voucher POS" account, see *Counter API* below) may use any target; customers only targets whose prefix a connector registered with `vcap_rest_redemption_target_prefixes` (e.g. `add_filter( 'vcap_rest_redemption_target_prefixes', fn( $p ) => array_merge( $p, array( 'learnboating:' ) ) )`) – without one, customers can check codes but not reserve them over REST, and they cannot commit or release a redemption a connector made for them with an unregistered target. Targets of built-in integrations (`passcaptain:…`, filter `vcap_internal_redemption_target_prefixes`) are refused over REST for everybody (`403 vcap_not_allowed`). Keys are global, so over REST a key with a prefix (`system:…`) must start with the prefix of its target (`400 vcap_invalid_request`; UUID keys are free), and keys a connector creates on the server (Pass Captain `wpcap-…`/`passcaptain:…`, Learnboating `learnboating:grant:…`) are never accepted over REST – connectors add theirs with `vcap_internal_redemption_key_prefixes`. PHP callers are not affected.
 
 Redemption data: `redemption_key`, `state` (`reserved`, `committed`, `released`), `voucher_id`, `code`, `user_id`, `target`, `amount`, `currency`, `balance_after` (gift cards), `expires_at` (while reserved), `created_at`, `committed_at` (UTC), `meta`.
+
+Voucher data (`check`): `code`, `type`, `usage_mode`, `value`, `balance` (gift cards), `currency`, `expires_at`, `product_id` and the VAT classification `purpose` (`multi` = multi-purpose voucher, a means of payment; `single` = single-purpose voucher; `discount` = promotion), `treatment` (`payment`, `single`, `discount`) and `sale_tax` (single-purpose vouchers: `{rate_bp, country}` of the sale, else `null`).
+
+Refund (`/refund`): gives back (part of) a committed redemption, same access rules as `commit` (the user who reserved, or a voucher manager); idempotent per `refund_key` (8–64 characters like `key`). Errors: `vcap_not_committed` (409), `vcap_refund_exceeded` (409), see *Refunds of completed redemptions*.
+
+Till and receipt: `meta.till` (till/branch) and `meta.receipt` (receipt number of the till) given with the reservation are stored with the `api_committed` and `api_refunded` ledger rows, like the scanner's bookings (journal and till columns).
+
+### Counter API (point of sale)
+
+A till system can redeem vouchers in two ways:
+
+1. **Redemption API** (recommended for external POS systems): `check` → `POST /redemptions` (target e.g. `pos:shop-1`, `meta.till`, `meta.receipt`) → `commit` after the sale is paid, `release` if it is cancelled, `refund` for a return. Idempotent per key; the account needs no admin rights. Create a dedicated user with a role "Voucher POS" that has only `read` and `vcap_redeem_api`, and give it an Application Password, e.g.:
+
+   ```
+   wp role create voucher_pos "Voucher POS"
+   wp cap add voucher_pos read vcap_redeem_api
+   wp user create pos-shop1 pos-shop1@example.com --role=voucher_pos
+   wp user application-password create pos-shop1 "Till shop 1"
+   ```
+
+   Such an account may use any target except the internal ones and reads/commits/releases/refunds only its own redemptions. The counter daily limits do not apply to the redemption API.
+2. **Scanner routes** (the built-in scanner; a stable contract for staff devices with the capability `vcap_scan_tickets`, role "Voucher cashier"):
+
+| Method | Route | Body | Answer |
+|---|---|---|---|
+| POST | `/wp-json/vcap/v1/lookup` | `q` (code, token or scanned URL) | voucher as shown in the scanner: `state` (`ok`/`warning`/`error`), `message`, `balance`, `currency`, `decimals`, `purpose`, `treatment`, `sale_tax`, `treatment_label`, `personal` (`{names, emails}` masked, or `null`), `reversible` (own cancellable bookings), `receipt_required` |
+| POST | `/wp-json/vcap/v1/redeem` | `q`, `amount` (gift cards), `receipt`, `till`, `note`, `allow_partial`, `id_checked`, `idempotency_key` | the voucher plus `success`, `booked`, `balance_after`, `event_id`, `slip` (data of the redemption slip) |
+| POST | `/wp-json/vcap/v1/redeem/reverse` | `q`, `event_id`, `reason`, `idempotency_key` | the voucher plus `success` |
+| POST | `/wp-json/vcap/v1/checkin` | `q`, `count`, `undo`, `reason`, `till`, `idempotency_key` | the ticket plus `success` |
+
+   Rules: a personal voucher needs `id_checked=true` (staff checked the ID against `personal.names`; else `409 vcap_id_check_required`); with the setting "Receipt no. required" a redemption without `receipt` is refused (`400 vcap_receipt_required`; default "automatic": required for shops based in Germany or Austria); with a managed list of tills (setting "Tills / branches") `till` must be one of them (`400 vcap_till_unknown`), and a staff member fixed to a till on their profile always books there. A repeated request with the same `idempotency_key` gets the stored answer with `replayed: true` – nothing is booked again. Unknown codes are limited per staff member (100 per 15 minutes, filter `vcap_rate_limit_scanner_lookup`; `429 vcap_rate_limited`) and counted in Reports → Tills and staff. Daily limits per staff member and till apply (`daily_limit`). There is no offline mode on purpose: without a connection nothing is booked, so a code cannot be redeemed twice at two tills.
 
 ### Error codes
 

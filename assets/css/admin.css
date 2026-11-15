@@ -68,5 +68,19 @@ mark.vcap-status--expired, mark.vcap-status--void { background: #eba3a3; color: 
 @media print {
 	#adminmenumain, #wpadminbar, #wpfooter, .vcap-scanner-wrap > .description, .vcap-scanner-video, .vcap-scanner-form, .vcap-auto, .vcap-till, .vcap-result .vcap-r-actions { display: none !important; }
 	#wpcontent { margin-inline-start: 0 !important; }
+	/* M12-31: the 80 mm redemption slip alone (masked code), not the scanner page. */
+	body.vcap-printing-slip * { visibility: hidden; }
+	body.vcap-printing-slip .vcap-slip, body.vcap-printing-slip .vcap-slip * { visibility: visible; }
+	body.vcap-printing-slip .vcap-slip { display: block; position: absolute; inset-block-start: 0; inset-inline-start: 0; width: 72mm; font: 12px/1.35 monospace; color: #000; }
+	@page { margin: 4mm; }
 }
+.vcap-slip { display: none; }
+.vcap-slip dl { display: grid; grid-template-columns: auto 1fr; gap: 0 2mm; margin: 2mm 0; }
+.vcap-slip dd { margin: 0; }
+.vcap-slip .vcap-slip-shop, .vcap-slip .vcap-slip-title { margin: 0; text-align: center; font-weight: 700; }
+.vcap-slip .vcap-slip-note { font-size: 10px; }
+.vcap-result .vcap-r-replayed { margin: 0; padding: 8px 16px; background: #fcf9e8; border: 1px solid #dba617; border-top: 0; font-weight: 600; }
+.vcap-result .vcap-r-personal { padding: 10px 16px; background: #fcf0a1; border: 1px solid #dba617; border-top: 0; color: #1d2327; }
+.vcap-result .vcap-id-checked { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.vcap-scanner-video #vcap-torch { position: absolute; z-index: 1; inset-block-start: 12px; inset-inline-end: 12px; min-height: 40px; }
 .vcap-code-label { align-self: center; font-weight: 600; }

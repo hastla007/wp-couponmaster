@@ -70,6 +70,10 @@ final class Settings {
 		Counter::USER_COUNT            => 0,
 		Counter::TILL_AMOUNT           => 0,
 		Counter::TILL_COUNT            => 0,
+		// M12-31: receipt number of the till required at the counter ('auto' = shops based in Germany or Austria).
+		Counter::REQUIRE_RECEIPT       => 'auto',
+		// M12-81: managed list of tills/branches ('' = free text on the scanner device).
+		Counter::LOCATIONS             => '',
 	);
 
 	/**
@@ -873,6 +877,26 @@ final class Settings {
 				'default'           => 0,
 				'css'               => 'width:90px',
 				'custom_attributes' => $count,
+			),
+			array(
+				'title'   => __( 'Receipt no. required', 'voucher-captain' ),
+				'id'      => Counter::REQUIRE_RECEIPT,
+				'type'    => 'select',
+				'default' => 'auto',
+				'options' => array(
+					'auto' => __( 'Automatic (required for shops based in Germany or Austria)', 'voucher-captain' ),
+					'yes'  => __( 'Required', 'voucher-captain' ),
+					'no'   => __( 'Optional', 'voucher-captain' ),
+				),
+				'desc'    => __( 'A counter redemption is only booked with the receipt number of the till receipt for the goods (checked on the server).', 'voucher-captain' ),
+			),
+			array(
+				'title'    => __( 'Tills / branches', 'voucher-captain' ),
+				'id'       => Counter::LOCATIONS,
+				'type'     => 'textarea',
+				'default'  => '',
+				'css'      => 'width:300px;height:90px',
+				'desc'     => __( 'One per line. When set, the scanner offers this list instead of a free text field, and a staff member can be fixed to one on their user profile. The scanner works online only: without a connection nothing is booked (on purpose – an offline scanner could redeem the same code twice).', 'voucher-captain' ),
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_counter_limits' ),
 		);

@@ -860,7 +860,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - Filter `woocommerce_coupon_get_items_to_apply` (Priorität 12, vor `prepare_gross_balance`) mit `is_valid_for_product` über eine `fixed_product`-Probe.
     - Ausschlüsse für VC-Karten in eigener Meta speichern und per Position anwenden, dazu die Prüfung „mindestens eine zulässige Position“. Tests im Coupon-Modus.
-- [ ] **[PRIO: HOCH]** | **[Experte #8]** | **[Kategorie: Security]** – **M12-15 Kassierer setzt per wiederholtem „Check-in rückgängig“ beliebig viele Einlässe zurück, auch fremde (O15 unvollständig)**
+- [x] **[PRIO: HOCH]** | **[Experte #8]** | **[Kategorie: Security]** – **M12-15 Kassierer setzt per wiederholtem „Check-in rückgängig“ beliebig viele Einlässe zurück, auch fremde (O15 unvollständig)** — *Nachweis: tests/pos-integration.php „M12-15: check in 1, undo twice → the second undo is refused with 403 (the other cashier's admissions stay)“; tests/run.php „M12-15: own undo reverts at most the admissions of that check-in (checked in 1, undone 1 → no further own undo)“*
   - *Problem:*
     - `Tickets::undo_mode()` prüft nur, ob das neueste `checkin`-Ereignis vom Kassierer selbst stammt und höchstens 10 Minuten alt ist.
     - `undo_checkin()` zieht bei jedem Aufruf 1 ab. Ein 3-Tages-Pass lässt sich so von 3/3 auf 0/3 zurücksetzen.
@@ -926,7 +926,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - In `hold_until()` den Gutscheinwert aller gezählten Bestellungen desselben Kunden (Konto oder `customer_key`) im Haltefenster addieren.
     - Optional ein Velocity-Limit je IP über `rate_limited( 'voucher_buy' )`. Test.
-- [ ] **[PRIO: MITTEL]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-24 Scanner zeigt nicht an „persönlich – Ausweis prüfen“**
+- [x] **[PRIO: MITTEL]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-24 Scanner zeigt nicht an „persönlich – Ausweis prüfen“** — *Nachweis: tests/pos-integration.php „M12-24: the lookup names the person of a personal voucher, address masked“, „M12-24: without id_checked a personal voucher is refused with 409 (nothing booked)“, „M12-24: with id_checked it is redeemed and the note records the ID check“; tests/run.php „M12-24/M12-31/M12-45: scanner shows the personal banner with ID checkbox …“*
   - *Problem:* `Tickets::describe()` liefert weder die Beschränkung noch Namen. Am Schalter löst damit jeder Codebesitzer persönliche Gutscheine ein, und V6 schützt nur online.
   - *Lösung:*
     - `describe()` liefert `personal`, die Namen und maskierte Adressen. Der Scanner zeigt ein gelbes Banner.
@@ -966,7 +966,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - Bestell-Meta `_vcap_voucher_payments` und Filter für Exporte bereitstellen.
     - Kontierung in TAX.md dokumentieren. Langfristig als echte Teilzahlung abbilden.
-- [ ] **[PRIO: MITTEL]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-31 Theke, Scanner und REST liefern keine Steuereinordnung, die Beleg-Nr. ist optional (RKSV/KassenSichV)**
+- [x] **[PRIO: MITTEL]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-31 Theke, Scanner und REST liefern keine Steuereinordnung, die Beleg-Nr. ist optional (RKSV/KassenSichV)** — *Nachweis: tests/pos-integration.php „M12-31: the scanner answer carries purpose, treatment and sale_tax“, „M12-31: RedemptionService::check() (voucher_data) carries purpose, treatment and sale_tax“, „M12-31: "Receipt no. required" is checked on the server“, „M12-31: automatic = required for shops in Austria/Germany only“, „M12-31: the slip carries masked code, time, staff, till, receipt and booking number“ (TAX.md-Hinweistext: Paket C)*
   - *Problem:*
     - `RedemptionService::voucher_data()` liefert weder `purpose` noch `sale_tax`.
     - Die Beleg-Nr. ist nie Pflicht. Der Druck zeigt den vollen Code und ist kein echter Bon.
@@ -1019,7 +1019,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - `fit_size()` beim Hinzufügen zum Warenkorb und in der Vorschau für Texte mit `{message}`, `{recipient_name}` und `{field:*}` aufrufen. Passt nicht: Fehler. Unter 75 %: Hinweis.
     - Produktoption „max. Zeilen“. Vorschau mit vielen Umbrüchen. Test.
-- [ ] **[PRIO: MITTEL]** | **[Experte #7]** | **[Kategorie: PDF-Mail]** – **M12-40 QR- und Barcodes ohne Ruhezone und hellen Untergrund, ohne Lesbarkeitsprüfung, der eigene Scanner liest nur nicht-invertierte QR**
+- [ ] **[PRIO: MITTEL]** | **[Experte #7]** | **[Kategorie: PDF-Mail]** – **M12-40 QR- und Barcodes ohne Ruhezone und hellen Untergrund, ohne Lesbarkeitsprüfung, der eigene Scanner liest nur nicht-invertierte QR** *(Stand 15.11.: Scanner-Teil erledigt – jsQR mit `inversionAttempts: 'attemptBoth'` liest invertierte QR, Nachweis tests/run.php „M12-40: jsQR also reads inverted (light-on-dark) QR codes“; Ruhezone/helle Module, Barcode-Rand, design_warnings und 1D-Fallback offen)*
   - *Problem:*
     - QR: Ruhezone 2 statt 4, `drawLightModules=false`, Farbe und Deckkraft frei.
     - Barcode: keine Ruhezone, keine Mindestbreite.
@@ -1047,13 +1047,13 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
     - Zufällige Temp-Namen (wp_mail-Anhang mit eigenem Namen). Ordnername mit Hash. Apache-2.4-Syntax.
     - Health führt einen echten HTTP-Test durch (bei 200 kritisch), dazu ein nginx-Snippet in COMPATIBILITY.md.
     - Die Wartung räumt alle Temp-Reste auf, die älter als 1 h sind.
-- [ ] **[PRIO: MITTEL]** | **[Experte #8]** | **[Kategorie: Bug]** – **M12-44 Buchungen der Redemption-API erscheinen im Ledger als „Scanner“**
+- [x] **[PRIO: MITTEL]** | **[Experte #8]** | **[Kategorie: Bug]** – **M12-44 Buchungen der Redemption-API erscheinen im Ledger als „Scanner“** — *Nachweis: tests/run.php „M12-44: ledger source by whole route segments – the redemption API is not the scanner“*
   - *Problem:* `Source::SCANNER_ROUTES` vergleicht mit `str_starts_with('/vcap/v1/redeem')`, und das passt auch auf `/vcap/v1/redemptions`.
   - *Lösung:* Pfadsegmente exakt vergleichen (`=== $prefix || str_starts_with( $prefix . '/' )`). Unit-Test.
-- [ ] **[PRIO: MITTEL]** | **[Experte #8]** | **[Kategorie: UX]** – **M12-45 Eigene Kassenbuchung lässt sich nur stornieren, solange die Antwort sichtbar ist**
+- [x] **[PRIO: MITTEL]** | **[Experte #8]** | **[Kategorie: UX]** – **M12-45 Eigene Kassenbuchung lässt sich nur stornieren, solange die Antwort sichtbar ist** — *Nachweis: tests/pos-integration.php „M12-45: the lookup lists the cashier's own booking that can still be cancelled“, „M12-45: another cashier does not see it“, „M12-45: once cancelled it is no longer listed“*
   - *Problem:* Die `event_id` steht nur in der Antwort. Nach dem nächsten Scan kann der Kassierer sein 15-Minuten-Storno nicht mehr ausüben.
   - *Lösung:* `describe()` liefert die eigenen stornierbaren Buchungen (`reversible[]`), der Scanner zeigt sie als Buttons, dazu `sessionStorage`.
-- [ ] **[PRIO: MITTEL]** | **[Experte #8]** | **[Kategorie: Security]** – **M12-46 Externes POS braucht ein Verwalterkonto: kein Minimal-Zugang, keine Limits, kein REST-Storno nach `commit`**
+- [x] **[PRIO: MITTEL]** | **[Experte #8]** | **[Kategorie: Security]** – **M12-46 Externes POS braucht ein Verwalterkonto: kein Minimal-Zugang, keine Limits, kein REST-Storno nach `commit`** — *Nachweis: tests/pos-integration.php „M12-46: without vcap_redeem_api a customer account cannot redeem for a POS target“, „M12-46: a "Voucher POS" account (vcap_redeem_api) reserves and commits; meta.till/receipt are booked like at the scanner“, „M12-46: POST /redemptions/{key}/refund gives the amount back“, „M12-46: the refund route has the access rules of commit (another user: 403)“; API.md „Counter API (point of sale)“*
   - *Problem:*
     - `target_allowed()` verlangt `vcap_manage_vouchers`.
     - v1 nutzt weder `Counter`-Limits noch Kasse oder Beleg.
@@ -1127,7 +1127,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:* `delivery_date` bei „Erneut bestellen“ verwerfen. Werte über `override` durch `errors()` laufen lassen. Prüfung in `check_cart_items`/`store_api_cart_errors`.
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #2]** | **[Kategorie: Bug]** – **M12-60 Rücknahme der Aufladung und Abzug des Kaufwerts: Betrag wird vor der Sperre berechnet, die Notiz meldet zu viel**
   - *Lösung:* `write_balance()` gibt den gebuchten Betrag zurück, Notiz und `REVERSED_META` werden daraus gebildet.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #2]** | **[Kategorie: Concurrency]** – **M12-61 Tageslimit an der Kasse wird mit dem Saldo vor der Sperre geprüft**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #2]** | **[Kategorie: Concurrency]** – **M12-61 Tageslimit an der Kasse wird mit dem Saldo vor der Sperre geprüft** — *Nachweis: tests/pos-integration.php „M12-61: a partial booking asking for more than the daily limit is refused (checked with 80, not with the balance of 30)“*
   - *Lösung:* Mit dem angefragten Betrag prüfen.
 - [x] **[PRIO: NIEDRIG]** | **[Experte #2]** | **[Kategorie: Concurrency]** – **M12-62 `sync_coupon_amount()` hält die Zeilensperre während `WC_Coupon::save()` mit Fremd-Hooks** — *Nachweis: tests/ledger-integration.php „M12-62: WC_Coupon::save() runs without the voucher row lock; a balance changed during the save is read again and saved“*
   - *Lösung:* Unter der Sperre lesen und danach speichern, mit erneutem Vergleich. Oder unter der Sperre nur die Meta schreiben.
@@ -1135,7 +1135,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:* `wp vcap ledger verify`, Site-Health-Prüfung, Treffer in Attention.
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-64 `issue_standalone()` übernimmt einen eigenen Code ohne Stärkeprüfung**
   - *Lösung:* `analyse_batch()` prüfen, `vcap_weak_code`, außer bei `allow_weak`. API.md.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-65 Abgelaufene PDF-Links bleiben am Schalter ein gültiges Einlöse-Merkmal**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-65 Abgelaufene PDF-Links bleiben am Schalter ein gültiges Einlöse-Merkmal** — *Nachweis: tests/pos-integration.php „M12-65: a scanned PDF link counts only with a valid signature“*
   - *Lösung:* `Tickets::resolve()` prüft bei `vcap_pdf` die Signatur, oder akzeptiert nur Ticket-URLs und rohe Codes.
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-66 DSGVO-Löschung überschreibt auch codierte Korrekturbegründungen (GoBD)**
   - *Lösung:* Nur Freitext mit Personenbezug ersetzen, codierte Notizen behalten. Die Löschung selbst protokollieren.
@@ -1165,13 +1165,13 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:* Titel „Produkt – Shop“, `lang`-Attribut, Hinweis in ACCESSIBILITY.md.
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #7]** | **[Kategorie: UX]** – **M12-77 Standardvorlage druckt „Gültig bis unbegrenzt“**
   - *Lösung:* Platzhalter `{expiry_line}`, oder die Zeile entfällt, wenn kein Ablauf gesetzt ist.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #8]** | **[Kategorie: Security]** – **M12-78 Scanner-Lookup ohne Rate-Limit und ohne Protokoll**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #8]** | **[Kategorie: Security]** – **M12-78 Scanner-Lookup ohne Rate-Limit und ohne Protokoll** — *Nachweis: tests/pos-integration.php „M12-78: after the limit of unknown codes the scanner of that staff member pauses (429)“, „M12-78: failed lookups are counted per staff member for the report“, „M12-78: a check-in keeps the till/branch of the scanner“; SECURITY.md*
   - *Lösung:* Fehlgeschlagene Lookups je Benutzer zählen, Zähler im Bericht, Kasse auch beim Check-in speichern. SECURITY.md.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #8]** | **[Kategorie: UX]** – **M12-79 Wiederholte Scanner-Antwort sieht wie eine neue Buchung aus, Schlüssel gehen beim Neuladen verloren**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #8]** | **[Kategorie: UX]** – **M12-79 Wiederholte Scanner-Antwort sieht wie eine neue Buchung aus, Schlüssel gehen beim Neuladen verloren** — *Nachweis: tests/run.php „M12-79: a replayed answer is marked, pending keys survive a reload (sessionStorage) and are dropped after any answer but "in progress"“*
   - *Lösung:* Hinweis bei `replayed`, Schlüssel nach einer Antwort nicht wiederverwenden, `sessionStorage`.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #8]** | **[Kategorie: UX]** – **M12-80 Mobile Kamera: kein Torch/Zoom, beendete Streams unter iOS werden nicht erkannt**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #8]** | **[Kategorie: UX]** – **M12-80 Mobile Kamera: kein Torch/Zoom, beendete Streams unter iOS werden nicht erkannt** — *Nachweis: tests/run.php „M12-80: camera stops on visibilitychange and ended tracks, torch button, ideal 1280 px, play() rejection handled“*
   - *Lösung:* `visibilitychange`/`onended` → `stop()`, Torch-Button, `ideal 1280`, `play().catch()`.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #8]** | **[Kategorie: Feature]** – **M12-81 Verwaltete Standortliste statt Freitext für Kasse/Filiale**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #8]** | **[Kategorie: Feature]** – **M12-81 Verwaltete Standortliste statt Freitext für Kasse/Filiale** — *Nachweis: tests/pos-integration.php „M12-81: with a managed list only its tills are accepted“, „M12-81: a staff member fixed to a till always books there“; tests/run.php „M12-81: managed tills as a dropdown, fixed per staff member; offline mode documented as intentionally absent“*
   - *Lösung:* Dropdown in den Einstellungen, optional pro Mitarbeiter fest zugeordnet. Offline-Betrieb bewusst nicht anbieten und das dokumentieren.
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #9]** | **[Kategorie: UX]** – **M12-82 Geänderter Termin erscheint nicht an der Bestellung**
   - *Lösung:* `NextSteps::for_order()` nutzt die Zustelldaten der Gutscheine.

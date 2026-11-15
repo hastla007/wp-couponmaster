@@ -61,13 +61,7 @@ final class Source {
 			return self::CRON;
 		}
 		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
-			$route = self::rest_route();
-			foreach ( self::SCANNER_ROUTES as $prefix ) {
-				if ( str_starts_with( $route, $prefix ) ) {
-					return self::SCANNER;
-				}
-			}
-			return str_starts_with( $route, '/wc/store' ) ? self::CHECKOUT : self::REST;
+			return self::for_route( self::rest_route() );
 		}
 		if ( did_action( 'woocommerce_checkout_process' ) || did_action( 'woocommerce_before_pay_action' ) || ( function_exists( 'is_checkout' ) && is_checkout() ) ) {
 			return self::CHECKOUT;
@@ -76,6 +70,26 @@ final class Source {
 			return self::ADMIN;
 		}
 		return self::WEB;
+	}
+
+	/**
+	 * Source of a REST route: the scanner routes (and the paths below them, e.g. "/vcap/v1/redeem/reverse"), the
+	 * Store API (checkout) or any other REST route. M12-44: whole path segments are compared, so
+	 * "/vcap/v1/redemptions" (the redemption API) is not taken for the scanner's "/vcap/v1/redeem".
+	 */
+	public static function for_route( string $route ): string {
+		$route = '/' . trim( strtolower( $route ), '/' );
+		foreach ( self::SCANNER_ROUTES as $prefix ) {
+			if ( self::under( $route, $prefix ) ) {
+				return self::SCANNER;
+			}
+		}
+		return self::under( $route, '/wc/store' ) ? self::CHECKOUT : self::REST;
+	}
+
+	/** Whether $route is $prefix or a path below it (whole segments). */
+	private static function under( string $route, string $prefix ): bool {
+		return $route === $prefix || str_starts_with( $route, $prefix . '/' );
 	}
 
 	/** Route of the current REST request ('' when unknown). */

@@ -76,6 +76,8 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_client_ip` | `src/Health.php`, `src/Plugin.php` | – |
 | `vcap_counter_limit_applies` | `src/Counter.php` | Whether the daily counter limits apply (default: not for staff who manage vouchers). Args: bool, user id, Voucher. |
 | `vcap_counter_limits` | `src/Counter.php` | Daily limits of counter redemptions for a staff member at a till (0 = unlimited), e.g. other limits per branch. Args: limits {user: {amount, count}, till: {amount, count}}, user id, till, Voucher\|null. |
+| `vcap_counter_locations` | `src/Counter.php` | The managed tills/branches offered on the scanner. Args: string[] list. |
+| `vcap_counter_require_receipt` | `src/Counter.php` | Whether a counter redemption needs a receipt number. Args: bool. |
 | `vcap_counter_reversal_minutes` | `src/Tickets.php` | – |
 | `vcap_coupon_allowed_on_voucher_products` | `src/VoucherPurchaseRules.php` | – |
 | `vcap_coupon_before_save` | `src/Coupons/CouponFactory.php` | – |

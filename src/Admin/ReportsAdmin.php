@@ -325,6 +325,20 @@ final class ReportsAdmin {
 				<?php endforeach; ?>
 				</tbody>
 			</table>
+			<?php $failed = \VCAP\Counter::failed_lookups( $from, $to ); ?>
+			<h2><?php esc_html_e( 'Unknown codes looked up in the scanner', 'voucher-captain' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'Lookups of codes that do not exist, per staff member. Many of them can mean typing errors or a damaged print – or someone trying out codes. Above 100 within 15 minutes the scanner of that staff member pauses.', 'voucher-captain' ); ?></p>
+			<table class="widefat striped vcap-failed-lookups">
+				<thead><tr><th><?php esc_html_e( 'Staff member', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'Unknown codes', 'voucher-captain' ); ?></th></tr></thead>
+				<tbody>
+				<?php if ( ! $failed ) : ?>
+					<tr><td colspan="2"><?php esc_html_e( 'None in this period.', 'voucher-captain' ); ?></td></tr>
+				<?php endif; ?>
+				<?php foreach ( $failed as $user_id => $count ) : ?>
+					<tr><td><?php echo esc_html( Ledger::staff_name( (int) $user_id ) ); ?></td><td><?php echo esc_html( number_format_i18n( $count ) ); ?></td></tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
 		</div>
 		<?php
 	}
