@@ -88,6 +88,18 @@
 			<key name="intro" />
 			<key name="additional_content" />
 		</key>
+		<key name="woocommerce_vcap_gift_delivered_settings">
+			<key name="subject" />
+			<key name="heading" />
+			<key name="intro" />
+			<key name="additional_content" />
+		</key>
+		<key name="woocommerce_vcap_gift_used_settings">
+			<key name="subject" />
+			<key name="heading" />
+			<key name="intro" />
+			<key name="additional_content" />
+		</key>
 		<key name="woocommerce_vcap_bonus_voucher_settings">
 			<key name="subject" />
 			<key name="heading" />

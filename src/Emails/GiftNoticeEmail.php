@@ -20,7 +20,10 @@ final class GiftNoticeEmail extends \WC_Email {
 
 	public function __construct( string $kind = 'delivered' ) {
 		$this->kind           = 'used' === $kind ? 'used' : 'delivered';
-		$this->id             = 'vcap_gift_' . $this->kind;
+		$this->id             = 'vcap_gift_delivered';
+		if ( 'used' === $this->kind ) {
+			$this->id = 'vcap_gift_used';
+		}
 		$this->customer_email = true;
 		$this->title          = 'used' === $this->kind ? __( 'Gift used (buyer)', 'voucher-captain' ) : __( 'Gift delivered (buyer)', 'voucher-captain' );
 		$this->description    = 'used' === $this->kind
