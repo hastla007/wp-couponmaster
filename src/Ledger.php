@@ -26,7 +26,7 @@ final class Ledger {
 	 * percentage, a reusable discount code's use or a ticket's check-in moves no value – they stay in the voucher
 	 * history but never appear in the journal as redeemed money.
 	 */
-	private const VALUE_VOUCHERS = "v.discount_type <> 'percent' AND v.type <> 'ticket' AND v.usage_mode IN ('single','balance')";
+	public const VALUE_VOUCHERS = "v.discount_type <> 'percent' AND v.type <> 'ticket' AND v.usage_mode IN ('single','balance')";
 	/**
 	 * Holds on a stored balance: they lower balance_after but the value is still owed until the hold is charged.
 	 * Each hold event is followed by at most one closing event with the same amount, so the open holds at a point
@@ -201,7 +201,9 @@ final class Ledger {
 		}
 		$events = self::in_list( (array) apply_filters( 'vcap_ledger_money_events', self::MONEY_EVENTS ) );
 		$value_vouchers = self::VALUE_VOUCHERS;
-		return $wpdb->get_results( $wpdb->prepare( "SELECT e.id, e.created_at, e.event, e.amount, e.balance_after, e.order_id, e.note, v.code, v.type, v.currency FROM {$tables['events']} e INNER JOIN {$tables['vouchers']} v ON v.id = e.voucher_id WHERE e.id > %d AND e.id <= %d AND e.created_at BETWEEN %s AND %s AND e.event IN ({$events}) AND e.amount IS NOT NULL AND {$value_vouchers} ORDER BY e.id LIMIT %d", max( $lo - 1, $after_id, 0 ), $hi, $start, $end, max( 1, $limit ) ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// R6: till/branch and receipt number of counter bookings (columns of schema 1.8.0; '' before).
+		$till = Install::event_till_ready() ? 'e.till, e.receipt' : "'' AS till, '' AS receipt";
+		return $wpdb->get_results( $wpdb->prepare( "SELECT e.id, e.created_at, e.event, e.amount, e.balance_after, e.order_id, e.note, {$till}, v.code, v.type, v.currency FROM {$tables['events']} e INNER JOIN {$tables['vouchers']} v ON v.id = e.voucher_id WHERE e.id > %d AND e.id <= %d AND e.created_at BETWEEN %s AND %s AND e.event IN ({$events}) AND e.amount IS NOT NULL AND {$value_vouchers} ORDER BY e.id LIMIT %d", max( $lo - 1, $after_id, 0 ), $hi, $start, $end, max( 1, $limit ) ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 
 	/**
@@ -244,6 +246,87 @@ final class Ledger {
 		} while ( count( $rows ) === $batch );
 	}
 
+	/** R6: groupings of the counter report => ledger columns (vetted, interpolated into the query). */
+	private const COUNTER_GROUPS = array(
+		'till' => array( 'e.till' ),
+		'user' => array( 'e.user_id' ),
+		'both' => array( 'e.till', 'e.user_id' ),
+	);
+
+	/**
+	 * R6: counter redemptions (scanner, till, "Mark as redeemed (store)": "redeemed" without an order) and their
+	 * cancellations in a period (local days), per till/branch, staff member or both and per currency. Amounts are
+	 * value vouchers only (as in the journal); percentage, ticket and reusable vouchers count as redemptions.
+	 * Cancellations count at the till of the redemption they cancel, by the staff member who cancelled.
+	 *
+	 * @param string $group 'till', 'user' or 'both'.
+	 * @return array<int, array{till:string, user_id:int, currency:string, count:int, amount:float, reversed_count:int, reversed_amount:float, net:float}>
+	 */
+	public function counter_totals( string $from, string $to, string $group = 'till' ): array {
+		global $wpdb;
+		$tables              = Install::tables();
+		list( $start, $end ) = self::utc_range( $from, $to );
+		$columns             = self::COUNTER_GROUPS[ $group ] ?? self::COUNTER_GROUPS['till'];
+		if ( ! Install::event_till_ready() ) {
+			$columns = array_values( array_diff( $columns, array( 'e.till' ) ) );
+		}
+		$by     = $columns ? implode( ', ', $columns ) . ', ' : '';
+		$value  = self::VALUE_VOUCHERS;
+		$rows   = $wpdb->get_results( $wpdb->prepare( "SELECT {$by}v.currency, SUM( e.event = 'redeemed' ) AS cnt, SUM( CASE WHEN e.event = 'redeemed' AND {$value} THEN e.amount ELSE 0 END ) AS amount, SUM( e.event = 'redeem_reversed' ) AS rcnt, SUM( CASE WHEN e.event = 'redeem_reversed' AND {$value} THEN e.amount ELSE 0 END ) AS ramount FROM {$tables['events']} e INNER JOIN {$tables['vouchers']} v ON v.id = e.voucher_id WHERE e.created_at BETWEEN %s AND %s AND ( ( e.event = 'redeemed' AND e.order_id = 0 ) OR e.event = 'redeem_reversed' ) GROUP BY {$by}v.currency ORDER BY {$by}v.currency", $start, $end ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- columns from COUNTER_GROUPS, $value a constant.
+		$totals = array();
+		foreach ( $rows as $r ) {
+			$currency = '' !== (string) $r['currency'] ? (string) $r['currency'] : (string) get_option( 'woocommerce_currency' );
+			$decimals = API\V1\RedemptionService::decimals( $currency );
+			$amount   = round( (float) $r['amount'], $decimals );
+			$reversed = round( (float) $r['ramount'], $decimals );
+			$totals[] = array(
+				'till'            => (string) ( $r['till'] ?? '' ),
+				'user_id'         => (int) ( $r['user_id'] ?? 0 ),
+				'currency'        => $currency,
+				'count'           => (int) $r['cnt'],
+				'amount'          => $amount,
+				'reversed_count'  => (int) $r['rcnt'],
+				'reversed_amount' => $reversed,
+				'net'             => round( $amount - $reversed, $decimals ),
+			);
+		}
+		return $totals;
+	}
+
+	/** R6: column headers of the counter report CSV. */
+	public static function counter_header( string $group = 'till' ): array {
+		$head = array();
+		if ( 'user' !== $group ) {
+			$head[] = __( 'Till / branch', 'voucher-captain' );
+		}
+		if ( 'till' !== $group ) {
+			$head[] = __( 'Staff member', 'voucher-captain' );
+		}
+		return array_merge( $head, array( __( 'Currency', 'voucher-captain' ), __( 'Redemptions', 'voucher-captain' ), __( 'Amount redeemed', 'voucher-captain' ), __( 'Cancellations', 'voucher-captain' ), __( 'Amount cancelled', 'voucher-captain' ), __( 'Net amount', 'voucher-captain' ) ) );
+	}
+
+	/** R6: one CSV line of counter_totals(). */
+	public static function counter_line( array $r, string $group = 'till' ): array {
+		$line = array();
+		if ( 'user' !== $group ) {
+			$line[] = '' !== $r['till'] ? $r['till'] : __( '(no till set)', 'voucher-captain' );
+		}
+		if ( 'till' !== $group ) {
+			$line[] = self::staff_name( (int) $r['user_id'] );
+		}
+		$decimals = API\V1\RedemptionService::decimals( (string) $r['currency'] );
+		return array_merge( $line, array( $r['currency'], $r['count'], Csv::number( $r['amount'], $decimals ), $r['reversed_count'], Csv::number( $r['reversed_amount'], $decimals ), Csv::number( $r['net'], $decimals ) ) );
+	}
+
+	/** Display name of a staff member of the counter report ("—" without, "#id" for a deleted account). */
+	public static function staff_name( int $user_id ): string {
+		if ( $user_id <= 0 ) {
+			return '—';
+		}
+		$user = get_userdata( $user_id );
+		return $user ? (string) $user->display_name : '#' . $user_id;
+	}
+
 	/**
 	 * U6: the booking amount with its direction – value taken off a voucher is negative, value added positive, so
 	 * the journal column sums to the change of the outstanding value. The ledger stores redemptions etc. as
@@ -283,7 +366,7 @@ final class Ledger {
 
 	/** Column headers of the journal CSV. */
 	public static function journal_header(): array {
-		return array( __( 'Date', 'voucher-captain' ), __( 'Code', 'voucher-captain' ), __( 'Type', 'voucher-captain' ), __( 'Currency', 'voucher-captain' ), __( 'Booking', 'voucher-captain' ), __( 'Amount', 'voucher-captain' ), __( 'Balance after', 'voucher-captain' ), __( 'Order number', 'voucher-captain' ), __( 'Order ID', 'voucher-captain' ), __( 'Note', 'voucher-captain' ) );
+		return array( __( 'Date', 'voucher-captain' ), __( 'Code', 'voucher-captain' ), __( 'Type', 'voucher-captain' ), __( 'Currency', 'voucher-captain' ), __( 'Booking', 'voucher-captain' ), __( 'Amount', 'voucher-captain' ), __( 'Balance after', 'voucher-captain' ), __( 'Order number', 'voucher-captain' ), __( 'Order ID', 'voucher-captain' ), __( 'Till / branch', 'voucher-captain' ), __( 'Receipt no.', 'voucher-captain' ), __( 'Note', 'voucher-captain' ) );
 	}
 
 	/** One CSV line of a journal booking. */
@@ -292,7 +375,7 @@ final class Ledger {
 		$labels   = $labels ?? VoucherRepository::event_labels();
 		$types    = $types ?? Voucher::types();
 		$decimals = API\V1\RedemptionService::decimals( (string) ( $r['currency'] ?: get_option( 'woocommerce_currency' ) ) );
-		return array( Csv::date( $r['created_at'] ), $r['code'], $types[ $r['type'] ] ?? $r['type'], $r['currency'], $labels[ $r['event'] ] ?? $r['event'], Csv::number( self::signed_amount( (string) $r['event'], $r['amount'] ), $decimals ), null === $r['balance_after'] ? '' : Csv::number( (float) $r['balance_after'], $decimals ), Format::order_number( $r['order_id'] ), $r['order_id'] ?: '', Note::render( (string) $r['note'] ) );
+		return array( Csv::date( $r['created_at'] ), $r['code'], $types[ $r['type'] ] ?? $r['type'], $r['currency'], $labels[ $r['event'] ] ?? $r['event'], Csv::number( self::signed_amount( (string) $r['event'], $r['amount'] ), $decimals ), null === $r['balance_after'] ? '' : Csv::number( (float) $r['balance_after'], $decimals ), Format::order_number( $r['order_id'] ), $r['order_id'] ?: '', (string) ( $r['till'] ?? '' ), (string) ( $r['receipt'] ?? '' ), Note::render( (string) $r['note'] ) );
 	}
 
 	/**

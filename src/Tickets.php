@@ -729,7 +729,9 @@ final class Tickets {
 			$data['message'] = $refused;
 			return rest_ensure_response( $data );
 		}
-		$note = self::counter_note( (string) $request['note'], (string) $request['receipt'], (string) $request['till'] );
+		$note    = self::counter_note( (string) $request['note'], (string) $request['receipt'], (string) $request['till'] );
+		$till    = Counter::clean_till( (string) $request['till'] );
+		$receipt = Counter::clean_receipt( (string) $request['receipt'] );
 		if ( $voucher->is_multi_use() ) {
 			$amount  = (float) $request['amount'];
 			$partial = self::allow_partial( $request );
@@ -745,8 +747,23 @@ final class Tickets {
 			}
 			// The balance is checked again under the row lock: above it, nothing is booked unless a partial
 			// booking was asked for explicitly (the till must collect the rest otherwise).
-			$reason    = '';
-			$deduction = vcap()->coupons->deduct_balance_atomic( $voucher, $amount, $note, 0, $partial, $reason );
+			// R6: daily limits of the staff member and the till, checked and booked under their locks.
+			$limit = Counter::claim( $voucher, min( $amount, (float) $voucher->balance ), $till );
+			if ( '' !== $limit['message'] ) {
+				return $this->limit_refusal( $voucher, $limit );
+			}
+			$reason = '';
+			try {
+				$deduction = Counter::with(
+					$till,
+					$receipt,
+					static function () use ( $voucher, $amount, $note, $partial, &$reason ) {
+						return vcap()->coupons->deduct_balance_atomic( $voucher, $amount, $note, 0, $partial, $reason );
+					}
+				);
+			} finally {
+				Counter::release( $limit['locks'] );
+			}
 			if ( ! $deduction || $deduction['amount'] <= 0 ) {
 				return $this->counter_refusal( $voucher->id, $deduction ? 'redeemed' : (string) $reason, $amount );
 			}
@@ -775,7 +792,17 @@ final class Tickets {
 			}
 			$data['event_id'] = $this->own_last_redemption( $voucher->id );
 			return rest_ensure_response( $data );
-		} elseif ( ! $this->redeem_single( $voucher, $note ) ) {
+		}
+		$limit = Counter::claim( $voucher, Counter::value_of( $voucher ), $till );
+		if ( '' !== $limit['message'] ) {
+			return $this->limit_refusal( $voucher, $limit );
+		}
+		try {
+			$redeemed = Counter::with( $till, $receipt, fn() => $this->redeem_single( $voucher, $note ) );
+		} finally {
+			Counter::release( $limit['locks'] );
+		}
+		if ( ! $redeemed ) {
 			// Of two parallel redemptions (two tills, or till and online) only one wins.
 			$data            = $this->describe( $this->repo->get( $voucher->id ) );
 			$data['success'] = false;
@@ -786,6 +813,22 @@ final class Tickets {
 		$data['state']    = 'ok';
 		$data['message']  = __( 'Redeemed', 'voucher-captain' );
 		$data['event_id'] = $this->own_last_redemption( $voucher->id );
+		return rest_ensure_response( $data );
+	}
+
+	/**
+	 * Scanner answer for a counter redemption refused by a daily limit (Counter::claim()): nothing was booked.
+	 *
+	 * @param array $limit Result of Counter::claim().
+	 */
+	private function limit_refusal( Voucher $voucher, array $limit ): \WP_REST_Response {
+		$data             = $this->describe( $this->repo->get( $voucher->id ) ?? $voucher );
+		$data['success']  = false;
+		$data['state']    = 'reserved' === $limit['reason'] ? 'warning' : 'error';
+		$data['reason']   = $limit['reason'];
+		$data['message']  = $limit['message'];
+		$data['limit']    = $limit['exceeded'] ? array( 'scope' => $limit['scope'] ) + $limit['exceeded'] : null;
+		$data['booked']   = 0.0;
 		return rest_ensure_response( $data );
 	}
 
@@ -973,6 +1016,26 @@ final class Tickets {
 		/* translators: 1: history entry number of the redemption, 2: reason */
 		$note = sprintf( __( 'Cancels redemption #%1$d: %2$s', 'voucher-captain' ), $event_id, $reason );
 		$ok   = false;
+		// R6: the cancellation is booked at the till of the redemption it cancels (till report, journal).
+		Counter::push( (string) ( $event['till'] ?? '' ), (string) ( $event['receipt'] ?? '' ) );
+		try {
+			$ok = $this->book_reversal( $voucher, $amount, $note );
+		} finally {
+			Counter::pop();
+		}
+		if ( ! $ok ) {
+			delete_option( 'vcap_reversal_' . $event_id );
+			return new \WP_Error( 'vcap_reversal_failed', self::reversal_message( 'failed' ), array( 'status' => 500 ) );
+		}
+		/** A counter redemption was cancelled (amount booked back). */
+		do_action( 'vcap_redemption_reversed', $voucher->id, $event_id, $amount, $reason );
+		return $amount;
+	}
+
+	/** Books the cancellation of a counter redemption back (balance, single-use state, coupon counter). */
+	private function book_reversal( Voucher $voucher, float $amount, string $note ): bool {
+		global $wpdb;
+		$ok = false;
 		if ( $voucher->is_multi_use() ) {
 			$ok = vcap()->coupons->adjust_balance( $voucher, $amount, 'redeem_reversed', $note );
 		} elseif ( 'unlimited' === $voucher->usage_mode ) {
@@ -1002,13 +1065,7 @@ final class Tickets {
 				}
 			}
 		}
-		if ( ! $ok ) {
-			delete_option( 'vcap_reversal_' . $event_id );
-			return new \WP_Error( 'vcap_reversal_failed', self::reversal_message( 'failed' ), array( 'status' => 500 ) );
-		}
-		/** A counter redemption was cancelled (amount booked back). */
-		do_action( 'vcap_redemption_reversed', $voucher->id, $event_id, $amount, $reason );
-		return $amount;
+		return (bool) $ok;
 	}
 
 	public function rest_reverse( \WP_REST_Request $request ) {

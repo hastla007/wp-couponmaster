@@ -145,6 +145,7 @@ final class Plugin {
 			( new Admin\StoreCreditAdmin( $this->store_credit, $this->vouchers ) )->register();
 			( new Admin\CampaignAdmin( new Campaigns( $this->code_pool, $this->vouchers ) ) )->register();
 			( new Admin\ReportsAdmin() )->register();
+			( new Counter() )->register(); // Own daily counter limits on the user profile (R6).
 		}
 
 		add_action( 'init', array( $this, 'load_textdomain' ), 0 );
