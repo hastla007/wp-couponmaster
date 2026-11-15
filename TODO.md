@@ -302,3 +302,13 @@ Ohne Befund geprüft: Nonce- und Capability-Checks aller `admin_post_`-, `wp_aja
 - [ ] Affiliate-Verkaufsquelle mit WooCommerce/Voucher-Deduplizierung dokumentieren, bevor zusätzliche Verkaufsereignisse angebunden werden; keine doppelte Provision.
 - [ ] E2E für Form-Anfrage → manuelle Bestätigung → Gutscheinservice sowie Voucher-Einlösung → optionale Review-Berechtigung einschließlich Refund, Duplikat und fehlendem Connector ergänzen.
 - **Abnahme:** Es gibt keinen direkten Datenbankzugriff, keine automatische Ausstellung aufgrund eines Formular-Entries und keine Review-Anfrage nur aufgrund von Kauf oder Gutscheinausgabe.
+
+## P2 – Workflow Captain Provider-Vertrag
+
+- [ ] VOUCH-WF-01 – Providervertrag v1 auf vorhandener PHP-API, Redemptions und Voucher-Pass-Provider aufbauen; Version, Envelope, Capability, Payload-Allowlist, Idempotenz, Fehler und Deprecation dokumentieren.
+- [ ] VOUCH-WF-02 – Post-Commit-Events für Gutschein erstellt/zugestellt/Versandfehler, eingelöst, teilweise/vollständig erstattet, widerrufen, reaktiviert und abgelaufen ergänzen; stabile Quell-IDs und Status, nie Code, PDF, E-Mail oder personenbezogene Felder.
+- [ ] VOUCH-WF-03 – Fachliche Services für erstellen/ausgeben, erneut zustellen, widerrufen, reaktivieren und zulässige Serviceeinlösung anbieten; Capability, Validierung, Audit und Idempotency-Key. Guthaben/Ledger niemals direkt ändern.
+- [ ] VOUCH-WF-04 – Native Abläufe bleiben Standard. Nur explizit übernommene optionale Kommunikation darf an Workflow übergeben werden; Woo/Voucher/Pass/Affiliate-Verkäufe und Refunds nicht doppelt buchen.
+- [ ] VOUCH-WF-05 – Admin-Status mit Contract-Version, aktiven Übernahmen, letzter Event-ID, Retry und Fehlerdiagnose ergänzen; fehlendes/deaktiviertes/inkompatibles Workflow-Plugin darf native Voucher-Funktionen nicht blockieren.
+- [ ] VOUCH-WF-06 – Vertrags- und E2E-Matrix für Redaction, Refund, Codegeheimnis, Multisite, HPOS, Duplikate und Workflow-Core/Pro vorhanden/fehlend/abgelaufen ergänzen.
+- Abnahme: Gutscheinzustand und Ledger ändern sich nur über Voucher-Services; Retries erzeugen keine doppelte Einlösung oder Provision.
