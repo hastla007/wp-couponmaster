@@ -17,6 +17,7 @@ function vcap_rl_assert( bool $condition, string $message ): void {
 function vcap_rl_reset(): void {
 	global $wpdb;
 	$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( 'vcap_rl_' ) . '%' ) );
+	$wpdb->query( 'DELETE FROM ' . VCAP\Install::tables()['rate'] );
 	wp_cache_flush();
 }
 
@@ -239,9 +240,16 @@ vcap_rl_reset();
 // --- S9: counter names are keyed hashes, not md5(bucket|address).
 vcap_rl_visitor( '198.51.100.90' );
 VCAP\CodeLookup::begin();
-$plain = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", '%\_' . md5( VCAP\CodeLookup::BUCKET . '|198.51.100.90' ) ) );
-$keyed = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", '%\_' . hash_hmac( 'sha256', VCAP\CodeLookup::BUCKET . '|198.51.100.90', wp_salt( 'auth' ) ) ) );
+$rl_table = VCAP\Install::tables()['rate'];
+$plain    = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$rl_table} WHERE counter_key = %s", md5( VCAP\CodeLookup::BUCKET . '|198.51.100.90' ) ) );
+$keyed    = (int) $wpdb->get_var( $wpdb->prepare( "SELECT hits FROM {$rl_table} WHERE counter_key = %s", hash_hmac( 'sha256', VCAP\CodeLookup::BUCKET . '|198.51.100.90', wp_salt( 'auth' ) ) ) );
 vcap_rl_assert( 0 === $plain && 1 === $keyed, 'the counter of an address is stored under an HMAC with the site salt (not reversible by trying all IPv4 addresses)' );
+vcap_rl_assert( 0 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( 'vcap_rl_' ) . '%' ) ), 'B16: rate limit counters are rows of vcap_rate_limits, no wp_options rows' );
+// B16: the daily purge removes counters of finished windows only; counters left as options before schema 1.7 too.
+$wpdb->insert( $rl_table, array( 'window_end' => time() - 10, 'counter_key' => str_repeat( 'a', 64 ), 'hits' => 3 ) );
+$wpdb->insert( $wpdb->options, array( 'option_name' => 'vcap_rl_' . sprintf( '%010d', time() - 10 ) . '_' . str_repeat( 'b', 64 ), 'option_value' => '2', 'autoload' => 'no' ) );
+VCAP\Plugin::purge_rate_limits( 5.0 );
+vcap_rl_assert( 0 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$rl_table} WHERE window_end <= %d", time() ) ) && 1 === (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$rl_table}" ) && 0 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( 'vcap_rl_' ) . '%' ) ), 'B16: the purge removes finished windows (table and old options) and keeps the running one' );
 vcap_rl_reset();
 
 // --- V14: IPv6 also per /48, so one allocation cannot rotate through its /64 networks.

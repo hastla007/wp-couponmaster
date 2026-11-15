@@ -81,7 +81,7 @@ final class Command {
 	}
 
 	/**
-	 * Runs the database upgrade and the data migrations now (also moves remaining legacy rows).
+	 * Runs the database upgrade and the data migrations now (also moves remaining legacy rows and recounts promotion use counters that differ).
 	 *
 	 * @param array $args       Positional arguments.
 	 * @param array $assoc_args Options.
@@ -91,9 +91,11 @@ final class Command {
 			Source::CLI,
 			static function (): void {
 				Install::maybe_upgrade();
-				if ( Install::legacy_rows() ) {
+				if ( Install::legacy_rows() || Install::legacy_throttle_rows() ) {
 					Install::move_legacy_rows_locked( 60.0 );
 				}
+				// B12: promotion use counters recounted where they differ from the usage table (e.g. after a rollback).
+				\VCAP\Discounts\Usage::reconcile();
 			}
 		);
 		$version = (string) get_option( Install::OPTION_DB_VERSION, '' );

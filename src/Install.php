@@ -72,9 +72,20 @@ final class Install {
 		'1.4.0' => 'migrate_1_4_0',
 		'1.5.0' => 'migrate_1_5_0',
 		'1.6.0' => 'migrate_1_6_0',
-		// R6: after 1.7.0 (scanner idempotency storage, added separately); independent of it.
+		'1.7.0' => 'migrate_1_7_0',
 		'1.8.0' => 'migrate_1_8_0',
 	);
+	/**
+	 * Schema version of the counter tables (B12 promotion use counters, B16 rate limit counters and scanner
+	 * idempotency keys); they are used once STORAGE_OPTION reaches it (counters_ready()).
+	 */
+	public const COUNTERS_VERSION = '1.7.0';
+	/** Time the counter tables took over while rate limit and scanner key options may still exist (B16). */
+	public const LEGACY_THROTTLE_OPTION = 'vcap_legacy_throttle_rows';
+	/** Option name prefix of the rate limit counters before schema 1.7 ("vcap_rl_{window end}_{key}"). */
+	public const LEGACY_RATE_PREFIX = 'vcap_rl_';
+	/** Option name prefix of the scanner idempotency keys before schema 1.7 ("_vcap_scan_{md5 of the key}"). */
+	public const LEGACY_SCAN_PREFIX = '_vcap_scan_';
 	/** Schema version that added the "source" column of the ledger (D8). */
 	public const EVENT_SOURCE_VERSION = '1.6.0';
 
@@ -740,6 +751,9 @@ final class Install {
 			'redemptions' => $prefix . 'vcap_redemptions',
 			'usage'       => $prefix . 'vcap_promotion_usage',
 			'claims'      => $prefix . 'vcap_claims',
+			'counts'      => $prefix . 'vcap_promotion_counts',
+			'rate'        => $prefix . 'vcap_rate_limits',
+			'scan'        => $prefix . 'vcap_scan_keys',
 		);
 	}
 
@@ -775,6 +789,20 @@ final class Install {
 	 */
 	public static function storage_ready(): bool {
 		return version_compare( (string) get_option( self::STORAGE_OPTION, '0' ), '1.4.0', '>=' );
+	}
+
+	/**
+	 * Whether the counter tables of schema 1.7 are in use: promotion use counters (vcap_promotion_counts), rate
+	 * limit counters (vcap_rate_limits) and scanner idempotency keys (vcap_scan_keys). Before that – e.g. while
+	 * another request still runs the upgrade – uses are counted from the usage table and options are used.
+	 */
+	public static function counters_ready(): bool {
+		return version_compare( (string) get_option( self::STORAGE_OPTION, '0' ), self::COUNTERS_VERSION, '>=' );
+	}
+
+	/** Whether rate limit counters or scanner keys may still be stored as options (moved by move_throttle_rows()). */
+	public static function legacy_throttle_rows(): bool {
+		return (int) get_option( self::LEGACY_THROTTLE_OPTION, 0 ) > 0;
 	}
 
 	/** Whether rows of the old storage may still exist (read as well until moved). */
@@ -840,14 +868,17 @@ final class Install {
 	 * migration (rows moved twice would count promotion uses twice). Skipped while another request holds the lock.
 	 */
 	public static function move_legacy_rows_locked( float $budget ): bool {
-		if ( ! self::storage_ready() || ! self::legacy_rows() ) {
+		$usage    = self::storage_ready() && self::legacy_rows();
+		$throttle = self::counters_ready() && self::legacy_throttle_rows();
+		if ( ! $usage && ! $throttle ) {
 			return true;
 		}
 		if ( ! self::lock() ) {
 			return true; // The request holding the lock moves them.
 		}
 		try {
-			return self::move_legacy_rows( $budget );
+			$done = ! $usage || self::move_legacy_rows( $budget );
+			return ( ! $throttle || self::move_throttle_rows( $budget ) ) && $done;
 		} finally {
 			self::unlock();
 		}
@@ -871,9 +902,12 @@ final class Install {
 		$in     = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
 		$values = implode( ',', $values );
 		$table  = self::tables()['usage'];
-		$ok     = self::in_transaction(
+		// B12: the moved uses are added to the promotions' counters in the same transaction.
+		$moved = array_count_values( array_map( 'intval', array_column( $rows, 'post_id' ) ) );
+		$ok    = self::in_transaction(
 			static fn() => false !== $wpdb->query( $wpdb->prepare( "INSERT INTO {$table} (campaign_id, customer_key, order_id, created_at) VALUES {$values}", $args ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- $values holds only placeholder groups built above.
-				&& false !== $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE meta_id IN ({$in})", $ids ) ), // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
+				&& false !== $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE meta_id IN ({$in})", $ids ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
+				&& ( ! self::counters_ready() || Discounts\Usage::add_to_counters( $moved ) ),
 			'migrate_usage_batch'
 		);
 		foreach ( array_unique( array_map( 'intval', array_column( $rows, 'post_id' ) ) ) as $post_id ) {
@@ -916,6 +950,129 @@ final class Install {
 	 * privacy exports and erasures find them through an index instead of scanning every note. New rows are
 	 * written with the hash; existing ones are filled in id batches.
 	 */
+	/**
+	 * 1.7.0: counter tables (B12, B16).
+	 *
+	 * Promotion use counters (vcap_promotion_counts) are filled from the usage table, once before the switch and
+	 * once after it: the second recount replaces what the first one and the increments of requests in between left,
+	 * so uses written while the first recount ran are not missed. Requests that still run the old code (no counter
+	 * increment) are corrected by the daily recount (Usage::reconcile()). Rate limit counters of running windows and
+	 * scanner idempotency keys move from wp_options into their tables in batches (move_throttle_rows()); until none
+	 * is left, a scanner key is also looked up as option (Tickets), so a repeat never acts twice.
+	 */
+	private static function migrate_1_7_0(): bool {
+		global $wpdb;
+		$tables = self::tables();
+		foreach ( array( 'counts', 'rate', 'scan' ) as $key ) {
+			if ( $tables[ $key ] !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $tables[ $key ] ) ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return false; // Never switch to tables that could not be created (upgrade_schema() reports them).
+			}
+		}
+		if ( ! self::counters_ready() ) {
+			if ( ! self::storage_ready() || ! Discounts\Usage::recount() ) {
+				return false; // The 1.4.0 step switches to the usage table first.
+			}
+			update_option( self::LEGACY_THROTTLE_OPTION, time() );
+			update_option( self::STORAGE_OPTION, self::COUNTERS_VERSION );
+			if ( ! Discounts\Usage::recount() ) {
+				return false;
+			}
+		} elseif ( ! self::legacy_throttle_rows() ) {
+			// Also after a rollback to an older version, which wrote options again: look for them once more.
+			update_option( self::LEGACY_THROTTLE_OPTION, time() );
+		}
+		return self::move_throttle_rows( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ? 8.0 : 2.0 );
+	}
+
+	/**
+	 * Moves rate limit counters of running windows and scanner idempotency keys from wp_options into their tables
+	 * (finished windows and keys older than two days are dropped), until none is left or the time budget is used.
+	 * The daily maintenance calls it again (move_legacy_rows_locked()), so options an older version wrote just
+	 * before the switch are moved as well.
+	 *
+	 * @param float $budget Seconds.
+	 * @return bool True when nothing is left.
+	 */
+	public static function move_throttle_rows( float $budget ): bool {
+		if ( ! self::counters_ready() || ! self::legacy_throttle_rows() ) {
+			return true;
+		}
+		$start = microtime( true );
+		do {
+			$rate = self::move_rate_batch( 500 );
+			$scan = self::move_scan_batch( 500 );
+			if ( $rate < 0 || $scan < 0 ) {
+				return false;
+			}
+			if ( 0 === $rate && 0 === $scan ) {
+				// Requests that started before the switch may still write options: keep looking for an hour.
+				if ( time() - (int) get_option( self::LEGACY_THROTTLE_OPTION, 0 ) > HOUR_IN_SECONDS ) {
+					delete_option( self::LEGACY_THROTTLE_OPTION );
+				}
+				return true;
+			}
+		} while ( microtime( true ) - $start < $budget );
+		return false;
+	}
+
+	/** @return int Options handled (moved or dropped), -1 on a database error. */
+	private static function move_rate_batch( int $limit ): int {
+		global $wpdb;
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT option_id, option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s ORDER BY option_id LIMIT %d", $wpdb->esc_like( self::LEGACY_RATE_PREFIX ) . '%', $limit ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( ! $rows ) {
+			return 0;
+		}
+		$values = array();
+		$args   = array();
+		foreach ( $rows as $row ) {
+			// "vcap_rl_{10-digit window end}_{64 hex key}"; counters of finished windows are dropped.
+			if ( ! preg_match( '/^vcap_rl_(\d{10})_([0-9a-f]{64})$/', (string) $row['option_name'], $m ) || (int) $m[1] <= time() ) {
+				continue;
+			}
+			$values[] = '(%d, %s, %d)';
+			array_push( $args, (int) $m[1], $m[2], max( 0, (int) $row['option_value'] ) );
+		}
+		$ids   = array_map( 'intval', array_column( $rows, 'option_id' ) );
+		$in    = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+		$table = self::tables()['rate'];
+		$sql   = implode( ',', $values );
+		$ok    = self::in_transaction(
+			static fn() => ( ! $values || false !== $wpdb->query( $wpdb->prepare( "INSERT INTO {$table} (window_end, counter_key, hits) VALUES {$sql} ON DUPLICATE KEY UPDATE hits = hits + VALUES(hits)", $args ) ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- $sql holds only placeholder groups built above.
+				&& false !== $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_id IN ({$in})", $ids ) ), // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
+			'migrate_rate_batch'
+		);
+		foreach ( array_column( $rows, 'option_name' ) as $name ) {
+			wp_cache_delete( (string) $name, 'options' );
+		}
+		return $ok ? count( $rows ) : -1;
+	}
+
+	/** @return int Options handled (moved or dropped), -1 on a database error. */
+	private static function move_scan_batch( int $limit ): int {
+		global $wpdb;
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT option_id, option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s ORDER BY option_id LIMIT %d", $wpdb->esc_like( self::LEGACY_SCAN_PREFIX ) . '%', $limit ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( ! $rows ) {
+			return 0;
+		}
+		$ids = array_map( 'intval', array_column( $rows, 'option_id' ) );
+		$in  = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+		$ok  = self::in_transaction(
+			static function () use ( $wpdb, $rows, $ids, $in ): bool {
+				foreach ( $rows as $row ) {
+					if ( ! Tickets::adopt_scan_option( substr( (string) $row['option_name'], strlen( self::LEGACY_SCAN_PREFIX ) ), (string) $row['option_value'] ) ) {
+						return false;
+					}
+				}
+				return false !== $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_id IN ({$in})", $ids ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
+			},
+			'migrate_scan_batch'
+		);
+		foreach ( array_column( $rows, 'option_name' ) as $name ) {
+			wp_cache_delete( (string) $name, 'options' );
+		}
+		return $ok ? count( $rows ) : -1;
+	}
+
 	/**
 	 * 1.6.0: the ledger column "source" (D8, created by the schema step). Earlier rows keep '' – their source is
 	 * unknown and shown without one; nothing to fill. The column is written as soon as it exists
@@ -1204,6 +1361,30 @@ final class Install {
 					created_at datetime NOT NULL,
 					PRIMARY KEY  (claim_key),
 					KEY kind_created (kind,created_at)
+				) ENGINE=InnoDB $collate;",
+			// counts: uses per promotion (B12), kept with the usage table by Discounts\Usage (the checkout counts under
+			// the promotion's lock) and recounted by the daily maintenance.
+			'counts' => "CREATE TABLE {$t['counts']} (
+					campaign_id bigint(20) unsigned NOT NULL,
+					uses bigint(20) unsigned NOT NULL DEFAULT 0,
+					PRIMARY KEY  (campaign_id)
+				) ENGINE=InnoDB $collate;",
+			// rate: fixed-window rate limit counters (Plugin::rate_limited()); counter_key is a keyed hash of bucket and visitor.
+			'rate' => "CREATE TABLE {$t['rate']} (
+					window_end int(10) unsigned NOT NULL,
+					counter_key char(64) NOT NULL,
+					hits int(10) unsigned NOT NULL DEFAULT 0,
+					PRIMARY KEY  (window_end,counter_key)
+				) ENGINE=InnoDB $collate;",
+			// scan: scanner idempotency keys (Tickets); key_hash is the md5 of the key, response the stored answer (NULL while running).
+			'scan' => "CREATE TABLE {$t['scan']} (
+					key_hash char(32) NOT NULL,
+					signature char(32) NOT NULL DEFAULT '',
+					event_mark bigint(20) unsigned NULL DEFAULT NULL,
+					claimed_at int(10) unsigned NOT NULL DEFAULT 0,
+					response longtext NULL,
+					PRIMARY KEY  (key_hash),
+					KEY claimed_at (claimed_at)
 				) ENGINE=InnoDB $collate;",
 		);
 	}

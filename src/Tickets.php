@@ -482,20 +482,27 @@ final class Tickets {
 		return rest_ensure_response( $data );
 	}
 
-	private const SCAN_PREFIX = '_vcap_scan_';
+	/** Option name prefix of scanner keys before schema 1.7 (moved into the table vcap_scan_keys by Install). */
+	private const SCAN_PREFIX = Install::LEGACY_SCAN_PREFIX;
 
 	/** Seconds after which a claim without an answer counts as abandoned (the request died after claiming). */
 	private const SCAN_STALE = 120;
 
+	/** Days a scanner key (and its answer) is kept. */
+	private const SCAN_DAYS = 2;
+
 	/**
 	 * Idempotency of native scanner mutations (check-in, undo, counter redemption, cancellation). The first request
-	 * with a key claims it atomically (unique option row, with the newest history event of the voucher); a repeat
+	 * with a key claims it atomically (unique row, with the newest history event of the voucher); a repeat
 	 * with the same key gets the stored answer, a repeat while the first is still running gets 409 (the scanner
 	 * retries with the same key), and a key reused for another action is refused. Keys are kept two days.
 	 *
 	 * A claim left without an answer (PHP stopped after booking, before storing the answer) is resolved after
 	 * SCAN_STALE seconds from the history: an event of this action by this user after the claim means it was
 	 * booked (that is answered), none means nothing happened and the repeat may act.
+	 *
+	 * B16: keys are rows of the table vcap_scan_keys (primary key = md5 of the key), one options row each before
+	 * schema 1.7.
 	 *
 	 * @param string[] $kinds History events the action writes.
 	 * @return array|\WP_Error|null stored response, error, or null when this request may act
@@ -505,25 +512,26 @@ final class Tickets {
 			return null;
 		}
 		global $wpdb;
-		$name   = self::SCAN_PREFIX . md5( $key );
+		$hash   = md5( $key );
 		$events = Install::tables()['events'];
 		$mark   = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(MAX(id), 0) FROM {$events} WHERE voucher_id = %d", $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $name, time() . '|' . $sig . '#' . $mark . '|' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		if ( 1 === (int) $wpdb->rows_affected ) {
+		if ( self::scan_insert( $hash, $sig, $mark ) ) {
 			return null;
 		}
-		$row                          = (string) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		list( $time, $stored, $json ) = array_pad( explode( '|', $row, 3 ), 3, '' );
-		list( $stored, $since )       = array_pad( explode( '#', $stored, 2 ), 2, '' );
-		if ( $stored !== $sig ) {
+		$row = self::scan_row( $hash );
+		if ( null === $row ) {
+			// Released by the request that held it just now: the scanner retries with the same key.
+			return new \WP_Error( 'vcap_in_progress', __( 'This action is still being processed. Please wait a moment and try again.', 'voucher-captain' ), array( 'status' => 409 ) );
+		}
+		if ( $row['sig'] !== $sig ) {
 			return new \WP_Error( 'vcap_idempotency_conflict', __( 'This scanner request was already used for another action. Please scan the code again.', 'voucher-captain' ), array( 'status' => 422 ) );
 		}
-		if ( '' === $json ) {
-			if ( time() - (int) $time < self::SCAN_STALE || '' === $since ) {
+		if ( null === $row['response'] ) {
+			if ( time() - $row['time'] < self::SCAN_STALE || null === $row['mark'] ) {
 				return new \WP_Error( 'vcap_in_progress', __( 'This action is still being processed. Please wait a moment and try again.', 'voucher-captain' ), array( 'status' => 409 ) );
 			}
 			$in     = implode( ',', array_map( static fn( $k ) => "'" . esc_sql( (string) $k ) . "'", $kinds ) );
-			$booked = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$events} WHERE voucher_id = %d AND id > %d AND user_id = %d AND event IN ({$in}) ORDER BY id LIMIT 1", $voucher->id, (int) $since, get_current_user_id() ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$booked = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$events} WHERE voucher_id = %d AND id > %d AND user_id = %d AND event IN ({$in}) ORDER BY id LIMIT 1", $voucher->id, (int) $row['mark'], get_current_user_id() ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			if ( $booked ) {
 				$fresh             = $this->repo->get( $voucher->id ) ?? $voucher;
 				$data              = $this->describe( $fresh );
@@ -536,10 +544,9 @@ final class Tickets {
 				return $data;
 			}
 			// Nothing was booked: take the claim over (only one repeat wins) and act.
-			$taken = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s", time() . '|' . $sig . '#' . $mark . '|', $name, $row ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			return 1 === (int) $taken ? null : new \WP_Error( 'vcap_in_progress', __( 'This action is still being processed. Please wait a moment and try again.', 'voucher-captain' ), array( 'status' => 409 ) );
+			return self::scan_take_over( $hash, $row, $sig, $mark ) ? null : new \WP_Error( 'vcap_in_progress', __( 'This action is still being processed. Please wait a moment and try again.', 'voucher-captain' ), array( 'status' => 409 ) );
 		}
-		$data             = (array) json_decode( $json, true );
+		$data             = (array) json_decode( $row['response'], true );
 		$data['replayed'] = true;
 		return $data;
 	}
@@ -549,36 +556,150 @@ final class Tickets {
 			return;
 		}
 		global $wpdb;
-		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT(SUBSTRING_INDEX(option_value, '|', 2), '|', %s) WHERE option_name = %s", (string) wp_json_encode( $data ), self::SCAN_PREFIX . md5( $key ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$json = (string) wp_json_encode( $data );
+		if ( Install::counters_ready() ) {
+			$wpdb->update( Install::tables()['scan'], array( 'response' => $json ), array( 'key_hash' => md5( $key ) ), array( '%s' ), array( '%s' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return;
+		}
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = CONCAT(SUBSTRING_INDEX(option_value, '|', 2), '|', %s) WHERE option_name = %s", $json, self::SCAN_PREFIX . md5( $key ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	/** Stored answer of a finished scanner action ('' answer or another action = null). */
 	private function scan_result( string $key, string $sig ): ?array {
-		global $wpdb;
-		$row                         = (string) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::SCAN_PREFIX . md5( $key ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		list( , $stored, $json )     = array_pad( explode( '|', $row, 3 ), 3, '' );
-		return '' !== $json && strtok( $stored, '#' ) === $sig ? (array) json_decode( $json, true ) : null;
+		$row = self::scan_row( md5( $key ) );
+		return $row && null !== $row['response'] && $row['sig'] === $sig ? (array) json_decode( $row['response'], true ) : null;
 	}
 
 	private function scan_release( string $key ): void {
-		if ( '' !== $key ) {
-			global $wpdb;
-			$wpdb->delete( $wpdb->options, array( 'option_name' => self::SCAN_PREFIX . md5( $key ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( '' === $key ) {
+			return;
+		}
+		global $wpdb;
+		if ( Install::counters_ready() ) {
+			$wpdb->delete( Install::tables()['scan'], array( 'key_hash' => md5( $key ) ), array( '%s' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			if ( ! Install::legacy_throttle_rows() ) {
+				return;
+			}
+		}
+		$wpdb->delete( $wpdb->options, array( 'option_name' => self::SCAN_PREFIX . md5( $key ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
+
+	/** Claims a key: true for exactly one request (INSERT IGNORE of a unique row). */
+	private static function scan_insert( string $hash, string $sig, int $mark ): bool {
+		global $wpdb;
+		if ( Install::counters_ready() ) {
+			self::adopt_legacy_scan_key( $hash );
+			$table = Install::tables()['scan'];
+			$wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$table} (key_hash, signature, event_mark, claimed_at, response) VALUES (%s, %s, %d, %d, NULL)", $hash, $sig, $mark, time() ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			return 1 === (int) $wpdb->rows_affected;
+		}
+		$wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", self::SCAN_PREFIX . $hash, time() . '|' . $sig . '#' . $mark . '|' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		return 1 === (int) $wpdb->rows_affected;
+	}
+
+	/**
+	 * A stored key: array{sig:string, mark:int|null, time:int, response:string|null, raw?:string} (raw: the option
+	 * value before schema 1.7, compared when a claim is taken over), or null.
+	 */
+	private static function scan_row( string $hash ): ?array {
+		global $wpdb;
+		if ( Install::counters_ready() ) {
+			self::adopt_legacy_scan_key( $hash );
+			$table = Install::tables()['scan'];
+			$row   = $wpdb->get_row( $wpdb->prepare( "SELECT signature, event_mark, claimed_at, response FROM {$table} WHERE key_hash = %s", $hash ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( ! $row ) {
+				return null;
+			}
+			return array(
+				'sig'      => (string) $row['signature'],
+				'mark'     => null === $row['event_mark'] ? null : (int) $row['event_mark'],
+				'time'     => (int) $row['claimed_at'],
+				'response' => null === $row['response'] ? null : (string) $row['response'],
+			);
+		}
+		$value = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::SCAN_PREFIX . $hash ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		return null === $value ? null : self::parse_scan_option( (string) $value ) + array( 'raw' => (string) $value );
+	}
+
+	/** Takes over an abandoned claim without answer; true for exactly one request (compare-and-set). */
+	private static function scan_take_over( string $hash, array $row, string $sig, int $mark ): bool {
+		global $wpdb;
+		if ( Install::counters_ready() ) {
+			$table = Install::tables()['scan'];
+			$taken = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET claimed_at = %d, event_mark = %d WHERE key_hash = %s AND claimed_at = %d AND response IS NULL", time(), $mark, $hash, $row['time'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			return 1 === (int) $taken;
+		}
+		$taken = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s", time() . '|' . $sig . '#' . $mark . '|', self::SCAN_PREFIX . $hash, (string) ( $row['raw'] ?? '' ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		return 1 === (int) $taken;
+	}
+
+	/** Parts of a scanner key stored as option before schema 1.7: "{time}|{signature}#{event mark}|{answer}". */
+	private static function parse_scan_option( string $value ): array {
+		list( $time, $stored, $json ) = array_pad( explode( '|', $value, 3 ), 3, '' );
+		list( $sig, $since )          = array_pad( explode( '#', $stored, 2 ), 2, '' );
+		return array(
+			'sig'      => $sig,
+			'mark'     => '' === $since ? null : (int) $since,
+			'time'     => (int) $time,
+			'response' => '' === $json ? null : $json,
+		);
+	}
+
+	/**
+	 * Copies a scanner key stored as option before schema 1.7 into the table (kept when the table has the key
+	 * already). Keys older than two days are not copied.
+	 *
+	 * @param string $hash  md5 of the key (the option name without its prefix).
+	 * @param string $value Option value.
+	 * @return bool false on a database error.
+	 */
+	public static function adopt_scan_option( string $hash, string $value ): bool {
+		$row = self::parse_scan_option( $value );
+		if ( ! preg_match( '/^[0-9a-f]{32}$/', $hash ) || $row['time'] < time() - self::SCAN_DAYS * DAY_IN_SECONDS ) {
+			return true;
+		}
+		global $wpdb;
+		$table = Install::tables()['scan'];
+		// A key without event mark (written before the mark existed) or without answer keeps NULL (-1 / '').
+		return false !== $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$table} (key_hash, signature, event_mark, claimed_at, response) VALUES (%s, %s, NULLIF(%d, -1), %d, NULLIF(%s, ''))", $hash, substr( $row['sig'], 0, 32 ), $row['mark'] ?? -1, $row['time'], (string) $row['response'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	}
+
+	/**
+	 * While options of the storage before schema 1.7 may exist (the upgrade moves them in batches), the option of
+	 * this key is moved first, so a repeat of a request claimed just before the switch is still recognised.
+	 */
+	private static function adopt_legacy_scan_key( string $hash ): void {
+		if ( ! Install::legacy_throttle_rows() ) {
+			return;
+		}
+		global $wpdb;
+		$name  = self::SCAN_PREFIX . $hash;
+		$value = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( null !== $value && self::adopt_scan_option( $hash, (string) $value ) ) {
+			$wpdb->delete( $wpdb->options, array( 'option_name' => $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
 	}
 
 	/**
 	 * Removes scanner idempotency keys older than two days (daily maintenance), in batches until done or $budget
-	 * seconds are used.
+	 * seconds are used: rows of the table vcap_scan_keys and options left from before schema 1.7.
 	 *
 	 * @return bool true when all old keys are removed.
 	 */
 	public static function purge_scan_keys( float $budget = 10.0 ): bool {
 		global $wpdb;
-		$start = microtime( true );
-		$limit = 1000;
+		$start  = microtime( true );
+		$limit  = 1000;
+		$cutoff = time() - self::SCAN_DAYS * DAY_IN_SECONDS;
+		$table  = Install::counters_ready() ? Install::tables()['scan'] : '';
 		do {
-			$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) < %d LIMIT %d", $wpdb->esc_like( self::SCAN_PREFIX ) . '%', time() - 2 * DAY_IN_SECONDS, $limit ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$deleted = 0;
+			if ( '' !== $table ) {
+				$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE claimed_at < %d LIMIT %d", $cutoff, $limit ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			}
+			if ( false !== $deleted && (int) $deleted < $limit ) {
+				$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) < %d LIMIT %d", $wpdb->esc_like( self::SCAN_PREFIX ) . '%', $cutoff, $limit ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			}
 			if ( false === $deleted ) {
 				throw new \RuntimeException( 'Scanner keys could not be removed: ' . esc_html( $wpdb->last_error ) );
 			}

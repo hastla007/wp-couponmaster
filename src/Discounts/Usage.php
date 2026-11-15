@@ -15,6 +15,12 @@ defined( 'ABSPATH' ) || exit;
  * lock per promotion, so parallel or still unpaid orders cannot together exceed a limit. It is confirmed when the
  * order reaches a paid/on-hold status and given back when it is cancelled, failed or set back to pending, or when
  * an unpaid order is abandoned. Each order remembers what it counted, so status repeats never count twice.
+ *
+ * B12: the total of a promotion is a counter (table vcap_promotion_counts, schema 1.7), changed by an atomic
+ * UPDATE with every row added or removed here – the checkout hold reads and adds under the promotion's lock – so
+ * carts read one primary-key row instead of COUNT(*) over all uses. Paths that change the usage table elsewhere
+ * keep it too (legacy migration, deleted promotion); the daily maintenance recounts it from the table as a safety
+ * net (reconcile()). Per-customer counts stay COUNT(*) over the (campaign, customer) index: they are small.
  */
 final class Usage {
 	public const META       = '_vcap_used_by';
@@ -39,6 +45,7 @@ final class Usage {
 		// which would give back the use that was just held).
 		add_action( 'woocommerce_order_status_changed', array( $this, 'reverted_to_pending' ), 20, 3 );
 		add_action( 'vcap_daily_maintenance', array( self::class, 'hash_legacy_keys' ), 30, 0 );
+		add_action( 'vcap_daily_maintenance', array( self::class, 'reconcile' ), 31, 0 );
 		add_action( 'deleted_post', array( self::class, 'forget_campaign' ), 10, 2 );
 	}
 
@@ -50,6 +57,9 @@ final class Usage {
 		global $wpdb;
 		self::forget_counts( (int) $post_id );
 		$wpdb->delete( \VCAP\Install::tables()['usage'], array( 'campaign_id' => (int) $post_id ), array( '%d' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( \VCAP\Install::counters_ready() ) {
+			$wpdb->delete( \VCAP\Install::tables()['counts'], array( 'campaign_id' => (int) $post_id ), array( '%d' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
 	}
 
 	/**
@@ -150,8 +160,135 @@ final class Usage {
 		if ( ! $ready ) {
 			return $legacy;
 		}
+		if ( \VCAP\Install::counters_ready() ) {
+			// B12: the promotion's counter (one primary-key row) instead of counting every use.
+			$counts = \VCAP\Install::tables()['counts'];
+			return $legacy + (int) $wpdb->get_var( $wpdb->prepare( "SELECT uses FROM {$counts} WHERE campaign_id = %d", $campaign_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		}
 		$table = \VCAP\Install::tables()['usage'];
 		return $legacy + (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE campaign_id = %d", $campaign_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	}
+
+	/**
+	 * Reads the totals of several promotions into this request's memo with one query (cart sync checks every active
+	 * promotion). Only with counters and without rows of the old storage; otherwise each is counted on demand.
+	 *
+	 * @param int[] $campaign_ids
+	 */
+	public static function prime_counts( array $campaign_ids ): void {
+		$ids = array_values( array_filter( array_unique( array_map( 'intval', $campaign_ids ) ), static fn( int $id ): bool => $id > 0 && ! isset( self::$memo[ $id ]['all'] ) ) );
+		if ( ! $ids || ! \VCAP\Install::storage_ready() || ! \VCAP\Install::counters_ready() || \VCAP\Install::legacy_rows() ) {
+			return;
+		}
+		global $wpdb;
+		$counts = \VCAP\Install::tables()['counts'];
+		$in     = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT campaign_id, uses FROM {$counts} WHERE campaign_id IN ({$in})", $ids ), ARRAY_A );
+		if ( ! is_array( $rows ) ) {
+			return;
+		}
+		$found = array_column( $rows, 'uses', 'campaign_id' );
+		foreach ( $ids as $id ) {
+			self::$memo[ $id ]['all'] = (int) ( $found[ $id ] ?? 0 );
+		}
+	}
+
+	/**
+	 * Adds uses to the counters of several promotions (campaign id => number of uses; negative gives back, never
+	 * below zero). One atomic statement per call.
+	 *
+	 * @param array<int, int> $deltas
+	 * @return bool false on a database error.
+	 */
+	public static function add_to_counters( array $deltas ): bool {
+		global $wpdb;
+		$counts = \VCAP\Install::tables()['counts'];
+		$values = array();
+		$args   = array();
+		foreach ( $deltas as $id => $delta ) {
+			$id    = (int) $id;
+			$delta = (int) $delta;
+			if ( $id <= 0 || 0 === $delta ) {
+				continue;
+			}
+			self::forget_counts( $id );
+			if ( $delta < 0 ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$counts} SET uses = IF(uses > %d, uses - %d, 0) WHERE campaign_id = %d", -$delta, -$delta, $id ) ) ) {
+					return false;
+				}
+				continue;
+			}
+			$values[] = '(%d, %d)';
+			array_push( $args, $id, $delta );
+		}
+		if ( ! $values ) {
+			return true;
+		}
+		$sql = implode( ',', $values );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- $sql holds only placeholder groups built above.
+		return false !== $wpdb->query( $wpdb->prepare( "INSERT INTO {$counts} (campaign_id, uses) VALUES {$sql} ON DUPLICATE KEY UPDATE uses = uses + VALUES(uses)", $args ) );
+	}
+
+	/**
+	 * Sets the counters of all promotions (or of one) to the number of rows in the usage table, in one statement
+	 * each: INSERT … SELECT reads the usage rows with shared locks (InnoDB), so a use added or given back meanwhile
+	 * waits and changes the recounted value afterwards. Counters of promotions without uses are removed.
+	 *
+	 * @param int $campaign_id 0 = all promotions.
+	 * @return bool false on a database error.
+	 */
+	public static function recount( int $campaign_id = 0 ): bool {
+		global $wpdb;
+		$tables = \VCAP\Install::tables();
+		self::forget_counts( $campaign_id );
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table names from Install.
+		if ( $campaign_id > 0 ) {
+			$ok = false !== $wpdb->query( $wpdb->prepare( "INSERT INTO {$tables['counts']} (campaign_id, uses) SELECT %d, COUNT(*) FROM {$tables['usage']} WHERE campaign_id = %d ON DUPLICATE KEY UPDATE uses = VALUES(uses)", $campaign_id, $campaign_id ) );
+			$ok = $ok && false !== $wpdb->query( $wpdb->prepare( "DELETE FROM {$tables['counts']} WHERE campaign_id = %d AND uses = 0", $campaign_id ) );
+		} else {
+			$ok = false !== $wpdb->query( "INSERT INTO {$tables['counts']} (campaign_id, uses) SELECT campaign_id, COUNT(*) FROM {$tables['usage']} GROUP BY campaign_id ON DUPLICATE KEY UPDATE uses = VALUES(uses)" );
+			$ok = $ok && false !== $wpdb->query( "DELETE c FROM {$tables['counts']} c LEFT JOIN {$tables['usage']} u ON u.campaign_id = c.campaign_id WHERE u.campaign_id IS NULL" );
+		}
+		// phpcs:enable
+		return $ok;
+	}
+
+	/**
+	 * Daily safety net (B12): compares every counter with the usage table and recounts the promotions that differ,
+	 * each under its lock (not alongside a checkout hold). Differences come from requests that died between the
+	 * two statements of add()/remove(), from an older version writing after a rollback, or from rows changed by hand.
+	 *
+	 * @return int Promotions recounted.
+	 */
+	public static function reconcile(): int {
+		if ( ! \VCAP\Install::storage_ready() || ! \VCAP\Install::counters_ready() ) {
+			return 0;
+		}
+		global $wpdb;
+		$tables = \VCAP\Install::tables();
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table names from Install.
+		$actual = array_map( 'intval', array_column( (array) $wpdb->get_results( "SELECT campaign_id, COUNT(*) AS n FROM {$tables['usage']} GROUP BY campaign_id", ARRAY_A ), 'n', 'campaign_id' ) );
+		$stored = array_map( 'intval', array_column( (array) $wpdb->get_results( "SELECT campaign_id, uses FROM {$tables['counts']}", ARRAY_A ), 'uses', 'campaign_id' ) );
+		// phpcs:enable
+		$fixed = 0;
+		foreach ( array_unique( array_merge( array_keys( $actual ), array_keys( $stored ) ) ) as $id ) {
+			if ( ( $actual[ $id ] ?? 0 ) === ( $stored[ $id ] ?? 0 ) || ! self::lock( (int) $id ) ) {
+				continue;
+			}
+			try {
+				if ( self::recount( (int) $id ) ) {
+					++$fixed;
+				}
+			} finally {
+				self::unlock( (int) $id );
+			}
+		}
+		if ( $fixed ) {
+			\VCAP\Logger::warning( sprintf( 'Promotion usage counters of %d promotion(s) differed from the usage table and were recounted.', $fixed ) );
+		}
+		return $fixed;
 	}
 
 	public static function count_for( int $campaign_id, array $keys ): int {
@@ -237,7 +374,7 @@ final class Usage {
 			return;
 		}
 		global $wpdb;
-		$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$added = $wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			\VCAP\Install::tables()['usage'],
 			array(
 				'campaign_id'  => $campaign_id,
@@ -247,6 +384,9 @@ final class Usage {
 			),
 			array( '%d', '%s', '%d', '%s' )
 		);
+		if ( $added && \VCAP\Install::counters_ready() ) {
+			self::add_to_counters( array( $campaign_id => 1 ) ); // B12: the checkout hold does this under the promotion's lock.
+		}
 	}
 
 	/**
@@ -261,11 +401,13 @@ final class Usage {
 		if ( \VCAP\Install::storage_ready() ) {
 			$table = \VCAP\Install::tables()['usage'];
 			if ( $order_id > 0 && $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE campaign_id = %d AND order_id = %d LIMIT 1", $campaign_id, $order_id ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				self::given_back( $campaign_id );
 				return;
 			}
 			$scope = $order_id > 0 ? ' AND order_id = 0' : '';
 			foreach ( array_unique( array( self::stored_key( $key ), $key ) ) as $form ) {
 				if ( $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE campaign_id = %d AND customer_key = %s{$scope} LIMIT 1", $campaign_id, substr( $form, 0, 200 ) ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					self::given_back( $campaign_id );
 					return;
 				}
 			}
@@ -275,6 +417,13 @@ final class Usage {
 		}
 		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s AND meta_value IN (%s, %s) LIMIT 1", $campaign_id, self::META, $key, self::stored_key( $key ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		wp_cache_delete( $campaign_id, 'post_meta' );
+	}
+
+	/** A use was removed from the usage table: its promotion's counter goes down by one (B12). */
+	private static function given_back( int $campaign_id ): void {
+		if ( \VCAP\Install::counters_ready() ) {
+			self::add_to_counters( array( $campaign_id => -1 ) );
+		}
 	}
 
 	/** The key a use of this order is stored under (kept on the order, so later email changes do not matter). */
