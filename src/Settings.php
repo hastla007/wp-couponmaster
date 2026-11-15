@@ -65,6 +65,11 @@ final class Settings {
 		// Z6: bundled delivery of large quantities (0 switches each one off).
 		'vcap_bundle_threshold'        => 5,
 		'vcap_bundle_pdf_limit'        => 50,
+		// R6: daily limits of counter (scanner) redemptions, off by default (0 = unlimited).
+		Counter::USER_AMOUNT           => 0,
+		Counter::USER_COUNT            => 0,
+		Counter::TILL_AMOUNT           => 0,
+		Counter::TILL_COUNT            => 0,
 	);
 
 	/**
@@ -375,6 +380,7 @@ final class Settings {
 					),
 					array( 'type' => 'sectionend', 'id' => 'vcap_privacy' ),
 				);
+				$fields = array_merge( $fields, self::counter_limit_fields() );
 				break;
 
 			default:
@@ -764,6 +770,54 @@ final class Settings {
 	}
 
 	/** Voucher products the setting "Multi-purpose vouchers as payment" leaves out (only on the settings page). */
+	/** R6: daily limits of counter (scanner) redemptions (Counter), a block of the "Privacy & advanced" section. */
+	private static function counter_limit_fields(): array {
+		$money = array( 'min' => 0, 'step' => '0.01' );
+		$count = array( 'min' => 0, 'step' => 1 );
+		return array(
+			array(
+				'type'  => 'title',
+				'title' => __( 'Counter limits (scanner)', 'voucher-captain' ),
+				'desc'  => __( 'Daily limits for redemptions at the counter, per shop day (shop time zone). 0 = unlimited. Staff who manage vouchers are not limited; a staff member can get own limits on their user profile. The amount counts gift cards and value vouchers in the currency of the voucher being redeemed.', 'voucher-captain' ),
+				'id'    => 'vcap_counter_limits',
+			),
+			array(
+				'title'             => __( 'Amount per staff member and day', 'voucher-captain' ),
+				'id'                => Counter::USER_AMOUNT,
+				'type'              => 'number',
+				'default'           => 0,
+				'css'               => 'width:90px',
+				'custom_attributes' => $money,
+			),
+			array(
+				'title'             => __( 'Redemptions per staff member and day', 'voucher-captain' ),
+				'id'                => Counter::USER_COUNT,
+				'type'              => 'number',
+				'default'           => 0,
+				'css'               => 'width:90px',
+				'custom_attributes' => $count,
+			),
+			array(
+				'title'             => __( 'Amount per till/branch and day', 'voucher-captain' ),
+				'id'                => Counter::TILL_AMOUNT,
+				'type'              => 'number',
+				'default'           => 0,
+				'css'               => 'width:90px',
+				'custom_attributes' => $money,
+				'desc_tip'          => __( 'Counts by the till/branch set on the scanner device; devices without one share one limit.', 'voucher-captain' ),
+			),
+			array(
+				'title'             => __( 'Redemptions per till/branch and day', 'voucher-captain' ),
+				'id'                => Counter::TILL_COUNT,
+				'type'              => 'number',
+				'default'           => 0,
+				'css'               => 'width:90px',
+				'custom_attributes' => $count,
+			),
+			array( 'type' => 'sectionend', 'id' => 'vcap_counter_limits' ),
+		);
+	}
+
 	private function not_settled_note(): string {
 		if ( ! is_admin() || ! current_user_can( 'manage_woocommerce' ) ) {
 			return '';

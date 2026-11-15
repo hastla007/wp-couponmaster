@@ -40,6 +40,9 @@ if ( $voucher->message ) {
 if ( $download_url ) {
 	echo "\n" . esc_html__( 'Download:', 'voucher-captain' ) . ' ' . esc_url_raw( $download_url ) . "\n";
 }
+foreach ( \VCAP\Downloads::voucher_links( $voucher, 'email_plain' ) as $vcap_link ) {
+	echo esc_html( $vcap_link['label'] ) . ': ' . esc_url_raw( $vcap_link['url'] ) . "\n";
+}
 $next_steps = array_filter( array_map( 'strval', (array) apply_filters( 'vcap_voucher_next_steps', array(), $voucher ) ) );
 if ( $next_steps ) {
 	echo "\n" . esc_html__( 'What happens next', 'voucher-captain' ) . "\n";

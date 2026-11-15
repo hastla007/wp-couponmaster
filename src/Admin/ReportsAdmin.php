@@ -38,7 +38,7 @@ final class ReportsAdmin {
 	 */
 	private static function view(): string {
 		$view = sanitize_key( wp_unslash( $_GET['view'] ?? '' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only.
-		$views = array( 'campaigns', 'liability', 'journal' );
+		$views = array( 'campaigns', 'liability', 'journal', 'counter' );
 		if ( \VCAP\Compat\PassCaptainReconcile::available() ) {
 			$views[] = 'reconcile';
 		}
@@ -53,6 +53,7 @@ final class ReportsAdmin {
 			'campaigns' => __( 'Campaigns and codes', 'voucher-captain' ),
 			'liability' => __( 'Outstanding value', 'voucher-captain' ),
 			'journal'   => __( 'Redemption journal', 'voucher-captain' ),
+			'counter'   => __( 'Tills and staff', 'voucher-captain' ),
 		);
 		if ( \VCAP\Compat\PassCaptainReconcile::available() ) {
 			$tabs['reconcile'] = __( 'Pass Captain reconciliation', 'voucher-captain' );
@@ -80,6 +81,10 @@ final class ReportsAdmin {
 		}
 		if ( 'reconcile' === $view ) {
 			$this->reconcile_page();
+			return;
+		}
+		if ( 'counter' === $view ) {
+			$this->counter_page();
 			return;
 		}
 		list( $from, $to ) = self::range( $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only filter.
@@ -221,10 +226,12 @@ final class ReportsAdmin {
 					<th><?php esc_html_e( 'Amount', 'voucher-captain' ); ?></th>
 					<th><?php esc_html_e( 'Balance after', 'voucher-captain' ); ?></th>
 					<th><?php esc_html_e( 'Order', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'Till / branch', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'Receipt no.', 'voucher-captain' ); ?></th>
 				</tr></thead>
 				<tbody>
 				<?php if ( ! $journal ) : ?>
-					<tr><td colspan="6"><?php esc_html_e( 'No bookings in this period.', 'voucher-captain' ); ?></td></tr>
+					<tr><td colspan="8"><?php esc_html_e( 'No bookings in this period.', 'voucher-captain' ); ?></td></tr>
 				<?php endif; ?>
 				<?php foreach ( $journal as $r ) : ?>
 					<tr>
@@ -234,6 +241,86 @@ final class ReportsAdmin {
 						<td><?php echo wp_kses_post( wc_price( \VCAP\Ledger::signed_amount( (string) $r['event'], $r['amount'] ), array( 'currency' => $r['currency'] ) ) ); ?></td>
 						<td><?php echo null === $r['balance_after'] ? '–' : wp_kses_post( wc_price( (float) $r['balance_after'], array( 'currency' => $r['currency'] ) ) ); ?></td>
 						<td><?php echo \VCAP\Format::order_link( $r['order_id'], '–' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in order_link(). ?></td>
+						<td><?php echo esc_html( '' !== (string) ( $r['till'] ?? '' ) ? (string) $r['till'] : '–' ); ?></td>
+						<td><?php echo esc_html( '' !== (string) ( $r['receipt'] ?? '' ) ? (string) $r['receipt'] : '–' ); ?></td>
+					</tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
+		</div>
+		<?php
+	}
+
+	/** Report grouping of the counter report: 'till' (default), 'user' or 'both'. */
+	private static function counter_group(): string {
+		$group = sanitize_key( wp_unslash( $_GET['group'] ?? '' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only.
+		return in_array( $group, array( 'till', 'user', 'both' ), true ) ? $group : 'till';
+	}
+
+	/** R6: counter redemptions per till/branch and staff member in a period. */
+	private function counter_page(): void {
+		list( $from, $to ) = self::range( $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only filter.
+		$group  = self::counter_group();
+		$rows   = ( new Ledger( vcap()->vouchers ) )->counter_totals( $from, $to, $group );
+		$csv    = wp_nonce_url( add_query_arg( array( 'action' => 'vcap_report_csv', 'view' => 'counter', 'from' => $from, 'to' => $to, 'group' => $group ), admin_url( 'admin-post.php' ) ), 'vcap_report_csv' );
+		$groups = array(
+			'till' => __( 'Till / branch', 'voucher-captain' ),
+			'user' => __( 'Staff member', 'voucher-captain' ),
+			'both' => __( 'Till and staff member', 'voucher-captain' ),
+		);
+		$cols   = 6 + ( 'both' === $group ? 2 : 1 );
+		?>
+		<div class="wrap">
+			<h1><?php esc_html_e( 'Reports', 'voucher-captain' ); ?></h1>
+			<?php self::tabs( 'counter' ); ?>
+			<form method="get" class="vcap-report-filter">
+				<input type="hidden" name="page" value="vcap-reports" /><input type="hidden" name="view" value="counter" />
+				<label><?php esc_html_e( 'From', 'voucher-captain' ); ?> <input type="date" name="from" value="<?php echo esc_attr( $from ); ?>" /></label>
+				<label><?php esc_html_e( 'until', 'voucher-captain' ); ?> <input type="date" name="to" value="<?php echo esc_attr( $to ); ?>" /></label>
+				<label><?php esc_html_e( 'Group by', 'voucher-captain' ); ?>
+					<select name="group">
+						<?php foreach ( $groups as $key => $label ) : ?>
+							<option value="<?php echo esc_attr( $key ); ?>" <?php selected( $group, $key ); ?>><?php echo esc_html( $label ); ?></option>
+						<?php endforeach; ?>
+					</select>
+				</label>
+				<button class="button"><?php esc_html_e( 'Show', 'voucher-captain' ); ?></button>
+				<a class="button" href="<?php echo esc_url( $csv ); ?>"><?php esc_html_e( 'Export CSV', 'voucher-captain' ); ?></a>
+			</form>
+			<p class="description"><?php esc_html_e( 'Redemptions at the counter (scanner and "Mark as redeemed (store)") with the till/branch set on the device, per currency. Cancellations count at the till of the redemption they cancel. Amounts include gift cards and value vouchers; percentage, ticket and reusable vouchers count only as redemptions.', 'voucher-captain' ); ?></p>
+			<table class="widefat striped">
+				<thead><tr>
+					<?php if ( 'user' !== $group ) : ?>
+						<th><?php esc_html_e( 'Till / branch', 'voucher-captain' ); ?></th>
+					<?php endif; ?>
+					<?php if ( 'till' !== $group ) : ?>
+						<th><?php esc_html_e( 'Staff member', 'voucher-captain' ); ?></th>
+					<?php endif; ?>
+					<th><?php esc_html_e( 'Currency', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'Redemptions', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'Amount redeemed', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'Cancellations', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'Amount cancelled', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'Net amount', 'voucher-captain' ); ?></th>
+				</tr></thead>
+				<tbody>
+				<?php if ( ! $rows ) : ?>
+					<tr><td colspan="<?php echo esc_attr( (string) $cols ); ?>"><?php esc_html_e( 'No counter redemptions in this period.', 'voucher-captain' ); ?></td></tr>
+				<?php endif; ?>
+				<?php foreach ( $rows as $r ) : ?>
+					<tr>
+						<?php if ( 'user' !== $group ) : ?>
+							<td><?php echo esc_html( '' !== $r['till'] ? $r['till'] : __( '(no till set)', 'voucher-captain' ) ); ?></td>
+						<?php endif; ?>
+						<?php if ( 'till' !== $group ) : ?>
+							<td><?php echo esc_html( Ledger::staff_name( (int) $r['user_id'] ) ); ?></td>
+						<?php endif; ?>
+						<td><?php echo esc_html( $r['currency'] ); ?></td>
+						<td><?php echo esc_html( number_format_i18n( $r['count'] ) ); ?></td>
+						<td><?php echo wp_kses_post( wc_price( $r['amount'], array( 'currency' => $r['currency'] ) ) ); ?></td>
+						<td><?php echo esc_html( number_format_i18n( $r['reversed_count'] ) ); ?></td>
+						<td><?php echo wp_kses_post( wc_price( $r['reversed_amount'], array( 'currency' => $r['currency'] ) ) ); ?></td>
+						<td><?php echo wp_kses_post( wc_price( $r['net'], array( 'currency' => $r['currency'] ) ) ); ?></td>
 					</tr>
 				<?php endforeach; ?>
 				</tbody>
@@ -314,6 +401,16 @@ final class ReportsAdmin {
 			exit;
 		}
 		list( $from, $to ) = self::range( $_GET );
+		if ( 'counter' === $view ) {
+			$group = self::counter_group();
+			$out   = \VCAP\Csv::open( 'voucher-counter-' . $group . '-' . $from . '-' . $to . '.csv' );
+			\VCAP\Csv::write( $out, Ledger::counter_header( $group ) );
+			foreach ( $ledger->counter_totals( $from, $to, $group ) as $row ) {
+				\VCAP\Csv::write( $out, Ledger::counter_line( $row, $group ) );
+			}
+			fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+			exit;
+		}
 		if ( 'journal' === $view ) {
 			$out = \VCAP\Csv::open( 'voucher-journal-' . $from . '-' . $to . '.csv' );
 			\VCAP\Csv::write( $out, Ledger::journal_header() );

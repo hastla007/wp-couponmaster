@@ -126,6 +126,44 @@ add_action( 'vcap_voucher_redeemed', function ( array $redemption ) { /* audit, 
 
 **Timing (D6).** Actions that report a change (`vcap_voucher_redeemed`, `vcap_redemption_reserved` / `_released` / `_refunded`, `vcap_voucher_updated`, `vcap_voucher_event`, `vcap_store_credit_changed` …) fire only after the database transaction that made the change was committed, exactly once, and never for a change that was rolled back; outside a transaction they fire immediately. The filters `vcap_redemption_allowed` and `vcap_redemption_target_available` decide and therefore run synchronously: `reserve()` evaluates them before it locks the voucher row (status, balance and owner are re-checked under the lock), but they can still run inside a caller's transaction – keep them fast, without remote calls or own transactions. Integrations that call the API inside their own transaction use `VCAP\Db::transaction( callable $work, string $context )` (or `Db::begin()` / `Db::commit()` / `Db::rollback_if_error()`): the call nests as a savepoint and its actions wait for the outermost COMMIT. Details: CONNECTORS.md → *Event timing*.
 
+## Issuing vouchers without an order (schema 1.8.0)
+
+`vcap()->issuer->issue_standalone( array $args )` issues one voucher without a WooCommerce order – for company orders with a list of recipients (one call per recipient), goodwill vouchers or prizes. It uses the same code generation, WooCommerce coupon, `issued` ledger entry and email delivery as a purchased voucher and returns the `VCAP\Voucher` or a `WP_Error`.
+
+| Argument | Meaning |
+|---|---|
+| `product_id` | Voucher product whose settings are used (type, usage, template, validity, restrictions, conditions). Optional. |
+| `amount` | Value (percent for percentage vouchers). Default: the product's fixed value or price; required without a product. |
+| `type`, `usage`, `discount_type`, `template_id` | Override the product's settings (`voucher`/`giftcard`/`ticket`; `single`/`balance`/`unlimited`; `fixed_cart`/`percent`). |
+| `expires_at` / `expiry_days` | Expiry as UTC `Y-m-d H:i:s` (`''`/`null` = never) or a number of days; default: the product's rule, else the global default. |
+| `recipient_name`, `recipient_email`, `message` | The voucher is mailed to the recipient when an address is given. |
+| `buyer_name`, `buyer_email`, `buyer_copy` | The ordering party (e.g. the company): gets the voucher without a recipient address, or a copy with `buyer_copy => true`. |
+| `send` | Deliver by email now (default `true`). `false`: the voucher counts as handed over, no email (the admin can still send it). |
+| `delivery_at` | Deliver and activate later (UTC). |
+| `code` | Own, unused code; default a generated one. |
+| `source`, `reference` | Free label of the caller and an idempotency key (up to 100 characters, e.g. `order-4711/3`), both shown in the history. A second call with the same `reference` issues nothing and answers `vcap_reference_used` with `voucher_id` in the error data (0 while the first call is still running). |
+
+Errors: `vcap_invalid_product`, `vcap_invalid_args`, `vcap_invalid_amount`, `vcap_no_address`, `vcap_code_taken`, `vcap_reference_used`, `vcap_issue_failed` (the error data carries an HTTP-like `status`). Afterwards the action `vcap_voucher_issued_standalone` (`Voucher`, `$args`) fires (not `vcap_vouchers_issued`, whose listeners expect an order).
+
+**Permission and context are the caller's responsibility**: the method checks no capability, so background tasks can use it. Call it only from code that has checked who asked for it – in an admin form `current_user_can( 'vcap_manage_vouchers' )` and a nonce, in a REST route a `permission_callback`. Amounts are in the shop's base currency.
+
+```php
+foreach ( $recipients as $i => $r ) {
+	$voucher = vcap()->issuer->issue_standalone( array(
+		'product_id'      => 123,
+		'recipient_name'  => $r['name'],
+		'recipient_email' => $r['email'],
+		'buyer_name'      => 'ACME GmbH',
+		'buyer_email'     => 'hr@acme.example',
+		'source'          => 'company-order',
+		'reference'       => 'company-order-' . $company_order_id . '/' . $i,
+	) );
+	if ( is_wp_error( $voucher ) && 'vcap_reference_used' !== $voucher->get_error_code() ) {
+		// Log and retry later: the same reference never issues twice.
+	}
+}
+```
+
 ## Extension points for connector plugins (since 1.1.0)
 
 ### Voucher types

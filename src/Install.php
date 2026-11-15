@@ -72,6 +72,8 @@ final class Install {
 		'1.4.0' => 'migrate_1_4_0',
 		'1.5.0' => 'migrate_1_5_0',
 		'1.6.0' => 'migrate_1_6_0',
+		// R6: after 1.7.0 (scanner idempotency storage, added separately); independent of it.
+		'1.8.0' => 'migrate_1_8_0',
 	);
 	/** Schema version that added the "source" column of the ledger (D8). */
 	public const EVENT_SOURCE_VERSION = '1.6.0';
@@ -99,6 +101,32 @@ final class Install {
 
 	/** @var array<int, bool> Whether the ledger of a site has its "source" column (event_source_ready()). */
 	private static array $event_source = array();
+
+	/** Schema version that added the ledger columns "till" and "receipt" of counter bookings (R6). */
+	public const EVENT_TILL_VERSION = '1.8.0';
+	/** Highest ledger id whose till/receipt was read from its note (schema 1.8.0; newer rows are written with them). */
+	public const EVENT_TILL_CURSOR = 'vcap_event_till_cursor';
+	/** @var array<int, bool> Whether the ledger of a site has its "till" column (event_till_ready()). */
+	private static array $event_till = array();
+
+	/**
+	 * Whether the ledger has the columns "till" and "receipt" (R6): the schema of EVENT_TILL_VERSION is installed,
+	 * or its tables were created by an upgrade whose data migrations still run – same rules as event_source_ready().
+	 */
+	public static function event_till_ready(): bool {
+		$installed = version_compare( (string) get_option( self::OPTION_DB_VERSION, '0' ), self::EVENT_TILL_VERSION, '>=' );
+		$step      = (string) get_option( self::SCHEMA_STEP_OPTION, '' );
+		$to        = (string) substr( (string) strrchr( $step, '>' ), 1 );
+		if ( ! $installed && ( '' === $to || version_compare( $to, self::EVENT_TILL_VERSION, '<' ) ) ) {
+			return false;
+		}
+		$site = function_exists( 'get_current_blog_id' ) ? get_current_blog_id() : 0;
+		if ( ! isset( self::$event_till[ $site ] ) ) {
+			global $wpdb;
+			self::$event_till[ $site ] = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM ' . self::tables()['events'] . ' LIKE %s', 'till' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
+		}
+		return self::$event_till[ $site ];
+	}
 
 	/**
 	 * Indexes of earlier schemas that a later one replaced (dbDelta never drops an index): table key => names.
@@ -898,6 +926,51 @@ final class Install {
 		return true;
 	}
 
+	/**
+	 * 1.8.0 (R6): the ledger columns "till" and "receipt" of counter bookings (created by the schema step, written by
+	 * new counter bookings as soon as they exist). Counter redemptions booked before carry both only inside their
+	 * note ("… · Receipt 4711 · Till Shop 1", Tickets::counter_note()); they are read from it in id batches, and a
+	 * cancellation ("Cancels redemption #N: …") takes the till and receipt of the redemption it cancels.
+	 */
+	private static function migrate_1_8_0(): bool {
+		self::$event_till = array();
+		return self::fill_event_tills( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ? 8.0 : 2.0 );
+	}
+
+	/**
+	 * Fills till/receipt of counter bookings after EVENT_TILL_CURSOR from their notes (Counter::parse_note()), in
+	 * batches of 1000 rows, until the newest row or the time budget.
+	 *
+	 * @param float $budget Seconds.
+	 * @return bool True when every row is done.
+	 */
+	public static function fill_event_tills( float $budget ): bool {
+		global $wpdb;
+		$table = self::tables()['events'];
+		if ( ! self::table_exists( $table ) || ! self::event_till_ready() ) {
+			return false;
+		}
+		$start  = microtime( true );
+		$cursor = (int) get_option( self::EVENT_TILL_CURSOR, 0 );
+		do {
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, event, note FROM {$table} WHERE id > %d AND ( ( event = 'redeemed' AND order_id = 0 ) OR event = 'redeem_reversed' ) ORDER BY id LIMIT 1000", $cursor ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( ! $rows ) {
+				return true;
+			}
+			foreach ( $rows as $row ) {
+				$parts = 'redeem_reversed' === $row['event'] ? Counter::reversed_context( (string) $row['note'] ) : Counter::parse_note( (string) $row['note'] );
+				if ( '' !== $parts['till'] || '' !== $parts['receipt'] ) {
+					// Only rows without a structured value (new bookings write it themselves).
+					$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET till = %s, receipt = %s WHERE id = %d AND till = '' AND receipt = ''", $parts['till'], $parts['receipt'], (int) $row['id'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				}
+			}
+			$cursor = (int) end( $rows )['id'];
+			$full   = 1000 === count( $rows );
+			update_option( self::EVENT_TILL_CURSOR, $cursor, false );
+		} while ( $full && microtime( true ) - $start < $budget );
+		return ! $full;
+	}
+
 	private static function migrate_1_5_0(): bool {
 		return self::hash_event_notes( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ? 8.0 : 2.0 );
 	}
@@ -1070,6 +1143,8 @@ final class Install {
 					order_id bigint(20) unsigned NOT NULL DEFAULT 0,
 					user_id bigint(20) unsigned NOT NULL DEFAULT 0,
 					source varchar(20) NOT NULL DEFAULT '',
+					till varchar(100) NOT NULL DEFAULT '',
+					receipt varchar(64) NOT NULL DEFAULT '',
 					note text NULL,
 					actor_email_hash char(64) NOT NULL DEFAULT '',
 					created_at datetime NOT NULL,
@@ -1135,6 +1210,7 @@ final class Install {
 
 	public static function create_tables(): void {
 		self::$event_source = array();
+		self::$event_till   = array();
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		foreach ( self::schema() as $sql ) {
 			dbDelta( $sql );

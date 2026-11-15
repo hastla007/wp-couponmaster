@@ -546,8 +546,9 @@ final class VoucherRepository {
 		 * Fires once per completed redemption.
 		 *
 		 * @param array $data voucher_id, code, user_id, amount, currency, order_id, channel (shop|counter|external),
-		 *                    committed_at (UTC), source (see Source).
+		 *                    committed_at (UTC), source (see Source), till and receipt (counter redemptions, else '').
 		 */
+		$counter = 'counter' === $channel ? Counter::context() : null;
 		Db::action(
 			'vcap_voucher_redeemed',
 			array(
@@ -562,6 +563,8 @@ final class VoucherRepository {
 				'channel'      => $channel,
 				'committed_at' => gmdate( 'Y-m-d H:i:s' ),
 				'source'       => Source::current(),
+				'till'         => $counter ? $counter['till'] : '',
+				'receipt'      => $counter ? $counter['receipt'] : '',
 			)
 		);
 	}
@@ -723,14 +726,25 @@ final class VoucherRepository {
 			'actor_email_hash' => self::note_hash( $note ),
 			'created_at'       => $this->now(),
 		);
+		$source = Source::current();
 		if ( Install::event_source_ready() ) {
-			$row['source'] = Source::current();
+			$row['source'] = $source;
+		}
+		// R6: till/branch and receipt number of a counter redemption and its cancellation (Counter::with()).
+		$counter = Counter::context();
+		if ( $counter && in_array( $event, array( 'redeemed', 'redeem_reversed' ), true ) && 0 === $order_id && Install::event_till_ready() ) {
+			$row['till']    = $counter['till'];
+			$row['receipt'] = $counter['receipt'];
 		}
 		$inserted = false !== $wpdb->insert( $this->events_table(), $row ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( $inserted ) {
 			// Listeners get the note as text (a coded note in the site language).
-			/** A history entry was written (args: voucher id, event, amount, balance after, note as text, order id). */
-			Db::action( 'vcap_voucher_event', $voucher_id, $event, $amount, $balance_after, Note::render( $note ), $order_id );
+			/**
+			 * A history entry was written (args: voucher id, event, amount, balance after, note as text, order id,
+			 * source (Source::current(): admin, cron, rest, scanner, checkout, cli, web), acting user id (0 = none)).
+			 * The last two were added later: register with 8 accepted args to get them.
+			 */
+			Db::action( 'vcap_voucher_event', $voucher_id, $event, $amount, $balance_after, Note::render( $note ), $order_id, $source, (int) $row['user_id'] );
 		}
 		return $inserted;
 	}
