@@ -483,11 +483,6 @@ final class VoucherAdmin {
 	}
 
 	/**
-	 * Send the voucher email to the buyer or the recipient on the admin's request and report the result with
-	 * its reason. Sending to the recipient of a "buyer only" voucher (the admin confirmed it) switches "Send to"
-	 * to the recipient.
-	 */
-	/**
 	 * Why a voucher must not be emailed by hand (H7), '' when it may: a scheduled gift would arrive early with a
 	 * code that does not work yet (use "Send now" instead), a void, expired or used-up voucher is no gift any more.
 	 */
@@ -507,6 +502,11 @@ final class VoucherAdmin {
 		return $v->is_expired() ? __( 'the voucher has expired', 'voucher-captain' ) : '';
 	}
 
+	/**
+	 * Send the voucher email to the buyer or the recipient on the admin's request and report the result with
+	 * its reason. Sending to the recipient of a "buyer only" voucher (the admin confirmed it) switches "Send to"
+	 * to the recipient.
+	 */
 	public function resend( Voucher $v, string $role ): bool {
 		$address = 'recipient' === $role ? $v->recipient_email : $v->buyer_email;
 		$emails  = function_exists( 'WC' ) ? WC()->mailer()->get_emails() : array();

@@ -53,9 +53,6 @@ final class PassCaptain {
 	}
 
 	/**
-	 * Status of the integration for the settings page (HTML, escaped).
-	 */
-	/**
 	 * Whether the active WP Pass Captain keeps tickets of a paid order reserved while Voucher Captain reports a
 	 * gift card shortfall (versioned hold contract, Pass Captain 1.4+). Older versions issue the tickets anyway.
 	 */

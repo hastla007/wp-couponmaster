@@ -801,14 +801,13 @@ final class CouponManager {
 		/* translators: %s: voucher code */
 		return sprintf( __( 'Voucher %s can no longer be used (it was cancelled or redeemed elsewhere). Please contact us to complete this order.', 'voucher-captain' ), $voucher->code );
 	}
-	/**
-	 * Atomically reserve stored balance for a specific order.
-	 *
-	 * @return array{amount:float,balance:float,state:string}|null
-	 */
+
 	/**
 	 * Public order-scoped operations for the versioned integration service.
 	 * The order id is the idempotency scope used by the event ledger.
+	 * Atomically reserve stored balance for a specific order.
+	 *
+	 * @return array{amount:float,balance:float,state:string}|null
 	 */
 	public function reserve_voucher_balance( Voucher $voucher, float $amount, \WC_Order $order, string $note = '' ): ?array {
 		return $this->reserve_balance_atomic( $voucher, $amount, (int) $order->get_id(), $note );
@@ -2211,9 +2210,6 @@ final class CouponManager {
 	}
 
 	/**
-	 * Single-use vouchers: mark redeemed once WooCommerce's usage limit is reached.
-	 */
-	/**
 	 * Whether a single-use voucher is held by a shop order that is not paid yet: WooCommerce's tentative coupon
 	 * usage right after checkout, and – because that hold lasts only the "hold stock" minutes – any unpaid order
 	 * (pending, failed, on hold; open_orders_with()) that carries its code and can still be paid later with the
@@ -2379,6 +2375,9 @@ final class CouponManager {
 		return in_array( wc_format_coupon_code( (string) $voucher->code ), $codes, true ) ? (int) $order->get_id() : 0;
 	}
 
+	/**
+	 * Single-use vouchers: mark redeemed once WooCommerce's usage limit is reached.
+	 */
 	public function usage_increased( $coupon, $new_count, $used_by ): void {
 		if ( ! $coupon instanceof \WC_Coupon || 'yes' !== $coupon->get_meta( '_vcap_voucher' ) ) {
 			return;
