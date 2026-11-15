@@ -11,6 +11,56 @@ final class NextSteps {
 	public function register(): void {
 		add_action( 'woocommerce_email_after_order_table', array( $this, 'order_email' ), 20, 4 );
 		add_action( 'woocommerce_order_details_after_order_table', array( $this, 'thankyou' ), 4 );
+		add_action( 'woocommerce_before_cart', array( $this, 'cart_hint' ) );
+		add_action( 'woocommerce_before_checkout_form', array( $this, 'cart_hint' ), 5 );
+	}
+
+	/**
+	 * M12-52: the security hold of a new customer's first voucher order above "vcap_hold_new_customer_above"
+	 * (V7, Delivery::hold_until()) explained before the purchase: '' when the hold is off or a voucher of this
+	 * product (price, fixed amount or highest custom amount) cannot be worth more than the threshold.
+	 */
+	public static function hold_hint( array $config, float $price = 0.0 ): string {
+		$above = (float) Settings::value( 'vcap_hold_new_customer_above' );
+		$hours = (float) Settings::value( 'vcap_hold_hours' );
+		if ( $above <= 0 || $hours <= 0 ) {
+			return '';
+		}
+		$custom = 'custom' === (string) ( $config['amount_source'] ?? '' );
+		$max    = $custom ? ProductConfig::effective_custom_max( $config ) : '';
+		$value  = max( $price, (float) ( $config['amount'] ?? 0 ), '' !== $max ? (float) $max : 0.0 );
+		if ( ! ( $custom && '' === $max ) && $value <= $above + 0.00001 ) {
+			return '';
+		}
+		return self::hold_text( $above, $hours );
+	}
+
+	private static function hold_text( float $above, float $hours ): string {
+		return sprintf(
+			/* translators: 1: amount, 2: number of hours */
+			_n( 'For your security, vouchers of a first order above %1$s are delivered and redeemable %2$s hour after the payment.', 'For your security, vouchers of a first order above %1$s are delivered and redeemable %2$s hours after the payment.', (int) ceil( $hours ), 'voucher-captain' ),
+			wp_strip_all_tags( wc_price( $above ) ),
+			wc_format_localized_decimal( (string) round( $hours, 1 ) )
+		);
+	}
+
+	/**
+	 * M12-52: cart and checkout name the security hold when the vouchers in the cart are worth more than the
+	 * threshold and the customer has no established order yet (guests without a known address included).
+	 */
+	public function cart_hint(): void {
+		$above = (float) Settings::value( 'vcap_hold_new_customer_above' );
+		$hours = (float) Settings::value( 'vcap_hold_hours' );
+		$cart  = function_exists( 'WC' ) && WC()->cart ? WC()->cart : null;
+		if ( $above <= 0 || $hours <= 0 || ! $cart || VoucherPurchaseRules::cart_voucher_value( $cart ) <= $above + 0.00001 ) {
+			return;
+		}
+		$email = WC()->customer ? (string) WC()->customer->get_billing_email() : '';
+		$user  = get_current_user_id();
+		if ( ( $user > 0 || '' !== $email ) && VoucherPurchaseRules::customer_orders( $user, $email, 0, time() - (int) round( $hours * HOUR_IN_SECONDS ) ) ) {
+			return; // An established customer: not held.
+		}
+		wc_print_notice( self::hold_text( $above, $hours ), 'notice' );
 	}
 
 	/**

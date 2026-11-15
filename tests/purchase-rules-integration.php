@@ -141,6 +141,37 @@ update_option( 'vcap_customer_daily_limit', 0 );
 vcap_rules_assert( '' === $v7_limit( 40 ), 'V7: 0 switches the limit off' );
 delete_option( 'vcap_customer_daily_limit' );
 
+// M12-52: refused checkouts are counted (once per customer session and day) and shown in Site Health.
+delete_option( VCAP\VoucherPurchaseRules::REFUSALS_OPTION );
+WC()->session->set( 'vcap_limit_refused', null );
+$v7_limit( 21 );
+$v7_limit( 22 );
+$m52_once = VCAP\VoucherPurchaseRules::refusals();
+WC()->session->set( 'vcap_limit_refused', null ); // Another customer.
+$v7_limit( 21 );
+$m52_health = ( new VCAP\Health() )->test_purchase_limits();
+vcap_rules_assert( 1 === $m52_once && 2 === VCAP\VoucherPurchaseRules::refusals() && 'recommended' === $m52_health['status'] && str_contains( $m52_health['description'], '2 checkouts' ), 'M12-52: checkouts refused by the daily limit are counted once per session and reported in Site Health' );
+delete_option( VCAP\VoucherPurchaseRules::REFUSALS_OPTION );
+vcap_rules_assert( 'good' === ( new VCAP\Health() )->test_purchase_limits()['status'], 'M12-52: without refusals Site Health reports nothing to do' );
+// M12-52: the security hold of first orders above 250 is named on the product page and in the cart.
+$m52_cfg = VCAP\ProductConfig::get( $gift_product );
+vcap_rules_assert( '' === VCAP\NextSteps::hold_hint( $m52_cfg, 50.0 ) && str_contains( VCAP\NextSteps::hold_hint( $m52_cfg, 300.0 ), '24 hours' ) && str_contains( VCAP\NextSteps::hold_hint( array_merge( $m52_cfg, array( 'amount_source' => 'custom', 'custom_max' => '' ) ), 0.0 ), 'first order' ), 'M12-52: the product page names the hold when a voucher can be worth more than the threshold (price or custom amount)' );
+WC()->customer->set_billing_email( "m52-new-{$v7_tag}@example.com" );
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart( $gift_product->get_id(), 6 );
+WC()->cart->calculate_totals();
+ob_start();
+( new VCAP\NextSteps() )->cart_hint();
+$m52_cart = (string) ob_get_clean();
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart( $gift_product->get_id(), 2 );
+WC()->cart->calculate_totals();
+ob_start();
+( new VCAP\NextSteps() )->cart_hint();
+$m52_small = (string) ob_get_clean();
+WC()->cart->empty_cart();
+vcap_rules_assert( str_contains( $m52_cart, 'For your security' ) && '' === $m52_small, 'M12-52: the cart of a new customer above 250 names the hold, a smaller cart does not', array( $m52_cart, $m52_small ) );
+
 // AP-P1-1: the 24-hour limit reads one day of orders (created_after in SQL on both order stores), once per request.
 $p11_old = wc_create_order();
 $p11_old->add_product( $gift_product, 2 );

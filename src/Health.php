@@ -84,7 +84,7 @@ final class Health {
 
 	public function tests( $tests ) {
 		$tests = (array) $tests;
-		foreach ( array( 'extensions', 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets', 'offline_payment', 'currency', 'rate_limits', 'template_images', 'template_overrides' ) as $id ) {
+		foreach ( array( 'extensions', 'schema', 'scheduler', 'mail', 'sender_domain', 'purchase_limits', 'upload_dir', 'redeem_page', 'markets', 'offline_payment', 'currency', 'rate_limits', 'template_images', 'template_overrides' ) as $id ) {
 			$tests['direct'][ 'vcap_' . $id ] = array(
 				'label' => __( 'Voucher Captain', 'voucher-captain' ),
 				'test'  => array( $this, 'test_' . $id ),
@@ -286,6 +286,58 @@ final class Health {
 			(string) $last['error']
 		);
 		return self::result( 'mail', 'critical', __( 'Emails could not be sent', 'voucher-captain' ), $text . ' ' . __( 'Vouchers and tickets are delivered by email: configure an SMTP or mail service plugin and send a test mail.', 'voucher-captain' ) );
+	}
+
+	/**
+	 * M12-84: voucher emails sent "from" another domain than the shop's without an SMTP / mail service plugin are
+	 * often filtered as spam (SPF/DKIM do not match).
+	 */
+	public function test_sender_domain(): array {
+		$from   = strtolower( trim( (string) get_option( 'woocommerce_email_from_address', get_option( 'admin_email' ) ) ) );
+		$domain = (string) substr( (string) strrchr( $from, '@' ), 1 );
+		$site   = strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
+		$site   = (string) preg_replace( '/^www\./', '', $site );
+		$same   = '' === $domain || '' === $site || $domain === $site || str_ends_with( $site, '.' . $domain ) || str_ends_with( $domain, '.' . $site );
+		if ( $same || self::smtp_plugin() ) {
+			return self::result( 'sender_domain', 'good', __( 'The sender address of the emails fits the shop', 'voucher-captain' ), __( 'Voucher emails are sent from an address of the shop\'s domain or through a mail service plugin.', 'voucher-captain' ) );
+		}
+		return self::result(
+			'sender_domain',
+			'recommended',
+			__( 'Voucher emails are sent from another domain', 'voucher-captain' ),
+			sprintf(
+				/* translators: 1: sender domain, 2: shop domain */
+				__( 'The emails are sent from an address at %1$s, but the shop runs on %2$s, and no SMTP or mail service plugin was found. Such emails often land in spam: use a sender address of the shop\'s domain (WooCommerce → Settings → Emails) or set up an SMTP plugin.', 'voucher-captain' ),
+				$domain,
+				$site
+			)
+		);
+	}
+
+	/** M12-84: whether a known SMTP / mail service plugin (or any phpmailer_init / pre_wp_mail handler) sends the mails. */
+	public static function smtp_plugin(): bool {
+		$known = defined( 'WPMS_PLUGIN_VER' ) || defined( 'POST_SMTP_VER' ) || defined( 'FLUENTMAIL' ) || defined( 'EASY_WP_SMTP_PLUGIN_VERSION' ) || class_exists( '\WPMailSMTP\Core' ) || class_exists( '\FluentMail\App\Hooks\Handlers\ActionHandler' );
+		/** Whether the site sends its mails through an SMTP or mail service plugin (Site Health sender check). */
+		return (bool) apply_filters( 'vcap_smtp_plugin_active', $known || has_action( 'phpmailer_init' ) );
+	}
+
+	/** M12-52: checkouts the daily voucher limit refused in the last 30 days (VoucherPurchaseRules::record_refusal()). */
+	public function test_purchase_limits(): array {
+		$refused = VoucherPurchaseRules::refusals( 30 );
+		if ( ! $refused ) {
+			return self::result( 'purchase_limits', 'good', __( 'No purchases refused by the daily voucher limit', 'voucher-captain' ), __( 'Voucher Captain counts the checkouts that the maximum voucher value per customer and 24 hours refused (last 30 days).', 'voucher-captain' ) );
+		}
+		return self::result(
+			'purchase_limits',
+			'recommended',
+			__( 'Purchases were refused by the daily voucher limit', 'voucher-captain' ),
+			sprintf(
+				/* translators: 1: number of refused checkouts, 2: limit */
+				_n( '%1$d checkout was refused in the last 30 days because the vouchers exceeded the limit of %2$s per customer and 24 hours. If regular customers are affected, raise the limit in the voucher settings.', '%1$d checkouts were refused in the last 30 days because the vouchers exceeded the limit of %2$s per customer and 24 hours. If regular customers are affected, raise the limit in the voucher settings.', $refused, 'voucher-captain' ),
+				$refused,
+				wp_strip_all_tags( wc_price( (float) Settings::value( 'vcap_customer_daily_limit' ) ) )
+			)
+		);
 	}
 
 	public function test_upload_dir(): array {

@@ -470,6 +470,11 @@ final class Fields {
 			if ( '' !== $hint ) {
 				echo '<p class="vcap-delivery-hint">' . esc_html( $hint ) . '</p>';
 			}
+			// M12-52: the security hold of new customers' larger orders, before the purchase.
+			$hold = NextSteps::hold_hint( $config, (float) $product->get_price() );
+			if ( '' !== $hold ) {
+				echo '<p class="vcap-hold-hint">' . esc_html( $hold ) . '</p>';
+			}
 		}
 		if ( 'before_button' === $position && 'yes' === $config['preview'] ) {
 			echo '<p class="vcap-preview-row"><button type="button" class="button vcap-preview-button" data-product="' . esc_attr( (string) $product->get_id() ) . '">' . esc_html__( 'Preview voucher', 'voucher-captain' ) . '</button></p>';
