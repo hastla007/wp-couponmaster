@@ -217,7 +217,10 @@ $f12_v->message = "Don't forget: dinner at O'Neill's & co.";
 $f12_v->terms   = "Not valid at O'Hara's.";
 $f12_v->send_to = 'recipient';
 vcap()->vouchers->update( $f12_v );
+$f12_type           = $emails['VCAP_Email_Voucher_Recipient']->email_type;
+$emails['VCAP_Email_Voucher_Recipient']->email_type = 'plain'; // The settings alone do not switch an initialised email.
 list( , $f12_body ) = vcap_mail_send( 'VCAP_Email_Voucher_Recipient', $f12_v );
+$emails['VCAP_Email_Voucher_Recipient']->email_type = $f12_type;
 $f12_raw            = (string) end( $captured )['message'];
 vcap_mail_assert( str_contains( $f12_raw, "Don't forget: dinner at O'Neill's & co." ) && str_contains( $f12_raw, "Not valid at O'Hara's." ) && ! str_contains( $f12_raw, '&#' ), 'AP-F1-2: an apostrophe ("O\'Neill\'s") survives in a plain voucher email (message and terms)', $f12_raw );
 $f12_list = array( $f12_v, vcap()->vouchers->get( $f12_v->id ) );
@@ -231,7 +234,10 @@ $f12_list[1]->code = $f12_v->code . '-B';
 $f12_bundle        = $emails['VCAP_Email_Voucher_Bundle'];
 $f12_bundle->settings['email_type'] = 'plain';
 $f12_bundle->settings['enabled']    = 'yes';
+$f12_bundle_type                  = $f12_bundle->email_type;
+$f12_bundle->email_type           = 'plain';
 $f12_bundle->trigger_bundle( $f12_list, 'buyer' ); // The buyer copy names the holder per code.
+$f12_bundle->email_type = $f12_bundle_type;
 $f12_raw = (string) end( $captured )['message'];
 vcap_mail_assert( str_contains( $f12_raw, "Don't forget: dinner at O'Neill's & co." ) && str_contains( $f12_raw, "Not valid at O'Hara's." ) && str_contains( $f12_raw, "Siobhan O'Brien" ) && ! str_contains( $f12_raw, '&#' ), 'AP-F1-2: an apostrophe in "O\'Brien" survives in the plain bundled email (holder name, message, terms)', $f12_raw );
 

@@ -23,6 +23,38 @@ $product->update_meta_data( '_vcap_enabled', 'yes' );
 $product->update_meta_data( '_vcap_builtin_fields', array( 'recipient_name', 'recipient_email_required', 'message' ) );
 $product->save();
 
+// AP-F1-1 (before any Store API request of this run: those leave their field values in the Fields instance).
+// A page with a single-product block runs do_shortcode() over the block output. A crafted link
+// (?vcap_fields[message]=[shortcode]) must neither prefill the fields nor run a shortcode through them.
+$GLOBALS['vcap_f11_ran'] = 0;
+add_shortcode( 'vcap_f11_probe', static function () {
+	++$GLOBALS['vcap_f11_ran'];
+	return 'F11-PROBE-RAN';
+} );
+$f11_page = wp_insert_post(
+	array(
+		'post_type'    => 'page',
+		'post_status'  => 'publish',
+		'post_title'   => 'AP-F1-1 landing page',
+		'post_content' => '<!-- wp:woocommerce/single-product {"productId":' . $product->get_id() . '} --><div class="wp-block-woocommerce-single-product"><!-- wp:woocommerce/add-to-cart-form /--></div><!-- /wp:woocommerce/single-product -->',
+	)
+);
+$_GET['vcap_fields']     = array( 'message' => '[vcap_f11_probe]', 'recipient_email' => 'attacker@example.com' );
+$_REQUEST['vcap_fields'] = $_GET['vcap_fields'];
+$GLOBALS['post']         = get_post( $f11_page ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride
+setup_postdata( $GLOBALS['post'] );
+$f11_html = apply_filters( 'the_content', get_post_field( 'post_content', $f11_page ) );
+wp_reset_postdata();
+unset( $_GET['vcap_fields'], $_REQUEST['vcap_fields'] );
+vcap_blocks_assert( str_contains( $f11_html, 'vcap_fields[message]' ), 'AP-F1-1: the single-product block renders the voucher fields', substr( wp_strip_all_tags( $f11_html ), 0, 300 ) );
+vcap_blocks_assert( 0 === $GLOBALS['vcap_f11_ran'] && ! str_contains( $f11_html, 'F11-PROBE-RAN' ) && ! str_contains( $f11_html, 'attacker@example.com' ), 'AP-F1-1: a link with ?vcap_fields[...] prefills nothing and runs no shortcode in the product block' );
+// Values posted back after a refused add to cart are shown again, with brackets as entities.
+$_POST['vcap_fields'] = array( 'message' => '[vcap_f11_probe]' );
+$f11_posted           = apply_filters( 'the_content', get_post_field( 'post_content', $f11_page ) );
+unset( $_POST['vcap_fields'] );
+vcap_blocks_assert( 0 === $GLOBALS['vcap_f11_ran'] && str_contains( $f11_posted, '&#91;vcap_f11_probe&#93;' ), 'AP-F1-1: a posted value is shown again with escaped brackets and runs no shortcode', array( $GLOBALS['vcap_f11_ran'], preg_match( '/<textarea[^>]*vcap_fields\[message\][^>]*>[^<]*<\/textarea>|<input[^>]*vcap_fields\[message\][^>]*>/', $f11_posted, $f11_m ) ? $f11_m[0] : substr( $f11_posted, 0, 500 ) ) );
+wp_delete_post( $f11_page, true );
+
 function vcap_blocks_add( int $id, array $fields ) {
 	$request = new WP_REST_Request( 'POST', '/wc/store/v1/cart/add-item' );
 	$request->set_param( 'id', $id );
@@ -68,37 +100,6 @@ sort( $emails );
 vcap_blocks_assert( array( 'block@example.com', 'other@example.com' ) === $emails, 'checkout writes the fields onto the order lines' );
 
 WC()->cart->empty_cart();
-
-// AP-F1-1: a page with a single-product block runs do_shortcode() over the block output. A crafted link
-// (?vcap_fields[message]=[shortcode]) must neither prefill the fields nor run a shortcode through them.
-$GLOBALS['vcap_f11_ran'] = 0;
-add_shortcode( 'vcap_f11_probe', static function () {
-	++$GLOBALS['vcap_f11_ran'];
-	return 'F11-PROBE-RAN';
-} );
-$f11_page = wp_insert_post(
-	array(
-		'post_type'    => 'page',
-		'post_status'  => 'publish',
-		'post_title'   => 'AP-F1-1 landing page',
-		'post_content' => '<!-- wp:woocommerce/single-product {"productId":' . $product->get_id() . '} --><div class="wp-block-woocommerce-single-product"><!-- wp:woocommerce/add-to-cart-form /--></div><!-- /wp:woocommerce/single-product -->',
-	)
-);
-$_GET['vcap_fields']     = array( 'message' => '[vcap_f11_probe]', 'recipient_email' => 'attacker@example.com' );
-$_REQUEST['vcap_fields'] = $_GET['vcap_fields'];
-$GLOBALS['post']         = get_post( $f11_page ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride
-setup_postdata( $GLOBALS['post'] );
-$f11_html = apply_filters( 'the_content', get_post_field( 'post_content', $f11_page ) );
-wp_reset_postdata();
-unset( $_GET['vcap_fields'], $_REQUEST['vcap_fields'] );
-vcap_blocks_assert( str_contains( $f11_html, 'vcap_fields[message]' ), 'AP-F1-1: the single-product block renders the voucher fields', substr( wp_strip_all_tags( $f11_html ), 0, 300 ) );
-vcap_blocks_assert( 0 === $GLOBALS['vcap_f11_ran'] && ! str_contains( $f11_html, 'F11-PROBE-RAN' ) && ! str_contains( $f11_html, 'attacker@example.com' ), 'AP-F1-1: a link with ?vcap_fields[...] prefills nothing and runs no shortcode in the product block' );
-// Values posted back after a refused add to cart are shown again, with brackets as entities.
-$_POST['vcap_fields'] = array( 'message' => '[vcap_f11_probe]' );
-$f11_posted           = apply_filters( 'the_content', get_post_field( 'post_content', $f11_page ) );
-unset( $_POST['vcap_fields'] );
-vcap_blocks_assert( 0 === $GLOBALS['vcap_f11_ran'] && str_contains( $f11_posted, '&#91;vcap_f11_probe&#93;' ), 'AP-F1-1: a posted value is shown again with escaped brackets and runs no shortcode' );
-wp_delete_post( $f11_page, true );
 
 // Cart and checkout blocks: voucher payments after tax, remaining balance and the store credit hint come with
 // the Store API cart (extensions["voucher-captain"]), not only from the classic PHP hooks.
