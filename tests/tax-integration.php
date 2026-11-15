@@ -20,6 +20,11 @@ function vcap_tax_assert( bool $condition, string $message, $detail = null ): vo
 	echo "PASS: {$message}\n";
 }
 
+// M12-03: new installations settle multi-purpose vouchers as a payment after tax ("Multi-purpose vouchers as
+// payment" on). This suite checks the coupon mode of existing shops; the payment mode is covered in
+// tests/tax-integration.php section 8 and tests/tax-accounting-integration.php.
+update_option( VCAP\PaymentVouchers::OPTION, 'no' );
+
 /** A voucher product with the given VAT treatment setting (meta only, as the product form saves it). */
 function vcap_tax_product( string $treatment, string $discount_type = 'fixed_cart', string $type = 'voucher', string $usage = 'single' ): WC_Product_Simple {
 	$product = new WC_Product_Simple();
@@ -597,6 +602,8 @@ list( $t15_gap, $t15_gap_left ) = $pay_with_card( $order_with( array( array( $go
 $t15_card   = vcap()->vouchers->get_by_code( current( $t15_gap->get_coupon_codes() ) );
 $t15_events = wp_list_pluck( vcap()->vouchers->events( $t15_card->id ), 'amount', 'event' );
 vcap_tax_assert( abs( 70.12 - (float) $t15_gap->get_total() ) < 0.001 && 0.0 === $t15_gap_left && abs( 0.01 - (float) ( $t15_events[ VCAP\CouponManager::WRITTEN_OFF_EVENT ] ?? 0 ) ) < 0.0001 && VCAP\Voucher::STATUS_REDEEMED === $t15_card->status, 'net prices (T15): a 49.89 card pays 49.88, the remaining cent is booked off with event "rounding_written_off" (card used up)', array( 'total' => $t15_gap->get_total(), 'left' => $t15_gap_left, 'events' => $t15_events ) );
+$t15_off = current( array_filter( vcap()->vouchers->events( $t15_card->id ), static fn( $e ) => VCAP\CouponManager::WRITTEN_OFF_EVENT === $e['event'] ) );
+vcap_tax_assert( $t15_off && (int) $t15_off['order_id'] === $t15_gap->get_id(), 'M12-29: the booked-off rounding rest carries the order id (journal, accounting)', $t15_off );
 wc_get_order( $t15_gap->get_id() )->update_status( 'cancelled' );
 vcap_tax_assert( abs( 49.89 - (float) vcap()->vouchers->get( $t15_card->id )->balance ) < 0.0001, 'net prices (T15): cancelling that order gives the card its full 49.89 back (charge + booked-off cent)', vcap()->vouchers->get( $t15_card->id )->balance );
 // A card bigger than the order keeps its (legitimate) rest, also a single cent.

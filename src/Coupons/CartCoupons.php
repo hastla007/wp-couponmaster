@@ -143,7 +143,7 @@ final class CartCoupons {
 			return false;
 		}
 		$voucher = $this->repo->get_by_code( wc_format_coupon_code( $coupon->get_code() ) );
-		$means   = $voucher && ! $voucher->is_ticket() && 'payment' === ProductConfig::tax_treatment( $voucher );
+		$means   = $voucher && $voucher->has_cash_value() && 'payment' === ProductConfig::tax_treatment( $voucher ); // M12-10
 		return (bool) apply_filters( 'vcap_voucher_is_means_of_payment', $means, $coupon, $voucher );
 	}
 
@@ -312,7 +312,9 @@ final class CartCoupons {
 		}
 		$voucher = $coupon->get_id() ? $this->repo->get_by_coupon( $coupon->get_id() ) : null;
 		$voucher = $voucher ?? $this->repo->get_by_code( $code );
-		if ( ! $voucher || ! $voucher->is_multi_use() || ( PaymentVouchers::enabled() && self::payments( $this->repo )->applies( $coupon ) ) ) {
+		// M12-27: a single-use multi-purpose voucher is money as well (pays 100 gross, not 100 net + VAT).
+		$money = $voucher && ( $voucher->is_multi_use() || ( $voucher->has_cash_value() && 'payment' === ProductConfig::tax_treatment( $voucher ) ) );
+		if ( ! $money || ( PaymentVouchers::enabled() && self::payments( $this->repo )->applies( $coupon ) ) ) {
 			return $items; // Paid after tax as a fee line: nothing to convert.
 		}
 		$taxed = array_filter(

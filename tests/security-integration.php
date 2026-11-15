@@ -60,8 +60,11 @@ vcap_security_assert( array() === vcap()->vouchers->for_email( $email, 10 ), 'pr
 $all_privacy_ids = $wpdb->get_col( $wpdb->prepare( 'SELECT id FROM ' . VCAP\Install::tables()['vouchers'] . ' WHERE code LIKE %s', 'vcap-privacy-%' ) );
 $still_personal   = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . VCAP\Install::tables()['vouchers'] . ' WHERE buyer_email = %s OR recipient_email = %s', $email, $email ) );
 vcap_security_assert( 0 === $still_personal && $all_privacy_ids, 'erasure leaves voucher records but removes direct identifiers' );
-$privacy_event = $wpdb->get_var( $wpdb->prepare( 'SELECT note FROM ' . VCAP\Install::tables()['events'] . ' WHERE voucher_id = %d ORDER BY id DESC LIMIT 1', (int) $all_privacy_ids[0] ) );
+$privacy_event = $wpdb->get_var( $wpdb->prepare( 'SELECT note FROM ' . VCAP\Install::tables()['events'] . " WHERE voucher_id = %d AND event <> 'privacy_erased' ORDER BY id DESC LIMIT 1", (int) $all_privacy_ids[0] ) );
 vcap_security_assert( '[personal data removed]' === $privacy_event, 'erasure redacts free-text audit notes while preserving event rows' );
+// M12-66: the erasure itself is logged (no personal data in it).
+$privacy_last = $wpdb->get_var( $wpdb->prepare( 'SELECT event FROM ' . VCAP\Install::tables()['events'] . ' WHERE voucher_id = %d ORDER BY id DESC LIMIT 1', (int) $all_privacy_ids[0] ) );
+vcap_security_assert( VCAP\TaxAccounting::ERASED_EVENT === $privacy_last, 'M12-66: the erasure is logged as its own history event' );
 
 // A customer who used someone else's voucher is named in its history ("used by"): exported and erased too.
 $user_email = 'privacy-user-' . strtolower( wp_generate_password( 8, false, false ) ) . '@example.test';

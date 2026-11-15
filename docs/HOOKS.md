@@ -127,6 +127,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_order_codes_visible` | `src/Downloads.php` | Whether the current visitor may see the full voucher codes and PDF links of an order (default: order key or own order). |
 | `vcap_order_language` | `src/Compat/Multilingual.php` | Language code of an order (e.g. for another multilingual plugin); '' = the site language. |
 | `vcap_order_lines` | `src/API/V1/VoucherService.php` | Filters the per-line order data handed to connector plugins. |
+| `vcap_order_voucher_payments` | `src/PaymentVouchers.php` | Voucher payments after tax of an order (code => amount, order currency), e.g. for an accounting export. |
 | `vcap_orphaned_hold_days` | `src/Coupons/Reservations.php` | – |
 | `vcap_page_has_redeem_form` | `src/Shortcodes.php` | Whether the page shows the redeem form (e.g. true when a theme template renders it). |
 | `vcap_passcaptain_can_resend_tickets` | `src/Compat/PassCaptain/Customer.php` | – |

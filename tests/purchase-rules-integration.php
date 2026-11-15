@@ -12,6 +12,11 @@ function vcap_rules_assert( bool $condition, string $message ): void {
 	echo "PASS: {$message}\n";
 }
 
+// M12-03: new installations settle multi-purpose vouchers as a payment after tax ("Multi-purpose vouchers as
+// payment" on). This suite checks the coupon mode of existing shops; the payment mode is covered in
+// tests/tax-integration.php section 8 and tests/tax-accounting-integration.php.
+update_option( VCAP\PaymentVouchers::OPTION, 'no' );
+
 function vcap_rules_product( string $name, string $price, bool $voucher ): WC_Product_Simple {
 	$p = new WC_Product_Simple();
 	$p->set_name( $name );

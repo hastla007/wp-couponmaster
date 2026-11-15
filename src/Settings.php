@@ -386,7 +386,7 @@ final class Settings {
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_passcaptain' ),
 		);
-		return $fields;
+		return array_merge( $fields, DatevExport::settings_fields() ); // M12-69.
 	}
 
 	/** Section "Privacy & advanced" with the counter limits. */
@@ -652,7 +652,7 @@ final class Settings {
 				'id'      => PaymentVouchers::OPTION,
 				'type'    => 'checkbox',
 				'default' => 'no',
-				'desc'    => __( 'Settle multi-purpose vouchers (gift cards, value vouchers sold in the shop, store credit) as a payment after tax: the order keeps the full VAT and the voucher pays part of the total as a separate line. This applies only to vouchers with the VAT treatment "Multi-purpose voucher" (or automatic) and the discount type "Fixed cart discount"; single-purpose vouchers, promotions, percentages, "Fixed product discount" and ticket vouchers keep lowering price and VAT. Off: every voucher is a coupon and lowers price and VAT (previous behaviour). Have the switch confirmed by your tax adviser.', 'voucher-captain' ) . $this->not_settled_note(),
+				'desc'    => __( 'Settle multi-purpose vouchers (gift cards, value vouchers sold in the shop, store credit) as a payment after tax: the order keeps the full VAT and the voucher pays part of the total as a separate line. This applies only to vouchers with the VAT treatment "Multi-purpose voucher" (or automatic) and the discount type "Fixed cart discount"; single-purpose vouchers, promotions, percentages, "Fixed product discount" and ticket vouchers without a value keep lowering price and VAT. Off: every voucher is a coupon and lowers price and VAT (previous behaviour). Have the switch confirmed by your tax adviser.', 'voucher-captain' ) . $this->not_settled_note(),
 			),
 			array(
 				'title'   => __( 'Void vouchers on refund', 'voucher-captain' ),

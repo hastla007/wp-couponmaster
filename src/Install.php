@@ -261,6 +261,11 @@ final class Install {
 	public static function activate_site(): void {
 		// Schema work only under the upgrade lock; when another request holds it, that request finishes the schema.
 		$locked = self::lock();
+		// M12-03: a new installation settles multi-purpose vouchers as a payment after tax (VAT on the full price,
+		// the voucher pays shipping and fees too). Existing shops keep their setting (missing option = off).
+		if ( '' === self::stored_version() ) {
+			add_option( PaymentVouchers::OPTION, 'yes' );
+		}
 		try {
 			if ( $locked ) {
 				$installed = self::stored_version();

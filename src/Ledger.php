@@ -15,18 +15,22 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Ledger {
 	/** Events that move monetary value. */
-	public const MONEY_EVENTS = array( 'issued', 'redeemed', 'committed', 'restored', 'adjusted', 'credit', 'debit', 'refund_credit', 'refund_credit_reversed', 'api_committed', 'api_refunded', 'passcaptain_tickets_restored', 'topup', 'topup_reversed', 'redeem_reversed', CouponManager::WRITTEN_OFF_EVENT );
+	public const MONEY_EVENTS = array( 'issued', 'redeemed', 'committed', 'restored', 'adjusted', 'credit', 'debit', 'refund_credit', 'refund_credit_reversed', 'api_committed', 'api_refunded', 'passcaptain_tickets_restored', 'topup', 'topup_reversed', 'redeem_reversed', CouponManager::WRITTEN_OFF_EVENT, 'expired', TaxAccounting::EXPIRY_REVERSED_EVENT, TaxAccounting::FORFEITED_EVENT, TaxAccounting::REST_CONVERTED_EVENT );
 	/** Events after which a single-use voucher no longer carries value (until restored or reactivated). */
-	private const USED_EVENTS = array( 'redeemed', 'committed', 'api_committed', 'voided' );
+	private const USED_EVENTS = array( 'redeemed', 'committed', 'api_committed', 'voided', TaxAccounting::FORFEITED_EVENT, TaxAccounting::REST_CONVERTED_EVENT );
 	private const BACK_EVENTS = array( 'restored', 'api_refunded', 'reactivated', 'passcaptain_tickets_restored', 'redeem_reversed' );
-	/** U6: bookings that take value off a voucher (shown negative in the journal); 'adjusted' carries its own sign. */
-	public const OUT_EVENTS = array( 'redeemed', 'committed', 'debit', 'refund_credit_reversed', 'api_committed', 'topup_reversed', CouponManager::WRITTEN_OFF_EVENT );
+	/**
+	 * U6: bookings that take value off a voucher (shown negative in the journal); 'adjusted' carries its own sign.
+	 * M12-29: the value lost at the expiry ('expired', booked back by 'expiry_reversed') and the rest of a single-use
+	 * voucher its order did not use ('forfeited', or 'rest_converted' into store credit / a new gift card).
+	 */
+	public const OUT_EVENTS = array( 'redeemed', 'committed', 'debit', 'refund_credit_reversed', 'api_committed', 'topup_reversed', CouponManager::WRITTEN_OFF_EVENT, 'expired', TaxAccounting::FORFEITED_EVENT, TaxAccounting::REST_CONVERTED_EVENT );
 	/**
 	 * Vouchers whose bookings are money (same set as the liability): the "amount" of a percentage voucher is its
 	 * percentage, a reusable discount code's use or a ticket's check-in moves no value – they stay in the voucher
 	 * history but never appear in the journal as redeemed money.
 	 */
-	public const VALUE_VOUCHERS = "v.discount_type <> 'percent' AND v.type <> 'ticket' AND v.usage_mode IN ('single','balance')";
+	public const VALUE_VOUCHERS = "v.discount_type <> 'percent' AND ( v.type <> 'ticket' OR v.initial_amount > 0 ) AND v.usage_mode IN ('single','balance')";
 	/**
 	 * Holds on a stored balance: they lower balance_after but the value is still owed until the hold is charged.
 	 * Each hold event is followed by at most one closing event with the same amount, so the open holds at a point
@@ -46,7 +50,10 @@ final class Ledger {
 	 * Outstanding value at the end of $date (Y-m-d, local), summed in the database (no voucher is loaded into
 	 * memory). The per-voucher detail is liability_rows().
 	 *
-	 * @return array{totals: array<string, array<string, array{count:int,amount:float,expired_count:int,expired_amount:float}>>}
+	 * M12-42: free_count/free_amount are the part of count/amount issued without a sale (goodwill, prizes:
+	 * issue_standalone() without "paid") - no consideration was received for them.
+	 *
+	 * @return array{totals: array<string, array<string, array{count:int,amount:float,expired_count:int,expired_amount:float,free_count:int,free_amount:float}>>}
 	 */
 	public function liability( string $date ): array {
 		global $wpdb;
@@ -55,7 +62,7 @@ final class Ledger {
 		// Cached per day: every change of value or validity writes a ledger row (edits included), so the newest
 		// ledger and voucher ids are part of the key.
 		$state     = $wpdb->get_row( "SELECT ( SELECT MAX(id) FROM {$t['events']} ) AS e, ( SELECT MAX(id) FROM {$t['vouchers']} ) AS v", ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$cache_key = 'vcap_liability_' . md5( (string) wp_json_encode( array( $until, $state, get_option( 'woocommerce_currency' ) ) ) );
+		$cache_key = 'vcap_liability_v2_' . md5( (string) wp_json_encode( array( $until, $state, get_option( 'woocommerce_currency' ) ) ) );
 		$cached    = get_transient( $cache_key );
 		if ( is_array( $cached ) && isset( $cached['totals'] ) ) {
 			return $cached;
@@ -64,11 +71,13 @@ final class Ledger {
 		$both  = self::in_list( array_merge( self::USED_EVENTS, self::BACK_EVENTS ) );
 		$holds = self::in_list( self::HOLD_EVENTS );
 		$all   = self::in_list( array_merge( self::HOLD_EVENTS, self::CLOSE_EVENTS ) );
+		$value = self::VALUE_VOUCHERS;
 		// Same rules as value_at(): voided (until reactivated) = 0; gift cards: last balance at that time plus the
 		// holds still open then (reserved for an unpaid order or an external redemption = still owed);
 		// single-use: full value unless the last use/give-back event was a use.
-		$sql  = "SELECT currency, type, expired, COUNT(*) AS cnt, SUM(outstanding) AS amount FROM (
-				SELECT v.currency, v.type, ( v.expires_at IS NOT NULL AND v.expires_at <= %s ) AS expired,
+		$free = self::free_sql();
+		$sql  = "SELECT currency, type, expired, free, COUNT(*) AS cnt, SUM(outstanding) AS amount FROM (
+				SELECT v.currency, v.type, ( v.expires_at IS NOT NULL AND v.expires_at <= %s ) AS expired, {$free} AS free,
 					CASE
 						WHEN 'voided' = ( SELECT e.event FROM {$t['events']} e WHERE e.voucher_id = v.id AND e.created_at <= %s AND e.event IN ('voided','reactivated') ORDER BY e.id DESC LIMIT 1 ) THEN 0
 						WHEN v.usage_mode = 'balance' THEN GREATEST( 0, COALESCE( ( SELECT e.balance_after FROM {$t['events']} e WHERE e.voucher_id = v.id AND e.created_at <= %s AND e.balance_after IS NOT NULL ORDER BY e.id DESC LIMIT 1 ), v.initial_amount ) )
@@ -77,17 +86,21 @@ final class Ledger {
 						ELSE v.initial_amount
 					END AS outstanding
 				FROM {$t['vouchers']} v
-				WHERE v.created_at <= %s AND v.discount_type <> 'percent' AND v.type <> 'ticket' AND v.usage_mode IN ('single','balance')
-			) x WHERE outstanding > 0.00001 GROUP BY currency, type, expired";
-		$rows   = $wpdb->get_results( $wpdb->prepare( $sql, $until, $until, $until, $until, $until, $until ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
+				WHERE v.created_at <= %s AND {$value}
+			) x WHERE outstanding > 0.00001 GROUP BY currency, type, expired, free";
+		$rows   = $wpdb->get_results( $wpdb->prepare( $sql, $until, self::free_pattern(), $until, $until, $until, $until, $until ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
 		$totals = array();
 		foreach ( $rows ? $rows : array() as $r ) {
 			$currency = '' !== (string) $r['currency'] ? (string) $r['currency'] : (string) get_option( 'woocommerce_currency' );
 			$expired  = (bool) (int) $r['expired'];
 			$bucket   = &$totals[ $currency ][ (string) $r['type'] ];
-			$bucket   = $bucket ?? array( 'count' => 0, 'amount' => 0.0, 'expired_count' => 0, 'expired_amount' => 0.0 );
+			$bucket   = $bucket ?? array( 'count' => 0, 'amount' => 0.0, 'expired_count' => 0, 'expired_amount' => 0.0, 'free_count' => 0, 'free_amount' => 0.0 );
 			$bucket[ $expired ? 'expired_count' : 'count' ] += (int) $r['cnt'];
 			$bucket[ $expired ? 'expired_amount' : 'amount' ] = round( $bucket[ $expired ? 'expired_amount' : 'amount' ] + (float) $r['amount'], API\V1\RedemptionService::decimals( $currency ) );
+			if ( ! $expired && (int) $r['free'] ) {
+				$bucket['free_count'] += (int) $r['cnt'];
+				$bucket['free_amount'] = round( $bucket['free_amount'] + (float) $r['amount'], API\V1\RedemptionService::decimals( $currency ) );
+			}
 			unset( $bucket );
 		}
 		set_transient( $cache_key, array( 'totals' => $totals ), HOUR_IN_SECONDS );
@@ -97,15 +110,16 @@ final class Ledger {
 	/**
 	 * Vouchers with outstanding value at the end of $date, one row each, read in batches of 500.
 	 *
-	 * @return \Generator<array{code:string,type:string,currency:string,issued:string,expires:string,order_id:int,outstanding:float,expired:bool,decimals:int}>
+	 * @return \Generator<array{code:string,type:string,currency:string,issued:string,expires:string,order_id:int,outstanding:float,expired:bool,decimals:int,sold:bool}>
 	 */
 	public function liability_rows( string $date ): \Generator {
 		global $wpdb;
 		$tables = Install::tables();
 		$until  = self::utc_range( $date, $date )[1];
 		$last   = 0;
+		$value  = self::VALUE_VOUCHERS;
 		do {
-			$vouchers = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$tables['vouchers']} WHERE id > %d AND created_at <= %s AND discount_type <> 'percent' AND type <> 'ticket' AND usage_mode IN ('single','balance') ORDER BY id LIMIT 500", $last, $until ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$vouchers = $wpdb->get_results( $wpdb->prepare( "SELECT v.* FROM {$tables['vouchers']} v WHERE v.id > %d AND v.created_at <= %s AND {$value} ORDER BY v.id LIMIT 500", $last, $until ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			if ( ! $vouchers ) {
 				break;
 			}
@@ -133,11 +147,28 @@ final class Ledger {
 					'outstanding' => $value,
 					'expired'     => $v->expires_at && $v->expires_at <= $until,
 					'decimals'    => $v->decimals(),
+					// M12-42: issued without a sale (goodwill, prize) = false; unknown (older vouchers) counts as sold.
+					'sold'        => false !== ProductConfig::is_sold( $v ),
 				);
 			}
 			unset( $events );
 			self::flush_runtime_cache();
 		} while ( count( $vouchers ) === 500 );
+	}
+
+	/**
+	 * M12-42: SQL condition (voucher alias v) of a voucher issued without a sale: no order, no store credit account
+	 * and its "issued" entry records "not sold" (ProductConfig::parse_snapshot()). One placeholder: free_pattern().
+	 */
+	private static function free_sql(): string {
+		$events = Install::tables()['events'];
+		return "( v.order_id = 0 AND v.order_item_id = 0 AND v.type <> 'credit' AND COALESCE( ( SELECT i.note FROM {$events} i WHERE i.voucher_id = v.id AND i.event = 'issued' ORDER BY i.id LIMIT 1 ), '' ) LIKE %s )";
+	}
+
+	/** LIKE pattern of free_sql(): a standalone "issued" note whose last argument (sold) is 0. */
+	private static function free_pattern(): string {
+		global $wpdb;
+		return '%' . $wpdb->esc_like( '"c":"' . Issuer::STANDALONE_NOTE . '"' ) . '%' . $wpdb->esc_like( ',0]}' );
 	}
 
 	/** SQL list of quoted event names. */
@@ -206,7 +237,8 @@ final class Ledger {
 		$value_vouchers = self::VALUE_VOUCHERS;
 		// R6: till/branch and receipt number of counter bookings (columns of schema 1.8.0; '' before).
 		$till = Install::event_till_ready() ? 'e.till, e.receipt' : "'' AS till, '' AS receipt";
-		return $wpdb->get_results( $wpdb->prepare( "SELECT e.id, e.created_at, e.event, e.amount, e.balance_after, e.order_id, e.note, {$till}, v.code, v.type, v.currency FROM {$tables['events']} e INNER JOIN {$tables['vouchers']} v ON v.id = e.voucher_id WHERE e.id > %d AND e.id <= %d AND e.created_at BETWEEN %s AND %s AND e.event IN ({$events}) AND e.amount IS NOT NULL AND {$value_vouchers} ORDER BY e.id LIMIT %d", max( $lo - 1, $after_id, 0 ), $hi, $start, $end, max( 1, $limit ) ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// M12-29: the voucher columns for its VAT treatment and the "issued" entry that holds the treatment at issue.
+		return $wpdb->get_results( $wpdb->prepare( "SELECT e.id, e.created_at, e.event, e.amount, e.balance_after, e.order_id, e.note, {$till}, v.code, v.type, v.currency, v.id AS voucher_id, v.product_id, v.variation_id, v.order_id AS voucher_order_id, v.order_item_id, v.usage_mode, v.discount_type, v.initial_amount, ( SELECT i.note FROM {$tables['events']} i WHERE i.voucher_id = v.id AND i.event = 'issued' ORDER BY i.id LIMIT 1 ) AS issued_note FROM {$tables['events']} e INNER JOIN {$tables['vouchers']} v ON v.id = e.voucher_id WHERE e.id > %d AND e.id <= %d AND e.created_at BETWEEN %s AND %s AND e.event IN ({$events}) AND e.amount IS NOT NULL AND {$value_vouchers} ORDER BY e.id LIMIT %d", max( $lo - 1, $after_id, 0 ), $hi, $start, $end, max( 1, $limit ) ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 
 	/**
@@ -397,13 +429,13 @@ final class Ledger {
 
 	/** Column headers of the liability CSV. */
 	public static function liability_header(): array {
-		return array( __( 'Date', 'voucher-captain' ), __( 'Code', 'voucher-captain' ), __( 'Type', 'voucher-captain' ), __( 'Currency', 'voucher-captain' ), __( 'Issued', 'voucher-captain' ), __( 'Expires', 'voucher-captain' ), __( 'Order number', 'voucher-captain' ), __( 'Order ID', 'voucher-captain' ), __( 'Outstanding value', 'voucher-captain' ), __( 'Expired', 'voucher-captain' ) );
+		return array( __( 'Date', 'voucher-captain' ), __( 'Code', 'voucher-captain' ), __( 'Type', 'voucher-captain' ), __( 'Currency', 'voucher-captain' ), __( 'Issued', 'voucher-captain' ), __( 'Expires', 'voucher-captain' ), __( 'Order number', 'voucher-captain' ), __( 'Order ID', 'voucher-captain' ), __( 'Outstanding value', 'voucher-captain' ), __( 'Expired', 'voucher-captain' ), __( 'Sold', 'voucher-captain' ) );
 	}
 
 	/** One CSV line of liability_rows(). */
 	public static function liability_line( array $r, string $date ): array {
 		$types = Voucher::types();
-		return array( $date, $r['code'], $types[ $r['type'] ] ?? $r['type'], $r['currency'], Csv::date( $r['issued'] ), Csv::date( $r['expires'], false ), Format::order_number( $r['order_id'] ), $r['order_id'] ?: '', Csv::number( $r['outstanding'], (int) ( $r['decimals'] ?? 2 ) ), $r['expired'] ? __( 'Yes', 'voucher-captain' ) : __( 'No', 'voucher-captain' ) );
+		return array( $date, $r['code'], $types[ $r['type'] ] ?? $r['type'], $r['currency'], Csv::date( $r['issued'] ), Csv::date( $r['expires'], false ), Format::order_number( $r['order_id'] ), $r['order_id'] ?: '', Csv::number( $r['outstanding'], (int) ( $r['decimals'] ?? 2 ) ), $r['expired'] ? __( 'Yes', 'voucher-captain' ) : __( 'No', 'voucher-captain' ), ( $r['sold'] ?? true ) ? __( 'Yes', 'voucher-captain' ) : __( 'No', 'voucher-captain' ) );
 	}
 
 	/**
@@ -421,7 +453,7 @@ final class Ledger {
 
 	/** Column headers of the journal CSV. */
 	public static function journal_header(): array {
-		return array( __( 'Date', 'voucher-captain' ), __( 'Code', 'voucher-captain' ), __( 'Type', 'voucher-captain' ), __( 'Currency', 'voucher-captain' ), __( 'Booking', 'voucher-captain' ), __( 'Amount', 'voucher-captain' ), __( 'Balance after', 'voucher-captain' ), __( 'Order number', 'voucher-captain' ), __( 'Order ID', 'voucher-captain' ), __( 'Till / branch', 'voucher-captain' ), __( 'Receipt no.', 'voucher-captain' ), __( 'Note', 'voucher-captain' ) );
+		return array( __( 'Date', 'voucher-captain' ), __( 'Code', 'voucher-captain' ), __( 'Type', 'voucher-captain' ), __( 'Currency', 'voucher-captain' ), __( 'Booking', 'voucher-captain' ), __( 'Amount', 'voucher-captain' ), __( 'Balance after', 'voucher-captain' ), __( 'Order number', 'voucher-captain' ), __( 'Order ID', 'voucher-captain' ), __( 'Till / branch', 'voucher-captain' ), __( 'Receipt no.', 'voucher-captain' ), __( 'Note', 'voucher-captain' ), __( 'VAT treatment', 'voucher-captain' ), __( 'Order amount', 'voucher-captain' ) );
 	}
 
 	/** One CSV line of a journal booking. */
@@ -430,7 +462,44 @@ final class Ledger {
 		$labels   = $labels ?? VoucherRepository::event_labels();
 		$types    = $types ?? Voucher::types();
 		$decimals = API\V1\RedemptionService::decimals( (string) ( $r['currency'] ?: get_option( 'woocommerce_currency' ) ) );
-		return array( Csv::date( $r['created_at'] ), $r['code'], $types[ $r['type'] ] ?? $r['type'], $r['currency'], $labels[ $r['event'] ] ?? $r['event'], Csv::number( self::signed_amount( (string) $r['event'], $r['amount'] ), $decimals ), null === $r['balance_after'] ? '' : Csv::number( (float) $r['balance_after'], $decimals ), Format::order_number( $r['order_id'] ), $r['order_id'] ?: '', (string) ( $r['till'] ?? '' ), (string) ( $r['receipt'] ?? '' ), Note::render( (string) $r['note'] ) );
+		$total    = Format::order_total( $r['order_id'] );
+		return array( Csv::date( $r['created_at'] ), $r['code'], $types[ $r['type'] ] ?? $r['type'], $r['currency'], $labels[ $r['event'] ] ?? $r['event'], Csv::number( self::signed_amount( (string) $r['event'], $r['amount'] ), $decimals ), null === $r['balance_after'] ? '' : Csv::number( (float) $r['balance_after'], $decimals ), Format::order_number( $r['order_id'] ), $r['order_id'] ?: '', (string) ( $r['till'] ?? '' ), (string) ( $r['receipt'] ?? '' ), Note::render( (string) $r['note'] ), ProductConfig::treatment_label( self::row_treatment( $r ) ), null === $total ? '' : Csv::number( $total[0], API\V1\RedemptionService::decimals( $total[1] ) ) );
+	}
+
+	/**
+	 * M12-29: VAT treatment of the voucher of a journal row - as recorded at issue ("issued" entry), for vouchers
+	 * issued before that from its current settings. '' when the row carries no voucher columns.
+	 */
+	public static function row_treatment( array $r ): string {
+		static $cache = array();
+		$snapshot = ProductConfig::parse_snapshot( (string) ( $r['issued_note'] ?? '' ) );
+		if ( null !== $snapshot && '' !== $snapshot['treatment'] ) {
+			return $snapshot['treatment'];
+		}
+		$id = (int) ( $r['voucher_id'] ?? 0 );
+		if ( $id <= 0 ) {
+			return '';
+		}
+		if ( ! isset( $cache[ $id ] ) ) {
+			if ( count( $cache ) > 2000 ) {
+				$cache = array();
+			}
+			$voucher = Voucher::from_row(
+				array(
+					'id'             => $id,
+					'type'           => $r['type'] ?? 'voucher',
+					'product_id'     => $r['product_id'] ?? 0,
+					'variation_id'   => $r['variation_id'] ?? 0,
+					'order_id'       => $r['voucher_order_id'] ?? 0,
+					'order_item_id'  => $r['order_item_id'] ?? 0,
+					'usage_mode'     => $r['usage_mode'] ?? 'single',
+					'discount_type'  => $r['discount_type'] ?? 'fixed_cart',
+					'initial_amount' => $r['initial_amount'] ?? 0,
+				)
+			);
+			$cache[ $id ] = ProductConfig::tax_treatment( $voucher );
+		}
+		return $cache[ $id ];
 	}
 
 	/**

@@ -92,6 +92,12 @@ final class Note {
 		return implode( '; ', $parts );
 	}
 
+	/** "VAT treatment: Multi-purpose voucher" (M12-29). */
+	private static function treatment_text( string $treatment ): string {
+		/* translators: %s: VAT treatment, e.g. "Multi-purpose voucher" */
+		return sprintf( __( 'VAT treatment: %s', 'voucher-captain' ), ProductConfig::treatment_label( $treatment ) );
+	}
+
 	private static function roles( $list ): string {
 		return implode( ', ', array_map( array( self::class, 'role_label' ), array_filter( explode( ',', (string) $list ) ) ) );
 	}
@@ -137,10 +143,31 @@ final class Note {
 				return __( 'Expiry reminder could not be sent; it is retried on the next run.', 'voucher-captain' );
 			case 'issued_standalone':
 				$parts = array_filter( array( (string) $a( 0 ), (string) $a( 1 ) ), static fn( $p ) => '' !== $p );
-				return $parts
+				$text  = $parts
 					/* translators: %s: source and reference given by the caller, e.g. "company-order, order-4711/3" */
 					? sprintf( __( 'Issued without order (%s)', 'voucher-captain' ), implode( ', ', $parts ) )
 					: __( 'Issued without order', 'voucher-captain' );
+				if ( isset( $args[2], $args[3] ) ) {
+					// M12-42: sold or free of charge, and the VAT treatment at issue.
+					$text .= '. ' . ( (int) $args[3] ? __( 'Sold', 'voucher-captain' ) : __( 'Free of charge', 'voucher-captain' ) ) . '; ' . self::treatment_text( (string) $args[2] );
+				}
+				return $text;
+			case ProductConfig::SNAPSHOT_NOTE:
+				return self::treatment_text( (string) $a( 0 ) );
+			case 'forfeited':
+				/* translators: %s: amount */
+				return sprintf( __( 'Remaining value of the single-use voucher not used by the order and forfeited: %s', 'voucher-captain' ), (string) $a( 0 ) );
+			case 'rest_converted':
+				/* translators: 1: amount, 2: where the rest went, e.g. "store credit" or a masked gift card code */
+				return sprintf( __( 'Remaining value %1$s of the single-use voucher kept as %2$s', 'voucher-captain' ), (string) $a( 0 ), '' !== (string) $a( 1 ) ? sprintf( /* translators: %s: masked gift card code */ __( 'gift card %s', 'voucher-captain' ), (string) $a( 1 ) ) : __( 'store credit', 'voucher-captain' ) );
+			case 'rest_reverted':
+				/* translators: %s: amount */
+				return sprintf( __( 'The voucher was given back: %s of its kept remaining value taken back from the store credit or gift card.', 'voucher-captain' ), (string) $a( 0 ) );
+			case 'expiry_reversed':
+				return __( 'Valid again: the value booked off at the expiry is booked back.', 'voucher-captain' );
+			case 'privacy_erased':
+				/* translators: %d: number of history notes */
+				return sprintf( _n( 'Personal data erased on request (GDPR); %d free-text history note anonymised, coded notes kept.', 'Personal data erased on request (GDPR); %d free-text history notes anonymised, coded notes kept.', (int) $a( 0 ), 'voucher-captain' ), (int) $a( 0 ) );
 			case 'resent':
 				/* translators: 1: role ("Buyer", "Recipient"), 2: masked email address */
 				return sprintf( __( 'Sent to the %1$s (%2$s) by an admin', 'voucher-captain' ), self::role_label( (string) $a( 0 ) ), (string) $a( 1 ) );

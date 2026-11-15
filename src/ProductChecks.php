@@ -178,7 +178,7 @@ final class ProductChecks {
 	 * What a voucher uses is its coupon discount plus what it pays after tax ("Multi-purpose vouchers as payment":
 	 * such a coupon discounts 0 and pays with a payment row instead, PaymentVouchers).
 	 *
-	 * @return array<int, array{code:string, value:float, used:float, currency:string}>
+	 * @return array<int, array{code:string, value:float, used:float, currency:string, keep:bool}>
 	 */
 	public static function residual_losses( \WC_Cart $cart ): array {
 		$losses = array();
@@ -203,7 +203,7 @@ final class ProductChecks {
 			$used  = (float) $cart->get_coupon_discount_amount( $code, ! wc_prices_include_tax() ) + (float) ( $paid[ wc_format_coupon_code( $code ) ] ?? 0 );
 			$value = (float) $voucher->initial_amount;
 			if ( $value - $used > 0.009 ) {
-				$losses[] = array( 'code' => $voucher->code, 'value' => $value, 'used' => $used, 'currency' => $voucher->currency );
+				$losses[] = array( 'code' => $voucher->code, 'value' => $value, 'used' => $used, 'currency' => $voucher->currency, 'keep' => TaxAccounting::keeps_rest( $voucher ) );
 			}
 		}
 		return $losses;
@@ -223,10 +223,22 @@ final class ProductChecks {
 	/**
 	 * The notice for one residual_losses() row: HTML (classic cart) or plain text (Store API for the blocks).
 	 *
-	 * @param array{code:string, value:float, used:float, currency:string} $loss
+	 * @param array{code:string, value:float, used:float, currency:string, keep?:bool} $loss
 	 */
 	public static function residual_notice( array $loss, bool $plain = false ): string {
 		$args = array( 'currency' => (string) $loss['currency'] );
+		if ( ! empty( $loss['keep'] ) ) {
+			// M12-68: the product keeps the rest as store credit or a new gift card.
+			$html = sprintf(
+				/* translators: 1: voucher code, 2: amount used in this order, 3: voucher value, 4: remaining value */
+				__( 'Voucher %1$s: only %2$s of %3$s is used in this order. The remaining %4$s is not lost: it is kept for you as store credit (or as a new gift card) after the order.', 'voucher-captain' ),
+				esc_html( (string) $loss['code'] ),
+				wc_price( (float) $loss['used'], $args ),
+				wc_price( (float) $loss['value'], $args ),
+				wc_price( (float) $loss['value'] - (float) $loss['used'], $args )
+			);
+			return $plain ? html_entity_decode( wp_strip_all_tags( $html ), ENT_QUOTES, 'UTF-8' ) : $html;
+		}
 		$html = sprintf(
 			/* translators: 1: voucher code, 2: amount used in this order, 3: voucher value, 4: lost remaining value */
 			__( 'Voucher %1$s: only %2$s of %3$s is used in this order. The voucher can be redeemed only once – the remaining %4$s will be lost. Add more items to use its full value.', 'voucher-captain' ),

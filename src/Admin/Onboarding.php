@@ -114,6 +114,16 @@ final class Onboarding {
 				'url'    => $settings,
 				'button' => __( 'Open settings', 'voucher-captain' ),
 			),
+			// M12-03: how gift cards are taxed depends on two settings that belong together.
+			'vat'          => array(
+				'label'  => \VCAP\PaymentVouchers::enabled()
+					? __( 'VAT of gift cards and value vouchers: they are multi-purpose vouchers that pay after tax (setting "Multi-purpose vouchers as payment" is on). Sell them with the tax status "None" and have the classification confirmed by your tax adviser.', 'voucher-captain' )
+					: __( 'VAT of gift cards and value vouchers: the setting "Multi-purpose vouchers as payment" is off, so they are redeemed as a price reduction. Turn the setting on (and sell them with the tax status "None"), or keep the voucher products taxable. Have the classification confirmed by your tax adviser.', 'voucher-captain' ),
+				'done'   => false,
+				'action' => '',
+				'url'    => $settings,
+				'button' => __( 'Open settings', 'voucher-captain' ),
+			),
 		);
 		$manual = (array) get_option( self::DONE, array() );
 		foreach ( $steps as $key => $step ) {

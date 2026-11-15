@@ -260,8 +260,9 @@ final class Settlement {
 				__( 'Rounding rest of the net-price conversion in order #%s booked off', 'voucher-captain' ),
 				$order->get_order_number()
 			);
-			// Logged without the order id: the order's own ledger rows (charge, restore) stay the latest per order.
-			if ( $this->balances->write_balance( $fresh, static fn( float $current ) => $current <= $unit ? 0.0 : $current, self::WRITTEN_OFF_EVENT, null, $note, 0 ) ) {
+			// M12-29: with the order id (journal, Kontierung). The per-order charge state reads only
+			// Balances::ORDER_CHARGE_EVENTS, so this row never hides the charge (AP-Q1-1).
+			if ( $this->balances->write_balance( $fresh, static fn( float $current ) => $current <= $unit ? 0.0 : $current, self::WRITTEN_OFF_EVENT, null, $note, $order->get_id() ) ) {
 				$after = $this->repo->get( $fresh->id );
 				if ( $after && $after->balance <= 0 ) {
 					$done[ $code ] = $rest;
