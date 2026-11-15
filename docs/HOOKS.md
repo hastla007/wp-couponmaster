@@ -197,6 +197,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_shop_channel_refused_message` | `src/Coupons/CartCoupons.php` | Message for a voucher that is not redeemable in the shop (e.g. a ticket voucher: where to use it instead). |
 | `vcap_should_issue_for_order` | `src/Issuer.php` | – |
 | `vcap_site_has_redeem_form` | `src/Shortcodes.php` | Whether a site-wide template (theme file, builder layout, widget) shows the redeem form. |
+| `vcap_smtp_plugin_active` | `src/Health.php` | Whether the site sends its mails through an SMTP or mail service plugin (Site Health sender check). |
 | `vcap_stale_reservation_minutes` | `src/Coupons/Reservations.php`, `src/Discounts/Usage.php` | – |
 | `vcap_statutory_expiry` | `src/ProductConfig.php` | – |
 | `vcap_template_design` | `src/TemplatePostType.php` | – |
