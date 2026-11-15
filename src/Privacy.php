@@ -334,6 +334,9 @@ final class Privacy {
 		return $ok;
 	}
 
+	/** Voucher columns the eraser writes (M12-06): the personal data, never balance or status. */
+	public const ERASED_COLUMNS = array( 'recipient_email', 'recipient_name', 'message', 'fields', 'buyer_email', 'buyer_name' );
+
 	public function erase( string $email, int $page = 1 ): array {
 		$removed  = false;
 		$retained = false;
@@ -380,7 +383,9 @@ final class Privacy {
 				}
 			}
 			// Remove free-text notes before clearing the lookup email, so a database failure remains retryable.
-			if ( ! $this->repo->anonymise_event_notes( $voucher->id ) || ! $this->repo->update( $voucher ) ) {
+			// M12-06: only the personal data columns – balance and status of $voucher were read before this loop and
+			// may be stale (a redemption landing meanwhile must not be undone).
+			if ( ! $this->repo->anonymise_event_notes( $voucher->id ) || ! $this->repo->update_columns( $voucher, self::ERASED_COLUMNS ) ) {
 				$retained = true;
 				continue;
 			}

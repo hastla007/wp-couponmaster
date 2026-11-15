@@ -30,19 +30,20 @@ final class Balances {
 
 	/**
 	 * The order's latest charge event on the voucher (event, amount, balance_after), or null. Read under the
-	 * voucher's row lock by the atomic operations.
+	 * voucher's row lock by the atomic operations – as a locking read (M12-04): a plain read inside an outer
+	 * transaction would see its older snapshot and miss a charge event committed since. LOCK IN SHARE MODE is used
+	 * rather than FOR SHARE: same meaning, and also understood by MySQL 5.7 and MariaDB before 10.6.
 	 */
 	private function latest_charge_event( int $voucher_id, int $order_id ): ?array {
 		global $wpdb;
 		$events = Install::tables()['events'];
 		$in     = self::ORDER_CHARGE_EVENTS_SQL;
-		$row    = $wpdb->get_row( $wpdb->prepare( "SELECT event, amount, balance_after FROM {$events} WHERE voucher_id = %d AND order_id = %d AND event IN ({$in}) ORDER BY id DESC LIMIT 1", $voucher_id, $order_id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- constant event list.
+		$lock   = Db::in_transaction() ? ' LOCK IN SHARE MODE' : '';
+		$row    = $wpdb->get_row( $wpdb->prepare( "SELECT event, amount, balance_after FROM {$events} WHERE voucher_id = %d AND order_id = %d AND event IN ({$in}) ORDER BY id DESC LIMIT 1{$lock}", $voucher_id, $order_id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- constant event list and lock clause.
 		return is_array( $row ) ? $row : null;
 	}
 
 	public function reserve_balance_atomic( Voucher $voucher, float $requested, int $order_id, string $note ): ?array {
-		global $wpdb;
-		$table  = Install::tables()['vouchers'];
 		if ( $order_id <= 0 || $requested <= 0 || ! Install::tables_support_transactions() ) {
 			return null;
 		}
@@ -51,7 +52,7 @@ final class Balances {
 			return null;
 		}
 		try {
-			$locked = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d FOR UPDATE", $voucher->id ) ); // phpcs:ignore
+			$locked = $this->repo->get_for_update( (int) $voucher->id ); // M12-04: the row as committed now, under its lock.
 			if ( ! $locked ) {
 				Db::rollback_if_error( 'reserve_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return null;
@@ -69,7 +70,7 @@ final class Balances {
 					: null;
 			}
 
-			$fresh = $this->repo->get( $voucher->id );
+			$fresh     = $locked;
 			$requested = round( $requested, $voucher->decimals() );
 			if ( $fresh && $fresh->balance < $requested && $requested - $fresh->balance <= self::rounding_tolerance( $order instanceof \WC_Order ? $order : null, $requested, $fresh ) ) {
 				// Currency round trips (order currency → base currency) can exceed the full balance by a few cents;
@@ -111,13 +112,11 @@ final class Balances {
 	 * @return array{amount:float,balance:float}|null
 	 */
 	public function commit_reservation_atomic( Voucher $voucher, int $order_id ): ?array {
-		global $wpdb;
-		$table  = Install::tables()['vouchers'];
 		if ( ! Install::tables_support_transactions() || ! Db::begin() ) {
 			return null;
 		}
 		try {
-			$locked = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d FOR UPDATE", $voucher->id ) ); // phpcs:ignore
+			$locked = $this->repo->get_for_update( (int) $voucher->id ); // M12-04: the row as committed now, under its lock.
 			if ( ! $locked ) {
 				Db::rollback_if_error( 'commit_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return null;
@@ -132,8 +131,7 @@ final class Balances {
 					Db::rollback_if_error( 'commit_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 					return null;
 				}
-				$fresh = $this->repo->get( $voucher->id );
-				if ( ! $fresh || ! $this->repo->log( $voucher->id, 'committed', (float) $latest['amount'], $fresh->balance, '', $order_id ) ) {
+				if ( ! $this->repo->log( $voucher->id, 'committed', (float) $latest['amount'], $locked->balance, '', $order_id ) ) {
 					Db::rollback_if_error( 'commit_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 					return null;
 				}
@@ -154,13 +152,11 @@ final class Balances {
 	 * Release an unpaid order's reservation and return the balance to the voucher atomically.
 	 */
 	public function release_reservation_atomic( Voucher $voucher, int $order_id, string $note = '' ): bool {
-		global $wpdb;
-		$table  = Install::tables()['vouchers'];
 		if ( ! Install::tables_support_transactions() || ! Db::begin() ) {
 			return false;
 		}
 		try {
-			$locked = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d FOR UPDATE", $voucher->id ) ); // phpcs:ignore
+			$locked = $this->repo->get_for_update( (int) $voucher->id ); // M12-04: the row as committed now, under its lock.
 			if ( ! $locked ) {
 				Db::rollback_if_error( 'release_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;
@@ -170,7 +166,7 @@ final class Balances {
 				Db::finish();
 				return (bool) ( $latest && in_array( $latest['event'], array( 'reservation_released', 'restored' ), true ) );
 			}
-			$fresh = $this->repo->get( $voucher->id );
+			$fresh = $locked;
 			if ( ! $fresh ) {
 				Db::rollback_if_error( 'release_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;
@@ -270,14 +266,12 @@ final class Balances {
 
 	/** @param callable(float):float $compute New balance from the locked, current balance. */
 	public function write_balance( Voucher $voucher, callable $compute, string $event, ?float $amount, string $note, int $order_id ): bool {
-		global $wpdb;
-		$table = Install::tables()['vouchers'];
 		if ( ! Install::tables_support_transactions() || ! Db::begin() ) {
 			return false;
 		}
 		try {
-			$locked = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d FOR UPDATE", $voucher->id ) ); // phpcs:ignore
-			$fresh = $locked ? $this->repo->get( $voucher->id ) : null;
+			$locked = $this->repo->get_for_update( (int) $voucher->id ); // M12-04: the row as committed now, under its lock.
+			$fresh  = $locked;
 			if ( ! $fresh ) {
 				Db::rollback_if_error( 'write_balance', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;
@@ -362,9 +356,7 @@ final class Balances {
 	 * @return array{amount:float,balance:float,duplicate:bool}|null
 	 */
 	public function deduct_balance_atomic( Voucher $voucher, float $requested, string $note = '', int $order_id = 0, bool $allow_partial = true, ?string &$reason = null ): ?array {
-		global $wpdb;
 		$reason = '';
-		$table  = Install::tables()['vouchers'];
 		if ( ! Install::tables_support_transactions() ) {
 			$reason = 'no_transactions';
 			return null;
@@ -375,7 +367,7 @@ final class Balances {
 		}
 		$reason = 'db_error';
 		try {
-			$locked = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d FOR UPDATE", $voucher->id ) ); // phpcs:ignore
+			$locked = $this->repo->get_for_update( (int) $voucher->id ); // M12-04: the row as committed now, under its lock.
 			if ( ! $locked ) {
 				Db::rollback_if_error( 'deduct_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				$reason = 'not_found';
@@ -388,8 +380,7 @@ final class Balances {
 					if ( 'reserved' === $prior['event'] ) {
 						// The balance read under the lock now, not the one after the reservation (other bookings
 						// may have changed it since): the journal and the liability read balance_after.
-						$locked_voucher         = $this->repo->get( $voucher->id );
-						$prior['balance_after'] = $locked_voucher ? (float) $locked_voucher->balance : (float) $prior['balance_after'];
+						$prior['balance_after'] = (float) $locked->balance;
 						if ( ! $this->repo->log( $voucher->id, 'committed', (float) $prior['amount'], (float) $prior['balance_after'], $note, $order_id ) ) {
 							Db::rollback_if_error( 'deduct_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 							return null;
@@ -408,7 +399,7 @@ final class Balances {
 				}
 			}
 
-			$fresh   = $this->repo->get( $voucher->id );
+			$fresh   = $locked;
 			$refusal = self::balance_refusal( $fresh );
 			// A used-up balance stays chargeable with 0 for orders (the caller records the shortfall).
 			if ( '' !== $refusal && ! ( 'redeemed' === $refusal && $allow_partial && Voucher::STATUS_ACTIVE === $fresh->status ) ) {
@@ -473,8 +464,6 @@ final class Balances {
 	 *                       hand already (event "returned", ignored when looking for the charge).
 	 */
 	public function restore_balance_atomic( Voucher $voucher, float $amount, int $order_id, string $note, ?float $charged = null ): bool {
-		global $wpdb;
-		$table   = Install::tables()['vouchers'];
 		$charged = $charged ?? $amount;
 		if ( $amount <= 0 && $charged > 0 && $order_id > 0 ) {
 			return true; // Booked back completely by hand already.
@@ -483,7 +472,7 @@ final class Balances {
 			return false;
 		}
 		try {
-			$locked = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d FOR UPDATE", $voucher->id ) ); // phpcs:ignore
+			$locked = $this->repo->get_for_update( (int) $voucher->id ); // M12-04: the row as committed now, under its lock.
 			if ( ! $locked ) {
 				Db::rollback_if_error( 'restore_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;
@@ -497,7 +486,7 @@ final class Balances {
 				Db::rollback_if_error( 'restore_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;
 			}
-			$fresh = $this->repo->get( $voucher->id );
+			$fresh = $locked;
 			if ( ! $fresh ) {
 				Db::rollback_if_error( 'restore_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;

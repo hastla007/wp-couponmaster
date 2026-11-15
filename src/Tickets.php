@@ -396,10 +396,13 @@ final class Tickets {
 		$table = Install::tables()['vouchers'];
 		$count = max( 1, $count );
 		$now   = gmdate( 'Y-m-d H:i:s' );
+		// M12-22: the last admission sets the status in the same statement (status first, so it reads the count before
+		// this check-in on MySQL and MariaDB alike): a separate full-row write could undo a parallel undo_checkin().
 		$rows  = $wpdb->query( // phpcs:ignore
 			$wpdb->prepare(
-				"UPDATE {$table} SET checkins = checkins + %d, last_checkin_at = %s, updated_at = %s
+				"UPDATE {$table} SET status = IF(checkins + %d >= max_checkins, 'redeemed', status), checkins = checkins + %d, last_checkin_at = %s, updated_at = %s
 				WHERE id = %d AND checkins + %d <= max_checkins AND status IN ('active') AND (expires_at IS NULL OR expires_at >= %s)",
+				$count,
 				$count,
 				$now,
 				$now,
@@ -414,9 +417,8 @@ final class Tickets {
 		$fresh = $this->repo->get( $voucher->id );
 		/* translators: 1: used admissions, 2: total admissions */
 		$this->repo->log( $voucher->id, 'checkin', $count, null, sprintf( __( '%1$d of %2$d admissions used', 'voucher-captain' ), $fresh->checkins, $fresh->max_checkins ) );
-		if ( $fresh->checkins >= $fresh->max_checkins && $fresh->is_ticket() ) {
-			$fresh->status = Voucher::STATUS_REDEEMED;
-			$this->repo->update( $fresh );
+		if ( Voucher::STATUS_REDEEMED === $fresh->status ) {
+			Db::action( 'vcap_voucher_updated', $fresh ); // As before, when the last admission was written separately.
 		}
 		Db::action( 'vcap_ticket_checked_in', $fresh, $count );
 		return true;
@@ -473,8 +475,12 @@ final class Tickets {
 		try {
 			$ok = $undo ? $this->undo_checkin( $voucher, $note ) : $this->checkin( $voucher, (int) $request['count'] );
 		} catch ( \Throwable $e ) {
-			$this->scan_release( $key );
-			throw $e;
+			$booked = $this->scan_settle( $key, $voucher, array( $undo ? 'checkin_undo' : 'checkin' ) );
+			if ( null === $booked ) {
+				throw $e;
+			}
+			self::log_after_booking( $e );
+			return rest_ensure_response( $booked );
 		}
 		$data            = $this->describe( $this->repo->get( $voucher->id ) );
 		$data['success'] = $ok;
@@ -537,18 +543,9 @@ final class Tickets {
 			if ( time() - $row['time'] < self::SCAN_STALE || null === $row['mark'] ) {
 				return new \WP_Error( 'vcap_in_progress', __( 'This action is still being processed. Please wait a moment and try again.', 'voucher-captain' ), array( 'status' => 409 ) );
 			}
-			$in     = implode( ',', array_map( static fn( $k ) => "'" . esc_sql( (string) $k ) . "'", $kinds ) );
-			$booked = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$events} WHERE voucher_id = %d AND id > %d AND user_id = %d AND event IN ({$in}) ORDER BY id LIMIT 1", $voucher->id, (int) $row['mark'], get_current_user_id() ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$booked = self::booked_since( (int) $voucher->id, (int) $row['mark'], $kinds );
 			if ( $booked ) {
-				$fresh             = $this->repo->get( $voucher->id ) ?? $voucher;
-				$data              = $this->describe( $fresh );
-				$data['success']   = true;
-				$data['state']     = 'warning';
-				$data['recovered'] = true;
-				$data['event_id']  = $booked;
-				$data['message']   = __( 'This action was already booked (found in the voucher history). Do not repeat it.', 'voucher-captain' );
-				$this->scan_store( $key, $data );
-				return $data;
+				return $this->store_booked( $key, $voucher, $booked );
 			}
 			// Nothing was booked: take the claim over (only one repeat wins) and act.
 			return self::scan_take_over( $hash, $row, $sig, $mark ) ? null : new \WP_Error( 'vcap_in_progress', __( 'This action is still being processed. Please wait a moment and try again.', 'voucher-captain' ), array( 'status' => 409 ) );
@@ -556,6 +553,61 @@ final class Tickets {
 		$data             = (array) json_decode( $row['response'], true );
 		$data['replayed'] = true;
 		return $data;
+	}
+
+	/**
+	 * Id of the first history event of one of $kinds that the current user wrote on the voucher after the event
+	 * mark of a claim (0 = none): the action of the claim was booked.
+	 *
+	 * @param string[] $kinds History events the action writes.
+	 */
+	private static function booked_since( int $voucher_id, int $mark, array $kinds ): int {
+		global $wpdb;
+		$events = Install::tables()['events'];
+		$in     = implode( ',', array_map( static fn( $k ) => "'" . esc_sql( (string) $k ) . "'", $kinds ) );
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$events} WHERE voucher_id = %d AND id > %d AND user_id = %d AND event IN ({$in}) ORDER BY id LIMIT 1", $voucher_id, $mark, get_current_user_id() ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	}
+
+	/** Stores and returns the answer "already booked" for a key whose action is found in the history. */
+	private function store_booked( string $key, Voucher $voucher, int $event_id ): array {
+		$fresh             = $this->repo->get( $voucher->id ) ?? $voucher;
+		$data              = $this->describe( $fresh );
+		$data['success']   = true;
+		$data['state']     = 'warning';
+		$data['recovered'] = true;
+		$data['event_id']  = $event_id;
+		$data['message']   = __( 'This action was already booked (found in the voucher history). Do not repeat it.', 'voucher-captain' );
+		$this->scan_store( $key, $data );
+		return $data;
+	}
+
+	/**
+	 * M12-05: after an action failed (exception) or answered with an error, the key is released only when nothing
+	 * was booked since the claim (the event mark stored with it). When the history shows the booking – e.g. a
+	 * listener threw after the COMMIT – the answer "already booked" is stored and returned instead: the scanner's
+	 * retry with the same key must never book a second time.
+	 *
+	 * @param string[] $kinds History events the action writes.
+	 * @return array|null the stored answer, or null when the key was released
+	 */
+	private function scan_settle( string $key, Voucher $voucher, array $kinds ): ?array {
+		if ( '' === $key ) {
+			return null;
+		}
+		$row = self::scan_row( md5( $key ) );
+		if ( $row && null !== $row['mark'] && null === $row['response'] ) {
+			$booked = self::booked_since( (int) $voucher->id, (int) $row['mark'], $kinds );
+			if ( $booked ) {
+				return $this->store_booked( $key, $voucher, $booked );
+			}
+		}
+		$this->scan_release( $key );
+		return null;
+	}
+
+	/** M12-05: logs an exception of a scanner action whose booking is in the history (answered "already booked"). */
+	private static function log_after_booking( \Throwable $e ): void {
+		Logger::error( 'A scanner action failed after its booking (answered as already booked): ' . Mask::addresses( get_class( $e ) . ': ' . $e->getMessage() ) );
 	}
 
 	private function scan_store( string $key, $data ): void {
@@ -731,11 +783,17 @@ final class Tickets {
 		try {
 			$response = $this->redeem_at_counter( $request, $voucher );
 		} catch ( \Throwable $e ) {
-			$this->scan_release( $key );
-			throw $e;
+			$booked = $this->scan_settle( $key, $voucher, array( 'redeemed' ) );
+			if ( null === $booked ) {
+				throw $e;
+			}
+			self::log_after_booking( $e );
+			return rest_ensure_response( $booked );
 		}
 		if ( is_wp_error( $response ) ) {
-			$this->scan_release( $key ); // Nothing was changed (e.g. no amount): the same key may act later.
+			// Every refusal is answered before a booking (an error never follows one): the same key may act later.
+			// The history is not asked here – a parallel scan of the same user would be mistaken for this booking.
+			$this->scan_release( $key );
 			return $response;
 		}
 		$this->scan_store( $key, $response instanceof \WP_REST_Response ? $response->get_data() : $response );
@@ -1197,11 +1255,15 @@ final class Tickets {
 		try {
 			$amount = $this->reverse_redemption( $voucher, $event_id, (string) $request['reason'] );
 		} catch ( \Throwable $e ) {
-			$this->scan_release( $key );
-			throw $e;
+			$booked = $this->scan_settle( $key, $voucher, array( 'redeem_reversed' ) );
+			if ( null === $booked ) {
+				throw $e;
+			}
+			self::log_after_booking( $e );
+			return rest_ensure_response( $booked );
 		}
 		if ( is_wp_error( $amount ) ) {
-			$this->scan_release( $key );
+			$this->scan_release( $key ); // Refused before any booking.
 			return $amount;
 		}
 		$fresh           = $this->repo->get( $voucher->id ) ?? $voucher;
@@ -1240,8 +1302,12 @@ final class Tickets {
 				try {
 					$ok = $this->checkin( $voucher, $count );
 				} catch ( \Throwable $e ) {
-					$this->scan_release( $key );
-					throw $e;
+					if ( null === $this->scan_settle( $key, $voucher, array( 'checkin' ) ) ) {
+						throw $e;
+					}
+					self::log_after_booking( $e );
+					wp_safe_redirect( add_query_arg( array( 'vcap_ticket' => $voucher->token, 'vcap_done' => $key ), home_url( '/' ) ), 303 );
+					exit;
 				}
 				$this->scan_store(
 					$key,

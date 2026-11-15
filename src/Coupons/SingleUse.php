@@ -269,9 +269,14 @@ final class SingleUse {
 		}
 		if ( Voucher::STATUS_REDEEMED === $voucher->status && ( 0 === $limit || (int) $new_count < $limit ) ) {
 			// An expired voucher stays expired (check_restored_card() tells the shop when an order gave it back).
-			$voucher->status  = $voucher->is_expired() ? Voucher::STATUS_EXPIRED : Voucher::STATUS_ACTIVE;
+			// M12-22: a conditional UPDATE, not the whole row from $voucher (read before): a voiding or another give-back
+			// landing meanwhile is never overwritten, and only the request that changed the row logs it.
+			$status = $voucher->is_expired() ? Voucher::STATUS_EXPIRED : Voucher::STATUS_ACTIVE;
+			if ( ! $this->repo->restore_single_if_redeemed( (int) $voucher->id, $status ) ) {
+				return;
+			}
+			$voucher->status  = $status;
 			$voucher->balance = $voucher->initial_amount;
-			$this->repo->update( $voucher );
 			$this->repo->log( $voucher->id, 'restored', $voucher->initial_amount, $voucher->balance, (string) $used_by );
 			if ( $this->cancelling ) {
 				$this->given_back[] = $voucher;

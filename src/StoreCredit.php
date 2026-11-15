@@ -94,7 +94,8 @@ final class StoreCredit {
 			return false;
 		}
 		$v->coupon_id = $coupon_id;
-		if ( ! $this->repo->update( $v ) ) {
+		// M12-22: only the coupon id – the balance of $v may be stale (a booking can land meanwhile).
+		if ( ! $this->repo->update_columns( $v, array( 'coupon_id' ) ) ) {
 			wp_delete_post( $coupon_id, true );
 			$v->coupon_id = 0;
 			return false;
@@ -107,7 +108,7 @@ final class StoreCredit {
 		$existing = wc_get_coupon_id_by_code( $account->code );
 		if ( $existing ) {
 			$account->coupon_id = (int) $existing;
-			$this->repo->update( $account );
+			$this->repo->update_columns( $account, array( 'coupon_id' ) ); // M12-22: never the (possibly stale) balance.
 		} elseif ( $this->attach_coupon( $account ) ) {
 			$this->repo->log( $account->id, 'edited', null, null, __( 'Store credit coupon was missing and has been created again.', 'voucher-captain' ) );
 		}
@@ -137,15 +138,12 @@ final class StoreCredit {
 		if ( ! Install::tables_support_transactions() ) {
 			return new \WP_Error( 'vcap_temporary_failure', __( 'Store credit is temporarily unavailable.', 'voucher-captain' ) );
 		}
-		global $wpdb;
-		$table = Install::tables()['vouchers'];
 		$event = '' !== $event ? $event : ( $amount > 0 ? 'credit' : 'debit' );
 		if ( ! Db::begin() ) {
 			return new \WP_Error( 'vcap_temporary_failure', __( 'Store credit is temporarily unavailable.', 'voucher-captain' ) );
 		}
 		try {
-			$wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d FOR UPDATE", $account->id ) ); // phpcs:ignore
-			$fresh = $this->repo->get( $account->id );
+			$fresh = $this->repo->get_for_update( (int) $account->id ); // M12-04: the balance as committed now, under the lock.
 			if ( ! $fresh || $fresh->balance + $amount < -0.00001 ) {
 				Db::rollback_if_error( 'store_credit_adjust', array( 'user_id' => $user_id, 'order_id' => $order_id ) );
 				return new \WP_Error( 'vcap_insufficient_balance', __( 'The store credit is not sufficient.', 'voucher-captain' ) );

@@ -109,6 +109,25 @@ final class VoucherRepository {
 		return 1 === $done;
 	}
 
+	/**
+	 * M12-22: give a redeemed single-use voucher its use back – only if it is still redeemed (atomic; false when
+	 * it was voided, given back or changed otherwise in the meantime). Its balance becomes its face value again.
+	 *
+	 * @param string $status Status it gets (active, or expired when past its validity).
+	 */
+	public function restore_single_if_redeemed( int $id, string $status ): bool {
+		global $wpdb;
+		self::forget();
+		$done = (int) $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = %s, balance = initial_amount, updated_at = %s WHERE id = %d AND status = %s", $status, $this->now(), $id, Voucher::STATUS_REDEEMED ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( 1 === $done ) {
+			$fresh = $this->get( $id );
+			if ( $fresh ) {
+				Db::action( 'vcap_voucher_updated', $fresh );
+			}
+		}
+		return 1 === $done;
+	}
+
 	/** Change only the status column (never overwrites a balance changed concurrently by a transaction). */
 	public function update_status( int $id, string $status ): bool {
 		global $wpdb;
@@ -155,6 +174,21 @@ final class VoucherRepository {
 
 	public function get( int $id ): ?Voucher {
 		return $id ? $this->get_by( 'id', $id ) : null;
+	}
+
+	/**
+	 * M12-04: the voucher row read with its row lock (SELECT * … FOR UPDATE), for bookings inside a transaction.
+	 * A locking read always sees the latest committed row; a plain get() after locking would read the snapshot of
+	 * an outer transaction that read before (REPEATABLE READ), e.g. a connector calling reserve() in its own
+	 * Db::transaction(), and book from a stale balance. Null when the row does not exist (or the read failed).
+	 */
+	public function get_for_update( int $id ): ?Voucher {
+		global $wpdb;
+		if ( $id <= 0 ) {
+			return null;
+		}
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$this->table()} WHERE id = %d FOR UPDATE", $id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name of this plugin.
+		return is_array( $row ) ? Voucher::from_row( $row ) : null;
 	}
 
 	public function get_by_code( string $code ): ?Voucher {
