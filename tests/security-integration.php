@@ -932,4 +932,49 @@ VCAP\Discounts\Usage::hash_legacy_keys();
 vcap_security_assert( 0 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$usage_table} WHERE customer_key LIKE %s", 'e:%' ) ), 'the daily maintenance converts all plain-text keys' );
 $wpdb->delete( $usage_table, array( 'campaign_id' => 990001 ) );
 
+// M12-17: a stale "notoptions" cache (object cache race, failed SELECT) never makes the plugin overwrite a secret
+// or a "since" option – add_option() would skip its existence check and run INSERT … ON DUPLICATE KEY UPDATE.
+$m17_raw = static fn( string $name ) => $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ) );
+$m17_poison = static function ( string $name ) {
+	wp_cache_delete( $name, 'options' );
+	$alloptions = wp_load_alloptions();
+	unset( $alloptions[ $name ] );
+	wp_cache_set( 'alloptions', $alloptions, 'options' );
+	$notoptions          = (array) wp_cache_get( 'notoptions', 'options' );
+	$notoptions[ $name ] = true;
+	wp_cache_set( 'notoptions', $notoptions, 'options' );
+};
+vcap()->settings->secret();
+VCAP\CustomerEmail::secret();
+VCAP\PersonalVoucher::since();
+$m17_before = array();
+foreach ( array( 'vcap_secret', VCAP\CustomerEmail::KEY_OPTION, VCAP\PersonalVoucher::OPTION_SINCE, VCAP\Delivery::ROUTING_SINCE_OPTION ) as $m17_name ) {
+	$m17_before[ $m17_name ] = (string) $m17_raw( $m17_name );
+}
+$m17_poison( 'vcap_secret' );
+$m17_secret = vcap()->settings->secret();
+$m17_poison( VCAP\CustomerEmail::KEY_OPTION );
+$m17_key = VCAP\CustomerEmail::secret();
+$m17_poison( VCAP\PersonalVoucher::OPTION_SINCE );
+$m17_since = VCAP\PersonalVoucher::since();
+$m17_poison( VCAP\Delivery::ROUTING_SINCE_OPTION );
+( new VCAP\Delivery( vcap()->settings, vcap()->vouchers ) )->register();
+vcap_security_assert( '' !== $m17_before['vcap_secret'] && $m17_secret === $m17_before['vcap_secret'] && $m17_raw( 'vcap_secret' ) === $m17_before['vcap_secret'], 'M12-17: with "vcap_secret" pre-seeded in notoptions the link secret is read back, never overwritten' );
+vcap_security_assert( '' !== $m17_before[ VCAP\CustomerEmail::KEY_OPTION ] && $m17_key === $m17_before[ VCAP\CustomerEmail::KEY_OPTION ] && $m17_raw( VCAP\CustomerEmail::KEY_OPTION ) === $m17_before[ VCAP\CustomerEmail::KEY_OPTION ], 'M12-17: the customer key secret is never overwritten either' );
+vcap_security_assert( (int) $m17_before[ VCAP\PersonalVoucher::OPTION_SINCE ] > 0 && $m17_since === (int) $m17_before[ VCAP\PersonalVoucher::OPTION_SINCE ] && $m17_raw( VCAP\PersonalVoucher::OPTION_SINCE ) === $m17_before[ VCAP\PersonalVoucher::OPTION_SINCE ], 'M12-17: the email-proof "since" date is never overwritten' );
+vcap_security_assert( '' !== $m17_before[ VCAP\Delivery::ROUTING_SINCE_OPTION ] && $m17_raw( VCAP\Delivery::ROUTING_SINCE_OPTION ) === $m17_before[ VCAP\Delivery::ROUTING_SINCE_OPTION ], 'M12-17: the routing "since" date is never overwritten' );
+// A missing option is created once; an empty row is filled; nothing stored = '' (the caller then uses a runtime value).
+$m17_name = 'vcap_m17_probe_' . wp_generate_password( 6, false, false );
+vcap_security_assert( 'first' === VCAP\Settings::insert_once( $m17_name, 'first', false ) && 'first' === VCAP\Settings::insert_once( $m17_name, 'second', false ), 'M12-17: insert_once() stores a value once and then returns the stored one' );
+update_option( $m17_name, '' );
+vcap_security_assert( 'third' === VCAP\Settings::insert_once( $m17_name, 'third', false ), 'M12-17: an empty row is filled (no link can have been signed with it)' );
+delete_option( $m17_name );
+$wpdb->suppress_errors( true );
+$m17_prefix     = $wpdb->options;
+$wpdb->options  = $wpdb->prefix . 'vcap_no_such_table';
+$m17_none       = VCAP\Settings::insert_once( $m17_name, 'x', false );
+$wpdb->options  = $m17_prefix;
+$wpdb->suppress_errors( false );
+vcap_security_assert( '' === $m17_none, 'M12-17: when nothing can be stored insert_once() returns "" (runtime value, nothing overwritten)' );
+
 echo "Voucher Captain security and privacy checks passed.\n";

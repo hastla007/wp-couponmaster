@@ -33,7 +33,7 @@ final class Delivery {
 
 	public function register(): void {
 		if ( false === get_option( self::ROUTING_SINCE_OPTION ) ) {
-			add_option( self::ROUTING_SINCE_OPTION, gmdate( 'Y-m-d H:i:s' ) );
+			Settings::insert_once( self::ROUTING_SINCE_OPTION, gmdate( 'Y-m-d H:i:s' ), true ); // M12-17: never overwritten.
 		}
 		add_action( 'vcap_deliver_voucher', array( $this, 'deliver' ), 10, 1 );
 		add_action( self::RETRY_HOOK, array( $this, 'deliver' ), 10, 1 );

@@ -51,13 +51,18 @@ final class PersonalVoucher {
 
 	/**
 	 * When the proof of mailbox was introduced here: stored once (add_option() never overwrites) on the first
-	 * request of this version, i.e. on the update or the first activation.
+	 * request of this version, i.e. on the update or the first activation (Settings::insert_once()).
 	 */
 	public static function since(): int {
+		static $runtime = 0;
 		$since = (int) get_option( self::OPTION_SINCE, 0 );
 		if ( $since <= 0 ) {
-			$since = time();
-			add_option( self::OPTION_SINCE, $since );
+			// M12-17: never overwritten (add_option() would, with a stale "notoptions" cache).
+			$since = (int) Settings::insert_once( self::OPTION_SINCE, (string) time(), true );
+		}
+		if ( $since <= 0 ) {
+			$runtime = $runtime > 0 ? $runtime : time();
+			$since   = $runtime;
 		}
 		return $since;
 	}
