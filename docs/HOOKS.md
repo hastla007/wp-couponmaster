@@ -21,7 +21,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_loaded` | `voucher-captain.php` | Voucher Captain has booted: vcap() and its services (api_v1, redemptions …) can be used from here on. |
 | `vcap_no_cache` | `src/Shortcodes.php` | Fires when a page must not be cached (hook for cache plugins without DONOTCACHEPAGE support). |
 | `vcap_order_metabox_after` | `src/Admin/OrderAdmin.php` | – |
-| `vcap_passcaptain_tickets_issued` | `src/Compat/PassCaptainTickets.php` | – |
+| `vcap_passcaptain_tickets_issued` | `src/Compat/PassCaptain/Exchange.php` | – |
 | `vcap_product_availability_changed` | `src/ProductChecks.php` | A voucher product became purchasable or stopped being purchasable (date passed, batch empty or refilled, discount setup). Its WordPress and WooCommerce caches have been cleared; full-page caches can purge its URL here. Arguments: the product, the new unsellable reason ('' = purchasable again; date_past, date_missing, codes_empty, discount_invalid) and the previous reason ('' = was purchasable). |
 | `vcap_product_settings_fields` | `src/ProductSettings.php` | Extra product fields of connectors (saved in vcap_product_settings_save). |
 | `vcap_product_settings_save` | `src/ProductSettings.php` | – |
@@ -129,16 +129,16 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_order_lines` | `src/API/V1/VoucherService.php` | Filters the per-line order data handed to connector plugins. |
 | `vcap_orphaned_hold_days` | `src/Coupons/Reservations.php` | – |
 | `vcap_page_has_redeem_form` | `src/Shortcodes.php` | Whether the page shows the redeem form (e.g. true when a theme template renders it). |
-| `vcap_passcaptain_can_resend_tickets` | `src/Compat/PassCaptainTickets.php` | – |
-| `vcap_passcaptain_check_fixed_date_capacity` | `src/Compat/PassCaptainTickets.php` | – |
-| `vcap_passcaptain_notify_restored` | `src/Compat/PassCaptainTickets.php` | – |
+| `vcap_passcaptain_can_resend_tickets` | `src/Compat/PassCaptain/Customer.php` | – |
+| `vcap_passcaptain_check_fixed_date_capacity` | `src/Compat/PassCaptain/ProductSetup.php` | – |
+| `vcap_passcaptain_notify_restored` | `src/Compat/PassCaptain/Revocation.php` | – |
 | `vcap_passcaptain_reconcile_orders` | `src/Compat/PassCaptainReconcile.php` | Rows of Pass Captain orders with a voucher (objects with the columns of self::COLUMNS; voucher_snapshot as JSON or array). Null uses Pass Captain's reconciliation API, or its order table on older versions. |
 | `vcap_passcaptain_reservation_minutes` | `src/Compat/PassCaptainProvider.php` | – |
-| `vcap_passcaptain_restore_on_revoke` | `src/Compat/PassCaptainTickets.php` | – |
-| `vcap_passcaptain_revoke_on_void` | `src/Compat/PassCaptainTickets.php` | – |
-| `vcap_passcaptain_ticket_reservation_minutes` | `src/Compat/PassCaptainTickets.php` | – |
-| `vcap_passcaptain_ticket_target` | `src/Compat/PassCaptainTickets.php` | Ticket target of a voucher (e.g. for imported or generated codes); return null for none. |
-| `vcap_passcaptain_ticket_voucher_as_value` | `src/Compat/PassCaptainTickets.php` | – |
+| `vcap_passcaptain_restore_on_revoke` | `src/Compat/PassCaptain/Revocation.php` | – |
+| `vcap_passcaptain_revoke_on_void` | `src/Compat/PassCaptain/Revocation.php` | – |
+| `vcap_passcaptain_ticket_reservation_minutes` | `src/Compat/PassCaptain/Exchange.php` | – |
+| `vcap_passcaptain_ticket_target` | `src/Compat/PassCaptain/TicketContract.php` | Ticket target of a voucher (e.g. for imported or generated codes); return null for none. |
+| `vcap_passcaptain_ticket_voucher_as_value` | `src/Compat/PassCaptain/ChannelRules.php` | – |
 | `vcap_pdf_element_html` | `src/PdfRenderer.php` | – |
 | `vcap_pdf_fallback_fonts` | `src/PdfRenderer.php` | – |
 | `vcap_pdf_fonts` | `src/PdfRenderer.php` | – |
@@ -184,7 +184,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_scanner_lookup` | `src/Tickets.php` | Codes Voucher Captain does not know may belong to another plugin (shared scanner, e.g. Pass Captain tickets). |
 | `vcap_scanner_redeem_refused` | `src/Tickets.php` | Vouchers that must not be redeemed at the counter (e.g. ticket vouchers: exchange them for tickets). |
 | `vcap_scanner_show_holder` | `src/Tickets.php` | – |
-| `vcap_sells_ticket_vouchers` | `src/Compat/PassCaptainTickets.php` | – |
+| `vcap_sells_ticket_vouchers` | `src/Compat/PassCaptain/TicketContract.php` | – |
 | `vcap_send_expiry_reminder` | `src/Delivery.php` | – |
 | `vcap_setting_` | `src/Settings.php` | – |
 | `vcap_settings_fields` | `src/Settings.php` | – |
