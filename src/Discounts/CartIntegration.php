@@ -289,10 +289,11 @@ final class CartIntegration {
 		}
 	}
 
+	/** Coupon row label: the promotion title. WooCommerce prints the label unescaped (AP-F1-3). */
 	public function label( $label, $coupon ) {
 		if ( $coupon instanceof \WC_Coupon && $coupon->is_type( self::TYPE ) ) {
 			$campaign = $this->campaigns->get( self::id_from_code( $coupon->get_code() ) );
-			return $campaign ? $campaign['title'] : $label;
+			return $campaign ? esc_html( wp_strip_all_tags( (string) $campaign['title'] ) ) : $label;
 		}
 		return $label;
 	}
