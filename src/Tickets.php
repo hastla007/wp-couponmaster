@@ -220,7 +220,7 @@ final class Tickets {
 			$state   = 'warning';
 			$message = $refusal;
 		}
-		$undo     = $voucher->is_ticket() && $voucher->checkins > 0 ? self::undo_mode( $voucher, self::last_event( $events, array( 'checkin' ) ), get_current_user_id(), $manager, time() ) : '';
+		$undo     = $voucher->is_ticket() && $voucher->checkins > 0 ? self::current_undo_mode( $voucher, $events ) : '';
 		$currency = '' !== $voucher->currency ? $voucher->currency : get_woocommerce_currency();
 		$data     = array(
 			'id'             => $voucher->id,
@@ -341,15 +341,38 @@ final class Tickets {
 	 * filter "vcap_checkin_undo_minutes", default 10), 'reason' (managers, with a reason) or '' (not at all; also
 	 * for cancelled or expired tickets).
 	 */
-	public static function undo_mode( Voucher $voucher, ?array $last_checkin, int $user_id, bool $manager, int $now ): string {
+	public static function undo_mode( Voucher $voucher, ?array $last_checkin, int $user_id, bool $manager, int $now, int $undone = 0 ): string {
 		if ( ! $voucher->is_ticket() || $voucher->checkins < 1 || Voucher::STATUS_VOID === $voucher->status || Voucher::STATUS_EXPIRED === $voucher->status || $voucher->is_expired() ) {
 			return '';
 		}
 		$window = max( 0, (int) apply_filters( 'vcap_checkin_undo_minutes', 10, $voucher ) );
-		if ( $last_checkin && $user_id > 0 && (int) $last_checkin['user_id'] === $user_id && $now - (int) strtotime( $last_checkin['created_at'] . ' UTC' ) <= $window * MINUTE_IN_SECONDS ) {
+		// M12-15: one's own undo reverts at most the admissions of that check-in ($undone: reverted since), never
+		// earlier check-ins of others (a 3-day pass checked in once must not go back from 3/3 to 0/3).
+		$admitted = $last_checkin ? max( 1, (int) round( (float) ( $last_checkin['amount'] ?? 1 ) ) ) : 0;
+		if ( $last_checkin && $user_id > 0 && (int) $last_checkin['user_id'] === $user_id && $undone < $admitted && $now - (int) strtotime( $last_checkin['created_at'] . ' UTC' ) <= $window * MINUTE_IN_SECONDS ) {
 			return 'own';
 		}
 		return $manager ? 'reason' : '';
+	}
+
+	/** Admissions reverted since the newest check-in (sum of the "checkin_undo" events after it). */
+	public static function undone_since_checkin( array $events ): int {
+		$undone = 0;
+		for ( $i = count( $events ) - 1; $i >= 0; $i-- ) {
+			$kind = (string) ( $events[ $i ]['event'] ?? '' );
+			if ( 'checkin' === $kind ) {
+				break;
+			}
+			if ( 'checkin_undo' === $kind ) {
+				$undone += max( 1, (int) round( (float) ( $events[ $i ]['amount'] ?? 1 ) ) );
+			}
+		}
+		return $undone;
+	}
+
+	/** undo_mode() of the current user for a ticket with its history. */
+	private static function current_undo_mode( Voucher $voucher, array $events ): string {
+		return self::undo_mode( $voucher, self::last_event( $events, array( 'checkin' ) ), get_current_user_id(), self::is_manager(), time(), self::undone_since_checkin( $events ) );
 	}
 
 	/**
@@ -456,7 +479,7 @@ final class Tickets {
 		$note = '';
 		if ( $undo ) {
 			// Reverting is limited: one's own check-in within a few minutes, otherwise a manager with a reason.
-			$mode   = self::undo_mode( $voucher, self::last_event( $this->repo->events( $voucher->id ), array( 'checkin' ) ), get_current_user_id(), self::is_manager(), time() );
+			$mode   = self::current_undo_mode( $voucher, $this->repo->events( $voucher->id ) );
 			$reason = sanitize_text_field( (string) $request['reason'] );
 			$error  = null;
 			if ( '' === $mode ) {

@@ -648,6 +648,13 @@ $void_ticket->status = Voucher::STATUS_VOID;
 $old_ticket          = clone $ticket;
 $old_ticket->expires_at = '2020-01-01 00:00:00';
 check( 'cancelled or expired tickets cannot be reverted at all (no extra admissions)', '' === Tickets::undo_mode( $void_ticket, $mine, 3, true, $now ) && '' === Tickets::undo_mode( $old_ticket, $mine, 3, true, $now ) );
+$m15_ticket           = clone $ticket;
+$m15_ticket->max_checkins = 3;
+$m15_ticket->checkins = 2;
+$m15_hist             = array( $ev( 1, 'checkin', null, 0, 4, '2026-01-01 09:00:00', 2.0 ), $ev( 2, 'checkin', null, 0, 3, '2026-01-01 10:00:00', 1.0 ), $ev( 3, 'checkin_undo', null, 0, 3, '2026-01-01 10:01:00', 1.0 ) );
+check( 'M12-15: own undo reverts at most the admissions of that check-in (checked in 1, undone 1 → no further own undo)', 1 === Tickets::undone_since_checkin( $m15_hist ) && 0 === Tickets::undone_since_checkin( array_slice( $m15_hist, 0, 2 ) ) && 'own' === Tickets::undo_mode( $m15_ticket, $m15_hist[1], 3, false, $now, 0 ) && '' === Tickets::undo_mode( $m15_ticket, $m15_hist[1], 3, false, $now, 1 ) && 'reason' === Tickets::undo_mode( $m15_ticket, $m15_hist[1], 3, true, $now, 1 ) );
+check( 'M12-15: a check-in of 2 admissions can be undone twice by its cashier', 'own' === Tickets::undo_mode( $m15_ticket, $m15_hist[0], 4, false, strtotime( '2026-01-01 09:05:00 UTC' ), 1 ) && '' === Tickets::undo_mode( $m15_ticket, $m15_hist[0], 4, false, strtotime( '2026-01-01 09:05:00 UTC' ), 2 ) );
+check( 'M12-44: ledger source by whole route segments – the redemption API is not the scanner', 'scanner' === VCAP\Source::for_route( '/vcap/v1/redeem' ) && 'scanner' === VCAP\Source::for_route( '/vcap/v1/redeem/reverse' ) && 'scanner' === VCAP\Source::for_route( 'vcap/v1/lookup' ) && 'rest' === VCAP\Source::for_route( '/vcap/v1/redemptions' ) && 'rest' === VCAP\Source::for_route( '/vcap/v1/redemptions/abc12345/commit' ) && 'rest' === VCAP\Source::for_route( '/vcap/v1/lookups' ) && 'checkout' === VCAP\Source::for_route( '/wc/store/v1/checkout' ) && 'rest' === VCAP\Source::for_route( '/wc/storefront' ) );
 
 $card             = new Voucher();
 $card->id         = 7;
