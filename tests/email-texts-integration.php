@@ -79,7 +79,7 @@ $lang_voucher = vcap_mail_voucher( array() );
 // M9: the admin PDF of a customer voucher is rendered in the site (order) language.
 $lang_seen = array();
 $lang_stop = static function ( $template_id ) use ( &$lang_seen ) {
-	$lang_seen = array( determine_locale(), __( 'Valid until {expiry_date}', 'voucher-captain' ) );
+	$lang_seen = array( determine_locale(), __( 'Valid until %s', 'voucher-captain' ) ); // M12-77: the starter templates use {expiry_line}.
 	throw new RuntimeException( 'vcap-lang-stop' ); // Stop before the PDF is streamed (exit).
 };
 add_filter( 'vcap_render_template_id', $lang_stop );
@@ -91,7 +91,7 @@ try {
 	$lang_stopped = 'vcap-lang-stop' === $e->getMessage();
 }
 remove_filter( 'vcap_render_template_id', $lang_stop );
-vcap_mail_assert( ! empty( $lang_stopped ) && array( 'de_DE', 'Gültig bis {expiry_date}' ) === $lang_seen, 'M9: the admin PDF is rendered in the site language (de_DE), not in the admin\'s profile language' );
+vcap_mail_assert( ! empty( $lang_stopped ) && array( 'de_DE', 'Gültig bis %s' ) === $lang_seen, 'M9: the admin PDF is rendered in the site language (de_DE), not in the admin\'s profile language' );
 vcap_mail_assert( 'en_US' === determine_locale() && 'GIFT VOUCHER' === __( 'GIFT VOUCHER', 'voucher-captain' ), 'M9: the admin\'s language is restored after rendering' );
 
 // Back to the test site's language.

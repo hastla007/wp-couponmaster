@@ -14,8 +14,11 @@ function vcap_acc_assert( bool $condition, string $message ): void {
 // M12-101: settings and tax rates changed below are restored in finally, also when an assertion fails (the
 // suites share one database; run-integration.sh expects a freshly installed shop).
 require_once __DIR__ . '/state-guard.php';
-$vcap_restore = vcap_test_state_guard( array( 'woocommerce_calc_taxes', 'woocommerce_prices_include_tax', 'vcap_vouchers_buy_vouchers', VCAP\Compat\MultiCurrency::UNKNOWN_OPTION, VCAP\Compat\MultiCurrency::HELD_OPTION ) );
+$vcap_restore = vcap_test_state_guard( array( 'woocommerce_calc_taxes', 'woocommerce_prices_include_tax', 'vcap_vouchers_buy_vouchers', VCAP\Compat\MultiCurrency::UNKNOWN_OPTION, VCAP\Compat\MultiCurrency::HELD_OPTION, VCAP\PaymentVouchers::OPTION ) );
 try {
+// M12-03: new installations settle multi-purpose vouchers as a payment after tax; this suite checks the coupon
+// mode of existing shops (the payment mode is covered in tax-integration section 8 and tax-accounting).
+update_option( VCAP\PaymentVouchers::OPTION, 'no' );
 
 function vcap_acc_card( float $value ): VCAP\Voucher {
 	$coupon = new WC_Coupon();
