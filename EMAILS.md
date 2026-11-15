@@ -25,26 +25,26 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) |
 |---|---|---|
-| Vouchers (bulk order) | **fehlt** | **fehlt** |
-| Sent instead of one email per voucher when an order line holds many vouchers for the same recipient: one email with all codes and one PDF (one page per voucher), or download links for very large quantities. The buyer gets one copy per order. The thresholds are set under WooCommerce → Settings → Vouchers → Delivery & downloads. | **fehlt** | **fehlt** |
-| {buyer_name} sent you {voucher_count} vouchers from {site_title} | **fehlt** | **fehlt** |
-| You received {voucher_count} vouchers from {site_title} | **fehlt** | **fehlt** |
-| Your {voucher_count} gift vouchers are on their way | **fehlt** | **fehlt** |
-| Your {voucher_count} vouchers from {site_title} | **fehlt** | **fehlt** |
-| You received {voucher_count} vouchers! | **fehlt** | **fehlt** |
-| Your {voucher_count} vouchers | **fehlt** | **fehlt** |
-| Hi {buyer_name}, thank you for your order #{order_number}. Your {voucher_count} vouchers are listed below. | **fehlt** | **fehlt** |
-| Hi {recipient_name}, {buyer_name} sent you {voucher_count} vouchers. You find all codes below. | **fehlt** | **fehlt** |
-| Hi {recipient_name}, you received {voucher_count} vouchers as a gift. You find all codes below. | **fehlt** | **fehlt** |
-| Hello, {buyer_name} sent you {voucher_count} vouchers. You find all codes below. | **fehlt** | **fehlt** |
-| Hello, you received {voucher_count} vouchers as a gift. You find all codes below. | **fehlt** | **fehlt** |
-| Hi {buyer_name}, your {voucher_count} gift vouchers are on their way. This copy with all codes is for your records. | **fehlt** | **fehlt** |
-| Hello, your {voucher_count} gift vouchers are on their way. This copy with all codes is for your records. | **fehlt** | **fehlt** |
-| Hello, thank you for your order #{order_number}. Your {voucher_count} vouchers are listed below. | **fehlt** | **fehlt** |
-| Hi {buyer_name}, your {voucher_count} vouchers are listed below. | **fehlt** | **fehlt** |
-| Hello, your {voucher_count} vouchers are listed below. | **fehlt** | **fehlt** |
-| Attach one PDF with all vouchers (up to the PDF limit of the bulk order settings) | **fehlt** | **fehlt** |
-| {voucher_count} is the number of vouchers in the email. | **fehlt** | **fehlt** |
+| Vouchers (bulk order) | Gutscheine (Sammelbestellung) | Gutscheine (Sammelbestellung) |
+| Sent instead of one email per voucher when an order line holds many vouchers for the same recipient: one email with all codes and one PDF (one page per voucher), or download links for very large quantities. The buyer gets one copy per order. The thresholds are set under WooCommerce → Settings → Vouchers → Delivery & downloads. | Wird statt einer E-Mail pro Gutschein versendet, wenn eine Bestellposition viele Gutscheine für denselben Empfänger enthält: eine E-Mail mit allen Codes und einem PDF (eine Seite pro Gutschein) oder – bei sehr großen Mengen – Download-Links. Der Käufer erhält eine Kopie pro Bestellung. Die Schwellenwerte legen Sie unter WooCommerce → Einstellungen → Gutscheine → Versand & Downloads fest. | Wird statt einer E-Mail pro Gutschein versendet, wenn eine Bestellposition viele Gutscheine für denselben Empfänger enthält: eine E-Mail mit allen Codes und einem PDF (eine Seite pro Gutschein) oder – bei sehr großen Mengen – Download-Links. Der Käufer erhält eine Kopie pro Bestellung. Die Schwellenwerte legen Sie unter WooCommerce → Einstellungen → Gutscheine → Versand & Downloads fest. |
+| {buyer_name} sent you {voucher_count} vouchers from {site_title} | {buyer_name} hat Ihnen {voucher_count} Gutscheine von {site_title} geschenkt | {buyer_name} hat Ihnen {voucher_count} Gutscheine von {site_title} geschenkt |
+| You received {voucher_count} vouchers from {site_title} | Sie haben {voucher_count} Gutscheine von {site_title} erhalten | Sie haben {voucher_count} Gutscheine von {site_title} erhalten |
+| Your {voucher_count} gift vouchers are on their way | Ihre {voucher_count} Geschenkgutscheine sind unterwegs | Ihre {voucher_count} Geschenkgutscheine sind unterwegs |
+| Your {voucher_count} vouchers from {site_title} | Ihre {voucher_count} Gutscheine von {site_title} | Ihre {voucher_count} Gutscheine von {site_title} |
+| You received {voucher_count} vouchers! | Sie haben {voucher_count} Gutscheine erhalten! | Sie haben {voucher_count} Gutscheine erhalten! |
+| Your {voucher_count} vouchers | Ihre {voucher_count} Gutscheine | Ihre {voucher_count} Gutscheine |
+| Hi {buyer_name}, thank you for your order #{order_number}. Your {voucher_count} vouchers are listed below. | Hallo {buyer_name}, vielen Dank für Ihre Bestellung #{order_number}. Ihre {voucher_count} Gutscheine finden Sie unten. | Hallo {buyer_name}, vielen Dank für Ihre Bestellung #{order_number}. Ihre {voucher_count} Gutscheine finden Sie unten. |
+| Hi {recipient_name}, {buyer_name} sent you {voucher_count} vouchers. You find all codes below. | Hallo {recipient_name}, {buyer_name} hat Ihnen {voucher_count} Gutscheine geschenkt. Alle Codes finden Sie unten. | Hallo {recipient_name}, {buyer_name} hat Ihnen {voucher_count} Gutscheine geschenkt. Alle Codes finden Sie unten. |
+| Hi {recipient_name}, you received {voucher_count} vouchers as a gift. You find all codes below. | Hallo {recipient_name}, Sie haben {voucher_count} Gutscheine geschenkt bekommen. Alle Codes finden Sie unten. | Hallo {recipient_name}, Sie haben {voucher_count} Gutscheine geschenkt bekommen. Alle Codes finden Sie unten. |
+| Hello, {buyer_name} sent you {voucher_count} vouchers. You find all codes below. | Hallo, {buyer_name} hat Ihnen {voucher_count} Gutscheine geschenkt. Alle Codes finden Sie unten. | Hallo, {buyer_name} hat Ihnen {voucher_count} Gutscheine geschenkt. Alle Codes finden Sie unten. |
+| Hello, you received {voucher_count} vouchers as a gift. You find all codes below. | Hallo, Sie haben {voucher_count} Gutscheine geschenkt bekommen. Alle Codes finden Sie unten. | Hallo, Sie haben {voucher_count} Gutscheine geschenkt bekommen. Alle Codes finden Sie unten. |
+| Hi {buyer_name}, your {voucher_count} gift vouchers are on their way. This copy with all codes is for your records. | Hallo {buyer_name}, Ihre {voucher_count} Geschenkgutscheine sind unterwegs. Diese Kopie mit allen Codes ist für Ihre Unterlagen. | Hallo {buyer_name}, Ihre {voucher_count} Geschenkgutscheine sind unterwegs. Diese Kopie mit allen Codes ist für Ihre Unterlagen. |
+| Hello, your {voucher_count} gift vouchers are on their way. This copy with all codes is for your records. | Hallo, Ihre {voucher_count} Geschenkgutscheine sind unterwegs. Diese Kopie mit allen Codes ist für Ihre Unterlagen. | Hallo, Ihre {voucher_count} Geschenkgutscheine sind unterwegs. Diese Kopie mit allen Codes ist für Ihre Unterlagen. |
+| Hello, thank you for your order #{order_number}. Your {voucher_count} vouchers are listed below. | Hallo, vielen Dank für Ihre Bestellung #{order_number}. Ihre {voucher_count} Gutscheine finden Sie unten. | Hallo, vielen Dank für Ihre Bestellung #{order_number}. Ihre {voucher_count} Gutscheine finden Sie unten. |
+| Hi {buyer_name}, your {voucher_count} vouchers are listed below. | Hallo {buyer_name}, Ihre {voucher_count} Gutscheine finden Sie unten. | Hallo {buyer_name}, Ihre {voucher_count} Gutscheine finden Sie unten. |
+| Hello, your {voucher_count} vouchers are listed below. | Hallo, Ihre {voucher_count} Gutscheine finden Sie unten. | Hallo, Ihre {voucher_count} Gutscheine finden Sie unten. |
+| Attach one PDF with all vouchers (up to the PDF limit of the bulk order settings) | Ein PDF mit allen Gutscheinen anhängen (bis zum PDF-Limit der Einstellungen für Sammelbestellungen) | Ein PDF mit allen Gutscheinen anhängen (bis zum PDF-Limit der Einstellungen für Sammelbestellungen) |
+| {voucher_count} is the number of vouchers in the email. | {voucher_count} ist die Anzahl der Gutscheine in der E-Mail. | {voucher_count} ist die Anzahl der Gutscheine in der E-Mail. |
 
 ## `src/Emails/BuyerEmail.php`
 
@@ -122,10 +122,10 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) |
 |---|---|---|
-| All vouchers are attached as one PDF, one page per voucher, ready to print. | **fehlt** | **fehlt** |
+| All vouchers are attached as one PDF, one page per voucher, ready to print. | Alle Gutscheine sind als ein PDF angehängt – eine Seite pro Gutschein, druckfertig. | Alle Gutscheine sind als ein PDF angehängt – eine Seite pro Gutschein, druckfertig. |
 | Valid until %s | Gültig bis %s | Gültig bis %s |
 | Download: | Download: | Download: |
-| All vouchers in your account: | **fehlt** | **fehlt** |
+| All vouchers in your account: | Alle Gutscheine in Ihrem Konto: | Alle Gutscheine in Ihrem Konto: |
 
 ## `templates/emails/plain/voucher.php`
 
@@ -142,10 +142,10 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 |---|---|---|
 | Valid until | Gültig bis | Gültig bis |
 | Recipient | Empfänger | Empfänger |
-| Download each voucher as a PDF with the links in the table. | **fehlt** | **fehlt** |
-| PDF | **fehlt** | **fehlt** |
-| Download | **fehlt** | **fehlt** |
-| All vouchers in your account | **fehlt** | **fehlt** |
+| Download each voucher as a PDF with the links in the table. | Laden Sie jeden Gutschein über die Links in der Tabelle als PDF herunter. | Laden Sie jeden Gutschein über die Links in der Tabelle als PDF herunter. |
+| PDF | PDF | PDF |
+| Download | Herunterladen | Herunterladen |
+| All vouchers in your account | Alle Gutscheine in Ihrem Konto | Alle Gutscheine in Ihrem Konto |
 
 ## `templates/emails/voucher.php`
 

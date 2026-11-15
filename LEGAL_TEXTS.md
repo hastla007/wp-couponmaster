@@ -50,7 +50,7 @@ dass die Vorlage aktuell ist und jeder Text noch existiert). Prüfung durch die 
 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) | Fundstelle | Freigabe |
 |---|---|---|---|---|
-| Valid until %s | Gültig bis %s | Gültig bis %s | templates/emails/plain/voucher.php:29 templates/emails/voucher.php:38 | ☐ |
+| Valid until %s | Gültig bis %s | Gültig bis %s | templates/emails/plain/voucher-bundle.php:39 templates/emails/plain/voucher.php:29 | ☐ |
 | Valid until: %s | Gültig bis: %s | Gültig bis: %s | src/Downloads.php:531 | ☐ |
 | unlimited | unbegrenzt | unbegrenzt | src/Downloads.php:531 src/Placeholders.php:102 | ☐ |
 | no expiry | unbegrenzt | unbegrenzt | src/Emails/BonusEmail.php:109 | ☐ |
