@@ -53,13 +53,13 @@ $queries = array();
 add_filter( 'query', $log );
 $in_pool = CodeIndex::taken( strtolower( $pool_code ) );
 remove_filter( 'query', $log );
-vcap_bulk_assert( $in_pool && 0 === $count_q( '/LOWER\(post_title\)/i' ), 'B4: a code of the code pool is found (case-insensitively) on the own index, WooCommerce is not asked', $queries );
+vcap_bulk_assert( $in_pool && 0 === $count_q( '/(LOWER\()?post_title\)? = /i' ), 'B4: a code of the code pool is found (case-insensitively) on the own index, WooCommerce is not asked', $queries );
 
 $queries = array();
 add_filter( 'query', $log );
 $in_wc = CodeIndex::taken( strtoupper( $wc_code ) );
 remove_filter( 'query', $log );
-vcap_bulk_assert( $in_wc && $count_q( '/LOWER\(post_title\)/i' ) <= 1, 'B4: a WooCommerce coupon code is found through WooCommerce after the own tables', $queries );
+vcap_bulk_assert( $in_wc && $count_q( '/(LOWER\()?post_title\)? = /i' ) <= 1, 'B4: a WooCommerce coupon code is found through WooCommerce after the own tables', $queries );
 
 $free    = 'B4-FREE-' . strtoupper( wp_generate_password( 12, false, false ) );
 $queries = array();
@@ -67,7 +67,7 @@ add_filter( 'query', $log );
 $first  = CodeIndex::taken( $free );
 $second = CodeIndex::taken( $free );
 remove_filter( 'query', $log );
-vcap_bulk_assert( ! $first && ! $second && 1 === $count_q( '/LOWER\(post_title\)/i' ), 'B4: a WooCommerce miss is cached for the request (one lookup for two checks)', $queries );
+vcap_bulk_assert( ! $first && ! $second && 1 === $count_q( '/(LOWER\()?post_title\)? = /i' ), 'B4: a WooCommerce miss is cached for the request (one lookup for two checks)', $queries );
 
 $candidates = array( $wc_code, $pool_code, 'B4-C1-' . strtoupper( $tag ) . 'AAAAAAAAAA', 'B4-C2-' . strtoupper( $tag ) . 'BBBBBBBBBB', 'B4-C3-' . strtoupper( $tag ) . 'CCCCCCCCCC' );
 CodeIndex::reset();
@@ -76,7 +76,7 @@ add_filter( 'query', $log );
 $claimed = CodeIndex::claim_first( $candidates );
 remove_filter( 'query', $log );
 $own_q = $count_q( '/' . preg_quote( $tables['vouchers'], '/' ) . ' WHERE code IN/' );
-vcap_bulk_assert( $candidates[2] === $claimed && 1 === $own_q && $count_q( '/LOWER\(post_title\)/i' ) <= 2 && ! preg_grep( '/LOWER\(\x27B4-POOL/i', $queries ) && ! preg_grep( '/LOWER\(\x27B4-C2/i', $queries ), 'B4: five candidates are checked in one query on both own tables; WooCommerce only for the candidates left, up to the first free one', array( $claimed, $own_q, $queries ) );
+vcap_bulk_assert( $candidates[2] === $claimed && 1 === $own_q && $count_q( '/(LOWER\()?post_title\)? = /i' ) <= 2 && ! preg_grep( '/LOWER\(\x27B4-POOL/i', $queries ) && ! preg_grep( '/LOWER\(\x27B4-C2/i', $queries ), 'B4: five candidates are checked in one query on both own tables; WooCommerce only for the candidates left, up to the first free one', array( $claimed, $own_q, $queries ) );
 vcap_bulk_assert( CodeIndex::taken( $candidates[2] ) && $candidates[3] === CodeIndex::claim_first( $candidates ), 'B4: a code handed out counts as taken for the rest of the request' );
 
 CodeIndex::reset();
@@ -85,7 +85,7 @@ add_filter( 'query', $log );
 $many = CodeIndex::unique_many( array( 'prefix' => 'B4M', 'length' => 12 ), 600 );
 remove_filter( 'query', $log );
 vcap_bulk_assert( 600 === count( array_unique( array_map( 'strtolower', $many ) ) ), 'B4: 600 unique codes for a bulk run' );
-vcap_bulk_assert( $count_q( '/LOWER\(post_title\)/i' ) <= 3 && $count_q( '/ WHERE code IN/' ) <= 3, 'B4: … checked in batches of up to 500 (' . count( $queries ) . ' queries, not one per code)', count( $queries ) );
+vcap_bulk_assert( $count_q( '/(LOWER\()?post_title\)? = /i' ) <= 3 && $count_q( '/ WHERE code IN/' ) <= 3, 'B4: … checked in batches of up to 500 (' . count( $queries ) . ' queries, not one per code)', count( $queries ) );
 
 $free_list = CodeIndex::claim_free( array( 7 => $pool_code, 8 => $wc_code, 9 => 'B4-F-' . strtoupper( $tag ) . 'DDDDDDDDDD', 10 => 'b4-f-' . $tag . 'dddddddddd' ) );
 vcap_bulk_assert( array( 9 => 'B4-F-' . strtoupper( $tag ) . 'DDDDDDDDDD' ) === $free_list, 'B4: claim_free() keeps the keys and drops codes in use and case variants of the same code', $free_list );
@@ -260,7 +260,7 @@ add_filter( 'query', $log );
 $wpdb->suppress_errors( true );
 Jobs::advance( $imp_id, 0 ); // First chunk: 500 codes.
 remove_filter( 'query', $log );
-vcap_bulk_assert( 1 === (int) Jobs::get( $imp_id )['next'] && $count_q( '/LOWER\(post_title\)/i' ) <= 1 && $count_q( '/ WHERE code IN/' ) <= 1, 'B4: a chunk of 500 codes is checked with one query on the own tables and one on WooCommerce', array( $count_q( '/LOWER\(post_title\)/i' ), $count_q( '/ WHERE code IN/' ) ) );
+vcap_bulk_assert( 1 === (int) Jobs::get( $imp_id )['next'] && $count_q( '/(LOWER\()?post_title\)? = /i' ) <= 1 && $count_q( '/ WHERE code IN/' ) <= 1, 'B4: a chunk of 500 codes is checked with one query on the own tables and one on WooCommerce', array( $count_q( '/(LOWER\()?post_title\)? = /i' ), $count_q( '/ WHERE code IN/' ) ) );
 add_filter( 'query', $fail );
 Jobs::advance( $imp_id, 0 );
 remove_filter( 'query', $fail );

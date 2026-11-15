@@ -3929,12 +3929,12 @@ msgstr ""
 msgid "This promotion is applied automatically and cannot be removed."
 msgstr ""
 
-#: src/Discounts/Usage.php:513
+#: src/Discounts/Usage.php:553
 msgid "The promotion could not be checked right now. Please try again in a moment."
 msgstr ""
 
 #. translators: %s: promotion title
-#: src/Discounts/Usage.php:531
+#: src/Discounts/Usage.php:571
 #, php-format
 msgid "The promotion \"%s\" has reached its usage limit. Please remove it from your cart and try again."
 msgstr ""

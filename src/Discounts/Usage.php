@@ -46,6 +46,8 @@ final class Usage {
 		add_action( 'woocommerce_order_status_changed', array( $this, 'reverted_to_pending' ), 20, 3 );
 		add_action( 'vcap_daily_maintenance', array( self::class, 'hash_legacy_keys' ), 30, 0 );
 		add_action( 'vcap_daily_maintenance', array( self::class, 'reconcile' ), 31, 0 );
+		add_action( 'upgrader_process_complete', array( self::class, 'files_replaced' ), 10, 2 );
+		add_action( 'init', array( self::class, 'reconcile_if_due' ), 40, 0 );
 		add_action( 'deleted_post', array( self::class, 'forget_campaign' ), 10, 2 );
 	}
 
@@ -289,6 +291,44 @@ final class Usage {
 			\VCAP\Logger::warning( sprintf( 'Promotion usage counters of %d promotion(s) differed from the usage table and were recounted.', $fixed ) );
 		}
 		return $fixed;
+	}
+
+	/** Option: the plugin files were replaced (update or rollback), the counters are checked once (B12). */
+	public const RECONCILE_DUE_OPTION = 'vcap_usage_reconcile_due';
+
+	/**
+	 * B12: when Voucher Captain is installed over itself – e.g. a rollback to a release before 1.7.0, which writes
+	 * uses without the counters, and the update again – the counters are checked on the next admin, cron or CLI
+	 * request instead of only by the daily recount. Runs in the request of the version being replaced; an
+	 * install whose plugin cannot be told is treated as ours (one extra check is harmless).
+	 *
+	 * @param mixed $upgrader WP_Upgrader.
+	 * @param mixed $extra    hook_extra of the upgrade.
+	 */
+	public static function files_replaced( $upgrader, $extra ): void {
+		$extra = (array) $extra;
+		if ( 'plugin' !== ( $extra['type'] ?? '' ) ) {
+			return;
+		}
+		$plugins = isset( $extra['plugins'] ) ? (array) $extra['plugins'] : ( isset( $extra['plugin'] ) ? array( $extra['plugin'] ) : array() );
+		if ( 'install' === ( $extra['action'] ?? '' ) && is_object( $upgrader ) && method_exists( $upgrader, 'plugin_info' ) ) {
+			$plugins[] = (string) $upgrader->plugin_info();
+		}
+		$ours = plugin_basename( VCAP_FILE );
+		if ( in_array( $ours, $plugins, true ) || ( 'install' === ( $extra['action'] ?? '' ) && in_array( '', $plugins, true ) ) || ( 'install' === ( $extra['action'] ?? '' ) && ! $plugins ) ) {
+			update_option( self::RECONCILE_DUE_OPTION, time(), false );
+		}
+	}
+
+	/** Runs the recount flagged by files_replaced() in the next admin, cron or CLI request (B12). */
+	public static function reconcile_if_due(): void {
+		if ( ! get_option( self::RECONCILE_DUE_OPTION ) || ! ( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ) ) {
+			return;
+		}
+		if ( \VCAP\Install::counters_ready() ) {
+			delete_option( self::RECONCILE_DUE_OPTION );
+			self::reconcile();
+		}
 	}
 
 	public static function count_for( int $campaign_id, array $keys ): int {
