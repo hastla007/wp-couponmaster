@@ -441,6 +441,9 @@ $m16_opts = vcap()->downloads->change_options( $m16_cust );
 vcap_acct_assert( $m16_opts['date'] && wp_date( 'Y-m-d' ) === $m16_opts['min'] && $m16_opts['max'] < wp_date( 'Y-m-d', time() + 31 * DAY_IN_SECONDS ) && $m16_opts['send_now'], 'M12-16: with a customer date the form offers today up to the last day before the expiry', $m16_opts );
 vcap_acct_assert( '' !== vcap()->downloads->change_delivery( $m16_cust, '', wp_date( 'Y-m-d', time() + 40 * DAY_IN_SECONDS ) ), 'M12-16: a date after the expiry is refused' );
 vcap_acct_assert( '' === vcap()->downloads->change_delivery( $m16_cust, '', wp_date( 'Y-m-d', time() + 10 * DAY_IN_SECONDS ) ) && wp_date( 'Y-m-d', time() + 10 * DAY_IN_SECONDS ) === VCAP\LocalDate::from_utc( (string) vcap()->vouchers->get( $m16_cust->id )->delivery_at, 'Y-m-d' ), 'M12-16: a date in range is taken' );
+// M12-82: the order's "What happens next" shows the changed date of the voucher, not the checkout value.
+$m82_lines = VCAP\NextSteps::for_order( wc_get_order( $m16_cust->order_id ) );
+vcap_acct_assert( 1 === count( $m82_lines ) && str_contains( $m82_lines[0]['text'], VCAP\LocalDate::from_utc( (string) vcap()->vouchers->get( $m16_cust->id )->delivery_at, vcap()->settings->date_format() ) ), 'M12-82: the order shows the delivery date of the voucher after a change', $m82_lines );
 
 // M12-47: an empty email changes only the date; name and message are editable; "send now" delivers at once;
 // a new address sets the routing of the product (send_to) – a gift entered "to me" goes to the recipient then.

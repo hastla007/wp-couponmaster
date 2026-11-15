@@ -113,7 +113,21 @@ final class NextSteps {
 	public static function for_order( \WC_Order $order ): array {
 		$lines = array();
 		$buyer = (string) $order->get_billing_email();
+		// M12-82: once the vouchers exist, their own delivery time and addresses (changed in My Account, by the
+		// shop or by a recipient correction) are shown instead of what the order line said at checkout.
+		$issued = array();
+		foreach ( $order->get_id() ? vcap()->vouchers->for_order( $order->get_id() ) : array() as $voucher ) {
+			$issued[ (int) $voucher->order_item_id ][] = $voucher;
+		}
 		foreach ( $order->get_items() as $item ) {
+			if ( $item instanceof \WC_Order_Item_Product && isset( $issued[ $item->get_id() ] ) ) {
+				$texts   = array_values( array_unique( array_map( static fn( Voucher $v ) => self::voucher_summary( $v, $buyer ), $issued[ $item->get_id() ] ) ) );
+				$lines[] = array(
+					'name' => (string) $item->get_name(),
+					'text' => implode( ' ', $texts ),
+				);
+				continue;
+			}
 			if ( ! $item instanceof \WC_Order_Item_Product ) {
 				continue;
 			}
@@ -136,6 +150,28 @@ final class NextSteps {
 			);
 		}
 		return $lines;
+	}
+
+	/** M12-82: where and when one issued voucher goes (or went), from the voucher itself. */
+	public static function voucher_summary( Voucher $voucher, string $buyer_email ): string {
+		$routed = Delivery::to_recipient( $voucher );
+		if ( $voucher->delivered_at ) {
+			return $routed
+				/* translators: %s: recipient email address */
+				? sprintf( __( 'The voucher was emailed to %s.', 'voucher-captain' ), $voucher->recipient_email )
+				: __( 'The voucher was emailed to you.', 'voucher-captain' );
+		}
+		$when = $voucher->delivery_at && strtotime( $voucher->delivery_at . ' UTC' ) > time() ? $voucher->delivery_at : null;
+		$text = self::summary(
+			array( 'send_to' => $voucher->send_to ),
+			array( 'recipient_email' => array( 'value' => $routed ? $voucher->recipient_email : '' ) ),
+			$buyer_email,
+			$when
+		);
+		if ( Delivery::is_held( $voucher ) ) {
+			$text .= ' ' . __( 'For your security, vouchers of a first order of this value are delivered and redeemable after a short waiting period.', 'voucher-captain' );
+		}
+		return $text;
 	}
 
 	/** "What happens next" in WooCommerce's order emails to the customer (not in the shop's own copies). */
