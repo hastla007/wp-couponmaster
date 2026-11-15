@@ -455,6 +455,9 @@ final class Health {
 	 */
 	public static function foreign_currency_vouchers(): array {
 		global $wpdb;
+		if ( ! $wpdb instanceof \wpdb ) {
+			return array();
+		}
 		$table = Install::tables()['vouchers'];
 		$rows  = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prepare(
