@@ -180,10 +180,15 @@ final class ProductChecks {
 	public static function residual_losses( \WC_Cart $cart ): array {
 		$losses = array();
 		$paid   = PaymentVouchers::enabled() && function_exists( 'WC' ) && WC()->cart === $cart ? vcap()->payments->cart_payments() : array();
+		$coupons = $cart->get_coupons();
 		foreach ( $cart->get_applied_coupons() as $code ) {
+			$coupon = $coupons[ $code ] ?? null;
+			if ( $coupon instanceof \WC_Coupon && 'yes' !== $coupon->get_meta( '_vcap_voucher' ) ) {
+				continue; // AP-P1-5: ordinary coupons are never looked up.
+			}
 			$voucher = vcap()->vouchers->get_by_code( wc_format_coupon_code( $code ) );
 			if ( ! $voucher ) {
-				$coupon_id = (int) wc_get_coupon_id_by_code( $code );
+				$coupon_id = $coupon instanceof \WC_Coupon ? (int) $coupon->get_id() : (int) wc_get_coupon_id_by_code( $code );
 				$voucher   = $coupon_id > 0 ? vcap()->vouchers->get_by_coupon( $coupon_id ) : null;
 			}
 			if ( ! $voucher || 'single' !== $voucher->usage_mode || 'percent' === $voucher->discount_type || $voucher->is_ticket() || 'credit' === $voucher->type ) {

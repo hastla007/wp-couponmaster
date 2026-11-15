@@ -34,6 +34,7 @@ final class Db {
 	 */
 	public static function begin(): bool {
 		global $wpdb;
+		VoucherRepository::forget(); // AP-P1-5: nothing read before the transaction is reused in it or after it.
 		$sql = 0 === self::$depth ? 'START TRANSACTION' : 'SAVEPOINT vcap_sp_' . self::$depth;
 		if ( false === $wpdb->query( $sql ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared -- constant SQL and an integer.
 			return false;
@@ -59,6 +60,7 @@ final class Db {
 		}
 		array_pop( self::$marks );
 		--self::$depth;
+		VoucherRepository::forget();
 		if ( 0 === self::$depth ) {
 			self::dispatch();
 		}
@@ -182,6 +184,7 @@ final class Db {
 	 */
 	private static function undo(): void {
 		global $wpdb;
+		VoucherRepository::forget(); // AP-P1-5: rolled back rows must not be served from the memo.
 		if ( self::$depth <= 0 ) {
 			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			return;

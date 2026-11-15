@@ -29,6 +29,7 @@ final class VoucherRepository {
 
 	public function insert( Voucher $voucher ): int {
 		global $wpdb;
+		self::forget();
 		$this->last_insert_error = '';
 		$voucher->created_at = $voucher->created_at ?: $this->now();
 		$voucher->updated_at = $this->now();
@@ -54,6 +55,7 @@ final class VoucherRepository {
 
 	public function update( Voucher $voucher ): bool {
 		global $wpdb;
+		self::forget();
 		$voucher->updated_at = $this->now();
 		$ok                  = false !== $wpdb->update( $this->table(), $voucher->to_row(), array( 'id' => $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( $ok ) {
@@ -72,6 +74,7 @@ final class VoucherRepository {
 	 */
 	public function update_columns( Voucher $voucher, array $columns, ?string $from_status = null ): bool {
 		global $wpdb;
+		self::forget();
 		$voucher->updated_at = $this->now();
 		$row                 = $voucher->to_row();
 		$data                = array_intersect_key( $row, array_flip( array_diff( $columns, array( 'status' ) ) ) );
@@ -95,6 +98,7 @@ final class VoucherRepository {
 	/** Mark a single-use voucher redeemed only if it is still active (atomic; false when someone else won). */
 	public function redeem_single_if_active( int $id ): bool {
 		global $wpdb;
+		self::forget();
 		$done = (int) $wpdb->query( $wpdb->prepare( "UPDATE {$this->table()} SET status = %s, balance = 0, updated_at = %s WHERE id = %d AND status = %s", Voucher::STATUS_REDEEMED, $this->now(), $id, Voucher::STATUS_ACTIVE ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		if ( 1 === $done ) {
 			$fresh = $this->get( $id );
@@ -108,6 +112,7 @@ final class VoucherRepository {
 	/** Change only the status column (never overwrites a balance changed concurrently by a transaction). */
 	public function update_status( int $id, string $status ): bool {
 		global $wpdb;
+		self::forget();
 		$ok = false !== $wpdb->update( $this->table(), array( 'status' => $status, 'updated_at' => $this->now() ), array( 'id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( $ok ) {
 			$fresh = $this->get( $id );
@@ -124,6 +129,7 @@ final class VoucherRepository {
 	 */
 	public function delete( int $id ): void {
 		global $wpdb;
+		self::forget();
 		$voucher = $this->get( $id );
 		$wpdb->delete( $this->table(), array( 'id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$wpdb->delete( $this->events_table(), array( 'voucher_id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -152,7 +158,7 @@ final class VoucherRepository {
 	}
 
 	public function get_by_code( string $code ): ?Voucher {
-		return '' !== $code ? $this->get_by( 'code', $code ) : null;
+		return '' !== $code ? $this->memo_get( 'code', $code ) : null;
 	}
 
 	public function get_by_token( string $token ): ?Voucher {
@@ -160,7 +166,72 @@ final class VoucherRepository {
 	}
 
 	public function get_by_coupon( int $coupon_id ): ?Voucher {
-		return $coupon_id ? $this->get_by( 'coupon_id', $coupon_id ) : null;
+		return $coupon_id ? $this->memo_get( 'coupon_id', $coupon_id ) : null;
+	}
+
+	/** @var array<string, Voucher|null> AP-P1-5: request memo of get_by_code()/get_by_coupon(), misses included. */
+	private static array $memo = array();
+
+	/** Whether the listeners that forget the memo are registered. */
+	private static bool $watching = false;
+
+	/** Most memo entries kept (a long CLI run reading many vouchers must not grow it without end). */
+	private const MEMO_MAX = 200;
+
+	/**
+	 * AP-P1-5: a cart calculation reads the same voucher by code or coupon 4–6 times (validation, sorting, the gross
+	 * split, notices). Those reads are memoised for the request – misses too (ordinary coupons are looked up as
+	 * well). Never inside a transaction: reads under a row lock (FOR UPDATE) and everything an atomic booking decides
+	 * on always come from the database (get() is never memoised either). The memo is forgotten on every write of
+	 * this repository, on every write query of the request (filter "query": also direct SQL of other classes), when
+	 * a transaction opens, commits or rolls back (Db), and on "vcap_voucher_updated".
+	 */
+	private function memo_get( string $column, $value ): ?Voucher {
+		if ( Db::in_transaction() ) {
+			return $this->get_by( $column, $value );
+		}
+		$key = $this->table() . '|' . $column . '|' . $value;
+		if ( array_key_exists( $key, self::$memo ) ) {
+			return self::$memo[ $key ] ? clone self::$memo[ $key ] : null;
+		}
+		$voucher = $this->get_by( $column, $value );
+		self::watch();
+		if ( count( self::$memo ) >= self::MEMO_MAX ) {
+			self::$memo = array();
+		}
+		self::$memo[ $key ] = $voucher ? clone $voucher : null;
+		return $voucher;
+	}
+
+	/** Forgets the request memo of get_by_code()/get_by_coupon() (AP-P1-5). */
+	public static function forget(): void {
+		self::$memo = array();
+	}
+
+	/**
+	 * Filter "query": any statement other than a plain SELECT (UPDATE, INSERT, DELETE, START TRANSACTION …) forgets
+	 * the memo, so a voucher row changed by direct SQL is never read stale afterwards.
+	 *
+	 * @param string $query SQL.
+	 */
+	public static function forget_on_write( $query ) {
+		if ( self::$memo && 0 !== strncasecmp( ltrim( (string) $query ), 'SELECT', 6 ) ) {
+			self::$memo = array();
+		}
+		return $query;
+	}
+
+	private static function watch(): void {
+		if ( self::$watching || ! function_exists( 'add_filter' ) ) {
+			return;
+		}
+		self::$watching = true;
+		add_filter( 'query', array( self::class, 'forget_on_write' ), PHP_INT_MAX );
+		add_action( 'vcap_voucher_updated', array( self::class, 'forget' ), 0 );
+		add_action( 'vcap_voucher_deleted', array( self::class, 'forget' ), 0 );
+		// Long-running workers (Action Scheduler, WP-CLI): each task starts with fresh reads.
+		add_action( 'action_scheduler_before_execute', array( self::class, 'forget' ), 0 );
+		add_action( 'switch_blog', array( self::class, 'forget' ), 0 );
 	}
 
 	public function get_slot( int $order_item_id, int $index ): ?Voucher {
@@ -716,6 +787,7 @@ final class VoucherRepository {
 	 */
 	public function log( int $voucher_id, string $event, ?float $amount = null, ?float $balance_after = null, string $note = '', int $order_id = 0 ): bool {
 		global $wpdb;
+		self::forget(); // Nearly every change of a voucher row (also by direct SQL elsewhere) is logged right after it.
 		$row = array(
 			'voucher_id'       => $voucher_id,
 			'event'            => $event,
