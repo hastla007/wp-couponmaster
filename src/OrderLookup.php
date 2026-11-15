@@ -24,6 +24,7 @@ final class OrderLookup {
 	 *     @type string          $order           "ASC" (default) or "DESC" by id.
 	 *     @type int             $limit           At most this many ids (default 200).
 	 *     @type bool|null       $hpos            Order store to read (default: the one in use; tests).
+	 *     @type bool            $missing         Orders WITHOUT the meta key instead ($value is ignored).
 	 * }
 	 * @return int[]
 	 */
@@ -40,6 +41,7 @@ final class OrderLookup {
 				'order'           => 'ASC',
 				'limit'           => 200,
 				'hpos'            => null,
+				'missing'         => false,
 			),
 			$args
 		);
@@ -57,6 +59,12 @@ final class OrderLookup {
 			$join = "INNER JOIN {$wpdb->postmeta} m ON m.post_id = o.ID AND m.meta_key = %s";
 			$cols = array( 'id' => 'o.ID', 'type' => 'o.post_type', 'status' => 'o.post_status', 'modified' => 'o.post_modified_gmt', 'created' => 'o.post_date_gmt' );
 			$from = "{$wpdb->posts} o";
+		}
+		if ( $args['missing'] ) {
+			// Orders without the key: LEFT JOIN on the key, keep the rows without a match.
+			$join    = 'LEFT ' . substr( $join, strlen( 'INNER ' ) );
+			$where[] = 'm.meta_key IS NULL';
+			$value   = null;
 		}
 		if ( null !== $value ) {
 			$join    .= ' AND m.meta_value = %s';

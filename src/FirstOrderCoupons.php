@@ -53,19 +53,18 @@ final class FirstOrderCoupons {
 		if ( ! function_exists( 'wc_get_orders' ) ) {
 			return 0;
 		}
-		$orders = wc_get_orders(
+		// OrderLookup: wc_get_orders() ignores the meta_query on the classic (posts) store and would re-stamp
+		// arbitrary orders every day instead of the unstamped ones.
+		$ids    = OrderLookup::ids_with_meta(
+			self::CUSTOMER_META,
+			null,
 			array(
-				'type'       => 'shop_order',
-				'status'     => array_keys( wc_get_order_statuses() ),
-				'limit'      => $limit,
-				'meta_query' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- daily maintenance, batches.
-					array(
-						'key'     => self::CUSTOMER_META,
-						'compare' => 'NOT EXISTS',
-					),
-				),
+				'missing' => true,
+				'status'  => array_keys( wc_get_order_statuses() ),
+				'limit'   => $limit,
 			)
 		);
+		$orders = array_filter( array_map( 'wc_get_order', $ids ) );
 		$done = 0;
 		foreach ( (array) $orders as $order ) {
 			if ( $order instanceof \WC_Order ) {

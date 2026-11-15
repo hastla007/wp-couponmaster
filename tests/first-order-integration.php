@@ -88,6 +88,12 @@ while ( VCAP\FirstOrderCoupons::stamp_older_orders( 200 ) >= 200 ) {
 }
 VCAP\FirstOrderCoupons::forget();
 vcap_first_assert( ! vcap_first_valid( $coupon, vcap_first_order( $product, 0, "old-{$tag}+z@example.com", 'pending' ) ), 'V4: once the daily run stamped older orders, their +tag twins are recognised' );
+// The daily run picks only unstamped orders – also on the classic store, where wc_get_orders() ignores meta_query.
+$v4_again = vcap_first_order( $product, 0, "again-{$tag}@example.com", 'completed' );
+$v4_again->delete_meta_data( VCAP\FirstOrderCoupons::CUSTOMER_META );
+$v4_again->save_meta_data();
+$v4_count = VCAP\FirstOrderCoupons::stamp_older_orders( 50 );
+vcap_first_assert( 1 === $v4_count && '' !== (string) wc_get_order( $v4_again->get_id() )->get_meta( VCAP\FirstOrderCoupons::CUSTOMER_META ) && 0 === VCAP\FirstOrderCoupons::stamp_older_orders( 50 ), 'V4: the daily run stamps only the orders without a mailbox hash (' . $v4_count . ')' );
 // Refunded/cancelled orders that used a discount count as earlier orders.
 $v4_discount = new WC_Coupon();
 $v4_discount->set_code( 'vcap-v4-' . strtolower( wp_generate_password( 8, false, false ) ) );
