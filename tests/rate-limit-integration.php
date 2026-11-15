@@ -126,9 +126,9 @@ for ( $i = 0; $i < VCAP\CouponGuard::PER_VISITOR; $i++ ) {
 $site_after = VCAP\Plugin::rate_site_count( VCAP\CouponGuard::BUCKET, VCAP\CouponGuard::WINDOW );
 vcap_rl_assert( VCAP\CouponGuard::PER_VISITOR === $site_after - $site_before, 'unknown codes entered in the cart count as failed attempts' );
 $refused = $apply( 'rl-valid-' . $tag );
-vcap_rl_assert( 400 === $refused->get_status() && str_contains( wp_json_encode( $refused->get_data() ), 'Too many attempts' ) && ! WC()->cart->has_discount( 'rl-valid-' . $tag ), 'a limited visitor is refused also for an existing code (the answer reveals nothing)' );
+vcap_rl_assert( 429 === $refused->get_status() && str_contains( wp_json_encode( $refused->get_data() ), 'Too many attempts' ) && ! WC()->cart->has_discount( 'rl-valid-' . $tag ), 'a limited visitor is refused also for an existing code (the answer reveals nothing)' );
 $unknown = $apply( 'rl-guess-more-' . $tag );
-vcap_rl_assert( 400 === $unknown->get_status() && str_contains( wp_json_encode( $unknown->get_data() ), 'Too many attempts' ), 'unknown codes get the same answer while limited' );
+vcap_rl_assert( 429 === $unknown->get_status() && str_contains( wp_json_encode( $unknown->get_data() ), 'Too many attempts' ), 'unknown codes get the same answer while limited' );
 vcap_rl_visitor( '192.0.2.41' );
 $ok = $apply( 'rl-valid-' . $tag );
 vcap_rl_assert( 200 === $ok->get_status() && WC()->cart->has_discount( 'rl-valid-' . $tag ), 'another visitor applies the code normally' );
@@ -246,6 +246,50 @@ vcap_rl_visitor( '203.0.113.83' );
 $before   = VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW );
 $ap_store = array( $apply( $foreign->code ), $apply( $ap_unknown ) );
 vcap_rl_assert( 400 === $ap_store[0]->get_status() && $ap_plain( $ap_store[0]->get_data()['message'] ?? '', $foreign->code ) === $ap_plain( $ap_store[1]->get_data()['message'] ?? '', $ap_unknown ) && $before + 2 === VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW ), 'AP-S1-3: Store API – the same answer as for an unknown code, and both count as failed attempts' );
+vcap_rl_reset();
+// M12-01: POST cart/coupons validates the code (coupon_exists) before any callback: no longer an uncounted oracle.
+$m01_post = static function ( array $body, bool $nonce_off = true ) {
+	$request = new WP_REST_Request( 'POST', '/wc/store/v1/cart/coupons' );
+	foreach ( $body as $key => $value ) {
+		$request->set_param( $key, $value );
+	}
+	if ( ! $nonce_off ) {
+		remove_filter( 'woocommerce_store_api_disable_nonce_check', '__return_true' );
+	}
+	$response = rest_do_request( $request );
+	add_filter( 'woocommerce_store_api_disable_nonce_check', '__return_true' );
+	return $response;
+};
+$m01_unknown = 'rl-m01-none-' . $tag;
+vcap_rl_visitor( '203.0.113.90' );
+$before  = VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW );
+$m01_a   = $m01_post( array( 'code' => $m01_unknown ), false );
+$m01_b   = $m01_post( array( 'code' => $foreign->code ), false );
+$m01_msg = static fn( $r, string $code ) => $ap_plain( $r->get_data()['message'] ?? '', $code );
+vcap_rl_assert( 400 === $m01_a->get_status() && 'woocommerce_rest_cart_coupon_error' === ( $m01_a->get_data()['code'] ?? '' ) && 'rest_invalid_param' !== ( $m01_a->get_data()['code'] ?? '' ), 'M12-01: cart/coupons – an unknown code gets one uniform 400 "invalid code" (no rest_invalid_param)' );
+vcap_rl_assert( 400 === $m01_b->get_status() && $m01_msg( $m01_a, $m01_unknown ) === $m01_msg( $m01_b, $foreign->code ) && ( $m01_a->get_data()['code'] ?? '' ) === ( $m01_b->get_data()['code'] ?? '' ), 'M12-01: cart/coupons – another customer\'s store credit gets the same answer, also without a nonce (no 401 oracle)' );
+vcap_rl_assert( $before + 2 === VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW ), 'M12-01: cart/coupons – both are booked as failed attempts' );
+$m01_c = $m01_post( array( 'code' => 'rl-valid-' . $tag, 'discount_type' => $foreign->code ), false );
+$m01_d = $m01_post( array( 'code' => 'rl-valid-' . $tag, 'discount_type' => $m01_unknown ), false );
+vcap_rl_assert( 400 === $m01_c->get_status() && 400 === $m01_d->get_status() && $m01_c->get_data()['code'] === $m01_d->get_data()['code'] && $before + 4 === VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW ), 'M12-01: cart/coupons – a code probed through discount_type (same validate_callback) gets the same answer and counts' );
+$m01_batch = new WP_REST_Request( 'POST', '/wc/store/v1/batch' );
+$m01_batch->set_header( 'Content-Type', 'application/json' );
+$m01_batch->set_body( wp_json_encode( array( 'validation' => 'require-all-validate', 'requests' => array( array( 'method' => 'POST', 'path' => '/wc/store/v1/cart/coupons', 'body' => array( 'code' => $m01_unknown . '-b' ) ), array( 'method' => 'POST', 'path' => '/wc/store/v1/Cart/Coupons', 'body' => array( 'code' => $foreign->code ) ) ) ) ) );
+$m01_out   = rest_do_request( $m01_batch )->get_data();
+$m01_codes = array_map( static fn( $r ) => is_array( $r ) ? ( $r['body']['code'] ?? '' ) : '', (array) ( $m01_out['responses'] ?? array() ) );
+vcap_rl_assert( array( 'woocommerce_rest_cart_coupon_error', 'woocommerce_rest_cart_coupon_error' ) === $m01_codes && $before + 6 === VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW ), 'M12-01: cart/coupons inside /batch (also "require-all-validate") – uniform answer, every request counts' );
+WC()->cart->add_to_cart( $product->get_id(), 1 );
+$m01_ok = $m01_post( array( 'code' => 'rl-valid-' . $tag ) );
+vcap_rl_assert( 201 === $m01_ok->get_status() && WC()->cart->has_discount( 'rl-valid-' . $tag ) && $before + 6 === VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW ), 'M12-01: cart/coupons – an existing code is applied as before and does not count as a failure' );
+WC()->cart->remove_coupon( 'rl-valid-' . $tag );
+for ( $i = 0; $i < VCAP\CodeLookup::PER_VISITOR; $i++ ) {
+	$m01_post( array( 'code' => $m01_unknown . '-' . $i ) );
+}
+$m01_l1 = $m01_post( array( 'code' => 'rl-valid-' . $tag ) );
+$m01_l2 = $m01_post( array( 'code' => $m01_unknown . '-x' ), false );
+vcap_rl_assert( 429 === $m01_l1->get_status() && 429 === $m01_l2->get_status() && $m01_l1->get_data()['message'] === $m01_l2->get_data()['message'] && ! WC()->cart->has_discount( 'rl-valid-' . $tag ), 'M12-01: cart/coupons – a limited visitor gets 429 for an existing and an unknown code alike' );
+WC()->cart->empty_cart();
+wc_clear_notices();
 vcap_rl_reset();
 // AP-S1-2: REST /redemptions/check (and reserve) as another customer: 404 like an unknown code, counted as a failure.
 $ap_other = (int) wp_insert_user( array( 'user_login' => 'vcap-rl-other-' . $tag, 'user_pass' => wp_generate_password( 20 ), 'user_email' => 'rl-other-' . $tag . '@example.test', 'role' => 'customer' ) );

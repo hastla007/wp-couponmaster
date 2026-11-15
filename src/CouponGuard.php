@@ -11,7 +11,7 @@ defined( 'ABSPATH' ) || exit;
  * Same rules and bucket as the plugin's forms (CodeLookup): each application counts per visitor before WooCommerce looks
  * the code up; an existing code gives the attempt back, an unknown code (or another customer's store credit) is
  * booked as a failure. Once the visitor's quota is used up, every application in that request is refused with
- * the same message – whether the code exists or not, so the answer reveals nothing. Coupons already in the cart
+ * the same message – whether the code exists or not, so the answer reveals nothing (Store API: status 429). Coupons already in the cart
  * and coupons applied by code (promotions, coupon links) are never touched.
  */
 final class CouponGuard {
@@ -62,28 +62,151 @@ final class CouponGuard {
 	 * Store API (block cart and checkout, headless shops). Recognised by the route's handler class, else by the
 	 * route path compared case-insensitively – WordPress matches REST routes case-insensitively, so
 	 * "/wc/store/v1/Cart/Apply-Coupon" reaches the same handler (also through ?rest_route= and batch requests).
+	 *
+	 * M12-01: `cart/coupons` checks the code with a validate_callback (coupon_exists) before any callback runs, so
+	 * WooCommerce answers an unknown code with 400 rest_invalid_param and an existing one with 401 (missing nonce)
+	 * or 201. Here the attempt is counted first; a limited visitor gets 429 for every code; an unknown code (also
+	 * one smuggled in as `discount_type`, which has the same validate_callback) and another customer's store
+	 * credit are booked as failures and get one uniform 400 "invalid code" – before the nonce check, so that
+	 * answer does not depend on the nonce either.
+	 *
+	 * @param mixed $response Result so far (WP_Error from the parameter validation).
+	 * @param mixed $handler  Route handler.
+	 * @param mixed $request  Request.
+	 * @return mixed
 	 */
 	public function rest_before( $response, $handler, $request ) {
-		if ( $request instanceof \WP_REST_Request && 'POST' === strtoupper( $request->get_method() ) && self::applies_coupon( $handler, (string) $request->get_route() ) ) {
-			$code = $request->get_param( 'code' );
-			if ( is_string( $code ) && '' !== $code ) {
-				$this->begin( wc_format_coupon_code( $code ) );
-			}
+		if ( ! $request instanceof \WP_REST_Request || 'POST' !== strtoupper( $request->get_method() ) ) {
+			return $response;
+		}
+		$route = (string) $request->get_route();
+		if ( self::is_batch( $handler, $route ) ) {
+			self::batch_validation( $request );
+			return $response;
+		}
+		$kind = self::coupon_route( $handler, $route );
+		if ( '' === $kind ) {
+			return $response;
+		}
+		$code  = $request->get_param( 'code' );
+		$code  = is_string( $code ) ? wc_format_coupon_code( $code ) : '';
+		$type  = 'coupons' === $kind ? $request->get_param( 'discount_type' ) : null;
+		$probe = is_string( $type ) && '' !== $type;
+		if ( '' === $code && $probe ) {
+			$code = wc_format_coupon_code( (string) $type );
+		}
+		if ( '' === $code ) {
+			return $response;
+		}
+		$this->begin( $code );
+		if ( $this->limited ) {
+			return new \WP_Error( 'woocommerce_rest_cart_coupon_error', self::message(), array( 'status' => 429 ) );
+		}
+		if ( 'coupons' === $kind && ( $probe || self::invalid_code_param( $response ) || self::foreign( $code ) ) ) {
+			$this->failed = true;
+			return new \WP_Error( 'woocommerce_rest_cart_coupon_error', self::invalid_message( $code ), array( 'status' => 400 ) );
 		}
 		return $response;
 	}
 
 	/** Whether a Store API request adds a coupon to the cart (handler CartApplyCoupon or CartCoupons). */
 	public static function applies_coupon( $handler, string $route ): bool {
+		return '' !== self::coupon_route( $handler, $route );
+	}
+
+	/**
+	 * Which coupon route a Store API request goes to: 'apply' (cart/apply-coupon), 'coupons' (cart/coupons, with
+	 * WooCommerce's validate_callback on the code) or '' (another route).
+	 *
+	 * @param mixed $handler Route handler.
+	 */
+	private static function coupon_route( $handler, string $route ): string {
+		$short = self::handler_class( $handler );
+		if ( 'CartApplyCoupon' === $short ) {
+			return 'apply';
+		}
+		if ( 'CartCoupons' === $short ) {
+			return 'coupons';
+		}
+		if ( preg_match( '#^/wc/store(?:/v\d+)?/cart/(apply-coupon|coupons)/?$#i', $route, $m ) ) {
+			return 'coupons' === strtolower( $m[1] ) ? 'coupons' : 'apply';
+		}
+		return '';
+	}
+
+	/**
+	 * Short class name of a Store API route handler ('' = no Store API handler).
+	 *
+	 * @param mixed $handler Route handler.
+	 */
+	private static function handler_class( $handler ): string {
 		$callback = is_array( $handler ) ? ( $handler['callback'] ?? null ) : null;
 		if ( is_array( $callback ) && isset( $callback[0] ) && is_object( $callback[0] ) ) {
 			$class = get_class( $callback[0] );
-			$short = substr( (string) strrchr( '\\' . $class, '\\' ), 1 );
-			if ( in_array( $short, array( 'CartApplyCoupon', 'CartCoupons' ), true ) && str_contains( $class, 'StoreApi' ) ) {
-				return true;
+			if ( str_contains( $class, 'StoreApi' ) ) {
+				return substr( (string) strrchr( '\\' . $class, '\\' ), 1 );
 			}
 		}
-		return (bool) preg_match( '#^/wc/store(?:/v\d+)?/cart/(?:apply-coupon|coupons)/?$#i', $route );
+		return '';
+	}
+
+	/**
+	 * Store API batch route.
+	 *
+	 * @param mixed $handler Route handler.
+	 */
+	private static function is_batch( $handler, string $route ): bool {
+		return 'Batch' === self::handler_class( $handler ) || (bool) preg_match( '#^/wc/store(?:/v\d+)?/batch/?$#i', $route );
+	}
+
+	/**
+	 * A batch with validation "require-all-validate" answers parameter errors of its requests without running any
+	 * filter – the coupon_exists check of cart/coupons would answer uncounted. Batches that apply a coupon are
+	 * therefore validated request by request ("normal"), so every application passes rest_before().
+	 */
+	private static function batch_validation( \WP_REST_Request $request ): void {
+		$requests = $request->get_param( 'requests' );
+		if ( 'require-all-validate' !== $request->get_param( 'validation' ) || ! is_array( $requests ) ) {
+			return;
+		}
+		foreach ( $requests as $single ) {
+			$path   = is_array( $single ) && is_string( $single['path'] ?? null ) ? (string) wp_parse_url( $single['path'], PHP_URL_PATH ) : '';
+			$method = is_array( $single ) && is_string( $single['method'] ?? null ) ? strtoupper( $single['method'] ) : 'POST';
+			if ( 'POST' === $method && self::applies_coupon( array(), $path ) ) {
+				$request->set_param( 'validation', 'normal' );
+				return;
+			}
+		}
+	}
+
+	/**
+	 * WooCommerce's parameter validation refused the code (coupon_exists = false: unknown code).
+	 *
+	 * @param mixed $response Result so far.
+	 */
+	private static function invalid_code_param( $response ): bool {
+		if ( ! is_wp_error( $response ) || 'rest_invalid_param' !== $response->get_error_code() ) {
+			return false;
+		}
+		$data = $response->get_error_data();
+		return is_array( $data ) && is_array( $data['params'] ?? null ) && ( isset( $data['params']['code'] ) || isset( $data['params']['discount_type'] ) );
+	}
+
+	/** Another customer's store credit: exists, but must read like an unknown code (CodeLookup::visible()). */
+	private static function foreign( string $code ): bool {
+		$id = strlen( $code ) <= 100 ? (int) wc_get_coupon_id_by_code( $code ) : 0;
+		if ( $id <= 0 || ! isset( vcap()->vouchers ) ) {
+			return false;
+		}
+		$voucher = vcap()->vouchers->get_by_coupon( $id );
+		return $voucher instanceof Voucher && ! CodeLookup::visible( $voucher );
+	}
+
+	/** WooCommerce's own "does not exist" message for the code, worded as its Store API words coupon errors. */
+	private static function invalid_message( string $code ): string {
+		$coupon = new \WC_Coupon();
+		$coupon->set_code( $code );
+		return esc_html( wp_strip_all_tags( (string) $coupon->get_coupon_error( \WC_Coupon::E_WC_COUPON_NOT_EXIST ) ) );
 	}
 
 	public function rest_after( $response, $handler, $request ) {
