@@ -140,6 +140,99 @@ final class Ledger {
 		} while ( count( $vouchers ) === 500 );
 	}
 
+	/** Attention kind prefix of a balance that differs from its ledger (M12-63), followed by the voucher id. */
+	public const VERIFY_KIND = 'ledger-';
+
+	/** Balance vouchers compared per query of verify(). */
+	private const VERIFY_BATCH = 1000;
+
+	/**
+	 * M12-63: reconciles every stored balance (gift cards, store credit) with its ledger. Each booking writes the
+	 * new balance and a ledger row with balance_after in one transaction, so the balance stored on the voucher must
+	 * equal the balance_after of its newest ledger row that carries one (the face value while there is none – the
+	 * same reading as liability()). A difference means the balance was written without a booking (direct SQL, a
+	 * lost update, an import) and the liability report no longer matches the cards.
+	 *
+	 * Read in batches through the primary key, until done or $budget seconds are used (0 = no limit).
+	 *
+	 * @return array{rows: list<array{voucher_id:int,code:string,currency:string,balance:float,ledger:float,event_id:int}>, checked:int, complete:bool}
+	 */
+	public static function verify( float $budget = 0.0 ): array {
+		global $wpdb;
+		$t        = Install::tables();
+		$start    = microtime( true );
+		$after    = 0;
+		$checked  = 0;
+		$rows     = array();
+		$complete = true;
+		do {
+			$last  = "( SELECT e.%s FROM {$t['events']} e WHERE e.voucher_id = v.id AND e.balance_after IS NOT NULL ORDER BY e.id DESC LIMIT 1 )";
+			$sql   = 'SELECT v.id, v.code, v.currency, v.balance, v.initial_amount, ' . sprintf( $last, 'id' ) . ' AS event_id, ' . sprintf( $last, 'balance_after' ) . " AS ledger FROM {$t['vouchers']} v WHERE v.id > %d AND v.usage_mode = 'balance' ORDER BY v.id LIMIT %d";
+			$batch = $wpdb->get_results( $wpdb->prepare( $sql, $after, self::VERIFY_BATCH ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared -- table names of this plugin, values as placeholders.
+			$batch = is_array( $batch ) ? $batch : array();
+			$size  = count( $batch );
+			$after = $batch ? (int) end( $batch )['id'] : $after;
+			foreach ( $batch as $r ) {
+				++$checked;
+				$event    = (int) $r['event_id'];
+				$ledger   = null !== $r['ledger'] ? (float) $r['ledger'] : (float) $r['initial_amount'];
+				$currency = '' !== (string) $r['currency'] ? (string) $r['currency'] : (string) get_option( 'woocommerce_currency' );
+				$decimals = API\V1\RedemptionService::decimals( $currency );
+				if ( Coupons\Balances::minor_units( (float) $r['balance'], $decimals ) !== Coupons\Balances::minor_units( $ledger, $decimals ) ) {
+					$rows[] = array(
+						'voucher_id' => (int) $r['id'],
+						'code'       => (string) $r['code'],
+						'currency'   => $currency,
+						'balance'    => round( (float) $r['balance'], $decimals ),
+						'ledger'     => round( $ledger, $decimals ),
+						'event_id'   => $event,
+					);
+				}
+			}
+			if ( self::VERIFY_BATCH === $size && $budget > 0 && microtime( true ) - $start >= $budget ) {
+				$complete = false;
+				break;
+			}
+		} while ( self::VERIFY_BATCH === $size );
+		return array( 'rows' => $rows, 'checked' => $checked, 'complete' => $complete );
+	}
+
+	/**
+	 * M12-63: verify() with its findings kept as Attention cases (one per voucher, order 0, kind "ledger-{id}"); a
+	 * case whose voucher matches its ledger again is resolved when the whole table was checked.
+	 *
+	 * @return array{rows: list<array{voucher_id:int,code:string,currency:string,balance:float,ledger:float,event_id:int}>, checked:int, complete:bool}
+	 */
+	public static function reconcile( float $budget = 0.0 ): array {
+		$result = self::verify( $budget );
+		$found  = array();
+		foreach ( $result['rows'] as $row ) {
+			$kind           = self::VERIFY_KIND . $row['voucher_id'];
+			$found[ $kind ] = true;
+			$decimals       = API\V1\RedemptionService::decimals( $row['currency'] );
+			Attention::add(
+				0,
+				$kind,
+				sprintf(
+					/* translators: 1: voucher code, 2: stored balance, 3: balance after the last ledger entry, 4: currency code */
+					__( 'Voucher %1$s: the stored balance (%2$s %4$s) differs from its history (%3$s %4$s after the last booking). Check its history and correct the balance; wp vcap ledger verify lists every difference.', 'voucher-captain' ),
+					$row['code'],
+					number_format( $row['balance'], $decimals, '.', '' ),
+					number_format( $row['ledger'], $decimals, '.', '' ),
+					$row['currency']
+				)
+			);
+		}
+		if ( $result['complete'] ) {
+			foreach ( Attention::all() as $case ) {
+				if ( 0 === (int) $case['order_id'] && str_starts_with( (string) $case['kind'], self::VERIFY_KIND ) && ! isset( $found[ (string) $case['kind'] ] ) ) {
+					Attention::resolve( 0, (string) $case['kind'] );
+				}
+			}
+		}
+		return $result;
+	}
+
 	/** SQL list of quoted event names. */
 	private static function in_list( array $events ): string {
 		return implode( ',', array_map( static fn( $e ) => "'" . esc_sql( (string) $e ) . "'", $events ) );

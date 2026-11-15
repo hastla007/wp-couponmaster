@@ -78,7 +78,7 @@ final class Health {
 	}
 
 	/** Checks that go through all voucher products: run asynchronously (REST), so Site Health opens at once. */
-	private const ASYNC = array( 'validity', 'tax_status' );
+	private const ASYNC = array( 'validity', 'tax_status', 'ledger' );
 	/** Voucher products checked at most per test (the result says when there are more). */
 	private const MAX_PRODUCTS = 500;
 
@@ -453,6 +453,34 @@ final class Health {
 		);
 	}
 
+	/** Seconds the ledger check of Site Health may read (the rest is left to "wp vcap ledger verify"). */
+	private const LEDGER_BUDGET = 10.0;
+
+	/**
+	 * M12-63: stored balances that differ from their ledger (Ledger::reconcile(); each one is also listed in the
+	 * Attention notice until it matches again).
+	 */
+	public function test_ledger(): array {
+		$result = Ledger::reconcile( self::LEDGER_BUDGET );
+		$count  = count( $result['rows'] );
+		$more   = $result['complete'] ? '' : ' ' . __( 'Not every voucher could be checked in time; run "wp vcap ledger verify" for the complete check.', 'voucher-captain' );
+		if ( ! $count ) {
+			return self::result( 'ledger', 'good', __( 'Voucher balances match their history', 'voucher-captain' ), __( 'The balance of every gift card and store credit account equals the balance after its last booking in the history.', 'voucher-captain' ) . $more );
+		}
+		$codes = array_map( static fn( $r ) => $r['code'], array_slice( $result['rows'], 0, 20 ) );
+		return self::result(
+			'ledger',
+			'critical',
+			__( 'Some voucher balances differ from their history', 'voucher-captain' ),
+			sprintf(
+				/* translators: 1: number of vouchers, 2: voucher codes */
+				_n( '%1$d voucher has a stored balance that differs from the balance after its last booking (written without a booking). The liability report reads the history, so it no longer matches the card. Check and correct: %2$s', '%1$d vouchers have a stored balance that differs from the balance after their last booking (written without a booking). The liability report reads the history, so it no longer matches the cards. Check and correct: %2$s', $count, 'voucher-captain' ),
+				$count,
+				implode( ', ', $codes )
+			) . $more
+		);
+	}
+
 	/** Voucher products whose tax status does not fit the voucher kind (multi-purpose: none, single-purpose: taxable). */
 	public function test_tax_status(): array {
 		list( $ids, $more ) = self::voucher_products( array( 'product', 'product_variation' ) );
@@ -493,6 +521,7 @@ final class Health {
 				return '<p><a href="' . esc_url( admin_url( 'admin.php?page=wc-status&tab=action-scheduler&status=pending&s=vcap' ) ) . '">' . esc_html__( 'Scheduled voucher tasks', 'voucher-captain' ) . '</a></p>';
 			case 'mail':
 			case 'template_overrides':
+			case 'ledger':
 				return '';
 		}
 		return '<p><a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=vcap' ) ) . '">' . esc_html__( 'Voucher settings', 'voucher-captain' ) . '</a></p>';

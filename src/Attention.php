@@ -68,10 +68,10 @@ final class Attention {
 		echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'Voucher Captain', 'voucher-captain' ) . ':</strong> '
 			. esc_html__( 'These orders need your attention (money of a refund, cancellation or top-up was not booked as expected):', 'voucher-captain' ) . '</p><ul>';
 		foreach ( array_slice( $all, -20, null, true ) as $key => $case ) {
-			$order = wc_get_order( (int) $case['order_id'] );
-			$label = $order instanceof \WC_Order ? '<a href="' . esc_url( $order->get_edit_order_url() ) . '">#' . esc_html( $order->get_order_number() ) . '</a>' : '#' . esc_html( (string) $case['order_id'] );
+			$order = (int) $case['order_id'] > 0 ? wc_get_order( (int) $case['order_id'] ) : null;
+			$label = $order instanceof \WC_Order ? '<a href="' . esc_url( $order->get_edit_order_url() ) . '">#' . esc_html( $order->get_order_number() ) . '</a>: ' : ( (int) $case['order_id'] > 0 ? '#' . esc_html( (string) $case['order_id'] ) . ': ' : '' );
 			$done  = wp_nonce_url( admin_url( 'admin-post.php?action=vcap_attention_done&case=' . rawurlencode( (string) $key ) ), 'vcap_attention_done' );
-			echo '<li>' . $label . ': ' . esc_html( (string) $case['text'] ) . ' <a href="' . esc_url( $done ) . '">' . esc_html__( 'Done', 'voucher-captain' ) . '</a></li>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped above.
+			echo '<li>' . $label . esc_html( (string) $case['text'] ) . ' <a href="' . esc_url( $done ) . '">' . esc_html__( 'Done', 'voucher-captain' ) . '</a></li>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped above.
 		}
 		echo '</ul></div>';
 	}

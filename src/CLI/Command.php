@@ -5,6 +5,7 @@ use VCAP\Delivery;
 use VCAP\Diagnostics;
 use VCAP\Health;
 use VCAP\Install;
+use VCAP\Ledger;
 use VCAP\Plugin;
 use VCAP\Source;
 use VCAP\Voucher;
@@ -221,6 +222,42 @@ final class Command {
 		// The rules every other path uses (CouponManager::sync_coupon()): balance under the row lock, coupon status.
 		\VCAP\CouponManager::sync_coupon( $voucher, array_merge( $amount ? array( 'amount' ) : array(), $enabled !== $is_on ? array( 'status' ) : array() ) );
 		return true;
+	}
+
+	/**
+	 * Reconciles stored balances with the ledger (M12-63).
+	 *
+	 * ## OPTIONS
+	 *
+	 * <action>
+	 * : "verify" compares the balance of every gift card and store credit account with the balance after its last
+	 * booking in the history; differences are listed (and kept in the admin notice "needs your attention").
+	 *
+	 * [--format=<format>]
+	 * : table, json, csv or yaml.
+	 * ---
+	 * default: table
+	 * ---
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp vcap ledger verify
+	 *
+	 * @param array $args       Positional arguments.
+	 * @param array $assoc_args Options.
+	 */
+	public function ledger( $args = array(), $assoc_args = array() ): void {
+		if ( 'verify' !== ( $args[0] ?? '' ) ) {
+			self::error( 'Usage: wp vcap ledger verify' );
+			return;
+		}
+		$result = Ledger::reconcile();
+		if ( ! $result['rows'] ) {
+			self::success( sprintf( '%d stored balances checked, all match the ledger.', $result['checked'] ) );
+			return;
+		}
+		self::table( $result['rows'], array( 'voucher_id', 'code', 'currency', 'balance', 'ledger', 'event_id' ), (string) ( $assoc_args['format'] ?? 'table' ) );
+		self::error( sprintf( '%d of %d stored balances differ from the ledger (balance = stored, ledger = balance after the last booking).', count( $result['rows'] ), $result['checked'] ) );
 	}
 
 	/**
