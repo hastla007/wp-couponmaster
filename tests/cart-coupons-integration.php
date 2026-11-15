@@ -305,4 +305,57 @@ vcap_cc_assert( 'critical' === $health['status'] && str_contains( wp_strip_all_t
 $foreign->status = VCAP\Voucher::STATUS_VOID;
 vcap()->vouchers->update( $foreign );
 
+/* ---- M12-20: Store API cart/add-item takes the customer-chosen amount ----------------------------- */
+
+add_filter( 'woocommerce_store_api_disable_nonce_check', '__return_true' );
+WC()->cart->empty_cart();
+function vcap_cc_custom_product( bool $topup ): WC_Product_Simple {
+	$product = new WC_Product_Simple();
+	$product->set_name( $topup ? 'CC top-up, any amount' : 'CC gift card, any amount' );
+	$product->set_virtual( true );
+	$product->update_meta_data( '_vcap_enabled', 'yes' );
+	$product->update_meta_data( '_vcap_type', 'giftcard' );
+	$product->update_meta_data( '_vcap_usage', 'balance' );
+	$product->update_meta_data( '_vcap_amount_source', 'custom' );
+	$product->update_meta_data( '_vcap_custom_min', '10' );
+	$product->update_meta_data( '_vcap_custom_max', '200' );
+	$product->update_meta_data( '_vcap_custom_presets', '25; 50' );
+	if ( $topup ) {
+		$product->update_meta_data( VCAP\TopUp::PRODUCT_META, 'yes' );
+	}
+	$product->save();
+	return $product;
+}
+function vcap_cc_store_add( int $id, array $params ) {
+	$request = new WP_REST_Request( 'POST', '/wc/store/v1/cart/add-item' );
+	$request->set_param( 'id', $id );
+	$request->set_param( 'quantity', 1 );
+	foreach ( $params as $key => $value ) {
+		$request->set_param( $key, $value );
+	}
+	return rest_do_request( $request );
+}
+$any        = vcap_cc_custom_product( false );
+$_REQUEST['vcap_amount'] = '77'; // Must never be read for a Store API request.
+$none       = vcap_cc_store_add( $any->get_id(), array() );
+unset( $_REQUEST['vcap_amount'] );
+vcap_cc_assert( $none->is_error() && 400 === $none->get_status() && 0 === count( WC()->cart->get_cart() ), 'M12-20: a Store API add-item without an amount is refused with 400 (no $_REQUEST fallback)', $none->get_data() );
+$typed = vcap_cc_store_add( $any->get_id(), array( 'vcap_amount' => '30' ) );
+$items = array_values( WC()->cart->get_cart() );
+vcap_cc_assert( ! $typed->is_error() && 1 === count( $items ) && 30.0 === (float) ( $items[0]['vcap_amount'] ?? 0 ), 'M12-20: the typed amount "vcap_amount" is taken into the cart line', $typed->is_error() ? $typed->get_data() : $items[0]['vcap_amount'] ?? null );
+$preset = vcap_cc_store_add( $any->get_id(), array( 'vcap_amount_preset' => '50' ) );
+$amounts = array_map( static fn( $item ) => (float) ( $item['vcap_amount'] ?? 0 ), array_values( WC()->cart->get_cart() ) );
+sort( $amounts );
+vcap_cc_assert( ! $preset->is_error() && array( 30.0, 50.0 ) === $amounts, 'M12-20: a suggested amount "vcap_amount_preset" makes its own cart line', $amounts );
+$too_much = vcap_cc_store_add( $any->get_id(), array( 'vcap_amount' => '500' ) );
+vcap_cc_assert( $too_much->is_error() && 'vcap_invalid_amount' === ( $too_much->get_data()['code'] ?? '' ), 'M12-20: an amount above the maximum is refused with the reason', $too_much->get_data() );
+WC()->cart->empty_cart();
+$topup_any  = vcap_cc_custom_product( true );
+$topup_card = vcap_cc_card( 5 );
+$topped     = vcap_cc_store_add( $topup_any->get_id(), array( 'vcap_topup_code' => $topup_card->code, 'vcap_amount' => '40' ) );
+$items      = array_values( WC()->cart->get_cart() );
+WC()->cart->calculate_totals();
+vcap_cc_assert( ! $topped->is_error() && 1 === count( $items ) && 40.0 === (float) ( $items[0]['vcap_amount'] ?? 0 ) && $topup_card->code === ( $items[0]['vcap_topup_code'] ?? '' ) && 40.0 === round( (float) WC()->cart->get_subtotal(), 2 ), 'M12-20: a top-up with a custom amount is added through the Store API with card code and amount 40', $topped->is_error() ? $topped->get_data() : $items );
+WC()->cart->empty_cart();
+
 echo "Cart coupons integration checks passed.\n";
