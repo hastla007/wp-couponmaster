@@ -426,6 +426,37 @@ $f11_cb->setAccessible( true );
 $f11_html = (string) $f11_cb->invoke( $f11_table, $u10_after );
 vcap_security_assert( (bool) preg_match( '/^<label class="screen-reader-text" for="cb-select-' . $u10_after->id . '">Select voucher ' . preg_quote( $u10_after->code, '/' ) . '<\/label><input type="checkbox" id="cb-select-' . $u10_after->id . '" name="voucher_ids\[\]"/', $f11_html ), 'F11: the row checkbox has a screen-reader label "Select voucher CODE" linked by id' );
 
+// AP-P1-4: the list loads the orders and coupons of its page together, not one by one per row.
+$p14_tag = 'p14-' . strtolower( wp_generate_password( 8, false, false ) );
+for ( $i = 0; $i < 3; $i++ ) {
+	$p14_order = wc_create_order();
+	$p14_order->save();
+	$p14_v = vcap_security_single();
+	$wpdb->update( VCAP\Install::tables()['vouchers'], array( 'order_id' => $p14_order->get_id(), 'buyer_email' => $p14_tag . '-' . $i . '@example.com' ), array( 'id' => $p14_v->id ) );
+}
+$_REQUEST['s'] = $p14_tag;
+wp_cache_flush();
+$f11_table->prepare_items();
+unset( $_REQUEST['s'] );
+$p14_queries = array();
+$p14_log     = static function ( $q ) use ( &$p14_queries ) {
+	$p14_queries[] = $q;
+	return $q;
+};
+$p14_order_col = new ReflectionMethod( $f11_table, 'column_order' );
+$p14_code_col  = new ReflectionMethod( $f11_table, 'column_code' );
+$p14_order_col->setAccessible( true );
+$p14_code_col->setAccessible( true );
+add_filter( 'query', $p14_log );
+$p14_html = '';
+foreach ( $f11_table->items as $p14_item ) {
+	$p14_html .= $p14_order_col->invoke( $f11_table, $p14_item ) . $p14_code_col->invoke( $f11_table, $p14_item );
+}
+remove_filter( 'query', $p14_log );
+$p14_row_reads = preg_grep( '/wc_orders|' . preg_quote( $wpdb->posts, '/' ) . '|' . preg_quote( $wpdb->postmeta, '/' ) . '/', $p14_queries );
+vcap_security_assert( 3 === count( $f11_table->items ) && 3 === substr_count( $p14_html, '>#' ) && ! $p14_row_reads, 'AP-P1-4: the rows of the voucher list read no order, post or meta row on their own (primed by prepare_items())', array_values( $p14_row_reads ) );
+VCAP\Voucher::forget_orders();
+
 // O3: a counter redemption of a single-use voucher is cancelled: active again, coupon counter back to 0 (limit 1).
 $o3_cashier = (int) wp_insert_user( array( 'user_login' => 'vcap-o3-' . wp_generate_password( 6, false, false ), 'user_pass' => wp_generate_password( 20 ), 'role' => VCAP\Install::CASHIER_ROLE ) );
 wp_set_current_user( $o3_cashier );

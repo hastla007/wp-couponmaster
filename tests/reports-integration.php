@@ -116,6 +116,33 @@ vcap_report_assert( 3 === count( $detail ) && abs( 59.0 - array_sum( array_colum
 vcap_report_assert( 3 === count( $jcsv ) && 3 === count( VCAP\Ledger::journal_csv( new ArrayIterator( $journal ) ) ), 'the journal CSV also takes a stream of bookings' );
 $all = iterator_to_array( $ledger->journal_all( $today, $today, 1 ), false );
 vcap_report_assert( count( $all ) === $ledger->journal_count( $today, $today ) && count( $all ) >= 2, 'the journal export reads every booking in batches' );
+// AP-P1-2: every export ends with "End of export: N rows"; the runtime cache is flushed after each batch and the
+// order numbers of a batch come from one query.
+$p12_flushes = VCAP\Ledger::$flushes;
+$p12_journal = iterator_to_array( $ledger->journal_export( $today, $today, 1 ), false );
+vcap_report_assert( VCAP\Ledger::journal_header() === $p12_journal[0] && array( sprintf( 'End of export: %d rows', count( $all ) ) ) === end( $p12_journal ) && count( $p12_journal ) === count( $all ) + 2, 'AP-P1-2: the journal CSV ends with "End of export: N rows" (N = bookings)', end( $p12_journal ) );
+vcap_report_assert( VCAP\Ledger::$flushes - $p12_flushes >= count( $all ), 'AP-P1-2: the journal export flushes the runtime cache after every batch', VCAP\Ledger::$flushes - $p12_flushes );
+$p12_liability = iterator_to_array( $ledger->liability_export( $today ), false );
+vcap_report_assert( array( sprintf( 'End of export: %d rows', iterator_count( $ledger->liability_rows( $today ) ) ) ) === end( $p12_liability ) && VCAP\Ledger::liability_header() === $p12_liability[0], 'AP-P1-2: the liability CSV ends with "End of export: N rows"', end( $p12_liability ) );
+$p12_counter = iterator_to_array( $ledger->counter_export( $today, $today, 'till' ), false );
+vcap_report_assert( array( sprintf( 'End of export: %d rows', count( $ledger->counter_totals( $today, $today, 'till' ) ) ) ) === end( $p12_counter ), 'AP-P1-2: the counter CSV ends with "End of export: N rows"', end( $p12_counter ) );
+$p12_orders = array();
+for ( $i = 0; $i < 3; $i++ ) {
+	$p12_order = wc_create_order();
+	$p12_order->save();
+	$p12_orders[] = $p12_order->get_id();
+}
+wp_cache_flush();
+$p12_queries = 0;
+VCAP\Format::prime_order_numbers( $p12_orders );
+$p12_count = static function ( $q ) use ( &$p12_queries ) {
+	++$p12_queries;
+	return $q;
+};
+add_filter( 'query', $p12_count );
+$p12_numbers = array_map( array( VCAP\Format::class, 'order_number' ), $p12_orders );
+remove_filter( 'query', $p12_count );
+vcap_report_assert( 0 === $p12_queries && array_map( 'strval', $p12_orders ) === $p12_numbers, 'AP-P1-2: the order numbers of an export batch are primed in one query (none per row)', array( $p12_queries, $p12_numbers ) );
 
 global $wpdb;
 // B3: the report sums code lines, totals and refunds in SQL per chunk – the number of queries does not grow with

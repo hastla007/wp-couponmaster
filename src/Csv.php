@@ -128,6 +128,30 @@ final class Csv {
 	}
 
 	/**
+	 * AP-P1-2: the closing line of an export ("End of export: N rows", N without the header). A file cut off by a
+	 * timeout or memory error after the headers were sent lacks it, so a truncated export is recognisable.
+	 */
+	public static function end_row( int $rows ): array {
+		/* translators: %d: number of data rows in the CSV file */
+		return array( sprintf( __( 'End of export: %d rows', 'voucher-captain' ), $rows ) );
+	}
+
+	/**
+	 * Passes the rows through and adds end_row() after the last one.
+	 *
+	 * @param iterable<array> $rows Header row first (not counted); may be a generator.
+	 * @return \Generator<array>
+	 */
+	public static function with_end_row( iterable $rows, bool $header = true ): \Generator {
+		$count = 0;
+		foreach ( $rows as $row ) {
+			yield $row;
+			++$count;
+		}
+		yield self::end_row( max( 0, $count - ( $header ? 1 : 0 ) ) );
+	}
+
+	/**
 	 * Streams rows as a CSV download.
 	 *
 	 * @param iterable<array> $rows Header row first; may be a generator.

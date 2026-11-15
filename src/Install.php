@@ -633,6 +633,7 @@ final class Install {
 			self::create_tables();
 			self::add_caps();
 			self::ensure_upload_dir();
+			Settings::store_request_defaults(); // AP-P1-7: saved values are kept.
 			if ( ! get_option( 'vcap_secret' ) ) {
 				update_option( 'vcap_secret', wp_generate_password( 64, true, true ), false );
 			}

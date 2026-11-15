@@ -229,4 +229,33 @@ wp_delete_post( $g11_page, true );
 $g5_script = wp_scripts()->query( 'vcap-blocks', 'registered' );
 vcap_sc_assert( $g5_script && in_array( 'wp-components', (array) $g5_script->deps, true ) && in_array( 'wp-server-side-render', (array) $g5_script->deps, true ), 'G5: the block editor script depends on wp-components (Disabled) and wp-server-side-render' );
 
+// AP-P1-6: the cached "redeem form in a template" answer is only forgotten when a template or layout is saved.
+set_transient( 'vcap_redeem_in_templates', 'no', DAY_IN_SECONDS );
+$p16_page = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'publish', 'post_title' => 'P16 page', 'post_content' => 'hello' ) );
+$p16_kept = 'no' === get_transient( 'vcap_redeem_in_templates' );
+$p16_block = wp_insert_post( array( 'post_type' => 'wp_block', 'post_status' => 'publish', 'post_title' => 'P16 pattern', 'post_content' => '<!-- wp:paragraph --><p>x</p><!-- /wp:paragraph -->' ) );
+vcap_sc_assert( $p16_kept && false === get_transient( 'vcap_redeem_in_templates' ), 'AP-P1-6: saving a page keeps the cached template answer, saving a synced pattern forgets it' );
+wp_delete_post( $p16_page, true );
+wp_delete_post( $p16_block, true );
+// ProductChecks: "_vcap_*" meta of a coupon leaves the cached shop problems alone, of a product it forgets them.
+$p16_flushed = new ReflectionProperty( VCAP\ProductChecks::class, 'problems_flushed' );
+$p16_flushed->setAccessible( true );
+$p16_flushed->setValue( null, false );
+set_transient( VCAP\ProductChecks::PROBLEMS_CACHE, array(), HOUR_IN_SECONDS );
+$p16_coupon = new WC_Coupon();
+$p16_coupon->set_code( 'p16-' . strtolower( wp_generate_password( 8, false, false ) ) );
+$p16_coupon->save();
+update_post_meta( $p16_coupon->get_id(), '_vcap_p16_marker', '1' );
+$p16_coupon_kept = false !== get_transient( VCAP\ProductChecks::PROBLEMS_CACHE );
+$p16_product = new WC_Product_Simple();
+$p16_product->set_name( 'P16 product' );
+$p16_product->save();
+$p16_flushed->setValue( null, false );
+set_transient( VCAP\ProductChecks::PROBLEMS_CACHE, array(), HOUR_IN_SECONDS );
+update_post_meta( $p16_product->get_id(), '_vcap_p16_marker', '1' );
+vcap_sc_assert( $p16_coupon_kept && false === get_transient( VCAP\ProductChecks::PROBLEMS_CACHE ), 'AP-P1-6: voucher meta of a coupon keeps the cached product problems, of a product it forgets them' );
+$p16_coupon->delete( true );
+$p16_product->delete( true );
+$p16_flushed->setValue( null, false );
+
 echo "Voucher Captain shortcode checks passed.\n";

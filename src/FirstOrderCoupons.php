@@ -135,9 +135,10 @@ final class FirstOrderCoupons {
 				self::CUSTOMER_META,
 				CustomerEmail::key( $email ),
 				array(
-					'status' => array_merge( $plain, $undone ),
-					'order'  => 'DESC',
-					'limit'  => 50,
+					'status'         => array_merge( $plain, $undone ),
+					'order'          => 'DESC',
+					'limit'          => 50,
+					'created_before' => max( 0, $before ), // AP-P1-1: newer orders never fill the 50.
 				)
 			);
 			foreach ( $ids as $id ) {

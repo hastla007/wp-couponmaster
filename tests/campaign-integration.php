@@ -54,7 +54,12 @@ $pool  = $campaigns->generate_pool( $batch, 10, array( 'length' => 12 ) );
 vcap_camp_assert( is_array( $pool ) && 10 === count( $pool ), 'ten pool codes are generated' );
 $found = array_values( array_filter( vcap()->code_pool->batches(), static fn( $b ) => $b['batch'] === $batch ) );
 vcap_camp_assert( $found && 10 === $found[0]['total'] && 10 === $found[0]['free'], 'the pool batch holds ten free codes' );
-vcap_camp_assert( 11 === count( $campaigns->pool_rows( $batch ) ), 'the pool CSV lists every code' );
+vcap_camp_assert( 11 === count( iterator_to_array( $campaigns->pool_rows( $batch ), false ) ), 'the pool CSV lists every code' );
+$p12_flushes = VCAP\Ledger::$flushes;
+$p12_rows    = iterator_to_array( VCAP\Csv::with_end_row( $campaigns->pool_rows( $batch, 3 ) ), false );
+$p12_codes   = array_column( array_slice( $p12_rows, 1, 10 ), 0 );
+vcap_camp_assert( 12 === count( $p12_rows ) && 10 === count( array_unique( $p12_codes ) ) && ! array_diff( array_map( 'strtolower', $pool ), array_map( 'strtolower', $p12_codes ) ), 'AP-P1-2: the pool CSV is read by id in batches (3 per query here) and still lists every code once', count( $p12_rows ) );
+vcap_camp_assert( array( 'End of export: 10 rows' ) === end( $p12_rows ) && VCAP\Ledger::$flushes - $p12_flushes >= 4, 'AP-P1-2: the pool CSV ends with "End of export: 10 rows" and the runtime cache is flushed after every batch', array( end( $p12_rows ), VCAP\Ledger::$flushes - $p12_flushes ) );
 $claimed = array();
 for ( $i = 0; $i < 10; $i++ ) {
 	$claimed[] = vcap()->code_pool->claim( $batch );

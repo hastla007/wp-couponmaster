@@ -21,6 +21,9 @@ final class VoucherPurchaseRules {
 		add_action( 'woocommerce_before_order_object_save', array( self::class, 'stamp_customer_key' ) );
 		// V7: velocity limit at checkout (classic and block checkout both run this hook after taking the address).
 		add_action( 'woocommerce_check_cart_items', array( $this, 'check_daily_limit' ) );
+		foreach ( array( 'woocommerce_new_order', 'woocommerce_update_order', 'woocommerce_order_status_changed', 'woocommerce_order_refunded', 'woocommerce_delete_order', 'woocommerce_trash_order' ) as $hook ) {
+			add_action( $hook, array( self::class, 'forget' ) );
+		}
 	}
 
 	/** Order meta: keyed hash of the normalised billing email (CustomerEmail::key()). */
@@ -78,14 +81,18 @@ final class VoucherPurchaseRules {
 		if ( '' !== trim( $email ) ) {
 			$queries[] = $base + array( 'billing_email' => strtolower( trim( $email ) ) );
 			// The normalised mailbox key is read with OrderLookup: wc_get_orders() ignores meta_query on the classic
-			// (posts) order store and would return every order. The date range is checked on the loaded orders.
+			// (posts) order store and would return every order. The date range is part of the query (AP-P1-1: the
+			// 24-hour limit reads one day of orders, not the customer's whole history) and checked again on the
+			// loaded orders.
 			$keyed = OrderLookup::ids_with_meta(
 				self::CUSTOMER_KEY_META,
 				CustomerEmail::key( $email ),
 				array(
-					'status' => self::COUNTED_STATUSES,
-					'order'  => 'DESC',
-					'limit'  => 200,
+					'status'         => self::COUNTED_STATUSES,
+					'order'          => 'DESC',
+					'limit'          => 200,
+					'created_after'  => max( 0, $since ),
+					'created_before' => max( 0, $until ),
 				)
 			);
 			foreach ( $keyed as $id ) {
@@ -130,6 +137,24 @@ final class VoucherPurchaseRules {
 	 * no longer count).
 	 */
 	public static function ordered_last_day( int $user_id, string $email ): float {
+		// AP-P1-1: cart, checkout and Store API run the check several times per request – the orders are read once
+		// per customer (forgotten when an order is created or changes status, see register()).
+		$memo = $user_id . '|' . strtolower( trim( $email ) );
+		if ( ! isset( self::$last_day[ $memo ] ) ) {
+			self::$last_day[ $memo ] = self::read_last_day( $user_id, $email );
+		}
+		return self::$last_day[ $memo ];
+	}
+
+	/** @var array<string, float> ordered_last_day() answers of this request. */
+	private static array $last_day = array();
+
+	/** Forgets the ordered_last_day() answers of this request (an order was created or changed its status). */
+	public static function forget(): void {
+		self::$last_day = array();
+	}
+
+	private static function read_last_day( int $user_id, string $email ): float {
 		$value = 0.0;
 		foreach ( self::customer_orders( $user_id, $email, time() - DAY_IN_SECONDS ) as $id ) {
 			$order = wc_get_order( $id );

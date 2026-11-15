@@ -146,6 +146,43 @@ final class Settings {
 		return $this->get( $id );
 	}
 
+	/**
+	 * AP-P1-7: settings read on (almost) every storefront request (cart, checkout, account, coupon links). Shops that
+	 * never saved them had one options query per request for each (notoptions); their defaults are stored as
+	 * autoloaded options on installation and upgrade instead (store_request_defaults()).
+	 */
+	public const REQUEST_SETTINGS = array(
+		'vcap_coupon_link',
+		'vcap_coupon_link_param',
+		'vcap_referral_enabled',
+		'vcap_store_credit',
+		'vcap_credit_with_coupons',
+		'vcap_credit_apply_order',
+		'vcap_campaigns_enabled',
+		'vcap_discounts_on_vouchers',
+		'vcap_vouchers_buy_vouchers',
+		'vcap_customer_daily_limit',
+		'vcap_show_myaccount',
+		'vcap_myaccount_tab',
+		'vcap_show_thankyou',
+	);
+
+	/**
+	 * Stores the defaults of REQUEST_SETTINGS as autoloaded options where none is saved yet; a value an admin saved
+	 * (also an empty one or 0) is never changed (add_option()).
+	 *
+	 * @return string[] settings stored now
+	 */
+	public static function store_request_defaults(): array {
+		$stored = array();
+		foreach ( self::REQUEST_SETTINGS as $key ) {
+			if ( array_key_exists( $key, self::DEFAULTS ) && false !== add_option( $key, self::DEFAULTS[ $key ], '', 'yes' ) ) {
+				$stored[] = $key;
+			}
+		}
+		return $stored;
+	}
+
 	public function get( string $key ) {
 		$default = self::DEFAULTS[ $key ] ?? null;
 		$value   = get_option( $key, $default );
@@ -156,7 +193,9 @@ final class Settings {
 		return 'yes' === $this->get( $key );
 	}
 
-	public function add_tab( array $tabs ): array {
+	/** @param mixed $tabs What the previous filter returned (AP-Q2-6: a non-array is normalised). */
+	public function add_tab( $tabs ): array {
+		$tabs = is_array( $tabs ) ? $tabs : array();
 		$tabs['vcap'] = __( 'Vouchers', 'voucher-captain' );
 		return $tabs;
 	}

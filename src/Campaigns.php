@@ -269,21 +269,35 @@ final class Campaigns {
 	}
 
 	/**
-	 * Export rows for a code pool batch.
+	 * Export rows for a code pool batch (header first), read by id in batches of POOL_EXPORT_BATCH (AP-P1-2: a pool
+	 * of hundreds of thousands of codes is never held in memory at once).
 	 *
-	 * @return array<int, array<int, string>>
+	 * @return \Generator<int, array<int, string>>
 	 */
-	public function pool_rows( string $batch ): array {
+	public function pool_rows( string $batch, int $limit = self::POOL_EXPORT_BATCH ): \Generator {
 		global $wpdb;
 		$table = Install::tables()['pool'];
 		$v     = Install::tables()['vouchers'];
-		$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT p.code, p.used_at, v.order_id FROM {$table} p LEFT JOIN {$v} v ON v.id = p.voucher_id WHERE p.batch = %s ORDER BY p.id", $batch ), ARRAY_A ); // phpcs:ignore
-		$out   = array( array( __( 'Code', 'voucher-captain' ), __( 'Status', 'voucher-captain' ), __( 'Used on', 'voucher-captain' ), __( 'Order number', 'voucher-captain' ), __( 'Order ID', 'voucher-captain' ) ) );
-		foreach ( $rows ? $rows : array() as $r ) {
-			$out[] = array( (string) $r['code'], $r['used_at'] ? __( 'Used', 'voucher-captain' ) : __( 'Free', 'voucher-captain' ), Csv::date( $r['used_at'] ), Format::order_number( $r['order_id'] ), $r['order_id'] ? (string) $r['order_id'] : '' );
-		}
-		return $out;
+		$limit = max( 1, $limit );
+		yield array( __( 'Code', 'voucher-captain' ), __( 'Status', 'voucher-captain' ), __( 'Used on', 'voucher-captain' ), __( 'Order number', 'voucher-captain' ), __( 'Order ID', 'voucher-captain' ) );
+		$after = 0;
+		do {
+			$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT p.id, p.code, p.used_at, v.order_id FROM {$table} p LEFT JOIN {$v} v ON v.id = p.voucher_id WHERE p.batch = %s AND p.id > %d ORDER BY p.id LIMIT %d", $batch, $after, $limit ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$got = count( $rows );
+			if ( ! $got ) {
+				break;
+			}
+			$after = (int) end( $rows )['id'];
+			Format::prime_order_numbers( array_column( $rows, 'order_id' ) );
+			foreach ( $rows as $r ) {
+				yield array( (string) $r['code'], $r['used_at'] ? __( 'Used', 'voucher-captain' ) : __( 'Free', 'voucher-captain' ), Csv::date( $r['used_at'] ), Format::order_number( $r['order_id'] ), $r['order_id'] ? (string) $r['order_id'] : '' );
+			}
+			Ledger::flush_runtime_cache();
+		} while ( $got === $limit );
 	}
+
+	/** Pool codes read per query of the pool export. */
+	public const POOL_EXPORT_BATCH = 1000;
 
 	/**
 	 * Stream rows as CSV (see Csv: UTF-8 BOM, separator and decimal comma per locale, formula injection neutralised).

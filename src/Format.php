@@ -25,6 +25,35 @@ final class Format {
 	 * The order number customers and accounting know (sequential numbers of Germanized & co. via
 	 * get_order_number()), the internal ID when the order is gone, '' without an order (U5).
 	 */
+	/**
+	 * AP-P1-2: looks up the order numbers of one export batch with one order query instead of one per row; the
+	 * orders themselves are not kept here (only their numbers, at most a few thousand); callers flush the runtime
+	 * cache after each batch.
+	 *
+	 * @param array<int|string> $order_ids
+	 */
+	public static function prime_order_numbers( array $order_ids ): void {
+		$ids = array_values( array_diff( array_unique( array_filter( array_map( 'intval', $order_ids ) ) ), array_keys( self::$order_numbers ) ) );
+		if ( ! $ids || ! function_exists( 'wc_get_orders' ) ) {
+			return;
+		}
+		if ( count( self::$order_numbers ) + count( $ids ) > 2000 ) {
+			self::$order_numbers = array();
+		}
+		foreach ( array_chunk( $ids, 500 ) as $chunk ) {
+			$found = array();
+			foreach ( (array) wc_get_orders( array( 'post__in' => $chunk, 'limit' => count( $chunk ), 'type' => 'shop_order', 'status' => array_keys( wc_get_order_statuses() ) ) ) as $order ) {
+				if ( $order instanceof \WC_Order ) {
+					$found[ $order->get_id() ] = (string) $order->get_order_number();
+				}
+			}
+			foreach ( $found as $id => $number ) {
+				self::$order_numbers[ $id ] = $number;
+			}
+			// Not found by the query (gone, trashed, another status): order_number() looks them up one by one.
+		}
+	}
+
 	public static function order_number( $order_id ): string {
 		$order_id = (int) $order_id;
 		if ( $order_id <= 0 ) {

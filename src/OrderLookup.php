@@ -17,6 +17,9 @@ final class OrderLookup {
 	 *     @type string|string[] $status          Order statuses without "wc-" (default: any).
 	 *     @type string          $type            Order type (default "shop_order").
 	 *     @type int             $modified_before Only orders last changed before this timestamp.
+	 *     @type int             $created_after   Only orders created at or after this timestamp (date_created_gmt on
+	 *                                            HPOS, post_date_gmt on the classic store).
+	 *     @type int             $created_before  Only orders created before this timestamp (the same columns).
 	 *     @type int             $after_id        Keyset paging: only ids after (ASC) / before (DESC) this one.
 	 *     @type string          $order           "ASC" (default) or "DESC" by id.
 	 *     @type int             $limit           At most this many ids (default 200).
@@ -31,6 +34,8 @@ final class OrderLookup {
 				'status'          => array(),
 				'type'            => 'shop_order',
 				'modified_before' => 0,
+				'created_after'   => 0,
+				'created_before'  => 0,
 				'after_id'        => 0,
 				'order'           => 'ASC',
 				'limit'           => 200,
@@ -46,11 +51,11 @@ final class OrderLookup {
 			$orders = $wpdb->prefix . 'wc_orders';
 			$meta   = $wpdb->prefix . 'wc_orders_meta';
 			$join   = "INNER JOIN {$meta} m ON m.order_id = o.id AND m.meta_key = %s";
-			$cols   = array( 'id' => 'o.id', 'type' => 'o.type', 'status' => 'o.status', 'modified' => 'o.date_updated_gmt' );
+			$cols   = array( 'id' => 'o.id', 'type' => 'o.type', 'status' => 'o.status', 'modified' => 'o.date_updated_gmt', 'created' => 'o.date_created_gmt' );
 			$from   = "{$orders} o";
 		} else {
 			$join = "INNER JOIN {$wpdb->postmeta} m ON m.post_id = o.ID AND m.meta_key = %s";
-			$cols = array( 'id' => 'o.ID', 'type' => 'o.post_type', 'status' => 'o.post_status', 'modified' => 'o.post_modified_gmt' );
+			$cols = array( 'id' => 'o.ID', 'type' => 'o.post_type', 'status' => 'o.post_status', 'modified' => 'o.post_modified_gmt', 'created' => 'o.post_date_gmt' );
 			$from = "{$wpdb->posts} o";
 		}
 		if ( null !== $value ) {
@@ -69,6 +74,14 @@ final class OrderLookup {
 		if ( (int) $args['modified_before'] > 0 ) {
 			$where[]  = "{$cols['modified']} < %s";
 			$values[] = gmdate( 'Y-m-d H:i:s', (int) $args['modified_before'] );
+		}
+		if ( (int) $args['created_after'] > 0 ) {
+			$where[]  = "{$cols['created']} >= %s";
+			$values[] = gmdate( 'Y-m-d H:i:s', (int) $args['created_after'] );
+		}
+		if ( (int) $args['created_before'] > 0 ) {
+			$where[]  = "{$cols['created']} < %s";
+			$values[] = gmdate( 'Y-m-d H:i:s', (int) $args['created_before'] );
 		}
 		if ( (int) $args['after_id'] > 0 ) {
 			$where[]  = $cols['id'] . ( $desc ? ' < %d' : ' > %d' );
