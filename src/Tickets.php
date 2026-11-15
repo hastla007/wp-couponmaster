@@ -56,6 +56,8 @@ final class Tickets {
 					'undo'   => array( 'type' => 'boolean', 'default' => false ),
 					// Required to revert someone else's (or an older) check-in.
 					'reason' => array( 'type' => 'string', 'default' => '' ),
+					// M12-78: till/branch (entrance) of this device, kept with the check-in.
+					'till'   => array( 'type' => 'string', 'default' => '' ),
 				),
 			)
 		);
@@ -75,6 +77,8 @@ final class Tickets {
 					'till'          => array( 'type' => 'string', 'default' => '' ),
 					// Only with this flag may an amount above the balance book the remaining balance.
 					'allow_partial' => array( 'type' => 'boolean', 'default' => false ),
+					// M12-24: personal vouchers are only redeemed once the holder's ID was checked.
+					'id_checked'    => array( 'type' => 'boolean', 'default' => false ),
 				),
 			)
 		);
@@ -100,7 +104,16 @@ final class Tickets {
 	 */
 	public function resolve( string $input ): ?Voucher {
 		$input = trim( $input );
-		if ( preg_match( '/[?&](?:vcap_ticket|vcap_pdf)=([a-f0-9]{48})/', $input, $m ) || preg_match( '/^([a-f0-9]{48})$/', $input, $m ) ) {
+		if ( preg_match( '/[?&]vcap_pdf=([a-f0-9]{48})/', $input, $m ) ) {
+			// M12-65: a PDF download link counts only with the shop's signature for the current link version (a
+			// link from before a reissue or with a made-up signature is no proof); its parameters are no codes.
+			parse_str( (string) wp_parse_url( $input, PHP_URL_QUERY ), $params );
+			$voucher = $this->repo->get_by_token( $m[1] );
+			$exp     = isset( $params['exp'] ) && is_string( $params['exp'] ) ? absint( $params['exp'] ) : 0;
+			$sig     = isset( $params['sig'] ) && is_string( $params['sig'] ) ? sanitize_key( $params['sig'] ) : '';
+			return $voucher && vcap()->downloads->signed_by_shop( $voucher, $exp, $sig ) ? $voucher : null;
+		}
+		if ( preg_match( '/[?&]vcap_ticket=([a-f0-9]{48})/', $input, $m ) || preg_match( '/^([a-f0-9]{48})$/', $input, $m ) ) {
 			$voucher = $this->repo->get_by_token( $m[1] );
 			if ( $voucher ) {
 				return $voucher;
@@ -253,12 +266,109 @@ final class Tickets {
 			'value_html'     => 'percent' === $voucher->discount_type ? Format::percent( $voucher->initial_amount ) : self::money_text( $voucher->initial_amount, $voucher->currency ),
 			'expires'        => $voucher->expires_at ? LocalDate::from_utc( $voucher->expires_at, get_option( 'date_format' ) ) : '',
 			'admin_url'      => $manager ? admin_url( 'admin.php?page=vcap-vouchers&voucher=' . $voucher->id ) : '',
-		);
+			// M12-24: personal voucher – the holder's ID is checked against these names (addresses masked).
+			'personal'       => self::personal_info( $voucher ),
+			// M12-45: the current user's own counter redemptions that can still be cancelled.
+			'reversible'     => $voucher->is_ticket() ? array() : $this->reversible( $voucher, $events ),
+			// M12-31: receipt number of the till receipt required for a redemption (setting).
+			'receipt_required' => ! $voucher->is_ticket() && Counter::receipt_required(),
+		) + self::tax_data( $voucher );
 		if ( '' !== $refusal ) {
 			$data['redeemable'] = false;
 		}
 		/** Connector details for the scanner (e.g. "ticket voucher – exchange first", redeemable false). */
 		return (array) apply_filters( 'vcap_scanner_describe', $data, $voucher );
+	}
+
+	/**
+	 * M12-31: VAT classification of a voucher for the counter (as in the redemption API): purpose ("multi",
+	 * "single" or "discount"), treatment ("payment", "single", "discount"), the VAT of the sale for single-purpose
+	 * vouchers ({rate_bp, country}, else null) and a short text for the cashier.
+	 *
+	 * @return array{purpose:string, treatment:string, sale_tax:?array, treatment_label:string}
+	 */
+	public static function tax_data( Voucher $voucher ): array {
+		$purpose  = ProductConfig::purpose( $voucher );
+		$sale_tax = 'single' === $purpose ? ProductConfig::sale_tax( $voucher ) : null;
+		return array(
+			'purpose'         => $purpose,
+			'treatment'       => ProductConfig::tax_treatment( $voucher ),
+			'sale_tax'        => $sale_tax,
+			'treatment_label' => self::treatment_label( $purpose, $sale_tax ),
+		);
+	}
+
+	/** Cashier's text for the VAT classification (purpose of ProductConfig::purpose()). */
+	public static function treatment_label( string $purpose, ?array $sale_tax = null ): string {
+		if ( 'multi' === $purpose ) {
+			return __( 'Multi-purpose voucher (means of payment): book it as payment on the till receipt – the VAT of the goods is due now.', 'voucher-captain' );
+		}
+		if ( 'single' === $purpose ) {
+			if ( $sale_tax && '' !== (string) $sale_tax['country'] ) {
+				/* translators: 1: VAT rate, e.g. 19 %, 2: country code */
+				return sprintf( __( 'Single-purpose voucher: VAT (%1$s, %2$s) was charged at the sale – book the goods without VAT again.', 'voucher-captain' ), Format::percent( (int) $sale_tax['rate_bp'] / 100 ), (string) $sale_tax['country'] );
+			}
+			return __( 'Single-purpose voucher: VAT was charged at the sale – book the goods without VAT again.', 'voucher-captain' );
+		}
+		return __( 'Discount voucher: reduces the price of the goods (and their VAT).', 'voucher-captain' );
+	}
+
+	/**
+	 * M12-24: restriction of a personal voucher for the ID check at the counter: the names of buyer/recipient whose
+	 * address is allowed, and the allowed addresses masked. Null for transferable vouchers and tickets.
+	 *
+	 * @return array{names:string[], emails:string[]}|null
+	 */
+	public static function personal_info( Voucher $voucher ): ?array {
+		if ( $voucher->is_ticket() || ! $voucher->coupon_id ) {
+			return null;
+		}
+		$coupon = new \WC_Coupon( $voucher->coupon_id );
+		$emails = $coupon->get_id() ? PersonalVoucher::restrictions( $coupon ) : array();
+		if ( ! $emails ) {
+			return null;
+		}
+		$names = array();
+		foreach ( array( array( $voucher->recipient_name, $voucher->recipient_email ), array( $voucher->buyer_name, $voucher->buyer_email ) ) as $person ) {
+			if ( '' !== trim( $person[0] ) && PersonalVoucher::matches( $person[1], $emails ) ) {
+				$names[] = trim( $person[0] );
+			}
+		}
+		return array(
+			'names'  => array_values( array_unique( $names ) ),
+			'emails' => array_values( array_map( array( Mask::class, 'email' ), $emails ) ),
+		);
+	}
+
+	/**
+	 * M12-45: the current user's own counter redemptions of this voucher that can still be cancelled (within the
+	 * cancellation window, not cancelled yet), newest first, at most five.
+	 *
+	 * @return array<int, array{event_id:int, amount_html:string, time:string, receipt:string}>
+	 */
+	private function reversible( Voucher $voucher, array $events ): array {
+		$user = get_current_user_id();
+		$now  = time();
+		$out  = array();
+		if ( $user <= 0 ) {
+			return $out;
+		}
+		for ( $i = count( $events ) - 1; $i >= 0 && count( $out ) < 5; $i-- ) {
+			$e = $events[ $i ];
+			if ( 'redeemed' !== ( $e['event'] ?? '' ) || 0 !== (int) $e['order_id'] || (int) $e['user_id'] !== $user ) {
+				continue;
+			}
+			if ( '' !== self::reversal_refusal( $e, $voucher, $user, false, $now, self::is_reversed( (int) $e['id'] ) ) ) {
+				continue;
+			}
+			$out[] = array(
+				'event_id'    => (int) $e['id'],
+				'amount_html' => self::money_text( (float) $e['amount'], $voucher->currency ),
+				'time'        => self::local_time( (string) $e['created_at'] ),
+				'receipt'     => (string) ( $e['receipt'] ?? '' ),
+			);
+		}
+		return $out;
 	}
 
 	/** Local date and time of a stored UTC time. */
@@ -395,16 +505,32 @@ final class Tickets {
 		return (string) apply_filters( 'vcap_scanner_redeem_refused', $refused, $voucher );
 	}
 
+	/** M12-78: failed scanner lookups per staff member and 15 minutes (filter "vcap_rate_limit_scanner_lookup"). */
+	private const LOOKUP_BUCKET = 'scanner_lookup';
+	private const LOOKUP_LIMIT  = 100;
+	private const LOOKUP_WINDOW = 900;
+
 	public function rest_lookup( \WP_REST_Request $request ) {
+		// M12-78: every lookup tries up to 12 code variants – unknown codes are counted per staff member (found
+		// ones give the attempt back), so a scanner account cannot be used to guess codes.
+		$visitor = 'u' . get_current_user_id();
+		if ( Plugin::rate_limited( self::LOOKUP_BUCKET, self::LOOKUP_LIMIT, 0, self::LOOKUP_WINDOW, false, $visitor ) ) {
+			return new \WP_Error( 'vcap_rate_limited', __( 'Too many unknown codes were looked up. Please wait a few minutes and scan again.', 'voucher-captain' ), array( 'status' => 429 ) );
+		}
 		$voucher = $this->resolve( (string) $request['q'] );
 		if ( ! $voucher ) {
 			/** Codes Voucher Captain does not know may belong to another plugin (shared scanner, e.g. Pass Captain tickets). */
 			$external = apply_filters( 'vcap_scanner_lookup', null, (string) $request['q'] );
-			if ( null !== $external ) {
+			$unknown  = null === $external || ( is_wp_error( $external ) && 404 === (int) ( ( (array) $external->get_error_data() )['status'] ?? 0 ) );
+			if ( ! $unknown ) {
+				Plugin::rate_limit_success( self::LOOKUP_BUCKET, self::LOOKUP_WINDOW, $visitor );
 				return is_wp_error( $external ) ? $external : rest_ensure_response( $external );
 			}
-			return new \WP_Error( 'vcap_not_found', __( 'No voucher or ticket found for this code.', 'voucher-captain' ), array( 'status' => 404 ) );
+			Plugin::rate_limit_failure( self::LOOKUP_BUCKET, self::LOOKUP_WINDOW );
+			Counter::record_failed_lookup( get_current_user_id() );
+			return null !== $external ? $external : new \WP_Error( 'vcap_not_found', __( 'No voucher or ticket found for this code.', 'voucher-captain' ), array( 'status' => 404 ) );
 		}
+		Plugin::rate_limit_success( self::LOOKUP_BUCKET, self::LOOKUP_WINDOW, $visitor );
 		return rest_ensure_response( $this->describe( $voucher ) );
 	}
 
@@ -469,6 +595,10 @@ final class Tickets {
 			}
 			return new \WP_Error( 'vcap_not_found', __( 'No voucher or ticket found for this code.', 'voucher-captain' ), array( 'status' => 404 ) );
 		}
+		$till = Counter::device_till( (string) $request['till'] );
+		if ( is_wp_error( $till ) ) {
+			return $till;
+		}
 		$undo  = (bool) $request['undo'];
 		$key   = sanitize_text_field( (string) $request['idempotency_key'] );
 		$sig   = md5( 'checkin|' . $voucher->id . '|' . ( $undo ? 'undo' : max( 1, (int) $request['count'] ) ) );
@@ -494,7 +624,7 @@ final class Tickets {
 			$note = $reason;
 		}
 		try {
-			$ok = $undo ? $this->undo_checkin( $voucher, $note ) : $this->checkin( $voucher, (int) $request['count'] );
+			$ok = Counter::with( $till, '', fn() => $undo ? $this->undo_checkin( $voucher, $note ) : $this->checkin( $voucher, (int) $request['count'] ) );
 		} catch ( \Throwable $e ) {
 			$this->scan_release( $key );
 			throw $e;
@@ -880,9 +1010,25 @@ final class Tickets {
 			$data['message'] = $refused;
 			return rest_ensure_response( $data );
 		}
-		$note    = self::counter_note( (string) $request['note'], (string) $request['receipt'], (string) $request['till'] );
-		$till    = Counter::clean_till( (string) $request['till'] );
+		// M12-81: the fixed till of the staff member, else the device's one (from the managed list, if any).
+		$till = Counter::device_till( (string) $request['till'] );
+		if ( is_wp_error( $till ) ) {
+			return $till;
+		}
+		// M12-31: the receipt number of the till receipt when the setting requires it (checked here, not only on the device).
 		$receipt = Counter::clean_receipt( (string) $request['receipt'] );
+		if ( '' === $receipt && Counter::receipt_required() ) {
+			return new \WP_Error( 'vcap_receipt_required', __( 'Not redeemed: please enter the receipt number of the till receipt.', 'voucher-captain' ), array( 'status' => 400 ) );
+		}
+		// M12-24: a personal voucher only after the holder's ID was checked (online, the account proves it).
+		$note = sanitize_text_field( (string) $request['note'] );
+		if ( null !== self::personal_info( $voucher ) ) {
+			if ( ! rest_sanitize_boolean( $request['id_checked'] ?? false ) ) {
+				return new \WP_Error( 'vcap_id_check_required', __( 'Not redeemed: this voucher is personal. Check the holder\'s ID against the names shown and confirm "ID checked".', 'voucher-captain' ), array( 'status' => 409 ) );
+			}
+			$note = ( '' !== $note ? $note : __( 'Redeemed in store', 'voucher-captain' ) ) . ' · ' . __( 'ID checked', 'voucher-captain' );
+		}
+		$note = self::counter_note( $note, $receipt, $till );
 		if ( $voucher->is_multi_use() ) {
 			$amount  = (float) $request['amount'];
 			$partial = self::allow_partial( $request );
@@ -899,7 +1045,9 @@ final class Tickets {
 			// The balance is checked again under the row lock: above it, nothing is booked unless a partial
 			// booking was asked for explicitly (the till must collect the rest otherwise).
 			// R6: daily limits of the staff member and the till, checked and booked under their locks.
-			$limit = Counter::claim( $voucher, min( $amount, (float) $voucher->balance ), $till );
+				// M12-61: checked with the amount asked for – the balance read before the row lock may be outdated
+			// (a top-up in between), and a partial booking may deduct up to the requested amount.
+			$limit = Counter::claim( $voucher, $amount, $till );
 			if ( '' !== $limit['message'] ) {
 				return $this->limit_refusal( $voucher, $limit );
 			}
@@ -941,7 +1089,8 @@ final class Tickets {
 				/* translators: 1: amount deducted, 2: remaining balance */
 				$data['message'] = sprintf( __( 'Redeemed: %1$s deducted. Remaining balance: %2$s.', 'voucher-captain' ), $data['booked_html'], $data['balance_after_html'] );
 			}
-			$data['event_id'] = $this->own_last_redemption( $voucher->id );
+			$data['event_id']   = $this->own_last_redemption( $voucher->id );
+			$data['slip']       = $this->slip( $fresh, $data['event_id'], $till, $receipt, $data['booked_html'] );
 			return rest_ensure_response( $data );
 		}
 		$limit = Counter::claim( $voucher, Counter::value_of( $voucher ), $till );
@@ -959,11 +1108,13 @@ final class Tickets {
 			$data['success'] = false;
 			return rest_ensure_response( $data );
 		}
-		$data             = $this->describe( $this->repo->get( $voucher->id ) );
+		$fresh            = $this->repo->get( $voucher->id ) ?? $voucher;
+		$data             = $this->describe( $fresh );
 		$data['success']  = true;
 		$data['state']    = 'ok';
 		$data['message']  = __( 'Redeemed', 'voucher-captain' );
 		$data['event_id'] = $this->own_last_redemption( $voucher->id );
+		$data['slip']     = $this->slip( $fresh, $data['event_id'], $till, $receipt, (string) $data['value_html'] );
 		return rest_ensure_response( $data );
 	}
 
@@ -981,6 +1132,29 @@ final class Tickets {
 		$data['limit']    = $limit['exceeded'] ? array( 'scope' => $limit['scope'] ) + $limit['exceeded'] : null;
 		$data['booked']   = 0.0;
 		return rest_ensure_response( $data );
+	}
+
+	/**
+	 * M12-31: data of the 80 mm redemption slip the scanner prints: shop, masked code, time, staff member, till,
+	 * receipt and booking number, amount, remaining balance and the VAT classification. Never the full code: the
+	 * slip may stay at the till or go to the customer.
+	 *
+	 * @return array<string, string|int>
+	 */
+	private function slip( Voucher $voucher, int $event_id, string $till, string $receipt, string $amount_html ): array {
+		$user = wp_get_current_user();
+		return array(
+			'shop'      => wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES ),
+			'code'      => Mask::code( $voucher->code ),
+			'time'      => self::local_time( gmdate( 'Y-m-d H:i:s' ) ),
+			'staff'     => $user instanceof \WP_User ? (string) $user->display_name : '',
+			'till'      => $till,
+			'receipt'   => $receipt,
+			'booking'   => $event_id,
+			'amount'    => $amount_html,
+			'balance'   => $voucher->is_multi_use() ? self::money_text( $voucher->balance, $voucher->currency ) : '',
+			'treatment' => self::tax_data( $voucher )['treatment_label'],
+		);
 	}
 
 	/** Booking note of a counter redemption: the note, receipt number and till/branch of the device. */
@@ -1156,6 +1330,12 @@ final class Tickets {
 			return new \WP_Error( 'vcap_reversal_reversed', self::reversal_message( 'reversed' ), array( 'status' => 409 ) );
 		}
 		wp_cache_delete( 'vcap_reversal_' . $event_id, 'options' );
+		// is_reversed() may have cached the option as missing (lookup, M12-45 list) in this request.
+		$missing = wp_cache_get( 'notoptions', 'options' );
+		if ( is_array( $missing ) && isset( $missing[ 'vcap_reversal_' . $event_id ] ) ) {
+			unset( $missing[ 'vcap_reversal_' . $event_id ] );
+			wp_cache_set( 'notoptions', $missing, 'options' );
+		}
 		$amount = (float) $event['amount'];
 		/* translators: 1: history entry number of the redemption, 2: reason */
 		$note = sprintf( __( 'Cancels redemption #%1$d: %2$s', 'voucher-captain' ), $event_id, $reason );

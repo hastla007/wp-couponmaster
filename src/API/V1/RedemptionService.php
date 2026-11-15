@@ -944,6 +944,7 @@ final class RedemptionService {
 	 * @return array<string, mixed>
 	 */
 	private function voucher_data( Voucher $voucher ): array {
+		$purpose = \VCAP\ProductConfig::purpose( $voucher );
 		return array(
 			'code'       => $voucher->code,
 			'type'       => $voucher->type,
@@ -953,6 +954,11 @@ final class RedemptionService {
 			'currency'   => $voucher->currency,
 			'expires_at' => $voucher->expires_at,
 			'product_id' => $voucher->variation_id ? $voucher->variation_id : $voucher->product_id,
+			// M12-31: VAT classification – purpose "multi" (means of payment), "single" or "discount", the
+			// treatment ("payment", "single", "discount") and, for single-purpose vouchers, the VAT of the sale.
+			'purpose'    => $purpose,
+			'treatment'  => \VCAP\ProductConfig::tax_treatment( $voucher ),
+			'sale_tax'   => 'single' === $purpose ? \VCAP\ProductConfig::sale_tax( $voucher ) : null,
 		);
 	}
 

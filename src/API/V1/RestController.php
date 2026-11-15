@@ -107,7 +107,30 @@ final class RestController {
 				)
 			);
 		}
+		// M12-46: give back (part of) a completed redemption – same access rules as commit.
+		register_rest_route(
+			self::NAMESPACE,
+			'/redemptions/' . $key . '/refund',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'refund' ),
+				'permission_callback' => array( $this, 'can_access' ),
+				'args'                => array(
+					'amount'     => array(
+						'required' => true,
+						'type'     => 'number',
+					),
+					'refund_key' => array(
+						'required' => true,
+						'type'     => 'string',
+					),
+				),
+			)
+		);
 	}
+
+	/** M12-46: optional capability for point-of-sale accounts ("Voucher POS" role): any non-internal target, no admin rights. */
+	public const POS_CAP = 'vcap_redeem_api';
 
 	/**
 	 * Whether the current user manages vouchers (may act on every redemption).
@@ -190,7 +213,7 @@ final class RestController {
 		if ( self::is_internal_target( $target ) ) {
 			return new \WP_Error( 'vcap_not_allowed', __( 'This redemption target is managed by an integration.', 'voucher-captain' ), array( 'status' => 403 ) );
 		}
-		if ( $this->is_manager() ) {
+		if ( $this->is_manager() || current_user_can( self::POS_CAP ) ) { // phpcs:ignore WordPress.WP.Capabilities.Unknown -- Optional, granted by the shop (API.md).
 			return true;
 		}
 		/**
@@ -363,7 +386,37 @@ final class RestController {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function commit( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
-		return rest_ensure_response( $this->service->commit( (string) $request['key'] ) );
+		return rest_ensure_response( $this->with_counter( $request, fn() => $this->service->commit( (string) $request['key'] ) ) );
+	}
+
+	/**
+	 * POST /redemptions/{key}/refund (M12-46): amount and refund_key (idempotency key of this refund).
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function refund( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$key = (string) $request['key'];
+		return rest_ensure_response( $this->with_counter( $request, fn() => $this->service->refund( $key, (float) $request['amount'], (string) $request['refund_key'] ) ) );
+	}
+
+	/**
+	 * M12-46: runs a booking with the till/branch and receipt number of the reservation's metadata
+	 * (meta.till, meta.receipt), so a POS booking carries them like a scanner booking (Counter::with()).
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @param callable         $work    Booking.
+	 * @return mixed What $work returns.
+	 */
+	private function with_counter( \WP_REST_Request $request, callable $work ): mixed {
+		$data = $this->service->get( (string) $request['key'] );
+		$meta = ! is_wp_error( $data ) && is_array( $data['meta'] ?? null ) ? $data['meta'] : array();
+		$till = is_scalar( $meta['till'] ?? null ) ? (string) $meta['till'] : '';
+		$rcpt = is_scalar( $meta['receipt'] ?? null ) ? (string) $meta['receipt'] : '';
+		if ( '' === $till && '' === $rcpt ) {
+			return $work();
+		}
+		return \VCAP\Counter::with( $till, $rcpt, $work );
 	}
 
 	/**

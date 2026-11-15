@@ -66,6 +66,15 @@ final class Downloads {
 		return $voucher->id ? $this->repo->count_event( $voucher->id, Reissue::EVENT ) : 0;
 	}
 
+	/**
+	 * M12-65: whether a scanned PDF link was signed by this shop for the current link version of the voucher (a
+	 * link sent before a reissue, or one with a forged signature, is no proof of the voucher at the counter). The
+	 * expiry is not checked: printed vouchers carry the link as QR content (M12-41).
+	 */
+	public function signed_by_shop( Voucher $voucher, int $exp, string $signature ): bool {
+		return '' !== $signature && hash_equals( $this->sign( $voucher->token, $exp, $this->link_version( $voucher ) ), $signature );
+	}
+
 	private function valid_guest_link( string $token, int $exp, string $signature, int $version = 0 ): bool {
 		return hash_equals( $this->sign( $token, $exp, $version ), $signature ) && ( 0 === $exp || $exp >= time() );
 	}

@@ -30,6 +30,16 @@ final class Counter {
 	/** User options (per site): own daily limits of a staff member ('' or missing = the setting). */
 	public const META_AMOUNT = 'vcap_counter_limit_amount';
 	public const META_COUNT  = 'vcap_counter_limit_count';
+	/** M12-31: setting "Receipt no. required" – 'auto' (shops based in Germany or Austria), 'yes' or 'no'. */
+	public const REQUIRE_RECEIPT = 'vcap_counter_require_receipt';
+	/** M12-81: setting with the managed list of tills/branches, one per line ('' = free text on the device). */
+	public const LOCATIONS = 'vcap_counter_locations';
+	/** M12-81: user option (per site): the till/branch a staff member is fixed to ('' = chosen on the device). */
+	public const META_LOCATION = 'vcap_counter_location';
+	/** M12-78: option with failed scanner lookups per shop day and staff member ({Y-m-d: {user id: count}}). */
+	public const FAILED_LOOKUPS = 'vcap_scanner_failed_lookups';
+	/** Days the failed-lookup counter keeps. */
+	private const FAILED_DAYS = 92;
 	/** Seconds a counter booking waits for the limit lock of another one (same staff member or till). */
 	private const LOCK_WAIT = 5;
 
@@ -137,6 +147,93 @@ final class Counter {
 		$events = Install::tables()['events'];
 		$row    = $wpdb->get_row( $wpdb->prepare( "SELECT till, receipt FROM {$events} WHERE id = %d AND event = 'redeemed'", (int) $m[1] ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		return $row ? array( 'till' => (string) $row['till'], 'receipt' => (string) $row['receipt'] ) : $out;
+	}
+
+	/* ---- Receipt number, managed tills, failed lookups (M12-31, M12-78, M12-81) ---------------------- */
+
+	/**
+	 * Whether a counter redemption needs a receipt number (setting "Receipt no. required"; automatic = for shops
+	 * based in Germany or Austria, where the till receipt documents the sale – KassenSichV/RKSV). Filter
+	 * "vcap_counter_require_receipt".
+	 */
+	public static function receipt_required(): bool {
+		$setting = (string) Settings::value( self::REQUIRE_RECEIPT );
+		if ( 'auto' === $setting || '' === $setting ) {
+			$country  = strtoupper( (string) strtok( (string) get_option( 'woocommerce_default_country', '' ), ':' ) );
+			$required = in_array( $country, array( 'DE', 'AT' ), true );
+		} else {
+			$required = 'yes' === $setting;
+		}
+		/** Whether a counter redemption needs a receipt number. Args: bool. */
+		return (bool) apply_filters( 'vcap_counter_require_receipt', $required );
+	}
+
+	/**
+	 * The managed list of tills/branches (setting, one per line; empty = free text on the device).
+	 *
+	 * @return string[]
+	 */
+	public static function locations(): array {
+		$list = preg_split( '/\r\n|\r|\n/', (string) Settings::value( self::LOCATIONS ) );
+		$list = array_values( array_unique( array_filter( array_map( array( self::class, 'clean_till' ), (array) $list ), static fn( $l ) => '' !== $l ) ) );
+		/** The managed tills/branches offered on the scanner. Args: string[] list. */
+		return array_values( array_map( 'strval', (array) apply_filters( 'vcap_counter_locations', $list ) ) );
+	}
+
+	/** The till/branch a staff member is fixed to ('' = chosen on the device; only names from the managed list). */
+	public static function fixed_location( int $user_id ): string {
+		$fixed = $user_id ? self::clean_till( (string) get_user_option( self::META_LOCATION, $user_id ) ) : '';
+		return '' !== $fixed && in_array( $fixed, self::locations(), true ) ? $fixed : '';
+	}
+
+	/**
+	 * Till/branch of a counter booking by the current user: the fixed one of the staff member, else the one sent
+	 * by the device – which must be on the managed list when there is one.
+	 *
+	 * @return string|\WP_Error
+	 */
+	public static function device_till( string $till ) {
+		$fixed = self::fixed_location( get_current_user_id() );
+		if ( '' !== $fixed ) {
+			return $fixed;
+		}
+		$till      = self::clean_till( $till );
+		$locations = self::locations();
+		if ( $locations && ! in_array( $till, $locations, true ) ) {
+			return new \WP_Error( 'vcap_till_unknown', __( 'Please choose the till/branch of this device from the list.', 'voucher-captain' ), array( 'status' => 400 ) );
+		}
+		return $till;
+	}
+
+	/** Counts a failed scanner lookup (unknown code) of a staff member for the counter report. */
+	public static function record_failed_lookup( int $user_id ): void {
+		$data  = get_option( self::FAILED_LOOKUPS, array() );
+		$data  = is_array( $data ) ? $data : array();
+		$today = wp_date( 'Y-m-d' );
+		$data[ $today ][ $user_id ] = (int) ( $data[ $today ][ $user_id ] ?? 0 ) + 1;
+		$cut  = wp_date( 'Y-m-d', time() - self::FAILED_DAYS * DAY_IN_SECONDS );
+		$data = array_filter( $data, static fn( $day ) => (string) $day >= $cut, ARRAY_FILTER_USE_KEY );
+		update_option( self::FAILED_LOOKUPS, $data, false );
+	}
+
+	/**
+	 * Failed scanner lookups per staff member in a period of shop days (Y-m-d, inclusive).
+	 *
+	 * @return array<int, int> user id => count, most first
+	 */
+	public static function failed_lookups( string $from, string $to ): array {
+		$data = get_option( self::FAILED_LOOKUPS, array() );
+		$out  = array();
+		foreach ( is_array( $data ) ? $data : array() as $day => $users ) {
+			if ( (string) $day < $from || (string) $day > $to || ! is_array( $users ) ) {
+				continue;
+			}
+			foreach ( $users as $user => $count ) {
+				$out[ (int) $user ] = ( $out[ (int) $user ] ?? 0 ) + (int) $count;
+			}
+		}
+		arsort( $out );
+		return $out;
 	}
 
 	/* ---- Daily limits ------------------------------------------------------------------------------ */
@@ -333,7 +430,9 @@ final class Counter {
 			return;
 		}
 		$amount = (string) get_user_option( self::META_AMOUNT, $user->ID );
-		$count  = (string) get_user_option( self::META_COUNT, $user->ID );
+		$count     = (string) get_user_option( self::META_COUNT, $user->ID );
+		$locations = self::locations();
+		$fixed     = self::fixed_location( $user->ID );
 		?>
 		<h2><?php esc_html_e( 'Voucher scanner: daily limits', 'voucher-captain' ); ?></h2>
 		<table class="form-table" role="presentation">
@@ -346,6 +445,18 @@ final class Counter {
 				<th><label for="vcap-counter-limit-count"><?php esc_html_e( 'Redemptions per day', 'voucher-captain' ); ?></label></th>
 				<td><input type="number" min="0" step="1" class="small-text" name="vcap_counter_limit_count" id="vcap-counter-limit-count" value="<?php echo esc_attr( $count ); ?>" /></td>
 			</tr>
+			<?php if ( $locations ) : ?>
+			<tr>
+				<th><label for="vcap-counter-location"><?php esc_html_e( 'Fixed till / branch', 'voucher-captain' ); ?></label></th>
+				<td><select name="vcap_counter_location" id="vcap-counter-location">
+					<option value=""><?php esc_html_e( '— chosen on the device —', 'voucher-captain' ); ?></option>
+					<?php foreach ( $locations as $location ) : ?>
+						<option value="<?php echo esc_attr( $location ); ?>" <?php selected( $fixed, $location ); ?>><?php echo esc_html( $location ); ?></option>
+					<?php endforeach; ?>
+				</select>
+				<p class="description"><?php esc_html_e( 'The scanner of this staff member always books at this till/branch.', 'voucher-captain' ); ?></p></td>
+			</tr>
+			<?php endif; ?>
 		</table>
 		<?php
 	}
@@ -358,6 +469,14 @@ final class Counter {
 		}
 		$amount = trim( sanitize_text_field( wp_unslash( $_POST['vcap_counter_limit_amount'] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
 		$count  = trim( sanitize_text_field( wp_unslash( $_POST['vcap_counter_limit_count'] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		if ( isset( $_POST['vcap_counter_location'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$location = self::clean_till( sanitize_text_field( wp_unslash( $_POST['vcap_counter_location'] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			if ( '' !== $location && in_array( $location, self::locations(), true ) ) {
+				update_user_option( $user->ID, self::META_LOCATION, $location );
+			} else {
+				delete_user_option( $user->ID, self::META_LOCATION );
+			}
+		}
 		foreach ( array( self::META_AMOUNT => $amount, self::META_COUNT => $count ) as $key => $value ) {
 			if ( '' === $value || ! is_numeric( str_replace( ',', '.', $value ) ) ) {
 				delete_user_option( $user->ID, $key );

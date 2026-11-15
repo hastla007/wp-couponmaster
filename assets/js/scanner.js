@@ -55,12 +55,20 @@
 	var current = null; // Voucher shown in the result block (amount entry, confirmation).
 	var fromField = false; // Last code came from the input field (keyboard or USB scanner), not the camera.
 
+	var torchBtn = document.getElementById( 'vcap-torch' );
+	var slip = document.getElementById( 'vcap-slip' );
+	var torchOn = false;
+
 	try {
 		auto.checked = '1' === window.localStorage.getItem( 'vcapAutoCheckin' );
-		if ( till ) {
+		if ( till && ! cfg.fixedTill ) {
+			// A managed list (select): a stored name that is no longer on it leaves the choice empty.
 			till.value = window.localStorage.getItem( 'vcapTill' ) || '';
 		}
 	} catch ( e ) {}
+	if ( till && cfg.fixedTill ) {
+		till.value = cfg.fixedTill; // Fixed for this staff member (user profile); the server books there anyway.
+	}
 	auto.addEventListener( 'change', function () {
 		try {
 			window.localStorage.setItem( 'vcapAutoCheckin', auto.checked ? '1' : '0' );
@@ -229,10 +237,24 @@
 			[ t.expires, d.expires ],
 			d.last_checkin ? [ t.lastCheckin, d.last_checkin ] : null
 		].concat( d.context || [] ).filter( function ( r ) { return r && r[ 1 ]; } );
-		var html = '<div class="vcap-r-head vcap-r-' + esc( d.state ) + '">' + esc( d.message ) + ' · <code>' + esc( d.code ) + '</code></div><div class="vcap-r-body"><dl>';
+		var html = '<div class="vcap-r-head vcap-r-' + esc( d.state ) + '">' + esc( d.message ) + ' · <code>' + esc( d.code ) + '</code></div>';
+		if ( d.replayed ) {
+			// Stored answer of an earlier request with the same key: nothing was booked again.
+			html += '<p class="vcap-r-replayed" role="note">' + esc( t.replayed ) + '</p>';
+		}
+		var redeemable = 'ticket' !== d.type && ( 'ok' === d.state || 'exceeds_balance' === d.reason ) && 'redeemed' !== d.status && false !== d.redeemable;
+		if ( d.personal && 'ticket' !== d.type ) {
+			// Personal voucher: the holder must prove to be one of these persons (ID), online the account does.
+			var who = ( d.personal.names || [] ).concat( d.personal.emails || [] ).join( ', ' );
+			html += '<div class="vcap-r-personal" role="note"><strong>' + esc( t.personal ) + '</strong>' + ( who ? ' ' + esc( who ) : '' ) + '</div>';
+		}
+		html += '<div class="vcap-r-body"><dl>';
 		rows.forEach( function ( r ) {
 			html += '<dt>' + esc( r[ 0 ] ) + '</dt><dd>' + esc( r[ 1 ] ) + '</dd>';
 		} );
+		if ( d.treatment_label && 'ticket' !== d.type ) {
+			html += '<dt>' + esc( t.vat ) + '</dt><dd>' + esc( d.treatment_label ) + '</dd>';
+		}
 		html += '</dl><div class="vcap-r-actions">';
 		if ( 'ticket' === d.type ) {
 			if ( d.checkins < d.max_checkins && 'error' !== d.state ) {
@@ -242,16 +264,20 @@
 			if ( d.checkins > 0 && d.undo ) {
 				html += '<button type="button" class="button" data-act="undo" data-reason="' + ( 'reason' === d.undo ? '1' : '' ) + '">' + esc( t.undo ) + '</button>';
 			}
-		} else if ( ( 'ok' === d.state || 'exceeds_balance' === d.reason ) && 'redeemed' !== d.status ) {
-			if ( false !== d.redeemable ) {
+		} else {
+			if ( redeemable ) {
 				if ( d.multi_use ) {
 					var cur = d.currency || money.currency || '';
 					html += '<label for="vcap-amount">' + esc( t.amount ) + ( cur ? ' (' + esc( cur ) + ')' : '' ) + '</label> ';
 					html += '<span class="vcap-amount-field"><input type="text" inputmode="decimal" id="vcap-amount" class="small-text" autocomplete="off" placeholder="' + esc( amounts.formatNumber( 0, decimalsOf( d ), money.decimalSep, money.thousandSep ) ) + '" aria-describedby="vcap-amount-error">';
 					html += ' <span class="vcap-amount-currency">' + esc( symbolOf( d ) ) + '</span></span>';
 				}
-				html += '<label for="vcap-receipt">' + esc( t.receipt ) + '</label> <input type="text" id="vcap-receipt" class="small-text vcap-receipt" autocomplete="off">';
+				html += '<label for="vcap-receipt">' + esc( d.receipt_required ? t.receiptRequired : t.receipt ) + '</label> <input type="text" id="vcap-receipt" class="small-text vcap-receipt" autocomplete="off"' + ( d.receipt_required ? ' required aria-required="true"' : '' ) + '>';
+				if ( d.personal ) {
+					html += '<label class="vcap-id-checked"><input type="checkbox" id="vcap-id-checked"> ' + esc( t.idChecked ) + '</label>';
+				}
 				html += '<button type="button" class="button button-primary" data-act="redeem">' + esc( t.redeem ) + '</button>';
+				html += '<p id="vcap-redeem-error" class="vcap-amount-error" role="alert" hidden></p>';
 				if ( d.multi_use ) {
 					// Above the balance: only an explicit second action books the remaining balance.
 					var partial = 'exceeds_balance' === d.reason && d.requested > 0;
@@ -260,9 +286,18 @@
 				}
 			}
 		}
-		if ( d.success && d.event_id && 'ticket' !== d.type ) {
+		var listed = ( d.reversible || [] ).some( function ( r ) {
+			return String( r.event_id ) === String( d.event_id );
+		} );
+		if ( d.success && d.event_id && 'ticket' !== d.type && ! listed ) {
 			// Wrong card or amount: the booking can be cancelled right away (with a reason).
 			html += '<button type="button" class="button" data-act="reverse" data-event="' + esc( d.event_id ) + '">' + esc( t.reverse ) + '</button>';
+		}
+		// The cashier's own bookings that can still be cancelled – also after the next scan (looked up again).
+		( d.reversible || [] ).forEach( function ( r ) {
+			html += '<button type="button" class="button vcap-r-reversible" data-act="reverse" data-event="' + esc( r.event_id ) + '">' + esc( fill( t.reverseOne, [ r.amount_html, r.time ] ) ) + '</button>';
+		} );
+		if ( d.success && d.slip && 'ticket' !== d.type ) {
 			html += '<button type="button" class="button" data-act="print">' + esc( t.print ) + '</button>';
 		}
 		if ( d.admin_url ) {
@@ -340,7 +375,7 @@
 		var p = api( 'lookup', 'POST', { q: query } ).then( function ( d ) {
 			if ( auto.checked && 'ok' === d.state && ( 'ticket' === d.type || ( 'passcaptain' === d.type && d.can_checkin ) ) ) {
 				booking = true;
-				return send( 'checkin', { q: query }, 'checkin|' + query + '|1' );
+				return send( 'checkin', { q: query, till: tillValue() }, 'checkin|' + query + '|1' );
 			}
 			return d;
 		} );
@@ -407,18 +442,46 @@
 
 	// One idempotency key per intended action (code + action + count/amount). It is kept until the server
 	// answered, so repeating an action after a timeout or network error replays the first result instead of
-	// admitting or deducting twice; a new key is only made once the previous attempt got an answer.
-	var pendingKeys = {};
+	// admitting or deducting twice; a new key is only made once the previous attempt got an answer (a key is
+	// never used again after an answer). Kept in sessionStorage (this tab, a day at most): a reload after a
+	// timeout still replays instead of booking again.
+	var KEY_STORE = 'vcapPendingKeys';
+	var pendingKeys = loadKeys();
+	function loadKeys() {
+		var keys = {};
+		try {
+			var stored = JSON.parse( window.sessionStorage.getItem( KEY_STORE ) || '{}' ) || {};
+			Object.keys( stored ).forEach( function ( sig ) {
+				if ( stored[ sig ] && stored[ sig ].k && Date.now() - ( stored[ sig ].t || 0 ) < 86400000 ) {
+					keys[ sig ] = stored[ sig ];
+				}
+			} );
+		} catch ( e ) {}
+		return keys;
+	}
+	function saveKeys() {
+		try {
+			window.sessionStorage.setItem( KEY_STORE, JSON.stringify( pendingKeys ) );
+		} catch ( e ) {}
+	}
+	function dropKey( sig ) {
+		delete pendingKeys[ sig ];
+		saveKeys();
+	}
 	function send( path, body, sig ) {
-		var key = pendingKeys[ sig ] || ( pendingKeys[ sig ] = uuid() );
-		body.idempotency_key = key;
+		if ( ! pendingKeys[ sig ] ) {
+			pendingKeys[ sig ] = { k: uuid(), t: Date.now() };
+			saveKeys();
+		}
+		body.idempotency_key = pendingKeys[ sig ].k;
 		return api( path, 'POST', body ).then( function ( d ) {
-			delete pendingKeys[ sig ];
+			dropKey( sig );
 			return d;
 		}, function ( err ) {
-			// Answered (4xx) = done; no answer, server error or "still processing" (409) = keep the key for a retry.
-			if ( err && err.status && err.status < 500 && 409 !== err.status ) {
-				delete pendingKeys[ sig ];
+			// Answered (4xx, also a refusal with 409) = done; no answer, server error or "still processing" = keep
+			// the key for a retry.
+			if ( err && err.status && err.status < 500 && 'vcap_in_progress' !== err.code ) {
+				dropKey( sig );
 			}
 			throw err;
 		} );
@@ -435,11 +498,14 @@
 			return;
 		}
 		if ( 'print' === act ) {
-			window.print();
+			printSlip( current && current.slip );
 			return;
 		}
 		if ( 'undo' === act && ! window.confirm( t.confirmUndo ) ) {
 			return;
+		}
+		if ( ( 'redeem' === act || 'redeem-partial' === act ) && ! counterReady() ) {
+			return; // Receipt number or ID check missing: nothing is sent.
 		}
 		var reason = '';
 		if ( ( 'undo' === act && e.target.getAttribute( 'data-reason' ) ) || 'reverse' === act ) {
@@ -457,9 +523,9 @@
 		if ( 'checkin' === act ) {
 			var c = document.getElementById( 'vcap-count' );
 			var count = c ? parseInt( c.value, 10 ) || 1 : 1;
-			req = send( 'checkin', { q: query, count: count }, 'checkin|' + query + '|' + count );
+			req = send( 'checkin', { q: query, count: count, till: tillValue() }, 'checkin|' + query + '|' + count );
 		} else if ( 'undo' === act ) {
-			req = send( 'checkin', { q: query, undo: true, reason: reason }, 'undo|' + query );
+			req = send( 'checkin', { q: query, undo: true, reason: reason, till: tillValue() }, 'undo|' + query );
 		} else if ( 'reverse' === act ) {
 			var eventId = parseInt( e.target.getAttribute( 'data-event' ), 10 ) || 0;
 			req = send( 'redeem/reverse', { q: query, event_id: eventId, reason: reason }, 'reverse|' + query + '|' + eventId );
@@ -531,9 +597,80 @@
 	/** Receipt number of the till and the till/branch of this device, kept with the booking. */
 	function counterBody( body ) {
 		var receipt = document.getElementById( 'vcap-receipt' );
+		var idChecked = document.getElementById( 'vcap-id-checked' );
 		body.receipt = receipt ? receipt.value.trim() : '';
-		body.till = till ? till.value.trim() : '';
+		body.till = tillValue();
+		body.id_checked = !! ( idChecked && idChecked.checked );
 		return body;
+	}
+
+	/** Till/branch of this device (fixed for the staff member, chosen from the list, or typed). */
+	function tillValue() {
+		return cfg.fixedTill || ( till ? String( till.value || '' ).trim() : '' );
+	}
+
+	/** Inline refusal above the redeem button (nothing is sent). */
+	function redeemError( text, focus ) {
+		var box = document.getElementById( 'vcap-redeem-error' );
+		if ( box ) {
+			box.textContent = text;
+			box.hidden = false;
+		}
+		if ( focus ) {
+			focus.focus();
+		}
+		beep( false );
+	}
+
+	/** Receipt number (when required), till from the list and ID check (personal vouchers) before a redemption. */
+	function counterReady() {
+		var receipt = document.getElementById( 'vcap-receipt' );
+		var idChecked = document.getElementById( 'vcap-id-checked' );
+		var box = document.getElementById( 'vcap-redeem-error' );
+		if ( box ) {
+			box.hidden = true;
+		}
+		if ( current && current.receipt_required && receipt && ! receipt.value.trim() ) {
+			redeemError( t.receiptMissing, receipt );
+			return false;
+		}
+		if ( ( cfg.locations || [] ).length && ! tillValue() ) {
+			redeemError( t.tillMissing, till );
+			return false;
+		}
+		if ( idChecked && ! idChecked.checked ) {
+			redeemError( t.idMissing, idChecked );
+			return false;
+		}
+		return true;
+	}
+
+	/** 80 mm redemption slip (masked code) printed instead of the page. */
+	function printSlip( s ) {
+		if ( ! s || ! slip ) {
+			return;
+		}
+		var rows = [
+			[ t.slipCode, s.code ],
+			[ t.slipTime, s.time ],
+			[ t.slipStaff, s.staff ],
+			[ t.slipTill, s.till ],
+			[ t.receipt, s.receipt ],
+			[ t.slipBooking, s.booking ? '#' + s.booking : '' ],
+			[ t.slipAmount, s.amount ],
+			[ t.balance, s.balance ]
+		].filter( function ( r ) { return r[ 1 ]; } );
+		var html = '<p class="vcap-slip-shop">' + esc( s.shop ) + '</p><p class="vcap-slip-title">' + esc( t.slipTitle ) + '</p><dl>';
+		rows.forEach( function ( r ) {
+			html += '<dt>' + esc( r[ 0 ] ) + '</dt><dd>' + esc( r[ 1 ] ) + '</dd>';
+		} );
+		html += '</dl><p>' + esc( s.treatment ) + '</p><p class="vcap-slip-note">' + esc( t.slipNote ) + '</p>';
+		slip.innerHTML = html;
+		document.body.classList.add( 'vcap-printing-slip' );
+		window.addEventListener( 'afterprint', function () {
+			document.body.classList.remove( 'vcap-printing-slip' );
+		}, { once: true } );
+		window.print();
 	}
 
 	form.addEventListener( 'submit', function ( e ) {
@@ -588,7 +725,8 @@
 				var ctx = canvas.getContext( '2d', { willReadFrequently: true } );
 				ctx.drawImage( video, 0, 0, canvas.width, canvas.height );
 				var img = ctx.getImageData( 0, 0, canvas.width, canvas.height );
-				var res = window.jsQR( img.data, img.width, img.height, { inversionAttempts: 'dontInvert' } );
+				// Light-on-dark QR codes (inverted print designs) too: iOS/Firefox have no BarcodeDetector (M12-40).
+				var res = window.jsQR( img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' } );
 				if ( res && res.data ) {
 					onCode( res.data );
 				}
@@ -622,11 +760,28 @@
 			return;
 		}
 		starting = true;
-		navigator.mediaDevices.getUserMedia( { video: { facingMode: 'environment' }, audio: false } ).then( function ( s ) {
+		// About 1280 px wide: small printed codes stay readable (jsQR scales the frame down to 640 px anyway).
+		navigator.mediaDevices.getUserMedia( { video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false } ).then( function ( s ) {
 			starting = false;
 			stream = s;
 			video.srcObject = s;
-			video.play();
+			var playing = video.play();
+			if ( playing && playing.catch ) {
+				playing.catch( function () {
+					// Autoplay refused (power saving, iOS): a tap on the toggle starts it again.
+					stop();
+					notice( t.cameraPaused );
+				} );
+			}
+			s.getVideoTracks().forEach( function ( track ) {
+				// iOS ends the stream when the app goes to the background or another app takes the camera.
+				track.addEventListener( 'ended', function () {
+					if ( stream === s ) {
+						stop();
+					}
+				} );
+			} );
+			setupTorch( s );
 			video.parentNode.classList.add( 'is-live' );
 			toggleBtn.textContent = t.stop;
 			if ( coarse && document.activeElement === input ) {
@@ -655,7 +810,43 @@
 		video.srcObject = null;
 		video.parentNode.classList.remove( 'is-live' );
 		toggleBtn.textContent = t.start;
+		torchOn = false;
+		if ( torchBtn ) {
+			torchBtn.hidden = true;
+			torchBtn.setAttribute( 'aria-pressed', 'false' );
+		}
 	}
+
+	/** Torch button for cameras that have one (Chrome on Android; elsewhere the button stays hidden). */
+	function setupTorch( s ) {
+		var track = s.getVideoTracks()[ 0 ];
+		var caps = track && track.getCapabilities ? track.getCapabilities() : {};
+		if ( torchBtn ) {
+			torchBtn.hidden = ! ( caps && caps.torch );
+		}
+	}
+
+	if ( torchBtn ) {
+		torchBtn.addEventListener( 'click', function () {
+			var track = stream ? stream.getVideoTracks()[ 0 ] : null;
+			if ( ! track || ! track.applyConstraints ) {
+				return;
+			}
+			track.applyConstraints( { advanced: [ { torch: ! torchOn } ] } ).then( function () {
+				torchOn = ! torchOn;
+				torchBtn.setAttribute( 'aria-pressed', torchOn ? 'true' : 'false' );
+			} ).catch( function () {
+				torchBtn.hidden = true;
+			} );
+		} );
+	}
+
+	// Leaving the tab or locking the phone: release the camera (iOS would end the stream silently anyway).
+	document.addEventListener( 'visibilitychange', function () {
+		if ( document.hidden && stream ) {
+			stop();
+		}
+	} );
 
 	if ( ! coarse ) {
 		input.focus(); // Desktop and USB scanners: ready to scan (no keyboard popping up on phones).

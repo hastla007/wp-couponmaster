@@ -844,7 +844,8 @@ final class VoucherRepository {
 		}
 		// R6: till/branch and receipt number of a counter redemption and its cancellation (Counter::with()).
 		$counter = Counter::context();
-		if ( $counter && in_array( $event, array( 'redeemed', 'redeem_reversed' ), true ) && 0 === $order_id && Install::event_till_ready() ) {
+		// M12-78/M12-46: check-ins (and their reverts) and POS bookings over the API (meta.till/receipt) keep them too.
+		if ( $counter && in_array( $event, array( 'redeemed', 'redeem_reversed', 'checkin', 'checkin_undo', 'api_committed', 'api_refunded' ), true ) && 0 === $order_id && Install::event_till_ready() ) {
 			$row['till']    = $counter['till'];
 			$row['receipt'] = $counter['receipt'];
 		}
