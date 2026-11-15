@@ -280,7 +280,7 @@ ob_start();
 $report_html = (string) ob_get_clean();
 $_GET        = array();
 vcap_sa_assert( str_contains( $report_html, 'vcap-report-cards' ) && (bool) preg_match( '/nav-tab nav-tab-active[^>]*>Overview/', $report_html ), 'M12-92: "Overview" is the default reports tab' );
-vcap_sa_assert( str_contains( (string) file_get_contents( VCAP_PATH . 'COMPATIBILITY.md' ), '## WooCommerce Analytics' ), 'M12-92: COMPATIBILITY.md explains what WooCommerce Analytics shows' );
+// COMPATIBILITY.md (WooCommerce Analytics section) is checked in tests/run.php: the release ZIP has no docs.
 
 // ---- M12-94: bulk actions. ----------------------------------------------------------------------------------------
 $voucher_admin = new VCAP\Admin\VoucherAdmin( vcap()->vouchers );

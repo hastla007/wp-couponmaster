@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-15 10:36+0000\n"
+"POT-Creation-Date: 2026-11-15 11:07+0000\n"
 "X-Domain: voucher-captain\n"
 
 #. Plugin Name of the plugin
@@ -4161,17 +4161,17 @@ msgstr ""
 msgid "Customer chooses the amount: the suggested amounts %s are outside the minimum/maximum or do not match the step and are not shown."
 msgstr ""
 
-#: src/CustomAmount.php:355
+#: src/CustomAmount.php:360
 msgid "Voucher amount"
 msgstr ""
 
 #. translators: %s: min price
-#: src/CustomAmount.php:393
+#: src/CustomAmount.php:398
 #, php-format
 msgid "From %s"
 msgstr ""
 
-#: src/CustomAmount.php:395
+#: src/CustomAmount.php:400
 msgid "Choose your amount"
 msgstr ""
 

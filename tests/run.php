@@ -579,6 +579,7 @@ $m12_purged = VCAP\Install::purge_temp_files();
 check( 'M12-43: the maintenance removes temp PDFs, img-*, *.part and dompdf temp images older than an hour, nothing else', 5 === $m12_purged && ! array_filter( $m12_junk, static fn( $f ) => file_exists( $m12_dir . $f ) ) && file_exists( $m12_dir . '/tmp/fresh.pdf' ) && file_exists( $m12_dir . '/fonts/DejaVuSans.ufm' ), (string) $m12_purged );
 @unlink( $m12_dir . '/tmp/fresh.pdf' );
 @unlink( $m12_dir . '/fonts/DejaVuSans.ufm' );
+check( 'M12-92: COMPATIBILITY.md explains what WooCommerce Analytics shows', str_contains( (string) file_get_contents( VCAP_PATH . 'COMPATIBILITY.md' ), '## WooCommerce Analytics' ) );
 check( 'M12-43: COMPATIBILITY.md has the nginx snippet; Site Health requests a test file', str_contains( (string) file_get_contents( VCAP_PATH . 'COMPATIBILITY.md' ), 'location ~* ^/wp-content/uploads/vcap' ) && method_exists( VCAP\Health::class, 'probe_private_dir' ) );
 
 // M12-72: subdivision flags and keycaps leave no tag characters or boxes.
