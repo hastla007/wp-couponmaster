@@ -111,7 +111,7 @@ remove_filter( 'vcap_delivery_max_attempts', $three );
 $state = $repo->delivery_attempts( $failing->id );
 vcap_dlv_assert( $state['given_up'] && 3 === $state['failures'] && 1 === vcap_dlv_events( $failing->id, 'delivery_given_up' ), 'after the last failed attempt the delivery is given up (ledger event)', $state );
 vcap_dlv_assert( 0 === $retry_at( $failing->id ), 'a given-up delivery has no pending retry' );
-vcap_dlv_assert( str_contains( vcap_dlv_notes( $order->get_id() ), $failing->code ), 'the order gets a note that the voucher is no longer sent automatically' );
+vcap_dlv_assert( str_contains( vcap_dlv_notes( $order->get_id() ), VCAP\Mask::code( $failing->code ) ) && ! str_contains( strtoupper( vcap_dlv_notes( $order->get_id() ) ), strtoupper( $failing->code ) ), 'the order gets a note that the voucher is no longer sent automatically (code masked, AP-S3-3)' );
 delete_transient( 'vcap_given_up_count' );
 vcap_dlv_assert( $repo->given_up_count() >= 1 && ! in_array( $failing->id, $repo->due_for_delivery( 500 ), true ), 'given-up deliveries are counted for the admin notice and skipped by the safety net' );
 vcap()->delivery->deliver( $failing->id ); // A late action (e.g. queued before) neither retries nor gives up twice.
@@ -219,7 +219,7 @@ vcap()->delivery->deliver( $late->id );
 $stored = $repo->get( $late->id );
 vcap_dlv_assert( ! in_array( "late-{$tag}@example.com", $mails, true ) && null === $stored->delivered_at, 'a voucher that expired before its delivery date is not mailed' );
 vcap_dlv_assert( Voucher::STATUS_EXPIRED === $stored->status && 'publish' !== get_post_status( $late->coupon_id ) && 1 === vcap_dlv_events( $late->id, 'delivery_expired' ), 'it is marked expired (coupon stays off) and the ledger says why' );
-vcap_dlv_assert( str_contains( vcap_dlv_notes( $late_order->get_id() ), $late->code ), 'the order gets a note for the shop' );
+vcap_dlv_assert( str_contains( vcap_dlv_notes( $late_order->get_id() ), VCAP\Mask::code( $late->code ) ) && ! str_contains( strtoupper( vcap_dlv_notes( $late_order->get_id() ) ), strtoupper( $late->code ) ), 'the order gets a note for the shop (code masked, AP-S3-3)' );
 vcap_dlv_assert( ! in_array( $late->id, $repo->due_for_delivery( 1000 ), true ), 'the safety net does not pick it up again' );
 
 // U12: one routing choice fixed on the voucher – the old "Buyer copy" flag of the product no longer reaches sold vouchers.
