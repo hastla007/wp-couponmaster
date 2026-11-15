@@ -21,6 +21,31 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 | Available placeholders: %s | Verfügbare Platzhalter: %s | Verfügbare Platzhalter: %s |
 | Email body | E-Mail-Text | E-Mail-Text |
 
+## `src/Emails/BundleEmail.php`
+
+| Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) |
+|---|---|---|
+| Vouchers (bulk order) | **fehlt** | **fehlt** |
+| Sent instead of one email per voucher when an order line holds many vouchers for the same recipient: one email with all codes and one PDF (one page per voucher), or download links for very large quantities. The buyer gets one copy per order. The thresholds are set under WooCommerce → Settings → Vouchers → Delivery & downloads. | **fehlt** | **fehlt** |
+| {buyer_name} sent you {voucher_count} vouchers from {site_title} | **fehlt** | **fehlt** |
+| You received {voucher_count} vouchers from {site_title} | **fehlt** | **fehlt** |
+| Your {voucher_count} gift vouchers are on their way | **fehlt** | **fehlt** |
+| Your {voucher_count} vouchers from {site_title} | **fehlt** | **fehlt** |
+| You received {voucher_count} vouchers! | **fehlt** | **fehlt** |
+| Your {voucher_count} vouchers | **fehlt** | **fehlt** |
+| Hi {buyer_name}, thank you for your order #{order_number}. Your {voucher_count} vouchers are listed below. | **fehlt** | **fehlt** |
+| Hi {recipient_name}, {buyer_name} sent you {voucher_count} vouchers. You find all codes below. | **fehlt** | **fehlt** |
+| Hi {recipient_name}, you received {voucher_count} vouchers as a gift. You find all codes below. | **fehlt** | **fehlt** |
+| Hello, {buyer_name} sent you {voucher_count} vouchers. You find all codes below. | **fehlt** | **fehlt** |
+| Hello, you received {voucher_count} vouchers as a gift. You find all codes below. | **fehlt** | **fehlt** |
+| Hi {buyer_name}, your {voucher_count} gift vouchers are on their way. This copy with all codes is for your records. | **fehlt** | **fehlt** |
+| Hello, your {voucher_count} gift vouchers are on their way. This copy with all codes is for your records. | **fehlt** | **fehlt** |
+| Hello, thank you for your order #{order_number}. Your {voucher_count} vouchers are listed below. | **fehlt** | **fehlt** |
+| Hi {buyer_name}, your {voucher_count} vouchers are listed below. | **fehlt** | **fehlt** |
+| Hello, your {voucher_count} vouchers are listed below. | **fehlt** | **fehlt** |
+| Attach one PDF with all vouchers (up to the PDF limit of the bulk order settings) | **fehlt** | **fehlt** |
+| {voucher_count} is the number of vouchers in the email. | **fehlt** | **fehlt** |
+
 ## `src/Emails/BuyerEmail.php`
 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) |
@@ -93,6 +118,15 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 | Attach PDF | PDF anhängen | PDF anhängen |
 | Attach the voucher PDF | Gutschein-PDF anhängen | Gutschein-PDF anhängen |
 
+## `templates/emails/plain/voucher-bundle.php`
+
+| Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) |
+|---|---|---|
+| All vouchers are attached as one PDF, one page per voucher, ready to print. | **fehlt** | **fehlt** |
+| Valid until %s | Gültig bis %s | Gültig bis %s |
+| Download: | Download: | Download: |
+| All vouchers in your account: | **fehlt** | **fehlt** |
+
 ## `templates/emails/plain/voucher.php`
 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) |
@@ -100,9 +134,18 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 | Value: %s | Wert: %s | Wert: %s |
 | What happens next | So geht es weiter | So geht es weiter |
 | Code: %s | Code: %s | Code: %s |
-| Valid until %s | Gültig bis %s | Gültig bis %s |
-| Download: | Download: | Download: |
 | Redeem now: | Jetzt einlösen: | Jetzt einlösen: |
+
+## `templates/emails/voucher-bundle.php`
+
+| Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) |
+|---|---|---|
+| Valid until | Gültig bis | Gültig bis |
+| Recipient | Empfänger | Empfänger |
+| Download each voucher as a PDF with the links in the table. | **fehlt** | **fehlt** |
+| PDF | **fehlt** | **fehlt** |
+| Download | **fehlt** | **fehlt** |
+| All vouchers in your account | **fehlt** | **fehlt** |
 
 ## `templates/emails/voucher.php`
 
@@ -113,4 +156,4 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 | Download voucher (PDF) | Gutschein herunterladen (PDF) | Gutschein herunterladen (PDF) |
 | Redeem now | Jetzt einlösen | Jetzt einlösen |
 
-66 Texte.
+94 Texte.

@@ -241,6 +241,105 @@ final class PdfRenderer {
 		return null;
 	}
 
+	/**
+	 * Z6: several vouchers as PDF documents with one page per voucher (bundled delivery of a large quantity). A PDF
+	 * has a single paper size here, so vouchers whose designs differ in page size get a document of their own
+	 * (normally all vouchers of an order line share one template and one document results).
+	 *
+	 * @param Voucher[] $vouchers
+	 * @return array<int, array{vouchers: Voucher[], pdf: string}> One entry per page size, in voucher order.
+	 */
+	public function render_many( array $vouchers ): array {
+		$groups = array();
+		foreach ( array_values( $vouchers ) as $voucher ) {
+			$design        = TemplatePostType::design_for_voucher( (int) apply_filters( 'vcap_render_template_id', $voucher->template_id, $voucher ), $voucher );
+			list( $w, $h ) = self::page_size( $design['page'] ?? array() );
+			$key           = $this->num( $w ) . 'x' . $this->num( $h );
+			$html          = $this->html( $voucher, $design );
+			if ( ! preg_match( '#<body[^>]*>(.*)</body>#is', $html, $body ) ) {
+				// A filter (vcap_pdf_html) produced a document without a body: that voucher is rendered on its own.
+				$key  .= '#' . $voucher->id;
+				$body  = array( 1 => $html );
+			}
+			preg_match_all( '#<style[^>]*>(.*?)</style>#is', $html, $styles );
+			if ( ! isset( $groups[ $key ] ) ) {
+				$groups[ $key ] = array( 'size' => array( $w, $h ), 'vouchers' => array(), 'pages' => array(), 'styles' => array(), 'raw' => str_contains( $key, '#' ) ? $html : '' );
+			}
+			$groups[ $key ]['vouchers'][] = $voucher;
+			$groups[ $key ]['pages'][]    = $body[1];
+			foreach ( $styles[1] as $css ) {
+				$groups[ $key ]['styles'][ md5( $css ) ] = $css;
+			}
+		}
+		$out = array();
+		foreach ( $groups as $group ) {
+			list( $w, $h ) = $group['size'];
+			if ( '' !== $group['raw'] ) {
+				$html = $group['raw'];
+			} else {
+				$html  = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' . implode( '', $group['styles'] ) . '.vcap-sheet{page-break-after:always;}.vcap-sheet-last{page-break-after:auto;}</style></head><body>';
+				$count = count( $group['pages'] );
+				foreach ( $group['pages'] as $i => $page ) {
+					$html .= '<div class="vcap-sheet' . ( $i === $count - 1 ? ' vcap-sheet-last' : '' ) . '">' . $page . '</div>';
+				}
+				$html .= '</body></html>';
+			}
+			$dompdf = new Dompdf( self::dompdf_options() );
+			$dompdf->setPaper( array( 0, 0, $w * self::MM_TO_PT, $h * self::MM_TO_PT ) );
+			$dompdf->loadHtml( $html, 'UTF-8' );
+			$dompdf->render();
+			$dompdf->addInfo( 'Title', implode( ', ', array_map( static fn( $v ) => (string) $v->code, array_slice( $group['vouchers'], 0, 3 ) ) ) . ( count( $group['vouchers'] ) > 3 ? ', …' : '' ) );
+			$dompdf->addInfo( 'Creator', 'Voucher Captain' );
+			$out[] = array(
+				'vouchers' => $group['vouchers'],
+				'pdf'      => (string) $dompdf->output(),
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * Z6: the multi-page PDF(s) of a bundle as private temp files (caller deletes them), named after the first
+	 * voucher's file name with the number of vouchers ("voucher-ABC-and-49-more.pdf").
+	 *
+	 * @param Voucher[] $vouchers
+	 * @return string[]|null Paths, null when a file could not be written (logged).
+	 */
+	public function bundle_to_temp_files( array $vouchers ): ?array {
+		Install::ensure_upload_dir();
+		$dir   = Install::upload_dir() . '/tmp';
+		$files = array();
+		foreach ( $this->render_many( $vouchers ) as $part ) {
+			$first = $part['vouchers'][0];
+			$more  = count( $part['vouchers'] ) - 1;
+			$name  = $more > 0 ? preg_replace( '/\.pdf$/', '', $this->filename( $first ) ) . '-' . sprintf( 'and-%d-more', $more ) . '.pdf' : $this->filename( $first );
+			$file  = null;
+			for ( $try = 0; $try < 5 && null === $file; $try++ ) {
+				$path   = $dir . '/' . ( $try ? wp_generate_password( 12, false ) . '-' : '' ) . $name;
+				$handle = @fopen( $path, 'xb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions,WordPress.PHP.NoSilencedErrors -- exclusive create: fails when the file exists.
+				if ( false === $handle ) {
+					continue;
+				}
+				$ok = false !== fwrite( $handle, $part['pdf'] ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+				fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+				if ( ! $ok ) {
+					wp_delete_file( $path );
+					break;
+				}
+				$file = $path;
+			}
+			if ( null === $file ) {
+				self::write_failed( $first );
+				foreach ( $files as $written ) {
+					wp_delete_file( $written );
+				}
+				return null;
+			}
+			$files[] = $file;
+		}
+		return $files;
+	}
+
 	/** D5: the mail would go out without its PDF – leave a trace with the voucher. */
 	private static function write_failed( Voucher $voucher ): void {
 		Logger::error( 'Voucher PDF could not be written to the private temp folder (disk full or no write permission).', array( 'voucher_id' => (int) $voucher->id, 'element' => 'pdf_file' ) );

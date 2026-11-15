@@ -110,7 +110,13 @@ final class Note {
 				/* translators: %d: number of addresses */
 				$text = sprintf( _n( 'Sent to %d address', 'Sent to %d addresses', $count, 'voucher-captain' ), $count );
 				$roles = self::roles( $a( 1 ) );
-				return '' !== $roles ? $text . ' (' . $roles . ')' : $text;
+				$text  = '' !== $roles ? $text . ' (' . $roles . ')' : $text;
+				$batch = (int) $a( 2 );
+				if ( $batch > 1 ) {
+					/* translators: %d: number of other vouchers in the same email */
+					$text .= ' ' . sprintf( _n( 'in one email together with %d other voucher', 'in one email together with %d other vouchers', $batch - 1, 'voucher-captain' ), $batch - 1 );
+				}
+				return $text;
 			case 'delivered_without_pdf':
 				return __( 'The email was sent without the PDF attachment: the PDF could not be created (see the WooCommerce log).', 'voucher-captain' );
 			case 'delivery_error':

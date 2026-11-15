@@ -15,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
 abstract class VoucherEmail extends \WC_Email {
 	public ?Voucher $voucher = null;
 	/** @var string[] */
-	private array $temp_files = array();
+	protected array $temp_files = array();
 	/**
 	 * Why the last trigger() sent nothing (D4): 'disabled' (email switched off), 'no_recipient' (no valid address),
 	 * 'mail_failed' (the mail system refused it) or '' after a successful send.
@@ -120,6 +120,16 @@ abstract class VoucherEmail extends \WC_Email {
 	}
 
 	/**
+	 * Default headings this email chooses from per mail (callables returning the __() text); see
+	 * default_subject_variants().
+	 *
+	 * @return callable[]
+	 */
+	protected function default_heading_variants(): array {
+		return array();
+	}
+
+	/**
 	 * Settings texts in the language of the mail (Polylang; WPML translates the option itself).
 	 *
 	 * WooCommerce caches the first default it hands out in the settings (WC_Settings_API::get_option()), which
@@ -127,14 +137,15 @@ abstract class VoucherEmail extends \WC_Email {
 	 * language), the subject is chosen per voucher.
 	 */
 	public function get_option( $key, $empty_value = null ) {
-		if ( 'subject' === $key && $this->default_subject_variants() ) {
+		$variants = 'subject' === $key ? $this->default_subject_variants() : ( 'heading' === $key ? $this->default_heading_variants() : array() );
+		if ( $variants ) {
 			if ( empty( $this->settings ) ) {
 				$this->init_settings();
 			}
-			$stored = (string) ( $this->settings['subject'] ?? '' );
-			foreach ( $this->default_subject_variants() as $variant ) {
+			$stored = (string) ( $this->settings[ $key ] ?? '' );
+			foreach ( $variants as $variant ) {
 				if ( I18n::is_default_text( $stored, $variant ) ) {
-					return $this->get_default_subject();
+					return 'subject' === $key ? $this->get_default_subject() : $this->get_default_heading();
 				}
 			}
 		}
@@ -152,16 +163,31 @@ abstract class VoucherEmail extends \WC_Email {
 		}
 	}
 
+	/** Whether this mail carries the PDF (setting "Attach PDF" of the email, else the global setting). */
+	protected function wants_pdf(): bool {
+		return $this->voucher && 'yes' === $this->get_option( 'attach_pdf', get_option( 'vcap_attach_pdf', 'yes' ) ) && class_exists( '\Dompdf\Dompdf' );
+	}
+
+	/**
+	 * The PDF file(s) to attach, written to the private temp folder (deleted after the mail).
+	 *
+	 * @return string[] Empty when the PDF could not be created (logged by the renderer).
+	 */
+	protected function pdf_files(): array {
+		$file = vcap()->pdf->to_temp_file( $this->voucher );
+		return $file ? array( $file ) : array();
+	}
+
 	public function get_attachments() {
 		$attachments = parent::get_attachments();
-		if ( $this->voucher && 'yes' === $this->get_option( 'attach_pdf', get_option( 'vcap_attach_pdf', 'yes' ) ) && class_exists( '\Dompdf\Dompdf' ) ) {
+		if ( $this->wants_pdf() ) {
 			try {
-				$file = vcap()->pdf->to_temp_file( $this->voucher );
-				if ( $file ) {
-					$this->temp_files[] = $file;
-					$attachments[]      = $file;
+				$files = $this->pdf_files();
+				if ( $files ) {
+					$this->temp_files = array_merge( $this->temp_files, $files );
+					$attachments      = array_merge( (array) $attachments, $files );
 				} else {
-					$this->pdf_failed = true; // to_temp_file() logged why.
+					$this->pdf_failed = true; // The renderer logged why.
 				}
 			} catch ( \Throwable $e ) {
 				$this->pdf_failed = true;
@@ -178,7 +204,7 @@ abstract class VoucherEmail extends \WC_Email {
 		$this->temp_files = array();
 	}
 
-	private function template_args( bool $plain ): array {
+	protected function template_args( bool $plain ): array {
 		if ( ! $this->voucher ) {
 			// WooCommerce email preview (Settings → Emails) renders without a trigger.
 			$this->voucher      = \VCAP\Preview::sample_voucher();

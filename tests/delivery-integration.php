@@ -34,7 +34,10 @@ function vcap_dlv_voucher( string $email, array $props = array() ): Voucher {
 	$v                 = new Voucher();
 	$v->code           = wc_format_coupon_code( $coupon->get_code() );
 	$v->coupon_id      = $coupon->get_id();
-	$v->order_item_id  = 83000000 + $coupon->get_id();
+	$v->order_item_id  = (int) ( $props['order_item_id'] ?? 83000000 + $coupon->get_id() );
+	$v->item_index     = (int) ( $props['item_index'] ?? 0 );
+	$v->recipient_email = (string) ( $props['recipient_email'] ?? '' );
+	$v->recipient_name  = (string) ( $props['recipient_name'] ?? '' );
 	$v->order_id       = (int) ( $props['order_id'] ?? 0 );
 	$v->type           = 'giftcard';
 	$v->usage_mode     = 'balance';
@@ -47,7 +50,7 @@ function vcap_dlv_voucher( string $email, array $props = array() ): Voucher {
 	$v->expires_at     = $props['expires_at'] ?? null;
 	$v->created_at     = $props['created_at'] ?? gmdate( 'Y-m-d H:i:s', time() - 2 * HOUR_IN_SECONDS );
 	$v->buyer_email    = $email;
-	$v->send_to        = 'buyer';
+	$v->send_to        = (string) ( $props['send_to'] ?? 'buyer' );
 	$v->token          = VCAP\VoucherRepository::new_token();
 	$v->id             = vcap()->vouchers->insert( $v );
 	if ( ! $v->id ) {
@@ -463,6 +466,142 @@ update_option( 'vcap_hold_new_customer_above', 0 );
 $v7_off = $v7_order( $v7_product, "v7-off-{$tag}@example.com" );
 delete_option( 'vcap_hold_new_customer_above' );
 vcap_dlv_assert( Voucher::STATUS_ACTIVE === ( $repo->for_order( $v7_off->get_id() )[0]->status ?? '' ), 'V7: 0 switches the hold off' );
+
+/* ---- Z6: bundled delivery of large quantities ------------------------------------------------------------------ */
+
+$z6_mails   = array();
+$z6_capture = static function ( $pre, $atts ) use ( &$z6_mails ) {
+	$pages = array();
+	foreach ( (array) ( $atts['attachments'] ?? array() ) as $file ) {
+		$bytes   = is_readable( $file ) ? (string) file_get_contents( $file ) : '';
+		$pages[] = preg_match_all( '#/Type\s*/Page[^s]#', $bytes );
+	}
+	$z6_mails[] = array(
+		'to'      => is_array( $atts['to'] ) ? implode( ',', $atts['to'] ) : (string) $atts['to'],
+		'subject' => (string) $atts['subject'],
+		'message' => (string) $atts['message'],
+		'pages'   => $pages,
+	);
+	return $pre;
+};
+add_filter( 'pre_wp_mail', $z6_capture, 1, 2 );
+$z6_to      = static function ( string $address ) use ( &$z6_mails ): int {
+	return count( array_filter( $z6_mails, static fn( $m ) => str_contains( $m['to'], $address ) ) );
+};
+$z6_attach  = get_option( 'vcap_attach_pdf', 'yes' );
+update_option( 'vcap_attach_pdf', 'yes' );
+$z6_batch = static function ( int $count, array $props ) use ( $tag ): array {
+	static $line = 0;
+	$line   += 1;
+	$item_id = 84000000 + wp_rand( 0, 999999 ) * 10 + $line;
+	$out     = array();
+	for ( $i = 0; $i < $count; $i++ ) {
+		$out[] = vcap_dlv_voucher( (string) ( $props['buyer'] ?? "z6-buyer-{$tag}@example.com" ), array_merge( $props, array( 'order_item_id' => $item_id, 'item_index' => $i ) ) );
+	}
+	return $out;
+};
+
+// 1. Six vouchers of one line for the buyer: one email, one PDF with six pages, every voucher recorded on its own.
+$z6_order = vcap_dlv_order();
+$z6_own   = $z6_batch( 6, array( 'order_id' => $z6_order->get_id(), 'buyer' => "z6-own-{$tag}@example.com" ) );
+$z6_mails = array();
+foreach ( $z6_own as $z6_v ) {
+	vcap()->delivery->deliver( $z6_v->id ); // Every voucher keeps its own action: the first one sends the bundle.
+}
+vcap_dlv_assert( 1 === count( $z6_mails ) && array( 6 ) === $z6_mails[0]['pages'], 'Z6: six vouchers of one order line for the same buyer go out in one email with one six-page PDF', array_map( static fn( $m ) => array( $m['to'], $m['pages'] ), $z6_mails ) );
+$z6_codes = array_filter( $z6_own, static fn( $v ) => str_contains( $z6_mails[0]['message'] ?? '', $v->code ) );
+vcap_dlv_assert( 6 === count( $z6_codes ) && str_contains( $z6_mails[0]['subject'], '6' ), 'Z6: the email lists every code in its table and names the number of vouchers', $z6_mails[0]['subject'] ?? '' );
+$z6_state = array_map( static fn( $v ) => array( null !== $repo->get( $v->id )->delivered_at, 1 === vcap_dlv_events( $v->id, 'delivered' ) ), $z6_own );
+vcap_dlv_assert( array_fill( 0, 6, array( true, true ) ) === $z6_state, 'Z6: each voucher of the bundle is marked delivered and has its own "delivered" history entry', $z6_state );
+$z6_note = VCAP\Note::render( (string) ( array_values( array_filter( $repo->events( $z6_own[2]->id ), static fn( $e ) => 'delivered' === $e['event'] ) )[0]['note'] ?? '' ) );
+vcap_dlv_assert( str_contains( $z6_note, 'together with 5 other vouchers' ), 'Z6: the history says the voucher went out in one email with the others', $z6_note );
+
+// 2. Gifts with buyer copy: one email to the recipient, exactly one copy to the buyer.
+$z6_gift_order = vcap_dlv_order();
+$z6_gifts      = $z6_batch( 5, array( 'order_id' => $z6_gift_order->get_id(), 'buyer' => "z6-giver-{$tag}@example.com", 'send_to' => 'both', 'recipient_email' => "z6-lea-{$tag}@example.com", 'recipient_name' => 'Lea' ) );
+$z6_mails      = array();
+vcap()->delivery->deliver( $z6_gifts[0]->id );
+vcap_dlv_assert( 1 === $z6_to( "z6-lea-{$tag}@" ) && 1 === $z6_to( "z6-giver-{$tag}@" ) && 2 === count( $z6_mails ), 'Z6: five gifts with buyer copy: one email to the recipient and exactly one copy to the buyer (not five each)', array_column( $z6_mails, 'to' ) );
+$z6_table = VCAP\Install::tables()['vouchers'];
+$z6_roles = array_map( static fn( $v ) => (string) $wpdb->get_var( $wpdb->prepare( "SELECT delivered_roles FROM {$z6_table} WHERE id = %d", $v->id ) ), $z6_gifts ); // phpcs:ignore
+vcap_dlv_assert( array_fill( 0, 5, 'recipient,buyer' ) === $z6_roles && null !== $repo->get( $z6_gifts[4]->id )->delivered_at, 'Z6: every gift records both roles and is delivered', $z6_roles );
+
+// 3. The recipient's email fails: only that part is retried, per voucher, without a second buyer copy.
+$z6_part_order = vcap_dlv_order();
+$z6_part       = $z6_batch( 5, array( 'order_id' => $z6_part_order->get_id(), 'buyer' => "z6-pb-{$tag}@example.com", 'send_to' => 'both', 'recipient_email' => "z6-pr-{$tag}@example.com" ) );
+$z6_refuse     = static fn( $pre, $atts ) => str_contains( is_array( $atts['to'] ) ? implode( ',', $atts['to'] ) : (string) $atts['to'], "z6-pr-{$tag}@" ) ? false : $pre;
+add_filter( 'pre_wp_mail', $z6_refuse, 2000, 2 );
+$z6_mails = array();
+vcap()->delivery->deliver( $z6_part[0]->id );
+remove_filter( 'pre_wp_mail', $z6_refuse, 2000 );
+$z6_open = array_filter( $z6_part, static fn( $v ) => null === $repo->get( $v->id )->delivered_at && 1 === $repo->delivery_attempts( $v->id )['failures'] && $retry_at( $v->id ) > time() );
+vcap_dlv_assert( 5 === count( $z6_open ) && 1 === $z6_to( "z6-pb-{$tag}@" ), 'Z6: a failed recipient email leaves every voucher of the bundle undelivered with its own failed attempt and retry; the buyer copy went out once', array( count( $z6_open ), array_column( $z6_mails, 'to' ) ) );
+$z6_mails = array();
+vcap()->delivery->deliver( $z6_part[3]->id ); // The retry of any voucher of the bundle sends what is missing.
+$z6_done = array_filter( $z6_part, static fn( $v ) => null !== $repo->get( $v->id )->delivered_at );
+vcap_dlv_assert( 1 === count( $z6_mails ) && 1 === $z6_to( "z6-pr-{$tag}@" ) && 5 === count( $z6_done ), 'Z6: the retry sends only the missing recipient email (no second buyer copy) and delivers all five', array_column( $z6_mails, 'to' ) );
+
+// 4. Only vouchers due together are bundled: scheduled ones wait for their own date.
+$z6_sched_order = vcap_dlv_order();
+$z6_due         = $z6_batch( 5, array( 'order_id' => $z6_sched_order->get_id(), 'buyer' => "z6-due-{$tag}@example.com" ) );
+$z6_later_item  = $z6_due[0]->order_item_id;
+$z6_later       = array();
+foreach ( array( 5, 6 ) as $z6_idx ) {
+	$z6_later[] = vcap_dlv_voucher( "z6-due-{$tag}@example.com", array( 'order_id' => $z6_sched_order->get_id(), 'order_item_id' => $z6_later_item, 'item_index' => $z6_idx, 'status' => Voucher::STATUS_SCHEDULED, 'delivery_at' => gmdate( 'Y-m-d H:i:s', time() + 3 * DAY_IN_SECONDS ) ) );
+}
+$z6_mails = array();
+vcap()->delivery->deliver( $z6_due[0]->id );
+vcap_dlv_assert( 1 === count( $z6_mails ) && array( 5 ) === $z6_mails[0]['pages'] && null === $repo->get( $z6_later[0]->id )->delivered_at && Voucher::STATUS_SCHEDULED === $repo->get( $z6_later[1]->id )->status, 'Z6: the five due vouchers go out together, the two scheduled for later stay scheduled', array_map( static fn( $m ) => $m['pages'], $z6_mails ) );
+
+// 5. Above the PDF limit: no attachment, a download link per voucher instead.
+$z6_limit = static fn() => 3;
+add_filter( 'vcap_bundle_pdf_limit', $z6_limit );
+$z6_big_order = vcap_dlv_order();
+$z6_big       = $z6_batch( 5, array( 'order_id' => $z6_big_order->get_id(), 'buyer' => "z6-big-{$tag}@example.com" ) );
+$z6_mails     = array();
+vcap()->delivery->deliver( $z6_big[0]->id );
+remove_filter( 'vcap_bundle_pdf_limit', $z6_limit );
+vcap_dlv_assert( 1 === count( $z6_mails ) && array() === $z6_mails[0]['pages'] && 5 === substr_count( $z6_mails[0]['message'], 'vcap_pdf=' ), 'Z6: above the PDF limit the bundled email carries no PDF but a download link per voucher', array( $z6_mails[0]['pages'] ?? null, substr_count( $z6_mails[0]['message'] ?? '', 'vcap_pdf=' ) ) );
+
+// 6. A resend of one voucher of the bundle still sends that voucher alone.
+$z6_mails = array();
+vcap()->delivery->send( $repo->get( $z6_own[1]->id ) );
+vcap_dlv_assert( 1 === count( $z6_mails ) && array( 1 ) === $z6_mails[0]['pages'] && str_contains( $z6_mails[0]['message'], $z6_own[1]->code ) && ! str_contains( $z6_mails[0]['message'], $z6_own[0]->code ), 'Z6: resending one voucher sends one email with its own one-page PDF', $z6_mails[0]['pages'] ?? null );
+
+// 7. Below the threshold, with bundling off (0) or the bundled email switched off: one email per voucher.
+$z6_small = $z6_batch( 4, array( 'order_id' => vcap_dlv_order()->get_id(), 'buyer' => "z6-small-{$tag}@example.com" ) );
+$z6_mails = array();
+foreach ( $z6_small as $z6_v ) {
+	vcap()->delivery->deliver( $z6_v->id );
+}
+vcap_dlv_assert( 4 === count( $z6_mails ), 'Z6: four vouchers (below the default of 5) get one email each, as before', count( $z6_mails ) );
+update_option( 'vcap_bundle_threshold', 0 );
+$z6_off   = $z6_batch( 5, array( 'order_id' => vcap_dlv_order()->get_id(), 'buyer' => "z6-off-{$tag}@example.com" ) );
+$z6_mails = array();
+foreach ( $z6_off as $z6_v ) {
+	vcap()->delivery->deliver( $z6_v->id );
+}
+delete_option( 'vcap_bundle_threshold' );
+vcap_dlv_assert( 5 === count( $z6_mails ), 'Z6: setting 0 sends one email per voucher', count( $z6_mails ) );
+$z6_bundle_email = WC()->mailer()->get_emails()['VCAP_Email_Voucher_Bundle'];
+$z6_bundle_email->enabled = 'no';
+$z6_dis   = $z6_batch( 5, array( 'order_id' => vcap_dlv_order()->get_id(), 'buyer' => "z6-dis-{$tag}@example.com" ) );
+$z6_mails = array();
+foreach ( $z6_dis as $z6_v ) {
+	vcap()->delivery->deliver( $z6_v->id );
+}
+$z6_bundle_email->enabled = 'yes';
+vcap_dlv_assert( 5 === count( $z6_mails ), 'Z6: with the bundled email switched off every voucher gets its own email again', count( $z6_mails ) );
+
+// 8. "Deliver now" on one scheduled voucher of a large line delivers that voucher alone.
+$z6_now_order = vcap_dlv_order();
+$z6_now       = $z6_batch( 6, array( 'order_id' => $z6_now_order->get_id(), 'buyer' => "z6-now-{$tag}@example.com", 'status' => Voucher::STATUS_SCHEDULED, 'delivery_at' => gmdate( 'Y-m-d H:i:s', time() + DAY_IN_SECONDS ) ) );
+$z6_mails     = array();
+vcap()->delivery->deliver_now( $repo->get( $z6_now[0]->id ) );
+vcap_dlv_assert( 1 === count( $z6_mails ) && null !== $repo->get( $z6_now[0]->id )->delivered_at && Voucher::STATUS_SCHEDULED === $repo->get( $z6_now[1]->id )->status, 'Z6: "Deliver now" on one voucher sends only that voucher', count( $z6_mails ) );
+
+remove_filter( 'pre_wp_mail', $z6_capture, 1 );
+update_option( 'vcap_attach_pdf', $z6_attach );
 
 // D10: the diagnostics name the counters support needs.
 $d10 = ( new VCAP\Diagnostics() )->fields();
