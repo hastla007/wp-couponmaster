@@ -38,6 +38,7 @@ final class Fields {
 		add_filter( 'woocommerce_order_item_display_meta_value', array( $this, 'display_meta_value' ), 10, 3 );
 		add_action( 'woocommerce_before_order_item_object_save', array( $this, 'sync_visible_meta' ), 10, 1 );
 		add_filter( 'woocommerce_order_again_cart_item_data', array( $this, 'order_again' ), 10, 3 );
+		add_action( 'woocommerce_check_cart_items', array( $this, 'check_cart_items' ) );
 		add_action( 'woocommerce_privacy_remove_order_personal_data', array( self::class, 'anonymise_order' ), 10, 1 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'assets' ) );
 		add_action( 'woocommerce_after_shop_loop_item', array( $this, 'loop_assets' ) );
@@ -566,8 +567,20 @@ final class Fields {
 		if ( ! $product || ! ProductConfig::is_voucher( $product ) ) {
 			return $passed;
 		}
-		if ( is_array( $cart_item_data ) && ! empty( $cart_item_data['vcap_fields'] ) ) {
-			return $passed; // "Order again": values were validated when first ordered.
+		if ( is_array( $cart_item_data ) && ! empty( $cart_item_data['vcap_fields'] ) && is_array( $cart_item_data['vcap_fields'] ) ) {
+			// M12-59: "order again" (and other supplied values) are checked like the form, with today's rules
+			// (fields that became required, a delivery date that has passed).
+			$this->override = self::plain_values( $cart_item_data['vcap_fields'] );
+			try {
+				$errors = $this->errors( $product );
+			} finally {
+				$this->override = null;
+			}
+			foreach ( $errors as $message ) {
+				wc_add_notice( $message, 'error' );
+				$passed = false;
+			}
+			return $passed;
 		}
 		foreach ( $this->errors( $product ) as $message ) {
 			wc_add_notice( $message, 'error' );
@@ -988,11 +1001,62 @@ final class Fields {
 
 	public function order_again( $data, $item, $order ) {
 		$fields = $item->get_meta( '_vcap_fields' );
+		if ( is_array( $fields ) ) {
+			// M12-59: the old delivery date is not taken over (it has usually passed: the voucher would go out at once).
+			unset( $fields['delivery_date'] );
+		}
 		if ( $fields ) {
 			$data['vcap_fields'] = $fields;
 			$data['vcap_key']    = md5( wp_json_encode( $fields ) );
 		}
 		return $data;
+	}
+
+	/**
+	 * Field values as the form would send them (key => value) from stored cart item data (key => label/value).
+	 *
+	 * @param array<string, mixed> $fields Cart item "vcap_fields".
+	 * @return array<string, string>
+	 */
+	private static function plain_values( array $fields ): array {
+		$out = array();
+		foreach ( $fields as $key => $field ) {
+			$value = is_array( $field ) ? ( $field['value'] ?? '' ) : $field;
+
+			$out[ (string) $key ] = is_scalar( $value ) ? (string) $value : '';
+		}
+		return $out;
+	}
+
+	/**
+	 * M12-59: a delivery date in the cart that has passed meanwhile (or now lies after the voucher's expiry) stops the
+	 * checkout instead of sending the voucher at once (classic checkout and Store API run this action).
+	 */
+	public function check_cart_items(): void {
+		if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
+			return;
+		}
+		$today = wp_date( 'Y-m-d' );
+		foreach ( WC()->cart->get_cart() as $values ) {
+			$date    = (string) ( $values['vcap_fields']['delivery_date']['value'] ?? '' );
+			$product = $values['data'] ?? null;
+			if ( '' === $date || ! $product instanceof \WC_Product ) {
+				continue;
+			}
+			$latest = Delivery::latest_delivery_date( ProductConfig::get( $product ), time(), self::customer_country() );
+			if ( $date >= $today && ( null === $latest || $date <= $latest ) ) {
+				continue;
+			}
+			wc_add_notice(
+				sprintf(
+					/* translators: 1: product name, 2: delivery date */
+					__( 'The delivery date of "%1$s" (%2$s) is no longer possible. Please remove the voucher from the cart and add it again with another date.', 'voucher-captain' ),
+					$product->get_name(),
+					wp_date( (string) get_option( 'date_format' ), (int) strtotime( $date . ' 12:00:00 ' . wp_timezone_string() ) )
+				),
+				'error'
+			);
+		}
 	}
 
 	/** Loop "Add to cart" must go to the product page when personalisation fields exist. */

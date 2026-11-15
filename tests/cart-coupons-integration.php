@@ -358,4 +358,41 @@ WC()->cart->calculate_totals();
 vcap_cc_assert( ! $topped->is_error() && 1 === count( $items ) && 40.0 === (float) ( $items[0]['vcap_amount'] ?? 0 ) && $topup_card->code === ( $items[0]['vcap_topup_code'] ?? '' ) && 40.0 === round( (float) WC()->cart->get_subtotal(), 2 ), 'M12-20: a top-up with a custom amount is added through the Store API with card code and amount 40', $topped->is_error() ? $topped->get_data() : $items );
 WC()->cart->empty_cart();
 
+/* ---- M12-59: "order again" drops the delivery date and checks the fields again --------------------- */
+
+$personal = new WC_Product_Simple();
+$personal->set_name( 'CC personal voucher' );
+$personal->set_regular_price( '30' );
+$personal->set_virtual( true );
+$personal->update_meta_data( '_vcap_enabled', 'yes' );
+$personal->update_meta_data( '_vcap_builtin_fields', array( 'recipient_email_required', 'message', 'delivery_date' ) );
+$personal->save();
+$past       = wp_date( 'Y-m-d', strtotime( '-20 days' ) );
+$old_fields = array(
+	'recipient_email' => array( 'label' => 'Recipient email', 'value' => 'friend@example.com' ),
+	'delivery_date'   => array( 'label' => 'Delivery date', 'value' => $past ),
+);
+$again_order = wc_create_order();
+$again_line  = $again_order->get_item( $again_order->add_product( $personal, 1 ) );
+$again_line->add_meta_data( '_vcap_fields', $old_fields, true );
+$again_line->save();
+$again_data = apply_filters( 'woocommerce_order_again_cart_item_data', array(), $again_line, $again_order );
+wc_clear_notices();
+$again_ok = apply_filters( 'woocommerce_add_to_cart_validation', true, $personal->get_id(), 1, 0, array(), $again_data );
+vcap_cc_assert( ! isset( $again_data['vcap_fields']['delivery_date'] ) && 'friend@example.com' === ( $again_data['vcap_fields']['recipient_email']['value'] ?? '' ) && true === $again_ok && ! vcap_cc_errors(), 'M12-59: "order again" keeps the recipient but not the old delivery date, and passes the field check', $again_data );
+// A field that became required since the first order: "order again" asks for it like the form.
+$personal->update_meta_data( '_vcap_builtin_fields', array( 'recipient_email_required', 'message_required', 'delivery_date' ) );
+$personal->save();
+$again_now = apply_filters( 'woocommerce_add_to_cart_validation', true, $personal->get_id(), 1, 0, array(), $again_data );
+$errors    = vcap_cc_errors();
+vcap_cc_assert( false === $again_now && $errors, 'M12-59: "order again" runs the values through the current field rules (a newly required field refuses it)', $errors );
+// A delivery date that has passed while the voucher waited in the cart stops the checkout.
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart( $personal->get_id(), 1, 0, array(), array( 'vcap_fields' => $old_fields, 'vcap_key' => md5( wp_json_encode( $old_fields ) ) ) );
+wc_clear_notices();
+do_action( 'woocommerce_check_cart_items' );
+$errors = vcap_cc_errors();
+vcap_cc_assert( $errors && str_contains( implode( ' ', $errors ), 'delivery date' ), 'M12-59: the cart check refuses a delivery date in the past', $errors );
+WC()->cart->empty_cart();
+
 echo "Cart coupons integration checks passed.\n";
