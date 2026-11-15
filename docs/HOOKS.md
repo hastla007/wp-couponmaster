@@ -104,6 +104,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_field_group_applies` | `src/Fields.php` | – |
 | `vcap_first_order_counting_statuses` | `src/FirstOrderCoupons.php` | – |
 | `vcap_first_order_counts_undone_order` | `src/FirstOrderCoupons.php` | Whether a refunded/cancelled order counts as earlier order for "first order only" (bool, WC_Order). |
+| `vcap_hold_velocity` | `src/Delivery.php` | Maximum voucher orders of new customers per address (IPv6 /64) within the hold window before further ones are held (default 0 = no velocity limit; rate limit bucket "voucher_buy"). |
 | `vcap_import_max_unzipped_bytes` | `src/SpreadsheetReader.php` | – |
 | `vcap_internal_redemption_key_prefixes` | `src/API/V1/RestController.php` | Key prefixes reserved for built-in integrations (never created or driven over REST). |
 | `vcap_internal_redemption_target_prefixes` | `src/API/V1/RestController.php` | Target prefixes reserved for built-in integrations (never used over REST). |

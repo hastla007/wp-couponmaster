@@ -91,7 +91,9 @@ final class Delivery {
 	/**
 	 * V7: until when the vouchers of an order are held (null = not held). A first order (no earlier order of the
 	 * account or email that is at least the hold period old, see VoucherPurchaseRules::is_new_customer()) whose
-	 * vouchers are worth more than "vcap_hold_new_customer_above" (default 250, 0 = off) is held for
+	 * vouchers – M12-23: together with the customer's other orders within the hold window, window_value() – are
+	 * worth more than "vcap_hold_new_customer_above" (default 250, 0 = off; or that comes too fast from one
+	 * address, too_fast()) is held for
 	 * "vcap_hold_hours" (default 24, 0 = off) from the payment: the vouchers are issued, but delivered and
 	 * redeemable only then (a scheduled delivery). With $persist the decision is stored once on the order (the
 	 * first issuing run decides; later orders of the customer do not change it).
@@ -103,10 +105,11 @@ final class Delivery {
 		}
 		$above = (float) Settings::value( 'vcap_hold_new_customer_above' );
 		$hours = (float) Settings::value( 'vcap_hold_hours' );
-		$until = null;
-		if ( $above > 0 && $hours > 0 && VoucherPurchaseRules::voucher_value( $order ) > $above + 0.00001 && VoucherPurchaseRules::is_new_customer( $order, (int) round( $hours * HOUR_IN_SECONDS ) ) ) {
+		$until  = null;
+		$window = (int) round( $hours * HOUR_IN_SECONDS );
+		if ( $above > 0 && $hours > 0 && VoucherPurchaseRules::is_new_customer( $order, $window ) && ( VoucherPurchaseRules::voucher_value( $order ) + self::window_value( $order, $window ) > $above + 0.00001 || ( $persist && self::too_fast( $order, $window ) ) ) ) {
 			$base  = $order->get_date_paid() ? $order->get_date_paid()->getTimestamp() : time();
-			$until = $base + (int) round( $hours * HOUR_IN_SECONDS );
+			$until = $base + $window;
 		}
 		/** Until when (Unix time, null = not held) the vouchers of a new customer's order are held. */
 		$until = apply_filters( 'vcap_delivery_hold_until', $until, $order );
@@ -126,6 +129,46 @@ final class Delivery {
 			}
 		}
 		return $until;
+	}
+
+	/**
+	 * M12-23: voucher value of the same customer's other counted orders (account, billing email or its normalised
+	 * key) placed within the hold window before this one or since – four orders of 250 are held like one of 1000.
+	 * Refunded shares no longer count.
+	 */
+	private static function window_value( \WC_Order $order, int $window ): float {
+		$created = $order->get_date_created() ? $order->get_date_created()->getTimestamp() : time();
+		$value   = 0.0;
+		foreach ( VoucherPurchaseRules::customer_orders( (int) $order->get_customer_id(), (string) $order->get_billing_email(), $created - $window, 0, $order->get_id() ) as $id ) {
+			$other = wc_get_order( $id );
+			if ( $other instanceof \WC_Order && ! $other instanceof \WC_Order_Refund ) {
+				$total  = (float) $other->get_total();
+				$share  = $total > 0 ? max( 0.0, 1 - (float) $other->get_total_refunded() / $total ) : 1.0;
+				$value += VoucherPurchaseRules::voucher_value( $other ) * $share;
+			}
+		}
+		return $value;
+	}
+
+	/**
+	 * M12-23: optional velocity limit per address (new email addresses defeat the per-customer sum): more voucher
+	 * orders of new customers from one address (IPv6 /64) within the hold window than the filter allows are held.
+	 * Counted once per order, when the hold is decided.
+	 */
+	private static function too_fast( \WC_Order $order, int $window ): bool {
+		/**
+		 * Maximum voucher orders of new customers per address (IPv6 /64) within the hold window before further
+		 * ones are held (default 0 = no velocity limit; rate limit bucket "voucher_buy").
+		 *
+		 * @param int      $max   Orders per address.
+		 * @param WC_Order $order Order being decided.
+		 */
+		$max = (int) apply_filters( 'vcap_hold_velocity', 0, $order );
+		$ip  = (string) $order->get_customer_ip_address();
+		if ( $max <= 0 || '' === $ip || VoucherPurchaseRules::voucher_value( $order ) <= 0 ) {
+			return false;
+		}
+		return Plugin::rate_limited( 'voucher_buy', $max, 0, max( HOUR_IN_SECONDS, $window ), true, Plugin::client_network( $ip ) );
 	}
 
 	/** Delivery time (UTC) of a voucher of the order: its own time, but never before the order's hold ends. */

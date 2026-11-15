@@ -43,6 +43,8 @@ function vcap_topup_balance( VCAP\Voucher $card ): float {
 }
 
 update_option( 'woocommerce_calc_taxes', 'no' );
+// The V7 hold sums one customer's orders (M12-23): these refund checks reuse one address, the hold is tested below.
+update_option( 'vcap_hold_new_customer_above', 0 );
 $topup_product = new WC_Product_Simple();
 $topup_product->set_name( 'Gift card top-up' );
 $topup_product->set_regular_price( '100' );
