@@ -132,8 +132,24 @@ final class NextSteps {
 				continue;
 			}
 			$product = $item->get_product();
-			if ( ! $product || ! ProductConfig::is_voucher( $product ) || TopUp::is_topup( $product ) ) {
-				continue; // A top-up credits an existing card, nothing is mailed.
+			if ( ! $product || ! ProductConfig::is_voucher( $product ) ) {
+				continue;
+			}
+			if ( TopUp::is_topup( $product ) ) {
+				// A top-up credits an existing card, nothing is mailed – but M12-09: say when a held top-up is booked.
+				$hold = '' !== (string) $item->get_meta( TopUp::ITEM_META ) && ! $item->get_meta( TopUp::DONE_META ) ? Delivery::hold_until( $order ) : null;
+				if ( $hold && $hold > time() ) {
+					$lines[] = array(
+						'name' => (string) $item->get_name(),
+						'text' => sprintf(
+							/* translators: 1: masked gift card code, 2: date */
+							__( 'For your security, the top-up of your gift card …%1$s is booked after a short waiting period, on %2$s.', 'voucher-captain' ),
+							Mask::code_tail( (string) $item->get_meta( TopUp::ITEM_META ) ),
+							LocalDate::from_utc( gmdate( 'Y-m-d H:i:s', $hold ), vcap()->settings->date_format() )
+						),
+					);
+				}
+				continue;
 			}
 			$config  = ProductConfig::get( $product );
 			$fields  = is_array( $item->get_meta( '_vcap_fields' ) ) ? $item->get_meta( '_vcap_fields' ) : array();

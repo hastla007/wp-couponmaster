@@ -1032,7 +1032,7 @@ final class Downloads {
 			$this->balance['html'] = '<p class="woocommerce-error" role="alert">' . esc_html( CodeLookup::limited_message() ) . '</p>';
 			return;
 		}
-		$code    = wc_format_coupon_code( sanitize_text_field( wp_unslash( $_POST['vcap_balance_code'] ) ) );
+		$code    = wc_format_coupon_code( CodeLookup::code_input( sanitize_text_field( wp_unslash( $_POST['vcap_balance_code'] ) ) ) ); // M12-99: code#PIN.
 		$voucher = '' !== $code && strlen( $code ) <= 100 ? ( $this->repo->get_by_code( $code ) ?? $this->repo->get_by_code( strtoupper( $code ) ) ) : null;
 		if ( ! CodeLookup::visible( $voucher, $verified ? get_current_user_id() : 0 ) ) {
 			CodeLookup::failed(); // Unknown, or another customer's store credit: the same answer.
@@ -1072,6 +1072,7 @@ final class Downloads {
 			<input type="hidden" name="vcap_balance_form" value="<?php echo esc_attr( $form_id ); ?>" />
 			<label for="<?php echo esc_attr( $form_id . '-code' ); ?>"><?php esc_html_e( 'Voucher code', 'voucher-captain' ); ?></label>
 			<input type="text" id="<?php echo esc_attr( $form_id . '-code' ); ?>" name="vcap_balance_code" required autocomplete="off" maxlength="100"<?php echo $error ? ' aria-invalid="true" aria-describedby="' . esc_attr( $form_id . '-result' ) . '"' : ''; ?> />
+			<?php echo CodeLookup::pin_hint(); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in pin_hint(). ?>
 			<button type="submit" class="<?php echo esc_attr( Shortcodes::button_class() ); ?>"><?php esc_html_e( 'Check balance', 'voucher-captain' ); ?></button>
 		</form>
 		<?php

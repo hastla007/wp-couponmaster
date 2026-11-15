@@ -1047,10 +1047,11 @@ final class Settings {
 	}
 
 	/**
-	 * Site secret for signed links. Created once with add_option(), which never overwrites: when a read fails
-	 * for a moment (database hiccup, stale cache), the stored secret is read again instead of being replaced –
-	 * replacing it would invalidate every PDF link already sent. If it still cannot be read, a secret for this
-	 * request only is used (links signed with it simply do not validate) and nothing is stored.
+	 * Site secret for signed links. Created once (insert_once(), never overwritten): when a read fails for a
+	 * moment (database hiccup, stale or poisoned cache), the stored secret is read again instead of being
+	 * replaced – replacing it would invalidate every PDF and confirmation link already sent. If it still cannot
+	 * be read, a secret for this request only is used (links signed with it simply do not validate) and nothing
+	 * is stored.
 	 */
 	public function secret(): string {
 		static $runtime = '';
@@ -1058,20 +1059,9 @@ final class Settings {
 		if ( '' !== $secret ) {
 			return $secret;
 		}
-		$new = wp_generate_password( 64, true, true );
-		if ( add_option( 'vcap_secret', $new, '', false ) ) {
-			return $new;
-		}
-		wp_cache_delete( 'vcap_secret', 'options' );
-		wp_cache_delete( 'notoptions', 'options' );
-		wp_cache_delete( 'alloptions', 'options' );
-		global $wpdb;
-		$stored = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", 'vcap_secret' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		if ( is_string( $stored ) && '' !== $stored ) {
+		$stored = self::insert_once( 'vcap_secret', wp_generate_password( 64, true, true ), false );
+		if ( '' !== $stored ) {
 			return $stored;
-		}
-		if ( '' === $stored && update_option( 'vcap_secret', $new, false ) ) {
-			return $new; // The row exists but is empty: no link can have been signed with it.
 		}
 		if ( '' === $runtime ) {
 			$runtime = wp_generate_password( 64, true, true );
@@ -1088,5 +1078,26 @@ final class Settings {
 			. ' ' . __( 'The journal is part of your bookkeeping records: retention periods are 8 or 10 years in Germany (§ 147 AO, § 257 HGB) and 7 years in Austria (§ 132 BAO). Export it before deleting the plugin.', 'voucher-captain' );
 		$url = Admin\ReportsAdmin::journal_csv_url( Admin\ReportsAdmin::JOURNAL_START, wp_date( 'Y-m-d' ) );
 		return esc_html( $text ) . ' <a href="' . esc_url( $url ) . '">' . esc_html__( 'Export the complete journal (CSV)', 'voucher-captain' ) . '</a>';
+	}
+
+	/**
+	 * M12-17: creates an option that must never change once set (secrets, "since" dates) and returns the value
+	 * actually stored. add_option() is not safe for this: when the option is listed in the "notoptions" cache
+	 * (object cache race, a failed SELECT) it skips its existence check and runs INSERT … ON DUPLICATE KEY UPDATE,
+	 * overwriting the stored value. Here the row is written with INSERT IGNORE (an empty row is filled, a value
+	 * is never replaced), the option caches are dropped and the row is read back raw.
+	 *
+	 * @return string The stored value, '' when nothing could be stored or read (the caller uses a runtime value).
+	 */
+	public static function insert_once( string $name, string $value, bool $autoload ): string {
+		global $wpdb;
+		// 'yes'/'no' are understood by every WordPress from 6.4 on (6.6 maps them to on/off).
+		$wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, %s)", $name, $value, $autoload ? 'yes' : 'no' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = ''", $value, $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		wp_cache_delete( $name, 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+		$stored = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		return is_string( $stored ) ? $stored : '';
 	}
 }

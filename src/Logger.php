@@ -68,13 +68,34 @@ final class Logger {
 		self::error( $message . ' [' . $error->get_error_code() . '] ' . $error->get_error_message(), $context );
 	}
 
+	/**
+	 * M12-100: every entry passes here, so email addresses are masked centrally – in the message (exception and
+	 * remote error texts often quote the recipient) and in the scalar context values, also nested ones.
+	 */
 	private static function log( string $level, string $message, array $context ): void {
 		if ( ! function_exists( 'wc_get_logger' ) ) {
 			return;
 		}
 		$logger = wc_get_logger();
 		if ( is_object( $logger ) && method_exists( $logger, 'log' ) ) {
-			$logger->log( $level, $message, array( 'source' => self::SOURCE ) + $context );
+			$logger->log( $level, Mask::addresses( $message ), array( 'source' => self::SOURCE ) + self::mask_context( $context ) );
 		}
+	}
+
+	/**
+	 * Context with the email addresses of its string values masked (objects such as exceptions are kept).
+	 *
+	 * @param array<mixed> $context Log context.
+	 * @return array<mixed>
+	 */
+	private static function mask_context( array $context, int $depth = 0 ): array {
+		foreach ( $context as $key => $value ) {
+			if ( is_string( $value ) ) {
+				$context[ $key ] = Mask::addresses( $value );
+			} elseif ( is_array( $value ) && $depth < 5 ) {
+				$context[ $key ] = self::mask_context( $value, $depth + 1 );
+			}
+		}
+		return $context;
 	}
 }

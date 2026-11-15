@@ -526,6 +526,35 @@ update_option( 'vcap_hold_new_customer_above', 0 );
 $v7_off = $v7_order( $v7_product, "v7-off-{$tag}@example.com" );
 delete_option( 'vcap_hold_new_customer_above' );
 vcap_dlv_assert( Voucher::STATUS_ACTIVE === ( $repo->for_order( $v7_off->get_id() )[0]->status ?? '' ), 'V7: 0 switches the hold off' );
+// M12-23: splitting into orders of up to 250 no longer avoids the hold – the window sums the customer's orders.
+$m23_split = array();
+for ( $i = 0; $i < 3; $i++ ) {
+	$m23_split[] = $v7_order( $v7_small, "m23-split-{$tag}@example.com" );
+}
+$m23_status = array_map( static fn( $o ) => $repo->for_order( $o->get_id() )[0]->status ?? '', $m23_split );
+vcap_dlv_assert( array( Voucher::STATUS_ACTIVE, Voucher::STATUS_ACTIVE, Voucher::STATUS_SCHEDULED ) === $m23_status && (int) $m23_split[2]->get_meta( Delivery::HOLD_META ) > time(), 'M12-23: three orders of 100 of one new customer – the one taking the window above 250 is held', $m23_status );
+$m23_alias = $v7_order( $v7_small, "M23-Split-{$tag}+gift@example.com" );
+vcap_dlv_assert( Voucher::STATUS_SCHEDULED === ( $repo->for_order( $m23_alias->get_id() )[0]->status ?? '' ), 'M12-23: also under an alias of the address (normalised customer key)' );
+$m23_refunded = $v7_order( $v7_small, "m23-refund-{$tag}@example.com" );
+wc_create_refund( array( 'order_id' => $m23_refunded->get_id(), 'amount' => $m23_refunded->get_total() ) );
+$v7_order( $v7_small, "m23-refund-{$tag}@example.com" );
+$m23_after_refund = $v7_order( $v7_small, "m23-refund-{$tag}@example.com" );
+vcap_dlv_assert( Voucher::STATUS_ACTIVE === ( $repo->for_order( $m23_after_refund->get_id() )[0]->status ?? '' ), 'M12-23: refunded orders no longer count towards the window' );
+// Optional velocity limit per address: new email addresses from one address.
+add_filter( 'vcap_hold_velocity', static fn() => 2 );
+$m23_fast = array();
+for ( $i = 0; $i < 3; $i++ ) {
+	$o = wc_create_order();
+	$o->add_product( $v7_small, 1 );
+	$o->set_billing_email( "m23-fast-{$i}-{$tag}@example.com" );
+	$o->set_customer_ip_address( '198.51.100.230' );
+	$o->calculate_totals();
+	$o->save();
+	$o->update_status( 'processing' );
+	$m23_fast[] = $repo->for_order( $o->get_id() )[0]->status ?? '';
+}
+remove_all_filters( 'vcap_hold_velocity' );
+vcap_dlv_assert( array( Voucher::STATUS_ACTIVE, Voucher::STATUS_ACTIVE, Voucher::STATUS_SCHEDULED ) === $m23_fast, 'M12-23: with the velocity limit (vcap_hold_velocity = 2) the third new-customer voucher order from one address is held', $m23_fast );
 
 /* ---- Z6: bundled delivery of large quantities ------------------------------------------------------------------ */
 

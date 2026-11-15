@@ -102,7 +102,7 @@ final class CouponLink {
 			wc_add_notice( CodeLookup::limited_message(), 'error' );
 			return false;
 		}
-		$code = wc_format_coupon_code( sanitize_text_field( $raw ) );
+		$code = wc_format_coupon_code( CodeLookup::code_input( sanitize_text_field( $raw ) ) ); // M12-99: code#PIN.
 		if ( ! CodeLookup::confirms( $code ) ) {
 			CodeLookup::failed();
 			wc_add_notice( __( 'This voucher link is not valid.', 'voucher-captain' ), 'error' );

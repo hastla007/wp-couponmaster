@@ -261,6 +261,12 @@ $bad = array(
 	vcap()->issuer->issue_standalone( array( 'amount' => 10, 'send' => false, 'code' => $issued->code ) ),
 );
 vcap_ctr_assert( array( 'vcap_invalid_amount', 'vcap_no_address', 'vcap_invalid_args', 'vcap_code_taken' ) === array_map( static fn( $e ) => is_wp_error( $e ) ? $e->get_error_code() : 'ok', $bad ), 'invalid arguments are refused (no value, no address to send to, store credit type, code taken)' );
+// M12-64: an own code is checked like an imported one.
+$m64_weak   = vcap()->issuer->issue_standalone( array( 'amount' => 10, 'send' => false, 'code' => 'PRIZE-' . substr( $tag, 0, 4 ) ) );
+$m64_ok     = vcap()->issuer->issue_standalone( array( 'amount' => 10, 'send' => false, 'code' => 'PRIZE-' . VCAP\CodeGenerator::random( 14 ) ) );
+$m64_knowing = vcap()->issuer->issue_standalone( array( 'amount' => 10, 'send' => false, 'code' => 'PRIZE-W' . substr( $tag, 0, 4 ), 'allow_weak' => true ) );
+vcap_ctr_assert( is_wp_error( $m64_weak ) && 'vcap_weak_code' === $m64_weak->get_error_code() && 400 === ( $m64_weak->get_error_data()['status'] ?? 0 ) && null === vcap()->vouchers->get_by_code( wc_format_coupon_code( 'PRIZE-' . substr( $tag, 0, 4 ) ) ), 'M12-64: issue_standalone() refuses an own code that is easy to guess (vcap_weak_code)', is_wp_error( $m64_weak ) ? $m64_weak->get_error_code() : 'issued' );
+vcap_ctr_assert( $m64_ok instanceof Voucher && $m64_knowing instanceof Voucher, 'M12-64: a strong own code is issued, a weak one only with allow_weak' );
 $product = new WC_Product_Simple();
 $product->set_name( 'R6 voucher ' . $tag );
 $product->set_regular_price( '40' );

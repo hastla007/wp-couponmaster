@@ -739,7 +739,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
 
 ### KRITISCH
 
-- [ ] **[PRIO: KRITISCH]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-01 Store API `POST /wc/store/v1/cart/coupons` ist ein anonymes, unbegrenztes Code-Orakel**
+- [x] **[PRIO: KRITISCH]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-01 Store API `POST /wc/store/v1/cart/coupons` ist ein anonymes, unbegrenztes Code-Orakel** — *Nachweis: tests/rate-limit-integration.php „M12-01: cart/coupons – another customer's store credit gets the same answer, also without a nonce (no 401 oracle)“, „M12-01: cart/coupons inside /batch (also "require-all-validate") – uniform answer, every request counts“, „M12-01: cart/coupons – a limited visitor gets 429 for an existing and an unknown code alike“*
   - *Problem:*
     - WooCommerce prüft den Code per `validate_callback => coupon_exists` in `CartCouponSchema`. Das passiert, bevor der Callback läuft und bevor CouponGuard zählt.
     - Unbekannter Code: Antwort 400 `rest_invalid_param`. Existierender Code: Antwort 401 `missing_nonce`. Die Seite verrät also ohne Anmeldung, ob ein Code existiert.
@@ -815,7 +815,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - Vor der Aktivierung `$order->is_paid()` prüfen, bei Offline-Zahlarten zusätzlich `payment_ok()`.
     - Sonst Notiz, Attention und `retry_later`. Test.
-- [ ] **[PRIO: HOCH]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-09 Aufladungen umgehen die V7-Haltefrist**
+- [x] **[PRIO: HOCH]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-09 Aufladungen umgehen die V7-Haltefrist** — *Nachweis: tests/topup-integration.php „M12-09: a first order topping up 300 (above the hold limit) is not booked at payment“, „M12-09: an order cancelled during the hold is checked again and never booked“, „M12-09: "What happens next" tells the customer when the held top-up is booked“*
   - *Problem:*
     - `TopUp::top_up_instead()` bucht sofort bei Zahlung.
     - Beispiel: Eine Erstbestellung über 500 € Aufladung mit gestohlener Karte ist sofort einlösbar, auch an der Kasse und per REST. Das ist Geldwäsche.
@@ -874,7 +874,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - `customer_can_change_date()`: nur wenn ein Kundendatum aktiv ist. In den Modi `date`/`delay` nie vor `compute_time()` ohne Kundendatum. Maximum über `latest_delivery_date()`.
     - Das Datumsfeld im Template nur in diesem Fall anzeigen, Minimum vereinheitlichen. Test.
-- [ ] **[PRIO: HOCH]** | **[Experte #10]** | **[Kategorie: Bug]** – **M12-17 `add_option()` überschreibt das Link-Secret und den Kunden-Hash-Schlüssel**
+- [x] **[PRIO: HOCH]** | **[Experte #10]** | **[Kategorie: Bug]** – **M12-17 `add_option()` überschreibt das Link-Secret und den Kunden-Hash-Schlüssel** — *Nachweis: tests/security-integration.php „M12-17: with "vcap_secret" pre-seeded in notoptions the link secret is read back, never overwritten“ (ebenso Kundenschlüssel, E-Mail-Nachweis- und Routing-Datum)*
   - *Problem:*
     - `Settings::secret()`, `CustomEmail::secret()`, `PersonalVoucher::since()` und `Delivery`-Option verlassen sich auf „add_option never overwrites“.
     - Steht die Option in `notoptions` (Redis-Race oder fehlgeschlagener SELECT), führt WP-Core `INSERT … ON DUPLICATE KEY UPDATE` aus und überschreibt den Wert.
@@ -921,7 +921,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
     - Bedingtes `UPDATE … WHERE status='redeemed'` mit Prüfung von `rows_affected`.
     - Statuswechsel im selben UPDATE wie der Check-in (`IF(checkins >= max_checkins …)`).
     - `update_columns( coupon_id )`.
-- [ ] **[PRIO: MITTEL]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-23 V7-Haltefrist gilt pro Bestellung, Aufteilen in Bestellungen bis 250 € umgeht sie**
+- [x] **[PRIO: MITTEL]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-23 V7-Haltefrist gilt pro Bestellung, Aufteilen in Bestellungen bis 250 € umgeht sie** — *Nachweis: tests/delivery-integration.php „M12-23: three orders of 100 of one new customer – the one taking the window above 250 is held“, „M12-23: with the velocity limit (vcap_hold_velocity = 2) the third new-customer voucher order from one address is held“*
   - *Problem:* Vier Bestellungen zu je 250 € (oder neue Adressen) werden nie gehalten.
   - *Lösung:*
     - In `hold_until()` den Gutscheinwert aller gezählten Bestellungen desselben Kunden (Konto oder `customer_key`) im Haltefenster addieren.
@@ -931,14 +931,14 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - `describe()` liefert `personal`, die Namen und maskierte Adressen. Der Scanner zeigt ein gelbes Banner.
     - `rest_redeem` verlangt bei persönlichen Gutscheinen `id_checked=1`, sonst 409, und vermerkt das in der Notiz. Test.
-- [ ] **[PRIO: MITTEL]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-25 E-Mail-Bestätigungslink funktioniert ohne Anmeldung, dadurch Pre-Hijacking**
+- [x] **[PRIO: MITTEL]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-25 E-Mail-Bestätigungslink funktioniert ohne Anmeldung, dadurch Pre-Hijacking** — *Nachweis: tests/account-integration.php „M12-25: a click without login does not confirm – the visitor is sent to the login with the link kept for afterwards“, „M12-25: the confirmation email names the account and its registration date and warns not to click for someone else's account“*
   - *Problem:*
     - Ein Angreifer registriert die Adresse des Beschenkten und fordert den Bestätigungslink an.
     - Der Beschenkte klickt, und damit ist das Konto des Angreifers verifiziert (`PersonalVoucher::handle_request`).
   - *Lösung:*
     - Nur bestätigen, wenn derselbe Benutzer angemeldet ist, sonst über den Login mit Rücksprung.
     - Die Mail nennt Konto und Registrierungsdatum und warnt: „nicht klicken, wenn Sie dieses Konto nicht angelegt haben“. Test.
-- [ ] **[PRIO: MITTEL]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-26 Entropie-Schätzung importierter Codes rechnet immer mit 26 Buchstaben (V2 unvollständig)**
+- [x] **[PRIO: MITTEL]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-26 Entropie-Schätzung importierter Codes rechnet immer mit 26 Buchstaben (V2 unvollständig)** — *Nachweis: tests/run.php „M12-26: a hex batch of 10 characters counts as weak (16 characters seen, about 40 bits)“*
   - *Problem:* Hex-Codes mit 10 Zeichen (40 Bit) werden zu 99 % ohne Warnung als stark angenommen.
   - *Lösung:* Den Zeichenvorrat aus den tatsächlich benutzten Zeichen des Batches schätzen. Test „Hex-Batch gilt als schwach“.
 - [x] **[PRIO: MITTEL]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-27 Netto-Shop mit ausgeschalteter Einstellung: Ein Mehrzweck-Einmalgutschein deckt 120 % seines Nennwerts** — *Nachweis: tests/tax-accounting-integration.php „M12-27: net prices, setting off: a 100 single-use multi-purpose voucher saves 100 gross (net + VAT), not 120“; TAX.md 3*
@@ -1133,7 +1133,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:* Unter der Sperre lesen und danach speichern, mit erneutem Vergleich. Oder unter der Sperre nur die Meta schreiben.
 - [x] **[PRIO: NIEDRIG]** | **[Experte #2]** | **[Kategorie: Feature]** – **M12-63 Keine Abstimmung zwischen Saldo und Ledger** — *Nachweis: tests/ledger-integration.php „M12-63: a balance written without a booking is found (stored 45, ledger 50), listed in Attention and reported by Site Health“*
   - *Lösung:* `wp vcap ledger verify`, Site-Health-Prüfung, Treffer in Attention.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-64 `issue_standalone()` übernimmt einen eigenen Code ohne Stärkeprüfung**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-64 `issue_standalone()` übernimmt einen eigenen Code ohne Stärkeprüfung** — *Nachweis: tests/counter-integration.php „M12-64: issue_standalone() refuses an own code that is easy to guess (vcap_weak_code)“*
   - *Lösung:* `analyse_batch()` prüfen, `vcap_weak_code`, außer bei `allow_weak`. API.md.
 - [x] **[PRIO: NIEDRIG]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-65 Abgelaufene PDF-Links bleiben am Schalter ein gültiges Einlöse-Merkmal** — *Nachweis: tests/pos-integration.php „M12-65: a scanned PDF link counts only with a valid signature“*
   - *Lösung:* `Tickets::resolve()` prüft bei `vcap_pdf` die Signatur, oder akzeptiert nur Ticket-URLs und rohe Codes.
@@ -1187,7 +1187,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:* Gemeinsames `CouponSync::forget_code_cache()`, das beide Schlüssel löscht.
 - [x] **[PRIO: NIEDRIG]** | **[Experte #10]** | **[Kategorie: UX]** – **M12-86 Grenzen des Zustelldatums stehen fest im gecachten Produkt-HTML** — *Nachweis: `tests/product-setup-integration.php` „M12-86: the delivery date field carries day offsets, no fixed min/max date; frontend.js sets them“*
   - *Lösung:* `min`/`max` clientseitig aus `data`-Attributen setzen.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #10]** | **[Kategorie: Bug]** – **M12-87 Redirect des Bestätigungslinks ohne no-cache-Header**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #10]** | **[Kategorie: Bug]** – **M12-87 Redirect des Bestätigungslinks ohne no-cache-Header** — *Nachweis: tests/account-integration.php „M12-87: the confirmation link answers with no-cache headers and Referrer-Policy: no-referrer“*
   - *Lösung:* `nocache_headers()` und `Referrer-Policy: no-referrer` setzen.
 - [x] **[PRIO: NIEDRIG]** | **[Experte #10]** | **[Kategorie: Bug]** – **M12-88 `wp_cache_flush_runtime()` wirkt nicht bei Drop-ins ohne Unterstützung** — *Nachweis: `tests/run.php` „M12-88: runtime flush where supported, full flush of a non-persistent cache otherwise, nothing for a persistent drop-in without flush_runtime“*
   - *Lösung:* `wp_cache_supports( 'flush_runtime' )` prüfen, sonst bei nicht-persistentem Cache `wp_cache_flush()`.
@@ -1214,9 +1214,9 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:* Produktoption „Physische Karte“: versendbar, Code aus Batch, keine Mail, Aktivierung beim Versand. Druckdaten bleiben Premium.
 - [x] **[PRIO: NIEDRIG]** | **[Experte #12]** | **[Kategorie: Feature]** – **M12-98 Erhaltene Karte ins eigene Guthaben übernehmen, Karten zusammenführen** — *Nachweis: tests/shop-admin-integration.php „M12-98: the code holder moves the card into store credit: credit +40, card voided with balance 0“, „M12-98: both histories show the booking and the outstanding value stays the same“*
   - *Lösung:* Im Kern „Zu meinem Guthaben hinzufügen“ (Karte → StoreCredit, im Ledger). Zusammenführen bleibt Premium.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #3]** | **[Kategorie: Feature]** – **M12-99 PIN für physische Karten**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #3]** | **[Kategorie: Feature]** – **M12-99 PIN für physische Karten** — *Nachweis: tests/rate-limit-integration.php „M12-99: balance check – without or with a wrong PIN the card reads like an unknown code and counts as a failed attempt“, „M12-99: Store API cart/coupons – refused without the PIN, applied with CODE#PIN“, „M12-99: top-up – without the PIN the same answer as for an unknown code, with CODE#PIN the card can be topped up“, „M12-99: REST /redemptions/check – 404 without the PIN, found with "pin" or CODE#PIN“*
   - *Lösung:* PIN-Spalte im Import (gehasht gespeichert). Die PIN ist Pflicht bei Saldoabfrage, Aufladung, REST und Online-Einlösung, im gemeinsamen Rate-Limit-Bucket.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #12]** | **[Kategorie: Security]** – **M12-100 Logger schreibt ungefilterte Exception-Texte**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #12]** | **[Kategorie: Security]** – **M12-100 Logger schreibt ungefilterte Exception-Texte** — *Nachweis: tests/run.php „M12-100: the logger masks email addresses in the message and in the context values“*
   - *Lösung:* `Mask::addresses()` zentral in `Logger::log()` auf Nachricht und Kontext anwenden.
 - [x] **[PRIO: NIEDRIG]** | **[Experte #12]** | **[Kategorie: Bug]** – **M12-101 Reihenfolgeabhängige und nicht wiederholbare Tests, REST-Storno ungetestet** — *Nachweis: `tests/caching-integration.php` „M12-101: after a failing assertion the state guard restores the options …“ (tests/state-guard.php in tax/acceptance/blocks); `tests/security-integration.php` „M12-101: /redeem/reverse without login is answered with 401“ / „… by a customer … 403“ / „… by a cashier without a reason (missing or blank) … 400“; Doku in `tests/run-integration.sh`; E2E frische Karte je Versuch + leerer Warenkorb (`helpers.js` freshCode/emptyCart)*
   - *Lösung:* `try/finally` bei Steuern und Optionen, Doku „frische DB“. E2E idempotent (frische Karte, leerer Warenkorb). `/redeem/reverse` per REST testen (401/403/400).

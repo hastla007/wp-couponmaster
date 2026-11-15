@@ -870,6 +870,7 @@ final class RedemptionService {
 	 * @return Voucher|null
 	 */
 	private function find( string $code ): ?Voucher {
+		$code = \VCAP\CodeLookup::code_input( $code ); // M12-99: code#PIN (checked by CodeLookup::visible()).
 		$code = trim( sanitize_text_field( $code ) );
 		if ( '' === $code || strlen( $code ) > 100 ) {
 			return null;

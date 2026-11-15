@@ -62,8 +62,8 @@ final class CustomerEmail {
 	}
 
 	/**
-	 * The persistent key: created once with add_option(), which never overwrites – a failed read is answered from
-	 * the database again instead of replacing the key (which would make every stored hash unrecognisable). If it
+	 * The persistent key: created once with Settings::insert_once(), which never overwrites (M12-17: add_option()
+	 * does when "notoptions" is stale) – a failed read is answered from the database again instead of replacing the key (which would make every stored hash unrecognisable). If it
 	 * still cannot be read, a key for this request only is used and nothing is stored.
 	 */
 	public static function secret(): string {
@@ -72,16 +72,8 @@ final class CustomerEmail {
 		if ( '' !== $secret ) {
 			return $secret;
 		}
-		$new = wp_generate_password( 64, true, true );
-		if ( add_option( self::KEY_OPTION, $new, '', true ) ) {
-			return $new;
-		}
-		wp_cache_delete( self::KEY_OPTION, 'options' );
-		wp_cache_delete( 'notoptions', 'options' );
-		wp_cache_delete( 'alloptions', 'options' );
-		global $wpdb;
-		$stored = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::KEY_OPTION ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		if ( is_string( $stored ) && '' !== $stored ) {
+		$stored = Settings::insert_once( self::KEY_OPTION, wp_generate_password( 64, true, true ), true );
+		if ( '' !== $stored ) {
 			return $stored;
 		}
 		if ( '' === $runtime ) {

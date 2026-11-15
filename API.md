@@ -74,12 +74,14 @@ PHP callers may pass `user_id`; otherwise the logged-in user is used. Personal v
 
 | Method | Route | Body | Success |
 |---|---|---|---|
-| POST | `/wp-json/vcap/v1/redemptions/check` | `code`, `target`, `amount`, `currency` | 200 voucher data |
-| POST | `/wp-json/vcap/v1/redemptions` | `code`, `key`, `target`, `amount`, `currency`, `meta` | 201 redemption (200 for a repeated request) |
+| POST | `/wp-json/vcap/v1/redemptions/check` | `code`, `pin`, `target`, `amount`, `currency` | 200 voucher data |
+| POST | `/wp-json/vcap/v1/redemptions` | `code`, `pin`, `key`, `target`, `amount`, `currency`, `meta` | 201 redemption (200 for a repeated request) |
 | GET | `/wp-json/vcap/v1/redemptions/{key}` | – | 200 redemption |
 | POST | `/wp-json/vcap/v1/redemptions/{key}/commit` | – | 200 redemption |
 | POST | `/wp-json/vcap/v1/redemptions/{key}/release` | – | 200 redemption |
 | POST | `/wp-json/vcap/v1/redemptions/{key}/refund` | `amount`, `refund_key` | 200 redemption with `refunded` (total) and `restored` (this call) |
+
+PIN cards (M12-99): imported codes can carry a PIN (import option "PIN column", stored hashed). For customers such a code is found only with its PIN – as `pin` or in the convention `code#PIN`, which every code field of the shop accepts (coupon field, Store API, redeem form, balance check, top-up); without it the answer is `404 vcap_not_found`, counted like an unknown code. Shop staff are not asked for the PIN (they hold the card). Codes without a PIN behave as before.
 
 Authentication: browsers of logged-in users send the WordPress REST nonce (`X-WP-Nonce`, from `wp_create_nonce( 'wp_rest' )`); external servers use WordPress Application Passwords for a dedicated technical user. Anonymous requests receive `401`. Narrow access with the `vcap_rest_can_redeem` filter.
 
@@ -126,7 +128,7 @@ A till system can redeem vouchers in two ways:
 |---|---|---|
 | `vcap_invalid_request` | 400 | Missing/malformed key, target or amount |
 | `vcap_not_allowed` | 401/403 | Not logged in, voucher restricted to another email, refused by `vcap_redemption_allowed`, or redemption of another user |
-| `vcap_not_found` | 404 | Unknown code (counts towards the invalid-code limit) |
+| `vcap_not_found` | 404 | Unknown code, or a PIN card without its correct PIN (counts towards the invalid-code limit) |
 | `vcap_reservation_missing` | 404/409 | Unknown key, or reservation expired/released |
 | `vcap_already_redeemed` | 409 | Voucher or redemption already completed |
 | `vcap_reserved` | 409 | Voucher is reserved by another redemption right now |
@@ -175,8 +177,9 @@ add_action( 'vcap_voucher_redeemed', function ( array $redemption ) { /* audit, 
 | `buyer_name`, `buyer_email`, `buyer_copy` | The ordering party (e.g. the company): gets the voucher without a recipient address, or a copy with `buyer_copy => true`. |
 | `send` | Deliver by email now (default `true`). `false`: the voucher counts as handed over, no email (the admin can still send it). |
 | `delivery_at` | Deliver and activate later (UTC). |
-| `code` | Own, unused code; default a generated one. |
+| `code` | Own, unused code; default a generated one. It must be as hard to guess as a generated code (at least `vcap_min_code_bits`, default 50 bits, rated like an imported code with `CodeGenerator::analyse_batch()`), otherwise the call answers `vcap_weak_code`. |
 | `paid` | Whether the voucher was sold (paid outside WooCommerce, e.g. a company order on invoice). Default `false`: a voucher without a sale (goodwill, prize) is a price reduction for VAT (treatment `discount`) and is listed as free of charge in the liability report (TAX.md 2.8, M12-42). |
+| `allow_weak` | `true`: accept an own code below that strength knowingly (e.g. a printed card series). Default `false`. |
 | `source`, `reference` | Free label of the caller and an idempotency key (up to 100 characters, e.g. `order-4711/3`), both shown in the history. A second call with the same `reference` issues nothing and answers `vcap_reference_used` with `voucher_id` in the error data (0 while the first call is still running). |
 | `reason` | Why it was issued (e.g. "goodwill"), shown in the history with source and reference. |
 | `balance` | Remaining value below `amount` (stored balance only), e.g. an existing card taken over with what is left of it. Default: `amount`. |
@@ -184,7 +187,7 @@ add_action( 'vcap_voucher_redeemed', function ( array $redemption ) { /* audit, 
 
 The admin screens Vouchers → New voucher and Vouchers → Import cards and the commands `wp vcap issue --amount=<amount> [--email=<email>] [--product=<id>] [--send]` and `wp vcap import <file> [--dry-run]` are built on this method (sources `admin`, `cli`, `import`; imported cards get the history entry `imported`).
 
-Errors: `vcap_invalid_product`, `vcap_invalid_args`, `vcap_invalid_amount`, `vcap_no_address`, `vcap_code_taken`, `vcap_reference_used`, `vcap_issue_failed` (the error data carries an HTTP-like `status`). Afterwards the action `vcap_voucher_issued_standalone` (`Voucher`, `$args`) fires (not `vcap_vouchers_issued`, whose listeners expect an order).
+Errors: `vcap_invalid_product`, `vcap_invalid_args`, `vcap_invalid_amount`, `vcap_no_address`, `vcap_code_taken`, `vcap_weak_code`, `vcap_reference_used`, `vcap_issue_failed` (the error data carries an HTTP-like `status`). Afterwards the action `vcap_voucher_issued_standalone` (`Voucher`, `$args`) fires (not `vcap_vouchers_issued`, whose listeners expect an order).
 
 **Permission and context are the caller's responsibility**: the method checks no capability, so background tasks can use it. Call it only from code that has checked who asked for it – in an admin form `current_user_can( 'vcap_manage_vouchers' )` and a nonce, in a REST route a `permission_callback`. Amounts are in the shop's base currency.
 

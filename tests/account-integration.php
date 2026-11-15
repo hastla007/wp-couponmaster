@@ -187,6 +187,52 @@ for ( $i = 0; $i < 4; $i++ ) {
 remove_filter( 'pre_wp_mail', $ap_catch, 10 );
 vcap_acct_assert( array( 'sent', 'sent', 'sent', 'limited' ) === $ap_results && 3 === count( $ap_mails ) && in_array( $login . '_gf2b@example.com', (array) $ap_mails[0]['to'], true ) && str_contains( (string) $ap_mails[0]['message'], 'vcap_confirm_email=' . $ap_gf2 ), 'AP-S1-1: the confirmation email goes to the account address with the signed link, rate limited (3 per hour)' );
 vcap_acct_assert( 'verified' === VCAP\PersonalVoucher::send_confirmation( get_userdata( $ap_gf ) ), 'AP-S1-1: no confirmation email for an address that is already verified' );
+$m25_registered = wp_date( (string) get_option( 'date_format', 'Y-m-d' ), (int) strtotime( get_userdata( $ap_gf2 )->user_registered . ' UTC' ) );
+vcap_acct_assert( str_contains( (string) $ap_mails[0]['message'], $login . '_gf2' ) && str_contains( (string) $ap_mails[0]['message'], $m25_registered ) && str_contains( (string) $ap_mails[0]['message'], 'did not create this account' ), 'M12-25: the confirmation email names the account and its registration date and warns not to click for someone else\'s account' );
+// M12-25: the link confirms only for the same account, logged in – no pre-hijacking by a click of the address owner.
+// M12-87: the page of the link sends no-cache headers and Referrer-Policy: no-referrer.
+$m25_headers = array();
+$m25_capture = static function ( $headers ) use ( &$m25_headers ) {
+	$m25_headers = (array) $headers;
+	return $headers;
+};
+$m25_open = static function ( string $url ) use ( $m25_capture ) {
+	parse_str( (string) wp_parse_url( $url, PHP_URL_QUERY ), $query );
+	$_GET     = $query;
+	$location = null;
+	$stop     = static function ( $to ) {
+		throw new RuntimeException( 'redirect:' . $to );
+	};
+	add_filter( 'wp_redirect', $stop, 1 );
+	add_filter( 'nocache_headers', $m25_capture, 100 );
+	try {
+		VCAP\PersonalVoucher::handle_request();
+	} catch ( RuntimeException $e ) {
+		$location = substr( $e->getMessage(), 9 );
+	} finally {
+		remove_filter( 'wp_redirect', $stop, 1 );
+		remove_filter( 'nocache_headers', $m25_capture, 100 );
+		$_GET = array();
+	}
+	return $location;
+};
+delete_user_meta( $ap_gf2, VCAP\PersonalVoucher::META_VERIFIED );
+$m25_link = VCAP\PersonalVoucher::confirmation_url( get_userdata( $ap_gf2 ) );
+wp_set_current_user( 0 );
+$m25_guest = $m25_open( $m25_link );
+vcap_acct_assert( null !== $m25_guest && str_contains( $m25_guest, 'vcap_confirm_email=' . $ap_gf2 ) && '' === get_user_meta( $ap_gf2, VCAP\PersonalVoucher::META_VERIFIED, true ), 'M12-25: a click without login does not confirm – the visitor is sent to the login with the link kept for afterwards' );
+vcap_acct_assert( 'no-referrer' === ( $m25_headers['Referrer-Policy'] ?? '' ) && str_contains( (string) ( $m25_headers['Cache-Control'] ?? '' ), 'no-cache' ), 'M12-87: the confirmation link answers with no-cache headers and Referrer-Policy: no-referrer' );
+add_filter( 'woocommerce_is_account_page', '__return_true' );
+$m25_form = $m25_open( $m25_link );
+remove_filter( 'woocommerce_is_account_page', '__return_true' );
+vcap_acct_assert( null === $m25_form && '' === get_user_meta( $ap_gf2, VCAP\PersonalVoucher::META_VERIFIED, true ), 'M12-25: on My Account the login form is shown (WooCommerce returns to the link after the login), nothing confirmed yet' );
+wp_set_current_user( $ap_gf );
+$m25_other = $m25_open( $m25_link );
+vcap_acct_assert( null !== $m25_other && ! str_contains( $m25_other, 'vcap_email_confirmed=1' ) && '' === get_user_meta( $ap_gf2, VCAP\PersonalVoucher::META_VERIFIED, true ), 'M12-25: a customer logged in with another account cannot confirm the address' );
+wp_set_current_user( $ap_gf2 );
+$m25_same = $m25_open( $m25_link );
+vcap_acct_assert( null !== $m25_same && str_contains( $m25_same, 'vcap_email_confirmed=1' ) && strtolower( $login . '_gf2b@example.com' ) === get_user_meta( $ap_gf2, VCAP\PersonalVoucher::META_VERIFIED, true ), 'M12-25: logged in with the account the link was sent for, the click confirms the address' );
+wc_clear_notices();
 wp_set_current_user( 0 );
 
 // V11: order notes reach connectors and all staff – the issued code appears masked only.

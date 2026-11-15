@@ -22,6 +22,10 @@ final class TopUp {
 	public const MISSING_META  = '_vcap_topup_missing';
 	/** A top-up line that could not be booked (card no longer valid, no value): held for the shop, not retried. */
 	public const HELD_META     = '_vcap_topup_held';
+	/** M12-09: a top-up line waiting for the V7 security hold of its order (value: hold end, Unix time). */
+	public const PENDING_META  = '_vcap_topup_pending';
+	/** M12-09: Action Scheduler hook that books a held top-up line once its order's hold is over. */
+	public const AFTER_HOLD_HOOK = 'vcap_topup_after_hold';
 	/** Default minimum remaining validity (days) of a card to be topped up (filter "vcap_topup_min_remaining_days"). */
 	public const MIN_REMAINING_DAYS = 30;
 	private const FIELD        = 'vcap_topup_code';
@@ -56,6 +60,7 @@ final class TopUp {
 		add_filter( 'woocommerce_get_item_data', array( $this, 'item_data' ), 10, 2 );
 		add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'order_item_meta' ), 10, 3 );
 		add_filter( 'vcap_vouchers_per_item', array( $this, 'top_up_instead' ), 5, 3 );
+		add_action( self::AFTER_HOLD_HOOK, array( $this, 'after_hold' ), 10, 2 );
 		add_action( 'woocommerce_order_status_changed', array( $this, 'hold_after_transition' ), 30, 4 );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'revoke' ), 20 );
 		add_action( 'woocommerce_order_status_refunded', array( $this, 'revoke' ), 20 );
@@ -100,11 +105,12 @@ final class TopUp {
 		$id    = Shortcodes::unique_id( 'vcap-topup-code' ); // Unique on the page (two product forms, quick views).
 		echo '<p class="form-row vcap-topup-field"><label for="' . esc_attr( $id ) . '">' . esc_html__( 'Gift card code to top up', 'voucher-captain' ) . ' <abbr class="required" title="' . esc_attr__( 'required', 'voucher-captain' ) . '">*</abbr></label>';
 		echo '<input type="text" class="input-text" id="' . esc_attr( $id ) . '" name="' . esc_attr( self::FIELD ) . '" value="' . Shortcodes::esc_attr_text( $value ) . '" required autocomplete="off" maxlength="100" /></p>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_attr_text().
+		echo CodeLookup::pin_hint(); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in pin_hint().
 	}
 
 	/** @return Voucher|string The gift card that can be topped up, or why not. */
 	public function card( string $raw ) {
-		$code = wc_format_coupon_code( sanitize_text_field( $raw ) );
+		$code = wc_format_coupon_code( CodeLookup::code_input( sanitize_text_field( $raw ) ) ); // M12-99: code#PIN.
 		$card = '' !== $code ? ( $this->repo->get_by_code( $code ) ?? $this->repo->get_by_code( strtoupper( $code ) ) ) : null;
 		if ( ! $card ) {
 			return __( 'This gift card code was not found.', 'voucher-captain' );
@@ -154,6 +160,7 @@ final class TopUp {
 			// other currency): the form does not tell which codes exist. Only a card that can be topped up gives
 			// the attempt back; the order note of a held line keeps the exact reason (card()).
 			$card = $this->card( $raw );
+			$card = $card instanceof Voucher && ! CodeLookup::pin_ok( (string) $card->code ) ? null : $card; // M12-99: PIN cards need code#PIN.
 			CodeLookup::finish( $card instanceof Voucher );
 			$result = $card instanceof Voucher ? self::remaining_validity_error( $card ) : __( 'This code is not a gift card that can be topped up. Please check the code.', 'voucher-captain' );
 			if ( '' === $result && $card instanceof Voucher && $product ) {
@@ -213,7 +220,7 @@ final class TopUp {
 		$this->override = is_scalar( $raw ) ? sanitize_text_field( (string) $raw ) : '';
 		if ( '' !== $this->override ) {
 			$data['cart_item_data']                = (array) ( $data['cart_item_data'] ?? array() );
-			$data['cart_item_data'][ self::FIELD ] = wc_format_coupon_code( $this->override );
+			$data['cart_item_data'][ self::FIELD ] = wc_format_coupon_code( CodeLookup::split_pin( $this->override )[0] ); // Never the PIN.
 		}
 		return $data;
 	}
@@ -240,7 +247,7 @@ final class TopUp {
 
 	public function cart_item_data( $data, $product_id ) {
 		if ( self::is_topup( wc_get_product( (int) $product_id ) ) && isset( $_POST[ self::FIELD ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce add-to-cart.
-			$data[ self::FIELD ] = wc_format_coupon_code( sanitize_text_field( wp_unslash( $_POST[ self::FIELD ] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$data[ self::FIELD ] = wc_format_coupon_code( CodeLookup::split_pin( sanitize_text_field( wp_unslash( $_POST[ self::FIELD ] ) ) )[0] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- never the PIN (M12-99).
 		}
 		return $data;
 	}
@@ -349,6 +356,16 @@ final class TopUp {
 			Claim::release( 'topup:' . $item->get_id() );
 			return 0;
 		}
+		// M12-09: the V7 security hold of a new customer's order applies to top-ups too – booked when it is over.
+		$hold    = Delivery::hold_until( $order, true );
+		$pending = '' !== (string) $item->get_meta( self::PENDING_META );
+		if ( ( $hold && $hold > time() ) || ( $pending && self::withdrawn( $order ) ) ) {
+			Claim::release( 'topup:' . $item->get_id() );
+			if ( $hold && $hold > time() ) {
+				$this->wait_for_hold( $order, $item, $hold );
+			}
+			return 0;
+		}
 		$card = $this->card( (string) $item->get_meta( self::ITEM_META ) );
 		if ( ! $card instanceof Voucher ) {
 			$this->hold_line( $order, $item, is_string( $card ) ? $card : '' );
@@ -395,7 +412,11 @@ final class TopUp {
 		Attention::resolve( $order->get_id(), 'topup:' . $item->get_id() );
 		$item->update_meta_data( self::DONE_META, $amount );
 		$item->update_meta_data( self::CARD_META, (int) $card->id );
+		$item->delete_meta_data( self::PENDING_META );
 		$item->save_meta_data();
+		if ( $pending && $order->get_total_refunded() > 0 ) {
+			$this->reverse( $order->get_id(), false ); // Refunded during the hold: the refunded share is taken back.
+		}
 		$card = $this->repo->get( $card->id ) ?? $card;
 		$this->extend_after_top_up( $card, $order, $item );
 		/* translators: 1: amount, 2: masked card code */
@@ -407,6 +428,74 @@ final class TopUp {
 		/** A gift card was topped up by an order (args: Voucher $card, float $amount, WC_Order $order, order item). */
 		Db::action( 'vcap_gift_card_topped_up', $card, $amount, $order, $item );
 		return 0;
+	}
+
+	/**
+	 * M12-09: a top-up line of an order under the V7 security hold is booked when the hold is over (Action
+	 * Scheduler AFTER_HOLD_HOOK), not at payment – otherwise a first order paid with a stolen card would put its
+	 * value on a card that can be spent at once. Scheduled and noted once per line.
+	 */
+	private function wait_for_hold( \WC_Order $order, \WC_Order_Item_Product $item, int $hold ): void {
+		$args = array(
+			'order_id' => $order->get_id(),
+			'item_id'  => $item->get_id(),
+		);
+		if ( function_exists( 'as_has_scheduled_action' ) && ! as_has_scheduled_action( self::AFTER_HOLD_HOOK, $args, Delivery::GROUP ) ) {
+			as_schedule_single_action( $hold + MINUTE_IN_SECONDS, self::AFTER_HOLD_HOOK, $args, Delivery::GROUP );
+		}
+		if ( (int) $item->get_meta( self::PENDING_META ) === $hold ) {
+			return;
+		}
+		$item->update_meta_data( self::PENDING_META, (string) $hold );
+		$item->save_meta_data();
+		$order->add_order_note(
+			sprintf(
+				/* translators: 1: masked gift card code, 2: date and time */
+				__( 'Security hold: the top-up of gift card …%1$s is booked on %2$s, unless the order is cancelled or refunded before then.', 'voucher-captain' ),
+				Mask::code_tail( (string) $item->get_meta( self::ITEM_META ) ),
+				LocalDate::from_utc( gmdate( 'Y-m-d H:i:s', $hold ), vcap()->settings->date_format() . ' H:i' )
+			)
+		);
+	}
+
+	/** The order was cancelled, failed or refunded in full: a held top-up is never booked. */
+	private static function withdrawn( \WC_Order $order ): bool {
+		$total = (float) $order->get_total();
+		return $order->has_status( array( 'cancelled', 'refunded', 'failed', 'trash', 'pending', 'checkout-draft' ) ) || ( $total > 0 && (float) $order->get_total_refunded() >= $total - 0.001 );
+	}
+
+	/**
+	 * M12-09: the security hold of the order is over – books the held top-up line, after checking again that the
+	 * order was not cancelled or refunded meanwhile (a partial refund takes its share back right after booking).
+	 * An order that is not paid (any more) is booked when it is processed again.
+	 *
+	 * @param int|string $order_id Order id.
+	 * @param int|string $item_id  Order item id of the top-up line.
+	 */
+	public function after_hold( $order_id, $item_id = 0 ): void {
+		$order = wc_get_order( (int) $order_id );
+		$item  = $order instanceof \WC_Order ? $order->get_item( (int) $item_id ) : null;
+		if ( ! $order instanceof \WC_Order || ! $item instanceof \WC_Order_Item_Product || $item->get_meta( self::DONE_META ) || $item->get_meta( self::HELD_META ) ) {
+			return;
+		}
+		$hold = Delivery::hold_until( $order );
+		if ( $hold && $hold > time() ) {
+			$this->wait_for_hold( $order, $item, $hold ); // Hold moved (filter): wait again.
+			return;
+		}
+		if ( self::withdrawn( $order ) ) {
+			if ( '' !== (string) $item->get_meta( self::PENDING_META ) ) {
+				$item->delete_meta_data( self::PENDING_META );
+				$item->save_meta_data();
+				$order->add_order_note( __( 'Gift card top-up not booked: the order was cancelled or refunded during the security hold.', 'voucher-captain' ) );
+			}
+			return;
+		}
+		$statuses = array_map( 'sanitize_key', (array) Settings::value( 'vcap_issue_statuses' ) );
+		if ( ! $order->is_paid() && ! in_array( 'wc-' . $order->get_status(), $statuses, true ) && ! in_array( $order->get_status(), $statuses, true ) ) {
+			return;
+		}
+		$this->top_up_instead( 1, $item );
 	}
 
 	/** Customer confirmation of a top-up: masked card, amount, new balance and validity. */

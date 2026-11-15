@@ -139,6 +139,16 @@ check( 'a single code is rated with the structure of the codes already in the ba
 $single = CodeGenerator::analyse_batch( array( 'GIFT-' . CodeGenerator::random( 20, 'numeric' ) ), array( 'GIFT-' . CodeGenerator::random( 20, 'numeric' ), 'GIFT-' . CodeGenerator::random( 20, 'numeric' ) ) );
 check( 'a single random code next to random codes of the batch stays strong', ! $single['sequential'] && $single['bits'][0] >= 50, json_encode( $single ) );
 check( 'a single code without other codes keeps its full length', CodeGenerator::analyse_batch( array( '1234567890123456' ) )['bits'][0] >= 50 );
+// M12-26: the alphabet is what the batch really uses – hex codes of 10 characters are 40 bits, not 52.
+$hex_batch = array();
+for ( $i = 0; $i < 20; $i++ ) {
+	$hex_batch[] = strtoupper( bin2hex( random_bytes( 5 ) ) );
+}
+$rated = CodeGenerator::analyse_batch( $hex_batch );
+check( 'M12-26: a hex batch of 10 characters counts as weak (16 characters seen, about 40 bits)', max( $rated['bits'] ) < 50 && max( $rated['bits'] ) <= 10 * log( 16, 2 ) + 0.01, json_encode( max( $rated['bits'] ) ) );
+check( 'M12-26: a single code says nothing about the alphabet (full letters and digits)', CodeGenerator::analyse_batch( array( 'K7QM2X9ZPA' ) )['bits'][0] >= 50 && 0 === CodeGenerator::alphabet_seen( array( 'k7qm2x9zpa' ) ) );
+$rated = CodeGenerator::analyse_batch( array( 7 => strtoupper( bin2hex( random_bytes( 5 ) ) ) ), $hex_batch );
+check( 'M12-26: one more hex code is rated with the alphabet of the codes already in the batch', $rated['bits'][7] < 50, json_encode( $rated['bits'] ) );
 
 echo "Design sanitising\n";
 $dirty = array(
@@ -1840,10 +1850,14 @@ if ( ! function_exists( 'do_action_ref_array' ) ) {
 if ( ! function_exists( 'wc_get_logger' ) ) {
 	function wc_get_logger() {
 		return new class() {
-			public function log( $level, $message, $context = array() ) { $GLOBALS['vcap_test_logged'][] = array( $level, $message ); }
+			public function log( $level, $message, $context = array() ) { $GLOBALS['vcap_test_logged'][] = array( $level, $message, $context ); }
 		};
 	}
 }
+$GLOBALS['vcap_test_logged'] = array();
+VCAP\Logger::error( 'Mail to jane.doe@example.com failed: SMTP 550 jane.doe@example.com unknown', array( 'to' => 'Jane <jane.doe@example.com>', 'order_id' => 7, 'nested' => array( 'cc' => 'bob@example.org' ) ) );
+$m100_entry = $GLOBALS['vcap_test_logged'][0] ?? array( '', '', array() );
+check( 'M12-100: the logger masks email addresses in the message and in the context values', ! str_contains( wp_json_encode( $m100_entry ), 'jane.doe@' ) && ! str_contains( wp_json_encode( $m100_entry ), 'bob@' ) && str_contains( (string) $m100_entry[1], 'j***@example.com' ) && 7 === ( $m100_entry[2]['order_id'] ?? null ) && 'voucher-captain' === ( $m100_entry[2]['source'] ?? '' ), wp_json_encode( $m100_entry ) );
 /** Database double for D6: records queries; COMMIT can be refused. */
 final class VCAP_D6_Wpdb {
 	public string $prefix     = 'wp_';

@@ -126,9 +126,9 @@ for ( $i = 0; $i < VCAP\CouponGuard::PER_VISITOR; $i++ ) {
 $site_after = VCAP\Plugin::rate_site_count( VCAP\CouponGuard::BUCKET, VCAP\CouponGuard::WINDOW );
 vcap_rl_assert( VCAP\CouponGuard::PER_VISITOR === $site_after - $site_before, 'unknown codes entered in the cart count as failed attempts' );
 $refused = $apply( 'rl-valid-' . $tag );
-vcap_rl_assert( 400 === $refused->get_status() && str_contains( wp_json_encode( $refused->get_data() ), 'Too many attempts' ) && ! WC()->cart->has_discount( 'rl-valid-' . $tag ), 'a limited visitor is refused also for an existing code (the answer reveals nothing)' );
+vcap_rl_assert( 429 === $refused->get_status() && str_contains( wp_json_encode( $refused->get_data() ), 'Too many attempts' ) && ! WC()->cart->has_discount( 'rl-valid-' . $tag ), 'a limited visitor is refused also for an existing code (the answer reveals nothing)' );
 $unknown = $apply( 'rl-guess-more-' . $tag );
-vcap_rl_assert( 400 === $unknown->get_status() && str_contains( wp_json_encode( $unknown->get_data() ), 'Too many attempts' ), 'unknown codes get the same answer while limited' );
+vcap_rl_assert( 429 === $unknown->get_status() && str_contains( wp_json_encode( $unknown->get_data() ), 'Too many attempts' ), 'unknown codes get the same answer while limited' );
 vcap_rl_visitor( '192.0.2.41' );
 $ok = $apply( 'rl-valid-' . $tag );
 vcap_rl_assert( 200 === $ok->get_status() && WC()->cart->has_discount( 'rl-valid-' . $tag ), 'another visitor applies the code normally' );
@@ -247,6 +247,50 @@ $before   = VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLook
 $ap_store = array( $apply( $foreign->code ), $apply( $ap_unknown ) );
 vcap_rl_assert( 400 === $ap_store[0]->get_status() && $ap_plain( $ap_store[0]->get_data()['message'] ?? '', $foreign->code ) === $ap_plain( $ap_store[1]->get_data()['message'] ?? '', $ap_unknown ) && $before + 2 === VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW ), 'AP-S1-3: Store API – the same answer as for an unknown code, and both count as failed attempts' );
 vcap_rl_reset();
+// M12-01: POST cart/coupons validates the code (coupon_exists) before any callback: no longer an uncounted oracle.
+$m01_post = static function ( array $body, bool $nonce_off = true ) {
+	$request = new WP_REST_Request( 'POST', '/wc/store/v1/cart/coupons' );
+	foreach ( $body as $key => $value ) {
+		$request->set_param( $key, $value );
+	}
+	if ( ! $nonce_off ) {
+		remove_filter( 'woocommerce_store_api_disable_nonce_check', '__return_true' );
+	}
+	$response = rest_do_request( $request );
+	add_filter( 'woocommerce_store_api_disable_nonce_check', '__return_true' );
+	return $response;
+};
+$m01_unknown = 'rl-m01-none-' . $tag;
+vcap_rl_visitor( '203.0.113.90' );
+$before  = VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW );
+$m01_a   = $m01_post( array( 'code' => $m01_unknown ), false );
+$m01_b   = $m01_post( array( 'code' => $foreign->code ), false );
+$m01_msg = static fn( $r, string $code ) => $ap_plain( $r->get_data()['message'] ?? '', $code );
+vcap_rl_assert( 400 === $m01_a->get_status() && 'woocommerce_rest_cart_coupon_error' === ( $m01_a->get_data()['code'] ?? '' ) && 'rest_invalid_param' !== ( $m01_a->get_data()['code'] ?? '' ), 'M12-01: cart/coupons – an unknown code gets one uniform 400 "invalid code" (no rest_invalid_param)' );
+vcap_rl_assert( 400 === $m01_b->get_status() && $m01_msg( $m01_a, $m01_unknown ) === $m01_msg( $m01_b, $foreign->code ) && ( $m01_a->get_data()['code'] ?? '' ) === ( $m01_b->get_data()['code'] ?? '' ), 'M12-01: cart/coupons – another customer\'s store credit gets the same answer, also without a nonce (no 401 oracle)' );
+vcap_rl_assert( $before + 2 === VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW ), 'M12-01: cart/coupons – both are booked as failed attempts' );
+$m01_c = $m01_post( array( 'code' => 'rl-valid-' . $tag, 'discount_type' => $foreign->code ), false );
+$m01_d = $m01_post( array( 'code' => 'rl-valid-' . $tag, 'discount_type' => $m01_unknown ), false );
+vcap_rl_assert( 400 === $m01_c->get_status() && 400 === $m01_d->get_status() && $m01_c->get_data()['code'] === $m01_d->get_data()['code'] && $before + 4 === VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW ), 'M12-01: cart/coupons – a code probed through discount_type (same validate_callback) gets the same answer and counts' );
+$m01_batch = new WP_REST_Request( 'POST', '/wc/store/v1/batch' );
+$m01_batch->set_header( 'Content-Type', 'application/json' );
+$m01_batch->set_body( wp_json_encode( array( 'validation' => 'require-all-validate', 'requests' => array( array( 'method' => 'POST', 'path' => '/wc/store/v1/cart/coupons', 'body' => array( 'code' => $m01_unknown . '-b' ) ), array( 'method' => 'POST', 'path' => '/wc/store/v1/Cart/Coupons', 'body' => array( 'code' => $foreign->code ) ) ) ) ) );
+$m01_out   = rest_do_request( $m01_batch )->get_data();
+$m01_codes = array_map( static fn( $r ) => is_array( $r ) ? ( $r['body']['code'] ?? '' ) : '', (array) ( $m01_out['responses'] ?? array() ) );
+vcap_rl_assert( array( 'woocommerce_rest_cart_coupon_error', 'woocommerce_rest_cart_coupon_error' ) === $m01_codes && $before + 6 === VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW ), 'M12-01: cart/coupons inside /batch (also "require-all-validate") – uniform answer, every request counts' );
+WC()->cart->add_to_cart( $product->get_id(), 1 );
+$m01_ok = $m01_post( array( 'code' => 'rl-valid-' . $tag ) );
+vcap_rl_assert( 201 === $m01_ok->get_status() && WC()->cart->has_discount( 'rl-valid-' . $tag ) && $before + 6 === VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW ), 'M12-01: cart/coupons – an existing code is applied as before and does not count as a failure' );
+WC()->cart->remove_coupon( 'rl-valid-' . $tag );
+for ( $i = 0; $i < VCAP\CodeLookup::PER_VISITOR; $i++ ) {
+	$m01_post( array( 'code' => $m01_unknown . '-' . $i ) );
+}
+$m01_l1 = $m01_post( array( 'code' => 'rl-valid-' . $tag ) );
+$m01_l2 = $m01_post( array( 'code' => $m01_unknown . '-x' ), false );
+vcap_rl_assert( 429 === $m01_l1->get_status() && 429 === $m01_l2->get_status() && $m01_l1->get_data()['message'] === $m01_l2->get_data()['message'] && ! WC()->cart->has_discount( 'rl-valid-' . $tag ), 'M12-01: cart/coupons – a limited visitor gets 429 for an existing and an unknown code alike' );
+WC()->cart->empty_cart();
+wc_clear_notices();
+vcap_rl_reset();
 // AP-S1-2: REST /redemptions/check (and reserve) as another customer: 404 like an unknown code, counted as a failure.
 $ap_other = (int) wp_insert_user( array( 'user_login' => 'vcap-rl-other-' . $tag, 'user_pass' => wp_generate_password( 20 ), 'user_email' => 'rl-other-' . $tag . '@example.test', 'role' => 'customer' ) );
 wp_set_current_user( $ap_other );
@@ -351,6 +395,136 @@ vcap_rl_assert( VCAP\Health::proxy_without_client_ip( array( 'REMOTE_ADDR' => '2
 add_filter( 'vcap_client_ip', static fn() => '198.51.100.1' );
 vcap_rl_assert( ! VCAP\Health::proxy_without_client_ip( array( 'REMOTE_ADDR' => '203.0.113.7', 'HTTP_X_FORWARDED_FOR' => '198.51.100.1' ) ), 'Site Health: no warning once "vcap_client_ip" returns the visitor address' );
 vcap_rl_reset();
+
+// --- M12-99: optional PIN of imported (physical) cards – off unless a PIN is set, then required everywhere.
+vcap_rl_reset();
+$m99_tag   = strtoupper( wp_generate_password( 6, false, false ) );
+$m99_codes = array( 'PIN-' . $m99_tag . '-A', 'PIN-' . $m99_tag . '-B', 'NOPIN-' . $m99_tag );
+$m99_pool  = new VCAP\CodePool();
+$m99_rep   = ( new VCAP\Admin\Import( $m99_pool ) )->process(
+	array( array( 'Code', 'PIN' ), array( $m99_codes[0], '4711' ), array( $m99_codes[1], '0815' ), array( $m99_codes[2], '' ), array( 'PIN-' . $m99_tag . '-X', '1!' ) ),
+	array( 'batch' => 'm99-' . $m99_tag, 'column' => 'Code', 'pin_column' => 'PIN', 'header' => true, 'allow_weak' => true, 'confirm_weak' => true, 'format' => 'custom', 'pattern' => '^[A-Za-z0-9-]{4,64}$' )
+);
+$m99_stored = (string) get_option( VCAP\CodeLookup::PIN_PREFIX . md5( strtolower( wc_format_coupon_code( $m99_codes[0] ) ) ) );
+vcap_rl_assert( 3 === $m99_rep['imported'] && 2 === $m99_rep['pins'] && 1 === count( $m99_rep['invalid'] ) && VCAP\CodeLookup::pins_in_use(), 'M12-99: the import reads the PIN column (2 PINs stored, an invalid PIN refuses its row)', $m99_rep );
+vcap_rl_assert( '' !== $m99_stored && ! str_contains( $m99_stored, '4711' ) && VCAP\CodeLookup::has_pin( $m99_codes[0] ) && ! VCAP\CodeLookup::has_pin( $m99_codes[2] ), 'M12-99: the PIN is stored hashed only, and only for codes of rows with a PIN' );
+// The cards are sold: gift cards with a balance, with the imported codes.
+$m99_card = static function ( string $code ) {
+	$coupon = new WC_Coupon();
+	$coupon->set_code( $code );
+	$coupon->set_discount_type( 'fixed_cart' );
+	$coupon->set_amount( 30 );
+	$coupon->update_meta_data( '_vcap_voucher', 'yes' );
+	$coupon->save();
+	$v                 = new VCAP\Voucher();
+	$v->code           = wc_format_coupon_code( $code );
+	$v->coupon_id      = $coupon->get_id();
+	$v->order_item_id  = 97000000 + $coupon->get_id();
+	$v->type           = 'giftcard';
+	$v->usage_mode     = 'balance';
+	$v->discount_type  = 'fixed_cart';
+	$v->initial_amount = 30;
+	$v->balance        = 30;
+	$v->currency       = get_woocommerce_currency();
+	$v->status         = VCAP\Voucher::STATUS_ACTIVE;
+	$v->expires_at     = gmdate( 'Y-m-d H:i:s', time() + 365 * DAY_IN_SECONDS );
+	$v->token          = VCAP\VoucherRepository::new_token();
+	$v->id             = vcap()->vouchers->insert( $v );
+	return $v;
+};
+$m99_a     = $m99_card( $m99_codes[0] );
+$m99_plain = $m99_card( $m99_codes[2] );
+$m99_fresh = static function () {
+	VCAP\CodeLookup::forget_pins(); // A new request.
+	WC()->session->set( 'vcap_pin_ok', null );
+	wc_clear_notices();
+};
+$m99_balance = static function ( string $input ): string {
+	VCAP\CodeLookup::forget_pins();
+	$_POST['vcap_balance_code'] = $input;
+	$downloads                  = new VCAP\Downloads( vcap()->settings, vcap()->vouchers, vcap()->pdf );
+	$downloads->handle_balance();
+	unset( $_POST['vcap_balance_code'] );
+	return $downloads->balance_shortcode();
+};
+vcap_rl_visitor( '203.0.113.99' );
+$m99_fresh();
+$before = VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW );
+$m99_b1 = $m99_balance( $m99_codes[0] );
+$m99_b2 = $m99_balance( $m99_codes[0] . '#0000' );
+$m99_b3 = $m99_balance( $m99_codes[0] . '#4711' );
+vcap_rl_assert( str_contains( $m99_b1, 'Voucher code not found' ) && str_contains( $m99_b2, 'Voucher code not found' ) && $before + 2 === VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW ), 'M12-99: balance check – without or with a wrong PIN the card reads like an unknown code and counts as a failed attempt' );
+vcap_rl_assert( ! str_contains( $m99_b3, 'not found' ) && str_contains( $m99_b3, '30' ) && str_contains( $m99_b3, 'CODE#1234' ), 'M12-99: balance check – with CODE#PIN the balance is shown (and the form explains the convention)' );
+vcap_rl_assert( ! str_contains( $m99_balance( $m99_codes[2] ), 'not found' ), 'M12-99: a card without a PIN is checked as before (off unless a PIN is set)' );
+// Online redemption: WooCommerce's coupon field / Store API.
+$m99_fresh();
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart( $product->get_id(), 1 );
+$before  = VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW );
+$m99_r1  = $apply( $m99_codes[0] );
+$m99_r2  = $apply( $m99_codes[0] . '#9999' );
+vcap_rl_assert( 400 === $m99_r1->get_status() && 400 === $m99_r2->get_status() && ! WC()->cart->has_discount( wc_format_coupon_code( $m99_codes[0] ) ) && $before + 2 === VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW ), 'M12-99: Store API apply-coupon – the card is refused without or with a wrong PIN (counted as failed guesses)' );
+$m99_r3 = $apply( $m99_codes[0] . '#4711' );
+vcap_rl_assert( 200 === $m99_r3->get_status() && WC()->cart->has_discount( wc_format_coupon_code( $m99_codes[0] ) ), 'M12-99: Store API apply-coupon – CODE#PIN applies the card (the PIN never reaches WooCommerce as part of the code)' );
+VCAP\CodeLookup::forget_pins(); // The next request of the same visitor: the session remembers the PIN.
+WC()->cart->check_cart_coupons();
+vcap_rl_assert( WC()->cart->has_discount( wc_format_coupon_code( $m99_codes[0] ) ), 'M12-99: the card stays in the cart on later requests (PIN remembered in the session)' );
+WC()->cart->remove_coupon( wc_format_coupon_code( $m99_codes[0] ) );
+$m99_fresh();
+WC()->cart->check_cart_coupons();
+$m99_c1 = $m01_post( array( 'code' => $m99_codes[0] ) );
+$m99_c2 = $m01_post( array( 'code' => $m99_codes[0] . '#4711' ) );
+vcap_rl_assert( 400 === $m99_c1->get_status() && 201 === $m99_c2->get_status() && WC()->cart->has_discount( wc_format_coupon_code( $m99_codes[0] ) ), 'M12-99: Store API cart/coupons – refused without the PIN, applied with CODE#PIN' );
+WC()->cart->remove_coupon( wc_format_coupon_code( $m99_codes[0] ) );
+$m99_fresh();
+$_POST['coupon_code'] = $m99_codes[0] . '#4711'; // Classic cart / checkout coupon field (AJAX).
+$m99_guard            = new VCAP\CouponGuard();
+$m99_guard->from_ajax();
+$m99_posted = wp_unslash( $_POST['coupon_code'] );
+$m99_applied = WC()->cart->apply_coupon( wc_format_coupon_code( $m99_posted ) );
+$m99_guard->finish();
+unset( $_POST['coupon_code'] );
+vcap_rl_assert( $m99_codes[0] === $m99_posted && $m99_applied && WC()->cart->has_discount( wc_format_coupon_code( $m99_codes[0] ) ), 'M12-99: classic coupon field – CODE#PIN is split before WooCommerce sees it and the card applies' );
+WC()->cart->remove_coupon( wc_format_coupon_code( $m99_codes[0] ) );
+$m99_fresh();
+$m99_plain_ok = $apply( $m99_codes[2] );
+vcap_rl_assert( 200 === $m99_plain_ok->get_status(), 'M12-99: a card without a PIN is applied as before' );
+WC()->cart->empty_cart();
+// Redeem form.
+$m99_fresh();
+vcap_rl_assert( 'invalid' === $sc->redeem( $m99_codes[0] ) && 'saved' === $sc->redeem( $m99_codes[0] . '#4711' ), 'M12-99: redeem form – "not found" without the PIN, accepted with CODE#PIN' );
+WC()->session->set( VCAP\CouponLink::SESSION_KEY, null );
+// Top-up.
+$m99_fresh();
+$m99_topup = new VCAP\TopUp( vcap()->vouchers, vcap()->coupons );
+$m99_check = new ReflectionMethod( $m99_topup, 'check' );
+$m99_t1    = $m99_check->invoke( $m99_topup, $m99_codes[0] );
+$m99_t2    = $m99_check->invoke( $m99_topup, 'PIN-NOTHING-' . $m99_tag );
+VCAP\CodeLookup::forget_pins();
+$m99_t3    = $m99_check->invoke( $m99_topup, $m99_codes[0] . '#4711' );
+vcap_rl_assert( is_string( $m99_t1 ) && $m99_t1 === $m99_t2 && true === $m99_t3, 'M12-99: top-up – without the PIN the same answer as for an unknown code, with CODE#PIN the card can be topped up' );
+// REST.
+$m99_fresh();
+$m99_user = (int) wp_insert_user( array( 'user_login' => 'vcap-m99-' . $m99_tag, 'user_pass' => wp_generate_password( 20 ), 'role' => 'customer' ) );
+wp_set_current_user( $m99_user );
+$m99_rest = static function ( array $params ) {
+	VCAP\CodeLookup::forget_pins();
+	$request = new WP_REST_Request( 'POST', '/vcap/v1/redemptions/check' );
+	foreach ( $params as $key => $value ) {
+		$request->set_param( $key, $value );
+	}
+	return rest_do_request( $request );
+};
+$m99_x1 = $m99_rest( array( 'code' => $m99_codes[0] ) );
+$m99_x2 = $m99_rest( array( 'code' => $m99_codes[0], 'pin' => '4711' ) );
+$m99_x3 = $m99_rest( array( 'code' => $m99_codes[0] . '#4711' ) );
+vcap_rl_assert( 404 === $m99_x1->get_status() && 200 === $m99_x2->get_status() && 200 === $m99_x3->get_status(), 'M12-99: REST /redemptions/check – 404 without the PIN, found with "pin" or CODE#PIN', array( $m99_x1->get_status(), $m99_x2->get_status(), $m99_x3->get_status() ) );
+wp_set_current_user( 0 );
+// Deleting unused codes of the batch removes their PINs.
+$m99_pool->delete_free( 'm99-' . $m99_tag );
+vcap_rl_assert( ! VCAP\CodeLookup::has_pin( $m99_codes[1] ), 'M12-99: deleting the unused codes of a batch deletes their PINs' );
+VCAP\CodeLookup::forget_pins();
+wc_clear_notices();
 
 remove_all_filters( 'vcap_client_ip' );
 vcap_rl_reset();
