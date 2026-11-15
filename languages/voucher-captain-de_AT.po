@@ -432,7 +432,7 @@ msgstr ""
 msgid ""
 "Creating WooCommerce coupons needs the WooCommerce right to publish coupons. "
 "No codes were generated."
-msgstr "Zum Erstellen von WooCommerce-Gutscheincodes ist das WooCommerce-Recht zum Veröffentlichen von Gutscheinen nötig. Es wurden keine Codes erzeugt."
+msgstr "Zum Erstellen von WooCommerce-Codes ist das WooCommerce-Recht zum Veröffentlichen von Gutscheinen nötig. Es wurden keine Codes erzeugt."
 
 #: src/Admin/Import.php:32
 msgid "Letters, digits, dot, hyphen, underscore (4–64 characters)"
@@ -1652,13 +1652,13 @@ msgstr "Wird auf diesem Gerät gespeichert und bei jeder Einlösung vermerkt."
 msgid ""
 "Adding store credit needs the right to raise voucher balances. Nothing was "
 "changed."
-msgstr "Zum Gutschreiben von Guthaben ist das Recht zum Erhöhen von Gutscheinwerten nötig. Es wurde nichts geändert."
+msgstr "Zum Gutschreiben von Kundenguthaben ist das Recht zum Erhöhen von Gutscheinwerten nötig. Es wurde nichts geändert."
 
 #: src/Admin/StoreCreditAdmin.php:58
 msgid ""
 "You cannot add store credit to your own account. Ask a shop manager. Nothing "
 "was changed."
-msgstr "Sie können Ihrem eigenen Konto kein Guthaben gutschreiben. Bitte wenden Sie sich an einen Shop-Manager. Es wurde nichts geändert."
+msgstr "Sie können Ihrem eigenen Konto kein Kundenguthaben gutschreiben. Bitte wenden Sie sich an einen Shop-Manager. Es wurde nichts geändert."
 
 #: src/Admin/StoreCreditAdmin.php:70 src/Privacy.php:161 src/Settings.php:642
 #: src/StoreCredit.php:417 src/Voucher.php:80
