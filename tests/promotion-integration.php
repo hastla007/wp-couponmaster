@@ -246,6 +246,10 @@ VCAP\Discounts\Usage::remove( $b12_id, 'o:b12-x', 9199 ); // Nothing to give bac
 vcap_promo_assert( 2 === (int) $b12_row( $b12_id ) && 2 === $b12_n( $b12_id ) && 2 === VCAP\Discounts\Usage::count( $b12_id ), 'B12: the counter follows every use added and given back (and only those)' );
 $b12_other = wp_insert_post( array( 'post_type' => 'vcap_discount', 'post_status' => 'publish', 'post_title' => 'B12 second promotion' ) );
 VCAP\Discounts\Usage::add( $b12_other, 'o:b12-c', 9103 );
+// Rows of the old storage may be left (an upgrade test of an earlier suite reads them for an hour): then the totals
+// are counted one by one, as they must include post meta. The single read is checked without them.
+$b12_legacy = get_option( VCAP\Install::LEGACY_OPTION, false );
+delete_option( VCAP\Install::LEGACY_OPTION );
 VCAP\Discounts\Usage::forget_counts();
 $b12_queries = array();
 add_filter( 'query', $b12_log );
@@ -253,6 +257,7 @@ VCAP\Discounts\Usage::prime_counts( array( $b12_id, $b12_other ) );
 $b12_primed = array( VCAP\Discounts\Usage::blocker( array( 'id' => $b12_id, 'rules' => array( 'usage_limit' => 2, 'usage_limit_per_customer' => 0 ) ), 0, '' ), VCAP\Discounts\Usage::blocker( array( 'id' => $b12_other, 'rules' => array( 'usage_limit' => 5, 'usage_limit_per_customer' => 0 ) ), 0, '' ) );
 remove_filter( 'query', $b12_log );
 vcap_promo_assert( 1 === count( $b12_queries ) && array( 'usage_limit', '' ) === $b12_primed, 'B12: the cart sync reads the totals of all limited promotions with one query' );
+false === $b12_legacy ? delete_option( VCAP\Install::LEGACY_OPTION ) : update_option( VCAP\Install::LEGACY_OPTION, $b12_legacy );
 $wpdb->update( $b12_counts, array( 'uses' => 99 ), array( 'campaign_id' => $b12_id ) );
 $wpdb->insert( $b12_table, array( 'campaign_id' => $b12_other, 'customer_key' => 'o:b12-hand', 'order_id' => 0, 'created_at' => gmdate( 'Y-m-d H:i:s' ) ) );
 $b12_fixed = VCAP\Discounts\Usage::reconcile();
