@@ -389,14 +389,12 @@ final class Downloads {
 		$this->repo->log( $fresh->id, self::FIX_EVENT, null, null, sprintf( __( 'Recipient corrected by the buyer: %1$s → %2$s', 'voucher-captain' ), '' !== $old_email ? $old_email : '–', $email ) );
 		$order = $fresh->order();
 		if ( $order instanceof \WC_Order ) {
-			$order->add_order_note(
-				sprintf(
-					/* translators: 1: voucher code (masked), 2: new recipient email */
-					$delivered ? __( 'The buyer corrected the recipient of voucher %1$s to %2$s; the voucher was reissued with a new code and sent to the new address.', 'voucher-captain' ) : __( 'The buyer corrected the recipient of voucher %1$s to %2$s before its delivery.', 'voucher-captain' ),
-					Mask::code( $fresh->code ),
-					$email
-				)
-			);
+			$text = $delivered
+				/* translators: 1: voucher code (masked), 2: new recipient email */
+				? __( 'The buyer corrected the recipient of voucher %1$s to %2$s; the voucher was reissued with a new code and sent to the new address.', 'voucher-captain' )
+				/* translators: 1: voucher code (masked), 2: new recipient email */
+				: __( 'The buyer corrected the recipient of voucher %1$s to %2$s before its delivery.', 'voucher-captain' );
+			$order->add_order_note( sprintf( $text, Mask::code( $fresh->code ), $email ) );
 		}
 		if ( $delivered ) {
 			$sent = vcap()->delivery->send( $fresh, 'recipient' );

@@ -58,8 +58,9 @@ $value = 'percent' === $voucher->discount_type
 <?php if ( $voucher->message ) : ?>
 	<blockquote style="border-<?php echo esc_attr( $vcap_start ); ?>:4px solid <?php echo esc_attr( $vcap_c['accent'] ); ?>;margin:0 0 16px;padding:8px 14px;font-style:italic;">
 		<?php echo wp_kses_post( nl2br( esc_html( $voucher->message ) ) ); ?>
-		<?php if ( $voucher->buyer_name ) : ?>
-			<br>— <?php echo esc_html( $voucher->buyer_name ); ?>
+		<?php $vcap_sender = \VCAP\Emails\VoucherEmail::sender_name( $voucher ); // M12-55. ?>
+		<?php if ( $vcap_sender ) : ?>
+			<br>— <?php echo esc_html( $vcap_sender ); ?>
 		<?php endif; ?>
 	</blockquote>
 <?php endif; ?>

@@ -107,8 +107,9 @@ $vcap_terms   = count( array_unique( array_map( static fn( $v ) => $v->terms, $v
 <?php if ( $vcap_message ) : ?>
 	<blockquote style="border-<?php echo esc_attr( $vcap_start ); ?>:4px solid <?php echo esc_attr( $vcap_c['accent'] ); ?>;margin:0 0 16px;padding:8px 14px;font-style:italic;">
 		<?php echo wp_kses_post( nl2br( esc_html( $vcap_message ) ) ); ?>
-		<?php if ( $voucher->buyer_name ) : ?>
-			<br>— <?php echo esc_html( $voucher->buyer_name ); ?>
+		<?php $vcap_sender = \VCAP\Emails\VoucherEmail::sender_name( $voucher ); // M12-55. ?>
+		<?php if ( $vcap_sender ) : ?>
+			<br>— <?php echo esc_html( $vcap_sender ); ?>
 		<?php endif; ?>
 	</blockquote>
 <?php endif; ?>

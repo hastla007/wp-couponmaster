@@ -286,6 +286,21 @@ abstract class VoucherEmail extends \WC_Email {
 		return $this->get_default_intro();
 	}
 
+	/** M12-55: the giver's name – the "From" field, else the buyer name ({sender_name}). */
+	public static function sender_name( Voucher $voucher ): string {
+		$from = trim( $voucher->field( 'sender_name' ) );
+		return '' !== $from ? $from : trim( $voucher->buyer_name );
+	}
+
+	/**
+	 * M12-55: a default text addressed to the gift recipient names the giver as {sender_name} ("From" field, else
+	 * the buyer name). The translated texts keep "{buyer_name}" (their translations stay valid); only the default is
+	 * changed – a text the shop wrote itself keeps the placeholder it chose.
+	 */
+	protected static function as_sender( string $text ): string {
+		return str_replace( '{buyer_name}', '{sender_name}', $text );
+	}
+
 	/** Placeholder value of a voucher (e.g. "{buyer_name}"), '' when unknown. */
 	protected function placeholder( string $token ): string {
 		return trim( (string) ( $this->placeholders[ '{' . $token . '}' ] ?? '' ) );

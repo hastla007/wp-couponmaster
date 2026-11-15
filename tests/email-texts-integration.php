@@ -172,6 +172,28 @@ vcap_mail_assert( str_contains( $body, 'Hello, your voucher for Spa day is ready
 list( $subject, $body ) = vcap_mail_send( 'VCAP_Email_Voucher_Recipient', vcap_mail_voucher( array( 'buyer_name' => 'Max', 'recipient_name' => 'Lea', 'amount' => 30 ) ) );
 vcap_mail_assert( str_starts_with( $subject, 'Max sent you a gift from' ) && str_contains( $body, 'Hi Lea, Max sent you a voucher worth' ), 'recipient email names giver and value', array( $subject, $body ) );
 
+// M12-55: the "From" field names the giver ({sender_name}) instead of the billing name; the default PDF shows it.
+$m55 = vcap_mail_voucher( array( 'buyer_name' => 'Müller GmbH', 'recipient_name' => 'Lea', 'amount' => 30 ) );
+$m55->fields = array( 'sender_name' => array( 'label' => 'From (your name)', 'value' => 'Nina' ) );
+vcap()->vouchers->update( $m55 );
+$m55 = vcap()->vouchers->get( $m55->id );
+list( $subject, $body ) = vcap_mail_send( 'VCAP_Email_Voucher_Recipient', $m55 );
+$m55_pdf = vcap()->pdf->html( $m55, VCAP\TemplatePostType::default_designs()['giftcard'] );
+vcap_mail_assert( str_starts_with( $subject, 'Nina sent you a gift from' ) && str_contains( $body, 'Hi Lea, Nina sent you a voucher worth' ) && ! str_contains( $subject . $body, 'Müller GmbH' ) && 'Nina' === VCAP\Placeholders::values( $m55 )['sender_name'], 'M12-55: the recipient email names the sender from the "From" field', array( $subject, $body ) );
+vcap_mail_assert( str_contains( $m55_pdf, 'From: Nina' ) && ! str_contains( $m55_pdf, 'Müller GmbH' ), 'M12-55: the default PDF shows the sender' );
+$m55_plain = vcap_mail_voucher( array( 'buyer_name' => 'Max', 'recipient_name' => 'Lea', 'amount' => 30 ) );
+vcap_mail_assert( 'Max' === VCAP\Placeholders::values( $m55_plain )['sender_name'] && ! str_contains( vcap()->pdf->html( $m55_plain, VCAP\TemplatePostType::default_designs()['giftcard'] ), 'From:' ), 'M12-55: without the field {sender_name} falls back to the buyer name; the PDF leaves the "From" line out' );
+$m55_email = WC()->mailer()->get_emails()['VCAP_Email_Voucher_Recipient'];
+vcap_mail_assert( 'multipart' === ( new VCAP\Emails\RecipientEmail() )->form_fields['email_type']['default'] && 'multipart' === ( new VCAP\Emails\BuyerEmail() )->form_fields['email_type']['default'], 'M12-83: voucher emails default to multipart (HTML with a text part)' );
+$m83_keep = get_option( 'woocommerce_email_base_color', false );
+update_option( 'woocommerce_email_base_color', '#aa3300' );
+$m55_email->voucher = $m55;
+$m83_body           = (string) $m55_email->get_content_html();
+$m55_email->voucher = null;
+$m83_colors = VCAP\Emails\VoucherEmail::colors();
+false === $m83_keep ? delete_option( 'woocommerce_email_base_color' ) : update_option( 'woocommerce_email_base_color', $m83_keep );
+vcap_mail_assert( '#aa3300' === $m83_colors['base'] && '#ffffff' === $m83_colors['on_base'] && str_contains( $m83_body, '#aa3300' ) && ! str_contains( $m83_body, '#1f3a4d' ), 'M12-83: the voucher email uses the WooCommerce base colour', $m83_colors );
+
 // Gift recipient, percentage voucher: the discount, not a "value".
 list( , $body ) = vcap_mail_send( 'VCAP_Email_Voucher_Recipient', vcap_mail_voucher( array( 'buyer_name' => 'Max', 'recipient_name' => 'Lea', 'discount_type' => 'percent', 'amount' => 15 ) ) );
 vcap_mail_assert( str_contains( $body, 'Max sent you a voucher for 15% off.' ) && ! str_contains( $body, 'worth' ), 'percentage voucher speaks of the discount', $body );

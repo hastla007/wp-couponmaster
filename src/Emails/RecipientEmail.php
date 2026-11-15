@@ -18,10 +18,10 @@ final class RecipientEmail extends VoucherEmail {
 	}
 
 	public function get_default_subject() {
-		if ( $this->voucher && '' === $this->placeholder( 'buyer_name' ) ) {
+		if ( $this->voucher && '' === $this->placeholder( 'sender_name' ) ) {
 			return __( 'You received a gift from {site_title}', 'voucher-captain' );
 		}
-		return __( '{buyer_name} sent you a gift from {site_title}', 'voucher-captain' );
+		return self::as_sender( __( '{buyer_name} sent you a gift from {site_title}', 'voucher-captain' ) );
 	}
 
 	protected function default_subject_variants(): array {
@@ -45,7 +45,7 @@ final class RecipientEmail extends VoucherEmail {
 	 */
 	protected function default_intro_for( Voucher $voucher ): string {
 		$greet = '' !== trim( $voucher->recipient_name );
-		$giver = '' !== $this->placeholder( 'buyer_name' );
+		$giver = '' !== $this->placeholder( 'sender_name' );
 		$kind  = self::has_no_value( $voucher ) ? 'product' : ( 'percent' === $voucher->discount_type ? 'percent' : 'value' );
 		$texts = array(
 			'value'   => array(
@@ -67,6 +67,6 @@ final class RecipientEmail extends VoucherEmail {
 				'00' => __( 'Hello, you received {product_name} as a gift.', 'voucher-captain' ),
 			),
 		);
-		return $texts[ $kind ][ (int) $greet . (int) $giver ];
+		return self::as_sender( $texts[ $kind ][ (int) $greet . (int) $giver ] ); // M12-55: the giver as {sender_name}.
 	}
 }

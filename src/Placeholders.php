@@ -27,6 +27,7 @@ final class Placeholders {
 			'product_short_description' => __( 'Product short description', 'voucher-captain' ),
 			'buyer_name'        => __( 'Buyer name', 'voucher-captain' ),
 			'buyer_email'       => __( 'Buyer email', 'voucher-captain' ),
+			'sender_name'       => __( 'Sender name ("From" field, else buyer name)', 'voucher-captain' ),
 			'recipient_name'    => __( 'Recipient name', 'voucher-captain' ),
 			'holder_name'       => __( 'Holder name (recipient, else buyer)', 'voucher-captain' ),
 			'recipient_email'   => __( 'Recipient email', 'voucher-captain' ),
@@ -109,6 +110,8 @@ final class Placeholders {
 			// Vouchers created before names were stored (or by hand) fall back to the order's billing name.
 			'buyer_name'        => $buyer,
 			'buyer_email'       => $voucher->buyer_email,
+			// M12-55: the giver's name as entered in the "From" field, else the buyer (billing) name.
+			'sender_name'       => '' !== trim( $voucher->field( 'sender_name' ) ) ? trim( $voucher->field( 'sender_name' ) ) : $buyer,
 			// Only the recipient's own name (a gift without one is not "For: <the buyer>"); {holder_name} falls back.
 			'recipient_name'    => trim( $voucher->recipient_name ),
 			'holder_name'       => '' !== trim( $voucher->recipient_name ) ? trim( $voucher->recipient_name ) : $buyer,

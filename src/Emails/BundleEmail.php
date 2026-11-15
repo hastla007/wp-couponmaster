@@ -61,8 +61,8 @@ final class BundleEmail extends VoucherEmail {
 
 	public function get_default_subject() {
 		if ( 'recipient' === $this->role ) {
-			return '' !== $this->placeholder( 'buyer_name' )
-				? __( '{buyer_name} sent you {voucher_count} vouchers from {site_title}', 'voucher-captain' )
+			return '' !== $this->placeholder( 'sender_name' )
+				? self::as_sender( __( '{buyer_name} sent you {voucher_count} vouchers from {site_title}', 'voucher-captain' ) )
 				: __( 'You received {voucher_count} vouchers from {site_title}', 'voucher-captain' );
 		}
 		return $this->is_gift_copy()
@@ -106,7 +106,7 @@ final class BundleEmail extends VoucherEmail {
 				'01' => __( 'Hello, {buyer_name} sent you {voucher_count} vouchers. You find all codes below.', 'voucher-captain' ),
 				'00' => __( 'Hello, you received {voucher_count} vouchers as a gift. You find all codes below.', 'voucher-captain' ),
 			);
-			return $texts[ (int) ( '' !== trim( $voucher->recipient_name ) ) . (int) $buyer ];
+			return self::as_sender( $texts[ (int) ( '' !== trim( $voucher->recipient_name ) ) . (int) ( '' !== $this->placeholder( 'sender_name' ) ) ] ); // M12-55.
 		}
 		if ( $this->is_gift_copy() ) {
 			return $buyer
