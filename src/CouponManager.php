@@ -293,8 +293,8 @@ final class CouponManager {
 	}
 
 	/** @see Coupons\Balances::adjust_balance() */
-	public function adjust_balance( Voucher $voucher, float $delta, string $event, string $note = '', int $order_id = 0 ): bool {
-		return $this->balances->adjust_balance( $voucher, $delta, $event, $note, $order_id );
+	public function adjust_balance( Voucher $voucher, float $delta, string $event, string $note = '', int $order_id = 0, ?float &$booked = null ): bool {
+		return $this->balances->adjust_balance( $voucher, $delta, $event, $note, $order_id, $booked );
 	}
 
 	/** @see Coupons\Balances::balance_refusal() */

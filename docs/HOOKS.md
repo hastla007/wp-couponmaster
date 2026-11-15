@@ -113,9 +113,10 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_is_new_customer` | `src/VoucherPurchaseRules.php` | – |
 | `vcap_is_voucher_product` | `src/ProductConfig.php` | – |
 | `vcap_issue_batch_size` | `src/Issuer.php` | Vouchers created per Action Scheduler batch when an order is issued in the background (default 25). |
-| `vcap_issue_requires_payment` | `src/Issuer.php` | – |
+| `vcap_issue_requires_payment` | `src/Delivery.php`, `src/Issuer.php` | – |
 | `vcap_issue_retry_delay` | `src/Issuer.php` | – |
 | `vcap_job_step_seconds` | `src/Jobs.php` | Seconds one background action works on a bulk job (code generation, import) before it queues the next. |
+| `vcap_keep_status_on_partial_return` | `src/OrderReturn.php` | Whether an order paid partly with vouchers keeps its status after a refund of all its money (default true). |
 | `vcap_ledger_money_events` | `src/Ledger.php` | – |
 | `vcap_legacy_claim_retention_days` | `src/Claim.php` | – |
 | `vcap_line_snapshot` | `src/Issuer.php` | Extra snapshot keys of connectors (e.g. the ticket a voucher is exchanged for); core keys always win. |
@@ -173,6 +174,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_referral_code_prefix` | `src/Referrals.php` | – |
 | `vcap_referral_min_spend` | `src/Referrals.php` | Minimum order value of referral codes (V3). |
 | `vcap_referral_same_address` | `src/Referrals.php` | – |
+| `vcap_refund_guest_as_gift_card` | `src/StoreCredit.php` | Whether a guest order can be refunded as a new gift card instead of store credit (default true). |
 | `vcap_render_template_id` | `src/PdfRenderer.php` | – |
 | `vcap_report_group` | `src/Reports.php` | – |
 | `vcap_report_statuses` | `src/Reports.php` | – |
@@ -196,6 +198,8 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_site_has_redeem_form` | `src/Shortcodes.php` | Whether a site-wide template (theme file, builder layout, widget) shows the redeem form. |
 | `vcap_stale_reservation_minutes` | `src/Coupons/Reservations.php`, `src/Discounts/Usage.php` | – |
 | `vcap_statutory_expiry` | `src/ProductConfig.php` | – |
+| `vcap_subscription_issue_on_switch` | `src/Compat/Subscriptions.php` | Whether a subscription switch or resubscribe order issues vouchers (default false; args: order, "switch"\|"resubscribe"). |
+| `vcap_suspend_on_payment_reversal` | `src/Issuer.php` | Whether vouchers of an order are suspended when its payment is reversed or held (default: "void on refund"). |
 | `vcap_template_design` | `src/TemplatePostType.php` | – |
 | `vcap_topup_amount` | `src/TopUp.php` | Value added to the card for a top-up line (default: its face value like a new gift card, in the base currency). |
 | `vcap_topup_customer_note` | `src/TopUp.php` | Whether the customer gets an order note (email) confirming the top-up (default true). |

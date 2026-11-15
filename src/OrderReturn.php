@@ -20,6 +20,51 @@ final class OrderReturn {
 		add_action( 'admin_post_vcap_return_to_voucher', array( $this, 'handle' ) );
 		add_filter( 'vcap_event_labels', static fn( array $l ) => $l + array( CouponManager::RETURNED_EVENT => __( 'Booked back from a return', 'voucher-captain' ) ) );
 		add_filter( 'vcap_ledger_money_events', static fn( array $e ) => array_merge( $e, array( CouponManager::RETURNED_EVENT ) ) );
+		add_filter( 'woocommerce_order_fully_refunded_status', array( $this, 'keep_status_on_partial_return' ), 10, 3 );
+	}
+
+	/**
+	 * M12-02: WooCommerce sets an order to "Refunded" as soon as its money is refunded – also when a voucher paid
+	 * the rest and the customer keeps most of the goods (card 80 + PayPal 20, one item of 20 returned). "Refunded"
+	 * books the whole voucher charge back (and gives single-use vouchers back), so such an order keeps its status
+	 * while refundable items are left: an order note and a notice (Attention) say that the voucher part is booked
+	 * back on purpose with "Book back onto voucher" – or by setting the status by hand for a complete return.
+	 *
+	 * @param string|false $status   Status WooCommerce is about to set ("refunded").
+	 * @param int          $order_id Order id.
+	 * @param int          $refund_id Refund id.
+	 * @return string|false
+	 */
+	public function keep_status_on_partial_return( $status, $order_id = 0, $refund_id = 0 ) {
+		$order = $status ? wc_get_order( (int) $order_id ) : null;
+		if ( ! $order instanceof \WC_Order || $order->has_status( array( 'refunded', 'cancelled' ) ) || 'yes' !== Settings::value( 'vcap_restore_on_cancel' ) ) {
+			return $status; // Already refunded (status set by hand: WooCommerce refunds the rest), or nothing books back.
+		}
+		if ( ! $this->charged_vouchers( $order ) || $order->get_remaining_refund_items() <= 0 ) {
+			return $status;
+		}
+		/** Whether an order paid partly with vouchers keeps its status after a refund of all its money (default true). */
+		if ( ! apply_filters( 'vcap_keep_status_on_partial_return', true, $order, (int) $refund_id ) ) {
+			return $status;
+		}
+		$text = __( 'The money of this order was refunded completely, but vouchers paid the rest and refundable items are left: the order was not set to "Refunded", so the voucher charge was not booked back. Book the returned part back with "Book back onto voucher", or set the order to "Refunded" or "Cancelled" by hand if everything was returned.', 'voucher-captain' );
+		$order->add_order_note( $text );
+		Attention::add( $order->get_id(), 'partial-return', $text );
+		return false;
+	}
+
+	/** Whether the order charged a balance voucher or used a single-use voucher of this plugin (M12-02). */
+	private function charged_vouchers( \WC_Order $order ): bool {
+		if ( CouponManager::order_map( $order, '_vcap_redemptions' ) ) {
+			return true;
+		}
+		foreach ( $order->get_items( 'coupon' ) as $item ) {
+			$code = $item instanceof \WC_Order_Item_Coupon ? wc_format_coupon_code( $item->get_code() ) : '';
+			if ( '' !== $code && $this->repo->get_by_code( $code ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
