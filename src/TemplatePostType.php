@@ -15,6 +15,8 @@ final class TemplatePostType {
 	public const SINCE_META = '_vcap_design_since';
 	/** Option prefix keeping the designs of a deleted template for the vouchers issued with it. */
 	public const ARCHIVE_OPTION = 'vcap_template_archive_';
+	/** Distance from the page edge texts and codes should keep (trimming tolerance, M12-75). */
+	public const SAFETY_ZONE_MM = 5;
 
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_post_type' ) );
@@ -199,7 +201,7 @@ final class TemplatePostType {
 					array( 'id' => 'e7', 'type' => 'text', 'name' => 'Message', 'x' => 76, 'y' => 56, 'w' => 120, 'h' => 30, 'text' => '{message}', 'font' => 'DejaVu Serif', 'size' => 11, 'color' => '#555555', 'italic' => true ),
 					array( 'id' => 'e8', 'type' => 'text', 'name' => 'Code label', 'x' => 76, 'y' => 96, 'w' => 80, 'h' => 6, 'text' => __( 'Voucher code', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 8, 'color' => '#8a8a8a', 'uppercase' => true ),
 					array( 'id' => 'e9', 'type' => 'text', 'name' => 'Code', 'x' => 76, 'y' => 102, 'w' => 90, 'h' => 10, 'text' => '{coupon_code}', 'font' => 'DejaVu Sans Mono', 'size' => 15, 'color' => '#1f3a4d', 'bold' => true ),
-					array( 'id' => 'e10', 'type' => 'text', 'name' => 'Expiry', 'x' => 76, 'y' => 118, 'w' => 90, 'h' => 8, 'text' => __( 'Valid until {expiry_date}', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 9, 'color' => '#555555' ),
+					array( 'id' => 'e10', 'type' => 'text', 'name' => 'Expiry', 'x' => 76, 'y' => 118, 'w' => 90, 'h' => 8, 'text' => '{expiry_line}', 'font' => 'DejaVu Sans', 'size' => 9, 'color' => '#555555' ),
 					array( 'id' => 'e12', 'type' => 'text', 'name' => 'How to redeem', 'x' => 76, 'y' => 127, 'w' => 92, 'h' => 7, 'text' => '{redeem_instructions}', 'font' => 'DejaVu Sans', 'size' => 7, 'color' => '#333333' ),
 					array( 'id' => 'e13', 'type' => 'text', 'name' => 'Conditions', 'x' => 76, 'y' => 134, 'w' => 122, 'h' => 7, 'text' => "{transferable}\n{redemption_terms}", 'font' => 'DejaVu Sans', 'size' => 6, 'color' => '#777777', 'lineHeight' => 1.15 ),
 					array( 'id' => 'e11', 'type' => 'qrcode', 'name' => 'QR code', 'x' => 170, 'y' => 100, 'w' => 28, 'h' => 28, 'qrContent' => 'code', 'color' => '#1f3a4d' ),
@@ -317,6 +319,7 @@ final class TemplatePostType {
 				'previewUrl'   => admin_url( 'admin-ajax.php?action=vcap_template_preview' ),
 				'previewNonce' => wp_create_nonce( 'vcap_template_preview' ),
 				'minFitScale'  => PdfRenderer::MIN_FIT_SCALE,
+				'safetyZone'   => self::SAFETY_ZONE_MM,
 				'imageMimes'   => PdfRenderer::image_mimes(),
 				'postId'       => get_the_ID(),
 				'i18n'         => array(
@@ -375,6 +378,12 @@ final class TemplatePostType {
 					'showText'    => __( 'Show text', 'voucher-captain' ),
 					'imageType'   => __( 'The PDF cannot show this image type. Please choose a JPEG or PNG image.', 'voucher-captain' ),
 					'textCut'     => __( 'This text does not fit its box even at half the font size and is cut off. Make the box larger.', 'voucher-captain' ),
+					'previewLines' => __( 'Preview with many lines', 'voucher-captain' ),
+					'qrDownloadHint' => __( 'The printed download link stays valid until 30 days after the voucher expires (always for vouchers without expiry). Reissuing the voucher invalidates it.', 'voucher-captain' ),
+					'barcodeScanner' => __( 'The camera scanner in the browser reads only QR codes on iOS and in Firefox. Use a QR code if vouchers are checked with it.', 'voucher-captain' ),
+					'bleed'       => __( 'Bleed (mm)', 'voucher-captain' ),
+					'bleedHelp'   => __( 'For print shops: the PDF gets this margin on every side; the background and shapes or images touching the edge reach into it. Keep texts and codes inside the dashed safety line (5 mm).', 'voucher-captain' ),
+					'cropMarks'   => __( 'Crop marks', 'voucher-captain' ),
 					'barcodeFallback' => __( 'EAN-13 needs 12 or 13 digits, Code 39 only capital letters, digits and - . $ / + %. Values that do not fit (e.g. generated voucher codes) are printed as Code 128.', 'voucher-captain' ),
 					'name'        => __( 'Layer name', 'voucher-captain' ),
 					'lock'        => __( 'Lock', 'voucher-captain' ),
@@ -496,6 +505,9 @@ final class TemplatePostType {
 			'backgroundImageId' => absint( $page_in['backgroundImageId'] ?? 0 ),
 			'backgroundImage'   => esc_url_raw( (string) ( $page_in['backgroundImage'] ?? '' ) ),
 			'backgroundFit'     => in_array( $page_in['backgroundFit'] ?? 'cover', array( 'cover', 'contain', 'stretch' ), true ) ? ( $page_in['backgroundFit'] ?? 'cover' ) : 'cover',
+			// M12-75: bleed in mm around the page for print shops (0 = none) and crop marks in it.
+			'bleed'             => round( PdfRenderer::bleed( $page_in ), 1 ),
+			'cropMarks'         => ! empty( $page_in['cropMarks'] ),
 		);
 
 		$types    = array( 'text', 'heading', 'image', 'qrcode', 'barcode', 'rect', 'line' );
@@ -596,6 +608,9 @@ final class TemplatePostType {
 				/* translators: %s: layer name */
 				$warnings[] = sprintf( __( 'Barcode "%s": generated voucher codes do not fit EAN-13 or Code 39 and are printed as Code 128.', 'voucher-captain' ), $name );
 			}
+			if ( ! $images_only && empty( $el['hidden'] ) && in_array( $el['type'] ?? '', array( 'qrcode', 'barcode' ), true ) ) {
+				$warnings = array_merge( $warnings, self::code_warnings( $el, $name ) );
+			}
 		}
 		foreach ( $images as $image ) {
 			$status = vcap()->pdf->image_status( $image[1], $image[2] );
@@ -605,7 +620,59 @@ final class TemplatePostType {
 			} elseif ( 'format' === $status['problem'] ) {
 				/* translators: 1: layer name, 2: image type */
 				$warnings[] = sprintf( __( 'Image "%1$s" is of type %2$s, which the PDF cannot show. Use a JPEG or PNG image.', 'voucher-captain' ), $image[0], $status['mime'] );
+			} elseif ( ! $images_only && 'image/png' === $status['mime'] && null !== $status['path'] && filesize( $status['path'] ) > 500 * 1024 && PdfRenderer::png_has_alpha( $status['path'] ) ) {
+				// M12-73: dompdf composes transparent PNGs pixel by pixel; the renderer caches a smaller copy.
+				/* translators: %s: layer name */
+				$warnings[] = sprintf( __( 'Image "%s" is a large PNG with transparency, which slows down every PDF (the first one in particular). Use a JPEG, or a PNG without transparency or with fewer pixels.', 'voucher-captain' ), $image[0] );
 			}
+		}
+		return $warnings;
+	}
+
+	/** A number in the site's number format (number_format_i18n() where WordPress is loaded). */
+	private static function num_i18n( float $number, int $decimals ): string {
+		return function_exists( 'number_format_i18n' ) ? number_format_i18n( $number, $decimals ) : number_format( $number, $decimals );
+	}
+
+	/**
+	 * M12-40: QR codes and barcodes a phone or hand scanner may not read: modules smaller than 0.33 mm (QR) or
+	 * 0.19 mm (barcode), measured with a payload as long as the element really carries, and dark colours with
+	 * less than 4.5:1 contrast to the white ground they are printed on.
+	 *
+	 * @return string[]
+	 */
+	private static function code_warnings( array $el, string $name ): array {
+		$warnings = array();
+		$value    = (string) ( $el['qrValue'] ?? '{coupon_code}' );
+		// Sample payloads as long as the real ones: generated codes have up to about 20 characters, the links
+		// carry a 48-character token and a 64-character signature.
+		$code = str_repeat( 'X', 20 );
+		$link = home_url( '/' ) . '?vcap_pdf=' . str_repeat( 'a', 48 ) . '&exp=1790000000&sig=' . str_repeat( 'f', 64 );
+		if ( 'qrcode' === $el['type'] ) {
+			$content = (string) ( $el['qrContent'] ?? 'code' );
+			$payload = in_array( $content, array( 'checkin', 'download' ), true ) ? $link : ( 'custom' === $content ? (string) preg_replace( '/\{[^}]+\}/', $code, $value ) : $code );
+			$modules = PdfRenderer::qr_modules( $payload );
+			$module  = $modules ? min( (float) ( $el['w'] ?? 0 ), (float) ( $el['h'] ?? 0 ) ) / $modules : 0;
+			if ( $modules && $module < PdfRenderer::MIN_QR_MODULE_MM ) {
+				/* translators: 1: layer name, 2: module size in mm, 3: minimum size in mm */
+				$warnings[] = sprintf( __( 'QR code "%1$s": a module is only %2$s mm wide; scanners need at least %3$s mm. Make the code larger.', 'voucher-captain' ), $name, self::num_i18n( $module, 2 ), self::num_i18n( PdfRenderer::MIN_QR_MODULE_MM, 2 ) );
+			}
+		} else {
+			$type    = (string) ( $el['barcodeType'] ?? 'C128' );
+			$payload = (string) preg_replace( '/\{[^}]+\}/', $code, $value );
+			$type    = PdfRenderer::barcode_fits( $type, $payload ) ? $type : 'C128';
+			$modules = PdfRenderer::barcode_modules( $type, $payload );
+			$module  = $modules ? (float) ( $el['w'] ?? 0 ) / $modules : 0;
+			if ( $modules && $module < PdfRenderer::MIN_BARCODE_MODULE_MM ) {
+				/* translators: 1: layer name, 2: module size in mm, 3: minimum size in mm */
+				$warnings[] = sprintf( __( 'Barcode "%1$s": a bar module is only %2$s mm wide; scanners need at least %3$s mm. Make the barcode wider.', 'voucher-captain' ), $name, self::num_i18n( $module, 2 ), self::num_i18n( PdfRenderer::MIN_BARCODE_MODULE_MM, 2 ) );
+			}
+		}
+		$color    = (string) ( $el['color'] ?? '#000000' );
+		$contrast = 'transparent' === $color ? 21.0 : PdfRenderer::contrast_ratio( $color, '#ffffff' );
+		if ( $contrast < PdfRenderer::MIN_CODE_CONTRAST ) {
+			/* translators: 1: layer name, 2: contrast ratio, 3: minimum ratio */
+			$warnings[] = sprintf( __( '"%1$s": the colour has a contrast of only %2$s:1 to the white ground of the code; scanners need at least %3$s:1. Use a darker colour.', 'voucher-captain' ), $name, self::num_i18n( $contrast, 1 ), self::num_i18n( PdfRenderer::MIN_CODE_CONTRAST, 1 ) );
 		}
 		return $warnings;
 	}
@@ -618,15 +685,29 @@ final class TemplatePostType {
 		return sanitize_hex_color( $value ) ?: '#000000';
 	}
 
+	/** Lines of the worst-case message with line breaks in the template preview (M12-39). */
+	public const PREVIEW_LINES = 10;
+
 	/**
 	 * Sample voucher of the template preview with a worst-case message (as long as products allow by default),
-	 * so the preview shows whether long greetings still fit their box.
+	 * so the preview shows whether long greetings still fit their box. M12-39: the variant "lines" has a message
+	 * of many short lines (a poem, a list), which needs far more height than its length suggests.
+	 *
+	 * @param string $variant "long" or "lines".
 	 */
-	public static function preview_voucher(): Voucher {
+	public static function preview_voucher( string $variant = 'long' ): Voucher {
 		$voucher = Preview::sample_voucher();
 		$max     = (int) ProductConfig::DEFAULTS['message_maxlength'];
 		$message = trim( $voucher->message );
-		if ( '' !== $message && $max > mb_strlen( $message ) ) {
+		if ( 'lines' === $variant && '' !== $message ) {
+			$words = preg_split( '/\s+/', $message );
+			$words = $words ? $words : array( $message );
+			$lines = array();
+			for ( $i = 0; $i < self::PREVIEW_LINES; $i++ ) {
+				$lines[] = $words[ $i % count( $words ) ];
+			}
+			$voucher->message = mb_substr( implode( "\n", $lines ), 0, $max );
+		} elseif ( '' !== $message && $max > mb_strlen( $message ) ) {
 			$voucher->message = mb_substr( trim( str_repeat( $message . ' ', (int) ceil( $max / ( mb_strlen( $message ) + 1 ) ) ) ), 0, $max );
 		}
 		return $voucher;
@@ -639,7 +720,7 @@ final class TemplatePostType {
 		}
 		$design = json_decode( wp_unslash( (string) ( $_POST['design'] ?? '' ) ), true ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised below.
 		$design = is_array( $design ) ? self::sanitize_design( $design ) : self::get_design( absint( $_POST['post_id'] ?? 0 ) );
-		$voucher = self::preview_voucher();
+		$voucher = self::preview_voucher( 'lines' === sanitize_key( wp_unslash( (string) ( $_POST['variant'] ?? '' ) ) ) ? 'lines' : 'long' );
 		Preview::stream( vcap()->pdf->render( $voucher, $design ), 'template-preview.pdf' );
 	}
 

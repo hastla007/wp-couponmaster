@@ -386,7 +386,7 @@ check( 'Q14: a temp PDF never overwrites or shares the file of a parallel delive
 @unlink( $p8_target );
 @unlink( (string) $p8_file );
 $p8_file = vcap()->pdf->to_temp_file( $v, $p8_design );
-check( 'Q14: a free file name is kept for the attachment', $p8_file === $p8_target, (string) $p8_file );
+check( 'M12-43: a temp PDF always has a random 24-character prefix and is attached under the configured name', $p8_file !== $p8_target && (bool) preg_match( '/^[A-Za-z0-9]{24}-' . preg_quote( basename( $p8_target ), '/' ) . '$/', basename( (string) $p8_file ) ) && basename( $p8_target ) === PdfRenderer::attachment_name( (string) $p8_file ), (string) $p8_file );
 @unlink( (string) $p8_file );
 
 // Z11: QR codes and barcodes are vector SVG (no GD) and the printed QR modules are those of the payload.
@@ -397,7 +397,7 @@ check( 'Z11: the QR code is an SVG image, not a GD PNG', str_contains( $p8_html,
 file_put_contents( "$out/p8-qr.pdf", vcap()->pdf->render( $v, $p8_qr ) );
 shell_exec( 'pdftoppm -png -r 300 -singlefile ' . escapeshellarg( "$out/p8-qr.pdf" ) . ' ' . escapeshellarg( "$out/p8-qr" ) . ' 2>/dev/null' );
 if ( is_readable( "$out/p8-qr.png" ) ) {
-	$p8_ref = new chillerlan\QRCode\QRCode( new chillerlan\QRCode\QROptions( array( 'eccLevel' => chillerlan\QRCode\Common\EccLevel::M, 'addQuietzone' => true, 'quietzoneSize' => 2 ) ) );
+	$p8_ref = new chillerlan\QRCode\QRCode( new chillerlan\QRCode\QROptions( array( 'eccLevel' => chillerlan\QRCode\Common\EccLevel::M, 'addQuietzone' => true, 'quietzoneSize' => 4 ) ) );
 	foreach ( chillerlan\QRCode\Common\Mode::INTERFACES as $p8_mode ) {
 		if ( $p8_mode::validateString( $p8_payload ) ) {
 			$p8_ref->addSegment( new $p8_mode( $p8_payload ) );
@@ -498,6 +498,178 @@ check( 'C7: a download that is no image is not used', null === vcap()->pdf->imag
 unset( $GLOBALS['vcap_test_filters']['vcap_pdf_remote_hosts'], $GLOBALS['vcap_test_http'] );
 @unlink( (string) $p8_remote );
 check( 'C7: Site Health checks the template images', method_exists( VCAP\Health::class, 'test_template_images' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Health.php' ), "'rate_limits', 'template_images', " ) );
+echo "M12 PDF engine, templates and wallet links (F1)\n";
+// M12-39: the customer's texts are measured as the PDF sets them; too long → error with the lines the box holds.
+$m12_gift          = TemplatePostType::default_designs()['giftcard'];
+$m12_fit           = clone $v;
+$m12_fit->message  = 'Alles Gute!';
+$m12_report        = PdfRenderer::fit_report( $m12_gift, $m12_fit );
+$m12_msg_row       = array_values( array_filter( $m12_report, static fn( $r ) => in_array( 'message', $r['tokens'], true ) ) )[0] ?? null;
+check( 'M12-39: the fit report covers the elements with {message} and {recipient_name}; a short message keeps its size', null !== $m12_msg_row && true === $m12_msg_row['fits'] && 1.0 === (float) $m12_msg_row['scale'] && in_array( array( 'recipient_name' ), array_map( static fn( $r ) => $r['tokens'], $m12_report ), true ), wp_json_encode( $m12_report ) );
+$m12_fit->message  = str_repeat( "Zeile\n", 40 );
+$m12_cut           = array_values( array_filter( PdfRenderer::fit_report( $m12_gift, $m12_fit ), static fn( $r ) => in_array( 'message', $r['tokens'], true ) ) )[0] ?? array();
+check( 'M12-39: 40 short lines do not fit the message box: reported with the number of lines it holds at half the size', false === ( $m12_cut['fits'] ?? null ) && ( $m12_cut['max_lines'] ?? 0 ) >= 8 && ( $m12_cut['max_lines'] ?? 99 ) <= 20, wp_json_encode( $m12_cut ) );
+$m12_fit->message  = str_repeat( "Zeile\n", 8 ) . 'Ende';
+$m12_small         = array_values( array_filter( PdfRenderer::fit_report( $m12_gift, $m12_fit ), static fn( $r ) => in_array( 'message', $r['tokens'], true ) ) )[0] ?? array();
+check( 'M12-39: nine lines fit only below 75 % of the size (notice)', true === ( $m12_small['fits'] ?? null ) && ( $m12_small['scale'] ?? 1 ) < PdfRenderer::SHRINK_NOTICE, wp_json_encode( $m12_small ) );
+$m12_fit->message  = str_repeat( "Zeile\n", 40 );
+$m12_banner        = VCAP\Preview::with_fit_banner( $m12_gift, $m12_fit );
+$m12_note          = end( $m12_banner['elements'] );
+check( 'M12-39: the customer preview shows a red note "Text too long … max. approx. N lines"', 'vcap-fit-note' === ( $m12_note['id'] ?? '' ) && str_contains( (string) $m12_note['text'], 'max. approx.' ) && count( $m12_banner['elements'] ) === count( $m12_gift['elements'] ) + 1 );
+$m12_fit->message  = 'Kurz';
+check( 'M12-39: no note when every text fits at full size', VCAP\Preview::with_fit_banner( $m12_gift, $m12_fit ) === $m12_gift );
+$m12_lines = TemplatePostType::preview_voucher( 'lines' )->message;
+check( 'M12-39: the template preview has a worst-case variant with many line breaks', TemplatePostType::PREVIEW_LINES === count( explode( "\n", $m12_lines ) ) && 300 === mb_strlen( TemplatePostType::preview_voucher()->message ) && str_contains( (string) file_get_contents( VCAP_PATH . 'assets/js/designer.js' ), "name: 'variant'" ) );
+check( 'M12-39: the product option "Message max. lines" exists (default 0 = no limit) and is validated', 0 === ProductConfig::DEFAULTS['message_maxlines'] && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Fields.php' ), "may contain at most %2\$d lines." ) );
+
+// M12-40: QR codes and barcodes on white with quiet zones, opacity ignored, readability warnings.
+$m12_codes = vcap()->pdf->html( $v, array( 'page' => array( 'format' => 'A6', 'background' => '#1f3a4d' ), 'elements' => array( array( 'type' => 'qrcode', 'x' => 10, 'y' => 10, 'w' => 30, 'h' => 30, 'qrContent' => 'code', 'opacity' => 0.3 ), array( 'type' => 'barcode', 'x' => 10, 'y' => 60, 'w' => 80, 'h' => 20, 'opacity' => 0.4 ) ) ) );
+preg_match_all( '/<div class="el" style="([^"]*)"><img src="data:image\/svg/', $m12_codes, $m12_code_styles );
+check( 'M12-40: the opacity of QR codes and barcodes is ignored, both lie on white', 2 === count( $m12_code_styles[1] ) && ! str_contains( implode( '', $m12_code_styles[1] ), 'opacity' ) && str_contains( $m12_codes, 'background:#ffffff;" /></div>' ) && str_contains( $m12_code_styles[1][1], 'background:#ffffff' ), $m12_codes );
+preg_match( '/<img src="data:image\/svg\+xml;base64,[^"]+" style="width:([\d.]+)mm;height:[\d.]+mm;margin-left:([\d.]+)mm;"/', $m12_codes, $m12_bar );
+$m12_modules = PdfRenderer::barcode_modules( 'C128', $v->code );
+check( 'M12-40: a barcode keeps 10 modules of white left and right', isset( $m12_bar[2] ) && abs( (float) $m12_bar[2] - 80 * 10 / $m12_modules ) < 0.01 && abs( (float) $m12_bar[1] - ( 80 - 2 * (float) $m12_bar[2] ) ) < 0.01, wp_json_encode( array( $m12_bar, $m12_modules ) ) );
+$m12_qr_svg = preg_match( '/<img src="data:image\/svg\+xml;base64,([^"]+)" style="width:30mm/', $m12_codes, $m12_q ) ? (string) base64_decode( $m12_q[1] ) : '';
+check( 'M12-40: the light QR modules are drawn in white (no dark ground shows through)', str_contains( $m12_qr_svg, '#fff' ), substr( $m12_qr_svg, 0, 300 ) );
+$m12_warn = TemplatePostType::design_warnings(
+	array(
+		'page'     => array( 'format' => 'A6' ),
+		'elements' => array(
+			array( 'id' => 'q', 'name' => 'Tiny QR', 'type' => 'qrcode', 'x' => 0, 'y' => 0, 'w' => 12, 'h' => 12, 'qrContent' => 'download' ),
+			array( 'id' => 'b', 'name' => 'Narrow bars', 'type' => 'barcode', 'x' => 0, 'y' => 0, 'w' => 25, 'h' => 10 ),
+			array( 'id' => 'p', 'name' => 'Pale QR', 'type' => 'qrcode', 'x' => 0, 'y' => 0, 'w' => 40, 'h' => 40, 'color' => '#aaaaaa' ),
+		),
+	)
+);
+check( 'M12-40: the designer warns about QR modules under 0.33 mm, bar modules under 0.19 mm and contrast under 4.5:1', 3 === count( $m12_warn ) && str_contains( $m12_warn[0], 'Tiny QR' ) && str_contains( $m12_warn[0], '0.33' ) && str_contains( $m12_warn[1], 'Narrow bars' ) && str_contains( $m12_warn[1], '0.19' ) && str_contains( $m12_warn[2], 'Pale QR' ) && str_contains( $m12_warn[2], '4.5:1' ), wp_json_encode( $m12_warn ) );
+check( 'M12-40: the starter designs pass the readability checks', array() === TemplatePostType::design_warnings( TemplatePostType::default_designs()['giftcard'] ) && array() === TemplatePostType::design_warnings( TemplatePostType::default_designs()['ticket'] ) );
+check( 'M12-40: contrast ratio as WCAG defines it', 21.0 === PdfRenderer::contrast_ratio( '#000', '#ffffff' ) && 1.0 === PdfRenderer::contrast_ratio( '#fff', '#ffffff' ) && PdfRenderer::contrast_ratio( '#777777', '#ffffff' ) < 4.5 && PdfRenderer::contrast_ratio( '#767676', '#ffffff' ) >= 4.5 );
+check( 'M12-40/41: the designer explains the browser scanner (QR only on iOS/Firefox) and the lifetime of the printed download link', str_contains( (string) file_get_contents( VCAP_PATH . 'assets/js/designer.js' ), 't.barcodeScanner' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'assets/js/designer.js' ), 't.qrDownloadHint' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/TemplatePostType.php' ), "'barcodeScanner'" ) );
+
+// M12-43: private folder with a random name, Apache 2.4 protection, temp files cleaned up after an hour.
+$m12_base = $GLOBALS['vcap_test_uploads'];
+unset( $GLOBALS['vcap_test_options'][ VCAP\Install::PRIVATE_DIR_OPTION ] );
+@mkdir( $m12_base . '/vcap', 0777, true );
+file_put_contents( $m12_base . '/vcap/keep.txt', 'old' );
+$m12_name = VCAP\Install::private_dir_name();
+check( 'M12-43: the private folder gets a random name; the old folder "vcap" is renamed with its files', (bool) preg_match( '/^vcap-[a-z0-9]{20}$/', $m12_name ) && ! is_dir( $m12_base . '/vcap' ) && 'old' === @file_get_contents( $m12_base . '/' . $m12_name . '/keep.txt' ) && VCAP\Install::upload_dir() === $m12_base . '/' . $m12_name, $m12_name );
+VCAP\Install::ensure_upload_dir();
+check( 'M12-43: the .htaccess files use the Apache 2.4 syntax (with a 2.2 fallback)', str_contains( (string) file_get_contents( VCAP\Install::upload_dir() . '/tmp/.htaccess' ), 'Require all denied' ) && str_contains( (string) file_get_contents( VCAP\Install::upload_dir() . '/.htaccess' ), 'Deny from all' ) );
+$m12_dir  = VCAP\Install::upload_dir();
+$m12_old  = time() - 2 * HOUR_IN_SECONDS;
+$m12_junk = array( '/tmp/abc-voucher.pdf', '/tmp/img-0123.img', '/tmp/img-0123.img.Xy12.part', '/fonts/ca_dompdf_img_AbCd', '/img/x.png.Ab.part' );
+foreach ( $m12_junk as $m12_f ) {
+	file_put_contents( $m12_dir . $m12_f, 'x' );
+	touch( $m12_dir . $m12_f, $m12_old );
+}
+file_put_contents( $m12_dir . '/tmp/fresh.pdf', 'x' );
+file_put_contents( $m12_dir . '/fonts/DejaVuSans.ufm', 'x' );
+touch( $m12_dir . '/fonts/DejaVuSans.ufm', $m12_old );
+$m12_purged = VCAP\Install::purge_temp_files();
+check( 'M12-43: the maintenance removes temp PDFs, img-*, *.part and dompdf temp images older than an hour, nothing else', 5 === $m12_purged && ! array_filter( $m12_junk, static fn( $f ) => file_exists( $m12_dir . $f ) ) && file_exists( $m12_dir . '/tmp/fresh.pdf' ) && file_exists( $m12_dir . '/fonts/DejaVuSans.ufm' ), (string) $m12_purged );
+@unlink( $m12_dir . '/tmp/fresh.pdf' );
+@unlink( $m12_dir . '/fonts/DejaVuSans.ufm' );
+check( 'M12-43: COMPATIBILITY.md has the nginx snippet; Site Health requests a test file', str_contains( (string) file_get_contents( VCAP_PATH . 'COMPATIBILITY.md' ), 'location ~* ^/wp-content/uploads/vcap' ) && method_exists( VCAP\Health::class, 'probe_private_dir' ) );
+
+// M12-72: subdivision flags and keycaps leave no tag characters or boxes.
+$m12_emoji = PdfRenderer::strip_unprintable_emoji( "Für Schottland 🏴\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F} und 1\u{FE0F}\u{20E3} ok" );
+check( 'M12-72: subdivision flags (tag characters) and keycap emoji are left out', ! preg_match( '/[\x{E0000}-\x{E007F}\x{FE0F}\x{1F3F4}]/u', $m12_emoji ) && str_contains( $m12_emoji, 'Für Schottland' ) && str_contains( $m12_emoji, 'ok' ), $m12_emoji );
+
+// M12-73: large PNGs are reduced once and cached, opaque ones as JPEG; previews are cached for 10 minutes.
+if ( function_exists( 'imagecreatetruecolor' ) ) {
+	$m12_png = $m12_base . '/2026/11/big-opaque.png';
+	$m12_im  = imagecreatetruecolor( 2400, 1700 );
+	for ( $m12_i = 0; $m12_i < 3000; $m12_i++ ) {
+		imagefilledellipse( $m12_im, random_int( 0, 2400 ), random_int( 0, 1700 ), 60, 60, (int) imagecolorallocate( $m12_im, random_int( 0, 255 ), random_int( 0, 255 ), random_int( 0, 255 ) ) );
+	}
+	imagepng( $m12_im, $m12_png );
+	$m12_alpha = $m12_base . '/2026/11/big-alpha.png';
+	$m12_ia    = imagecreatetruecolor( 3000, 2000 );
+	imagealphablending( $m12_ia, false );
+	imagesavealpha( $m12_ia, true );
+	imagefill( $m12_ia, 0, 0, (int) imagecolorallocatealpha( $m12_ia, 255, 0, 0, 80 ) );
+	imagepng( $m12_ia, $m12_alpha );
+	$m12_o  = PdfRenderer::optimized_image( $m12_png, 105, 74 );
+	$m12_a  = PdfRenderer::optimized_image( $m12_alpha, 105, 74 );
+	$m12_ai = @getimagesize( $m12_a );
+	check( 'M12-73: an opaque PNG is printed from a cached JPEG, a large transparent PNG from a reduced PNG', str_ends_with( $m12_o, '.jpg' ) && 'image/jpeg' === ( getimagesize( $m12_o )['mime'] ?? '' ) && str_starts_with( $m12_o, VCAP\Install::upload_dir() . '/img/' ) && str_ends_with( $m12_a, '.png' ) && is_array( $m12_ai ) && $m12_ai[0] < 3000 && PdfRenderer::png_has_alpha( $m12_a ), wp_json_encode( array( $m12_o, $m12_a, $m12_ai ) ) );
+	$m12_mtime = filemtime( $m12_o );
+	check( 'M12-73: the reduced copy is made once and reused; a small PNG is used as it is', $m12_o === PdfRenderer::optimized_image( $m12_png, 105, 74 ) && filemtime( $m12_o ) === $m12_mtime && $png === PdfRenderer::optimized_image( $png, 105, 74 ) );
+	$m12_bg = vcap()->pdf->html( $v, array( 'page' => array( 'format' => 'A6', 'backgroundImage' => 'https://shop.test/wp-content/uploads/2026/11/big-alpha.png' ), 'elements' => array() ) );
+	check( 'M12-73: the PDF embeds a reduced cached copy, not the original', (bool) preg_match( '#' . preg_quote( VCAP\Install::upload_dir() . '/img/', '#' ) . '[0-9a-f]{32}\.png#', $m12_bg ) && ! str_contains( $m12_bg, $m12_alpha ), $m12_bg );
+}
+$m12_pv_a          = clone $v;
+$m12_pv_b          = clone $v;
+$m12_pv_b->message = 'Anders';
+check( 'M12-73: the preview cache key follows design, fields and amount', VCAP\Preview::cache_file( $m12_gift, $m12_pv_a ) === VCAP\Preview::cache_file( $m12_gift, clone $v ) && VCAP\Preview::cache_file( $m12_gift, $m12_pv_a ) !== VCAP\Preview::cache_file( $m12_gift, $m12_pv_b ) && 600 === VCAP\Preview::CACHE_SECONDS );
+
+// M12-74: voucher links with badge images and the placeholder {link:<id>}.
+$GLOBALS['vcap_test_filters']['vcap_voucher_links'] = array(
+	array(
+		static fn( $links ) => array(
+			array( 'id' => 'Wallet', 'label' => 'Add to Wallet', 'url' => 'https://wallet.example/p/1', 'image' => 'https://wallet.example/badge.svg', 'width' => 9999, 'alt' => '<b>Apple</b> Wallet' ),
+			array( 'id' => 'g', 'label' => 'Google', 'url' => 'https://pay.example/g', 'image' => 'http://insecure.example/b.png' ),
+		),
+		1,
+	),
+);
+$m12_links = VCAP\Downloads::voucher_links( $v, 'email' );
+check( 'M12-74: voucher links keep an id, an https badge image (width 16–400) and an alt text; http images are dropped', 'wallet' === ( $m12_links[0]['id'] ?? '' ) && 'https://wallet.example/badge.svg' === ( $m12_links[0]['image'] ?? '' ) && 400 === ( $m12_links[0]['width'] ?? 0 ) && 'Apple Wallet' === ( $m12_links[0]['alt'] ?? '' ) && ! isset( $m12_links[1]['image'] ), wp_json_encode( $m12_links ) );
+$m12_links_html = VCAP\Downloads::voucher_links_html( $m12_links );
+check( 'M12-74: badges are printed as escaped image links, other links as text', str_contains( $m12_links_html, '<img src="https://wallet.example/badge.svg" width="400" alt="Apple Wallet"' ) && str_contains( $m12_links_html, '>Google</a>' ), $m12_links_html );
+check( 'M12-74: {link:wallet} prints the URL of that link', 'Pass: https://wallet.example/p/1' === Placeholders::replace( 'Pass: {link:wallet}', $v ) );
+unset( $GLOBALS['vcap_test_filters']['vcap_voucher_links'] );
+check( 'M12-74: both bundle templates print the voucher links per row', str_contains( (string) file_get_contents( VCAP_PATH . 'templates/emails/voucher-bundle.php' ), "voucher_links( \$vcap_v, 'email' )" ) && str_contains( (string) file_get_contents( VCAP_PATH . 'templates/emails/plain/voucher-bundle.php' ), "voucher_links( \$vcap_v, 'email_plain' )" ) );
+
+// M12-75: bleed, crop marks, N-up on A4.
+$m12_bleed_design = array(
+	'page'     => array( 'format' => 'A6', 'bleed' => 3, 'cropMarks' => true, 'background' => '#123456' ),
+	'elements' => array(
+		array( 'id' => 'band', 'type' => 'rect', 'x' => 0, 'y' => 0, 'w' => 105, 'h' => 20, 'fill' => '#ff0000' ),
+		array( 'id' => 'txt', 'type' => 'text', 'x' => 10, 'y' => 30, 'w' => 50, 'h' => 10, 'text' => 'Hallo' ),
+	),
+);
+check( 'M12-75: the sheet is the page plus the bleed on every side', array( 111.0, 154.0 ) === PdfRenderer::sheet_size( $m12_bleed_design['page'] ) && array( 105, 148 ) === PdfRenderer::page_size( $m12_bleed_design['page'] ) );
+$m12_band = PdfRenderer::bleed_element( $m12_bleed_design['elements'][0], 105, 148, 3 );
+$m12_txt  = PdfRenderer::bleed_element( $m12_bleed_design['elements'][1], 105, 148, 3 );
+check( 'M12-75: a shape at the edge reaches into the bleed, a text only moves', 0.0 === (float) $m12_band['x'] && 0.0 === (float) $m12_band['y'] && 111.0 === (float) $m12_band['w'] && 23.0 === (float) $m12_band['h'] && 13.0 === (float) $m12_txt['x'] && 33.0 === (float) $m12_txt['y'] && 50.0 === (float) $m12_txt['w'], wp_json_encode( array( $m12_band, $m12_txt ) ) );
+file_put_contents( "$out/m12-bleed.pdf", vcap()->pdf->render( $v, $m12_bleed_design ) );
+$m12_info = (string) shell_exec( 'pdfinfo ' . escapeshellarg( "$out/m12-bleed.pdf" ) . ' 2>/dev/null' );
+if ( preg_match( '/Page size:\s+([\d.]+) x ([\d.]+) pts/', $m12_info, $m12_m ) ) {
+	check( 'M12-75: the PDF of a design with 3 mm bleed is 111 × 154 mm', abs( (float) $m12_m[1] - 111 * PdfRenderer::MM_TO_PT ) < 1 && abs( (float) $m12_m[2] - 154 * PdfRenderer::MM_TO_PT ) < 1, $m12_m[0] );
+}
+check( 'M12-75: crop marks are drawn in the bleed', 8 === substr_count( vcap()->pdf->html( $v, $m12_bleed_design ), 'background:#000000;"></div>' ) && 0 === substr_count( vcap()->pdf->html( $v, array_replace_recursive( $m12_bleed_design, array( 'page' => array( 'cropMarks' => false ) ) ) ), 'background:#000000;"></div>' ) );
+check( 'M12-75: N-up: four A6, two A5, one DL beside another, one A4 per A4 sheet', 4 === PdfRenderer::nup_layout( 105, 148 )['cols'] * PdfRenderer::nup_layout( 105, 148 )['rows'] && 2 === PdfRenderer::nup_layout( 148, 210 )['cols'] * PdfRenderer::nup_layout( 148, 210 )['rows'] && 3 === PdfRenderer::nup_layout( 99, 210 )['cols'] * PdfRenderer::nup_layout( 99, 210 )['rows'] && 1 === PdfRenderer::nup_layout( 210, 297 )['cols'] * PdfRenderer::nup_layout( 210, 297 )['rows'], wp_json_encode( PdfRenderer::nup_layout( 99, 210 ) ) );
+$GLOBALS['vcap_test_filters']['vcap_template_design'] = array( array( static fn() => array( 'page' => array( 'format' => 'A6' ), 'elements' => array( array( 'type' => 'text', 'x' => 5, 'y' => 5, 'w' => 90, 'h' => 10, 'text' => '{coupon_code}' ) ) ), 1 ) );
+$m12_nup_list = array();
+for ( $m12_i = 0; $m12_i < 5; $m12_i++ ) {
+	$m12_nv       = clone $v;
+	$m12_nv->id   = 900 + $m12_i;
+	$m12_nv->code = 'NUP-CODE-' . $m12_i;
+	$m12_nup_list[] = $m12_nv;
+}
+$m12_nup = vcap()->pdf->render_many( $m12_nup_list, true );
+unset( $GLOBALS['vcap_test_filters']['vcap_template_design'] );
+file_put_contents( "$out/m12-nup.pdf", $m12_nup[0]['pdf'] );
+$m12_nup_info = (string) shell_exec( 'pdfinfo ' . escapeshellarg( "$out/m12-nup.pdf" ) . ' 2>/dev/null' );
+if ( '' !== $m12_nup_info ) {
+	$m12_nup_text = (string) shell_exec( 'pdftotext ' . escapeshellarg( "$out/m12-nup.pdf" ) . ' - 2>/dev/null' );
+	check( 'M12-75: five A6 vouchers are printed on two A4 sheets (render_many N-up)', 1 === count( $m12_nup ) && (bool) preg_match( '/Pages:\s+2\b/', $m12_nup_info ) && (bool) preg_match( '/Page size:\s+595\.\d+ x 841\.\d+ pts/', $m12_nup_info ) && 5 === substr_count( $m12_nup_text, 'NUP-CODE-' ), $m12_nup_info );
+}
+
+// M12-76: PDF title "Product – Shop" (never the code) and the document language.
+$m12_title_info = (string) shell_exec( 'pdfinfo ' . escapeshellarg( "$out/m12-bleed.pdf" ) . ' 2>/dev/null' );
+if ( '' !== $m12_title_info ) {
+	check( 'M12-76: the PDF title names the shop (and product), not the voucher code', str_contains( $m12_title_info, 'Café Süß & Co' ) && ! str_contains( $m12_title_info, $v->code ), $m12_title_info );
+}
+check( 'M12-76: the PDF HTML carries the language and a title without the code', (bool) preg_match( '/<html lang="[a-z]{2}(-[A-Z]{2})?">/', vcap()->pdf->html( $v, $m12_bleed_design ) ) && ! str_contains( PdfRenderer::pdf_title( $v ), $v->code ) && str_contains( (string) file_get_contents( VCAP_PATH . 'ACCESSIBILITY.md' ), 'nicht getaggt' ) );
+
+// M12-77: {expiry_line}; a line with {expiry_date} is left out for vouchers without expiry.
+$m12_noexp             = clone $v;
+$m12_noexp->expires_at = null;
+$m12_noexp_html        = vcap()->pdf->html( $m12_noexp, array( 'page' => array( 'format' => 'A6' ), 'elements' => array( array( 'type' => 'text', 'x' => 5, 'y' => 5, 'w' => 90, 'h' => 20, 'text' => "Code {coupon_code}\nValid until {expiry_date}" ), array( 'type' => 'text', 'x' => 5, 'y' => 30, 'w' => 90, 'h' => 10, 'text' => '{expiry_line}' ) ) ) );
+check( 'M12-77: without expiry "Valid indefinitely" is printed and "Valid until {expiry_date}" is left out', str_contains( $m12_noexp_html, 'Valid indefinitely' ) && ! str_contains( $m12_noexp_html, 'Valid until' ) && ! str_contains( $m12_noexp_html, 'unlimited' ) && str_contains( $m12_noexp_html, 'Code ' . $v->code ), $m12_noexp_html );
+check( 'M12-77: with expiry {expiry_line} reads "Valid until <date>"; the starter gift card uses it', str_starts_with( Placeholders::replace( '{expiry_line}', $v ), 'Valid until ' ) && str_contains( Placeholders::replace( '{expiry_line}', $v ), '2027' ) && in_array( '{expiry_line}', array_column( TemplatePostType::default_designs()['giftcard']['elements'], 'text' ), true ) );
 // Z13: a voucher keeps the design of its template at issue time (also after a redesign or deletion).
 if ( ! function_exists( 'update_post_meta' ) ) {
 	function update_post_meta( $id, $k, $v ) { $GLOBALS['vcap_test_meta'][ $id ][ $k ] = $v; return true; }

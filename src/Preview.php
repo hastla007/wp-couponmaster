@@ -99,7 +99,72 @@ final class Preview {
 		}
 		$amount = wp_unslash( (string) ( $_REQUEST['vcap_amount'] ?? '' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended,WordPress.Security.ValidatedSanitizedInput -- formatted in preview().
 		list( $v, $design ) = $this->preview( $product, (string) $amount, $trusted );
-		self::stream( $this->pdf->render( $v, $design ), 'preview.pdf' );
+		$design             = self::with_fit_banner( $design, $v );
+		// M12-73: the same personalisation is rendered once per 10 minutes (customers open the preview again and
+		// again while typing; a template with a large transparent PNG costs seconds per PDF).
+		$cache = self::cache_file( $design, $v );
+		if ( is_readable( $cache ) && (int) filemtime( $cache ) > time() - self::CACHE_SECONDS ) {
+			$pdf = (string) file_get_contents( $cache ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- private local file.
+			if ( str_starts_with( $pdf, '%PDF-' ) ) {
+				self::stream( $pdf, 'preview.pdf' );
+			}
+		}
+		$pdf = $this->pdf->render( $v, $design );
+		if ( Install::ensure_upload_dir() ) {
+			$part = $cache . '.' . wp_generate_password( 8, false ) . '.part';
+			if ( false !== file_put_contents( $part, $pdf ) && ! rename( $part, $cache ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions
+				wp_delete_file( $part );
+			}
+		}
+		self::stream( $pdf, 'preview.pdf' );
+	}
+
+	/** Lifetime of a cached customer preview in seconds (M12-73). */
+	public const CACHE_SECONDS = 10 * MINUTE_IN_SECONDS;
+
+	/**
+	 * Private file of a cached customer preview. The name is a keyed hash of everything the PDF shows: the design,
+	 * every placeholder value (personalisation, amount, names, dates), the language and the plugin version.
+	 */
+	public static function cache_file( array $design, Voucher $v ): string {
+		$key = wp_json_encode( array( $design, Placeholders::values( $v ), $v->fields, function_exists( 'determine_locale' ) ? determine_locale() : get_locale(), defined( 'VCAP_VERSION' ) ? VCAP_VERSION : '' ) );
+		return Install::upload_dir() . '/tmp/pv-' . hash_hmac( 'sha256', (string) $key, vcap()->settings->secret() ) . '.pdf';
+	}
+
+	/**
+	 * M12-39: the customer preview says when a text does not fit (it would be cut off) or is printed small: a red
+	 * note at the top of the page, with the number of lines the box holds.
+	 */
+	public static function with_fit_banner( array $design, Voucher $v ): array {
+		$notes = array();
+		foreach ( PdfRenderer::fit_report( $design, $v ) as $row ) {
+			if ( ! $row['fits'] ) {
+				/* translators: %d: number of lines */
+				$notes[] = sprintf( __( 'Text too long: it is cut off on the voucher (max. approx. %d lines).', 'voucher-captain' ), $row['max_lines'] );
+			} elseif ( $row['scale'] < PdfRenderer::SHRINK_NOTICE ) {
+				/* translators: %d: percentage */
+				$notes[] = sprintf( __( 'Long text: printed at %d %% of the normal size.', 'voucher-captain' ), (int) round( $row['scale'] * 100 ) );
+			}
+		}
+		if ( ! $notes ) {
+			return $design;
+		}
+		list( $page_w )        = PdfRenderer::page_size( (array) ( $design['page'] ?? array() ) );
+		$design['elements'][] = array(
+			'id'    => 'vcap-fit-note',
+			'type'  => 'text',
+			'x'     => 3,
+			'y'     => 3,
+			'w'     => max( 10, $page_w - 6 ),
+			'h'     => 6 + 4 * count( array_unique( $notes ) ),
+			'text'  => implode( "\n", array_unique( $notes ) ),
+			'size'  => 9,
+			'bold'  => true,
+			'color' => '#ffffff',
+			'fill'  => '#cc0000',
+			'align' => 'center',
+		);
+		return $design;
 	}
 
 	/**

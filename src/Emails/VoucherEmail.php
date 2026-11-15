@@ -184,8 +184,9 @@ abstract class VoucherEmail extends \WC_Email {
 			try {
 				$files = $this->pdf_files();
 				if ( $files ) {
-					$this->temp_files = array_merge( $this->temp_files, $files );
-					$attachments      = array_merge( (array) $attachments, $files );
+					$this->temp_files = array_merge( $this->temp_files, array_values( $files ) );
+					// M12-43: random temp file names, attached under the configured PDF name.
+					$attachments = array_merge( (array) $attachments, \VCAP\PdfRenderer::attachments( $files ) );
 				} else {
 					$this->pdf_failed = true; // The renderer logged why.
 				}

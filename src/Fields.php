@@ -104,6 +104,7 @@ final class Fields {
 				'type'        => 'textarea',
 				'required'    => false,
 				'maxlength'   => max( 10, (int) ( $config['message_maxlength'] ?: 300 ) ),
+				'maxlines'    => max( 0, (int) ( $config['message_maxlines'] ?? 0 ) ), // M12-39: 0 = no limit.
 				'placeholder' => '',
 				'tooltip'     => '',
 			),
@@ -577,8 +578,65 @@ final class Fields {
 			foreach ( $this->print_warnings( $product ) as $message ) {
 				wc_add_notice( $message, 'notice' ); // Accepted, but the customer knows how the PDF will look.
 			}
+			$fit = $this->fit_problems( $product );
+			foreach ( $fit['errors'] as $message ) {
+				wc_add_notice( $message, 'error' );
+				$passed = false;
+			}
+			foreach ( $passed ? $fit['notices'] : array() as $message ) {
+				wc_add_notice( $message, 'notice' );
+			}
 		}
 		return $passed;
+	}
+
+	/**
+	 * M12-39: whether the customer's texts fit their boxes on the voucher, measured as the PDF sets them (the
+	 * product's template with the submitted values). A text that does not fit even at half the size would be cut
+	 * off: error with the number of lines the box holds. A text printed below 75 % of its size: notice.
+	 *
+	 * @return array{errors: string[], notices: string[]}
+	 */
+	public function fit_problems( \WC_Product $product ): array {
+		$out = array(
+			'errors'  => array(),
+			'notices' => array(),
+		);
+		if ( ! class_exists( '\Dompdf\Dompdf' ) ) {
+			return $out;
+		}
+		$labels = array();
+		foreach ( $this->flat_definitions( $product ) as $key => $field ) {
+			$labels[ strtolower( (string) $key ) ] = (string) ( $field['label'] ?? $key );
+		}
+		try {
+			list( $voucher, $design ) = ( new Preview( vcap()->pdf ) )->preview( $product, '', false );
+			$report                   = PdfRenderer::fit_report( $design, $voucher );
+		} catch ( \Throwable $e ) {
+			Logger::warning( 'The fit of the voucher texts could not be checked: ' . $e->getMessage() );
+			return $out;
+		}
+		foreach ( $report as $row ) {
+			$names = array();
+			foreach ( $row['tokens'] as $token ) {
+				$key = str_starts_with( $token, 'field:' ) ? substr( $token, 6 ) : $token;
+				if ( isset( $labels[ $key ] ) ) {
+					$names[] = $labels[ $key ];
+				}
+			}
+			if ( ! $names ) {
+				continue;
+			}
+			$label = implode( ', ', array_unique( $names ) );
+			if ( ! $row['fits'] ) {
+				/* translators: 1: field label(s), 2: number of lines */
+				$out['errors'][] = sprintf( __( '%1$s is too long for the voucher and would be cut off. Please shorten it (max. approx. %2$d lines).', 'voucher-captain' ), $label, $row['max_lines'] );
+			} elseif ( $row['scale'] < PdfRenderer::SHRINK_NOTICE ) {
+				/* translators: 1: field label(s), 2: percentage */
+				$out['notices'][] = sprintf( __( '%1$s is long and is printed in a smaller font on the voucher (%2$d %% of the normal size).', 'voucher-captain' ), $label, (int) round( $row['scale'] * 100 ) );
+			}
+		}
+		return $out;
 	}
 
 	/**
@@ -661,6 +719,11 @@ final class Fields {
 				/* translators: 1: field label, 2: max length */
 				$errors[] = sprintf( __( '%1$s may contain at most %2$d characters.', 'voucher-captain' ), $label, $max );
 			}
+			$max_lines = (int) ( $field['maxlines'] ?? 0 );
+			if ( $max_lines > 0 && count( (array) preg_split( '/\r\n|\r|\n/', $raw ) ) > $max_lines ) {
+				/* translators: 1: field label, 2: max number of lines */
+				$errors[] = sprintf( __( '%1$s may contain at most %2$d lines.', 'voucher-captain' ), $label, $max_lines );
+			}
 			if ( count( $errors ) > $before ) {
 				$this->invalid[ (string) $key ] = $errors[ $before ];
 			}
@@ -697,6 +760,9 @@ final class Fields {
 			$this->override = is_array( $values ) ? $values : array();
 		}
 		$errors = $this->errors( $product );
+		if ( ! $errors ) {
+			$errors = $this->fit_problems( $product )['errors']; // M12-39: a text that would be cut off.
+		}
 		if ( $errors && class_exists( '\Automattic\WooCommerce\StoreApi\Exceptions\RouteException' ) ) {
 			throw new \Automattic\WooCommerce\StoreApi\Exceptions\RouteException( 'vcap_invalid_voucher_fields', esc_html( implode( ' ', $errors ) ), 400 );
 		}

@@ -68,7 +68,7 @@ update_option( 'vcap_needs_default_template', 'yes' );
 remove_action( 'pre_get_posts', $lang_hide );
 $lang_created = $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_type = %s AND ID > %d ORDER BY ID", VCAP\TemplatePostType::POST_TYPE, $lang_last_id ) ); // phpcs:ignore
 $lang_design  = $lang_created ? implode( "\n", array_column( (array) ( json_decode( (string) get_post_meta( (int) $lang_created[0], VCAP\TemplatePostType::META, true ), true )['elements'] ?? array() ), 'text' ) ) : '';
-vcap_mail_assert( 2 === count( $lang_created ) && 'Geschenkkarte (A5 quer)' === get_the_title( (int) $lang_created[0] ) && str_contains( $lang_design, 'GESCHENKGUTSCHEIN' ) && str_contains( $lang_design, 'Gültig bis {expiry_date}' ) && ! str_contains( $lang_design, 'GIFT VOUCHER' ), 'M4: default PDF templates are created in the site language, not in the admin\'s profile language' );
+vcap_mail_assert( 2 === count( $lang_created ) && 'Geschenkkarte (A5 quer)' === get_the_title( (int) $lang_created[0] ) && str_contains( $lang_design, 'GESCHENKGUTSCHEIN' ) && str_contains( $lang_design, '{expiry_line}' ) && ! str_contains( $lang_design, 'GIFT VOUCHER' ), 'M4: default PDF templates are created in the site language, not in the admin\'s profile language' );
 vcap_mail_assert( 'en_US' === determine_locale() && 'GIFT VOUCHER' === __( 'GIFT VOUCHER', 'voucher-captain' ), 'M4: the admin\'s language is restored afterwards' );
 foreach ( $lang_created as $lang_id ) {
 	wp_delete_post( (int) $lang_id, true );

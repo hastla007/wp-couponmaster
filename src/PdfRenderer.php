@@ -199,23 +199,55 @@ final class PdfRenderer {
 	public function render( Voucher $voucher, ?array $design = null ): string {
 		$design = $design ?? TemplatePostType::design_for_voucher( (int) apply_filters( 'vcap_render_template_id', $voucher->template_id, $voucher ), $voucher );
 		$html   = $this->html( $voucher, $design );
-		list( $w, $h ) = self::page_size( $design['page'] ?? array() );
+		list( $w, $h ) = self::sheet_size( $design['page'] ?? array() );
 
 		$dompdf = new Dompdf( self::dompdf_options() );
 		$dompdf->setPaper( array( 0, 0, $w * self::MM_TO_PT, $h * self::MM_TO_PT ) );
 		$dompdf->loadHtml( $html, 'UTF-8' );
 		$dompdf->render();
-		$dompdf->addInfo( 'Title', $voucher->code );
+		$dompdf->addInfo( 'Title', self::pdf_title( $voucher ) );
 		$dompdf->addInfo( 'Creator', 'Voucher Captain' );
 		return (string) $dompdf->output();
+	}
+
+	/**
+	 * M12-76: document title of a voucher PDF: "Product – Shop" (the shop name alone without a product). Never the
+	 * voucher code: PDF viewers, mail clients and screen readers show the title, and the code is a means of payment.
+	 */
+	public static function pdf_title( Voucher $voucher ): string {
+		$product = $voucher->product();
+		$name    = $product ? trim( wp_strip_all_tags( (string) $product->get_name() ) ) : '';
+		$shop    = trim( wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES ) );
+		/** Title of a voucher PDF (args: string $title, Voucher $voucher). */
+		return (string) apply_filters( 'vcap_pdf_title', '' !== $name && '' !== $shop ? $name . ' – ' . $shop : ( '' !== $name ? $name : $shop ), $voucher );
+	}
+
+	/** M12-75: bleed of a page design in mm (0–10), added on every side of the printed sheet. */
+	public static function bleed( array $page ): float {
+		return max( 0.0, min( 10.0, (float) ( $page['bleed'] ?? 0 ) ) );
+	}
+
+	/** Size of the PDF sheet in mm: the page size plus the bleed on every side (M12-75). */
+	public static function sheet_size( array $page ): array {
+		list( $w, $h ) = self::page_size( $page );
+		$bleed         = self::bleed( $page );
+		return array( $w + 2 * $bleed, $h + 2 * $bleed );
+	}
+
+	/** Language of the PDF document (html lang, M12-76): the current locale, e.g. "de-DE". */
+	public static function document_lang(): string {
+		$locale = function_exists( 'determine_locale' ) ? determine_locale() : get_locale();
+		return (string) preg_replace( '/[^A-Za-z0-9-]/', '', str_replace( '_', '-', (string) $locale ) );
 	}
 
 	/**
 	 * Write the PDF to a private temp file (for email attachments). Caller deletes it.
 	 *
 	 * The file is created exclusively (fopen "x") after rendering: two deliveries at the same time with the same
-	 * file name pattern (e.g. "{order_number}") can never share, overwrite or attach each other's file. The
-	 * attachment keeps the configured name where it is free, otherwise it gets a random prefix.
+	 * file name pattern (e.g. "{order_number}") can never share, overwrite or attach each other's file. M12-43: the
+	 * file always gets a random prefix, so its URL cannot be guessed from the code or order number should the
+	 * private folder be reachable from the web; the mail attaches it under the configured name
+	 * (attachment_name(), see attachments()).
 	 */
 	public function to_temp_file( Voucher $voucher, ?array $design = null ): ?string {
 		Install::ensure_upload_dir();
@@ -223,7 +255,7 @@ final class PdfRenderer {
 		$dir   = Install::upload_dir() . '/tmp';
 		$name  = $this->filename( $voucher );
 		for ( $try = 0; $try < 5; $try++ ) {
-			$file   = $dir . '/' . ( $try ? wp_generate_password( 12, false ) . '-' : '' ) . $name;
+			$file   = $dir . '/' . self::temp_prefix() . $name;
 			$handle = @fopen( $file, 'xb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions,WordPress.PHP.NoSilencedErrors -- exclusive create: fails when the file exists.
 			if ( false === $handle ) {
 				continue;
@@ -246,14 +278,18 @@ final class PdfRenderer {
 	 * has a single paper size here, so vouchers whose designs differ in page size get a document of their own
 	 * (normally all vouchers of an order line share one template and one document results).
 	 *
+	 * M12-75: with $nup_a4 the vouchers are set side by side on A4 sheets instead (batch print in the admin): as
+	 * many per sheet as fit in portrait or landscape A4 (at least one), with the bleed and crop marks of their
+	 * designs; vouchers of the same page size share the sheets.
+	 *
 	 * @param Voucher[] $vouchers
 	 * @return array<int, array{vouchers: Voucher[], pdf: string}> One entry per page size, in voucher order.
 	 */
-	public function render_many( array $vouchers ): array {
+	public function render_many( array $vouchers, bool $nup_a4 = false ): array {
 		$groups = array();
 		foreach ( array_values( $vouchers ) as $voucher ) {
 			$design        = TemplatePostType::design_for_voucher( (int) apply_filters( 'vcap_render_template_id', $voucher->template_id, $voucher ), $voucher );
-			list( $w, $h ) = self::page_size( $design['page'] ?? array() );
+			list( $w, $h ) = self::sheet_size( $design['page'] ?? array() );
 			$key           = $this->num( $w ) . 'x' . $this->num( $h );
 			$html          = $this->html( $voucher, $design );
 			if ( ! preg_match( '#<body[^>]*>(.*)</body>#is', $html, $body ) ) {
@@ -268,16 +304,21 @@ final class PdfRenderer {
 			$groups[ $key ]['vouchers'][] = $voucher;
 			$groups[ $key ]['pages'][]    = $body[1];
 			foreach ( $styles[1] as $css ) {
-				$groups[ $key ]['styles'][ md5( $css ) ] = $css;
+				// N-up: the sheet size of the design (@page) is replaced by A4.
+				$groups[ $key ]['styles'][ md5( $css ) ] = $nup_a4 ? (string) preg_replace( '/@page\{[^}]*\}/', '', $css ) : $css;
 			}
 		}
 		$out = array();
 		foreach ( $groups as $group ) {
 			list( $w, $h ) = $group['size'];
+			$layout        = $nup_a4 && '' === $group['raw'] ? self::nup_layout( $w, $h ) : null;
 			if ( '' !== $group['raw'] ) {
 				$html = $group['raw'];
+			} elseif ( $layout ) {
+				list( $w, $h ) = array( $layout['sheet'][0], $layout['sheet'][1] );
+				$html          = $this->nup_html( $group['pages'], $group['styles'], $group['size'], $layout );
 			} else {
-				$html  = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' . implode( '', $group['styles'] ) . '.vcap-sheet{page-break-after:always;}.vcap-sheet-last{page-break-after:auto;}</style></head><body>';
+				$html  = '<!DOCTYPE html><html lang="' . esc_attr( self::document_lang() ) . '"><head><meta charset="utf-8"><style>' . implode( '', $group['styles'] ) . '.vcap-sheet{page-break-after:always;}.vcap-sheet-last{page-break-after:auto;}</style></head><body>';
 				$count = count( $group['pages'] );
 				foreach ( $group['pages'] as $i => $page ) {
 					$html .= '<div class="vcap-sheet' . ( $i === $count - 1 ? ' vcap-sheet-last' : '' ) . '">' . $page . '</div>';
@@ -288,7 +329,7 @@ final class PdfRenderer {
 			$dompdf->setPaper( array( 0, 0, $w * self::MM_TO_PT, $h * self::MM_TO_PT ) );
 			$dompdf->loadHtml( $html, 'UTF-8' );
 			$dompdf->render();
-			$dompdf->addInfo( 'Title', implode( ', ', array_map( static fn( $v ) => (string) $v->code, array_slice( $group['vouchers'], 0, 3 ) ) ) . ( count( $group['vouchers'] ) > 3 ? ', …' : '' ) );
+			$dompdf->addInfo( 'Title', self::pdf_title( $group['vouchers'][0] ) );
 			$dompdf->addInfo( 'Creator', 'Voucher Captain' );
 			$out[] = array(
 				'vouchers' => $group['vouchers'],
@@ -296,6 +337,54 @@ final class PdfRenderer {
 			);
 		}
 		return $out;
+	}
+
+	/** Gap between vouchers on an N-up sheet and its margin in mm (cutting room, printer margin). */
+	private const NUP_GAP    = 4;
+	private const NUP_MARGIN = 5;
+
+	/**
+	 * M12-75: how vouchers of a size are set on A4: columns, rows and sheet orientation with the most vouchers per
+	 * sheet (portrait wins a tie); a voucher larger than the sheet gets a sheet of its own size.
+	 *
+	 * @return array{cols: int, rows: int, sheet: array{0: float, 1: float}, gap: float}
+	 */
+	public static function nup_layout( float $w, float $h ): array {
+		$best = null;
+		// With margin and gaps where they cost no voucher; formats that tile A4 exactly (A6, A5) without them.
+		foreach ( array( array( self::NUP_MARGIN, self::NUP_GAP ), array( 0, 0 ) ) as $spacing ) {
+			foreach ( array( array( 210.0, 297.0 ), array( 297.0, 210.0 ) ) as $sheet ) {
+				$cols = (int) floor( ( $sheet[0] - 2 * $spacing[0] + $spacing[1] + 0.01 ) / ( $w + $spacing[1] ) );
+				$rows = (int) floor( ( $sheet[1] - 2 * $spacing[0] + $spacing[1] + 0.01 ) / ( $h + $spacing[1] ) );
+				if ( $cols >= 1 && $rows >= 1 && ( null === $best || $cols * $rows > $best['cols'] * $best['rows'] ) ) {
+					$best = array( 'cols' => $cols, 'rows' => $rows, 'sheet' => $sheet, 'gap' => (float) $spacing[1] );
+				}
+			}
+		}
+		return $best ?? array( 'cols' => 1, 'rows' => 1, 'sheet' => array( max( 210.0, $w ), max( 297.0, $h ) ), 'gap' => 0.0 );
+	}
+
+	/** HTML of N-up sheets: the voucher pages placed in a centred grid, a page break after each full sheet. */
+	private function nup_html( array $pages, array $styles, array $size, array $layout ): string {
+		list( $w, $h )   = $size;
+		list( $sw, $sh ) = $layout['sheet'];
+		$per             = $layout['cols'] * $layout['rows'];
+		$left            = ( $sw - $layout['cols'] * $w - ( $layout['cols'] - 1 ) * $layout['gap'] ) / 2;
+		$top             = ( $sh - $layout['rows'] * $h - ( $layout['rows'] - 1 ) * $layout['gap'] ) / 2;
+		$html            = '<!DOCTYPE html><html lang="' . esc_attr( self::document_lang() ) . '"><head><meta charset="utf-8"><style>' . sprintf( '@page{margin:0;size:%1$smm %2$smm;}', $this->num( $sw ), $this->num( $sh ) ) . implode( '', $styles );
+		$html           .= sprintf( '.vcap-nup{position:relative;width:%1$smm;height:%2$smm;overflow:hidden;page-break-after:always;}.vcap-nup-last{page-break-after:auto;}.vcap-cell{position:absolute;width:%3$smm;height:%4$smm;overflow:hidden;}', $this->num( $sw ), $this->num( $sh ), $this->num( $w ), $this->num( $h ) );
+		$html           .= '</style></head><body>';
+		$sheets          = array_chunk( $pages, max( 1, $per ) );
+		foreach ( $sheets as $s => $chunk ) {
+			$html .= '<div class="vcap-nup' . ( count( $sheets ) - 1 === $s ? ' vcap-nup-last' : '' ) . '">';
+			foreach ( $chunk as $i => $page ) {
+				$col   = $i % $layout['cols'];
+				$row   = intdiv( $i, $layout['cols'] );
+				$html .= sprintf( '<div class="vcap-cell" style="left:%smm;top:%smm;">%s</div>', $this->num( $left + $col * ( $w + $layout['gap'] ) ), $this->num( $top + $row * ( $h + $layout['gap'] ) ), $page );
+			}
+			$html .= '</div>';
+		}
+		return $html . '</body></html>';
 	}
 
 	/**
@@ -315,7 +404,7 @@ final class PdfRenderer {
 			$name  = $more > 0 ? preg_replace( '/\.pdf$/', '', $this->filename( $first ) ) . '-' . sprintf( 'and-%d-more', $more ) . '.pdf' : $this->filename( $first );
 			$file  = null;
 			for ( $try = 0; $try < 5 && null === $file; $try++ ) {
-				$path   = $dir . '/' . ( $try ? wp_generate_password( 12, false ) . '-' : '' ) . $name;
+				$path   = $dir . '/' . self::temp_prefix() . $name;
 				$handle = @fopen( $path, 'xb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions,WordPress.PHP.NoSilencedErrors -- exclusive create: fails when the file exists.
 				if ( false === $handle ) {
 					continue;
@@ -338,6 +427,41 @@ final class PdfRenderer {
 			$files[] = $file;
 		}
 		return $files;
+	}
+
+	/** Length of the random prefix of a temp PDF (M12-43). */
+	private const TEMP_PREFIX_LENGTH = 24;
+
+	/** Random, unguessable file name prefix of a temp PDF ("<24 letters and digits>-"). */
+	private static function temp_prefix(): string {
+		return wp_generate_password( self::TEMP_PREFIX_LENGTH, false ) . '-';
+	}
+
+	/** The name a temp PDF is attached under: its file name without the random prefix (M12-43). */
+	public static function attachment_name( string $file ): string {
+		$base = basename( $file );
+		return (string) preg_replace( '/^[A-Za-z0-9]{' . self::TEMP_PREFIX_LENGTH . '}-(?=.)/', '', $base );
+	}
+
+	/**
+	 * M12-43: temp PDFs as wp_mail() attachments keyed by the name the customer sees (WordPress 6.2+ names
+	 * attachments after string keys; the plugin requires 6.4). Older versions or mailers that ignore the key
+	 * attach the file under its own name, which still ends with the configured name.
+	 *
+	 * @param string[] $files Paths of temp PDFs.
+	 * @return array<int|string, string>
+	 */
+	public static function attachments( array $files ): array {
+		$out = array();
+		foreach ( array_values( $files ) as $file ) {
+			$name = self::attachment_name( (string) $file );
+			if ( isset( $out[ $name ] ) || ! function_exists( 'get_bloginfo' ) || version_compare( (string) get_bloginfo( 'version' ), '6.2', '<' ) ) {
+				$out[] = (string) $file;
+				continue;
+			}
+			$out[ $name ] = (string) $file;
+		}
+		return $out;
 	}
 
 	/** D5: the mail would go out without its PDF – leave a trace with the voucher. */
@@ -389,27 +513,99 @@ final class PdfRenderer {
 			}
 		}
 
+		// M12-75: with a bleed the sheet is larger than the page; the page sits in its middle, the background and
+		// every element touching an edge reach into the bleed, so no white border remains after trimming.
+		$bleed = self::bleed( $page );
+		$sw    = $w + 2 * $bleed;
+		$sh    = $h + 2 * $bleed;
+
 		$bg     = $this->color( $page['background'] ?? '#ffffff', '#ffffff' );
-		$out    = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' . $font_css;
-		$out   .= sprintf( '@page{margin:0;size:%1$smm %2$smm;}html,body{margin:0;padding:0;}', $this->num( $w ), $this->num( $h ) );
-		$out   .= sprintf( '.page{position:relative;width:%1$smm;height:%2$smm;overflow:hidden;background:%3$s;}', $this->num( $w ), $this->num( $h ), $bg );
+		$out    = '<!DOCTYPE html><html lang="' . esc_attr( self::document_lang() ) . '"><head><meta charset="utf-8"><title>' . esc_html( self::pdf_title( $voucher ) ) . '</title><style>' . $font_css;
+		$out   .= sprintf( '@page{margin:0;size:%1$smm %2$smm;}html,body{margin:0;padding:0;}', $this->num( $sw ), $this->num( $sh ) );
+		$out   .= sprintf( '.page{position:relative;width:%1$smm;height:%2$smm;overflow:hidden;background:%3$s;}', $this->num( $sw ), $this->num( $sh ), $bg );
 		$out   .= '.el{position:absolute;overflow:hidden;}.el img{display:block;}.txt{white-space:normal;word-wrap:break-word;}';
 		$out   .= '</style></head><body><div class="page">';
 
 		$bg_path = $this->image_path( $page['backgroundImageId'] ?? 0, $page['backgroundImage'] ?? '' );
 		if ( $bg_path ) {
-			$out .= $this->image_box( $bg_path, 0, 0, $w, $h, (string) ( $page['backgroundFit'] ?? 'cover' ), 1.0, 0 );
+			$out .= $this->image_box( $bg_path, 0, 0, $sw, $sh, (string) ( $page['backgroundFit'] ?? 'cover' ), 1.0, 0 );
 		}
 
 		foreach ( (array) ( $design['elements'] ?? array() ) as $el ) {
 			if ( ! empty( $el['hidden'] ) ) {
 				continue;
 			}
-			$out .= $this->element( (array) $el, $voucher, $values );
+			$out .= $this->element( $bleed > 0 ? self::bleed_element( (array) $el, $w, $h, $bleed ) : (array) $el, $voucher, $values );
+		}
+		if ( $bleed >= 2 && ! empty( $page['cropMarks'] ) ) {
+			$out .= $this->crop_marks( $w, $h, $bleed );
 		}
 		$out .= '</div></body></html>';
 		/** HTML a voucher PDF is rendered from (args: string $html, Voucher $voucher, array $design). */
 		return (string) apply_filters( 'vcap_pdf_html', $out, $voucher, $design );
+	}
+
+	/**
+	 * M12-75: an element in the coordinates of the sheet with bleed. Images, shapes and lines that touch a page
+	 * edge (within 0.5 mm, not rotated) are extended into the bleed on that side; texts and codes only move.
+	 */
+	public static function bleed_element( array $el, float $w, float $h, float $bleed ): array {
+		$x       = (float) ( $el['x'] ?? 0 );
+		$y       = (float) ( $el['y'] ?? 0 );
+		$ew      = (float) ( $el['w'] ?? 50 );
+		$eh      = (float) ( $el['h'] ?? 10 );
+		$el['x'] = $x + $bleed;
+		$el['y'] = $y + $bleed;
+		if ( ! in_array( $el['type'] ?? '', array( 'image', 'rect', 'line' ), true ) || 0.0 !== (float) ( $el['rotation'] ?? 0 ) ) {
+			return $el;
+		}
+		$edge = 0.5;
+		$nx   = $x + $bleed;
+		$ny   = $y + $bleed;
+		$nw   = $ew;
+		$nh   = $eh;
+		if ( $x <= $edge ) {
+			$nw += $nx;
+			$nx  = 0.0;
+		}
+		if ( $x + $ew >= $w - $edge ) {
+			$nw = $w + 2 * $bleed - $nx;
+		}
+		if ( 'line' !== $el['type'] ) { // A line is as high as its stroke: only its length grows.
+			if ( $y <= $edge ) {
+				$nh += $ny;
+				$ny  = 0.0;
+			}
+			if ( $y + $eh >= $h - $edge ) {
+				$nh = $h + 2 * $bleed - $ny;
+			}
+		}
+		$el['x'] = round( $nx, 3 );
+		$el['y'] = round( $ny, 3 );
+		$el['w'] = round( $nw, 3 );
+		$el['h'] = round( $nh, 3 );
+		return $el;
+	}
+
+	/** M12-75: crop marks in the bleed at the four corners of the page (0.25 pt black hairlines). */
+	private function crop_marks( float $w, float $h, float $bleed ): string {
+		$len   = max( 1.0, $bleed - 1.0 );
+		$out   = '';
+		$marks = array();
+		foreach ( array( array( 0, 0 ), array( $w, 0 ), array( 0, $h ), array( $w, $h ) ) as $corner ) {
+			list( $cx, $cy ) = $corner;
+			$cx    += $bleed;
+			$cy    += $bleed;
+			$dir_x  = 0.0 === (float) $corner[0] ? -1 : 1;
+			$dir_y  = 0.0 === (float) $corner[1] ? -1 : 1;
+			// Horizontal mark beside the corner, vertical mark above/below it, both 1 mm away from the page.
+			$marks[] = array( $dir_x < 0 ? $cx - 1 - $len : $cx + 1, $cy, $len, 0.1 );
+			$marks[] = array( $cx, $dir_y < 0 ? $cy - 1 - $len : $cy + 1, 0.1, $len );
+		}
+		foreach ( $marks as $m ) {
+			$out .= sprintf( '<div class="el" style="left:%smm;top:%smm;width:%smm;height:%smm;background:#000000;"></div>', $this->num( $m[0] ), $this->num( $m[1] ), $this->num( $m[2] ), $this->num( $m[3] ) );
+		}
+		return $out;
 	}
 
 	private function num( $v ): string {
@@ -424,7 +620,7 @@ final class PdfRenderer {
 		return preg_match( '/^#([0-9a-f]{3}|[0-9a-f]{6})$/i', $value ) ? $value : $fallback;
 	}
 
-	private function box_style( array $el ): string {
+	private function box_style( array $el, bool $opaque = false ): string {
 		$x   = (float) ( $el['x'] ?? 0 );
 		$y   = (float) ( $el['y'] ?? 0 );
 		$w   = max( 1, (float) ( $el['w'] ?? 50 ) );
@@ -434,7 +630,7 @@ final class PdfRenderer {
 		if ( 0.0 !== $rot ) {
 			$css .= sprintf( 'transform:rotate(%sdeg);transform-origin:50%% 50%%;', $this->num( $rot ) );
 		}
-		$opacity = isset( $el['opacity'] ) ? max( 0, min( 1, (float) $el['opacity'] ) ) : 1;
+		$opacity = isset( $el['opacity'] ) && ! $opaque ? max( 0, min( 1, (float) $el['opacity'] ) ) : 1;
 		if ( $opacity < 1 ) {
 			$css .= 'opacity:' . $this->num( $opacity ) . ';';
 		}
@@ -542,11 +738,15 @@ final class PdfRenderer {
 	 * customer was warned when entering them, and a fallback font can be added (COMPATIBILITY.md).
 	 */
 	public static function strip_unprintable_emoji( string $text, string $font = 'DejaVu Sans', bool $bold = false, bool $italic = false ): string {
-		$missing = array_filter( self::unsupported_chars( $text, $font, $bold, $italic ), static fn( $c ) => (bool) preg_match( '/^[\x{1F000}-\x{1FAFF}\x{2300}-\x{23FF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{1F1E6}-\x{1F1FF}]$/u', $c ) );
+		// M12-72: also the tag characters of subdivision flags (🏴 + U+E0020–E007F, e.g. Scotland), the keycap
+		// mark U+20E3 (1️⃣) and the other emoji blocks; they are left out together with their joiners.
+		$missing = array_filter( self::unsupported_chars( $text, $font, $bold, $italic ), static fn( $c ) => (bool) preg_match( '/^[\x{1F000}-\x{1FAFF}\x{2300}-\x{23FF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{1F1E6}-\x{1F1FF}\x{E0000}-\x{E007F}\x{20E3}\x{3030}\x{303D}\x{3297}\x{3299}]$/u', $c ) );
 		if ( ! $missing ) {
 			return $text;
 		}
 		$text = str_replace( array_merge( $missing, array( "\u{200D}", "\u{FE0F}" ) ), '', $text );
+		$text = (string) preg_replace( '/[\x{E0000}-\x{E007F}]/u', '', $text ); // Tag characters never print.
+
 		return trim( (string) preg_replace( '/[ \t]{2,}/', ' ', $text ), " \t" );
 	}
 
@@ -632,26 +832,102 @@ final class PdfRenderer {
 		return max( 1, $lines );
 	}
 
-	private function text_element( array $el, Voucher $voucher, array $values ): string {
-		if ( Placeholders::all_empty( (string) ( $el['text'] ?? '' ), $voucher, $values ) ) {
+	/**
+	 * Text of a text element as the PDF prints it ('' when the element is left out): placeholders replaced, lines
+	 * with {expiry_date} dropped for vouchers without expiry (M12-77), upper case, unprintable emoji left out.
+	 */
+	private static function element_text( array $el, Voucher $voucher, array $values, array $params ): string {
+		$raw = Placeholders::drop_undated_lines( (string) ( $el['text'] ?? '' ), $voucher );
+		if ( '' === trim( $raw ) || Placeholders::all_empty( $raw, $voucher, $values ) ) {
 			return ''; // "For: {recipient_name}" without a name: no lone label.
 		}
-		$text = Placeholders::replace( (string) ( $el['text'] ?? '' ), $voucher, $values );
+		$text = Placeholders::replace( $raw, $voucher, $values );
 		if ( ! empty( $el['uppercase'] ) ) {
 			$text = mb_strtoupper( $text );
 		}
-		$fonts  = self::fonts();
-		$font   = isset( $fonts[ $el['font'] ?? '' ] ) ? $el['font'] : 'DejaVu Sans';
-		$size   = max( 4, min( 300, (float) ( $el['size'] ?? ( 'heading' === $el['type'] ? 24 : 11 ) ) ) );
+		return self::strip_unprintable_emoji( $text, $params['font'], $params['bold'], $params['italic'] );
+	}
+
+	/**
+	 * Typography of a text element as the PDF uses it.
+	 *
+	 * @return array{font: string, size: float, lh: float, bold: bool, italic: bool, spacing: float, w: float, h: float}
+	 */
+	private static function text_params( array $el ): array {
+		$fonts = self::fonts();
+		$type  = (string) ( $el['type'] ?? 'text' );
+		return array(
+			'font'    => isset( $fonts[ $el['font'] ?? '' ] ) ? (string) $el['font'] : 'DejaVu Sans',
+			'size'    => max( 4, min( 300, (float) ( $el['size'] ?? ( 'heading' === $type ? 24 : 11 ) ) ) ),
+			'lh'      => max( 0.8, min( 3, (float) ( $el['lineHeight'] ?? 1.25 ) ) ),
+			'bold'    => ! empty( $el['bold'] ) || ( 'heading' === $type && ! isset( $el['bold'] ) ),
+			'italic'  => ! empty( $el['italic'] ),
+			'spacing' => (float) ( $el['letterSpacing'] ?? 0 ),
+			'w'       => max( 1, (float) ( $el['w'] ?? 50 ) ),
+			'h'       => max( 1, (float) ( $el['h'] ?? 10 ) ),
+		);
+	}
+
+	/** Share of the designed font size below which the customer is told that the text is printed small (M12-39). */
+	public const SHRINK_NOTICE = 0.75;
+
+	/** Placeholders a customer fills in: their texts are checked against the box before the purchase (M12-39). */
+	public const CUSTOMER_TOKENS = '/\{(message|recipient_name|field:[^}]+)\}/i';
+
+	/**
+	 * M12-39: how the customer's texts fit the design: every visible text element with {message},
+	 * {recipient_name} or {field:…}, measured as the PDF sets it (fit_size()).
+	 *
+	 * @return array<int, array{id: string, name: string, tokens: string[], fits: bool, scale: float, max_lines: int, lines: int}>
+	 *         scale: printed size ÷ designed size; max_lines: lines the box holds at the smallest size;
+	 *         lines: lines of the text at the printed size.
+	 */
+	public static function fit_report( array $design, Voucher $voucher, ?array $values = null ): array {
+		$values = $values ?? Placeholders::values( $voucher );
+		$out    = array();
+		foreach ( (array) ( $design['elements'] ?? array() ) as $el ) {
+			$el = (array) $el;
+			if ( ! empty( $el['hidden'] ) || ! in_array( $el['type'] ?? '', array( 'text', 'heading' ), true ) || ! preg_match_all( self::CUSTOMER_TOKENS, (string) ( $el['text'] ?? '' ), $m ) ) {
+				continue;
+			}
+			$params = self::text_params( $el );
+			$text   = self::element_text( $el, $voucher, $values, $params );
+			if ( '' === trim( $text ) ) {
+				continue;
+			}
+			$fitted  = self::fit_size( $text, $params['font'], $params['size'], $params['lh'], $params['bold'], $params['italic'], $params['spacing'], $params['w'], $params['h'] );
+			$min     = min( $params['size'], max( 4, $params['size'] * self::MIN_FIT_SCALE ) );
+			$metrics = self::font_metrics();
+			$file    = $metrics ? $metrics->getFont( $params['font'], self::style_of( ( $params['bold'] ? 'bold' : '' ) . ( $params['italic'] ? 'italic' : '' ) ) ) : null;
+			$out[]   = array(
+				'id'        => (string) ( $el['id'] ?? '' ),
+				'name'      => (string) ( $el['name'] ?? ( $el['id'] ?? '' ) ),
+				'tokens'    => array_values( array_unique( array_map( 'strtolower', $m[1] ) ) ),
+				'fits'      => $fitted['fits'],
+				'scale'     => round( $fitted['size'] / $params['size'], 3 ),
+				'max_lines' => max( 1, (int) floor( ( $params['h'] * self::MM_TO_PT + 0.5 ) / ( $min * $params['lh'] ) ) ),
+				'lines'     => $metrics && $file ? self::count_lines( $metrics, (string) $file, $text, $fitted['size'], $params['spacing'], $params['w'] * self::MM_TO_PT - 0.5 ) : 1,
+			);
+		}
+		return $out;
+	}
+
+	private function text_element( array $el, Voucher $voucher, array $values ): string {
+		$params = self::text_params( $el );
+		$text   = self::element_text( $el, $voucher, $values, $params );
+		if ( '' === $text ) {
+			return '';
+		}
+		$font   = $params['font'];
+		$size   = $params['size'];
 		$align  = (string) ( $el['align'] ?? 'left' );
 		$align  = in_array( $align, array( 'left', 'center', 'right', 'justify' ), true ) ? $align : 'left';
 		$valign = (string) ( $el['valign'] ?? 'top' );
 		$valign = in_array( $valign, array( 'top', 'middle', 'bottom' ), true ) ? $valign : 'top';
-		$lh     = max( 0.8, min( 3, (float) ( $el['lineHeight'] ?? 1.25 ) ) );
-		$bold   = ! empty( $el['bold'] ) || ( 'heading' === $el['type'] && ! isset( $el['bold'] ) );
-		$text   = self::strip_unprintable_emoji( $text, (string) $font, $bold, ! empty( $el['italic'] ) );
+		$lh     = $params['lh'];
+		$bold   = $params['bold'];
 		// A long message or code is set smaller until it fits its box instead of being cut off without a trace.
-		$fitted = self::fit_size( $text, (string) $font, $size, $lh, $bold, ! empty( $el['italic'] ), (float) ( $el['letterSpacing'] ?? 0 ), max( 1, (float) ( $el['w'] ?? 50 ) ), max( 1, (float) ( $el['h'] ?? 10 ) ) );
+		$fitted = self::fit_size( $text, (string) $font, $size, $lh, $bold, $params['italic'], $params['spacing'], $params['w'], $params['h'] );
 		if ( $fitted['size'] < $size ) {
 			$size = $fitted['size'];
 		}
@@ -694,7 +970,8 @@ final class PdfRenderer {
 			case 'checkin':
 				return Tickets::checkin_url( $voucher );
 			case 'download':
-				return $voucher->id ? vcap()->downloads->signed_url( $voucher, true ) : home_url( '/' );
+				// M12-41: a printed link lives as long as the voucher (+30 days), not as long as an email link.
+				return $voucher->id ? vcap()->downloads->printed_url( $voucher ) : home_url( '/' );
 			case 'custom':
 				return Placeholders::replace( (string) ( $el['qrValue'] ?? '{coupon_code}' ), $voucher, $values );
 			default:
@@ -710,7 +987,9 @@ final class PdfRenderer {
 		if ( '' === $payload ) {
 			return '';
 		}
-		// SVG (vector): needs no GD, prints sharp at any size, and dompdf draws it as paths.
+		// SVG (vector): needs no GD, prints sharp at any size, and dompdf draws it as paths. M12-40: the quiet zone
+		// of 4 modules and the light modules are white on a white ground, whatever lies beneath (a dark band, a
+		// photo), and the element's opacity is ignored, so scanners find and read the code.
 		$dark    = $this->color( $el['color'] ?? '#000000' );
 		$dark    = 'transparent' === $dark ? '#000000' : $dark;
 		$options = new QROptions(
@@ -719,8 +998,8 @@ final class PdfRenderer {
 				'outputBase64'     => true,
 				'eccLevel'         => EccLevel::M,
 				'addQuietzone'     => true,
-				'quietzoneSize'    => 2,
-				'drawLightModules' => false,
+				'quietzoneSize'    => self::QR_QUIET_ZONE,
+				'drawLightModules' => true,
 				'connectPaths'     => true,
 				'moduleValues'     => array(
 					// Dark modules in the chosen colour.
@@ -742,9 +1021,9 @@ final class PdfRenderer {
 			return '';
 		}
 		$size  = min( (float) $el['w'], (float) $el['h'] );
-		$style = $this->box_style( $el );
+		$style = $this->box_style( $el, true );
 		return sprintf(
-			'<div class="el" style="%s"><img src="%s" style="width:%smm;height:%smm;margin-left:%smm;margin-top:%smm;" /></div>',
+			'<div class="el" style="%s"><img src="%s" style="width:%smm;height:%smm;margin-left:%smm;margin-top:%smm;background:#ffffff;" /></div>',
 			esc_attr( $style ),
 			esc_attr( $uri ),
 			$this->num( $size ),
@@ -752,6 +1031,69 @@ final class PdfRenderer {
 			$this->num( ( (float) $el['w'] - $size ) / 2 ),
 			$this->num( ( (float) $el['h'] - $size ) / 2 )
 		);
+	}
+
+	/** Quiet zone of a QR code in modules (ISO/IEC 18004: 4). */
+	public const QR_QUIET_ZONE = 4;
+	/** Quiet zone left and right of a barcode in modules (ISO/IEC 15417: 10). */
+	public const BARCODE_QUIET_ZONE = 10;
+	/** Smallest module sizes in mm that phone cameras and hand scanners read reliably (M12-40). */
+	public const MIN_QR_MODULE_MM      = 0.33;
+	public const MIN_BARCODE_MODULE_MM = 0.19;
+	/** Smallest contrast of a code to its (white) ground (WCAG ratio, M12-40). */
+	public const MIN_CODE_CONTRAST = 4.5;
+
+	/** Modules per side of the QR code of a payload, quiet zone included (0 when it cannot be encoded). */
+	public static function qr_modules( string $payload ): int {
+		if ( ! class_exists( QRCode::class ) || '' === $payload ) {
+			return 0;
+		}
+		try {
+			$options = new QROptions( array( 'eccLevel' => EccLevel::M, 'addQuietzone' => false ) );
+			return ( new QRCode( $options ) )->addByteSegment( $payload )->getQRMatrix()->getSize() + 2 * self::QR_QUIET_ZONE;
+		} catch ( \Throwable $e ) {
+			return 0;
+		}
+	}
+
+	/** Modules of the barcode of a payload, quiet zones included (0 when it cannot be encoded). */
+	public static function barcode_modules( string $type, string $payload ): int {
+		if ( ! class_exists( '\Picqer\Barcode\BarcodeGeneratorSVG' ) || '' === $payload ) {
+			return 0;
+		}
+		$types = array(
+			'C128'  => \Picqer\Barcode\BarcodeGenerator::TYPE_CODE_128,
+			'C39'   => \Picqer\Barcode\BarcodeGenerator::TYPE_CODE_39,
+			'EAN13' => \Picqer\Barcode\BarcodeGenerator::TYPE_EAN_13,
+		);
+		try {
+			$svg = ( new \Picqer\Barcode\BarcodeGeneratorSVG() )->getBarcode( $payload, $types[ $type ] ?? $types['C128'], 1, 10 );
+		} catch ( \Throwable $e ) {
+			return 0;
+		}
+		return preg_match( '/<svg[^>]*\swidth="([\d.]+)"/', $svg, $m ) ? (int) round( (float) $m[1] ) + 2 * self::BARCODE_QUIET_ZONE : 0;
+	}
+
+	/** Contrast ratio of two colours (#rgb or #rrggbb) as defined by WCAG 2 (1 to 21). */
+	public static function contrast_ratio( string $a, string $b ): float {
+		$lum = static function ( string $hex ): float {
+			$hex = ltrim( $hex, '#' );
+			if ( 3 === strlen( $hex ) ) {
+				$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+			}
+			if ( ! preg_match( '/^[0-9a-f]{6}$/i', $hex ) ) {
+				return 0.0;
+			}
+			$c = array();
+			foreach ( str_split( $hex, 2 ) as $part ) {
+				$v   = hexdec( $part ) / 255;
+				$c[] = $v <= 0.03928 ? $v / 12.92 : ( ( $v + 0.055 ) / 1.055 ) ** 2.4;
+			}
+			return 0.2126 * $c[0] + 0.7152 * $c[1] + 0.0722 * $c[2];
+		};
+		$la = $lum( $a );
+		$lb = $lum( $b );
+		return round( ( max( $la, $lb ) + 0.05 ) / ( min( $la, $lb ) + 0.05 ), 2 );
 	}
 
 	/**
@@ -797,13 +1139,16 @@ final class PdfRenderer {
 			self::element_failed( 'barcode', $voucher, '' !== $problem ? $problem : $e->getMessage() );
 			return '';
 		}
-		// No external DTD; the bars stretch to the element box like the designer shows them.
-		$svg   = (string) preg_replace( '/<!DOCTYPE[^>]*>\s*/i', '', $svg );
-		$svg   = (string) preg_replace( '/<svg /', '<svg preserveAspectRatio="none" ', $svg, 1 );
-		$style = $this->box_style( $el );
-		$show  = ! isset( $el['showText'] ) || ! empty( $el['showText'] );
-		$bar_h = $show ? max( 1, (float) $el['h'] - 4.5 ) : (float) $el['h'];
-		$html  = sprintf( '<img src="data:image/svg+xml;base64,%s" style="width:%smm;height:%smm;" />', base64_encode( $svg ), $this->num( $el['w'] ), $this->num( $bar_h ) );
+		// No external DTD; the bars stretch to the element box like the designer shows them. M12-40: a quiet zone of
+		// 10 modules on a white ground left and right of the bars, the element's opacity is ignored.
+		$modules = preg_match( '/<svg[^>]*\swidth="([\d.]+)"/', $svg, $mw ) ? max( 1, (float) $mw[1] / 3 ) : 0;
+		$margin  = $modules > 0 ? (float) $el['w'] * self::BARCODE_QUIET_ZONE / ( $modules + 2 * self::BARCODE_QUIET_ZONE ) : 0;
+		$svg     = (string) preg_replace( '/<!DOCTYPE[^>]*>\s*/i', '', $svg );
+		$svg     = (string) preg_replace( '/<svg /', '<svg preserveAspectRatio="none" ', $svg, 1 );
+		$style   = $this->box_style( $el, true ) . 'background:#ffffff;';
+		$show    = ! isset( $el['showText'] ) || ! empty( $el['showText'] );
+		$bar_h   = $show ? max( 1, (float) $el['h'] - 4.5 ) : (float) $el['h'];
+		$html    = sprintf( '<img src="data:image/svg+xml;base64,%s" style="width:%smm;height:%smm;margin-left:%smm;" />', base64_encode( $svg ), $this->num( max( 1, (float) $el['w'] - 2 * $margin ) ), $this->num( $bar_h ), $this->num( $margin ) );
 		if ( $show ) {
 			$html .= sprintf( '<div style="font-family:\'DejaVu Sans Mono\';font-size:8pt;text-align:center;color:%s;line-height:1.2;">%s</div>', $this->color( $el['color'] ?? '#000000' ), esc_html( $payload ) );
 		}
@@ -939,8 +1284,89 @@ final class PdfRenderer {
 		return null;
 	}
 
+	/** Resolution in dpi template images are reduced to for printing (M12-73). */
+	public const IMAGE_DPI = 200;
+
+	/**
+	 * Whether a PNG file has an alpha channel or transparency (colour type 4 or 6, or a tRNS chunk). dompdf
+	 * composes such images pixel by pixel in PHP: a large one costs seconds per PDF.
+	 */
+	public static function png_has_alpha( string $file ): bool {
+		$head = (string) @file_get_contents( $file, false, null, 0, 4096 ); // phpcs:ignore WordPress.WP.AlternativeFunctions,WordPress.PHP.NoSilencedErrors -- local image header.
+		if ( strlen( $head ) < 26 || "\x89PNG" !== substr( $head, 0, 4 ) ) {
+			return false;
+		}
+		return in_array( ord( $head[25] ), array( 4, 6 ), true ) || str_contains( $head, 'tRNS' );
+	}
+
+	/**
+	 * M12-73: a PNG template image as the PDF should embed it, made once and kept in the private image cache:
+	 * PNGs without transparency become JPEGs (dompdf embeds them as they are), PNGs with transparency larger than
+	 * the box needs at IMAGE_DPI are scaled down. Other images, small PNGs and servers without GD use the original.
+	 *
+	 * @param float $w_mm Width of the box the image fills (mm).
+	 * @param float $h_mm Height of the box (mm).
+	 */
+	public static function optimized_image( string $path, float $w_mm, float $h_mm ): string {
+		$info = @getimagesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- not an image: original.
+		if ( ! is_array( $info ) || 'image/png' !== ( $info['mime'] ?? '' ) || ! function_exists( 'imagecreatefrompng' ) || ! function_exists( 'imagejpeg' ) ) {
+			return $path;
+		}
+		$iw     = (int) $info[0];
+		$ih     = (int) $info[1];
+		$alpha  = self::png_has_alpha( $path );
+		$need   = (int) ceil( max( $w_mm, $h_mm, 1 ) / 25.4 * self::IMAGE_DPI );
+		$scale  = min( 1.0, $need / max( 1, $iw, $ih ) );
+		$small  = filesize( $path ) < 100 * 1024;
+		if ( ( $alpha && $scale > 0.8 ) || ( ! $alpha && $small && $scale > 0.8 ) || (int) $iw * (int) $ih > 40000000 ) {
+			return $path; // Nothing to gain, or too large to load into memory safely.
+		}
+		$dir  = Install::upload_dir() . '/img';
+		$file = $dir . '/' . md5( $path . '|' . (int) filemtime( $path ) . '|' . (int) filesize( $path ) . '|' . $need ) . ( $alpha ? '.png' : '.jpg' );
+		if ( is_readable( $file ) ) {
+			if ( (int) filemtime( $file ) < time() - DAY_IN_SECONDS ) {
+				@touch( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors,WordPress.WP.AlternativeFunctions -- in use: kept by the maintenance (Install::purge_temp_files()).
+			}
+			return $file;
+		}
+		if ( ! Install::ensure_upload_dir() ) {
+			return $path;
+		}
+		try {
+			$src = @imagecreatefrompng( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- broken file: original.
+			if ( ! $src ) {
+				return $path;
+			}
+			$nw  = max( 1, (int) round( $iw * $scale ) );
+			$nh  = max( 1, (int) round( $ih * $scale ) );
+			$dst = imagecreatetruecolor( $nw, $nh );
+			if ( $alpha ) {
+				imagealphablending( $dst, false );
+				imagesavealpha( $dst, true );
+				imagefill( $dst, 0, 0, (int) imagecolorallocatealpha( $dst, 255, 255, 255, 127 ) );
+			} else {
+				imagefill( $dst, 0, 0, (int) imagecolorallocate( $dst, 255, 255, 255 ) );
+			}
+			imagecopyresampled( $dst, $src, 0, 0, 0, 0, $nw, $nh, $iw, $ih );
+			$part = $file . '.' . wp_generate_password( 8, false ) . '.part';
+			$ok   = $alpha ? imagepng( $dst, $part, 6 ) : imagejpeg( $dst, $part, 90 );
+			if ( $ok && rename( $part, $file ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions
+				return $file;
+			}
+			wp_delete_file( $part );
+		} catch ( \Throwable $e ) {
+			Logger::warning( 'PDF template image could not be optimised: ' . $e->getMessage() );
+		}
+		return $path;
+	}
+
 	private function image_box( string $path, float $x, float $y, float $w, float $h, string $fit, float $opacity, float $rotation ): string {
 		$size = @getimagesize( $path ); // phpcs:ignore
+		if ( $size ) {
+			// The box the image really fills (cover overflows the box on one side).
+			$cover = 'cover' === $fit && $size[0] > 0 && $size[1] > 0 ? max( $w / $size[0], $h / $size[1] ) : 0;
+			$path  = self::optimized_image( $path, $cover ? $size[0] * $cover : $w, $cover ? $size[1] * $cover : $h );
+		}
 		$iw   = $size ? (float) $size[0] : $w;
 		$ih   = $size ? (float) $size[1] : $h;
 		$dw   = $w;

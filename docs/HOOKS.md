@@ -147,6 +147,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_pdf_html` | `src/PdfRenderer.php` | HTML a voucher PDF is rendered from (args: string $html, Voucher $voucher, array $design). |
 | `vcap_pdf_image_mimes` | `src/PdfRenderer.php` | – |
 | `vcap_pdf_remote_hosts` | `src/PdfRenderer.php` | – |
+| `vcap_pdf_title` | `src/PdfRenderer.php` | Title of a voucher PDF (args: string $title, Voucher $voucher). |
 | `vcap_personal_voucher_email_verified` | `src/PersonalVoucher.php` | Whether the account email of a customer counts as verified for personal vouchers (V6). Default: the customer proved the mailbox (password reset through the emailed link, or the confirmation link) or the account is grandfathered (registered before the proof of mailbox was introduced, email unchanged since; AP-S1-1). |
 | `vcap_placeholder_definitions` | `src/Placeholders.php` | – |
 | `vcap_placeholders` | `src/Placeholders.php` | – |
@@ -207,7 +208,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_voucher_code` | `src/Issuer.php` | – |
 | `vcap_voucher_expires_at` | `src/Issuer.php` | Expiry (UTC "Y-m-d H:i:s" or null) of a voucher being issued, e.g. no later than the event it is for. |
 | `vcap_voucher_is_means_of_payment` | `src/Coupons/CartCoupons.php` | – |
-| `vcap_voucher_links` | `src/Downloads.php` | Extra links of a voucher in its email and the customer's voucher list, e.g. "Add to Wallet". Args: list of array{label: string, url: string}, Voucher, context ("email", "email_plain" or "account"). |
+| `vcap_voucher_links` | `src/Downloads.php` | Extra links of a voucher in its email and the customer's voucher list, e.g. "Add to Wallet". Args: list of array{label: string, url: string, id?: string, image?: string, width?: int, alt?: string}, Voucher, context ("email", "email_plain", "account" or "placeholder"). |
 | `vcap_voucher_next_steps` | `templates/emails/plain/voucher.php`, `templates/emails/voucher.php` | Steps after receiving the voucher (e.g. "exchange it for tickets on the redeem page"); connectors add them for their voucher types. Empty: the usual "enter the code at checkout" hint. |
 | `vcap_voucher_pays_after_tax` | `src/PaymentVouchers.php` | – |
 | `vcap_voucher_pays_shipping_and_fees` | `src/PaymentVouchers.php` | Whether a voucher paying after tax may also pay shipping and fees (default: when it is not limited to products or categories). |

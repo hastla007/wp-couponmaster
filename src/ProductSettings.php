@@ -461,6 +461,17 @@ final class ProductSettings {
 				'custom_attributes' => array( 'min' => 10, 'max' => 2000 ),
 			)
 		);
+		woocommerce_wp_text_input(
+			array(
+				'id'                => '_vcap_message_maxlines',
+				'label'             => __( 'Message max. lines', 'voucher-captain' ),
+				'type'              => 'number',
+				'value'             => $this->v( $p, 'message_maxlines' ),
+				'desc_tip'          => true,
+				'description'       => __( 'Empty or 0: no limit. Messages that would not fit the voucher are refused in any case.', 'voucher-captain' ),
+				'custom_attributes' => array( 'min' => 0, 'max' => 100 ),
+			)
+		);
 		woocommerce_wp_select(
 			array(
 				'id'      => '_vcap_delivery',
@@ -616,7 +627,7 @@ final class ProductSettings {
 			$value = (string) ( $post[ '_vcap_' . $key ] ?? '' );
 			$product->update_meta_data( '_vcap_' . $key, '' === $value ? '' : wc_format_decimal( $value ) );
 		}
-		$ints = array( 'per_item', 'usage_limit', 'expiry_days', 'code_length', 'delivery_delay_days', 'max_checkins', 'message_maxlength', 'code_pool_low' );
+		$ints = array( 'per_item', 'usage_limit', 'expiry_days', 'code_length', 'delivery_delay_days', 'max_checkins', 'message_maxlength', 'message_maxlines', 'code_pool_low' );
 		foreach ( $ints as $key ) {
 			$value = (string) ( $post[ '_vcap_' . $key ] ?? '' );
 			$product->update_meta_data( '_vcap_' . $key, '' === $value ? '' : absint( $value ) );

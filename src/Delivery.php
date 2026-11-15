@@ -1260,12 +1260,8 @@ final class Delivery {
 		$budget = self::time_budget( $step );
 		switch ( $step ) {
 			case 'tmp_pdfs':
-				// Temporary PDFs contain voucher codes in plain text.
-				foreach ( glob( Install::upload_dir() . '/tmp/*.pdf' ) ?: array() as $file ) {
-					if ( filemtime( $file ) < time() - HOUR_IN_SECONDS ) {
-						wp_delete_file( $file );
-					}
-				}
+				// Temporary PDFs and dompdf's temp images contain voucher codes in plain text (M12-43).
+				Install::purge_temp_files();
 				return true;
 			case 'rate_limits':
 				return Plugin::purge_rate_limits( $budget );

@@ -165,8 +165,15 @@ function vcap_uninstall_site(): bool {
 		as_unschedule_all_actions( '', array(), 'vcap' );
 	}
 	$uploads = wp_upload_dir( null, false );
-	$dir     = trailingslashit( $uploads['basedir'] ) . 'vcap';
-	if ( is_dir( $dir ) ) {
+	// The private folder: "vcap" or, since M12-43, "vcap-<random suffix>" (the option naming it is already gone).
+	$dirs = array_filter(
+		array_merge( array( trailingslashit( $uploads['basedir'] ) . 'vcap' ), glob( trailingslashit( $uploads['basedir'] ) . 'vcap-*', GLOB_ONLYDIR ) ?: array() ),
+		static fn( $d ) => (bool) preg_match( '#/vcap(-[a-z0-9]{16,40})?$#', $d )
+	);
+	foreach ( $dirs as $dir ) {
+		if ( ! is_dir( $dir ) ) {
+			continue;
+		}
 		$it = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $dir, FilesystemIterator::SKIP_DOTS ), RecursiveIteratorIterator::CHILD_FIRST );
 		foreach ( $it as $file ) {
 			$file->isDir() ? rmdir( $file->getPathname() ) : unlink( $file->getPathname() ); // phpcs:ignore

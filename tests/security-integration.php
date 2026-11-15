@@ -885,7 +885,7 @@ vcap_security_assert( $downloads->downloaded_recently( $dl_voucher->id ), 'a dow
 $file_a              = $downloads->cached_pdf_file( $dl_voucher );
 $dl_voucher->balance = 5;
 $file_b              = $downloads->cached_pdf_file( $dl_voucher );
-vcap_security_assert( $file_a !== $file_b && str_contains( $file_a, '/vcap/tmp/dl-' ) && ! str_contains( $file_a, $dl_voucher->token ), 'the cached PDF is private, does not name the token and changes with the voucher' );
+vcap_security_assert( $file_a !== $file_b && str_starts_with( $file_a, VCAP\Install::upload_dir() . '/tmp/dl-' ) && ! str_contains( $file_a, $dl_voucher->token ), 'the cached PDF is private, does not name the token and changes with the voucher' );
 $die_handler = static fn() => static function ( $message, $title = '', $args = array() ) {
 	throw new RuntimeException( 'die:' . (int) ( is_array( $args ) ? ( $args['response'] ?? 0 ) : 0 ) );
 };

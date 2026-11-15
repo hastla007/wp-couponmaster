@@ -90,6 +90,24 @@ final class Downloads {
 		} else {
 			$exp = time() + DAY_IN_SECONDS;
 		}
+		return $this->url_with_exp( $voucher, $exp );
+	}
+
+	/** Days a link printed on a voucher stays valid after the voucher expires (M12-41). */
+	public const PRINTED_LINK_GRACE_DAYS = 30;
+
+	/**
+	 * M12-41: download link printed in the PDF (QR code "PDF download link"). A printed voucher is kept for years,
+	 * so the link does not expire with the email link lifetime but 30 days after the voucher itself, and never for
+	 * vouchers without expiry. A reissue still invalidates it (link version).
+	 */
+	public function printed_url( Voucher $voucher ): string {
+		$expires = $voucher->expires_at ? strtotime( $voucher->expires_at . ' UTC' ) : false;
+		$exp     = false !== $expires ? (int) $expires + self::PRINTED_LINK_GRACE_DAYS * DAY_IN_SECONDS : 0;
+		return $this->url_with_exp( $voucher, $exp );
+	}
+
+	private function url_with_exp( Voucher $voucher, int $exp ): string {
 		return add_query_arg(
 			array(
 				'vcap_pdf' => $voucher->token,
@@ -400,11 +418,13 @@ final class Downloads {
 
 	/**
 	 * R6: extra links of a voucher (e.g. "Add to Apple Wallet") from the filter "vcap_voucher_links", for the voucher
-	 * email (context "email" and "email_plain") and the voucher list in My Account / on the order pages ("account").
+	 * email (context "email" and "email_plain", also each row of the bundled email), the voucher list in My Account /
+	 * on the order pages ("account") and the placeholder {link:<id>} in PDFs and texts ("placeholder", M12-74).
 	 * Only http(s) links with a label are kept; nothing for cancelled vouchers or vouchers held for the security
-	 * check (V7). Templates print them escaped.
+	 * check (V7). Optional keys: "id" (sanitize_key), "image" (https badge URL), "width" (px, 16-400, default 160)
+	 * and "alt" (default: the label). Templates print them escaped.
 	 *
-	 * @return array<int, array{label:string, url:string}>
+	 * @return array<int, array{label:string, url:string, id?:string, image?:string, width?:int, alt?:string}>
 	 */
 	public static function voucher_links( Voucher $voucher, string $context ): array {
 		if ( Voucher::STATUS_VOID === $voucher->status || Delivery::is_held( $voucher ) ) {
@@ -412,18 +432,58 @@ final class Downloads {
 		}
 		/**
 		 * Extra links of a voucher in its email and the customer's voucher list, e.g. "Add to Wallet". Args: list of
-		 * array{label: string, url: string}, Voucher, context ("email", "email_plain" or "account").
+		 * array{label: string, url: string, id?: string, image?: string, width?: int, alt?: string}, Voucher, context
+		 * ("email", "email_plain", "account" or "placeholder").
 		 */
 		$links = apply_filters( 'vcap_voucher_links', array(), $voucher, $context );
 		$out   = array();
 		foreach ( is_array( $links ) ? $links : array() as $link ) {
 			$label = is_array( $link ) ? trim( wp_strip_all_tags( (string) ( $link['label'] ?? '' ) ) ) : '';
 			$url   = is_array( $link ) ? esc_url_raw( (string) ( $link['url'] ?? '' ), array( 'http', 'https' ) ) : '';
-			if ( '' !== $label && '' !== $url ) {
-				$out[] = array( 'label' => $label, 'url' => $url );
+			if ( '' === $label || '' === $url ) {
+				continue;
 			}
+			$entry = array( 'label' => $label, 'url' => $url );
+			// M12-74: an id for the placeholder {link:<id>} and an optional badge image (https only), e.g. the
+			// official "Add to Apple Wallet" button, with its width in px and alternative text.
+			$id = sanitize_key( (string) ( $link['id'] ?? '' ) );
+			if ( '' !== $id ) {
+				$entry['id'] = $id;
+			}
+			$image = esc_url_raw( (string) ( $link['image'] ?? '' ), array( 'https' ) );
+			if ( '' !== $image && str_starts_with( strtolower( $image ), 'https://' ) ) {
+				$entry['image'] = $image;
+				$entry['width'] = max( 16, min( 400, absint( $link['width'] ?? 0 ) ?: 160 ) );
+				$alt            = trim( wp_strip_all_tags( (string) ( $link['alt'] ?? '' ) ) );
+				$entry['alt']   = '' !== $alt ? $alt : $label;
+			}
+			$out[] = $entry;
 		}
 		return $out;
+	}
+
+	/**
+	 * M12-74: HTML of voucher links for emails: a badge image where the link has one, else the label as a link,
+	 * separated by " · ". Everything is escaped.
+	 *
+	 * @param array<int, array{label: string, url: string, image?: string, width?: int, alt?: string}> $links From voucher_links().
+	 */
+	public static function voucher_links_html( array $links ): string {
+		$parts = array();
+		foreach ( $links as $link ) {
+			if ( ! empty( $link['image'] ) ) {
+				$parts[] = sprintf(
+					'<a href="%s" style="display:inline-block;text-decoration:none;"><img src="%s" width="%d" alt="%s" style="border:0;height:auto;vertical-align:middle;max-width:100%%;" /></a>',
+					esc_url( $link['url'] ),
+					esc_url( (string) $link['image'], array( 'https' ) ),
+					(int) ( $link['width'] ?? 160 ),
+					esc_attr( (string) ( $link['alt'] ?? $link['label'] ) )
+				);
+			} else {
+				$parts[] = '<a href="' . esc_url( $link['url'] ) . '">' . esc_html( $link['label'] ) . '</a>';
+			}
+		}
+		return implode( ' · ', $parts );
 	}
 
 	/** Last four characters of a code, e.g. "…7KQ2" (the code is a means of payment). Alias of Mask::code(). */
