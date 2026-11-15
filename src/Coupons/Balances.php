@@ -264,13 +264,18 @@ final class Balances {
 	 * row lock. Admin edits use this so a redemption that lands while the edit form is open is not
 	 * overwritten by a balance computed from the stale form value.
 	 */
-	public function adjust_balance( Voucher $voucher, float $delta, string $event, string $note = '', int $order_id = 0 ): bool {
-		return $this->write_balance( $voucher, static fn( float $current ) => $current + $delta, $event, null, $note, $order_id );
+	public function adjust_balance( Voucher $voucher, float $delta, string $event, string $note = '', int $order_id = 0, ?float &$booked = null ): bool {
+		return $this->write_balance( $voucher, static fn( float $current ) => $current + $delta, $event, null, $note, $order_id, $booked );
 	}
 
-	/** @param callable(float):float $compute New balance from the locked, current balance. */
-	public function write_balance( Voucher $voucher, callable $compute, string $event, ?float $amount, string $note, int $order_id ): bool {
+	/**
+	 * @param callable(float):float $compute New balance from the locked, current balance.
+	 * @param float|null            $booked  Set to the change really booked (new minus old balance, signed; 0.0 when
+	 *                                       nothing was written): what notes report, not what was asked (M12-60).
+	 */
+	public function write_balance( Voucher $voucher, callable $compute, string $event, ?float $amount, string $note, int $order_id, ?float &$booked = null ): bool {
 		global $wpdb;
+		$booked = 0.0;
 		$table = Install::tables()['vouchers'];
 		if ( ! Install::tables_support_transactions() || ! Db::begin() ) {
 			return false;
@@ -307,6 +312,7 @@ final class Balances {
 			Db::rollback( 'write_balance', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ), $e );
 			throw $e;
 		}
+		$booked = round( $balance - $before, $fresh->decimals() );
 		CouponSync::sync_coupon( $fresh, array( 'amount' ) );
 		return true;
 	}
