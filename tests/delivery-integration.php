@@ -522,7 +522,8 @@ $z6_gifts      = $z6_batch( 5, array( 'order_id' => $z6_gift_order->get_id(), 'b
 $z6_mails      = array();
 vcap()->delivery->deliver( $z6_gifts[0]->id );
 vcap_dlv_assert( 1 === $z6_to( "z6-lea-{$tag}@" ) && 1 === $z6_to( "z6-giver-{$tag}@" ) && 2 === count( $z6_mails ), 'Z6: five gifts with buyer copy: one email to the recipient and exactly one copy to the buyer (not five each)', array_column( $z6_mails, 'to' ) );
-$z6_roles = array_map( static fn( $v ) => (string) $wpdb->get_var( $wpdb->prepare( 'SELECT delivered_roles FROM ' . VCAP\Install::tables()['vouchers'] . ' WHERE id = %d', $v->id ) ), $z6_gifts ); // phpcs:ignore
+$z6_table = VCAP\Install::tables()['vouchers'];
+$z6_roles = array_map( static fn( $v ) => (string) $wpdb->get_var( $wpdb->prepare( "SELECT delivered_roles FROM {$z6_table} WHERE id = %d", $v->id ) ), $z6_gifts ); // phpcs:ignore
 vcap_dlv_assert( array_fill( 0, 5, 'recipient,buyer' ) === $z6_roles && null !== $repo->get( $z6_gifts[4]->id )->delivered_at, 'Z6: every gift records both roles and is delivered', $z6_roles );
 
 // 3. The recipient's email fails: only that part is retried, per voucher, without a second buyer copy.
