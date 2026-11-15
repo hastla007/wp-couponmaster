@@ -93,6 +93,14 @@ final class Settings {
 			add_filter( 'woocommerce_admin_settings_sanitize_option_' . $affix, array( $this, 'sanitize_affix' ), 10, 2 );
 		}
 		add_filter( 'woocommerce_admin_settings_sanitize_option_vcap_terms_by_country', array( $this, 'report_country_lines' ), 10, 2 );
+		// M12-84: "30, 7, 1" is stored normalised (largest first), anything else as 0 (no reminders).
+		add_filter(
+			'woocommerce_admin_settings_sanitize_option_vcap_expiry_reminder_days',
+			static function ( $value ) {
+				$days = Delivery::expiry_reminder_offsets( $value );
+				return $days ? implode( ', ', $days ) : '0';
+			}
+		);
 		add_filter( 'woocommerce_admin_settings_sanitize_option_' . Markets::EXPIRY_OPTION, array( $this, 'report_country_lines' ), 10, 2 );
 	}
 

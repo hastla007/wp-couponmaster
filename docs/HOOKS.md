@@ -158,6 +158,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_rate_limit_brake` | `src/Plugin.php` | Quota per visitor while the site-wide counter is full (default: a fifth, at least 1). |
 | `vcap_rate_limit_brake_exempt` | `src/Plugin.php` | Whether the current user keeps the full rate-limit quota while the site-wide brake is on. |
 | `vcap_rate_limit_ipv6_48_factor` | `src/Plugin.php` | – |
+| `vcap_recipient_email_locale` | `src/Emails/VoucherEmail.php` | Language of a voucher email to the gift recipient (args: locale chosen by the buyer, Voucher, email). |
 | `vcap_recipient_fix_days` | `src/Downloads.php` | Days the "Correct recipient" link of a gift stays valid. |
 | `vcap_recipient_fix_max` | `src/Downloads.php` | – |
 | `vcap_recipient_locales` | `src/Fields.php` | Languages offered in the "Language of the recipient email" field (locale => name). |

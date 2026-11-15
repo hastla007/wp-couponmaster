@@ -1276,8 +1276,8 @@ final class Delivery {
 	 */
 	public function send_expiry_reminders( float $budget = 0.0, ?bool &$finished = null ): int {
 		$finished = true;
-		$days     = (int) $this->settings->get( 'vcap_expiry_reminder_days' );
-		if ( $days <= 0 ) {
+		$offsets  = self::expiry_reminder_offsets( $this->settings->get( 'vcap_expiry_reminder_days' ) );
+		if ( ! $offsets ) {
 			return 0;
 		}
 		$emails = WC()->mailer()->get_emails();
@@ -1287,42 +1287,69 @@ final class Delivery {
 		}
 		$start = microtime( true );
 		$sent  = 0;
-		$seen  = array();
-		do {
-			$batch = $this->repo->due_for_expiry_reminder( $days, 200, $seen );
-			foreach ( $batch as $voucher ) {
-				if ( $budget > 0 && microtime( true ) - $start >= $budget ) {
-					$finished = false;
-					return $sent;
+		// M12-84: several reminders (e.g. 30, 7 and 1 day before). Each one covers the vouchers ending before its
+		// day and after the next smaller one, so a voucher found late gets only the reminder that fits.
+		foreach ( $offsets as $i => $days ) {
+			$after = (int) ( $offsets[ $i + 1 ] ?? 0 );
+			$seen  = array();
+			do {
+				$batch = $this->repo->due_for_expiry_reminder( $days, 200, $seen, $after );
+				foreach ( $batch as $voucher ) {
+					if ( $budget > 0 && microtime( true ) - $start >= $budget ) {
+						$finished = false;
+						return $sent;
+					}
+					$seen[] = $voucher->id;
+					if ( ! is_email( $voucher->delivery_email() ) || ! apply_filters( 'vcap_send_expiry_reminder', true, $voucher, $days ) ) {
+						continue;
+					}
+					// Claimed first (a parallel run or a crash after sending never leads to a second reminder), recorded
+					// only after a successful send; a failed send gives the claim back and is retried after a day.
+					$claim = 'expiry-reminder:' . $voucher->id . ':' . $days;
+					if ( ! Claim::take( $claim ) ) {
+						continue;
+					}
+					try {
+						$mailed = $email->trigger( $voucher );
+					} catch ( \Throwable $e ) {
+						// One broken voucher (PDF, template, mail plugin) neither keeps its claim nor stops the others.
+						Claim::release( $claim );
+						Logger::error( 'Expiry reminder failed: ' . Mask::addresses( $e->getMessage() ), array( 'voucher_id' => $voucher->id ) );
+						continue;
+					}
+					if ( $mailed ) {
+						$this->repo->log( $voucher->id, 'expiry_reminder', null, $voucher->balance, self::REMINDER_NOTE_PREFIX . $days );
+						++$sent;
+					} else {
+						Claim::release( $claim );
+						$this->repo->log( $voucher->id, 'delivery_failed', null, null, Note::make( 'reminder_failed' ) );
+					}
 				}
-				$seen[] = $voucher->id;
-				if ( ! is_email( $voucher->delivery_email() ) || ! apply_filters( 'vcap_send_expiry_reminder', true, $voucher ) ) {
-					continue;
-				}
-				// Claimed first (a parallel run or a crash after sending never leads to a second reminder), recorded
-				// only after a successful send; a failed send gives the claim back and is retried after a day.
-				$claim = 'expiry-reminder:' . $voucher->id;
-				if ( ! Claim::take( $claim ) ) {
-					continue;
-				}
-				try {
-					$mailed = $email->trigger( $voucher );
-				} catch ( \Throwable $e ) {
-					// One broken voucher (PDF, template, mail plugin) neither keeps its claim nor stops the others.
-					Claim::release( $claim );
-					Logger::error( 'Expiry reminder failed: ' . Mask::addresses( $e->getMessage() ), array( 'voucher_id' => $voucher->id ) );
-					continue;
-				}
-				if ( $mailed ) {
-					$this->repo->log( $voucher->id, 'expiry_reminder', null, $voucher->balance, '' );
-					++$sent;
-				} else {
-					Claim::release( $claim );
-					$this->repo->log( $voucher->id, 'delivery_failed', null, null, Note::make( 'reminder_failed' ) );
-				}
-			}
-		} while ( count( $batch ) === 200 );
+			} while ( count( $batch ) === 200 );
+		}
 		return $sent;
+	}
+
+	/** M12-84: note of an "expiry_reminder" event sent N days before the expiry ("days_before=N"). */
+	public const REMINDER_NOTE_PREFIX = 'days_before=';
+
+	/**
+	 * M12-84: the reminder days of the setting "vcap_expiry_reminder_days" – one number as before, or several
+	 * separated by commas ("30, 7, 1"); 1–365, without duplicates, largest first. 0 or nothing: no reminders.
+	 *
+	 * @param mixed $value Stored setting.
+	 * @return int[]
+	 */
+	public static function expiry_reminder_offsets( $value ): array {
+		$out = array();
+		foreach ( preg_split( '/[\s,;]+/', trim( (string) $value ), -1, PREG_SPLIT_NO_EMPTY ) ?: array() as $part ) {
+			if ( ctype_digit( $part ) && (int) $part >= 1 && (int) $part <= 365 ) {
+				$out[] = (int) $part;
+			}
+		}
+		$out = array_values( array_unique( $out ) );
+		rsort( $out, SORT_NUMERIC );
+		return $out;
 	}
 
 	/**

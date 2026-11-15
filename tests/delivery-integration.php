@@ -185,9 +185,69 @@ $mails = array();
 vcap()->delivery->send_expiry_reminders();
 remove_filter( 'woocommerce_email_recipient_vcap_voucher_expiry', $throw_for, 999 );
 vcap_dlv_assert( in_array( "fine-{$tag}@example.com", $mails, true ), 'an exception in one reminder does not stop the others' );
-vcap_dlv_assert( VCAP\Claim::take( 'expiry-reminder:' . $broken->id ), 'the claim of the failed reminder is released (it is retried next time)' );
-VCAP\Claim::release( 'expiry-reminder:' . $broken->id );
+vcap_dlv_assert( VCAP\Claim::take( 'expiry-reminder:' . $broken->id . ':14' ), 'the claim of the failed reminder is released (it is retried next time)' );
+VCAP\Claim::release( 'expiry-reminder:' . $broken->id . ':14' );
+
+// M12-84: several reminders ("30, 7, 1"): each once; a voucher found late gets only the reminder that fits.
+update_option( 'vcap_expiry_reminder_days', '7, 30,1, 7' );
+vcap_dlv_assert( array( 30, 7, 1 ) === Delivery::expiry_reminder_offsets( get_option( 'vcap_expiry_reminder_days' ) ) && array() === Delivery::expiry_reminder_offsets( '0' ) && array( 14 ) === Delivery::expiry_reminder_offsets( 14 ), 'M12-84: the reminder days are read from a list (largest first), a single number as before' );
+$m84_far  = vcap_dlv_voucher( "m84-far-{$tag}@example.com", array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() + 20 * DAY_IN_SECONDS ) ) );
+$m84_near = vcap_dlv_voucher( "m84-near-{$tag}@example.com", array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() + 5 * DAY_IN_SECONDS ) ) );
+$m84_last = vcap_dlv_voucher( "m84-last-{$tag}@example.com", array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() + 12 * HOUR_IN_SECONDS ) ) );
+$m84_old  = vcap_dlv_voucher( "m84-old-{$tag}@example.com", array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() + 5 * DAY_IN_SECONDS ) ) );
+$wpdb->query( $wpdb->prepare( 'UPDATE ' . VCAP\Install::tables()['vouchers'] . ' SET delivered_at = %s WHERE id IN (%d, %d, %d, %d)', gmdate( 'Y-m-d H:i:s' ), $m84_far->id, $m84_near->id, $m84_last->id, $m84_old->id ) ); // phpcs:ignore
+$repo->log( $m84_old->id, 'expiry_reminder', null, 25, '' ); // Reminded by an earlier version.
+$m84_notes = static function ( int $id ) use ( $repo ): array {
+	return array_values( array_map( static fn( $e ) => (string) $e['note'], array_filter( $repo->events( $id ), static fn( $e ) => 'expiry_reminder' === $e['event'] ) ) );
+};
+$mails = array();
+vcap()->delivery->send_expiry_reminders();
+vcap()->delivery->send_expiry_reminders(); // A second run sends nothing new.
+vcap_dlv_assert( array( 'days_before=30' ) === $m84_notes( $m84_far->id ) && array( 'days_before=7' ) === $m84_notes( $m84_near->id ) && array( 'days_before=1' ) === $m84_notes( $m84_last->id ) && array( '' ) === $m84_notes( $m84_old->id ), 'M12-84: each voucher gets the one reminder that fits its expiry, once; a voucher reminded by an earlier version is not reminded again', array( $m84_notes( $m84_far->id ), $m84_notes( $m84_near->id ), $m84_notes( $m84_last->id ) ) );
+$wpdb->query( $wpdb->prepare( 'UPDATE ' . VCAP\Install::tables()['vouchers'] . ' SET expires_at = %s WHERE id = %d', gmdate( 'Y-m-d H:i:s', time() + 6 * DAY_IN_SECONDS ), $m84_far->id ) ); // phpcs:ignore
+VCAP\VoucherRepository::forget();
+vcap()->delivery->send_expiry_reminders();
+vcap_dlv_assert( array( 'days_before=30', 'days_before=7' ) === $m84_notes( $m84_far->id ) && 2 === count( array_keys( $mails, "m84-far-{$tag}@example.com", true ) ), 'M12-84: closer to the expiry the next reminder follows', array( $m84_notes( $m84_far->id ), $mails ) );
 false === $keep_days ? delete_option( 'vcap_expiry_reminder_days' ) : update_option( 'vcap_expiry_reminder_days', $keep_days );
+
+// M12-84: delivery hour as a setting; the recipient email in the language the buyer chose.
+update_option( 'vcap_delivery_hour', 17 );
+$m84_hour = Delivery::delivery_hour();
+delete_option( 'vcap_delivery_hour' );
+vcap_dlv_assert( 17 === $m84_hour && 8 === Delivery::delivery_hour(), 'M12-84: the delivery hour is a setting (default 8)' );
+$m84_locales = static fn( $list ) => array_merge( (array) $list, array( 'de_DE' => 'Deutsch' ) );
+add_filter( 'vcap_recipient_locales', $m84_locales );
+$m84_gift = vcap_dlv_voucher( "m84-buyer-{$tag}@example.com", array( 'send_to' => 'recipient', 'recipient_email' => "m84-rec-{$tag}@example.com" ) );
+$m84_gift->fields = array( VCAP\Fields::LOCALE_KEY => array( 'label' => 'Language', 'value' => 'de_DE' ) );
+$m84_locale = new ReflectionMethod( VCAP\Emails\VoucherEmail::class, 'mail_locale' );
+$m84_locale->setAccessible( true );
+$m84_emails = WC()->mailer()->get_emails();
+vcap_dlv_assert( 'de_DE' === $m84_locale->invoke( $m84_emails['VCAP_Email_Voucher_Recipient'], $m84_gift ) && get_locale() === $m84_locale->invoke( $m84_emails['VCAP_Email_Voucher_Buyer'], $m84_gift ), 'M12-84: the recipient email uses the chosen language, the buyer email the order language' );
+remove_filter( 'vcap_recipient_locales', $m84_locales );
+vcap_dlv_assert( get_locale() === $m84_locale->invoke( $m84_emails['VCAP_Email_Voucher_Recipient'], $m84_gift ), 'M12-84: a language that is not offered is ignored' );
+
+// M12-84: optional buyer notices "gift delivered" and "gift used" (without the code), off by default.
+$m84_delivered = $m84_emails['VCAP_Email_Gift_Delivered'];
+$m84_used      = $m84_emails['VCAP_Email_Gift_Used'];
+vcap_dlv_assert( ! $m84_delivered->is_enabled() && ! $m84_used->is_enabled(), 'M12-84: the gift notices are off by default' );
+$m84_delivered->enabled = 'yes';
+$m84_used->enabled      = 'yes';
+$mails = array();
+$m84_msgs = array();
+$m84_spy  = static function ( $pre, $atts ) use ( &$m84_msgs ) {
+	$m84_msgs[] = array( is_array( $atts['to'] ) ? implode( ',', $atts['to'] ) : (string) $atts['to'], (string) $atts['subject'], (string) $atts['message'] );
+	return $pre;
+};
+add_filter( 'pre_wp_mail', $m84_spy, 0, 2 );
+vcap()->delivery->deliver( $m84_gift->id, false );
+$m84_live = $repo->get( $m84_gift->id );
+VCAP\VoucherRepository::fire_redeemed( $m84_live, 10.0, 'counter' );
+VCAP\VoucherRepository::fire_redeemed( $m84_live, 5.0, 'counter' ); // Only the first use is told.
+remove_filter( 'pre_wp_mail', $m84_spy, 0 );
+$m84_delivered->enabled = 'no';
+$m84_used->enabled      = 'no';
+$m84_to_buyer = array_values( array_filter( $m84_msgs, static fn( $m ) => str_contains( $m[0], "m84-buyer-{$tag}@" ) ) );
+vcap_dlv_assert( 2 === count( $m84_to_buyer ) && str_contains( $m84_to_buyer[0][1], 'delivered' ) && str_contains( $m84_to_buyer[1][1], 'used' ) && ! str_contains( $m84_to_buyer[0][2] . $m84_to_buyer[1][2], $m84_live->code ), 'M12-84: the buyer is told once that the gift was delivered and once that it was used, without the code', array_map( static fn( $m ) => $m[1], $m84_msgs ) );
 
 /* ---- 6. Restore in batches, overdue scheduled vouchers included ----------------------------------------------- */
 

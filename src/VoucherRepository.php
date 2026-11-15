@@ -608,7 +608,7 @@ final class VoucherRepository {
 	 * @param int[] $exclude
 	 * @return Voucher[]
 	 */
-	public function due_for_expiry_reminder( int $days, int $limit = 200, array $exclude = array() ): array {
+	public function due_for_expiry_reminder( int $days, int $limit = 200, array $exclude = array(), int $after_days = 0 ): array {
 		global $wpdb;
 		$exclude = array_values( array_filter( array_map( 'intval', $exclude ) ) );
 		$not_in  = $exclude ? ' AND v.id NOT IN (' . implode( ',', $exclude ) . ')' : '';
@@ -618,11 +618,12 @@ final class VoucherRepository {
 				WHERE v.status = 'active' AND v.expires_at > %s AND v.expires_at <= %s
 				AND v.delivered_at IS NOT NULL AND v.type <> 'ticket'
 				AND ( v.usage_mode <> 'balance' OR v.balance > 0 ){$not_in}
-				AND NOT EXISTS ( SELECT 1 FROM {$this->events_table()} e WHERE e.voucher_id = v.id AND e.event = 'expiry_reminder' )
+				AND NOT EXISTS ( SELECT 1 FROM {$this->events_table()} e WHERE e.voucher_id = v.id AND e.event = 'expiry_reminder' AND ( e.note = %s OR e.note IS NULL OR LEFT( e.note, 12 ) <> 'days_before=' ) )
 				AND NOT EXISTS ( SELECT 1 FROM {$this->events_table()} f WHERE f.voucher_id = v.id AND f.event = 'delivery_failed' AND f.created_at > %s )
 				ORDER BY v.expires_at ASC, v.id ASC LIMIT %d",
-				$this->now(),
+				gmdate( 'Y-m-d H:i:s', time() + max( 0, $after_days ) * DAY_IN_SECONDS ),
 				gmdate( 'Y-m-d H:i:s', time() + $days * DAY_IN_SECONDS ),
+				'days_before=' . $days,
 				gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS ),
 				max( 1, $limit )
 			),
@@ -1019,6 +1020,7 @@ final class VoucherRepository {
 			'reissued'   => __( 'Reissued with a new code', 'voucher-captain' ),
 			Downloads::FIX_EVENT => __( 'Recipient corrected by the buyer', 'voucher-captain' ),
 			Delivery::ATTEMPT_EVENT => __( 'Delivery attempt', 'voucher-captain' ),
+			Emails::USED_NOTICE_EVENT => __( 'Buyer told that the gift was used', 'voucher-captain' ),
 		);
 		/** Labels of connector events in the voucher history. */
 		return (array) apply_filters( 'vcap_event_labels', $labels );

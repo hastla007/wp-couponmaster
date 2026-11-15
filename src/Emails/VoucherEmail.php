@@ -63,7 +63,7 @@ abstract class VoucherEmail extends \WC_Email {
 		$this->pdf_failed   = false;
 		$this->pdf_attached = null;
 		$this->pdf_skipped  = '';
-		$state =Multilingual::switch_to( Multilingual::email_locale( $voucher, null, $this ), Multilingual::order_language( $voucher->order() ) );
+		$state = Multilingual::switch_to( $this->mail_locale( $voucher ), Multilingual::order_language( $voucher->order() ) );
 		if ( ! $state['ready'] ) {
 			$this->setup_locale();
 		}
@@ -111,6 +111,21 @@ abstract class VoucherEmail extends \WC_Email {
 				$this->init_settings();
 			}
 		}
+	}
+
+	/**
+	 * Language of the mail: the order language (Multilingual::email_locale()); M12-84: a mail to the gift recipient
+	 * in the language the buyer chose in the "Language of the recipient email" field, when it is offered.
+	 */
+	protected function mail_locale( Voucher $voucher ): string {
+		$locale = Multilingual::email_locale( $voucher, null, $this );
+		$chosen = trim( $voucher->field( \VCAP\Fields::LOCALE_KEY ) );
+		$to     = $this->recipient_address( $voucher );
+		if ( '' !== $chosen && \VCAP\Delivery::same_address( $to, (string) $voucher->recipient_email ) && ! \VCAP\Delivery::same_address( $to, (string) $voucher->buyer_email ) && isset( \VCAP\Fields::recipient_locales()[ $chosen ] ) ) {
+			/** Language of a voucher email to the gift recipient (args: locale chosen by the buyer, Voucher, email). */
+			$locale = (string) apply_filters( 'vcap_recipient_email_locale', $chosen, $voucher, $this );
+		}
+		return $locale;
 	}
 
 	/**
