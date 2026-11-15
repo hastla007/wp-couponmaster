@@ -51,6 +51,11 @@ final class RestController {
 						'required' => true,
 						'type'     => 'string',
 					),
+					'pin'    => array(
+						'type'        => 'string',
+						'default'     => '',
+						'description' => 'PIN of a card protected by one (M12-99); also accepted as code#PIN.',
+					),
 					'target' => array(
 						'type'    => 'string',
 						'default' => '',
@@ -70,6 +75,11 @@ final class RestController {
 					'code'   => array(
 						'required' => true,
 						'type'     => 'string',
+					),
+					'pin'    => array(
+						'type'        => 'string',
+						'default'     => '',
+						'description' => 'PIN of a card protected by one (M12-99); also accepted as code#PIN.',
 					),
 					'key'    => array(
 						'required' => true,
@@ -271,6 +281,16 @@ final class RestController {
 	}
 
 	/**
+	 * The code of a request, with the "pin" parameter appended in the code#PIN convention (M12-99).
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 */
+	private static function code_with_pin( \WP_REST_Request $request ): string {
+		$pin = is_string( $request['pin'] ) ? trim( $request['pin'] ) : '';
+		return (string) $request['code'] . ( '' !== $pin ? \VCAP\CodeLookup::PIN_SEPARATOR . $pin : '' );
+	}
+
+	/**
 	 * POST /redemptions/check
 	 *
 	 * @param \WP_REST_Request $request Request.
@@ -287,7 +307,7 @@ final class RestController {
 		if ( null !== $request['amount'] ) {
 			$args['amount'] = (float) $request['amount'];
 		}
-		return rest_ensure_response( $this->service->check( (string) $request['code'], $args ) );
+		return rest_ensure_response( $this->service->check( self::code_with_pin( $request ), $args ) );
 	}
 
 	/**
@@ -311,7 +331,7 @@ final class RestController {
 			return new \WP_Error( 'vcap_invalid_request', __( 'A redemption key with a prefix ("system:…") must use the prefix of its target.', 'voucher-captain' ), array( 'status' => 400 ) );
 		}
 		$result = $this->service->reserve(
-			(string) $request['code'],
+			self::code_with_pin( $request ),
 			array(
 				'key'     => (string) $request['key'],
 				'target'  => (string) $request['target'],

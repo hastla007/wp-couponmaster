@@ -36,6 +36,7 @@ final class CouponGuard {
 		add_filter( 'rest_request_before_callbacks', array( $this, 'rest_before' ), 10, 3 );
 		add_filter( 'rest_request_after_callbacks', array( $this, 'rest_after' ), 10, 3 );
 		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'refuse_when_limited' ), 1, 3 );
+		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'require_pin' ), 2, 3 );
 		add_filter( 'woocommerce_coupon_error', array( $this, 'error' ), 999, 3 );
 		add_action( 'shutdown', array( $this, 'finish' ) );
 	}
@@ -44,7 +45,7 @@ final class CouponGuard {
 	public function from_cart_form(): void {
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- WooCommerce verifies its nonce; we only count.
 		if ( ! empty( $_POST['apply_coupon'] ) && ! empty( $_POST['coupon_code'] ) && is_string( $_POST['coupon_code'] ) ) {
-			$this->begin( wc_format_coupon_code( wp_unslash( $_POST['coupon_code'] ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- wc_format_coupon_code() sanitizes.
+			$this->begin( wc_format_coupon_code( self::posted_code() ) );
 		}
 		// phpcs:enable
 	}
@@ -53,9 +54,25 @@ final class CouponGuard {
 	public function from_ajax(): void {
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- WooCommerce verifies its nonce; we only count.
 		if ( ! empty( $_POST['coupon_code'] ) && is_string( $_POST['coupon_code'] ) ) {
-			$this->begin( wc_format_coupon_code( wp_unslash( $_POST['coupon_code'] ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- wc_format_coupon_code() sanitizes.
+			$this->begin( wc_format_coupon_code( self::posted_code() ) );
 		}
 		// phpcs:enable
+	}
+
+	/**
+	 * The posted coupon code. M12-99: a PIN entered as code#PIN is taken off (kept for this request's PIN check)
+	 * and WooCommerce gets the plain code.
+	 */
+	private static function posted_code(): string {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput -- WooCommerce verifies its nonce and formats the code.
+		$raw  = (string) wp_unslash( $_POST['coupon_code'] ?? '' );
+		$code = CodeLookup::code_input( $raw );
+		if ( $code !== $raw ) {
+			$_POST['coupon_code']    = wp_slash( $code );
+			$_REQUEST['coupon_code'] = wp_slash( $code );
+		}
+		// phpcs:enable
+		return $code;
 	}
 
 	/**
@@ -88,7 +105,15 @@ final class CouponGuard {
 		if ( '' === $kind ) {
 			return $response;
 		}
-		$code  = $request->get_param( 'code' );
+		$code = $request->get_param( 'code' );
+		if ( is_string( $code ) && str_contains( $code, CodeLookup::PIN_SEPARATOR ) ) {
+			// M12-99: code#PIN – the plain code goes on, the PIN is checked when the coupon is validated.
+			$code = wc_format_coupon_code( CodeLookup::code_input( $code ) );
+			$request->set_param( 'code', $code );
+			if ( 'coupons' === $kind && self::invalid_code_param( $response ) && '' !== $code && ( new \WC_Coupon( $code ) )->get_id() ) {
+				$response = null; // Only "code#PIN" failed coupon_exists; the plain code exists.
+			}
+		}
 		$code  = is_string( $code ) ? wc_format_coupon_code( $code ) : '';
 		$type  = 'coupons' === $kind ? $request->get_param( 'discount_type' ) : null;
 		$probe = is_string( $type ) && '' !== $type;
@@ -259,7 +284,27 @@ final class CouponGuard {
 	}
 
 	/**
-	 * Unknown code (105) or another customer's store credit (9030): a failed guess. While limited, every error of
+	 * M12-99: a code protected by a PIN is valid only with its PIN (code#PIN, entered in this request or earlier in
+	 * the session). Without it the code reads like an unknown one and counts as a failed guess. Only visitor carts
+	 * (with a WooCommerce session) are checked; staff (wp-admin, REST orders) have the card in hand, like at
+	 * the counter.
+	 *
+	 * @param mixed $valid     Validity so far.
+	 * @param mixed $coupon    WC_Coupon.
+	 * @param mixed $discounts WC_Discounts.
+	 * @return mixed
+	 * @throws \Exception When the PIN is missing or wrong.
+	 */
+	public function require_pin( $valid, $coupon, $discounts = null ) {
+		$visitor = function_exists( 'WC' ) && WC()->session && ! current_user_can( 'edit_shop_orders' ) && ! current_user_can( 'manage_woocommerce' ); // phpcs:ignore WordPress.WP.Capabilities.Unknown -- WooCommerce capabilities.
+		if ( $visitor && $coupon instanceof \WC_Coupon && ! CodeLookup::pin_ok( (string) $coupon->get_code() ) ) {
+			throw new \Exception( (string) \WC_Coupon::E_WC_COUPON_NOT_EXIST, CodeLookup::E_PIN ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- an integer.
+		}
+		return $valid;
+	}
+
+	/**
+	 * Unknown code (105), another customer's store credit (9030) or a missing PIN (9070): a failed guess. While limited, every error of
 	 * the code being applied reads the same, so expiry or usage messages do not confirm that a code exists.
 	 */
 	public function error( $message, $code, $coupon ) {
@@ -269,7 +314,7 @@ final class CouponGuard {
 		if ( $this->limited ) {
 			return self::message();
 		}
-		if ( in_array( (int) $code, array( \WC_Coupon::E_WC_COUPON_NOT_EXIST, 9030 ), true ) ) {
+		if ( in_array( (int) $code, array( \WC_Coupon::E_WC_COUPON_NOT_EXIST, 9030, CodeLookup::E_PIN ), true ) ) {
 			$this->failed = true;
 		}
 		return $message;

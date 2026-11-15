@@ -359,7 +359,7 @@ final class Shortcodes {
 			wc_add_notice( CodeLookup::limited_message(), 'error' );
 			return 'limited';
 		}
-		$code = wc_format_coupon_code( sanitize_text_field( $raw ) );
+		$code = wc_format_coupon_code( CodeLookup::code_input( sanitize_text_field( $raw ) ) ); // M12-99: code#PIN.
 		if ( ! CodeLookup::confirms( $code ) ) {
 			CodeLookup::failed();
 			wc_add_notice( CodeLookup::not_found_message(), 'error' );
@@ -641,6 +641,7 @@ final class Shortcodes {
 			<button type="submit" class="vcap-default-submit" tabindex="-1" aria-hidden="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);clip-path:inset(50%);white-space:nowrap;"><?php echo esc_html( $atts['button'] ); ?></button>
 			<label for="<?php echo esc_attr( $form_id . '-code' ); ?>"><?php esc_html_e( 'Voucher code', 'voucher-captain' ); ?></label>
 			<input type="text" id="<?php echo esc_attr( $form_id . '-code' ); ?>" name="vcap_redeem_code" required autocomplete="off" maxlength="100" value="<?php echo self::esc_attr_text( $value ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_attr_text(). ?>"<?php echo $invalid ? ' aria-invalid="true" aria-describedby="' . esc_attr( $form_id . '-result' ) . '"' : ''; ?> />
+			<?php echo CodeLookup::pin_hint(); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in pin_hint(). ?>
 			<?php
 			/** Extra fields of connectors (e.g. the date for a ticket voucher), posted with the code. */
 			do_action( 'vcap_redeem_form_fields' );

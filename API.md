@@ -74,11 +74,13 @@ PHP callers may pass `user_id`; otherwise the logged-in user is used. Personal v
 
 | Method | Route | Body | Success |
 |---|---|---|---|
-| POST | `/wp-json/vcap/v1/redemptions/check` | `code`, `target`, `amount` | 200 voucher data |
-| POST | `/wp-json/vcap/v1/redemptions` | `code`, `key`, `target`, `amount`, `meta` | 201 redemption (200 for a repeated request) |
+| POST | `/wp-json/vcap/v1/redemptions/check` | `code`, `pin`, `target`, `amount` | 200 voucher data |
+| POST | `/wp-json/vcap/v1/redemptions` | `code`, `pin`, `key`, `target`, `amount`, `meta` | 201 redemption (200 for a repeated request) |
 | GET | `/wp-json/vcap/v1/redemptions/{key}` | – | 200 redemption |
 | POST | `/wp-json/vcap/v1/redemptions/{key}/commit` | – | 200 redemption |
 | POST | `/wp-json/vcap/v1/redemptions/{key}/release` | – | 200 redemption |
+
+PIN cards (M12-99): imported codes can carry a PIN (import option "PIN column", stored hashed). For customers such a code is found only with its PIN – as `pin` or in the convention `code#PIN`, which every code field of the shop accepts (coupon field, Store API, redeem form, balance check, top-up); without it the answer is `404 vcap_not_found`, counted like an unknown code. Shop staff are not asked for the PIN (they hold the card). Codes without a PIN behave as before.
 
 Authentication: browsers of logged-in users send the WordPress REST nonce (`X-WP-Nonce`, from `wp_create_nonce( 'wp_rest' )`); external servers use WordPress Application Passwords for a dedicated technical user. Anonymous requests receive `401`. Narrow access with the `vcap_rest_can_redeem` filter.
 
@@ -92,7 +94,7 @@ Redemption data: `redemption_key`, `state` (`reserved`, `committed`, `released`)
 |---|---|---|
 | `vcap_invalid_request` | 400 | Missing/malformed key, target or amount |
 | `vcap_not_allowed` | 401/403 | Not logged in, voucher restricted to another email, refused by `vcap_redemption_allowed`, or redemption of another user |
-| `vcap_not_found` | 404 | Unknown code (counts towards the invalid-code limit) |
+| `vcap_not_found` | 404 | Unknown code, or a PIN card without its correct PIN (counts towards the invalid-code limit) |
 | `vcap_reservation_missing` | 404/409 | Unknown key, or reservation expired/released |
 | `vcap_already_redeemed` | 409 | Voucher or redemption already completed |
 | `vcap_reserved` | 409 | Voucher is reserved by another redemption right now |

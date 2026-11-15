@@ -99,16 +99,30 @@ final class CodePool {
 	 * asked in batches (CodeIndex::claim_free()), not three lookups per code. Updates the report: "imported",
 	 * "dupes_existing" and the capped list "not_saved" (Jobs::add_error()).
 	 *
-	 * @param array<int, string> $codes  Row number => code.
-	 * @param array              $report Import report (Admin\Import::empty_report()).
+	 * M12-99: an entry may be array( code, PIN hash ) (CodeLookup::hash_pin()): the hash is stored for the code
+	 * once the code is in the pool – never for a code that already existed.
+	 *
+	 * @param array<int, string|array{0:string, 1:string}> $codes  Row number => code, or code and PIN hash.
+	 * @param array                                         $report Import report (Admin\Import::empty_report()).
 	 */
 	public function import_codes( array $codes, string $batch, array &$report ): void {
 		global $wpdb;
-		$free                      = CodeIndex::claim_free( $codes );
-		$report['dupes_existing'] += count( $codes ) - count( $free );
+		$plain  = array();
+		$hashes = array();
+		foreach ( $codes as $row => $entry ) {
+			$plain[ $row ] = is_array( $entry ) ? (string) ( $entry[0] ?? '' ) : (string) $entry;
+			if ( is_array( $entry ) && '' !== (string) ( $entry[1] ?? '' ) ) {
+				$hashes[ $row ] = (string) $entry[1];
+			}
+		}
+		$free                      = CodeIndex::claim_free( $plain );
+		$report['dupes_existing'] += count( $plain ) - count( $free );
 		foreach ( $free as $row => $code ) {
 			if ( $this->add( $code, $batch ) ) {
 				++$report['imported'];
+				if ( isset( $hashes[ $row ] ) && CodeLookup::store_pin_hash( $code, $hashes[ $row ] ) ) {
+					$report['pins'] = (int) ( $report['pins'] ?? 0 ) + 1;
+				}
 				continue;
 			}
 			// Not a duplicate (checked above): the database refused the row. Say why.
@@ -161,6 +175,12 @@ final class CodePool {
 		global $wpdb;
 		ProductChecks::flush();
 		ProductChecks::batch_touched( $batch );
+		if ( CodeLookup::pins_in_use() ) {
+			// M12-99: the PINs of the deleted codes go with them.
+			foreach ( (array) $wpdb->get_col( $wpdb->prepare( "SELECT code FROM {$this->table()} WHERE batch = %s AND used_at IS NULL", $batch ) ) as $code ) { // phpcs:ignore
+				CodeLookup::store_pin_hash( (string) $code, '' );
+			}
+		}
 		return (int) $wpdb->query( $wpdb->prepare( "DELETE FROM {$this->table()} WHERE batch = %s AND used_at IS NULL", $batch ) ); // phpcs:ignore
 	}
 }

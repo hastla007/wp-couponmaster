@@ -2,6 +2,7 @@
 namespace VCAP\Admin;
 
 use VCAP\CodeGenerator;
+use VCAP\CodeLookup;
 use VCAP\CodePool;
 use VCAP\CodeIndex;
 use VCAP\Jobs;
@@ -84,6 +85,9 @@ final class Import {
 							<?php if ( ! empty( $report['weak'] ) ) : ?>
 								<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Codes too easy to guess skipped: %d', 'voucher-captain' ), Jobs::count( $report, 'weak' ) ) ); ?></li>
 							<?php endif; ?>
+							<?php if ( ! empty( $report['pins'] ) ) : ?>
+								<li><?php echo esc_html( sprintf( /* translators: %d: count */ __( 'Codes protected by a PIN: %d', 'voucher-captain' ), (int) $report['pins'] ) ); ?></li>
+							<?php endif; ?>
 						</ul>
 						<?php if ( ! empty( $report['sequential'] ) ) : ?>
 							<p class="vcap-warning"><strong><?php esc_html_e( 'The codes form a numbered series (consecutive or evenly spaced numbers): whoever buys or sees one code can work out others. They count as easy to guess.', 'voucher-captain' ); ?></strong></p>
@@ -140,6 +144,11 @@ final class Import {
 							<th scope="row"><label for="vcap-column"><?php esc_html_e( 'Column', 'voucher-captain' ); ?></label></th>
 							<td><input type="text" id="vcap-column" name="column" value="A" class="small-text" />
 								<p class="description"><?php esc_html_e( 'Column letter (A, B, …) or header name containing the codes.', 'voucher-captain' ); ?></p></td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="vcap-pin-column"><?php esc_html_e( 'PIN column (optional)', 'voucher-captain' ); ?></label></th>
+							<td><input type="text" id="vcap-pin-column" name="pin_column" value="" class="small-text" />
+								<p class="description"><?php esc_html_e( 'Column letter or header name with a PIN per card (3–16 letters or digits, e.g. under a scratch-off field). The PIN is stored hashed only. Cards with a PIN are redeemed, checked and topped up only with it: customers enter CODE#PIN.', 'voucher-captain' ); ?></p></td>
 						</tr>
 						<tr>
 							<th scope="row"><?php esc_html_e( 'Options', 'voucher-captain' ); ?></th>
@@ -248,6 +257,7 @@ final class Import {
 			array(
 				'batch'        => $batch,
 				'column'       => sanitize_text_field( wp_unslash( $_POST['column'] ?? 'A' ) ),
+				'pin_column'   => sanitize_text_field( wp_unslash( $_POST['pin_column'] ?? '' ) ),
 				'header'       => ! empty( $_POST['header'] ),
 				'uppercase'    => ! empty( $_POST['uppercase'] ),
 				'allow_weak'   => ! empty( $_POST['allow_weak'] ),
@@ -313,6 +323,7 @@ final class Import {
 			'weak'             => array(),
 			'weak_count'       => 0,
 			'weak_imported'    => 0,
+			'pins'             => 0,
 			'sequential'       => false,
 			'check_digit'      => false,
 			'weak_unconfirmed' => false,
@@ -399,8 +410,8 @@ final class Import {
 	 * database lookups per code. The report lists at most Jobs::MAX_ERRORS rows per list and counts all of them.
 	 *
 	 * @param array<int, array<int, string>> $rows
-	 * @param array{batch:string, column?:string, header?:bool, uppercase?:bool, allow_weak?:bool, confirm_weak?:bool, format?:string, pattern?:string} $opts
-	 * @return array{0:array, 1:array<int, string>} report, codes to import (row number => code)
+	 * @param array{batch:string, column?:string, pin_column?:string, header?:bool, uppercase?:bool, allow_weak?:bool, confirm_weak?:bool, format?:string, pattern?:string} $opts
+	 * @return array{0:array, 1:array<int, string|array{0:string, 1:string}>} report, codes to import (row number => code, or code and PIN hash)
 	 */
 	public function prepare( array $rows, array $opts ): array {
 		$batch  = (string) $opts['batch'];
@@ -425,6 +436,17 @@ final class Import {
 		}
 		$index            = $col['index'];
 		$header           = $col['header'];
+		// M12-99: optional PIN column (a header name makes the first row a header too).
+		$pin_index = null;
+		if ( '' !== trim( (string) ( $opts['pin_column'] ?? '' ) ) ) {
+			$pin_col = self::resolve_column( $rows, (string) $opts['pin_column'], $header );
+			if ( '' !== $pin_col['error'] ) {
+				$report['error'] = $pin_col['error'];
+				return array( $report, $codes );
+			}
+			$pin_index = $pin_col['index'];
+			$header    = $header || $pin_col['header'];
+		}
 		$report['column'] = $col['label'];
 		$rows             = array_values( $rows );
 		if ( $header ) {
@@ -452,6 +474,7 @@ final class Import {
 		$allow_weak = ! empty( $opts['allow_weak'] );
 		$seen       = array();
 		$candidates = array();
+		$pins       = array();
 		$row_number = static fn( int $n ): int => $n + ( $header ? 2 : 1 );
 		foreach ( $rows as $n => $row ) {
 			$code = trim( (string) ( $row[ $index ] ?? '' ) );
@@ -465,6 +488,12 @@ final class Import {
 				Jobs::add_error( $report, 'invalid', sprintf( __( 'Row %1$d: "%2$s" – %3$s', 'voucher-captain' ), $row_number( $n ), mb_substr( (string) preg_replace( '/[\x00-\x1F\x7F]/', '?', $code ), 0, 80 ), $problem ) );
 				continue;
 			}
+			$pin = null !== $pin_index ? trim( (string) ( $row[ $pin_index ] ?? '' ) ) : '';
+			if ( '' !== $pin && ( ! CodeLookup::valid_pin( $pin ) || str_contains( $code, CodeLookup::PIN_SEPARATOR ) ) ) {
+				/* translators: 1: row number, 2: value, 3: reason */
+				Jobs::add_error( $report, 'invalid', sprintf( __( 'Row %1$d: "%2$s" – %3$s', 'voucher-captain' ), $row_number( $n ), mb_substr( $code, 0, 80 ), __( 'the PIN must be 3–16 letters or digits (and the code must not contain "#")', 'voucher-captain' ) ) );
+				continue;
+			}
 			$key = wc_format_coupon_code( $code ); // WooCommerce codes are case-insensitive.
 			if ( isset( $seen[ $key ] ) ) {
 				++$report['dupes_file'];
@@ -472,6 +501,9 @@ final class Import {
 			}
 			$seen[ $key ]     = true;
 			$candidates[ $n ] = $code;
+			if ( '' !== $pin ) {
+				$pins[ $n ] = $pin;
+			}
 		}
 
 		// Guessing space without what makes the codes predictable from each other: the parts all codes of the file
@@ -494,7 +526,8 @@ final class Import {
 				}
 				++$report['weak_imported'];
 			}
-			$codes[ $row_number( $n ) ] = $code;
+			// The PIN leaves this request only as a hash (also in the chunks of a background import).
+			$codes[ $row_number( $n ) ] = isset( $pins[ $n ] ) ? array( $code, CodeLookup::hash_pin( $code, $pins[ $n ] ) ) : $code;
 		}
 		return array( $report, $codes );
 	}

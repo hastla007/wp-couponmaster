@@ -105,11 +105,12 @@ final class TopUp {
 		$id    = Shortcodes::unique_id( 'vcap-topup-code' ); // Unique on the page (two product forms, quick views).
 		echo '<p class="form-row vcap-topup-field"><label for="' . esc_attr( $id ) . '">' . esc_html__( 'Gift card code to top up', 'voucher-captain' ) . ' <abbr class="required" title="' . esc_attr__( 'required', 'voucher-captain' ) . '">*</abbr></label>';
 		echo '<input type="text" class="input-text" id="' . esc_attr( $id ) . '" name="' . esc_attr( self::FIELD ) . '" value="' . Shortcodes::esc_attr_text( $value ) . '" required autocomplete="off" maxlength="100" /></p>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_attr_text().
+		echo CodeLookup::pin_hint(); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in pin_hint().
 	}
 
 	/** @return Voucher|string The gift card that can be topped up, or why not. */
 	public function card( string $raw ) {
-		$code = wc_format_coupon_code( sanitize_text_field( $raw ) );
+		$code = wc_format_coupon_code( CodeLookup::code_input( sanitize_text_field( $raw ) ) ); // M12-99: code#PIN.
 		$card = '' !== $code ? ( $this->repo->get_by_code( $code ) ?? $this->repo->get_by_code( strtoupper( $code ) ) ) : null;
 		if ( ! $card ) {
 			return __( 'This gift card code was not found.', 'voucher-captain' );
@@ -159,6 +160,7 @@ final class TopUp {
 			// other currency): the form does not tell which codes exist. Only a card that can be topped up gives
 			// the attempt back; the order note of a held line keeps the exact reason (card()).
 			$card = $this->card( $raw );
+			$card = $card instanceof Voucher && ! CodeLookup::pin_ok( (string) $card->code ) ? null : $card; // M12-99: PIN cards need code#PIN.
 			CodeLookup::finish( $card instanceof Voucher );
 			$result = $card instanceof Voucher ? self::remaining_validity_error( $card ) : __( 'This code is not a gift card that can be topped up. Please check the code.', 'voucher-captain' );
 			$result = '' === $result ? true : $result;
@@ -214,7 +216,7 @@ final class TopUp {
 		$this->override = is_scalar( $raw ) ? sanitize_text_field( (string) $raw ) : '';
 		if ( '' !== $this->override ) {
 			$data['cart_item_data']                = (array) ( $data['cart_item_data'] ?? array() );
-			$data['cart_item_data'][ self::FIELD ] = wc_format_coupon_code( $this->override );
+			$data['cart_item_data'][ self::FIELD ] = wc_format_coupon_code( CodeLookup::split_pin( $this->override )[0] ); // Never the PIN.
 		}
 		return $data;
 	}
@@ -241,7 +243,7 @@ final class TopUp {
 
 	public function cart_item_data( $data, $product_id ) {
 		if ( self::is_topup( wc_get_product( (int) $product_id ) ) && isset( $_POST[ self::FIELD ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce add-to-cart.
-			$data[ self::FIELD ] = wc_format_coupon_code( sanitize_text_field( wp_unslash( $_POST[ self::FIELD ] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$data[ self::FIELD ] = wc_format_coupon_code( CodeLookup::split_pin( sanitize_text_field( wp_unslash( $_POST[ self::FIELD ] ) ) )[0] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- never the PIN (M12-99).
 		}
 		return $data;
 	}
