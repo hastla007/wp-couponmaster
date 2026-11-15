@@ -1014,12 +1014,12 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - `false` bei `wcs_order_contains_switch`/`resubscribe` (abschaltbar per Filter).
     - Bei Summe 0 mit Testphase erst ab der ersten bezahlten Verlängerung ausstellen. Ecosystem-Test.
-- [ ] **[PRIO: MITTEL]** | **[Experte #7]** | **[Kategorie: PDF-Mail]** – **M12-39 Mehrzeiliger Gruß wird still auf 5,5 pt geschrumpft und abgeschnitten**
+- [x] **[PRIO: MITTEL]** | **[Experte #7]** | **[Kategorie: PDF-Mail]** – **M12-39 Mehrzeiliger Gruß wird still auf 5,5 pt geschrumpft und abgeschnitten** — *Nachweis: tests/pdf-integration.php „M12-39: a message of 41 short lines (would be cut off in the PDF) is refused at add to cart“, tests/run.php „M12-39: the customer preview shows a red note "Text too long … max. approx. N lines"“*
   - *Problem:* `PdfRenderer` schreibt nur einen Logeintrag. Weder Kunde noch Vorschau sehen das, und die Worst-Case-Vorschau enthält keine Zeilenumbrüche.
   - *Lösung:*
     - `fit_size()` beim Hinzufügen zum Warenkorb und in der Vorschau für Texte mit `{message}`, `{recipient_name}` und `{field:*}` aufrufen. Passt nicht: Fehler. Unter 75 %: Hinweis.
     - Produktoption „max. Zeilen“. Vorschau mit vielen Umbrüchen. Test.
-- [ ] **[PRIO: MITTEL]** | **[Experte #7]** | **[Kategorie: PDF-Mail]** – **M12-40 QR- und Barcodes ohne Ruhezone und hellen Untergrund, ohne Lesbarkeitsprüfung, der eigene Scanner liest nur nicht-invertierte QR**
+- [ ] **[PRIO: MITTEL]** | **[Experte #7]** | **[Kategorie: PDF-Mail]** – **M12-40 QR- und Barcodes ohne Ruhezone und hellen Untergrund, ohne Lesbarkeitsprüfung, der eigene Scanner liest nur nicht-invertierte QR** (Stand 15.11.: PDF-Teil erledigt – Ruhezone 4 und weiße helle Module, Barcode mit 10 Modulen Rand, Deckkraft ignoriert, design_warnings(), Designer-Hinweis zum Browser-Scanner; Nachweis tests/run.php „M12-40: the designer warns about QR modules under 0.33 mm, bar modules under 0.19 mm and contrast under 4.5:1“. Offen: scanner.js `inversionAttempts` → Paket A2.)
   - *Problem:*
     - QR: Ruhezone 2 statt 4, `drawLightModules=false`, Farbe und Deckkraft frei.
     - Barcode: keine Ruhezone, keine Mindestbreite.
@@ -1028,7 +1028,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
     - QR mit Ruhezone 4 und hellen Modulen in Weiß, `opacity` ignorieren. Barcode mit 10 Modulen Rand.
     - `design_warnings()` warnt bei Modul unter 0,33 mm (QR) bzw. 0,19 mm (Barcode) und bei Kontrast unter 4,5:1.
     - Scanner mit `inversionAttempts: 'attemptBoth'`. Designer-Hinweis bzw. 1D-Decoder als Fallback.
-- [ ] **[PRIO: MITTEL]** | **[Experte #7]** | **[Kategorie: UX]** – **M12-41 QR-Inhalt „PDF-Download-Link“ läuft nach 90 Tagen ab, der gedruckte Gutschein gilt Jahre**
+- [x] **[PRIO: MITTEL]** | **[Experte #7]** | **[Kategorie: UX]** – **M12-41 QR-Inhalt „PDF-Download-Link“ läuft nach 90 Tagen ab, der gedruckte Gutschein gilt Jahre** — *Nachweis: tests/pdf-integration.php „M12-41: the printed link expires 30 days after the voucher, never for a voucher without expiry“*
   - *Problem:* `signed_url()` mit `exp` aus `vcap_download_link_days` wird fest ins PDF geschrieben.
   - *Lösung:* Den Ablauf an die Gültigkeit des Gutscheins koppeln (+30 Tage, bzw. unbefristet) oder auf eine dauerhafte Statusseite verlinken. Hinweis im Designer.
 - [ ] **[PRIO: MITTEL]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-42 Gutscheine ohne Verkauf (`issue_standalone`, Kulanz, Preise) werden automatisch Mehrzweck**
@@ -1038,7 +1038,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - Merkmal „sold“ im Gutschein speichern (Bestell-ID oder `paid => true`). Ohne Verkauf `discount`.
     - Bericht trennt verkaufte und unentgeltliche Gutscheine. Frage F4.
-- [ ] **[PRIO: MITTEL]** | **[Experte #7]** | **[Kategorie: Security]** – **M12-43 Privater Ordner ist unter nginx offen, Site Health meldet trotzdem „geschützt“, Temp-Reste werden nie gelöscht**
+- [x] **[PRIO: MITTEL]** | **[Experte #7]** | **[Kategorie: Security]** – **M12-43 Privater Ordner ist unter nginx offen, Site Health meldet trotzdem „geschützt“, Temp-Reste werden nie gelöscht** — *Nachweis: tests/pdf-integration.php „M12-43: Site Health fetches a test file: downloadable (200) is critical, refused (403) is good“, tests/run.php „M12-43: the maintenance removes temp PDFs, img-*, *.part and dompdf temp images older than an hour, nothing else“*
   - *Problem:*
     - Der Schutz ist nur `.htaccess` mit Apache-2.2-Syntax.
     - Temp-PDFs haben erratbare Namen (`vcap_pdf_filename`).
@@ -1153,17 +1153,17 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:* `payments_for()` sortiert wie `sort()`.
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #5]** | **[Kategorie: UX]** – **M12-71 Klassische Kasse zeigt das Restguthaben nicht**
   - *Lösung:* `cart_balance_notice` auch an `woocommerce_review_order_after_order_total` hängen.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #7]** | **[Kategorie: PDF-Mail]** – **M12-72 Subdivision-Flaggen und Keycap-Emoji drucken leere Kästchen (M8 unvollständig)**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #7]** | **[Kategorie: PDF-Mail]** – **M12-72 Subdivision-Flaggen und Keycap-Emoji drucken leere Kästchen (M8 unvollständig)** — *Nachweis: tests/run.php „M12-72: subdivision flags (tag characters) and keycap emoji are left out“*
   - *Lösung:* Die Zeichenbereiche erweitern (U+E0000–E007F, U+20E3, …). Test.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #7]** | **[Kategorie: Bug]** – **M12-73 PNG-Hintergründe mit Alphakanal kosten 2–7 s pro Render, auch in der öffentlichen Kundenvorschau**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #7]** | **[Kategorie: Bug]** – **M12-73 PNG-Hintergründe mit Alphakanal kosten 2–7 s pro Render, auch in der öffentlichen Kundenvorschau** — *Nachweis: tests/run.php „M12-73: an opaque PNG is printed from a cached JPEG, a large transparent PNG from a reduced PNG“*
   - *Lösung:* Verkleinern bzw. als JPEG cachen, Warnung im Designer, Vorschau-Cache für 10 Minuten.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #7, #11, #12]** | **[Kategorie: Feature]** – **M12-74 Wallet: Bundle-Mail ohne Links, nur Text-Labels, kein Platzhalter**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #7, #11, #12]** | **[Kategorie: Feature]** – **M12-74 Wallet: Bundle-Mail ohne Links, nur Text-Labels, kein Platzhalter** — *Nachweis: tests/pdf-integration.php „M12-74: the bundled email shows the wallet badge of every voucher“*
   - *Lösung:* `voucher_links()` in beiden Bundle-Templates aufrufen, `image`/`width`/`alt` erlauben, Platzhalter `{link:id}`. Wallet selbst bleibt ein Premium-Add-on.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #7]** | **[Kategorie: Feature]** – **M12-75 Druck: kein Anschnitt, keine Schnittmarken, keine Sicherheitszone, kein Mehrfachnutzen auf A4**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #7]** | **[Kategorie: Feature]** – **M12-75 Druck: kein Anschnitt, keine Schnittmarken, keine Sicherheitszone, kein Mehrfachnutzen auf A4** — *Nachweis: tests/run.php „M12-75: five A6 vouchers are printed on two A4 sheets (render_many N-up)“*
   - *Lösung:* Seitenoption „Anschnitt“, Sicherheitszone im Designer, Admin-Sammeldruck mit mehreren Gutscheinen auf A4.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #7]** | **[Kategorie: UX]** – **M12-76 PDF ungetaggt, Titel ist der Gutscheincode**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #7]** | **[Kategorie: UX]** – **M12-76 PDF ungetaggt, Titel ist der Gutscheincode** — *Nachweis: tests/run.php „M12-76: the PDF title names the shop (and product), not the voucher code“*
   - *Lösung:* Titel „Produkt – Shop“, `lang`-Attribut, Hinweis in ACCESSIBILITY.md.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #7]** | **[Kategorie: UX]** – **M12-77 Standardvorlage druckt „Gültig bis unbegrenzt“**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #7]** | **[Kategorie: UX]** – **M12-77 Standardvorlage druckt „Gültig bis unbegrenzt“** — *Nachweis: tests/run.php „M12-77: without expiry "Valid indefinitely" is printed and "Valid until {expiry_date}" is left out“*
   - *Lösung:* Platzhalter `{expiry_line}`, oder die Zeile entfällt, wenn kein Ablauf gesetzt ist.
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #8]** | **[Kategorie: Security]** – **M12-78 Scanner-Lookup ohne Rate-Limit und ohne Protokoll**
   - *Lösung:* Fehlgeschlagene Lookups je Benutzer zählen, Zähler im Bericht, Kasse auch beim Check-in speichern. SECURITY.md.
