@@ -4,7 +4,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: Voucher Captain 1.0.0\n"
-"POT-Creation-Date: 2026-11-15 08:08+0000\n"
+"POT-Creation-Date: 2026-11-15 08:53+0000\n"
 "PO-Revision-Date: 2026-11-14 16:00+0000\n"
 "Last-Translator: \n"
 "Language-Team: German\n"
@@ -50,7 +50,7 @@ msgstr ""
 "Zu viele ungültige Gutscheincodes. Bitte versuchen Sie es später erneut."
 
 #: src/API/V1/RedemptionService.php:86 src/API/V1/RedemptionService.php:144
-#: src/Compat/PassCaptainTickets.php:583
+#: src/Compat/PassCaptain/Exchange.php:37
 msgid "This voucher code is not valid."
 msgstr "Dieser Gutscheincode ist ungültig."
 
@@ -150,7 +150,7 @@ msgstr ""
 "Gutschein erneut ein."
 
 #: src/API/V1/RedemptionService.php:645 src/API/V1/RedemptionService.php:748
-#: src/CouponManager.php:1499 src/Downloads.php:275
+#: src/Coupons/CartCoupons.php:69 src/Downloads.php:275
 msgid "This voucher has been cancelled."
 msgstr "Dieser Gutschein wurde storniert."
 
@@ -171,12 +171,12 @@ msgstr ""
 msgid "This voucher can only be used in the shop."
 msgstr "Dieser Gutschein kann nur im Shop verwendet werden."
 
-#: src/API/V1/RedemptionService.php:750 src/CouponManager.php:1502
+#: src/API/V1/RedemptionService.php:750 src/Coupons/CartCoupons.php:72
 msgid "This voucher is not active yet."
 msgstr "Dieser Gutschein ist noch nicht aktiv."
 
 #: src/API/V1/RedemptionService.php:752 src/API/V1/RedemptionService.php:758
-#: src/CouponManager.php:1506
+#: src/Coupons/CartCoupons.php:76
 msgid ""
 "This voucher is currently being redeemed. Please try again in a few minutes."
 msgstr ""
@@ -187,7 +187,7 @@ msgstr ""
 msgid "This voucher has already been redeemed."
 msgstr "Dieser Gutschein wurde bereits eingelöst."
 
-#: src/API/V1/RedemptionService.php:761 src/CouponManager.php:1512
+#: src/API/V1/RedemptionService.php:761 src/Coupons/CartCoupons.php:82
 msgid "This voucher has expired."
 msgstr "Dieser Gutschein ist abgelaufen."
 
@@ -1217,7 +1217,8 @@ msgstr ""
 
 #: src/Admin/ReportsAdmin.php:223 src/Admin/Scanner.php:70
 #: src/Admin/StoreCreditAdmin.php:96 src/Admin/VoucherAdmin.php:347
-#: src/Compat/PassCaptainTickets.php:911 src/Compat/PassCaptainTickets.php:1196
+#: src/Compat/PassCaptain/RedeemPage.php:157
+#: src/Compat/PassCaptain/TicketAdmin.php:89
 msgid "Date"
 msgstr "Datum"
 
@@ -3215,6 +3216,537 @@ msgstr "WP Pass Captain öffnen"
 msgid "WP Pass Captain (ticket checkout)"
 msgstr "WP Pass Captain (Ticket-Kasse)"
 
+#. translators: %s: URL of the voucher redemption page
+#: src/Compat/PassCaptain/ChannelRules.php:41
+#, php-format
+msgid ""
+"This voucher is exchanged for tickets, not used as payment. Please redeem it "
+"on %s."
+msgstr ""
+"Dieser Gutschein wird gegen Tickets eingetauscht, nicht als Zahlungsmittel "
+"verwendet. Bitte lösen Sie ihn hier ein: %s"
+
+#: src/Compat/PassCaptain/ChannelRules.php:42
+msgid ""
+"This voucher is exchanged for tickets, not used as payment. Please redeem it "
+"on the voucher redemption page."
+msgstr ""
+"Dieser Gutschein wird gegen Tickets eingetauscht, nicht als Zahlungsmittel "
+"verwendet. Bitte lösen Sie ihn auf der Einlöseseite ein."
+
+#: src/Compat/PassCaptain/ChannelRules.php:53
+msgid ""
+"Ticket voucher – not a ticket. Exchange it for tickets first (redeem page or "
+"voucher admin)."
+msgstr ""
+"Ticket-Gutschein – kein Ticket. Zuerst in Tickets umwandeln (Einlöseseite "
+"oder Gutscheinverwaltung)."
+
+#: src/Compat/PassCaptain/ChannelRules.php:59
+msgid ""
+"Ticket vouchers cannot be redeemed at the counter. Exchange them for tickets "
+"first."
+msgstr ""
+"Ticket-Gutscheine können nicht an der Kasse eingelöst werden. Bitte zuerst "
+"in Tickets umwandeln."
+
+#: src/Compat/PassCaptain/Customer.php:28
+msgid ""
+"Open the redeem page with the button below – your code is already filled in."
+msgstr ""
+"Öffnen Sie die Einlöseseite über die Schaltfläche unten – Ihr Code ist "
+"bereits eingetragen."
+
+#: src/Compat/PassCaptain/Customer.php:29
+msgid "Enter your code on our website's redeem page."
+msgstr "Geben Sie Ihren Code auf der Einlöseseite unserer Website ein."
+
+#: src/Compat/PassCaptain/Customer.php:31
+msgid "Choose your date and, if asked, enter the names of the attendees."
+msgstr ""
+"Wählen Sie Ihren Termin und geben Sie, falls gefragt, die Namen der "
+"Teilnehmenden ein."
+
+#: src/Compat/PassCaptain/Customer.php:32
+msgid "If asked, enter the names of the attendees."
+msgstr "Geben Sie, falls gefragt, die Namen der Teilnehmenden ein."
+
+#. translators: %s: e.g. "2 tickets for Concert X"
+#: src/Compat/PassCaptain/Customer.php:34
+#, php-format
+msgid "You receive %s by email right away."
+msgstr "Sie erhalten %s sofort per E-Mail."
+
+#: src/Compat/PassCaptain/Customer.php:35
+msgid ""
+"Show the tickets at the entrance – the voucher itself is not an admission "
+"ticket."
+msgstr ""
+"Zeigen Sie die Tickets am Einlass vor – der Gutschein selbst ist keine "
+"Eintrittskarte."
+
+#: src/Compat/PassCaptain/Customer.php:44
+msgid ""
+"Your ticket voucher {coupon_code} is valid until {expiry_date}. Exchange it "
+"for your tickets before then."
+msgstr ""
+"Ihr Ticket-Gutschein {coupon_code} ist bis {expiry_date} gültig. Tauschen "
+"Sie ihn bis dahin gegen Ihre Tickets ein."
+
+#: src/Compat/PassCaptain/Customer.php:49
+msgid "Event of a ticket voucher"
+msgstr "Veranstaltung eines Ticket-Gutscheins"
+
+#: src/Compat/PassCaptain/Customer.php:50
+msgid "Number of tickets of a ticket voucher"
+msgstr "Anzahl Tickets eines Ticket-Gutscheins"
+
+#: src/Compat/PassCaptain/Customer.php:72
+msgid "The tickets were cancelled."
+msgstr "Die Tickets wurden storniert."
+
+#. translators: 1: number of tickets, 2: event and date
+#: src/Compat/PassCaptain/Customer.php:79
+#, php-format
+msgid "%1$d ticket for %2$s"
+msgid_plural "%1$d tickets for %2$s"
+msgstr[0] "%1$d Ticket für %2$s"
+msgstr[1] "%1$d Tickets für %2$s"
+
+#. translators: %d: number of tickets
+#: src/Compat/PassCaptain/Customer.php:81
+#, php-format
+msgid "Exchanged for %d ticket"
+msgid_plural "Exchanged for %d tickets"
+msgstr[0] "Gegen %d Ticket eingetauscht"
+msgstr[1] "Gegen %d Tickets eingetauscht"
+
+#. translators: 1: tickets text, 2: masked email
+#: src/Compat/PassCaptain/Customer.php:84
+#, php-format
+msgid "%1$s, sent to %2$s"
+msgstr "%1$s, gesendet an %2$s"
+
+#: src/Compat/PassCaptain/Customer.php:98
+#: src/Compat/PassCaptain/Revocation.php:85
+#: src/Compat/PassCaptain/TicketAdmin.php:78
+#: src/Compat/PassCaptain/TicketAdmin.php:94 src/Downloads.php:573
+msgid "Exchange for tickets"
+msgstr "In Tickets umwandeln"
+
+#: src/Compat/PassCaptain/Customer.php:109
+msgid "I understand that the tickets sent so far become invalid."
+msgstr "Mir ist bewusst, dass die bisher gesendeten Tickets ungültig werden."
+
+#: src/Compat/PassCaptain/Customer.php:110
+#: src/Compat/PassCaptain/TicketAdmin.php:66
+msgid "Send tickets again"
+msgstr "Tickets erneut senden"
+
+#: src/Compat/PassCaptain/Customer.php:142 src/Downloads.php:193
+#: src/Downloads.php:224 src/Shortcodes.php:408
+msgid "The request has expired. Please try again."
+msgstr "Die Anfrage ist abgelaufen. Bitte versuchen Sie es erneut."
+
+#: src/Compat/PassCaptain/Customer.php:146
+msgid "Please confirm that the tickets sent so far become invalid."
+msgstr ""
+"Bitte bestätigen Sie, dass die bisher gesendeten Tickets ungültig werden."
+
+#: src/Compat/PassCaptain/Customer.php:154
+msgid "The tickets of this voucher cannot be sent again."
+msgstr "Die Tickets dieses Gutscheins können nicht erneut gesendet werden."
+
+#: src/Compat/PassCaptain/Customer.php:159
+msgid "Sending the tickets again (requested by the customer) failed:"
+msgstr "Erneutes Senden der Tickets (auf Kundenwunsch) fehlgeschlagen:"
+
+#: src/Compat/PassCaptain/Customer.php:162
+msgid "Requested by the customer"
+msgstr "Von der Kundin oder dem Kunden angefordert"
+
+#. translators: %s: masked email
+#: src/Compat/PassCaptain/Customer.php:164
+#, php-format
+msgid "The tickets were sent again to %s. Only the new tickets are valid."
+msgstr ""
+"Die Tickets wurden erneut an %s gesendet. Nur die neuen Tickets sind gültig."
+
+#: src/Compat/PassCaptain/Exchange.php:41
+msgid "This voucher cannot be exchanged for tickets."
+msgstr "Dieser Gutschein kann nicht in Tickets umgewandelt werden."
+
+#: src/Compat/PassCaptain/Exchange.php:44
+msgid ""
+"Gift cards with a balance cannot be exchanged for tickets; use them in the "
+"ticket checkout."
+msgstr ""
+"Geschenkkarten mit Restwert können nicht in Tickets umgewandelt werden; "
+"bitte im Ticket-Checkout einlösen."
+
+#: src/Compat/PassCaptain/Exchange.php:48
+#: src/Compat/PassCaptain/Exchange.php:127
+msgid "Tickets cannot be issued right now. Please try again later."
+msgstr ""
+"Tickets können gerade nicht ausgestellt werden. Bitte versuchen Sie es "
+"später erneut."
+
+#: src/Compat/PassCaptain/Exchange.php:56
+msgid ""
+"The tickets of this voucher were revoked (for example because the event was "
+"cancelled). Please contact us."
+msgstr ""
+"Die Tickets dieses Gutscheins wurden widerrufen (zum Beispiel, weil die "
+"Veranstaltung abgesagt wurde). Bitte kontaktieren Sie uns."
+
+#: src/Compat/PassCaptain/Exchange.php:70
+msgid "Please choose a date for your tickets."
+msgstr "Bitte wählen Sie einen Termin für Ihre Tickets."
+
+#: src/Compat/PassCaptain/Exchange.php:70
+#: src/Compat/PassCaptain/TicketAdmin.php:82
+msgid "There are no upcoming dates for this voucher at the moment."
+msgstr "Für diesen Gutschein gibt es derzeit keine künftigen Termine."
+
+#: src/Compat/PassCaptain/Exchange.php:92
+msgid "Please fill in the details for each ticket."
+msgstr "Bitte füllen Sie die Angaben für jedes Ticket aus."
+
+#: src/Compat/PassCaptain/Exchange.php:101
+msgid "Please log in so we know where to send the tickets."
+msgstr ""
+"Bitte melden Sie sich an, damit wir wissen, wohin die Tickets gesendet "
+"werden sollen."
+
+#. translators: 1: number of tickets, 2: Pass Captain order id, 3: email
+#: src/Compat/PassCaptain/Exchange.php:149
+#, php-format
+msgid "%1$d ticket, Pass Captain order %2$s, sent to %3$s"
+msgid_plural "%1$d tickets, Pass Captain order %2$s, sent to %3$s"
+msgstr[0] "%1$d Ticket, Pass-Captain-Bestellung %2$s, gesendet an %3$s"
+msgstr[1] "%1$d Tickets, Pass-Captain-Bestellung %2$s, gesendet an %3$s"
+
+#: src/Compat/PassCaptain/ProductSetup.php:21
+msgid ""
+"Tip: the voucher type \"Ticket\" is a simple admission pass without dates or "
+"capacity, checked in at Voucher Captain. For events with dates, capacity and "
+"admission rules, create them in WP Pass Captain and use a voucher with \"WP "
+"Pass Captain ticket\" below (or sell Pass Captain tickets directly)."
+msgstr ""
+"Tipp: Der Gutscheintyp „Ticket“ ist ein einfacher Eintrittsgutschein ohne "
+"Termin und Kontingent, eingecheckt in Voucher Captain. Für Veranstaltungen "
+"mit Terminen, Kontingent und Einlassregeln diese in WP Pass Captain anlegen "
+"und unten „WP-Pass-Captain-Ticket“ wählen (oder Pass-Captain-Tickets direkt "
+"verkaufen)."
+
+#: src/Compat/PassCaptain/ProductSetup.php:25
+msgid "— No ticket (regular voucher) —"
+msgstr "— Kein Ticket (normaler Gutschein) —"
+
+#. translators: 1: event, 2: number of upcoming dates
+#: src/Compat/PassCaptain/ProductSetup.php:29
+#, php-format
+msgid "Customer chooses the date: %1$s (%2$d dates)"
+msgstr "Kunde wählt den Termin: %1$s (%2$d Termine)"
+
+#. translators: %s: event, date and ticket type
+#: src/Compat/PassCaptain/ProductSetup.php:34
+#, php-format
+msgid "Fixed date: %s"
+msgstr "Fester Termin: %s"
+
+#. translators: %d: event id
+#: src/Compat/PassCaptain/ProductSetup.php:38
+#, php-format
+msgid "Event #%d (no upcoming dates)"
+msgstr "Veranstaltung #%d (keine künftigen Termine)"
+
+#. translators: %d: ticket type id
+#: src/Compat/PassCaptain/ProductSetup.php:42
+#, php-format
+msgid "Ticket type #%d (no longer on sale)"
+msgstr "Ticketart #%d (nicht mehr im Verkauf)"
+
+#: src/Compat/PassCaptain/ProductSetup.php:47
+#: src/Compat/PassCaptainScanner.php:77
+msgid "WP Pass Captain ticket"
+msgstr "WP-Pass-Captain-Ticket"
+
+#: src/Compat/PassCaptain/ProductSetup.php:51
+msgid ""
+"Exchange each voucher for tickets of this ticket type (redeem page or "
+"voucher admin). The voucher is then only exchanged for its tickets; to let "
+"it also pay as a value voucher, tick \"Shop\" under \"Redeemable via\"."
+msgstr ""
+"Jeder Gutschein wird gegen Tickets dieser Ticketart eingetauscht "
+"(Einlöseseite oder Gutscheinverwaltung). Er ist dann nur gegen seine Tickets "
+"eintauschbar; soll er zusätzlich wie ein Wertgutschein bezahlen können, "
+"wählen Sie unter „Einlösbar über“ den Shop aus."
+
+#: src/Compat/PassCaptain/ProductSetup.php:57
+msgid "Tickets per voucher"
+msgstr "Tickets pro Gutschein"
+
+#: src/Compat/PassCaptain/ProductSetup.php:66
+msgid "Ticket name (date choice)"
+msgstr "Ticketname (Terminwahl)"
+
+#: src/Compat/PassCaptain/ProductSetup.php:68
+msgid "Any ticket type"
+msgstr "Jede Ticketart"
+
+#: src/Compat/PassCaptain/ProductSetup.php:70
+msgid ""
+"Only for \"customer chooses the date\": offer only ticket types with exactly "
+"this name (e.g. \"Standard\")."
+msgstr ""
+"Nur bei „Kunde wählt den Termin“: nur Ticketarten mit genau diesem Namen "
+"anbieten (z. B. „Standard“)."
+
+#. translators: %s: product name
+#: src/Compat/PassCaptain/ProductSetup.php:154
+#, php-format
+msgid "\"%s\" is not available: the date is sold out or already over."
+msgstr ""
+"„%s“ ist nicht verfügbar: Der Termin ist ausverkauft oder bereits vorbei."
+
+#: src/Compat/PassCaptain/RedeemPage.php:47
+msgid "Please enter a valid email address for your tickets."
+msgstr "Bitte geben Sie eine gültige E-Mail-Adresse für Ihre Tickets ein."
+
+#: src/Compat/PassCaptain/RedeemPage.php:47
+msgid "Please enter the email address the tickets should be sent to."
+msgstr ""
+"Bitte geben Sie die E-Mail-Adresse ein, an die die Tickets gesendet werden "
+"sollen."
+
+#. translators: 1: date, 2: number of tickets, 3: (masked) email
+#: src/Compat/PassCaptain/RedeemPage.php:93
+#, php-format
+msgid "This voucher was already exchanged on %1$s: %2$d ticket went to %3$s."
+msgid_plural ""
+"This voucher was already exchanged on %1$s: %2$d tickets went to %3$s."
+msgstr[0] ""
+"Dieser Gutschein wurde bereits am %1$s eingelöst: %2$d Ticket ging an %3$s."
+msgstr[1] ""
+"Dieser Gutschein wurde bereits am %1$s eingelöst: %2$d Tickets gingen an "
+"%3$s."
+
+#. translators: 1: number of tickets, 2: (masked) email
+#: src/Compat/PassCaptain/RedeemPage.php:95
+#, php-format
+msgid "This voucher was already exchanged: %1$d ticket went to %2$s."
+msgid_plural "This voucher was already exchanged: %1$d tickets went to %2$s."
+msgstr[0] "Dieser Gutschein wurde bereits eingelöst: %1$d Ticket ging an %2$s."
+msgstr[1] ""
+"Dieser Gutschein wurde bereits eingelöst: %1$d Tickets gingen an %2$s."
+
+#. translators: 1: number of tickets, 2: email
+#: src/Compat/PassCaptain/RedeemPage.php:101
+#, php-format
+msgid "Your tickets (%1$d) were sent to %2$s."
+msgstr "Ihre Tickets (%1$d) wurden an %2$s gesendet."
+
+#: src/Compat/PassCaptain/RedeemPage.php:139
+msgid "Send the tickets to (email)"
+msgstr "Tickets senden an (E-Mail)"
+
+#: src/Compat/PassCaptain/RedeemPage.php:144
+msgid "Choose another date"
+msgstr "Anderen Termin wählen"
+
+#: src/Compat/PassCaptain/RedeemPage.php:146
+msgid "Cancel"
+msgstr "Abbrechen"
+
+#: src/Compat/PassCaptain/RedeemPage.php:147
+msgid "Redeeming issues the tickets bindingly; the voucher is used up."
+msgstr ""
+"Mit dem Einlösen werden die Tickets verbindlich ausgestellt; der Gutschein "
+"ist dann verbraucht."
+
+#: src/Compat/PassCaptain/RedeemPage.php:159
+#: src/Compat/PassCaptain/TicketAdmin.php:90
+msgid "— Choose a date —"
+msgstr "— Termin wählen —"
+
+#. translators: %d: ticket number
+#: src/Compat/PassCaptain/RedeemPage.php:179
+#, php-format
+msgid "Ticket %d"
+msgstr "Ticket %d"
+
+#: src/Compat/PassCaptain/Revocation.php:78
+msgid "Your voucher is valid again"
+msgstr "Ihr Gutschein ist wieder gültig"
+
+#. translators: 1: voucher code, 2: expiry date
+#: src/Compat/PassCaptain/Revocation.php:81
+#, php-format
+msgid ""
+"The tickets you received for voucher %1$s were cancelled. The voucher is "
+"valid again until %2$s and can be exchanged for tickets once more."
+msgstr ""
+"Die Tickets, die Sie für den Gutschein %1$s erhalten haben, wurden "
+"storniert. Der Gutschein ist wieder gültig bis %2$s und kann erneut gegen "
+"Tickets eingetauscht werden."
+
+#. translators: %s: site name
+#: src/Compat/PassCaptain/Revocation.php:89
+#, php-format
+msgid "[%s] Your voucher is valid again"
+msgstr "[%s] Ihr Gutschein ist wieder gültig"
+
+#: src/Compat/PassCaptain/Revocation.php:94
+msgid "The customer could not be told that the voucher is valid again."
+msgstr ""
+"Der Kunde konnte nicht informiert werden, dass der Gutschein wieder gültig "
+"ist."
+
+#: src/Compat/PassCaptain/Revocation.php:118
+#: src/Compat/PassCaptainReconcile.php:67
+msgid "WP Pass Captain is not active."
+msgstr "WP Pass Captain ist nicht aktiv."
+
+#: src/Compat/PassCaptain/TicketAdmin.php:32
+msgid ""
+"WP Pass Captain tickets could not be cancelled or a voucher could not be "
+"given back. The customer may hold valid tickets while the voucher is free "
+"again (or the other way round). Check these vouchers and their history:"
+msgstr ""
+"WP-Pass-Captain-Tickets konnten nicht storniert oder ein Gutschein nicht "
+"zurückgegeben werden. Möglicherweise sind die Tickets noch gültig, während "
+"der Gutschein wieder frei ist (oder umgekehrt). Prüfen Sie diese Gutscheine "
+"und ihren Verlauf:"
+
+#: src/Compat/PassCaptain/TicketAdmin.php:47
+msgid ""
+"Customers exchange ticket vouchers for tickets on that page, and voucher "
+"emails link to it."
+msgstr ""
+"Dort tauschen Kunden Ticketgutscheine gegen Tickets ein, und die Gutschein-E-"
+"Mails verlinken darauf."
+
+#: src/Compat/PassCaptain/TicketAdmin.php:48
+msgid "Choose the redeem page"
+msgstr "Einlöseseite wählen"
+
+#: src/Compat/PassCaptain/TicketAdmin.php:66
+msgid ""
+"Send the tickets again? New ticket codes are issued; the tickets sent so far "
+"become invalid."
+msgstr ""
+"Tickets erneut senden? Es werden neue Ticketcodes ausgestellt; die bisher "
+"gesendeten Tickets werden ungültig."
+
+#: src/Compat/PassCaptain/TicketAdmin.php:69
+msgid "Undo exchange (e.g. to change the date)"
+msgstr "Umtausch rückgängig machen (z. B. um den Termin zu ändern)"
+
+#: src/Compat/PassCaptain/TicketAdmin.php:69
+msgid ""
+"Undo the exchange? Its tickets are cancelled in WP Pass Captain and the "
+"voucher becomes valid again, so it can be exchanged for another date."
+msgstr ""
+"Umtausch rückgängig machen? Die Tickets werden in WP Pass Captain storniert "
+"und der Gutschein wird wieder gültig, sodass er gegen einen anderen Termin "
+"eingetauscht werden kann."
+
+#: src/Compat/PassCaptain/TicketAdmin.php:136
+msgid "Requested by an admin:"
+msgstr "Von einer Administratorin oder einem Administrator angefordert:"
+
+#: src/Compat/PassCaptain/TicketAdmin.php:158
+msgid ""
+"The exchange could not be undone completely: tickets that were already "
+"checked in stay valid."
+msgstr ""
+"Der Umtausch konnte nicht vollständig rückgängig gemacht werden: bereits "
+"eingecheckte Tickets bleiben gültig."
+
+#: src/Compat/PassCaptain/TicketAdmin.php:168
+msgid "Tickets issued in WP Pass Captain and sent by email."
+msgstr "Tickets in WP Pass Captain ausgestellt und per E-Mail gesendet."
+
+#: src/Compat/PassCaptain/TicketAdmin.php:169
+msgid "The tickets could not be issued. The reason is in the voucher history."
+msgstr ""
+"Die Tickets konnten nicht ausgestellt werden. Der Grund steht im "
+"Gutscheinverlauf."
+
+#: src/Compat/PassCaptain/TicketAdmin.php:170
+msgid "The tickets were sent again with new codes."
+msgstr "Die Tickets wurden mit neuen Codes erneut gesendet."
+
+#: src/Compat/PassCaptain/TicketAdmin.php:171
+msgid ""
+"The tickets could not be sent again. The reason is in the voucher history."
+msgstr ""
+"Die Tickets konnten nicht erneut gesendet werden. Der Grund steht im Verlauf "
+"des Gutscheins."
+
+#: src/Compat/PassCaptain/TicketAdmin.php:172
+msgid ""
+"Exchange undone: the tickets are cancelled and the voucher is valid again."
+msgstr ""
+"Umtausch rückgängig gemacht: Die Tickets sind storniert und der Gutschein "
+"ist wieder gültig."
+
+#: src/Compat/PassCaptain/TicketAdmin.php:173
+msgid "The exchange could not be undone. The reason is in the voucher history."
+msgstr ""
+"Der Umtausch konnte nicht rückgängig gemacht werden. Der Grund steht im "
+"Verlauf des Gutscheins."
+
+#: src/Compat/PassCaptain/TicketAdmin.php:179
+msgid "Exchanged for Pass Captain tickets"
+msgstr "In Pass-Captain-Tickets umgewandelt"
+
+#: src/Compat/PassCaptain/TicketAdmin.php:180
+msgid "Ticket exchange failed"
+msgstr "Umwandlung in Tickets fehlgeschlagen"
+
+#: src/Compat/PassCaptain/TicketAdmin.php:181
+msgid "Pass Captain tickets revoked"
+msgstr "Pass-Captain-Tickets widerrufen"
+
+#: src/Compat/PassCaptain/TicketAdmin.php:182
+msgid "Voucher restored (tickets cancelled in Pass Captain)"
+msgstr "Gutschein wiederhergestellt (Tickets in Pass Captain storniert)"
+
+#: src/Compat/PassCaptain/TicketAdmin.php:183
+msgid "Tickets sent again"
+msgstr "Tickets erneut gesendet"
+
+#: src/Compat/PassCaptain/TicketAdmin.php:184
+msgid "Customer told that the voucher is valid again"
+msgstr "Kunde über wieder gültigen Gutschein informiert"
+
+#: src/Compat/PassCaptain/TicketAdmin.php:185
+msgid "Pass Captain tickets could not be cancelled – check them"
+msgstr "Pass-Captain-Tickets konnten nicht storniert werden – bitte prüfen"
+
+#: src/Compat/PassCaptain/TicketAdmin.php:186
+msgid ""
+"Voucher could not be given back after the tickets were cancelled – check it"
+msgstr ""
+"Gutschein konnte nach der Ticketstornierung nicht zurückgegeben werden – "
+"bitte prüfen"
+
+#. translators: %d: number of tickets
+#: src/Compat/PassCaptain/TicketContract.php:27
+#, php-format
+msgid "%d ticket"
+msgid_plural "%d tickets"
+msgstr[0] "%d Ticket"
+msgstr[1] "%d Tickets"
+
+#. translators: 1: "2 tickets", 2: event
+#: src/Compat/PassCaptain/TicketContract.php:31
+#, php-format
+msgid "%1$s for %2$s"
+msgstr "%1$s für %2$s"
+
 #: src/Compat/PassCaptainProvider.php:45
 msgid "Please enter a voucher code."
 msgstr "Bitte geben Sie einen Gutscheincode ein."
@@ -3242,10 +3774,6 @@ msgid ""
 msgstr ""
 "Diese Gutschein-Reservierung wurde bereits freigegeben. Bitte lösen Sie den "
 "Gutschein erneut ein."
-
-#: src/Compat/PassCaptainReconcile.php:67 src/Compat/PassCaptainTickets.php:486
-msgid "WP Pass Captain is not active."
-msgstr "WP Pass Captain ist nicht aktiv."
 
 #: src/Compat/PassCaptainReconcile.php:81
 msgid ""
@@ -3394,10 +3922,6 @@ msgstr "Ticket für eine andere Veranstaltung"
 msgid "unknown ticket"
 msgstr "unbekanntes Ticket"
 
-#: src/Compat/PassCaptainScanner.php:77 src/Compat/PassCaptainTickets.php:1008
-msgid "WP Pass Captain ticket"
-msgstr "WP-Pass-Captain-Ticket"
-
 #: src/Compat/PassCaptainScanner.php:97
 msgid "Already checked in by this scan"
 msgstr "Mit diesem Scan bereits eingecheckt"
@@ -3426,522 +3950,6 @@ msgstr "Kein Einlass: %s"
 #, php-format
 msgid "Valid ticket – but for another date: %s"
 msgstr "Gültiges Ticket – aber für einen anderen Termin: %s"
-
-#: src/Compat/PassCaptainTickets.php:101
-msgid ""
-"Open the redeem page with the button below – your code is already filled in."
-msgstr ""
-"Öffnen Sie die Einlöseseite über die Schaltfläche unten – Ihr Code ist "
-"bereits eingetragen."
-
-#: src/Compat/PassCaptainTickets.php:102
-msgid "Enter your code on our website's redeem page."
-msgstr "Geben Sie Ihren Code auf der Einlöseseite unserer Website ein."
-
-#: src/Compat/PassCaptainTickets.php:104
-msgid "Choose your date and, if asked, enter the names of the attendees."
-msgstr ""
-"Wählen Sie Ihren Termin und geben Sie, falls gefragt, die Namen der "
-"Teilnehmenden ein."
-
-#: src/Compat/PassCaptainTickets.php:105
-msgid "If asked, enter the names of the attendees."
-msgstr "Geben Sie, falls gefragt, die Namen der Teilnehmenden ein."
-
-#. translators: %s: e.g. "2 tickets for Concert X"
-#: src/Compat/PassCaptainTickets.php:107
-#, php-format
-msgid "You receive %s by email right away."
-msgstr "Sie erhalten %s sofort per E-Mail."
-
-#: src/Compat/PassCaptainTickets.php:108
-msgid ""
-"Show the tickets at the entrance – the voucher itself is not an admission "
-"ticket."
-msgstr ""
-"Zeigen Sie die Tickets am Einlass vor – der Gutschein selbst ist keine "
-"Eintrittskarte."
-
-#: src/Compat/PassCaptainTickets.php:117
-msgid ""
-"Your ticket voucher {coupon_code} is valid until {expiry_date}. Exchange it "
-"for your tickets before then."
-msgstr ""
-"Ihr Ticket-Gutschein {coupon_code} ist bis {expiry_date} gültig. Tauschen "
-"Sie ihn bis dahin gegen Ihre Tickets ein."
-
-#: src/Compat/PassCaptainTickets.php:122
-msgid "Event of a ticket voucher"
-msgstr "Veranstaltung eines Ticket-Gutscheins"
-
-#: src/Compat/PassCaptainTickets.php:123
-msgid "Number of tickets of a ticket voucher"
-msgstr "Anzahl Tickets eines Ticket-Gutscheins"
-
-#. translators: %d: number of tickets
-#: src/Compat/PassCaptainTickets.php:139
-#, php-format
-msgid "%d ticket"
-msgid_plural "%d tickets"
-msgstr[0] "%d Ticket"
-msgstr[1] "%d Tickets"
-
-#. translators: 1: "2 tickets", 2: event
-#: src/Compat/PassCaptainTickets.php:143
-#, php-format
-msgid "%1$s for %2$s"
-msgstr "%1$s für %2$s"
-
-#: src/Compat/PassCaptainTickets.php:181
-msgid "The tickets were cancelled."
-msgstr "Die Tickets wurden storniert."
-
-#. translators: 1: number of tickets, 2: event and date
-#: src/Compat/PassCaptainTickets.php:188
-#, php-format
-msgid "%1$d ticket for %2$s"
-msgid_plural "%1$d tickets for %2$s"
-msgstr[0] "%1$d Ticket für %2$s"
-msgstr[1] "%1$d Tickets für %2$s"
-
-#. translators: %d: number of tickets
-#: src/Compat/PassCaptainTickets.php:190
-#, php-format
-msgid "Exchanged for %d ticket"
-msgid_plural "Exchanged for %d tickets"
-msgstr[0] "Gegen %d Ticket eingetauscht"
-msgstr[1] "Gegen %d Tickets eingetauscht"
-
-#. translators: 1: tickets text, 2: masked email
-#: src/Compat/PassCaptainTickets.php:193
-#, php-format
-msgid "%1$s, sent to %2$s"
-msgstr "%1$s, gesendet an %2$s"
-
-#: src/Compat/PassCaptainTickets.php:207 src/Compat/PassCaptainTickets.php:346
-#: src/Compat/PassCaptainTickets.php:1185
-#: src/Compat/PassCaptainTickets.php:1201 src/Downloads.php:573
-msgid "Exchange for tickets"
-msgstr "In Tickets umwandeln"
-
-#: src/Compat/PassCaptainTickets.php:218
-msgid "I understand that the tickets sent so far become invalid."
-msgstr "Mir ist bewusst, dass die bisher gesendeten Tickets ungültig werden."
-
-#: src/Compat/PassCaptainTickets.php:219 src/Compat/PassCaptainTickets.php:1173
-msgid "Send tickets again"
-msgstr "Tickets erneut senden"
-
-#: src/Compat/PassCaptainTickets.php:251 src/Downloads.php:193
-#: src/Downloads.php:224 src/Shortcodes.php:408
-msgid "The request has expired. Please try again."
-msgstr "Die Anfrage ist abgelaufen. Bitte versuchen Sie es erneut."
-
-#: src/Compat/PassCaptainTickets.php:255
-msgid "Please confirm that the tickets sent so far become invalid."
-msgstr ""
-"Bitte bestätigen Sie, dass die bisher gesendeten Tickets ungültig werden."
-
-#: src/Compat/PassCaptainTickets.php:263
-msgid "The tickets of this voucher cannot be sent again."
-msgstr "Die Tickets dieses Gutscheins können nicht erneut gesendet werden."
-
-#: src/Compat/PassCaptainTickets.php:268
-msgid "Sending the tickets again (requested by the customer) failed:"
-msgstr "Erneutes Senden der Tickets (auf Kundenwunsch) fehlgeschlagen:"
-
-#: src/Compat/PassCaptainTickets.php:271
-msgid "Requested by the customer"
-msgstr "Von der Kundin oder dem Kunden angefordert"
-
-#. translators: %s: masked email
-#: src/Compat/PassCaptainTickets.php:273
-#, php-format
-msgid "The tickets were sent again to %s. Only the new tickets are valid."
-msgstr ""
-"Die Tickets wurden erneut an %s gesendet. Nur die neuen Tickets sind gültig."
-
-#: src/Compat/PassCaptainTickets.php:339
-msgid "Your voucher is valid again"
-msgstr "Ihr Gutschein ist wieder gültig"
-
-#. translators: 1: voucher code, 2: expiry date
-#: src/Compat/PassCaptainTickets.php:342
-#, php-format
-msgid ""
-"The tickets you received for voucher %1$s were cancelled. The voucher is "
-"valid again until %2$s and can be exchanged for tickets once more."
-msgstr ""
-"Die Tickets, die Sie für den Gutschein %1$s erhalten haben, wurden "
-"storniert. Der Gutschein ist wieder gültig bis %2$s und kann erneut gegen "
-"Tickets eingetauscht werden."
-
-#. translators: %s: site name
-#: src/Compat/PassCaptainTickets.php:350
-#, php-format
-msgid "[%s] Your voucher is valid again"
-msgstr "[%s] Ihr Gutschein ist wieder gültig"
-
-#: src/Compat/PassCaptainTickets.php:355
-msgid "The customer could not be told that the voucher is valid again."
-msgstr ""
-"Der Kunde konnte nicht informiert werden, dass der Gutschein wieder gültig "
-"ist."
-
-#: src/Compat/PassCaptainTickets.php:465
-msgid ""
-"WP Pass Captain tickets could not be cancelled or a voucher could not be "
-"given back. The customer may hold valid tickets while the voucher is free "
-"again (or the other way round). Check these vouchers and their history:"
-msgstr ""
-"WP-Pass-Captain-Tickets konnten nicht storniert oder ein Gutschein nicht "
-"zurückgegeben werden. Möglicherweise sind die Tickets noch gültig, während "
-"der Gutschein wieder frei ist (oder umgekehrt). Prüfen Sie diese Gutscheine "
-"und ihren Verlauf:"
-
-#: src/Compat/PassCaptainTickets.php:517
-msgid ""
-"Customers exchange ticket vouchers for tickets on that page, and voucher "
-"emails link to it."
-msgstr ""
-"Dort tauschen Kunden Ticketgutscheine gegen Tickets ein, und die Gutschein-E-"
-"Mails verlinken darauf."
-
-#: src/Compat/PassCaptainTickets.php:518
-msgid "Choose the redeem page"
-msgstr "Einlöseseite wählen"
-
-#. translators: %s: URL of the voucher redemption page
-#: src/Compat/PassCaptainTickets.php:535
-#, php-format
-msgid ""
-"This voucher is exchanged for tickets, not used as payment. Please redeem it "
-"on %s."
-msgstr ""
-"Dieser Gutschein wird gegen Tickets eingetauscht, nicht als Zahlungsmittel "
-"verwendet. Bitte lösen Sie ihn hier ein: %s"
-
-#: src/Compat/PassCaptainTickets.php:536
-msgid ""
-"This voucher is exchanged for tickets, not used as payment. Please redeem it "
-"on the voucher redemption page."
-msgstr ""
-"Dieser Gutschein wird gegen Tickets eingetauscht, nicht als Zahlungsmittel "
-"verwendet. Bitte lösen Sie ihn auf der Einlöseseite ein."
-
-#: src/Compat/PassCaptainTickets.php:587
-msgid "This voucher cannot be exchanged for tickets."
-msgstr "Dieser Gutschein kann nicht in Tickets umgewandelt werden."
-
-#: src/Compat/PassCaptainTickets.php:590
-msgid ""
-"Gift cards with a balance cannot be exchanged for tickets; use them in the "
-"ticket checkout."
-msgstr ""
-"Geschenkkarten mit Restwert können nicht in Tickets umgewandelt werden; "
-"bitte im Ticket-Checkout einlösen."
-
-#: src/Compat/PassCaptainTickets.php:594 src/Compat/PassCaptainTickets.php:684
-msgid "Tickets cannot be issued right now. Please try again later."
-msgstr ""
-"Tickets können gerade nicht ausgestellt werden. Bitte versuchen Sie es "
-"später erneut."
-
-#: src/Compat/PassCaptainTickets.php:602
-msgid ""
-"The tickets of this voucher were revoked (for example because the event was "
-"cancelled). Please contact us."
-msgstr ""
-"Die Tickets dieses Gutscheins wurden widerrufen (zum Beispiel, weil die "
-"Veranstaltung abgesagt wurde). Bitte kontaktieren Sie uns."
-
-#: src/Compat/PassCaptainTickets.php:616
-msgid "Please choose a date for your tickets."
-msgstr "Bitte wählen Sie einen Termin für Ihre Tickets."
-
-#: src/Compat/PassCaptainTickets.php:616 src/Compat/PassCaptainTickets.php:1189
-msgid "There are no upcoming dates for this voucher at the moment."
-msgstr "Für diesen Gutschein gibt es derzeit keine künftigen Termine."
-
-#: src/Compat/PassCaptainTickets.php:638
-msgid "Please fill in the details for each ticket."
-msgstr "Bitte füllen Sie die Angaben für jedes Ticket aus."
-
-#: src/Compat/PassCaptainTickets.php:658
-msgid "Please log in so we know where to send the tickets."
-msgstr ""
-"Bitte melden Sie sich an, damit wir wissen, wohin die Tickets gesendet "
-"werden sollen."
-
-#. translators: 1: number of tickets, 2: Pass Captain order id, 3: email
-#: src/Compat/PassCaptainTickets.php:730
-#, php-format
-msgid "%1$d ticket, Pass Captain order %2$s, sent to %3$s"
-msgid_plural "%1$d tickets, Pass Captain order %2$s, sent to %3$s"
-msgstr[0] "%1$d Ticket, Pass-Captain-Bestellung %2$s, gesendet an %3$s"
-msgstr[1] "%1$d Tickets, Pass-Captain-Bestellung %2$s, gesendet an %3$s"
-
-#: src/Compat/PassCaptainTickets.php:796
-msgid "Please enter a valid email address for your tickets."
-msgstr "Bitte geben Sie eine gültige E-Mail-Adresse für Ihre Tickets ein."
-
-#: src/Compat/PassCaptainTickets.php:796
-msgid "Please enter the email address the tickets should be sent to."
-msgstr ""
-"Bitte geben Sie die E-Mail-Adresse ein, an die die Tickets gesendet werden "
-"sollen."
-
-#. translators: 1: date, 2: number of tickets, 3: (masked) email
-#: src/Compat/PassCaptainTickets.php:842
-#, php-format
-msgid "This voucher was already exchanged on %1$s: %2$d ticket went to %3$s."
-msgid_plural ""
-"This voucher was already exchanged on %1$s: %2$d tickets went to %3$s."
-msgstr[0] ""
-"Dieser Gutschein wurde bereits am %1$s eingelöst: %2$d Ticket ging an %3$s."
-msgstr[1] ""
-"Dieser Gutschein wurde bereits am %1$s eingelöst: %2$d Tickets gingen an "
-"%3$s."
-
-#. translators: 1: number of tickets, 2: (masked) email
-#: src/Compat/PassCaptainTickets.php:844
-#, php-format
-msgid "This voucher was already exchanged: %1$d ticket went to %2$s."
-msgid_plural "This voucher was already exchanged: %1$d tickets went to %2$s."
-msgstr[0] "Dieser Gutschein wurde bereits eingelöst: %1$d Ticket ging an %2$s."
-msgstr[1] ""
-"Dieser Gutschein wurde bereits eingelöst: %1$d Tickets gingen an %2$s."
-
-#. translators: 1: number of tickets, 2: email
-#: src/Compat/PassCaptainTickets.php:850
-#, php-format
-msgid "Your tickets (%1$d) were sent to %2$s."
-msgstr "Ihre Tickets (%1$d) wurden an %2$s gesendet."
-
-#: src/Compat/PassCaptainTickets.php:893
-msgid "Send the tickets to (email)"
-msgstr "Tickets senden an (E-Mail)"
-
-#: src/Compat/PassCaptainTickets.php:898
-msgid "Choose another date"
-msgstr "Anderen Termin wählen"
-
-#: src/Compat/PassCaptainTickets.php:900
-msgid "Cancel"
-msgstr "Abbrechen"
-
-#: src/Compat/PassCaptainTickets.php:901
-msgid "Redeeming issues the tickets bindingly; the voucher is used up."
-msgstr ""
-"Mit dem Einlösen werden die Tickets verbindlich ausgestellt; der Gutschein "
-"ist dann verbraucht."
-
-#: src/Compat/PassCaptainTickets.php:913 src/Compat/PassCaptainTickets.php:1197
-msgid "— Choose a date —"
-msgstr "— Termin wählen —"
-
-#. translators: %d: ticket number
-#: src/Compat/PassCaptainTickets.php:933
-#, php-format
-msgid "Ticket %d"
-msgstr "Ticket %d"
-
-#: src/Compat/PassCaptainTickets.php:965
-msgid ""
-"Ticket voucher – not a ticket. Exchange it for tickets first (redeem page or "
-"voucher admin)."
-msgstr ""
-"Ticket-Gutschein – kein Ticket. Zuerst in Tickets umwandeln (Einlöseseite "
-"oder Gutscheinverwaltung)."
-
-#: src/Compat/PassCaptainTickets.php:971
-msgid ""
-"Ticket vouchers cannot be redeemed at the counter. Exchange them for tickets "
-"first."
-msgstr ""
-"Ticket-Gutscheine können nicht an der Kasse eingelöst werden. Bitte zuerst "
-"in Tickets umwandeln."
-
-#: src/Compat/PassCaptainTickets.php:982
-msgid ""
-"Tip: the voucher type \"Ticket\" is a simple admission pass without dates or "
-"capacity, checked in at Voucher Captain. For events with dates, capacity and "
-"admission rules, create them in WP Pass Captain and use a voucher with \"WP "
-"Pass Captain ticket\" below (or sell Pass Captain tickets directly)."
-msgstr ""
-"Tipp: Der Gutscheintyp „Ticket“ ist ein einfacher Eintrittsgutschein ohne "
-"Termin und Kontingent, eingecheckt in Voucher Captain. Für Veranstaltungen "
-"mit Terminen, Kontingent und Einlassregeln diese in WP Pass Captain anlegen "
-"und unten „WP-Pass-Captain-Ticket“ wählen (oder Pass-Captain-Tickets direkt "
-"verkaufen)."
-
-#: src/Compat/PassCaptainTickets.php:986
-msgid "— No ticket (regular voucher) —"
-msgstr "— Kein Ticket (normaler Gutschein) —"
-
-#. translators: 1: event, 2: number of upcoming dates
-#: src/Compat/PassCaptainTickets.php:990
-#, php-format
-msgid "Customer chooses the date: %1$s (%2$d dates)"
-msgstr "Kunde wählt den Termin: %1$s (%2$d Termine)"
-
-#. translators: %s: event, date and ticket type
-#: src/Compat/PassCaptainTickets.php:995
-#, php-format
-msgid "Fixed date: %s"
-msgstr "Fester Termin: %s"
-
-#. translators: %d: event id
-#: src/Compat/PassCaptainTickets.php:999
-#, php-format
-msgid "Event #%d (no upcoming dates)"
-msgstr "Veranstaltung #%d (keine künftigen Termine)"
-
-#. translators: %d: ticket type id
-#: src/Compat/PassCaptainTickets.php:1003
-#, php-format
-msgid "Ticket type #%d (no longer on sale)"
-msgstr "Ticketart #%d (nicht mehr im Verkauf)"
-
-#: src/Compat/PassCaptainTickets.php:1012
-msgid ""
-"Exchange each voucher for tickets of this ticket type (redeem page or "
-"voucher admin). The voucher is then only exchanged for its tickets; to let "
-"it also pay as a value voucher, tick \"Shop\" under \"Redeemable via\"."
-msgstr ""
-"Jeder Gutschein wird gegen Tickets dieser Ticketart eingetauscht "
-"(Einlöseseite oder Gutscheinverwaltung). Er ist dann nur gegen seine Tickets "
-"eintauschbar; soll er zusätzlich wie ein Wertgutschein bezahlen können, "
-"wählen Sie unter „Einlösbar über“ den Shop aus."
-
-#: src/Compat/PassCaptainTickets.php:1018
-msgid "Tickets per voucher"
-msgstr "Tickets pro Gutschein"
-
-#: src/Compat/PassCaptainTickets.php:1027
-msgid "Ticket name (date choice)"
-msgstr "Ticketname (Terminwahl)"
-
-#: src/Compat/PassCaptainTickets.php:1029
-msgid "Any ticket type"
-msgstr "Jede Ticketart"
-
-#: src/Compat/PassCaptainTickets.php:1031
-msgid ""
-"Only for \"customer chooses the date\": offer only ticket types with exactly "
-"this name (e.g. \"Standard\")."
-msgstr ""
-"Nur bei „Kunde wählt den Termin“: nur Ticketarten mit genau diesem Namen "
-"anbieten (z. B. „Standard“)."
-
-#. translators: %s: product name
-#: src/Compat/PassCaptainTickets.php:1115
-#, php-format
-msgid "\"%s\" is not available: the date is sold out or already over."
-msgstr ""
-"„%s“ ist nicht verfügbar: Der Termin ist ausverkauft oder bereits vorbei."
-
-#: src/Compat/PassCaptainTickets.php:1173
-msgid ""
-"Send the tickets again? New ticket codes are issued; the tickets sent so far "
-"become invalid."
-msgstr ""
-"Tickets erneut senden? Es werden neue Ticketcodes ausgestellt; die bisher "
-"gesendeten Tickets werden ungültig."
-
-#: src/Compat/PassCaptainTickets.php:1176
-msgid "Undo exchange (e.g. to change the date)"
-msgstr "Umtausch rückgängig machen (z. B. um den Termin zu ändern)"
-
-#: src/Compat/PassCaptainTickets.php:1176
-msgid ""
-"Undo the exchange? Its tickets are cancelled in WP Pass Captain and the "
-"voucher becomes valid again, so it can be exchanged for another date."
-msgstr ""
-"Umtausch rückgängig machen? Die Tickets werden in WP Pass Captain storniert "
-"und der Gutschein wird wieder gültig, sodass er gegen einen anderen Termin "
-"eingetauscht werden kann."
-
-#: src/Compat/PassCaptainTickets.php:1243
-msgid "Requested by an admin:"
-msgstr "Von einer Administratorin oder einem Administrator angefordert:"
-
-#: src/Compat/PassCaptainTickets.php:1265
-msgid ""
-"The exchange could not be undone completely: tickets that were already "
-"checked in stay valid."
-msgstr ""
-"Der Umtausch konnte nicht vollständig rückgängig gemacht werden: bereits "
-"eingecheckte Tickets bleiben gültig."
-
-#: src/Compat/PassCaptainTickets.php:1275
-msgid "Tickets issued in WP Pass Captain and sent by email."
-msgstr "Tickets in WP Pass Captain ausgestellt und per E-Mail gesendet."
-
-#: src/Compat/PassCaptainTickets.php:1276
-msgid "The tickets could not be issued. The reason is in the voucher history."
-msgstr ""
-"Die Tickets konnten nicht ausgestellt werden. Der Grund steht im "
-"Gutscheinverlauf."
-
-#: src/Compat/PassCaptainTickets.php:1277
-msgid "The tickets were sent again with new codes."
-msgstr "Die Tickets wurden mit neuen Codes erneut gesendet."
-
-#: src/Compat/PassCaptainTickets.php:1278
-msgid ""
-"The tickets could not be sent again. The reason is in the voucher history."
-msgstr ""
-"Die Tickets konnten nicht erneut gesendet werden. Der Grund steht im Verlauf "
-"des Gutscheins."
-
-#: src/Compat/PassCaptainTickets.php:1279
-msgid ""
-"Exchange undone: the tickets are cancelled and the voucher is valid again."
-msgstr ""
-"Umtausch rückgängig gemacht: Die Tickets sind storniert und der Gutschein "
-"ist wieder gültig."
-
-#: src/Compat/PassCaptainTickets.php:1280
-msgid "The exchange could not be undone. The reason is in the voucher history."
-msgstr ""
-"Der Umtausch konnte nicht rückgängig gemacht werden. Der Grund steht im "
-"Verlauf des Gutscheins."
-
-#: src/Compat/PassCaptainTickets.php:1286
-msgid "Exchanged for Pass Captain tickets"
-msgstr "In Pass-Captain-Tickets umgewandelt"
-
-#: src/Compat/PassCaptainTickets.php:1287
-msgid "Ticket exchange failed"
-msgstr "Umwandlung in Tickets fehlgeschlagen"
-
-#: src/Compat/PassCaptainTickets.php:1288
-msgid "Pass Captain tickets revoked"
-msgstr "Pass-Captain-Tickets widerrufen"
-
-#: src/Compat/PassCaptainTickets.php:1289
-msgid "Voucher restored (tickets cancelled in Pass Captain)"
-msgstr "Gutschein wiederhergestellt (Tickets in Pass Captain storniert)"
-
-#: src/Compat/PassCaptainTickets.php:1290
-msgid "Tickets sent again"
-msgstr "Tickets erneut gesendet"
-
-#: src/Compat/PassCaptainTickets.php:1291
-msgid "Customer told that the voucher is valid again"
-msgstr "Kunde über wieder gültigen Gutschein informiert"
-
-#: src/Compat/PassCaptainTickets.php:1292
-msgid "Pass Captain tickets could not be cancelled – check them"
-msgstr "Pass-Captain-Tickets konnten nicht storniert werden – bitte prüfen"
-
-#: src/Compat/PassCaptainTickets.php:1293
-msgid ""
-"Voucher could not be given back after the tickets were cancelled – check it"
-msgstr ""
-"Gutschein konnte nach der Ticketstornierung nicht zurückgegeben werden – "
-"bitte prüfen"
 
 #. translators: %s: receipt number of the till
 #: src/Counter.php:100 src/Tickets.php:971
@@ -4035,366 +4043,6 @@ msgid ""
 msgstr ""
 "Der Gutschein %s wird angewendet, sobald Sie Produkte in den Warenkorb legen."
 
-#: src/CouponManager.php:307
-msgid "WooCommerce coupon moved to the trash"
-msgstr "WooCommerce-Code in den Papierkorb verschoben"
-
-#: src/CouponManager.php:307
-msgid "WooCommerce coupon deleted"
-msgstr "WooCommerce-Code gelöscht"
-
-#: src/CouponManager.php:384
-msgid "Unpaid order: voucher balance reservations released."
-msgstr ""
-"Unbezahlte Bestellung: reservierte Gutschein-Restwerte wurden freigegeben."
-
-#. translators: 1: voucher type, 2: order number
-#: src/CouponManager.php:436
-#, php-format
-msgid "%1$s from order #%2$s (Voucher Captain)"
-msgstr "%1$s aus Bestellung #%2$s (Voucher Captain)"
-
-#: src/CouponManager.php:476
-msgid ""
-"No recipient email was given: redemption is limited to the buyer email "
-"instead."
-msgstr ""
-"Es wurde keine Empfänger-E-Mail angegeben: Die Einlösung ist stattdessen auf "
-"die Käufer-E-Mail beschränkt."
-
-#: src/CouponManager.php:613
-msgid "Checkout reservation reconciled"
-msgstr "Kassen-Reservierung abgeglichen"
-
-#: src/CouponManager.php:614
-msgid ""
-"An earlier voucher reservation could not be released. Please contact the "
-"store before trying again."
-msgstr ""
-"Eine frühere Gutschein-Reservierung konnte nicht freigegeben werden. Bitte "
-"wenden Sie sich an den Shop, bevor Sie es erneut versuchen."
-
-#. translators: %s: order number
-#: src/CouponManager.php:631
-#, php-format
-msgid "Reserved for order #%s"
-msgstr "Für Bestellung #%s reserviert"
-
-#: src/CouponManager.php:641 src/CouponManager.php:649
-msgid "Checkout reservation rolled back"
-msgstr "Kassen-Reservierung zurückgenommen"
-
-#: src/CouponManager.php:655 src/CouponManager.php:1236
-msgid "Some voucher reservations could not be released. Review this order."
-msgstr ""
-"Einige Gutschein-Reservierungen konnten nicht freigegeben werden. Bitte "
-"prüfen Sie diese Bestellung."
-
-#: src/CouponManager.php:661
-msgid ""
-"A voucher balance changed while checkout was processing. Your order was not "
-"sent for payment. Refresh the cart and try again."
-msgstr ""
-"Der Restwert eines Gutscheins hat sich während der Bestellung geändert. Ihre "
-"Bestellung wurde nicht zur Zahlung weitergeleitet. Bitte aktualisieren Sie "
-"den Warenkorb und versuchen Sie es erneut."
-
-#. translators: %s: voucher code
-#: src/CouponManager.php:792
-#, php-format
-msgid ""
-"Payment attempt refused: voucher %s no longer has the balance this order "
-"uses (it was used elsewhere). Contact the customer, or edit or cancel the "
-"order."
-msgstr ""
-"Zahlungsversuch abgelehnt: Gutschein %s hat den in dieser Bestellung "
-"verwendeten Restwert nicht mehr (es wurde anderweitig verwendet). "
-"Kontaktieren Sie den Kunden oder bearbeiten bzw. stornieren Sie die "
-"Bestellung."
-
-#. translators: %s: voucher code
-#: src/CouponManager.php:798
-#, php-format
-msgid ""
-"Voucher %s no longer has enough balance for this order (it was used "
-"elsewhere meanwhile). This order cannot be paid as it is. Please contact us "
-"to complete it."
-msgstr ""
-"Gutschein %s hat nicht mehr genug Restwert für diese Bestellung (es wurde "
-"inzwischen anderweitig verwendet). Diese Bestellung kann so nicht bezahlt "
-"werden. Bitte kontaktieren Sie uns, um sie abzuschließen."
-
-#. translators: %s: voucher code
-#: src/CouponManager.php:806
-#, php-format
-msgid ""
-"Voucher %s can no longer be used (it was cancelled or redeemed elsewhere). "
-"Please contact us to complete this order."
-msgstr ""
-"Gutschein %s kann nicht mehr verwendet werden (er wurde storniert oder "
-"anderweitig eingelöst). Bitte kontaktieren Sie uns, um diese Bestellung "
-"abzuschließen."
-
-#. translators: %s: masked voucher code
-#: src/CouponManager.php:816
-#, php-format
-msgid ""
-"Voucher %s: this code was replaced by a new one (reissued) before the order "
-"was paid, so nothing was charged to the voucher for its discount. Review "
-"this order before fulfilment."
-msgstr "Gutschein %s: Dieser Code wurde vor der Bezahlung der Bestellung durch einen neuen ersetzt (neu ausgestellt), daher wurde für seinen Rabatt nichts vom Gutschein abgebucht. Prüfen Sie diese Bestellung vor der Ausführung."
-
-#. translators: %s: masked voucher code
-#: src/CouponManager.php:818
-#, php-format
-msgid ""
-"Voucher %s has been replaced by a new code and can no longer be used. This "
-"order cannot be paid as it is. Please contact us to complete it."
-msgstr "Der Gutschein %s wurde durch einen neuen Code ersetzt und kann nicht mehr verwendet werden. Diese Bestellung kann so nicht bezahlt werden. Bitte kontaktieren Sie uns, um sie abzuschließen."
-
-#. translators: %s: order id
-#: src/CouponManager.php:1089
-#, php-format
-msgid "Orphaned reservation of order #%s released"
-msgstr "Verwaiste Reservierung von Bestellung #%s freigegeben"
-
-#. translators: %s: voucher code
-#: src/CouponManager.php:1106
-#, php-format
-msgid "A voucher reservation of %s that was left open has been released."
-msgstr "Eine offen gebliebene Gutscheinreservierung von %s wurde freigegeben."
-
-#: src/CouponManager.php:1143
-msgid "Coupon removed or changed on the order"
-msgstr "WooCommerce-Code wurde in der Bestellung entfernt oder geändert"
-
-#: src/CouponManager.php:1170
-msgid ""
-"Some voucher reservations could not be committed. Review this order before "
-"fulfilment."
-msgstr ""
-"Einige Gutschein-Reservierungen konnten nicht verbucht werden. Bitte prüfen "
-"Sie diese Bestellung vor der Ausführung."
-
-#. translators: 1: masked voucher code, 2: amount
-#: src/CouponManager.php:1176
-#, php-format
-msgid ""
-"Voucher %1$s: currency rounding made the discount %2$s larger than the "
-"balance it held; the full balance was charged and the uncovered difference "
-"is recorded on this order."
-msgstr "Gutschein %1$s: Durch Währungsrundung war der Rabatt um %2$s größer als sein Restwert; der gesamte Restwert wurde abgebucht und der ungedeckte Unterschied ist an dieser Bestellung vermerkt."
-
-#. translators: %s: order number
-#: src/CouponManager.php:1228
-#, php-format
-msgid "Released from order #%s"
-msgstr "Aus Bestellung #%s freigegeben"
-
-#: src/CouponManager.php:1491
-msgid ""
-"This voucher cannot be redeemed: its voucher record is missing. Please "
-"contact the shop."
-msgstr ""
-"Dieser Gutschein kann nicht eingelöst werden: Sein Gutscheindatensatz fehlt. "
-"Bitte wenden Sie sich an den Shop."
-
-#: src/CouponManager.php:1509
-msgid "This voucher has already been fully redeemed."
-msgstr "Dieser Gutschein wurde bereits vollständig eingelöst."
-
-#: src/CouponManager.php:1532
-msgid "This voucher cannot be redeemed in the shop."
-msgstr "Dieser Gutschein kann nicht im Shop eingelöst werden."
-
-#. translators: 1: voucher code, 2: amount
-#: src/CouponManager.php:1649
-#, php-format
-msgid "Remaining balance of voucher %1$s after this order: %2$s"
-msgstr "Restwert von Gutschein %1$s nach dieser Bestellung: %2$s"
-
-#. translators: 1: shop base currency, 2: currency of the cart or order
-#: src/CouponManager.php:1804
-#, php-format
-msgid ""
-"This voucher is kept in %1$s and cannot be used for a payment in %2$s, "
-"because no exchange rate is known. Please pay in %1$s to use it."
-msgstr ""
-"Dieser Gutschein wird in %1$s geführt und kann nicht für eine Zahlung in "
-"%2$s verwendet werden, weil kein Wechselkurs bekannt ist. Bitte bezahlen Sie "
-"in %1$s, um ihn zu verwenden."
-
-#: src/CouponManager.php:1880
-msgid ""
-"Voucher shortfall accepted by an administrator; the order can be fulfilled."
-msgstr ""
-"Gutschein-Fehlbetrag von einem Administrator akzeptiert; die Bestellung kann "
-"ausgeführt werden."
-
-#: src/CouponManager.php:1896 src/CouponManager.php:2013
-msgid "Voucher balance shortfall requires manual review before fulfilment."
-msgstr ""
-"Fehlender Gutschein-Restwert erfordert vor der Ausführung eine manuelle "
-"Prüfung."
-
-#: src/CouponManager.php:1912
-msgid ""
-"A voucher of this order was cancelled or redeemed elsewhere: manual review "
-"required before fulfilment."
-msgstr ""
-"Ein Gutschein dieser Bestellung wurde storniert oder anderweitig eingelöst: "
-"Vor der Ausführung ist eine manuelle Prüfung nötig."
-
-#. translators: 1: voucher code, 2: order currency
-#: src/CouponManager.php:1949
-#, php-format
-msgid ""
-"Voucher %1$s: the discount could not be deducted from its balance because no "
-"exchange rate for %2$s is known. Review this order and adjust the charge "
-"before fulfilment."
-msgstr ""
-"Gutschein %1$s: Der Rabatt konnte nicht vom Restwert abgebucht werden, weil "
-"für %2$s kein Wechselkurs bekannt ist. Prüfen Sie diese Bestellung und "
-"passen Sie den Betrag vor der Ausführung an."
-
-#. translators: %s: order number
-#: src/CouponManager.php:1957
-#, php-format
-msgid "Used in order #%s"
-msgstr "Verwendet in Bestellung #%s"
-
-#. translators: %s: voucher code
-#: src/CouponManager.php:1967
-#, php-format
-msgid ""
-"Voucher %s: the discount could not be deducted from its balance. Review this "
-"order and adjust the charge before fulfilment."
-msgstr ""
-"Gutschein %s: Der Rabatt konnte nicht vom Restwert abgebucht werden. Bitte "
-"prüfen Sie diese Bestellung und passen Sie den Betrag vor der Ausführung an."
-
-#: src/CouponManager.php:1977
-msgid ""
-"A stored-value voucher balance changed during checkout. Review this order "
-"and adjust the charge before fulfilment."
-msgstr ""
-"Der Restwert eines Gutscheins hat sich während des Bezahlvorgangs geändert. "
-"Bitte prüfen Sie diese Bestellung und passen Sie den Betrag vor der "
-"Ausführung an."
-
-#. translators: 1: code, 2: amount, 3: remaining balance
-#: src/CouponManager.php:1984
-#, php-format
-msgid "Voucher %1$s: %2$s deducted, remaining balance %3$s."
-msgstr "Gutschein %1$s: %2$s abgezogen, Restwert %3$s."
-
-#: src/CouponManager.php:1997
-msgid ""
-"Gift card shortfall: the installed WP Pass Captain cannot hold ticket "
-"issuance. If this order contains tickets, check them – and update WP Pass "
-"Captain."
-msgstr ""
-"Fehlbetrag einer Geschenkkarte: Das installierte WP Pass Captain kann die "
-"Ticketausstellung nicht anhalten. Enthält diese Bestellung Tickets, prüfen "
-"Sie diese – und aktualisieren Sie WP Pass Captain."
-
-#. translators: %s: order number
-#: src/CouponManager.php:2054
-#, php-format
-msgid "Rounding rest of the net-price conversion in order #%s booked off"
-msgstr "Rundungsrest der Netto-Umrechnung in Bestellung #%s ausgebucht"
-
-#: src/CouponManager.php:2136 src/CouponManager.php:2179
-msgid ""
-"Some voucher balances could not be restored. Review this order and retry the "
-"refund handling."
-msgstr ""
-"Einige Gutschein-Restwerte konnten nicht zurückgebucht werden. Bitte prüfen "
-"Sie diese Bestellung und wiederholen Sie die Erstattung."
-
-#. translators: %s: order number
-#: src/CouponManager.php:2163
-#, php-format
-msgid "Order #%s cancelled or refunded"
-msgstr "Bestellung #%s storniert oder erstattet"
-
-#. translators: %s: order number
-#: src/CouponManager.php:2202
-#, php-format
-msgid "Balance of order #%s booked back"
-msgstr "Restwert aus Bestellung #%s zurückgebucht"
-
-#. translators: 1: voucher code, 2: expiry date
-#: src/CouponManager.php:2204
-#, php-format
-msgid ""
-"Voucher %1$s had expired: its validity was extended to %2$s so the booked-"
-"back amount can be used."
-msgstr ""
-"Gutschein %1$s war abgelaufen: Seine Gültigkeit wurde bis %2$s verlängert, "
-"damit der zurückgebuchte Betrag verwendet werden kann."
-
-#. translators: 1: amount, 2: voucher code
-#: src/CouponManager.php:2211
-#, php-format
-msgid ""
-"%1$s were booked back onto voucher %2$s, but it is cancelled: the customer "
-"cannot use it. Reactivate it, or pay the amount back as money or store "
-"credit."
-msgstr ""
-"%1$s wurden auf Gutschein %2$s zurückgebucht, er ist aber storniert: Der "
-"Kunde kann ihn nicht verwenden. Reaktivieren Sie ihn oder zahlen Sie den "
-"Betrag als Geld oder Kundenguthaben zurück."
-
-#. translators: 1: amount, 2: voucher code
-#: src/CouponManager.php:2213
-#, php-format
-msgid ""
-"%1$s were booked back onto voucher %2$s, but it has expired: the customer "
-"cannot use it. Extend its validity on the voucher screen, or pay the amount "
-"back as money or store credit."
-msgstr ""
-"%1$s wurden auf Gutschein %2$s zurückgebucht, er ist aber abgelaufen: Der "
-"Kunde kann ihn nicht verwenden. Verlängern Sie seine Gültigkeit in der "
-"Gutscheinansicht oder zahlen Sie den Betrag als Geld oder Kundenguthaben "
-"zurück."
-
-#. translators: %s: voucher codes
-#: src/CouponManager.php:2259
-#, php-format
-msgid "Order refunded: single-use vouchers %s can be used again."
-msgstr ""
-"Bestellung erstattet: Die Einzelgutscheine %s können wieder verwendet werden."
-
-#. translators: %s: voucher codes
-#: src/CouponManager.php:2284
-#, php-format
-msgid ""
-"Order cancelled: single-use vouchers %s stay redeemed (\"Restore balance on "
-"cancellation\" is off)."
-msgstr ""
-"Bestellung storniert: Die Einzelgutscheine %s bleiben eingelöst („Restwert "
-"bei Stornierung wiederherstellen“ ist ausgeschaltet)."
-
-#. translators: %s: order number
-#: src/CouponManager.php:2462
-#, php-format
-msgid "Order #%s"
-msgstr "Bestellung #%s"
-
-#. translators: 1: voucher code, 2: discount amount
-#: src/CouponManager.php:2466
-#, php-format
-msgid ""
-"Voucher %1$s was cancelled or redeemed elsewhere before this order was paid, "
-"but the order still has its discount of %2$s. The order is held: collect the "
-"difference or cancel the order before fulfilment."
-msgstr ""
-"Gutschein %1$s wurde storniert oder anderweitig eingelöst, bevor diese "
-"Bestellung bezahlt wurde, die Bestellung enthält aber noch seinen Rabatt von "
-"%2$s. Die Bestellung ist in Wartestellung: Fordern Sie die Differenz nach "
-"oder stornieren Sie die Bestellung vor der Ausführung."
-
 #: src/CouponSkuRules.php:96
 msgid "SKUs"
 msgstr "Artikelnummern"
@@ -4423,6 +4071,375 @@ msgstr ""
 msgid "Sorry, this coupon is not applicable to the products in your cart."
 msgstr ""
 "Dieser Gutschein gilt leider nicht für die Produkte in Ihrem Warenkorb."
+
+#: src/Coupons/BookBack.php:30 src/Coupons/BookBack.php:73
+msgid ""
+"Some voucher balances could not be restored. Review this order and retry the "
+"refund handling."
+msgstr ""
+"Einige Gutschein-Restwerte konnten nicht zurückgebucht werden. Bitte prüfen "
+"Sie diese Bestellung und wiederholen Sie die Erstattung."
+
+#. translators: %s: order number
+#: src/Coupons/BookBack.php:57
+#, php-format
+msgid "Order #%s cancelled or refunded"
+msgstr "Bestellung #%s storniert oder erstattet"
+
+#. translators: %s: order number
+#: src/Coupons/BookBack.php:97
+#, php-format
+msgid "Balance of order #%s booked back"
+msgstr "Restwert aus Bestellung #%s zurückgebucht"
+
+#. translators: 1: voucher code, 2: expiry date
+#: src/Coupons/BookBack.php:99
+#, php-format
+msgid ""
+"Voucher %1$s had expired: its validity was extended to %2$s so the booked-"
+"back amount can be used."
+msgstr ""
+"Gutschein %1$s war abgelaufen: Seine Gültigkeit wurde bis %2$s verlängert, "
+"damit der zurückgebuchte Betrag verwendet werden kann."
+
+#. translators: 1: amount, 2: voucher code
+#: src/Coupons/BookBack.php:106
+#, php-format
+msgid ""
+"%1$s were booked back onto voucher %2$s, but it is cancelled: the customer "
+"cannot use it. Reactivate it, or pay the amount back as money or store "
+"credit."
+msgstr ""
+"%1$s wurden auf Gutschein %2$s zurückgebucht, er ist aber storniert: Der "
+"Kunde kann ihn nicht verwenden. Reaktivieren Sie ihn oder zahlen Sie den "
+"Betrag als Geld oder Kundenguthaben zurück."
+
+#. translators: 1: amount, 2: voucher code
+#: src/Coupons/BookBack.php:108
+#, php-format
+msgid ""
+"%1$s were booked back onto voucher %2$s, but it has expired: the customer "
+"cannot use it. Extend its validity on the voucher screen, or pay the amount "
+"back as money or store credit."
+msgstr ""
+"%1$s wurden auf Gutschein %2$s zurückgebucht, er ist aber abgelaufen: Der "
+"Kunde kann ihn nicht verwenden. Verlängern Sie seine Gültigkeit in der "
+"Gutscheinansicht oder zahlen Sie den Betrag als Geld oder Kundenguthaben "
+"zurück."
+
+#. translators: %s: voucher codes
+#: src/Coupons/BookBack.php:154
+#, php-format
+msgid "Order refunded: single-use vouchers %s can be used again."
+msgstr ""
+"Bestellung erstattet: Die Einzelgutscheine %s können wieder verwendet werden."
+
+#: src/Coupons/CartCoupons.php:61
+msgid ""
+"This voucher cannot be redeemed: its voucher record is missing. Please "
+"contact the shop."
+msgstr ""
+"Dieser Gutschein kann nicht eingelöst werden: Sein Gutscheindatensatz fehlt. "
+"Bitte wenden Sie sich an den Shop."
+
+#: src/Coupons/CartCoupons.php:79
+msgid "This voucher has already been fully redeemed."
+msgstr "Dieser Gutschein wurde bereits vollständig eingelöst."
+
+#: src/Coupons/CartCoupons.php:102
+msgid "This voucher cannot be redeemed in the shop."
+msgstr "Dieser Gutschein kann nicht im Shop eingelöst werden."
+
+#. translators: 1: voucher code, 2: amount
+#: src/Coupons/CartCoupons.php:219
+#, php-format
+msgid "Remaining balance of voucher %1$s after this order: %2$s"
+msgstr "Restwert von Gutschein %1$s nach dieser Bestellung: %2$s"
+
+#. translators: 1: shop base currency, 2: currency of the cart or order
+#: src/Coupons/CartCoupons.php:349
+#, php-format
+msgid ""
+"This voucher is kept in %1$s and cannot be used for a payment in %2$s, "
+"because no exchange rate is known. Please pay in %1$s to use it."
+msgstr ""
+"Dieser Gutschein wird in %1$s geführt und kann nicht für eine Zahlung in "
+"%2$s verwendet werden, weil kein Wechselkurs bekannt ist. Bitte bezahlen Sie "
+"in %1$s, um ihn zu verwenden."
+
+#: src/Coupons/Checkout.php:69
+msgid "Checkout reservation reconciled"
+msgstr "Kassen-Reservierung abgeglichen"
+
+#: src/Coupons/Checkout.php:70
+msgid ""
+"An earlier voucher reservation could not be released. Please contact the "
+"store before trying again."
+msgstr ""
+"Eine frühere Gutschein-Reservierung konnte nicht freigegeben werden. Bitte "
+"wenden Sie sich an den Shop, bevor Sie es erneut versuchen."
+
+#. translators: %s: order number
+#: src/Coupons/Checkout.php:87
+#, php-format
+msgid "Reserved for order #%s"
+msgstr "Für Bestellung #%s reserviert"
+
+#: src/Coupons/Checkout.php:97 src/Coupons/Checkout.php:105
+msgid "Checkout reservation rolled back"
+msgstr "Kassen-Reservierung zurückgenommen"
+
+#: src/Coupons/Checkout.php:111 src/Coupons/Reservations.php:256
+msgid "Some voucher reservations could not be released. Review this order."
+msgstr ""
+"Einige Gutschein-Reservierungen konnten nicht freigegeben werden. Bitte "
+"prüfen Sie diese Bestellung."
+
+#: src/Coupons/Checkout.php:117
+msgid ""
+"A voucher balance changed while checkout was processing. Your order was not "
+"sent for payment. Refresh the cart and try again."
+msgstr ""
+"Der Restwert eines Gutscheins hat sich während der Bestellung geändert. Ihre "
+"Bestellung wurde nicht zur Zahlung weitergeleitet. Bitte aktualisieren Sie "
+"den Warenkorb und versuchen Sie es erneut."
+
+#. translators: %s: voucher code
+#: src/Coupons/Checkout.php:248
+#, php-format
+msgid ""
+"Payment attempt refused: voucher %s no longer has the balance this order "
+"uses (it was used elsewhere). Contact the customer, or edit or cancel the "
+"order."
+msgstr ""
+"Zahlungsversuch abgelehnt: Gutschein %s hat den in dieser Bestellung "
+"verwendeten Restwert nicht mehr (es wurde anderweitig verwendet). "
+"Kontaktieren Sie den Kunden oder bearbeiten bzw. stornieren Sie die "
+"Bestellung."
+
+#. translators: %s: voucher code
+#: src/Coupons/Checkout.php:254
+#, php-format
+msgid ""
+"Voucher %s no longer has enough balance for this order (it was used "
+"elsewhere meanwhile). This order cannot be paid as it is. Please contact us "
+"to complete it."
+msgstr ""
+"Gutschein %s hat nicht mehr genug Restwert für diese Bestellung (es wurde "
+"inzwischen anderweitig verwendet). Diese Bestellung kann so nicht bezahlt "
+"werden. Bitte kontaktieren Sie uns, um sie abzuschließen."
+
+#. translators: %s: voucher code
+#: src/Coupons/Checkout.php:262
+#, php-format
+msgid ""
+"Voucher %s can no longer be used (it was cancelled or redeemed elsewhere). "
+"Please contact us to complete this order."
+msgstr ""
+"Gutschein %s kann nicht mehr verwendet werden (er wurde storniert oder "
+"anderweitig eingelöst). Bitte kontaktieren Sie uns, um diese Bestellung "
+"abzuschließen."
+
+#. translators: 1: voucher type, 2: order number
+#: src/Coupons/CouponFactory.php:51
+#, php-format
+msgid "%1$s from order #%2$s (Voucher Captain)"
+msgstr "%1$s aus Bestellung #%2$s (Voucher Captain)"
+
+#: src/Coupons/CouponFactory.php:91
+msgid ""
+"No recipient email was given: redemption is limited to the buyer email "
+"instead."
+msgstr ""
+"Es wurde keine Empfänger-E-Mail angegeben: Die Einlösung ist stattdessen auf "
+"die Käufer-E-Mail beschränkt."
+
+#: src/Coupons/CouponSync.php:253
+msgid "WooCommerce coupon moved to the trash"
+msgstr "WooCommerce-Code in den Papierkorb verschoben"
+
+#: src/Coupons/CouponSync.php:253
+msgid "WooCommerce coupon deleted"
+msgstr "WooCommerce-Code gelöscht"
+
+#. translators: %s: masked voucher code
+#: src/Coupons/OrderCoupons.php:40
+#, php-format
+msgid ""
+"Voucher %s: this code was replaced by a new one (reissued) before the order "
+"was paid, so nothing was charged to the voucher for its discount. Review "
+"this order before fulfilment."
+msgstr ""
+"Gutschein %s: Dieser Code wurde vor der Bezahlung der Bestellung durch einen "
+"neuen ersetzt (neu ausgestellt), daher wurde für seinen Rabatt nichts vom "
+"Gutschein abgebucht. Prüfen Sie diese Bestellung vor der Ausführung."
+
+#. translators: %s: masked voucher code
+#: src/Coupons/OrderCoupons.php:42
+#, php-format
+msgid ""
+"Voucher %s has been replaced by a new code and can no longer be used. This "
+"order cannot be paid as it is. Please contact us to complete it."
+msgstr ""
+"Der Gutschein %s wurde durch einen neuen Code ersetzt und kann nicht mehr "
+"verwendet werden. Diese Bestellung kann so nicht bezahlt werden. Bitte "
+"kontaktieren Sie uns, um sie abzuschließen."
+
+#: src/Coupons/Reservations.php:91
+msgid "Unpaid order: voucher balance reservations released."
+msgstr ""
+"Unbezahlte Bestellung: reservierte Gutschein-Restwerte wurden freigegeben."
+
+#. translators: %s: order id
+#: src/Coupons/Reservations.php:139
+#, php-format
+msgid "Orphaned reservation of order #%s released"
+msgstr "Verwaiste Reservierung von Bestellung #%s freigegeben"
+
+#. translators: %s: voucher code
+#: src/Coupons/Reservations.php:156
+#, php-format
+msgid "A voucher reservation of %s that was left open has been released."
+msgstr "Eine offen gebliebene Gutscheinreservierung von %s wurde freigegeben."
+
+#: src/Coupons/Reservations.php:193
+msgid "Coupon removed or changed on the order"
+msgstr "WooCommerce-Code wurde in der Bestellung entfernt oder geändert"
+
+#: src/Coupons/Reservations.php:220
+msgid ""
+"Some voucher reservations could not be committed. Review this order before "
+"fulfilment."
+msgstr ""
+"Einige Gutschein-Reservierungen konnten nicht verbucht werden. Bitte prüfen "
+"Sie diese Bestellung vor der Ausführung."
+
+#. translators: 1: masked voucher code, 2: amount
+#: src/Coupons/Reservations.php:226
+#, php-format
+msgid ""
+"Voucher %1$s: currency rounding made the discount %2$s larger than the "
+"balance it held; the full balance was charged and the uncovered difference "
+"is recorded on this order."
+msgstr ""
+"Gutschein %1$s: Durch Währungsrundung war der Rabatt um %2$s größer als sein "
+"Restwert; der gesamte Restwert wurde abgebucht und der ungedeckte "
+"Unterschied ist an dieser Bestellung vermerkt."
+
+#. translators: %s: order number
+#: src/Coupons/Reservations.php:248
+#, php-format
+msgid "Released from order #%s"
+msgstr "Aus Bestellung #%s freigegeben"
+
+#: src/Coupons/Settlement.php:86
+msgid ""
+"Voucher shortfall accepted by an administrator; the order can be fulfilled."
+msgstr ""
+"Gutschein-Fehlbetrag von einem Administrator akzeptiert; die Bestellung kann "
+"ausgeführt werden."
+
+#: src/Coupons/Settlement.php:102 src/Coupons/Settlement.php:218
+msgid "Voucher balance shortfall requires manual review before fulfilment."
+msgstr ""
+"Fehlender Gutschein-Restwert erfordert vor der Ausführung eine manuelle "
+"Prüfung."
+
+#: src/Coupons/Settlement.php:117
+msgid ""
+"A voucher of this order was cancelled or redeemed elsewhere: manual review "
+"required before fulfilment."
+msgstr ""
+"Ein Gutschein dieser Bestellung wurde storniert oder anderweitig eingelöst: "
+"Vor der Ausführung ist eine manuelle Prüfung nötig."
+
+#. translators: 1: voucher code, 2: order currency
+#: src/Coupons/Settlement.php:154
+#, php-format
+msgid ""
+"Voucher %1$s: the discount could not be deducted from its balance because no "
+"exchange rate for %2$s is known. Review this order and adjust the charge "
+"before fulfilment."
+msgstr ""
+"Gutschein %1$s: Der Rabatt konnte nicht vom Restwert abgebucht werden, weil "
+"für %2$s kein Wechselkurs bekannt ist. Prüfen Sie diese Bestellung und "
+"passen Sie den Betrag vor der Ausführung an."
+
+#. translators: %s: order number
+#: src/Coupons/Settlement.php:162
+#, php-format
+msgid "Used in order #%s"
+msgstr "Verwendet in Bestellung #%s"
+
+#. translators: %s: voucher code
+#: src/Coupons/Settlement.php:172
+#, php-format
+msgid ""
+"Voucher %s: the discount could not be deducted from its balance. Review this "
+"order and adjust the charge before fulfilment."
+msgstr ""
+"Gutschein %s: Der Rabatt konnte nicht vom Restwert abgebucht werden. Bitte "
+"prüfen Sie diese Bestellung und passen Sie den Betrag vor der Ausführung an."
+
+#: src/Coupons/Settlement.php:182
+msgid ""
+"A stored-value voucher balance changed during checkout. Review this order "
+"and adjust the charge before fulfilment."
+msgstr ""
+"Der Restwert eines Gutscheins hat sich während des Bezahlvorgangs geändert. "
+"Bitte prüfen Sie diese Bestellung und passen Sie den Betrag vor der "
+"Ausführung an."
+
+#. translators: 1: code, 2: amount, 3: remaining balance
+#: src/Coupons/Settlement.php:189
+#, php-format
+msgid "Voucher %1$s: %2$s deducted, remaining balance %3$s."
+msgstr "Gutschein %1$s: %2$s abgezogen, Restwert %3$s."
+
+#: src/Coupons/Settlement.php:202
+msgid ""
+"Gift card shortfall: the installed WP Pass Captain cannot hold ticket "
+"issuance. If this order contains tickets, check them – and update WP Pass "
+"Captain."
+msgstr ""
+"Fehlbetrag einer Geschenkkarte: Das installierte WP Pass Captain kann die "
+"Ticketausstellung nicht anhalten. Enthält diese Bestellung Tickets, prüfen "
+"Sie diese – und aktualisieren Sie WP Pass Captain."
+
+#. translators: %s: order number
+#: src/Coupons/Settlement.php:260
+#, php-format
+msgid "Rounding rest of the net-price conversion in order #%s booked off"
+msgstr "Rundungsrest der Netto-Umrechnung in Bestellung #%s ausgebucht"
+
+#. translators: %s: voucher codes
+#: src/Coupons/SingleUse.php:43
+#, php-format
+msgid ""
+"Order cancelled: single-use vouchers %s stay redeemed (\"Restore balance on "
+"cancellation\" is off)."
+msgstr ""
+"Bestellung storniert: Die Einzelgutscheine %s bleiben eingelöst („Restwert "
+"bei Stornierung wiederherstellen“ ist ausgeschaltet)."
+
+#. translators: %s: order number
+#: src/Coupons/SingleUse.php:189
+#, php-format
+msgid "Order #%s"
+msgstr "Bestellung #%s"
+
+#. translators: 1: voucher code, 2: discount amount
+#: src/Coupons/SingleUse.php:193
+#, php-format
+msgid ""
+"Voucher %1$s was cancelled or redeemed elsewhere before this order was paid, "
+"but the order still has its discount of %2$s. The order is held: collect the "
+"difference or cancel the order before fulfilment."
+msgstr ""
+"Gutschein %1$s wurde storniert oder anderweitig eingelöst, bevor diese "
+"Bestellung bezahlt wurde, die Bestellung enthält aber noch seinen Rabatt von "
+"%2$s. Die Bestellung ist in Wartestellung: Fordern Sie die Differenz nach "
+"oder stornieren Sie die Bestellung vor der Ausführung."
 
 #. translators: %d: number of data rows in the CSV file
 #: src/Csv.php:150
