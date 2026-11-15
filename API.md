@@ -74,8 +74,8 @@ PHP callers may pass `user_id`; otherwise the logged-in user is used. Personal v
 
 | Method | Route | Body | Success |
 |---|---|---|---|
-| POST | `/wp-json/vcap/v1/redemptions/check` | `code`, `target`, `amount` | 200 voucher data |
-| POST | `/wp-json/vcap/v1/redemptions` | `code`, `key`, `target`, `amount`, `meta` | 201 redemption (200 for a repeated request) |
+| POST | `/wp-json/vcap/v1/redemptions/check` | `code`, `target`, `amount`, `currency` | 200 voucher data |
+| POST | `/wp-json/vcap/v1/redemptions` | `code`, `key`, `target`, `amount`, `currency`, `meta` | 201 redemption (200 for a repeated request) |
 | GET | `/wp-json/vcap/v1/redemptions/{key}` | – | 200 redemption |
 | POST | `/wp-json/vcap/v1/redemptions/{key}/commit` | – | 200 redemption |
 | POST | `/wp-json/vcap/v1/redemptions/{key}/release` | – | 200 redemption |
@@ -84,6 +84,8 @@ PHP callers may pass `user_id`; otherwise the logged-in user is used. Personal v
 Authentication: browsers of logged-in users send the WordPress REST nonce (`X-WP-Nonce`, from `wp_create_nonce( 'wp_rest' )`); external servers use WordPress Application Passwords for a dedicated technical user. Anonymous requests receive `401`. Narrow access with the `vcap_rest_can_redeem` filter.
 
 Targets over REST: shop managers (`manage_woocommerce` / `vcap_manage_vouchers`, e.g. the technical user of a connector server) and accounts with the optional capability `vcap_redeem_api` (a "Voucher POS" account, see *Counter API* below) may use any target; customers only targets whose prefix a connector registered with `vcap_rest_redemption_target_prefixes` (e.g. `add_filter( 'vcap_rest_redemption_target_prefixes', fn( $p ) => array_merge( $p, array( 'learnboating:' ) ) )`) – without one, customers can check codes but not reserve them over REST, and they cannot commit or release a redemption a connector made for them with an unregistered target. Targets of built-in integrations (`passcaptain:…`, filter `vcap_internal_redemption_target_prefixes`) are refused over REST for everybody (`403 vcap_not_allowed`). Keys are global, so over REST a key with a prefix (`system:…`) must start with the prefix of its target (`400 vcap_invalid_request`; UUID keys are free), and keys a connector creates on the server (Pass Captain `wpcap-…`/`passcaptain:…`, Learnboating `learnboating:grant:…`) are never accepted over REST – connectors add theirs with `vcap_internal_redemption_key_prefixes`. PHP callers are not affected.
+
+Currency (M12-33): fixed values are redeemed only in the currency the voucher is kept in. `currency` (optional, ISO 4217, e.g. `EUR`) names the currency of the calling system; without it the shop base currency is expected. A voucher kept in another currency (e.g. issued before the shop base currency was changed) is refused with `409 vcap_currency_mismatch`, never redeemed 1:1. Percentage vouchers have no currency. PHP callers pass `currency` in `$args` of `check()` and `reserve()`.
 
 Redemption data: `redemption_key`, `state` (`reserved`, `committed`, `released`), `voucher_id`, `code`, `user_id`, `target`, `amount`, `currency`, `balance_after` (gift cards), `expires_at` (while reserved), `created_at`, `committed_at` (UTC), `meta`.
 
@@ -130,6 +132,7 @@ A till system can redeem vouchers in two ways:
 | `vcap_reserved` | 409 | Voucher is reserved by another redemption right now |
 | `vcap_insufficient_balance` | 409 | Gift card balance too low |
 | `vcap_not_active` | 409 | Voucher scheduled for later delivery |
+| `vcap_currency_mismatch` | 409 | Voucher kept in another currency than the shop base currency or the `currency` given |
 | `vcap_target_unavailable` | 409 | Refused by `vcap_redemption_target_available` |
 | `vcap_idempotency_conflict` | 409 | Key reused for a different request |
 | `vcap_redemption_released` | 409 | `reserve()` repeated for a key whose reservation was released or expired – redeem again with a new key |

@@ -10,10 +10,16 @@ final class CustomAmount {
 	/** Error of the amount refused in this request (the field is marked when the form shows again). */
 	private string $error = '';
 
+	/** Whether a Store API add-item of a customer-chosen amount is being handled in this request. */
+	private bool $store_api = false;
+
 	public function register(): void {
 		add_action( 'vcap_before_fields', array( $this, 'render' ) );
 		add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'validate' ), 5, 6 );
 		add_filter( 'woocommerce_add_cart_item_data', array( $this, 'cart_item_data' ), 5, 3 );
+		// M12-20: Store API cart/add-item (blocks, headless clients) sends the amount as request parameters.
+		add_filter( 'woocommerce_store_api_add_to_cart_data', array( $this, 'store_api_data' ), 10, 2 );
+		add_action( 'woocommerce_store_api_validate_add_to_cart', array( $this, 'store_api_validate' ), 10, 2 );
 		add_filter( 'woocommerce_get_cart_item_from_session', array( $this, 'from_session' ), 10, 2 );
 		add_action( 'woocommerce_before_calculate_totals', array( $this, 'apply_prices' ), 20 );
 		add_filter( 'woocommerce_get_item_data', array( $this, 'display' ), 5, 2 );
@@ -143,7 +149,54 @@ final class CustomAmount {
 			// Numbers come from code ("order again", Store API extensions); text is parsed like a typed amount.
 			return is_int( $given ) || is_float( $given ) ? self::number( (float) $given ) : ( is_scalar( $given ) ? self::normalise( (string) $given ) : '' );
 		}
+		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			return ''; // M12-20: REST clients send the amount through the Store API (store_api_data()), never $_REQUEST.
+		}
 		return self::posted_amount( ProductConfig::get( $product ), wp_unslash( $_REQUEST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- add to cart; WooCommerce handles the request.
+	}
+
+	/**
+	 * M12-20: Store API cart/add-item takes the amount from the request parameters "vcap_amount" (typed amount) or
+	 * "vcap_amount_preset" (one of the suggested amounts) into the cart item data – also for top-ups with a
+	 * customer-chosen amount. A request without either gets an empty amount, refused by store_api_validate().
+	 *
+	 * @param mixed                 $data    Add-to-cart data (id, quantity, variation, cart_item_data).
+	 * @param \WP_REST_Request|mixed $request Store API request.
+	 * @return mixed
+	 */
+	public function store_api_data( $data, $request ) {
+		if ( ! is_array( $data ) || ! $request instanceof \WP_REST_Request ) {
+			return $data;
+		}
+		$product = wc_get_product( (int) ( ! empty( $data['variation_id'] ) ? $data['variation_id'] : ( $data['id'] ?? 0 ) ) );
+		if ( ! $product || ! $this->is_custom( $product ) ) {
+			return $data;
+		}
+		$params = array(
+			'vcap_amount'        => $request->get_param( 'vcap_amount' ),
+			'vcap_amount_preset' => $request->get_param( 'vcap_amount_preset' ),
+		);
+		$this->store_api                       = true;
+		$data['cart_item_data']                = (array) ( $data['cart_item_data'] ?? array() );
+		$data['cart_item_data']['vcap_amount'] = self::posted_amount( ProductConfig::get( $product ), array_filter( $params, 'is_scalar' ) );
+		return $data;
+	}
+
+	/**
+	 * M12-20: a Store API add-item of a customer-chosen amount is refused with a 400 and the reason, like the form.
+	 *
+	 * @param \WC_Product $product Product being added.
+	 * @param mixed       $request Add-to-cart data (WooCommerce passes the array with cart_item_data).
+	 */
+	public function store_api_validate( $product, $request ): void {
+		if ( ! $product instanceof \WC_Product || ! $this->is_custom( $product ) ) {
+			return;
+		}
+		$given = is_array( $request ) ? ( $request['cart_item_data']['vcap_amount'] ?? '' ) : '';
+		$error = $this->amount_error( $product, is_scalar( $given ) ? (string) $given : '' );
+		if ( $error && class_exists( '\Automattic\WooCommerce\StoreApi\Exceptions\RouteException' ) ) {
+			throw new \Automattic\WooCommerce\StoreApi\Exceptions\RouteException( 'vcap_invalid_amount', esc_html( $error ), 400 );
+		}
 	}
 
 	/**
@@ -267,6 +320,10 @@ final class CustomAmount {
 		}
 		$raw   = $this->requested_amount( $data, $product );
 		$error = $this->amount_error( $product, $raw );
+		if ( $error && $this->store_api && class_exists( '\Automattic\WooCommerce\StoreApi\Exceptions\RouteException' ) ) {
+			// Newer WooCommerce filters the cart item data before woocommerce_store_api_validate_add_to_cart: a 400.
+			throw new \Automattic\WooCommerce\StoreApi\Exceptions\RouteException( 'vcap_invalid_amount', esc_html( $error ), 400 );
+		}
 		if ( $error ) {
 			throw new \Exception( esc_html( $error ) );
 		}

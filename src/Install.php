@@ -277,6 +277,8 @@ final class Install {
 			}
 			if ( ! get_option( 'vcap_secret' ) ) {
 				update_option( 'vcap_secret', wp_generate_password( 64, true, true ), false );
+				// M12-95: a first installation (no secret yet) offers the delivery date on new voucher products.
+				add_option( 'vcap_new_product_delivery', 'yes' );
 			}
 			add_option( 'vcap_needs_default_template', 'yes' );
 			update_option( 'vcap_flush_rewrite', 'yes' );

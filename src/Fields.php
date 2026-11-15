@@ -38,6 +38,7 @@ final class Fields {
 		add_filter( 'woocommerce_order_item_display_meta_value', array( $this, 'display_meta_value' ), 10, 3 );
 		add_action( 'woocommerce_before_order_item_object_save', array( $this, 'sync_visible_meta' ), 10, 1 );
 		add_filter( 'woocommerce_order_again_cart_item_data', array( $this, 'order_again' ), 10, 3 );
+		add_action( 'woocommerce_check_cart_items', array( $this, 'check_cart_items' ) );
 		add_action( 'woocommerce_privacy_remove_order_personal_data', array( self::class, 'anonymise_order' ), 10, 1 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'assets' ) );
 		add_action( 'woocommerce_after_shop_loop_item', array( $this, 'loop_assets' ) );
@@ -363,6 +364,9 @@ final class Fields {
 		$config = ProductConfig::get( $product );
 		echo '<div class="vcap-fields vcap-fields--' . esc_attr( $position ) . '">';
 		echo $amount_html; // phpcs:ignore WordPress.Security.EscapeOutput -- built by CustomAmount with escaping.
+		if ( self::gift_toggle_enabled() && array_intersect_key( $defs, array_flip( self::GIFT_KEYS ) ) ) {
+			$this->render_gift_toggle();
+		}
 		foreach ( $defs as $key => $field ) {
 			$this->render_field( $key, $field, $config );
 		}
@@ -404,6 +408,33 @@ final class Fields {
 			echo '<p class="vcap-preview-row"><button type="button" class="button vcap-preview-button" data-product="' . esc_attr( (string) $product->get_id() ) . '">' . esc_html__( 'Preview voucher', 'voucher-captain' ) . '</button></p>';
 		}
 		echo '</div>';
+	}
+
+	/** M12-95: fields that only matter for a gift (hidden and ignored when the customer buys "for me"). */
+	public const GIFT_KEYS = array( 'recipient_name', 'recipient_email', 'message' );
+
+	/** M12-95: setting "Gift / for me" choice. */
+	public static function gift_toggle_enabled(): bool {
+		return 'yes' === Settings::value( 'vcap_gift_toggle' );
+	}
+
+	/** Whether the customer chose "For me" (field "gift_mode" = "self", only with the setting on). */
+	private function for_self(): bool {
+		return self::gift_toggle_enabled() && 'self' === $this->posted_value( 'gift_mode' );
+	}
+
+	/** "As a gift" / "For me" (frontend.js hides the gift fields for "For me"; the server ignores them then). */
+	private function render_gift_toggle(): void {
+		$self = 'self' === $this->posted_value( 'gift_mode' );
+		$id   = Shortcodes::unique_id( 'vcap-gift-mode' );
+		echo '<fieldset class="vcap-gift-mode"><legend>' . esc_html__( 'Who is the voucher for?', 'voucher-captain' ) . '</legend>';
+		foreach ( array(
+			'gift' => __( 'As a gift', 'voucher-captain' ),
+			'self' => __( 'For me', 'voucher-captain' ),
+		) as $value => $label ) {
+			echo '<label for="' . esc_attr( $id . '-' . $value ) . '"><input type="radio" id="' . esc_attr( $id . '-' . $value ) . '" name="vcap_fields[gift_mode]" value="' . esc_attr( $value ) . '"' . checked( ( 'self' === $value ) === $self, true, false ) . ' /> ' . esc_html( $label ) . '</label> ';
+		}
+		echo '</fieldset>';
 	}
 
 	/** @var array<string, mixed>|null field values of a Store API request (blocks), used instead of $_POST */
@@ -458,7 +489,7 @@ final class Fields {
 			$attrs .= ' placeholder="' . esc_attr( $field['placeholder'] ) . '"';
 		}
 
-		echo '<p class="form-row vcap-field vcap-field--' . esc_attr( $type ) . '">';
+		echo '<p class="form-row vcap-field vcap-field--' . esc_attr( $type ) . '" data-vcap-key="' . esc_attr( $key ) . '">';
 		if ( 'checkbox' !== $type ) {
 			echo '<label for="' . esc_attr( $id ) . '">' . esc_html( $field['label'] ?? $key ) . ( $required ? ' <abbr class="required" title="' . esc_attr__( 'required', 'voucher-captain' ) . '">*</abbr>' : ' <span class="optional">(' . esc_html__( 'optional', 'voucher-captain' ) . ')</span>' ) . '</label>';
 		}
@@ -524,8 +555,12 @@ final class Fields {
 	 * @return array<string, array{label:string,value:string}>
 	 */
 	public function collect_posted( \WC_Product $product, bool $only_filled = true ): array {
-		$out = array();
+		$out  = array();
+		$self = $this->for_self();
 		foreach ( $this->flat_definitions( $product ) as $key => $field ) {
+			if ( $self && in_array( (string) $key, self::GIFT_KEYS, true ) ) {
+				continue; // "For me": no recipient, no gift message.
+			}
 			$raw = $this->posted_value( (string) $key );
 			switch ( $field['type'] ?? 'text' ) {
 				case 'textarea':
@@ -567,8 +602,21 @@ final class Fields {
 		if ( ! $product || ! ProductConfig::is_voucher( $product ) ) {
 			return $passed;
 		}
-		if ( is_array( $cart_item_data ) && ! empty( $cart_item_data['vcap_fields'] ) ) {
-			return $passed; // "Order again": values were validated when first ordered.
+		if ( is_array( $cart_item_data ) && ! empty( $cart_item_data['vcap_fields'] ) && is_array( $cart_item_data['vcap_fields'] ) ) {
+			// M12-59: "order again" (and other supplied values) are checked like the form, with today's rules
+			// (fields that became required, a delivery date that has passed).
+			$previous       = $this->override; // A Store API request keeps its own values (store_api_data()).
+			$this->override = self::plain_values( $cart_item_data['vcap_fields'] );
+			try {
+				$errors = $this->errors( $product );
+			} finally {
+				$this->override = $previous;
+			}
+			foreach ( $errors as $message ) {
+				wc_add_notice( $message, 'error' );
+				$passed = false;
+			}
+			return $passed;
 		}
 		foreach ( $this->errors( $product ) as $message ) {
 			wc_add_notice( $message, 'error' );
@@ -667,7 +715,11 @@ final class Fields {
 	public function errors( \WC_Product $product ): array {
 		$errors        = array();
 		$this->invalid = array();
+		$self          = $this->for_self();
 		foreach ( $this->flat_definitions( $product ) as $key => $field ) {
+			if ( $self && in_array( (string) $key, self::GIFT_KEYS, true ) ) {
+				continue; // "For me": the gift fields are not asked for.
+			}
 			$raw    = trim( $this->posted_value( (string) $key ) );
 			$label  = (string) ( $field['label'] ?? $key );
 			$before = count( $errors );
@@ -1054,11 +1106,62 @@ final class Fields {
 
 	public function order_again( $data, $item, $order ) {
 		$fields = $item->get_meta( '_vcap_fields' );
+		if ( is_array( $fields ) ) {
+			// M12-59: the old delivery date is not taken over (it has usually passed: the voucher would go out at once).
+			unset( $fields['delivery_date'] );
+		}
 		if ( $fields ) {
 			$data['vcap_fields'] = $fields;
 			$data['vcap_key']    = md5( wp_json_encode( $fields ) );
 		}
 		return $data;
+	}
+
+	/**
+	 * Field values as the form would send them (key => value) from stored cart item data (key => label/value).
+	 *
+	 * @param array<string, mixed> $fields Cart item "vcap_fields".
+	 * @return array<string, string>
+	 */
+	private static function plain_values( array $fields ): array {
+		$out = array();
+		foreach ( $fields as $key => $field ) {
+			$value = is_array( $field ) ? ( $field['value'] ?? '' ) : $field;
+
+			$out[ (string) $key ] = is_scalar( $value ) ? (string) $value : '';
+		}
+		return $out;
+	}
+
+	/**
+	 * M12-59: a delivery date in the cart that has passed meanwhile (or now lies after the voucher's expiry) stops the
+	 * checkout instead of sending the voucher at once (classic checkout and Store API run this action).
+	 */
+	public function check_cart_items(): void {
+		if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
+			return;
+		}
+		$today = wp_date( 'Y-m-d' );
+		foreach ( WC()->cart->get_cart() as $values ) {
+			$date    = (string) ( $values['vcap_fields']['delivery_date']['value'] ?? '' );
+			$product = $values['data'] ?? null;
+			if ( '' === $date || ! $product instanceof \WC_Product ) {
+				continue;
+			}
+			$latest = Delivery::latest_delivery_date( ProductConfig::get( $product ), time(), self::customer_country() );
+			if ( $date >= $today && ( null === $latest || $date <= $latest ) ) {
+				continue;
+			}
+			wc_add_notice(
+				sprintf(
+					/* translators: 1: product name, 2: delivery date */
+					__( 'The delivery date of "%1$s" (%2$s) is no longer possible. Please remove the voucher from the cart and add it again with another date.', 'voucher-captain' ),
+					$product->get_name(),
+					wp_date( (string) get_option( 'date_format' ), (int) strtotime( $date . ' 12:00:00 ' . wp_timezone_string() ) )
+				),
+				'error'
+			);
+		}
 	}
 
 	/** Loop "Add to cart" must go to the product page when personalisation fields exist. */

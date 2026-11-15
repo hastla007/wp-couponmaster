@@ -134,6 +134,7 @@ final class Plugin {
 		$this->payments->register();
 		( new TaxAccounting( $this->vouchers ) )->register(); // M12-28/29/68: VAT rules and accounting bookings.
 		( new CartBlocks( $this->vouchers, $this->payments, $this->store_credit ) )->register();
+		( new GiftCardField( $this->vouchers, $this->payments, $this->store_credit ) )->register();
 		( new API\V1\RestController( $this->redemptions ) )->register();
 
 		( new Compat\Subscriptions() )->register();

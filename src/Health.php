@@ -457,6 +457,24 @@ final class Health {
 		$state   = (array) apply_filters( 'vcap_currency_health', array( 'unknown' => array(), 'switcher' => '' ) );
 		$unknown = (array) ( $state['unknown'] ?? array() );
 		$advice  = __( 'Vouchers and gift card balances are kept in the shop base currency. Use a supported currency switcher (WooCommerce Multilingual, Aelia, WOOCS, CURCY, WooPayments Multi-Currency) or convert amounts with the filter "vcap_amount_to_base_currency".', 'voucher-captain' );
+		$foreign = self::foreign_currency_vouchers();
+		if ( $foreign ) {
+			$list = array();
+			foreach ( $foreign as $currency => $count ) {
+				$list[] = $currency . ' (' . (int) $count . ')';
+			}
+			return self::result(
+				'currency',
+				'critical',
+				__( 'Vouchers kept in another currency than the shop base currency', 'voucher-captain' ),
+				sprintf(
+					/* translators: 1: shop base currency, 2: currencies with the number of vouchers */
+					__( 'The shop base currency is %1$s, but usable fixed-value vouchers are kept in %2$s (the base currency was changed after they were issued). They are refused in the cart and over the API until their value is converted (edit the balance or reissue them).', 'voucher-captain' ),
+					(string) get_option( 'woocommerce_currency' ),
+					implode( ', ', $list )
+				)
+			);
+		}
 		if ( $unknown ) {
 			return self::result(
 				'currency',
@@ -477,6 +495,31 @@ final class Health {
 			);
 		}
 		return self::result( 'currency', 'good', __( 'Voucher amounts are converted to the shop base currency', 'voucher-captain' ), __( 'Either all orders are in the base currency or a supported currency switcher provides the exchange rates.', 'voucher-captain' ) );
+	}
+
+	/**
+	 * M12-33: usable fixed-value vouchers whose currency is not the shop base currency.
+	 *
+	 * @return array<string, int> currency => number of vouchers
+	 */
+	public static function foreign_currency_vouchers(): array {
+		global $wpdb;
+		if ( ! $wpdb instanceof \wpdb ) {
+			return array();
+		}
+		$table = Install::tables()['vouchers'];
+		$rows  = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				"SELECT currency, COUNT(*) AS n FROM {$table} WHERE status IN ('active','scheduled','reserved') AND discount_type <> 'percent' AND type <> 'ticket' AND currency <> '' AND currency <> %s GROUP BY currency ORDER BY n DESC LIMIT 10", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				(string) get_option( 'woocommerce_currency' )
+			),
+			ARRAY_A
+		);
+		$out = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$out[ (string) $row['currency'] ] = (int) $row['n'];
+		}
+		return $out;
 	}
 
 	/** Voucher products whose validity ends before the statutory limitation period in the shop or a selling country. */

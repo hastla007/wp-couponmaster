@@ -40,6 +40,12 @@ final class Settings {
 		'vcap_campaigns_enabled'       => 'no',
 		'vcap_vouchers_buy_vouchers'   => 'no',
 		'vcap_coupon_link_param'       => 'gutschein',
+		// M12-95: storefront conveniences, off by default (existing shops keep their storefront).
+		'vcap_giftcard_field'          => 'no',
+		'vcap_minicart_balance'        => 'no',
+		'vcap_gift_toggle'             => 'no',
+		// Stored as "yes" on a first installation (Install::activate_site()); existing shops keep "no".
+		'vcap_new_product_delivery'    => 'no',
 		'vcap_redemption_max_failures' => 10,
 		'vcap_credit_with_coupons'     => 'yes',
 		'vcap_credit_apply_order'      => 'last',
@@ -269,6 +275,20 @@ final class Settings {
 				'type'    => 'checkbox',
 				'default' => 'yes',
 				'desc'    => __( 'Attach the voucher PDF to voucher emails.', 'voucher-captain' ),
+			),
+			array(
+				'title'   => __( '"Gift / for me" choice', 'voucher-captain' ),
+				'id'      => 'vcap_gift_toggle',
+				'type'    => 'checkbox',
+				'default' => 'no',
+				'desc'    => __( 'On product pages with recipient fields, let the customer choose "As a gift" or "For me"; "For me" hides the recipient fields and sends the voucher to the buyer.', 'voucher-captain' ),
+			),
+			array(
+				'title'   => __( 'Delivery date for new products', 'voucher-captain' ),
+				'id'      => 'vcap_new_product_delivery',
+				'type'    => 'checkbox',
+				'default' => 'no',
+				'desc'    => __( 'New voucher products offer the "Delivery date" field by default (existing products keep their fields).', 'voucher-captain' ),
 			),
 			array(
 				'title'   => __( 'Download link in emails', 'voucher-captain' ),
@@ -733,6 +753,20 @@ final class Settings {
 				'default'  => 'gutschein',
 				'css'      => 'width:160px',
 				'desc_tip' => __( 'Name of the URL parameter (letters, digits, - and _).', 'voucher-captain' ),
+			),
+			array(
+				'title'   => __( 'Gift card field', 'voucher-captain' ),
+				'id'      => 'vcap_giftcard_field',
+				'type'    => 'checkbox',
+				'default' => 'no',
+				'desc'    => __( 'Show a separate "Redeem a gift card" field in the cart and at checkout (classic pages and blocks). Gift cards and store credit are applied without reloading the page.', 'voucher-captain' ),
+			),
+			array(
+				'title'   => __( 'Balance in the mini cart', 'voucher-captain' ),
+				'id'      => 'vcap_minicart_balance',
+				'type'    => 'checkbox',
+				'default' => 'no',
+				'desc'    => __( 'Show the remaining balance of applied gift cards in the mini cart widget.', 'voucher-captain' ),
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_redeem' ),
 

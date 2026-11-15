@@ -47,15 +47,19 @@ final class RestController {
 				'callback'            => array( $this, 'check' ),
 				'permission_callback' => array( $this, 'can_redeem' ),
 				'args'                => array(
-					'code'   => array(
+					'code'     => array(
 						'required' => true,
 						'type'     => 'string',
 					),
-					'target' => array(
+					'target'   => array(
 						'type'    => 'string',
 						'default' => '',
 					),
-					'amount' => array( 'type' => 'number' ),
+					'amount'   => array( 'type' => 'number' ),
+					'currency' => array(
+						'type'    => 'string',
+						'pattern' => '^[A-Za-z]{3}$',
+					),
 				),
 			)
 		);
@@ -67,20 +71,24 @@ final class RestController {
 				'callback'            => array( $this, 'reserve' ),
 				'permission_callback' => array( $this, 'can_redeem' ),
 				'args'                => array(
-					'code'   => array(
+					'code'     => array(
 						'required' => true,
 						'type'     => 'string',
 					),
-					'key'    => array(
+					'key'      => array(
 						'required' => true,
 						'type'     => 'string',
 					),
-					'target' => array(
+					'target'   => array(
 						'required' => true,
 						'type'     => 'string',
 					),
-					'amount' => array( 'type' => 'number' ),
-					'meta'   => array(
+					'amount'   => array( 'type' => 'number' ),
+					'currency' => array(
+						'type'    => 'string',
+						'pattern' => '^[A-Za-z]{3}$',
+					),
+					'meta'     => array(
 						'type'    => 'object',
 						'default' => array(),
 					),
@@ -310,6 +318,9 @@ final class RestController {
 		if ( null !== $request['amount'] ) {
 			$args['amount'] = (float) $request['amount'];
 		}
+		if ( is_string( $request['currency'] ) && '' !== $request['currency'] ) {
+			$args['currency'] = $request['currency']; // M12-33: the caller's currency.
+		}
 		return rest_ensure_response( $this->service->check( (string) $request['code'], $args ) );
 	}
 
@@ -336,11 +347,12 @@ final class RestController {
 		$result = $this->service->reserve(
 			(string) $request['code'],
 			array(
-				'key'     => (string) $request['key'],
-				'target'  => (string) $request['target'],
-				'amount'  => null !== $request['amount'] ? (float) $request['amount'] : 0.0,
-				'meta'    => is_array( $request['meta'] ) ? $request['meta'] : array(),
-				'user_id' => get_current_user_id(), // Never taken from the request body.
+				'key'      => (string) $request['key'],
+				'target'   => (string) $request['target'],
+				'amount'   => null !== $request['amount'] ? (float) $request['amount'] : 0.0,
+				'meta'     => is_array( $request['meta'] ) ? $request['meta'] : array(),
+				'currency' => is_string( $request['currency'] ) ? $request['currency'] : '',
+				'user_id'  => get_current_user_id(), // Never taken from the request body.
 			)
 		);
 		if ( is_wp_error( $result ) ) {
