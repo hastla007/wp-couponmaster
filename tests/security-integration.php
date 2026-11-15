@@ -472,6 +472,145 @@ wp_set_current_user( 0 );
 wp_set_current_user( $o5_manager );
 $o5_with = $o5_refund->invoke( $o5_credit_admin );
 vcap_security_assert( false === $o5_without && true === $o5_with, 'O5: "Refund as store credit" needs edit_shop_orders besides the voucher right' );
+// AP-S2-1: store credit "+amount" on a user profile creates value: it needs vcap_increase_balance, and nobody credits
+// their own account without manage_woocommerce – checked on validation and again when the pending booking is made.
+$s21_option = get_option( 'vcap_store_credit' );
+update_option( 'vcap_store_credit', 'yes' );
+$s21_manager  = (int) wp_insert_user( array( 'user_login' => 'vcap-s21-' . wp_generate_password( 6, false, false ), 'user_pass' => wp_generate_password( 20 ), 'role' => 'subscriber' ) );
+$s21_customer = (int) wp_insert_user( array( 'user_login' => 'vcap-s21c-' . wp_generate_password( 6, false, false ), 'user_pass' => wp_generate_password( 20 ), 'user_email' => 's21-' . strtolower( wp_generate_password( 6, false, false ) ) . '@example.test', 'role' => 'customer' ) );
+( new WP_User( $s21_manager ) )->add_cap( 'vcap_manage_vouchers' );
+wp_set_current_user( $s21_manager );
+$s21_admin   = new VCAP\Admin\StoreCreditAdmin( vcap()->store_credit, vcap()->vouchers );
+$s21_profile = static function ( int $user_id, string $amount ) use ( $s21_admin ) {
+	$_POST = array(
+		'vcap_credit_nonce'         => wp_create_nonce( 'vcap_credit_' . $user_id ),
+		'vcap_credit_amount'        => $amount,
+		'vcap_credit_reason'        => 'AP-S2-1',
+		VCAP\Admin\FormToken::FIELD => VCAP\Admin\FormToken::generate(),
+	);
+	$s21_admin->save_profile( $user_id );
+	$errors = new WP_Error();
+	$s21_admin->profile_errors( $errors, true, get_userdata( $user_id ) );
+	$booked = $s21_admin->book_profile_credit( $user_id );
+	$_POST  = array();
+	return array( $errors->has_errors(), $booked );
+};
+[ $s21_err_other ] = $s21_profile( $s21_customer, '10' );
+[ $s21_err_self ]  = $s21_profile( $s21_manager, '10' );
+vcap_security_assert( $s21_err_other && $s21_err_self && 0.0 === vcap()->store_credit->balance( $s21_customer ) && 0.0 === vcap()->store_credit->balance( $s21_manager ), 'AP-S2-1: without vcap_increase_balance a voucher manager cannot add store credit on a profile (own or other)' );
+// A pending booking that bypassed the validation (replayed) is refused when it is booked.
+$s21_pending = new ReflectionProperty( VCAP\Admin\StoreCreditAdmin::class, 'pending' );
+$s21_pending->setAccessible( true );
+$s21_pending->setValue( $s21_admin, array( $s21_manager => array( 'amount' => 10.0, 'reason' => 'replay', 'error' => '' ) ) );
+$s21_replay = $s21_admin->book_profile_credit( $s21_manager );
+vcap_security_assert( is_wp_error( $s21_replay ) && 'vcap_credit_forbidden' === $s21_replay->get_error_code() && 0.0 === vcap()->store_credit->balance( $s21_manager ), 'AP-S2-1: book_profile_credit() checks the rights again (a replayed pending credit is not booked)' );
+( new WP_User( $s21_manager ) )->add_cap( 'vcap_increase_balance' );
+wp_set_current_user( 0 );
+wp_set_current_user( $s21_manager );
+[ $s21_err_self2 ]           = $s21_profile( $s21_manager, '10' );
+[ $s21_err_cust, $s21_book ] = $s21_profile( $s21_customer, '10' );
+vcap_security_assert( $s21_err_self2 && 0.0 === vcap()->store_credit->balance( $s21_manager ) && ! $s21_err_cust && is_array( $s21_book ) && 10.0 === vcap()->store_credit->balance( $s21_customer ), 'AP-S2-1: with vcap_increase_balance a manager credits customers, but never their own account without manage_woocommerce' );
+[ $s21_err_debit ] = $s21_profile( $s21_customer, '-4' );
+vcap_security_assert( ! $s21_err_debit && 6.0 === vcap()->store_credit->balance( $s21_customer ) && '' === VCAP\Admin\StoreCreditAdmin::credit_refusal( $s21_manager, -1.0 ), 'AP-S2-1: removing store credit needs the voucher right only' );
+update_option( 'vcap_store_credit', $s21_option );
+delete_transient( 'vcap_flash_' . get_current_user_id() );
+
+// AP-S2-2 / AP-S2-3: other value-raising admin paths need vcap_increase_balance.
+$s22_manager = (int) wp_insert_user( array( 'user_login' => 'vcap-s22-' . wp_generate_password( 6, false, false ), 'user_pass' => wp_generate_password( 20 ), 'role' => 'subscriber' ) );
+( new WP_User( $s22_manager ) )->add_cap( 'vcap_manage_vouchers' );
+wp_set_current_user( $s22_manager );
+$s22_admin = new VCAP\Admin\VoucherAdmin( vcap()->vouchers );
+// Reviving an expired voucher with a new expiry date.
+$s22_expired             = vcap_security_create_voucher( 's22-' . strtolower( wp_generate_password( 6, false, false ) ) . '@example.test', 970000 + random_int( 1, 9999 ) );
+$s22_expired->expires_at = gmdate( 'Y-m-d H:i:s', time() - 3 * DAY_IN_SECONDS );
+$s22_expired->status     = VCAP\Voucher::STATUS_EXPIRED;
+vcap()->vouchers->update( $s22_expired );
+$s22_save = static function ( VCAP\Voucher $v, array $post ) use ( $s22_admin ) {
+	$fresh = vcap()->vouchers->get( $v->id );
+	$_POST = $post + array(
+		'expires_at'      => $fresh->expires_at ? get_date_from_gmt( $fresh->expires_at, 'Y-m-d' ) : '',
+		'recipient_name'  => $fresh->recipient_name,
+		'recipient_email' => $fresh->recipient_email,
+		'message'         => $fresh->message,
+		'send_to'         => $fresh->send_to,
+	);
+	$ok    = $s22_admin->save( $fresh );
+	$_POST = array();
+	return $ok;
+};
+$s22_future = wp_date( 'Y-m-d', time() + 30 * DAY_IN_SECONDS );
+$s22_revive = $s22_save( $s22_expired, array( 'expires_at' => $s22_future ) );
+vcap_security_assert( false === $s22_revive && VCAP\Voucher::STATUS_EXPIRED === vcap()->vouchers->get( $s22_expired->id )->status && vcap()->vouchers->get( $s22_expired->id )->is_expired(), 'AP-S2-2: without vcap_increase_balance a new expiry date does not revive an expired voucher' );
+$s22_edit = $s22_save( $s22_expired, array( 'recipient_name' => 'Renamed' ) );
+vcap_security_assert( true === $s22_edit && 'Renamed' === vcap()->vouchers->get( $s22_expired->id )->recipient_name, 'AP-S2-2: other fields of an expired voucher can still be edited without the right' );
+// Raising the check-ins of a ticket.
+$s22_ticket = vcap_security_create_voucher( 's22t-' . strtolower( wp_generate_password( 6, false, false ) ) . '@example.test', 960000 + random_int( 1, 9999 ) );
+$s22_more   = $s22_save( $s22_ticket, array( 'max_checkins' => '5' ) );
+vcap_security_assert( false === $s22_more && 5 !== (int) vcap()->vouchers->get( $s22_ticket->id )->max_checkins, 'AP-S2-2: without vcap_increase_balance the check-ins of a ticket cannot be raised' );
+// Reactivating: only void vouchers (AP-S2-3), only with the right, and a refund void only with confirmation.
+$s22_void = vcap_security_create_voucher( 's22v-' . strtolower( wp_generate_password( 6, false, false ) ) . '@example.test', 950000 + random_int( 1, 9999 ) );
+vcap()->issuer->void( vcap()->vouchers->get( $s22_void->id ), 'Purchase order cancelled or refunded', true );
+$s22_no_right = $s22_admin->reactivate( vcap()->vouchers->get( $s22_void->id ), true );
+$s22_bulk     = $s22_admin->bulk( 'reactivate', array( $s22_void->id ) );
+vcap_security_assert( '' === $s22_no_right && false === vcap()->issuer->reactivate( vcap()->vouchers->get( $s22_void->id ), true ) && 1 === $s22_bulk['skipped'] && VCAP\Voucher::STATUS_VOID === vcap()->vouchers->get( $s22_void->id )->status, 'AP-S2-2: without vcap_increase_balance a void voucher is not reactivated (single, bulk and Issuer)' );
+( new WP_User( $s22_manager ) )->add_cap( 'vcap_increase_balance' );
+wp_set_current_user( 0 );
+wp_set_current_user( $s22_manager );
+$s22_unconfirmed = $s22_admin->reactivate( vcap()->vouchers->get( $s22_void->id ) );
+$s22_bulk2       = $s22_admin->bulk( 'reactivate', array( $s22_void->id ) );
+vcap_security_assert( vcap()->issuer->voided_after_refund( vcap()->vouchers->get( $s22_void->id ) ) && '' === $s22_unconfirmed && 1 === $s22_bulk2['skipped'] && VCAP\Voucher::STATUS_VOID === vcap()->vouchers->get( $s22_void->id )->status, 'AP-S2-2: a voucher voided because of a refund is not reactivated silently (single action without confirmation, bulk)' );
+vcap_security_assert( 'reactivated' === $s22_admin->reactivate( vcap()->vouchers->get( $s22_void->id ), true ) && VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $s22_void->id )->status, 'AP-S2-2: with the right and the explicit confirmation the refund void is reactivated' );
+$s22_admin_void = vcap_security_create_voucher( 's22a-' . strtolower( wp_generate_password( 6, false, false ) ) . '@example.test', 940000 + random_int( 1, 9999 ) );
+vcap()->issuer->void( vcap()->vouchers->get( $s22_admin_void->id ), 'Voided by admin: test' );
+vcap_security_assert( ! vcap()->issuer->voided_after_refund( vcap()->vouchers->get( $s22_admin_void->id ) ) && 'reactivated' === $s22_admin->reactivate( vcap()->vouchers->get( $s22_admin_void->id ) ), 'AP-S2-2: a voucher voided by staff is reactivated without the refund confirmation' );
+$s22_active = vcap_security_create_voucher( 's22s-' . strtolower( wp_generate_password( 6, false, false ) ) . '@example.test', 930000 + random_int( 1, 9999 ) );
+vcap()->vouchers->update_status( $s22_active->id, VCAP\Voucher::STATUS_SCHEDULED );
+vcap_security_assert( '' === $s22_admin->reactivate( vcap()->vouchers->get( $s22_active->id ) ) && false === vcap()->issuer->reactivate( vcap()->vouchers->get( $s22_active->id ) ) && VCAP\Voucher::STATUS_SCHEDULED === vcap()->vouchers->get( $s22_active->id )->status, 'AP-S2-3: "Reactivate" refuses a voucher that is not void (a scheduled voucher stays scheduled)' );
+// Now with the right: the check-ins can be raised and the expired voucher revived.
+vcap_security_assert( true === $s22_save( $s22_ticket, array( 'max_checkins' => '5' ) ) && 5 === (int) vcap()->vouchers->get( $s22_ticket->id )->max_checkins && true === $s22_save( $s22_expired, array( 'expires_at' => $s22_future ) ) && VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $s22_expired->id )->status, 'AP-S2-2: with vcap_increase_balance check-ins can be raised and an expired voucher revived' );
+// "Book back onto voucher": voucher right + edit_shop_orders + vcap_increase_balance; strict amount parsing.
+wp_set_current_user( $s21_manager ); // Voucher right and increase right, no edit_shop_orders.
+$s22_return_without = VCAP\OrderReturn::can();
+( new WP_User( $s21_manager ) )->add_cap( 'edit_shop_orders' );
+( new WP_User( $s21_manager ) )->remove_cap( 'vcap_increase_balance' );
+wp_set_current_user( 0 );
+wp_set_current_user( $s21_manager );
+$s22_return_no_increase = VCAP\OrderReturn::can();
+( new WP_User( $s21_manager ) )->add_cap( 'vcap_increase_balance' );
+wp_set_current_user( 0 );
+wp_set_current_user( $s21_manager );
+$s22_return_with = VCAP\OrderReturn::can();
+$s22_handle      = vcap_security_method_source( VCAP\OrderReturn::class, 'handle' );
+vcap_security_assert( false === $s22_return_without && false === $s22_return_no_increase && true === $s22_return_with && str_contains( $s22_handle, 'StoreCreditAdmin::parse_amount(' ) && ! str_contains( $s22_handle, 'wc_format_decimal' ), 'AP-S2-2: "Book back onto voucher" needs edit_shop_orders and vcap_increase_balance and parses the amount strictly' );
+// AP-S2-4: generating WooCommerce coupons from a template needs publish_shop_coupons.
+$s24_without = VCAP\Admin\CampaignAdmin::can_generate( 'coupons' );
+( new WP_User( $s21_manager ) )->add_cap( 'publish_shop_coupons' );
+wp_set_current_user( 0 );
+wp_set_current_user( $s21_manager );
+vcap_security_assert( false === $s24_without && VCAP\Admin\CampaignAdmin::can_generate( 'pool' ) && VCAP\Admin\CampaignAdmin::can_generate( 'coupons' ), 'AP-S2-4: "Generate codes" for WooCommerce coupons needs publish_shop_coupons (code pool batches do not)' );
+// AP-Q2-4: an exception during "Send now" becomes a notice and a history entry, not a white screen.
+$q24_voucher = vcap_security_create_voucher( 'q24-' . strtolower( wp_generate_password( 6, false, false ) ) . '@example.test', 920000 + random_int( 1, 9999 ) );
+vcap()->vouchers->update_status( $q24_voucher->id, VCAP\Voucher::STATUS_SCHEDULED );
+$q24_throw = static function ( $voucher_id, $event ) use ( $q24_voucher ) {
+	if ( (int) $voucher_id === (int) $q24_voucher->id && 'scheduled' === $event ) {
+		throw new RuntimeException( 'Mail system exploded for q24@example.test' );
+	}
+};
+add_action( 'vcap_voucher_event', $q24_throw, 10, 2 );
+delete_transient( 'vcap_flash_' . get_current_user_id() );
+$q24_threw = null;
+$q24_sent  = null;
+try {
+	$q24_sent = $s22_admin->deliver_now( vcap()->vouchers->get( $q24_voucher->id ) );
+} catch ( Throwable $e ) {
+	$q24_threw = $e;
+}
+remove_action( 'vcap_voucher_event', $q24_throw, 10 );
+$q24_flash  = get_transient( 'vcap_flash_' . get_current_user_id() );
+$q24_events = vcap()->vouchers->events( $q24_voucher->id );
+$q24_last   = end( $q24_events );
+vcap_security_assert( null === $q24_threw && false === $q24_sent && 'delivery_failed' === $q24_last['event'] && ! str_contains( (string) $q24_last['note'], 'q24@example.test' ) && str_contains( (string) wp_json_encode( $q24_flash ), '"type":"error"' ), 'AP-Q2-4: an exception in "Send now" is caught, logged (address masked) and shown as an error notice' );
+delete_transient( 'vcap_flash_' . get_current_user_id() );
 wp_set_current_user( 0 );
 
 // O6: an idempotency claim left without an answer (PHP stopped after or before booking) is resolved from the history.

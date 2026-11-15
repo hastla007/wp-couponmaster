@@ -54,6 +54,9 @@ final class Issuer {
 	public const CONFIG_REFUSED_META = '_vcap_config_refused';
 	/** Ledger event: the unspent purchased value was taken off a gift card whose purchase was refunded. */
 	public const PURCHASE_REFUNDED_EVENT = 'purchase_refunded';
+
+	/** Code of the history note of a voucher voided because its purchase was refunded or cancelled (AP-S2-2). */
+	public const REFUND_VOID_NOTE = 'voided_refund';
 	/** Action Scheduler hook: retries voiding a voucher whose purchase was refunded or cancelled. */
 	public const VOID_RETRY_HOOK = 'vcap_retry_void';
 	/** Attempts of the void retry (15 minutes apart, then an hour each). */
@@ -1402,7 +1405,7 @@ final class Issuer {
 	 * retried in the background until it works.
 	 */
 	private function void_or_retry( Voucher $voucher, string $note, ?\WC_Order $order, int $attempt = 0 ): bool {
-		if ( $this->void( $voucher, $note ) ) {
+		if ( $this->void( $voucher, $note, true ) ) {
 			return true;
 		}
 		$order_id = $order ? $order->get_id() : (int) $voucher->order_id;
@@ -1453,8 +1456,12 @@ final class Issuer {
 		}
 	}
 
-	/** @return bool False when the voucher could not be voided (nothing logged, the coupon stays as it was). */
-	public function void( Voucher $voucher, string $note = '' ): bool {
+	/**
+	 * @param bool $refund Voided because its purchase was refunded or cancelled: the history note is stored as coded
+	 *                     note "voided_refund" so that a later reactivation can tell (voided_after_refund()).
+	 * @return bool False when the voucher could not be voided (nothing logged, the coupon stays as it was).
+	 */
+	public function void( Voucher $voucher, string $note = '', bool $refund = false ): bool {
 		if ( Voucher::STATUS_VOID === $voucher->status ) {
 			return true;
 		}
@@ -1462,21 +1469,65 @@ final class Issuer {
 			return false;
 		}
 		$voucher->status = Voucher::STATUS_VOID;
+		$text            = static fn( string $t ): string => $refund ? Note::make( self::REFUND_VOID_NOTE, array( $t ) ) : $t;
 		if ( ! $this->coupons->set_coupon_enabled( $voucher, false ) ) {
 			// The voucher is void but its coupon still works: say so loudly instead of pretending success.
-			$this->repo->log( $voucher->id, 'voided', null, $voucher->balance, trim( $note . ' ' . __( '(WooCommerce coupon could not be disabled – disable it manually)', 'voucher-captain' ) ) );
+			$this->repo->log( $voucher->id, 'voided', null, $voucher->balance, $text( trim( $note . ' ' . __( '(WooCommerce coupon could not be disabled – disable it manually)', 'voucher-captain' ) ) ) );
 			return false;
 		}
-		$this->repo->log( $voucher->id, 'voided', null, $voucher->balance, $note );
+		$this->repo->log( $voucher->id, 'voided', null, $voucher->balance, $text( $note ) );
 		if ( function_exists( 'as_unschedule_all_actions' ) ) {
 			as_unschedule_all_actions( 'vcap_deliver_voucher', array( 'voucher_id' => $voucher->id ), 'vcap' );
 		}
 		return true;
 	}
 
-	/** @return bool False when the status or the coupon could not be restored. */
-	public function reactivate( Voucher $voucher ): bool {
-		$fresh   = $this->repo->get( $voucher->id ) ?? $voucher;
+	/**
+	 * AP-S2-2: whether the voucher was voided because its purchase was refunded or cancelled – reactivating it gives
+	 * back value the buyer got paid back. The newest "voided" entry decides (coded note "voided_refund"); for entries
+	 * written before that note existed, a purchase order that is refunded or cancelled counts as well.
+	 */
+	public function voided_after_refund( Voucher $voucher ): bool {
+		if ( Voucher::STATUS_VOID !== $voucher->status ) {
+			return false;
+		}
+		$voided = null;
+		foreach ( array_reverse( $this->repo->events( $voucher->id ) ) as $event ) {
+			if ( 'voided' === ( $event['event'] ?? '' ) ) {
+				$voided = $event;
+				break;
+			}
+		}
+		$decoded = $voided ? Note::decode( (string) $voided['note'] ) : null;
+		if ( $decoded && self::REFUND_VOID_NOTE === $decoded['code'] ) {
+			return true;
+		}
+		if ( $decoded || (int) $voucher->order_id <= 0 || ! function_exists( 'wc_get_order' ) ) {
+			return false;
+		}
+		$order = wc_get_order( (int) $voucher->order_id );
+		return $order instanceof \WC_Order && $order->has_status( array( 'refunded', 'cancelled' ) );
+	}
+
+	/**
+	 * Makes a void voucher usable again. Restoring value needs the right to raise balances (AP-S2-2,
+	 * VoucherAdmin::can_increase()) when a user is logged in; system contexts (cron, WP-CLI) are not limited. A
+	 * voucher voided because of a refund or cancellation is only reactivated with $after_refund (explicit confirmation).
+	 *
+	 * @return bool False when the voucher is not void, the right or confirmation is missing, or the status or the
+	 *              coupon could not be restored.
+	 */
+	public function reactivate( Voucher $voucher, bool $after_refund = false ): bool {
+		$fresh = $this->repo->get( $voucher->id ) ?? $voucher;
+		if ( Voucher::STATUS_VOID !== $fresh->status ) {
+			return false;
+		}
+		if ( is_user_logged_in() && ! Admin\VoucherAdmin::can_increase() ) {
+			return false;
+		}
+		if ( ! $after_refund && $this->voided_after_refund( $fresh ) ) {
+			return false;
+		}
 		$coupon  = $fresh->coupon_id ? new \WC_Coupon( $fresh->coupon_id ) : null;
 		$used_up = $fresh->is_multi_use()
 			? $fresh->balance <= 0
