@@ -136,11 +136,23 @@ final class Note {
 			case 'reminder_failed':
 				return __( 'Expiry reminder could not be sent; it is retried on the next run.', 'voucher-captain' );
 			case 'issued_standalone':
-				$parts = array_filter( array( (string) $a( 0 ), (string) $a( 1 ) ), static fn( $p ) => '' !== $p );
+				$parts = array_filter( array( (string) $a( 0 ), (string) $a( 1 ), (string) $a( 2 ) ), static fn( $p ) => '' !== $p );
 				return $parts
 					/* translators: %s: source and reference given by the caller, e.g. "company-order, order-4711/3" */
 					? sprintf( __( 'Issued without order (%s)', 'voucher-captain' ), implode( ', ', $parts ) )
 					: __( 'Issued without order', 'voucher-captain' );
+			case 'imported':
+				/* translators: 1: initial value, 2: remaining value taken over, 3: file or source */
+				return trim( sprintf( __( 'Taken over from an existing card: value %1$s, remaining value %2$s. %3$s', 'voucher-captain' ), (string) $a( 0 ), (string) $a( 1 ), (string) $a( 2 ) ) );
+			case 'moved_to_credit':
+				/* translators: 1: amount, 2: masked store credit code */
+				return sprintf( __( 'Remaining value %1$s added to the customer\'s store credit (%2$s); the card was voided.', 'voucher-captain' ), (string) $a( 0 ), (string) $a( 1 ) );
+			case 'validity_extended':
+				/* translators: 1: old expiry date, 2: new expiry date */
+				return sprintf( __( 'Validity extended (bulk action): %1$s → %2$s', 'voucher-captain' ), (string) $a( 0 ), (string) $a( 1 ) );
+			case 'physical_activated':
+				/* translators: %s: order number */
+				return sprintf( __( 'Physical card activated: order %s was shipped (completed).', 'voucher-captain' ), (string) $a( 0 ) );
 			case 'resent':
 				/* translators: 1: role ("Buyer", "Recipient"), 2: masked email address */
 				return sprintf( __( 'Sent to the %1$s (%2$s) by an admin', 'voucher-captain' ), self::role_label( (string) $a( 0 ) ), (string) $a( 1 ) );

@@ -120,6 +120,9 @@ final class VoucherAdmin {
 		$table = new VouchersListTable( $this->repo );
 		$table->prepare_items();
 		echo '<div class="wrap vcap-wrap"><h1 class="wp-heading-inline">' . esc_html__( 'Issued vouchers', 'voucher-captain' ) . '</h1>';
+		if ( IssueVoucher::can() ) {
+			echo ' <a class="page-title-action" href="' . esc_url( admin_url( 'admin.php?page=' . IssueVoucher::SLUG ) ) . '">' . esc_html__( 'New voucher', 'voucher-captain' ) . '</a>';
+		}
 		echo ' <a class="page-title-action" href="' . esc_url( admin_url( 'admin.php?page=vcap-scanner' ) ) . '">' . esc_html__( 'Open scanner', 'voucher-captain' ) . '</a><hr class="wp-header-end">';
 		$table->views();
 		// Single GET form (like core list tables): search, filters, pagination and bulk actions.

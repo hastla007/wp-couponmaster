@@ -143,17 +143,79 @@ final class Command {
 	}
 
 	/**
-	 * Issues the missing vouchers of orders (like the order action "Generate vouchers").
+	 * Issues the missing vouchers of orders (like the order action "Generate vouchers"), or with --amount or
+	 * --product one voucher without an order (like Vouchers → New voucher; marked as not sold).
 	 *
 	 * ## OPTIONS
 	 *
-	 * <order_id>...
+	 * [<order_id>...]
 	 * : Order ids.
+	 *
+	 * [--amount=<amount>]
+	 * : Value of a voucher without an order.
+	 *
+	 * [--email=<email>]
+	 * : Recipient email.
+	 *
+	 * [--product=<product_id>]
+	 * : Voucher product whose settings apply.
+	 *
+	 * [--type=<type>]
+	 * : giftcard or voucher (without a product).
+	 * ---
+	 * default: giftcard
+	 * ---
+	 *
+	 * [--name=<name>]
+	 * : Recipient name.
+	 *
+	 * [--message=<message>]
+	 * : Personal message.
+	 *
+	 * [--expiry=<date>]
+	 * : Expiry date (YYYY-MM-DD) or "never"; default the product's or the global validity.
+	 *
+	 * [--reason=<reason>]
+	 * : Reason kept in the history.
+	 *
+	 * [--send]
+	 * : Send it by email now (otherwise it counts as handed over).
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp vcap issue 4711
+	 *     wp vcap issue --amount=50 --email=erika@example.com --send --reason="Prize draw"
 	 *
 	 * @param array $args       Positional arguments.
 	 * @param array $assoc_args Options.
 	 */
 	public function issue( $args = array(), $assoc_args = array() ): void {
+		if ( isset( $assoc_args['amount'] ) || isset( $assoc_args['product'] ) ) {
+			$voucher = \VCAP\Admin\IssueVoucher::issue(
+				array(
+					'product_id'      => (int) ( $assoc_args['product'] ?? 0 ),
+					'amount'          => (string) ( $assoc_args['amount'] ?? '' ),
+					'type'            => (string) ( $assoc_args['type'] ?? 'giftcard' ),
+					'recipient_email' => (string) ( $assoc_args['email'] ?? '' ),
+					'recipient_name'  => (string) ( $assoc_args['name'] ?? '' ),
+					'message'         => (string) ( $assoc_args['message'] ?? '' ),
+					'expiry'          => (string) ( $assoc_args['expiry'] ?? '' ),
+					'send'            => ! empty( $assoc_args['send'] ),
+					'reason'          => (string) ( $assoc_args['reason'] ?? 'WP-CLI' ),
+					'source'          => 'cli',
+				)
+			);
+			if ( is_wp_error( $voucher ) ) {
+				self::error( 'No voucher was issued: ' . $voucher->get_error_message() );
+				return;
+			}
+			self::success( sprintf( 'Voucher %d issued: %s (%s%s).', $voucher->id, $voucher->code, (string) $voucher->balance, ! empty( $assoc_args['send'] ) ? ', being sent' : ', not sent' ) );
+			return;
+		}
+		if ( ! $args ) {
+			self::error( 'Usage: wp vcap issue <order_id>... or wp vcap issue --amount=<amount> [--email=<email>] [--product=<id>] [--send]' );
+			return;
+		}
 		foreach ( array_map( 'absint', $args ) as $order_id ) {
 			$order = wc_get_order( $order_id );
 			if ( ! $order instanceof \WC_Order ) {
@@ -164,6 +226,53 @@ final class Command {
 			$failed  = vcap()->issuer->last_failures;
 			self::line( sprintf( 'Order %d: %d issued, %d failed.', $order_id, count( $created ), $failed ) );
 		}
+	}
+
+	/**
+	 * Imports existing gift cards with their remaining value from a CSV, XLSX or ODS file (like Vouchers → Import
+	 * cards). Columns: code, initial, balance, expiry, recipient, recipient name, type. Cards imported before are
+	 * skipped, so the command can be run again.
+	 *
+	 * ## OPTIONS
+	 *
+	 * <file>
+	 * : Path of the file.
+	 *
+	 * [--dry-run]
+	 * : Only check the rows; nothing is imported.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp vcap import cards.csv --dry-run
+	 *
+	 * @param array $args       Positional arguments.
+	 * @param array $assoc_args Options.
+	 */
+	public function import( $args = array(), $assoc_args = array() ): void {
+		$file = (string) ( $args[0] ?? '' );
+		if ( '' === $file || ! is_readable( $file ) ) {
+			self::error( 'File not found or not readable: ' . $file );
+			return;
+		}
+		try {
+			$rows = \VCAP\SpreadsheetReader::read( $file, (string) pathinfo( $file, PATHINFO_EXTENSION ) );
+		} catch ( \Throwable $e ) {
+			self::error( 'The file could not be read: ' . $e->getMessage() );
+			return;
+		}
+		$dry    = ! empty( $assoc_args['dry-run'] );
+		$report = Source::with( Source::CLI, static fn() => \VCAP\Admin\CardImport::run( $rows, $dry, 'Import of ' . basename( $file ) . ' (WP-CLI)' ) );
+		if ( '' !== $report['error'] ) {
+			self::error( $report['error'] );
+			return;
+		}
+		foreach ( $report['skipped'] as $line => $text ) {
+			self::line( sprintf( 'Row %d skipped: %s', $line, $text ) );
+		}
+		foreach ( $report['errors'] as $line => $text ) {
+			self::warning( sprintf( 'Row %d not imported: %s', $line, $text ) );
+		}
+		self::success( sprintf( '%d card(s) with %s remaining value %s.', $report['imported'], (string) $report['value'], $dry ? 'would be imported (dry run)' : 'imported' ) );
 	}
 
 	/**

@@ -15,6 +15,9 @@ final class Menu {
 		add_action( 'admin_menu', array( $this, 'settings_link' ), 99 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'assets' ) );
 		add_filter( 'parent_file', array( $this, 'parent_file' ) );
+		// M12-19, M12-56: issuing without an order and importing existing cards.
+		( new IssueVoucher() )->register();
+		( new CardImport() )->register();
 	}
 
 	public static function cap(): string {
@@ -37,6 +40,10 @@ final class Menu {
 			56
 		);
 		add_submenu_page( 'vcap-vouchers', __( 'Issued vouchers', 'voucher-captain' ), __( 'Issued vouchers', 'voucher-captain' ), self::cap(), 'vcap-vouchers', array( $voucher_admin, 'page' ) );
+		if ( IssueVoucher::can() ) {
+			add_submenu_page( 'vcap-vouchers', __( 'New voucher', 'voucher-captain' ), __( 'New voucher', 'voucher-captain' ), self::cap(), IssueVoucher::SLUG, array( new IssueVoucher(), 'page' ) );
+			add_submenu_page( 'vcap-vouchers', __( 'Import cards', 'voucher-captain' ), __( 'Import cards', 'voucher-captain' ), self::cap(), CardImport::SLUG, array( new CardImport(), 'page' ) );
+		}
 		add_submenu_page( 'vcap-vouchers', __( 'Import codes', 'voucher-captain' ), __( 'Import codes', 'voucher-captain' ), self::cap(), 'vcap-import', array( new Import( vcap()->code_pool ), 'page' ) );
 		add_submenu_page( 'vcap-vouchers', __( 'Generate codes', 'voucher-captain' ), __( 'Generate codes', 'voucher-captain' ), self::cap(), 'vcap-generate', array( new CampaignAdmin( new \VCAP\Campaigns( vcap()->code_pool, vcap()->vouchers ) ), 'page' ) );
 		add_submenu_page( 'vcap-vouchers', __( 'Reports', 'voucher-captain' ), __( 'Reports', 'voucher-captain' ), self::cap(), 'vcap-reports', array( new ReportsAdmin(), 'page' ) );

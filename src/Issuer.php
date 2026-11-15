@@ -922,6 +922,12 @@ final class Issuer {
 	 *     @type string      $reference       Idempotency key (up to 100 characters), e.g. "order-4711/3": a
 	 *                                        second call with the same reference issues nothing and returns
 	 *                                        the error "vcap_reference_used" with the voucher id in its data.
+	 *     @type string      $reason          Why it was issued (e.g. "goodwill"), shown in the history (M12-19).
+	 *     @type float       $balance         Remaining value below the value (stored balance only), e.g. a card
+	 *                                        imported with what is left of it (M12-56). Default: the value.
+	 *     @type bool        $paid            Whether the voucher was sold (money received). Admin issues pass
+	 *                                        false (goodwill, prize), imports of sold cards true. Read by the
+	 *                                        tax logic of sold/unsold vouchers; stored by it, not here.
 	 * }
 	 * @return Voucher|\WP_Error
 	 */
@@ -972,7 +978,8 @@ final class Issuer {
 		}
 		$source    = mb_substr( sanitize_text_field( (string) ( $args['source'] ?? '' ) ), 0, 60 );
 		$reference = mb_substr( sanitize_text_field( (string) ( $args['reference'] ?? '' ) ), 0, 100 );
-		$note      = Note::make( self::STANDALONE_NOTE, array( $source, $reference ) );
+		$reason    = mb_substr( sanitize_text_field( (string) ( $args['reason'] ?? '' ) ), 0, 200 );
+		$note      = Note::make( self::STANDALONE_NOTE, '' !== $reason ? array( $source, $reference, $reason ) : array( $source, $reference ) );
 		if ( '' !== $reference && ! Claim::take( 'standalone:' . md5( $reference ) ) ) {
 			// AP-P1-3: the claim (kept for good, released only when the insert failed) decides; every reference
 			// issued since standalone issuing exists holds one. Only a used reference looks up its voucher, from
@@ -1031,6 +1038,10 @@ final class Issuer {
 		$voucher->currency       = $currency;
 		$voucher->initial_amount = $amount;
 		$voucher->balance        = $amount;
+		if ( isset( $args['balance'] ) && 'balance' === $voucher->usage_mode ) {
+			// M12-56: a card taken over with what is left of it (never more than its value, never negative).
+			$voucher->balance = round( max( 0.0, min( $amount, (float) $args['balance'] ) ), API\V1\RedemptionService::decimals( $currency ) );
+		}
 		if ( array_key_exists( 'expires_at', $args ) ) {
 			$ts                  = '' !== (string) $args['expires_at'] ? strtotime( (string) $args['expires_at'] . ' UTC' ) : false;
 			$voucher->expires_at = $ts ? gmdate( 'Y-m-d H:i:s', $ts ) : null;

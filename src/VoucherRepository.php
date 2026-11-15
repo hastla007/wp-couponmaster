@@ -940,6 +940,9 @@ final class VoucherRepository {
 			'edited'     => __( 'Edited', 'voucher-captain' ),
 			'downloaded' => __( 'Downloaded', 'voucher-captain' ),
 			'reissued'   => __( 'Reissued with a new code', 'voucher-captain' ),
+			'imported'   => __( 'Imported (existing card)', 'voucher-captain' ),
+			'moved_to_credit' => __( 'Moved to store credit', 'voucher-captain' ),
+			'activated'  => __( 'Activated', 'voucher-captain' ),
 		);
 		/** Labels of connector events in the voucher history. */
 		return (array) apply_filters( 'vcap_event_labels', $labels );
