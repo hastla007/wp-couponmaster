@@ -11,8 +11,9 @@ defined( 'ABSPATH' ) || exit;
  * token changes and the link signature carries the reissue count (Downloads::link_version()).
  *
  * The old code stays known as "previous code" on the new coupon (meta _vcap_previous_code), so refunds of orders
- * that were paid with it still book the value back onto the voucher (never a redemption: lookups for redemption go
- * by the current code only).
+ * that were paid with it still book the value back onto the voucher (never a redemption: lookups for reserving,
+ * committing and charging go by the current code only, and an unpaid order with the old code refuses payment).
+ * A voucher in an unpaid order is not reissued at all (refusal()).
  */
 final class Reissue {
 	/** Ledger event of a reissue (its count is the link version). */
@@ -64,7 +65,9 @@ final class Reissue {
 		if ( $voucher->is_multi_use() && $voucher->balance <= 0 ) {
 			return __( 'the voucher has been redeemed – no value is left to carry over', 'voucher-captain' );
 		}
-		if ( $this->coupons->open_holds( $voucher ) > 0 || CouponManager::held_by_pending_order( $voucher ) ) {
+		// AP-Q1-2: any unpaid order carrying the code (pending, failed, on hold) can still be paid with it later – also
+		// a balance card whose hold was released (stale sweep, new checkout): the old code would pay it after the reissue.
+		if ( $this->coupons->open_holds( $voucher ) > 0 || CouponManager::held_by_pending_order( $voucher ) || CouponManager::open_orders_with( $voucher ) ) {
 			return __( 'the voucher is in an unpaid order or reserved for a redemption – reissue it once that is paid or released', 'voucher-captain' );
 		}
 		if ( $voucher->coupon_id ) {
@@ -127,7 +130,11 @@ final class Reissue {
 				CouponManager::set_coupon_post_status( (int) $old_coupon_id, $old_code, false );
 				$warning = __( 'The old WooCommerce coupon could not be deleted; it was disabled instead.', 'voucher-captain' );
 			} elseif ( class_exists( '\WC_Cache_Helper' ) ) {
-				wp_cache_delete( \WC_Cache_Helper::get_cache_prefix( 'coupons' ) . 'coupon_id_from_code_' . wc_format_coupon_code( $old_code ), 'coupons' );
+				// The code → coupon id cache: keyed by the code (WooCommerce 8.x) or its md5 hash (newer versions).
+				// A stale entry would still resolve the old code to the deleted coupon (AP-Q1-2).
+				$prefix = \WC_Cache_Helper::get_cache_prefix( 'coupons' ) . 'coupon_id_from_code_';
+				wp_cache_delete( $prefix . wc_format_coupon_code( $old_code ), 'coupons' );
+				wp_cache_delete( $prefix . md5( wc_strtolower( $old_code ) ), 'coupons' );
 			}
 			CouponManager::sync_coupon( $fresh, array( 'amount' ) ); // Remaining value read under the row lock.
 		}

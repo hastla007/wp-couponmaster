@@ -410,4 +410,41 @@ vcap_acct_assert( $v10_by_old && $v10_by_old->id === $v10->id, 'V10: refunds of 
 vcap()->coupons->restore_order( wc_get_order( $v10_pay->get_id() ) );
 vcap_acct_assert( abs( vcap()->vouchers->get( $v10->id )->balance - ( $v10_old['balance'] + 15 ) ) < 0.001, 'V10: cancelling an order paid with the old code books the value back onto the reissued voucher' );
 
+// AP-Q1-2: a balance card in an unpaid order is not reissued – also once that order's hold was released.
+$q12_issued = vcap()->issuer->issue_for_order( vcap_acct_order( $v10_product, $buyer, $login . '@example.com' ) );
+$q12        = vcap()->vouchers->get( $q12_issued[0]->id );
+$q12->status = VCAP\Voucher::STATUS_ACTIVE;
+vcap()->vouchers->update( $q12 );
+$q12_pending = vcap_acct_order( $v6_goods, $buyer, $login . '@example.com' );
+vcap_acct_assert( true === $q12_pending->apply_coupon( $q12->code ), 'AP-Q1-2: the card is applied to an unpaid order' );
+$q12_pending = wc_get_order( $q12_pending->get_id() );
+vcap()->coupons->reserve_order( $q12_pending );
+$q12_held = (float) vcap()->vouchers->get( $q12->id )->balance;
+$q12_pending->set_status( 'failed' );
+$q12_pending->save(); // The failed payment releases the hold; the order can still be paid through its pay link.
+$q12       = vcap()->vouchers->get( $q12->id );
+$q12_full  = (float) $q12->balance;
+$q12_try   = $v10_reissue->reissue( $q12, 'Reported stolen' );
+vcap_acct_assert( $q12_full > $q12_held && 0.0 === vcap()->coupons->open_holds( $q12 ) && $q12_try instanceof WP_Error && 'vcap_reissue_refused' === $q12_try->get_error_code() && $q12->code === vcap()->vouchers->get( $q12->id )->code, 'AP-Q1-2: with the hold released, the card in the unpaid (failed) order is still refused for a reissue' );
+
+// AP-Q1-2: an old code on an unpaid order that is paid after a reissue is never charged (second line of defence:
+// here the shop counts no unpaid statuses, so the reissue goes through).
+$q12_no_open = static fn() => array();
+add_filter( 'vcap_open_order_statuses', $q12_no_open );
+$q12_new = $v10_reissue->reissue( vcap()->vouchers->get( $q12->id ), 'Reported stolen' );
+remove_filter( 'vcap_open_order_statuses', $q12_no_open );
+vcap_acct_assert( $q12_new instanceof VCAP\Voucher && $q12_new->code !== $q12->code, 'AP-Q1-2: (statuses filtered away) the card is reissued' );
+$q12_retry_error = '';
+try {
+	vcap()->coupons->reserve_order( wc_get_order( $q12_pending->get_id() ) ); // The pay page's reserve (reserve_retry_order()).
+} catch ( Exception $e ) {
+	$q12_retry_error = $e->getMessage();
+}
+vcap_acct_assert( str_contains( $q12_retry_error, 'replaced by a new code' ) && ! str_contains( strtoupper( $q12_retry_error ), strtoupper( $q12->code ) ) && abs( (float) vcap()->vouchers->get( $q12->id )->balance - $q12_full ) < 0.001, 'AP-Q1-2: a pay retry with the old code is refused and reserves nothing on the reissued card (' . $q12_retry_error . ')' );
+$q12_paid = wc_get_order( $q12_pending->get_id() );
+$q12_paid->set_status( 'processing' );
+$q12_paid->save(); // E.g. a gateway callback that marks the order paid anyway.
+$q12_paid = wc_get_order( $q12_pending->get_id() );
+vcap_acct_assert( abs( (float) vcap()->vouchers->get( $q12->id )->balance - $q12_full ) < 0.001 && VCAP\CouponManager::has_shortfall( $q12_paid ) && 'on-hold' === $q12_paid->get_status(), 'AP-Q1-2: paid anyway, the old code is not charged – the order is held with a shortfall for review' );
+
 echo "Voucher Captain account checks passed.\n";
