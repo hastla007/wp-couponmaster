@@ -141,6 +141,7 @@ add_action( 'vcap_voucher_redeemed', function ( array $redemption ) { /* audit, 
 | `send` | Deliver by email now (default `true`). `false`: the voucher counts as handed over, no email (the admin can still send it). |
 | `delivery_at` | Deliver and activate later (UTC). |
 | `code` | Own, unused code; default a generated one. |
+| `paid` | Whether the voucher was sold (paid outside WooCommerce, e.g. a company order on invoice). Default `false`: a voucher without a sale (goodwill, prize) is a price reduction for VAT (treatment `discount`) and is listed as free of charge in the liability report (TAX.md 2.8, M12-42). |
 | `source`, `reference` | Free label of the caller and an idempotency key (up to 100 characters, e.g. `order-4711/3`), both shown in the history. A second call with the same `reference` issues nothing and answers `vcap_reference_used` with `voucher_id` in the error data (0 while the first call is still running). |
 
 Errors: `vcap_invalid_product`, `vcap_invalid_args`, `vcap_invalid_amount`, `vcap_no_address`, `vcap_code_taken`, `vcap_reference_used`, `vcap_issue_failed` (the error data carries an HTTP-like `status`). Afterwards the action `vcap_voucher_issued_standalone` (`Voucher`, `$args`) fires (not `vcap_vouchers_issued`, whose listeners expect an order).
