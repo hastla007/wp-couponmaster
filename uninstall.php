@@ -137,7 +137,7 @@ function vcap_uninstall_site(): bool {
 			wp_delete_post( $id, true );
 		}
 	}
-	$where   = "option_name LIKE 'vcap\_%' OR option_name LIKE '\_vcap\_claim\_%' OR option_name LIKE '\_vcap\_scan\_%' OR option_name LIKE '\_transient\_vcap\_%' OR option_name LIKE '\_transient\_timeout\_vcap\_%'";
+	$where   = vcap_uninstall_options_where();
 	$options = (array) $wpdb->get_col( "SELECT option_name FROM {$wpdb->options} WHERE {$where}" ); // phpcs:ignore
 	$wpdb->query( "DELETE FROM {$wpdb->options} WHERE {$where}" ); // phpcs:ignore
 	// A persistent object cache would otherwise keep the deleted options (e.g. the suspended coupon list).
@@ -177,6 +177,14 @@ function vcap_uninstall_site(): bool {
 }
 
 /**
+ * SQL condition for the options of a site that uninstall removes: Voucher Captain's own options, claims, scan
+ * keys and transients, and the settings of its WooCommerce emails ("woocommerce_vcap_{email id}_settings", M12-67).
+ */
+function vcap_uninstall_options_where(): string {
+	return "option_name LIKE 'vcap\_%' OR option_name LIKE '\_vcap\_claim\_%' OR option_name LIKE '\_vcap\_scan\_%' OR option_name LIKE '\_transient\_vcap\_%' OR option_name LIKE '\_transient\_timeout\_vcap\_%' OR option_name LIKE 'woocommerce\_vcap\_%\_settings'";
+}
+
+/**
  * Deletes the given user meta keys of all users.
  *
  * @param string[] $keys Meta keys.
@@ -192,12 +200,13 @@ function vcap_uninstall_referral_meta( array $keys ): void {
 }
 
 /**
- * Removes the referral data earlier versions stored network-wide with the users (personal referral coupon and
- * reward count, now per site). Users are shared by all sites of a network, so on a network only when every site
- * opted in.
+ * Removes what Voucher Captain stores network-wide with the users: the referral data of earlier versions (personal
+ * referral coupon and reward count, now per site) and the email verification proof of personal vouchers
+ * (VCAP\PersonalVoucher: verified address, time of the last email change, M12-67). Users are shared by all sites
+ * of a network, so on a network only when every site opted in.
  */
 function vcap_uninstall_user_meta(): void {
-	vcap_uninstall_referral_meta( array( '_vcap_referral_coupon', '_vcap_referral_count' ) );
+	vcap_uninstall_referral_meta( array( '_vcap_referral_coupon', '_vcap_referral_count', '_vcap_verified_email', '_vcap_email_changed' ) );
 }
 
 if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
