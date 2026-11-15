@@ -177,8 +177,9 @@ final class Onboarding {
 			if ( ! $step['done'] ) {
 				if ( '' !== $step['action'] ) {
 					echo ' ' . $this->button( $step['action'], $step['button'] ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in button().
-					if ( ! empty( $step['link'] ) && '' !== $step['url'] ) {
-						echo ' <a class="button button-small" href="' . esc_url( $step['url'] ) . '">' . esc_html( (string) $step['link'] ) . '</a>';
+					$link = (string) ( $step['link'] ?? '' );
+					if ( '' !== $link && '' !== $step['url'] ) {
+						echo ' <a class="button button-small" href="' . esc_url( $step['url'] ) . '">' . esc_html( $link ) . '</a>';
 					}
 				} else {
 					echo ' <a class="button button-small" href="' . esc_url( $step['url'] ) . '">' . esc_html( $step['button'] ) . '</a>';
@@ -305,7 +306,7 @@ final class Onboarding {
 		} catch ( \Throwable $e ) {
 			return 0;
 		}
-		Onboarding::forget_pages();
+		self::forget_pages();
 		return $id;
 	}
 

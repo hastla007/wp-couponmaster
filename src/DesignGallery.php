@@ -15,12 +15,12 @@ final class DesignGallery {
 
 	public function register(): void {
 		add_action( 'vcap_before_fields', array( $this, 'render' ), 30 );
-		add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'validate' ), 20, 3 );
+		add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'validate' ), 20, 2 );
 		add_filter( 'woocommerce_add_cart_item_data', array( $this, 'cart_item_data' ), 20, 3 );
 		add_filter( 'woocommerce_get_item_data', array( $this, 'display_item_data' ), 20, 2 );
 		add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'save_order_item' ), 20, 3 );
 		// The PDF print preview of the product page shows the chosen design as well.
-		add_filter( 'vcap_product_config', array( $this, 'preview_template' ), 20, 2 );
+		add_filter( 'vcap_product_config', array( $this, 'preview_template' ), 20, 1 );
 	}
 
 	/**
@@ -107,7 +107,7 @@ final class DesignGallery {
 	 * @param mixed $passed Whether the product may be added so far.
 	 * @return mixed
 	 */
-	public function validate( $passed, $product_id, $quantity = 1 ) {
+	public function validate( $passed, $product_id ) {
 		$product = wc_get_product( absint( wp_unslash( $_POST['variation_id'] ?? 0 ) ) ?: (int) $product_id ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- see posted().
 		if ( ! $passed || ! $product || ! ProductConfig::is_voucher( $product ) ) {
 			return $passed;
@@ -161,7 +161,7 @@ final class DesignGallery {
 	 * @param mixed $config Product configuration.
 	 * @return mixed
 	 */
-	public function preview_template( $config, $product = null ) {
+	public function preview_template( $config ) {
 		if ( ! is_array( $config ) || ! ( doing_action( 'wc_ajax_vcap_product_preview' ) || doing_action( 'wp_ajax_vcap_product_preview' ) || doing_action( 'wp_ajax_nopriv_vcap_product_preview' ) ) ) {
 			return $config;
 		}

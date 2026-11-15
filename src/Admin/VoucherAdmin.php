@@ -975,15 +975,16 @@ final class VoucherAdmin {
 		}
 		if ( 'export' === $action ) {
 			// M12-94: the selected vouchers as CSV (same columns as "Export CSV").
-			$repo = $this->repo;
-			$this->stream_csv( ( static function () use ( $ids, $repo ): \Generator {
+			$repo     = $this->repo;
+			$selected = static function () use ( $ids, $repo ): \Generator {
 				foreach ( $ids as $id ) {
 					$v = $repo->get( (int) $id );
 					if ( $v ) {
 						yield $v;
 					}
 				}
-			} )() );
+			};
+			$this->stream_csv( $selected() );
 			exit;
 		}
 		if ( 'extend' === $action ) {
@@ -1200,7 +1201,7 @@ final class VoucherAdmin {
 		$result = array( 'sent' => 0, 'skipped' => 0, 'failed' => 0 );
 		$emails = function_exists( 'WC' ) ? WC()->mailer()->get_emails() : array();
 		$email  = $emails['VCAP_Email_Voucher_Expiry'] ?? null;
-		if ( ! $email || ! $email->is_enabled() ) {
+		if ( ! $email instanceof \WC_Email || ! method_exists( $email, 'trigger' ) || ! $email->is_enabled() ) {
 			Flash::add( 'error', __( 'No reminder was sent: the email "Voucher expiry reminder" is disabled (WooCommerce → Settings → Emails).', 'voucher-captain' ) );
 			return $result;
 		}

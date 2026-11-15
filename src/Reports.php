@@ -45,18 +45,8 @@ final class Reports {
 			$out[ (int) $row['sold'] ? 'sold' : 'free' ] = array( 'count' => (int) $row['cnt'], 'value' => round( (float) $row['val'], 2 ) );
 		}
 		$value_vouchers = Ledger::VALUE_VOUCHERS;
-		$out['redeemed'] = round(
-			(float) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				$wpdb->prepare(
-					"SELECT SUM( CASE WHEN e.event IN ('redeemed','committed','api_committed') THEN e.amount ELSE -e.amount END ) FROM {$t['events']} e INNER JOIN {$t['vouchers']} v ON v.id = e.voucher_id
-					WHERE e.created_at BETWEEN %s AND %s AND e.event IN ('redeemed','committed','api_committed','redeem_reversed','restored','api_refunded') AND e.amount IS NOT NULL AND v.currency = %s AND {$value_vouchers}", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-					$start,
-					$end,
-					$currency
-				)
-			),
-			2
-		);
+		$redeemed        = $wpdb->get_var( $wpdb->prepare( "SELECT SUM( CASE WHEN e.event IN ('redeemed','committed','api_committed') THEN e.amount ELSE -e.amount END ) FROM {$t['events']} e INNER JOIN {$t['vouchers']} v ON v.id = e.voucher_id WHERE e.created_at BETWEEN %s AND %s AND e.event IN ('redeemed','committed','api_committed','redeem_reversed','restored','api_refunded') AND e.amount IS NOT NULL AND v.currency = %s AND {$value_vouchers}", $start, $end, $currency ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$out['redeemed'] = round( (float) $redeemed, 2 );
 		foreach ( ( new Ledger( vcap()->vouchers ) )->liability( $to )['totals'][ $currency ] ?? array() as $bucket ) {
 			$out['open']['count'] += (int) $bucket['count'];
 			$out['open']['value'] += (float) $bucket['amount'];

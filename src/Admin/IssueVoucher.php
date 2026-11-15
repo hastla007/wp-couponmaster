@@ -103,7 +103,7 @@ final class IssueVoucher {
 			array(
 				'post_type'   => 'product',
 				'post_status' => array( 'publish', 'private', 'draft' ),
-				'numberposts' => 200,
+				'numberposts' => 100,
 				'fields'      => 'ids',
 				'meta_key'    => '_vcap_enabled', // phpcs:ignore WordPress.DB.SlowDBQuery
 				'meta_value'  => 'yes', // phpcs:ignore WordPress.DB.SlowDBQuery
@@ -119,7 +119,7 @@ final class IssueVoucher {
 		if ( ! self::can() ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
-		$templates = get_posts( array( 'post_type' => TemplatePostType::POST_TYPE, 'numberposts' => 200, 'post_status' => 'publish' ) );
+		$templates = get_posts( array( 'post_type' => TemplatePostType::POST_TYPE, 'numberposts' => 100, 'post_status' => 'publish' ) );
 		$max       = VoucherAdmin::expiry_bounds()[1];
 		?>
 		<div class="wrap vcap-wrap">
