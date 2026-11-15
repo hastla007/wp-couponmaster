@@ -94,8 +94,10 @@ final class Usage {
 		foreach ( $emails as $address ) {
 			$keys[] = self::email_key( $address );
 		}
-		// … and, still counted, the hashes stored before V4 (of the address only lowered).
+		// … and, still counted, the hashes stored before: keyed with the site salt (before AP-S3-4) and of the
+		// address only lowered (before V4).
 		foreach ( $emails as $address ) {
+			$keys[] = \VCAP\CustomerEmail::salt_key( $address );
 			$keys[] = \VCAP\CustomerEmail::legacy_key( $address );
 		}
 		// Plain-text keys of earlier versions, still counted until the maintenance has converted them (never

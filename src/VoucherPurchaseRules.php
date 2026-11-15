@@ -84,18 +84,25 @@ final class VoucherPurchaseRules {
 			// (posts) order store and would return every order. The date range is part of the query (AP-P1-1: the
 			// 24-hour limit reads one day of orders, not the customer's whole history) and checked again on the
 			// loaded orders.
-			$keyed = OrderLookup::ids_with_meta(
-				self::CUSTOMER_KEY_META,
-				CustomerEmail::key( $email ),
-				array(
-					'status'         => self::COUNTED_STATUSES,
-					'order'          => 'DESC',
-					'limit'          => 200,
-					'created_after'  => max( 0, $since ),
-					'created_before' => max( 0, $until ),
-				)
-			);
-			foreach ( $keyed as $id ) {
+			// AP-S3-4: orders stamped before the plugin's own key still carry the salt-keyed hash.
+			$keyed = array();
+			foreach ( array( CustomerEmail::key( $email ), CustomerEmail::salt_key( $email ) ) as $hash ) {
+				$keyed = array_merge(
+					$keyed,
+					OrderLookup::ids_with_meta(
+						self::CUSTOMER_KEY_META,
+						$hash,
+						array(
+							'status'         => self::COUNTED_STATUSES,
+							'order'          => 'DESC',
+							'limit'          => 200,
+							'created_after'  => max( 0, $since ),
+							'created_before' => max( 0, $until ),
+						)
+					)
+				);
+			}
+			foreach ( array_unique( array_map( 'intval', $keyed ) ) as $id ) {
 				$order   = (int) $id !== $exclude ? wc_get_order( (int) $id ) : null;
 				$created = $order instanceof \WC_Order && $order->get_date_created() ? $order->get_date_created()->getTimestamp() : 0;
 				if ( $created && ( $since <= 0 || $created >= $since ) && ( $until <= 0 || $created < $until ) ) {

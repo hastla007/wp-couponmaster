@@ -98,6 +98,17 @@ wp_set_current_user( $other );
 $v6_other = $v6_valid( WC()->cart );
 vcap_acct_assert( is_wp_error( $v6_other ) && str_contains( $v6_other->get_error_message(), 'belongs to another customer account' ), 'V6: another logged-in customer is refused' );
 wp_set_current_user( $buyer );
+// AP-S1-1: the account was created after the update and logged in without proving its mailbox (WooCommerce logs
+// new accounts in at once) – refused, with the offer to send the confirmation link.
+wc_clear_notices();
+$ap_unproven = $v6_valid( WC()->cart );
+vcap_acct_assert( is_wp_error( $ap_unproven ) && str_contains( $ap_unproven->get_error_message(), 'Please confirm your email address ' . $v6_masked ), 'AP-S1-1: a new account whose mailbox is not proven is refused ("Please confirm your email address ' . $v6_masked . '")' );
+$ap_offer = implode( ' ', array_column( wc_get_notices( 'notice' ), 'notice' ) );
+vcap_acct_assert( str_contains( $ap_offer, 'vcap_send_email_confirmation=1' ) && str_contains( $ap_offer, $v6_masked ), 'AP-S1-1: the cart notice offers to send the confirmation link to the masked address' );
+wc_clear_notices();
+reset_password( get_userdata( $buyer ), wp_generate_password( 24 ) ); // The emailed reset link proves the mailbox.
+wp_set_current_user( $buyer );
+vcap_acct_assert( strtolower( $login . '@example.com' ) === get_user_meta( $buyer, VCAP\PersonalVoucher::META_VERIFIED, true ), 'AP-S1-1: a password reset through the emailed link stores the proof of mailbox' );
 vcap_acct_assert( true === $v6_valid( WC()->cart ), 'V6: logged in with the matching account the personal voucher is valid' );
 wp_set_current_user( 0 );
 vcap_acct_assert( true === $v6_valid( vcap_acct_order( $v6_goods, $buyer, $login . '@example.com' ) ), 'V6: an order of the matching account stays valid (e.g. recalculated later without a login)' );
@@ -106,6 +117,71 @@ $v6_admin_order->set_created_via( 'admin' );
 $v6_admin_order->save();
 vcap_acct_assert( true === $v6_valid( $v6_admin_order ), 'V6: an order staff created in wp-admin may carry the personal voucher (staff checked the holder)' );
 vcap_acct_assert( str_contains( $voucher->transferable_label(), 'Online redemption requires logging in to the customer account with that email address.' ), 'V6: the voucher text says that online redemption requires the customer account' );
+
+// AP-S1-1: proof of mailbox. WooCommerce's account details change the email without confirmation.
+$ap_coupon_for = static function ( string $email ) use ( $personal ): WC_Coupon {
+	// A personal voucher of the shop (only Voucher Captain coupons get the identity check), bound to $email.
+	$issued = vcap()->issuer->issue_for_order( vcap_acct_order( $personal, 0, $email ) );
+	$live   = vcap()->vouchers->get( $issued[0]->id );
+	if ( VCAP\Voucher::STATUS_ACTIVE !== $live->status ) {
+		$live->status = VCAP\Voucher::STATUS_ACTIVE;
+		vcap()->vouchers->update( $live );
+	}
+	$coupon = new WC_Coupon( $live->coupon_id );
+	if ( array( strtolower( $email ) ) !== array_values( $coupon->get_email_restrictions() ) ) {
+		throw new RuntimeException( 'FAIL: (setup) personal voucher restricted to ' . $email );
+	}
+	return $coupon;
+};
+$ap_valid_as = static function ( int $user_id, WC_Coupon $coupon ) {
+	wp_set_current_user( 0 );
+	clean_user_cache( $user_id );
+	wp_set_current_user( $user_id );
+	return ( new WC_Discounts( WC()->cart ) )->is_coupon_valid( new WC_Coupon( $coupon->get_id() ) );
+};
+$ap_victim = $login . '_victim@example.com';
+$ap_coupon = $ap_coupon_for( $ap_victim );
+\WC_Shortcode_My_Account::reset_password( get_userdata( $other ), wp_generate_password( 24 ) ); // WooCommerce's lost-password form.
+vcap_acct_assert( strtolower( $login . '_x@example.com' ) === get_user_meta( $other, VCAP\PersonalVoucher::META_VERIFIED, true ), 'AP-S1-1: WooCommerce\'s lost-password reset also stores the proof (it fires password_reset)' );
+wp_update_user( array( 'ID' => $other, 'user_email' => $ap_victim ) ); // What WC_Form_Handler::save_account_details() does.
+do_action( 'woocommerce_save_account_details', $other );
+wc_clear_notices();
+$ap_changed = $ap_valid_as( $other, $ap_coupon );
+vcap_acct_assert( is_wp_error( $ap_changed ) && str_contains( $ap_changed->get_error_message(), 'Please confirm your email address' ) && '' === get_user_meta( $other, VCAP\PersonalVoucher::META_VERIFIED, true ) && (int) get_user_meta( $other, VCAP\PersonalVoucher::META_CHANGED, true ) > 0, 'AP-S1-1: an email changed in My Account is refused until confirmed (the proof of the old address is dropped)' );
+$ap_url = VCAP\PersonalVoucher::confirmation_url( get_userdata( $other ) );
+parse_str( (string) wp_parse_url( $ap_url, PHP_URL_QUERY ), $ap_link );
+vcap_acct_assert( ! str_contains( $ap_url, rawurlencode( $ap_victim ) ) && ! str_contains( $ap_url, $ap_victim ) && ! VCAP\PersonalVoucher::confirm( (int) $ap_link['vcap_confirm_email'], (int) $ap_link['exp'] + 1, (string) $ap_link['sig'] ) && ! VCAP\PersonalVoucher::confirm( (int) $buyer, (int) $ap_link['exp'], (string) $ap_link['sig'] ) && ! VCAP\PersonalVoucher::confirm( (int) $ap_link['vcap_confirm_email'], (int) $ap_link['exp'], strrev( (string) $ap_link['sig'] ) ), 'AP-S1-1: a confirmation link with another expiry, user or signature does not verify (and carries no address)' );
+vcap_acct_assert( VCAP\PersonalVoucher::confirm( (int) $ap_link['vcap_confirm_email'], (int) $ap_link['exp'], (string) $ap_link['sig'] ) && true === $ap_valid_as( $other, $ap_coupon ), 'AP-S1-1: the confirmation link verifies the address, then the personal voucher is valid' );
+wp_update_user( array( 'ID' => $other, 'user_email' => $login . '_y@example.com' ) );
+vcap_acct_assert( ! VCAP\PersonalVoucher::confirm( (int) $ap_link['vcap_confirm_email'], (int) $ap_link['exp'], (string) $ap_link['sig'] ) && '' === get_user_meta( $other, VCAP\PersonalVoucher::META_VERIFIED, true ), 'AP-S1-1: a link sent before the email changed does not verify the new address' );
+// Grandfathering: accounts registered before the update whose email never changed keep redeeming.
+global $wpdb;
+$ap_old_user = static function ( string $suffix ) use ( $login, $wpdb ): int {
+	$id = (int) wp_insert_user( array( 'user_login' => $login . '_' . $suffix, 'user_pass' => wp_generate_password( 24 ), 'user_email' => $login . '_' . $suffix . '@example.com', 'role' => 'customer' ) );
+	$wpdb->update( $wpdb->users, array( 'user_registered' => gmdate( 'Y-m-d H:i:s', VCAP\PersonalVoucher::since() - 30 * DAY_IN_SECONDS ) ), array( 'ID' => $id ) );
+	clean_user_cache( $id );
+	return $id;
+};
+$ap_gf = $ap_old_user( 'gf' );
+vcap_acct_assert( true === $ap_valid_as( $ap_gf, $ap_coupon_for( $login . '_gf@example.com' ) ) && strtolower( $login . '_gf@example.com' ) === get_user_meta( $ap_gf, VCAP\PersonalVoucher::META_VERIFIED, true ), 'AP-S1-1: a customer registered before the update (email unchanged) is grandfathered and accepted' );
+$ap_gf2 = $ap_old_user( 'gf2' );
+wp_update_user( array( 'ID' => $ap_gf2, 'user_email' => $login . '_gf2b@example.com' ) );
+vcap_acct_assert( is_wp_error( $ap_valid_as( $ap_gf2, $ap_coupon_for( $login . '_gf2b@example.com' ) ) ), 'AP-S1-1: an old account whose email changed after the update is not grandfathered' );
+// The confirmation email: sent to the account address with the link, at most three per hour and account.
+$ap_mails = array();
+$ap_catch = static function ( $short, $atts ) use ( &$ap_mails ) {
+	$ap_mails[] = $atts;
+	return true;
+};
+add_filter( 'pre_wp_mail', $ap_catch, 10, 2 );
+$ap_results = array();
+for ( $i = 0; $i < 4; $i++ ) {
+	$ap_results[] = VCAP\PersonalVoucher::send_confirmation( get_userdata( $ap_gf2 ) );
+}
+remove_filter( 'pre_wp_mail', $ap_catch, 10 );
+vcap_acct_assert( array( 'sent', 'sent', 'sent', 'limited' ) === $ap_results && 3 === count( $ap_mails ) && in_array( $login . '_gf2b@example.com', (array) $ap_mails[0]['to'], true ) && str_contains( (string) $ap_mails[0]['message'], 'vcap_confirm_email=' . $ap_gf2 ), 'AP-S1-1: the confirmation email goes to the account address with the signed link, rate limited (3 per hour)' );
+vcap_acct_assert( 'verified' === VCAP\PersonalVoucher::send_confirmation( get_userdata( $ap_gf ) ), 'AP-S1-1: no confirmation email for an address that is already verified' );
+wp_set_current_user( 0 );
 
 // V11: order notes reach connectors and all staff – the issued code appears masked only.
 $notes = implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $order->get_id() ) ), 'content' ) );

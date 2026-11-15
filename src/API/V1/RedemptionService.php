@@ -80,7 +80,7 @@ final class RedemptionService {
 		if ( $this->too_many_failures( $user_id ) ) {
 			return self::error( 'vcap_rate_limited', __( 'Too many invalid voucher codes. Please try again later.', 'voucher-captain' ), 429 );
 		}
-		$voucher = $this->find( $code );
+		$voucher = $this->visible( $this->find( $code ), $user_id );
 		if ( ! $voucher ) {
 			$this->record_failure();
 			return self::error( 'vcap_not_found', __( 'This voucher code is not valid.', 'voucher-captain' ), 404 );
@@ -134,7 +134,7 @@ final class RedemptionService {
 
 		// A known key is answered before the voucher lookup, so retries keep working after the voucher changed.
 		$existing = $this->get_row( $key );
-		$voucher  = $this->find( $code );
+		$voucher  = $this->visible( $this->find( $code ), $user_id );
 		if ( ! $voucher ) {
 			if ( $existing ) {
 				$this->record_success( $user_id ); // A retry with a known key, not a guess.
@@ -843,6 +843,25 @@ final class RedemptionService {
 	}
 
 	/**
+	 * AP-S1-2: another customer's store credit reads like an unknown code (404, counted as a failed attempt) for
+	 * everyone but staff, so check and reserve do not confirm that such a code exists (CodeLookup::visible()).
+	 *
+	 * @param Voucher|null $voucher Voucher found by code.
+	 * @param int          $user_id Acting user.
+	 */
+	private function visible( ?Voucher $voucher, int $user_id ): ?Voucher {
+		if ( ! $voucher || $this->is_staff() || \VCAP\CodeLookup::visible( $voucher, $user_id ) ) {
+			return $voucher;
+		}
+		return null;
+	}
+
+	/** Shop staff (voucher managers, shop managers): they see every code in wp-admin anyway. */
+	private function is_staff(): bool {
+		return current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' ); // phpcs:ignore WordPress.WP.Capabilities.Unknown -- Registered by Install / WooCommerce.
+	}
+
+	/**
 	 * The acting user: explicit user_id from trusted PHP callers, otherwise the logged-in user.
 	 *
 	 * @param array $args Arguments.
@@ -993,8 +1012,7 @@ final class RedemptionService {
 	 * @return bool
 	 */
 	private function counts_by_address(): bool {
-		$staff = current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' ); // phpcs:ignore WordPress.WP.Capabilities.Unknown -- Registered by Install / WooCommerce.
-		return ! $staff && '' !== \VCAP\Plugin::client_ip();
+		return ! $this->is_staff() && '' !== \VCAP\Plugin::client_ip();
 	}
 
 	/**

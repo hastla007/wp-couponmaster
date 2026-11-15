@@ -94,6 +94,22 @@ $v4_again->delete_meta_data( VCAP\FirstOrderCoupons::CUSTOMER_META );
 $v4_again->save_meta_data();
 $v4_count = VCAP\FirstOrderCoupons::stamp_older_orders( 50 );
 vcap_first_assert( 1 === $v4_count && '' !== (string) wc_get_order( $v4_again->get_id() )->get_meta( VCAP\FirstOrderCoupons::CUSTOMER_META ) && 0 === VCAP\FirstOrderCoupons::stamp_older_orders( 50 ), 'V4: the daily run stamps only the orders without a mailbox hash (' . $v4_count . ')' );
+// AP-S3-4: the mailbox hash is keyed with the plugin's own persistent key, not wp_salt( 'auth' ): rotating the salts
+// keeps every per-customer key; orders stamped with the salt-keyed hash before are still found.
+$s34_email = "salt-{$tag}@example.com";
+$s34_key   = VCAP\CustomerEmail::key( $s34_email );
+$s34_salt  = static fn() => 'rotated-salt-' . wp_generate_password( 12, false, false );
+add_filter( 'salt', $s34_salt );
+$s34_rotated = VCAP\CustomerEmail::key( $s34_email );
+remove_filter( 'salt', $s34_salt );
+vcap_first_assert( $s34_key === $s34_rotated && 'h:' . hash_hmac( 'sha256', $s34_email, wp_salt( 'auth' ) ) !== $s34_key && '' !== (string) get_option( VCAP\CustomerEmail::KEY_OPTION ), 'AP-S3-4: the customer key does not change when the WordPress salts are rotated (own persistent key)' );
+remove_action( 'woocommerce_before_order_object_save', array( VCAP\FirstOrderCoupons::class, 'stamp' ) );
+$s34_old = vcap_first_order( $product, 0, "saltold-{$tag}+a@example.com", 'completed' );
+$s34_old->update_meta_data( VCAP\FirstOrderCoupons::CUSTOMER_META, VCAP\CustomerEmail::salt_key( "saltold-{$tag}+a@example.com" ) );
+$s34_old->save();
+add_action( 'woocommerce_before_order_object_save', array( VCAP\FirstOrderCoupons::class, 'stamp' ) );
+VCAP\FirstOrderCoupons::forget();
+vcap_first_assert( VCAP\CustomerEmail::salt_key( "saltold-{$tag}+a@example.com" ) === (string) wc_get_order( $s34_old->get_id() )->get_meta( VCAP\FirstOrderCoupons::CUSTOMER_META ) && ! vcap_first_valid( $coupon, vcap_first_order( $product, 0, "saltold-{$tag}+b@example.com", 'pending' ) ), 'AP-S3-4: an order stamped with the salt-keyed hash before is still found (legacy key looked up)' );
 // Refunded/cancelled orders that used a discount count as earlier orders.
 $v4_discount = new WC_Coupon();
 $v4_discount->set_code( 'vcap-v4-' . strtolower( wp_generate_password( 8, false, false ) ) );

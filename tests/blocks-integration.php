@@ -298,6 +298,9 @@ $v6_request->set_param( 'code', $v6_card->code );
 $v6_guest = rest_do_request( $v6_request );
 vcap_blocks_assert( $v6_guest->is_error() && str_contains( wp_json_encode( $v6_guest->get_data() ), 'Please log in with v***@example.com to use this personal voucher.' ) && ! in_array( $v6_card->code, WC()->cart->get_applied_coupons(), true ), 'V6: Store API – a guest with the buyer\'s billing email cannot apply a personal voucher ("Please log in with v***@example.com …")', $v6_guest->get_data() );
 wp_set_current_user( $v6_owner );
+$v6_unproven = rest_do_request( $v6_request );
+vcap_blocks_assert( $v6_unproven->is_error() && str_contains( wp_json_encode( $v6_unproven->get_data() ), 'Please confirm your email address v***@example.com' ), 'AP-S1-1: Store API – the matching account without a proof of mailbox is asked to confirm its address', $v6_unproven->get_data() );
+VCAP\PersonalVoucher::mark_verified( $v6_owner ); // As after the confirmation link or a password reset.
 $v6_mine = rest_do_request( $v6_request );
 vcap_blocks_assert( ! $v6_mine->is_error() && in_array( $v6_card->code, WC()->cart->get_applied_coupons(), true ), 'V6: Store API – logged in with the matching account the personal voucher is applied', $v6_mine->get_data() );
 WC()->cart->empty_cart();

@@ -338,6 +338,7 @@ final class Privacy {
 		$removed  = false;
 		$retained = false;
 		$vouchers = $this->repo->for_email( $email, 500 );
+		$items    = array(); // AP-S3-1: order lines whose personalisation copies go too (item id => scope).
 		foreach ( $vouchers as $voucher ) {
 			$changed = false;
 			if ( 0 === strcasecmp( $voucher->recipient_email, $email ) ) {
@@ -346,11 +347,19 @@ final class Privacy {
 				$voucher->recipient_name  = '';
 				$voucher->message         = '';
 				$voucher->fields          = array();
+				if ( $voucher->order_item_id ) {
+					$items[ $voucher->order_item_id ] = 'recipient';
+				}
 			}
 			if ( 0 === strcasecmp( $voucher->buyer_email, $email ) ) {
 				$voucher->buyer_email = '';
 				$voucher->buyer_name  = '';
-				$changed              = true;
+				// The merchant's own fields were typed by the buyer (the recipient's go with the recipient).
+				$voucher->fields = array_filter( $voucher->fields, static fn( $key ) => in_array( (string) $key, array_merge( Fields::RECIPIENT_FIELDS, array( 'delivery_date' ) ), true ), ARRAY_FILTER_USE_KEY );
+				$changed         = true;
+				if ( $voucher->order_item_id && ! isset( $items[ $voucher->order_item_id ] ) ) {
+					$items[ $voucher->order_item_id ] = 'buyer';
+				}
 			}
 			if ( ! $changed ) {
 				continue;
@@ -363,7 +372,7 @@ final class Privacy {
 				if ( $emails && ! $kept ) {
 					// An empty restriction would make a personal voucher usable by anyone: keep it restricted to an
 					// address nobody can have, until an administrator assigns a new holder.
-					$kept = array( 'erased-' . $voucher->id . '@invalid.invalid' );
+					$kept = array( VoucherRepository::erased_address( $voucher->id ) );
 				}
 				if ( count( $kept ) !== count( $emails ) || $kept !== array_values( $emails ) ) {
 					$coupon->set_email_restrictions( $kept );
@@ -376,6 +385,20 @@ final class Privacy {
 				continue;
 			}
 			$removed = true;
+		}
+		// AP-S3-1: the copies in the order lines (admin order screen, order emails, REST): of the vouchers above, and
+		// of lines naming the address as recipient without a voucher (unpaid or cancelled orders).
+		foreach ( Fields::items_for_recipient( $email ) as $item_id ) {
+			$items[ $item_id ] = 'recipient';
+		}
+		foreach ( $items as $item_id => $scope ) {
+			try {
+				if ( Fields::erase_item_data( Fields::voucher_item( (int) $item_id ), $scope ) ) {
+					$removed = true;
+				}
+			} catch ( \Throwable $e ) {
+				$retained = true;
+			}
 		}
 		// "Used by" entries in the history of other people's vouchers.
 		if ( $this->repo->events_noting( $email ) ) {

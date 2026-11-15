@@ -29,16 +29,64 @@ final class CustomerEmail {
 		return $local . '@' . $domain;
 	}
 
+	/** Option holding the persistent key of the customer hashes (AP-S3-4). */
+	public const KEY_OPTION = 'vcap_customer_key_secret';
+
 	/**
-	 * Keyed hash (site salt) of the normalised address: recognises a customer without storing the address.
-	 * Prefixed "h:" like the promotion usage keys.
+	 * Keyed hash of the normalised address: recognises a customer without storing the address. Prefixed "h:" like
+	 * the promotion usage keys. AP-S3-4: keyed with a persistent key of the plugin (KEY_OPTION), not with
+	 * wp_salt( 'auth' ) – rotating the WordPress salts (a routine security measure) must not reset every
+	 * per-customer limit. Hashes stored before are still found through salt_key() and legacy_key() (keys()).
 	 */
 	public static function key( string $email ): string {
+		return 'h:' . hash_hmac( 'sha256', self::normalize( $email ), self::secret() );
+	}
+
+	/** The hash of the normalised address as stored before AP-S3-4 (keyed with the site salt), still looked up. */
+	public static function salt_key( string $email ): string {
 		return 'h:' . hash_hmac( 'sha256', self::normalize( $email ), wp_salt( 'auth' ) );
 	}
 
-	/** The hash of the address as stored before V4 (only lowered), still looked up for existing records. */
+	/** The hash of the address as stored before V4 (only lowered, site salt), still looked up for existing records. */
 	public static function legacy_key( string $email ): string {
 		return 'h:' . hash_hmac( 'sha256', strtolower( trim( $email ) ), wp_salt( 'auth' ) );
+	}
+
+	/**
+	 * Every stored form of an address, current first: key(), salt_key() (before AP-S3-4), legacy_key() (before V4).
+	 *
+	 * @return string[]
+	 */
+	public static function keys( string $email ): array {
+		return array_values( array_unique( array( self::key( $email ), self::salt_key( $email ), self::legacy_key( $email ) ) ) );
+	}
+
+	/**
+	 * The persistent key: created once with add_option(), which never overwrites – a failed read is answered from
+	 * the database again instead of replacing the key (which would make every stored hash unrecognisable). If it
+	 * still cannot be read, a key for this request only is used and nothing is stored.
+	 */
+	public static function secret(): string {
+		static $runtime = '';
+		$secret = (string) get_option( self::KEY_OPTION );
+		if ( '' !== $secret ) {
+			return $secret;
+		}
+		$new = wp_generate_password( 64, true, true );
+		if ( add_option( self::KEY_OPTION, $new, '', true ) ) {
+			return $new;
+		}
+		wp_cache_delete( self::KEY_OPTION, 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+		global $wpdb;
+		$stored = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::KEY_OPTION ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( is_string( $stored ) && '' !== $stored ) {
+			return $stored;
+		}
+		if ( '' === $runtime ) {
+			$runtime = wp_generate_password( 64, true, true );
+		}
+		return $runtime;
 	}
 }

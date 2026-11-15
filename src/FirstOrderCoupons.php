@@ -130,17 +130,24 @@ final class FirstOrderCoupons {
 		// (posts) order store and would return any order (K2).
 		if ( is_email( $email ) ) {
 			$plain = array_map( static fn( $s ) => str_replace( 'wc-', '', (string) $s ), $statuses );
-			$ids   = OrderLookup::ids_with_meta(
-				self::CUSTOMER_META,
-				CustomerEmail::key( $email ),
-				array(
-					'status'         => array_merge( $plain, $undone ),
-					'order'          => 'DESC',
-					'limit'          => 50,
-					'created_before' => max( 0, $before ), // AP-P1-1: newer orders never fill the 50.
-				)
-			);
-			foreach ( $ids as $id ) {
+			$ids   = array();
+			// AP-S3-4: orders stamped before the plugin's own key still carry the salt-keyed hash.
+			foreach ( array( CustomerEmail::key( $email ), CustomerEmail::salt_key( $email ) ) as $hash ) {
+				$ids = array_merge(
+					$ids,
+					OrderLookup::ids_with_meta(
+						self::CUSTOMER_META,
+						$hash,
+						array(
+							'status'         => array_merge( $plain, $undone ),
+							'order'          => 'DESC',
+							'limit'          => 50,
+							'created_before' => max( 0, $before ), // AP-P1-1: newer orders never fill the 50.
+						)
+					)
+				);
+			}
+			foreach ( array_unique( array_map( 'intval', $ids ) ) as $id ) {
 				$order = (int) $id !== $exclude_order_id ? wc_get_order( (int) $id ) : null;
 				if ( ! $order instanceof \WC_Order || ( $before > 0 && $order->get_date_created() && $order->get_date_created()->getTimestamp() >= $before ) ) {
 					continue;

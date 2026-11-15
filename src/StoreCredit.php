@@ -17,7 +17,8 @@ final class StoreCredit {
 	public function __construct( private Settings $settings, private VoucherRepository $repo, private CouponManager $coupons ) {}
 
 	public function register(): void {
-		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'validate_owner' ), 21, 3 );
+		// Before CouponManager::validate() (20): another customer's credit must not reveal its balance or state (AP-S1-3).
+		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'validate_owner' ), 19, 3 );
 		add_action( 'vcap_account_vouchers_top', array( $this, 'account_block' ) );
 		add_action( 'woocommerce_before_cart', array( $this, 'cart_notice' ) );
 		add_action( 'woocommerce_before_checkout_form', array( $this, 'cart_notice' ) );
@@ -326,7 +327,13 @@ final class StoreCredit {
 			? (int) $discounts->get_object()->get_customer_id()
 			: get_current_user_id();
 		if ( ! $this->enabled() || $user !== $voucher->user_id ) {
-			throw new \Exception( esc_html__( 'This store credit belongs to another customer account.', 'voucher-captain' ), 9030 );
+			if ( PersonalVoucher::staff_context() ) {
+				throw new \Exception( esc_html__( 'This store credit belongs to another customer account.', 'voucher-captain' ), 9030 );
+			}
+			// AP-S1-3: for customers it reads exactly like an unknown code (WooCommerce's own "does not exist"
+			// message, a numeric message is turned into it by WC_Discounts), so the coupon field confirms nothing.
+			// The error code 9030 still books the attempt as a failed guess (CouponGuard::error()).
+			throw new \Exception( (string) \WC_Coupon::E_WC_COUPON_NOT_EXIST, 9030 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- an integer.
 		}
 		if ( ! $this->settings->yes( 'vcap_credit_with_coupons' ) && $this->has_discount_codes( $discounts ) ) {
 			throw new \Exception( esc_html__( 'Store credit cannot be combined with discount codes.', 'voucher-captain' ), 9031 );

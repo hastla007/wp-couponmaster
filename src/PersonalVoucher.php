@@ -7,14 +7,143 @@ defined( 'ABSPATH' ) || exit;
  * V6: identity check of personal vouchers (WooCommerce coupons restricted to email addresses: "buyer", "recipient",
  * "buyer or recipient", referral rewards). WooCommerce itself compares the restriction with the billing email typed
  * at checkout, which anyone who knows the address can enter. A personal voucher is therefore redeemed only by a
- * customer who is logged in with an account whose email matches the restriction.
+ * customer who is logged in with an account whose verified email matches the restriction.
  *
- * "Verified" address: WordPress has no verification flag. The account email (user_email) counts as verified, because
- * accounts are created through WordPress/WooCommerce registration, which sends the set-password link to that address
- * (filter "vcap_personal_voucher_email_verified" for shops with their own verification, e.g. a double-opt-in plugin).
+ * AP-S1-1 – proof of mailbox: WordPress has no verification flag, and WooCommerce changes the account email in
+ * My Account without confirmation and logs new accounts (registration, checkout) in at once. The account email
+ * therefore counts as verified only with a proof stored in the user meta META_VERIFIED (the lower-cased address
+ * it was proven for):
+ * - a password reset through the emailed link (core and WooCommerce lost-password / set-password flows: the
+ *   "password_reset" action, fired by both once the reset key was checked; WooCommerce 8.9 fires only this one,
+ *   core and newer WooCommerce versions also "after_password_reset", which is hooked as well);
+ * - a click on the confirmation link this class sends (HMAC with the site secret over user id, address and
+ *   expiry; offered next to the refusal in the cart/checkout and in the account details, rate limited);
+ * - grandfathering: accounts registered before this check existed on the site (option OPTION_SINCE, stored once
+ *   on the first request of this version) whose email was never changed since (META_CHANGED) are verified on
+ *   first use – they redeemed with their account email before, and locking every existing customer out at once
+ *   is no option. Email changes before the update cannot be seen; that residual risk is accepted.
+ * A change of the email (profile_update with the old user data, WooCommerce's account details) drops the proof
+ * and ends grandfathering; a proof also only counts for the address it was stored for.
+ * Filter "vcap_personal_voucher_email_verified" for shops with their own verification (double opt-in plugin).
  * Staff at the counter (scanner, admin) verify the holder's identity themselves and are not restricted by this.
  */
 final class PersonalVoucher {
+	/** User meta: the lower-cased address whose mailbox the customer proved. */
+	public const META_VERIFIED = '_vcap_verified_email';
+	/** User meta: time of the last change of the account email seen by this plugin (ends grandfathering). */
+	public const META_CHANGED = '_vcap_email_changed';
+	/** Option: when the proof of mailbox was introduced on this site (accounts registered before are grandfathered). */
+	public const OPTION_SINCE = 'vcap_email_proof_since';
+	/** Lifetime of a confirmation link in seconds (48 hours). */
+	public const LINK_LIFETIME = 172800;
+	/** Confirmation emails per account and hour (rate limit bucket "email_confirm"). */
+	public const SEND_PER_HOUR = 3;
+
+	public static function register(): void {
+		self::since();
+		add_action( 'password_reset', array( self::class, 'password_reset' ), 10, 1 );
+		add_action( 'after_password_reset', array( self::class, 'password_reset' ), 10, 1 );
+		add_action( 'profile_update', array( self::class, 'profile_update' ), 10, 2 );
+		add_action( 'woocommerce_save_account_details', array( self::class, 'account_saved' ), 10, 1 );
+		add_action( 'template_redirect', array( self::class, 'handle_request' ), 4 );
+		add_action( 'woocommerce_edit_account_form', array( self::class, 'account_form_hint' ) );
+	}
+
+	/**
+	 * When the proof of mailbox was introduced here: stored once (add_option() never overwrites) on the first
+	 * request of this version, i.e. on the update or the first activation.
+	 */
+	public static function since(): int {
+		$since = (int) get_option( self::OPTION_SINCE, 0 );
+		if ( $since <= 0 ) {
+			$since = time();
+			add_option( self::OPTION_SINCE, $since );
+		}
+		return $since;
+	}
+
+	/**
+	 * Stores the proof for the account's current address.
+	 *
+	 * @param \WP_User|int $user Account.
+	 */
+	public static function mark_verified( $user ): void {
+		$user = $user instanceof \WP_User ? $user : get_userdata( (int) $user );
+		if ( ! $user instanceof \WP_User || ! $user->exists() || ! is_email( (string) $user->user_email ) ) {
+			return;
+		}
+		update_user_meta( $user->ID, self::META_VERIFIED, strtolower( trim( (string) $user->user_email ) ) );
+	}
+
+	/**
+	 * Password reset through the emailed link (wp-login.php, WooCommerce's lost-password and set-password forms).
+	 *
+	 * @param mixed $user WP_User.
+	 */
+	public static function password_reset( $user ): void {
+		self::mark_verified( $user );
+	}
+
+	/**
+	 * A changed account email drops the proof (any way it is changed: My Account, wp-admin, REST, wp_update_user()).
+	 *
+	 * @param int   $user_id       User id.
+	 * @param mixed $old_user_data WP_User before the change.
+	 */
+	public static function profile_update( $user_id, $old_user_data = null ): void {
+		$user = get_userdata( (int) $user_id );
+		if ( ! $user instanceof \WP_User || ! $old_user_data instanceof \WP_User ) {
+			return;
+		}
+		if ( strtolower( trim( (string) $old_user_data->user_email ) ) !== strtolower( trim( (string) $user->user_email ) ) ) {
+			self::email_changed( (int) $user->ID );
+		}
+	}
+
+	/**
+	 * WooCommerce's account details form: checked again after the save (which also ends in profile_update).
+	 *
+	 * @param int $user_id User id.
+	 */
+	public static function account_saved( $user_id ): void {
+		$user = get_userdata( (int) $user_id );
+		if ( ! $user instanceof \WP_User ) {
+			return;
+		}
+		$proof = (string) get_user_meta( $user->ID, self::META_VERIFIED, true );
+		if ( '' !== $proof && strtolower( trim( (string) $user->user_email ) ) !== $proof ) {
+			self::email_changed( (int) $user->ID );
+		}
+	}
+
+	private static function email_changed( int $user_id ): void {
+		delete_user_meta( $user_id, self::META_VERIFIED );
+		update_user_meta( $user_id, self::META_CHANGED, time() );
+	}
+
+	/** Whether the customer proved the mailbox of the current account email (the filter not applied). */
+	public static function has_proof( \WP_User $user ): bool {
+		$email = strtolower( trim( (string) $user->user_email ) );
+		if ( '' === $email ) {
+			return false;
+		}
+		$proof = (string) get_user_meta( $user->ID, self::META_VERIFIED, true );
+		if ( '' !== $proof ) {
+			return $proof === $email;
+		}
+		if ( self::grandfathered( $user ) ) {
+			self::mark_verified( $user ); // On first use: later checks read the proof.
+			return true;
+		}
+		return false;
+	}
+
+	/** Registered before the proof of mailbox existed and the email never changed since (see the class comment). */
+	public static function grandfathered( \WP_User $user ): bool {
+		$registered = strtotime( (string) $user->user_registered . ' UTC' );
+		return $registered && $registered < self::since() && '' === (string) get_user_meta( $user->ID, self::META_CHANGED, true );
+	}
+
 	/**
 	 * Lower-cased email restrictions of a coupon (empty: transferable).
 	 *
@@ -43,20 +172,30 @@ final class PersonalVoucher {
 		return false;
 	}
 
-	/** The verified email of an account ('' for none): its user_email, see the class comment. */
+	/** The verified email of an account ('' for none): its user_email with a proof of mailbox, see the class comment. */
 	public static function verified_email( ?\WP_User $user ): string {
 		if ( ! $user || ! $user->exists() || ! is_email( (string) $user->user_email ) ) {
 			return '';
 		}
 		/**
-		 * Whether the account email of a customer counts as verified for personal vouchers (V6). Default true: the
-		 * account was created through WordPress/WooCommerce, which sends the set-password link to that address.
+		 * Whether the account email of a customer counts as verified for personal vouchers (V6). Default: the
+		 * customer proved the mailbox (password reset through the emailed link, or the confirmation link) or the
+		 * account is grandfathered (registered before the proof of mailbox was introduced, email unchanged since; AP-S1-1).
 		 *
 		 * @since 1.2.0
 		 * @param bool     $verified Whether the address is verified.
 		 * @param \WP_User $user     Customer account.
 		 */
-		return apply_filters( 'vcap_personal_voucher_email_verified', true, $user ) ? (string) $user->user_email : '';
+		return apply_filters( 'vcap_personal_voucher_email_verified', self::has_proof( $user ), $user ) ? (string) $user->user_email : '';
+	}
+
+	/**
+	 * Whether the account email matches a restriction but is not verified yet (where a confirmation link helps).
+	 *
+	 * @param string[] $restrictions Lower-cased restrictions.
+	 */
+	public static function needs_confirmation( array $restrictions, ?\WP_User $user ): bool {
+		return $user && $user->exists() && $restrictions && '' === self::verified_email( $user ) && self::matches( (string) $user->user_email, $restrictions );
 	}
 
 	/**
@@ -66,6 +205,156 @@ final class PersonalVoucher {
 	 */
 	public static function allowed_for_user( array $restrictions, ?\WP_User $user ): bool {
 		return ! $restrictions || self::matches( self::verified_email( $user ), $restrictions );
+	}
+
+	// ----------------------------------------------------------------- Confirmation link.
+
+	private static function sign( int $user_id, string $email, int $exp ): string {
+		return hash_hmac( 'sha256', 'confirm-email|' . $user_id . '|' . strtolower( trim( $email ) ) . '|' . $exp, vcap()->settings->secret() );
+	}
+
+	/** Signed link that proves the mailbox of the account's current address (bound to user id, address, expiry). */
+	public static function confirmation_url( \WP_User $user ): string {
+		$exp  = time() + self::LINK_LIFETIME;
+		$base = function_exists( 'wc_get_page_permalink' ) ? (string) wc_get_page_permalink( 'myaccount' ) : '';
+		return add_query_arg(
+			array(
+				'vcap_confirm_email' => $user->ID,
+				'exp'                => $exp,
+				'sig'                => self::sign( (int) $user->ID, (string) $user->user_email, $exp ),
+			),
+			'' !== $base ? $base : home_url( '/' )
+		);
+	}
+
+	/**
+	 * Checks a confirmation link and stores the proof. The address signed is the account's current one: a link sent
+	 * before the email changed no longer matches.
+	 */
+	public static function confirm( int $user_id, int $exp, string $signature ): bool {
+		$user = $user_id > 0 ? get_userdata( $user_id ) : false;
+		if ( ! $user instanceof \WP_User || $exp < time() || '' === $signature || ! is_email( (string) $user->user_email ) ) {
+			return false;
+		}
+		if ( ! hash_equals( self::sign( $user_id, (string) $user->user_email, $exp ), $signature ) ) {
+			return false;
+		}
+		self::mark_verified( $user );
+		return true;
+	}
+
+	/**
+	 * Sends the confirmation link to the account's address (at most SEND_PER_HOUR per account and hour).
+	 *
+	 * @return string sent|limited|verified|failed
+	 */
+	public static function send_confirmation( \WP_User $user ): string {
+		if ( ! is_email( (string) $user->user_email ) ) {
+			return 'failed';
+		}
+		if ( self::has_proof( $user ) ) {
+			return 'verified';
+		}
+		if ( Plugin::rate_limited( 'email_confirm', self::SEND_PER_HOUR, 500, HOUR_IN_SECONDS, true, 'u' . $user->ID ) ) {
+			return 'limited';
+		}
+		$subject = sprintf(
+			/* translators: %s: site name */
+			__( 'Confirm your email address at %s', 'voucher-captain' ),
+			wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES )
+		);
+		$url    = self::confirmation_url( $user );
+		$body   = '<p>' . esc_html__( 'Please confirm your email address to redeem personal vouchers sent to it in our shop:', 'voucher-captain' ) . '</p>'
+			. '<p><a href="' . esc_url( $url ) . '">' . esc_html__( 'Confirm email address', 'voucher-captain' ) . '</a></p>'
+			. '<p>' . esc_html__( 'The link is valid for 48 hours. If you did not ask for it, you can ignore this email.', 'voucher-captain' ) . '</p>';
+		$mailer = function_exists( 'WC' ) ? WC()->mailer() : null;
+		$sent   = $mailer
+			? $mailer->send( (string) $user->user_email, $subject, $mailer->wrap_message( __( 'Confirm your email address', 'voucher-captain' ), $body ), array( 'Content-Type: text/html; charset=UTF-8' ) )
+			: wp_mail( (string) $user->user_email, $subject, wp_strip_all_tags( $body ) . "\n\n" . $url );
+		return $sent ? 'sent' : 'failed';
+	}
+
+	/** URL that asks for a confirmation email (logged-in customer, nonce), returning to the current page. */
+	public static function send_url(): string {
+		return wp_nonce_url( add_query_arg( 'vcap_send_email_confirmation', '1' ), 'vcap_send_email_confirmation', 'vcap_nonce' );
+	}
+
+	/** Front end: confirmation links, their result notice, and requests for a confirmation email. */
+	public static function handle_request(): void {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- the confirmation link carries an HMAC instead of a nonce; the result flag only selects a notice.
+		if ( isset( $_GET['vcap_confirm_email'] ) ) {
+			$ok = ! Plugin::rate_limited( 'email_confirm_link', 30, 0, 10 * MINUTE_IN_SECONDS )
+				&& self::confirm( absint( $_GET['vcap_confirm_email'] ), absint( $_GET['exp'] ?? 0 ), sanitize_key( wp_unslash( $_GET['sig'] ?? '' ) ) );
+			wp_safe_redirect( add_query_arg( 'vcap_email_confirmed', $ok ? '1' : '0', remove_query_arg( array( 'vcap_confirm_email', 'exp', 'sig' ) ) ) );
+			exit;
+		}
+		if ( isset( $_GET['vcap_email_confirmed'] ) && function_exists( 'wc_add_notice' ) ) {
+			if ( '1' === $_GET['vcap_email_confirmed'] ) {
+				wc_add_notice( __( 'Thank you – your email address is confirmed. Personal vouchers sent to it can now be redeemed with your account.', 'voucher-captain' ), 'success' );
+			} else {
+				wc_add_notice( __( 'This confirmation link is invalid or has expired, or the email address of the account has changed. Please log in and request a new link.', 'voucher-captain' ), 'error' );
+			}
+		}
+		if ( ! isset( $_GET['vcap_send_email_confirmation'] ) ) {
+			return;
+		}
+		// phpcs:enable
+		$back = remove_query_arg( array( 'vcap_send_email_confirmation', 'vcap_nonce' ) );
+		if ( ! is_user_logged_in() || ! wp_verify_nonce( sanitize_key( wp_unslash( $_GET['vcap_nonce'] ?? '' ) ), 'vcap_send_email_confirmation' ) ) {
+			wp_safe_redirect( $back );
+			exit;
+		}
+		$user   = wp_get_current_user();
+		$result = self::send_confirmation( $user );
+		if ( function_exists( 'wc_add_notice' ) ) {
+			switch ( $result ) {
+				case 'sent':
+					/* translators: %s: masked email address, e.g. j***@example.com */
+					wc_add_notice( sprintf( __( 'We have sent a confirmation link to %s. Please open it, then apply the voucher again.', 'voucher-captain' ), Mask::email( (string) $user->user_email ) ), 'success' );
+					break;
+				case 'verified':
+					wc_add_notice( __( 'Your email address is already confirmed.', 'voucher-captain' ), 'notice' );
+					break;
+				case 'limited':
+					wc_add_notice( __( 'Too many confirmation emails. Please check your inbox or try again in an hour.', 'voucher-captain' ), 'error' );
+					break;
+				default:
+					wc_add_notice( __( 'The confirmation email could not be sent. Please try again later or contact us.', 'voucher-captain' ), 'error' );
+			}
+		}
+		wp_safe_redirect( $back );
+		exit;
+	}
+
+	/** Account details form: offers the confirmation link while the account email is not verified. */
+	public static function account_form_hint(): void {
+		$user = wp_get_current_user();
+		if ( ! $user->exists() || '' !== self::verified_email( $user ) ) {
+			return;
+		}
+		echo '<p class="vcap-email-confirmation">' . esc_html__( 'Personal vouchers sent to your email address can be redeemed once the address is confirmed.', 'voucher-captain' )
+			. ' <a href="' . esc_url( self::send_url() ) . '">' . esc_html__( 'Send confirmation link', 'voucher-captain' ) . '</a></p>';
+	}
+
+	/**
+	 * Classic cart and checkout: next to the refusal, a notice with the link that sends the confirmation email
+	 * (once per request; not in REST requests such as the Store API, which shows no notices).
+	 */
+	private static function offer_confirmation( \WP_User $user ): void {
+		static $offered = false;
+		if ( $offered || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || ! function_exists( 'wc_add_notice' ) || ! function_exists( 'WC' ) || ! WC()->session ) {
+			return;
+		}
+		$offered = true;
+		wc_add_notice(
+			sprintf(
+				/* translators: 1: masked email address, e.g. j***@example.com, 2: link "Send confirmation link" */
+				__( 'Confirm %1$s to use personal vouchers sent to it: %2$s', 'voucher-captain' ),
+				esc_html( Mask::email( (string) $user->user_email ) ),
+				'<a class="button" href="' . esc_url( self::send_url() ) . '">' . esc_html__( 'Send confirmation link', 'voucher-captain' ) . '</a>'
+			),
+			'notice'
+		);
 	}
 
 	/** Customer-facing hint added to the "Personal – …" texts (voucher, email, PDF, account, product page). */
@@ -79,12 +368,23 @@ final class PersonalVoucher {
 	}
 
 	/**
-	 * Message for a refused personal voucher: whom to log in as (masked addresses only).
+	 * Message for a refused personal voucher: whom to log in as (masked addresses only). A logged-in customer whose
+	 * account email matches but is not verified yet is asked to confirm it, and the classic cart/checkout gets a
+	 * notice with the link that sends the confirmation email (AP-S1-1).
 	 *
 	 * @param string[] $restrictions Lower-cased restrictions.
 	 * @param bool     $logged_in    Whether a (non-matching) customer is logged in.
 	 */
 	public static function refusal( array $restrictions, bool $logged_in ): string {
+		$user = $logged_in && is_user_logged_in() ? wp_get_current_user() : null;
+		if ( $user && self::needs_confirmation( $restrictions, $user ) ) {
+			self::offer_confirmation( $user );
+			return sprintf(
+				/* translators: %s: masked email address, e.g. j***@example.com */
+				__( 'Please confirm your email address %s to use this personal voucher. You can request the confirmation link in your account details.', 'voucher-captain' ),
+				Mask::email( (string) $user->user_email )
+			);
+		}
 		$masked = array_values( array_unique( array_map( array( Mask::class, 'email' ), $restrictions ) ) );
 		if ( 1 === count( $masked ) ) {
 			return $logged_in
