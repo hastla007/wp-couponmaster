@@ -25,7 +25,9 @@ do_action( 'woocommerce_email_header', $email_heading, $email ); // phpcs:ignore
 
 // F15: the start side for right-to-left languages (email clients know no logical CSS properties).
 $vcap_start   = is_rtl() ? 'right' : 'left';
-$vcap_cell    = 'padding:6px 8px;border-bottom:1px solid #e5e5e5;text-align:' . $vcap_start . ';vertical-align:top;';
+// M12-83: colours of WooCommerce → Settings → Emails (base and text colour).
+$vcap_c       = isset( $colors ) && is_array( $colors ) ? $colors : \VCAP\Emails\VoucherEmail::colors();
+$vcap_cell    = 'padding:6px 8px;border-bottom:1px solid ' . $vcap_c['border'] . ';text-align:' . $vcap_start . ';vertical-align:top;';
 $vcap_links   = (bool) array_filter( $download_urls );
 $vcap_expiry  = (bool) array_filter( array_map( static fn( $v ) => $v->expires_at, $vouchers ) );
 $vcap_message = count( array_unique( array_map( static fn( $v ) => $v->message, $vouchers ) ) ) === 1 ? $voucher->message : '';
@@ -41,9 +43,9 @@ $vcap_extra_any = (bool) array_filter( $vcap_extra );
 <div><?php echo wp_kses_post( wpautop( wptexturize( $intro ) ) ); ?></div>
 
 <?php if ( $pdf_attached ) : ?>
-	<p style="font-size:13px;color:#555;"><?php esc_html_e( 'All vouchers are attached as one PDF, one page per voucher, ready to print.', 'voucher-captain' ); ?></p>
+	<p style="font-size:13px;color:<?php echo esc_attr( $vcap_c['muted'] ); ?>;"><?php esc_html_e( 'All vouchers are attached as one PDF, one page per voucher, ready to print.', 'voucher-captain' ); ?></p>
 <?php elseif ( $vcap_links ) : ?>
-	<p style="font-size:13px;color:#555;"><?php esc_html_e( 'Download each voucher as a PDF with the links in the table.', 'voucher-captain' ); ?></p>
+	<p style="font-size:13px;color:<?php echo esc_attr( $vcap_c['muted'] ); ?>;"><?php esc_html_e( 'Download each voucher as a PDF with the links in the table.', 'voucher-captain' ); ?></p>
 <?php endif; ?>
 
 <table cellspacing="0" cellpadding="0" border="0" style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px;">
@@ -72,7 +74,7 @@ $vcap_extra_any = (bool) array_filter( $vcap_extra );
 	<tbody>
 		<?php foreach ( array_values( $vouchers ) as $vcap_i => $vcap_v ) : ?>
 			<tr>
-				<td style="<?php echo esc_attr( $vcap_cell ); ?>color:#888;"><?php echo esc_html( (string) ( $vcap_i + 1 ) ); ?></td>
+				<td style="<?php echo esc_attr( $vcap_cell ); ?>color:<?php echo esc_attr( $vcap_c['muted'] ); ?>;"><?php echo esc_html( (string) ( $vcap_i + 1 ) ); ?></td>
 				<td style="<?php echo esc_attr( $vcap_cell ); ?>font-family:monospace;font-weight:bold;letter-spacing:1px;"><?php echo esc_html( $vcap_v->code ); ?></td>
 				<?php if ( $show_product ) : ?>
 					<td style="<?php echo esc_attr( $vcap_cell ); ?>"><?php echo esc_html( $vcap_v->product() ? wp_strip_all_tags( $vcap_v->product()->get_name() ) : '' ); ?></td>
@@ -106,7 +108,7 @@ $vcap_extra_any = (bool) array_filter( $vcap_extra );
 </table>
 
 <?php if ( ! $voucher->transferable || '' !== $vcap_terms ) : ?>
-	<p style="font-size:12px;color:#666;margin:0 0 16px;">
+	<p style="font-size:12px;color:<?php echo esc_attr( $vcap_c['muted'] ); ?>;margin:0 0 16px;">
 		<?php if ( ! $voucher->transferable ) : ?>
 			<?php echo esc_html( $voucher->transferable_label() ); ?><br>
 		<?php endif; ?>
@@ -115,10 +117,11 @@ $vcap_extra_any = (bool) array_filter( $vcap_extra );
 <?php endif; ?>
 
 <?php if ( $vcap_message ) : ?>
-	<blockquote style="border-<?php echo esc_attr( $vcap_start ); ?>:4px solid #c9b28a;margin:0 0 16px;padding:8px 14px;font-style:italic;">
+	<blockquote style="border-<?php echo esc_attr( $vcap_start ); ?>:4px solid <?php echo esc_attr( $vcap_c['accent'] ); ?>;margin:0 0 16px;padding:8px 14px;font-style:italic;">
 		<?php echo wp_kses_post( nl2br( esc_html( $vcap_message ) ) ); ?>
-		<?php if ( $voucher->buyer_name ) : ?>
-			<br>— <?php echo esc_html( $voucher->buyer_name ); ?>
+		<?php $vcap_sender = \VCAP\Emails\VoucherEmail::sender_name( $voucher ); // M12-55. ?>
+		<?php if ( $vcap_sender ) : ?>
+			<br>— <?php echo esc_html( $vcap_sender ); ?>
 		<?php endif; ?>
 	</blockquote>
 <?php endif; ?>
@@ -126,14 +129,14 @@ $vcap_extra_any = (bool) array_filter( $vcap_extra );
 <?php if ( $account_url ) : ?>
 	<?php // F16: "bulletproof" button – the colour sits on the table cell, so Outlook shows it as well. ?>
 	<table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:20px auto;"><tr>
-		<td bgcolor="#1f3a4d" style="background:#1f3a4d;border-radius:4px;text-align:center;">
-			<a class="vcap-email-button" href="<?php echo esc_url( $account_url ); ?>" style="display:inline-block;padding:12px 22px;border:1px solid #1f3a4d;border-radius:4px;background:#1f3a4d;color:#ffffff;text-decoration:none;font-weight:bold;"><?php esc_html_e( 'All vouchers in your account', 'voucher-captain' ); ?></a>
+		<td bgcolor="<?php echo esc_attr( $vcap_c['base'] ); ?>" style="background:<?php echo esc_attr( $vcap_c['base'] ); ?>;border-radius:4px;text-align:center;">
+			<a class="vcap-email-button" href="<?php echo esc_url( $account_url ); ?>" style="display:inline-block;padding:12px 22px;border:1px solid <?php echo esc_attr( $vcap_c['base'] ); ?>;border-radius:4px;background:<?php echo esc_attr( $vcap_c['base'] ); ?>;color:<?php echo esc_attr( $vcap_c['on_base'] ); ?>;text-decoration:none;font-weight:bold;"><?php esc_html_e( 'All vouchers in your account', 'voucher-captain' ); ?></a>
 		</td>
 	</tr></table>
 <?php endif; ?>
 
 <?php if ( '' !== \VCAP\Channels::instructions( $voucher ) ) : ?>
-	<p style="font-size:13px;color:#555;">
+	<p style="font-size:13px;color:<?php echo esc_attr( $vcap_c['muted'] ); ?>;">
 		<?php echo \VCAP\Channels::instructions_html( $voucher ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in instructions_html(). ?>
 	</p>
 <?php endif; ?>

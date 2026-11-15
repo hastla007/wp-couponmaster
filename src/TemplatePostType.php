@@ -198,7 +198,9 @@ final class TemplatePostType {
 					array( 'id' => 'e4', 'type' => 'text', 'name' => 'Site', 'x' => 10, 'y' => 118, 'w' => 54, 'h' => 16, 'text' => "{site_name}\n{site_url}", 'font' => 'DejaVu Sans', 'size' => 8, 'color' => '#f3e6cf', 'align' => 'center' ),
 					array( 'id' => 'e5', 'type' => 'text', 'name' => 'Value', 'x' => 76, 'y' => 18, 'w' => 120, 'h' => 22, 'text' => '{coupon_value}', 'font' => 'DejaVu Serif', 'size' => 34, 'color' => '#1f3a4d', 'align' => 'left', 'bold' => true ),
 					array( 'id' => 'e6', 'type' => 'text', 'name' => 'For', 'x' => 76, 'y' => 44, 'w' => 120, 'h' => 10, 'text' => __( 'For: {recipient_name}', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 12, 'color' => '#333333' ),
-					array( 'id' => 'e7', 'type' => 'text', 'name' => 'Message', 'x' => 76, 'y' => 56, 'w' => 120, 'h' => 30, 'text' => '{message}', 'font' => 'DejaVu Serif', 'size' => 11, 'color' => '#555555', 'italic' => true ),
+					array( 'id' => 'e7', 'type' => 'text', 'name' => 'Message', 'x' => 76, 'y' => 56, 'w' => 120, 'h' => 26, 'text' => '{message}', 'font' => 'DejaVu Serif', 'size' => 11, 'color' => '#555555', 'italic' => true ),
+					// M12-55: the giver, only when the "From" field was filled (never the billing name, e.g. a company).
+					array( 'id' => 'e14', 'type' => 'text', 'name' => 'From', 'x' => 76, 'y' => 84, 'w' => 120, 'h' => 7, 'text' => __( 'From: {field:sender_name}', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 9, 'color' => '#555555' ),
 					array( 'id' => 'e8', 'type' => 'text', 'name' => 'Code label', 'x' => 76, 'y' => 96, 'w' => 80, 'h' => 6, 'text' => __( 'Voucher code', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 8, 'color' => '#8a8a8a', 'uppercase' => true ),
 					array( 'id' => 'e9', 'type' => 'text', 'name' => 'Code', 'x' => 76, 'y' => 102, 'w' => 90, 'h' => 10, 'text' => '{coupon_code}', 'font' => 'DejaVu Sans Mono', 'size' => 15, 'color' => '#1f3a4d', 'bold' => true ),
 					array( 'id' => 'e10', 'type' => 'text', 'name' => 'Expiry', 'x' => 76, 'y' => 118, 'w' => 90, 'h' => 8, 'text' => '{expiry_line}', 'font' => 'DejaVu Sans', 'size' => 9, 'color' => '#555555' ),

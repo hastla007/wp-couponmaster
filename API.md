@@ -205,6 +205,20 @@ foreach ( $recipients as $i => $r ) {
 }
 ```
 
+## Returned voucher emails (bounces, since 1.3.0)
+
+"Delivered" means that `wp_mail()` accepted the email. Voucher emails carry the headers `X-VCAP-Voucher` (the voucher
+id, comma separated for a bundled email) and `X-VCAP-Role` (`recipient` or `buyer`). A bounce handler (webhook of the
+mail service, queue SMTP plugin) reports a returned email with:
+
+```php
+vcap()->delivery->mark_bounced( $voucher_id, 'recipient', '550 mailbox unavailable', true );
+```
+
+The role no longer counts as delivered, the voucher history gets a "Delivery failed" entry, the order a note; with the
+fourth argument the buyer is told by email (with the signed "Correct the recipient" link where the gift may still be
+redirected). The action `vcap_voucher_bounced( Voucher $voucher, string $role, string $reason )` fires afterwards.
+
 ## Extension points for connector plugins (since 1.1.0)
 
 ### Voucher types

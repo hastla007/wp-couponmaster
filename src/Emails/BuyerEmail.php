@@ -18,6 +18,13 @@ final class BuyerEmail extends VoucherEmail {
 		return (string) $voucher->buyer_email;
 	}
 
+	/** M12-47: the buyer's copy of a gift carries the signed "Correct the recipient" link (also for guests). */
+	protected function template_args( bool $plain ): array {
+		$args                   = parent::template_args( $plain );
+		$args['correction_url'] = $this->voucher && $this->voucher->id && Delivery::to_recipient( $this->voucher ) ? vcap()->downloads->correction_url( $this->voucher ) : '';
+		return $args;
+	}
+
 	public function get_default_subject() {
 		if ( $this->voucher && Delivery::to_recipient( $this->voucher ) ) {
 			return '' !== $this->placeholder( 'recipient_name' )

@@ -185,9 +185,69 @@ $mails = array();
 vcap()->delivery->send_expiry_reminders();
 remove_filter( 'woocommerce_email_recipient_vcap_voucher_expiry', $throw_for, 999 );
 vcap_dlv_assert( in_array( "fine-{$tag}@example.com", $mails, true ), 'an exception in one reminder does not stop the others' );
-vcap_dlv_assert( VCAP\Claim::take( 'expiry-reminder:' . $broken->id ), 'the claim of the failed reminder is released (it is retried next time)' );
-VCAP\Claim::release( 'expiry-reminder:' . $broken->id );
+vcap_dlv_assert( VCAP\Claim::take( 'expiry-reminder:' . $broken->id . ':14' ), 'the claim of the failed reminder is released (it is retried next time)' );
+VCAP\Claim::release( 'expiry-reminder:' . $broken->id . ':14' );
+
+// M12-84: several reminders ("30, 7, 1"): each once; a voucher found late gets only the reminder that fits.
+update_option( 'vcap_expiry_reminder_days', '7, 30,1, 7' );
+vcap_dlv_assert( array( 30, 7, 1 ) === Delivery::expiry_reminder_offsets( get_option( 'vcap_expiry_reminder_days' ) ) && array() === Delivery::expiry_reminder_offsets( '0' ) && array( 14 ) === Delivery::expiry_reminder_offsets( 14 ), 'M12-84: the reminder days are read from a list (largest first), a single number as before' );
+$m84_far  = vcap_dlv_voucher( "m84-far-{$tag}@example.com", array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() + 20 * DAY_IN_SECONDS ) ) );
+$m84_near = vcap_dlv_voucher( "m84-near-{$tag}@example.com", array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() + 5 * DAY_IN_SECONDS ) ) );
+$m84_last = vcap_dlv_voucher( "m84-last-{$tag}@example.com", array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() + 12 * HOUR_IN_SECONDS ) ) );
+$m84_old  = vcap_dlv_voucher( "m84-old-{$tag}@example.com", array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() + 5 * DAY_IN_SECONDS ) ) );
+$wpdb->query( $wpdb->prepare( 'UPDATE ' . VCAP\Install::tables()['vouchers'] . ' SET delivered_at = %s WHERE id IN (%d, %d, %d, %d)', gmdate( 'Y-m-d H:i:s' ), $m84_far->id, $m84_near->id, $m84_last->id, $m84_old->id ) ); // phpcs:ignore
+$repo->log( $m84_old->id, 'expiry_reminder', null, 25, '' ); // Reminded by an earlier version.
+$m84_notes = static function ( int $id ) use ( $repo ): array {
+	return array_values( array_map( static fn( $e ) => (string) $e['note'], array_filter( $repo->events( $id ), static fn( $e ) => 'expiry_reminder' === $e['event'] ) ) );
+};
+$mails = array();
+vcap()->delivery->send_expiry_reminders();
+vcap()->delivery->send_expiry_reminders(); // A second run sends nothing new.
+vcap_dlv_assert( array( 'days_before=30' ) === $m84_notes( $m84_far->id ) && array( 'days_before=7' ) === $m84_notes( $m84_near->id ) && array( 'days_before=1' ) === $m84_notes( $m84_last->id ) && array( '' ) === $m84_notes( $m84_old->id ), 'M12-84: each voucher gets the one reminder that fits its expiry, once; a voucher reminded by an earlier version is not reminded again', array( $m84_notes( $m84_far->id ), $m84_notes( $m84_near->id ), $m84_notes( $m84_last->id ) ) );
+$wpdb->query( $wpdb->prepare( 'UPDATE ' . VCAP\Install::tables()['vouchers'] . ' SET expires_at = %s WHERE id = %d', gmdate( 'Y-m-d H:i:s', time() + 6 * DAY_IN_SECONDS ), $m84_far->id ) ); // phpcs:ignore
+VCAP\VoucherRepository::forget();
+vcap()->delivery->send_expiry_reminders();
+vcap_dlv_assert( array( 'days_before=30', 'days_before=7' ) === $m84_notes( $m84_far->id ) && 2 === count( array_keys( $mails, "m84-far-{$tag}@example.com", true ) ), 'M12-84: closer to the expiry the next reminder follows', array( $m84_notes( $m84_far->id ), $mails ) );
 false === $keep_days ? delete_option( 'vcap_expiry_reminder_days' ) : update_option( 'vcap_expiry_reminder_days', $keep_days );
+
+// M12-84: delivery hour as a setting; the recipient email in the language the buyer chose.
+update_option( 'vcap_delivery_hour', 17 );
+$m84_hour = Delivery::delivery_hour();
+delete_option( 'vcap_delivery_hour' );
+vcap_dlv_assert( 17 === $m84_hour && 8 === Delivery::delivery_hour(), 'M12-84: the delivery hour is a setting (default 8)' );
+$m84_locales = static fn( $list ) => array_merge( (array) $list, array( 'de_DE' => 'Deutsch' ) );
+add_filter( 'vcap_recipient_locales', $m84_locales );
+$m84_gift = vcap_dlv_voucher( "m84-buyer-{$tag}@example.com", array( 'send_to' => 'recipient', 'recipient_email' => "m84-rec-{$tag}@example.com" ) );
+$m84_gift->fields = array( VCAP\Fields::LOCALE_KEY => array( 'label' => 'Language', 'value' => 'de_DE' ) );
+$m84_locale = new ReflectionMethod( VCAP\Emails\VoucherEmail::class, 'mail_locale' );
+$m84_locale->setAccessible( true );
+$m84_emails = WC()->mailer()->get_emails();
+vcap_dlv_assert( 'de_DE' === $m84_locale->invoke( $m84_emails['VCAP_Email_Voucher_Recipient'], $m84_gift ) && get_locale() === $m84_locale->invoke( $m84_emails['VCAP_Email_Voucher_Buyer'], $m84_gift ), 'M12-84: the recipient email uses the chosen language, the buyer email the order language' );
+remove_filter( 'vcap_recipient_locales', $m84_locales );
+vcap_dlv_assert( get_locale() === $m84_locale->invoke( $m84_emails['VCAP_Email_Voucher_Recipient'], $m84_gift ), 'M12-84: a language that is not offered is ignored' );
+
+// M12-84: optional buyer notices "gift delivered" and "gift used" (without the code), off by default.
+$m84_delivered = $m84_emails['VCAP_Email_Gift_Delivered'];
+$m84_used      = $m84_emails['VCAP_Email_Gift_Used'];
+vcap_dlv_assert( ! $m84_delivered->is_enabled() && ! $m84_used->is_enabled(), 'M12-84: the gift notices are off by default' );
+$m84_delivered->enabled = 'yes';
+$m84_used->enabled      = 'yes';
+$mails = array();
+$m84_msgs = array();
+$m84_spy  = static function ( $pre, $atts ) use ( &$m84_msgs ) {
+	$m84_msgs[] = array( is_array( $atts['to'] ) ? implode( ',', $atts['to'] ) : (string) $atts['to'], (string) $atts['subject'], (string) $atts['message'] );
+	return $pre;
+};
+add_filter( 'pre_wp_mail', $m84_spy, 0, 2 );
+vcap()->delivery->deliver( $m84_gift->id, false );
+$m84_live = $repo->get( $m84_gift->id );
+VCAP\VoucherRepository::fire_redeemed( $m84_live, 10.0, 'counter' );
+VCAP\VoucherRepository::fire_redeemed( $m84_live, 5.0, 'counter' ); // Only the first use is told.
+remove_filter( 'pre_wp_mail', $m84_spy, 0 );
+$m84_delivered->enabled = 'no';
+$m84_used->enabled      = 'no';
+$m84_to_buyer = array_values( array_filter( $m84_msgs, static fn( $m ) => str_contains( $m[0], "m84-buyer-{$tag}@" ) ) );
+vcap_dlv_assert( 2 === count( $m84_to_buyer ) && str_contains( $m84_to_buyer[0][1], 'delivered' ) && str_contains( $m84_to_buyer[1][1], 'used' ) && ! str_contains( $m84_to_buyer[0][2] . $m84_to_buyer[1][2], $m84_live->code ), 'M12-84: the buyer is told once that the gift was delivered and once that it was used, without the code', array_map( static fn( $m ) => $m[1], $m84_msgs ) );
 
 /* ---- 6. Restore in batches, overdue scheduled vouchers included ----------------------------------------------- */
 
@@ -635,6 +695,97 @@ $z6_now       = $z6_batch( 6, array( 'order_id' => $z6_now_order->get_id(), 'buy
 $z6_mails     = array();
 vcap()->delivery->deliver_now( $repo->get( $z6_now[0]->id ) );
 vcap_dlv_assert( 1 === count( $z6_mails ) && null !== $repo->get( $z6_now[0]->id )->delivered_at && Voucher::STATUS_SCHEDULED === $repo->get( $z6_now[1]->id )->status, 'Z6: "Deliver now" on one voucher sends only that voucher', count( $z6_mails ) );
+
+// M12-48: a PDF above vcap_max_attachment_bytes is not attached – a download link is sent instead.
+$m48_small = static fn() => 100;
+add_filter( 'vcap_max_attachment_bytes', $m48_small );
+$m48_one  = vcap_dlv_voucher( "m48-one-{$tag}@example.com" );
+$z6_mails = array();
+vcap()->delivery->deliver( $m48_one->id, false );
+remove_filter( 'vcap_max_attachment_bytes', $m48_small );
+vcap_dlv_assert( 1 === count( $z6_mails ) && array() === $z6_mails[0]['pages'] && str_contains( $z6_mails[0]['message'], 'vcap_pdf=' ) && null !== $repo->get( $m48_one->id )->delivered_at, 'M12-48: a PDF above the size limit is replaced by a download link', array( $z6_mails[0]['pages'] ?? null ) );
+vcap_dlv_assert( 8 * MB_IN_BYTES === Delivery::max_attachment_bytes(), 'M12-48: the default size limit is 8 MB' );
+
+// M12-48: the attempt is recorded before the PDF is rendered (a crash still counts), and it is paired by its outcome.
+$m48_seen = null;
+$m48_spy  = static function ( $attachments, $id, $object, $email = null ) use ( &$m48_seen ) {
+	if ( $email instanceof VCAP\Emails\VoucherEmail && $email->voucher ) {
+		$m48_seen = vcap_dlv_events( $email->voucher->id, Delivery::ATTEMPT_EVENT );
+	}
+	return $attachments;
+};
+add_filter( 'woocommerce_email_attachments', $m48_spy, 10, 4 );
+$m48_two = vcap_dlv_voucher( "m48-two-{$tag}@example.com" );
+vcap()->delivery->deliver( $m48_two->id, false );
+remove_filter( 'woocommerce_email_attachments', $m48_spy, 10 );
+vcap_dlv_assert( 1 === $m48_seen && null !== $repo->get( $m48_two->id )->delivered_at, 'M12-48: the "delivery_attempt" event is written before the attachments are built', $m48_seen );
+$m48_crash = vcap_dlv_voucher( "m48-crash-{$tag}@example.com" );
+$repo->log( $m48_crash->id, Delivery::ATTEMPT_EVENT ); // Two attempts that died (fatal error) without an outcome …
+$repo->log( $m48_crash->id, Delivery::ATTEMPT_EVENT );
+$repo->log( $m48_crash->id, 'delivery_failed', null, null, 'x' ); // … and one that recorded its failure.
+$repo->log( $m48_crash->id, Delivery::ATTEMPT_EVENT );
+$repo->log( $m48_crash->id, 'delivery_failed', null, null, 'y' );
+$m48_state = $repo->delivery_attempts( $m48_crash->id );
+vcap_dlv_assert( 3 === $m48_state['failures'], 'M12-48: an attempt without outcome (crash) counts as a failed attempt, a recorded failure once', $m48_state );
+$m48_new  = vcap_dlv_voucher( "m48-new-{$tag}@example.com" );
+$m48_lone = vcap_dlv_voucher( "m48-lone-{$tag}@example.com" );
+$repo->log( $m48_lone->id, Delivery::ATTEMPT_EVENT ); // Only a crashed attempt, no recorded failure.
+$m48_ids = $repo->due_for_delivery( 1000 );
+vcap_dlv_assert( false !== array_search( $m48_lone->id, $m48_ids, true ) && array_search( $m48_lone->id, $m48_ids, true ) > array_search( $m48_new->id, $m48_ids, true ), 'M12-48: a voucher whose attempt crashed is no longer taken before never-attempted ones by the safety net' );
+$repo->log( $m48_new->id, 'delivered' ); // Keep the two out of the later checks.
+$repo->log( $m48_lone->id, 'delivered' );
+$wpdb->query( $wpdb->prepare( 'UPDATE ' . VCAP\Install::tables()['vouchers'] . ' SET delivered_at = %s WHERE id IN (%d, %d)', gmdate( 'Y-m-d H:i:s' ), $m48_new->id, $m48_lone->id ) ); // phpcs:ignore
+$m48_max = static fn() => 3;
+add_filter( 'vcap_delivery_max_attempts', $m48_max );
+$z6_mails = array();
+$m48_gave = vcap()->delivery->give_up_if_exhausted( $m48_crash->id );
+remove_filter( 'vcap_delivery_max_attempts', $m48_max );
+vcap_dlv_assert( $m48_gave && $repo->delivery_attempts( $m48_crash->id )['given_up'] && ! $z6_mails, 'M12-48: after max_attempts (crashes included) the safety net gives the delivery up instead of trying again' );
+
+// M12-48: after a failed bundled email the retry goes out without the PDF (download links).
+$m48_order = vcap_dlv_order();
+$m48_bund  = $z6_batch( 5, array( 'order_id' => $m48_order->get_id(), 'buyer' => "m48-b-{$tag}@example.com" ) );
+add_filter( 'pre_wp_mail', $fail, 2000 );
+vcap()->delivery->deliver( $m48_bund[0]->id );
+remove_filter( 'pre_wp_mail', $fail, 2000 );
+$z6_mails = array();
+vcap()->delivery->deliver( $m48_bund[1]->id );
+vcap_dlv_assert( 1 === count( $z6_mails ) && array() === $z6_mails[0]['pages'] && 5 === substr_count( $z6_mails[0]['message'], 'vcap_pdf=' ) && null !== $repo->get( $m48_bund[4]->id )->delivered_at, 'M12-48: the retry of a failed bundle carries download links instead of the PDF', array( $z6_mails[0]['pages'] ?? null ) );
+foreach ( $m48_bund as $m48_v ) {
+	as_unschedule_all_actions( Delivery::RETRY_HOOK, array( 'voucher_id' => $m48_v->id ), Delivery::GROUP );
+}
+vcap_dlv_assert( 20 === (int) get_option( 'vcap_bundle_pdf_limit' ), 'M12-48: a new installation attaches one PDF to bundled emails up to 20 vouchers' );
+update_option( 'vcap_bundle_pdf_limit', 50 );
+VCAP\Install::activate_site();
+vcap_dlv_assert( 50 === (int) get_option( 'vcap_bundle_pdf_limit' ), 'M12-48: a reactivation keeps the limit of an existing shop' );
+update_option( 'vcap_bundle_pdf_limit', 20 );
+
+// M12-49: a bounce resets the role, is recorded and noted on the order; the mails carry X-VCAP-Voucher.
+$m49_order = vcap_dlv_order();
+$m49       = vcap_dlv_voucher( "m49-b-{$tag}@example.com", array( 'order_id' => $m49_order->get_id(), 'send_to' => 'recipient', 'recipient_email' => "m49-r-{$tag}@example.com" ) );
+$m49_head  = array();
+$m49_spy   = static function ( $pre, $atts ) use ( &$m49_head ) {
+	$m49_head[] = is_array( $atts['headers'] ) ? implode( "\n", $atts['headers'] ) : (string) $atts['headers'];
+	return $pre;
+};
+add_filter( 'pre_wp_mail', $m49_spy, 0, 2 );
+$z6_mails = array();
+vcap()->delivery->deliver( $m49->id, false );
+remove_filter( 'pre_wp_mail', $m49_spy, 0 );
+vcap_dlv_assert( null !== $repo->get( $m49->id )->delivered_at && str_contains( implode( "\n", $m49_head ), 'X-VCAP-Voucher: ' . $m49->id ) && str_contains( implode( "\n", $m49_head ), 'X-VCAP-Role: recipient' ), 'M12-49: the voucher email carries the headers X-VCAP-Voucher and X-VCAP-Role', $m49_head );
+$m49_fired = array();
+$m49_hook  = static function ( $voucher, $role, $reason ) use ( &$m49_fired ) {
+	$m49_fired[] = array( $voucher->id, $role, $reason );
+};
+add_action( 'vcap_voucher_bounced', $m49_hook, 10, 3 );
+$z6_mails = array();
+$m49_ok   = vcap()->delivery->mark_bounced( $m49->id, 'recipient', '550 mailbox unavailable', true );
+remove_action( 'vcap_voucher_bounced', $m49_hook, 10 );
+$m49_roles = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT delivered_roles FROM ' . VCAP\Install::tables()['vouchers'] . ' WHERE id = %d', $m49->id ) ); // phpcs:ignore
+$m49_last  = VCAP\Tickets::last_event( $repo->events( $m49->id ), array( 'delivery_failed' ) );
+vcap_dlv_assert( $m49_ok && ! str_contains( $m49_roles, 'recipient' ) && $m49_last && str_contains( (string) $m49_last['note'], '550 mailbox unavailable' ) && str_contains( vcap_dlv_notes( $m49_order->get_id() ), 'came back undelivered' ), 'M12-49: mark_bounced() resets the role, writes delivery_failed and an order note', array( $m49_roles, $m49_last ) );
+vcap_dlv_assert( array( array( $m49->id, 'recipient', '550 mailbox unavailable' ) ) === $m49_fired && 1 === $z6_to( "m49-b-{$tag}@" ) && str_contains( $z6_mails[0]['message'] ?? '', 'vcap_fix=' ), 'M12-49: the action fires and the buyer is told with the "Correct the recipient" link', $m49_fired );
+vcap_dlv_assert( false === vcap()->delivery->mark_bounced( $m49->id, 'nobody' ), 'M12-49: an unknown role is refused' );
 
 remove_filter( 'pre_wp_mail', $z6_capture, 1 );
 update_option( 'vcap_attach_pdf', $z6_attach );

@@ -514,7 +514,16 @@ final class ProductSettings {
 			'recipient_email' => __( 'Recipient email', 'voucher-captain' ),
 			'message'         => __( 'Personal message', 'voucher-captain' ),
 			'delivery_date'   => __( 'Delivery date', 'voucher-captain' ),
+			// M12-55 / M12-47 / M12-84.
+			'sender_name'           => __( 'From (your name)', 'voucher-captain' ),
+			Fields::CONFIRM_KEY     => __( 'Confirm recipient email', 'voucher-captain' ),
+			Fields::LOCALE_KEY      => __( 'Language of the recipient email', 'voucher-captain' ),
 		) as $key => $label ) {
+			if ( Fields::CONFIRM_KEY === $key ) {
+				// Required whenever a recipient email is entered; no own "required" box.
+				printf( '<span><label><input type="checkbox" name="_vcap_builtin_fields[]" value="%1$s" %2$s /> %3$s</label></span>', esc_attr( $key ), checked( in_array( $key, $builtin, true ), true, false ), esc_html( $label ) );
+				continue;
+			}
 			printf(
 				'<span><label><input type="checkbox" name="_vcap_builtin_fields[]" value="%1$s" %2$s /> %3$s</label> <label class="vcap-required"><input type="checkbox" name="_vcap_builtin_fields[]" value="%1$s_required" %4$s /> %5$s</label></span>',
 				esc_attr( $key ),
@@ -748,7 +757,7 @@ final class ProductSettings {
 		foreach ( array( 'product_ids', 'exclude_product_ids', 'category_ids', 'exclude_category_ids' ) as $key ) {
 			$product->update_meta_data( '_vcap_' . $key, array_values( array_filter( array_map( 'absint', (array) ( $post[ '_vcap_' . $key ] ?? array() ) ) ) ) );
 		}
-		$allowed = array( 'recipient_name', 'recipient_email', 'message', 'delivery_date' );
+		$allowed = array( 'recipient_name', 'recipient_email', 'message', 'delivery_date', 'sender_name', Fields::CONFIRM_KEY, Fields::LOCALE_KEY );
 		$builtin = array();
 		foreach ( (array) ( $post['_vcap_builtin_fields'] ?? array() ) as $value ) {
 			$value = sanitize_key( $value );

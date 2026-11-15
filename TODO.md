@@ -867,7 +867,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - Eigenes Undo nur, solange `$undone` (Summe der `checkin_undo` nach dem letzten Check-in) kleiner ist als dessen Betrag. Gilt in `describe()`, `rest_checkin()` und `undo_mode()`.
     - Test „einchecken 1, rückgängig 2× → zweites Mal 403“.
-- [ ] **[PRIO: HOCH]** | **[Experte #9]** | **[Kategorie: Bug]** – **M12-16 Käufer kann einen vom Shop festgelegten Zustell- und Aktivierungstermin vorziehen**
+- [x] **[PRIO: HOCH]** | **[Experte #9]** | **[Kategorie: Bug]** – **M12-16 Käufer kann einen vom Shop festgelegten Zustell- und Aktivierungstermin vorziehen** — *Nachweis: tests/account-integration.php „M12-16: a presale date cannot be brought forward to tomorrow“, „M12-16: the product page refuses a date before the presale date and accepts a later one“*
   - *Problem:*
     - `Downloads::customer_can_change()`/`change_delivery()` prüfen nicht, ob das Produkt ein Kundendatum erlaubt. In den Modi `date`/`delay` kann der Käufer einen Vorverkaufs- oder Karenztermin auf morgen vorziehen.
     - Das Minimum ist uneinheitlich (Produkt: heute, Konto: morgen), und `vcap_delivery_min_validity_days` wird nicht geprüft.
@@ -882,7 +882,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - `INSERT IGNORE`, danach `options`/`notoptions`-Cache löschen und roh zurücklesen. Wird nicht gespeichert, gilt ein Laufzeitwert.
     - Test mit vorbelegtem `notoptions`.
-- [ ] **[PRIO: HOCH]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-18 Mein Konto zeigt nur gekaufte Gutscheine, keine erhaltenen**
+- [x] **[PRIO: HOCH]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-18 Mein Konto zeigt nur gekaufte Gutscheine, keine erhaltenen** — *Nachweis: tests/account-integration.php „M12-18: the delivered gift is listed as received, the scheduled one stays hidden“, „M12-18: a guest order of the verified address is in the list of bought vouchers“*
   - *Problem:*
     - `VoucherRepository::for_customer()` liest nur Bestellungen mit `customer_id`.
     - Ein Beschenkter mit persönlichem Gutschein (der ein Konto verlangt) sieht „You have no vouchers yet.“ und keinen Restwert.
@@ -1062,7 +1062,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - „Counter API“ (lookup/redeem/reverse) in API.md dokumentieren und eine Rolle „Voucher POS“ empfehlen. Optional `vcap_redeem_api`.
     - Route `POST /redemptions/{key}/refund`. `meta.till`/`receipt` über `Counter::with()`. Test.
-- [ ] **[PRIO: MITTEL]** | **[Experte #9, #11]** | **[Kategorie: UX]** – **M12-47 Empfänger ändern: falsche Bestätigung, keine Selbsthilfe für Gäste und Sofortzustellung**
+- [x] **[PRIO: MITTEL]** | **[Experte #9, #11]** | **[Kategorie: UX]** – **M12-47 Empfänger ändern: falsche Bestätigung, keine Selbsthilfe für Gäste und Sofortzustellung** — *Nachweis: tests/account-integration.php „M12-47: after the delivery the voucher is reissued (old code invalid) and mailed to the new address“, „M12-47: a mismatching confirmation is refused, a matching one accepted and not stored“, „M12-47: "send now" plans the delivery right away“*
   - *Problem:*
     - `change_delivery()` setzt `send_to` nicht, bestätigt aber den Versand an den Empfänger.
     - Das Pflicht-E-Mail-Feld setzt die Coupon-Beschränkung auch bei reinen Käufer-Gutscheinen.
@@ -1073,14 +1073,14 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
     - Optionales Feld „Empfänger-E-Mail bestätigen“ auf der Produktseite.
     - Signierte Aktion „Empfänger korrigieren“ (Danke-Seite, Käufermail, auch für Gäste). Nach der Zustellung mit Neuausstellung, höchstens 1–2 Mal, solange unbenutzt.
     - Kontrollkästchen „Sofort senden“. Name und Nachricht bis zur Zustellung editierbar. Tests.
-- [ ] **[PRIO: MITTEL]** | **[Experte #9]** | **[Kategorie: PDF-Mail]** – **M12-48 Sammel-PDF ohne Größen- und Zeitgrenze, kein Rückfall auf Links, ein Absturz zählt nicht als Versuch**
+- [x] **[PRIO: MITTEL]** | **[Experte #9]** | **[Kategorie: PDF-Mail]** – **M12-48 Sammel-PDF ohne Größen- und Zeitgrenze, kein Rückfall auf Links, ein Absturz zählt nicht als Versuch** — *Nachweis: tests/delivery-integration.php „M12-48: a PDF above the size limit is replaced by a download link“, „M12-48: the retry of a failed bundle carries download links instead of the PDF“, „M12-48: after max_attempts (crashes included) the safety net gives the delivery up instead of trying again“*
   - *Problem:*
     - Bis zu 50 Seiten in einer Mail. SMTP antwortet mit 552, und 12 Versuche scheitern mit derselben Mail.
     - Ein Fatal Error beim Rendern schreibt kein Ereignis und blockiert 30 Tage lang das Tagesnetz.
   - *Lösung:*
     - Größengrenze (Filter `vcap_max_attachment_bytes`, etwa 8 MB), darüber Links statt PDF. Ab dem 2. Fehlversuch ohne PDF.
     - Ereignis `delivery_attempt` vor dem Rendern. Standard-Limit auf 20 senken.
-- [ ] **[PRIO: MITTEL]** | **[Experte #9]** | **[Kategorie: Feature]** – **M12-49 Keine Bounce-Schnittstelle, Queue-SMTP wird nicht erkannt**
+- [x] **[PRIO: MITTEL]** | **[Experte #9]** | **[Kategorie: Feature]** – **M12-49 Keine Bounce-Schnittstelle, Queue-SMTP wird nicht erkannt** — *Nachweis: tests/delivery-integration.php „M12-49: mark_bounced() resets the role, writes delivery_failed and an order note“, „M12-49: the voucher email carries the headers X-VCAP-Voucher and X-VCAP-Role“*
   - *Problem:* „Zugestellt“ bedeutet nur, dass `wp_mail` `true` zurückgab.
   - *Lösung:* `vcap()->delivery->mark_bounced( $voucher_id, $role, $reason )` mit dokumentierter Action und Header `X-VCAP-Voucher`.
 - [x] **[PRIO: MITTEL]** | **[Experte #10]** | **[Kategorie: UX]** – **M12-50 Redeem-Link leitet auf eine gecachte URL um, die Vorbefüllung ist hinter Page-Caches tot** — *Nachweis: `tests/shortcodes-integration.php` „M12-50: a redeem link redirects with a random query argument (a cache MISS), new for every link“, „M12-50: WP Rocket serves no cached page …“; `tests/e2e/04-account-and-shortcodes.spec.js` „a redeem link fills in the form on an uncached URL without the code“; COMPATIBILITY.md (LiteSpeed/Varnish/Cloudflare)*
@@ -1089,7 +1089,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
 - [x] **[PRIO: MITTEL]** | **[Experte #10]** | **[Kategorie: Security]** – **M12-51 Vorbefüllter Code wird auch ohne gesendete no-cache-Header ausgegeben** — *Nachweis: `tests/shortcodes-integration.php` „M12-51: rendered after the headers went out (theme, builder), elsewhere than on the redeem page, the form stays empty“*
   - *Problem:* Rendern Theme oder Builder das Formular, sind die Header schon gesendet. Varnish und Cloudflare cachen dann den vollen Code für alle.
   - *Lösung:* Vorbefüllung nur, wenn die no-cache-Header noch gesendet werden konnten oder es die Einlöseseite selbst ist. Test.
-- [ ] **[PRIO: MITTEL]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-52 Sicherheitssperre für Erstkäufer wird erst nach der Zahlung erklärt**
+- [x] **[PRIO: MITTEL]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-52 Sicherheitssperre für Erstkäufer wird erst nach der Zahlung erklärt** — *Nachweis: tests/purchase-rules-integration.php „M12-52: checkouts refused by the daily limit are counted once per session and reported in Site Health“, „M12-52: the cart of a new customer above 250 names the hold, a smaller cart does not“*
   - *Problem:* „Über 250 € → 24 h Wartezeit“ steht nur in Bestellbestätigung und Mail. Abgebrochene Käufe wegen des Tageslimits sieht niemand.
   - *Lösung:* Hinweis in `product_hint()` und im Warenkorb für neue Kunden. Abgewiesene Versuche zählen.
 - [x] **[PRIO: MITTEL]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-53 Vorschau ist ein PDF im neuen Tab (Android lädt herunter), keine Live-Vorschau** — *Nachweis: tests/shop-admin-integration.php „M12-53: the live preview gets the designs (product and gallery) with name, message and amount left to fill in and the rest filled“, „M12-53: the PDF button is the "Print preview" with the hint "opens in a new window"“, „M12-53: the preview data carries template and amount of each variation“*
@@ -1098,7 +1098,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
 - [x] **[PRIO: MITTEL]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-54 Admin-Suche findet keine Codeenden, keine Codes ohne Trennzeichen und keine Bestellnummern** — *Nachweis: tests/shop-admin-integration.php „M12-54: a masked code end ("…M9X1") finds the voucher“, „M12-54: the code without separators or with spaces finds the voucher“, „M12-54: the order id ("#123") and a sequential order number find the order's vouchers“, „M12-54: the user profile links to the customer's vouchers“*
   - *Problem:* Gesucht wird nur am Anfang des Codes (`LIKE 'x%'`) und mit `order_id`. Es fehlen Links „Gutscheine dieses Kunden/Produkts“.
   - *Lösung:* Eingabe normalisieren (`code_candidates`), Endsuche, `order_number` auflösen, Links in Profil und Produkt-Tab.
-- [ ] **[PRIO: MITTEL]** | **[Experte #11]** | **[Kategorie: Feature]** – **M12-55 Kein Absendername „Von“**
+- [x] **[PRIO: MITTEL]** | **[Experte #11]** | **[Kategorie: Feature]** – **M12-55 Kein Absendername „Von“** — *Nachweis: tests/email-texts-integration.php „M12-55: the recipient email names the sender from the "From" field“, „M12-55: the default PDF shows the sender“*
   - *Problem:* Betreff und PDF verwenden den Rechnungsnamen, etwa „Müller GmbH sent you …“.
   - *Lösung:* Eingebautes Feld `sender_name` (vorbelegt), Platzhalter `{sender_name}` mit Rückfall auf `{buyer_name}`.
 - [x] **[PRIO: MITTEL]** | **[Experte #11, #12]** | **[Kategorie: Feature]** – **M12-56 Import bestehender Karten mit Restwert (Migration)** — *Nachweis: tests/shop-admin-integration.php „M12-56: the dry run checks every row and imports nothing“, „M12-56: a card is imported with its code, value, remaining value and expiry“, „M12-56: a second run skips cards imported before (idempotent)“*
@@ -1173,11 +1173,11 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:* `visibilitychange`/`onended` → `stop()`, Torch-Button, `ideal 1280`, `play().catch()`.
 - [x] **[PRIO: NIEDRIG]** | **[Experte #8]** | **[Kategorie: Feature]** – **M12-81 Verwaltete Standortliste statt Freitext für Kasse/Filiale** — *Nachweis: tests/pos-integration.php „M12-81: with a managed list only its tills are accepted“, „M12-81: a staff member fixed to a till always books there“; tests/run.php „M12-81: managed tills as a dropdown, fixed per staff member; offline mode documented as intentionally absent“*
   - *Lösung:* Dropdown in den Einstellungen, optional pro Mitarbeiter fest zugeordnet. Offline-Betrieb bewusst nicht anbieten und das dokumentieren.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #9]** | **[Kategorie: UX]** – **M12-82 Geänderter Termin erscheint nicht an der Bestellung**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #9]** | **[Kategorie: UX]** – **M12-82 Geänderter Termin erscheint nicht an der Bestellung** — *Nachweis: tests/account-integration.php „M12-82: the order shows the delivery date of the voucher after a change“*
   - *Lösung:* `NextSteps::for_order()` nutzt die Zustelldaten der Gutscheine.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #9]** | **[Kategorie: PDF-Mail]** – **M12-83 Mails standardmäßig nur HTML, Farben fest im Template**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #9]** | **[Kategorie: PDF-Mail]** – **M12-83 Mails standardmäßig nur HTML, Farben fest im Template** — *Nachweis: tests/email-texts-integration.php „M12-83: voucher emails default to multipart (HTML with a text part)“, „M12-83: the voucher email uses the WooCommerce base colour“*
   - *Lösung:* Standard `multipart`, Farben aus `woocommerce_email_base_color`/`text_color`.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #9, #12]** | **[Kategorie: Feature]** – **M12-84 Benachrichtigungen und Zustelloptionen: „Geschenk zugestellt“, Zustellstunde, Empfängersprache, Absenderdomain, mehrere Ablauferinnerungen**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #9, #12]** | **[Kategorie: Feature]** – **M12-84 Benachrichtigungen und Zustelloptionen: „Geschenk zugestellt“, Zustellstunde, Empfängersprache, Absenderdomain, mehrere Ablauferinnerungen** — *Nachweis: tests/delivery-integration.php „M12-84: each voucher gets the one reminder that fits its expiry, once; a voucher reminded by an earlier version is not reminded again“, „M12-84: the buyer is told once that the gift was delivered and once that it was used, without the code“, „M12-84: the recipient email uses the chosen language, the buyer email the order language“; tests/purchase-rules-integration.php „M12-84: Site Health warns about a sender address of another domain without an SMTP plugin“*
   - *Lösung:*
     - Optionale Käufermail „zugestellt“ bzw. „genutzt“.
     - Zustellstunde als Einstellung, Feld für die Empfängersprache.

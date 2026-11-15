@@ -50,6 +50,15 @@ final class BundleEmail extends VoucherEmail {
 		return $this->trigger_bundle( array( $voucher ), Delivery::to_recipient( $voucher ) ? 'recipient' : 'buyer' );
 	}
 
+	/** M12-49: every voucher of the bundled email in X-VCAP-Voucher. */
+	protected function header_voucher_ids(): array {
+		return array_values( array_filter( array_map( static fn( $v ) => (int) $v->id, $this->vouchers ) ) );
+	}
+
+	protected function header_role(): string {
+		return $this->role;
+	}
+
 	protected function recipient_address( Voucher $voucher ): string {
 		return (string) ( 'recipient' === $this->role ? $voucher->recipient_email : $voucher->buyer_email );
 	}
@@ -61,8 +70,8 @@ final class BundleEmail extends VoucherEmail {
 
 	public function get_default_subject() {
 		if ( 'recipient' === $this->role ) {
-			return '' !== $this->placeholder( 'buyer_name' )
-				? __( '{buyer_name} sent you {voucher_count} vouchers from {site_title}', 'voucher-captain' )
+			return '' !== $this->placeholder( 'sender_name' )
+				? self::as_sender( __( '{buyer_name} sent you {voucher_count} vouchers from {site_title}', 'voucher-captain' ) )
 				: __( 'You received {voucher_count} vouchers from {site_title}', 'voucher-captain' );
 		}
 		return $this->is_gift_copy()
@@ -106,7 +115,7 @@ final class BundleEmail extends VoucherEmail {
 				'01' => __( 'Hello, {buyer_name} sent you {voucher_count} vouchers. You find all codes below.', 'voucher-captain' ),
 				'00' => __( 'Hello, you received {voucher_count} vouchers as a gift. You find all codes below.', 'voucher-captain' ),
 			);
-			return $texts[ (int) ( '' !== trim( $voucher->recipient_name ) ) . (int) $buyer ];
+			return self::as_sender( $texts[ (int) ( '' !== trim( $voucher->recipient_name ) ) . (int) ( '' !== $this->placeholder( 'sender_name' ) ) ] ); // M12-55.
 		}
 		if ( $this->is_gift_copy() ) {
 			return $buyer
@@ -146,7 +155,8 @@ final class BundleEmail extends VoucherEmail {
 			$this->placeholders['{voucher_count}'] = (string) count( $this->vouchers );
 		}
 		$args          = parent::template_args( $plain );
-		$pdf           = $this->wants_pdf();
+		// M12-48: what get_attachments() did (left off when too large or on a retry); the preview asks wants_pdf().
+		$pdf           = null !== $this->pdf_attached ? $this->pdf_attached : ( $this->voucher && $this->voucher->id ? false : $this->wants_pdf() );
 		$links         = ! $pdf || 'yes' === get_option( 'vcap_include_link', 'yes' );
 		$download_urls = array();
 		foreach ( $this->vouchers as $voucher ) {

@@ -266,6 +266,7 @@ final class Install {
 		if ( '' === self::stored_version() ) {
 			add_option( PaymentVouchers::OPTION, 'yes' );
 		}
+		$fresh  = '' === self::stored_version(); // M12-48: a first installation on this site.
 		try {
 			if ( $locked ) {
 				$installed = self::stored_version();
@@ -281,6 +282,10 @@ final class Install {
 				add_option( 'vcap_new_product_delivery', 'yes' );
 			}
 			add_option( 'vcap_needs_default_template', 'yes' );
+			if ( $fresh ) {
+				// M12-48: new installs attach one PDF to bundled emails up to 20 vouchers (existing shops keep 50).
+				add_option( 'vcap_bundle_pdf_limit', 20 );
+			}
 			update_option( 'vcap_flush_rewrite', 'yes' );
 			self::resume();
 		} finally {

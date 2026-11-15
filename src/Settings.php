@@ -26,6 +26,7 @@ final class Settings {
 		'vcap_attach_pdf'            => 'yes',
 		'vcap_include_link'          => 'yes',
 		'vcap_expiry_reminder_days'  => 0,
+		'vcap_delivery_hour'         => 8,
 		'vcap_date_format'           => '',
 		'vcap_retention_days'        => 0,
 		'vcap_delete_on_uninstall'   => 'no',
@@ -102,6 +103,14 @@ final class Settings {
 			add_filter( 'woocommerce_admin_settings_sanitize_option_' . $affix, array( $this, 'sanitize_affix' ), 10, 2 );
 		}
 		add_filter( 'woocommerce_admin_settings_sanitize_option_vcap_terms_by_country', array( $this, 'report_country_lines' ), 10, 2 );
+		// M12-84: "30, 7, 1" is stored normalised (largest first), anything else as 0 (no reminders).
+		add_filter(
+			'woocommerce_admin_settings_sanitize_option_vcap_expiry_reminder_days',
+			static function ( $value ) {
+				$days = Delivery::expiry_reminder_offsets( $value );
+				return $days ? implode( ', ', $days ) : '0';
+			}
+		);
 		add_filter( 'woocommerce_admin_settings_sanitize_option_' . Markets::EXPIRY_OPTION, array( $this, 'report_country_lines' ), 10, 2 );
 	}
 
@@ -315,12 +324,19 @@ final class Settings {
 				'desc_tip'          => __( 'Signed links in emails expire after this many days (default 90). Customers get a fresh link in My Account at any time; reissuing a voucher invalidates its old links. 0 = never expire (not recommended).', 'voucher-captain' ),
 			),
 			array(
-				'title'             => __( 'Expiry reminder (days before)', 'voucher-captain' ),
-				'id'                => 'vcap_expiry_reminder_days',
+				'title'             => __( 'Delivery hour', 'voucher-captain' ),
+				'id'                => 'vcap_delivery_hour',
 				'type'              => 'number',
-				'default'           => 0,
-				'custom_attributes' => array( 'min' => 0, 'max' => 365, 'step' => 1 ),
-				'desc_tip'          => __( 'Email the voucher holder once this many days before a voucher with remaining value expires. 0 = no reminders. The email text is edited under WooCommerce → Settings → Emails.', 'voucher-captain' ),
+				'default'           => self::DEFAULTS['vcap_delivery_hour'],
+				'custom_attributes' => array( 'min' => 0, 'max' => 23, 'step' => 1 ),
+				'desc_tip'          => __( 'Hour of the day (shop time, 0–23) at which vouchers with a delivery date are sent (default 8).', 'voucher-captain' ),
+			),
+			array(
+				'title'    => __( 'Expiry reminders (days before)', 'voucher-captain' ),
+				'id'       => 'vcap_expiry_reminder_days',
+				'type'     => 'text',
+				'default'  => '0',
+				'desc_tip' => __( 'Email the voucher holder this many days before a voucher with remaining value expires. Several reminders are separated by commas, e.g. "30, 7, 1"; each one is sent once. 0 = no reminders. The email text is edited under WooCommerce → Settings → Emails.', 'voucher-captain' ),
 			),
 			array(
 				'title'   => __( 'Order confirmation', 'voucher-captain' ),
@@ -378,7 +394,7 @@ final class Settings {
 				'type'              => 'number',
 				'default'           => self::DEFAULTS['vcap_bundle_pdf_limit'],
 				'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
-				'desc_tip'          => __( 'A bundled email with up to this many vouchers carries one PDF with a page per voucher (default 50). Larger bundles carry no attachment but a download link per voucher and the link to My Account. 0 = never attach a PDF to a bundled email.', 'voucher-captain' ),
+				'desc_tip'          => __( 'A bundled email with up to this many vouchers carries one PDF with a page per voucher (default 20 for new shops). Larger bundles carry no attachment but a download link per voucher and the link to My Account. 0 = never attach a PDF to a bundled email.', 'voucher-captain' ),
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_bundle' ),
 		);

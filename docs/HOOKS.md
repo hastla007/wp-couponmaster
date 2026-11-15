@@ -37,6 +37,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_topup_held` | `src/TopUp.php` | – |
 | `vcap_topup_without_code` | `src/TopUp.php` | A top-up line without card code was held (no card issued, no top-up booked). |
 | `vcap_voucher_admin_actions` | `src/Admin/VoucherAdmin.php` | Extra buttons for connectors: call $form( $do, $label, $class, $extra_fields, $confirm_text ) and handle $do in vcap_voucher_admin_action. |
+| `vcap_voucher_bounced` | `src/Delivery.php` | A voucher email came back (Delivery::mark_bounced()). Args: Voucher, role ('recipient'\|'buyer'), reason. |
 | `vcap_voucher_created` | `src/VoucherRepository.php` | A voucher row was inserted (args: Voucher). If its issuing fails afterwards, vcap_voucher_deleted follows. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_deleted` | `src/VoucherRepository.php` | A voucher was removed again (its issuing failed after "vcap_voucher_created"). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_delivered` | `src/Delivery.php` | A voucher was delivered to everyone it is meant for (args: Voucher $voucher, string[] $addresses). |
@@ -100,6 +101,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_delivery_timestamp` | `src/Delivery.php` | – |
 | `vcap_dompdf_options` | `src/PdfRenderer.php` | Dompdf options used to render voucher PDFs (args: Dompdf\\Options). |
 | `vcap_dynamic_placeholder` | `src/Placeholders.php` | – |
+| `vcap_email_colors` | `src/Emails/VoucherEmail.php` | Colours of the voucher emails (base, on_base, accent, muted, border), from the WooCommerce email colours. |
 | `vcap_email_intro` | `src/Emails/VoucherEmail.php` | Intro text of a voucher email (e.g. a ticket voucher's reminder speaks of tickets, not of a remaining value). |
 | `vcap_email_locale` | `src/Compat/Multilingual.php` | – |
 | `vcap_event_labels` | `src/VoucherRepository.php` | Labels of connector events in the voucher history. |
@@ -123,6 +125,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_line_snapshot` | `src/Issuer.php` | Extra snapshot keys of connectors (e.g. the ticket a voucher is exchanged for); core keys always win. |
 | `vcap_maintenance_time_budget` | `src/Delivery.php` | – |
 | `vcap_markets` | `src/Markets.php` | – |
+| `vcap_max_attachment_bytes` | `src/Delivery.php` | Largest PDF attachment (bytes) of a voucher email; above it download links are sent instead. |
 | `vcap_min_code_bits` | `src/Admin/Import.php`, `src/Campaigns.php`, `src/Issuer.php`, `src/Reissue.php` | This filter is documented in src/Issuer.php |
 | `vcap_next_steps_emails` | `src/NextSteps.php` | WooCommerce order emails that show the delivery of the order's vouchers. |
 | `vcap_note_text` | `src/Note.php` | Text of a coded history note (connectors can translate their own codes). |
@@ -162,6 +165,10 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_rate_limit_brake` | `src/Plugin.php` | Quota per visitor while the site-wide counter is full (default: a fifth, at least 1). |
 | `vcap_rate_limit_brake_exempt` | `src/Plugin.php` | Whether the current user keeps the full rate-limit quota while the site-wide brake is on. |
 | `vcap_rate_limit_ipv6_48_factor` | `src/Plugin.php` | – |
+| `vcap_recipient_email_locale` | `src/Emails/VoucherEmail.php` | Language of a voucher email to the gift recipient (args: locale chosen by the buyer, Voucher, email). |
+| `vcap_recipient_fix_days` | `src/Downloads.php` | Days the "Correct recipient" link of a gift stays valid. |
+| `vcap_recipient_fix_max` | `src/Downloads.php` | – |
+| `vcap_recipient_locales` | `src/Fields.php` | Languages offered in the "Language of the recipient email" field (locale => name). |
 | `vcap_redeem_code` | `src/Shortcodes.php` | Connectors may handle a code themselves (e.g. exchange it for tickets): return a result string. |
 | `vcap_redeem_instructions` | `src/Channels.php` | – |
 | `vcap_redeem_page_needed` | `src/Health.php` | Whether the shop needs the voucher redeem page (an integration that exchanges vouchers there, e.g. ticket vouchers, says so). Default false: then the check passes. |
@@ -199,6 +206,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_shop_channel_refused_message` | `src/Coupons/CartCoupons.php` | Message for a voucher that is not redeemable in the shop (e.g. a ticket voucher: where to use it instead). |
 | `vcap_should_issue_for_order` | `src/Issuer.php` | – |
 | `vcap_site_has_redeem_form` | `src/Shortcodes.php` | Whether a site-wide template (theme file, builder layout, widget) shows the redeem form. |
+| `vcap_smtp_plugin_active` | `src/Health.php` | Whether the site sends its mails through an SMTP or mail service plugin (Site Health sender check). |
 | `vcap_stale_reservation_minutes` | `src/Coupons/Reservations.php`, `src/Discounts/Usage.php` | – |
 | `vcap_statutory_expiry` | `src/ProductConfig.php` | – |
 | `vcap_subscription_issue_on_switch` | `src/Compat/Subscriptions.php` | Whether a subscription switch or resubscribe order issues vouchers (default false; args: order, "switch"\|"resubscribe"). |

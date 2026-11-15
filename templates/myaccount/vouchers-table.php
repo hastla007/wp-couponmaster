@@ -9,11 +9,13 @@
  * @var \VCAP\Downloads  $downloads
  * @var string           $title
  * @var bool             $show_order
+ * @var bool             $received   M12-18: vouchers received from others (no change or resend forms).
  */
 
 defined( 'ABSPATH' ) || exit;
 
 $show_order = ! empty( $show_order );
+$vcap_received = ! empty( $received );
 ?>
 <section class="vcap-vouchers">
 	<?php if ( $title ) : ?>
@@ -87,6 +89,8 @@ $show_order = ! empty( $show_order );
 						$order = $voucher->order();
 						if ( $order && (int) $order->get_customer_id() === get_current_user_id() ) {
 							echo '<a href="' . esc_url( $order->get_view_order_url() ) . '">#' . esc_html( $order->get_order_number() ) . '</a>';
+						} elseif ( $order && ! $vcap_received && 0 === (int) $order->get_customer_id() ) {
+							echo '#' . esc_html( $order->get_order_number() ); // M12-18: a guest order of the verified address.
 						} else {
 							esc_html_e( 'Gift', 'voucher-captain' );
 						}
@@ -107,22 +111,42 @@ $show_order = ! empty( $show_order );
 						<?php // Extra links of add-ons, e.g. "Add to Wallet" (filter vcap_voucher_links). ?>
 						<a class="<?php echo esc_attr( \VCAP\Shortcodes::button_class( 'woocommerce-button button vcap-voucher-link' ) ); ?>" href="<?php echo esc_url( $vcap_link['url'] ); ?>" target="_blank" rel="noopener"><?php echo esc_html( $vcap_link['label'] ); ?></a>
 					<?php endforeach; ?>
-					<?php if ( $downloads->customer_can_change( $voucher ) ) : ?>
-						<?php // H10: until delivery the buyer may correct the recipient email and the delivery date. ?>
+					<?php if ( ! $vcap_received && $downloads->customer_can_change( $voucher ) ) : ?>
+						<?php
+						// H10/M12-16/M12-47: until delivery the buyer may correct the recipient, name and message; the date
+						// only where the product lets the customer choose it.
+						$vcap_opt = $downloads->change_options( $voucher );
+						$vcap_vid = (string) $voucher->id;
+						?>
 						<details class="vcap-change">
-							<summary><?php esc_html_e( 'Change recipient or date', 'voucher-captain' ); ?></summary>
+							<summary><?php echo esc_html( $vcap_opt['date'] ? __( 'Change recipient or date', 'voucher-captain' ) : __( 'Change gift details', 'voucher-captain' ) ); ?></summary>
 							<form method="post" class="vcap-change-form">
-								<input type="hidden" name="vcap_change" value="<?php echo esc_attr( (string) $voucher->id ); ?>" />
+								<input type="hidden" name="vcap_change" value="<?php echo esc_attr( $vcap_vid ); ?>" />
 								<?php wp_nonce_field( 'vcap_change_' . $voucher->id, 'vcap_change_nonce' ); ?>
-								<p><label for="vcap-change-email-<?php echo esc_attr( (string) $voucher->id ); ?>"><?php esc_html_e( 'Recipient email', 'voucher-captain' ); ?></label>
-								<input type="email" required class="input-text" name="vcap_change_email" id="vcap-change-email-<?php echo esc_attr( (string) $voucher->id ); ?>" value="<?php echo esc_attr( $voucher->recipient_email ); ?>" /></p>
-								<p><label for="vcap-change-date-<?php echo esc_attr( (string) $voucher->id ); ?>"><?php esc_html_e( 'Delivery date', 'voucher-captain' ); ?></label>
-								<input type="date" class="input-text" name="vcap_change_date" id="vcap-change-date-<?php echo esc_attr( (string) $voucher->id ); ?>" min="<?php echo esc_attr( wp_date( 'Y-m-d', time() + DAY_IN_SECONDS ) ); ?>" value="<?php echo esc_attr( $voucher->delivery_at ? \VCAP\LocalDate::from_utc( $voucher->delivery_at, 'Y-m-d' ) : '' ); ?>" /></p>
+								<?php if ( $vcap_opt['email'] ) : ?>
+									<p><label for="vcap-change-email-<?php echo esc_attr( $vcap_vid ); ?>"><?php esc_html_e( 'Recipient email', 'voucher-captain' ); ?></label>
+									<input type="email" class="input-text" name="vcap_change_email" id="vcap-change-email-<?php echo esc_attr( $vcap_vid ); ?>" value="<?php echo esc_attr( $voucher->recipient_email ); ?>" /></p>
+								<?php endif; ?>
+								<?php if ( $vcap_opt['name'] ) : ?>
+									<p><label for="vcap-change-name-<?php echo esc_attr( $vcap_vid ); ?>"><?php esc_html_e( 'Recipient name', 'voucher-captain' ); ?></label>
+									<input type="text" class="input-text" maxlength="100" name="vcap_change_name" id="vcap-change-name-<?php echo esc_attr( $vcap_vid ); ?>" value="<?php echo \VCAP\Shortcodes::esc_attr_text( $voucher->recipient_name ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_attr_text(). ?>" /></p>
+								<?php endif; ?>
+								<?php if ( $vcap_opt['message'] ) : ?>
+									<p><label for="vcap-change-message-<?php echo esc_attr( $vcap_vid ); ?>"><?php esc_html_e( 'Personal message', 'voucher-captain' ); ?></label>
+									<textarea class="input-text" rows="3" name="vcap_change_message" id="vcap-change-message-<?php echo esc_attr( $vcap_vid ); ?>"><?php echo \VCAP\Shortcodes::esc_html_text( $voucher->message ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_html_text(). ?></textarea></p>
+								<?php endif; ?>
+								<?php if ( $vcap_opt['date'] ) : ?>
+									<p><label for="vcap-change-date-<?php echo esc_attr( $vcap_vid ); ?>"><?php esc_html_e( 'Delivery date', 'voucher-captain' ); ?></label>
+									<input type="date" class="input-text" name="vcap_change_date" id="vcap-change-date-<?php echo esc_attr( $vcap_vid ); ?>" min="<?php echo esc_attr( $vcap_opt['min'] ); ?>" max="<?php echo esc_attr( $vcap_opt['max'] ); ?>" value="<?php echo esc_attr( $voucher->delivery_at ? \VCAP\LocalDate::from_utc( $voucher->delivery_at, 'Y-m-d' ) : '' ); ?>" /></p>
+								<?php endif; ?>
+								<?php if ( $vcap_opt['send_now'] ) : ?>
+									<p><label><input type="checkbox" name="vcap_change_now" value="1" /> <?php esc_html_e( 'Send now', 'voucher-captain' ); ?></label></p>
+								<?php endif; ?>
 								<button type="submit" class="<?php echo esc_attr( \VCAP\Shortcodes::button_class( 'woocommerce-button button vcap-change-button' ) ); ?>"><?php esc_html_e( 'Save changes', 'voucher-captain' ); ?></button>
 							</form>
 						</details>
 					<?php endif; ?>
-					<?php if ( $downloads->customer_can_resend( $voucher ) ) : ?>
+					<?php if ( ! $vcap_received && $downloads->customer_can_resend( $voucher ) ) : ?>
 						<form method="post" class="vcap-resend-form">
 							<input type="hidden" name="vcap_resend" value="<?php echo esc_attr( (string) $voucher->id ); ?>" />
 							<?php if ( \VCAP\Delivery::to_recipient( $voucher ) ) : ?>

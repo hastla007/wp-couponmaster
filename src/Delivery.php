@@ -58,31 +58,53 @@ final class Delivery {
 	public static function compute_time( array $config, array $fields, ?\WC_Order $order = null ): ?string {
 		$tz       = wp_timezone();
 		$hour     = self::delivery_hour();
-		$ts       = null;
 		$customer = (string) ( $fields['delivery_date']['value'] ?? '' );
 		$mode     = '' !== $customer && self::customer_date_enabled( $config ) ? 'customer' : (string) $config['delivery'];
+		$ts       = self::mode_timestamp( $mode, $config, $customer, $order, $hour, $tz );
+		if ( 'customer' === $mode && in_array( (string) $config['delivery'], array( 'date', 'delay' ), true ) ) {
+			// M12-16: a date the customer chose never brings a presale date or a waiting period of the shop forward.
+			$shop = self::mode_timestamp( (string) $config['delivery'], $config, '', $order, $hour, $tz );
+			if ( $shop && ( ! $ts || $ts < $shop ) ) {
+				$ts = $shop;
+			}
+		}
+		$ts = apply_filters( 'vcap_delivery_timestamp', $ts, $config, $fields, $order );
+		return $ts && $ts > time() ? gmdate( 'Y-m-d H:i:s', (int) $ts ) : null;
+	}
+
+	/** Delivery time of one mode ("delay", "date", "customer" with the customer's local date), null for none. */
+	private static function mode_timestamp( string $mode, array $config, string $customer, ?\WC_Order $order, int $hour, \DateTimeZone $tz ): ?int {
 		switch ( $mode ) {
 			case 'delay':
 				$days = (int) $config['delivery_delay_days'];
 				if ( $days > 0 ) {
 					$base = $order && $order->get_date_created() ? $order->get_date_created()->getTimestamp() : time();
-					$ts   = $base + $days * DAY_IN_SECONDS;
+					return $base + $days * DAY_IN_SECONDS;
 				}
-				break;
+				return null;
 			case 'date':
-				if ( $config['delivery_date'] ) {
-					$ts = self::local_date_ts( (string) $config['delivery_date'], $hour, $tz );
-				}
-				break;
+				return $config['delivery_date'] ? self::local_date_ts( (string) $config['delivery_date'], $hour, $tz ) : null;
 			case 'customer':
-				$date = (string) ( $fields['delivery_date']['value'] ?? '' );
-				if ( $date ) {
-					$ts = self::local_date_ts( $date, $hour, $tz );
-				}
-				break;
+				return '' !== $customer ? self::local_date_ts( $customer, $hour, $tz ) : null;
 		}
-		$ts = apply_filters( 'vcap_delivery_timestamp', $ts, $config, $fields, $order );
-		return $ts && $ts > time() ? gmdate( 'Y-m-d H:i:s', (int) $ts ) : null;
+		return null;
+	}
+
+	/**
+	 * M12-16: earliest local date ("Y-m-d") a customer may choose as delivery date – on the product page and when
+	 * changing it in My Account: today, and in the modes "date"/"delay" never before the shop's own delivery date
+	 * (presale, waiting period), see compute_time().
+	 */
+	public static function earliest_customer_date( array $config, ?\WC_Order $order = null ): string {
+		$today = wp_date( 'Y-m-d' );
+		if ( in_array( (string) ( $config['delivery'] ?? '' ), array( 'date', 'delay' ), true ) ) {
+			$shop = self::mode_timestamp( (string) $config['delivery'], $config, '', $order, self::delivery_hour(), wp_timezone() );
+			$day  = $shop ? (string) wp_date( 'Y-m-d', $shop ) : '';
+			if ( $day > $today ) {
+				return $day;
+			}
+		}
+		return $today;
 	}
 
 	/** Order meta: V7 hold of a new customer's vouchers – Unix time until which they are held, 0 for none. */
@@ -151,9 +173,9 @@ final class Delivery {
 		return $dt ? $dt->setTime( $hour, 0 )->getTimestamp() : null;
 	}
 
-	/** Local hour at which dated deliveries go out (filter "vcap_delivery_hour"). */
+	/** Local hour at which dated deliveries go out (setting "vcap_delivery_hour", default 8; filter "vcap_delivery_hour"). */
 	public static function delivery_hour(): int {
-		return max( 0, min( 23, (int) apply_filters( 'vcap_delivery_hour', 8 ) ) );
+		return max( 0, min( 23, (int) apply_filters( 'vcap_delivery_hour', (int) Settings::value( 'vcap_delivery_hour' ) ) ) );
 	}
 
 	/** Does the product page ask for a delivery date (mode "customer", or the built-in field switched on)? */
@@ -170,9 +192,14 @@ final class Delivery {
 	 */
 	public static function latest_delivery_date( array $config, ?int $from = null, string $country = '' ): ?string {
 		$expiry = ProductConfig::expiry_for( $config, $from ?? time(), $country );
-		if ( ! $expiry ) {
-			return null;
-		}
+		return $expiry ? self::latest_date_before( $expiry, $config ) : null;
+	}
+
+	/**
+	 * Last local date ("Y-m-d") on which a voucher that ends at $expiry (UTC) may still be delivered, at least
+	 * "vcap_delivery_min_validity_days" days before its end (M12-16: the same rule for a voucher already issued).
+	 */
+	public static function latest_date_before( string $expiry, array $config ): string {
 		$tz      = wp_timezone();
 		$min     = max( 0, (int) apply_filters( 'vcap_delivery_min_validity_days', 0, $config ) );
 		$limit   = (int) strtotime( $expiry . ' UTC' ) - $min * DAY_IN_SECONDS;
@@ -561,7 +588,7 @@ final class Delivery {
 
 	/**
 	 * Z6: a bundled email with more vouchers than this carries no PDF but a download link per voucher (and the
-	 * link to My Account) instead (setting "vcap_bundle_pdf_limit", default 50; filter "vcap_bundle_pdf_limit"
+	 * link to My Account) instead (setting "vcap_bundle_pdf_limit", default 50, 20 on new installs; filter "vcap_bundle_pdf_limit"
 	 * with the vouchers; 0 = never a PDF in a bundled email).
 	 *
 	 * @param Voucher[] $vouchers
@@ -570,6 +597,18 @@ final class Delivery {
 		/** Most vouchers a bundled email attaches the PDF for; above it, download links only (0 = never a PDF). */
 		return max( 0, (int) apply_filters( 'vcap_bundle_pdf_limit', (int) Settings::value( 'vcap_bundle_pdf_limit' ), $vouchers ) );
 	}
+
+	/**
+	 * M12-48: largest PDF attachment of a voucher email in bytes (filter "vcap_max_attachment_bytes", default 8 MB);
+	 * a larger PDF is not attached – the email carries download links instead.
+	 */
+	public static function max_attachment_bytes( ?Voucher $voucher = null ): int {
+		/** Largest PDF attachment (bytes) of a voucher email; above it download links are sent instead. */
+		return max( 1, (int) apply_filters( 'vcap_max_attachment_bytes', 8 * MB_IN_BYTES, $voucher ) );
+	}
+
+	/** M12-48: ledger event written before a delivery renders and sends (a crash still counts as an attempt). */
+	public const ATTEMPT_EVENT = 'delivery_attempt';
 
 	/** Z6: vouchers with the same key may share one email: the same order line, routing and main address. */
 	public static function bundle_key( Voucher $voucher ): string {
@@ -733,11 +772,21 @@ final class Delivery {
 					$mails['buyer'][ strtolower( trim( $voucher->buyer_email ) ) ][] = $voucher;
 				}
 			}
+			// M12-48: each voucher records the attempt before the PDF is rendered (a crash still counts towards
+			// max_attempts); after a failed attempt the bundle goes out with download links instead of the PDF.
+			$retry = false;
+			foreach ( $plan as $item ) {
+				$retry = $retry || $this->repo->delivery_attempts( $item['voucher']->id )['failures'] >= 1;
+			}
+			foreach ( $plan as $item ) {
+				$this->repo->log( $item['voucher']->id, self::ATTEMPT_EVENT );
+			}
 			foreach ( $mails as $role => $lists ) {
 				foreach ( $lists as $list ) {
 					$sent   = false;
 					$reason = 'mail_failed';
 					try {
+						$email->force_links = $retry;
 						$sent   = $email->trigger_bundle( $list, $role );
 						$reason = '' !== $email->last_failure ? $email->last_failure : 'mail_failed';
 					} catch ( \Throwable $e ) {
@@ -888,6 +937,75 @@ final class Delivery {
 	}
 
 	/**
+	 * M12-49: reports a voucher email that came back (bounce, or a queue SMTP plugin that failed later): "sent"
+	 * only meant that wp_mail() accepted it. The role no longer counts as delivered (delivered_roles), the history
+	 * gets a "delivery_failed" entry, the order a note, and with $notify_buyer the buyer is told by email (with the
+	 * "Correct the recipient" link where it applies). Fires "vcap_voucher_bounced". The voucher emails carry the
+	 * headers "X-VCAP-Voucher" (voucher ids) and "X-VCAP-Role" for bounce handlers.
+	 *
+	 * @param string $role 'recipient' or 'buyer'.
+	 * @return bool Whether the bounce was recorded.
+	 */
+	public function mark_bounced( int $voucher_id, string $role, string $reason = '', bool $notify_buyer = false ): bool {
+		$voucher = in_array( $role, array( 'recipient', 'buyer' ), true ) ? $this->repo->get( $voucher_id ) : null;
+		if ( ! $voucher ) {
+			return false;
+		}
+		$reason    = trim( mb_substr( wp_strip_all_tags( $reason ), 0, 200 ) );
+		$delivered = array_values( array_diff( $this->delivered_roles( $voucher ), array( $role ) ) );
+		$this->store_delivered_roles( $voucher->id, $delivered, array_values( array_diff( $this->required_roles( $voucher ), $delivered ) ) );
+		$label = 'recipient' === $role ? __( 'recipient', 'voucher-captain' ) : __( 'buyer', 'voucher-captain' );
+		$this->repo->log(
+			$voucher->id,
+			'delivery_failed',
+			null,
+			null,
+			'' !== $reason
+				/* translators: 1: "recipient" or "buyer", 2: reason reported by the mail system */
+				? sprintf( __( 'The email to the %1$s came back (bounce): %2$s', 'voucher-captain' ), $label, $reason )
+				/* translators: %s: "recipient" or "buyer" */
+				: sprintf( __( 'The email to the %s came back (bounce).', 'voucher-captain' ), $label )
+		);
+		delete_transient( 'vcap_undelivered_count' );
+		$order = $voucher->order();
+		if ( $order instanceof \WC_Order ) {
+			$order->add_order_note(
+				sprintf(
+					/* translators: 1: voucher code (masked), 2: email address (masked), 3: reason */
+					__( 'The email with voucher %1$s to %2$s came back undelivered. %3$s Check the address and send the voucher again on the voucher screen.', 'voucher-captain' ),
+					Mask::code( $voucher->code ),
+					Mask::email( 'recipient' === $role ? $voucher->recipient_email : $voucher->buyer_email ),
+					$reason
+				)
+			);
+		}
+		if ( $notify_buyer && 'recipient' === $role && is_email( $voucher->buyer_email ) && function_exists( 'WC' ) ) {
+			$fix     = vcap()->downloads->correction_url( $voucher );
+			$mailer  = WC()->mailer();
+			$message = '<p>' . esc_html(
+				sprintf(
+					/* translators: %s: recipient email */
+					__( 'The voucher you sent to %s could not be delivered: the email came back.', 'voucher-captain' ),
+					$voucher->recipient_email
+				)
+			) . '</p>';
+			$message .= '' !== $fix
+				? '<p><a href="' . esc_url( $fix ) . '">' . esc_html__( 'Correct the recipient', 'voucher-captain' ) . '</a></p>'
+				: '<p>' . esc_html__( 'Please contact us with the correct address.', 'voucher-captain' ) . '</p>';
+			$subject = __( 'Your gift voucher could not be delivered', 'voucher-captain' );
+			$mailer->send( $voucher->buyer_email, $subject, $mailer->wrap_message( $subject, $message ) );
+		}
+		Logger::warning( 'Voucher email bounced.', array( 'voucher_id' => $voucher->id, 'role' => $role ) );
+		/**
+		 * A voucher email came back (Delivery::mark_bounced()). Args: Voucher, role ('recipient'|'buyer'), reason.
+		 *
+		 * @since 1.3.0
+		 */
+		do_action( 'vcap_voucher_bounced', $voucher, $role, $reason );
+		return true;
+	}
+
+	/**
 	 * Roles ('recipient', 'buyer') that already received this voucher in an earlier, partly failed attempt.
 	 *
 	 * @return string[]
@@ -992,6 +1110,11 @@ final class Delivery {
 		$mailer = WC()->mailer();
 		$emails = $mailer->get_emails();
 		$sent   = array();
+		if ( $voucher->id && ( null === $voucher->delivered_at || '' === (string) $voucher->delivered_at ) ) {
+			// M12-48: recorded before the PDF is rendered, so an attempt that crashes (fatal error, time limit) still
+			// counts towards max_attempts (VoucherRepository::delivery_attempts(); the outcome event pairs it).
+			$this->repo->log( $voucher->id, self::ATTEMPT_EVENT );
+		}
 
 		$to_recipient = self::to_recipient( $voucher );
 		$to_buyer     = ! $to_recipient || 'both' === $voucher->send_to || self::legacy_buyer_copy( $voucher );
@@ -1213,8 +1336,8 @@ final class Delivery {
 	 */
 	public function send_expiry_reminders( float $budget = 0.0, ?bool &$finished = null ): int {
 		$finished = true;
-		$days     = (int) $this->settings->get( 'vcap_expiry_reminder_days' );
-		if ( $days <= 0 ) {
+		$offsets  = self::expiry_reminder_offsets( $this->settings->get( 'vcap_expiry_reminder_days' ) );
+		if ( ! $offsets ) {
 			return 0;
 		}
 		$emails = WC()->mailer()->get_emails();
@@ -1224,42 +1347,69 @@ final class Delivery {
 		}
 		$start = microtime( true );
 		$sent  = 0;
-		$seen  = array();
-		do {
-			$batch = $this->repo->due_for_expiry_reminder( $days, 200, $seen );
-			foreach ( $batch as $voucher ) {
-				if ( $budget > 0 && microtime( true ) - $start >= $budget ) {
-					$finished = false;
-					return $sent;
+		// M12-84: several reminders (e.g. 30, 7 and 1 day before). Each one covers the vouchers ending before its
+		// day and after the next smaller one, so a voucher found late gets only the reminder that fits.
+		foreach ( $offsets as $i => $days ) {
+			$after = (int) ( $offsets[ $i + 1 ] ?? 0 );
+			$seen  = array();
+			do {
+				$batch = $this->repo->due_for_expiry_reminder( $days, 200, $seen, $after );
+				foreach ( $batch as $voucher ) {
+					if ( $budget > 0 && microtime( true ) - $start >= $budget ) {
+						$finished = false;
+						return $sent;
+					}
+					$seen[] = $voucher->id;
+					if ( ! is_email( $voucher->delivery_email() ) || ! apply_filters( 'vcap_send_expiry_reminder', true, $voucher, $days ) ) {
+						continue;
+					}
+					// Claimed first (a parallel run or a crash after sending never leads to a second reminder), recorded
+					// only after a successful send; a failed send gives the claim back and is retried after a day.
+					$claim = 'expiry-reminder:' . $voucher->id . ':' . $days;
+					if ( ! Claim::take( $claim ) ) {
+						continue;
+					}
+					try {
+						$mailed = $email->trigger( $voucher );
+					} catch ( \Throwable $e ) {
+						// One broken voucher (PDF, template, mail plugin) neither keeps its claim nor stops the others.
+						Claim::release( $claim );
+						Logger::error( 'Expiry reminder failed: ' . Mask::addresses( $e->getMessage() ), array( 'voucher_id' => $voucher->id ) );
+						continue;
+					}
+					if ( $mailed ) {
+						$this->repo->log( $voucher->id, 'expiry_reminder', null, $voucher->balance, self::REMINDER_NOTE_PREFIX . $days );
+						++$sent;
+					} else {
+						Claim::release( $claim );
+						$this->repo->log( $voucher->id, 'delivery_failed', null, null, Note::make( 'reminder_failed' ) );
+					}
 				}
-				$seen[] = $voucher->id;
-				if ( ! is_email( $voucher->delivery_email() ) || ! apply_filters( 'vcap_send_expiry_reminder', true, $voucher ) ) {
-					continue;
-				}
-				// Claimed first (a parallel run or a crash after sending never leads to a second reminder), recorded
-				// only after a successful send; a failed send gives the claim back and is retried after a day.
-				$claim = 'expiry-reminder:' . $voucher->id;
-				if ( ! Claim::take( $claim ) ) {
-					continue;
-				}
-				try {
-					$mailed = $email->trigger( $voucher );
-				} catch ( \Throwable $e ) {
-					// One broken voucher (PDF, template, mail plugin) neither keeps its claim nor stops the others.
-					Claim::release( $claim );
-					Logger::error( 'Expiry reminder failed: ' . Mask::addresses( $e->getMessage() ), array( 'voucher_id' => $voucher->id ) );
-					continue;
-				}
-				if ( $mailed ) {
-					$this->repo->log( $voucher->id, 'expiry_reminder', null, $voucher->balance, '' );
-					++$sent;
-				} else {
-					Claim::release( $claim );
-					$this->repo->log( $voucher->id, 'delivery_failed', null, null, Note::make( 'reminder_failed' ) );
-				}
-			}
-		} while ( count( $batch ) === 200 );
+			} while ( count( $batch ) === 200 );
+		}
 		return $sent;
+	}
+
+	/** M12-84: note of an "expiry_reminder" event sent N days before the expiry ("days_before=N"). */
+	public const REMINDER_NOTE_PREFIX = 'days_before=';
+
+	/**
+	 * M12-84: the reminder days of the setting "vcap_expiry_reminder_days" – one number as before, or several
+	 * separated by commas ("30, 7, 1"); 1–365, without duplicates, largest first. 0 or nothing: no reminders.
+	 *
+	 * @param mixed $value Stored setting.
+	 * @return int[]
+	 */
+	public static function expiry_reminder_offsets( $value ): array {
+		$out = array();
+		foreach ( preg_split( '/[\s,;]+/', trim( (string) $value ), -1, PREG_SPLIT_NO_EMPTY ) ?: array() as $part ) {
+			if ( ctype_digit( $part ) && (int) $part >= 1 && (int) $part <= 365 ) {
+				$out[] = (int) $part;
+			}
+		}
+		$out = array_values( array_unique( $out ) );
+		rsort( $out, SORT_NUMERIC );
+		return $out;
 	}
 
 	/**
@@ -1383,6 +1533,9 @@ final class Delivery {
 				if ( $this->has_pending_delivery( $id ) ) {
 					continue;
 				}
+				if ( $this->give_up_if_exhausted( $id ) ) {
+					continue;
+				}
 				try {
 					$this->deliver( $id );
 				} catch ( \Throwable $e ) {
@@ -1391,6 +1544,23 @@ final class Delivery {
 				}
 			}
 		}
+	}
+
+	/**
+	 * M12-48: gives a delivery up once max_attempts() attempts failed – also attempts that crashed before they could
+	 * record their failure or plan a retry (a "delivery_attempt" without outcome, see delivery_attempts()), which
+	 * would otherwise be picked up by the safety net again and again.
+	 *
+	 * @return bool Whether it was given up now.
+	 */
+	public function give_up_if_exhausted( int $voucher_id ): bool {
+		$state   = $this->repo->delivery_attempts( $voucher_id );
+		$voucher = $state['failures'] > 0 && ! $state['given_up'] ? $this->repo->get( $voucher_id ) : null;
+		if ( ! $voucher || $voucher->delivered_at || $state['failures'] < self::max_attempts( $voucher ) ) {
+			return false;
+		}
+		$this->give_up( $voucher, $state['failures'] );
+		return true;
 	}
 
 	/** Is a delivery or a retry of this voucher waiting in Action Scheduler? */

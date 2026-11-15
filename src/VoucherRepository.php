@@ -307,7 +307,7 @@ final class VoucherRepository {
 	 *
 	 * @return Voucher[]
 	 */
-	public function for_customer( int $user_id, int $limit = 200, int $offset = 0 ): array {
+	public function for_customer( int $user_id, int $limit = 200, int $offset = 0, string $verified_email = '' ): array {
 		global $wpdb;
 		if ( $user_id <= 0 ) {
 			return array();
@@ -315,6 +315,14 @@ final class VoucherRepository {
 		// B15: a page of the list ($offset vouchers skipped, newest first).
 		$offset = max( 0, $offset );
 		$limit += $offset;
+		// M12-18: guest orders placed with the account's verified address (PersonalVoucher::verified_email()) belong
+		// to the buyer as well – only with a proven mailbox, never with a merely claimed account email.
+		$guest = array();
+		$ids   = is_email( $verified_email ) ? $this->guest_order_ids( $verified_email ) : array();
+		if ( $ids ) {
+			$in    = implode( ',', $ids );
+			$guest = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->table()} WHERE order_id IN ($in) ORDER BY id DESC LIMIT %d", $limit ), ARRAY_A ) ?: array(); // phpcs:ignore
+		}
 		// Page through all of the customer's orders (newest first) until enough vouchers are found: customers
 		// with many orders (e.g. regulars) must still see vouchers bought long ago.
 		$rows = array();
@@ -338,6 +346,11 @@ final class VoucherRepository {
 			if ( count( $order_ids ) < 500 ) {
 				break;
 			}
+		}
+		if ( $guest ) {
+			$rows = array_merge( $rows, $guest );
+			usort( $rows, static fn( $a, $b ) => (int) $b['id'] <=> (int) $a['id'] );
+			$rows = array_slice( $rows, 0, $limit );
 		}
 		return array_map( array( Voucher::class, 'from_row' ), array_slice( $rows, $offset ) );
 	}
@@ -375,6 +388,58 @@ final class VoucherRepository {
 			$terms['order_ids'] = array_values( array_unique( array_filter( array_map( 'intval', $ids ) ) ) );
 		}
 		return $terms;
+	}
+
+	/**
+	 * M12-18: ids of guest orders (no customer account) whose vouchers were bought with this address (at most 500,
+	 * newest first).
+	 *
+	 * @return int[]
+	 */
+	private function guest_order_ids( string $email ): array {
+		global $wpdb;
+		$ids = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT order_id FROM {$this->table()} WHERE buyer_email = %s AND order_id > 0 ORDER BY order_id DESC LIMIT 500", $email ) ) ); // phpcs:ignore
+		if ( ! $ids || ! function_exists( 'wc_get_orders' ) ) {
+			return array();
+		}
+		$guest = array();
+		foreach ( (array) wc_get_orders( array( 'post__in' => $ids, 'limit' => count( $ids ), 'type' => 'shop_order', 'status' => array_keys( wc_get_order_statuses() ) ) ) as $order ) {
+			if ( $order instanceof \WC_Order && 0 === (int) $order->get_customer_id() && 0 === strcasecmp( trim( (string) $order->get_billing_email() ), trim( $email ) ) ) {
+				$guest[] = (int) $order->get_id();
+			}
+		}
+		return $guest;
+	}
+
+	/**
+	 * M12-18: vouchers addressed to a customer as gift recipient – by the account's verified address only
+	 * (PersonalVoucher::verified_email(); an unproven account email would list gifts of a claimed address). Not the
+	 * customer's own orders (listed as bought), no store credit and no gift that is still scheduled (a surprise is
+	 * not spoiled before its delivery date). Newest first.
+	 *
+	 * @return Voucher[]
+	 */
+	public function received_by( string $verified_email, int $user_id, int $limit = 20, int $offset = 0 ): array {
+		global $wpdb;
+		if ( ! is_email( $verified_email ) ) {
+			return array();
+		}
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->table()} WHERE recipient_email = %s AND send_to IN ('recipient','both') AND type <> 'credit' AND status <> 'scheduled' AND buyer_email <> %s ORDER BY id DESC LIMIT %d OFFSET %d", $verified_email, $verified_email, max( 1, $limit ) + 50, max( 0, $offset ) ), ARRAY_A ) ?: array(); // phpcs:ignore
+		$list = array_map( array( Voucher::class, 'from_row' ), $rows );
+		Voucher::prime_orders( $list );
+		$out = array();
+		foreach ( $list as $voucher ) {
+			$order = $voucher->order();
+			if ( $user_id > 0 && $order instanceof \WC_Order && (int) $order->get_customer_id() === $user_id ) {
+				continue; // Bought with the account: in the list of bought vouchers.
+			}
+			$out[] = $voucher;
+			if ( count( $out ) >= max( 1, $limit ) ) {
+				break;
+			}
+		}
+		Voucher::forget_orders();
+		return $out;
 	}
 
 	/**
@@ -545,8 +610,8 @@ final class VoucherRepository {
 					WHERE v.delivered_at IS NULL AND v.status IN ('scheduled','active')
 					AND ( ( v.delivery_at IS NOT NULL AND v.delivery_at <= %s AND v.delivery_at >= %s ) OR ( v.delivery_at IS NULL AND v.created_at <= %s AND v.created_at >= %s ) )
 					AND NOT EXISTS ( {$given_up} ){$not_in}
-					ORDER BY ( SELECT MAX(f.id) FROM {$this->events_table()} f WHERE f.voucher_id = v.id AND f.event = 'delivery_failed' ) IS NOT NULL,
-					( SELECT MAX(f.id) FROM {$this->events_table()} f WHERE f.voucher_id = v.id AND f.event = 'delivery_failed' ) ASC,
+					ORDER BY ( SELECT MAX(f.id) FROM {$this->events_table()} f WHERE f.voucher_id = v.id AND f.event IN ('delivery_failed','delivery_attempt') ) IS NOT NULL,
+					( SELECT MAX(f.id) FROM {$this->events_table()} f WHERE f.voucher_id = v.id AND f.event IN ('delivery_failed','delivery_attempt') ) ASC,
 					COALESCE( v.delivery_at, v.created_at ) ASC, v.id ASC
 					LIMIT %d",
 					$this->now(),
@@ -579,12 +644,24 @@ final class VoucherRepository {
 	 */
 	public function delivery_attempts( int $voucher_id ): array {
 		global $wpdb;
-		$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT event, created_at FROM {$this->events_table()} WHERE voucher_id = %d AND event IN ('delivery_failed','delivery_given_up'," . self::DELIVERY_RESET_EVENTS . ') ORDER BY id DESC LIMIT 500', $voucher_id ), ARRAY_A ); // phpcs:ignore
+		$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT event, created_at FROM {$this->events_table()} WHERE voucher_id = %d AND event IN ('delivery_failed','delivery_given_up','delivery_attempt','resent'," . self::DELIVERY_RESET_EVENTS . ') ORDER BY id DESC LIMIT 500', $voucher_id ), ARRAY_A ); // phpcs:ignore
 		$state = array( 'failures' => 0, 'last_attempt' => null, 'given_up' => false );
+		// M12-48: a "delivery_attempt" is written before an attempt renders and sends; its outcome (a failure, a
+		// resend, the delivery) pairs it. An attempt without an outcome crashed and counts as a failure.
+		$outcome = false;
 		foreach ( $rows ? $rows : array() as $row ) {
-			if ( 'delivery_failed' === $row['event'] ) {
+			if ( 'delivery_attempt' === $row['event'] ) {
+				if ( ! $outcome ) {
+					++$state['failures'];
+					$state['last_attempt'] = $state['last_attempt'] ?? (string) $row['created_at'];
+				}
+				$outcome = false;
+			} elseif ( 'resent' === $row['event'] ) {
+				$outcome = true;
+			} elseif ( 'delivery_failed' === $row['event'] ) {
 				++$state['failures'];
 				$state['last_attempt'] = $state['last_attempt'] ?? (string) $row['created_at'];
+				$outcome               = true;
 			} elseif ( 'delivery_given_up' === $row['event'] ) {
 				$state['given_up'] = true;
 			} else {
@@ -613,7 +690,7 @@ final class VoucherRepository {
 	 * @param int[] $exclude
 	 * @return Voucher[]
 	 */
-	public function due_for_expiry_reminder( int $days, int $limit = 200, array $exclude = array() ): array {
+	public function due_for_expiry_reminder( int $days, int $limit = 200, array $exclude = array(), int $after_days = 0 ): array {
 		global $wpdb;
 		$exclude = array_values( array_filter( array_map( 'intval', $exclude ) ) );
 		$not_in  = $exclude ? ' AND v.id NOT IN (' . implode( ',', $exclude ) . ')' : '';
@@ -623,11 +700,12 @@ final class VoucherRepository {
 				WHERE v.status = 'active' AND v.expires_at > %s AND v.expires_at <= %s
 				AND v.delivered_at IS NOT NULL AND v.type <> 'ticket'
 				AND ( v.usage_mode <> 'balance' OR v.balance > 0 ){$not_in}
-				AND NOT EXISTS ( SELECT 1 FROM {$this->events_table()} e WHERE e.voucher_id = v.id AND e.event = 'expiry_reminder' )
+				AND NOT EXISTS ( SELECT 1 FROM {$this->events_table()} e WHERE e.voucher_id = v.id AND e.event = 'expiry_reminder' AND ( e.note = %s OR e.note IS NULL OR LEFT( e.note, 12 ) <> 'days_before=' ) )
 				AND NOT EXISTS ( SELECT 1 FROM {$this->events_table()} f WHERE f.voucher_id = v.id AND f.event = 'delivery_failed' AND f.created_at > %s )
 				ORDER BY v.expires_at ASC, v.id ASC LIMIT %d",
-				$this->now(),
+				gmdate( 'Y-m-d H:i:s', time() + max( 0, $after_days ) * DAY_IN_SECONDS ),
 				gmdate( 'Y-m-d H:i:s', time() + $days * DAY_IN_SECONDS ),
+				'days_before=' . $days,
 				gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS ),
 				max( 1, $limit )
 			),
@@ -1042,6 +1120,9 @@ final class VoucherRepository {
 			'imported'   => __( 'Imported (existing card)', 'voucher-captain' ),
 			'moved_to_credit' => __( 'Moved to store credit', 'voucher-captain' ),
 			'activated'  => __( 'Activated', 'voucher-captain' ),
+			Downloads::FIX_EVENT => __( 'Recipient corrected by the buyer', 'voucher-captain' ),
+			Delivery::ATTEMPT_EVENT => __( 'Delivery attempt', 'voucher-captain' ),
+			Emails::USED_NOTICE_EVENT => __( 'Buyer told that the gift was used', 'voucher-captain' ),
 		);
 		/** Labels of connector events in the voucher history. */
 		return (array) apply_filters( 'vcap_event_labels', $labels );

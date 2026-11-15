@@ -128,7 +128,7 @@ final class VoucherPurchaseRules {
 	}
 
 	/** Voucher value of the cart (line subtotals of voucher products, as displayed). */
-	private static function cart_voucher_value( \WC_Cart $cart ): float {
+	public static function cart_voucher_value( \WC_Cart $cart ): float {
 		$value = 0.0;
 		foreach ( $cart->get_cart() as $values ) {
 			$product = $values['data'] ?? null;
@@ -192,6 +192,7 @@ final class VoucherPurchaseRules {
 		$total = $in_cart + self::ordered_last_day( get_current_user_id(), $email );
 		$limit = (float) apply_filters( 'vcap_customer_daily_limit', $limit, $total, $in_cart );
 		if ( $limit > 0 && $total > $limit + 0.00001 ) {
+			self::record_refusal();
 			wc_add_notice(
 				sprintf(
 					/* translators: %s: maximum voucher value */
@@ -201,6 +202,39 @@ final class VoucherPurchaseRules {
 				'error'
 			);
 		}
+	}
+
+	/** M12-52: option with the checkouts refused by the daily limit per day ("Y-m-d" => count, last 30 days). */
+	public const REFUSALS_OPTION = 'vcap_daily_limit_refusals';
+
+	/**
+	 * M12-52: counts a cart refused by the daily limit – once per customer session and day (the cart check runs on
+	 * every cart and checkout view), so the shop sees how many purchases the limit stops (Site Health).
+	 */
+	public static function record_refusal(): void {
+		$today   = gmdate( 'Y-m-d' );
+		$session = function_exists( 'WC' ) && WC()->session ? WC()->session : null;
+		if ( $session ) {
+			if ( $today === $session->get( 'vcap_limit_refused' ) ) {
+				return;
+			}
+			$session->set( 'vcap_limit_refused', $today );
+		}
+		$counts           = (array) get_option( self::REFUSALS_OPTION, array() );
+		$counts[ $today ] = (int) ( $counts[ $today ] ?? 0 ) + 1;
+		$since            = gmdate( 'Y-m-d', time() - 30 * DAY_IN_SECONDS );
+		$counts           = array_filter( $counts, static fn( $day ) => (string) $day >= $since, ARRAY_FILTER_USE_KEY );
+		update_option( self::REFUSALS_OPTION, $counts, false );
+	}
+
+	/** M12-52: checkouts refused by the daily limit within the last $days days. */
+	public static function refusals( int $days = 30 ): int {
+		$since = gmdate( 'Y-m-d', time() - max( 1, $days ) * DAY_IN_SECONDS );
+		$total = 0;
+		foreach ( (array) get_option( self::REFUSALS_OPTION, array() ) as $day => $count ) {
+			$total += (string) $day >= $since ? (int) $count : 0;
+		}
+		return $total;
 	}
 
 	/**

@@ -155,6 +155,24 @@
 			counter( this );
 		} );
 
+		// M12-47: "Confirm recipient email" must match the recipient email (checked again on the server).
+		var confirmCheck = function ( confirm ) {
+			var $confirm = $( confirm );
+			var $form = $confirm.closest( 'form' );
+			var $other = $form.find( '[name="vcap_fields[' + $confirm.data( 'vcapConfirm' ) + ']"]' );
+			var a = $.trim( $other.val() || '' ).toLowerCase();
+			var b = $.trim( $confirm.val() || '' ).toLowerCase();
+			confirm.setCustomValidity( a !== '' && a !== b ? String( $confirm.data( 'vcapMismatch' ) || '' ) : '' );
+		};
+		$( document ).on( 'input change blur', '[data-vcap-confirm]', function () {
+			confirmCheck( this );
+		} );
+		$( document ).on( 'input change', '[name="vcap_fields[recipient_email]"]', function () {
+			$( this ).closest( 'form' ).find( '[data-vcap-confirm]' ).each( function () {
+				confirmCheck( this );
+			} );
+		} );
+
 		// Suggested amounts are radio buttons (they work without JavaScript); the amount field follows them …
 		$( '.vcap-amount-presets input[type="radio"]:checked' ).each( function () {
 			var $field = amountField( this );
