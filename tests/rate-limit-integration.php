@@ -236,6 +236,33 @@ $check    = new ReflectionMethod( $topup, 'check' );
 $messages = array( $check->invoke( $topup, $foreign->code ), $check->invoke( $topup, 'rl-nothing-' . $tag ) );
 vcap_rl_assert( is_string( $messages[0] ) && $messages[0] === $messages[1], 'top-up: an existing code that cannot be topped up gets the same answer as an unknown code' );
 vcap_rl_reset();
+// AP-S1-3: WooCommerce's coupon field (WC_Discounts, Store API) answers like for an unknown code and books a failure.
+$ap_unknown  = 'rl-nothing-ap-' . $tag;
+$ap_plain    = static fn( $message, string $code ) => str_ireplace( $code, 'CODE', wp_strip_all_tags( (string) $message ) );
+$ap_foreign  = ( new WC_Discounts( WC()->cart ) )->is_coupon_valid( new WC_Coupon( $foreign->code ) );
+$ap_nothing  = ( new WC_Discounts( WC()->cart ) )->is_coupon_valid( new WC_Coupon( $ap_unknown ) );
+vcap_rl_assert( is_wp_error( $ap_foreign ) && is_wp_error( $ap_nothing ) && $ap_plain( $ap_foreign->get_error_message(), $foreign->code ) === $ap_plain( $ap_nothing->get_error_message(), $ap_unknown ) && ! str_contains( $ap_foreign->get_error_message(), 'another customer' ), 'AP-S1-3: another customer\'s store credit in the coupon field gets WooCommerce\'s "does not exist" message' );
+vcap_rl_visitor( '203.0.113.83' );
+$before   = VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW );
+$ap_store = array( $apply( $foreign->code ), $apply( $ap_unknown ) );
+vcap_rl_assert( 400 === $ap_store[0]->get_status() && $ap_plain( $ap_store[0]->get_data()['message'] ?? '', $foreign->code ) === $ap_plain( $ap_store[1]->get_data()['message'] ?? '', $ap_unknown ) && $before + 2 === VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW ), 'AP-S1-3: Store API – the same answer as for an unknown code, and both count as failed attempts' );
+vcap_rl_reset();
+// AP-S1-2: REST /redemptions/check (and reserve) as another customer: 404 like an unknown code, counted as a failure.
+$ap_other = (int) wp_insert_user( array( 'user_login' => 'vcap-rl-other-' . $tag, 'user_pass' => wp_generate_password( 20 ), 'user_email' => 'rl-other-' . $tag . '@example.test', 'role' => 'customer' ) );
+wp_set_current_user( $ap_other );
+vcap_rl_visitor( '203.0.113.84' );
+$before   = VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW );
+$ap_check = new WP_REST_Request( 'POST', '/vcap/v1/redemptions/check' );
+$ap_check->set_param( 'code', $foreign->code );
+$ap_rest  = rest_do_request( $ap_check );
+vcap_rl_assert( 404 === $ap_rest->get_status() && 'vcap_not_found' === ( $ap_rest->get_data()['code'] ?? '' ) && $before + 1 === VCAP\Plugin::rate_site_count( VCAP\CodeLookup::BUCKET, VCAP\CodeLookup::WINDOW ), 'AP-S1-2: REST /redemptions/check – another customer\'s store credit is 404 "not found" and counts as a failed attempt' );
+$ap_reserve = vcap()->redemptions->reserve( $foreign->code, array( 'key' => 'ap-s12-' . $tag, 'target' => 'test:ap', 'user_id' => $ap_other ) );
+vcap_rl_assert( is_wp_error( $ap_reserve ) && 'vcap_not_found' === $ap_reserve->get_error_code() && 404 === $ap_reserve->get_error_data()['status'], 'AP-S1-2: reserve – the same 404 for another customer\'s store credit' );
+wp_set_current_user( $owner_id );
+$ap_own = rest_do_request( $ap_check );
+vcap_rl_assert( 422 === $ap_own->get_status() && 'vcap_not_redeemable' === ( $ap_own->get_data()['code'] ?? '' ), 'AP-S1-2: the owner still learns that store credit is only used in the shop (422)' );
+wp_set_current_user( 0 );
+vcap_rl_reset();
 
 // --- S9: counter names are keyed hashes, not md5(bucket|address).
 vcap_rl_visitor( '198.51.100.90' );
