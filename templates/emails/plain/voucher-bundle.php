@@ -2,6 +2,9 @@
 /**
  * Bundled voucher email (plain text, Z6): several vouchers of one order with a code list.
  *
+ * Override: yourtheme/woocommerce/voucher-captain/emails/plain/voucher-bundle.php
+ * @version  1.2.0
+ *
  * @var \VCAP\Voucher[]    $vouchers
  * @var \VCAP\Voucher      $voucher
  * @var string             $email_heading
@@ -16,14 +19,18 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// Plain text: no HTML escaping. WooCommerce strips tags and drops entities it does not know (&#039; would make an
+// apostrophe vanish), so values are printed as text without tags (AP-F1-2).
+// phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped
+
 echo "=================================================================\n";
-echo esc_html( wp_strip_all_tags( $email_heading ) ) . "\n";
+echo wp_strip_all_tags( $email_heading ) . "\n";
 echo "=================================================================\n\n";
 
-echo esc_html( wp_strip_all_tags( wptexturize( $intro ) ) ) . "\n\n";
+echo wp_strip_all_tags( wptexturize( $intro ) ) . "\n\n";
 
 if ( $pdf_attached ) {
-	echo esc_html__( 'All vouchers are attached as one PDF, one page per voucher, ready to print.', 'voucher-captain' ) . "\n\n";
+	echo __( 'All vouchers are attached as one PDF, one page per voucher, ready to print.', 'voucher-captain' ) . "\n\n";
 }
 
 foreach ( array_values( $vouchers ) as $vcap_i => $vcap_v ) {
@@ -41,33 +48,33 @@ foreach ( array_values( $vouchers ) as $vcap_i => $vcap_v ) {
 	if ( $show_holder && \VCAP\Delivery::to_recipient( $vcap_v ) ) {
 		$vcap_parts[] = '' !== trim( $vcap_v->recipient_name ) ? $vcap_v->recipient_name : $vcap_v->recipient_email;
 	}
-	echo esc_html( implode( ' · ', $vcap_parts ) ) . "\n";
+	echo wp_strip_all_tags( implode( ' · ', $vcap_parts ) ) . "\n";
 	if ( ! empty( $download_urls[ $vcap_v->id ] ) ) {
-		echo '   ' . esc_html__( 'Download:', 'voucher-captain' ) . ' ' . esc_url_raw( $download_urls[ $vcap_v->id ] ) . "\n";
+		echo '   ' . __( 'Download:', 'voucher-captain' ) . ' ' . esc_url_raw( $download_urls[ $vcap_v->id ] ) . "\n";
 	}
 }
 
 if ( ! $voucher->transferable ) {
-	echo "\n" . esc_html( $voucher->transferable_label() ) . "\n";
+	echo "\n" . wp_strip_all_tags( $voucher->transferable_label() ) . "\n";
 }
 $vcap_terms = count( array_unique( array_map( static fn( $v ) => $v->terms, $vouchers ) ) ) === 1 ? $voucher->terms : '';
 if ( '' !== $vcap_terms ) {
-	echo "\n" . esc_html( $vcap_terms ) . "\n";
+	echo "\n" . wp_strip_all_tags( $vcap_terms ) . "\n";
 }
 $vcap_message = count( array_unique( array_map( static fn( $v ) => $v->message, $vouchers ) ) ) === 1 ? $voucher->message : '';
 if ( $vcap_message ) {
-	echo "\n" . esc_html( $vcap_message ) . "\n";
+	echo "\n" . wp_strip_all_tags( $vcap_message ) . "\n";
 }
 if ( $account_url ) {
-	echo "\n" . esc_html__( 'All vouchers in your account:', 'voucher-captain' ) . ' ' . esc_url_raw( $account_url ) . "\n";
+	echo "\n" . __( 'All vouchers in your account:', 'voucher-captain' ) . ' ' . esc_url_raw( $account_url ) . "\n";
 }
 if ( '' !== \VCAP\Channels::instructions( $voucher ) ) {
-	echo "\n" . esc_html( \VCAP\Channels::instructions( $voucher ) ) . "\n";
+	echo "\n" . wp_strip_all_tags( \VCAP\Channels::instructions( $voucher ) ) . "\n";
 }
 echo "\n=================================================================\n\n";
 
 if ( $additional_content ) {
-	echo esc_html( wp_strip_all_tags( wptexturize( $additional_content ) ) ) . "\n\n";
+	echo wp_strip_all_tags( wptexturize( $additional_content ) ) . "\n\n";
 }
 
 echo wp_kses_post( apply_filters( 'woocommerce_email_footer_text', get_option( 'woocommerce_email_footer_text' ) ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce filter.
