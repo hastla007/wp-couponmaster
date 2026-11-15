@@ -142,11 +142,11 @@ final class Bonus {
 					as_schedule_single_action( $from, self::ACTIVATE_HOOK, array( $coupon_id ), \VCAP\Delivery::GROUP );
 				}
 				/* translators: 1: masked coupon code (last four characters), 2: promotion title, 3: date */
-				$order->add_order_note( sprintf( __( 'Bonus voucher %1$s created (promotion "%2$s"); it is sent and valid from %3$s unless the order is cancelled or refunded before.', 'voucher-captain' ), \VCAP\Downloads::masked_code( (string) $coupon->get_code() ), $campaign['title'], wp_date( vcap()->settings->date_format(), $from ) ) );
+				$order->add_order_note( sprintf( __( 'Bonus voucher %1$s created (promotion "%2$s"); it is sent and valid from %3$s unless the order is cancelled or refunded before.', 'voucher-captain' ), \VCAP\Mask::code( (string) $coupon->get_code() ), $campaign['title'], wp_date( vcap()->settings->date_format(), $from ) ) );
 				continue;
 			}
 			/* translators: 1: masked coupon code (last four characters), 2: promotion title */
-			$order->add_order_note( sprintf( __( 'Bonus voucher %1$s issued (promotion "%2$s").', 'voucher-captain' ), \VCAP\Downloads::masked_code( (string) $coupon->get_code() ), $campaign['title'] ) );
+			$order->add_order_note( sprintf( __( 'Bonus voucher %1$s issued (promotion "%2$s").', 'voucher-captain' ), \VCAP\Mask::code( (string) $coupon->get_code() ), $campaign['title'] ) );
 			$this->send( $coupon, $order, $campaign );
 		}
 		return $created;
@@ -188,7 +188,7 @@ final class Bonus {
 		$campaign = $this->campaigns->get_any( $campaign_id );
 		$title    = $campaign ? (string) $campaign['title'] : '';
 		/* translators: 1: masked coupon code (last four characters), 2: promotion title */
-		$order->add_order_note( sprintf( __( 'Bonus voucher %1$s issued (promotion "%2$s").', 'voucher-captain' ), \VCAP\Downloads::masked_code( (string) $coupon->get_code() ), $title ) );
+		$order->add_order_note( sprintf( __( 'Bonus voucher %1$s issued (promotion "%2$s").', 'voucher-captain' ), \VCAP\Mask::code( (string) $coupon->get_code() ), $title ) );
 		$this->send( $coupon, $order, array( 'title' => $title ) );
 		return true;
 	}
@@ -298,7 +298,7 @@ final class Bonus {
 		foreach ( self::live_bonuses( $order ) as $campaign_id => $coupon ) {
 			if ( $coupon->get_usage_count() > 0 && ! $this->qualifies( $order, $campaign_id, $share ) ) {
 				$used   += self::used_value( $coupon );
-				$codes[] = \VCAP\Downloads::masked_code( (string) $coupon->get_code() );
+				$codes[] = \VCAP\Mask::code( (string) $coupon->get_code() );
 			}
 		}
 		$max = max( 0.0, round( (float) $order->get_total() - $refunded - $used, wc_get_price_decimals() ) );
@@ -437,7 +437,7 @@ final class Bonus {
 			}
 			if ( $coupon->get_usage_count() > 0 ) {
 				/* translators: %s: coupon code */
-				$order->add_order_note( sprintf( __( 'Bonus voucher %s was already used and stays valid.', 'voucher-captain' ), \VCAP\Downloads::masked_code( (string) $coupon->get_code() ) ) );
+				$order->add_order_note( sprintf( __( 'Bonus voucher %s was already used and stays valid.', 'voucher-captain' ), \VCAP\Mask::code( (string) $coupon->get_code() ) ) );
 				continue;
 			}
 			if ( function_exists( 'as_unschedule_all_actions' ) ) {
@@ -447,7 +447,7 @@ final class Bonus {
 			Usage::remove( (int) $campaign_id, Usage::order_key( $order ), (int) $order->get_id() );
 			unset( $left[ $campaign_id ] );
 			/* translators: %s: coupon code */
-			$order->add_order_note( sprintf( __( 'Unused bonus voucher %s withdrawn.', 'voucher-captain' ), \VCAP\Downloads::masked_code( (string) $coupon->get_code() ) ) );
+			$order->add_order_note( sprintf( __( 'Unused bonus voucher %s withdrawn.', 'voucher-captain' ), \VCAP\Mask::code( (string) $coupon->get_code() ) ) );
 		}
 		// Keep withdrawn campaigns marked, so a later status change does not issue the bonus again.
 		$order->update_meta_data( self::ORDER_META, $issued );

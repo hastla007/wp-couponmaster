@@ -946,11 +946,6 @@ final class Install {
 	}
 
 	/**
-	 * 1.5.0: ledger notes that are an e-mail address (WooCommerce "used by") get its hash in actor_email_hash, so
-	 * privacy exports and erasures find them through an index instead of scanning every note. New rows are
-	 * written with the hash; existing ones are filled in id batches.
-	 */
-	/**
 	 * 1.7.0: counter tables (B12, B16).
 	 *
 	 * Promotion use counters (vcap_promotion_counts) are filled from the usage table, once before the switch and
@@ -1128,6 +1123,11 @@ final class Install {
 		return ! $full;
 	}
 
+	/**
+	 * 1.5.0: ledger notes that are an e-mail address (WooCommerce "used by") get its hash in actor_email_hash, so
+	 * privacy exports and erasures find them through an index instead of scanning every note. New rows are
+	 * written with the hash; existing ones are filled in id batches.
+	 */
 	private static function migrate_1_5_0(): bool {
 		return self::hash_event_notes( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ? 8.0 : 2.0 );
 	}

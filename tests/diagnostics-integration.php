@@ -88,6 +88,15 @@ vcap_diag_assert( '' !== (string) ( $section['label'] ?? '' ) && array() === arr
 $malformed = array_filter( $fields, static fn( $f ) => ! is_array( $f ) || ! is_string( $f['label'] ?? null ) || ! is_string( $f['value'] ?? null ) || ( isset( $f['debug'] ) && ! is_string( $f['debug'] ) ) );
 vcap_diag_assert( ! $malformed, 'every Site Health field has a string label and value (and a string debug value where given)', array_keys( $malformed ) );
 vcap_diag_assert( VCAP_VERSION === $fields['version']['value'] && str_contains( $fields['db_version']['value'], (string) VCAP_DB_VERSION ), 'the plugin version and the expected database version are shown', array( $fields['version'], $fields['db_version'] ) );
+$d14_expected = array();
+if ( '' !== VCAP\Compat\MultiCurrency::adapter() ) {
+	$d14_expected[] = 'currency: ' . VCAP\Compat\MultiCurrency::adapter();
+}
+if ( VCAP\Compat\PassCaptain::active() ) {
+	$d14_expected[] = 'passcaptain';
+}
+$d14_adapters = implode( ', ', $d14_expected );
+vcap_diag_assert( ( VCAP\Compat\PassCaptain::active() ? ( defined( 'WPCAP_VERSION' ) ? (string) WPCAP_VERSION : __( 'Active', 'voucher-captain' ) ) : __( 'Not active', 'voucher-captain' ) ) === $fields['pass_captain']['value'] && ( '' === $d14_adapters ? true : str_starts_with( $fields['adapters']['value'], $d14_adapters ) ), 'D14: Pass Captain and the currency switcher are reported by the integrations themselves (vcap_active_integrations), with the same values as before', array( $fields['pass_captain']['value'], $fields['adapters']['value'] ) );
 $missing_steps = array_filter( Delivery::MAINTENANCE_STEPS, static fn( $step ) => ! str_contains( $fields['maintenance']['value'], $step . ': ' ) );
 vcap_diag_assert( ! $missing_steps, 'the maintenance summary names every daily maintenance step', $fields['maintenance']['value'] );
 vcap_diag_assert( (int) $fields['open_reservations']['value'] === $before + 1, 'an open external reservation is counted', array( $before, $fields['open_reservations']['value'] ) );

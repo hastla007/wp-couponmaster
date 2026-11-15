@@ -20,6 +20,21 @@ final class PassCaptain {
 		add_filter( self::FILTER, array( $this, 'provider' ), 10, 2 );
 		add_filter( 'vcap_redemption_channels', array( $this, 'channels' ) );
 		add_filter( 'vcap_redemption_channel_for_target', array( $this, 'channel_for_target' ), 10, 2 );
+		add_filter( 'vcap_active_integrations', array( $this, 'integration' ) );
+	}
+
+	/**
+	 * Diagnostics (filter "vcap_active_integrations"): WP Pass Captain's version while its voucher bridge is there.
+	 *
+	 * @param mixed $active Integration id => version or label.
+	 * @return array<string, string>
+	 */
+	public function integration( $active ): array {
+		$active = is_array( $active ) ? $active : array();
+		if ( self::active() ) {
+			$active['passcaptain'] = defined( 'WPCAP_VERSION' ) ? (string) WPCAP_VERSION : __( 'Active', 'voucher-captain' );
+		}
+		return $active;
 	}
 
 	/**
@@ -37,9 +52,6 @@ final class PassCaptain {
 		return interface_exists( self::INTERFACE );
 	}
 
-	/**
-	 * Status of the integration for the settings page (HTML, escaped).
-	 */
 	/**
 	 * Whether the active WP Pass Captain keeps tickets of a paid order reserved while Voucher Captain reports a
 	 * gift card shortfall (versioned hold contract, Pass Captain 1.4+). Older versions issue the tickets anyway.

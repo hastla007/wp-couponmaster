@@ -196,10 +196,11 @@ final class VoucherRepository {
 		return array_map( array( Voucher::class, 'from_row' ), $rows ?: array() );
 	}
 
-	/** @return Voucher[] */
 	/**
 	 * Vouchers bought by a customer. Deliberately NOT matched by recipient email: WooCommerce account emails are
 	 * unverified, so that would let anyone list gifts addressed to an email they merely claim.
+	 *
+	 * @return Voucher[]
 	 */
 	public function for_customer( int $user_id, int $limit = 200, int $offset = 0 ): array {
 		global $wpdb;

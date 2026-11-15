@@ -90,6 +90,18 @@ final class ProductSettings {
 		$p = $product_object instanceof \WC_Product ? $product_object : new \WC_Product_Simple();
 		echo '<div id="vcap_product_data" class="panel woocommerce_options_panel hidden">';
 
+		$this->panel_general( $p );
+		$this->panel_value( $p );
+		$this->panel_redemption( $p );
+		$this->panel_restrictions( $p );
+		$this->panel_codes( $p );
+		$this->panel_personalisation( $p );
+		$this->panel_ticket( $p );
+		echo '</div>';
+	}
+
+	/** Product panel: Type, template and design. */
+	private function panel_general( \WC_Product $p ): void {
 		echo '<div class="options_group">';
 		woocommerce_wp_select(
 			array(
@@ -130,7 +142,10 @@ final class ProductSettings {
 		);
 		$this->hint( 'vcap-hint-virtual', __( 'Vouchers are sent by email as PDF. Tick "Virtual" at the top of the product data box – otherwise WooCommerce asks for a shipping address and may charge shipping for the voucher.', 'voucher-captain' ) );
 		echo '</div>';
+	}
 
+	/** Product panel: Value: source, amount, tax treatment. */
+	private function panel_value( \WC_Product $p ): void {
 		echo '<div class="options_group"><h4 class="vcap-group-title">' . esc_html__( 'Value', 'voucher-captain' ) . '</h4>';
 		woocommerce_wp_select(
 			array(
@@ -211,7 +226,10 @@ final class ProductSettings {
 			echo '<p class="form-field vcap-short-validity" role="alert" style="color:#b32d2e">' . esc_html( $short_validity ) . '</p>';
 		}
 		echo '</div>';
+	}
 
+	/** Product panel: Redemption & validity. */
+	private function panel_redemption( \WC_Product $p ): void {
 		echo '<div class="options_group"><h4 class="vcap-group-title">' . esc_html__( 'Redemption & validity', 'voucher-captain' ) . '</h4>';
 		woocommerce_wp_select(
 			array(
@@ -306,7 +324,10 @@ final class ProductSettings {
 			)
 		);
 		echo '</div>';
+	}
 
+	/** Product panel: Coupon restrictions. */
+	private function panel_restrictions( \WC_Product $p ): void {
 		echo '<div class="options_group"><h4 class="vcap-group-title">' . esc_html__( 'Coupon restrictions', 'voucher-captain' ) . '</h4>';
 		foreach ( array(
 			'free_shipping'  => __( 'Allow free shipping', 'voucher-captain' ),
@@ -342,7 +363,10 @@ final class ProductSettings {
 		$this->category_select( '_vcap_category_ids', __( 'Valid for categories', 'voucher-captain' ), (array) $this->v( $p, 'category_ids' ) );
 		$this->category_select( '_vcap_exclude_category_ids', __( 'Exclude categories', 'voucher-captain' ), (array) $this->v( $p, 'exclude_category_ids' ) );
 		echo '</div>';
+	}
 
+	/** Product panel: Codes. */
+	private function panel_codes( \WC_Product $p ): void {
 		echo '<div class="options_group"><h4 class="vcap-group-title">' . esc_html__( 'Codes', 'voucher-captain' ) . '</h4>';
 		woocommerce_wp_select(
 			array(
@@ -401,7 +425,10 @@ final class ProductSettings {
 			)
 		);
 		echo '</div>';
+	}
 
+	/** Product panel: Personalisation & delivery. */
+	private function panel_personalisation( \WC_Product $p ): void {
 		echo '<div class="options_group"><h4 class="vcap-group-title">' . esc_html__( 'Personalisation & delivery', 'voucher-captain' ) . '</h4>';
 		$builtin = (array) $this->v( $p, 'builtin_fields' );
 		echo '<fieldset class="form-field vcap-builtin-fields"><legend>' . esc_html__( 'Product page fields', 'voucher-captain' ) . '</legend><div class="vcap-builtin-grid">';
@@ -471,7 +498,10 @@ final class ProductSettings {
 		);
 		$this->hint( 'vcap-hint-buyer-recipient', __( 'With "Buyer only" nothing is sent to a recipient, so the product page does not ask for a recipient email – unless "Who may redeem" uses the recipient email; then the field only decides who can redeem.', 'voucher-captain' ) );
 		echo '</div>';
+	}
 
+	/** Product panel: Ticket (ticket vouchers only). */
+	private function panel_ticket( \WC_Product $p ): void {
 		echo '<div class="options_group vcap-show-ticket"><h4 class="vcap-group-title">' . esc_html__( 'Ticket', 'voucher-captain' ) . '</h4>';
 		woocommerce_wp_text_input(
 			array(
@@ -499,8 +529,6 @@ final class ProductSettings {
 				'value' => $this->v( $p, 'event_location' ),
 			)
 		);
-		echo '</div>';
-
 		echo '</div>';
 	}
 

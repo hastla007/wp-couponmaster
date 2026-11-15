@@ -209,7 +209,7 @@ final class Command {
 		$is_on = 'publish' === get_post_status( $voucher->coupon_id );
 		// Active: enabled; void or scheduled: disabled. Redeemed, expired and reserved coupons are left as they are
 		// (WooCommerce's usage limit, expiry date and the reservation guard refuse them already).
-		$enabled = in_array( $voucher->status, array( Voucher::STATUS_VOID, Voucher::STATUS_SCHEDULED ), true ) ? false : ( Voucher::STATUS_ACTIVE === $voucher->status ? true : $is_on );
+		$enabled = \VCAP\CouponManager::coupon_enabled_for( $voucher->status ) ?? $is_on;
 		$amount  = Voucher::STATUS_ACTIVE === $voucher->status && $voucher->is_multi_use() && 'balance' === $voucher->usage_mode && abs( (float) $coupon->get_amount() - (float) $voucher->balance ) > 0.00001;
 		if ( $enabled === $is_on && ! $amount ) {
 			return false;
@@ -218,13 +218,8 @@ final class Command {
 		if ( $dry ) {
 			return true;
 		}
-		if ( $amount ) {
-			$coupon->set_amount( $voucher->balance );
-			$coupon->save();
-		}
-		if ( $enabled !== $is_on ) {
-			vcap()->coupons->set_coupon_enabled( $voucher, $enabled );
-		}
+		// The rules every other path uses (CouponManager::sync_coupon()): balance under the row lock, coupon status.
+		\VCAP\CouponManager::sync_coupon( $voucher, array_merge( $amount ? array( 'amount' ) : array(), $enabled !== $is_on ? array( 'status' ) : array() ) );
 		return true;
 	}
 

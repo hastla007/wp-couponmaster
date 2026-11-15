@@ -49,6 +49,8 @@ final class PassCaptainTickets {
 		add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'check_fixed_date_capacity' ), 25, 3 );
 		add_action( 'woocommerce_check_cart_items', array( $this, 'check_cart_capacity' ) );
 		add_action( 'admin_notices', array( $this, 'redeem_page_notice' ) );
+		// D14: Site Health asks through a filter whether the redeem page is needed (ticket vouchers are sold).
+		add_filter( 'vcap_redeem_page_needed', static fn( $needed ) => (bool) $needed || self::sells_ticket_vouchers() );
 		add_action( 'admin_notices', array( $this, 'attention_notice' ) );
 	}
 
@@ -188,7 +190,7 @@ final class PassCaptainTickets {
 			: sprintf( _n( 'Exchanged for %d ticket', 'Exchanged for %d tickets', $count, 'voucher-captain' ), $count );
 		if ( '' !== (string) ( $state['email'] ?? '' ) ) {
 			/* translators: 1: tickets text, 2: masked email */
-			$text = sprintf( __( '%1$s, sent to %2$s', 'voucher-captain' ), $text, self::mask_email( (string) $state['email'] ) );
+			$text = sprintf( __( '%1$s, sent to %2$s', 'voucher-captain' ), $text, \VCAP\Mask::email( (string) $state['email'] ) );
 		}
 		echo '<br><small>' . esc_html( $text ) . '</small>';
 	}
@@ -268,7 +270,7 @@ final class PassCaptainTickets {
 		} else {
 			$this->vouchers->log( $voucher->id, 'passcaptain_tickets_resent', null, null, __( 'Requested by the customer', 'voucher-captain' ) );
 			/* translators: %s: masked email */
-			wc_add_notice( sprintf( __( 'The tickets were sent again to %s. Only the new tickets are valid.', 'voucher-captain' ), self::mask_email( (string) ( $result['email'] ?? '' ) ) ), 'success', \VCAP\Shortcodes::ACCOUNT_NOTICE );
+			wc_add_notice( sprintf( __( 'The tickets were sent again to %s. Only the new tickets are valid.', 'voucher-captain' ), \VCAP\Mask::email( (string) ( $result['email'] ?? '' ) ) ), 'success', \VCAP\Shortcodes::ACCOUNT_NOTICE );
 		}
 		wp_safe_redirect( wp_get_referer() ? wp_get_referer() : wc_get_account_endpoint_url( \VCAP\Downloads::ENDPOINT ) );
 		exit;
@@ -348,7 +350,7 @@ final class PassCaptainTickets {
 		$subject = sprintf( __( '[%s] Your voucher is valid again', 'voucher-captain' ), wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ) );
 		$sent    = $mailer->send( $to, $subject, $mailer->wrap_message( $heading, $body ) );
 		if ( $sent ) {
-			$this->vouchers->log( $voucher->id, 'passcaptain_restore_notified', null, null, self::mask_email( $to ) );
+			$this->vouchers->log( $voucher->id, 'passcaptain_restore_notified', null, null, \VCAP\Mask::email( $to ) );
 		} else {
 			$this->vouchers->log( $voucher->id, 'delivery_failed', null, null, __( 'The customer could not be told that the voucher is valid again.', 'voucher-captain' ) );
 		}
@@ -725,7 +727,7 @@ final class PassCaptainTickets {
 		}
 		$tickets = count( (array) ( $issued['ticket_ids'] ?? array() ) );
 		/* translators: 1: number of tickets, 2: Pass Captain order id, 3: email */
-		$this->vouchers->log( $voucher->id, 'passcaptain_tickets', null, null, sprintf( _n( '%1$d ticket, Pass Captain order %2$s, sent to %3$s', '%1$d tickets, Pass Captain order %2$s, sent to %3$s', $tickets, 'voucher-captain' ), $tickets, (string) ( $issued['order_public_id'] ?? '' ), self::mask_email( (string) $email ) ) );
+		$this->vouchers->log( $voucher->id, 'passcaptain_tickets', null, null, sprintf( _n( '%1$d ticket, Pass Captain order %2$s, sent to %3$s', '%1$d tickets, Pass Captain order %2$s, sent to %3$s', $tickets, 'voucher-captain' ), $tickets, (string) ( $issued['order_public_id'] ?? '' ), \VCAP\Mask::email( (string) $email ) ) );
 		do_action( 'vcap_passcaptain_tickets_issued', $voucher, $issued, $email );
 		return $this->result( $voucher, $issued, $email );
 	}
@@ -831,7 +833,7 @@ final class PassCaptainTickets {
 		$this->clear_session();
 		// The full address only when it is the visitor's own (entered now or of the logged-in account).
 		$own   = array_filter( array( strtolower( $guest_email ), is_user_logged_in() ? strtolower( (string) wp_get_current_user()->user_email ) : '' ) );
-		$shown = in_array( strtolower( (string) $result['email'] ), $own, true ) ? $result['email'] : self::mask_email( $result['email'] );
+		$shown = in_array( strtolower( (string) $result['email'] ), $own, true ) ? $result['email'] : \VCAP\Mask::email( $result['email'] );
 		if ( ! empty( $result['reused'] ) ) {
 			$when = '' !== (string) ( $result['exchanged_at'] ?? '' ) ? \VCAP\LocalDate::from_utc( (string) $result['exchanged_at'], (string) get_option( 'date_format' ) ) : '';
 			wc_add_notice(
@@ -858,13 +860,9 @@ final class PassCaptainTickets {
 		}
 	}
 
-	/** "j***@example.com" – never show a full address the visitor did not enter themselves. */
+	/** "j***@example.com" – never show a full address the visitor did not enter themselves. Alias of Mask::email(). */
 	public static function mask_email( string $email ): string {
-		if ( ! str_contains( $email, '@' ) ) {
-			return $email;
-		}
-		[ $local, $domain ] = explode( '@', $email, 2 );
-		return mb_substr( $local, 0, 1 ) . '***@' . $domain;
+		return \VCAP\Mask::email( $email );
 	}
 
 	/** The code waiting for its date choice (pre-filled in the redeem form). */
@@ -1242,7 +1240,7 @@ final class PassCaptainTickets {
 			$this->vouchers->log( $voucher->id, 'passcaptain_tickets_failed', null, null, $result->get_error_code() . ': ' . $result->get_error_message() );
 			return 'passcaptain_resend_failed';
 		}
-		$this->vouchers->log( $voucher->id, 'passcaptain_tickets_resent', null, null, __( 'Requested by an admin:', 'voucher-captain' ) . ' ' . self::mask_email( (string) ( $result['email'] ?? '' ) ) );
+		$this->vouchers->log( $voucher->id, 'passcaptain_tickets_resent', null, null, __( 'Requested by an admin:', 'voucher-captain' ) . ' ' . \VCAP\Mask::email( (string) ( $result['email'] ?? '' ) ) );
 		return 'passcaptain_resent';
 	}
 

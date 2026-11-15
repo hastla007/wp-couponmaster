@@ -121,6 +121,128 @@ final class CouponManager {
 		}
 	}
 
+	/** What sync_coupon() can bring in line with the voucher row. */
+	public const SYNC_ASPECTS = array( 'amount', 'usage', 'return_use', 'expiry', 'status' );
+
+	/**
+	 * D14: the one place that writes a voucher's state to its WooCommerce coupon after the voucher row changed
+	 * (API, scanner/counter, admin, top-up, CLI repair, reissue, store credit). The rules:
+	 *  - "amount": a stored balance is the coupon amount, read and saved under the voucher row lock
+	 *    (sync_coupon_amount()); single-use coupons keep their face value.
+	 *  - "usage": a non-balance voucher's usage limit and count follow its status (coupon_usage_for()):
+	 *    redeemed elsewhere = used up for WooCommerce too, active again = at least one use left.
+	 *  - "return_use": one counted use is given back first (a cancelled counter redemption), then "usage" applies.
+	 *  - "expiry": the coupon expires with the voucher (none = never).
+	 *  - "status": active vouchers have a published coupon, void and scheduled ones a disabled coupon; redeemed,
+	 *    expired and reserved vouchers keep the coupon as it is (usage limit, expiry and the reservation guard
+	 *    refuse it already).
+	 * Only what differs is saved.
+	 *
+	 * @param Voucher  $voucher Voucher as stored (status, expiry); the balance is re-read under the lock.
+	 * @param string[] $what    Aspects, see SYNC_ASPECTS.
+	 * @return bool False when the voucher has no coupon or a part could not be written.
+	 */
+	public static function sync_coupon( Voucher $voucher, array $what ): bool {
+		if ( ! $voucher->coupon_id || ! class_exists( '\WC_Coupon' ) ) {
+			return false;
+		}
+		$ok = true;
+		if ( in_array( 'amount', $what, true ) && $voucher->is_multi_use() ) {
+			$ok = self::sync_coupon_amount( $voucher );
+		}
+		$usage  = ! $voucher->is_multi_use() && ( in_array( 'usage', $what, true ) || in_array( 'return_use', $what, true ) );
+		$expiry = in_array( 'expiry', $what, true );
+		if ( $usage || $expiry ) {
+			$coupon = new \WC_Coupon( $voucher->coupon_id );
+			if ( ! $coupon->get_id() ) {
+				return false;
+			}
+			$changed = false;
+			if ( $usage ) {
+				$count = (int) $coupon->get_usage_count( 'edit' );
+				if ( in_array( 'return_use', $what, true ) ) {
+					$count = max( 0, $count - 1 );
+				}
+				list( $limit, $count ) = self::coupon_usage_for( $voucher->usage_mode, $voucher->status, (int) $coupon->get_usage_limit( 'edit' ), $count );
+				if ( $count !== (int) $coupon->get_usage_count( 'edit' ) || $limit !== (int) $coupon->get_usage_limit( 'edit' ) ) {
+					$coupon->set_usage_count( $count );
+					$coupon->set_usage_limit( $limit );
+					$changed = true;
+				}
+			}
+			if ( $expiry ) {
+				$ends    = $voucher->expires_at ? strtotime( $voucher->expires_at . ' UTC' ) : null;
+				$current = $coupon->get_date_expires( 'edit' );
+				if ( ( $current ? $current->getTimestamp() : null ) !== ( $ends ? $ends : null ) ) {
+					$coupon->set_date_expires( $ends ? $ends : null );
+					$changed = true;
+				}
+			}
+			if ( $changed ) {
+				$ok = $coupon->save() && $ok;
+			}
+		}
+		if ( in_array( 'status', $what, true ) ) {
+			$enabled = self::coupon_enabled_for( $voucher->status );
+			if ( null !== $enabled && $enabled !== ( 'publish' === get_post_status( $voucher->coupon_id ) ) ) {
+				$ok = self::set_coupon_post_status( (int) $voucher->coupon_id, (string) $voucher->code, $enabled ) && $ok;
+			}
+		}
+		return $ok;
+	}
+
+	/**
+	 * Usage limit and count of a non-balance voucher's coupon for the voucher status (D14, one rule for every path):
+	 * redeemed outside the cart makes WooCommerce's own limit refuse it (at least one use counted, limit = count);
+	 * an active single-use voucher has exactly one use left (limit = count + 1: never none, never two); an active
+	 * reusable voucher whose coupon is used up (after a refund or cancellation) gets one more use. Balance vouchers
+	 * and every other state keep what they have.
+	 *
+	 * @return array{0:int, 1:int} usage limit, usage count
+	 */
+	public static function coupon_usage_for( string $usage_mode, string $status, int $limit, int $count ): array {
+		if ( 'balance' === $usage_mode ) {
+			return array( $limit, $count );
+		}
+		if ( Voucher::STATUS_REDEEMED === $status ) {
+			$count = max( 1, $count );
+			return array( $count, $count );
+		}
+		if ( Voucher::STATUS_ACTIVE === $status && 'single' === $usage_mode ) {
+			return array( $count + 1, $count );
+		}
+		if ( Voucher::STATUS_ACTIVE === $status && $limit > 0 && $count >= $limit ) {
+			return array( $count + 1, $count );
+		}
+		return array( $limit, $count );
+	}
+
+	/** Whether a voucher in this status has an enabled coupon (null: leave the coupon as it is). */
+	public static function coupon_enabled_for( string $status ): ?bool {
+		if ( in_array( $status, array( Voucher::STATUS_VOID, Voucher::STATUS_SCHEDULED ), true ) ) {
+			return false;
+		}
+		return Voucher::STATUS_ACTIVE === $status ? true : null;
+	}
+
+	/**
+	 * Publishes or disables (draft) a coupon post and drops WooCommerce's code → ID cache, so a persistent object
+	 * cache cannot keep a disabled coupon alive.
+	 */
+	public static function set_coupon_post_status( int $coupon_id, string $code, bool $enabled ): bool {
+		$updated = wp_update_post(
+			array(
+				'ID'          => $coupon_id,
+				'post_status' => $enabled ? 'publish' : 'draft',
+			),
+			true
+		);
+		if ( class_exists( '\WC_Cache_Helper' ) ) {
+			wp_cache_delete( \WC_Cache_Helper::get_cache_prefix( 'coupons' ) . 'coupon_id_from_code_' . wc_format_coupon_code( $code ), 'coupons' );
+		}
+		return ! is_wp_error( $updated ) && $updated;
+	}
+
 	/**
 	 * A voucher coupon was saved in WooCommerce (coupon editor, REST API, another plugin): a stored balance is kept
 	 * by the voucher row, so a different amount is set back to it (an edited or failed save would otherwise send
@@ -135,7 +257,7 @@ final class CouponManager {
 		}
 		$voucher = $this->repo->get_by_coupon( (int) $coupon_id );
 		if ( $voucher && $voucher->is_multi_use() && abs( (float) $coupon->get_amount( 'edit' ) - (float) $voucher->balance ) > 0.000001 ) {
-			self::sync_coupon_amount( $voucher );
+			self::sync_coupon( $voucher, array( 'amount' ) );
 		}
 	}
 
@@ -285,12 +407,13 @@ final class CouponManager {
 	 * Creates the WooCommerce coupon of a voucher. A failure (e.g. WC_Data_Exception for an invalid amount) removes
 	 * a coupon that was saved already and is passed on, so the caller can roll the voucher back.
 	 *
+	 * @param string $description Coupon description instead of "… from order #…" (standalone vouchers, store credit).
 	 * @throws \Throwable When WooCommerce refuses the coupon data.
 	 */
-	public function create_coupon( Voucher $voucher, array $config ): int {
+	public function create_coupon( Voucher $voucher, array $config, string $description = '' ): int {
 		$coupon = new \WC_Coupon();
 		try {
-			return $this->build_coupon( $coupon, $voucher, $config );
+			return $this->build_coupon( $coupon, $voucher, $config, $description );
 		} catch ( \Throwable $e ) {
 			if ( $coupon->get_id() ) {
 				wp_delete_post( $coupon->get_id(), true );
@@ -299,7 +422,7 @@ final class CouponManager {
 		}
 	}
 
-	private function build_coupon( \WC_Coupon $coupon, Voucher $voucher, array $config ): int {
+	private function build_coupon( \WC_Coupon $coupon, Voucher $voucher, array $config, string $description ): int {
 		$coupon->set_code( $voucher->code );
 		$type = in_array( $voucher->discount_type, array( 'fixed_cart', 'percent', 'fixed_product' ), true ) ? $voucher->discount_type : 'fixed_cart';
 		if ( $voucher->is_multi_use() ) {
@@ -308,7 +431,7 @@ final class CouponManager {
 		$coupon->set_discount_type( $type );
 		$coupon->set_amount( $voucher->is_multi_use() ? $voucher->balance : $voucher->initial_amount );
 		$coupon->set_description(
-			sprintf(
+			'' !== $description ? $description : sprintf(
 				/* translators: 1: voucher type, 2: order number */
 				__( '%1$s from order #%2$s (Voucher Captain)', 'voucher-captain' ),
 				Voucher::types()[ $voucher->type ] ?? $voucher->type,
@@ -432,18 +555,7 @@ final class CouponManager {
 		if ( ! $voucher->coupon_id ) {
 			return true;
 		}
-		$updated = wp_update_post(
-			array(
-				'ID'          => $voucher->coupon_id,
-				'post_status' => $enabled ? 'publish' : 'draft',
-			),
-			true
-		);
-		// WooCommerce caches code → ID lookups; drop it so a persistent object cache cannot keep a disabled coupon alive.
-		if ( class_exists( '\WC_Cache_Helper' ) ) {
-			wp_cache_delete( \WC_Cache_Helper::get_cache_prefix( 'coupons' ) . 'coupon_id_from_code_' . wc_format_coupon_code( $voucher->code ), 'coupons' );
-		}
-		return ! is_wp_error( $updated ) && $updated;
+		return self::set_coupon_post_status( (int) $voucher->coupon_id, (string) $voucher->code, $enabled );
 	}
 
 	/**
@@ -689,14 +801,13 @@ final class CouponManager {
 		/* translators: %s: voucher code */
 		return sprintf( __( 'Voucher %s can no longer be used (it was cancelled or redeemed elsewhere). Please contact us to complete this order.', 'voucher-captain' ), $voucher->code );
 	}
-	/**
-	 * Atomically reserve stored balance for a specific order.
-	 *
-	 * @return array{amount:float,balance:float,state:string}|null
-	 */
+
 	/**
 	 * Public order-scoped operations for the versioned integration service.
 	 * The order id is the idempotency scope used by the event ledger.
+	 * Atomically reserve stored balance for a specific order.
+	 *
+	 * @return array{amount:float,balance:float,state:string}|null
 	 */
 	public function reserve_voucher_balance( Voucher $voucher, float $amount, \WC_Order $order, string $note = '' ): ?array {
 		return $this->reserve_balance_atomic( $voucher, $amount, (int) $order->get_id(), $note );
@@ -775,7 +886,7 @@ final class CouponManager {
 			throw $e;
 		}
 
-		$this->sync_balance_coupon( $fresh );
+		self::sync_coupon( $fresh, array( 'amount' ) );
 		return array( 'amount' => $requested, 'balance' => $fresh->balance, 'state' => 'reserved' );
 	}
 
@@ -886,7 +997,7 @@ final class CouponManager {
 			Db::rollback( 'release_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ), $e );
 			throw $e;
 		}
-		$this->sync_balance_coupon( $fresh );
+		self::sync_coupon( $fresh, array( 'amount' ) );
 		return true;
 	}
 
@@ -972,14 +1083,10 @@ final class CouponManager {
 					$order->save();
 				}
 				/* translators: %s: voucher code */
-				$order->add_order_note( sprintf( __( 'A voucher reservation of %s that was left open has been released.', 'voucher-captain' ), Downloads::masked_code( $voucher->code ) ) );
+				$order->add_order_note( sprintf( __( 'A voucher reservation of %s that was left open has been released.', 'voucher-captain' ), Mask::code( $voucher->code ) ) );
 			}
 		}
 		return $released;
-	}
-
-	private function sync_balance_coupon( Voucher $voucher ): void {
-		self::sync_coupon_amount( $voucher );
 	}
 
 	/**
@@ -1112,7 +1219,7 @@ final class CouponManager {
 			Db::rollback( 'write_balance', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ), $e );
 			throw $e;
 		}
-		$this->sync_balance_coupon( $fresh );
+		self::sync_coupon( $fresh, array( 'amount' ) );
 		return true;
 	}
 
@@ -1268,7 +1375,7 @@ final class CouponManager {
 			throw $e;
 		}
 
-		self::sync_coupon_amount( $fresh );
+		self::sync_coupon( $fresh, array( 'amount' ) );
 		$reason = '';
 		if ( $amount > 0 ) {
 			VoucherRepository::fire_redeemed( $fresh, $amount, $order_id > 0 ? 'shop' : 'counter', $order_id );
@@ -1939,7 +2046,7 @@ final class CouponManager {
 			Db::rollback( 'restore_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ), $e );
 			throw $e;
 		}
-		$this->sync_balance_coupon( $fresh );
+		self::sync_coupon( $fresh, array( 'amount' ) );
 		return true;
 	}
 
@@ -1999,7 +2106,7 @@ final class CouponManager {
 		/* translators: %s: order number */
 		if ( $days > 0 && TopUp::extend_validity( $repo, $card, gmdate( 'Y-m-d H:i:s', time() + $days * DAY_IN_SECONDS ), sprintf( __( 'Balance of order #%s booked back', 'voucher-captain' ), $order->get_order_number() ), $order->get_id() ) ) {
 			/* translators: 1: voucher code, 2: expiry date */
-			$order->add_order_note( sprintf( __( 'Voucher %1$s had expired: its validity was extended to %2$s so the booked-back amount can be used.', 'voucher-captain' ), Downloads::masked_code( (string) $card->code ), wp_date( (string) get_option( 'date_format' ), (int) strtotime( $card->expires_at . ' UTC' ) ) ) );
+			$order->add_order_note( sprintf( __( 'Voucher %1$s had expired: its validity was extended to %2$s so the booked-back amount can be used.', 'voucher-captain' ), Mask::code( (string) $card->code ), wp_date( (string) get_option( 'date_format' ), (int) strtotime( $card->expires_at . ' UTC' ) ) ) );
 			return;
 		}
 		$money = wp_strip_all_tags( wc_price( $amount, array( 'currency' => $card->currency ) ) );
@@ -2049,7 +2156,7 @@ final class CouponManager {
 			$order->update_meta_data( '_vcap_single_use_returned', $done );
 			$order->save_meta_data();
 			/* translators: %s: voucher codes */
-			$order->add_order_note( sprintf( __( 'Order refunded: single-use vouchers %s can be used again.', 'voucher-captain' ), implode( ', ', array_map( array( Downloads::class, 'masked_code' ), $codes ) ) ) );
+			$order->add_order_note( sprintf( __( 'Order refunded: single-use vouchers %s can be used again.', 'voucher-captain' ), implode( ', ', array_map( array( Mask::class, 'code' ), $codes ) ) ) );
 		}
 	}
 
@@ -2071,7 +2178,7 @@ final class CouponManager {
 		if ( $this->given_back && $order instanceof \WC_Order ) {
 			if ( $this->keep_single_use ) {
 				/* translators: %s: voucher codes */
-				$order->add_order_note( sprintf( __( 'Order cancelled: single-use vouchers %s stay redeemed ("Restore balance on cancellation" is off).', 'voucher-captain' ), implode( ', ', array_map( array( Downloads::class, 'masked_code' ), array_map( 'strval', wp_list_pluck( $this->given_back, 'code' ) ) ) ) ) );
+				$order->add_order_note( sprintf( __( 'Order cancelled: single-use vouchers %s stay redeemed ("Restore balance on cancellation" is off).', 'voucher-captain' ), implode( ', ', array_map( array( Mask::class, 'code' ), array_map( 'strval', wp_list_pluck( $this->given_back, 'code' ) ) ) ) ) );
 			} else {
 				foreach ( $this->given_back as $voucher ) {
 					self::check_restored_card( $this->repo, $order, $voucher, (float) $voucher->initial_amount );
@@ -2102,9 +2209,6 @@ final class CouponManager {
 		return $voucher ?? Reissue::voucher_of_previous_code( $this->repo, $code );
 	}
 
-	/**
-	 * Single-use vouchers: mark redeemed once WooCommerce's usage limit is reached.
-	 */
 	/**
 	 * Whether a single-use voucher is held by a shop order that is not paid yet: WooCommerce's tentative coupon
 	 * usage right after checkout, and – because that hold lasts only the "hold stock" minutes – any unpaid order
@@ -2271,6 +2375,9 @@ final class CouponManager {
 		return in_array( wc_format_coupon_code( (string) $voucher->code ), $codes, true ) ? (int) $order->get_id() : 0;
 	}
 
+	/**
+	 * Single-use vouchers: mark redeemed once WooCommerce's usage limit is reached.
+	 */
 	public function usage_increased( $coupon, $new_count, $used_by ): void {
 		if ( ! $coupon instanceof \WC_Coupon || 'yes' !== $coupon->get_meta( '_vcap_voucher' ) ) {
 			return;

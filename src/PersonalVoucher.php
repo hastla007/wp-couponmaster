@@ -85,7 +85,7 @@ final class PersonalVoucher {
 	 * @param bool     $logged_in    Whether a (non-matching) customer is logged in.
 	 */
 	public static function refusal( array $restrictions, bool $logged_in ): string {
-		$masked = array_values( array_unique( array_map( array( Compat\PassCaptainTickets::class, 'mask_email' ), $restrictions ) ) );
+		$masked = array_values( array_unique( array_map( array( Mask::class, 'email' ), $restrictions ) ) );
 		if ( 1 === count( $masked ) ) {
 			return $logged_in
 				/* translators: %s: masked email address, e.g. j***@example.com */

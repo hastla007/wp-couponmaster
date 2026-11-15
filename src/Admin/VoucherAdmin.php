@@ -483,11 +483,6 @@ final class VoucherAdmin {
 	}
 
 	/**
-	 * Send the voucher email to the buyer or the recipient on the admin's request and report the result with
-	 * its reason. Sending to the recipient of a "buyer only" voucher (the admin confirmed it) switches "Send to"
-	 * to the recipient.
-	 */
-	/**
 	 * Why a voucher must not be emailed by hand (H7), '' when it may: a scheduled gift would arrive early with a
 	 * code that does not work yet (use "Send now" instead), a void, expired or used-up voucher is no gift any more.
 	 */
@@ -507,6 +502,11 @@ final class VoucherAdmin {
 		return $v->is_expired() ? __( 'the voucher has expired', 'voucher-captain' ) : '';
 	}
 
+	/**
+	 * Send the voucher email to the buyer or the recipient on the admin's request and report the result with
+	 * its reason. Sending to the recipient of a "buyer only" voucher (the admin confirmed it) switches "Send to"
+	 * to the recipient.
+	 */
 	public function resend( Voucher $v, string $role ): bool {
 		$address = 'recipient' === $role ? $v->recipient_email : $v->buyer_email;
 		$emails  = function_exists( 'WC' ) ? WC()->mailer()->get_emails() : array();
@@ -533,7 +533,7 @@ final class VoucherAdmin {
 			$started = time();
 			if ( $email->trigger( $v ) ) {
 				// Masked (SECURITY.md, D8): the history is seen by all staff and exported.
-				$this->repo->log( $v->id, 'resent', null, null, \VCAP\Note::make( 'resent', array( $role, \VCAP\Compat\PassCaptainTickets::mask_email( $address ) ) ) );
+				$this->repo->log( $v->id, 'resent', null, null, \VCAP\Note::make( 'resent', array( $role, \VCAP\Mask::email( $address ) ) ) );
 				// A first delivery by hand counts as the delivery (H7): the daily safety net does not send it again.
 				vcap()->delivery->record_manual_send( $v, array( $role ) );
 				/* translators: %s: email address */
@@ -548,7 +548,7 @@ final class VoucherAdmin {
 		}
 		/* translators: %s: reason */
 		$message = sprintf( __( 'The voucher email was not sent: %s.', 'voucher-captain' ), $reason );
-		$this->repo->log( $v->id, 'delivery_failed', null, null, \VCAP\Note::make( 'resend_failed', array( \VCAP\Health::mask_addresses( $reason ) ) ) );
+		$this->repo->log( $v->id, 'delivery_failed', null, null, \VCAP\Note::make( 'resend_failed', array( \VCAP\Mask::addresses( $reason ) ) ) );
 		Flash::add( 'error', $message );
 		return false;
 	}
@@ -794,7 +794,7 @@ final class VoucherAdmin {
 				case 'expires_at':
 					return $v->expires_at ? (string) get_date_from_gmt( $v->expires_at, 'Y-m-d' ) : '';
 				case 'recipient_email':
-					return \VCAP\Compat\PassCaptainTickets::mask_email( (string) $v->recipient_email );
+					return \VCAP\Mask::email( (string) $v->recipient_email );
 				case 'message':
 					return '' !== (string) $v->message ? '…' . substr( md5( (string) $v->message ), 0, 6 ) : '';
 				default:
@@ -875,13 +875,7 @@ final class VoucherAdmin {
 			Flash::add( 'warning', __( 'There is no recipient email: emails for this voucher go to the buyer.', 'voucher-captain' ) );
 		}
 
-		if ( $v->coupon_id ) {
-			$coupon = new \WC_Coupon( $v->coupon_id );
-			if ( $coupon->get_id() ) {
-				$coupon->set_date_expires( $v->expires_at ? strtotime( $v->expires_at . ' UTC' ) : null );
-				$coupon->save();
-			}
-		}
+		\VCAP\CouponManager::sync_coupon( $v, array( 'expiry' ) );
 		if ( preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $delivery ) ) {
 			$utc = get_gmt_from_date( str_replace( 'T', ' ', $delivery ) . ':00' );
 			if ( strtotime( $utc . ' UTC' ) > time() ) {

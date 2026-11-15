@@ -368,7 +368,7 @@ final class Referrals {
 		$order->save_meta_data();
 		// The note is part of the friend's order: referrer by account number, the reward code masked.
 		/* translators: 1: masked coupon code, 2: customer account id */
-		$order->add_order_note( sprintf( __( 'Referral reward: coupon %1$s for customer account #%2$d.', 'voucher-captain' ), Downloads::masked_code( (string) $coupon->get_code() ), $owner ) );
+		$order->add_order_note( sprintf( __( 'Referral reward: coupon %1$s for customer account #%2$d.', 'voucher-captain' ), Mask::code( (string) $coupon->get_code() ), $owner ) );
 		$mailer = WC()->mailer();
 		$emails = $mailer ? $mailer->get_emails() : array();
 		if ( isset( $emails['VCAP_Email_Referral'] ) ) {
@@ -505,11 +505,11 @@ final class Referrals {
 			$coupon = new \WC_Coupon( (int) ( $reward['coupon'] ?? 0 ) );
 			if ( $coupon->get_id() && $coupon->get_usage_count() > 0 ) {
 				/* translators: %s: coupon code */
-				$order->add_order_note( sprintf( __( 'Referral reward coupon %s was already used and stays valid.', 'voucher-captain' ), Downloads::masked_code( (string) $coupon->get_code() ) ) );
+				$order->add_order_note( sprintf( __( 'Referral reward coupon %s was already used and stays valid.', 'voucher-captain' ), Mask::code( (string) $coupon->get_code() ) ) );
 			} elseif ( $coupon->get_id() ) {
 				wp_trash_post( $coupon->get_id() );
 				/* translators: %s: coupon code */
-				$order->add_order_note( sprintf( __( 'Unused referral reward coupon %s withdrawn.', 'voucher-captain' ), Downloads::masked_code( (string) $coupon->get_code() ) ) );
+				$order->add_order_note( sprintf( __( 'Unused referral reward coupon %s withdrawn.', 'voucher-captain' ), Mask::code( (string) $coupon->get_code() ) ) );
 			}
 		} elseif ( 'credit' === ( $reward['type'] ?? '' ) ) {
 			$account = $this->credit->account( $owner, false );

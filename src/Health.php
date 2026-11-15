@@ -169,9 +169,9 @@ final class Health {
 		$log  = self::mail_failures();
 		$entry = array(
 			'time'       => time(),
-			'to'         => implode( ', ', array_map( array( Compat\PassCaptainTickets::class, 'mask_email' ), $to ) ),
+			'to'         => implode( ', ', array_map( array( Mask::class, 'email' ), $to ) ),
 			'email'      => mb_substr( wp_strip_all_tags( (string) end( self::$kinds ) ), 0, 80 ),
-			'error'      => self::mask_addresses( mb_substr( wp_strip_all_tags( $error->get_error_message() ), 0, 300 ) ),
+			'error'      => Mask::addresses( mb_substr( wp_strip_all_tags( $error->get_error_message() ), 0, 300 ) ),
 			// Which voucher the failed mail was for (D4), so support finds its history.
 			'voucher_id' => (int) end( self::$vouchers ),
 		);
@@ -180,9 +180,9 @@ final class Health {
 		Logger::error( 'Voucher email could not be sent: ' . $entry['error'], array( 'voucher_id' => $entry['voucher_id'], 'email' => $entry['email'] ) );
 	}
 
-	/** "Could not send to jane@example.com" → "Could not send to j***@example.com". */
+	/** "Could not send to jane@example.com" → "Could not send to j***@example.com". Alias of Mask::addresses(). */
 	public static function mask_addresses( string $text ): string {
-		return (string) preg_replace_callback( '/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i', static fn( $m ) => Compat\PassCaptainTickets::mask_email( $m[0] ), $text );
+		return Mask::addresses( $text );
 	}
 
 	/** @return array<int, array{time:int,to:string,email?:string,error:string}> recent failures, newest first. */
@@ -204,7 +204,7 @@ final class Health {
 
 	/** Privacy erasure: removes the entries that name this address (masked). @return bool whether entries were removed */
 	public static function erase_mail_failures( string $email ): bool {
-		$masked = strtolower( Compat\PassCaptainTickets::mask_email( $email ) );
+		$masked = strtolower( Mask::email( $email ) );
 		$log    = self::mail_failures();
 		$kept   = array_values( array_filter( $log, static fn( $e ) => ! str_contains( strtolower( (string) ( $e['to'] ?? '' ) . ' ' . (string) ( $e['error'] ?? '' ) ), $masked ) ) );
 		if ( count( $kept ) === count( $log ) ) {
@@ -318,7 +318,12 @@ final class Health {
 	}
 
 	public function test_redeem_page(): array {
-		$problem = Compat\PassCaptainTickets::sells_ticket_vouchers() ? Shortcodes::redeem_page_problem() : '';
+		/**
+		 * Whether the shop needs the voucher redeem page (an integration that exchanges vouchers there, e.g. ticket
+		 * vouchers, says so). Default false: then the check passes.
+		 */
+		$needed  = (bool) apply_filters( 'vcap_redeem_page_needed', false );
+		$problem = $needed ? Shortcodes::redeem_page_problem() : '';
 		if ( '' === $problem ) {
 			return self::result( 'redeem_page', 'good', __( 'The voucher redeem page is set up', 'voucher-captain' ), __( 'Voucher emails and ticket vouchers link to a page with the redeem form.', 'voucher-captain' ) );
 		}
@@ -372,7 +377,13 @@ final class Health {
 	 * or a currency switcher is active that no adapter (and no `vcap_amount_to_base_currency` callback) converts.
 	 */
 	public function test_currency(): array {
-		$unknown = Compat\MultiCurrency::unknown_currencies();
+		/**
+		 * Currency conversion state for Site Health, reported by the currency integration: "unknown" = currencies
+		 * without exchange rate in the last 30 days (code => time), "switcher" = name of an active currency switcher
+		 * nothing converts ('' = none).
+		 */
+		$state   = (array) apply_filters( 'vcap_currency_health', array( 'unknown' => array(), 'switcher' => '' ) );
+		$unknown = (array) ( $state['unknown'] ?? array() );
 		$advice  = __( 'Vouchers and gift card balances are kept in the shop base currency. Use a supported currency switcher (WooCommerce Multilingual, Aelia, WOOCS, CURCY, WooPayments Multi-Currency) or convert amounts with the filter "vcap_amount_to_base_currency".', 'voucher-captain' );
 		if ( $unknown ) {
 			return self::result(
@@ -383,7 +394,7 @@ final class Health {
 				sprintf( __( 'No exchange rate to the shop base currency was known for %s in the last 30 days: voucher sales in that currency were held, store-credit refunds and fixed-value vouchers were refused.', 'voucher-captain' ), implode( ', ', array_keys( $unknown ) ) ) . ' ' . $advice
 			);
 		}
-		$switcher = Compat\MultiCurrency::unsupported_switcher();
+		$switcher = (string) ( $state['switcher'] ?? '' );
 		if ( '' !== $switcher ) {
 			return self::result(
 				'currency',

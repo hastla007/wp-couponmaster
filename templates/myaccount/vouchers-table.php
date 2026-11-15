@@ -55,7 +55,7 @@ $show_order = ! empty( $show_order );
 						<br><small><?php /* translators: %s: recipient name */ printf( esc_html__( 'For %s', 'voucher-captain' ), \VCAP\Shortcodes::esc_html_text( $voucher->recipient_name ) ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_html_text(). ?></small>
 					<?php endif; ?>
 				</td>
-				<td data-title="<?php esc_attr_e( 'Code', 'voucher-captain' ); ?>"><code><?php echo esc_html( $vcap_held ? \VCAP\Downloads::masked_code( $voucher->code ) : $voucher->code ); ?></code></td>
+				<td data-title="<?php esc_attr_e( 'Code', 'voucher-captain' ); ?>"><code><?php echo esc_html( $vcap_held ? \VCAP\Mask::code( $voucher->code ) : $voucher->code ); ?></code></td>
 				<td data-title="<?php esc_attr_e( 'Value', 'voucher-captain' ); ?>"><?php echo wp_kses_post( $value ); ?></td>
 				<td data-title="<?php esc_attr_e( 'Status', 'voucher-captain' ); ?>">
 					<?php echo esc_html( $voucher->status_label() ); ?>

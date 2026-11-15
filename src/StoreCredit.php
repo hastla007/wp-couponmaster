@@ -85,15 +85,13 @@ final class StoreCredit {
 
 	/** Creates the account's WooCommerce coupon and stores its id; false (and no coupon left) on failure. */
 	private function attach_coupon( Voucher $v ): bool {
-		$coupon_id = $this->coupons->create_coupon( $v, ProductConfig::DEFAULTS );
+		/* translators: %s: customer name */
+		$description = sprintf( __( 'Store credit of %s (Voucher Captain)', 'voucher-captain' ), $v->buyer_name );
+		$coupon_id   = $this->coupons->create_coupon( $v, ProductConfig::DEFAULTS, $description );
 		// Verify the stored post itself: after a failed insert WooCommerce can still report an id.
 		if ( ! $coupon_id || 'shop_coupon' !== get_post_type( $coupon_id ) || 0 !== strcasecmp( (string) get_post_field( 'post_title', $coupon_id ), $v->code ) ) {
 			return false;
 		}
-		$coupon = new \WC_Coupon( $coupon_id );
-		/* translators: %s: customer name */
-		$coupon->set_description( sprintf( __( 'Store credit of %s (Voucher Captain)', 'voucher-captain' ), $v->buyer_name ) );
-		$coupon->save();
 		$v->coupon_id = $coupon_id;
 		if ( ! $this->repo->update( $v ) ) {
 			wp_delete_post( $coupon_id, true );
@@ -167,7 +165,7 @@ final class StoreCredit {
 			Db::rollback( 'store_credit_adjust', array( 'user_id' => $user_id, 'order_id' => $order_id ), $e );
 			throw $e;
 		}
-		CouponManager::sync_coupon_amount( $fresh );
+		CouponManager::sync_coupon( $fresh, array( 'amount' ) );
 		/** The store credit of a customer changed (args: user id, amount, balance after, event, reason, order id). */
 		Db::action( 'vcap_store_credit_changed', $user_id, $amount, $fresh->balance, $event, $reason, $order_id );
 		return array(

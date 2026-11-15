@@ -53,6 +53,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 
 | Hook | Where | Description |
 |---|---|---|
+| `vcap_active_integrations` | `src/Diagnostics.php` | Active integrations for the diagnostics (id => version or label), added by the integrations themselves. |
 | `vcap_affiliate_commission_on_voucher_sales` | `src/Compat/AffiliateCaptain.php` | – |
 | `vcap_allow_refund_of_spent_top_ups` | `src/TopUp.php` | – |
 | `vcap_allow_refund_of_spent_vouchers` | `src/Issuer.php` | – |
@@ -81,6 +82,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_create_coupon` | `src/Issuer.php` | – |
 | `vcap_csv_format` | `src/Csv.php` | CSV format of the exports. |
 | `vcap_currency_decimals` | `src/API/V1/RedemptionService.php` | Decimal places used for voucher amounts of a currency. |
+| `vcap_currency_health` | `src/Health.php` | Currency conversion state for Site Health, reported by the currency integration: "unknown" = currencies without exchange rate in the last 30 days (code => time), "switcher" = name of an active currency switcher nothing converts ('' = none). |
 | `vcap_currency_rate_known` | `src/Compat/MultiCurrency.php` | Whether amounts in this currency can be converted to the shop base currency (bool, currency, order). |
 | `vcap_custom_amount_price` | `src/CustomAmount.php` | – |
 | `vcap_customer_can_change` | `src/Downloads.php` | – |
@@ -155,6 +157,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_rate_limit_ipv6_48_factor` | `src/Plugin.php` | – |
 | `vcap_redeem_code` | `src/Shortcodes.php` | Connectors may handle a code themselves (e.g. exchange it for tickets): return a result string. |
 | `vcap_redeem_instructions` | `src/Channels.php` | – |
+| `vcap_redeem_page_needed` | `src/Health.php` | Whether the shop needs the voucher redeem page (an integration that exchanges vouchers there, e.g. ticket vouchers, says so). Default false: then the check passes. |
 | `vcap_redeem_prefill` | `src/Shortcodes.php` | – |
 | `vcap_redeem_url` | `src/Shortcodes.php` | Redeem page link of a code ('' = none). |
 | `vcap_redemption_allowed` | `src/API/V1/RedemptionService.php` | Filters whether a voucher may be redeemed for a target (e.g. "only course vouchers unlock courses"). Return false or a WP_Error to refuse. Runs before the voucher row is locked (D6), but may still run inside a caller's transaction: no remote calls that can take long, no own transaction (CONNECTORS.md). |

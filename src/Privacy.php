@@ -317,7 +317,7 @@ final class Privacy {
 				$new = (string) str_ireplace( $address, __( '[erased]', 'voucher-captain' ), $new );
 			}
 			if ( '' !== $code ) {
-				$new = (string) str_ireplace( $code, Downloads::masked_code( $code ), $new );
+				$new = (string) str_ireplace( $code, Mask::code( $code ), $new );
 			}
 			if ( $new === $text ) {
 				continue;

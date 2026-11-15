@@ -373,9 +373,9 @@ final class Delivery {
 			$sent        = $delivered && ! $pending ? array() : $this->send( $voucher, $only, $sent_roles, $failures, $without_pdf );
 			$this->record_attempt( $voucher, $required, $delivered, $sent, $sent_roles, $failures, $without_pdf, $now );
 		} catch ( \Throwable $e ) {
-			Logger::error( 'Voucher delivery failed: ' . Health::mask_addresses( $e->getMessage() ), array( 'voucher_id' => $voucher_id ) );
+			Logger::error( 'Voucher delivery failed: ' . Mask::addresses( $e->getMessage() ), array( 'voucher_id' => $voucher_id ) );
 			if ( isset( $voucher ) && $voucher instanceof Voucher ) {
-				$this->repo->log( $voucher->id, 'delivery_failed', null, null, Note::make( 'delivery_error', array( Health::mask_addresses( mb_substr( wp_strip_all_tags( $e->getMessage() ), 0, 300 ) ) ) ) );
+				$this->repo->log( $voucher->id, 'delivery_failed', null, null, Note::make( 'delivery_error', array( Mask::addresses( mb_substr( wp_strip_all_tags( $e->getMessage() ), 0, 300 ) ) ) ) );
 				try {
 					$this->retry_later( $voucher );
 				} catch ( \Throwable $retry_error ) {
@@ -681,7 +681,7 @@ final class Delivery {
 						$sent   = $email->trigger_bundle( $list, $role );
 						$reason = '' !== $email->last_failure ? $email->last_failure : 'mail_failed';
 					} catch ( \Throwable $e ) {
-						Logger::error( 'Bundled voucher email failed: ' . Health::mask_addresses( $e->getMessage() ), array( 'voucher_ids' => array_map( static fn( $v ) => $v->id, $list ), 'role' => $role ) );
+						Logger::error( 'Bundled voucher email failed: ' . Mask::addresses( $e->getMessage() ), array( 'voucher_ids' => array_map( static fn( $v ) => $v->id, $list ), 'role' => $role ) );
 					}
 					foreach ( $list as $voucher ) {
 						$item = &$plan[ $voucher->id ];
@@ -712,8 +712,8 @@ final class Delivery {
 						$error = $e; // deliver() records it and plans the retry.
 						continue;
 					}
-					Logger::error( 'Voucher delivery failed: ' . Health::mask_addresses( $e->getMessage() ), array( 'voucher_id' => $id ) );
-					$this->repo->log( $id, 'delivery_failed', null, null, Note::make( 'delivery_error', array( Health::mask_addresses( mb_substr( wp_strip_all_tags( $e->getMessage() ), 0, 300 ) ) ) ) );
+					Logger::error( 'Voucher delivery failed: ' . Mask::addresses( $e->getMessage() ), array( 'voucher_id' => $id ) );
+					$this->repo->log( $id, 'delivery_failed', null, null, Note::make( 'delivery_error', array( Mask::addresses( mb_substr( wp_strip_all_tags( $e->getMessage() ), 0, 300 ) ) ) ) );
 					try {
 						$this->retry_later( $item['voucher'] );
 					} catch ( \Throwable $retry_error ) {
@@ -1118,7 +1118,7 @@ final class Delivery {
 				} catch ( \Throwable $e ) {
 					// One broken voucher (PDF, template, mail plugin) neither keeps its claim nor stops the others.
 					Claim::release( $claim );
-					Logger::error( 'Expiry reminder failed: ' . Health::mask_addresses( $e->getMessage() ), array( 'voucher_id' => $voucher->id ) );
+					Logger::error( 'Expiry reminder failed: ' . Mask::addresses( $e->getMessage() ), array( 'voucher_id' => $voucher->id ) );
 					continue;
 				}
 				if ( $mailed ) {
@@ -1169,7 +1169,7 @@ final class Delivery {
 		try {
 			$finished = $this->maintenance_task( $step );
 		} catch ( \Throwable $e ) {
-			Logger::error( sprintf( 'Daily maintenance step "%s" failed: %s', $step, Health::mask_addresses( $e->getMessage() ) ), array( 'step' => $step ) );
+			Logger::error( sprintf( 'Daily maintenance step "%s" failed: %s', $step, Mask::addresses( $e->getMessage() ) ), array( 'step' => $step ) );
 			self::record_run( $step, false, $e->getMessage(), microtime( true ) - $start );
 			return false;
 		}
@@ -1283,7 +1283,7 @@ final class Delivery {
 			array(
 				'time'    => time(),
 				'ok'      => $ok,
-				'note'    => mb_substr( Health::mask_addresses( wp_strip_all_tags( $note ) ), 0, 200 ),
+				'note'    => mb_substr( Mask::addresses( wp_strip_all_tags( $note ) ), 0, 200 ),
 				'seconds' => round( $seconds, 2 ),
 			),
 			false

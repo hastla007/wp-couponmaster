@@ -417,10 +417,9 @@ final class Downloads {
 		return $out;
 	}
 
-	/** Last four characters of a code, e.g. "…7KQ2" (the code is a means of payment). */
+	/** Last four characters of a code, e.g. "…7KQ2" (the code is a means of payment). Alias of Mask::code(). */
 	public static function masked_code( string $code ): string {
-		// Q10: cut whole characters – a byte cut would split multibyte codes (Ä, €) into invalid UTF-8.
-		return '…' . mb_substr( mb_strtoupper( $code, 'UTF-8' ), -4, null, 'UTF-8' );
+		return Mask::code( $code );
 	}
 
 	/**
@@ -430,7 +429,7 @@ final class Downloads {
 		echo '<section class="vcap-vouchers vcap-vouchers-masked"><h2 class="woocommerce-column__title">' . esc_html__( 'Your vouchers', 'voucher-captain' ) . '</h2><ul>';
 		foreach ( $vouchers as $voucher ) {
 			$product = $voucher->product();
-			echo '<li>' . esc_html( ( $product ? $product->get_name() : __( 'Voucher', 'voucher-captain' ) ) . ' · ' . self::masked_code( $voucher->code ) . ' · ' . $voucher->status_label() ) . '</li>';
+			echo '<li>' . esc_html( ( $product ? $product->get_name() : __( 'Voucher', 'voucher-captain' ) ) . ' · ' . Mask::code( $voucher->code ) . ' · ' . $voucher->status_label() ) . '</li>';
 		}
 		echo '</ul><p class="vcap-masked-hint">' . esc_html__( 'For security reasons the full codes are shown only in the customer account of the buyer and in the voucher email.', 'voucher-captain' ) . '</p></section>';
 	}

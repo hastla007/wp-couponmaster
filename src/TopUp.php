@@ -274,7 +274,7 @@ final class TopUp {
 			$card   = $this->repo->get_by_code( wc_format_coupon_code( $code ) ) ?? $this->repo->get_by_code( $code );
 			$data[] = array(
 				'key'   => __( 'Tops up gift card', 'voucher-captain' ),
-				'value' => '…' . substr( $code, -4 ),
+				'value' => Mask::code( $code ),
 			);
 			if ( $card instanceof Voucher && $card->expires_at ) {
 				$data[] = array(
@@ -358,7 +358,7 @@ final class TopUp {
 		$card = $this->repo->get( $card->id ) ?? $card;
 		$this->extend_after_top_up( $card, $order, $item );
 		/* translators: 1: amount, 2: masked card code */
-		$order->add_order_note( sprintf( __( 'Gift card …%2$s topped up by %1$s.', 'voucher-captain' ), wp_strip_all_tags( wc_price( $amount ) ), substr( strtoupper( $card->code ), -4 ) ) );
+		$order->add_order_note( sprintf( __( 'Gift card …%2$s topped up by %1$s.', 'voucher-captain' ), wp_strip_all_tags( wc_price( $amount ) ), Mask::code_tail( $card->code ) ) );
 		/** Whether the customer gets an order note (email) confirming the top-up (default true). */
 		if ( apply_filters( 'vcap_topup_customer_note', true, $card, $order, $item ) ) {
 			$order->add_order_note( self::confirmation( $card, $amount ), 1 );
@@ -374,7 +374,7 @@ final class TopUp {
 		$text  = sprintf(
 			/* translators: 1: masked gift card code, 2: amount added, 3: new balance */
 			__( 'Your gift card …%1$s was topped up by %2$s. New balance: %3$s.', 'voucher-captain' ),
-			substr( strtoupper( $card->code ), -4 ),
+			Mask::code_tail( $card->code ),
 			$money( $amount ),
 			$money( (float) $card->balance )
 		);
@@ -436,13 +436,7 @@ final class TopUp {
 		if ( ! $repo->update_columns( $voucher, array( 'expires_at' ), $from ) ) {
 			return false;
 		}
-		if ( $voucher->coupon_id && class_exists( '\WC_Coupon' ) ) {
-			$coupon = new \WC_Coupon( $voucher->coupon_id );
-			if ( $coupon->get_id() ) {
-				$coupon->set_date_expires( $ends );
-				$coupon->save();
-			}
-		}
+		CouponManager::sync_coupon( $voucher, array( 'expiry' ) );
 		$repo->log( $voucher->id, self::EXTENDED_EVENT, null, null, trim( $note . ' → ' . $voucher->expires_at ), $order_id );
 		return true;
 	}
@@ -713,7 +707,7 @@ final class TopUp {
 			$used = $card ? max( 0.0, $amount - self::card_shares( $card, $repo )['topup_unspent'] ) : 0.0;
 			if ( $used > 0.0001 ) {
 				$spent  += $used;
-				$codes[] = '…' . substr( strtoupper( $code ), -4 );
+				$codes[] = Mask::code( $code );
 			}
 		}
 		return array( $spent, $codes );
@@ -753,7 +747,7 @@ final class TopUp {
 			$missing = $card ? $want - self::card_shares( $card, $this->repo )['topup_unspent'] : 0.0;
 			if ( $card && $missing > 0.5 / ( 10 ** $card->decimals() ) ) {
 				$over   += $missing * $rate;
-				$codes[] = '…' . substr( strtoupper( $code ), -4 );
+				$codes[] = Mask::code( $code );
 			}
 		}
 		$amount = (float) ( $args['amount'] ?? 0 );
