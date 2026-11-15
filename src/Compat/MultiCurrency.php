@@ -33,6 +33,37 @@ final class MultiCurrency {
 		add_action( 'woocommerce_checkout_create_order', array( $this, 'store_rate' ), 20, 1 );
 		add_action( 'woocommerce_store_api_checkout_update_order_meta', array( $this, 'store_rate' ), 20, 1 );
 		add_action( 'admin_notices', array( $this, 'held_notice' ) );
+		// D14: Site Health and the diagnostics read the currency state through filters, not from this class.
+		add_filter( 'vcap_currency_health', array( $this, 'health_state' ) );
+		add_filter( 'vcap_active_integrations', array( $this, 'integration' ) );
+	}
+
+	/**
+	 * Site Health (filter "vcap_currency_health"): currencies refused for want of a rate, unsupported switcher.
+	 *
+	 * @param mixed $state Default state.
+	 * @return array{unknown: array<string, int>, switcher: string}
+	 */
+	public function health_state( $state ): array {
+		return array(
+			'unknown'  => self::unknown_currencies(),
+			'switcher' => self::unsupported_switcher(),
+		);
+	}
+
+	/**
+	 * Diagnostics (filter "vcap_active_integrations"): the supported currency switcher in use.
+	 *
+	 * @param mixed $active Integration id => version or label.
+	 * @return array<string, string>
+	 */
+	public function integration( $active ): array {
+		$active  = is_array( $active ) ? $active : array();
+		$adapter = self::adapter();
+		if ( '' !== $adapter ) {
+			$active['currency'] = $adapter;
+		}
+		return $active;
 	}
 
 	public function convert( $amount, $currency, $order = null ) {

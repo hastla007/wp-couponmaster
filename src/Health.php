@@ -318,7 +318,12 @@ final class Health {
 	}
 
 	public function test_redeem_page(): array {
-		$problem = Compat\PassCaptainTickets::sells_ticket_vouchers() ? Shortcodes::redeem_page_problem() : '';
+		/**
+		 * Whether the shop needs the voucher redeem page (an integration that exchanges vouchers there, e.g. ticket
+		 * vouchers, says so). Default false: then the check passes.
+		 */
+		$needed  = (bool) apply_filters( 'vcap_redeem_page_needed', false );
+		$problem = $needed ? Shortcodes::redeem_page_problem() : '';
 		if ( '' === $problem ) {
 			return self::result( 'redeem_page', 'good', __( 'The voucher redeem page is set up', 'voucher-captain' ), __( 'Voucher emails and ticket vouchers link to a page with the redeem form.', 'voucher-captain' ) );
 		}
@@ -372,7 +377,13 @@ final class Health {
 	 * or a currency switcher is active that no adapter (and no `vcap_amount_to_base_currency` callback) converts.
 	 */
 	public function test_currency(): array {
-		$unknown = Compat\MultiCurrency::unknown_currencies();
+		/**
+		 * Currency conversion state for Site Health, reported by the currency integration: "unknown" = currencies
+		 * without exchange rate in the last 30 days (code => time), "switcher" = name of an active currency switcher
+		 * nothing converts ('' = none).
+		 */
+		$state   = (array) apply_filters( 'vcap_currency_health', array( 'unknown' => array(), 'switcher' => '' ) );
+		$unknown = (array) ( $state['unknown'] ?? array() );
 		$advice  = __( 'Vouchers and gift card balances are kept in the shop base currency. Use a supported currency switcher (WooCommerce Multilingual, Aelia, WOOCS, CURCY, WooPayments Multi-Currency) or convert amounts with the filter "vcap_amount_to_base_currency".', 'voucher-captain' );
 		if ( $unknown ) {
 			return self::result(
@@ -383,7 +394,7 @@ final class Health {
 				sprintf( __( 'No exchange rate to the shop base currency was known for %s in the last 30 days: voucher sales in that currency were held, store-credit refunds and fixed-value vouchers were refused.', 'voucher-captain' ), implode( ', ', array_keys( $unknown ) ) ) . ' ' . $advice
 			);
 		}
-		$switcher = Compat\MultiCurrency::unsupported_switcher();
+		$switcher = (string) ( $state['switcher'] ?? '' );
 		if ( '' !== $switcher ) {
 			return self::result(
 				'currency',

@@ -198,6 +198,8 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	$plain_page = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'publish', 'post_title' => 'About us', 'post_content' => 'Hello' ) );
 	update_option( 'vcap_redeem_page_id', $plain_page );
 	vcap_pc_assert( VCAP\Compat\PassCaptainTickets::sells_ticket_vouchers() && str_contains( VCAP\Shortcodes::redeem_page_problem(), 'About us' ), 'a redeem page without the redeem form is reported while ticket vouchers are sold' );
+	$d14_health = ( new VCAP\Health() )->test_redeem_page();
+	vcap_pc_assert( 'recommended' === $d14_health['status'] && str_contains( wp_json_encode( $d14_health ), 'About us' ), 'D14: Site Health learns through vcap_redeem_page_needed that ticket vouchers need the redeem page', $d14_health['status'] );
 	update_option( 'vcap_redeem_page_id', $redeem_page );
 	vcap_pc_assert( '' === VCAP\Shortcodes::redeem_page_problem(), 'a redeem page with the form is fine' );
 	delete_option( 'vcap_redeem_page_id' );

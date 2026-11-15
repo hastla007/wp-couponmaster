@@ -49,6 +49,8 @@ final class PassCaptainTickets {
 		add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'check_fixed_date_capacity' ), 25, 3 );
 		add_action( 'woocommerce_check_cart_items', array( $this, 'check_cart_capacity' ) );
 		add_action( 'admin_notices', array( $this, 'redeem_page_notice' ) );
+		// D14: Site Health asks through a filter whether the redeem page is needed (ticket vouchers are sold).
+		add_filter( 'vcap_redeem_page_needed', static fn( $needed ) => (bool) $needed || self::sells_ticket_vouchers() );
 		add_action( 'admin_notices', array( $this, 'attention_notice' ) );
 	}
 

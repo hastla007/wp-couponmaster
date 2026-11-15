@@ -1839,6 +1839,17 @@ foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( dirname
 	}
 }
 check( 'D14: no class masks codes or addresses on its own (all through VCAP\Mask)', array() === $d14_maskers, implode( ', ', $d14_maskers ) );
+$d14_core = (string) file_get_contents( dirname( __DIR__ ) . '/src/Health.php' ) . (string) file_get_contents( dirname( __DIR__ ) . '/src/Diagnostics.php' );
+check( 'D14: Site Health and the diagnostics no longer reference src/Compat classes (inverted through filters)', ! preg_match( '/Compat\\\\[A-Z]/', $d14_core ) );
+$d14_filters = $GLOBALS['vcap_test_filters'] ?? array();
+unset( $GLOBALS['vcap_test_filters']['vcap_currency_health'] );
+$d14_plain = ( new VCAP\Health() )->test_currency();
+( new VCAP\Compat\MultiCurrency() )->register();
+$GLOBALS['vcap_test_options'][ VCAP\Compat\MultiCurrency::UNKNOWN_OPTION ] = array( 'CZK' => time() );
+$d14_compat = ( new VCAP\Health() )->test_currency();
+$GLOBALS['vcap_test_filters'] = $d14_filters;
+unset( $GLOBALS['vcap_test_options'][ VCAP\Compat\MultiCurrency::UNKNOWN_OPTION ] );
+check( 'D14: the currency check reads the state the currency integration registers (critical with a refused currency, good without the integration)', 'good' === $d14_plain['status'] && 'critical' === $d14_compat['status'] && str_contains( wp_json_encode( $d14_compat ), 'CZK' ), wp_json_encode( array( $d14_plain['status'], $d14_compat['status'] ) ) );
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

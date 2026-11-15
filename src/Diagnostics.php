@@ -47,7 +47,7 @@ final class Diagnostics {
 		);
 		$fields['pass_captain'] = array(
 			'label' => __( 'WP Pass Captain', 'voucher-captain' ),
-			'value' => Compat\PassCaptain::active() ? ( defined( 'WPCAP_VERSION' ) ? (string) WPCAP_VERSION : __( 'Active', 'voucher-captain' ) ) : __( 'Not active', 'voucher-captain' ),
+			'value' => self::integrations()['passcaptain'] ?? __( 'Not active', 'voucher-captain' ),
 		);
 		$fields['maintenance'] = array(
 			'label' => __( 'Daily maintenance (last run per step)', 'voucher-captain' ),
@@ -148,14 +148,26 @@ final class Diagnostics {
 		return count( (array) wc_get_orders( array( 'limit' => 100, 'return' => 'ids', 'meta_key' => CouponManager::SHORTFALL_META, 'meta_value' => 'yes' ) ) ); // phpcs:ignore WordPress.DB.SlowDBQuery
 	}
 
+	/**
+	 * Integrations that report themselves (D14: the core does not ask the Compat classes): id => version or label,
+	 * e.g. "currency" => switcher name, "passcaptain" => version.
+	 *
+	 * @return array<string, string>
+	 */
+	private static function integrations(): array {
+		/** Active integrations for the diagnostics (id => version or label), added by the integrations themselves. */
+		$active = apply_filters( 'vcap_active_integrations', array() );
+		return is_array( $active ) ? array_map( 'strval', $active ) : array();
+	}
+
 	/** Integrations in use: currency switcher, WP Pass Captain, multilingual plugin, subscriptions. */
 	private static function adapters(): string {
-		$active   = array();
-		$currency = Compat\MultiCurrency::adapter();
-		if ( '' !== $currency ) {
-			$active[] = 'currency: ' . $currency;
+		$active       = array();
+		$integrations = self::integrations();
+		if ( '' !== ( $integrations['currency'] ?? '' ) ) {
+			$active[] = 'currency: ' . $integrations['currency'];
 		}
-		if ( Compat\PassCaptain::active() ) {
+		if ( isset( $integrations['passcaptain'] ) ) {
 			$active[] = 'passcaptain';
 		}
 		if ( defined( 'ICL_SITEPRESS_VERSION' ) ) {
