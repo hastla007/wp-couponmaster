@@ -11,6 +11,12 @@ function vcap_acc_assert( bool $condition, string $message ): void {
 	echo "PASS: {$message}\n";
 }
 
+// M12-101: settings and tax rates changed below are restored in finally, also when an assertion fails (the
+// suites share one database; run-integration.sh expects a freshly installed shop).
+require_once __DIR__ . '/state-guard.php';
+$vcap_restore = vcap_test_state_guard( array( 'woocommerce_calc_taxes', 'woocommerce_prices_include_tax', 'vcap_vouchers_buy_vouchers', VCAP\Compat\MultiCurrency::UNKNOWN_OPTION, VCAP\Compat\MultiCurrency::HELD_OPTION ) );
+try {
+
 function vcap_acc_card( float $value ): VCAP\Voucher {
 	$coupon = new WC_Coupon();
 	$coupon->set_code( 'vcap-acc-' . strtolower( wp_generate_password( 10, false, false ) ) );
@@ -405,3 +411,6 @@ $gone_notes = implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_i
 vcap_acc_assert( str_contains( $gone_notices, $gone_card->code ) && ! str_contains( $gone_notices, 'Refresh the cart' ) && str_contains( $gone_notes, VCAP\Mask::code( $gone_card->code ) ) && ! str_contains( strtoupper( $gone_notes ), strtoupper( $gone_card->code ) ), 'the pay page refuses an order whose gift card balance was used elsewhere with its own message (no "refresh the cart") and an order note with the code masked (AP-S3-3) (' . $gone_notices . ')' );
 
 echo "Voucher Captain acceptance checks passed.\n";
+} finally {
+	$vcap_restore();
+}

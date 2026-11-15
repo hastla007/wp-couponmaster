@@ -460,7 +460,7 @@ final class Settings {
 				'id'      => 'vcap_delete_on_uninstall',
 				'type'    => 'checkbox',
 				'default' => 'no',
-				'desc'    => __( 'Remove voucher tables, templates and settings when the plugin is deleted. WooCommerce coupons are kept.', 'voucher-captain' ),
+				'desc'    => self::delete_on_uninstall_description(),
 			),
 			array(
 				'title'   => __( 'Verbose log', 'voucher-captain' ),
@@ -1061,5 +1061,16 @@ final class Settings {
 			$runtime = wp_generate_password( 64, true, true );
 		}
 		return $runtime;
+	}
+
+	/**
+	 * Description of "Delete data on uninstall" (M12-67): what is deleted, what happens to the coupons, the
+	 * retention periods of bookkeeping records and a link to export the complete redemption journal first.
+	 */
+	public static function delete_on_uninstall_description(): string {
+		$text = __( 'Remove voucher tables (including the redemption journal), templates and settings when the plugin is deleted. The WooCommerce coupons of the vouchers are moved to the trash (restorable there), other coupons are kept.', 'voucher-captain' )
+			. ' ' . __( 'The journal is part of your bookkeeping records: retention periods are 8 or 10 years in Germany (§ 147 AO, § 257 HGB) and 7 years in Austria (§ 132 BAO). Export it before deleting the plugin.', 'voucher-captain' );
+		$url = Admin\ReportsAdmin::journal_csv_url( Admin\ReportsAdmin::JOURNAL_START, wp_date( 'Y-m-d' ) );
+		return esc_html( $text ) . ' <a href="' . esc_url( $url ) . '">' . esc_html__( 'Export the complete journal (CSV)', 'voucher-captain' ) . '</a>';
 	}
 }

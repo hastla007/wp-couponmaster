@@ -97,8 +97,19 @@ function vcap_e2e_voucher( string $type, string $usage, float $value ): string {
 	vcap()->vouchers->insert( $v );
 	return strtoupper( $v->code );
 }
-$state['gift_card']      = vcap_e2e_voucher( 'giftcard', 'balance', 20 );
-$state['single_voucher'] = vcap_e2e_voucher( 'voucher', 'single', 50 );
+// M12-101: a code of its own per test attempt (helpers.js freshCode(): index = retry), so a retried test never
+// meets a card its failed attempt already charged. Pools: block checkout with payment after tax, block checkout
+// with the card as a coupon (vcap_mpv_after_tax=no), classic redeem form, single-use voucher warning.
+$state['gift_cards']        = array();
+$state['gift_cards_coupon'] = array();
+$state['classic_cards']     = array();
+$state['single_vouchers']   = array();
+for ( $vcap_e2e_i = 0; $vcap_e2e_i < 3; $vcap_e2e_i++ ) {
+	$state['gift_cards'][]        = vcap_e2e_voucher( 'giftcard', 'balance', 20 );
+	$state['gift_cards_coupon'][] = vcap_e2e_voucher( 'giftcard', 'balance', 20 );
+	$state['classic_cards'][]     = vcap_e2e_voucher( 'giftcard', 'balance', 20 );
+	$state['single_vouchers'][]   = vcap_e2e_voucher( 'voucher', 'single', 50 );
+}
 
 file_put_contents( __DIR__ . '/.state.json', wp_json_encode( $state ) );
 echo "E2E shop prepared.\n";

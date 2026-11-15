@@ -20,6 +20,11 @@ function vcap_tax_assert( bool $condition, string $message, $detail = null ): vo
 	echo "PASS: {$message}\n";
 }
 
+// M12-101: settings and tax rates changed below are restored in finally, also when an assertion fails (the
+// suites share one database; run-integration.sh expects a freshly installed shop).
+require_once __DIR__ . '/state-guard.php';
+$vcap_restore = vcap_test_state_guard( array( 'woocommerce_calc_taxes', 'woocommerce_prices_include_tax', 'woocommerce_default_country', 'woocommerce_tax_based_on', VCAP\PaymentVouchers::OPTION ) );
+try {
 // M12-03: new installations settle multi-purpose vouchers as a payment after tax ("Multi-purpose vouchers as
 // payment" on). This suite checks the coupon mode of existing shops; the payment mode is covered in
 // tests/tax-integration.php section 8 and tests/tax-accounting-integration.php.
@@ -618,3 +623,6 @@ update_option( 'woocommerce_tax_based_on', $keep_based );
 update_option( 'woocommerce_calc_taxes', 'no' );
 update_option( 'woocommerce_prices_include_tax', 'no' );
 echo "Voucher Captain tax classification checks passed.\n";
+} finally {
+	$vcap_restore();
+}

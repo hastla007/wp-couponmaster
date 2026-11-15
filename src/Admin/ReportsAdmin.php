@@ -18,6 +18,14 @@ final class ReportsAdmin {
 		add_action( 'admin_post_vcap_report_csv', array( $this, 'export' ) );
 	}
 
+	/** First day of a "complete journal" export (the plugin keeps no bookings before). */
+	public const JOURNAL_START = '2000-01-01';
+
+	/** Download link of the redemption journal CSV of a period (Y-m-d, local dates). */
+	public static function journal_csv_url( string $from, string $to ): string {
+		return wp_nonce_url( add_query_arg( array( 'action' => 'vcap_report_csv', 'view' => 'journal', 'from' => $from, 'to' => $to ), admin_url( 'admin-post.php' ) ), 'vcap_report_csv' );
+	}
+
 	/** @return array{0:string,1:string} sanitised from/to (Y-m-d), default the last 30 days */
 	private static function range( array $in ): array {
 		$valid = static fn( $v ) => is_string( $v ) && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $v ) ? $v : '';
@@ -256,7 +264,7 @@ final class ReportsAdmin {
 		$ledger  = new Ledger( vcap()->vouchers );
 		$journal = $ledger->journal( $from, $to, 1000 );
 		$total   = count( $journal ) < 1000 ? count( $journal ) : $ledger->journal_count( $from, $to );
-		$csv     = wp_nonce_url( add_query_arg( array( 'action' => 'vcap_report_csv', 'view' => 'journal', 'from' => $from, 'to' => $to ), admin_url( 'admin-post.php' ) ), 'vcap_report_csv' );
+		$csv     = self::journal_csv_url( $from, $to );
 		$labels  = \VCAP\VoucherRepository::event_labels();
 		?>
 		<div class="wrap">

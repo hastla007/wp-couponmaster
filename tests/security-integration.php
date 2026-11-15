@@ -214,6 +214,50 @@ foreach ( array( array( 'GET', '/vcap/v1/lookup' ), array( 'POST', '/vcap/v1/che
 	vcap_security_assert( in_array( $response->get_status(), array( 401, 403 ), true ), 'unauthenticated scanner route ' . $route[1] . ' is denied' );
 }
 
+// M12-101: cancelling a counter redemption over REST (/vcap/v1/redeem/reverse): anonymous 401, customer 403,
+// cashier without (or with a blank) reason 400 – nothing booked back in any of these cases.
+$m101_card = vcap_security_create_voucher( 'reverse-' . strtolower( wp_generate_password( 6, false, false ) ) . '@example.test', 940000 + random_int( 1, 9999 ) );
+$m101_tag  = strtolower( wp_generate_password( 6, false, false ) );
+$m101_cash = wp_insert_user( array( 'user_login' => 'sec-cashier-' . $m101_tag, 'user_pass' => wp_generate_password(), 'user_email' => 'sec-cashier-' . $m101_tag . '@example.test', 'role' => 'vcap_cashier' ) );
+$m101_cust = wp_insert_user( array( 'user_login' => 'sec-customer-' . $m101_tag, 'user_pass' => wp_generate_password(), 'user_email' => 'sec-customer-' . $m101_tag . '@example.test', 'role' => 'customer' ) );
+wp_set_current_user( $m101_cash );
+$m101_req    = new WP_REST_Request( 'POST', '/vcap/v1/redeem' );
+$m101_req->set_param( 'q', $m101_card->code );
+$m101_req->set_param( 'amount', 5 );
+$m101_req->set_param( 'idempotency_key', wp_generate_uuid4() );
+$m101_booked = rest_do_request( $m101_req );
+$m101_event  = 0;
+foreach ( vcap()->vouchers->events( $m101_card->id ) as $m101_e ) {
+	if ( 'redeemed' === $m101_e['event'] ) {
+		$m101_event = (int) $m101_e['id'];
+	}
+}
+$m101_balance = (float) vcap()->vouchers->get( $m101_card->id )->balance;
+$m101_reverse = static function ( int $user, array $params ) use ( $m101_card, $m101_event ) {
+	wp_set_current_user( $user );
+	$req = new WP_REST_Request( 'POST', '/vcap/v1/redeem/reverse' );
+	$req->set_param( 'q', $m101_card->code );
+	$req->set_param( 'event_id', $m101_event );
+	$req->set_param( 'idempotency_key', wp_generate_uuid4() );
+	foreach ( $params as $name => $value ) {
+		$req->set_param( $name, $value );
+	}
+	$res = rest_do_request( $req );
+	wp_set_current_user( 0 );
+	return $res;
+};
+$m101_anon   = $m101_reverse( 0, array( 'reason' => 'test' ) );
+$m101_denied = $m101_reverse( $m101_cust, array( 'reason' => 'test' ) );
+$m101_none   = $m101_reverse( $m101_cash, array() );
+$m101_blank  = $m101_reverse( $m101_cash, array( 'reason' => '   ' ) );
+vcap_security_assert( 200 === $m101_booked->get_status() && $m101_event > 0, 'M12-101: (a cashier booked a counter redemption to cancel)', array( $m101_booked->get_status(), $m101_event ) );
+vcap_security_assert( 401 === $m101_anon->get_status(), 'M12-101: /redeem/reverse without login is answered with 401', $m101_anon->get_status() );
+vcap_security_assert( 403 === $m101_denied->get_status(), 'M12-101: /redeem/reverse by a customer is answered with 403', $m101_denied->get_status() );
+vcap_security_assert( 400 === $m101_none->get_status() && 400 === $m101_blank->get_status() && 'vcap_reversal_reason' === ( $m101_blank->get_data()['code'] ?? '' ), 'M12-101: /redeem/reverse by a cashier without a reason (missing or blank) is answered with 400', array( $m101_none->get_status(), $m101_blank->get_status(), $m101_blank->get_data() ) );
+vcap_security_assert( abs( $m101_balance - (float) vcap()->vouchers->get( $m101_card->id )->balance ) < 0.0001, 'M12-101: none of the refused cancellations booked anything back' );
+$m101_ok = $m101_reverse( $m101_cash, array( 'reason' => 'typo at the till' ) );
+vcap_security_assert( 200 === $m101_ok->get_status() && abs( $m101_balance + 5 - (float) vcap()->vouchers->get( $m101_card->id )->balance ) < 0.0001, 'M12-101: with a reason the cashier cancels the redemption (5 booked back)', $m101_ok->get_data() );
+
 // Counter redemption with an idempotency key: a retry after a timeout replays the result, never deducts twice.
 $scan_card = vcap_security_create_voucher( 'scan-' . strtolower( wp_generate_password( 6, false, false ) ) . '@example.test', 930000 + random_int( 1, 99999 ) );
 $scan_req  = static function ( float $amount, string $key ) use ( $scan_card ) {

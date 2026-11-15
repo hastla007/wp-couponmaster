@@ -2201,5 +2201,60 @@ check(
 		&& 5.0 === VCAP\CouponManager::tolerance_for( 'USD', 'JPY', 100000.0, 0 )
 );
 
+// M12-88: export batches empty the object cache only in a way the drop-in supports.
+$m88 = array();
+foreach ( array( array( true, true ), array( true, false ), array( false, false ), array( false, true ) ) as $m88_case ) {
+	$GLOBALS['vcap_test_cache'] = array( 'supports' => $m88_case[0], 'external' => $m88_case[1], 'calls' => array() );
+	VCAP\Ledger::flush_runtime_cache();
+	$m88[] = implode( ',', $GLOBALS['vcap_test_cache']['calls'] );
+}
+unset( $GLOBALS['vcap_test_cache'] );
+check( 'M12-88: runtime flush where supported, full flush of a non-persistent cache otherwise, nothing for a persistent drop-in without flush_runtime', array( 'runtime', 'runtime', 'full', '' ) === $m88, implode( '|', $m88 ) );
+
+// M12-58: WooPayments Multi-Currency (fake of its public API: WC_Payments_Multi_Currency()->get_enabled_currencies()
+// with currency objects that have get_rate(); price in the currency = base price × rate).
+if ( ! function_exists( 'WC_Payments_Multi_Currency' ) ) {
+	function WC_Payments_Multi_Currency() { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName
+		return $GLOBALS['vcap_test_wcpay_mc'] ?? null;
+	}
+}
+$m58_currency = static fn( float $rate ) => new class( $rate ) {
+	public function __construct( private float $rate ) {}
+	public function get_rate() {
+		return $this->rate;
+	}
+};
+$GLOBALS['vcap_test_options']['woocommerce_currency'] = 'EUR';
+$m58_before  = VCAP\Compat\MultiCurrency::adapter();
+$m58_filters = $GLOBALS['vcap_test_filters'];
+( new VCAP\Compat\MultiCurrency() )->register();
+$GLOBALS['vcap_test_wcpay_mc'] = new class( array( 'EUR' => $m58_currency( 1.0 ), 'USD' => $m58_currency( 1.25 ), 'CHF' => $m58_currency( 0.0 ) ) ) {
+	public function __construct( private array $list ) {}
+	public function get_enabled_currencies() {
+		return $this->list;
+	}
+};
+check(
+	'M12-58: WooPayments Multi-Currency is a known converter – 125 USD = 100 EUR at its rate, a currency it lists without rate or does not list is never taken 1:1',
+	'' === $m58_before && 'WooPayments Multi-Currency' === VCAP\Compat\MultiCurrency::adapter()
+		&& VCAP\Compat\MultiCurrency::can_convert( 'USD' ) && 100.0 === VCAP\Compat\MultiCurrency::to_base( 125.0, 'USD' )
+		&& abs( 40.0 - (float) ( new VCAP\Compat\MultiCurrency() )->convert( 50.0, 'USD', null ) ) < 1e-9
+		&& ! VCAP\Compat\MultiCurrency::can_convert( 'CHF' ) && null === VCAP\Compat\MultiCurrency::to_base( 10.0, 'CHF' )
+		&& ! VCAP\Compat\MultiCurrency::can_convert( 'GBP' ) && null === VCAP\Compat\MultiCurrency::to_base( 10.0, 'GBP' ),
+	VCAP\Compat\MultiCurrency::adapter()
+);
+unset( $GLOBALS['vcap_test_wcpay_mc'], $GLOBALS['vcap_test_options'][ VCAP\Compat\MultiCurrency::UNKNOWN_OPTION ] );
+$GLOBALS['vcap_test_filters'] = $m58_filters;
+check( 'M12-58: without WooPayments Multi-Currency (function returns nothing) no adapter is reported', '' === VCAP\Compat\MultiCurrency::adapter() );
+
+// M12-102: docs/FREE-PREMIUM.md keeps no hook table of its own (it went stale) but refers to the generated
+// docs/HOOKS.md; every hook named in its section on extension points exists there.
+$m102_doc   = (string) file_get_contents( dirname( __DIR__ ) . '/docs/FREE-PREMIUM.md' );
+$m102_hooks = (string) file_get_contents( dirname( __DIR__ ) . '/docs/HOOKS.md' );
+$m102_part  = (string) strstr( $m102_doc, '## Öffentliche Erweiterungspunkte' );
+preg_match_all( '/`(vcap_[a-z0-9_]+)`/', $m102_part, $m102_named );
+$m102_missing = array_values( array_filter( array_unique( $m102_named[1] ), static fn( $h ) => ! str_contains( $m102_hooks, '`' . $h . '`' ) ) );
+check( 'M12-102: FREE-PREMIUM.md refers to docs/HOOKS.md instead of an own hook table, and every hook it names is in HOOKS.md', '' !== $m102_part && str_contains( $m102_doc, '(HOOKS.md)' ) && ! preg_match( '/^\|\s*`vcap_/m', $m102_doc ) && count( $m102_named[1] ) > 10 && array() === $m102_missing, implode( ', ', $m102_missing ) );
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

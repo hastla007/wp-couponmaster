@@ -297,6 +297,26 @@ foreach ( $u_changed as $u_id => $u_status ) {
 WC_Cache_Helper::invalidate_cache_group( 'coupons' );
 vcap_inst_assert( 'publish' === get_post_status( $u_card->coupon_id ) && 'publish' === get_post_status( $u_orphan->get_id() ), '(coupons restored after the uninstall check)' );
 
+// M12-67: data deletion also removes the settings of the plugin's WooCommerce emails and, with the users (network
+// rule: only when every site opted in), the email verification proof of personal vouchers.
+foreach ( array( 'woocommerce_vcap_m67probe_settings', 'woocommerce_vcapx_settings', 'woocommerce_other_settings' ) as $m67_option ) {
+	update_option( $m67_option, array( 'enabled' => 'yes' ), false );
+}
+$m67_matched = (array) $wpdb->get_col( "SELECT option_name FROM {$wpdb->options} WHERE option_name IN ('woocommerce_vcap_m67probe_settings', 'woocommerce_vcapx_settings', 'woocommerce_other_settings') AND ( " . vcap_uninstall_options_where() . ' )' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
+$m67_emails  = array_map( static fn( $email ) => 'woocommerce_' . $email->id . '_settings', array_filter( WC()->mailer()->get_emails(), static fn( $email ) => str_starts_with( (string) $email->id, 'vcap_' ) ) );
+vcap_inst_assert( array( 'woocommerce_vcap_m67probe_settings' ) === $m67_matched && count( $m67_emails ) >= 4 && array() === array_filter( $m67_emails, static fn( $o ) => ! preg_match( '/^woocommerce_vcap_.+_settings$/', $o ) ), 'M12-67: uninstall removes the "woocommerce_vcap_*_settings" options of its emails, not those of others', $m67_matched );
+foreach ( array( 'woocommerce_vcap_m67probe_settings', 'woocommerce_vcapx_settings', 'woocommerce_other_settings' ) as $m67_option ) {
+	delete_option( $m67_option );
+}
+$m67_user = wp_create_user( 'inst-m67-' . strtolower( wp_generate_password( 6, false ) ), wp_generate_password(), 'inst-m67-' . strtolower( wp_generate_password( 6, false ) ) . '@example.com' );
+update_user_meta( $m67_user, VCAP\PersonalVoucher::META_VERIFIED, 'm67@example.com' );
+update_user_meta( $m67_user, VCAP\PersonalVoucher::META_CHANGED, time() );
+vcap_uninstall_user_meta();
+wp_cache_delete( $m67_user, 'user_meta' );
+vcap_inst_assert( '' === get_user_meta( $m67_user, VCAP\PersonalVoucher::META_VERIFIED, true ) && '' === get_user_meta( $m67_user, VCAP\PersonalVoucher::META_CHANGED, true ), 'M12-67: uninstall removes _vcap_verified_email and _vcap_email_changed of the users' );
+$m67_desc = VCAP\Settings::delete_on_uninstall_description();
+vcap_inst_assert( str_contains( $m67_desc, '10 years' ) && str_contains( $m67_desc, '7 years' ) && str_contains( $m67_desc, 'moved to the trash' ) && ! str_contains( $m67_desc, 'WooCommerce coupons are kept' ) && str_contains( html_entity_decode( $m67_desc ), 'action=vcap_report_csv&view=journal&from=' . VCAP\Admin\ReportsAdmin::JOURNAL_START ), 'M12-67: the option warns about the retention periods (DE 8/10, AT 7 years), says the voucher coupons go to the trash and links the complete journal export' );
+
 // A voucher coupon without its voucher (row deleted, data removed) is never redeemed as an ordinary coupon.
 $u_refused = 0;
 try {

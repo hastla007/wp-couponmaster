@@ -1083,10 +1083,10 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
 - [ ] **[PRIO: MITTEL]** | **[Experte #9]** | **[Kategorie: Feature]** – **M12-49 Keine Bounce-Schnittstelle, Queue-SMTP wird nicht erkannt**
   - *Problem:* „Zugestellt“ bedeutet nur, dass `wp_mail` `true` zurückgab.
   - *Lösung:* `vcap()->delivery->mark_bounced( $voucher_id, $role, $reason )` mit dokumentierter Action und Header `X-VCAP-Voucher`.
-- [ ] **[PRIO: MITTEL]** | **[Experte #10]** | **[Kategorie: UX]** – **M12-50 Redeem-Link leitet auf eine gecachte URL um, die Vorbefüllung ist hinter Page-Caches tot**
+- [x] **[PRIO: MITTEL]** | **[Experte #10]** | **[Kategorie: UX]** – **M12-50 Redeem-Link leitet auf eine gecachte URL um, die Vorbefüllung ist hinter Page-Caches tot** — *Nachweis: `tests/shortcodes-integration.php` „M12-50: a redeem link redirects with a random query argument (a cache MISS), new for every link“, „M12-50: WP Rocket serves no cached page …“; `tests/e2e/04-account-and-shortcodes.spec.js` „a redeem link fills in the form on an uncached URL without the code“; COMPATIBILITY.md (LiteSpeed/Varnish/Cloudflare)*
   - *Problem:* Das Cookie `vcap_redeem_code` ist WP Rocket, LiteSpeed, Cloudflare und Varnish unbekannt.
   - *Lösung:* Mit zufälligem Query-Argument umleiten, `rocket_cache_reject_cookies` setzen, Doku in COMPATIBILITY.md.
-- [ ] **[PRIO: MITTEL]** | **[Experte #10]** | **[Kategorie: Security]** – **M12-51 Vorbefüllter Code wird auch ohne gesendete no-cache-Header ausgegeben**
+- [x] **[PRIO: MITTEL]** | **[Experte #10]** | **[Kategorie: Security]** – **M12-51 Vorbefüllter Code wird auch ohne gesendete no-cache-Header ausgegeben** — *Nachweis: `tests/shortcodes-integration.php` „M12-51: rendered after the headers went out (theme, builder), elsewhere than on the redeem page, the form stays empty“*
   - *Problem:* Rendern Theme oder Builder das Formular, sind die Header schon gesendet. Varnish und Cloudflare cachen dann den vollen Code für alle.
   - *Lösung:* Vorbefüllung nur, wenn die no-cache-Header noch gesendet werden konnten oder es die Einlöseseite selbst ist. Test.
 - [ ] **[PRIO: MITTEL]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-52 Sicherheitssperre für Erstkäufer wird erst nach der Zahlung erklärt**
@@ -1109,7 +1109,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
 - [x] **[PRIO: MITTEL]** | **[Experte #12]** | **[Kategorie: Feature]** – **M12-57 Erstattung als Gutschein für Gastbestellungen** — *Nachweis: tests/refund-lifecycle-integration.php „M12-57: a guest order is refunded as a new gift card of 15 for the buyer“*
   - *Problem:* „Refund as store credit“ ist bei Gästen ausgeblendet.
   - *Lösung:* Für Gäste eine neue Geschenkkarte über den Erstattungsbetrag ausstellen und mailen, mit gleicher Zustimmungs- und Ledger-Logik und mit Positionen (siehe M12-11).
-- [ ] **[PRIO: MITTEL]** | **[Experte #12]** | **[Kategorie: WooCommerce]** – **M12-58 E2E- und Integrationslücken im Block-Checkout und bei Fremdwährungen**
+- [x] **[PRIO: MITTEL]** | **[Experte #12]** | **[Kategorie: WooCommerce]** – **M12-58 E2E- und Integrationslücken im Block-Checkout und bei Fremdwährungen** — *Nachweis: `tests/store-checkout-integration.php` („the declined attempt charges nothing on the card“, „the card is charged 20 once, for the paid order only (ledger)“, beide Modi); `tests/e2e/03-block-checkout.spec.js` + CI-Lauf mit `vcap_mpv_after_tax=no`, `tests/e2e/02-classic-checkout.spec.js` „a gift card entered in the redeem form pays part of a classic checkout“, `tests/e2e/verify.php` (Saldo + Journal); `tests/ecosystem-integration.php` (`VCAP_ECO_STRICT=1`, Matrix `curcy-fee`); `tests/run.php` „M12-58: WooPayments Multi-Currency is a known converter …“*
   - *Problem:*
     - Der Block-E2E läuft nur mit `vcap_mpv_after_tax=yes`.
     - Die klassische Kasse löst nie ein.
@@ -1139,7 +1139,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:* `Tickets::resolve()` prüft bei `vcap_pdf` die Signatur, oder akzeptiert nur Ticket-URLs und rohe Codes.
 - [x] **[PRIO: NIEDRIG]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-66 DSGVO-Löschung überschreibt auch codierte Korrekturbegründungen (GoBD)** — *Nachweis: tests/tax-accounting-integration.php „M12-66: GDPR erasure replaces free-text notes, keeps coded notes and logs the erasure“; tests/security-integration.php „M12-66: the erasure is logged as its own history event“; TAX.md 6.5*
   - *Lösung:* Nur Freitext mit Personenbezug ersetzen, codierte Notizen behalten. Die Löschung selbst protokollieren.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #4, #12]** | **[Kategorie: Tax-Legal]** – **M12-67 Deinstallation: Journal wird ohne Aufbewahrungshinweis gelöscht, Optionstext falsch, Reste bleiben**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #4, #12]** | **[Kategorie: Tax-Legal]** – **M12-67 Deinstallation: Journal wird ohne Aufbewahrungshinweis gelöscht, Optionstext falsch, Reste bleiben** — *Nachweis: `tests/install-integration.php` „M12-67: uninstall removes the "woocommerce_vcap_*_settings" options …“, „M12-67: uninstall removes _vcap_verified_email and _vcap_email_changed …“, „M12-67: the option warns about the retention periods …“*
   - *Problem:*
     - Kein Hinweis auf DE 8/10 bzw. AT 7 Jahre Aufbewahrungsfrist.
     - Der Text „coupons are kept“ ist falsch.
@@ -1183,15 +1183,15 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
     - Zustellstunde als Einstellung, Feld für die Empfängersprache.
     - Site-Health-Prüfung Absenderdomain/SMTP.
     - Mehrere Erinnerungen (Branch `codex/multi-expiry-reminders` übernehmen).
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #10]** | **[Kategorie: WooCommerce]** – **M12-85 Falscher Cache-Schlüssel beim Deaktivieren und Veröffentlichen von Coupons (AP-Q1-2 unvollständig)**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #10]** | **[Kategorie: WooCommerce]** – **M12-85 Falscher Cache-Schlüssel beim Deaktivieren und Veröffentlichen von Coupons (AP-Q1-2 unvollständig)** — *Nachweis: `tests/caching-integration.php` „M12-85: forget_code_cache() deletes the code → coupon id cache under the code key … and its md5 key …“*
   - *Lösung:* Gemeinsames `CouponSync::forget_code_cache()`, das beide Schlüssel löscht.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #10]** | **[Kategorie: UX]** – **M12-86 Grenzen des Zustelldatums stehen fest im gecachten Produkt-HTML**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #10]** | **[Kategorie: UX]** – **M12-86 Grenzen des Zustelldatums stehen fest im gecachten Produkt-HTML** — *Nachweis: `tests/product-setup-integration.php` „M12-86: the delivery date field carries day offsets, no fixed min/max date; frontend.js sets them“*
   - *Lösung:* `min`/`max` clientseitig aus `data`-Attributen setzen.
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #10]** | **[Kategorie: Bug]** – **M12-87 Redirect des Bestätigungslinks ohne no-cache-Header**
   - *Lösung:* `nocache_headers()` und `Referrer-Policy: no-referrer` setzen.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #10]** | **[Kategorie: Bug]** – **M12-88 `wp_cache_flush_runtime()` wirkt nicht bei Drop-ins ohne Unterstützung**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #10]** | **[Kategorie: Bug]** – **M12-88 `wp_cache_flush_runtime()` wirkt nicht bei Drop-ins ohne Unterstützung** — *Nachweis: `tests/run.php` „M12-88: runtime flush where supported, full flush of a non-persistent cache otherwise, nothing for a persistent drop-in without flush_runtime“*
   - *Lösung:* `wp_cache_supports( 'flush_runtime' )` prüfen, sonst bei nicht-persistentem Cache `wp_cache_flush()`.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #10]** | **[Kategorie: Bug]** – **M12-89 Doppelte Inhaltsanalyse je Seitenaufruf ohne Memo**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #10]** | **[Kategorie: Bug]** – **M12-89 Doppelte Inhaltsanalyse je Seitenaufruf ohne Memo** — *Nachweis: `tests/caching-integration.php` „M12-89: page_has_redeem_form() analyses a page once per request (memo per post id)“, „M12-89: once the headers are sent, redeem_link() returns before analysing the page content“*
   - *Lösung:* `page_has_redeem_form()` je Post-ID merken und erst nach dem `headers_sent`-Kurzschluss aufrufen.
 - [x] **[PRIO: NIEDRIG]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-90 Einstellungsseite „Allgemein“ mit rund 50 Optionen** — *Nachweis: tests/shop-admin-integration.php „M12-90: the four sections show every former "General" option exactly once (option keys unchanged)“, „M12-90: the checklist links straight to the option (anchor)“*
   - *Lösung:* Eigene Abschnitte „Einlösung & Guthaben“, „Aktionen & Freunde werben“ und „Codes“. Onboarding-Links mit Anker.
@@ -1218,7 +1218,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:* PIN-Spalte im Import (gehasht gespeichert). Die PIN ist Pflicht bei Saldoabfrage, Aufladung, REST und Online-Einlösung, im gemeinsamen Rate-Limit-Bucket.
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #12]** | **[Kategorie: Security]** – **M12-100 Logger schreibt ungefilterte Exception-Texte**
   - *Lösung:* `Mask::addresses()` zentral in `Logger::log()` auf Nachricht und Kontext anwenden.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #12]** | **[Kategorie: Bug]** – **M12-101 Reihenfolgeabhängige und nicht wiederholbare Tests, REST-Storno ungetestet**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #12]** | **[Kategorie: Bug]** – **M12-101 Reihenfolgeabhängige und nicht wiederholbare Tests, REST-Storno ungetestet** — *Nachweis: `tests/caching-integration.php` „M12-101: after a failing assertion the state guard restores the options …“ (tests/state-guard.php in tax/acceptance/blocks); `tests/security-integration.php` „M12-101: /redeem/reverse without login is answered with 401“ / „… by a customer … 403“ / „… by a cashier without a reason (missing or blank) … 400“; Doku in `tests/run-integration.sh`; E2E frische Karte je Versuch + leerer Warenkorb (`helpers.js` freshCode/emptyCart)*
   - *Lösung:* `try/finally` bei Steuern und Optionen, Doku „frische DB“. E2E idempotent (frische Karte, leerer Warenkorb). `/redeem/reverse` per REST testen (401/403/400).
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #12]** | **[Kategorie: UX]** – **M12-102 Hook-Tabelle in docs/FREE-PREMIUM.md veraltet**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #12]** | **[Kategorie: UX]** – **M12-102 Hook-Tabelle in docs/FREE-PREMIUM.md veraltet** — *Nachweis: `tests/run.php` „M12-102: FREE-PREMIUM.md refers to docs/HOOKS.md instead of an own hook table, and every hook it names is in HOOKS.md“*
   - *Lösung:* Durch einen Verweis auf `docs/HOOKS.md` ersetzen oder automatisch prüfen.

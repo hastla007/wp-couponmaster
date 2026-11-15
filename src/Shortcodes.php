@@ -44,6 +44,13 @@ final class Shortcodes {
 		add_action( 'template_redirect', array( $this, 'handle_redeem' ), 8 );
 		add_action( 'template_redirect', array( $this, 'maybe_no_cache' ), 9 );
 		add_action( 'init', array( $this, 'blocks' ) );
+		// M12-50: page caches that know cookies to skip (WP Rocket) bypass pages for a waiting redeem link code.
+		add_filter( 'rocket_cache_reject_cookies', array( self::class, 'cache_reject_cookies' ) );
+		// M12-89: the content analysis of a page is remembered per request until the page or its meta changes.
+		add_action( 'clean_post_cache', array( self::class, 'forget_page_memo' ), 10, 0 );
+		foreach ( array( 'added_post_meta', 'updated_post_meta', 'deleted_post_meta' ) as $hook ) {
+			add_action( $hook, array( self::class, 'forget_page_memo' ), 10, 0 );
+		}
 	}
 
 	/**
@@ -209,9 +216,47 @@ final class Shortcodes {
 		}
 		if ( ! headers_sent() ) {
 			nocache_headers();
+			self::$no_cache_headers = true;
 		}
 		/** Fires when a page must not be cached (hook for cache plugins without DONOTCACHEPAGE support). */
 		do_action( 'vcap_no_cache' );
+	}
+
+	/** @var bool Whether no_cache() could still send its no-cache headers in this request (M12-51). */
+	private static bool $no_cache_headers = false;
+
+	/**
+	 * Whether this request sent the no-cache headers (no_cache() before any output): only then may a page show a
+	 * code from a redeem link – DONOTCACHEPAGE alone is unknown to Varnish, Cloudflare and other proxy caches.
+	 */
+	public static function no_cache_headers_sent(): bool {
+		return self::$no_cache_headers;
+	}
+
+	/** Tests: forget that the no-cache headers were sent. */
+	public static function reset_no_cache_headers(): void {
+		self::$no_cache_headers = false;
+	}
+
+	/**
+	 * Whether the redeem form may be filled in with a code from a redeem link (M12-51): the no-cache headers were
+	 * sent, or it is the configured redeem page itself (decided on template_redirect, before any output). A form
+	 * rendered only after the headers went out (theme file, builder) stays empty: a proxy cache could otherwise
+	 * keep the full code of one visitor for everybody.
+	 */
+	public static function may_prefill(): bool {
+		if ( self::$no_cache_headers ) {
+			return true;
+		}
+		$page = (int) get_option( 'vcap_redeem_page_id', 0 );
+		return $page > 0 && is_singular() && (int) get_queried_object_id() === $page;
+	}
+
+	/** Cookies for which WP Rocket serves no cached page (filter rocket_cache_reject_cookies, M12-50). */
+	public static function cache_reject_cookies( $cookies ): array {
+		$cookies   = is_array( $cookies ) ? $cookies : array();
+		$cookies[] = self::PREFILL_COOKIE;
+		return array_values( array_unique( $cookies ) );
 	}
 
 	/**
@@ -446,22 +491,34 @@ final class Shortcodes {
 				nocache_headers();
 				header( 'Referrer-Policy: no-referrer' );
 			}
-			wp_safe_redirect( remove_query_arg( 'vcap_code' ) );
+			wp_safe_redirect( self::redeem_link_target() );
 			exit;
 		}
 		// phpcs:enable
+		if ( headers_sent() ) {
+			return;
+		}
 		$prefill = ( $session && '' !== (string) $session->get( self::PREFILL_KEY, '' ) ) || '' !== self::prefill_cookie();
 		$on_page = is_singular() && self::page_has_redeem_form( (int) get_queried_object_id() );
-		if ( headers_sent() || ! ( $on_page || ( $prefill && self::request_shows_redeem_form() ) ) ) {
+		if ( ! ( $on_page || ( $prefill && self::request_shows_redeem_form() ) ) ) {
 			return;
 		}
 		header( 'Referrer-Policy: no-referrer' );
 		if ( $prefill ) {
-			if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-				define( 'DONOTCACHEPAGE', true );
-			}
-			nocache_headers();
+			self::no_cache(); // Before any output: the headers go out, so the form may show the code (M12-51).
 		}
+	}
+
+	/** Query argument with a random value on the redirect of a redeem link (M12-50). */
+	public const NO_CACHE_ARG = 'vcap_nc';
+
+	/**
+	 * Where a redeem link redirects to: the URL without the code, with a random query argument, so a full-page
+	 * cache (WP Rocket, LiteSpeed, Varnish, Cloudflare) has no copy of that URL and the page is built for this
+	 * visitor – a cached copy would never show the code from the cookie or session (M12-50).
+	 */
+	public static function redeem_link_target(): string {
+		return add_query_arg( self::NO_CACHE_ARG, strtolower( wp_generate_password( 8, false ) ), remove_query_arg( array( 'vcap_code', self::NO_CACHE_ARG ) ) );
 	}
 
 	/** Code to fill in the redeem form: from a redeem link (session), else from the URL (no session). */
@@ -552,14 +609,26 @@ final class Shortcodes {
 		return (string) apply_filters( 'vcap_redeem_url', $url, $code );
 	}
 
+	/** @var array<int, bool> Content analysis of page_has_redeem_form() per post id (this request, M12-89). */
+	private static array $page_memo = array();
+
+	/** Forgets the remembered content analysis (a post or its meta changed). */
+	public static function forget_page_memo(): void {
+		self::$page_memo = array();
+	}
+
 	/** Whether a page shows the redeem form (block or shortcode in its content). */
 	public static function page_has_redeem_form( int $page_id ): bool {
-		$has = self::content_has_redeem_form( (string) get_post_field( 'post_content', $page_id ) );
-		if ( ! $has ) {
-			// Elementor keeps its layout in post meta (shortcode widget or block in a text widget).
-			$builder = (string) get_post_meta( $page_id, '_elementor_data', true );
-			$has     = '' !== $builder && ( str_contains( $builder, 'vcap_redeem' ) || str_contains( $builder, 'vcap\\/redeem' ) || str_contains( $builder, 'vcap/redeem' ) );
+		if ( ! isset( self::$page_memo[ $page_id ] ) ) {
+			$has = self::content_has_redeem_form( (string) get_post_field( 'post_content', $page_id ) );
+			if ( ! $has ) {
+				// Elementor keeps its layout in post meta (shortcode widget or block in a text widget).
+				$builder = (string) get_post_meta( $page_id, '_elementor_data', true );
+				$has     = '' !== $builder && ( str_contains( $builder, 'vcap_redeem' ) || str_contains( $builder, 'vcap\\/redeem' ) || str_contains( $builder, 'vcap/redeem' ) );
+			}
+			self::$page_memo[ $page_id ] = $has;
 		}
+		$has = self::$page_memo[ $page_id ];
 		/** Whether the page shows the redeem form (e.g. true when a theme template renders it). */
 		return (bool) apply_filters( 'vcap_page_has_redeem_form', $has, $page_id );
 	}
@@ -627,7 +696,7 @@ final class Shortcodes {
 			$this->sent = false; // Shown once.
 		}
 		$invalid = '' !== $result && in_array( $this->result, array( 'invalid', 'rejected', 'limited', 'expired' ), true );
-		$value   = $preview ? '' : self::clean_code( (string) apply_filters( 'vcap_redeem_prefill', self::link_code() ) );
+		$value   = $preview || ! self::may_prefill() ? '' : self::clean_code( (string) apply_filters( 'vcap_redeem_prefill', self::link_code() ) );
 		ob_start();
 		?>
 		<form method="post" class="vcap-redeem-form" action="#<?php echo esc_attr( $form_id ); ?>">

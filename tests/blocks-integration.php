@@ -11,6 +11,12 @@ function vcap_blocks_assert( bool $condition, string $message, $detail = null ):
 	echo "PASS: {$message}\n";
 }
 
+// M12-101: settings and tax rates changed below are restored in finally, also when an assertion fails (the
+// suites share one database; run-integration.sh expects a freshly installed shop).
+require_once __DIR__ . '/state-guard.php';
+$vcap_restore = vcap_test_state_guard( array( VCAP\PaymentVouchers::OPTION, 'vcap_store_credit', 'woocommerce_calc_taxes', 'woocommerce_prices_include_tax' ) );
+try {
+
 add_filter( 'woocommerce_store_api_disable_nonce_check', '__return_true' );
 wc_load_cart();
 WC()->cart->empty_cart();
@@ -319,3 +325,6 @@ $g12_preview = $g12->get_script_data()['preview'];
 vcap_blocks_assert( is_array( $g12_preview ) && ! empty( $g12_preview['payments'][0]['label'] ) && ! empty( $g12_preview['balances'][0]['text'] ), 'G12: in the editor the blocks get a sample voucher payment and balance' );
 $GLOBALS['current_screen'] = null;
 echo "Voucher Captain block checks passed.\n";
+} finally {
+	$vcap_restore();
+}

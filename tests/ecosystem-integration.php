@@ -4,7 +4,11 @@
  *   wp eval-file tests/ecosystem-integration.php setup <plugin>   (configures the plugin; separate process)
  *   wp eval-file tests/ecosystem-integration.php run <plugin>
  *
- * <plugin>: stripe | paypal (payment gateways), woocs | curcy | wcml (currency switchers).
+ * <plugin>: stripe | paypal (payment gateways), woocs | curcy | curcy-fee | wcml (currency switchers; curcy-fee:
+ * CURCY with an exchange fee on top of the rate, so the effective rate is not the configured one).
+ *
+ * VCAP_ECO_STRICT=1 (set in CI): a check that cannot run (e.g. the cart cannot be switched to the foreign currency
+ * from WP-CLI) fails the job instead of printing a warning.
  *
  * Gateways: the gateway is registered next to Voucher Captain, and the payment flows a gateway drives (payment
  * pending at the provider, failed attempt and retry, duplicate webhooks, refund without calling the provider)
@@ -29,6 +33,11 @@ function vcap_eco_assert( bool $condition, string $message, $detail = null ): vo
 }
 
 defined( 'VCAP_ECO_RATE' ) || define( 'VCAP_ECO_RATE', 1.1 ); // USD per EUR.
+defined( 'VCAP_ECO_FEE' ) || define( 'VCAP_ECO_FEE', 0.05 ); // CURCY exchange fee (fixed, USD per EUR) of "curcy-fee".
+// Rate the shop really charges: CURCY adds its fee to the configured rate.
+$eco_rate   = 'curcy-fee' === $plugin ? VCAP_ECO_RATE + VCAP_ECO_FEE : VCAP_ECO_RATE;
+$eco_strict = '1' === (string) getenv( 'VCAP_ECO_STRICT' );
+$eco_family = 'curcy-fee' === $plugin ? 'curcy' : $plugin;
 
 if ( 'setup' === $mode ) {
 	update_option( 'woocommerce_currency', 'EUR' );
@@ -38,6 +47,7 @@ if ( 'setup' === $mode ) {
 			update_option( 'woocs', array( 'EUR' => $currency( 'EUR', 1, 1 ), 'USD' => $currency( 'USD', VCAP_ECO_RATE, 0 ) ) );
 			break;
 		case 'curcy':
+		case 'curcy-fee':
 			$params = (array) get_option( 'woo_multi_currency_params', array() );
 			update_option(
 				'woo_multi_currency_params',
@@ -48,7 +58,7 @@ if ( 'setup' === $mode ) {
 						'currency_default'       => 'EUR',
 						'currency'               => array( 'EUR', 'USD' ),
 						'currency_rate'          => array( '1', (string) VCAP_ECO_RATE ),
-						'currency_rate_fee'      => array( '0', '0' ),
+						'currency_rate_fee'      => array( '0', 'curcy-fee' === $plugin ? (string) VCAP_ECO_FEE : '0' ),
 						'currency_rate_fee_type' => array( 'fixed', 'fixed' ),
 						'currency_decimals'      => array( '2', '2' ),
 						'currency_pos'           => array( 'right', 'left' ),
@@ -226,25 +236,26 @@ if ( isset( $gateways[ $plugin ] ) ) {
 
 /* ---- Currency switchers ------------------------------------------------------------------------------ */
 
-if ( in_array( $plugin, array( 'woocs', 'curcy', 'wcml' ), true ) ) {
+if ( in_array( $plugin, array( 'woocs', 'curcy', 'curcy-fee', 'wcml' ), true ) ) {
 	vcap_eco_assert( 'EUR' === get_option( 'woocommerce_currency' ), 'the shop base currency is EUR' );
-	$converted = (float) apply_filters( 'vcap_amount_to_base_currency', 110.0, 'USD', null );
-	vcap_eco_assert( abs( 100.0 - $converted ) < 0.01, "the adapter reads the {$plugin} rate: 110 USD = 100 EUR", $converted );
+	$usd_100   = round( 100 * $eco_rate, 2 );
+	$converted = (float) apply_filters( 'vcap_amount_to_base_currency', $usd_100, 'USD', null );
+	vcap_eco_assert( abs( 100.0 - $converted ) < 0.01, "the adapter reads the {$plugin} rate (fee included): {$usd_100} USD = 100 EUR", $converted );
 	vcap_eco_assert( abs( 50.0 - (float) apply_filters( 'vcap_amount_to_base_currency', 50.0, 'EUR', null ) ) < 0.0001, 'base-currency amounts are not converted' );
 	vcap_eco_assert( VCAP\Compat\MultiCurrency::can_convert( 'USD' ) && '' === VCAP\Compat\MultiCurrency::unsupported_switcher(), "{$plugin} counts as a known converter (no Site Health warning)" );
 	$rate_order = wc_create_order();
 	$rate_order->set_currency( 'USD' );
 	$rate_order->save();
 	( new VCAP\Compat\MultiCurrency() )->store_rate( $rate_order );
-	vcap_eco_assert( abs( VCAP_ECO_RATE - (float) wc_get_order( $rate_order->get_id() )->get_meta( VCAP\Compat\MultiCurrency::RATE_META ) ) < 0.0001, "checkout stores the {$plugin} exchange rate on the order", wc_get_order( $rate_order->get_id() )->get_meta( VCAP\Compat\MultiCurrency::RATE_META ) );
+	vcap_eco_assert( abs( $eco_rate - (float) wc_get_order( $rate_order->get_id() )->get_meta( VCAP\Compat\MultiCurrency::RATE_META ) ) < 0.0001, "checkout stores the {$plugin} exchange rate on the order (fee included)", wc_get_order( $rate_order->get_id() )->get_meta( VCAP\Compat\MultiCurrency::RATE_META ) );
 
 	// A voucher bought in USD is worth its EUR value.
 	$product = vcap_eco_product( '50' );
 	$buy     = wc_create_order();
 	$item_id = $buy->add_product( $product, 1 );
 	$item    = $buy->get_item( $item_id );
-	$item->set_subtotal( 55 );
-	$item->set_total( 55 );
+	$item->set_subtotal( round( 50 * $eco_rate, 2 ) );
+	$item->set_total( round( 50 * $eco_rate, 2 ) );
 	$item->save();
 	$buy->set_currency( 'USD' );
 	$buy->set_billing_email( "eco-{$plugin}@example.com" );
@@ -252,7 +263,7 @@ if ( in_array( $plugin, array( 'woocs', 'curcy', 'wcml' ), true ) ) {
 	$buy->calculate_totals( false );
 	wc_get_order( $buy->get_id() )->payment_complete( "{$plugin}-usd-1" );
 	$issued = vcap()->vouchers->for_order( $buy->get_id() );
-	vcap_eco_assert( 1 === count( $issued ) && abs( 50.0 - (float) $issued[0]->initial_amount ) < 0.01, 'a voucher paid with 55 USD is worth 50 EUR', $issued ? (float) $issued[0]->initial_amount : null );
+	vcap_eco_assert( 1 === count( $issued ) && abs( 50.0 - (float) $issued[0]->initial_amount ) < 0.01, 'a voucher paid with ' . round( 50 * $eco_rate, 2 ) . ' USD is worth 50 EUR', $issued ? (float) $issued[0]->initial_amount : null );
 	$line = VCAP\Issuer::line_data( current( wc_get_order( $buy->get_id() )->get_items() ) );
 	vcap_eco_assert( 'USD' === ( $line['order_currency'] ?? '' ) && 'EUR' === ( $line['voucher_currency'] ?? '' ), 'the line keeps the paid (USD) and the stored (EUR) currency' );
 
@@ -266,8 +277,8 @@ if ( in_array( $plugin, array( 'woocs', 'curcy', 'wcml' ), true ) ) {
 	$spend   = wc_create_order();
 	$item_id = $spend->add_product( $goods, 1 );
 	$item    = $spend->get_item( $item_id );
-	$item->set_subtotal( 110 );
-	$item->set_total( 110 );
+	$item->set_subtotal( $usd_100 );
+	$item->set_total( $usd_100 );
 	$item->save();
 	$spend->set_currency( 'USD' );
 	$spend->set_billing_email( "eco-{$plugin}-spend@example.com" );
@@ -279,23 +290,23 @@ if ( in_array( $plugin, array( 'woocs', 'curcy', 'wcml' ), true ) ) {
 	vcap()->coupons->reserve_order( $spend );
 	wc_get_order( $spend->get_id() )->payment_complete( "{$plugin}-usd-2" );
 	$charged = 50.0 - vcap_eco_balance( $card );
-	vcap_eco_assert( $discount > 0 && abs( $discount / VCAP_ECO_RATE - $charged ) < 0.02, 'the gift card is charged the EUR value of the USD discount', array( 'discount_usd' => $discount, 'charged_eur' => $charged ) );
+	vcap_eco_assert( $discount > 0 && abs( $discount / $eco_rate - $charged ) < 0.02, 'the gift card is charged the EUR value of the USD discount', array( 'discount_usd' => $discount, 'charged_eur' => $charged ) );
 	wc_get_order( $spend->get_id() )->update_status( 'cancelled' );
 	vcap_eco_assert( abs( 50.0 - vcap_eco_balance( $card ) ) < 0.02, 'cancelling the USD order gives the EUR value back' );
 
 	// "Multi-purpose vouchers as payment" in a USD cart: the 50 EUR card pays the USD value of 50 EUR (55 USD), not
 	// 50 USD, and is charged 50 EUR. The cart is switched through the plugin's own API.
-	$switch = static function ( string $currency ) use ( $plugin ): bool {
+	$switch = static function ( string $currency ) use ( $eco_family ): bool {
 		global $WOOCS, $woocommerce_wpml; // phpcs:ignore WordPress.NamingConventions.ValidVariableName
-		if ( 'woocs' === $plugin && is_object( $WOOCS ) && method_exists( $WOOCS, 'set_currency' ) ) { // phpcs:ignore WordPress.NamingConventions.ValidVariableName
+		if ( 'woocs' === $eco_family && is_object( $WOOCS ) && method_exists( $WOOCS, 'set_currency' ) ) { // phpcs:ignore WordPress.NamingConventions.ValidVariableName
 			$WOOCS->set_currency( $currency ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName
-		} elseif ( 'curcy' === $plugin ) {
+		} elseif ( 'curcy' === $eco_family ) {
 			foreach ( array( 'WOOMULTI_CURRENCY_F_Data', 'WOOMULTI_CURRENCY_Data' ) as $class ) {
 				if ( class_exists( $class ) && method_exists( $class, 'get_ins' ) && method_exists( $class::get_ins(), 'set_current_currency' ) ) {
 					$class::get_ins()->set_current_currency( $currency );
 				}
 			}
-		} elseif ( 'wcml' === $plugin && isset( $woocommerce_wpml->multi_currency ) && method_exists( $woocommerce_wpml->multi_currency, 'set_client_currency' ) ) {
+		} elseif ( 'wcml' === $eco_family && isset( $woocommerce_wpml->multi_currency ) && method_exists( $woocommerce_wpml->multi_currency, 'set_client_currency' ) ) {
 			$woocommerce_wpml->multi_currency->set_client_currency( $currency );
 		}
 		return $currency === get_woocommerce_currency();
@@ -306,7 +317,7 @@ if ( in_array( $plugin, array( 'woocs', 'curcy', 'wcml' ), true ) ) {
 	if ( $switch( 'USD' ) ) {
 		$mpv_card = vcap_eco_card( 50 );
 		list( $cart, $mpv ) = vcap_eco_mpv_order( $goods, $mpv_card, 'bacs', "eco-{$plugin}-mpv@example.com" );
-		$expected = round( 50.0 * VCAP_ECO_RATE, 2 );
+		$expected = round( 50.0 * $eco_rate, 2 );
 		vcap_eco_assert( 'USD' === $cart['currency'] && abs( $expected - $cart['payment'] ) < 0.02, "payment after tax in USD: the 50 EUR card pays {$expected} USD (its EUR value), not 50 USD", $cart );
 		vcap_eco_assert( $mpv && 'USD' === $mpv->get_currency() && abs( (float) $mpv->get_total() - vcap_eco_lines_total( $mpv ) ) < 0.011, 'payment after tax in USD: the order lines add up to the charged total', $mpv ? array( 'total' => $mpv->get_total(), 'lines' => vcap_eco_lines_total( $mpv ) ) : null );
 		vcap()->coupons->reserve_order( $mpv );
@@ -314,6 +325,9 @@ if ( in_array( $plugin, array( 'woocs', 'curcy', 'wcml' ), true ) ) {
 		vcap_eco_assert( vcap_eco_balance( $mpv_card ) < 0.02, 'payment after tax in USD: the card is charged its 50 EUR', vcap_eco_balance( $mpv_card ) );
 		wc_get_order( $mpv->get_id() )->update_status( 'cancelled' );
 		vcap_eco_assert( abs( 50.0 - vcap_eco_balance( $mpv_card ) ) < 0.02, 'payment after tax in USD: cancelling gives the 50 EUR back' );
+	} elseif ( $eco_strict ) {
+		// M12-58: in CI (VCAP_ECO_STRICT=1) a foreign-currency path that silently does not run is a failure.
+		throw new RuntimeException( "FAIL: {$plugin}: the cart could not be switched to USD from WP-CLI – payment after tax in a foreign currency NOT checked (VCAP_ECO_STRICT=1)." );
 	} else {
 		// Not a pass: the job summary shows it, and the checklist item stays open until the cart can be switched.
 		echo "::warning::{$plugin}: the cart could not be switched to USD from WP-CLI – payment after tax in a foreign currency NOT checked.\n";
@@ -325,4 +339,4 @@ if ( in_array( $plugin, array( 'woocs', 'curcy', 'wcml' ), true ) ) {
 	return;
 }
 
-throw new RuntimeException( "Unknown plugin '{$plugin}' (stripe, paypal, woocs, curcy, wcml)." );
+throw new RuntimeException( "Unknown plugin '{$plugin}' (stripe, paypal, woocs, curcy, curcy-fee, wcml)." );

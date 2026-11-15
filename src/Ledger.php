@@ -418,12 +418,31 @@ final class Ledger {
 	/** @var int Runtime cache flushes of exports (tests: memory stays flat on large exports). */
 	public static int $flushes = 0;
 
-	/** After an export batch: orders, products and options read for its rows are not kept for the whole export. */
+	/**
+	 * After an export batch: orders, products and options read for its rows are not kept for the whole export
+	 * (used by every export: journal, vouchers, coupons of a promotion). Object cache drop-ins without support for
+	 * flush_runtime would only raise a notice there, so: runtime flush where supported, a full flush of the plain
+	 * in-memory cache otherwise, nothing for a persistent cache that cannot flush only the runtime (M12-88).
+	 */
 	public static function flush_runtime_cache(): void {
-		if ( function_exists( 'wp_cache_flush_runtime' ) ) {
+		$mode = self::runtime_flush_mode(
+			function_exists( 'wp_cache_supports' ) && function_exists( 'wp_cache_flush_runtime' ) && wp_cache_supports( 'flush_runtime' ),
+			(bool) wp_using_ext_object_cache()
+		);
+		if ( 'runtime' === $mode ) {
 			wp_cache_flush_runtime();
+		} elseif ( 'full' === $mode ) {
+			wp_cache_flush();
 		}
 		++self::$flushes;
+	}
+
+	/** How flush_runtime_cache() empties the cache: 'runtime', 'full' (non-persistent cache only) or 'none'. */
+	public static function runtime_flush_mode( bool $supports_runtime, bool $external_cache ): string {
+		if ( $supports_runtime ) {
+			return 'runtime';
+		}
+		return $external_cache ? 'none' : 'full';
 	}
 
 	/** R6: groupings of the counter report => ledger columns (vetted, interpolated into the query). */

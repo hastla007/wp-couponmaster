@@ -1381,7 +1381,9 @@ final class Tickets {
 			$code   = $coupon->get_id() && array_filter( (array) $coupon->get_used_by() ) ? 'used' : '';
 		}
 		if ( '' !== $code ) {
-			return new \WP_Error( 'vcap_reversal_' . $code, self::reversal_message( $code ), array( 'status' => in_array( $code, array( 'forbidden' ), true ) ? 403 : 409 ) );
+			// A missing reason is a bad request (400), not a conflict: the scanner keeps a 409 request for a retry.
+			$status = 'forbidden' === $code ? 403 : ( 'reason' === $code ? 400 : 409 );
+			return new \WP_Error( 'vcap_reversal_' . $code, self::reversal_message( $code ), array( 'status' => $status ) );
 		}
 		global $wpdb;
 		// One cancellation per redemption, also with two clicks or two admins at once.

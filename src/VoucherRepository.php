@@ -504,9 +504,7 @@ final class VoucherRepository {
 				$before = $voucher->id;
 				yield $voucher;
 			}
-			if ( function_exists( 'wp_cache_flush_runtime' ) ) {
-				wp_cache_flush_runtime(); // Products and orders read for the rows are not kept for the whole export.
-			}
+			Ledger::flush_runtime_cache(); // Products and orders read for the rows are not kept for the whole export.
 		} while ( count( $page['items'] ) === $batch );
 	}
 

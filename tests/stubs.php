@@ -199,3 +199,10 @@ if ( ! function_exists( 'wp_remote_get' ) ) {
 	function wp_parse_url( $url, $component = -1 ) { return parse_url( $url, $component ); }
 	function plugin_basename( $file ) { return basename( dirname( $file ) ) . '/' . basename( $file ); }
 }
+if ( ! function_exists( 'wp_cache_flush' ) ) {
+	// Object cache seam (M12-88): $GLOBALS['vcap_test_cache'] = [ 'supports' => bool, 'external' => bool, 'calls' => [] ].
+	function wp_cache_supports( $feature ) { return ! empty( $GLOBALS['vcap_test_cache']['supports'] ); }
+	function wp_using_ext_object_cache( $using = null ) { return ! empty( $GLOBALS['vcap_test_cache']['external'] ); }
+	function wp_cache_flush_runtime() { $GLOBALS['vcap_test_cache']['calls'][] = 'runtime'; return true; }
+	function wp_cache_flush() { $GLOBALS['vcap_test_cache']['calls'][] = 'full'; return true; }
+}
