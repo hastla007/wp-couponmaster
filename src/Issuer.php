@@ -917,7 +917,10 @@ final class Issuer {
 	 *     @type bool        $send            Deliver by email now (default true). false: the voucher counts as
 	 *                                        handed over (no email; "Send again" in the admin still works).
 	 *     @type string      $delivery_at     Deliver (and activate) later, UTC "Y-m-d H:i:s".
-	 *     @type string      $code            Own code (must be unused); default: a generated code.
+	 *     @type string      $code            Own code (must be unused and as hard to guess as a generated one,
+	 *                                        CodeGenerator::analyse_batch(), else "vcap_weak_code"); default: a
+	 *                                        generated code.
+	 *     @type bool        $allow_weak      Accept an own code below the minimum strength (default false).
 	 *     @type string      $source          Free label of the caller, e.g. "company-order" (in the history).
 	 *     @type string      $reference       Idempotency key (up to 100 characters), e.g. "order-4711/3": a
 	 *                                        second call with the same reference issues nothing and returns
@@ -969,6 +972,21 @@ final class Issuer {
 		$code = isset( $args['code'] ) ? wc_format_coupon_code( (string) $args['code'] ) : '';
 		if ( '' !== $code && $this->coupons->code_exists( $code ) ) {
 			return new \WP_Error( 'vcap_code_taken', __( 'This code is already used by another voucher or coupon.', 'voucher-captain' ), array( 'status' => 409 ) );
+		}
+		// M12-64: an own code must be as hard to guess as a generated one, unless the caller accepts it knowingly.
+		$min_bits = (int) apply_filters( 'vcap_min_code_bits', CodeGenerator::MIN_BITS );
+		$strength = '' !== $code && empty( $args['allow_weak'] ) ? CodeGenerator::analyse_batch( array( $code ), array(), $min_bits )['bits'][0] : null;
+		if ( null !== $strength && $strength < $min_bits ) {
+			return new \WP_Error(
+				'vcap_weak_code',
+				sprintf(
+					/* translators: 1: estimated bits of the code, 2: minimum bits */
+					__( 'This code is too easy to guess (about %1$d bits, at least %2$d needed). Use a longer random code, or pass allow_weak to accept it knowingly.', 'voucher-captain' ),
+					(int) floor( $strength ),
+					$min_bits
+				),
+				array( 'status' => 400 )
+			);
 		}
 		$source    = mb_substr( sanitize_text_field( (string) ( $args['source'] ?? '' ) ), 0, 60 );
 		$reference = mb_substr( sanitize_text_field( (string) ( $args['reference'] ?? '' ) ), 0, 100 );
