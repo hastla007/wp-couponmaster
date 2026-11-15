@@ -84,6 +84,7 @@ final class Plugin {
 		( new Preview( $this->pdf ) )->register();
 		( new Emails() )->register();
 		( new Privacy( $this->vouchers ) )->register();
+		PersonalVoucher::register(); // AP-S1-1: proof of mailbox for personal vouchers.
 		( new Health() )->register();
 		( new Attention() )->register();
 		( new Diagnostics() )->register();

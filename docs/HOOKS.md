@@ -145,7 +145,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_pdf_html` | `src/PdfRenderer.php` | HTML a voucher PDF is rendered from (args: string $html, Voucher $voucher, array $design). |
 | `vcap_pdf_image_mimes` | `src/PdfRenderer.php` | – |
 | `vcap_pdf_remote_hosts` | `src/PdfRenderer.php` | – |
-| `vcap_personal_voucher_email_verified` | `src/PersonalVoucher.php` | Whether the account email of a customer counts as verified for personal vouchers (V6). Default true: the account was created through WordPress/WooCommerce, which sends the set-password link to that address. |
+| `vcap_personal_voucher_email_verified` | `src/PersonalVoucher.php` | Whether the account email of a customer counts as verified for personal vouchers (V6). Default: the customer proved the mailbox (password reset through the emailed link, or the confirmation link) or the account is grandfathered (registered before the proof of mailbox was introduced, email unchanged since; AP-S1-1). |
 | `vcap_placeholder_definitions` | `src/Placeholders.php` | – |
 | `vcap_placeholders` | `src/Placeholders.php` | – |
 | `vcap_product_config` | `src/ProductConfig.php` | – |
