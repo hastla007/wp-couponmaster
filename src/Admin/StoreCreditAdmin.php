@@ -202,13 +202,15 @@ final class StoreCreditAdmin {
 	}
 
 	public function order_form( \WC_Order $order ): void {
-		if ( ! $this->credit->enabled() || ! $this->can_refund() || ! $order->get_customer_id() || (float) $order->get_remaining_refund_amount() <= 0 ) {
+		// M12-57: a guest order is refunded as a new gift card mailed to the billing address.
+		$guest = ! $order->get_customer_id();
+		if ( ! $this->credit->enabled() || ! $this->can_refund() || ( $guest && '' === StoreCredit::guest_gift_card_email( $order ) ) || (float) $order->get_remaining_refund_amount() <= 0 ) {
 			return;
 		}
 		?>
 		<hr>
-		<p><strong><?php esc_html_e( 'Refund as store credit', 'voucher-captain' ); ?></strong></p>
-		<p class="description"><?php esc_html_e( 'Records a refund without paying money back and credits the customer account instead. Use only if the customer chose store credit; how they agreed is recorded with the refund.', 'voucher-captain' ); ?></p>
+		<p><strong><?php $guest ? esc_html_e( 'Refund as gift card', 'voucher-captain' ) : esc_html_e( 'Refund as store credit', 'voucher-captain' ); ?></strong></p>
+		<p class="description"><?php $guest ? esc_html_e( 'Guest order: records a refund without paying money back and mails the customer a new gift card for the amount instead. Use only if the customer chose a gift card; how they agreed is recorded with the refund.', 'voucher-captain' ) : esc_html_e( 'Records a refund without paying money back and credits the customer account instead. Use only if the customer chose store credit; how they agreed is recorded with the refund.', 'voucher-captain' ); ?></p>
 		<p>
 			<input type="text" class="short" name="vcap_refund_credit_amount" form="vcap-refund-credit" inputmode="decimal" required value="<?php echo esc_attr( wc_format_localized_price( $order->get_remaining_refund_amount() ) ); ?>" aria-label="<?php esc_attr_e( 'Amount', 'voucher-captain' ); ?>" />
 			<input type="text" name="vcap_refund_credit_reason" form="vcap-refund-credit" required placeholder="<?php esc_attr_e( 'Reason (required)', 'voucher-captain' ); ?>" aria-label="<?php esc_attr_e( 'Reason', 'voucher-captain' ); ?>" />
@@ -286,6 +288,16 @@ final class StoreCreditAdmin {
 		);
 		if ( is_wp_error( $result ) ) {
 			Flash::add( 'error', __( 'Refund as store credit failed:', 'voucher-captain' ) . ' ' . $result->get_error_message() );
+		} elseif ( ! empty( $result['voucher_id'] ) ) {
+			Flash::add(
+				'success',
+				sprintf(
+					/* translators: 1: refunded amount, 2: gift card code */
+					__( '%1$s refunded as a new gift card (%2$s); it is mailed to the customer.', 'voucher-captain' ),
+					html_entity_decode( wp_strip_all_tags( wc_price( $amount, array( 'currency' => $order->get_currency() ) ) ), ENT_QUOTES, 'UTF-8' ),
+					(string) $result['code']
+				)
+			);
 		} else {
 			$currency = (string) get_option( 'woocommerce_currency' );
 			Flash::add(

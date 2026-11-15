@@ -100,7 +100,9 @@ vcap_sc_assert( is_wp_error( $stale ), 'a second form with a stale remaining tot
 $guest = vcap_sc_order( $product, 0 );
 $guest->set_status( 'completed' );
 $guest->save();
-vcap_sc_assert( is_wp_error( $credit->refund_as_credit( $guest, 5, 'Guest', array( 'channel' => 'email' ) ) ), 'guest orders cannot be refunded as credit' );
+add_filter( 'vcap_refund_guest_as_gift_card', '__return_false' ); // M12-57: on by default (gift card), see refund-lifecycle.
+vcap_sc_assert( is_wp_error( $credit->refund_as_credit( $guest, 5, 'Guest', array( 'channel' => 'email' ) ) ), 'guest orders cannot be refunded as credit when refunds as gift card are turned off' );
+remove_filter( 'vcap_refund_guest_as_gift_card', '__return_false' );
 
 // Fault injection: WooCommerce cannot record the refund – the credit added first is booked back, nothing else changes.
 $before_fail  = $credit->balance( $alice );

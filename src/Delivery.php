@@ -275,7 +275,12 @@ final class Delivery {
 		if ( function_exists( 'as_unschedule_all_actions' ) ) {
 			as_unschedule_all_actions( 'vcap_deliver_voucher', array( 'voucher_id' => $voucher->id ), self::GROUP );
 		}
-		$this->deliver( $voucher->id, false );
+		$this->forced = true;
+		try {
+			$this->deliver( $voucher->id, false );
+		} finally {
+			$this->forced = false;
+		}
 		$fresh = $this->repo->get( $voucher->id );
 		return $fresh && null !== $fresh->delivered_at;
 	}
@@ -349,6 +354,10 @@ final class Delivery {
 				return;
 			}
 
+			if ( $this->wait_for_payment( $voucher ) ) {
+				return; // M12-08: the order is not (or no longer) paid – nothing is activated or mailed.
+			}
+
 			// Z6: a large quantity of the same order line for the same recipient goes out as one bundled email.
 			if ( '' !== $order_lock && $this->deliver_bundle( $voucher ) ) {
 				return;
@@ -388,6 +397,57 @@ final class Delivery {
 			$this->release_lock( $lock_name );
 			$this->release_lock( $order_lock );
 		}
+	}
+
+	/** Whether "Deliver now" runs (an administrator released the voucher: no payment hold, M12-08). */
+	private bool $forced = false;
+
+	/** Order meta: a held or scheduled voucher waits because its order is not paid (note written once, M12-08). */
+	public const UNPAID_META = '_vcap_delivery_unpaid';
+
+	/**
+	 * M12-08 (V7): a held or scheduled voucher of an order is activated and mailed only while the order is paid – one
+	 * whose order went on hold meanwhile (dispute, PayPal reversal), failed or is pending again waits: order
+	 * note and notice (Attention) once, then another try in an hour (not counted as a failed delivery). Offline
+	 * payment methods count as paid only once the payment was confirmed (Issuer::payment_ok()). Filter
+	 * "vcap_issue_requires_payment" false turns the check off like the payment check before issuing; "Deliver now"
+	 * (an administrator's decision) is not held.
+	 *
+	 * @return bool Whether the delivery waits.
+	 */
+	private function wait_for_payment( Voucher $voucher ): bool {
+		if ( Voucher::STATUS_SCHEDULED !== $voucher->status || $this->forced ) {
+			return false; // Active vouchers are redeemable already; only the activation of a held one is stopped.
+		}
+		$order = $voucher->order_id > 0 && function_exists( 'wc_get_order' ) ? wc_get_order( (int) $voucher->order_id ) : null;
+		if ( ! $order instanceof \WC_Order || $order instanceof \WC_Order_Refund || ! apply_filters( 'vcap_issue_requires_payment', true, $order ) ) {
+			return false;
+		}
+		if ( $order->is_paid() && ( ! Issuer::offline_payment( $order ) || Issuer::payment_ok( $order ) ) ) {
+			if ( '' !== (string) $order->get_meta( self::UNPAID_META ) ) {
+				$order->delete_meta_data( self::UNPAID_META );
+				$order->save_meta_data();
+				Attention::resolve( $order->get_id(), 'delivery-unpaid' );
+			}
+			return false;
+		}
+		if ( '' === (string) $order->get_meta( self::UNPAID_META ) ) {
+			$order->update_meta_data( self::UNPAID_META, (string) time() );
+			$order->save_meta_data();
+			$text = sprintf(
+				/* translators: %s: order status */
+				__( 'Vouchers of this order are due but are not activated or sent: the order is not paid (status %s). They follow automatically once the order is paid again; void them if the payment does not come.', 'voucher-captain' ),
+				wc_get_order_status_name( $order->get_status() )
+			);
+			$order->add_order_note( $text );
+			Attention::add( $order->get_id(), 'delivery-unpaid', $text );
+		}
+		if ( function_exists( 'as_schedule_single_action' ) ) {
+			$args = array( 'voucher_id' => $voucher->id );
+			as_unschedule_all_actions( self::RETRY_HOOK, $args, self::GROUP );
+			as_schedule_single_action( time() + HOUR_IN_SECONDS, self::RETRY_HOOK, $args, self::GROUP );
+		}
+		return true;
 	}
 
 	/** Another worker holds a lock this delivery needs: it is tried again in five minutes (one retry per voucher). */

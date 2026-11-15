@@ -36,6 +36,12 @@ final class Issuer {
 		add_action( 'woocommerce_order_status_refunded', array( $this, 'on_purchase_cancelled' ), 30, 2 );
 		add_action( 'woocommerce_create_refund', array( $this, 'guard_refund' ), 10, 2 );
 		add_action( 'woocommerce_order_partially_refunded', array( $this, 'on_partial_refund' ), 20, 2 );
+		// M12-21: after every guard of "woocommerce_create_refund", before the gateway pays the refund out.
+		add_action( 'woocommerce_create_refund', array( $this, 'reserve_refund' ), 99, 2 );
+		add_action( 'woocommerce_refund_created', array( $this, 'confirm_refund' ), 10, 2 );
+		add_action( self::REFUND_CHECK_HOOK, array( $this, 'check_refund' ), 10, 2 );
+		add_action( 'woocommerce_refund_deleted', array( $this, 'on_refund_deleted' ), 10, 2 );
+		add_action( 'woocommerce_order_status_changed', array( $this, 'on_payment_status' ), 25, 4 );
 		add_action( self::ISSUE_RETRY_HOOK, array( $this, 'issue_async' ) );
 		add_action( self::VOID_RETRY_HOOK, array( $this, 'retry_void' ), 10, 2 );
 		// Vouchers that waited for the payment (e.g. "On hold" as the only issue status, bank transfer): issued
@@ -54,6 +60,18 @@ final class Issuer {
 	public const CONFIG_REFUSED_META = '_vcap_config_refused';
 	/** Ledger event: the unspent purchased value was taken off a gift card whose purchase was refunded. */
 	public const PURCHASE_REFUNDED_EVENT = 'purchase_refunded';
+	/** Ledger event: purchased value taken off for a refund that was not recorded after all, booked back (M12-21). */
+	public const PURCHASE_REFUND_REVERSED_EVENT = 'purchase_refund_reversed';
+	/** Ledger event: voucher suspended because the payment of its order was reversed or held (M12-35). */
+	public const SUSPENDED_EVENT = 'suspended_payment';
+	/** Order item meta: value (voucher weights, see refund_weight()) of the line written off by refunds (M12-07). */
+	public const WRITTEN_OFF_META = '_vcap_refund_written_off';
+	/** Order meta: write-offs of refunds not confirmed yet, refund id => bookings (M12-21). */
+	public const PENDING_REFUND_META = '_vcap_refund_pending';
+	/** Order meta: voucher write-offs per recorded refund, refund id => bookings (M12-37). */
+	public const REFUND_BOOKINGS_META = '_vcap_refund_bookings';
+	/** Action Scheduler hook: checks a refund whose write-offs were never confirmed (args: order_id, refund_id). */
+	public const REFUND_CHECK_HOOK = 'vcap_refund_reservation_check';
 
 	/** Code of the history note of a voucher voided because its purchase was refunded or cancelled (AP-S2-2). */
 	public const REFUND_VOID_NOTE = 'voided_refund';
@@ -1119,7 +1137,14 @@ final class Issuer {
 		}
 		$order    = wc_get_order( (int) $order_id );
 		$order    = $order instanceof \WC_Order ? $order : null;
-		$refunded = $order && $order->has_status( 'refunded' );
+		$refunded = $order && $order->has_status( 'refunded' ) && self::fully_refunded( $order );
+		if ( $order && $order->has_status( 'refunded' ) && ! $refunded ) {
+			// M12-34: "Refunded" set by hand while WooCommerce recorded no refund of the whole total (e.g. the refund
+			// of value already spent was refused): handled like a cancellation, used vouchers stay valid.
+			$text = __( 'The order was set to "Refunded", but less than its total was refunded: it is handled as a cancellation – unused vouchers are voided, used ones stay valid.', 'voucher-captain' );
+			$order->add_order_note( $text );
+			Attention::add( $order->get_id(), 'refunded-status', $text );
+		}
 		$kept     = array();
 		foreach ( $this->repo->for_order( (int) $order_id ) as $voucher ) {
 			if ( ! $refunded && Voucher::STATUS_VOID !== $voucher->status && $this->in_use( $voucher ) ) {
@@ -1137,6 +1162,15 @@ final class Issuer {
 				)
 			);
 		}
+	}
+
+	/** M12-34: whether WooCommerce recorded refunds of the order's whole total (only then it counts as refunded). */
+	public static function fully_refunded( \WC_Order $order ): bool {
+		$refunded = 0.0;
+		foreach ( wc_get_orders( array( 'type' => 'shop_order_refund', 'parent' => $order->get_id(), 'limit' => -1 ) ) as $refund ) {
+			$refunded += $refund instanceof \WC_Order_Refund ? abs( (float) $refund->get_amount() ) : 0.0;
+		}
+		return $refunded + 0.5 / ( 10 ** wc_get_price_decimals() ) >= (float) $order->get_total();
 	}
 
 	/** Whether a voucher was used up completely: a redeemed single-use voucher, a gift card without balance. */
@@ -1260,101 +1294,539 @@ final class Issuer {
 	}
 
 	/**
-	 * Partial refund of voucher lines: as many vouchers as the refunded quantity covers are voided, unused
-	 * ones first (newest first). Partly used gift cards follow when no unused voucher is left for that line (their
-	 * unspent value is what the refund pays back). Vouchers used up completely (redeemed single-use vouchers,
-	 * gift cards without balance) are never voided by a partial refund: their value was not refundable
-	 * (guard_refund()), and a connector would revoke a service already delivered – an order note names them.
+	 * Partial refund of voucher lines: what the refunds pay back of a line is written off its vouchers by value
+	 * (M12-07, write_off_refunds()). Normally reserve_refund() did so already before the gateway paid the refund
+	 * out; this catches refunds saved without that step.
 	 */
 	public function on_partial_refund( $order_id, $refund_id = 0 ): void {
 		$order = wc_get_order( (int) $order_id );
 		if ( ! $order instanceof \WC_Order || ! $this->settings->yes( 'vcap_void_on_refund' ) ) {
 			return;
 		}
+		$this->write_off_refunds( $order, (int) $refund_id );
+	}
+
+	/** Weight of a voucher in its line: its value (base currency), or 1 for vouchers without a value (tickets, %). */
+	private static function refund_weight( Voucher $voucher ): float {
+		return (float) $voucher->initial_amount > 0 && 'percent' !== $voucher->discount_type ? (float) $voucher->initial_amount : 1.0;
+	}
+
+	/**
+	 * M12-07: writes off what the order's refunds pay back of each voucher line, by value – like the top-ups
+	 * (TopUp::refund_shares()): refund lines count for their line, an amount refunded without lines (gateway
+	 * dashboard, "refund as store credit" of older versions) first for the rest of the order, the part beyond it
+	 * for the voucher and top-up lines. Of a line's vouchers the unused ones are written off first (newest first).
+	 *  - Gift cards (stored value): the refunded value comes off the unspent purchased value (ledger
+	 *    "purchase_refunded"); the card is voided only once nothing is left on it (no unspent purchased value, no
+	 *    topped-up value).
+	 *  - Single-use vouchers and vouchers without a value: voided once the refunded value covers the voucher's value;
+	 *    a smaller amount waits for the next refund of the line.
+	 * What a line had written off is kept in WRITTEN_OFF_META, so every refund books only the difference. Used-up
+	 * vouchers are never voided (their value was not refundable, guard_refund()); an order note names them.
+	 *
+	 * @return array<int, array{v:int, i:int, w:float, a:float, x:bool}> bookings: voucher, line, weight written
+	 *                                                                    off, balance taken off, voided
+	 */
+	private function write_off_refunds( \WC_Order $order, int $refund_id ): array {
 		$by_item = array();
 		foreach ( $this->repo->for_order( $order->get_id() ) as $voucher ) {
 			$by_item[ (int) $voucher->order_item_id ][] = $voucher;
 		}
 		if ( ! $by_item ) {
-			return;
+			return array();
 		}
-		// Refunded quantities straight from the refund documents: the order's cached refund list was read by
-		// wc_create_refund() before the new refund was saved.
-		$refunded = array();
-		$refunds  = wc_get_orders(
-			array(
-				'type'   => 'shop_order_refund',
-				'parent' => $order->get_id(),
-				'limit'  => -1,
-			)
-		);
-		foreach ( $refunds as $refund ) {
-			foreach ( $refund->get_items( 'line_item' ) as $refund_item ) {
-				$original = (int) $refund_item->get_meta( '_refunded_item_id' );
-				if ( $original ) {
-					$refunded[ $original ] = ( $refunded[ $original ] ?? 0 ) + abs( (int) $refund_item->get_quantity() );
-				}
-			}
-		}
+		$shares   = TopUp::refund_shares( $order, array_keys( $by_item ) );
+		$bookings = array();
 		foreach ( $by_item as $item_id => $vouchers ) {
-			$item = $order->get_item( $item_id );
-			if ( ! $item instanceof \WC_Order_Item_Product || $item->get_quantity() < 1 ) {
+			$share = min( 1.0, (float) ( $shares[ $item_id ] ?? 0.0 ) );
+			if ( $share <= 0 || ! $order->get_item( $item_id ) instanceof \WC_Order_Item_Product ) {
 				continue;
 			}
-			$refunded_qty = (int) ( $refunded[ $item_id ] ?? 0 );
-			$per_unit     = max( 1, (int) round( count( $vouchers ) / $item->get_quantity() ) );
-			$void_target  = min( count( $vouchers ), $refunded_qty * $per_unit );
-			$handled      = array_filter( $vouchers, fn( Voucher $v ) => $this->purchase_handled( $v ) );
-			$voided       = count( $handled );
-			if ( $voided >= $void_target ) {
+			$total = 0.0;
+			foreach ( $vouchers as $voucher ) {
+				$total += self::refund_weight( $voucher );
+			}
+			$tolerance = 0.5 / ( 10 ** $vouchers[0]->decimals() );
+			$done      = (float) wc_get_order_item_meta( $item_id, self::WRITTEN_OFF_META, true );
+			$want      = $total * $share - $done;
+			if ( $want <= $tolerance ) {
 				continue;
 			}
-			$open = array_values( array_diff_key( $vouchers, $handled ) );
 			usort(
-				$open,
+				$vouchers,
 				fn( Voucher $a, Voucher $b ) => array( $this->in_use( $a ) ? 1 : 0, -$a->item_index ) <=> array( $this->in_use( $b ) ? 1 : 0, -$b->item_index )
 			);
-			foreach ( array_slice( $open, 0, $void_target - $voided ) as $voucher ) {
-				if ( $this->used_up( $voucher ) ) {
-					if ( 'yes' !== (string) $order->get_meta( '_vcap_used_kept_' . $voucher->id ) ) {
-						$order->update_meta_data( '_vcap_used_kept_' . $voucher->id, 'yes' );
-						$order->save_meta_data();
-						$order->add_order_note(
-							sprintf(
-								/* translators: %s: voucher code */
-								__( 'Voucher %s was already used up and stays as it is (partial refund): its value was not refundable. Void it by hand only if the service it was used for is cancelled as well.', 'voucher-captain' ),
-								Mask::code( $voucher->code )
-							)
-						);
-					}
+			$left = $want;
+			foreach ( $vouchers as $voucher ) {
+				if ( $left <= $tolerance ) {
+					break;
+				}
+				$fresh = $this->repo->get( $voucher->id ) ?? $voucher;
+				if ( Voucher::STATUS_VOID === $fresh->status ) {
 					continue;
 				}
-				$ok = true;
-				/* translators: %d: refund id */
-				$kept = $this->void_purchase( $voucher, sprintf( __( 'Partial refund #%d of the purchase order', 'voucher-captain' ), (int) $refund_id ), $order, $ok );
-				if ( ! $ok ) {
-					continue; // void_or_retry() wrote the note and scheduled a retry.
+				$partial = false;
+				$booking = $fresh->is_multi_use() && (float) $fresh->initial_amount > 0
+					? $this->write_off_card( $order, $fresh, $left, $refund_id )
+					: $this->write_off_unit( $order, $fresh, $left, $refund_id, $partial );
+				if ( $partial ) {
+					break; // Not enough refunded for the next voucher: it waits for the next refund of the line.
 				}
-				if ( Voucher::STATUS_VOID === $voucher->status ) {
-					$order->add_order_note(
-						sprintf(
-							/* translators: %s: voucher code */
-							__( 'Voucher %s voided (refunded).', 'voucher-captain' ),
-							Mask::code( $voucher->code )
-						)
-					);
-				} elseif ( $kept > 0 ) {
-					$order->add_order_note(
-						sprintf(
-							/* translators: 1: gift card code, 2: topped-up value that stays on the card */
-							__( 'Gift card %1$s: the purchased value was taken off the card (refunded); the topped-up value of %2$s stays on it.', 'voucher-captain' ),
-							Mask::code( $voucher->code ),
-							wp_strip_all_tags( wc_price( $kept, array( 'currency' => $voucher->currency ) ) )
-						)
-					);
+				if ( $booking ) {
+					$booking['i'] = (int) $item_id;
+					$bookings[]   = $booking;
+					$left        -= $booking['w'];
 				}
 			}
+			if ( $want - $left > 0 ) {
+				wc_update_order_item_meta( $item_id, self::WRITTEN_OFF_META, round( $done + $want - $left, 6 ) );
+			}
 		}
+		return $bookings;
+	}
+
+	/**
+	 * Takes up to $left of the unspent purchased value off a gift card (M12-07); voids it when nothing is left on it.
+	 *
+	 * @return array{v:int, i:int, w:float, a:float, x:bool}|null
+	 */
+	private function write_off_card( \WC_Order $order, Voucher $card, float $left, int $refund_id ): ?array {
+		$shares = TopUp::card_shares( $card, $this->repo );
+		$take   = round( min( $left, $shares['purchase_unspent'] ), $card->decimals() );
+		if ( $take <= 0 ) {
+			$this->note_used_up( $order, $card );
+			return null;
+		}
+		/* translators: %d: refund id */
+		$note   = sprintf( __( 'Partial refund #%d of the purchase order', 'voucher-captain' ), $refund_id );
+		$booked = 0.0;
+		if ( ! $this->coupons->adjust_balance( $card, -$take, self::PURCHASE_REFUNDED_EVENT, $note, $order->get_id(), $booked ) ) {
+			// The balance could not be changed: lock the whole card rather than pay out the purchased value twice.
+			$this->void_or_retry( $card, $note, $order );
+			return array( 'v' => (int) $card->id, 'i' => 0, 'w' => $take, 'a' => 0.0, 'x' => true );
+		}
+		$taken = abs( $booked ); // M12-60: what the locked booking really took.
+		$after = $this->repo->get( $card->id ) ?? $card;
+		// Voided once nothing is left on it: no purchased value (refunded or spent) and no topped-up value.
+		$void  = (float) $after->balance <= 0.5 / ( 10 ** $card->decimals() );
+		if ( $void && $this->void_or_retry( $after, $note, $order ) ) {
+			/* translators: %s: voucher code */
+			$order->add_order_note( sprintf( __( 'Voucher %s voided (refunded).', 'voucher-captain' ), Mask::code( $card->code ) ) );
+		} elseif ( ! $void ) {
+			$order->add_order_note(
+				sprintf(
+					/* translators: 1: gift card code, 2: amount taken off, 3: remaining balance */
+					__( 'Gift card %1$s: %2$s of the purchased value taken off the card (refunded), remaining balance %3$s.', 'voucher-captain' ),
+					Mask::code( $card->code ),
+					wp_strip_all_tags( wc_price( $taken, array( 'currency' => $card->currency ) ) ),
+					wp_strip_all_tags( wc_price( (float) $after->balance, array( 'currency' => $card->currency ) ) )
+				)
+			);
+		}
+		return array( 'v' => (int) $card->id, 'i' => 0, 'w' => $taken, 'a' => $taken, 'x' => $void );
+	}
+
+	/**
+	 * Voids a voucher without stored value once the refunded value $left covers its value (M12-07); a used-up
+	 * voucher stays as it is (order note).
+	 *
+	 * @param bool $partial Set when $left does not cover the voucher.
+	 * @return array{v:int, i:int, w:float, a:float, x:bool}|null
+	 */
+	private function write_off_unit( \WC_Order $order, Voucher $voucher, float $left, int $refund_id, bool &$partial ): ?array {
+		if ( $this->in_use( $voucher ) ) {
+			$this->note_used_up( $order, $voucher );
+			return null;
+		}
+		$weight = self::refund_weight( $voucher );
+		if ( $left + 0.5 / ( 10 ** $voucher->decimals() ) < $weight ) {
+			$partial = true;
+			return null;
+		}
+		/* translators: %d: refund id */
+		if ( $this->void_or_retry( $voucher, sprintf( __( 'Partial refund #%d of the purchase order', 'voucher-captain' ), $refund_id ), $order ) ) {
+			/* translators: %s: voucher code */
+			$order->add_order_note( sprintf( __( 'Voucher %s voided (refunded).', 'voucher-captain' ), Mask::code( $voucher->code ) ) );
+		}
+		// A void that failed is retried (void_or_retry()): its value counts as written off all the same.
+		return array( 'v' => (int) $voucher->id, 'i' => 0, 'w' => $weight, 'a' => 0.0, 'x' => true );
+	}
+
+	/** Order note (once per voucher): a used voucher stays as it is although its line was refunded. */
+	private function note_used_up( \WC_Order $order, Voucher $voucher ): void {
+		if ( 'yes' === (string) $order->get_meta( '_vcap_used_kept_' . $voucher->id ) ) {
+			return;
+		}
+		$order->update_meta_data( '_vcap_used_kept_' . $voucher->id, 'yes' );
+		$order->save_meta_data();
+		$order->add_order_note(
+			sprintf(
+				/* translators: %s: voucher code */
+				__( 'Voucher %s was already used up and stays as it is (partial refund): its value was not refundable. Void it by hand only if the service it was used for is cancelled as well.', 'voucher-captain' ),
+				Mask::code( $voucher->code )
+			)
+		);
+	}
+
+	/** @var array<int, int> Refunds written off in this request and not confirmed yet (refund id => order id). */
+	private array $pending = array();
+
+	/**
+	 * M12-21: after the guards (priority 99 of "woocommerce_create_refund"), before the gateway pays the refund out:
+	 * the vouchers and top-ups the refund pays back are written off now, under the card's row lock – a card spent
+	 * during the gateway call can no longer be paid out a second time. Until WooCommerce confirms the refund
+	 * ("woocommerce_refund_created") the bookings are kept on the order (PENDING_REFUND_META); a refund that is not
+	 * recorded after all (gateway error, a later hook stopped it) is booked back at the end of the request, and by
+	 * an Action Scheduler check if the request died (check_refund()).
+	 *
+	 * @param \WC_Order_Refund $refund Refund about to be saved (already stored with its lines).
+	 * @param array            $args   wc_create_refund() arguments.
+	 */
+	public function reserve_refund( $refund, $args ): void {
+		if ( ! $refund instanceof \WC_Order_Refund || ! $refund->get_id() ) {
+			return; // Not stored yet: the partial-refund hook writes off after the save.
+		}
+		$order = wc_get_order( (int) ( $args['order_id'] ?? $refund->get_parent_id() ) );
+		if ( ! $order instanceof \WC_Order ) {
+			return;
+		}
+		$vouchers = $this->settings->yes( 'vcap_void_on_refund' ) ? $this->write_off_refunds( $order, (int) $refund->get_id() ) : array();
+		$topups   = ( new TopUp( $this->repo, $this->coupons ) )->reverse_for_refund( $order );
+		if ( ! $vouchers && ! $topups ) {
+			return;
+		}
+		$lines = false;
+		foreach ( (array) ( $args['line_items'] ?? array() ) as $line ) {
+			$lines = $lines || ( is_array( $line ) && ( ! empty( $line['qty'] ) || ! empty( $line['refund_total'] ) || ! empty( $line['refund_tax'] ) ) );
+		}
+		$pending                       = self::refund_map( $order, self::PENDING_REFUND_META );
+		$pending[ $refund->get_id() ] = array(
+			'v'     => $vouchers,
+			't'     => $topups,
+			'lines' => $lines,
+		);
+		$order->update_meta_data( self::PENDING_REFUND_META, $pending );
+		$order->save_meta_data();
+		if ( ! $this->pending ) {
+			add_action( 'shutdown', array( $this, 'check_pending_refunds' ) );
+		}
+		$this->pending[ (int) $refund->get_id() ] = $order->get_id();
+		if ( function_exists( 'as_schedule_single_action' ) ) {
+			as_schedule_single_action( time() + 15 * MINUTE_IN_SECONDS, self::REFUND_CHECK_HOOK, array( 'order_id' => $order->get_id(), 'refund_id' => (int) $refund->get_id() ), 'vcap' );
+		}
+	}
+
+	/** Order meta map keyed by refund id (PENDING_REFUND_META, REFUND_BOOKINGS_META). */
+	private static function refund_map( \WC_Order $order, string $key ): array {
+		$map = $order->get_meta( $key );
+		return is_array( $map ) ? $map : array();
+	}
+
+	/**
+	 * WooCommerce recorded the refund ("woocommerce_refund_created"): its write-offs stay (kept per refund in
+	 * REFUND_BOOKINGS_META for a later deletion of the refund, M12-37). A refund without lines that wrote off
+	 * vouchers (e.g. booked by a gateway webhook) is listed for the shop: which voucher it was meant for is a guess.
+	 *
+	 * @param int   $refund_id Refund id.
+	 * @param array $args      wc_create_refund() arguments.
+	 */
+	public function confirm_refund( $refund_id, $args = array() ): void {
+		$order_id = (int) ( is_array( $args ) ? ( $args['order_id'] ?? 0 ) : 0 );
+		unset( $this->pending[ (int) $refund_id ] );
+		$order = $order_id ? wc_get_order( $order_id ) : null;
+		if ( ! $order instanceof \WC_Order ) {
+			return;
+		}
+		$pending = self::refund_map( $order, self::PENDING_REFUND_META );
+		if ( ! isset( $pending[ $refund_id ] ) ) {
+			return;
+		}
+		$this->keep_bookings( $order, (int) $refund_id, (array) $pending[ $refund_id ] );
+		if ( ! empty( $pending[ $refund_id ]['v'] ) && empty( $pending[ $refund_id ]['lines'] ) ) {
+			$codes = array();
+			foreach ( (array) $pending[ $refund_id ]['v'] as $booking ) {
+				$voucher = $this->repo->get( (int) $booking['v'] );
+				$codes[] = $voucher ? Mask::code( $voucher->code ) : '#' . (int) $booking['v'];
+			}
+			$text = sprintf(
+				/* translators: 1: refund id, 2: voucher codes */
+				__( 'Refund #%1$d was recorded without order lines (e.g. by the payment provider). Vouchers bought with this order were written off by its value: %2$s. Check that this matches what was refunded.', 'voucher-captain' ),
+				(int) $refund_id,
+				implode( ', ', array_unique( $codes ) )
+			);
+			$order->add_order_note( $text );
+			Attention::add( $order->get_id(), 'refund-value:' . (int) $refund_id, $text );
+		}
+	}
+
+	/** Moves the bookings of a recorded refund from PENDING_REFUND_META to REFUND_BOOKINGS_META. */
+	private function keep_bookings( \WC_Order $order, int $refund_id, array $entry ): void {
+		$pending = self::refund_map( $order, self::PENDING_REFUND_META );
+		unset( $pending[ $refund_id ] );
+		$pending ? $order->update_meta_data( self::PENDING_REFUND_META, $pending ) : $order->delete_meta_data( self::PENDING_REFUND_META );
+		if ( ! empty( $entry['v'] ) ) {
+			$kept               = self::refund_map( $order, self::REFUND_BOOKINGS_META );
+			$kept[ $refund_id ] = array( 'v' => $entry['v'] );
+			$order->update_meta_data( self::REFUND_BOOKINGS_META, $kept );
+		}
+		$order->save_meta_data();
+	}
+
+	/** End of the request: refunds written off by reserve_refund() and never confirmed are checked (M12-21). */
+	public function check_pending_refunds(): void {
+		foreach ( $this->pending as $refund_id => $order_id ) {
+			$this->check_refund( $order_id, $refund_id );
+		}
+		$this->pending = array();
+	}
+
+	/**
+	 * Action Scheduler (REFUND_CHECK_HOOK) and end of request: a refund whose write-offs are still pending is kept
+	 * when it exists, otherwise its write-offs are booked back (M12-21).
+	 */
+	public function check_refund( $order_id, $refund_id ): void {
+		$order = wc_get_order( (int) $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			return;
+		}
+		$pending = self::refund_map( $order, self::PENDING_REFUND_META );
+		if ( ! isset( $pending[ $refund_id ] ) ) {
+			return;
+		}
+		$refund = wc_get_order( (int) $refund_id );
+		if ( $refund instanceof \WC_Order_Refund ) {
+			$this->keep_bookings( $order, (int) $refund_id, (array) $pending[ $refund_id ] );
+			return;
+		}
+		$failed = $this->undo_bookings( $order, (array) $pending[ $refund_id ] );
+		unset( $pending[ $refund_id ] );
+		$pending ? $order->update_meta_data( self::PENDING_REFUND_META, $pending ) : $order->delete_meta_data( self::PENDING_REFUND_META );
+		$order->save_meta_data();
+		if ( $failed ) {
+			$text = sprintf(
+				/* translators: 1: refund id, 2: voucher codes */
+				__( 'The refund was not recorded, but what it had written off could not be booked back completely (%2$s). Check these vouchers and gift cards (refund #%1$d).', 'voucher-captain' ),
+				(int) $refund_id,
+				implode( ', ', $failed )
+			);
+			$order->add_order_note( $text );
+			Attention::add( $order->get_id(), 'refund-undo:' . (int) $refund_id, $text );
+			return;
+		}
+		/* translators: %d: refund id */
+		$order->add_order_note( sprintf( __( 'Refund #%d was not recorded: the vouchers and gift card top-ups it had written off were booked back.', 'voucher-captain' ), (int) $refund_id ) );
+	}
+
+	/**
+	 * Books the write-offs of a refund back (M12-21): balances are given back (ledger "purchase_refund_reversed"),
+	 * vouchers voided by it are reactivated, top-ups booked again, the line counters set back.
+	 *
+	 * @return string[] masked codes that could not be booked back
+	 */
+	private function undo_bookings( \WC_Order $order, array $entry ): array {
+		$failed = array();
+		$topup  = new TopUp( $this->repo, $this->coupons );
+		foreach ( array_reverse( (array) ( $entry['t'] ?? array() ) ) as $booking ) {
+			if ( ! $topup->undo_reversal( $order, (array) $booking ) ) {
+				$failed[] = '#' . (int) ( $booking['t'] ?? 0 );
+			}
+		}
+		/* translators: %s: order number */
+		$note = sprintf( __( 'Refund of order #%s not recorded', 'voucher-captain' ), $order->get_order_number() );
+		foreach ( array_reverse( (array) ( $entry['v'] ?? array() ) ) as $booking ) {
+			$voucher = $this->repo->get( (int) $booking['v'] );
+			if ( ! $voucher ) {
+				continue;
+			}
+			$ok = (float) $booking['a'] <= 0 || $this->coupons->adjust_balance( $voucher, (float) $booking['a'], self::PURCHASE_REFUND_REVERSED_EVENT, $note, $order->get_id() );
+			if ( $ok && ! empty( $booking['x'] ) ) {
+				$voucher = $this->repo->get( $voucher->id ) ?? $voucher;
+				$ok      = Voucher::STATUS_VOID !== $voucher->status || $this->restore_status( $voucher, $note );
+			}
+			if ( ! $ok ) {
+				$failed[] = Mask::code( $voucher->code );
+				continue;
+			}
+			$item_id = (int) $booking['i'];
+			$done    = (float) wc_get_order_item_meta( $item_id, self::WRITTEN_OFF_META, true );
+			wc_update_order_item_meta( $item_id, self::WRITTEN_OFF_META, max( 0.0, round( $done - (float) $booking['w'], 6 ) ) );
+		}
+		return $failed;
+	}
+
+	/**
+	 * Makes a voucher voided or suspended by the plugin itself usable again (refund not recorded, payment back):
+	 * no value is given that the buyer was paid back, so no right to raise balances is needed (unlike reactivate()).
+	 */
+	private function restore_status( Voucher $voucher, string $note ): bool {
+		$coupon  = $voucher->coupon_id ? new \WC_Coupon( $voucher->coupon_id ) : null;
+		$used_up = $voucher->is_multi_use()
+			? (float) $voucher->balance <= 0
+			: ( $coupon && $coupon->get_id() && $coupon->get_usage_limit() > 0 && $coupon->get_usage_count() >= $coupon->get_usage_limit() );
+		$status  = $used_up ? Voucher::STATUS_REDEEMED : Voucher::STATUS_ACTIVE;
+		if ( ! $this->repo->update_status( $voucher->id, $status ) ) {
+			return false;
+		}
+		$voucher->status = $status;
+		$enabled         = $this->coupons->set_coupon_enabled( $voucher, true );
+		$this->repo->log( $voucher->id, 'reactivated', null, $voucher->balance, $enabled ? $note : trim( $note . ' ' . __( '(WooCommerce coupon could not be enabled – enable it manually)', 'voucher-captain' ) ) );
+		return $enabled;
+	}
+
+	/**
+	 * M12-37: a refund was deleted on the order screen. Its money may not have gone back, but what it wrote off
+	 * stays as it is (a voucher could have been handed on meanwhile): the shop gets a notice with the vouchers to
+	 * reactivate by hand. Top-ups taken back for it are booked again (TopUp::rebook()); store credit or a gift card
+	 * it paid out is taken back (StoreCredit::reverse_refund()).
+	 *
+	 * @param int $refund_id Deleted refund.
+	 * @param int $order_id  Its order.
+	 */
+	public function on_refund_deleted( $refund_id, $order_id ): void {
+		$order = wc_get_order( (int) $order_id );
+		if ( ! $order instanceof \WC_Order ) {
+			return;
+		}
+		$kept = self::refund_map( $order, self::REFUND_BOOKINGS_META );
+		if ( ! empty( $kept[ $refund_id ]['v'] ) ) {
+			$codes = array();
+			foreach ( (array) $kept[ $refund_id ]['v'] as $booking ) {
+				$voucher = $this->repo->get( (int) $booking['v'] );
+				if ( $voucher ) {
+					$codes[] = Mask::code( $voucher->code );
+				}
+			}
+			unset( $kept[ $refund_id ] );
+			$kept ? $order->update_meta_data( self::REFUND_BOOKINGS_META, $kept ) : $order->delete_meta_data( self::REFUND_BOOKINGS_META );
+			$order->save_meta_data();
+			if ( $codes ) {
+				$text = sprintf(
+					/* translators: 1: refund id, 2: voucher codes */
+					__( 'Refund #%1$d was deleted. The vouchers it voided or took value off stay as they are: %2$s. If the money was not paid back, reactivate them or book the value back on the voucher screen.', 'voucher-captain' ),
+					(int) $refund_id,
+					implode( ', ', array_unique( $codes ) )
+				);
+				$order->add_order_note( $text );
+				Attention::add( $order->get_id(), 'refund-deleted:' . (int) $refund_id, $text );
+			}
+		}
+		( new TopUp( $this->repo, $this->coupons ) )->rebook( $order, __( 'refund deleted', 'voucher-captain' ) );
+		vcap()->store_credit->reverse_refund( $order, (int) $refund_id );
+	}
+
+	/**
+	 * Payment reversed or paid again (status hook, priority 25):
+	 *  - M12-35: paid → on hold or failed (dispute, chargeback, reversal): unused vouchers of the order are
+	 *    suspended (status void, coupon disabled, ledger "suspended_payment"), used ones listed for the shop.
+	 *  - Back to a paid status: suspended vouchers are made usable again.
+	 *  - M12-36: paid again after a cancellation or refund: vouchers voided for it are listed with a link to
+	 *    reactivate them (only the shop knows whether money went back), top-ups taken back are booked again.
+	 */
+	public function on_payment_status( $order_id, $from = '', $to = '', $order = null ): void {
+		$order = $order instanceof \WC_Order ? $order : wc_get_order( (int) $order_id );
+		if ( ! $order instanceof \WC_Order || $order instanceof \WC_Order_Refund ) {
+			return;
+		}
+		$paid = self::paid_statuses();
+		if ( in_array( $from, $paid, true ) && in_array( $to, array( 'on-hold', 'failed' ), true ) ) {
+			/** Whether vouchers of an order are suspended when its payment is reversed or held (default: "void on refund"). */
+			if ( apply_filters( 'vcap_suspend_on_payment_reversal', $this->settings->yes( 'vcap_void_on_refund' ), $order ) ) {
+				$this->suspend_for_payment( $order );
+			}
+			return;
+		}
+		if ( ! in_array( $to, $paid, true ) || in_array( $from, $paid, true ) ) {
+			return;
+		}
+		$this->resume_after_payment( $order );
+		if ( in_array( $from, array( 'cancelled', 'refunded' ), true ) ) {
+			$this->paid_again( $order );
+		}
+	}
+
+	/** M12-35: suspends the unused vouchers of an order whose payment was reversed or held. */
+	private function suspend_for_payment( \WC_Order $order ): void {
+		$done = array();
+		$kept = array();
+		/* translators: %s: order status */
+		$note = sprintf( __( 'Payment of the purchase order reversed or held (status %s)', 'voucher-captain' ), wc_get_order_status_name( $order->get_status() ) );
+		foreach ( $this->repo->for_order( $order->get_id() ) as $voucher ) {
+			if ( Voucher::STATUS_ACTIVE !== $voucher->status ) {
+				continue; // Scheduled ones wait anyway: their delivery checks the order (Delivery::deliver()).
+			}
+			if ( $this->in_use( $voucher ) || ! $this->repo->update_status( $voucher->id, Voucher::STATUS_VOID ) ) {
+				$kept[] = Mask::code( $voucher->code );
+				continue;
+			}
+			$voucher->status = Voucher::STATUS_VOID;
+			$this->coupons->set_coupon_enabled( $voucher, false );
+			$this->repo->log( $voucher->id, self::SUSPENDED_EVENT, null, $voucher->balance, $note );
+			$done[] = Mask::code( $voucher->code );
+		}
+		if ( ! $done && ! $kept ) {
+			return;
+		}
+		$text = trim(
+			( $done
+				/* translators: %s: voucher codes */
+				? sprintf( __( 'The payment of this order was reversed or is held: its unused vouchers were suspended (%s). They become usable again when the order is paid.', 'voucher-captain' ), implode( ', ', $done ) )
+				: '' )
+			. ' ' . ( $kept
+				/* translators: %s: voucher codes */
+				? sprintf( __( 'Vouchers already used stay valid (%s): check them.', 'voucher-captain' ), implode( ', ', $kept ) )
+				: '' )
+		);
+		$order->add_order_note( $text );
+		Attention::add( $order->get_id(), 'suspended', $text );
+	}
+
+	/** Whether the newest status entry of a void voucher is a suspension (M12-35). */
+	private function suspended( Voucher $voucher ): bool {
+		foreach ( array_reverse( $this->repo->events( $voucher->id ) ) as $event ) {
+			$name = (string) ( $event['event'] ?? '' );
+			if ( in_array( $name, array( 'voided', 'reactivated', self::SUSPENDED_EVENT ), true ) ) {
+				return self::SUSPENDED_EVENT === $name;
+			}
+		}
+		return false;
+	}
+
+	/** Paid again: vouchers suspended for the payment are usable again (M12-35). */
+	private function resume_after_payment( \WC_Order $order ): void {
+		$codes = array();
+		foreach ( $this->repo->for_order( $order->get_id() ) as $voucher ) {
+			if ( Voucher::STATUS_VOID === $voucher->status && $this->suspended( $voucher ) && $this->restore_status( $voucher, __( 'Purchase order paid again', 'voucher-captain' ) ) ) {
+				$codes[] = Mask::code( $voucher->code );
+			}
+		}
+		if ( $codes ) {
+			Attention::resolve( $order->get_id(), 'suspended' );
+			/* translators: %s: voucher codes */
+			$order->add_order_note( sprintf( __( 'The order is paid again: the suspended vouchers are usable again (%s).', 'voucher-captain' ), implode( ', ', $codes ) ) );
+		}
+	}
+
+	/** M12-36: paid again after a cancellation or refund. */
+	private function paid_again( \WC_Order $order ): void {
+		$links = array();
+		$codes = array();
+		foreach ( $this->repo->for_order( $order->get_id() ) as $voucher ) {
+			if ( $this->voided_after_refund( $voucher ) ) {
+				$codes[] = Mask::code( $voucher->code );
+				$links[] = '<a href="' . esc_url( admin_url( 'admin.php?page=vcap-vouchers&voucher=' . $voucher->id ) ) . '">' . esc_html( Mask::code( $voucher->code ) ) . '</a>';
+			}
+		}
+		if ( $codes ) {
+			/* translators: %s: links to the vouchers */
+			$order->add_order_note( sprintf( __( 'The order is paid again, but its vouchers were voided when it was cancelled or refunded: %s. If the customer did not get the money back, reactivate them on the voucher screen.', 'voucher-captain' ), implode( ', ', $links ) ) );
+			Attention::add(
+				$order->get_id(),
+				'paid-again',
+				/* translators: %s: voucher codes */
+				sprintf( __( 'The order is paid again, but its vouchers stay voided from the cancellation or refund (%s). Reactivate them on the voucher screen (links in the order notes) if the customer did not get the money back.', 'voucher-captain' ), implode( ', ', $codes ) )
+			);
+		}
+		( new TopUp( $this->repo, $this->coupons ) )->rebook( $order, __( 'order paid again', 'voucher-captain' ) );
 	}
 
 	/** Whether the purchase of this voucher was refunded already (voided, or its purchased value taken off). */
@@ -1386,16 +1858,16 @@ final class Issuer {
 			$ok = $this->void_or_retry( $voucher, $note, $order );
 			return 0.0;
 		}
-		$fresh = $this->repo->get( $voucher->id ) ?? $voucher;
-		if ( $this->purchase_handled( $fresh ) ) {
-			return (float) $fresh->balance; // Purchased value already taken off; the rest is topped-up value.
-		}
+		$fresh  = $this->repo->get( $voucher->id ) ?? $voucher;
 		$shares = TopUp::card_shares( $fresh, $this->repo );
 		if ( $shares['topup_unspent'] <= 0.5 / ( 10 ** $fresh->decimals() ) ) {
 			$ok = $this->void_or_retry( $voucher, $note, $order );
 			return 0.0;
 		}
 		$take     = round( $shares['purchase_unspent'], $fresh->decimals() );
+		if ( $take <= 0 && $this->purchase_handled( $fresh ) ) {
+			return (float) $fresh->balance; // Purchased value already taken off (M12-07); the rest is topped-up value.
+		}
 		$order_id = $order ? $order->get_id() : (int) $voucher->order_id;
 		$text     = trim( $note . ' ' . __( '(purchased value taken off, topped-up value kept)', 'voucher-captain' ) );
 		$done     = $take > 0
@@ -1476,6 +1948,10 @@ final class Issuer {
 	 */
 	public function void( Voucher $voucher, string $note = '', bool $refund = false ): bool {
 		if ( Voucher::STATUS_VOID === $voucher->status ) {
+			if ( $refund && $this->suspended( $voucher ) ) {
+				// Suspended for its payment (M12-35), now refunded or cancelled: no longer resumed when paid again.
+				$this->repo->log( $voucher->id, 'voided', null, $voucher->balance, Note::make( self::REFUND_VOID_NOTE, array( $note ) ) );
+			}
 			return true;
 		}
 		if ( ! $this->repo->update_status( $voucher->id, Voucher::STATUS_VOID ) ) {

@@ -61,8 +61,8 @@ final class TopUp {
 		add_action( 'woocommerce_order_status_refunded', array( $this, 'revoke' ), 20 );
 		add_action( 'woocommerce_order_partially_refunded', array( $this, 'reverse_refunded' ), 20, 2 );
 		add_action( 'woocommerce_create_refund', array( $this, 'guard_refund' ), 11, 2 );
-		add_filter( 'vcap_event_labels', static fn( array $l ) => $l + array( 'topup' => __( 'Topped up', 'voucher-captain' ), 'topup_reversed' => __( 'Top-up reversed', 'voucher-captain' ), Issuer::PURCHASE_REFUNDED_EVENT => __( 'Purchase refunded: purchased value taken off', 'voucher-captain' ), self::EXTENDED_EVENT => __( 'Validity extended', 'voucher-captain' ) ) );
-		add_filter( 'vcap_ledger_money_events', static fn( array $e ) => array_merge( $e, array( 'topup', 'topup_reversed', Issuer::PURCHASE_REFUNDED_EVENT ) ) );
+		add_filter( 'vcap_event_labels', static fn( array $l ) => $l + array( 'topup' => __( 'Topped up', 'voucher-captain' ), 'topup_reversed' => __( 'Top-up reversed', 'voucher-captain' ), Issuer::PURCHASE_REFUNDED_EVENT => __( 'Purchase refunded: purchased value taken off', 'voucher-captain' ), Issuer::PURCHASE_REFUND_REVERSED_EVENT => __( 'Purchase refund not recorded: purchased value booked back', 'voucher-captain' ), Issuer::SUSPENDED_EVENT => __( 'Suspended: payment of the order reversed or held', 'voucher-captain' ), self::EXTENDED_EVENT => __( 'Validity extended', 'voucher-captain' ) ) );
+		add_filter( 'vcap_ledger_money_events', static fn( array $e ) => array_merge( $e, array( 'topup', 'topup_reversed', Issuer::PURCHASE_REFUNDED_EVENT, Issuer::PURCHASE_REFUND_REVERSED_EVENT ) ) );
 	}
 
 	public static function is_topup( $product ): bool {
@@ -546,16 +546,94 @@ final class TopUp {
 	}
 
 	/**
+	 * M12-21: takes back the share of the refunds saved so far (the refund being created included) before the
+	 * gateway pays it out, so the card cannot be spent meanwhile. Returns what was booked, for undo_reversal()
+	 * when the refund is not recorded after all.
+	 *
+	 * @return array<int, array{t:int, h:float, b:float}> top-up line, REVERSED_META before, amount taken back
+	 */
+	public function reverse_for_refund( \WC_Order $order ): array {
+		return $this->reverse( $order->get_id(), false );
+	}
+
+	/**
+	 * M12-21: books a reversal of reverse_for_refund() back (the refund was not recorded): the amount goes back
+	 * onto the card as a top-up and the line's REVERSED_META is set back.
+	 *
+	 * @param array{t:int, h:float, b:float} $booking
+	 */
+	public function undo_reversal( \WC_Order $order, array $booking ): bool {
+		$item = $order->get_item( (int) $booking['t'] );
+		if ( ! $item instanceof \WC_Order_Item_Product ) {
+			return false;
+		}
+		$card = self::card_of_item( $item, $this->repo );
+		if ( ! $card ) {
+			return false;
+		}
+		if ( (float) $booking['b'] > 0 ) {
+			/* translators: %s: order number */
+			$note = sprintf( __( 'Top-up of order #%s booked again: the refund was not recorded', 'voucher-captain' ), $order->get_order_number() );
+			if ( ! $this->coupons->adjust_balance( $card, (float) $booking['b'], 'topup', $note, $order->get_id() ) ) {
+				return false;
+			}
+		}
+		wc_update_order_item_meta( $item->get_id(), self::REVERSED_META, (float) $booking['h'] );
+		return true;
+	}
+
+	/**
+	 * M12-36/M12-37: what was taken back of a top-up line is more than the order's refunds cover now (a refund
+	 * was deleted, or the cancelled order was paid again): the difference is booked onto the card again. Nothing
+	 * happens while the order is cancelled, refunded or failed.
+	 */
+	public function rebook( \WC_Order $order, string $why ): void {
+		if ( $order->has_status( array( 'cancelled', 'refunded', 'failed' ) ) ) {
+			return;
+		}
+		$shares = self::refund_shares( $order );
+		foreach ( $order->get_items() as $item ) {
+			$done = $item instanceof \WC_Order_Item_Product ? (float) $item->get_meta( self::DONE_META ) : 0.0;
+			if ( $done <= 0 ) {
+				continue;
+			}
+			$handled = (float) wc_get_order_item_meta( $item->get_id(), self::REVERSED_META, true );
+			$card    = $handled > 0 ? self::card_of_item( $item, $this->repo ) : null;
+			if ( ! $card ) {
+				continue;
+			}
+			$target = min( $done, round( $done * max( 0.0, min( 1.0, (float) ( $shares[ $item->get_id() ] ?? 0.0 ) ) ), $card->decimals() ) );
+			$back   = round( $handled - $target, $card->decimals() );
+			if ( $back <= 0 ) {
+				continue;
+			}
+			$booked = 0.0;
+			/* translators: 1: order number, 2: why (e.g. "refund deleted") */
+			if ( ! $this->coupons->adjust_balance( $card, $back, 'topup', sprintf( __( 'Top-up of order #%1$s booked again (%2$s)', 'voucher-captain' ), $order->get_order_number(), $why ), $order->get_id(), $booked ) ) {
+				/* translators: %s: masked gift card code */
+				Attention::add( $order->get_id(), 'topup-rebook:' . $item->get_id(), sprintf( __( 'The top-up of gift card %s that was taken back could not be booked again. Top up the card by hand.', 'voucher-captain' ), Mask::code( $card->code ) ) );
+				continue;
+			}
+			wc_update_order_item_meta( $item->get_id(), self::REVERSED_META, $target );
+			/* translators: 1: masked gift card code, 2: amount */
+			$order->add_order_note( sprintf( __( 'Gift card %1$s: the top-up taken back before (%2$s) was booked onto the card again.', 'voucher-captain' ), Mask::code( $card->code ), wp_strip_all_tags( wc_price( $booked ) ) ) );
+		}
+	}
+
+	/**
 	 * Takes back what the refunds of the order cover of its top-up lines (all of it for a cancelled or fully
 	 * refunded order). Each line keeps what was handled in REVERSED_META, so repeated refunds and status changes
 	 * take back only the difference; the card gives back at most its balance.
+	 *
+	 * @return array<int, array{t:int, h:float, b:float}> what was booked (see reverse_for_refund())
 	 */
-	private function reverse( $order_id, bool $all ): void {
+	private function reverse( $order_id, bool $all ): array {
 		$order = wc_get_order( $order_id );
 		if ( ! $order instanceof \WC_Order ) {
-			return;
+			return array();
 		}
-		$shares = $all ? array() : self::refund_shares( $order );
+		$shares   = $all ? array() : self::refund_shares( $order );
+		$bookings = array();
 		foreach ( $order->get_items() as $item ) {
 			$done = $item instanceof \WC_Order_Item_Product ? (float) $item->get_meta( self::DONE_META ) : 0.0;
 			if ( $done <= 0 || ( ! $all && empty( $shares[ $item->get_id() ] ) ) ) {
@@ -566,20 +644,26 @@ final class TopUp {
 				continue; // Another request is taking this top-up back right now.
 			}
 			try {
-				$this->reverse_line( $order, $item, $done, $all ? 1.0 : (float) $shares[ $item->get_id() ], $all );
+				$booking = $this->reverse_line( $order, $item, $done, $all ? 1.0 : (float) $shares[ $item->get_id() ], $all );
+				if ( $booking ) {
+					$bookings[] = $booking;
+				}
 			} finally {
 				Claim::release( $lock );
 			}
 		}
+		return $bookings;
 	}
 
-	private function reverse_line( \WC_Order $order, \WC_Order_Item_Product $item, float $done, float $share, bool $all ): void {
+	/** @return array{t:int, h:float, b:float}|null What was booked (null: nothing). */
+	private function reverse_line( \WC_Order $order, \WC_Order_Item_Product $item, float $done, float $share, bool $all ): ?array {
+		// Fresh from the database: the item object can be older than a reversal booked meanwhile (M12-21).
 		$handled = (float) wc_get_order_item_meta( $item->get_id(), self::REVERSED_META, true );
 		if ( $all && $handled <= 0 && ! Claim::take( 'topup-revoke:' . $item->get_id() ) ) {
 			// Taken back completely by an earlier version (one claim per line, before REVERSED_META existed).
 			$item->update_meta_data( self::REVERSED_META, $done );
 			$item->save_meta_data();
-			return;
+			return null;
 		}
 		$card = self::card_of_item( $item, $this->repo );
 		if ( ! $card ) {
@@ -588,22 +672,25 @@ final class TopUp {
 			}
 			$order->add_order_note( __( 'The gift card top-up could not be reversed: the gift card was not found. Please check the card balance.', 'voucher-captain' ) );
 			Attention::add( $order->get_id(), 'topup-reverse:' . $item->get_id(), __( 'A gift card top-up could not be reversed because the gift card was not found. Check the card and take the top-up back by hand.', 'voucher-captain' ) );
-			return;
+			return null;
 		}
 		$target = min( $done, round( $done * max( 0.0, min( 1.0, $share ) ), $card->decimals() ) );
 		$want   = round( $target - $handled, $card->decimals() );
 		if ( $want <= 0 ) {
-			return;
+			return null;
 		}
-		$back = min( $want, self::card_shares( $card, $this->repo )['topup_unspent'] );
+		$back   = min( $want, self::card_shares( $card, $this->repo )['topup_unspent'] );
+		$booked = 0.0;
 		/* translators: %s: order number */
-		if ( $back > 0 && ! $this->coupons->adjust_balance( $card, -$back, 'topup_reversed', sprintf( __( 'Top-up of order #%s reversed', 'voucher-captain' ), $order->get_order_number() ), $order->get_id() ) ) {
+		if ( $back > 0 && ! $this->coupons->adjust_balance( $card, -$back, 'topup_reversed', sprintf( __( 'Top-up of order #%s reversed', 'voucher-captain' ), $order->get_order_number() ), $order->get_id(), $booked ) ) {
 			if ( $all && $handled <= 0 ) {
 				Claim::release( 'topup-revoke:' . $item->get_id() );
 			}
 			$order->add_order_note( __( 'The gift card top-up could not be reversed. Please check the card balance.', 'voucher-captain' ) );
-			return;
+			return null;
 		}
+		// M12-60: the note reports what the locked booking really took (the balance may have dropped meanwhile).
+		$back = abs( $booked );
 		$item->update_meta_data( self::REVERSED_META, $target );
 		$item->save_meta_data();
 		$order->add_order_note(
@@ -613,19 +700,25 @@ final class TopUp {
 				/* translators: %s: amount */
 				: sprintf( __( 'Gift card top-up reversed: %s taken back.', 'voucher-captain' ), wp_strip_all_tags( wc_price( $back ) ) )
 		);
+		return array(
+			't' => (int) $item->get_id(),
+			'h' => $handled,
+			'b' => $back,
+		);
 	}
 
 	/**
-	 * Share (0–1) of each booked top-up line that the order's refunds pay back. Refund lines count for their line
-	 * (_refunded_item_id); an amount refunded without lines pays back the rest of the order first and only the part
-	 * beyond it is spread over the top-up lines.
+	 * Share (0–1) of each booked top-up line and each line that issued vouchers (M12-07) that the order's refunds
+	 * pay back. Refund lines count for their line (_refunded_item_id); an amount refunded without lines pays back the
+	 * rest of the order first and only the part beyond it is spread over the top-up and voucher lines.
 	 *
+	 * @param int[] $voucher_lines Further lines holding vouchers of the order (lines issued before the line snapshot).
 	 * @return array<int, float> order item id => refunded share
 	 */
-	public static function refund_shares( \WC_Order $order ): array {
+	public static function refund_shares( \WC_Order $order, array $voucher_lines = array() ): array {
 		$lines = array();
 		foreach ( $order->get_items() as $item_id => $item ) {
-			if ( $item instanceof \WC_Order_Item_Product && (float) $item->get_meta( self::DONE_META ) > 0 ) {
+			if ( $item instanceof \WC_Order_Item_Product && ( (float) $item->get_meta( self::DONE_META ) > 0 || Issuer::line_data( $item ) || in_array( (int) $item_id, $voucher_lines, true ) ) ) {
 				$lines[ (int) $item_id ] = (float) $item->get_total() + (float) $item->get_total_tax();
 			}
 		}
@@ -713,6 +806,9 @@ final class TopUp {
 					break;
 				case Issuer::PURCHASE_REFUNDED_EVENT:
 					$removed += $amount;
+					break;
+				case Issuer::PURCHASE_REFUND_REVERSED_EVENT:
+					$removed -= $amount;
 					break;
 			}
 		}

@@ -243,7 +243,10 @@ $t5->calculate_totals( false );
 $t5->set_status( 'processing' );
 $t5->save();
 vcap_life_assert( VCAP\Voucher::STATUS_REDEEMED === $repo->get( $single->id )->status, 'T5: paying the order redeems the single-use voucher' );
-wc_create_refund( array( 'order_id' => $t5->get_id(), 'amount' => wc_get_order( $t5->get_id() )->get_total() ) );
+// The whole order comes back (M12-02: an order paid with a voucher becomes "Refunded" only without items left).
+$t5_total = (float) wc_get_order( $t5->get_id() )->get_total();
+$t5_line  = array_key_first( wc_get_order( $t5->get_id() )->get_items() );
+wc_create_refund( array( 'order_id' => $t5->get_id(), 'amount' => $t5_total, 'line_items' => array( $t5_line => array( 'qty' => 1, 'refund_total' => $t5_total ) ) ) );
 vcap_life_assert( wc_get_order( $t5->get_id() )->has_status( 'refunded' ), 'T5: the order is fully refunded' );
 vcap_life_assert( VCAP\Voucher::STATUS_ACTIVE === $repo->get( $single->id )->status && 0 === ( new WC_Coupon( $single->coupon_id ) )->get_usage_count(), 'T5: the single-use voucher can be used again after the full refund' );
 

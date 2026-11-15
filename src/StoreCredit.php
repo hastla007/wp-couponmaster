@@ -198,7 +198,8 @@ final class StoreCredit {
 	 *
 	 * @param array{channel?:string, note?:string} $consent     How the customer agreed (see consent_channels()).
 	 * @param string                               $request_key One-time key of the submitted form ('' = none).
-	 * @return array{balance:float,amount:float}|\WP_Error
+	 * @return array{balance:float,amount:float,voucher_id?:int,code?:string}|\WP_Error Guest orders (M12-57): the
+	 *         new gift card's id and code.
 	 */
 	public function refund_as_credit( \WC_Order $order, float $amount, string $reason, array $consent = array(), string $request_key = '' ) {
 		global $wpdb;
@@ -223,12 +224,142 @@ final class StoreCredit {
 		}
 	}
 
+	/**
+	 * M12-57: address a guest order is refunded to as a new gift card ('' = not possible). Filter
+	 * "vcap_refund_guest_as_gift_card" (default true) turns refunds of guest orders as gift card off.
+	 */
+	public static function guest_gift_card_email( \WC_Order $order ): string {
+		$email = sanitize_email( (string) $order->get_billing_email() );
+		return '' !== $email && is_email( $email ) && apply_filters( 'vcap_refund_guest_as_gift_card', true, $order ) ? $email : '';
+	}
+
+	/**
+	 * M12-11: refund lines for a refund of $amount without a choice of items: every line, fee and shipping line
+	 * gets its share of what is still refundable of it, net and per tax rate, so the refund carries the VAT it pays
+	 * back (correction of the sale's VAT). The rounding rest goes onto the last line. A refund of the whole remaining
+	 * total returns the items as well (their quantities), so the order counts as returned completely (M12-02).
+	 *
+	 * @return array<int, array{qty:int, refund_total:float, refund_tax:array<int, float>}>
+	 */
+	public static function refund_lines( \WC_Order $order, float $amount ): array {
+		$decimals = wc_get_price_decimals();
+		$lines    = array();
+		$open     = 0.0;
+		foreach ( $order->get_items( array( 'line_item', 'fee', 'shipping' ) ) as $item_id => $item ) {
+			if ( ! $item instanceof \WC_Order_Item_Product && ! $item instanceof \WC_Order_Item_Fee && ! $item instanceof \WC_Order_Item_Shipping ) {
+				continue;
+			}
+			$type  = $item->get_type();
+			$net   = (float) $item->get_total() - abs( (float) $order->get_total_refunded_for_item( $item_id, $type ) );
+			$taxes = $item->get_taxes();
+			$tax   = array();
+			foreach ( (array) ( $taxes['total'] ?? array() ) as $rate_id => $value ) {
+				if ( '' !== $value && null !== $value ) {
+					$tax[ $rate_id ] = (float) $value - abs( (float) $order->get_tax_refunded_for_item( $item_id, $rate_id, $type ) );
+				}
+			}
+			$gross = $net + array_sum( $tax );
+			if ( $gross <= 0 ) {
+				continue;
+			}
+			$lines[ (int) $item_id ] = array( $net, $tax );
+			$open                   += $gross;
+		}
+		if ( $open <= 0 || $amount <= 0 ) {
+			return array();
+		}
+		$factor = min( 1.0, $amount / $open );
+		$all    = $amount + 0.5 / ( 10 ** $decimals ) >= (float) $order->get_remaining_refund_amount();
+		$result = array();
+		$sum    = 0.0;
+		foreach ( $lines as $item_id => list( $net, $tax ) ) {
+			$total              = round( $net * $factor, $decimals );
+			$taxes              = array_map( static fn( float $value ): float => round( $value * $factor, $decimals ), $tax );
+			$item               = $order->get_item( $item_id );
+			$result[ $item_id ] = array(
+				'qty'          => $all && $item instanceof \WC_Order_Item_Product ? max( 0, (int) $item->get_quantity() - abs( (int) $order->get_qty_refunded_for_item( $item_id ) ) ) : 0,
+				'refund_total' => $total,
+				'refund_tax'   => $taxes,
+			);
+			$sum               += $total + array_sum( $taxes );
+		}
+		$rest = round( $amount - $sum, $decimals );
+		$last = array_key_last( $result );
+		if ( null !== $last && 0.0 !== $rest ) {
+			$result[ $last ]['refund_total'] = round( $result[ $last ]['refund_total'] + $rest, $decimals );
+		}
+		return $result;
+	}
+
+	/**
+	 * M12-37: a refund recorded by refund_as_credit() was deleted on the order screen – the credit it paid out is
+	 * taken back (ledger "refund_credit_reversed"), a guest's gift card voided while unused. What was spent already
+	 * cannot be taken back: the shop gets a notice (Attention).
+	 */
+	public function reverse_refund( \WC_Order $order, int $refund_id ): void {
+		$consents = $order->get_meta( '_vcap_credit_consents' );
+		if ( ! is_array( $consents ) ) {
+			return;
+		}
+		$changed = false;
+		foreach ( $consents as $index => $record ) {
+			if ( ! is_array( $record ) || (int) ( $record['refund_id'] ?? 0 ) !== $refund_id || ! empty( $record['reversed'] ) ) {
+				continue;
+			}
+			$credit = isset( $record['credit'] ) ? (float) $record['credit'] : (float) ( Compat\MultiCurrency::to_base( (float) ( $record['amount'] ?? 0 ), (string) $order->get_currency(), $order ) ?? 0.0 );
+			$open   = $this->take_back( $order, $record, $credit );
+			if ( $open > 0.00001 ) {
+				$text = sprintf(
+					/* translators: 1: refund id, 2: amount that could not be taken back */
+					__( 'Refund #%1$d (refunded as store credit or gift card) was deleted, but %2$s of the credit was already spent and could not be taken back. Settle it with the customer.', 'voucher-captain' ),
+					$refund_id,
+					wp_strip_all_tags( wc_price( $open ) )
+				);
+				$order->add_order_note( $text );
+				Attention::add( $order->get_id(), 'credit-reversed:' . $refund_id, $text );
+			}
+			$consents[ $index ]['reversed'] = gmdate( 'Y-m-d H:i:s' );
+			$changed                        = true;
+		}
+		if ( $changed ) {
+			$order->update_meta_data( '_vcap_credit_consents', $consents );
+			$order->save_meta_data();
+		}
+	}
+
+	/** Takes back the credit of a deleted refund; returns what could not be taken back (spent). */
+	private function take_back( \WC_Order $order, array $record, float $credit ): float {
+		/* translators: %s: order number */
+		$reason = sprintf( __( 'Refund of order #%s deleted', 'voucher-captain' ), $order->get_order_number() );
+		if ( ! empty( $record['voucher_id'] ) ) {
+			$card = $this->repo->get( (int) $record['voucher_id'] );
+			if ( $card && Voucher::STATUS_VOID === $card->status ) {
+				return 0.0;
+			}
+			if ( $card && (float) $card->balance + 0.00001 >= (float) $card->initial_amount && vcap()->issuer->void( $card, $reason ) ) {
+				$order->add_order_note( sprintf( /* translators: %s: gift card code */ __( 'Gift card %s of the deleted refund was voided.', 'voucher-captain' ), Mask::code( $card->code ) ) );
+				return 0.0;
+			}
+			return $credit;
+		}
+		$user_id = (int) ( $record['user_id'] ?? $order->get_customer_id() );
+		$take    = min( $credit, $user_id > 0 ? $this->balance( $user_id ) : 0.0 );
+		if ( $take > 0 ) {
+			$result = $this->adjust( $user_id, -$take, $reason, $order->get_id(), 'refund_credit_reversed' );
+			if ( is_wp_error( $result ) ) {
+				return $credit;
+			}
+			$order->add_order_note( sprintf( /* translators: %s: amount */ __( '%s of store credit taken back (the refund was deleted).', 'voucher-captain' ), wp_strip_all_tags( wc_price( $take ) ) ) );
+		}
+		return max( 0.0, round( $credit - $take, 6 ) );
+	}
+
 	/** One-time key for a "refund as store credit" form (see refund_as_credit()). */
 	public static function request_key(): string {
 		return function_exists( 'wp_generate_uuid4' ) ? str_replace( '-', '', wp_generate_uuid4() ) : bin2hex( random_bytes( 16 ) );
 	}
 
-	/** @return array{balance:float,amount:float}|\WP_Error */
+	/** @return array{balance:float,amount:float,voucher_id?:int,code?:string}|\WP_Error */
 	private function refund_as_credit_locked( \WC_Order $order, float $amount, string $reason, array $consent ) {
 		$user_id = (int) $order->get_customer_id();
 		$reason  = trim( sanitize_text_field( $reason ) );
@@ -240,7 +371,8 @@ final class StoreCredit {
 		if ( ! $this->enabled() ) {
 			return new \WP_Error( 'vcap_credit_disabled', __( 'Store credit is not enabled.', 'voucher-captain' ) );
 		}
-		if ( $user_id <= 0 ) {
+		$guest_email = $user_id <= 0 ? self::guest_gift_card_email( $order ) : '';
+		if ( $user_id <= 0 && '' === $guest_email ) {
 			return new \WP_Error( 'vcap_credit_guest', __( 'Guest orders cannot be refunded as store credit.', 'voucher-captain' ) );
 		}
 		if ( $amount <= 0 || $amount > (float) $order->get_remaining_refund_amount() + 0.00001 || '' === $reason ) {
@@ -263,30 +395,74 @@ final class StoreCredit {
 			);
 		}
 		$credit = round( $credit, API\V1\RedemptionService::decimals( (string) get_option( 'woocommerce_currency' ) ) );
-		$result = $this->adjust( $user_id, $credit, $reason, $order->get_id(), 'refund_credit' );
-		if ( is_wp_error( $result ) ) {
-			return $result;
+		$card   = null;
+		if ( '' !== $guest_email ) {
+			// M12-57: a guest has no account – the credit is a new gift card for the amount, mailed once the refund
+			// is recorded (issued without email first, so a failed refund leaves nothing in the customer's inbox).
+			$card = vcap()->issuer->issue_standalone(
+				array(
+					'type'        => 'giftcard',
+					'usage'       => 'balance',
+					'amount'      => $credit,
+					'buyer_email' => $guest_email,
+					'buyer_name'  => trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ),
+					'send'        => false,
+					'source'      => 'refund-credit',
+				)
+			);
+			if ( is_wp_error( $card ) ) {
+				return $card;
+			}
+			$result = array(
+				'balance'    => (float) $card->balance,
+				'amount'     => $credit,
+				'voucher_id' => (int) $card->id,
+				'code'       => (string) $card->code,
+			);
+		} else {
+			$result = $this->adjust( $user_id, $credit, $reason, $order->get_id(), 'refund_credit' );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
 		}
 		$refund = wc_create_refund(
 			array(
 				'amount'         => $amount,
-				/* translators: %s: reason */
-				'reason'         => sprintf( __( 'Refunded as store credit: %s', 'voucher-captain' ), $reason ),
+				'reason'         => sprintf(
+					$card
+						/* translators: %s: reason */
+						? __( 'Refunded as a gift card: %s', 'voucher-captain' )
+						/* translators: %s: reason */
+						: __( 'Refunded as store credit: %s', 'voucher-captain' ),
+					$reason
+				),
 				'order_id'       => $order->get_id(),
+				// M12-11: the refund carries its share of every line and tax rate, so the VAT is corrected as well.
+				'line_items'     => self::refund_lines( $order, $amount ),
 				'refund_payment' => false,
 				'restock_items'  => false,
 			)
 		);
 		if ( is_wp_error( $refund ) ) {
+			if ( $card ) {
+				vcap()->issuer->void( $card, __( 'Refund as a gift card failed', 'voucher-captain' ) );
+				return $refund;
+			}
 			$back = $this->adjust( $user_id, -$credit, __( 'Refund as store credit failed', 'voucher-captain' ), $order->get_id(), 'refund_credit_reversed' );
 			if ( is_wp_error( $back ) ) {
 				$order->add_order_note( __( 'Store credit was added but the refund could not be recorded, and the credit could not be booked back. Please check the customer\'s store credit.', 'voucher-captain' ) );
 			}
 			return $refund;
 		}
+		if ( $card ) {
+			vcap()->delivery->reschedule( $card, null ); // Mailed now that the refund is recorded.
+		}
 		$record   = array(
 			'refund_id'   => (int) $refund->get_id(),
 			'amount'      => $amount,
+			'credit'      => $credit,
+			'user_id'     => $user_id,
+			'voucher_id'  => $card ? (int) $card->id : 0,
 			'channel'     => $channel,
 			'note'        => mb_substr( sanitize_textarea_field( (string) ( $consent['note'] ?? '' ) ), 0, 500 ),
 			'recorded_by' => get_current_user_id(),
@@ -300,8 +476,11 @@ final class StoreCredit {
 		$order->update_meta_data( '_vcap_credit_consents', $consents );
 		$order->save_meta_data();
 		$order->add_order_note(
-			/* translators: %s: amount */
-			sprintf( __( '%s refunded as store credit.', 'voucher-captain' ), wp_strip_all_tags( wc_price( $amount, array( 'currency' => $order->get_currency() ) ) ) )
+			( $card
+				/* translators: 1: amount, 2: gift card code */
+				? sprintf( __( '%1$s refunded as a new gift card %2$s (mailed to the customer).', 'voucher-captain' ), wp_strip_all_tags( wc_price( $amount, array( 'currency' => $order->get_currency() ) ) ), Mask::code( $card->code ) )
+				/* translators: %s: amount */
+				: sprintf( __( '%s refunded as store credit.', 'voucher-captain' ), wp_strip_all_tags( wc_price( $amount, array( 'currency' => $order->get_currency() ) ) ) ) )
 			. ' ' . sprintf(
 				/* translators: 1: how the customer agreed (e.g. "By email"), 2: optional note */
 				__( 'Customer consent to store credit: %1$s%2$s.', 'voucher-captain' ),
