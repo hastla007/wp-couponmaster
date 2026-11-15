@@ -25,7 +25,7 @@ parameters:
 			path: src/Admin/VouchersListTable.php
 
 		-
-			message: '#^Path in require_once\(\) "/home/user/wp\-couponmaster/tests/wp\-admin/includes/class\-wp\-list\-table\.php" is not a file or it does not exist\.$#'
+			message: '#^Path in require_once\(\) ".+/tests/wp\-admin/includes/class\-wp\-list\-table\.php" is not a file or it does not exist\.$#'
 			identifier: requireOnce.fileNotFound
 			count: 1
 			path: src/Admin/VouchersListTable.php
@@ -199,7 +199,7 @@ parameters:
 			path: src/Install.php
 
 		-
-			message: '#^Path in require_once\(\) "/home/user/wp\-couponmaster/tests/wp\-admin/includes/upgrade\.php" is not a file or it does not exist\.$#'
+			message: '#^Path in require_once\(\) ".+/tests/wp\-admin/includes/upgrade\.php" is not a file or it does not exist\.$#'
 			identifier: requireOnce.fileNotFound
 			count: 1
 			path: src/Install.php
