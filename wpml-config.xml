@@ -59,6 +59,7 @@
 		<custom-field action="copy">_vcap_code_pool_low</custom-field>
 		<custom-field action="copy">_vcap_code_pool_empty</custom-field>
 		<custom-field action="copy">_vcap_transferable</custom-field>
+		<custom-field action="copy">_vcap_keep_rest</custom-field>
 		<custom-field action="translate">_vcap_redemption_terms</custom-field>
 		<custom-field action="copy">_vcap_topup</custom-field>
 	</custom-fields>

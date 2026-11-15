@@ -140,8 +140,8 @@ final class TopUp {
 	}
 
 	/** @return true|string True when the code can be topped up, otherwise why not (failures count for the rate limit). */
-	private function check( string $raw ) {
-		$memo = null !== $this->override ? wc_format_coupon_code( sanitize_text_field( $raw ) ) : null;
+	private function check( string $raw, ?\WC_Product $product = null ) {
+		$memo = null !== $this->override ? wc_format_coupon_code( sanitize_text_field( $raw ) ) . ':' . ( $product ? $product->get_id() : 0 ) : null;
 		if ( null !== $memo && isset( $this->checked[ $memo ] ) ) {
 			return $this->checked[ $memo ]; // Store API runs the legacy and its own validation for the same request.
 		}
@@ -156,6 +156,9 @@ final class TopUp {
 			$card = $this->card( $raw );
 			CodeLookup::finish( $card instanceof Voucher );
 			$result = $card instanceof Voucher ? self::remaining_validity_error( $card ) : __( 'This code is not a gift card that can be topped up. Please check the code.', 'voucher-captain' );
+			if ( '' === $result && $card instanceof Voucher && $product ) {
+				$result = self::treatment_mismatch( $card, self::product_treatment( $product ) );
+			}
 			$result = '' === $result ? true : $result;
 		}
 		if ( null !== $memo ) {
@@ -190,7 +193,8 @@ final class TopUp {
 		if ( ! $passed || ! self::is_topup( wc_get_product( (int) ( $variation_id ?: $product_id ) ) ) ) {
 			return $passed;
 		}
-		$result = $this->check( $this->posted_code( $cart_item_data ) );
+		$product = wc_get_product( (int) ( $variation_id ?: $product_id ) );
+		$result  = $this->check( $this->posted_code( $cart_item_data ), $product instanceof \WC_Product ? $product : null );
 		if ( true !== $result ) {
 			wc_add_notice( $result, 'error' );
 			return false;
@@ -228,7 +232,7 @@ final class TopUp {
 			$raw            = $request->get_param( self::FIELD );
 			$this->override = is_scalar( $raw ) ? sanitize_text_field( (string) $raw ) : '';
 		}
-		$result = $this->check( $this->posted_code( is_array( $request ) ? ( $request['cart_item_data'] ?? array() ) : array() ) );
+		$result = $this->check( $this->posted_code( is_array( $request ) ? ( $request['cart_item_data'] ?? array() ) : array() ), $product instanceof \WC_Product ? $product : null );
 		if ( true !== $result && class_exists( '\Automattic\WooCommerce\StoreApi\Exceptions\RouteException' ) ) {
 			throw new \Automattic\WooCommerce\StoreApi\Exceptions\RouteException( 'vcap_invalid_topup_code', esc_html( $result ), 400 );
 		}
@@ -350,14 +354,21 @@ final class TopUp {
 			$this->hold_line( $order, $item, is_string( $card ) ? $card : '' );
 			return 0;
 		}
-		$config = is_array( $config ) && $config ? $config + ProductConfig::DEFAULTS : ( $item->get_product() ? ProductConfig::get( $item->get_product() ) : ProductConfig::DEFAULTS );
+		$config    = is_array( $config ) && $config ? $config + ProductConfig::DEFAULTS : ( $item->get_product() ? ProductConfig::get( $item->get_product() ) : ProductConfig::DEFAULTS );
+		$treatment = Issuer::line_treatment( $item, $config );
+		$mismatch  = self::treatment_mismatch( $card, $treatment );
+		if ( '' !== $mismatch ) {
+			$this->hold_line( $order, $item, $mismatch ); // M12-12: never booked onto a card with another VAT treatment.
+			return 0;
+		}
 		list( $value, $in_base ) = self::line_value(
 			$config,
 			(int) $item->get_quantity(),
 			(float) $item->get_subtotal(),
 			(float) $item->get_subtotal_tax(),
 			function_exists( 'wc_prices_include_tax' ) && wc_prices_include_tax(),
-			(string) $item->get_meta( '_vcap_custom_amount' )
+			(string) $item->get_meta( '_vcap_custom_amount' ),
+			$treatment
 		);
 		$base = $in_base ? $value : Compat\MultiCurrency::to_base( $value, (string) $order->get_currency(), $order );
 		if ( null === $base ) {
@@ -419,19 +430,48 @@ final class TopUp {
 	 * Value of a top-up line in the order currency – the rule of Issuer::voucher_amount() for a new gift card:
 	 * a fixed product amount (already in the base currency), the amount the customer entered, or the line price
 	 * before discounts (gross where shop prices include tax, net otherwise). Never what was paid after coupons.
+	 * M12-12: in a tax-exclusive shop a top-up sold with VAT that is not a multi-purpose voucher ($treatment) is
+	 * worth the gross amount paid, like a new card (T7, Issuer::sold_with_vat_value()).
 	 *
+	 * @param string $treatment VAT treatment of the top-up line (Issuer::line_treatment()).
 	 * @return array{0: float, 1: bool} value, whether it is in the base currency already
 	 */
-	public static function line_value( array $config, int $qty, float $subtotal, float $subtotal_tax, bool $prices_include_tax, string $custom = '' ): array {
+	public static function line_value( array $config, int $qty, float $subtotal, float $subtotal_tax, bool $prices_include_tax, string $custom = '', string $treatment = 'payment' ): array {
 		$qty   = max( 1, $qty );
 		$units = $qty * max( 1, (int) ( $config['per_item'] ?? 1 ) );
 		if ( 'fixed' === ( $config['amount_source'] ?? '' ) ) {
 			return array( (float) wc_format_decimal( (string) ( $config['amount'] ?? 0 ) ) * $units, true );
 		}
 		if ( 'custom' === ( $config['amount_source'] ?? '' ) && '' !== $custom ) {
-			return array( (float) $custom * $units, false );
+			$value = (float) $custom * $units;
+		} else {
+			$value = $subtotal + ( $prices_include_tax ? $subtotal_tax : 0.0 );
 		}
-		return array( $subtotal + ( $prices_include_tax ? $subtotal_tax : 0.0 ), false );
+		// A top-up always adds to a stored balance.
+		return array( Issuer::sold_with_vat_value( $value, array_merge( $config, array( 'usage' => 'balance' ) ), $subtotal, $subtotal_tax, $treatment, $prices_include_tax ), false );
+	}
+
+	/**
+	 * M12-12: a top-up must have the VAT treatment of the card it tops up: a multi-purpose top-up on a
+	 * single-purpose card would never be taxed, the other way round taxed twice. '' when they match, else the
+	 * message for the customer.
+	 */
+	public static function treatment_mismatch( Voucher $card, string $topup_treatment ): string {
+		if ( function_exists( 'wc_tax_enabled' ) && ! wc_tax_enabled() ) {
+			return ''; // No VAT in the shop (e.g. small business): the classification has no effect.
+		}
+		$card_treatment = ProductConfig::tax_treatment( $card );
+		if ( $card_treatment === $topup_treatment ) {
+			return '';
+		}
+		return __( 'This gift card cannot be topped up with this product: the card and the top-up are treated differently for VAT (multi-purpose or single-purpose voucher). Please choose the top-up product that belongs to your gift card, or buy a new gift card.', 'voucher-captain' );
+	}
+
+	/** VAT treatment of a top-up product: the treatment its gift card balance gets (Issuer::line_treatment()). */
+	public static function product_treatment( \WC_Product $product ): string {
+		$item = new \WC_Order_Item_Product();
+		$item->set_product( $product );
+		return Issuer::line_treatment( $item, ProductConfig::get( $product ) );
 	}
 
 	/** Ledger event: the validity of a gift card was extended (top-up, balance booked back). */

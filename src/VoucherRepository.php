@@ -623,7 +623,8 @@ final class VoucherRepository {
 				$rows    = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->table()} WHERE id IN ({$in}) AND status = 'expired' AND updated_at = %s", $now ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$expired = array_map( array( Voucher::class, 'from_row' ), $rows ? $rows : array() );
 				foreach ( $expired as $voucher ) {
-					$this->log( (int) $voucher->id, 'expired', null, (float) $voucher->balance, Note::make( 'expired' ) );
+					// M12-29: the value lost at the expiry is booked (journal); TaxAccounting books it back if it becomes valid again.
+					$this->log( (int) $voucher->id, 'expired', TaxAccounting::expiry_amount( $voucher ), (float) $voucher->balance, Note::make( 'expired' ) );
 					Db::action( 'vcap_voucher_updated', $voucher );
 				}
 				if ( $expired ) {
@@ -844,14 +845,29 @@ final class VoucherRepository {
 		return true;
 	}
 
+	/**
+	 * GDPR erasure of a voucher's history (M12-66, GoBD): only free-text notes are replaced – they may hold names or
+	 * addresses typed by staff or written by older versions. Coded notes (Note::make(): correction reasons,
+	 * delivery results, VAT snapshot) carry no free personal data and are kept, as are amounts and dates. The
+	 * erasure itself is logged (TaxAccounting::ERASED_EVENT with the number of notes replaced).
+	 */
 	public function anonymise_event_notes( int $voucher_id ): bool {
 		global $wpdb;
-		return false !== $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$changed = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prepare(
-				"UPDATE {$this->events_table()} SET note = '[personal data removed]', actor_email_hash = '' WHERE voucher_id = %d AND note <> ''",
-				$voucher_id
+				"UPDATE {$this->events_table()} SET note = '[personal data removed]', actor_email_hash = '' WHERE voucher_id = %d AND note <> '' AND note <> '[personal data removed]' AND note NOT LIKE %s",
+				$voucher_id,
+				$wpdb->esc_like( Note::PREFIX ) . '%'
 			)
 		);
+		if ( false === $changed ) {
+			return false;
+		}
+		// The hash of an address found in a note is personal data of its own (coded notes keep their text).
+		if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$this->events_table()} SET actor_email_hash = '' WHERE voucher_id = %d AND actor_email_hash <> ''", $voucher_id ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			return false;
+		}
+		return $this->log( $voucher_id, TaxAccounting::ERASED_EVENT, null, null, Note::make( 'privacy_erased', array( (int) $changed ) ) );
 	}
 
 	/**

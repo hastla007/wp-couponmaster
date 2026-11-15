@@ -226,6 +226,10 @@ final class ProductSettings {
 		if ( $conflict ) {
 			echo '<p class="form-field vcap-tax-conflict" role="alert" style="color:#b32d2e">' . esc_html( $conflict['message'] ) . '</p>';
 		}
+		$single_purpose = ProductConfig::single_purpose_warning( $p );
+		if ( '' !== $single_purpose ) {
+			echo '<p class="form-field vcap-single-purpose" role="alert" style="color:#b32d2e">' . esc_html( $single_purpose ) . '</p>';
+		}
 		if ( '' !== $short_validity ) {
 			echo '<p class="form-field vcap-short-validity" role="alert" style="color:#b32d2e">' . esc_html( $short_validity ) . '</p>';
 		}
@@ -251,6 +255,15 @@ final class ProductSettings {
 		);
 		$this->hint( 'vcap-hint-giftcard-single', __( 'Gift card with single use: whatever the customer does not use in the first order is lost. Gift cards usually keep their remaining value – choose "Multi-use with stored balance (gift card)".', 'voucher-captain' ), true );
 		$this->hint( 'vcap-hint-value-single', __( 'Single use: the whole value must be used in one order, a remaining value is lost (the customer is told so in the cart). Choose "Multi-use with stored balance" if the remaining value should be kept.', 'voucher-captain' ) );
+		// M12-68: the rest of a sold single-use value voucher is not lost but kept for the customer.
+		woocommerce_wp_checkbox(
+			array(
+				'id'          => '_vcap_keep_rest',
+				'label'       => __( 'Keep the rest', 'voucher-captain' ),
+				'value'       => $this->v( $p, 'keep_rest' ),
+				'description' => __( 'Single use: what an order does not use becomes store credit of the customer account (or a new gift card for guests) instead of being lost. Recommended where a forfeited rest would be unfair to consumers (e.g. Germany § 307 BGB).', 'voucher-captain' ),
+			)
+		);
 		woocommerce_wp_text_input(
 			array(
 				'id'                => '_vcap_usage_limit',
@@ -587,6 +600,10 @@ final class ProductSettings {
 			if ( $conflict ) {
 				$conflicts[ $conflict['message'] ] = $conflict['message'];
 			}
+			$single = ProductConfig::single_purpose_warning( $item );
+			if ( '' !== $single ) {
+				$conflicts[ $single ] = $single;
+			}
 		}
 		foreach ( $conflicts as $message ) {
 			echo '<div class="notice notice-warning"><p><strong>' . esc_html__( 'Voucher Captain – VAT', 'voucher-captain' ) . ':</strong> ' . esc_html( $message ) . '</p></div>';
@@ -639,7 +656,7 @@ final class ProductSettings {
 		$event = (string) ( $post['_vcap_event_date'] ?? '' );
 		$product->update_meta_data( '_vcap_event_date', preg_match( '/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/', $event ) ? $event : '' );
 		$product->update_meta_data( '_vcap_redemption_terms', sanitize_textarea_field( (string) ( $post['_vcap_redemption_terms'] ?? '' ) ) );
-		foreach ( array( 'free_shipping', 'individual_use', 'exclude_sale', 'preview' ) as $key ) {
+		foreach ( array( 'free_shipping', 'individual_use', 'exclude_sale', 'preview', 'keep_rest' ) as $key ) {
 			$product->update_meta_data( '_vcap_' . $key, isset( $post[ '_vcap_' . $key ] ) ? 'yes' : 'no' );
 		}
 		// U12: one routing choice; the old "Buyer copy" flag is stored as its consequence (read by older code).

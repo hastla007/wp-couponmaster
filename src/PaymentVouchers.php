@@ -20,6 +20,13 @@ final class PaymentVouchers {
 	public const OPTION     = 'vcap_mpv_after_tax';
 	public const FEE_META   = '_vcap_payment_code';
 	public const AMOUNT_META = '_vcap_payment_amount';
+	/**
+	 * M12-30: order meta code => amount paid after tax, for exports and accounting (DATEV, invoices, analytics):
+	 * the payment lines are negative fees, which those tools would book as a 0 % revenue reduction. Kept in step
+	 * with the payment lines (order_payments(), filter "vcap_order_voucher_payments", REST field
+	 * "vcap_voucher_payments"; TAX.md "Kontierung").
+	 */
+	public const PAYMENTS_META = '_vcap_voucher_payments';
 
 	/** @var array<string, float> coupon code => amount paid after tax in the current cart calculation */
 	private array $payments = array();
@@ -43,6 +50,60 @@ final class PaymentVouchers {
 		// A voucher added to an existing order (admin "Apply coupon", WC_Order::apply_coupon()) pays after tax too.
 		add_action( 'woocommerce_order_applied_coupon', array( $this, 'add_applied_payment' ), 10, 2 );
 		add_filter( 'woocommerce_cart_totals_coupon_html', array( $this, 'coupon_html' ), 30, 2 );
+		add_filter( 'woocommerce_rest_prepare_shop_order_object', array( self::class, 'rest_order_payments' ), 10, 2 );
+	}
+
+	/**
+	 * M12-30: the voucher payments of an order (code => amount in the order currency): the stored meta, else read
+	 * from the payment lines. Filter "vcap_order_voucher_payments" ( $payments, $order ) for exports.
+	 *
+	 * @return array<string, float>
+	 */
+	public static function order_payments( \WC_Order $order ): array {
+		$payments = self::payments_of_lines( $order );
+		/** Voucher payments after tax of an order (code => amount, order currency), e.g. for an accounting export. */
+		return (array) apply_filters( 'vcap_order_voucher_payments', $payments, $order );
+	}
+
+	/** @return array<string, float> code => amount of the payment lines of the order */
+	private static function payments_of_lines( \WC_Order $order ): array {
+		$payments = array();
+		foreach ( $order->get_items( 'fee' ) as $fee ) {
+			$code = $fee instanceof \WC_Order_Item_Fee ? (string) $fee->get_meta( self::FEE_META ) : '';
+			if ( '' !== $code ) {
+				$payments[ $code ] = round( ( $payments[ $code ] ?? 0.0 ) + abs( (float) $fee->get_total() ), wc_get_price_decimals() );
+			}
+		}
+		return $payments;
+	}
+
+	/** Keeps the order meta PAYMENTS_META in step with the payment lines (saved with the order). */
+	public static function sync_payments_meta( \WC_Order $order ): void {
+		$payments = self::payments_of_lines( $order );
+		if ( $payments ) {
+			$order->update_meta_data( self::PAYMENTS_META, $payments );
+		} elseif ( $order->meta_exists( self::PAYMENTS_META ) ) {
+			$order->delete_meta_data( self::PAYMENTS_META );
+		}
+	}
+
+	/**
+	 * WooCommerce REST API (orders): "vcap_voucher_payments" lists the voucher payments, so exports can book them as
+	 * a payment instead of a fee.
+	 *
+	 * @param \WP_REST_Response $response Response.
+	 * @param \WC_Order         $order    Order.
+	 */
+	public static function rest_order_payments( $response, $order ) {
+		if ( $response instanceof \WP_REST_Response && $order instanceof \WC_Order ) {
+			$data                          = (array) $response->get_data();
+			$data['vcap_voucher_payments'] = array();
+			foreach ( self::order_payments( $order ) as $code => $amount ) {
+				$data['vcap_voucher_payments'][] = array( 'code' => Mask::code( (string) $code ), 'amount' => wc_format_decimal( $amount, wc_get_price_decimals() ) );
+			}
+			$response->set_data( $data );
+		}
+		return $response;
 	}
 
 	/**
@@ -66,7 +127,7 @@ final class PaymentVouchers {
 				$this->forget_hooked = true;
 				add_action( 'vcap_voucher_updated', array( $this, 'forget' ) );
 			}
-			$this->treatments[ $code ] = array( $voucher, ! $voucher->is_ticket() && 'payment' === ProductConfig::tax_treatment( $voucher ) );
+			$this->treatments[ $code ] = array( $voucher, $voucher->has_cash_value() && 'payment' === ProductConfig::tax_treatment( $voucher ) );
 		}
 		list( $voucher, $applies ) = $this->treatments[ $code ];
 		return (bool) apply_filters( 'vcap_voucher_pays_after_tax', $applies, $coupon, $voucher );
@@ -114,8 +175,8 @@ final class PaymentVouchers {
 			$treatment = ProductConfig::product_treatment( $product );
 			$type      = 'balance' === (string) $config['usage'] ? 'fixed_cart' : (string) $config['discount_type'];
 			$reason    = '';
-			if ( 'ticket' === (string) $config['type'] ) {
-				$reason = __( 'ticket voucher', 'voucher-captain' );
+			if ( 'ticket' === (string) $config['type'] && 'fixed' !== (string) $config['amount_source'] ) {
+				$reason = __( 'ticket voucher', 'voucher-captain' ); // Without a fixed value: no cash value (M12-10).
 			} elseif ( 'single' === $treatment ) {
 				$reason = __( 'VAT treatment "Single-purpose voucher"', 'voucher-captain' );
 			} elseif ( 'discount' === $treatment ) {
@@ -373,6 +434,7 @@ final class PaymentVouchers {
 			$order->add_item( self::payment_line( (string) $code, (float) $amount ) );
 		}
 		$order->set_total( (string) max( 0.0, round( $gross - array_sum( array_map( 'floatval', $payments ) ), wc_get_price_decimals() ) ) );
+		self::sync_payments_meta( $order );
 	}
 
 	/** Gross cart total before voucher payments (what WooCommerce passes to woocommerce_calculated_total). */
@@ -431,6 +493,7 @@ final class PaymentVouchers {
 		$amount = $this->take_payment( $coupon, $order, $open, round( $due, wc_get_price_decimals() ), $value );
 		if ( $amount > 0 ) {
 			$order->add_item( self::payment_line( $code, $amount ) );
+			self::sync_payments_meta( $order );
 		}
 	}
 
@@ -484,6 +547,9 @@ final class PaymentVouchers {
 		}
 		if ( 0.0 !== $diff ) {
 			$order->set_total( (string) max( 0.0, round( (float) $order->get_total() + $diff, wc_get_price_decimals() ) ) );
+		}
+		if ( $order->meta_exists( self::PAYMENTS_META ) || self::payments_of_lines( $order ) ) {
+			self::sync_payments_meta( $order );
 		}
 	}
 

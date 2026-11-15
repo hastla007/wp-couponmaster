@@ -158,19 +158,20 @@ final class ReportsAdmin {
 				<button class="button"><?php esc_html_e( 'Show', 'voucher-captain' ); ?></button>
 				<a class="button" href="<?php echo esc_url( $csv ); ?>"><?php esc_html_e( 'Export CSV (per voucher)', 'voucher-captain' ); ?></a>
 			</form>
-			<p class="description"><?php esc_html_e( 'Value customers could still redeem at the end of the chosen day: the balance of gift cards and store credit, and the value of single-use vouchers not yet redeemed or voided. Expired value is shown separately. Percentage and ticket vouchers carry no monetary value and are not included. Have your accountant decide how to book it.', 'voucher-captain' ); ?></p>
+			<p class="description"><?php esc_html_e( 'Value customers could still redeem at the end of the chosen day: the balance of gift cards and store credit, and the value of single-use vouchers not yet redeemed or voided. Expired value is shown separately, and vouchers issued free of charge (goodwill, prizes) are shown as part of the total. Percentage vouchers and tickets without a value carry no monetary value and are not included. Have your accountant decide how to book it.', 'voucher-captain' ); ?></p>
 			<table class="widefat striped">
 				<thead><tr>
 					<th><?php esc_html_e( 'Currency', 'voucher-captain' ); ?></th>
 					<th><?php esc_html_e( 'Type', 'voucher-captain' ); ?></th>
 					<th><?php esc_html_e( 'Valid vouchers', 'voucher-captain' ); ?></th>
 					<th><?php esc_html_e( 'Outstanding value', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'Of which free of charge', 'voucher-captain' ); ?></th>
 					<th><?php esc_html_e( 'Expired vouchers', 'voucher-captain' ); ?></th>
 					<th><?php esc_html_e( 'Expired value', 'voucher-captain' ); ?></th>
 				</tr></thead>
 				<tbody>
 				<?php if ( ! $report['totals'] ) : ?>
-					<tr><td colspan="6"><?php esc_html_e( 'No outstanding voucher value on this day.', 'voucher-captain' ); ?></td></tr>
+					<tr><td colspan="7"><?php esc_html_e( 'No outstanding voucher value on this day.', 'voucher-captain' ); ?></td></tr>
 				<?php endif; ?>
 				<?php foreach ( $report['totals'] as $currency => $by_type ) : ?>
 					<?php foreach ( $by_type as $type => $t ) : ?>
@@ -179,6 +180,7 @@ final class ReportsAdmin {
 							<td><?php echo esc_html( $types[ $type ] ?? $type ); ?></td>
 							<td><?php echo esc_html( (string) $t['count'] ); ?></td>
 							<td><?php echo wp_kses_post( wc_price( $t['amount'], array( 'currency' => $currency ) ) ); ?></td>
+							<td><?php echo esc_html( (string) ( $t['free_count'] ?? 0 ) ) . ' / ' . wp_kses_post( wc_price( (float) ( $t['free_amount'] ?? 0 ), array( 'currency' => $currency ) ) ); ?></td>
 							<td><?php echo esc_html( (string) $t['expired_count'] ); ?></td>
 							<td><?php echo wp_kses_post( wc_price( $t['expired_amount'], array( 'currency' => $currency ) ) ); ?></td>
 						</tr>
@@ -208,6 +210,11 @@ final class ReportsAdmin {
 				<label><?php esc_html_e( 'until', 'voucher-captain' ); ?> <input type="date" name="to" value="<?php echo esc_attr( $to ); ?>" /></label>
 				<button class="button"><?php esc_html_e( 'Show', 'voucher-captain' ); ?></button>
 				<a class="button" href="<?php echo esc_url( $csv ); ?>"><?php esc_html_e( 'Export CSV', 'voucher-captain' ); ?></a>
+				<?php if ( \VCAP\DatevExport::configured() ) : ?>
+					<a class="button" href="<?php echo esc_url( add_query_arg( 'format', 'datev', $csv ) ); ?>"><?php esc_html_e( 'Export DATEV (EXTF)', 'voucher-captain' ); ?></a>
+				<?php else : ?>
+					<a href="<?php echo esc_url( admin_url( 'admin.php?page=wc-settings&tab=vcap&section=api' ) ); ?>"><?php esc_html_e( 'Set up the DATEV export', 'voucher-captain' ); ?></a>
+				<?php endif; ?>
 			</form>
 			<p class="description"><?php esc_html_e( 'Redemptions, refunds, credits and corrections with their amount, in booking order. Value taken off a voucher is negative, value added is positive. The page shows the first 1,000 bookings; the CSV export contains all of them.', 'voucher-captain' ); ?></p>
 			<?php if ( $total > count( $journal ) ) : ?>
@@ -228,10 +235,11 @@ final class ReportsAdmin {
 					<th><?php esc_html_e( 'Order', 'voucher-captain' ); ?></th>
 					<th><?php esc_html_e( 'Till / branch', 'voucher-captain' ); ?></th>
 					<th><?php esc_html_e( 'Receipt no.', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'VAT treatment', 'voucher-captain' ); ?></th>
 				</tr></thead>
 				<tbody>
 				<?php if ( ! $journal ) : ?>
-					<tr><td colspan="8"><?php esc_html_e( 'No bookings in this period.', 'voucher-captain' ); ?></td></tr>
+					<tr><td colspan="9"><?php esc_html_e( 'No bookings in this period.', 'voucher-captain' ); ?></td></tr>
 				<?php endif; ?>
 				<?php foreach ( $journal as $r ) : ?>
 					<tr>
@@ -243,6 +251,7 @@ final class ReportsAdmin {
 						<td><?php echo \VCAP\Format::order_link( $r['order_id'], '–' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in order_link(). ?></td>
 						<td><?php echo esc_html( '' !== (string) ( $r['till'] ?? '' ) ? (string) $r['till'] : '–' ); ?></td>
 						<td><?php echo esc_html( '' !== (string) ( $r['receipt'] ?? '' ) ? (string) $r['receipt'] : '–' ); ?></td>
+						<td><?php echo esc_html( \VCAP\ProductConfig::treatment_label( \VCAP\Ledger::row_treatment( $r ) ) ); ?></td>
 					</tr>
 				<?php endforeach; ?>
 				</tbody>
@@ -421,6 +430,13 @@ final class ReportsAdmin {
 			exit;
 		}
 		if ( 'journal' === $view ) {
+			if ( 'datev' === sanitize_key( wp_unslash( $_GET['format'] ?? '' ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- nonce checked above.
+				if ( ! \VCAP\DatevExport::configured() ) {
+					wp_die( esc_html__( 'Please set the consultant and client number and the three accounts of the DATEV export first (WooCommerce → Settings → Vouchers → Integrations).', 'voucher-captain' ), 400 );
+				}
+				\VCAP\DatevExport::send( $ledger, $from, $to ); // M12-69.
+				exit;
+			}
 			\VCAP\Csv::send( 'voucher-journal-' . $from . '-' . $to . '.csv', $ledger->journal_export( $from, $to ) );
 			exit;
 		}

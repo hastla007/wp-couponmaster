@@ -729,12 +729,10 @@ final class Issuer {
 			default:
 				$amount = $paid / $qty / max( 1, (int) $config['per_item'] );
 		}
-		if ( 'fixed' !== $config['amount_source'] && self::balance_sold_with_vat( $item, $config ) ) {
-			// T7: a stored balance sold WITH VAT (single-purpose, not a multi-purpose voucher) in a tax-exclusive
-			// shop is worth what the customer paid, gross: 50 + 19 % VAT = 59.50, and as a stored balance it
-			// pays 59.50 of the gross price (CouponManager::prepare_gross_balance()), not only 50.
-			$amount *= ( (float) $item->get_subtotal() + (float) $item->get_subtotal_tax() ) / (float) $item->get_subtotal();
-		}
+		// T7: a stored balance sold WITH VAT (single-purpose, not a multi-purpose voucher) in a tax-exclusive shop is
+		// worth what the customer paid, gross: 50 + 19 % VAT = 59.50, and as a stored balance it pays 59.50 of the
+		// gross price (CouponManager::prepare_gross_balance()), not only 50. Same rule for top-ups (M12-12).
+		$amount = self::sold_with_vat_value( $amount, $config, (float) $item->get_subtotal(), (float) $item->get_subtotal_tax(), self::line_treatment( $item, $config ), wc_prices_include_tax() );
 		if ( 'percent' !== $config['discount_type'] && 'fixed' !== $config['amount_source'] ) {
 			// Paid / entered in the order currency; coupons are stored in the shop base currency.
 			$amount = (float) apply_filters( 'vcap_amount_to_base_currency', $amount, $order->get_currency(), $order );
@@ -756,14 +754,39 @@ final class Issuer {
 		if ( (float) $item->get_subtotal() <= 0 || (float) $item->get_subtotal_tax() <= 0 ) {
 			return false; // Not taxed at sale (multi-purpose set up as "not taxable", small business, exempt buyer).
 		}
+		return 'payment' !== self::line_treatment( $item, $config );
+	}
+
+	/**
+	 * VAT treatment of the stored balance a voucher line sells (a new gift card or a top-up of one): the treatment
+	 * a balance voucher of the line's product gets (ProductConfig::tax_treatment(), filter included).
+	 */
+	public static function line_treatment( \WC_Order_Item_Product $item, array $config ): string {
 		$probe                = new Voucher();
 		$probe->product_id    = (int) $item->get_product_id();
 		$probe->variation_id  = (int) $item->get_variation_id();
+		$probe->order_id      = (int) $item->get_order_id();
 		$probe->order_item_id = (int) $item->get_id();
 		$probe->type          = (string) ( $config['type'] ?? 'voucher' );
 		$probe->usage_mode    = 'balance';
 		$probe->discount_type = 'fixed_cart';
-		return 'payment' !== ProductConfig::tax_treatment( $probe );
+		return ProductConfig::tax_treatment( $probe );
+	}
+
+	/**
+	 * T7 / M12-12, shared by Issuer::voucher_amount() (new card) and TopUp::line_value() (top-up): the value of a
+	 * stored balance whose sale was taxed in a tax-exclusive shop and that is not a multi-purpose voucher is the
+	 * gross amount paid ($amount × (net + VAT) / net). Unchanged for fixed amounts (the stated face value),
+	 * percentages, single-use vouchers, untaxed sales, tax-inclusive shops and multi-purpose vouchers.
+	 */
+	public static function sold_with_vat_value( float $amount, array $config, float $subtotal, float $subtotal_tax, string $treatment, bool $prices_include_tax ): float {
+		if ( $prices_include_tax || 'fixed' === ( $config['amount_source'] ?? '' ) || 'percent' === ( $config['discount_type'] ?? '' ) || 'balance' !== ( $config['usage'] ?? '' ) ) {
+			return $amount;
+		}
+		if ( $subtotal <= 0 || $subtotal_tax <= 0 || 'payment' === $treatment ) {
+			return $amount;
+		}
+		return $amount * ( $subtotal + $subtotal_tax ) / $subtotal;
 	}
 
 	private function create_voucher( \WC_Order $order, \WC_Order_Item_Product $item, \WC_Product $product, array $config, int $index ): ?Voucher {
@@ -890,7 +913,10 @@ final class Issuer {
 				$this->coupons->set_coupon_enabled( $voucher, false );
 			}
 		}
-		if ( ! $this->repo->log( $voucher->id, 'issued', $voucher->initial_amount, $voucher->balance, '', $order->get_id() ) ) {
+		// M12-29: the VAT treatment at issue is kept with the "issued" entry (journal column, never changed later).
+		$treatment = ProductConfig::tax_treatment( $voucher );
+		ProductConfig::remember_sold( $voucher, true, $treatment );
+		if ( ! $this->repo->log( $voucher->id, 'issued', $voucher->initial_amount, $voucher->balance, Note::make( ProductConfig::SNAPSHOT_NOTE, array( $treatment, 1 ) ), $order->get_id() ) ) {
 			Db::fail( 'log_issued', array( 'voucher_id' => $voucher->id, 'order_id' => $order->get_id() ) );
 			$order->add_order_note( sprintf( /* translators: %s: code */ __( 'Voucher %s was issued, but its history entry could not be written.', 'voucher-captain' ), Mask::code( (string) $voucher->code ) ) );
 		}
@@ -937,6 +963,10 @@ final class Issuer {
 	 *     @type string      $delivery_at     Deliver (and activate) later, UTC "Y-m-d H:i:s".
 	 *     @type string      $code            Own code (must be unused); default: a generated code.
 	 *     @type string      $source          Free label of the caller, e.g. "company-order" (in the history).
+	 *     @type bool        $paid            Whether the voucher was sold, i.e. paid for outside WooCommerce (e.g. a
+	 *                                        company order invoiced separately). Default false: a voucher without a
+	 *                                        sale (goodwill, prize) is a price reduction for VAT (treatment
+	 *                                        "discount", M12-42) and is listed as free in the liability report.
 	 *     @type string      $reference       Idempotency key (up to 100 characters), e.g. "order-4711/3": a
 	 *                                        second call with the same reference issues nothing and returns
 	 *                                        the error "vcap_reference_used" with the voucher id in its data.
@@ -990,7 +1020,8 @@ final class Issuer {
 		}
 		$source    = mb_substr( sanitize_text_field( (string) ( $args['source'] ?? '' ) ), 0, 60 );
 		$reference = mb_substr( sanitize_text_field( (string) ( $args['reference'] ?? '' ) ), 0, 100 );
-		$note      = Note::make( self::STANDALONE_NOTE, array( $source, $reference ) );
+		$note      = Note::make( self::STANDALONE_NOTE, array( $source, $reference ) ); // Idempotency key (standalone_by_note()).
+		$sold      = ! empty( $args['paid'] );
 		if ( '' !== $reference && ! Claim::take( 'standalone:' . md5( $reference ) ) ) {
 			// AP-P1-3: the claim (kept for good, released only when the insert failed) decides; every reference
 			// issued since standalone issuing exists holds one. Only a used reference looks up its voucher, from
@@ -1005,7 +1036,10 @@ final class Issuer {
 			}
 			return $voucher;
 		}
-		if ( ! $this->repo->log( $voucher->id, 'issued', $voucher->initial_amount, $voucher->balance, $note ) ) {
+		// M12-42/M12-29: whether it was sold and its VAT treatment at issue, kept with the "issued" entry.
+		$treatment = ProductConfig::tax_treatment( $voucher );
+		ProductConfig::remember_sold( $voucher, $sold, $treatment );
+		if ( ! $this->repo->log( $voucher->id, 'issued', $voucher->initial_amount, $voucher->balance, Note::make( self::STANDALONE_NOTE, array( $source, $reference, $treatment, $sold ? 1 : 0 ) ) ) ) {
 			Db::fail( 'log_issued', array( 'voucher_id' => $voucher->id ) );
 		}
 		if ( $send ) {
@@ -1023,11 +1057,13 @@ final class Issuer {
 	private function standalone_by_note( string $note, ?string $since = null ): int {
 		global $wpdb;
 		$events = Install::tables()['events'];
+		// M12-42: entries since the tax snapshot carry two more arguments (treatment, sold): '…["src","ref",…]}'.
+		$like = $wpdb->esc_like( substr( $note, 0, -2 ) . ',' ) . '%';
 		if ( null !== $since && false !== strtotime( $since . ' UTC' ) ) {
 			$from = gmdate( 'Y-m-d H:i:s', (int) strtotime( $since . ' UTC' ) - MINUTE_IN_SECONDS );
-			return (int) $wpdb->get_var( $wpdb->prepare( "SELECT voucher_id FROM {$events} WHERE created_at >= %s AND event = 'issued' AND order_id = 0 AND note = %s ORDER BY created_at, id LIMIT 1", $from, $note ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			return (int) $wpdb->get_var( $wpdb->prepare( "SELECT voucher_id FROM {$events} WHERE created_at >= %s AND event = 'issued' AND order_id = 0 AND ( note = %s OR note LIKE %s ) ORDER BY created_at, id LIMIT 1", $from, $note, $like ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		}
-		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT voucher_id FROM {$events} WHERE event = 'issued' AND order_id = 0 AND note = %s ORDER BY id LIMIT 1", $note ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT voucher_id FROM {$events} WHERE event = 'issued' AND order_id = 0 AND ( note = %s OR note LIKE %s ) ORDER BY id LIMIT 1", $note, $like ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 
 	/**
@@ -1100,6 +1136,7 @@ final class Issuer {
 		if ( ! $voucher->id ) {
 			return new \WP_Error( 'vcap_issue_failed', __( 'The voucher could not be saved. Please try again.', 'voucher-captain' ), array( 'status' => 500 ) );
 		}
+		ProductConfig::remember_sold( $voucher, ! empty( $args['paid'] ) ); // M12-42: known before the coupon is created.
 		$create_coupon = 'ticket' !== $voucher->type || $voucher->initial_amount > 0;
 		if ( apply_filters( 'vcap_create_coupon', $create_coupon, $voucher, $config ) ) {
 			/* translators: %s: voucher type */

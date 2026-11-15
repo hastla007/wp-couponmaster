@@ -11,6 +11,11 @@ function vcap_sc_assert( bool $condition, string $message ): void {
 	echo "PASS: {$message}\n";
 }
 
+// M12-03: new installations settle multi-purpose vouchers as a payment after tax ("Multi-purpose vouchers as
+// payment" on). This suite checks the coupon mode of existing shops; the payment mode is covered in
+// tests/tax-integration.php section 8 and tests/tax-accounting-integration.php.
+update_option( VCAP\PaymentVouchers::OPTION, 'no' );
+
 function vcap_sc_user( string $name ): int {
 	$login = 'vcap_sc_' . $name . '_' . strtolower( wp_generate_password( 6, false, false ) );
 	return (int) wp_insert_user( array( 'user_login' => $login, 'user_pass' => wp_generate_password( 20 ), 'user_email' => $login . '@example.com', 'role' => 'customer' ) );

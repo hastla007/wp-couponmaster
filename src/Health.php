@@ -534,6 +534,8 @@ final class Health {
 	public function test_tax_status(): array {
 		list( $ids, $more ) = self::voucher_products( array( 'product', 'product_variation' ) );
 		$names   = array();
+		$untaxed = array();
+		$single  = array();
 		$checked = array();
 		foreach ( $ids as $id ) {
 			$product = wc_get_product( $id );
@@ -545,11 +547,36 @@ final class Health {
 				}
 				$checked[ $item->get_id() ] = true;
 				$conflict                   = ProductConfig::tax_status_conflict( $item );
-				if ( $conflict ) {
+				if ( $conflict && ! empty( $conflict['untaxed'] ) ) {
+					$untaxed[] = $item->get_name();
+				} elseif ( $conflict ) {
 					/* translators: 1: product name, 2: expected tax status ("none" or "taxable") */
 					$names[] = sprintf( __( '%1$s (tax status should be "%2$s")', 'voucher-captain' ), $item->get_name(), 'none' === $conflict['expected'] ? __( 'None', 'voucher-captain' ) : __( 'Taxable', 'voucher-captain' ) );
 				}
+				if ( '' !== ProductConfig::single_purpose_warning( $item ) ) {
+					$single[] = $item->get_name();
+				}
 			}
+		}
+		if ( $untaxed ) {
+			// M12-03: multi-purpose vouchers sold without VAT while they are redeemed as a price reduction.
+			return self::result(
+				'tax_status',
+				'critical',
+				__( 'Multi-purpose vouchers are never taxed', 'voucher-captain' ),
+				/* translators: %s: list of products */
+				sprintf( __( 'These voucher products sell multi-purpose vouchers without VAT (tax status "None"), but the setting "Multi-purpose vouchers as payment" is off: the vouchers are redeemed as a price reduction that lowers the VAT, so their value is taxed neither at the sale nor at the redemption. Turn on "Multi-purpose vouchers as payment" or make the products taxable, and check with your tax adviser: %s', 'voucher-captain' ), implode( '; ', $untaxed ) ) . self::truncation_note( $more )
+			);
+		}
+		if ( $single && ! $names ) {
+			// M12-28: single-purpose vouchers in a shop that sells to several countries.
+			return self::result(
+				'tax_status',
+				'recommended',
+				__( 'Single-purpose vouchers in a shop that sells to several countries', 'voucher-captain' ),
+				/* translators: %s: list of products */
+				sprintf( __( 'A single-purpose voucher needs the place of supply and the VAT to be fixed at the sale. Your shop sells to several countries, so the country of the later redemption is open: check with your tax adviser whether these products are single-purpose vouchers. Vouchers are only redeemed for goods with the VAT rate and country of their sale: %s', 'voucher-captain' ), implode( '; ', $single ) ) . self::truncation_note( $more )
+			);
 		}
 		if ( ! $names ) {
 			return self::result( 'tax_status', 'good', __( 'Voucher products have a tax status that fits their VAT treatment', 'voucher-captain' ), __( 'Multi-purpose vouchers are sold without VAT, single-purpose vouchers with VAT.', 'voucher-captain' ) . self::truncation_note( $more ) );

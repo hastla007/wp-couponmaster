@@ -234,7 +234,10 @@ final class SingleUse {
 		if ( $limit > 0 && (int) $new_count >= $limit && Voucher::STATUS_ACTIVE === $voucher->status ) {
 			if ( $this->repo->redeem_single_if_active( $voucher->id ) ) {
 				$order_id = $this->usage_order_for( $voucher );
-				$this->repo->log( $voucher->id, 'redeemed', $voucher->initial_amount, 0, (string) $used_by, $order_id );
+				// M12-29: "redeemed" books what the order used, the rest is forfeited (or kept, M12-68) separately.
+				$used = \VCAP\TaxAccounting::used_by_order( $voucher, $order_id, $this->lookup );
+				$this->repo->log( $voucher->id, 'redeemed', $used, 0, (string) $used_by, $order_id );
+				\VCAP\TaxAccounting::book_rest( $this->repo, $voucher, $used, $order_id );
 				VoucherRepository::fire_redeemed( $voucher, (float) $voucher->initial_amount, 'shop', $order_id );
 			}
 		} elseif ( $limit > 0 && (int) $new_count >= $limit && Voucher::STATUS_ACTIVE !== $voucher->status && ! isset( $this->double_flagged[ $voucher->id ] ) ) {
@@ -277,6 +280,7 @@ final class SingleUse {
 			}
 			$voucher->status  = $status;
 			$voucher->balance = $voucher->initial_amount;
+			\VCAP\TaxAccounting::revert_rest( $this->repo, $voucher ); // M12-68: a kept rest goes back with it.
 			$this->repo->log( $voucher->id, 'restored', $voucher->initial_amount, $voucher->balance, (string) $used_by );
 			if ( $this->cancelling ) {
 				$this->given_back[] = $voucher;

@@ -1478,6 +1478,11 @@ check( 'top-up value in a net-price shop: the net price (like a new gift card), 
 check( 'top-up value: a fixed amount per unit, already in the base currency', array( 50.0, true ) === VCAP\TopUp::line_value( array( 'amount_source' => 'fixed', 'amount' => '25' ) + $topup_cfg, 2, 0.0, 0.0, true ) );
 check( 'top-up value: the amount the customer entered, per unit', array( 80.0, false ) === VCAP\TopUp::line_value( array( 'amount_source' => 'custom' ) + $topup_cfg, 2, 0.0, 0.0, true, '40' ) );
 check( 'top-up paid completely with another gift card still adds its value (subtotal, not total)', VCAP\TopUp::line_value( $topup_cfg, 1, 100.0, 0.0, true )[0] > 0 );
+// M12-12: the T7 gross rule is shared by new gift cards (Issuer::voucher_amount()) and top-ups.
+check( 'M12-12: net-price shop, single-purpose top-up sold with VAT: the gross amount paid (50 + 19 % = 59.50)', array( 59.5, false ) === VCAP\TopUp::line_value( $topup_cfg, 1, 50.0, 9.5, false, '', 'single' ) );
+check( 'M12-12: a multi-purpose top-up keeps the net value; an entered amount follows the same rule', array( 50.0, false ) === VCAP\TopUp::line_value( $topup_cfg, 1, 50.0, 9.5, false, '', 'payment' ) && array( 59.5, false ) === VCAP\TopUp::line_value( array( 'amount_source' => 'custom' ) + $topup_cfg, 1, 50.0, 9.5, false, '50', 'single' ) );
+check( 'M12-12: Issuer::sold_with_vat_value(): unchanged for fixed amounts, single use, untaxed sales and tax-inclusive shops', 50.0 === VCAP\Issuer::sold_with_vat_value( 50.0, array( 'amount_source' => 'fixed', 'usage' => 'balance' ), 50.0, 9.5, 'single', false ) && 50.0 === VCAP\Issuer::sold_with_vat_value( 50.0, array( 'usage' => 'single' ), 50.0, 9.5, 'single', false ) && 50.0 === VCAP\Issuer::sold_with_vat_value( 50.0, array( 'usage' => 'balance' ), 50.0, 0.0, 'single', false ) && 50.0 === VCAP\Issuer::sold_with_vat_value( 50.0, array( 'usage' => 'balance' ), 50.0, 9.5, 'single', true ) );
+check( 'M12-69: DATEV financial year start follows the setting (MMDD)', '20260101' === VCAP\DatevExport::financial_year_start( '2026-11-15', '0101' ) && '20250701' === VCAP\DatevExport::financial_year_start( '2026-03-01', '0701' ) && '20260701' === VCAP\DatevExport::financial_year_start( '2026-07-01', '0701' ) );
 // E4: no top-up onto a card that expires soon.
 $soon             = new Voucher();
 $soon->code       = 'GIFT-SOON';

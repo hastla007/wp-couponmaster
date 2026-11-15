@@ -150,6 +150,15 @@ final class Voucher {
 		return 'ticket' === $this->type;
 	}
 
+	/**
+	 * M12-10: whether the voucher carries money: every voucher but a ticket, and a ticket with a value above 0
+	 * (sold with a fixed value). Such tickets are settled and reported like value vouchers (PaymentVouchers,
+	 * means of payment, Ledger::VALUE_VOUCHERS); a ticket without a value is an admission pass only.
+	 */
+	public function has_cash_value(): bool {
+		return ! $this->is_ticket() || $this->initial_amount > 0;
+	}
+
 	public function is_multi_use(): bool {
 		return 'balance' === $this->usage_mode;
 	}

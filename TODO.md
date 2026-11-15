@@ -761,7 +761,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
     - Filter `woocommerce_order_fully_refunded_status`: Gibt es Gutscheinbelastungen (`_vcap_redemptions`) und ist `get_remaining_refund_items() > 0`, wird der Status nicht geändert.
     - Dazu Bestellnotiz und Attention-Eintrag. Die Rückbuchung läuft dann bewusst über „Auf Gutschein zurückbuchen“.
     - Integrationstest „80 Karte + 20 Geld, Teilretoure → Karte unverändert“.
-- [ ] **[PRIO: KRITISCH]** | **[Experte #4, #5]** | **[Kategorie: Tax-Legal]** – **M12-03 Standardkonfiguration versteuert Mehrzweckgutscheine nie und zahlt keinen Versand**
+- [x] **[PRIO: KRITISCH]** | **[Experte #4, #5]** | **[Kategorie: Tax-Legal]** – **M12-03 Standardkonfiguration versteuert Mehrzweckgutscheine nie und zahlt keinen Versand** — *Nachweis: tests/tax-accounting-integration.php „M12-03: a new installation starts with "Multi-purpose vouchers as payment" on“, „M12-03: Site Health is critical for multi-purpose products with tax status "None" while the setting is off“, „M12-03: setting off + multi-purpose product "None": the warning says "turn the setting on, or keep the product taxable"“; TAX.md 1, F17*
   - *Problem:*
     - Die Automatik stuft Wertgutscheine und Geschenkkarten als Mehrzweck (`payment`) ein. Die Produkt- und Health-Warnung verlangt dafür Steuerstatus „Keiner“ (`ProductConfig::tax_status_conflict`), unabhängig von der Einstellung.
     - „Mehrzweckgutscheine als Zahlung“ (`vcap_mpv_after_tax`) ist standardmäßig aus. Der Coupon bleibt dann ein `fixed_cart`-Rabatt und mindert die Bemessungsgrundlage.
@@ -822,7 +822,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - `Delivery::hold_until( $order, true )` auch für Aufladungen. Gebucht wird dann per Action Scheduler (`vcap_topup_after_hold`), nachdem erneut geprüft wurde, dass die Bestellung weder storniert noch erstattet ist.
     - Bestellnotiz, NextSteps-Text, Test.
-- [ ] **[PRIO: HOCH]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-10 Ticketgutschein mit Geldwert: als Mehrzweck eingestuft, aber immer als Rabatt verrechnet und in keinem Bericht**
+- [x] **[PRIO: HOCH]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-10 Ticketgutschein mit Geldwert: als Mehrzweck eingestuft, aber immer als Rabatt verrechnet und in keinem Bericht** — *Nachweis: tests/tax-accounting-integration.php „M12-10: a ticket with a cash value pays after tax and is a means of payment like a value voucher“, „M12-10: the redemption of a ticket with a cash value is in the journal (Ledger::VALUE_VOUCHERS)“; TAX.md 2.4, F9*
   - *Problem:*
     - `product_treatment()` liefert für Tickets mit festem Wert `payment`.
     - `PaymentVouchers::applies()` schließt Tickets aber aus, und `Ledger::VALUE_VOUCHERS` nimmt sie aus Verbindlichkeit und Journal heraus.
@@ -838,7 +838,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - Positionen anteilig mit `refund_total` und `refund_tax` je Steuersatz übergeben, den Rundungsrest auf die letzte Zeile.
     - Alternativ eine Positionsauswahl im Formular. Test.
-- [ ] **[PRIO: HOCH]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-12 Aufladung prüft die Steuereinordnung der Karte nicht, im Netto-Shop fehlt die T7-Bruttoregel**
+- [x] **[PRIO: HOCH]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-12 Aufladung prüft die Steuereinordnung der Karte nicht, im Netto-Shop fehlt die T7-Bruttoregel** — *Nachweis: tests/tax-accounting-integration.php „M12-12: adding that top-up to the cart is refused with a clear message“, „M12-12: a paid top-up of another VAT treatment is held, never booked onto the card“; tests/run.php „M12-12: net-price shop, single-purpose top-up sold with VAT: the gross amount paid (50 + 19 % = 59.50)“; TAX.md 3, 5.2*
   - *Problem:*
     - Ein Mehrzweck-Aufladeprodukt kann eine Einzweckkarte aufladen, und der Betrag wird dann nie versteuert. Umgekehrt wird doppelt versteuert.
     - `TopUp::line_value()` wendet `balance_sold_with_vat()` nicht an. Im Netto-Shop bekommt die Kundin 20 % weniger als bei einer neuen Karte.
@@ -941,17 +941,17 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
 - [ ] **[PRIO: MITTEL]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-26 Entropie-Schätzung importierter Codes rechnet immer mit 26 Buchstaben (V2 unvollständig)**
   - *Problem:* Hex-Codes mit 10 Zeichen (40 Bit) werden zu 99 % ohne Warnung als stark angenommen.
   - *Lösung:* Den Zeichenvorrat aus den tatsächlich benutzten Zeichen des Batches schätzen. Test „Hex-Batch gilt als schwach“.
-- [ ] **[PRIO: MITTEL]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-27 Netto-Shop mit ausgeschalteter Einstellung: Ein Mehrzweck-Einmalgutschein deckt 120 % seines Nennwerts**
+- [x] **[PRIO: MITTEL]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-27 Netto-Shop mit ausgeschalteter Einstellung: Ein Mehrzweck-Einmalgutschein deckt 120 % seines Nennwerts** — *Nachweis: tests/tax-accounting-integration.php „M12-27: net prices, setting off: a 100 single-use multi-purpose voucher saves 100 gross (net + VAT), not 120“; TAX.md 3*
   - *Problem:* `prepare_gross_balance()` gilt nur für Guthabengutscheine. Ein Einmal-Wertgutschein mindert netto plus USt.
   - *Lösung:* `prepare_gross_balance()` auch auf Einmal-Wertgutscheine mit `payment` anwenden, oder über M12-03 lösen. TAX.md 3 korrigieren. Test.
-- [ ] **[PRIO: MITTEL]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-28 Einzweckgutschein: Steuersatz und Land werden nur bei Pass Captain geprüft, OSS-Verkauf ohne Warnung**
+- [x] **[PRIO: MITTEL]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-28 Einzweckgutschein: Steuersatz und Land werden nur bei Pass Captain geprüft, OSS-Verkauf ohne Warnung** — *Nachweis: tests/tax-accounting-integration.php „M12-28: refused for goods with another VAT rate, with a clear message“, „M12-28: in a mixed cart it discounts only the goods with the VAT rate and country of its sale“, „M12-28: a single-purpose product in a shop that sells to several countries is warned about“; TAX.md 4.1, F3/F14 (vormals zweites F13)*
   - *Problem:*
     - Im Warenkorb, an der Kasse und per REST wird ein `single`-Gutschein auf beliebige Steuersätze und Länder verrechnet.
     - Verkauft der Shop in mehrere EU-Länder, ist der Leistungsort offen. Ein Einzweckgutschein ist dann fragwürdig.
   - *Lösung:*
     - `single` nur auf Positionen mit gleichem Satz und gleichem Land zulassen.
     - Health- und Produktwarnung, wenn `single` gewählt ist und an mehrere Länder verkauft wird. Fragen F3/F13 an die Steuerberatung.
-- [ ] **[PRIO: MITTEL]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-29 Journal und Verbindlichkeit ohne Steuereinordnung, ohne Verfall, Einmalgutschein zum vollen Nennwert**
+- [x] **[PRIO: MITTEL]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-29 Journal und Verbindlichkeit ohne Steuereinordnung, ohne Verfall, Einmalgutschein zum vollen Nennwert** — *Nachweis: tests/tax-accounting-integration.php „M12-29: the journal line shows the treatment at issue and the order amount“, „M12-29: the expiry is booked with the remaining value (negative in the journal)“, „M12-29: extending the validity books the expired value back once“, „M12-29: a single-use voucher of 100 used for 60 books "redeemed" 60 and "forfeited" 40 with the order“; tests/tax-integration.php „M12-29: the booked-off rounding rest carries the order id (journal, accounting)“; TAX.md 6.1, F7/F8*
   - *Problem:*
     - Es gibt keine Spalte Mehrzweck/Einzweck/Aktion.
     - `expired` wird ohne Betrag gebucht.
@@ -961,7 +961,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
     - Spalten „Steuereinordnung“ und „Bestellbetrag“.
     - `expired` mit Restwert (in `OUT_EVENTS`), Gegenbuchung bei Reaktivierung.
     - `redeemed` und `forfeited` trennen. Bestell-ID bei der Rundungsbuchung. Fragen F7/F8.
-- [ ] **[PRIO: MITTEL]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-30 Gutscheinzahlung als negative Gebührenzeile verfälscht Analytics und Exporte**
+- [x] **[PRIO: MITTEL]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-30 Gutscheinzahlung als negative Gebührenzeile verfälscht Analytics und Exporte** — *Nachweis: tests/tax-accounting-integration.php „M12-30: the order keeps its voucher payments in "_vcap_voucher_payments" (code => amount)“, „M12-30: the WooCommerce REST order response lists the voucher payments (masked code)“, „M12-30: filter "vcap_order_voucher_payments" adjusts the payments for exports“; Kontierung TAX.md 6.3 (echte Teilzahlung bleibt langfristig offen, TAX.md 10 Nr. 3)*
   - *Problem:* WooCommerce Analytics zeigt einen falschen Nettoumsatz. DATEV- und Rechnungs-Plugins buchen die Zeile als 0-%-Erlösminderung.
   - *Lösung:*
     - Bestell-Meta `_vcap_voucher_payments` und Filter für Exporte bereitstellen.
@@ -974,7 +974,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
     - `purpose`, `treatment` und `sale_tax` in API- und Scanner-Antwort.
     - Option „Beleg-Nr. Pflicht“ (Standard an für AT/DE), serverseitig geprüft.
     - 80-mm-Bon mit maskiertem Code, Zeit, Mitarbeiter, Kasse, Beleg- und Buchungs-Nr. Kassenhinweis.
-- [ ] **[PRIO: MITTEL]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-32 TAX.md widerspricht sich selbst und dem Code**
+- [x] **[PRIO: MITTEL]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-32 TAX.md widerspricht sich selbst und dem Code** — *Nachweis: TAX.md neu gegliedert (1–12) und auf Code-Stand 15.11.2026 gebracht; Fragen F1–F21 neu nummeriert, neu F17 (Standard der Einstellung), F9 (Ticket mit Geldwert), F18 (Erstattung als Guthaben), F19 (Kaufpreis unter Nennwert, Art. 73a), F20/F21*
   - *Problem:* Die Abschnitte 1, 6 und 7 sind veraltet, 2.7 und 5.2 passen nicht zum Code, die Nummerierung ist fehlerhaft.
   - *Lösung:*
     - Auf den aktuellen Code-Stand bringen und neu nummerieren.
@@ -1031,7 +1031,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
 - [x] **[PRIO: MITTEL]** | **[Experte #7]** | **[Kategorie: UX]** – **M12-41 QR-Inhalt „PDF-Download-Link“ läuft nach 90 Tagen ab, der gedruckte Gutschein gilt Jahre** — *Nachweis: tests/pdf-integration.php „M12-41: the printed link expires 30 days after the voucher, never for a voucher without expiry“*
   - *Problem:* `signed_url()` mit `exp` aus `vcap_download_link_days` wird fest ins PDF geschrieben.
   - *Lösung:* Den Ablauf an die Gültigkeit des Gutscheins koppeln (+30 Tage, bzw. unbefristet) oder auf eine dauerhafte Statusseite verlinken. Hinweis im Designer.
-- [ ] **[PRIO: MITTEL]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-42 Gutscheine ohne Verkauf (`issue_standalone`, Kulanz, Preise) werden automatisch Mehrzweck**
+- [x] **[PRIO: MITTEL]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-42 Gutscheine ohne Verkauf (`issue_standalone`, Kulanz, Preise) werden automatisch Mehrzweck** — *Nachweis: tests/tax-accounting-integration.php „M12-42: a voucher issued without a sale (goodwill) is a price reduction for VAT“, „M12-42: the liability report shows the free vouchers separately from the sold ones“; API.md (`paid`), TAX.md 2.8/2.9, 6.2, F4*
   - *Problem:*
     - Die Automatik liefert `payment`, sobald es eine Geschenkkarte oder ein Produkt ist, auch ohne Zahlung. TAX.md 2.7 sagt `discount`.
     - Folgen: USt auf eine unentgeltliche Leistung, und der Gutschein erscheint als Verbindlichkeit.
@@ -1137,7 +1137,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:* `analyse_batch()` prüfen, `vcap_weak_code`, außer bei `allow_weak`. API.md.
 - [x] **[PRIO: NIEDRIG]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-65 Abgelaufene PDF-Links bleiben am Schalter ein gültiges Einlöse-Merkmal** — *Nachweis: tests/pos-integration.php „M12-65: a scanned PDF link counts only with a valid signature“*
   - *Lösung:* `Tickets::resolve()` prüft bei `vcap_pdf` die Signatur, oder akzeptiert nur Ticket-URLs und rohe Codes.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-66 DSGVO-Löschung überschreibt auch codierte Korrekturbegründungen (GoBD)**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-66 DSGVO-Löschung überschreibt auch codierte Korrekturbegründungen (GoBD)** — *Nachweis: tests/tax-accounting-integration.php „M12-66: GDPR erasure replaces free-text notes, keeps coded notes and logs the erasure“; tests/security-integration.php „M12-66: the erasure is logged as its own history event“; TAX.md 6.5*
   - *Lösung:* Nur Freitext mit Personenbezug ersetzen, codierte Notizen behalten. Die Löschung selbst protokollieren.
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #4, #12]** | **[Kategorie: Tax-Legal]** – **M12-67 Deinstallation: Journal wird ohne Aufbewahrungshinweis gelöscht, Optionstext falsch, Reste bleiben**
   - *Problem:*
@@ -1145,9 +1145,9 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
     - Der Text „coupons are kept“ ist falsch.
     - `_vcap_verified_email`, `_vcap_email_changed` und `woocommerce_vcap_*_settings` bleiben liegen.
   - *Lösung:* Export anbieten, Text korrigieren, Reste mitlöschen, Assertions.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-68 Kundentext „Restwert verfällt“ bei gekauften Einmal-Wertgutscheinen (§ 307 BGB, ABGB)**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-68 Kundentext „Restwert verfällt“ bei gekauften Einmal-Wertgutscheinen (§ 307 BGB, ABGB)** — *Nachweis: tests/tax-accounting-integration.php „M12-68: with "Keep the rest" the unused 40 become store credit of the customer instead of being lost“, „M12-68: cancelling the order gives the voucher back and takes the kept credit back“; LEGAL_TEXTS.md (Abschnitt 1, „Restwert“), TAX.md 4.3*
   - *Lösung:* In LEGAL_TEXTS.md aufnehmen. Option „Rest als Guthaben behalten“.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #4]** | **[Kategorie: Feature]** – **M12-69 DATEV/BMD-Export mit Konten und Steuerschlüsseln**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #4]** | **[Kategorie: Feature]** – **M12-69 DATEV/BMD-Export mit Konten und Steuerschlüsseln** — *Nachweis: tests/tax-accounting-integration.php „M12-69: EXTF booking batch: header, columns, an expiry booked from the liability to the income account“; TAX.md 6.4 (BMD-Format nicht umgesetzt)*
   - *Lösung:* Optionaler EXTF-Buchungsstapel mit konfigurierbaren Konten.
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #5]** | **[Kategorie: Bug]** – **M12-70 Zahlungsmodus ignoriert die Reihenfolge Karte/Guthaben**
   - *Lösung:* `payments_for()` sortiert wie `sort()`.

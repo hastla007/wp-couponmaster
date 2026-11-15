@@ -50,6 +50,7 @@ final class ProductConfig {
 		'event_date'          => '',
 		'event_location'      => '',
 		'transferable'        => 'yes',
+		'keep_rest'           => 'no',
 		'redemption_terms'    => '',
 		'preview'             => 'yes',
 		'channels'            => array(),
@@ -320,6 +321,11 @@ final class ProductConfig {
 	 * vouchers and gift cards multi-purpose vouchers). Filter "vcap_voucher_tax_treatment".
 	 */
 	public static function tax_treatment( Voucher $voucher ): string {
+		if ( false === self::is_sold( $voucher ) ) {
+			// M12-42: issued without a sale (goodwill, prize, issue_standalone() without "paid"): no consideration was
+			// received, so it is no voucher in the sense of the directive but a free price reduction (TAX.md 2.7, F4).
+			return (string) apply_filters( 'vcap_voucher_tax_treatment', 'discount', $voucher );
+		}
 		$product = $voucher->product();
 		$setting = $product ? (string) self::get( $product )['tax_treatment'] : 'auto';
 		if ( in_array( $setting, array( 'payment', 'single', 'discount' ), true ) ) {
@@ -327,13 +333,108 @@ final class ProductConfig {
 		} else {
 			if ( 'percent' === $voucher->discount_type ) {
 				$treatment = 'discount';
-			} elseif ( $voucher->is_multi_use() || in_array( $voucher->type, array( 'giftcard', 'credit' ), true ) || $product ) {
+			} elseif ( $voucher->is_multi_use() || in_array( $voucher->type, array( 'giftcard', 'credit' ), true ) || $product || ( self::is_standalone( $voucher ) && true === self::is_sold( $voucher ) ) ) {
 				$treatment = 'payment'; // Gift cards, store credit and value vouchers that were sold.
 			} else {
 				$treatment = 'discount'; // Codes without a sale behind them (promotions, campaigns).
 			}
 		}
 		return (string) apply_filters( 'vcap_voucher_tax_treatment', $treatment, $voucher );
+	}
+
+	/** Ledger note code of the "issued" entry of a voucher sold with an order: args [treatment, sold 1/0] (M12-29). */
+	public const SNAPSHOT_NOTE = 'issued_tax';
+
+	/** @var array<int, array{treatment:string, sold:bool}|null> voucher id => snapshot of the "issued" entry (request cache) */
+	private static array $snapshots = array();
+
+	/** Translated name of a VAT treatment ("payment", "single", "discount"). */
+	public static function treatment_label( string $treatment ): string {
+		switch ( $treatment ) {
+			case 'payment':
+				return __( 'Multi-purpose voucher', 'voucher-captain' );
+			case 'single':
+				return __( 'Single-purpose voucher', 'voucher-captain' );
+			case 'discount':
+				return __( 'Promotion (price reduction)', 'voucher-captain' );
+		}
+		return $treatment;
+	}
+
+	/** M12-42: whether a voucher was issued without an order and is no store credit account (issue_standalone()). */
+	public static function is_standalone( Voucher $voucher ): bool {
+		return 0 === $voucher->order_id && 0 === $voucher->order_item_id && 'credit' !== $voucher->type;
+	}
+
+	/**
+	 * M12-42: whether a voucher was sold (consideration received): vouchers of an order and store credit always;
+	 * a voucher issued without an order as recorded at issue (issue_standalone() argument "paid"). Null for
+	 * vouchers issued without an order before the flag existed (their treatment stays as it was).
+	 */
+	public static function is_sold( Voucher $voucher ): ?bool {
+		if ( ! self::is_standalone( $voucher ) ) {
+			return true;
+		}
+		if ( $voucher->id <= 0 ) {
+			return null;
+		}
+		$snapshot = self::snapshot( $voucher );
+		return null === $snapshot ? null : $snapshot['sold'];
+	}
+
+	/** Records the "sold" flag of a voucher being issued, before its "issued" entry is written. */
+	public static function remember_sold( Voucher $voucher, bool $sold, string $treatment = '' ): void {
+		if ( $voucher->id > 0 ) {
+			self::$snapshots[ $voucher->id ] = array( 'treatment' => $treatment, 'sold' => $sold );
+		}
+	}
+
+	/** Forgets the cached snapshots (tests, long-running exports). */
+	public static function forget_snapshots(): void {
+		self::$snapshots = array();
+	}
+
+	/**
+	 * M12-29: VAT treatment and "sold" flag recorded in the voucher's "issued" ledger entry when it was issued
+	 * (note SNAPSHOT_NOTE, or Issuer::STANDALONE_NOTE with treatment and flag as 3rd and 4th argument). Null for
+	 * vouchers issued before the snapshot existed.
+	 *
+	 * @return array{treatment:string, sold:bool}|null
+	 */
+	public static function snapshot( Voucher $voucher ): ?array {
+		if ( $voucher->id <= 0 ) {
+			return null;
+		}
+		if ( ! array_key_exists( $voucher->id, self::$snapshots ) ) {
+			global $wpdb;
+			$events = Install::tables()['events'];
+			$note   = $wpdb->get_var( $wpdb->prepare( "SELECT note FROM {$events} WHERE voucher_id = %d AND event = 'issued' ORDER BY id LIMIT 1", $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( count( self::$snapshots ) > 1000 ) {
+				self::$snapshots = array();
+			}
+			self::$snapshots[ $voucher->id ] = self::parse_snapshot( (string) $note );
+		}
+		return self::$snapshots[ $voucher->id ];
+	}
+
+	/**
+	 * Snapshot of an "issued" ledger note (see snapshot()), null when the note carries none.
+	 *
+	 * @return array{treatment:string, sold:bool}|null
+	 */
+	public static function parse_snapshot( string $note ): ?array {
+		$decoded = Note::decode( $note );
+		if ( null === $decoded ) {
+			return null;
+		}
+		$args = $decoded['args'];
+		if ( self::SNAPSHOT_NOTE === $decoded['code'] && isset( $args[0], $args[1] ) ) {
+			return array( 'treatment' => (string) $args[0], 'sold' => (bool) (int) $args[1] );
+		}
+		if ( Issuer::STANDALONE_NOTE === $decoded['code'] && isset( $args[2], $args[3] ) ) {
+			return array( 'treatment' => (string) $args[2], 'sold' => (bool) (int) $args[3] );
+		}
+		return null;
 	}
 
 	/**
@@ -426,9 +527,11 @@ final class ProductConfig {
 	/**
 	 * Does the product's tax status fit the voucher kind? Multi-purpose vouchers are sold without VAT (tax status
 	 * "None", VAT is due at redemption), single-purpose vouchers with the VAT of the later service ("Taxable").
-	 * Null when it fits, taxes are off or the product is no voucher / a promotion.
+	 * Null when it fits, taxes are off or the product is no voucher / a promotion. M12-03: multi-purpose vouchers are
+	 * sold without VAT only while "Multi-purpose vouchers as payment" is on; with the setting off a multi-purpose
+	 * voucher sold as "None" is never taxed ("untaxed" = true, Health: critical), a taxable one fits.
 	 *
-	 * @return array{treatment:string, expected:string, actual:string, message:string}|null
+	 * @return array{treatment:string, expected:string, actual:string, message:string, untaxed?:bool}|null
 	 */
 	public static function tax_status_conflict( $product ): ?array {
 		$product = $product instanceof \WC_Product ? $product : wc_get_product( $product );
@@ -441,6 +544,15 @@ final class ProductConfig {
 			$status = $parent ? (string) $parent->get_tax_status() : 'taxable';
 		}
 		$treatment = self::product_treatment( $product );
+		if ( 'payment' === $treatment && ! PaymentVouchers::enabled() ) {
+			// M12-03: with "Multi-purpose vouchers as payment" off the voucher is redeemed as a price reduction that
+			// lowers the VAT. Sold without VAT as well, the value would never be taxed: VAT stays at the sale.
+			if ( 'none' !== $status ) {
+				return null;
+			}
+			$message = __( 'This product sells a multi-purpose voucher without VAT (tax status "None"), but the setting "Multi-purpose vouchers as payment" is off: the voucher is redeemed as a price reduction that lowers the VAT, so its value is never taxed. Turn on the setting "Multi-purpose vouchers as payment" (WooCommerce → Settings → Vouchers), or keep this product taxable.', 'voucher-captain' );
+			return array( 'treatment' => $treatment, 'expected' => 'taxable', 'actual' => $status, 'message' => $message, 'untaxed' => true );
+		}
 		if ( 'payment' === $treatment && 'none' !== $status ) {
 			$message = __( 'This product sells a multi-purpose voucher (means of payment): its sale is not subject to VAT, the VAT is due when the voucher is redeemed. Set the tax status to "None" – or choose "Single-purpose voucher" if place and VAT of the service are fixed at the sale.', 'voucher-captain' );
 			return array( 'treatment' => $treatment, 'expected' => 'none', 'actual' => $status, 'message' => $message );
@@ -450,6 +562,24 @@ final class ProductConfig {
 			return array( 'treatment' => $treatment, 'expected' => 'taxable', 'actual' => $status, 'message' => $message );
 		}
 		return null;
+	}
+
+	/**
+	 * M12-28: warning for a single-purpose voucher product in a shop that sells to more than one country (WooCommerce
+	 * "Selling location(s)"): the place of supply of the later redemption is open, so the voucher may not be a
+	 * single-purpose voucher (TAX.md F3/F13). '' when the product is no single-purpose voucher, taxes are off or the
+	 * shop sells to one country only.
+	 */
+	public static function single_purpose_warning( $product ): string {
+		$product = $product instanceof \WC_Product ? $product : wc_get_product( $product );
+		if ( ! $product || ! self::is_voucher( $product ) || ! function_exists( 'wc_tax_enabled' ) || ! wc_tax_enabled() || 'single' !== self::product_treatment( $product ) ) {
+			return '';
+		}
+		$countries = function_exists( 'WC' ) && WC()->countries ? (array) WC()->countries->get_allowed_countries() : array();
+		if ( count( $countries ) <= 1 ) {
+			return '';
+		}
+		return __( 'This product sells a single-purpose voucher, but the shop sells to several countries: the country (and with it the VAT) of the later redemption is not fixed at the sale. The voucher is only redeemed for goods with the VAT rate and country of its sale. Check with your tax adviser whether it is a single-purpose voucher, or choose "Multi-purpose voucher".', 'voucher-captain' );
 	}
 
 	/**

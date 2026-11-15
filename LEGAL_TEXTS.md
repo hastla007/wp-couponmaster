@@ -11,6 +11,7 @@ dass die Vorlage aktuell ist und jeder Text noch existiert). Prüfung durch die 
 | Einlösebedingungen pro Land | ebenda → „Redemption conditions per country“ (`AT: …`) | Rechnungsland entscheidet; Text wird am Gutschein festgeschrieben |
 | Gesetzliche Gültigkeit pro Land | ebenda → „Statutory validity per country“ (`DE: 3 end`) | Ablaufdatum neuer Gutscheine mit gesetzlicher Gültigkeit |
 | Bedingungen je Produkt | Produkt → Gutschein → „Redemption conditions“ | ersetzt die allgemeinen Bedingungen |
+| Restwert gekaufter Einmal-Wertgutscheine | Produkt → Gutschein → „Keep the rest“ (Standard aus) | aus: der nicht genutzte Rest verfällt, der Kunde wird im Warenkorb gewarnt (Text unten „Restwert“; Verfallklausel in AGB nach § 307 BGB bzw. ABGB prüfen); an: der Rest wird Kundenguthaben bzw. eine neue Geschenkkarte (TAX.md 4.3) |
 
 ## 2. Gesetzliche Gültigkeit (Standardwerte, `config/markets.php`)
 
@@ -73,6 +74,7 @@ dass die Vorlage aktuell ist und jeder Text noch existiert). Prüfung durch die 
 |---|---|---|---|---|
 | Balance: %s | Restwert: %s | Restwert: %s | src/Downloads.php:630 templates/myaccount/vouchers-table.php:48 | ☐ |
 | Remaining balance | Restwert | Restwert | src/Placeholders.php:20 | ☐ |
+| Voucher %1$s: only %2$s of %3$s is used in this order. The voucher can be redeemed only once – the remaining %4$s will be lost. Add more items to use its full value. | Gutschein %1$s: In dieser Bestellung werden nur %2$s von %3$s angerechnet. Der Gutschein kann nur einmal eingelöst werden – der Restwert von %4$s verfällt. Legen Sie weitere Artikel in den Warenkorb, um den vollen Wert zu nutzen. | Gutschein %1$s: In dieser Bestellung werden nur %2$s von %3$s angerechnet. Der Gutschein kann nur einmal eingelöst werden – der Restwert von %4$s verfällt. Legen Sie weitere Artikel in den Warenkorb, um den vollen Wert zu nutzen. | src/ProductChecks.php:232 | ☐ |
 
 ### Erstattung und Widerruf
 
