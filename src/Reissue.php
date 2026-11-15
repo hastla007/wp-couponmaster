@@ -129,12 +129,9 @@ final class Reissue {
 				// Still not redeemable: a Voucher Captain coupon without its voucher is refused at checkout.
 				CouponManager::set_coupon_post_status( (int) $old_coupon_id, $old_code, false );
 				$warning = __( 'The old WooCommerce coupon could not be deleted; it was disabled instead.', 'voucher-captain' );
-			} elseif ( class_exists( '\WC_Cache_Helper' ) ) {
-				// The code → coupon id cache: keyed by the code (WooCommerce 8.x) or its md5 hash (newer versions).
-				// A stale entry would still resolve the old code to the deleted coupon (AP-Q1-2).
-				$prefix = \WC_Cache_Helper::get_cache_prefix( 'coupons' ) . 'coupon_id_from_code_';
-				wp_cache_delete( $prefix . wc_format_coupon_code( $old_code ), 'coupons' );
-				wp_cache_delete( $prefix . md5( wc_strtolower( $old_code ) ), 'coupons' );
+			} else {
+				// A stale code → coupon id entry would still resolve the old code to the deleted coupon (AP-Q1-2).
+				Coupons\CouponSync::forget_code_cache( $old_code );
 			}
 			CouponManager::sync_coupon( $fresh, array( 'amount' ) ); // Remaining value read under the row lock.
 		}

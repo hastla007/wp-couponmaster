@@ -10,7 +10,7 @@ for suite in \
 	woocommerce $compat security redemption order-lifecycle account coupon-link campaign reminder zero-total \
 	purchase-rules first-order store-credit promotion bonus sku-rules reports referral shortcodes \
 	connector example-connector affiliate-captain blocks fault-injection acceptance scoping tax email-texts validity bulk \
-	topup rate-limit product-setup install delivery diagnostics counter; do
+	topup rate-limit product-setup install delivery diagnostics counter caching; do
 	echo "::group::${suite}"
 	$WP eval-file "$PWD/tests/${suite}-integration.php"
 	echo "::endgroup::"

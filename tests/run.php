@@ -1960,5 +1960,15 @@ check(
 		&& 5.0 === VCAP\CouponManager::tolerance_for( 'USD', 'JPY', 100000.0, 0 )
 );
 
+// M12-88: export batches empty the object cache only in a way the drop-in supports.
+$m88 = array();
+foreach ( array( array( true, true ), array( true, false ), array( false, false ), array( false, true ) ) as $m88_case ) {
+	$GLOBALS['vcap_test_cache'] = array( 'supports' => $m88_case[0], 'external' => $m88_case[1], 'calls' => array() );
+	VCAP\Ledger::flush_runtime_cache();
+	$m88[] = implode( ',', $GLOBALS['vcap_test_cache']['calls'] );
+}
+unset( $GLOBALS['vcap_test_cache'] );
+check( 'M12-88: runtime flush where supported, full flush of a non-persistent cache otherwise, nothing for a persistent drop-in without flush_runtime', array( 'runtime', 'runtime', 'full', '' ) === $m88, implode( '|', $m88 ) );
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

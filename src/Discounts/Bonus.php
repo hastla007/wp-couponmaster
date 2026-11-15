@@ -182,9 +182,7 @@ final class Bonus {
 			return false;
 		}
 		$coupon = new \WC_Coupon( $coupon_id );
-		if ( class_exists( '\WC_Cache_Helper' ) ) {
-			wp_cache_delete( \WC_Cache_Helper::get_cache_prefix( 'coupons' ) . 'coupon_id_from_code_' . wc_format_coupon_code( (string) $coupon->get_code() ), 'coupons' );
-		}
+		\VCAP\Coupons\CouponSync::forget_code_cache( (string) $coupon->get_code() );
 		$campaign = $this->campaigns->get_any( $campaign_id );
 		$title    = $campaign ? (string) $campaign['title'] : '';
 		/* translators: 1: masked coupon code (last four characters), 2: promotion title */

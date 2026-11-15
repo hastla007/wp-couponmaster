@@ -183,10 +183,22 @@ final class CouponSync {
 			),
 			true
 		);
-		if ( class_exists( '\WC_Cache_Helper' ) ) {
-			wp_cache_delete( \WC_Cache_Helper::get_cache_prefix( 'coupons' ) . 'coupon_id_from_code_' . wc_format_coupon_code( $code ), 'coupons' );
-		}
+		self::forget_code_cache( $code );
 		return ! is_wp_error( $updated ) && $updated;
+	}
+
+	/**
+	 * Drops WooCommerce's code → coupon id cache of a code: keyed by the code (WooCommerce 8.x) or its md5 hash
+	 * (newer versions). A stale entry under a persistent object cache would keep a disabled or deleted coupon
+	 * redeemable, or hide a freshly published one (AP-Q1-2, M12-85).
+	 */
+	public static function forget_code_cache( string $code ): void {
+		if ( '' === $code || ! class_exists( '\WC_Cache_Helper' ) ) {
+			return;
+		}
+		$prefix = \WC_Cache_Helper::get_cache_prefix( 'coupons' ) . 'coupon_id_from_code_';
+		wp_cache_delete( $prefix . wc_format_coupon_code( $code ), 'coupons' );
+		wp_cache_delete( $prefix . md5( wc_strtolower( $code ) ), 'coupons' );
 	}
 
 	/**

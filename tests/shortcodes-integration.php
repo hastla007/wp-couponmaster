@@ -105,6 +105,22 @@ $product->save();
 WC()->cart->add_to_cart( $product->get_id(), 1 );
 vcap_sc_assert( 'applied' === $sc->redeem( 'redeem-' . $tag ) && WC()->cart->has_discount( 'redeem-' . $tag ), 'with products in the cart the code is applied' );
 
+// M12-51: a code from a redeem link fills in the form only where the no-cache headers went out before any output
+// (no_cache() on template_redirect) or on the configured redeem page itself. In WP-CLI output has started, so
+// the form is rendered once on the redeem page and once on another page.
+$m51_keep_page = get_option( 'vcap_redeem_page_id', false );
+$m51_page      = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'publish', 'post_title' => 'M51 redeem', 'post_content' => '<!-- wp:vcap/redeem /-->' ) );
+$m51_other     = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'publish', 'post_title' => 'M51 other', 'post_content' => 'Theme renders the form' ) );
+update_option( 'vcap_redeem_page_id', $m51_page );
+$m51_render = static function ( int $page_id ): string {
+	$GLOBALS['wp_query'] = new WP_Query( array( 'page_id' => $page_id ) );
+	$GLOBALS['post']     = get_post( $page_id );
+	$html                = do_shortcode( '[vcap_redeem]' );
+	wp_reset_query();
+	return $html;
+};
+VCAP\Shortcodes::reset_no_cache_headers();
+
 // Redeem links: the code moves from the URL into the session (redirect to the clean URL) and fills in the form.
 $_GET['vcap_code']      = 'LINK-' . strtoupper( $tag );
 $_SERVER['REQUEST_URI'] = '/einloesen/?vcap_code=LINK-' . strtoupper( $tag ) . '&utm_source=mail';
@@ -121,7 +137,14 @@ try {
 remove_filter( 'wp_redirect', $stop_redirect );
 unset( $_GET['vcap_code'] );
 vcap_sc_assert( '' !== $redirected && ! str_contains( $redirected, 'vcap_code' ) && str_contains( $redirected, 'utm_source=mail' ), 'a redeem link redirects to the URL without the code' );
-vcap_sc_assert( 'LINK-' . strtoupper( $tag ) === WC()->session->get( VCAP\Shortcodes::PREFILL_KEY ) && str_contains( do_shortcode( '[vcap_redeem]' ), 'value="LINK-' . strtoupper( $tag ) . '"' ), 'the code from the link fills in the redeem form from the session' );
+// M12-50: the redirect target is a URL no page cache has a copy of (random query argument, new on every link).
+$m50_q   = wp_parse_args( (string) wp_parse_url( $redirected, PHP_URL_QUERY ) );
+$m50_arg = (string) ( $m50_q[ VCAP\Shortcodes::NO_CACHE_ARG ] ?? '' );
+$m50_two = VCAP\Shortcodes::redeem_link_target();
+vcap_sc_assert( 8 === strlen( $m50_arg ) && ! str_contains( $m50_two, $m50_arg ), 'M12-50: a redeem link redirects with a random query argument (a cache MISS), new for every link' );
+vcap_sc_assert( in_array( VCAP\Shortcodes::PREFILL_COOKIE, (array) apply_filters( 'rocket_cache_reject_cookies', array( 'wordpress_logged_in_' ) ), true ) && in_array( 'wordpress_logged_in_', (array) apply_filters( 'rocket_cache_reject_cookies', array( 'wordpress_logged_in_' ) ), true ), 'M12-50: WP Rocket serves no cached page to a visitor with the redeem link cookie (rocket_cache_reject_cookies)' );
+vcap_sc_assert( 'LINK-' . strtoupper( $tag ) === WC()->session->get( VCAP\Shortcodes::PREFILL_KEY ) && str_contains( $m51_render( $m51_page ), 'value="LINK-' . strtoupper( $tag ) . '"' ), 'the code from the link fills in the redeem form from the session (on the redeem page)' );
+vcap_sc_assert( ! VCAP\Shortcodes::no_cache_headers_sent() && ! str_contains( $m51_render( $m51_other ), 'LINK-' . strtoupper( $tag ) ) && ! str_contains( do_shortcode( '[vcap_redeem]' ), 'LINK-' . strtoupper( $tag ) ), 'M12-51: rendered after the headers went out (theme, builder), elsewhere than on the redeem page, the form stays empty' );
 WC()->session->set( VCAP\Shortcodes::PREFILL_KEY, null );
 wc_clear_notices();
 
@@ -148,10 +171,14 @@ $follow( '' );
 $follow( 'x' );
 vcap_sc_assert( ! WC()->session->has_session() && ! isset( $_COOKIE[ VCAP\Shortcodes::PREFILL_COOKIE ] ), 'an empty or implausible redeem link starts no session and sets no cookie' );
 $follow( 'COOKIE-' . strtoupper( $tag ) );
-vcap_sc_assert( ! WC()->session->has_session() && 'COOKIE-' . strtoupper( $tag ) === VCAP\Shortcodes::prefill_cookie() && str_contains( do_shortcode( '[vcap_redeem]' ), 'value="COOKIE-' . strtoupper( $tag ) . '"' ), 'a redeem link of a visitor without a session keeps the code in a short-lived cookie (no WooCommerce session) and fills in the form' );
+vcap_sc_assert( ! WC()->session->has_session() && 'COOKIE-' . strtoupper( $tag ) === VCAP\Shortcodes::prefill_cookie() && str_contains( $m51_render( $m51_page ), 'value="COOKIE-' . strtoupper( $tag ) . '"' ), 'a redeem link of a visitor without a session keeps the code in a short-lived cookie (no WooCommerce session) and fills in the form' );
+vcap_sc_assert( ! str_contains( $m51_render( $m51_other ), 'COOKIE-' . strtoupper( $tag ) ), 'M12-51: the cookie code is not printed into a form whose page could not get the no-cache headers' );
 VCAP\Shortcodes::set_prefill_cookie( '' );
 vcap_sc_assert( '' === VCAP\Shortcodes::prefill_cookie(), 'the cookie is removed once the form is used' );
 WC()->session = $session_before;
+false === $m51_keep_page ? delete_option( 'vcap_redeem_page_id' ) : update_option( 'vcap_redeem_page_id', $m51_keep_page );
+wp_delete_post( $m51_page, true );
+wp_delete_post( $m51_other, true );
 
 WC()->cart->empty_cart();
 wc_clear_notices();
