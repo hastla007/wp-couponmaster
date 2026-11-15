@@ -442,7 +442,7 @@ final class PaymentVouchers {
 	private static function payment_line( string $code, float $amount ): \WC_Order_Item_Fee {
 		$fee = new \WC_Order_Item_Fee();
 		/* translators: %s: voucher code */
-		$fee->set_name( sprintf( __( 'Voucher %s', 'voucher-captain' ), Downloads::masked_code( $code ) ) );
+		$fee->set_name( sprintf( __( 'Voucher %s', 'voucher-captain' ), Mask::code( $code ) ) );
 		$fee->set_tax_status( 'none' );
 		$fee->set_tax_class( '' );
 		$fee->set_total( (string) -abs( $amount ) );

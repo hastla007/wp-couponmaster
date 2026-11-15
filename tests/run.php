@@ -1823,6 +1823,22 @@ foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( dirname
 	}
 }
 check( 'D14: no other class sets usage limit/count or expiry on a voucher coupon (all through CouponManager::sync_coupon)', array() === $d14_writers, implode( ', ', $d14_writers ) );
+check(
+	'D14: one masking helper – codes "…" + last four in capitals (whole characters), addresses "j***@domain"; the old names are aliases',
+	'…7KQ2' === VCAP\Mask::code( 'gift-ab7kq2' ) && '7KQ2' === VCAP\Mask::code_tail( 'gift-ab7kq2' ) && '…ÄÖÜÉ' === VCAP\Mask::code( 'x-äöüé' ) && '…AB' === VCAP\Mask::code( 'ab' )
+		&& 'j***@example.com' === VCAP\Mask::email( 'jane@example.com' ) && 'no address' === VCAP\Mask::email( 'no address' ) && 'Ä***@b.de' === VCAP\Mask::email( 'Äxy@b.de' )
+		&& 'Mail to j***@example.com and b***@test.org failed' === VCAP\Mask::addresses( 'Mail to jane@example.com and bob@test.org failed' )
+		&& VCAP\Downloads::masked_code( 'abc-12345' ) === VCAP\Mask::code( 'abc-12345' ) && VCAP\Compat\PassCaptainTickets::mask_email( 'x@y.z' ) === VCAP\Mask::email( 'x@y.z' ) && VCAP\Health::mask_addresses( 'a@b.cd' ) === VCAP\Mask::addresses( 'a@b.cd' )
+);
+$d14_maskers = array();
+foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( dirname( __DIR__ ) . '/src', FilesystemIterator::SKIP_DOTS ) ) as $d14_file ) {
+	// "code_hint" (Pass Captain contract payload) keeps the code's own case on purpose: it is not a display mask.
+	$d14_lines = preg_grep( "/(mb_)?substr\\([^;]*-4\\b|'\\*\\*\\*@'/", (array) file( (string) $d14_file ) );
+	if ( array_filter( $d14_lines, static fn( $l ) => ! str_contains( $l, "'code_hint'" ) ) && ! str_ends_with( (string) $d14_file, '/Mask.php' ) ) {
+		$d14_maskers[] = basename( (string) $d14_file );
+	}
+}
+check( 'D14: no class masks codes or addresses on its own (all through VCAP\Mask)', array() === $d14_maskers, implode( ', ', $d14_maskers ) );
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

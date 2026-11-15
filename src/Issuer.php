@@ -595,7 +595,7 @@ final class Issuer {
 					count( $created ),
 					// Masked: order notes reach ERP/CRM/shipping connectors (REST) and every member of staff; the
 					// full code is shown on the voucher's detail page only.
-					implode( ', ', array_map( static fn( $v ) => Downloads::masked_code( (string) $v->code ), $created ) )
+					implode( ', ', array_map( static fn( $v ) => Mask::code( (string) $v->code ), $created ) )
 				) . ( $manual ? ' ' . __( '(manual)', 'voucher-captain' ) : '' )
 			);
 		}
@@ -853,7 +853,7 @@ final class Issuer {
 				$this->repo->delete( $voucher->id );
 				if ( $from_pool && ! $this->pool->release( $code ) ) {
 					/* translators: %s: code */
-					$order->add_order_note( sprintf( __( 'Imported code %s could not be returned to the code pool.', 'voucher-captain' ), Downloads::masked_code( $code ) ) );
+					$order->add_order_note( sprintf( __( 'Imported code %s could not be returned to the code pool.', 'voucher-captain' ), Mask::code( $code ) ) );
 				}
 				/* translators: %s: product name */
 				$order->add_order_note( sprintf( __( 'A voucher for "%s" could not be created (WooCommerce coupon not saved). It will be issued on the next attempt.', 'voucher-captain' ), $item->get_name() ) );
@@ -866,7 +866,7 @@ final class Issuer {
 		}
 		if ( ! $this->repo->log( $voucher->id, 'issued', $voucher->initial_amount, $voucher->balance, '', $order->get_id() ) ) {
 			Db::fail( 'log_issued', array( 'voucher_id' => $voucher->id, 'order_id' => $order->get_id() ) );
-			$order->add_order_note( sprintf( /* translators: %s: code */ __( 'Voucher %s was issued, but its history entry could not be written.', 'voucher-captain' ), Downloads::masked_code( (string) $voucher->code ) ) );
+			$order->add_order_note( sprintf( /* translators: %s: code */ __( 'Voucher %s was issued, but its history entry could not be written.', 'voucher-captain' ), Mask::code( (string) $voucher->code ) ) );
 		}
 		return $voucher;
 	}
@@ -1449,7 +1449,7 @@ final class Issuer {
 		$order = wc_get_order( (int) $voucher->order_id );
 		if ( $order instanceof \WC_Order ) {
 			/* translators: %s: voucher code */
-			$order->add_order_note( sprintf( __( 'Voucher %s voided (retried after the refund or cancellation).', 'voucher-captain' ), Downloads::masked_code( (string) $voucher->code ) ) );
+			$order->add_order_note( sprintf( __( 'Voucher %s voided (retried after the refund or cancellation).', 'voucher-captain' ), Mask::code( (string) $voucher->code ) ) );
 		}
 	}
 

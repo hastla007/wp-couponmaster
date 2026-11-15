@@ -209,7 +209,7 @@ final class Db {
 			try {
 				$callback();
 			} catch ( \Throwable $e ) {
-				Logger::error( 'An action listener failed after COMMIT: ' . Health::mask_addresses( get_class( $e ) . ': ' . $e->getMessage() ) );
+				Logger::error( 'An action listener failed after COMMIT: ' . Mask::addresses( get_class( $e ) . ': ' . $e->getMessage() ) );
 			}
 		}
 	}
@@ -226,7 +226,7 @@ final class Db {
 		$error     = is_object( $wpdb ) && isset( $wpdb->last_error ) ? (string) $wpdb->last_error : '';
 		$reference = self::reference();
 		Logger::error(
-			sprintf( 'Database error [%s] in %s: %s', $reference, $context, '' !== $error ? Health::mask_addresses( $error ) : 'no error text (no row changed)' ),
+			sprintf( 'Database error [%s] in %s: %s', $reference, $context, '' !== $error ? Mask::addresses( $error ) : 'no error text (no row changed)' ),
 			array( 'reference' => $reference, 'context' => $context ) + $ids
 		);
 		return new \WP_Error(
@@ -243,7 +243,7 @@ final class Db {
 	 */
 	public static function rollback( string $context, array $ids = array(), ?\Throwable $e = null ): \WP_Error {
 		if ( $e ) {
-			$ids['exception'] = Health::mask_addresses( get_class( $e ) . ': ' . $e->getMessage() );
+			$ids['exception'] = Mask::addresses( get_class( $e ) . ': ' . $e->getMessage() );
 		}
 		$error = self::fail( $context, $ids );
 		self::undo();

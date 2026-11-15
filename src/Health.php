@@ -169,9 +169,9 @@ final class Health {
 		$log  = self::mail_failures();
 		$entry = array(
 			'time'       => time(),
-			'to'         => implode( ', ', array_map( array( Compat\PassCaptainTickets::class, 'mask_email' ), $to ) ),
+			'to'         => implode( ', ', array_map( array( Mask::class, 'email' ), $to ) ),
 			'email'      => mb_substr( wp_strip_all_tags( (string) end( self::$kinds ) ), 0, 80 ),
-			'error'      => self::mask_addresses( mb_substr( wp_strip_all_tags( $error->get_error_message() ), 0, 300 ) ),
+			'error'      => Mask::addresses( mb_substr( wp_strip_all_tags( $error->get_error_message() ), 0, 300 ) ),
 			// Which voucher the failed mail was for (D4), so support finds its history.
 			'voucher_id' => (int) end( self::$vouchers ),
 		);
@@ -180,9 +180,9 @@ final class Health {
 		Logger::error( 'Voucher email could not be sent: ' . $entry['error'], array( 'voucher_id' => $entry['voucher_id'], 'email' => $entry['email'] ) );
 	}
 
-	/** "Could not send to jane@example.com" → "Could not send to j***@example.com". */
+	/** "Could not send to jane@example.com" → "Could not send to j***@example.com". Alias of Mask::addresses(). */
 	public static function mask_addresses( string $text ): string {
-		return (string) preg_replace_callback( '/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i', static fn( $m ) => Compat\PassCaptainTickets::mask_email( $m[0] ), $text );
+		return Mask::addresses( $text );
 	}
 
 	/** @return array<int, array{time:int,to:string,email?:string,error:string}> recent failures, newest first. */
@@ -204,7 +204,7 @@ final class Health {
 
 	/** Privacy erasure: removes the entries that name this address (masked). @return bool whether entries were removed */
 	public static function erase_mail_failures( string $email ): bool {
-		$masked = strtolower( Compat\PassCaptainTickets::mask_email( $email ) );
+		$masked = strtolower( Mask::email( $email ) );
 		$log    = self::mail_failures();
 		$kept   = array_values( array_filter( $log, static fn( $e ) => ! str_contains( strtolower( (string) ( $e['to'] ?? '' ) . ' ' . (string) ( $e['error'] ?? '' ) ), $masked ) ) );
 		if ( count( $kept ) === count( $log ) ) {

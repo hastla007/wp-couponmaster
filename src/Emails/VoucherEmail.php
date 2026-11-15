@@ -191,7 +191,7 @@ abstract class VoucherEmail extends \WC_Email {
 				}
 			} catch ( \Throwable $e ) {
 				$this->pdf_failed = true;
-				\VCAP\Logger::error( 'PDF attachment failed: ' . \VCAP\Health::mask_addresses( $e->getMessage() ), array( 'voucher_id' => (int) $this->voucher->id, 'element' => 'pdf', 'email' => $this->id ) );
+				\VCAP\Logger::error( 'PDF attachment failed: ' . \VCAP\Mask::addresses( $e->getMessage() ), array( 'voucher_id' => (int) $this->voucher->id, 'element' => 'pdf', 'email' => $this->id ) );
 			}
 		}
 		return $attachments;

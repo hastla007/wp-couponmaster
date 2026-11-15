@@ -70,7 +70,7 @@ final class CatchUp {
 				++$done;
 			} catch ( \Throwable $e ) {
 				// One broken order never stops the others.
-				Logger::error( 'Catch-up after reactivation: order skipped after an error: ' . Health::mask_addresses( $e->getMessage() ), array( 'order_id' => $order->get_id() ) );
+				Logger::error( 'Catch-up after reactivation: order skipped after an error: ' . Mask::addresses( $e->getMessage() ), array( 'order_id' => $order->get_id() ) );
 			}
 		}
 		if ( count( $orders ) >= self::BATCH && function_exists( 'as_enqueue_async_action' ) ) {

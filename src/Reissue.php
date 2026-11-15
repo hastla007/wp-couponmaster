@@ -131,8 +131,8 @@ final class Reissue {
 			}
 			CouponManager::sync_coupon( $fresh, array( 'amount' ) ); // Remaining value read under the row lock.
 		}
-		$old_masked = Downloads::masked_code( $old_code );
-		$new_masked = Downloads::masked_code( $new_code );
+		$old_masked = Mask::code( $old_code );
+		$new_masked = Mask::code( $new_code );
 		$this->repo->log( $fresh->id, self::EVENT, null, null, Note::make( self::EVENT, array( $old_masked, $new_masked, trim( mb_substr( $note, 0, 200 ) ) ) ) );
 		$order = $fresh->order();
 		if ( $order instanceof \WC_Order ) {

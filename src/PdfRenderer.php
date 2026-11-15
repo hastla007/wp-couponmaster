@@ -361,7 +361,7 @@ final class PdfRenderer {
 
 	/** An element (QR code, barcode) could not be drawn: logged with the voucher and the element type (D5). */
 	private static function element_failed( string $element, Voucher $voucher, string $why ): void {
-		Logger::error( sprintf( 'Voucher PDF: the %s could not be drawn: %s', $element, Health::mask_addresses( $why ) ), array( 'voucher_id' => (int) $voucher->id, 'element' => $element ) );
+		Logger::error( sprintf( 'Voucher PDF: the %s could not be drawn: %s', $element, Mask::addresses( $why ) ), array( 'voucher_id' => (int) $voucher->id, 'element' => $element ) );
 	}
 
 	public function filename( Voucher $voucher ): string {

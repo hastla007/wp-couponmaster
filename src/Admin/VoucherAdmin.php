@@ -533,7 +533,7 @@ final class VoucherAdmin {
 			$started = time();
 			if ( $email->trigger( $v ) ) {
 				// Masked (SECURITY.md, D8): the history is seen by all staff and exported.
-				$this->repo->log( $v->id, 'resent', null, null, \VCAP\Note::make( 'resent', array( $role, \VCAP\Compat\PassCaptainTickets::mask_email( $address ) ) ) );
+				$this->repo->log( $v->id, 'resent', null, null, \VCAP\Note::make( 'resent', array( $role, \VCAP\Mask::email( $address ) ) ) );
 				// A first delivery by hand counts as the delivery (H7): the daily safety net does not send it again.
 				vcap()->delivery->record_manual_send( $v, array( $role ) );
 				/* translators: %s: email address */
@@ -548,7 +548,7 @@ final class VoucherAdmin {
 		}
 		/* translators: %s: reason */
 		$message = sprintf( __( 'The voucher email was not sent: %s.', 'voucher-captain' ), $reason );
-		$this->repo->log( $v->id, 'delivery_failed', null, null, \VCAP\Note::make( 'resend_failed', array( \VCAP\Health::mask_addresses( $reason ) ) ) );
+		$this->repo->log( $v->id, 'delivery_failed', null, null, \VCAP\Note::make( 'resend_failed', array( \VCAP\Mask::addresses( $reason ) ) ) );
 		Flash::add( 'error', $message );
 		return false;
 	}
@@ -794,7 +794,7 @@ final class VoucherAdmin {
 				case 'expires_at':
 					return $v->expires_at ? (string) get_date_from_gmt( $v->expires_at, 'Y-m-d' ) : '';
 				case 'recipient_email':
-					return \VCAP\Compat\PassCaptainTickets::mask_email( (string) $v->recipient_email );
+					return \VCAP\Mask::email( (string) $v->recipient_email );
 				case 'message':
 					return '' !== (string) $v->message ? '…' . substr( md5( (string) $v->message ), 0, 6 ) : '';
 				default:

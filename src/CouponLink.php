@@ -142,6 +142,6 @@ final class CouponLink {
 	/** "The voucher …ABCD will be applied …": the code masked, a notice may end up in a page cache. */
 	public static function waiting_text( string $code ): string {
 		/* translators: %s: masked voucher code, e.g. "…7QX2" */
-		return sprintf( __( 'The voucher %s will be applied as soon as you add products to your cart.', 'voucher-captain' ), Downloads::masked_code( $code ) );
+		return sprintf( __( 'The voucher %s will be applied as soon as you add products to your cart.', 'voucher-captain' ), Mask::code( $code ) );
 	}
 }
