@@ -237,6 +237,9 @@ if ( isset( $gateways[ $plugin ] ) ) {
 /* ---- Currency switchers ------------------------------------------------------------------------------ */
 
 if ( in_array( $plugin, array( 'woocs', 'curcy', 'curcy-fee', 'wcml' ), true ) ) {
+	// M12-03: new installations settle multi-purpose vouchers as a payment after tax; the discount checks below
+	// use the coupon mode of existing shops (the payment mode follows further down).
+	update_option( VCAP\PaymentVouchers::OPTION, 'no' );
 	vcap_eco_assert( 'EUR' === get_option( 'woocommerce_currency' ), 'the shop base currency is EUR' );
 	$usd_100   = round( 100 * $eco_rate, 2 );
 	$converted = (float) apply_filters( 'vcap_amount_to_base_currency', $usd_100, 'USD', null );
