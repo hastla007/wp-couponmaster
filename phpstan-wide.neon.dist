@@ -7,7 +7,7 @@ includes:
   - phpstan-baseline.neon
 
 parameters:
-  level: 1
+  level: 3
   paths:
     - voucher-captain.php
     - uninstall.php

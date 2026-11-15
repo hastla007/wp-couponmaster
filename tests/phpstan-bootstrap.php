@@ -68,3 +68,7 @@ if ( ! function_exists( 'as_schedule_single_action' ) ) {
 		return array();
 	}
 }
+// WP Pass Captain's provider contract (optional plugin; VCAP\Compat\PassCaptainProvider is only loaded when it exists).
+if ( ! interface_exists( 'PassCaptain\Integrations\Vouchers\ProviderInterface' ) ) {
+	eval( 'namespace PassCaptain\Integrations\Vouchers; interface ProviderInterface {}' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- PHPStan bootstrap only, never shipped.
+}

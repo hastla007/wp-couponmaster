@@ -1,4 +1,307 @@
-# Baseline of known PHPStan findings for phpstan-wide.neon.dist. Replace with the "phpstan-baseline" artifact of the
-# CI job quality-wide (generated with --generate-baseline) after reviewing it; never add entries by hand for new code.
 parameters:
-  ignoreErrors: []
+	ignoreErrors:
+		-
+			message: '#^Variable \$rows might not be defined\.$#'
+			identifier: variable.undefined
+			count: 1
+			path: src/Admin/Import.php
+
+		-
+			message: '#^Call to an undefined method WC_Email\:\:trigger\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Admin/VoucherAdmin.php
+
+		-
+			message: '#^Cannot access property \$code on array\|object\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: src/Admin/VouchersListTable.php
+
+		-
+			message: '#^Cannot access property \$id on array\|object\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: src/Admin/VouchersListTable.php
+
+		-
+			message: '#^Path in require_once\(\) "/home/user/wp\-couponmaster/tests/wp\-admin/includes/class\-wp\-list\-table\.php" is not a file or it does not exist\.$#'
+			identifier: requireOnce.fileNotFound
+			count: 1
+			path: src/Admin/VouchersListTable.php
+
+		-
+			message: '#^Call to static method error\(\) on an unknown class WP_CLI\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/CLI/Command.php
+
+		-
+			message: '#^Call to static method halt\(\) on an unknown class WP_CLI\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/CLI/Command.php
+
+		-
+			message: '#^Call to static method line\(\) on an unknown class WP_CLI\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/CLI/Command.php
+
+		-
+			message: '#^Call to static method success\(\) on an unknown class WP_CLI\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/CLI/Command.php
+
+		-
+			message: '#^Call to static method warning\(\) on an unknown class WP_CLI\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/CLI/Command.php
+
+		-
+			message: '#^Function WP_CLI\\Utils\\format_items not found\.$#'
+			identifier: function.notFound
+			count: 1
+			path: src/CLI/Command.php
+
+		-
+			message: '#^Function wpac_resolve_partner_code not found\.$#'
+			identifier: function.notFound
+			count: 2
+			path: src/Compat/AffiliateCaptain.php
+
+		-
+			message: '#^Trying to invoke ''WC_Payments_Multi…'' but it''s not a callable\.$#'
+			identifier: callable.nonCallable
+			count: 1
+			path: src/Compat/MultiCurrency.php
+
+		-
+			message: '#^Offset ''event_id'' does not exist on array\{ticket_type_id\: int, quantity\: int, label\: string\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: src/Compat/PassCaptain/Customer.php
+
+		-
+			message: '#^Offset ''event_id'' does not exist on array\{ticket_type_id\: int, quantity\: int, label\: string\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: src/Compat/PassCaptain/Exchange.php
+
+		-
+			message: '#^Variable \$starts_at on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.variable
+			count: 1
+			path: src/Compat/PassCaptain/ProductSetup.php
+
+		-
+			message: '#^Offset ''event_id'' does not exist on array\{ticket_type_id\: int, quantity\: int, label\: string\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: src/Compat/PassCaptain/RedeemPage.php
+
+		-
+			message: '#^Offset ''event_id'' does not exist on array\{ticket_type_id\: int, quantity\: int, label\: string\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: src/Compat/PassCaptain/TicketAdmin.php
+
+		-
+			message: '#^Offset ''event_id'' does not exist on array\{ticket_type_id\: int, quantity\: int, label\: string\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: src/Compat/PassCaptain/TicketContract.php
+
+		-
+			message: '#^Call to an undefined method WC_Session\:\:has_session\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/CouponLink.php
+
+		-
+			message: '#^Call to an undefined method WC_Session\:\:set_customer_session_cookie\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/CouponLink.php
+
+		-
+			message: '#^Call to an undefined method WC_Order_Item\:\:get_code\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Coupons/BookBack.php
+
+		-
+			message: '#^Call to an undefined method WC_Order_Item\:\:get_code\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Coupons/Checkout.php
+
+		-
+			message: '#^Call to an undefined method WC_Order_Item\:\:get_code\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Coupons/OrderCoupons.php
+
+		-
+			message: '#^Call to an undefined method WC_Order_Item\:\:get_code\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Coupons/Reservations.php
+
+		-
+			message: '#^Call to an undefined method WC_Order_Item\:\:get_code\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Coupons/Settlement.php
+
+		-
+			message: '#^Call to an undefined method WC_Email\:\:trigger\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: src/Delivery.php
+
+		-
+			message: '#^Call to an undefined method WC_Email\:\:trigger\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Discounts/Bonus.php
+
+		-
+			message: '#^Call to an undefined method WC_Order\:\:get_amount\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Discounts/Bonus.php
+
+		-
+			message: '#^Call to an undefined method WC_Order_Item\:\:get_code\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Discounts/Bonus.php
+
+		-
+			message: '#^Call to an undefined method WC_Order_Item\:\:get_discount\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Discounts/Bonus.php
+
+		-
+			message: '#^Call to an undefined method WC_Order_Item\:\:get_discount_tax\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Discounts/Bonus.php
+
+		-
+			message: '#^PHPDoc tag @var for constant VCAP\\Install\:\:MIGRATIONS with type array\<string, callable\-string\> is incompatible with value array\{''1\.4\.0''\: ''migrate_1_4_0'', ''1\.5\.0''\: ''migrate_1_5_0'', ''1\.6\.0''\: ''migrate_1_6_0'', ''1\.7\.0''\: ''migrate_1_7_0'', ''1\.8\.0''\: ''migrate_1_8_0''\}\.$#'
+			identifier: classConstant.phpDocType
+			count: 1
+			path: src/Install.php
+
+		-
+			message: '#^Path in require_once\(\) "/home/user/wp\-couponmaster/tests/wp\-admin/includes/upgrade\.php" is not a file or it does not exist\.$#'
+			identifier: requireOnce.fileNotFound
+			count: 1
+			path: src/Install.php
+
+		-
+			message: '#^Call to an undefined method WC_Order\:\:get_amount\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Issuer.php
+
+		-
+			message: '#^Offset string does not exist on array\{\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: src/Ledger.php
+
+		-
+			message: '#^Call to an undefined method WC_Order_Item\:\:get_total\(\)\.$#'
+			identifier: method.notFound
+			count: 7
+			path: src/PaymentVouchers.php
+
+		-
+			message: '#^Call to an undefined method WC_Order_Item\:\:get_total_tax\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: src/PaymentVouchers.php
+
+		-
+			message: '#^Call to an undefined method WC_Order_Item\:\:set_taxes\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/PaymentVouchers.php
+
+		-
+			message: '#^Call to an undefined method WC_Order_Item\:\:set_total\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/PaymentVouchers.php
+
+		-
+			message: '#^Call to an undefined method WC_Order_Item\:\:get_rate_id\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: src/ProductConfig.php
+
+		-
+			message: '#^Call to an undefined method WC_Email\:\:trigger\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Referrals.php
+
+		-
+			message: '#^Call to an undefined method WC_Session\:\:has_session\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: src/Shortcodes.php
+
+		-
+			message: '#^Call to an undefined method WC_Session\:\:set_customer_session_cookie\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Shortcodes.php
+
+		-
+			message: '#^Call to an undefined method WC_Order\:\:get_amount\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/TopUp.php
+
+		-
+			message: '#^Call to an undefined method WC_Order_Item\:\:get_total\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/TopUp.php
+
+		-
+			message: '#^Call to an undefined method WC_Order_Item\:\:get_total_tax\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/TopUp.php
+
+		-
+			message: '#^Cannot call method get_total\(\) on WC_Order_Item\|false\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/TopUp.php
+
+		-
+			message: '#^Cannot call method get_total_tax\(\) on WC_Order_Item\|false\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/TopUp.php
+
+		-
+			message: '#^Variable \$checkin_key on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.variable
+			count: 1
+			path: templates/ticket-status.php
+
+		-
+			message: '#^Variable \$notice_level in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.variable
+			count: 1
+			path: templates/ticket-status.php

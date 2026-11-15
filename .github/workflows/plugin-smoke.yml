@@ -618,7 +618,7 @@ jobs:
 
   quality-wide:
     # Wide scan of the whole plugin (src/, templates/, config/, main and uninstall file): PHPCS with phpcs.xml.dist
-    # (WordPress-Extra, I18n text domain, Security) and PHPStan level 1 with phpstan-wide.neon.dist + baseline
+    # (WordPress-Extra, I18n text domain, Security) and PHPStan level 3 with phpstan-wide.neon.dist + baseline
     # (RELEASE.md → Static analysis). Blocking are: every WordPress.Security.* finding, and a growth of the PHPCS or
     # PHPStan findings against the base commit (ratchet: pull request base, or the previous commit of a push). The
     # full reports stay informational until the existing findings are worked off.
@@ -650,7 +650,7 @@ jobs:
           phpcs --report-full=phpcs-full.txt --report-summary=phpcs-summary.txt --report-source=phpcs-source.txt --report-json=phpcs.json || true
           { echo '### PHPCS (wide scan)'; echo '```'; cat phpcs-source.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           test -s phpcs.json
-      - name: PHPStan level 1 on the whole plugin (findings beyond phpstan-baseline.neon, report)
+      - name: PHPStan level 3 on the whole plugin (findings beyond phpstan-baseline.neon, report)
         run: |
           phpstan analyse --configuration=phpstan-wide.neon.dist --no-progress --memory-limit=1G --error-format=json > phpstan.json || true
           phpstan analyse --configuration=phpstan-wide.neon.dist --no-progress --memory-limit=1G || true
@@ -683,7 +683,7 @@ jobs:
             echo "| Scan | base ${BASE:0:7} | this commit |"
             echo '| --- | --- | --- |'
             echo "| PHPCS (errors + warnings) | ${base_cs:-n/a} | ${head_cs} |"
-            echo "| PHPStan level 1 (beyond the baseline) | ${base_stan:-n/a} | ${head_stan} |"
+            echo "| PHPStan level 3 (beyond the baseline) | ${base_stan:-n/a} | ${head_stan} |"
           } >> "$GITHUB_STEP_SUMMARY"
           fail=0
           if [ "$head_cs" -lt 0 ] || [ "$head_stan" -lt 0 ]; then echo "::error::A scan of this commit produced no report."; fail=1; fi

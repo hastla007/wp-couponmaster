@@ -69,7 +69,7 @@ final class RedemptionService {
 	 * Check whether a code can be redeemed, without reserving anything.
 	 *
 	 * @param string $code    Voucher code.
-	 * @param array  $args    Optional: target (string), amount (float), user_id (int, PHP callers only),
+	 * @param array<string, mixed>  $args    Optional: target (string), amount (float), user_id (int, PHP callers only),
 	 *                        email (string, PHP callers only: customer email of a guest, for personal vouchers – only
 	 *                        with email_verified), email_verified (bool, PHP callers only: the caller vouches that the
 	 *                        customer controls this address, e.g. its own logged-in account or staff checked the ID).
@@ -105,7 +105,7 @@ final class RedemptionService {
 	 * the same key with a different request returns vcap_idempotency_conflict.
 	 *
 	 * @param string $code Voucher code.
-	 * @param array  $args key (string, required), target (string, required), amount (float, gift cards),
+	 * @param array<string, mixed>  $args key (string, required), target (string, required), amount (float, gift cards),
 	 *                     user_id (int, PHP callers only; REST always uses the authenticated user), meta (array),
 	 *                     ttl_minutes (int, PHP callers only: how long the reservation is held before it is released
 	 *                     automatically; default the "Reservation lifetime" setting, at most 60 days),
@@ -262,7 +262,7 @@ final class RedemptionService {
 	 * or expired – the error vcap_redemption_released (409): it holds nothing any more, so a connector must not
 	 * deliver its service for it but revoke and ask the user to redeem again (with a new key).
 	 *
-	 * @param array $row Redemption row.
+	 * @param array<string, mixed> $row Redemption row.
 	 * @return array<string, mixed>|\WP_Error
 	 */
 	private function replay( array $row ): array|\WP_Error {
@@ -336,7 +336,7 @@ final class RedemptionService {
 	 * Make a reservation final. Idempotent: committing a committed redemption returns it unchanged.
 	 *
 	 * @param string $key  Redemption key.
-	 * @param array  $args user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
+	 * @param array<string, mixed>  $args user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
 	 * @return array<string, mixed>|\WP_Error
 	 */
 	public function commit( string $key, array $args = array() ): array|\WP_Error {
@@ -347,7 +347,7 @@ final class RedemptionService {
 	 * Cancel a reservation and give the voucher value back. Idempotent for already released redemptions.
 	 *
 	 * @param string $key  Redemption key.
-	 * @param array  $args user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
+	 * @param array<string, mixed>  $args user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
 	 * @return array<string, mixed>|\WP_Error
 	 */
 	public function release( string $key, array $args = array() ): array|\WP_Error {
@@ -365,7 +365,7 @@ final class RedemptionService {
 	 * @param string $key        Redemption key.
 	 * @param float  $amount     Amount to give back (voucher currency).
 	 * @param string $refund_key Idempotency key of this refund.
-	 * @param array  $args       user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
+	 * @param array<string, mixed>  $args       user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
 	 * @return array<string, mixed>|\WP_Error Redemption data plus refunded (total) and restored (this call).
 	 * @throws \Throwable Database errors are re-thrown after the transaction was rolled back.
 	 */
@@ -552,7 +552,7 @@ final class RedemptionService {
 	/**
 	 * Action Scheduler callback: release one reservation if it is still pending after its TTL.
 	 *
-	 * @param int|array $redemption_id Redemption id.
+	 * @param int|array<int|string, mixed> $redemption_id Redemption id.
 	 */
 	public function release_expired( $redemption_id ): void {
 		global $wpdb;
@@ -583,7 +583,7 @@ final class RedemptionService {
 	 *
 	 * @param string $key     Redemption key.
 	 * @param string $to      Target state.
-	 * @param array  $args    user_id for ownership checks.
+	 * @param array<string, mixed>  $args    user_id for ownership checks.
 	 * @param bool   $expired Called by the expiry job.
 	 * @return array<string, mixed>|\WP_Error
 	 * @throws \Throwable Database errors are re-thrown after the transaction was rolled back.
@@ -864,7 +864,7 @@ final class RedemptionService {
 	/**
 	 * The acting user: explicit user_id from trusted PHP callers, otherwise the logged-in user.
 	 *
-	 * @param array $args Arguments.
+	 * @param array<string, mixed> $args Arguments.
 	 * @return int
 	 */
 	private function user_id( array $args ): int {
@@ -899,6 +899,7 @@ final class RedemptionService {
 	 *
 	 * @param string $key Key.
 	 * @return array<string, mixed>|null
+	 * @phpstan-impure Reads the current row (it changes between calls).
 	 */
 	private function get_row( string $key ): ?array {
 		global $wpdb;
@@ -910,7 +911,7 @@ final class RedemptionService {
 	/**
 	 * Public representation of a redemption.
 	 *
-	 * @param array|null $row Row.
+	 * @param array<string, mixed>|null $row Row.
 	 * @return array<string, mixed>
 	 */
 	private function redemption_data( ?array $row ): array {

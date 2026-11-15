@@ -86,8 +86,8 @@ last release → current ZIP and previous schema → current, each followed by a
 
 | Job | Scope | Configuration | Blocking |
 | --- | --- | --- | --- |
-| `quality` | `src/API/V1`, `src/Contracts` – PHPCS WordPress and WooCommerce-Core, PHPStan level 0 | `phpstan.neon.dist` | yes |
-| `quality-wide` | whole plugin (`voucher-captain.php`, `uninstall.php`, `config/`, `src/`, `templates/`) – PHPCS WordPress-Extra incl. `WordPress.WP.I18n` (text domain `voucher-captain`), `WordPress.Security.*`, prefix check; PHPStan level 1 | `phpcs.xml.dist`, `phpstan-wide.neon.dist` + `phpstan-baseline.neon` | `WordPress.Security.*`: yes (every finding); all other findings: must not grow against the base commit (ratchet), the full report is informational |
+| `quality` | `src/API/V1`, `src/Contracts` – PHPCS WordPress and WooCommerce-Core, PHPStan level 8 | `phpstan.neon.dist` | yes |
+| `quality-wide` | whole plugin (`voucher-captain.php`, `uninstall.php`, `config/`, `src/`, `templates/`) – PHPCS WordPress-Extra incl. `WordPress.WP.I18n` (text domain `voucher-captain`), `WordPress.Security.*`, prefix check; PHPStan level 3 | `phpcs.xml.dist`, `phpstan-wide.neon.dist` + `phpstan-baseline.neon` | `WordPress.Security.*`: yes (every finding); all other findings: must not grow against the base commit (ratchet), the full report is informational |
 | `plugin-check` | installed release ZIP – WordPress Plugin Check (PCP), static and runtime checks | – | no (report-only) |
 
 The wide scans were introduced on an existing code base. Security findings block at once; the other findings are
@@ -100,7 +100,7 @@ request base, or the previous commit of a push) and fails when either count grow
   `phpstan-baseline`, files `phpcs-*.txt`, `phpcs.json`). Work them off by category; remove a debt exclusion together
   with its clean-up commit.
 - **PHPStan**: the job uploads a baseline of the current findings (`phpstan-baseline.generated.neon`). Review it and
-  commit it as `phpstan-baseline.neon`; from then on every new finding is visible in the step "PHPStan level 1". Never
+  commit it as `phpstan-baseline.neon`; from then on every new finding is visible in the step "PHPStan level 3". Never
   add baseline entries by hand for new code.
 - **Plugin Check**: the result table is in the job summary and the artifact `plugin-check`. Errors there must be
   resolved before a wordpress.org submission.
