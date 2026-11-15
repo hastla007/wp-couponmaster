@@ -40,7 +40,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_voucher_deleted` | `src/VoucherRepository.php` | A voucher was removed again (its issuing failed after "vcap_voucher_created"). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_delivered` | `src/Delivery.php` | A voucher was delivered to everyone it is meant for (args: Voucher $voucher, string[] $addresses). |
 | `vcap_voucher_delivery_given_up` | `src/Delivery.php` | A delivery was given up after $failures failed attempts. |
-| `vcap_voucher_double_use` | `src/CouponManager.php` | – |
+| `vcap_voucher_double_use` | `src/Coupons/SingleUse.php` | – |
 | `vcap_voucher_event` | `src/VoucherRepository.php` | A history entry was written (args: voucher id, event, amount, balance after, note as text, order id, source (Source::current(): admin, cron, rest, scanner, checkout, cli, web), acting user id (0 = none)). The last two were added later: register with 8 accepted args to get them. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_expired` | `src/VoucherRepository.php` | Vouchers whose validity ended were marked as expired (one call per batch of the daily maintenance). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_issued_standalone` | `src/Issuer.php` | A voucher was issued without an order (args: Voucher, the arguments of Issuer::issue_standalone()). |
@@ -58,14 +58,14 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_allow_refund_of_spent_top_ups` | `src/TopUp.php` | – |
 | `vcap_allow_refund_of_spent_vouchers` | `src/Issuer.php` | – |
 | `vcap_allow_refund_of_used_bonus` | `src/Discounts/Bonus.php` | – |
-| `vcap_amount_to_base_currency` | `src/Compat/MultiCurrency.php`, `src/CouponManager.php`, `src/Issuer.php` | – |
+| `vcap_amount_to_base_currency` | `src/Compat/MultiCurrency.php`, `src/Coupons/CartCoupons.php`, `src/Issuer.php` | – |
 | `vcap_async_issue_threshold` | `src/Issuer.php` | Vouchers still to be issued for an order above which they are created in Action Scheduler batches, so the payment request (gateway webhook, checkout) returns quickly (default 20). The order shows a note and its vouchers are delivered once all of them exist. A very high value issues everything right away. |
-| `vcap_balance_covers_tax` | `src/CouponManager.php` | – |
-| `vcap_balance_deduct_statuses` | `src/CouponManager.php` | – |
-| `vcap_balance_deduct_tax` | `src/CouponManager.php` | – |
-| `vcap_balance_restore_statuses` | `src/CouponManager.php` | – |
+| `vcap_balance_covers_tax` | `src/Coupons/CartCoupons.php`, `src/Coupons/OrderCoupons.php`, `src/Coupons/Settlement.php` | – |
+| `vcap_balance_deduct_statuses` | `src/Coupons/Settlement.php` | – |
+| `vcap_balance_deduct_tax` | `src/Coupons/CartCoupons.php`, `src/Coupons/OrderCoupons.php` | – |
+| `vcap_balance_restore_statuses` | `src/Coupons/Settlement.php` | – |
 | `vcap_balance_result_parts` | `src/Downloads.php` | Parts of the [vcap_balance] result line (status, value, expiry), plain text. |
-| `vcap_balance_rounding_tolerance` | `src/CouponManager.php` | – |
+| `vcap_balance_rounding_tolerance` | `src/Coupons/Balances.php` | – |
 | `vcap_bonus_code_prefix` | `src/Discounts/Bonus.php` | – |
 | `vcap_bonus_coupon` | `src/Discounts/Bonus.php` | – |
 | `vcap_builtin_fields` | `src/Fields.php` | – |
@@ -78,7 +78,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_counter_limits` | `src/Counter.php` | Daily limits of counter redemptions for a staff member at a till (0 = unlimited), e.g. other limits per branch. Args: limits {user: {amount, count}, till: {amount, count}}, user id, till, Voucher\|null. |
 | `vcap_counter_reversal_minutes` | `src/Tickets.php` | – |
 | `vcap_coupon_allowed_on_voucher_products` | `src/VoucherPurchaseRules.php` | – |
-| `vcap_coupon_before_save` | `src/CouponManager.php` | – |
+| `vcap_coupon_before_save` | `src/Coupons/CouponFactory.php` | – |
 | `vcap_create_coupon` | `src/Issuer.php` | – |
 | `vcap_csv_format` | `src/Csv.php` | CSV format of the exports. |
 | `vcap_currency_decimals` | `src/API/V1/RedemptionService.php` | Decimal places used for voucher amounts of a currency. |
@@ -123,11 +123,11 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_next_steps_emails` | `src/NextSteps.php` | WooCommerce order emails that show the delivery of the order's vouchers. |
 | `vcap_note_text` | `src/Note.php` | Text of a coded history note (connectors can translate their own codes). |
 | `vcap_offline_payment_methods` | `src/Issuer.php` | – |
-| `vcap_open_order_statuses` | `src/CouponManager.php` | – |
+| `vcap_open_order_statuses` | `src/Coupons/SingleUse.php` | – |
 | `vcap_order_codes_visible` | `src/Downloads.php` | Whether the current visitor may see the full voucher codes and PDF links of an order (default: order key or own order). |
 | `vcap_order_language` | `src/Compat/Multilingual.php` | Language code of an order (e.g. for another multilingual plugin); '' = the site language. |
 | `vcap_order_lines` | `src/API/V1/VoucherService.php` | Filters the per-line order data handed to connector plugins. |
-| `vcap_orphaned_hold_days` | `src/CouponManager.php` | – |
+| `vcap_orphaned_hold_days` | `src/Coupons/Reservations.php` | – |
 | `vcap_page_has_redeem_form` | `src/Shortcodes.php` | Whether the page shows the redeem form (e.g. true when a theme template renders it). |
 | `vcap_passcaptain_can_resend_tickets` | `src/Compat/PassCaptainTickets.php` | – |
 | `vcap_passcaptain_check_fixed_date_capacity` | `src/Compat/PassCaptainTickets.php` | – |
@@ -149,7 +149,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_placeholder_definitions` | `src/Placeholders.php` | – |
 | `vcap_placeholders` | `src/Placeholders.php` | – |
 | `vcap_product_config` | `src/ProductConfig.php` | – |
-| `vcap_protect_voucher_coupons` | `src/CouponManager.php` | Whether trashing/deleting a voucher's WooCommerce coupon is refused (default: in wp-admin and REST requests). |
+| `vcap_protect_voucher_coupons` | `src/Coupons/CouponSync.php` | Whether trashing/deleting a voucher's WooCommerce coupon is refused (default: in wp-admin and REST requests). |
 | `vcap_purgeable_claim_kinds` | `src/Claim.php` | – |
 | `vcap_rate_limit_backend` | `src/Plugin.php` | – |
 | `vcap_rate_limit_brake` | `src/Plugin.php` | Quota per visitor while the site-wide counter is full (default: a fifth, at least 1). |
@@ -176,7 +176,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_rest_can_access_redemption` | `src/API/V1/RestController.php` | Filters whether the current user may read/commit/release a redemption. |
 | `vcap_rest_can_redeem` | `src/API/V1/RestController.php` | Filters whether the current user may redeem vouchers through the REST API. |
 | `vcap_rest_redemption_target_prefixes` | `src/API/V1/RestController.php` | Target prefixes customers may redeem for over REST (connectors that let customers redeem in the browser add theirs, e.g. "learnboating:"). Default none. |
-| `vcap_restore_extension_days` | `src/CouponManager.php` | – |
+| `vcap_restore_extension_days` | `src/Coupons/BookBack.php` | – |
 | `vcap_sample_voucher` | `src/Preview.php` | – |
 | `vcap_sanitize_design` | `src/TemplatePostType.php` | – |
 | `vcap_scanner_checkin` | `src/Tickets.php` | – |
@@ -188,10 +188,10 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_send_expiry_reminder` | `src/Delivery.php` | – |
 | `vcap_setting_` | `src/Settings.php` | – |
 | `vcap_settings_fields` | `src/Settings.php` | – |
-| `vcap_shop_channel_refused_message` | `src/CouponManager.php` | Message for a voucher that is not redeemable in the shop (e.g. a ticket voucher: where to use it instead). |
+| `vcap_shop_channel_refused_message` | `src/Coupons/CartCoupons.php` | Message for a voucher that is not redeemable in the shop (e.g. a ticket voucher: where to use it instead). |
 | `vcap_should_issue_for_order` | `src/Issuer.php` | – |
 | `vcap_site_has_redeem_form` | `src/Shortcodes.php` | Whether a site-wide template (theme file, builder layout, widget) shows the redeem form. |
-| `vcap_stale_reservation_minutes` | `src/CouponManager.php`, `src/Discounts/Usage.php` | – |
+| `vcap_stale_reservation_minutes` | `src/Coupons/Reservations.php`, `src/Discounts/Usage.php` | – |
 | `vcap_statutory_expiry` | `src/ProductConfig.php` | – |
 | `vcap_template_design` | `src/TemplatePostType.php` | – |
 | `vcap_topup_amount` | `src/TopUp.php` | Value added to the card for a top-up line (default: its face value like a new gift card, in the base currency). |
@@ -204,7 +204,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_voucher_amount` | `src/Issuer.php` | – |
 | `vcap_voucher_code` | `src/Issuer.php` | – |
 | `vcap_voucher_expires_at` | `src/Issuer.php` | Expiry (UTC "Y-m-d H:i:s" or null) of a voucher being issued, e.g. no later than the event it is for. |
-| `vcap_voucher_is_means_of_payment` | `src/CouponManager.php` | – |
+| `vcap_voucher_is_means_of_payment` | `src/Coupons/CartCoupons.php` | – |
 | `vcap_voucher_links` | `src/Downloads.php` | Extra links of a voucher in its email and the customer's voucher list, e.g. "Add to Wallet". Args: list of array{label: string, url: string}, Voucher, context ("email", "email_plain" or "account"). |
 | `vcap_voucher_next_steps` | `templates/emails/plain/voucher.php`, `templates/emails/voucher.php` | Steps after receiving the voucher (e.g. "exchange it for tickets on the redeem page"); connectors add them for their voucher types. Empty: the usual "enter the code at checkout" hint. |
 | `vcap_voucher_pays_after_tax` | `src/PaymentVouchers.php` | – |
