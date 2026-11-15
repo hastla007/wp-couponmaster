@@ -267,7 +267,13 @@ $wpdb->update( VCAP\Install::tables()['vouchers'], array( 'expires_at' => gmdate
 $after = VCAP\Reports::overview( $today, $today );
 vcap_sa_assert( $after['free']['count'] === $before['free']['count'] + 2 && abs( $after['free']['value'] - $before['free']['value'] - 27 ) < 0.001, 'M12-92: the overview counts vouchers issued without an order', array( $before['free'], $after['free'] ) );
 vcap_sa_assert( abs( $after['redeemed'] - $before['redeemed'] - 20 ) < 0.001 && $after['expired']['count'] === $before['expired']['count'] + 1 && abs( $after['expired']['value'] - $before['expired']['value'] - 7 ) < 0.001, 'M12-92: redeemed and expired value of the period', array( $before, $after ) );
-vcap_sa_assert( $after['sold']['count'] >= 1 && in_array( $search_product->get_id(), array_column( $after['top'], 'product_id' ), true ) && $after['open']['value'] > 0, 'M12-92: sold vouchers, top products and the open value are reported' );
+// The top list holds the 5 products with the most vouchers of the period: the test product is in it, or (after other
+// suites in the same database) 5 products with at least as many vouchers are.
+$sa_top_ids  = array_column( $after['top'], 'product_id' );
+$sa_top_last = $after['top'] ? (int) end( $after['top'] )['count'] : 0;
+$sa_own      = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . VCAP\Install::tables()['vouchers'] . ' WHERE product_id = %d AND order_id > 0', $search_product->get_id() ) ); // phpcs:ignore
+$sa_top_ok   = in_array( $search_product->get_id(), $sa_top_ids, true ) || ( 5 === count( $sa_top_ids ) && $sa_top_last >= $sa_own );
+vcap_sa_assert( $after['sold']['count'] >= 1 && $sa_own >= 1 && $sa_top_ok && $after['open']['value'] > 0, 'M12-92: sold vouchers, top products and the open value are reported', array( $after['top'], $sa_own ) );
 $_GET = array( 'page' => 'vcap-reports' );
 ob_start();
 ( new VCAP\Admin\ReportsAdmin() )->page();
