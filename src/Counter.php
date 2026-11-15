@@ -134,7 +134,8 @@ final class Counter {
 			return $out;
 		}
 		global $wpdb;
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT till, receipt FROM ' . Install::tables()['events'] . " WHERE id = %d AND event = 'redeemed'", (int) $m[1] ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
+		$events = Install::tables()['events'];
+		$row    = $wpdb->get_row( $wpdb->prepare( "SELECT till, receipt FROM {$events} WHERE id = %d AND event = 'redeemed'", (int) $m[1] ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		return $row ? array( 'till' => (string) $row['till'], 'receipt' => (string) $row['receipt'] ) : $out;
 	}
 
