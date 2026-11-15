@@ -4,7 +4,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: Voucher Captain 1.0.0\n"
-"POT-Creation-Date: 2026-11-15 02:12+0000\n"
+"POT-Creation-Date: 2026-11-15 02:15+0000\n"
 "PO-Revision-Date: 2026-11-14 16:00+0000\n"
 "Last-Translator: \n"
 "Language-Team: German\n"
@@ -162,7 +162,7 @@ msgstr "abgelaufen"
 msgid "Store credit can only be used in the shop."
 msgstr "Kundenguthaben kann nur im Shop verwendet werden."
 
-#: src/API/V1/RedemptionService.php:738 src/Tickets.php:724
+#: src/API/V1/RedemptionService.php:738 src/Tickets.php:845
 msgid "Tickets are checked in at the entrance and cannot be redeemed here."
 msgstr ""
 "Tickets werden am Einlass eingecheckt und können hier nicht eingelöst werden."
@@ -373,16 +373,16 @@ msgstr "Anzahl der Codes"
 msgid "Code format"
 msgstr "Codeformat"
 
-#: src/Admin/CampaignAdmin.php:131 src/Settings.php:513
+#: src/Admin/CampaignAdmin.php:131 src/Settings.php:519
 msgid "Prefix"
 msgstr "Präfix"
 
 #: src/Admin/CampaignAdmin.php:132 src/ProductSettings.php:396
-#: src/Settings.php:529
+#: src/Settings.php:535
 msgid "Random part length"
 msgstr "Länge des Zufallsteils"
 
-#: src/Admin/CampaignAdmin.php:133 src/Settings.php:521
+#: src/Admin/CampaignAdmin.php:133 src/Settings.php:527
 msgid "Suffix"
 msgstr "Suffix"
 
@@ -798,7 +798,7 @@ msgstr ""
 "verlassen."
 
 #: src/Admin/Menu.php:31 src/Admin/Menu.php:32 src/Admin/OrderAdmin.php:43
-#: src/Attention.php:110 src/Downloads.php:445 src/Downloads.php:449
+#: src/Attention.php:110 src/Downloads.php:473 src/Downloads.php:477
 msgid "Vouchers"
 msgstr "Gutscheine"
 
@@ -806,9 +806,9 @@ msgstr "Gutscheine"
 msgid "Issued vouchers"
 msgstr "Ausgestellte Gutscheine"
 
-#: src/Admin/Menu.php:42 src/Admin/ReportsAdmin.php:60
-#: src/Admin/ReportsAdmin.php:91 src/Admin/ReportsAdmin.php:148
-#: src/Admin/ReportsAdmin.php:198
+#: src/Admin/Menu.php:42 src/Admin/ReportsAdmin.php:61
+#: src/Admin/ReportsAdmin.php:96 src/Admin/ReportsAdmin.php:153
+#: src/Admin/ReportsAdmin.php:203
 msgid "Reports"
 msgstr "Auswertung"
 
@@ -825,7 +825,7 @@ msgstr "WP Pass Captain"
 msgid "WP Pass Captain ↗"
 msgstr "WP Pass Captain ↗"
 
-#: src/Admin/Menu.php:51 src/Plugin.php:202 src/Shortcodes.php:63
+#: src/Admin/Menu.php:56 src/Plugin.php:203 src/Shortcodes.php:63
 msgid "Settings"
 msgstr "Einstellungen"
 
@@ -1043,8 +1043,8 @@ msgstr "Nicht gesendet (E-Mail deaktiviert oder keine gültige Adresse): %s"
 msgid "Campaigns and codes"
 msgstr "Aktionen und Codes"
 
-#: src/Admin/ReportsAdmin.php:54 src/Admin/ReportsAdmin.php:162
-#: src/Ledger.php:262
+#: src/Admin/ReportsAdmin.php:54 src/Admin/ReportsAdmin.php:167
+#: src/Ledger.php:345
 msgid "Outstanding value"
 msgstr "Offener Gutscheinwert"
 
@@ -1052,31 +1052,35 @@ msgstr "Offener Gutscheinwert"
 msgid "Redemption journal"
 msgstr "Einlösejournal"
 
-#: src/Admin/ReportsAdmin.php:58
+#: src/Admin/ReportsAdmin.php:56
+msgid "Tills and staff"
+msgstr "Kassen und Personal"
+
+#: src/Admin/ReportsAdmin.php:59
 msgid "Pass Captain reconciliation"
 msgstr "Abgleich mit Pass Captain"
 
-#: src/Admin/ReportsAdmin.php:95 src/Admin/ReportsAdmin.php:202
-#: src/Discounts/Admin.php:207
+#: src/Admin/ReportsAdmin.php:100 src/Admin/ReportsAdmin.php:207
+#: src/Admin/ReportsAdmin.php:278 src/Discounts/Admin.php:207
 msgid "From"
 msgstr "Von"
 
-#: src/Admin/ReportsAdmin.php:96 src/Admin/ReportsAdmin.php:203
-#: src/Discounts/Admin.php:208
+#: src/Admin/ReportsAdmin.php:101 src/Admin/ReportsAdmin.php:208
+#: src/Admin/ReportsAdmin.php:279 src/Discounts/Admin.php:208
 msgid "until"
 msgstr "bis"
 
-#: src/Admin/ReportsAdmin.php:97 src/Admin/ReportsAdmin.php:153
-#: src/Admin/ReportsAdmin.php:204
+#: src/Admin/ReportsAdmin.php:102 src/Admin/ReportsAdmin.php:158
+#: src/Admin/ReportsAdmin.php:209 src/Admin/ReportsAdmin.php:287
 msgid "Show"
 msgstr "Anzeigen"
 
-#: src/Admin/ReportsAdmin.php:98 src/Admin/ReportsAdmin.php:205
-#: src/Admin/VouchersListTable.php:90
+#: src/Admin/ReportsAdmin.php:103 src/Admin/ReportsAdmin.php:210
+#: src/Admin/ReportsAdmin.php:288 src/Admin/VouchersListTable.php:90
 msgid "Export CSV"
 msgstr "CSV exportieren"
 
-#: src/Admin/ReportsAdmin.php:100
+#: src/Admin/ReportsAdmin.php:105
 msgid ""
 "Paid and refunded orders created in this period. Discount = what customers "
 "saved (incl. tax); revenue = order total minus refunds. An order with "
@@ -1088,14 +1092,14 @@ msgstr ""
 "Eine Bestellung mit mehreren Codes zählt bei jedem davon. „Ausgegebene "
 "Codes“ ist die Gesamtzahl für Code-Kampagnen und Bonusaktionen."
 
-#: src/Admin/ReportsAdmin.php:100
+#: src/Admin/ReportsAdmin.php:105
 msgid "Vouchers used as a payment after tax count with the amount paid."
 msgstr ""
 "Gutscheine, die als Zahlung nach Steuern verwendet wurden, zählen mit dem "
 "bezahlten Betrag."
 
 #. translators: %s: maximum number of orders
-#: src/Admin/ReportsAdmin.php:105
+#: src/Admin/ReportsAdmin.php:110
 #, php-format
 msgid ""
 "Only the newest %s orders of this period were evaluated. Choose a shorter "
@@ -1104,50 +1108,50 @@ msgstr ""
 "Nur die neuesten %s Bestellungen dieses Zeitraums wurden ausgewertet. Wählen "
 "Sie einen kürzeren Zeitraum für vollständige Zahlen."
 
-#: src/Admin/ReportsAdmin.php:111 src/Admin/ReportsAdmin.php:160
+#: src/Admin/ReportsAdmin.php:116 src/Admin/ReportsAdmin.php:165
 #: src/Admin/VoucherAdmin.php:169 src/Admin/VoucherAdmin.php:1040
-#: src/Fields.php:942 src/Ledger.php:262
+#: src/Fields.php:942 src/Ledger.php:345
 msgid "Type"
 msgstr "Typ"
 
-#: src/Admin/ReportsAdmin.php:112 src/Reports.php:309
+#: src/Admin/ReportsAdmin.php:117 src/Reports.php:309
 msgid "Name"
 msgstr "Name"
 
-#: src/Admin/ReportsAdmin.php:113 src/Reports.php:309
+#: src/Admin/ReportsAdmin.php:118 src/Reports.php:309
 msgid "Codes issued"
 msgstr "Ausgegebene Codes"
 
-#: src/Admin/ReportsAdmin.php:114 src/Campaigns.php:229 src/Reports.php:309
+#: src/Admin/ReportsAdmin.php:119 src/Campaigns.php:229 src/Reports.php:309
 msgid "Uses"
 msgstr "Nutzungen"
 
-#: src/Admin/ReportsAdmin.php:115 src/Reports.php:309
+#: src/Admin/ReportsAdmin.php:120 src/Reports.php:309
 msgid "Orders"
 msgstr "Bestellungen"
 
-#: src/Admin/ReportsAdmin.php:116 src/Discounts/Admin.php:114
+#: src/Admin/ReportsAdmin.php:121 src/Discounts/Admin.php:114
 #: src/Discounts/Admin.php:410 src/Discounts/Admin.php:424 src/Reports.php:309
 msgid "Discount"
 msgstr "Rabatt"
 
-#: src/Admin/ReportsAdmin.php:117 src/Reports.php:309
+#: src/Admin/ReportsAdmin.php:122 src/Reports.php:309
 msgid "Revenue"
 msgstr "Umsatz"
 
-#: src/Admin/ReportsAdmin.php:121
+#: src/Admin/ReportsAdmin.php:126
 msgid "No redemptions in this period."
 msgstr "Keine Einlösungen in diesem Zeitraum."
 
-#: src/Admin/ReportsAdmin.php:152
+#: src/Admin/ReportsAdmin.php:157
 msgid "At the end of"
 msgstr "Zum Ende des"
 
-#: src/Admin/ReportsAdmin.php:154
+#: src/Admin/ReportsAdmin.php:159
 msgid "Export CSV (per voucher)"
 msgstr "CSV exportieren (je Gutschein)"
 
-#: src/Admin/ReportsAdmin.php:156
+#: src/Admin/ReportsAdmin.php:161
 msgid ""
 "Value customers could still redeem at the end of the chosen day: the balance "
 "of gift cards and store credit, and the value of single-use vouchers not yet "
@@ -1162,28 +1166,29 @@ msgstr ""
 "und sind nicht enthalten. Wie er zu buchen ist, entscheidet Ihre "
 "Steuerberatung."
 
-#: src/Admin/ReportsAdmin.php:159 src/Admin/VoucherAdmin.php:1045
-#: src/Ledger.php:262 src/Ledger.php:286 src/Reports.php:309
+#: src/Admin/ReportsAdmin.php:164 src/Admin/ReportsAdmin.php:299
+#: src/Admin/VoucherAdmin.php:1045 src/Ledger.php:305 src/Ledger.php:345
+#: src/Ledger.php:369
 msgid "Currency"
 msgstr "Währung"
 
-#: src/Admin/ReportsAdmin.php:161
+#: src/Admin/ReportsAdmin.php:166
 msgid "Valid vouchers"
 msgstr "Gültige Gutscheine"
 
-#: src/Admin/ReportsAdmin.php:163
+#: src/Admin/ReportsAdmin.php:168
 msgid "Expired vouchers"
 msgstr "Abgelaufene Gutscheine"
 
-#: src/Admin/ReportsAdmin.php:164
+#: src/Admin/ReportsAdmin.php:169
 msgid "Expired value"
 msgstr "Abgelaufener Wert"
 
-#: src/Admin/ReportsAdmin.php:168
+#: src/Admin/ReportsAdmin.php:173
 msgid "No outstanding voucher value on this day."
 msgstr "An diesem Tag gab es keinen offenen Gutscheinwert."
 
-#: src/Admin/ReportsAdmin.php:207
+#: src/Admin/ReportsAdmin.php:212
 msgid ""
 "Redemptions, refunds, credits and corrections with their amount, in booking "
 "order. Value taken off a voucher is negative, value added is positive. The "
@@ -1195,63 +1200,126 @@ msgstr ""
 "CSV-Export enthält alle."
 
 #. translators: 1: bookings shown, 2: bookings in the period
-#: src/Admin/ReportsAdmin.php:212
+#: src/Admin/ReportsAdmin.php:217
 #, php-format
 msgid "Showing %1$s of %2$s bookings. Export the CSV for the complete journal."
 msgstr ""
 "%1$s von %2$s Buchungen werden angezeigt. Exportieren Sie die CSV-Datei für "
 "das vollständige Journal."
 
-#: src/Admin/ReportsAdmin.php:218 src/Admin/Scanner.php:70
+#: src/Admin/ReportsAdmin.php:223 src/Admin/Scanner.php:70
 #: src/Admin/StoreCreditAdmin.php:78 src/Admin/VoucherAdmin.php:338
 #: src/Compat/PassCaptainTickets.php:913 src/Compat/PassCaptainTickets.php:1198
 msgid "Date"
 msgstr "Datum"
 
-#: src/Admin/ReportsAdmin.php:219 src/Admin/Scanner.php:110
+#: src/Admin/ReportsAdmin.php:224 src/Admin/Scanner.php:110
 #: src/Admin/VoucherAdmin.php:1039 src/Admin/VouchersListTable.php:27
 #: src/Campaigns.php:229 src/Campaigns.php:281
 msgid "Code"
 msgstr "Code"
 
-#: src/Admin/ReportsAdmin.php:220 src/Ledger.php:286
+#: src/Admin/ReportsAdmin.php:225 src/Ledger.php:369
 msgid "Booking"
 msgstr "Buchung"
 
-#: src/Admin/ReportsAdmin.php:221 src/Admin/StoreCreditAdmin.php:78
+#: src/Admin/ReportsAdmin.php:226 src/Admin/StoreCreditAdmin.php:78
 #: src/Admin/StoreCreditAdmin.php:188 src/Admin/VoucherAdmin.php:310
 #: src/Admin/VoucherAdmin.php:338 src/Campaigns.php:229
 msgid "Amount"
 msgstr "Betrag"
 
-#: src/Admin/ReportsAdmin.php:222 src/Admin/StoreCreditAdmin.php:78
-#: src/Admin/VoucherAdmin.php:338 src/Ledger.php:286 src/StoreCredit.php:431
+#: src/Admin/ReportsAdmin.php:227 src/Admin/StoreCreditAdmin.php:78
+#: src/Admin/VoucherAdmin.php:338 src/Ledger.php:369 src/StoreCredit.php:431
 msgid "Balance after"
 msgstr "Restwert danach"
 
-#: src/Admin/ReportsAdmin.php:223 src/Admin/Scanner.php:62
+#: src/Admin/ReportsAdmin.php:228 src/Admin/Scanner.php:62
 #: src/Admin/StoreCreditAdmin.php:78 src/Admin/VoucherAdmin.php:171
 #: src/Admin/VoucherAdmin.php:338 src/Admin/VouchersListTable.php:32
 msgid "Order"
 msgstr "Bestellung"
 
-#: src/Admin/ReportsAdmin.php:227
+#: src/Admin/ReportsAdmin.php:229 src/Admin/ReportsAdmin.php:267
+#: src/Admin/ReportsAdmin.php:294 src/Ledger.php:300 src/Ledger.php:369
+msgid "Till / branch"
+msgstr "Kasse / Filiale"
+
+#: src/Admin/ReportsAdmin.php:230 src/Admin/Scanner.php:49 src/Ledger.php:369
+msgid "Receipt no."
+msgstr "Beleg-Nr."
+
+#: src/Admin/ReportsAdmin.php:234
 msgid "No bookings in this period."
 msgstr "Keine Buchungen in diesem Zeitraum."
 
-#: src/Admin/ReportsAdmin.php:249
+#: src/Admin/ReportsAdmin.php:268 src/Admin/ReportsAdmin.php:297
+#: src/Ledger.php:303
+msgid "Staff member"
+msgstr "Mitarbeiter"
+
+#: src/Admin/ReportsAdmin.php:269
+msgid "Till and staff member"
+msgstr "Kasse und Mitarbeiter"
+
+#: src/Admin/ReportsAdmin.php:280
+msgid "Group by"
+msgstr "Gruppieren nach"
+
+#: src/Admin/ReportsAdmin.php:290
+msgid ""
+"Redemptions at the counter (scanner and \"Mark as redeemed (store)\") with "
+"the till/branch set on the device, per currency. Cancellations count at the "
+"till of the redemption they cancel. Amounts include gift cards and value "
+"vouchers; percentage, ticket and reusable vouchers count only as redemptions."
+msgstr ""
+"Einlösungen an der Kasse (Scanner und „Als eingelöst markieren (Geschäft)“) "
+"mit der am Gerät eingestellten Kasse/Filiale, je Währung. Stornierungen "
+"zählen bei der Kasse der stornierten Einlösung. Beträge umfassen "
+"Geschenkkarten und Wertgutscheine; Prozent-, Ticket- und Mehrfachgutscheine "
+"zählen nur als Einlösungen."
+
+#: src/Admin/ReportsAdmin.php:300 src/Ledger.php:305
+msgid "Redemptions"
+msgstr "Einlösungen"
+
+#: src/Admin/ReportsAdmin.php:301 src/Ledger.php:305
+msgid "Amount redeemed"
+msgstr "Eingelöster Betrag"
+
+#: src/Admin/ReportsAdmin.php:302 src/Ledger.php:305
+msgid "Cancellations"
+msgstr "Stornierungen"
+
+#: src/Admin/ReportsAdmin.php:303 src/Ledger.php:305
+msgid "Amount cancelled"
+msgstr "Stornierter Betrag"
+
+#: src/Admin/ReportsAdmin.php:304 src/Ledger.php:305
+msgid "Net amount"
+msgstr "Nettobetrag"
+
+#: src/Admin/ReportsAdmin.php:308
+msgid "No counter redemptions in this period."
+msgstr "Keine Einlösungen an der Kasse in diesem Zeitraum."
+
+#: src/Admin/ReportsAdmin.php:313 src/Counter.php:295 src/Ledger.php:312
+msgid "(no till set)"
+msgstr "(keine Kasse eingestellt)"
+
+#: src/Admin/ReportsAdmin.php:336
 msgid "Ticket checkout"
 msgstr "Ticket-Checkout"
 
-#: src/Admin/ReportsAdmin.php:250
+#: src/Admin/ReportsAdmin.php:337
 msgid "Ticket voucher"
 msgstr "Ticketgutschein"
 
-#: src/Admin/ReportsAdmin.php:251
+#: src/Admin/ReportsAdmin.php:338
 msgid "Without order"
 msgstr "Ohne Bestellung"
 
-#: src/Admin/ReportsAdmin.php:265
+#: src/Admin/ReportsAdmin.php:352
 msgid ""
 "This version of WP Pass Captain has no reconciliation interface yet, so its "
 "order table is read directly as a fallback. Please update WP Pass Captain."
@@ -1261,7 +1329,7 @@ msgstr ""
 "Captain gelesen. Bitte aktualisieren Sie WP Pass Captain."
 
 #. translators: %d: number of Pass Captain orders checked
-#: src/Admin/ReportsAdmin.php:270
+#: src/Admin/ReportsAdmin.php:357
 #, php-format
 msgid ""
 "Compares the vouchers used in WP Pass Captain (ticket checkout and ticket "
@@ -1274,23 +1342,23 @@ msgstr ""
 "und Erstattungen. %d Pass-Captain-Bestellungen geprüft; es werden nur "
 "Abweichungen aufgeführt, nichts wird geändert."
 
-#: src/Admin/ReportsAdmin.php:275
+#: src/Admin/ReportsAdmin.php:362
 msgid "Kind"
 msgstr "Art"
 
-#: src/Admin/ReportsAdmin.php:276
+#: src/Admin/ReportsAdmin.php:363
 msgid "Pass Captain order"
 msgstr "Pass-Captain-Bestellung"
 
-#: src/Admin/ReportsAdmin.php:277 src/Privacy.php:84
+#: src/Admin/ReportsAdmin.php:364 src/Privacy.php:84
 msgid "Redemption key"
 msgstr "Einlöseschlüssel"
 
-#: src/Admin/ReportsAdmin.php:278
+#: src/Admin/ReportsAdmin.php:365
 msgid "Difference"
 msgstr "Abweichung"
 
-#: src/Admin/ReportsAdmin.php:282
+#: src/Admin/ReportsAdmin.php:369
 msgid "No differences found."
 msgstr "Keine Abweichungen gefunden."
 
@@ -1359,10 +1427,6 @@ msgstr ""
 #: src/Admin/Scanner.php:48
 msgid "Nothing was changed: a reason is required."
 msgstr "Nichts geändert: Ein Grund ist erforderlich."
-
-#: src/Admin/Scanner.php:49
-msgid "Receipt no."
-msgstr "Beleg-Nr."
 
 #: src/Admin/Scanner.php:50
 msgid "Print"
@@ -1499,7 +1563,7 @@ msgstr "Nur Restwert abbuchen (%s)"
 msgid "Please enter an amount."
 msgstr "Bitte geben Sie einen Betrag ein."
 
-#: src/Admin/Scanner.php:83 src/Amount.php:113 src/Tickets.php:659
+#: src/Admin/Scanner.php:83 src/Amount.php:113 src/Tickets.php:780
 msgid "Please enter an amount greater than zero."
 msgstr "Bitte geben Sie einen Betrag größer als null ein."
 
@@ -1530,7 +1594,7 @@ msgid "This currency has no decimal places."
 msgstr "Diese Währung hat keine Nachkommastellen."
 
 #. translators: 1: entered amount, 2: remaining balance of the voucher
-#: src/Admin/Scanner.php:92 src/Tickets.php:656
+#: src/Admin/Scanner.php:92 src/Tickets.php:777
 #, php-format
 msgid "Not deducted: the amount (%1$s) exceeds the remaining balance (%2$s)."
 msgstr "Nicht abgebucht: Der Betrag (%1$s) übersteigt den Restwert (%2$s)."
@@ -1578,7 +1642,7 @@ msgstr "Kasse / Filiale dieses Geräts"
 msgid "Saved on this device and kept with every redemption."
 msgstr "Wird auf diesem Gerät gespeichert und bei jeder Einlösung vermerkt."
 
-#: src/Admin/StoreCreditAdmin.php:52 src/Privacy.php:161 src/Settings.php:614
+#: src/Admin/StoreCreditAdmin.php:52 src/Privacy.php:161 src/Settings.php:620
 #: src/StoreCredit.php:419 src/Voucher.php:80
 msgid "Store credit"
 msgstr "Kundenguthaben"
@@ -1623,7 +1687,7 @@ msgid "User"
 msgstr "Benutzer"
 
 #: src/Admin/StoreCreditAdmin.php:78 src/Admin/VoucherAdmin.php:312
-#: src/Admin/VoucherAdmin.php:338 src/Ledger.php:286 src/Tickets.php:327
+#: src/Admin/VoucherAdmin.php:338 src/Ledger.php:369 src/Tickets.php:327
 msgid "Note"
 msgstr "Notiz"
 
@@ -1888,7 +1952,7 @@ msgstr "Übersicht"
 
 #: src/Admin/VoucherAdmin.php:168 src/Admin/VoucherAdmin.php:1041
 #: src/Admin/VouchersListTable.php:30 src/Campaigns.php:229
-#: src/Campaigns.php:281 src/Note.php:165
+#: src/Campaigns.php:281 src/Note.php:171
 msgid "Status"
 msgstr "Status"
 
@@ -1930,7 +1994,7 @@ msgstr "WooCommerce-Code"
 msgid "none (ticket)"
 msgstr "keiner (Ticket)"
 
-#: src/Admin/VoucherAdmin.php:185 src/VoucherRepository.php:793
+#: src/Admin/VoucherAdmin.php:185 src/VoucherRepository.php:807
 msgid "Delivered"
 msgstr "Zugestellt"
 
@@ -2006,23 +2070,23 @@ msgid "Edit"
 msgstr "Bearbeiten"
 
 #: src/Admin/VoucherAdmin.php:252 src/Admin/VoucherAdmin.php:1051
-#: src/Fields.php:84 src/Note.php:161 src/Placeholders.php:30
+#: src/Fields.php:84 src/Note.php:167 src/Placeholders.php:30
 #: src/Privacy.php:48
 msgid "Recipient name"
 msgstr "Name des Empfängers"
 
 #: src/Admin/VoucherAdmin.php:253 src/Admin/VoucherAdmin.php:1052
-#: src/Fields.php:93 src/Note.php:162 src/Placeholders.php:32
+#: src/Fields.php:93 src/Note.php:168 src/Placeholders.php:32
 #: src/Privacy.php:49
 msgid "Recipient email"
 msgstr "E-Mail-Adresse des Empfängers"
 
-#: src/Admin/VoucherAdmin.php:254 src/Note.php:163 src/Privacy.php:50
+#: src/Admin/VoucherAdmin.php:254 src/Note.php:169 src/Privacy.php:50
 msgid "Message"
 msgstr "Nachricht"
 
-#: src/Admin/VoucherAdmin.php:255 src/Note.php:164
-#: templates/myaccount/vouchers-table.php:125
+#: src/Admin/VoucherAdmin.php:255 src/Note.php:170
+#: templates/myaccount/vouchers-table.php:129
 msgid "Send to"
 msgstr "Senden an"
 
@@ -2046,7 +2110,7 @@ msgstr "Läuft nie ab"
 
 #: src/Admin/VoucherAdmin.php:263 src/Fields.php:111 src/Placeholders.php:34
 #: src/ProductSettings.php:412 src/ProductSettings.php:454
-#: templates/myaccount/vouchers-table.php:114
+#: templates/myaccount/vouchers-table.php:118
 msgid "Delivery date"
 msgstr "Zustelldatum"
 
@@ -2226,7 +2290,7 @@ msgstr "der Gutschein wird gerade eingelöst"
 
 #. translators: %s: reason
 #: src/Admin/VoucherAdmin.php:517 src/Admin/VoucherAdmin.php:550
-#: src/Note.php:143
+#: src/Note.php:149
 #, php-format
 msgid "The voucher email was not sent: %s."
 msgstr "Die Gutschein-E-Mail wurde nicht gesendet: %s."
@@ -2612,17 +2676,17 @@ msgstr[1] ""
 "WooCommerce-Code) – prüfen Sie ihren Verlauf: %2$s"
 
 #: src/Admin/VoucherAdmin.php:1046 src/Admin/VouchersListTable.php:33
-#: src/Campaigns.php:229 src/Ledger.php:262
+#: src/Campaigns.php:229 src/Ledger.php:345
 msgid "Expires"
 msgstr "Gültig bis"
 
-#: src/Admin/VoucherAdmin.php:1047 src/Campaigns.php:281 src/Ledger.php:262
-#: src/Ledger.php:286 src/Placeholders.php:36
+#: src/Admin/VoucherAdmin.php:1047 src/Campaigns.php:281 src/Ledger.php:345
+#: src/Ledger.php:369 src/Placeholders.php:36
 msgid "Order number"
 msgstr "Bestellnummer"
 
-#: src/Admin/VoucherAdmin.php:1048 src/Campaigns.php:281 src/Ledger.php:262
-#: src/Ledger.php:286 src/Placeholders.php:35
+#: src/Admin/VoucherAdmin.php:1048 src/Campaigns.php:281 src/Ledger.php:345
+#: src/Ledger.php:369 src/Placeholders.php:35
 msgid "Order ID"
 msgstr "Bestell-ID"
 
@@ -2634,7 +2698,7 @@ msgstr "Name des Käufers"
 msgid "Buyer email"
 msgstr "E-Mail-Adresse des Käufers"
 
-#: src/Admin/VoucherAdmin.php:1054 src/Note.php:166
+#: src/Admin/VoucherAdmin.php:1054 src/Note.php:172
 msgid "Maximum check-ins"
 msgstr "Maximale Check-ins"
 
@@ -2656,8 +2720,8 @@ msgstr "Wert / Restwert"
 msgid "Buyer → recipient"
 msgstr "Käufer → Empfänger"
 
-#: src/Admin/VouchersListTable.php:34 src/Ledger.php:262
-#: src/VoucherRepository.php:783
+#: src/Admin/VouchersListTable.php:34 src/Ledger.php:345
+#: src/VoucherRepository.php:797
 msgid "Issued"
 msgstr "Ausgestellt"
 
@@ -2811,7 +2875,7 @@ msgstr ""
 msgid "No further codes could be saved."
 msgstr "Es konnten keine weiteren Codes gespeichert werden."
 
-#: src/Campaigns.php:229 src/ProductSettings.php:185 src/Settings.php:690
+#: src/Campaigns.php:229 src/ProductSettings.php:185 src/Settings.php:696
 msgid "Discount type"
 msgstr "Rabattart"
 
@@ -3217,7 +3281,7 @@ msgid "Already checked in by this scan"
 msgstr "Mit diesem Scan bereits eingecheckt"
 
 #: src/Compat/PassCaptainScanner.php:97 src/Tickets.php:476
-#: src/VoucherRepository.php:809
+#: src/VoucherRepository.php:823
 msgid "Checked in"
 msgstr "Eingecheckt"
 
@@ -3334,7 +3398,7 @@ msgstr "%1$s, gesendet an %2$s"
 
 #: src/Compat/PassCaptainTickets.php:205 src/Compat/PassCaptainTickets.php:344
 #: src/Compat/PassCaptainTickets.php:1187
-#: src/Compat/PassCaptainTickets.php:1203 src/Downloads.php:537
+#: src/Compat/PassCaptainTickets.php:1203 src/Downloads.php:565
 msgid "Exchange for tickets"
 msgstr "In Tickets umwandeln"
 
@@ -3756,6 +3820,86 @@ msgid ""
 msgstr ""
 "Gutschein konnte nach der Ticketstornierung nicht zurückgegeben werden – "
 "bitte prüfen"
+
+#. translators: %s: receipt number of the till
+#: src/Counter.php:100 src/Tickets.php:964
+#, php-format
+msgid "Receipt %s"
+msgstr "Beleg %s"
+
+#. translators: %s: till or branch name
+#: src/Counter.php:102 src/Tickets.php:968
+#, php-format
+msgid "Till %s"
+msgstr "Kasse %s"
+
+#: src/Counter.php:262
+msgid ""
+"Not redeemed: another redemption at this till or by you is being booked "
+"right now. Please try again in a moment."
+msgstr ""
+"Nicht eingelöst: Eine andere Einlösung an dieser Kasse oder durch Sie wird "
+"gerade gebucht. Bitte versuchen Sie es gleich noch einmal."
+
+#. translators: 1: till or branch, 2: redemptions allowed per day, 3: redemptions today, 4: redemptions left
+#: src/Counter.php:298
+#, php-format
+msgid ""
+"Not redeemed: the daily limit of till \"%1$s\" is %2$d counter redemptions. "
+"Redeemed there today: %3$d – left: %4$d."
+msgstr ""
+"Nicht eingelöst: Das Tageslimit der Kasse „%1$s“ beträgt %2$d Einlösungen. "
+"Heute dort eingelöst: %3$d – übrig: %4$d."
+
+#. translators: 1: till or branch, 2: amount allowed per day, 3: amount redeemed today, 4: amount left
+#: src/Counter.php:301
+#, php-format
+msgid ""
+"Not redeemed: the daily limit of till \"%1$s\" is %2$s. Redeemed there "
+"today: %3$s – still available: %4$s."
+msgstr ""
+"Nicht eingelöst: Das Tageslimit der Kasse „%1$s“ beträgt %2$s. Heute dort "
+"eingelöst: %3$s – noch verfügbar: %4$s."
+
+#. translators: 1: redemptions allowed per day, 2: redemptions today, 3: redemptions left
+#: src/Counter.php:305
+#, php-format
+msgid ""
+"Not redeemed: your daily limit is %1$d counter redemptions. Redeemed by you "
+"today: %2$d – left: %3$d."
+msgstr ""
+"Nicht eingelöst: Ihr Tageslimit beträgt %1$d Einlösungen an der Kasse. Heute "
+"von Ihnen eingelöst: %2$d – übrig: %3$d."
+
+#. translators: 1: amount allowed per day, 2: amount redeemed today, 3: amount left
+#: src/Counter.php:308
+#, php-format
+msgid ""
+"Not redeemed: your daily limit for counter redemptions is %1$s. Redeemed by "
+"you today: %2$s – still available: %3$s."
+msgstr ""
+"Nicht eingelöst: Ihr Tageslimit für Einlösungen an der Kasse beträgt %1$s. "
+"Heute von Ihnen eingelöst: %2$s – noch verfügbar: %3$s."
+
+#: src/Counter.php:326
+msgid "Voucher scanner: daily limits"
+msgstr "Gutschein-Scanner: Tageslimits"
+
+#: src/Counter.php:329
+msgid "Amount per day"
+msgstr "Betrag pro Tag"
+
+#: src/Counter.php:331
+msgid ""
+"Empty = the setting under WooCommerce → Settings → Vouchers → Privacy & "
+"advanced. 0 = unlimited."
+msgstr ""
+"Leer = die Einstellung unter WooCommerce → Einstellungen → Gutscheine → "
+"Datenschutz & Erweitert. 0 = unbegrenzt."
+
+#: src/Counter.php:334
+msgid "Redemptions per day"
+msgstr "Einlösungen pro Tag"
 
 #: src/CouponLink.php:107
 msgid "This voucher link is not valid."
@@ -4390,12 +4534,12 @@ msgstr "Wegen eines Gutschein-Fehlbetrags angehaltene Bestellungen"
 msgid "Voucher tables support transactions (InnoDB)"
 msgstr "Gutscheintabellen unterstützen Transaktionen (InnoDB)"
 
-#: src/Diagnostics.php:85 src/Fields.php:540 src/Ledger.php:268
+#: src/Diagnostics.php:85 src/Fields.php:540 src/Ledger.php:351
 #: src/Privacy.php:163
 msgid "Yes"
 msgstr "Ja"
 
-#: src/Diagnostics.php:85 src/Diagnostics.php:90 src/Ledger.php:268
+#: src/Diagnostics.php:85 src/Diagnostics.php:90 src/Ledger.php:351
 #: src/Privacy.php:163
 msgid "No"
 msgstr "Nein"
@@ -4424,7 +4568,7 @@ msgstr "Aufbewahrung personenbezogener Daten (Tage nach Ende des Gutscheins)"
 msgid "Off"
 msgstr "Aus"
 
-#: src/Diagnostics.php:107 src/Settings.php:369
+#: src/Diagnostics.php:107 src/Settings.php:374
 msgid "Verbose log"
 msgstr "Ausführliches Protokoll"
 
@@ -4432,7 +4576,7 @@ msgstr "Ausführliches Protokoll"
 msgid "On"
 msgstr "Ein"
 
-#: src/Diagnostics.php:112 src/Settings.php:584
+#: src/Diagnostics.php:112 src/Settings.php:590
 msgid "Multi-purpose vouchers as payment"
 msgstr "Mehrzweckgutscheine als Zahlung"
 
@@ -4512,7 +4656,7 @@ msgstr "Kaufe X, erhalte Y"
 msgid "Bonus voucher after the order"
 msgstr "Bonusgutschein nach der Bestellung"
 
-#: src/Discounts/Admin.php:126 src/Settings.php:696
+#: src/Discounts/Admin.php:126 src/Settings.php:702
 msgid "Percentage"
 msgstr "Prozent"
 
@@ -4897,12 +5041,12 @@ msgstr "Sie haben diese Aktion bereits so oft wie erlaubt genutzt."
 msgid "This promotion has reached its usage limit."
 msgstr "Diese Aktion hat ihr Nutzungslimit erreicht."
 
-#: src/Discounts/CartIntegration.php:321
+#: src/Discounts/CartIntegration.php:324
 msgid "This promotion is applied automatically and cannot be removed."
 msgstr ""
 "Diese Aktion wird automatisch angewendet und kann nicht entfernt werden."
 
-#: src/Discounts/Usage.php:364
+#: src/Discounts/Usage.php:513
 msgid ""
 "The promotion could not be checked right now. Please try again in a moment."
 msgstr ""
@@ -4910,7 +5054,7 @@ msgstr ""
 "noch einmal."
 
 #. translators: %s: promotion title
-#: src/Discounts/Usage.php:382
+#: src/Discounts/Usage.php:531
 #, php-format
 msgid ""
 "The promotion \"%s\" has reached its usage limit. Please remove it from your "
@@ -5038,16 +5182,16 @@ msgid ""
 msgstr ""
 "Ihre Gutscheine sind hier verfügbar, sobald die Zahlung bestätigt wurde."
 
-#: src/Downloads.php:374 src/Downloads.php:402
+#: src/Downloads.php:374 src/Downloads.php:430
 msgid "Your vouchers"
 msgstr "Ihre Gutscheine"
 
-#: src/Downloads.php:405 src/OrderReturn.php:156 src/ProductSettings.php:38
+#: src/Downloads.php:433 src/OrderReturn.php:156 src/ProductSettings.php:38
 #: src/ProductSettings.php:47 src/ProductSettings.php:716 src/Voucher.php:77
 msgid "Voucher"
 msgstr "Gutschein"
 
-#: src/Downloads.php:407
+#: src/Downloads.php:435
 msgid ""
 "For security reasons the full codes are shown only in the customer account "
 "of the buyer and in the voucher email."
@@ -5055,22 +5199,22 @@ msgstr ""
 "Aus Sicherheitsgründen werden die vollständigen Codes nur im Kundenkonto des "
 "Käufers und in der Gutschein-E-Mail angezeigt."
 
-#: src/Downloads.php:488
+#: src/Downloads.php:516
 msgid "Newer vouchers"
 msgstr "Neuere Gutscheine"
 
-#: src/Downloads.php:491
+#: src/Downloads.php:519
 msgid "Older vouchers"
 msgstr "Ältere Gutscheine"
 
 #. translators: %s: voucher status
-#: src/Downloads.php:508
+#: src/Downloads.php:536
 #, php-format
 msgid "Status: %s"
 msgstr "Status: %s"
 
 #. translators: 1: number of tickets, 2: event / ticket type
-#: src/Downloads.php:515
+#: src/Downloads.php:543
 #, php-format
 msgid "For %1$d ticket: %2$s"
 msgid_plural "For %1$d tickets: %2$s"
@@ -5078,50 +5222,50 @@ msgstr[0] "Für %1$d Ticket: %2$s"
 msgstr[1] "Für %1$d Tickets: %2$s"
 
 #. translators: %d: number of tickets
-#: src/Downloads.php:517
+#: src/Downloads.php:545
 #, php-format
 msgid "For %d ticket"
 msgid_plural "For %d tickets"
 msgstr[0] "Für %d Ticket"
 msgstr[1] "Für %d Tickets"
 
-#: src/Downloads.php:519
+#: src/Downloads.php:547
 msgid "Admission ticket (shown at the entrance)"
 msgstr "Eintrittskarte (wird am Einlass vorgezeigt)"
 
 #. translators: %s: percentage
-#: src/Downloads.php:522
+#: src/Downloads.php:550
 #, php-format
 msgid "Discount: %s"
 msgstr "Rabatt: %s"
 
 #. translators: %s: remaining balance
-#: src/Downloads.php:525 templates/myaccount/vouchers-table.php:47
+#: src/Downloads.php:553 templates/myaccount/vouchers-table.php:47
 #, php-format
 msgid "Balance: %s"
 msgstr "Restwert: %s"
 
 #. translators: %s: value
-#: src/Downloads.php:528 templates/emails/plain/voucher.php:23
+#: src/Downloads.php:556 templates/emails/plain/voucher.php:23
 #, php-format
 msgid "Value: %s"
 msgstr "Wert: %s"
 
 #. translators: %s: expiry date or "unlimited"
-#: src/Downloads.php:531
+#: src/Downloads.php:559
 #, php-format
 msgid "Valid until: %s"
 msgstr "Gültig bis: %s"
 
-#: src/Downloads.php:531 src/Placeholders.php:102
+#: src/Downloads.php:559 src/Placeholders.php:102
 msgid "unlimited"
 msgstr "unbegrenzt"
 
-#: src/Downloads.php:615 src/Shortcodes.php:622 src/TemplatePostType.php:200
+#: src/Downloads.php:643 src/Shortcodes.php:622 src/TemplatePostType.php:200
 msgid "Voucher code"
 msgstr "Gutscheincode"
 
-#: src/Downloads.php:617
+#: src/Downloads.php:645
 msgid "Check balance"
 msgstr "Restwert prüfen"
 
@@ -5710,7 +5854,7 @@ msgstr "Bitte wählen Sie eine gültige Option für %s."
 msgid "%1$s may contain at most %2$d characters."
 msgstr "%1$s darf höchstens %2$d Zeichen enthalten."
 
-#: src/Fields.php:731 src/Note.php:167 src/ProductSettings.php:436
+#: src/Fields.php:731 src/Note.php:173 src/ProductSettings.php:436
 msgid "Delivery"
 msgstr "Zustellung"
 
@@ -6357,7 +6501,7 @@ msgid "Voucher settings"
 msgstr "Gutschein-Einstellungen"
 
 #. translators: %s: comma separated PHP extension names
-#: src/Install.php:130
+#: src/Install.php:169
 #, php-format
 msgid ""
 "Voucher Captain needs the PHP extensions %s, which are not available on this "
@@ -6367,11 +6511,11 @@ msgstr ""
 "nicht verfügbar sind. Bitten Sie Ihren Hoster, sie zu aktivieren, und "
 "aktivieren Sie das Plugin dann erneut."
 
-#: src/Install.php:134
+#: src/Install.php:173
 msgid "Plugin could not be activated"
 msgstr "Das Plugin konnte nicht aktiviert werden"
 
-#: src/Install.php:389
+#: src/Install.php:428
 msgid ""
 "Gift cards and store credit cannot be redeemed at the moment. Please try "
 "again later or contact the shop."
@@ -6380,7 +6524,7 @@ msgstr ""
 "Bitte versuchen Sie es später erneut oder wenden Sie sich an den Shop."
 
 #. translators: 1: database version in use, 2: database version of the running plugin
-#: src/Install.php:693
+#: src/Install.php:732
 #, php-format
 msgid ""
 "Voucher Captain: the voucher database was updated by a newer plugin version "
@@ -6394,7 +6538,7 @@ msgstr ""
 "oder spielen Sie die vor dem Update erstellte Sicherung zusammen mit dieser "
 "Version ein."
 
-#: src/Install.php:1223
+#: src/Install.php:1480
 msgid "Voucher cashier"
 msgstr "Gutschein-Kasse"
 
@@ -6559,12 +6703,61 @@ msgstr ""
 "Gutschein %s wurde ausgestellt, der Verlaufseintrag konnte aber nicht "
 "geschrieben werden."
 
-#: src/Issuer.php:895
+#: src/Issuer.php:926
+msgid "This product is not a voucher product."
+msgstr "Dieses Produkt ist kein Gutscheinprodukt."
+
+#: src/Issuer.php:936
+msgid "Unknown voucher type, usage or discount type."
+msgstr ""
+"Unbekannter Gutscheintyp, unbekannte Nutzungsart oder unbekannter Rabatttyp."
+
+#: src/Issuer.php:948
+msgid "Please give a voucher value greater than zero."
+msgstr "Bitte geben Sie einen Gutscheinwert größer als null an."
+
+#: src/Issuer.php:959
+msgid ""
+"An email address of the recipient or the ordering party is needed to send "
+"the voucher."
+msgstr ""
+"Zum Versand des Gutscheins wird eine E-Mail-Adresse des Empfängers oder des "
+"Auftraggebers benötigt."
+
+#: src/Issuer.php:963
+msgid "This code is already used by another voucher or coupon."
+msgstr ""
+"Dieser Code wird bereits von einem anderen Gutschein oder Coupon verwendet."
+
+#: src/Issuer.php:971
+msgid "A voucher was already issued for this reference."
+msgstr "Für diese Referenz wurde bereits ein Gutschein ausgestellt."
+
+#: src/Issuer.php:1067
+msgid "The voucher could not be saved. Please try again."
+msgstr ""
+"Der Gutschein konnte nicht gespeichert werden. Bitte versuchen Sie es erneut."
+
+#. translators: %s: voucher type
+#: src/Issuer.php:1079
+#, php-format
+msgid "%s issued without order (Voucher Captain)"
+msgstr "%s ohne Bestellung ausgestellt (Voucher Captain)"
+
+#: src/Issuer.php:1087
+msgid ""
+"The voucher could not be created (WooCommerce coupon not saved). Please try "
+"again."
+msgstr ""
+"Der Gutschein konnte nicht erstellt werden (WooCommerce-Coupon nicht "
+"gespeichert). Bitte versuchen Sie es erneut."
+
+#: src/Issuer.php:1117
 msgid "Purchase order cancelled or refunded"
 msgstr "Kaufbestellung storniert oder erstattet"
 
 #. translators: %s: voucher codes
-#: src/Issuer.php:901
+#: src/Issuer.php:1123
 #, php-format
 msgid ""
 "Order cancelled without a refund: vouchers already used (%s) stay valid, the "
@@ -6576,7 +6769,7 @@ msgstr ""
 "zurückgezahlt, machen Sie sie in der Gutscheinansicht von Hand ungültig."
 
 #. translators: 1: voucher codes, 2: order currency
-#: src/Issuer.php:1000
+#: src/Issuer.php:1222
 #, php-format
 msgid ""
 "Value from this order was already spent (%1$s), and no exchange rate for "
@@ -6588,7 +6781,7 @@ msgstr ""
 "kann. Richten Sie zuerst den Wechselkurs ein."
 
 #. translators: 1: voucher codes and masked gift card codes, 2: spent value, 3: maximum refund
-#: src/Issuer.php:1018
+#: src/Issuer.php:1240
 #, php-format
 msgid ""
 "Value from this order was already spent (%1$s, value used: %2$s). At most "
@@ -6601,7 +6794,7 @@ msgstr ""
 "Geschenkkarte zurückgebucht."
 
 #. translators: 1: voucher codes, 2: spent value, 3: maximum refund
-#: src/Issuer.php:1020
+#: src/Issuer.php:1242
 #, php-format
 msgid ""
 "Vouchers from this order were already used (%1$s, value used: %2$s). At most "
@@ -6612,7 +6805,7 @@ msgstr ""
 "unverbrauchten Gutscheine werden entwertet."
 
 #. translators: %s: voucher code
-#: src/Issuer.php:1091
+#: src/Issuer.php:1313
 #, php-format
 msgid ""
 "Voucher %s was already used up and stays as it is (partial refund): its "
@@ -6625,19 +6818,19 @@ msgstr ""
 "verwendet wurde."
 
 #. translators: %d: refund id
-#: src/Issuer.php:1100
+#: src/Issuer.php:1322
 #, php-format
 msgid "Partial refund #%d of the purchase order"
 msgstr "Teilerstattung #%d der Kaufbestellung"
 
 #. translators: %s: voucher code
-#: src/Issuer.php:1108
+#: src/Issuer.php:1330
 #, php-format
 msgid "Voucher %s voided (refunded)."
 msgstr "Gutschein %s entwertet (erstattet)."
 
 #. translators: 1: gift card code, 2: topped-up value that stays on the card
-#: src/Issuer.php:1116
+#: src/Issuer.php:1338
 #, php-format
 msgid ""
 "Gift card %1$s: the purchased value was taken off the card (refunded); the "
@@ -6646,12 +6839,12 @@ msgstr ""
 "Geschenkkarte %1$s: Der gekaufte Wert wurde von der Karte abgebucht "
 "(erstattet); der aufgeladene Wert von %2$s bleibt darauf."
 
-#: src/Issuer.php:1166
+#: src/Issuer.php:1388
 msgid "(purchased value taken off, topped-up value kept)"
 msgstr "(Kaufwert abgebucht, aufgeladener Wert bleibt)"
 
 #. translators: %s: voucher code
-#: src/Issuer.php:1196
+#: src/Issuer.php:1418
 #, php-format
 msgid ""
 "Voucher %s could NOT be voided after the refund or cancellation – it may "
@@ -6663,7 +6856,7 @@ msgstr ""
 "erneut versucht; sperren Sie ihn bis dahin von Hand in der Gutscheinansicht."
 
 #. translators: %s: voucher code
-#: src/Issuer.php:1205
+#: src/Issuer.php:1427
 #, php-format
 msgid ""
 "Voucher %s could not be voided after its purchase was refunded or cancelled. "
@@ -6672,25 +6865,25 @@ msgstr ""
 "Gutschein %s konnte nicht ungültig gemacht werden, nachdem sein Kauf "
 "erstattet oder storniert wurde. Sperren Sie ihn in der Gutscheinansicht."
 
-#: src/Issuer.php:1227
+#: src/Issuer.php:1449
 msgid "Purchase order cancelled or refunded (retried)"
 msgstr "Kaufbestellung storniert oder erstattet (erneuter Versuch)"
 
 #. translators: %s: voucher code
-#: src/Issuer.php:1234
+#: src/Issuer.php:1456
 #, php-format
 msgid "Voucher %s voided (retried after the refund or cancellation)."
 msgstr ""
 "Gutschein %s ungültig gemacht (erneuter Versuch nach der Erstattung oder "
 "Stornierung)."
 
-#: src/Issuer.php:1249
+#: src/Issuer.php:1471
 msgid "(WooCommerce coupon could not be disabled – disable it manually)"
 msgstr ""
 "(WooCommerce-Code konnte nicht deaktiviert werden – bitte manuell "
 "deaktivieren)"
 
-#: src/Issuer.php:1274
+#: src/Issuer.php:1496
 msgid "WooCommerce coupon could not be enabled – enable it manually"
 msgstr ""
 "WooCommerce-Code konnte nicht aktiviert werden – bitte manuell aktivieren"
@@ -6699,8 +6892,8 @@ msgstr ""
 msgid "The background run could not be continued."
 msgstr "Der Hintergrundlauf konnte nicht fortgesetzt werden."
 
-#: src/Ledger.php:262 src/Tickets.php:183 src/Voucher.php:65
-#: src/VoucherRepository.php:813
+#: src/Ledger.php:345 src/Tickets.php:183 src/Voucher.php:65
+#: src/VoucherRepository.php:827
 msgid "Expired"
 msgstr "Abgelaufen"
 
@@ -6749,8 +6942,8 @@ msgstr ""
 "Zu Ihrer Sicherheit werden Gutscheine einer ersten Bestellung in dieser Höhe "
 "erst nach einer kurzen Wartezeit zugestellt und einlösbar."
 
-#: src/NextSteps.php:117 templates/emails/plain/voucher.php:45
-#: templates/emails/voucher.php:83
+#: src/NextSteps.php:117 templates/emails/plain/voucher.php:48
+#: templates/emails/voucher.php:92
 msgid "What happens next"
 msgstr "So geht es weiter"
 
@@ -6846,24 +7039,34 @@ msgstr ""
 "Die Ablauf-Erinnerung konnte nicht gesendet werden; sie wird beim nächsten "
 "Lauf erneut versucht."
 
+#. translators: %s: source and reference given by the caller, e.g. "company-order, order-4711/3"
+#: src/Note.php:139
+#, php-format
+msgid "Issued without order (%s)"
+msgstr "Ohne Bestellung ausgestellt (%s)"
+
+#: src/Note.php:140
+msgid "Issued without order"
+msgstr "Ohne Bestellung ausgestellt"
+
 #. translators: 1: role ("Buyer", "Recipient"), 2: masked email address
-#: src/Note.php:137
+#: src/Note.php:143
 #, php-format
 msgid "Sent to the %1$s (%2$s) by an admin"
 msgstr "Von einem Administrator gesendet an: %1$s (%2$s)"
 
 #. translators: %s: roles, e.g. "Recipient, Buyer"
-#: src/Note.php:140
+#: src/Note.php:146
 #, php-format
 msgid "Sent to %s by an admin (bulk action)"
 msgstr "Von der Verwaltung an %s gesendet (Sammelaktion)"
 
-#: src/Note.php:145
+#: src/Note.php:151
 msgid "Expired (the validity ended)."
 msgstr "Abgelaufen (die Gültigkeit ist beendet)."
 
 #. translators: 1: old code (masked), 2: new code (masked)
-#: src/Note.php:150
+#: src/Note.php:156
 #, php-format
 msgid ""
 "Reissued: the code %1$s was replaced by %2$s. The old code and its download "
@@ -6872,11 +7075,11 @@ msgstr ""
 "Neu ausgestellt: Der Code %1$s wurde durch %2$s ersetzt. Der alte Code und "
 "seine Download-Links funktionieren nicht mehr."
 
-#: src/Note.php:160 src/ProductSettings.php:246
+#: src/Note.php:166 src/ProductSettings.php:246
 msgid "Expiry"
 msgstr "Ablauf"
 
-#: src/Note.php:175
+#: src/Note.php:181
 msgid "Saved without changes"
 msgstr "Ohne Änderungen gespeichert"
 
@@ -7168,7 +7371,7 @@ msgid "How to redeem (from the redemption channels)"
 msgstr "So lösen Sie ein (aus den Einlösewegen)"
 
 #. translators: %s: comma separated table names
-#: src/Plugin.php:218
+#: src/Plugin.php:219
 #, php-format
 msgid ""
 "Voucher Captain: the voucher database tables do not support transactions "
@@ -7179,7 +7382,7 @@ msgstr ""
 "Transaktionen (InnoDB). Restwerte von Geschenkkarten können erst eingelöst "
 "werden, wenn diese Tabellen auf InnoDB umgestellt sind: %s"
 
-#: src/Plugin.php:226
+#: src/Plugin.php:227
 msgid ""
 "Voucher Captain: the PDF libraries are missing. Install the release ZIP or "
 "run \"composer install --no-dev\" in the plugin folder."
@@ -7236,7 +7439,7 @@ msgid "Target"
 msgstr "Ziel"
 
 #: src/Privacy.php:128 src/Referrals.php:375 src/Referrals.php:595
-#: src/Settings.php:670 src/Settings.php:675 src/Shortcodes.php:70
+#: src/Settings.php:676 src/Settings.php:681 src/Shortcodes.php:70
 msgid "Refer a friend"
 msgstr "Freunde werben"
 
@@ -7705,7 +7908,7 @@ msgstr ""
 msgid "Sell this product as a PDF voucher, gift card or ticket."
 msgstr "Dieses Produkt als PDF-Gutschein, Geschenkkarte oder Ticket verkaufen."
 
-#: src/ProductSettings.php:56 src/Settings.php:441
+#: src/ProductSettings.php:56 src/Settings.php:447
 msgid "Default template"
 msgstr "Standardvorlage"
 
@@ -8390,7 +8593,7 @@ msgid "Referral"
 msgstr "Empfehlung"
 
 #. translators: 1: setting name, 2: lines that are not used
-#: src/Settings.php:108
+#: src/Settings.php:113
 #, php-format
 msgid ""
 "%1$s: these lines are not used because they do not start with a country code "
@@ -8400,7 +8603,7 @@ msgstr ""
 "Ländercode (z. B. „AT:“) beginnen oder nicht im erwarteten Format sind: %2$s"
 
 #. translators: 1: setting name, 2: value entered
-#: src/Settings.php:135
+#: src/Settings.php:140
 #, php-format
 msgid ""
 "%1$s \"%2$s\" was not saved: use only letters, digits, dot, hyphen and "
@@ -8410,47 +8613,47 @@ msgstr ""
 "Punkt, Bindestrich und Unterstrich (bis zu 20 Zeichen, Trennzeichen bis zu "
 "3)."
 
-#: src/Settings.php:161
+#: src/Settings.php:166
 msgid "General"
 msgstr "Allgemein"
 
-#: src/Settings.php:162 src/Settings.php:201
+#: src/Settings.php:167 src/Settings.php:206
 msgid "Delivery & downloads"
 msgstr "Zustellung & Downloads"
 
-#: src/Settings.php:163 src/Settings.php:331
+#: src/Settings.php:168 src/Settings.php:336
 msgid "Privacy & advanced"
 msgstr "Datenschutz & Erweitert"
 
-#: src/Settings.php:164
+#: src/Settings.php:169
 msgid "Integrations (API)"
 msgstr "Integrationen (API)"
 
-#: src/Settings.php:190
+#: src/Settings.php:195
 msgid "— None —"
 msgstr "— Keine —"
 
-#: src/Settings.php:203
+#: src/Settings.php:208
 msgid "Attach PDF to emails"
 msgstr "PDF an E-Mails anhängen"
 
-#: src/Settings.php:207
+#: src/Settings.php:212
 msgid "Attach the voucher PDF to voucher emails."
 msgstr "Das Gutschein-PDF an Gutschein-E-Mails anhängen."
 
-#: src/Settings.php:210
+#: src/Settings.php:215
 msgid "Download link in emails"
 msgstr "Download-Link in E-Mails"
 
-#: src/Settings.php:214
+#: src/Settings.php:219
 msgid "Include a secure download link in voucher emails."
 msgstr "Einen sicheren Download-Link in Gutschein-E-Mails einfügen."
 
-#: src/Settings.php:217
+#: src/Settings.php:222
 msgid "Download link lifetime (days)"
 msgstr "Gültigkeit des Download-Links (Tage)"
 
-#: src/Settings.php:222
+#: src/Settings.php:227
 msgid ""
 "Signed links in emails expire after this many days (default 90). Customers "
 "get a fresh link in My Account at any time; reissuing a voucher invalidates "
@@ -8461,11 +8664,11 @@ msgstr ""
 "Neuausstellung des Gutscheins macht seine alten Links ungültig. 0 = laufen "
 "nie ab (nicht empfohlen)."
 
-#: src/Settings.php:225
+#: src/Settings.php:230
 msgid "Expiry reminder (days before)"
 msgstr "Erinnerung vor Ablauf (Tage vorher)"
 
-#: src/Settings.php:230
+#: src/Settings.php:235
 msgid ""
 "Email the voucher holder once this many days before a voucher with remaining "
 "value expires. 0 = no reminders. The email text is edited under WooCommerce "
@@ -8475,28 +8678,28 @@ msgstr ""
 "Restwert per E-Mail erinnern. 0 = keine Erinnerungen. Den Text bearbeiten "
 "Sie unter WooCommerce → Einstellungen → E-Mails."
 
-#: src/Settings.php:233
+#: src/Settings.php:238
 msgid "Order confirmation"
 msgstr "Bestellbestätigung"
 
-#: src/Settings.php:237
+#: src/Settings.php:242
 msgid "Show voucher downloads on the order received page."
 msgstr "Gutschein-Downloads auf der Seite \"Bestellung erhalten\" anzeigen."
 
-#: src/Settings.php:240
+#: src/Settings.php:245
 msgid "My Account"
 msgstr "Mein Konto"
 
-#: src/Settings.php:244
+#: src/Settings.php:249
 msgid "Show voucher downloads in the My Account order details."
 msgstr ""
 "Gutschein-Downloads in den Bestelldetails unter \"Mein Konto\" anzeigen."
 
-#: src/Settings.php:247
+#: src/Settings.php:252
 msgid "My Account \"Vouchers\" tab"
 msgstr "Tab \"Gutscheine\" in \"Mein Konto\""
 
-#: src/Settings.php:251
+#: src/Settings.php:256
 msgid ""
 "Add a \"Vouchers\" tab listing all purchased vouchers with balance and "
 "status."
@@ -8504,19 +8707,19 @@ msgstr ""
 "Einen Tab \"Gutscheine\" hinzufügen, der alle gekauften Gutscheine mit "
 "Restwert und Status auflistet."
 
-#: src/Settings.php:254
+#: src/Settings.php:259
 msgid "PDF file name"
 msgstr "PDF-Dateiname"
 
-#: src/Settings.php:258
+#: src/Settings.php:263
 msgid "Placeholders are allowed, e.g. {coupon_code}, {order_number}."
 msgstr "Platzhalter sind erlaubt, z. B. {coupon_code}, {order_number}."
 
-#: src/Settings.php:261
+#: src/Settings.php:266
 msgid "Date format"
 msgstr "Datumsformat"
 
-#: src/Settings.php:265
+#: src/Settings.php:270
 msgid ""
 "PHP date format used in PDFs and emails. Leave empty to use the WordPress "
 "date format."
@@ -8524,11 +8727,11 @@ msgstr ""
 "PHP-Datumsformat für PDFs und E-Mails. Leer lassen, um das WordPress-"
 "Datumsformat zu verwenden."
 
-#: src/Settings.php:270
+#: src/Settings.php:275
 msgid "Bulk orders"
 msgstr "Sammelbestellungen"
 
-#: src/Settings.php:272
+#: src/Settings.php:277
 msgid ""
 "Many vouchers of one order line for the same recipient are sent in one email "
 "with a list of all codes instead of one email per voucher; the buyer gets "
@@ -8545,11 +8748,11 @@ msgstr ""
 "(Sammelbestellung)“; wird diese E-Mail deaktiviert, wird wieder jeder "
 "Gutschein einzeln versendet."
 
-#: src/Settings.php:275
+#: src/Settings.php:280
 msgid "One email from (vouchers)"
 msgstr "Eine E-Mail ab (Gutscheine)"
 
-#: src/Settings.php:280
+#: src/Settings.php:285
 msgid ""
 "From this many vouchers of the same order line and recipient, due at the "
 "same time, they are sent together in one email (default 5). 0 = always one "
@@ -8559,11 +8762,11 @@ msgstr ""
 "und desselben Empfängers werden sie gemeinsam in einer E-Mail versendet "
 "(Standard 5). 0 = immer eine E-Mail pro Gutschein."
 
-#: src/Settings.php:283
+#: src/Settings.php:288
 msgid "One PDF up to (vouchers)"
 msgstr "Ein PDF bis (Gutscheine)"
 
-#: src/Settings.php:288
+#: src/Settings.php:293
 msgid ""
 "A bundled email with up to this many vouchers carries one PDF with a page "
 "per voucher (default 50). Larger bundles carry no attachment but a download "
@@ -8575,11 +8778,11 @@ msgstr ""
 "Anhang, sondern einen Download-Link pro Gutschein und den Link zu „Mein "
 "Konto“. 0 = nie ein PDF an eine Sammel-E-Mail anhängen."
 
-#: src/Settings.php:298
+#: src/Settings.php:303
 msgid "External redemptions"
 msgstr "Externe Einlösungen"
 
-#: src/Settings.php:300
+#: src/Settings.php:305
 msgid ""
 "Other plugins and apps can redeem vouchers through the PHP service vcap()-"
 ">redemptions or the REST API /wp-json/vcap/v1/redemptions (see API.md)."
@@ -8588,11 +8791,11 @@ msgstr ""
 ">redemptions oder die REST-API /wp-json/vcap/v1/redemptions einlösen (siehe "
 "API.md)."
 
-#: src/Settings.php:303
+#: src/Settings.php:308
 msgid "Reservation lifetime (minutes)"
 msgstr "Gültigkeit einer Reservierung (Minuten)"
 
-#: src/Settings.php:308
+#: src/Settings.php:313
 msgid ""
 "A reserved voucher that is neither completed nor cancelled within this time "
 "is released automatically."
@@ -8600,11 +8803,11 @@ msgstr ""
 "Ein reservierter Gutschein, der in dieser Zeit weder abgeschlossen noch "
 "storniert wird, wird automatisch wieder freigegeben."
 
-#: src/Settings.php:311
+#: src/Settings.php:316
 msgid "Invalid code attempts"
 msgstr "Fehlversuche mit ungültigen Codes"
 
-#: src/Settings.php:316
+#: src/Settings.php:321
 msgid ""
 "Number of invalid codes a user may enter within 15 minutes before further "
 "attempts are blocked. 0 = no limit."
@@ -8612,15 +8815,15 @@ msgstr ""
 "Anzahl ungültiger Codes, die ein Nutzer innerhalb von 15 Minuten eingeben "
 "darf, bevor weitere Versuche gesperrt werden. 0 = keine Begrenzung."
 
-#: src/Settings.php:321
+#: src/Settings.php:326
 msgid "WP Pass Captain (tickets)"
 msgstr "WP Pass Captain (Tickets)"
 
-#: src/Settings.php:333
+#: src/Settings.php:338
 msgid "Anonymise recipient data after (days)"
 msgstr "Empfängerdaten anonymisieren nach (Tagen)"
 
-#: src/Settings.php:338
+#: src/Settings.php:343
 msgid ""
 "Recipient name, email, message and custom fields are erased this many days "
 "after a voucher has expired or been fully redeemed. 0 = keep."
@@ -8629,11 +8832,11 @@ msgstr ""
 "werden diese Anzahl von Tagen nach Ablauf oder vollständiger Einlösung eines "
 "Gutscheins gelöscht. 0 = behalten."
 
-#: src/Settings.php:341
+#: src/Settings.php:346
 msgid "Public ticket status"
 msgstr "Öffentlicher Ticketstatus"
 
-#: src/Settings.php:345
+#: src/Settings.php:350
 msgid ""
 "When a ticket QR code is opened by someone without scanning rights, show "
 "whether the ticket is valid (no personal data)."
@@ -8641,11 +8844,11 @@ msgstr ""
 "Wenn ein Ticket-QR-Code von jemandem ohne Scan-Berechtigung geöffnet wird, "
 "anzeigen, ob das Ticket gültig ist (ohne personenbezogene Daten)."
 
-#: src/Settings.php:348
+#: src/Settings.php:353
 msgid "Holder name in the scanner"
 msgstr "Name des Inhabers im Scanner"
 
-#: src/Settings.php:352
+#: src/Settings.php:357
 msgid ""
 "Show the name of the buyer or recipient when a code is scanned. Personal "
 "tickets always show the name so it can be checked. Order number and original "
@@ -8656,21 +8859,21 @@ msgstr ""
 "Bestellnummer und ursprünglicher Wert sehen nur Mitarbeitende, die "
 "Gutscheine verwalten."
 
-#: src/Settings.php:355
+#: src/Settings.php:360
 msgid "Subscription renewals"
 msgstr "Abonnement-Verlängerungen"
 
-#: src/Settings.php:359
+#: src/Settings.php:364
 msgid "Issue new vouchers for WooCommerce Subscriptions renewal orders."
 msgstr ""
 "Neue Gutscheine für Verlängerungsbestellungen von WooCommerce Subscriptions "
 "ausstellen."
 
-#: src/Settings.php:362
+#: src/Settings.php:367
 msgid "Delete data on uninstall"
 msgstr "Daten bei Deinstallation löschen"
 
-#: src/Settings.php:366
+#: src/Settings.php:371
 msgid ""
 "Remove voucher tables, templates and settings when the plugin is deleted. "
 "WooCommerce coupons are kept."
@@ -8679,7 +8882,7 @@ msgstr ""
 "gelöscht wird. WooCommerce-Codes bleiben erhalten."
 
 #. translators: %d: hours
-#: src/Settings.php:374
+#: src/Settings.php:379
 #, php-format
 msgid ""
 "Write detailed entries about issuing and deliveries to the WooCommerce log "
@@ -8690,12 +8893,12 @@ msgstr ""
 "sich nach %d Stunden selbst ab."
 
 #. translators: %s: order status
-#: src/Settings.php:391
+#: src/Settings.php:397
 #, php-format
 msgid "%s (not paid – vouchers wait for the payment)"
 msgstr "%s (nicht bezahlt – Gutscheine warten auf den Zahlungseingang)"
 
-#: src/Settings.php:397
+#: src/Settings.php:403
 msgid ""
 "Vouchers are created once per purchased item the first time an order reaches "
 "one of these statuses. Leave empty to issue manually only."
@@ -8704,7 +8907,7 @@ msgstr ""
 "Bestellung erstmals einen dieser Status erreicht. Leer lassen, um nur "
 "manuell auszustellen."
 
-#: src/Settings.php:398
+#: src/Settings.php:404
 msgid ""
 "Orders paid by cash on delivery, bank transfer or cheque issue vouchers only "
 "once the payment is confirmed: the order is completed, the payment is "
@@ -8715,7 +8918,7 @@ msgstr ""
 "abgeschlossen, die Zahlung ist erfasst oder ein bezahlter Status wird von "
 "Hand gesetzt."
 
-#: src/Settings.php:400
+#: src/Settings.php:406
 msgid ""
 "Cash on delivery is offered for virtual products: vouchers of such orders "
 "wait until the order is completed. Consider switching off \"Accept for "
@@ -8726,7 +8929,7 @@ msgstr ""
 "virtuelle Bestellungen akzeptieren“ in den Nachnahme-Einstellungen "
 "auszuschalten."
 
-#: src/Settings.php:403
+#: src/Settings.php:409
 msgid ""
 "Unpaid statuses (e.g. \"On hold\" for bank transfer) issue nothing until the "
 "payment is recorded – remove them and keep \"Processing\" and \"Completed\"."
@@ -8735,19 +8938,19 @@ msgstr ""
 "aus, bis die Zahlung erfasst ist – entfernen Sie diese und behalten Sie „In "
 "Bearbeitung“ und „Abgeschlossen“."
 
-#: src/Settings.php:406
+#: src/Settings.php:412
 msgid "Voucher issuing"
 msgstr "Gutscheinausstellung"
 
-#: src/Settings.php:408
+#: src/Settings.php:414
 msgid "Generate vouchers when order is"
 msgstr "Gutscheine erzeugen, wenn die Bestellung folgenden Status hat"
 
-#: src/Settings.php:417
+#: src/Settings.php:423
 msgid "Default redemption conditions"
 msgstr "Standard-Einlösebedingungen"
 
-#: src/Settings.php:422
+#: src/Settings.php:428
 msgid ""
 "Used when a product has no conditions of its own, e.g. \"Not exchangeable "
 "for cash. Residual value remains on the voucher.\""
@@ -8755,11 +8958,11 @@ msgstr ""
 "Gilt, wenn ein Produkt keine eigenen Bedingungen hat, z. B. „Keine "
 "Barauszahlung. Restwert bleibt auf dem Gutschein erhalten.“"
 
-#: src/Settings.php:425
+#: src/Settings.php:431
 msgid "Redemption conditions per country"
 msgstr "Einlösebedingungen pro Land"
 
-#: src/Settings.php:430
+#: src/Settings.php:436
 msgid ""
 "Optional, for shops selling to several countries. One block per country, "
 "starting with the two-letter country code and a colon, e.g. \"AT: Valid for "
@@ -8773,11 +8976,11 @@ msgstr ""
 "Produkte mit eigenen Bedingungen und Länder ohne Block verwenden die "
 "Bedingungen oben. Lassen Sie die Texte für jedes Land rechtlich prüfen."
 
-#: src/Settings.php:433
+#: src/Settings.php:439
 msgid "Statutory validity per country"
 msgstr "Gesetzliche Gültigkeit pro Land"
 
-#: src/Settings.php:438
+#: src/Settings.php:444
 msgid ""
 "Optional. One line per country: two-letter code, colon, years, and \"end\" "
 "for \"to the end of the year\" (0 = never expires), e.g. \"DE: 3 end\" or "
@@ -8793,11 +8996,11 @@ msgstr ""
 "30 Jahre). Länder ohne Regel erhalten 3 Jahre zum Jahresende. Lassen Sie die "
 "Regeln für jedes Land rechtlich prüfen."
 
-#: src/Settings.php:448
+#: src/Settings.php:454
 msgid "Default validity"
 msgstr "Standard-Gültigkeit"
 
-#: src/Settings.php:452
+#: src/Settings.php:458
 msgid ""
 "Statutory default for the buyer's country (Germany: 3 years to the end of "
 "the year, Austria: 30 years)"
@@ -8805,11 +9008,11 @@ msgstr ""
 "Gesetzliche Vorgabe für das Land des Käufers (Deutschland: 3 Jahre zum "
 "Jahresende, Österreich: 30 Jahre)"
 
-#: src/Settings.php:453
+#: src/Settings.php:459
 msgid "Fixed number of days (below)"
 msgstr "Feste Anzahl Tage (unten)"
 
-#: src/Settings.php:456
+#: src/Settings.php:462
 msgid ""
 "Used when a product does not define its own expiry. Shorter validity periods "
 "can be invalid towards consumers; have them checked legally."
@@ -8818,11 +9021,11 @@ msgstr ""
 "können gegenüber Verbrauchern unwirksam sein; lassen Sie sie rechtlich "
 "prüfen."
 
-#: src/Settings.php:459
+#: src/Settings.php:465
 msgid "Default validity (days)"
 msgstr "Standard-Gültigkeit (Tage)"
 
-#: src/Settings.php:464
+#: src/Settings.php:470
 msgid ""
 "Used with \"Fixed number of days\" when a product does not define its own "
 "expiry. 0 = never expires."
@@ -8830,11 +9033,11 @@ msgstr ""
 "Gilt bei „Feste Anzahl Tage“, wenn ein Produkt keine eigene Gültigkeit "
 "festlegt. 0 = unbegrenzt gültig."
 
-#: src/Settings.php:470
+#: src/Settings.php:476
 msgid "Abuse protection"
 msgstr "Missbrauchsschutz"
 
-#: src/Settings.php:471
+#: src/Settings.php:477
 msgid ""
 "Limits against vouchers bought with stolen payment details. 0 switches a "
 "limit off."
@@ -8842,11 +9045,11 @@ msgstr ""
 "Grenzen gegen Gutscheine, die mit gestohlenen Zahlungsdaten gekauft werden. "
 "0 schaltet eine Grenze ab."
 
-#: src/Settings.php:475
+#: src/Settings.php:481
 msgid "Default maximum of customer-chosen amounts"
 msgstr "Standard-Höchstbetrag für vom Kunden gewählte Beträge"
 
-#: src/Settings.php:481
+#: src/Settings.php:487
 msgid ""
 "Applies to \"customer chooses the amount\" products without their own "
 "maximum (shop currency). 0 = no limit."
@@ -8854,11 +9057,11 @@ msgstr ""
 "Gilt für Produkte mit „Kunde wählt den Betrag“ ohne eigenen Höchstbetrag "
 "(Shopwährung). 0 = keine Grenze."
 
-#: src/Settings.php:484
+#: src/Settings.php:490
 msgid "Maximum voucher value per customer and 24 hours"
 msgstr "Maximaler Gutscheinwert pro Kunde und 24 Stunden"
 
-#: src/Settings.php:490
+#: src/Settings.php:496
 msgid ""
 "Checked at checkout: vouchers in the cart plus vouchers ordered in the last "
 "24 hours by the same account or billing email (shop currency). 0 = no limit."
@@ -8867,11 +9070,11 @@ msgstr ""
 "den letzten 24 Stunden über dasselbe Konto oder dieselbe Rechnungs-E-Mail "
 "bestellt wurden (Shopwährung). 0 = keine Grenze."
 
-#: src/Settings.php:493
+#: src/Settings.php:499
 msgid "Hold vouchers of new customers above"
 msgstr "Gutscheine von Neukunden zurückhalten ab einem Wert über"
 
-#: src/Settings.php:499
+#: src/Settings.php:505
 msgid ""
 "Vouchers of a first order above this value are issued, but delivered and "
 "redeemable only after the hold below. 0 = off."
@@ -8880,20 +9083,20 @@ msgstr ""
 "erst nach der unten eingestellten Wartezeit zugestellt und einlösbar. 0 = "
 "aus."
 
-#: src/Settings.php:502
+#: src/Settings.php:508
 msgid "Hold for (hours)"
 msgstr "Zurückhalten für (Stunden)"
 
-#: src/Settings.php:511
+#: src/Settings.php:517
 msgid "Coupon codes"
 msgstr "Gutscheincodes"
 
-#: src/Settings.php:517 src/Settings.php:525
+#: src/Settings.php:523 src/Settings.php:531
 msgid "Letters, digits, dot, hyphen and underscore, up to 20 characters."
 msgstr ""
 "Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich, bis zu 20 Zeichen."
 
-#: src/Settings.php:533
+#: src/Settings.php:539
 msgid ""
 "Voucher codes are made at least as long as needed to be safe from guessing "
 "(about 2^50 combinations): 10 letters and digits, 11 letters or 16 digits."
@@ -8902,47 +9105,47 @@ msgstr ""
 "werden können (etwa 2^50 Kombinationen): 10 Buchstaben und Ziffern, 11 "
 "Buchstaben oder 16 Ziffern."
 
-#: src/Settings.php:537
+#: src/Settings.php:543
 msgid "Characters"
 msgstr "Zeichen"
 
-#: src/Settings.php:542
+#: src/Settings.php:548
 msgid "Letters and digits, uppercase (no ambiguous characters)"
 msgstr "Buchstaben und Ziffern, Großbuchstaben (ohne verwechselbare Zeichen)"
 
-#: src/Settings.php:543
+#: src/Settings.php:549
 msgid "Letters only, uppercase"
 msgstr "Nur Buchstaben, Großbuchstaben"
 
-#: src/Settings.php:544
+#: src/Settings.php:550
 msgid "Digits only"
 msgstr "Nur Ziffern"
 
-#: src/Settings.php:545
+#: src/Settings.php:551
 msgid "Letters and digits, mixed case"
 msgstr "Buchstaben und Ziffern, Groß- und Kleinschreibung"
 
-#: src/Settings.php:549
+#: src/Settings.php:555
 msgid "Separator"
 msgstr "Trennzeichen"
 
-#: src/Settings.php:557
+#: src/Settings.php:563
 msgid "Include order number"
 msgstr "Bestellnummer einbeziehen"
 
-#: src/Settings.php:561
+#: src/Settings.php:567
 msgid "Add the order number to the code, e.g. GIFT-1042-7KQ2M9XA."
 msgstr "Die Bestellnummer in den Code aufnehmen, z. B. GIFT-1042-7KQ2M9XA."
 
-#: src/Settings.php:565
+#: src/Settings.php:571
 msgid "Redemption"
 msgstr "Einlösung"
 
-#: src/Settings.php:567
+#: src/Settings.php:573
 msgid "Redeem page"
 msgstr "Einlöseseite"
 
-#: src/Settings.php:574
+#: src/Settings.php:580
 msgid ""
 "Page with the \"Redeem voucher\" block or [vcap_redeem]. Emails, PDFs "
 "({redeem_url}) and the customer account link there, with the code filled in. "
@@ -8952,11 +9155,11 @@ msgstr ""
 "({redeem_url}) und das Kundenkonto verlinken dorthin, mit eingetragenem "
 "Code. Ticket-Gutscheine werden auf dieser Seite gegen Tickets eingetauscht."
 
-#: src/Settings.php:577
+#: src/Settings.php:583
 msgid "Restore balance on cancellation"
 msgstr "Restwert bei Stornierung wiederherstellen"
 
-#: src/Settings.php:581
+#: src/Settings.php:587
 msgid ""
 "Give the redeemed amount back when an order that used a voucher is "
 "cancelled, refunded or failed."
@@ -8964,7 +9167,7 @@ msgstr ""
 "Den eingelösten Betrag zurückbuchen, wenn eine Bestellung, in der ein "
 "Gutschein verwendet wurde, storniert, erstattet wird oder fehlschlägt."
 
-#: src/Settings.php:588
+#: src/Settings.php:594
 msgid ""
 "Settle multi-purpose vouchers (gift cards, value vouchers sold in the shop, "
 "store credit) as a payment after tax: the order keeps the full VAT and the "
@@ -8986,11 +9189,11 @@ msgstr ""
 "Umsatzsteuer (bisheriges Verhalten). Lassen Sie die Einstellung von Ihrer "
 "Steuerberatung bestätigen."
 
-#: src/Settings.php:591
+#: src/Settings.php:597
 msgid "Void vouchers on refund"
 msgstr "Gutscheine bei Erstattung stornieren"
 
-#: src/Settings.php:595
+#: src/Settings.php:601
 msgid ""
 "Disable vouchers when the order they were bought with is fully refunded or "
 "cancelled."
@@ -8998,11 +9201,11 @@ msgstr ""
 "Gutscheine deaktivieren, wenn die Bestellung, mit der sie gekauft wurden, "
 "vollständig erstattet oder storniert wird."
 
-#: src/Settings.php:598
+#: src/Settings.php:604
 msgid "Automatic promotions"
 msgstr "Automatische Aktionen"
 
-#: src/Settings.php:602
+#: src/Settings.php:608
 msgid ""
 "Apply published promotions (Vouchers → Promotions) automatically in the "
 "cart. The discount is shown as its own line in the cart and the order; "
@@ -9012,11 +9215,11 @@ msgstr ""
 "anwenden. Der Rabatt erscheint als eigene Zeile im Warenkorb und in der "
 "Bestellung; die Katalogpreise ändern sich nicht."
 
-#: src/Settings.php:605
+#: src/Settings.php:611
 msgid "Bonus vouchers valid after (days)"
 msgstr "Bonusgutscheine gültig nach (Tagen)"
 
-#: src/Settings.php:611
+#: src/Settings.php:617
 msgid ""
 "A bonus voucher is created when the order is paid, but sent and redeemable "
 "only after this many days; a cancelled or refunded order withdraws it "
@@ -9026,7 +9229,7 @@ msgstr ""
 "so vielen Tagen gesendet und einlösbar; wird die Bestellung vorher storniert "
 "oder erstattet, wird er zurückgezogen. 0 = sofort."
 
-#: src/Settings.php:618
+#: src/Settings.php:624
 msgid ""
 "Enable store credit accounts: credit customers manually (user profile) or "
 "refund orders as store credit (order screen); customers see and use their "
@@ -9037,11 +9240,11 @@ msgstr ""
 "(Bestellansicht); Kunden sehen und nutzen ihr Kundenguthaben in „Mein Konto“ "
 "und im Warenkorb."
 
-#: src/Settings.php:621
+#: src/Settings.php:627
 msgid "Store credit with discount codes"
 msgstr "Kundenguthaben mit Rabattcodes"
 
-#: src/Settings.php:625
+#: src/Settings.php:631
 msgid ""
 "Allow store credit in the same order as discount codes. Discounts are always "
 "calculated first; gift cards and store credit then pay the remaining amount."
@@ -9050,23 +9253,23 @@ msgstr ""
 "werden immer zuerst berechnet; Geschenkkarten und Kundenguthaben bezahlen "
 "danach den Restbetrag."
 
-#: src/Settings.php:628
+#: src/Settings.php:634
 msgid "Order of gift cards and store credit"
 msgstr "Reihenfolge von Geschenkkarten und Kundenguthaben"
 
-#: src/Settings.php:633
+#: src/Settings.php:639
 msgid "Gift cards first, then store credit"
 msgstr "Erst Geschenkkarten, dann Kundenguthaben"
 
-#: src/Settings.php:634
+#: src/Settings.php:640
 msgid "Store credit first, then gift cards"
 msgstr "Erst Kundenguthaben, dann Geschenkkarten"
 
-#: src/Settings.php:638
+#: src/Settings.php:644
 msgid "Discount codes on vouchers"
 msgstr "Rabattcodes auf Gutscheine"
 
-#: src/Settings.php:642
+#: src/Settings.php:648
 msgid ""
 "Allow discount codes to reduce the price of voucher products. Vouchers keep "
 "their full face value, so a 10 % code on a 50 € voucher costs the shop 5 €."
@@ -9075,11 +9278,11 @@ msgstr ""
 "behalten ihren vollen Nennwert – ein 10-%-Code auf einen 50-€-Gutschein "
 "kostet den Shop also 5 €."
 
-#: src/Settings.php:645
+#: src/Settings.php:651
 msgid "Pay vouchers with vouchers"
 msgstr "Gutscheine mit Gutscheinen bezahlen"
 
-#: src/Settings.php:649
+#: src/Settings.php:655
 msgid ""
 "Allow vouchers and gift cards to pay for voucher products (off by default to "
 "prevent exchanging or extending vouchers)."
@@ -9088,11 +9291,11 @@ msgstr ""
 "(standardmäßig aus, um Umtausch oder Verlängerung von Gutscheinen zu "
 "verhindern)."
 
-#: src/Settings.php:652
+#: src/Settings.php:658
 msgid "Voucher links"
 msgstr "Gutschein-Links"
 
-#: src/Settings.php:656
+#: src/Settings.php:662
 msgid ""
 "Apply a coupon automatically when a customer opens a link such as https://"
 "your-shop/?gutschein=CODE (any WooCommerce coupon). The code is applied "
@@ -9103,15 +9306,15 @@ msgstr ""
 "wird einmalig, von WooCommerce geprüft und erst bei befülltem Warenkorb "
 "angewendet."
 
-#: src/Settings.php:659
+#: src/Settings.php:665
 msgid "Link parameter"
 msgstr "Link-Parameter"
 
-#: src/Settings.php:664
+#: src/Settings.php:670
 msgid "Name of the URL parameter (letters, digits, - and _)."
 msgstr "Name des URL-Parameters (Buchstaben, Ziffern, - und _)."
 
-#: src/Settings.php:671
+#: src/Settings.php:677
 msgid ""
 "Customers find their personal code in My Account → Vouchers. Friends use it "
 "on their first order; the referring customer is rewarded after the waiting "
@@ -9122,27 +9325,27 @@ msgstr ""
 "Prämie nach der Wartezeit, sobald diese Bestellung abgeschlossen und bezahlt "
 "ist. Eigene Codes können nicht verwendet werden."
 
-#: src/Settings.php:679
+#: src/Settings.php:685
 msgid "Enable referral codes"
 msgstr "Empfehlungscodes aktivieren"
 
-#: src/Settings.php:682
+#: src/Settings.php:688
 msgid "Discount for the friend"
 msgstr "Rabatt für den Freund"
 
-#: src/Settings.php:695
+#: src/Settings.php:701
 msgid "Fixed amount"
 msgstr "Fester Betrag"
 
-#: src/Settings.php:700
+#: src/Settings.php:706
 msgid "Minimum order value for the friend"
 msgstr "Mindestbestellwert für den Freund"
 
-#: src/Settings.php:705
+#: src/Settings.php:711
 msgid "automatic"
 msgstr "automatisch"
 
-#: src/Settings.php:707
+#: src/Settings.php:713
 msgid ""
 "Empty: twice a fixed discount. A fixed discount always needs an order value "
 "above it (at least the discount plus 1)."
@@ -9150,31 +9353,31 @@ msgstr ""
 "Leer: das Doppelte eines festen Rabatts. Ein fester Rabatt erfordert immer "
 "einen höheren Bestellwert (mindestens Rabatt plus 1)."
 
-#: src/Settings.php:710
+#: src/Settings.php:716
 msgid "Reward for the referrer"
 msgstr "Prämie für den Werbenden"
 
-#: src/Settings.php:718
+#: src/Settings.php:724
 msgid "Reward as"
 msgstr "Prämie als"
 
-#: src/Settings.php:723
+#: src/Settings.php:729
 msgid "Coupon by email"
 msgstr "Gutschein per E-Mail"
 
-#: src/Settings.php:724
+#: src/Settings.php:730
 msgid "Store credit (requires store credit)"
 msgstr "Kundenguthaben (erfordert die Kundenguthaben-Funktion)"
 
-#: src/Settings.php:728
+#: src/Settings.php:734
 msgid "Reward coupon valid for (days)"
 msgstr "Prämiengutschein gültig für (Tage)"
 
-#: src/Settings.php:736
+#: src/Settings.php:742
 msgid "Waiting period before the reward (days)"
 msgstr "Wartezeit bis zur Prämie (Tage)"
 
-#: src/Settings.php:742
+#: src/Settings.php:748
 msgid ""
 "Counted from the payment of the friend's order (e.g. the withdrawal period). "
 "A cancelled or refunded order earns nothing. 0 = at once."
@@ -9182,24 +9385,65 @@ msgstr ""
 "Gezählt ab Zahlung der Bestellung des Geworbenen (z. B. die Widerrufsfrist). "
 "Eine stornierte oder erstattete Bestellung bringt keine Prämie. 0 = sofort."
 
-#: src/Settings.php:745
+#: src/Settings.php:751
 msgid "Rewards per referrer and 30 days"
 msgstr "Prämien pro Werbendem und 30 Tage"
 
-#: src/Settings.php:751
+#: src/Settings.php:757
 msgid "0 = unlimited."
 msgstr "0 = unbegrenzt."
 
-#: src/Settings.php:754
+#: src/Settings.php:760
 msgid "Address check"
 msgstr "Adressprüfung"
 
-#: src/Settings.php:758
+#: src/Settings.php:764
 msgid ""
 "No reward when the friend's billing address is the referrer's own address"
 msgstr ""
 "Keine Prämie, wenn die Rechnungsadresse des Geworbenen die eigene Adresse "
 "des Werbenden ist"
+
+#: src/Settings.php:780
+msgid "Counter limits (scanner)"
+msgstr "Kassenlimits (Scanner)"
+
+#: src/Settings.php:781
+msgid ""
+"Daily limits for redemptions at the counter, per shop day (shop time zone). "
+"0 = unlimited. Staff who manage vouchers are not limited; a staff member can "
+"get own limits on their user profile. The amount counts gift cards and value "
+"vouchers in the currency of the voucher being redeemed."
+msgstr ""
+"Tageslimits für Einlösungen an der Kasse, je Shop-Tag (Zeitzone des Shops). "
+"0 = unbegrenzt. Personal, das Gutscheine verwaltet, ist nicht begrenzt; "
+"einzelne Mitarbeiter können in ihrem Benutzerprofil eigene Limits erhalten. "
+"Der Betrag zählt Geschenkkarten und Wertgutscheine in der Währung des "
+"eingelösten Gutscheins."
+
+#: src/Settings.php:785
+msgid "Amount per staff member and day"
+msgstr "Betrag pro Mitarbeiter und Tag"
+
+#: src/Settings.php:793
+msgid "Redemptions per staff member and day"
+msgstr "Einlösungen pro Mitarbeiter und Tag"
+
+#: src/Settings.php:801
+msgid "Amount per till/branch and day"
+msgstr "Betrag pro Kasse/Filiale und Tag"
+
+#: src/Settings.php:807
+msgid ""
+"Counts by the till/branch set on the scanner device; devices without one "
+"share one limit."
+msgstr ""
+"Zählt nach der am Scanner-Gerät eingestellten Kasse/Filiale; Geräte ohne "
+"Kasse teilen sich ein Limit."
+
+#: src/Settings.php:810
+msgid "Redemptions per till/branch and day"
+msgstr "Einlösungen pro Kasse/Filiale und Tag"
 
 #: src/Shortcodes.php:60
 msgid "Button text"
@@ -10069,8 +10313,8 @@ msgstr ""
 "Dieser Gutschein steckt gerade in einer unbezahlten Shop-Bestellung. Erst "
 "einlösen, wenn diese Bestellung storniert ist."
 
-#: src/Tickets.php:376 src/Tickets.php:440 src/Tickets.php:595
-#: src/Tickets.php:692 src/Tickets.php:1017
+#: src/Tickets.php:376 src/Tickets.php:440 src/Tickets.php:716
+#: src/Tickets.php:813 src/Tickets.php:1195
 msgid "No voucher or ticket found for this code."
 msgstr "Für diesen Code wurde kein Gutschein und kein Ticket gefunden."
 
@@ -10094,15 +10338,22 @@ msgstr ""
 msgid "Please enter a reason for reverting this check-in."
 msgstr "Bitte geben Sie einen Grund für die Rücknahme des Check-ins an."
 
-#: src/Tickets.php:476 src/VoucherRepository.php:810
+#: src/Tickets.php:476 src/VoucherRepository.php:824
 msgid "Check-in reverted"
 msgstr "Check-in rückgängig gemacht"
 
-#: src/Tickets.php:479 src/Tickets.php:1075
+#: src/Tickets.php:479 src/Tickets.php:1253
 msgid "Check-in not possible."
 msgstr "Check-in nicht möglich."
 
-#: src/Tickets.php:519
+#: src/Tickets.php:524 src/Tickets.php:531 src/Tickets.php:547
+msgid ""
+"This action is still being processed. Please wait a moment and try again."
+msgstr ""
+"Diese Aktion wird noch verarbeitet. Bitte warten Sie einen Moment und "
+"versuchen Sie es erneut."
+
+#: src/Tickets.php:527
 msgid ""
 "This scanner request was already used for another action. Please scan the "
 "code again."
@@ -10110,14 +10361,7 @@ msgstr ""
 "Diese Scanner-Anfrage wurde bereits für eine andere Aktion verwendet. Bitte "
 "scannen Sie den Code erneut."
 
-#: src/Tickets.php:523 src/Tickets.php:540
-msgid ""
-"This action is still being processed. Please wait a moment and try again."
-msgstr ""
-"Diese Aktion wird noch verarbeitet. Bitte warten Sie einen Moment und "
-"versuchen Sie es erneut."
-
-#: src/Tickets.php:534
+#: src/Tickets.php:542
 msgid ""
 "This action was already booked (found in the voucher history). Do not repeat "
 "it."
@@ -10126,7 +10370,7 @@ msgstr ""
 "nicht wiederholen."
 
 #. translators: %d: number of decimal places of the currency
-#: src/Tickets.php:662
+#: src/Tickets.php:783
 #, php-format
 msgid ""
 "Not deducted: the amount has more decimal places than the currency allows "
@@ -10135,15 +10379,15 @@ msgstr ""
 "Nicht abgebucht: Der Betrag hat mehr Nachkommastellen, als die Währung "
 "erlaubt (%d)."
 
-#: src/Tickets.php:664
+#: src/Tickets.php:785
 msgid "Not deducted: this voucher has been cancelled."
 msgstr "Nicht abgebucht: Dieser Gutschein wurde storniert."
 
-#: src/Tickets.php:666
+#: src/Tickets.php:787
 msgid "Not deducted: this voucher has expired."
 msgstr "Nicht abgebucht: Dieser Gutschein ist abgelaufen."
 
-#: src/Tickets.php:668
+#: src/Tickets.php:789
 msgid ""
 "Not deducted: this voucher is being redeemed elsewhere right now. Please try "
 "again in a moment."
@@ -10151,19 +10395,19 @@ msgstr ""
 "Nicht abgebucht: Dieser Gutschein wird gerade an anderer Stelle eingelöst. "
 "Bitte versuchen Sie es gleich noch einmal."
 
-#: src/Tickets.php:670
+#: src/Tickets.php:791
 msgid "Not deducted: this voucher has not been delivered yet."
 msgstr "Nicht abgebucht: Dieser Gutschein wurde noch nicht zugestellt."
 
-#: src/Tickets.php:672
+#: src/Tickets.php:793
 msgid "Not deducted: the balance is used up."
 msgstr "Nicht abgebucht: Der Restwert ist aufgebraucht."
 
-#: src/Tickets.php:676
+#: src/Tickets.php:797
 msgid "Not deducted: this voucher is not active."
 msgstr "Nicht abgebucht: Dieser Gutschein ist nicht aktiv."
 
-#: src/Tickets.php:678
+#: src/Tickets.php:799
 msgid ""
 "Not deducted: the database cannot deduct balances safely (no transaction "
 "support). Please contact the shop administrator."
@@ -10171,18 +10415,18 @@ msgstr ""
 "Nicht abgebucht: Die Datenbank kann Restwerte nicht sicher abbuchen (keine "
 "Transaktionen). Bitte wenden Sie sich an die Shop-Administration."
 
-#: src/Tickets.php:680
+#: src/Tickets.php:801
 msgid "Not deducted: the balance could not be updated. Please try again."
 msgstr ""
 "Nicht abgebucht: Der Restwert konnte nicht aktualisiert werden. Bitte "
 "versuchen Sie es erneut."
 
-#: src/Tickets.php:718
+#: src/Tickets.php:839
 msgid "This voucher is not active."
 msgstr "Dieser Gutschein ist nicht aktiv."
 
 #. translators: 1: amount deducted, 2: amount still to be paid in another way, 3: remaining balance
-#: src/Tickets.php:771
+#: src/Tickets.php:909
 #, php-format
 msgid ""
 "Partially redeemed: %1$s deducted, %2$s still to be paid otherwise. "
@@ -10192,54 +10436,42 @@ msgstr ""
 "Restwert: %3$s."
 
 #. translators: 1: amount deducted, 2: remaining balance
-#: src/Tickets.php:774
+#: src/Tickets.php:912
 #, php-format
 msgid "Redeemed: %1$s deducted. Remaining balance: %2$s."
 msgstr "Eingelöst: %1$s abgebucht. Restwert: %2$s."
 
-#: src/Tickets.php:787 src/Voucher.php:64 src/VoucherRepository.php:804
+#: src/Tickets.php:935 src/Voucher.php:64 src/VoucherRepository.php:818
 msgid "Redeemed"
 msgstr "Eingelöst"
 
-#: src/Tickets.php:797
+#: src/Tickets.php:961
 msgid "Redeemed in store"
 msgstr "Im Geschäft eingelöst"
 
-#. translators: %s: receipt number of the till
-#: src/Tickets.php:800
-#, php-format
-msgid "Receipt %s"
-msgstr "Beleg %s"
-
-#. translators: %s: till or branch name
-#: src/Tickets.php:804
-#, php-format
-msgid "Till %s"
-msgstr "Kasse %s"
-
-#: src/Tickets.php:918
+#: src/Tickets.php:1082
 msgid "Please enter a reason for the cancellation."
 msgstr "Bitte geben Sie einen Grund für die Stornierung an."
 
-#: src/Tickets.php:920
+#: src/Tickets.php:1084
 msgid ""
 "This redemption belongs to a shop order. Cancel or refund the order instead."
 msgstr ""
 "Diese Einlösung gehört zu einer Shop-Bestellung. Stornieren oder erstatten "
 "Sie stattdessen die Bestellung."
 
-#: src/Tickets.php:922
+#: src/Tickets.php:1086
 msgid "This redemption has already been cancelled."
 msgstr "Diese Einlösung wurde bereits storniert."
 
-#: src/Tickets.php:924
+#: src/Tickets.php:1088
 msgid ""
 "The voucher has been cancelled; its redemptions cannot be cancelled any more."
 msgstr ""
 "Der Gutschein wurde storniert; seine Einlösungen können nicht mehr storniert "
 "werden."
 
-#: src/Tickets.php:926
+#: src/Tickets.php:1090
 msgid ""
 "Only a manager, or the person who booked it shortly before, can cancel this "
 "redemption."
@@ -10247,37 +10479,37 @@ msgstr ""
 "Nur die Leitung oder die Person, die kurz zuvor gebucht hat, kann diese "
 "Einlösung stornieren."
 
-#: src/Tickets.php:928
+#: src/Tickets.php:1092
 msgid ""
 "The voucher has been used again since then. Correct the balance instead."
 msgstr ""
 "Der Gutschein wurde seitdem erneut verwendet. Korrigieren Sie stattdessen "
 "den Restwert."
 
-#: src/Tickets.php:930
+#: src/Tickets.php:1094
 msgid "The cancellation could not be saved. Please try again."
 msgstr ""
 "Die Stornierung konnte nicht gespeichert werden. Bitte versuchen Sie es "
 "erneut."
 
-#: src/Tickets.php:932
+#: src/Tickets.php:1096
 msgid "This redemption cannot be cancelled."
 msgstr "Diese Einlösung kann nicht storniert werden."
 
 #. translators: 1: history entry number of the redemption, 2: reason
-#: src/Tickets.php:974
+#: src/Tickets.php:1138
 #, php-format
 msgid "Cancels redemption #%1$d: %2$s"
 msgstr "Storniert Einlösung #%1$d: %2$s"
 
 #. translators: %s: amount booked back
-#: src/Tickets.php:1040
+#: src/Tickets.php:1218
 #, php-format
 msgid "Redemption cancelled: %s booked back."
 msgstr "Einlösung storniert: %s zurückgebucht."
 
 #. translators: %d: number of admissions
-#: src/Tickets.php:1075
+#: src/Tickets.php:1253
 #, php-format
 msgid "Checked in (%d admission)"
 msgid_plural "Checked in (%d admissions)"
@@ -10553,118 +10785,118 @@ msgstr ""
 "Der Mindestbestellwert für den Gutscheincode „%1$s“ beträgt %2$s. "
 "Gutscheinprodukte im Warenkorb zählen nicht dazu."
 
-#: src/VoucherRepository.php:784
+#: src/VoucherRepository.php:798
 msgid "Balance reserved for payment"
 msgstr "Restwert für Zahlung reserviert"
 
-#: src/VoucherRepository.php:785
+#: src/VoucherRepository.php:799
 msgid ""
 "Used in a shop order although already redeemed elsewhere – check the order"
 msgstr ""
 "In einer Shop-Bestellung verwendet, obwohl bereits anderswo eingelöst – "
 "Bestellung prüfen"
 
-#: src/VoucherRepository.php:786
+#: src/VoucherRepository.php:800
 msgid "Balance reservation committed"
 msgstr "Reservierung des Restwerts verbucht"
 
-#: src/VoucherRepository.php:787
+#: src/VoucherRepository.php:801
 msgid "Balance reservation released"
 msgstr "Reservierung des Restwerts freigegeben"
 
-#: src/VoucherRepository.php:788
+#: src/VoucherRepository.php:802
 msgid "Reserved for external redemption"
 msgstr "Für externe Einlösung reserviert"
 
-#: src/VoucherRepository.php:789
+#: src/VoucherRepository.php:803
 msgid "Redeemed externally"
 msgstr "Extern eingelöst"
 
-#: src/VoucherRepository.php:790
+#: src/VoucherRepository.php:804
 msgid "External reservation released"
 msgstr "Externe Reservierung freigegeben"
 
-#: src/VoucherRepository.php:791
+#: src/VoucherRepository.php:805
 msgid "External redemption refunded"
 msgstr "Externe Einlösung erstattet"
 
-#: src/VoucherRepository.php:792
+#: src/VoucherRepository.php:806
 msgid "Delivery scheduled"
 msgstr "Zustellung geplant"
 
-#: src/VoucherRepository.php:794
+#: src/VoucherRepository.php:808
 msgid "Delivery failed"
 msgstr "Zustellung fehlgeschlagen"
 
-#: src/VoucherRepository.php:795
+#: src/VoucherRepository.php:809
 msgid "Delivery given up (no more automatic attempts)"
 msgstr "Zustellung aufgegeben (keine automatischen Versuche mehr)"
 
-#: src/VoucherRepository.php:796
+#: src/VoucherRepository.php:810
 msgid "Not delivered: already expired"
 msgstr "Nicht zugestellt: bereits abgelaufen"
 
-#: src/VoucherRepository.php:797
+#: src/VoucherRepository.php:811
 msgid "Delivered without PDF"
 msgstr "Ohne PDF zugestellt"
 
-#: src/VoucherRepository.php:798
+#: src/VoucherRepository.php:812
 msgid "Expiry reminder"
 msgstr "Erinnerung vor Ablauf"
 
-#: src/VoucherRepository.php:799
+#: src/VoucherRepository.php:813
 msgid "Credit added"
 msgstr "Kundenguthaben gutgeschrieben"
 
-#: src/VoucherRepository.php:800
+#: src/VoucherRepository.php:814
 msgid "Credit removed"
 msgstr "Kundenguthaben belastet"
 
-#: src/VoucherRepository.php:801
+#: src/VoucherRepository.php:815
 msgid "Refunded as store credit"
 msgstr "Als Kundenguthaben erstattet"
 
-#: src/VoucherRepository.php:802
+#: src/VoucherRepository.php:816
 msgid "Store credit refund reversed"
 msgstr "Erstattung als Kundenguthaben zurückgebucht"
 
-#: src/VoucherRepository.php:803
+#: src/VoucherRepository.php:817
 msgid "Email resent"
 msgstr "E-Mail erneut gesendet"
 
-#: src/VoucherRepository.php:805
+#: src/VoucherRepository.php:819
 msgid "Redemption cancelled (value booked back)"
 msgstr "Einlösung storniert (Wert zurückgebucht)"
 
-#: src/VoucherRepository.php:806
+#: src/VoucherRepository.php:820
 msgid "Balance restored"
 msgstr "Restwert wiederhergestellt"
 
-#: src/VoucherRepository.php:807
+#: src/VoucherRepository.php:821
 msgid "Balance adjusted"
 msgstr "Restwert angepasst"
 
-#: src/VoucherRepository.php:808
+#: src/VoucherRepository.php:822
 msgid "Rounding rest booked off"
 msgstr "Rundungsrest ausgebucht"
 
-#: src/VoucherRepository.php:811
+#: src/VoucherRepository.php:825
 msgid "Voided"
 msgstr "Storniert"
 
-#: src/VoucherRepository.php:812
+#: src/VoucherRepository.php:826
 msgid "Reactivated"
 msgstr "Reaktiviert"
 
-#: src/VoucherRepository.php:814
+#: src/VoucherRepository.php:828
 msgid "Edited"
 msgstr "Bearbeitet"
 
-#: src/VoucherRepository.php:815
+#: src/VoucherRepository.php:829
 msgid "Downloaded"
 msgstr "Heruntergeladen"
 
-#: src/VoucherRepository.php:816
+#: src/VoucherRepository.php:830
 msgid "Reissued with a new code"
 msgstr "Mit neuem Code neu ausgestellt"
 
@@ -10699,7 +10931,7 @@ msgstr "Alle Gutscheine in Ihrem Konto:"
 msgid "Code: %s"
 msgstr "Code: %s"
 
-#: templates/emails/plain/voucher.php:51
+#: templates/emails/plain/voucher.php:54
 msgid "Redeem now:"
 msgstr "Jetzt einlösen:"
 
@@ -10732,7 +10964,7 @@ msgstr "Ticket herunterladen (PDF)"
 msgid "Download voucher (PDF)"
 msgstr "Gutschein herunterladen (PDF)"
 
-#: templates/emails/voucher.php:92
+#: templates/emails/voucher.php:101
 msgid "Redeem now"
 msgstr "Jetzt einlösen"
 
@@ -10772,25 +11004,25 @@ msgstr "Geschenk"
 msgid "Download PDF"
 msgstr "PDF herunterladen"
 
-#: templates/myaccount/vouchers-table.php:108
+#: templates/myaccount/vouchers-table.php:112
 msgid "Change recipient or date"
 msgstr "Empfänger oder Datum ändern"
 
-#: templates/myaccount/vouchers-table.php:116
+#: templates/myaccount/vouchers-table.php:120
 msgid "Save changes"
 msgstr "Änderungen speichern"
 
-#: templates/myaccount/vouchers-table.php:127
+#: templates/myaccount/vouchers-table.php:131
 msgid "To me"
 msgstr "An mich"
 
 #. translators: %s: recipient email
-#: templates/myaccount/vouchers-table.php:128
+#: templates/myaccount/vouchers-table.php:132
 #, php-format
 msgid "To %s"
 msgstr "An %s"
 
-#: templates/myaccount/vouchers-table.php:132
+#: templates/myaccount/vouchers-table.php:136
 msgid "Send email again"
 msgstr "E-Mail erneut senden"
 
