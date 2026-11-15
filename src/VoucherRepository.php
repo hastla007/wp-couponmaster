@@ -273,7 +273,7 @@ final class VoucherRepository {
 	 *
 	 * @return Voucher[]
 	 */
-	public function for_customer( int $user_id, int $limit = 200, int $offset = 0 ): array {
+	public function for_customer( int $user_id, int $limit = 200, int $offset = 0, string $verified_email = '' ): array {
 		global $wpdb;
 		if ( $user_id <= 0 ) {
 			return array();
@@ -281,6 +281,14 @@ final class VoucherRepository {
 		// B15: a page of the list ($offset vouchers skipped, newest first).
 		$offset = max( 0, $offset );
 		$limit += $offset;
+		// M12-18: guest orders placed with the account's verified address (PersonalVoucher::verified_email()) belong
+		// to the buyer as well – only with a proven mailbox, never with a merely claimed account email.
+		$guest = array();
+		$ids   = is_email( $verified_email ) ? $this->guest_order_ids( $verified_email ) : array();
+		if ( $ids ) {
+			$in    = implode( ',', $ids );
+			$guest = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->table()} WHERE order_id IN ($in) ORDER BY id DESC LIMIT %d", $limit ), ARRAY_A ) ?: array(); // phpcs:ignore
+		}
 		// Page through all of the customer's orders (newest first) until enough vouchers are found: customers
 		// with many orders (e.g. regulars) must still see vouchers bought long ago.
 		$rows = array();
@@ -305,7 +313,64 @@ final class VoucherRepository {
 				break;
 			}
 		}
+		if ( $guest ) {
+			$rows = array_merge( $rows, $guest );
+			usort( $rows, static fn( $a, $b ) => (int) $b['id'] <=> (int) $a['id'] );
+			$rows = array_slice( $rows, 0, $limit );
+		}
 		return array_map( array( Voucher::class, 'from_row' ), array_slice( $rows, $offset ) );
+	}
+
+	/**
+	 * M12-18: ids of guest orders (no customer account) whose vouchers were bought with this address (at most 500,
+	 * newest first).
+	 *
+	 * @return int[]
+	 */
+	private function guest_order_ids( string $email ): array {
+		global $wpdb;
+		$ids = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT order_id FROM {$this->table()} WHERE buyer_email = %s AND order_id > 0 ORDER BY order_id DESC LIMIT 500", $email ) ) ); // phpcs:ignore
+		if ( ! $ids || ! function_exists( 'wc_get_orders' ) ) {
+			return array();
+		}
+		$guest = array();
+		foreach ( (array) wc_get_orders( array( 'post__in' => $ids, 'limit' => count( $ids ), 'type' => 'shop_order', 'status' => array_keys( wc_get_order_statuses() ) ) ) as $order ) {
+			if ( $order instanceof \WC_Order && 0 === (int) $order->get_customer_id() && 0 === strcasecmp( trim( (string) $order->get_billing_email() ), trim( $email ) ) ) {
+				$guest[] = (int) $order->get_id();
+			}
+		}
+		return $guest;
+	}
+
+	/**
+	 * M12-18: vouchers addressed to a customer as gift recipient – by the account's verified address only
+	 * (PersonalVoucher::verified_email(); an unproven account email would list gifts of a claimed address). Not the
+	 * customer's own orders (listed as bought), no store credit and no gift that is still scheduled (a surprise is
+	 * not spoiled before its delivery date). Newest first.
+	 *
+	 * @return Voucher[]
+	 */
+	public function received_by( string $verified_email, int $user_id, int $limit = 20, int $offset = 0 ): array {
+		global $wpdb;
+		if ( ! is_email( $verified_email ) ) {
+			return array();
+		}
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->table()} WHERE recipient_email = %s AND send_to IN ('recipient','both') AND type <> 'credit' AND status <> 'scheduled' AND buyer_email <> %s ORDER BY id DESC LIMIT %d OFFSET %d", $verified_email, $verified_email, max( 1, $limit ) + 50, max( 0, $offset ) ), ARRAY_A ) ?: array(); // phpcs:ignore
+		$list = array_map( array( Voucher::class, 'from_row' ), $rows );
+		Voucher::prime_orders( $list );
+		$out = array();
+		foreach ( $list as $voucher ) {
+			$order = $voucher->order();
+			if ( $user_id > 0 && $order instanceof \WC_Order && (int) $order->get_customer_id() === $user_id ) {
+				continue; // Bought with the account: in the list of bought vouchers.
+			}
+			$out[] = $voucher;
+			if ( count( $out ) >= max( 1, $limit ) ) {
+				break;
+			}
+		}
+		Voucher::forget_orders();
+		return $out;
 	}
 
 	/**

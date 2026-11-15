@@ -58,31 +58,53 @@ final class Delivery {
 	public static function compute_time( array $config, array $fields, ?\WC_Order $order = null ): ?string {
 		$tz       = wp_timezone();
 		$hour     = self::delivery_hour();
-		$ts       = null;
 		$customer = (string) ( $fields['delivery_date']['value'] ?? '' );
 		$mode     = '' !== $customer && self::customer_date_enabled( $config ) ? 'customer' : (string) $config['delivery'];
+		$ts       = self::mode_timestamp( $mode, $config, $customer, $order, $hour, $tz );
+		if ( 'customer' === $mode && in_array( (string) $config['delivery'], array( 'date', 'delay' ), true ) ) {
+			// M12-16: a date the customer chose never brings a presale date or a waiting period of the shop forward.
+			$shop = self::mode_timestamp( (string) $config['delivery'], $config, '', $order, $hour, $tz );
+			if ( $shop && ( ! $ts || $ts < $shop ) ) {
+				$ts = $shop;
+			}
+		}
+		$ts = apply_filters( 'vcap_delivery_timestamp', $ts, $config, $fields, $order );
+		return $ts && $ts > time() ? gmdate( 'Y-m-d H:i:s', (int) $ts ) : null;
+	}
+
+	/** Delivery time of one mode ("delay", "date", "customer" with the customer's local date), null for none. */
+	private static function mode_timestamp( string $mode, array $config, string $customer, ?\WC_Order $order, int $hour, \DateTimeZone $tz ): ?int {
 		switch ( $mode ) {
 			case 'delay':
 				$days = (int) $config['delivery_delay_days'];
 				if ( $days > 0 ) {
 					$base = $order && $order->get_date_created() ? $order->get_date_created()->getTimestamp() : time();
-					$ts   = $base + $days * DAY_IN_SECONDS;
+					return $base + $days * DAY_IN_SECONDS;
 				}
-				break;
+				return null;
 			case 'date':
-				if ( $config['delivery_date'] ) {
-					$ts = self::local_date_ts( (string) $config['delivery_date'], $hour, $tz );
-				}
-				break;
+				return $config['delivery_date'] ? self::local_date_ts( (string) $config['delivery_date'], $hour, $tz ) : null;
 			case 'customer':
-				$date = (string) ( $fields['delivery_date']['value'] ?? '' );
-				if ( $date ) {
-					$ts = self::local_date_ts( $date, $hour, $tz );
-				}
-				break;
+				return '' !== $customer ? self::local_date_ts( $customer, $hour, $tz ) : null;
 		}
-		$ts = apply_filters( 'vcap_delivery_timestamp', $ts, $config, $fields, $order );
-		return $ts && $ts > time() ? gmdate( 'Y-m-d H:i:s', (int) $ts ) : null;
+		return null;
+	}
+
+	/**
+	 * M12-16: earliest local date ("Y-m-d") a customer may choose as delivery date – on the product page and when
+	 * changing it in My Account: today, and in the modes "date"/"delay" never before the shop's own delivery date
+	 * (presale, waiting period), see compute_time().
+	 */
+	public static function earliest_customer_date( array $config, ?\WC_Order $order = null ): string {
+		$today = wp_date( 'Y-m-d' );
+		if ( in_array( (string) ( $config['delivery'] ?? '' ), array( 'date', 'delay' ), true ) ) {
+			$shop = self::mode_timestamp( (string) $config['delivery'], $config, '', $order, self::delivery_hour(), wp_timezone() );
+			$day  = $shop ? (string) wp_date( 'Y-m-d', $shop ) : '';
+			if ( $day > $today ) {
+				return $day;
+			}
+		}
+		return $today;
 	}
 
 	/** Order meta: V7 hold of a new customer's vouchers – Unix time until which they are held, 0 for none. */
@@ -151,9 +173,9 @@ final class Delivery {
 		return $dt ? $dt->setTime( $hour, 0 )->getTimestamp() : null;
 	}
 
-	/** Local hour at which dated deliveries go out (filter "vcap_delivery_hour"). */
+	/** Local hour at which dated deliveries go out (setting "vcap_delivery_hour", default 8; filter "vcap_delivery_hour"). */
 	public static function delivery_hour(): int {
-		return max( 0, min( 23, (int) apply_filters( 'vcap_delivery_hour', 8 ) ) );
+		return max( 0, min( 23, (int) apply_filters( 'vcap_delivery_hour', (int) Settings::value( 'vcap_delivery_hour' ) ) ) );
 	}
 
 	/** Does the product page ask for a delivery date (mode "customer", or the built-in field switched on)? */
@@ -170,9 +192,14 @@ final class Delivery {
 	 */
 	public static function latest_delivery_date( array $config, ?int $from = null, string $country = '' ): ?string {
 		$expiry = ProductConfig::expiry_for( $config, $from ?? time(), $country );
-		if ( ! $expiry ) {
-			return null;
-		}
+		return $expiry ? self::latest_date_before( $expiry, $config ) : null;
+	}
+
+	/**
+	 * Last local date ("Y-m-d") on which a voucher that ends at $expiry (UTC) may still be delivered, at least
+	 * "vcap_delivery_min_validity_days" days before its end (M12-16: the same rule for a voucher already issued).
+	 */
+	public static function latest_date_before( string $expiry, array $config ): string {
 		$tz      = wp_timezone();
 		$min     = max( 0, (int) apply_filters( 'vcap_delivery_min_validity_days', 0, $config ) );
 		$limit   = (int) strtotime( $expiry . ' UTC' ) - $min * DAY_IN_SECONDS;

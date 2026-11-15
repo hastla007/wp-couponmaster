@@ -378,7 +378,15 @@ wc_clear_notices();
 wp_set_current_user( 0 );
 
 // H10: until delivery the buyer may correct the recipient email and the delivery date; logged; coupon follows.
-$h10_order   = vcap_acct_order( $personal, $buyer, $login . '@example.com' );
+// M12-16: the date only where the product lets the customer choose one (here the delivery date field).
+$h10_product = vcap_acct_product(
+	array(
+		'transferable'   => 'no',
+		'email_restrict' => 'none',
+		'builtin_fields' => array( 'recipient_name', 'recipient_email', 'message', 'delivery_date' ),
+	)
+);
+$h10_order   = vcap_acct_order( $h10_product, $buyer, $login . '@example.com' );
 $h10_voucher = vcap()->issuer->issue_for_order( $h10_order )[0];
 $h10_voucher                  = vcap()->vouchers->get( $h10_voucher->id );
 $h10_voucher->recipient_email = 'anna@gmial.com';
@@ -404,7 +412,80 @@ $h10_new->delivered_at = gmdate( 'Y-m-d H:i:s' );
 $h10_new->status       = VCAP\Voucher::STATUS_ACTIVE;
 vcap()->vouchers->update( $h10_new );
 vcap_acct_assert( ! vcap()->downloads->customer_can_change( vcap()->vouchers->get( $h10_new->id ) ) && '' !== vcap()->downloads->change_delivery( $h10_new, 'x@example.com', '' ), 'H10: after delivery the gift can no longer be changed' );
+
+// M12-16: a delivery date set by the shop (mode "date", presale) cannot be brought forward by the buyer.
+$m16_shop_day = wp_date( 'Y-m-d', time() + 20 * DAY_IN_SECONDS );
+$m16_product  = vcap_acct_product( array( 'delivery' => 'date', 'delivery_date' => $m16_shop_day, 'email_restrict' => 'none' ) );
+$m16_voucher  = vcap()->vouchers->get( vcap()->issuer->issue_for_order( vcap_acct_order( $m16_product, $buyer, $login . '@example.com' ) )[0]->id );
+$m16_before   = (string) $m16_voucher->delivery_at;
+vcap_acct_assert( VCAP\Voucher::STATUS_SCHEDULED === $m16_voucher->status && $m16_shop_day === VCAP\LocalDate::from_utc( $m16_before, 'Y-m-d' ), 'M12-16: a presale voucher is scheduled for the shop date' );
+vcap_acct_assert( vcap()->downloads->customer_can_change( $m16_voucher ) && ! vcap()->downloads->customer_can_change_date( $m16_voucher ) && ! vcap()->downloads->change_options( $m16_voucher )['date'], 'M12-16: without a customer date the date is not offered for change' );
+$m16_err = vcap()->downloads->change_delivery( $m16_voucher, '', wp_date( 'Y-m-d', time() + DAY_IN_SECONDS ) );
+vcap_acct_assert( '' !== $m16_err && $m16_before === (string) vcap()->vouchers->get( $m16_voucher->id )->delivery_at, 'M12-16: a presale date cannot be brought forward to tomorrow (' . $m16_err . ')' );
+vcap_acct_assert( '' !== vcap()->downloads->change_delivery( $m16_voucher, '', '', array( 'send_now' => true ) ) && $m16_before === (string) vcap()->vouchers->get( $m16_voucher->id )->delivery_at, 'M12-16: nor sent right away' );
+// With the delivery date field in mode "date": never before the shop date (product page and account), not after the expiry.
+$m16_cfg = VCAP\ProductConfig::get( vcap_acct_product( array( 'delivery' => 'date', 'delivery_date' => $m16_shop_day, 'builtin_fields' => array( 'delivery_date' ) ) ) );
+vcap_acct_assert( $m16_shop_day === VCAP\Delivery::earliest_customer_date( $m16_cfg ) && $m16_shop_day === VCAP\LocalDate::from_utc( (string) VCAP\Delivery::compute_time( $m16_cfg, array( 'delivery_date' => array( 'value' => wp_date( 'Y-m-d', time() + 2 * DAY_IN_SECONDS ) ) ) ), 'Y-m-d' ), 'M12-16: a customer date never comes before the shop date (earliest date and computed time)' );
+$m16_late_product = vcap_acct_product( array( 'delivery' => 'date', 'delivery_date' => $m16_shop_day, 'builtin_fields' => array( 'delivery_date' ) ) );
+$_POST['vcap_fields'] = array( 'delivery_date' => wp_date( 'Y-m-d', time() + 2 * DAY_IN_SECONDS ) );
+$m16_errors = vcap()->fields->errors( $m16_late_product );
+$_POST['vcap_fields'] = array( 'delivery_date' => wp_date( 'Y-m-d', time() + 25 * DAY_IN_SECONDS ) );
+$m16_ok = vcap()->fields->errors( $m16_late_product );
+unset( $_POST['vcap_fields'] );
+vcap_acct_assert( 1 === count( $m16_errors ) && ! $m16_ok, 'M12-16: the product page refuses a date before the presale date and accepts a later one', array( $m16_errors, $m16_ok ) );
+// Mode "customer": the minimum is today (as on the product page), the maximum the last day before the expiry.
+$m16_cust = vcap()->vouchers->get( vcap()->issuer->issue_for_order( vcap_acct_order( vcap_acct_product( array( 'delivery' => 'customer', 'expiry_mode' => 'days', 'expiry_days' => 30 ) ), $buyer, $login . '@example.com' ) )[0]->id );
+vcap()->delivery->reschedule( $m16_cust, gmdate( 'Y-m-d H:i:s', time() + 5 * DAY_IN_SECONDS ) );
+$m16_cust = vcap()->vouchers->get( $m16_cust->id );
+$m16_opts = vcap()->downloads->change_options( $m16_cust );
+vcap_acct_assert( $m16_opts['date'] && wp_date( 'Y-m-d' ) === $m16_opts['min'] && $m16_opts['max'] < wp_date( 'Y-m-d', time() + 31 * DAY_IN_SECONDS ) && $m16_opts['send_now'], 'M12-16: with a customer date the form offers today up to the last day before the expiry', $m16_opts );
+vcap_acct_assert( '' !== vcap()->downloads->change_delivery( $m16_cust, '', wp_date( 'Y-m-d', time() + 40 * DAY_IN_SECONDS ) ), 'M12-16: a date after the expiry is refused' );
+vcap_acct_assert( '' === vcap()->downloads->change_delivery( $m16_cust, '', wp_date( 'Y-m-d', time() + 10 * DAY_IN_SECONDS ) ) && wp_date( 'Y-m-d', time() + 10 * DAY_IN_SECONDS ) === VCAP\LocalDate::from_utc( (string) vcap()->vouchers->get( $m16_cust->id )->delivery_at, 'Y-m-d' ), 'M12-16: a date in range is taken' );
+
+// M12-47: an empty email changes only the date; name and message are editable; "send now" delivers at once;
+// a new address sets the routing of the product (send_to) – a gift entered "to me" goes to the recipient then.
+$m47 = vcap()->vouchers->get( vcap()->issuer->issue_for_order( vcap_acct_order( vcap_acct_product( array( 'delivery' => 'customer' ) ), $buyer, $login . '@example.com' ) )[0]->id );
+vcap()->delivery->reschedule( $m47, gmdate( 'Y-m-d H:i:s', time() + 5 * DAY_IN_SECONDS ) );
+$m47 = vcap()->vouchers->get( $m47->id );
+vcap_acct_assert( 'buyer' === $m47->send_to && '' === $m47->recipient_email, 'M12-47: a gift without recipient email is routed to the buyer' );
+$m47_err = vcap()->downloads->change_delivery( $m47, 'friend@example.com', '', array( 'recipient_name' => 'Friend', 'message' => "Alles Gute\r\nzum Geburtstag" ) );
+$m47     = vcap()->vouchers->get( $m47->id );
+vcap_acct_assert( '' === $m47_err && 'friend@example.com' === $m47->recipient_email && 'both' === $m47->send_to && 'Friend' === $m47->recipient_name && "Alles Gute\nzum Geburtstag" === $m47->message && VCAP\Delivery::to_recipient( $m47 ), 'M12-47: the new recipient gets the routing of the product (recipient and buyer copy), name and message are changed', array( $m47_err, $m47->send_to ) );
+vcap_acct_assert( '' === vcap()->downloads->change_delivery( $m47, '', '', array( 'send_now' => true ) ) && strtotime( (string) vcap()->vouchers->get( $m47->id )->delivery_at . ' UTC' ) <= time() + 5, 'M12-47: "send now" plans the delivery right away' );
 wp_set_current_user( 0 );
+
+// M12-18: My Account lists gifts received at the verified account address (not scheduled ones, no change or
+// resend forms) and the guest orders of that address with the bought vouchers.
+$m18_login = 'vcap_m18_' . strtolower( wp_generate_password( 6, false, false ) );
+$m18_user  = (int) wp_insert_user( array( 'user_login' => $m18_login, 'user_pass' => wp_generate_password( 24 ), 'user_email' => $m18_login . '@example.com', 'role' => 'customer' ) );
+$m18_mail  = $m18_login . '@example.com';
+$m18_gift  = vcap()->vouchers->get( vcap()->issuer->issue_for_order( vcap_acct_order( $personal, $buyer, $login . '@example.com' ) )[0]->id );
+$m18_gift->recipient_email = $m18_mail;
+$m18_gift->send_to         = 'recipient';
+$m18_gift->status          = VCAP\Voucher::STATUS_ACTIVE;
+$m18_gift->delivered_at    = gmdate( 'Y-m-d H:i:s' );
+vcap()->vouchers->update( $m18_gift );
+$m18_secret = vcap()->vouchers->get( vcap()->issuer->issue_for_order( vcap_acct_order( $personal, $buyer, $login . '@example.com' ) )[0]->id );
+$m18_secret->recipient_email = $m18_mail;
+$m18_secret->send_to         = 'recipient';
+$m18_secret->status          = VCAP\Voucher::STATUS_SCHEDULED;
+$m18_secret->delivery_at     = gmdate( 'Y-m-d H:i:s', time() + 9 * DAY_IN_SECONDS );
+vcap()->vouchers->update( $m18_secret );
+$m18_guest = vcap()->vouchers->get( vcap()->issuer->issue_for_order( vcap_acct_order( $personal, 0, $m18_mail ) )[0]->id );
+update_user_meta( $m18_user, VCAP\PersonalVoucher::META_CHANGED, time() ); // Not grandfathered: no proof yet.
+$m18_ids = static fn( array $list ) => array_map( static fn( $v ) => (int) $v->id, $list );
+vcap_acct_assert( array() === vcap()->vouchers->received_by( VCAP\PersonalVoucher::verified_email( get_userdata( $m18_user ) ), $m18_user ) && ! in_array( $m18_guest->id, $m18_ids( vcap()->vouchers->for_customer( $m18_user, 20, 0, VCAP\PersonalVoucher::verified_email( get_userdata( $m18_user ) ) ) ), true ), 'M12-18: without a proven mailbox neither received gifts nor guest orders are listed' );
+VCAP\PersonalVoucher::mark_verified( $m18_user );
+$m18_verified = VCAP\PersonalVoucher::verified_email( get_userdata( $m18_user ) );
+$m18_received = $m18_ids( vcap()->vouchers->received_by( $m18_verified, $m18_user ) );
+vcap_acct_assert( in_array( $m18_gift->id, $m18_received, true ) && ! in_array( $m18_secret->id, $m18_received, true ) && ! in_array( $m18_guest->id, $m18_received, true ), 'M12-18: the delivered gift is listed as received, the scheduled one stays hidden', $m18_received );
+vcap_acct_assert( in_array( $m18_guest->id, $m18_ids( vcap()->vouchers->for_customer( $m18_user, 20, 0, $m18_verified ) ), true ), 'M12-18: a guest order of the verified address is in the list of bought vouchers' );
+wp_set_current_user( $m18_user );
+ob_start();
+vcap()->downloads->account_page( false );
+$m18_html = (string) ob_get_clean();
+wp_set_current_user( 0 );
+vcap_acct_assert( str_contains( $m18_html, 'Received vouchers' ) && str_contains( $m18_html, esc_html( $m18_gift->code ) ) && ! str_contains( $m18_html, esc_html( $m18_secret->code ) ) && ! str_contains( $m18_html, 'name="vcap_change"' ) && ! str_contains( $m18_html, 'name="vcap_resend"' ), 'M12-18: My Account shows the received gift without change or resend forms' );
 
 // M10/H11: the visible copy of voucher fields has a stable key; label and a formatted date are only for display.
 $m10_order = wc_create_order();

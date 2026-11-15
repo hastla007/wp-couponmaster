@@ -118,48 +118,145 @@ final class Downloads {
 			&& (bool) apply_filters( 'vcap_customer_can_change', true, $voucher );
 	}
 
+	/** Voucher settings of the voucher's product (the defaults when the product is gone). */
+	private static function product_config( Voucher $voucher ): array {
+		$product = $voucher->product();
+		return $product ? ProductConfig::get( $product ) : ProductConfig::DEFAULTS;
+	}
+
+	/**
+	 * M12-16: whether the buyer may also change the delivery date of a gift that may be changed: only when the
+	 * product lets the customer choose a date (mode "customer" or the delivery date field switched on). A date set
+	 * by the shop (presale date, waiting period) is never moved by the customer.
+	 */
+	public function customer_can_change_date( Voucher $voucher ): bool {
+		return $this->customer_can_change( $voucher ) && Delivery::customer_date_enabled( self::product_config( $voucher ) );
+	}
+
+	/**
+	 * M12-47: which inputs the change form of a gift offers – the recipient email only where the product sends to
+	 * a recipient or the address decides who may redeem it, the date only with a customer date (M12-16), name and
+	 * message where the product asks for them (or the voucher has them), "send now" where the customer may also
+	 * choose today.
+	 *
+	 * @return array{email:bool, date:bool, name:bool, message:bool, send_now:bool, min:string, max:string}
+	 */
+	public function change_options( Voucher $voucher ): array {
+		$config  = self::product_config( $voucher );
+		$builtin = array_map( static fn( $k ) => preg_replace( '/_required$/', '', (string) $k ), (array) ( $config['builtin_fields'] ?? array() ) );
+		$date    = $this->customer_can_change_date( $voucher );
+		$order   = $voucher->order();
+		$min     = Delivery::earliest_customer_date( $config, $order instanceof \WC_Order ? $order : null );
+		$max     = wp_date( 'Y-m-d', time() + YEAR_IN_SECONDS );
+		if ( $voucher->expires_at ) {
+			$latest = Delivery::latest_date_before( $voucher->expires_at, $config );
+			$max    = $latest < $max ? $latest : $max;
+		}
+		return array(
+			'email'    => 'buyer' !== ( $config['send_to'] ?? '' ) || in_array( (string) ( $config['email_restrict'] ?? 'none' ), array( 'recipient', 'both' ), true ) || Delivery::to_recipient( $voucher ),
+			'date'     => $date,
+			'name'     => in_array( 'recipient_name', $builtin, true ) || '' !== $voucher->recipient_name,
+			'message'  => in_array( 'message', $builtin, true ) || '' !== $voucher->message,
+			'send_now' => $date && wp_date( 'Y-m-d' ) === $min,
+			'min'      => $min,
+			'max'      => (string) $max,
+		);
+	}
+
 	/**
 	 * H10: change recipient email and/or delivery date (local Y-m-d) of a scheduled gift. Only while it is still
 	 * scheduled (the stored row is checked, a delivery running at the same time wins); the coupon's email
 	 * restriction follows the new address, the delivery is planned anew, the history records old and new values.
 	 *
+	 * M12-16: the date only with a customer date, between Delivery::earliest_customer_date() and the last day before
+	 * the expiry (latest_date_before()). M12-47: an empty email or date leaves it as it is; the routing (send_to)
+	 * follows the product for a new address; $extra may change "recipient_name" and "message" and with
+	 * "send_now" deliver right away (where the customer may choose today).
+	 *
+	 * @param array{recipient_name?:string, message?:string, send_now?:bool} $extra
 	 * @return string '' on success, else the reason to show.
 	 */
-	public function change_delivery( Voucher $voucher, string $email, string $date ): string {
+	public function change_delivery( Voucher $voucher, string $email, string $date, array $extra = array() ): string {
 		$fresh = $this->repo->get( $voucher->id );
 		if ( ! $fresh || ! $this->customer_can_change( $fresh ) ) {
 			return __( 'This voucher has already been sent and can no longer be changed.', 'voucher-captain' );
 		}
-		$email = sanitize_email( trim( $email ) );
-		if ( ! is_email( $email ) ) {
-			return __( 'Please enter a valid email address for the recipient.', 'voucher-captain' );
+		$options = $this->change_options( $fresh );
+		$config  = self::product_config( $fresh );
+		$email   = trim( $email );
+		if ( '' !== $email ) {
+			$email = sanitize_email( $email );
+			if ( ! is_email( $email ) ) {
+				return __( 'Please enter a valid email address for the recipient.', 'voucher-captain' );
+			}
 		}
-		$utc = null;
-		if ( '' !== $date ) {
-			$local = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ? LocalDate::timestamp( $date . sprintf( 'T%02d:00', Delivery::delivery_hour() ) ) : null;
-			if ( null === $local || $local <= time() || $local > time() + YEAR_IN_SECONDS + DAY_IN_SECONDS ) {
-				return __( 'Please choose a delivery date between tomorrow and one year from now.', 'voucher-captain' );
+		$order    = $fresh->order();
+		$utc      = null;
+		$send_now = ! empty( $extra['send_now'] );
+		if ( '' !== $date || $send_now ) {
+			if ( ! $options['date'] ) {
+				return __( 'The delivery date of this voucher is set by the shop and cannot be changed.', 'voucher-captain' );
 			}
-			if ( $fresh->expires_at && $local >= strtotime( $fresh->expires_at . ' UTC' ) ) {
-				return __( 'The voucher would already have expired on this delivery date. Please choose an earlier date.', 'voucher-captain' );
+			if ( $send_now ) {
+				if ( ! $options['send_now'] ) {
+					return __( 'This voucher cannot be sent earlier.', 'voucher-captain' );
+				}
+				$date  = wp_date( 'Y-m-d' );
+				$local = time();
+			} else {
+				$local = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ? LocalDate::timestamp( $date . sprintf( 'T%02d:00', Delivery::delivery_hour() ) ) : null;
+				if ( null === $local || $date < $options['min'] || $local > time() + YEAR_IN_SECONDS + DAY_IN_SECONDS ) {
+					return sprintf(
+						/* translators: 1: earliest date, 2: latest date */
+						__( 'Please choose a delivery date between %1$s and %2$s.', 'voucher-captain' ),
+						wp_date( $this->settings->date_format(), (int) LocalDate::timestamp( $options['min'] ) ),
+						wp_date( $this->settings->date_format(), (int) LocalDate::timestamp( $options['max'] ) )
+					);
+				}
+				if ( $date > $options['max'] ) {
+					return __( 'The voucher would already have expired on this delivery date. Please choose an earlier date.', 'voucher-captain' );
+				}
 			}
-			$utc   = gmdate( 'Y-m-d H:i:s', $local );
-			$order = $fresh->order();
+			// Today after the delivery hour: right away (as on the product page).
+			$utc = gmdate( 'Y-m-d H:i:s', max( time(), $local ) );
 			// V7: a new date never ends the security hold of the order early.
 			$utc = $order instanceof \WC_Order ? Delivery::with_hold( $utc, $order ) : $utc;
 		}
 		$old_email = (string) $fresh->recipient_email;
 		$old_at    = (string) $fresh->delivery_at;
 		$changes   = array();
-		if ( strtolower( $old_email ) !== strtolower( $email ) ) {
+		$columns   = array( 'fields' );
+		$new_email = '' !== $email && $options['email'] && strtolower( $old_email ) !== strtolower( $email );
+		if ( $new_email ) {
 			$fresh->recipient_email = $email;
+			// M12-47: the routing follows the product (as when it was issued, Issuer), a new address of a gift
+			// "to the buyer" only restricts who may redeem it.
+			$fresh->send_to = 'buyer' !== ( $config['send_to'] ?? 'recipient' ) ? (string) $config['send_to'] : 'buyer';
 			if ( isset( $fresh->fields['recipient_email'] ) ) {
 				$fresh->fields['recipient_email']['value'] = $email;
 			}
+			array_push( $columns, 'recipient_email', 'send_to' );
 			/* translators: 1: old email, 2: new email */
 			$changes[] = sprintf( __( 'recipient %1$s → %2$s', 'voucher-captain' ), '' !== $old_email ? $old_email : '–', $email );
 		}
-		if ( null !== $utc && $utc !== $old_at ) {
+		foreach ( array( 'recipient_name' => 'name', 'message' => 'message' ) as $column => $option ) {
+			if ( ! isset( $extra[ $column ] ) || ! $options[ $option ] ) {
+				continue;
+			}
+			$value = 'message' === $column ? sanitize_textarea_field( Fields::normalize_newlines( (string) $extra[ $column ] ) ) : sanitize_text_field( (string) $extra[ $column ] );
+			$value = mb_substr( trim( $value ), 0, 'message' === $column ? max( 10, (int) ( $config['message_maxlength'] ?: 300 ) ) : 100 );
+			if ( $value === $fresh->$column ) {
+				continue;
+			}
+			$fresh->$column = $value;
+			if ( isset( $fresh->fields[ $column ] ) ) {
+				$fresh->fields[ $column ]['value'] = $value;
+			}
+			$columns[] = $column;
+			$changes[] = 'message' === $column ? __( 'personal message changed', 'voucher-captain' ) : __( 'recipient name changed', 'voucher-captain' );
+		}
+		$new_date = null !== $utc && $utc !== $old_at;
+		if ( $new_date ) {
 			if ( isset( $fresh->fields['delivery_date'] ) ) {
 				$fresh->fields['delivery_date']['value'] = $date;
 			}
@@ -169,17 +266,17 @@ final class Downloads {
 		if ( ! $changes ) {
 			return '';
 		}
-		if ( ! $this->repo->update_columns( $fresh, array( 'recipient_email', 'fields' ) ) ) {
+		if ( ! $this->repo->update_columns( $fresh, array_values( array_unique( $columns ) ) ) ) {
 			return __( 'The change could not be saved. Please contact us.', 'voucher-captain' );
 		}
-		if ( strtolower( $old_email ) !== strtolower( $email ) ) {
+		if ( $new_email ) {
 			vcap()->coupons->refresh_email_restrictions( $fresh, $old_email );
-		}
-		if ( null !== $utc && $utc !== $old_at ) {
-			vcap()->delivery->reschedule( $fresh, $utc );
 		}
 		/* translators: %s: list of changes */
 		$this->repo->log( $fresh->id, 'edited', null, null, sprintf( __( 'Changed by the customer before delivery: %s', 'voucher-captain' ), implode( '; ', $changes ) ) );
+		if ( $new_date ) {
+			vcap()->delivery->reschedule( $fresh, $utc );
+		}
 		return '';
 	}
 
@@ -202,7 +299,19 @@ final class Downloads {
 			wc_add_notice( __( 'This voucher was changed several times already. Please try again later.', 'voucher-captain' ), 'error', Shortcodes::ACCOUNT_NOTICE );
 			return;
 		}
-		$error = $this->change_delivery( $voucher, (string) wp_unslash( $_POST['vcap_change_email'] ?? '' ), sanitize_text_field( wp_unslash( $_POST['vcap_change_date'] ?? '' ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitize_email() in change_delivery().
+		$extra = array( 'send_now' => ! empty( $_POST['vcap_change_now'] ) );
+		foreach ( array( 'recipient_name' => 'vcap_change_name', 'message' => 'vcap_change_message' ) as $column => $input ) {
+			if ( isset( $_POST[ $input ] ) && is_string( $_POST[ $input ] ) ) {
+				$extra[ $column ] = sanitize_textarea_field( wp_unslash( $_POST[ $input ] ) ); // Sanitised per column again in change_delivery().
+			}
+		}
+		$email = isset( $_POST['vcap_change_email'] ) && is_string( $_POST['vcap_change_email'] ) ? sanitize_text_field( wp_unslash( $_POST['vcap_change_email'] ) ) : '';
+		$date  = isset( $_POST['vcap_change_date'] ) && is_string( $_POST['vcap_change_date'] ) ? sanitize_text_field( wp_unslash( $_POST['vcap_change_date'] ) ) : '';
+		// An unchanged date in the form is no change (the form shows the planned date).
+		if ( '' !== $date && $voucher->delivery_at && LocalDate::from_utc( $voucher->delivery_at, 'Y-m-d' ) === $date ) {
+			$date = '';
+		}
+		$error = $this->change_delivery( $voucher, $email, $date, $extra );
 		if ( '' !== $error ) {
 			wc_add_notice( $error, 'error', Shortcodes::ACCOUNT_NOTICE );
 			return;
@@ -499,25 +608,29 @@ final class Downloads {
 		}
 		// B15: one page of the list (newest first); one more voucher is read to know whether a next page exists.
 		$page = max( 1, absint( wp_unslash( $_GET[ self::PAGE_ARG ] ?? 1 ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- only selects a page of the customer's own list.
-		$list = $this->repo->for_customer( (int) $user->ID, self::PER_PAGE + 1, ( $page - 1 ) * self::PER_PAGE );
-		$more = count( $list ) > self::PER_PAGE;
-		$list = array_slice( $list, 0, self::PER_PAGE );
+		// M12-18: with a proven mailbox also guest orders of that address, and the gifts received at it.
+		$verified = PersonalVoucher::verified_email( $user );
+		$list     = $this->repo->for_customer( (int) $user->ID, self::PER_PAGE + 1, ( $page - 1 ) * self::PER_PAGE, $verified );
+		$received = 1 === $page ? $this->repo->received_by( $verified, (int) $user->ID, self::RECEIVED_MAX ) : array();
+		$more     = count( $list ) > self::PER_PAGE;
+		$list     = array_slice( $list, 0, self::PER_PAGE );
 		// Products and orders of the page loaded together (one query each, not one per voucher).
-		$products = array_values( array_unique( array_filter( array_map( static fn( $v ) => (int) ( $v->variation_id ?: $v->product_id ), $list ) ) ) );
+		$products = array_values( array_unique( array_filter( array_map( static fn( $v ) => (int) ( $v->variation_id ?: $v->product_id ), array_merge( $list, $received ) ) ) ) );
 		if ( $products ) {
 			_prime_post_caches( $products, false, true );
 		}
-		Voucher::prime_orders( $list );
-		Plugin::template(
-			'myaccount/vouchers-table.php',
-			array(
-				'vouchers'  => $list,
-				'downloads' => $this,
-				'title'     => '',
-				'show_order'=> true,
-			)
-		);
-		Voucher::forget_orders();
+		Voucher::prime_orders( array_merge( $list, $received ) );
+		if ( $list || ! $received ) {
+			Plugin::template(
+				'myaccount/vouchers-table.php',
+				array(
+					'vouchers'   => $list,
+					'downloads'  => $this,
+					'title'      => $received ? __( 'Bought vouchers', 'voucher-captain' ) : '',
+					'show_order' => true,
+				)
+			);
+		}
 		if ( $more || $page > 1 ) {
 			echo '<nav class="woocommerce-pagination vcap-vouchers-pagination">';
 			if ( $page > 1 ) {
@@ -528,7 +641,24 @@ final class Downloads {
 			}
 			echo '</nav>';
 		}
+		if ( $received ) {
+			// No change or resend forms: the gift belongs to the buyer's order.
+			Plugin::template(
+				'myaccount/vouchers-table.php',
+				array(
+					'vouchers'   => $received,
+					'downloads'  => $this,
+					'title'      => __( 'Received vouchers', 'voucher-captain' ),
+					'show_order' => true,
+					'received'   => true,
+				)
+			);
+		}
+		Voucher::forget_orders();
 	}
+
+	/** M12-18: received gifts listed in My Account → Vouchers (newest first). */
+	public const RECEIVED_MAX = 50;
 
 	/** B15: vouchers per page of My Account → Vouchers, and the query argument of the page. */
 	public const PER_PAGE = 20;

@@ -477,8 +477,9 @@ final class Fields {
 				echo '<label for="' . esc_attr( $id ) . '" class="checkbox"><input type="checkbox" value="1" ' . $attrs . checked( '1', $value, false ) . ' /> ' . esc_html( $field['label'] ?? $key ) . ( $required ? ' <abbr class="required" title="' . esc_attr__( 'required', 'voucher-captain' ) . '">*</abbr>' : '' ) . '</label>'; // phpcs:ignore WordPress.Security.EscapeOutput
 				break;
 			case 'date':
-				// H11: from today, like the server rule in errors() (a day already past the delivery hour sends at once).
-				$min  = 'delivery_date' === $key ? wp_date( 'Y-m-d' ) : '';
+				// H11: from today, like the server rule in errors() (a day already past the delivery hour sends at once);
+				// M12-16: in the modes "date"/"delay" from the shop's own delivery date.
+				$min  = 'delivery_date' === $key ? ( $config ? Delivery::earliest_customer_date( $config ) : wp_date( 'Y-m-d' ) ) : '';
 				$maxd = 'delivery_date' === $key ? self::max_delivery_date( $config ) : '';
 				echo '<input type="date" ' . $attrs . ' value="' . Shortcodes::esc_attr_text( $value ) . '"' . ( $min ? ' min="' . esc_attr( $min ) . '" max="' . esc_attr( $maxd ) . '"' : '' ) . ' />'; // phpcs:ignore WordPress.Security.EscapeOutput
 				break;
@@ -635,6 +636,13 @@ final class Fields {
 					$errors[] = sprintf( __( '%s is not a valid date.', 'voucher-captain' ), $label );
 				} elseif ( 'delivery_date' === $key && ( $raw < wp_date( 'Y-m-d' ) || $ts > time() + YEAR_IN_SECONDS + DAY_IN_SECONDS ) ) {
 					$errors[] = __( 'Please choose a delivery date between today and one year from now.', 'voucher-captain' );
+				} elseif ( 'delivery_date' === $key && $raw < Delivery::earliest_customer_date( ProductConfig::get( $product ) ) ) {
+					// M12-16: a presale date or waiting period of the shop is not brought forward.
+					$errors[] = sprintf(
+						/* translators: %s: earliest delivery date */
+						__( 'This voucher is delivered on %s at the earliest. Please choose this or a later date.', 'voucher-captain' ),
+						wp_date( (string) get_option( 'date_format' ), (int) strtotime( Delivery::earliest_customer_date( ProductConfig::get( $product ) ) . ' 12:00:00 ' . wp_timezone_string() ) )
+					);
 				} elseif ( 'delivery_date' === $key ) {
 					$latest = Delivery::latest_delivery_date( ProductConfig::get( $product ), time(), self::customer_country() );
 					if ( null !== $latest && $raw > $latest ) {
