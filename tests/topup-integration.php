@@ -63,7 +63,7 @@ $goods->save();
  *
  * @return array{0: WC_Order, 1: int} order, top-up line id
  */
-function vcap_topup_order( WC_Product $topup_product, VCAP\Voucher $card, float $amount, ?WC_Product $goods = null, float $goods_value = 0 ): array {
+function vcap_topup_order( WC_Product $topup_product, VCAP\Voucher $card, float $amount, ?WC_Product $goods = null, float $goods_value = 0, string $email = 'topup-refund@example.com' ): array {
 	$order   = wc_create_order();
 	$line_id = $order->add_product( $topup_product, 1, array( 'subtotal' => $amount, 'total' => $amount ) );
 	$line    = $order->get_item( $line_id );
@@ -72,7 +72,7 @@ function vcap_topup_order( WC_Product $topup_product, VCAP\Voucher $card, float 
 	if ( $goods ) {
 		$order->add_product( $goods, 1, array( 'subtotal' => $goods_value, 'total' => $goods_value ) );
 	}
-	$order->set_billing_email( 'topup-refund@example.com' );
+	$order->set_billing_email( $email );
 	$order->calculate_totals( false );
 	$order->set_status( 'processing' );
 	$order->save();
@@ -324,5 +324,46 @@ $q13_item->update_meta_data( TopUp::ITEM_META, 'VCAP-NO-SUCH-CARD-' . wp_generat
 $q13_item->save();
 $q13_lost = vcap_topup_refund( wc_get_order( $q13_lost_order->get_id() ), 100, array( $q13_lost_line => array( 'qty' => 1, 'refund_total' => 100 ) ) );
 vcap_topup_assert( is_wp_error( $q13_lost ) && 'processing' === wc_get_order( $q13_lost_order->get_id() )->get_status() && str_contains( $q13_lost->get_error_message(), 'cannot be found' ), 'AP-Q1-3: a refund of a top-up whose card cannot be found is refused', is_wp_error( $q13_lost ) ? $q13_lost->get_error_message() : 'refund created' );
+
+/* ---- M12-09: top-ups respect the V7 security hold of a new customer's first order ---------------------- */
+
+update_option( 'vcap_hold_new_customer_above', 250 );
+update_option( 'vcap_hold_hours', 24 );
+$m09_book = static function ( WC_Order $order, int $line ) {
+	$order = wc_get_order( $order->get_id() );
+	$order->update_meta_data( VCAP\Delivery::HOLD_META, (string) ( time() - 5 ) ); // The hold is over.
+	$order->save();
+	do_action( TopUp::AFTER_HOLD_HOOK, $order->get_id(), $line );
+	return wc_get_order( $order->get_id() );
+};
+$m09_notes = static fn( WC_Order $o ) => implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $o->get_id() ) ), 'content' ) );
+$m09_card  = vcap_topup_card( 20 );
+list( $m09_order, $m09_line ) = vcap_topup_order( $topup_product, $m09_card, 300, null, 0, 'm09-a-' . wp_generate_password( 6, false, false ) . '@example.com' );
+$m09_item = $m09_order->get_item( $m09_line );
+vcap_topup_assert( 20.0 === vcap_topup_balance( $m09_card ) && (int) $m09_item->get_meta( TopUp::PENDING_META ) > time() && ! $m09_item->get_meta( TopUp::DONE_META ), 'M12-09: a first order topping up 300 (above the hold limit) is not booked at payment' );
+vcap_topup_assert( as_has_scheduled_action( TopUp::AFTER_HOLD_HOOK, array( 'order_id' => $m09_order->get_id(), 'item_id' => $m09_line ), VCAP\Delivery::GROUP ) && str_contains( $m09_notes( $m09_order ), 'Security hold: the top-up of gift card' ), 'M12-09: the booking is scheduled for the end of the hold (vcap_topup_after_hold) and noted on the order' );
+$m09_steps = wp_json_encode( VCAP\NextSteps::for_order( $m09_order ) );
+vcap_topup_assert( str_contains( $m09_steps, 'top-up of your gift card' ) && str_contains( $m09_steps, 'waiting period' ), 'M12-09: "What happens next" tells the customer when the held top-up is booked', $m09_steps );
+vcap()->issuer->issue_for_order( wc_get_order( $m09_order->get_id() ), true );
+vcap_topup_assert( 20.0 === vcap_topup_balance( $m09_card ) && 1 === substr_count( $m09_notes( $m09_order ), 'Security hold: the top-up' ), 'M12-09: processing the order again during the hold books nothing and notes nothing twice' );
+$m09_order = $m09_book( $m09_order, $m09_line );
+vcap_topup_assert( 320.0 === vcap_topup_balance( $m09_card ) && 300.0 === (float) $m09_order->get_item( $m09_line )->get_meta( TopUp::DONE_META ) && '' === (string) $m09_order->get_item( $m09_line )->get_meta( TopUp::PENDING_META ), 'M12-09: when the hold is over the top-up is booked (20 → 320)' );
+do_action( TopUp::AFTER_HOLD_HOOK, $m09_order->get_id(), $m09_line );
+vcap_topup_assert( 320.0 === vcap_topup_balance( $m09_card ), 'M12-09: the scheduled booking runs once' );
+// Cancelled during the hold: never booked.
+$m09_card2 = vcap_topup_card( 20 );
+list( $m09_order2, $m09_line2 ) = vcap_topup_order( $topup_product, $m09_card2, 300, null, 0, 'm09-b-' . wp_generate_password( 6, false, false ) . '@example.com' );
+$m09_order2->update_status( 'cancelled' );
+$m09_order2 = $m09_book( $m09_order2, $m09_line2 );
+vcap_topup_assert( 20.0 === vcap_topup_balance( $m09_card2 ) && str_contains( $m09_notes( $m09_order2 ), 'cancelled or refunded during the security hold' ), 'M12-09: an order cancelled during the hold is checked again and never booked' );
+// Partly refunded during the hold: booked, the refunded share taken back.
+$m09_card3 = vcap_topup_card( 20 );
+list( $m09_order3, $m09_line3 ) = vcap_topup_order( $topup_product, $m09_card3, 300, null, 0, 'm09-c-' . wp_generate_password( 6, false, false ) . '@example.com' );
+$m09_refund = vcap_topup_refund( $m09_order3, 100, array( $m09_line3 => array( 'qty' => 0, 'refund_total' => 100 ) ) );
+vcap_topup_assert( ! is_wp_error( $m09_refund ) && 20.0 === vcap_topup_balance( $m09_card3 ), 'M12-09: (setup) a partial refund of 100 during the hold', is_wp_error( $m09_refund ) ? $m09_refund->get_error_message() : null );
+$m09_book( $m09_order3, $m09_line3 );
+vcap_topup_assert( 220.0 === vcap_topup_balance( $m09_card3 ), 'M12-09: a top-up partly refunded during the hold is booked without the refunded share (20 + 300 − 100)', vcap_topup_balance( $m09_card3 ) );
+delete_option( 'vcap_hold_new_customer_above' );
+delete_option( 'vcap_hold_hours' );
 
 echo "Voucher Captain top-up checks passed.\n";
