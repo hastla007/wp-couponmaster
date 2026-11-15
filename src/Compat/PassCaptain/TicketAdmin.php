@@ -43,7 +43,7 @@ final class TicketAdmin {
 		if ( '' === $problem ) {
 			return;
 		}
-		$link = admin_url( 'admin.php?page=wc-settings&tab=vcap' );
+		$link = admin_url( 'admin.php?page=wc-settings&tab=vcap&section=redemption#vcap_redeem_page_id' );
 		echo '<div class="notice notice-warning"><p>' . esc_html( $problem ) . ' ' . esc_html__( 'Customers exchange ticket vouchers for tickets on that page, and voucher emails link to it.', 'voucher-captain' )
 			. ' <a href="' . esc_url( $link ) . '">' . esc_html__( 'Choose the redeem page', 'voucher-captain' ) . '</a></p></div>';
 	}

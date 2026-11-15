@@ -38,7 +38,7 @@ test.describe( 'Product page', () => {
 	test( 'the personalised PDF preview works with the keyboard', async ( { page, context } ) => {
 		await page.goto( '/product/e2e-voucher/' );
 		await page.fill( '#vcap-field-recipient_name', 'Vorschau Person' );
-		const button = page.getByRole( 'button', { name: /Preview voucher/i } );
+		const button = page.getByRole( 'button', { name: /Print preview/i } );
 		await expect( button ).toBeVisible();
 		await button.focus();
 		await expect( button ).toBeFocused();

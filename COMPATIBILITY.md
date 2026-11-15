@@ -95,6 +95,24 @@ Real payments (card, PayPal account, redirects, the provider's webhooks against 
 provider accounts: they are a release acceptance check per shop (`RELEASE_CHECKLIST.md`). Each store should verify its
 currency switcher's rate direction and rounding rules with one test order per currency before selling.
 
+## WooCommerce Analytics (reports)
+
+Voucher Captain has no report of its own in WooCommerce → Analytics. What Analytics shows: orders that buy voucher
+products count as normal product revenue (the voucher product appears under Products), and vouchers redeemed as
+WooCommerce coupons appear under Coupons with the discount they gave. Vouchers settled as a payment after tax
+(setting "Multi-purpose vouchers as payment") are not coupons and are not listed there; neither are vouchers issued
+without an order, imported cards, store credit or redemptions at the counter or through the API. The voucher figures
+therefore live in Vouchers → Reports: "Overview" (sold, issued without order, redeemed, open, expired, best-selling
+products per period), "Outstanding value" (liability at a date), "Redemption journal" (every booking) and the
+campaign and till reports, each exportable as CSV. See TAX.md for how sale and redemption are booked.
+
+## Physical gift cards
+
+A voucher product with "Physical card" is shipped like any product (leave "Virtual" unticked). Its vouchers take the
+code from the product's imported batch (Vouchers → Import codes: the codes printed on the cards), are not emailed and
+stay inactive until the order reaches "Completed" (filter `vcap_physical_activation_statuses`, e.g. a "shipped" status
+of a shipping plugin). Print data for card printers (code lists with layout, barcodes) is not part of the free core.
+
 ## Checkout and product fields
 
 Voucher fields use WooCommerce product add-to-cart hooks and cart/order-item data. The integration suite checks field definitions, cart data persistence, order-item persistence, Store API reservation, paid-order commit, payment retry behavior, and both HPOS and legacy order CRUD. Voucher Captain declares HPOS and Cart/Checkout Blocks compatibility. Block-based add-to-cart requests (Store API `cart/add-item`) accept the voucher fields as `vcap_fields` (object of field key ⇒ value); they are validated like the product form (required fields, email/date/number/select rules) and refused with the error code `vcap_invalid_voucher_fields`. Products with required or custom fields link to the product page instead of adding to the cart from product lists.

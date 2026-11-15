@@ -756,7 +756,7 @@ final class Issuer {
 		$voucher->item_index    = $index;
 		$voucher->product_id    = (int) $item->get_product_id();
 		$voucher->variation_id  = (int) $item->get_variation_id();
-		$voucher->template_id   = (int) $config['template'];
+		$voucher->template_id   = DesignGallery::template_for_item( $item, $config ); // M12-96: the customer's design.
 		$voucher->discount_type = $config['discount_type'];
 		$voucher->usage_mode    = 'percent' === $config['discount_type'] && 'balance' === $config['usage'] ? 'single' : $config['usage'];
 		if ( 'balance' === $voucher->usage_mode ) {
@@ -786,6 +786,8 @@ final class Issuer {
 		// V7: a new customer's first order above the hold value is delivered (and redeemable) after the hold.
 		$voucher->delivery_at = Delivery::with_hold( Delivery::compute_time( $config, $fields, $order ), $order, true );
 		$voucher->status      = $voucher->delivery_at && strtotime( $voucher->delivery_at . ' UTC' ) > time() ? Voucher::STATUS_SCHEDULED : Voucher::STATUS_ACTIVE;
+		// M12-97: a physical card is handed over by shipping it (no email) and stays inactive until then.
+		PhysicalCards::prepare( $voucher, $config, $order, $this->repo->now() );
 
 		// Code: imported batch first, generated fallback.
 		$code      = '';

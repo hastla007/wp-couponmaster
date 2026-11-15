@@ -95,6 +95,7 @@ final class ProductSettings {
 		echo '<div id="vcap_product_data" class="panel woocommerce_options_panel hidden">';
 
 		$this->panel_general( $p );
+		$this->panel_gift_options( $p );
 		$this->panel_value( $p );
 		$this->panel_redemption( $p );
 		$this->panel_restrictions( $p );
@@ -141,11 +142,52 @@ final class ProductSettings {
 				'id'          => '_vcap_preview',
 				'label'       => __( 'Customer preview', 'voucher-captain' ),
 				'value'       => $this->v( $p, 'preview' ),
-				'description' => __( 'Show a "Preview voucher" button on the product page.', 'voucher-captain' ),
+				'description' => __( 'Show a live preview of the voucher and a "Print preview (PDF)" button on the product page.', 'voucher-captain' ),
 			)
 		);
 		$this->hint( 'vcap-hint-virtual', __( 'Vouchers are sent by email as PDF. Tick "Virtual" at the top of the product data box – otherwise WooCommerce asks for a shipping address and may charge shipping for the voucher.', 'voucher-captain' ) );
 		echo '</div>';
+	}
+
+	/**
+	 * Product panel: link to the product's vouchers (M12-54), the design gallery (M12-96) and the physical card
+	 * mode (M12-97). Saved by save_gift_options().
+	 */
+	private function panel_gift_options( \WC_Product $p ): void {
+		echo '<div class="options_group vcap-gift-options">';
+		if ( $p->get_id() ) {
+			echo '<p class="form-field"><label>' . esc_html__( 'Issued vouchers', 'voucher-captain' ) . '</label><a class="button" href="' . esc_url( Admin\VoucherLinks::product_url( $p->get_id() ) ) . '">' . esc_html__( 'Show vouchers', 'voucher-captain' ) . '</a></p>';
+		}
+		$allowed = array_map( 'intval', (array) $this->v( $p, 'allowed_templates' ) );
+		echo '<p class="form-field"><label for="_vcap_allowed_templates">' . esc_html__( 'Designs to choose from', 'voucher-captain' ) . '</label>';
+		echo '<select id="_vcap_allowed_templates" name="_vcap_allowed_templates[]" multiple="multiple" class="wc-enhanced-select" style="width:50%" data-placeholder="' . esc_attr__( 'No choice (product template)', 'voucher-captain' ) . '">';
+		foreach ( $this->template_options() as $id => $title ) {
+			if ( '' === (string) $id ) {
+				continue;
+			}
+			echo '<option value="' . esc_attr( (string) $id ) . '"' . selected( in_array( (int) $id, $allowed, true ), true, false ) . '>' . esc_html( $title ) . '</option>';
+		}
+		echo '</select> ' . wc_help_tip( __( 'With two or more designs, the product page shows them as pictures to choose from; the chosen design is used for the PDF. The PDF template above is preselected.', 'voucher-captain' ) ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput -- wc_help_tip() escapes.
+		woocommerce_wp_checkbox(
+			array(
+				'id'          => '_vcap_physical',
+				'label'       => __( 'Physical card', 'voucher-captain' ),
+				'value'       => $this->v( $p, 'physical' ),
+				'description' => __( 'A printed card is shipped: no email to the recipient, the code comes from the imported batch (Codes), and the card is activated when the order is completed (shipped). Leave "Virtual" unticked.', 'voucher-captain' ),
+			)
+		);
+		echo '</div>';
+	}
+
+	/** Saves the fields of panel_gift_options(). */
+	private function save_gift_options( \WC_Product $product, array $post ): void {
+		$templates = array_values( array_filter( array_map( 'absint', (array) ( $post['_vcap_allowed_templates'] ?? array() ) ), static fn( $id ) => $id > 0 && TemplatePostType::POST_TYPE === get_post_type( $id ) ) );
+		$product->update_meta_data( '_vcap_allowed_templates', $templates );
+		$physical = isset( $post['_vcap_physical'] ) ? 'yes' : 'no';
+		$product->update_meta_data( '_vcap_physical', $physical );
+		if ( 'yes' === $physical && '' === (string) $product->get_meta( '_vcap_code_batch' ) ) {
+			self::save_error( __( 'Physical card: choose the imported code batch of the printed cards under Codes → Code source. Until then the cards get random codes that are not printed on any card.', 'voucher-captain' ) );
+		}
 	}
 
 	/** Product panel: Value: source, amount, tax treatment. */
@@ -655,6 +697,7 @@ final class ProductSettings {
 		// Channels of plugins that are inactive right now are not shown in the form: keep them, never drop them.
 		$hidden     = array_diff( array_map( 'sanitize_key', (array) $product->get_meta( '_vcap_channels' ) ), $registered );
 		$product->update_meta_data( '_vcap_channels', array_values( array_filter( array_unique( array_merge( $channels, $hidden ) ) ) ) );
+		$this->save_gift_options( $product, $post );
 		do_action( 'vcap_product_settings_save', $product, $post );
 		foreach ( array( 'product_ids', 'exclude_product_ids', 'category_ids', 'exclude_category_ids' ) as $key ) {
 			$product->update_meta_data( '_vcap_' . $key, array_values( array_filter( array_map( 'absint', (array) ( $post[ '_vcap_' . $key ] ?? array() ) ) ) ) );

@@ -17,6 +17,68 @@ final class Reports {
 	/** Whether the last collect() stopped at MAX_ORDERS. */
 	public bool $truncated = false;
 
+	/**
+	 * M12-92: key figures of a period (local days) in the shop currency: vouchers sold (issued from orders) and
+	 * issued without an order, value redeemed (net of cancelled redemptions and refunds), value still open at the
+	 * end of the period (Ledger::liability()), value that expired in the period, and the best-selling voucher
+	 * products. Store credit is not "sold"; percentage and ticket vouchers count as pieces without value.
+	 *
+	 * @return array{sold:array{count:int,value:float}, free:array{count:int,value:float}, redeemed:float, open:array{count:int,value:float}, expired:array{count:int,value:float}, top:array<int, array{product_id:int,name:string,count:int,value:float}>, currency:string}
+	 */
+	public static function overview( string $from, string $to ): array {
+		global $wpdb;
+		$t        = Install::tables();
+		$currency = (string) get_option( 'woocommerce_currency' );
+		list( $start, $end ) = Ledger::utc_range( $from, $to );
+		$value    = "CASE WHEN discount_type = 'percent' OR type = 'ticket' THEN 0 ELSE initial_amount END";
+		$issued   = $wpdb->get_results( $wpdb->prepare( "SELECT ( order_id > 0 ) AS sold, COUNT(*) AS cnt, SUM( {$value} ) AS val FROM {$t['vouchers']} WHERE created_at BETWEEN %s AND %s AND type <> 'credit' AND currency = %s GROUP BY ( order_id > 0 )", $start, $end, $currency ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$out      = array(
+			'sold'     => array( 'count' => 0, 'value' => 0.0 ),
+			'free'     => array( 'count' => 0, 'value' => 0.0 ),
+			'redeemed' => 0.0,
+			'open'     => array( 'count' => 0, 'value' => 0.0 ),
+			'expired'  => array( 'count' => 0, 'value' => 0.0 ),
+			'top'      => array(),
+			'currency' => $currency,
+		);
+		foreach ( $issued as $row ) {
+			$out[ (int) $row['sold'] ? 'sold' : 'free' ] = array( 'count' => (int) $row['cnt'], 'value' => round( (float) $row['val'], 2 ) );
+		}
+		$value_vouchers = Ledger::VALUE_VOUCHERS;
+		$out['redeemed'] = round(
+			(float) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->prepare(
+					"SELECT SUM( CASE WHEN e.event IN ('redeemed','committed','api_committed') THEN e.amount ELSE -e.amount END ) FROM {$t['events']} e INNER JOIN {$t['vouchers']} v ON v.id = e.voucher_id
+					WHERE e.created_at BETWEEN %s AND %s AND e.event IN ('redeemed','committed','api_committed','redeem_reversed','restored','api_refunded') AND e.amount IS NOT NULL AND v.currency = %s AND {$value_vouchers}", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$start,
+					$end,
+					$currency
+				)
+			),
+			2
+		);
+		foreach ( ( new Ledger( vcap()->vouchers ) )->liability( $to )['totals'][ $currency ] ?? array() as $bucket ) {
+			$out['open']['count'] += (int) $bucket['count'];
+			$out['open']['value'] += (float) $bucket['amount'];
+		}
+		$out['open']['value'] = round( $out['open']['value'], 2 );
+		// Expired in the period with value left: the stored balance, or a single-use voucher's value while unused.
+		$expired = $wpdb->get_row( $wpdb->prepare( "SELECT COUNT(*) AS cnt, SUM( CASE WHEN usage_mode = 'balance' THEN balance ELSE initial_amount END ) AS val FROM {$t['vouchers']} WHERE expires_at BETWEEN %s AND %s AND expires_at <= %s AND status IN ('active','expired') AND balance > 0 AND discount_type <> 'percent' AND type NOT IN ('ticket','credit') AND currency = %s", $start, $end, gmdate( 'Y-m-d H:i:s' ), $currency ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$out['expired'] = array( 'count' => (int) ( $expired['cnt'] ?? 0 ), 'value' => round( (float) ( $expired['val'] ?? 0 ), 2 ) );
+		$top = $wpdb->get_results( $wpdb->prepare( "SELECT product_id, COUNT(*) AS cnt, SUM( {$value} ) AS val FROM {$t['vouchers']} WHERE created_at BETWEEN %s AND %s AND order_id > 0 AND product_id > 0 AND type <> 'credit' AND currency = %s GROUP BY product_id ORDER BY cnt DESC, val DESC LIMIT 5", $start, $end, $currency ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		foreach ( $top as $row ) {
+			$product      = wc_get_product( (int) $row['product_id'] );
+			$out['top'][] = array(
+				'product_id' => (int) $row['product_id'],
+				/* translators: %d: product id */
+				'name'       => $product ? $product->get_name() : sprintf( __( 'Product #%d (deleted)', 'voucher-captain' ), (int) $row['product_id'] ),
+				'count'      => (int) $row['cnt'],
+				'value'      => round( (float) $row['val'], 2 ),
+			);
+		}
+		return $out;
+	}
+
 	/** Paid statuses that count for reports. */
 	public static function statuses(): array {
 		return array_map( static fn( $s ) => 'wc-' . $s, (array) apply_filters( 'vcap_report_statuses', array_merge( wc_get_is_paid_statuses(), array( 'refunded' ) ) ) );

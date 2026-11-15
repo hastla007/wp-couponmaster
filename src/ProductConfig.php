@@ -55,6 +55,10 @@ final class ProductConfig {
 		'channels'            => array(),
 		'builtin_fields'      => array( 'recipient_name', 'recipient_email', 'message' ),
 		'message_maxlength'   => 300,
+		// M12-96: PDF templates the customer may choose from on the product page (empty: no choice).
+		'allowed_templates'   => array(),
+		// M12-97: shipped plastic/paper card with a code from the batch, activated when the order is completed.
+		'physical'            => 'no',
 	);
 
 	/** Keys a variation may override (empty = inherit). */

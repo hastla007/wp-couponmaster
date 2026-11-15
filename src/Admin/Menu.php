@@ -18,6 +18,7 @@ final class Menu {
 		// M12-19, M12-56: issuing without an order and importing existing cards.
 		( new IssueVoucher() )->register();
 		( new CardImport() )->register();
+		( new VoucherLinks() )->register(); // M12-54.
 	}
 
 	public static function cap(): string {

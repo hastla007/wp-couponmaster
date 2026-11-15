@@ -17,6 +17,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_before_fields` | `src/Fields.php` | – |
 | `vcap_campaigns_table_cell` | `src/Admin/CampaignAdmin.php` | Extra cells of the campaign table (e.g. the partner of WP Affiliate Captain). |
 | `vcap_campaigns_table_header` | `src/Admin/CampaignAdmin.php` | – |
+| `vcap_card_moved_to_credit` | `src/CardToCredit.php` | A gift card was moved into a customer's store credit (args: card Voucher, user id, amount). |
 | `vcap_gift_card_topped_up` | `src/TopUp.php` | A gift card was topped up by an order (args: Voucher $card, float $amount, WC_Order $order, order item). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_loaded` | `voucher-captain.php` | Voucher Captain has booted: vcap() and its services (api_v1, redemptions …) can be used from here on. |
 | `vcap_no_cache` | `src/Shortcodes.php` | Fires when a page must not be cached (hook for cache plugins without DONOTCACHEPAGE support). |
@@ -146,6 +147,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_pdf_image_mimes` | `src/PdfRenderer.php` | – |
 | `vcap_pdf_remote_hosts` | `src/PdfRenderer.php` | – |
 | `vcap_personal_voucher_email_verified` | `src/PersonalVoucher.php` | Whether the account email of a customer counts as verified for personal vouchers (V6). Default: the customer proved the mailbox (password reset through the emailed link, or the confirmation link) or the account is grandfathered (registered before the proof of mailbox was introduced, email unchanged since; AP-S1-1). |
+| `vcap_physical_activation_statuses` | `src/PhysicalCards.php` | Order statuses at which physical gift cards are activated (default: completed). |
 | `vcap_placeholder_definitions` | `src/Placeholders.php` | – |
 | `vcap_placeholders` | `src/Placeholders.php` | – |
 | `vcap_product_config` | `src/ProductConfig.php` | – |

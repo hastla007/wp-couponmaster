@@ -38,18 +38,19 @@ final class ReportsAdmin {
 	 */
 	private static function view(): string {
 		$view = sanitize_key( wp_unslash( $_GET['view'] ?? '' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only.
-		$views = array( 'campaigns', 'liability', 'journal', 'counter' );
+		$views = array( 'overview', 'campaigns', 'liability', 'journal', 'counter' );
 		if ( \VCAP\Compat\PassCaptainReconcile::available() ) {
 			$views[] = 'reconcile';
 		}
 		if ( in_array( $view, $views, true ) ) {
 			return $view;
 		}
-		return 'campaigns';
+		return 'overview'; // M12-92: the overview is the first page (a CSV link without a view stays the campaign report).
 	}
 
 	private static function tabs( string $current ): void {
 		$tabs = array(
+			'overview'  => __( 'Overview', 'voucher-captain' ),
 			'campaigns' => __( 'Campaigns and codes', 'voucher-captain' ),
 			'liability' => __( 'Outstanding value', 'voucher-captain' ),
 			'journal'   => __( 'Redemption journal', 'voucher-captain' ),
@@ -87,6 +88,10 @@ final class ReportsAdmin {
 			$this->counter_page();
 			return;
 		}
+		if ( 'overview' === $view ) {
+			$this->overview_page();
+			return;
+		}
 		list( $from, $to ) = self::range( $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only filter.
 		$reports           = new Reports();
 		$rows              = $reports->collect( $from, $to );
@@ -96,7 +101,7 @@ final class ReportsAdmin {
 			<h1><?php esc_html_e( 'Reports', 'voucher-captain' ); ?></h1>
 			<?php self::tabs( 'campaigns' ); ?>
 			<form method="get" class="vcap-report-filter">
-				<input type="hidden" name="page" value="vcap-reports" />
+				<input type="hidden" name="page" value="vcap-reports" /><input type="hidden" name="view" value="campaigns" />
 				<label><?php esc_html_e( 'From', 'voucher-captain' ); ?> <input type="date" name="from" value="<?php echo esc_attr( $from ); ?>" /></label>
 				<label><?php esc_html_e( 'until', 'voucher-captain' ); ?> <input type="date" name="to" value="<?php echo esc_attr( $to ); ?>" /></label>
 				<button class="button"><?php esc_html_e( 'Show', 'voucher-captain' ); ?></button>
@@ -134,6 +139,59 @@ final class ReportsAdmin {
 						<td><?php echo esc_html( (string) $r['orders'] ); ?></td>
 						<td><?php echo wp_kses_post( wc_price( $r['discount'] ) ); ?></td>
 						<td><?php echo wp_kses_post( wc_price( $r['revenue'] ) ); ?></td>
+					</tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
+		</div>
+		<?php
+	}
+
+	/** M12-92: key figures of a period (sold, redeemed, open, expired, best-selling products). */
+	private function overview_page(): void {
+		list( $from, $to ) = self::range( $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only filter.
+		$o     = Reports::overview( $from, $to );
+		$money = static fn( float $v ): string => wp_kses_post( wc_price( $v, array( 'currency' => $o['currency'] ) ) );
+		$cards = array(
+			array( __( 'Sold', 'voucher-captain' ), $money( $o['sold']['value'] ), sprintf( /* translators: %d: number of vouchers */ _n( '%d voucher from orders', '%d vouchers from orders', $o['sold']['count'], 'voucher-captain' ), $o['sold']['count'] ) ),
+			array( __( 'Issued without order', 'voucher-captain' ), $money( $o['free']['value'] ), sprintf( /* translators: %d: number of vouchers */ _n( '%d voucher (goodwill, prizes, imports)', '%d vouchers (goodwill, prizes, imports)', $o['free']['count'], 'voucher-captain' ), $o['free']['count'] ) ),
+			array( __( 'Redeemed', 'voucher-captain' ), $money( $o['redeemed'] ), __( 'net of cancelled redemptions and refunds', 'voucher-captain' ) ),
+			array( __( 'Open', 'voucher-captain' ), $money( $o['open']['value'] ), sprintf( /* translators: 1: number of vouchers, 2: date */ _n( '%1$d voucher with value left on %2$s', '%1$d vouchers with value left on %2$s', $o['open']['count'], 'voucher-captain' ), $o['open']['count'], $to ) ),
+			array( __( 'Expired', 'voucher-captain' ), $money( $o['expired']['value'] ), sprintf( /* translators: %d: number of vouchers */ _n( '%d voucher expired with value left', '%d vouchers expired with value left', $o['expired']['count'], 'voucher-captain' ), $o['expired']['count'] ) ),
+		);
+		?>
+		<div class="wrap">
+			<h1><?php esc_html_e( 'Reports', 'voucher-captain' ); ?></h1>
+			<?php self::tabs( 'overview' ); ?>
+			<form method="get" class="vcap-report-filter">
+				<input type="hidden" name="page" value="vcap-reports" /><input type="hidden" name="view" value="overview" />
+				<label><?php esc_html_e( 'From', 'voucher-captain' ); ?> <input type="date" name="from" value="<?php echo esc_attr( $from ); ?>" /></label>
+				<label><?php esc_html_e( 'until', 'voucher-captain' ); ?> <input type="date" name="to" value="<?php echo esc_attr( $to ); ?>" /></label>
+				<button class="button"><?php esc_html_e( 'Show', 'voucher-captain' ); ?></button>
+			</form>
+			<?php /* translators: %s: currency code */ ?>
+			<p class="description"><?php echo esc_html( sprintf( __( 'Vouchers in the shop currency (%s); store credit is not counted as sold. Details: "Outstanding value" (per day) and "Redemption journal" (every booking).', 'voucher-captain' ), $o['currency'] ) ); ?></p>
+			<div class="vcap-report-cards" style="display:flex;flex-wrap:wrap;gap:12px;margin:1em 0">
+				<?php foreach ( $cards as $card ) : ?>
+					<div class="vcap-card" style="flex:1 1 180px;margin:0">
+						<h2 style="margin-top:0"><?php echo esc_html( $card[0] ); ?></h2>
+						<p style="font-size:1.6em;margin:.2em 0"><strong><?php echo $card[1]; // phpcs:ignore WordPress.Security.EscapeOutput -- wc_price() through wp_kses_post(). ?></strong></p>
+						<p class="description"><?php echo esc_html( $card[2] ); ?></p>
+					</div>
+				<?php endforeach; ?>
+			</div>
+			<h2><?php esc_html_e( 'Best-selling voucher products', 'voucher-captain' ); ?></h2>
+			<table class="widefat striped">
+				<thead><tr><th><?php esc_html_e( 'Product', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'Vouchers sold', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'Value', 'voucher-captain' ); ?></th></tr></thead>
+				<tbody>
+				<?php if ( ! $o['top'] ) : ?>
+					<tr><td colspan="3"><?php esc_html_e( 'No vouchers were sold in this period.', 'voucher-captain' ); ?></td></tr>
+				<?php endif; ?>
+				<?php foreach ( $o['top'] as $row ) : ?>
+					<tr>
+						<td><a href="<?php echo esc_url( VoucherLinks::product_url( $row['product_id'] ) ); ?>"><?php echo esc_html( $row['name'] ); ?></a></td>
+						<td><?php echo esc_html( (string) $row['count'] ); ?></td>
+						<td><?php echo $money( $row['value'] ); // phpcs:ignore WordPress.Security.EscapeOutput -- wc_price() through wp_kses_post(). ?></td>
 					</tr>
 				<?php endforeach; ?>
 				</tbody>

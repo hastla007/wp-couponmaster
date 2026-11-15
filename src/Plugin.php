@@ -135,6 +135,12 @@ final class Plugin {
 		( new CartBlocks( $this->vouchers, $this->payments, $this->store_credit ) )->register();
 		( new API\V1\RestController( $this->redemptions ) )->register();
 
+		// M12 package G: live preview and design gallery on the product page, physical cards, card → store credit.
+		( new LivePreview() )->register();
+		( new DesignGallery() )->register();
+		( new PhysicalCards() )->register();
+		( new CardToCredit( $this->store_credit, $this->vouchers ) )->register();
+
 		( new Compat\Subscriptions() )->register();
 		( new Compat\Wpml() )->register();
 		( new Compat\Multilingual() )->register();

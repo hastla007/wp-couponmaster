@@ -202,8 +202,12 @@ final class Settings {
 
 	private function section_list(): array {
 		return array(
-			''         => __( 'General', 'voucher-captain' ),
-			'delivery' => __( 'Delivery & downloads', 'voucher-captain' ),
+			''           => __( 'General', 'voucher-captain' ),
+			// M12-90: the former "General" page split up (the option keys are unchanged).
+			'redemption' => __( 'Redemption & balance', 'voucher-captain' ),
+			'promotions' => __( 'Promotions & refer a friend', 'voucher-captain' ),
+			'codes'      => __( 'Codes', 'voucher-captain' ),
+			'delivery'   => __( 'Delivery & downloads', 'voucher-captain' ),
 			'privacy'  => __( 'Privacy & advanced', 'voucher-captain' ),
 			'api'      => __( 'Integrations (API)', 'voucher-captain' ),
 		);
@@ -249,8 +253,13 @@ final class Settings {
 			case 'privacy':
 				$fields = $this->privacy_fields();
 				break;
+			case 'redemption':
+			case 'promotions':
+			case 'codes':
+				$fields = self::general_part( $this->general_fields(), $section );
+				break;
 			default:
-				$fields = $this->general_fields();
+				$fields = self::general_part( $this->general_fields(), '' );
 		}
 		return apply_filters( 'vcap_settings_fields', $fields, $section );
 	}
@@ -441,6 +450,78 @@ final class Settings {
 		);
 		$fields = array_merge( $fields, self::counter_limit_fields() );
 		return $fields;
+	}
+
+	/* ---- M12-90: sections of the former "General" page. ---------------------------------------------------- */
+
+	/** Blocks of general_fields() shown on their own section (other blocks stay on "General"). */
+	private const GENERAL_BLOCKS = array(
+		'vcap_codes'    => 'codes',
+		'vcap_redeem'   => 'redemption',
+		'vcap_referral' => 'promotions',
+	);
+
+	/** Single options shown on another section than their block's. */
+	private const GENERAL_OPTIONS = array(
+		'vcap_campaigns_enabled'     => 'promotions',
+		'vcap_bonus_wait_days'       => 'promotions',
+		'vcap_discounts_on_vouchers' => 'promotions',
+		'vcap_coupon_link'           => 'promotions',
+		'vcap_coupon_link_param'     => 'promotions',
+	);
+
+	/** Section ('' = General) of an option of general_fields() in block $block. */
+	public static function general_section_of( string $block, string $option ): string {
+		return self::GENERAL_OPTIONS[ $option ] ?? self::GENERAL_BLOCKS[ $block ] ?? '';
+	}
+
+	/**
+	 * The fields of general_fields() that belong to one section, with their blocks (title, fields, end). Options
+	 * moved out of their block get the block title "Promotions and links". Fields other code adds to a block of the
+	 * general page (filter or later additions) follow their block; unknown blocks stay on "General".
+	 *
+	 * @param array<int, array<string, mixed>> $fields
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function general_part( array $fields, string $section ): array {
+		$out    = array();
+		$block  = '';
+		$title  = null;
+		$opened = false;
+		foreach ( $fields as $field ) {
+			$type = (string) ( $field['type'] ?? '' );
+			if ( 'title' === $type ) {
+				$block  = (string) ( $field['id'] ?? '' );
+				$title  = $field;
+				$opened = false;
+				continue;
+			}
+			if ( 'sectionend' === $type ) {
+				if ( $opened ) {
+					$out[] = array( 'type' => 'sectionend', 'id' => (string) ( $title['id'] ?? $block ) );
+				}
+				$block  = '';
+				$title  = null;
+				$opened = false;
+				continue;
+			}
+			$own = self::GENERAL_BLOCKS[ $block ] ?? '';
+			if ( self::general_section_of( $block, (string) ( $field['id'] ?? '' ) ) !== $section ) {
+				continue;
+			}
+			if ( ! $opened ) {
+				$opened = true;
+				$title  = $own !== $section
+					? array( 'type' => 'title', 'title' => __( 'Promotions and links', 'voucher-captain' ), 'id' => $block . '_' . $section )
+					: ( $title ?? array( 'type' => 'title', 'id' => $block ) );
+				$out[]  = $title;
+			}
+			$out[] = $field;
+		}
+		if ( $opened ) {
+			$out[] = array( 'type' => 'sectionend', 'id' => (string) ( $title['id'] ?? $block ) );
+		}
+		return $out;
 	}
 
 	/** Section "General": issuing, codes, redemption and the other shop-wide options. */

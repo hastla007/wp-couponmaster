@@ -309,6 +309,41 @@ final class VoucherRepository {
 	}
 
 	/**
+	 * M12-54: what an admin search term can mean besides names and addresses: the exact code in its typed or scanned
+	 * forms (Tickets::code_candidates(): without separators, with spaces, from a link, Y/Z swapped), the start of a
+	 * code without the "…" a masked code is shown with, the end of a code (4–6 letters/digits, e.g. "…M9XA" from an
+	 * email or a receipt) and the orders of an order number ("#1234", also numbers of sequential-number plugins).
+	 *
+	 * @return array{codes: string[], prefix: string, plain: string, tail: string, order_ids: int[]}
+	 */
+	public static function search_terms( string $search ): array {
+		$clean   = trim( str_replace( array( "\u{2026}", '...' ), '', $search ) );
+		$compact = (string) preg_replace( '/\s+/u', '', $clean );
+		$alnum   = (string) preg_replace( '/[^\p{L}\p{N}]+/u', '', $clean );
+		$len     = function_exists( 'mb_strlen' ) ? mb_strlen( $alnum ) : strlen( $alnum );
+		$terms   = array(
+			'codes'     => '' !== $clean ? Tickets::code_candidates( $clean ) : array(),
+			'prefix'    => wc_format_coupon_code( $compact ),
+			// Letters and numbers only, from 6 characters (shorter ones are code ends or words).
+			'plain'     => $len >= 6 ? wc_format_coupon_code( $alnum ) : '',
+			// A code end: only when the term is short and was not a word of a name (it has a digit or was masked).
+			'tail'      => $len >= 4 && $len <= 6 && ( preg_match( '/\d/', $alnum ) || $clean !== trim( $search ) ) ? wc_format_coupon_code( $alnum ) : '',
+			'order_ids' => array(),
+		);
+		$number = ltrim( $compact, '#' );
+		if ( '' !== $number && ctype_digit( $number ) && (int) $number > 0 ) {
+			$ids = array( (int) $number );
+			// Sequential order numbers (plugins answer the order tracking filter, or store "_order_number").
+			$ids[] = (int) apply_filters( 'woocommerce_shortcode_order_tracking_order_id', $number ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce filter.
+			if ( class_exists( OrderLookup::class ) ) {
+				$ids = array_merge( $ids, OrderLookup::ids_with_meta( '_order_number', $number, array( 'limit' => 20 ) ) );
+			}
+			$terms['order_ids'] = array_values( array_unique( array_filter( array_map( 'intval', $ids ) ) ) );
+		}
+		return $terms;
+	}
+
+	/**
 	 * @return array{items: Voucher[], total: int}
 	 */
 	public function query( array $args ): array {
@@ -340,12 +375,27 @@ final class VoucherRepository {
 			} else {
 				// Code by its start (UNIQUE code index), email addresses by their start, names anywhere; an order
 				// number only for a number (a word must never match the vouchers without order, order_id = 0).
+				// M12-54: the code also exactly in its typed or scanned forms (without separators, with spaces, as
+				// a link), by its end ("…M9XA", 4–6 characters) and orders by their number (sequential numbers).
+				$terms   = self::search_terms( $search );
 				$like    = '%' . $wpdb->esc_like( $search ) . '%';
 				$parts   = array( 'code LIKE %s', 'buyer_email LIKE %s', 'recipient_email LIKE %s', 'buyer_name LIKE %s', 'recipient_name LIKE %s' );
-				array_push( $vals, $prefix, $prefix, $prefix, $like, $like );
-				if ( ctype_digit( $search ) && (int) $search > 0 ) {
-					$parts[] = 'order_id = %d';
-					$vals[]  = (int) $search;
+				array_push( $vals, $wpdb->esc_like( $terms['prefix'] ) . '%', $prefix, $prefix, $like, $like );
+				if ( $terms['codes'] ) {
+					$parts[] = 'code IN (' . implode( ',', array_fill( 0, count( $terms['codes'] ), '%s' ) ) . ')';
+					array_push( $vals, ...$terms['codes'] );
+				}
+				if ( '' !== $terms['plain'] ) {
+					// Typed without the separators the code is stored with ("ABCD1234" for "ABCD-1234").
+					$parts[] = "REPLACE(REPLACE(REPLACE(code, '-', ''), '_', ''), '.', '') LIKE %s";
+					$vals[]  = $wpdb->esc_like( $terms['plain'] ) . '%';
+				}
+				if ( '' !== $terms['tail'] ) {
+					$parts[] = "REPLACE(REPLACE(REPLACE(code, '-', ''), '_', ''), '.', '') LIKE %s";
+					$vals[]  = '%' . $wpdb->esc_like( $terms['tail'] );
+				}
+				if ( $terms['order_ids'] ) {
+					$parts[] = 'order_id IN (' . implode( ',', array_map( 'intval', $terms['order_ids'] ) ) . ')';
 				}
 				$where[] = '(' . implode( ' OR ', $parts ) . ')';
 			}

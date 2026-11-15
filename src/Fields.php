@@ -400,7 +400,9 @@ final class Fields {
 			}
 		}
 		if ( 'before_button' === $position && 'yes' === $config['preview'] ) {
-			echo '<p class="vcap-preview-row"><button type="button" class="button vcap-preview-button" data-product="' . esc_attr( (string) $product->get_id() ) . '">' . esc_html__( 'Preview voucher', 'voucher-captain' ) . '</button></p>';
+			// M12-53: the live preview is drawn above; the PDF is the print preview and opens in a new window.
+			$hint_id = 'vcap-preview-hint-' . $product->get_id();
+			echo '<p class="vcap-preview-row"><button type="button" class="button vcap-preview-button" data-product="' . esc_attr( (string) $product->get_id() ) . '" aria-describedby="' . esc_attr( $hint_id ) . '">' . esc_html__( 'Print preview (PDF)', 'voucher-captain' ) . '</button> <span class="vcap-preview-hint screen-reader-text" id="' . esc_attr( $hint_id ) . '">' . esc_html__( 'opens in a new window', 'voucher-captain' ) . '</span></p>';
 		}
 		echo '</div>';
 	}

@@ -33,7 +33,7 @@ test.describe( 'Screen reader: product page', () => {
 		const email = page.getByRole( 'textbox', { name: new RegExp( label.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' ), 'i' ) } );
 		await expect( email ).toHaveId( 'vcap-field-recipient_email' );
 		await expect( email ).toHaveJSProperty( 'required', true );
-		await expect( page.getByRole( 'button', { name: /Preview voucher/i } ) ).toBeVisible();
+		await expect( page.getByRole( 'button', { name: /Print preview/i } ) ).toBeVisible();
 	} );
 
 	test( 'a refused field is announced as an alert', async ( { page } ) => {
