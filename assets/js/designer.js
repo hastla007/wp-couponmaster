@@ -2,7 +2,7 @@
  * Voucher Captain – visual PDF template designer.
  *
  * Data model (stored as JSON in the hidden #vcap-design-json textarea):
- *   { page: { format, orientation, width, height, background, backgroundImageId, backgroundImage, backgroundFit },
+ *   { page: { format, orientation, width, height, background, backgroundImageId, backgroundImage, backgroundFit, bleed, cropMarks },
  *     elements: [ { id, type, name, x, y, w, h, rotation, opacity, locked, hidden, ...typeProps } ] }
  * All geometry is in millimetres; elements later in the array are rendered on top.
  */
@@ -240,6 +240,9 @@
 	var layersPanel = el( 'div', { class: 'vcap-d-panel vcap-d-layers' } );
 	var pagePanel = el( 'div', { class: 'vcap-d-panel vcap-d-pageprops' } );
 
+	// M12-75: dashed safety line (texts and codes inside it survive trimming), drawn above the background.
+	var safetyLayer = el( 'div', { class: 'vcap-d-safety', 'aria-hidden': 'true', style: 'position:absolute;pointer-events:none;border:1px dashed rgba(204,0,0,.55);box-sizing:border-box;z-index:0;' } );
+	page.appendChild( safetyLayer );
 	page.appendChild( guidesLayer );
 	workspace.appendChild( page );
 	sidebar.appendChild( propsPanel );
@@ -332,7 +335,8 @@
 			el( 'button', { type: 'button', class: 'button', 'aria-label': t.zoom + ' +', text: '+', onclick: function () { setZoom( state.scale * 1.2 ); } } ),
 			el( 'label', { class: 'vcap-d-check', for: 'vcap-d-snap' }, [ snapBox, ' ' + t.grid ] ),
 			starter,
-			el( 'button', { type: 'button', class: 'button button-primary', text: t.preview, onclick: preview } )
+			el( 'button', { type: 'button', class: 'button button-primary', text: t.preview, onclick: function () { preview( 'long' ); } } ),
+			el( 'button', { type: 'button', class: 'button', text: t.previewLines, onclick: function () { preview( 'lines' ); } } )
 		] ) );
 		updateToolbar();
 	}
@@ -402,6 +406,14 @@
 		} else {
 			page.style.backgroundImage = 'none';
 		}
+
+		var zone = ( cfg.safetyZone || 5 ) * s;
+		safetyLayer.style.left = zone + 'px';
+		safetyLayer.style.top = zone + 'px';
+		safetyLayer.style.width = Math.max( 0, size[ 0 ] * s - 2 * zone ) + 'px';
+		safetyLayer.style.height = Math.max( 0, size[ 1 ] * s - 2 * zone ) + 'px';
+		safetyLayer.style.outline = parseFloat( design.page.bleed || 0 ) > 0 ? ( parseFloat( design.page.bleed ) * s ) + 'px solid rgba(0,115,170,.12)' : 'none';
+		safetyLayer.style.outlineOffset = ( zone ) + 'px';
 
 		var selNode = null;
 		Array.prototype.slice.call( page.querySelectorAll( '.vcap-d-el, .vcap-d-sel' ) ).forEach( function ( n ) {
@@ -1022,6 +1034,10 @@
 			if ( 'custom' === item.qrContent ) {
 				grid.appendChild( field( t.value, textInput( item, 'qrValue' ), true ) );
 			}
+			if ( 'download' === item.qrContent ) {
+				// M12-41: how long the printed link works.
+				grid.appendChild( el( 'p', { class: 'description is-wide vcap-d-hint', text: t.qrDownloadHint } ) );
+			}
 			grid.appendChild( field( t.color, colorInput( item, 'color' ) ) );
 		} else if ( 'barcode' === item.type ) {
 			grid.appendChild( field( t.value, textInput( item, 'qrValue' ), true ) );
@@ -1029,6 +1045,8 @@
 			if ( 'EAN13' === item.barcodeType || 'C39' === item.barcodeType ) {
 				grid.appendChild( el( 'p', { class: 'description is-wide vcap-d-hint', text: t.barcodeFallback } ) );
 			}
+			// M12-40: the browser scanner without BarcodeDetector (iOS, Firefox) decodes QR codes only.
+			grid.appendChild( el( 'p', { class: 'description is-wide vcap-d-hint', text: t.barcodeScanner } ) );
 			grid.appendChild( field( t.color, colorInput( item, 'color' ) ) );
 			grid.appendChild( el( 'div', { class: 'vcap-d-field is-wide' }, [ toggle( item, 'showText', t.showText ) ] ) );
 		} else if ( 'rect' === item.type ) {
@@ -1109,6 +1127,10 @@
 		}
 		grid.appendChild( field( t.background, colorInput( p, 'background' ) ) );
 		grid.appendChild( field( t.fit, selectInput( p, 'backgroundFit', { cover: t.cover, contain: t.contain, stretch: t.stretch } ) ) );
+		// M12-75: bleed and crop marks for print shops.
+		grid.appendChild( field( t.bleed, numberInput( p, 'bleed', { step: 0.5, min: 0, max: 10, def: 0 } ) ) );
+		grid.appendChild( el( 'div', { class: 'vcap-d-field' }, [ toggle( p, 'cropMarks', t.cropMarks ) ] ) );
+		grid.appendChild( el( 'p', { class: 'description is-wide vcap-d-hint', text: t.bleedHelp } ) );
 		var bgButtons = el( 'div', { class: 'vcap-d-field is-wide' }, [
 			el( 'span', { class: 'vcap-d-label', text: t.bgImage } ),
 			el( 'button', { type: 'button', class: 'button', text: t.choose, onclick: function () {
@@ -1140,10 +1162,12 @@
 
 	// ------------------------------------------------------------------ preview.
 
-	function preview() {
+	function preview( variant ) {
 		save();
 		var form = el( 'form', { method: 'post', action: cfg.previewUrl, target: '_blank', style: 'display:none' } );
 		form.appendChild( el( 'input', { type: 'hidden', name: 'nonce', value: cfg.previewNonce } ) );
+		// M12-39: "lines" = worst-case message with many line breaks.
+		form.appendChild( el( 'input', { type: 'hidden', name: 'variant', value: 'lines' === variant ? 'lines' : 'long' } ) );
 		form.appendChild( el( 'input', { type: 'hidden', name: 'post_id', value: cfg.postId || 0 } ) );
 		var ta = el( 'textarea', { name: 'design' } );
 		ta.value = store.value;

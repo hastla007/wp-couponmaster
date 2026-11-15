@@ -55,6 +55,7 @@ final class ProductConfig {
 		'channels'            => array(),
 		'builtin_fields'      => array( 'recipient_name', 'recipient_email', 'message' ),
 		'message_maxlength'   => 300,
+		'message_maxlines'    => 0, // M12-39: line limit of the personal message (0 = none).
 	);
 
 	/** Keys a variation may override (empty = inherit). */

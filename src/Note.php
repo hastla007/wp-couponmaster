@@ -147,6 +147,8 @@ final class Note {
 			case 'resent_bulk':
 				/* translators: %s: roles, e.g. "Recipient, Buyer" */
 				return sprintf( __( 'Sent to %s by an admin (bulk action)', 'voucher-captain' ), self::roles( $a( 0 ) ) );
+			case 'printed_nup':
+				return __( 'Printed by an admin (several vouchers per A4 sheet)', 'voucher-captain' );
 			case 'resend_failed':
 				/* translators: %s: reason */
 				return sprintf( __( 'The voucher email was not sent: %s.', 'voucher-captain' ), (string) $a( 0 ) );

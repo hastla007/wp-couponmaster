@@ -52,6 +52,7 @@ final class VouchersListTable extends \WP_List_Table {
 			'void'       => __( 'Void', 'voucher-captain' ),
 			'reactivate' => __( 'Reactivate', 'voucher-captain' ),
 			'reissue'    => __( 'Reissue code (no email)', 'voucher-captain' ),
+			'print_nup'  => __( 'Print on A4 sheets (PDF, several per sheet)', 'voucher-captain' ),
 		);
 	}
 

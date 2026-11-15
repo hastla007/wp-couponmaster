@@ -966,11 +966,50 @@ final class VoucherAdmin {
 		if ( '-1' === $action || '' === $action ) {
 			$action = sanitize_key( wp_unslash( $_REQUEST['action2'] ?? '' ) );
 		}
+		if ( 'print_nup' === $action ) {
+			$this->print_nup( $ids );
+			return;
+		}
 		if ( ! in_array( $action, array( 'void', 'reactivate', 'resend', 'reissue' ), true ) ) {
 			return;
 		}
 		$result = $this->bulk( $action, $ids );
 		$this->redirect( $result['done'] || $result['failed'] || $result['skipped'] ? '' : 'bulk' );
+	}
+
+	/** Most vouchers in one N-up print (rendering time). */
+	public const PRINT_NUP_MAX = 100;
+
+	/**
+	 * M12-75: the selected vouchers side by side on A4 sheets as one PDF (PdfRenderer::render_many() N-up), e.g.
+	 * for printing vouchers to sell at the counter. Void vouchers are left out; vouchers whose page size differs
+	 * from the first one's are left out with a notice (one PDF has one sheet layout).
+	 *
+	 * @param int[] $ids
+	 */
+	private function print_nup( array $ids ): void {
+		$vouchers = array();
+		foreach ( array_slice( $ids, 0, self::PRINT_NUP_MAX ) as $id ) {
+			$v = $this->repo->get( (int) $id );
+			if ( $v && Voucher::STATUS_VOID !== $v->status ) {
+				$vouchers[] = $v;
+			}
+		}
+		if ( ! $vouchers || ! class_exists( '\Dompdf\Dompdf' ) ) {
+			Flash::add( 'error', __( 'No voucher of the selection can be printed.', 'voucher-captain' ) );
+			$this->redirect( '' );
+			return;
+		}
+		$parts = vcap()->pdf->render_many( $vouchers, true );
+		$first = $parts[0];
+		if ( count( $parts ) > 1 || count( $ids ) > self::PRINT_NUP_MAX ) {
+			/* translators: 1: number of printed vouchers, 2: number of selected vouchers */
+			Flash::add( 'warning', sprintf( __( '%1$d of %2$d selected vouchers were printed: one PDF holds vouchers of one page size, at most 100. Select the others separately.', 'voucher-captain' ), count( $first['vouchers'] ), count( $ids ) ) );
+		}
+		foreach ( $first['vouchers'] as $v ) {
+			$this->repo->log( $v->id, 'downloaded', null, null, \VCAP\Note::make( 'printed_nup', array() ) );
+		}
+		\VCAP\Preview::stream( $first['pdf'], 'vouchers-a4.pdf', false );
 	}
 
 	/**

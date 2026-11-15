@@ -68,7 +68,24 @@ translation (test "Some EU selling countries need voucher settings"). `tests/run
 - **Warnings:** a customer who enters characters without a glyph (or right-to-left text) gets a notice when adding the voucher to the cart. In the PDF, emoji without a glyph are left out; other missing characters print as empty boxes.
 - **Right-to-left scripts:** dompdf has no bidirectional layout and no Arabic shaping. Hebrew and Arabic print left to right, Arabic letters unjoined. Not supported for voucher texts.
 - **Images:** JPEG, PNG and GIF (WebP only where PHP's GD has WebP support); AVIF, HEIC, SVG and other formats cannot be chosen in the designer and are left out of the PDF. Images are read from the local uploads folder. With media offloaded to a cloud storage or CDN (WP Offload Media, WP-Stateless), name the image hosts with the filter `vcap_pdf_remote_hosts` (`[ 'cdn.example.com' ]`): images whose local file is missing are then downloaded from those hosts only (`wp_safe_remote_get`, cached for an hour). A missing image is logged (WooCommerce → Status → Logs, source `voucher-captain`), shown in the designer, and Site Health checks the template images.
-- **QR codes and barcodes** are drawn as vector graphics (SVG) and need no GD. EAN-13 and Code 39 values that the type cannot carry (generated voucher codes are longer than 13 digits) are printed as Code 128.
+- **QR codes and barcodes** are drawn as vector graphics (SVG) and need no GD. EAN-13 and Code 39 values that the type cannot carry (generated voucher codes are longer than 13 digits) are printed as Code 128. QR codes get a white quiet zone of 4 modules and white light modules, barcodes 10 white modules left and right; the opacity of these elements is ignored. The designer warns about QR modules below 0.33 mm, bar modules below 0.19 mm and a contrast below 4.5:1 to white. The browser camera scanner reads Code 128 only where the browser has `BarcodeDetector` (Chrome/Android); on iOS and in Firefox it reads QR codes only.
+- **Large PNG images:** transparent PNGs are composed pixel by pixel by dompdf (seconds per PDF). The renderer stores a copy reduced to 200 dpi of the box size (PNGs without transparency as JPEG) in the private folder (`img/`) and uses it for every later PDF; without GD the original is used. The designer warns about transparent PNGs over 500 KB. Customer previews of the same personalisation are cached for 10 minutes.
+- **Print shops:** the page option *Bleed (mm)* (0–10) makes the PDF larger by this margin on every side; the background colour and image and images, shapes and lines touching a page edge reach into it, *Crop marks* adds marks at the corners (from 2 mm bleed). The designer shows a dashed 5 mm safety line. *Vouchers → bulk action "Print on A4 sheets"* sets the selected vouchers (at most 100 of one page size) side by side on A4 (`PdfRenderer::render_many( $vouchers, true )`).
+
+## Private folder and web servers (nginx)
+
+Voucher PDFs, fonts and temp files are kept in `wp-content/uploads/vcap-<random>` (the name is stored in the option `vcap_private_dir`; the folder `vcap` of earlier versions is renamed on update). Temp PDFs get a random 24-character prefix and are attached to mails under their configured name (`wp_mail()` attachment keys, WordPress 6.2+); the daily maintenance deletes temp PDFs, previews, downloaded images (`img-*`), unfinished writes (`*.part`) and dompdf's temp images (`ca_dompdf_img_*`) older than one hour.
+
+Apache reads the `.htaccess` files of the folder (`Require all denied`, with the 2.2 syntax as fallback). **nginx ignores them**: block the folder in the server configuration, e.g.
+
+```nginx
+location ~* ^/wp-content/uploads/vcap(-[a-z0-9]+)?/ {
+    deny all;
+    return 404;
+}
+```
+
+*Tools → Site Health* writes a test file into the folder and requests it over HTTP: if it can be downloaded (status 200), the check "The private voucher folder can be opened from the web" is critical.
 
 ## Bundled libraries
 
