@@ -299,6 +299,11 @@ final class CustomAmount {
 		if ( ! $product || ! $this->is_custom( $product ) ) {
 			return $passed;
 		}
+		if ( $this->store_api && ! ( is_array( $cart_item_data ) && isset( $cart_item_data['vcap_amount'] ) ) ) {
+			// Store API before WooCommerce 9.x calls this filter without the cart item data; the amount taken by
+			// store_api_data() is checked by store_api_validate() and cart_item_data() instead.
+			return $passed;
+		}
 		$error = $this->amount_error( $product, $this->requested_amount( $cart_item_data, $product ) );
 		if ( $error ) {
 			$this->error = $error;
