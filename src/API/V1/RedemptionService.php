@@ -68,11 +68,11 @@ final class RedemptionService {
 	/**
 	 * Check whether a code can be redeemed, without reserving anything.
 	 *
-	 * @param string $code    Voucher code.
-	 * @param array<string, mixed>  $args    Optional: target (string), amount (float), user_id (int, PHP callers only),
-	 *                        email (string, PHP callers only: customer email of a guest, for personal vouchers – only
-	 *                        with email_verified), email_verified (bool, PHP callers only: the caller vouches that the
-	 *                        customer controls this address, e.g. its own logged-in account or staff checked the ID).
+	 * @param string               $code    Voucher code.
+	 * @param array<string, mixed> $args    Optional: target (string), amount (float), user_id (int, PHP callers only),
+	 *                       email (string, PHP callers only: customer email of a guest, for personal vouchers – only
+	 *                       with email_verified), email_verified (bool, PHP callers only: the caller vouches that the
+	 *                       customer controls this address, e.g. its own logged-in account or staff checked the ID).
 	 * @return array<string, mixed>|\WP_Error
 	 */
 	public function check( string $code, array $args = array() ): array|\WP_Error {
@@ -104,13 +104,13 @@ final class RedemptionService {
 	 * Idempotent: repeating the call with the same key and the same request returns the existing redemption;
 	 * the same key with a different request returns vcap_idempotency_conflict.
 	 *
-	 * @param string $code Voucher code.
-	 * @param array<string, mixed>  $args key (string, required), target (string, required), amount (float, gift cards),
-	 *                     user_id (int, PHP callers only; REST always uses the authenticated user), meta (array),
-	 *                     ttl_minutes (int, PHP callers only: how long the reservation is held before it is released
-	 *                     automatically; default the "Reservation lifetime" setting, at most 60 days),
-	 *                     email (string, PHP callers only: verified customer email of a guest, for personal vouchers),
-	 *                     email_verified (bool, PHP callers only: required for email to unlock a personal voucher, V6).
+	 * @param string               $code Voucher code.
+	 * @param array<string, mixed> $args key (string, required), target (string, required), amount (float, gift cards),
+	 *                    user_id (int, PHP callers only; REST always uses the authenticated user), meta (array),
+	 *                    ttl_minutes (int, PHP callers only: how long the reservation is held before it is released
+	 *                    automatically; default the "Reservation lifetime" setting, at most 60 days),
+	 *                    email (string, PHP callers only: verified customer email of a guest, for personal vouchers),
+	 *                    email_verified (bool, PHP callers only: required for email to unlock a personal voucher, V6).
 	 * @return array<string, mixed>|\WP_Error
 	 * @throws \Throwable Database errors are re-thrown after the transaction was rolled back.
 	 */
@@ -334,8 +334,8 @@ final class RedemptionService {
 	/**
 	 * Make a reservation final. Idempotent: committing a committed redemption returns it unchanged.
 	 *
-	 * @param string $key  Redemption key.
-	 * @param array<string, mixed>  $args user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
+	 * @param string               $key  Redemption key.
+	 * @param array<string, mixed> $args user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
 	 * @return array<string, mixed>|\WP_Error
 	 */
 	public function commit( string $key, array $args = array() ): array|\WP_Error {
@@ -345,8 +345,8 @@ final class RedemptionService {
 	/**
 	 * Cancel a reservation and give the voucher value back. Idempotent for already released redemptions.
 	 *
-	 * @param string $key  Redemption key.
-	 * @param array<string, mixed>  $args user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
+	 * @param string               $key  Redemption key.
+	 * @param array<string, mixed> $args user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
 	 * @return array<string, mixed>|\WP_Error
 	 */
 	public function release( string $key, array $args = array() ): array|\WP_Error {
@@ -361,10 +361,10 @@ final class RedemptionService {
 	 * the same refund key with a different amount is a conflict.
 	 *
 	 * @since 1.1.0
-	 * @param string $key        Redemption key.
-	 * @param float  $amount     Amount to give back (voucher currency).
-	 * @param string $refund_key Idempotency key of this refund.
-	 * @param array<string, mixed>  $args       user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
+	 * @param string               $key        Redemption key.
+	 * @param float                $amount     Amount to give back (voucher currency).
+	 * @param string               $refund_key Idempotency key of this refund.
+	 * @param array<string, mixed> $args       user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
 	 * @return array<string, mixed>|\WP_Error Redemption data plus refunded (total) and restored (this call).
 	 * @throws \Throwable Database errors are re-thrown after the transaction was rolled back.
 	 */
@@ -580,10 +580,10 @@ final class RedemptionService {
 	/**
 	 * Move a reservation to committed or released inside one transaction.
 	 *
-	 * @param string $key     Redemption key.
-	 * @param string $to      Target state.
-	 * @param array<string, mixed>  $args    user_id for ownership checks.
-	 * @param bool   $expired Called by the expiry job.
+	 * @param string               $key     Redemption key.
+	 * @param string               $to      Target state.
+	 * @param array<string, mixed> $args    user_id for ownership checks.
+	 * @param bool                 $expired Called by the expiry job.
 	 * @return array<string, mixed>|\WP_Error
 	 * @throws \Throwable Database errors are re-thrown after the transaction was rolled back.
 	 */
