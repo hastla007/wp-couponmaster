@@ -1365,7 +1365,7 @@ $GLOBALS['wpdb']->answers = array(
 	'/^SHOW TABLES LIKE/'           => static fn( $q ) => preg_match( "/LIKE '([a-z_0-9\\\\]+)'/", $q, $m ) ? stripslashes( $m[1] ) : null,
 	'/^SHOW COLUMNS FROM/'          => static function ( $q ) {
 		preg_match( '/FROM (\S+)/', $q, $m );
-		return array( 'id', 'code', 'coupon_id', 'type', 'status', 'order_id', 'order_item_id', 'item_index', 'product_id', 'variation_id', 'template_id', 'usage_mode', 'discount_type', 'initial_amount', 'balance', 'currency', 'expires_at', 'buyer_name', 'buyer_email', 'user_id', 'recipient_name', 'recipient_email', 'message', 'fields', 'send_to', 'delivery_at', 'delivered_at', 'token', 'transferable', 'terms', 'max_checkins', 'checkins', 'last_checkin_at', 'delivered_roles', 'created_at', 'updated_at', 'voucher_id', 'event', 'amount', 'balance_after', 'source', 'note', 'actor_email_hash', 'batch', 'imported_at', 'used_at', 'redemption_key', 'target', 'state', 'request_hash', 'meta', 'campaign_id', 'customer_key', 'claim_key', 'kind' );
+		return array( 'id', 'code', 'coupon_id', 'type', 'status', 'order_id', 'order_item_id', 'item_index', 'product_id', 'variation_id', 'template_id', 'usage_mode', 'discount_type', 'initial_amount', 'balance', 'currency', 'expires_at', 'buyer_name', 'buyer_email', 'user_id', 'recipient_name', 'recipient_email', 'message', 'fields', 'send_to', 'delivery_at', 'delivered_at', 'token', 'transferable', 'terms', 'max_checkins', 'checkins', 'last_checkin_at', 'delivered_roles', 'created_at', 'updated_at', 'voucher_id', 'event', 'amount', 'balance_after', 'source', 'till', 'receipt', 'note', 'actor_email_hash', 'batch', 'imported_at', 'used_at', 'redemption_key', 'target', 'state', 'request_hash', 'meta', 'campaign_id', 'customer_key', 'claim_key', 'kind' );
 	},
 	'/^SHOW INDEX FROM wp_vcap_events$/' => array( 'PRIMARY', 'voucher_ledger', 'voucher_order', 'actor_email_hash', 'event' ),
 	'/^SHOW INDEX FROM/'            => static function ( $q ) {
@@ -1535,6 +1535,37 @@ $GLOBALS['vcap_test_options']['vcap_referral_min_spend']   = '';
 $p12_pct = $p12_ref->effective_min_spend();
 unset( $GLOBALS['vcap_test_options']['vcap_referral_min_spend'], $GLOBALS['vcap_test_options']['vcap_referral_friend_type'] );
 check( 'V3: the friend\'s code needs an order above the discount: automatic 2 × 10 = 20, an entered 0 becomes 11, 35 stays 35, percentages as entered', 20.0 === $p12_auto && 11.0 === $p12_zero && 35.0 === $p12_own_min && 0.0 === $p12_pct, var_export( array( $p12_auto, $p12_zero, $p12_own_min, $p12_pct ), true ) );
+
+echo "R6 tills, counter limits and add-on hooks\n";
+$r6_note = VCAP\Tickets::counter_note( 'Lunch', '4711', 'Shop 1' );
+check( 'R6: till and receipt are read back from a counter note written before schema 1.8.0 (English and German labels)', array( 'till' => 'Shop 1', 'receipt' => '4711' ) === VCAP\Counter::parse_note( $r6_note ) && array( 'till' => 'Filiale Graz', 'receipt' => 'B-12' ) === VCAP\Counter::parse_note( 'Im Laden eingelöst · Beleg B-12 · Kasse Filiale Graz' ) && array( 'till' => '', 'receipt' => '' ) === VCAP\Counter::parse_note( 'Redeemed in store' ) && array( 'till' => '', 'receipt' => '' ) === VCAP\Counter::parse_note( VCAP\Note::make( 'delivered', array( 1 ) ) ), var_export( VCAP\Counter::parse_note( $r6_note ), true ) );
+$r6_none  = VCAP\Counter::exceeded( array( 'amount' => 0.0, 'count' => 0 ), array( 'count' => 99, 'amount' => 9999.0 ), 500.0 );
+$r6_fits  = VCAP\Counter::exceeded( array( 'amount' => 100.0, 'count' => 3 ), array( 'count' => 2, 'amount' => 60.0 ), 40.0 );
+$r6_amt   = VCAP\Counter::exceeded( array( 'amount' => 100.0, 'count' => 0 ), array( 'count' => 2, 'amount' => 60.0 ), 40.01 );
+$r6_cnt   = VCAP\Counter::exceeded( array( 'amount' => 0.0, 'count' => 3 ), array( 'count' => 3, 'amount' => 0.0 ), 0.0 );
+check( 'R6: daily limits: 0 = unlimited, exactly reaching the limit fits, one cent above is refused with what is left, the count limit counts this redemption', null === $r6_none && null === $r6_fits && 'amount' === $r6_amt['kind'] && 40.0 === $r6_amt['left'] && 'count' === $r6_cnt['kind'] && 0.0 === $r6_cnt['left'], var_export( array( $r6_fits, $r6_amt, $r6_cnt ), true ) );
+check( 'R6: the scanner message names the limit and what is left', str_contains( VCAP\Counter::limit_message( 'till', 'Shop 1', $r6_cnt, 'EUR' ), '"Shop 1"' ) && str_contains( VCAP\Counter::limit_message( 'user', '', $r6_cnt, 'EUR' ), 'left: 0' ) );
+check( 'R6: counter limits are off by default (0 = unlimited)', 0 === VCAP\Settings::DEFAULTS[ VCAP\Counter::USER_AMOUNT ] && 0 === VCAP\Settings::DEFAULTS[ VCAP\Counter::USER_COUNT ] && 0 === VCAP\Settings::DEFAULTS[ VCAP\Counter::TILL_AMOUNT ] && 0 === VCAP\Settings::DEFAULTS[ VCAP\Counter::TILL_COUNT ] );
+$r6_head = VCAP\Ledger::journal_header();
+$r6_line = VCAP\Ledger::journal_line( array( 'created_at' => '2026-11-14 10:00:00', 'code' => 'ABC', 'type' => 'giftcard', 'currency' => 'EUR', 'event' => 'redeemed', 'amount' => 5, 'balance_after' => 10, 'order_id' => 0, 'till' => 'Shop 1', 'receipt' => '4711', 'note' => 'x' ) );
+check( 'R6: the journal CSV has its own till/branch and receipt columns', 'Shop 1' === $r6_line[ array_search( 'Till / branch', $r6_head, true ) ] && '4711' === $r6_line[ array_search( 'Receipt no.', $r6_head, true ) ] && count( $r6_head ) === count( $r6_line ) );
+check( 'R6: the counter report CSV groups by till, staff member or both', array( 'Till / branch', 'Staff member' ) === array_slice( VCAP\Ledger::counter_header( 'both' ), 0, 2 ) && 'Currency' === VCAP\Ledger::counter_header( 'user' )[1] && 'Till / branch' === VCAP\Ledger::counter_header( 'till' )[0] );
+$r6_v         = new VCAP\Voucher();
+$r6_v->status = VCAP\Voucher::STATUS_ACTIVE;
+add_filter(
+	'vcap_voucher_links',
+	static fn( $links, $voucher, $context ) => array_merge( $links, array( array( 'label' => '<b>Add to Wallet</b>', 'url' => 'https://wallet.example/' . $context ), array( 'label' => 'Bad', 'url' => 'javascript:alert(1)' ), array( 'label' => '', 'url' => 'https://x.example/' ), 'junk' ) ),
+	10,
+	3
+);
+$r6_links = VCAP\Downloads::voucher_links( $r6_v, 'email' );
+$r6_v->status = VCAP\Voucher::STATUS_VOID;
+check( 'R6: vcap_voucher_links: only labelled http(s) links are kept, as plain text; none for a cancelled voucher', array( array( 'label' => 'Add to Wallet', 'url' => 'https://wallet.example/email' ) ) === $r6_links && array() === VCAP\Downloads::voucher_links( $r6_v, 'account' ), var_export( $r6_links, true ) );
+unset( $GLOBALS['vcap_test_filters']['vcap_voucher_links'] );
+$r6_src = (string) file_get_contents( dirname( __DIR__ ) . '/src/VoucherRepository.php' );
+check( 'R6: vcap_voucher_event passes the source and the acting user id as trailing arguments', str_contains( $r6_src, "do_action( 'vcap_voucher_event', \$voucher_id, \$event, \$amount, \$balance_after, Note::render( \$note ), \$order_id, \$source, (int) \$row['user_id'] )" ) );
+check( 'R6: the admin menu fires vcap_admin_menu with its parent slug', str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Admin/Menu.php' ), "do_action( 'vcap_admin_menu', 'vcap-vouchers' )" ) );
+check( 'R6: schema 1.8.0 adds the ledger columns till and receipt, migrated after 1.7.0', '1.8.0' === VCAP\Install::EVENT_TILL_VERSION && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/voucher-captain.php' ), "define( 'VCAP_DB_VERSION', '1.8.0' )" ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Install.php' ), "till varchar(100) NOT NULL DEFAULT ''" ) );
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

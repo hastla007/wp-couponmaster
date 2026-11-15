@@ -42,6 +42,7 @@ Entscheidung des Betreibers vom 13.11.2026 (verbindlich). Dieses Dokument ersetz
 | Verwaltung | Gutscheinliste, Detailansicht, Guthabenkorrektur, erneuter Versand, Stornieren, Verlauf; Shortcodes und Blöcke |
 | Kundenguthaben | Guthabenkonto je Kunde, Erstattung als Guthaben mit Zustimmung |
 | Scanner & Pässe | QR-Prüfung und Einlösung, Kassiererrolle, Storno einer Schaltereinlösung |
+| **Standorte & Mitarbeiter** (Entscheidung 15.11.: frei) | Kasse/Filiale je Gerät und Beleg-Nr. als eigene Spalten im Einlösejournal (Seite + CSV), Bericht „Kassen und Personal“ (Schaltereinlösungen je Kasse/Filiale und/oder Mitarbeiter, Anzahl, Betrag, Stornos, je Währung, CSV), Tageslimits für Schaltereinlösungen je Mitarbeiter und je Kasse (Betrag/Anzahl, Standard aus, eigenes Limit im Benutzerprofil) |
 | Code-Import & Code-Kampagnen | CSV/XLS/XLSX/ODS, Batches, Duplikaterkennung, Kampagnen mit Partnern |
 | Einlöse-API & Connectoren | `vcap()->api_v1`, `vcap()->redemptions`, REST `vcap/v1`, Kanäle, eigene Gutscheintypen |
 | Steuer & Recht | Steuerbehandlung je Gutscheinart, Mehrzweckgutscheine als Zahlung, gesetzliche Gültigkeit je Land |
@@ -73,6 +74,22 @@ Besonders nützlich für ein Add-on: `vcap_settings_fields` (eigene Einstellunge
 `vcap_voucher_admin_actions`/`vcap_voucher_admin_action` (Aktionen in der Gutscheinansicht) und die Ereignisse
 `vcap_vouchers_issued`, `vcap_voucher_redeemed`, `vcap_voucher_event`.
 
+Seit Schema 1.8.0 (R6) zusätzlich für das Add-on:
+
+- `vcap_admin_menu` (Action, `$parent_slug` = `vcap-vouchers`): nach dem Menü des Kerns, für eigene Unterseiten
+  (`add_submenu_page( $parent_slug, … )`, erscheinen vor „Einstellungen“).
+- `vcap_voucher_event`: zusätzlich `$source` (`Source::current()`) und die ID des handelnden Benutzers als 7. und
+  8. Argument (rückwärtskompatibel; mit `add_action( …, 10, 8 )` registrieren).
+- `vcap()->issuer->issue_standalone( array $args )`: Gutschein ohne Bestellung ausstellen (Firmenbestellung mit
+  Empfängerliste, Kulanz, Gewinnspiel) – Produkt oder Wert/Art/Ablauf, Empfänger, Versand sofort, Quelle/Referenz
+  (idempotent); Rechte prüft der Aufrufer (API.md → „Issuing vouchers without an order“). Danach
+  `vcap_voucher_issued_standalone` (`Voucher`, `$args`).
+- `vcap_voucher_links` (Filter, `array $links`, `Voucher`, `$context` = `email`, `email_plain`, `account`): zusätzliche
+  Links wie „Add to Wallet“ in der Gutschein-E-Mail (HTML und Text) und in der Gutscheinliste von „Mein Konto“,
+  escaped ausgegeben.
+- `vcap_counter_limits` / `vcap_counter_limit_applies` (Filter): Tageslimits am Schalter je Mitarbeiter/Kasse ändern
+  (z. B. je Filiale) bzw. festlegen, für wen sie gelten.
+
 Vollständige Liste der vorhandenen Hooks (Stand dieses Commits; erzeugt aus `apply_filters( 'vcap_…' )` und
 `do_action( 'vcap_…' )` in `src/`, `templates/` und `voucher-captain.php`):
 
@@ -81,6 +98,7 @@ Vollständige Liste der vorhandenen Hooks (Stand dieses Commits; erzeugt aus `ap
 | `vcap_account_voucher_actions` | Action | `templates/myaccount/vouchers-table` |
 | `vcap_account_voucher_status` | Action | `templates/myaccount/vouchers-table` |
 | `vcap_account_vouchers_top` | Action | `Downloads` |
+| `vcap_admin_menu` | Action | `Admin/Menu` |
 | `vcap_affiliate_campaign_partner_changed` | Action | `Compat/AffiliateCaptain` |
 | `vcap_affiliate_commission_on_voucher_sales` | Filter | `Compat/AffiliateCaptain` |
 | `vcap_allow_refund_of_spent_top_ups` | Filter | `TopUp` |
@@ -101,6 +119,8 @@ Vollständige Liste der vorhandenen Hooks (Stand dieses Commits; erzeugt aus `ap
 | `vcap_checkin_undo_minutes` | Filter | `Tickets` |
 | `vcap_claim_retention_days` | Filter | `Claim` |
 | `vcap_client_ip` | Filter | `Plugin` |
+| `vcap_counter_limit_applies` | Filter | `Counter` |
+| `vcap_counter_limits` | Filter | `Counter` |
 | `vcap_counter_reversal_minutes` | Filter | `Tickets` |
 | `vcap_coupon_allowed_on_voucher_products` | Filter | `VoucherPurchaseRules` |
 | `vcap_coupon_before_save` | Filter | `CouponManager` |
@@ -226,6 +246,8 @@ Vollständige Liste der vorhandenen Hooks (Stand dieses Commits; erzeugt aus `ap
 | `vcap_voucher_double_use` | Action | `CouponManager` |
 | `vcap_voucher_event` | Action | `VoucherRepository` |
 | `vcap_voucher_expires_at` | Filter | `Issuer` |
+| `vcap_voucher_issued_standalone` | Action | `Issuer` |
+| `vcap_voucher_links` | Filter | `Downloads` |
 | `vcap_voucher_next_steps` | Filter | `templates/emails/voucher`, `templates/emails/plain/voucher` |
 | `vcap_voucher_pays_after_tax` | Filter | `PaymentVouchers` |
 | `vcap_voucher_pays_shipping_and_fees` | Filter | `PaymentVouchers` |

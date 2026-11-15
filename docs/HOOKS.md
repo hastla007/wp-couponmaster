@@ -11,6 +11,7 @@ are described in CONNECTORS.md and API.md.
 | `vcap_account_voucher_actions` | `templates/myaccount/vouchers-table.php` | Extra actions of connectors (e.g. "Exchange for tickets", "Send tickets again"). |
 | `vcap_account_voucher_status` | `templates/myaccount/vouchers-table.php` | Extra status lines of connectors (e.g. "2 tickets for … on …, sent to …"). |
 | `vcap_account_vouchers_top` | `src/Downloads.php` | – |
+| `vcap_admin_menu` | `src/Admin/Menu.php` | The plugin's admin menu is registered (arg: parent slug "vcap-vouchers"): add-ons add their submenu pages with add_submenu_page( $parent_slug, … ) here (before "Settings", which is added last). |
 | `vcap_affiliate_campaign_partner_changed` | `src/Compat/AffiliateCaptain.php` | Fires after the partner of a voucher campaign was changed (for audit logs). |
 | `vcap_before_fields` | `src/Fields.php` | – |
 | `vcap_campaigns_table_cell` | `src/Admin/CampaignAdmin.php` | Extra cells of the campaign table (e.g. the partner of WP Affiliate Captain). |
@@ -39,8 +40,9 @@ are described in CONNECTORS.md and API.md.
 | `vcap_voucher_delivered` | `src/Delivery.php` | A voucher was delivered to everyone it is meant for (args: Voucher $voucher, string[] $addresses). |
 | `vcap_voucher_delivery_given_up` | `src/Delivery.php` | A delivery was given up after $failures failed attempts. |
 | `vcap_voucher_double_use` | `src/CouponManager.php` | – |
-| `vcap_voucher_event` | `src/VoucherRepository.php` | A history entry was written (args: voucher id, event, amount, balance after, note as text, order id). |
+| `vcap_voucher_event` | `src/VoucherRepository.php` | A history entry was written (args: voucher id, event, amount, balance after, note as text, order id, source (Source::current(): admin, cron, rest, scanner, checkout, cli, web), acting user id (0 = none)). The last two were added later: register with 8 accepted args to get them. |
 | `vcap_voucher_expired` | `src/VoucherRepository.php` | Vouchers whose validity ended were marked as expired (one call per batch of the daily maintenance). |
+| `vcap_voucher_issued_standalone` | `src/Issuer.php` | A voucher was issued without an order (args: Voucher, the arguments of Issuer::issue_standalone()). |
 | `vcap_voucher_redeemed` | `src/API/V1/RedemptionService.php`, `src/VoucherRepository.php` | Fires once when an external redemption is completed. |
 | `vcap_voucher_reissued` | `src/Reissue.php` | Fires after a voucher was reissued with a new code and token (V10). The old code is no longer redeemable. |
 | `vcap_voucher_updated` | `src/Tickets.php`, `src/VoucherRepository.php` | A voucher was saved (args: Voucher as stored). May fire inside a database transaction, see CONNECTORS.md. |
@@ -67,6 +69,8 @@ are described in CONNECTORS.md and API.md.
 | `vcap_checkin_undo_minutes` | `src/Tickets.php` | – |
 | `vcap_claim_retention_days` | `src/Claim.php` | – |
 | `vcap_client_ip` | `src/Health.php`, `src/Plugin.php` | – |
+| `vcap_counter_limit_applies` | `src/Counter.php` | Whether the daily counter limits apply (default: not for staff who manage vouchers). Args: bool, user id, Voucher. |
+| `vcap_counter_limits` | `src/Counter.php` | Daily limits of counter redemptions for a staff member at a till (0 = unlimited), e.g. other limits per branch. Args: limits {user: {amount, count}, till: {amount, count}}, user id, till, Voucher\|null. |
 | `vcap_counter_reversal_minutes` | `src/Tickets.php` | – |
 | `vcap_coupon_allowed_on_voucher_products` | `src/VoucherPurchaseRules.php` | – |
 | `vcap_coupon_before_save` | `src/CouponManager.php` | – |
@@ -192,6 +196,7 @@ are described in CONNECTORS.md and API.md.
 | `vcap_voucher_code` | `src/Issuer.php` | – |
 | `vcap_voucher_expires_at` | `src/Issuer.php` | Expiry (UTC "Y-m-d H:i:s" or null) of a voucher being issued, e.g. no later than the event it is for. |
 | `vcap_voucher_is_means_of_payment` | `src/CouponManager.php` | – |
+| `vcap_voucher_links` | `src/Downloads.php` | Extra links of a voucher in its email and the customer's voucher list, e.g. "Add to Wallet". Args: list of array{label: string, url: string}, Voucher, context ("email", "email_plain" or "account"). |
 | `vcap_voucher_next_steps` | `templates/emails/plain/voucher.php`, `templates/emails/voucher.php` | Steps after receiving the voucher (e.g. "exchange it for tickets on the redeem page"); connectors add them for their voucher types. Empty: the usual "enter the code at checkout" hint. |
 | `vcap_voucher_pays_after_tax` | `src/PaymentVouchers.php` | – |
 | `vcap_voucher_pays_shipping_and_fees` | `src/PaymentVouchers.php` | Whether a voucher paying after tax may also pay shipping and fees (default: when it is not limited to products or categories). |
