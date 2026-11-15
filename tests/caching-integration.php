@@ -86,4 +86,23 @@ remove_filter( 'get_post_metadata', $m89_count, 10 );
 vcap_cache_assert( headers_sent() && 0 === $m89_reads, 'M12-89: once the headers are sent, redeem_link() returns before analysing the page content' );
 wp_delete_post( $m89_page, true );
 
+// M12-101: the state guard of the tax, acceptance and blocks suites restores settings and tax rates in finally.
+require_once __DIR__ . '/state-guard.php';
+$m101_rates   = (int) $GLOBALS['wpdb']->get_var( "SELECT COUNT(*) FROM {$GLOBALS['wpdb']->prefix}woocommerce_tax_rates" ); // phpcs:ignore
+$m101_taxes   = get_option( 'woocommerce_calc_taxes' );
+$m101_restore = vcap_test_state_guard( array( 'woocommerce_calc_taxes', 'vcap_m101_probe' ) );
+try {
+	try {
+		update_option( 'woocommerce_calc_taxes', 'yes' === $m101_taxes ? 'no' : 'yes' );
+		update_option( 'vcap_m101_probe', 'set' );
+		WC_Tax::_insert_tax_rate( array( 'tax_rate_country' => 'AT', 'tax_rate' => '20.0000', 'tax_rate_name' => 'M101', 'tax_rate_priority' => 1, 'tax_rate_compound' => 0, 'tax_rate_shipping' => 1, 'tax_rate_order' => 1, 'tax_rate_class' => '' ) );
+		throw new RuntimeException( 'a failing assertion' );
+	} finally {
+		$m101_restore();
+	}
+} catch ( RuntimeException $e ) {
+	unset( $e );
+}
+vcap_cache_assert( $m101_taxes === get_option( 'woocommerce_calc_taxes' ) && false === get_option( 'vcap_m101_probe' ) && (int) $GLOBALS['wpdb']->get_var( "SELECT COUNT(*) FROM {$GLOBALS['wpdb']->prefix}woocommerce_tax_rates" ) === $m101_rates, 'M12-101: after a failing assertion the state guard restores the options and deletes the added tax rates' ); // phpcs:ignore
+
 echo "Voucher Captain caching checks passed.\n";

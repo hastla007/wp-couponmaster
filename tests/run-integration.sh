@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 # Runs the WP-CLI integration suites against the WordPress in ./wp-test (see .github/workflows/plugin-smoke.yml).
+#
+# Needs a FRESH database: WordPress and WooCommerce freshly installed, Voucher Captain just activated, no other
+# test run before (CI creates a new MySQL service per job). The suites share that database in the order below:
+# they create products, vouchers, orders and users with unique names and clean up what later suites would trip
+# over, but a second run on the same database (leftover vouchers, rate-limit counters, promotion counts, scheduled
+# actions) is not supported. Locally: drop and recreate the database, reinstall WordPress and reactivate the plugins
+# before each run. Suites that change shop settings or tax rates (tax, acceptance, blocks) restore them in
+# `finally` via tests/state-guard.php, so a failing assertion does not change the conditions of the next suite.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 WP="php wp-cli.phar --path=wp-test"
