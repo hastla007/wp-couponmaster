@@ -784,7 +784,7 @@ final class Delivery {
 				sprintf(
 					/* translators: 1: voucher code, 2: number of failed attempts */
 					__( 'Voucher %1$s could not be delivered after %2$d attempts and is no longer sent automatically. Check the email address and the email settings, then send it again on the voucher screen.', 'voucher-captain' ),
-					$voucher->code,
+					Mask::code( $voucher->code ),
 					$failures
 				)
 			);
@@ -815,7 +815,7 @@ final class Delivery {
 				sprintf(
 					/* translators: 1: voucher code, 2: expiry date */
 					__( 'Voucher %1$s was not delivered: it had already expired on %2$s, before its delivery date. Extend its validity and send it again, or refund the buyer.', 'voucher-captain' ),
-					$voucher->code,
+					Mask::code( $voucher->code ),
 					$expiry
 				)
 			);
