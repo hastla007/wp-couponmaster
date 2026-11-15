@@ -122,8 +122,8 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) |
 |---|---|---|
-| All vouchers are attached as one PDF, one page per voucher, ready to print. | Alle Gutscheine sind als ein PDF angehängt – eine Seite pro Gutschein, druckfertig. | Alle Gutscheine sind als ein PDF angehängt – eine Seite pro Gutschein, druckfertig. |
 | Valid until %s | Gültig bis %s | Gültig bis %s |
+| All vouchers are attached as one PDF, one page per voucher, ready to print. | Alle Gutscheine sind als ein PDF angehängt – eine Seite pro Gutschein, druckfertig. | Alle Gutscheine sind als ein PDF angehängt – eine Seite pro Gutschein, druckfertig. |
 | Download: | Download: | Download: |
 | All vouchers in your account: | Alle Gutscheine in Ihrem Konto: | Alle Gutscheine in Ihrem Konto: |
 
@@ -144,6 +144,7 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 | Recipient | Empfänger | Empfänger |
 | Download each voucher as a PDF with the links in the table. | Laden Sie jeden Gutschein über die Links in der Tabelle als PDF herunter. | Laden Sie jeden Gutschein über die Links in der Tabelle als PDF herunter. |
 | PDF | PDF | PDF |
+| Links | Links | Links |
 | Download | Herunterladen | Herunterladen |
 | All vouchers in your account | Alle Gutscheine in Ihrem Konto | Alle Gutscheine in Ihrem Konto |
 
@@ -156,4 +157,4 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 | Download voucher (PDF) | Gutschein herunterladen (PDF) | Gutschein herunterladen (PDF) |
 | Redeem now | Jetzt einlösen | Jetzt einlösen |
 
-94 Texte.
+95 Texte.
