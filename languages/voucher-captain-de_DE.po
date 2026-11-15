@@ -687,7 +687,7 @@ msgstr "Zu leicht erratbare Codes übersprungen: %d"
 #: src/Admin/Import.php:89
 #, php-format
 msgid "Codes protected by a PIN: %d"
-msgstr ""
+msgstr "Mit PIN geschützte Codes: %d"
 
 #: src/Admin/Import.php:93
 msgid ""
@@ -780,7 +780,7 @@ msgstr ""
 
 #: src/Admin/Import.php:149
 msgid "PIN column (optional)"
-msgstr ""
+msgstr "PIN-Spalte (optional)"
 
 #: src/Admin/Import.php:151
 msgid ""
@@ -788,7 +788,7 @@ msgid ""
 "g. under a scratch-off field). The PIN is stored hashed only. Cards with a "
 "PIN are redeemed, checked and topped up only with it: customers enter "
 "CODE#PIN."
-msgstr ""
+msgstr "Spaltenbuchstabe oder Spaltenname mit einer PIN pro Karte (3–16 Buchstaben oder Ziffern, z. B. unter einem Rubbelfeld). Die PIN wird nur als Hash gespeichert. Karten mit PIN werden nur mit ihr eingelöst, geprüft und aufgeladen: Kunden geben CODE#PIN ein."
 
 #: src/Admin/Import.php:154
 msgid "Options"
@@ -956,7 +956,7 @@ msgstr "Zeile %1$d: „%2$s“ – %3$s"
 #: src/Admin/Import.php:494
 msgid ""
 "the PIN must be 3–16 letters or digits (and the code must not contain \"#\")"
-msgstr ""
+msgstr "die PIN muss aus 3–16 Buchstaben oder Ziffern bestehen (und der Code darf kein „#“ enthalten)"
 
 #. translators: 1: row number, 2: value
 #: src/Admin/Import.php:524
@@ -3888,7 +3888,7 @@ msgstr "Zu viele Versuche. Bitte versuchen Sie es später erneut."
 #: src/CodeLookup.php:204
 msgid ""
 "Card with a PIN? Enter it after the code, separated by #, e.g. CODE#1234."
-msgstr ""
+msgstr "Karte mit PIN? Geben Sie sie nach dem Code ein, getrennt durch #, z. B. CODE#1234."
 
 #: src/CodePool.php:129
 msgid "the database did not save it"
@@ -5555,23 +5555,23 @@ msgstr ""
 
 #: src/Delivery.php:1000
 msgid "recipient"
-msgstr ""
+msgstr "Empfänger"
 
 #: src/Delivery.php:1000
 msgid "buyer"
-msgstr ""
+msgstr "Käufer"
 
 #. translators: 1: "recipient" or "buyer", 2: reason reported by the mail system
 #: src/Delivery.php:1008
 #, php-format
 msgid "The email to the %1$s came back (bounce): %2$s"
-msgstr ""
+msgstr "Die E-Mail an den %1$s kam zurück (Rückläufer): %2$s"
 
 #. translators: %s: "recipient" or "buyer"
 #: src/Delivery.php:1010
 #, php-format
 msgid "The email to the %s came back (bounce)."
-msgstr ""
+msgstr "Die E-Mail an den %s kam zurück (Rückläufer)."
 
 #. translators: 1: voucher code (masked), 2: email address (masked), 3: reason
 #: src/Delivery.php:1018
@@ -5579,26 +5579,26 @@ msgstr ""
 msgid ""
 "The email with voucher %1$s to %2$s came back undelivered. %3$s Check the "
 "address and send the voucher again on the voucher screen."
-msgstr ""
+msgstr "Die E-Mail mit dem Gutschein %1$s an %2$s kam unzugestellt zurück. %3$s Prüfen Sie die Adresse und senden Sie den Gutschein auf der Gutscheinseite erneut."
 
 #. translators: %s: recipient email
 #: src/Delivery.php:1031
 #, php-format
 msgid "The voucher you sent to %s could not be delivered: the email came back."
-msgstr ""
+msgstr "Der Gutschein, den Sie an %s gesendet haben, konnte nicht zugestellt werden: Die E-Mail kam zurück."
 
 #: src/Delivery.php:1036 src/Downloads.php:452 src/Downloads.php:503
 #: templates/emails/plain/voucher.php:70 templates/emails/voucher.php:118
 msgid "Correct the recipient"
-msgstr ""
+msgstr "Empfänger korrigieren"
 
 #: src/Delivery.php:1037
 msgid "Please contact us with the correct address."
-msgstr ""
+msgstr "Bitte kontaktieren Sie uns mit der richtigen Adresse."
 
 #: src/Delivery.php:1038
 msgid "Your gift voucher could not be delivered"
-msgstr ""
+msgstr "Ihr Geschenkgutschein konnte nicht zugestellt werden"
 
 #: src/DesignGallery.php:95
 msgid "Choose a design"
@@ -6218,17 +6218,17 @@ msgstr "Bitte geben Sie eine gültige E-Mail-Adresse für den Empfänger ein."
 #: src/Downloads.php:226
 msgid ""
 "The delivery date of this voucher is set by the shop and cannot be changed."
-msgstr ""
+msgstr "Das Zustelldatum dieses Gutscheins legt der Shop fest; es kann nicht geändert werden."
 
 #: src/Downloads.php:230
 msgid "This voucher cannot be sent earlier."
-msgstr ""
+msgstr "Dieser Gutschein kann nicht früher gesendet werden."
 
 #. translators: 1: earliest date, 2: latest date
 #: src/Downloads.php:239
 #, php-format
 msgid "Please choose a delivery date between %1$s and %2$s."
-msgstr ""
+msgstr "Bitte wählen Sie ein Zustelldatum zwischen %1$s und %2$s."
 
 #: src/Downloads.php:245
 msgid ""
@@ -6246,11 +6246,11 @@ msgstr "Empfänger %1$s → %2$s"
 
 #: src/Downloads.php:284
 msgid "personal message changed"
-msgstr ""
+msgstr "persönliche Nachricht geändert"
 
 #: src/Downloads.php:284
 msgid "recipient name changed"
-msgstr ""
+msgstr "Name des Empfängers geändert"
 
 #. translators: 1: old delivery date, 2: new delivery date
 #: src/Downloads.php:292
@@ -6271,43 +6271,43 @@ msgstr "Vom Kunden vor der Zustellung geändert: %s"
 
 #: src/Downloads.php:361
 msgid "This voucher is not sent to a recipient."
-msgstr ""
+msgstr "Dieser Gutschein wird nicht an einen Empfänger gesendet."
 
 #: src/Downloads.php:366
 msgid ""
 "This voucher has already been used or is no longer valid, so its recipient "
 "can no longer be changed. Please contact us."
-msgstr ""
+msgstr "Dieser Gutschein wurde bereits verwendet oder ist nicht mehr gültig, daher kann sein Empfänger nicht mehr geändert werden. Bitte kontaktieren Sie uns."
 
 #: src/Downloads.php:369
 msgid ""
 "The recipient of this voucher has already been corrected. Please contact us "
 "for further changes."
-msgstr ""
+msgstr "Der Empfänger dieses Gutscheins wurde bereits korrigiert. Für weitere Änderungen kontaktieren Sie uns bitte."
 
 #: src/Downloads.php:384
 msgid "This voucher was not found."
-msgstr ""
+msgstr "Dieser Gutschein wurde nicht gefunden."
 
 #: src/Downloads.php:396
 msgid "This is the address the voucher is already sent to."
-msgstr ""
+msgstr "An diese Adresse wird der Gutschein bereits gesendet."
 
 #: src/Downloads.php:400 src/VoucherRepository.php:1123
 msgid "Recipient corrected by the buyer"
-msgstr ""
+msgstr "Empfänger vom Käufer korrigiert"
 
 #. translators: %s: reason
 #: src/Downloads.php:403
 #, php-format
 msgid "The recipient cannot be changed right now (%s). Please contact us."
-msgstr ""
+msgstr "Der Empfänger kann gerade nicht geändert werden (%s). Bitte kontaktieren Sie uns."
 
 #. translators: 1: old email, 2: new email
 #: src/Downloads.php:416
 #, php-format
 msgid "Recipient corrected by the buyer: %1$s → %2$s"
-msgstr ""
+msgstr "Empfänger vom Käufer korrigiert: %1$s → %2$s"
 
 #. translators: 1: voucher code (masked), 2: new recipient email
 #: src/Downloads.php:421
@@ -6315,7 +6315,7 @@ msgstr ""
 msgid ""
 "The buyer corrected the recipient of voucher %1$s to %2$s; the voucher was "
 "reissued with a new code and sent to the new address."
-msgstr ""
+msgstr "Der Käufer hat den Empfänger des Gutscheins %1$s auf %2$s korrigiert; der Gutschein wurde mit neuem Code neu ausgestellt und an die neue Adresse gesendet."
 
 #. translators: 1: voucher code (masked), 2: new recipient email
 #: src/Downloads.php:423
@@ -6323,48 +6323,48 @@ msgstr ""
 msgid ""
 "The buyer corrected the recipient of voucher %1$s to %2$s before its "
 "delivery."
-msgstr ""
+msgstr "Der Käufer hat den Empfänger des Gutscheins %1$s vor der Zustellung auf %2$s korrigiert."
 
 #. translators: %d: number of addresses
 #: src/Downloads.php:428
 #, php-format
 msgid "After the recipient correction, sent to %d address"
 msgid_plural "After the recipient correction, sent to %d addresses"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "Nach der Empfängerkorrektur an %d Adresse gesendet"
+msgstr[1] "Nach der Empfängerkorrektur an %d Adressen gesendet"
 
 #: src/Downloads.php:430
 msgid ""
 "The recipient was changed, but the email could not be sent. Please contact "
 "us."
-msgstr ""
+msgstr "Der Empfänger wurde geändert, aber die E-Mail konnte nicht gesendet werden. Bitte kontaktieren Sie uns."
 
 #: src/Downloads.php:454 src/Downloads.php:465
 msgid "Too many requests. Please try again later."
-msgstr ""
+msgstr "Zu viele Anfragen. Bitte versuchen Sie es später erneut."
 
 #: src/Downloads.php:458
 msgid "This link is invalid or has expired. Please contact us."
-msgstr ""
+msgstr "Dieser Link ist ungültig oder abgelaufen. Bitte kontaktieren Sie uns."
 
 #. translators: %s: new recipient email
 #: src/Downloads.php:474
 #, php-format
 msgid "Thank you. The voucher is now sent to %s."
-msgstr ""
+msgstr "Vielen Dank. Der Gutschein wird jetzt an %s gesendet."
 
 #. translators: 1: masked current address, 2: masked voucher code
 #: src/Downloads.php:493
 #, php-format
 msgid ""
 "Voucher %2$s is sent to %1$s. Enter the correct address of the recipient:"
-msgstr ""
+msgstr "Der Gutschein %2$s wird an %1$s gesendet. Geben Sie die richtige Adresse des Empfängers ein:"
 
 #: src/Downloads.php:499
 msgid ""
 "The voucher has already been sent. It is reissued with a new code for the "
 "new address; the code sent before stops working."
-msgstr ""
+msgstr "Der Gutschein wurde bereits gesendet. Er wird für die neue Adresse mit neuem Code neu ausgestellt; der zuvor gesendete Code ist dann ungültig."
 
 #: src/Downloads.php:523
 msgid "This voucher was changed several times already. Please try again later."
@@ -6448,12 +6448,12 @@ msgstr "Ihre Gutscheine"
 #: src/Downloads.php:726
 #, php-format
 msgid "Correct the recipient %s"
-msgstr ""
+msgstr "Empfänger %s korrigieren"
 
 #: src/Downloads.php:730 templates/emails/plain/voucher.php:70
 #: templates/emails/voucher.php:117
 msgid "Mistyped the recipient address?"
-msgstr ""
+msgstr "Empfängeradresse vertippt?"
 
 #: src/Downloads.php:831
 msgid ""
@@ -6465,7 +6465,7 @@ msgstr ""
 
 #: src/Downloads.php:917
 msgid "Bought vouchers"
-msgstr ""
+msgstr "Gekaufte Gutscheine"
 
 #: src/Downloads.php:925
 msgid "Newer vouchers"
@@ -6477,7 +6477,7 @@ msgstr "Ältere Gutscheine"
 
 #: src/Downloads.php:939
 msgid "Received vouchers"
-msgstr ""
+msgstr "Erhaltene Gutscheine"
 
 #. translators: %s: last characters of the voucher code, e.g. "…7KQ2"
 #: src/Downloads.php:962
@@ -6839,48 +6839,48 @@ msgstr ""
 
 #: src/Emails/GiftNoticeEmail.php:28
 msgid "Gift used (buyer)"
-msgstr ""
+msgstr "Geschenk eingelöst (Käufer)"
 
 #: src/Emails/GiftNoticeEmail.php:28
 msgid "Gift delivered (buyer)"
-msgstr ""
+msgstr "Geschenk zugestellt (Käufer)"
 
 #: src/Emails/GiftNoticeEmail.php:30
 msgid ""
 "Optional: tells the buyer of a gift that the recipient used it for the first "
 "time (without the code)."
-msgstr ""
+msgstr "Optional: Teilt dem Käufer eines Geschenks mit, dass der Empfänger es zum ersten Mal eingelöst hat (ohne den Code)."
 
 #: src/Emails/GiftNoticeEmail.php:31
 msgid ""
 "Optional: tells the buyer of a gift that it was delivered to the recipient "
 "(without the code)."
-msgstr ""
+msgstr "Optional: Teilt dem Käufer eines Geschenks mit, dass es dem Empfänger zugestellt wurde (ohne den Code)."
 
 #: src/Emails/GiftNoticeEmail.php:42
 msgid "Your gift from {site_title} was used"
-msgstr ""
+msgstr "Ihr Geschenk von {site_title} wurde eingelöst"
 
 #: src/Emails/GiftNoticeEmail.php:42
 msgid "Your gift from {site_title} was delivered"
-msgstr ""
+msgstr "Ihr Geschenk von {site_title} wurde zugestellt"
 
 #: src/Emails/GiftNoticeEmail.php:46
 msgid "Your gift was used"
-msgstr ""
+msgstr "Ihr Geschenk wurde eingelöst"
 
 #: src/Emails/GiftNoticeEmail.php:46
 msgid "Your gift was delivered"
-msgstr ""
+msgstr "Ihr Geschenk wurde zugestellt"
 
 #: src/Emails/GiftNoticeEmail.php:51
 msgid "Good news: {recipient} used your gift ({product_name}) on {date}."
-msgstr ""
+msgstr "Gute Nachricht: {recipient} hat Ihr Geschenk ({product_name}) am {date} eingelöst."
 
 #: src/Emails/GiftNoticeEmail.php:52
 msgid ""
 "Good news: your gift ({product_name}) was delivered to {recipient} on {date}."
-msgstr ""
+msgstr "Gute Nachricht: Ihr Geschenk ({product_name}) wurde am {date} an {recipient} zugestellt."
 
 #: src/Emails/RecipientEmail.php:11
 msgid "Voucher (gift recipient)"
@@ -7068,20 +7068,20 @@ msgstr ""
 
 #: src/Fields.php:155 src/ProductSettings.php:518
 msgid "From (your name)"
-msgstr ""
+msgstr "Von (Ihr Name)"
 
 #: src/Fields.php:160
 msgid ""
 "Shown to the recipient as the sender. Leave empty to use your billing name."
-msgstr ""
+msgstr "Wird dem Empfänger als Absender angezeigt. Leer lassen, um Ihren Rechnungsnamen zu verwenden."
 
 #: src/Fields.php:165 src/ProductSettings.php:519
 msgid "Confirm recipient email"
-msgstr ""
+msgstr "E-Mail-Adresse des Empfängers bestätigen"
 
 #: src/Fields.php:176 src/ProductSettings.php:520
 msgid "Language of the recipient email"
-msgstr ""
+msgstr "Sprache der E-Mail an den Empfänger"
 
 #: src/Fields.php:195
 msgid ""
@@ -7152,7 +7152,7 @@ msgstr "Für mich"
 
 #: src/Fields.php:576
 msgid "The email addresses do not match."
-msgstr ""
+msgstr "Die E-Mail-Adressen stimmen nicht überein."
 
 #: src/Fields.php:581
 msgid "optional"
@@ -7180,11 +7180,11 @@ msgstr ""
 
 #: src/Fields.php:838
 msgid "Please enter the recipient email a second time to confirm it."
-msgstr ""
+msgstr "Bitte geben Sie die E-Mail-Adresse des Empfängers zur Bestätigung ein zweites Mal ein."
 
 #: src/Fields.php:838
 msgid "The recipient email addresses do not match. Please check them."
-msgstr ""
+msgstr "Die E-Mail-Adressen des Empfängers stimmen nicht überein. Bitte prüfen Sie sie."
 
 #. translators: %s: field label
 #: src/Fields.php:845
@@ -7215,7 +7215,7 @@ msgstr ""
 msgid ""
 "This voucher is delivered on %s at the earliest. Please choose this or a "
 "later date."
-msgstr ""
+msgstr "Dieser Gutschein wird frühestens am %s zugestellt. Bitte wählen Sie dieses oder ein späteres Datum."
 
 #: src/Fields.php:876
 msgid ""
@@ -7680,17 +7680,17 @@ msgstr ""
 
 #: src/Health.php:338
 msgid "The sender address of the emails fits the shop"
-msgstr ""
+msgstr "Die Absenderadresse der E-Mails passt zum Shop"
 
 #: src/Health.php:338
 msgid ""
 "Voucher emails are sent from an address of the shop's domain or through a "
 "mail service plugin."
-msgstr ""
+msgstr "Gutschein-E-Mails werden von einer Adresse der Shop-Domain oder über ein Mailservice-Plugin gesendet."
 
 #: src/Health.php:343
 msgid "Voucher emails are sent from another domain"
-msgstr ""
+msgstr "Gutschein-E-Mails werden von einer anderen Domain gesendet"
 
 #. translators: 1: sender domain, 2: shop domain
 #: src/Health.php:346
@@ -7700,21 +7700,21 @@ msgid ""
 "no SMTP or mail service plugin was found. Such emails often land in spam: "
 "use a sender address of the shop's domain (WooCommerce → Settings → Emails) "
 "or set up an SMTP plugin."
-msgstr ""
+msgstr "Die E-Mails werden von einer Adresse bei %1$s gesendet, der Shop läuft aber auf %2$s, und es wurde kein SMTP- oder Mailservice-Plugin gefunden. Solche E-Mails landen oft im Spam: Verwenden Sie eine Absenderadresse der Shop-Domain (WooCommerce → Einstellungen → E-Mails) oder richten Sie ein SMTP-Plugin ein."
 
 #: src/Health.php:364
 msgid "No purchases refused by the daily voucher limit"
-msgstr ""
+msgstr "Keine Käufe durch das tägliche Gutscheinlimit abgelehnt"
 
 #: src/Health.php:364
 msgid ""
 "Voucher Captain counts the checkouts that the maximum voucher value per "
 "customer and 24 hours refused (last 30 days)."
-msgstr ""
+msgstr "Voucher Captain zählt die Bestellversuche, die der maximale Gutscheinwert pro Kunde und 24 Stunden abgelehnt hat (letzte 30 Tage)."
 
 #: src/Health.php:369
 msgid "Purchases were refused by the daily voucher limit"
-msgstr ""
+msgstr "Käufe wurden durch das tägliche Gutscheinlimit abgelehnt"
 
 #. translators: 1: number of refused checkouts, 2: limit
 #: src/Health.php:372
@@ -7727,8 +7727,8 @@ msgid_plural ""
 "%1$d checkouts were refused in the last 30 days because the vouchers "
 "exceeded the limit of %2$s per customer and 24 hours. If regular customers "
 "are affected, raise the limit in the voucher settings."
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "%1$d Bestellversuch wurde in den letzten 30 Tagen abgelehnt, weil die Gutscheine das Limit von %2$s pro Kunde und 24 Stunden überschritten. Wenn Stammkunden betroffen sind, erhöhen Sie das Limit in den Gutschein-Einstellungen."
+msgstr[1] "%1$d Bestellversuche wurden in den letzten 30 Tagen abgelehnt, weil die Gutscheine das Limit von %2$s pro Kunde und 24 Stunden überschritten. Wenn Stammkunden betroffen sind, erhöhen Sie das Limit in den Gutschein-Einstellungen."
 
 #: src/Health.php:387
 msgid "The private voucher folder can be opened from the web"
@@ -8381,7 +8381,7 @@ msgstr ""
 msgid ""
 "This code is too easy to guess (about %1$d bits, at least %2$d needed). Use "
 "a longer random code, or pass allow_weak to accept it knowingly."
-msgstr ""
+msgstr "Dieser Code ist zu leicht zu erraten (etwa %1$d Bit, mindestens %2$d nötig). Verwenden Sie einen längeren Zufallscode oder übergeben Sie allow_weak, um ihn bewusst zu akzeptieren."
 
 #: src/Issuer.php:1057
 msgid "A voucher was already issued for this reference."
@@ -8709,8 +8709,8 @@ msgid ""
 msgid_plural ""
 "For your security, vouchers of a first order above %1$s are delivered and "
 "redeemable %2$s hours after the payment."
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "Zu Ihrer Sicherheit werden Gutscheine einer ersten Bestellung über %1$s erst %2$s Stunde nach der Zahlung zugestellt und einlösbar."
+msgstr[1] "Zu Ihrer Sicherheit werden Gutscheine einer ersten Bestellung über %1$s erst %2$s Stunden nach der Zahlung zugestellt und einlösbar."
 
 #. translators: %d: number of days
 #: src/NextSteps.php:74
@@ -8755,7 +8755,7 @@ msgstr ""
 msgid ""
 "For your security, the top-up of your gift card …%1$s is booked after a "
 "short waiting period, on %2$s."
-msgstr ""
+msgstr "Zu Ihrer Sicherheit wird die Aufladung Ihrer Geschenkkarte …%1$s nach einer kurzen Wartezeit am %2$s gebucht."
 
 #: src/NextSteps.php:161 src/NextSteps.php:188
 msgid ""
@@ -8769,11 +8769,11 @@ msgstr ""
 #: src/NextSteps.php:177
 #, php-format
 msgid "The voucher was emailed to %s."
-msgstr ""
+msgstr "Der Gutschein wurde per E-Mail an %s gesendet."
 
 #: src/NextSteps.php:178
 msgid "The voucher was emailed to you."
-msgstr ""
+msgstr "Der Gutschein wurde Ihnen per E-Mail gesendet."
 
 #: src/NextSteps.php:219 templates/emails/plain/voucher.php:55
 #: templates/emails/voucher.php:95
@@ -9201,11 +9201,11 @@ msgstr ""
 msgid ""
 "The link confirms the address for the customer account \"%1$s\", registered "
 "on %2$s. You need to log in to this account to confirm."
-msgstr ""
+msgstr "Der Link bestätigt die Adresse für das Kundenkonto „%1$s“, registriert am %2$s. Zur Bestätigung müssen Sie in diesem Konto angemeldet sein."
 
 #: src/PersonalVoucher.php:283
 msgid "Do not click the link if you did not create this account yourself."
-msgstr ""
+msgstr "Klicken Sie nicht auf den Link, wenn Sie dieses Konto nicht selbst angelegt haben."
 
 #: src/PersonalVoucher.php:284
 msgid "Confirm email address"
@@ -9276,17 +9276,17 @@ msgstr ""
 msgid ""
 "This confirmation link was sent for another customer account. Please %s and "
 "log in with the account it was sent for."
-msgstr ""
+msgstr "Dieser Bestätigungslink wurde für ein anderes Kundenkonto gesendet. Bitte %s und melden Sie sich mit dem Konto an, für das er gesendet wurde."
 
 #: src/PersonalVoucher.php:391
 msgid "log out"
-msgstr ""
+msgstr "melden Sie sich ab"
 
 #: src/PersonalVoucher.php:401
 msgid ""
 "Please log in to the customer account this confirmation link was sent for. "
 "The email address is confirmed right after the login."
-msgstr ""
+msgstr "Bitte melden Sie sich in dem Kundenkonto an, für das dieser Bestätigungslink gesendet wurde. Die E-Mail-Adresse wird direkt nach der Anmeldung bestätigt."
 
 #: src/PersonalVoucher.php:415
 msgid ""
@@ -9418,7 +9418,7 @@ msgstr "Produkt-Kurzbeschreibung"
 
 #: src/Placeholders.php:31
 msgid "Sender name (\"From\" field, else buyer name)"
-msgstr ""
+msgstr "Absendername (Feld „Von“, sonst Name des Käufers)"
 
 #: src/Placeholders.php:33
 msgid "Holder name (recipient, else buyer)"
@@ -10893,17 +10893,17 @@ msgstr ""
 
 #: src/Settings.php:327
 msgid "Delivery hour"
-msgstr ""
+msgstr "Zustellstunde"
 
 #: src/Settings.php:332
 msgid ""
 "Hour of the day (shop time, 0–23) at which vouchers with a delivery date are "
 "sent (default 8)."
-msgstr ""
+msgstr "Stunde des Tages (Shop-Zeit, 0–23), zu der Gutscheine mit Zustelldatum gesendet werden (Standard 8)."
 
 #: src/Settings.php:335
 msgid "Expiry reminders (days before)"
-msgstr ""
+msgstr "Ablauferinnerungen (Tage vorher)"
 
 #: src/Settings.php:339
 msgid ""
@@ -10911,7 +10911,7 @@ msgid ""
 "value expires. Several reminders are separated by commas, e.g. \"30, 7, 1\"; "
 "each one is sent once. 0 = no reminders. The email text is edited under "
 "WooCommerce → Settings → Emails."
-msgstr ""
+msgstr "Sendet dem Gutscheininhaber so viele Tage vor dem Ablauf eines Gutscheins mit Restwert eine E-Mail. Mehrere Erinnerungen werden durch Kommas getrennt, z. B. „30, 7, 1“; jede wird einmal gesendet. 0 = keine Erinnerungen. Den E-Mail-Text bearbeiten Sie unter WooCommerce → Einstellungen → E-Mails."
 
 #: src/Settings.php:342
 msgid "Order confirmation"
@@ -11007,7 +11007,7 @@ msgid ""
 "per voucher (default 20 for new shops). Larger bundles carry no attachment "
 "but a download link per voucher and the link to My Account. 0 = never attach "
 "a PDF to a bundled email."
-msgstr ""
+msgstr "Eine Sammel-E-Mail mit bis zu so vielen Gutscheinen enthält ein PDF mit einer Seite pro Gutschein (Standard 20 für neue Shops). Größere Sammel-E-Mails enthalten keinen Anhang, sondern einen Download-Link pro Gutschein und den Link zu „Mein Konto“. 0 = nie ein PDF an eine Sammel-E-Mail anhängen."
 
 #: src/Settings.php:409
 msgid "External redemptions"
@@ -12177,7 +12177,7 @@ msgstr "Für: {recipient_name}"
 
 #: src/TemplatePostType.php:203
 msgid "From: {field:sender_name}"
-msgstr ""
+msgstr "Von: {field:sender_name}"
 
 #: src/TemplatePostType.php:222
 msgid "Guest: {holder_name}"
@@ -13177,13 +13177,13 @@ msgstr "Geschenkkarte …%2$s um %1$s aufgeladen."
 msgid ""
 "Security hold: the top-up of gift card …%1$s is booked on %2$s, unless the "
 "order is cancelled or refunded before then."
-msgstr ""
+msgstr "Sicherheitssperre: Die Aufladung der Geschenkkarte …%1$s wird am %2$s gebucht, sofern die Bestellung nicht vorher storniert oder erstattet wird."
 
 #: src/TopUp.php:490
 msgid ""
 "Gift card top-up not booked: the order was cancelled or refunded during the "
 "security hold."
-msgstr ""
+msgstr "Aufladung der Geschenkkarte nicht gebucht: Die Bestellung wurde während der Sicherheitssperre storniert oder erstattet."
 
 #. translators: 1: masked gift card code, 2: amount added, 3: new balance
 #: src/TopUp.php:506
@@ -13515,11 +13515,11 @@ msgstr "Aktiviert"
 
 #: src/VoucherRepository.php:1124
 msgid "Delivery attempt"
-msgstr ""
+msgstr "Zustellversuch"
 
 #: src/VoucherRepository.php:1125
 msgid "Buyer told that the gift was used"
-msgstr ""
+msgstr "Käufer über die Einlösung des Geschenks informiert"
 
 #: templates/emails/plain/voucher-bundle.php:33
 #: templates/emails/voucher-bundle.php:46
@@ -13627,11 +13627,11 @@ msgstr "Empfänger oder Datum ändern"
 
 #: templates/myaccount/vouchers-table.php:122
 msgid "Change gift details"
-msgstr ""
+msgstr "Geschenkdetails ändern"
 
 #: templates/myaccount/vouchers-table.php:143
 msgid "Send now"
-msgstr ""
+msgstr "Jetzt senden"
 
 #: templates/myaccount/vouchers-table.php:145
 msgid "Save changes"

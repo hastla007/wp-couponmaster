@@ -77,6 +77,22 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 | Don't forget your voucher | Vergessen Sie Ihren Gutschein nicht | Vergessen Sie Ihren Gutschein nicht |
 | Your voucher {coupon_code} is valid until {expiry_date}. Remaining value: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. |
 
+## `src/Emails/GiftNoticeEmail.php`
+
+| Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) |
+|---|---|---|
+| Voucher | Gutschein | Gutschein |
+| Gift used (buyer) | Geschenk eingelöst (Käufer) | Geschenk eingelöst (Käufer) |
+| Gift delivered (buyer) | Geschenk zugestellt (Käufer) | Geschenk zugestellt (Käufer) |
+| Optional: tells the buyer of a gift that the recipient used it for the first time (without the code). | Optional: Teilt dem Käufer eines Geschenks mit, dass der Empfänger es zum ersten Mal eingelöst hat (ohne den Code). | Optional: Teilt dem Käufer eines Geschenks mit, dass der Empfänger es zum ersten Mal eingelöst hat (ohne den Code). |
+| Optional: tells the buyer of a gift that it was delivered to the recipient (without the code). | Optional: Teilt dem Käufer eines Geschenks mit, dass es dem Empfänger zugestellt wurde (ohne den Code). | Optional: Teilt dem Käufer eines Geschenks mit, dass es dem Empfänger zugestellt wurde (ohne den Code). |
+| Your gift from {site_title} was used | Ihr Geschenk von {site_title} wurde eingelöst | Ihr Geschenk von {site_title} wurde eingelöst |
+| Your gift from {site_title} was delivered | Ihr Geschenk von {site_title} wurde zugestellt | Ihr Geschenk von {site_title} wurde zugestellt |
+| Your gift was used | Ihr Geschenk wurde eingelöst | Ihr Geschenk wurde eingelöst |
+| Your gift was delivered | Ihr Geschenk wurde zugestellt | Ihr Geschenk wurde zugestellt |
+| Good news: {recipient} used your gift ({product_name}) on {date}. | Gute Nachricht: {recipient} hat Ihr Geschenk ({product_name}) am {date} eingelöst. | Gute Nachricht: {recipient} hat Ihr Geschenk ({product_name}) am {date} eingelöst. |
+| Good news: your gift ({product_name}) was delivered to {recipient} on {date}. | Gute Nachricht: Ihr Geschenk ({product_name}) wurde am {date} an {recipient} zugestellt. | Gute Nachricht: Ihr Geschenk ({product_name}) wurde am {date} an {recipient} zugestellt. |
+
 ## `src/Emails/RecipientEmail.php`
 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) |
@@ -131,6 +147,8 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) |
 |---|---|---|
+| Correct the recipient | Empfänger korrigieren | Empfänger korrigieren |
+| Mistyped the recipient address? | Empfängeradresse vertippt? | Empfängeradresse vertippt? |
 | Value: %s | Wert: %s | Wert: %s |
 | What happens next | So geht es weiter | So geht es weiter |
 | Code: %s | Code: %s | Code: %s |
@@ -157,4 +175,4 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 | Download voucher (PDF) | Gutschein herunterladen (PDF) | Gutschein herunterladen (PDF) |
 | Redeem now | Jetzt einlösen | Jetzt einlösen |
 
-95 Texte.
+108 Texte.
