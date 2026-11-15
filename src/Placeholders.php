@@ -19,6 +19,7 @@ final class Placeholders {
 			'coupon_value_plain'=> __( 'Voucher value (number)', 'voucher-captain' ),
 			'coupon_balance'    => __( 'Remaining balance', 'voucher-captain' ),
 			'expiry_date'       => __( 'Expiry date', 'voucher-captain' ),
+			'expiry_line'       => __( 'Validity line ("Valid until …" or "Valid indefinitely")', 'voucher-captain' ),
 			'issue_date'        => __( 'Issue date', 'voucher-captain' ),
 			'voucher_type'      => __( 'Voucher type', 'voucher-captain' ),
 			'product_name'      => __( 'Product name', 'voucher-captain' ),
@@ -100,6 +101,8 @@ final class Placeholders {
 			'coupon_value_plain'=> wc_format_localized_decimal( $voucher->initial_amount ),
 			'coupon_balance'    => 'percent' === $voucher->discount_type ? $value : self::money( $voucher->balance, $voucher->currency ),
 			'expiry_date'       => $voucher->expires_at ? self::date( $voucher->expires_at ) : __( 'unlimited', 'voucher-captain' ),
+			/* translators: %s: date */
+			'expiry_line'       => $voucher->expires_at ? sprintf( __( 'Valid until %s', 'voucher-captain' ), self::date( $voucher->expires_at ) ) : __( 'Valid indefinitely', 'voucher-captain' ),
 			'issue_date'        => self::date( $voucher->created_at ?: gmdate( 'Y-m-d H:i:s' ) ),
 			'voucher_type'      => Voucher::types()[ $voucher->type ] ?? $voucher->type,
 			'product_name'      => $product ? $product->get_name() : '',
@@ -165,11 +168,31 @@ final class Placeholders {
 		return true;
 	}
 
+	/**
+	 * M12-77: a PDF text without the lines that show {expiry_date} when the voucher has no expiry, so a template
+	 * line "Valid until {expiry_date}" is left out instead of printing "Valid until unlimited".
+	 */
+	public static function drop_undated_lines( string $text, Voucher $voucher ): string {
+		if ( $voucher->expires_at || false === stripos( $text, '{expiry_date}' ) ) {
+			return $text;
+		}
+		$lines = array_filter( (array) preg_split( '/\r\n|\r|\n/', $text ), static fn( $line ) => false === stripos( (string) $line, '{expiry_date}' ) );
+		return implode( "\n", $lines );
+	}
+
 	private static function dynamic( string $token, ?string $arg, Voucher $voucher, string $original ): string {
 		$order = $voucher->order();
 		switch ( $token ) {
 			case 'field':
 				return $voucher->field( (string) $arg );
+			case 'link':
+				// M12-74: {link:wallet} – the URL of the voucher link with this id from "vcap_voucher_links".
+				foreach ( Downloads::voucher_links( $voucher, 'placeholder' ) as $link ) {
+					if ( isset( $link['id'] ) && 0 === strcasecmp( $link['id'], (string) $arg ) ) {
+						return $link['url'];
+					}
+				}
+				return '';
 			case 'item_meta':
 				if ( $order && $voucher->order_item_id ) {
 					$item = $order->get_item( $voucher->order_item_id );

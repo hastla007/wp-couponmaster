@@ -52,6 +52,10 @@ foreach ( array_values( $vouchers ) as $vcap_i => $vcap_v ) {
 	if ( ! empty( $download_urls[ $vcap_v->id ] ) ) {
 		echo '   ' . __( 'Download:', 'voucher-captain' ) . ' ' . esc_url_raw( $download_urls[ $vcap_v->id ] ) . "\n";
 	}
+	// M12-74: extra links of add-ons per voucher (filter vcap_voucher_links).
+	foreach ( \VCAP\Downloads::voucher_links( $vcap_v, 'email_plain' ) as $vcap_link ) {
+		echo '   ' . wp_strip_all_tags( $vcap_link['label'] ) . ': ' . esc_url_raw( $vcap_link['url'] ) . "\n";
+	}
 }
 
 if ( ! $voucher->transferable ) {

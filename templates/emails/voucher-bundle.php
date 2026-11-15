@@ -30,6 +30,12 @@ $vcap_links   = (bool) array_filter( $download_urls );
 $vcap_expiry  = (bool) array_filter( array_map( static fn( $v ) => $v->expires_at, $vouchers ) );
 $vcap_message = count( array_unique( array_map( static fn( $v ) => $v->message, $vouchers ) ) ) === 1 ? $voucher->message : '';
 $vcap_terms   = count( array_unique( array_map( static fn( $v ) => $v->terms, $vouchers ) ) ) === 1 ? $voucher->terms : '';
+// M12-74: extra links of add-ons per voucher (filter vcap_voucher_links), e.g. "Add to Wallet" badges.
+$vcap_extra = array();
+foreach ( $vouchers as $vcap_v ) {
+	$vcap_extra[ $vcap_v->id ] = \VCAP\Downloads::voucher_links( $vcap_v, 'email' );
+}
+$vcap_extra_any = (bool) array_filter( $vcap_extra );
 ?>
 
 <div><?php echo wp_kses_post( wpautop( wptexturize( $intro ) ) ); ?></div>
@@ -57,6 +63,9 @@ $vcap_terms   = count( array_unique( array_map( static fn( $v ) => $v->terms, $v
 			<?php endif; ?>
 			<?php if ( $vcap_links ) : ?>
 				<th scope="col" style="<?php echo esc_attr( $vcap_cell ); ?>"><?php esc_html_e( 'PDF', 'voucher-captain' ); ?></th>
+			<?php endif; ?>
+			<?php if ( $vcap_extra_any ) : ?>
+				<th scope="col" style="<?php echo esc_attr( $vcap_cell ); ?>"><?php esc_html_e( 'Links', 'voucher-captain' ); ?></th>
 			<?php endif; ?>
 		</tr>
 	</thead>
@@ -87,6 +96,9 @@ $vcap_terms   = count( array_unique( array_map( static fn( $v ) => $v->terms, $v
 							<a href="<?php echo esc_url( $download_urls[ $vcap_v->id ] ); ?>"><?php esc_html_e( 'Download', 'voucher-captain' ); ?></a>
 						<?php endif; ?>
 					</td>
+				<?php endif; ?>
+				<?php if ( $vcap_extra_any ) : ?>
+					<td class="vcap-voucher-links" style="<?php echo esc_attr( $vcap_cell ); ?>"><?php echo \VCAP\Downloads::voucher_links_html( $vcap_extra[ $vcap_v->id ] ?? array() ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in voucher_links_html(). ?></td>
 				<?php endif; ?>
 			</tr>
 		<?php endforeach; ?>

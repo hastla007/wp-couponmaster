@@ -75,9 +75,7 @@ $value = 'percent' === $voucher->discount_type
 <?php $vcap_links = \VCAP\Downloads::voucher_links( $voucher, 'email' ); // Extra links of add-ons (filter vcap_voucher_links). ?>
 <?php if ( $vcap_links ) : ?>
 	<p class="vcap-voucher-links" style="text-align:center;margin:0 0 16px;">
-		<?php foreach ( $vcap_links as $vcap_i => $vcap_link ) : ?>
-			<?php echo esc_html( $vcap_i ? ' · ' : '' ); ?><a href="<?php echo esc_url( $vcap_link['url'] ); ?>"><?php echo esc_html( $vcap_link['label'] ); ?></a>
-		<?php endforeach; ?>
+		<?php echo \VCAP\Downloads::voucher_links_html( $vcap_links ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in voucher_links_html(); badge images since M12-74. ?>
 	</p>
 <?php endif; ?>
 
