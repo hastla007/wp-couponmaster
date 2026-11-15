@@ -254,7 +254,7 @@ final class Counter {
 		}
 		global $wpdb;
 		foreach ( $scopes as $scope => $key ) {
-			$name = Install::lock_name( 'counter_' . $scope . '_' . md5( (string) $key ) );
+			$name = Install::lock_name( self::lock_key( $scope, $key ) );
 			if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $name, self::LOCK_WAIT ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				self::release( $out['locks'] );
 				$out['locks']   = array();
@@ -278,6 +278,18 @@ final class Counter {
 			}
 		}
 		return $out;
+	}
+
+	/**
+	 * Name of the limit lock of a staff member or till (before Install::lock_name()). AP-S3-5: a till is compared
+	 * like used_today() compares it in SQL (case- and accent-insensitive collation, surrounding spaces ignored), so
+	 * "Till 1" and "till 1 " share one lock as they share one daily count.
+	 *
+	 * @param int|string $key
+	 */
+	public static function lock_key( string $scope, $key ): string {
+		$key = 'till' === $scope ? remove_accents( mb_strtolower( trim( (string) $key ) ) ) : (string) $key;
+		return 'counter_' . $scope . '_' . md5( $key );
 	}
 
 	/** @param string[] $locks Lock names of claim(). */

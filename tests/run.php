@@ -1851,5 +1851,45 @@ $GLOBALS['vcap_test_filters'] = $d14_filters;
 unset( $GLOBALS['vcap_test_options'][ VCAP\Compat\MultiCurrency::UNKNOWN_OPTION ] );
 check( 'D14: the currency check reads the state the currency integration registers (critical with a refused currency, good without the integration)', 'good' === $d14_plain['status'] && 'critical' === $d14_compat['status'] && str_contains( wp_json_encode( $d14_compat ), 'CZK' ), wp_json_encode( array( $d14_plain['status'], $d14_compat['status'] ) ) );
 
+echo "Audit panel package D (lifecycle, async work, performance)\n";
+// AP-Q2-6: filter callbacks accept whatever the previous filter returned.
+$q26_callbacks = array( array( VCAP\Downloads::class, 'query_vars' ), array( VCAP\Downloads::class, 'menu_item' ), array( VCAP\Emails::class, 'classes' ), array( VCAP\ProductSettings::class, 'type_option' ), array( VCAP\ProductSettings::class, 'tab' ), array( VCAP\Compat\Subscriptions::class, 'type_option_classes' ), array( VCAP\Settings::class, 'add_tab' ), array( VCAP\Plugin::class, 'action_links' ), array( VCAP\Privacy::class, 'exporters' ), array( VCAP\Privacy::class, 'erasers' ) );
+$q26_typed     = array_values( array_filter( $q26_callbacks, static fn( $c ) => null !== ( new ReflectionMethod( $c[0], $c[1] ) )->getParameters()[0]->getType() ) );
+$q26_downloads = ( new ReflectionClass( VCAP\Downloads::class ) )->newInstanceWithoutConstructor();
+( new ReflectionProperty( VCAP\Downloads::class, 'settings' ) )->setValue( $q26_downloads, new VCAP\Settings() );
+$GLOBALS['vcap_test_options']['vcap_myaccount_tab'] = 'yes';
+$q26_vars  = $q26_downloads->query_vars( null );
+$q26_menu  = $q26_downloads->menu_item( 'broken' );
+$q26_tabs  = ( new VCAP\ProductSettings() )->tab( false );
+$q26_types = ( new VCAP\ProductSettings() )->type_option( '' );
+$q26_subs  = ( new ReflectionClass( VCAP\Compat\Subscriptions::class ) )->newInstanceWithoutConstructor()->type_option_classes( null );
+unset( $GLOBALS['vcap_test_options']['vcap_myaccount_tab'] );
+check( 'AP-Q2-6: filter callbacks take an untyped value and normalise a non-array from another plugin (no TypeError)', ! $q26_typed && array( VCAP\Downloads::ENDPOINT => VCAP\Downloads::ENDPOINT ) === $q26_vars && isset( $q26_menu[ VCAP\Downloads::ENDPOINT ], $q26_tabs['vcap'], $q26_types['vcap_enabled'] ) && array() === $q26_subs, wp_json_encode( array( $q26_typed, $q26_vars, $q26_menu ) ) );
+
+// AP-P1-7: a storefront request reads no option for the recount flag; defaults are stored without touching saved values.
+$GLOBALS['vcap_test_option_reads'] = array();
+if ( ! function_exists( 'wp_doing_cron' ) ) {
+	function wp_doing_cron() { return false; }
+}
+VCAP\Discounts\Usage::reconcile_if_due();
+check( 'AP-P1-7: Usage::reconcile_if_due() checks the request context before it reads its option', ! isset( $GLOBALS['vcap_test_option_reads'][ VCAP\Discounts\Usage::RECONCILE_DUE_OPTION ] ), wp_json_encode( $GLOBALS['vcap_test_option_reads'] ) );
+$p17_keep = $GLOBALS['vcap_test_options'];
+$GLOBALS['vcap_test_options']['vcap_customer_daily_limit'] = 0;
+unset( $GLOBALS['vcap_test_options']['vcap_coupon_link'], $GLOBALS['vcap_test_options']['vcap_store_credit'] );
+$p17_stored = VCAP\Settings::store_request_defaults();
+check( 'AP-P1-7: the defaults of settings read on every request are stored autoloaded; a saved value (0) is kept', 0 === $GLOBALS['vcap_test_options']['vcap_customer_daily_limit'] && ! in_array( 'vcap_customer_daily_limit', $p17_stored, true ) && 'no' === $GLOBALS['vcap_test_options']['vcap_coupon_link'] && 'yes' === ( $GLOBALS['vcap_test_autoload']['vcap_store_credit'] ?? null ) && array() === VCAP\Settings::store_request_defaults(), wp_json_encode( $p17_stored ) );
+$GLOBALS['vcap_test_options'] = $p17_keep;
+
+// AP-S3-5: the till lock is named like the SQL comparison counts (case-insensitive, trimmed).
+check( 'AP-S3-5: "Till 1", "till 1 " and "TILL 1" share one limit lock; staff locks and other tills do not', VCAP\Counter::lock_key( 'till', 'Till 1' ) === VCAP\Counter::lock_key( 'till', ' till 1 ' ) && VCAP\Counter::lock_key( 'till', 'TILL 1' ) === VCAP\Counter::lock_key( 'till', 'Till 1' ) && VCAP\Counter::lock_key( 'till', 'Till 2' ) !== VCAP\Counter::lock_key( 'till', 'Till 1' ) && VCAP\Counter::lock_key( 'user', 5 ) !== VCAP\Counter::lock_key( 'till', '5' ) );
+
+// AP-P1-2: closing line of the exports.
+$p12_rows = iterator_to_array( VCAP\Csv::with_end_row( ( static function () {
+	yield array( 'Header' );
+	yield array( 'a' );
+	yield array( 'b' );
+} )() ), false );
+check( 'AP-P1-2: an export ends with "End of export: N rows" (header not counted, also for an empty export)', array( 'End of export: 2 rows' ) === end( $p12_rows ) && 4 === count( $p12_rows ) && array( array( 'H' ), array( 'End of export: 0 rows' ) ) === iterator_to_array( VCAP\Csv::with_end_row( array( array( 'H' ) ) ), false ), wp_json_encode( $p12_rows ) );
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

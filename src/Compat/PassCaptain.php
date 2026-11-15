@@ -80,7 +80,9 @@ final class PassCaptain {
 		return $html . '<br /><a href="' . esc_url( admin_url( 'admin.php?page=wp-pass-captain' ) ) . '">' . esc_html__( 'Open WP Pass Captain', 'voucher-captain' ) . '</a>';
 	}
 
-	public function channels( array $channels ): array {
+	/** @param mixed $channels What the previous filter returned (AP-Q2-6: a non-array is normalised). */
+	public function channels( $channels ): array {
+		$channels = is_array( $channels ) ? $channels : array();
 		return $channels + array( self::CHANNEL => __( 'WP Pass Captain (ticket checkout)', 'voucher-captain' ) );
 	}
 

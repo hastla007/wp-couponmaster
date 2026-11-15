@@ -11,8 +11,10 @@ final class Emails {
 		add_filter( 'woocommerce_email_classes', array( $this, 'classes' ) );
 	}
 
-	public function classes( array $emails ): array {
-		$emails['VCAP_Email_Voucher_Buyer']     = new Emails\BuyerEmail();
+	/** @param mixed $emails What the previous filter returned (AP-Q2-6: a non-array is normalised, no TypeError). */
+	public function classes( $emails ): array {
+		$emails                                 = is_array( $emails ) ? $emails : array();
+		$emails['VCAP_Email_Voucher_Buyer']    = new Emails\BuyerEmail();
 		$emails['VCAP_Email_Voucher_Recipient'] = new Emails\RecipientEmail();
 		$emails['VCAP_Email_Voucher_Bundle']    = new Emails\BundleEmail();
 		$emails['VCAP_Email_Voucher_Expiry']    = new Emails\ExpiryReminderEmail();

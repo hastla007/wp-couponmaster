@@ -16,7 +16,9 @@ final class Privacy {
 		add_action( 'admin_init', array( $this, 'policy' ) );
 	}
 
-	public function exporters( array $exporters ): array {
+	/** @param mixed $exporters What the previous filter returned (AP-Q2-6: a non-array is normalised). */
+	public function exporters( $exporters ): array {
+		$exporters = is_array( $exporters ) ? $exporters : array();
 		$exporters['voucher-captain'] = array(
 			'exporter_friendly_name' => __( 'Vouchers', 'voucher-captain' ),
 			'callback'               => array( $this, 'export' ),
@@ -24,7 +26,9 @@ final class Privacy {
 		return $exporters;
 	}
 
-	public function erasers( array $erasers ): array {
+	/** @param mixed $erasers What the previous filter returned (AP-Q2-6: a non-array is normalised). */
+	public function erasers( $erasers ): array {
+		$erasers = is_array( $erasers ) ? $erasers : array();
 		$erasers['voucher-captain'] = array(
 			'eraser_friendly_name' => __( 'Vouchers', 'voucher-captain' ),
 			'callback'             => array( $this, 'erase' ),

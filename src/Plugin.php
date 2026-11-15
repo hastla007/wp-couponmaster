@@ -198,7 +198,9 @@ final class Plugin {
 		load_plugin_textdomain( 'voucher-captain', false, dirname( plugin_basename( VCAP_FILE ) ) . '/languages' );
 	}
 
-	public function action_links( array $links ): array {
+	/** @param mixed $links What the previous filter returned (AP-Q2-6: a non-array is normalised). */
+	public function action_links( $links ): array {
+		$links = is_array( $links ) ? $links : array();
 		$extra = array(
 			'<a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=vcap' ) ) . '">' . esc_html__( 'Settings', 'voucher-captain' ) . '</a>',
 			'<a href="' . esc_url( admin_url( 'admin.php?page=vcap-vouchers' ) ) . '">' . esc_html__( 'Vouchers', 'voucher-captain' ) . '</a>',

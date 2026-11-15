@@ -454,14 +454,23 @@ final class Downloads {
 		}
 	}
 
-	public function query_vars( array $vars ): array {
+	/**
+	 * Filter callbacks take what the previous filter returned (AP-Q2-6): a non-array from another plugin is
+	 * normalised instead of a TypeError on every page.
+	 *
+	 * @param mixed $vars
+	 */
+	public function query_vars( $vars ): array {
+		$vars = is_array( $vars ) ? $vars : array();
 		if ( $this->settings->yes( 'vcap_myaccount_tab' ) ) {
 			$vars[ self::ENDPOINT ] = self::ENDPOINT;
 		}
 		return $vars;
 	}
 
-	public function menu_item( array $items ): array {
+	/** @param mixed $items */
+	public function menu_item( $items ): array {
+		$items = is_array( $items ) ? $items : array();
 		if ( ! $this->settings->yes( 'vcap_myaccount_tab' ) ) {
 			return $items;
 		}
