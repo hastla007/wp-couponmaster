@@ -606,6 +606,13 @@ final class VoucherRepository {
 			}
 			$after = (int) end( $ids );
 			$in    = implode( ',', $ids );
+			// AP-S3-1/AP-S3-2: the copies outside the voucher row first (a failure below leaves the row to be retried,
+			// and these steps are repeatable): coupon restriction and guest "used by" addresses, order line copies.
+			$copies = (array) $wpdb->get_results( $wpdb->prepare( "SELECT v.id, v.coupon_id, v.order_item_id FROM {$this->table()} v WHERE v.id IN ({$in}) AND {$eligibility}", $cutoff, $cutoff ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- integer ids and constant SQL (the placeholders are in $eligibility).
+			foreach ( $copies as $copy ) {
+				self::erase_coupon_addresses( (int) $copy['coupon_id'], (int) $copy['id'] );
+				Fields::erase_item_data( Fields::voucher_item( (int) $copy['order_item_id'] ), 'all' );
+			}
 			if ( $transaction && ! Db::begin() ) {
 				throw new \RuntimeException( 'Retention: transaction could not be started: ' . esc_html( $wpdb->last_error ) );
 			}
@@ -636,6 +643,38 @@ final class VoucherRepository {
 			}
 		} while ( true );
 		return $total;
+	}
+
+	/**
+	 * AP-S3-2: retention of a voucher's coupon – an email restriction is replaced by the placeholder the privacy
+	 * eraser uses (an address nobody can have: a personal voucher must not become usable by anyone), and the
+	 * addresses of guests in "used by" (WooCommerce records a user id or the billing email per use) by the same
+	 * placeholder, so the per-customer usage count stays as it was.
+	 */
+	public static function erase_coupon_addresses( int $coupon_id, int $voucher_id ): void {
+		if ( $coupon_id <= 0 || ! class_exists( '\WC_Coupon' ) ) {
+			return;
+		}
+		$coupon = new \WC_Coupon( $coupon_id );
+		if ( ! $coupon->get_id() ) {
+			return;
+		}
+		$placeholder  = self::erased_address( $voucher_id );
+		$restrictions = array_values( array_filter( (array) $coupon->get_email_restrictions() ) );
+		if ( $restrictions && array( $placeholder ) !== $restrictions ) {
+			$coupon->set_email_restrictions( array( $placeholder ) );
+			$coupon->save();
+		}
+		foreach ( array_unique( array_map( 'strval', (array) get_post_meta( $coupon_id, '_used_by', false ) ) ) as $used_by ) {
+			if ( $used_by !== $placeholder && is_email( $used_by ) ) {
+				update_post_meta( $coupon_id, '_used_by', $placeholder, $used_by ); // Every row of that address.
+			}
+		}
+	}
+
+	/** The address a personal voucher's coupon is restricted to once its holder's data is erased (eraser, retention). */
+	public static function erased_address( int $voucher_id ): string {
+		return 'erased-' . $voucher_id . '@invalid.invalid';
 	}
 
 	/**

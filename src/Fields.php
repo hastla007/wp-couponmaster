@@ -38,6 +38,7 @@ final class Fields {
 		add_filter( 'woocommerce_order_item_display_meta_value', array( $this, 'display_meta_value' ), 10, 3 );
 		add_action( 'woocommerce_before_order_item_object_save', array( $this, 'sync_visible_meta' ), 10, 1 );
 		add_filter( 'woocommerce_order_again_cart_item_data', array( $this, 'order_again' ), 10, 3 );
+		add_action( 'woocommerce_privacy_remove_order_personal_data', array( self::class, 'anonymise_order' ), 10, 1 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'assets' ) );
 		add_action( 'woocommerce_after_shop_loop_item', array( $this, 'loop_assets' ) );
 		add_filter( 'woocommerce_blocks_product_grid_item_html', array( $this, 'grid_assets' ), 10, 3 );
@@ -756,6 +757,115 @@ final class Fields {
 
 	/** Prefix of the visible order item meta of voucher fields (M10). */
 	public const ITEM_META_PREFIX = 'vcap_';
+
+	/** Built-in fields about the recipient (AP-S3-1): erased with the recipient's data. */
+	public const RECIPIENT_FIELDS = array( 'recipient_name', 'recipient_email', 'message' );
+
+	/**
+	 * AP-S3-1: removes the personalisation copies from an order line – the value in "_vcap_fields" (the label stays)
+	 * and the visible copy under the stable key ("vcap_recipient_email") or, for orders placed before M10, under
+	 * the field's label. Scopes:
+	 * - "recipient": the recipient fields and the merchant's own fields (the voucher row drops all its fields on
+	 *   a recipient erasure, so the order line follows it);
+	 * - "buyer": the merchant's own fields (typed by the buyer, they cannot be attributed to the recipient);
+	 * - "all": every field (retention, WooCommerce's order anonymisation).
+	 * The delivery date is no personal data and stays. Saves the line when something changed.
+	 *
+	 * @param \WC_Order_Item $item  Order line.
+	 * @param string         $scope recipient|buyer|all.
+	 * @return bool Whether something was removed.
+	 */
+	public static function erase_item_data( $item, string $scope ): bool {
+		if ( ! $item instanceof \WC_Order_Item ) {
+			return false;
+		}
+		$fields = $item->get_meta( '_vcap_fields' );
+		$fields = is_array( $fields ) ? $fields : array();
+		$keys   = array();
+		foreach ( array_keys( $fields ) as $key ) {
+			$key = (string) $key;
+			if ( 'delivery_date' === $key ) {
+				continue;
+			}
+			$recipient = in_array( $key, self::RECIPIENT_FIELDS, true );
+			if ( 'all' === $scope || ! $recipient || 'recipient' === $scope ) {
+				$keys[] = $key;
+			}
+		}
+		if ( 'buyer' !== $scope ) {
+			// Copies of the recipient fields without a "_vcap_fields" entry (edited lines, partial data).
+			$keys = array_values( array_unique( array_merge( $keys, self::RECIPIENT_FIELDS ) ) );
+		}
+		$changed = false;
+		foreach ( $keys as $key ) {
+			$field = is_array( $fields[ $key ] ?? null ) ? $fields[ $key ] : null;
+			$value = null !== $field ? (string) ( $field['value'] ?? '' ) : '';
+			if ( $item->meta_exists( self::item_meta_key( $key ) ) ) {
+				$item->delete_meta_data( self::item_meta_key( $key ) );
+				$changed = true;
+			}
+			$label = null !== $field ? wp_strip_all_tags( (string) ( $field['label'] ?? '' ) ) : '';
+			if ( '' !== $label && '' !== $value && $item->meta_exists( $label ) && (string) $item->get_meta( $label ) === $value ) {
+				$item->delete_meta_data( $label );
+				$changed = true;
+			}
+			if ( null !== $field && '' !== $value ) {
+				$fields[ $key ]['value'] = '';
+				$changed                 = true;
+			}
+		}
+		if ( ! $changed ) {
+			return false;
+		}
+		if ( $fields ) {
+			$item->update_meta_data( '_vcap_fields', $fields );
+		}
+		$item->save();
+		return true;
+	}
+
+	/**
+	 * AP-S3-1: the order line a voucher was issued for (false when there is none any more).
+	 *
+	 * @return \WC_Order_Item|false
+	 */
+	public static function voucher_item( int $order_item_id ) {
+		if ( $order_item_id <= 0 || ! class_exists( '\WC_Order_Factory' ) ) {
+			return false;
+		}
+		return \WC_Order_Factory::get_order_item( $order_item_id );
+	}
+
+	/**
+	 * AP-S3-1: order lines whose visible recipient email copy is this address (also lines of orders that never
+	 * issued a voucher: unpaid, cancelled). At most 500 per call.
+	 *
+	 * @return int[] order item ids
+	 */
+	public static function items_for_recipient( string $email ): array {
+		global $wpdb;
+		$email = trim( $email );
+		if ( '' === $email ) {
+			return array();
+		}
+		$table = $wpdb->prefix . 'woocommerce_order_itemmeta';
+		return array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT order_item_id FROM {$table} WHERE meta_key = %s AND meta_value = %s LIMIT 500", self::item_meta_key( 'recipient_email' ), $email ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.SlowDBQuery -- table name from $wpdb.
+	}
+
+	/**
+	 * AP-S3-1: WooCommerce's order anonymisation (erasure request with "Remove personal data from orders", or its
+	 * own retention of orders) also clears the personalisation copies of the order lines.
+	 *
+	 * @param \WC_Order $order Order being anonymised.
+	 */
+	public static function anonymise_order( $order ): void {
+		if ( ! $order instanceof \WC_Order ) {
+			return;
+		}
+		foreach ( $order->get_items() as $item ) {
+			self::erase_item_data( $item, 'all' );
+		}
+	}
 
 	/**
 	 * H11/M10: a field value as people read it – a date in the voucher date format ("24.12.2026" instead of

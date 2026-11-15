@@ -111,6 +111,95 @@ $retention_note  = $wpdb->get_var( $wpdb->prepare( 'SELECT note FROM ' . VCAP\In
 vcap_security_assert( $anonymised > 0 && '' === $after_retention->buyer_email && array() === $after_retention->fields, 'retention anonymises expired voucher personalisation' );
 vcap_security_assert( '[personal data removed by retention]' === $retention_note, 'retention redacts free-text audit notes without deleting the audit trail' );
 
+// AP-S3-1: the personalisation is also copied into the order line ("_vcap_fields" and the visible "vcap_…" meta).
+$ap_tag     = strtolower( wp_generate_password( 6, false, false ) );
+$ap_product = new WC_Product_Simple();
+$ap_product->set_name( 'AP-S3 voucher ' . $ap_tag );
+$ap_product->set_regular_price( '25' );
+$ap_product->save();
+$ap_line = static function ( WC_Order $order, string $recipient ) use ( $ap_product ): WC_Order_Item_Product {
+	$item_id = $order->add_product( $ap_product, 1 );
+	$item    = $order->get_item( $item_id );
+	$fields  = array(
+		'recipient_name'  => array( 'label' => 'Recipient name', 'value' => 'Rita Recipient' ),
+		'recipient_email' => array( 'label' => 'Recipient email', 'value' => $recipient ),
+		'message'         => array( 'label' => 'Personal message', 'value' => 'Happy birthday, Rita' ),
+		'delivery_date'   => array( 'label' => 'Delivery date', 'value' => '2026-12-24' ),
+		'sender'          => array( 'label' => 'Your name', 'value' => 'Bert Buyer' ),
+	);
+	$item->add_meta_data( '_vcap_fields', $fields, true );
+	foreach ( $fields as $key => $field ) {
+		$item->add_meta_data( VCAP\Fields::item_meta_key( $key ), $field['value'], true );
+	}
+	$item->save();
+	return $item;
+};
+$ap_values = static function ( int $item_id ): array {
+	$item   = WC_Order_Factory::get_order_item( $item_id );
+	$fields = $item->get_meta( '_vcap_fields' );
+	$out    = array();
+	foreach ( array( 'recipient_name', 'recipient_email', 'message', 'delivery_date', 'sender' ) as $key ) {
+		$out[ $key ] = (string) ( $fields[ $key ]['value'] ?? '' ) . '|' . (string) $item->get_meta( VCAP\Fields::item_meta_key( $key ) );
+	}
+	return $out;
+};
+$ap_buyer   = "ap-buyer-{$ap_tag}@example.test";
+$ap_rcpt    = "ap-rcpt-{$ap_tag}@example.test";
+$ap_order   = wc_create_order();
+$ap_order->set_billing_email( $ap_buyer );
+$ap_item_r  = $ap_line( $ap_order, $ap_rcpt );
+$ap_item_b  = $ap_line( $ap_order, "ap-other-{$ap_tag}@example.test" );
+$ap_item_u  = $ap_line( $ap_order, "ap-unissued-{$ap_tag}@example.test" ); // No voucher (e.g. unpaid order).
+$ap_order->save();
+$ap_link = static function ( VCAP\Voucher $voucher, int $item_id, string $buyer, string $recipient ) {
+	$voucher->order_item_id   = $item_id;
+	$voucher->buyer_email     = $buyer;
+	$voucher->recipient_email = $recipient;
+	vcap()->vouchers->update( $voucher );
+};
+$ap_link( vcap_security_create_voucher( $ap_rcpt, 910001 ), $ap_item_r->get_id(), "ap-someone-{$ap_tag}@example.test", $ap_rcpt );
+$ap_link( vcap_security_create_voucher( $ap_buyer, 910002 ), $ap_item_b->get_id(), $ap_buyer, "ap-other-{$ap_tag}@example.test" );
+$privacy->erase( $ap_rcpt, 1 );
+$ap_after = $ap_values( $ap_item_r->get_id() );
+vcap_security_assert( array( 'recipient_name' => '|', 'recipient_email' => '|', 'message' => '|', 'delivery_date' => '2026-12-24|2026-12-24', 'sender' => '|' ) === $ap_after, 'AP-S3-1: erasing the recipient also clears the order line copies (_vcap_fields values and vcap_… meta; the delivery date stays)' );
+$privacy->erase( $ap_buyer, 1 );
+$ap_after_b = $ap_values( $ap_item_b->get_id() );
+vcap_security_assert( '|' === $ap_after_b['sender'] && 'Rita Recipient|Rita Recipient' === $ap_after_b['recipient_name'], 'AP-S3-1: erasing the buyer clears the buyer\'s own fields on the line (the recipient\'s stay for the recipient)' );
+$privacy->erase( "ap-unissued-{$ap_tag}@example.test", 1 );
+vcap_security_assert( '|' === $ap_values( $ap_item_u->get_id() )['recipient_email'] && '|' === $ap_values( $ap_item_u->get_id() )['message'], 'AP-S3-1: a line naming the recipient without a voucher (unpaid order) is cleared as well' );
+// WooCommerce's own order anonymisation (erasure with "Remove personal data from orders", WooCommerce retention).
+$ap_order2 = wc_create_order();
+$ap_item_w = $ap_line( $ap_order2, "ap-wc-{$ap_tag}@example.test" );
+$ap_order2->save();
+WC_Privacy_Erasers::remove_order_personal_data( wc_get_order( $ap_order2->get_id() ) );
+$ap_after_w = $ap_values( $ap_item_w->get_id() );
+vcap_security_assert( '|' === $ap_after_w['recipient_name'] && '|' === $ap_after_w['recipient_email'] && '|' === $ap_after_w['message'] && '|' === $ap_after_w['sender'], 'AP-S3-1: WooCommerce\'s order anonymisation (woocommerce_privacy_remove_order_personal_data) clears the personalisation copies too' );
+// AP-S3-1/AP-S3-2: retention clears the line copies, the coupon's email restriction and guest addresses in "used by".
+$ap_order3  = wc_create_order();
+$ap_item_t  = $ap_line( $ap_order3, "ap-ret-{$ap_tag}@example.test" );
+$ap_order3->save();
+$ap_ret     = vcap_security_create_voucher( "ap-ret-{$ap_tag}@example.test", 910003 );
+$ap_link( $ap_ret, $ap_item_t->get_id(), "ap-ret-buyer-{$ap_tag}@example.test", "ap-ret-{$ap_tag}@example.test" );
+$ap_ret_wc  = new WC_Coupon();
+$ap_ret_wc->set_code( $ap_ret->code );
+$ap_ret_wc->set_discount_type( 'fixed_cart' );
+$ap_ret_wc->set_amount( 10 );
+$ap_ret_wc->set_email_restrictions( array( "ap-ret-{$ap_tag}@example.test", "ap-ret-buyer-{$ap_tag}@example.test" ) );
+$ap_ret_wc->save();
+add_post_meta( $ap_ret_wc->get_id(), '_used_by', "ap-ret-buyer-{$ap_tag}@example.test" );
+add_post_meta( $ap_ret_wc->get_id(), '_used_by', "ap-ret-buyer-{$ap_tag}@example.test" );
+add_post_meta( $ap_ret_wc->get_id(), '_used_by', '12345' );
+$ap_ret->coupon_id = $ap_ret_wc->get_id();
+vcap()->vouchers->update( $ap_ret );
+$wpdb->update( VCAP\Install::tables()['vouchers'], array( 'status' => 'redeemed', 'updated_at' => $old_date ), array( 'id' => $ap_ret->id ) );
+vcap()->vouchers->anonymise_older_than( 30 );
+$ap_after_t = $ap_values( $ap_item_t->get_id() );
+vcap_security_assert( '|' === $ap_after_t['recipient_name'] && '|' === $ap_after_t['recipient_email'] && '|' === $ap_after_t['message'] && '|' === $ap_after_t['sender'], 'AP-S3-1: retention clears the order line copies of the voucher' );
+$ap_used_by = array_map( 'strval', get_post_meta( $ap_ret_wc->get_id(), '_used_by' ) );
+sort( $ap_used_by );
+$ap_placeholder = VCAP\VoucherRepository::erased_address( $ap_ret->id );
+vcap_security_assert( array( $ap_placeholder ) === array_values( ( new WC_Coupon( $ap_ret_wc->get_id() ) )->get_email_restrictions() ) && array( '12345', $ap_placeholder, $ap_placeholder ) === $ap_used_by, 'AP-S3-2: retention replaces the coupon\'s email restriction and guest addresses in "used by" with the eraser\'s placeholder (user ids and the number of uses stay)' );
+
 // Scanner routes must reject unauthenticated lookups and mutations.
 wp_set_current_user( 0 );
 $server = rest_get_server();
