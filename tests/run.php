@@ -139,6 +139,16 @@ check( 'a single code is rated with the structure of the codes already in the ba
 $single = CodeGenerator::analyse_batch( array( 'GIFT-' . CodeGenerator::random( 20, 'numeric' ) ), array( 'GIFT-' . CodeGenerator::random( 20, 'numeric' ), 'GIFT-' . CodeGenerator::random( 20, 'numeric' ) ) );
 check( 'a single random code next to random codes of the batch stays strong', ! $single['sequential'] && $single['bits'][0] >= 50, json_encode( $single ) );
 check( 'a single code without other codes keeps its full length', CodeGenerator::analyse_batch( array( '1234567890123456' ) )['bits'][0] >= 50 );
+// M12-26: the alphabet is what the batch really uses – hex codes of 10 characters are 40 bits, not 52.
+$hex_batch = array();
+for ( $i = 0; $i < 20; $i++ ) {
+	$hex_batch[] = strtoupper( bin2hex( random_bytes( 5 ) ) );
+}
+$rated = CodeGenerator::analyse_batch( $hex_batch );
+check( 'M12-26: a hex batch of 10 characters counts as weak (16 characters seen, about 40 bits)', max( $rated['bits'] ) < 50 && max( $rated['bits'] ) <= 10 * log( 16, 2 ) + 0.01, json_encode( max( $rated['bits'] ) ) );
+check( 'M12-26: a single code says nothing about the alphabet (full letters and digits)', CodeGenerator::analyse_batch( array( 'K7QM2X9ZPA' ) )['bits'][0] >= 50 && 0 === CodeGenerator::alphabet_seen( array( 'k7qm2x9zpa' ) ) );
+$rated = CodeGenerator::analyse_batch( array( 7 => strtoupper( bin2hex( random_bytes( 5 ) ) ) ), $hex_batch );
+check( 'M12-26: one more hex code is rated with the alphabet of the codes already in the batch', $rated['bits'][7] < 50, json_encode( $rated['bits'] ) );
 
 echo "Design sanitising\n";
 $dirty = array(
