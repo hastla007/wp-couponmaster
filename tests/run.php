@@ -1786,7 +1786,7 @@ $d6_repo->update( $d6_voucher );
 $d6_repo->log( 7, 'voided' );
 VCAP\Db::rollback_silently();
 check( 'D6: vcap_voucher_updated and vcap_voucher_event fire after the COMMIT (each with the voucher as saved then), never after a ROLLBACK', array( array(), array() ) === $d6_mid && array( 40.0, 30.0 ) === $d6_updates && array( 'redeemed' ) === $d6_events, var_export( array( $d6_updates, $d6_events ), true ) );
-$d6_sources = implode( "\n", array_map( 'file_get_contents', array( VCAP_PATH . 'src/CouponManager.php', VCAP_PATH . 'src/API/V1/RedemptionService.php', VCAP_PATH . 'src/StoreCredit.php', VCAP_PATH . 'src/VoucherRepository.php', VCAP_PATH . 'src/Install.php' ) ) );
+$d6_sources = implode( "\n", array_map( 'file_get_contents', array_merge( glob( VCAP_PATH . 'src/Coupons/*.php' ), array( VCAP_PATH . 'src/CouponManager.php', VCAP_PATH . 'src/API/V1/RedemptionService.php', VCAP_PATH . 'src/StoreCredit.php', VCAP_PATH . 'src/VoucherRepository.php', VCAP_PATH . 'src/Install.php' ) ) ) );
 check( 'D6: every transaction in src runs through the shared helper (no raw START TRANSACTION / COMMIT / ROLLBACK)', ! preg_match( "/query\\( '(START TRANSACTION|COMMIT|ROLLBACK)' \\)/", $d6_sources ) );
 VCAP\Db::reset();
 $GLOBALS['wpdb'] = $d6_saved_wpdb;
@@ -1839,9 +1839,9 @@ check( 'D14: coupon status per voucher status (void/scheduled off, active on, ot
 $d14_writers = array();
 foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( dirname( __DIR__ ) . '/src', FilesystemIterator::SKIP_DOTS ) ) as $d14_file ) {
 	$d14_src = (string) file_get_contents( (string) $d14_file );
-	// Voucher coupons are written by CouponManager only (create_coupon/sync_coupon); other coupons (bonus,
-	// referral, campaign, first order, SKU rules) are not voucher coupons.
-	if ( preg_match( '/->set_usage_limit\(|->set_usage_count\(|->set_date_expires\(/', $d14_src ) && ! preg_match( '#/(CouponManager|Reissue|Referrals|Discounts/Bonus|Campaigns|FirstOrderCoupons|CouponSkuRules)\.php$#', (string) $d14_file ) ) {
+	// Voucher coupons are written by CouponManager only (create_coupon/sync_coupon, in src/Coupons since the split:
+	// CouponFactory and CouponSync); other coupons (bonus, referral, campaign, first order, SKU rules) are not voucher coupons.
+	if ( preg_match( '/->set_usage_limit\(|->set_usage_count\(|->set_date_expires\(/', $d14_src ) && ! preg_match( '#/(CouponManager|Coupons/CouponFactory|Coupons/CouponSync|Reissue|Referrals|Discounts/Bonus|Campaigns|FirstOrderCoupons|CouponSkuRules)\.php$#', (string) $d14_file ) ) {
 		$d14_writers[] = basename( (string) $d14_file );
 	}
 }
