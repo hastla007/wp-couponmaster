@@ -54,7 +54,8 @@ final class JobProgress {
 				?>
 			</p>
 		</div>
-		<script>setTimeout( function () { window.location.reload(); }, 3000 );</script>
 		<?php
+		// Reloads until the job is through (AP-W1-3: attached to the admin script, no inline <script>).
+		wp_add_inline_script( 'vcap-admin', 'setTimeout( function () { window.location.reload(); }, 3000 );' );
 	}
 }

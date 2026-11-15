@@ -301,4 +301,46 @@ $d14_card->status = Voucher::STATUS_ACTIVE;
 VCAP\CouponManager::sync_coupon( $d14_card, array( 'status' ) );
 vcap_ctr_assert( 'draft' === $d14_off && 'publish' === get_post_status( $d14_card->coupon_id ), 'D14: the coupon status follows the voucher status (void = disabled, active = enabled)' );
 
+// AP-W1-2 / AP-Q2-7: the check-in page admits only with the form's one-time key. An outdated theme copy of
+// ticket-status.php without the key is refused (a fresh key per request would admit a resent form twice).
+$w12_ticket               = vcap_ctr_voucher( 'single', 0 );
+$w12_ticket->type         = 'ticket';
+$w12_ticket->max_checkins = 3;
+$w12_ticket->token        = VCAP\VoucherRepository::new_token();
+vcap()->vouchers->update( $w12_ticket );
+wp_set_current_user( vcap_ctr_user( Install::CASHIER_ROLE ) );
+$w12_page = static function ( array $post ) use ( $w12_ticket ): array {
+	$_GET  = array( 'vcap_ticket' => $w12_ticket->token );
+	$_POST = $post + array( 'vcap_checkin_nonce' => wp_create_nonce( 'vcap_checkin_' . $w12_ticket->id ), 'count' => '1' );
+	$stop_redirect = static function ( $location ) {
+		throw new RuntimeException( 'redirect:' . $location );
+	};
+	$stop_template = static function ( $template, $name, $args ) {
+		if ( 'ticket-status.php' === $name ) {
+			throw new RuntimeException( 'template:' . wp_json_encode( array( 'notice' => $args['notice'] ?? '', 'level' => $args['notice_level'] ?? '' ) ) );
+		}
+		return $template;
+	};
+	add_filter( 'wp_redirect', $stop_redirect );
+	add_filter( 'wc_get_template', $stop_template, 10, 3 );
+	$out = '';
+	try {
+		vcap()->tickets->ticket_page();
+	} catch ( RuntimeException $e ) {
+		$out = $e->getMessage();
+	}
+	remove_filter( 'wp_redirect', $stop_redirect );
+	remove_filter( 'wc_get_template', $stop_template, 10 );
+	$_GET  = array();
+	$_POST = array();
+	return array( $out, (int) vcap()->vouchers->get( $w12_ticket->id )->checkins );
+};
+list( $w12_out, $w12_in ) = $w12_page( array() );
+vcap_ctr_assert( 0 === $w12_in && str_starts_with( $w12_out, 'template:' ) && str_contains( $w12_out, '"level":"error"' ), 'AP-W1-2: a check-in POST without vcap_checkin_key (outdated template override) is refused, nobody is admitted', $w12_out );
+$w12_key                  = wp_generate_uuid4();
+list( $w12_out, $w12_in ) = $w12_page( array( 'vcap_checkin_key' => $w12_key ) );
+vcap_ctr_assert( 1 === $w12_in && str_starts_with( $w12_out, 'redirect:' ), 'AP-W1-2: with its one-time key the check-in admits once and redirects', $w12_out );
+list( $w12_out, $w12_in ) = $w12_page( array( 'vcap_checkin_key' => $w12_key ) );
+vcap_ctr_assert( 1 === $w12_in, 'AP-W1-2: the same form sent again admits nobody', $w12_out );
+
 echo "Counter integration: all checks passed.\n";

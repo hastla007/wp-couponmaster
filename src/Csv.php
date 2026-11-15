@@ -109,14 +109,28 @@ final class Csv {
 	}
 
 	/**
+	 * Download headers of a CSV file: an attachment, never sniffed as HTML or script by the browser (AP-W1-4).
+	 *
+	 * @return string[]
+	 */
+	public static function headers( string $filename ): array {
+		return array(
+			'Content-Type: text/csv; charset=utf-8',
+			'Content-Disposition: attachment; filename="' . sanitize_file_name( $filename ) . '"',
+			'X-Content-Type-Options: nosniff',
+		);
+	}
+
+	/**
 	 * Sends the download headers and the BOM.
 	 *
 	 * @return resource Output stream for write().
 	 */
 	public static function open( string $filename ) {
 		nocache_headers();
-		header( 'Content-Type: text/csv; charset=utf-8' );
-		header( 'Content-Disposition: attachment; filename="' . sanitize_file_name( $filename ) . '"' );
+		foreach ( self::headers( $filename ) as $line ) {
+			header( $line );
+		}
 		$out = fopen( 'php://output', 'w' );
 		fwrite( $out, "\xEF\xBB\xBF" ); // phpcs:ignore WordPress.WP.AlternativeFunctions -- UTF-8 BOM for Excel.
 		return $out;

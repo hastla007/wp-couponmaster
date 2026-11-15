@@ -1222,9 +1222,13 @@ final class Tickets {
 			// Post/Redirect/Get with a one-time key per form: reloading, a double tap or resending the form
 			// never admits twice; the answer is shown after the redirect.
 			$count = max( 1, absint( $_POST['count'] ?? 1 ) );
-			// Theme overrides of the template without the key still get the redirect (no repeat on reload).
-			$key   = sanitize_key( wp_unslash( $_POST['vcap_checkin_key'] ?? '' ) ) ?: wp_generate_uuid4();
-			$prior = $this->scan_claim( $key, md5( 'checkin-page|' . $voucher->id ), $voucher, array( 'checkin' ) );
+			$key   = sanitize_key( wp_unslash( $_POST['vcap_checkin_key'] ?? '' ) );
+			// AP-W1-2: a theme copy of ticket-status.php older than the one-time key cannot tell a resent form from a
+			// new one; a key made up here would admit every resend. Refused (WooCommerce → Status lists the outdated
+			// override, the scanner keeps working).
+			$prior = '' === $key
+				? new \WP_Error( 'vcap_checkin_key_missing', __( 'Check-in refused: this check-in form is outdated (theme copy of ticket-status.php without its one-time key). Please use the scanner or update the template.', 'voucher-captain' ) )
+				: $this->scan_claim( $key, md5( 'checkin-page|' . $voucher->id ), $voucher, array( 'checkin' ) );
 			if ( null === $prior ) {
 				try {
 					$ok = $this->checkin( $voucher, $count );

@@ -3,6 +3,7 @@
  * Bundled voucher email (HTML, Z6): several vouchers of one order with a code table.
  *
  * Override: yourtheme/woocommerce/voucher-captain/emails/voucher-bundle.php
+ * @version  1.2.0
  *
  * @var \VCAP\Voucher[]    $vouchers
  * @var \VCAP\Voucher      $voucher            The first voucher (texts, placeholders).

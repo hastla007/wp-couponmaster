@@ -1464,6 +1464,9 @@ final class Install {
 	/** Role for till and entrance staff: the scanner only (no orders, customers or settings). */
 	public const CASHIER_ROLE = 'vcap_cashier';
 
+	/** Stored (English) name of the cashier role; translated on display (translate_role_name()). */
+	public const CASHIER_ROLE_NAME = 'Voucher cashier';
+
 	public static function add_caps(): void {
 		foreach ( array( 'administrator', 'shop_manager' ) as $role_name ) {
 			$role = get_role( $role_name );
@@ -1475,15 +1478,43 @@ final class Install {
 			}
 		}
 		if ( ! get_role( self::CASHIER_ROLE ) ) {
+			// English, like the core roles: add_caps() runs at plugins_loaded (too early to translate) and the stored
+			// name must not depend on the language of whoever triggered the upgrade. Shown translated through
+			// translate_user_role() (see translate_role_name()).
 			add_role(
 				self::CASHIER_ROLE,
-				__( 'Voucher cashier', 'voucher-captain' ),
+				self::CASHIER_ROLE_NAME,
 				array(
 					'read'              => true,
 					'vcap_scan_tickets' => true,
 				)
 			);
+		} else {
+			// Installs before AP-W1-1 stored the name in the language of that request: stored in English once.
+			$roles = wp_roles();
+			if ( isset( $roles->roles[ self::CASHIER_ROLE ] ) && self::CASHIER_ROLE_NAME !== ( $roles->roles[ self::CASHIER_ROLE ]['name'] ?? '' ) ) {
+				$roles->roles[ self::CASHIER_ROLE ]['name'] = self::CASHIER_ROLE_NAME;
+				$roles->role_names[ self::CASHIER_ROLE ]    = self::CASHIER_ROLE_NAME;
+				if ( $roles->use_db ) {
+					update_option( $roles->role_key, $roles->roles );
+				}
+			}
 		}
+	}
+
+	/**
+	 * Filter gettext_with_context_default: translate_user_role() looks role names up in the "default" text domain
+	 * with the context "User role"; the cashier role's name comes from the plugin's translation.
+	 *
+	 * @param string $translation Translated text.
+	 * @param string $text        Text to translate.
+	 * @param string $context     Context.
+	 */
+	public static function translate_role_name( $translation, $text, $context ) {
+		if ( self::CASHIER_ROLE_NAME === $text && 'User role' === $context ) {
+			return _x( 'Voucher cashier', 'User role', 'voucher-captain' );
+		}
+		return $translation;
 	}
 
 	public static function upload_dir(): string {

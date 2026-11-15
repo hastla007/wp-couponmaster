@@ -220,9 +220,13 @@ final class StoreCreditAdmin {
 				wp_nonce_field( 'vcap_refund_credit_' . $order->get_id() );
 				echo '<input type="hidden" name="vcap_refund_credit_key" value="' . esc_attr( StoreCredit::request_key() ) . '" />';
 				echo '</form>';
-				// Confirmation with the amount entered: the refund cannot be undone.
-				echo "<script>document.getElementById('vcap-refund-credit').addEventListener('submit',function(e){var a=document.querySelector('[name=\"vcap_refund_credit_amount\"]');if(!window.confirm(this.getAttribute('data-confirm').replace('%s',a?a.value:''))){e.preventDefault();}});</script>";
 			}
+		);
+		// Confirmation with the amount entered: the refund cannot be undone (AP-W1-3: attached to the admin script,
+		// no inline <script>; vcap-admin is loaded on the order screens, see Menu::assets()).
+		wp_add_inline_script(
+			'vcap-admin',
+			"document.addEventListener('submit',function(e){var f=e.target;if(!f||'vcap-refund-credit'!==f.id){return;}var a=document.querySelector('[name=\"vcap_refund_credit_amount\"]');if(!window.confirm(f.getAttribute('data-confirm').replace('%s',a?a.value:''))){e.preventDefault();}});"
 		);
 		echo '<p><button type="submit" form="vcap-refund-credit" class="button">' . esc_html__( 'Refund as store credit', 'voucher-captain' ) . '</button></p>';
 	}
