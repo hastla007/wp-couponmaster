@@ -1970,5 +1970,14 @@ foreach ( array( array( true, true ), array( true, false ), array( false, false 
 unset( $GLOBALS['vcap_test_cache'] );
 check( 'M12-88: runtime flush where supported, full flush of a non-persistent cache otherwise, nothing for a persistent drop-in without flush_runtime', array( 'runtime', 'runtime', 'full', '' ) === $m88, implode( '|', $m88 ) );
 
+// M12-102: docs/FREE-PREMIUM.md keeps no hook table of its own (it went stale) but refers to the generated
+// docs/HOOKS.md; every hook named in its section on extension points exists there.
+$m102_doc   = (string) file_get_contents( dirname( __DIR__ ) . '/docs/FREE-PREMIUM.md' );
+$m102_hooks = (string) file_get_contents( dirname( __DIR__ ) . '/docs/HOOKS.md' );
+$m102_part  = (string) strstr( $m102_doc, '## Öffentliche Erweiterungspunkte' );
+preg_match_all( '/`(vcap_[a-z0-9_]+)`/', $m102_part, $m102_named );
+$m102_missing = array_values( array_filter( array_unique( $m102_named[1] ), static fn( $h ) => ! str_contains( $m102_hooks, '`' . $h . '`' ) ) );
+check( 'M12-102: FREE-PREMIUM.md refers to docs/HOOKS.md instead of an own hook table, and every hook it names is in HOOKS.md', '' !== $m102_part && str_contains( $m102_doc, '(HOOKS.md)' ) && ! preg_match( '/^\|\s*`vcap_/m', $m102_doc ) && count( $m102_named[1] ) > 10 && array() === $m102_missing, implode( ', ', $m102_missing ) );
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );
