@@ -174,8 +174,91 @@ final class Issuer {
 	public function issue_async( $order_id ): void {
 		$order_id = is_array( $order_id ) ? (int) ( $order_id['order_id'] ?? 0 ) : (int) $order_id;
 		$order    = $order_id ? wc_get_order( $order_id ) : null;
-		if ( $order && self::payment_ok( $order ) ) {
-			$this->issue_for_order( $order );
+		if ( ! $order instanceof \WC_Order ) {
+			return;
+		}
+		if ( is_array( $order->get_meta( self::ASYNC_META ) ) && $order->has_status( array( 'cancelled', 'refunded', 'failed' ) ) ) {
+			// Cancelled while its vouchers were being issued in the background: no further batches.
+			$order->delete_meta_data( self::ASYNC_META );
+			$order->save_meta_data();
+			$order->add_order_note( __( 'Issuing vouchers in the background stopped: the order is no longer paid.', 'voucher-captain' ) );
+			return;
+		}
+		if ( self::payment_ok( $order ) ) {
+			$this->in_batch = true;
+			try {
+				$this->issue_for_order( $order );
+			} finally {
+				$this->in_batch = false;
+			}
+		}
+	}
+
+	/** Order meta while the vouchers of an order are issued in the background (array{total:int, started:string}). */
+	public const ASYNC_META = '_vcap_issue_async';
+	/** More vouchers to issue for one order than this: issued in Action Scheduler batches (filter "vcap_async_issue_threshold"). */
+	public const ASYNC_THRESHOLD = 20;
+	/** Vouchers issued per background batch (filter "vcap_issue_batch_size"). */
+	public const BATCH_SIZE = 25;
+	/** Whether the last issue_for_order() run handed the work to the background instead of issuing. */
+	public bool $last_deferred = false;
+	/** Whether issuing runs as a background batch (issue_async()). */
+	private bool $in_batch = false;
+
+	/** Vouchers above which an order is issued in the background. */
+	public static function async_threshold( \WC_Order $order ): int {
+		/**
+		 * Vouchers still to be issued for an order above which they are created in Action Scheduler batches, so the
+		 * payment request (gateway webhook, checkout) returns quickly (default 20). The order shows a note and its
+		 * vouchers are delivered once all of them exist. A very high value issues everything right away.
+		 */
+		return max( 1, (int) apply_filters( 'vcap_async_issue_threshold', self::ASYNC_THRESHOLD, $order ) );
+	}
+
+	/** Vouchers created per background batch. */
+	public static function batch_size( \WC_Order $order ): int {
+		/** Vouchers created per Action Scheduler batch when an order is issued in the background (default 25). */
+		return max( 1, (int) apply_filters( 'vcap_issue_batch_size', self::BATCH_SIZE, $order ) );
+	}
+
+	/**
+	 * Plans the next issuing action of the order (the same hook and arguments as the retries: one pending action per
+	 * order at a time, replaced by every plan).
+	 */
+	private function schedule_batch( \WC_Order $order, int $delay = 0 ): void {
+		$args = array( 'order_id' => $order->get_id() );
+		as_unschedule_all_actions( self::ISSUE_RETRY_HOOK, $args, Delivery::GROUP );
+		as_schedule_single_action( time() + $delay, self::ISSUE_RETRY_HOOK, $args, Delivery::GROUP );
+	}
+
+	/**
+	 * Every voucher of a background run exists: the vouchers it created (since it started) are delivered together,
+	 * vcap_vouchers_issued fires once for all of them.
+	 *
+	 * @param array{total:int, started:string} $state
+	 */
+	private function finish_background( \WC_Order $order, array $state ): void {
+		$order->delete_meta_data( self::ASYNC_META );
+		$order->save_meta_data();
+		if ( function_exists( 'as_unschedule_all_actions' ) ) {
+			as_unschedule_all_actions( self::ISSUE_RETRY_HOOK, array( 'order_id' => $order->get_id() ), Delivery::GROUP );
+		}
+		$started = (string) ( $state['started'] ?? '' );
+		$issued  = array_values(
+			array_filter(
+				$this->repo->for_order( $order->get_id() ),
+				static fn( Voucher $v ) => (string) $v->created_at >= $started && ! $v->delivered_at && in_array( $v->status, array( Voucher::STATUS_ACTIVE, Voucher::STATUS_SCHEDULED ), true )
+			)
+		);
+		/* translators: %d: number of vouchers */
+		$order->add_order_note( sprintf( __( 'All vouchers of this order have been issued (%d in the background); delivery starts now.', 'voucher-captain' ), count( $issued ) ) );
+		Logger::debug( 'Background issuing finished.', array( 'order_id' => $order->get_id(), 'vouchers' => count( $issued ) ) );
+		if ( $issued ) {
+			foreach ( $issued as $voucher ) {
+				$this->delivery->schedule( $voucher );
+			}
+			/** Vouchers of an order were issued (args: Voucher[] $created, WC_Order $order). */
+			do_action( 'vcap_vouchers_issued', $issued, $order );
 		}
 	}
 
@@ -393,15 +476,27 @@ final class Issuer {
 	}
 
 	/**
+	 * Creates the missing vouchers of an order (one per free item slot, so every run is idempotent).
+	 *
+	 * B4: more than async_threshold() missing vouchers are created in the background, batch_size() per Action
+	 * Scheduler action (hook ISSUE_RETRY_HOOK, like the retries), so the payment request returns quickly. The run
+	 * that hands them over adds an order note and returns no vouchers ($last_deferred); every batch notes the
+	 * vouchers it created; the vouchers are delivered together when the last batch is through (finish_background()).
+	 *
+	 * @param bool $allow_async False: create everything in this request (e.g. WP-CLI), finishing a background run.
 	 * @return Voucher[] newly created vouchers
 	 */
-	public function issue_for_order( \WC_Order $order, bool $manual = false ): array {
+	public function issue_for_order( \WC_Order $order, bool $manual = false, bool $allow_async = true ): array {
 		$created             = array();
 		$this->last_failures = 0;
+		$this->last_deferred = false;
 		if ( ! Compat\MultiCurrency::can_convert( (string) $order->get_currency(), $order ) && $this->needs_conversion( $order ) ) {
 			$this->hold_for_rate( $order );
 			return $created;
 		}
+		// Plan: the voucher lines and their free slots (one query per line).
+		$lines   = array();
+		$missing = 0;
 		foreach ( $order->get_items() as $item_id => $item ) {
 			/** @var \WC_Order_Item_Product $item */
 			if ( ! $item instanceof \WC_Order_Item_Product ) {
@@ -420,27 +515,76 @@ final class Issuer {
 				$this->refuse_line( $order, $item, $errors );
 				continue;
 			}
-			if ( $count > 0 ) {
-				$this->record_line( $order, $item, $config, $count );
+			if ( $count <= 0 ) {
+				continue;
 			}
+			$this->record_line( $order, $item, $config, $count );
+			$taken = $this->repo->taken_slots( (int) $item_id );
+			$free  = array_values( array_diff( range( 0, $count - 1 ), array_keys( $taken ) ) );
+			if ( $free ) {
+				$lines[]  = array( $item, $product, $config, $free );
+				$missing += count( $free );
+			}
+		}
 
-			for ( $index = 0; $index < $count; $index++ ) {
-				if ( $this->repo->get_slot( (int) $item_id, $index ) ) {
-					continue;
+		$state = $order->get_meta( self::ASYNC_META );
+		$state = is_array( $state ) ? $state : null;
+		$async = $allow_async && function_exists( 'as_schedule_single_action' );
+		if ( ! $state && $async && $missing > self::async_threshold( $order ) ) {
+			$state = array(
+				'total'   => $missing,
+				'started' => $this->repo->now(),
+			);
+			$order->update_meta_data( self::ASYNC_META, $state );
+			$order->save_meta_data();
+			$order->add_order_note(
+				/* translators: %d: number of vouchers */
+				sprintf( __( '%d vouchers are being issued in the background. They are delivered once all of them have been issued; this order shows a note when that is done.', 'voucher-captain' ), $missing )
+			);
+			Logger::debug( 'Issuing handed to the background.', array( 'order_id' => $order->get_id(), 'missing' => $missing ) );
+		}
+		if ( $state && $async && ! $this->in_batch ) {
+			// A status hook, the payment callback or "Generate vouchers" while the batches run: they carry on.
+			if ( ! as_has_scheduled_action( self::ISSUE_RETRY_HOOK, array( 'order_id' => $order->get_id() ), Delivery::GROUP ) ) {
+				$this->schedule_batch( $order );
+			}
+			$this->last_deferred = true;
+			return $created;
+		}
+		$limit = $state && $async ? self::batch_size( $order ) : PHP_INT_MAX;
+		if ( $state && $async ) {
+			// Safety net: should this batch be cut off (time limit, fatal error), the next one still runs.
+			$this->schedule_batch( $order, 10 * MINUTE_IN_SECONDS );
+		}
+
+		$attempts = 0;
+		$more     = false;
+		foreach ( $lines as list( $item, $product, $config, $free ) ) {
+			foreach ( $free as $index ) {
+				if ( $attempts >= $limit ) {
+					$more = true;
+					break 2;
 				}
+				if ( $this->repo->get_slot( (int) $item->get_id(), $index ) ) {
+					continue; // Taken by a concurrent request since the plan.
+				}
+				++$attempts;
 				$voucher = $this->create_voucher( $order, $item, $product, $config, $index );
 				if ( $voucher ) {
 					$created[] = $voucher;
-				} elseif ( ! $this->repo->get_slot( (int) $item_id, $index ) ) {
+				} elseif ( ! $this->repo->get_slot( (int) $item->get_id(), $index ) ) {
 					++$this->last_failures; // Not a concurrent request that took the slot: really missing.
 				}
 			}
 		}
-		Logger::debug( 'Issuing run.', array( 'order_id' => $order->get_id(), 'created' => count( $created ), 'failed' => $this->last_failures, 'manual' => $manual ) );
+		Logger::debug( 'Issuing run.', array( 'order_id' => $order->get_id(), 'created' => count( $created ), 'failed' => $this->last_failures, 'manual' => $manual, 'more' => $more ) );
 		if ( $this->last_failures ) {
-			$this->issue_failed( $order, $this->last_failures );
+			$this->issue_failed( $order, $this->last_failures ); // Plans the next attempt (also of a background run).
 		} else {
 			$this->issue_recovered( $order );
+			if ( $more ) {
+				$this->schedule_batch( $order ); // The next background batch, right away.
+			}
 		}
 
 		if ( $created ) {
@@ -454,6 +598,15 @@ final class Issuer {
 					implode( ', ', array_map( static fn( $v ) => Downloads::masked_code( (string) $v->code ), $created ) )
 				) . ( $manual ? ' ' . __( '(manual)', 'voucher-captain' ) : '' )
 			);
+		}
+		if ( $state ) {
+			// Background run: delivery waits until every voucher of the order exists.
+			if ( ! $more && ! $this->last_failures ) {
+				$this->finish_background( $order, $state );
+			}
+			return $created;
+		}
+		if ( $created ) {
 			foreach ( $created as $voucher ) {
 				$this->delivery->schedule( $voucher );
 			}
@@ -640,7 +793,7 @@ final class Issuer {
 			}
 		}
 		if ( '' === $code ) {
-			$code = CodeGenerator::unique(
+			$code = CodeIndex::unique(
 				array(
 					'prefix'    => '' !== (string) $config['code_prefix'] ? $config['code_prefix'] : $this->settings->get( 'vcap_code_prefix' ),
 					'suffix'    => '' !== (string) $config['code_suffix'] ? $config['code_suffix'] : $this->settings->get( 'vcap_code_suffix' ),
@@ -650,8 +803,7 @@ final class Issuer {
 					'order_ref' => $this->settings->yes( 'vcap_code_order_ref' ) ? $order->get_order_number() : '',
 					/** Minimum guessing space of generated voucher codes in bits (default 50: 10 letters/digits or 16 digits). */
 					'min_bits'  => (int) apply_filters( 'vcap_min_code_bits', CodeGenerator::MIN_BITS ),
-				),
-				array( $this->coupons, 'code_exists' )
+				)
 			);
 		}
 		$voucher->code = (string) apply_filters( 'vcap_voucher_code', $code, $order, $item, $index );

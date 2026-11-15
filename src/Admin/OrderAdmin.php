@@ -108,7 +108,7 @@ final class OrderAdmin {
 		if ( ! $created && $this->issuer->last_failures ) {
 			/* translators: %d: number of vouchers */
 			$order->add_order_note( sprintf( _n( 'Generate vouchers: %d voucher could not be created – see the notes above and the WooCommerce log. It is retried automatically.', 'Generate vouchers: %d vouchers could not be created – see the notes above and the WooCommerce log. They are retried automatically.', $this->issuer->last_failures, 'voucher-captain' ), $this->issuer->last_failures ) );
-		} elseif ( ! $created ) {
+		} elseif ( ! $created && ! $this->issuer->last_deferred ) { // Deferred: the issuer noted the background run.
 			$order->add_order_note( __( 'Generate vouchers: all vouchers for this order already exist.', 'voucher-captain' ) );
 		}
 	}

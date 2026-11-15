@@ -91,6 +91,52 @@ final class CodePool {
 		);
 	}
 
+	/** Job type of imports run in the background (Jobs). */
+	public const IMPORT_JOB = 'import';
+
+	/**
+	 * Adds checked codes of an import to a batch (B4): whether a voucher, a pool entry or a coupon uses them is
+	 * asked in batches (CodeIndex::claim_free()), not three lookups per code. Updates the report: "imported",
+	 * "dupes_existing" and the capped list "not_saved" (Jobs::add_error()).
+	 *
+	 * @param array<int, string> $codes  Row number => code.
+	 * @param array              $report Import report (Admin\Import::empty_report()).
+	 */
+	public function import_codes( array $codes, string $batch, array &$report ): void {
+		global $wpdb;
+		$free                      = CodeIndex::claim_free( $codes );
+		$report['dupes_existing'] += count( $codes ) - count( $free );
+		foreach ( $free as $row => $code ) {
+			if ( $this->add( $code, $batch ) ) {
+				++$report['imported'];
+				continue;
+			}
+			// Not a duplicate (checked above): the database refused the row. Say why.
+			$reason = '' !== (string) $wpdb->last_error ? (string) $wpdb->last_error : __( 'the database did not save it', 'voucher-captain' );
+			/* translators: 1: row number, 2: value, 3: reason */
+			Jobs::add_error( $report, 'not_saved', sprintf( __( 'Row %1$d: "%2$s" – %3$s', 'voucher-captain' ), (int) $row, mb_substr( $code, 0, 80 ), $reason ) );
+		}
+	}
+
+	/** One chunk of a background import (Jobs handler). */
+	public function import_step( array $job ): array {
+		$n      = (int) $job['next'];
+		$chunk  = Jobs::chunk( $job, $n );
+		$report = (array) $job['report'];
+		if ( null !== $chunk ) {
+			$this->import_codes( $chunk, (string) $report['batch'], $report );
+			$job['done'] = (int) $job['done'] + count( $chunk );
+		}
+		$job['report'] = $report;
+		$job['next']   = $n + 1;
+		Jobs::drop_chunk( $job, $n );
+		if ( $job['next'] >= (int) $job['chunks'] ) {
+			$job['status'] = 'done';
+			$job['done']   = (int) $job['total'];
+		}
+		return $job;
+	}
+
 	/** Free codes of one batch, counted on the (batch, used_at) index (no scan of the other batches). */
 	public function free_count( string $batch ): int {
 		global $wpdb;

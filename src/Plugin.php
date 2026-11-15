@@ -92,6 +92,10 @@ final class Plugin {
 		}
 		( new CatchUp() )->register();
 		add_action( Install::MIGRATE_HOOK, array( Install::class, 'run_queued_migration' ) );
+		// B4: background bulk runs (code generation, large imports) also run from WP-Cron, outside the admin.
+		( new Jobs() )->register();
+		Jobs::handle( Campaigns::JOB, array( new Campaigns( $this->code_pool, $this->vouchers ), 'job_step' ) );
+		Jobs::handle( CodePool::IMPORT_JOB, array( $this->code_pool, 'import_step' ) );
 
 		( new TopUp( $this->vouchers, $this->coupons ) )->register();
 		( new CouponLink( $this->settings ) )->register();

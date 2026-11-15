@@ -64,12 +64,11 @@ final class StoreCredit {
 		$v->order_item_id  = 0;
 		$v->item_index     = $user_id; // Unique slot per customer (vouchers from orders use order item ids).
 		$v->delivered_at   = $this->repo->now();
-		$v->code           = CodeGenerator::unique(
+		$v->code           = CodeIndex::unique(
 			array(
 				'prefix' => 'CREDIT',
 				'length' => 12,
-			),
-			array( $this->coupons, 'code_exists' )
+			)
 		);
 		if ( ! $this->repo->insert( $v ) ) {
 			// Created concurrently: return the existing account.

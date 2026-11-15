@@ -56,6 +56,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_allow_refund_of_spent_vouchers` | `src/Issuer.php` | – |
 | `vcap_allow_refund_of_used_bonus` | `src/Discounts/Bonus.php` | – |
 | `vcap_amount_to_base_currency` | `src/Compat/MultiCurrency.php`, `src/CouponManager.php`, `src/Issuer.php` | – |
+| `vcap_async_issue_threshold` | `src/Issuer.php` | Vouchers still to be issued for an order above which they are created in Action Scheduler batches, so the payment request (gateway webhook, checkout) returns quickly (default 20). The order shows a note and its vouchers are delivered once all of them exist. A very high value issues everything right away. |
 | `vcap_balance_covers_tax` | `src/CouponManager.php` | – |
 | `vcap_balance_deduct_statuses` | `src/CouponManager.php` | – |
 | `vcap_balance_deduct_tax` | `src/CouponManager.php` | – |
@@ -101,8 +102,10 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_is_editor_preview` | `src/Shortcodes.php` | Whether shortcodes and blocks render an editor's preview (example data, no side effects). |
 | `vcap_is_new_customer` | `src/VoucherPurchaseRules.php` | – |
 | `vcap_is_voucher_product` | `src/ProductConfig.php` | – |
+| `vcap_issue_batch_size` | `src/Issuer.php` | Vouchers created per Action Scheduler batch when an order is issued in the background (default 25). |
 | `vcap_issue_requires_payment` | `src/Issuer.php` | – |
 | `vcap_issue_retry_delay` | `src/Issuer.php` | – |
+| `vcap_job_step_seconds` | `src/Jobs.php` | Seconds one background action works on a bulk job (code generation, import) before it queues the next. |
 | `vcap_ledger_money_events` | `src/Ledger.php` | – |
 | `vcap_legacy_claim_retention_days` | `src/Claim.php` | – |
 | `vcap_line_snapshot` | `src/Issuer.php` | Extra snapshot keys of connectors (e.g. the ticket a voucher is exchanged for); core keys always win. |
