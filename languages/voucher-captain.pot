@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-15 07:49+0000\n"
+"POT-Creation-Date: 2026-11-15 08:08+0000\n"
 "X-Domain: voucher-captain\n"
 
 #. Plugin Name of the plugin
@@ -111,7 +111,7 @@ msgstr ""
 msgid "This reservation has expired or was cancelled. Please redeem the voucher again."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:645 src/API/V1/RedemptionService.php:748 src/CouponManager.php:1434 src/Downloads.php:275
+#: src/API/V1/RedemptionService.php:645 src/API/V1/RedemptionService.php:748 src/CouponManager.php:1499 src/Downloads.php:275
 msgid "This voucher has been cancelled."
 msgstr ""
 
@@ -119,11 +119,11 @@ msgstr ""
 msgid "expired"
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:735 src/Tickets.php:358
+#: src/API/V1/RedemptionService.php:735 src/Tickets.php:365
 msgid "Store credit can only be used in the shop."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:738 src/Tickets.php:845
+#: src/API/V1/RedemptionService.php:738 src/Tickets.php:852
 msgid "Tickets are checked in at the entrance and cannot be redeemed here."
 msgstr ""
 
@@ -131,11 +131,11 @@ msgstr ""
 msgid "This voucher can only be used in the shop."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:750 src/CouponManager.php:1437
+#: src/API/V1/RedemptionService.php:750 src/CouponManager.php:1502
 msgid "This voucher is not active yet."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:752 src/API/V1/RedemptionService.php:758 src/CouponManager.php:1441
+#: src/API/V1/RedemptionService.php:752 src/API/V1/RedemptionService.php:758 src/CouponManager.php:1506
 msgid "This voucher is currently being redeemed. Please try again in a few minutes."
 msgstr ""
 
@@ -143,7 +143,7 @@ msgstr ""
 msgid "This voucher has already been redeemed."
 msgstr ""
 
-#: src/API/V1/RedemptionService.php:761 src/CouponManager.php:1447
+#: src/API/V1/RedemptionService.php:761 src/CouponManager.php:1512
 msgid "This voucher has expired."
 msgstr ""
 
@@ -1235,7 +1235,7 @@ msgstr ""
 msgid "Please enter an amount."
 msgstr ""
 
-#: src/Admin/Scanner.php:83 src/Amount.php:113 src/Tickets.php:780
+#: src/Admin/Scanner.php:83 src/Amount.php:113 src/Tickets.php:787
 msgid "Please enter an amount greater than zero."
 msgstr ""
 
@@ -1262,7 +1262,7 @@ msgid "This currency has no decimal places."
 msgstr ""
 
 #. translators: 1: entered amount, 2: remaining balance of the voucher
-#: src/Admin/Scanner.php:92 src/Tickets.php:777
+#: src/Admin/Scanner.php:92 src/Tickets.php:784
 #, php-format
 msgid "Not deducted: the amount (%1$s) exceeds the remaining balance (%2$s)."
 msgstr ""
@@ -1337,7 +1337,7 @@ msgstr ""
 msgid "User"
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:96 src/Admin/VoucherAdmin.php:321 src/Admin/VoucherAdmin.php:347 src/Ledger.php:424 src/Tickets.php:327
+#: src/Admin/StoreCreditAdmin.php:96 src/Admin/VoucherAdmin.php:321 src/Admin/VoucherAdmin.php:347 src/Ledger.php:424 src/Tickets.php:334
 msgid "Note"
 msgstr ""
 
@@ -1563,7 +1563,7 @@ msgstr ""
 msgid "none (ticket)"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:185 src/VoucherRepository.php:847
+#: src/Admin/VoucherAdmin.php:185 src/VoucherRepository.php:919
 msgid "Delivered"
 msgstr ""
 
@@ -1807,11 +1807,11 @@ msgstr ""
 msgid "the voucher is scheduled for later – use \"Send now\" to bring the delivery forward"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:551 src/Reissue.php:53
+#: src/Admin/VoucherAdmin.php:551 src/Reissue.php:54
 msgid "the voucher is void"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:553 src/Admin/VoucherAdmin.php:559 src/Reissue.php:59 src/Reissue.php:62
+#: src/Admin/VoucherAdmin.php:553 src/Admin/VoucherAdmin.php:559 src/Reissue.php:60 src/Reissue.php:63
 msgid "the voucher has expired"
 msgstr ""
 
@@ -1819,7 +1819,7 @@ msgstr ""
 msgid "the voucher has been redeemed"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:557 src/Reissue.php:57
+#: src/Admin/VoucherAdmin.php:557 src/Reissue.php:58
 msgid "the voucher is being redeemed right now"
 msgstr ""
 
@@ -2153,7 +2153,7 @@ msgstr ""
 msgid "Buyer → recipient"
 msgstr ""
 
-#: src/Admin/VouchersListTable.php:34 src/Ledger.php:400 src/VoucherRepository.php:837
+#: src/Admin/VouchersListTable.php:34 src/Ledger.php:400 src/VoucherRepository.php:909
 msgid "Issued"
 msgstr ""
 
@@ -2601,7 +2601,7 @@ msgstr ""
 msgid "Already checked in by this scan"
 msgstr ""
 
-#: src/Compat/PassCaptainScanner.php:97 src/Tickets.php:476 src/VoucherRepository.php:863
+#: src/Compat/PassCaptainScanner.php:97 src/Tickets.php:483 src/VoucherRepository.php:935
 msgid "Checked in"
 msgstr ""
 
@@ -3022,13 +3022,13 @@ msgid "Voucher could not be given back after the tickets were cancelled – chec
 msgstr ""
 
 #. translators: %s: receipt number of the till
-#: src/Counter.php:100 src/Tickets.php:964
+#: src/Counter.php:100 src/Tickets.php:971
 #, php-format
 msgid "Receipt %s"
 msgstr ""
 
 #. translators: %s: till or branch name
-#: src/Counter.php:102 src/Tickets.php:968
+#: src/Counter.php:102 src/Tickets.php:975
 #, php-format
 msgid "Till %s"
 msgstr ""
@@ -3109,204 +3109,222 @@ msgstr ""
 msgid "No recipient email was given: redemption is limited to the buyer email instead."
 msgstr ""
 
-#: src/CouponManager.php:609
+#: src/CouponManager.php:613
 msgid "Checkout reservation reconciled"
 msgstr ""
 
-#: src/CouponManager.php:610
+#: src/CouponManager.php:614
 msgid "An earlier voucher reservation could not be released. Please contact the store before trying again."
 msgstr ""
 
 #. translators: %s: order number
-#: src/CouponManager.php:627
+#: src/CouponManager.php:631
 #, php-format
 msgid "Reserved for order #%s"
 msgstr ""
 
-#: src/CouponManager.php:637 src/CouponManager.php:645
+#: src/CouponManager.php:641 src/CouponManager.php:649
 msgid "Checkout reservation rolled back"
 msgstr ""
 
-#: src/CouponManager.php:651 src/CouponManager.php:1163
+#: src/CouponManager.php:655 src/CouponManager.php:1236
 msgid "Some voucher reservations could not be released. Review this order."
 msgstr ""
 
-#: src/CouponManager.php:657
+#: src/CouponManager.php:661
 msgid "A voucher balance changed while checkout was processing. Your order was not sent for payment. Refresh the cart and try again."
 msgstr ""
 
 #. translators: %s: voucher code
-#: src/CouponManager.php:788
+#: src/CouponManager.php:792
 #, php-format
 msgid "Payment attempt refused: voucher %s no longer has the balance this order uses (it was used elsewhere). Contact the customer, or edit or cancel the order."
 msgstr ""
 
 #. translators: %s: voucher code
-#: src/CouponManager.php:794
+#: src/CouponManager.php:798
 #, php-format
 msgid "Voucher %s no longer has enough balance for this order (it was used elsewhere meanwhile). This order cannot be paid as it is. Please contact us to complete it."
 msgstr ""
 
 #. translators: %s: voucher code
-#: src/CouponManager.php:802
+#: src/CouponManager.php:806
 #, php-format
 msgid "Voucher %s can no longer be used (it was cancelled or redeemed elsewhere). Please contact us to complete this order."
 msgstr ""
 
+#. translators: %s: masked voucher code
+#: src/CouponManager.php:816
+#, php-format
+msgid "Voucher %s: this code was replaced by a new one (reissued) before the order was paid, so nothing was charged to the voucher for its discount. Review this order before fulfilment."
+msgstr ""
+
+#. translators: %s: masked voucher code
+#: src/CouponManager.php:818
+#, php-format
+msgid "Voucher %s has been replaced by a new code and can no longer be used. This order cannot be paid as it is. Please contact us to complete it."
+msgstr ""
+
 #. translators: %s: order id
-#: src/CouponManager.php:1069
+#: src/CouponManager.php:1089
 #, php-format
 msgid "Orphaned reservation of order #%s released"
 msgstr ""
 
 #. translators: %s: voucher code
-#: src/CouponManager.php:1086
+#: src/CouponManager.php:1106
 #, php-format
 msgid "A voucher reservation of %s that was left open has been released."
 msgstr ""
 
-#: src/CouponManager.php:1116
+#: src/CouponManager.php:1143
 msgid "Coupon removed or changed on the order"
 msgstr ""
 
-#: src/CouponManager.php:1140
+#: src/CouponManager.php:1170
 msgid "Some voucher reservations could not be committed. Review this order before fulfilment."
 msgstr ""
 
+#. translators: 1: masked voucher code, 2: amount
+#: src/CouponManager.php:1176
+#, php-format
+msgid "Voucher %1$s: currency rounding made the discount %2$s larger than the balance it held; the full balance was charged and the uncovered difference is recorded on this order."
+msgstr ""
+
 #. translators: %s: order number
-#: src/CouponManager.php:1155
+#: src/CouponManager.php:1228
 #, php-format
 msgid "Released from order #%s"
 msgstr ""
 
-#: src/CouponManager.php:1426
+#: src/CouponManager.php:1491
 msgid "This voucher cannot be redeemed: its voucher record is missing. Please contact the shop."
 msgstr ""
 
-#: src/CouponManager.php:1444
+#: src/CouponManager.php:1509
 msgid "This voucher has already been fully redeemed."
 msgstr ""
 
-#: src/CouponManager.php:1467
+#: src/CouponManager.php:1532
 msgid "This voucher cannot be redeemed in the shop."
 msgstr ""
 
 #. translators: 1: voucher code, 2: amount
-#: src/CouponManager.php:1578
+#: src/CouponManager.php:1649
 #, php-format
 msgid "Remaining balance of voucher %1$s after this order: %2$s"
 msgstr ""
 
 #. translators: 1: shop base currency, 2: currency of the cart or order
-#: src/CouponManager.php:1727
+#: src/CouponManager.php:1804
 #, php-format
 msgid "This voucher is kept in %1$s and cannot be used for a payment in %2$s, because no exchange rate is known. Please pay in %1$s to use it."
 msgstr ""
 
-#: src/CouponManager.php:1803
+#: src/CouponManager.php:1880
 msgid "Voucher shortfall accepted by an administrator; the order can be fulfilled."
 msgstr ""
 
-#: src/CouponManager.php:1819 src/CouponManager.php:1929
+#: src/CouponManager.php:1896 src/CouponManager.php:2013
 msgid "Voucher balance shortfall requires manual review before fulfilment."
 msgstr ""
 
-#: src/CouponManager.php:1835
+#: src/CouponManager.php:1912
 msgid "A voucher of this order was cancelled or redeemed elsewhere: manual review required before fulfilment."
 msgstr ""
 
 #. translators: 1: voucher code, 2: order currency
-#: src/CouponManager.php:1865
+#: src/CouponManager.php:1949
 #, php-format
 msgid "Voucher %1$s: the discount could not be deducted from its balance because no exchange rate for %2$s is known. Review this order and adjust the charge before fulfilment."
 msgstr ""
 
 #. translators: %s: order number
-#: src/CouponManager.php:1873
+#: src/CouponManager.php:1957
 #, php-format
 msgid "Used in order #%s"
 msgstr ""
 
 #. translators: %s: voucher code
-#: src/CouponManager.php:1883
+#: src/CouponManager.php:1967
 #, php-format
 msgid "Voucher %s: the discount could not be deducted from its balance. Review this order and adjust the charge before fulfilment."
 msgstr ""
 
-#: src/CouponManager.php:1893
+#: src/CouponManager.php:1977
 msgid "A stored-value voucher balance changed during checkout. Review this order and adjust the charge before fulfilment."
 msgstr ""
 
 #. translators: 1: code, 2: amount, 3: remaining balance
-#: src/CouponManager.php:1900
+#: src/CouponManager.php:1984
 #, php-format
 msgid "Voucher %1$s: %2$s deducted, remaining balance %3$s."
 msgstr ""
 
-#: src/CouponManager.php:1913
+#: src/CouponManager.php:1997
 msgid "Gift card shortfall: the installed WP Pass Captain cannot hold ticket issuance. If this order contains tickets, check them – and update WP Pass Captain."
 msgstr ""
 
 #. translators: %s: order number
-#: src/CouponManager.php:1970
+#: src/CouponManager.php:2054
 #, php-format
 msgid "Rounding rest of the net-price conversion in order #%s booked off"
 msgstr ""
 
-#. translators: %s: order number
-#: src/CouponManager.php:2070
-#, php-format
-msgid "Order #%s cancelled or refunded"
-msgstr ""
-
-#: src/CouponManager.php:2084
+#: src/CouponManager.php:2136 src/CouponManager.php:2179
 msgid "Some voucher balances could not be restored. Review this order and retry the refund handling."
 msgstr ""
 
 #. translators: %s: order number
-#: src/CouponManager.php:2107
+#: src/CouponManager.php:2163
+#, php-format
+msgid "Order #%s cancelled or refunded"
+msgstr ""
+
+#. translators: %s: order number
+#: src/CouponManager.php:2202
 #, php-format
 msgid "Balance of order #%s booked back"
 msgstr ""
 
 #. translators: 1: voucher code, 2: expiry date
-#: src/CouponManager.php:2109
+#: src/CouponManager.php:2204
 #, php-format
 msgid "Voucher %1$s had expired: its validity was extended to %2$s so the booked-back amount can be used."
 msgstr ""
 
 #. translators: 1: amount, 2: voucher code
-#: src/CouponManager.php:2116
+#: src/CouponManager.php:2211
 #, php-format
 msgid "%1$s were booked back onto voucher %2$s, but it is cancelled: the customer cannot use it. Reactivate it, or pay the amount back as money or store credit."
 msgstr ""
 
 #. translators: 1: amount, 2: voucher code
-#: src/CouponManager.php:2118
+#: src/CouponManager.php:2213
 #, php-format
 msgid "%1$s were booked back onto voucher %2$s, but it has expired: the customer cannot use it. Extend its validity on the voucher screen, or pay the amount back as money or store credit."
 msgstr ""
 
 #. translators: %s: voucher codes
-#: src/CouponManager.php:2159
+#: src/CouponManager.php:2259
 #, php-format
 msgid "Order refunded: single-use vouchers %s can be used again."
 msgstr ""
 
 #. translators: %s: voucher codes
-#: src/CouponManager.php:2181
+#: src/CouponManager.php:2284
 #, php-format
 msgid "Order cancelled: single-use vouchers %s stay redeemed (\"Restore balance on cancellation\" is off)."
 msgstr ""
 
 #. translators: %s: order number
-#: src/CouponManager.php:2345
+#: src/CouponManager.php:2462
 #, php-format
 msgid "Order #%s"
 msgstr ""
 
 #. translators: 1: voucher code, 2: discount amount
-#: src/CouponManager.php:2349
+#: src/CouponManager.php:2466
 #, php-format
 msgid "Voucher %1$s was cancelled or redeemed elsewhere before this order was paid, but the order still has its discount of %2$s. The order is held: collect the difference or cancel the order before fulfilment."
 msgstr ""
@@ -3444,7 +3462,7 @@ msgid "Choose your amount"
 msgstr ""
 
 #. translators: %s: reference id, searchable in WooCommerce → Status → Logs
-#: src/Db.php:235
+#: src/Db.php:238
 #, php-format
 msgid "A database error occurred (reference %s, see WooCommerce → Status → Logs)."
 msgstr ""
@@ -3991,12 +4009,12 @@ msgstr ""
 msgid "This promotion is applied automatically and cannot be removed."
 msgstr ""
 
-#: src/Discounts/Usage.php:556
+#: src/Discounts/Usage.php:585
 msgid "The promotion could not be checked right now. Please try again in a moment."
 msgstr ""
 
 #. translators: %s: promotion title
-#: src/Discounts/Usage.php:574
+#: src/Discounts/Usage.php:603
 #, php-format
 msgid "The promotion \"%s\" has reached its usage limit. Please remove it from your cart and try again."
 msgstr ""
@@ -5359,7 +5377,7 @@ msgstr ""
 msgid "The background run could not be continued."
 msgstr ""
 
-#: src/Ledger.php:400 src/Tickets.php:183 src/Voucher.php:65 src/VoucherRepository.php:867
+#: src/Ledger.php:400 src/Tickets.php:183 src/Voucher.php:65 src/VoucherRepository.php:939
 msgid "Expired"
 msgstr ""
 
@@ -5947,62 +5965,62 @@ msgid_plural "Only %d vouchers of this kind are still available."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/ProductChecks.php:214
+#: src/ProductChecks.php:219
 msgid "Remaining value"
 msgstr ""
 
 #. translators: 1: voucher code, 2: amount used in this order, 3: voucher value, 4: lost remaining value
-#: src/ProductChecks.php:227
+#: src/ProductChecks.php:232
 #, php-format
 msgid "Voucher %1$s: only %2$s of %3$s is used in this order. The voucher can be redeemed only once – the remaining %4$s will be lost. Add more items to use its full value."
 msgstr ""
 
-#: src/ProductChecks.php:407
+#: src/ProductChecks.php:412
 msgid "The product cannot be bought until the discount setup is corrected."
 msgstr ""
 
-#: src/ProductChecks.php:411
+#: src/ProductChecks.php:416
 msgid "Expiry \"Fixed date\" is selected but no expiry date is set. The product cannot be bought until you enter a date (or choose another expiry)."
 msgstr ""
 
 #. translators: %s: date
-#: src/ProductChecks.php:417
+#: src/ProductChecks.php:422
 #, php-format
 msgid "The fixed expiry date %s has passed: vouchers sold now would already be expired, so the product can no longer be bought. Set a new date or another expiry."
 msgstr ""
 
-#: src/ProductChecks.php:421
+#: src/ProductChecks.php:426
 msgid "Expiry \"Days after purchase\" has no number of days: the global default validity is used."
 msgstr ""
 
 #. translators: 1: delivery date, 2: expiry date
-#: src/ProductChecks.php:431
+#: src/ProductChecks.php:436
 #, php-format
 msgid "Vouchers sold now would be delivered on %1$s but expire on %2$s: the recipient would get an expired voucher (it is then not sent; the order gets a note). Choose an earlier delivery or a longer validity."
 msgstr ""
 
-#: src/ProductChecks.php:438
+#: src/ProductChecks.php:443
 msgid "The product page field \"Delivery date\" is on, but the delivery is not \"On a date chosen by the customer\". A date the customer enters is used; save the product to make both settings match."
 msgstr ""
 
-#: src/ProductChecks.php:441
+#: src/ProductChecks.php:446
 msgid "This gift card is set to \"Single use (whole value at once)\": whatever is not used in the first order is lost. Gift cards usually keep their remaining value – choose \"Multi-use with stored balance (gift card)\" under Usage."
 msgstr ""
 
 #. translators: %s: batch name
-#: src/ProductChecks.php:451
+#: src/ProductChecks.php:456
 #, php-format
 msgid "The code batch \"%s\" is empty: the product cannot be bought until you import more codes."
 msgstr ""
 
 #. translators: %s: batch name
-#: src/ProductChecks.php:453
+#: src/ProductChecks.php:458
 #, php-format
 msgid "The code batch \"%s\" is empty: new vouchers get random codes."
 msgstr ""
 
 #. translators: 1: batch name, 2: number of free codes
-#: src/ProductChecks.php:459
+#: src/ProductChecks.php:464
 #, php-format
 msgid "The code batch \"%1$s\" has only %2$d free code left."
 msgid_plural "The code batch \"%1$s\" has only %2$d free codes left."
@@ -6010,52 +6028,52 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s: variation name
-#: src/ProductChecks.php:470
+#: src/ProductChecks.php:475
 #, php-format
 msgid "The variation \"%s\" is not virtual: WooCommerce asks for a shipping address and may charge shipping for the voucher. Tick \"Virtual\" on the variation."
 msgstr ""
 
-#: src/ProductChecks.php:471 src/ProductSettings.php:147
+#: src/ProductChecks.php:476 src/ProductSettings.php:147
 msgid "Vouchers are sent by email as PDF. Tick \"Virtual\" at the top of the product data box – otherwise WooCommerce asks for a shipping address and may charge shipping for the voucher."
 msgstr ""
 
-#: src/ProductChecks.php:625
+#: src/ProductChecks.php:630
 msgid "These voucher products have an invalid discount setup (a percentage that is not a fixed value between 0 and 100, or \"Fixed product discount\") and cannot be bought until it is corrected:"
 msgstr ""
 
-#: src/ProductChecks.php:628
+#: src/ProductChecks.php:633
 msgid "These voucher products have a fixed expiry date that has passed (or is missing) and can no longer be bought:"
 msgstr ""
 
-#: src/ProductChecks.php:633
+#: src/ProductChecks.php:638
 msgid "The imported code batch of these voucher products is empty (products set to \"stop selling\" cannot be bought, the others get random codes). Import more codes under Vouchers → Import codes:"
 msgstr ""
 
-#: src/ProductChecks.php:636
+#: src/ProductChecks.php:641
 msgid "The imported code batch of these voucher products is running low:"
 msgstr ""
 
-#: src/ProductChecks.php:670
+#: src/ProductChecks.php:675
 msgid "Voucher products can be sold"
 msgstr ""
 
-#: src/ProductChecks.php:673
+#: src/ProductChecks.php:678
 msgid "No voucher product has an expired fixed expiry date or an empty code batch."
 msgstr ""
 
-#: src/ProductChecks.php:682
+#: src/ProductChecks.php:687
 msgid "Voucher products with an invalid discount setup (not purchasable):"
 msgstr ""
 
-#: src/ProductChecks.php:685
+#: src/ProductChecks.php:690
 msgid "Expired voucher products (fixed expiry date passed or missing, no longer purchasable):"
 msgstr ""
 
-#: src/ProductChecks.php:688
+#: src/ProductChecks.php:693
 msgid "Voucher products with an empty code batch:"
 msgstr ""
 
-#: src/ProductChecks.php:690
+#: src/ProductChecks.php:695
 msgid "Some voucher products cannot be sold as configured"
 msgstr ""
 
@@ -6605,40 +6623,40 @@ msgid_plural "%d friends have ordered so far."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Reissue.php:49
+#: src/Reissue.php:50
 msgid "store credit belongs to a customer account and is not passed on by code"
 msgstr ""
 
-#: src/Reissue.php:55 src/Reissue.php:65
+#: src/Reissue.php:56 src/Reissue.php:66
 msgid "the voucher has been redeemed – no value is left to carry over"
 msgstr ""
 
-#: src/Reissue.php:68
+#: src/Reissue.php:71
 msgid "the voucher is in an unpaid order or reserved for a redemption – reissue it once that is paid or released"
 msgstr ""
 
-#: src/Reissue.php:73
+#: src/Reissue.php:76
 msgid "its WooCommerce coupon is missing"
 msgstr ""
 
-#: src/Reissue.php:87
+#: src/Reissue.php:90
 msgid "the voucher was not found"
 msgstr ""
 
-#: src/Reissue.php:96
+#: src/Reissue.php:99
 msgid "no new unique code could be generated"
 msgstr ""
 
-#: src/Reissue.php:106
+#: src/Reissue.php:109
 msgid "the new WooCommerce coupon could not be saved"
 msgstr ""
 
-#: src/Reissue.php:128
+#: src/Reissue.php:131
 msgid "The old WooCommerce coupon could not be deleted; it was disabled instead."
 msgstr ""
 
 #. translators: 1: old code (masked), 2: new code (masked)
-#: src/Reissue.php:140
+#: src/Reissue.php:147
 #, php-format
 msgid "Voucher %1$s was reissued as %2$s by an admin. The old code and its download links no longer work."
 msgstr ""
@@ -7947,194 +7965,194 @@ msgstr ""
 msgid "Currently being redeemed elsewhere"
 msgstr ""
 
-#: src/Tickets.php:311
+#: src/Tickets.php:318
 msgid "Last use"
 msgstr ""
 
-#: src/Tickets.php:313 src/Tickets.php:318 src/Tickets.php:320
+#: src/Tickets.php:320 src/Tickets.php:325 src/Tickets.php:327
 msgid "Where"
 msgstr ""
 
 #. translators: %s: order number
-#: src/Tickets.php:315
+#: src/Tickets.php:322
 #, php-format
 msgid "Shop order #%s"
 msgstr ""
 
-#: src/Tickets.php:316
+#: src/Tickets.php:323
 msgid "Shop order"
 msgstr ""
 
-#: src/Tickets.php:318
+#: src/Tickets.php:325
 msgid "External system"
 msgstr ""
 
-#: src/Tickets.php:320
+#: src/Tickets.php:327
 msgid "In store"
 msgstr ""
 
-#: src/Tickets.php:323
+#: src/Tickets.php:330
 msgid "By"
 msgstr ""
 
-#: src/Tickets.php:360
+#: src/Tickets.php:367
 msgid "This voucher cannot be redeemed at the counter."
 msgstr ""
 
-#: src/Tickets.php:362
+#: src/Tickets.php:369
 msgid "This voucher is in an unpaid shop order right now. Redeem it after that order is cancelled."
 msgstr ""
 
-#: src/Tickets.php:376 src/Tickets.php:440 src/Tickets.php:716 src/Tickets.php:813 src/Tickets.php:1182
+#: src/Tickets.php:383 src/Tickets.php:447 src/Tickets.php:723 src/Tickets.php:820 src/Tickets.php:1189
 msgid "No voucher or ticket found for this code."
 msgstr ""
 
 #. translators: 1: used admissions, 2: total admissions
-#: src/Tickets.php:409
+#: src/Tickets.php:416
 #, php-format
 msgid "%1$d of %2$d admissions used"
 msgstr ""
 
-#: src/Tickets.php:456
+#: src/Tickets.php:463
 msgid "This check-in cannot be reverted here: only your own check-in can be reverted within a few minutes, and never for cancelled or expired tickets. Please ask a manager."
 msgstr ""
 
-#: src/Tickets.php:458
+#: src/Tickets.php:465
 msgid "Please enter a reason for reverting this check-in."
 msgstr ""
 
-#: src/Tickets.php:476 src/VoucherRepository.php:864
+#: src/Tickets.php:483 src/VoucherRepository.php:936
 msgid "Check-in reverted"
 msgstr ""
 
-#: src/Tickets.php:479 src/Tickets.php:1244
+#: src/Tickets.php:486 src/Tickets.php:1251
 msgid "Check-in not possible."
 msgstr ""
 
-#: src/Tickets.php:524 src/Tickets.php:531 src/Tickets.php:547
+#: src/Tickets.php:531 src/Tickets.php:538 src/Tickets.php:554
 msgid "This action is still being processed. Please wait a moment and try again."
 msgstr ""
 
-#: src/Tickets.php:527
+#: src/Tickets.php:534
 msgid "This scanner request was already used for another action. Please scan the code again."
 msgstr ""
 
-#: src/Tickets.php:542
+#: src/Tickets.php:549
 msgid "This action was already booked (found in the voucher history). Do not repeat it."
 msgstr ""
 
 #. translators: %d: number of decimal places of the currency
-#: src/Tickets.php:783
+#: src/Tickets.php:790
 #, php-format
 msgid "Not deducted: the amount has more decimal places than the currency allows (%d)."
 msgstr ""
 
-#: src/Tickets.php:785
+#: src/Tickets.php:792
 msgid "Not deducted: this voucher has been cancelled."
 msgstr ""
 
-#: src/Tickets.php:787
+#: src/Tickets.php:794
 msgid "Not deducted: this voucher has expired."
 msgstr ""
 
-#: src/Tickets.php:789
+#: src/Tickets.php:796
 msgid "Not deducted: this voucher is being redeemed elsewhere right now. Please try again in a moment."
 msgstr ""
 
-#: src/Tickets.php:791
+#: src/Tickets.php:798
 msgid "Not deducted: this voucher has not been delivered yet."
 msgstr ""
 
-#: src/Tickets.php:793
+#: src/Tickets.php:800
 msgid "Not deducted: the balance is used up."
 msgstr ""
 
-#: src/Tickets.php:797
+#: src/Tickets.php:804
 msgid "Not deducted: this voucher is not active."
 msgstr ""
 
-#: src/Tickets.php:799
+#: src/Tickets.php:806
 msgid "Not deducted: the database cannot deduct balances safely (no transaction support). Please contact the shop administrator."
 msgstr ""
 
-#: src/Tickets.php:801
+#: src/Tickets.php:808
 msgid "Not deducted: the balance could not be updated. Please try again."
 msgstr ""
 
-#: src/Tickets.php:839
+#: src/Tickets.php:846
 msgid "This voucher is not active."
 msgstr ""
 
 #. translators: 1: amount deducted, 2: amount still to be paid in another way, 3: remaining balance
-#: src/Tickets.php:909
+#: src/Tickets.php:916
 #, php-format
 msgid "Partially redeemed: %1$s deducted, %2$s still to be paid otherwise. Remaining balance: %3$s."
 msgstr ""
 
 #. translators: 1: amount deducted, 2: remaining balance
-#: src/Tickets.php:912
+#: src/Tickets.php:919
 #, php-format
 msgid "Redeemed: %1$s deducted. Remaining balance: %2$s."
 msgstr ""
 
-#: src/Tickets.php:935 src/Voucher.php:64 src/VoucherRepository.php:858
+#: src/Tickets.php:942 src/Voucher.php:64 src/VoucherRepository.php:930
 msgid "Redeemed"
 msgstr ""
 
-#: src/Tickets.php:961
+#: src/Tickets.php:968
 msgid "Redeemed in store"
 msgstr ""
 
-#: src/Tickets.php:1075
+#: src/Tickets.php:1082
 msgid "Please enter a reason for the cancellation."
 msgstr ""
 
-#: src/Tickets.php:1077
+#: src/Tickets.php:1084
 msgid "This redemption belongs to a shop order. Cancel or refund the order instead."
 msgstr ""
 
-#: src/Tickets.php:1079
+#: src/Tickets.php:1086
 msgid "This redemption has already been cancelled."
 msgstr ""
 
-#: src/Tickets.php:1081
+#: src/Tickets.php:1088
 msgid "The voucher has been cancelled; its redemptions cannot be cancelled any more."
 msgstr ""
 
-#: src/Tickets.php:1083
+#: src/Tickets.php:1090
 msgid "Only a manager, or the person who booked it shortly before, can cancel this redemption."
 msgstr ""
 
-#: src/Tickets.php:1085
+#: src/Tickets.php:1092
 msgid "The voucher has been used again since then. Correct the balance instead."
 msgstr ""
 
-#: src/Tickets.php:1087
+#: src/Tickets.php:1094
 msgid "The cancellation could not be saved. Please try again."
 msgstr ""
 
-#: src/Tickets.php:1089
+#: src/Tickets.php:1096
 msgid "This redemption cannot be cancelled."
 msgstr ""
 
 #. translators: 1: history entry number of the redemption, 2: reason
-#: src/Tickets.php:1131
+#: src/Tickets.php:1138
 #, php-format
 msgid "Cancels redemption #%1$d: %2$s"
 msgstr ""
 
 #. translators: %s: amount booked back
-#: src/Tickets.php:1205
+#: src/Tickets.php:1212
 #, php-format
 msgid "Redemption cancelled: %s booked back."
 msgstr ""
 
-#: src/Tickets.php:1230
+#: src/Tickets.php:1237
 msgid "Check-in refused: this check-in form is outdated (theme copy of ticket-status.php without its one-time key). Please use the scanner or update the template."
 msgstr ""
 
 #. translators: %d: number of admissions
-#: src/Tickets.php:1244
+#: src/Tickets.php:1251
 #, php-format
 msgid "Checked in (%d admission)"
 msgid_plural "Checked in (%d admissions)"
@@ -8349,115 +8367,115 @@ msgstr ""
 msgid "The minimum spend for coupon \"%1$s\" is %2$s. Voucher products in the cart do not count towards it."
 msgstr ""
 
-#: src/VoucherRepository.php:838
+#: src/VoucherRepository.php:910
 msgid "Balance reserved for payment"
 msgstr ""
 
-#: src/VoucherRepository.php:839
+#: src/VoucherRepository.php:911
 msgid "Used in a shop order although already redeemed elsewhere – check the order"
 msgstr ""
 
-#: src/VoucherRepository.php:840
+#: src/VoucherRepository.php:912
 msgid "Balance reservation committed"
 msgstr ""
 
-#: src/VoucherRepository.php:841
+#: src/VoucherRepository.php:913
 msgid "Balance reservation released"
 msgstr ""
 
-#: src/VoucherRepository.php:842
+#: src/VoucherRepository.php:914
 msgid "Reserved for external redemption"
 msgstr ""
 
-#: src/VoucherRepository.php:843
+#: src/VoucherRepository.php:915
 msgid "Redeemed externally"
 msgstr ""
 
-#: src/VoucherRepository.php:844
+#: src/VoucherRepository.php:916
 msgid "External reservation released"
 msgstr ""
 
-#: src/VoucherRepository.php:845
+#: src/VoucherRepository.php:917
 msgid "External redemption refunded"
 msgstr ""
 
-#: src/VoucherRepository.php:846
+#: src/VoucherRepository.php:918
 msgid "Delivery scheduled"
 msgstr ""
 
-#: src/VoucherRepository.php:848
+#: src/VoucherRepository.php:920
 msgid "Delivery failed"
 msgstr ""
 
-#: src/VoucherRepository.php:849
+#: src/VoucherRepository.php:921
 msgid "Delivery given up (no more automatic attempts)"
 msgstr ""
 
-#: src/VoucherRepository.php:850
+#: src/VoucherRepository.php:922
 msgid "Not delivered: already expired"
 msgstr ""
 
-#: src/VoucherRepository.php:851
+#: src/VoucherRepository.php:923
 msgid "Delivered without PDF"
 msgstr ""
 
-#: src/VoucherRepository.php:852
+#: src/VoucherRepository.php:924
 msgid "Expiry reminder"
 msgstr ""
 
-#: src/VoucherRepository.php:853
+#: src/VoucherRepository.php:925
 msgid "Credit added"
 msgstr ""
 
-#: src/VoucherRepository.php:854
+#: src/VoucherRepository.php:926
 msgid "Credit removed"
 msgstr ""
 
-#: src/VoucherRepository.php:855
+#: src/VoucherRepository.php:927
 msgid "Refunded as store credit"
 msgstr ""
 
-#: src/VoucherRepository.php:856
+#: src/VoucherRepository.php:928
 msgid "Store credit refund reversed"
 msgstr ""
 
-#: src/VoucherRepository.php:857
+#: src/VoucherRepository.php:929
 msgid "Email resent"
 msgstr ""
 
-#: src/VoucherRepository.php:859
+#: src/VoucherRepository.php:931
 msgid "Redemption cancelled (value booked back)"
 msgstr ""
 
-#: src/VoucherRepository.php:860
+#: src/VoucherRepository.php:932
 msgid "Balance restored"
 msgstr ""
 
-#: src/VoucherRepository.php:861
+#: src/VoucherRepository.php:933
 msgid "Balance adjusted"
 msgstr ""
 
-#: src/VoucherRepository.php:862
+#: src/VoucherRepository.php:934
 msgid "Rounding rest booked off"
 msgstr ""
 
-#: src/VoucherRepository.php:865
+#: src/VoucherRepository.php:937
 msgid "Voided"
 msgstr ""
 
-#: src/VoucherRepository.php:866
+#: src/VoucherRepository.php:938
 msgid "Reactivated"
 msgstr ""
 
-#: src/VoucherRepository.php:868
+#: src/VoucherRepository.php:940
 msgid "Edited"
 msgstr ""
 
-#: src/VoucherRepository.php:869
+#: src/VoucherRepository.php:941
 msgid "Downloaded"
 msgstr ""
 
-#: src/VoucherRepository.php:870
+#: src/VoucherRepository.php:942
 msgid "Reissued with a new code"
 msgstr ""
 
