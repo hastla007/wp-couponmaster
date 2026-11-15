@@ -1661,10 +1661,14 @@ if ( ! function_exists( 'do_action_ref_array' ) ) {
 if ( ! function_exists( 'wc_get_logger' ) ) {
 	function wc_get_logger() {
 		return new class() {
-			public function log( $level, $message, $context = array() ) { $GLOBALS['vcap_test_logged'][] = array( $level, $message ); }
+			public function log( $level, $message, $context = array() ) { $GLOBALS['vcap_test_logged'][] = array( $level, $message, $context ); }
 		};
 	}
 }
+$GLOBALS['vcap_test_logged'] = array();
+VCAP\Logger::error( 'Mail to jane.doe@example.com failed: SMTP 550 jane.doe@example.com unknown', array( 'to' => 'Jane <jane.doe@example.com>', 'order_id' => 7, 'nested' => array( 'cc' => 'bob@example.org' ) ) );
+$m100_entry = $GLOBALS['vcap_test_logged'][0] ?? array( '', '', array() );
+check( 'M12-100: the logger masks email addresses in the message and in the context values', ! str_contains( wp_json_encode( $m100_entry ), 'jane.doe@' ) && ! str_contains( wp_json_encode( $m100_entry ), 'bob@' ) && str_contains( (string) $m100_entry[1], 'j***@example.com' ) && 7 === ( $m100_entry[2]['order_id'] ?? null ) && 'voucher-captain' === ( $m100_entry[2]['source'] ?? '' ), wp_json_encode( $m100_entry ) );
 /** Database double for D6: records queries; COMMIT can be refused. */
 final class VCAP_D6_Wpdb {
 	public string $prefix     = 'wp_';
