@@ -48,7 +48,7 @@ final class MultiCurrency {
 		return array(
 			'unknown'  => self::unknown_currencies(),
 			'switcher' => self::unsupported_switcher(),
-		);
+		) + ( is_array( $state ) ? $state : array() );
 	}
 
 	/**
