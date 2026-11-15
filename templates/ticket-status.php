@@ -3,6 +3,7 @@
  * Ticket / voucher QR landing page.
  *
  * Override: yourtheme/woocommerce/voucher-captain/ticket-status.php
+ * @version  1.2.0
  *
  * @var \VCAP\Voucher|null $voucher
  * @var array|null         $data

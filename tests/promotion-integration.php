@@ -266,4 +266,15 @@ wp_delete_post( $b12_other, true );
 vcap_promo_assert( null === $b12_row( $b12_other ) && 0 === $b12_n( $b12_other ), 'B12: a deleted promotion takes its counter with it' );
 wp_delete_post( $b12_id, true );
 
+// AP-F1-3: the promotion title is the coupon row label in cart and checkout; WooCommerce prints it unescaped.
+$f13_id     = vcap_promo_campaign( 'F13', array( 'discount_type' => 'percent', 'amount' => 10 ) );
+$wpdb->update( $wpdb->posts, array( 'post_title' => 'Summer <img src=x onerror=alert(1)> sale & more' ), array( 'ID' => $f13_id ) ); // As an admin with unfiltered_html saves it (no kses).
+clean_post_cache( $f13_id );
+$f13_coupon = new WC_Coupon();
+$f13_coupon->set_code( VCAP\Discounts\CartIntegration::code( $f13_id ) );
+$f13_coupon->set_discount_type( VCAP\Discounts\CartIntegration::TYPE );
+$f13_label = wc_cart_totals_coupon_label( $f13_coupon, false );
+vcap_promo_assert( 'Summer  sale &amp; more' === $f13_label, 'AP-F1-3: the promotion title in the coupon row is plain, escaped text (no tags, & as &amp;) – got ' . $f13_label );
+wp_delete_post( $f13_id, true );
+
 echo "Voucher Captain promotion checks passed.\n";

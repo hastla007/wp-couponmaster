@@ -92,6 +92,10 @@ final class Plugin {
 		}
 		( new CatchUp() )->register();
 		add_action( Install::MIGRATE_HOOK, array( Install::class, 'run_queued_migration' ) );
+		// AP-W1-1: the cashier role is stored with its English name and translated where WordPress shows roles.
+		add_filter( 'gettext_with_context_default', array( Install::class, 'translate_role_name' ), 10, 3 );
+		// AP-W1-2: WooCommerce's template scan knows the plugin's overridable templates.
+		add_filter( 'woocommerce_template_overrides_scan_paths', array( self::class, 'template_scan_paths' ) );
 		// B4: background bulk runs (code generation, large imports) also run from WP-Cron, outside the admin.
 		( new Jobs() )->register();
 		Jobs::handle( Campaigns::JOB, array( new Campaigns( $this->code_pool, $this->vouchers ), 'job_step' ) );
@@ -569,5 +573,63 @@ final class Plugin {
 
 	public static function template_html( string $name, array $args = array() ): string {
 		return wc_get_template_html( $name, $args, WC()->template_path() . 'voucher-captain/', VCAP_PATH . 'templates/' );
+	}
+
+	/**
+	 * Filter woocommerce_template_overrides_scan_paths (AP-W1-2): the plugin's templates are listed with
+	 * WooCommerce's template scan. Outdated theme copies are reported by template_overrides() (Site Health).
+	 *
+	 * @param mixed $paths Plugin name => template folder.
+	 * @return array<string, string>
+	 */
+	public static function template_scan_paths( $paths ): array {
+		$paths                    = (array) $paths;
+		$paths['Voucher Captain'] = VCAP_PATH . 'templates/';
+		return $paths;
+	}
+
+	/**
+	 * Theme copies of the plugin's templates (woocommerce/voucher-captain/…), with their @version and the version of
+	 * the template they copy. A copy without @version or with an older one is outdated: it may miss later changes,
+	 * e.g. the one-time key of the check-in form.
+	 *
+	 * @return array<int, array{file:string, path:string, version:string, core_version:string, outdated:bool}>
+	 */
+	public static function template_overrides(): array {
+		$base  = wp_normalize_path( VCAP_PATH . 'templates/' );
+		$found = array();
+		if ( ! is_dir( $base ) ) {
+			return $found;
+		}
+		$files    = array();
+		$iterator = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $base, \FilesystemIterator::SKIP_DOTS ) );
+		foreach ( $iterator as $entry ) {
+			if ( $entry instanceof \SplFileInfo && $entry->isFile() && 'php' === strtolower( $entry->getExtension() ) ) {
+				$files[] = substr( wp_normalize_path( $entry->getPathname() ), strlen( $base ) );
+			}
+		}
+		sort( $files );
+		foreach ( $files as $file ) {
+			$located = wp_normalize_path( (string) wc_locate_template( $file, WC()->template_path() . 'voucher-captain/', $base ) );
+			if ( '' === $located || str_starts_with( $located, $base ) || ! is_file( $located ) ) {
+				continue;
+			}
+			$core    = self::template_version( $base . $file );
+			$version = self::template_version( $located );
+			$found[] = array(
+				'file'         => $file,
+				'path'         => $located,
+				'version'      => $version,
+				'core_version' => $core,
+				'outdated'     => '' === $version || ( '' !== $core && version_compare( $version, $core, '<' ) ),
+			);
+		}
+		return $found;
+	}
+
+	/** The "@version x.y.z" line of a template's header comment ('' without one). */
+	public static function template_version( string $path ): string {
+		$head = is_readable( $path ) ? (string) file_get_contents( $path, false, null, 0, 8192 ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local template file.
+		return preg_match( '/^[ \t\/*#@]*@version\s+(\S+)/mi', $head, $m ) ? $m[1] : '';
 	}
 }

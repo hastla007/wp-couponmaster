@@ -579,4 +579,38 @@ vcap()->vouchers->query( array( 'orderby' => 'balance', 'order' => 'ASC', 'per_p
 remove_filter( 'query', $p6_log );
 vcap_inst_assert( (bool) preg_grep( '/ORDER BY balance ASC, id ASC/', $p6_queries ), 'B8: list pages are sorted with id as tie-breaker (no row on two pages or none)' );
 
+// AP-W1-1: the cashier role is stored in English (add_caps() runs too early to translate) and translated on display.
+$w11_roles = wp_roles();
+$w11_roles->roles[ VCAP\Install::CASHIER_ROLE ]['name'] = 'Gutschein-Kasse'; // Stored translated by an earlier version.
+update_option( $w11_roles->role_key, $w11_roles->roles );
+VCAP\Install::add_caps();
+$w11_stored = get_option( $w11_roles->role_key )[ VCAP\Install::CASHIER_ROLE ]['name'] ?? '';
+vcap_inst_assert( 'Voucher cashier' === $w11_stored && 'Voucher cashier' === wp_roles()->role_names[ VCAP\Install::CASHIER_ROLE ], 'AP-W1-1: add_caps() stores the cashier role with its English name, also over a name stored translated before' );
+$w11_de = static fn( $translation, $text, $context ) => 'Voucher cashier' === $text && 'User role' === $context ? 'Gutschein-Kasse' : $translation;
+add_filter( 'gettext_with_context_voucher-captain', $w11_de, 10, 3 );
+$w11_shown = translate_user_role( $w11_stored );
+remove_filter( 'gettext_with_context_voucher-captain', $w11_de, 10 );
+vcap_inst_assert( 'Gutschein-Kasse' === $w11_shown && 'Shop manager' === translate_user_role( 'Shop manager' ), 'AP-W1-1: translate_user_role() shows the cashier role in the plugin translation (other roles untouched)' );
+
+// AP-W1-2 / AP-Q2-7: an outdated theme copy of a voucher template (no @version, e.g. without the check-in key)
+// is reported in Site Health; a current copy is not.
+$w12_dir  = get_stylesheet_directory() . '/woocommerce/voucher-captain';
+$w12_file = $w12_dir . '/ticket-status.php';
+$w12_had  = file_exists( $w12_file );
+if ( ! $w12_had ) {
+	wp_mkdir_p( $w12_dir );
+	file_put_contents( $w12_file, "<?php\n/**\n * Old copy.\n */\n" ); // phpcs:ignore
+	$w12_list   = VCAP\Plugin::template_overrides();
+	$w12_health = ( new VCAP\Health() )->test_template_overrides();
+	vcap_inst_assert( 1 === count( $w12_list ) && 'ticket-status.php' === $w12_list[0]['file'] && $w12_list[0]['outdated'] && '1.2.0' === $w12_list[0]['core_version'] && 'recommended' === $w12_health['status'] && str_contains( $w12_health['description'], 'ticket-status.php' ), 'AP-W1-2: a theme copy of ticket-status.php without @version is reported as outdated in Site Health' );
+	file_put_contents( $w12_file, "<?php\n/**\n * Current copy.\n *\n * @version 1.2.0\n */\n" ); // phpcs:ignore
+	$w12_list = VCAP\Plugin::template_overrides();
+	vcap_inst_assert( 1 === count( $w12_list ) && ! $w12_list[0]['outdated'] && 'good' === ( new VCAP\Health() )->test_template_overrides()['status'], 'AP-W1-2: a theme copy with the current @version is not reported' );
+	wp_delete_file( $w12_file );
+	@rmdir( $w12_dir ); // phpcs:ignore
+	@rmdir( dirname( $w12_dir ) ); // phpcs:ignore
+}
+$w12_paths = (array) apply_filters( 'woocommerce_template_overrides_scan_paths', array() );
+vcap_inst_assert( VCAP_PATH . 'templates/' === ( $w12_paths['Voucher Captain'] ?? '' ), 'AP-W1-2: woocommerce_template_overrides_scan_paths lists the plugin templates' );
+
 echo "Voucher Captain install checks passed.\n";

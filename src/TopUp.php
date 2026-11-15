@@ -13,6 +13,8 @@ defined( 'ABSPATH' ) || exit;
 final class TopUp {
 	public const PRODUCT_META  = '_vcap_topup';
 	public const ITEM_META     = '_vcap_topup_code';
+	/** Order item meta: id of the topped-up card (AP-Q1-3), the code alone is lost when the card is reissued. */
+	public const CARD_META     = '_vcap_topup_voucher_id';
 	public const DONE_META     = '_vcap_topup_done';
 	/** Top-up value of the line already taken back by refunds or cancellation (base currency). */
 	public const REVERSED_META = '_vcap_topup_reversed';
@@ -289,7 +291,34 @@ final class TopUp {
 	public function order_item_meta( $item, $cart_item_key, $values ): void {
 		if ( ! empty( $values[ self::FIELD ] ) && $item instanceof \WC_Order_Item_Product ) {
 			$item->add_meta_data( self::ITEM_META, (string) $values[ self::FIELD ], true );
+			$card = $this->card( (string) $values[ self::FIELD ] );
+			if ( $card instanceof Voucher && $card->id ) {
+				$item->add_meta_data( self::CARD_META, (int) $card->id, true );
+			}
 		}
+	}
+
+	/**
+	 * The card a top-up line belongs to (AP-Q1-3): by the stored card id, else by the code entered, else by a code
+	 * the card had before it was reissued (Reissue::voucher_of_previous_code()).
+	 */
+	public static function card_of_item( \WC_Order_Item_Product $item, VoucherRepository $repo ): ?Voucher {
+		$id = (int) $item->get_meta( self::CARD_META );
+		if ( $id > 0 ) {
+			$card = $repo->get( $id );
+			if ( $card ) {
+				return $card;
+			}
+		}
+		$code = trim( (string) $item->get_meta( self::ITEM_META ) );
+		if ( '' === $code ) {
+			return null;
+		}
+		$formatted = wc_format_coupon_code( $code );
+		return $repo->get_by_code( $code )
+			?? ( '' !== $formatted ? $repo->get_by_code( $formatted ) : null )
+			?? $repo->get_by_code( strtoupper( $code ) )
+			?? Reissue::voucher_of_previous_code( $repo, $code );
 	}
 
 	/* ---- Order lifecycle --------------------------------------------------------------------------- */
@@ -354,6 +383,7 @@ final class TopUp {
 		}
 		Attention::resolve( $order->get_id(), 'topup:' . $item->get_id() );
 		$item->update_meta_data( self::DONE_META, $amount );
+		$item->update_meta_data( self::CARD_META, (int) $card->id );
 		$item->save_meta_data();
 		$card = $this->repo->get( $card->id ) ?? $card;
 		$this->extend_after_top_up( $card, $order, $item );
@@ -551,8 +581,13 @@ final class TopUp {
 			$item->save_meta_data();
 			return;
 		}
-		$card = $this->repo->get_by_code( (string) $item->get_meta( self::ITEM_META ) );
+		$card = self::card_of_item( $item, $this->repo );
 		if ( ! $card ) {
+			if ( $all && $handled <= 0 ) {
+				Claim::release( 'topup-revoke:' . $item->get_id() );
+			}
+			$order->add_order_note( __( 'The gift card top-up could not be reversed: the gift card was not found. Please check the card balance.', 'voucher-captain' ) );
+			Attention::add( $order->get_id(), 'topup-reverse:' . $item->get_id(), __( 'A gift card top-up could not be reversed because the gift card was not found. Check the card and take the top-up back by hand.', 'voucher-captain' ) );
 			return;
 		}
 		$target = min( $done, round( $done * max( 0.0, min( 1.0, $share ) ), $card->decimals() ) );
@@ -692,22 +727,23 @@ final class TopUp {
 	 * @return array{0: float, 1: string[]} value, masked card codes
 	 */
 	public static function spent_value( \WC_Order $order, VoucherRepository $repo ): array {
-		$open = array();
+		$open  = array(); // card id => open amount
+		$cards = array();
 		foreach ( $order->get_items() as $item ) {
 			$done = $item instanceof \WC_Order_Item_Product ? (float) $item->get_meta( self::DONE_META ) : 0.0;
-			if ( $done > 0 ) {
-				$code          = (string) $item->get_meta( self::ITEM_META );
-				$open[ $code ] = ( $open[ $code ] ?? 0.0 ) + max( 0.0, $done - (float) $item->get_meta( self::REVERSED_META ) );
+			$card = $done > 0 ? self::card_of_item( $item, $repo ) : null;
+			if ( $card ) {
+				$cards[ $card->id ] = $card;
+				$open[ $card->id ]  = ( $open[ $card->id ] ?? 0.0 ) + max( 0.0, $done - (float) $item->get_meta( self::REVERSED_META ) );
 			}
 		}
 		$spent = 0.0;
 		$codes = array();
-		foreach ( $open as $code => $amount ) {
-			$card = $repo->get_by_code( $code );
-			$used = $card ? max( 0.0, $amount - self::card_shares( $card, $repo )['topup_unspent'] ) : 0.0;
+		foreach ( $open as $id => $amount ) {
+			$used = max( 0.0, $amount - self::card_shares( $cards[ $id ], $repo )['topup_unspent'] );
 			if ( $used > 0.0001 ) {
 				$spent  += $used;
-				$codes[] = Mask::code( $code );
+				$codes[] = Mask::code( $cards[ $id ]->code );
 			}
 		}
 		return array( $spent, $codes );
@@ -727,32 +763,53 @@ final class TopUp {
 		if ( ! $order instanceof \WC_Order ) {
 			return;
 		}
-		$shares = self::refund_shares( $order );
-		$need   = array(); // card code => [ amount to take back (base currency), order currency per base unit ]
+		$shares  = self::refund_shares( $order );
+		$need    = array(); // card id => [ amount to take back (base currency), order currency per base unit ]
+		$cards   = array();
+		$unknown = array(); // masked codes of top-ups whose card cannot be found
+		$lost    = 0.0;
 		foreach ( $shares as $item_id => $share ) {
 			$item = $order->get_item( $item_id );
 			$done = $item instanceof \WC_Order_Item_Product ? (float) $item->get_meta( self::DONE_META ) : 0.0;
 			if ( $done <= 0 ) {
 				continue;
 			}
-			$code             = (string) $item->get_meta( self::ITEM_META );
-			$want             = max( 0.0, $done * $share - (float) $item->get_meta( self::REVERSED_META ) );
-			$need[ $code ][0] = ( $need[ $code ][0] ?? 0.0 ) + $want;
-			$need[ $code ][1] = ( (float) $item->get_total() + (float) $item->get_total_tax() ) / $done;
+			$want = max( 0.0, $done * $share - (float) $item->get_meta( self::REVERSED_META ) );
+			$rate = ( (float) $item->get_total() + (float) $item->get_total_tax() ) / $done;
+			$card = self::card_of_item( $item, $this->repo );
+			if ( ! $card ) {
+				// AP-Q1-3: the top-up cannot be taken back from a card nobody finds – the refund would pay it out.
+				if ( $want > 0.0001 ) {
+					$lost     += $want * $rate;
+					$unknown[] = Mask::code( (string) $item->get_meta( self::ITEM_META ) );
+				}
+				continue;
+			}
+			$cards[ $card->id ]   = $card;
+			$need[ $card->id ][0] = ( $need[ $card->id ][0] ?? 0.0 ) + $want;
+			$need[ $card->id ][1] = $rate;
 		}
 		$over  = 0.0;
 		$codes = array();
-		foreach ( $need as $code => list( $want, $rate ) ) {
-			$card    = $this->repo->get_by_code( $code );
-			$missing = $card ? $want - self::card_shares( $card, $this->repo )['topup_unspent'] : 0.0;
-			if ( $card && $missing > 0.5 / ( 10 ** $card->decimals() ) ) {
+		foreach ( $need as $id => list( $want, $rate ) ) {
+			$missing = $want - self::card_shares( $cards[ $id ], $this->repo )['topup_unspent'];
+			if ( $missing > 0.5 / ( 10 ** $cards[ $id ]->decimals() ) ) {
 				$over   += $missing * $rate;
-				$codes[] = Mask::code( $code );
+				$codes[] = Mask::code( $cards[ $id ]->code );
 			}
 		}
 		$amount = (float) ( $args['amount'] ?? 0 );
-		if ( ! $codes || apply_filters( 'vcap_allow_refund_of_spent_top_ups', false, $order, $amount, $over ) ) {
+		if ( ( ! $codes && ! $unknown ) || apply_filters( 'vcap_allow_refund_of_spent_top_ups', false, $order, $amount, $over + $lost ) ) {
 			return;
+		}
+		if ( $unknown ) {
+			throw new \Exception(
+				sprintf(
+					/* translators: %s: masked gift card codes */
+					esc_html__( 'The gift card topped up by this order cannot be found (%s), so its top-up cannot be taken back. Check the card before refunding the top-up.', 'voucher-captain' ),
+					esc_html( implode( ', ', array_unique( $unknown ) ) )
+				)
+			);
 		}
 		$max = max( 0.0, round( $amount - $over, wc_get_price_decimals() ) );
 		throw new \Exception(

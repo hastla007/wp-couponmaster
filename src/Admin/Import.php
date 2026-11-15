@@ -185,7 +185,7 @@ final class Import {
 						<td>
 							<a class="button button-small" href="<?php echo esc_url( ( new CampaignAdmin( new \VCAP\Campaigns( $this->pool, vcap()->vouchers ) ) )->export_url( 'pool', $b['batch'] ) ); ?>"><?php esc_html_e( 'Download CSV', 'voucher-captain' ); ?></a>
 							<?php if ( $b['free'] ) : ?>
-								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" onsubmit="return confirm('<?php echo esc_js( __( 'Delete all unused codes of this batch?', 'voucher-captain' ) ); ?>');">
+								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" data-confirm="<?php echo esc_attr__( 'Delete all unused codes of this batch?', 'voucher-captain' ); ?>">
 									<input type="hidden" name="action" value="vcap_delete_batch" />
 									<input type="hidden" name="batch" value="<?php echo esc_attr( $b['batch'] ); ?>" />
 									<?php wp_nonce_field( 'vcap_delete_batch' ); ?>

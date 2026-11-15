@@ -188,4 +188,10 @@ vcap_integration_assert( 'Christmas design' === $z13_label( VCAP\TemplatePostTyp
 delete_option( VCAP\TemplatePostType::ARCHIVE_OPTION . $z13_tpl );
 wp_set_current_user( 0 );
 
+// AP-W1-6: compatibility declarations – HPOS and block cart/checkout yes, the new product editor no. WooCommerce
+// versions without the product editor feature (removed in recent releases) ignore that declaration.
+$w16_features = wc_get_container()->get( Automattic\WooCommerce\Internal\Features\FeaturesController::class )->get_compatible_features_for_plugin( plugin_basename( VCAP_FILE ) );
+$w16_known    = in_array( 'product_block_editor', array_merge( $w16_features['compatible'] ?? array(), $w16_features['incompatible'] ?? array(), $w16_features['uncertain'] ?? array() ), true );
+vcap_integration_assert( ( ! $w16_known || in_array( 'product_block_editor', $w16_features['incompatible'] ?? array(), true ) ) && in_array( 'custom_order_tables', $w16_features['compatible'] ?? array(), true ) && in_array( 'cart_checkout_blocks', $w16_features['compatible'] ?? array(), true ), 'AP-W1-6: Voucher Captain declares the new product editor incompatible where WooCommerce offers it (' . ( $w16_known ? 'offered' : 'not offered by WooCommerce ' . WC()->version ) . '); HPOS and block checkout compatible' );
+
 echo "WooCommerce integration checks passed.\n";

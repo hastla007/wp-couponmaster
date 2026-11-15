@@ -3,6 +3,7 @@
  * Voucher email (HTML).
  *
  * Override: yourtheme/woocommerce/voucher-captain/emails/voucher.php
+ * @version  1.2.0
  *
  * @var \VCAP\Voucher  $voucher
  * @var string         $email_heading

@@ -46,13 +46,15 @@ register_deactivation_hook( __FILE__, array( '\VCAP\Install', 'deactivate' ) );
 // Multisite: deleting a site drops its voucher tables too (they hold buyer and recipient data).
 add_filter( 'wpmu_drop_tables', array( '\VCAP\Install', 'drop_site_tables' ), 10, 2 );
 
-// Declare HPOS + block cart/checkout compatibility.
+// Declare HPOS + block cart/checkout compatibility; the new product editor is not supported.
 add_action(
 	'before_woocommerce_init',
 	static function (): void {
 		if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
 			\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', __FILE__, true );
 			\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'cart_checkout_blocks', __FILE__, true );
+			// The new product editor has no voucher settings (classic product data tabs only): declared incompatible.
+			\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'product_block_editor', __FILE__, false );
 		}
 	}
 );

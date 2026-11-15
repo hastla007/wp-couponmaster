@@ -497,7 +497,7 @@ $GLOBALS['vcap_test_http'] = static fn( $url ) => array( 'code' => 200, 'body' =
 check( 'C7: a download that is no image is not used', null === vcap()->pdf->image_path( 0, 'https://cdn.shop.test/other.png' ) );
 unset( $GLOBALS['vcap_test_filters']['vcap_pdf_remote_hosts'], $GLOBALS['vcap_test_http'] );
 @unlink( (string) $p8_remote );
-check( 'C7: Site Health checks the template images', method_exists( VCAP\Health::class, 'test_template_images' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Health.php' ), "'rate_limits', 'template_images' )" ) );
+check( 'C7: Site Health checks the template images', method_exists( VCAP\Health::class, 'test_template_images' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Health.php' ), "'rate_limits', 'template_images', " ) );
 // Z13: a voucher keeps the design of its template at issue time (also after a redesign or deletion).
 if ( ! function_exists( 'update_post_meta' ) ) {
 	function update_post_meta( $id, $k, $v ) { $GLOBALS['vcap_test_meta'][ $id ][ $k ] = $v; return true; }
@@ -692,6 +692,17 @@ check( 'scanner: an expired nonce is renewed and the request repeated', str_cont
 check( 'scanner: no camera is a hint (HTTPS, permission), not a system error', str_contains( $scanner_js, 'function noCamera' ) && ! str_contains( $scanner_js, 'showError( { message: t.noCamera } )' ) );
 check( 'scanner: no autofocus that opens the phone keyboard over the camera', ! str_contains( $scanner_php, 'autofocus' ) && str_contains( $scanner_js, 'pointer: coarse' ) );
 check( 'ticket page: check-in form carries a one-time key, refusals are red', str_contains( $ticket_tpl, 'vcap_checkin_key' ) && str_contains( $ticket_tpl, 'notice--error' ) );
+// AP-W1-2 / AP-Q2-7: every overridable template names its version, so outdated theme copies can be reported.
+$w12_versions = array();
+foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( dirname( __DIR__ ) . '/templates', FilesystemIterator::SKIP_DOTS ) ) as $w12_file ) {
+	if ( 'php' === $w12_file->getExtension() ) {
+		$w12_versions[ substr( $w12_file->getPathname(), strlen( dirname( __DIR__ ) . '/templates/' ) ) ] = VCAP\Plugin::template_version( $w12_file->getPathname() );
+	}
+}
+check( 'AP-W1-2: every overridable template carries "@version 1.2.0"', count( $w12_versions ) >= 6 && array( '1.2.0' ) === array_values( array_unique( $w12_versions ) ), json_encode( $w12_versions ) );
+$w13_src = array_map( static fn( $f ) => (string) file_get_contents( dirname( __DIR__ ) . '/src/Admin/' . $f ), array( 'sc' => 'StoreCreditAdmin.php', 'jp' => 'JobProgress.php', 'im' => 'Import.php' ) );
+check( 'AP-W1-3: no inline <script> or onsubmit in the store credit refund, job progress and code import screens', ! preg_grep( '/(echo\s+["\']<script|^\s*<script|onsubmit=)/m', $w13_src ) && str_contains( $w13_src['sc'], "wp_add_inline_script(\n\t\t\t'vcap-admin'" ) && str_contains( $w13_src['jp'], "wp_add_inline_script( 'vcap-admin'" ) && str_contains( $w13_src['im'], 'data-confirm="' ) );
+check( 'AP-W1-2: the plugin templates are added to woocommerce_template_overrides_scan_paths', array( 'WooCommerce' => '/wc/', 'Voucher Captain' => VCAP_PATH . 'templates/' ) === VCAP\Plugin::template_scan_paths( array( 'WooCommerce' => '/wc/' ) ) );
 
 echo "Discount campaign engine\n";
 use VCAP\Discounts\Engine;
@@ -1211,6 +1222,14 @@ check( 'Q7/H12: an ambiguous amount says why instead of "outside the range"', fa
 check( 'Q7: number fields are read strictly ("2,50" = 2.5, "1e3" refused)', '2.5' === VCAP\Fields::parse_number( '2,50' ) && null === VCAP\Fields::parse_number( '1e3' ) && '-3' === VCAP\Fields::parse_number( '−3' ) );
 
 echo "CSV export format (A15)\n";
+$w15_readme = (string) file_get_contents( dirname( __DIR__ ) . '/readme.txt' );
+$w15_main   = (string) file_get_contents( dirname( __DIR__ ) . '/voucher-captain.php' );
+preg_match( "/define\\( 'VCAP_DB_VERSION', '([0-9.]+)' \\)/", $w15_main, $w15_db );
+preg_match( '/== Upgrade Notice ==\s*= [0-9.]+ =\s*(.+)/', $w15_readme, $w15_notice );
+check( 'AP-W1-5: readme names the filter vcap_pdf_remote_hosts instead of "PDFs never load remote images"', str_contains( $w15_readme, '`vcap_pdf_remote_hosts`' ) && ! str_contains( $w15_readme, 'never load remote images' ) );
+check( 'AP-W1-5: the upgrade notice names the current database version', isset( $w15_db[1], $w15_notice[1] ) && str_contains( $w15_notice[1], 'database is updated to version ' . $w15_db[1] ), $w15_notice[1] ?? '' );
+check( 'AP-W1-6: the new product editor is declared incompatible', str_contains( $w15_main, "declare_compatibility( 'product_block_editor', __FILE__, false )" ) );
+check( 'AP-W1-4: CSV downloads are sent with "X-Content-Type-Options: nosniff" (attachment, text/csv)', in_array( 'X-Content-Type-Options: nosniff', VCAP\Csv::headers( 'vouchers.csv' ), true ) && in_array( 'Content-Disposition: attachment; filename="vouchers.csv"', VCAP\Csv::headers( 'vouchers.csv' ), true ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Csv.php' ), 'foreach ( self::headers( $filename ) as $line )' ) );
 check( 'A15: decimal comma for fr/it/es/nl/pl/de, point for de_CH(_informal) and en', ',' === VCAP\Csv::locale_decimal( 'fr_FR' ) && ',' === VCAP\Csv::locale_decimal( 'it_IT' ) && ',' === VCAP\Csv::locale_decimal( 'es_ES' ) && ',' === VCAP\Csv::locale_decimal( 'nl_NL' ) && ',' === VCAP\Csv::locale_decimal( 'pl_PL' ) && ',' === VCAP\Csv::locale_decimal( 'de_DE_formal' ) && '.' === VCAP\Csv::locale_decimal( 'de_CH_informal' ) && '.' === VCAP\Csv::locale_decimal( 'de_CH' ) && '.' === VCAP\Csv::locale_decimal( 'en_US' ) && '.' === VCAP\Csv::locale_decimal( 'es_MX' ) );
 $GLOBALS['wp_locale'] = (object) array( 'number_format' => array( 'decimal_point' => ',', 'thousands_sep' => ' ' ) );
 check( 'A15: an unknown language follows WordPress\' number format of the current locale', ',' === VCAP\Csv::locale_decimal( 'xx_XX' ) );

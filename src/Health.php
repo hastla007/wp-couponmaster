@@ -84,7 +84,7 @@ final class Health {
 
 	public function tests( $tests ) {
 		$tests = (array) $tests;
-		foreach ( array( 'extensions', 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets', 'offline_payment', 'currency', 'rate_limits', 'template_images' ) as $id ) {
+		foreach ( array( 'extensions', 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets', 'offline_payment', 'currency', 'rate_limits', 'template_images', 'template_overrides' ) as $id ) {
 			$tests['direct'][ 'vcap_' . $id ] = array(
 				'label' => __( 'Voucher Captain', 'voucher-captain' ),
 				'test'  => array( $this, 'test_' . $id ),
@@ -317,6 +317,29 @@ final class Health {
 		return self::result( 'template_images', 'recommended', __( 'PDF template images are missing from voucher PDFs', 'voucher-captain' ), implode( ' ', array_slice( $problems, 0, 10 ) ) );
 	}
 
+	/** AP-W1-2: theme copies of the plugin templates without @version or older than the plugin's template. */
+	public function test_template_overrides(): array {
+		$outdated = array_values( array_filter( Plugin::template_overrides(), static fn( array $o ): bool => $o['outdated'] ) );
+		if ( ! $outdated ) {
+			return self::result( 'template_overrides', 'good', __( 'The theme copies of the voucher templates are up to date', 'voucher-captain' ), __( 'The theme overrides no voucher template, or only with copies of the current version.', 'voucher-captain' ) );
+		}
+		$list = implode(
+			', ',
+			array_map(
+				/* translators: 1: template file, 2: version of the theme copy, 3: current version */
+				static fn( array $o ): string => sprintf( __( '%1$s (version %2$s, current %3$s)', 'voucher-captain' ), $o['file'], '' !== $o['version'] ? $o['version'] : '–', $o['core_version'] ),
+				$outdated
+			)
+		);
+		return self::result(
+			'template_overrides',
+			'recommended',
+			__( 'Your theme contains outdated copies of voucher templates', 'voucher-captain' ),
+			/* translators: %s: list of template files with versions */
+			sprintf( __( 'Compare these files in yourtheme/woocommerce/voucher-captain/ with the plugin\'s templates and update them, otherwise later fixes (such as the one-time key of the check-in form) are missing: %s', 'voucher-captain' ), $list )
+		);
+	}
+
 	public function test_redeem_page(): array {
 		/**
 		 * Whether the shop needs the voucher redeem page (an integration that exchanges vouchers there, e.g. ticket
@@ -469,6 +492,7 @@ final class Health {
 			case 'scheduler':
 				return '<p><a href="' . esc_url( admin_url( 'admin.php?page=wc-status&tab=action-scheduler&status=pending&s=vcap' ) ) . '">' . esc_html__( 'Scheduled voucher tasks', 'voucher-captain' ) . '</a></p>';
 			case 'mail':
+			case 'template_overrides':
 				return '';
 		}
 		return '<p><a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=vcap' ) ) . '">' . esc_html__( 'Voucher settings', 'voucher-captain' ) . '</a></p>';

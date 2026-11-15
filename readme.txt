@@ -67,7 +67,7 @@ See "External services" below. Customer data stays on your site; the suggested p
 
 == External services ==
 
-Voucher Captain connects to no external service. The plugin bundles all its libraries and fonts; PDFs never load remote images.
+Voucher Captain connects to no external service. The plugin bundles all its libraries and fonts. PDFs load no remote images by default; only when a developer names hosts with the filter `vcap_pdf_remote_hosts` (for example the shop's own CDN or offloaded media library) are template images missing on the server downloaded from those hosts. No customer data is sent with these requests.
 
 On the same site (no external transfer): with WP Pass Captain active, ticket exchanges and ticket payments pass the voucher code, amount, the customer's name and email address and attendee names to WP Pass Captain.
 
@@ -203,7 +203,7 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 == Upgrade Notice ==
 
 = 1.2.0 =
-All features stay free, including the new gift card top-up and multi-purpose vouchers as payment. Database update 1.4.0 – back up first.
+All features stay free, including the new gift card top-up and multi-purpose vouchers as payment. The database is updated to version 1.8.0 – back up first.
 
 = 1.1.0 =
 Requires WooCommerce 8.9 or newer.

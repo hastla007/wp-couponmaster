@@ -289,4 +289,40 @@ vcap()->issuer->issue_for_order( $held_order, true );
 vcap_topup_assert( 20.0 === vcap_topup_balance( $void_card ), 'a held top-up line is not retried silently' );
 VCAP\Attention::resolve( $held_order->get_id(), 'topup:' . $held_line );
 
+/* ---- AP-Q1-3: the card is reissued (new code) after the top-up ---------------------------------------- */
+
+$q13_reissue = new VCAP\Reissue( vcap()->settings, vcap()->vouchers, vcap()->coupons );
+$q13_card    = vcap_topup_card( 20 );
+list( $q13_order, $q13_line ) = vcap_topup_order( $topup_product, $q13_card, 100 );
+vcap_topup_assert( 120.0 === vcap_topup_balance( $q13_card ) && (int) $q13_card->id === (int) wc_get_order( $q13_order->get_id() )->get_item( $q13_line )->get_meta( TopUp::CARD_META ), 'AP-Q1-3: the top-up line stores the id of the card it topped up' );
+$q13_new = $q13_reissue->reissue( vcap()->vouchers->get( $q13_card->id ), 'AP-Q1-3' );
+vcap_topup_assert( $q13_new instanceof VCAP\Voucher && $q13_new->code !== $q13_card->code && null === vcap()->vouchers->get_by_code( $q13_card->code ), 'AP-Q1-3: (setup) the card got a new code, the code on the top-up line is gone', is_wp_error( $q13_new ) ? $q13_new->get_error_message() : null );
+$q13_partial = vcap_topup_refund( wc_get_order( $q13_order->get_id() ), 40, array( $q13_line => array( 'qty' => 0, 'refund_total' => 40 ) ) );
+vcap_topup_assert( ! is_wp_error( $q13_partial ) && 80.0 === vcap_topup_balance( $q13_card ), 'AP-Q1-3: after a reissue a refund of 40 on the top-up line still takes 40 back from the card (by its id)', is_wp_error( $q13_partial ) ? $q13_partial->get_error_message() : vcap_topup_balance( $q13_card ) );
+vcap()->coupons->adjust_balance( vcap()->vouchers->get( $q13_card->id ), -70, 'redeemed', 'spent after the reissue' );
+$q13_spent = vcap_topup_refund( wc_get_order( $q13_order->get_id() ), 60, array( $q13_line => array( 'qty' => 1, 'refund_total' => 60 ) ) );
+vcap_topup_assert( is_wp_error( $q13_spent ) && 10.0 === vcap_topup_balance( $q13_card ) && str_contains( $q13_spent->get_error_message(), '10' ), 'AP-Q1-3: after a reissue the guard still refuses refunding top-up value spent from the card (at most 10)', is_wp_error( $q13_spent ) ? $q13_spent->get_error_message() : 'refund created' );
+
+// Orders from before the card id was stored: the card is found by the code it had before the reissue.
+$q13_old_card = vcap_topup_card( 20 );
+list( $q13_old_order, $q13_old_line ) = vcap_topup_order( $topup_product, $q13_old_card, 100 );
+$q13_item = wc_get_order( $q13_old_order->get_id() )->get_item( $q13_old_line );
+$q13_item->delete_meta_data( TopUp::CARD_META );
+$q13_item->save();
+vcap_topup_assert( ! is_wp_error( $q13_reissue->reissue( vcap()->vouchers->get( $q13_old_card->id ), 'AP-Q1-3 legacy' ) ), 'AP-Q1-3: (setup) a card topped up before the fix is reissued' );
+$q13_item = wc_get_order( $q13_old_order->get_id() )->get_item( $q13_old_line );
+vcap_topup_assert( (int) $q13_old_card->id === (int) TopUp::card_of_item( $q13_item, vcap()->vouchers )?->id, 'AP-Q1-3: without a stored id the card is found by its previous code (Reissue::voucher_of_previous_code)' );
+$q13_old_all = vcap_topup_refund( wc_get_order( $q13_old_order->get_id() ), 100, array( $q13_old_line => array( 'qty' => 1, 'refund_total' => 100 ) ) );
+vcap_topup_assert( ! is_wp_error( $q13_old_all ) && 'refunded' === wc_get_order( $q13_old_order->get_id() )->get_status() && 20.0 === vcap_topup_balance( $q13_old_card ), 'AP-Q1-3: refunding the whole top-up of a reissued card (no stored id) reverses it (card back at 20)', is_wp_error( $q13_old_all ) ? $q13_old_all->get_error_message() : vcap_topup_balance( $q13_old_card ) );
+
+// A card nobody finds any more: the refund of its top-up is refused (it could not be taken back).
+$q13_lost_card = vcap_topup_card( 20 );
+list( $q13_lost_order, $q13_lost_line ) = vcap_topup_order( $topup_product, $q13_lost_card, 100 );
+$q13_item = wc_get_order( $q13_lost_order->get_id() )->get_item( $q13_lost_line );
+$q13_item->update_meta_data( TopUp::CARD_META, 2000000000 );
+$q13_item->update_meta_data( TopUp::ITEM_META, 'VCAP-NO-SUCH-CARD-' . wp_generate_password( 6, false, false ) );
+$q13_item->save();
+$q13_lost = vcap_topup_refund( wc_get_order( $q13_lost_order->get_id() ), 100, array( $q13_lost_line => array( 'qty' => 1, 'refund_total' => 100 ) ) );
+vcap_topup_assert( is_wp_error( $q13_lost ) && 'processing' === wc_get_order( $q13_lost_order->get_id() )->get_status() && str_contains( $q13_lost->get_error_message(), 'cannot be found' ), 'AP-Q1-3: a refund of a top-up whose card cannot be found is refused', is_wp_error( $q13_lost ) ? $q13_lost->get_error_message() : 'refund created' );
+
 echo "Voucher Captain top-up checks passed.\n";
