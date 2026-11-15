@@ -528,8 +528,8 @@ final class VoucherRepository {
 					WHERE v.delivered_at IS NULL AND v.status IN ('scheduled','active')
 					AND ( ( v.delivery_at IS NOT NULL AND v.delivery_at <= %s AND v.delivery_at >= %s ) OR ( v.delivery_at IS NULL AND v.created_at <= %s AND v.created_at >= %s ) )
 					AND NOT EXISTS ( {$given_up} ){$not_in}
-					ORDER BY ( SELECT MAX(f.id) FROM {$this->events_table()} f WHERE f.voucher_id = v.id AND f.event = 'delivery_failed' ) IS NOT NULL,
-					( SELECT MAX(f.id) FROM {$this->events_table()} f WHERE f.voucher_id = v.id AND f.event = 'delivery_failed' ) ASC,
+					ORDER BY ( SELECT MAX(f.id) FROM {$this->events_table()} f WHERE f.voucher_id = v.id AND f.event IN ('delivery_failed','delivery_attempt') ) IS NOT NULL,
+					( SELECT MAX(f.id) FROM {$this->events_table()} f WHERE f.voucher_id = v.id AND f.event IN ('delivery_failed','delivery_attempt') ) ASC,
 					COALESCE( v.delivery_at, v.created_at ) ASC, v.id ASC
 					LIMIT %d",
 					$this->now(),
@@ -562,12 +562,24 @@ final class VoucherRepository {
 	 */
 	public function delivery_attempts( int $voucher_id ): array {
 		global $wpdb;
-		$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT event, created_at FROM {$this->events_table()} WHERE voucher_id = %d AND event IN ('delivery_failed','delivery_given_up'," . self::DELIVERY_RESET_EVENTS . ') ORDER BY id DESC LIMIT 500', $voucher_id ), ARRAY_A ); // phpcs:ignore
+		$rows  = $wpdb->get_results( $wpdb->prepare( "SELECT event, created_at FROM {$this->events_table()} WHERE voucher_id = %d AND event IN ('delivery_failed','delivery_given_up','delivery_attempt','resent'," . self::DELIVERY_RESET_EVENTS . ') ORDER BY id DESC LIMIT 500', $voucher_id ), ARRAY_A ); // phpcs:ignore
 		$state = array( 'failures' => 0, 'last_attempt' => null, 'given_up' => false );
+		// M12-48: a "delivery_attempt" is written before an attempt renders and sends; its outcome (a failure, a
+		// resend, the delivery) pairs it. An attempt without an outcome crashed and counts as a failure.
+		$outcome = false;
 		foreach ( $rows ? $rows : array() as $row ) {
-			if ( 'delivery_failed' === $row['event'] ) {
+			if ( 'delivery_attempt' === $row['event'] ) {
+				if ( ! $outcome ) {
+					++$state['failures'];
+					$state['last_attempt'] = $state['last_attempt'] ?? (string) $row['created_at'];
+				}
+				$outcome = false;
+			} elseif ( 'resent' === $row['event'] ) {
+				$outcome = true;
+			} elseif ( 'delivery_failed' === $row['event'] ) {
 				++$state['failures'];
 				$state['last_attempt'] = $state['last_attempt'] ?? (string) $row['created_at'];
+				$outcome               = true;
 			} elseif ( 'delivery_given_up' === $row['event'] ) {
 				$state['given_up'] = true;
 			} else {
@@ -1006,6 +1018,7 @@ final class VoucherRepository {
 			'downloaded' => __( 'Downloaded', 'voucher-captain' ),
 			'reissued'   => __( 'Reissued with a new code', 'voucher-captain' ),
 			Downloads::FIX_EVENT => __( 'Recipient corrected by the buyer', 'voucher-captain' ),
+			Delivery::ATTEMPT_EVENT => __( 'Delivery attempt', 'voucher-captain' ),
 		);
 		/** Labels of connector events in the voucher history. */
 		return (array) apply_filters( 'vcap_event_labels', $labels );

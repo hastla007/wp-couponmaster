@@ -50,6 +50,15 @@ final class BundleEmail extends VoucherEmail {
 		return $this->trigger_bundle( array( $voucher ), Delivery::to_recipient( $voucher ) ? 'recipient' : 'buyer' );
 	}
 
+	/** M12-49: every voucher of the bundled email in X-VCAP-Voucher. */
+	protected function header_voucher_ids(): array {
+		return array_values( array_filter( array_map( static fn( $v ) => (int) $v->id, $this->vouchers ) ) );
+	}
+
+	protected function header_role(): string {
+		return $this->role;
+	}
+
 	protected function recipient_address( Voucher $voucher ): string {
 		return (string) ( 'recipient' === $this->role ? $voucher->recipient_email : $voucher->buyer_email );
 	}
@@ -146,7 +155,8 @@ final class BundleEmail extends VoucherEmail {
 			$this->placeholders['{voucher_count}'] = (string) count( $this->vouchers );
 		}
 		$args          = parent::template_args( $plain );
-		$pdf           = $this->wants_pdf();
+		// M12-48: what get_attachments() did (left off when too large or on a retry); the preview asks wants_pdf().
+		$pdf           = null !== $this->pdf_attached ? $this->pdf_attached : ( $this->voucher && $this->voucher->id ? false : $this->wants_pdf() );
 		$links         = ! $pdf || 'yes' === get_option( 'vcap_include_link', 'yes' );
 		$download_urls = array();
 		foreach ( $this->vouchers as $voucher ) {

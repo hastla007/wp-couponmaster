@@ -36,6 +36,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_topup_held` | `src/TopUp.php` | – |
 | `vcap_topup_without_code` | `src/TopUp.php` | A top-up line without card code was held (no card issued, no top-up booked). |
 | `vcap_voucher_admin_actions` | `src/Admin/VoucherAdmin.php` | Extra buttons for connectors: call $form( $do, $label, $class, $extra_fields, $confirm_text ) and handle $do in vcap_voucher_admin_action. |
+| `vcap_voucher_bounced` | `src/Delivery.php` | A voucher email came back (Delivery::mark_bounced()). Args: Voucher, role ('recipient'\|'buyer'), reason. |
 | `vcap_voucher_created` | `src/VoucherRepository.php` | A voucher row was inserted (args: Voucher). If its issuing fails afterwards, vcap_voucher_deleted follows. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_deleted` | `src/VoucherRepository.php` | A voucher was removed again (its issuing failed after "vcap_voucher_created"). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_delivered` | `src/Delivery.php` | A voucher was delivered to everyone it is meant for (args: Voucher $voucher, string[] $addresses). |
@@ -120,6 +121,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_line_snapshot` | `src/Issuer.php` | Extra snapshot keys of connectors (e.g. the ticket a voucher is exchanged for); core keys always win. |
 | `vcap_maintenance_time_budget` | `src/Delivery.php` | – |
 | `vcap_markets` | `src/Markets.php` | – |
+| `vcap_max_attachment_bytes` | `src/Delivery.php` | Largest PDF attachment (bytes) of a voucher email; above it download links are sent instead. |
 | `vcap_min_code_bits` | `src/Admin/Import.php`, `src/Campaigns.php`, `src/Issuer.php`, `src/Reissue.php` | This filter is documented in src/Issuer.php |
 | `vcap_next_steps_emails` | `src/NextSteps.php` | WooCommerce order emails that show the delivery of the order's vouchers. |
 | `vcap_note_text` | `src/Note.php` | Text of a coded history note (connectors can translate their own codes). |

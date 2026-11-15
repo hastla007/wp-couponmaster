@@ -636,6 +636,97 @@ $z6_mails     = array();
 vcap()->delivery->deliver_now( $repo->get( $z6_now[0]->id ) );
 vcap_dlv_assert( 1 === count( $z6_mails ) && null !== $repo->get( $z6_now[0]->id )->delivered_at && Voucher::STATUS_SCHEDULED === $repo->get( $z6_now[1]->id )->status, 'Z6: "Deliver now" on one voucher sends only that voucher', count( $z6_mails ) );
 
+// M12-48: a PDF above vcap_max_attachment_bytes is not attached – a download link is sent instead.
+$m48_small = static fn() => 100;
+add_filter( 'vcap_max_attachment_bytes', $m48_small );
+$m48_one  = vcap_dlv_voucher( "m48-one-{$tag}@example.com" );
+$z6_mails = array();
+vcap()->delivery->deliver( $m48_one->id, false );
+remove_filter( 'vcap_max_attachment_bytes', $m48_small );
+vcap_dlv_assert( 1 === count( $z6_mails ) && array() === $z6_mails[0]['pages'] && str_contains( $z6_mails[0]['message'], 'vcap_pdf=' ) && null !== $repo->get( $m48_one->id )->delivered_at, 'M12-48: a PDF above the size limit is replaced by a download link', array( $z6_mails[0]['pages'] ?? null ) );
+vcap_dlv_assert( 8 * MB_IN_BYTES === Delivery::max_attachment_bytes(), 'M12-48: the default size limit is 8 MB' );
+
+// M12-48: the attempt is recorded before the PDF is rendered (a crash still counts), and it is paired by its outcome.
+$m48_seen = null;
+$m48_spy  = static function ( $attachments, $id, $object, $email = null ) use ( &$m48_seen ) {
+	if ( $email instanceof VCAP\Emails\VoucherEmail && $email->voucher ) {
+		$m48_seen = vcap_dlv_events( $email->voucher->id, Delivery::ATTEMPT_EVENT );
+	}
+	return $attachments;
+};
+add_filter( 'woocommerce_email_attachments', $m48_spy, 10, 4 );
+$m48_two = vcap_dlv_voucher( "m48-two-{$tag}@example.com" );
+vcap()->delivery->deliver( $m48_two->id, false );
+remove_filter( 'woocommerce_email_attachments', $m48_spy, 10 );
+vcap_dlv_assert( 1 === $m48_seen && null !== $repo->get( $m48_two->id )->delivered_at, 'M12-48: the "delivery_attempt" event is written before the attachments are built', $m48_seen );
+$m48_crash = vcap_dlv_voucher( "m48-crash-{$tag}@example.com" );
+$repo->log( $m48_crash->id, Delivery::ATTEMPT_EVENT ); // Two attempts that died (fatal error) without an outcome …
+$repo->log( $m48_crash->id, Delivery::ATTEMPT_EVENT );
+$repo->log( $m48_crash->id, 'delivery_failed', null, null, 'x' ); // … and one that recorded its failure.
+$repo->log( $m48_crash->id, Delivery::ATTEMPT_EVENT );
+$repo->log( $m48_crash->id, 'delivery_failed', null, null, 'y' );
+$m48_state = $repo->delivery_attempts( $m48_crash->id );
+vcap_dlv_assert( 3 === $m48_state['failures'], 'M12-48: an attempt without outcome (crash) counts as a failed attempt, a recorded failure once', $m48_state );
+$m48_new  = vcap_dlv_voucher( "m48-new-{$tag}@example.com" );
+$m48_lone = vcap_dlv_voucher( "m48-lone-{$tag}@example.com" );
+$repo->log( $m48_lone->id, Delivery::ATTEMPT_EVENT ); // Only a crashed attempt, no recorded failure.
+$m48_ids = $repo->due_for_delivery( 1000 );
+vcap_dlv_assert( false !== array_search( $m48_lone->id, $m48_ids, true ) && array_search( $m48_lone->id, $m48_ids, true ) > array_search( $m48_new->id, $m48_ids, true ), 'M12-48: a voucher whose attempt crashed is no longer taken before never-attempted ones by the safety net' );
+$repo->log( $m48_new->id, 'delivered' ); // Keep the two out of the later checks.
+$repo->log( $m48_lone->id, 'delivered' );
+$wpdb->query( $wpdb->prepare( 'UPDATE ' . VCAP\Install::tables()['vouchers'] . ' SET delivered_at = %s WHERE id IN (%d, %d)', gmdate( 'Y-m-d H:i:s' ), $m48_new->id, $m48_lone->id ) ); // phpcs:ignore
+$m48_max = static fn() => 3;
+add_filter( 'vcap_delivery_max_attempts', $m48_max );
+$z6_mails = array();
+$m48_gave = vcap()->delivery->give_up_if_exhausted( $m48_crash->id );
+remove_filter( 'vcap_delivery_max_attempts', $m48_max );
+vcap_dlv_assert( $m48_gave && $repo->delivery_attempts( $m48_crash->id )['given_up'] && ! $z6_mails, 'M12-48: after max_attempts (crashes included) the safety net gives the delivery up instead of trying again' );
+
+// M12-48: after a failed bundled email the retry goes out without the PDF (download links).
+$m48_order = vcap_dlv_order();
+$m48_bund  = $z6_batch( 5, array( 'order_id' => $m48_order->get_id(), 'buyer' => "m48-b-{$tag}@example.com" ) );
+add_filter( 'pre_wp_mail', $fail, 2000 );
+vcap()->delivery->deliver( $m48_bund[0]->id );
+remove_filter( 'pre_wp_mail', $fail, 2000 );
+$z6_mails = array();
+vcap()->delivery->deliver( $m48_bund[1]->id );
+vcap_dlv_assert( 1 === count( $z6_mails ) && array() === $z6_mails[0]['pages'] && 5 === substr_count( $z6_mails[0]['message'], 'vcap_pdf=' ) && null !== $repo->get( $m48_bund[4]->id )->delivered_at, 'M12-48: the retry of a failed bundle carries download links instead of the PDF', array( $z6_mails[0]['pages'] ?? null ) );
+foreach ( $m48_bund as $m48_v ) {
+	as_unschedule_all_actions( Delivery::RETRY_HOOK, array( 'voucher_id' => $m48_v->id ), Delivery::GROUP );
+}
+vcap_dlv_assert( 20 === (int) get_option( 'vcap_bundle_pdf_limit' ), 'M12-48: a new installation attaches one PDF to bundled emails up to 20 vouchers' );
+update_option( 'vcap_bundle_pdf_limit', 50 );
+VCAP\Install::activate_site();
+vcap_dlv_assert( 50 === (int) get_option( 'vcap_bundle_pdf_limit' ), 'M12-48: a reactivation keeps the limit of an existing shop' );
+update_option( 'vcap_bundle_pdf_limit', 20 );
+
+// M12-49: a bounce resets the role, is recorded and noted on the order; the mails carry X-VCAP-Voucher.
+$m49_order = vcap_dlv_order();
+$m49       = vcap_dlv_voucher( "m49-b-{$tag}@example.com", array( 'order_id' => $m49_order->get_id(), 'send_to' => 'recipient', 'recipient_email' => "m49-r-{$tag}@example.com" ) );
+$m49_head  = array();
+$m49_spy   = static function ( $pre, $atts ) use ( &$m49_head ) {
+	$m49_head[] = is_array( $atts['headers'] ) ? implode( "\n", $atts['headers'] ) : (string) $atts['headers'];
+	return $pre;
+};
+add_filter( 'pre_wp_mail', $m49_spy, 0, 2 );
+$z6_mails = array();
+vcap()->delivery->deliver( $m49->id, false );
+remove_filter( 'pre_wp_mail', $m49_spy, 0 );
+vcap_dlv_assert( null !== $repo->get( $m49->id )->delivered_at && str_contains( implode( "\n", $m49_head ), 'X-VCAP-Voucher: ' . $m49->id ) && str_contains( implode( "\n", $m49_head ), 'X-VCAP-Role: recipient' ), 'M12-49: the voucher email carries the headers X-VCAP-Voucher and X-VCAP-Role', $m49_head );
+$m49_fired = array();
+$m49_hook  = static function ( $voucher, $role, $reason ) use ( &$m49_fired ) {
+	$m49_fired[] = array( $voucher->id, $role, $reason );
+};
+add_action( 'vcap_voucher_bounced', $m49_hook, 10, 3 );
+$z6_mails = array();
+$m49_ok   = vcap()->delivery->mark_bounced( $m49->id, 'recipient', '550 mailbox unavailable', true );
+remove_action( 'vcap_voucher_bounced', $m49_hook, 10 );
+$m49_roles = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT delivered_roles FROM ' . VCAP\Install::tables()['vouchers'] . ' WHERE id = %d', $m49->id ) ); // phpcs:ignore
+$m49_last  = VCAP\Tickets::last_event( $repo->events( $m49->id ), array( 'delivery_failed' ) );
+vcap_dlv_assert( $m49_ok && ! str_contains( $m49_roles, 'recipient' ) && $m49_last && str_contains( (string) $m49_last['note'], '550 mailbox unavailable' ) && str_contains( vcap_dlv_notes( $m49_order->get_id() ), 'came back undelivered' ), 'M12-49: mark_bounced() resets the role, writes delivery_failed and an order note', array( $m49_roles, $m49_last ) );
+vcap_dlv_assert( array( array( $m49->id, 'recipient', '550 mailbox unavailable' ) ) === $m49_fired && 1 === $z6_to( "m49-b-{$tag}@" ) && str_contains( $z6_mails[0]['message'] ?? '', 'vcap_fix=' ), 'M12-49: the action fires and the buyer is told with the "Correct the recipient" link', $m49_fired );
+vcap_dlv_assert( false === vcap()->delivery->mark_bounced( $m49->id, 'nobody' ), 'M12-49: an unknown role is refused' );
+
 remove_filter( 'pre_wp_mail', $z6_capture, 1 );
 update_option( 'vcap_attach_pdf', $z6_attach );
 

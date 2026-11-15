@@ -23,6 +23,15 @@ abstract class VoucherEmail extends \WC_Email {
 	public string $last_failure = '';
 	/** Whether the last trigger() was to attach the PDF but could not create it (D5: "delivered without PDF"). */
 	public bool $pdf_failed = false;
+	/**
+	 * M12-48: whether the PDF went with the last trigger() – null when it was not wanted, false when it was left
+	 * off (too large, or a retry after a failed bundle) and download links were sent instead.
+	 */
+	public ?bool $pdf_attached = null;
+	/** M12-48: why the PDF was left off ('too_large', 'links'), '' when it was attached or not wanted. */
+	public string $pdf_skipped = '';
+	/** M12-48: send download links instead of the PDF in the next trigger() (reset afterwards). */
+	public bool $force_links = false;
 
 	public function __construct() {
 		$this->customer_email = true;
@@ -52,7 +61,9 @@ abstract class VoucherEmail extends \WC_Email {
 	public function trigger( Voucher $voucher ): bool {
 		$this->last_failure = '';
 		$this->pdf_failed   = false;
-		$state = Multilingual::switch_to( Multilingual::email_locale( $voucher, null, $this ), Multilingual::order_language( $voucher->order() ) );
+		$this->pdf_attached = null;
+		$this->pdf_skipped  = '';
+		$state =Multilingual::switch_to( Multilingual::email_locale( $voucher, null, $this ), Multilingual::order_language( $voucher->order() ) );
 		if ( ! $state['ready'] ) {
 			$this->setup_locale();
 		}
@@ -73,9 +84,10 @@ abstract class VoucherEmail extends \WC_Email {
 			} else {
 				$to          = $this->get_recipient();
 				$subject     = $this->get_subject();
+				// M12-48: the attachments first – the text says whether the PDF is attached or linked instead.
+				$attachments = $this->get_attachments();
 				$content     = $this->get_content();
 				$headers     = $this->get_headers();
-				$attachments = $this->get_attachments();
 				$sent        = (bool) $this->send( $to, $subject, $content, $headers, $attachments );
 				if ( ! $sent ) {
 					$this->last_failure = 'mail_failed';
@@ -90,6 +102,7 @@ abstract class VoucherEmail extends \WC_Email {
 			return $sent;
 		} finally {
 			$this->cleanup();
+			$this->force_links = false;
 			if ( ! $state['ready'] ) {
 				$this->restore_locale();
 			}
@@ -181,11 +194,25 @@ abstract class VoucherEmail extends \WC_Email {
 	public function get_attachments() {
 		$attachments = parent::get_attachments();
 		if ( $this->wants_pdf() ) {
+			$this->pdf_attached = false;
+			if ( $this->force_links ) {
+				// M12-48: a retry after a failed bundled email goes without the PDF (links instead).
+				$this->pdf_skipped = 'links';
+				return $attachments;
+			}
 			try {
 				$files = $this->pdf_files();
 				if ( $files ) {
 					$this->temp_files = array_merge( $this->temp_files, $files );
-					$attachments      = array_merge( (array) $attachments, $files );
+					$size             = array_sum( array_map( static fn( $f ) => is_readable( $f ) ? (int) filesize( $f ) : 0, $files ) );
+					if ( $size > \VCAP\Delivery::max_attachment_bytes( $this->voucher ) ) {
+						// M12-48: too large for many mail servers (552) – download links instead of the PDF.
+						$this->pdf_skipped = 'too_large';
+						\VCAP\Logger::warning( 'Voucher PDF too large to attach, download links sent instead.', array( 'voucher_id' => (int) $this->voucher->id, 'bytes' => $size, 'email' => $this->id ) );
+						return $attachments;
+					}
+					$attachments        = array_merge( (array) $attachments, $files );
+					$this->pdf_attached = true;
 				} else {
 					$this->pdf_failed = true; // The renderer logged why.
 				}
@@ -195,6 +222,29 @@ abstract class VoucherEmail extends \WC_Email {
 			}
 		}
 		return $attachments;
+	}
+
+	/**
+	 * M12-49: headers with the voucher(s) and the role of the mail ("X-VCAP-Voucher", "X-VCAP-Role"), so a bounce
+	 * handler can report a returned mail with Delivery::mark_bounced().
+	 */
+	public function get_headers() {
+		$headers = (string) parent::get_headers();
+		if ( $this->voucher && $this->voucher->id ) {
+			$headers .= 'X-VCAP-Voucher: ' . implode( ',', $this->header_voucher_ids() ) . "\r\n";
+			$headers .= 'X-VCAP-Role: ' . $this->header_role() . "\r\n";
+		}
+		return $headers;
+	}
+
+	/** @return int[] Vouchers of the mail (X-VCAP-Voucher). */
+	protected function header_voucher_ids(): array {
+		return array( (int) $this->voucher->id );
+	}
+
+	/** Role of the mail for X-VCAP-Role: 'recipient' or 'buyer'. */
+	protected function header_role(): string {
+		return $this->voucher && \VCAP\Delivery::same_address( (string) $this->recipient, (string) $this->voucher->recipient_email ) && ! \VCAP\Delivery::same_address( (string) $this->recipient, (string) $this->voucher->buyer_email ) ? 'recipient' : 'buyer';
 	}
 
 	private function cleanup(): void {
@@ -217,7 +267,8 @@ abstract class VoucherEmail extends \WC_Email {
 			/** Intro text of a voucher email (e.g. a ticket voucher's reminder speaks of tickets, not of a remaining value). */
 			'intro'              => $this->format_string( (string) apply_filters( 'vcap_email_intro', $this->intro_text( $this->voucher ), $this->voucher, $this ) ),
 			'additional_content' => $this->get_additional_content(),
-			'download_url'       => $this->voucher->id && 'yes' === get_option( 'vcap_include_link', 'yes' ) ? vcap()->downloads->signed_url( $this->voucher, true ) : '',
+			// M12-48: always a link when the PDF was left off (too large) or could not be attached.
+			'download_url'       => $this->voucher->id && ( 'yes' === get_option( 'vcap_include_link', 'yes' ) || false === $this->pdf_attached ) ? vcap()->downloads->signed_url( $this->voucher, true ) : '',
 			'sent_to_admin'      => false,
 			'plain_text'         => $plain,
 			'email'              => $this,

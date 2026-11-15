@@ -261,6 +261,7 @@ final class Install {
 	public static function activate_site(): void {
 		// Schema work only under the upgrade lock; when another request holds it, that request finishes the schema.
 		$locked = self::lock();
+		$fresh  = '' === self::stored_version(); // M12-48: a first installation on this site.
 		try {
 			if ( $locked ) {
 				$installed = self::stored_version();
@@ -274,6 +275,10 @@ final class Install {
 				update_option( 'vcap_secret', wp_generate_password( 64, true, true ), false );
 			}
 			add_option( 'vcap_needs_default_template', 'yes' );
+			if ( $fresh ) {
+				// M12-48: new installs attach one PDF to bundled emails up to 20 vouchers (existing shops keep 50).
+				add_option( 'vcap_bundle_pdf_limit', 20 );
+			}
 			update_option( 'vcap_flush_rewrite', 'yes' );
 			self::resume();
 		} finally {
