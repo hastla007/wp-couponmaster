@@ -415,8 +415,10 @@ final class Fields {
 			$raw = $this->override[ $key ] ?? null;
 			return is_scalar( $raw ) ? self::normalize_newlines( (string) $raw ) : '';
 		}
-		// phpcs:ignore WordPress.Security.NonceVerification -- Add-to-cart form; WooCommerce handles the request.
-		$raw = isset( $_POST['vcap_fields'][ $key ] ) ? wp_unslash( $_POST['vcap_fields'][ $key ] ) : ( isset( $_REQUEST['vcap_fields'][ $key ] ) ? wp_unslash( $_REQUEST['vcap_fields'][ $key ] ) : null ); // phpcs:ignore
+		// Only the posted add-to-cart form (AP-F1-1): a link with ?vcap_fields[...] must not prefill a field (e.g. the
+		// recipient email of a gift) or carry text into the page. GET prefill is no documented feature.
+		// Add-to-cart form, WooCommerce handles the request; validated in errors(), sanitised with the cart item data.
+		$raw = isset( $_POST['vcap_fields'][ $key ] ) ? wp_unslash( $_POST['vcap_fields'][ $key ] ) : null; // phpcs:ignore WordPress.Security.NonceVerification, WordPress.Security.ValidatedSanitizedInput
 		return is_scalar( $raw ) ? self::normalize_newlines( (string) $raw ) : '';
 	}
 
@@ -460,7 +462,8 @@ final class Fields {
 		}
 		switch ( $type ) {
 			case 'textarea':
-				echo '<textarea ' . $attrs . ' rows="3">' . esc_textarea( $value ) . '</textarea>'; // phpcs:ignore WordPress.Security.EscapeOutput
+				// Visitor text with brackets as entities: a page with a product block runs do_shortcode() over the form.
+				echo '<textarea ' . $attrs . ' rows="3">' . Shortcodes::esc_html_text( $value ) . '</textarea>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_html_text().
 				break;
 			case 'select':
 				echo '<select ' . $attrs . '><option value="">' . esc_html__( '— Select —', 'voucher-captain' ) . '</option>'; // phpcs:ignore WordPress.Security.EscapeOutput
@@ -476,10 +479,10 @@ final class Fields {
 				// H11: from today, like the server rule in errors() (a day already past the delivery hour sends at once).
 				$min  = 'delivery_date' === $key ? wp_date( 'Y-m-d' ) : '';
 				$maxd = 'delivery_date' === $key ? self::max_delivery_date( $config ) : '';
-				echo '<input type="date" ' . $attrs . ' value="' . esc_attr( $value ) . '"' . ( $min ? ' min="' . esc_attr( $min ) . '" max="' . esc_attr( $maxd ) . '"' : '' ) . ' />'; // phpcs:ignore WordPress.Security.EscapeOutput
+				echo '<input type="date" ' . $attrs . ' value="' . Shortcodes::esc_attr_text( $value ) . '"' . ( $min ? ' min="' . esc_attr( $min ) . '" max="' . esc_attr( $maxd ) . '"' : '' ) . ' />'; // phpcs:ignore WordPress.Security.EscapeOutput
 				break;
 			default:
-				echo '<input type="' . esc_attr( $type ) . '" class="input-text" ' . $attrs . ' value="' . esc_attr( $value ) . '" />'; // phpcs:ignore WordPress.Security.EscapeOutput
+				echo '<input type="' . esc_attr( $type ) . '" class="input-text" ' . $attrs . ' value="' . Shortcodes::esc_attr_text( $value ) . '" />'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_attr_text().
 		}
 		if ( ! empty( $field['tooltip'] ) ) {
 			echo '<span class="description vcap-field-help" id="' . esc_attr( $desc_id ) . '">' . esc_html( $field['tooltip'] ) . '</span>';
