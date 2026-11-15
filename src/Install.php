@@ -1518,20 +1518,58 @@ final class Install {
 		return $translation;
 	}
 
+	/** Option with the name of the private upload folder ("vcap-<random>", M12-43). */
+	public const PRIVATE_DIR_OPTION = 'vcap_private_dir';
+
 	public static function upload_dir(): string {
 		$uploads = wp_upload_dir( null, false );
-		return trailingslashit( $uploads['basedir'] ) . 'vcap';
+		return trailingslashit( $uploads['basedir'] ) . self::private_dir_name();
 	}
 
 	/**
-	 * Creates the private upload folders (PDFs, fonts, temp files) with their protection files.
+	 * M12-43: name of the private upload folder. A random suffix makes its URL unguessable where the web server
+	 * ignores .htaccess (nginx): nothing in it can be fetched without knowing the name. The folder "vcap" of
+	 * earlier versions is renamed once; where that fails it keeps being used (Site Health reports it if it is
+	 * reachable).
+	 */
+	public static function private_dir_name(): string {
+		$name = (string) get_option( self::PRIVATE_DIR_OPTION, '' );
+		if ( preg_match( '/^vcap(-[a-z0-9]{16,40})?$/', $name ) ) {
+			return $name;
+		}
+		$base = trailingslashit( wp_upload_dir( null, false )['basedir'] );
+		$name = 'vcap-' . strtolower( wp_generate_password( 20, false ) );
+		if ( ! add_option( self::PRIVATE_DIR_OPTION, $name, '', true ) ) {
+			// A parallel request chose the name first.
+			wp_cache_delete( 'notoptions', 'options' );
+			wp_cache_delete( 'alloptions', 'options' );
+			wp_cache_delete( self::PRIVATE_DIR_OPTION, 'options' );
+			$other = (string) get_option( self::PRIVATE_DIR_OPTION, '' );
+			return preg_match( '/^vcap(-[a-z0-9]{16,40})?$/', $other ) ? $other : 'vcap';
+		}
+		if ( is_dir( $base . 'vcap' ) && ! is_dir( $base . $name ) && ! @rename( $base . 'vcap', $base . $name ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions,WordPress.PHP.NoSilencedErrors -- reported below.
+			update_option( self::PRIVATE_DIR_OPTION, 'vcap', true );
+			Logger::warning( 'The private upload folder "vcap" could not be renamed to a name with a random suffix; it is kept.' );
+			return 'vcap';
+		}
+		return $name;
+	}
+
+	/**
+	 * .htaccess of the private folders: Apache 2.4 ("Require all denied") and 2.2 ("Deny from all"). nginx ignores
+	 * it: see the snippet in COMPATIBILITY.md and the Site Health check, which tries to fetch a file.
+	 */
+	public const HTACCESS = "# Voucher Captain: private files (voucher PDFs, fonts, temp files).\n<IfModule mod_authz_core.c>\n\tRequire all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n\tOrder deny,allow\n\tDeny from all\n</IfModule>\n";
+
+	/**
+	 * Creates the private upload folders (PDFs, fonts, temp files, image cache) with their protection files.
 	 *
 	 * @return bool False when a folder or protection file could not be written (remembered for an admin notice).
 	 */
 	public static function ensure_upload_dir(): bool {
 		$dir = self::upload_dir();
 		$ok  = true;
-		foreach ( array( $dir, $dir . '/fonts', $dir . '/tmp' ) as $d ) {
+		foreach ( array( $dir, $dir . '/fonts', $dir . '/tmp', $dir . '/img' ) as $d ) {
 			if ( ! is_dir( $d ) && ! wp_mkdir_p( $d ) ) {
 				$ok = false;
 				continue;
@@ -1539,7 +1577,9 @@ final class Install {
 			if ( ! file_exists( $d . '/index.html' ) && false === @file_put_contents( $d . '/index.html', '' ) ) { // phpcs:ignore
 				$ok = false;
 			}
-			if ( ! file_exists( $d . '/.htaccess' ) && false === @file_put_contents( $d . '/.htaccess', "Deny from all\n" ) ) { // phpcs:ignore
+			// The Apache 2.2 line of earlier versions is replaced by the 2.4 syntax (M12-43).
+			$current = is_readable( $d . '/.htaccess' ) ? (string) file_get_contents( $d . '/.htaccess' ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions
+			if ( self::HTACCESS !== $current && ( '' === $current || "Deny from all\n" === $current ) && false === @file_put_contents( $d . '/.htaccess', self::HTACCESS ) ) { // phpcs:ignore
 				$ok = false;
 			}
 		}
@@ -1549,5 +1589,38 @@ final class Install {
 			update_option( 'vcap_upload_dir_error', $dir, false );
 		}
 		return $ok;
+	}
+
+	/**
+	 * M12-43: removes temp files older than $age seconds from the private folder: temp PDFs and previews (they
+	 * show voucher codes), downloaded template images ("img-*"), unfinished writes ("*.part") and dompdf's temp
+	 * images in its temp folder (e.g. "ca_dompdf_img_*", barcode SVGs carrying the code). Old cached template
+	 * images are removed after 30 days without use.
+	 *
+	 * @return int Number of files removed.
+	 */
+	public static function purge_temp_files( int $age = HOUR_IN_SECONDS ): int {
+		$dir     = self::upload_dir();
+		$before  = time() - $age;
+		$removed = 0;
+		$sets    = array(
+			array( $dir . '/tmp', array( '*.pdf', 'img-*', '*.part', 'probe-*' ), $before ),
+			array( $dir . '/fonts', array( 'ca_dompdf_*', 'dompdf_*', '*.part', '*.tmp' ), $before ),
+			array( $dir . '/img', array( '*.part' ), $before ),
+			array( $dir . '/img', array( '*.png', '*.jpg' ), time() - 30 * DAY_IN_SECONDS ),
+		);
+		foreach ( $sets as $set ) {
+			foreach ( $set[1] as $pattern ) {
+				foreach ( glob( $set[0] . '/' . $pattern ) ?: array() as $file ) {
+					// The cache keeps images in use: their access time is not reliable, the modification time is
+					// refreshed when an image is used (see PdfRenderer::optimized_image()).
+					if ( is_file( $file ) && (int) filemtime( $file ) < $set[2] ) {
+						wp_delete_file( $file );
+						++$removed;
+					}
+				}
+			}
+		}
+		return $removed;
 	}
 }

@@ -78,13 +78,13 @@ final class Health {
 	}
 
 	/** Checks that go through all voucher products: run asynchronously (REST), so Site Health opens at once. */
-	private const ASYNC = array( 'validity', 'tax_status' );
+	private const ASYNC = array( 'validity', 'tax_status', 'upload_dir' ); // upload_dir: an HTTP request to the own site (M12-43).
 	/** Voucher products checked at most per test (the result says when there are more). */
 	private const MAX_PRODUCTS = 500;
 
 	public function tests( $tests ) {
 		$tests = (array) $tests;
-		foreach ( array( 'extensions', 'schema', 'scheduler', 'mail', 'upload_dir', 'redeem_page', 'markets', 'offline_payment', 'currency', 'rate_limits', 'template_images', 'template_overrides' ) as $id ) {
+		foreach ( array( 'extensions', 'schema', 'scheduler', 'mail', 'redeem_page', 'markets', 'offline_payment', 'currency', 'rate_limits', 'template_images', 'template_overrides' ) as $id ) {
 			$tests['direct'][ 'vcap_' . $id ] = array(
 				'label' => __( 'Voucher Captain', 'voucher-captain' ),
 				'test'  => array( $this, 'test_' . $id ),
@@ -288,10 +288,59 @@ final class Health {
 		return self::result( 'mail', 'critical', __( 'Emails could not be sent', 'voucher-captain' ), $text . ' ' . __( 'Vouchers and tickets are delivered by email: configure an SMTP or mail service plugin and send a test mail.', 'voucher-captain' ) );
 	}
 
+	/**
+	 * M12-43: whether a file of the private folder can be fetched from the web. A probe file is written to the
+	 * temp folder and requested over HTTP: status 200 with its content means the folder is open (nginx ignores
+	 * .htaccess), which is critical. Returns 'open', 'closed' or 'unknown' (no request possible).
+	 */
+	public static function probe_private_dir(): string {
+		if ( ! Install::ensure_upload_dir() ) {
+			return 'unknown';
+		}
+		$name  = 'probe-' . wp_generate_password( 20, false ) . '.txt';
+		$token = wp_generate_password( 32, false );
+		$file  = Install::upload_dir() . '/tmp/' . $name;
+		if ( false === @file_put_contents( $file, $token ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions,WordPress.PHP.NoSilencedErrors -- reported as unknown.
+			return 'unknown';
+		}
+		$uploads = wp_upload_dir( null, false );
+		$url     = trailingslashit( $uploads['baseurl'] ) . Install::private_dir_name() . '/tmp/' . $name;
+		try {
+			$response = wp_remote_get(
+				$url,
+				array(
+					'timeout'     => 5,
+					'redirection' => 0,
+					'sslverify'   => false, // Loopback to the own site; only the reachability matters.
+				)
+			);
+		} finally {
+			wp_delete_file( $file );
+		}
+		if ( is_wp_error( $response ) ) {
+			return 'unknown';
+		}
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		return 200 === $code && str_contains( (string) wp_remote_retrieve_body( $response ), $token ) ? 'open' : ( $code > 0 ? 'closed' : 'unknown' );
+	}
+
 	public function test_upload_dir(): array {
 		$error = (string) get_option( 'vcap_upload_dir_error', '' );
 		if ( '' === $error ) {
-			return self::result( 'upload_dir', 'good', __( 'The private voucher folder is protected', 'voucher-captain' ), __( 'PDF vouchers and fonts are stored in a folder that cannot be opened from the web.', 'voucher-captain' ) );
+			$probe = self::probe_private_dir();
+			if ( 'open' === $probe ) {
+				return self::result(
+					'upload_dir',
+					'critical',
+					__( 'The private voucher folder can be opened from the web', 'voucher-captain' ),
+					/* translators: %s: folder path */
+					sprintf( __( 'A test file in %s could be downloaded. The web server ignores the .htaccess protection (e.g. nginx): voucher PDFs and temp files could be fetched by anyone who knows their address. Block the folder in the server configuration (see the nginx snippet in COMPATIBILITY.md).', 'voucher-captain' ), Install::upload_dir() )
+				);
+			}
+			if ( 'unknown' === $probe ) {
+				return self::result( 'upload_dir', 'recommended', __( 'The protection of the private voucher folder could not be tested', 'voucher-captain' ), __( 'The site could not request a test file from itself. Make sure the web server blocks the private folder (see the nginx snippet in COMPATIBILITY.md).', 'voucher-captain' ) );
+			}
+			return self::result( 'upload_dir', 'good', __( 'The private voucher folder is protected', 'voucher-captain' ), __( 'PDF vouchers and fonts are stored in a folder that cannot be opened from the web (a test file could not be downloaded).', 'voucher-captain' ) );
 		}
 		return self::result(
 			'upload_dir',

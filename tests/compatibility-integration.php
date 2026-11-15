@@ -278,7 +278,7 @@ vcap_compat_assert( VCAP_DB_VERSION === get_option( VCAP\Install::OPTION_DB_VERS
 // Site Health: failed mails are recorded (masked) and reported; the checks are registered.
 delete_option( VCAP\Health::MAIL_LOG );
 $health_tests = apply_filters( 'site_status_tests', array( 'direct' => array(), 'async' => array() ) );
-vcap_compat_assert( isset( $health_tests['direct']['vcap_scheduler'], $health_tests['direct']['vcap_mail'], $health_tests['direct']['vcap_upload_dir'], $health_tests['direct']['vcap_redeem_page'] ), 'Voucher Captain adds its checks to Site Health' );
+vcap_compat_assert( isset( $health_tests['direct']['vcap_scheduler'], $health_tests['direct']['vcap_mail'], $health_tests['async']['vcap_upload_dir'], $health_tests['direct']['vcap_redeem_page'] ), 'Voucher Captain adds its checks to Site Health' );
 $mail_test = $health_tests['direct']['vcap_mail']['test'];
 vcap_compat_assert( 'good' === call_user_func( $mail_test )['status'], 'without failed mails the mail check is good' );
 VCAP\Health::mail_begin( 'Voucher to recipient' ); // Only Voucher Captain mails are recorded.
