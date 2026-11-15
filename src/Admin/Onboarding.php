@@ -272,7 +272,7 @@ final class Onboarding {
 	 */
 	public static function create_page( string $which ): int {
 		global $wpdb;
-		$lock = 'vcap_onboarding_' . $which;
+		$lock = \VCAP\Install::lock_name( 'onboarding_' . $which );
 		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 10)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			return 0;
 		}

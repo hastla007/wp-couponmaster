@@ -22,6 +22,14 @@ final class CampaignAdmin {
 		return current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' );
 	}
 
+	/**
+	 * AP-S2-4: WooCommerce coupons copied from a template are published shop coupons – the voucher right alone is not
+	 * enough, WooCommerce's "publish_shop_coupons" is needed as well. Code pool batches only need the voucher right.
+	 */
+	public static function can_generate( string $target ): bool {
+		return 'pool' === $target || current_user_can( 'publish_shop_coupons' );
+	}
+
 	private function template_coupons(): array {
 		$ids = get_posts(
 			array(
@@ -101,8 +109,9 @@ final class CampaignAdmin {
 						<tr>
 							<th scope="row"><?php esc_html_e( 'Create', 'voucher-captain' ); ?></th>
 							<td>
-								<label><input type="radio" name="target" value="coupons" checked /> <?php esc_html_e( 'WooCommerce coupons (copy all settings of a template coupon)', 'voucher-captain' ); ?></label><br>
-								<label><input type="radio" name="target" value="pool" /> <?php esc_html_e( 'Codes for voucher products (code pool batch)', 'voucher-captain' ); ?></label>
+								<?php $coupons_ok = self::can_generate( 'coupons' ); ?>
+								<label><input type="radio" name="target" value="coupons" <?php checked( $coupons_ok ); ?> <?php disabled( ! $coupons_ok ); ?> /> <?php esc_html_e( 'WooCommerce coupons (copy all settings of a template coupon)', 'voucher-captain' ); ?></label><br>
+								<label><input type="radio" name="target" value="pool" <?php checked( ! $coupons_ok ); ?> /> <?php esc_html_e( 'Codes for voucher products (code pool batch)', 'voucher-captain' ); ?></label>
 							</td>
 						</tr>
 						<tr>
@@ -198,6 +207,21 @@ final class CampaignAdmin {
 			exit;
 		}
 		$target = 'pool' === sanitize_key( wp_unslash( $_POST['target'] ?? '' ) ) ? 'pool' : 'coupons';
+		if ( ! self::can_generate( $target ) ) {
+			FormToken::release( 'generate' );
+			set_transient(
+				self::REPORT . get_current_user_id(),
+				array(
+					'error'  => __( 'Creating WooCommerce coupons needs the WooCommerce right to publish coupons. No codes were generated.', 'voucher-captain' ),
+					'count'  => 0,
+					'name'   => '',
+					'target' => '',
+				),
+				10 * MINUTE_IN_SECONDS
+			);
+			wp_safe_redirect( admin_url( 'admin.php?page=vcap-generate' ) );
+			exit;
+		}
 		$name   = Campaigns::clean_name( wp_unslash( (string) ( $_POST['name'] ?? '' ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		$count  = absint( $_POST['count'] ?? 0 );
 		$opts   = array(

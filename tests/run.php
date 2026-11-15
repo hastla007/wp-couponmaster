@@ -1376,6 +1376,10 @@ $lock_b                  = VCAP\Install::lock_name( 'delivery_42' );
 $GLOBALS['wpdb']->prefix = 'wp_';
 check( 'the same voucher id on two sites uses two different locks (at most 64 characters)', $lock_a !== $lock_b && strlen( $lock_a ) <= 64 && str_ends_with( $lock_a, '_delivery_42' ) );
 check( 'deliveries and promotion holds use the per-site lock name', str_contains( (string) file_get_contents( VCAP_PATH . 'src/Delivery.php' ), "Install::lock_name( 'delivery_'" ) && 2 === substr_count( (string) file_get_contents( VCAP_PATH . 'src/Discounts/Usage.php' ), "Install::lock_name( 'usage_'" ) );
+// AP-Q2-5: the remaining named locks (refund as credit, book back, onboarding pages, background jobs) are per site too.
+$q25_src = static fn( string $f ): string => (string) file_get_contents( VCAP_PATH . 'src/' . $f );
+check( 'AP-Q2-5: refund-as-credit, book-back, onboarding and job locks use Install::lock_name() (no bare GET_LOCK names)', str_contains( $q25_src( 'StoreCredit.php' ), "Install::lock_name( 'refund_credit_'" ) && str_contains( $q25_src( 'OrderReturn.php' ), 'self::lock_name( $order->get_id() )' ) && str_contains( $q25_src( 'Admin/Onboarding.php' ), "Install::lock_name( 'onboarding_'" ) && str_contains( $q25_src( 'Jobs.php' ), "Install::lock_name( 'job_'" ) && ! preg_match( '/\$lock\s*=\s*(\'vcap_|substr\()/',$q25_src( 'StoreCredit.php' ) . $q25_src( 'OrderReturn.php' ) . $q25_src( 'Admin/Onboarding.php' ) . $q25_src( 'Jobs.php' ) ) );
+check( 'AP-Q2-5: OrderReturn::lock_name() is the per-site name other order paths can share', VCAP\Install::lock_name( 'return_42' ) === VCAP\OrderReturn::lock_name( 42 ) );
 
 // L10/L4: the marker of a suspended coupon is written first; without it the coupon is not drafted.
 $GLOBALS['vcap_test_cleaned'] = array();

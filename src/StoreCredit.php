@@ -201,7 +201,7 @@ final class StoreCredit {
 	 */
 	public function refund_as_credit( \WC_Order $order, float $amount, string $reason, array $consent = array(), string $request_key = '' ) {
 		global $wpdb;
-		$lock = 'vcap_refund_credit_' . $order->get_id();
+		$lock = Install::lock_name( 'refund_credit_' . $order->get_id() );
 		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 10)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			return new \WP_Error( 'vcap_credit_busy', __( 'Another refund of this order is being recorded right now. Please reload the order and check its refunds before trying again.', 'voucher-captain' ) );
 		}

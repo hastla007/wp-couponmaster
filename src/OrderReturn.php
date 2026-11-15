@@ -22,6 +22,14 @@ final class OrderReturn {
 		add_filter( 'vcap_ledger_money_events', static fn( array $e ) => array_merge( $e, array( CouponManager::RETURNED_EVENT ) ) );
 	}
 
+	/**
+	 * Name of the named lock (GET_LOCK) that serializes bookings back onto vouchers for one order, per site (see
+	 * Install::lock_name()). Public so other order paths (e.g. restoring a cancelled order) can take the same lock.
+	 */
+	public static function lock_name( int $order_id ): string {
+		return Install::lock_name( 'return_' . $order_id );
+	}
+
 	/** What can still be booked back: charged by the order minus already booked back (never negative). */
 	public static function cap( float $charged, float $returned, int $decimals = 2 ): float {
 		return max( 0.0, round( $charged - $returned, $decimals ) );
@@ -66,7 +74,7 @@ final class OrderReturn {
 		if ( '' === $reason ) {
 			return new \WP_Error( 'vcap_return_reason', __( 'Please enter a reason.', 'voucher-captain' ) );
 		}
-		$lock = 'vcap_return_' . $order->get_id();
+		$lock = self::lock_name( $order->get_id() );
 		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 10)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			return new \WP_Error( 'vcap_return_busy', __( 'Another booking for this order is running. Please reload the order and try again.', 'voucher-captain' ) );
 		}
@@ -135,13 +143,18 @@ final class OrderReturn {
 		}
 	}
 
-	private function can(): bool {
-		return current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' );
+	/**
+	 * AP-S2-2: booking back raises a balance and changes the order – voucher managers also need WooCommerce's right to
+	 * edit orders and the right to raise voucher balances (Admin\VoucherAdmin::can_increase()).
+	 */
+	public static function can(): bool {
+		return ( current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' ) )
+			&& current_user_can( 'edit_shop_orders' ) && Admin\VoucherAdmin::can_increase();
 	}
 
 	/** Order screen (voucher box): book part of a gift card payment back onto the card. */
 	public function form( \WC_Order $order ): void {
-		if ( ! $this->can() ) {
+		if ( ! self::can() ) {
 			return;
 		}
 		$list = $this->returnable( $order );
@@ -188,17 +201,25 @@ final class OrderReturn {
 	public function handle(): void {
 		$order_id = absint( $_POST['order_id'] ?? 0 );
 		check_admin_referer( 'vcap_return_to_voucher_' . $order_id );
-		if ( ! $this->can() ) {
+		if ( ! self::can() ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
 		$order = wc_get_order( $order_id );
 		if ( ! $order instanceof \WC_Order ) {
 			wp_die( esc_html__( 'Order not found.', 'voucher-captain' ), 404 );
 		}
+		// Strictly parsed like every store credit form: "2,50" is never 250.
+		$raw    = sanitize_text_field( wp_unslash( $_POST['vcap_return_amount'] ?? '' ) );
+		$parsed = Admin\StoreCreditAdmin::parse_amount( $raw, false );
+		if ( ! $parsed['ok'] ) {
+			Flash::add( 'error', __( 'Booking back onto the voucher failed:', 'voucher-captain' ) . ' ' . Admin\StoreCreditAdmin::refusal( $raw, $parsed['error'] ) );
+			wp_safe_redirect( $order->get_edit_order_url() );
+			exit;
+		}
 		$result = $this->book_back(
 			$order,
 			sanitize_text_field( wp_unslash( $_POST['vcap_return_code'] ?? '' ) ),
-			(float) wc_format_decimal( sanitize_text_field( wp_unslash( $_POST['vcap_return_amount'] ?? '' ) ) ),
+			$parsed['value'],
 			sanitize_text_field( wp_unslash( $_POST['vcap_return_reason'] ?? '' ) ),
 			absint( $_POST['vcap_return_item'] ?? 0 )
 		);

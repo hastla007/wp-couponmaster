@@ -224,7 +224,16 @@ final class VoucherAdmin {
 							$form( 'redeem_store', __( 'Mark as redeemed (store)', 'voucher-captain' ), 'button', array(), __( 'Mark this voucher as redeemed in the store? It can then no longer be used; the redemption is recorded in the history and the redemption journal.', 'voucher-captain' ) );
 						}
 						if ( Voucher::STATUS_VOID === $v->status ) {
-							$form( 'reactivate', __( 'Reactivate', 'voucher-captain' ) );
+							if ( self::can_increase() ) {
+								$refund_void = vcap()->issuer->voided_after_refund( $v );
+								$form(
+									'reactivate',
+									__( 'Reactivate', 'voucher-captain' ),
+									'button',
+									$refund_void ? array( 'after_refund' => '1' ) : array(),
+									$refund_void ? __( 'This voucher was voided because its purchase was refunded or cancelled. Reactivate it only if the customer did not get the money back – otherwise the value is paid out twice. Reactivate anyway?', 'voucher-captain' ) : ''
+								);
+							}
 						} else {
 							// Voiding needs a reason: it is kept in the history and the CSV export (audit).
 							echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="vcap-inline-form">';
@@ -411,11 +420,7 @@ final class VoucherAdmin {
 		$do = sanitize_key( $_POST['do'] ?? '' );
 		switch ( $do ) {
 			case 'deliver_now':
-				if ( vcap()->delivery->deliver_now( $v ) ) {
-					Flash::add( 'success', __( 'The voucher was sent now and is redeemable.', 'voucher-captain' ) );
-				} else {
-					Flash::add( 'error', Voucher::STATUS_SCHEDULED === $v->status ? __( 'The voucher could not be delivered now – see its history for the reason. It is retried automatically.', 'voucher-captain' ) : __( 'This voucher is not scheduled (any more).', 'voucher-captain' ) );
-				}
+				$this->deliver_now( $v );
 				$this->redirect( '', $id );
 				break;
 			case 'resend_buyer':
@@ -432,7 +437,8 @@ final class VoucherAdmin {
 				$this->redirect( $this->void( $v, sanitize_text_field( wp_unslash( (string) ( $_POST['reason'] ?? '' ) ) ) ), $id );
 				break;
 			case 'reactivate':
-				$this->redirect( vcap()->issuer->reactivate( $v ) ? 'reactivated' : 'action_failed', $id );
+				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above.
+				$this->redirect( $this->reactivate( $v, ! empty( $_POST['after_refund'] ) ), $id );
 				break;
 			case 'adjust':
 				// One booking per rendered form: a double click or a resent form must not book the amount twice.
@@ -480,6 +486,57 @@ final class VoucherAdmin {
 				}
 		}
 		$this->redirect( '', $id );
+	}
+
+	/**
+	 * "Send now" (AP-Q2-4): an exception while delivering (PDF, mail system, a connector) is reported as a notice
+	 * and logged instead of ending in a white screen; the regular retry stays scheduled.
+	 */
+	public function deliver_now( Voucher $v ): bool {
+		try {
+			$sent = (bool) vcap()->delivery->deliver_now( $v );
+		} catch ( \Throwable $e ) {
+			$message = \VCAP\Mask::addresses( mb_substr( $e->getMessage(), 0, 200 ) );
+			if ( function_exists( 'wc_get_logger' ) ) {
+				wc_get_logger()->error( 'Send now failed for voucher ' . $v->id . ': ' . $message, array( 'source' => 'voucher-captain' ) );
+			}
+			$this->repo->log( $v->id, 'delivery_failed', null, null, \VCAP\Note::make( 'delivery_error', array( $message ) ) );
+			// "Send now" removed the planned delivery before the error: plan the next attempt again.
+			$args = array( 'voucher_id' => $v->id );
+			if ( function_exists( 'as_schedule_single_action' ) && function_exists( 'as_has_scheduled_action' ) && ! as_has_scheduled_action( 'vcap_deliver_voucher', $args, \VCAP\Delivery::GROUP ) ) {
+				as_schedule_single_action( time() + 15 * MINUTE_IN_SECONDS, 'vcap_deliver_voucher', $args, \VCAP\Delivery::GROUP );
+			}
+			Flash::add( 'error', __( 'The voucher could not be delivered now because of an error (details in the voucher history and the WooCommerce log). It is retried automatically.', 'voucher-captain' ) );
+			return false;
+		}
+		if ( $sent ) {
+			Flash::add( 'success', __( 'The voucher was sent now and is redeemable.', 'voucher-captain' ) );
+		} else {
+			Flash::add( 'error', Voucher::STATUS_SCHEDULED === $v->status ? __( 'The voucher could not be delivered now – see its history for the reason. It is retried automatically.', 'voucher-captain' ) : __( 'This voucher is not scheduled (any more).', 'voucher-captain' ) );
+		}
+		return $sent;
+	}
+
+	/**
+	 * Single "Reactivate" action (AP-S2-2, AP-S2-3): only void vouchers, only with the right to raise balances, and a
+	 * voucher voided because its purchase was refunded or cancelled only with the explicit confirmation $after_refund.
+	 *
+	 * @return string Message key for redirect() ('' when a notice was added instead).
+	 */
+	public function reactivate( Voucher $v, bool $after_refund = false ): string {
+		if ( Voucher::STATUS_VOID !== $v->status ) {
+			Flash::add( 'error', __( 'Only void vouchers can be reactivated. Nothing was changed.', 'voucher-captain' ) );
+			return '';
+		}
+		if ( ! self::can_increase() ) {
+			Flash::add( 'error', __( 'Reactivating a voucher gives its value back: you need the right to raise voucher balances. Nothing was changed.', 'voucher-captain' ) );
+			return '';
+		}
+		if ( ! $after_refund && vcap()->issuer->voided_after_refund( $v ) ) {
+			Flash::add( 'error', __( 'This voucher was voided because its purchase was refunded or cancelled. It was not reactivated: confirm the reactivation on the voucher screen only if the customer did not get the money back.', 'voucher-captain' ) );
+			return '';
+		}
+		return vcap()->issuer->reactivate( $v, $after_refund ) ? 'reactivated' : 'action_failed';
 	}
 
 	/**
@@ -839,16 +896,27 @@ final class VoucherAdmin {
 				$v->fields[ $key ]['value'] = $v->$key;
 			}
 		}
+		// AP-S2-2: more check-ins and reviving an expired voucher with a new expiry date create value.
+		$new_max     = isset( $_POST['max_checkins'] ) ? max( 1, absint( $_POST['max_checkins'] ) ) : $v->max_checkins;
+		$new_expires = (string) $expiry['date'] !== $current ? ( null !== $expiry['date'] ? get_gmt_from_date( $expiry['date'] . ' 23:59:59' ) : null ) : $v->expires_at;
+		$revived     = ( Voucher::STATUS_EXPIRED === $v->status || ( $v->is_expired() && in_array( $v->status, array( Voucher::STATUS_ACTIVE, Voucher::STATUS_SCHEDULED ), true ) ) ) && ( ! $new_expires || strtotime( $new_expires . ' UTC' ) >= time() );
+		if ( ( $new_max > (int) $v->max_checkins || $revived ) && ! self::can_increase() ) {
+			Flash::add(
+				'error',
+				$revived
+					? __( 'A new expiry date makes this expired voucher usable again: you need the right to raise voucher balances. The voucher was not saved.', 'voucher-captain' )
+					: __( 'More check-ins give the ticket more value: you need the right to raise voucher balances. The voucher was not saved.', 'voucher-captain' )
+			);
+			return false;
+		}
 		if ( isset( $_POST['max_checkins'] ) ) {
-			$v->max_checkins = max( 1, absint( $_POST['max_checkins'] ) );
+			$v->max_checkins = $new_max;
 			if ( $v->is_ticket() && Voucher::STATUS_REDEEMED === $v->status && $v->checkins < $v->max_checkins ) {
 				$v->status = Voucher::STATUS_ACTIVE;
 			}
 		}
-		if ( (string) $expiry['date'] !== $current ) {
-			// Only touch the stored time when the date was actually changed.
-			$v->expires_at = null !== $expiry['date'] ? get_gmt_from_date( $expiry['date'] . ' 23:59:59' ) : null;
-		}
+		// Only touch the stored time when the date was actually changed.
+		$v->expires_at = $new_expires;
 		if ( Voucher::STATUS_EXPIRED === $v->status && ! $v->is_expired() ) {
 			$v->status = Voucher::STATUS_ACTIVE;
 		}
@@ -929,6 +997,10 @@ final class VoucherAdmin {
 				}
 				$ok = vcap()->issuer->void( $v, __( 'Voided by admin (bulk)', 'voucher-captain' ) );
 			} elseif ( 'reactivate' === $action && Voucher::STATUS_VOID === $v->status ) {
+				if ( ! self::can_increase() || vcap()->issuer->voided_after_refund( $v ) ) {
+					++$skipped; // AP-S2-2: no right to raise values, or voided because of a refund (single action only).
+					continue;
+				}
 				$ok = vcap()->issuer->reactivate( $v );
 			} elseif ( 'reissue' === $action ) {
 				// V10: new code and token for each voucher that can be reissued; no email (resend afterwards).
@@ -991,6 +1063,16 @@ final class VoucherAdmin {
 				Flash::add( 'error', sprintf( _n( '%d voucher could not be sent (no valid address, email disabled or mail error) – see its history.', '%d vouchers could not be sent (no valid address, email disabled or mail error) – see their history.', count( $failed ), 'voucher-captain' ), count( $failed ) ) . ' ' . $codes );
 			}
 			return array( 'done' => $done, 'failed' => $failed, 'skipped' => $skipped );
+		}
+		if ( 'reactivate' === $action && $skipped ) {
+			Flash::add(
+				'warning',
+				self::can_increase()
+					/* translators: %d: number of vouchers */
+					? sprintf( _n( '%d voucher was not reactivated: it was voided because its purchase was refunded or cancelled. Reactivate it on its voucher screen if the customer did not get the money back.', '%d vouchers were not reactivated: they were voided because their purchase was refunded or cancelled. Reactivate them on their voucher screens if the customer did not get the money back.', $skipped, 'voucher-captain' ), $skipped )
+					/* translators: %d: number of vouchers */
+					: sprintf( _n( '%d voucher was not reactivated: reactivating gives value back and needs the right to raise voucher balances.', '%d vouchers were not reactivated: reactivating gives value back and needs the right to raise voucher balances.', $skipped, 'voucher-captain' ), $skipped )
+			);
 		}
 		if ( $done ) {
 			Flash::add(

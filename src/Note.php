@@ -99,6 +99,9 @@ final class Note {
 	private static function text( string $code, array $args ): string {
 		$a = static fn( int $i ) => $args[ $i ] ?? '';
 		switch ( $code ) {
+			case 'voided_refund':
+				// The reason as written when the purchase was refunded or cancelled (Issuer::void()).
+				return (string) $a( 0 );
 			case 'delivery_not_sent':
 				/* translators: %s: per role the reason, e.g. "Recipient: email disabled" */
 				return sprintf( __( 'No email was sent (%s).', 'voucher-captain' ), self::reasons( $a( 0 ) ) );

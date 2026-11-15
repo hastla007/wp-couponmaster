@@ -42,6 +42,24 @@ final class StoreCreditAdmin {
 		return $this->can() && current_user_can( 'edit_shop_orders' );
 	}
 
+	/**
+	 * AP-S2-1: why the current user may not book $amount onto the store credit of $user_id ('' = allowed). Adding
+	 * credit creates value: it needs the right to raise balances (VoucherAdmin::can_increase()), and nobody credits
+	 * their own account without manage_woocommerce. Debits only need the voucher right.
+	 */
+	public static function credit_refusal( int $user_id, float $amount ): string {
+		if ( $amount <= 0 ) {
+			return '';
+		}
+		if ( ! VoucherAdmin::can_increase() ) {
+			return __( 'Adding store credit needs the right to raise voucher balances. Nothing was changed.', 'voucher-captain' );
+		}
+		if ( get_current_user_id() === $user_id && ! current_user_can( 'manage_woocommerce' ) ) {
+			return __( 'You cannot add store credit to your own account. Ask a shop manager. Nothing was changed.', 'voucher-captain' );
+		}
+		return '';
+	}
+
 	public function profile( \WP_User $user ): void {
 		if ( ! $this->credit->enabled() || ! $this->can() ) {
 			return;
@@ -112,7 +130,7 @@ final class StoreCreditAdmin {
 		$raw    = sanitize_text_field( wp_unslash( (string) $_POST['vcap_credit_amount'] ) );
 		$parsed = self::parse_amount( $raw, true );
 		$reason = trim( sanitize_text_field( wp_unslash( (string) ( $_POST['vcap_credit_reason'] ?? '' ) ) ) );
-		$error  = $parsed['ok'] ? ( '' === $reason ? __( 'Please enter an amount and a reason.', 'voucher-captain' ) : '' ) : self::refusal( $raw, $parsed['error'] );
+		$error  = $parsed['ok'] ? ( '' === $reason ? __( 'Please enter an amount and a reason.', 'voucher-captain' ) : self::credit_refusal( $user_id, $parsed['value'] ) ) : self::refusal( $raw, $parsed['error'] );
 		$this->pending[ $user_id ] = array(
 			'amount' => $parsed['value'],
 			'reason' => $reason,
@@ -138,6 +156,12 @@ final class StoreCreditAdmin {
 		unset( $this->pending[ $user_id ] );
 		if ( ! $pending || '' !== $pending['error'] ) {
 			return null;
+		}
+		// Checked again when booking: the rights of the user who sent the form, not only those at validation time.
+		$refusal = $this->can() ? self::credit_refusal( $user_id, (float) $pending['amount'] ) : __( 'You are not allowed to do this.', 'voucher-captain' );
+		if ( '' !== $refusal ) {
+			Flash::add( 'error', __( 'The store credit was not changed:', 'voucher-captain' ) . ' ' . $refusal );
+			return new \WP_Error( 'vcap_credit_forbidden', $refusal );
 		}
 		$scope = 'credit-' . $user_id;
 		if ( ! FormToken::claim( $scope ) ) {
@@ -170,7 +194,8 @@ final class StoreCreditAdmin {
 		);
 	}
 
-	private static function refusal( string $raw, string $error, string $currency = '' ): string {
+	/** Notice for an amount parse_amount() refused (what was entered and why). */
+	public static function refusal( string $raw, string $error, string $currency = '' ): string {
 		$currency = '' !== $currency ? $currency : (string) get_option( 'woocommerce_currency' );
 		/* translators: 1: what was entered, 2: why it was refused */
 		return sprintf( __( '"%1$s" was not accepted: %2$s Nothing was changed.', 'voucher-captain' ), $raw, \VCAP\Amount::message( $error, \VCAP\API\V1\RedemptionService::decimals( $currency ) ) );

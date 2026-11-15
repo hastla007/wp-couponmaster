@@ -147,7 +147,7 @@ final class Jobs {
 	 */
 	public static function advance( string $id, float $seconds ): ?bool {
 		global $wpdb;
-		$lock = substr( $wpdb->prefix . self::OPTION . $id, 0, 64 );
+		$lock = Install::lock_name( 'job_' . $id );
 		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			return self::running( self::get( $id ) ) ? null : false;
 		}
