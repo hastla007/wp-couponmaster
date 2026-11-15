@@ -198,8 +198,7 @@ final class PaymentVouchers {
 		$decimals = wc_get_price_decimals();
 		$payments = array();
 		$open     = null;
-		foreach ( $cart->get_applied_coupons() as $code ) {
-			$coupon = new \WC_Coupon( $code );
+		foreach ( self::sorted_coupons( $cart->get_applied_coupons() ) as $code => $coupon ) {
 			if ( ! $this->applies( $coupon ) ) {
 				continue;
 			}
@@ -212,10 +211,34 @@ final class PaymentVouchers {
 			if ( $amount <= 0 ) {
 				continue;
 			}
-			$payments[ wc_format_coupon_code( $code ) ] = $amount;
+			$payments[ wc_format_coupon_code( (string) $code ) ] = $amount;
 			$due = round( $due - $amount, $decimals );
 		}
 		return $payments;
+	}
+
+	/**
+	 * M12-70: the applied coupons in the order WooCommerce applies them (filter woocommerce_coupon_sort, e.g. store
+	 * credit before or after gift cards, CartCoupons::sort()); equal priorities keep the order they were entered in.
+	 *
+	 * @param string[] $codes Applied coupon codes.
+	 * @return array<string, \WC_Coupon>
+	 */
+	public static function sorted_coupons( array $codes ): array {
+		$coupons = array();
+		$sort    = array();
+		foreach ( $codes as $code ) {
+			$coupon = new \WC_Coupon( (string) $code );
+			$type   = array(
+				'fixed_product' => 1,
+				'percent'       => 2,
+				'fixed_cart'    => 3,
+			);
+			$coupons[ (string) $code ] = $coupon;
+			$sort[ (string) $code ]    = (int) apply_filters( 'woocommerce_coupon_sort', $type[ $coupon->get_discount_type() ] ?? 0, $coupon );
+		}
+		uksort( $coupons, static fn( $a, $b ) => $sort[ $a ] <=> $sort[ $b ] ); // Stable since PHP 8.0.
+		return $coupons;
 	}
 
 	/**

@@ -81,15 +81,20 @@ final class MultiCurrency {
 			}
 		}
 
-		// WooCommerce Multilingual.
+		// WooCommerce Multilingual, Aelia Currency Switcher. M12-33: they return amounts of a currency they do not
+		// know unchanged; then a switcher that publishes rates (WOOCS, CURCY, WooPayments) may still know it.
 		global $woocommerce_wpml;
 		if ( isset( $woocommerce_wpml->multi_currency->prices ) && method_exists( $woocommerce_wpml->multi_currency->prices, 'unconvert_price_amount' ) ) {
-			return (float) $woocommerce_wpml->multi_currency->prices->unconvert_price_amount( $amount, $currency );
+			$converted = (float) $woocommerce_wpml->multi_currency->prices->unconvert_price_amount( $amount, $currency );
+			if ( abs( $converted - $amount ) > 1e-9 ) {
+				return $converted;
+			}
 		}
-
-		// Aelia Currency Switcher.
 		if ( has_filter( 'wc_aelia_cs_convert' ) ) {
-			return (float) apply_filters( 'wc_aelia_cs_convert', $amount, $currency, $base );
+			$converted = (float) apply_filters( 'wc_aelia_cs_convert', $amount, $currency, $base );
+			if ( abs( $converted - $amount ) > 1e-9 ) {
+				return $converted;
+			}
 		}
 
 		$rate = self::switcher_rate( (string) $currency );
@@ -205,6 +210,24 @@ final class MultiCurrency {
 			return null;
 		}
 		return (float) apply_filters( 'vcap_amount_to_base_currency', $amount, $currency, $order );
+	}
+
+	/**
+	 * M12-33: a base-currency amount converted into $currency (the inverse of to_base()), or null when no exchange
+	 * rate is known. Converted through a probe of 1000 base units, so a switcher's rounding stays out of the rate.
+	 *
+	 * @param \WC_Order|null $order Order whose stored exchange rate counts.
+	 */
+	public static function from_base( float $amount, string $currency, $order = null ): ?float {
+		if ( '' === $currency || get_option( 'woocommerce_currency' ) === $currency ) {
+			return $amount;
+		}
+		$probe = 1000.0;
+		$unit  = self::to_base( $probe, $currency, $order );
+		if ( null === $unit || $unit <= 0 ) {
+			return null;
+		}
+		return $amount * $probe / $unit;
 	}
 
 	/** Remembers (at most once an hour per currency) that a money operation was refused for want of a rate. */

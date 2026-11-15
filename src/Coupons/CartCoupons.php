@@ -69,17 +69,24 @@ final class CartCoupons {
 			throw new \Exception( esc_html__( 'This voucher has been cancelled.', 'voucher-captain' ), 9001 );
 		}
 		if ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
-			throw new \Exception( esc_html__( 'This voucher is not active yet.', 'voucher-captain' ), 9004 );
+			throw new \Exception( esc_html( self::not_active_message( $voucher ) ), 9004 );
 		}
 		if ( Voucher::STATUS_RESERVED === $voucher->status ) {
 			// Being redeemed outside the shop right now (API reservation); released again if that fails.
 			throw new \Exception( esc_html__( 'This voucher is currently being redeemed. Please try again in a few minutes.', 'voucher-captain' ), 9005 );
 		}
-		if ( Voucher::STATUS_REDEEMED === $voucher->status || ( $voucher->is_multi_use() && $voucher->balance <= 0 ) ) {
+		// M12-13: what this visitor's own unpaid checkout order holds is still theirs to use (cart only).
+		$in_order = $discounts instanceof \WC_Discounts && $discounts->get_object() instanceof \WC_Order;
+		$own_hold = $in_order ? 0.0 : OwnHold::amount( $voucher );
+		if ( ( Voucher::STATUS_REDEEMED === $voucher->status || ( $voucher->is_multi_use() && $voucher->balance <= 0 ) ) && $own_hold <= 0 ) {
 			throw new \Exception( esc_html__( 'This voucher has already been fully redeemed.', 'voucher-captain' ), 9002 );
 		}
 		if ( Voucher::STATUS_EXPIRED === $voucher->status || $voucher->is_expired() ) {
-			throw new \Exception( esc_html__( 'This voucher has expired.', 'voucher-captain' ), 9003 );
+			throw new \Exception( esc_html( self::expired_message( $voucher ) ), 9003 );
+		}
+		if ( 'percent' !== $coupon->get_discount_type() && self::currency_mismatch( $voucher ) ) {
+			// M12-33: a fixed value kept in a currency that is no longer the base currency is never taken 1:1.
+			throw new \Exception( esc_html( self::currency_mismatch_message( $voucher ) ), 9007 );
 		}
 		if ( 'percent' !== $coupon->get_discount_type() ) {
 			// Fixed values are in the shop base currency: never taken 1:1 in a cart or order in another currency.
@@ -91,12 +98,17 @@ final class CartCoupons {
 				throw new \Exception( esc_html( self::currency_message( $currency ) ), 9007 );
 			}
 		}
-		if ( $voucher->is_multi_use() && ! ( $discounts instanceof \WC_Discounts && $discounts->get_object() instanceof \WC_Order ) && (float) $coupon->get_amount( 'edit' ) > (float) $voucher->balance + 0.000001 ) {
+		if ( $voucher->is_multi_use() && ! $in_order ) {
 			// The cart never grants more than the stored balance, even if the coupon amount is out of date (edited in
 			// WooCommerce, failed save): otherwise every checkout with it ends in a shortfall. Orders keep their
-			// own amount (order_coupon_object()).
-			$coupon->set_amount( $voucher->balance );
+			// own amount (order_coupon_object()). M12-33: compared in the units of the coupon object (a switcher
+			// such as WCML converts it into the cart currency), never base balance against a converted amount.
+			$available = OwnHold::in_coupon_units( $coupon, (float) $voucher->balance + $own_hold );
+			if ( (float) $coupon->get_amount( 'edit' ) > $available + 0.000001 ) {
+				$coupon->set_amount( $available );
+			}
 		}
+		LineRules::check( $coupon, $discounts ); // M12-14: at least one line the voucher may pay for.
 		if ( ! Channels::allowed( $voucher, Channels::SHOP ) ) {
 			/** Message for a voucher that is not redeemable in the shop (e.g. a ticket voucher: where to use it instead). */
 			$message = (string) apply_filters( 'vcap_shop_channel_refused_message', __( 'This voucher cannot be redeemed in the shop.', 'voucher-captain' ), $voucher );
@@ -209,7 +221,7 @@ final class CartCoupons {
 			$used     = (float) $cart->get_coupon_discount_amount( $code, ! $with_tax );
 		}
 		$used = Compat\MultiCurrency::to_base( $used, get_woocommerce_currency() ) ?? $used;
-		return max( 0.0, round( (float) $voucher->balance - $used, $voucher->decimals() ) );
+		return max( 0.0, round( (float) $voucher->balance + OwnHold::amount( $voucher ) - $used, $voucher->decimals() ) );
 	}
 
 	/** "Remaining balance of voucher CODE after this order: 20.00" (plain text). */
@@ -242,6 +254,7 @@ final class CartCoupons {
 		if ( ! $coupon instanceof \WC_Coupon || ! $order instanceof \WC_Order ) {
 			return $coupon;
 		}
+		OwnHold::skip( $coupon ); // M12-13: an order's coupon never gets the cart's own hold added.
 		$code = wc_format_coupon_code( (string) $code );
 		if ( null !== PaymentVouchers::paid_amount( $order, $code ) ) {
 			// Paid after tax by its fee line (single-use vouchers too): a recalculation must not turn it into a
@@ -340,6 +353,48 @@ final class CartCoupons {
 			return $net;
 		}
 		return $amount;
+	}
+
+	/** M12-93: "This voucher is active from 1 May 2027." (without a known date: "… not active yet."). */
+	public static function not_active_message( Voucher $voucher ): string {
+		$from = $voucher->delivery_at ? strtotime( $voucher->delivery_at . ' UTC' ) : false;
+		if ( ! $from ) {
+			return __( 'This voucher is not active yet.', 'voucher-captain' );
+		}
+		/* translators: %s: date from which the voucher can be used */
+		return sprintf( __( 'This voucher is active from %s.', 'voucher-captain' ), wp_date( self::date_format(), $from ) );
+	}
+
+	/** M12-93: "This voucher expired on 1 May 2027." (without a known date: "… has expired."). */
+	public static function expired_message( Voucher $voucher ): string {
+		$ended = $voucher->expires_at ? strtotime( $voucher->expires_at . ' UTC' ) : false;
+		if ( ! $ended ) {
+			return __( 'This voucher has expired.', 'voucher-captain' );
+		}
+		/* translators: %s: expiry date */
+		return sprintf( __( 'This voucher expired on %s.', 'voucher-captain' ), wp_date( self::date_format(), $ended ) );
+	}
+
+	private static function date_format(): string {
+		$format = (string) get_option( 'vcap_date_format', '' );
+		return '' !== $format ? $format : (string) get_option( 'date_format', 'Y-m-d' );
+	}
+
+	/**
+	 * M12-33: a fixed-value voucher kept in another currency than the shop base currency (the base currency was
+	 * changed after it was issued): its amount would be read as base currency, e.g. 50 EUR as 50 CHF.
+	 */
+	public static function currency_mismatch( Voucher $voucher ): bool {
+		return '' !== $voucher->currency && 'percent' !== $voucher->discount_type && (string) get_option( 'woocommerce_currency' ) !== $voucher->currency;
+	}
+
+	public static function currency_mismatch_message( Voucher $voucher ): string {
+		return sprintf(
+			/* translators: 1: currency of the voucher, 2: shop base currency */
+			__( 'This voucher is kept in %1$s, but the shop now uses %2$s. Please contact the shop to have it converted.', 'voucher-captain' ),
+			$voucher->currency,
+			(string) get_option( 'woocommerce_currency' )
+		);
 	}
 
 	/** Why a fixed-value voucher cannot be used in this currency (no exchange rate to the base currency). */

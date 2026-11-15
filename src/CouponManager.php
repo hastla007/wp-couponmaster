@@ -48,6 +48,14 @@ final class CouponManager {
 	public function register(): void {
 		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'validate' ), 20, 3 );
 		add_filter( 'woocommerce_coupon_sort', array( $this, 'sort' ), 20, 2 );
+		// M12-13: the reservation of this visitor's own unpaid checkout order counts as available in the cart.
+		add_filter( 'woocommerce_coupon_get_items_to_apply', array( Coupons\OwnHold::class, 'raise_for_cart' ), 11, 3 );
+		add_filter( 'woocommerce_coupon_get_amount', array( Coupons\OwnHold::class, 'amount_filter' ), 10, 2 );
+		// M12-14: product, category and exclusion rules of fixed-cart vouchers apply per line.
+		add_filter( 'woocommerce_coupon_get_items_to_apply', array( Coupons\LineRules::class, 'items_to_apply' ), 12, 2 );
+		foreach ( array( 'exclude_sale_items', 'excluded_product_ids', 'excluded_product_categories' ) as $prop ) {
+			add_filter( 'woocommerce_coupon_get_' . $prop, array( Coupons\LineRules::class, 'no_whole_cart_exclusion' ), 10, 2 );
+		}
 		add_filter( 'woocommerce_coupon_get_items_to_apply', array( $this, 'prepare_gross_balance' ), 20, 3 );
 		add_filter( 'woocommerce_coupon_get_amount', array( $this, 'gross_balance_amount' ), 20, 2 );
 		add_filter( 'woocommerce_order_recalculate_coupons_coupon_object', array( $this, 'order_coupon_object' ), 10, 4 );
@@ -92,6 +100,7 @@ final class CouponManager {
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'keep_single_use_start' ), 1, 1 );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'keep_single_use_end' ), 99, 2 );
 		add_action( 'woocommerce_cart_totals_after_order_total', array( $this, 'cart_balance_notice' ) );
+		add_action( 'woocommerce_review_order_after_order_total', array( $this, 'cart_balance_notice' ) ); // M12-71: classic checkout too.
 		// Free balance holds of unpaid orders that are trashed, deleted or abandoned.
 		add_action( 'woocommerce_trash_order', array( $this, 'release_deleted_order' ), 5 );
 		add_action( 'woocommerce_before_delete_order', array( $this, 'release_deleted_order' ), 5 );
