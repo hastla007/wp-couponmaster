@@ -29,12 +29,23 @@ final class Db {
 	private static array $marks = array();
 
 	/**
+	 * M12-04: the database rolled back the whole transaction while a savepoint was open (deadlock 1213, or a lock
+	 * wait timeout with innodb_rollback_on_timeout): every savepoint is gone. The levels the callers still hold are
+	 * closed one by one as usual, but nothing can be committed any more: commit() refuses, begin() opens nothing,
+	 * and the buffered actions of all levels are dropped. The outermost undo() ends this state.
+	 */
+	private static bool $lost = false;
+
+	/**
 	 * Opens a transaction, or a savepoint when one is already open. False when the database refused it (then
 	 * nothing is open and the caller must not commit or roll back).
 	 */
 	public static function begin(): bool {
 		global $wpdb;
 		VoucherRepository::forget(); // AP-P1-5: nothing read before the transaction is reused in it or after it.
+		if ( self::$lost ) {
+			return false; // M12-04: the outer transaction is gone; the caller must not commit or roll back.
+		}
 		$sql = 0 === self::$depth ? 'START TRANSACTION' : 'SAVEPOINT vcap_sp_' . self::$depth;
 		if ( false === $wpdb->query( $sql ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared -- constant SQL and an integer.
 			return false;
@@ -53,6 +64,9 @@ final class Db {
 		global $wpdb;
 		if ( self::$depth <= 0 ) {
 			return false !== $wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		if ( self::$lost ) {
+			return false; // M12-04: rolled back by the database already; the caller rolls its level back.
 		}
 		$sql = 1 === self::$depth ? 'COMMIT' : 'RELEASE SAVEPOINT vcap_sp_' . ( self::$depth - 1 );
 		if ( false === $wpdb->query( $sql ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared -- constant SQL and an integer.
@@ -84,7 +98,8 @@ final class Db {
 
 	/**
 	 * Fires an action now, or – while a transaction is open – after its successful COMMIT (never after a
-	 * ROLLBACK). The arguments are taken as they are now: a Voucher is passed as a copy of its state at this
+	 * ROLLBACK). Either way the booking that fires it is done: a listener that throws is logged and never reaches
+	 * the caller (M12-05), so a failing listener cannot make a committed booking look failed. The arguments are taken as they are now: a Voucher is passed as a copy of its state at this
 	 * point (the caller may change the object before the COMMIT).
 	 *
 	 * @param string $hook Action name.
@@ -92,7 +107,7 @@ final class Db {
 	 */
 	public static function action( string $hook, ...$args ): void {
 		if ( 0 === self::$depth ) {
-			do_action( $hook, ...$args ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- callers pass vcap_* hooks.
+			self::run( static fn() => do_action( $hook, ...$args ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- callers pass vcap_* hooks.
 			return;
 		}
 		$args = self::snapshot( $args );
@@ -105,7 +120,7 @@ final class Db {
 	 */
 	public static function action_ref_array( string $hook, array $args ): void {
 		if ( 0 === self::$depth ) {
-			do_action_ref_array( $hook, $args ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- callers pass vcap_* hooks.
+			self::run( static fn() => do_action_ref_array( $hook, $args ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- callers pass vcap_* hooks.
 			return;
 		}
 		$args = self::snapshot( $args );
@@ -132,7 +147,7 @@ final class Db {
 	/** Runs $callback now, or after the successful COMMIT of the open transaction (dropped on ROLLBACK). */
 	public static function after_commit( callable $callback ): void {
 		if ( 0 === self::$depth ) {
-			$callback();
+			self::run( $callback );
 			return;
 		}
 		self::$deferred[] = $callback;
@@ -175,6 +190,7 @@ final class Db {
 		self::$depth    = 0;
 		self::$deferred = array();
 		self::$marks    = array();
+		self::$lost     = false;
 	}
 
 	/**
@@ -189,15 +205,38 @@ final class Db {
 			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			return;
 		}
-		$mark = (int) array_pop( self::$marks );
+		$deadlock = self::transaction_lost();
+		$mark     = (int) array_pop( self::$marks );
 		--self::$depth;
 		if ( 0 === self::$depth ) {
 			self::$deferred = array();
+			self::$lost     = false;
 			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			return;
 		}
-		self::$deferred = array_slice( self::$deferred, 0, $mark );
-		$wpdb->query( 'ROLLBACK TO SAVEPOINT vcap_sp_' . self::$depth ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared -- integer.
+		if ( ! self::$lost ) {
+			self::$deferred = array_slice( self::$deferred, 0, $mark );
+			if ( ! $deadlock && false !== $wpdb->query( 'ROLLBACK TO SAVEPOINT vcap_sp_' . self::$depth ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared -- integer.
+				return;
+			}
+		}
+		// M12-04: the database rolled back the whole transaction (deadlock) – the savepoint is gone. The outer levels
+		// stay open for their callers but can only be rolled back; their buffered actions are dropped now. A new
+		// transaction keeps whatever the callers still write until then out of autocommit (it is rolled back too).
+		self::$lost     = true;
+		self::$deferred = array();
+		$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
+
+	/**
+	 * Whether the last statement failed with a deadlock (1213), which rolls back the whole transaction in InnoDB.
+	 * Read from the error text; when it is gone already (another statement ran since), the refused ROLLBACK TO
+	 * SAVEPOINT tells the same.
+	 */
+	private static function transaction_lost(): bool {
+		global $wpdb;
+		return is_object( $wpdb ) && isset( $wpdb->last_error ) && str_contains( (string) $wpdb->last_error, 'Deadlock found' );
 	}
 
 	/**
@@ -209,11 +248,16 @@ final class Db {
 		$queue          = self::$deferred;
 		self::$deferred = array();
 		foreach ( $queue as $callback ) {
-			try {
-				$callback();
-			} catch ( \Throwable $e ) {
-				Logger::error( 'An action listener failed after COMMIT: ' . Mask::addresses( get_class( $e ) . ': ' . $e->getMessage() ) );
-			}
+			self::run( $callback );
+		}
+	}
+
+	/** Runs a listener of a booking that is done; an exception is logged (with the other listeners still run). */
+	private static function run( callable $callback ): void {
+		try {
+			$callback();
+		} catch ( \Throwable $e ) {
+			Logger::error( 'An action listener failed after COMMIT: ' . Mask::addresses( get_class( $e ) . ': ' . $e->getMessage() ) );
 		}
 	}
 

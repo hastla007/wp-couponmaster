@@ -4,6 +4,7 @@ namespace VCAP\Coupons;
 use VCAP\API;
 use VCAP\Db;
 use VCAP\Install;
+use VCAP\Logger;
 use VCAP\Voucher;
 use VCAP\VoucherRepository;
 
@@ -20,51 +21,76 @@ final class CouponSync {
 	/** @var bool Set while sync_coupon_amount() saves a coupon (its own save hook must not sync again). */
 	private static bool $syncing = false;
 
+	/** Most rounds of sync_coupon_amount() (read, save, read again) before it gives up. */
+	private const SYNC_ROUNDS = 3;
+
 	/**
 	 * Write the voucher's current balance to its WooCommerce coupon. Bookings change the balance under the voucher
 	 * row lock but save the coupon after their COMMIT, so two bookings could save in the opposite order and leave an
-	 * old amount on the coupon (then every checkout with the card fails until the next booking). The coupon is
-	 * therefore saved under the row lock again, with the balance read under it: the last save always carries the
-	 * latest balance, whatever the passed (possibly stale) voucher object says.
+	 * old amount on the coupon (then every checkout with the card fails until the next booking).
+	 *
+	 * M12-62: the balance is read under the row lock, the lock is released, and only then is the coupon saved
+	 * (WC_Coupon::save() runs third-party hooks, which must not hold the voucher row). Afterwards the balance is
+	 * read under the lock again: when a booking changed it meanwhile (its own sync may have saved before this one),
+	 * the coupon is saved again. The last request to save therefore always leaves the latest balance on the coupon,
+	 * whatever the passed (possibly stale) voucher object says.
 	 */
 	public static function sync_coupon_amount( Voucher $voucher ): bool {
-		global $wpdb;
 		if ( ! $voucher->coupon_id || self::$syncing || ! class_exists( '\WC_Coupon' ) ) {
 			return false;
 		}
-		$table = Install::tables()['vouchers'];
-		$tx    = Install::tables_support_transactions() && Db::begin();
 		self::$syncing = true;
 		try {
-			$lock = $tx ? ' FOR UPDATE' : '';
-			$row  = $wpdb->get_row( $wpdb->prepare( "SELECT balance, usage_mode, currency FROM {$table} WHERE id = %d{$lock}", $voucher->id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$ok  = false;
-			if ( $row && 'balance' === $row['usage_mode'] ) {
-				// Read the coupon under the lock, past this request's cache (another process may have saved it).
+			for ( $round = 0; $round < self::SYNC_ROUNDS; $round++ ) {
+				$balance = self::locked_balance( $voucher );
+				if ( null === $balance ) {
+					return false;
+				}
+				// Read the coupon past this request's cache (another process may have saved it).
 				wp_cache_delete( $voucher->coupon_id, 'posts' );
 				wp_cache_delete( $voucher->coupon_id, 'post_meta' );
 				$coupon = new \WC_Coupon( $voucher->coupon_id );
-				if ( $coupon->get_id() ) {
-					$balance = round( max( 0.0, (float) $row['balance'] ), API\V1\RedemptionService::decimals( (string) $row['currency'] ) );
-					if ( abs( (float) $coupon->get_amount( 'edit' ) - $balance ) > 0.000001 ) {
-						$coupon->set_amount( $balance );
-						$coupon->save();
-					}
-					$ok = true;
+				if ( ! $coupon->get_id() ) {
+					return false;
 				}
+				if ( abs( (float) $coupon->get_amount( 'edit' ) - $balance ) <= 0.000001 ) {
+					return true; // In line with the balance read last (after this request's own save, if any).
+				}
+				$coupon->set_amount( $balance );
+				$coupon->save();
 			}
-			if ( $tx && ! Db::commit() ) {
-				Db::rollback_if_error( 'sync_coupon_amount', array( 'voucher_id' => $voucher->id ) );
+			Logger::warning( sprintf( 'The coupon amount of voucher %d kept changing while it was synced; the next booking or the CLI command "sync" brings it in line.', (int) $voucher->id ) );
+			return true;
+		} finally {
+			self::$syncing = false;
+		}
+	}
+
+	/**
+	 * The stored balance of a balance voucher, rounded to its currency, read under the row lock in a short
+	 * transaction of its own (a locking read sees the latest committed balance, also inside an outer transaction);
+	 * null when the voucher is gone or not a balance voucher.
+	 */
+	private static function locked_balance( Voucher $voucher ): ?float {
+		global $wpdb;
+		$table = Install::tables()['vouchers'];
+		$tx    = Install::tables_support_transactions() && Db::begin();
+		try {
+			$lock = $tx ? ' FOR UPDATE' : '';
+			$row  = $wpdb->get_row( $wpdb->prepare( "SELECT balance, usage_mode, currency FROM {$table} WHERE id = %d{$lock}", $voucher->id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( $tx ) {
+				Db::finish();
 			}
-			return $ok;
 		} catch ( \Throwable $e ) {
 			if ( $tx ) {
 				Db::rollback_silently();
 			}
 			throw $e;
-		} finally {
-			self::$syncing = false;
 		}
+		if ( ! is_array( $row ) || 'balance' !== $row['usage_mode'] ) {
+			return null;
+		}
+		return round( max( 0.0, (float) $row['balance'] ), API\V1\RedemptionService::decimals( (string) $row['currency'] ) );
 	}
 
 	/** What sync_coupon() can bring in line with the voucher row. */

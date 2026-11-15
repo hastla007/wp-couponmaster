@@ -178,8 +178,7 @@ final class RedemptionService {
 			return $this->temporary();
 		}
 		try {
-			$locked = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$tables['vouchers']} WHERE id = %d FOR UPDATE", $voucher->id ) ); // phpcs:ignore
-			$fresh  = $locked ? $this->vouchers->get( $voucher->id ) : null;
+			$fresh = $this->vouchers->get_for_update( (int) $voucher->id ); // M12-04: the row as committed now, under its lock.
 			if ( ! $fresh ) {
 				\VCAP\Db::rollback_if_error( 'api_reserve', array( 'voucher_id' => $voucher->id ) );
 				return $this->temporary();
@@ -405,9 +404,9 @@ final class RedemptionService {
 			return $this->temporary();
 		}
 		try {
-			$wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$tables['vouchers']} WHERE id = %d FOR UPDATE", (int) $row['voucher_id'] ) ); // phpcs:ignore
+			// M12-04: voucher row first (as committed now, under its lock), then the redemption row, as in reserve().
+			$voucher = $this->vouchers->get_for_update( (int) $row['voucher_id'] );
 			$row     = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$tables['redemptions']} WHERE redemption_key = %s FOR UPDATE", $key ), ARRAY_A ); // phpcs:ignore
-			$voucher = $row ? $this->vouchers->get( (int) $row['voucher_id'] ) : null;
 			if ( ! $row || ! $voucher ) {
 				\VCAP\Db::rollback_if_error( 'api_refund', array( 'redemption_key' => $key ) );
 				return $this->temporary();
@@ -618,13 +617,12 @@ final class RedemptionService {
 		}
 		try {
 			// Same lock order as reserve(): voucher row first, then the redemption row.
-			$wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$tables['vouchers']} WHERE id = %d FOR UPDATE", (int) $row['voucher_id'] ) ); // phpcs:ignore
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$tables['redemptions']} WHERE redemption_key = %s FOR UPDATE", $key ), ARRAY_A ); // phpcs:ignore
+			$voucher = $this->vouchers->get_for_update( (int) $row['voucher_id'] ); // M12-04: as committed now.
+			$row     = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$tables['redemptions']} WHERE redemption_key = %s FOR UPDATE", $key ), ARRAY_A ); // phpcs:ignore
 			if ( ! $row || self::STATE_RESERVED !== $row['state'] ) {
 				\VCAP\Db::rollback_if_error( 'api_transition', array( 'redemption_key' => $key ) );
 				return $row && $to === $row['state'] ? $this->redemption_data( $row ) : self::error( 'vcap_reservation_missing', __( 'This reservation has expired or was cancelled. Please redeem the voucher again.', 'voucher-captain' ), 409 );
 			}
-			$voucher = $this->vouchers->get( (int) $row['voucher_id'] );
 			if ( ! $voucher ) {
 				\VCAP\Db::rollback_if_error( 'api_transition', array( 'redemption_key' => $key ) );
 				return $this->temporary();

@@ -1661,8 +1661,9 @@ final class VCAP_D6_Wpdb {
 	public string $last_error = '';
 	public int $insert_id     = 1;
 	public bool $refuse_commit = false;
+	public bool $savepoint_gone = false;
 	public array $log         = array();
-	public function query( $q ) { $this->log[] = $q; return $this->refuse_commit && 'COMMIT' === $q ? false : 1; }
+	public function query( $q ) { $this->log[] = $q; return ( $this->refuse_commit && 'COMMIT' === $q ) || ( $this->savepoint_gone && str_starts_with( $q, 'ROLLBACK TO SAVEPOINT' ) ) ? false : 1; }
 	public function update( ...$a ) { return 1; }
 	public function insert( ...$a ) { return 1; }
 	public function prepare( $q, ...$a ) { return $q; }
@@ -1788,6 +1789,57 @@ VCAP\Db::rollback_silently();
 check( 'D6: vcap_voucher_updated and vcap_voucher_event fire after the COMMIT (each with the voucher as saved then), never after a ROLLBACK', array( array(), array() ) === $d6_mid && array( 40.0, 30.0 ) === $d6_updates && array( 'redeemed' ) === $d6_events, var_export( array( $d6_updates, $d6_events ), true ) );
 $d6_sources = implode( "\n", array_map( 'file_get_contents', array_merge( glob( VCAP_PATH . 'src/Coupons/*.php' ), array( VCAP_PATH . 'src/CouponManager.php', VCAP_PATH . 'src/API/V1/RedemptionService.php', VCAP_PATH . 'src/StoreCredit.php', VCAP_PATH . 'src/VoucherRepository.php', VCAP_PATH . 'src/Install.php' ) ) ) );
 check( 'D6: every transaction in src runs through the shared helper (no raw START TRANSACTION / COMMIT / ROLLBACK)', ! preg_match( "/query\\( '(START TRANSACTION|COMMIT|ROLLBACK)' \\)/", $d6_sources ) );
+
+// M12-05: outside a transaction a throwing listener is logged as well; the booking that fired it is done.
+VCAP\Db::reset();
+$d6_seen                     = array();
+$GLOBALS['vcap_test_logged'] = array();
+$m12_05_thrown               = false;
+try {
+	VCAP\Db::action( 'vcap_d6_throws' );
+	VCAP\Db::action_ref_array( 'vcap_d6_throws', array( 1 ) );
+	VCAP\Db::after_commit( static function () { throw new RuntimeException( 'after commit failed' ); } );
+	VCAP\Db::action( 'vcap_d6_test', 'still' );
+} catch ( Throwable $e ) {
+	$m12_05_thrown = true;
+}
+check( 'M12-05: Db::action(), action_ref_array() and after_commit() catch and log a throwing listener at depth 0 too', ! $m12_05_thrown && array( 'still' ) === $d6_seen && 3 === count( $GLOBALS['vcap_test_logged'] ) && str_contains( $GLOBALS['vcap_test_logged'][2][1], 'after commit failed' ), var_export( $GLOBALS['vcap_test_logged'], true ) );
+
+// M12-04: a deadlock inside a savepoint rolls back the whole transaction (InnoDB): the outer levels can only be rolled
+// back, no action of any level is fired, nothing is committed by a later COMMIT and the next transaction is normal.
+foreach ( array( 'deadlock error' => 'error', 'savepoint gone' => 'savepoint' ) as $m12_04_case => $m12_04_how ) {
+	VCAP\Db::reset();
+	$d6_seen              = array();
+	$GLOBALS['wpdb']->log = array();
+	VCAP\Db::begin();
+	VCAP\Db::action( 'vcap_d6_test', 'outer' );
+	VCAP\Db::begin();
+	VCAP\Db::action( 'vcap_d6_test', 'inner' );
+	if ( 'error' === $m12_04_how ) {
+		$GLOBALS['wpdb']->last_error = 'Deadlock found when trying to get lock; try restarting transaction';
+	} else {
+		$GLOBALS['wpdb']->savepoint_gone = true;
+	}
+	VCAP\Db::rollback_silently();
+	$GLOBALS['wpdb']->last_error     = '';
+	$GLOBALS['wpdb']->savepoint_gone = false;
+	$m12_04_open     = VCAP\Db::in_transaction();
+	$m12_04_nested   = VCAP\Db::begin();
+	$m12_04_commit   = VCAP\Db::commit();
+	VCAP\Db::rollback_silently();
+	$m12_04_closed   = ! VCAP\Db::in_transaction();
+	$m12_04_log      = $GLOBALS['wpdb']->log;
+	VCAP\Db::begin();
+	VCAP\Db::action( 'vcap_d6_test', 'next' );
+	$m12_04_next = VCAP\Db::commit();
+	$m12_04_rest = array_slice( $GLOBALS['wpdb']->log, count( $m12_04_log ) );
+	$m12_04_expect = 'error' === $m12_04_how
+		? array( 'START TRANSACTION', 'SAVEPOINT vcap_sp_1', 'ROLLBACK', 'START TRANSACTION', 'ROLLBACK' )
+		: array( 'START TRANSACTION', 'SAVEPOINT vcap_sp_1', 'ROLLBACK TO SAVEPOINT vcap_sp_1', 'ROLLBACK', 'START TRANSACTION', 'ROLLBACK' );
+	check( "M12-04: a deadlock in a savepoint ({$m12_04_case}) leaves Db consistent: outer level open but not committable, its actions dropped, the next transaction normal", $m12_04_open && ! $m12_04_nested && ! $m12_04_commit && $m12_04_closed && $m12_04_expect === $m12_04_log && $m12_04_next && array( 'START TRANSACTION', 'COMMIT' ) === $m12_04_rest && array( 'next' ) === $d6_seen, implode( ' | ', $GLOBALS['wpdb']->log ) . ' / ' . implode( ',', $d6_seen ) );
+}
+$m12_04_sources = implode( "\n", array_map( 'file_get_contents', array( VCAP_PATH . 'src/Coupons/Balances.php', VCAP_PATH . 'src/API/V1/RedemptionService.php', VCAP_PATH . 'src/StoreCredit.php' ) ) );
+check( 'M12-04: bookings read the voucher with get_for_update() (no "SELECT id … FOR UPDATE" followed by a plain get()), the charge state with a locking read', ! preg_match( '/SELECT id FROM \{\$(table|tables\[\'vouchers\'\])\} WHERE id = %d FOR UPDATE/', $m12_04_sources ) && substr_count( $m12_04_sources, 'get_for_update(' ) >= 10 && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Coupons/Balances.php' ), "' LOCK IN SHARE MODE'" ) );
 VCAP\Db::reset();
 $GLOBALS['wpdb'] = $d6_saved_wpdb;
 echo "R6 tills, counter limits and add-on hooks\n";
