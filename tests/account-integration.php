@@ -454,6 +454,62 @@ vcap_acct_assert( '' === $m47_err && 'friend@example.com' === $m47->recipient_em
 vcap_acct_assert( '' === vcap()->downloads->change_delivery( $m47, '', '', array( 'send_now' => true ) ) && strtotime( (string) vcap()->vouchers->get( $m47->id )->delivery_at . ' UTC' ) <= time() + 5, 'M12-47: "send now" plans the delivery right away' );
 wp_set_current_user( 0 );
 
+// M12-47: "Confirm recipient email" must match; it is checked, never stored with the cart item.
+$m47_confirm = vcap_acct_product( array( 'builtin_fields' => array( 'recipient_email', VCAP\Fields::CONFIRM_KEY ) ) );
+$_POST['vcap_fields'] = array( 'recipient_email' => 'anna@example.com', VCAP\Fields::CONFIRM_KEY => 'anna@exmaple.com' );
+$m47_mismatch = vcap()->fields->errors( $m47_confirm );
+$_POST['vcap_fields'] = array( 'recipient_email' => 'anna@example.com', VCAP\Fields::CONFIRM_KEY => 'Anna@Example.com' );
+$m47_match  = vcap()->fields->errors( $m47_confirm );
+$m47_posted = vcap()->fields->collect_posted( $m47_confirm );
+unset( $_POST['vcap_fields'] );
+vcap_acct_assert( 1 === count( $m47_mismatch ) && ! $m47_match && isset( $m47_posted['recipient_email'] ) && ! isset( $m47_posted[ VCAP\Fields::CONFIRM_KEY ] ), 'M12-47: a mismatching confirmation is refused, a matching one accepted and not stored', array( $m47_mismatch, $m47_match, array_keys( $m47_posted ) ) );
+
+// M12-47: signed "Correct the recipient" link (also for guests): before the delivery the address changes, after
+// the delivery the voucher is reissued (old code invalid) and mailed to the new address; at most twice, unused only.
+$m47_mails = array();
+$m47_catch = static function ( $short, $atts ) use ( &$m47_mails ) {
+	$m47_mails[] = (string) ( is_array( $atts['to'] ) ? implode( ',', $atts['to'] ) : $atts['to'] );
+	return true;
+};
+add_filter( 'pre_wp_mail', $m47_catch, 10, 2 );
+$m47_fix = vcap()->vouchers->get( vcap()->issuer->issue_for_order( vcap_acct_order( $personal, 0, 'guest-buyer@example.com' ) )[0]->id );
+$m47_fix->recipient_email = 'wrong@exmaple.com';
+$m47_fix->send_to         = 'recipient';
+vcap()->vouchers->update( $m47_fix );
+vcap()->delivery->reschedule( vcap()->vouchers->get( $m47_fix->id ), gmdate( 'Y-m-d H:i:s', time() + 3 * DAY_IN_SECONDS ) );
+$m47_fix  = vcap()->vouchers->get( $m47_fix->id );
+$m47_args = array();
+wp_parse_str( (string) wp_parse_url( vcap()->downloads->correction_url( $m47_fix ), PHP_URL_QUERY ), $m47_args );
+vcap_acct_assert( isset( $m47_args['vcap_fix'] ) && null !== vcap()->downloads->voucher_of_correction_link( (string) $m47_args['vcap_fix'], (int) $m47_args['exp'], (string) $m47_args['sig'] ) && null === vcap()->downloads->voucher_of_correction_link( (string) $m47_args['vcap_fix'], (int) $m47_args['exp'] + 1, (string) $m47_args['sig'] ) && null === vcap()->downloads->voucher_of_correction_link( (string) $m47_args['vcap_fix'], time() - 10, (string) $m47_args['sig'] ), 'M12-47: the correction link is signed and time-limited (a changed or past expiry is refused)' );
+$m47_code = $m47_fix->code;
+vcap_acct_assert( '' === vcap()->downloads->correct_recipient( $m47_fix, 'right@example.com' ) && 'right@example.com' === vcap()->vouchers->get( $m47_fix->id )->recipient_email && $m47_code === vcap()->vouchers->get( $m47_fix->id )->code && ! $m47_mails, 'M12-47: before the delivery the address is corrected, the code stays and nothing is mailed yet' );
+$m47_live = vcap()->vouchers->get( $m47_fix->id );
+$m47_live->status       = VCAP\Voucher::STATUS_ACTIVE;
+$m47_live->delivered_at = gmdate( 'Y-m-d H:i:s' );
+$m47_live->delivery_at  = null;
+vcap()->vouchers->update( $m47_live );
+vcap_acct_assert( '' === vcap()->downloads->correct_recipient( $m47_live, 'third@example.com' ), 'M12-47: after the delivery the correction goes through' );
+$m47_after = vcap()->vouchers->get( $m47_fix->id );
+vcap_acct_assert( 'third@example.com' === $m47_after->recipient_email && $m47_after->code !== $m47_code && null === vcap()->vouchers->get_by_code( $m47_code ) && in_array( 'third@example.com', $m47_mails, true ) && 1 === vcap()->vouchers->count_event( $m47_fix->id, VCAP\Reissue::EVENT ), 'M12-47: after the delivery the voucher is reissued (old code invalid) and mailed to the new address', $m47_mails );
+vcap_acct_assert( null === vcap()->downloads->voucher_of_correction_link( (string) $m47_args['vcap_fix'], (int) $m47_args['exp'], (string) $m47_args['sig'] ), 'M12-47: the link of the old code no longer works after the reissue' );
+vcap_acct_assert( 2 === vcap()->vouchers->count_event( $m47_fix->id, VCAP\Downloads::FIX_EVENT ) && '' !== vcap()->downloads->correct_recipient( $m47_after, 'fourth@example.com' ) && '' === vcap()->downloads->correction_url( $m47_after ), 'M12-47: at most two corrections per voucher' );
+$m47_used = vcap()->vouchers->get( vcap()->issuer->issue_for_order( vcap_acct_order( $personal, 0, 'guest-buyer@example.com' ) )[0]->id );
+$m47_used->recipient_email = 'x@example.com';
+$m47_used->send_to         = 'recipient';
+$m47_used->status          = VCAP\Voucher::STATUS_REDEEMED;
+vcap()->vouchers->update( $m47_used );
+vcap_acct_assert( '' !== vcap()->downloads->correction_refusal( $m47_used ) && '' === vcap()->downloads->correction_url( $m47_used ), 'M12-47: a used voucher cannot be redirected' );
+ob_start();
+$m47_mail = WC()->mailer()->get_emails()['VCAP_Email_Voucher_Buyer'];
+$m47_mail->voucher = vcap()->vouchers->get( vcap()->issuer->issue_for_order( vcap_acct_order( $personal, 0, 'guest-buyer@example.com' ) )[0]->id );
+$m47_mail->voucher->recipient_email = 'friend@example.com';
+$m47_mail->voucher->send_to         = 'both';
+$m47_html = (string) $m47_mail->get_content_html();
+ob_end_clean();
+$m47_mail->voucher = null;
+remove_filter( 'pre_wp_mail', $m47_catch, 10 );
+vcap_acct_assert( str_contains( $m47_html, 'vcap_fix=' ), 'M12-47: the buyer copy of a gift carries the "Correct the recipient" link' );
+
 // M12-18: My Account lists gifts received at the verified account address (not scheduled ones, no change or
 // resend forms) and the guest orders of that address with the bought vouchers.
 $m18_login = 'vcap_m18_' . strtolower( wp_generate_password( 6, false, false ) );

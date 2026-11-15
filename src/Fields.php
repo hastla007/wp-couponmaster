@@ -78,6 +78,36 @@ final class Fields {
 
 	// ----------------------------------------------------------------- Definitions.
 
+	/** M12-47: built-in field that repeats the recipient email (checked, never stored with the order). */
+	public const CONFIRM_KEY = 'recipient_email_confirm';
+	/** M12-84: built-in field with the language of the recipient's email (a locale such as "de_DE"). */
+	public const LOCALE_KEY = 'recipient_locale';
+
+	/**
+	 * M12-84: languages a recipient email can be sent in – the site language and the installed translations
+	 * (filter "vcap_recipient_locales"), locale => name.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function recipient_locales(): array {
+		$codes = array_unique( array_merge( array( (string) get_locale() ), function_exists( 'get_available_languages' ) ? get_available_languages() : array() ) );
+		$out   = array();
+		foreach ( $codes as $code ) {
+			$code = (string) $code;
+			if ( '' === $code ) {
+				continue;
+			}
+			$name         = class_exists( '\Locale' ) ? (string) \Locale::getDisplayName( $code, $code ) : '';
+			$out[ $code ] = '' !== $name ? $name : $code;
+		}
+		if ( ! isset( $out['en_US'] ) && count( $out ) > 0 ) {
+			$out['en_US'] = class_exists( '\Locale' ) ? (string) \Locale::getDisplayName( 'en_US', 'en_US' ) : 'English (United States)';
+		}
+		/** Languages offered in the "Language of the recipient email" field (locale => name). */
+		$out = (array) apply_filters( 'vcap_recipient_locales', $out );
+		return array_map( 'strval', $out );
+	}
+
 	public static function builtin_definitions( array $config ): array {
 		$defs = array(
 			'recipient_name'  => array(
@@ -117,6 +147,39 @@ final class Fields {
 				/* translators: %s: time of day (e.g. 8:00 am) */
 				'tooltip'     => sprintf( __( 'The voucher is emailed on this day at about %s (shop time). Leave empty to send it right away.', 'voucher-captain' ), self::delivery_time_text() ),
 			),
+			// M12-55: the giver's name as the recipient sees it ({sender_name}; empty = the billing name).
+			'sender_name'     => array(
+				'key'         => 'sender_name',
+				'label'       => __( 'From (your name)', 'voucher-captain' ),
+				'type'        => 'text',
+				'required'    => false,
+				'maxlength'   => 100,
+				'placeholder' => '',
+				'tooltip'     => __( 'Shown to the recipient as the sender. Leave empty to use your billing name.', 'voucher-captain' ),
+			),
+			// M12-47: typed twice, a mistyped recipient address is noticed before the order.
+			self::CONFIRM_KEY => array(
+				'key'         => self::CONFIRM_KEY,
+				'label'       => __( 'Confirm recipient email', 'voucher-captain' ),
+				'type'        => 'email',
+				'required'    => false,
+				'maxlength'   => 200,
+				'placeholder' => '',
+				'tooltip'     => '',
+				'confirms'    => 'recipient_email',
+			),
+			// M12-84: the language of the recipient's email and PDF.
+			self::LOCALE_KEY  => array(
+				'key'           => self::LOCALE_KEY,
+				'label'         => __( 'Language of the recipient email', 'voucher-captain' ),
+				'type'          => 'select',
+				'required'      => false,
+				'maxlength'     => 20,
+				'placeholder'   => '',
+				'tooltip'       => '',
+				'options'       => array_keys( self::recipient_locales() ),
+				'option_labels' => self::recipient_locales(),
+			),
 		);
 		$enabled = (array) $config['builtin_fields'];
 		if ( 'customer' === $config['delivery'] && ! in_array( 'delivery_date', $enabled, true ) ) {
@@ -137,8 +200,17 @@ final class Fields {
 		$out = array();
 		foreach ( $enabled as $key ) {
 			$base = preg_replace( '/_required$/', '', (string) $key );
+			if ( self::CONFIRM_KEY === $base ) {
+				continue; // Placed right after the recipient email below.
+			}
+			if ( self::LOCALE_KEY === $base && count( self::recipient_locales() ) < 2 ) {
+				continue; // One language only: nothing to choose.
+			}
 			if ( isset( $defs[ $base ] ) ) {
 				$out[ $base ] = $defs[ $base ];
+			}
+			if ( 'recipient_email' === $base && isset( $out['recipient_email'] ) && in_array( self::CONFIRM_KEY, $enabled, true ) ) {
+				$out[ self::CONFIRM_KEY ] = $defs[ self::CONFIRM_KEY ];
 			}
 		}
 		foreach ( $enabled as $key ) {
@@ -442,6 +514,10 @@ final class Fields {
 		if ( '' === $value && isset( $field['default'] ) ) {
 			$value = (string) $field['default'];
 		}
+		if ( '' === $value && 'sender_name' === $key && is_user_logged_in() && function_exists( 'WC' ) && WC()->customer ) {
+			// M12-55: prefilled with the billing name (pages of logged-in customers are not cached).
+			$value = trim( WC()->customer->get_billing_first_name() . ' ' . WC()->customer->get_billing_last_name() );
+		}
 		$desc_id  = $id . '-desc';
 		$error    = $this->invalid[ $key ] ?? '';
 		// After a refused add to cart the field is marked invalid and names its error (the first one gets focus).
@@ -456,6 +532,10 @@ final class Fields {
 		if ( ! empty( $field['placeholder'] ) ) {
 			$attrs .= ' placeholder="' . esc_attr( $field['placeholder'] ) . '"';
 		}
+		if ( ! empty( $field['confirms'] ) ) {
+			// M12-47: compared with the field it repeats while typing (frontend.js) and on the server (errors()).
+			$attrs .= ' data-vcap-confirm="' . esc_attr( (string) $field['confirms'] ) . '" data-vcap-mismatch="' . esc_attr__( 'The email addresses do not match.', 'voucher-captain' ) . '" autocomplete="off"';
+		}
 
 		echo '<p class="form-row vcap-field vcap-field--' . esc_attr( $type ) . '">';
 		if ( 'checkbox' !== $type ) {
@@ -468,8 +548,9 @@ final class Fields {
 				break;
 			case 'select':
 				echo '<select ' . $attrs . '><option value="">' . esc_html__( '— Select —', 'voucher-captain' ) . '</option>'; // phpcs:ignore WordPress.Security.EscapeOutput
+				$labels = is_array( $field['option_labels'] ?? null ) ? $field['option_labels'] : array();
 				foreach ( self::options( $field ) as $option ) {
-					echo '<option value="' . esc_attr( $option ) . '"' . selected( $value, $option, false ) . '>' . esc_html( $option ) . '</option>';
+					echo '<option value="' . esc_attr( $option ) . '"' . selected( $value, $option, false ) . '>' . esc_html( (string) ( $labels[ $option ] ?? $option ) ) . '</option>';
 				}
 				echo '</select>';
 				break;
@@ -526,6 +607,9 @@ final class Fields {
 	public function collect_posted( \WC_Product $product, bool $only_filled = true ): array {
 		$out = array();
 		foreach ( $this->flat_definitions( $product ) as $key => $field ) {
+			if ( ! empty( $field['confirms'] ) ) {
+				continue; // M12-47: only checked, not kept.
+			}
 			$raw = $this->posted_value( (string) $key );
 			switch ( $field['type'] ?? 'text' ) {
 				case 'textarea':
@@ -614,6 +698,15 @@ final class Fields {
 			$raw    = trim( $this->posted_value( (string) $key ) );
 			$label  = (string) ( $field['label'] ?? $key );
 			$before = count( $errors );
+			if ( ! empty( $field['confirms'] ) ) {
+				// M12-47: the repeated address must match the one it confirms (nothing to confirm when that is empty).
+				$other = trim( $this->posted_value( (string) $field['confirms'] ) );
+				if ( '' !== $other && 0 !== strcasecmp( $other, $raw ) ) {
+					$errors[]                       = '' === $raw ? __( 'Please enter the recipient email a second time to confirm it.', 'voucher-captain' ) : __( 'The recipient email addresses do not match. Please check them.', 'voucher-captain' );
+					$this->invalid[ (string) $key ] = end( $errors );
+				}
+				continue;
+			}
 			if ( ! empty( $field['required'] ) && '' === $raw ) {
 				/* translators: %s: field label */
 				$errors[]                       = sprintf( __( '%s is a required field.', 'voucher-captain' ), $label );
@@ -728,10 +821,11 @@ final class Fields {
 
 	public function display_item_data( $item_data, $cart_item ) {
 		$fields = (array) ( $cart_item['vcap_fields'] ?? array() );
-		foreach ( $fields as $field ) {
+		foreach ( $fields as $key => $field ) {
+			$value       = self::LOCALE_KEY === $key ? ( self::recipient_locales()[ (string) $field['value'] ] ?? (string) $field['value'] ) : (string) $field['value'];
 			$item_data[] = array(
 				'key'   => $field['label'],
-				'value' => self::display_value( (string) $field['value'] ),
+				'value' => self::display_value( $value ),
 			);
 		}
 		// When and where the voucher goes (the buyer otherwise learns it only on the delivery day).

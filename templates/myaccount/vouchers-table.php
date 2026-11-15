@@ -3,7 +3,7 @@
  * Voucher download list (order received page, My Account → order, My Account → Vouchers).
  *
  * Override: yourtheme/woocommerce/voucher-captain/myaccount/vouchers-table.php
- * @version  1.3.0
+ * @version  1.2.0
  *
  * @var \VCAP\Voucher[]  $vouchers
  * @var \VCAP\Downloads  $downloads

@@ -15,6 +15,7 @@ final class Downloads {
 		add_action( 'template_redirect', array( $this, 'maybe_serve' ), 1 );
 		add_action( 'template_redirect', array( $this, 'customer_resend' ), 5 );
 		add_action( 'template_redirect', array( $this, 'customer_change' ), 5 );
+		add_action( 'template_redirect', array( $this, 'handle_correction' ), 6 );
 		add_action( 'admin_post_vcap_admin_pdf', array( $this, 'admin_download' ) );
 		add_action( 'woocommerce_order_details_after_order_table', array( $this, 'order_downloads' ), 5 );
 		add_action( 'wp_loaded', array( $this, 'maybe_flush_rewrite' ) );
@@ -280,6 +281,204 @@ final class Downloads {
 		return '';
 	}
 
+	// ----------------------------------------------------------------- M12-47: "Correct recipient" (signed link).
+
+	/** Ledger event of a recipient corrected through the signed link (counted: at most FIX_MAX). */
+	public const FIX_EVENT = 'recipient_corrected';
+	/** Corrections per voucher through the signed link (filter "vcap_recipient_fix_max", at most 2). */
+	public const FIX_MAX = 2;
+
+	private function fix_signature( string $token, int $exp, int $version ): string {
+		return hash_hmac( 'sha256', 'fix|' . $token . '|' . $exp . '|v' . $version, $this->settings->secret() );
+	}
+
+	/**
+	 * M12-47: signed, time-limited link with which the buyer – also a guest – corrects a mistyped recipient address
+	 * (order received page, buyer email). Valid for "vcap_recipient_fix_days" days (default 30) and only for the
+	 * voucher's current code (a reissue gives a new token). '' when the voucher cannot be corrected.
+	 */
+	public function correction_url( Voucher $voucher ): string {
+		if ( '' !== $this->correction_refusal( $voucher ) ) {
+			return '';
+		}
+		/** Days the "Correct recipient" link of a gift stays valid. */
+		$days = max( 1, (int) apply_filters( 'vcap_recipient_fix_days', 30, $voucher ) );
+		$exp  = time() + $days * DAY_IN_SECONDS;
+		return add_query_arg(
+			array(
+				'vcap_fix' => $voucher->token,
+				'exp'      => $exp,
+				'sig'      => $this->fix_signature( $voucher->token, $exp, $this->link_version( $voucher ) ),
+			),
+			home_url( '/' )
+		);
+	}
+
+	/** The voucher of a valid, unexpired correction link, else null. */
+	public function voucher_of_correction_link( string $token, int $exp, string $signature ): ?Voucher {
+		$voucher = '' !== $token && '' !== $signature && $exp >= time() ? $this->repo->get_by_token( $token ) : null;
+		if ( ! $voucher || ! hash_equals( $this->fix_signature( $voucher->token, $exp, $this->link_version( $voucher ) ), $signature ) ) {
+			return null;
+		}
+		return $voucher;
+	}
+
+	/**
+	 * Why the recipient of a gift cannot be corrected ('' when it can): only gifts mailed to a recipient, while
+	 * they are unused (scheduled or active, the full value left, never redeemed or checked in), not expired, and at
+	 * most FIX_MAX times.
+	 */
+	public function correction_refusal( Voucher $voucher ): string {
+		$max = min( self::FIX_MAX, max( 0, (int) apply_filters( 'vcap_recipient_fix_max', self::FIX_MAX, $voucher ) ) );
+		if ( ! $voucher->id || 'credit' === $voucher->type || ! in_array( $voucher->send_to, array( 'recipient', 'both' ), true ) ) {
+			return __( 'This voucher is not sent to a recipient.', 'voucher-captain' );
+		}
+		if ( ! in_array( $voucher->status, array( Voucher::STATUS_SCHEDULED, Voucher::STATUS_ACTIVE ), true ) || $voucher->is_expired()
+			|| ( $voucher->is_multi_use() && $voucher->balance < $voucher->initial_amount - 0.001 )
+			|| $voucher->checkins > 0 || $this->repo->has_event( $voucher->id, 'redeemed' ) ) {
+			return __( 'This voucher has already been used or is no longer valid, so its recipient can no longer be changed. Please contact us.', 'voucher-captain' );
+		}
+		if ( $this->repo->count_event( $voucher->id, self::FIX_EVENT ) >= $max ) {
+			return __( 'The recipient of this voucher has already been corrected. Please contact us for further changes.', 'voucher-captain' );
+		}
+		return '';
+	}
+
+	/**
+	 * M12-47: corrects the recipient address of a gift. Before the delivery the gift simply goes to the new address
+	 * (as planned, or right away when it was due); after the delivery the voucher is reissued (Reissue: a new
+	 * code, the old one and its links stop working) and sent to the new address. The coupon restriction follows.
+	 *
+	 * @return string '' on success, else the reason to show.
+	 */
+	public function correct_recipient( Voucher $voucher, string $email ): string {
+		$fresh = $this->repo->get( $voucher->id );
+		if ( ! $fresh ) {
+			return __( 'This voucher was not found.', 'voucher-captain' );
+		}
+		$refusal = $this->correction_refusal( $fresh );
+		if ( '' !== $refusal ) {
+			return $refusal;
+		}
+		$email = sanitize_email( trim( $email ) );
+		if ( ! is_email( $email ) ) {
+			return __( 'Please enter a valid email address for the recipient.', 'voucher-captain' );
+		}
+		$old_email = (string) $fresh->recipient_email;
+		if ( Delivery::same_address( $old_email, $email ) ) {
+			return __( 'This is the address the voucher is already sent to.', 'voucher-captain' );
+		}
+		$delivered = null !== $fresh->delivered_at && '' !== (string) $fresh->delivered_at;
+		if ( $delivered ) {
+			$reissued = ( new Reissue( $this->settings, $this->repo, vcap()->coupons ) )->reissue( $fresh, __( 'Recipient corrected by the buyer', 'voucher-captain' ) );
+			if ( is_wp_error( $reissued ) ) {
+				/* translators: %s: reason */
+				return sprintf( __( 'The recipient cannot be changed right now (%s). Please contact us.', 'voucher-captain' ), $reissued->get_error_message() );
+			}
+			$fresh = $reissued;
+		}
+		$fresh->recipient_email = $email;
+		if ( isset( $fresh->fields['recipient_email'] ) ) {
+			$fresh->fields['recipient_email']['value'] = $email;
+		}
+		if ( ! $this->repo->update_columns( $fresh, array( 'recipient_email', 'fields' ) ) ) {
+			return __( 'The change could not be saved. Please contact us.', 'voucher-captain' );
+		}
+		vcap()->coupons->refresh_email_restrictions( $fresh, $old_email );
+		/* translators: 1: old email, 2: new email */
+		$this->repo->log( $fresh->id, self::FIX_EVENT, null, null, sprintf( __( 'Recipient corrected by the buyer: %1$s → %2$s', 'voucher-captain' ), '' !== $old_email ? $old_email : '–', $email ) );
+		$order = $fresh->order();
+		if ( $order instanceof \WC_Order ) {
+			$order->add_order_note(
+				sprintf(
+					/* translators: 1: voucher code (masked), 2: new recipient email */
+					$delivered ? __( 'The buyer corrected the recipient of voucher %1$s to %2$s; the voucher was reissued with a new code and sent to the new address.', 'voucher-captain' ) : __( 'The buyer corrected the recipient of voucher %1$s to %2$s before its delivery.', 'voucher-captain' ),
+					Mask::code( $fresh->code ),
+					$email
+				)
+			);
+		}
+		if ( $delivered ) {
+			$sent = vcap()->delivery->send( $fresh, 'recipient' );
+			$this->repo->log( $fresh->id, 'resent', null, null, sprintf( /* translators: %d: number of addresses */ _n( 'After the recipient correction, sent to %d address', 'After the recipient correction, sent to %d addresses', count( $sent ), 'voucher-captain' ), count( $sent ) ) );
+			if ( ! $sent ) {
+				return __( 'The recipient was changed, but the email could not be sent. Please contact us.', 'voucher-captain' );
+			}
+		} elseif ( ! $fresh->delivery_at || strtotime( $fresh->delivery_at . ' UTC' ) <= time() ) {
+			// Due already (e.g. failed attempts to the mistyped address): a new series of attempts to the new one.
+			vcap()->delivery->reschedule( $fresh, null );
+		}
+		return '';
+	}
+
+	/**
+	 * GET: the form of a valid correction link; POST: the correction (nonce, rate limit). Rendered as a plain page
+	 * of its own, so it works for guests without an account page.
+	 */
+	public function handle_correction(): void {
+		// phpcs:disable WordPress.Security.NonceVerification -- the signed link is the credential; the POST also carries a nonce.
+		if ( empty( $_REQUEST['vcap_fix'] ) || ! is_string( $_REQUEST['vcap_fix'] ) ) {
+			return;
+		}
+		Shortcodes::no_cache();
+		$token = sanitize_key( wp_unslash( $_REQUEST['vcap_fix'] ) );
+		$exp   = absint( $_REQUEST['exp'] ?? 0 );
+		$sig   = isset( $_REQUEST['sig'] ) && is_string( $_REQUEST['sig'] ) ? sanitize_key( wp_unslash( $_REQUEST['sig'] ) ) : '';
+		$title = __( 'Correct the recipient', 'voucher-captain' );
+		if ( Plugin::rate_limited( 'recipient_fix_view', 30, 0, HOUR_IN_SECONDS ) ) {
+			wp_die( esc_html__( 'Too many requests. Please try again later.', 'voucher-captain' ), esc_html( $title ), array( 'response' => 429 ) );
+		}
+		$voucher = $this->voucher_of_correction_link( $token, $exp, $sig );
+		if ( ! $voucher ) {
+			wp_die( esc_html__( 'This link is invalid or has expired. Please contact us.', 'voucher-captain' ), esc_html( $title ), array( 'response' => 403 ) );
+		}
+		$notice = '';
+		if ( isset( $_POST['vcap_fix_email'] ) && is_string( $_POST['vcap_fix_email'] ) ) {
+			if ( ! isset( $_POST['vcap_fix_nonce'] ) || ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_fix_nonce'] ) ), 'vcap_fix_' . $voucher->id ) ) {
+				$notice = __( 'The request has expired. Please try again.', 'voucher-captain' );
+			} elseif ( Plugin::rate_limited( 'recipient_fix', 5, 0, HOUR_IN_SECONDS, true, 'v' . $voucher->id ) ) {
+				$notice = __( 'Too many requests. Please try again later.', 'voucher-captain' );
+			} else {
+				$notice = $this->correct_recipient( $voucher, sanitize_text_field( wp_unslash( $_POST['vcap_fix_email'] ) ) );
+				if ( '' === $notice ) {
+					$done = $this->repo->get( $voucher->id );
+					wp_die(
+						'<p>' . esc_html(
+							sprintf(
+								/* translators: %s: new recipient email */
+								__( 'Thank you. The voucher is now sent to %s.', 'voucher-captain' ),
+								$done ? $done->recipient_email : ''
+							)
+						) . '</p>',
+						esc_html( $title ),
+						array( 'response' => 200 )
+					);
+				}
+			}
+		}
+		// phpcs:enable WordPress.Security.NonceVerification
+		$refusal = $this->correction_refusal( $voucher );
+		if ( '' !== $refusal ) {
+			wp_die( esc_html( $refusal ), esc_html( $title ), array( 'response' => 200 ) );
+		}
+		$html  = '' !== $notice ? '<p class="vcap-fix-error" role="alert"><strong>' . esc_html( $notice ) . '</strong></p>' : '';
+		$html .= '<p>' . esc_html(
+			sprintf(
+				/* translators: 1: masked current address, 2: masked voucher code */
+				__( 'Voucher %2$s is sent to %1$s. Enter the correct address of the recipient:', 'voucher-captain' ),
+				Mask::email( $voucher->recipient_email ),
+				Mask::code( $voucher->code )
+			)
+		) . '</p>';
+		if ( $voucher->delivered_at ) {
+			$html .= '<p>' . esc_html__( 'The voucher has already been sent. It is reissued with a new code for the new address; the code sent before stops working.', 'voucher-captain' ) . '</p>';
+		}
+		$html .= '<form method="post"><input type="hidden" name="vcap_fix_nonce" value="' . esc_attr( wp_create_nonce( 'vcap_fix_' . $voucher->id ) ) . '" />'
+			. '<p><label for="vcap-fix-email">' . esc_html__( 'Recipient email', 'voucher-captain' ) . '</label><br><input type="email" required id="vcap-fix-email" name="vcap_fix_email" size="40" /></p>'
+			. '<p><button type="submit" class="button">' . esc_html__( 'Correct the recipient', 'voucher-captain' ) . '</button></p></form>';
+		wp_die( $html, esc_html( $title ), array( 'response' => 200 ) ); // phpcs:ignore WordPress.Security.EscapeOutput -- built from escaped parts above.
+	}
+
 	/** POST handler of the "Change recipient or date" form in the voucher list (H10). */
 	public function customer_change(): void {
 		if ( empty( $_POST['vcap_change'] ) || empty( $_POST['vcap_change_nonce'] ) ) {
@@ -483,6 +682,28 @@ final class Downloads {
 				'title'     => __( 'Your vouchers', 'voucher-captain' ),
 			)
 		);
+		if ( $is_thankyou ) {
+			$this->correction_links( $vouchers );
+		}
+	}
+
+	/**
+	 * M12-47: "Wrong address? Correct the recipient" per gift on the order received page (also for guests).
+	 *
+	 * @param Voucher[] $vouchers
+	 */
+	private function correction_links( array $vouchers ): void {
+		$links = array();
+		foreach ( $vouchers as $voucher ) {
+			$url = Delivery::to_recipient( $voucher ) ? $this->correction_url( $voucher ) : '';
+			if ( '' !== $url ) {
+				/* translators: %s: recipient email */
+				$links[] = '<li><a href="' . esc_url( $url ) . '">' . esc_html( sprintf( __( 'Correct the recipient %s', 'voucher-captain' ), $voucher->recipient_email ) ) . '</a></li>';
+			}
+		}
+		if ( $links ) {
+			echo '<section class="vcap-fix-recipient"><p>' . esc_html__( 'Mistyped the recipient address?', 'voucher-captain' ) . '</p><ul>' . implode( '', $links ) . '</ul></section>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped above.
+		}
 	}
 
 	/**

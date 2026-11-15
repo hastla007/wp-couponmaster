@@ -221,7 +221,36 @@ abstract class VoucherEmail extends \WC_Email {
 			'sent_to_admin'      => false,
 			'plain_text'         => $plain,
 			'email'              => $this,
+			'colors'             => self::colors(),
 		);
+	}
+
+	/**
+	 * M12-83: colours of the voucher emails from WooCommerce → Settings → Emails: base colour (buttons, frame),
+	 * the readable text on it, a light accent, the muted text and table borders from the text colour
+	 * (filter "vcap_email_colors").
+	 *
+	 * @return array{base:string, on_base:string, accent:string, muted:string, border:string}
+	 */
+	public static function colors(): array {
+		$base = sanitize_hex_color( (string) get_option( 'woocommerce_email_base_color', '' ) );
+		$text = sanitize_hex_color( (string) get_option( 'woocommerce_email_text_color', '' ) );
+		$base = $base ? $base : '#1f3a4d';
+		$text = $text ? $text : '#3c3c3c';
+		$colors = array(
+			'base'    => $base,
+			'on_base' => function_exists( 'wc_light_or_dark' ) ? (string) wc_light_or_dark( $base, '#202020', '#ffffff' ) : '#ffffff',
+			'accent'  => function_exists( 'wc_hex_lighter' ) ? '#' . ltrim( (string) wc_hex_lighter( $base, 45 ), '#' ) : $base,
+			'muted'   => function_exists( 'wc_hex_lighter' ) ? '#' . ltrim( (string) wc_hex_lighter( $text, 25 ), '#' ) : '#666666',
+			'border'  => function_exists( 'wc_hex_lighter' ) ? '#' . ltrim( (string) wc_hex_lighter( $text, 85 ), '#' ) : '#e5e5e5',
+		);
+		/** Colours of the voucher emails (base, on_base, accent, muted, border), from the WooCommerce email colours. */
+		$filtered = (array) apply_filters( 'vcap_email_colors', $colors );
+		foreach ( $colors as $key => $default ) {
+			$value          = sanitize_hex_color( (string) ( $filtered[ $key ] ?? '' ) );
+			$colors[ $key ] = $value ? $value : $default;
+		}
+		return $colors;
 	}
 
 	public function get_content_html() {
@@ -301,7 +330,8 @@ abstract class VoucherEmail extends \WC_Email {
 				'label'   => __( 'Attach the voucher PDF', 'voucher-captain' ),
 				'default' => 'yes',
 			),
-			'email_type'         => $this->form_fields['email_type'],
+			// M12-83: HTML with a plain text part by default (spam filters, text-only clients).
+			'email_type'         => array_merge( $this->form_fields['email_type'], array( 'default' => 'multipart' ) ),
 		);
 		$this->form_fields = $fields;
 	}

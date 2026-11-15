@@ -65,6 +65,11 @@ if ( $next_steps ) {
 }
 echo "\n=================================================================\n\n";
 
+if ( ! empty( $correction_url ) ) {
+	// M12-47: the buyer's copy of a gift: a mistyped recipient address can be corrected.
+	echo __( 'Mistyped the recipient address?', 'voucher-captain' ) . ' ' . __( 'Correct the recipient', 'voucher-captain' ) . ': ' . esc_url_raw( $correction_url ) . "\n\n";
+}
+
 if ( $additional_content ) {
 	echo wp_strip_all_tags( wptexturize( $additional_content ) ) . "\n\n";
 }
