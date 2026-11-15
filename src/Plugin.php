@@ -133,6 +133,7 @@ final class Plugin {
 		( new OrderReturn( $this->vouchers, $this->coupons ) )->register();
 		$this->payments->register();
 		( new CartBlocks( $this->vouchers, $this->payments, $this->store_credit ) )->register();
+		( new GiftCardField( $this->vouchers, $this->payments, $this->store_credit ) )->register();
 		( new API\V1\RestController( $this->redemptions ) )->register();
 
 		( new Compat\Subscriptions() )->register();

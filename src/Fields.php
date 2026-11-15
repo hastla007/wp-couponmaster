@@ -363,6 +363,9 @@ final class Fields {
 		$config = ProductConfig::get( $product );
 		echo '<div class="vcap-fields vcap-fields--' . esc_attr( $position ) . '">';
 		echo $amount_html; // phpcs:ignore WordPress.Security.EscapeOutput -- built by CustomAmount with escaping.
+		if ( self::gift_toggle_enabled() && array_intersect_key( $defs, array_flip( self::GIFT_KEYS ) ) ) {
+			$this->render_gift_toggle();
+		}
 		foreach ( $defs as $key => $field ) {
 			$this->render_field( $key, $field, $config );
 		}
@@ -404,6 +407,33 @@ final class Fields {
 			echo '<p class="vcap-preview-row"><button type="button" class="button vcap-preview-button" data-product="' . esc_attr( (string) $product->get_id() ) . '">' . esc_html__( 'Preview voucher', 'voucher-captain' ) . '</button></p>';
 		}
 		echo '</div>';
+	}
+
+	/** M12-95: fields that only matter for a gift (hidden and ignored when the customer buys "for me"). */
+	public const GIFT_KEYS = array( 'recipient_name', 'recipient_email', 'message' );
+
+	/** M12-95: setting "Gift / for me" choice. */
+	public static function gift_toggle_enabled(): bool {
+		return 'yes' === Settings::value( 'vcap_gift_toggle' );
+	}
+
+	/** Whether the customer chose "For me" (field "gift_mode" = "self", only with the setting on). */
+	private function for_self(): bool {
+		return self::gift_toggle_enabled() && 'self' === $this->posted_value( 'gift_mode' );
+	}
+
+	/** "As a gift" / "For me" (frontend.js hides the gift fields for "For me"; the server ignores them then). */
+	private function render_gift_toggle(): void {
+		$self = 'self' === $this->posted_value( 'gift_mode' );
+		$id   = Shortcodes::unique_id( 'vcap-gift-mode' );
+		echo '<fieldset class="vcap-gift-mode"><legend>' . esc_html__( 'Who is the voucher for?', 'voucher-captain' ) . '</legend>';
+		foreach ( array(
+			'gift' => __( 'As a gift', 'voucher-captain' ),
+			'self' => __( 'For me', 'voucher-captain' ),
+		) as $value => $label ) {
+			echo '<label for="' . esc_attr( $id . '-' . $value ) . '"><input type="radio" id="' . esc_attr( $id . '-' . $value ) . '" name="vcap_fields[gift_mode]" value="' . esc_attr( $value ) . '"' . checked( ( 'self' === $value ) === $self, true, false ) . ' /> ' . esc_html( $label ) . '</label> ';
+		}
+		echo '</fieldset>';
 	}
 
 	/** @var array<string, mixed>|null field values of a Store API request (blocks), used instead of $_POST */
@@ -458,7 +488,7 @@ final class Fields {
 			$attrs .= ' placeholder="' . esc_attr( $field['placeholder'] ) . '"';
 		}
 
-		echo '<p class="form-row vcap-field vcap-field--' . esc_attr( $type ) . '">';
+		echo '<p class="form-row vcap-field vcap-field--' . esc_attr( $type ) . '" data-vcap-key="' . esc_attr( $key ) . '">';
 		if ( 'checkbox' !== $type ) {
 			echo '<label for="' . esc_attr( $id ) . '">' . esc_html( $field['label'] ?? $key ) . ( $required ? ' <abbr class="required" title="' . esc_attr__( 'required', 'voucher-captain' ) . '">*</abbr>' : ' <span class="optional">(' . esc_html__( 'optional', 'voucher-captain' ) . ')</span>' ) . '</label>';
 		}
@@ -524,8 +554,12 @@ final class Fields {
 	 * @return array<string, array{label:string,value:string}>
 	 */
 	public function collect_posted( \WC_Product $product, bool $only_filled = true ): array {
-		$out = array();
+		$out  = array();
+		$self = $this->for_self();
 		foreach ( $this->flat_definitions( $product ) as $key => $field ) {
+			if ( $self && in_array( (string) $key, self::GIFT_KEYS, true ) ) {
+				continue; // "For me": no recipient, no gift message.
+			}
 			$raw = $this->posted_value( (string) $key );
 			switch ( $field['type'] ?? 'text' ) {
 				case 'textarea':
@@ -623,7 +657,11 @@ final class Fields {
 	public function errors( \WC_Product $product ): array {
 		$errors        = array();
 		$this->invalid = array();
+		$self          = $this->for_self();
 		foreach ( $this->flat_definitions( $product ) as $key => $field ) {
+			if ( $self && in_array( (string) $key, self::GIFT_KEYS, true ) ) {
+				continue; // "For me": the gift fields are not asked for.
+			}
 			$raw    = trim( $this->posted_value( (string) $key ) );
 			$label  = (string) ( $field['label'] ?? $key );
 			$before = count( $errors );

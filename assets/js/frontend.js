@@ -95,6 +95,22 @@
 			$post.appendTo( document.body ).trigger( 'submit' ).remove();
 		} );
 
+		// M12-95: "As a gift" / "For me" – the gift fields are hidden and not sent (disabled) for "For me".
+		var giftMode = function ( radio ) {
+			var $scope = $( radio ).closest( 'form' );
+			$scope = $scope.length ? $scope : $( document.body );
+			var self = 'self' === $scope.find( 'input[name="vcap_fields[gift_mode]"]:checked' ).val();
+			$scope.find( '.vcap-field[data-vcap-key="recipient_name"], .vcap-field[data-vcap-key="recipient_email"], .vcap-field[data-vcap-key="message"]' ).each( function () {
+				$( this ).prop( 'hidden', self ).find( 'input, textarea, select' ).prop( 'disabled', self );
+			} );
+		};
+		$( document ).on( 'change', 'input[name="vcap_fields[gift_mode]"]', function () {
+			giftMode( this );
+		} );
+		$( 'input[name="vcap_fields[gift_mode]"]:checked' ).each( function () {
+			giftMode( this );
+		} );
+
 		// The referral link is selected when focused, ready to copy (no inline handler: Content Security Policy).
 		$( document ).on( 'focus', '.vcap-referral-link', function () {
 			this.select();

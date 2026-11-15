@@ -403,10 +403,13 @@ final class StoreCredit {
 				/* translators: 1: balance, 2: link */
 				__( 'You have %1$s store credit. %2$s', 'voucher-captain' ),
 				wc_price( $account->balance, array( 'currency' => $account->currency ) ),
-				'<a class="button" href="' . esc_url( $this->apply_url() ) . '">' . esc_html__( 'Use store credit', 'voucher-captain' ) . '</a>'
+				'<a class="button vcap-use-store-credit" href="' . esc_url( $this->apply_url() ) . '">' . esc_html__( 'Use store credit', 'voucher-captain' ) . '</a>'
 			),
 			'notice'
 		);
+		if ( GiftCardField::enabled() ) {
+			GiftCardField::enqueue_script(); // M12-95: applied without reloading the page (the link stays the fallback).
+		}
 	}
 
 	public function account_block(): void {

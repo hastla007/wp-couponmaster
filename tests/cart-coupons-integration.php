@@ -426,4 +426,97 @@ WC()->cart->remove_coupons();
 WC()->cart->empty_cart();
 wc_clear_notices();
 
+/* ---- M12-95: gift card field, store credit without reload, mini cart, gift toggle, delivery date ---- */
+
+function vcap_cc_extension( array $payload ) {
+	$request = new WP_REST_Request( 'POST', '/wc/store/v1/cart/extensions' );
+	$request->set_param( 'namespace', 'voucher-captain' );
+	$request->set_param( 'data', $payload );
+	return rest_do_request( $request );
+}
+function vcap_cc_block_data(): array {
+	$cart = json_decode( (string) wp_json_encode( rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/cart' ) )->get_data() ), true );
+	return (array) ( $cart['extensions']['voucher-captain'] ?? array() );
+}
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart( $goods->get_id(), 1 );
+// Off by default: nothing changes for existing shops.
+ob_start();
+do_action( 'woocommerce_before_cart_collaterals' );
+do_action( 'woocommerce_widget_shopping_cart_before_buttons' );
+$off_html = (string) ob_get_clean();
+$off_api  = vcap_cc_extension( array( 'action' => 'apply_code', 'code' => 'x' ) );
+vcap_cc_assert( 'no' === get_option( 'vcap_giftcard_field', 'no' ) && ! str_contains( $off_html, 'vcap-giftcard' ) && $off_api->is_error() && null === ( vcap_cc_block_data()['giftcard_field'] ?? null ), 'M12-95: with the settings off there is no gift card field (classic, blocks, update callback)', $off_api->get_status() );
+update_option( 'vcap_giftcard_field', 'yes' );
+update_option( 'vcap_minicart_balance', 'yes' );
+ob_start();
+do_action( 'woocommerce_before_cart_collaterals' );
+$field_html = (string) ob_get_clean();
+vcap_cc_assert( str_contains( $field_html, 'name="' . VCAP\GiftCardField::FIELD . '"' ) && wp_script_is( VCAP\GiftCardField::SCRIPT, 'enqueued' ), 'M12-95: the classic cart shows the "Redeem a gift card" field with its script', $field_html );
+$block_texts = vcap_cc_block_data()['giftcard_field'] ?? null;
+vcap_cc_assert( is_array( $block_texts ) && '' !== (string) ( $block_texts['label'] ?? '' ), 'M12-95: the blocks get the field texts in the Store API cart data', $block_texts );
+$field_card = vcap_cc_card( 12 );
+$bad        = vcap_cc_extension( array( 'action' => 'apply_code', 'code' => 'no-such-card-' . wp_generate_password( 6, false, false ) ) );
+$good       = vcap_cc_extension( array( 'action' => 'apply_code', 'code' => strtoupper( $field_card->code ) ) );
+vcap_cc_assert( $bad->is_error() && 400 === $bad->get_status() && ! $good->is_error() && WC()->cart->has_discount( $field_card->code ) && ! wc_get_notices( 'error' ), 'M12-95: the block field applies a gift card through the Store API update callback and refuses an unknown code with 400', array( $bad->get_status(), $good->get_status() ) );
+WC()->cart->calculate_totals();
+ob_start();
+do_action( 'woocommerce_widget_shopping_cart_before_buttons' );
+$mini = (string) ob_get_clean();
+vcap_cc_assert( str_contains( $mini, 'vcap-minicart-balance' ) && str_contains( $mini, VCAP\Mask::code( $field_card->code ) ) && ! str_contains( $mini, $field_card->code ), 'M12-95: the mini cart shows the remaining balance with the masked code', $mini );
+WC()->cart->remove_coupons();
+$classic_card = vcap_cc_card( 8 );
+$field        = new VCAP\GiftCardField( vcap()->vouchers, vcap()->payments, vcap()->store_credit );
+vcap_cc_assert( $field->apply( $classic_card->code ) && WC()->cart->has_discount( $classic_card->code ), 'M12-95: the classic field (AJAX and form) applies the code to the cart' );
+wc_clear_notices();
+WC()->cart->remove_coupons();
+// Store credit without reload (blocks).
+update_option( 'vcap_store_credit', 'yes' );
+$credit_user = wp_insert_user( array( 'user_login' => 'vcap-cc-' . wp_generate_password( 6, false, false ), 'user_email' => 'cc-credit-' . wp_generate_password( 6, false, false ) . '@example.com', 'user_pass' => wp_generate_password(), 'role' => 'customer' ) );
+wp_set_current_user( $credit_user );
+vcap()->store_credit->adjust( $credit_user, 15.0, 'cc test' );
+$credit_data = vcap_cc_block_data()['store_credit'] ?? null;
+$credit_api  = vcap_cc_extension( array( 'action' => 'apply_credit' ) );
+$account     = vcap()->store_credit->account( $credit_user );
+vcap_cc_assert( is_array( $credit_data ) && true === ( $credit_data['inline'] ?? null ) && ! $credit_api->is_error() && $account && WC()->cart->has_discount( $account->code ), 'M12-95: store credit is applied through the update callback (no page reload)', $credit_api->is_error() ? $credit_api->get_data() : $credit_data );
+WC()->cart->remove_coupons();
+wp_set_current_user( 0 );
+update_option( 'vcap_store_credit', 'no' );
+update_option( 'vcap_giftcard_field', 'no' );
+update_option( 'vcap_minicart_balance', 'no' );
+WC()->cart->empty_cart();
+wc_clear_notices();
+
+// "As a gift / For me".
+$gift_product = new WC_Product_Simple();
+$gift_product->set_name( 'CC gift toggle' );
+$gift_product->set_regular_price( '20' );
+$gift_product->set_virtual( true );
+$gift_product->update_meta_data( '_vcap_enabled', 'yes' );
+$gift_product->update_meta_data( '_vcap_builtin_fields', array( 'recipient_name', 'recipient_email_required', 'message' ) );
+$gift_product->save();
+$self_off = vcap_cc_store_add( $gift_product->get_id(), array( 'vcap_fields' => array( 'gift_mode' => 'self' ) ) );
+update_option( 'vcap_gift_toggle', 'yes' );
+$self_on = vcap_cc_store_add( $gift_product->get_id(), array( 'vcap_fields' => array( 'gift_mode' => 'self', 'recipient_email' => 'ignored@example.com' ) ) );
+$items   = array_values( WC()->cart->get_cart() );
+vcap_cc_assert( $self_off->is_error() && ! $self_on->is_error() && 1 === count( $items ) && ! isset( $items[0]['vcap_fields']['recipient_email'] ), 'M12-95: "For me" skips the (required) recipient fields and stores none; without the setting the field stays required', $self_on->is_error() ? $self_on->get_data() : $items );
+$GLOBALS['product'] = wc_get_product( $gift_product->get_id() ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride
+ob_start();
+vcap()->fields->render( 'before_button' );
+$toggle_html = (string) ob_get_clean();
+vcap_cc_assert( str_contains( $toggle_html, 'name="vcap_fields[gift_mode]"' ) && str_contains( $toggle_html, 'data-vcap-key="recipient_email"' ), 'M12-95: the product page shows "As a gift / For me" before the recipient fields', substr( wp_strip_all_tags( $toggle_html ), 0, 200 ) );
+update_option( 'vcap_gift_toggle', 'no' );
+WC()->cart->empty_cart();
+
+// Delivery date on by default for new voucher products only.
+update_option( 'vcap_new_product_delivery', 'yes' );
+$fresh_product = new WC_Product_Simple();
+$known_product = new WC_Product_Simple();
+$known_product->update_meta_data( '_vcap_enabled', 'no' );
+$with_date = VCAP\ProductSettings::default_builtin_fields( $fresh_product );
+$kept      = VCAP\ProductSettings::default_builtin_fields( $known_product );
+update_option( 'vcap_new_product_delivery', 'no' );
+$off_date = VCAP\ProductSettings::default_builtin_fields( new WC_Product_Simple() );
+vcap_cc_assert( in_array( 'delivery_date', $with_date, true ) && ! in_array( 'delivery_date', $kept, true ) && ! in_array( 'delivery_date', $off_date, true ), 'M12-95: new voucher products start with the delivery date field (setting on); existing products and the setting off do not', array( $with_date, $kept, $off_date ) );
+
 echo "Cart coupons integration checks passed.\n";

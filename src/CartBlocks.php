@@ -40,6 +40,15 @@ final class CartBlocks {
 				'schema_type'     => ARRAY_A,
 			)
 		);
+		if ( function_exists( 'woocommerce_store_api_register_update_callback' ) ) {
+			// M12-95: gift card field and store credit of the blocks (extensionCartUpdate, namespace "voucher-captain").
+			woocommerce_store_api_register_update_callback(
+				array(
+					'namespace' => self::NAMESPACE,
+					'callback'  => array( new GiftCardField( $this->repo, $this->payments, $this->credit ), 'store_api_update' ),
+				)
+			);
+		}
 	}
 
 	/** @param object $registry Automattic\WooCommerce\Blocks\Integrations\IntegrationRegistry */
@@ -62,6 +71,7 @@ final class CartBlocks {
 			'store_credit'   => null,
 			'forfeits'       => array(),
 			'promotions'     => array(),
+			'giftcard_field' => GiftCardField::block_texts(),
 		);
 		$cart = function_exists( 'WC' ) ? WC()->cart : null;
 		if ( ! $cart instanceof \WC_Cart ) {
@@ -121,6 +131,7 @@ final class CartBlocks {
 					'text'       => trim( sprintf( __( 'You have %1$s store credit. %2$s', 'voucher-captain' ), self::plain_price( (float) $account->balance, (string) $account->currency ), '' ) ),
 					'link_label' => __( 'Use store credit', 'voucher-captain' ),
 					'url'        => $this->credit->apply_url(),
+					'inline'     => GiftCardField::enabled(), // M12-95: applied with extensionCartUpdate().
 				);
 			}
 		}
@@ -174,6 +185,22 @@ final class CartBlocks {
 					'text'       => $string,
 					'link_label' => $string,
 					'url'        => $string,
+					'inline'     => array(
+						'type'     => 'boolean',
+						'context'  => array( 'view', 'edit' ),
+						'readonly' => true,
+					),
+				),
+			),
+			'giftcard_field' => array(
+				'type'       => array( 'object', 'null' ),
+				'context'    => array( 'view', 'edit' ),
+				'readonly'   => true,
+				'properties' => array(
+					'label'       => $string,
+					'placeholder' => $string,
+					'button'      => $string,
+					'applied'     => $string,
 				),
 			),
 			'forfeits'       => $rows(
@@ -226,6 +253,7 @@ final class CartBlocks {
 			'store_credit'   => null,
 			'forfeits'       => array(),
 			'promotions'     => array(),
+			'giftcard_field' => GiftCardField::block_texts(),
 		);
 	}
 

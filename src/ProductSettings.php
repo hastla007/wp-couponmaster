@@ -81,7 +81,25 @@ final class ProductSettings {
 		if ( 'usage' === $key ) {
 			return ProductConfig::default_usage( (string) $this->v( $product, 'type' ) );
 		}
+		if ( 'builtin_fields' === $key ) {
+			return self::default_builtin_fields( $product );
+		}
 		return ProductConfig::DEFAULTS[ $key ];
+	}
+
+	/**
+	 * M12-95: the product page fields a product starts with. A new voucher product (never saved with voucher
+	 * settings) also offers the delivery date when "Delivery date for new products" is on; products that exist keep
+	 * what they have.
+	 *
+	 * @return string[]
+	 */
+	public static function default_builtin_fields( \WC_Product $product ): array {
+		$fields = ProductConfig::DEFAULTS['builtin_fields'];
+		if ( ! $product->meta_exists( '_vcap_enabled' ) && 'yes' === Settings::value( 'vcap_new_product_delivery' ) ) {
+			$fields[] = 'delivery_date';
+		}
+		return $fields;
 	}
 
 	/** A hint below a field, shown by product-admin.js while its condition holds ($class names the condition). */

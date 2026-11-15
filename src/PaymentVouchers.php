@@ -235,7 +235,7 @@ final class PaymentVouchers {
 				'fixed_cart'    => 3,
 			);
 			$coupons[ (string) $code ] = $coupon;
-			$sort[ (string) $code ]    = (int) apply_filters( 'woocommerce_coupon_sort', $type[ $coupon->get_discount_type() ] ?? 0, $coupon );
+			$sort[ (string) $code ]    = (int) apply_filters( 'woocommerce_coupon_sort', $type[ $coupon->get_discount_type() ] ?? 0, $coupon ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce's own sort filter.
 		}
 		uksort( $coupons, static fn( $a, $b ) => $sort[ $a ] <=> $sort[ $b ] ); // Stable since PHP 8.0.
 		return $coupons;
