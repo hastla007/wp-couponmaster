@@ -31,11 +31,11 @@ final class Emails {
 	}
 
 	/** The gift notice email of a kind when it is registered and switched on. */
-	private static function notice( string $class ): ?Emails\GiftNoticeEmail {
+	private static function notice( string $key ): ?Emails\GiftNoticeEmail {
 		if ( ! function_exists( 'WC' ) ) {
 			return null;
 		}
-		$email = WC()->mailer()->get_emails()[ $class ] ?? null;
+		$email = WC()->mailer()->get_emails()[ $key ] ?? null;
 		return $email instanceof Emails\GiftNoticeEmail && $email->is_enabled() ? $email : null;
 	}
 

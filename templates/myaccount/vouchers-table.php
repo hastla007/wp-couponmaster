@@ -15,7 +15,7 @@
 defined( 'ABSPATH' ) || exit;
 
 $show_order = ! empty( $show_order );
-$received   = ! empty( $received );
+$vcap_received = ! empty( $received );
 ?>
 <section class="vcap-vouchers">
 	<?php if ( $title ) : ?>
@@ -89,7 +89,7 @@ $received   = ! empty( $received );
 						$order = $voucher->order();
 						if ( $order && (int) $order->get_customer_id() === get_current_user_id() ) {
 							echo '<a href="' . esc_url( $order->get_view_order_url() ) . '">#' . esc_html( $order->get_order_number() ) . '</a>';
-						} elseif ( $order && ! $received && 0 === (int) $order->get_customer_id() ) {
+						} elseif ( $order && ! $vcap_received && 0 === (int) $order->get_customer_id() ) {
 							echo '#' . esc_html( $order->get_order_number() ); // M12-18: a guest order of the verified address.
 						} else {
 							esc_html_e( 'Gift', 'voucher-captain' );
@@ -111,7 +111,7 @@ $received   = ! empty( $received );
 						<?php // Extra links of add-ons, e.g. "Add to Wallet" (filter vcap_voucher_links). ?>
 						<a class="<?php echo esc_attr( \VCAP\Shortcodes::button_class( 'woocommerce-button button vcap-voucher-link' ) ); ?>" href="<?php echo esc_url( $vcap_link['url'] ); ?>" target="_blank" rel="noopener"><?php echo esc_html( $vcap_link['label'] ); ?></a>
 					<?php endforeach; ?>
-					<?php if ( ! $received && $downloads->customer_can_change( $voucher ) ) : ?>
+					<?php if ( ! $vcap_received && $downloads->customer_can_change( $voucher ) ) : ?>
 						<?php
 						// H10/M12-16/M12-47: until delivery the buyer may correct the recipient, name and message; the date
 						// only where the product lets the customer choose it.
@@ -146,7 +146,7 @@ $received   = ! empty( $received );
 							</form>
 						</details>
 					<?php endif; ?>
-					<?php if ( ! $received && $downloads->customer_can_resend( $voucher ) ) : ?>
+					<?php if ( ! $vcap_received && $downloads->customer_can_resend( $voucher ) ) : ?>
 						<form method="post" class="vcap-resend-form">
 							<input type="hidden" name="vcap_resend" value="<?php echo esc_attr( (string) $voucher->id ); ?>" />
 							<?php if ( \VCAP\Delivery::to_recipient( $voucher ) ) : ?>
