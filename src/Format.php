@@ -18,6 +18,11 @@ final class Format {
 		return sprintf( _x( '%s%%', 'percentage', 'voucher-captain' ), wc_format_localized_decimal( (string) (float) $value ) );
 	}
 
+	/** An amount as plain text with the currency ("20,50 €"), for notices and history notes (wc_price without markup). */
+	public static function money_text( float $amount, string $currency = '' ): string {
+		return trim( html_entity_decode( wp_strip_all_tags( wc_price( $amount, '' !== $currency ? array( 'currency' => $currency ) : array() ) ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ) );
+	}
+
 	/** @var array<int, string> Order numbers already looked up (one export touches many rows of the same order). */
 	private static array $order_numbers = array();
 

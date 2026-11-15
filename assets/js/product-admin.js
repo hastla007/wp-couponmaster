@@ -40,12 +40,13 @@
 		var physicalVariation = 'variable' === productType && $( 'input.variable_is_virtual' ).filter( function () {
 			return ! $( this ).is( ':checked' );
 		} ).length > 0;
-		$( '.vcap-hint-virtual' ).toggle( on && ( ( 'simple' === productType && $( '#_virtual' ).length > 0 && ! $( '#_virtual' ).is( ':checked' ) ) || physicalVariation ) );
+		// M12-97: a physical gift card is shipped – not being virtual is right for it.
+		$( '.vcap-hint-virtual' ).toggle( on && ! $( '#_vcap_physical' ).is( ':checked' ) && ( ( 'simple' === productType && $( '#_virtual' ).length > 0 && ! $( '#_virtual' ).is( ':checked' ) ) || physicalVariation ) );
 	}
 	$( function () {
 		$( '#_vcap_enabled' ).on( 'change', toggleTab );
 		$( '#woocommerce-product-data' ).on( 'change', '#_vcap_amount_source, #_vcap_usage, #_vcap_expiry_mode, #_vcap_delivery, #_vcap_type, #_vcap_code_batch', toggleFields );
-		$( '#woocommerce-product-data' ).on( 'change', '#_vcap_discount_type, #_vcap_send_to, #_vcap_email_restrict, input[name="_vcap_builtin_fields[]"], #_virtual, #product-type, input.variable_is_virtual', toggleHints );
+		$( '#woocommerce-product-data' ).on( 'change', '#_vcap_discount_type, #_vcap_send_to, #_vcap_email_restrict, input[name="_vcap_builtin_fields[]"], #_virtual, #product-type, input.variable_is_virtual, #_vcap_physical', toggleHints );
 		// Switching the expiry mode clears a number of days that would otherwise linger unseen.
 		$( '#woocommerce-product-data' ).on( 'change', '#_vcap_expiry_mode', function () {
 			if ( 'days' !== $( this ).val() ) {

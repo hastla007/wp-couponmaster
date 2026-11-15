@@ -479,7 +479,7 @@ final class ProductChecks {
 		}
 		// U3: a voucher that is not virtual makes the checkout ask for a shipping address and charge shipping. A
 		// variable product has no virtual flag of its own; each variation is checked (they default to not virtual).
-		if ( ( $product->is_type( 'simple' ) || $product->is_type( 'variation' ) ) && ! $product->is_virtual() ) {
+		if ( ( $product->is_type( 'simple' ) || $product->is_type( 'variation' ) ) && ! $product->is_virtual() && 'yes' !== ( $config['physical'] ?? 'no' ) ) {
 			$out[] = array(
 				'level'   => 'warning',
 				'message' => $product->is_type( 'variation' )

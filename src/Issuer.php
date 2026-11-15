@@ -797,7 +797,7 @@ final class Issuer {
 		$voucher->item_index    = $index;
 		$voucher->product_id    = (int) $item->get_product_id();
 		$voucher->variation_id  = (int) $item->get_variation_id();
-		$voucher->template_id   = (int) $config['template'];
+		$voucher->template_id   = DesignGallery::template_for_item( $item, $config ); // M12-96: the customer's design.
 		$voucher->discount_type = $config['discount_type'];
 		$voucher->usage_mode    = 'percent' === $config['discount_type'] && 'balance' === $config['usage'] ? 'single' : $config['usage'];
 		if ( 'balance' === $voucher->usage_mode ) {
@@ -827,6 +827,8 @@ final class Issuer {
 		// V7: a new customer's first order above the hold value is delivered (and redeemable) after the hold.
 		$voucher->delivery_at = Delivery::with_hold( Delivery::compute_time( $config, $fields, $order ), $order, true );
 		$voucher->status      = $voucher->delivery_at && strtotime( $voucher->delivery_at . ' UTC' ) > time() ? Voucher::STATUS_SCHEDULED : Voucher::STATUS_ACTIVE;
+		// M12-97: a physical card is handed over by shipping it (no email) and stays inactive until then.
+		PhysicalCards::prepare( $voucher, $config, $order, $this->repo->now() );
 
 		// Code: imported batch first, generated fallback.
 		$code      = '';
@@ -970,6 +972,12 @@ final class Issuer {
 	 *     @type string      $reference       Idempotency key (up to 100 characters), e.g. "order-4711/3": a
 	 *                                        second call with the same reference issues nothing and returns
 	 *                                        the error "vcap_reference_used" with the voucher id in its data.
+	 *     @type string      $reason          Why it was issued (e.g. "goodwill"), shown in the history (M12-19).
+	 *     @type float       $balance         Remaining value below the value (stored balance only), e.g. a card
+	 *                                        imported with what is left of it (M12-56). Default: the value.
+	 *     @type bool        $paid            Whether the voucher was sold (money received). Admin issues pass
+	 *                                        false (goodwill, prize), imports of sold cards true. Read by the
+	 *                                        tax logic of sold/unsold vouchers; stored by it, not here.
 	 * }
 	 * @return Voucher|\WP_Error
 	 */
@@ -1020,6 +1028,7 @@ final class Issuer {
 		}
 		$source    = mb_substr( sanitize_text_field( (string) ( $args['source'] ?? '' ) ), 0, 60 );
 		$reference = mb_substr( sanitize_text_field( (string) ( $args['reference'] ?? '' ) ), 0, 100 );
+		$reason    = mb_substr( sanitize_text_field( (string) ( $args['reason'] ?? '' ) ), 0, 200 );
 		$note      = Note::make( self::STANDALONE_NOTE, array( $source, $reference ) ); // Idempotency key (standalone_by_note()).
 		$sold      = ! empty( $args['paid'] );
 		if ( '' !== $reference && ! Claim::take( 'standalone:' . md5( $reference ) ) ) {
@@ -1039,7 +1048,7 @@ final class Issuer {
 		// M12-42/M12-29: whether it was sold and its VAT treatment at issue, kept with the "issued" entry.
 		$treatment = ProductConfig::tax_treatment( $voucher );
 		ProductConfig::remember_sold( $voucher, $sold, $treatment );
-		if ( ! $this->repo->log( $voucher->id, 'issued', $voucher->initial_amount, $voucher->balance, Note::make( self::STANDALONE_NOTE, array( $source, $reference, $treatment, $sold ? 1 : 0 ) ) ) ) {
+		if ( ! $this->repo->log( $voucher->id, 'issued', $voucher->initial_amount, $voucher->balance, Note::make( self::STANDALONE_NOTE, array( $source, $reference, $treatment, $sold ? 1 : 0, $reason ) ) ) ) {
 			Db::fail( 'log_issued', array( 'voucher_id' => $voucher->id ) );
 		}
 		if ( $send ) {
@@ -1085,6 +1094,10 @@ final class Issuer {
 		$voucher->currency       = $currency;
 		$voucher->initial_amount = $amount;
 		$voucher->balance        = $amount;
+		if ( isset( $args['balance'] ) && 'balance' === $voucher->usage_mode ) {
+			// M12-56: a card taken over with what is left of it (never more than its value, never negative).
+			$voucher->balance = round( max( 0.0, min( $amount, (float) $args['balance'] ) ), API\V1\RedemptionService::decimals( $currency ) );
+		}
 		if ( array_key_exists( 'expires_at', $args ) ) {
 			$ts                  = '' !== (string) $args['expires_at'] ? strtotime( (string) $args['expires_at'] . ' UTC' ) : false;
 			$voucher->expires_at = $ts ? gmdate( 'Y-m-d H:i:s', $ts ) : null;

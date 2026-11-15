@@ -111,6 +111,15 @@ es nicht und behalten ihre bisherige Einordnung (Automatik wie oben, im Bericht 
 - Rechnung/Beleg: erstellt WooCommerce bzw. das Rechnungs-Plugin des Shops; Voucher Captain gibt keine eigene
   Rechnung aus.
 
+### 3.1 Ohne Bestellung ausgegebene und importierte Gutscheine
+
+Gutscheine aus „Gutscheine → Neuer Gutschein“ und `wp vcap issue --amount=…` (Kulanz, Gewinnspiel) werden ohne
+Zahlung ausgegeben und als „nicht verkauft“ übergeben (`paid => false` an `Issuer::issue_standalone()`); importierte
+Bestandskarten („Karten importieren“, `wp vcap import`) gelten als bereits verkauft (`paid => true`). Wie das bei der
+Einlösung steuerlich zu behandeln ist (z. B. als Preisnachlass), entscheidet die Steuerlogik, die dieses Kennzeichen
+auswertet. WooCommerce Analytics zeigt diese Gutscheine nicht (COMPATIBILITY.md „WooCommerce Analytics“); maßgeblich
+sind die Berichte unter „Gutscheine → Berichte“.
+
 ## 4. Einlösung
 
 ### 4.1 Im WooCommerce-Warenkorb (alle Gutscheinarten)

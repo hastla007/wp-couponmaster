@@ -93,25 +93,28 @@ final class Onboarding {
 				'url'    => '',
 				'button' => __( 'Create page', 'voucher-captain' ),
 			),
+			// M12-91: a ready gift card in one click (draft), or an own product; the voucher tab sets type and value.
 			'product'      => array(
-				'label'  => __( 'A voucher product: create a virtual product, tick "Voucher" and place a test order', 'voucher-captain' ),
+				'label'  => __( 'A voucher product: create a sample gift card (draft, customer chooses 25, 50 or 100 or an own amount) or your own product with "Voucher" ticked in the product data, publish it and place a test order', 'voucher-captain' ),
 				'done'   => $has_product,
-				'action' => '',
+				'action' => 'sample_product',
 				'url'    => admin_url( 'post-new.php?post_type=product' ),
-				'button' => __( 'Add product', 'voucher-captain' ),
+				'button' => __( 'Create sample gift card', 'voucher-captain' ),
+				'link'   => __( 'Add own product', 'voucher-captain' ),
 			),
+			// M12-90: links straight to the option (anchor = the option's field id).
 			'issue_status' => array(
 				'label'  => __( 'Check when vouchers are issued (default: order "Processing" or "Completed", i.e. paid)', 'voucher-captain' ),
 				'done'   => false !== get_option( 'vcap_issue_statuses', false ),
 				'action' => '',
-				'url'    => $settings,
+				'url'    => $settings . '#vcap_issue_statuses',
 				'button' => __( 'Open settings', 'voucher-captain' ),
 			),
 			'terms'        => array(
 				'label'  => __( 'Redemption conditions printed on vouchers and shown in emails (have them checked legally)', 'voucher-captain' ),
 				'done'   => self::has_terms(),
 				'action' => '',
-				'url'    => $settings,
+				'url'    => $settings . '#vcap_default_terms',
 				'button' => __( 'Open settings', 'voucher-captain' ),
 			),
 			// M12-03: how gift cards are taxed depends on two settings that belong together.
@@ -184,6 +187,10 @@ final class Onboarding {
 			if ( ! $step['done'] ) {
 				if ( '' !== $step['action'] ) {
 					echo ' ' . $this->button( $step['action'], $step['button'] ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in button().
+					$link = (string) ( $step['link'] ?? '' );
+					if ( '' !== $link && '' !== $step['url'] ) {
+						echo ' <a class="button button-small" href="' . esc_url( $step['url'] ) . '">' . esc_html( $link ) . '</a>';
+					}
 				} else {
 					echo ' <a class="button button-small" href="' . esc_url( $step['url'] ) . '">' . esc_html( $step['button'] ) . '</a>';
 				}
@@ -249,6 +256,14 @@ final class Onboarding {
 			self::choose_validity( substr( $do, 9 ) );
 		} elseif ( str_starts_with( $do, 'done_' ) ) {
 			self::mark_done( substr( $do, 5 ) );
+		} elseif ( 'sample_product' === $do ) {
+			$product_id = self::create_sample_product();
+			if ( $product_id ) {
+				Flash::add( 'success', __( 'A sample gift card was created as a draft: check the price, design and texts, then publish it.', 'voucher-captain' ) );
+				$back = (string) get_edit_post_link( $product_id, 'url' );
+			} else {
+				Flash::add( 'error', __( 'The sample gift card could not be created.', 'voucher-captain' ) );
+			}
 		} elseif ( in_array( $do, array( 'redeem_page', 'balance_page' ), true ) ) {
 			$existing = self::existing_page( $do );
 			$page     = $existing ?: self::create_page( $do );
@@ -265,6 +280,44 @@ final class Onboarding {
 		}
 		wp_safe_redirect( $back );
 		exit;
+	}
+
+	/**
+	 * M12-91: a draft gift card that fits the usual case: virtual, stored balance, the customer chooses one of 25, 50
+	 * and 100 or an own amount (10–500), sent by email. Returns the product id (0 on failure).
+	 */
+	public static function create_sample_product(): int {
+		$product = new \WC_Product_Simple();
+		$product->set_name( __( 'Gift card', 'voucher-captain' ) );
+		$product->set_status( 'draft' );
+		$product->set_virtual( true );
+		$product->set_regular_price( '25' );
+		$product->set_short_description( __( 'Choose an amount, add a personal message and send the gift card by email – right away or on a date of your choice. It can be used for several purchases until its value is used up.', 'voucher-captain' ) );
+		$meta = array(
+			'_vcap_enabled'        => 'yes',
+			'_vcap_type'           => 'giftcard',
+			'_vcap_usage'          => 'balance',
+			'_vcap_discount_type'  => 'fixed_cart',
+			'_vcap_amount_source'  => 'custom',
+			'_vcap_custom_min'     => '10',
+			'_vcap_custom_max'     => '500',
+			'_vcap_custom_step'    => '1',
+			'_vcap_custom_presets' => '25; 50; 100',
+			'_vcap_tax_treatment'  => 'auto',
+			'_vcap_send_to'        => 'recipient',
+			'_vcap_preview'        => 'yes',
+			'_vcap_builtin_fields' => array( 'recipient_name', 'recipient_email', 'message', 'delivery_date' ),
+		);
+		foreach ( $meta as $key => $value ) {
+			$product->update_meta_data( $key, $value );
+		}
+		try {
+			$id = (int) $product->save();
+		} catch ( \Throwable $e ) {
+			return 0;
+		}
+		self::forget_pages();
+		return $id;
 	}
 
 	/** Published page that already does the job of the redeem or balance page (0 when there is none). */
@@ -304,7 +357,8 @@ final class Onboarding {
 				'post_type'    => 'page',
 				'post_status'  => 'publish',
 				'post_title'   => $redeem ? __( 'Redeem voucher', 'voucher-captain' ) : __( 'Check voucher balance', 'voucher-captain' ),
-				'post_content' => $redeem ? '<!-- wp:shortcode -->[vcap_redeem]<!-- /wp:shortcode -->' : '<!-- wp:shortcode -->[vcap_balance]<!-- /wp:shortcode -->',
+				// M12-91: the plugin's own blocks (editable in the block editor), not a shortcode block.
+				'post_content' => $redeem ? '<!-- wp:vcap/redeem /-->' : '<!-- wp:vcap/balance /-->',
 			),
 			true
 		);

@@ -151,6 +151,9 @@ final class Note {
 					// M12-42: sold or free of charge, and the VAT treatment at issue.
 					$text .= '. ' . ( (int) $args[3] ? __( 'Sold', 'voucher-captain' ) : __( 'Free of charge', 'voucher-captain' ) ) . '; ' . self::treatment_text( (string) $args[2] );
 				}
+				if ( '' !== (string) $a( 4 ) ) {
+					$text .= '. ' . (string) $a( 4 ); // M12-19: reason given by the admin.
+				}
 				return $text;
 			case ProductConfig::SNAPSHOT_NOTE:
 				return self::treatment_text( (string) $a( 0 ) );
@@ -168,6 +171,18 @@ final class Note {
 			case 'privacy_erased':
 				/* translators: %d: number of history notes */
 				return sprintf( _n( 'Personal data erased on request (GDPR); %d free-text history note anonymised, coded notes kept.', 'Personal data erased on request (GDPR); %d free-text history notes anonymised, coded notes kept.', (int) $a( 0 ), 'voucher-captain' ), (int) $a( 0 ) );
+			case 'imported':
+				/* translators: 1: initial value, 2: remaining value taken over, 3: file or source */
+				return trim( sprintf( __( 'Taken over from an existing card: value %1$s, remaining value %2$s. %3$s', 'voucher-captain' ), (string) $a( 0 ), (string) $a( 1 ), (string) $a( 2 ) ) );
+			case 'moved_to_credit':
+				/* translators: 1: amount, 2: masked store credit code */
+				return sprintf( __( 'Remaining value %1$s added to the customer\'s store credit (%2$s); the card was voided.', 'voucher-captain' ), (string) $a( 0 ), (string) $a( 1 ) );
+			case 'validity_extended':
+				/* translators: 1: old expiry date, 2: new expiry date */
+				return sprintf( __( 'Validity extended (bulk action): %1$s → %2$s', 'voucher-captain' ), (string) $a( 0 ), (string) $a( 1 ) );
+			case 'physical_activated':
+				/* translators: %s: order number */
+				return sprintf( __( 'Physical card activated: order %s was shipped (completed).', 'voucher-captain' ), (string) $a( 0 ) );
 			case 'resent':
 				/* translators: 1: role ("Buyer", "Recipient"), 2: masked email address */
 				return sprintf( __( 'Sent to the %1$s (%2$s) by an admin', 'voucher-captain' ), self::role_label( (string) $a( 0 ) ), (string) $a( 1 ) );

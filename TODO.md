@@ -890,7 +890,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - Abschnitt „Erhaltene Gutscheine“ über die bestätigte Kontoadresse (`PersonalVoucher::verified_email`, `received_by()`), ohne Ändern- und Resend-Formulare. Geplante Gutscheine bleiben verborgen.
     - Gastbestellungen mit bestätigter Adresse in die Käuferliste. Test.
-- [ ] **[PRIO: HOCH]** | **[Experte #12, #11]** | **[Kategorie: Feature]** – **M12-19 Gutschein oder Geschenkkarte im Admin ohne Bestellung anlegen**
+- [x] **[PRIO: HOCH]** | **[Experte #12, #11]** | **[Kategorie: Feature]** – **M12-19 Gutschein oder Geschenkkarte im Admin ohne Bestellung anlegen** — *Nachweis: tests/shop-admin-integration.php „M12-19: the admin form "New voucher" issues a gift card without an order and opens it“, „M12-19: issued vouchers are passed as not sold (paid => false); without "send" they count as handed over“, „M12-19: wp vcap issue --amount --email issues through the same path (ledger source "cli")“*
   - *Problem:*
     - `issue_standalone()` hat weder Oberfläche noch CLI.
     - Kulanz, Gewinnspiel oder Verkauf im Laden gehen nur über Scheinbestellungen. Alle Marktführer bieten „Gift card hinzufügen“.
@@ -1092,16 +1092,16 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
 - [ ] **[PRIO: MITTEL]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-52 Sicherheitssperre für Erstkäufer wird erst nach der Zahlung erklärt**
   - *Problem:* „Über 250 € → 24 h Wartezeit“ steht nur in Bestellbestätigung und Mail. Abgebrochene Käufe wegen des Tageslimits sieht niemand.
   - *Lösung:* Hinweis in `product_hint()` und im Warenkorb für neue Kunden. Abgewiesene Versuche zählen.
-- [ ] **[PRIO: MITTEL]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-53 Vorschau ist ein PDF im neuen Tab (Android lädt herunter), keine Live-Vorschau**
+- [x] **[PRIO: MITTEL]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-53 Vorschau ist ein PDF im neuen Tab (Android lädt herunter), keine Live-Vorschau** — *Nachweis: tests/shop-admin-integration.php „M12-53: the live preview gets the designs (product and gallery) with name, message and amount left to fill in and the rest filled“, „M12-53: the PDF button is the "Print preview" with the hint "opens in a new window"“, „M12-53: the preview data carries template and amount of each variation“*
   - *Problem:* Jede Änderung braucht ein neues Rendering, die Variante wird nicht berücksichtigt, es gibt keinen Hinweis auf das neue Fenster.
   - *Lösung:* HTML/Canvas-Live-Vorschau, oder mindestens ein PNG im Modal. `aria`-Hinweis, die gewählte Variante übergeben.
-- [ ] **[PRIO: MITTEL]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-54 Admin-Suche findet keine Codeenden, keine Codes ohne Trennzeichen und keine Bestellnummern**
+- [x] **[PRIO: MITTEL]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-54 Admin-Suche findet keine Codeenden, keine Codes ohne Trennzeichen und keine Bestellnummern** — *Nachweis: tests/shop-admin-integration.php „M12-54: a masked code end ("…M9X1") finds the voucher“, „M12-54: the code without separators or with spaces finds the voucher“, „M12-54: the order id ("#123") and a sequential order number find the order's vouchers“, „M12-54: the user profile links to the customer's vouchers“*
   - *Problem:* Gesucht wird nur am Anfang des Codes (`LIKE 'x%'`) und mit `order_id`. Es fehlen Links „Gutscheine dieses Kunden/Produkts“.
   - *Lösung:* Eingabe normalisieren (`code_candidates`), Endsuche, `order_number` auflösen, Links in Profil und Produkt-Tab.
 - [ ] **[PRIO: MITTEL]** | **[Experte #11]** | **[Kategorie: Feature]** – **M12-55 Kein Absendername „Von“**
   - *Problem:* Betreff und PDF verwenden den Rechnungsnamen, etwa „Müller GmbH sent you …“.
   - *Lösung:* Eingebautes Feld `sender_name` (vorbelegt), Platzhalter `{sender_name}` mit Rückfall auf `{buyer_name}`.
-- [ ] **[PRIO: MITTEL]** | **[Experte #11, #12]** | **[Kategorie: Feature]** – **M12-56 Import bestehender Karten mit Restwert (Migration)**
+- [x] **[PRIO: MITTEL]** | **[Experte #11, #12]** | **[Kategorie: Feature]** – **M12-56 Import bestehender Karten mit Restwert (Migration)** — *Nachweis: tests/shop-admin-integration.php „M12-56: the dry run checks every row and imports nothing“, „M12-56: a card is imported with its code, value, remaining value and expiry“, „M12-56: a second run skips cards imported before (idempotent)“*
   - *Problem:* Importiert werden nur unvergebene Codes. Bestandskarten aus YITH, PW oder WC Gift Cards bzw. Papiergutscheine lassen sich nicht übernehmen.
   - *Lösung:*
     - CSV-Import über `issue_standalone()`: Code, Wert, Restwert, Ablauf, Empfänger. Idempotent, mit Probelauf, Ledger-Ereignis `import`.
@@ -1193,26 +1193,26 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:* `wp_cache_supports( 'flush_runtime' )` prüfen, sonst bei nicht-persistentem Cache `wp_cache_flush()`.
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #10]** | **[Kategorie: Bug]** – **M12-89 Doppelte Inhaltsanalyse je Seitenaufruf ohne Memo**
   - *Lösung:* `page_has_redeem_form()` je Post-ID merken und erst nach dem `headers_sent`-Kurzschluss aufrufen.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-90 Einstellungsseite „Allgemein“ mit rund 50 Optionen**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-90 Einstellungsseite „Allgemein“ mit rund 50 Optionen** — *Nachweis: tests/shop-admin-integration.php „M12-90: the four sections show every former "General" option exactly once (option keys unchanged)“, „M12-90: the checklist links straight to the option (anchor)“*
   - *Lösung:* Eigene Abschnitte „Einlösung & Guthaben“, „Aktionen & Freunde werben“ und „Codes“. Onboarding-Links mit Anker.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-91 Produkt-Standards passen nicht zur Geschenkkarte, Onboarding ohne Musterkarte, Schritttext irreführend**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-91 Produkt-Standards passen nicht zur Geschenkkarte, Onboarding ohne Musterkarte, Schritttext irreführend** — *Nachweis: tests/shop-admin-integration.php „M12-91: "Create sample gift card" makes a draft virtual gift card with stored balance, own amount and 25/50/100“, „M12-91: the created pages contain the plugin's block, not a shortcode block“*
   - *Lösung:* Button „Beispiel-Geschenkkarte anlegen“, Schritttext korrigieren, echte Blöcke statt Shortcodes.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #11, #1, #12]** | **[Kategorie: UX]** – **M12-92 Berichte: keine Verkaufsübersicht, keine Integration in WooCommerce Analytics**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #11, #1, #12]** | **[Kategorie: UX]** – **M12-92 Berichte: keine Verkaufsübersicht, keine Integration in WooCommerce Analytics** — *Nachweis: tests/shop-admin-integration.php „M12-92: redeemed and expired value of the period“, „M12-92: "Overview" is the default reports tab“, „M12-92: COMPATIBILITY.md explains what WooCommerce Analytics shows“*
   - *Lösung:* Tab „Übersicht“ als Standard mit Kennzahlen (verkauft, eingelöst, offen, verfallen, Top-Produkte). Optional ein Analytics-Report, zumindest Erklärung in COMPATIBILITY.md und TAX.md.
 - [x] **[PRIO: NIEDRIG]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-93 Guthabenabfrage und Warenkorbmeldungen ohne Kontext** — *Nachweis: tests/cart-coupons-integration.php „M12-93: the balance result names the code ("Code …XXXX") and has a "Redeem" button“*
   - *Lösung:* Ergebnis nennt „Code …XXXX“, Button „Einlösen“. Meldungen mit Datum („aktiv ab“, „abgelaufen am“).
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-94 Massenaktionen ohne „Gültigkeit verlängern“, „Erinnerung senden“ und „Auswahl exportieren“**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-94 Massenaktionen ohne „Gültigkeit verlängern“, „Erinnerung senden“ und „Auswahl exportieren“** — *Nachweis: tests/shop-admin-integration.php „M12-94: "Extend validity" adds the days to the expiry; vouchers without expiry are skipped“, „M12-94: "Send expiry reminder" mails the expiring voucher and records it“, „M12-94: "Export selection" writes the selected vouchers“*
   - *Lösung:* Die drei Massenaktionen ergänzen, protokolliert über `sync_coupon`.
 - [x] **[PRIO: NIEDRIG]** | **[Experte #11, #12, #5, #1]** | **[Kategorie: Feature]** – **M12-95 Eigenes Geschenkkartenfeld, Guthaben per Klick, Restwert im Mini-Warenkorb, Gift-Toggle, Lieferdatum standardmäßig an** — *Nachweis: tests/cart-coupons-integration.php „M12-95: the block field applies a gift card through the Store API update callback and refuses an unknown code with 400“*
   - *Lösung:*
     - Optionales Feld „Geschenkkarte einlösen“ (klassisch und Block-Slot über `extensionCartUpdate`), gespeicherte Karten mit einem Klick.
     - Restwert im Mini-Warenkorb.
     - Schalter „Als Geschenk kaufen / für mich“, Lieferdatum standardmäßig aktiv.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #11, #12]** | **[Kategorie: Feature]** – **M12-96 Designgalerie: Kunde wählt die Vorlage**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #11, #12]** | **[Kategorie: Feature]** – **M12-96 Designgalerie: Kunde wählt die Vorlage** — *Nachweis: tests/shop-admin-integration.php „M12-96: a design outside the list is refused; a valid one is stored as cart item data "vcap_template"“, „M12-96: the voucher is issued with the chosen design; a design not (or no longer) allowed falls back to the product template“*
   - *Lösung:* Produktoption mit erlaubten Vorlagen und Radiogruppe mit Thumbnails, geprüft gegen die Liste. Eigener Foto-Upload bleibt Premium.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #11, #12]** | **[Kategorie: Feature]** – **M12-97 Physische Geschenkkarten**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #11, #12]** | **[Kategorie: Feature]** – **M12-97 Physische Geschenkkarten** — *Nachweis: tests/shop-admin-integration.php „M12-97: a paid order issues the card with a code from the batch, inactive and handed over (no email)“, „M12-97: completing (shipping) the order activates the card, still without a voucher email“*
   - *Lösung:* Produktoption „Physische Karte“: versendbar, Code aus Batch, keine Mail, Aktivierung beim Versand. Druckdaten bleiben Premium.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #12]** | **[Kategorie: Feature]** – **M12-98 Erhaltene Karte ins eigene Guthaben übernehmen, Karten zusammenführen**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #12]** | **[Kategorie: Feature]** – **M12-98 Erhaltene Karte ins eigene Guthaben übernehmen, Karten zusammenführen** — *Nachweis: tests/shop-admin-integration.php „M12-98: the code holder moves the card into store credit: credit +40, card voided with balance 0“, „M12-98: both histories show the booking and the outstanding value stays the same“*
   - *Lösung:* Im Kern „Zu meinem Guthaben hinzufügen“ (Karte → StoreCredit, im Ledger). Zusammenführen bleibt Premium.
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #3]** | **[Kategorie: Feature]** – **M12-99 PIN für physische Karten**
   - *Lösung:* PIN-Spalte im Import (gehasht gespeichert). Die PIN ist Pflicht bei Saldoabfrage, Aufladung, REST und Online-Einlösung, im gemeinsamen Rate-Limit-Bucket.

@@ -57,6 +57,10 @@ final class ProductConfig {
 		'builtin_fields'      => array( 'recipient_name', 'recipient_email', 'message' ),
 		'message_maxlength'   => 300,
 		'message_maxlines'    => 0, // M12-39: line limit of the personal message (0 = none).
+		// M12-96: PDF templates the customer may choose from on the product page (empty: no choice).
+		'allowed_templates'   => array(),
+		// M12-97: shipped plastic/paper card with a code from the batch, activated when the order is completed.
+		'physical'            => 'no',
 	);
 
 	/** Keys a variation may override (empty = inherit). */

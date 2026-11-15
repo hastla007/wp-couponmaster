@@ -53,6 +53,10 @@ final class VouchersListTable extends \WP_List_Table {
 			'reactivate' => __( 'Reactivate', 'voucher-captain' ),
 			'reissue'    => __( 'Reissue code (no email)', 'voucher-captain' ),
 			'print_nup'  => __( 'Print on A4 sheets (PDF, several per sheet)', 'voucher-captain' ),
+			// M12-94.
+			'extend'     => __( 'Extend validity…', 'voucher-captain' ),
+			'remind'     => __( 'Send expiry reminder', 'voucher-captain' ),
+			'export'     => __( 'Export selection (CSV)', 'voucher-captain' ),
 		);
 	}
 
@@ -84,6 +88,9 @@ final class VouchersListTable extends \WP_List_Table {
 		echo '<label><input type="checkbox" name="expiring" value="soon" ' . checked( $expiring, 'soon', false ) . '> ' . esc_html__( 'Expiring within 30 days (usable, with remaining value)', 'voucher-captain' ) . '</label> ';
 		echo '<label><input type="checkbox" name="undelivered" value="yes" ' . checked( $undeliv, 'yes', false ) . '> ' . esc_html__( 'Not delivered', 'voucher-captain' ) . '</label> ';
 		submit_button( __( 'Filter', 'voucher-captain' ), '', 'filter_action', false );
+		// M12-94: what "Extend validity…" extends by (days from the current expiry, or to a date).
+		echo ' <span class="vcap-extend-fields"><label for="vcap-extend-days">' . esc_html__( 'Extend by days', 'voucher-captain' ) . '</label> <input type="number" min="1" max="3650" step="1" id="vcap-extend-days" name="vcap_extend_days" style="width:5em" />';
+		echo ' <label for="vcap-extend-date">' . esc_html__( 'or until', 'voucher-captain' ) . '</label> <input type="date" id="vcap-extend-date" name="vcap_extend_date" /></span>';
 		$args = $this->filter_args();
 		$args['s'] = $args['search']; // filter_args() reads the search term from "s".
 		unset( $args['search'] );

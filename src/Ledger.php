@@ -15,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Ledger {
 	/** Events that move monetary value. */
-	public const MONEY_EVENTS = array( 'issued', 'redeemed', 'committed', 'restored', 'adjusted', 'credit', 'debit', 'refund_credit', 'refund_credit_reversed', 'api_committed', 'api_refunded', 'passcaptain_tickets_restored', 'topup', 'topup_reversed', 'redeem_reversed', CouponManager::WRITTEN_OFF_EVENT, 'expired', TaxAccounting::EXPIRY_REVERSED_EVENT, TaxAccounting::FORFEITED_EVENT, TaxAccounting::REST_CONVERTED_EVENT );
+	public const MONEY_EVENTS = array( 'issued', 'redeemed', 'committed', 'restored', 'adjusted', 'credit', 'debit', 'refund_credit', 'refund_credit_reversed', 'api_committed', 'api_refunded', 'passcaptain_tickets_restored', 'topup', 'topup_reversed', 'redeem_reversed', CouponManager::WRITTEN_OFF_EVENT, 'expired', TaxAccounting::EXPIRY_REVERSED_EVENT, TaxAccounting::FORFEITED_EVENT, TaxAccounting::REST_CONVERTED_EVENT, 'moved_to_credit' );
 	/** Events after which a single-use voucher no longer carries value (until restored or reactivated). */
 	private const USED_EVENTS = array( 'redeemed', 'committed', 'api_committed', 'voided', TaxAccounting::FORFEITED_EVENT, TaxAccounting::REST_CONVERTED_EVENT );
 	private const BACK_EVENTS = array( 'restored', 'api_refunded', 'reactivated', 'passcaptain_tickets_restored', 'redeem_reversed' );
@@ -24,7 +24,7 @@ final class Ledger {
 	 * M12-29: the value lost at the expiry ('expired', booked back by 'expiry_reversed') and the rest of a single-use
 	 * voucher its order did not use ('forfeited', or 'rest_converted' into store credit / a new gift card).
 	 */
-	public const OUT_EVENTS = array( 'redeemed', 'committed', 'debit', 'refund_credit_reversed', 'api_committed', 'topup_reversed', CouponManager::WRITTEN_OFF_EVENT, 'expired', TaxAccounting::FORFEITED_EVENT, TaxAccounting::REST_CONVERTED_EVENT );
+	public const OUT_EVENTS = array( 'redeemed', 'committed', 'debit', 'refund_credit_reversed', 'api_committed', 'topup_reversed', CouponManager::WRITTEN_OFF_EVENT, 'expired', TaxAccounting::FORFEITED_EVENT, TaxAccounting::REST_CONVERTED_EVENT, 'moved_to_credit' );
 	/**
 	 * Vouchers whose bookings are money (same set as the liability): the "amount" of a percentage voucher is its
 	 * percentage, a reusable discount code's use or a ticket's check-in moves no value – they stay in the voucher
@@ -258,10 +258,10 @@ final class Ledger {
 		return "( v.order_id = 0 AND v.order_item_id = 0 AND v.type <> 'credit' AND COALESCE( ( SELECT i.note FROM {$events} i WHERE i.voucher_id = v.id AND i.event = 'issued' ORDER BY i.id LIMIT 1 ), '' ) LIKE %s )";
 	}
 
-	/** LIKE pattern of free_sql(): a standalone "issued" note whose last argument (sold) is 0. */
+	/** LIKE pattern of free_sql(): a standalone "issued" note whose 4th argument (sold) is 0. */
 	private static function free_pattern(): string {
 		global $wpdb;
-		return '%' . $wpdb->esc_like( '"c":"' . Issuer::STANDALONE_NOTE . '"' ) . '%' . $wpdb->esc_like( ',0]}' );
+		return '%' . $wpdb->esc_like( '"c":"' . Issuer::STANDALONE_NOTE . '"' ) . '%' . $wpdb->esc_like( ',0,"' ) . '%'; // 4th argument (sold) 0, followed by the reason (M12-19).
 	}
 
 	/** SQL list of quoted event names. */
