@@ -535,7 +535,11 @@ $GLOBALS['product'] = $short;
 ob_start();
 vcap()->fields->render( 'before_button' );
 $form = (string) ob_get_clean();
-vcap_ps_assert( str_contains( $form, 'max="' . $last . '"' ), 'the date field offers no day after the last possible one' );
+$m86_days = (int) round( ( strtotime( $last . ' 00:00:00 UTC' ) - strtotime( wp_date( 'Y-m-d' ) . ' 00:00:00 UTC' ) ) / DAY_IN_SECONDS );
+vcap_ps_assert( str_contains( $form, 'data-vcap-max-days="' . $m86_days . '"' ) && str_contains( $form, 'data-vcap-min-days="0"' ), 'the date field offers no day after the last possible one (offset in days)', $m86_days );
+// M12-86: no fixed date in the (cacheable) product HTML – the storefront script sets min/max from today.
+$m86_js = (string) file_get_contents( dirname( __DIR__ ) . '/assets/js/frontend.js' );
+vcap_ps_assert( ! preg_match( '/\s(min|max)="\d{4}-\d{2}-\d{2}"/', $form ) && str_contains( $form, 'data-vcap-utc-offset="' ) && str_contains( $m86_js, "attr( 'max'," ) && str_contains( $m86_js, 'data-vcap-max-days' ), 'M12-86: the delivery date field carries day offsets, no fixed min/max date; frontend.js sets them' );
 $_POST = array();
 if ( class_exists( '\Automattic\WooCommerce\StoreApi\Exceptions\RouteException' ) ) {
 	$request = new WP_REST_Request( 'POST', '/wc/store/v1/cart/add-item' );

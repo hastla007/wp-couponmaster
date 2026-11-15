@@ -95,6 +95,33 @@
 			$post.appendTo( document.body ).trigger( 'submit' ).remove();
 		} );
 
+		// Delivery date: min/max from today in the shop's time zone (day offsets in data attributes), so a cached
+		// product page never offers a day already past (M12-86); also for fields loaded later (quick view).
+		var ymd = function ( base, days ) {
+			var d = new Date( base.getTime() + days * 86400000 );
+			var pad = function ( n ) {
+				return ( n < 10 ? '0' : '' ) + n;
+			};
+			return d.getUTCFullYear() + '-' + pad( d.getUTCMonth() + 1 ) + '-' + pad( d.getUTCDate() );
+		};
+		var dateRange = function ( input ) {
+			var $input = $( input );
+			var offset = parseInt( $input.attr( 'data-vcap-utc-offset' ), 10 ) || 0;
+			var shopNow = new Date( Date.now() + offset * 60000 ); // Shop's wall clock, read with getUTC*().
+			var today = new Date( Date.UTC( shopNow.getUTCFullYear(), shopNow.getUTCMonth(), shopNow.getUTCDate() ) );
+			$input.attr( 'min', ymd( today, parseInt( $input.attr( 'data-vcap-min-days' ), 10 ) || 0 ) );
+			var maxDays = parseInt( $input.attr( 'data-vcap-max-days' ), 10 );
+			if ( ! isNaN( maxDays ) ) {
+				$input.attr( 'max', ymd( today, maxDays ) );
+			}
+		};
+		$( 'input[type="date"][data-vcap-max-days]' ).each( function () {
+			dateRange( this );
+		} );
+		$( document ).on( 'focus click', 'input[type="date"][data-vcap-max-days]', function () {
+			dateRange( this );
+		} );
+
 		// The referral link is selected when focused, ready to copy (no inline handler: Content Security Policy).
 		$( document ).on( 'focus', '.vcap-referral-link', function () {
 			this.select();

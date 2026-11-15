@@ -478,9 +478,9 @@ final class Fields {
 				break;
 			case 'date':
 				// H11: from today, like the server rule in errors() (a day already past the delivery hour sends at once).
-				$min  = 'delivery_date' === $key ? wp_date( 'Y-m-d' ) : '';
-				$maxd = 'delivery_date' === $key ? self::max_delivery_date( $config ) : '';
-				echo '<input type="date" ' . $attrs . ' value="' . Shortcodes::esc_attr_text( $value ) . '"' . ( $min ? ' min="' . esc_attr( $min ) . '" max="' . esc_attr( $maxd ) . '"' : '' ) . ' />'; // phpcs:ignore WordPress.Security.EscapeOutput
+				// M12-86: as day offsets – the storefront script sets min/max, a cached page keeps no fixed date.
+				$range = 'delivery_date' === $key ? self::delivery_date_attributes( $config ) : '';
+				echo '<input type="date" ' . $attrs . ' value="' . Shortcodes::esc_attr_text( $value ) . '"' . $range . ' />'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_attr_text() and delivery_date_attributes().
 				break;
 			default:
 				echo '<input type="' . esc_attr( $type ) . '" class="input-text" ' . $attrs . ' value="' . Shortcodes::esc_attr_text( $value ) . '" />'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_attr_text().
@@ -502,6 +502,21 @@ final class Fields {
 		$max    = wp_date( 'Y-m-d', time() + YEAR_IN_SECONDS );
 		$latest = $config ? Delivery::latest_delivery_date( $config, time(), self::customer_country() ) : null;
 		return null !== $latest && $latest < $max ? $latest : $max;
+	}
+
+	/**
+	 * Range of the delivery date field as data attributes (M12-86): days from today in the shop's time zone (min
+	 * 0, max up to max_delivery_date()) and the shop's UTC offset in minutes. frontend.js turns them into min/max
+	 * from the visitor's current date, so a page cache that keeps the product page for days or weeks does not
+	 * offer days already past or block days that became possible. The server checks the date anyway (errors()).
+	 */
+	public static function delivery_date_attributes( array $config ): string {
+		$tz    = wp_timezone();
+		$today = new \DateTimeImmutable( wp_date( 'Y-m-d' ) . ' 00:00:00', $tz );
+		$max   = new \DateTimeImmutable( self::max_delivery_date( $config ) . ' 00:00:00', $tz );
+		$days  = max( 0, (int) round( ( $max->getTimestamp() - $today->getTimestamp() ) / DAY_IN_SECONDS ) );
+		$off   = (int) round( $tz->getOffset( new \DateTimeImmutable( 'now', $tz ) ) / MINUTE_IN_SECONDS );
+		return ' data-vcap-min-days="0" data-vcap-max-days="' . esc_attr( (string) $days ) . '" data-vcap-utc-offset="' . esc_attr( (string) $off ) . '"';
 	}
 
 	/** Country of the current customer (statutory validity, see ProductConfig::expiry_for()). */
