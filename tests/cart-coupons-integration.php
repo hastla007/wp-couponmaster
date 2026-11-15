@@ -240,4 +240,69 @@ vcap_cc_assert( str_contains( implode( ' ', $later_errors ), wp_date( $fmt, strt
 vcap_cc_assert( str_contains( implode( ' ', $gone_errors ), wp_date( $fmt, strtotime( $gone->expires_at . ' UTC' ) ) ) && str_contains( implode( ' ', $gone_errors ), 'expired on' ), 'M12-93: an expired card says on which date it expired', $gone_errors );
 WC()->cart->empty_cart();
 
+/* ---- M12-33: foreign currencies (WCML-like switcher simulated) ------------------------------------- */
+
+$base_currency = (string) get_option( 'woocommerce_currency' );
+// A WCML stand-in that knows DKK (7.46 per base unit) and returns other currencies unchanged, as WCML does.
+$GLOBALS['woocommerce_wpml'] = (object) array(
+	'multi_currency' => (object) array(
+		'prices' => new class() {
+			public function unconvert_price_amount( $amount, $currency ) {
+				return 'DKK' === $currency ? (float) $amount / 7.46 : (float) $amount;
+			}
+		},
+	),
+);
+// A WOOCS stand-in that publishes a rate for SEK.
+$GLOBALS['WOOCS'] = new class() {
+	public function get_currencies() {
+		return array( 'SEK' => array( 'rate' => 11 ) );
+	}
+};
+$sek = (float) apply_filters( 'vcap_amount_to_base_currency', 110.0, 'SEK', null );
+vcap_cc_assert( abs( 10.0 - $sek ) < 0.0001, 'M12-33: convert() does not take the unchanged WCML answer for a currency WCML does not know; the published WOOCS rate converts 110 SEK to 10', $sek );
+unset( $GLOBALS['WOOCS'] );
+
+// The cart is in DKK; WCML converts coupon amounts when they are loaded.
+$dkk         = static fn() => 'DKK';
+$wcml_coupon = static function ( $coupon ) {
+	if ( $coupon instanceof WC_Coupon && 'yes' === $coupon->get_meta( '_vcap_voucher' ) ) {
+		$coupon->set_amount( round( (float) $coupon->get_amount( 'edit' ) * 7.46, 2 ) );
+	}
+};
+$dkk_goods = vcap_cc_product( 'CC goods 1000 DKK', '1000' );
+$dkk_card  = vcap_cc_card( 100 ); // Kept in the base currency.
+add_filter( 'woocommerce_currency', $dkk, 99 );
+add_action( 'woocommerce_coupon_loaded', $wcml_coupon );
+WC()->cart->add_to_cart( $dkk_goods->get_id(), 1 );
+WC()->cart->apply_coupon( $dkk_card->code );
+$errors = vcap_cc_errors();
+WC()->cart->calculate_totals();
+vcap_cc_assert( ! $errors && 746.0 === vcap_cc_discount( $dkk_card->code ), 'M12-33: a 100 card in a DKK cart (WCML) pays 746 DKK, not 100 DKK (balance converted before the cap)', array( $errors, vcap_cc_discount( $dkk_card->code ) ) );
+WC()->cart->remove_coupons();
+WC()->cart->empty_cart();
+remove_filter( 'woocommerce_currency', $dkk, 99 );
+remove_action( 'woocommerce_coupon_loaded', $wcml_coupon );
+unset( $GLOBALS['woocommerce_wpml'] );
+
+// A card issued before the base currency was changed: never 50 of the new currency.
+$old_currency      = 'CHF' === $base_currency ? 'EUR' : 'CHF';
+$foreign           = vcap_cc_card( 50 );
+$foreign->currency = $old_currency;
+vcap()->vouchers->update( $foreign );
+WC()->cart->add_to_cart( $goods->get_id(), 1 );
+$applied = WC()->cart->apply_coupon( $foreign->code );
+$errors  = vcap_cc_errors();
+vcap_cc_assert( ! $applied && str_contains( implode( ' ', $errors ), $old_currency ), 'M12-33: the cart refuses a card kept in another currency than the base currency', $errors );
+WC()->cart->empty_cart();
+$api_default = vcap()->redemptions->check( $foreign->code, array( 'amount' => 10 ) );
+$api_named   = vcap()->redemptions->check( $foreign->code, array( 'amount' => 10, 'currency' => strtolower( $old_currency ) ) );
+$api_reserve = vcap()->redemptions->reserve( $foreign->code, array( 'key' => 'cc-currency-' . wp_generate_password( 8, false, false ), 'target' => 'test:cc', 'amount' => 10 ) );
+vcap_cc_assert( is_wp_error( $api_default ) && 'vcap_currency_mismatch' === $api_default->get_error_code() && ! is_wp_error( $api_named ), 'M12-33: the API check refuses it in the base currency (vcap_currency_mismatch) and accepts it when the caller names its currency', array( is_wp_error( $api_default ) ? $api_default->get_error_code() : $api_default, is_wp_error( $api_named ) ? $api_named->get_error_code() : 'ok' ) );
+vcap_cc_assert( is_wp_error( $api_reserve ) && 'vcap_currency_mismatch' === $api_reserve->get_error_code(), 'M12-33: the API reservation refuses it as well', is_wp_error( $api_reserve ) ? $api_reserve->get_error_code() : $api_reserve );
+$health = ( new VCAP\Health() )->test_currency();
+vcap_cc_assert( 'critical' === $health['status'] && str_contains( wp_strip_all_tags( $health['description'] ), $old_currency . ' (' ), 'M12-33: Site Health names the vouchers kept in another currency', $health );
+$foreign->status = VCAP\Voucher::STATUS_VOID;
+vcap()->vouchers->update( $foreign );
+
 echo "Cart coupons integration checks passed.\n";

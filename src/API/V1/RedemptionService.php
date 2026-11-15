@@ -72,7 +72,8 @@ final class RedemptionService {
 	 * @param array<string, mixed>  $args    Optional: target (string), amount (float), user_id (int, PHP callers only),
 	 *                        email (string, PHP callers only: customer email of a guest, for personal vouchers – only
 	 *                        with email_verified), email_verified (bool, PHP callers only: the caller vouches that the
-	 *                        customer controls this address, e.g. its own logged-in account or staff checked the ID).
+	 *                        customer controls this address, e.g. its own logged-in account or staff checked the ID),
+	 *                        currency (string, ISO 4217: the caller's currency; default the shop base currency, M12-33).
 	 * @return array<string, mixed>|\WP_Error
 	 */
 	public function check( string $code, array $args = array() ): array|\WP_Error {
@@ -91,11 +92,42 @@ final class RedemptionService {
 		}
 		$target = isset( $args['target'] ) ? self::clean_target( (string) $args['target'] ) : '';
 		$amount = isset( $args['amount'] ) ? (float) $args['amount'] : null;
-		$check  = $this->eligibility( $voucher, $target, $amount, $user_id, (string) ( $args['email'] ?? '' ), ! empty( $args['email_verified'] ) );
+		$money  = self::currency_check( $voucher, $args );
+		if ( is_wp_error( $money ) ) {
+			return $money;
+		}
+		$check = $this->eligibility( $voucher, $target, $amount, $user_id, (string) ( $args['email'] ?? '' ), ! empty( $args['email_verified'] ) );
 		if ( is_wp_error( $check ) ) {
 			return $check;
 		}
 		return $this->voucher_data( $voucher );
+	}
+
+	/**
+	 * M12-33: a fixed value is only redeemed in the currency it is kept in. The caller may name the currency of its
+	 * own system ("currency", ISO 4217); without it the shop base currency is expected, so a voucher issued before
+	 * the base currency was changed (50 EUR) is never redeemed as 50 of the new currency (vcap_currency_mismatch).
+	 * Percentage vouchers have no currency.
+	 *
+	 * @param Voucher              $voucher Voucher.
+	 * @param array<string, mixed> $args    Request arguments.
+	 * @return true|\WP_Error
+	 */
+	public static function currency_check( Voucher $voucher, array $args ): bool|\WP_Error {
+		if ( 'percent' === $voucher->discount_type || $voucher->is_ticket() || '' === $voucher->currency ) {
+			return true;
+		}
+		$given    = isset( $args['currency'] ) && is_string( $args['currency'] ) ? strtoupper( sanitize_key( $args['currency'] ) ) : '';
+		$expected = '' !== $given ? $given : (string) get_option( 'woocommerce_currency' );
+		if ( '' === $expected || strtoupper( $voucher->currency ) === $expected ) {
+			return true;
+		}
+		return self::error(
+			'vcap_currency_mismatch',
+			/* translators: 1: currency of the voucher, 2: currency of the redemption */
+			sprintf( __( 'This voucher is kept in %1$s and cannot be redeemed in %2$s.', 'voucher-captain' ), $voucher->currency, $expected ),
+			409
+		);
 	}
 
 	/**
@@ -110,7 +142,8 @@ final class RedemptionService {
 	 *                     ttl_minutes (int, PHP callers only: how long the reservation is held before it is released
 	 *                     automatically; default the "Reservation lifetime" setting, at most 60 days),
 	 *                     email (string, PHP callers only: verified customer email of a guest, for personal vouchers),
-	 *                     email_verified (bool, PHP callers only: required for email to unlock a personal voucher, V6).
+	 *                     email_verified (bool, PHP callers only: required for email to unlock a personal voucher, V6),
+	 *                     currency (string, ISO 4217: the caller's currency; default the shop base currency, M12-33).
 	 * @return array<string, mixed>|\WP_Error
 	 * @throws \Throwable Database errors are re-thrown after the transaction was rolled back.
 	 */
@@ -160,6 +193,10 @@ final class RedemptionService {
 
 		if ( ! Install::tables_support_transactions() ) {
 			return self::error( 'vcap_temporary_failure', __( 'Voucher redemption is temporarily unavailable.', 'voucher-captain' ), 503 );
+		}
+		$money = self::currency_check( $voucher, $args );
+		if ( is_wp_error( $money ) ) {
+			return $money;
 		}
 		// D6: the deciding filters (vcap_redemption_allowed, vcap_redemption_target_available) run here, before the
 		// row lock, on the voucher as read now; a slow or remote listener then holds no lock. Under the lock the
