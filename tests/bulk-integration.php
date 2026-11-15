@@ -170,6 +170,91 @@ $cli     = wc_get_order( $cli->get_id() );
 $created = vcap()->issuer->issue_for_order( $cli, true, false );
 vcap_bulk_assert( 22 === count( $created ) && ! vcap()->issuer->last_deferred, 'B4: WP-CLI ("wp vcap issue") issues everything at once' );
 
+// AP-Q2-1: a background run whose issuing is given up leaves no safety-net action behind (no endless retries).
+$q21 = $make_order( 22 );
+add_filter( 'vcap_should_issue_for_order', '__return_false' );
+$q21->payment_complete( 'q21' );
+remove_filter( 'vcap_should_issue_for_order', '__return_false' );
+$q21 = wc_get_order( $q21->get_id() );
+$q21->update_meta_data( Issuer::ASYNC_META, array( 'total' => 22, 'started' => $repo->now() ) );
+$q21->update_meta_data( Issuer::ISSUE_FAILED_META, array( 'attempts' => Issuer::ISSUE_RETRIES, 'time' => time(), 'reference' => '' ) );
+$q21->save_meta_data();
+$q21_break = static function ( $data ) {
+	if ( $data instanceof WC_Coupon && ! $data->get_id() ) {
+		throw new RuntimeException( 'coupon save refused' );
+	}
+};
+add_action( 'woocommerce_before_data_object_save', $q21_break );
+vcap()->issuer->issue_async( $args_of( $q21 ) );
+remove_action( 'woocommerce_before_data_object_save', $q21_break );
+$q21 = wc_get_order( $q21->get_id() );
+vcap_bulk_assert( Issuer::ISSUE_RETRIES + 1 === (int) ( $q21->get_meta( Issuer::ISSUE_FAILED_META )['attempts'] ?? 0 ) && false === as_next_scheduled_action( Issuer::ISSUE_RETRY_HOOK, $args_of( $q21 ), Delivery::GROUP ), 'AP-Q2-1: after the last retry the order keeps no pending vcap_issue_order action (the 10-minute safety net is removed)', as_next_scheduled_action( Issuer::ISSUE_RETRY_HOOK, $args_of( $q21 ), Delivery::GROUP ) );
+VCAP\Attention::resolve( $q21->get_id(), 'issue' );
+
+// AP-Q2-2: deactivating mid-run removes every pending action of the group; reactivating plans again the
+// background issuing, issue retries, running bulk jobs and failed voids – and every voucher gets issued.
+$q22_run = $make_order( 30 );
+$q22_run->payment_complete( 'q22-run' );
+vcap()->issuer->issue_async( $args_of( $q22_run ) ); // First batch of 25; the next one is queued.
+$q22_run = wc_get_order( $q22_run->get_id() );
+$q22_retry = $make_order( 2 );
+add_filter( 'vcap_should_issue_for_order', '__return_false' );
+$q22_retry->payment_complete( 'q22-retry' );
+$q22_gone = $make_order( 1 );
+$q22_gone->payment_complete( 'q22-gone' );
+remove_filter( 'vcap_should_issue_for_order', '__return_false' );
+$q22_retry = wc_get_order( $q22_retry->get_id() );
+$q22_retry->update_meta_data( Issuer::ISSUE_FAILED_META, array( 'attempts' => 2, 'time' => time() - DAY_IN_SECONDS, 'reference' => '' ) );
+$q22_retry->save_meta_data();
+as_schedule_single_action( time() + HOUR_IN_SECONDS, Issuer::ISSUE_RETRY_HOOK, $args_of( $q22_retry ), Delivery::GROUP );
+$q22_gone = wc_get_order( $q22_gone->get_id() );
+$q22_gone->update_meta_data( Issuer::ISSUE_FAILED_META, array( 'attempts' => Issuer::ISSUE_RETRIES + 1, 'time' => time() - DAY_IN_SECONDS, 'reference' => '' ) );
+$q22_gone->save_meta_data();
+$q22_job = Jobs::id( 'apq22', $admin_id );
+Jobs::finish( $q22_job );
+Jobs::start( $q22_job, array( 'type' => 'apq22-none', 'total' => 1 ) );
+$q22_void = $repo->for_order( $small->get_id() )[0];
+VCAP\Attention::add( $small->get_id(), 'void:' . $q22_void->id, 'AP-Q2-2 test case' );
+vcap_bulk_assert( 25 === count( $repo->for_order( $q22_run->get_id() ) ) && false !== as_next_scheduled_action( Issuer::ISSUE_RETRY_HOOK, $args_of( $q22_run ), Delivery::GROUP ) && false !== as_next_scheduled_action( Jobs::HOOK, array( 'id' => $q22_job ), Delivery::GROUP ), 'AP-Q2-2: before the deactivation 25 of 30 vouchers exist and the next batch and the bulk job are queued' );
+
+VCAP\Install::deactivate_site();
+vcap_bulk_assert( false === as_next_scheduled_action( Issuer::ISSUE_RETRY_HOOK, $args_of( $q22_run ), Delivery::GROUP ) && false === as_next_scheduled_action( Issuer::ISSUE_RETRY_HOOK, $args_of( $q22_retry ), Delivery::GROUP ) && false === as_next_scheduled_action( Jobs::HOOK, array( 'id' => $q22_job ), Delivery::GROUP ), 'AP-Q2-2: the deactivation removed the pending batch, the issue retry and the job step' );
+VCAP\Install::activate_site();
+vcap()->ensure_schedules();
+as_unschedule_all_actions( VCAP\CatchUp::HOOK, null, Delivery::GROUP );
+as_unschedule_all_actions( Delivery::RESTORE_HOOK );
+$q22_phases = array();
+$q22_next   = array( 'vouchers', 0 );
+for ( $i = 0; $i < 200 && $q22_next; $i++ ) {
+	$q22_phases[] = $q22_next[0];
+	$q22_next     = vcap()->delivery->restore_tasks( $q22_next[0], $q22_next[1] );
+}
+as_unschedule_all_actions( Delivery::RESTORE_HOOK );
+vcap_bulk_assert( ! array_diff( array( 'vouchers', 'redemptions', 'referrals', 'issue', 'issue_failed', 'jobs', 'voids' ), $q22_phases ) && null === $q22_next, 'AP-Q2-2: the restore runs through all phases (vouchers, redemptions, referrals, issue, issue_failed, jobs, voids)', array_values( array_unique( $q22_phases ) ) );
+$q22_run_at   = as_next_scheduled_action( Issuer::ISSUE_RETRY_HOOK, $args_of( $q22_run ), Delivery::GROUP );
+$q22_retry_at = as_next_scheduled_action( Issuer::ISSUE_RETRY_HOOK, $args_of( $q22_retry ), Delivery::GROUP );
+vcap_bulk_assert( is_int( $q22_run_at ) && $q22_run_at <= time() + 5 && is_int( $q22_retry_at ) && $q22_retry_at <= time() + 5, 'AP-Q2-2: the background run and the overdue issue retry are queued again right away', array( $q22_run_at, $q22_retry_at ) );
+vcap_bulk_assert( false === as_next_scheduled_action( Issuer::ISSUE_RETRY_HOOK, $args_of( $q22_gone ), Delivery::GROUP ), 'AP-Q2-2: an order whose retries were given up before stays listed only (no new retry)' );
+vcap_bulk_assert( false !== as_next_scheduled_action( Jobs::HOOK, array( 'id' => $q22_job ), Delivery::GROUP ) && as_has_scheduled_action( Issuer::VOID_RETRY_HOOK, array( 'voucher_id' => $q22_void->id, 'attempt' => 1 ), Delivery::GROUP ), 'AP-Q2-2: the running bulk job and the open void retry are queued again' );
+$q22_again = vcap()->delivery->restore_tasks( 'issue', 0 );
+$q22_count = count( as_get_scheduled_actions( array( 'hook' => Issuer::ISSUE_RETRY_HOOK, 'args' => $args_of( $q22_run ), 'group' => Delivery::GROUP, 'status' => ActionScheduler_Store::STATUS_PENDING ), 'ids' ) );
+vcap_bulk_assert( 1 === $q22_count, 'AP-Q2-2: a restore run again does not queue a second action for an order that already has one', $q22_count );
+for ( $i = 0; $i < 5 && as_next_scheduled_action( Issuer::ISSUE_RETRY_HOOK, $args_of( $q22_run ), Delivery::GROUP ); $i++ ) {
+	vcap()->issuer->issue_async( $args_of( $q22_run ) );
+}
+vcap()->issuer->issue_async( $args_of( $q22_retry ) );
+$q22_run = wc_get_order( $q22_run->get_id() );
+vcap_bulk_assert( 30 === count( $repo->for_order( $q22_run->get_id() ) ) && '' === $q22_run->get_meta( Issuer::ASYNC_META ) && 2 === count( $repo->for_order( $q22_retry->get_id() ) ), 'AP-Q2-2: after the reactivation all 30 vouchers of the interrupted order and both of the retried order are issued', array( count( $repo->for_order( $q22_run->get_id() ) ), count( $repo->for_order( $q22_retry->get_id() ) ) ) );
+Jobs::finish( $q22_job );
+VCAP\Attention::resolve( $small->get_id(), 'void:' . $q22_void->id );
+as_unschedule_all_actions( Issuer::VOID_RETRY_HOOK, array( 'voucher_id' => $q22_void->id, 'attempt' => 1 ), Delivery::GROUP );
+foreach ( array( $q21, $q22_run, $q22_retry, $q22_gone ) as $o ) {
+	foreach ( $repo->for_order( $o->get_id() ) as $v ) {
+		as_unschedule_all_actions( 'vcap_deliver_voucher', array( 'voucher_id' => $v->id ), Delivery::GROUP );
+	}
+	as_unschedule_all_actions( Issuer::ISSUE_RETRY_HOOK, $args_of( $o ), Delivery::GROUP );
+}
+
 remove_action( 'vcap_vouchers_issued', $listen, 10 );
 foreach ( array( $small, $big, $cli ) as $o ) {
 	foreach ( $repo->for_order( $o->get_id() ) as $v ) {

@@ -707,6 +707,10 @@ final class Delivery {
 			foreach ( $plan as $id => $item ) {
 				try {
 					$this->record_attempt( $item['voucher'], $item['required'], $item['delivered'], $item['sent'], $item['sent_roles'], $item['failures'], $item['without_pdf'], $now, $item['batch'] );
+					if ( $id !== $entry->id && $item['voucher']->delivered_at && function_exists( 'as_unschedule_all_actions' ) ) {
+						// AP-P1-8: the member went out with the bundle – its own pending action would do nothing.
+						as_unschedule_all_actions( 'vcap_deliver_voucher', array( 'voucher_id' => (int) $id ), self::GROUP );
+					}
 				} catch ( \Throwable $e ) {
 					if ( $id === $entry->id ) {
 						$error = $e; // deliver() records it and plans the retry.
@@ -944,7 +948,16 @@ final class Delivery {
 				$failures[ $role ] = 'not_registered';
 				continue;
 			}
-			if ( $email->trigger( $voucher ) ) {
+			try {
+				$mailed = $email->trigger( $voucher );
+			} catch ( \Throwable $e ) {
+				// AP-Q2-3: one role's mail failing (template error in the buyer copy) does not lose the roles mailed
+				// before it – they are recorded, the retry only mails who is still missing.
+				Logger::error( 'Voucher email failed: ' . Mask::addresses( $e->getMessage() ), array( 'voucher_id' => $voucher->id, 'role' => $role ) );
+				$failures[ $role ] = 'mail_failed';
+				continue;
+			}
+			if ( $mailed ) {
 				$sent[]       = $address;
 				$sent_roles[] = $role;
 				if ( ! empty( $email->pdf_failed ) ) {
@@ -991,11 +1004,13 @@ final class Delivery {
 	/**
 	 * After a reactivation: schedules again what the deactivation removed – deliveries of scheduled vouchers (those
 	 * that became due meanwhile right away, however long ago), the release of open external reservations and
-	 * pending referral withdrawals. Runs as Action Scheduler action in batches of RESTORE_BATCH rows; each batch
+	 * pending referral withdrawals, background issuing and issue retries of orders (AP-Q2-2), running bulk jobs and
+	 * retries of failed voids. Runs as Action Scheduler action in batches of RESTORE_BATCH rows; each batch
 	 * queues the next one.
 	 *
-	 * @param string|array $phase "vouchers", "redemptions" or "referrals" (or the action's args array).
-	 * @param int          $after Last id done (order id for "referrals").
+	 * @param string|array $phase "vouchers", "redemptions", "referrals", "issue", "issue_failed", "jobs" or "voids"
+	 *                            (or the action's args array).
+	 * @param int          $after Last id done (order id for "referrals", "issue" and "issue_failed").
 	 * @return array{0:string, 1:int}|null The next batch (also queued), null when everything is restored.
 	 */
 	public function restore_tasks( $phase = 'vouchers', $after = 0 ): ?array {
@@ -1066,7 +1081,61 @@ final class Delivery {
 					as_schedule_single_action( time() + HOUR_IN_SECONDS, Referrals::RETRY_HOOK, array( (int) $order_id ), self::GROUP );
 				}
 			}
-			return count( $orders ) >= 200 ? array( 'referrals', (int) end( $orders ) ) : null;
+			return count( $orders ) >= 200 ? array( 'referrals', (int) end( $orders ) ) : array( 'issue', 0 );
+		}
+		if ( ( 'issue' === $phase || 'issue_failed' === $phase ) && function_exists( 'wc_get_orders' ) ) {
+			// AP-Q2-2: orders whose vouchers were being issued in the background, or whose issuing failed and was
+			// to be retried, lost their pending vcap_issue_order action with the deactivation.
+			$failed = 'issue_failed' === $phase;
+			$orders = OrderLookup::ids_with_meta(
+				$failed ? Issuer::ISSUE_FAILED_META : Issuer::ASYNC_META,
+				null,
+				array(
+					'status'   => array(),
+					'limit'    => 200,
+					'after_id' => max( 0, $after ),
+				)
+			);
+			foreach ( $orders as $order_id ) {
+				$args = array( 'order_id' => (int) $order_id );
+				if ( as_has_scheduled_action( Issuer::ISSUE_RETRY_HOOK, $args, self::GROUP ) ) {
+					continue;
+				}
+				$at = time();
+				if ( $failed ) {
+					$order = wc_get_order( $order_id );
+					$state = $order instanceof \WC_Order ? $order->get_meta( Issuer::ISSUE_FAILED_META ) : null;
+					$tries = is_array( $state ) ? (int) ( $state['attempts'] ?? 0 ) : 0;
+					if ( $tries < 1 || $tries > Issuer::ISSUE_RETRIES ) {
+						continue; // Given up before the deactivation: only the listing stays, as before.
+					}
+					$at = max( $at, (int) ( $state['time'] ?? 0 ) + Issuer::issue_retry_delay( $tries ) );
+				}
+				as_schedule_single_action( $at, Issuer::ISSUE_RETRY_HOOK, $args, self::GROUP );
+			}
+			if ( count( $orders ) >= 200 ) {
+				return array( $phase, (int) end( $orders ) );
+			}
+			return $failed ? array( 'jobs', 0 ) : array( 'issue_failed', 0 );
+		}
+		if ( 'jobs' === $phase ) {
+			Jobs::reschedule_running(); // Background code generation and imports (a handful of records).
+			return array( 'voids', 0 );
+		}
+		if ( 'voids' === $phase ) {
+			// Voids that failed after a refund are retried until they work: open cases without a pending retry.
+			$pending = array();
+			foreach ( as_get_scheduled_actions( array( 'hook' => Issuer::VOID_RETRY_HOOK, 'status' => \ActionScheduler_Store::STATUS_PENDING, 'per_page' => -1 ) ) as $action ) {
+				$pending[ (int) ( $action->get_args()['voucher_id'] ?? 0 ) ] = true;
+			}
+			foreach ( Attention::all() as $case ) {
+				if ( ! preg_match( '/^void(\d+)$/', (string) $case['kind'], $m ) || isset( $pending[ (int) $m[1] ] ) ) {
+					continue;
+				}
+				as_schedule_single_action( time() + MINUTE_IN_SECONDS, Issuer::VOID_RETRY_HOOK, array( 'voucher_id' => (int) $m[1], 'attempt' => 1 ), self::GROUP );
+				$pending[ (int) $m[1] ] = true;
+			}
+			return null;
 		}
 		return null;
 	}

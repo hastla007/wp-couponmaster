@@ -180,6 +180,34 @@ final class Jobs {
 		}
 	}
 
+	/**
+	 * After a reactivation (AP-Q2-2, Delivery::restore_tasks()): running jobs whose action the deactivation removed
+	 * are queued again. Chunk options ("<id>_c<n>") are skipped by name: a job id always ends in "_<user id>".
+	 *
+	 * @return string[] ids of the jobs queued again
+	 */
+	public static function reschedule_running(): array {
+		global $wpdb;
+		if ( ! function_exists( 'as_has_scheduled_action' ) ) {
+			return array();
+		}
+		$names  = (array) $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s AND option_name NOT REGEXP %s ORDER BY option_id LIMIT 500", $wpdb->esc_like( self::OPTION ) . '%', '_c[0-9]+$' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$queued = array();
+		foreach ( $names as $name ) {
+			$id = substr( (string) $name, strlen( self::OPTION ) );
+			if ( preg_match( '/_c\d+$/', $id ) ) {
+				continue;
+			}
+			$job = self::get( $id );
+			if ( ! self::running( $job ) || (string) ( $job['id'] ?? '' ) !== $id || as_has_scheduled_action( self::HOOK, array( 'id' => $id ), Delivery::GROUP ) ) {
+				continue;
+			}
+			self::schedule( $id );
+			$queued[] = $id;
+		}
+		return $queued;
+	}
+
 	private static function schedule( string $id, int $delay = 0 ): void {
 		if ( function_exists( 'as_schedule_single_action' ) ) {
 			as_unschedule_all_actions( self::HOOK, array( 'id' => $id ), Delivery::GROUP );
