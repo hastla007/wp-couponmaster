@@ -20,6 +20,7 @@ final class CouponLink {
 		// code entry points, independently of the link setting.
 		( new CouponGuard() )->register();
 		add_action( 'wp_loaded', array( $this, 'handle_request' ), 30 );
+		add_action( 'wp_loaded', array( $this, 'handle_redeem_form' ), 31 );
 		add_action( 'wp_loaded', array( $this, 'no_cache_while_pending' ), 40 );
 		add_action( 'woocommerce_add_to_cart', array( $this, 'apply_pending' ), 30, 0 );
 		add_action( 'woocommerce_cart_loaded_from_session', array( $this, 'apply_pending' ), 30, 0 );
@@ -133,6 +134,44 @@ final class CouponLink {
 		if ( ! WC()->cart->has_discount( $code ) ) {
 			WC()->cart->apply_coupon( $code );
 		}
+	}
+
+	/** Form field and nonce action of the "Redeem" button of a balance check (M12-93). */
+	public const REDEEM_FIELD = 'vcap_redeem_code';
+	public const REDEEM_NONCE = 'vcap_redeem_in_cart';
+
+	/** Whether a checked voucher can be put into the cart by code (usable in the shop, no store credit or ticket). */
+	public static function redeemable_in_cart( Voucher $voucher ): bool {
+		return Voucher::STATUS_ACTIVE === $voucher->status && ! $voucher->is_expired() && 'credit' !== $voucher->type && ! $voucher->is_ticket()
+			&& $voucher->coupon_id > 0 && Channels::allowed( $voucher, Channels::SHOP ) && ( ! $voucher->is_multi_use() || $voucher->balance > 0 );
+	}
+
+	/**
+	 * M12-93: the "Redeem" button under a balance check result: posts the code to the cart, where it is applied as
+	 * soon as the cart has products (the same way as a coupon link, also with coupon links switched off).
+	 */
+	public static function redeem_button( string $code ): string {
+		return '<form method="post" class="vcap-redeem-in-cart" action="' . esc_url( wc_get_cart_url() ) . '">'
+			. wp_nonce_field( self::REDEEM_NONCE, '_vcap_redeem_nonce', false, false )
+			. '<input type="hidden" name="' . esc_attr( self::REDEEM_FIELD ) . '" value="' . esc_attr( $code ) . '" />'
+			. '<button type="submit" class="' . esc_attr( Shortcodes::button_class() ) . '">' . esc_html__( 'Redeem', 'voucher-captain' ) . Shortcodes::voucher_suffix( Mask::code( $code ) ) . '</button>'
+			. '</form>';
+	}
+
+	/** The "Redeem" button was sent: remember the code, apply it (or wait for products) and show the cart. */
+	public function handle_redeem_form(): void {
+		if ( is_admin() || ! isset( $_POST[ self::REDEEM_FIELD ] ) || ! is_string( $_POST[ self::REDEEM_FIELD ] ) ) {
+			return;
+		}
+		if ( ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['_vcap_redeem_nonce'] ?? '' ) ), self::REDEEM_NONCE ) ) {
+			return;
+		}
+		if ( $this->capture( sanitize_text_field( wp_unslash( $_POST[ self::REDEEM_FIELD ] ) ) ) ) {
+			$this->apply_pending();
+		}
+		Shortcodes::no_cache();
+		wp_safe_redirect( wc_get_cart_url() );
+		exit;
 	}
 
 	private function waiting_notice( string $code ): string {

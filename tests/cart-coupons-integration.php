@@ -395,4 +395,35 @@ $errors = vcap_cc_errors();
 vcap_cc_assert( $errors && str_contains( implode( ' ', $errors ), 'delivery date' ), 'M12-59: the cart check refuses a delivery date in the past', $errors );
 WC()->cart->empty_cart();
 
+/* ---- M12-93: the balance check names the code and offers "Redeem" --------------------------------- */
+
+$checked = vcap_cc_card( 35 );
+$_POST['vcap_balance_code'] = $checked->code;
+$_POST['vcap_balance_form'] = '';
+vcap()->downloads->handle_balance();
+$balance_html = vcap()->downloads->balance_shortcode();
+unset( $_POST['vcap_balance_code'], $_POST['vcap_balance_form'] );
+vcap_cc_assert( str_contains( $balance_html, 'Code …' . VCAP\Mask::code_tail( $checked->code ) ) && str_contains( $balance_html, 'name="' . VCAP\CouponLink::REDEEM_FIELD . '"' ), 'M12-93: the balance result names the code ("Code …XXXX") and has a "Redeem" button', wp_strip_all_tags( $balance_html ) );
+// The button puts the code into the cart (here: the cart has a product, so it is applied at once).
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart( $goods->get_id(), 1 );
+$_POST[ VCAP\CouponLink::REDEEM_FIELD ] = $checked->code;
+$_POST['_vcap_redeem_nonce']             = wp_create_nonce( VCAP\CouponLink::REDEEM_NONCE );
+$stop_redirect                           = static function ( $location ) {
+	throw new RuntimeException( 'redirect:' . $location );
+};
+add_filter( 'wp_redirect', $stop_redirect );
+$redirected = '';
+try {
+	( new VCAP\CouponLink( vcap()->settings ) )->handle_redeem_form();
+} catch ( RuntimeException $e ) {
+	$redirected = $e->getMessage();
+}
+remove_filter( 'wp_redirect', $stop_redirect );
+unset( $_POST[ VCAP\CouponLink::REDEEM_FIELD ], $_POST['_vcap_redeem_nonce'] );
+vcap_cc_assert( str_starts_with( $redirected, 'redirect:' . wc_get_cart_url() ) && WC()->cart->has_discount( $checked->code ), 'M12-93: "Redeem" applies the code to the cart and shows the cart', $redirected );
+WC()->cart->remove_coupons();
+WC()->cart->empty_cart();
+wc_clear_notices();
+
 echo "Cart coupons integration checks passed.\n";

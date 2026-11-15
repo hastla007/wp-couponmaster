@@ -540,6 +540,8 @@ final class Downloads {
 	/** Status line of a code, by voucher kind: balance, value, percentage, admission ticket or Pass Captain tickets. */
 	private function balance_result( Voucher $voucher ): string {
 		$parts  = array(
+			/* translators: %s: last characters of the voucher code, e.g. "…7KQ2" */
+			'code'   => sprintf( __( 'Code %s', 'voucher-captain' ), Mask::code( $voucher->code ) ), // M12-93: which code was checked.
 			/* translators: %s: voucher status */
 			'status' => sprintf( __( 'Status: %s', 'voucher-captain' ), $voucher->status_label() ),
 		);
@@ -571,6 +573,8 @@ final class Downloads {
 		$url   = $target && $voucher->is_usable() ? Shortcodes::redeem_url( $voucher->code ) : '';
 		if ( '' !== $url ) {
 			$html .= ' <a href="' . esc_url( $url ) . '">' . esc_html__( 'Exchange for tickets', 'voucher-captain' ) . '</a>';
+		} elseif ( CouponLink::redeemable_in_cart( $voucher ) ) {
+			$html .= ' ' . CouponLink::redeem_button( $voucher->code ); // M12-93: straight into the cart.
 		}
 		// Shown in a region that is focused after the page reload (Shortcodes::result_region()), so screen readers read it.
 		return '<div class="woocommerce-info vcap-balance-result">' . $html . '</div>';

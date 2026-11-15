@@ -570,11 +570,12 @@ final class Fields {
 		if ( is_array( $cart_item_data ) && ! empty( $cart_item_data['vcap_fields'] ) && is_array( $cart_item_data['vcap_fields'] ) ) {
 			// M12-59: "order again" (and other supplied values) are checked like the form, with today's rules
 			// (fields that became required, a delivery date that has passed).
+			$previous       = $this->override; // A Store API request keeps its own values (store_api_data()).
 			$this->override = self::plain_values( $cart_item_data['vcap_fields'] );
 			try {
 				$errors = $this->errors( $product );
 			} finally {
-				$this->override = null;
+				$this->override = $previous;
 			}
 			foreach ( $errors as $message ) {
 				wc_add_notice( $message, 'error' );
