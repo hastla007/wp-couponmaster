@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-15 10:26+0000\n"
+"POT-Creation-Date: 2026-11-15 10:28+0000\n"
 "X-Domain: voucher-captain\n"
 
 #. Plugin Name of the plugin
@@ -959,11 +959,11 @@ msgstr ""
 msgid "Booking"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:226 src/Admin/StoreCreditAdmin.php:96 src/Admin/StoreCreditAdmin.php:213 src/Admin/VoucherAdmin.php:319 src/Admin/VoucherAdmin.php:347 src/Campaigns.php:229
+#: src/Admin/ReportsAdmin.php:226 src/Admin/StoreCreditAdmin.php:96 src/Admin/StoreCreditAdmin.php:215 src/Admin/VoucherAdmin.php:319 src/Admin/VoucherAdmin.php:347 src/Campaigns.php:229
 msgid "Amount"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:227 src/Admin/StoreCreditAdmin.php:96 src/Admin/VoucherAdmin.php:347 src/Ledger.php:517 src/StoreCredit.php:434
+#: src/Admin/ReportsAdmin.php:227 src/Admin/StoreCreditAdmin.php:96 src/Admin/VoucherAdmin.php:347 src/Ledger.php:517 src/StoreCredit.php:614
 msgid "Balance after"
 msgstr ""
 
@@ -1201,7 +1201,7 @@ msgstr ""
 msgid "Request failed."
 msgstr ""
 
-#: src/Admin/Scanner.php:73 src/Admin/StoreCreditAdmin.php:96 src/Admin/VoucherAdmin.php:347 src/Privacy.php:76 src/StoreCredit.php:432
+#: src/Admin/Scanner.php:73 src/Admin/StoreCreditAdmin.php:96 src/Admin/VoucherAdmin.php:347 src/Privacy.php:76 src/StoreCredit.php:612
 msgid "Event"
 msgstr ""
 
@@ -1329,7 +1329,7 @@ msgstr ""
 msgid "Voucher redemption"
 msgstr ""
 
-#: src/Admin/Scanner.php:110 src/Downloads.php:501 src/OrderReturn.php:169 src/ProductSettings.php:40 src/ProductSettings.php:51 src/ProductSettings.php:759
+#: src/Admin/Scanner.php:110 src/Downloads.php:501 src/OrderReturn.php:214 src/ProductSettings.php:40 src/ProductSettings.php:51 src/ProductSettings.php:759
 msgid "Voucher"
 msgstr ""
 
@@ -1405,7 +1405,7 @@ msgstr ""
 msgid "You cannot add store credit to your own account. Ask a shop manager. Nothing was changed."
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:70 src/Privacy.php:165 src/Settings.php:685 src/StoreCredit.php:422 src/Voucher.php:80
+#: src/Admin/StoreCreditAdmin.php:70 src/Privacy.php:165 src/Settings.php:685 src/StoreCredit.php:602 src/Voucher.php:80
 msgid "Store credit"
 msgstr ""
 
@@ -1419,11 +1419,11 @@ msgstr ""
 msgid "Book %s as store credit for this customer (a minus sign removes credit)? The change is recorded with your user and the reason."
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:88 src/Admin/StoreCreditAdmin.php:214 src/Admin/VoucherAdmin.php:242 src/Admin/VoucherAdmin.php:372 src/Admin/VoucherAdmin.php:640 src/OrderReturn.php:186
+#: src/Admin/StoreCreditAdmin.php:88 src/Admin/StoreCreditAdmin.php:216 src/Admin/VoucherAdmin.php:242 src/Admin/VoucherAdmin.php:372 src/Admin/VoucherAdmin.php:640 src/OrderReturn.php:231
 msgid "Reason"
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:89 src/Admin/StoreCreditAdmin.php:214 src/Admin/VoucherAdmin.php:243 src/Admin/VoucherAdmin.php:373 src/OrderReturn.php:186
+#: src/Admin/StoreCreditAdmin.php:89 src/Admin/StoreCreditAdmin.php:216 src/Admin/VoucherAdmin.php:243 src/Admin/VoucherAdmin.php:373 src/OrderReturn.php:231
 msgid "Reason (required)"
 msgstr ""
 
@@ -1457,52 +1457,66 @@ msgstr ""
 msgid "\"%1$s\" was not accepted: %2$s Nothing was changed."
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:210 src/Admin/StoreCreditAdmin.php:256
+#: src/Admin/StoreCreditAdmin.php:212
+msgid "Refund as gift card"
+msgstr ""
+
+#: src/Admin/StoreCreditAdmin.php:212 src/Admin/StoreCreditAdmin.php:258
 msgid "Refund as store credit"
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:211
+#: src/Admin/StoreCreditAdmin.php:213
+msgid "Guest order: records a refund without paying money back and mails the customer a new gift card for the amount instead. Use only if the customer chose a gift card; how they agreed is recorded with the refund."
+msgstr ""
+
+#: src/Admin/StoreCreditAdmin.php:213
 msgid "Records a refund without paying money back and credits the customer account instead. Use only if the customer chose store credit; how they agreed is recorded with the refund."
 msgstr ""
 
 #. translators: %s: remaining refundable amount
-#: src/Admin/StoreCreditAdmin.php:218
+#: src/Admin/StoreCreditAdmin.php:220
 #, php-format
 msgid "Up to %s (the remaining refundable total). Refunding all of it sets the order to \"Refunded\"."
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:223
+#: src/Admin/StoreCreditAdmin.php:225
 msgid "Customer agreed to store credit"
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:225
+#: src/Admin/StoreCreditAdmin.php:227
 msgid "– how? (required) –"
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:230
+#: src/Admin/StoreCreditAdmin.php:232
 msgid "Note, e.g. date of the email"
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:230
+#: src/Admin/StoreCreditAdmin.php:232
 msgid "Consent note"
 msgstr ""
 
 #. translators: 1: placeholder for the amount entered (keep "%s"), 2: currency
-#: src/Admin/StoreCreditAdmin.php:236
+#: src/Admin/StoreCreditAdmin.php:238
 #, php-format
 msgid "Refund %1$s %2$s as store credit? No money is paid back; the amount is added to the customer's store credit and booked as a refund. If this refunds the whole remaining total, the order becomes \"Refunded\": vouchers bought with it are voided and connected tickets are cancelled. This cannot be undone."
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:267 src/OrderReturn.php:209
+#: src/Admin/StoreCreditAdmin.php:269 src/OrderReturn.php:254
 msgid "Order not found."
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:272 src/Admin/StoreCreditAdmin.php:288
+#: src/Admin/StoreCreditAdmin.php:274 src/Admin/StoreCreditAdmin.php:290
 msgid "Refund as store credit failed:"
 msgstr ""
 
+#. translators: 1: refunded amount, 2: gift card code
+#: src/Admin/StoreCreditAdmin.php:296
+#, php-format
+msgid "%1$s refunded as a new gift card (%2$s); it is mailed to the customer."
+msgstr ""
+
 #. translators: 1: refunded amount, 2: new store credit balance of the customer
-#: src/Admin/StoreCreditAdmin.php:295
+#: src/Admin/StoreCreditAdmin.php:307
 #, php-format
 msgid "%1$s refunded as store credit. The customer's store credit is now %2$s."
 msgstr ""
@@ -2418,12 +2432,12 @@ msgid "Voucher %s balance"
 msgstr ""
 
 #. translators: 1: balance, 2: link
-#: src/CartBlocks.php:121 src/StoreCredit.php:402
+#: src/CartBlocks.php:121 src/StoreCredit.php:582
 #, php-format
 msgid "You have %1$s store credit. %2$s"
 msgstr ""
 
-#: src/CartBlocks.php:122 src/StoreCredit.php:404 src/StoreCredit.php:427
+#: src/CartBlocks.php:122 src/StoreCredit.php:584 src/StoreCredit.php:607
 msgid "Use store credit"
 msgstr ""
 
@@ -3133,6 +3147,10 @@ msgstr ""
 msgid "Valid ticket – but for another date: %s"
 msgstr ""
 
+#: src/Compat/Subscriptions.php:54
+msgid "Free trial: the vouchers of this subscription are issued with the first paid renewal."
+msgstr ""
+
 #. translators: %s: receipt number of the till
 #: src/Counter.php:110 src/Tickets.php:1228
 #, php-format
@@ -3613,18 +3631,24 @@ msgstr ""
 msgid "Security hold: the vouchers of this first order (above %2$s) are delivered and redeemable from %1$s. Use \"Deliver now\" on a voucher to release it earlier, or void it."
 msgstr ""
 
-#: src/Delivery.php:477
+#. translators: %s: order status
+#: src/Delivery.php:439
+#, php-format
+msgid "Vouchers of this order are due but are not activated or sent: the order is not paid (status %s). They follow automatically once the order is paid again; void them if the payment does not come."
+msgstr ""
+
+#: src/Delivery.php:537
 msgid "Voucher email was sent but its delivery state could not be saved."
 msgstr ""
 
 #. translators: 1: voucher code, 2: number of failed attempts
-#: src/Delivery.php:790
+#: src/Delivery.php:850
 #, php-format
 msgid "Voucher %1$s could not be delivered after %2$d attempts and is no longer sent automatically. Check the email address and the email settings, then send it again on the voucher screen."
 msgstr ""
 
 #. translators: 1: voucher code, 2: expiry date
-#: src/Delivery.php:821
+#: src/Delivery.php:881
 #, php-format
 msgid "Voucher %1$s was not delivered: it had already expired on %2$s, before its delivery date. Extend its validity and send it again, or refund the buyer."
 msgstr ""
@@ -5331,28 +5355,28 @@ msgctxt "User role"
 msgid "Voucher cashier"
 msgstr ""
 
-#: src/Issuer.php:116 src/Issuer.php:172
+#: src/Issuer.php:134 src/Issuer.php:190
 msgid "Vouchers wait for an exchange rate to the shop currency."
 msgstr ""
 
 #. translators: 1: order currency, 2: shop base currency, 3: order meta key
-#: src/Issuer.php:162
+#: src/Issuer.php:180
 #, php-format
 msgid "Vouchers not issued: the order was paid in %1$s and no exchange rate to the shop currency %2$s is known (vouchers are never converted 1:1). Set up a supported currency switcher or store the rate on the order (meta \"%3$s\": %1$s per 1 %2$s), then issue the vouchers from this order screen – or refund the order."
 msgstr ""
 
-#: src/Issuer.php:187
+#: src/Issuer.php:205
 msgid "Issuing vouchers in the background stopped: the order is no longer paid."
 msgstr ""
 
 #. translators: %d: number of vouchers
-#: src/Issuer.php:257
+#: src/Issuer.php:275
 #, php-format
 msgid "All vouchers of this order have been issued (%d in the background); delivery starts now."
 msgstr ""
 
 #. translators: %d: number of vouchers
-#: src/Issuer.php:288
+#: src/Issuer.php:306
 #, php-format
 msgid "Paid order without voucher: %d voucher could not be created. It is retried automatically; or use \"Generate vouchers\" on the order."
 msgid_plural "Paid order without voucher: %d vouchers could not be created. They are retried automatically; or use \"Generate vouchers\" on the order."
@@ -5360,196 +5384,282 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s: payment method title, e.g. "Cash on delivery"
-#: src/Issuer.php:440
+#: src/Issuer.php:458
 #, php-format
 msgid "Vouchers are not issued yet: the payment (%s) has not been received. Once the money has arrived, mark the order as completed (or set a paid status by hand) and the vouchers are issued – or issue them now with the order action \"Generate vouchers\"."
 msgstr ""
 
 #. translators: %d: number of vouchers
-#: src/Issuer.php:550
+#: src/Issuer.php:568
 #, php-format
 msgid "%d vouchers are being issued in the background. They are delivered once all of them have been issued; this order shows a note when that is done."
 msgstr ""
 
 #. translators: 1: count, 2: masked codes (last four characters)
-#: src/Issuer.php:602
+#: src/Issuer.php:620
 #, php-format
 msgid "%1$d voucher issued: %2$s"
 msgid_plural "%1$d vouchers issued: %2$s"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Issuer.php:607
+#: src/Issuer.php:625
 msgid "(manual)"
 msgstr ""
 
 #. translators: 1: product name, 2: reasons
-#: src/Issuer.php:637
+#: src/Issuer.php:655
 #, php-format
 msgid "No voucher issued for \"%1$s\": the product's discount setup is invalid (%2$s). Correct the product and issue the vouchers from this order screen, or refund the line."
 msgstr ""
 
 #. translators: %s: batch name
-#: src/Issuer.php:799
+#: src/Issuer.php:817
 #, php-format
 msgid "Voucher code batch \"%s\" is empty, a random code was generated instead."
 msgstr ""
 
 #. translators: 1: product name, 2: reference id in the WooCommerce log
-#: src/Issuer.php:828
+#: src/Issuer.php:846
 #, php-format
 msgid "A voucher for \"%1$s\" could not be saved (database error, reference %2$s). It is retried automatically."
 msgstr ""
 
-#: src/Issuer.php:838
+#: src/Issuer.php:856
 msgid "Imported code could not be linked to this voucher in the code pool."
 msgstr ""
 
 #. translators: 1: product name, 2: error message
-#: src/Issuer.php:853
+#: src/Issuer.php:871
 #, php-format
 msgid "WooCommerce refused the coupon of a voucher for \"%1$s\": %2$s"
 msgstr ""
 
 #. translators: %s: code
-#: src/Issuer.php:864
+#: src/Issuer.php:882
 #, php-format
 msgid "Imported code %s could not be returned to the code pool."
 msgstr ""
 
 #. translators: %s: product name
-#: src/Issuer.php:867
+#: src/Issuer.php:885
 #, php-format
 msgid "A voucher for \"%s\" could not be created (WooCommerce coupon not saved). It will be issued on the next attempt."
 msgstr ""
 
 #. translators: %s: code
-#: src/Issuer.php:877
+#: src/Issuer.php:895
 #, php-format
 msgid "Voucher %s was issued, but its history entry could not be written."
 msgstr ""
 
-#: src/Issuer.php:934
+#: src/Issuer.php:952
 msgid "This product is not a voucher product."
 msgstr ""
 
-#: src/Issuer.php:944
+#: src/Issuer.php:962
 msgid "Unknown voucher type, usage or discount type."
 msgstr ""
 
-#: src/Issuer.php:956
+#: src/Issuer.php:974
 msgid "Please give a voucher value greater than zero."
 msgstr ""
 
-#: src/Issuer.php:967
+#: src/Issuer.php:985
 msgid "An email address of the recipient or the ordering party is needed to send the voucher."
 msgstr ""
 
-#: src/Issuer.php:971
+#: src/Issuer.php:989
 msgid "This code is already used by another voucher or coupon."
 msgstr ""
 
-#: src/Issuer.php:981
+#: src/Issuer.php:999
 msgid "A voucher was already issued for this reference."
 msgstr ""
 
-#: src/Issuer.php:1083
+#: src/Issuer.php:1101
 msgid "The voucher could not be saved. Please try again."
 msgstr ""
 
 #. translators: %s: voucher type
-#: src/Issuer.php:1088
+#: src/Issuer.php:1106
 #, php-format
 msgid "%s issued without order (Voucher Captain)"
 msgstr ""
 
-#: src/Issuer.php:1099
+#: src/Issuer.php:1117
 msgid "The voucher could not be created (WooCommerce coupon not saved). Please try again."
 msgstr ""
 
-#: src/Issuer.php:1129
+#: src/Issuer.php:1144
+msgid "The order was set to \"Refunded\", but less than its total was refunded: it is handled as a cancellation – unused vouchers are voided, used ones stay valid."
+msgstr ""
+
+#: src/Issuer.php:1154
 msgid "Purchase order cancelled or refunded"
 msgstr ""
 
 #. translators: %s: voucher codes
-#: src/Issuer.php:1135
+#: src/Issuer.php:1160
 #, php-format
 msgid "Order cancelled without a refund: vouchers already used (%s) stay valid, the unused ones were voided. If money is paid back for them, void them by hand on the voucher screen."
 msgstr ""
 
 #. translators: 1: voucher codes, 2: order currency
-#: src/Issuer.php:1234
+#: src/Issuer.php:1260
 #, php-format
 msgid "Value from this order was already spent (%1$s), and no exchange rate for %2$s is known to work out how much can still be refunded. Set up the exchange rate first."
 msgstr ""
 
 #. translators: 1: voucher codes and masked gift card codes, 2: spent value, 3: maximum refund
-#: src/Issuer.php:1252
+#: src/Issuer.php:1278
 #, php-format
 msgid "Value from this order was already spent (%1$s, value used: %2$s). At most %3$s can be refunded; unused vouchers are voided and unspent top-ups are taken back from the gift card."
 msgstr ""
 
 #. translators: 1: voucher codes, 2: spent value, 3: maximum refund
-#: src/Issuer.php:1254
+#: src/Issuer.php:1280
 #, php-format
 msgid "Vouchers from this order were already used (%1$s, value used: %2$s). At most %3$s can be refunded; the unused vouchers are voided."
 msgstr ""
 
-#. translators: %s: voucher code
-#: src/Issuer.php:1325
-#, php-format
-msgid "Voucher %s was already used up and stays as it is (partial refund): its value was not refundable. Void it by hand only if the service it was used for is cancelled as well."
-msgstr ""
-
 #. translators: %d: refund id
-#: src/Issuer.php:1334
+#: src/Issuer.php:1393 src/Issuer.php:1439
 #, php-format
 msgid "Partial refund #%d of the purchase order"
 msgstr ""
 
 #. translators: %s: voucher code
-#: src/Issuer.php:1342
+#: src/Issuer.php:1406 src/Issuer.php:1441
 #, php-format
 msgid "Voucher %s voided (refunded)."
 msgstr ""
 
-#. translators: 1: gift card code, 2: topped-up value that stays on the card
-#: src/Issuer.php:1350
+#. translators: 1: gift card code, 2: amount taken off, 3: remaining balance
+#: src/Issuer.php:1411
 #, php-format
-msgid "Gift card %1$s: the purchased value was taken off the card (refunded); the topped-up value of %2$s stays on it."
+msgid "Gift card %1$s: %2$s of the purchased value taken off the card (refunded), remaining balance %3$s."
 msgstr ""
 
-#: src/Issuer.php:1400
+#. translators: %s: voucher code
+#: src/Issuer.php:1457
+#, php-format
+msgid "Voucher %s was already used up and stays as it is (partial refund): its value was not refundable. Void it by hand only if the service it was used for is cancelled as well."
+msgstr ""
+
+#. translators: 1: refund id, 2: voucher codes
+#: src/Issuer.php:1548
+#, php-format
+msgid "Refund #%1$d was recorded without order lines (e.g. by the payment provider). Vouchers bought with this order were written off by its value: %2$s. Check that this matches what was refunded."
+msgstr ""
+
+#. translators: 1: refund id, 2: voucher codes
+#: src/Issuer.php:1603
+#, php-format
+msgid "The refund was not recorded, but what it had written off could not be booked back completely (%2$s). Check these vouchers and gift cards (refund #%1$d)."
+msgstr ""
+
+#. translators: %d: refund id
+#: src/Issuer.php:1612
+#, php-format
+msgid "Refund #%d was not recorded: the vouchers and gift card top-ups it had written off were booked back."
+msgstr ""
+
+#. translators: %s: order number
+#: src/Issuer.php:1630
+#, php-format
+msgid "Refund of order #%s not recorded"
+msgstr ""
+
+#: src/Issuer.php:1667
+msgid "(WooCommerce coupon could not be enabled – enable it manually)"
+msgstr ""
+
+#. translators: 1: refund id, 2: voucher codes
+#: src/Issuer.php:1700
+#, php-format
+msgid "Refund #%1$d was deleted. The vouchers it voided or took value off stay as they are: %2$s. If the money was not paid back, reactivate them or book the value back on the voucher screen."
+msgstr ""
+
+#: src/Issuer.php:1708
+msgid "refund deleted"
+msgstr ""
+
+#. translators: %s: order status
+#: src/Issuer.php:1747
+#, php-format
+msgid "Payment of the purchase order reversed or held (status %s)"
+msgstr ""
+
+#. translators: %s: voucher codes
+#: src/Issuer.php:1767
+#, php-format
+msgid "The payment of this order was reversed or is held: its unused vouchers were suspended (%s). They become usable again when the order is paid."
+msgstr ""
+
+#. translators: %s: voucher codes
+#: src/Issuer.php:1771
+#, php-format
+msgid "Vouchers already used stay valid (%s): check them."
+msgstr ""
+
+#: src/Issuer.php:1793
+msgid "Purchase order paid again"
+msgstr ""
+
+#. translators: %s: voucher codes
+#: src/Issuer.php:1800
+#, php-format
+msgid "The order is paid again: the suspended vouchers are usable again (%s)."
+msgstr ""
+
+#. translators: %s: links to the vouchers
+#: src/Issuer.php:1816
+#, php-format
+msgid "The order is paid again, but its vouchers were voided when it was cancelled or refunded: %s. If the customer did not get the money back, reactivate them on the voucher screen."
+msgstr ""
+
+#. translators: %s: voucher codes
+#: src/Issuer.php:1821
+#, php-format
+msgid "The order is paid again, but its vouchers stay voided from the cancellation or refund (%s). Reactivate them on the voucher screen (links in the order notes) if the customer did not get the money back."
+msgstr ""
+
+#: src/Issuer.php:1824
+msgid "order paid again"
+msgstr ""
+
+#: src/Issuer.php:1867
 msgid "(purchased value taken off, topped-up value kept)"
 msgstr ""
 
 #. translators: %s: voucher code
-#: src/Issuer.php:1430
+#: src/Issuer.php:1897
 #, php-format
 msgid "Voucher %s could NOT be voided after the refund or cancellation – it may still be redeemable. It is tried again automatically; until then disable it by hand on the voucher screen."
 msgstr ""
 
 #. translators: %s: voucher code
-#: src/Issuer.php:1439
+#: src/Issuer.php:1906
 #, php-format
 msgid "Voucher %s could not be voided after its purchase was refunded or cancelled. Disable it on the voucher screen."
 msgstr ""
 
-#: src/Issuer.php:1461
+#: src/Issuer.php:1928
 msgid "Purchase order cancelled or refunded (retried)"
 msgstr ""
 
 #. translators: %s: voucher code
-#: src/Issuer.php:1468
+#: src/Issuer.php:1935
 #, php-format
 msgid "Voucher %s voided (retried after the refund or cancellation)."
 msgstr ""
 
-#: src/Issuer.php:1488
+#: src/Issuer.php:1959
 msgid "(WooCommerce coupon could not be disabled – disable it manually)"
 msgstr ""
 
-#: src/Issuer.php:1556
+#: src/Issuer.php:2027
 msgid "WooCommerce coupon could not be enabled – enable it manually"
 msgstr ""
 
@@ -5735,68 +5845,72 @@ msgstr ""
 msgid "Booked back from a return"
 msgstr ""
 
-#: src/OrderReturn.php:75
+#: src/OrderReturn.php:50
+msgid "The money of this order was refunded completely, but vouchers paid the rest and refundable items are left: the order was not set to \"Refunded\", so the voucher charge was not booked back. Book the returned part back with \"Book back onto voucher\", or set the order to \"Refunded\" or \"Cancelled\" by hand if everything was returned."
+msgstr ""
+
+#: src/OrderReturn.php:120
 msgid "Please enter a reason."
 msgstr ""
 
-#: src/OrderReturn.php:79
+#: src/OrderReturn.php:124
 msgid "Another booking for this order is running. Please reload the order and try again."
 msgstr ""
 
-#: src/OrderReturn.php:86
+#: src/OrderReturn.php:131
 msgid "Nothing of this voucher can be booked back for this order."
 msgstr ""
 
 #. translators: %s: maximum amount
-#: src/OrderReturn.php:95
+#: src/OrderReturn.php:140
 #, php-format
 msgid "Enter an amount up to %s (what the order charged to this voucher and was not booked back yet)."
 msgstr ""
 
 #. translators: 1: order number, 2: reason
-#: src/OrderReturn.php:104
+#: src/OrderReturn.php:149
 #, php-format
 msgid "Return from order #%1$s: %2$s"
 msgstr ""
 
-#: src/OrderReturn.php:109
+#: src/OrderReturn.php:154
 msgid "The amount could not be booked back (database error). Nothing was changed."
 msgstr ""
 
 #. translators: 1: amount, 2: voucher code, 3: new balance, 4: reason
-#: src/OrderReturn.php:130
+#: src/OrderReturn.php:175
 #, php-format
 msgid "%1$s booked back onto voucher %2$s (return), new balance %3$s. Reason: %4$s"
 msgstr ""
 
-#: src/OrderReturn.php:166 src/OrderReturn.php:188
+#: src/OrderReturn.php:211 src/OrderReturn.php:233
 msgid "Book back onto voucher"
 msgstr ""
 
-#: src/OrderReturn.php:167
+#: src/OrderReturn.php:212
 msgid "For a return of items paid with a gift card: books the amount back onto the card (also for guests and orders with a total of 0). No money is paid back and no WooCommerce refund is recorded."
 msgstr ""
 
 #. translators: 1: voucher code, 2: maximum amount
-#: src/OrderReturn.php:174
+#: src/OrderReturn.php:219
 #, php-format
 msgid "%1$s (up to %2$s)"
 msgstr ""
 
-#: src/OrderReturn.php:179
+#: src/OrderReturn.php:224
 msgid "Returned item"
 msgstr ""
 
-#: src/OrderReturn.php:180
+#: src/OrderReturn.php:225
 msgid "– returned item (optional) –"
 msgstr ""
 
-#: src/OrderReturn.php:215 src/OrderReturn.php:227
+#: src/OrderReturn.php:260 src/OrderReturn.php:272
 msgid "Booking back onto the voucher failed:"
 msgstr ""
 
 #. translators: 1: voucher code, 2: new balance
-#: src/OrderReturn.php:233
+#: src/OrderReturn.php:278
 #, php-format
 msgid "Booked back onto voucher %1$s. New balance: %2$s."
 msgstr ""
@@ -7677,77 +7791,117 @@ msgstr ""
 msgid "In the customer account"
 msgstr ""
 
-#: src/StoreCredit.php:205
+#: src/StoreCredit.php:206
 msgid "Another refund of this order is being recorded right now. Please reload the order and check its refunds before trying again."
 msgstr ""
 
-#: src/StoreCredit.php:210
+#: src/StoreCredit.php:211
 msgid "This refund as store credit was already submitted and recorded. Reload the order to see it."
 msgstr ""
 
-#: src/StoreCredit.php:235
+#. translators: 1: refund id, 2: amount that could not be taken back
+#: src/StoreCredit.php:313
+#, php-format
+msgid "Refund #%1$d (refunded as store credit or gift card) was deleted, but %2$s of the credit was already spent and could not be taken back. Settle it with the customer."
+msgstr ""
+
+#. translators: %s: order number
+#: src/StoreCredit.php:332
+#, php-format
+msgid "Refund of order #%s deleted"
+msgstr ""
+
+#. translators: %s: gift card code
+#: src/StoreCredit.php:339
+#, php-format
+msgid "Gift card %s of the deleted refund was voided."
+msgstr ""
+
+#. translators: %s: amount
+#: src/StoreCredit.php:351
+#, php-format
+msgid "%s of store credit taken back (the refund was deleted)."
+msgstr ""
+
+#: src/StoreCredit.php:367
 msgid "Record how the customer agreed to store credit instead of a money refund."
 msgstr ""
 
-#: src/StoreCredit.php:239
+#: src/StoreCredit.php:371
 msgid "Store credit is not enabled."
 msgstr ""
 
-#: src/StoreCredit.php:242
+#: src/StoreCredit.php:375
 msgid "Guest orders cannot be refunded as store credit."
 msgstr ""
 
-#: src/StoreCredit.php:245
+#: src/StoreCredit.php:378
 msgid "Please enter a reason and an amount up to the remaining refundable total."
 msgstr ""
 
 #. translators: 1: order currency, 2: shop base currency
-#: src/StoreCredit.php:257
+#: src/StoreCredit.php:390
 #, php-format
 msgid "This order was paid in %1$s and no exchange rate to the shop currency %2$s is known, so it cannot be refunded as store credit. Refund the money instead, or set up the exchange rate first."
 msgstr ""
 
 #. translators: %s: reason
-#: src/StoreCredit.php:272
+#: src/StoreCredit.php:433
+#, php-format
+msgid "Refunded as a gift card: %s"
+msgstr ""
+
+#. translators: %s: reason
+#: src/StoreCredit.php:435
 #, php-format
 msgid "Refunded as store credit: %s"
 msgstr ""
 
-#: src/StoreCredit.php:279
+#: src/StoreCredit.php:447
+msgid "Refund as a gift card failed"
+msgstr ""
+
+#: src/StoreCredit.php:450
 msgid "Refund as store credit failed"
 msgstr ""
 
-#: src/StoreCredit.php:281
+#: src/StoreCredit.php:452
 msgid "Store credit was added but the refund could not be recorded, and the credit could not be booked back. Please check the customer's store credit."
 msgstr ""
 
+#. translators: 1: amount, 2: gift card code
+#: src/StoreCredit.php:480
+#, php-format
+msgid "%1$s refunded as a new gift card %2$s (mailed to the customer)."
+msgstr ""
+
 #. translators: %s: amount
-#: src/StoreCredit.php:302
+#: src/StoreCredit.php:482
 #, php-format
 msgid "%s refunded as store credit."
 msgstr ""
 
 #. translators: 1: how the customer agreed (e.g. "By email"), 2: optional note
-#: src/StoreCredit.php:305
+#: src/StoreCredit.php:485
 #, php-format
 msgid "Customer consent to store credit: %1$s%2$s."
 msgstr ""
 
-#: src/StoreCredit.php:329
+#: src/StoreCredit.php:509
 msgid "This store credit belongs to another customer account."
 msgstr ""
 
-#: src/StoreCredit.php:337
+#: src/StoreCredit.php:517
 msgid "Store credit cannot be combined with discount codes."
 msgstr ""
 
 #. translators: %s: coupon code
-#: src/StoreCredit.php:425
+#: src/StoreCredit.php:605
 #, php-format
 msgid "Code for the cart: %s"
 msgstr ""
 
-#: src/StoreCredit.php:456
+#: src/StoreCredit.php:636
 msgid "No store credit bookings yet."
 msgstr ""
 
@@ -8486,6 +8640,14 @@ msgid "Purchase refunded: purchased value taken off"
 msgstr ""
 
 #: src/TopUp.php:64
+msgid "Purchase refund not recorded: purchased value booked back"
+msgstr ""
+
+#: src/TopUp.php:64
+msgid "Suspended: payment of the order reversed or held"
+msgstr ""
+
+#: src/TopUp.php:64
 msgid "Validity extended"
 msgstr ""
 
@@ -8611,44 +8773,68 @@ msgstr ""
 msgid "The line \"%s\" has no gift card code, so no new gift card was issued for it."
 msgstr ""
 
-#: src/TopUp.php:589
+#. translators: %s: order number
+#: src/TopUp.php:576
+#, php-format
+msgid "Top-up of order #%s booked again: the refund was not recorded"
+msgstr ""
+
+#. translators: 1: order number, 2: why (e.g. "refund deleted")
+#: src/TopUp.php:612
+#, php-format
+msgid "Top-up of order #%1$s booked again (%2$s)"
+msgstr ""
+
+#. translators: %s: masked gift card code
+#: src/TopUp.php:614
+#, php-format
+msgid "The top-up of gift card %s that was taken back could not be booked again. Top up the card by hand."
+msgstr ""
+
+#. translators: 1: masked gift card code, 2: amount
+#: src/TopUp.php:619
+#, php-format
+msgid "Gift card %1$s: the top-up taken back before (%2$s) was booked onto the card again."
+msgstr ""
+
+#: src/TopUp.php:673
 msgid "The gift card top-up could not be reversed: the gift card was not found. Please check the card balance."
 msgstr ""
 
-#: src/TopUp.php:590
+#: src/TopUp.php:674
 msgid "A gift card top-up could not be reversed because the gift card was not found. Check the card and take the top-up back by hand."
 msgstr ""
 
 #. translators: %s: order number
-#: src/TopUp.php:600
+#: src/TopUp.php:685
 #, php-format
 msgid "Top-up of order #%s reversed"
 msgstr ""
 
-#: src/TopUp.php:604
+#: src/TopUp.php:689
 msgid "The gift card top-up could not be reversed. Please check the card balance."
 msgstr ""
 
 #. translators: 1: amount taken back, 2: amount already spent
-#: src/TopUp.php:612
+#: src/TopUp.php:699
 #, php-format
 msgid "Gift card top-up reversed: %1$s taken back, %2$s had already been spent."
 msgstr ""
 
 #. translators: %s: amount
-#: src/TopUp.php:614
+#: src/TopUp.php:701
 #, php-format
 msgid "Gift card top-up reversed: %s taken back."
 msgstr ""
 
 #. translators: %s: masked gift card codes
-#: src/TopUp.php:809
+#: src/TopUp.php:905
 #, php-format
 msgid "The gift card topped up by this order cannot be found (%s), so its top-up cannot be taken back. Check the card before refunding the top-up."
 msgstr ""
 
 #. translators: 1: masked gift card codes, 2: maximum refund
-#: src/TopUp.php:818
+#: src/TopUp.php:914
 #, php-format
 msgid "The gift card top-up of this order was already spent from the card (%1$s). At most %2$s can be refunded now."
 msgstr ""
