@@ -1913,6 +1913,52 @@ $p12_rows = iterator_to_array( VCAP\Csv::with_end_row( ( static function () {
 	yield array( 'b' );
 } )() ), false );
 check( 'AP-P1-2: an export ends with "End of export: N rows" (header not counted, also for an empty export)', array( 'End of export: 2 rows' ) === end( $p12_rows ) && 4 === count( $p12_rows ) && array( array( 'H' ), array( 'End of export: 0 rows' ) ) === iterator_to_array( VCAP\Csv::with_end_row( array( array( 'H' ) ) ), false ), wp_json_encode( $p12_rows ) );
+echo "\nAudit panel package A: money flows, masked notes\n";
+// AP-S3-3: order notes reach REST connectors and all staff – a voucher code in an add_order_note() call is masked.
+$s33_unmasked = array();
+foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( dirname( __DIR__ ) . '/src', FilesystemIterator::SKIP_DOTS ) ) as $s33_file ) {
+	if ( ! str_ends_with( (string) $s33_file, '.php' ) ) {
+		continue;
+	}
+	$s33_src = (string) file_get_contents( (string) $s33_file );
+	$s33_off = 0;
+	while ( false !== ( $s33_at = strpos( $s33_src, 'add_order_note(', $s33_off ) ) ) {
+		// The call's arguments up to the matching parenthesis, with every Mask::*( … ) call taken out.
+		$s33_end   = $s33_at + strlen( 'add_order_note(' );
+		$s33_depth = 1;
+		while ( $s33_end < strlen( $s33_src ) && $s33_depth > 0 ) {
+			$s33_depth += ( '(' === $s33_src[ $s33_end ] ) - ( ')' === $s33_src[ $s33_end ] );
+			++$s33_end;
+		}
+		$s33_args = substr( $s33_src, $s33_at, $s33_end - $s33_at );
+		$s33_off  = $s33_end;
+		while ( preg_match( '/Mask::\w+\s*\(/', $s33_args, $s33_m, PREG_OFFSET_CAPTURE ) ) {
+			$s33_j = $s33_m[0][1] + strlen( $s33_m[0][0] );
+			for ( $s33_d = 1; $s33_j < strlen( $s33_args ) && $s33_d > 0; ++$s33_j ) {
+				$s33_d += ( '(' === $s33_args[ $s33_j ] ) - ( ')' === $s33_args[ $s33_j ] );
+			}
+			$s33_args = substr( $s33_args, 0, $s33_m[0][1] ) . 'MASKED' . substr( $s33_args, $s33_j );
+		}
+		if ( preg_match( '/->code\b|\$code\b|->get_code\(/', $s33_args ) ) {
+			$s33_unmasked[] = basename( (string) $s33_file ) . ':' . ( substr_count( substr( $s33_src, 0, $s33_at ), "\n" ) + 1 );
+		}
+	}
+}
+check( 'AP-S3-3: no add_order_note() call passes a voucher code (->code, $code, ->get_code()) without Mask::', array() === $s33_unmasked, implode( ', ', $s33_unmasked ) );
+
+// AP-Q1-1: the per-order ledger state machine reads only the charge events.
+check( 'AP-Q1-1: the SQL list of the charge events is the same as ORDER_CHARGE_EVENTS', "'" . implode( "','", VCAP\CouponManager::ORDER_CHARGE_EVENTS ) . "'" === VCAP\CouponManager::ORDER_CHARGE_EVENTS_SQL );
+$q11_hist = array( $ev( 1, 'issued', 50.0 ), $ev( 2, 'reserved', 20.0, 99 ), $ev( 3, 'topup', 120.0, 99 ), $ev( 4, 'refund_credit', 130.0, 99 ) );
+check( 'AP-Q1-1: a top-up or a refund as credit of the same order does not close its open reservation', 2 === ( Tickets::open_reservation( $q11_hist )['id'] ?? 0 ) );
+check( 'AP-Q1-1: the reservation of another order stays open when one order commits', 2 === ( Tickets::open_reservation( array_merge( $q11_hist, array( $ev( 5, 'committed', 130.0, 98 ) ) ) )['id'] ?? 0 ) && null === Tickets::open_reservation( array_merge( $q11_hist, array( $ev( 5, 'committed', 130.0, 99 ) ) ) ) );
+
+// AP-Q1-5: the rounding tolerance applies only across currencies and is capped at a few minor units.
+check(
+	'AP-Q1-5: no rounding tolerance in the base currency; across currencies 0.1 % within 1 to 5 minor units',
+	0.0 === VCAP\CouponManager::tolerance_for( 'EUR', 'EUR', 1000.0, 2 ) && 0.0 === VCAP\CouponManager::tolerance_for( 'eur', 'EUR', 1000.0, 2 ) && 0.0 === VCAP\CouponManager::tolerance_for( '', 'EUR', 1000.0, 2 )
+		&& 0.05 === VCAP\CouponManager::tolerance_for( 'USD', 'EUR', 1000.0, 2 ) && 0.02 === VCAP\CouponManager::tolerance_for( 'USD', 'EUR', 20.0, 2 ) && 0.01 === VCAP\CouponManager::tolerance_for( 'USD', 'EUR', 0.5, 2 )
+		&& 5.0 === VCAP\CouponManager::tolerance_for( 'USD', 'JPY', 100000.0, 0 )
+);
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

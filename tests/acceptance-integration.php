@@ -402,6 +402,6 @@ vcap()->coupons->reserve_retry_order( wc_get_order( $gone_order->get_id() ) );
 $gone_notices = implode( ' ', array_map( static fn( $n ) => wp_strip_all_tags( is_array( $n ) ? (string) $n['notice'] : (string) $n ), wc_get_notices( 'error' ) ) );
 wc_clear_notices();
 $gone_notes = implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $gone_order->get_id() ) ), 'content' ) );
-vcap_acc_assert( str_contains( $gone_notices, $gone_card->code ) && ! str_contains( $gone_notices, 'Refresh the cart' ) && str_contains( $gone_notes, $gone_card->code ), 'the pay page refuses an order whose gift card balance was used elsewhere with its own message (no "refresh the cart") and an order note (' . $gone_notices . ')' );
+vcap_acc_assert( str_contains( $gone_notices, $gone_card->code ) && ! str_contains( $gone_notices, 'Refresh the cart' ) && str_contains( $gone_notes, VCAP\Mask::code( $gone_card->code ) ) && ! str_contains( strtoupper( $gone_notes ), strtoupper( $gone_card->code ) ), 'the pay page refuses an order whose gift card balance was used elsewhere with its own message (no "refresh the cart") and an order note with the code masked (AP-S3-3) (' . $gone_notices . ')' );
 
 echo "Voucher Captain acceptance checks passed.\n";

@@ -277,15 +277,22 @@ final class Tickets {
 	}
 
 	/**
-	 * The balance reservation of an unpaid shop order that is still open: the newest balance event is a
-	 * "reserved" one (payment commits or releases it).
+	 * The newest balance reservation of an unpaid shop order that is still open: the order's latest charge event
+	 * (CouponManager::ORDER_CHARGE_EVENTS) is "reserved" (payment commits it, a cancellation releases it). Other
+	 * events of the same order (a top-up of the card, a refund as store credit) do not close it (AP-Q1-1).
 	 */
 	public static function open_reservation( array $events ): ?array {
+		$closed = array();
 		for ( $i = count( $events ) - 1; $i >= 0; $i-- ) {
-			if ( null === ( $events[ $i ]['balance_after'] ?? null ) ) {
+			$order = (int) ( $events[ $i ]['order_id'] ?? 0 );
+			$kind  = (string) ( $events[ $i ]['event'] ?? '' );
+			if ( $order <= 0 || isset( $closed[ $order ] ) || ! in_array( $kind, CouponManager::ORDER_CHARGE_EVENTS, true ) ) {
 				continue;
 			}
-			return 'reserved' === $events[ $i ]['event'] && (int) $events[ $i ]['order_id'] > 0 ? $events[ $i ] : null;
+			if ( 'reserved' === $kind ) {
+				return $events[ $i ];
+			}
+			$closed[ $order ] = true;
 		}
 		return null;
 	}

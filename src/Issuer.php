@@ -1123,7 +1123,7 @@ final class Issuer {
 		$kept     = array();
 		foreach ( $this->repo->for_order( (int) $order_id ) as $voucher ) {
 			if ( ! $refunded && Voucher::STATUS_VOID !== $voucher->status && $this->in_use( $voucher ) ) {
-				$kept[] = $voucher->code;
+				$kept[] = Mask::code( $voucher->code ); // AP-S3-3: order notes show codes masked.
 				continue;
 			}
 			$this->void_purchase( $voucher, __( 'Purchase order cancelled or refunded', 'voucher-captain' ), $order );
@@ -1323,7 +1323,7 @@ final class Issuer {
 							sprintf(
 								/* translators: %s: voucher code */
 								__( 'Voucher %s was already used up and stays as it is (partial refund): its value was not refundable. Void it by hand only if the service it was used for is cancelled as well.', 'voucher-captain' ),
-								$voucher->code
+								Mask::code( $voucher->code )
 							)
 						);
 					}
@@ -1340,7 +1340,7 @@ final class Issuer {
 						sprintf(
 							/* translators: %s: voucher code */
 							__( 'Voucher %s voided (refunded).', 'voucher-captain' ),
-							$voucher->code
+							Mask::code( $voucher->code )
 						)
 					);
 				} elseif ( $kept > 0 ) {
@@ -1348,7 +1348,7 @@ final class Issuer {
 						sprintf(
 							/* translators: 1: gift card code, 2: topped-up value that stays on the card */
 							__( 'Gift card %1$s: the purchased value was taken off the card (refunded); the topped-up value of %2$s stays on it.', 'voucher-captain' ),
-							$voucher->code,
+							Mask::code( $voucher->code ),
 							wp_strip_all_tags( wc_price( $kept, array( 'currency' => $voucher->currency ) ) )
 						)
 					);
@@ -1428,7 +1428,7 @@ final class Issuer {
 				sprintf(
 					/* translators: %s: voucher code */
 					__( 'Voucher %s could NOT be voided after the refund or cancellation – it may still be redeemable. It is tried again automatically; until then disable it by hand on the voucher screen.', 'voucher-captain' ),
-					$voucher->code
+					Mask::code( $voucher->code )
 				)
 			);
 		}
@@ -1436,7 +1436,7 @@ final class Issuer {
 			$order_id,
 			'void:' . $voucher->id,
 			/* translators: %s: voucher code */
-			sprintf( __( 'Voucher %s could not be voided after its purchase was refunded or cancelled. Disable it on the voucher screen.', 'voucher-captain' ), $voucher->code )
+			sprintf( __( 'Voucher %s could not be voided after its purchase was refunded or cancelled. Disable it on the voucher screen.', 'voucher-captain' ), Mask::code( $voucher->code ) )
 		);
 		if ( $attempt < self::VOID_RETRIES && function_exists( 'as_schedule_single_action' ) ) {
 			as_schedule_single_action( time() + ( $attempt < 2 ? 15 * MINUTE_IN_SECONDS : HOUR_IN_SECONDS ), self::VOID_RETRY_HOOK, array( 'voucher_id' => (int) $voucher->id, 'attempt' => $attempt + 1 ), 'vcap' );

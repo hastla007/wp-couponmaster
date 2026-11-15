@@ -211,6 +211,22 @@ $_POST = array();
 delete_transient( 'vcap_flash_' . get_current_user_id() );
 wp_set_current_user( 0 );
 
+// AP-Q1-1 (a): an order paid partly with store credit and fully refunded as store credit: the credit it spent
+// comes back as well (the "refund_credit" ledger row of the same order must not hide its charge).
+$erin = vcap_sc_user( 'erin' );
+$credit->adjust( $erin, 5, 'Goodwill' );
+$erin_account = $credit->account( $erin );
+$erin_order   = vcap_sc_order( $product, $erin );
+$erin_order->apply_coupon( $erin_account->code );
+$erin_order = wc_get_order( $erin_order->get_id() );
+vcap()->coupons->reserve_order( $erin_order );
+$erin_order->payment_complete();
+$erin_order = wc_get_order( $erin_order->get_id() );
+vcap_sc_assert( 15.0 === (float) $erin_order->get_total() && 0.0 === $credit->balance( $erin ), 'AP-Q1-1: the 20 order is paid with 5 credit and 15 money' );
+$erin_refund = $credit->refund_as_credit( $erin_order, 15, 'Customer chose credit', array( 'channel' => 'email' ) );
+vcap_sc_assert( ! is_wp_error( $erin_refund ) && wc_get_order( $erin_order->get_id() )->has_status( 'refunded' ), 'AP-Q1-1: the money part is refunded as store credit (order fully refunded)' );
+vcap_sc_assert( 20.0 === $credit->balance( $erin ), 'AP-Q1-1: the 15 refunded as credit and the 5 credit spent on the order are both on the account (20)' );
+
 // Disabled feature: credit coupons stop working.
 update_option( 'vcap_store_credit', 'no' );
 $late = vcap_sc_order( $product, $alice );

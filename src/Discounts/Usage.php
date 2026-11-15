@@ -70,6 +70,35 @@ final class Usage {
 	 * around a per-customer limit.
 	 */
 	public static function customer_keys( int $user_id, string $email ): array {
+		// AP-P1-5: asked several times per cart calculation (each promotion, each limit check); memoised per user and
+		// email for the request, forgotten when an account is created, changed or deleted.
+		$memo_key = $user_id . '|' . strtolower( trim( $email ) );
+		if ( isset( self::$keys_memo[ $memo_key ] ) ) {
+			return self::$keys_memo[ $memo_key ];
+		}
+		if ( ! self::$keys_watching && function_exists( 'add_action' ) ) {
+			self::$keys_watching = true;
+			foreach ( array( 'user_register', 'profile_update', 'deleted_user', 'switch_blog' ) as $hook ) {
+				add_action( $hook, array( self::class, 'forget_customer_keys' ), 0 );
+			}
+		}
+		if ( count( self::$keys_memo ) >= 100 ) {
+			self::$keys_memo = array();
+		}
+		self::$keys_memo[ $memo_key ] = self::build_customer_keys( $user_id, $email );
+		return self::$keys_memo[ $memo_key ];
+	}
+
+	/** @var array<string, string[]> Request memo of customer_keys() (user id | email). */
+	private static array $keys_memo = array();
+	private static bool $keys_watching = false;
+
+	/** Forgets the memo of customer_keys() (an account was created, changed or deleted). */
+	public static function forget_customer_keys(): void {
+		self::$keys_memo = array();
+	}
+
+	private static function build_customer_keys( int $user_id, string $email ): array {
 		$keys  = array();
 		$email = strtolower( trim( $email ) );
 		if ( $user_id <= 0 && is_email( $email ) ) {

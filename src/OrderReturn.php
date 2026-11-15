@@ -129,7 +129,7 @@ final class OrderReturn {
 					/* translators: 1: amount, 2: voucher code, 3: new balance, 4: reason */
 					__( '%1$s booked back onto voucher %2$s (return), new balance %3$s. Reason: %4$s', 'voucher-captain' ),
 					wp_strip_all_tags( wc_price( $amount, array( 'currency' => $voucher->currency ) ) ),
-					$voucher->code,
+					Mask::code( $voucher->code ),
 					wp_strip_all_tags( wc_price( (float) $after->balance, array( 'currency' => $voucher->currency ) ) ),
 					$reason
 				) . ( '' !== $line ? ' (' . $line . ')' : '' ),

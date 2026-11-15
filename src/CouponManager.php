@@ -580,6 +580,10 @@ final class CouponManager {
 				continue;
 			}
 			$voucher = $this->find_voucher_for_code( $code );
+			if ( ! $voucher && $this->is_reissued_code( $code ) ) {
+				// AP-Q1-2: the code was replaced (reissued) – e.g. reported stolen – after this order was placed.
+				throw new \Exception( esc_html( self::reissued_code_message( Mask::code( $code ) ) ) );
+			}
 			if ( ! $voucher || ! $voucher->is_multi_use() ) {
 				continue;
 			}
@@ -605,7 +609,7 @@ final class CouponManager {
 				$made[ $code ] = (float) $reserved_amount;
 				continue;
 			}
-			$reserved_voucher = $this->find_voucher_for_code( (string) $code );
+			$reserved_voucher = $this->find_voucher_for_code( (string) $code, true );
 			if ( ! $reserved_voucher || ! $this->release_reservation_atomic( $reserved_voucher, $order->get_id(), __( 'Checkout reservation reconciled', 'voucher-captain' ) ) ) {
 				throw new \Exception( esc_html__( 'An earlier voucher reservation could not be released. Please contact the store before trying again.', 'voucher-captain' ) );
 			}
@@ -629,7 +633,7 @@ final class CouponManager {
 			// The reservation may be a few cents below the discount when currency round trips exceed the balance
 			// (same tolerance as reserve_balance_atomic()): that is the full balance, not a changed one.
 			$short_by = $reservation ? $amount - (float) $reservation['amount'] : 0.0;
-			$tolerant = $reservation && $short_by > -0.0001 && $short_by <= (float) apply_filters( 'vcap_balance_rounding_tolerance', max( 0.05, $amount * 0.001 ), $voucher );
+			$tolerant = $reservation && $short_by > -0.0001 && ( $short_by < 0.0001 || $short_by <= self::rounding_tolerance( $order, $amount, $voucher ) );
 			if ( ! $reservation || 'reserved' !== $reservation['state'] || ! $tolerant ) {
 				// Roll back this attempt's holds. A hold that cannot be released stays in the order's map (so the
 				// stale-order sweep, a cancellation or deleting the order still finds it) and gets an order note.
@@ -641,7 +645,7 @@ final class CouponManager {
 					}
 				}
 				foreach ( $made as $reserved_code => $reserved_amount ) {
-					$reserved_voucher = $this->find_voucher_for_code( $reserved_code );
+					$reserved_voucher = $this->find_voucher_for_code( $reserved_code, true );
 					if ( ! $reserved_voucher || ! $this->release_reservation_atomic( $reserved_voucher, $order->get_id(), __( 'Checkout reservation rolled back', 'voucher-captain' ) ) ) {
 						$kept[ $reserved_code ] = (float) $reserved_amount;
 					}
@@ -786,7 +790,7 @@ final class CouponManager {
 			sprintf(
 				/* translators: %s: voucher code */
 				__( 'Payment attempt refused: voucher %s no longer has the balance this order uses (it was used elsewhere). Contact the customer, or edit or cancel the order.', 'voucher-captain' ),
-				$code
+				Mask::code( $code )
 			)
 		);
 		return sprintf(
@@ -800,6 +804,18 @@ final class CouponManager {
 	private static function single_use_conflict_message( Voucher $voucher ): string {
 		/* translators: %s: voucher code */
 		return sprintf( __( 'Voucher %s can no longer be used (it was cancelled or redeemed elsewhere). Please contact us to complete this order.', 'voucher-captain' ), $voucher->code );
+	}
+
+	/**
+	 * AP-Q1-2: a code on an unpaid order that was replaced by a new one (reissued) since: the customer message
+	 * (payment refused) or the order note for the shop ($note), for the masked code.
+	 */
+	private static function reissued_code_message( string $masked, bool $note = false ): string {
+		return $note
+			/* translators: %s: masked voucher code */
+			? sprintf( __( 'Voucher %s: this code was replaced by a new one (reissued) before the order was paid, so nothing was charged to the voucher for its discount. Review this order before fulfilment.', 'voucher-captain' ), $masked )
+			/* translators: %s: masked voucher code */
+			: sprintf( __( 'Voucher %s has been replaced by a new code and can no longer be used. This order cannot be paid as it is. Please contact us to complete it.', 'voucher-captain' ), $masked );
 	}
 
 	/**
@@ -822,11 +838,37 @@ final class CouponManager {
 		return $this->release_reservation_atomic( $voucher, (int) $order->get_id(), $note );
 	}
 
+	/**
+	 * AP-Q1-1: the ledger events of an order's charge on a stored balance. The per-order state machine (reserved →
+	 * committed/redeemed → reservation_released/restored) reads only these: other events carry the same order id
+	 * (refund as store credit, top-up of the paying card and its reversal, validity extended, a partial return)
+	 * and must never hide the state of the charge.
+	 */
+	public const ORDER_CHARGE_EVENTS = array( 'reserved', 'committed', 'redeemed', 'reservation_released', 'restored' );
+
+	/** ORDER_CHARGE_EVENTS as a constant SQL list (interpolated, never user input; unit-tested to match). */
+	public const ORDER_CHARGE_EVENTS_SQL = "'reserved','committed','redeemed','reservation_released','restored'";
+
+	/**
+	 * The order's latest charge event on the voucher (event, amount, balance_after), or null. Read under the
+	 * voucher's row lock by the atomic operations.
+	 */
+	private function latest_charge_event( int $voucher_id, int $order_id ): ?array {
+		global $wpdb;
+		$events = Install::tables()['events'];
+		$in     = self::ORDER_CHARGE_EVENTS_SQL;
+		$row    = $wpdb->get_row( $wpdb->prepare( "SELECT event, amount, balance_after FROM {$events} WHERE voucher_id = %d AND order_id = %d AND event IN ({$in}) ORDER BY id DESC LIMIT 1", $voucher_id, $order_id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- constant event list.
+		return is_array( $row ) ? $row : null;
+	}
+
 	private function reserve_balance_atomic( Voucher $voucher, float $requested, int $order_id, string $note ): ?array {
 		global $wpdb;
 		$table  = Install::tables()['vouchers'];
-		$events = Install::tables()['events'];
-		if ( $order_id <= 0 || $requested <= 0 || ! Install::tables_support_transactions() || ! Db::begin() ) {
+		if ( $order_id <= 0 || $requested <= 0 || ! Install::tables_support_transactions() ) {
+			return null;
+		}
+		$order = wc_get_order( $order_id );
+		if ( ! Db::begin() ) {
 			return null;
 		}
 		try {
@@ -835,14 +877,7 @@ final class CouponManager {
 				Db::rollback_if_error( 'reserve_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return null;
 			}
-			$latest = $wpdb->get_row(
-				$wpdb->prepare(
-					"SELECT event, amount, balance_after FROM {$events} WHERE voucher_id = %d AND order_id = %d ORDER BY id DESC LIMIT 1",
-					$voucher->id,
-					$order_id
-				),
-				ARRAY_A
-			); // phpcs:ignore
+			$latest = $this->latest_charge_event( $voucher->id, $order_id );
 			if ( $latest && in_array( $latest['event'], array( 'committed', 'redeemed' ), true ) ) {
 				Db::finish();
 				return array( 'amount' => (float) $latest['amount'], 'balance' => (float) $latest['balance_after'], 'state' => 'committed' );
@@ -857,8 +892,9 @@ final class CouponManager {
 
 			$fresh = $this->repo->get( $voucher->id );
 			$requested = round( $requested, $voucher->decimals() );
-			if ( $fresh && $fresh->balance < $requested && $requested - $fresh->balance <= (float) apply_filters( 'vcap_balance_rounding_tolerance', max( 0.05, $fresh->balance * 0.001 ), $fresh ) ) {
-				// Currency round trips (order currency → base currency) can exceed the full balance by a few cents.
+			if ( $fresh && $fresh->balance < $requested && $requested - $fresh->balance <= self::rounding_tolerance( $order instanceof \WC_Order ? $order : null, $requested, $fresh ) ) {
+				// Currency round trips (order currency → base currency) can exceed the full balance by a few cents;
+				// commit_order_reservations() records the gap on the order (AP-Q1-5).
 				$requested = $fresh->balance;
 			}
 			if ( ! $fresh || ! $fresh->is_multi_use() || Voucher::STATUS_ACTIVE !== $fresh->status || $fresh->is_expired() || $fresh->balance < $requested ) {
@@ -898,7 +934,6 @@ final class CouponManager {
 	private function commit_reservation_atomic( Voucher $voucher, int $order_id ): ?array {
 		global $wpdb;
 		$table  = Install::tables()['vouchers'];
-		$events = Install::tables()['events'];
 		if ( ! Install::tables_support_transactions() || ! Db::begin() ) {
 			return null;
 		}
@@ -908,14 +943,7 @@ final class CouponManager {
 				Db::rollback_if_error( 'commit_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return null;
 			}
-			$latest = $wpdb->get_row(
-				$wpdb->prepare(
-					"SELECT event, amount, balance_after FROM {$events} WHERE voucher_id = %d AND order_id = %d ORDER BY id DESC LIMIT 1",
-					$voucher->id,
-					$order_id
-				),
-				ARRAY_A
-			); // phpcs:ignore
+			$latest = $this->latest_charge_event( $voucher->id, $order_id );
 			if ( ! $latest ) {
 				Db::rollback_if_error( 'commit_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return null;
@@ -949,7 +977,6 @@ final class CouponManager {
 	private function release_reservation_atomic( Voucher $voucher, int $order_id, string $note = '' ): bool {
 		global $wpdb;
 		$table  = Install::tables()['vouchers'];
-		$events = Install::tables()['events'];
 		if ( ! Install::tables_support_transactions() || ! Db::begin() ) {
 			return false;
 		}
@@ -959,14 +986,7 @@ final class CouponManager {
 				Db::rollback_if_error( 'release_reservation_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;
 			}
-			$latest = $wpdb->get_row(
-				$wpdb->prepare(
-					"SELECT event, amount FROM {$events} WHERE voucher_id = %d AND order_id = %d ORDER BY id DESC LIMIT 1",
-					$voucher->id,
-					$order_id
-				),
-				ARRAY_A
-			); // phpcs:ignore
+			$latest = $this->latest_charge_event( $voucher->id, $order_id );
 			if ( ! $latest || 'reserved' !== $latest['event'] ) {
 				Db::finish();
 				return (bool) ( $latest && in_array( $latest['event'], array( 'reservation_released', 'restored' ), true ) );
@@ -1011,16 +1031,15 @@ final class CouponManager {
 			return 0.0;
 		}
 		$t      = Install::tables();
-		$orders = (float) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE( SUM( e.amount ), 0 ) FROM {$t['events']} e WHERE e.voucher_id = %d AND e.event = 'reserved' AND e.order_id > 0 AND NOT EXISTS ( SELECT 1 FROM {$t['events']} x WHERE x.voucher_id = e.voucher_id AND x.order_id = e.order_id AND x.id > e.id )", $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$in     = self::ORDER_CHARGE_EVENTS_SQL;
+		$orders = (float) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE( SUM( e.amount ), 0 ) FROM {$t['events']} e WHERE e.voucher_id = %d AND e.event = 'reserved' AND e.order_id > 0 AND NOT EXISTS ( SELECT 1 FROM {$t['events']} x WHERE x.voucher_id = e.voucher_id AND x.order_id = e.order_id AND x.id > e.id AND x.event IN ({$in}) )", $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$api    = (float) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE( SUM( amount ), 0 ) FROM {$t['redemptions']} WHERE voucher_id = %d AND state = %s", $voucher->id, API\V1\RedemptionService::STATE_RESERVED ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		return round( $orders + $api, $voucher->decimals() );
 	}
 
 	/** Amount of the order's hold on the voucher when its latest ledger event is an open reservation, else null. */
 	private function open_hold( Voucher $voucher, int $order_id ): ?float {
-		global $wpdb;
-		$events = Install::tables()['events'];
-		$latest = $wpdb->get_row( $wpdb->prepare( "SELECT event, amount FROM {$events} WHERE voucher_id = %d AND order_id = %d ORDER BY id DESC LIMIT 1", $voucher->id, $order_id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$latest = $this->latest_charge_event( $voucher->id, $order_id );
 		return $latest && 'reserved' === $latest['event'] ? (float) $latest['amount'] : null;
 	}
 
@@ -1036,11 +1055,12 @@ final class CouponManager {
 	public function release_orphaned_holds( int $cutoff ): int {
 		global $wpdb;
 		$events = Install::tables()['events'];
+		$in     = self::ORDER_CHARGE_EVENTS_SQL;
 		$days   = max( 1, (int) apply_filters( 'vcap_orphaned_hold_days', 90 ) );
 		$rows   = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prepare(
 				"SELECT e.voucher_id, e.order_id FROM {$events} e WHERE e.event = 'reserved' AND e.order_id > 0 AND e.created_at >= %s
-					AND NOT EXISTS ( SELECT 1 FROM {$events} x WHERE x.voucher_id = e.voucher_id AND x.order_id = e.order_id AND x.id > e.id )
+					AND NOT EXISTS ( SELECT 1 FROM {$events} x WHERE x.voucher_id = e.voucher_id AND x.order_id = e.order_id AND x.id > e.id AND x.event IN ({$in}) )
 					ORDER BY e.id LIMIT 200", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS )
 			),
@@ -1103,14 +1123,21 @@ final class CouponManager {
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
 			$current[ wc_format_coupon_code( $item->get_code() ) ] = $this->used_amount( $item ) ?? -1.0; // No rate: never matches.
 		}
-		$failed = false;
+		$failed   = false;
+		$rounding = self::order_map( $order, self::ROUNDING_SHORTFALL_META );
+		$gaps     = array();
 		foreach ( $reservations as $code => $amount ) {
 			$code    = (string) $code;
 			$voucher = $this->find_voucher_for_code( $code );
 			$key     = wc_format_coupon_code( $code );
 			// Currency round trips can make the used amount a few cents larger than the (full-balance) hold.
 			$excess = isset( $current[ $key ] ) ? (float) $current[ $key ] - (float) $amount : 0.0;
-			$same   = isset( $current[ $key ] ) && ( abs( $excess ) < 0.0001 || ( $excess > 0 && $excess <= (float) apply_filters( 'vcap_balance_rounding_tolerance', max( 0.05, (float) $amount * 0.001 ), $voucher ) ) );
+			$same   = isset( $current[ $key ] ) && ( abs( $excess ) < 0.0001 || ( $excess > 0 && $excess <= self::rounding_tolerance( $order, (float) $current[ $key ], $voucher ) ) );
+			if ( $same && $excess >= 0.0001 && $voucher ) {
+				// AP-Q1-5: the discount used a few minor units more than the card held – recorded, never silent.
+				$rounding[ $key ] = round( $excess, $voucher->decimals() );
+				$gaps[ $key ]     = $voucher;
+			}
 			if ( ! $same ) {
 				// Removed or changed coupon line: give the hold back; deduct_order() charges the current amount.
 				if ( $voucher && $this->release_reservation_atomic( $voucher, $order->get_id(), __( 'Coupon removed or changed on the order', 'voucher-captain' ) ) ) {
@@ -1130,6 +1157,9 @@ final class CouponManager {
 		}
 		// Persist whatever succeeded, so refunds restore exactly what was committed.
 		$order->update_meta_data( '_vcap_redemptions', $redemptions );
+		if ( $gaps ) {
+			$order->update_meta_data( self::ROUNDING_SHORTFALL_META, $rounding );
+		}
 		if ( $reservations ) {
 			$order->update_meta_data( '_vcap_reservations', $reservations );
 		} else {
@@ -1139,6 +1169,49 @@ final class CouponManager {
 		if ( $failed ) {
 			$order->add_order_note( __( 'Some voucher reservations could not be committed. Review this order before fulfilment.', 'voucher-captain' ) );
 		}
+		foreach ( $gaps as $key => $voucher ) {
+			$order->add_order_note(
+				sprintf(
+					/* translators: 1: masked voucher code, 2: amount */
+					__( 'Voucher %1$s: currency rounding made the discount %2$s larger than the balance it held; the full balance was charged and the uncovered difference is recorded on this order.', 'voucher-captain' ),
+					Mask::code( (string) $key ),
+					html_entity_decode( wp_strip_all_tags( wc_price( (float) $rounding[ $key ], array( 'currency' => $voucher->currency ) ) ), ENT_QUOTES, 'UTF-8' )
+				)
+			);
+		}
+	}
+
+	/** Order meta (AP-Q1-5): code => part of a discount that currency rounding let exceed the card's balance (base currency). */
+	public const ROUNDING_SHORTFALL_META = '_vcap_rounding_shortfall';
+
+	/** Most minor units a currency round trip may exceed a stored balance by (AP-Q1-5). */
+	public const ROUNDING_TOLERANCE_UNITS = 5;
+
+	/**
+	 * AP-Q1-5: how far an order's use of a stored balance may exceed it (the full balance is taken instead). Only a
+	 * currency round trip (order currency → base currency) rounds like that, so only for an order in another
+	 * currency than the shop's – 0 otherwise – and at most ROUNDING_TOLERANCE_UNITS minor units. The filter
+	 * "vcap_balance_rounding_tolerance" can lower it, never raise it above that cap.
+	 */
+	public static function rounding_tolerance( ?\WC_Order $order, float $amount, ?Voucher $voucher ): float {
+		$base     = (string) get_option( 'woocommerce_currency' );
+		$decimals = $voucher ? $voucher->decimals() : API\V1\RedemptionService::decimals( $base );
+		$default  = self::tolerance_for( $order ? (string) $order->get_currency() : '', $base, $amount, $decimals );
+		if ( $default <= 0 ) {
+			return 0.0;
+		}
+		$cap = self::ROUNDING_TOLERANCE_UNITS / ( 10 ** max( 0, $decimals ) );
+		return max( 0.0, min( $cap, (float) apply_filters( 'vcap_balance_rounding_tolerance', $default, $voucher ) ) );
+	}
+
+	/** The default of rounding_tolerance(): 0 in the base currency, else 0.1 % of the amount within 1 to 5 minor units. */
+	public static function tolerance_for( string $currency, string $base, float $amount, int $decimals ): float {
+		if ( '' === $currency || '' === $base || 0 === strcasecmp( $currency, $base ) ) {
+			return 0.0;
+		}
+		$decimals = max( 0, $decimals );
+		$unit     = 1 / ( 10 ** $decimals );
+		return round( min( self::ROUNDING_TOLERANCE_UNITS * $unit, max( $unit, abs( $amount ) * 0.001 ) ), $decimals );
 	}
 
 	/**
@@ -1151,7 +1224,7 @@ final class CouponManager {
 		}
 		$released = 0;
 		foreach ( $reservations as $code => $amount ) {
-			$voucher = $this->find_voucher_for_code( (string) $code );
+			$voucher = $this->find_voucher_for_code( (string) $code, true );
 			if ( $voucher && $this->release_reservation_atomic( $voucher, $order->get_id(), sprintf( /* translators: %s: order number */ __( 'Released from order #%s', 'voucher-captain' ), $order->get_order_number() ) ) ) {
 				++$released;
 			}
@@ -1277,7 +1350,6 @@ final class CouponManager {
 		global $wpdb;
 		$reason = '';
 		$table  = Install::tables()['vouchers'];
-		$events = Install::tables()['events'];
 		if ( ! Install::tables_support_transactions() ) {
 			$reason = 'no_transactions';
 			return null;
@@ -1296,14 +1368,7 @@ final class CouponManager {
 			}
 
 			if ( $order_id > 0 ) {
-				$prior = $wpdb->get_row(
-					$wpdb->prepare(
-						"SELECT event, amount, balance_after FROM {$events} WHERE voucher_id = %d AND order_id = %d ORDER BY id DESC LIMIT 1",
-						$voucher->id,
-						$order_id
-					),
-					ARRAY_A
-				); // phpcs:ignore
+				$prior = $this->latest_charge_event( $voucher->id, $order_id );
 				if ( $prior && in_array( $prior['event'], array( 'reserved', 'committed', 'redeemed' ), true ) ) {
 					if ( 'reserved' === $prior['event'] ) {
 						// The balance read under the lock now, not the one after the reservation (other bookings
@@ -1544,8 +1609,14 @@ final class CouponManager {
 			return;
 		}
 		$payments = function_exists( 'vcap' ) ? vcap()->payments->cart_payments() : array();
+		$coupons  = WC()->cart->get_coupons();
 		foreach ( WC()->cart->get_applied_coupons() as $code ) {
-			$voucher = $this->repo->get_by_code( wc_format_coupon_code( $code ) ) ?? $this->repo->get_by_code( $code );
+			$coupon = $coupons[ $code ] ?? null;
+			if ( $coupon instanceof \WC_Coupon && 'yes' !== $coupon->get_meta( '_vcap_voucher' ) ) {
+				continue; // AP-P1-5: ordinary coupons are never looked up.
+			}
+			$voucher = $coupon instanceof \WC_Coupon && $coupon->get_id() ? $this->repo->get_by_coupon( $coupon->get_id() ) : null;
+			$voucher = $voucher ?? $this->repo->get_by_code( wc_format_coupon_code( $code ) ) ?? $this->repo->get_by_code( $code );
 			if ( $voucher && $voucher->is_multi_use() ) {
 				// A note across the totals table, not a second amount column next to the order total (frontend.css).
 				echo '<tr class="vcap-balance"><td colspan="2"><small>' . esc_html( self::remaining_balance_note( $voucher, self::remaining_after_cart( $voucher, WC()->cart, (string) $code, $payments ) ) ) . '</small></td></tr>';
@@ -1581,6 +1652,11 @@ final class CouponManager {
 		);
 	}
 
+	/** The plugin's PaymentVouchers service (AP-P1-5: one instance per request), or a new one without the plugin. */
+	private static function payments( VoucherRepository $repo ): PaymentVouchers {
+		return function_exists( 'vcap' ) && isset( vcap()->payments ) ? vcap()->payments : new PaymentVouchers( $repo );
+	}
+
 	/**
 	 * Recalculating an order (admin adds a coupon, changes items …) reads the coupon amount again, which for a
 	 * stored balance is the *remaining* balance – after the reservation often 0, so the gift card line would
@@ -1603,11 +1679,11 @@ final class CouponManager {
 			$coupon->set_amount( 0 );
 			return $coupon;
 		}
-		$voucher = $this->find_voucher_for_code( $code );
+		$redeemed = (float) ( self::order_map( $order, '_vcap_redemptions' )[ $code ] ?? 0 );
+		$voucher  = $this->find_voucher_for_code( $code, $redeemed > 0 ); // An earlier code: only what was charged.
 		if ( ! $voucher || ! $voucher->is_multi_use() ) {
 			return $coupon;
 		}
-		$redeemed = (float) ( self::order_map( $order, '_vcap_redemptions' )[ $code ] ?? 0 );
 		$reserved = (float) ( self::order_map( $order, '_vcap_reservations' )[ $code ] ?? 0 );
 		if ( $redeemed > 0 ) {
 			$amount = $redeemed; // Already deducted: never more than the order was charged.
@@ -1661,11 +1737,12 @@ final class CouponManager {
 		}
 		$code = wc_format_coupon_code( $coupon->get_code() );
 		unset( $this->net_amounts[ $code ] );
-		if ( ! wc_tax_enabled() || wc_prices_include_tax() || 'fixed_cart' !== $coupon->get_discount_type() || ! apply_filters( 'vcap_balance_covers_tax', true, $coupon ) ) {
-			return $items;
+		if ( ! wc_tax_enabled() || wc_prices_include_tax() || 'fixed_cart' !== $coupon->get_discount_type() || 'yes' !== $coupon->get_meta( '_vcap_voucher' ) || ! apply_filters( 'vcap_balance_covers_tax', true, $coupon ) ) {
+			return $items; // AP-P1-5: ordinary coupons are never looked up.
 		}
-		$voucher = $this->repo->get_by_code( $code );
-		if ( ! $voucher || ! $voucher->is_multi_use() || ( PaymentVouchers::enabled() && ( new PaymentVouchers( $this->repo ) )->applies( $coupon ) ) ) {
+		$voucher = $coupon->get_id() ? $this->repo->get_by_coupon( $coupon->get_id() ) : null;
+		$voucher = $voucher ?? $this->repo->get_by_code( $code );
+		if ( ! $voucher || ! $voucher->is_multi_use() || ( PaymentVouchers::enabled() && self::payments( $this->repo )->applies( $coupon ) ) ) {
 			return $items; // Paid after tax as a fee line: nothing to convert.
 		}
 		$taxed = array_filter(
@@ -1784,7 +1861,7 @@ final class CouponManager {
 		$reservations = self::order_map( $order, '_vcap_reservations' );
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
 			$code    = wc_format_coupon_code( $item->get_code() );
-			$voucher = $this->find_voucher_for_code( $code );
+			$voucher = $this->find_voucher_for_code( $code, true ); // Books 0 (charges nothing): a reissued code too.
 			if ( ! $voucher || ! $voucher->is_multi_use() || isset( $applied[ $code ] ) ) {
 				continue;
 			}
@@ -1852,6 +1929,13 @@ final class CouponManager {
 				continue;
 			}
 			$voucher = $this->find_voucher_for_code( $code );
+			if ( ! $voucher && $this->is_reissued_code( $code ) ) {
+				// AP-Q1-2: never charged to the voucher under its old code, never fulfilled with the free discount.
+				$shortfall = true;
+				$changed   = true;
+				$order->add_order_note( self::reissued_code_message( Mask::code( $code ), true ) );
+				continue;
+			}
 			if ( ! $voucher || ! $voucher->is_multi_use() ) {
 				continue;
 			}
@@ -1862,7 +1946,7 @@ final class CouponManager {
 				$changed   = true;
 				$order->add_order_note(
 					/* translators: 1: voucher code, 2: order currency */
-					sprintf( __( 'Voucher %1$s: the discount could not be deducted from its balance because no exchange rate for %2$s is known. Review this order and adjust the charge before fulfilment.', 'voucher-captain' ), $voucher->code, $order->get_currency() )
+					sprintf( __( 'Voucher %1$s: the discount could not be deducted from its balance because no exchange rate for %2$s is known. Review this order and adjust the charge before fulfilment.', 'voucher-captain' ), Mask::code( $voucher->code ), $order->get_currency() )
 				);
 				continue;
 			}
@@ -1880,7 +1964,7 @@ final class CouponManager {
 				$changed   = true;
 				$order->add_order_note(
 					/* translators: %s: voucher code */
-					sprintf( __( 'Voucher %s: the discount could not be deducted from its balance. Review this order and adjust the charge before fulfilment.', 'voucher-captain' ), $voucher->code )
+					sprintf( __( 'Voucher %s: the discount could not be deducted from its balance. Review this order and adjust the charge before fulfilment.', 'voucher-captain' ), Mask::code( $voucher->code ) )
 				);
 				continue;
 			}
@@ -1898,7 +1982,7 @@ final class CouponManager {
 				sprintf(
 					/* translators: 1: code, 2: amount, 3: remaining balance */
 					__( 'Voucher %1$s: %2$s deducted, remaining balance %3$s.', 'voucher-captain' ),
-					$voucher->code,
+					Mask::code( $voucher->code ),
 					wc_price( $amount, array( 'currency' => $voucher->currency ) ),
 					wc_price( $voucher->balance, array( 'currency' => $voucher->currency ) )
 				)
@@ -1993,7 +2077,6 @@ final class CouponManager {
 	private function restore_balance_atomic( Voucher $voucher, float $amount, int $order_id, string $note, ?float $charged = null ): bool {
 		global $wpdb;
 		$table   = Install::tables()['vouchers'];
-		$events  = Install::tables()['events'];
 		$charged = $charged ?? $amount;
 		if ( $amount <= 0 && $charged > 0 && $order_id > 0 ) {
 			return true; // Booked back completely by hand already.
@@ -2007,16 +2090,7 @@ final class CouponManager {
 				Db::rollback_if_error( 'restore_balance_atomic', array( 'voucher_id' => $voucher->id, 'order_id' => $order_id ) );
 				return false;
 			}
-			$latest = $wpdb->get_row(
-				$wpdb->prepare(
-					"SELECT event, amount FROM {$events} WHERE voucher_id = %d AND order_id = %d AND event NOT IN (%s, %s) ORDER BY id DESC LIMIT 1",
-					$voucher->id,
-					$order_id,
-					self::RETURNED_EVENT,
-					TopUp::EXTENDED_EVENT
-				),
-				ARRAY_A
-			); // phpcs:ignore
+			$latest = $this->latest_charge_event( $voucher->id, $order_id );
 			if ( $latest && 'restored' === $latest['event'] ) {
 				Db::finish();
 				return true;
@@ -2051,17 +2125,36 @@ final class CouponManager {
 	}
 
 	public function restore_order( \WC_Order $order ): void {
-		$applied = self::order_map( $order, '_vcap_redemptions' );
-		if ( ! $applied ) {
+		global $wpdb;
+		if ( ! self::order_map( $order, '_vcap_redemptions' ) ) {
 			return;
 		}
+		// AP-Q1-6: the same named lock as a booking back by hand (OrderReturn::book_back()), so a return and the
+		// cancellation never both book the same part back.
+		$lock = OrderReturn::lock_name( $order->get_id() );
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 10)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$order->add_order_note( __( 'Some voucher balances could not be restored. Review this order and retry the refund handling.', 'voucher-captain' ) );
+			return;
+		}
+		try {
+			$this->restore_order_locked( $order );
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+	}
+
+	private function restore_order_locked( \WC_Order $order ): void {
+		// Read under the lock: a return booked meanwhile is in the stored order, not in this object.
+		$stored  = wc_get_order( $order->get_id() );
+		$stored  = $stored instanceof \WC_Order && ! $stored instanceof \WC_Order_Refund ? $stored : $order;
+		$applied = self::order_map( $order, '_vcap_redemptions' );
 		// Parts already booked back by hand (partial return, OrderReturn): only the rest goes back now.
-		$returned = self::order_map( $order, self::RETURNED_META );
+		$returned = self::order_map( $stored, self::RETURNED_META ) + self::order_map( $order, self::RETURNED_META );
 		// A rounding rest booked off after the charge (T15) goes back with it.
 		$rests    = self::order_map( $order, self::WRITTEN_OFF_META );
 		$restored = 0;
 		foreach ( $applied as $code => $amount ) {
-			$voucher = $this->find_voucher_for_code( (string) $code );
+			$voucher = $this->find_voucher_for_code( (string) $code, true );
 			$back    = (float) $amount - (float) ( $returned[ $code ] ?? 0 ) + (float) ( $rests[ $code ] ?? 0 );
 			if ( $voucher && $this->restore_balance_atomic(
 				$voucher,
@@ -2079,6 +2172,8 @@ final class CouponManager {
 		if ( $restored === count( $applied ) ) {
 			$order->delete_meta_data( '_vcap_redemptions' );
 			$order->delete_meta_data( self::WRITTEN_OFF_META );
+			// AP-Q1-6: the returns belonged to this charge; a new charge after reopening the order starts afresh.
+			$order->delete_meta_data( self::RETURNED_META );
 			$order->save();
 		} else {
 			$order->add_order_note( __( 'Some voucher balances could not be restored. Review this order and retry the refund handling.', 'voucher-captain' ) );
@@ -2117,7 +2212,7 @@ final class CouponManager {
 				/* translators: 1: amount, 2: voucher code */
 				: __( '%1$s were booked back onto voucher %2$s, but it has expired: the customer cannot use it. Extend its validity on the voucher screen, or pay the amount back as money or store credit.', 'voucher-captain' ),
 			$money,
-			$card->code
+			Mask::code( (string) $card->code )
 		);
 		$order->add_order_note( $text );
 		Attention::add( $order->get_id(), 'restored:' . $card->id, $text );
@@ -2130,14 +2225,14 @@ final class CouponManager {
 	 */
 	private function return_single_use( \WC_Order $order ): void {
 		$data_store = $order->get_data_store();
-		if ( method_exists( $data_store, 'get_recorded_coupon_usage_counts' ) && ! $data_store->get_recorded_coupon_usage_counts( $order ) ) {
+		if ( $data_store->has_callable( 'get_recorded_coupon_usage_counts' ) && ! $data_store->get_recorded_coupon_usage_counts( $order ) ) {
 			return; // WooCommerce counted no use for this order (or gave it back already).
 		}
-		$done  = self::order_map( $order, '_vcap_single_use_returned' );
+		$done  = self::order_map( $order, self::SINGLE_USE_RETURNED_META );
 		$codes = array();
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
 			$code    = wc_format_coupon_code( $item->get_code() );
-			$voucher = isset( $done[ $code ] ) ? null : $this->find_voucher_for_code( $code );
+			$voucher = isset( $done[ $code ] ) ? null : $this->find_voucher_for_code( $code, true );
 			if ( ! $voucher || $voucher->is_multi_use() || ! $voucher->coupon_id ) {
 				continue;
 			}
@@ -2153,12 +2248,20 @@ final class CouponManager {
 			}
 		}
 		if ( $codes ) {
-			$order->update_meta_data( '_vcap_single_use_returned', $done );
+			$order->update_meta_data( self::SINGLE_USE_RETURNED_META, $done );
 			$order->save_meta_data();
+			// AP-Q1-4: the uses are given back now – WooCommerce must not lower the counts a second time when the
+			// refunded order is cancelled later (it does so while its "recorded" flag is set).
+			if ( $data_store->has_callable( 'set_recorded_coupon_usage_counts' ) ) {
+				$data_store->set_recorded_coupon_usage_counts( $order, false );
+			}
 			/* translators: %s: voucher codes */
 			$order->add_order_note( sprintf( __( 'Order refunded: single-use vouchers %s can be used again.', 'voucher-captain' ), implode( ', ', array_map( array( Mask::class, 'code' ), $codes ) ) ) );
 		}
 	}
+
+	/** Order meta: single-use codes whose use a full refund gave back already (code => 1, return_single_use()). */
+	public const SINGLE_USE_RETURNED_META = '_vcap_single_use_returned';
 
 	/** @var int Order being cancelled right now (WooCommerce gives its coupon uses back), 0 = none. */
 	private int $cancelling = 0;
@@ -2202,11 +2305,25 @@ final class CouponManager {
 		return false;
 	}
 
-	private function find_voucher_for_code( string $code ): ?Voucher {
+	/**
+	 * The voucher of a coupon code on an order: by its coupon, else by its code. With $book_back an earlier code of
+	 * a reissued voucher (V10) finds the voucher too – only to book value back (restore, release, return), never to
+	 * reserve, commit or charge it (AP-Q1-2: the old code must not pay an order after the reissue).
+	 */
+	private function find_voucher_for_code( string $code, bool $book_back = false ): ?Voucher {
 		$coupon_id = wc_get_coupon_id_by_code( $code );
 		$voucher   = $coupon_id ? $this->repo->get_by_coupon( (int) $coupon_id ) : $this->repo->get_by_code( $code );
-		// V10: an order paid with a code that was reissued since still charges/books back the same voucher.
-		return $voucher ?? Reissue::voucher_of_previous_code( $this->repo, $code );
+		return $voucher ?? ( $book_back ? Reissue::voucher_of_previous_code( $this->repo, $code ) : null );
+	}
+
+	/** Whether $code is an earlier code of a reissued voucher (no coupon or voucher carries it any more). */
+	private function is_reissued_code( string $code ): bool {
+		$coupon_id = (int) wc_get_coupon_id_by_code( $code );
+		if ( $coupon_id && 'publish' === get_post_status( $coupon_id ) && 'yes' !== get_post_meta( $coupon_id, '_vcap_voucher', true ) ) {
+			return false; // An ordinary coupon (no extra query: post and meta are cached).
+		}
+		// Also when a stale cache still names the deleted coupon of the old code.
+		return null === $this->repo->get_by_code( $code ) && null !== Reissue::voucher_of_previous_code( $this->repo, $code );
 	}
 
 	/**
@@ -2347,7 +2464,7 @@ final class CouponManager {
 			sprintf(
 				/* translators: 1: voucher code, 2: discount amount */
 				__( 'Voucher %1$s was cancelled or redeemed elsewhere before this order was paid, but the order still has its discount of %2$s. The order is held: collect the difference or cancel the order before fulfilment.', 'voucher-captain' ),
-				$voucher->code,
+				Mask::code( $voucher->code ),
 				wp_strip_all_tags( wc_price( $value, array( 'currency' => $order->get_currency() ) ) )
 			)
 		);
@@ -2401,6 +2518,12 @@ final class CouponManager {
 		}
 	}
 
+	/** Whether the order being cancelled right now gave this voucher's use back already (full refund before). */
+	private function returned_by_order( Voucher $voucher ): bool {
+		$order = $this->cancelling > 0 && function_exists( 'wc_get_order' ) ? wc_get_order( $this->cancelling ) : null;
+		return $order instanceof \WC_Order && isset( self::order_map( $order, self::SINGLE_USE_RETURNED_META )[ wc_format_coupon_code( (string) $voucher->code ) ] );
+	}
+
 	public function usage_decreased( $coupon, $new_count, $used_by ): void {
 		if ( ! $coupon instanceof \WC_Coupon || 'yes' !== $coupon->get_meta( '_vcap_voucher' ) ) {
 			return;
@@ -2413,6 +2536,9 @@ final class CouponManager {
 		if ( $this->cancelling && $this->keep_single_use && Voucher::STATUS_REDEEMED === $voucher->status ) {
 			$this->given_back[] = $voucher; // Cancelled while "Restore balance on cancellation" is off: stays redeemed.
 			return;
+		}
+		if ( $this->returned_by_order( $voucher ) ) {
+			return; // AP-Q1-4: this order gave the use back already (full refund); a later use elsewhere stays redeemed.
 		}
 		if ( Voucher::STATUS_REDEEMED === $voucher->status && ( 0 === $limit || (int) $new_count < $limit ) ) {
 			// An expired voucher stays expired (check_restored_card() tells the shop when an order gave it back).
