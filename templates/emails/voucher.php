@@ -71,6 +71,15 @@ $value = 'percent' === $voucher->discount_type
 	</tr></table>
 <?php endif; ?>
 
+<?php $vcap_links = \VCAP\Downloads::voucher_links( $voucher, 'email' ); // Extra links of add-ons (filter vcap_voucher_links). ?>
+<?php if ( $vcap_links ) : ?>
+	<p class="vcap-voucher-links" style="text-align:center;margin:0 0 16px;">
+		<?php foreach ( $vcap_links as $vcap_i => $vcap_link ) : ?>
+			<?php echo esc_html( $vcap_i ? ' · ' : '' ); ?><a href="<?php echo esc_url( $vcap_link['url'] ); ?>"><?php echo esc_html( $vcap_link['label'] ); ?></a>
+		<?php endforeach; ?>
+	</p>
+<?php endif; ?>
+
 <?php
 /**
  * Steps after receiving the voucher (e.g. "exchange it for tickets on the redeem page"); connectors add them

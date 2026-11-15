@@ -102,6 +102,10 @@ $show_order = ! empty( $show_order );
 							<?php esc_html_e( 'Download PDF', 'voucher-captain' ); ?><?php echo \VCAP\Shortcodes::voucher_suffix( $voucher->code ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in voucher_suffix(). ?>
 						</a>
 					<?php endif; ?>
+					<?php foreach ( \VCAP\Downloads::voucher_links( $voucher, 'account' ) as $vcap_link ) : ?>
+						<?php // Extra links of add-ons, e.g. "Add to Wallet" (filter vcap_voucher_links). ?>
+						<a class="<?php echo esc_attr( \VCAP\Shortcodes::button_class( 'woocommerce-button button vcap-voucher-link' ) ); ?>" href="<?php echo esc_url( $vcap_link['url'] ); ?>" target="_blank" rel="noopener"><?php echo esc_html( $vcap_link['label'] ); ?></a>
+					<?php endforeach; ?>
 					<?php if ( $downloads->customer_can_change( $voucher ) ) : ?>
 						<?php // H10: until delivery the buyer may correct the recipient email and the delivery date. ?>
 						<details class="vcap-change">

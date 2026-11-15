@@ -719,6 +719,228 @@ final class Issuer {
 		return $voucher;
 	}
 
+	/* ---- Vouchers without an order (R6) ------------------------------------------------------------- */
+
+	/** Ledger note code of a voucher issued without an order (args: source, reference). */
+	public const STANDALONE_NOTE = 'issued_standalone';
+	/** First slot index of vouchers without an order (order item 0; store credit uses the user id below it). */
+	private const STANDALONE_SLOT_BASE = 2147483648;
+
+	/**
+	 * Issues one voucher without a WooCommerce order – e.g. a company order with a list of recipients, a goodwill
+	 * voucher or a prize – with the same code generation, WooCommerce coupon, "issued" ledger entry and email
+	 * delivery as a purchased one. Public PHP API (see API.md, "Issuing vouchers without an order").
+	 *
+	 * The caller is responsible for the permission and the context: this method checks no capability (it is
+	 * also meant for background tasks), so call it only from code that has checked who asked for it (e.g.
+	 * current_user_can( 'vcap_manage_vouchers' ) and a nonce for an admin form).
+	 *
+	 * @param array $args {
+	 *     @type int         $product_id      Voucher product whose settings to use (type, usage, template, validity,
+	 *                                        restrictions, terms). Optional.
+	 *     @type float       $amount          Value (percent for percentage vouchers). Default: the product's fixed
+	 *                                        value or price. Required without a product.
+	 *     @type string      $type            voucher|giftcard|ticket (default: the product's, else "voucher").
+	 *     @type string      $usage           single|balance|unlimited (default: the product's, else "single").
+	 *     @type string      $discount_type   fixed_cart|percent (default: the product's, else "fixed_cart").
+	 *     @type int         $template_id     PDF template (default: the product's, else the default template).
+	 *     @type string|null $expires_at      Expiry, UTC "Y-m-d H:i:s"; '' or null = never. Default: the product's
+	 *                                        validity rule, else the global default.
+	 *     @type int         $expiry_days     Alternative to expires_at: valid for this many days.
+	 *     @type string      $recipient_name  Recipient name (on the PDF and in the email).
+	 *     @type string      $recipient_email Recipient address: the voucher is mailed there.
+	 *     @type string      $buyer_name      Name of the ordering party (e.g. the company).
+	 *     @type string      $buyer_email     Address of the ordering party (gets the voucher when there is no
+	 *                                        recipient address, or a copy with buyer_copy).
+	 *     @type bool        $buyer_copy      Also mail the ordering party (default false).
+	 *     @type string      $message         Personal message.
+	 *     @type bool        $send            Deliver by email now (default true). false: the voucher counts as
+	 *                                        handed over (no email; "Send again" in the admin still works).
+	 *     @type string      $delivery_at     Deliver (and activate) later, UTC "Y-m-d H:i:s".
+	 *     @type string      $code            Own code (must be unused); default: a generated code.
+	 *     @type string      $source          Free label of the caller, e.g. "company-order" (in the history).
+	 *     @type string      $reference       Idempotency key (up to 100 characters), e.g. "order-4711/3": a
+	 *                                        second call with the same reference issues nothing and returns
+	 *                                        the error "vcap_reference_used" with the voucher id in its data.
+	 * }
+	 * @return Voucher|\WP_Error
+	 */
+	public function issue_standalone( array $args ) {
+		$product = null;
+		$config  = ProductConfig::DEFAULTS;
+		if ( ! empty( $args['product_id'] ) ) {
+			$product = wc_get_product( (int) $args['product_id'] );
+			if ( ! $product || ! ProductConfig::is_voucher( $product ) ) {
+				return new \WP_Error( 'vcap_invalid_product', __( 'This product is not a voucher product.', 'voucher-captain' ), array( 'status' => 400 ) );
+			}
+			$config = ProductConfig::get( $product );
+		}
+		foreach ( array( 'type' => 'type', 'usage' => 'usage', 'discount_type' => 'discount_type', 'template_id' => 'template' ) as $arg => $key ) {
+			if ( isset( $args[ $arg ] ) && '' !== (string) $args[ $arg ] ) {
+				$config[ $key ] = 'template' === $key ? (int) $args[ $arg ] : sanitize_key( (string) $args[ $arg ] );
+			}
+		}
+		if ( ! isset( Voucher::types()[ $config['type'] ] ) || 'credit' === $config['type'] || ! in_array( $config['usage'], array( 'single', 'balance', 'unlimited' ), true ) || ! in_array( $config['discount_type'], array( 'fixed_cart', 'percent', 'fixed_product' ), true ) ) {
+			return new \WP_Error( 'vcap_invalid_args', __( 'Unknown voucher type, usage or discount type.', 'voucher-captain' ), array( 'status' => 400 ) );
+		}
+		if ( isset( $args['amount'] ) ) {
+			$amount = (float) $args['amount'];
+		} elseif ( $product ) {
+			$amount = 'fixed' === $config['amount_source'] && '' !== (string) $config['amount'] ? (float) wc_format_decimal( (string) $config['amount'] ) : (float) $product->get_price();
+		} else {
+			$amount = 0.0;
+		}
+		$currency = (string) get_option( 'woocommerce_currency' );
+		$amount   = round( $amount, API\V1\RedemptionService::decimals( $currency ) );
+		if ( ! is_finite( $amount ) || $amount < 0 || ( $amount <= 0 && 'ticket' !== $config['type'] ) ) {
+			return new \WP_Error( 'vcap_invalid_amount', __( 'Please give a voucher value greater than zero.', 'voucher-captain' ), array( 'status' => 400 ) );
+		}
+		// Same discount rules as for products: the value is a fixed value here.
+		$errors = ProductConfig::discount_errors( array_merge( $config, array( 'amount_source' => 'fixed', 'amount' => (string) $amount ) ) );
+		if ( $errors ) {
+			return new \WP_Error( 'vcap_invalid_args', esc_html( implode( ' ', $errors ) ), array( 'status' => 400 ) );
+		}
+		$recipient_email = sanitize_email( (string) ( $args['recipient_email'] ?? '' ) );
+		$buyer_email     = sanitize_email( (string) ( $args['buyer_email'] ?? '' ) );
+		$send            = ! array_key_exists( 'send', $args ) || (bool) $args['send'];
+		if ( $send && '' === $recipient_email && '' === $buyer_email ) {
+			return new \WP_Error( 'vcap_no_address', __( 'An email address of the recipient or the ordering party is needed to send the voucher.', 'voucher-captain' ), array( 'status' => 400 ) );
+		}
+		$code = isset( $args['code'] ) ? wc_format_coupon_code( (string) $args['code'] ) : '';
+		if ( '' !== $code && $this->coupons->code_exists( $code ) ) {
+			return new \WP_Error( 'vcap_code_taken', __( 'This code is already used by another voucher or coupon.', 'voucher-captain' ), array( 'status' => 409 ) );
+		}
+		$source    = mb_substr( sanitize_text_field( (string) ( $args['source'] ?? '' ) ), 0, 60 );
+		$reference = mb_substr( sanitize_text_field( (string) ( $args['reference'] ?? '' ) ), 0, 100 );
+		$note      = Note::make( self::STANDALONE_NOTE, array( $source, $reference ) );
+		if ( '' !== $reference ) {
+			$existing = $this->standalone_by_note( $note );
+			if ( $existing || ! Claim::take( 'standalone:' . md5( $reference ) ) ) {
+				return new \WP_Error( 'vcap_reference_used', __( 'A voucher was already issued for this reference.', 'voucher-captain' ), array( 'status' => 409, 'voucher_id' => $existing ) );
+			}
+		}
+		$voucher = $this->insert_standalone( $args, $config, $amount, $currency, $code, $send, $product );
+		if ( is_wp_error( $voucher ) ) {
+			if ( '' !== $reference ) {
+				Claim::release( 'standalone:' . md5( $reference ) );
+			}
+			return $voucher;
+		}
+		if ( ! $this->repo->log( $voucher->id, 'issued', $voucher->initial_amount, $voucher->balance, $note ) ) {
+			Db::fail( 'log_issued', array( 'voucher_id' => $voucher->id ) );
+		}
+		if ( $send ) {
+			$this->delivery->schedule( $voucher );
+		}
+		/** A voucher was issued without an order (args: Voucher, the arguments of Issuer::issue_standalone()). */
+		do_action( 'vcap_voucher_issued_standalone', $voucher, $args );
+		return $voucher;
+	}
+
+	/** Id of the voucher whose "issued" entry carries this standalone note (0 = none). */
+	private function standalone_by_note( string $note ): int {
+		global $wpdb;
+		$events = Install::tables()['events'];
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT voucher_id FROM {$events} WHERE event = 'issued' AND order_id = 0 AND note = %s ORDER BY id LIMIT 1", $note ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	}
+
+	/**
+	 * Voucher row and WooCommerce coupon of issue_standalone() (nothing is left behind on failure).
+	 *
+	 * @return Voucher|\WP_Error
+	 */
+	private function insert_standalone( array $args, array $config, float $amount, string $currency, string $code, bool $send, ?\WC_Product $product ) {
+		$voucher                 = new Voucher();
+		$voucher->type           = $config['type'];
+		$voucher->product_id     = $product ? (int) ( $product->get_parent_id() ?: $product->get_id() ) : 0;
+		$voucher->variation_id   = $product && $product->get_parent_id() ? (int) $product->get_id() : 0;
+		$voucher->template_id    = (int) $config['template'] ?: (int) $this->settings->get( 'vcap_default_template' );
+		$voucher->discount_type  = $config['discount_type'];
+		$voucher->usage_mode     = 'percent' === $config['discount_type'] && 'balance' === $config['usage'] ? 'single' : $config['usage'];
+		if ( 'balance' === $voucher->usage_mode ) {
+			$voucher->discount_type = 'fixed_cart';
+		}
+		$voucher->currency       = $currency;
+		$voucher->initial_amount = $amount;
+		$voucher->balance        = $amount;
+		if ( array_key_exists( 'expires_at', $args ) ) {
+			$ts                  = '' !== (string) $args['expires_at'] ? strtotime( (string) $args['expires_at'] . ' UTC' ) : false;
+			$voucher->expires_at = $ts ? gmdate( 'Y-m-d H:i:s', $ts ) : null;
+		} elseif ( ! empty( $args['expiry_days'] ) ) {
+			$voucher->expires_at = ProductConfig::expiry_for( array_merge( $config, array( 'expiry_mode' => 'days', 'expiry_days' => (int) $args['expiry_days'] ) ) );
+		} else {
+			$voucher->expires_at = ProductConfig::expiry_for( $config );
+		}
+		$voucher->recipient_name  = sanitize_text_field( (string) ( $args['recipient_name'] ?? '' ) );
+		$voucher->recipient_email = sanitize_email( (string) ( $args['recipient_email'] ?? '' ) );
+		$voucher->buyer_name      = sanitize_text_field( (string) ( $args['buyer_name'] ?? '' ) );
+		$voucher->buyer_email     = sanitize_email( (string) ( $args['buyer_email'] ?? '' ) );
+		$voucher->message         = sanitize_textarea_field( (string) ( $args['message'] ?? '' ) );
+		$voucher->fields          = array();
+		if ( '' !== $voucher->recipient_email ) {
+			$voucher->send_to = ! empty( $args['buyer_copy'] ) && '' !== $voucher->buyer_email ? 'both' : 'recipient';
+		} else {
+			$voucher->send_to = 'buyer';
+		}
+		$voucher->max_checkins = max( 1, (int) $config['max_checkins'] );
+		$voucher->transferable = 'no' !== $config['transferable'];
+		$voucher->terms        = ProductConfig::terms( $config );
+		$delivery              = ! empty( $args['delivery_at'] ) ? strtotime( (string) $args['delivery_at'] . ' UTC' ) : false;
+		$voucher->delivery_at  = $delivery && $delivery > time() ? gmdate( 'Y-m-d H:i:s', $delivery ) : null;
+		$voucher->status       = $voucher->delivery_at ? Voucher::STATUS_SCHEDULED : Voucher::STATUS_ACTIVE;
+		if ( ! $send && ! $voucher->delivery_at ) {
+			$voucher->delivered_at = $this->repo->now(); // Handed over by the caller: no email, no safety-net delivery.
+		}
+		$voucher->code = '' !== $code ? $code : CodeGenerator::unique(
+			array(
+				'prefix'    => '' !== (string) $config['code_prefix'] ? $config['code_prefix'] : $this->settings->get( 'vcap_code_prefix' ),
+				'suffix'    => '' !== (string) $config['code_suffix'] ? $config['code_suffix'] : $this->settings->get( 'vcap_code_suffix' ),
+				'length'    => (int) ( $config['code_length'] ?: $this->settings->get( 'vcap_code_length' ) ),
+				'charset'   => $this->settings->get( 'vcap_code_charset' ),
+				'separator' => $this->settings->get( 'vcap_code_separator' ),
+				'min_bits'  => (int) apply_filters( 'vcap_min_code_bits', CodeGenerator::MIN_BITS ),
+			),
+			array( $this->coupons, 'code_exists' )
+		);
+		// Unique slot: order item 0 with an index above every user id (store credit accounts use the user id).
+		$voucher->order_item_id = 0;
+		for ( $try = 0; $try < 5 && ! $voucher->id; $try++ ) {
+			$voucher->item_index = self::STANDALONE_SLOT_BASE + wp_rand( 0, 2147483646 );
+			$this->repo->insert( $voucher );
+			if ( 'duplicate' !== $this->repo->last_insert_error ) {
+				break;
+			}
+		}
+		if ( ! $voucher->id ) {
+			return new \WP_Error( 'vcap_issue_failed', __( 'The voucher could not be saved. Please try again.', 'voucher-captain' ), array( 'status' => 500 ) );
+		}
+		$create_coupon = 'ticket' !== $voucher->type || $voucher->initial_amount > 0;
+		if ( apply_filters( 'vcap_create_coupon', $create_coupon, $voucher, $config ) ) {
+			try {
+				$voucher->coupon_id = $this->coupons->create_coupon( $voucher, $config );
+			} catch ( \Throwable $e ) {
+				$voucher->coupon_id = 0;
+			}
+			if ( $voucher->coupon_id ) {
+				$coupon = new \WC_Coupon( $voucher->coupon_id );
+				/* translators: %s: voucher type */
+				$coupon->set_description( sprintf( __( '%s issued without order (Voucher Captain)', 'voucher-captain' ), Voucher::types()[ $voucher->type ] ?? $voucher->type ) );
+				$coupon->save();
+			}
+			if ( ! $voucher->coupon_id || ! $this->repo->update( $voucher ) ) {
+				if ( $voucher->coupon_id ) {
+					wp_delete_post( $voucher->coupon_id, true );
+				}
+				$this->repo->delete( $voucher->id );
+				return new \WP_Error( 'vcap_issue_failed', __( 'The voucher could not be created (WooCommerce coupon not saved). Please try again.', 'voucher-captain' ), array( 'status' => 500 ) );
+			}
+			if ( Voucher::STATUS_SCHEDULED === $voucher->status ) {
+				$this->coupons->set_coupon_enabled( $voucher, false );
+			}
+		}
+		return $voucher;
+	}
+
 	/**
 	 * Purchase order cancelled/refunded → void its vouchers.
 	 *

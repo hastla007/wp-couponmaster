@@ -126,6 +126,12 @@ final class Note {
 				return sprintf( __( 'Not delivered: the voucher had already expired on %s.', 'voucher-captain' ), $expiry );
 			case 'reminder_failed':
 				return __( 'Expiry reminder could not be sent; it is retried on the next run.', 'voucher-captain' );
+			case 'issued_standalone':
+				$parts = array_filter( array( (string) $a( 0 ), (string) $a( 1 ) ), static fn( $p ) => '' !== $p );
+				return $parts
+					/* translators: %s: source and reference given by the caller, e.g. "company-order, order-4711/3" */
+					? sprintf( __( 'Issued without order (%s)', 'voucher-captain' ), implode( ', ', $parts ) )
+					: __( 'Issued without order', 'voucher-captain' );
 			case 'resent':
 				/* translators: 1: role ("Buyer", "Recipient"), 2: masked email address */
 				return sprintf( __( 'Sent to the %1$s (%2$s) by an admin', 'voucher-captain' ), self::role_label( (string) $a( 0 ) ), (string) $a( 1 ) );

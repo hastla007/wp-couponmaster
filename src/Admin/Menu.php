@@ -45,6 +45,11 @@ final class Menu {
 			// Link into Pass Captain's own menu (both plugins keep their menus).
 			add_submenu_page( 'vcap-vouchers', __( 'WP Pass Captain', 'voucher-captain' ), __( 'WP Pass Captain ↗', 'voucher-captain' ), 'wpcap_checkin', 'admin.php?page=wp-pass-captain' );
 		}
+		/**
+		 * The plugin's admin menu is registered (arg: parent slug "vcap-vouchers"): add-ons add their submenu pages
+		 * with add_submenu_page( $parent_slug, … ) here (before "Settings", which is added last).
+		 */
+		do_action( 'vcap_admin_menu', 'vcap-vouchers' );
 	}
 
 	public function settings_link(): void {

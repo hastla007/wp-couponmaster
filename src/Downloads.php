@@ -389,6 +389,34 @@ final class Downloads {
 		return (bool) apply_filters( 'vcap_order_codes_visible', $allowed, $order );
 	}
 
+	/**
+	 * R6: extra links of a voucher (e.g. "Add to Apple Wallet") from the filter "vcap_voucher_links", for the voucher
+	 * email (context "email" and "email_plain") and the voucher list in My Account / on the order pages ("account").
+	 * Only http(s) links with a label are kept; nothing for cancelled vouchers or vouchers held for the security
+	 * check (V7). Templates print them escaped.
+	 *
+	 * @return array<int, array{label:string, url:string}>
+	 */
+	public static function voucher_links( Voucher $voucher, string $context ): array {
+		if ( Voucher::STATUS_VOID === $voucher->status || Delivery::is_held( $voucher ) ) {
+			return array();
+		}
+		/**
+		 * Extra links of a voucher in its email and the customer's voucher list, e.g. "Add to Wallet". Args: list of
+		 * array{label: string, url: string}, Voucher, context ("email", "email_plain" or "account").
+		 */
+		$links = apply_filters( 'vcap_voucher_links', array(), $voucher, $context );
+		$out   = array();
+		foreach ( is_array( $links ) ? $links : array() as $link ) {
+			$label = is_array( $link ) ? trim( wp_strip_all_tags( (string) ( $link['label'] ?? '' ) ) ) : '';
+			$url   = is_array( $link ) ? esc_url_raw( (string) ( $link['url'] ?? '' ), array( 'http', 'https' ) ) : '';
+			if ( '' !== $label && '' !== $url ) {
+				$out[] = array( 'label' => $label, 'url' => $url );
+			}
+		}
+		return $out;
+	}
+
 	/** Last four characters of a code, e.g. "…7KQ2" (the code is a means of payment). */
 	public static function masked_code( string $code ): string {
 		// Q10: cut whole characters – a byte cut would split multibyte codes (Ä, €) into invalid UTF-8.
