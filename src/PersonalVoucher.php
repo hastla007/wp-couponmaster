@@ -268,8 +268,19 @@ final class PersonalVoucher {
 			__( 'Confirm your email address at %s', 'voucher-captain' ),
 			wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES )
 		);
-		$url    = self::confirmation_url( $user );
-		$body   = '<p>' . esc_html__( 'Please confirm your email address to redeem personal vouchers sent to it in our shop:', 'voucher-captain' ) . '</p>'
+		$url        = self::confirmation_url( $user );
+		$registered = strtotime( (string) $user->user_registered . ' UTC' );
+		$body       = '<p>' . esc_html__( 'Please confirm your email address to redeem personal vouchers sent to it in our shop:', 'voucher-captain' ) . '</p>'
+			// M12-25: name the account, so a recipient whose address someone else registered does not confirm it.
+			. '<p>' . esc_html(
+				sprintf(
+					/* translators: 1: account (user name), 2: registration date */
+					__( 'The link confirms the address for the customer account "%1$s", registered on %2$s. You need to log in to this account to confirm.', 'voucher-captain' ),
+					(string) $user->user_login,
+					$registered ? wp_date( (string) get_option( 'date_format', 'Y-m-d' ), $registered ) : '–'
+				)
+			) . '</p>'
+			. '<p><strong>' . esc_html__( 'Do not click the link if you did not create this account yourself.', 'voucher-captain' ) . '</strong></p>'
 			. '<p><a href="' . esc_url( $url ) . '">' . esc_html__( 'Confirm email address', 'voucher-captain' ) . '</a></p>'
 			. '<p>' . esc_html__( 'The link is valid for 48 hours. If you did not ask for it, you can ignore this email.', 'voucher-captain' ) . '</p>';
 		$mailer = function_exists( 'WC' ) ? WC()->mailer() : null;
@@ -288,8 +299,15 @@ final class PersonalVoucher {
 	public static function handle_request(): void {
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- the confirmation link carries an HMAC instead of a nonce; the result flag only selects a notice.
 		if ( isset( $_GET['vcap_confirm_email'] ) ) {
-			$ok = ! Plugin::rate_limited( 'email_confirm_link', 30, 0, 10 * MINUTE_IN_SECONDS )
-				&& self::confirm( absint( $_GET['vcap_confirm_email'] ), absint( $_GET['exp'] ?? 0 ), sanitize_key( wp_unslash( $_GET['sig'] ?? '' ) ) );
+			self::private_headers(); // M12-87: the signed link is neither cached nor passed on as referrer.
+			$target = absint( $_GET['vcap_confirm_email'] );
+			$exp    = absint( $_GET['exp'] ?? 0 );
+			$sig    = sanitize_key( wp_unslash( $_GET['sig'] ?? '' ) );
+			if ( get_current_user_id() <= 0 || get_current_user_id() !== $target ) {
+				self::confirm_after_login( $target, $exp, $sig );
+				return;
+			}
+			$ok = ! Plugin::rate_limited( 'email_confirm_link', 30, 0, 10 * MINUTE_IN_SECONDS ) && self::confirm( $target, $exp, $sig );
 			wp_safe_redirect( add_query_arg( 'vcap_email_confirmed', $ok ? '1' : '0', remove_query_arg( array( 'vcap_confirm_email', 'exp', 'sig' ) ) ) );
 			exit;
 		}
@@ -328,6 +346,63 @@ final class PersonalVoucher {
 			}
 		}
 		wp_safe_redirect( $back );
+		exit;
+	}
+
+	/** M12-87: no caching and no referrer for pages that carry a signed confirmation link. */
+	private static function private_headers(): void {
+		$add = static fn( $headers ) => array_merge( (array) $headers, array( 'Referrer-Policy' => 'no-referrer' ) );
+		add_filter( 'nocache_headers', $add, 99 );
+		$headers = wp_get_nocache_headers(); // As nocache_headers(), plus the referrer policy.
+		remove_filter( 'nocache_headers', $add, 99 );
+		if ( headers_sent() ) {
+			return;
+		}
+		unset( $headers['Last-Modified'] );
+		header_remove( 'Last-Modified' );
+		foreach ( $headers as $name => $value ) {
+			header( "{$name}: {$value}" );
+		}
+	}
+
+	/**
+	 * M12-25: a confirmation link only confirms for the account it was sent for, logged in. Otherwise someone who
+	 * registered the recipient's address (pre-hijacking) would have the account verified by the recipient's click.
+	 * A visitor who is not logged in gets the login form of My Account, which returns to the link after the login;
+	 * a customer logged in with another account is asked to log out first.
+	 */
+	private static function confirm_after_login( int $target, int $exp, string $sig ): void {
+		$account = function_exists( 'wc_get_page_id' ) && wc_get_page_id( 'myaccount' ) > 0 ? (string) wc_get_page_permalink( 'myaccount' ) : '';
+		$link    = add_query_arg(
+			array(
+				'vcap_confirm_email' => $target,
+				'exp'                => $exp,
+				'sig'                => $sig,
+			),
+			'' !== $account ? $account : home_url( '/' )
+		);
+		$notice = function_exists( 'wc_add_notice' ) && function_exists( 'WC' ) && WC()->session;
+		if ( is_user_logged_in() ) {
+			if ( $notice ) {
+				wc_add_notice(
+					sprintf(
+						/* translators: %s: link "log out" */
+						__( 'This confirmation link was sent for another customer account. Please %s and log in with the account it was sent for.', 'voucher-captain' ),
+						'<a href="' . esc_url( wp_logout_url( $link ) ) . '">' . esc_html__( 'log out', 'voucher-captain' ) . '</a>'
+					),
+					'error'
+				);
+			}
+			wp_safe_redirect( remove_query_arg( array( 'vcap_confirm_email', 'exp', 'sig' ) ) );
+			exit;
+		}
+		if ( '' !== $account && function_exists( 'is_account_page' ) && is_account_page() ) {
+			if ( $notice ) {
+				wc_add_notice( __( 'Please log in to the customer account this confirmation link was sent for. The email address is confirmed right after the login.', 'voucher-captain' ), 'notice' );
+			}
+			return; // The login form posts this URL back as referrer: WooCommerce returns here after the login.
+		}
+		wp_safe_redirect( '' !== $account ? $link : wp_login_url( $link ) );
 		exit;
 	}
 
