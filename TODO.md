@@ -774,7 +774,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
 
 ### HOCH
 
-- [ ] **[PRIO: HOCH]** | **[Experte #2]** | **[Kategorie: Concurrency]** – **M12-04 Verschachtelte Transaktion liest unter REPEATABLE READ einen alten Snapshot: doppelte Ausgabe möglich**
+- [x] **[PRIO: HOCH]** | **[Experte #2]** | **[Kategorie: Concurrency]** – **M12-04 Verschachtelte Transaktion liest unter REPEATABLE READ einen alten Snapshot: doppelte Ausgabe möglich** — *Nachweis: tests/ledger-integration.php „M12-04: a deduction inside an outer transaction that read before books from the balance committed by another request“ (plus reserve(), locking charge state, StoreCredit::adjust); tests/run.php „M12-04: a deadlock in a savepoint … leaves Db consistent“*
   - *Problem:*
     - Die Buchungen sperren nur die ID (`SELECT id … FOR UPDATE`) und lesen den Saldo danach mit einem normalen `get()`.
     - Auf oberster Ebene ist das korrekt. Ruft ein Connector `reserve()` aber in seiner eigenen `Db::transaction()` auf (so empfiehlt es CONNECTORS.md:49), stammt der Lese-Snapshot aus der Zeit vor der Sperre.
@@ -785,7 +785,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
     - `VoucherRepository::get_for_update()` (`SELECT * … FOR UPDATE`) in Balances, RedemptionService (reserve/transition/refund) und StoreCredit.
     - `latest_charge_event` mit `FOR SHARE` bzw. `LOCK IN SHARE MODE`.
     - `Db::undo()` setzt bei Fehler 1213 die ganze Ebenenstruktur zurück. Test mit zweiter Verbindung.
-- [ ] **[PRIO: HOCH]** | **[Experte #2]** | **[Kategorie: Concurrency]** – **M12-05 Scanner: Exception nach dem COMMIT gibt den Idempotenz-Schlüssel frei, der Wiederholungsversuch bucht doppelt**
+- [x] **[PRIO: HOCH]** | **[Experte #2]** | **[Kategorie: Concurrency]** – **M12-05 Scanner: Exception nach dem COMMIT gibt den Idempotenz-Schlüssel frei, der Wiederholungsversuch bucht doppelt** — *Nachweis: tests/ledger-integration.php „M12-05: an exception after the booking keeps the key: "already booked" is stored and answered, the retry with the same key deducts nothing“; tests/run.php „M12-05: Db::action(), action_ref_array() and after_commit() catch and log a throwing listener at depth 0 too“*
   - *Problem:*
     - `rest_redeem`/`rest_checkin`/`rest_reverse` rufen bei jeder Exception `scan_release()` auf.
     - `Db::action()` ruft auf Ebene 0 `do_action()` ohne try/catch auf. Wirft ein Listener von `vcap_voucher_redeemed` nach dem COMMIT, ist der Schlüssel weg.
@@ -793,7 +793,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - `Db::action()`, `action_ref_array()` und `after_commit()` fangen Exceptions auch auf Ebene 0 ab und protokollieren sie.
     - Den Schlüssel nur freigeben, wenn nach dem Claim nichts gebucht wurde (`event_mark`-Abfrage). Andernfalls die Antwort „bereits gebucht“ speichern. Test.
-- [ ] **[PRIO: HOCH]** | **[Experte #2]** | **[Kategorie: Bug]** – **M12-06 DSGVO-Löschung schreibt Saldo und Status aus einem veralteten Objekt zurück**
+- [x] **[PRIO: HOCH]** | **[Experte #2]** | **[Kategorie: Bug]** – **M12-06 DSGVO-Löschung schreibt Saldo und Status aus einem veralteten Objekt zurück** — *Nachweis: tests/ledger-integration.php „M12-06: the privacy eraser writes only the personal data – a redemption made between loading and writing is kept“*
   - *Problem:*
     - `Privacy::erase()` lädt bis zu 500 Gutscheine und schreibt am Ende pro Gutschein `repo->update( $voucher )`, also die ganze Zeile.
     - Eine Einlösung, die währenddessen passiert, wird ohne Ledger-Eintrag rückgängig gemacht.
@@ -912,7 +912,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - Im Guard die betroffenen Karten unter Zeilensperre reservieren bzw. den Aufladebetrag abziehen.
     - Bleibt die Erstattung aus (`woocommerce_order_refunded` fehlt bzw. Fehler), zurückbuchen. Test.
-- [ ] **[PRIO: MITTEL]** | **[Experte #2]** | **[Kategorie: Concurrency]** – **M12-22 Weitere Schreibzugriffe auf ganze Zeilen ohne Sperre**
+- [x] **[PRIO: MITTEL]** | **[Experte #2]** | **[Kategorie: Concurrency]** – **M12-22 Weitere Schreibzugriffe auf ganze Zeilen ohne Sperre** — *Nachweis: tests/ledger-integration.php „M12-22: usage_decreased() gives the use back only while the voucher is still redeemed“, „M12-22: the last check-in changes the status in the same UPDATE – a parallel undo is not overwritten“, „M12-22: repairing a store credit coupon writes only the coupon id“*
   - *Problem:*
     - `SingleUse::usage_decreased()` kann eine parallele Sperrung aufheben.
     - `Tickets::checkin()` kann ein gleichzeitiges Undo verlieren.
@@ -1129,9 +1129,9 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:* `write_balance()` gibt den gebuchten Betrag zurück, Notiz und `REVERSED_META` werden daraus gebildet.
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #2]** | **[Kategorie: Concurrency]** – **M12-61 Tageslimit an der Kasse wird mit dem Saldo vor der Sperre geprüft**
   - *Lösung:* Mit dem angefragten Betrag prüfen.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #2]** | **[Kategorie: Concurrency]** – **M12-62 `sync_coupon_amount()` hält die Zeilensperre während `WC_Coupon::save()` mit Fremd-Hooks**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #2]** | **[Kategorie: Concurrency]** – **M12-62 `sync_coupon_amount()` hält die Zeilensperre während `WC_Coupon::save()` mit Fremd-Hooks** — *Nachweis: tests/ledger-integration.php „M12-62: WC_Coupon::save() runs without the voucher row lock; a balance changed during the save is read again and saved“*
   - *Lösung:* Unter der Sperre lesen und danach speichern, mit erneutem Vergleich. Oder unter der Sperre nur die Meta schreiben.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #2]** | **[Kategorie: Feature]** – **M12-63 Keine Abstimmung zwischen Saldo und Ledger**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #2]** | **[Kategorie: Feature]** – **M12-63 Keine Abstimmung zwischen Saldo und Ledger** — *Nachweis: tests/ledger-integration.php „M12-63: a balance written without a booking is found (stored 45, ledger 50), listed in Attention and reported by Site Health“*
   - *Lösung:* `wp vcap ledger verify`, Site-Health-Prüfung, Treffer in Attention.
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #3]** | **[Kategorie: Security]** – **M12-64 `issue_standalone()` übernimmt einen eigenen Code ohne Stärkeprüfung**
   - *Lösung:* `analyse_batch()` prüfen, `vcap_weak_code`, außer bei `allow_weak`. API.md.
