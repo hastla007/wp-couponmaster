@@ -133,6 +133,7 @@ final class VCAP_Test_Plugin {
 		$this->pdf       = new \VCAP\PdfRenderer( $this->settings );
 		$this->downloads = new class() {
 			public function signed_url( $v, $email = false ) { return 'https://shop.test/?vcap_pdf=' . $v->token; }
+			public function printed_url( $v ) { return 'https://shop.test/?vcap_pdf=' . $v->token . '&exp=0'; }
 		};
 	}
 }
