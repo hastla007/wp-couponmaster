@@ -36,7 +36,7 @@ final class CouponGuard {
 		add_filter( 'rest_request_before_callbacks', array( $this, 'rest_before' ), 10, 3 );
 		add_filter( 'rest_request_after_callbacks', array( $this, 'rest_after' ), 10, 3 );
 		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'refuse_when_limited' ), 1, 3 );
-		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'require_pin' ), 2, 3 );
+		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'require_pin' ), 2, 2 );
 		add_filter( 'woocommerce_coupon_error', array( $this, 'error' ), 999, 3 );
 		add_action( 'shutdown', array( $this, 'finish' ) );
 	}
@@ -289,13 +289,12 @@ final class CouponGuard {
 	 * (with a WooCommerce session) are checked; staff (wp-admin, REST orders) have the card in hand, like at
 	 * the counter.
 	 *
-	 * @param mixed $valid     Validity so far.
-	 * @param mixed $coupon    WC_Coupon.
-	 * @param mixed $discounts WC_Discounts.
+	 * @param mixed $valid  Validity so far.
+	 * @param mixed $coupon WC_Coupon.
 	 * @return mixed
 	 * @throws \Exception When the PIN is missing or wrong.
 	 */
-	public function require_pin( $valid, $coupon, $discounts = null ) {
+	public function require_pin( $valid, $coupon ) {
 		$visitor = function_exists( 'WC' ) && WC()->session && ! current_user_can( 'edit_shop_orders' ) && ! current_user_can( 'manage_woocommerce' ); // phpcs:ignore WordPress.WP.Capabilities.Unknown -- WooCommerce capabilities.
 		if ( $visitor && $coupon instanceof \WC_Coupon && ! CodeLookup::pin_ok( (string) $coupon->get_code() ) ) {
 			throw new \Exception( (string) \WC_Coupon::E_WC_COUPON_NOT_EXIST, CodeLookup::E_PIN ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- an integer.

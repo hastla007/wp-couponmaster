@@ -169,14 +169,16 @@ final class CodeLookup {
 		}
 		$hash = (string) get_option( self::PIN_PREFIX . $key, '' );
 		if ( '' === $hash ) {
-			return self::$checked[ $key ] = true;
-		}
-		if ( isset( self::$presented[ $key ] ) && password_verify( $key . '|' . self::$presented[ $key ], $hash ) ) {
+			$ok = true;
+		} elseif ( isset( self::$presented[ $key ] ) && password_verify( $key . '|' . self::$presented[ $key ], $hash ) ) {
 			self::remember_pin( $key );
-			return self::$checked[ $key ] = true;
+			$ok = true;
+		} else {
+			$session = function_exists( 'WC' ) && WC()->session ? (array) WC()->session->get( self::PIN_SESSION, array() ) : array();
+			$ok      = in_array( $key, $session, true );
 		}
-		$session = function_exists( 'WC' ) && WC()->session ? (array) WC()->session->get( self::PIN_SESSION, array() ) : array();
-		return self::$checked[ $key ] = in_array( $key, $session, true );
+		self::$checked[ $key ] = $ok;
+		return $ok;
 	}
 
 	private static function remember_pin( string $key ): void {
