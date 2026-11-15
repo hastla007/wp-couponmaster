@@ -169,6 +169,7 @@ vcap_rl_assert( 50.0 === vcap_rl_balance( $m21_card ) && Voucher::STATUS_ACTIVE 
 vcap_rl_assert( in_array( Issuer::PURCHASE_REFUND_REVERSED_EVENT, vcap_rl_events( $m21_card ), true ) && ! wc_get_order( $m21->get_id() )->get_meta( Issuer::PENDING_REFUND_META ), 'M12-21: the ledger records the booking back, nothing stays pending' );
 $m21_ok = wc_create_refund( array( 'order_id' => $m21->get_id(), 'amount' => 50, 'line_items' => array( $m21_line => array( 'qty' => 1, 'refund_total' => 50 ) ) ) );
 vcap_rl_assert( ! is_wp_error( $m21_ok ) && Voucher::STATUS_VOID === vcap_rl_status( $m21_card ) && ! wc_get_order( $m21->get_id() )->get_meta( Issuer::PENDING_REFUND_META ), 'M12-21: a recorded refund keeps its write-off (confirmed)' );
+vcap_rl_assert( ! as_next_scheduled_action( Issuer::REFUND_CHECK_HOOK, array( 'order_id' => $m21->get_id(), 'refund_id' => $m21_ok->get_id() ), 'vcap' ), 'M12-21: the background check of a confirmed refund is dropped' );
 
 /* ---- M12-34: "Refunded" by hand without a refund of the total ---------------------------------------------- */
 

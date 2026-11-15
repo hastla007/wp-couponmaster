@@ -43,6 +43,7 @@ final class Subscriptions {
 		foreach ( array( 'switch', 'resubscribe' ) as $kind ) {
 			$check = 'wcs_order_contains_' . $kind;
 			if ( function_exists( $check ) && $check( $order ) ) {
+				/** Whether a subscription switch or resubscribe order issues vouchers (default false; args: order, "switch"|"resubscribe"). */
 				return $issue && (bool) apply_filters( 'vcap_subscription_issue_on_switch', false, $order, $kind );
 			}
 		}

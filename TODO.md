@@ -752,7 +752,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
     - Bei `limited` sofort mit 429 antworten.
     - Bei `rest_invalid_param` für `code` den Versuch als Fehlversuch buchen und eine einheitliche 400 „ungültiger Code“ zurückgeben. Fremdes Guthaben wird genauso beantwortet.
     - Tests für `cart/coupons` direkt und über `batch`.
-- [ ] **[PRIO: KRITISCH]** | **[Experte #6]** | **[Kategorie: Bug]** – **M12-02 Teilretoure bei Mischzahlung (Karte + Geld) bucht den ganzen Karteneinsatz zurück**
+- [x] **[PRIO: KRITISCH]** | **[Experte #6]** | **[Kategorie: Bug]** – **M12-02 Teilretoure bei Mischzahlung (Karte + Geld) bucht den ganzen Karteneinsatz zurück** — *Nachweis: tests/refund-lifecycle-integration.php „M12-02: 80 card + 20 money, partial return – the card balance stays unchanged (no +80)“*
   - *Problem:*
     - WooCommerce setzt die Bestellung automatisch auf `refunded`, sobald der Geldanteil erstattet ist.
     - `Settlement::order_status_changed()` → `BookBack::restore_order()` behandelt das wie eine Vollstornierung und bucht den vollen Karteneinsatz zurück. Bei Einmalgutscheinen gibt `return_single_use()` den Gutschein außerdem wieder frei.
@@ -798,7 +798,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
     - `Privacy::erase()` lädt bis zu 500 Gutscheine und schreibt am Ende pro Gutschein `repo->update( $voucher )`, also die ganze Zeile.
     - Eine Einlösung, die währenddessen passiert, wird ohne Ledger-Eintrag rückgängig gemacht.
   - *Lösung:* `update_columns()` nur für die Personendaten-Spalten verwenden. Test mit einer Einlösung zwischen Laden und Schreiben.
-- [ ] **[PRIO: HOCH]** | **[Experte #6]** | **[Kategorie: Bug]** – **M12-07 Gutscheinkauf: Erstattung nach Betrag sperrt nichts, Erstattung nach Menge sperrt den ganzen Gutschein**
+- [x] **[PRIO: HOCH]** | **[Experte #6]** | **[Kategorie: Bug]** – **M12-07 Gutscheinkauf: Erstattung nach Betrag sperrt nichts, Erstattung nach Menge sperrt den ganzen Gutschein** — *Nachweis: tests/refund-lifecycle-integration.php „M12-07: quantity 1 with 10 refunded takes 10 off a card with 30 left (20 stay usable, not voided)“*
   - *Problem:*
     - `Issuer::on_partial_refund()` zählt nur Mengen.
     - Dashboard-Erstattungen (Stripe/PayPal-Webhooks) und „Als Guthaben erstatten“ kommen ohne Positionen. Beispiel: 60 € erstattet, die Karte behält 100 €.
@@ -808,7 +808,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
     - Nach erstattetem Wert abschreiben, wie bei `TopUp::refund_shares()`: Guthabenkarten über `adjust_balance( -min( Wert, purchase_unspent ), PURCHASE_REFUNDED_EVENT )`, gesperrt erst bei Restkaufwert 0.
     - Einmalgutscheine nur sperren, wenn der Wert den Stückwert deckt.
     - Sofortmaßnahme: `guard_refund()` lehnt positionslose Beträge über dem Nicht-Gutschein-Anteil ab. Bei Webhook-Erstattungen Attention-Eintrag. Tests.
-- [ ] **[PRIO: HOCH]** | **[Experte #6]** | **[Kategorie: Security]** – **M12-08 Gehaltene oder geplante Gutscheine werden aktiviert und versendet, ohne den Bestellstatus zu prüfen (V7 unvollständig)**
+- [x] **[PRIO: HOCH]** | **[Experte #6]** | **[Kategorie: Security]** – **M12-08 Gehaltene oder geplante Gutscheine werden aktiviert und versendet, ohne den Bestellstatus zu prüfen (V7 unvollständig)** — *Nachweis: tests/refund-lifecycle-integration.php „M12-08: the hold has ended, but the order is on hold – the voucher is not activated“*
   - *Problem:*
     - `Delivery::deliver()`/`activate_due()` prüfen nur den Gutschein.
     - Ist die Bestellung inzwischen `on-hold` (Dispute, PayPal-Reversal), `failed` oder `pending`, wird der Gutschein nach Ablauf der Haltefrist trotzdem aktiviert und versendet.
@@ -830,7 +830,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - `Voucher::has_cash_value()` (kein Ticket oder Ticket mit Wert > 0) statt `is_ticket()` in `applies()`, `is_payment_means()` und `VALUE_VOUCHERS`.
     - Alternativ für Tickets `single` erwarten. Frage F9 an die Steuerberatung.
-- [ ] **[PRIO: HOCH]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-11 „Als Guthaben erstatten“ legt eine WooCommerce-Erstattung ohne Positionen und ohne USt an**
+- [x] **[PRIO: HOCH]** | **[Experte #4]** | **[Kategorie: Tax-Legal]** – **M12-11 „Als Guthaben erstatten“ legt eine WooCommerce-Erstattung ohne Positionen und ohne USt an** — *Nachweis: tests/refund-lifecycle-integration.php „M12-11: refund as store credit carries its lines and VAT (36 = 30 + 6 VAT)“*
   - *Problem:*
     - `StoreCredit::refund_as_credit()` ruft `wc_create_refund()` ohne `line_items` auf, die Erstattung hat also `total_tax = 0`.
     - Es gibt keine Korrektur nach § 17 UStG. Bei späterer Einlösung des Guthabens fällt die USt doppelt an.
@@ -907,7 +907,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - Filter wie bei TopUp/Fields, bei REST-Anfragen `$_REQUEST` nicht lesen.
     - Doku in COMPATIBILITY.md. Test mit Aufladung und Wunschbetrag.
-- [ ] **[PRIO: MITTEL]** | **[Experte #2]** | **[Kategorie: Concurrency]** – **M12-21 Erstattung eines Gutscheinkaufs: Zwischen Prüfung und Sperre liegt der Gateway-Aufruf**
+- [x] **[PRIO: MITTEL]** | **[Experte #2]** | **[Kategorie: Concurrency]** – **M12-21 Erstattung eines Gutscheinkaufs: Zwischen Prüfung und Sperre liegt der Gateway-Aufruf** — *Nachweis: tests/refund-lifecycle-integration.php „M12-21: the refund was not recorded – the card is booked back and active again“*
   - *Problem:* `guard_refund()` prüft den Restwert. Gesperrt wird erst bei Status `refunded`. Wird die Karte während des Stripe-Aufrufs eingelöst, ist das Geld erstattet und der Wert verbraucht.
   - *Lösung:*
     - Im Guard die betroffenen Karten unter Zeilensperre reservieren bzw. den Aufladebetrag abziehen.
@@ -988,28 +988,28 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
     - Guthaben in die Warenkorbwährung umrechnen (`value_in`), bevor gedeckelt wird.
     - Währungsprüfung in `CartCoupons::validate`, `RedemptionService` (`vcap_currency_mismatch`, optional Parameter `currency`) und Site Health.
     - `convert()` fällt zurück, wenn das Ergebnis gleich dem Eingang ist. Ecosystem-Test im Warenkorb.
-- [ ] **[PRIO: MITTEL]** | **[Experte #6]** | **[Kategorie: WooCommerce]** – **M12-34 Status „Erstattet“ von Hand ohne echte Erstattung sperrt auch eingelöste Gutscheine**
+- [x] **[PRIO: MITTEL]** | **[Experte #6]** | **[Kategorie: WooCommerce]** – **M12-34 Status „Erstattet“ von Hand ohne echte Erstattung sperrt auch eingelöste Gutscheine** — *Nachweis: tests/refund-lifecycle-integration.php „M12-34: handled as a cancellation – the used voucher stays valid, the unused one is voided“*
   - *Problem:* `guard_refund` blockiert die Auto-Erstattung still, die Bestellung steht trotzdem auf `refunded`, und `on_purchase_cancelled()` sperrt auch benutzte oder teilverbrauchte Gutscheine.
   - *Lösung:*
     - Als „Erstattet“ gilt eine Bestellung nur, wenn `total_refunded >= total`. Sonst den Storno-Zweig nehmen (benutzte Gutscheine behalten).
     - Notiz und Attention. Test.
-- [ ] **[PRIO: MITTEL]** | **[Experte #6]** | **[Kategorie: Feature]** – **M12-35 Kein Verhalten bei Chargeback/Dispute (bezahlt → wartend oder fehlgeschlagen) für gekaufte Gutscheine**
+- [x] **[PRIO: MITTEL]** | **[Experte #6]** | **[Kategorie: Feature]** – **M12-35 Kein Verhalten bei Chargeback/Dispute (bezahlt → wartend oder fehlgeschlagen) für gekaufte Gutscheine** — *Nachweis: tests/refund-lifecycle-integration.php „M12-35: on hold after payment – the unused card is suspended, the used one stays“*
   - *Problem:* Gutscheine bleiben einlösbar, und es gibt keinen Hinweis.
   - *Lösung:*
     - Beim Wechsel von `processing|completed` auf `on-hold|failed` unbenutzte Gutscheine aussetzen (Coupon-Entwurf, Ereignis `suspended_payment`), mit Attention.
     - Bei Rückkehr in einen bezahlten Status reaktivieren. Test.
-- [ ] **[PRIO: MITTEL]** | **[Experte #6]** | **[Kategorie: Bug]** – **M12-36 Status-Ping-Pong: nach Storno und erneuter Zahlung bleiben Gutscheine gesperrt und Aufladungen zurückgenommen**
+- [x] **[PRIO: MITTEL]** | **[Experte #6]** | **[Kategorie: Bug]** – **M12-36 Status-Ping-Pong: nach Storno und erneuter Zahlung bleiben Gutscheine gesperrt und Aufladungen zurückgenommen** — *Nachweis: tests/refund-lifecycle-integration.php „M12-36: paid again – the top-up is booked again“*
   - *Problem:* `issue_for_order` füllt nur freie Slots, und TopUp bricht bei `DONE`/`REVERSED_META` ab. Es gibt keinen Hinweis.
   - *Lösung:*
     - Wird die Bestellung wieder bezahlt: Notiz und Attention mit Reaktivierungslink für `voided_refund`-Gutscheine.
     - Aufladung neu buchen oder Attention.
-- [ ] **[PRIO: MITTEL]** | **[Experte #6]** | **[Kategorie: Bug]** – **M12-37 Gelöschte Erstattungen werden ignoriert, „Als Guthaben erstatten“ kann doppelt auszahlen**
+- [x] **[PRIO: MITTEL]** | **[Experte #6]** | **[Kategorie: Bug]** – **M12-37 Gelöschte Erstattungen werden ignoriert, „Als Guthaben erstatten“ kann doppelt auszahlen** — *Nachweis: tests/refund-lifecycle-integration.php „M12-37: deleting a refund as store credit takes the credit back“*
   - *Problem:* Es gibt keinen Hook auf `woocommerce_refund_deleted`.
   - *Lösung:* Hook ergänzen:
     - Guthaben zurückbuchen (`refund_credit_reversed`) oder, wenn schon ausgegeben, Attention.
     - Attention für Gutscheine, die durch die Erstattung gesperrt wurden.
     - TopUp neu berechnen. Test.
-- [ ] **[PRIO: MITTEL]** | **[Experte #6]** | **[Kategorie: WooCommerce]** – **M12-38 Subscriptions: Switch-, Resubscribe- und Testphasen-Bestellungen stellen den vollen Festwert-Gutschein aus**
+- [x] **[PRIO: MITTEL]** | **[Experte #6]** | **[Kategorie: WooCommerce]** – **M12-38 Subscriptions: Switch-, Resubscribe- und Testphasen-Bestellungen stellen den vollen Festwert-Gutschein aus** — *Nachweis: tests/refund-lifecycle-integration.php „M12-38: a free trial sign-up (total 0) waits for the first paid renewal“*
   - *Problem:* `should_issue()` prüft nur Verlängerungen.
   - *Lösung:*
     - `false` bei `wcs_order_contains_switch`/`resubscribe` (abschaltbar per Filter).
@@ -1106,7 +1106,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - CSV-Import über `issue_standalone()`: Code, Wert, Restwert, Ablauf, Empfänger. Idempotent, mit Probelauf, Ledger-Ereignis `import`.
     - `wp vcap import`.
-- [ ] **[PRIO: MITTEL]** | **[Experte #12]** | **[Kategorie: Feature]** – **M12-57 Erstattung als Gutschein für Gastbestellungen**
+- [x] **[PRIO: MITTEL]** | **[Experte #12]** | **[Kategorie: Feature]** – **M12-57 Erstattung als Gutschein für Gastbestellungen** — *Nachweis: tests/refund-lifecycle-integration.php „M12-57: a guest order is refunded as a new gift card of 15 for the buyer“*
   - *Problem:* „Refund as store credit“ ist bei Gästen ausgeblendet.
   - *Lösung:* Für Gäste eine neue Geschenkkarte über den Erstattungsbetrag ausstellen und mailen, mit gleicher Zustimmungs- und Ledger-Logik und mit Positionen (siehe M12-11).
 - [ ] **[PRIO: MITTEL]** | **[Experte #12]** | **[Kategorie: WooCommerce]** – **M12-58 E2E- und Integrationslücken im Block-Checkout und bei Fremdwährungen**
@@ -1125,7 +1125,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #1, #9]** | **[Kategorie: Bug]** – **M12-59 „Erneut bestellen“ übernimmt Felder ungeprüft (vergangenes Lieferdatum, neue Pflichtfelder)**
   - *Problem:* `Fields::validate()` überspringt die Prüfung. Ein altes Datum führt zum Sofortversand, im Warenkorb steht aber weiter das alte Datum.
   - *Lösung:* `delivery_date` bei „Erneut bestellen“ verwerfen. Werte über `override` durch `errors()` laufen lassen. Prüfung in `check_cart_items`/`store_api_cart_errors`.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #2]** | **[Kategorie: Bug]** – **M12-60 Rücknahme der Aufladung und Abzug des Kaufwerts: Betrag wird vor der Sperre berechnet, die Notiz meldet zu viel**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #2]** | **[Kategorie: Bug]** – **M12-60 Rücknahme der Aufladung und Abzug des Kaufwerts: Betrag wird vor der Sperre berechnet, die Notiz meldet zu viel** — *Nachweis: tests/refund-lifecycle-integration.php „M12-60: taking 50 off a balance of 30 reports the 30 really booked“*
   - *Lösung:* `write_balance()` gibt den gebuchten Betrag zurück, Notiz und `REVERSED_META` werden daraus gebildet.
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #2]** | **[Kategorie: Concurrency]** – **M12-61 Tageslimit an der Kasse wird mit dem Saldo vor der Sperre geprüft**
   - *Lösung:* Mit dem angefragten Betrag prüfen.

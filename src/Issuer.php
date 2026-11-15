@@ -1173,14 +1173,6 @@ final class Issuer {
 		return $refunded + 0.5 / ( 10 ** wc_get_price_decimals() ) >= (float) $order->get_total();
 	}
 
-	/** Whether a voucher was used up completely: a redeemed single-use voucher, a gift card without balance. */
-	private function used_up( Voucher $voucher ): bool {
-		if ( Voucher::STATUS_RESERVED === $voucher->status || Voucher::STATUS_VOID === $voucher->status ) {
-			return false;
-		}
-		return $voucher->is_multi_use() ? (float) $voucher->balance <= 0 && self::spent_value( $voucher, $this->repo ) > 0 : self::spent_value( $voucher, $this->repo ) > 0;
-	}
-
 	/** Whether a voucher was (partly) used or is being redeemed right now. */
 	private function in_use( Voucher $voucher ): bool {
 		return self::spent_value( $voucher, $this->repo ) > 0 || Voucher::STATUS_RESERVED === $voucher->status;
@@ -1542,6 +1534,9 @@ final class Issuer {
 			return;
 		}
 		$this->keep_bookings( $order, (int) $refund_id, (array) $pending[ $refund_id ] );
+		if ( function_exists( 'as_unschedule_action' ) ) {
+			as_unschedule_action( self::REFUND_CHECK_HOOK, array( 'order_id' => $order->get_id(), 'refund_id' => (int) $refund_id ), 'vcap' );
+		}
 		if ( ! empty( $pending[ $refund_id ]['v'] ) && empty( $pending[ $refund_id ]['lines'] ) ) {
 			$codes = array();
 			foreach ( (array) $pending[ $refund_id ]['v'] as $booking ) {

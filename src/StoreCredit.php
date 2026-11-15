@@ -230,6 +230,7 @@ final class StoreCredit {
 	 */
 	public static function guest_gift_card_email( \WC_Order $order ): string {
 		$email = sanitize_email( (string) $order->get_billing_email() );
+		/** Whether a guest order can be refunded as a new gift card instead of store credit (default true). */
 		return '' !== $email && is_email( $email ) && apply_filters( 'vcap_refund_guest_as_gift_card', true, $order ) ? $email : '';
 	}
 
