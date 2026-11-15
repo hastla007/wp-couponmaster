@@ -124,15 +124,12 @@ final class Reissue {
 			$deleted = wp_delete_post( $old_coupon_id, true );
 			if ( ! $deleted ) {
 				// Still not redeemable: a Voucher Captain coupon without its voucher is refused at checkout.
-				wp_update_post( array( 'ID' => $old_coupon_id, 'post_status' => 'draft' ) );
+				CouponManager::set_coupon_post_status( (int) $old_coupon_id, $old_code, false );
 				$warning = __( 'The old WooCommerce coupon could not be deleted; it was disabled instead.', 'voucher-captain' );
-			}
-			if ( class_exists( '\WC_Cache_Helper' ) ) {
+			} elseif ( class_exists( '\WC_Cache_Helper' ) ) {
 				wp_cache_delete( \WC_Cache_Helper::get_cache_prefix( 'coupons' ) . 'coupon_id_from_code_' . wc_format_coupon_code( $old_code ), 'coupons' );
 			}
-			if ( $fresh->is_multi_use() ) {
-				CouponManager::sync_coupon_amount( $fresh ); // Remaining value read under the row lock.
-			}
+			CouponManager::sync_coupon( $fresh, array( 'amount' ) ); // Remaining value read under the row lock.
 		}
 		$old_masked = Downloads::masked_code( $old_code );
 		$new_masked = Downloads::masked_code( $new_code );

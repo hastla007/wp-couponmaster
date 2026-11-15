@@ -942,26 +942,8 @@ final class RedemptionService {
 	 * @param Voucher $voucher Voucher.
 	 */
 	private function sync_coupon( Voucher $voucher ): void {
-		if ( ! $voucher->coupon_id ) {
-			return;
-		}
-		if ( $voucher->is_multi_use() ) {
-			\VCAP\CouponManager::sync_coupon_amount( $voucher ); // Under the row lock, with the latest balance.
-			return;
-		}
-		$coupon = new \WC_Coupon( $voucher->coupon_id );
-		if ( ! $coupon->get_id() ) {
-			return;
-		}
-		if ( Voucher::STATUS_REDEEMED === $voucher->status ) {
-			// Used up outside the cart: make WooCommerce's own usage limit refuse it too.
-			$coupon->set_usage_count( max( 1, (int) $coupon->get_usage_count() ) );
-			$coupon->set_usage_limit( max( 1, (int) $coupon->get_usage_count() ) );
-		} elseif ( Voucher::STATUS_ACTIVE === $voucher->status && $coupon->get_usage_limit() > 0 && $coupon->get_usage_count() >= $coupon->get_usage_limit() ) {
-			// Usable again after a full refund: allow exactly one more use.
-			$coupon->set_usage_limit( (int) $coupon->get_usage_count() + 1 );
-		}
-		$coupon->save();
+		// Balance under the row lock; single use: used up outside the cart, or usable again after a full refund.
+		\VCAP\CouponManager::sync_coupon( $voucher, array( 'amount', 'usage' ) );
 	}
 
 	/**

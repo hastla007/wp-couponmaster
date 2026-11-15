@@ -436,13 +436,7 @@ final class TopUp {
 		if ( ! $repo->update_columns( $voucher, array( 'expires_at' ), $from ) ) {
 			return false;
 		}
-		if ( $voucher->coupon_id && class_exists( '\WC_Coupon' ) ) {
-			$coupon = new \WC_Coupon( $voucher->coupon_id );
-			if ( $coupon->get_id() ) {
-				$coupon->set_date_expires( $ends );
-				$coupon->save();
-			}
-		}
+		CouponManager::sync_coupon( $voucher, array( 'expiry' ) );
 		$repo->log( $voucher->id, self::EXTENDED_EVENT, null, null, trim( $note . ' → ' . $voucher->expires_at ), $order_id );
 		return true;
 	}

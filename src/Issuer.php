@@ -1068,16 +1068,12 @@ final class Issuer {
 		}
 		$create_coupon = 'ticket' !== $voucher->type || $voucher->initial_amount > 0;
 		if ( apply_filters( 'vcap_create_coupon', $create_coupon, $voucher, $config ) ) {
+			/* translators: %s: voucher type */
+			$description = sprintf( __( '%s issued without order (Voucher Captain)', 'voucher-captain' ), Voucher::types()[ $voucher->type ] ?? $voucher->type );
 			try {
-				$voucher->coupon_id = $this->coupons->create_coupon( $voucher, $config );
+				$voucher->coupon_id = $this->coupons->create_coupon( $voucher, $config, $description );
 			} catch ( \Throwable $e ) {
 				$voucher->coupon_id = 0;
-			}
-			if ( $voucher->coupon_id ) {
-				$coupon = new \WC_Coupon( $voucher->coupon_id );
-				/* translators: %s: voucher type */
-				$coupon->set_description( sprintf( __( '%s issued without order (Voucher Captain)', 'voucher-captain' ), Voucher::types()[ $voucher->type ] ?? $voucher->type ) );
-				$coupon->save();
 			}
 			if ( ! $voucher->coupon_id || ! $this->repo->update( $voucher ) ) {
 				if ( $voucher->coupon_id ) {

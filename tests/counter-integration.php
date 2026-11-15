@@ -261,4 +261,44 @@ vcap_ctr_assert( str_contains( $table, 'vcap-voucher-link' ) && str_contains( $t
 remove_filter( 'vcap_voucher_links', $links, 10 );
 remove_filter( 'pre_wp_mail', $catch, 999 );
 
+// D14: every path writes the coupon through CouponManager::sync_coupon() – API and counter agree on the usage limit.
+wp_set_current_user( (int) ( get_users( array( 'role' => 'administrator', 'number' => 1, 'fields' => 'ID' ) )[0] ?? 1 ) );
+delete_option( Counter::USER_COUNT );
+delete_option( Counter::TILL_COUNT );
+$d14_usage = static function ( Voucher $v ): array {
+	wp_cache_delete( $v->coupon_id, 'post_meta' );
+	$c = new WC_Coupon( $v->coupon_id );
+	return array( 'limit' => (int) $c->get_usage_limit(), 'count' => (int) $c->get_usage_count() );
+};
+$d14_api     = vcap_ctr_voucher( 'single', 20 );
+$d14_counter = vcap_ctr_voucher( 'single', 20 );
+$d14_key     = 'd14-' . wp_generate_uuid4();
+$d14_res     = vcap()->redemptions->reserve( $d14_api->code, array( 'key' => $d14_key, 'target' => 'test:d14', 'amount' => 20 ) );
+$d14_com     = is_wp_error( $d14_res ) ? $d14_res : vcap()->redemptions->commit( $d14_key );
+$d14_scan    = vcap_ctr_scan( $d14_counter );
+vcap_ctr_assert( ! is_wp_error( $d14_com ) && ! empty( $d14_scan['success'] ) && $d14_usage( $d14_api ) === $d14_usage( $d14_counter ) && array( 'limit' => 1, 'count' => 1 ) === $d14_usage( $d14_counter ), 'D14: a single-use voucher redeemed over the API and one redeemed at the counter leave the same used-up coupon', array( $d14_usage( $d14_api ), $d14_usage( $d14_counter ), is_wp_error( $d14_com ) ? $d14_com->get_error_code() : null ) );
+$d14_refund = vcap()->redemptions->refund( $d14_key, 20, 'd14r-' . wp_generate_uuid4() );
+$d14_event  = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$events} WHERE voucher_id = %d AND event = 'redeemed' ORDER BY id DESC LIMIT 1", $d14_counter->id ) ); // phpcs:ignore
+$d14_back   = vcap()->tickets->reverse_redemption( vcap()->vouchers->get( $d14_counter->id ), $d14_event, 'd14 test' );
+$d14_left   = array_map( static fn( $u ) => $u['limit'] - $u['count'], array( $d14_usage( $d14_api ), $d14_usage( $d14_counter ) ) );
+vcap_ctr_assert( ! is_wp_error( $d14_refund ) && ! is_wp_error( $d14_back ) && Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $d14_api->id )->status && Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $d14_counter->id )->status && array( 1, 1 ) === $d14_left, 'D14: an API refund and a cancelled counter redemption both leave exactly one use on the coupon', array( $d14_left, is_wp_error( $d14_refund ) ? $d14_refund->get_error_code() : null, is_wp_error( $d14_back ) ? $d14_back->get_error_code() : null ) );
+// A coupon that allows two uses although the voucher is single-use (e.g. edited in WooCommerce) is put right.
+$d14_wide = new WC_Coupon( $d14_counter->coupon_id );
+$d14_wide->set_usage_limit( 5 );
+$d14_wide->save();
+VCAP\CouponManager::sync_coupon( vcap()->vouchers->get( $d14_counter->id ), array( 'usage' ) );
+vcap_ctr_assert( 1 === $d14_usage( $d14_counter )['limit'] - $d14_usage( $d14_counter )['count'], 'D14: the usage sync keeps an active single-use voucher at exactly one use', $d14_usage( $d14_counter ) );
+// Expiry and status follow the voucher row through the same method (admin edit, top-up extension, CLI repair).
+$d14_card = vcap_ctr_voucher( 'balance', 50 );
+VCAP\TopUp::extend_validity( vcap()->vouchers, $d14_card, gmdate( 'Y-m-d H:i:s', time() + 400 * DAY_IN_SECONDS ) );
+$d14_card    = vcap()->vouchers->get( $d14_card->id );
+$d14_expires = ( new WC_Coupon( $d14_card->coupon_id ) )->get_date_expires();
+vcap_ctr_assert( $d14_expires && strtotime( $d14_card->expires_at . ' UTC' ) === $d14_expires->getTimestamp(), 'D14: an extended validity is written to the coupon expiry', array( $d14_card->expires_at, $d14_expires ? $d14_expires->date( 'Y-m-d H:i:s' ) : null ) );
+$d14_card->status = Voucher::STATUS_VOID;
+VCAP\CouponManager::sync_coupon( $d14_card, array( 'status' ) );
+$d14_off = get_post_status( $d14_card->coupon_id );
+$d14_card->status = Voucher::STATUS_ACTIVE;
+VCAP\CouponManager::sync_coupon( $d14_card, array( 'status' ) );
+vcap_ctr_assert( 'draft' === $d14_off && 'publish' === get_post_status( $d14_card->coupon_id ), 'D14: the coupon status follows the voucher status (void = disabled, active = enabled)' );
+
 echo "Counter integration: all checks passed.\n";

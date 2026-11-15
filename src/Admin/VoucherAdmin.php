@@ -875,13 +875,7 @@ final class VoucherAdmin {
 			Flash::add( 'warning', __( 'There is no recipient email: emails for this voucher go to the buyer.', 'voucher-captain' ) );
 		}
 
-		if ( $v->coupon_id ) {
-			$coupon = new \WC_Coupon( $v->coupon_id );
-			if ( $coupon->get_id() ) {
-				$coupon->set_date_expires( $v->expires_at ? strtotime( $v->expires_at . ' UTC' ) : null );
-				$coupon->save();
-			}
-		}
+		\VCAP\CouponManager::sync_coupon( $v, array( 'expiry' ) );
 		if ( preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $delivery ) ) {
 			$utc = get_gmt_from_date( str_replace( 'T', ' ', $delivery ) . ':00' );
 			if ( strtotime( $utc . ' UTC' ) > time() ) {

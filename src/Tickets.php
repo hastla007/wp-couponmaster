@@ -1007,14 +1007,7 @@ final class Tickets {
 		$voucher->balance = 0;
 		$this->repo->log( $voucher->id, 'redeemed', $voucher->initial_amount, 0, $note );
 		VoucherRepository::fire_redeemed( $voucher, (float) $voucher->initial_amount, 'counter' );
-		if ( $voucher->coupon_id ) {
-			$coupon = new \WC_Coupon( $voucher->coupon_id );
-			if ( $coupon->get_id() ) {
-				$coupon->set_usage_limit( max( 1, $coupon->get_usage_count() ) );
-				$coupon->set_usage_count( max( 1, $coupon->get_usage_count() ) );
-				$coupon->save();
-			}
-		}
+		CouponManager::sync_coupon( $voucher, array( 'usage' ) ); // Used up for WooCommerce's own usage limit too.
 		return true;
 	}
 
@@ -1171,16 +1164,10 @@ final class Tickets {
 			$table = Install::tables()['vouchers'];
 			$done  = (int) $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = %s, balance = initial_amount, updated_at = %s WHERE id = %d AND status = %s", Voucher::STATUS_ACTIVE, gmdate( 'Y-m-d H:i:s' ), $voucher->id, Voucher::STATUS_REDEEMED ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			if ( 1 === $done ) {
-				$ok = $this->repo->log( $voucher->id, 'redeem_reversed', $amount, null, $note );
-				if ( $voucher->coupon_id ) {
-					$coupon = new \WC_Coupon( $voucher->coupon_id );
-					if ( $coupon->get_id() ) {
-						$coupon->set_usage_count( max( 0, $coupon->get_usage_count() - 1 ) );
-						$coupon->set_usage_limit( 1 );
-						$coupon->save();
-					}
-				}
+				$ok    = $this->repo->log( $voucher->id, 'redeem_reversed', $amount, null, $note );
 				$fresh = $this->repo->get( $voucher->id );
+				// The counted use is given back; an active voucher keeps one use left (the API's refund rule).
+				CouponManager::sync_coupon( $fresh ?? $voucher, array( 'return_use' ) );
 				if ( $fresh ) {
 					Db::action( 'vcap_voucher_updated', $fresh );
 				}

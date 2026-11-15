@@ -1798,5 +1798,31 @@ check( 'R6: vcap_voucher_event passes the source and the acting user id as trail
 check( 'R6: the admin menu fires vcap_admin_menu with its parent slug', str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Admin/Menu.php' ), "do_action( 'vcap_admin_menu', 'vcap-vouchers' )" ) );
 check( 'R6: schema 1.8.0 adds the ledger columns till and receipt, migrated after 1.7.0', '1.8.0' === VCAP\Install::EVENT_TILL_VERSION && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/voucher-captain.php' ), "define( 'VCAP_DB_VERSION', '1.8.0' )" ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Install.php' ), "till varchar(100) NOT NULL DEFAULT ''" ) );
 
+echo "D14 coupon sync and code masking\n";
+$d14_u = static fn( string $mode, string $status, int $limit, int $count ) => CouponManager::coupon_usage_for( $mode, $status, $limit, $count );
+check(
+	'D14: one usage rule – redeemed = used up, active single-use = exactly one use left, balance untouched',
+	array( 1, 1 ) === $d14_u( 'single', Voucher::STATUS_REDEEMED, 1, 0 )
+		&& array( 2, 2 ) === $d14_u( 'single', Voucher::STATUS_REDEEMED, 1, 2 )
+		&& array( 2, 1 ) === $d14_u( 'single', Voucher::STATUS_ACTIVE, 1, 1 )
+		&& array( 1, 0 ) === $d14_u( 'single', Voucher::STATUS_ACTIVE, 5, 0 )
+		&& array( 1, 0 ) === $d14_u( 'single', Voucher::STATUS_RESERVED, 1, 0 )
+		&& array( 11, 10 ) === $d14_u( 'unlimited', Voucher::STATUS_ACTIVE, 10, 10 )
+		&& array( 10, 3 ) === $d14_u( 'unlimited', Voucher::STATUS_ACTIVE, 10, 3 )
+		&& array( 0, 0 ) === $d14_u( 'unlimited', Voucher::STATUS_ACTIVE, 0, 0 )
+		&& array( 0, 4 ) === $d14_u( 'balance', Voucher::STATUS_REDEEMED, 0, 4 )
+);
+check( 'D14: coupon status per voucher status (void/scheduled off, active on, others unchanged)', false === CouponManager::coupon_enabled_for( Voucher::STATUS_VOID ) && false === CouponManager::coupon_enabled_for( Voucher::STATUS_SCHEDULED ) && true === CouponManager::coupon_enabled_for( Voucher::STATUS_ACTIVE ) && null === CouponManager::coupon_enabled_for( Voucher::STATUS_REDEEMED ) && null === CouponManager::coupon_enabled_for( Voucher::STATUS_EXPIRED ) );
+$d14_writers = array();
+foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( dirname( __DIR__ ) . '/src', FilesystemIterator::SKIP_DOTS ) ) as $d14_file ) {
+	$d14_src = (string) file_get_contents( (string) $d14_file );
+	// Voucher coupons are written by CouponManager only (create_coupon/sync_coupon); other coupons (bonus,
+	// referral, campaign, first order, SKU rules) are not voucher coupons.
+	if ( preg_match( '/->set_usage_limit\(|->set_usage_count\(|->set_date_expires\(/', $d14_src ) && ! preg_match( '#/(CouponManager|Reissue|Referrals|Discounts/Bonus|Campaigns|FirstOrderCoupons|CouponSkuRules)\.php$#', (string) $d14_file ) ) {
+		$d14_writers[] = basename( (string) $d14_file );
+	}
+}
+check( 'D14: no other class sets usage limit/count or expiry on a voucher coupon (all through CouponManager::sync_coupon)', array() === $d14_writers, implode( ', ', $d14_writers ) );
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );
