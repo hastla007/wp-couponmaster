@@ -845,14 +845,14 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - In `validate()`/`top_up_instead()` die Einordnung von Aufladeprodukt und Karte vergleichen und bei Abweichung mit klarem Hinweis ablehnen.
     - Gemeinsame Wertfunktion mit `Issuer::voucher_amount()`. TAX.md 5.2 korrigieren. Tests.
-- [ ] **[PRIO: HOCH]** | **[Experte #5]** | **[Kategorie: Concurrency]** – **M12-13 Eigene Reservierung einer abgebrochenen Zahlung entfernt oder kürzt die Karte beim nächsten Checkout-Versuch**
+- [x] **[PRIO: HOCH]** | **[Experte #5]** | **[Kategorie: Concurrency]** – **M12-13 Eigene Reservierung einer abgebrochenen Zahlung entfernt oder kürzt die Karte beim nächsten Checkout-Versuch** — *Nachweis: tests/cart-coupons-integration.php „M12-13: after an abandoned payment the next check_cart_items keeps the card and calculate_totals keeps the 20 discount“*
   - *Problem:*
     - Die Reservierung der unbezahlten Sitzungsbestellung wird erst bei `*_checkout_order_processed` (Priorität 49) freigegeben, also nach der Warenkorbprüfung.
     - `CartCoupons::validate()` lehnt die Karte dann als „vollständig eingelöst“ ab oder kürzt den Rabatt auf den Rest. Der Kunde zahlt mehr per Karte.
   - *Lösung:*
     - `own_hold()`: Den Reservierungsbetrag der eigenen offenen Sitzungsbestellung (pending/failed/checkout-draft, unbezahlt) in `validate()` und `woocommerce_coupon_get_amount` als verfügbar behandeln.
     - Freigabe und Neureservierung bleiben bei 49/51. Test mit `check_cart_items` und `calculate_totals`.
-- [ ] **[PRIO: HOCH]** | **[Experte #5]** | **[Kategorie: WooCommerce]** – **M12-14 Produkt- und Kategoriebeschränkungen von Guthabenkarten wirken im Standardmodus nicht, Ausschlüsse sperren die ganze Karte**
+- [x] **[PRIO: HOCH]** | **[Experte #5]** | **[Kategorie: WooCommerce]** – **M12-14 Produkt- und Kategoriebeschränkungen von Guthabenkarten wirken im Standardmodus nicht, Ausschlüsse sperren die ganze Karte** — *Nachweis: tests/cart-coupons-integration.php „M12-14: "exclude sale items" no longer refuses the whole card; it pays the 30 of the regular line and leaves the sale line at 20“*
   - *Problem:*
     - Guthabenkarten sind `fixed_cart`. WooCommerce wendet sie auf alle Positionen an, sobald eine passende im Warenkorb liegt.
     - Der Fix K filtert nur im Zahlungsmodus.
@@ -900,7 +900,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
 
 ### MITTEL
 
-- [ ] **[PRIO: MITTEL]** | **[Experte #1]** | **[Kategorie: WooCommerce]** – **M12-20 Store API `cart/add-item`: Betrag nach Kundenwahl (auch für Aufladungen) wird nicht übernommen**
+- [x] **[PRIO: MITTEL]** | **[Experte #1]** | **[Kategorie: WooCommerce]** – **M12-20 Store API `cart/add-item`: Betrag nach Kundenwahl (auch für Aufladungen) wird nicht übernommen** — *Nachweis: tests/cart-coupons-integration.php „M12-20: a top-up with a custom amount is added through the Store API with card code and amount 40“*
   - *Problem:*
     - `CustomAmount::requested_amount()` liest nur `$_REQUEST`. Es gibt keinen `woocommerce_store_api_add_to_cart_data`-Hook.
     - Headless- und Store-API-Clients bekommen immer 400.
@@ -979,7 +979,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:*
     - Auf den aktuellen Code-Stand bringen und neu nummerieren.
     - Fragen ergänzen: Standard der Einstellung, Ticket mit Geldwert, Erstattung als Guthaben, Kaufpreis unter Nennwert (Art. 73a).
-- [ ] **[PRIO: MITTEL]** | **[Experte #5, #12]** | **[Kategorie: Bug]** – **M12-33 Fremdwährung: Kartenwert falsch begrenzt bzw. Gutscheinwährung nicht geprüft**
+- [x] **[PRIO: MITTEL]** | **[Experte #5, #12]** | **[Kategorie: Bug]** – **M12-33 Fremdwährung: Kartenwert falsch begrenzt bzw. Gutscheinwährung nicht geprüft** — *Nachweis: tests/cart-coupons-integration.php „M12-33: a 100 card in a DKK cart (WCML) pays 746 DKK, not 100 DKK (balance converted before the cap)“*
   - *Problem:*
     - WCML: Die Deckelung vergleicht den umgerechneten Coupon-Betrag mit dem Guthaben in Basiswährung. Beispiel DKK: 100 statt 746 DKK Rabatt.
     - Die Gutscheinwährung wird beim Einlösen nie gegen die aktuelle Basiswährung geprüft (nur bei TopUp). Nach einem Wechsel der Basiswährung gilt 50 EUR als 50 CHF.
@@ -1122,7 +1122,7 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
 
 ### NIEDRIG
 
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #1, #9]** | **[Kategorie: Bug]** – **M12-59 „Erneut bestellen“ übernimmt Felder ungeprüft (vergangenes Lieferdatum, neue Pflichtfelder)**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #1, #9]** | **[Kategorie: Bug]** – **M12-59 „Erneut bestellen“ übernimmt Felder ungeprüft (vergangenes Lieferdatum, neue Pflichtfelder)** — *Nachweis: tests/cart-coupons-integration.php „M12-59: "order again" runs the values through the current field rules (a newly required field refuses it)“*
   - *Problem:* `Fields::validate()` überspringt die Prüfung. Ein altes Datum führt zum Sofortversand, im Warenkorb steht aber weiter das alte Datum.
   - *Lösung:* `delivery_date` bei „Erneut bestellen“ verwerfen. Werte über `override` durch `errors()` laufen lassen. Prüfung in `check_cart_items`/`store_api_cart_errors`.
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #2]** | **[Kategorie: Bug]** – **M12-60 Rücknahme der Aufladung und Abzug des Kaufwerts: Betrag wird vor der Sperre berechnet, die Notiz meldet zu viel**
@@ -1149,9 +1149,9 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:* In LEGAL_TEXTS.md aufnehmen. Option „Rest als Guthaben behalten“.
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #4]** | **[Kategorie: Feature]** – **M12-69 DATEV/BMD-Export mit Konten und Steuerschlüsseln**
   - *Lösung:* Optionaler EXTF-Buchungsstapel mit konfigurierbaren Konten.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #5]** | **[Kategorie: Bug]** – **M12-70 Zahlungsmodus ignoriert die Reihenfolge Karte/Guthaben**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #5]** | **[Kategorie: Bug]** – **M12-70 Zahlungsmodus ignoriert die Reihenfolge Karte/Guthaben** — *Nachweis: tests/cart-coupons-integration.php „M12-70: in payment mode the voucher sorted first (e.g. "use store credit first") pays, not the one entered first“*
   - *Lösung:* `payments_for()` sortiert wie `sort()`.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #5]** | **[Kategorie: UX]** – **M12-71 Klassische Kasse zeigt das Restguthaben nicht**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #5]** | **[Kategorie: UX]** – **M12-71 Klassische Kasse zeigt das Restguthaben nicht** — *Nachweis: tests/cart-coupons-integration.php „M12-71: the classic checkout order review shows "Remaining balance of voucher … after this order"“*
   - *Lösung:* `cart_balance_notice` auch an `woocommerce_review_order_after_order_total` hängen.
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #7]** | **[Kategorie: PDF-Mail]** – **M12-72 Subdivision-Flaggen und Keycap-Emoji drucken leere Kästchen (M8 unvollständig)**
   - *Lösung:* Die Zeichenbereiche erweitern (U+E0000–E007F, U+20E3, …). Test.
@@ -1199,11 +1199,11 @@ Bericht mit den Urteilen der 12 Experten: `docs/AUDIT-12-2026-11-15.md`. IDs M12
   - *Lösung:* Button „Beispiel-Geschenkkarte anlegen“, Schritttext korrigieren, echte Blöcke statt Shortcodes.
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #11, #1, #12]** | **[Kategorie: UX]** – **M12-92 Berichte: keine Verkaufsübersicht, keine Integration in WooCommerce Analytics**
   - *Lösung:* Tab „Übersicht“ als Standard mit Kennzahlen (verkauft, eingelöst, offen, verfallen, Top-Produkte). Optional ein Analytics-Report, zumindest Erklärung in COMPATIBILITY.md und TAX.md.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-93 Guthabenabfrage und Warenkorbmeldungen ohne Kontext**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-93 Guthabenabfrage und Warenkorbmeldungen ohne Kontext** — *Nachweis: tests/cart-coupons-integration.php „M12-93: the balance result names the code ("Code …XXXX") and has a "Redeem" button“*
   - *Lösung:* Ergebnis nennt „Code …XXXX“, Button „Einlösen“. Meldungen mit Datum („aktiv ab“, „abgelaufen am“).
 - [ ] **[PRIO: NIEDRIG]** | **[Experte #11]** | **[Kategorie: UX]** – **M12-94 Massenaktionen ohne „Gültigkeit verlängern“, „Erinnerung senden“ und „Auswahl exportieren“**
   - *Lösung:* Die drei Massenaktionen ergänzen, protokolliert über `sync_coupon`.
-- [ ] **[PRIO: NIEDRIG]** | **[Experte #11, #12, #5, #1]** | **[Kategorie: Feature]** – **M12-95 Eigenes Geschenkkartenfeld, Guthaben per Klick, Restwert im Mini-Warenkorb, Gift-Toggle, Lieferdatum standardmäßig an**
+- [x] **[PRIO: NIEDRIG]** | **[Experte #11, #12, #5, #1]** | **[Kategorie: Feature]** – **M12-95 Eigenes Geschenkkartenfeld, Guthaben per Klick, Restwert im Mini-Warenkorb, Gift-Toggle, Lieferdatum standardmäßig an** — *Nachweis: tests/cart-coupons-integration.php „M12-95: the block field applies a gift card through the Store API update callback and refuses an unknown code with 400“*
   - *Lösung:*
     - Optionales Feld „Geschenkkarte einlösen“ (klassisch und Block-Slot über `extensionCartUpdate`), gespeicherte Karten mit einem Klick.
     - Restwert im Mini-Warenkorb.
