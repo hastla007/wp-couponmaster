@@ -353,8 +353,10 @@ final class Tickets {
 		if ( $user <= 0 ) {
 			return $out;
 		}
-		for ( $i = count( $events ) - 1; $i >= 0 && count( $out ) < 5; $i-- ) {
-			$e = $events[ $i ];
+		foreach ( array_reverse( $events ) as $e ) {
+			if ( 5 === count( $out ) ) {
+				break;
+			}
 			if ( 'redeemed' !== ( $e['event'] ?? '' ) || 0 !== (int) $e['order_id'] || (int) $e['user_id'] !== $user ) {
 				continue;
 			}

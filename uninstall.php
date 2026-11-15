@@ -150,8 +150,8 @@ function vcap_uninstall_site(): bool {
 	$wpdb->query( $wpdb->prepare( "DELETE m FROM {$wpdb->postmeta} m INNER JOIN {$wpdb->posts} p ON p.ID = m.post_id WHERE p.post_type IN ('product', 'product_variation') AND m.meta_key LIKE %s", $wpdb->esc_like( '_vcap_' ) . '%' ) ); // phpcs:ignore
 	// Referral coupon id and count of this site's customers (per-site user options, VCAP\Referrals).
 	vcap_uninstall_referral_meta( array( $wpdb->get_blog_prefix() . '_vcap_referral_coupon', $wpdb->get_blog_prefix() . '_vcap_referral_count' ) );
-	// Own daily counter limits of staff members (per-site user options, VCAP\Counter).
-	vcap_uninstall_referral_meta( array( $wpdb->get_blog_prefix() . 'vcap_counter_limit_amount', $wpdb->get_blog_prefix() . 'vcap_counter_limit_count' ) );
+	// Own daily counter limits and the fixed till of staff members (per-site user options, VCAP\Counter).
+	vcap_uninstall_referral_meta( array( $wpdb->get_blog_prefix() . 'vcap_counter_limit_amount', $wpdb->get_blog_prefix() . 'vcap_counter_limit_count', $wpdb->get_blog_prefix() . 'vcap_counter_location' ) );
 	foreach ( array( 'administrator', 'shop_manager' ) as $role_name ) {
 		$role = get_role( $role_name );
 		if ( $role ) {
