@@ -2272,6 +2272,12 @@ $m102_hooks = (string) file_get_contents( dirname( __DIR__ ) . '/docs/HOOKS.md' 
 $m102_part  = (string) strstr( $m102_doc, '## Öffentliche Erweiterungspunkte' );
 preg_match_all( '/`(vcap_[a-z0-9_]+)`/', $m102_part, $m102_named );
 $m102_missing = array_values( array_filter( array_unique( $m102_named[1] ), static fn( $h ) => ! str_contains( $m102_hooks, '`' . $h . '`' ) ) );
+// Regression (CI run 464): liability_rows() read later batches with the outstanding value of the last voucher in
+// place of the VALUE_VOUCHERS condition, so vouchers after the first 500 were missing from the liability CSV.
+$lr_src = (string) file_get_contents( dirname( __DIR__ ) . '/src/Ledger.php' );
+$lr_fn  = (string) substr( $lr_src, (int) strpos( $lr_src, 'public function liability_rows(' ), 4000 );
+$lr_fn  = (string) substr( $lr_fn, 0, (int) strpos( $lr_fn, "\n\t}\n" ) );
+check( 'Ledger::liability_rows() keeps the voucher condition for every batch of 500 (the outstanding value has its own variable)', '' !== $lr_fn && 1 === preg_match_all( '/\$value\s*=/', $lr_fn ) && str_contains( $lr_fn, '$outstanding = $this->value_at(' ) );
 check( 'M12-102: FREE-PREMIUM.md refers to docs/HOOKS.md instead of an own hook table, and every hook it names is in HOOKS.md', '' !== $m102_part && str_contains( $m102_doc, '(HOOKS.md)' ) && ! preg_match( '/^\|\s*`vcap_/m', $m102_doc ) && count( $m102_named[1] ) > 10 && array() === $m102_missing, implode( ', ', $m102_missing ) );
 
 

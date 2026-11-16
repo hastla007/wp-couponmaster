@@ -133,8 +133,8 @@ final class Ledger {
 			Format::prime_order_numbers( array_column( $vouchers, 'order_id' ) ); // AP-P1-2: one order query per batch.
 			foreach ( $vouchers as $row ) {
 				$v     = Voucher::from_row( $row );
-				$value = $this->value_at( $v, $events[ $v->id ] ?? array() );
-				if ( $value <= 0.00001 ) {
+				$outstanding = $this->value_at( $v, $events[ $v->id ] ?? array() );
+				if ( $outstanding <= 0.00001 ) {
 					continue;
 				}
 				yield array(
@@ -144,7 +144,7 @@ final class Ledger {
 					'issued'      => $v->created_at,
 					'expires'     => (string) $v->expires_at,
 					'order_id'    => $v->order_id,
-					'outstanding' => $value,
+					'outstanding' => $outstanding,
 					'expired'     => $v->expires_at && $v->expires_at <= $until,
 					'decimals'    => $v->decimals(),
 					// M12-42: issued without a sale (goodwill, prize) = false; unknown (older vouchers) counts as sold.

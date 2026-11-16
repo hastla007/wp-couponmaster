@@ -975,6 +975,12 @@ final class RedemptionService {
 		return null;
 	}
 
+	/**
+	 * Stored redemption row by its key, or null when there is none.
+	 *
+	 * @param string $key Redemption key.
+	 * @return array<string,mixed>|null
+	 */
 	private function get_row( string $key ): ?array {
 		global $wpdb;
 		$table = Install::tables()['redemptions'];
