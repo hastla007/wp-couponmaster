@@ -13689,3 +13689,125 @@ msgid ""
 msgstr ""
 "Bis dahin werden Geschenkkarten und Kundenguthaben an der Kasse abgelehnt, "
 "weil ihr Restwert nicht abgebucht werden kann."
+
+msgid "Voucher requests"
+msgstr "Gutschein-Anfragen"
+
+msgid "Partly issued"
+msgstr "Teilweise ausgestellt"
+
+msgid "Company order"
+msgstr "Firmenbestellung"
+
+msgid "Requests from forms (e.g. company orders or personalisation wishes). A request is no voucher: vouchers are issued only when you confirm it here. Payment is agreed with the customer outside this screen."
+msgstr "Anfragen aus Formularen (z. B. Firmenbestellungen oder Personalisierungswünsche). Eine Anfrage ist kein Gutschein: Gutscheine werden erst ausgestellt, wenn Sie sie hier bestätigen. Die Zahlung vereinbaren Sie mit dem Kunden außerhalb dieser Seite."
+
+msgid "No voucher requests yet."
+msgstr "Noch keine Gutschein-Anfragen."
+
+msgid "Received"
+msgstr "Eingegangen"
+
+msgid "Contact"
+msgstr "Kontakt"
+
+msgid "← All voucher requests"
+msgstr "← Alle Gutschein-Anfragen"
+
+msgid "Reference"
+msgstr "Referenz"
+
+msgid "Recipients"
+msgstr "Empfänger"
+
+msgid "Voucher #%d"
+msgstr "Gutschein #%d"
+
+msgid "Issue vouchers"
+msgstr "Gutscheine ausstellen"
+
+msgid "Id of the voucher product whose settings apply; 0 = a gift card with the value below."
+msgstr "ID des Gutscheinprodukts, dessen Einstellungen gelten; 0 = eine Geschenkkarte mit dem Wert unten."
+
+msgid "Sale"
+msgstr "Verkauf"
+
+msgid "Sold (paid or invoiced outside the shop)"
+msgstr "Verkauft (außerhalb des Shops bezahlt oder in Rechnung gestellt)"
+
+msgid "Free of charge (goodwill, prize)"
+msgstr "Kostenlos (Kulanz, Gewinn)"
+
+msgid "Send by email now (to the recipient, else to the contact)"
+msgstr "Jetzt per E-Mail senden (an den Empfänger, sonst an den Kontakt)"
+
+msgid "Reject and delete request"
+msgstr "Anfrage ablehnen und löschen"
+
+msgid "%d voucher issued for this request."
+msgid_plural "%d vouchers issued for this request."
+msgstr[0] "Für diese Anfrage wurde %d Gutschein ausgestellt."
+msgstr[1] "Für diese Anfrage wurden %d Gutscheine ausgestellt."
+
+msgid "Not all vouchers could be issued. Correct the settings and confirm again: vouchers issued already are not issued twice."
+msgstr "Nicht alle Gutscheine konnten ausgestellt werden. Korrigieren Sie die Angaben und bestätigen Sie erneut: Bereits ausgestellte Gutscheine werden nicht doppelt ausgestellt."
+
+msgid "Voucher request rejected and deleted."
+msgstr "Gutschein-Anfrage abgelehnt und gelöscht."
+
+msgid "Company"
+msgstr "Firma"
+
+msgid "Contact name"
+msgstr "Name der Kontaktperson"
+
+msgid "Contact email"
+msgstr "E-Mail-Adresse der Kontaktperson"
+
+msgid "Phone"
+msgstr "Telefon"
+
+msgid "Some voucher requests could not be anonymised. Please retry the erasure request."
+msgstr "Einige Gutschein-Anfragen konnten nicht anonymisiert werden. Bitte wiederholen Sie die Löschanfrage."
+
+msgid "Voucher request"
+msgstr "Gutschein-Anfrage"
+
+msgid "This product is no voucher product."
+msgstr "Dieses Produkt ist kein Gutscheinprodukt."
+
+msgid "Please give a valid contact email address."
+msgstr "Bitte geben Sie eine gültige Kontakt-E-Mail-Adresse an."
+
+msgid "A recipient email address is not valid."
+msgstr "Eine Empfänger-E-Mail-Adresse ist ungültig."
+
+msgid "A request may ask for at most %d vouchers."
+msgstr "Eine Anfrage darf höchstens %d Gutscheine umfassen."
+
+msgid "Too many voucher requests are waiting to be handled. Please try again later."
+msgstr "Zu viele Gutschein-Anfragen warten auf Bearbeitung. Bitte versuchen Sie es später erneut."
+
+msgid "Voucher request %s"
+msgstr "Gutschein-Anfrage %s"
+
+msgid "Please choose whether the vouchers were sold or are free of charge."
+msgstr "Bitte wählen Sie, ob die Gutscheine verkauft wurden oder kostenlos sind."
+
+msgid "This voucher request does not exist."
+msgstr "Diese Gutschein-Anfrage gibt es nicht."
+
+msgid "Voucher %1$d: %2$s"
+msgstr "Gutschein %1$d: %2$s"
+
+msgid "Only open voucher requests can be rejected."
+msgstr "Nur offene Gutschein-Anfragen können abgelehnt werden."
+
+msgid "Voucher requests: when you ask for vouchers through a form on this website (for example a company order or a personalised voucher), we store the contact details you enter (company, name, email address, phone number), your message and note, and the names, email addresses and messages of the recipients you list, so that we can check the request and issue the vouchers. No voucher is issued and no payment is taken by the form itself. When the vouchers are issued, the recipient list is removed from the request and kept only with the vouchers; a rejected request is deleted."
+msgstr "Gutschein-Anfragen: Wenn Sie über ein Formular auf dieser Website Gutscheine anfragen (zum Beispiel als Firmenbestellung oder als personalisierten Gutschein), speichern wir die von Ihnen eingegebenen Kontaktdaten (Firma, Name, E-Mail-Adresse, Telefonnummer), Ihre Nachricht und Notiz sowie Namen, E-Mail-Adressen und Nachrichten der von Ihnen genannten Empfänger, damit wir die Anfrage prüfen und die Gutscheine ausstellen können. Das Formular selbst stellt keinen Gutschein aus und nimmt keine Zahlung entgegen. Sobald die Gutscheine ausgestellt sind, wird die Empfängerliste aus der Anfrage entfernt und nur noch bei den Gutscheinen gespeichert; eine abgelehnte Anfrage wird gelöscht."
+
+msgid "Redemption confirms a service (for review invitations)"
+msgstr "Einlösung bestätigt eine Leistung (für Bewertungseinladungen)"
+
+msgid "For experience or service vouchers: a redemption at the counter then confirms that the service was provided, and a review plugin (e.g. WP Review Captain) may invite the customer afterwards. Voucher Captain sends no invitation itself. Purchases, issuing, top-ups, discount codes and store credit never count."
+msgstr "Für Erlebnis- oder Leistungsgutscheine: Eine Einlösung an der Kasse bestätigt dann, dass die Leistung erbracht wurde, und ein Bewertungs-Plugin (z. B. WP Review Captain) darf den Kunden danach einladen. Voucher Captain versendet selbst keine Einladung. Kauf, Ausgabe, Aufladung, Rabattcodes und Kundenguthaben zählen nie."
