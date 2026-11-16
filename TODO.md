@@ -1355,8 +1355,8 @@ Unabhängige Durchsicht der Sicherheitskorrekturen S4–S21, der Captain-Suite- 
 - [x] Tabellennamen in SQL auf `%i` umstellen: 86 Abfragen in 28 Dateien; Plugin-Check-Warnungen 125 → 41.
 - [x] Kompatibilität WooCommerce 11.3.0: alle Suites grün (HPOS und klassisch), „getestet bis“ 11.3, CI nutzt 11.3.0.
 - [x] Sicherheitsprüfung der Änderungen seit 4269878: siehe Abschnitt unten (SEC1–SEC4d erledigt, SEC4c wartet auf Entscheidung).
-- [ ] Barrierefreiheit automatisch mit axe-core prüfen (Vorbereitung der Screenreader-Abnahme).
-- [ ] Browser-E2E-Tests für die neuen Funktionen (Live-Vorschau, Design-Auswahl, Geschenkkarten-Feld im Block-Warenkorb, Gutschein ins Kundenguthaben, Empfänger korrigieren).
+- [x] Barrierefreiheit automatisch mit axe-core prüfen: jede neue Ansicht in `tests/e2e/07-new-features.spec.js` mit `expectAccessible`. Gefunden und behoben: leerer Datumslink in der Anfrageliste (link-name), zu schwacher Kontrast in den Standardvorlagen (#8a8a8a/#777/#888 → #666, nur Neuinstallationen), Ergebnis des Geschenkkarten-Felds im Block-Warenkorb wurde nicht angezeigt/angesagt.
+- [x] Browser-E2E-Tests für die neuen Funktionen: Live-Vorschau, Design-Auswahl, „Als Geschenk / Für mich“, Geschenkkarten-Feld (klassisch und Block), Gutschein ins Kundenguthaben, Admin (Neuer Gutschein, Import-Probelauf, Gutschein-Anfragen, Berichte); eigener CI-Schritt.
 - [x] Last- und Performance-Test mit 20.000 Gutscheinen: alle Abläufe schnell; einmaliges Nachholen von expire_overdue 2,8 s (RELEASE_CHECKLIST.md → Load test).
 - [ ] Testsuiten in zufälliger Reihenfolge laufen lassen (versteckte Abhängigkeiten).
 
