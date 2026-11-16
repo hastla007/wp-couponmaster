@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-16 12:41+0000\n"
+"POT-Creation-Date: 2026-11-16 14:18+0000\n"
 "X-Domain: voucher-captain\n"
 
 #. Plugin Name of the plugin
@@ -7672,14 +7672,18 @@ msgid "Voucher requests: when you ask for vouchers through a form on this websit
 msgstr ""
 
 #: src/Privacy.php:517
-msgid "At the entrance or the counter, our staff may scan the code of your voucher or ticket. We record the time, the staff member and the result (redeemed, checked in or refused) in the voucher history."
+msgid "Review invitations: when a voucher for a service (for example a course or an experience) is redeemed and a review plugin on this website is connected, we note that this redemption may lead to a review invitation – without your name or email address. Only when the review plugin sends the invitation does it ask us for the email address and name of the recipient (or the buyer) and the language. Only the first redemption of a voucher counts. These notes are deleted 90 days after a cancellation or refund, and at the latest after 24 months."
 msgstr ""
 
 #: src/Privacy.php:518
-msgid "Promotion limits per customer: when a promotion may be used only a limited number of times per customer, we record each use with your customer account or, for guest orders, with a keyed hash of your email address (not the address itself), so that the limit also applies to later orders. These records are deleted together with the promotion."
+msgid "At the entrance or the counter, our staff may scan the code of your voucher or ticket. We record the time, the staff member and the result (redeemed, checked in or refused) in the voucher history."
 msgstr ""
 
 #: src/Privacy.php:519
+msgid "Promotion limits per customer: when a promotion may be used only a limited number of times per customer, we record each use with your customer account or, for guest orders, with a keyed hash of your email address (not the address itself), so that the limit also applies to later orders. These records are deleted together with the promotion."
+msgstr ""
+
+#: src/Privacy.php:520
 msgid "To protect voucher codes against guessing and our server against overload, we count code entries, PDF previews and downloads per visitor for a short time window (at most one hour). For this we store the counter under a keyed hash of your IP address (made with a secret key of this website, so it cannot be turned back into the address), never the address itself. The counters are deleted by the daily cleanup, at the latest about one day after the window has ended."
 msgstr ""
 

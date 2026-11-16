@@ -120,6 +120,21 @@ Einlösung steuerlich zu behandeln ist (z. B. als Preisnachlass), entscheidet di
 auswertet. WooCommerce Analytics zeigt diese Gutscheine nicht (COMPATIBILITY.md „WooCommerce Analytics“); maßgeblich
 sind die Berichte unter „Gutscheine → Berichte“.
 
+### 3.2 Physische Karten, Umbuchung ins Kundenguthaben, Firmenbestellungen, Workflow
+
+- **Physische Karten** (Produktoption „Physische Karte“, M12-97): Der Code stammt aus einem Code-Kontingent, die Karte
+  wird beim Kauf angelegt, bleibt aber gesperrt, bis die Bestellung den Status „Abgeschlossen“ erreicht (Ereignis
+  `activated`). Steuerlich gilt der Verkauf wie bei jeder anderen Karte (Abschnitt 3); die Aktivierung ist kein
+  eigener Vorgang (Frage F22).
+- **„In mein Kundenguthaben“** (Mein Konto, M12-98): Die Restsumme einer Geschenkkarte wird in einem Schritt auf das
+  Kundenguthaben gebucht (Karte auf 0 und „ungültig“, Ereignis `moved_to_credit`, Guthaben +Betrag). Die offene
+  Verbindlichkeit ändert sich nicht (Mehrzweck → Mehrzweck, Test in tests/shop-admin-integration.php). Frage F23.
+- **Gutschein-Anfragen / Firmenbestellungen** (Captain Suite, D5): Beim Bestätigen wählt der Verwalter „verkauft“ oder
+  „kostenlos“; das Kennzeichen geht wie in 3.1 an die Steuerlogik. Wird eine Anfrage an die Firmenbestellung eines
+  Add-ons übergeben, stellt das Add-on Rechnung und Gutscheine aus – der Kern gibt dann nichts aus.
+- **Einlösungen über ein Workflow-Plugin** (WORKFLOW.md, Dienst `redeem`) laufen über dieselbe Einlöse-Logik wie die
+  Ladenkasse (Abschnitt 4) und erscheinen im Journal mit der Quelle `workflow`.
+
 ## 4. Einlösung
 
 ### 4.1 Im WooCommerce-Warenkorb (alle Gutscheinarten)
@@ -456,6 +471,8 @@ des Codes dabei.
 | F19 | **Kaufpreis unter Nennwert** (Art. 73a MwStSystRL, z. B. Rabattaktion „100‑€‑Karte für 90 €“, Wiederverkäufer): Bemessungsgrundlage bei Einlösung eines Mehrzweckgutscheins = gezahlter Betrag oder Nennwert? Muss das Plugin den Kaufpreis je Gutschein festhalten? | Nennwert (Kaufpreis steht im Zeilen-Schnappschuss) | |
 | F20 | **Restwert eines Einmalgutscheins** (4.3): Verfall des Restes eines Mehrzweck-Einmalgutscheins ohne USt (Ertrag), beim Einzweck keine Korrektur – bestätigt? Ist die Umwandlung in Kundenguthaben/neue Karte („Keep the rest“) steuerlich neutral (Mehrzweck → Mehrzweck)? | „forfeited“ gegen Ertragskonto; Umwandlung neutral | |
 | F21 | **Kontierung** (Abschnitt 6.3/6.4): Konten, keine Steuerschlüssel auf Gutscheinbuchungen, Gutscheinzahlung als Zahlung statt Erlösminderung – bestätigt? | wie 6.3 | |
+| F22 | **Physische Karten** (3.2): Gilt der Verkauf (Zahlung) als maßgeblicher Zeitpunkt, auch wenn die Karte erst bei „Abgeschlossen“ aktiviert wird? | Verkauf maßgeblich, Aktivierung ohne Buchung | |
+| F23 | **Umbuchung Geschenkkarte → Kundenguthaben** (3.2): steuerlich neutral (Mehrzweck → Mehrzweck), keine Rechnungskorrektur? | neutral, nur Umbuchung der Verbindlichkeit | |
 
 ## 12. Freigabe
 
