@@ -2454,5 +2454,111 @@ eval( implode( "\n", $r16_fn[0] ) ); // phpcs:ignore Squiz.PHP.Eval.Discouraged 
 list( $r16_merged, $r16_missing ) = vcap_hooks_with_since( array( 'vcap_old' => array( 'since' => '' ), 'vcap_new' => array( 'since' => vcap_hooks_since( $r16_before ) ), 'vcap_undocumented' => array( 'since' => vcap_hooks_since( "<?php\n" ) ) ), array( 'vcap_old' => '1.1.0' ) );
 check( 'R16-13: the hook reference takes the version from the list or from @since and reports a hook without one', '1.1.0' === $r16_merged['vcap_old']['since'] && '1.4.0' === $r16_merged['vcap_new']['since'] && array( 'vcap_undocumented' ) === $r16_missing, wp_json_encode( $r16_missing ) );
 
+// VC-7 (suite spec 8.1, 4.3, R-4.7, R-5.1): read functions for the state of a voucher by its id – a fixed list of
+// keys, null for an unknown id, never a code, a name, an address, the redemption key, the target or meta, no writes.
+echo "\nVC-7: read functions (contract 1.2.0)\n";
+$vc7_saved_wpdb = $GLOBALS['wpdb'] ?? null;
+$GLOBALS['wpdb'] = new VCAP_Test_Wpdb();
+$vc7_code        = 'MARKERGIFT-7Q2XK9';
+$vc7_secrets     = array( $vc7_code, '7Q2XK9', strtolower( $vc7_code ), hash( 'sha256', $vc7_code ), hash( 'sha256', strtolower( $vc7_code ) ), 'marker.recipient@example.test', 'marker.buyer@example.test', 'Marker Recipient', 'Marker Buyer', 'MARKER MESSAGE', 'markertoken0123456789abcdef0123456789abcdef012345', 'rk-marker-secret-key', 'course:marker-target', 'marker-meta', 'MARKER NOTE', 'Marker till', 'MARKER-RECEIPT', 'MARKER TERMS', 'Marker field' );
+// Full rows as SELECT * would return them: the facade must build its answer from the allowed fields only.
+$vc7_voucher = static fn( array $over = array() ): array => $over + array(
+	'id' => '42', 'code' => $vc7_code, 'coupon_id' => '901', 'type' => 'giftcard', 'status' => 'active', 'order_id' => '1042', 'order_item_id' => '7', 'item_index' => '0',
+	'product_id' => '55', 'variation_id' => '0', 'template_id' => '3', 'usage_mode' => 'balance', 'discount_type' => 'fixed_cart', 'initial_amount' => '50.0000',
+	'balance' => '12.5000', 'currency' => 'EUR', 'expires_at' => '2029-12-31 23:59:59', 'buyer_name' => 'Marker Buyer', 'buyer_email' => 'marker.buyer@example.test',
+	'user_id' => '0', 'recipient_name' => 'Marker Recipient', 'recipient_email' => 'marker.recipient@example.test', 'message' => 'MARKER MESSAGE',
+	'fields' => '{"f":{"label":"Marker field","value":"Marker field"}}', 'send_to' => 'recipient', 'delivery_at' => null, 'delivered_at' => '2026-11-01 08:00:00',
+	'token' => 'markertoken0123456789abcdef0123456789abcdef012345', 'transferable' => '1', 'terms' => 'MARKER TERMS', 'max_checkins' => '1', 'checkins' => '0',
+	'last_checkin_at' => null, 'delivered_roles' => 'recipient,evil', 'created_at' => '2026-11-01 07:59:00', 'updated_at' => '2026-11-02 10:00:00',
+);
+$vc7_redemption = array( 'id' => '9', 'redemption_key' => 'rk-marker-secret-key', 'voucher_id' => '42', 'user_id' => '17', 'target' => 'course:marker-target', 'amount' => '7.5000', 'state' => 'committed', 'request_hash' => hash( 'sha256', 'x' ), 'meta' => '{"marker-meta":1}', 'expires_at' => '2026-11-02 10:15:00', 'created_at' => '2026-11-02 10:00:00', 'updated_at' => '2026-11-02 10:01:00' );
+$vc7_rows = array(
+	42 => $vc7_voucher(),
+	43 => $vc7_voucher( array( 'id' => '43', 'type' => 'voucher', 'usage_mode' => 'single', 'status' => 'void', 'balance' => '0.0000', 'initial_amount' => '5000', 'currency' => 'JPY', 'delivered_at' => null, 'delivery_at' => '2099-01-01 09:00:00', 'order_id' => '0' ) ),
+	44 => $vc7_voucher( array( 'id' => '44', 'type' => 'credit', 'user_id' => '17', 'order_id' => '0', 'balance' => '3.1250', 'currency' => 'KWD' ) ),
+);
+$GLOBALS['wpdb']->answers = array(
+	'/FROM wp_vcap_vouchers WHERE user_id = (\d+) AND type = \'credit\'/' => static fn( $q ) => preg_match( '/user_id = (\d+)/', $q, $m ) && 17 === (int) $m[1] ? $vc7_rows[44] : null,
+	'/^SELECT id FROM wp_vcap_vouchers WHERE order_id = (\d+)/'           => static fn( $q ) => preg_match( '/order_id = (\d+)/', $q, $m ) && 1042 === (int) $m[1] ? array( '42', '44' ) : array(),
+	'/FROM wp_vcap_vouchers WHERE id = (\d+)/'                            => static fn( $q ) => preg_match( '/WHERE id = (\d+)/', $q, $m ) ? ( $vc7_rows[ (int) $m[1] ] ?? null ) : null,
+	'/FROM wp_vcap_redemptions WHERE id = (\d+)/'                         => static fn( $q ) => str_contains( $q, 'WHERE id = 9' ) ? $vc7_redemption : null,
+	'/COUNT\(\*\) AS n FROM wp_vcap_redemptions WHERE voucher_id = 42 /'  => array( array( 'state' => 'committed', 'n' => '2' ), array( 'state' => 'released', 'n' => '1' ), array( 'state' => 'bogus', 'n' => '5' ) ),
+	'/FROM wp_vcap_redemptions WHERE voucher_id = 42 ORDER BY/'           => array( $vc7_redemption, array( 'state' => 'reserved', 'id' => '8' ) + $vc7_redemption ),
+	'/FROM wp_vcap_events WHERE voucher_id = 43 AND event IN/'    => array( array( 'event' => 'delivery_failed', 'created_at' => '2026-11-03 10:00:00', 'note' => 'MARKER NOTE' ), array( 'event' => 'delivery_given_up', 'created_at' => '2026-11-03 11:00:00' ) ),
+	'/AND event = \'topup\'/'                                              => '3',
+	'/AND event = \'topup_reversed\'/'                                     => '1',
+);
+$vc7_void_calls = array();
+$vc7_read       = new VCAP\API\V1\ReadService(
+	new VCAP\VoucherRepository(),
+	static function ( Voucher $v ) use ( &$vc7_void_calls ): bool {
+		$vc7_void_calls[] = array( $v->id, $v->status, $v->order_id, $v->code, $v->recipient_email );
+		return true;
+	}
+);
+$vc7_options    = $GLOBALS['vcap_test_options'] ?? array();
+$vc7_transients = $GLOBALS['vcap_test_transients'] ?? array();
+$vc7_results    = array(
+	'voucher'      => $vc7_read->voucher( 42 ),
+	'voucher_str'  => $vc7_read->voucher( '42' ),
+	'void'         => $vc7_read->voucher( 43 ),
+	'gift'         => $vc7_read->gift_card( 42 ),
+	'credit'       => $vc7_read->store_credit( 17 ),
+	'redemption'   => $vc7_read->redemption( 9 ),
+	'redemptions'  => $vc7_read->redemptions( 42 ),
+	'order'        => $vc7_read->order_vouchers( 1042 ),
+);
+$vc7_v = $vc7_results['voucher'];
+check( 'VC-7: read_voucher() returns exactly the documented keys in order', is_array( $vc7_v ) && VCAP\API\V1\ReadService::VOUCHER_KEYS === array_keys( $vc7_v ), wp_json_encode( array_keys( (array) $vc7_v ) ) );
+check(
+	'VC-7: voucher state – ids, type, status, amounts in minor units with currency, UTC timestamps, delivery, counts',
+	is_array( $vc7_v ) && 42 === $vc7_v['voucher_id'] && 'giftcard' === $vc7_v['type'] && 'active' === $vc7_v['status'] && 'EUR' === $vc7_v['currency'] && 5000 === $vc7_v['amount_minor'] && 1250 === $vc7_v['balance_minor']
+		&& 1042 === $vc7_v['order_id'] && 55 === $vc7_v['product_id'] && null === $vc7_v['user_id'] && true === $vc7_v['transferable'] && '2029-12-31T23:59:59Z' === $vc7_v['expires_at'] && '2026-11-01T07:59:00Z' === $vc7_v['created_at']
+		&& 'delivered' === $vc7_v['delivery_state'] && '2026-11-01T08:00:00Z' === $vc7_v['delivered_at'] && array( 'recipient' ) === $vc7_v['delivered_roles'] && 0 === $vc7_v['delivery_failures'] && null === $vc7_v['void_reason']
+		&& array( 'reserved' => 0, 'committed' => 2, 'released' => 1 ) === $vc7_v['redemption_counts'] && $vc7_v === $vc7_results['voucher_str'],
+	wp_json_encode( $vc7_v )
+);
+$vc7_void = $vc7_results['void'];
+check( 'VC-7: a void voucher reports void_reason through Issuer::voided_after_refund() with a voucher object without code or addresses; JPY has no minor digits; a given-up delivery is reported', is_array( $vc7_void ) && 'refund' === $vc7_void['void_reason'] && array( array( 43, 'void', 0, '', '' ) ) === $vc7_void_calls && 5000 === $vc7_void['amount_minor'] && 'JPY' === $vc7_void['currency'] && null === $vc7_void['order_id'] && 'given_up' === $vc7_void['delivery_state'] && 1 === $vc7_void['delivery_failures'] && '2099-01-01T09:00:00Z' === $vc7_void['delivery_at'], wp_json_encode( $vc7_void ) );
+check( 'VC-7: read_gift_card() adds the top-up counts; null for a voucher of another type', is_array( $vc7_results['gift'] ) && array_merge( VCAP\API\V1\ReadService::VOUCHER_KEYS, VCAP\API\V1\ReadService::GIFT_CARD_KEYS ) === array_keys( $vc7_results['gift'] ) && 3 === $vc7_results['gift']['top_up_count'] && 1 === $vc7_results['gift']['top_up_reversed_count'] && null === $vc7_read->gift_card( 43 ) );
+check( 'VC-7: read_store_credit() – account of the user with balance in minor units (KWD: three digits)', VCAP\API\V1\ReadService::STORE_CREDIT_KEYS === array_keys( (array) $vc7_results['credit'] ) && 17 === $vc7_results['credit']['user_id'] && 44 === $vc7_results['credit']['account_id'] && 3125 === $vc7_results['credit']['balance_minor'] && 'KWD' === $vc7_results['credit']['currency'], wp_json_encode( $vc7_results['credit'] ) );
+$vc7_r = $vc7_results['redemption'];
+check( 'VC-7: read_redemption() – state, channel, amount in minor units with the voucher currency, committed_at only when committed, no expiry after the reservation', VCAP\API\V1\ReadService::REDEMPTION_KEYS === array_keys( (array) $vc7_r ) && 9 === $vc7_r['redemption_id'] && 42 === $vc7_r['voucher_id'] && 'committed' === $vc7_r['state'] && 'external' === $vc7_r['channel'] && 750 === $vc7_r['amount_minor'] && 'EUR' === $vc7_r['currency'] && 17 === $vc7_r['user_id'] && null === $vc7_r['expires_at'] && '2026-11-02T10:01:00Z' === $vc7_r['committed_at'], wp_json_encode( $vc7_r ) );
+check( 'VC-7: read_redemptions() lists the redemptions of a voucher (a reserved one with its expiry); [] for a voucher without any', 2 === count( (array) $vc7_results['redemptions'] ) && 'reserved' === $vc7_results['redemptions'][1]['state'] && '2026-11-02T10:15:00Z' === $vc7_results['redemptions'][1]['expires_at'] && null === $vc7_results['redemptions'][1]['committed_at'] && array() === $vc7_read->redemptions( 43 ) );
+check( 'VC-7: read_order_vouchers() – number and ids of the vouchers of an order', array( 'order_id' => 1042, 'voucher_count' => 2, 'voucher_ids' => array( 42, 44 ) ) === $vc7_results['order'] );
+check(
+	'VC-7: unknown ids, zero, negative ids and strings that are no whole number (a code) answer null',
+	null === $vc7_read->voucher( 4711 ) && null === $vc7_read->voucher( 0 ) && null === $vc7_read->voucher( -42 ) && null === $vc7_read->voucher( $vc7_code ) && null === $vc7_read->voucher( '42abc' ) && null === $vc7_read->voucher( '042' ) && null === $vc7_read->voucher( '' )
+		&& null === $vc7_read->gift_card( 4711 ) && null === $vc7_read->store_credit( 18 ) && null === $vc7_read->store_credit( 'marker.buyer@example.test' ) && null === $vc7_read->redemption( 10 ) && null === $vc7_read->redemption( 'rk-marker-secret-key' )
+		&& null === $vc7_read->redemptions( 4711 ) && null === $vc7_read->order_vouchers( 1043 ) && null === $vc7_read->order_vouchers( 0 )
+);
+$vc7_json   = strtolower( (string) wp_json_encode( $vc7_results ) . serialize( $vc7_results ) );
+$vc7_leaked = array_values( array_filter( $vc7_secrets, static fn( $s ) => str_contains( $vc7_json, strtolower( $s ) ) ) );
+check( 'VC-7: no code (nor its tail or hash), token, name, address, message, field, terms, note, redemption key, target, meta, till or receipt of the fixtures appears in any result', array() === $vc7_leaked, implode( ', ', $vc7_leaked ) );
+$vc7_keys = array();
+array_walk_recursive( $vc7_results, static function ( $v, $k ) use ( &$vc7_keys ) { $vc7_keys[] = (string) $k; } );
+foreach ( $vc7_results as $vc7_res ) {
+	foreach ( (array) $vc7_res as $vc7_k => $vc7_val ) {
+		$vc7_keys[] = (string) $vc7_k;
+	}
+}
+check( 'VC-7: no result key names a code, token, name, email, message, note, reference, redemption key, target, meta or receipt', ! preg_grep( '/(code|token|name|email|message|note|reference|redemption_key|target|meta|receipt|till|fields|terms)/', array_unique( $vc7_keys ) ) );
+$vc7_sql = $GLOBALS['wpdb']->log;
+check( 'VC-7: only SELECTs; no SELECT *; the queries never name code, token, names, addresses, message, fields, terms, redemption key, target, request hash or meta', count( $vc7_sql ) > 10 && array() === preg_grep( '/^\s*SELECT\b/i', $vc7_sql, PREG_GREP_INVERT ) && ! preg_grep( '/SELECT \*|\b(INSERT|UPDATE|DELETE|REPLACE|GET_LOCK|FOR UPDATE)\b/i', $vc7_sql ) && ! preg_grep( '/\b(code|token|buyer_name|buyer_email|recipient_name|recipient_email|message|fields|terms|redemption_key|target|request_hash|meta|note|till|receipt)\b/', $vc7_sql ), implode( ' | ', $vc7_sql ) );
+check( 'VC-7: reading changes no option and no transient', $vc7_options === ( $GLOBALS['vcap_test_options'] ?? array() ) && $vc7_transients === ( $GLOBALS['vcap_test_transients'] ?? array() ) );
+$vc7_src = (string) file_get_contents( VCAP_PATH . 'src/API/V1/ReadService.php' );
+check( 'VC-7: ReadService fires no hook, writes nothing and does not go through the code lookups', ! preg_match( '/\b(do_action|apply_filters|Db::action|update_option|add_option|delete_option|set_transient|wp_cache_set|update_post_meta|->insert\(|->update\(|->delete\(|->query\(|->replace\(|get_by_code|get_by_token|->redemptions->get|->account\()/', $vc7_src ) );
+$vc7_fn = (string) file_get_contents( VCAP_PATH . 'src/functions.php' );
+$vc7_main = (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' );
+$vc7_api  = (string) file_get_contents( VCAP_PATH . 'API.md' );
+$vc7_names = array( 'vcap_read_voucher' => 'voucher', 'vcap_read_gift_card' => 'gift_card', 'vcap_read_store_credit' => 'store_credit', 'vcap_read_redemption' => 'redemption', 'vcap_read_redemptions' => 'redemptions', 'vcap_read_order_vouchers' => 'order_vouchers' );
+$vc7_missing = array_keys( array_filter( $vc7_names, static fn( $m, $f ) => ! str_contains( $vc7_fn, "function {$f}( int|string \$" ) || ! str_contains( $vc7_fn, "vcap()->read->{$m}(" ) || ! str_contains( $vc7_api, "`{$f}( int\\|string" ) || ! method_exists( VCAP\API\V1\ReadService::class, $m ), ARRAY_FILTER_USE_BOTH ) );
+check( 'VC-7: each read function wraps vcap()->read, is loaded after boot and documented in API.md with "Since 1.2.0"; Plugin exposes vcap()->read', array() === $vc7_missing && str_contains( $vc7_main, "require_once VCAP_PATH . 'src/functions.php';" ) && strpos( $vc7_main, "require_once VCAP_PATH . 'src/functions.php';" ) > strpos( $vc7_main, 'function vcap(): \VCAP\Plugin' ) && str_contains( $vc7_api, '## Read functions (since 1.2.0, contract 1.2.0)' ) && property_exists( VCAP\Plugin::class, 'read' ), implode( ', ', $vc7_missing ) );
+require_once VCAP_PATH . 'src/functions.php';
+check( 'VC-7: without vcap()->read (plugin not booted) the functions answer null instead of failing', null === vcap_read_voucher( 42 ) && null === vcap_read_store_credit( 17 ) && null === vcap_read_order_vouchers( 1042 ) );
+preg_match( "/define\( 'VCAP_CONTRACT_VERSION', '(\d+\.\d+\.\d+)' \);/", $vc7_main, $vc7_contract );
+check( 'VC-7: the read functions raised the contract version to at least 1.2.0 (additive minor within major 1)', isset( $vc7_contract[1] ) && version_compare( $vc7_contract[1], '1.2.0', '>=' ) && str_starts_with( $vc7_contract[1], '1.' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'CONNECTORS.md' ), '| 1.2.0 | 1.2.0 | read functions `vcap_read_voucher()`' ) );
+$GLOBALS['wpdb'] = $vc7_saved_wpdb;
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

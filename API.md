@@ -221,6 +221,68 @@ The role no longer counts as delivered, the voucher history gets a "Delivery fai
 fourth argument the buyer is told by email (with the signed "Correct the recipient" link where the gift may still be
 redirected). The action `vcap_voucher_bounced( Voucher $voucher, string $role, string $reason )` fires afterwards.
 
+## Read functions (since 1.2.0, contract 1.2.0)
+
+Read-only state of a voucher by its **record id**, for add-ons and automations that must re-check an event or evaluate
+a condition without knowing the voucher code (an event carries the `voucher_id`, never the code). Available once the
+plugin booted (`vcap_loaded`); check `function_exists( 'vcap_read_voucher' )` or
+`version_compare( VCAP_CONTRACT_VERSION, '1.2.0', '>=' )`. The functions are thin wrappers of the service
+`vcap()->read` (`VCAP\API\V1\ReadService`, methods `voucher()`, `gift_card()`, `store_credit()`, `redemption()`,
+`redemptions()`, `order_vouchers()`).
+
+| Function | Argument | Returns | Since |
+|---|---|---|---|
+| `vcap_read_voucher( int\|string $id )` | voucher id | voucher keys below, or `null` | 1.2.0 |
+| `vcap_read_gift_card( int\|string $id )` | voucher id of a gift card | voucher keys plus `top_up_count`, `top_up_reversed_count`; `null` when the id is unknown or no gift card (type `giftcard`) | 1.2.0 |
+| `vcap_read_store_credit( int\|string $user_id )` | WordPress user id | `user_id`, `account_id` (voucher id of the account), `status`, `currency`, `balance_minor`, `created_at`, `updated_at`; `null` when the user has no account (none is opened) | 1.2.0 |
+| `vcap_read_redemption( int\|string $id )` | record id of an external redemption | redemption keys below, or `null` | 1.2.0 |
+| `vcap_read_redemptions( int\|string $voucher_id )` | voucher id | list of redemptions (redemption keys), newest first, at most 100; `[]` when it has none; `null` when the voucher id is unknown | 1.2.0 |
+| `vcap_read_order_vouchers( int\|string $order_id )` | WooCommerce order id | `order_id`, `voucher_count`, `voucher_ids` (int[]); `null` when no voucher belongs to the order | 1.2.0 |
+
+**Voucher keys** (always all of them, in this order): `voucher_id`, `type` (`voucher`, `giftcard`, `ticket`, `credit` or
+a connector type), `status` (`active`, `scheduled`, `reserved`, `redeemed`, `expired`, `void`), `usage_mode`
+(`single`, `balance`, …), `currency`, `amount_minor` (face value), `balance_minor` (remaining value as stored),
+`order_id`, `product_id` (variation if any), `user_id` (owner of a store credit account) – each `null` when not set –,
+`transferable` (bool), `expires_at`, `created_at`, `updated_at`, `send_to` (`buyer`, `recipient`, `both`, `other`),
+`delivery_state` (`delivered`, `scheduled`, `pending`, `given_up`), `delivery_at` (planned), `delivered_at`,
+`delivered_roles` (subset of `recipient`, `buyer`), `delivery_failures` (failed attempts of the current delivery),
+`checkins`, `max_checkins`, `last_checkin_at` (tickets), `void_reason` (`refund` or `manual` for a void voucher, from
+`Issuer::voided_after_refund()`, never from the note; else `null`), `redemption_counts` (external redemptions per
+state: `reserved`, `committed`, `released`).
+
+**Redemption keys:** `redemption_id`, `voucher_id`, `state` (`reserved`, `committed`, `released`), `channel`
+(`external`), `amount_minor`, `currency` (of the voucher), `user_id` (`null` for none), `expires_at` (only while
+`reserved`), `created_at`, `committed_at` (only when `committed`). The row is read as stored: an overdue reservation is
+reported as `reserved` with its past `expires_at` (unlike `vcap()->redemptions->get()`, nothing is released here).
+
+**Format.** Amounts are integers in the smallest unit of the currency (`*_minor` with `currency`, ISO 4217 minor units
+from `config/currencies.php`: `12.50 EUR` → `1250`, `500 JPY` → `500`). Timestamps are RFC 3339 in UTC
+(`2026-11-16T09:30:00Z`) or `null`. A string id must be a positive whole number; anything else (a code, a token) is
+treated as unknown and answers `null`.
+
+**Never returned:** the voucher code or any part, hash or mask of it, the token and download links, buyer and
+recipient names and email addresses, the message, personalisation fields, conditions text, notes and reasons (free
+text), the redemption key (`redemption_key`), the redemption `target`, `meta`, tills and receipts. The queries name
+their columns, so these values are not even read. New keys may be added within contract 1.x (CONNECTORS.md → 6.);
+existing keys keep their meaning.
+
+**No side effects.** The functions write nothing (no released reservation, no repaired coupon, no opened store credit
+account, no cache entry, no hook) and do not check the current user: the caller decides who may see the result.
+Contact data and consent of a recipient are not part of them (open question F-13 of the suite specification, TODO.md
+→ VOUCH-WF-15).
+
+```php
+add_action( 'vcap_voucher_event', function ( $voucher_id, $event ) {
+    if ( 'voided' !== $event || ! function_exists( 'vcap_read_voucher' ) ) {
+        return;
+    }
+    $state = vcap_read_voucher( $voucher_id );
+    if ( $state && 'void' === $state['status'] && 'refund' === $state['void_reason'] ) {
+        // e.g. start a follow-up: $state['balance_minor'], $state['currency'], $state['order_id'] …
+    }
+}, 10, 2 );
+```
+
 ## Extension points for connector plugins (since 1.1.0)
 
 ### Voucher types

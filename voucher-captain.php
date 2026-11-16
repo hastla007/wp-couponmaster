@@ -24,9 +24,10 @@ define( 'VCAP_DB_VERSION', '1.8.0' );
  * Version of the public extension contract (hooks, vcap()->api_v1, vcap()->redemptions, REST vcap/v1,
  * VCAP\Contracts\*) – independent of the plugin version. Major = API generation (1 = v1), minor rises with every
  * release that adds hooks, methods or arguments. Add-ons and connectors check this instead of single hooks
- * (CONNECTORS.md, section 6; docs/HOOKS.md). 1.0.0 = plugin 1.1.0, 1.1.0 = plugin 1.2.0.
+ * (CONNECTORS.md, section 6; docs/HOOKS.md). 1.0.0 = plugin 1.1.0, 1.1.0 = plugin 1.2.0, 1.2.0 = plugin 1.2.0 with
+ * the read functions vcap_read_*() / vcap()->read (API.md → "Read functions").
  */
-define( 'VCAP_CONTRACT_VERSION', '1.1.0' );
+define( 'VCAP_CONTRACT_VERSION', '1.2.0' );
 define( 'VCAP_FILE', __FILE__ );
 define( 'VCAP_PATH', plugin_dir_path( __FILE__ ) );
 define( 'VCAP_URL', plugin_dir_url( __FILE__ ) );
@@ -104,6 +105,8 @@ add_action(
 			}
 		}
 		$vcap_plugin = \VCAP\Plugin::instance();
+		// Public read functions vcap_read_*() (contract 1.2.0, API.md → "Read functions").
+		require_once VCAP_PATH . 'src/functions.php';
 		/**
 		 * Voucher Captain has booted: vcap() and its services (api_v1, redemptions …) can be used from here on.
 		 *

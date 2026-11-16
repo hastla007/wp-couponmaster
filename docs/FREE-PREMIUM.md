@@ -102,7 +102,9 @@ Besonders nützlich für ein Add-on: `vcap_settings_sections` (eigener Abschnitt
 `vcap_vouchers_issued`, `vcap_voucher_redeemed`, `vcap_voucher_event`.
 
 **Vertragsversion:** Die Konstante `VCAP_CONTRACT_VERSION` (seit Plugin 1.2.0) nennt die Version dieser öffentlichen
-Schnittstelle, unabhängig von der Plugin-Version: 1.0.0 = Plugin 1.1.0, 1.1.0 = Plugin 1.2.0. Ein Add-on prüft sie
+Schnittstelle, unabhängig von der Plugin-Version: 1.0.0 = Plugin 1.1.0, 1.1.0 = Plugin 1.2.0, 1.2.0 = Plugin 1.2.0 mit den
+Lesefunktionen `vcap_read_*()` / `vcap()->read` (Zustand eines Gutscheins über die ID, ohne Code und personenbezogene
+Daten; API.md → „Read functions“). Ein Add-on prüft sie
 einmal, statt einzelne Hooks abzufragen (CONNECTORS.md → 6.); die erste Version jedes Hooks steht in der Spalte
 „Since“ von docs/HOOKS.md.
 
