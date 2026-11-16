@@ -24,7 +24,7 @@ final class Delivery {
 	 * Daily maintenance, one Action Scheduler action per step so that a failing or slow step never keeps the others
 	 * from running. Cheap purges first, mails and PDFs last.
 	 */
-	public const MAINTENANCE_STEPS = array( 'tmp_pdfs', 'rate_limits', 'mail_failures', 'scan_keys', 'claims', 'upload_dir', 'expire_overdue', 'retention', 'legacy_rows', 'delivery_net', 'expiry_reminders' );
+	public const MAINTENANCE_STEPS = array( 'tmp_pdfs', 'rate_limits', 'mail_failures', 'scan_keys', 'claims', 'upload_dir', 'expire_overdue', 'retention', 'voucher_requests', 'legacy_rows', 'delivery_net', 'expiry_reminders' );
 
 	public function __construct( private Settings $settings, private VoucherRepository $repo ) {}
 
@@ -1551,6 +1551,9 @@ final class Delivery {
 					$this->repo->anonymise_older_than( $days, $budget, $finished );
 				}
 				return $finished;
+			case 'voucher_requests':
+				// D10: open/partial requests after 6 months, issued/handed-over ones after 24 (batches of 50).
+				return ! isset( vcap()->voucher_requests ) || vcap()->voucher_requests->purge_expired( $budget );
 			case 'legacy_rows':
 				Install::move_legacy_rows_locked( $budget );
 				return Install::hash_event_notes( $budget );

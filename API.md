@@ -257,7 +257,7 @@ The voucher line snapshot (`VCAP\Issuer::line_data( $item )`, order item meta `_
 ## Captain Suite (since 1.2.0)
 
 Two in-process PHP contracts for the separate plugins WP Review Captain and WP Form Captain. Both are versioned
-(`CONTRACT` `1.0.0`; a consumer checks the major version), carry no personal data in events, are idempotent and
+(`CONTRACT`: review source `1.1.0`, voucher requests `1.0.0`; a consumer checks the major version), carry no personal data in events, are idempotent and
 never touch the other plugin's tables. Voucher Captain stays the only owner of codes, values, issuing, redemption,
 refunds and voucher personal data.
 
@@ -274,6 +274,7 @@ Which redemptions count (all conditions):
 | Product setting *Redemption confirms a service (for review invitations)* (`_vcap_review_service`) | off; `vcap_review_service_voucher` ( `bool`, `Voucher` ) for vouchers without a product. Store credit and tickets never count. |
 | Channel | `counter` (scanner, *Mark as redeemed (store)*: staff confirm on site). `external` (redemption API) only when added to `vcap_review_channels` **and** the target starts with a prefix of `vcap_review_external_target_prefixes` (e.g. `spa:`); the built-in `passcaptain:` targets never. `shop` never: the order is a purchase, which the review plugin judges by the order itself. |
 | A review plugin listens | `vcap_review_redemption_eligible` has a listener (filter `vcap_review_source_active`). Without one nothing is recorded. |
+| One service = one request | only the **first** confirmed redemption of a voucher becomes `eligible` – also for gift cards with a remaining value (`usage_mode` `balance`) redeemed in several visits. Further redemptions of the same voucher (counter or external) create no event and no reference record while that one is eligible. When the first one is revoked (`redeem_reversed`, `refunded`), the next confirmed redemption may become eligible again; redemptions made in between are not reported afterwards. Filter `vcap_review_first_redemption_only` ( `bool $only = true`, `Voucher` ): `false` counts every redemption on its own (owner decision 16.11.2026). |
 
 Never a review source: purchases, issuing, delivery, top-ups, store credit, discount codes (campaign coupons are no
 vouchers), reservations that were released.
@@ -288,7 +289,7 @@ Events (after the COMMIT, once per reference and event):
   eligible is revoked; revoked is final. With `erased`, `deleted` and `no_recipient` the reference is also unlinked
   from the voucher, so no address can be resolved for it any more.
 
-Payload (exactly these keys): `contract` (`1.0.0`), `event` (`eligible`/`revoked`), `event_id` (`{reference}:{event}`),
+Payload (exactly these keys): `contract` (`1.1.0`; `1.0.0` before the `locale` addition), `event` (`eligible`/`revoked`), `event_id` (`{reference}:{event}`),
 `reference`, `source` (`voucher-captain`), `site_id`, `channel` (`counter`/`external`), `experience_id` (voucher
 product id), `occurred_at` (UTC), `reason`. No code, name, email, amount, till or receipt.
 
@@ -298,7 +299,12 @@ always has the same reference, a repeated event creates no duplicate. Stored as 
 voucher id, product, channel, times; removed on uninstall).
 
 Service methods: `contract()`, `get( $reference )` (current payload or `null`, for reconciliation),
-`recipient( $reference )` → `{reference, email, name, role}` (`role` `recipient`, else `buyer`) or `WP_Error`:
+`recipient( $reference )` → `{reference, email, name, role, locale}` (`role` `recipient`, else `buyer`) or `WP_Error`.
+`locale` (since contract 1.1.0, additive – consumers of 1.0.0 ignore it) is the language for the invitation, in this
+order: the language of the voucher's order when known (WPML/Polylang, `vcap_order_language`, then the filter
+`vcap_email_locale` as for the voucher emails), else the locale of the customer account with that address
+(`get_user_locale()`), else the site language (`get_locale()`); filter `vcap_review_recipient_locale` ( `string`,
+`Voucher`, `role` ). Errors:
 `vcap_review_not_allowed` (403), `vcap_review_unknown_reference` (404), `vcap_review_revoked` (410),
 `vcap_review_no_recipient` (404), `vcap_review_opted_out` (409). Allowed for voucher managers, shop managers and
 background runs without a logged-in user (WP-Cron, WP-CLI); narrow or widen with `vcap_review_recipient_allowed`
@@ -350,7 +356,42 @@ page). A person gets only their own part: as contact the contact data, message a
 address and message. Erasure blanks exactly these fields (company, value and count stay). The suggested privacy
 policy text names the requests. Actions (no personal data): `vcap_voucher_request_received` ( `id`, `kind`,
 `vouchers` ), `vcap_voucher_request_confirmed` ( `id`, `state`, `voucher_ids`, `user_id` ),
-`vcap_voucher_request_rejected` ( `id`, `user_id` ).
+`vcap_voucher_request_rejected` ( `id`, `user_id` ), `vcap_voucher_request_handed_over` ( `id`, `order_id`,
+`user_id` ), `vcap_voucher_request_expired` ( `id` ).
+
+Retention (owner decision 16.11.2026): the daily maintenance (step `voucher_requests`, batches of 50 within the step's
+time budget) deletes requests in the states `open` and `partial` 6 months after their receipt (a `partial` one after
+the last confirmation – it was never completed and still holds recipient data, so it is treated like an open one) and
+requests in the states `issued` and `handed_over` 24 months after the issuing or the hand-over. Rejected requests are
+deleted at once by `reject()`. A deleted request takes its form-reference claim with it (the same form entry could be
+submitted again afterwards). Filter `vcap_voucher_requests_retention_months` ( `array{open:int, closed:int}` ,
+default `[ 'open' => 6, 'closed' => 24 ]`; `0` keeps that group). The suggested privacy policy text names both periods.
+
+#### Hand-over to a company order (add-on)
+
+Owner decision 16.11.2026: both features stay – the core keeps *Voucher requests*; an add-on (e.g. Voucher Captain
+Pro, company orders) may take a request over. Without such an add-on nothing changes.
+
+- Availability: `apply_filters( 'vcap_voucher_request_handover_available', false, int $request_id )` → `bool`. The
+  request view shows *Take over as company order* only when it is `true`, the request is `open` (nothing issued yet),
+  has at least 2 recipients and the user has `vcap_manage_vouchers`.
+- Hand-over (admin-post `vcap_request_handover`, nonce per request, right `vcap_manage_vouchers`, or
+  `$requests->hand_over( $request_id )`): `$result = apply_filters( 'vcap_voucher_request_handover', null, array $handover )`
+  with exactly these keys: `contract` (`'1.0.0'`), `request_id` (int), `reference` (`vcap-request:{request_id}`,
+  stable – the add-on de-duplicates by it: the same reference again answers the same order), `company`
+  (`name`, `contact_name`, `contact_email`, `contact_phone`), `currency` (ISO 4217), `recipients` (list of `name`,
+  `email`, `amount` (float, the request's value per voucher, 0 when none), `message`), `note` (message and note of the
+  request, `''` when none).
+- Expected answer: `array{ url: string, order_id: int }` (admin URL of the company order's preview) or `WP_Error`.
+  `null` (nobody answered) → `vcap_handover_unavailable` *No extension takes over this request.*; an answer without
+  order id or URL → `vcap_handover_invalid`.
+- Success: state `handed_over` (`VoucherRequests::STATE_HANDED_OVER`), meta `_vcap_request_handover` (`order_id`,
+  `url`, `at` UTC, `user_id`), the recipients are removed as after issuing (only the count stays – they belong to the
+  company order now), redirect to `url`; the request view shows *Handed over to company order #{order_id}*. A second
+  hand-over (double click) answers the stored order without asking the add-on again. On a `WP_Error` the request
+  view shows the message and the request stays `open` with all its data.
+- A handed-over request cannot be issued (`confirm()` → `vcap_handed_over`, 409) or rejected. Privacy export and
+  erasure treat `handed_over` like `issued`.
 
 ## Extension points for add-ons (public API since 1.2.0)
 

@@ -164,6 +164,12 @@ try {
 	vcap_wf_assert( array() === $mine && 1 === vcap_wf_count( (int) $handed->id, 'workflow_handover' ) && 0 === vcap_wf_count( (int) $handed->id, 'expiry_reminder' ) && 1 === count( $over ) && 7 === $over[0]['data']['days'] && 'buyer' === $over[0]['data']['role'], 'WF-04: with the switch on and a compatible workflow plugin the reminder is handed over once, not mailed', array( $mine, $over ) );
 	$contact = $provider->contact( array( 'voucher_id' => $handed->id, 'communication' => 'expiry_reminder' ) );
 	vcap_wf_assert( is_array( $contact ) && "wf-handed-{$tag}@example.com" === $contact['email'] && ! str_contains( (string) wp_json_encode( $contact ), $handed->code ), 'WF-04: the workflow plugin gets the address of a handed-over communication, not the code', $contact );
+	// Decision D9 (16.11.2026): every read of contact data is in the history and the privacy export, never an event.
+	$reads = vcap()->vouchers->events_of( (int) $handed->id, VCAP\Workflow\Services::CONTACT_EVENT );
+	vcap_wf_assert( 1 === count( $reads ) && null === $reads[0]['amount'] && (int) get_current_user_id() === (int) $reads[0]['user_id'] && ! str_contains( (string) $reads[0]['note'], '@example.com' ) && ! str_contains( (string) $reads[0]['note'], $handed->code ), 'D9: contact() writes one history entry workflow_contact_read without address or code', $reads );
+	vcap_wf_assert( array() === array_filter( $events, static fn( $e ) => (int) $e['source_id'] === (int) $handed->id && 'voucher.communication_handed_over' !== $e['type'] ), 'D9: reading the contact data fires no workflow event', $events );
+	$export = ( new VCAP\Privacy( vcap()->vouchers ) )->export( "wf-handed-{$tag}@example.com" );
+	vcap_wf_assert( in_array( 'vcap-workflow-contact', array_column( $export['data'], 'group_id' ), true ), 'D9: the privacy export of the voucher lists the read of its contact data', $export['data'] );
 
 	foreach ( array( 'missing' => null, 'major' => '2.0.0', 'expired' => 'expired' ) as $case => $change ) {
 		$native = $due( "wf-native-{$case}-{$tag}@example.com" );

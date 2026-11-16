@@ -13799,9 +13799,6 @@ msgstr "Gutschein %1$d: %2$s"
 msgid "Only open voucher requests can be rejected."
 msgstr "Nur offene Gutschein-Anfragen können abgelehnt werden."
 
-msgid "Voucher requests: when you ask for vouchers through a form on this website (for example a company order or a personalised voucher), we store the contact details you enter (company, name, email address, phone number), your message and note, and the names, email addresses and messages of the recipients you list, so that we can check the request and issue the vouchers. No voucher is issued and no payment is taken by the form itself. When the vouchers are issued, the recipient list is removed from the request and kept only with the vouchers; a rejected request is deleted."
-msgstr "Gutschein-Anfragen: Wenn Sie über ein Formular auf dieser Website Gutscheine anfragen (zum Beispiel als Firmenbestellung oder als personalisierten Gutschein), speichern wir die von Ihnen eingegebenen Kontaktdaten (Firma, Name, E-Mail-Adresse, Telefonnummer), Ihre Nachricht und Notiz sowie Namen, E-Mail-Adressen und Nachrichten der von Ihnen genannten Empfänger, damit wir die Anfrage prüfen und die Gutscheine ausstellen können. Das Formular selbst stellt keinen Gutschein aus und nimmt keine Zahlung entgegen. Sobald die Gutscheine ausgestellt sind, wird die Empfängerliste aus der Anfrage entfernt und nur noch bei den Gutscheinen gespeichert; eine abgelehnte Anfrage wird gelöscht."
-
 msgid "Redemption confirms a service (for review invitations)"
 msgstr "Einlösung bestätigt eine Leistung (für Bewertungseinladungen)"
 
@@ -13938,3 +13935,54 @@ msgstr "Der für „%1$s“ gewählte Gutscheinbetrag (%2$s) entspricht nicht de
 
 msgid "Only voucher managers can change the voucher settings of a product. Your changes to these settings are not saved; the other product data is."
 msgstr "Nur Gutschein-Verwalter können die Gutscheineinstellungen eines Produkts ändern. Ihre Änderungen an diesen Einstellungen werden nicht gespeichert, die übrigen Produktdaten schon."
+
+msgid "Handed over to a company order"
+msgstr "An Firmenbestellung übergeben"
+
+msgid "Handed over to company order #%d"
+msgstr "An Firmenbestellung #%d übergeben"
+
+msgid "An extension can take this request over as a company order (preview, invoice, issuing in one step). The recipients then move to the company order and no voucher is issued here."
+msgstr "Eine Erweiterung kann diese Anfrage als Firmenbestellung übernehmen (Vorschau, Rechnung, Ausstellung in einem Schritt). Die Empfänger gehen dann in die Firmenbestellung über, und hier wird kein Gutschein ausgestellt."
+
+msgid "Take over as company order"
+msgstr "Als Firmenbestellung übernehmen"
+
+msgid "The request was not taken over as a company order: %s"
+msgstr "Die Anfrage wurde nicht als Firmenbestellung übernommen: %s"
+
+msgid "This voucher request was handed over to a company order. Its vouchers are issued there."
+msgstr "Diese Gutschein-Anfrage wurde an eine Firmenbestellung übergeben. Ihre Gutscheine werden dort ausgestellt."
+
+msgid "Only open voucher requests with at least %d recipients can be taken over as a company order."
+msgstr "Nur offene Gutschein-Anfragen mit mindestens %d Empfängern können als Firmenbestellung übernommen werden."
+
+msgid "No extension takes over this request."
+msgstr "Keine Erweiterung übernimmt die Anfrage."
+
+msgid "The extension did not answer with a company order. The request stays open."
+msgstr "Die Erweiterung hat keine Firmenbestellung zurückgegeben. Die Anfrage bleibt offen."
+
+msgid "Contact data read by %1$s (communication: %2$s, role: %3$s)."
+msgstr "Kontaktdaten von %1$s abgerufen (Kommunikation: %2$s, Rolle: %3$s)."
+
+msgid "Contact data read by the workflow plugin"
+msgstr "Kontaktdaten vom Workflow-Plugin abgerufen"
+
+msgid "Plugin"
+msgstr "Plugin"
+
+msgid "Communication"
+msgstr "Kommunikation"
+
+msgid "Voucher requests: when you ask for vouchers through a form on this website (for example a company order or a personalised voucher), we store the contact details you enter (company, name, email address, phone number), your message and note, and the names, email addresses and messages of the recipients you list, so that we can check the request and issue the vouchers. No voucher is issued and no payment is taken by the form itself. When the vouchers are issued, the recipient list is removed from the request and kept only with the vouchers; when the request is taken over as a company order, the recipient list moves to that order. A rejected request is deleted at once. Requests that were never completed are deleted after 6 months, issued requests and requests taken over as a company order after 24 months."
+msgstr "Gutschein-Anfragen: Wenn Sie über ein Formular auf dieser Website Gutscheine anfragen (zum Beispiel als Firmenbestellung oder als personalisierten Gutschein), speichern wir die von Ihnen eingegebenen Kontaktdaten (Firma, Name, E-Mail-Adresse, Telefonnummer), Ihre Nachricht und Notiz sowie Namen, E-Mail-Adressen und Nachrichten der von Ihnen genannten Empfänger, damit wir die Anfrage prüfen und die Gutscheine ausstellen können. Das Formular selbst stellt keinen Gutschein aus und nimmt keine Zahlung entgegen. Sobald die Gutscheine ausgestellt sind, wird die Empfängerliste aus der Anfrage entfernt und nur noch bei den Gutscheinen gespeichert; wird die Anfrage als Firmenbestellung übernommen, geht die Empfängerliste in diese Bestellung über. Eine abgelehnte Anfrage wird sofort gelöscht. Nie abgeschlossene Anfragen werden nach 6 Monaten gelöscht, ausgestellte und als Firmenbestellung übernommene Anfragen nach 24 Monaten."
+
+msgid "New workflow instance because the address of the website changed (copy/staging)."
+msgstr "Neue Workflow-Instanz, weil sich die Adresse der Website geändert hat (Kopie/Staging)."
+
+msgid "A connected workflow plugin receives new event ids from now on; events of the original website are not repeated here."
+msgstr "Ein angebundenes Workflow-Plugin erhält ab jetzt neue Ereignis-IDs; Ereignisse der ursprünglichen Website werden hier nicht wiederholt."
+
+msgid "%1$s Since %2$s UTC, previous instance: %3$s"
+msgstr "%1$s Seit %2$s UTC, vorherige Instanz: %3$s"

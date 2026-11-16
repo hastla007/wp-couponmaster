@@ -14,7 +14,7 @@ use VCAP\Voucher;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Review source contract v1 (API.md → "Captain Suite: review source"). Voucher Captain only reports that a
+ * Review source contract v1 (API.md → "Captain Suite: review source"); 1.1.0 adds `locale` to recipient(). Voucher Captain only reports that a
  * redemption confirmed a service – it never invites, emails or stores reviews; that is WP Review Captain's job.
  *
  * A redemption becomes a review source ("eligible") only when all of this holds:
@@ -27,6 +27,11 @@ defined( 'ABSPATH' ) || exit;
  *   store credit or discount codes (plain WooCommerce coupons that are no vouchers);
  * - a review plugin listens (`vcap_review_redemption_eligible`, or the filter `vcap_review_source_active`).
  *
+ * One service = one request (owner decision 16.11.2026): only the FIRST confirmed redemption of a voucher becomes
+ * eligible – later redemptions of the same voucher (a gift card used in several visits) create no event. When that
+ * first redemption is revoked (redeem_reversed, refunded), the next confirmed redemption may become eligible again.
+ * Filter `vcap_review_first_redemption_only` (default true) switches back to one event per redemption.
+ *
  * Every redemption has one stable reference (same redemption ⇒ same reference); a repeated event for it is ignored.
  * It is "revoked" once when the counter redemption is cancelled (redeem_reversed), the external redemption is
  * refunded (any amount) or the voucher is voided. Payloads carry no code, name, email or amount; the address is
@@ -35,7 +40,8 @@ defined( 'ABSPATH' ) || exit;
  * @since 1.2.0
  */
 final class ReviewSource {
-	public const CONTRACT         = '1.0.0';
+	/** 1.1.0: recipient() also answers `locale` (additive). */
+	public const CONTRACT         = '1.1.0';
 	public const SOURCE           = 'voucher-captain';
 	public const PRODUCT_META     = '_vcap_review_service';
 	public const EVENT_ELIGIBLE   = 'vcap_review_redemption_eligible';
@@ -45,6 +51,10 @@ final class ReviewSource {
 	public const OPTION_PREFIX = 'vcap_review_ref_';
 	/** References of a voucher (for "voided"). */
 	public const INDEX_PREFIX = 'vcap_review_voucher_';
+	/** Claim of a voucher's open review source (option, not autoloaded): the eligible reference (first-only mode). */
+	public const CLAIM_PREFIX = 'vcap_review_claim_';
+	/** Seconds after which a claim without a record counts as abandoned. */
+	private const CLAIM_STALE = 60;
 	/** Most references kept per voucher index (a reusable card redeemed very often). */
 	public const INDEX_MAX = 100;
 	/** The only keys of an event payload (allowlist, no personal data). */
@@ -189,7 +199,10 @@ final class ReviewSource {
 			return;
 		}
 		$reference = self::reference( $identity );
-		$record    = array(
+		if ( self::first_redemption_only( $voucher ) && ! $this->claim( (int) $voucher->id, $reference ) ) {
+			return; // One service = one request: the voucher has an eligible redemption already.
+		}
+		$record = array(
 			'v'             => 1,
 			'state'         => 'eligible',
 			'voucher_id'    => (int) $voucher->id,
@@ -207,6 +220,65 @@ final class ReviewSource {
 		$index[] = $reference;
 		update_option( self::INDEX_PREFIX . (int) $voucher->id, array_slice( array_values( array_unique( $index ) ), -self::INDEX_MAX ), false );
 		$this->emit( $reference, $record );
+	}
+
+	/**
+	 * Whether only the first confirmed redemption of a voucher counts (default true, owner decision 16.11.2026):
+	 * a gift card redeemed in several visits asks for one review, not one per visit.
+	 */
+	public static function first_redemption_only( Voucher $voucher ): bool {
+		/**
+		 * Whether only the first confirmed redemption of a voucher becomes a review source ("eligible"). Further
+		 * redemptions of the same voucher create no event while that one is eligible; after it was revoked
+		 * (redeem_reversed, refunded) the next confirmed redemption may become eligible. False: every redemption
+		 * counts on its own.
+		 *
+		 * @since 1.2.0
+		 * @param bool    $only    Default true.
+		 * @param Voucher $voucher Voucher.
+		 */
+		return (bool) apply_filters( 'vcap_review_first_redemption_only', true, $voucher );
+	}
+
+	/**
+	 * The eligible reference of a voucher, '' when none is eligible (any more).
+	 *
+	 * @param int $voucher_id Voucher id.
+	 */
+	public function open_reference( int $voucher_id ): string {
+		foreach ( (array) get_option( self::INDEX_PREFIX . $voucher_id, array() ) as $reference ) {
+			$record = self::record( (string) $reference );
+			if ( $record && 'eligible' === $record['state'] ) {
+				return (string) $reference;
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * First-only mode: takes the voucher's claim for $reference. False when another (or this) reference of the
+	 * voucher is eligible already. The claim is an option created with add_option() (one row per voucher), so two
+	 * redemptions at the same moment do not both become eligible; a claim whose reference was revoked is taken over.
+	 */
+	private function claim( int $voucher_id, string $reference ): bool {
+		if ( '' !== $this->open_reference( $voucher_id ) ) {
+			return false;
+		}
+		$key   = self::CLAIM_PREFIX . $voucher_id;
+		$claim = array(
+			'reference' => $reference,
+			'at'        => time(),
+		);
+		if ( add_option( $key, $claim, '', false ) ) {
+			return true;
+		}
+		$held   = (array) get_option( $key, array() );
+		$record = self::record( (string) ( $held['reference'] ?? '' ) );
+		if ( $record ? 'eligible' === $record['state'] : (int) ( $held['at'] ?? 0 ) > time() - self::CLAIM_STALE ) {
+			return false; // Eligible, or claimed by a redemption that is being recorded right now.
+		}
+		update_option( $key, $claim, false ); // The claimed reference was revoked (or never recorded): take it over.
+		return true;
 	}
 
 	/**
@@ -277,6 +349,7 @@ final class ReviewSource {
 		if ( $index ) {
 			delete_option( self::INDEX_PREFIX . $voucher_id );
 		}
+		delete_option( self::CLAIM_PREFIX . $voucher_id );
 	}
 
 	/** Marks an eligible reference as revoked and reports it once. False when unknown or revoked already. */
@@ -309,7 +382,9 @@ final class ReviewSource {
 	 * `vcap_review_recipient_allowed`); refused for revoked references and opted-out addresses. Consent, frequency
 	 * limits and the opt-out link of the invitation are the review plugin's duty.
 	 *
-	 * @return array{reference:string, email:string, name:string, role:string}|\WP_Error
+	 * Since contract 1.1.0 the answer also carries `locale` (locale_for()).
+	 *
+	 * @return array{reference:string, email:string, name:string, role:string, locale:string}|\WP_Error
 	 */
 	public function recipient( string $reference ) {
 		if ( ! self::can_resolve() ) {
@@ -355,7 +430,42 @@ final class ReviewSource {
 			'email'     => $email,
 			'name'      => 'recipient' === $role ? $voucher->recipient_name : $voucher->buyer_name,
 			'role'      => $role,
+			'locale'    => self::locale_for( $voucher, $email, $role ),
 		);
+	}
+
+	/**
+	 * Language of a review invitation (contract 1.1.0): the language of the voucher's order when it is known (WPML,
+	 * Polylang, `vcap_order_language`; then through `vcap_email_locale` like the voucher emails), else the locale of
+	 * the customer account with that address (get_user_locale()), else the site language (get_locale()).
+	 *
+	 * @param string $email Address the invitation goes to.
+	 * @param string $role  recipient or buyer.
+	 */
+	public static function locale_for( Voucher $voucher, string $email, string $role = 'recipient' ): string {
+		$order  = $voucher->order();
+		$locale = \VCAP\Compat\Multilingual::locale_of( \VCAP\Compat\Multilingual::order_language( $order ) );
+		if ( '' !== $locale ) {
+			$locale = (string) apply_filters( 'vcap_email_locale', $locale, $voucher, $order, null );
+		}
+		if ( '' === $locale && '' !== $email && function_exists( 'get_user_by' ) ) {
+			$user = get_user_by( 'email', $email );
+			if ( is_object( $user ) && (int) ( $user->ID ?? 0 ) > 0 ) {
+				$locale = (string) get_user_locale( (int) $user->ID );
+			}
+		}
+		if ( '' === $locale ) {
+			$locale = (string) get_locale();
+		}
+		/**
+		 * Locale of a review invitation answered by recipient() (contract 1.1.0).
+		 *
+		 * @since 1.2.0
+		 * @param string  $locale  Order language, else account locale, else site language.
+		 * @param Voucher $voucher Voucher.
+		 * @param string  $role    recipient or buyer.
+		 */
+		return (string) apply_filters( 'vcap_review_recipient_locale', $locale, $voucher, $role );
 	}
 
 	/** Who may resolve addresses: voucher/shop managers, or a background run without a user. */
@@ -410,7 +520,7 @@ final class ReviewSource {
 		if ( 'eligible' === $payload['event'] ) {
 			/**
 			 * A redemption confirmed a service and may be used for a review invitation (once per reference). Payload
-			 * (contract 1.0.0, no personal data): contract, event, event_id, reference, source, site_id, channel,
+			 * (contract 1.x, no personal data): contract, event, event_id, reference, source, site_id, channel,
 			 * experience_id (voucher product), occurred_at (UTC), reason.
 			 *
 			 * @since 1.2.0

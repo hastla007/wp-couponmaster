@@ -209,6 +209,10 @@ final class Note {
 				// WF-03: the service, a hash of the idempotency key and of the request (no personal data).
 				/* translators: 1: action (issue, resend, void, reactivate, redeem), 2: short reference of the request */
 				return sprintf( __( 'Requested by the workflow plugin: %1$s (request %2$s)', 'voucher-captain' ), Workflow\Services::label( (string) $a( 0 ) ), substr( (string) $a( 1 ), 0, 8 ) );
+			case Workflow\Services::CONTACT_EVENT:
+				// D9: plugin, communication and role – no address, name or code.
+				/* translators: 1: workflow plugin, e.g. "Workflow Captain", 2: communication, e.g. "Expiry reminder", 3: role, e.g. "Recipient" */
+				return sprintf( __( 'Contact data read by %1$s (communication: %2$s, role: %3$s).', 'voucher-captain' ), (string) $a( 0 ), Workflow\Handover::labels()[ (string) $a( 1 ) ] ?? (string) $a( 1 ), self::roles( (string) $a( 2 ) ) );
 			case Workflow\Handover::EVENT:
 				$label = Workflow\Handover::labels()[ (string) $a( 0 ) ] ?? (string) $a( 0 );
 				return (int) $a( 1 ) > 0

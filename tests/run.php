@@ -2372,7 +2372,7 @@ $cs_voucher = static function ( int $id, array $props = array() ): Voucher {
 	}
 	return $v;
 };
-$cs_vouchers = array( 11 => $cs_voucher( 11 ), 12 => $cs_voucher( 12, array( 'product_id' => 502 ) ), 13 => $cs_voucher( 13, array( 'type' => 'credit' ) ), 14 => $cs_voucher( 14, array( 'recipient_email' => '' ) ) );
+$cs_vouchers = array( 11 => $cs_voucher( 11 ), 12 => $cs_voucher( 12, array( 'product_id' => 502 ) ), 13 => $cs_voucher( 13, array( 'type' => 'credit' ) ), 14 => $cs_voucher( 14, array( 'recipient_email' => '' ) ), 15 => $cs_voucher( 15 ), 16 => $cs_voucher( 16, array( 'type' => 'giftcard', 'usage_mode' => 'balance', 'balance' => 50.0 ) ), 17 => $cs_voucher( 17, array( 'type' => 'giftcard', 'usage_mode' => 'balance', 'balance' => 50.0 ) ) );
 $GLOBALS['vcap_test_meta'][501][ ReviewSource::PRODUCT_META ] = 'yes';
 $GLOBALS['vcap_test_meta'][502][ ReviewSource::PRODUCT_META ] = 'no';
 $cs_source = new ReviewSource( static fn( int $id ) => $cs_vouchers[ $id ] ?? null );
@@ -2384,7 +2384,7 @@ do_action( 'vcap_voucher_redeemed', $cs_counter );
 check( 'Captain Suite review: without a listening review plugin a redemption records nothing (missing connector changes nothing)', ! ReviewSource::active() && null === $cs_source->get( ReviewSource::reference( 'counter:701' ) ) );
 add_action( ReviewSource::EVENT_ELIGIBLE, static function ( $p ) use ( &$cs_events ) { $cs_events[] = $p; } );
 add_action( ReviewSource::EVENT_REVOKED, static function ( $p ) use ( &$cs_events ) { $cs_events[] = $p; } );
-check( 'Captain Suite review: versioned service through vcap_review_source_v1 (contract 1.0.0)', $cs_source === apply_filters( 'vcap_review_source_v1', null ) && '1.0.0' === $cs_source->contract() && ReviewSource::active() );
+check( 'Captain Suite review: versioned service through vcap_review_source_v1 (contract 1.1.0: recipient() adds locale)', $cs_source === apply_filters( 'vcap_review_source_v1', null ) && '1.1.0' === $cs_source->contract() && '1' === strtok( $cs_source->contract(), '.' ) && ReviewSource::active() );
 do_action( 'vcap_voucher_redeemed', $cs_counter );
 $cs_ref = ReviewSource::reference( 'counter:701' );
 $cs_first = $cs_events[0] ?? array();
@@ -2406,7 +2406,7 @@ do_action( 'vcap_voucher_event', 11, 'issued', 80.0, 80.0, '', 0, 'admin', 1 );
 do_action( 'vcap_voucher_event', 11, 'topup', 20.0, 100.0, '', 42, 'checkout', 1 );
 do_action( 'vcap_gift_card_topped_up', $cs_vouchers[11], 20.0 );
 check( 'Captain Suite review: shop orders, unmarked products, store credit, unknown codes (plain discount coupons), issuing and top-ups are never eligible', $cs_before === count( $cs_events ), json_encode( array_slice( $cs_events, $cs_before ) ) );
-$cs_external = array( 'voucher_id' => 11, 'channel' => 'external', 'redemption_key' => 'spa:booking:77', 'target' => 'spa:room-1', 'amount' => 80.0 );
+$cs_external = array( 'voucher_id' => 15, 'channel' => 'external', 'redemption_key' => 'spa:booking:77', 'target' => 'spa:room-1', 'amount' => 80.0 );
 do_action( 'vcap_voucher_redeemed', $cs_external );
 check( 'Captain Suite review: external redemptions do not count by default', $cs_before === count( $cs_events ) );
 add_filter( 'vcap_review_channels', static fn() => array( 'counter', 'external', 'shop' ) );
@@ -2433,6 +2433,38 @@ do_action( 'vcap_voucher_redeemed', array( 'event_id' => 709, 'voucher_id' => 14
 $cs_before = count( $cs_events );
 do_action( 'vcap_voucher_event', 11, 'voided', null, 0.0, 'refund', 5, 'admin', 1 );
 check( 'Captain Suite review: voiding the voucher revokes its open references (already revoked ones are not sent again)', $cs_before + 1 === count( $cs_events ) && ReviewSource::reference( 'counter:708' ) === end( $cs_events )['reference'] && 'voided' === end( $cs_events )['reason'] );
+// D4 (owner decision 16.11.2026): one service = one request – only the first confirmed redemption of a voucher.
+$cs_before = count( $cs_events );
+do_action( 'vcap_voucher_redeemed', array( 'voucher_id' => 16, 'event_id' => 901 ) + $cs_counter );
+do_action( 'vcap_voucher_redeemed', array( 'voucher_id' => 16, 'event_id' => 902 ) + $cs_counter );
+do_action( 'vcap_voucher_redeemed', array( 'voucher_id' => 16, 'event_id' => 902 ) + $cs_counter );
+check( 'Decision D4: a gift card (balance) redeemed twice at the counter is eligible once – the second redemption creates no event and no record', $cs_before + 1 === count( $cs_events ) && ReviewSource::reference( 'counter:901' ) === end( $cs_events )['reference'] && null === $cs_source->get( ReviewSource::reference( 'counter:902' ) ) && ReviewSource::reference( 'counter:901' ) === $cs_source->open_reference( 16 ) && ReviewSource::first_redemption_only( $cs_vouchers[16] ), json_encode( array_slice( $cs_events, $cs_before ) ) );
+do_action( 'vcap_redemption_reversed', 16, 902, 10.0, 'not eligible' );
+check( 'Decision D4: cancelling a later redemption that was never eligible sends nothing', $cs_before + 1 === count( $cs_events ) );
+do_action( 'vcap_redemption_reversed', 16, 901, 10.0, 'wrong card' );
+do_action( 'vcap_voucher_redeemed', array( 'voucher_id' => 16, 'event_id' => 903 ) + $cs_counter );
+do_action( 'vcap_voucher_redeemed', array( 'voucher_id' => 16, 'event_id' => 904 ) + $cs_counter );
+$cs_d4 = array_slice( $cs_events, $cs_before + 1 );
+check( 'Decision D4: after the first redemption was revoked (redeem_reversed) the next confirmed redemption is eligible again – and only that one', 2 === count( $cs_d4 ) && 'revoked' === $cs_d4[0]['event'] && 'redeem_reversed' === $cs_d4[0]['reason'] && 'eligible' === $cs_d4[1]['event'] && ReviewSource::reference( 'counter:903' ) === $cs_d4[1]['reference'] && null === $cs_source->get( ReviewSource::reference( 'counter:904' ) ), json_encode( $cs_d4 ) );
+add_filter( 'vcap_review_external_target_prefixes', static fn() => array( 'spa:' ) );
+do_action( 'vcap_voucher_redeemed', array( 'voucher_id' => 16, 'redemption_key' => 'spa:booking:91' ) + $cs_external );
+do_action( 'vcap_redemption_refunded', array( 'redemption_key' => 'spa:booking:91' ), 5.0 );
+check( 'Decision D4: an external redemption of the same voucher counts as a further redemption (no event while the first is eligible)', $cs_before + 3 === count( $cs_events ) );
+$GLOBALS['vcap_test_options'][ ReviewSource::CLAIM_PREFIX . 17 ] = array( 'reference' => ReviewSource::reference( 'counter:999001' ), 'at' => time() );
+do_action( 'vcap_voucher_redeemed', array( 'voucher_id' => 17, 'event_id' => 905 ) + $cs_counter );
+$cs_d4_busy = count( $cs_events );
+$GLOBALS['vcap_test_options'][ ReviewSource::CLAIM_PREFIX . 17 ]['at'] = time() - 120;
+do_action( 'vcap_voucher_redeemed', array( 'voucher_id' => 17, 'event_id' => 906 ) + $cs_counter );
+check( 'Decision D4: two redemptions at the same moment – a fresh claim of another redemption wins (no second event), an abandoned claim is taken over', $cs_before + 3 === $cs_d4_busy && $cs_before + 4 === count( $cs_events ) && ReviewSource::reference( 'counter:906' ) === end( $cs_events )['reference'] && ReviewSource::reference( 'counter:906' ) === get_option( ReviewSource::CLAIM_PREFIX . 17 )['reference'] );
+add_filter( 'vcap_review_first_redemption_only', static fn() => false );
+do_action( 'vcap_voucher_redeemed', array( 'voucher_id' => 16, 'event_id' => 907 ) + $cs_counter );
+check( 'Decision D4: filter vcap_review_first_redemption_only false – every confirmed redemption counts on its own again', $cs_before + 5 === count( $cs_events ) && ReviewSource::reference( 'counter:907' ) === end( $cs_events )['reference'] && 'eligible' === $cs_source->get( ReviewSource::reference( 'counter:903' ) )['event'] );
+array_pop( $GLOBALS['vcap_test_filters']['vcap_review_first_redemption_only'] );
+array_pop( $GLOBALS['vcap_test_filters']['vcap_review_external_target_prefixes'] );
+$cs_source->forget_voucher( 17, 'deleted' );
+check( 'Decision D4: the claim of a voucher goes with its references (erased or deleted voucher)', false === get_option( ReviewSource::CLAIM_PREFIX . 17, false ) );
+$cs_d4_doc = (string) file_get_contents( dirname( __DIR__ ) . '/API.md' );
+check( 'Decision D4: API.md documents the first-redemption rule and its filter in "Which redemptions count"', str_contains( $cs_d4_doc, '`vcap_review_first_redemption_only`' ) && str_contains( $cs_d4_doc, 'only the **first** confirmed redemption' ) );
 // Recipient: only for authorised callers, never for revoked or opted-out references.
 $cs_ref14 = ReviewSource::reference( 'counter:709' );
 $cs_no    = $cs_source->recipient( $cs_ref14 );
@@ -2445,12 +2477,36 @@ $cs_out   = $cs_source->recipient( $cs_ref14 );
 check(
 	'Captain Suite review: the address is resolved only with permission (recipient, else buyer), refused for revoked, unknown and opted-out references',
 	is_wp_error( $cs_no ) && 'vcap_review_not_allowed' === $cs_no->get_error_code()
-		&& is_array( $cs_rec ) && 'bea@example.com' === $cs_rec['email'] && 'buyer' === $cs_rec['role'] && array( 'reference', 'email', 'name', 'role' ) === array_keys( $cs_rec )
+		&& is_array( $cs_rec ) && 'bea@example.com' === $cs_rec['email'] && 'buyer' === $cs_rec['role'] && array( 'reference', 'email', 'name', 'role', 'locale' ) === array_keys( $cs_rec ) && 'de_DE' === $cs_rec['locale']
 		&& is_wp_error( $cs_gone ) && 'vcap_review_revoked' === $cs_gone->get_error_code()
 		&& is_wp_error( $cs_bad ) && 'vcap_review_unknown_reference' === $cs_bad->get_error_code()
 		&& is_wp_error( $cs_out ) && 'vcap_review_opted_out' === $cs_out->get_error_code(),
 	json_encode( array( $cs_rec, is_wp_error( $cs_gone ) ? $cs_gone->get_error_code() : $cs_gone ) )
 );
+// Addition to D4: recipient() names the language of the invitation – order language, else account, else site.
+if ( ! function_exists( 'get_user_by' ) ) {
+	function get_user_by( $field, $value ) { return 'email' === $field ? ( $GLOBALS['vcap_test_users'][ strtolower( (string) $value ) ] ?? false ) : false; }
+}
+if ( ! function_exists( 'get_user_locale' ) ) {
+	function get_user_locale( $user = 0 ) { foreach ( $GLOBALS['vcap_test_users'] ?? array() as $u ) { if ( (int) $u->ID === (int) ( is_object( $user ) ? $user->ID : $user ) ) { return '' !== $u->locale ? $u->locale : get_locale(); } } return get_locale(); }
+}
+if ( ! function_exists( 'pll_languages_list' ) ) {
+	function pll_languages_list( $args = array() ) { $l = $GLOBALS['vcap_test_pll'] ?? array(); return 'slug' === ( $args['fields'] ?? '' ) ? array_keys( $l ) : array_values( $l ); }
+}
+array_pop( $GLOBALS['vcap_test_filters']['vcap_review_opted_out'] );
+$GLOBALS['vcap_test_users']['bea@example.com'] = (object) array( 'ID' => 77, 'locale' => 'de_AT' );
+$cs_loc_account = $cs_source->recipient( $cs_ref14 )['locale'] ?? '';
+$GLOBALS['vcap_test_pll'] = array( 'fr' => 'fr_FR' );
+add_filter( 'vcap_order_language', static fn() => 'fr' );
+$cs_loc_order = $cs_source->recipient( $cs_ref14 )['locale'] ?? '';
+add_filter( 'vcap_email_locale', static fn( $l ) => 'fr_FR' === $l ? 'fr_BE' : $l );
+$cs_loc_email = $cs_source->recipient( $cs_ref14 )['locale'] ?? '';
+array_pop( $GLOBALS['vcap_test_filters']['vcap_email_locale'] );
+array_pop( $GLOBALS['vcap_test_filters']['vcap_order_language'] );
+unset( $GLOBALS['vcap_test_users']['bea@example.com'], $GLOBALS['vcap_test_pll'] );
+$cs_loc_site = $cs_source->recipient( $cs_ref14 )['locale'] ?? '';
+$cs_loc_doc  = (string) file_get_contents( dirname( __DIR__ ) . '/API.md' );
+check( 'Decision D4 (addition): recipient() answers locale – order language (through vcap_email_locale) before the account locale before the site language; contract 1.1.0 documented', 'de_AT' === $cs_loc_account && 'fr_FR' === $cs_loc_order && 'fr_BE' === $cs_loc_email && 'de_DE' === $cs_loc_site && str_contains( $cs_loc_doc, '`locale`' ) && str_contains( $cs_loc_doc, 'contract 1.1.0' ), json_encode( array( $cs_loc_account, $cs_loc_order, $cs_loc_email, $cs_loc_site ) ) );
 check( 'Captain Suite review: product setting "Redemption confirms a service" defaults to off', 'no' === ProductConfig::DEFAULTS['review_service'] && ProductConfig::meta_key( 'review_service' ) === ReviewSource::PRODUCT_META );
 $GLOBALS['vcap_test_filters'] = $cs_filters;
 
@@ -2591,6 +2647,112 @@ $cs_none  = $cs_req2->submit( array( 'reference' => 'formcaptain:entry:privacy-4
 check( 'Captain Suite form: with 500 open requests (vcap_voucher_requests_max_open) submit() refuses new ones with vcap_request_limit (429), a repeated entry is still answered, a higher limit accepts, 0 accepts none', is_wp_error( $cs_full ) && 'vcap_request_limit' === $cs_full->get_error_code() && 429 === $cs_full->get_error_data()['status'] && false === get_option( VoucherRequests::CLAIM_PREFIX . md5( 'formcaptain:entry:privacy-2' ), false ) && is_array( $cs_again ) && $cs_again['replayed'] && is_array( $cs_more ) && ! $cs_more['replayed'] && is_wp_error( $cs_none ) && 'vcap_request_limit' === $cs_none->get_error_code() );
 check( 'Captain Suite form: the suggested privacy policy text names voucher requests', (bool) array_filter( VCAP\Privacy::policy_paragraphs(), static fn( $p ) => str_starts_with( $p, 'Voucher requests:' ) ) );
 $GLOBALS['vcap_test_filters'] = $cs_filters;
+
+// Decision D5 (16.11.2026): an open request with several recipients can be handed over to a company order of an add-on.
+$d5_can   = false;
+$d5_calls = array();
+$d5_req   = new VoucherRequests( static fn( array $a ) => new WP_Error( 'x', 'not used' ), $cs_find, static fn() => 0, static function () use ( &$d5_can ) { return $d5_can; } );
+$d5_in    = array( 'reference' => 'formcaptain:entry:d5-1', 'amount' => '30', 'contact' => array( 'company' => 'ACME GmbH', 'name' => 'Hanna HR', 'email' => 'hr5@acme.example', 'phone' => '+43 5' ), 'message' => 'Für das Team', 'note' => 'Rechnung an die Buchhaltung', 'recipients' => array( array( 'name' => 'Ann', 'email' => 'ann5@acme.example', 'message' => 'Danke Ann' ), array( 'name' => 'Bob', 'email' => 'bob5@acme.example' ) ) );
+$d5_id    = (int) ( $d5_req->submit( $d5_in )['request_id'] ?? 0 );
+$d5_solo  = (int) ( $d5_req->submit( array( 'reference' => 'formcaptain:entry:d5-2', 'recipients' => array( array( 'name' => 'Solo', 'email' => 'solo5@acme.example' ) ) ) + $d5_in )['request_id'] ?? 0 );
+$d5_bad   = (int) ( $d5_req->submit( array( 'reference' => 'formcaptain:entry:d5-3' ) + $d5_in )['request_id'] ?? 0 );
+$d5_can   = true;
+$d5_none  = $d5_req->hand_over( $d5_id );
+check( 'Decision D5: without an add-on the button is not offered and a hand-over is refused – the request stays open with its data', ! $d5_req->handover_available( VoucherRequests::get( $d5_id ) ) && is_wp_error( $d5_none ) && 'vcap_handover_unavailable' === $d5_none->get_error_code() && 'open' === VoucherRequests::get( $d5_id )['state'] && 2 === count( VoucherRequests::get( $d5_id )['recipients'] ) );
+add_filter( 'vcap_voucher_request_handover_available', static fn( $available, $id ) => true, 10, 2 );
+$d5_answer = null;
+add_filter(
+	'vcap_voucher_request_handover',
+	static function ( $result, $handover ) use ( &$d5_calls, &$d5_answer ) {
+		$d5_calls[] = $handover;
+		return $d5_answer;
+	},
+	10,
+	2
+);
+$d5_can    = false;
+$d5_denied = $d5_req->hand_over( $d5_id );
+check( 'Decision D5: without vcap_manage_vouchers there is no button and the hand-over is refused (vcap_not_allowed, 403) before the add-on is asked', ! $d5_req->handover_available( VoucherRequests::get( $d5_id ) ) && is_wp_error( $d5_denied ) && 'vcap_not_allowed' === $d5_denied->get_error_code() && 403 === $d5_denied->get_error_data()['status'] && array() === $d5_calls );
+$d5_can = true;
+check( 'Decision D5: the button needs an open request with at least two recipients and the add-on\'s yes', $d5_req->handover_available( VoucherRequests::get( $d5_id ) ) && ! $d5_req->handover_available( VoucherRequests::get( $d5_solo ) ) && is_wp_error( $d5_req->hand_over( $d5_solo ) ) && 'vcap_handover_not_possible' === $d5_req->hand_over( $d5_solo )->get_error_code() && ! VoucherRequests::handover_possible( array( 'state' => 'partial' ) + VoucherRequests::get( $d5_id ) ) && array() === $d5_calls );
+$d5_null = $d5_req->hand_over( $d5_id );
+check( 'Decision D5: null from the hand-over filter (nobody answered) → "No extension takes over this request.", the request stays open', is_wp_error( $d5_null ) && 'vcap_handover_unavailable' === $d5_null->get_error_code() && 'No extension takes over this request.' === $d5_null->get_error_message() && 1 === count( $d5_calls ) && 'open' === VoucherRequests::get( $d5_id )['state'] );
+$d5_payload = $d5_calls[0] ?? array();
+check(
+	'Decision D5: the hand-over carries exactly contract 1.0.0, request_id, the stable reference vcap-request:{id}, company, currency, recipients (name, email, amount, message) and note',
+	array( 'contract', 'request_id', 'reference', 'company', 'currency', 'recipients', 'note' ) === array_keys( $d5_payload ) && '1.0.0' === $d5_payload['contract'] && $d5_id === $d5_payload['request_id'] && 'vcap-request:' . $d5_id === $d5_payload['reference']
+		&& array( 'name' => 'ACME GmbH', 'contact_name' => 'Hanna HR', 'contact_email' => 'hr5@acme.example', 'contact_phone' => '+43 5' ) === $d5_payload['company'] && 'EUR' === $d5_payload['currency']
+		&& array( array( 'name' => 'Ann', 'email' => 'ann5@acme.example', 'amount' => 30.0, 'message' => 'Danke Ann' ), array( 'name' => 'Bob', 'email' => 'bob5@acme.example', 'amount' => 30.0, 'message' => '' ) ) === $d5_payload['recipients'] && "Für das Team\n\nRechnung an die Buchhaltung" === $d5_payload['note'],
+	json_encode( $d5_payload )
+);
+$d5_answer = new WP_Error( 'voucher_captain_pro_handover_contract', 'Unsupported contract.' );
+$d5_err    = $d5_req->hand_over( $d5_id );
+check( 'Decision D5: a WP_Error of the add-on is passed on – state open, recipients and their lookup rows kept', is_wp_error( $d5_err ) && 'voucher_captain_pro_handover_contract' === $d5_err->get_error_code() && 'open' === VoucherRequests::get( $d5_id )['state'] && 2 === count( VoucherRequests::get( $d5_id )['recipients'] ) && in_array( 'ann5@acme.example', (array) $GLOBALS['vcap_test_meta'][ $d5_id ][ VoucherRequests::EMAIL_META ], true ) && null === VoucherRequests::handover( $d5_id ) );
+$d5_answer = array( 'url' => '', 'order_id' => 0 );
+$d5_inv    = $d5_req->hand_over( $d5_bad );
+check( 'Decision D5: an answer without order id or URL is no hand-over (vcap_handover_invalid), the request stays open', is_wp_error( $d5_inv ) && 'vcap_handover_invalid' === $d5_inv->get_error_code() && 'open' === VoucherRequests::get( $d5_bad )['state'] );
+$d5_answer = array( 'url' => 'https://shop.test/wp-admin/admin.php?page=vcap-pro-bulk&order=812', 'order_id' => 812 );
+$d5_events = array();
+add_action( 'vcap_voucher_request_handed_over', static function ( ...$a ) use ( &$d5_events ) { $d5_events[] = $a; }, 10, 3 );
+$d5_ok   = $d5_req->hand_over( $d5_id );
+$d5_after = VoucherRequests::get( $d5_id );
+$d5_meta  = VoucherRequests::handover( $d5_id );
+check( 'Decision D5: success → state handed_over, order id, URL, time and user kept, recipients removed (only the count stays), action without personal data', is_array( $d5_ok ) && 812 === $d5_ok['order_id'] && $d5_answer['url'] === $d5_ok['url'] && false === $d5_ok['replayed'] && VoucherRequests::STATE_HANDED_OVER === $d5_after['state'] && 'handed_over' === VoucherRequests::STATE_HANDED_OVER && array() === $d5_after['recipients'] && 2 === $d5_after['quantity'] && 812 === $d5_meta['order_id'] && $d5_answer['url'] === $d5_meta['url'] && '' !== $d5_meta['at'] && array( array( $d5_id, 812, 0 ) ) === $d5_events, json_encode( array( $d5_ok, $d5_after, $d5_meta ) ) );
+$d5_twice = $d5_req->hand_over( $d5_id );
+check( 'Decision D5: a second hand-over (double click) answers the same company order without asking the add-on again', is_array( $d5_twice ) && 812 === $d5_twice['order_id'] && true === $d5_twice['replayed'] && 4 === count( $d5_calls ) && 1 === count( $d5_events ) && ! $d5_req->handover_available( $d5_after ) );
+// The test stub of delete_post_meta() drops all rows of the key; WordPress keeps the contact's row.
+$GLOBALS['vcap_test_meta'][ $d5_id ][ VoucherRequests::EMAIL_META ] = array( 'hr5@acme.example' );
+$d5_ex_c = $d5_req->export( 'hr5@acme.example' );
+$d5_ex_a = $d5_req->export( 'ann5@acme.example' );
+$d5_er   = $d5_req->erase( 'hr5@acme.example' );
+check( 'Decision D5: privacy – a handed-over request is exported to the contact like an issued one (status handed_over, no recipients), recipients are no longer found here, the eraser blanks the contact', str_contains( $cs_vals( $d5_ex_c ), '|handed_over|' ) && ! str_contains( $cs_vals( $d5_ex_c ), 'ann5' ) && ! in_array( 'vcap-request-' . $d5_id, array_column( $d5_ex_a['data'], 'item_id' ), true ) && $d5_er['items_removed'] && '' === VoucherRequests::get( $d5_id )['contact']['email'] && 'ACME GmbH' === VoucherRequests::get( $d5_id )['contact']['company'], $cs_vals( $d5_ex_c ) );
+$d5_src = (string) file_get_contents( dirname( __DIR__ ) . '/src/Admin/VoucherRequestsAdmin.php' ) . (string) file_get_contents( dirname( __DIR__ ) . '/src/Integrations/VoucherRequests.php' );
+check( 'Decision D5: admin-post vcap_request_handover checks the nonce per request; the button is shown only when handover_available(); a handed-over request cannot be issued', str_contains( $d5_src, "add_action( 'admin_post_vcap_request_handover', array( \$this, 'handover' ) );" ) && str_contains( $d5_src, "check_admin_referer( 'vcap_request_handover_' . \$id );" ) && str_contains( $d5_src, "wp_nonce_field( 'vcap_request_handover_' . (int) \$r['id'] );" ) && str_contains( $d5_src, 'if ( $this->requests->handover_available( $r ) ) {' ) && (bool) preg_match( '/public function confirm\(.*?STATE_HANDED_OVER === \$request\[\'state\'\].*?vcap_handed_over.*?STATE_ISSUED === \$request\[\'state\'\]/s', $d5_src ) );
+$GLOBALS['vcap_test_filters'] = $cs_filters;
+
+// Decision D10 (16.11.2026): retention of voucher requests in the daily maintenance.
+check( 'Decision D10: default retention 6 months for open/partial and 24 months for issued/handed-over requests; the filter can change or switch off (0) each', array( 'open' => 6, 'closed' => 24 ) === VoucherRequests::retention_months() && ( static function () { add_filter( 'vcap_voucher_requests_retention_months', static fn() => array( 'open' => 0, 'closed' => -3 ) ); $m = VoucherRequests::retention_months(); array_pop( $GLOBALS['vcap_test_filters']['vcap_voucher_requests_retention_months'] ); return array( 'open' => 0, 'closed' => 0 ) === $m; } )() && in_array( 'voucher_requests', VCAP\Delivery::MAINTENANCE_STEPS, true ) );
+$d10_ids = array();
+foreach ( range( 1, 53 ) as $d10_n ) {
+	$d10_ids[] = (int) ( $d5_req->submit( array( 'reference' => 'formcaptain:entry:d10-' . $d10_n ) + $d5_in )['request_id'] ?? 0 );
+}
+$d10_calls = array();
+$d10_find  = static function ( array $states, string $before, int $limit ) use ( &$d10_calls, $d10_ids ) {
+	$d10_calls[] = array( $states, $before, $limit );
+	$left = array_values( array_filter( $d10_ids, static fn( $id ) => isset( $GLOBALS['vcap_test_posts'][ $id ] ) ) );
+	return in_array( 'open', $states, true ) ? array_slice( $left, 0, $limit ) : array();
+};
+$d10_done = $d5_req->purge_expired( 20.0, $d10_find );
+$d10_open_before = strtotime( ( $d10_calls[0][1] ?? '' ) . ' UTC' );
+$d10_closed_before = strtotime( ( end( $d10_calls )[1] ?? '' ) . ' UTC' );
+check(
+	'Decision D10: the purge deletes in batches of 50 (open + partial counted from the receipt or last change older than 6 months, then issued + handed_over older than 24 months) and removes the form-reference claims',
+	$d10_done && array( 'open', 'partial' ) === $d10_calls[0][0] && 50 === $d10_calls[0][2] && 2 === count( array_filter( $d10_calls, static fn( $c ) => in_array( 'open', $c[0], true ) ) ) && array( 'issued', 'handed_over' ) === end( $d10_calls )[0]
+		&& abs( $d10_open_before - strtotime( '-6 months' ) ) < 120 && abs( $d10_closed_before - strtotime( '-24 months' ) ) < 120
+		&& array() === array_filter( $d10_ids, static fn( $id ) => isset( $GLOBALS['vcap_test_posts'][ $id ] ) ) && false === get_option( VoucherRequests::CLAIM_PREFIX . md5( 'formcaptain:entry:d10-7' ), false ),
+	json_encode( array_map( static fn( $c ) => array( $c[0], $c[1], $c[2] ), $d10_calls ) )
+);
+$d10_more = array();
+foreach ( range( 1, 60 ) as $d10_n ) {
+	$d10_more[] = (int) ( $d5_req->submit( array( 'reference' => 'formcaptain:entry:d10b-' . $d10_n ) + $d5_in )['request_id'] ?? 0 );
+}
+$d10_calls = array();
+$d10_find2 = static function ( array $states, string $before, int $limit ) use ( &$d10_calls, $d10_more ) {
+	$d10_calls[] = $states;
+	return array_slice( array_values( array_filter( $d10_more, static fn( $id ) => isset( $GLOBALS['vcap_test_posts'][ $id ] ) ) ), 0, $limit );
+};
+$d10_cut = $d5_req->purge_expired( 0.0, $d10_find2 );
+add_filter( 'vcap_voucher_requests_retention_months', static fn() => array( 'open' => 0, 'closed' => 0 ) );
+$d10_calls_off = count( $d10_calls );
+$d10_off = $d5_req->purge_expired( 20.0, $d10_find2 );
+array_pop( $GLOBALS['vcap_test_filters']['vcap_voucher_requests_retention_months'] );
+check( 'Decision D10: the purge stops after a batch when its time budget is used (continued by a new action) and does nothing with retention 0', false === $d10_cut && 1 === $d10_calls_off && 10 === count( array_filter( $d10_more, static fn( $id ) => isset( $GLOBALS['vcap_test_posts'][ $id ] ) ) ) && $d10_off && $d10_calls_off === count( $d10_calls ) );
+$d10_src = (string) file_get_contents( dirname( __DIR__ ) . '/src/Integrations/VoucherRequests.php' );
+$d10_policy = implode( ' ', array_filter( VCAP\Privacy::policy_paragraphs(), static fn( $p ) => str_starts_with( $p, 'Voucher requests:' ) ) );
+check( 'Decision D10: the database query reads the last change (or the receipt) per request; privacy text, readme and API.md name the periods and the filter', str_contains( $d10_src, 'COALESCE( u.meta_value, p.post_date_gmt ) < %s' ) && str_contains( $d10_policy, '6 months' ) && str_contains( $d10_policy, '24 months' ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/readme.txt' ), '`vcap_voucher_requests_retention_months`' ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/API.md' ), '`vcap_voucher_requests_retention_months`' ) );
+foreach ( $d10_more as $d10_id ) {
+	wp_delete_post( $d10_id, true );
+}
 echo "Workflow provider contract (WF-01 … WF-06)\n";
 // In-memory database for the workflow tests: voucher rows, ledger rows, option claims (schema < 1.4 fallback).
 $wf_saved_db      = $GLOBALS['wpdb'] ?? null;
@@ -2626,6 +2788,9 @@ $GLOBALS['wpdb']  = new class() {
 		return null;
 	}
 	public function get_results( $q, $o = null ) {
+		if ( preg_match( "/FROM wp_vcap_events WHERE voucher_id = '?(\\d+)'? AND event = '([a-z_]+)' ORDER BY id DESC LIMIT '?(\\d+)/", $q, $m ) ) {
+			return array_slice( array_reverse( array_values( array_filter( $this->events, static fn( $r ) => (int) $r['voucher_id'] === (int) $m[1] && $r['event'] === $m[2] ) ) ), 0, (int) $m[3] );
+		}
 		if ( preg_match( '/FROM wp_vcap_events WHERE id > (\d+) ORDER BY id ASC LIMIT (\d+)/', $q, $m ) ) {
 			return array_slice( array_values( array_filter( $this->events, static fn( $r ) => $r['id'] > (int) $m[1] ) ), 0, (int) $m[2] );
 		}
@@ -2728,6 +2893,39 @@ unset( $GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_OPTION ] 
 $wf_new_instance = VCAP\Workflow\Provider::instance();
 check( 'WF-01: the site id is created once and kept', '' !== $wf_new_instance && $wf_new_instance === VCAP\Workflow\Provider::instance() );
 $GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_OPTION ] = 'site-instance-1';
+// Decision D8 (16.11.2026): the instance is bound to the site address – a copy/staging site gets a new instance id.
+$d8_sig = static fn( string $u ) => VCAP\Workflow\Provider::site_signature( $u );
+check( 'Decision D8: the address signature ignores http/https, letter case of the host and a trailing slash, but not another host, path or port', $d8_sig( 'https://shop.test' ) === $d8_sig( 'http://shop.test/' ) && $d8_sig( 'https://shop.test' ) === $d8_sig( 'HTTPS://Shop.TEST//' ) && $d8_sig( 'https://shop.test' ) === VCAP\Workflow\Provider::site_signature() && $d8_sig( 'https://shop.test' ) !== $d8_sig( 'https://staging.shop.test' ) && $d8_sig( 'https://shop.test' ) !== $d8_sig( 'https://shop.test/de' ) && $d8_sig( 'https://shop.test' ) !== $d8_sig( 'https://shop.test:8443' ) );
+unset( $GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_SITE_OPTION ] );
+$d8_legacy = VCAP\Workflow\Provider::instance();
+check( 'Decision D8: an install without a stored address (update) keeps its instance and binds it to the current address', 'site-instance-1' === $d8_legacy && $d8_sig( 'https://shop.test' ) === get_option( VCAP\Workflow\Provider::INSTANCE_SITE_OPTION )['signature'] && null === VCAP\Workflow\Provider::instance_change() );
+$GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_SITE_OPTION ]['signature'] = $d8_sig( 'http://shop.test/' );
+check( 'Decision D8: a switch from http to https (or a trailing slash) keeps the instance and its event ids', 'site-instance-1' === VCAP\Workflow\Provider::instance() && $wf_id === VCAP\Workflow\Provider::event_id( 900, 'voucher.redeemed', 1 ) && null === VCAP\Workflow\Provider::instance_change() );
+$d8_changes = array();
+add_action( 'vcap_workflow_instance_changed', static function ( ...$a ) use ( &$d8_changes ) { $d8_changes[] = $a; }, 10, 2 );
+$GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_SITE_OPTION ]['signature'] = $d8_sig( 'https://live-shop.example' ); // The database came from another address.
+$d8_new    = VCAP\Workflow\Provider::instance();
+$d8_change = VCAP\Workflow\Provider::instance_change();
+check(
+	'Decision D8: under another address (copy/staging) a new instance id is derived, the old one noted and announced once – event ids of the copy differ from the original',
+	'site-instance-1' !== $d8_new && (bool) preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $d8_new ) && $d8_new === get_option( VCAP\Workflow\Provider::INSTANCE_OPTION ) && $d8_new === VCAP\Workflow\Provider::instance()
+		&& $wf_id !== VCAP\Workflow\Provider::event_id( 900, 'voucher.redeemed', 1 ) && is_array( $d8_change ) && array( 'site-instance-1' ) === $d8_change['previous'] && true === $d8_change['notice'] && '' !== $d8_change['changed_at']
+		&& array( array( $d8_new, 'site-instance-1' ) ) === $d8_changes && $d8_sig( 'https://shop.test' ) === get_option( VCAP\Workflow\Provider::INSTANCE_SITE_OPTION )['signature'],
+	json_encode( array( $d8_new, $d8_change, $d8_changes ) )
+);
+$GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_OPTION ] = 'site-instance-1';
+$GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_SITE_OPTION ]['signature'] = $d8_sig( 'https://live-shop.example' );
+$d8_again = VCAP\Workflow\Provider::instance();
+check( 'Decision D8: requests that notice the new address at the same moment derive the same instance id (no random race)', $d8_new === $d8_again && array( 'site-instance-1', 'site-instance-1' ) === VCAP\Workflow\Provider::instance_change()['previous'] );
+$d8_lines = implode( "\n", $wf_provider->status_lines() );
+ob_start();
+VCAP\Workflow\Provider::instance_notice();
+$d8_notice_out = (string) ob_get_clean();
+$d8_src = (string) file_get_contents( dirname( __DIR__ ) . '/src/Workflow/Provider.php' );
+check( 'Decision D8: Site Health (Workflow plugin (provider contract)) names the new instance; the admin notice is for shop managers only and is cleared once shown', str_contains( $d8_lines, 'New workflow instance because the address of the website changed (copy/staging).' ) && '' === $d8_notice_out && VCAP\Workflow\Provider::instance_change()['notice'] && str_contains( $d8_src, "add_action( 'admin_notices', array( self::class, 'instance_notice' ) );" ) && (bool) preg_match( "/current_user_can\\( 'manage_woocommerce' \\).*?\\\$site\\['notice'\\] = false;/s", $d8_src ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/WORKFLOW.md' ), 'vcap_workflow_instance_site' ), $d8_lines );
+array_pop( $GLOBALS['vcap_test_filters']['vcap_workflow_instance_changed'] );
+$GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_OPTION ] = 'site-instance-1';
+unset( $GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_SITE_OPTION ] );
 
 // WF-02 end to end: ledger entry → vcap_voucher_event (after COMMIT) → vcap_workflow_event.
 VCAP\Db::reset();
@@ -2821,11 +3019,25 @@ check( 'WF-03: unknown vouchers and store credit accounts are not found', is_wp_
 $wf_issue = $wf_provider->issue( array( 'amount' => 20, 'idempotency_key' => 'wf-flow-4:issue' ) );
 $wf_redeem = $wf_provider->redeem( array( 'code' => 'X', 'target' => 't', 'idempotency_key' => 'wf-flow-4:redeem' ) );
 check( 'WF-03: issue and redeem need their own permission (not granted here)', is_wp_error( $wf_issue ) && 'vcap_not_allowed' === $wf_issue->get_error_code() && is_wp_error( $wf_redeem ) && 'vcap_not_allowed' === $wf_redeem->get_error_code() );
+$d9_seen    = count( $wf_seen );
+$d9_rows    = count( $GLOBALS['wpdb']->events );
 $wf_contact = $wf_provider->contact( array( 'voucher_id' => 41, 'communication' => 'gift_delivered' ) );
 $GLOBALS['vcap_test_options']['vcap_workflow_handover_expiry_reminder'] = 'yes';
 $wf_contact2 = $wf_provider->contact( array( 'voucher_id' => 41, 'communication' => 'expiry_reminder' ) );
 unset( $GLOBALS['vcap_test_options']['vcap_workflow_handover_expiry_reminder'] );
 check( 'WF-04: contact data only for a handed-over communication – the holder\'s address and the masked code tail, never the code', is_wp_error( $wf_contact ) && 'vcap_not_allowed' === $wf_contact->get_error_code() && is_array( $wf_contact2 ) && 'ben@example.com' === $wf_contact2['email'] && 'recipient' === $wf_contact2['role'] && '…ABCD' === $wf_contact2['code_hint'] && ! str_contains( (string) json_encode( $wf_contact2 ), 'WFSECRET' ), json_encode( $wf_contact2 ) );
+$d9_reads = array_values( array_filter( array_slice( $GLOBALS['wpdb']->events, $d9_rows ), static fn( $r ) => VCAP\Workflow\Services::CONTACT_EVENT === $r['event'] ) );
+$d9_note  = VCAP\Note::decode( (string) ( $d9_reads[0]['note'] ?? '' ) );
+$d9_json  = (string) json_encode( $d9_reads );
+check(
+	'Decision D9: every successful contact() writes one history entry workflow_contact_read (time, user, plugin, communication, role) – none for a refused call, no address, name or code',
+	1 === count( $d9_reads ) && 'workflow_contact_read' === VCAP\Workflow\Services::CONTACT_EVENT && 41 === (int) $d9_reads[0]['voucher_id'] && null === $d9_reads[0]['amount'] && 0 === (int) $d9_reads[0]['user_id'] && '' !== (string) $d9_reads[0]['created_at']
+		&& array( 'Workflow Captain', 'expiry_reminder', 'recipient' ) === ( $d9_note['args'] ?? null ) && ! str_contains( $d9_json, 'example.com' ) && ! str_contains( $d9_json, 'Ben' ) && ! str_contains( strtolower( $d9_json ), 'wfsecret' ) && ! str_contains( $d9_json, 'ABCD' ),
+	$d9_json
+);
+check( 'Decision D9: the entry fires no workflow event (no loop), is no money event (liabilities, journal) and reads in words in the history', $d9_seen === count( $wf_seen ) && array() === VCAP\Workflow\Provider::map( VCAP\Workflow\Services::CONTACT_EVENT, $d9_note, null, 0 ) && ! in_array( VCAP\Workflow\Services::CONTACT_EVENT, VCAP\Ledger::MONEY_EVENTS, true ) && 'Contact data read by Workflow Captain (communication: Expiry reminder, role: Recipient).' === VCAP\Note::render( (string) $d9_reads[0]['note'] ) && isset( VCAP\VoucherRepository::event_labels()[ VCAP\Workflow\Services::CONTACT_EVENT ] ), VCAP\Note::render( (string) ( $d9_reads[0]['note'] ?? '' ) ) );
+$d9_items = ( new VCAP\Privacy( $wf_repo ) )->workflow_contact_items( $wf_v );
+check( 'Decision D9: the privacy export of the voucher lists the read (date, plugin, communication, role); WORKFLOW.md documents it', 1 === count( $d9_items ) && 'vcap-workflow-contact' === $d9_items[0]['group_id'] && array( 'Workflow Captain', 'Expiry reminder', 'Recipient' ) === array_slice( array_column( $d9_items[0]['data'], 'value' ), 1 ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/WORKFLOW.md' ), '`workflow_contact_read`' ), json_encode( $d9_items ) );
 check( 'WF-03: request fingerprints ignore the order of the arguments and differ per voucher', VCAP\Workflow\Services::signature( 'void', 1, array( 'a' => 1, 'b' => 2 ) ) === VCAP\Workflow\Services::signature( 'void', 1, array( 'b' => 2, 'a' => 1 ) ) && VCAP\Workflow\Services::signature( 'void', 1, array() ) !== VCAP\Workflow\Services::signature( 'void', 2, array() ) );
 
 $GLOBALS['vcap_test_filters'] = $wf_saved_filters;
