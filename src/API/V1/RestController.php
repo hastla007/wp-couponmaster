@@ -499,6 +499,9 @@ final class RestController {
 	 * allows it. By default only voucher managers, "Voucher POS" accounts (vcap_redeem_api) and server code
 	 * (`vcap()->redemptions->refund()`) refund – the service may already have been provided; a customer cancels before
 	 * the commit (release) instead.
+	 *
+	 * @param string $key Redemption key.
+	 * @return bool
 	 */
 	private function customer_may_refund( string $key ): bool {
 		$data = $this->service->get( $key );
