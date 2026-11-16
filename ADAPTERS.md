@@ -122,7 +122,7 @@ Erasure with the service: data protection requests are handled by the service's 
 | Event | Fires `vcap_voucher_request_forgotten( int $request_id, string $result )` with `deleted`, `anonymized` or `none` (request id 0); no personal data. |
 | Answer | `true` when a request was deleted or anonymised, `false` when none was stored for the reference, `WP_Error` (`vcap_invalid_args`, 400) for an empty reference. Repeating the call is harmless. |
 
-A ready implementation for `VCAP\Integrations\VoucherRequests` (branch `claude/wp-plugin-analyse-todo-hvollo-refactors`, at `c216dd1`) is in [`docs/patches/voucher-requests-forget-reference.patch`](docs/patches/voucher-requests-forget-reference.patch) (`git apply` there).
+Implemented in `VCAP\Integrations\VoucherRequests` on branch `claude/wp-plugin-analyse-todo-hvollo-refactors` (commit `b18621b`); anonymising also removes the stored issue errors (`_vcap_request_errors`). A repeated `submit()` of a forgotten reference answers `state = rejected` with `request_id = 0`; the adapter reports that as `success` / `already_rejected`.
 
 Test: `tests/form-captain-request-service.php` (22 checks, fake services with the interface of the real one, with and without `forget_reference()`).
 
