@@ -602,6 +602,21 @@ final class VoucherRequests {
 	}
 
 	/**
+	 * Value per recipient for a hand-over: the request's own amount, else the price of its voucher product (a request
+	 * for a product without a typed amount wants that product's value), else 0 (no hand-over, see hand_over_locked()).
+	 *
+	 * @param array<string, mixed> $request Request (get()).
+	 */
+	public static function handover_amount( array $request ): float {
+		$amount = '' !== (string) ( $request['amount'] ?? '' ) ? (float) $request['amount'] : 0.0;
+		if ( $amount <= 0 && (int) ( $request['product_id'] ?? 0 ) > 0 && function_exists( 'wc_get_product' ) ) {
+			$product = wc_get_product( (int) $request['product_id'] );
+			$amount  = $product instanceof \WC_Product ? (float) $product->get_price() : 0.0;
+		}
+		return $amount > 0 ? round( $amount, 2 ) : 0.0;
+	}
+
+	/**
 	 * The data an add-on receives (exactly these keys): contract, request_id, reference ("vcap-request:{id}", stable –
 	 * the add-on de-duplicates by it), company, currency, recipients, note.
 	 *
@@ -611,7 +626,7 @@ final class VoucherRequests {
 	public static function handover_payload( array $request ): array {
 		$id         = (int) ( $request['id'] ?? 0 );
 		$contact    = (array) ( $request['contact'] ?? array() );
-		$amount     = '' !== (string) ( $request['amount'] ?? '' ) ? (float) $request['amount'] : 0.0;
+		$amount     = self::handover_amount( $request );
 		$recipients = array();
 		foreach ( (array) ( $request['recipients'] ?? array() ) as $r ) {
 			$recipients[] = array(
@@ -665,6 +680,10 @@ final class VoucherRequests {
 		if ( ! self::handover_possible( $request ) ) {
 			/* translators: %d: fewest recipients */
 			return new \WP_Error( 'vcap_handover_not_possible', sprintf( __( 'Only open voucher requests with at least %d recipients can be taken over as a company order.', 'voucher-captain' ), self::HANDOVER_MIN_RECIPIENTS ), array( 'status' => 409 ) );
+		}
+		if ( self::handover_amount( $request ) <= 0 ) {
+			// A company order without a value could never be issued, and the request would have lost its recipients.
+			return new \WP_Error( 'vcap_handover_no_amount', __( 'This request has no voucher value (no amount and no product with a price). Issue it here with a value instead. The request stays open.', 'voucher-captain' ), array( 'status' => 409 ) );
 		}
 		$unavailable = new \WP_Error( 'vcap_handover_unavailable', __( 'No extension takes over this request.', 'voucher-captain' ), array( 'status' => 409 ) );
 		if ( ! $this->handover_available( $request ) ) {

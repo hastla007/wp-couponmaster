@@ -380,8 +380,11 @@ Pro, company orders) may take a request over. Without such an add-on nothing cha
   with exactly these keys: `contract` (`'1.0.0'`), `request_id` (int), `reference` (`vcap-request:{request_id}`,
   stable – the add-on de-duplicates by it: the same reference again answers the same order), `company`
   (`name`, `contact_name`, `contact_email`, `contact_phone`), `currency` (ISO 4217), `recipients` (list of `name`,
-  `email`, `amount` (float, the request's value per voucher, 0 when none), `message`), `note` (message and note of the
-  request, `''` when none).
+  `email`, `amount` (float > 0, the request's value per voucher; without a typed amount the price of the request's
+  voucher product), `message`), `note` (message and note of the request, `''` when none). A request with neither
+  amount nor priced product is not handed over: `vcap_handover_no_amount` (409) before the add-on is asked, the
+  request stays `open` with its recipients. An add-on that cannot issue every taken-over row (its own limits, e.g.
+  message length or highest amount) should answer a `WP_Error`, so the request stays open too.
 - Expected answer: `array{ url: string, order_id: int }` (admin URL of the company order's preview) or `WP_Error`.
   `null` (nobody answered) → `vcap_handover_unavailable` *No extension takes over this request.*; an answer without
   order id or URL → `vcap_handover_invalid`.

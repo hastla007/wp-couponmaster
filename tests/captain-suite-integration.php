@@ -203,6 +203,35 @@ vcap_cs_assert( is_array( $ho_again ) && $ho_again['replayed'] && 4242 === $ho_a
 $ho_issue = $requests->confirm( $ho_id, array( 'sale' => 'free', 'send' => false ) );
 vcap_cs_assert( is_wp_error( $ho_issue ) && 'vcap_handed_over' === $ho_issue->get_error_code(), 'a handed-over request cannot be issued' );
 vcap_cs_assert( array() === $requests->export( 'cs-ho-ann@example.com' )['data'] && VoucherRequests::state_label( VoucherRequests::STATE_HANDED_OVER ) === $requests->export( 'cs-ho@example.com' )['data'][0]['data'][2]['value'], 'privacy export: the recipients are gone from the request, the contact sees the state "handed over" (readable label, R11)' );
+// A request for a voucher product without a typed amount hands over the product's price; without any value the
+// hand-over is refused before the add-on is asked, so the request keeps its recipients (found playing Voucher
+// Captain Pro through: such drafts could never be issued).
+$ho_payload = null;
+$ho_capture = static function ( $result, $handover ) use ( &$ho_payload ) {
+	$ho_payload = $handover;
+	return $result;
+};
+add_filter( 'vcap_voucher_request_handover', $ho_capture, 5, 2 );
+$ho_product = new WC_Product_Simple();
+$ho_product->set_name( 'CS hand-over voucher 35' );
+$ho_product->set_regular_price( '35' );
+$ho_product->update_meta_data( '_vcap_enabled', 'yes' );
+$ho_product->save();
+$ho_make = static function ( array $extra ) use ( $requests ): int {
+	wp_set_current_user( 0 );
+	$r = $requests->submit( $extra + array( 'reference' => 'formcaptain:entry:cs-ho2-' . strtolower( wp_generate_password( 8, false, false ) ), 'contact' => array( 'company' => 'ACME GmbH', 'email' => 'cs-ho2-' . strtolower( wp_generate_password( 6, false, false ) ) . '@example.com' ), 'recipients' => array( array( 'name' => 'Ann', 'email' => 'cs-ho2-ann@example.com' ), array( 'name' => 'Ben', 'email' => 'cs-ho2-ben@example.com' ) ) ) );
+	wp_set_current_user( 1 );
+	return (int) $r['request_id'];
+};
+$ho_priced = $ho_make( array( 'product_id' => $ho_product->get_id() ) );
+$requests->hand_over( $ho_priced );
+vcap_cs_assert( is_array( $ho_payload ) && 35.0 === $ho_payload['recipients'][0]['amount'] && 'handed_over' === VoucherRequests::get( $ho_priced )['state'], 'a request for a voucher product without an amount hands over the product price', $ho_payload['recipients'][0] ?? null );
+$ho_payload = null;
+$ho_none    = $ho_make( array() );
+$ho_refused = $requests->hand_over( $ho_none );
+vcap_cs_assert( is_wp_error( $ho_refused ) && 'vcap_handover_no_amount' === $ho_refused->get_error_code() && null === $ho_payload && 'open' === VoucherRequests::get( $ho_none )['state'] && 2 === count( VoucherRequests::get( $ho_none )['recipients'] ), 'without any value the hand-over is refused before the add-on is asked; the request stays open with its recipients' );
+remove_filter( 'vcap_voucher_request_handover', $ho_capture, 5 );
+$ho_product->delete( true );
 remove_filter( 'vcap_voucher_request_handover_available', $available, 10 );
 remove_filter( 'vcap_voucher_request_handover', $takeover, 10 );
 
