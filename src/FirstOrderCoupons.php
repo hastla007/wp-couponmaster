@@ -18,11 +18,22 @@ final class FirstOrderCoupons {
 	/** Order meta: CustomerEmail::key() of the billing email (V4), to find earlier orders of the same mailbox. */
 	public const CUSTOMER_META = '_vcap_customer_email_key';
 
+	/**
+	 * S14: order meta of an order placed with a "first order only" coupon, set at checkout under the customer's
+	 * lock. While such an order is open (pending, within the hold window) it counts as earlier order, so two
+	 * parallel checkouts of the same person cannot both use the first-order discount.
+	 */
+	public const HOLD_META = '_vcap_first_order_hold';
+
 	public function register(): void {
 		add_action( 'woocommerce_coupon_options_usage_restriction', array( $this, 'field' ), 10, 2 );
 		add_action( 'woocommerce_coupon_options_save', array( $this, 'save' ), 10, 2 );
 		add_filter( 'woocommerce_coupon_is_valid', array( $this, 'validate' ), 25, 3 );
 		add_action( 'woocommerce_after_checkout_validation', array( $this, 'checkout_validation' ), 10, 2 );
+		// S14: the order being placed holds the first-order discount under the customer's lock (as Usage::hold).
+		add_action( 'woocommerce_checkout_order_processed', array( $this, 'hold_classic' ), 49, 3 );
+		add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'hold_store_api' ), 49, 1 );
+		add_action( 'woocommerce_before_pay_action', array( $this, 'hold' ), 4, 1 );
 		// An order created or changed in this request may change the answer of has_previous_order().
 		foreach ( array( 'woocommerce_new_order', 'woocommerce_update_order', 'woocommerce_order_status_changed', 'woocommerce_delete_order', 'woocommerce_trash_order' ) as $hook ) {
 			add_action( $hook, array( self::class, 'forget' ) );
@@ -157,6 +168,9 @@ final class FirstOrderCoupons {
 				}
 			}
 		}
+		if ( self::open_order_holds( $user_id, $email, $exclude_order_id, $before ) ) {
+			return true;
+		}
 		foreach ( $criteria as $criterion ) {
 			$query = $criterion + array(
 				'status' => $statuses,
@@ -184,6 +198,109 @@ final class FirstOrderCoupons {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * S14: whether an open order of the customer (pending, placed within the hold window) holds the first-order
+	 * discount (HOLD_META): a parallel checkout of the same person, by account, email or mailbox (V4).
+	 */
+	private static function open_order_holds( int $user_id, string $email, int $exclude_order_id, int $before ): bool {
+		$ids = OrderLookup::ids_with_meta(
+			self::HOLD_META,
+			'yes',
+			array(
+				'status'         => array( 'pending' ),
+				'created_after'  => time() - self::hold_minutes() * MINUTE_IN_SECONDS,
+				'created_before' => max( 0, $before ),
+				'order'          => 'DESC',
+				'limit'          => 200,
+			)
+		);
+		$mailbox = is_email( $email ) ? CustomerEmail::normalize( $email ) : '';
+		foreach ( $ids as $id ) {
+			$order = (int) $id !== $exclude_order_id ? wc_get_order( (int) $id ) : null;
+			if ( ! $order instanceof \WC_Order ) {
+				continue;
+			}
+			$billing = (string) $order->get_billing_email();
+			if ( ( $user_id > 0 && (int) $order->get_customer_id() === $user_id ) || ( '' !== $mailbox && is_email( $billing ) && CustomerEmail::normalize( $billing ) === $mailbox ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** S14: how long an unpaid order holds its first-order discount (the shop's stock hold, else 60 minutes). */
+	private static function hold_minutes(): int {
+		$hold = (int) get_option( 'woocommerce_hold_stock_minutes', 0 );
+		return max( 1, (int) apply_filters( 'vcap_stale_reservation_minutes', $hold > 0 ? $hold : 60 ) );
+	}
+
+	/**
+	 * S14: an order placed with a "first order only" coupon holds it: under a lock per customer (mailbox and
+	 * account) no other order of the same person may already be paid, awaiting fulfilment or hold it open.
+	 * Throws (the order is not sent for payment) when it does or the lock is not available.
+	 *
+	 * @param mixed $order Order being placed or paid.
+	 * @throws \Exception When the coupon is not valid for this order.
+	 */
+	public function hold( $order ): void {
+		if ( ! $order instanceof \WC_Order ) {
+			return;
+		}
+		$codes = array_values( array_filter( $order->get_coupon_codes(), static fn( $code ) => 'yes' === ( new \WC_Coupon( $code ) )->get_meta( self::META ) ) );
+		if ( ! $codes ) {
+			return;
+		}
+		$user  = (int) $order->get_customer_id();
+		$email = (string) $order->get_billing_email();
+		$locks = array_values( array_filter( array( is_email( $email ) ? 'first_order_' . substr( CustomerEmail::key( $email ), 0, 32 ) : '', $user > 0 ? 'first_order_u' . $user : '' ) ) );
+		$held  = array();
+		global $wpdb;
+		foreach ( $locks as $lock ) {
+			if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 10)', Install::lock_name( $lock ) ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				self::unlock( $held );
+				throw new \Exception( esc_html__( 'The coupon could not be checked right now. Please try again in a moment.', 'voucher-captain' ) );
+			}
+			$held[] = $lock;
+		}
+		try {
+			self::forget();
+			if ( self::has_previous_order( $user, $email, (int) $order->get_id() ) ) {
+				$order->delete_meta_data( self::HOLD_META );
+				$order->save_meta_data();
+				/* translators: %s: coupon code */
+				throw new \Exception( esc_html( sprintf( __( 'The coupon %s is only valid for your first order.', 'voucher-captain' ), strtoupper( $codes[0] ) ) ) );
+			}
+			$order->update_meta_data( self::HOLD_META, 'yes' );
+			$order->save_meta_data();
+		} finally {
+			self::unlock( $held );
+			self::forget();
+		}
+	}
+
+	/** @param string[] $locks Lock names taken by hold(). */
+	private static function unlock( array $locks ): void {
+		global $wpdb;
+		foreach ( array_reverse( $locks ) as $lock ) {
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', Install::lock_name( $lock ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+	}
+
+	public function hold_classic( $order_id, $posted_data = null, $order = null ): void {
+		$this->hold( $order instanceof \WC_Order ? $order : wc_get_order( (int) $order_id ) );
+	}
+
+	public function hold_store_api( $order ): void {
+		try {
+			$this->hold( $order );
+		} catch ( \Exception $e ) {
+			if ( class_exists( \Automattic\WooCommerce\StoreApi\Exceptions\RouteException::class ) ) {
+				throw new \Automattic\WooCommerce\StoreApi\Exceptions\RouteException( 'vcap_first_order', esc_html( $e->getMessage() ), 409 );
+			}
+			throw $e;
+		}
 	}
 
 	/**
@@ -237,7 +354,9 @@ final class FirstOrderCoupons {
 		}
 		foreach ( WC()->cart->get_applied_coupons() as $code ) {
 			$coupon = new \WC_Coupon( $code );
-			if ( 'yes' === $coupon->get_meta( self::META ) && self::has_previous_order( get_current_user_id(), (string) ( $data['billing_email'] ?? '' ) ) ) {
+			// The order of an earlier attempt of this checkout (awaiting payment) is not an earlier order.
+			$awaiting = WC()->session ? (int) WC()->session->get( 'order_awaiting_payment' ) : 0;
+			if ( 'yes' === $coupon->get_meta( self::META ) && self::has_previous_order( get_current_user_id(), (string) ( $data['billing_email'] ?? '' ), $awaiting ) ) {
 				/* translators: %s: coupon code */
 				$errors->add( 'vcap_first_order', sprintf( __( 'The coupon %s is only valid for your first order.', 'voucher-captain' ), strtoupper( $code ) ) );
 			}

@@ -51,6 +51,39 @@ vcap_first_assert( ! vcap_first_valid( $coupon, vcap_first_order( $product, 0, "
 vcap_first_order( $product, 0, "cancelled-{$tag}@example.com", 'cancelled' );
 vcap_first_assert( vcap_first_valid( $coupon, vcap_first_order( $product, 0, "cancelled-{$tag}@example.com", 'pending' ) ), 'cancelled earlier orders do not count' );
 
+// S14: two parallel checkouts of the same person (also with a plus address) cannot both use the first-order
+// coupon: the first order holds it under the customer's lock while it is open; a cancelled one gives it back.
+$s14_a = vcap_first_order( $product, 0, "par-{$tag}@example.com", 'pending' );
+$s14_b = vcap_first_order( $product, 0, "par-{$tag}+2@example.com", 'pending' );
+foreach ( array( $s14_a, $s14_b ) as $s14_order ) {
+	$s14_order->apply_coupon( $coupon->get_code() );
+	$s14_order->save();
+}
+$s14_first  = new VCAP\FirstOrderCoupons();
+$s14_errors = array();
+foreach ( array( 'a' => $s14_a, 'b' => $s14_b ) as $s14_name => $s14_order ) {
+	try {
+		$s14_first->hold( wc_get_order( $s14_order->get_id() ) );
+		$s14_errors[ $s14_name ] = '';
+	} catch ( Exception $e ) {
+		$s14_errors[ $s14_name ] = $e->getMessage();
+	}
+}
+VCAP\FirstOrderCoupons::forget();
+$s14_third = vcap_first_order( $product, 0, "par-{$tag}@example.com", 'pending' );
+vcap_first_assert( '' === $s14_errors['a'] && str_contains( $s14_errors['b'], 'only valid for your first order' ) && 'yes' === wc_get_order( $s14_a->get_id() )->get_meta( VCAP\FirstOrderCoupons::HOLD_META ) && ! vcap_first_valid( $coupon, $s14_third ), 'S14: an open order that holds the first-order coupon counts as earlier order – the parallel checkout (plus address) is refused at checkout and in the cart' );
+$s14_a = wc_get_order( $s14_a->get_id() );
+$s14_a->set_status( 'cancelled' );
+$s14_a->save();
+VCAP\FirstOrderCoupons::forget();
+$s14_retry = '';
+try {
+	$s14_first->hold( wc_get_order( $s14_b->get_id() ) );
+} catch ( Exception $e ) {
+	$s14_retry = $e->getMessage();
+}
+vcap_first_assert( '' === $s14_retry && vcap_first_valid( $coupon, $s14_third ) === false, 'S14: once the holding order is cancelled unpaid, the other checkout may use the coupon (and then holds it itself)' );
+
 // B13: repeated validations of the request (cart totals run several times) query the orders once; an order
 // created in the request is seen at once.
 $b13_orders = 0;
