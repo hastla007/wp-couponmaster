@@ -67,3 +67,18 @@ Checked one by one before the WordPress.org submission (A9). None is a security 
 - Upgrade from the released 1.1.0 (schema 1.3.0, built from the release commit `1fb789d`) with fixture data to the current ZIP: data verified; rollback to 1.1.0 still reads the vouchers; forward again keeps the promotion uses (`tests/upgrade-integration.php`, also in CI `upgrade`).
 - Uninstall with "Delete data on uninstall" off: all 10 tables stay. With it on: no `vcap_*` table, no `vcap_*` option and no request/template/field-group post left.
 - Fresh install, purchase, delivery, redemption and refunds of the ZIP: all 49 integration suites (HPOS and classic) and `browser-e2e` green.
+
+## Load test (16.11.2026, 20 008 vouchers, 51 348 ledger entries, MariaDB 10.11, HPOS)
+
+| Operation | Time | Queries |
+| --- | --- | --- |
+| Admin list page 1 / page 50 with status filter | 3 ms / 15 ms | 2 |
+| Search by code end / by email | 65 ms / 1 ms | 3 / 2 |
+| Outstanding value at a date (uncached) | 251 ms | 5 |
+| Liability CSV, all 20 000 rows | 579 ms | 244 (batches) |
+| Reports overview, 365 days / journal, 30 days | 77 ms / 40 ms | 12 / 19 |
+| Code lookup | 0.7 ms | 1 |
+| Site Health ledger check | 120 ms | 15 |
+| Maintenance "expire overdue" catching up ~1 400 overdue vouchers at once | 2.8 s | 4 232 (batches within the step's time budget; daily only a few) |
+
+No full table scans; seeding script: scratchpad `perf.php` (bulk insert, then the timings above).
