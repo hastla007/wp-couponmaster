@@ -61,3 +61,9 @@ Checked one by one before the WordPress.org submission (A9). None is a security 
 | 6 | `DirectDatabaseQuery.*` | Own tables without a WordPress API; caching is done in the repository classes where it matters. |
 | 1 | `load_plugin_textdomainFound` | The plugin ships its own de_DE/de_AT translations; harmless once translate.wordpress.org serves them. |
 | 1 each | `PostNotIn_exclude`, `DiscouragedFunctions`, `NonPrefixedConstantFound` | Admin-only lists with a small exclusion set; reviewed, no change needed. |
+
+## Release probe (16.11.2026, release ZIP of the PR state)
+
+- Upgrade from the released 1.1.0 (schema 1.3.0, built from the release commit `1fb789d`) with fixture data to the current ZIP: data verified; rollback to 1.1.0 still reads the vouchers; forward again keeps the promotion uses (`tests/upgrade-integration.php`, also in CI `upgrade`).
+- Uninstall with "Delete data on uninstall" off: all 10 tables stay. With it on: no `vcap_*` table, no `vcap_*` option and no request/template/field-group post left.
+- Fresh install, purchase, delivery, redemption and refunds of the ZIP: all 49 integration suites (HPOS and classic) and `browser-e2e` green.
