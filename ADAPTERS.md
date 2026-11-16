@@ -77,3 +77,24 @@ Test: `tests/affiliate-captain-integration.php` (runs with and without Affiliate
 - Never change Voucher Captain's tables or `_vcap_*` meta directly; use the services (`vcap()->vouchers`, `vcap()->redemptions`, `vcap()->store_credit`).
 - Add an integration test that runs with and without the other plugin (a deterministic stub is fine when the plugin is commercial).
 - See [COMPATIBILITY.md](COMPATIBILITY.md) for what CI covers and [CONNECTORS.md](CONNECTORS.md) for redemption connectors.
+
+## 7. Form Captain (voucher requests)
+
+Built in: `src/Integrations/FormCaptain/`, loaded only after `form_captain_loaded_v1` with contract major 1 (Form Captain 1.0 or newer). Without Form Captain nothing is registered. Form Captain contract: `wp-formmaster/docs/spec/api-v1.md`, `docs/CONNECTORS.md`.
+
+| Contract | How |
+|---|---|
+| Connector | Key `voucher_captain` via `form_captain_connectors_v1`, action `voucher_captain.voucher_request` ("Voucher request to Voucher Captain") via `form_captain_register_action_v1()`. Form Captain keeps the connector disabled until the site opts in (*Form Captain → Integrations*). No entitlement: Voucher Captain is free. |
+| Field mapping (allowlist) | `company` (text, optional), `contact_name` (text), `email` (email), `quantity` (number/select/radio/text/hidden), `value` (same types, per voucher, base currency, "50", "50,50", "1.250,00"), `personalization` (textarea/text, optional, ≤ 1000 characters), `consent` (consent/checkbox). No sensitive fields; unmapped fields never arrive. Action setting `product_id`: optional voucher product suggested for the approval. |
+| What a submission does | Stores one **request** in the own table `{prefix}vcap_fc_requests` (status `pending`, "To be reviewed") – never a voucher, coupon, order, email or payment. The worker of Form Captain runs the callback; the job's mapped `values` are the only data read (no Form Captain tables, no `form_captain_get_entry_v1()` call needed). |
+| Idempotency | Request key `form-captain:{site}:{form}:{entry}` (UNIQUE). Repeated deliveries, a second action instance on the same form and retries after a timeout return `success` with the same `remote_id` (`vcap-request-{id}`) and store nothing new. |
+| Results | `success` (`created`, `already_created`); `retry` `voucher_captain_unavailable` (WooCommerce/Voucher Captain not running or table missing, filter `vcap_form_captain_available`) and `storage_failed`; `fail` with `invalid_job`, `missing_contact`, `invalid_email`, `invalid_quantity` (1–100, filter `vcap_form_captain_max_quantity`), `invalid_value` (> 0, ≤ 10000, filter `vcap_form_captain_max_value`), `text_too_long`, `consent_missing`. Test runs (`test_mode`) validate only and store nothing. Without WooCommerce the connector reports `requirements.ok = false`, so Form Captain retries instead of losing the job. |
+| Review | *Vouchers → Voucher requests* (capability `vcap_manage_vouchers`, nonce per request): list by status, edit an open request (validated like a submission), **approve** or **reject** (internal reason). |
+| Approval | Exactly once per request (atomic status change `pending → approving → approved`). Creates a WooCommerce order (`created_via = vcap_form_captain`, meta `_vcap_fc_request`) for the contact with the chosen voucher product (simple product or variation, one voucher per item), quantity × requested value, the personalisation as personal message, and calls `vcap()->issuer->issue_for_order( $order, true )` – the existing issuing service (codes, coupons, ledger, delivery). The order is set *on hold* (payment by invoice, outside the plugin). If nothing could be issued the order is cancelled and the request stays open. Voucher tables are never written by the adapter. |
+| Rejection | Status `rejected`; nothing is issued, no order. |
+| Erasure (`form_captain_entry_deleted_v1`) | Open, rejected and withdrawn requests of the entry are deleted. Approved requests keep their numbers and order link but lose company, contact, e-mail and personalisation (the order belongs to WooCommerce and its privacy tools); issued vouchers stay untouched. |
+| Consent withdrawn (`form_captain_consent_withdrawn_v1`) | An open request becomes `withdrawn` and loses its personal data (it can never be approved); rejected requests are anonymised; approved requests stay (vouchers were issued under a contract – Form Captain sends `entry_deleted_v1` if the entry is erased). |
+| Hooks | `vcap_form_captain_request_created` (id), `vcap_form_captain_request_approved` (id, order, vouchers), `vcap_form_captain_request_rejected` (id). |
+| Uninstall | The table is dropped with the other tables when *Delete data on uninstall* is on. |
+
+Test: `tests/form-captain-integration.php` (needs Form Captain; uses the contract test kit `tests/integration/Contract/ConnectorContractAssertions.php` of Form Captain; CI job `form-captain` against Form Captain `main` and the contract 1.1.0 branch).
