@@ -202,7 +202,7 @@ $ho_again = $requests->hand_over( $ho_id );
 vcap_cs_assert( is_array( $ho_again ) && $ho_again['replayed'] && 4242 === $ho_again['order_id'] && 1 === $calls, 'a second hand-over answers the same company order' );
 $ho_issue = $requests->confirm( $ho_id, array( 'sale' => 'free', 'send' => false ) );
 vcap_cs_assert( is_wp_error( $ho_issue ) && 'vcap_handed_over' === $ho_issue->get_error_code(), 'a handed-over request cannot be issued' );
-vcap_cs_assert( array() === $requests->export( 'cs-ho-ann@example.com' )['data'] && 'handed_over' === $requests->export( 'cs-ho@example.com' )['data'][0]['data'][2]['value'], 'privacy export: the recipients are gone from the request, the contact sees the state handed_over' );
+vcap_cs_assert( array() === $requests->export( 'cs-ho-ann@example.com' )['data'] && VoucherRequests::state_label( VoucherRequests::STATE_HANDED_OVER ) === $requests->export( 'cs-ho@example.com' )['data'][0]['data'][2]['value'], 'privacy export: the recipients are gone from the request, the contact sees the state "handed over" (readable label, R11)' );
 remove_filter( 'vcap_voucher_request_handover_available', $available, 10 );
 remove_filter( 'vcap_voucher_request_handover', $takeover, 10 );
 
