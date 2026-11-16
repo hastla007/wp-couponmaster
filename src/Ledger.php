@@ -157,7 +157,8 @@ final class Ledger {
 			}
 			unset( $events );
 			self::flush_runtime_cache();
-		} while ( count( $vouchers ) === 500 );
+			$more = count( $vouchers ) === 500;
+		} while ( $more );
 	}
 
 	/** Attention kind prefix of a balance that differs from its ledger (M12-63), followed by the voucher id. */
@@ -378,7 +379,8 @@ final class Ledger {
 			}
 			$after = $rows ? (int) end( $rows )['id'] : 0;
 			self::flush_runtime_cache();
-		} while ( count( $rows ) === $batch );
+			$more = count( $rows ) === $batch;
+		} while ( $more );
 	}
 
 	/**

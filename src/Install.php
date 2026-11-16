@@ -255,7 +255,8 @@ final class Install {
 				}
 			}
 			$offset += count( $ids );
-		} while ( count( $ids ) === $number );
+			$more = count( $ids ) === $number;
+		} while ( $more );
 	}
 
 	public static function activate_site(): void {
@@ -491,7 +492,8 @@ final class Install {
 				wp_cache_delete( $id, 'post_meta' );
 			}
 			$after = (int) end( $ids );
-		} while ( 500 === count( $ids ) );
+			$more = 500 === count( $ids );
+		} while ( $more );
 		if ( $changed ) {
 			self::flush_coupon_cache();
 		}
@@ -1175,7 +1177,8 @@ final class Install {
 			}
 			$cursor = (int) end( $rows )['id'];
 			update_option( self::EVENT_HASH_CURSOR, $cursor, false );
-		} while ( count( $rows ) === 2000 && microtime( true ) - $start < $budget );
+			$more = count( $rows ) === 2000 && microtime( true ) - $start < $budget;
+		} while ( $more );
 		return count( $rows ) < 2000;
 	}
 

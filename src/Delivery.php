@@ -1439,7 +1439,8 @@ final class Delivery {
 						$this->repo->log( $voucher->id, 'delivery_failed', null, null, Note::make( 'reminder_failed' ) );
 					}
 				}
-			} while ( count( $batch ) === 200 );
+				$more = count( $batch ) === 200;
+			} while ( $more );
 		}
 		return $sent;
 	}

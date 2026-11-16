@@ -263,7 +263,8 @@ final class Campaigns {
 				);
 			}
 			Ledger::flush_runtime_cache(); // Products and orders read for the rows are not kept for the whole export.
-		} while ( count( $ids ) === 500 );
+			$more = count( $ids ) === 500;
+		} while ( $more );
 	}
 
 	/**

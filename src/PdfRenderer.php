@@ -966,7 +966,7 @@ final class PdfRenderer {
 
 		$style  = $this->box_style( $el );
 		$inner  = sprintf(
-			"font-family:%s;font-size:%spt;line-height:%s;color:%s;text-align:%s;font-weight:%s;font-style:%s;%s",
+			'font-family:%s;font-size:%spt;line-height:%s;color:%s;text-align:%s;font-weight:%s;font-style:%s;%s',
 			self::font_stack( (string) $font ),
 			$this->num( $size ),
 			$this->num( $lh ),

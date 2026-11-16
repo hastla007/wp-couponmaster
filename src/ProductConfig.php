@@ -336,14 +336,12 @@ final class ProductConfig {
 		$setting = $product ? (string) self::get( $product )['tax_treatment'] : 'auto';
 		if ( in_array( $setting, array( 'payment', 'single', 'discount' ), true ) ) {
 			$treatment = $setting;
+		} elseif ( 'percent' === $voucher->discount_type ) {
+			$treatment = 'discount';
+		} elseif ( $voucher->is_multi_use() || in_array( $voucher->type, array( 'giftcard', 'credit' ), true ) || $product || ( self::is_standalone( $voucher ) && true === self::is_sold( $voucher ) ) ) {
+			$treatment = 'payment'; // Gift cards, store credit and value vouchers that were sold.
 		} else {
-			if ( 'percent' === $voucher->discount_type ) {
-				$treatment = 'discount';
-			} elseif ( $voucher->is_multi_use() || in_array( $voucher->type, array( 'giftcard', 'credit' ), true ) || $product || ( self::is_standalone( $voucher ) && true === self::is_sold( $voucher ) ) ) {
-				$treatment = 'payment'; // Gift cards, store credit and value vouchers that were sold.
-			} else {
-				$treatment = 'discount'; // Codes without a sale behind them (promotions, campaigns).
-			}
+			$treatment = 'discount'; // Codes without a sale behind them (promotions, campaigns).
 		}
 		return (string) apply_filters( 'vcap_voucher_tax_treatment', $treatment, $voucher );
 	}

@@ -302,7 +302,8 @@ final class Command {
 				$changed += self::sync_one( $voucher, $dry ) ? 1 : 0;
 			}
 			++$page;
-		} while ( ! $ids && count( $batch ) === 200 );
+			$more = ! $ids && count( $batch ) === 200;
+		} while ( $more );
 		self::success( sprintf( '%d coupon(s) %s.', $changed, $dry ? 'would change' : 'changed' ) );
 	}
 

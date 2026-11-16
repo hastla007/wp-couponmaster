@@ -573,7 +573,8 @@ final class VoucherRepository {
 				yield $voucher;
 			}
 			Ledger::flush_runtime_cache(); // Products and orders read for the rows are not kept for the whole export.
-		} while ( count( $page['items'] ) === $batch );
+			$more = count( $page['items'] ) === $batch;
+		} while ( $more );
 	}
 
 	public function code_exists( string $code ): bool {
@@ -771,7 +772,8 @@ final class VoucherRepository {
 				$finished = false;
 				break;
 			}
-		} while ( count( $ids ) === self::MAINTENANCE_BATCH );
+			$more = count( $ids ) === self::MAINTENANCE_BATCH;
+		} while ( $more );
 		return $total;
 	}
 
@@ -977,7 +979,8 @@ final class VoucherRepository {
 			if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$this->events_table()} SET note = '[personal data removed]', actor_email_hash = '' WHERE id IN ({$placeholders})", array_map( 'intval', $ids ) ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
 				return false;
 			}
-		} while ( count( $ids ) === 500 );
+			$more = count( $ids ) === 500;
+		} while ( $more );
 		return true;
 	}
 
