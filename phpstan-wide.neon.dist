@@ -7,6 +7,10 @@ includes:
   - phpstan-baseline.neon
 
 parameters:
+  # Level 3 on purpose (checked 16.11.2026): level 4/5 reported 201/246 findings, with treatPhpDocTypesAsCertain off
+  # still 43/84 – all "always true/false" checks on values that WordPress filters, other plugins or wc_get_order()
+  # (refunds) can deliver with another type, and WooCommerce stubs stricter than WooCommerce itself
+  # (update_meta_data() with int, set_taxes( false )). No real defect among them; the defensive checks stay.
   level: 3
   paths:
     - voucher-captain.php
