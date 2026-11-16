@@ -47,7 +47,7 @@ add_filter( 'vcap_redemption_providers', function( array $providers, string $cod
 }, 10, 3 );
 ```
 
-Register a provider only when its external system is available. This hook defines the integration seam; it does not itself install or activate a Ticket Captain connector. A real cross-plugin adapter still needs a shared contract version and a two-plugin integration test.
+Register a provider only when its external system is available. This hook defines the integration seam; it does not itself install or activate a Pass Captain connector. A real cross-plugin adapter still needs a shared contract version and a two-plugin integration test.
 
 ## External redemptions (since 1.1.0)
 
@@ -251,13 +251,13 @@ The voucher line snapshot (`VCAP\Issuer::line_data( $item )`, order item meta `_
 
 `vcap()->redemptions->refund( $key, $amount, $refund_key )` gives back (part of) a committed redemption, e.g. when the service it paid for is refunded. Gift cards get the amount back on their balance; a single-use voucher becomes usable again once the refunds reach the redeemed amount (partial refunds are recorded only). Idempotent per `$refund_key`; refunds are capped at the redeemed amount (`vcap_refund_exceeded`), only committed redemptions can be refunded (`vcap_not_committed`). Ledger event `api_refunded`, action `vcap_redemption_refunded`.
 
-## WP Pass Captain
+## Pass Captain
 
-When WP Pass Captain is active, Voucher Captain registers itself as its voucher provider (`wp_pass_captain_voucher_provider_v1`, contract version 1): vouchers and gift cards can pay for tickets in Pass Captain's own checkout. Quote, reserve, commit, release and refund map to the redemption API (target `passcaptain:{order reference}`, channel `passcaptain` – tick it under *Redeemable via*, or leave all channels unticked). Amounts are converted between Pass Captain's minor units and the voucher currency; vouchers in another currency are refused. Ticket refunds give the voucher share back proportionally. Checked in CI with both plugins installed (`tests/passcaptain-integration.php`).
+When Pass Captain is active, Voucher Captain registers itself as its voucher provider (`wp_pass_captain_voucher_provider_v1`, contract version 1): vouchers and gift cards can pay for tickets in Pass Captain's own checkout. Quote, reserve, commit, release and refund map to the redemption API (target `passcaptain:{order reference}`, channel `passcaptain` – tick it under *Redeemable via*, or leave all channels unticked). Amounts are converted between Pass Captain's minor units and the voucher currency; vouchers in another currency are refused. Ticket refunds give the voucher share back proportionally. Checked in CI with both plugins installed (`tests/passcaptain-integration.php`).
 
 ### Ticket vouchers (voucher → Pass Captain tickets)
 
-A voucher product can name a Pass Captain ticket type – a fixed date – or a whole event, where the customer chooses one of its upcoming dates (*WP Pass Captain ticket*: "Fixed date: …" or "Customer chooses the date: …"; optional *Ticket name (date choice)* to offer only ticket types with that name; *Tickets per voucher* in the product's voucher settings; shown while Pass Captain ≥ the version with `wp_pass_captain_ticket_service_v1` is active). Each sold voucher stores that target with its order line (`_vcap_line` → `passcaptain_ticket`) and is exchanged for the tickets:
+A voucher product can name a Pass Captain ticket type – a fixed date – or a whole event, where the customer chooses one of its upcoming dates (*Pass Captain ticket*: "Fixed date: …" or "Customer chooses the date: …"; optional *Ticket name (date choice)* to offer only ticket types with that name; *Tickets per voucher* in the product's voucher settings; shown while Pass Captain ≥ the version with `wp_pass_captain_ticket_service_v1` is active). Each sold voucher stores that target with its order line (`_vcap_line` → `passcaptain_ticket`) and is exchanged for the tickets:
 
 - **Customer:** entering the code on the redeem page (`[vcap_redeem]`) exchanges it instead of applying it to the cart. Tickets go to the logged-in customer, else to the voucher's recipient (or buyer). For an event voucher the form asks for the date first (select of upcoming dates).
 - **Admin:** *Exchange for tickets* on the voucher page (with a date select for event vouchers).

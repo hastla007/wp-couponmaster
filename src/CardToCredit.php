@@ -9,7 +9,7 @@ defined( 'ABSPATH' ) || exit;
  * voided and both histories show the booking ("moved_to_credit" on the card, "credit" on the account), in one
  * transaction. Allowed for the verified owner (the card was bought in the customer's own order) or whoever holds
  * the full code (typed into the form, rate limited like every code entry); personal cards only for their named
- * addresses. Needs store credit to be switched on. Merging cards stays a premium feature.
+ * addresses. Needs store credit to be switched on. Merging cards is not part of the core.
  */
 final class CardToCredit {
 	public const ACTION = 'vcap_card_to_credit';

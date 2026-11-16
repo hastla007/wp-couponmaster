@@ -7,7 +7,7 @@ defined( 'ABSPATH' ) || exit;
  * M12-96: the customer chooses the design. A voucher product lists the PDF templates allowed for it
  * ("allowed_templates"); with two or more, the product page shows them as a radio group with a small picture of
  * each. The choice is checked against the list, kept as cart item data "vcap_template" and order item meta
- * "_vcap_template", and Issuer::create_voucher() prints the voucher with it. An own photo stays a premium feature.
+ * "_vcap_template", and Issuer::create_voucher() prints the voucher with it. An own photo is not part of the core.
  */
 final class DesignGallery {
 	public const CART_KEY  = 'vcap_template';

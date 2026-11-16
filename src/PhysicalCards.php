@@ -7,8 +7,8 @@ defined( 'ABSPATH' ) || exit;
  * M12-97: physical gift cards. A voucher product with "Physical card" is shipped (not virtual): its vouchers take
  * their code from the product's imported batch (the printed cards), get no email – the card itself is the handover
  * – and stay inactive (scheduled, coupon disabled) until the order reaches an activation status (default
- * "completed", i.e. shipped; filter "vcap_physical_activation_statuses"). Print data for card printers stays a
- * premium feature.
+ * "completed", i.e. shipped; filter "vcap_physical_activation_statuses"). Print data for card printers is not part
+ * of the core (an add-on can build it on the public hooks).
  */
 final class PhysicalCards {
 	public function register(): void {

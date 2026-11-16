@@ -2308,6 +2308,45 @@ preg_match_all( '/`(vcap_[a-z0-9_]+)`/', $m102_part, $m102_named );
 $m102_missing = array_values( array_filter( array_unique( $m102_named[1] ), static fn( $h ) => ! str_contains( $m102_hooks, '`' . $h . '`' ) ) );
 check( 'M12-102: FREE-PREMIUM.md refers to docs/HOOKS.md instead of an own hook table, and every hook it names is in HOOKS.md', '' !== $m102_part && str_contains( $m102_doc, '(HOOKS.md)' ) && ! preg_match( '/^\|\s*`vcap_/m', $m102_doc ) && count( $m102_named[1] ) > 10 && array() === $m102_missing, implode( ', ', $m102_missing ) );
 
+// A5 / A6 (free core): the core works on its own. It sends HTTP requests in two places only – the Site Health
+// self-check of the own site and PDF images from hosts a developer named (filter vcap_pdf_remote_hosts) – and its
+// code names no premium offer or upgrade.
+$a5_http   = array();
+$a5_upsell = array();
+foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( dirname( __DIR__ ) . '/src', FilesystemIterator::SKIP_DOTS ) ) as $a5_file ) {
+	if ( 'php' !== $a5_file->getExtension() ) {
+		continue;
+	}
+	$a5_code = (string) file_get_contents( $a5_file->getPathname() );
+	$a5_rel  = substr( $a5_file->getPathname(), strlen( dirname( __DIR__ ) ) + 1 );
+	if ( preg_match( '/\b(wp_remote_(get|post|request|head)|wp_safe_remote_(get|post|request|head)|curl_init|fsockopen)\s*\(/', $a5_code ) ) {
+		$a5_http[] = $a5_rel;
+	}
+	if ( preg_match( '/upgrade to|go pro\b|pro version|premium feature|captain[ -]pro/i', $a5_code ) ) {
+		$a5_upsell[] = $a5_rel;
+	}
+}
+sort( $a5_http );
+check( 'A5: the core sends HTTP requests only from the Site Health self-check and the opt-in PDF image hosts', array( 'src/Health.php', 'src/PdfRenderer.php' ) === $a5_http, implode( ', ', $a5_http ) );
+check( 'A6: the core code names no premium offer, upgrade or add-on product', array() === $a5_upsell, implode( ', ', $a5_upsell ) );
+
+// Review 16.11.2026 (R16-07): the README table "Was der Kern heute ausgibt" names only actions that exist, with
+// the version of docs/HOOKS.md, and the fields it says vcap_voucher_redeemed carries are in the code.
+$r07_readme = (string) file_get_contents( dirname( __DIR__ ) . '/README.md' );
+$r07_part   = (string) strstr( (string) strstr( $r07_readme, '**Was der Kern heute ausgibt**' ), '## Entwicklung', true );
+$r07_ref    = (string) strstr( (string) file_get_contents( dirname( __DIR__ ) . '/docs/HOOKS.md' ), '## Filters', true );
+preg_match_all( '/^\| `(vcap_[a-z0-9_]+)` \| (\d+\.\d+\.\d+) \|/m', $r07_part, $r07_rows, PREG_SET_ORDER );
+$r07_wrong = array();
+foreach ( $r07_rows as $r07_row ) {
+	if ( ! str_contains( $r07_ref, '| `' . $r07_row[1] . '` | ' . $r07_row[2] . ' |' ) ) {
+		$r07_wrong[] = $r07_row[1];
+	}
+}
+$r07_fire = (string) file_get_contents( dirname( __DIR__ ) . '/src/VoucherRepository.php' ) . (string) file_get_contents( dirname( __DIR__ ) . '/src/API/V1/RedemptionService.php' );
+$r07_keys = array( 'voucher_id', 'code', 'user_id', 'amount', 'currency', 'order_id', 'channel', 'committed_at', 'source', 'redemption_key', 'target', 'till', 'receipt', 'state', 'balance_after', 'expires_at', 'created_at', 'meta' );
+$r07_lost = array_values( array_filter( $r07_keys, static fn( $k ) => ! str_contains( $r07_fire, "'" . $k . "'" ) || ! str_contains( $r07_part, '`' . $k . '`' ) ) );
+check( 'R16-07: the README list of emitted events matches docs/HOOKS.md and the redemption payload in the code', count( $r07_rows ) >= 18 && array() === $r07_wrong && array() === $r07_lost, implode( ', ', array_merge( $r07_wrong, $r07_lost ) ) );
+
 // Review 16.11.2026 (R16-13): the extension points a premium add-on needs exist, every hook names its first version,
 // and an add-on can check one contract version. The core knows nothing about the add-on.
 $r16_root  = dirname( __DIR__ );

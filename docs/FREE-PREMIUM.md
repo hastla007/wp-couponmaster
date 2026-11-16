@@ -6,7 +6,7 @@ Entscheidung des Betreibers vom 13.11.2026 (verbindlich). Dieses Dokument ersetz
 
 1. **Der Kern ist frei.** Voucher Captain steht unter GPL-2.0-or-later und wird über WordPress.org verteilt. Jede
    Funktion, die heute im Code steht, gehört zum Kern und bleibt dauerhaft frei – auch Aktionen, Freunde werben,
-   Aufladung, Auswertungen und die WP-Pass-Captain-Integration. Im Kern ist nichts gesperrt, abgestuft oder „in
+   Aufladung, Auswertungen und die Pass-Captain-Integration. Im Kern ist nichts gesperrt, abgestuft oder „in
    Premium enthalten“.
 2. **Kein Lizenz- oder Update-Code im Kern.** Kein Lizenz-Client, keine Aufrufe von `wplc/v1`, kein `Update URI`-Header,
    keine eigenen Filter auf `pre_set_site_transient_update_plugins` oder `plugins_api`, keine Berechtigungsprüfungen
@@ -53,7 +53,7 @@ Entscheidung des Betreibers vom 13.11.2026 (verbindlich). Dieses Dokument ersetz
 | **Aktionen und Bonusgutscheine** (früher Premium) | Regelbasierte Rabatte im Warenkorb, Bonusgutscheine, Nutzungsgrenzen |
 | **Freunde werben** (früher Premium) | Persönlicher Empfehlungscode, Prämien, Rücknahme bei Storno, `[vcap_referral]` |
 | **Aufladung von Geschenkkarten** (früher Premium) | Aufladeprodukt bucht den Wert auf eine bestehende Karte, Rückbuchung bei Erstattung |
-| **WP-Pass-Captain-Integration** (früher Premium) | Ticketgutscheine, gemeinsamer Scanner; dazu wie bisher Bezahlen mit Gutscheinen in der Pass-Captain-Kasse |
+| **Pass-Captain-Integration** (früher Premium) | Ticketgutscheine, gemeinsamer Scanner; dazu wie bisher Bezahlen mit Gutscheinen in der Pass-Captain-Kasse |
 | Kompatibilität | WooCommerce Subscriptions, WPML/WCML, Multi-Currency (WCML, Aelia, WOOCS, CURCY), HPOS, Block-Warenkorb/-Kasse, Multisite |
 | Sicherheit & Datenschutz | Capabilities, Nonces, signierte Links, Datenexport/-löschung, Anonymisierung, Rate-Limit |
 
