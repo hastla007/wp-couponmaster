@@ -84,7 +84,7 @@ final class VoucherRequestsAdmin {
 				/* translators: %d: id of the voucher request */
 				? '<label class="screen-reader-text" for="vcap-req-' . (int) $r['id'] . '">' . esc_html( sprintf( __( 'Select request %d', 'voucher-captain' ), (int) $r['id'] ) ) . '</label><input type="checkbox" id="vcap-req-' . (int) $r['id'] . '" name="requests[]" value="' . (int) $r['id'] . '" />'
 				: '';
-			echo '<tr><th scope="row" class="check-column">' . $check . '</th><td><a href="' . esc_url( $url ) . '">'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built from escaped parts above. . esc_html( get_date_from_gmt( (string) $r['received_at'], get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ) . '</a></td>';
+			echo '<tr><th scope="row" class="check-column">' . $check . '</th><td><a href="' . esc_url( $url ) . '">' . esc_html( get_date_from_gmt( (string) $r['received_at'], get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ) . '</a></td>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $check is built from escaped parts above.
 			echo '<td>' . esc_html( self::kind_label( (string) $r['kind'] ) ) . '</td>';
 			echo '<td>' . esc_html( trim( $contact['company'] . ' ' . $contact['name'] ) ) . '</td>';
 			echo '<td>' . esc_html( (string) (int) $r['quantity'] ) . '</td>';

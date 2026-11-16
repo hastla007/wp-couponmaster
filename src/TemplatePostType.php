@@ -204,11 +204,11 @@ final class TemplatePostType {
 					array( 'id' => 'e7', 'type' => 'text', 'name' => 'Message', 'x' => 76, 'y' => 56, 'w' => 120, 'h' => 26, 'text' => '{message}', 'font' => 'DejaVu Serif', 'size' => 11, 'color' => '#555555', 'italic' => true ),
 					// M12-55: the giver, only when the "From" field was filled (never the billing name, e.g. a company).
 					array( 'id' => 'e14', 'type' => 'text', 'name' => 'From', 'x' => 76, 'y' => 84, 'w' => 120, 'h' => 7, 'text' => __( 'From: {field:sender_name}', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 9, 'color' => '#555555' ),
-					array( 'id' => 'e8', 'type' => 'text', 'name' => 'Code label', 'x' => 76, 'y' => 96, 'w' => 80, 'h' => 6, 'text' => __( 'Voucher code', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 8, 'color' => '#8a8a8a', 'uppercase' => true ),
+					array( 'id' => 'e8', 'type' => 'text', 'name' => 'Code label', 'x' => 76, 'y' => 96, 'w' => 80, 'h' => 6, 'text' => __( 'Voucher code', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 8, 'color' => '#666666', 'uppercase' => true ),
 					array( 'id' => 'e9', 'type' => 'text', 'name' => 'Code', 'x' => 76, 'y' => 102, 'w' => 90, 'h' => 10, 'text' => '{coupon_code}', 'font' => 'DejaVu Sans Mono', 'size' => 15, 'color' => '#1f3a4d', 'bold' => true ),
 					array( 'id' => 'e10', 'type' => 'text', 'name' => 'Expiry', 'x' => 76, 'y' => 118, 'w' => 90, 'h' => 8, 'text' => '{expiry_line}', 'font' => 'DejaVu Sans', 'size' => 9, 'color' => '#555555' ),
 					array( 'id' => 'e12', 'type' => 'text', 'name' => 'How to redeem', 'x' => 76, 'y' => 127, 'w' => 92, 'h' => 7, 'text' => '{redeem_instructions}', 'font' => 'DejaVu Sans', 'size' => 7, 'color' => '#333333' ),
-					array( 'id' => 'e13', 'type' => 'text', 'name' => 'Conditions', 'x' => 76, 'y' => 134, 'w' => 122, 'h' => 7, 'text' => "{transferable}\n{redemption_terms}", 'font' => 'DejaVu Sans', 'size' => 6, 'color' => '#777777', 'lineHeight' => 1.15 ),
+					array( 'id' => 'e13', 'type' => 'text', 'name' => 'Conditions', 'x' => 76, 'y' => 134, 'w' => 122, 'h' => 7, 'text' => "{transferable}\n{redemption_terms}", 'font' => 'DejaVu Sans', 'size' => 6, 'color' => '#666666', 'lineHeight' => 1.15 ),
 					array( 'id' => 'e11', 'type' => 'qrcode', 'name' => 'QR code', 'x' => 170, 'y' => 100, 'w' => 28, 'h' => 28, 'qrContent' => 'code', 'color' => '#1f3a4d' ),
 				),
 			),
@@ -226,7 +226,7 @@ final class TemplatePostType {
 					array( 'id' => 't5', 'type' => 'text', 'name' => 'Admissions', 'x' => 6, 'y' => 52, 'w' => 93, 'h' => 8, 'text' => __( 'Admissions: {ticket_admissions}', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 10, 'color' => '#222222' ),
 					array( 'id' => 't6', 'type' => 'qrcode', 'name' => 'Check-in QR', 'x' => 25, 'y' => 64, 'w' => 55, 'h' => 55, 'qrContent' => 'checkin', 'color' => '#000000' ),
 					array( 'id' => 't7', 'type' => 'text', 'name' => 'Code', 'x' => 6, 'y' => 122, 'w' => 93, 'h' => 8, 'text' => '{coupon_code}', 'font' => 'DejaVu Sans Mono', 'size' => 11, 'color' => '#5b2a86', 'align' => 'center', 'bold' => true ),
-					array( 'id' => 't8', 'type' => 'text', 'name' => 'Order', 'x' => 6, 'y' => 134, 'w' => 93, 'h' => 6, 'text' => __( 'Order #{order_number} · {site_name}', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 7, 'color' => '#888888', 'align' => 'center' ),
+					array( 'id' => 't8', 'type' => 'text', 'name' => 'Order', 'x' => 6, 'y' => 134, 'w' => 93, 'h' => 6, 'text' => __( 'Order #{order_number} · {site_name}', 'voucher-captain' ), 'font' => 'DejaVu Sans', 'size' => 7, 'color' => '#666666', 'align' => 'center' ),
 				),
 			),
 		);

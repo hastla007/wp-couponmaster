@@ -154,11 +154,16 @@
 		);
 	}
 
+	// The cart update re-mounts the slot's fills before the answer arrives: the result goes to the field mounted
+	// then (its status region is announced when the text appears) and is kept for a later re-mount.
+	var giftCard = { result: { text: '', error: false }, set: null };
+
 	/** "Redeem a gift card": code field and button (setting "Gift card field"). */
 	function GiftCardField( props ) {
 		var texts = data( props.extensions ).giftcard_field;
 		var code = wp.element.useState( '' );
-		var message = wp.element.useState( { text: '', error: false } );
+		var message = wp.element.useState( giftCard.result );
+		giftCard.set = message[ 1 ];
 		var busy = wp.element.useState( false );
 		if ( ! texts || ! checkout.extensionCartUpdate ) {
 			return null;
@@ -170,13 +175,17 @@
 				return;
 			}
 			busy[ 1 ]( true );
+			var show = function ( result ) {
+				giftCard.result = result;
+				giftCard.set( result );
+			};
 			update( { action: 'apply_code', code: code[ 0 ] } )
 				.then( function () {
 					code[ 1 ]( '' );
-					message[ 1 ]( { text: texts.applied, error: false } );
+					show( { text: texts.applied, error: false } );
 				} )
 				.catch( function ( error ) {
-					message[ 1 ]( { text: errorText( error ), error: true } );
+					show( { text: errorText( error ), error: true } );
 				} )
 				.finally( function () {
 					busy[ 1 ]( false );

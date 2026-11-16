@@ -569,6 +569,20 @@ jobs:
         env:
           CI: 'true'
         run: npx playwright test 01-product.spec.js 04-account-and-shortcodes.spec.js 05-admin-yoast.spec.js 06-screen-reader.spec.js
+      - name: Browser tests – features of 1.2.0 (live preview, design choice, gift / for me, gift card field, card to store credit, new admin pages)
+        env:
+          CI: 'true'
+          E2E_NEW_FEATURES: 'yes'
+        run: |
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/e2e/pages.php" classic
+          # Settings that change every product page and cart: on for this run only.
+          php wp-cli.phar --path=wp-test option update vcap_gift_toggle yes
+          php wp-cli.phar --path=wp-test option update vcap_giftcard_field yes
+          status=0
+          (cd tests/e2e && npx playwright test 07-new-features.spec.js) || status=$?
+          php wp-cli.phar --path=wp-test option update vcap_gift_toggle no
+          php wp-cli.phar --path=wp-test option update vcap_giftcard_field no
+          exit $status
       - name: Browser tests – classic cart and checkout (personalised voucher, gift card through the redeem form)
         env:
           CI: 'true'
