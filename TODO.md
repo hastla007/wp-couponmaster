@@ -1326,7 +1326,7 @@ Ohne Befund geprüft: Nonce- und Capability-Checks aller `admin_post_`-, `wp_aja
 **Stand 16.11.2026:** Es gibt keinen festgelegten Vertrag. Die folgenden Aufgaben sind Arbeitspakete für die Zeit nach einer gemeinsamen Spezifikation der Suite; ihr Ort ist offen (E2), ebenso die Priorität (E5). Dieses Repository legt den Vertrag nicht allein fest. Fest stehen nur diese Regeln:
 
 - Der Kern kennt weder Lizenzen noch ein „Pro“ eines anderen Plugins; er unterscheidet höchstens „Workflow-Plugin vorhanden, fehlt oder ist inkompatibel“ (Entscheidung 13.11.2026).
-- Kein Formular und kein Workflow stellt selbstständig Gutscheine aus (strengere Regel aus README und Suite-Abschnitt; Frage E3).
+- ~~Kein Formular und kein Workflow stellt selbstständig Gutscheine aus (strengere Regel aus README und Suite-Abschnitt; Frage E3).~~ Überholt durch die Entscheidungen D11 und D11b vom 16.11.2026, siehe den Abschnitt „Entscheidungen des Inhabers vom 16.11.2026 zu Workflow“ direkt darunter. Bis die dortigen Aufgaben umgesetzt sind, gilt die alte Regel im Code weiter.
 - Die bestehenden PHP-Hooks bleiben unverändert (Vertrag v1). `vcap_voucher_redeemed` übergibt heute `code` und `user_id` (`src/API/V1/RedemptionService.php`, `src/VoucherRepository.php`), ein `Voucher`-Objekt enthält immer Code, Token und Käufer-/Empfängerdaten. Ein künftiger Ereignisumschlag für andere Plugins muss deshalb weglassen: Gutscheincode, Token und Download-Links, PDF, E-Mail-Adressen, Namen, Nachricht, eigene Feldwerte und – bis die Spezifikation es anders festlegt – die Benutzer-ID.
 - Was der Kern heute ausgibt (18 Lebenszyklus-Actions mit Argumenten und Version), steht in README „Captain-Suite-Verbund → Was der Kern heute ausgibt“ und vollständig in docs/HOOKS.md. Eine Ereignis-ID, einen Ausgangspuffer und eine Zustellung an andere Systeme gibt es nicht.
 
@@ -1337,6 +1337,33 @@ Ohne Befund geprüft: Nonce- und Capability-Checks aller `admin_post_`-, `wp_aja
 - [ ] VOUCH-WF-05 – Admin-Status mit Vertragsversion, aktiven Übernahmen, letzter Ereignis-ID, Wiederholung und Fehlerdiagnose ergänzen; ein fehlendes, deaktiviertes oder inkompatibles Workflow-Plugin darf native Voucher-Funktionen nicht blockieren. Zuerst zu spezifizieren: Ereignis-ID und Wiederholungsverhalten (VOUCH-WF-01/-02). Braucht: gemeinsame Spezifikation (E2).
 - [ ] VOUCH-WF-06 – Vertrags- und E2E-Matrix für Schwärzung, Erstattung, Codegeheimnis, Multisite, HPOS, Duplikate und „Workflow-Plugin vorhanden / fehlt / inkompatibel“ ergänzen. Lizenz- oder Pro-Zustände eines anderen Plugins prüft der Kern nicht. Braucht: VOUCH-WF-01 bis -05.
 - Abnahme: Gutscheinzustand und Ledger ändern sich nur über Voucher-Services; Retries erzeugen keine doppelte Einlösung oder Provision.
+
+## Entscheidungen des Inhabers vom 16.11.2026 zu Workflow – was ist wann zu tun
+
+Die gemeinsame Spezifikation liegt im Repository `wp-workflowmaster` (`docs/SPEC-suite-events.md`, Entwurf). Sie gilt vor diesem Abschnitt, sobald sie abgenommen ist.
+
+**Entschieden:**
+
+- **D13:** Die vorläufige Workflow-Schnittstelle kommt vor dem Release aus dem kostenlosen Kern heraus. Sie liegt nur auf dem Branch von Pull Request 16 (`claude/wp-plugin-analyse-todo-hvollo-refactors`, geprüft auf Commit 282d71a): `src/Workflow/Provider.php`, `src/Workflow/Handover.php`, `src/Workflow/Services.php`, `WORKFLOW.md`, `tests/workflow-integration.php` sowie die Stellen dazu in `src/Settings.php`, `tests/run.php`, `API.md`, `CONNECTORS.md` und `docs/HOOKS.md`. Auf `claude/sharp-mendel-xiiwf3` ist sie nicht enthalten (`git grep vcap_workflow` ohne Treffer).
+- **D5, D9, D10:** Übertragen wird über die bestehenden PHP-Hooks. Workflow Captain baut den Umschlag, speichert und wiederholt. Der Kern behält seine E-Mails; eine Übergabe von E-Mails an Workflow gibt es nicht.
+- **D8, D8b:** Ereignisdaten enthalten öffentliche Kennungen, die Benutzer-ID und Geldbeträge mit Währung. Verboten bleiben geheime Codes (Gutscheincode, Token, Download-Links), E-Mail-Adressen und Namen.
+- **D11, D11b:** Ein Workflow darf Gutscheine ausstellen, entwerten, reaktivieren und einlösen. Jede der vier Handlungen braucht feste Grenzen, ein Protokoll und einen Missbrauchsschutz im Kern. Erstattungen und andere Geldbewegungen bleiben Menschen vorbehalten.
+- **D6, D7:** Lizenzen prüft nur das Add-on. Der Kern kennt weder `edition` noch `entitlement`.
+- **D12:** Die Workflow-Arbeit steht hinter dem Verkaufsstart der drei Add-ons.
+
+**Zeitpunkt 1 – vor dem Merge von Pull Request 16 und vor dem Release 1.2.0 (Sitzung von PR 16):**
+
+- [ ] VOUCH-WF-10 – Die Workflow-Schnittstelle aus dem Stand für 1.2.0 nehmen (Dateien siehe D13) und auf einem eigenen Branch aufbewahren; im TODO den Commit nennen, aus dem sie wiederhergestellt werden kann. Erledigt, wenn `git grep vcap_workflow` auf dem Release-Stand keinen Treffer hat und alle Prüfungen grün sind.
+- [ ] VOUCH-WF-11 – Wächtertest ergänzen: Er schlägt fehl, wenn `vcap_workflow_event`, `edition` oder `entitlement` als Lizenzbegriff im Kern auftauchen, solange VOUCH-WF-13 offen ist.
+- [ ] VOUCH-WF-12 – README, `API.md`, `CONNECTORS.md`, `docs/HOOKS.md` und Changelog berichtigen: 1.2.0 enthält keine Workflow-Schnittstelle. Der Satz „kein Workflow stellt Gutscheine aus“ wird durch den Hinweis auf D11b ersetzt.
+
+**Zeitpunkt 2 – nach dem Verkaufsstart der drei Add-ons und nach Abnahme der Spezifikation:**
+
+- [ ] VOUCH-WF-13 – Einstiegspunkte für die vier erlaubten Handlungen (ausstellen, entwerten, reaktivieren, einlösen) als neue Vertragsversion bauen: Höchstwert je Gutschein, Anzahl je Tag und Website, Anzahl je Tag und Empfänger, Idempotenzschlüssel, Berechtigung `vcap_manage_vouchers`, Protokoll, standardmäßig aus. Die Zahlen stehen als Vorschlag in der Spezifikation (Frage F-05) und brauchen die Bestätigung des Inhabers. Ersetzt VOUCH-WF-03.
+- [ ] VOUCH-WF-14 – Für die sechs Actions ohne Vermerk „nach COMMIT“ (`vcap_vouchers_issued`, `vcap_voucher_issued_standalone`, `vcap_voucher_delivered`, `vcap_voucher_delivery_given_up`, `vcap_voucher_bounced`, `vcap_voucher_reissued`) prüfen und in `docs/HOOKS.md` festhalten, ob sie nach dem Commit feuern (Spezifikation Z-05).
+- [ ] VOUCH-WF-15 – Eine kleine Lesefunktion „Kontakt und Einwilligung zu dieser Gutschein-ID“ anbieten, damit ein Add-on Empfänger ohne WordPress-Konto erreichen kann (Spezifikation F-13). Braucht die rechtliche Prüfung zu D8.
+
+**Was aus der älteren Liste entfällt oder sich ändert:** VOUCH-WF-01, -02 und -05 entfallen im Kern (Umschlag, Ereignis-ID und Wiederholung baut Workflow Captain, D9). VOUCH-WF-04 entfällt (keine Übergabe, D10). VOUCH-WF-03 wird durch VOUCH-WF-13 ersetzt. VOUCH-WF-06 bleibt und prüft dann VOUCH-WF-13 bis -15.
 
 ## Review vom 16.11.2026
 
