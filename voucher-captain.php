@@ -41,6 +41,9 @@ spl_autoload_register(
 	}
 );
 
+// Optional Form Captain adapter (voucher requests); stays inactive without Form Captain.
+\VCAP\Integrations\FormCaptain\Bootstrap::register();
+
 register_activation_hook( __FILE__, array( '\VCAP\Install', 'activate' ) );
 register_deactivation_hook( __FILE__, array( '\VCAP\Install', 'deactivate' ) );
 

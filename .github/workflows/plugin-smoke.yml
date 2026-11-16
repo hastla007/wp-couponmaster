@@ -218,6 +218,62 @@ jobs:
           php wp-cli.phar --path=wp-test plugin get wp-pass-captain --field=version
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/passcaptain-integration.php"
 
+  form-captain:
+    # Optional Form Captain adapter (voucher requests, contract v1): released main and the branch with contract 1.1.0
+    # of hastla007/wp-formmaster (a ref that no longer exists is skipped). Form Captain needs PHP 8.3 and WordPress 6.8.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        form_captain_ref: ['main', 'claude/sleepy-ptolemy-n32guj']
+    services:
+      db:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --password=root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, gd, mbstring, mysqli, xml, zip
+          coverage: none
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist
+      - name: Download WP-CLI
+        run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
+      - name: Install WordPress, WooCommerce, Form Captain and the release ZIP
+        run: |
+          php wp-cli.phar core download --path=wp-test --version=7.1.4
+          php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
+          php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher + Form Captain" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
+          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.2.2 --activate
+          if ! curl --fail --silent --show-error --location --output form-captain.zip "https://codeload.github.com/hastla007/wp-formmaster/zip/refs/heads/${{ matrix.form_captain_ref }}"; then
+            echo "Form Captain ref ${{ matrix.form_captain_ref }} is not available; skipping."
+            echo "VCAP_SKIP_FORM_CAPTAIN=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          unzip -q form-captain.zip -d form-captain-src
+          mv form-captain-src/wp-formmaster-* wp-test/wp-content/plugins/form-captain
+          php wp-cli.phar --path=wp-test plugin activate form-captain
+          bin/build.sh
+          php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
+          php wp-cli.phar --path=wp-test plugin list
+      - name: Run the Voucher Captain + Form Captain checks
+        if: env.VCAP_SKIP_FORM_CAPTAIN != '1'
+        run: |
+          php wp-cli.phar --path=wp-test eval 'echo form_captain_contract_version(), PHP_EOL;'
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/form-captain-integration.php"
+
   browser-e2e:
     runs-on: ubuntu-latest
     services:
