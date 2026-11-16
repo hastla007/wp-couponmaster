@@ -79,6 +79,19 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 == Changelog ==
 
 = 1.2.0 =
+* Change: new installations settle multi-purpose vouchers, gift cards and store credit as a payment after tax ("Multi-purpose vouchers as payment" on); existing shops keep their setting and see a Site Health note.
+* New: admin – "New voucher" (issue without an order, with reason; also `wp vcap issue --amount --email`), "Import cards" (existing gift cards from CSV/XLS/XLSX/ODS with dry run, also `wp vcap import`), bulk actions "Extend validity", "Send expiry reminder" and "Export selection (CSV)", search by code end, code without separators or order number, "Show vouchers" on the user profile.
+* New: storefront – live preview of the voucher while typing, design choice from several PDF templates, "As a gift / For me", a separate "Redeem a gift card" field in cart and checkout (classic and blocks), remaining balance in the mini cart, custom amounts through the Store API (blocks, headless).
+* New: physical cards (code from a code batch, activated when the order is completed) and "Add to my store credit" for gift cards in My Account.
+* New: reports – "Overview" tab (sold, issued without order, redeemed, outstanding, expired with value left, top products).
+* New: delivery – "Correct the recipient" link for the buyer (also for guests, signed and time limited), bounce handling with the buyer told, optional buyer emails "Gift delivered" and "Gift used", delivery hour, several expiry reminders (e.g. 30, 7, 1 days), sender name field, attachments above 8 MB sent as links.
+* New: white label extension points for add-ons – `vcap_brand_name`, `vcap_brand_logo`, `vcap_admin_menu_title`, `vcap_admin_menu_icon`.
+* Fix: a gift card kept in another currency than the shop base currency is refused in the cart and over the API instead of being taken 1:1; with currency switchers the cart cap is compared in the coupon's own units.
+* Fix: the customer's own reservation of an abandoned payment counts as available again; product and exclusion rules of a gift card limit only the lines it pays for instead of refusing the whole card.
+* Fix: an abandoned payment page no longer blocks a "first order only" coupon of the same customer for up to an hour.
+* Fix (security): voucher settings of a product are also guarded on the WooCommerce REST API and the CSV import (voucher managers only).
+* Fix: workflow plugins – the instance id stays the same with language plugins (WPML), an incompatible workflow plugin gets no events, repeated service calls never run twice, communications are handed over only with an active licence, "gift used" is never told twice.
+* Fix: voucher requests – list with pages and a state filter, a lock per request against two managers acting at once, rejected entries stay answered as rejected, interrupted submits are repaired; review-source records and rejected claims are removed after their retention period.
 * New: Captain Suite contracts (optional, for the separate plugins WP Review Captain and WP Form Captain). Product setting "Redemption confirms a service (for review invitations)" (default off): counter redemptions of such vouchers are reported to a review plugin with a stable reference and no personal data, and withdrawn when the redemption is cancelled, refunded or the voucher voided. Vouchers → Voucher requests: requests from forms (company orders, personalisation) are only stored – vouchers are issued when a manager confirms them. Voucher Captain sends no review invitations itself. Requests are part of the WordPress personal data export and erasure and of the suggested privacy policy text; at most 500 open requests (filter `vcap_voucher_requests_max_open`). Erasing or deleting a voucher withdraws its review references. Only the first confirmed redemption of a voucher is reported for a review (one service = one request; filter `vcap_review_first_redemption_only`). With an add-on that offers it, an open request with several recipients can be taken over as a company order. The daily maintenance deletes open and partly issued requests after 6 months and issued or taken-over ones after 24 months (filter `vcap_voucher_requests_retention_months`, 0 = keep).
 * New: provider contract for workflow plugins (e.g. Workflow Captain, WORKFLOW.md): voucher events after each committed change (created, delivered, delivery failed, redeemed, redemption refunded, purchase refunded partly or fully, voided, reactivated, expired) without codes or personal data; services to issue, resend, void, reactivate and redeem with capability check, idempotency key and history entry; status in Site Health. Optional emails (expiry reminder, gift notices) can be left to the workflow plugin – off by default, and Voucher Captain sends them itself whenever no compatible workflow plugin takes them.
 * Fix (security): a customer-chosen voucher amount is worth at most what was paid for it per voucher, and only in the currency it was entered in (fixed when added to the cart); a difference is noted on the order. Same for gift card top-ups.
@@ -216,7 +229,7 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 == Upgrade Notice ==
 
 = 1.2.0 =
-All features stay free, including the new gift card top-up and multi-purpose vouchers as payment. The database is updated to version 1.8.0 – back up first.
+All features stay free. The database is updated to version 1.8.0 – back up first. Existing shops keep how multi-purpose vouchers are booked; new installations book them as a payment after tax.
 
 = 1.1.0 =
 Requires WooCommerce 8.9 or newer.
