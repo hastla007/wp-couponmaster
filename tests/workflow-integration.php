@@ -75,7 +75,15 @@ try {
 	wp_set_current_user( 0 );
 	$denied = $provider->issue( array( 'amount' => 20, 'send' => false, 'idempotency_key' => "wf-{$tag}:issue:denied" ) );
 	vcap_wf_assert( is_wp_error( $denied ) && 'vcap_not_allowed' === $denied->get_error_code(), 'WF-03: a caller without capability cannot issue' );
+	// SEC1: a voucher manager without the right to raise values cannot issue either (like "New voucher").
+	add_role( 'vcap_sec1_manager', 'SEC1 manager', array( 'read' => true, 'vcap_manage_vouchers' => true ) );
+	$sec1_user = wp_insert_user( array( 'user_login' => 'vcap_sec1_' . $tag, 'user_pass' => wp_generate_password( 24 ), 'role' => 'vcap_sec1_manager' ) );
+	wp_set_current_user( $sec1_user );
+	$sec1 = $provider->issue( array( 'amount' => 20, 'send' => false, 'idempotency_key' => "wf-{$tag}:issue:sec1" ) );
 	wp_set_current_user( 1 );
+	wp_delete_user( $sec1_user );
+	remove_role( 'vcap_sec1_manager' );
+	vcap_wf_assert( is_wp_error( $sec1 ) && 'vcap_not_allowed' === $sec1->get_error_code(), 'SEC1: issuing through the workflow needs the right to raise values, not only vcap_manage_vouchers' );
 
 	// WF-03: issue once per key; the event carries no code.
 	$args   = array(
