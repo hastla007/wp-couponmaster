@@ -1,5 +1,5 @@
 const { test, expect } = require( '@playwright/test' );
-const { addVoucherToCart, emptyCart, freshCode, trackPluginErrors } = require( './helpers' );
+const { addVoucherToCart, emptyCart, expectCartShows, freshCode, trackPluginErrors } = require( './helpers' );
 
 // Runs while the cart/checkout pages are the classic shortcode pages (tests/e2e/pages.php classic). Every test
 // starts with an empty cart and uses a voucher code of its own per attempt (M12-101: retries are idempotent).
@@ -38,7 +38,7 @@ test.describe( 'classic cart and checkout', () => {
 		await addVoucherToCart( page, 'classic-recipient@example.test' );
 
 		await page.goto( '/classic-cart/' );
-		await expect( page.getByText( 'classic-recipient@example.test' ).first() ).toBeVisible();
+		await expectCartShows( page, 'classic-recipient@example.test', 'form.woocommerce-cart-form, .woocommerce, main' );
 
 		await placeClassicOrder( page, 'e2e-classic@example.test', 'Klassik' );
 		expect( errors ).toEqual( [] );

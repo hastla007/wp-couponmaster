@@ -1,5 +1,5 @@
 const { test, expect } = require( '@playwright/test' );
-const { addVoucherToCart, emptyCart, expectAccessible, freshCode, login, trackPluginErrors } = require( './helpers' );
+const { addVoucherToCart, emptyCart, expectAccessible, expectCartShows, freshCode, login, trackPluginErrors } = require( './helpers' );
 
 // Runs while the cart/checkout pages are the WooCommerce blocks (tests/e2e/pages.php blocks), twice
 // (plugin-smoke.yml → browser-e2e): with "Multi-purpose vouchers as payment" on (vcap_mpv_after_tax=yes, the
@@ -67,7 +67,7 @@ test.describe( 'cart and checkout blocks', () => {
 		const errors = trackPluginErrors( page );
 		await addVoucherToCart( page, 'block-recipient@example.test' );
 		await page.goto( '/cart/' );
-		await expect( page.getByText( 'block-recipient@example.test' ).first() ).toBeVisible();
+		await expectCartShows( page, 'block-recipient@example.test', '.wp-block-woocommerce-cart, main' );
 		await placeBlockOrder( page, 'e2e-block@example.test', 'Block' );
 		expect( errors ).toEqual( [] );
 	} );
