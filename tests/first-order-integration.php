@@ -4,9 +4,9 @@
  *   wp eval-file tests/first-order-integration.php
  */
 
-function vcap_first_assert( bool $condition, string $message ): void {
+function vcap_first_assert( bool $condition, string $message, $detail = null ): void {
 	if ( ! $condition ) {
-		throw new RuntimeException( 'FAIL: ' . $message );
+		throw new RuntimeException( 'FAIL: ' . $message . ( null === $detail ? '' : ' – ' . wp_json_encode( $detail ) ) );
 	}
 	echo "PASS: {$message}\n";
 }
@@ -83,6 +83,32 @@ try {
 	$s14_retry = $e->getMessage();
 }
 vcap_first_assert( '' === $s14_retry && vcap_first_valid( $coupon, $s14_third ) === false, 'S14: once the holding order is cancelled unpaid, the other checkout may use the coupon (and then holds it itself)' );
+
+// R6: the customer abandoned the payment page, changed the cart and checks out again – WooCommerce creates a new
+// order while the old one (the session's order awaiting payment) still holds the coupon. The old attempt gives way.
+if ( function_exists( 'wc_load_cart' ) ) {
+	wc_load_cart();
+}
+// Both orders carry the coupon from the cart (checkout copies it, no new validation); then the old one holds it.
+$r6_old = vcap_first_order( $product, 0, "r6-{$tag}@example.com", 'pending' );
+$r6_new = vcap_first_order( $product, 0, "r6-{$tag}@example.com", 'pending' );
+foreach ( array( $r6_old, $r6_new ) as $r6_order ) {
+	$r6_order->apply_coupon( $coupon->get_code() );
+	$r6_order->save();
+}
+VCAP\FirstOrderCoupons::forget();
+$s14_first->hold( wc_get_order( $r6_old->get_id() ) );
+WC()->session->set( 'order_awaiting_payment', $r6_old->get_id() );
+VCAP\FirstOrderCoupons::forget();
+$r6_error = '';
+try {
+	$s14_first->hold( wc_get_order( $r6_new->get_id() ) );
+} catch ( Exception $e ) {
+	$r6_error = $e->getMessage();
+}
+WC()->session->set( 'order_awaiting_payment', null );
+VCAP\FirstOrderCoupons::forget();
+vcap_first_assert( '' === $r6_error && '' === (string) wc_get_order( $r6_old->get_id() )->get_meta( VCAP\FirstOrderCoupons::HOLD_META ) && 'yes' === wc_get_order( $r6_new->get_id() )->get_meta( VCAP\FirstOrderCoupons::HOLD_META ), 'R6: the abandoned attempt of the same checkout session gives its first-order hold to the new order', array( $r6_error, wc_get_order( $r6_old->get_id() )->get_meta( VCAP\FirstOrderCoupons::HOLD_META ), wc_get_order( $r6_new->get_id() )->get_meta( VCAP\FirstOrderCoupons::HOLD_META ), WC()->session ? get_class( WC()->session ) : 'no session' ) );
 
 // B13: repeated validations of the request (cart totals run several times) query the orders once; an order
 // created in the request is seen at once.

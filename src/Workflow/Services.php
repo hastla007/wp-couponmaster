@@ -221,9 +221,9 @@ final class Services {
 			if ( null === $at || strtotime( $at . ' UTC' ) > time() - self::STALE ) {
 				return self::in_progress();
 			}
-			// The first call stopped before it recorded its outcome: take the key over (only one repeat wins).
-			Claim::release( $claim );
-			if ( ! Claim::take( $claim ) ) {
+			// The first call stopped before it recorded its outcome: take the key over. R3: atomically on the old
+			// time, so of two repeats that both saw the stale claim only one continues.
+			if ( ! Claim::take_over( $claim, $at ) ) {
 				return self::in_progress();
 			}
 		}
@@ -432,7 +432,12 @@ final class Services {
 		$replayed  = ! empty( $reserved['replayed'] );
 		$committed = Source::with( Source::WORKFLOW, fn() => $this->redemptions->commit( $key ) );
 		if ( is_wp_error( $committed ) ) {
-			return self::wrap( $committed );
+			$wrapped = self::wrap( $committed );
+			if ( empty( $wrapped->get_error_data()['retryable'] ) ) {
+				// R11: a final refusal leaves no reservation behind (it would hold the amount until it expires).
+				Source::with( Source::WORKFLOW, fn() => $this->redemptions->release( $key ) );
+			}
+			return $wrapped;
 		}
 		if ( ! $prior ) {
 			$this->audit( (int) $committed['voucher_id'], 'redeem', $hash, self::signature( 'redeem', (int) $committed['voucher_id'], array( 'target' => $target, 'amount' => $committed['amount'] ?? null ) ) );

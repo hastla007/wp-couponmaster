@@ -266,6 +266,7 @@ final class FirstOrderCoupons {
 		}
 		try {
 			self::forget();
+			self::release_session_holds( $order, $user, $email );
 			if ( self::has_previous_order( $user, $email, (int) $order->get_id() ) ) {
 				$order->delete_meta_data( self::HOLD_META );
 				$order->save_meta_data();
@@ -277,6 +278,31 @@ final class FirstOrderCoupons {
 		} finally {
 			self::unlock( $held );
 			self::forget();
+		}
+	}
+
+	/**
+	 * R6: an earlier attempt of this checkout session (the order awaiting payment, e.g. after the customer came back
+	 * from the payment page and changed the cart, or the Store API draft) is replaced by the order being placed: it
+	 * gives up its first-order hold, so it does not count as a parallel order of the same person. Only unpaid
+	 * orders of the same customer (account or billing email).
+	 */
+	private static function release_session_holds( \WC_Order $order, int $user, string $email ): void {
+		if ( ! function_exists( 'WC' ) || ! WC()->session ) {
+			return;
+		}
+		$mailbox = is_email( $email ) ? CustomerEmail::normalize( $email ) : '';
+		foreach ( array_unique( array( (int) WC()->session->get( 'order_awaiting_payment' ), (int) WC()->session->get( 'store_api_draft_order' ) ) ) as $id ) {
+			$earlier = $id > 0 && $id !== (int) $order->get_id() ? wc_get_order( $id ) : null;
+			if ( ! $earlier instanceof \WC_Order || 'yes' !== $earlier->get_meta( self::HOLD_META ) || null !== $earlier->get_date_paid() || ! $earlier->has_status( array( 'pending', 'failed', 'checkout-draft' ) ) ) {
+				continue;
+			}
+			$billing = (string) $earlier->get_billing_email();
+			$same    = ( $user > 0 && (int) $earlier->get_customer_id() === $user ) || ( '' !== $mailbox && is_email( $billing ) && CustomerEmail::normalize( $billing ) === $mailbox );
+			if ( $same ) {
+				$earlier->delete_meta_data( self::HOLD_META );
+				$earlier->save_meta_data();
+			}
 		}
 	}
 

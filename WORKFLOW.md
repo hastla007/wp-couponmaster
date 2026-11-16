@@ -32,7 +32,7 @@ add_filter( 'vcap_workflow_consumer', fn() => array(
 ) );
 ```
 
-Compatibility (`Provider::compatibility()`): `missing` (no consumer), `incompatible` (no version, or another major), `compatible` (same major; a consumer built for a newer minor version is compatible and reads `descriptor()` to see what this provider offers). Events are fired whenever a listener is registered on `vcap_workflow_event`; communications are handed over only to a compatible consumer (section 7).
+Compatibility (`Provider::compatibility()`): `missing` (no consumer), `incompatible` (no version, or another major), `compatible` (same major; a consumer built for a newer minor version is compatible and reads `descriptor()` to see what this provider offers). Events are fired whenever a listener is registered on `vcap_workflow_event` – unless a workflow plugin is registered as a consumer and is `incompatible`: then no events are built at all. Communications are handed over only to a compatible consumer (section 7).
 
 ## 2. Versioning and deprecation
 
@@ -192,7 +192,7 @@ Voucher Captain's own emails stay the default. Under **WooCommerce → Settings 
 | `gift_delivered` | Notice to the buyer: gift delivered | buyer |
 | `gift_used` | Notice to the buyer: gift used (once per voucher) | buyer |
 
-A communication is handed over only while its switch is on **and** a compatible consumer is registered **and** lists it in `communications` **and** its `entitlement` is not `expired`. Otherwise Voucher Captain sends its own email as usual, so a missing, deactivated, incompatible or unlicensed workflow plugin never leaves a customer without the message. When handed over, Voucher Captain sends nothing, writes the history entry "Handed over to the workflow" (`workflow_handover`) at the moment it would have sent the email – with the same rules (reminder days, at most once, only gifts with a buyer address) – and fires `voucher.communication_handed_over`. The workflow plugin then gets address and name with `contact()`.
+A communication is handed over only while its switch is on **and** a compatible consumer is registered **and** lists it in `communications` **and** its `entitlement` is `active` (not `expired` or `missing`). Otherwise Voucher Captain sends its own email as usual, so a missing, deactivated, incompatible or unlicensed workflow plugin never leaves a customer without the message. When handed over, Voucher Captain sends nothing, writes the history entry "Handed over to the workflow" (`workflow_handover`) at the moment it would have sent the email – with the same rules (reminder days, at most once, only gifts with a buyer address) – and fires `voucher.communication_handed_over`. The workflow plugin then gets address and name with `contact()`.
 
 Every successful `contact()` call is recorded in the voucher history (owner decision 16.11.2026): event
 `workflow_contact_read` with the time, the user id of the caller, the workflow plugin (the `name` of the registered

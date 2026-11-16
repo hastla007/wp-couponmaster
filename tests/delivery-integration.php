@@ -249,6 +249,18 @@ $m84_used->enabled      = 'no';
 $m84_to_buyer = array_values( array_filter( $m84_msgs, static fn( $m ) => str_contains( $m[0], "m84-buyer-{$tag}@" ) ) );
 vcap_dlv_assert( 2 === count( $m84_to_buyer ) && str_contains( $m84_to_buyer[0][1], 'delivered' ) && str_contains( $m84_to_buyer[1][1], 'used' ) && ! str_contains( $m84_to_buyer[0][2] . $m84_to_buyer[1][2], $m84_live->code ), 'M12-84: the buyer is told once that the gift was delivered and once that it was used, without the code', array_map( static fn( $m ) => $m[1], $m84_msgs ) );
 
+// R12: the "gift used" notice was handed over to a workflow plugin earlier; after the hand-over is switched off the
+// shop does not tell the buyer a second time.
+$r12_gift = vcap_dlv_voucher( "r12-buyer-{$tag}@example.com", array( 'send_to' => 'recipient', 'recipient_email' => "r12-rec-{$tag}@example.com" ) );
+VCAP\Workflow\Handover::record( $r12_gift, VCAP\Workflow\Handover::GIFT_USED );
+$m84_used->enabled = 'yes';
+$m84_msgs          = array();
+add_filter( 'pre_wp_mail', $m84_spy, 0, 2 );
+VCAP\VoucherRepository::fire_redeemed( $repo->get( $r12_gift->id ), 5.0, 'counter' );
+remove_filter( 'pre_wp_mail', $m84_spy, 0 );
+$m84_used->enabled = 'no';
+vcap_dlv_assert( array() === array_filter( $m84_msgs, static fn( $m ) => str_contains( $m[0], "r12-buyer-{$tag}@" ) ) && 0 === vcap_dlv_events( $r12_gift->id, VCAP\Emails::USED_NOTICE_EVENT ), 'R12: a gift-used notice handed over to the workflow earlier is not sent again natively', array_map( static fn( $m ) => $m[0], $m84_msgs ) );
+
 /* ---- 6. Restore in batches, overdue scheduled vouchers included ----------------------------------------------- */
 
 $overdue = vcap_dlv_voucher( "restore-{$tag}@example.com", array( 'status' => Voucher::STATUS_SCHEDULED, 'delivery_at' => gmdate( 'Y-m-d H:i:s', time() - 45 * DAY_IN_SECONDS ) ) );

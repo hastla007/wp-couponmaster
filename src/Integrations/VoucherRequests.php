@@ -38,6 +38,12 @@ final class VoucherRequests {
 	public const ERRORS_META    = '_vcap_request_errors';
 	/** Claim of a form reference (option): the request id, so a repeated submit() creates nothing. */
 	public const CLAIM_PREFIX   = 'vcap_request_ref_';
+	/** R8: hash of the form reference on the request itself (found again when its claim was not completed). */
+	public const REF_META = '_vcap_request_ref';
+	/** R8: claim value of a rejected request ("rejected:" + UTC time), removed by the retention after a while. */
+	public const REJECTED_CLAIM = 'rejected:';
+	/** R8: seconds after which a claim without a stored request is taken over by a repeat. */
+	private const CLAIM_STALE = 120;
 	public const KINDS          = array( 'company_order', 'personalisation' );
 	public const MAX_VOUCHERS   = 100;
 	public const STATE_OPEN     = 'open';
@@ -159,7 +165,7 @@ final class VoucherRequests {
 			$data = array(
 				array( 'name' => __( 'Reference', 'voucher-captain' ), 'value' => (string) $request['reference'] ),
 				array( 'name' => __( 'Received', 'voucher-captain' ), 'value' => (string) $request['received_at'] ),
-				array( 'name' => __( 'Status', 'voucher-captain' ), 'value' => (string) $request['state'] ),
+				array( 'name' => __( 'Status', 'voucher-captain' ), 'value' => self::state_label( (string) $request['state'] ) ),
 			);
 			$contact = (array) $request['contact'];
 			if ( 0 === strcasecmp( (string) $contact['email'], $email ) ) {
@@ -366,8 +372,21 @@ final class VoucherRequests {
 				return new \WP_Error( 'vcap_request_limit', __( 'Too many voucher requests are waiting to be handled. Please try again later.', 'voucher-captain' ), array( 'status' => 429 ) );
 			}
 		}
-		if ( ! add_option( $claim, 0, '', false ) ) {
-			$id = (int) get_option( $claim, 0 );
+		if ( ! add_option( $claim, '0:' . time(), '', false ) ) {
+			$stored = (string) get_option( $claim, '0' );
+			if ( str_starts_with( $stored, self::REJECTED_CLAIM ) ) {
+				return array( 'request_id' => 0, 'reference' => $clean['reference'], 'state' => 'rejected', 'replayed' => true );
+			}
+			$id = (int) $stored;
+			if ( 0 === $id ) {
+				// R8: the first call stopped between storing the request and completing its claim: find it again.
+				$id = self::id_by_reference( $clean['reference'] );
+				if ( $id ) {
+					update_option( $claim, $id, false );
+				} elseif ( (int) substr( (string) strstr( $stored, ':' ), 1 ) < time() - self::CLAIM_STALE && delete_option( $claim ) ) {
+					return $this->submit( $request ); // Nothing was stored: this repeat takes the reference over.
+				}
+			}
 			return array(
 				'request_id' => $id,
 				'reference'  => $clean['reference'],
@@ -381,6 +400,7 @@ final class VoucherRequests {
 				'post_status' => 'private',
 				/* translators: %s: reference of the form entry */
 				'post_title'  => sprintf( __( 'Voucher request %s', 'voucher-captain' ), $clean['reference'] ),
+				'meta_input'  => array( self::REF_META => md5( $clean['reference'] ) ),
 			),
 			true
 		);
@@ -482,7 +502,7 @@ final class VoucherRequests {
 	 * @param array<string, mixed> $opts See issue_args().
 	 * @return array{state:string, vouchers:int[], errors:string[]}|\WP_Error
 	 */
-	public function confirm( int $id, array $opts ) {
+	private function confirm_locked( int $id, array $opts ) {
 		if ( ! IssueVoucher::can() ) {
 			return new \WP_Error( 'vcap_not_allowed', __( 'You are not allowed to do this.', 'voucher-captain' ), array( 'status' => 403 ) );
 		}
@@ -623,7 +643,7 @@ final class VoucherRequests {
 	 *
 	 * @return array{order_id:int, url:string, replayed:bool}|\WP_Error
 	 */
-	public function hand_over( int $id ) {
+	private function hand_over_locked( int $id ) {
 		if ( ! $this->can_hand_over() ) {
 			return new \WP_Error( 'vcap_not_allowed', __( 'You are not allowed to do this.', 'voucher-captain' ), array( 'status' => 403 ) );
 		}
@@ -793,7 +813,119 @@ final class VoucherRequests {
 				}
 			} while ( self::RETENTION_BATCH === $found );
 		}
+		if ( $months['closed'] > 0 ) {
+			// R8: rejected form entries are answered as rejected for as long as closed requests are kept.
+			$before = gmdate( 'Y-m-d H:i:s', (int) strtotime( '-' . $months['closed'] . ' months', time() ) );
+			do {
+				$removed = self::purge_rejected_claims( $before, self::RETENTION_BATCH );
+				if ( $removed && microtime( true ) - $start >= $budget ) {
+					return false;
+				}
+			} while ( self::RETENTION_BATCH === $removed );
+		}
 		return true;
+	}
+
+	/**
+	 * Confirms a request and issues its vouchers (see confirm_locked()). R9: state changes of one request run under
+	 * a lock, so a parallel confirm, hand-over or rejection by another manager waits and then sees the new state.
+	 *
+	 * @param array<string, mixed> $opts Options (sale, …).
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	public function confirm( int $id, array $opts ) {
+		return self::locked( $id, fn() => $this->confirm_locked( $id, $opts ) );
+	}
+
+	/**
+	 * Hands a request over to a company order of an add-on (see hand_over_locked()), under the request's lock (R9).
+	 *
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	public function hand_over( int $id ) {
+		return self::locked( $id, fn() => $this->hand_over_locked( $id ) );
+	}
+
+	/**
+	 * Rejects (deletes) an open request (see reject_locked()), under the request's lock (R9).
+	 *
+	 * @return true|\WP_Error
+	 */
+	public function reject( int $id ) {
+		return self::locked( $id, fn() => $this->reject_locked( $id ) );
+	}
+
+	/**
+	 * R9: runs $fn while holding the lock of request $id (MySQL GET_LOCK, 10 s); the request is read fresh inside.
+	 *
+	 * @return mixed|\WP_Error
+	 */
+	private static function locked( int $id, callable $fn ) {
+		global $wpdb;
+		if ( ! is_object( $wpdb ) || ! method_exists( $wpdb, 'get_var' ) ) {
+			return $fn(); // No database (unit tests).
+		}
+		$name = \VCAP\Install::lock_name( 'voucher_request_' . $id );
+		/**
+		 * Seconds a state change of a voucher request waits for another one on the same request (R9).
+		 *
+		 * @since 1.2.0
+		 * @param int $seconds Default 10.
+		 */
+		$wait = max( 0, (int) apply_filters( 'vcap_voucher_request_lock_wait', 10 ) );
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $name, $wait ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return new \WP_Error( 'vcap_in_progress', __( 'This action is still being processed. Please wait a moment and try again.', 'voucher-captain' ), array( 'status' => 409 ) );
+		}
+		try {
+			clean_post_cache( $id ); // Another request may have changed it while this one waited.
+			return $fn();
+		} finally {
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+	}
+
+	/** Readable name of a request state (admin list, detail, privacy export). */
+	public static function state_label( string $state ): string {
+		$labels = array(
+			self::STATE_OPEN        => __( 'Open', 'voucher-captain' ),
+			self::STATE_PARTIAL     => __( 'Partly issued', 'voucher-captain' ),
+			self::STATE_ISSUED      => __( 'Issued', 'voucher-captain' ),
+			self::STATE_HANDED_OVER => __( 'Handed over to a company order', 'voucher-captain' ),
+		);
+		return $labels[ $state ] ?? $state;
+	}
+
+	/** R8: request stored for a form reference (by its hash on the request), 0 when there is none. */
+	private static function id_by_reference( string $reference ): int {
+		$ids = get_posts(
+			array(
+				'post_type'   => self::POST_TYPE,
+				'post_status' => 'private',
+				'numberposts' => 1,
+				'fields'      => 'ids',
+				'meta_key'    => self::REF_META, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- only after an interrupted submit.
+				'meta_value'  => md5( $reference ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			)
+		);
+		return $ids ? (int) $ids[0] : 0;
+	}
+
+	/**
+	 * R8: claims of rejected requests older than $before (UTC) are deleted, at most $limit per call.
+	 *
+	 * @return int Claims removed.
+	 */
+	public static function purge_rejected_claims( string $before, int $limit = 200 ): int {
+		global $wpdb;
+		if ( ! is_object( $wpdb ) || ! method_exists( $wpdb, 'get_col' ) ) {
+			return 0; // No database (unit tests).
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- option rows by prefix and value.
+		$names = (array) $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s AND option_value LIKE %s AND option_value < %s LIMIT %d", $wpdb->esc_like( self::CLAIM_PREFIX ) . '%', $wpdb->esc_like( self::REJECTED_CLAIM ) . '%', self::REJECTED_CLAIM . $before, max( 1, $limit ) ) );
+		foreach ( $names as $name ) {
+			delete_option( (string) $name );
+		}
+		return count( $names );
 	}
 
 	/** Deletes a request with its data and its form-reference claim (retention). */
@@ -831,7 +963,7 @@ final class VoucherRequests {
 				$vouchers[] = (int) ( (array) $voucher->get_error_data() )['voucher_id']; // Issued by an earlier confirmation.
 			} else {
 				/* translators: 1: number of the voucher in the request, 2: reason */
-				$errors[] = sprintf( __( 'Voucher %1$d: %2$s', 'voucher-captain' ), $i + 1, is_wp_error( $voucher ) ? $voucher->get_error_message() : 'unknown error' );
+				$errors[] = sprintf( __( 'Voucher %1$d: %2$s', 'voucher-captain' ), $i + 1, is_wp_error( $voucher ) ? $voucher->get_error_message() : __( 'Unknown error', 'voucher-captain' ) );
 			}
 		}
 		return array(
@@ -847,7 +979,7 @@ final class VoucherRequests {
 	 *
 	 * @return true|\WP_Error
 	 */
-	public function reject( int $id ) {
+	private function reject_locked( int $id ) {
 		if ( ! IssueVoucher::can() ) {
 			return new \WP_Error( 'vcap_not_allowed', __( 'You are not allowed to do this.', 'voucher-captain' ), array( 'status' => 403 ) );
 		}
@@ -856,6 +988,10 @@ final class VoucherRequests {
 			return new \WP_Error( 'vcap_invalid_args', __( 'Only open voucher requests can be rejected.', 'voucher-captain' ), array( 'status' => 409 ) );
 		}
 		wp_delete_post( $id, true );
+		if ( '' !== (string) $request['reference'] ) {
+			// R8: the form entry stays answered as rejected (no new request from a repeat) until the retention removes it.
+			update_option( self::CLAIM_PREFIX . md5( (string) $request['reference'] ), self::REJECTED_CLAIM . gmdate( 'Y-m-d H:i:s' ), false );
+		}
 		/**
 		 * A manager rejected (deleted) a voucher request.
 		 *
@@ -865,6 +1001,38 @@ final class VoucherRequests {
 		 */
 		do_action( 'vcap_voucher_request_rejected', $id, get_current_user_id() );
 		return true;
+	}
+
+	/**
+	 * R5: one page of requests, newest first, optionally only the given states.
+	 *
+	 * @param string[] $states States to list (empty: all).
+	 * @return array{items: array<int, array<string, mixed>>, total: int, pages: int}
+	 */
+	public static function page( array $states = array(), int $page = 1, int $per_page = 50 ): array {
+		$per_page = max( 1, min( 200, $per_page ) );
+		$args     = array(
+			'post_type'      => self::POST_TYPE,
+			'post_status'    => 'private',
+			'posts_per_page' => $per_page,
+			'paged'          => max( 1, $page ),
+			'orderby'        => 'ID',
+			'order'          => 'DESC',
+			'fields'         => 'ids',
+		);
+		$states = array_values( array_filter( array_map( 'sanitize_key', $states ) ) );
+		if ( $states ) {
+			$args['meta_query'] = array( array( 'key' => self::STATE_META, 'value' => $states, 'compare' => 'IN' ) ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- small admin list of a private post type.
+		}
+		$query = new \WP_Query( $args );
+		$items = array();
+		foreach ( (array) $query->posts as $id ) {
+			$request = self::get( (int) $id );
+			if ( $request ) {
+				$items[] = $request;
+			}
+		}
+		return array( 'items' => $items, 'total' => (int) $query->found_posts, 'pages' => (int) $query->max_num_pages );
 	}
 
 	/**

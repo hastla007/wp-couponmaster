@@ -23,13 +23,7 @@ final class VoucherRequestsAdmin {
 
 	/** States as shown in the list. */
 	private static function state_label( string $state ): string {
-		$labels = array(
-			VoucherRequests::STATE_OPEN    => __( 'Open', 'voucher-captain' ),
-			VoucherRequests::STATE_PARTIAL => __( 'Partly issued', 'voucher-captain' ),
-			VoucherRequests::STATE_ISSUED  => __( 'Issued', 'voucher-captain' ),
-			VoucherRequests::STATE_HANDED_OVER => __( 'Handed over to a company order', 'voucher-captain' ),
-		);
-		return $labels[ $state ] ?? $state;
+		return VoucherRequests::state_label( $state );
 	}
 
 	private static function kind_label( string $kind ): string {
@@ -52,8 +46,28 @@ final class VoucherRequestsAdmin {
 		echo '</div>';
 	}
 
+	/** R5: list filters (default: requests still to be dealt with). */
+	private static function views(): array {
+		return array(
+			'open' => array( __( 'To do', 'voucher-captain' ), array( VoucherRequests::STATE_OPEN, VoucherRequests::STATE_PARTIAL ) ),
+			'done' => array( __( 'Done', 'voucher-captain' ), array( VoucherRequests::STATE_ISSUED, VoucherRequests::STATE_HANDED_OVER ) ),
+			'all'  => array( __( 'All', 'voucher-captain' ), array() ),
+		);
+	}
+
 	private function table(): void {
-		$rows = VoucherRequests::recent();
+		$views = self::views();
+		$view  = isset( $_GET['view'] ) ? sanitize_key( wp_unslash( $_GET['view'] ) ) : 'open'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display only.
+		$view  = isset( $views[ $view ] ) ? $view : 'open';
+		$paged = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display only.
+		$links = array();
+		foreach ( $views as $key => $def ) {
+			$url     = add_query_arg( array( 'page' => self::SLUG, 'view' => $key ), admin_url( 'admin.php' ) );
+			$links[] = '<li><a href="' . esc_url( $url ) . '"' . ( $key === $view ? ' class="current" aria-current="page"' : '' ) . '>' . esc_html( $def[0] ) . '</a></li>';
+		}
+		echo '<ul class="subsubsub">' . implode( ' | ', $links ) . '</ul><br class="clear" />'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above.
+		$result = VoucherRequests::page( $views[ $view ][1], $paged, 50 );
+		$rows   = $result['items'];
 		if ( ! $rows ) {
 			echo '<p>' . esc_html__( 'No voucher requests yet.', 'voucher-captain' ) . '</p>';
 			return;
@@ -69,6 +83,17 @@ final class VoucherRequestsAdmin {
 			echo '<td>' . esc_html( self::state_label( (string) $r['state'] ) ) . '</td></tr>';
 		}
 		echo '</tbody></table>';
+		if ( $result['pages'] > 1 ) {
+			$pages = paginate_links(
+				array(
+					'base'    => add_query_arg( array( 'page' => self::SLUG, 'view' => $view, 'paged' => '%#%' ), admin_url( 'admin.php' ) ),
+					'format'  => '',
+					'current' => $paged,
+					'total'   => $result['pages'],
+				)
+			);
+			echo '<div class="tablenav"><div class="tablenav-pages">' . wp_kses_post( (string) $pages ) . '</div></div>';
+		}
 	}
 
 	/** @param array<string, mixed> $r Request. */

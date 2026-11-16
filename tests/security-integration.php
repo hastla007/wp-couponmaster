@@ -1078,6 +1078,33 @@ $s17_vendor_template = $s17_template && current_user_can( 'edit_post', $s17_temp
 wp_set_current_user( $s17_user );
 vcap_security_assert( 'price' === (string) $s17_product->get_meta( '_vcap_amount_source' ) && '' === (string) $s17_product->get_meta( '_vcap_amount' ), 'S17: without vcap_manage_vouchers/manage_woocommerce the voucher value and its source stay unchanged' );
 vcap_security_assert( ! $s17_vendor_template && ! user_can( $s17_vendor, get_post_type_object( VCAP\TemplatePostType::POST_TYPE )->cap->edit_posts ) && ! user_can( $s17_vendor, get_post_type_object( VCAP\Fields::POST_TYPE )->cap->create_posts ), 'S17: PDF templates and field groups need the voucher managers\' right, not edit_products' );
+
+// R7: the same role cannot set the voucher settings through the WooCommerce REST API (meta_data) or the CSV import
+// either; other product data is saved.
+wp_set_current_user( $s17_vendor );
+$r7_request = new WP_REST_Request( 'PUT', '/wc/v3/products/' . $s17_product->get_id() );
+$r7_request->set_body_params(
+	array(
+		'name'      => 'S17 voucher renamed',
+		'meta_data' => array(
+			array( 'key' => '_vcap_amount_source', 'value' => 'fixed' ),
+			array( 'key' => '_vcap_amount', 'value' => '500' ),
+			array( 'key' => '_vcap_review_service', 'value' => 'yes' ),
+		),
+	)
+);
+$r7_response = rest_do_request( $r7_request );
+$r7_import   = VCAP\ProductSettings::guard_voucher_meta( ( static function () {
+	$p = new WC_Product_Simple();
+	$p->update_meta_data( '_vcap_enabled', 'yes' );
+	$p->update_meta_data( '_vcap_amount', '900' );
+	$p->update_meta_data( 'other_meta', 'kept' );
+	return $p;
+} )() );
+wp_set_current_user( $s17_user );
+$r7_product = wc_get_product( $s17_product->get_id() );
+vcap_security_assert( 200 === $r7_response->get_status() && 'S17 voucher renamed' === $r7_product->get_name() && 'price' === (string) $r7_product->get_meta( '_vcap_amount_source' ) && '' === (string) $r7_product->get_meta( '_vcap_amount' ) && '' === (string) $r7_product->get_meta( '_vcap_review_service' ), 'R7: over the REST API the voucher settings stay unchanged for a role without the voucher managers\' right (the name is saved)', array( $r7_response->get_status(), $r7_product->get_meta( '_vcap_amount_source' ), $r7_product->get_meta( '_vcap_amount' ) ) );
+vcap_security_assert( '' === (string) $r7_import->get_meta( '_vcap_amount' ) && '' === (string) $r7_import->get_meta( '_vcap_enabled' ) && 'kept' === $r7_import->get_meta( 'other_meta' ), 'R7: a CSV import by such a role drops the voucher settings of a new product, other meta stays' );
 wp_delete_user( $s17_vendor );
 remove_role( 'vcap_s17_vendor' );
 

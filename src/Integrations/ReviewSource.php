@@ -352,6 +352,61 @@ final class ReviewSource {
 		delete_option( self::CLAIM_PREFIX . $voucher_id );
 	}
 
+	/** Records checked per database round in purge(). */
+	private const PURGE_BATCH = 200;
+
+	/**
+	 * R4: daily retention of the reference records (one option each). Revoked records go after
+	 * `vcap_review_revoked_retention_days` (default 90 – long enough for the review plugin to reconcile them with
+	 * get()), every record after `vcap_review_retention_months` (default 24). 0 keeps them. Works in batches until
+	 * done or $budget seconds are used.
+	 *
+	 * @return bool True when finished (nothing left to check within the budget).
+	 */
+	public function purge( float $budget = 10.0 ): bool {
+		global $wpdb;
+		$days   = (int) apply_filters( 'vcap_review_revoked_retention_days', 90 );
+		$months = (int) apply_filters( 'vcap_review_retention_months', 24 );
+		if ( $days <= 0 && $months <= 0 ) {
+			return true;
+		}
+		$revoked_before = $days > 0 ? gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS ) : '';
+		$created_before = $months > 0 ? gmdate( 'Y-m-d H:i:s', (int) strtotime( '-' . $months . ' months', time() ) ) : '';
+		$start          = microtime( true );
+		$after          = 0;
+		do {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- option rows by prefix, keyset paging on option_id.
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT option_id, option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s AND option_id > %d ORDER BY option_id LIMIT %d", $wpdb->esc_like( self::OPTION_PREFIX ) . '%', $after, self::PURGE_BATCH ), ARRAY_A );
+			foreach ( (array) $rows as $row ) {
+				$after  = (int) $row['option_id'];
+				$record = maybe_unserialize( $row['option_value'] );
+				if ( ! is_array( $record ) ) {
+					continue;
+				}
+				$revoked = 'revoked' === ( $record['state'] ?? '' ) && '' !== $revoked_before && '' !== (string) ( $record['revoked_at'] ?? '' ) && (string) $record['revoked_at'] < $revoked_before;
+				$old     = '' !== $created_before && '' !== (string) ( $record['at'] ?? '' ) && (string) $record['at'] < $created_before;
+				if ( ! $revoked && ! $old ) {
+					continue;
+				}
+				delete_option( (string) $row['option_name'] );
+				$voucher_id = (int) ( $record['voucher_id'] ?? 0 );
+				if ( $voucher_id > 0 ) {
+					$reference = substr( (string) $row['option_name'], strlen( self::OPTION_PREFIX ) );
+					$index     = array_values( array_diff( (array) get_option( self::INDEX_PREFIX . $voucher_id, array() ), array( $reference ) ) );
+					if ( $index ) {
+						update_option( self::INDEX_PREFIX . $voucher_id, $index, false );
+					} else {
+						delete_option( self::INDEX_PREFIX . $voucher_id );
+					}
+				}
+			}
+			if ( microtime( true ) - $start >= $budget ) {
+				return count( (array) $rows ) < self::PURGE_BATCH;
+			}
+		} while ( self::PURGE_BATCH === count( (array) $rows ) );
+		return true;
+	}
+
 	/** Marks an eligible reference as revoked and reports it once. False when unknown or revoked already. */
 	public function revoke( string $reference, string $reason ): bool {
 		$record = self::record( $reference );

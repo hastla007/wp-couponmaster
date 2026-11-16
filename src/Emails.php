@@ -63,6 +63,17 @@ final class Emails {
 		}
 	}
 
+	/** R12: whether the "gift used" notice of this voucher was handed over to the workflow plugin earlier. */
+	private static function gift_used_handed_over( Voucher $voucher ): bool {
+		$note = Workflow\Handover::note( Workflow\Handover::GIFT_USED );
+		foreach ( vcap()->vouchers->events_of( (int) $voucher->id, Workflow\Handover::EVENT ) as $event ) {
+			if ( (string) ( $event['note'] ?? '' ) === $note ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/**
 	 * M12-84: "Your gift was used" to the buyer on the first redemption of a gift (optional email, at most once).
 	 *
@@ -79,8 +90,8 @@ final class Emails {
 			return;
 		}
 		$voucher = vcap()->vouchers->get( (int) $data['voucher_id'] );
-		if ( ! $voucher || ! Emails\GiftNoticeEmail::applies( $voucher ) || vcap()->vouchers->has_event( $voucher->id, self::USED_NOTICE_EVENT ) ) {
-			return;
+		if ( ! $voucher || ! Emails\GiftNoticeEmail::applies( $voucher ) || vcap()->vouchers->has_event( $voucher->id, self::USED_NOTICE_EVENT ) || self::gift_used_handed_over( $voucher ) ) {
+			return; // R12: told once – natively or by the workflow plugin, also when the hand-over was switched off since.
 		}
 		if ( $handover ) {
 			if ( Claim::take( 'workflow-handover:gift-used:' . $voucher->id ) ) {

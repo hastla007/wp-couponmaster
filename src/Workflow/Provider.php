@@ -46,6 +46,9 @@ final class Provider {
 	 */
 	public const INSTANCE_SITE_OPTION = 'vcap_workflow_instance_site';
 
+	/** Site address of this request (see stored_home()). */
+	private static ?string $stored_home = null;
+
 	/** Previous instances kept in INSTANCE_SITE_OPTION. */
 	private const PREVIOUS_MAX = 5;
 
@@ -96,6 +99,9 @@ final class Provider {
 		'role',
 		'days',
 	);
+
+	/** R11: counts of this request, added to the stored ones at shutdown. */
+	private array $delta = array( 'delivered' => 0, 'failures' => 0 );
 
 	/** Dispatch status of this request, saved once at shutdown. */
 	private array $status = array();
@@ -448,14 +454,41 @@ final class Provider {
 	}
 
 	/**
-	 * Signature of the site address the instance is bound to: home_url() without scheme and trailing slash, host in
-	 * lower case – so http↔https or "/" at the end change nothing, another host, port or path does.
+	 * Signature of the site address the instance is bound to: the stored site address without scheme and trailing
+	 * slash, host in lower case – so http↔https or "/" at the end change nothing, another host, port or path does.
 	 */
 	public static function site_signature( ?string $url = null ): string {
-		$url = strtolower( trim( null === $url ? (string) home_url() : $url ) );
+		$url = strtolower( trim( null === $url ? self::stored_home() : $url ) );
 		$url = (string) preg_replace( '#^[a-z][a-z0-9+.\-]*://#', '', $url );
 		$url = rtrim( $url, '/' );
 		return substr( hash( 'sha256', 'vcap-workflow-site|' . $url ), 0, 32 );
+	}
+
+	/**
+	 * The site address as configured (WP_HOME or the stored "home" option), never the filtered home_url(): language
+	 * plugins such as WPML return another address per language (directory or domain), which would renew the
+	 * instance on every language switch. Read once per request.
+	 */
+	public static function stored_home(): string {
+		if ( null !== self::$stored_home ) {
+			return self::$stored_home;
+		}
+		$home = defined( 'WP_HOME' ) ? (string) WP_HOME : '';
+		if ( '' === $home ) {
+			global $wpdb;
+			$raw  = isset( $wpdb->options ) ? $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1", 'home' ) ) : null; // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- unfiltered on purpose, cached per request.
+			$home = is_string( $raw ) ? $raw : '';
+		}
+		if ( '' === $home ) {
+			$home = (string) home_url(); // No database row (tests, unusual setups): the address WordPress reports.
+		}
+		self::$stored_home = $home;
+		return $home;
+	}
+
+	/** Tests: read the site address again. */
+	public static function forget_stored_home(): void {
+		self::$stored_home = null;
 	}
 
 	/**
@@ -536,6 +569,9 @@ final class Provider {
 		unset( $balance_after, $note, $user_id );
 		if ( ! has_filter( self::EVENT_HOOK ) || ! is_array( $entry ) || empty( $entry['id'] ) ) {
 			return;
+		}
+		if ( self::INCOMPATIBLE === self::compatibility( self::consumer() ) ) {
+			return; // R2: a registered workflow plugin built for another major contract gets no events (status, WORKFLOW.md).
 		}
 		$mapped = self::map( (string) $event, is_array( $entry['note'] ?? null ) ? $entry['note'] : null, null === $amount ? null : (float) $amount, (int) $order_id );
 		if ( ! $mapped ) {
@@ -670,8 +706,10 @@ final class Provider {
 			$this->status['last_sequence']   = (int) ( $envelope['sequence'] ?? 0 );
 			$this->status['last_event_at']   = $now;
 			$this->status['delivered']       = (int) ( $this->status['delivered'] ?? 0 ) + 1;
+			++$this->delta['delivered'];
 		} else {
 			$this->status['failures']   = (int) ( $this->status['failures'] ?? 0 ) + 1;
+			++$this->delta['failures'];
 			$this->status['last_error'] = array(
 				'at'       => $now,
 				'event_id' => (string) ( $envelope['event_id'] ?? '' ),
@@ -687,10 +725,22 @@ final class Provider {
 
 	/** Saves the dispatch status of this request (once, at shutdown). */
 	public function save_status(): void {
-		if ( $this->dirty ) {
-			update_option( self::STATUS_OPTION, $this->status, false );
-			$this->dirty = false;
+		if ( ! $this->dirty ) {
+			return;
 		}
+		// R11: other requests may have counted meanwhile – add this request's counts to the stored ones (read fresh)
+		// instead of writing back the numbers read at its start.
+		wp_cache_delete( self::STATUS_OPTION, 'options' );
+		$stored = get_option( self::STATUS_OPTION, array() );
+		$stored = is_array( $stored ) ? $stored : array();
+		$status = $this->status;
+		foreach ( array( 'delivered', 'failures' ) as $counter ) {
+			$status[ $counter ] = (int) ( $stored[ $counter ] ?? 0 ) + $this->delta[ $counter ];
+		}
+		update_option( self::STATUS_OPTION, $status, false );
+		$this->status = $status;
+		$this->delta  = array( 'delivered' => 0, 'failures' => 0 );
+		$this->dirty  = false;
 	}
 
 	/**

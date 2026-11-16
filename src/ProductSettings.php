@@ -17,6 +17,10 @@ final class ProductSettings {
 		add_action( 'woocommerce_admin_process_variation_object', array( $this, 'save_variation' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'assets' ) );
 		add_action( 'admin_notices', array( $this, 'tax_status_notice' ) );
+		// R7 (S17): the same right on the other ways to write product meta – REST API and CSV import.
+		add_filter( 'woocommerce_rest_pre_insert_product_object', array( self::class, 'guard_voucher_meta' ), 10, 1 );
+		add_filter( 'woocommerce_rest_pre_insert_product_variation_object', array( self::class, 'guard_voucher_meta' ), 10, 1 );
+		add_filter( 'woocommerce_product_import_pre_insert_product_object', array( self::class, 'guard_voucher_meta' ), 10, 1 );
 		if ( is_admin() ) {
 			Admin\Flash::register(); // Notices of save() survive the redirect after saving the product.
 		}
@@ -701,6 +705,36 @@ final class ProductSettings {
 	 */
 	public static function may_manage(): bool {
 		return current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' ); // phpcs:ignore WordPress.WP.Capabilities.Unknown -- Registered by Install / WooCommerce.
+	}
+
+	/**
+	 * R7 (S17): a user who may edit products but is no voucher manager cannot set voucher settings (`_vcap_*`
+	 * product meta) through the WooCommerce REST API or the CSV import either: changed values are put back to the
+	 * stored ones, new keys are dropped. Other product data is saved as usual.
+	 *
+	 * @param mixed $product Product about to be saved.
+	 * @return mixed
+	 */
+	public static function guard_voucher_meta( $product ) {
+		if ( ! $product instanceof \WC_Product || self::may_manage() ) {
+			return $product;
+		}
+		$id = (int) $product->get_id();
+		foreach ( $product->get_meta_data() as $meta ) {
+			$key = (string) $meta->key;
+			if ( ! str_starts_with( $key, '_vcap_' ) ) {
+				continue;
+			}
+			if ( $id > 0 && metadata_exists( 'post', $id, $key ) ) {
+				$stored = get_post_meta( $id, $key, true );
+				if ( $stored !== $meta->value ) {
+					$product->update_meta_data( $key, $stored );
+				}
+			} else {
+				$product->delete_meta_data( $key );
+			}
+		}
+		return $product;
 	}
 
 	/**

@@ -227,6 +227,74 @@ vcap_cs_assert( in_array( $old_open, VoucherRequests::expired_ids( array( 'open'
 vcap_cs_assert( $requests->purge_expired( 20.0 ), 'the retention purge finishes within its budget' );
 vcap_cs_assert( null === VoucherRequests::get( $old_open ) && null === VoucherRequests::get( $old_issued ) && null !== VoucherRequests::get( $new_open ) && null !== VoucherRequests::get( $mid_issued ) && null !== VoucherRequests::get( $ho_id ), 'open requests older than 6 months and issued ones older than 24 months (since issuing) are deleted, younger ones kept' );
 vcap_cs_assert( vcap()->delivery->run_maintenance_step( 'voucher_requests' ), 'the maintenance step voucher_requests runs' );
+
+// R8: claims of form references – a rejected entry stays answered as rejected (and is purged after the retention),
+// an interrupted submit (claim without id) is repaired from the request, a claim without any request is taken over.
+$r8_user = get_current_user_id();
+wp_set_current_user( 1 );
+$r8_ref = 'formcaptain:entry:cs-r8-' . strtolower( wp_generate_password( 6, false, false ) );
+$r8_sub = $requests->submit( array( 'reference' => $r8_ref, 'contact' => array( 'email' => 'cs-r8@example.com' ), 'recipients' => array( array( 'name' => 'Ann', 'email' => 'cs-r8-ann@example.com' ) ) ) );
+$r8_rej = $requests->reject( (int) $r8_sub['request_id'] );
+$r8_rep = $requests->submit( array( 'reference' => $r8_ref, 'contact' => array( 'email' => 'cs-r8@example.com' ) ) );
+vcap_cs_assert( true === $r8_rej && is_array( $r8_rep ) && 'rejected' === $r8_rep['state'] && 0 === $r8_rep['request_id'] && $r8_rep['replayed'], 'R8: a repeat of a rejected form entry is answered as rejected, no new request', $r8_rep );
+update_option( VoucherRequests::CLAIM_PREFIX . md5( $r8_ref ), VoucherRequests::REJECTED_CLAIM . gmdate( 'Y-m-d H:i:s', strtotime( '-25 months' ) ), false );
+VoucherRequests::purge_rejected_claims( gmdate( 'Y-m-d H:i:s', strtotime( '-24 months' ) ) );
+vcap_cs_assert( false === get_option( VoucherRequests::CLAIM_PREFIX . md5( $r8_ref ), false ), 'R8: the claim of a rejected entry is removed after the retention for closed requests' );
+$r8_ref2 = 'formcaptain:entry:cs-r8b-' . strtolower( wp_generate_password( 6, false, false ) );
+$r8_sub2 = $requests->submit( array( 'reference' => $r8_ref2, 'contact' => array( 'email' => 'cs-r8@example.com' ) ) );
+update_option( VoucherRequests::CLAIM_PREFIX . md5( $r8_ref2 ), '0:' . time(), false ); // As if the first call stopped before completing the claim.
+$r8_rep2 = $requests->submit( array( 'reference' => $r8_ref2, 'contact' => array( 'email' => 'cs-r8@example.com' ) ) );
+vcap_cs_assert( is_array( $r8_rep2 ) && $r8_rep2['request_id'] === $r8_sub2['request_id'] && (int) get_option( VoucherRequests::CLAIM_PREFIX . md5( $r8_ref2 ) ) === (int) $r8_sub2['request_id'], 'R8: an interrupted submit is repaired – the repeat answers the stored request and completes the claim', $r8_rep2 );
+$r8_ref3 = 'formcaptain:entry:cs-r8c-' . strtolower( wp_generate_password( 6, false, false ) );
+add_option( VoucherRequests::CLAIM_PREFIX . md5( $r8_ref3 ), '0:' . ( time() - 600 ), '', false ); // Claimed, nothing stored, long ago.
+$r8_rep3 = $requests->submit( array( 'reference' => $r8_ref3, 'contact' => array( 'email' => 'cs-r8@example.com' ) ) );
+vcap_cs_assert( is_array( $r8_rep3 ) && $r8_rep3['request_id'] > 0 && ! $r8_rep3['replayed'] && 'open' === $r8_rep3['state'], 'R8: a stale claim without a stored request is taken over and the entry stored', $r8_rep3 );
+foreach ( array( $r8_sub2, $r8_rep3 ) as $r8_done ) {
+	wp_delete_post( (int) $r8_done['request_id'], true );
+}
+wp_set_current_user( $r8_user );
+
+// R9: while another manager changes the same request (its lock is held by another connection), confirm, hand-over
+// and rejection wait and then answer vcap_in_progress instead of acting twice.
+$r9_user = get_current_user_id();
+wp_set_current_user( 1 );
+$r9_req  = $requests->submit( array( 'reference' => 'formcaptain:entry:cs-r9-' . strtolower( wp_generate_password( 6, false, false ) ), 'contact' => array( 'email' => 'cs-r9@example.com' ), 'recipients' => array( array( 'name' => 'Ann', 'email' => 'cs-r9-ann@example.com' ) ) ) );
+$r9_db   = new mysqli( DB_HOST, DB_USER, DB_PASSWORD, DB_NAME );
+$r9_name = VCAP\Install::lock_name( 'voucher_request_' . (int) $r9_req['request_id'] );
+$r9_db->query( "SELECT GET_LOCK('" . $r9_db->real_escape_string( $r9_name ) . "', 0)" );
+$r9_wait = static fn() => 0;
+add_filter( 'vcap_voucher_request_lock_wait', $r9_wait );
+$r9_busy = array( $requests->confirm( (int) $r9_req['request_id'], array( 'sale' => 'free' ) ), $requests->reject( (int) $r9_req['request_id'] ) );
+remove_filter( 'vcap_voucher_request_lock_wait', $r9_wait );
+$r9_db->query( "SELECT RELEASE_LOCK('" . $r9_db->real_escape_string( $r9_name ) . "')" );
+$r9_db->close();
+$r9_free = $requests->reject( (int) $r9_req['request_id'] );
+wp_set_current_user( $r9_user );
+vcap_cs_assert( is_wp_error( $r9_busy[0] ) && 'vcap_in_progress' === $r9_busy[0]->get_error_code() && is_wp_error( $r9_busy[1] ) && 'vcap_in_progress' === $r9_busy[1]->get_error_code() && true === $r9_free, 'R9: a state change waits for the lock of the request; while another holds it nothing happens, afterwards it works', array( $r9_busy, $r9_free ) );
+
+// R5: the admin list pages and filters by state (default "to do" = open/partial).
+$r5_todo = array_column( VoucherRequests::page( array( VoucherRequests::STATE_OPEN, VoucherRequests::STATE_PARTIAL ), 1, 200 )['items'], 'id' );
+$r5_done = array_column( VoucherRequests::page( array( VoucherRequests::STATE_ISSUED, VoucherRequests::STATE_HANDED_OVER ), 1, 200 )['items'], 'id' );
+$r5_one  = VoucherRequests::page( array(), 1, 1 );
+vcap_cs_assert( in_array( $new_open, $r5_todo, true ) && ! in_array( $mid_issued, $r5_todo, true ) && in_array( $mid_issued, $r5_done, true ) && in_array( $ho_id, $r5_done, true ) && 1 === count( $r5_one['items'] ) && $r5_one['total'] >= 3 && $r5_one['pages'] === $r5_one['total'], 'R5: requests are listed page by page and filtered by state', array( $r5_todo, $r5_done, $r5_one['total'] ) );
+
+// R4: retention of the review-source reference records (revoked after 90 days, all after 24 months).
+$r4_refs = array();
+foreach ( array( 'old_revoked' => array( 'revoked', '-200 days', '-100 days' ), 'new_revoked' => array( 'revoked', '-20 days', '-10 days' ), 'eligible' => array( 'eligible', '-30 days', '' ), 'ancient' => array( 'eligible', '-25 months', '' ) ) as $r4_case => $r4_spec ) {
+	$r4_refs[ $r4_case ] = VCAP\Integrations\ReviewSource::reference( 'r4-' . $r4_case . '-' . wp_generate_password( 8, false ) );
+	add_option(
+		VCAP\Integrations\ReviewSource::OPTION_PREFIX . $r4_refs[ $r4_case ],
+		array( 'v' => 1, 'state' => $r4_spec[0], 'voucher_id' => 0, 'experience_id' => 0, 'channel' => 'counter', 'at' => gmdate( 'Y-m-d H:i:s', strtotime( $r4_spec[1] ) ), 'revoked_at' => '' !== $r4_spec[2] ? gmdate( 'Y-m-d H:i:s', strtotime( $r4_spec[2] ) ) : '', 'reason' => '' ),
+		'',
+		false
+	);
+}
+vcap_cs_assert( vcap()->delivery->run_maintenance_step( 'review_refs' ), 'R4: the maintenance step review_refs runs' );
+$r4_left = array_map( static fn( $ref ) => null !== vcap()->review_source->get( $ref ), $r4_refs );
+vcap_cs_assert( array( 'old_revoked' => false, 'new_revoked' => true, 'eligible' => true, 'ancient' => false ) === $r4_left, 'R4: revoked references older than 90 days and all references older than 24 months are deleted, younger ones kept', $r4_left );
+foreach ( $r4_refs as $r4_ref ) {
+	delete_option( VCAP\Integrations\ReviewSource::OPTION_PREFIX . $r4_ref );
+}
 foreach ( array( $new_open, $mid_issued, $ho_id ) as $rid ) {
 	wp_delete_post( $rid, true );
 }

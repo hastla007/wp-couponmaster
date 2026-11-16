@@ -211,6 +211,8 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_review_opted_out` | `src/Integrations/ReviewSource.php` | Whether the address must not be invited (e.g. an opt-out list). An opted-out address is never returned. |
 | `vcap_review_recipient_allowed` | `src/Integrations/ReviewSource.php` | Whether the current caller may resolve the recipient of a review reference. |
 | `vcap_review_recipient_locale` | `src/Integrations/ReviewSource.php` | Locale of a review invitation answered by recipient() (contract 1.1.0). |
+| `vcap_review_retention_months` | `src/Integrations/ReviewSource.php` | – |
+| `vcap_review_revoked_retention_days` | `src/Integrations/ReviewSource.php` | – |
 | `vcap_review_service_voucher` | `src/Integrations/ReviewSource.php` | Whether a redemption of this voucher confirms a service (default: its product is marked so). |
 | `vcap_review_source_active` | `src/Integrations/ReviewSource.php` | Whether redemptions are recorded as review sources. Default: something listens to vcap_review_redemption_eligible. |
 | `vcap_sample_voucher` | `src/Preview.php` | – |
@@ -251,6 +253,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_voucher_pays_shipping_and_fees` | `src/PaymentVouchers.php` | Whether a voucher paying after tax may also pay shipping and fees (default: when it is not limited to products or categories). |
 | `vcap_voucher_request_handover` | `src/Integrations/VoucherRequests.php` | Hands a voucher request over to a company order (D5, contract 1.0.0). Return `array{url: string, order_id: int}` (admin URL of the order's preview) or a WP_Error; null means no extension took it. The same reference again must answer the same order. |
 | `vcap_voucher_request_handover_available` | `src/Integrations/VoucherRequests.php` | Whether an add-on takes this voucher request over as a company order (D5, contract 1.0.0). Default false: without an add-on the request view stays as it is. |
+| `vcap_voucher_request_lock_wait` | `src/Integrations/VoucherRequests.php` | Seconds a state change of a voucher request waits for another one on the same request (R9). |
 | `vcap_voucher_requests_max_open` | `src/Integrations/VoucherRequests.php` | Most open requests at a time (protection against floods of form entries); above it submit() answers `vcap_request_limit` (429). 0 accepts no new request. |
 | `vcap_voucher_requests_retention_months` | `src/Integrations/VoucherRequests.php` | Retention of voucher requests in months (D10): `open` – open and partly issued requests (default 6), `closed` – issued and handed-over requests (default 24). 0 keeps them. Rejected requests are deleted at once. |
 | `vcap_voucher_tax_treatment` | `src/ProductConfig.php` | – |

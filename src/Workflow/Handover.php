@@ -56,7 +56,8 @@ final class Handover {
 
 	/**
 	 * Whether Voucher Captain leaves this communication to the workflow plugin now: switched on, and a compatible
-	 * workflow plugin is registered that handles it (Provider::consumer()). False falls back to the native email.
+	 * workflow plugin with an active licence is registered that handles it (Provider::consumer()). False falls back
+	 * to the native email.
 	 */
 	public static function active( string $communication ): bool {
 		if ( ! self::switched_on( $communication ) ) {
@@ -64,7 +65,7 @@ final class Handover {
 		}
 		$consumer = Provider::consumer();
 		return Provider::COMPATIBLE === Provider::compatibility( $consumer )
-			&& 'expired' !== ( $consumer['entitlement'] ?? '' )
+			&& 'active' === ( $consumer['entitlement'] ?? '' ) // R10: no hand-over with an expired or missing licence.
 			&& in_array( $communication, (array) ( $consumer['communications'] ?? array() ), true );
 	}
 

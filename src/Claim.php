@@ -45,6 +45,20 @@ final class Claim {
 		return null === $at ? null : (string) $at;
 	}
 
+	/**
+	 * Takes over a claim that was taken at $taken_at (a stale one): true for exactly one caller – the UPDATE only
+	 * matches while the row still carries the old time, so a second caller that read the same time loses.
+	 */
+	public static function take_over( string $name, string $taken_at ): bool {
+		global $wpdb;
+		if ( ! Install::storage_ready() ) {
+			return false;
+		}
+		$table = Install::tables()['claims'];
+		$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET created_at = %s WHERE claim_key = %s AND created_at = %s", gmdate( 'Y-m-d H:i:s' ), self::key( $name ), $taken_at ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return 1 === (int) $wpdb->rows_affected;
+	}
+
 	/** Allow the action again (e.g. a use is counted again after a cancelled order is paid later). */
 	public static function release( string $name ): void {
 		global $wpdb;

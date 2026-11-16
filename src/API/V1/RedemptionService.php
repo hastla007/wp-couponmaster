@@ -947,13 +947,6 @@ final class RedemptionService {
 	}
 
 	/**
-	 * Load a redemption row.
-	 *
-	 * @param string $key Key.
-	 * @return array<string, mixed>|null
-	 * @phpstan-impure Reads the current row (it changes between calls).
-	 */
-	/**
 	 * S9: whether the caller of commit(), release() or refund() may act on this redemption row: the access check
 	 * ($args['access'], e.g. the REST rules for customers) and the owner ($args['user_id']). Checked on the row as
 	 * read and again under its lock, so a redemption created after a caller's own check is never driven by it.

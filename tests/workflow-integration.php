@@ -58,6 +58,19 @@ try {
 	vcap_wf_assert( $provider instanceof VCAP\Workflow\Provider && apply_filters( 'vcap_workflow_provider', null ) === $provider && '1.0.0' === VCAP\Workflow\Provider::descriptor()['contract_version'], 'WF-01: the provider is available as vcap()->workflow and through the filter vcap_workflow_provider' );
 	vcap_wf_assert( 'missing' === $provider->status()['compatibility'], 'WF-05: without a workflow plugin the status says "missing"' );
 
+	// R1: a language plugin (WPML style) filters home_url() and option_home per language – the instance must not change.
+	$r1_instance  = VCAP\Workflow\Provider::instance();
+	$r1_signature = VCAP\Workflow\Provider::site_signature();
+	$r1_lang      = static fn( $url ) => rtrim( (string) $url, '/' ) . '/de';
+	add_filter( 'home_url', $r1_lang );
+	add_filter( 'option_home', $r1_lang );
+	VCAP\Workflow\Provider::forget_stored_home();
+	$r1_same = VCAP\Workflow\Provider::site_signature() === $r1_signature && VCAP\Workflow\Provider::instance() === $r1_instance && null === VCAP\Workflow\Provider::instance_change();
+	remove_filter( 'home_url', $r1_lang );
+	remove_filter( 'option_home', $r1_lang );
+	VCAP\Workflow\Provider::forget_stored_home();
+	vcap_wf_assert( $r1_same, 'R1: a language plugin that filters home_url()/option_home per language keeps the workflow instance and its event ids' );
+
 	// WF-03: permission.
 	wp_set_current_user( 0 );
 	$denied = $provider->issue( array( 'amount' => 20, 'send' => false, 'idempotency_key' => "wf-{$tag}:issue:denied" ) );
@@ -171,7 +184,7 @@ try {
 	$export = ( new VCAP\Privacy( vcap()->vouchers ) )->export( "wf-handed-{$tag}@example.com" );
 	vcap_wf_assert( in_array( 'vcap-workflow-contact', array_column( $export['data'], 'group_id' ), true ), 'D9: the privacy export of the voucher lists the read of its contact data', $export['data'] );
 
-	foreach ( array( 'missing' => null, 'major' => '2.0.0', 'expired' => 'expired' ) as $case => $change ) {
+	foreach ( array( 'missing' => null, 'major' => '2.0.0', 'expired' => 'expired', 'unlicensed' => 'missing' ) as $case => $change ) { // R10: "unlicensed" = entitlement missing.
 		$native = $due( "wf-native-{$case}-{$tag}@example.com" );
 		$saved  = $consumer;
 		if ( 'missing' === $case ) {
@@ -188,6 +201,26 @@ try {
 		$mine = array_values( array_filter( $mails, static fn( $to ) => str_contains( $to, $tag ) ) );
 		vcap_wf_assert( array( "wf-native-{$case}-{$tag}@example.com" ) === $mine && 0 === vcap_wf_count( (int) $native->id, 'workflow_handover' ) && 1 === vcap_wf_count( (int) $native->id, 'expiry_reminder' ) && 0 === vcap_wf_count( (int) $handed->id, 'expiry_reminder' ), "WF-06: workflow plugin {$case} – Voucher Captain sends the reminder itself (and not again for the handed-over voucher)", $mine );
 	}
+
+	// R3: two repeats that both find the same stale claim – only one may take it over.
+	$r3_name = "workflow:r3-{$tag}";
+	VCAP\Claim::take( $r3_name );
+	$r3_old = gmdate( 'Y-m-d H:i:s', time() - 600 );
+	$GLOBALS['wpdb']->query( $GLOBALS['wpdb']->prepare( 'UPDATE ' . VCAP\Install::tables()['claims'] . ' SET created_at = %s WHERE claim_key = %s', $r3_old, substr( md5( $r3_name ), 0, 24 ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	$r3_at = VCAP\Claim::taken_at( $r3_name );
+	vcap_wf_assert( $r3_old === $r3_at && VCAP\Claim::take_over( $r3_name, $r3_at ) && ! VCAP\Claim::take_over( $r3_name, $r3_at ) && ! VCAP\Claim::take( $r3_name ), 'R3: a stale claim is taken over by exactly one caller', $r3_at );
+	VCAP\Claim::release( $r3_name );
+
+	// R2: a registered workflow plugin built for another major contract gets no events at all (status and WORKFLOW.md).
+	$saved                = $consumer;
+	$consumer['contract'] = '2.0.0';
+	$events               = array();
+	$r2                   = $provider->issue( array( 'idempotency_key' => "wf-{$tag}:r2" ) + $args );
+	$consumer             = $saved;
+	vcap_wf_assert( is_array( $r2 ) && $r2['voucher_id'] > 0 && array() === $events, 'R2: an incompatible workflow plugin receives no events (the voucher is still issued)', $events );
+	$events = array();
+	$r2b    = $provider->issue( array( 'idempotency_key' => "wf-{$tag}:r2b" ) + $args );
+	vcap_wf_assert( is_array( $r2b ) && array() !== array_filter( $events, static fn( $e ) => 'voucher.created' === $e['type'] ), 'R2: a compatible workflow plugin receives the events again', $events );
 } finally {
 	remove_filter( 'pre_wp_mail', $catch, 10 );
 	remove_action( 'vcap_workflow_event', $listen );
