@@ -8,7 +8,7 @@ defined( 'ABSPATH' ) || exit;
  * their code from the product's imported batch (the printed cards), get no email – the card itself is the handover
  * – and stay inactive (scheduled, coupon disabled) until the order reaches an activation status (default
  * "completed", i.e. shipped; filter "vcap_physical_activation_statuses"). Print data for card printers is not part
- * of the core (an add-on can build it on the public hooks).
+ * of the core (docs/FREE-PREMIUM.md: possible add-on feature).
  */
 final class PhysicalCards {
 	public function register(): void {

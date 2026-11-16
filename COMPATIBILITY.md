@@ -141,9 +141,9 @@ Voucher fields use WooCommerce product add-to-cart hooks and cart/order-item dat
 
 The CI job `browser-e2e` runs Playwright against a real shop (WordPress 7.1.4, WooCommerce 11.2.2, Yoast SEO 28.8): product page fields, keyboard-only use, classic cart/checkout and the cart/checkout blocks with cash on delivery, shortcodes and blocks, My Account, admin screens and the product editor next to Yoast SEO, axe-core accessibility scans of all Voucher Captain markup, and a PHP notice check. External payment gateways, redirects and webhooks, and screen-reader testing by a person remain release acceptance checks.
 
-## Pass Captain (tickets)
+## WP Pass Captain (tickets)
 
-Release gate: Voucher Captain alone, Pass Captain alone and both together.
+Release gate: Voucher Captain alone, WP Pass Captain alone and both together.
 
 | Setup | Where it is checked |
 |---|---|
@@ -153,7 +153,7 @@ Release gate: Voucher Captain alone, Pass Captain alone and both together.
 
 Both plugins keep their own plugin entries and admin menus (each links to the other while both are active; WooCommerce → Settings → Vouchers → Integrations shows the status). They talk only through Pass Captain's versioned contract – the filters `wp_pass_captain_voucher_provider_v1`, `wp_pass_captain_ticket_service_v1` and `wp_pass_captain_checkin_service_v1`, the hold contract `OrderAdapter::HOLD_FULFILMENT` and the reconciliation API `Integrations\Vouchers\Reconciliation` – never through each other's tables (one fallback for older Pass Captain versions, see *Reconciliation*).
 
-**Which ticket to use:** Voucher Captain's voucher type *Ticket* is a simple admission pass without dates or capacity (e.g. a day pass sold in the shop), checked in at Voucher Captain. Events with dates, capacity, seats or admission rules belong in Pass Captain – sold there directly or through a ticket voucher. Existing Voucher Captain tickets keep working; while Pass Captain is active the product settings point this out.
+**Which ticket to use:** Voucher Captain's voucher type *Ticket* is a simple admission pass without dates or capacity (e.g. a day pass sold in the shop), checked in at Voucher Captain. Events with dates, capacity, seats or admission rules belong in WP Pass Captain – sold there directly or through a ticket voucher. Existing Voucher Captain tickets keep working; while Pass Captain is active the product settings point this out.
 
 **Reconciliation:** *Reports → Pass Captain reconciliation* compares the voucher payments and ticket vouchers in Pass Captain with the redemptions here. What Pass Captain must provide: `PassCaptain\Integrations\Vouchers\Reconciliation::VERSION` ≥ 1 and `Reconciliation::orders( array $args )` (Pass Captain 1.4+, docs/VOUCHERS.md there) – a read-only listing of the orders with a voucher (`limit` ≤ 500, cursors `after_id`/`before_id`, `order` `desc` for the newest first, lookup by `redemption_key`) with `order_id`, `public_id`, `status`, `payment_status`, `payment_provider`, `provider_reference`, `currency`, `exchange_key`, `voucher` (`source`, `redemption_key`, `status`, `purpose`, `amount_minor`, `amount_paid_by_voucher`, `refunded_minor`) and timestamps. Voucher Captain pages through the newest 2,000 orders. Pass Captain versions without this API (e.g. its current `main`) are read from their order table `{prefix}wpcap_orders` as a fallback, only after checking its columns (`order_id`, `public_id`, `status`, `payment_status`, `payment_provider`, `provider_reference`, `currency`, `voucher_snapshot`); the report then shows a notice to update Pass Captain. The fallback will be removed once every supported Pass Captain release has the API. The filter `vcap_passcaptain_reconcile_orders` (rows; `null` keeps the default) overrides both. The CI job `pass-captain` checks the API on Pass Captain's work branch (same findings as the table read) and the fallback on `main`.
 

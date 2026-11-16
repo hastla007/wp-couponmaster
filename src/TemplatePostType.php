@@ -91,6 +91,7 @@ final class TemplatePostType {
 		if ( ! is_array( $design ) || empty( $design['page'] ) ) {
 			$design = self::default_designs()['giftcard'];
 		}
+		/** The design (JSON layout: page, elements) of a PDF template as it is printed (args: design, template id). */
 		return apply_filters( 'vcap_template_design', $design, $template_id );
 	}
 
@@ -576,6 +577,7 @@ final class TemplatePostType {
 			}
 			$elements[] = $clean;
 		}
+		/** A design after it was cleaned for saving (args: clean design, design as posted); add-on element types keep their own keys here. */
 		return apply_filters(
 			'vcap_sanitize_design',
 			array(

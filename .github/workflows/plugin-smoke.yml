@@ -730,10 +730,9 @@ jobs:
 
   plugin-check:
     # WordPress Plugin Check (PCP, the wordpress.org review tool) against the installed release ZIP as shipped.
-    # Report-only for now (RELEASE.md → Static analysis); the result table is in the job summary and the artifact
-    # plugin-check.
+    # Blocking for errors (A8; the run of 16.11.2026 had none), warnings are reported only (RELEASE.md → Static
+    # analysis); the result table is in the job summary and the artifact plugin-check.
     runs-on: ubuntu-latest
-    continue-on-error: true
     services:
       db:
         image: mysql:8.4
@@ -775,10 +774,13 @@ jobs:
           status=$?
           cat plugin-check.csv
           {
-            echo '### Plugin Check (report-only)'
+            echo '### Plugin Check (errors block, warnings are reported)'
             echo "Errors: $(grep -c ',ERROR,' plugin-check.csv || true), warnings: $(grep -c ',WARNING,' plugin-check.csv || true)"
           } >> "$GITHUB_STEP_SUMMARY"
-          if grep -q ',ERROR,' plugin-check.csv; then exit 1; fi
+          if grep -q ',ERROR,' plugin-check.csv; then
+            echo "::error::Plugin Check reported $(grep -c ',ERROR,' plugin-check.csv) error(s) – fix them before merging (wordpress.org review)."
+            exit 1
+          fi
           exit $status
       - name: Upload the Plugin Check result
         if: always()

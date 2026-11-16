@@ -47,6 +47,7 @@ final class Placeholders {
 			'redemption_terms'  => __( 'Redemption conditions', 'voucher-captain' ),
 			'transferable'      => __( 'Transferability', 'voucher-captain' ),
 		);
+		/** Placeholders offered in the PDF designer and the email texts (arg: array of token => label); fill them in vcap_placeholders. */
 		return apply_filters( 'vcap_placeholder_definitions', $defs );
 	}
 
@@ -134,6 +135,7 @@ final class Placeholders {
 			'redemption_terms'  => '' !== $voucher->terms ? $voucher->terms : ProductConfig::terms( $config ),
 			'transferable'      => $voucher->transferable_label(),
 		);
+		/** Values of the placeholders for a voucher (args: array of token => text, Voucher); texts are escaped when printed. */
 		return apply_filters( 'vcap_placeholders', $values, $voucher );
 	}
 

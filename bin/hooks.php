@@ -120,8 +120,8 @@ function vcap_hooks_markdown( array $hooks ): string {
 	$out .= "CI checks that this file is current (`php bin/hooks.php --check`). Connector contracts (when hooks fire, transactions)\n";
 	$out .= "are described in CONNECTORS.md and API.md. Actions marked \"after COMMIT\" are buffered while a database transaction\n";
 	$out .= "is open and fired only once it was committed (CONNECTORS.md, \"Event timing\").\n\n";
-	$out .= "\"Since\" is the first plugin version with the hook (\"1.1.0\" = 1.1.0 or earlier, the first release with a public\n";
-	$out .= "API). Add-ons check the contract version instead of single hooks: `VCAP_CONTRACT_VERSION` (CONNECTORS.md, section 6).\n";
+	$out .= "\"Since\" is the first plugin version with the hook (from the git history; 1.0.x was never released\n";
+	$out .= "with a public API contract, the contract starts with 1.1.0). Add-ons check the contract version instead of single hooks: `VCAP_CONTRACT_VERSION` (CONNECTORS.md, section 6).\n";
 	foreach ( array( 'action' => 'Actions', 'filter' => 'Filters' ) as $type => $title ) {
 		$out .= "\n## {$title}\n\n| Hook | Since | Where | Description |\n|---|---|---|---|\n";
 		foreach ( $hooks as $name => $hook ) {

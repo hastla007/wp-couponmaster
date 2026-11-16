@@ -110,10 +110,10 @@ Voucher Captain does not know what a customer owns in another plugin. Use the ex
 
   | Contract | Plugin | Added |
   |---|---|---|
-  | 1.0.0 | 1.1.0 | first public contract: `vcap()->api_v1`, `vcap()->redemptions`, REST `vcap/v1`, `VCAP\Contracts\*`, the hooks marked "1.1.0" in docs/HOOKS.md |
+  | 1.0.0 | 1.1.0 | first public contract: `vcap()->api_v1`, `vcap()->redemptions`, REST `vcap/v1`, `VCAP\Contracts\*`, the hooks marked "1.0.0" and "1.1.0" in docs/HOOKS.md |
   | 1.1.0 | 1.2.0 | the hooks marked "1.2.0" in docs/HOOKS.md, among them the add-on extension points `vcap_admin_menu`, `vcap_voucher_links`, `vcap_voucher_issued_standalone`, `vcap_counter_limits`; `vcap_voucher_event` with source and user id; `vcap()->issuer->issue_standalone()`; action `vcap_loaded` |
 
-- The first plugin version of every hook is in the "Since" column of docs/HOOKS.md (generated; a new hook needs `@since` in its doc comment, `php bin/hooks.php --check` fails otherwise). Every public method carries `@since`. Everything else (classes without a documented contract, database tables, private meta) is internal and may change in any release – never query Voucher Captain's tables directly.
+- The first plugin version of every hook is in the "Since" column of docs/HOOKS.md (generated; a new hook needs `@since` in its doc comment, `php bin/hooks.php --check` fails otherwise). Every public method carries `@since`. Everything else (classes without a documented contract, database tables, private meta) is internal and may change in any release – never query Voucher Captain's tables directly. Everything else (classes without a documented contract, database tables, private meta) is internal and may change in any release – never query Voucher Captain's tables directly.
 - Connectors should check `defined( 'VCAP_VERSION' ) && version_compare( VCAP_VERSION, '1.1.0', '>=' )` and `function_exists( 'vcap' )` before registering hooks. Since 1.2.0, `vcap()` exists only once Voucher Captain has booted (WooCommerce active in a supported version), so `function_exists( 'vcap' )` from `plugins_loaded` priority 11 on is a reliable check; better, register in the action `vcap_loaded` (argument: the running `VCAP\Plugin`), which fires exactly then. `VCAP\Plugin::ready()` tells whether the plugin booted; `VCAP\Plugin::instance()` throws a `LogicException` without a supported WooCommerce.
 
 ## 7. Checklist for a connector release

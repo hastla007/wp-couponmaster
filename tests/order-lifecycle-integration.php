@@ -12,6 +12,10 @@ function vcap_life_assert( bool $condition, string $message, $detail = null ): v
 	echo "PASS: {$message}\n";
 }
 
+// A5: the core works alone (no add-on installed) and offline: every outgoing HTTP request of this suite is blocked.
+require_once __DIR__ . '/no-network.php';
+$vcap_offline = vcap_test_no_network();
+
 function vcap_life_voucher( float $balance = 50.0, array $props = array() ): array {
 	$coupon = new WC_Coupon();
 	$coupon->set_code( 'vcap-life-' . strtolower( wp_generate_password( 12, false, false ) ) );
@@ -540,4 +544,6 @@ $wpdb->query( "UPDATE {$p15_table} SET updated_at = updated_at WHERE id = 0" ); 
 vcap_life_assert( null === $p15_miss_again && $p15->id === ( $repo->get_by_code( $p15_missing )->id ?? 0 ), 'AP-P1-5: any write query of the request (direct SQL too) forgets the memo' );
 $p15_other->close();
 
+$vcap_offline_core = $vcap_offline();
+vcap_life_assert( array() === $vcap_offline_core, 'A5: the order lifecycle checks of this suite (scheduled delivery, cancellation, refunds, balances) ran with outgoing HTTP blocked and Voucher Captain requested nothing (' . implode( ', ', $vcap_offline_core ) . ')' );
 echo "Voucher Captain order lifecycle checks passed.\n";

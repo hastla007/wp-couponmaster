@@ -166,7 +166,9 @@ if ( ! function_exists( 'wp_generate_uuid4' ) ) {
 }
 /** HTTP: $GLOBALS['vcap_test_http'] = callable( $url, $args ) returning array{code:int, body:string} or WP_Error. */
 if ( ! function_exists( 'wp_remote_request' ) ) {
-	function wp_remote_request( $url, $args = array() ) { $h = $GLOBALS['vcap_test_http'] ?? null; return $h ? $h( $url, $args ) : new WP_Error( 'http_request_failed', 'no transport' ); }
+	// A5: every request of the unit run is recorded (tests/run.php checks the list at the end); without a test
+	// transport the network is off ("no transport"), as in a shop without outgoing connections.
+	function wp_remote_request( $url, $args = array() ) { $GLOBALS['vcap_test_requests'][] = (string) $url; $h = $GLOBALS['vcap_test_http'] ?? null; return $h ? $h( $url, $args ) : new WP_Error( 'http_request_failed', 'no transport' ); }
 	function wp_remote_retrieve_response_code( $r ) { return is_array( $r ) ? (int) $r['code'] : 0; }
 	function wp_remote_retrieve_body( $r ) { return is_array( $r ) ? (string) $r['body'] : ''; }
 }

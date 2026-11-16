@@ -7,7 +7,7 @@ Requires PHP: 8.1
 WC requires at least: 8.9
 WC tested up to: 11.2
 Stable tag: 1.2.0
-License: GPLv2 or later
+License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
 Sell personalised PDF vouchers, gift cards and store credit with WooCommerce: balance tracking, scheduled delivery, scanner and code import.
@@ -67,9 +67,14 @@ See "External services" below. Customer data stays on your site; the suggested p
 
 == External services ==
 
-Voucher Captain connects to no external service. The plugin bundles all its libraries and fonts. PDFs load no remote images by default; only when a developer names hosts with the filter `vcap_pdf_remote_hosts` (for example the shop's own CDN or offloaded media library) are template images missing on the server downloaded from those hosts. No customer data is sent with these requests.
+Voucher Captain connects to no external service and needs no account, license key or add-on. It never contacts a license or update server; updates come from WordPress.org. The plugin bundles all its libraries and fonts, and QR codes, barcodes and PDFs are created on your server.
 
-On the same site (no external transfer): with WP Pass Captain active, ticket exchanges and ticket payments pass the voucher code, amount, the customer's name and email address and attendee names to WP Pass Captain.
+The plugin itself makes only these HTTP requests:
+
+* PDF template images from your own media hosts – off by default. Only when a developer names hosts with the filter `vcap_pdf_remote_hosts` (for example the shop's own CDN or offloaded media library) are template images that are missing on the server downloaded from those hosts when a PDF is created. The request carries only the image URL; no customer data is sent.
+* Site Health check of the private folder – a request from your site to its own uploads URL (Tools → Site Health) that tests whether voucher PDFs could be fetched from the web. It goes to your own site only.
+
+On the same site (no external transfer): with WP Pass Captain active, ticket exchanges and ticket payments pass the voucher code, amount, the customer's name and email address and attendee names to WP Pass Captain. With WP Affiliate Captain active, the partner of a code campaign is passed to it for the commission of orders that use the code.
 
 == Changelog ==
 
@@ -87,6 +92,7 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 * Fix: ticket QR page – the check-in form redirects after posting and carries a one-time key (reload, double tap or resending never admit twice); a refused check-in is shown in red.
 * Fix: WP Pass Captain – failures to cancel tickets, release a reservation or give a voucher back are recorded in the history ("passcaptain_revoke_failed", "passcaptain_restore_failed") and shown to the admins; a failed "send tickets again" from the customer account is recorded too.
 * Change: every feature stays free and included – no license, no locked features; license data stored by pre-release builds is removed on update and uninstall.
+* New: extension points for add-ons – own settings section (`vcap_settings_sections`), own report tab (`vcap_report_tabs`, `vcap_report_page`), admin submenu (`vcap_admin_menu`), voucher links such as "Add to Wallet" (`vcap_voucher_links`), issuing without an order (`issue_standalone()`) and source and user of every history entry (`vcap_voucher_event`); documented as public API in API.md.
 * New: setting "Multi-purpose vouchers as payment" (off by default) – multi-purpose vouchers, gift cards and store credit pay the order total after tax, shipping and fees as an untaxed payment line "Voucher CODE" instead of a discount before tax.
 * New: gift card top-up – a product marked "Top up" adds the paid value to an existing card; refunds take the top-up back as far as the balance allows.
 * New: Reports – outstanding voucher value at a date (with CSV), redemption journal and, with WP Pass Captain, a reconciliation of voucher payments.

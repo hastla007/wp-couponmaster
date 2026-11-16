@@ -24,6 +24,7 @@ final class Channels {
 			self::EXTERNAL => __( 'External redemption (API, connected plugins)', 'voucher-captain' ),
 			self::COUNTER  => __( 'At the counter (scanner)', 'voucher-captain' ),
 		);
+		/** Redemption channels (arg: array of channel key => label): connectors add where their vouchers can be redeemed (API.md). */
 		return (array) apply_filters( 'vcap_redemption_channels', $channels );
 	}
 
