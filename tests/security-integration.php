@@ -13,6 +13,12 @@ function vcap_security_assert( bool $condition, string $message ): void {
 }
 
 function vcap_security_create_voucher( string $email, int $index ): VCAP\Voucher {
+	// The callers draw indexes from overlapping random ranges; two vouchers must never share an order line slot.
+	static $used = array();
+	while ( isset( $used[ $index ] ) ) {
+		++$index;
+	}
+	$used[ $index ]           = true;
 	$voucher                  = new VCAP\Voucher();
 	$voucher->code            = 'vcap-privacy-' . $index . '-' . strtolower( wp_generate_password( 8, false, false ) );
 	$voucher->order_item_id   = 92000000 + $index;

@@ -167,7 +167,7 @@ final class VoucherRequests {
 	 *
 	 * @return array{items_removed: bool, items_retained: bool, messages: string[], done: bool}
 	 */
-	public function erase( string $email, int $page = 1 ): array {
+	public function erase( string $email, int $page = 1 ): array { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- WordPress passes the page; erased requests no longer match, so every page starts at the first match.
 		$ids      = ( $this->find )( $email, self::PRIVACY_PAGE, 0 );
 		$removed  = false;
 		$retained = false;

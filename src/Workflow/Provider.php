@@ -631,7 +631,7 @@ final class Provider {
 			/* translators: 1: plugin name and version, 2: edition (core/pro), 3: licence state */
 			$lines[] = sprintf( __( '%1$s registered (edition: %2$s, licence: %3$s).', 'voucher-captain' ), trim( $s['consumer']['name'] . ' ' . $s['consumer']['version'] ), $s['consumer']['edition'], $s['consumer']['entitlement'] );
 		}
-		$names = static fn( array $list ): string => $list ? implode( ', ', array_map( static fn( $c ) => $labels[ $c ] ?? $c, $list ) ) : __( 'None', 'voucher-captain' );
+		$names = static fn( array $items ): string => $items ? implode( ', ', array_map( static fn( $c ) => $labels[ $c ] ?? $c, $items ) ) : __( 'None', 'voucher-captain' );
 		/* translators: %s: list of communications */
 		$lines[] = sprintf( __( 'Handed over to the workflow now: %s', 'voucher-captain' ), $names( $s['handed_over'] ) );
 		$fallback = array_values( array_diff( $s['switched'], $s['handed_over'] ) );

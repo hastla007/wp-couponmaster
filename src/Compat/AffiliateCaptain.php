@@ -194,15 +194,15 @@ final class AffiliateCaptain {
 		return $product && ProductConfig::is_voucher( $product ) ? 0 : $base;
 	}
 
-	public function register_integration( $list ) {
-		$list                 = is_array( $list ) ? $list : array();
-		$list[ self::SOURCE ] = array(
+	public function register_integration( $integrations ) {
+		$integrations                 = is_array( $integrations ) ? $integrations : array();
+		$integrations[ self::SOURCE ] = array(
 			'name'     => 'Voucher Captain',
 			'version'  => defined( 'VCAP_VERSION' ) ? VCAP_VERSION : '',
 			'contract' => self::CONTRACT,
 			'active'   => true,
 		);
-		return $list;
+		return $integrations;
 	}
 
 	public function table_header(): void {
