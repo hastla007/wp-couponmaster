@@ -1340,3 +1340,22 @@ Unabhängige Durchsicht der Sicherheitskorrekturen S4–S21, der Captain-Suite- 
 - [x] **[PRIO: NIEDRIG]** **R10 – Übergabe bei fehlender Lizenz.** *Problem:* `Workflow\Handover` sperrt nur `expired`, nicht `missing`; WF-04 verspricht „nur mit gültiger Lizenz“. *Lösung:* nur bei `valid` übergeben, WORKFLOW.md §7 angleichen. *Erledigt (16.11.2026): nur entitlement active, WF-06-Matrix „unlicensed“, WORKFLOW.md §7.*
 - [x] **[PRIO: NIEDRIG]** **R11 – Kleinpunkte.** *Problem:* verwaister Docblock in `RedemptionService`, Rohstatus im Datenschutzexport der Anfragen, unübersetztes „unknown error“, offene Reservierung bei endgültigem Fehler in `Workflow\Services::redeem()`, Statuszähler verlieren parallele Updates. *Lösung:* bereinigen, Labels, übersetzen, Reservierung freigeben, Zähler atomar. *Erledigt (16.11.2026): Docblock, Status-Label im Export, „Unknown error“ übersetzt, Reservierung bei endgültiger Ablehnung freigegeben, Zähler additiv.*
 - [x] **[PRIO: NIEDRIG]** **R12 – „Geschenk eingelöst“ nach Übergabe doppelt möglich.** *Problem:* Übergabe- und nativer Pfad nutzen verschiedene Claims; wird die Übergabe abgeschaltet, kann die Mail ein zweites Mal kommen. *Lösung:* gemeinsame Prüfung beider Claims. *Erledigt (16.11.2026): Emails::gift_used_handed_over(), tests/delivery-integration.php (ohne Fix rot).*
+
+## Qualität und Release-Vorbereitung (16.11.2026)
+
+- [x] PHPStan: Baseline der breiten Prüfung geleert (51 Einträge behoben: Typprüfungen für Bestellpositionen, Erstattungen, E-Mails, Sessions; Doku von `TicketContract::target()`; Stubs für WP-CLI/Affiliate Captain). Stufe 3 bleibt bewusst (Stufe 4/5 nur Fehlalarme, Begründung in phpstan-wide.neon.dist).
+- [x] PHPCS: 177 → 86 Befunde (Schleifenbedingungen, Formatierung; bewusste Ausnahmen begründet in phpcs.xml.dist).
+- [x] Plugin Check: 0 Fehler, 199 Warnungen einzeln eingeordnet (RELEASE_CHECKLIST.md → Plugin Check warnings).
+- [x] Release-Probe: Upgrade von 1.1.0 mit Bestandsdaten inkl. Rollback, Deinstallation mit/ohne Datenlöschung (RELEASE_CHECKLIST.md → Release probe).
+- [x] Testsuiten-Abhängigkeit: DATEV-Prüfung in tax-accounting sucht den eigenen Gutschein (vorher abhängig von anderen Suites).
+- [x] White Label für das Premium-Add-on: `vcap_brand_name`, `vcap_brand_logo`, `vcap_admin_menu_title`, `vcap_admin_menu_icon` (API.md, Tests); Anfrage der captain-pro-Sitzung beantwortet.
+- [x] readme.txt: Changelog 1.2.0 vervollständigt, Upgrade-Hinweis zur neuen Standardeinstellung für Mehrzweckgutscheine.
+- [x] Freigabe-Unterlagen: TAX.md 3.2 (physische Karten, Umbuchung ins Kundenguthaben, Firmenbestellungen, Workflow) mit Fragen F22/F23; Datenschutztext zu Bewertungseinladungen (übersetzt).
+- [x] Multisite: Workflow-Instanz, Gutschein-Anfragen und Review-Datensätze je Website getrennt; Netzwerk-Deinstallation löscht Anfragen nur auf Websites mit Opt-in (tests/multisite-data-integration.php, CI-Job multisite).
+- [ ] Tabellennamen in SQL auf `%i` umstellen (125 Plugin-Check-Warnungen) – in Arbeit.
+- [ ] Kompatibilität WooCommerce 11.3.0 – Testlauf in Arbeit.
+- [ ] Sicherheitsprüfung der Änderungen seit 4269878 – in Arbeit.
+- [ ] Barrierefreiheit automatisch mit axe-core prüfen (Vorbereitung der Screenreader-Abnahme).
+- [ ] Browser-E2E-Tests für die neuen Funktionen (Live-Vorschau, Design-Auswahl, Geschenkkarten-Feld im Block-Warenkorb, Gutschein ins Kundenguthaben, Empfänger korrigieren).
+- [ ] Last- und Performance-Test mit großen Datenmengen.
+- [ ] Testsuiten in zufälliger Reihenfolge laufen lassen (versteckte Abhängigkeiten).
