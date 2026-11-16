@@ -856,14 +856,14 @@ final class VoucherRequests {
 	}
 
 	/**
-	 * R9: runs $fn while holding the lock of request $id (MySQL GET_LOCK, 10 s); the request is read fresh inside.
+	 * R9: runs $action while holding the lock of request $id (MySQL GET_LOCK, 10 s); the request is read fresh inside.
 	 *
 	 * @return mixed|\WP_Error
 	 */
-	private static function locked( int $id, callable $fn ) {
+	private static function locked( int $id, callable $action ) {
 		global $wpdb;
 		if ( ! is_object( $wpdb ) || ! method_exists( $wpdb, 'get_var' ) ) {
-			return $fn(); // No database (unit tests).
+			return $action(); // No database (unit tests).
 		}
 		$name = \VCAP\Install::lock_name( 'voucher_request_' . $id );
 		/**
@@ -878,7 +878,7 @@ final class VoucherRequests {
 		}
 		try {
 			clean_post_cache( $id ); // Another request may have changed it while this one waited.
-			return $fn();
+			return $action();
 		} finally {
 			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}

@@ -400,10 +400,11 @@ final class ReviewSource {
 					}
 				}
 			}
+			$found = count( (array) $rows );
 			if ( microtime( true ) - $start >= $budget ) {
-				return count( (array) $rows ) < self::PURGE_BATCH;
+				return $found < self::PURGE_BATCH;
 			}
-		} while ( self::PURGE_BATCH === count( (array) $rows ) );
+		} while ( self::PURGE_BATCH === $found );
 		return true;
 	}
 
