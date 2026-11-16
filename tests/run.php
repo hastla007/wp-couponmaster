@@ -2292,6 +2292,9 @@ unset( $GLOBALS['vcap_test_options'][ VCAP\Compat\AffiliateCaptain::OPTION ] );
 $s19_js = $sec_src( 'assets/js/scanner.js' );
 preg_match_all( '/href="\' \+ (.*?) \+ \'"/', $s19_js, $s19_hrefs );
 check( 'S19: the scanner takes links from the server only with an http(s) scheme (every href goes through safeUrl())', str_contains( $s19_js, 'function safeUrl( u )' ) && str_contains( $s19_js, "return /^https?:\\/\\//i.test( s ) ? s : '';" ) && 2 === count( $s19_hrefs[1] ) && array() === array_filter( $s19_hrefs[1], static fn( $h ) => ! str_starts_with( $h, 'esc( safeUrl( ' ) ) && ! str_contains( $s19_js, 'if ( d.admin_url )' ), json_encode( $s19_hrefs[1] ) );
+$s21_doc = $sec_src( 'CONNECTORS.md' );
+$s21_ex  = $sec_src( 'examples/vcap-example-connector/vcap-example-connector.php' );
+check( 'S21: CONNECTORS.md requires the complete binding in vcap_redemption_allowed and names the key and REST target prefix filters; the example connector registers "example:"', str_contains( $s21_doc, 'bind voucher *and* target completely' ) && str_contains( $s21_doc, '`vcap_rest_redemption_target_prefixes`' ) && str_contains( $s21_doc, '**Register your server-side key prefixes**' ) && str_contains( $s21_ex, "add_filter( 'vcap_internal_redemption_key_prefixes', array( \$self, 'internal_keys' ) );" ) && str_contains( $s21_ex, "array( 'example:' )" ) && str_contains( $s21_ex, 'self::TARGET !== $target' ) );
 check( 'S6: referral rewards are "Individual use only" (several rewards cannot be stacked)', (bool) preg_match( '/function reward_coupon\(.*?set_individual_use\( true \).*?return \$coupon->save\(\)/s', $sec_src( 'src/Referrals.php' ) ) );
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
