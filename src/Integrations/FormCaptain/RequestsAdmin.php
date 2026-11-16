@@ -49,6 +49,11 @@ final class RequestsAdmin {
 		if ( ! self::usable() ) {
 			return;
 		}
+		// With the request service of Voucher Captain the requests are listed there; this screen stays only
+		// while the fallback table still holds requests from before.
+		if ( null !== RequestService::core_service() && 0 === array_sum( ( new RequestRepository() )->counts() ) ) {
+			return;
+		}
 		$pending = (int) ( ( new RequestRepository() )->counts()[ RequestRepository::STATUS_PENDING ] ?? 0 );
 		$label   = __( 'Voucher requests', 'voucher-captain' );
 		if ( $pending > 0 ) {

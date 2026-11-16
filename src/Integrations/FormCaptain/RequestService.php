@@ -101,6 +101,12 @@ final class RequestService {
 		if ( $form_id < 1 || $entry_id < 1 ) {
 			return self::result( 'fail', 'invalid_job', 'Form or entry id missing.' );
 		}
+		$core = self::core_service();
+		if ( null !== $core ) {
+			return is_wp_error( $clean )
+				? self::result( 'fail', (string) $clean->get_error_code(), 'The request data is invalid.' )
+				: self::hand_over( $core, $clean, $form_id, $entry_id );
+		}
 		$key      = self::idempotency_key( $form_id, $entry_id );
 		$existing = $this->repo->find_by_key( $key );
 		if ( $existing ) {
@@ -134,6 +140,62 @@ final class RequestService {
 			do_action( 'vcap_form_captain_request_created', $stored['id'] );
 		}
 		return self::result( 'success', $stored['created'] ? 'created' : 'already_created', '', self::remote_id( $stored['id'] ) );
+	}
+
+	/**
+	 * The voucher request service of Voucher Captain (`vcap_voucher_request_service_v1`, contract 1.x), when this
+	 * version of Voucher Captain has it. Then requests are stored there – one store, one admin screen – and this
+	 * adapter keeps only its own table as fallback for older versions.
+	 *
+	 * @return object|null
+	 */
+	public static function core_service(): ?object {
+		$service = apply_filters( 'vcap_voucher_request_service_v1', null );
+		if ( ! is_object( $service ) || ! method_exists( $service, 'submit' ) || ! method_exists( $service, 'contract' ) ) {
+			return null;
+		}
+		return 1 === (int) $service->contract() ? $service : null;
+	}
+
+	/**
+	 * Hands a checked request to the service of Voucher Captain. Idempotent by the reference of the entry.
+	 *
+	 * @param object               $core     Service (submit()).
+	 * @param array<string, mixed> $clean    Result of sanitize().
+	 * @param int                  $form_id  Form id.
+	 * @param int                  $entry_id Entry id.
+	 * @return array{status:string, code:string, message:string, remote_id?:string}
+	 */
+	private static function hand_over( object $core, array $clean, int $form_id, int $entry_id ): array {
+		$site   = substr( md5( (string) home_url() ), 0, 8 );
+		$answer = $core->submit(
+			array(
+				'contract'   => '1.0.0',
+				'reference'  => 'formcaptain:' . $site . ':' . $form_id . ':' . $entry_id,
+				'kind'       => '' === $clean['company'] && '' !== $clean['personalization'] ? 'personalisation' : 'company_order',
+				'product_id' => (int) $clean['product_id'],
+				'amount'     => (string) $clean['value'],
+				'quantity'   => (int) $clean['quantity'],
+				'contact'    => array(
+					'company' => (string) $clean['company'],
+					'name'    => (string) $clean['contact_name'],
+					'email'   => (string) $clean['email'],
+				),
+				'message'    => (string) $clean['personalization'],
+			)
+		);
+		if ( is_wp_error( $answer ) ) {
+			$data   = $answer->get_error_data();
+			$status = is_array( $data ) ? (int) ( $data['status'] ?? 0 ) : 0;
+			return in_array( $status, array( 429, 503 ), true )
+				? self::result( 'retry', (string) $answer->get_error_code(), 'Voucher Captain asks to try again later.' )
+				: self::result( 'fail', (string) $answer->get_error_code(), 'Voucher Captain refused the request.' );
+		}
+		$id = (int) ( $answer['request_id'] ?? 0 );
+		if ( 'rejected' === ( $answer['state'] ?? '' ) ) {
+			return self::result( 'success', 'already_rejected', 'The request was rejected earlier.' );
+		}
+		return self::result( 'success', empty( $answer['replayed'] ) ? 'created' : 'already_created', '', 'vcap-request-' . $id );
 	}
 
 	/**

@@ -98,3 +98,18 @@ Built in: `src/Integrations/FormCaptain/`, loaded only after `form_captain_loade
 | Uninstall | The table is dropped with the other tables when *Delete data on uninstall* is on. |
 
 Test: `tests/form-captain-integration.php` (needs Form Captain; uses the contract test kit `tests/integration/Contract/ConnectorContractAssertions.php` of Form Captain; CI job `form-captain` against Form Captain `main` and the contract 1.1.0 branch).
+
+### 7.1 Hand-over to the voucher request service (one store, one screen)
+
+When Voucher Captain provides the request service `vcap_voucher_request_service_v1` (contract 1.x; `VCAP\Integrations\VoucherRequests`, being built on branch `claude/wp-plugin-analyse-todo-hvollo-refactors`), the adapter hands every checked request to `submit()` instead of storing it in its own table:
+
+- reference `formcaptain:{site hash}:{form}:{entry}` (idempotent in the service), kind `company_order` or `personalisation` (no company, with a text), product, amount, quantity, contact and message; nothing about payment or issuing;
+- answers: created / replayed → `success` with remote id `vcap-request-{id}`; HTTP 429/503 → `retry`; other errors → final `fail` with the code of the service; rejected earlier → `success` `already_rejected` (no new request);
+- the adapter's own screen "Voucher requests" is hidden while its fallback table is empty, so there is one menu entry.
+
+Without the service (Voucher Captain versions before it) the adapter keeps using its own table `vcap_fc_requests` and screen as described above.
+
+Erasure with the service: data protection requests are handled by the service's own exporter/eraser (by e-mail address, run by WordPress together with Form Captain's), its retention removes open requests after 6 months. Deleting the request when a single Form Captain entry is deleted or its consent is withdrawn needs a method of the service that works without a logged-in user (`reject()` checks a capability); proposed as `forget_reference( string $reference )`.
+
+Test: `tests/form-captain-request-service.php` (14 checks, fake service with the interface of the real one).
+
