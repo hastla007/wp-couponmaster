@@ -291,3 +291,24 @@ Ohne Befund geprüft: Nonce- und Capability-Checks aller `admin_post_`-, `wp_aja
 - [ ] **P3 · HÄRTUNG** assets/js/scanner.js:54-58,81,90,112,133 — `esc()` maskiert keine Anführungszeichen, wird aber in Attributen (`class`, `href`) verwendet. Die Werte kommen heute vom Server; ein Connector könnte über `vcap_scanner_lookup` eine `admin_url` liefern. **Maßnahme:** Anführungszeichen maskieren und für Links nur `http(s)` zulassen.
 - [ ] **P3 · HÄRTUNG** src/CouponManager.php:373-376 — Die Rundungstoleranz `max( 0.05, balance * 0.001 )` wächst mit dem Guthaben (10,00 bei 10.000). **Maßnahme:** Absolute Obergrenze setzen.
 - [ ] **P3 · HÄRTUNG** CONNECTORS.md; examples/vcap-example-connector — Jeder angemeldete Nutzer darf über REST mit frei gewähltem `target` reservieren und bestätigen; Connectoren müssen Gutschein und Ziel in `vcap_redemption_allowed` vollständig binden. **Maßnahme:** In CONNECTORS.md ausdrücklich fordern und `vcap_internal_redemption_key_prefixes` für eigene Schlüsselpräfixe empfehlen (der Beispiel-Connector registriert sein Präfix `example:` nicht).
+
+
+## P2 – Captain-Suite-Integration: Form Captain und Review Captain (15.11.2026)
+
+- [ ] Form Captain Anfragen für Firmenbestellung/Personalisierung über den versionierten Formularaktionsvertrag anbinden; explizite Freigabe vor Angebot, Zahlung oder Gutscheinausstellung. Keine Entry-Datenbank direkt lesen.
+- [ ] Review-Adapter auf dem bestehenden Voucher-PHP-Vertrag aufbauen und nur freigegebene Erlebnis-/Serviceeinlösungen als mögliche Review-Quelle zulassen; normale Rabattcode-Einlösung, Ausgabe, Aufladung und Kauf ausschließen.
+- [ ] Prüfen, welche Einlösungsarten tatsächlich eine Leistungserbringung bestätigen; dafür explizite Adapterkonfiguration und stabile Experience-/Redemption-ID festlegen.
+- [ ] Refund/Storno und wiederholte Einlöseereignisse an Review Captain über versionierte, idempotente Zustandsübergänge melden; Empfänger-/Opt-out-Auflösung datensparsam und berechtigt halten.
+- [ ] Affiliate-Verkaufsquelle mit WooCommerce/Voucher-Deduplizierung dokumentieren, bevor zusätzliche Verkaufsereignisse angebunden werden; keine doppelte Provision.
+- [ ] E2E für Form-Anfrage → manuelle Bestätigung → Gutscheinservice sowie Voucher-Einlösung → optionale Review-Berechtigung einschließlich Refund, Duplikat und fehlendem Connector ergänzen.
+- **Abnahme:** Es gibt keinen direkten Datenbankzugriff, keine automatische Ausstellung aufgrund eines Formular-Entries und keine Review-Anfrage nur aufgrund von Kauf oder Gutscheinausgabe.
+
+## P2 – Workflow Captain Provider-Vertrag
+
+- [ ] VOUCH-WF-01 – Providervertrag v1 auf vorhandener PHP-API, Redemptions und Voucher-Pass-Provider aufbauen; Version, Envelope, Capability, Payload-Allowlist, Idempotenz, Fehler und Deprecation dokumentieren.
+- [ ] VOUCH-WF-02 – Post-Commit-Events für Gutschein erstellt/zugestellt/Versandfehler, eingelöst, teilweise/vollständig erstattet, widerrufen, reaktiviert und abgelaufen ergänzen; stabile Quell-IDs und Status, nie Code, PDF, E-Mail oder personenbezogene Felder.
+- [ ] VOUCH-WF-03 – Fachliche Services für erstellen/ausgeben, erneut zustellen, widerrufen, reaktivieren und zulässige Serviceeinlösung anbieten; Capability, Validierung, Audit und Idempotency-Key. Guthaben/Ledger niemals direkt ändern.
+- [ ] VOUCH-WF-04 – Native Abläufe bleiben Standard. Nur explizit übernommene optionale Kommunikation darf an Workflow übergeben werden; Woo/Voucher/Pass/Affiliate-Verkäufe und Refunds nicht doppelt buchen.
+- [ ] VOUCH-WF-05 – Admin-Status mit Contract-Version, aktiven Übernahmen, letzter Event-ID, Retry und Fehlerdiagnose ergänzen; fehlendes/deaktiviertes/inkompatibles Workflow-Plugin darf native Voucher-Funktionen nicht blockieren.
+- [ ] VOUCH-WF-06 – Vertrags- und E2E-Matrix für Redaction, Refund, Codegeheimnis, Multisite, HPOS, Duplikate und Workflow-Core/Pro vorhanden/fehlend/abgelaufen ergänzen.
+- Abnahme: Gutscheinzustand und Ledger ändern sich nur über Voucher-Services; Retries erzeugen keine doppelte Einlösung oder Provision.
