@@ -16,6 +16,8 @@ final class Source {
 	public const CHECKOUT = 'checkout';
 	public const CLI      = 'cli';
 	public const WEB      = 'web';
+	/** WF-03: a service call of a workflow plugin (Workflow\Services). */
+	public const WORKFLOW = 'workflow';
 
 	/** REST routes of the ticket scanner (Tickets::rest_routes()). */
 	private const SCANNER_ROUTES = array( '/vcap/v1/lookup', '/vcap/v1/checkin', '/vcap/v1/redeem' );
@@ -47,6 +49,7 @@ final class Source {
 			self::CHECKOUT => __( 'Checkout', 'voucher-captain' ),
 			self::CLI      => __( 'WP-CLI', 'voucher-captain' ),
 			self::WEB      => __( 'Website', 'voucher-captain' ),
+			self::WORKFLOW => __( 'Workflow', 'voucher-captain' ),
 		);
 	}
 

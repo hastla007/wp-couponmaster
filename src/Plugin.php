@@ -29,6 +29,8 @@ final class Plugin {
 	public StoreCredit $store_credit;
 	/** Multi-purpose vouchers as a payment after tax (setting "vcap_mpv_after_tax"). */
 	public PaymentVouchers $payments;
+	/** Workflow provider contract v1 (events, services, hand-over of optional emails; WORKFLOW.md). */
+	public Workflow\Provider $workflow;
 
 	/** Oldest WooCommerce version Voucher Captain runs with (header "WC requires at least"). */
 	public const MIN_WC_VERSION = '8.9';
@@ -82,6 +84,7 @@ final class Plugin {
 		$this->voucher_requests    = new Integrations\VoucherRequests();
 		$this->store_credit = new StoreCredit( $this->settings, $this->vouchers, $this->coupons );
 		$this->payments     = new PaymentVouchers( $this->vouchers );
+		$this->workflow     = new Workflow\Provider( $this->vouchers, $this->redemptions );
 
 		( new TemplatePostType() )->register();
 		( new ProductSettings() )->register();
@@ -141,6 +144,7 @@ final class Plugin {
 		( new CartBlocks( $this->vouchers, $this->payments, $this->store_credit ) )->register();
 		( new GiftCardField( $this->vouchers, $this->payments, $this->store_credit ) )->register();
 		( new API\V1\RestController( $this->redemptions ) )->register();
+		$this->workflow->register(); // WF-01: provider contract for workflow plugins (optional, nothing waits for one).
 
 		// M12 package G: live preview and design gallery on the product page, physical cards, card → store credit.
 		( new LivePreview() )->register();

@@ -46,6 +46,13 @@ final class Emails {
 	 * @param mixed $voucher Voucher delivered (action vcap_voucher_delivered).
 	 */
 	public function gift_delivered( $voucher ): void {
+		if ( $voucher instanceof Voucher && 'both' !== $voucher->send_to && Workflow\Handover::active( Workflow\Handover::GIFT_DELIVERED ) ) {
+			// WF-04: handed over to the workflow plugin (switch on and a compatible plugin takes it): no own email.
+			if ( Emails\GiftNoticeEmail::applies( $voucher ) ) {
+				Workflow\Handover::record( $voucher, Workflow\Handover::GIFT_DELIVERED );
+			}
+			return;
+		}
 		$email = $voucher instanceof Voucher && 'both' !== $voucher->send_to ? self::notice( 'VCAP_Email_Gift_Delivered' ) : null;
 		if ( $email && Emails\GiftNoticeEmail::applies( $voucher ) ) {
 			try {
@@ -62,12 +69,26 @@ final class Emails {
 	 * @param mixed $data Redemption data (action vcap_voucher_redeemed).
 	 */
 	public function gift_used( $data ): void {
-		$email = is_array( $data ) && ! empty( $data['voucher_id'] ) ? self::notice( 'VCAP_Email_Gift_Used' ) : null;
-		if ( ! $email ) {
+		if ( ! is_array( $data ) || empty( $data['voucher_id'] ) ) {
+			return;
+		}
+		// WF-04: handed over to the workflow plugin – at most once per voucher (durable claim), no own email.
+		$handover = Workflow\Handover::active( Workflow\Handover::GIFT_USED );
+		$email    = $handover ? null : self::notice( 'VCAP_Email_Gift_Used' );
+		if ( ! $handover && ! $email ) {
 			return;
 		}
 		$voucher = vcap()->vouchers->get( (int) $data['voucher_id'] );
-		if ( ! $voucher || ! Emails\GiftNoticeEmail::applies( $voucher ) || vcap()->vouchers->has_event( $voucher->id, self::USED_NOTICE_EVENT ) || ! Claim::take( 'gift-used:' . $voucher->id ) ) {
+		if ( ! $voucher || ! Emails\GiftNoticeEmail::applies( $voucher ) || vcap()->vouchers->has_event( $voucher->id, self::USED_NOTICE_EVENT ) ) {
+			return;
+		}
+		if ( $handover ) {
+			if ( Claim::take( 'workflow-handover:gift-used:' . $voucher->id ) ) {
+				Workflow\Handover::record( $voucher, Workflow\Handover::GIFT_USED );
+			}
+			return;
+		}
+		if ( ! Claim::take( 'gift-used:' . $voucher->id ) ) {
 			return;
 		}
 		try {

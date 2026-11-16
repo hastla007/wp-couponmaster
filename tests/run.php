@@ -2073,7 +2073,7 @@ $r6_v->status = VCAP\Voucher::STATUS_VOID;
 check( 'R6: vcap_voucher_links: only labelled http(s) links are kept, as plain text; none for a cancelled voucher', array( array( 'label' => 'Add to Wallet', 'url' => 'https://wallet.example/email' ) ) === $r6_links && array() === VCAP\Downloads::voucher_links( $r6_v, 'account' ), var_export( $r6_links, true ) );
 unset( $GLOBALS['vcap_test_filters']['vcap_voucher_links'] );
 $r6_src = (string) file_get_contents( dirname( __DIR__ ) . '/src/VoucherRepository.php' );
-check( 'R6: vcap_voucher_event passes the source and the acting user id as trailing arguments', str_contains( $r6_src, "Db::action( 'vcap_voucher_event', \$voucher_id, \$event, \$amount, \$balance_after, Note::render( \$note ), \$order_id, \$source, (int) \$row['user_id'] )" ) );
+check( 'R6: vcap_voucher_event passes the source and the acting user id as trailing arguments (WF-02: then the ledger row)', str_contains( $r6_src, "Db::action( 'vcap_voucher_event', \$voucher_id, \$event, \$amount, \$balance_after, Note::render( \$note ), \$order_id, \$source, (int) \$row['user_id'], \$entry )" ) );
 check( 'R6: the admin menu fires vcap_admin_menu with its parent slug', str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Admin/Menu.php' ), "do_action( 'vcap_admin_menu', 'vcap-vouchers' )" ) );
 check( 'R6: schema 1.8.0 adds the ledger columns till and receipt, migrated after 1.7.0', '1.8.0' === VCAP\Install::EVENT_TILL_VERSION && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/voucher-captain.php' ), "define( 'VCAP_DB_VERSION', '1.8.0' )" ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Install.php' ), "till varchar(100) NOT NULL DEFAULT ''" ) );
 
@@ -2582,6 +2582,256 @@ $cs_none  = $cs_req2->submit( array( 'reference' => 'formcaptain:entry:privacy-4
 check( 'Captain Suite form: with 500 open requests (vcap_voucher_requests_max_open) submit() refuses new ones with vcap_request_limit (429), a repeated entry is still answered, a higher limit accepts, 0 accepts none', is_wp_error( $cs_full ) && 'vcap_request_limit' === $cs_full->get_error_code() && 429 === $cs_full->get_error_data()['status'] && false === get_option( VoucherRequests::CLAIM_PREFIX . md5( 'formcaptain:entry:privacy-2' ), false ) && is_array( $cs_again ) && $cs_again['replayed'] && is_array( $cs_more ) && ! $cs_more['replayed'] && is_wp_error( $cs_none ) && 'vcap_request_limit' === $cs_none->get_error_code() );
 check( 'Captain Suite form: the suggested privacy policy text names voucher requests', (bool) array_filter( VCAP\Privacy::policy_paragraphs(), static fn( $p ) => str_starts_with( $p, 'Voucher requests:' ) ) );
 $GLOBALS['vcap_test_filters'] = $cs_filters;
+echo "Workflow provider contract (WF-01 … WF-06)\n";
+// In-memory database for the workflow tests: voucher rows, ledger rows, option claims (schema < 1.4 fallback).
+$wf_saved_db      = $GLOBALS['wpdb'] ?? null;
+$wf_saved_filters = $GLOBALS['vcap_test_filters'];
+$wf_saved_options = $GLOBALS['vcap_test_options'];
+$GLOBALS['wpdb']  = new class() {
+	public string $prefix   = 'wp_';
+	public string $options  = 'wp_options';
+	public string $posts    = 'wp_posts';
+	public string $postmeta = 'wp_postmeta';
+	public int $insert_id   = 0;
+	public int $rows_affected = 0;
+	public string $last_error = '';
+	public array $vouchers  = array();
+	public array $events    = array();
+	public function prepare( $query, ...$args ) {
+		$args = isset( $args[0] ) && is_array( $args[0] ) ? $args[0] : $args;
+		return vsprintf( str_replace( array( '%d', '%s' ), array( '%d', "'%s'" ), $query ), $args );
+	}
+	public function esc_like( $s ) { return addcslashes( (string) $s, '_%\\' ); }
+	public function get_row( $q, $o = null ) {
+		if ( preg_match( "/FROM wp_vcap_vouchers WHERE id = '(\\d+)'/", $q, $m ) ) {
+			return $this->vouchers[ (int) $m[1] ] ?? null;
+		}
+		if ( preg_match( "/FROM wp_vcap_events WHERE event = '([a-z_]+)' AND note LIKE '%(.*)%' ORDER BY id DESC/", $q, $m ) ) {
+			$needle = stripcslashes( $m[2] );
+			foreach ( array_reverse( $this->events ) as $row ) {
+				if ( $row['event'] === $m[1] && str_contains( (string) $row['note'], $needle ) ) {
+					return $row;
+				}
+			}
+		}
+		return null;
+	}
+	public function get_results( $q, $o = null ) {
+		if ( preg_match( '/FROM wp_vcap_events WHERE id > (\d+) ORDER BY id ASC LIMIT (\d+)/', $q, $m ) ) {
+			return array_slice( array_values( array_filter( $this->events, static fn( $r ) => $r['id'] > (int) $m[1] ) ), 0, (int) $m[2] );
+		}
+		return array();
+	}
+	public function get_var( $q ) { return null; }
+	public function get_col( $q, $i = 0 ) { return array(); }
+	public function query( $q ) {
+		if ( preg_match( "/INSERT IGNORE INTO wp_options \\(option_name, option_value, autoload\\) VALUES \\('([^']+)'/", $q, $m ) ) {
+			$this->rows_affected = array_key_exists( $m[1], $GLOBALS['vcap_test_options'] ) ? 0 : 1;
+			if ( $this->rows_affected ) {
+				$GLOBALS['vcap_test_options'][ $m[1] ] = (string) time();
+			}
+			return $this->rows_affected;
+		}
+		return 1;
+	}
+	public function insert( $table, $row ) {
+		if ( 'wp_vcap_events' === $table ) {
+			$this->insert_id      = count( $this->events ) + 1;
+			$this->events[]       = array( 'id' => $this->insert_id ) + $row;
+		}
+		return 1;
+	}
+	public function update( $table, $data, $where ) {
+		if ( 'wp_vcap_vouchers' === $table && isset( $this->vouchers[ (int) $where['id'] ] ) ) {
+			$this->vouchers[ (int) $where['id'] ] = array_merge( $this->vouchers[ (int) $where['id'] ], $data );
+		}
+		return 1;
+	}
+};
+$wf_voucher = static function ( int $id, array $props = array() ): Voucher {
+	$v = new Voucher();
+	foreach ( $props + array( 'code' => 'WFSECRET-7KQ2-ABCD', 'type' => 'giftcard', 'usage_mode' => 'balance', 'initial_amount' => 50.0, 'balance' => 30.0, 'currency' => 'EUR', 'order_id' => 77, 'product_id' => 12, 'buyer_name' => 'Anna Käufer', 'buyer_email' => 'anna@example.com', 'recipient_name' => 'Ben Empfänger', 'recipient_email' => 'ben@example.com', 'send_to' => 'recipient', 'token' => str_repeat( 'f0', 24 ), 'expires_at' => '2027-12-31 22:59:59' ) as $k => $val ) {
+		$v->$k = $val;
+	}
+	$v->id = $id;
+	$row   = $v->to_row();
+	$GLOBALS['wpdb']->vouchers[ $id ] = array( 'id' => $id ) + $row;
+	return $v;
+};
+$wf_repo     = new VCAP\VoucherRepository();
+$wf_provider = new VCAP\Workflow\Provider( $wf_repo, new VCAP\API\V1\RedemptionService( $wf_repo ) );
+$wf_provider->register();
+$wf_seen = array();
+$GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_OPTION ] = 'site-instance-1';
+
+// WF-01: contract descriptor and registration.
+$wf_desc = VCAP\Workflow\Provider::descriptor();
+check( 'WF-01: the provider contract is versioned (SemVer 1.x) and lists its events, services, communications and payload allowlist', (bool) preg_match( '/^1\.\d+\.\d+$/', VCAP\Workflow\Provider::CONTRACT_VERSION ) && array( '1' ) === $wf_desc['supported_contracts'] && in_array( 'voucher.refunded', $wf_desc['events'], true ) && in_array( 'redeem', $wf_desc['services'], true ) && array( 'expiry_reminder', 'gift_delivered', 'gift_used' ) === $wf_desc['communications'] && ! array_intersect( array( 'code', 'email', 'name', 'token', 'pdf', 'note' ), $wf_desc['data_fields'] ) && 'vcap_workflow_event' === $wf_desc['event_hook'] );
+$wf_registry = new class() {
+	public array $got = array();
+	public function register( $id, $provider ) { $this->got[ $id ] = $provider; }
+};
+do_action( 'workflow_captain_register_providers', $wf_registry );
+check( 'WF-01: Voucher Captain registers with a workflow registry (action workflow_captain_register_providers, filter workflow_captain_providers, filter vcap_workflow_provider)', ( $wf_registry->got['voucher-captain'] ?? null ) === $wf_provider && ( apply_filters( 'workflow_captain_providers', array() )['voucher-captain'] ?? null ) === $wf_provider && apply_filters( 'vcap_workflow_provider', null ) === $wf_provider );
+check( 'WF-03: keys and targets "workflow:" are reserved for the server (never accepted over REST)', in_array( 'workflow:', apply_filters( 'vcap_internal_redemption_key_prefixes', array( 'wpcap-' ) ), true ) && in_array( 'workflow:', apply_filters( 'vcap_internal_redemption_target_prefixes', array() ), true ) );
+
+// WF-02: mapping of ledger entries to events.
+$wf_map = static fn( string $e, ?array $note = null, ?float $amount = null, int $order = 0 ) => array_map( static fn( $i ) => $i[0], VCAP\Workflow\Provider::map( $e, $note, $amount, $order ) );
+check(
+	'WF-02: ledger entries map to the events of the contract (created, delivered, delivery failed, redeemed in shop/counter/external, redemption refunded, purchase refunded partly/fully, voided, reactivated, expired)',
+	array( 'voucher.created' ) === $wf_map( 'issued' ) && array( 'voucher.delivered' ) === $wf_map( 'delivered' ) && array( 'voucher.delivered' ) === $wf_map( 'resent' )
+		&& array( 'voucher.delivery_failed' ) === $wf_map( 'delivery_failed', array( 'code' => 'delivery_error', 'args' => array( 'j***@example.com' ) ) ) && array( 'voucher.delivery_failed' ) === $wf_map( 'delivery_given_up' )
+		&& array( 'voucher.redeemed' ) === $wf_map( 'redeemed', null, 10.0, 5 ) && array( 'voucher.redeemed' ) === $wf_map( 'committed', null, 10.0, 5 ) && array( 'voucher.redeemed' ) === $wf_map( 'api_committed', null, 10.0 )
+		&& array( 'voucher.redemption_refunded' ) === $wf_map( 'api_refunded', null, 4.0 ) && array( 'voucher.redemption_refunded' ) === $wf_map( 'restored', null, 4.0, 5 ) && array( 'voucher.redemption_refunded' ) === $wf_map( 'redeem_reversed', null, 4.0 )
+		&& array( 'voucher.refunded' ) === $wf_map( VCAP\Issuer::PURCHASE_REFUNDED_EVENT, null, -5.0, 77 )
+		&& array( 'voucher.refunded', 'voucher.voided' ) === $wf_map( 'voided', array( 'code' => VCAP\Issuer::REFUND_VOID_NOTE, 'args' => array( 'Order refunded' ) ) )
+		&& array( 'voucher.voided' ) === $wf_map( 'voided' ) && array( 'voucher.reactivated' ) === $wf_map( 'reactivated' ) && array( 'voucher.expired' ) === $wf_map( 'expired', null, 30.0 )
+		&& array() === $wf_map( 'downloaded' ) && array() === $wf_map( 'edited' ) && array() === $wf_map( VCAP\Workflow\Services::AUDIT_EVENT ) && array() === $wf_map( 'workflow_handover', array( 'code' => 'workflow_handover', 'args' => array( 'unknown' ) ) )
+);
+$wf_redeemed = VCAP\Workflow\Provider::map( 'redeemed', null, 12.5, 0 );
+$wf_partial  = VCAP\Workflow\Provider::map( VCAP\Issuer::PURCHASE_REFUNDED_EVENT, null, -5.0, 77 );
+$wf_full     = VCAP\Workflow\Provider::map( 'voided', array( 'code' => VCAP\Issuer::REFUND_VOID_NOTE, 'args' => array() ), null, 0 );
+check( 'WF-02: refund events tell partial (value taken off) from full (voided because of the refund); redemptions name their channel', 'partial' === $wf_partial[0][1]['scope'] && 'full' === $wf_full[0][1]['scope'] && 'refund' === $wf_full[1][1]['reason'] && 'counter' === $wf_redeemed[0][1]['channel'] && 'shop' === VCAP\Workflow\Provider::map( 'redeemed', null, 1.0, 9 )[0][1]['channel'] );
+
+// WF-02: envelope schema and redaction.
+$wf_v   = $wf_voucher( 41 );
+$wf_env = VCAP\Workflow\Provider::envelope( array( 'id' => 900, 'created_at' => '2026-11-16 08:30:00', 'order_id' => 0, 'source' => 'checkout' ), $wf_v, 'voucher.redeemed', $wf_redeemed[0][1] );
+check( 'WF-06: the envelope has exactly the fields of the contract, occurred_at in UTC (ISO 8601), the voucher id as source and the ledger row as sequence', VCAP\Workflow\Provider::ENVELOPE_FIELDS === array_keys( $wf_env ) && '1.0.0' === $wf_env['contract_version'] && 'voucher-captain' === $wf_env['provider'] && '2026-11-16T08:30:00Z' === $wf_env['occurred_at'] && 'voucher' === $wf_env['source_type'] && 41 === $wf_env['source_id'] && 900 === $wf_env['sequence'] && 1 === $wf_env['blog_id'] && 'active' === $wf_env['status'] && false === $wf_env['replayed'], json_encode( $wf_env ) );
+check( 'WF-06: amounts are minor units with the currency, plus stable ids (order, product) and the origin of the change', 1250 === $wf_env['data']['amount_minor'] && 3000 === $wf_env['data']['balance_minor'] && 5000 === $wf_env['data']['value_minor'] && 'EUR' === $wf_env['data']['currency'] && 77 === $wf_env['data']['order_id'] && 12 === $wf_env['data']['product_id'] && 'checkout' === $wf_env['data']['origin'] && '2027-12-31T22:59:59Z' === $wf_env['data']['expires_at'] && ! array_diff( array_keys( $wf_env['data'] ), VCAP\Workflow\Provider::DATA_FIELDS ), json_encode( $wf_env['data'] ) );
+$wf_json = (string) json_encode( $wf_env );
+check( 'WF-06: redaction – the envelope holds no code, token, email address or name of the voucher', ! str_contains( strtolower( $wf_json ), 'wfsecret' ) && ! str_contains( $wf_json, '7KQ2' ) && ! str_contains( $wf_json, '@' ) && ! str_contains( $wf_json, 'Anna' ) && ! str_contains( $wf_json, 'Ben' ) && ! str_contains( $wf_json, 'f0f0f0' ), $wf_json );
+$wf_red = VCAP\Workflow\Provider::redact( array( 'reason' => 'mail to anna@example.com failed', 'channel' => 'WFSECRET-7KQ2-ABCD', 'origin' => 'x' . strtolower( $wf_v->code ), 'scope' => array( 'nested' ), 'code' => 'WFSECRET-7KQ2-ABCD', 'email' => 'anna@example.com', 'final' => true, 'days' => 7 ), $wf_v );
+check( 'WF-06: the payload allowlist drops unknown keys, nested values, addresses and anything containing the code', array( 'final' => true, 'days' => 7 ) === $wf_red, json_encode( $wf_red ) );
+$wf_pct = VCAP\Workflow\Provider::envelope( array( 'id' => 901, 'created_at' => '2026-11-16 08:30:00' ), $wf_voucher( 42, array( 'type' => 'voucher', 'usage_mode' => 'single', 'discount_type' => 'percent', 'initial_amount' => 15.0 ) ), 'voucher.created', array() );
+check( 'WF-06: a percentage voucher carries its percent, no money amount or currency', 15.0 === $wf_pct['data']['percent'] && null === $wf_pct['data']['currency'] && null === $wf_pct['data']['value_minor'] && null === $wf_pct['data']['balance_minor'] );
+
+// Event ids: stable for the same ledger row and type, distinct per type, row, blog and site.
+$wf_id = VCAP\Workflow\Provider::event_id( 900, 'voucher.redeemed', 1 );
+check( 'WF-06: event ids are UUID-shaped, the same for the same ledger row and type (replays, retries) and differ per type and row', (bool) preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $wf_id ) && $wf_id === $wf_env['event_id'] && $wf_id === VCAP\Workflow\Provider::event_id( 900, 'voucher.redeemed', 1 ) && $wf_id !== VCAP\Workflow\Provider::event_id( 900, 'voucher.voided', 1 ) && $wf_id !== VCAP\Workflow\Provider::event_id( 901, 'voucher.redeemed', 1 ), $wf_id );
+$GLOBALS['vcap_test_blog_id'] = 7;
+$wf_env7 = VCAP\Workflow\Provider::envelope( array( 'id' => 900, 'created_at' => '2026-11-16 08:30:00' ), $wf_v, 'voucher.redeemed', array() );
+unset( $GLOBALS['vcap_test_blog_id'] );
+$GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_OPTION ] = 'site-instance-2';
+$wf_other_site = VCAP\Workflow\Provider::event_id( 900, 'voucher.redeemed', 1 );
+$GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_OPTION ] = 'site-instance-1';
+check( 'WF-06: multisite – the envelope names its blog, and the same ledger row id on another blog or another shop gets another event id', 7 === $wf_env7['blog_id'] && $wf_env7['event_id'] !== $wf_id && $wf_other_site !== $wf_id );
+unset( $GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_OPTION ] );
+$wf_new_instance = VCAP\Workflow\Provider::instance();
+check( 'WF-01: the site id is created once and kept', '' !== $wf_new_instance && $wf_new_instance === VCAP\Workflow\Provider::instance() );
+$GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_OPTION ] = 'site-instance-1';
+
+// WF-02 end to end: ledger entry → vcap_voucher_event (after COMMIT) → vcap_workflow_event.
+VCAP\Db::reset();
+$GLOBALS['wpdb']->events = array();
+$wf_repo->log( 41, 'redeemed', 12.5, 17.5, 'anna@example.com', 0 );
+check( 'WF-05: without a workflow listener nothing is built (no voucher read, no status written)', array() === $wf_seen && 0 === $wf_provider->status()['delivered'] );
+add_action( 'vcap_workflow_event', static function ( $e ) use ( &$wf_seen ) { $wf_seen[] = $e; } );
+$wf_repo->log( 41, 'voided', null, 30.0, VCAP\Note::make( VCAP\Issuer::REFUND_VOID_NOTE, array( 'Refunded to anna@example.com' ) ), 77 );
+check( 'WF-02: a full refund fires "voucher.refunded" (scope full) and "voucher.voided" for the same ledger row, with distinct ids and no note text', 2 === count( $wf_seen ) && 'voucher.refunded' === $wf_seen[0]['type'] && 'voucher.voided' === $wf_seen[1]['type'] && 2 === $wf_seen[0]['sequence'] && $wf_seen[0]['event_id'] !== $wf_seen[1]['event_id'] && ! str_contains( (string) json_encode( $wf_seen ), 'anna' ), json_encode( $wf_seen ) );
+$wf_seen = array();
+VCAP\Db::begin();
+$wf_repo->log( 41, VCAP\Issuer::PURCHASE_REFUNDED_EVENT, -5.0, 25.0, '', 77 );
+$wf_inside = count( $wf_seen );
+VCAP\Db::rollback_silently();
+VCAP\Db::begin();
+$wf_repo->log( 41, VCAP\Issuer::PURCHASE_REFUNDED_EVENT, -5.0, 25.0, '', 77 );
+VCAP\Db::commit();
+check( 'WF-02: events are post-commit – nothing while the transaction is open, nothing after a ROLLBACK, one event after the COMMIT', 0 === $wf_inside && 1 === count( $wf_seen ) && 'voucher.refunded' === $wf_seen[0]['type'] && 'partial' === $wf_seen[0]['data']['scope'] && 500 === $wf_seen[0]['data']['amount_minor'], json_encode( $wf_seen ) );
+$wf_voucher( 43, array( 'type' => 'credit', 'usage_mode' => 'balance', 'user_id' => 5 ) );
+$wf_seen = array();
+$wf_repo->log( 43, 'issued', 0.0, 0.0, '' );
+check( 'WF-02: store credit accounts (customer accounts, not vouchers) fire no workflow events', array() === $wf_seen );
+
+// Replay: same ids, replayed flag, cursor.
+$wf_live   = array_column( array_merge( array(), ( static function () use ( &$wf_seen, $wf_repo ) { $wf_seen = array(); $wf_repo->log( 41, 'reactivated', null, 30.0 ); return $wf_seen; } )() ), 'event_id' );
+$wf_replay = $wf_provider->replay( 0, 100 );
+$wf_ids    = array_column( $wf_replay['events'], 'event_id' );
+check( 'WF-06: replay from the ledger answers the same event ids as the live events (idempotent for the consumer), marked replayed, with the cursor of the last row', in_array( $wf_live[0] ?? 'x', $wf_ids, true ) && count( $wf_ids ) === count( array_unique( $wf_ids ) ) && ! in_array( false, array_column( $wf_replay['events'], 'replayed' ), true ) && count( $GLOBALS['wpdb']->events ) === $wf_replay['next'] && false === $wf_replay['more'] && $wf_provider->replay( $wf_replay['next'] )['events'] === array(), json_encode( $wf_replay['next'] ) );
+
+// WF-05: a failing workflow listener does not break the booking; the error is counted.
+add_action( 'vcap_workflow_event', static function () { throw new RuntimeException( 'Workflow down for anna@example.com' ); } );
+$wf_ok = $wf_repo->log( 41, 'expired', 30.0, 30.0 );
+$wf_st = $wf_provider->status();
+check( 'WF-05: a failing workflow listener is caught and counted (masked message, ledger row to replay from); the booking stands', $wf_ok && 1 === $wf_st['failures'] && str_contains( (string) $wf_st['last_error']['message'], 'a***@example.com' ) && count( $GLOBALS['wpdb']->events ) === $wf_st['last_error']['sequence'] && '' !== $wf_st['last_event_id'], json_encode( $wf_st ) );
+array_pop( $GLOBALS['vcap_test_filters']['vcap_workflow_event'] );
+
+// WF-01/WF-05: consumer compatibility, hand-over matrix (workflow core/pro present, missing, expired, incompatible).
+check( 'WF-05: no workflow plugin registered → "missing", native flows', null === VCAP\Workflow\Provider::consumer() && 'missing' === VCAP\Workflow\Provider::compatibility( null ) );
+$wf_consumer = array( 'id' => 'workflow-captain', 'name' => 'Workflow Captain', 'version' => '1.0.0', 'contract' => '1.3.0', 'edition' => 'pro', 'entitlement' => 'active', 'communications' => array( 'expiry_reminder', 'gift_used', 'voucher_email' ) );
+add_filter( 'vcap_workflow_consumer', static function () use ( &$wf_consumer ) { return $wf_consumer; } );
+$wf_c = VCAP\Workflow\Provider::consumer();
+check( 'WF-01: a consumer built for a newer minor version is compatible; communications it may not take (the voucher email) are dropped', 'compatible' === VCAP\Workflow\Provider::compatibility( $wf_c ) && array( 'expiry_reminder', 'gift_used' ) === $wf_c['communications'] );
+check( 'WF-04: switches off (default) → nothing is handed over even with a compatible workflow plugin', ! VCAP\Workflow\Handover::active( 'expiry_reminder' ) && 'no' === VCAP\Settings::DEFAULTS['vcap_workflow_handover_expiry_reminder'] && 'no' === VCAP\Settings::DEFAULTS['vcap_workflow_handover_gift_used'] && 'no' === VCAP\Settings::DEFAULTS['vcap_workflow_handover_gift_delivered'] );
+$GLOBALS['vcap_test_options']['vcap_workflow_handover_expiry_reminder'] = 'yes';
+$GLOBALS['vcap_test_options']['vcap_workflow_handover_gift_delivered']  = 'yes';
+check( 'WF-04: switch on + compatible plugin that handles it → handed over; one it does not handle stays native', VCAP\Workflow\Handover::active( 'expiry_reminder' ) && ! VCAP\Workflow\Handover::active( 'gift_delivered' ) && ! VCAP\Workflow\Handover::active( 'gift_used' ) );
+$wf_consumer['entitlement'] = 'expired';
+$wf_expired = VCAP\Workflow\Handover::active( 'expiry_reminder' );
+$wf_consumer['entitlement'] = 'active';
+$wf_consumer['edition']     = 'core';
+$wf_core = VCAP\Workflow\Handover::active( 'expiry_reminder' );
+$wf_consumer['contract'] = '2.0.0';
+$wf_major = VCAP\Workflow\Handover::active( 'expiry_reminder' ) || 'incompatible' !== VCAP\Workflow\Provider::compatibility( VCAP\Workflow\Provider::consumer() );
+$wf_consumer['contract'] = 'latest';
+$wf_bad = 'incompatible' === VCAP\Workflow\Provider::compatibility( VCAP\Workflow\Provider::consumer() );
+$wf_consumer['contract'] = '1.0.0';
+check( 'WF-06: matrix – licence expired → native; core edition that lists it → handed over; another major or no version → incompatible, native', ! $wf_expired && $wf_core && ! $wf_major && $wf_bad );
+$wf_lines = implode( "\n", $wf_provider->status_lines() );
+check( 'WF-05: the admin status names the contract version, the plugin, what is handed over, what falls back, the last event id and the listener errors', str_contains( $wf_lines, 'Provider contract 1.0.0' ) && str_contains( $wf_lines, 'Workflow Captain 1.0.0 registered' ) && str_contains( $wf_lines, 'Handed over to the workflow now: Expiry reminder' ) && str_contains( $wf_lines, 'Switched on, but sent by Voucher Captain because the workflow plugin does not take them over now: Notice to the buyer: gift delivered' ) && str_contains( $wf_lines, 'Last event: ' . $wf_st['last_event_id'] ) && str_contains( $wf_lines, 'listener errors: 1' ), $wf_lines );
+$wf_hv = VCAP\Workflow\Handover::note( 'expiry_reminder', 7 );
+check( 'WF-04: a handed-over expiry reminder is recorded with a fixed note (matched by the reminder query, so it is not sent again)', '@vcap:{"c":"workflow_handover","a":["expiry_reminder",7]}' === $wf_hv && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/VoucherRepository.php' ), "OR ( e.event = %s AND e.note = %s )" ) );
+$wf_seen = array();
+VCAP\Workflow\Handover::record( $wf_v, 'expiry_reminder', 7, $wf_repo );
+check( 'WF-04: the hand-over fires "voucher.communication_handed_over" with communication, days and role (no address)', 1 === count( $wf_seen ) && 'voucher.communication_handed_over' === $wf_seen[0]['type'] && 'expiry_reminder' === $wf_seen[0]['data']['communication'] && 7 === $wf_seen[0]['data']['days'] && 'recipient' === $wf_seen[0]['data']['role'] && ! str_contains( (string) json_encode( $wf_seen ), '@' ), json_encode( $wf_seen ) );
+check( 'WF-04: the history shows the hand-over in words', str_contains( VCAP\Note::render( $wf_hv ), 'handed over to the workflow plugin' ) && isset( VCAP\VoucherRepository::event_labels()['workflow_handover'], VCAP\VoucherRepository::event_labels()['workflow_command'] ) );
+unset( $GLOBALS['vcap_test_options']['vcap_workflow_handover_expiry_reminder'], $GLOBALS['vcap_test_options']['vcap_workflow_handover_gift_delivered'] );
+
+// WF-03: services – permission, idempotency key, replay, conflict, audit.
+$wf_void = array( 'voucher_id' => 44, 'reason' => 'Fraud check', 'idempotency_key' => 'wf-flow-1:void:44' );
+$wf_voucher( 44, array( 'status' => Voucher::STATUS_VOID ) );
+$wf_denied = $wf_provider->void( $wf_void );
+check( 'WF-03: services refuse callers without the capability (vcap_not_allowed, 403, contract error data)', is_wp_error( $wf_denied ) && 'vcap_not_allowed' === $wf_denied->get_error_code() && 403 === $wf_denied->get_error_data()['status'] && false === $wf_denied->get_error_data()['retryable'] && '1.0.0' === $wf_denied->get_error_data()['contract_version'] );
+add_filter( 'vcap_workflow_service_allowed', static fn( $allowed, $service ) => in_array( $service, array( 'void', 'reactivate', 'contact' ), true ), 10, 2 );
+$wf_nokey = $wf_provider->void( array( 'idempotency_key' => 'short' ) + $wf_void );
+check( 'WF-03: a changing service needs an idempotency key of 8–64 characters', is_wp_error( $wf_nokey ) && 'vcap_invalid_request' === $wf_nokey->get_error_code() );
+$wf_events_before = count( $GLOBALS['wpdb']->events );
+$wf_first  = $wf_provider->void( $wf_void );
+$wf_again  = $wf_provider->void( $wf_void );
+$wf_audits = array_values( array_filter( $GLOBALS['wpdb']->events, static fn( $r ) => 'workflow_command' === $r['event'] ) );
+check( 'WF-03: idempotency – the first call acts once and is audited (source "workflow"), the repeat answers the stored outcome without acting again', is_array( $wf_first ) && false === $wf_first['replayed'] && is_array( $wf_again ) && true === $wf_again['replayed'] && 44 === $wf_again['voucher_id'] && 1 === count( $wf_audits ) && $wf_events_before + 1 === count( $GLOBALS['wpdb']->events ) && ! str_contains( (string) $wf_audits[0]['note'], 'wf-flow-1' ), json_encode( array( $wf_first, $wf_again, $wf_audits ) ) );
+$wf_conflict = $wf_provider->void( array( 'reason' => 'Another reason' ) + $wf_void );
+$wf_cross    = $wf_provider->reactivate( array( 'voucher_id' => 44, 'idempotency_key' => $wf_void['idempotency_key'] ) );
+check( 'WF-03: the same key with another request (other reason, other service) is a conflict', is_wp_error( $wf_conflict ) && 'vcap_idempotency_conflict' === $wf_conflict->get_error_code() && is_wp_error( $wf_cross ) && 'vcap_idempotency_conflict' === $wf_cross->get_error_code() );
+$wf_voucher( 45, array( 'status' => Voucher::STATUS_ACTIVE ) );
+$wf_react  = $wf_provider->reactivate( array( 'voucher_id' => 45, 'idempotency_key' => 'wf-flow-2:react:45' ) );
+$wf_react2 = $wf_provider->reactivate( array( 'voucher_id' => 45, 'idempotency_key' => 'wf-flow-2:react:45' ) );
+check( 'WF-03: validation – only void vouchers are reactivated; a refused call frees its key (the retry is checked again, not "in progress")', is_wp_error( $wf_react ) && 'vcap_invalid_state' === $wf_react->get_error_code() && is_wp_error( $wf_react2 ) && 'vcap_invalid_state' === $wf_react2->get_error_code() );
+$wf_missing = $wf_provider->void( array( 'voucher_id' => 999, 'idempotency_key' => 'wf-flow-3:void:999' ) + $wf_void );
+$wf_credit  = $wf_provider->void( array( 'voucher_id' => 43, 'idempotency_key' => 'wf-flow-3:void:43' ) + $wf_void );
+check( 'WF-03: unknown vouchers and store credit accounts are not found', is_wp_error( $wf_missing ) && 'vcap_not_found' === $wf_missing->get_error_code() && is_wp_error( $wf_credit ) && 'vcap_not_found' === $wf_credit->get_error_code() );
+$wf_issue = $wf_provider->issue( array( 'amount' => 20, 'idempotency_key' => 'wf-flow-4:issue' ) );
+$wf_redeem = $wf_provider->redeem( array( 'code' => 'X', 'target' => 't', 'idempotency_key' => 'wf-flow-4:redeem' ) );
+check( 'WF-03: issue and redeem need their own permission (not granted here)', is_wp_error( $wf_issue ) && 'vcap_not_allowed' === $wf_issue->get_error_code() && is_wp_error( $wf_redeem ) && 'vcap_not_allowed' === $wf_redeem->get_error_code() );
+$wf_contact = $wf_provider->contact( array( 'voucher_id' => 41, 'communication' => 'gift_delivered' ) );
+$GLOBALS['vcap_test_options']['vcap_workflow_handover_expiry_reminder'] = 'yes';
+$wf_contact2 = $wf_provider->contact( array( 'voucher_id' => 41, 'communication' => 'expiry_reminder' ) );
+unset( $GLOBALS['vcap_test_options']['vcap_workflow_handover_expiry_reminder'] );
+check( 'WF-04: contact data only for a handed-over communication – the holder\'s address and the masked code tail, never the code', is_wp_error( $wf_contact ) && 'vcap_not_allowed' === $wf_contact->get_error_code() && is_array( $wf_contact2 ) && 'ben@example.com' === $wf_contact2['email'] && 'recipient' === $wf_contact2['role'] && '…ABCD' === $wf_contact2['code_hint'] && ! str_contains( (string) json_encode( $wf_contact2 ), 'WFSECRET' ), json_encode( $wf_contact2 ) );
+check( 'WF-03: request fingerprints ignore the order of the arguments and differ per voucher', VCAP\Workflow\Services::signature( 'void', 1, array( 'a' => 1, 'b' => 2 ) ) === VCAP\Workflow\Services::signature( 'void', 1, array( 'b' => 2, 'a' => 1 ) ) && VCAP\Workflow\Services::signature( 'void', 1, array() ) !== VCAP\Workflow\Services::signature( 'void', 2, array() ) );
+
+$GLOBALS['vcap_test_filters'] = $wf_saved_filters;
+$GLOBALS['vcap_test_options'] = $wf_saved_options;
+$GLOBALS['wpdb']              = $wf_saved_db;
+VCAP\Db::reset();
+check( 'WF-01: WORKFLOW.md documents the contract (version, envelope, allowlist, errors, idempotency, deprecation) and every event type', ( static function (): bool {
+	$doc = (string) @file_get_contents( dirname( __DIR__ ) . '/WORKFLOW.md' );
+	foreach ( array_merge( VCAP\Workflow\Provider::EVENTS, VCAP\Workflow\Provider::ENVELOPE_FIELDS, VCAP\Workflow\Provider::DATA_FIELDS, array( 'Idempotency', 'Deprecation', 'vcap_workflow_consumer', 'workflow_captain_register_providers', VCAP\Workflow\Provider::CONTRACT_VERSION ) ) as $needle ) {
+		if ( ! str_contains( $doc, $needle ) ) {
+			return false;
+		}
+	}
+	return true;
+} )() );
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

@@ -207,6 +207,10 @@ foreach ( $recipients as $i => $r ) {
 }
 ```
 
+## Workflow plugins (since 1.2.0)
+
+`vcap()->workflow` implements the workflow provider contract v1 for plugins such as Workflow Captain: voucher events after the COMMIT (`vcap_workflow_event`, an envelope with stable event id and no code or personal data), services with capability check, idempotency key and audit entry (`issue`, `resend`, `void`, `reactivate`, `redeem`, `contact`), replay of missed events, and the optional hand-over of single customer emails (expiry reminder, gift notices; off by default). Contract, envelope, payload allowlist, errors, idempotency and deprecation rules: [WORKFLOW.md](WORKFLOW.md).
+
 ## Returned voucher emails (bounces, since 1.3.0)
 
 "Delivered" means that `wp_mail()` accepted the email. Voucher emails carry the headers `X-VCAP-Voucher` (the voucher
