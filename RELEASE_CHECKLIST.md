@@ -53,8 +53,8 @@ Checked one by one before the WordPress.org submission (A9). None is a security 
 
 | Count | Code | Assessment |
 | --- | --- | --- |
-| 125 | `PluginCheck.Security.DirectDB.UnescapedDBParameter` | The plugin's own table names (`Install::tables()`, built from `$wpdb->prefix` and constants) in SQL strings; values always go through placeholders. Planned: identifier placeholder `%i` (WordPress ≥ 6.2, minimum is 6.4) so the warning disappears. |
-| 21 | `WordPress.DB.PreparedSQL.InterpolatedNotPrepared` | Same cause (table names, placeholder lists built from `array_fill()`), each line carries a `phpcs:ignore` with the reason. |
+| 125 → 41 | `PluginCheck.Security.DirectDB.UnescapedDBParameter` | Table names now use the identifier placeholder `%i` (WordPress ≥ 6.2, minimum is 6.4; 86 statements). The 41 left are placeholder lists built at run time (`IN (%s, %s …)`, `VALUES` groups), SQL fragments from constants (CASE expressions, `FOR UPDATE`, column lists) and transaction statements without a table – values always go through placeholders. |
+| 21 → 12 | `WordPress.DB.PreparedSQL.InterpolatedNotPrepared` | Same cause (table names, placeholder lists built from `array_fill()`), each line carries a `phpcs:ignore` with the reason. |
 | 18 | `PrefixAllGlobals.NonPrefixedVariableFound` | Variables in `templates/`: their names are the documented template API for theme overrides (`{theme}/voucher-captain/`), renaming would break overrides. |
 | 15 + 2 | `PrefixAllGlobals.NonPrefixedHooknameFound` / `DynamicHooknameFound` | WooCommerce and WordPress hooks the plugin fires on purpose for compatibility (e.g. `woocommerce_*` in templates); own hooks all start with `vcap_`. |
 | 6 + 2 | `PreparedSQLPlaceholders.ReplacementsWrongNumber` / `UnfinishedPrepare` | Placeholder lists built at run time (`IN (%s, %s …)`), checked by the integration tests. |
