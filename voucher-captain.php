@@ -8,7 +8,7 @@
  * Requires PHP:      8.1
  * Requires Plugins:  woocommerce
  * WC requires at least: 8.9
- * WC tested up to:   11.2
+ * WC tested up to:   11.3
  * Author:            CouponMaster
  * Text Domain:       voucher-captain
  * Domain Path:       /languages

@@ -2,14 +2,14 @@
 
 ## Tested platform
 
-The CI integration suite installs WordPress 7.1.4, WooCommerce 11.2.2, Yoast SEO 28.8 and Voucher Captain together. It runs against MySQL 8.4 and MariaDB 11.4, with both WooCommerce HPOS and legacy post storage. PHP lint and smoke checks run on PHP 8.1 and 8.4.
+The CI integration suite installs WordPress 7.1.4, WooCommerce 11.3.0, Yoast SEO 28.8 and Voucher Captain together. It runs against MySQL 8.4 and MariaDB 11.4, with both WooCommerce HPOS and legacy post storage. PHP lint and smoke checks run on PHP 8.1 and 8.4.
 
 ## Minimum versions vs. test baseline
 
 | | Minimum (plugin header, enforced) | Test baseline |
 |---|---|---|
 | WordPress | 6.4 | 7.1.4 |
-| WooCommerce | 8.9 (first version with the `woocommerce_coupon_get_items_to_apply` filter used by promotions, purchase rules and SKU rules – verified against the 8.8.0–10.0.0 releases; older versions show an admin notice and the plugin stays inactive; gift card and store credit coupons are then refused at checkout, because nothing would deduct their balance) | 11.2.2 |
+| WooCommerce | 8.9 (first version with the `woocommerce_coupon_get_items_to_apply` filter used by promotions, purchase rules and SKU rules – verified against the 8.8.0–10.0.0 releases; older versions show an admin notice and the plugin stays inactive; gift card and store credit coupons are then refused at checkout, because nothing would deduct their balance) | 11.3.0 |
 | PHP | 8.1 | 8.4 |
 | Yoast SEO | not required | 28.8 (optional, tested alongside) |
 
@@ -99,7 +99,7 @@ Voucher Captain bundles dompdf, php-font-lib, php-svg-lib, html5, php-qrcode and
 ## Optional integrations
 
 CI job `ecosystem` installs each third-party plugin below from wordpress.org (latest release at run time; the job log
-prints the version) next to WooCommerce 11.2.2 and Voucher Captain and runs `tests/ecosystem-integration.php`.
+prints the version) next to WooCommerce 11.3.0 and Voucher Captain and runs `tests/ecosystem-integration.php`.
 
 | Integration | Contract | CI coverage |
 |---|---|---|
@@ -139,7 +139,7 @@ of a shipping plugin). Print data for card printers (code lists with layout, bar
 
 Voucher fields use WooCommerce product add-to-cart hooks and cart/order-item data. The integration suite checks field definitions, cart data persistence, order-item persistence, Store API reservation, paid-order commit, payment retry behavior, and both HPOS and legacy order CRUD. Voucher Captain declares HPOS and Cart/Checkout Blocks compatibility. Block-based add-to-cart requests (Store API `cart/add-item`) accept the voucher fields as `vcap_fields` (object of field key ⇒ value); they are validated like the product form (required fields, email/date/number/select rules) and refused with the error code `vcap_invalid_voucher_fields`. A customer-chosen amount (gift cards and top-ups with "Customer chooses the amount") is sent as `vcap_amount` (typed amount) or `vcap_amount_preset` (one of the suggested amounts); it is checked against minimum, maximum and step and refused with `400 vcap_invalid_amount` (M12-20). Store API requests never read the amount from `$_REQUEST`. A top-up adds its card code as `vcap_topup_code`, e.g. `{"id": 123, "quantity": 1, "vcap_topup_code": "GIFT-…", "vcap_amount": "40"}`. Products with required or custom fields link to the product page instead of adding to the cart from product lists.
 
-The CI job `browser-e2e` runs Playwright against a real shop (WordPress 7.1.4, WooCommerce 11.2.2, Yoast SEO 28.8): product page fields, keyboard-only use, classic cart/checkout and the cart/checkout blocks with cash on delivery, shortcodes and blocks, My Account, admin screens and the product editor next to Yoast SEO, axe-core accessibility scans of all Voucher Captain markup, and a PHP notice check. External payment gateways, redirects and webhooks, and screen-reader testing by a person remain release acceptance checks.
+The CI job `browser-e2e` runs Playwright against a real shop (WordPress 7.1.4, WooCommerce 11.3.0, Yoast SEO 28.8): product page fields, keyboard-only use, classic cart/checkout and the cart/checkout blocks with cash on delivery, shortcodes and blocks, My Account, admin screens and the product editor next to Yoast SEO, axe-core accessibility scans of all Voucher Captain markup, and a PHP notice check. External payment gateways, redirects and webhooks, and screen-reader testing by a person remain release acceptance checks.
 
 ## Captain Suite (WP Review Captain, WP Form Captain, WP Affiliate Captain)
 

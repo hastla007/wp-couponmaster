@@ -77,7 +77,7 @@ jobs:
           php wp-cli.phar core download --path=wp-test --version=7.1.4
           printf "define( 'FS_METHOD', 'direct' );\n" | php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check --extra-php
           $WP core install --url="https://release-smoke-${GITHUB_RUN_ID}.invalid" --title="Voucher Captain release smoke" --admin_user=admin --admin_password="$(openssl rand -hex 16)" --admin_email=ci@example.test --skip-email
-          $WP plugin install woocommerce --version=11.2.2 --activate
+          $WP plugin install woocommerce --version=11.3.0 --activate
       - name: The draft's ZIP – over the previous release, then checked
         run: |
           WP="php wp-cli.phar --path=wp-test"

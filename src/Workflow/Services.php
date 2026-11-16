@@ -101,6 +101,10 @@ final class Services {
 				break;
 			}
 		}
+		if ( $allowed && 'issue' === $service ) {
+			// SEC1: issuing creates value – also the right to raise values, like "New voucher" and `wp vcap issue`.
+			$allowed = \VCAP\Admin\VoucherAdmin::can_increase();
+		}
 		/**
 		 * Whether the current user may call a workflow service (issue, resend, void, reactivate, redeem, contact).
 		 * Default: one of the capabilities in Workflow\Services::CAPS. Args: bool, service, the call's arguments.
@@ -268,10 +272,9 @@ final class Services {
 			Source::WORKFLOW,
 			fn() => vcap()->issuer->issue_standalone(
 				array(
-					'paid'      => false,
 					'source'    => 'workflow',
 					'reference' => self::PREFIX . $hash, // One voucher per key (Issuer's own idempotency).
-				) + $request
+				) + $request + array( 'paid' => false ) // The caller's "paid" counts; default: goodwill (not sold).
 			)
 		);
 		if ( is_wp_error( $voucher ) ) {

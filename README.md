@@ -37,7 +37,7 @@ Eigene Platzhalter lassen sich über die Filter `vcap_placeholder_definitions` u
 
 ## Voraussetzungen
 
-WordPress 6.4+, WooCommerce 8.9+ (wird beim Laden geprüft), PHP 8.1+ (mit GD, mbstring, zip). Getestet bis WordPress 7.1 und WooCommerce 11.2.
+WordPress 6.4+, WooCommerce 8.9+ (wird beim Laden geprüft), PHP 8.1+ (mit GD, mbstring, zip). Getestet bis WordPress 7.1 und WooCommerce 11.3.
 
 ## Installation
 

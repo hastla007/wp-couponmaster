@@ -107,7 +107,7 @@ jobs:
           php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher Captain CI" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
       - name: Build, install, and update the release ZIP
         run: |
-          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.2.2 --activate
+          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.3.0 --activate
           php wp-cli.phar --path=wp-test plugin install wordpress-seo --version=28.8 --activate
           php wp-cli.phar --path=wp-test option update woocommerce_custom_orders_table_enabled ${{ matrix.order_storage.enabled }}
           bin/build.sh
@@ -240,7 +240,7 @@ jobs:
           php wp-cli.phar core download --path=wp-test --version=7.1.4
           php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
           php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher Captain ecosystem" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
-          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.2.2 --activate
+          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.3.0 --activate
           php wp-cli.phar --path=wp-test option update woocommerce_currency EUR
           bin/build.sh
           php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
@@ -293,7 +293,7 @@ jobs:
           php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
           $WP core multisite-install --url=http://localhost --title="Voucher Captain network" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
           $WP site create --slug=before --title="Existing site"
-          $WP plugin install woocommerce --version=11.2.2 --activate-network
+          $WP plugin install woocommerce --version=11.3.0 --activate-network
           bin/build.sh
           $WP plugin install build/voucher-captain.zip --activate-network
           $WP site create --slug=after --title="New site"
@@ -418,7 +418,7 @@ jobs:
           php wp-cli.phar core download --path=wp-test --version=7.1.4
           php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
           $WP core install --url=http://localhost --title="Voucher Captain upgrade" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
-          $WP plugin install woocommerce --version=11.2.2 --activate
+          $WP plugin install woocommerce --version=11.3.0 --activate
           $WP plugin install "$RUNNER_TEMP/voucher-captain-previous.zip" --activate
           $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" setup
       - name: Update to the current release and verify data and schema
@@ -483,7 +483,7 @@ jobs:
           php wp-cli.phar core download --path=wp-test --version=7.1.4
           php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
           php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher + Pass Captain" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
-          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.2.2 --activate
+          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.3.0 --activate
           if ! curl --fail --silent --show-error --location --retry 4 --retry-all-errors --retry-delay 15 --output pass-captain.zip "https://codeload.github.com/hastla007/wp-passmaster/zip/${{ matrix.archive }}"; then
             if [ "${{ matrix.required }}" = "true" ]; then
               echo "::error::WP Pass Captain ${{ matrix.pass_captain_ref }} could not be downloaded – the cross-plugin gate cannot pass without it (re-run the job)."
@@ -544,7 +544,7 @@ jobs:
           php wp-cli.phar --path=wp-test config set WP_DEBUG_LOG true --raw
           php wp-cli.phar --path=wp-test config set WP_DEBUG_DISPLAY false --raw
           php wp-cli.phar core install --path=wp-test --url=http://127.0.0.1:8080 --title="Voucher Captain E2E" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
-          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.2.2 --activate
+          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.3.0 --activate
           php wp-cli.phar --path=wp-test plugin install wordpress-seo --version=28.8 --activate
           bin/build.sh
           php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
@@ -771,7 +771,7 @@ jobs:
           php wp-cli.phar core download --path=wp-test --version=7.1.4
           php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
           php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher Captain plugin check" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
-          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.2.2 --activate
+          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.3.0 --activate
           php wp-cli.phar --path=wp-test plugin install plugin-check --activate
           bin/build.sh
           php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
