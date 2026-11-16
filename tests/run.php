@@ -2276,6 +2276,9 @@ check( 'M12-102: FREE-PREMIUM.md refers to docs/HOOKS.md instead of an own hook 
 
 echo "Security check (S6–S21, E2)\n";
 $sec_src = static fn( string $file ): string => (string) file_get_contents( dirname( __DIR__ ) . '/' . $file );
+$s9_rest = $sec_src( 'src/API/V1/RestController.php' );
+$s9_svc  = $sec_src( 'src/API/V1/RedemptionService.php' );
+check( 'S9: the REST permission check no longer lets a missing redemption through, commit/release/refund pass the access rules and the owner to the service, which checks them again under the row lock', ! str_contains( $s9_rest, 'return true; // Let the callback answer 404' ) && 3 === substr_count( $s9_rest, '$this->customer_args( $request )' ) && 3 <= substr_count( $s9_svc, '$this->access_denied( $row, $args )' ) && (bool) preg_match( '/FOR UPDATE", \$key \), ARRAY_A \); \/\/ phpcs:ignore\s+\$denied\s+= \$row \? \$this->access_denied/', $s9_svc ) );
 check( 'S6: referral rewards are "Individual use only" (several rewards cannot be stacked)', (bool) preg_match( '/function reward_coupon\(.*?set_individual_use\( true \).*?return \$coupon->save\(\)/s', $sec_src( 'src/Referrals.php' ) ) );
 
 echo "\n$passed passed, $failed failed. Output: $out\n";

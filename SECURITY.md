@@ -90,7 +90,7 @@ A personal voucher ("Who may redeem": buyer, recipient, or buyer or recipient; r
 
 ## Redemption API targets
 
-Over REST, customers may reserve, commit or release only for targets whose prefix a connector registered (`vcap_rest_redemption_target_prefixes`, default none); shop managers and connector users may use any other target. Targets and keys of built-in integrations (`passcaptain:…`, `wpcap-…`; filters `vcap_internal_redemption_target_prefixes`, `vcap_internal_redemption_key_prefixes`) are refused over REST, so nobody can book a ticket voucher or a Pass Captain payment without its delivery. Targets are checked in their stored (normalised) form.
+Over REST, customers may reserve, commit or release only for targets whose prefix a connector registered (`vcap_rest_redemption_target_prefixes`, default none); shop managers and connector users may use any other target. Targets and keys of built-in integrations (`passcaptain:…`, `wpcap-…`; filters `vcap_internal_redemption_target_prefixes`, `vcap_internal_redemption_key_prefixes`) are refused over REST, so nobody can book a ticket voucher or a Pass Captain payment without its delivery. Targets are checked in their stored (normalised) form. For customers, another user's redemption, an internal one and an unknown key get the same `404` (no existence oracle), and commit, release and refund repeat the access check in the redemption service under the row lock, so a redemption created after the REST permission check is never driven by another customer (S9).
 
 ## Deactivation
 

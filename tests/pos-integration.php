@@ -222,7 +222,7 @@ $ref_row = $wpdb->get_row( $wpdb->prepare( "SELECT till FROM {$events} WHERE vou
 vcap_pos_assert( 200 === $refund->get_status() && 5.0 === (float) $refund->get_data()['refunded'] && 45.0 === (float) vcap()->vouchers->get( $pos_card->id )->balance && 'POS 7' === $ref_row['till'], 'M12-46: POST /redemptions/{key}/refund gives the amount back', $refund->get_data() );
 wp_set_current_user( $other );
 $foreign = vcap_pos_rest( 'POST', '/vcap/v1/redemptions/' . $key . '/refund', array( 'amount' => 5, 'refund_key' => 'ref-' . wp_generate_password( 10, false, false ) ) );
-vcap_pos_assert( 403 === $foreign->get_status() && 45.0 === (float) vcap()->vouchers->get( $pos_card->id )->balance, 'M12-46: the refund route has the access rules of commit (another user: 403)', $foreign->get_data() );
+vcap_pos_assert( 404 === $foreign->get_status() && 45.0 === (float) vcap()->vouchers->get( $pos_card->id )->balance, 'M12-46: the refund route has the access rules of commit (another user: 404 like an unknown key, S9)', $foreign->get_data() );
 
 wp_set_current_user( 0 );
 delete_option( Counter::REQUIRE_RECEIPT );
