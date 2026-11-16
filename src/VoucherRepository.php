@@ -209,6 +209,9 @@ final class VoucherRepository {
 	/** Whether the listeners that forget the memo are registered. */
 	private static bool $watching = false;
 
+	/** @var array<int, int> Ledger id of the latest "redeemed" row per voucher in this request (fire_redeemed()). */
+	private static array $last_redeemed = array();
+
 	/** Most memo entries kept (a long CLI run reading many vouchers must not grow it without end). */
 	private const MEMO_MAX = 200;
 
@@ -779,9 +782,13 @@ final class VoucherRepository {
 		 * Fires once per completed redemption.
 		 *
 		 * @param array $data voucher_id, code, user_id, amount, currency, order_id, channel (shop|counter|external),
-		 *                    committed_at (UTC), source (see Source), till and receipt (counter redemptions, else '').
+		 *                    committed_at (UTC), source (see Source), till and receipt (counter redemptions, else ''),
+		 *                    event_id (since 1.2.0: id of the "redeemed" history entry, the id a counter cancellation
+		 *                    names in vcap_redemption_reversed; 0 when unknown).
 		 */
 		$counter = 'counter' === $channel ? Counter::context() : null;
+		$event   = self::$last_redeemed[ (int) $voucher->id ] ?? 0;
+		unset( self::$last_redeemed[ (int) $voucher->id ] );
 		Db::action(
 			'vcap_voucher_redeemed',
 			array(
@@ -798,6 +805,7 @@ final class VoucherRepository {
 				'source'       => Source::current(),
 				'till'         => $counter ? $counter['till'] : '',
 				'receipt'      => $counter ? $counter['receipt'] : '',
+				'event_id'     => $event,
 			)
 		);
 	}
@@ -1026,6 +1034,9 @@ final class VoucherRepository {
 			$row['receipt'] = $counter['receipt'];
 		}
 		$inserted = false !== $wpdb->insert( $this->events_table(), $row ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( $inserted && 'redeemed' === $event ) {
+			self::$last_redeemed[ $voucher_id ] = (int) $wpdb->insert_id;
+		}
 		if ( $inserted ) {
 			// Listeners get the note as text (a coded note in the site language).
 			/**

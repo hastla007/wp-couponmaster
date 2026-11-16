@@ -388,6 +388,15 @@ final class ProductSettings {
 			echo '<label style="display:block;margin-inline-start:0"><input type="checkbox" name="_vcap_channels[]" value="' . esc_attr( $key ) . '" ' . checked( in_array( $key, $channels, true ), true, false ) . ' /> ' . esc_html( $label ) . '</label>';
 		}
 		echo '<span class="description">' . esc_html__( 'Leave all unticked to allow every channel. Stored with each sold voucher.', 'voucher-captain' ) . '</span></fieldset>';
+		// Captain Suite: only vouchers marked here can become a review source (Integrations\ReviewSource).
+		woocommerce_wp_checkbox(
+			array(
+				'id'          => '_vcap_review_service',
+				'label'       => __( 'Redemption confirms a service (for review invitations)', 'voucher-captain' ),
+				'value'       => $this->v( $p, 'review_service' ),
+				'description' => __( 'For experience or service vouchers: a redemption at the counter then confirms that the service was provided, and a review plugin (e.g. WP Review Captain) may invite the customer afterwards. Voucher Captain sends no invitation itself. Purchases, issuing, top-ups, discount codes and store credit never count.', 'voucher-captain' ),
+			)
+		);
 		/** Extra product fields of connectors (saved in vcap_product_settings_save). */
 		do_action( 'vcap_product_settings_fields', $p );
 		woocommerce_wp_textarea_input(
@@ -725,7 +734,7 @@ final class ProductSettings {
 		$event = (string) ( $post['_vcap_event_date'] ?? '' );
 		$product->update_meta_data( '_vcap_event_date', preg_match( '/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/', $event ) ? $event : '' );
 		$product->update_meta_data( '_vcap_redemption_terms', sanitize_textarea_field( (string) ( $post['_vcap_redemption_terms'] ?? '' ) ) );
-		foreach ( array( 'free_shipping', 'individual_use', 'exclude_sale', 'preview', 'keep_rest' ) as $key ) {
+		foreach ( array( 'free_shipping', 'individual_use', 'exclude_sale', 'preview', 'keep_rest', 'review_service' ) as $key ) {
 			$product->update_meta_data( '_vcap_' . $key, isset( $post[ '_vcap_' . $key ] ) ? 'yes' : 'no' );
 		}
 		// U12: one routing choice; the old "Buyer copy" flag is stored as its consequence (read by older code).

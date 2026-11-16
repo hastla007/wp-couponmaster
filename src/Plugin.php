@@ -23,6 +23,9 @@ final class Plugin {
 	public API\V1\RedemptionService $redemptions;
 	/** Exchange of ticket vouchers for WP Pass Captain tickets (works only while Pass Captain is active). */
 	public Compat\PassCaptainTickets $passcaptain_tickets;
+	/** Captain Suite (since 1.2.0): review source contract v1 and voucher requests from forms (contract v1). */
+	public Integrations\ReviewSource $review_source;
+	public Integrations\VoucherRequests $voucher_requests;
 	public StoreCredit $store_credit;
 	/** Multi-purpose vouchers as a payment after tax (setting "vcap_mpv_after_tax"). */
 	public PaymentVouchers $payments;
@@ -75,6 +78,8 @@ final class Plugin {
 		$this->api_v1    = new API\V1\VoucherService( $this->vouchers, $this->coupons );
 		$this->redemptions = new API\V1\RedemptionService( $this->vouchers );
 		$this->passcaptain_tickets = new Compat\PassCaptainTickets( $this->redemptions, $this->vouchers );
+		$this->review_source       = new Integrations\ReviewSource();
+		$this->voucher_requests    = new Integrations\VoucherRequests();
 		$this->store_credit = new StoreCredit( $this->settings, $this->vouchers, $this->coupons );
 		$this->payments     = new PaymentVouchers( $this->vouchers );
 
@@ -148,6 +153,8 @@ final class Plugin {
 		( new Compat\Multilingual() )->register();
 		( new Compat\MultiCurrency() )->register();
 		( new Compat\AffiliateCaptain() )->register();
+		$this->review_source->register();
+		$this->voucher_requests->register();
 		// Pass Captain: provider (reserve/commit/release/refund), channel, ticket exchange, product settings, ticket
 		// vouchers and the shared scanner.
 		( new Compat\PassCaptain() )->register();

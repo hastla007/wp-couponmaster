@@ -19,6 +19,7 @@ final class Menu {
 		( new IssueVoucher() )->register();
 		( new CardImport() )->register();
 		( new VoucherLinks() )->register(); // M12-54.
+		( new VoucherRequestsAdmin( vcap()->voucher_requests ) )->register(); // Captain Suite: requests from forms.
 	}
 
 	public static function cap(): string {
@@ -44,6 +45,7 @@ final class Menu {
 		if ( IssueVoucher::can() ) {
 			add_submenu_page( 'vcap-vouchers', __( 'New voucher', 'voucher-captain' ), __( 'New voucher', 'voucher-captain' ), self::cap(), IssueVoucher::SLUG, array( new IssueVoucher(), 'page' ) );
 			add_submenu_page( 'vcap-vouchers', __( 'Import cards', 'voucher-captain' ), __( 'Import cards', 'voucher-captain' ), self::cap(), CardImport::SLUG, array( new CardImport(), 'page' ) );
+			add_submenu_page( 'vcap-vouchers', __( 'Voucher requests', 'voucher-captain' ), __( 'Voucher requests', 'voucher-captain' ), self::cap(), VoucherRequestsAdmin::SLUG, array( new VoucherRequestsAdmin( vcap()->voucher_requests ), 'page' ) );
 		}
 		add_submenu_page( 'vcap-vouchers', __( 'Import codes', 'voucher-captain' ), __( 'Import codes', 'voucher-captain' ), self::cap(), 'vcap-import', array( new Import( vcap()->code_pool ), 'page' ) );
 		add_submenu_page( 'vcap-vouchers', __( 'Generate codes', 'voucher-captain' ), __( 'Generate codes', 'voucher-captain' ), self::cap(), 'vcap-generate', array( new CampaignAdmin( new \VCAP\Campaigns( vcap()->code_pool, vcap()->vouchers ) ), 'page' ) );
