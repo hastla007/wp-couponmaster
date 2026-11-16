@@ -312,3 +312,10 @@ Ohne Befund geprüft: Nonce- und Capability-Checks aller `admin_post_`-, `wp_aja
 - [ ] VOUCH-WF-05 – Admin-Status mit Contract-Version, aktiven Übernahmen, letzter Event-ID, Retry und Fehlerdiagnose ergänzen; fehlendes/deaktiviertes/inkompatibles Workflow-Plugin darf native Voucher-Funktionen nicht blockieren.
 - [ ] VOUCH-WF-06 – Vertrags- und E2E-Matrix für Redaction, Refund, Codegeheimnis, Multisite, HPOS, Duplikate und Workflow-Core/Pro vorhanden/fehlend/abgelaufen ergänzen.
 - Abnahme: Gutscheinzustand und Ledger ändern sich nur über Voucher-Services; Retries erzeugen keine doppelte Einlösung oder Provision.
+
+## Mindestversionen: neueste PHP-, MySQL- und MariaDB-Version (Entscheidung der Inhaberin, 16.11.2026)
+
+- [ ] **MINVER-1 — Auf die neuesten Versionen umstellen und testen.** Die Inhaberin hat am 16.11.2026 für alle Captain-Plugins entschieden: Mindestversionen sind die jeweils neuesten – **PHP 8.5** (PHP 8.6 erscheint am 19.11.2026 und kommt in die Test-Matrix), **MySQL 9.7 (LTS)** und **MariaDB 12.3 (LTS)**. Heute verlangt dieses Repository PHP 8.1.
+  - *Zu tun:* Plugin-Header `Requires PHP`, Laufzeitprüfung, `readme.txt`, README, `composer.json`, PHPCS `testVersion`, PHPStan `phpVersion` und die CI-Zellen (Unit-Matrix ab 8.5, Integration auf MySQL 9.7 und MariaDB 12.3) einheitlich umstellen; eine Warnung (keine Sperre), wenn die Datenbank älter ist; Changelog-Eintrag.
+  - *Test (Inhaberin):* auf einem echten Host mit PHP 8.5/8.6 und MySQL 9.7 bzw. MariaDB 12.3 installieren, aktualisieren und die Hauptabläufe durchspielen.
+  - *Vorbild:* Affiliate Captain (`hastla007/wpaffiliatemaster`, Aufgaben PHP-1/PHP-2).
