@@ -914,6 +914,33 @@ $watermarks = array_filter( $design['elements'], static fn( $el ) => str_starts_
 vcap_security_assert( 10.0 === (float) $pv->initial_amount && 50.0 === (float) $ok_v->initial_amount, 'customer preview: an amount above the product maximum is shown as the minimum, an allowed amount as entered' );
 vcap_security_assert( count( $codes ) >= 3 && array() === array_filter( $codes, static fn( $el ) => 'PREVIEW' !== ( $el['qrValue'] ?? '' ) || 'custom' !== ( $el['qrContent'] ?? '' ) ), 'customer preview: every QR code and barcode carries the fixed placeholder (no foreign link)' );
 vcap_security_assert( count( $watermarks ) >= 3 && array() === array_filter( $watermarks, static fn( $el ) => (float) $el['opacity'] < 0.5 ), 'customer preview: the watermark covers the page in several rows' );
+// S13: no customer preview for a password-protected product (password not entered) or one hidden from the catalog.
+$s13_die = static fn() => static function ( $message, $title = '', $args = array() ) {
+	throw new RuntimeException( 'die:' . (int) ( is_array( $args ) ? ( $args['response'] ?? 0 ) : 0 ) );
+};
+$s13_user = get_current_user_id();
+wp_set_current_user( 0 );
+add_filter( 'wp_die_handler', $s13_die );
+add_filter( 'vcap_client_ip', static fn() => '203.0.113.' . wp_rand( 160, 250 ) );
+$s13_results = array();
+foreach ( array( 'password' => array( 'post_password' => 'secret-' . wp_generate_password( 6, false, false ) ), 'hidden' => array() ) as $s13_case => $s13_post ) {
+	wp_update_post( array( 'ID' => $preview_product->get_id(), 'post_password' => $s13_post['post_password'] ?? '' ) );
+	$s13_product = wc_get_product( $preview_product->get_id() );
+	$s13_product->set_catalog_visibility( 'hidden' === $s13_case ? 'hidden' : 'visible' );
+	$s13_product->save();
+	$_REQUEST = array( 'product_id' => $preview_product->get_id(), 'vcap_amount' => '50' );
+	try {
+		( new VCAP\Preview( vcap()->pdf ) )->product_preview();
+		$s13_results[ $s13_case ] = 'rendered';
+	} catch ( RuntimeException $e ) {
+		$s13_results[ $s13_case ] = $e->getMessage();
+	}
+}
+$_REQUEST = array();
+remove_filter( 'wp_die_handler', $s13_die );
+remove_all_filters( 'vcap_client_ip' );
+wp_set_current_user( $s13_user );
+vcap_security_assert( array( 'password' => 'die:400', 'hidden' => 'die:400' ) === $s13_results, 'S13: the customer preview refuses a password-protected product and a product hidden from the catalog', $s13_results );
 
 // --- C13: a failed read of the site secret never replaces it (all PDF links already sent stay valid).
 $secret_before = vcap()->settings->secret();
