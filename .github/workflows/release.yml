@@ -1,0 +1,152 @@
+name: Release
+
+# Pushing a tag vX.Y.Z (see RELEASE.md) builds the release ZIP reproducibly (one build: the free core, see
+# docs/FREE-PREMIUM.md) – but only for a commit on main after the CI workflow "Plugin smoke tests" finished with every
+# blocking job green on exactly the tagged commit (job ci-green) and the version gate passed (job version: tag =
+# plugin version, changelog and upgrade notice for it, no "= Unreleased =" left, newer than the last release tag).
+# It creates a CycloneDX SBOM of the ZIP and publishes both as a GitHub release draft. The release smoke (workflow
+# release-smoke.yml) must pass before the draft is published (RELEASE.md).
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  version:
+    # Fails fast (before waiting for CI): bin/release-gate.sh version + newer (RELEASE.md → Cutting a release).
+    name: Version, changelog and upgrade notice
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Tag matches the plugin version; changelog and upgrade notice are complete
+        run: bin/release-gate.sh version "${GITHUB_REF_NAME#v}"
+      - name: Newer than the last release tag
+        run: |
+          git fetch --force --tags --quiet origin
+          bin/release-gate.sh newer "${GITHUB_REF_NAME#v}"
+
+  ci-green:
+    # Release gate: the tagged commit must have a completed, successful push run of plugin-smoke.yml (all jobs,
+    # including integration, multisite, ecosystem, Pass Captain and browser tests). Waits while
+    # that run is still in progress (tag pushed together with the commit); fails when there is none or it failed.
+    name: CI green for the tagged commit
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: The tagged commit is on main
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          # Releases come from main only (RELEASE.md step 1), never from a work branch that CI also runs on.
+          git fetch --quiet origin main
+          if ! git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "::error::The tagged commit ${SHA} is not on main. Merge the release branch into main, wait for CI and tag the merged commit (RELEASE.md)."
+            exit 1
+          fi
+          echo "${SHA} is on main."
+      - name: Wait for "Plugin smoke tests" on ${{ github.sha }} and require every job green
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          # Jobs that may fail without blocking a release (continue-on-error in plugin-smoke.yml, RELEASE.md →
+          # Static analysis). Every other job must end with success (or be skipped).
+          REPORT_ONLY: plugin-check
+        run: |
+          # The run conclusion alone is not enough: a job with continue-on-error fails while the run is "success".
+          # A run must appear within 15 minutes and complete within 140 minutes.
+          start="$(date +%s)"
+          while :; do
+            now="$(date +%s)"
+            run="$(gh api "repos/${REPO}/actions/workflows/plugin-smoke.yml/runs?head_sha=${SHA}&event=push&per_page=50" \
+              --jq '.workflow_runs | sort_by(.created_at) | last // empty | [.id, .status, (.conclusion // ""), .html_url] | @tsv')"
+            if [ -z "$run" ]; then
+              if [ $(( now - start )) -gt 900 ]; then
+                echo "::error::No push run of plugin-smoke.yml for ${SHA}. Push the release commit to main, wait for CI, then tag it (RELEASE.md)."
+                exit 1
+              fi
+              echo "No CI run for ${SHA} yet – waiting."
+            else
+              IFS=$'\t' read -r id status conclusion url <<< "$run"
+              if [ "$status" = "completed" ]; then
+                if [ "$conclusion" = "success" ]; then
+                  # Every job of the run (matrix entries included): name and conclusion.
+                  jobs="$(gh api --paginate "repos/${REPO}/actions/runs/${id}/jobs?per_page=100" --jq '.jobs[] | [.name, (.conclusion // "none")] | @tsv')"
+                  red=""
+                  while IFS=$'\t' read -r job result; do
+                    [ -n "$job" ] || continue
+                    case "$result" in success|skipped) continue ;; esac
+                    base="${job%% (*}"
+                    case " ${REPORT_ONLY} " in
+                      *" ${base} "*)
+                        echo "::warning::Report-only job '${job}' ended with '${result}' – review it before publishing (RELEASE_CHECKLIST.md)."
+                        continue
+                        ;;
+                    esac
+                    red="${red}${job} (${result}); "
+                  done <<< "$jobs"
+                  if [ -n "$red" ]; then
+                    echo "::error::CI run ${id} for ${SHA} is 'success', but these jobs are not: ${red}${url}"
+                    exit 1
+                  fi
+                  echo "CI run ${id} for ${SHA} is green, every blocking job succeeded: ${url}"
+                  exit 0
+                fi
+                echo "::error::CI run ${id} for ${SHA} ended with '${conclusion}': ${url}. Fix (or re-run) it, then re-run this release workflow."
+                exit 1
+              fi
+              if [ $(( now - start )) -gt 8400 ]; then
+                echo "::error::CI run ${id} for ${SHA} did not finish in time (${status}): ${url}"
+                exit 1
+              fi
+              echo "CI run ${id} is ${status} – waiting: ${url}"
+            fi
+            sleep 60
+          done
+
+  release:
+    needs: [version, ci-green]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, gd, mbstring, xml, zip
+          coverage: none
+      - name: Tag matches the plugin version
+        run: bin/release-gate.sh version "${GITHUB_REF_NAME#v}"
+      - name: Build twice and compare
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          bin/build.sh
+          cp build/voucher-captain.zip.sha256 /tmp/first.sha256
+          bin/build.sh
+          diff /tmp/first.sha256 build/voucher-captain.zip.sha256
+          cp build/voucher-captain.zip dist/voucher-captain.zip
+          ( cd dist && sha256sum voucher-captain.zip > voucher-captain.zip.sha256 )
+          # Software bill of materials of exactly this ZIP (CycloneDX JSON, SECURITY.md): Composer packages and
+          # bundled libraries such as jsQR, same timestamp as the ZIP.
+          SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" php bin/sbom.php build/voucher-captain dist/voucher-captain.cdx.json
+          # Release notes: the "= X.Y.Z =" section of "== Changelog ==" only (not the Upgrade Notice).
+          awk -v v="= ${version} =" '/^== /{sec=$0; f=0; next} sec=="== Changelog ==" && $0==v{f=1; next} /^=/{f=0} f' readme.txt > dist/notes.md
+          test -s dist/notes.md || { echo "Empty release notes for ${version}"; exit 1; }
+      - name: Draft the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          gh release create "${GITHUB_REF_NAME}" dist/*.zip dist/*.sha256 dist/*.cdx.json \
+            --draft --title "Voucher Captain ${version}" --notes-file dist/notes.md

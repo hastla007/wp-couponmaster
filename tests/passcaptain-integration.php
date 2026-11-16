@@ -175,6 +175,42 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	$tv = vcap()->vouchers->for_order( $tv_order->get_id() )[0] ?? null;
 	$tv_target = $tv ? VCAP\Compat\PassCaptainTickets::target( $tv ) : null;
 	vcap_pc_assert( $tv_target && $ticket_type === $tv_target['ticket_type_id'] && 2 === $tv_target['quantity'], 'the sold voucher stores its ticket target with the order line' );
+	$tv_starts = (string) $wpdb->get_var( $wpdb->prepare( "SELECT o.starts_at FROM {$wpdb->prefix}wpcap_ticket_types t JOIN {$wpdb->prefix}wpcap_occurrences o ON o.occurrence_id = t.occurrence_id WHERE t.ticket_type_id = %d", $ticket_type ) );
+	$tv_line   = wc_get_order_item_meta( $tv->order_item_id, VCAP\Issuer::LINE_META, true );
+	$has_start = '' !== (string) ( $tv_line['passcaptain_ticket']['starts_at'] ?? '' ); // Pass Captain lists start times (targets()).
+	vcap_pc_assert( ! $has_start || ( $tv->expires_at && strtotime( $tv->expires_at . ' UTC' ) <= strtotime( $tv_starts . ' UTC' ) ), 'a fixed-date ticket voucher expires when its event starts' );
+	$capacity_check = vcap()->passcaptain_tickets;
+	// Pass Captain versions with the quantity filter of targets() leave out dates without enough places.
+	$has_qty_filter = ! in_array( $ticket_type, array_map( 'intval', array_column( (array) VCAP\Compat\PassCaptainTickets::service()->targets( array( 'quantity' => 100000 ) ), 'ticket_type_id' ) ), true );
+	vcap_pc_assert( '' === $capacity_check->fixed_date_problem( $tv_product, 1 ) && ( ! $has_qty_filter || '' !== $capacity_check->fixed_date_problem( $tv_product, 60 ) ), 'fixed-date ticket vouchers are sold only while the date has room for their tickets (2 per voucher, 100 places)' );
+	vcap_pc_assert( ! VCAP\Channels::allowed( $tv, VCAP\Channels::SHOP ) && ! VCAP\Channels::allowed( $tv, VCAP\Channels::COUNTER ) && VCAP\Channels::allowed( $tv, 'passcaptain' ), 'a ticket voucher sold without a channel selection is only redeemable via Pass Captain (not in the cart or at the counter)' );
+	vcap_pc_assert( str_contains( (string) apply_filters( 'vcap_shop_channel_refused_message', 'x', $tv ), 'exchanged for tickets' ), 'the cart explains where a ticket voucher is redeemed' );
+	$tv_quote = Bridge::provider()->quote( array( 'code' => $tv->code, 'currency' => get_woocommerce_currency(), 'amount_minor' => 7000, 'order_reference' => 'tv-test' ) );
+	vcap_pc_assert( is_wp_error( $tv_quote ) && 'vcap_ticket_voucher' === $tv_quote->get_error_code(), 'a ticket voucher cannot pay for a Pass Captain checkout as a value voucher' );
+	$as_value = static fn() => true;
+	add_filter( 'vcap_passcaptain_ticket_voucher_as_value', $as_value );
+	vcap_pc_assert( VCAP\Channels::allowed( $tv, VCAP\Channels::SHOP ), 'the value use of ticket vouchers can be switched on' );
+	remove_filter( 'vcap_passcaptain_ticket_voucher_as_value', $as_value );
+
+	$redeem_page = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'publish', 'post_title' => 'Redeem', 'post_content' => '[vcap_redeem]' ) );
+	delete_transient( 'vcap_redeem_page_guess' );
+	vcap_pc_assert( str_contains( VCAP\Shortcodes::redeem_url( $tv->code ), 'vcap_code=' . rawurlencode( $tv->code ) ) && str_contains( VCAP\Shortcodes::redeem_url(), (string) get_permalink( $redeem_page ) ), 'the redeem page is found and links carry the code' );
+	$plain_page = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'publish', 'post_title' => 'About us', 'post_content' => 'Hello' ) );
+	update_option( 'vcap_redeem_page_id', $plain_page );
+	vcap_pc_assert( VCAP\Compat\PassCaptainTickets::sells_ticket_vouchers() && str_contains( VCAP\Shortcodes::redeem_page_problem(), 'About us' ), 'a redeem page without the redeem form is reported while ticket vouchers are sold' );
+	$d14_health = ( new VCAP\Health() )->test_redeem_page();
+	vcap_pc_assert( 'recommended' === $d14_health['status'] && str_contains( wp_json_encode( $d14_health ), 'About us' ), 'D14: Site Health learns through vcap_redeem_page_needed that ticket vouchers need the redeem page', $d14_health['status'] );
+	update_option( 'vcap_redeem_page_id', $redeem_page );
+	vcap_pc_assert( '' === VCAP\Shortcodes::redeem_page_problem(), 'a redeem page with the form is fine' );
+	delete_option( 'vcap_redeem_page_id' );
+	wp_delete_post( $plain_page, true );
+	$_POST    = array( 'vcap_balance_code' => $tv->code, 'vcap_balance_nonce' => wp_create_nonce( 'vcap_balance' ) );
+	$tv_bal   = do_shortcode( '[vcap_balance]' );
+	$_POST    = array();
+	vcap_pc_assert( str_contains( $tv_bal, '2 tickets' ) && str_contains( $tv_bal, 'vcap_code=' ) && ! str_contains( wp_strip_all_tags( html_entity_decode( $tv_bal ) ), '70' ), 'the balance check shows a ticket voucher as tickets with a link to exchange them' );
+	$tv_steps = apply_filters( 'vcap_voucher_next_steps', array(), vcap()->vouchers->get( $tv->id ) );
+	$tv_values = VCAP\Placeholders::values( vcap()->vouchers->get( $tv->id ) );
+	vcap_pc_assert( 4 === count( $tv_steps ) && str_contains( implode( ' ', $tv_steps ), '2 tickets' ) && '2' === $tv_values['ticket_quantity'] && '' !== $tv_values['redeem_url'], 'a ticket voucher email explains the next steps (redeem page, tickets by email)' );
 
 	wp_set_current_user( 0 ); // A guest on the redeem page: tickets go to the voucher's recipient or buyer.
 	$done = vcap()->passcaptain_tickets->exchange( $tv->code );
@@ -185,8 +221,34 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	vcap_pc_assert( is_array( $done ) && 2 === $done['tickets'] && 'ticket-buyer@example.com' === $done['email'] && $pc_order && 'paid' === $pc_order->payment_status && 0 === (int) $pc_order->total_minor, 'the voucher is exchanged for two free Pass Captain tickets' );
 	vcap_pc_assert( VCAP\Voucher::STATUS_REDEEMED === vcap()->vouchers->get( $tv->id )->status && 'committed' === vcap()->redemptions->get( VCAP\Compat\PassCaptainTickets::key( $tv ) )['state'], 'the voucher is redeemed only after the tickets were issued' );
 	$again = vcap()->passcaptain_tickets->exchange( $tv->code );
+	vcap_pc_assert( is_array( $again ) && ! empty( $again['reused'] ) && '' !== (string) $again['exchanged_at'], 'a repeated exchange is reported as already exchanged (with the date)' );
 	vcap_pc_assert( is_array( $again ) && $again['order_public_id'] === $done['order_public_id'] && 2 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}wpcap_tickets WHERE order_id=%d", $pc_order->order_id ) ), 'exchanging again returns the same tickets (no second order)' );
 	vcap_pc_assert( 'passcaptain_tickets' === array_column( vcap()->vouchers->events( $tv->id ), 'event' )[ count( vcap()->vouchers->events( $tv->id ) ) - 1 ], 'the exchange is in the voucher history' );
+	ob_start();
+	do_action( 'vcap_account_voucher_status', vcap()->vouchers->get( $tv->id ) );
+	$tv_status = (string) ob_get_clean();
+	// Event and recipient come from Pass Captain 1.5+ (ticket service with resend_tickets()).
+	$pc_details = method_exists( VCAP\Compat\PassCaptainTickets::service(), 'resend_tickets' );
+	vcap_pc_assert( $pc_details ? str_contains( $tv_status, '2 tickets for' ) && str_contains( $tv_status, 't***@example.com' ) : str_contains( $tv_status, '2 tickets' ), 'the customer account shows what the voucher was exchanged for and where the tickets went (masked)' );
+	vcap_pc_assert( ! apply_filters( 'vcap_voucher_next_steps', array(), vcap()->vouchers->get( $tv->id ) ) && false === apply_filters( 'vcap_customer_can_resend', true, vcap()->vouchers->get( $tv->id ) ), 'after the exchange there are no next steps and no voucher resend' );
+	if ( $pc_details ) {
+		// "Send tickets again" replaces the codes: only for whoever holds the tickets, and only after confirming.
+		$actions = static function () use ( $tv ) {
+			ob_start();
+			do_action( 'vcap_account_voucher_actions', vcap()->vouchers->get( $tv->id ) );
+			return (string) ob_get_clean();
+		};
+		$holder = get_user_by( 'email', 'ticket-buyer@example.com' );
+		$holder = $holder ? $holder->ID : wp_create_user( 'tv-holder-' . wp_generate_password( 5, false ), wp_generate_password(), 'ticket-buyer@example.com' );
+		$other  = wp_create_user( 'tv-other-' . wp_generate_password( 5, false ), wp_generate_password(), 'someone-else-' . wp_generate_password( 5, false ) . '@example.com' );
+		wp_set_current_user( $holder );
+		$own_html = $actions();
+		wp_set_current_user( $other );
+		$other_html = $actions();
+		vcap_pc_assert( str_contains( $own_html, 'vcap_resend_tickets' ) && str_contains( $own_html, 'name="vcap_resend_confirm"' ) && ! str_contains( $other_html, 'vcap_resend_tickets' ), 'only the ticket holder can have the tickets sent again, after confirming that the old ones become invalid' );
+		wp_set_current_user( 0 );
+	}
+	wp_delete_post( $redeem_page, true );
 
 	wp_set_current_user( 1 );
 	vcap()->issuer->void( vcap()->vouchers->get( $tv->id ), 'Purchase order refunded' );
@@ -196,6 +258,8 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	$full_type = vcap_pc_ticket_type( 1000 );
 	$wpdb->update( "{$wpdb->prefix}wpcap_ticket_types", array( 'capacity' => 1 ), array( 'ticket_type_id' => $full_type ) );
 	$full = vcap_pc_voucher( 'single', 20 );
+	$full->buyer_email = 'full-holder@example.com';
+	vcap()->vouchers->update( $full );
 	$give = static fn( $t, $v ) => $v->id === $full->id ? array( 'ticket_type_id' => $full_type, 'quantity' => 2 ) : $t;
 	add_filter( 'vcap_passcaptain_ticket_target', $give, 10, 2 );
 	$refused = vcap()->passcaptain_tickets->exchange( $full->code );
@@ -206,12 +270,35 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	if ( defined( 'PassCaptain\\Integrations\\Vouchers\\TicketService::REVOKED_ACTION' ) ) {
 		// Pass Captain cancels the exchange order (e.g. the date was cancelled): the voucher comes back.
 		$second_order = (int) $wpdb->get_var( $wpdb->prepare( "SELECT order_id FROM {$wpdb->prefix}wpcap_orders WHERE public_id=%s", $second_try['order_public_id'] ) );
+		$restore_mails = array();
+		$catch_restore = static function ( $pre, $atts ) use ( &$restore_mails ) {
+			if ( str_contains( (string) $atts['subject'], 'valid again' ) ) {
+				$restore_mails[] = $atts;
+			}
+			return true;
+		};
+		add_filter( 'pre_wp_mail', $catch_restore, 10, 2 );
 		Orders::cancel_order( $second_order, 'occurrence_cancelled' );
 		Orders::cancel_order( $second_order, 'occurrence_cancelled' );
+		remove_filter( 'pre_wp_mail', $catch_restore, 10 );
 		$restored_events = array_count_values( array_column( vcap()->vouchers->events( $full->id ), 'event' ) );
 		vcap_pc_assert( VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $full->id )->status && 1 === ( $restored_events['passcaptain_tickets_restored'] ?? 0 ), 'tickets cancelled in Pass Captain give the voucher back exactly once' );
+		vcap_pc_assert( 1 === count( $restore_mails ) && 1 === ( $restored_events['passcaptain_restore_notified'] ?? 0 ) && str_contains( (string) $restore_mails[0]['message'], $full->code ), 'the customer is told once that the voucher is valid again' );
 		$third_try = vcap()->passcaptain_tickets->exchange( $full->code );
 		vcap_pc_assert( is_array( $third_try ) && 2 === $third_try['tickets'] && $third_try['order_public_id'] !== $second_try['order_public_id'] && VCAP\Voucher::STATUS_REDEEMED === vcap()->vouchers->get( $full->id )->status, 'the restored voucher can be exchanged again for new tickets' );
+		// Admin: undo the exchange (e.g. to change the date), then exchange again.
+		$undo = apply_filters( 'vcap_voucher_admin_action', '', 'passcaptain_undo', vcap()->vouchers->get( $full->id ) );
+		$third_order = (int) $wpdb->get_var( $wpdb->prepare( "SELECT order_id FROM {$wpdb->prefix}wpcap_orders WHERE public_id=%s", $third_try['order_public_id'] ) );
+		vcap_pc_assert( 'passcaptain_undone' === $undo && VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $full->id )->status && 0 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}wpcap_tickets WHERE order_id=%d AND status='valid'", $third_order ) ), 'the admin can undo an exchange: tickets cancelled, voucher valid again' );
+		$fourth_try = vcap()->passcaptain_tickets->exchange( $full->code );
+		vcap_pc_assert( is_array( $fourth_try ) && $fourth_try['order_public_id'] !== $third_try['order_public_id'], 'after undoing, the voucher can be exchanged for another date' );
+		if ( method_exists( VCAP\Compat\PassCaptainTickets::service(), 'resend_tickets' ) ) {
+			$mail_ok = static fn() => true;
+			add_filter( 'pre_wp_mail', $mail_ok );
+			$resend = apply_filters( 'vcap_voucher_admin_action', '', 'passcaptain_resend', vcap()->vouchers->get( $full->id ) );
+			remove_filter( 'pre_wp_mail', $mail_ok );
+			vcap_pc_assert( 'passcaptain_resent' === $resend, 'the admin can send the tickets of an exchange again' );
+		}
 	}
 	remove_filter( 'vcap_passcaptain_ticket_target', $give, 10 );
 	vcap_pc_assert( is_wp_error( vcap()->passcaptain_tickets->exchange( vcap_pc_voucher( 'single', 10 )->code ) ), 'vouchers without a ticket target are not exchanged' );
@@ -325,6 +412,39 @@ if ( null !== VCAP\Compat\PassCaptainScanner::service() ) {
 		PassCaptain\Settings::update( array( 'default_entry_window' => 1 ) );
 	}
 }
+
+// Gift card shortfall: Voucher Captain asks Pass Captain to hold the tickets of the shop order (versioned contract).
+$short_order = wc_create_order();
+$short_order->update_meta_data( VCAP\CouponManager::SHORTFALL_META, 'yes' );
+$short_order->save();
+$has_contract = defined( 'PassCaptain\\Integrations\\WooCommerce\\OrderAdapter::HOLD_FULFILMENT' );
+vcap_pc_assert( true === apply_filters( 'wpcap_woocommerce_hold_fulfilment', false, $short_order ) && $has_contract === VCAP\Compat\PassCaptain::supports_hold_fulfilment(), 'a shortfall holds the ticket issuance; support for the hold is detected from Pass Captain\'s contract version' );
+vcap_pc_assert( false === apply_filters( 'wpcap_woocommerce_hold_fulfilment', false, wc_create_order() ), 'orders without a shortfall are not held' );
+
+// Reconciliation with Pass Captain: an old open redemption for Pass Captain without an order there is reported.
+global $wpdb;
+$orphan_key = 'orphan-' . strtolower( wp_generate_password( 10, false, false ) );
+$wpdb->insert( VCAP\Install::tables()['redemptions'], array( 'redemption_key' => $orphan_key, 'voucher_id' => vcap_pc_voucher( 'balance', 10 )->id, 'user_id' => 0, 'target' => 'passcaptain:order-none', 'amount' => 5, 'state' => 'reserved', 'request_hash' => str_repeat( 'b', 64 ), 'created_at' => gmdate( 'Y-m-d H:i:s', time() - 3 * HOUR_IN_SECONDS ), 'updated_at' => gmdate( 'Y-m-d H:i:s', time() - 3 * HOUR_IN_SECONDS ) ) );
+$reconcile = ( new VCAP\Compat\PassCaptainReconcile( vcap()->redemptions ) )->run();
+$orphans   = array_filter( $reconcile['issues'], static fn( $i ) => 'orphan' === $i['kind'] && $orphan_key === $i['key'] );
+vcap_pc_assert( VCAP\Compat\PassCaptainReconcile::available() && $reconcile['checked'] > 0 && 1 === count( $orphans ), 'the reconciliation checks Pass Captain orders and reports a redemption without an order' );
+$checkout_issues = array_filter( $reconcile['issues'], static fn( $i ) => 'checkout' === $i['kind'] && str_contains( $i['problem'], 'Amount differs' ) );
+vcap_pc_assert( array() === $checkout_issues, 'gift cards paid in the ticket checkout match Pass Captain\'s amounts' . ( $checkout_issues ? ': ' . wp_json_encode( array_values( $checkout_issues ) ) : '' ) );
+// Pass Captain 1.4+ offers a versioned reconciliation API (work branch); older versions (main) are read from the order table.
+$has_reconcile_api = defined( VCAP\Compat\PassCaptainReconcile::API . '::VERSION' );
+vcap_pc_assert( $has_reconcile_api === VCAP\Compat\PassCaptainReconcile::supports_api() && ( $has_reconcile_api ? 'api' : 'table' ) === $reconcile['source'], 'the reconciliation reads Pass Captain\'s versioned API when offered, else its order table (' . $reconcile['source'] . ')' );
+if ( $has_reconcile_api ) {
+	// The API rows lead to the same findings as the order table (filter rows = the old table read).
+	$table_rows = static fn() => $wpdb->get_results( $wpdb->prepare( "SELECT order_id, public_id, status, payment_status, payment_provider, provider_reference, currency, voucher_snapshot FROM {$wpdb->prefix}wpcap_orders WHERE (voucher_snapshot IS NOT NULL AND voucher_snapshot <> '') OR provider_reference LIKE %s ORDER BY order_id DESC LIMIT %d", $wpdb->esc_like( 'voucher:' ) . '%', 2000 ) );
+	add_filter( 'vcap_passcaptain_reconcile_orders', $table_rows );
+	$from_table = ( new VCAP\Compat\PassCaptainReconcile( vcap()->redemptions ) )->run();
+	remove_filter( 'vcap_passcaptain_reconcile_orders', $table_rows );
+	$not_orphan = static fn( array $issues ) => array_values( array_filter( $issues, static fn( $i ) => 'orphan' !== $i['kind'] ) );
+	vcap_pc_assert( 'filter' === $from_table['source'] && $from_table['checked'] === $reconcile['checked'] && $not_orphan( $from_table['issues'] ) === $not_orphan( $reconcile['issues'] ), 'the API rows give the same reconciliation as Pass Captain\'s order table' . ( $from_table['checked'] !== $reconcile['checked'] ? " ({$reconcile['checked']} vs. {$from_table['checked']})" : '' ) );
+	$api_rows = call_user_func( array( VCAP\Compat\PassCaptainReconcile::API, 'orders' ), array( 'order' => 'desc', 'limit' => 500 ) );
+	vcap_pc_assert( is_array( $api_rows ) && $api_rows && ! array_key_exists( 'voucher_snapshot', $api_rows[0] ) && array() === call_user_func( array( VCAP\Compat\PassCaptainReconcile::API, 'orders' ), array( 'redemption_key' => $orphan_key ) ), 'Pass Captain\'s reconciliation API lists voucher orders without internal snapshot data and finds no order for an orphaned key' );
+}
+$wpdb->delete( VCAP\Install::tables()['redemptions'], array( 'redemption_key' => $orphan_key ) );
 
 // Minor units follow ISO 4217 (as Pass Captain does), not the shop's price display setting.
 $decimals = static fn() => 0;

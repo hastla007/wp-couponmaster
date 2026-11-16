@@ -30,6 +30,8 @@ foreach ( get_posts( array( 'post_type' => VCAP\Discounts\Repository::POST_TYPE,
 	wp_update_post( array( 'ID' => $old, 'post_status' => 'draft' ) );
 }
 update_option( 'vcap_campaigns_enabled', 'yes' );
+// The flow below is the immediate one; the V5 waiting period (default 14 days) is checked further down.
+update_option( 'vcap_bonus_wait_days', 0 );
 
 $product = new WC_Product_Simple();
 $product->set_name( 'Bonus test product' );
@@ -104,6 +106,19 @@ $cheap->apply_coupon( 'bonus-minus-' . $tag );
 $cheap = wc_get_order( $cheap->get_id() );
 $cheap->update_status( 'processing' );
 vcap_bonus_assert( array() === VCAP\Discounts\Bonus::issued( wc_get_order( $cheap->get_id() ) ), 'a discount code counts: 60 minus 20 paid does not reach the minimum of 50' );
+$cod = vcap_bonus_order( $product, 2, 'bonus-cod-' . $tag . '@example.com' );
+$cod->set_payment_method( 'cod' );
+$cod->save();
+$cod->update_status( 'processing', 'Payment to be made upon delivery.' );
+vcap_bonus_assert( array() === VCAP\Discounts\Bonus::issued( wc_get_order( $cod->get_id() ) ), 'cash on delivery: no bonus while the order is processing but not paid' );
+wc_get_order( $cod->get_id() )->update_status( 'completed' );
+vcap_bonus_assert( 1 === count( VCAP\Discounts\Bonus::issued( wc_get_order( $cod->get_id() ) ) ), 'cash on delivery: the bonus follows when the order is completed' );
+$transfer = vcap_bonus_order( $product, 2, 'bonus-bacs-' . $tag . '@example.com' );
+$transfer->set_payment_method( 'bacs' );
+$transfer->save();
+$transfer->update_status( 'on-hold' );
+wc_get_order( $transfer->get_id() )->payment_complete( 'bonus-bacs-' . $tag );
+vcap_bonus_assert( 1 === count( VCAP\Discounts\Bonus::issued( wc_get_order( $transfer->get_id() ) ) ), 'bank transfer: the bonus is issued once the payment is recorded' );
 wp_update_post( array( 'ID' => $bonus, 'post_status' => 'draft' ) );
 
 $gift = vcap_bonus_campaign( 'Gift card bonus', array( 'action' => 'bonus', 'bonus_amount' => 10, 'bonus_type' => 'percent', 'bonus_trigger' => 'gift_card' ) );
@@ -112,8 +127,55 @@ $plain->update_status( 'processing' );
 vcap_bonus_assert( array() === VCAP\Discounts\Bonus::issued( wc_get_order( $plain->get_id() ) ), 'a gift card bonus needs a voucher in the order' );
 wp_update_post( array( 'ID' => $gift, 'post_status' => 'draft' ) );
 
+// P12 · V5: refund guard and withdrawal below the threshold (no waiting period here).
+$guarded = vcap_bonus_campaign( 'Guarded bonus', array( 'action' => 'bonus', 'bonus_amount' => 5, 'bonus_type' => 'fixed_cart', 'min_subtotal' => 50 ) );
+$used_order = vcap_bonus_order( $product, 2, 'bonus-guard-' . $tag . '@example.com' );
+$used_order->update_status( 'processing' );
+$used_bonus = new WC_Coupon( VCAP\Discounts\Bonus::issued( wc_get_order( $used_order->get_id() ) )[ $guarded ] ?? 0 );
+vcap_bonus_assert( $used_bonus->get_id() > 0 && 'publish' === get_post_status( $used_bonus->get_id() ), 'V5: without waiting period the bonus is valid at once' );
+$used_bonus->set_usage_count( 1 );
+$used_bonus->save();
+$refused = wc_create_refund( array( 'order_id' => $used_order->get_id(), 'amount' => 60, 'reason' => 'test' ) );
+vcap_bonus_assert( is_wp_error( $refused ) && str_contains( $refused->get_error_message(), 'bonus voucher' ) && str_contains( html_entity_decode( $refused->get_error_message() ), '55' ), 'V5: a refund below the threshold while the bonus is used is reduced by the used bonus (at most 55 of 60)' );
+$allowed = wc_create_refund( array( 'order_id' => $used_order->get_id(), 'amount' => 55, 'reason' => 'test' ) );
+vcap_bonus_assert( $allowed instanceof WC_Order_Refund && 'publish' === get_post_status( $used_bonus->get_id() ), 'V5: the reduced refund goes through; the used bonus stays' );
+add_filter( 'vcap_allow_refund_of_used_bonus', '__return_true' );
+$forced = wc_create_refund( array( 'order_id' => $used_order->get_id(), 'amount' => 5, 'reason' => 'test' ) );
+remove_filter( 'vcap_allow_refund_of_used_bonus', '__return_true' );
+vcap_bonus_assert( $forced instanceof WC_Order_Refund, 'V5: the filter allows the full refund' );
+
+$unused_order = vcap_bonus_order( $product, 2, 'bonus-unused-' . $tag . '@example.com' );
+$unused_order->update_status( 'processing' );
+$unused_id = VCAP\Discounts\Bonus::issued( wc_get_order( $unused_order->get_id() ) )[ $guarded ] ?? 0;
+$small_refund = wc_create_refund( array( 'order_id' => $unused_order->get_id(), 'amount' => 5, 'reason' => 'test' ) );
+vcap_bonus_assert( $small_refund instanceof WC_Order_Refund && 'publish' === get_post_status( $unused_id ), 'V5: a partial refund that keeps the threshold (55 of 50) keeps the bonus' );
+$big_refund = wc_create_refund( array( 'order_id' => $unused_order->get_id(), 'amount' => 20, 'reason' => 'test' ) );
+vcap_bonus_assert( $big_refund instanceof WC_Order_Refund && 'trash' === get_post_status( $unused_id ), 'V5: a partial refund below the threshold withdraws the unused bonus' );
+
+// P12 · V5: waiting period (default 14 days): created as a draft, valid and sent only afterwards.
+delete_option( 'vcap_bonus_wait_days' );
+$waiting = vcap_bonus_order( $product, 2, 'bonus-wait-' . $tag . '@example.com' );
+$waiting->update_status( 'processing' );
+$wait_id = VCAP\Discounts\Bonus::issued( wc_get_order( $waiting->get_id() ) )[ $guarded ] ?? 0;
+$wait_coupon = new WC_Coupon( $wait_id );
+$valid_from  = (int) $wait_coupon->get_meta( VCAP\Discounts\Bonus::VALID_FROM );
+vcap_bonus_assert( $wait_id > 0 && 'draft' === get_post_status( $wait_id ) && 0 === wc_get_coupon_id_by_code( $wait_coupon->get_code() ), 'V5: the bonus is created as a draft – not usable yet' );
+vcap_bonus_assert( abs( $valid_from - ( time() + 14 * DAY_IN_SECONDS ) ) < 120 && as_has_scheduled_action( VCAP\Discounts\Bonus::ACTIVATE_HOOK, array( $wait_id ), VCAP\Delivery::GROUP ), 'V5: it becomes valid after 14 days (scheduled)' );
+$waiting->update_status( 'cancelled' );
+vcap_bonus_assert( 'trash' === get_post_status( $wait_id ) && ! as_has_scheduled_action( VCAP\Discounts\Bonus::ACTIVATE_HOOK, array( $wait_id ), VCAP\Delivery::GROUP ), 'V5: cancelling within the waiting period withdraws it and drops the activation' );
+
+$patient = vcap_bonus_order( $product, 2, 'bonus-patient-' . $tag . '@example.com' );
+$patient->update_status( 'processing' );
+$patient_id = VCAP\Discounts\Bonus::issued( wc_get_order( $patient->get_id() ) )[ $guarded ] ?? 0;
+update_post_meta( $patient_id, VCAP\Discounts\Bonus::VALID_FROM, time() - 10 ); // The waiting period is over.
+do_action( VCAP\Discounts\Bonus::ACTIVATE_HOOK, $patient_id );
+$patient_coupon = new WC_Coupon( $patient_id );
+vcap_bonus_assert( 'publish' === get_post_status( $patient_id ) && $patient_id === wc_get_coupon_id_by_code( $patient_coupon->get_code() ), 'V5: after the waiting period the bonus is published and usable' );
+update_option( 'vcap_bonus_wait_days', 0 );
+wp_update_post( array( 'ID' => $guarded, 'post_status' => 'draft' ) );
+
 update_option( 'vcap_campaigns_enabled', 'no' );
-$off = vcap_bonus_campaign( 'Disabled bonus', array( 'action' => 'bonus', 'bonus_amount' => 5 ) );
+$off =vcap_bonus_campaign( 'Disabled bonus', array( 'action' => 'bonus', 'bonus_amount' => 5 ) );
 $late = vcap_bonus_order( $product, 2, 'bonus-off@example.com' );
 $late->update_status( 'processing' );
 vcap_bonus_assert( array() === VCAP\Discounts\Bonus::issued( wc_get_order( $late->get_id() ) ), 'no bonus while promotions are switched off' );

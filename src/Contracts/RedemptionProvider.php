@@ -12,6 +12,12 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Provider contract for lookup and order-scoped voucher redemption.
  *
+ * The methods lookup(), reserve(), commit() and release() deliberately declare no native return type: adding one to an interface
+ * is a breaking change for every existing third-party provider (PHP requires implementations to repeat it), so it
+ * would need API v2 (CONNECTORS.md, section 6). The documented contract is `array<string, mixed>|\WP_Error`;
+ * implementations may declare it natively (as WooCommerceRedemptionProvider does), and VoucherService turns any
+ * other result into the WP_Error `vcap_provider_invalid_response`.
+ *
  * @since 1.1.0
  */
 interface RedemptionProvider {

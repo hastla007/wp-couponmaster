@@ -20,6 +20,21 @@ final class PassCaptain {
 		add_filter( self::FILTER, array( $this, 'provider' ), 10, 2 );
 		add_filter( 'vcap_redemption_channels', array( $this, 'channels' ) );
 		add_filter( 'vcap_redemption_channel_for_target', array( $this, 'channel_for_target' ), 10, 2 );
+		add_filter( 'vcap_active_integrations', array( $this, 'integration' ) );
+	}
+
+	/**
+	 * Diagnostics (filter "vcap_active_integrations"): WP Pass Captain's version while its voucher bridge is there.
+	 *
+	 * @param mixed $active Integration id => version or label.
+	 * @return array<string, string>
+	 */
+	public function integration( $active ): array {
+		$active = is_array( $active ) ? $active : array();
+		if ( self::active() ) {
+			$active['passcaptain'] = defined( 'WPCAP_VERSION' ) ? (string) WPCAP_VERSION : __( 'Active', 'voucher-captain' );
+		}
+		return $active;
 	}
 
 	/**
@@ -38,8 +53,14 @@ final class PassCaptain {
 	}
 
 	/**
-	 * Status of the integration for the settings page (HTML, escaped).
+	 * Whether the active WP Pass Captain keeps tickets of a paid order reserved while Voucher Captain reports a
+	 * gift card shortfall (versioned hold contract, Pass Captain 1.4+). Older versions issue the tickets anyway.
 	 */
+	public static function supports_hold_fulfilment(): bool {
+		$constant = 'PassCaptain\\Integrations\\WooCommerce\\OrderAdapter::HOLD_FULFILMENT';
+		return self::active() && defined( $constant ) && (int) constant( $constant ) >= 1;
+	}
+
 	public static function status_html(): string {
 		if ( ! self::active() ) {
 			return esc_html__( 'Not active – vouchers in the ticket checkout, ticket vouchers and the shared scanner are off. Voucher Captain works fully without it.', 'voucher-captain' );
@@ -48,6 +69,7 @@ final class PassCaptain {
 			array( true, __( 'Vouchers and gift cards pay in the ticket checkout (contract v1; tick "WP Pass Captain" under "Redeemable via" or leave all channels unticked).', 'voucher-captain' ) ),
 			array( null !== PassCaptainTickets::service(), null !== PassCaptainTickets::service() ? __( 'Ticket vouchers: choose a ticket type or event in the product\'s voucher settings.', 'voucher-captain' ) : __( 'Ticket vouchers: not available – update WP Pass Captain.', 'voucher-captain' ) ),
 			array( null !== PassCaptainScanner::service(), null !== PassCaptainScanner::service() ? __( 'Shared scanner: Vouchers → Scanner also checks in Pass Captain tickets.', 'voucher-captain' ) : __( 'Shared scanner: not available – update WP Pass Captain.', 'voucher-captain' ) ),
+			array( self::supports_hold_fulfilment(), self::supports_hold_fulfilment() ? __( 'Gift card shortfall: tickets of the shop order wait for the review.', 'voucher-captain' ) : __( 'Gift card shortfall: this WP Pass Captain issues tickets anyway – update it.', 'voucher-captain' ) ),
 		);
 		$version = defined( 'WPCAP_VERSION' ) ? (string) WPCAP_VERSION : '';
 		/* translators: %s: version */
@@ -58,7 +80,9 @@ final class PassCaptain {
 		return $html . '<br /><a href="' . esc_url( admin_url( 'admin.php?page=wp-pass-captain' ) ) . '">' . esc_html__( 'Open WP Pass Captain', 'voucher-captain' ) . '</a>';
 	}
 
-	public function channels( array $channels ): array {
+	/** @param mixed $channels What the previous filter returned (AP-Q2-6: a non-array is normalised). */
+	public function channels( $channels ): array {
+		$channels = is_array( $channels ) ? $channels : array();
 		return $channels + array( self::CHANNEL => __( 'WP Pass Captain (ticket checkout)', 'voucher-captain' ) );
 	}
 

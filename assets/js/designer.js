@@ -2,7 +2,7 @@
  * Voucher Captain – visual PDF template designer.
  *
  * Data model (stored as JSON in the hidden #vcap-design-json textarea):
- *   { page: { format, orientation, width, height, background, backgroundImageId, backgroundImage, backgroundFit },
+ *   { page: { format, orientation, width, height, background, backgroundImageId, backgroundImage, backgroundFit, bleed, cropMarks },
  *     elements: [ { id, type, name, x, y, w, h, rotation, opacity, locked, hidden, ...typeProps } ] }
  * All geometry is in millimetres; elements later in the array are rendered on top.
  */
@@ -27,6 +27,13 @@
 		Times: '"Times New Roman", Times, serif',
 		Courier: '"Courier New", Courier, monospace'
 	};
+	// Custom PDF fonts (vcap_pdf_fonts) are loaded as web fonts (@font-face from the server); like the PDF, missing
+	// glyphs come from DejaVu Sans.
+	( cfg.fonts || [] ).forEach( function ( family ) {
+		if ( ! FONT_STACKS[ family ] ) {
+			FONT_STACKS[ family ] = '"' + String( family ).replace( /["\\]/g, '' ) + '", "DejaVu Sans", sans-serif';
+		}
+	} );
 
 	var design;
 	try {
@@ -139,6 +146,23 @@
 		} );
 	}
 
+	/**
+	 * Like the PDF (PdfRenderer::fit_size): a text that does not fit its box is set smaller in steps, down to half
+	 * the designed size, and is marked when it is cut off even then.
+	 */
+	function fitText( inner ) {
+		var size = parseFloat( inner.style.fontSize );
+		var min = size * ( cfg.minFitScale || 0.5 );
+		while ( inner.scrollHeight > inner.clientHeight + 1 && size > min ) {
+			size = Math.max( min, size * 0.94 );
+			inner.style.fontSize = size + 'px';
+		}
+		inner.parentNode.classList.toggle( 'is-overflowing', inner.scrollHeight > inner.clientHeight + 1 );
+		if ( inner.parentNode.classList.contains( 'is-overflowing' ) ) {
+			inner.parentNode.title = t.textCut || '';
+		}
+	}
+
 	// ------------------------------------------------------------------ history.
 
 	var commitTimer = null;
@@ -216,6 +240,9 @@
 	var layersPanel = el( 'div', { class: 'vcap-d-panel vcap-d-layers' } );
 	var pagePanel = el( 'div', { class: 'vcap-d-panel vcap-d-pageprops' } );
 
+	// M12-75: dashed safety line (texts and codes inside it survive trimming), drawn above the background.
+	var safetyLayer = el( 'div', { class: 'vcap-d-safety', 'aria-hidden': 'true', style: 'position:absolute;pointer-events:none;border:1px dashed rgba(204,0,0,.55);box-sizing:border-box;z-index:0;' } );
+	page.appendChild( safetyLayer );
 	page.appendChild( guidesLayer );
 	workspace.appendChild( page );
 	sidebar.appendChild( propsPanel );
@@ -308,7 +335,8 @@
 			el( 'button', { type: 'button', class: 'button', 'aria-label': t.zoom + ' +', text: '+', onclick: function () { setZoom( state.scale * 1.2 ); } } ),
 			el( 'label', { class: 'vcap-d-check', for: 'vcap-d-snap' }, [ snapBox, ' ' + t.grid ] ),
 			starter,
-			el( 'button', { type: 'button', class: 'button button-primary', text: t.preview, onclick: preview } )
+			el( 'button', { type: 'button', class: 'button button-primary', text: t.preview, onclick: function () { preview( 'long' ); } } ),
+			el( 'button', { type: 'button', class: 'button', text: t.previewLines, onclick: function () { preview( 'lines' ); } } )
 		] ) );
 		updateToolbar();
 	}
@@ -379,6 +407,14 @@
 			page.style.backgroundImage = 'none';
 		}
 
+		var zone = ( cfg.safetyZone || 5 ) * s;
+		safetyLayer.style.left = zone + 'px';
+		safetyLayer.style.top = zone + 'px';
+		safetyLayer.style.width = Math.max( 0, size[ 0 ] * s - 2 * zone ) + 'px';
+		safetyLayer.style.height = Math.max( 0, size[ 1 ] * s - 2 * zone ) + 'px';
+		safetyLayer.style.outline = parseFloat( design.page.bleed || 0 ) > 0 ? ( parseFloat( design.page.bleed ) * s ) + 'px solid rgba(0,115,170,.12)' : 'none';
+		safetyLayer.style.outlineOffset = ( zone ) + 'px';
+
 		var selNode = null;
 		Array.prototype.slice.call( page.querySelectorAll( '.vcap-d-el, .vcap-d-sel' ) ).forEach( function ( n ) {
 			n.parentNode.removeChild( n );
@@ -416,6 +452,7 @@
 					inner.style.textDecoration = item.underline ? 'underline' : 'none';
 					inner.style.letterSpacing = item.letterSpacing ? item.letterSpacing * PT_TO_MM * s + 'px' : 'normal';
 					inner.style.whiteSpace = 'pre-line'; // Like the PDF: line breaks kept, runs of spaces collapsed.
+					inner.style.overflowWrap = 'break-word'; // Like the PDF: long words (codes) break inside.
 					inner.style.background = item.fill && 'transparent' !== item.fill ? item.fill : 'transparent';
 					inner.style.display = 'flex';
 					inner.style.flexDirection = 'column';
@@ -461,6 +498,9 @@
 			node.appendChild( inner );
 
 			page.appendChild( node );
+			if ( 'text' === item.type || 'heading' === item.type ) {
+				fitText( inner );
+			}
 			if ( item.id === state.selected ) {
 				selNode = { node: node, item: item };
 			}
@@ -781,9 +821,15 @@
 		if ( ! window.wp || ! wp.media ) {
 			return;
 		}
-		var frame = wp.media( { title: t.choose, multiple: false, library: { type: 'image' } } );
+		// Only the image types the PDF can draw (no AVIF/HEIC/SVG; WebP only with GD support).
+		var mimes = cfg.imageMimes && cfg.imageMimes.length ? cfg.imageMimes : [ 'image/jpeg', 'image/png' ];
+		var frame = wp.media( { title: t.choose, multiple: false, library: { type: mimes } } );
 		frame.on( 'select', function () {
 			var att = frame.state().get( 'selection' ).first().toJSON();
+			if ( att.mime && -1 === mimes.indexOf( att.mime ) ) {
+				window.alert( t.imageType );
+				return;
+			}
 			done( att );
 		} );
 		frame.open();
@@ -988,10 +1034,19 @@
 			if ( 'custom' === item.qrContent ) {
 				grid.appendChild( field( t.value, textInput( item, 'qrValue' ), true ) );
 			}
+			if ( 'download' === item.qrContent ) {
+				// M12-41: how long the printed link works.
+				grid.appendChild( el( 'p', { class: 'description is-wide vcap-d-hint', text: t.qrDownloadHint } ) );
+			}
 			grid.appendChild( field( t.color, colorInput( item, 'color' ) ) );
 		} else if ( 'barcode' === item.type ) {
 			grid.appendChild( field( t.value, textInput( item, 'qrValue' ), true ) );
-			grid.appendChild( field( t.barcodeType, selectInput( item, 'barcodeType', { C128: 'Code 128', C39: 'Code 39', EAN13: 'EAN-13' } ) ) );
+			grid.appendChild( field( t.barcodeType, selectInput( item, 'barcodeType', { C128: 'Code 128', C39: 'Code 39', EAN13: 'EAN-13' }, function () { renderProps(); } ) ) );
+			if ( 'EAN13' === item.barcodeType || 'C39' === item.barcodeType ) {
+				grid.appendChild( el( 'p', { class: 'description is-wide vcap-d-hint', text: t.barcodeFallback } ) );
+			}
+			// M12-40: the browser scanner without BarcodeDetector (iOS, Firefox) decodes QR codes only.
+			grid.appendChild( el( 'p', { class: 'description is-wide vcap-d-hint', text: t.barcodeScanner } ) );
 			grid.appendChild( field( t.color, colorInput( item, 'color' ) ) );
 			grid.appendChild( el( 'div', { class: 'vcap-d-field is-wide' }, [ toggle( item, 'showText', t.showText ) ] ) );
 		} else if ( 'rect' === item.type ) {
@@ -1072,6 +1127,10 @@
 		}
 		grid.appendChild( field( t.background, colorInput( p, 'background' ) ) );
 		grid.appendChild( field( t.fit, selectInput( p, 'backgroundFit', { cover: t.cover, contain: t.contain, stretch: t.stretch } ) ) );
+		// M12-75: bleed and crop marks for print shops.
+		grid.appendChild( field( t.bleed, numberInput( p, 'bleed', { step: 0.5, min: 0, max: 10, def: 0 } ) ) );
+		grid.appendChild( el( 'div', { class: 'vcap-d-field' }, [ toggle( p, 'cropMarks', t.cropMarks ) ] ) );
+		grid.appendChild( el( 'p', { class: 'description is-wide vcap-d-hint', text: t.bleedHelp } ) );
 		var bgButtons = el( 'div', { class: 'vcap-d-field is-wide' }, [
 			el( 'span', { class: 'vcap-d-label', text: t.bgImage } ),
 			el( 'button', { type: 'button', class: 'button', text: t.choose, onclick: function () {
@@ -1103,10 +1162,12 @@
 
 	// ------------------------------------------------------------------ preview.
 
-	function preview() {
+	function preview( variant ) {
 		save();
 		var form = el( 'form', { method: 'post', action: cfg.previewUrl, target: '_blank', style: 'display:none' } );
 		form.appendChild( el( 'input', { type: 'hidden', name: 'nonce', value: cfg.previewNonce } ) );
+		// M12-39: "lines" = worst-case message with many line breaks.
+		form.appendChild( el( 'input', { type: 'hidden', name: 'variant', value: 'lines' === variant ? 'lines' : 'long' } ) );
 		form.appendChild( el( 'input', { type: 'hidden', name: 'post_id', value: cfg.postId || 0 } ) );
 		var ta = el( 'textarea', { name: 'design' } );
 		ta.value = store.value;
@@ -1123,6 +1184,12 @@
 	state.history.push( store.value );
 	fitZoom();
 	renderAll();
+	if ( document.fonts && document.fonts.ready ) {
+		// The DejaVu web fonts change line breaks: fit the texts again once they are loaded.
+		document.fonts.ready.then( function () {
+			renderCanvas();
+		} );
+	}
 	window.addEventListener( 'resize', function () {
 		if ( ! drag && ! state.userZoom ) {
 			fitZoom();

@@ -67,6 +67,9 @@ update_user_meta( $user, VCAP_Example_Connector::PENDING, array( $key2 => VCAP_E
 $connector->retry( $user, $key2 );
 remove_filter( 'vcap_example_grant_fails', $fail );
 vcap_ex_assert( 'released' === vcap()->redemptions->get( $key2 )['state'] && VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $vouchers[2]->id )->status, 'after the last failed attempt the voucher is released and usable again' );
+// P5: the user tries the same code again: the released key answers vcap_redemption_released, the connector
+// starts over with a new key instead of granting for a reservation that holds nothing.
+vcap_ex_assert( 'granted' === $connector->redeem( $user, $vouchers[2]->code ) && 'committed' === vcap()->redemptions->get( VCAP_Example_Connector::key( $user, $vouchers[2]->code, 1 ) )['state'] && VCAP\Voucher::STATUS_REDEEMED === vcap()->vouchers->get( $vouchers[2]->id )->status, 'P5: after a released redemption the same code can be redeemed again under a new key' );
 
 // Wrong voucher type for the target.
 $plain = new WC_Product_Simple();

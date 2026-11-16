@@ -19,6 +19,19 @@ final class OrderAdmin {
 		add_filter( 'woocommerce_order_actions', array( $this, 'actions' ), 10, 2 );
 		add_action( 'woocommerce_order_action_vcap_issue', array( $this, 'issue' ) );
 		add_action( 'woocommerce_order_action_vcap_resend', array( $this, 'resend' ) );
+		add_action( 'woocommerce_order_action_vcap_accept_shortfall', array( $this, 'accept_shortfall' ) );
+	}
+
+	/** Order action: accept a voucher shortfall and fulfil the order (status back to processing). */
+	public function accept_shortfall( $order ): void {
+		$order = self::order_from( $order );
+		if ( ! $order || ! current_user_can( 'edit_shop_orders' ) || ! \VCAP\CouponManager::has_shortfall( $order ) ) {
+			return;
+		}
+		vcap()->coupons->accept_shortfall( $order );
+		if ( 'on-hold' === $order->get_status() ) {
+			$order->update_status( 'processing', __( 'Fulfilment after the voucher shortfall was accepted.', 'voucher-captain' ) );
+		}
 	}
 
 	private function screen_id(): string {
@@ -78,8 +91,13 @@ final class OrderAdmin {
 		do_action( 'vcap_order_metabox_after', $order );
 	}
 
-	public function actions( array $actions, $order = null ): array {
+	/** @param mixed $actions What the previous filter returned (AP-Q2-6: a non-array is normalised). */
+	public function actions( $actions, $order = null ): array {
+		$actions = is_array( $actions ) ? $actions : array();
 		$order = $order instanceof \WC_Order ? $order : self::order_from( $GLOBALS['theorder'] ?? ( $GLOBALS['post'] ?? null ) );
+		if ( $order && \VCAP\CouponManager::has_shortfall( $order ) ) {
+			$actions['vcap_accept_shortfall'] = __( 'Accept voucher shortfall and fulfil the order', 'voucher-captain' );
+		}
 		if ( $order && $this->has_voucher_items( $order ) ) {
 			$actions['vcap_issue']  = __( 'Generate vouchers', 'voucher-captain' );
 			$actions['vcap_resend'] = __( 'Resend voucher emails', 'voucher-captain' );
@@ -89,22 +107,39 @@ final class OrderAdmin {
 
 	public function issue( \WC_Order $order ): void {
 		$created = $this->issuer->issue_for_order( $order, true );
-		if ( ! $created ) {
+		if ( ! $created && $this->issuer->last_failures ) {
+			/* translators: %d: number of vouchers */
+			$order->add_order_note( sprintf( _n( 'Generate vouchers: %d voucher could not be created – see the notes above and the WooCommerce log. It is retried automatically.', 'Generate vouchers: %d vouchers could not be created – see the notes above and the WooCommerce log. They are retried automatically.', $this->issuer->last_failures, 'voucher-captain' ), $this->issuer->last_failures ) );
+		} elseif ( ! $created && ! $this->issuer->last_deferred ) { // Deferred: the issuer noted the background run.
 			$order->add_order_note( __( 'Generate vouchers: all vouchers for this order already exist.', 'voucher-captain' ) );
 		}
 	}
 
 	public function resend( \WC_Order $order ): void {
-		$count = 0;
+		$count  = 0;
+		$failed = array();
 		foreach ( $this->repo->for_order( $order->get_id() ) as $v ) {
-			if ( Voucher::STATUS_VOID === $v->status ) {
+			if ( '' !== VoucherAdmin::resend_refusal( $v ) ) {
+				continue; // H7: scheduled gifts wait for their date; void, expired or used-up vouchers are not sent.
+			}
+			$roles    = array();
+			$failures = array();
+			$sent     = vcap()->delivery->send( $v, null, $roles, $failures );
+			if ( ! $sent ) {
+				$failed[] = $v->code;
+				$this->repo->log( $v->id, 'delivery_failed', null, null, \VCAP\Note::make( 'delivery_not_sent', array( (string) wp_json_encode( $failures ) ) ) );
 				continue;
 			}
-			vcap()->delivery->send( $v );
-			$this->repo->log( $v->id, 'resent' );
+			vcap()->delivery->record_manual_send( $v, $roles );
+			$this->repo->log( $v->id, 'resent', null, null, sprintf( /* translators: %d: number of addresses */ _n( 'Sent again from the order to %d address', 'Sent again from the order to %d addresses', count( $sent ), 'voucher-captain' ), count( $sent ) ) );
 			++$count;
 		}
 		/* translators: %d: number of vouchers */
-		$order->add_order_note( sprintf( __( 'Voucher emails resent for %d voucher(s).', 'voucher-captain' ), $count ) );
+		$note = sprintf( _n( 'Voucher emails resent for %d voucher.', 'Voucher emails resent for %d vouchers.', $count, 'voucher-captain' ), $count );
+		if ( $failed ) {
+			/* translators: %s: voucher codes */
+			$note .= ' ' . sprintf( __( 'Not sent (email disabled or no valid address): %s', 'voucher-captain' ), implode( ', ', $failed ) );
+		}
+		$order->add_order_note( $note );
 	}
 }

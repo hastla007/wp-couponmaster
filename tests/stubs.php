@@ -5,6 +5,7 @@
  */
 
 define( 'ABSPATH', sys_get_temp_dir() . '/vcap-abspath/' );
+defined( 'VCAP_FILE' ) || define( 'VCAP_FILE', dirname( __DIR__ ) . '/voucher-captain.php' );
 define( 'VCAP_PATH', dirname( __DIR__ ) . '/' );
 define( 'VCAP_URL', 'https://shop.test/wp-content/plugins/voucher-captain/' );
 define( 'VCAP_VERSION', 'test' );
@@ -38,12 +39,16 @@ function apply_filters( $hook, $value, ...$args ) {
 function do_action( $hook, ...$args ) { foreach ( $GLOBALS['vcap_test_filters'][ $hook ] ?? array() as $f ) { call_user_func_array( $f[0], array_slice( $args, 0, $f[1] ) ); } }
 function __( $s, $d = null ) { return $s; }
 function _n( $a, $b, $n, $d = null ) { return 1 === $n ? $a : $b; }
+function _x( $s, $c, $d = null ) { return $s; }
+function get_locale() { return 'de_DE'; }
+function is_admin() { return false; }
 function esc_html__( $s, $d = null ) { return esc_html( $s ); }
 function esc_attr__( $s, $d = null ) { return esc_attr( $s ); }
 function esc_html( $s ) { return htmlspecialchars( (string) $s, ENT_QUOTES, 'UTF-8' ); }
 function esc_attr( $s ) { return htmlspecialchars( (string) $s, ENT_QUOTES, 'UTF-8' ); }
 function esc_textarea( $s ) { return esc_html( $s ); }
 function esc_url( $s ) { return filter_var( (string) $s, FILTER_SANITIZE_URL ); }
+function wp_kses_post( $s ) { return (string) $s; }
 function esc_url_raw( $s ) { $s = (string) $s; return preg_match( '#^(https?:)?//#i', $s ) || '' === $s ? $s : ''; }
 function esc_js( $s ) { return addslashes( (string) $s ); }
 function sanitize_text_field( $s ) { return trim( preg_replace( '/[\r\n\t ]+/', ' ', strip_tags( (string) $s ) ) ); }
@@ -58,13 +63,15 @@ function is_email( $s ) { return (bool) filter_var( (string) $s, FILTER_VALIDATE
 function absint( $n ) { return abs( (int) $n ); }
 function wp_json_encode( $v, $f = 0 ) { return json_encode( $v, $f | JSON_UNESCAPED_UNICODE ); }
 function wp_strip_all_tags( $s ) { return trim( strip_tags( (string) $s ) ); }
+function wp_is_writable( $p ) { return is_writable( (string) $p ); }
 function wp_specialchars_decode( $s, $q = ENT_NOQUOTES ) { return htmlspecialchars_decode( (string) $s, $q ); }
 function wp_unslash( $v ) { return $v; }
 function wp_slash( $v ) { return $v; }
 function wp_parse_args( $a, $d = array() ) { return array_merge( $d, (array) $a ); }
-function get_option( $k, $d = false ) { return $GLOBALS['vcap_test_options'][ $k ] ?? $d; }
+function remove_accents( $s ) { return strtr( (string) $s, array( 'ä' => 'a', 'ö' => 'o', 'ü' => 'u', 'Ä' => 'A', 'Ö' => 'O', 'Ü' => 'U', 'é' => 'e', 'è' => 'e', 'à' => 'a', 'ç' => 'c', 'ñ' => 'n', 'ß' => 'ss' ) ); }
+function get_option( $k, $d = false ) { $GLOBALS['vcap_test_option_reads'][ $k ] = ( $GLOBALS['vcap_test_option_reads'][ $k ] ?? 0 ) + 1; return $GLOBALS['vcap_test_options'][ $k ] ?? $d; }
 function update_option( $k, $v, $a = null ) { $GLOBALS['vcap_test_options'][ $k ] = $v; return true; }
-function add_option( $k, $v ) { if ( ! isset( $GLOBALS['vcap_test_options'][ $k ] ) ) { $GLOBALS['vcap_test_options'][ $k ] = $v; } }
+function add_option( $k, $v, $dep = '', $autoload = null ) { if ( array_key_exists( $k, $GLOBALS['vcap_test_options'] ?? array() ) ) { return false; } $GLOBALS['vcap_test_options'][ $k ] = $v; $GLOBALS['vcap_test_autoload'][ $k ] = $autoload; return true; }
 function get_bloginfo( $k ) { return 'Café Süß & Co'; }
 function home_url( $p = '' ) { return 'https://shop.test' . $p; }
 function admin_url( $p = '' ) { return 'https://shop.test/wp-admin/' . $p; }
@@ -88,12 +95,21 @@ function wc_format_localized_decimal( $n ) { return str_replace( '.', ',', (stri
 function wc_price( $amount, $args = array() ) { return '<span class="amount">' . number_format( (float) $amount, 2, ',', '.' ) . '&nbsp;&euro;</span>'; }
 function wc_get_product( $id ) { return null; }
 function wc_get_order( $id ) { return null; }
-function wc_format_coupon_code( $c ) { return strtolower( trim( (string) $c ) ); }
+// Like WooCommerce 11.3: html_entity_decode, sanitize_post_field( post_title, db ) (trim), wp_kses( …, 'entities' )
+// (tags removed, a bare "&" becomes "&amp;"), wc_strtolower. "B&B" → "b&amp;b".
+function wc_format_coupon_code( $c ) {
+	$v = trim( strip_tags( html_entity_decode( (string) $c, ENT_COMPAT, 'UTF-8' ) ) );
+	$v = (string) preg_replace( '/&(?![A-Za-z][A-Za-z0-9]*;|#\d+;|#x[0-9A-Fa-f]+;)/', '&amp;', $v );
+	return mb_strtolower( $v, 'UTF-8' );
+}
 function get_post_meta( $id, $k = '', $s = false ) { return $GLOBALS['vcap_test_meta'][ $id ][ $k ] ?? ''; }
 function get_posts( $a = array() ) { return array(); }
-function is_wp_error( $v ) { return false; }
+function is_wp_error( $v ) { return $v instanceof WP_Error; }
 function current_user_can( $c ) { return false; }
 function get_current_user_id() { return 0; }
+if ( ! function_exists( 'get_current_blog_id' ) ) {
+	function get_current_blog_id() { return (int) ( $GLOBALS['vcap_test_blog_id'] ?? 1 ); }
+}
 function wp_generate_password( $l = 12, $s = true, $e = false ) { return substr( bin2hex( random_bytes( $l ) ), 0, $l ); }
 
 require_once VCAP_PATH . 'vendor/autoload.php';
@@ -117,7 +133,76 @@ final class VCAP_Test_Plugin {
 		$this->pdf       = new \VCAP\PdfRenderer( $this->settings );
 		$this->downloads = new class() {
 			public function signed_url( $v, $email = false ) { return 'https://shop.test/?vcap_pdf=' . $v->token; }
+			public function printed_url( $v ) { return 'https://shop.test/?vcap_pdf=' . $v->token . '&exp=0'; }
 		};
 	}
 }
 function vcap() { static $p = null; return $p ??= new VCAP_Test_Plugin(); }
+// No pages in the unit tests: the redeem page lookup finds none (-1 = cached "none").
+function get_transient( $k ) { return $GLOBALS['vcap_test_transients'][ $k ] ?? -1; }
+function set_transient( $k, $v, $e = 0 ) { $GLOBALS['vcap_test_transients'][ $k ] = $v; return true; }
+function get_post_status( $id = null ) { return false; }
+function get_permalink( $id = 0 ) { return ''; }
+function did_action( $h ) { return 0; }
+function delete_option( $k ) { unset( $GLOBALS['vcap_test_options'][ $k ] ); return true; }
+function delete_transient( $k ) { unset( $GLOBALS['vcap_test_transients'][ $k ] ); return true; }
+function get_site_transient( $k ) { return $GLOBALS['vcap_test_site_transients'][ $k ] ?? false; }
+function set_site_transient( $k, $v, $e = 0 ) { $GLOBALS['vcap_test_site_transients'][ $k ] = $v; return true; }
+function delete_site_transient( $k ) { do_action( 'delete_site_transient_' . $k, $k ); unset( $GLOBALS['vcap_test_site_transients'][ $k ] ); return true; }
+
+if ( ! class_exists( 'WP_Error' ) ) {
+	class WP_Error {
+		public function __construct( private string $code = '', private string $message = '', private $data = null ) {}
+		public function get_error_code() { return $this->code; }
+		public function get_error_message() { return $this->message; }
+		public function get_error_data() { return $this->data; }
+	}
+}
+if ( ! function_exists( 'untrailingslashit' ) ) {
+	function untrailingslashit( $s ) { return rtrim( (string) $s, '/\\' ); }
+}
+if ( ! function_exists( 'wp_generate_uuid4' ) ) {
+	function wp_generate_uuid4() { return sprintf( '%04x%04x-%04x-4%03x-%04x-%04x%04x%04x', random_int( 0, 0xffff ), random_int( 0, 0xffff ), random_int( 0, 0xffff ), random_int( 0, 0xfff ), random_int( 0x8000, 0xbfff ), random_int( 0, 0xffff ), random_int( 0, 0xffff ), random_int( 0, 0xffff ) ); }
+}
+/** HTTP: $GLOBALS['vcap_test_http'] = callable( $url, $args ) returning array{code:int, body:string} or WP_Error. */
+if ( ! function_exists( 'wp_remote_request' ) ) {
+	function wp_remote_request( $url, $args = array() ) { $h = $GLOBALS['vcap_test_http'] ?? null; return $h ? $h( $url, $args ) : new WP_Error( 'http_request_failed', 'no transport' ); }
+	function wp_remote_retrieve_response_code( $r ) { return is_array( $r ) ? (int) $r['code'] : 0; }
+	function wp_remote_retrieve_body( $r ) { return is_array( $r ) ? (string) $r['body'] : ''; }
+}
+/** wp_safe_remote_*(): same fake transport; the URL check of WordPress is not part of the unit tests. */
+if ( ! function_exists( 'wp_safe_remote_request' ) ) {
+	function wp_safe_remote_request( $url, $args = array() ) { $GLOBALS['vcap_test_http_log'][] = $url; return wp_remote_request( $url, $args ); }
+	function wp_safe_remote_get( $url, $args = array() ) { $GLOBALS['vcap_test_http_log'][] = $url; return wp_remote_get( $url, $args ); }
+}
+if ( ! function_exists( 'remove_filter' ) ) {
+	function remove_filter( $hook, $cb, $prio = 10 ) {
+		foreach ( $GLOBALS['vcap_test_filters'][ $hook ] ?? array() as $i => $f ) {
+			if ( $f[0] === $cb ) {
+				unset( $GLOBALS['vcap_test_filters'][ $hook ][ $i ] );
+			}
+		}
+		return true;
+	}
+}
+if ( ! function_exists( 'wp_remote_get' ) ) {
+	/** GET through the same fake transport; 'stream' + 'filename' write the body to that file. */
+	function wp_remote_get( $url, $args = array() ) {
+		$r = wp_remote_request( $url, array( 'method' => 'GET' ) + $args );
+		if ( is_array( $r ) && ! empty( $args['stream'] ) && ! empty( $args['filename'] ) ) {
+			file_put_contents( $args['filename'], $r['body'] );
+		}
+		return $r;
+	}
+	function wp_remote_retrieve_header( $r, $name ) { return is_array( $r ) ? (string) ( $r['headers'][ strtolower( $name ) ] ?? '' ) : ''; }
+	function wp_tempnam( $name = '' ) { return tempnam( sys_get_temp_dir(), 'vcap' ); }
+	function wp_parse_url( $url, $component = -1 ) { return parse_url( $url, $component ); }
+	function plugin_basename( $file ) { return basename( dirname( $file ) ) . '/' . basename( $file ); }
+}
+if ( ! function_exists( 'wp_cache_flush' ) ) {
+	// Object cache seam (M12-88): $GLOBALS['vcap_test_cache'] = [ 'supports' => bool, 'external' => bool, 'calls' => [] ].
+	function wp_cache_supports( $feature ) { return ! empty( $GLOBALS['vcap_test_cache']['supports'] ); }
+	function wp_using_ext_object_cache( $using = null ) { return ! empty( $GLOBALS['vcap_test_cache']['external'] ); }
+	function wp_cache_flush_runtime() { $GLOBALS['vcap_test_cache']['calls'][] = 'runtime'; return true; }
+	function wp_cache_flush() { $GLOBALS['vcap_test_cache']['calls'][] = 'full'; return true; }
+}

@@ -1,26 +1,113 @@
 === Voucher Captain ===
-Tags: woocommerce, gift card, voucher, pdf, coupon
+Contributors: hastla007
+Tags: woocommerce, gift card, voucher, pdf, store credit
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.1.0
+WC requires at least: 8.9
+WC tested up to: 11.2
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Sell personalised PDF vouchers, gift cards, stored-value vouchers and discount codes with WooCommerce. Full event ticketing is handled by the separate Ticket Captain plugin.
+Sell personalised PDF vouchers, gift cards and store credit with WooCommerce: balance tracking, scheduled delivery, scanner and code import.
 
 == Description ==
 
-Visual PDF designer, recipient fields and custom field groups, scheduled delivery, balance-tracked gift cards, QR voucher and service-pass scanner, coupon code import (CSV/XLS/XLSX/ODS), WPML, multi-currency and Subscriptions support.
+Visual PDF designer, recipient fields and custom field groups, scheduled delivery, balance-tracked gift cards and store credit, QR voucher and service-pass scanner, coupon code import (CSV/XLS/XLSX/ODS), outstanding value and redemption journal, WPML, multi-currency and Subscriptions support. Promotions and bonus vouchers, refer a friend, gift card top-up and campaign reports are included. Built for shops in Germany and Austria: statutory validity per buyer country, VAT treatment per voucher kind (single-purpose / multi-purpose) and German translations.
+
+Event tickets, seats and admission belong to the separate plugin WP Pass Captain. When both are active, vouchers and gift cards pay for tickets in its checkout, ticket vouchers are exchanged for tickets and the scanner checks in both.
+
+= Free, complete core =
+
+Every feature is included and free (GPL-2.0-or-later): there is no license key, no locked feature and no upgrade notice. This includes promotions and bonus vouchers, refer a friend, gift card top-up, campaign and partner reports, and the ticket vouchers and shared scanner for WP Pass Captain. Any paid offer would be a separate add-on plugin.
+
+== Installation ==
+
+1. Install and activate WooCommerce 8.9 or newer.
+2. Upload the release ZIP under Plugins → Add New → Upload Plugin and activate Voucher Captain. PHP 8.1 or newer with the mbstring and dom extensions is required (activation stops without them); GD (QR codes, barcodes and images in PDFs), zip (Excel import) and iconv are needed for those features. Tools → Site Health shows what is missing.
+3. Check WooCommerce → Settings → Vouchers (issuing status, validity, delivery, store credit, VAT treatment).
+4. Edit a product, tick "Voucher" and configure the "Voucher" tab. Two PDF templates (gift card A5, voucher/service pass A6) are created on activation; edit them in the Vouchers menu.
+5. Optional: create pages with the shortcodes [vcap_redeem] (redeem page), [vcap_balance] (balance check) and [vcap_my_vouchers].
+
+== Frequently Asked Questions ==
+
+= Are vouchers WooCommerce coupons? =
+
+Yes. Every voucher is a WooCommerce coupon with its own record (balance, history, recipient, PDF). Gift cards and store credit keep their remaining balance; single-use vouchers are spent at once.
+
+= How is VAT handled? =
+
+Each voucher product has a VAT treatment (automatic, multi-purpose, single-purpose, promotion). By default vouchers reduce the price before tax like a discount. With the setting "Multi-purpose vouchers as payment" (off by default) multi-purpose vouchers pay the order total after tax instead. Have your tax adviser confirm the treatment; TAX.md in the source repository describes every case.
+
+= How long are vouchers valid? =
+
+A product can set days, a fixed date or no expiry. Without its own expiry a voucher gets the statutory default of the buyer's country (Germany: 3 years to the end of the year, Austria: 30 years; filter vcap_statutory_expiry).
+
+= What happens on refunds and cancellations? =
+
+Cancelled, failed or fully refunded orders give the used voucher amount back. Refunds of voucher purchases void the refunded vouchers; value already spent cannot be paid out again. Refunds as store credit are possible only with the customer's recorded consent.
+
+= Does it work with the block checkout and HPOS? =
+
+Yes, with High-Performance Order Storage and the legacy order storage, and with the cart and checkout blocks. With the optional setting "Multi-purpose vouchers as payment" the blocks show the payment row "Voucher CODE" below the discounts; the coupon itself shows a discount of 0 there with a note that it pays below. The warning that a single-use voucher worth more than the cart loses its remaining value is shown in the blocks as well.
+
+= Which data does the plugin share? =
+
+See "External services" below. Customer data stays on your site; the suggested privacy policy text is added under Settings → Privacy.
+
+== Screenshots ==
+
+1. PDF designer with drag and drop, layers, QR code, barcode and placeholders.
+2. Voucher tab of a product: value, validity, delivery, recipient fields and VAT treatment.
+3. Customer view: product page with recipient fields and preview, "Vouchers" in My Account.
+4. Vouchers list and detail screen with balance, history and resend.
+5. Scanner for vouchers, service passes and WP Pass Captain tickets.
+6. Reports: outstanding voucher value at a date and the redemption journal.
+
+== External services ==
+
+Voucher Captain connects to no external service. The plugin bundles all its libraries and fonts. PDFs load no remote images by default; only when a developer names hosts with the filter `vcap_pdf_remote_hosts` (for example the shop's own CDN or offloaded media library) are template images missing on the server downloaded from those hosts. No customer data is sent with these requests.
+
+On the same site (no external transfer): with WP Pass Captain active, ticket exchanges and ticket payments pass the voucher code, amount, the customer's name and email address and attendee names to WP Pass Captain.
 
 == Changelog ==
 
-= Unreleased =
+= 1.2.0 =
+* Fix (security): personal vouchers (only buyer/recipient) are redeemed online only by a customer logged in with the matching account email – a guest typing the buyer's address at checkout (also in the cart/checkout blocks, connectors and the WP Pass Captain checkout) is asked to log in with the masked address. Staff at the counter and in wp-admin are not affected; transferable vouchers neither.
+* New: "Reissue code" on the voucher page (and as a bulk action): new code and token, remaining value carried over, the old code and its download links stop working, optionally the new code is mailed. Email download links now expire after 90 days by default (a lifetime saved before is kept).
+* New: role "Voucher cashier" (scanner only, no access to orders or customers); WooCommerce no longer sends scanner staff away from wp-admin. Raising a remaining value needs its own right "vcap_increase_balance" (administrators and shop managers); "Add" above the face value asks first. "Refund as store credit" needs WooCommerce's right to edit orders.
+* New: cancel a counter redemption (wrong card, wrong amount) – in the scanner right after booking (the cashier within 15 minutes) or in the voucher history (managers), always with a reason; the value is booked back, a single-use voucher becomes active again and its coupon counter goes back. Shown in the redemption journal.
+* New: "Mark as redeemed (store)" on the voucher page of a single-use voucher, booked like a scanner redemption. The scanner keeps a receipt number and the till/branch of the device with each redemption and can print the result.
+* New: scanner messages with context – when, where and by whom a voucher was used, "reserved in an unpaid shop order" with the time it is released, the planned delivery date and the cancellation reason. The lookup applies the same rules as the redemption (store credit, channels, unpaid orders): no green "Valid" for a code the counter would refuse.
+* Fix: scanner – requests time out after 10 seconds with a loading state; an unanswered booking shows "Result unclear – query again" instead of "system error"; an abandoned claim is resolved from the voucher history after two minutes; "still processing" is yellow. Codes are posted instead of put into the lookup URL, and an expired login nonce is renewed automatically.
+* Fix: scanner – without a camera (no HTTPS, permission denied) a hint is shown instead of "system error"; on phones the keyboard no longer pops up over the camera after each scan.
+* Fix: scanner recognises custom QR links (code in a parameter or the last path segment), PDF download links, codes with spaces or without separators, and Y/Z swapped by a USB scanner on a German keyboard.
+* Fix: reverting a check-in is limited to one's own check-in within 10 minutes; later only managers with a reason, never for cancelled or expired tickets.
+* Fix: ticket QR page – the check-in form redirects after posting and carries a one-time key (reload, double tap or resending never admit twice); a refused check-in is shown in red.
+* Fix: WP Pass Captain – failures to cancel tickets, release a reservation or give a voucher back are recorded in the history ("passcaptain_revoke_failed", "passcaptain_restore_failed") and shown to the admins; a failed "send tickets again" from the customer account is recorded too.
+* Change: every feature stays free and included – no license, no locked features; license data stored by pre-release builds is removed on update and uninstall.
+* New: setting "Multi-purpose vouchers as payment" (off by default) – multi-purpose vouchers, gift cards and store credit pay the order total after tax, shipping and fees as an untaxed payment line "Voucher CODE" instead of a discount before tax.
+* New: gift card top-up – a product marked "Top up" adds the paid value to an existing card; refunds take the top-up back as far as the balance allows.
+* New: Reports – outstanding voucher value at a date (with CSV), redemption journal and, with WP Pass Captain, a reconciliation of voucher payments.
+* New: statutory validity follows the buyer's billing country; voucher products whose validity is shorter than the statutory period get a warning (product screen and Site Health).
+* New: VAT check – voucher products whose tax status does not fit the voucher kind are flagged.
+* New: refunds as store credit require and record the customer's consent.
+* New: Site Health checks (scheduled tasks, failed mails, private folder, redeem page) and a short log of failed mails with masked addresses.
+* New: multisite – network activation, sites added later and per-site uninstall.
+* New: fixed-date ticket vouchers are sold only while the date has room and expire when the event starts.
+* New: "Not delivered" filter and notices for vouchers that have not reached anyone; customers are told when a ticket voucher is valid again.
+* New: German formal ("Sie"), Swiss and Austrian German sites use the German translation when they have no file of their own.
+* New: the release ZIP ships the licence files of all bundled libraries and THIRD-PARTY-NOTICES.txt.
+* Fix: gift card and store credit coupons are suspended while the plugin is deactivated, so they cannot take their full balance off orders.
+* Fix (security): rate limits are atomic, count failures only and ignore forged forwarding headers; XLSX/ODS imports refuse zip bombs.
+* Fix: recipient emails choose their default subject per voucher.
+* Privacy: referral data is included in the personal data export and erasure; the suggested privacy policy text covers the balance history, referrals, external redemptions, WP Pass Captain, the scanner and rate-limit counters.
 * New: VAT treatment per voucher product (automatic, multi-purpose, single-purpose, promotion). Pass Captain keeps the VAT for multi-purpose vouchers and shows them as a payment on its invoices.
-* New: default validity by the shop country when a product has no expiry of its own – Germany 3 years to the end of the year, Austria 30 years (filter vcap_statutory_expiry). Shops that saved a default in days keep it.
+* New: default validity by the buyer's billing country (the shop country when it is unknown) when a product has no expiry of its own – Germany 3 years to the end of the year, Austria 30 years (filter vcap_statutory_expiry). Shops that saved a default in days keep it.
 * New: ticket vouchers are given back automatically when Pass Captain cancels or refunds the exchanged tickets (date or event cancelled); the voucher can then be exchanged again.
 * New: partial refunds of voucher purchases void as many vouchers as were refunded (unused ones first); refunds that would pay back value already spent from a voucher are refused with the maximum amount (filter vcap_allow_refund_of_spent_vouchers).
-* New: scanner privacy – the holder name is hidden unless enabled (personal tickets always show it); order number and original value only for staff who manage vouchers.
+* New: scanner privacy – the holder name is hidden unless enabled (personal tickets always show it); order number, customer details and the admin link only for staff who manage vouchers. Value and remaining balance are always shown, the cashier needs them.
 * Fix: in shops with net prices a gift card paid the net amount plus tax while only the net amount was deducted; it now pays exactly its balance of the gross price (filter vcap_balance_covers_tax).
 * Fix (security): keys of built-in integrations can no longer be created, read or released over REST; Pass Captain reservations are owned by no customer.
 * Fix: scanner – ticket vouchers cannot be redeemed at the counter, single-use redemption is atomic, vouchers held by an unpaid order are refused, undo asks first, check-ins are idempotent, Pass Captain results show readable reasons and the date of other-day tickets.
@@ -37,6 +124,14 @@ Visual PDF designer, recipient fields and custom field groups, scheduled deliver
 * New: redemptions->refund() gives back (part of) a completed external redemption.
 * Fix: Pass Captain reservations are held for Pass Captain's whole payment window (late bank transfers no longer find the voucher released).
 * Fix: stacked promotions never discount a line by more than its price; recalculating an order keeps the promotions it was placed with.
+* Fix: a voucher that cannot be voided after a refund or cancellation is no longer reported as voided: the order gets a note, the case is listed in an admin notice and Site Health, and the void is retried automatically.
+* Fix: an order cancelled by hand (no refund) voids only its unused vouchers; vouchers already used stay valid. Partial refunds never void vouchers that were used up completely.
+* Fix: vouchers of orders that waited for their payment (e.g. "On hold" as the only issue status) are issued when the order reaches a paid status.
+* Fix: "Refund as store credit" runs once per order at a time and ignores a resubmitted form – no double credit.
+* New: "Book back onto voucher" on the order screen – a return of items paid with a gift card goes back onto the card, also for guest orders and orders with a total of 0.
+* Fix: a fully refunded order gives single-use vouchers back (WooCommerce does so only for cancelled orders); with "Restore balance on cancellation" off, single-use vouchers stay redeemed on cancellation too.
+* Fix: value booked back onto an expired or cancelled card is reported (order note, admin notice) instead of vanishing; filter vcap_restore_extension_days extends expired cards.
+* Fix: a gift card top-up adds its face value like a new card (net in net-price shops, also when paid with another card); a top-up that cannot be booked holds the order and tells the customer; customers get a confirmation with the new balance and validity; cards valid for less than 30 days cannot be topped up (filter vcap_topup_min_remaining_days), the validity can be extended with vcap_topup_expires_at.
 * Fix: "individual use" coupons no longer stack with promotions; gift card lines in the cart no longer count towards a promotion's minimum cart value.
 * Fix: store credit can no longer be redeemed through the redemption API or Pass Captain (it is used in the shop only).
 * Fix: Pass Captain amounts use ISO 4217 minor units, independent of the shop's price decimals setting.
@@ -49,6 +144,32 @@ Visual PDF designer, recipient fields and custom field groups, scheduled deliver
 * Fix: refer a friend – own codes are refused for email aliases (+tag, Gmail dots); the reward is withdrawn when the friend's order is cancelled or refunded (unused coupon trashed, store credit debited).
 * Fix: parallel requests for the same order status change count uses, bonus vouchers and referral rewards only once.
 * Fix: Reports no longer count trashed bonus vouchers as issued.
+* Fix: money safety – foreign-currency amounts are never taken 1:1 (rate stored at checkout, sale held or refused without a rate, Site Health test, WooPayments Multi-Currency adapter); gift card refunds count top-ups (a refunded purchase keeps the topped-up value); single-use vouchers in unpaid orders count as used and a late payment after voiding or redemption is held; sold percentage vouchers only with a fixed value of 0–100 %, "Fixed product discount" blocked, refused coupons roll the voucher back.
+* Fix: with WPML or Polylang, voucher emails and their PDF (texts, dates, links) are sent in the order language – also for scheduled deliveries, reminders and resends; filter vcap_email_locale. Polylang gets the template translation of the order language too.
+* Fix: the email body follows the mail's language: a saved default text (in any language) is treated as the default, new installs store none.
+* Fix: redemption conditions and email texts can be translated (WPML string translation via wpml-config.xml, Polylang strings); wpml-config.xml lists every voucher product setting (top-up, tax treatment, code batch stop, transferability, conditions translated) – checked in CI.
+* Fix: default PDF templates are created in the site language, staff print PDFs in the order/site language, dates show translated month names, percentages use the shop's number format.
+* Fix: "Additional recipients" get their own copy; only the customer's address decides whether a voucher counts as delivered.
+* Fix: a gift sent to the buyer's own address is mailed once (buyer mail only).
+* Change: {recipient_name} no longer falls back to the buyer – the PDF leaves out an element whose placeholders are all empty ("For:" without a name); new placeholder {holder_name} (recipient, else buyer) for tickets.
+* New: the buyer learns when and where vouchers go – note on the product page (delivery delay/date), in the cart, in WooCommerce's order emails and on the order received page ("What happens next"); the buyer's copy of a gift says it is on its way to the recipient.
+* Fix: line breaks in the personal message count as one character, as in the browser's counter.
+* Fix: deactivation also suspends vouchers that may not be redeemed in the shop and coupons with rules only Voucher Captain checks (first order only, referral codes, SKU rules); each suspended coupon is marked, only marked coupons are published again, also on a reinstall.
+* Fix: after a reactivation, orders paid, cancelled or refunded while the plugin was off are caught up in the background (vouchers issued or voided, referral rewards, top-ups).
+* Fix: a deactivation that never got its activation (network deactivation stopped by a time-out, update by upload after a rollback) no longer leaves gift cards suspended: the running plugin publishes them again.
+* Fix: network activation sets up 25 sites at once (the others on their first request); deleting a site of a network drops its voucher tables; named database locks are per site.
+* Fix: database updates run in admin, cron and WP-CLI requests or the background action vcap_migrate, never in shop requests; tables are created and checked once per update; the schema check covers every index.
+* New: Site Health check for the PHP extensions mbstring, dom, gd, zip and iconv; activation stops without mbstring or dom.
+* Dev: vcap() is defined only when WooCommerce is active in a supported version; new action vcap_loaded and VCAP\Plugin::ready().
+* Fix (security): text from visitors (code of a redeem link, recipient name, attendee fields) can no longer run shortcodes through block output.
+* Fix: the redeem form needs no nonce for guests and keeps pages cacheable unless it shows data of the visitor; it is also recognised in synced patterns, template parts, widgets and builder layouts. Its notices appear only in the form that was sent.
+* Fix: editor and page builder previews show example notes and no longer create referral codes or show the editor's own vouchers; the block preview is not clickable.
+* Fix: cart and checkout blocks show the title of an automatic promotion instead of "vcap-campaign-ID" and refuse to remove it with a message.
+* Fix: product pages list the redemption conditions of every country instead of the visitor's (page caches served one visitor's conditions to all).
+* Fix: a balance check counts once per request, however many balance forms the page has.
+* Accessibility: results of the balance and redeem forms are focused after sending and marked on the field; buttons in voucher lists keep their visible text as name; character counters are field descriptions and are announced only near the limit; responsive tables label every value; field ids are unique with several product forms on a page; the field group editor can reorder fields by keyboard; voucher list checkboxes are labelled.
+* New: suggested amounts are a radio group that works without JavaScript (and in quick views on shop pages); the chosen amount is clearly marked; a maximum alone is shown as "Maximum X".
+* New: block settings – button text of "Redeem voucher", "My vouchers" with or without store credit and referral code (shortcode `[vcap_my_vouchers extras="no"]`); blocks have keywords and an inserter preview. Shortcode output is wrapped in div.woocommerce; the login hint returns to the page after logging in.
 
 = 1.1.0 =
 * New: redeem vouchers and gift cards outside the shop (courses, tickets, memberships) through the PHP service vcap()->redemptions or the REST API /wp-json/vcap/v1/redemptions – reserve, commit, release, with idempotency keys, stable error codes and automatic release of expired reservations.
@@ -78,3 +199,11 @@ Visual PDF designer, recipient fields and custom field groups, scheduled deliver
 
 = 1.0.0 =
 * Initial release.
+
+== Upgrade Notice ==
+
+= 1.2.0 =
+All features stay free, including the new gift card top-up and multi-purpose vouchers as payment. The database is updated to version 1.8.0 – back up first.
+
+= 1.1.0 =
+Requires WooCommerce 8.9 or newer.

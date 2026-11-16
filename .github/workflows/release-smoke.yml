@@ -1,0 +1,89 @@
+name: Release smoke
+
+# Manual check of a release draft (RELEASE.md): the ZIP exactly as shipped (release tooling, Composer packages,
+# scoped vendor) installed on a throw-away shop – first over the previous published release (update path), then
+# checked by tests/release-smoke.php: the version, every feature available, no license page, no "Update URI" header
+# and no leftover license data of earlier builds.
+#
+# Run it from the Actions tab with the tag of the draft before publishing it.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag of the draft, e.g. v1.2.0
+        required: true
+        type: string
+
+permissions:
+  contents: write  # read the release draft
+  actions: read
+
+concurrency:
+  group: release-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Release smoke for ${{ inputs.tag }}
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --password=root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Set up PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, gd, mbstring, mysqli, xml, zip
+          coverage: none
+      - name: Download the ZIPs (draft and previous release) and check their SHA-256
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::Tag '$TAG' is not vX.Y.Z."; exit 1; }
+          version="${TAG#v}"
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/zips/new" "$RUNNER_TEMP/zips/previous"
+          gh release download "$TAG" --dir "$RUNNER_TEMP/zips/new" --pattern "voucher-captain.zip" --pattern "voucher-captain.zip.sha256"
+          ( cd "$RUNNER_TEMP/zips/new" && sha256sum -c voucher-captain.zip.sha256 )
+          previous="$(gh release list --exclude-drafts --exclude-pre-releases --limit 50 --json tagName --jq '.[].tagName' | grep -vxF "$TAG" \
+            | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | awk -v v="$version" '{ split($0, a, "."); split(v, b, "."); if (a[1]*1000000+a[2]*1000+a[3] < b[1]*1000000+b[2]*1000+b[3]) last=$0 } END { print last }')"
+          if [ -n "$previous" ] && gh release download "v${previous}" --dir "$RUNNER_TEMP/zips/previous" --pattern "voucher-captain.zip" --pattern "voucher-captain.zip.sha256"; then
+            ( cd "$RUNNER_TEMP/zips/previous" && sha256sum -c voucher-captain.zip.sha256 )
+            echo "PREVIOUS=${previous}" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No earlier published release with a voucher-captain.zip – only the fresh installation is checked."
+          fi
+      - name: Download WP-CLI
+        run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
+      - name: Throw-away shop with WooCommerce
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          php wp-cli.phar core download --path=wp-test --version=7.1.4
+          printf "define( 'FS_METHOD', 'direct' );\n" | php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check --extra-php
+          $WP core install --url="https://release-smoke-${GITHUB_RUN_ID}.invalid" --title="Voucher Captain release smoke" --admin_user=admin --admin_password="$(openssl rand -hex 16)" --admin_email=ci@example.test --skip-email
+          $WP plugin install woocommerce --version=11.2.2 --activate
+      - name: The draft's ZIP – over the previous release, then checked
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          T="$GITHUB_WORKSPACE/tests/release-smoke.php"
+          if [ -n "${PREVIOUS:-}" ]; then
+            $WP plugin install "$RUNNER_TEMP/zips/previous/voucher-captain.zip" --activate
+          fi
+          $WP plugin install "$RUNNER_TEMP/zips/new/voucher-captain.zip" --force --activate
+          $WP --user=admin eval-file "$T" installed "$VERSION"

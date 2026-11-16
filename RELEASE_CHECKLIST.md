@@ -2,18 +2,36 @@
 
 ## Automated checks
 
-- [ ] CI is green on PHP 8.1 and 8.4.
-- [ ] Integration matrix is green for MySQL 8.4 and MariaDB 11.4, each with HPOS and legacy order storage.
-- [ ] Composer audit, scoped PHPCS, and PHPStan checks pass.
-- [ ] Release ZIP installs and activates from a clean WordPress 7.1.4 site with WooCommerce 11.2.2.
-- [ ] Forced ZIP reinstall/update preserves plugin tables and voucher rows.
-- [ ] Default uninstall preserves plugin data; explicit `vcap_delete_on_uninstall=yes` removes plugin tables.
+Each line names the CI job (`.github/workflows/plugin-smoke.yml`) that proves it; tick it when that job is green on
+the release commit. The `Release` workflow enforces this: its job `ci-green` refuses to build a tag whose commit is
+not on `main` or has no push run of `Plugin smoke tests` in which every blocking job succeeded (RELEASE.md → Cutting a
+release).
+
+- [ ] Smoke tests and PHP lint on PHP 8.1 and 8.4; no licensing or update code in the shipped files (`tests/license-guard.php`, docs/FREE-PREMIUM.md); release ZIP reproducible (two builds, same SHA-256) – `smoke`.
+- [ ] Integration suites on MySQL 8.4 and MariaDB 11.4, each with HPOS and legacy order storage, plus parallel checkout – `wordpress-integration`.
+- [ ] Release ZIP installs, activates and updates in place (tables and voucher rows kept) on WordPress 7.1.4 / WooCommerce 11.2.2 – `wordpress-integration`.
+- [ ] Default uninstall keeps plugin data; `vcap_delete_on_uninstall=yes` removes the tables – `wordpress-integration`.
+- [ ] Oldest supported platform (WordPress 6.4, WooCommerce 8.9, PHP 8.1, no Yoast SEO) – `minimum-versions`.
+- [ ] Multisite: network activation, a site added later, per-site uninstall – `multisite`.
+- [ ] Voucher Captain + WP Pass Captain (pinned release v1.4.0, `main` – both must run – and the work branch, which may be skipped with a warning): gift cards in the ticket checkout, ticket voucher exchange, refunds, shared scanner – `pass-captain`.
+- [ ] Updates with data from the last release and from the previous schema to the current ZIP, each with rollback – `upgrade`.
+- [ ] Browser: product page, classic and block checkout (block: gift card paying after tax with payment row, balance and total, single-use voucher warning in its live region, store credit link), customer account, shortcodes, admin with Yoast SEO, axe accessibility and keyboard checks – `browser-e2e`.
+- [ ] Real gateways and currency switchers from wordpress.org next to Voucher Captain (Stripe, PayPal Payments, WOOCS, CURCY, WCML): purchase, voucher payment, refund, currency conversion, and "Multi-purpose vouchers as payment" (partial and full payment, foreign currency) – `ecosystem`.
+- [ ] Composer audit, scoped PHPCS (WordPress and WooCommerce standards) and PHPStan on the API and contracts; the release ZIP has a licence file for every bundled package, `THIRD-PARTY-NOTICES.txt` and a valid SBOM – `quality` (weekly also `dependency-audit` in `scheduled.yml`).
+- [ ] No `WordPress.Security.*` finding and no growth of the PHPCS/PHPStan findings on the whole plugin – `quality-wide` (blocking); review the report-only WordPress Plugin Check – `plugin-check` (`ci-green` prints its failures as a warning).
+- [ ] The draft has a CycloneDX SBOM of the ZIP (`voucher-captain.cdx.json`); the weekly `dependency-audit` (`scheduled.yml`: Composer, npm, OSV for jsQR and other bundled libraries) is green.
+- [ ] Newest PHP/WordPress/WooCommerce and WordPress nightly – `forward-compatibility` in `scheduled.yml` (informational; investigate failures before release).
 
 ## Manual release checks
 
-- [ ] Complete a real gateway payment, redirect return, webhook retry, and refund on the supported gateway set.
+- [ ] Release smoke green before the draft is published: the draft's ZIP installed over the previous release, every feature available, no license page, no `Update URI` header (workflow `release-smoke.yml`, RELEASE.md).
+- [ ] The vendor website publishes `/.well-known/security.txt` (RFC 9116) with the reporting channel of SECURITY.md, and SECURITY.md → Supported versions is current.
+- [ ] Complete a real gateway payment, redirect return, webhook retry, and refund on the supported gateway set. Plugin-level flows with Stripe and PayPal Payments installed are automated (CI job `ecosystem`); this check covers the provider's real sandbox/live account.
+- [ ] With WooCommerce Subscriptions (commercial, not in CI) installed: a renewal issues vouchers only when *Subscription renewals* is on, and renewal orders carry no `_vcap_*` meta.
 - [ ] Check Yoast SEO admin, checkout, and customer account pages in a browser.
 - [ ] Review keyboard and screen-reader flows for voucher purchase, balance check, account downloads, and scanner actions.
+- [ ] Approve the customer email texts in `EMAILS.md` (generated, EN/DE/AT; CI job `smoke` fails when it is out of date). Translation coverage and placeholders are checked automatically (`tests/run.php` → Translations).
+- [ ] Legal review per selling country with `LEGAL_TEXTS.md` (generated: shop settings to check, statutory validity per country, fixed plugin texts on validity, transferability, residual value, refunds; CI job `smoke` keeps it current).
 - [ ] Verify translations and customer-facing voucher expiry, transferability, residual value, and redemption terms for the store's legal policy.
 - [ ] Have the merchant's tax/accounting adviser approve voucher tax and refund treatment for each voucher type.
 
@@ -21,8 +39,9 @@
 
 | Installation | Required check | Status |
 | --- | --- | --- |
-| Voucher Captain alone | Activate, issue, deliver, redeem, refund, export/erase privacy data, uninstall | CI core coverage; real gateway/browser checks remain |
-| Ticket Captain alone | Activate and complete its normal ticket lifecycle | Run in the Ticket Captain repository |
-| Both plugins | Install/activate together; exchange a voucher/ticket through the versioned provider contract; retry and rollback | Blocked until the shared adapter is implemented and contract-tested |
+| Voucher Captain alone | Activate, issue, deliver, redeem, refund, export/erase privacy data, uninstall | CI (`wordpress-integration`, `browser-e2e`); real gateway checks remain manual |
+| WP Pass Captain alone | Activate and complete its normal ticket lifecycle | Run in the WP Pass Captain repository |
+| Both plugins | Install/activate together; pay with a gift card in the ticket checkout; exchange a ticket voucher; refunds and cancellations give vouchers back; shared scanner | CI `pass-captain` against Pass Captain `main` and the work branch |
 
-Do not advertise a Ticket Captain or Learnboating connector as supported until the corresponding external contract and combined installation pass.
+Do not advertise a Learnboating connector as supported until its external contract and the combined installation pass.
+- [ ] Screen reader listening test (NVDA + VoiceOver) with the protocol in `ACCESSIBILITY.md`; the accessibility tree is checked automatically in `browser-e2e`.

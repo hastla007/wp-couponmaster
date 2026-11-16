@@ -19,6 +19,7 @@ final class Placeholders {
 			'coupon_value_plain'=> __( 'Voucher value (number)', 'voucher-captain' ),
 			'coupon_balance'    => __( 'Remaining balance', 'voucher-captain' ),
 			'expiry_date'       => __( 'Expiry date', 'voucher-captain' ),
+			'expiry_line'       => __( 'Validity line ("Valid until …" or "Valid indefinitely")', 'voucher-captain' ),
 			'issue_date'        => __( 'Issue date', 'voucher-captain' ),
 			'voucher_type'      => __( 'Voucher type', 'voucher-captain' ),
 			'product_name'      => __( 'Product name', 'voucher-captain' ),
@@ -27,7 +28,9 @@ final class Placeholders {
 			'product_short_description' => __( 'Product short description', 'voucher-captain' ),
 			'buyer_name'        => __( 'Buyer name', 'voucher-captain' ),
 			'buyer_email'       => __( 'Buyer email', 'voucher-captain' ),
+			'sender_name'       => __( 'Sender name ("From" field, else buyer name)', 'voucher-captain' ),
 			'recipient_name'    => __( 'Recipient name', 'voucher-captain' ),
+			'holder_name'       => __( 'Holder name (recipient, else buyer)', 'voucher-captain' ),
 			'recipient_email'   => __( 'Recipient email', 'voucher-captain' ),
 			'message'           => __( 'Personal message', 'voucher-captain' ),
 			'delivery_date'     => __( 'Delivery date', 'voucher-captain' ),
@@ -39,6 +42,8 @@ final class Placeholders {
 			'ticket_admissions' => __( 'Admissions per ticket', 'voucher-captain' ),
 			'site_name'         => __( 'Site name', 'voucher-captain' ),
 			'site_url'          => __( 'Site URL', 'voucher-captain' ),
+			'redeem_url'        => __( 'Redeem page link with the code', 'voucher-captain' ),
+			'redeem_instructions' => __( 'How to redeem (from the redemption channels)', 'voucher-captain' ),
 			'redemption_terms'  => __( 'Redemption conditions', 'voucher-captain' ),
 			'transferable'      => __( 'Transferability', 'voucher-captain' ),
 		);
@@ -59,6 +64,20 @@ final class Placeholders {
 	}
 
 	/**
+	 * A date entered in the shop's local time ("2026-12-24", or "2026-12-24T19:00" from a datetime-local field such
+	 * as the event date) in the voucher date format, with the time format when it has a time of day. It stays the
+	 * wall-clock time that was entered (LocalDate, not strtotime() as UTC). Other text is returned unchanged.
+	 */
+	public static function local_date( string $value ): string {
+		$value = trim( $value );
+		if ( '' === $value ) {
+			return '';
+		}
+		$formatted = LocalDate::format( $value, vcap()->settings->date_format(), (string) get_option( 'time_format', 'H:i' ) );
+		return '' !== $formatted ? $formatted : $value;
+	}
+
+	/**
 	 * @return array<string,string> token (without braces) => value
 	 */
 	public static function values( Voucher $voucher ): array {
@@ -67,15 +86,15 @@ final class Placeholders {
 		$config  = $product ? ProductConfig::get( $product ) : ProductConfig::DEFAULTS;
 
 		$value = 'percent' === $voucher->discount_type
-			? wc_format_localized_decimal( $voucher->initial_amount ) . '%'
+			? Format::percent( $voucher->initial_amount )
 			: self::money( $voucher->initial_amount, $voucher->currency );
 
-		$delivery = $voucher->delivery_at ? self::date( $voucher->delivery_at ) : ( $voucher->field( 'delivery_date' ) ? wp_date( vcap()->settings->date_format(), strtotime( $voucher->field( 'delivery_date' ) ) ) : '' );
+		// The date the voucher is (or was) really delivered: its delivery date, else – when the customer entered a
+		// date that was not in the future – the day it went out. Never a date that was not used.
+		$delivery = $voucher->delivery_at ? self::date( $voucher->delivery_at ) : ( $voucher->field( 'delivery_date' ) ? self::date( $voucher->delivered_at ?: ( $voucher->created_at ?: gmdate( 'Y-m-d H:i:s' ) ) ) : '' );
 
-		$event_date = (string) $config['event_date'];
-		if ( $event_date && strtotime( $event_date ) ) {
-			$event_date = wp_date( vcap()->settings->date_format() . ( str_contains( $event_date, ':' ) ? ' ' . get_option( 'time_format' ) : '' ), strtotime( $event_date ), wp_timezone() );
-		}
+		$event_date = self::local_date( (string) $config['event_date'] );
+		$buyer      = '' !== trim( $voucher->buyer_name ) ? trim( $voucher->buyer_name ) : ( $order ? trim( $order->get_formatted_billing_full_name() ) : '' );
 
 		$values = array(
 			'coupon_code'       => $voucher->code,
@@ -83,15 +102,22 @@ final class Placeholders {
 			'coupon_value_plain'=> wc_format_localized_decimal( $voucher->initial_amount ),
 			'coupon_balance'    => 'percent' === $voucher->discount_type ? $value : self::money( $voucher->balance, $voucher->currency ),
 			'expiry_date'       => $voucher->expires_at ? self::date( $voucher->expires_at ) : __( 'unlimited', 'voucher-captain' ),
+			/* translators: %s: date */
+			'expiry_line'       => $voucher->expires_at ? sprintf( __( 'Valid until %s', 'voucher-captain' ), self::date( $voucher->expires_at ) ) : __( 'Valid indefinitely', 'voucher-captain' ),
 			'issue_date'        => self::date( $voucher->created_at ?: gmdate( 'Y-m-d H:i:s' ) ),
 			'voucher_type'      => Voucher::types()[ $voucher->type ] ?? $voucher->type,
 			'product_name'      => $product ? $product->get_name() : '',
 			'product_price'     => $product ? self::money( (float) wc_get_price_to_display( $product ), get_woocommerce_currency() ) : '',
 			'product_sku'       => $product ? (string) $product->get_sku() : '',
 			'product_short_description' => $product ? wp_strip_all_tags( (string) ( $product->get_short_description() ?: ( $product->is_type( 'variation' ) ? $product->get_description() : '' ) ) ) : '',
-			'buyer_name'        => $voucher->buyer_name,
+			// Vouchers created before names were stored (or by hand) fall back to the order's billing name.
+			'buyer_name'        => $buyer,
 			'buyer_email'       => $voucher->buyer_email,
-			'recipient_name'    => $voucher->recipient_name ?: $voucher->buyer_name,
+			// M12-55: the giver's name as entered in the "From" field, else the buyer (billing) name.
+			'sender_name'       => '' !== trim( $voucher->field( 'sender_name' ) ) ? trim( $voucher->field( 'sender_name' ) ) : $buyer,
+			// Only the recipient's own name (a gift without one is not "For: <the buyer>"); {holder_name} falls back.
+			'recipient_name'    => trim( $voucher->recipient_name ),
+			'holder_name'       => '' !== trim( $voucher->recipient_name ) ? trim( $voucher->recipient_name ) : $buyer,
 			'recipient_email'   => $voucher->recipient_email,
 			'message'           => $voucher->message,
 			'delivery_date'     => $delivery,
@@ -103,6 +129,8 @@ final class Placeholders {
 			'ticket_admissions' => (string) $voucher->max_checkins,
 			'site_name'         => wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ),
 			'site_url'          => home_url( '/' ),
+			'redeem_url'        => $voucher->code ? Shortcodes::redeem_url( $voucher->code ) : '',
+			'redeem_instructions' => Channels::instructions( $voucher ),
 			'redemption_terms'  => '' !== $voucher->terms ? $voucher->terms : ProductConfig::terms( $config ),
 			'transferable'      => $voucher->transferable_label(),
 		);
@@ -126,11 +154,48 @@ final class Placeholders {
 		return (string) $text;
 	}
 
+	/**
+	 * Whether every placeholder in $text is empty for this voucher (false for a text without placeholders), e.g.
+	 * "For: {recipient_name}" of a gift without a recipient name: the PDF leaves such an element out.
+	 */
+	public static function all_empty( string $text, Voucher $voucher, ?array $values = null ): bool {
+		if ( ! preg_match_all( '/\{[a-z0-9_]+(?::[^}]+)?\}/i', $text, $m ) ) {
+			return false;
+		}
+		$values = $values ?? self::values( $voucher );
+		foreach ( array_unique( $m[0] ) as $token ) {
+			if ( '' !== trim( self::replace( $token, $voucher, $values ) ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * M12-77: a PDF text without the lines that show {expiry_date} when the voucher has no expiry, so a template
+	 * line "Valid until {expiry_date}" is left out instead of printing "Valid until unlimited".
+	 */
+	public static function drop_undated_lines( string $text, Voucher $voucher ): string {
+		if ( $voucher->expires_at || false === stripos( $text, '{expiry_date}' ) ) {
+			return $text;
+		}
+		$lines = array_filter( (array) preg_split( '/\r\n|\r|\n/', $text ), static fn( $line ) => false === stripos( (string) $line, '{expiry_date}' ) );
+		return implode( "\n", $lines );
+	}
+
 	private static function dynamic( string $token, ?string $arg, Voucher $voucher, string $original ): string {
 		$order = $voucher->order();
 		switch ( $token ) {
 			case 'field':
 				return $voucher->field( (string) $arg );
+			case 'link':
+				// M12-74: {link:wallet} – the URL of the voucher link with this id from "vcap_voucher_links".
+				foreach ( Downloads::voucher_links( $voucher, 'placeholder' ) as $link ) {
+					if ( isset( $link['id'] ) && 0 === strcasecmp( $link['id'], (string) $arg ) ) {
+						return $link['url'];
+					}
+				}
+				return '';
 			case 'item_meta':
 				if ( $order && $voucher->order_item_id ) {
 					$item = $order->get_item( $voucher->order_item_id );

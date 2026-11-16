@@ -45,4 +45,32 @@ async function addVoucherToCart( page, recipient ) {
 	await expect( page.getByText( /has been added to your cart/i ).first() ).toBeVisible();
 }
 
-module.exports = { state, expectAccessible, trackPluginErrors, login, addVoucherToCart };
+/**
+ * Empties the cart of the current visitor (items and codes) through the Store API, so a test – and its retry –
+ * starts from an empty cart (a logged-in customer's cart persists across tests).
+ */
+async function emptyCart( page ) {
+	const cart = await page.request.get( '/wp-json/wc/store/v1/cart' );
+	const headers = { Nonce: cart.headers().nonce || '' };
+	if ( cart.headers()[ 'cart-token' ] ) {
+		headers[ 'Cart-Token' ] = cart.headers()[ 'cart-token' ];
+	}
+	const items = await page.request.delete( '/wp-json/wc/store/v1/cart/items', { headers } );
+	const coupons = await page.request.delete( '/wp-json/wc/store/v1/cart/coupons', { headers } );
+	expect( items.ok() && coupons.ok(), 'the cart is emptied before the test' ).toBeTruthy();
+}
+
+/**
+ * A voucher code of its own for this test attempt (tests/e2e/setup.php creates a few per pool): a retry after a
+ * failure never meets a card the failed attempt already charged.
+ */
+function freshCode( pool, testInfo ) {
+	const codes = state()[ pool ] || [];
+	const code = codes[ testInfo.retry ];
+	if ( ! code ) {
+		throw new Error( `no unused code left in pool "${ pool }" (attempt ${ testInfo.retry + 1 })` );
+	}
+	return code;
+}
+
+module.exports = { state, expectAccessible, trackPluginErrors, login, addVoucherToCart, emptyCart, freshCode };
