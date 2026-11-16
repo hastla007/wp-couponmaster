@@ -317,6 +317,14 @@ jobs:
           $WP eval-file "$T" site-a
           $WP --url=http://localhost/before/ eval-file "$T" site-b
           $WP eval-file "$T" verify
+      - name: Workflow instance, voucher requests and review records stay per site
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          T="$GITHUB_WORKSPACE/tests/multisite-data-integration.php"
+          $WP eval-file "$T" record
+          $WP --url=http://localhost/before/ eval-file "$T" record
+          $WP --url=http://localhost/after/ eval-file "$T" record
+          $WP eval-file "$T" verify
       - name: Network uninstall deletes data only on sites that opted in
         run: |
           WP="php wp-cli.phar --path=wp-test"
@@ -332,6 +340,9 @@ jobs:
           test "$($WP eval "$has")" = "kept"
           test "$($WP --url=http://localhost/before/ eval "$has")" = "kept"
           test "$($WP --url=http://localhost/after/ eval "$has")" = "deleted"
+          requests='echo (int) ( new WP_Query( array( "post_type" => "vcap_request", "post_status" => "any", "fields" => "ids", "posts_per_page" => -1 ) ) )->found_posts;'
+          test "$($WP eval "$requests")" != "0"
+          test "$($WP --url=http://localhost/after/ eval "$requests")" = "0"
 
   upgrade:
     # Updates as shops get them (COMPATIBILITY.md → Updates, RELEASE.md → Rollback), each with data, followed by a
