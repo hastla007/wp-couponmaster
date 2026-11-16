@@ -182,6 +182,8 @@ final class RestController {
 	/**
 	 * Keys used by built-in integrations (Pass Captain checkout "wpcap-…", ticket vouchers "passcaptain:…").
 	 * Connectors add their own prefixes with the filter vcap_internal_redemption_key_prefixes.
+	 * "learnboating:grant:" stays in the default list for the project connector 1.0.0, which does not
+	 * register it; from 1.1.0 on the connector registers its prefixes itself (CONNECTORS.md §8).
 	 *
 	 * @param string $key Redemption key.
 	 * @return bool

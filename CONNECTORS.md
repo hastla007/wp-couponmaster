@@ -131,3 +131,13 @@ Voucher Captain does not know what a customer owns in another plugin. Use the ex
 - [ ] Server-side key prefixes registered with `vcap_internal_redemption_key_prefixes`; customer target prefixes (`vcap_rest_redemption_target_prefixes`) only where customers redeem in the browser; voucher and target bound completely in `vcap_redemption_allowed`
 - [ ] Listeners of `vcap_voucher_event` & co. expect to run after the COMMIT; `vcap_redemption_allowed` / `_target_available` stay fast and local (see *Event timing*)
 - [ ] Two-plugin integration test (Voucher Captain + connector) in CI, including a forced outage
+
+## 8. Project connectors (customer-specific plugins)
+
+A connector written for one customer project (today: the LearnBoating course vouchers) is a plugin of its own. It lives in the repository of that project, not in Voucher Captain and not in a premium add-on, and is installed separately. The shop owner decides its license; it may be proprietary.
+
+- It uses only the public contract above: `vcap()->redemptions` (API v1), `vcap_redemption_providers`, the channel, type and target filters and the hooks in [docs/HOOKS.md](docs/HOOKS.md). It never reads Voucher Captain's tables or private meta, and it needs no premium add-on.
+- Voucher Captain carries no project code. A project connector registers its internal key and target prefixes itself (`vcap_internal_redemption_key_prefixes`, `vcap_internal_redemption_target_prefixes`, §2 S21), whether or not its license is active. The one leftover, `learnboating:grant:` in the default key prefixes, stays for the LearnBoating connector 1.0.0, which predates this rule; v1 only adds, so it is not removed.
+- If the project licenses its connector, the license code is in the connector, never in Voucher Captain (rule 5 of the WordPress.org guidelines; `tests/license-guard.php`).
+- Release it like any connector (§7), with its own two-plugin integration test in the CI of its repository.
+
