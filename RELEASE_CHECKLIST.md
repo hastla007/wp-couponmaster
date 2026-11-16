@@ -46,3 +46,18 @@ release).
 
 Do not advertise a Learnboating connector as supported until its external contract and the combined installation pass.
 - [ ] Screen reader listening test (NVDA + VoiceOver) with the protocol in `ACCESSIBILITY.md`; the accessibility tree is checked automatically in `browser-e2e`.
+
+## Plugin Check warnings (state 16.11.2026: 0 errors, 199 warnings)
+
+Checked one by one before the WordPress.org submission (A9). None is a security defect; they are listed so the review answers are ready.
+
+| Count | Code | Assessment |
+| --- | --- | --- |
+| 125 | `PluginCheck.Security.DirectDB.UnescapedDBParameter` | The plugin's own table names (`Install::tables()`, built from `$wpdb->prefix` and constants) in SQL strings; values always go through placeholders. Planned: identifier placeholder `%i` (WordPress ≥ 6.2, minimum is 6.4) so the warning disappears. |
+| 21 | `WordPress.DB.PreparedSQL.InterpolatedNotPrepared` | Same cause (table names, placeholder lists built from `array_fill()`), each line carries a `phpcs:ignore` with the reason. |
+| 18 | `PrefixAllGlobals.NonPrefixedVariableFound` | Variables in `templates/`: their names are the documented template API for theme overrides (`{theme}/voucher-captain/`), renaming would break overrides. |
+| 15 + 2 | `PrefixAllGlobals.NonPrefixedHooknameFound` / `DynamicHooknameFound` | WooCommerce and WordPress hooks the plugin fires on purpose for compatibility (e.g. `woocommerce_*` in templates); own hooks all start with `vcap_`. |
+| 6 + 2 | `PreparedSQLPlaceholders.ReplacementsWrongNumber` / `UnfinishedPrepare` | Placeholder lists built at run time (`IN (%s, %s …)`), checked by the integration tests. |
+| 6 | `DirectDatabaseQuery.*` | Own tables without a WordPress API; caching is done in the repository classes where it matters. |
+| 1 | `load_plugin_textdomainFound` | The plugin ships its own de_DE/de_AT translations; harmless once translate.wordpress.org serves them. |
+| 1 each | `PostNotIn_exclude`, `DiscouragedFunctions`, `NonPrefixedConstantFound` | Admin-only lists with a small exclusion set; reviewed, no change needed. |
