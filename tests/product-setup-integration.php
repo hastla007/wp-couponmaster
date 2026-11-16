@@ -85,6 +85,29 @@ $ranged->update_meta_data( '_vcap_custom_min', '300' );
 $ranged->save();
 vcap_ps_assert( count( CustomAmount::config_errors( ProductConfig::get( wc_get_product( $ranged->get_id() ) ) ) ) >= 1 && 'error' === ( ProductChecks::problems( wc_get_product( $ranged->get_id() ) )[0]['level'] ?? '' ), 'minimum above maximum is an error on the product screen' );
 
+// S4: the chosen amount is never worth more than was paid for the line (price filter, switcher, third-party discount).
+function vcap_ps_custom_order( WC_Product $product, float $paid, string $entered, string $currency = '' ): array {
+	$order   = wc_create_order();
+	$item_id = $order->add_product( $product, 1, array( 'subtotal' => $paid, 'total' => $paid ) );
+	$item    = $order->get_item( $item_id );
+	$item->update_meta_data( '_vcap_custom_amount', (float) $entered );
+	if ( '' !== $currency ) {
+		$item->update_meta_data( CustomAmount::CURRENCY_META, $currency );
+	}
+	$item->save();
+	$order->set_billing_email( 'ps-s4@example.com' );
+	$order->calculate_totals( false );
+	$order->payment_complete( 'txn-ps-s4-' . wp_generate_password( 6, false, false ) );
+	return array( wc_get_order( $order->get_id() ), vcap()->vouchers->for_order( $order->get_id() ) );
+}
+list( $s4_order, $s4_vouchers ) = vcap_ps_custom_order( $free, 30.0, '50' );
+$s4_notes = implode( ' ', array_map( static fn( $n ) => $n->content, wc_get_order_notes( array( 'order_id' => $s4_order->get_id() ) ) ) );
+vcap_ps_assert( 1 === count( $s4_vouchers ) && 30.0 === round( (float) $s4_vouchers[0]->initial_amount, 2 ) && str_contains( $s4_notes, 'does not match the amount paid' ), 'S4: a chosen amount of 50 paid with 30 issues a voucher worth 30 and notes it', array( $s4_vouchers ? $s4_vouchers[0]->initial_amount : null, $s4_notes ) );
+list( , $s4_ok ) = vcap_ps_custom_order( $free, 25.0, '25', get_woocommerce_currency() );
+vcap_ps_assert( 1 === count( $s4_ok ) && 25.0 === round( (float) $s4_ok[0]->initial_amount, 2 ), 'S4: a chosen amount that was paid in full is the face value', $s4_ok ? $s4_ok[0]->initial_amount : null );
+list( , $s4_fx ) = vcap_ps_custom_order( $free, 20.0, '25', 'XTS' === get_woocommerce_currency() ? 'XXX' : 'XTS' );
+vcap_ps_assert( 1 === count( $s4_fx ) && 20.0 === round( (float) $s4_fx[0]->initial_amount, 2 ), 'S4: an amount entered in another currency than the order counts as the amount paid', $s4_fx ? $s4_fx[0]->initial_amount : null );
+
 /* ---- 2. Fixed expiry date --------------------------------------------------------------------------------- */
 
 $yesterday = wp_date( 'Y-m-d', time() - 2 * DAY_IN_SECONDS );

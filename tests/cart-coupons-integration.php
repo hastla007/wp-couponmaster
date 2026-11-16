@@ -343,6 +343,7 @@ vcap_cc_assert( $none->is_error() && 400 === $none->get_status() && 0 === count(
 $typed = vcap_cc_store_add( $any->get_id(), array( 'vcap_amount' => '30' ) );
 $items = array_values( WC()->cart->get_cart() );
 vcap_cc_assert( ! $typed->is_error() && 1 === count( $items ) && 30.0 === (float) ( $items[0]['vcap_amount'] ?? 0 ), 'M12-20: the typed amount "vcap_amount" is taken into the cart line', $typed->is_error() ? $typed->get_data() : $items[0]['vcap_amount'] ?? null );
+vcap_cc_assert( get_woocommerce_currency() === ( $items[0]['vcap_currency'] ?? '' ), 'S4: the cart line keeps the currency the amount was entered in', $items[0] ?? null );
 $preset = vcap_cc_store_add( $any->get_id(), array( 'vcap_amount_preset' => '50' ) );
 $amounts = array_map( static fn( $item ) => (float) ( $item['vcap_amount'] ?? 0 ), array_values( WC()->cart->get_cart() ) );
 sort( $amounts );

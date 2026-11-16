@@ -385,7 +385,9 @@ final class TopUp {
 			(float) $item->get_subtotal_tax(),
 			function_exists( 'wc_prices_include_tax' ) && wc_prices_include_tax(),
 			(string) $item->get_meta( '_vcap_custom_amount' ),
-			$treatment
+			$treatment,
+			(string) $item->get_meta( CustomAmount::CURRENCY_META ),
+			(string) $order->get_currency()
 		);
 		$base = $in_base ? $value : Compat\MultiCurrency::to_base( $value, (string) $order->get_currency(), $order );
 		if ( null === $base ) {
@@ -525,16 +527,18 @@ final class TopUp {
 	 * @param string $treatment VAT treatment of the top-up line (Issuer::line_treatment()).
 	 * @return array{0: float, 1: bool} value, whether it is in the base currency already
 	 */
-	public static function line_value( array $config, int $qty, float $subtotal, float $subtotal_tax, bool $prices_include_tax, string $custom = '', string $treatment = 'payment' ): array {
+	public static function line_value( array $config, int $qty, float $subtotal, float $subtotal_tax, bool $prices_include_tax, string $custom = '', string $treatment = 'payment', string $custom_currency = '', string $order_currency = '' ): array {
 		$qty   = max( 1, $qty );
 		$units = $qty * max( 1, (int) ( $config['per_item'] ?? 1 ) );
 		if ( 'fixed' === ( $config['amount_source'] ?? '' ) ) {
 			return array( (float) wc_format_decimal( (string) ( $config['amount'] ?? 0 ) ) * $units, true );
 		}
+		$paid = $subtotal + ( $prices_include_tax ? $subtotal_tax : 0.0 );
 		if ( 'custom' === ( $config['amount_source'] ?? '' ) && '' !== $custom ) {
-			$value = (float) $custom * $units;
+			// S4: never more than was paid, and only in the currency the amount was entered in (like a new gift card).
+			$value = Issuer::custom_face_value( $custom, $custom_currency, $order_currency, $paid / $units, wc_get_price_decimals() )[0] * $units;
 		} else {
-			$value = $subtotal + ( $prices_include_tax ? $subtotal_tax : 0.0 );
+			$value = $paid;
 		}
 		// A top-up always adds to a stored balance.
 		return array( Issuer::sold_with_vat_value( $value, array_merge( $config, array( 'usage' => 'balance' ) ), $subtotal, $subtotal_tax, $treatment, $prices_include_tax ), false );

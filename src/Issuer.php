@@ -723,8 +723,17 @@ final class Issuer {
 				$amount = (float) wc_format_decimal( $config['amount'] );
 				break;
 			case 'custom':
-				$custom = $item->get_meta( '_vcap_custom_amount' );
-				$amount = '' !== (string) $custom ? (float) $custom : $paid / $qty;
+				// S4: the entered amount, never more than was paid per voucher, and only in the currency it was entered in.
+				list( $amount, $capped ) = self::custom_face_value(
+					(string) $item->get_meta( '_vcap_custom_amount' ),
+					(string) $item->get_meta( CustomAmount::CURRENCY_META ),
+					(string) $order->get_currency(),
+					$paid / $qty / max( 1, (int) $config['per_item'] ),
+					API\V1\RedemptionService::decimals( (string) $order->get_currency() )
+				);
+				if ( $capped ) {
+					$this->note_custom_capped( $order, $item, $amount );
+				}
 				break;
 			default:
 				$amount = $paid / $qty / max( 1, (int) $config['per_item'] );
@@ -739,6 +748,49 @@ final class Issuer {
 		}
 		// Vouchers are kept in the shop base currency, booked with its ISO 4217 decimals.
 		return round( (float) apply_filters( 'vcap_voucher_amount', $amount, $item, $config, $order ), API\V1\RedemptionService::decimals( (string) get_option( 'woocommerce_currency' ) ) );
+	}
+
+	/** Marks a line whose entered amount was limited to the amount paid (the order note is written once). */
+	public const CUSTOM_CAPPED_META = '_vcap_custom_amount_capped';
+
+	/**
+	 * S4: face value of a customer-chosen amount, in the order currency, and whether it was limited. The entered
+	 * amount counts only up to what was paid per voucher (a currency switcher that converts the price, a third-party
+	 * discount or a price filter must never make the voucher worth more than its payment), and only when it was
+	 * entered in the order currency (else the amount paid counts). Lines without an entered amount use the amount paid.
+	 *
+	 * @return array{0: float, 1: bool} Face value and whether the entered amount was limited.
+	 */
+	public static function custom_face_value( string $custom, string $custom_currency, string $order_currency, float $paid_per_voucher, int $decimals ): array {
+		$paid_per_voucher = max( 0.0, $paid_per_voucher );
+		if ( '' === trim( $custom ) ) {
+			return array( $paid_per_voucher, false );
+		}
+		if ( '' !== $custom_currency && '' !== $order_currency && strtoupper( $custom_currency ) !== strtoupper( $order_currency ) ) {
+			return array( $paid_per_voucher, true ); // Entered in another currency than the order was paid in.
+		}
+		$entered = (float) $custom;
+		if ( $entered > $paid_per_voucher + 0.5 * 10 ** -max( 0, $decimals ) ) {
+			return array( $paid_per_voucher, true );
+		}
+		return array( $entered, false );
+	}
+
+	private function note_custom_capped( \WC_Order $order, \WC_Order_Item_Product $item, float $amount ): void {
+		if ( 'yes' === $item->get_meta( self::CUSTOM_CAPPED_META ) ) {
+			return;
+		}
+		$item->update_meta_data( self::CUSTOM_CAPPED_META, 'yes' );
+		$item->save_meta_data();
+		$order->add_order_note(
+			sprintf(
+				/* translators: 1: product name, 2: amount entered, 3: face value used */
+				__( 'The voucher amount chosen for "%1$s" (%2$s) does not match the amount paid for it; the voucher is issued with the amount paid per voucher (%3$s).', 'voucher-captain' ),
+				wp_strip_all_tags( $item->get_name() ),
+				wp_strip_all_tags( wc_price( (float) $item->get_meta( '_vcap_custom_amount' ), array( 'currency' => (string) ( $item->get_meta( CustomAmount::CURRENCY_META ) ?: $order->get_currency() ) ) ) ),
+				wp_strip_all_tags( wc_price( $amount, array( 'currency' => $order->get_currency() ) ) )
+			)
+		);
 	}
 
 	/**
