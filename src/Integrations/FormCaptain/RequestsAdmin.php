@@ -63,6 +63,21 @@ final class RequestsAdmin {
 	}
 
 	/**
+	 * VC-FC-06: notice while the request service of Voucher Captain cannot forget single entries.
+	 */
+	public static function forget_notice(): void {
+		if ( false === get_option( RequestService::FORGET_UNSUPPORTED_OPTION, false ) || ! class_exists( Menu::class ) || ! current_user_can( self::cap() ) ) {
+			return;
+		}
+		$core = RequestService::core_service();
+		if ( null === $core || method_exists( $core, 'forget_reference' ) ) {
+			delete_option( RequestService::FORGET_UNSUPPORTED_OPTION ); // Service gone or updated: nothing to warn about.
+			return;
+		}
+		echo '<div class="notice notice-warning"><p>' . esc_html__( 'Voucher Captain: the voucher request service cannot delete a request when a single Form Captain entry is deleted or its consent withdrawn (forget_reference() missing). Data protection requests are still handled by the eraser of the service.', 'voucher-captain' ) . '</p></div>';
+	}
+
+	/**
 	 * Status labels.
 	 *
 	 * @return array<string, string>

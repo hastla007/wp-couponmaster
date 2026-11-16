@@ -157,6 +157,52 @@ final class RequestService {
 		return 1 === (int) $service->contract() ? $service : null;
 	}
 
+	/** Option set once when the request service cannot forget a single entry (no forget_reference()). */
+	public const FORGET_UNSUPPORTED_OPTION = 'vcap_fc_forget_unsupported';
+
+	/**
+	 * Reference of a Form Captain entry in the request service: site hash, form and entry.
+	 *
+	 * @param int $form_id  Form id.
+	 * @param int $entry_id Entry id.
+	 */
+	public static function reference( int $form_id, int $entry_id ): string {
+		return 'formcaptain:' . substr( md5( (string) home_url() ), 0, 8 ) . ':' . $form_id . ':' . $entry_id;
+	}
+
+	/**
+	 * VC-FC-06: entry deleted or consent withdrawn in Form Captain – the request service forgets the request of the
+	 * entry with forget_reference() (contract: ADAPTERS.md 7.1; no capability, runs from cron and retention). A service
+	 * without that method is left alone; the first time this is logged once and shown to managers, because then single
+	 * entries cannot be erased there (data protection requests go through the eraser of the service).
+	 *
+	 * @param int $form_id  Form id.
+	 * @param int $entry_id Entry id.
+	 * @return bool|\WP_Error|null Answer of forget_reference(); null without service or method.
+	 */
+	public static function forget_in_core( int $form_id, int $entry_id ) {
+		$core = self::core_service();
+		if ( null === $core ) {
+			return null;
+		}
+		if ( ! method_exists( $core, 'forget_reference' ) ) {
+			if ( add_option( self::FORGET_UNSUPPORTED_OPTION, gmdate( 'Y-m-d H:i:s' ), '', false ) ) {
+				$text = 'Voucher Captain: request service without forget_reference() - requests cannot be deleted per Form Captain entry; data protection requests go through the eraser of the service.';
+				if ( function_exists( 'wc_get_logger' ) ) {
+					wc_get_logger()->warning( $text, array( 'source' => 'voucher-captain' ) );
+				} else {
+					error_log( $text ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- logged once.
+				}
+			}
+			return null;
+		}
+		try {
+			return $core->forget_reference( self::reference( $form_id, $entry_id ) );
+		} catch ( \Throwable $e ) {
+			return new \WP_Error( 'vcap_fc_forget_failed', 'The request service could not forget the request.' );
+		}
+	}
+
 	/**
 	 * Hands a checked request to the service of Voucher Captain. Idempotent by the reference of the entry.
 	 *
@@ -167,11 +213,10 @@ final class RequestService {
 	 * @return array{status:string, code:string, message:string, remote_id?:string}
 	 */
 	private static function hand_over( object $core, array $clean, int $form_id, int $entry_id ): array {
-		$site   = substr( md5( (string) home_url() ), 0, 8 );
 		$answer = $core->submit(
 			array(
 				'contract'   => '1.0.0',
-				'reference'  => 'formcaptain:' . $site . ':' . $form_id . ':' . $entry_id,
+				'reference'  => self::reference( $form_id, $entry_id ),
 				'kind'       => '' === $clean['company'] && '' !== $clean['personalization'] ? 'personalisation' : 'company_order',
 				'product_id' => (int) $clean['product_id'],
 				'amount'     => (string) $clean['value'],

@@ -109,7 +109,20 @@ When Voucher Captain provides the request service `vcap_voucher_request_service_
 
 Without the service (Voucher Captain versions before it) the adapter keeps using its own table `vcap_fc_requests` and screen as described above.
 
-Erasure with the service: data protection requests are handled by the service's own exporter/eraser (by e-mail address, run by WordPress together with Form Captain's), its retention removes open requests after 6 months. Deleting the request when a single Form Captain entry is deleted or its consent is withdrawn needs a method of the service that works without a logged-in user (`reject()` checks a capability); proposed as `forget_reference( string $reference )`.
+Erasure with the service: data protection requests are handled by the service's own exporter/eraser (by e-mail address, run by WordPress together with Form Captain's), its retention removes open requests after 6 months. Single entries (VC-FC-06): on `form_captain_entry_deleted_v1` and `form_captain_consent_withdrawn_v1` the adapter calls `forget_reference( $reference )` of the service with the reference of the hand-over (and still cleans its fallback table). A service without that method is left alone; this is logged once and shown to managers as an admin notice ("request service without forget_reference – deletion per entry not possible, data protection through the service's eraser").
 
-Test: `tests/form-captain-request-service.php` (14 checks, fake service with the interface of the real one).
+**Contract `forget_reference( string $reference ): bool|\WP_Error`** (service contract 1.x, additive):
+
+| Rule | |
+|---|---|
+| Caller | Runs **without a capability check** – it is called from WP-Cron, retention or WP-CLI of the form plugin. Never exposed to visitors (no REST route, no AJAX). |
+| Open request | Deleted with its data. |
+| Partly issued, issued, handed over | Anonymised: contact name, e-mail, phone, recipients, message and note are removed; company, amounts, counts and the issued vouchers stay (voucher ledger). |
+| Claim | The claim of the reference is set to "rejected" (with UTC time) **before** the request goes, so a repeated `submit()` with the same reference stores nothing new and answers `state = rejected`. The retention removes old rejected claims. |
+| Event | Fires `vcap_voucher_request_forgotten( int $request_id, string $result )` with `deleted`, `anonymized` or `none` (request id 0); no personal data. |
+| Answer | `true` when a request was deleted or anonymised, `false` when none was stored for the reference, `WP_Error` (`vcap_invalid_args`, 400) for an empty reference. Repeating the call is harmless. |
+
+A ready implementation for `VCAP\Integrations\VoucherRequests` (branch `claude/wp-plugin-analyse-todo-hvollo-refactors`, at `c216dd1`) is in [`docs/patches/voucher-requests-forget-reference.patch`](docs/patches/voucher-requests-forget-reference.patch) (`git apply` there).
+
+Test: `tests/form-captain-request-service.php` (22 checks, fake services with the interface of the real one, with and without `forget_reference()`).
 

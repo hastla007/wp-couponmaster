@@ -43,6 +43,7 @@ final class Bootstrap {
 		}
 		if ( is_admin() && ! has_action( 'admin_menu', array( RequestsAdmin::class, 'menu' ) ) ) {
 			RequestsAdmin::register();
+			add_action( 'admin_notices', array( RequestsAdmin::class, 'forget_notice' ) );
 		}
 	}
 
@@ -109,6 +110,7 @@ final class Bootstrap {
 	 */
 	public static function entry_deleted( $entry_id, $form_id = 0, $reason = '' ): void {
 		unset( $reason );
+		RequestService::forget_in_core( (int) $form_id, (int) $entry_id );
 		if ( RequestRepository::ready() ) {
 			self::service()->entry_deleted( (int) $entry_id, (int) $form_id );
 		}
@@ -123,6 +125,7 @@ final class Bootstrap {
 	 */
 	public static function consent_withdrawn( $entry_id, $form_id = 0, $source = '' ): void {
 		unset( $source );
+		RequestService::forget_in_core( (int) $form_id, (int) $entry_id );
 		if ( RequestRepository::ready() ) {
 			self::service()->consent_withdrawn( (int) $entry_id, (int) $form_id );
 		}
