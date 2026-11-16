@@ -349,7 +349,9 @@ update_option( VCAP\DatevExport::OPTION_CLEARING, '1360' );
 update_option( VCAP\DatevExport::OPTION_INCOME, '2700' );
 vcap_ta_assert( VCAP\DatevExport::configured(), 'M12-69: the DATEV export is ready once numbers and accounts are set' );
 $datev = iterator_to_array( VCAP\DatevExport::lines( new Ledger( vcap()->vouchers ), $today, $today ), false );
-$found = array_filter( $datev, static fn( $l ) => isset( $l[13] ) && false !== strpos( (string) $l[13], 'Expired' ) );
+// The expiry of this suite's voucher (earlier suites may have let other vouchers expire today as well).
+$expiring_mask = VCAP\Mask::code( (string) $expiring->code );
+$found         = array_filter( $datev, static fn( $l ) => isset( $l[13] ) && false !== strpos( (string) $l[13], 'Expired' ) && false !== strpos( (string) $l[13], $expiring_mask ) );
 $first = current( $found );
 vcap_ta_assert( 'EXTF' === $datev[0][0] && 21 === $datev[0][2] && 'Buchungsstapel' === $datev[0][3] && VCAP\DatevExport::COLUMNS === $datev[1] && $first && '40,00' === $first[0] && '3272' === $first[6] && '2700' === $first[7], 'M12-69: EXTF booking batch: header, columns, an expiry booked from the liability to the income account', array_slice( $datev, 0, 3 ) );
 vcap_ta_assert( str_starts_with( VCAP\DatevExport::encode( $datev[0] ), '"EXTF";700;21;"Buchungsstapel";12;' ), 'M12-69: the file is ";"-separated with quoted texts' );
