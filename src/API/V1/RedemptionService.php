@@ -978,6 +978,9 @@ final class RedemptionService {
 	/**
 	 * Stored redemption row by its key, or null when there is none.
 	 *
+	 * Reads the database on every call (the row changes under a transition), so it is not memoised.
+	 *
+	 * @phpstan-impure
 	 * @param string $key Redemption key.
 	 * @return array<string,mixed>|null
 	 */
