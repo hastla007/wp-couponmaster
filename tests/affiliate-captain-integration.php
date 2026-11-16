@@ -94,7 +94,27 @@ remove_filter( 'vcap_affiliate_commission_on_voucher_sales', '__return_false' );
 
 vcap_aff_assert( true === AffiliateCaptain::assign( $name, '' ) && null === apply_filters( 'wpac_coupon_affiliate', null, $codes[0] ), 'removing the partner stops the attribution' );
 
-foreach ( array_merge( $codes, array( $template->get_code(), $gift->get_code() ) ) as $code ) {
+// S18: generating more codes under a campaign assigned to a partner needs Affiliate Captain's right; the assignment
+// ends with the last code of the campaign.
+vcap_aff_assert( true === AffiliateCaptain::assign( $name, 'vcap-test-partner' ), 'S18: the partner is assigned again' );
+$s18_clerk = wp_insert_user( array( 'user_login' => 'vcap_s18_' . strtolower( wp_generate_password( 6, false, false ) ), 'user_pass' => wp_generate_password( 24 ), 'role' => 'shop_manager' ) );
+get_userdata( $s18_clerk )->add_cap( AffiliateCaptain::CAPABILITY, false ); // Denied for this user even if the role has it.
+wp_set_current_user( $s18_clerk );
+$s18_refused = AffiliateCaptain::generation_refusal( $name );
+$s18_free    = AffiliateCaptain::generation_refusal( 'Unassigned ' . wp_generate_password( 6, false, false ) );
+wp_set_current_user( 1 );
+$s18_admin_ok = '' === AffiliateCaptain::generation_refusal( $name ) || ! current_user_can( AffiliateCaptain::CAPABILITY );
+vcap_aff_assert( '' !== $s18_refused && str_contains( $s18_refused, $name ) && '' === $s18_free && $s18_admin_ok, 'S18: without wpac_manage_affiliates no codes can be generated under a campaign assigned to a partner (other names are free)' );
+vcap_aff_assert( str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Admin/CampaignAdmin.php' ), 'AffiliateCaptain::generation_refusal( $name )' ), 'S18: the "Generate codes" handler asks before generating coupons' );
+wp_delete_user( $s18_clerk );
+foreach ( $codes as $code ) {
+	wp_delete_post( wc_get_coupon_id_by_code( $code ), true );
+}
+// The gift card above also carries the campaign name: the assignment stays until it is gone too.
+vcap_aff_assert( 'VCAP-TEST-PARTNER' === AffiliateCaptain::partner_for_campaign( $name ), 'S18: the assignment stays while a code of the campaign exists' );
+wp_delete_post( $gift->get_id(), true );
+vcap_aff_assert( '' === AffiliateCaptain::partner_for_campaign( $name ), 'S18: deleting the last code of a campaign removes its partner assignment' );
+foreach ( array( $template->get_code() ) as $code ) {
 	wp_delete_post( wc_get_coupon_id_by_code( $code ), true );
 }
 $product->delete( true );

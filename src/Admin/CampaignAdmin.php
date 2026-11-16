@@ -230,6 +230,23 @@ final class CampaignAdmin {
 			'length' => absint( $_POST['length'] ?? 12 ),
 		);
 		$template = absint( $_POST['template'] ?? 0 );
+		$partner  = 'coupons' === $target ? \VCAP\Compat\AffiliateCaptain::generation_refusal( $name ) : '';
+		if ( '' !== $partner ) {
+			// S18: codes under a campaign assigned to a partner would route commission to that partner.
+			FormToken::release( 'generate' );
+			set_transient(
+				self::REPORT . get_current_user_id(),
+				array(
+					'error'  => $partner,
+					'count'  => 0,
+					'name'   => '',
+					'target' => '',
+				),
+				10 * MINUTE_IN_SECONDS
+			);
+			wp_safe_redirect( admin_url( 'admin.php?page=vcap-generate' ) );
+			exit;
+		}
 		if ( $count > Campaigns::STEP ) {
 			// B4: large runs are made in the background, Campaigns::STEP codes per step, with progress on this screen.
 			$queued = $this->campaigns->queue( $target, $template, $name, $count, $opts, get_current_user_id() );
