@@ -2835,5 +2835,47 @@ $vc10_src = (string) file_get_contents( VCAP_PATH . 'src/Admin/CardImport.php' )
 check( 'VC-10: the reference is random ("import:<uuid>"), differs per call and is not derived from the code (no hash of it in the source)', (bool) preg_match( '/^import:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $vc10_a ) && $vc10_a !== $vc10_b && 0 === ( new ReflectionMethod( VCAP\Admin\CardImport::class, 'reference' ) )->getNumberOfParameters() && ! preg_match( '/md5\(\s*strtolower\(\s*\$code|sha1\(\s*\$code|hash\([^)]*\$code/', $vc10_src ) && str_contains( $vc10_src, "'reference'       => self::reference()," ) && ! str_contains( $vc10_src, 'reference "import:<code>"' ) );
 check( 'VC-10: a second import stays idempotent through the code (entry "imported" → skipped, other existing code → taken), imports before VC-10 are recognised the same way', str_contains( $vc10_src, "has_event( \$existing->id, self::EVENT )" ) && str_contains( $vc10_src, 'Cards imported before VC-10 keep their old reference' ) );
 
+// Suite task "Providerstatus … in Suite-Admins anzeigen": optional Workflow Captain status in the settings.
+echo "\nWorkflow Captain status (optional)\n";
+$wfc_missing = VCAP\Compat\WorkflowCaptain::status_html();
+check( 'Workflow Captain: without workflow_captain_status_for() the section says "not active" in one sentence, without links or licence wording', ! function_exists( 'workflow_captain_status_for' ) && null === VCAP\Compat\WorkflowCaptain::status() && str_starts_with( $wfc_missing, 'Not active' ) && ! str_contains( $wfc_missing, 'href=' ) && ! preg_match( '/licen[cs]e|premium|\bpro\b|upgrade|buy/i', $wfc_missing ) );
+$wfc_asked = array();
+$wfc_base  = 'https://example.test/wp-admin/admin.php';
+$wfc_html  = VCAP\Compat\WorkflowCaptain::status_html(
+	static function ( string $product ) use ( &$wfc_asked, $wfc_base ): array {
+		$wfc_asked[] = $product;
+		return array(
+			'version'             => 1,
+			'product'             => $product,
+			'adapter'             => 'registered',
+			'reason'              => null,
+			'contract_version'    => '1.3.0',
+			'active_workflows'    => 2,
+			'events'              => array( 'done' => 7, 'retry_wait' => 1 ),
+			'last_correlation_id' => 'c-1"><script>alert(1)</script>',
+			'links'               => array(
+				'workflows' => $wfc_base . '?page=workflow-captain-workflows',
+				'runs'      => $wfc_base . '?page=workflow-captain-runs',
+				'events'    => $wfc_base . '?page=workflow-captain-events&product=voucher-captain',
+				'providers' => 'javascript:alert(1)',
+			),
+		);
+	}
+);
+check( 'Workflow Captain: asks for the product voucher-captain and shows adapter, contract version, active workflows and events per state', array( 'voucher-captain' ) === $wfc_asked && str_contains( $wfc_html, 'Adapter: registered' ) && str_contains( $wfc_html, 'Contract version: 1.3.0' ) && str_contains( $wfc_html, 'Active workflows: 2' ) && str_contains( $wfc_html, 'done: 7' ) && str_contains( $wfc_html, 'waiting for retry: 1' ) );
+check( 'Workflow Captain: each state links to the event list with product and state filter', str_contains( $wfc_html, 'product=voucher-captain&state=retry_wait' ) && str_contains( $wfc_html, 'product=voucher-captain&state=done' ) );
+check( 'Workflow Captain: the last correlation ID is escaped and links to the events of Voucher Captain', ! str_contains( $wfc_html, '<script>' ) && str_contains( $wfc_html, '<code>c-1&quot;&gt;&lt;script&gt;' ) && str_contains( $wfc_html, 'product=voucher-captain"><code>' ) );
+check( 'Workflow Captain: links to workflows, runs and events; a link that is not http(s) is dropped', str_contains( $wfc_html, 'page=workflow-captain-workflows' ) && str_contains( $wfc_html, 'page=workflow-captain-runs' ) && ! str_contains( $wfc_html, 'javascript:' ) && ! str_contains( $wfc_html, '>Providers<' ) );
+$wfc_refused = VCAP\Compat\WorkflowCaptain::status_html( static fn() => array( 'adapter' => 'refused', 'reason' => 'major <b>2</b>', 'contract_version' => null, 'active_workflows' => 0, 'events' => array(), 'last_correlation_id' => null, 'links' => array() ) );
+check( 'Workflow Captain: a refused adapter shows its escaped reason, "none yet" and no links', str_contains( $wfc_refused, 'Adapter: refused (major &lt;b&gt;2&lt;/b&gt;)' ) && str_contains( $wfc_refused, 'none yet' ) && str_contains( $wfc_refused, 'Contract version: —' ) && ! str_contains( $wfc_refused, 'href=' ) );
+check( 'Workflow Captain: a missing adapter and a status function returning null are reported', str_contains( VCAP\Compat\WorkflowCaptain::status_html( static fn() => array( 'adapter' => 'missing' ) ), 'Adapter: not registered' ) && str_contains( VCAP\Compat\WorkflowCaptain::status_html( static fn() => null ), 'does not report a status yet' ) );
+if ( ! function_exists( 'workflow_captain_status_for' ) ) {
+	function workflow_captain_status_for( string $product ): ?array { // Declared here so it exists only from now on.
+		return array( 'product' => $product, 'adapter' => 'registered', 'contract_version' => '1.3.0', 'active_workflows' => 0, 'events' => array(), 'last_correlation_id' => null, 'links' => array() );
+	}
+}
+$wfc_settings = (string) file_get_contents( VCAP_PATH . 'src/Settings.php' );
+check( 'Workflow Captain: with the function the status is read by default; the "Integrations (API)" settings section shows it', VCAP\Compat\WorkflowCaptain::available() && 'voucher-captain' === ( VCAP\Compat\WorkflowCaptain::status()['product'] ?? '' ) && str_contains( VCAP\Compat\WorkflowCaptain::status_html(), 'Adapter: registered' ) && str_contains( $wfc_settings, "'desc'  => Compat\\WorkflowCaptain::status_html()," ) );
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

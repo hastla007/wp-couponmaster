@@ -13751,3 +13751,109 @@ msgstr "Automatischer Befehl"
 #, php-format
 msgid "%1$s: %2$s (%3$s) – workflow %4$s, run %5$s, step %6$s, authorised by user #%7$s, reason %8$s"
 msgstr "%1$s: %2$s (%3$s) – Workflow %4$s, Lauf %5$s, Schritt %6$s, freigegeben von Benutzer #%7$s, Grund %8$s"
+
+#: src/Compat/WorkflowCaptain.php:48
+msgid "received"
+msgstr "empfangen"
+
+#: src/Compat/WorkflowCaptain.php:49
+msgid "processing"
+msgstr "in Bearbeitung"
+
+#: src/Compat/WorkflowCaptain.php:50
+msgid "done"
+msgstr "erledigt"
+
+#: src/Compat/WorkflowCaptain.php:51
+msgid "waiting for retry"
+msgstr "wartet auf Wiederholung"
+
+#: src/Compat/WorkflowCaptain.php:52
+msgid "failed"
+msgstr "fehlgeschlagen"
+
+#: src/Compat/WorkflowCaptain.php:53
+msgid "discarded"
+msgstr "verworfen"
+
+#: src/Compat/WorkflowCaptain.php:54
+msgid "stopped as a loop"
+msgstr "als Schleife gestoppt"
+
+#: src/Compat/WorkflowCaptain.php:55
+msgid "paused"
+msgstr "pausiert"
+
+#: src/Compat/WorkflowCaptain.php:77
+msgid "Not active – with Workflow Captain, voucher events such as \"voucher redeemed\" can start your own workflows. Voucher Captain works fully without it."
+msgstr "Nicht aktiv – mit Workflow Captain können Gutschein-Ereignisse wie „Gutschein eingelöst“ eigene Abläufe auslösen. Voucher Captain funktioniert ohne Einschränkung."
+
+#: src/Compat/WorkflowCaptain.php:81
+msgid "Active, but it does not report a status yet."
+msgstr "Aktiv, meldet aber noch keinen Status."
+
+#: src/Compat/WorkflowCaptain.php:86
+msgid "Adapter: registered"
+msgstr "Adapter: angemeldet"
+
+#. translators: %s: reason given by Workflow Captain
+#: src/Compat/WorkflowCaptain.php:89
+#, php-format
+msgid "Adapter: refused (%s)"
+msgstr "Adapter: abgelehnt (%s)"
+
+#: src/Compat/WorkflowCaptain.php:89
+msgid "Adapter: refused"
+msgstr "Adapter: abgelehnt"
+
+#: src/Compat/WorkflowCaptain.php:91
+msgid "Adapter: not registered – Workflow Captain does not know an adapter for Voucher Captain yet."
+msgstr "Adapter: nicht angemeldet – Workflow Captain kennt noch keinen Adapter für Voucher Captain."
+
+#. translators: %s: contract version
+#: src/Compat/WorkflowCaptain.php:95
+#, php-format
+msgid "Contract version: %s"
+msgstr "Vertragsversion: %s"
+
+#. translators: %d: number of active workflows
+#: src/Compat/WorkflowCaptain.php:97
+#, php-format
+msgid "Active workflows: %d"
+msgstr "Aktive Workflows: %d"
+
+#: src/Compat/WorkflowCaptain.php:105
+msgid "Events by state:"
+msgstr "Ereignisse je Zustand:"
+
+#: src/Compat/WorkflowCaptain.php:105
+msgid "none yet"
+msgstr "noch keine"
+
+#: src/Compat/WorkflowCaptain.php:107
+msgid "Last correlation ID:"
+msgstr "Letzte Korrelations-ID:"
+
+#: src/Compat/WorkflowCaptain.php:109
+msgid "Workflows"
+msgstr "Workflows"
+
+#: src/Compat/WorkflowCaptain.php:110
+msgid "Runs"
+msgstr "Läufe"
+
+#: src/Compat/WorkflowCaptain.php:111
+msgid "Events"
+msgstr "Ereignisse"
+
+#: src/Compat/WorkflowCaptain.php:112
+msgid "Providers"
+msgstr "Anbieter"
+
+#: src/Compat/WorkflowCaptain.php:123
+msgid "Open in Workflow Captain:"
+msgstr "In Workflow Captain öffnen:"
+
+#: src/Settings.php:465
+msgid "Workflow Captain"
+msgstr "Workflow Captain"
