@@ -99,6 +99,12 @@ Review Captain ist ein separater optionaler Adapter. Ein Kauf oder die bloße Au
 
 Affiliate Captain kann Verkauf/Erstattung über seinen bestehenden Verkaufsquellenvertrag verarbeiten. Ein Voucher-Ereignis darf nicht parallel eine zweite Provision neben dem WooCommerce-Auftrag erzeugen; die Quelle und Idempotenz müssen vor Aktivierung des Connectors festgelegt werden. Aggregierte Review-Auswertung ist ein späterer, read-only Ausbau und darf weder Kunden-/Review-PII noch provisionswirksame Änderungen enthalten. Alle Erweiterungen bleiben optional und vermeiden direkte Tabellenzugriffe.
 
+**Stand im Kern (1.2.0, Details in [API.md → Captain Suite](API.md#captain-suite-since-120)):**
+
+- *Review-Quelle v1* (`vcap_review_source_v1`): Nur Gutscheine, deren Produkt „Einlösung bestätigt eine Leistung (für Bewertungseinladungen)“ hat (Standard aus), und nur Einlösungen an der Kasse (Scanner, „Als eingelöst markieren (Laden)“) – externe Einlösungen nur für ausdrücklich registrierte Ziel-Präfixe – melden `vcap_review_redemption_eligible`; Storno der Kasseneinlösung, Erstattung der externen Einlösung oder Annullierung des Gutscheins melden `vcap_review_redemption_revoked`. Stabile Referenz je Einlösung, Wiederholungen ohne Duplikat, Payload ohne Code, Namen, E-Mail und Betrag. Die Adresse gibt nur `recipient()` an Gutschein-/Shopverwalter oder Hintergrundläufe heraus (Opt-out-Filter `vcap_review_opted_out`). Ohne lauschendes Review-Plugin wird nichts gespeichert.
+- *Gutschein-Anfragen v1* (`vcap_voucher_request_service_v1`): Ein Formular-Plugin übergibt Firmenbestellung oder Personalisierungswunsch mit `submit()`; daraus entsteht nur eine Anfrage unter *Gutscheine → Gutschein-Anfragen*. Gutscheine entstehen erst, wenn ein Verwalter sie dort ausdrücklich ausstellt (Verkauf oder kostenlos ist bewusst zu wählen) – über den vorhandenen Ausstellweg, idempotent je Gutschein. Keine Zahlung, kein Angebot, kein Lesen fremder Einträge.
+- *Affiliate-Deduplizierung* (heutige Regel, [ADAPTERS.md 5](ADAPTERS.md#5-wp-affiliate-captain-partner-programme)): Provision entsteht nur an WooCommerce-Bestellungen, die Affiliate Captain selbst erfasst. Voucher Captain meldet keine eigenen Verkaufs-, Einlösungs-, Review- oder Anfrageereignisse an Affiliate Captain.
+
 
 
 ## Entwicklung

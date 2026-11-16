@@ -70,6 +70,23 @@ Built in: `src/Compat/AffiliateCaptain.php`, active only when WP Affiliate Capta
 | Vouchers and gift cards | Purchased vouchers (`_vcap_voucher`) are means of payment and never map to a partner. By default the partner who brought the buyer of a voucher earns commission on the voucher sale (the redeeming order is reduced by the voucher amount, so nothing is paid twice). `add_filter( 'vcap_affiliate_commission_on_voucher_sales', '__return_false' )` pays nothing on voucher products instead. |
 | Status | Listed on Affiliate Captain's integration page (`wpac_registered_integrations`). |
 
+**No double commission (today's rule).** Affiliate Captain is the only place where commission is booked, and only on
+WooCommerce orders it records itself. Voucher Captain sends Affiliate Captain no sales events of its own; it only
+answers `wpac_coupon_affiliate` (which partner a campaign code belongs to) and `wpac_commission_base`. Per flow:
+
+| Flow | Commission |
+|---|---|
+| Buying a voucher or gift card (WooCommerce order) | Once, on that order, for the partner Affiliate Captain attributes to the buyer (referral link, cookie). With `vcap_affiliate_commission_on_voucher_sales` false: 0 on voucher lines. |
+| Redeeming it in a later shop order | The voucher reduces that order (coupon) or pays part of it (gift card): the voucher value is not counted again; the partner of that order earns only on what was paid with money. The voucher code itself never maps to a partner (`_vcap_voucher`). |
+| Redemption at the counter, through the redemption API or in the Pass Captain checkout | No WooCommerce order: no commission. |
+| Campaign discount code (Vouchers → Generate codes) used in an order | Once, on that order, for the campaign's partner (unless Affiliate Captain links the coupon directly). |
+| Refund of the voucher order | Handled by Affiliate Captain's own refund logic for that order; Voucher Captain voids the voucher. |
+| Vouchers issued without an order (New voucher, card import, confirmed voucher requests from forms) | No order: no commission. Company orders that should earn commission must go through a WooCommerce order. |
+| Review source events (`vcap_review_redemption_*`) | Never commission-relevant. |
+
+A future sales-source connector (voucher events as their own Affiliate Captain source) would need its own source key
+and idempotency and must exclude orders that Affiliate Captain already records – it is not part of 1.2.0.
+
 Test: `tests/affiliate-captain-integration.php` (runs with and without Affiliate Captain; without it the two contract functions are stubbed).
 
 ## 6. Rules for every adapter

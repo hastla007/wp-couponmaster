@@ -141,6 +141,16 @@ Voucher fields use WooCommerce product add-to-cart hooks and cart/order-item dat
 
 The CI job `browser-e2e` runs Playwright against a real shop (WordPress 7.1.4, WooCommerce 11.2.2, Yoast SEO 28.8): product page fields, keyboard-only use, classic cart/checkout and the cart/checkout blocks with cash on delivery, shortcodes and blocks, My Account, admin screens and the product editor next to Yoast SEO, axe-core accessibility scans of all Voucher Captain markup, and a PHP notice check. External payment gateways, redirects and webhooks, and screen-reader testing by a person remain release acceptance checks.
 
+## Captain Suite (WP Review Captain, WP Form Captain, WP Affiliate Captain)
+
+Optional, separate plugins of the suite; Voucher Captain works without them. WP Review Captain and WP Form Captain
+use the PHP contracts *Review source v1* and *Voucher requests v1* (API.md → Captain Suite); without the other plugin
+nothing is recorded or issued. `tests/captain-suite-integration.php` (part of `tests/run-integration.sh`) plays the
+other plugin's part through the documented hooks: counter redemption → eligible → cancellation → revoked, external
+redemption → refund → revoked, no listener → nothing; form request → no voucher → confirmation by a manager →
+vouchers once. A test against the real plugins is added once they are released. WP Affiliate Captain: ADAPTERS.md 5
+(including the rule against double commission).
+
 ## WP Pass Captain (tickets)
 
 Release gate: Voucher Captain alone, WP Pass Captain alone and both together.

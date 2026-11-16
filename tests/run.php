@@ -2352,6 +2352,236 @@ check( 'A8: the plugin-check job fails on every Plugin Check ERROR (not on warni
 $a5_hosts = array_values( array_unique( array_map( static fn( $u ) => (string) parse_url( $u, PHP_URL_HOST ), $GLOBALS['vcap_test_requests'] ?? array() ) ) );
 check( 'A5: the core flows of the unit run (boot, issuing, PDFs, emails, redemption, reports) made no HTTP request except the deliberate C7 image download', array( 'cdn.shop.test' ) === $a5_hosts && ! isset( $GLOBALS['vcap_test_http'] ), implode( ', ', $a5_hosts ) );
 check( 'A5: the integration suites block every outgoing request and fail on one from Voucher Captain (tests/no-network.php)', is_file( dirname( __DIR__ ) . '/tests/no-network.php' ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/tests/woocommerce-integration.php' ), '$vcap_offline = vcap_test_no_network();' ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/tests/order-lifecycle-integration.php' ), '$vcap_offline = vcap_test_no_network();' ) );
+echo "Captain Suite: review source (contract v1) and voucher requests from forms\n";
+use VCAP\Integrations\ReviewSource;
+use VCAP\Integrations\VoucherRequests;
+$cs_filters = $GLOBALS['vcap_test_filters'];
+$cs_voucher = static function ( int $id, array $props = array() ): Voucher {
+	$v = new Voucher();
+	foreach ( $props + array( 'id' => $id, 'code' => 'SPA-SECRET-' . $id, 'type' => 'voucher', 'product_id' => 501, 'initial_amount' => 80.0, 'balance' => 0.0, 'currency' => 'EUR', 'buyer_name' => 'Bea Buyer', 'buyer_email' => 'bea@example.com', 'recipient_name' => 'Rita Recipient', 'recipient_email' => 'rita@example.com' ) as $k => $val ) {
+		$v->$k = $val;
+	}
+	return $v;
+};
+$cs_vouchers = array( 11 => $cs_voucher( 11 ), 12 => $cs_voucher( 12, array( 'product_id' => 502 ) ), 13 => $cs_voucher( 13, array( 'type' => 'credit' ) ), 14 => $cs_voucher( 14, array( 'recipient_email' => '' ) ) );
+$GLOBALS['vcap_test_meta'][501][ ReviewSource::PRODUCT_META ] = 'yes';
+$GLOBALS['vcap_test_meta'][502][ ReviewSource::PRODUCT_META ] = 'no';
+$cs_source = new ReviewSource( static fn( int $id ) => $cs_vouchers[ $id ] ?? null );
+$cs_events = array();
+$cs_source->register();
+$cs_counter = array( 'voucher_id' => 11, 'code' => 'SPA-SECRET-11', 'amount' => 80.0, 'channel' => 'counter', 'event_id' => 701, 'order_id' => 0, 'user_id' => 3, 'till' => 'Front desk', 'receipt' => 'R-1' );
+// Without a review plugin listening nothing is recorded or sent.
+do_action( 'vcap_voucher_redeemed', $cs_counter );
+check( 'Captain Suite review: without a listening review plugin a redemption records nothing (missing connector changes nothing)', ! ReviewSource::active() && null === $cs_source->get( ReviewSource::reference( 'counter:701' ) ) );
+add_action( ReviewSource::EVENT_ELIGIBLE, static function ( $p ) use ( &$cs_events ) { $cs_events[] = $p; } );
+add_action( ReviewSource::EVENT_REVOKED, static function ( $p ) use ( &$cs_events ) { $cs_events[] = $p; } );
+check( 'Captain Suite review: versioned service through vcap_review_source_v1 (contract 1.0.0)', $cs_source === apply_filters( 'vcap_review_source_v1', null ) && '1.0.0' === $cs_source->contract() && ReviewSource::active() );
+do_action( 'vcap_voucher_redeemed', $cs_counter );
+$cs_ref = ReviewSource::reference( 'counter:701' );
+$cs_first = $cs_events[0] ?? array();
+check( 'Captain Suite review: a counter redemption of a service voucher is eligible once, with the stable reference and event id', 1 === count( $cs_events ) && $cs_ref === ( $cs_first['reference'] ?? '' ) && $cs_ref . ':eligible' === ( $cs_first['event_id'] ?? '' ) && 'eligible' === $cs_first['event'] && 'counter' === $cs_first['channel'] && 501 === $cs_first['experience_id'] && ReviewSource::valid_reference( $cs_ref ), json_encode( $cs_events ) );
+$cs_json = (string) wp_json_encode( $cs_events );
+check( 'Captain Suite review: the payload has exactly the documented keys and no code, name, email, amount, till or receipt', ReviewSource::PAYLOAD_KEYS === array_keys( $cs_first ) && ! preg_match( '/SPA-SECRET|example\.com|Rita|Bea|Front desk|R-1|"80/', $cs_json ), $cs_json );
+do_action( 'vcap_voucher_redeemed', $cs_counter );
+check( 'Captain Suite review: the same redemption again creates no duplicate (idempotent per reference)', 1 === count( $cs_events ) && ReviewSource::reference( 'counter:701' ) === $cs_ref && ReviewSource::reference( 'counter:702' ) !== $cs_ref );
+$GLOBALS['vcap_test_blog_id'] = 2;
+check( 'Captain Suite review: references differ per site of a network', ReviewSource::reference( 'counter:701' ) !== $cs_ref );
+unset( $GLOBALS['vcap_test_blog_id'] );
+$cs_before = count( $cs_events );
+do_action( 'vcap_voucher_redeemed', array( 'channel' => 'shop', 'order_id' => 99, 'event_id' => 703 ) + $cs_counter );
+do_action( 'vcap_voucher_redeemed', array( 'event_id' => 704, 'voucher_id' => 12 ) + $cs_counter );
+do_action( 'vcap_voucher_redeemed', array( 'event_id' => 705, 'voucher_id' => 13 ) + $cs_counter );
+do_action( 'vcap_voucher_redeemed', array( 'event_id' => 706, 'voucher_id' => 999 ) + $cs_counter );
+do_action( 'vcap_voucher_redeemed', array( 'event_id' => 0 ) + $cs_counter );
+do_action( 'vcap_voucher_event', 11, 'issued', 80.0, 80.0, '', 0, 'admin', 1 );
+do_action( 'vcap_voucher_event', 11, 'topup', 20.0, 100.0, '', 42, 'checkout', 1 );
+do_action( 'vcap_gift_card_topped_up', $cs_vouchers[11], 20.0 );
+check( 'Captain Suite review: shop orders, unmarked products, store credit, unknown codes (plain discount coupons), issuing and top-ups are never eligible', $cs_before === count( $cs_events ), json_encode( array_slice( $cs_events, $cs_before ) ) );
+$cs_external = array( 'voucher_id' => 11, 'channel' => 'external', 'redemption_key' => 'spa:booking:77', 'target' => 'spa:room-1', 'amount' => 80.0 );
+do_action( 'vcap_voucher_redeemed', $cs_external );
+check( 'Captain Suite review: external redemptions do not count by default', $cs_before === count( $cs_events ) );
+add_filter( 'vcap_review_channels', static fn() => array( 'counter', 'external', 'shop' ) );
+add_filter( 'vcap_review_external_target_prefixes', static fn() => array( 'spa:', 'passcaptain:' ) );
+do_action( 'vcap_voucher_redeemed', array( 'redemption_key' => 'passcaptain:ticket:11', 'target' => 'passcaptain:ticket:5' ) + $cs_external );
+do_action( 'vcap_voucher_redeemed', array( 'channel' => 'shop', 'order_id' => 98, 'event_id' => 707 ) + $cs_counter );
+check( 'Captain Suite review: built-in Pass Captain targets and shop orders stay excluded even when configured', $cs_before === count( $cs_events ) && array( 'counter', 'external' ) === ReviewSource::channels() );
+do_action( 'vcap_voucher_redeemed', $cs_external );
+$cs_ext_ref = ReviewSource::reference( 'external:spa:booking:77' );
+check( 'Captain Suite review: an external redemption for a registered service target is eligible when "external" is configured', $cs_before + 1 === count( $cs_events ) && $cs_ext_ref === end( $cs_events )['reference'] && 'external' === end( $cs_events )['channel'] );
+// Revocation: counter cancellation, external refund, voided voucher – each once.
+$cs_before = count( $cs_events );
+do_action( 'vcap_redemption_reversed', 11, 701, 80.0, 'wrong card' );
+do_action( 'vcap_redemption_reversed', 11, 701, 80.0, 'wrong card' );
+$cs_rev = end( $cs_events );
+check( 'Captain Suite review: a cancelled counter redemption (redeem_reversed) is revoked once with the same reference', $cs_before + 1 === count( $cs_events ) && 'revoked' === $cs_rev['event'] && $cs_ref === $cs_rev['reference'] && $cs_ref . ':revoked' === $cs_rev['event_id'] && 'redeem_reversed' === $cs_rev['reason'] && ReviewSource::PAYLOAD_KEYS === array_keys( $cs_rev ) );
+do_action( 'vcap_redemption_refunded', array( 'redemption_key' => 'spa:booking:77', 'refunded' => 10.0 ), 10.0 );
+check( 'Captain Suite review: a refund of an external redemption revokes it ("refunded")', $cs_before + 2 === count( $cs_events ) && 'refunded' === end( $cs_events )['reason'] && 'revoked' === $cs_source->get( $cs_ext_ref )['event'] );
+do_action( 'vcap_redemption_reversed', 11, 999, 5.0, 'unknown' );
+do_action( 'vcap_redemption_refunded', array( 'redemption_key' => 'never-eligible' ), 1.0 );
+check( 'Captain Suite review: revoking a redemption that was never eligible sends nothing', $cs_before + 2 === count( $cs_events ) );
+do_action( 'vcap_voucher_redeemed', array( 'event_id' => 708 ) + $cs_counter );
+do_action( 'vcap_voucher_redeemed', array( 'event_id' => 709, 'voucher_id' => 14 ) + $cs_counter );
+$cs_before = count( $cs_events );
+do_action( 'vcap_voucher_event', 11, 'voided', null, 0.0, 'refund', 5, 'admin', 1 );
+check( 'Captain Suite review: voiding the voucher revokes its open references (already revoked ones are not sent again)', $cs_before + 1 === count( $cs_events ) && ReviewSource::reference( 'counter:708' ) === end( $cs_events )['reference'] && 'voided' === end( $cs_events )['reason'] );
+// Recipient: only for authorised callers, never for revoked or opted-out references.
+$cs_ref14 = ReviewSource::reference( 'counter:709' );
+$cs_no    = $cs_source->recipient( $cs_ref14 );
+add_filter( 'vcap_review_recipient_allowed', static fn() => true );
+$cs_rec   = $cs_source->recipient( $cs_ref14 );
+$cs_gone  = $cs_source->recipient( $cs_ref );
+$cs_bad   = $cs_source->recipient( 'vcr1_nothing' );
+add_filter( 'vcap_review_opted_out', static fn( $out, $email ) => 'bea@example.com' === $email, 10, 2 );
+$cs_out   = $cs_source->recipient( $cs_ref14 );
+check(
+	'Captain Suite review: the address is resolved only with permission (recipient, else buyer), refused for revoked, unknown and opted-out references',
+	is_wp_error( $cs_no ) && 'vcap_review_not_allowed' === $cs_no->get_error_code()
+		&& is_array( $cs_rec ) && 'bea@example.com' === $cs_rec['email'] && 'buyer' === $cs_rec['role'] && array( 'reference', 'email', 'name', 'role' ) === array_keys( $cs_rec )
+		&& is_wp_error( $cs_gone ) && 'vcap_review_revoked' === $cs_gone->get_error_code()
+		&& is_wp_error( $cs_bad ) && 'vcap_review_unknown_reference' === $cs_bad->get_error_code()
+		&& is_wp_error( $cs_out ) && 'vcap_review_opted_out' === $cs_out->get_error_code(),
+	json_encode( array( $cs_rec, is_wp_error( $cs_gone ) ? $cs_gone->get_error_code() : $cs_gone ) )
+);
+check( 'Captain Suite review: product setting "Redemption confirms a service" defaults to off', 'no' === ProductConfig::DEFAULTS['review_service'] && ProductConfig::meta_key( 'review_service' ) === ReviewSource::PRODUCT_META );
+$GLOBALS['vcap_test_filters'] = $cs_filters;
+
+// Voucher requests (form action contract v1): a request is a draft only.
+if ( ! function_exists( 'wp_insert_post' ) ) {
+	function wp_insert_post( $postarr, $wp_error = false ) {
+		$id = 9000 + count( $GLOBALS['vcap_test_posts'] ?? array() );
+		$GLOBALS['vcap_test_posts'][ $id ] = (array) $postarr;
+		return $id;
+	}
+}
+if ( ! function_exists( 'add_post_meta' ) ) {
+	function add_post_meta( $id, $k, $v, $unique = false ) { $GLOBALS['vcap_test_meta'][ $id ][ $k ][] = $v; return true; }
+}
+if ( ! function_exists( 'wp_delete_post' ) ) {
+	function wp_delete_post( $id, $force = false ) { unset( $GLOBALS['vcap_test_posts'][ (int) $id ], $GLOBALS['vcap_test_meta'][ (int) $id ] ); return true; }
+}
+$cs_issued   = array();
+$cs_requests = new VoucherRequests(
+	static function ( array $args ) use ( &$cs_issued ) {
+		$cs_issued[] = $args;
+		$v           = new Voucher();
+		$v->id       = 3000 + count( $cs_issued );
+		return $v;
+	},
+	static fn() => array(),
+	static fn() => 0
+);
+$cs_in = array(
+	'contract'   => '1.0',
+	'reference'  => 'formcaptain:entry:4711',
+	'kind'       => 'company_order',
+	'amount'     => '25,50',
+	'contact'    => array( 'company' => 'ACME GmbH', 'name' => 'Hanna HR', 'email' => 'hr@acme.example' ),
+	'recipients' => array( array( 'name' => 'Ann', 'email' => 'ann@acme.example' ), array( 'name' => 'Ben', 'email' => '' ) ),
+	'paid'       => true,
+	'code'       => 'MYCODE',
+	'send'       => true,
+	'status'     => 'issued',
+);
+$cs_clean = VoucherRequests::normalise( $cs_in );
+check( 'Captain Suite form: a request is cleaned to the contract keys – payment, code, sending and status from the form are dropped', is_array( $cs_clean ) && array( 'contract', 'reference', 'kind', 'product_id', 'amount', 'quantity', 'recipients', 'contact', 'message', 'note', 'received_at' ) === array_keys( $cs_clean ) && 25.5 === $cs_clean['amount'] && 2 === $cs_clean['quantity'] && ! str_contains( (string) wp_json_encode( $cs_clean ), 'MYCODE' ), json_encode( $cs_clean ) );
+$cs_errs = array_map(
+	static fn( $r ) => is_wp_error( $r ) ? $r->get_error_code() : 'ok',
+	array(
+		VoucherRequests::normalise( array( 'contract' => '2.0.0' ) + $cs_in ),
+		VoucherRequests::normalise( array( 'reference' => 'short' ) + $cs_in ),
+		VoucherRequests::normalise( array( 'contact' => array( 'email' => 'nope' ) ) + $cs_in ),
+		VoucherRequests::normalise( array( 'recipients' => array( array( 'email' => 'bad@' ) ) ) + $cs_in ),
+		VoucherRequests::normalise( array( 'recipients' => array(), 'quantity' => 101 ) + $cs_in ),
+		VoucherRequests::normalise( array( 'product_id' => 77 ) + $cs_in ),
+		VoucherRequests::normalise( array( 'amount' => '-5' ) + $cs_in ),
+	)
+);
+check( 'Captain Suite form: other contract majors, bad references and addresses, too many vouchers, non-voucher products and negative values are refused', array( 'vcap_request_contract', 'vcap_invalid_request', 'vcap_invalid_email', 'vcap_invalid_email', 'vcap_invalid_request', 'vcap_invalid_product', 'vcap_invalid_amount' ) === $cs_errs, implode( ',', $cs_errs ) );
+$cs_sub  = $cs_requests->submit( $cs_in );
+$cs_id   = is_array( $cs_sub ) ? $cs_sub['request_id'] : 0;
+$cs_rep  = $cs_requests->submit( $cs_in );
+$cs_req  = VoucherRequests::get( $cs_id );
+check( 'Captain Suite form: submit() stores an open request (private post) and issues nothing; the same form entry again is answered as a replay', is_array( $cs_sub ) && $cs_id > 0 && false === $cs_sub['replayed'] && 'open' === $cs_sub['state'] && is_array( $cs_rep ) && true === $cs_rep['replayed'] && $cs_id === $cs_rep['request_id'] && 'private' === $GLOBALS['vcap_test_posts'][ $cs_id ]['post_status'] && VoucherRequests::POST_TYPE === get_post_type( $cs_id ) && is_array( $cs_req ) && 'open' === $cs_req['state'] && array() === $cs_issued, json_encode( array( $cs_sub, $cs_rep ) ) );
+$cs_conf = $cs_requests->confirm( $cs_id, array( 'sale' => 'sold', 'send' => true ) );
+$cs_rej  = $cs_requests->reject( $cs_id );
+check( 'Captain Suite form: without the right to issue vouchers confirm() and reject() are refused – no voucher, request stays open', is_wp_error( $cs_conf ) && 'vcap_not_allowed' === $cs_conf->get_error_code() && is_wp_error( $cs_rej ) && array() === $cs_issued && 'open' === VoucherRequests::get( $cs_id )['state'] );
+$cs_args = VoucherRequests::issue_args( $cs_req, $cs_id, 1, array( 'sale' => 'free', 'send' => false ) );
+$cs_sold = VoucherRequests::issue_args( $cs_req, $cs_id, 0, array( 'sale' => 'sold', 'send' => true, 'product_id' => 0, 'amount' => '' ) );
+$cs_none = VoucherRequests::issue_args( $cs_req, $cs_id, 0, array() );
+check( 'Captain Suite form: the issuing arguments use a stable reference per voucher, the company as buyer, and "paid" only after the manager chose "sold"', 'vcap-request:' . $cs_id . '/2' === $cs_args['reference'] && false === $cs_args['paid'] && false === $cs_args['send'] && 'ACME GmbH' === $cs_args['buyer_name'] && 'hr@acme.example' === $cs_args['buyer_email'] && '' === $cs_args['recipient_email'] && 25.5 === $cs_args['amount'] && 'giftcard' === $cs_args['type'] && true === $cs_sold['paid'] && 'ann@acme.example' === $cs_sold['recipient_email'] && 'vcap-request:' . $cs_id . '/1' === $cs_sold['reference'] && false === $cs_none['paid'] && 'request' === $cs_sold['source'], json_encode( $cs_args ) );
+$cs_issue_all = new ReflectionMethod( VoucherRequests::class, 'issue_all' );
+$cs_issue_all->setAccessible( true );
+$cs_all = $cs_issue_all->invoke( $cs_requests, $cs_req, $cs_id, array( 'sale' => 'sold' ) );
+$cs_again = $cs_issue_all->invoke(
+	new VoucherRequests( static fn( array $a ) => str_ends_with( $a['reference'], '/1' ) ? new WP_Error( 'vcap_reference_used', 'used', array( 'voucher_id' => 3001 ) ) : new WP_Error( 'vcap_invalid_amount', 'Please give a voucher value greater than zero.' ) ),
+	$cs_req,
+	$cs_id,
+	array( 'sale' => 'sold' )
+);
+check( 'Captain Suite form: after confirmation one voucher per recipient is issued through the voucher service; a repeat keeps issued ones and reports the rest (partial)', 'issued' === $cs_all['state'] && array( 3001, 3002 ) === $cs_all['vouchers'] && 2 === count( $cs_issued ) && 'partial' === $cs_again['state'] && array( 3001 ) === $cs_again['vouchers'] && 1 === count( $cs_again['errors'] ), json_encode( array( $cs_all, $cs_again ) ) );
+$GLOBALS['vcap_test_filters'] = $cs_filters;
+
+// Captain Suite follow-up: erased or deleted vouchers withdraw their review references; privacy tools and the open
+// limit of voucher requests.
+$cs_events = array();
+$cs_vouchers2 = array( 21 => $cs_voucher( 21 ), 22 => $cs_voucher( 22 ), 23 => $cs_voucher( 23, array( 'recipient_email' => '', 'buyer_email' => '' ) ) );
+$cs_source2   = new ReviewSource( static fn( int $id ) => $cs_vouchers2[ $id ] ?? null );
+$cs_source2->register();
+add_action( ReviewSource::EVENT_ELIGIBLE, static function ( $p ) use ( &$cs_events ) { $cs_events[] = $p; } );
+add_action( ReviewSource::EVENT_REVOKED, static function ( $p ) use ( &$cs_events ) { $cs_events[] = $p; } );
+add_filter( 'vcap_review_recipient_allowed', static fn() => true );
+foreach ( array( 21 => 801, 22 => 802, 23 => 803 ) as $cs_vid => $cs_eid ) {
+	do_action( 'vcap_voucher_redeemed', array( 'voucher_id' => $cs_vid, 'event_id' => $cs_eid ) + $cs_counter );
+}
+do_action( 'vcap_voucher_event', 21, VCAP\TaxAccounting::ERASED_EVENT, null, null, '', 0, 'admin', 1 );
+$cs_r21 = ReviewSource::reference( 'counter:801' );
+$cs_g21 = $cs_source2->recipient( $cs_r21 );
+check( 'Captain Suite review: the privacy eraser of a voucher revokes its references ("erased"), unlinks them and drops the index – no recipient can be resolved', 4 === count( $cs_events ) && 'erased' === $cs_events[3]['reason'] && $cs_r21 === $cs_events[3]['reference'] && is_wp_error( $cs_g21 ) && 'vcap_review_revoked' === $cs_g21->get_error_code() && 0 === get_option( ReviewSource::OPTION_PREFIX . $cs_r21 )['voucher_id'] && false === get_option( ReviewSource::INDEX_PREFIX . 21, false ), json_encode( $cs_events ) );
+do_action( 'vcap_voucher_deleted', $cs_vouchers2[22] );
+$cs_g23 = $cs_source2->recipient( ReviewSource::reference( 'counter:803' ) );
+$cs_g23b = $cs_source2->recipient( ReviewSource::reference( 'counter:803' ) );
+check( 'Captain Suite review: a deleted voucher revokes its references ("deleted"); a voucher without any address left (retention) is withdrawn on the first lookup', 6 === count( $cs_events ) && 'deleted' === $cs_events[4]['reason'] && 'no_recipient' === $cs_events[5]['reason'] && is_wp_error( $cs_g23 ) && 'vcap_review_no_recipient' === $cs_g23->get_error_code() && is_wp_error( $cs_g23b ) && 'vcap_review_revoked' === $cs_g23b->get_error_code(), json_encode( array_slice( $cs_events, 4 ) ) );
+$GLOBALS['vcap_test_filters'] = $cs_filters;
+
+$cs_find  = static function ( string $email, int $limit, int $offset ): array {
+	$ids = array();
+	foreach ( $GLOBALS['vcap_test_meta'] as $id => $meta ) {
+		if ( in_array( strtolower( $email ), (array) ( $meta[ VoucherRequests::EMAIL_META ] ?? array() ), true ) ) {
+			$ids[] = (int) $id;
+		}
+	}
+	return array_slice( $ids, $offset, $limit );
+};
+$cs_open  = 0;
+$cs_req2  = new VoucherRequests( static fn( array $a ) => new WP_Error( 'x', 'not used' ), $cs_find, static function ( int $cap ) use ( &$cs_open ) { return min( $cap, $cs_open ); } );
+$cs_req2->register();
+$cs_p_in  = array( 'reference' => 'formcaptain:entry:privacy-1', 'contact' => array( 'company' => 'ACME', 'name' => 'Hanna', 'email' => 'HR2@acme.example', 'phone' => '+43 1 234' ), 'message' => 'Für das Team', 'recipients' => array( array( 'name' => 'Ann', 'email' => 'ann2@acme.example', 'message' => 'Danke Ann' ), array( 'name' => 'Bob', 'email' => 'bob2@acme.example' ) ) );
+$cs_p_id  = $cs_req2->submit( $cs_p_in )['request_id'] ?? 0;
+$cs_ex_a  = $cs_req2->export( 'ann2@acme.example' );
+$cs_ex_c  = $cs_req2->export( 'hr2@acme.example' );
+$cs_vals  = static fn( array $ex ) => implode( '|', array_column( $ex['data'][0]['data'] ?? array(), 'value' ) );
+check( 'Captain Suite form: requests are found by every address they name (lower case) and exported per person – a recipient sees only their own entry, the contact the contact data', array( 'hr2@acme.example', 'ann2@acme.example', 'bob2@acme.example' ) === $GLOBALS['vcap_test_meta'][ $cs_p_id ][ VoucherRequests::EMAIL_META ] && 1 === count( $cs_ex_a['data'] ) && $cs_ex_a['done'] && 'vcap-voucher-requests' === $cs_ex_a['data'][0]['group_id'] && 'vcap-request-' . $cs_p_id === $cs_ex_a['data'][0]['item_id'] && str_contains( $cs_vals( $cs_ex_a ), 'Danke Ann' ) && ! str_contains( $cs_vals( $cs_ex_a ), 'bob2' ) && ! str_contains( $cs_vals( $cs_ex_a ), '+43' ) && str_contains( $cs_vals( $cs_ex_c ), '+43 1 234' ) && str_contains( $cs_vals( $cs_ex_c ), 'Für das Team' ) && ! str_contains( $cs_vals( $cs_ex_c ), 'ann2' ), $cs_vals( $cs_ex_a ) . ' / ' . $cs_vals( $cs_ex_c ) );
+$cs_er    = $cs_req2->erase( 'ANN2@acme.example' );
+$cs_after = get_post_meta( $cs_p_id, VoucherRequests::META, true );
+// The test stub of delete_post_meta() drops all rows of the key (WordPress drops only the row with that value).
+$cs_erased_index = $GLOBALS['vcap_test_meta'][ $cs_p_id ][ VoucherRequests::EMAIL_META ] ?? null;
+$GLOBALS['vcap_test_meta'][ $cs_p_id ][ VoucherRequests::EMAIL_META ] = array( 'hr2@acme.example', 'bob2@acme.example' );
+$cs_er_c  = $cs_req2->erase( 'hr2@acme.example' );
+$cs_after2 = get_post_meta( $cs_p_id, VoucherRequests::META, true );
+check( 'Captain Suite form: the eraser removes name, address and message of the erased person only; for the contact also phone, message and note (company and count stay)', $cs_er['items_removed'] && ! $cs_er['items_retained'] && $cs_er['done'] && null === $cs_erased_index && array( 'name' => '', 'email' => '', 'message' => '' ) === $cs_after['recipients'][0] && 'bob2@acme.example' === $cs_after['recipients'][1]['email'] && 'HR2@acme.example' === $cs_after['contact']['email'] && $cs_er_c['items_removed'] && '' === $cs_after2['contact']['email'] && '' === $cs_after2['contact']['phone'] && '' === $cs_after2['contact']['name'] && '' === $cs_after2['message'] && 'ACME' === $cs_after2['contact']['company'] && 2 === $cs_after2['quantity'] && array() === $cs_req2->export( 'hr2@acme.example' )['data'], json_encode( $cs_after2 ) );
+check( 'Captain Suite form: exporter and eraser are registered with WordPress\'s privacy tools', isset( apply_filters( 'wp_privacy_personal_data_exporters', array() )['voucher-captain-requests'], apply_filters( 'wp_privacy_personal_data_erasers', array() )['voucher-captain-requests'] ) );
+$cs_open  = 500;
+$cs_full  = $cs_req2->submit( array( 'reference' => 'formcaptain:entry:privacy-2' ) + $cs_p_in );
+$cs_again = $cs_req2->submit( $cs_p_in );
+add_filter( 'vcap_voucher_requests_max_open', static fn() => 501 );
+$cs_more  = $cs_req2->submit( array( 'reference' => 'formcaptain:entry:privacy-3' ) + $cs_p_in );
+$GLOBALS['vcap_test_filters'] = $cs_filters;
+$cs_open  = 0;
+add_filter( 'vcap_voucher_requests_max_open', static fn() => 0 );
+$cs_none  = $cs_req2->submit( array( 'reference' => 'formcaptain:entry:privacy-4' ) + $cs_p_in );
+check( 'Captain Suite form: with 500 open requests (vcap_voucher_requests_max_open) submit() refuses new ones with vcap_request_limit (429), a repeated entry is still answered, a higher limit accepts, 0 accepts none', is_wp_error( $cs_full ) && 'vcap_request_limit' === $cs_full->get_error_code() && 429 === $cs_full->get_error_data()['status'] && false === get_option( VoucherRequests::CLAIM_PREFIX . md5( 'formcaptain:entry:privacy-2' ), false ) && is_array( $cs_again ) && $cs_again['replayed'] && is_array( $cs_more ) && ! $cs_more['replayed'] && is_wp_error( $cs_none ) && 'vcap_request_limit' === $cs_none->get_error_code() );
+check( 'Captain Suite form: the suggested privacy policy text names voucher requests', (bool) array_filter( VCAP\Privacy::policy_paragraphs(), static fn( $p ) => str_starts_with( $p, 'Voucher requests:' ) ) );
+$GLOBALS['vcap_test_filters'] = $cs_filters;
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

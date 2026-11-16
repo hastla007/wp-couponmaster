@@ -33,6 +33,9 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_redemption_reserved` | `src/API/V1/RedemptionService.php` | Fires after a voucher was reserved for an external redemption. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_redemption_reversed` | `src/Tickets.php` | A counter redemption was cancelled (amount booked back). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_report_page` | `src/Admin/ReportsAdmin.php` | Prints the page of an add-on's report view (arg: view id from "vcap_report_tabs"), below the tabs. |
+| `vcap_review_recipient_resolved` | `src/Integrations/ReviewSource.php` | A recipient was given to a review plugin (for audit logs; no personal data). |
+| `vcap_review_redemption_eligible` | `src/Integrations/ReviewSource.php` | A redemption confirmed a service and may be used for a review invitation (once per reference). Payload (contract 1.0.0, no personal data): contract, event, event_id, reference, source, site_id, channel, experience_id (voucher product), occurred_at (UTC), reason. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
+| `vcap_review_redemption_revoked` | `src/Integrations/ReviewSource.php` | A review source was withdrawn (once per reference): reason redeem_reversed, refunded, voided, erased (personal data of the voucher erased), deleted or no_recipient (no address left). Same payload as vcap_review_redemption_eligible with event "revoked". *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_store_credit_changed` | `src/StoreCredit.php` | The store credit of a customer changed (args: user id, amount, balance after, event, reason, order id). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_ticket_checked_in` | `src/Tickets.php` | – *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_topup_held` | `src/TopUp.php` | – |
@@ -49,6 +52,9 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_voucher_issued_standalone` | `src/Issuer.php` | A voucher was issued without an order (args: Voucher, the arguments of Issuer::issue_standalone()). |
 | `vcap_voucher_redeemed` | `src/API/V1/RedemptionService.php`, `src/VoucherRepository.php` | Fires once when an external redemption is completed. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_reissued` | `src/Reissue.php` | Fires after a voucher was reissued with a new code and token (V10). The old code is no longer redeemable. |
+| `vcap_voucher_request_confirmed` | `src/Integrations/VoucherRequests.php` | A manager confirmed a voucher request (vouchers were issued through the voucher service). |
+| `vcap_voucher_request_received` | `src/Integrations/VoucherRequests.php` | A voucher request was stored (nothing was issued). No personal data in the arguments. |
+| `vcap_voucher_request_rejected` | `src/Integrations/VoucherRequests.php` | A manager rejected (deleted) a voucher request. |
 | `vcap_voucher_updated` | `src/Tickets.php`, `src/VoucherRepository.php` | A voucher was saved (args: Voucher as stored, see CONNECTORS.md "Event timing"). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_vouchers_issued` | `src/Issuer.php` | Vouchers of an order were issued (args: Voucher[] $created, WC_Order $order). |
 
@@ -195,6 +201,12 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_rest_can_redeem` | `src/API/V1/RestController.php` | Filters whether the current user may redeem vouchers through the REST API. |
 | `vcap_rest_redemption_target_prefixes` | `src/API/V1/RestController.php` | Target prefixes customers may redeem for over REST (connectors that let customers redeem in the browser add theirs, e.g. "learnboating:"). Default none. |
 | `vcap_restore_extension_days` | `src/Coupons/BookBack.php` | – |
+| `vcap_review_channels` | `src/Integrations/ReviewSource.php` | Redemption channels that confirm a service for reviews ("counter", "external"). |
+| `vcap_review_external_target_prefixes` | `src/Integrations/ReviewSource.php` | Target prefixes of external redemptions that confirm a delivered service (e.g. "spa-booking:"). |
+| `vcap_review_opted_out` | `src/Integrations/ReviewSource.php` | Whether the address must not be invited (e.g. an opt-out list). An opted-out address is never returned. |
+| `vcap_review_recipient_allowed` | `src/Integrations/ReviewSource.php` | Whether the current caller may resolve the recipient of a review reference. |
+| `vcap_review_service_voucher` | `src/Integrations/ReviewSource.php` | Whether a redemption of this voucher confirms a service (default: its product is marked so). |
+| `vcap_review_source_active` | `src/Integrations/ReviewSource.php` | Whether redemptions are recorded as review sources. Default: something listens to vcap_review_redemption_eligible. |
 | `vcap_sample_voucher` | `src/Preview.php` | – |
 | `vcap_sanitize_design` | `src/TemplatePostType.php` | A design after it was cleaned for saving (args: clean design, design as posted); add-on element types keep their own keys here. |
 | `vcap_scanner_checkin` | `src/Tickets.php` | – |
@@ -231,6 +243,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_voucher_next_steps` | `templates/emails/plain/voucher.php`, `templates/emails/voucher.php` | Steps after receiving the voucher (e.g. "exchange it for tickets on the redeem page"); connectors add them for their voucher types. Empty: the usual "enter the code at checkout" hint. |
 | `vcap_voucher_pays_after_tax` | `src/PaymentVouchers.php` | – |
 | `vcap_voucher_pays_shipping_and_fees` | `src/PaymentVouchers.php` | Whether a voucher paying after tax may also pay shipping and fees (default: when it is not limited to products or categories). |
+| `vcap_voucher_requests_max_open` | `src/Integrations/VoucherRequests.php` | Most open requests at a time (protection against floods of form entries); above it submit() answers `vcap_request_limit` (429). 0 accepts no new request. |
 | `vcap_voucher_tax_treatment` | `src/ProductConfig.php` | – |
 | `vcap_voucher_types` | `src/Voucher.php` | Extra voucher types of connectors and add-ons (arg: array of type key => label). Core types cannot be replaced; see API.md → Extension points. |
 | `vcap_vouchers_per_item` | `src/Issuer.php` | – |

@@ -61,6 +61,8 @@ final class ProductConfig {
 		'allowed_templates'   => array(),
 		// M12-97: shipped plastic/paper card with a code from the batch, activated when the order is completed.
 		'physical'            => 'no',
+		// Captain Suite: a redemption of this product's vouchers confirms that a service was provided (review source).
+		'review_service'      => 'no',
 	);
 
 	/** Keys a variation may override (empty = inherit). */

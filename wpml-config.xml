@@ -57,6 +57,7 @@
 		<custom-field action="copy">_vcap_message_maxlines</custom-field>
 		<custom-field action="copy">_vcap_allowed_templates</custom-field>
 		<custom-field action="copy">_vcap_physical</custom-field>
+		<custom-field action="copy">_vcap_review_service</custom-field>
 		<custom-field action="copy">_vcap_tax_treatment</custom-field>
 		<custom-field action="copy">_vcap_code_pool_low</custom-field>
 		<custom-field action="copy">_vcap_code_pool_empty</custom-field>

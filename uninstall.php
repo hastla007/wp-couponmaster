@@ -131,7 +131,7 @@ function vcap_uninstall_site(): bool {
 		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}{$table}" ); // phpcs:ignore
 	}
 	// Templates, field groups and promotions (vcap_discount, with their usage records).
-	foreach ( array( 'vcap_template', 'vcap_field_group', 'vcap_discount' ) as $post_type ) {
+	foreach ( array( 'vcap_template', 'vcap_field_group', 'vcap_discount', 'vcap_request' ) as $post_type ) {
 		$ids = get_posts( array( 'post_type' => $post_type, 'post_status' => array( 'any', 'trash', 'auto-draft' ), 'numberposts' => -1, 'fields' => 'ids' ) );
 		foreach ( $ids as $id ) {
 			wp_delete_post( $id, true );

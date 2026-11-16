@@ -250,6 +250,104 @@ The voucher line snapshot (`VCAP\Issuer::line_data( $item )`, order item meta `_
 
 `vcap()->redemptions->refund( $key, $amount, $refund_key )` gives back (part of) a committed redemption, e.g. when the service it paid for is refunded. Gift cards get the amount back on their balance; a single-use voucher becomes usable again once the refunds reach the redeemed amount (partial refunds are recorded only). Idempotent per `$refund_key`; refunds are capped at the redeemed amount (`vcap_refund_exceeded`), only committed redemptions can be refunded (`vcap_not_committed`). Ledger event `api_refunded`, action `vcap_redemption_refunded`.
 
+## Captain Suite (since 1.2.0)
+
+Two in-process PHP contracts for the separate plugins WP Review Captain and WP Form Captain. Both are versioned
+(`CONTRACT` `1.0.0`; a consumer checks the major version), carry no personal data in events, are idempotent and
+never touch the other plugin's tables. Voucher Captain stays the only owner of codes, values, issuing, redemption,
+refunds and voucher personal data.
+
+### Review source (WP Review Captain), contract v1
+
+`$source = apply_filters( 'vcap_review_source_v1', null )` returns `VCAP\Integrations\ReviewSource` (also
+`vcap()->review_source`). Voucher Captain only reports that a redemption **confirmed a service**; invitations,
+consent, frequency limits, sending, opt-out links and reviews belong to the review plugin.
+
+Which redemptions count (all conditions):
+
+| Condition | Default |
+|---|---|
+| Product setting *Redemption confirms a service (for review invitations)* (`_vcap_review_service`) | off; `vcap_review_service_voucher` ( `bool`, `Voucher` ) for vouchers without a product. Store credit and tickets never count. |
+| Channel | `counter` (scanner, *Mark as redeemed (store)*: staff confirm on site). `external` (redemption API) only when added to `vcap_review_channels` **and** the target starts with a prefix of `vcap_review_external_target_prefixes` (e.g. `spa:`); the built-in `passcaptain:` targets never. `shop` never: the order is a purchase, which the review plugin judges by the order itself. |
+| A review plugin listens | `vcap_review_redemption_eligible` has a listener (filter `vcap_review_source_active`). Without one nothing is recorded. |
+
+Never a review source: purchases, issuing, delivery, top-ups, store credit, discount codes (campaign coupons are no
+vouchers), reservations that were released.
+
+Events (after the COMMIT, once per reference and event):
+
+- `vcap_review_redemption_eligible( array $payload )` – after the confirmed redemption.
+- `vcap_review_redemption_revoked( array $payload )` – reason `redeem_reversed` (counter cancellation), `refunded`
+  (any refund of the external redemption), `voided` (voucher voided, e.g. its purchase refunded), `erased` (the
+  privacy eraser removed the voucher's personal data), `deleted` (voucher deleted) or `no_recipient` (no address
+  left, e.g. after the retention cleanup – noticed on the next `recipient()` call). Only a reference that was
+  eligible is revoked; revoked is final. With `erased`, `deleted` and `no_recipient` the reference is also unlinked
+  from the voucher, so no address can be resolved for it any more.
+
+Payload (exactly these keys): `contract` (`1.0.0`), `event` (`eligible`/`revoked`), `event_id` (`{reference}:{event}`),
+`reference`, `source` (`voucher-captain`), `site_id`, `channel` (`counter`/`external`), `experience_id` (voucher
+product id), `occurred_at` (UTC), `reason`. No code, name, email, amount, till or receipt.
+
+Reference: `vcr1_` + 32 hex characters, derived from the site and the redemption (`counter:{history entry id}` –
+the `event_id` now also given in `vcap_voucher_redeemed` – or `external:{redemption key}`): the same redemption
+always has the same reference, a repeated event creates no duplicate. Stored as a small option per reference (state,
+voucher id, product, channel, times; removed on uninstall).
+
+Service methods: `contract()`, `get( $reference )` (current payload or `null`, for reconciliation),
+`recipient( $reference )` → `{reference, email, name, role}` (`role` `recipient`, else `buyer`) or `WP_Error`:
+`vcap_review_not_allowed` (403), `vcap_review_unknown_reference` (404), `vcap_review_revoked` (410),
+`vcap_review_no_recipient` (404), `vcap_review_opted_out` (409). Allowed for voucher managers, shop managers and
+background runs without a logged-in user (WP-Cron, WP-CLI); narrow or widen with `vcap_review_recipient_allowed`
+( `bool`, `user_id` ). `vcap_review_opted_out` ( `false`, `email`, `reference`, `Voucher` ) lets the review plugin's
+opt-out list (or any other) block an address; `vcap_review_recipient_resolved` ( `reference`, `user_id` ) is for audit
+logs. The voucher's recipient may never have bought anything: whether an invitation is allowed (consent, existing
+customer exception) is the review plugin's decision.
+
+```php
+add_action( 'vcap_review_redemption_eligible', function ( array $p ) {
+	if ( '1' !== strtok( $p['contract'], '.' ) ) {
+		return;
+	}
+	my_review_queue_add( $p['event_id'], $p['reference'], $p['experience_id'] ); // Dedupe by event_id.
+} );
+add_action( 'vcap_review_redemption_revoked', fn( array $p ) => my_review_queue_cancel( $p['reference'] ) );
+// Later, in the sending job (WP-Cron):
+$to = apply_filters( 'vcap_review_source_v1', null )?->recipient( $reference );
+```
+
+### Voucher requests from forms (WP Form Captain), contract v1
+
+`$requests = apply_filters( 'vcap_voucher_request_service_v1', null )` returns `VCAP\Integrations\VoucherRequests`
+(also `vcap()->voucher_requests`). A form plugin hands over what the visitor entered; Voucher Captain stores a
+**request** – nothing else: no voucher, coupon, email, payment or offer. A manager who may issue vouchers without an
+order opens it under *Vouchers → Voucher requests* and either issues the vouchers (choosing product, value, *Sold* or
+*Free of charge* – there is no default – and whether to email them) or rejects it (the request is deleted).
+
+`submit( array $request )` → `{request_id, reference, state, replayed}` or `WP_Error`. Keys: `reference` (required,
+8–100 characters `A–Z a–z 0–9 . _ : / -`, e.g. `formcaptain:entry:123`; a repeated call answers the same request with
+`replayed: true`), `kind` (`company_order`, `personalisation`), `product_id` (a voucher product), `amount` (per
+voucher), `quantity` (without recipients), `recipients` (list of `name`, `email`, `message`), `contact` (`company`,
+`name`, `email` – required, `phone`), `message`, `note`, `contract` (optional, major 1). At most 100 vouchers. Every
+other key (`paid`, `code`, `send`, a status …) is dropped. While 500 requests are open (filter
+`vcap_voucher_requests_max_open`; 0 accepts none) a new reference is refused with `vcap_request_limit` (429); a
+repeated reference is still answered. `submit()` checks no capability – it is called for
+visitors after the form plugin's own nonce and spam checks; the form plugin's entries are never read.
+
+`confirm( $request_id, [ 'sale' => 'sold'|'free', 'send' => bool, 'product_id', 'amount', 'type', 'reason' ] )`
+needs the rights of *Vouchers → New voucher* and issues one voucher per recipient (else `quantity` to the contact)
+through `issue_standalone()` with the references `vcap-request:{id}/{n}` (source `request`; buyer = company or
+contact): repeating it issues only what is missing. States `open`, `partial` (some failed – correct and confirm
+again), `issued` (the recipient list is then removed from the request; the data lives in the vouchers). `reject()`
+deletes an open request. Errors: `vcap_request_contract` (409), `vcap_invalid_request`, `vcap_invalid_email`,
+`vcap_invalid_product`, `vcap_invalid_amount` (400), `vcap_not_allowed` (403), `vcap_invalid_args`, `vcap_not_found`,
+`vcap_temporary_failure` (503), `vcap_request_limit` (429). Privacy: requests are part of WordPress's personal data
+export and erasure (Tools → Export/Erase Personal Data, exporter/eraser `voucher-captain-requests`, 100 requests per
+page). A person gets only their own part: as contact the contact data, message and note; as recipient their name,
+address and message. Erasure blanks exactly these fields (company, value and count stay). The suggested privacy
+policy text names the requests. Actions (no personal data): `vcap_voucher_request_received` ( `id`, `kind`,
+`vouchers` ), `vcap_voucher_request_confirmed` ( `id`, `state`, `voucher_ids`, `user_id` ),
+`vcap_voucher_request_rejected` ( `id`, `user_id` ).
+
 ## Extension points for add-ons (public API since 1.2.0)
 
 Voucher Captain is free and complete; paid features live in a separate add-on plugin (docs/FREE-PREMIUM.md, planned:
