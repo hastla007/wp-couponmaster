@@ -115,9 +115,18 @@ final class Exchange {
 				'ttl_minutes' => (int) apply_filters( 'vcap_passcaptain_ticket_reservation_minutes', DAY_IN_SECONDS / MINUTE_IN_SECONDS ),
 			)
 		);
-		if ( is_wp_error( $reserved ) && 'vcap_idempotency_conflict' === $reserved->get_error_code() && $existing && RedemptionService::STATE_RESERVED === $existing['state'] && $existing['target'] === 'passcaptain:ticket:' . $ticket_type ) {
-			// Same voucher and date, retried by someone else (e.g. the admin after the customer): continue it.
-			$reserved = $existing;
+		$conflict = is_wp_error( $reserved ) && 'vcap_idempotency_conflict' === $reserved->get_error_code() && $existing && RedemptionService::STATE_RESERVED === $existing['state'] && $existing['target'] === 'passcaptain:ticket:' . $ticket_type;
+		$replayed = ! is_wp_error( $reserved ) && ! empty( $reserved['replayed'] );
+		if ( $conflict || $replayed ) {
+			// Same voucher and date, retried: continued only by the same caller for the same address, or by staff
+			// (e.g. the admin after the customer). S11: anybody else would get the tickets of a reservation whose
+			// checks (personal vouchers) were made for another person. A replay (same user, e.g. two guests) counts too.
+			if ( ! self::may_continue( $existing ? $existing : $reserved, $user_id, $email, current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' ) ) ) { // phpcs:ignore WordPress.WP.Capabilities.Unknown -- Registered by Install / WooCommerce.
+				return new \WP_Error( 'vcap_reserved', __( 'This voucher is currently being redeemed. Please try again in a few minutes.', 'voucher-captain' ), array( 'status' => 409 ) );
+			}
+			if ( $conflict ) {
+				$reserved = $existing;
+			}
 		}
 		if ( is_wp_error( $reserved ) ) {
 			return $reserved;
@@ -149,6 +158,26 @@ final class Exchange {
 		$this->vouchers->log( $voucher->id, 'passcaptain_tickets', null, null, sprintf( _n( '%1$d ticket, Pass Captain order %2$s, sent to %3$s', '%1$d tickets, Pass Captain order %2$s, sent to %3$s', $tickets, 'voucher-captain' ), $tickets, (string) ( $issued['order_public_id'] ?? '' ), \VCAP\Mask::email( (string) $email ) ) );
 		do_action( 'vcap_passcaptain_tickets_issued', $voucher, $issued, $email );
 		return $this->result( $voucher, $issued, $email );
+	}
+
+	/**
+	 * S11: whether an open ticket reservation of a voucher may be continued by this caller: staff always, a customer
+	 * account only if it made the reservation, a guest (user 0) only for the ticket address the reservation was made for.
+	 *
+	 * @param array<string, mixed> $existing The open reservation (redemption data).
+	 * @param int                  $user_id  Calling user.
+	 * @param string               $email    Where this caller's tickets would go.
+	 * @param bool                 $staff    Whether the caller manages vouchers.
+	 */
+	public static function may_continue( array $existing, int $user_id, string $email, bool $staff ): bool {
+		if ( $staff ) {
+			return true;
+		}
+		$reserved_for = (string) ( is_array( $existing['meta'] ?? null ) ? ( $existing['meta']['email'] ?? '' ) : '' );
+		if ( (int) ( $existing['user_id'] ?? -1 ) !== $user_id ) {
+			return false;
+		}
+		return $user_id > 0 || ( '' !== $email && 0 === strcasecmp( $reserved_for, $email ) );
 	}
 
 	/**

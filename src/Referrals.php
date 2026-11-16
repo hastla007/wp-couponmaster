@@ -563,6 +563,9 @@ final class Referrals {
 		$coupon->set_discount_type( 'fixed_cart' );
 		$coupon->set_amount( $amount );
 		$coupon->set_usage_limit( 1 );
+		// S6: one reward per order, never stacked with further rewards or other discount codes (multi-purpose
+		// vouchers still pay the rest: CartCoupons::keep_payment_means()).
+		$coupon->set_individual_use( true );
 		$coupon->set_email_restrictions( array( strtolower( (string) $user->user_email ) ) );
 		if ( $days > 0 ) {
 			$coupon->set_date_expires( time() + $days * DAY_IN_SECONDS );

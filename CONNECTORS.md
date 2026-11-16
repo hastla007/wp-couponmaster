@@ -10,7 +10,7 @@ A complete, tested reference implementation is in [`examples/vcap-example-connec
 |---|---|
 | Own kind of voucher (e.g. "course voucher") | `vcap_voucher_types` filter – appears in the product's *Type* select |
 | Redeem only in your plugin, not in the shop | Own channel via `vcap_redemption_channels` + `vcap_redemption_channel_for_target`; the merchant ticks it under *Redeemable via* |
-| Decide what a voucher may unlock | `vcap_redemption_allowed` (voucher, target, user) – return `WP_Error` to refuse |
+| Decide what a voucher may unlock | `vcap_redemption_allowed` (voucher, target, user) – return `WP_Error` to refuse. **Required:** bind voucher *and* target completely – refuse every target of your prefix you do not deliver and every voucher (type, product, channel) that may not unlock it; a REST caller chooses `target` freely within the prefixes it may use (S21, see *Redemptions over REST* below) |
 | Personal vouchers (restricted to buyer/recipient email) | Redeemed only for a user whose verified account email matches (`user_id`, REST: the authenticated user; verified = proof of mailbox by password reset or confirmation link, or an existing account grandfathered on the update – see SECURITY.md). For a guest, pass `email` **and** `email_verified => true` only when your plugin vouches for the identity (its own logged-in customer, an OTP sent to that address, staff who checked the ID); a typed guest email alone answers `vcap_login_required` (403) with "Please log in with j***@example.com …" – show it. Counter redemptions by staff stay allowed. Filter `vcap_personal_voucher_email_verified` (`bool`, `WP_User`) for shops with their own account verification. See SECURITY.md → Personal vouchers |
 | Target must still exist | `vcap_redemption_target_available` |
 | Redeem | `vcap()->redemptions` – `check`, `reserve`, `get`, `commit`, `release` (PHP) or `/wp-json/vcap/v1/redemptions` (REST) |
@@ -52,7 +52,7 @@ Your own code: when you call `reserve()` / `commit()` inside a transaction of yo
 ## 2. Redemption flow (copy this)
 
 1. **Derive a stable key** from what identifies the request, e.g. `myplugin:{user}:{hash(code)}` or `myplugin:grant:{grant id}`. Store it before calling Voucher Captain. A double click, a reload or a retry after a timeout must reuse the same key.
-2. **`reserve( $code, [ 'key', 'target', 'user_id' ] )`** – locks the voucher. Same key + same request ⇒ same answer while the redemption is `reserved` or `committed` (`replayed: true`); once it was released or expired the key answers `vcap_redemption_released`. Register server-side key prefixes (e.g. `myplugin:grant:`) with `vcap_internal_redemption_key_prefixes`, so nobody can claim them over REST in advance.
+2. **`reserve( $code, [ 'key', 'target', 'user_id' ] )`** – locks the voucher. Same key + same request ⇒ same answer while the redemption is `reserved` or `committed` (`replayed: true`); once it was released or expired the key answers `vcap_redemption_released`. **Register your server-side key prefixes** (e.g. `myplugin:grant:`) with `vcap_internal_redemption_key_prefixes` – required for every key your plugin creates on the server, so nobody can claim them over REST in advance or commit/release them there (customers get `404` for such keys, like for unknown ones).
 3. **Deliver your service idempotently**: store the redemption key with what you grant; if the key is already there, do nothing.
 4. **`commit( $key )`** – final. Repeating it is harmless.
 5. Only if you cannot deliver: **`release( $key )`** – the voucher becomes usable again.
@@ -71,6 +71,15 @@ Your own code: when you call `reserve()` / `commit()` inside a transaction of yo
 | Any other error | Show the message; nothing was reserved |
 
 Retry jobs read the current state with `get( $key )` and continue from there: `reserved` ⇒ deliver + commit; `committed` ⇒ make sure the grant exists; `released` ⇒ revoke and forget the key. Make the reservation lifetime longer than your longest retry window, or expect `vcap_reservation_missing`.
+
+### Redemptions over REST (S21)
+
+Every logged-in user can call `/wp-json/vcap/v1/redemptions`. What protects your service:
+
+- **Customers** may reserve, commit or release over REST only for target prefixes registered with `vcap_rest_redemption_target_prefixes` (default: none). Register a prefix there only if customers redeem for your service in the browser, and then bind voucher and target completely in `vcap_redemption_allowed` (above): the customer chooses the `target` string.
+- **Shop managers, connector users (Application Password) and POS accounts** (`vcap_redeem_api`) may use any target except internal ones – your `vcap_redemption_allowed` is the only check that a target of your prefix is real.
+- **Internal prefixes:** keys your plugin creates on the server go into `vcap_internal_redemption_key_prefixes`; targets only your plugin may book (never over REST, not even for managers) into `vcap_internal_redemption_target_prefixes`.
+- Over REST a key with a prefix (`system:…`) must start with the prefix of its target. The reference connector registers `example:` as internal key prefix and accepts only its own target `example:premium`.
 
 ## 3. Refunds and cancellations
 
@@ -119,5 +128,6 @@ Voucher Captain does not know what a customer owns in another plugin. Use the ex
 - [ ] Refund policy after redemption decided and documented
 - [ ] Own channel registered; merchant documentation tells them to tick it
 - [ ] Personal vouchers: `email_verified` passed only for identities your plugin verified; `vcap_login_required` handled
+- [ ] Server-side key prefixes registered with `vcap_internal_redemption_key_prefixes`; customer target prefixes (`vcap_rest_redemption_target_prefixes`) only where customers redeem in the browser; voucher and target bound completely in `vcap_redemption_allowed`
 - [ ] Listeners of `vcap_voucher_event` & co. expect to run after the COMMIT; `vcap_redemption_allowed` / `_target_available` stay fast and local (see *Event timing*)
 - [ ] Two-plugin integration test (Voucher Captain + connector) in CI, including a forced outage

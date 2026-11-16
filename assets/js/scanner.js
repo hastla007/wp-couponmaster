@@ -149,6 +149,12 @@
 		return d.innerHTML.replace( /"/g, '&quot;' ).replace( /'/g, '&#39;' );
 	}
 
+	/** S19: a link from the server only with an http(s) scheme (never javascript:, data: …); '' otherwise. */
+	function safeUrl( u ) {
+		var s = null === u || undefined === u ? '' : String( u ).trim();
+		return /^https?:\/\//i.test( s ) ? s : '';
+	}
+
 	function beep( ok ) {
 		announce();
 		try {
@@ -183,8 +189,8 @@
 		if ( d.can_checkin ) {
 			html += '<button type="button" class="button button-primary button-hero" data-act="checkin">' + esc( t.checkin ) + '</button>';
 		}
-		if ( d.admin_url ) {
-			html += '<a class="button-link" href="' + esc( d.admin_url ) + '">' + esc( t.passCaptainCheckins ) + '</a>';
+		if ( safeUrl( d.admin_url ) ) {
+			html += '<a class="button-link" href="' + esc( safeUrl( d.admin_url ) ) + '">' + esc( t.passCaptainCheckins ) + '</a>';
 		}
 		html += '</div></div>';
 		result.innerHTML = html;
@@ -300,8 +306,8 @@
 		if ( d.success && d.slip && 'ticket' !== d.type ) {
 			html += '<button type="button" class="button" data-act="print">' + esc( t.print ) + '</button>';
 		}
-		if ( d.admin_url ) {
-			html += '<a class="button-link" href="' + esc( d.admin_url ) + '">' + esc( t.details ) + '</a>';
+		if ( safeUrl( d.admin_url ) ) {
+			html += '<a class="button-link" href="' + esc( safeUrl( d.admin_url ) ) + '">' + esc( t.details ) + '</a>';
 		}
 		html += '</div></div>';
 		result.innerHTML = html;

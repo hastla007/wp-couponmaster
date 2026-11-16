@@ -7,6 +7,9 @@ defined( 'ABSPATH' ) || exit;
  * Native "customer chooses the amount" gift cards (min/max/step and preset buttons).
  */
 final class CustomAmount {
+	/** S4: currency the amount was entered in (order line meta; the cart item keeps it as vcap_currency). */
+	public const CURRENCY_META = '_vcap_custom_currency';
+
 	/** Error of the amount refused in this request (the field is marked when the form shows again). */
 	private string $error = '';
 
@@ -333,12 +336,17 @@ final class CustomAmount {
 			throw new \Exception( esc_html( $error ) );
 		}
 		$data['vcap_amount'] = round( Amount::parse( $raw )['value'], wc_get_price_decimals() );
+		// S4: the amount is fixed together with the currency it was entered in (switchers change it per request).
+		$data['vcap_currency'] = (string) get_woocommerce_currency();
 		return $data;
 	}
 
 	public function from_session( $item, $values ) {
 		if ( isset( $values['vcap_amount'] ) ) {
 			$item['vcap_amount'] = (float) $values['vcap_amount'];
+		}
+		if ( isset( $values['vcap_currency'] ) ) {
+			$item['vcap_currency'] = (string) $values['vcap_currency'];
 		}
 		return $item;
 	}
@@ -367,6 +375,9 @@ final class CustomAmount {
 	public function save( $item, $cart_item_key, $values, $order ): void {
 		if ( isset( $values['vcap_amount'] ) ) {
 			$item->add_meta_data( '_vcap_custom_amount', (float) $values['vcap_amount'], true );
+			if ( ! empty( $values['vcap_currency'] ) ) {
+				$item->add_meta_data( self::CURRENCY_META, strtoupper( (string) preg_replace( '/[^A-Za-z]/', '', (string) $values['vcap_currency'] ) ), true );
+			}
 		}
 	}
 

@@ -373,6 +373,8 @@ final class RedemptionService {
 	 *
 	 * @param string               $key  Redemption key.
 	 * @param array<string, mixed> $args user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
+	 *                                   access (callable, S9): gets the redemption data and returns true or a WP_Error;
+	 *                                   checked before and again under the row lock.
 	 * @return array<string, mixed>|\WP_Error
 	 */
 	public function commit( string $key, array $args = array() ): array|\WP_Error {
@@ -384,6 +386,7 @@ final class RedemptionService {
 	 *
 	 * @param string               $key  Redemption key.
 	 * @param array<string, mixed> $args user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
+	 *                                   access (callable, S9): as in commit().
 	 * @return array<string, mixed>|\WP_Error
 	 */
 	public function release( string $key, array $args = array() ): array|\WP_Error {
@@ -402,6 +405,7 @@ final class RedemptionService {
 	 * @param float                $amount     Amount to give back (voucher currency).
 	 * @param string               $refund_key Idempotency key of this refund.
 	 * @param array<string, mixed> $args       user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
+	 *                                         access (callable, S9): as in commit().
 	 * @return array<string, mixed>|\WP_Error Redemption data plus refunded (total) and restored (this call).
 	 * @throws \Throwable Database errors are re-thrown after the transaction was rolled back.
 	 */
@@ -414,6 +418,10 @@ final class RedemptionService {
 		if ( ! $row ) {
 			return self::error( 'vcap_reservation_missing', __( 'No redemption exists for this key.', 'voucher-captain' ), 404 );
 		}
+		$denied = $this->access_denied( $row, $args );
+		if ( $denied ) {
+			return $denied;
+		}
 		$known = json_decode( (string) $row['meta'], true );
 		if ( is_array( $known ) && isset( $known['_refunds'][ $refund_key ] ) ) {
 			// Repeated refund (retry): answer with the stored result, whatever amount the retry computed.
@@ -424,9 +432,6 @@ final class RedemptionService {
 		}
 		if ( $amount <= 0 ) {
 			return self::error( 'vcap_invalid_request', __( 'A redemption key, a refund key and a positive amount are required.', 'voucher-captain' ), 400 );
-		}
-		if ( isset( $args['user_id'] ) && (int) $args['user_id'] !== (int) $row['user_id'] ) {
-			return self::error( 'vcap_not_allowed', __( 'This redemption belongs to another user.', 'voucher-captain' ), 403 );
 		}
 		if ( self::STATE_COMMITTED !== $row['state'] ) {
 			return self::error( 'vcap_not_committed', __( 'Only completed redemptions can be refunded.', 'voucher-captain' ), 409 );
@@ -447,6 +452,11 @@ final class RedemptionService {
 			if ( ! $row || ! $voucher ) {
 				\VCAP\Db::rollback_if_error( 'api_refund', array( 'redemption_key' => $key ) );
 				return $this->temporary();
+			}
+			$denied = $this->access_denied( $row, $args ); // S9: again on the locked row.
+			if ( $denied ) {
+				\VCAP\Db::rollback_if_error( 'api_refund', array( 'redemption_key' => $key ) );
+				return $denied;
 			}
 			$meta    = json_decode( (string) $row['meta'], true );
 			$meta    = is_array( $meta ) ? $meta : array();
@@ -632,8 +642,9 @@ final class RedemptionService {
 		if ( ! $row ) {
 			return self::error( 'vcap_reservation_missing', __( 'No redemption exists for this key.', 'voucher-captain' ), 404 );
 		}
-		if ( isset( $args['user_id'] ) && (int) $args['user_id'] !== (int) $row['user_id'] ) {
-			return self::error( 'vcap_not_allowed', __( 'This redemption belongs to another user.', 'voucher-captain' ), 403 );
+		$denied = $this->access_denied( $row, $args );
+		if ( $denied ) {
+			return $denied;
 		}
 		if ( $to === $row['state'] ) {
 			return $this->redemption_data( $row ); // Idempotent repeat.
@@ -656,6 +667,11 @@ final class RedemptionService {
 			// Same lock order as reserve(): voucher row first, then the redemption row.
 			$voucher = $this->vouchers->get_for_update( (int) $row['voucher_id'] ); // M12-04: as committed now.
 			$row     = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$tables['redemptions']} WHERE redemption_key = %s FOR UPDATE", $key ), ARRAY_A ); // phpcs:ignore
+			$denied  = $row ? $this->access_denied( $row, $args ) : null; // S9: again on the locked row.
+			if ( $denied ) {
+				\VCAP\Db::rollback_if_error( 'api_transition', array( 'redemption_key' => $key ) );
+				return $denied;
+			}
 			if ( ! $row || self::STATE_RESERVED !== $row['state'] ) {
 				\VCAP\Db::rollback_if_error( 'api_transition', array( 'redemption_key' => $key ) );
 				return $row && $to === $row['state'] ? $this->redemption_data( $row ) : self::error( 'vcap_reservation_missing', __( 'This reservation has expired or was cancelled. Please redeem the voucher again.', 'voucher-captain' ), 409 );
@@ -937,6 +953,28 @@ final class RedemptionService {
 	 * @return array<string, mixed>|null
 	 * @phpstan-impure Reads the current row (it changes between calls).
 	 */
+	/**
+	 * S9: whether the caller of commit(), release() or refund() may act on this redemption row: the access check
+	 * ($args['access'], e.g. the REST rules for customers) and the owner ($args['user_id']). Checked on the row as
+	 * read and again under its lock, so a redemption created after a caller's own check is never driven by it.
+	 *
+	 * @param array<string, mixed> $row  Redemption row.
+	 * @param array<string, mixed> $args Call arguments.
+	 * @return \WP_Error|null The refusal, or null when allowed.
+	 */
+	private function access_denied( array $row, array $args ): ?\WP_Error {
+		if ( isset( $args['access'] ) && is_callable( $args['access'] ) ) {
+			$allowed = call_user_func( $args['access'], $this->redemption_data( $row ) );
+			if ( true !== $allowed ) {
+				return is_wp_error( $allowed ) ? $allowed : self::error( 'vcap_reservation_missing', __( 'No redemption exists for this key.', 'voucher-captain' ), 404 );
+			}
+		}
+		if ( isset( $args['user_id'] ) && (int) $args['user_id'] !== (int) $row['user_id'] ) {
+			return self::error( 'vcap_not_allowed', __( 'This redemption belongs to another user.', 'voucher-captain' ), 403 );
+		}
+		return null;
+	}
+
 	private function get_row( string $key ): ?array {
 		global $wpdb;
 		$table = Install::tables()['redemptions'];

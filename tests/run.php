@@ -1487,7 +1487,10 @@ $topup_cfg = ProductConfig::DEFAULTS;
 check( 'top-up value: line price before discounts, gross where prices include tax', array( 119.0, false ) === VCAP\TopUp::line_value( $topup_cfg, 1, 100.0, 19.0, true ) );
 check( 'top-up value in a net-price shop: the net price (like a new gift card), not net + VAT', array( 50.0, false ) === VCAP\TopUp::line_value( $topup_cfg, 1, 50.0, 9.5, false ) );
 check( 'top-up value: a fixed amount per unit, already in the base currency', array( 50.0, true ) === VCAP\TopUp::line_value( array( 'amount_source' => 'fixed', 'amount' => '25' ) + $topup_cfg, 2, 0.0, 0.0, true ) );
-check( 'top-up value: the amount the customer entered, per unit', array( 80.0, false ) === VCAP\TopUp::line_value( array( 'amount_source' => 'custom' ) + $topup_cfg, 2, 0.0, 0.0, true, '40' ) );
+check( 'top-up value: the amount the customer entered, per unit', array( 80.0, false ) === VCAP\TopUp::line_value( array( 'amount_source' => 'custom' ) + $topup_cfg, 2, 67.23, 12.77, true, '40' ) );
+check( 'S4: a top-up adds no more than was paid, and an amount entered in another currency counts as the amount paid', array( 70.0, false ) === VCAP\TopUp::line_value( array( 'amount_source' => 'custom' ) + $topup_cfg, 2, 70.0, 0.0, true, '40' ) && array( 60.0, false ) === VCAP\TopUp::line_value( array( 'amount_source' => 'custom' ) + $topup_cfg, 2, 60.0, 0.0, true, '40', 'payment', 'EUR', 'USD' ) );
+check( 'S4: a chosen amount is the face value only up to the amount paid per voucher and in the currency it was entered in', array( 50.0, false ) === VCAP\Issuer::custom_face_value( '50', 'EUR', 'EUR', 50.004, 2 ) && array( 42.5, true ) === VCAP\Issuer::custom_face_value( '50', 'EUR', 'EUR', 42.5, 2 ) && array( 45.0, true ) === VCAP\Issuer::custom_face_value( '50', 'USD', 'EUR', 45.0, 2 ) && array( 30.0, false ) === VCAP\Issuer::custom_face_value( '', '', 'EUR', 30.0, 2 ) && array( 20.0, false ) === VCAP\Issuer::custom_face_value( '20', '', 'EUR', 50.0, 2 ) && array( 0.0, true ) === VCAP\Issuer::custom_face_value( '50', 'EUR', 'EUR', 0.0, 2 ) );
+check( 'S4: the currency is fixed with the amount when it is added to the cart and stored on the order line', str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/CustomAmount.php' ), "\$data['vcap_currency'] = (string) get_woocommerce_currency();" ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/CustomAmount.php' ), 'self::CURRENCY_META' ) );
 check( 'top-up paid completely with another gift card still adds its value (subtotal, not total)', VCAP\TopUp::line_value( $topup_cfg, 1, 100.0, 0.0, true )[0] > 0 );
 // M12-12: the T7 gross rule is shared by new gift cards (Issuer::voucher_amount()) and top-ups.
 check( 'M12-12: net-price shop, single-purpose top-up sold with VAT: the gross amount paid (50 + 19 % = 59.50)', array( 59.5, false ) === VCAP\TopUp::line_value( $topup_cfg, 1, 50.0, 9.5, false, '', 'single' ) );
@@ -2832,6 +2835,55 @@ check( 'WF-01: WORKFLOW.md documents the contract (version, envelope, allowlist,
 	}
 	return true;
 } )() );
+echo "Security check (S6–S21, E2)\n";
+$sec_src = static fn( string $file ): string => (string) file_get_contents( dirname( __DIR__ ) . '/' . $file );
+$s9_rest = $sec_src( 'src/API/V1/RestController.php' );
+$s9_svc  = $sec_src( 'src/API/V1/RedemptionService.php' );
+check( 'S9: the REST permission check no longer lets a missing redemption through, commit/release/refund pass the access rules and the owner to the service, which checks them again under the row lock', ! str_contains( $s9_rest, 'return true; // Let the callback answer 404' ) && 3 === substr_count( $s9_rest, '$this->customer_args( $request )' ) && 3 <= substr_count( $s9_svc, '$this->access_denied( $row, $args )' ) && (bool) preg_match( '/FOR UPDATE", \$key \), ARRAY_A \); \/\/ phpcs:ignore\s+\$denied\s+= \$row \? \$this->access_denied/', $s9_svc ) );
+$s11_open = array( 'user_id' => 0, 'meta' => array( 'email' => 'holder@example.com' ) );
+check( 'S11: an open Pass Captain ticket reservation is continued only by the account that made it, by a guest only for the same address, or by staff', VCAP\Compat\PassCaptain\Exchange::may_continue( $s11_open, 0, 'Holder@example.com', false ) && ! VCAP\Compat\PassCaptain\Exchange::may_continue( $s11_open, 0, 'other@example.com', false ) && ! VCAP\Compat\PassCaptain\Exchange::may_continue( $s11_open, 7, 'holder@example.com', false ) && ! VCAP\Compat\PassCaptain\Exchange::may_continue( array( 'user_id' => 0 ), 0, '', false ) && VCAP\Compat\PassCaptain\Exchange::may_continue( $s11_open, 7, 'other@example.com', true ) && VCAP\Compat\PassCaptain\Exchange::may_continue( array( 'user_id' => 7 ) + $s11_open, 7, 'new@example.com', false ) );
+check( 'S13: the customer preview refuses password-protected (password not entered), hidden and unpublished products – editors still see published ones', VCAP\Preview::public_product( 'publish', false, 'visible', false ) && VCAP\Preview::public_product( 'publish', false, 'search', false ) && ! VCAP\Preview::public_product( 'publish', true, 'visible', false ) && ! VCAP\Preview::public_product( 'publish', false, 'hidden', false ) && ! VCAP\Preview::public_product( 'draft', false, 'visible', false ) && VCAP\Preview::public_product( 'publish', true, 'hidden', true ) && ! VCAP\Preview::public_product( 'private', false, 'visible', true ) && str_contains( $sec_src( 'src/Preview.php' ), 'self::public_product( (string) get_post_status( $parent_id ), post_password_required( $parent_id )' ) );
+$s14_src = $sec_src( 'src/FirstOrderCoupons.php' );
+check( 'S14: first-order coupons are held at checkout (classic, Store API, pay page) under a per-customer lock, and open orders holding one count as earlier order', str_contains( $s14_src, "add_action( 'woocommerce_checkout_order_processed', array( \$this, 'hold_classic' )" ) && str_contains( $s14_src, "add_action( 'woocommerce_store_api_checkout_order_processed', array( \$this, 'hold_store_api' )" ) && str_contains( $s14_src, "add_action( 'woocommerce_before_pay_action', array( \$this, 'hold' )" ) && str_contains( $s14_src, "SELECT GET_LOCK(%s, 10)" ) && str_contains( $s14_src, 'if ( self::open_order_holds( $user_id, $email, $exclude_order_id, $before ) )' ) && str_contains( $s14_src, "'status'         => array( 'pending' )" ) );
+$s17_caps = VCAP\ProductSettings::manager_post_caps();
+check( 'S17: voucher settings, PDF templates and field groups need vcap_manage_vouchers or manage_woocommerce (not product rights)', ! VCAP\ProductSettings::may_manage() && 'manage_woocommerce' === $s17_caps['edit_posts'] && 'manage_woocommerce' === $s17_caps['create_posts'] && 'manage_woocommerce' === $s17_caps['delete_others_posts'] && ! in_array( 'edit_products', $s17_caps, true ) && 2 === substr_count( $sec_src( 'src/TemplatePostType.php' ) . $sec_src( 'src/Fields.php' ), "'capabilities'    => ProductSettings::manager_post_caps()," ) && ! str_contains( $sec_src( 'src/TemplatePostType.php' ), "current_user_can( 'edit_products' )" ) && 2 === substr_count( $sec_src( 'src/ProductSettings.php' ), 'if ( self::refuse_without_right(' ) );
+$GLOBALS['vcap_test_options'][ VCAP\Compat\AffiliateCaptain::OPTION ] = array( 'Summer flyer' => 'PARTNER1' );
+check( 'S18: without wpac_manage_affiliates no codes are generated under a campaign name assigned to a partner; unassigned names are free', str_contains( VCAP\Compat\AffiliateCaptain::generation_refusal( 'Summer flyer' ), 'Summer flyer' ) && '' === VCAP\Compat\AffiliateCaptain::generation_refusal( 'Winter flyer' ) && str_contains( $sec_src( 'src/Admin/CampaignAdmin.php' ), "'coupons' === \$target ? \\VCAP\\Compat\\AffiliateCaptain::generation_refusal( \$name )" ) && str_contains( $sec_src( 'src/Compat/AffiliateCaptain.php' ), "add_action( 'deleted_post', array( \$this, 'forget_empty_campaign' ), 10, 2 );" ) );
+unset( $GLOBALS['vcap_test_options'][ VCAP\Compat\AffiliateCaptain::OPTION ] );
+$s19_js = $sec_src( 'assets/js/scanner.js' );
+preg_match_all( '/href="\' \+ (.*?) \+ \'"/', $s19_js, $s19_hrefs );
+check( 'S19: the scanner takes links from the server only with an http(s) scheme (every href goes through safeUrl())', str_contains( $s19_js, 'function safeUrl( u )' ) && str_contains( $s19_js, "return /^https?:\\/\\//i.test( s ) ? s : '';" ) && 2 === count( $s19_hrefs[1] ) && array() === array_filter( $s19_hrefs[1], static fn( $h ) => ! str_starts_with( $h, 'esc( safeUrl( ' ) ) && ! str_contains( $s19_js, 'if ( d.admin_url )' ), json_encode( $s19_hrefs[1] ) );
+$s21_doc = $sec_src( 'CONNECTORS.md' );
+$s21_ex  = $sec_src( 'examples/vcap-example-connector/vcap-example-connector.php' );
+check( 'S21: CONNECTORS.md requires the complete binding in vcap_redemption_allowed and names the key and REST target prefix filters; the example connector registers "example:"', str_contains( $s21_doc, 'bind voucher *and* target completely' ) && str_contains( $s21_doc, '`vcap_rest_redemption_target_prefixes`' ) && str_contains( $s21_doc, '**Register your server-side key prefixes**' ) && str_contains( $s21_ex, "add_filter( 'vcap_internal_redemption_key_prefixes', array( \$self, 'internal_keys' ) );" ) && str_contains( $s21_ex, "array( 'example:' )" ) && str_contains( $s21_ex, 'self::TARGET !== $target' ) );
+// E2: dompdf reads local files only from the plugin, the uploads and custom font folders – never ABSPATH, never a
+// sibling folder with the same prefix ("uploads-private"), also not through "../".
+$e2_uploads = rtrim( $GLOBALS['vcap_test_uploads'], '/' );
+$e2_sibling = $e2_uploads . '-private';
+@mkdir( $e2_sibling, 0777, true );
+file_put_contents( $e2_sibling . '/secret.png', 'x' );
+file_put_contents( $e2_uploads . '/e2-ok.png', 'x' );
+file_put_contents( ABSPATH . 'wp-config.php', '<?php // test' );
+$e2_opts  = PdfRenderer::dompdf_options();
+$e2_ok    = static fn( string $f ): bool => true === $e2_opts->validateLocalUri( $f )[0];
+$e2_dirs  = PdfRenderer::chroot_dirs();
+check(
+	'E2: the PDF chroot holds the plugin and the uploads only (no ABSPATH); siblings with a shared prefix and ../ escapes are refused',
+	! in_array( realpath( ABSPATH ), $e2_dirs, true ) && in_array( realpath( $e2_uploads ), $e2_dirs, true ) && in_array( realpath( VCAP_PATH ), $e2_dirs, true )
+		&& $e2_ok( $e2_uploads . '/e2-ok.png' ) && $e2_ok( 'file://' . $e2_uploads . '/e2-ok.png' ) && $e2_ok( VCAP_PATH . 'voucher-captain.php' )
+		&& ! $e2_ok( $e2_sibling . '/secret.png' ) && ! $e2_ok( $e2_uploads . '/../' . basename( $e2_sibling ) . '/secret.png' ) && ! $e2_ok( $e2_uploads . '/../../' . basename( dirname( $e2_uploads ) ) . '/' . basename( $e2_sibling ) . '/secret.png' )
+		&& ! $e2_ok( ABSPATH . 'wp-config.php' ) && ! $e2_ok( $e2_uploads . '/../vcap-abspath/wp-config.php' ),
+	json_encode( $e2_dirs )
+);
+$GLOBALS['vcap_test_filters']['vcap_pdf_fonts'][] = array( static fn( $fonts ) => array( 'E2 Font' => array( 'normal' => $e2_sibling . '/secret.png' ) ), 1 );
+check( 'E2: the folder of a custom font (vcap_pdf_fonts) is allowed as well', in_array( realpath( $e2_sibling ), PdfRenderer::chroot_dirs(), true ) );
+array_pop( $GLOBALS['vcap_test_filters']['vcap_pdf_fonts'] );
+@unlink( $e2_sibling . '/secret.png' );
+@unlink( $e2_uploads . '/e2-ok.png' );
+@unlink( ABSPATH . 'wp-config.php' );
+@rmdir( $e2_sibling );
+
+check( 'S6: referral rewards are "Individual use only" (several rewards cannot be stacked)', (bool) preg_match( '/function reward_coupon\(.*?set_individual_use\( true \).*?return \$coupon->save\(\)/s', $sec_src( 'src/Referrals.php' ) ) );
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

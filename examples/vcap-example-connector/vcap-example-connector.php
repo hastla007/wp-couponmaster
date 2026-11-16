@@ -34,6 +34,8 @@ final class VCAP_Example_Connector {
 		add_filter( 'vcap_redemption_channels', array( $self, 'channels' ) );
 		add_filter( 'vcap_redemption_channel_for_target', array( $self, 'channel_for_target' ), 10, 2 );
 		add_filter( 'vcap_redemption_allowed', array( $self, 'allowed' ), 10, 4 );
+		// Keys "example:…" are created on the server only: nobody may claim (or drive) them over REST.
+		add_filter( 'vcap_internal_redemption_key_prefixes', array( $self, 'internal_keys' ) );
 		add_action( self::RETRY, array( $self, 'retry' ), 10, 2 );
 		add_action( 'vcap_voucher_event', array( $self, 'on_voucher_event' ), 10, 2 );
 		add_shortcode( 'vcap_example_unlock', array( $self, 'shortcode' ) );
@@ -53,12 +55,23 @@ final class VCAP_Example_Connector {
 		return 0 === strpos( $target, 'example:' ) ? self::CHANNEL : $channel;
 	}
 
-	/** Only "premium" vouchers unlock the premium service. */
+	/**
+	 * Binds voucher and target completely: only "premium" vouchers, and only for the one target this connector
+	 * delivers (any other "example:…" target is refused – nothing would be delivered for it).
+	 */
 	public function allowed( $allowed, $voucher, string $target, int $user_id ) {
-		if ( 0 === strpos( $target, 'example:' ) && 'premium' !== $voucher->type ) {
+		if ( 0 !== strpos( $target, 'example:' ) ) {
+			return $allowed;
+		}
+		if ( self::TARGET !== $target || 'premium' !== $voucher->type ) {
 			return new WP_Error( 'vcap_not_allowed', __( 'This voucher cannot unlock the premium service.', 'vcap-example' ), array( 'status' => 403 ) );
 		}
 		return $allowed;
+	}
+
+	/** The connector's own key prefix is internal (CONNECTORS.md 2: never accepted over REST). */
+	public function internal_keys( array $prefixes ): array {
+		return array_merge( $prefixes, array( 'example:' ) );
 	}
 
 	// ---------------------------------------------------------------- redemption flow.

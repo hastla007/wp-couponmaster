@@ -90,7 +90,12 @@ final class Preview {
 
 		$product_id = absint( $_REQUEST['variation_id'] ?? 0 ) ?: absint( $_REQUEST['product_id'] ?? 0 ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- public, read-only preview (see above).
 		$product    = wc_get_product( $product_id );
-		if ( ! $product || ! ProductConfig::is_voucher( $product ) || 'publish' !== get_post_status( $product->get_parent_id() ?: $product->get_id() ) ) {
+		if ( ! $product || ! ProductConfig::is_voucher( $product ) ) {
+			wp_die( esc_html__( 'Invalid product.', 'voucher-captain' ), 400 );
+		}
+		$parent_id = $product->get_parent_id() ?: $product->get_id();
+		$parent    = $parent_id === $product->get_id() ? $product : wc_get_product( $parent_id );
+		if ( ! self::public_product( (string) get_post_status( $parent_id ), post_password_required( $parent_id ), $parent ? (string) $parent->get_catalog_visibility() : 'hidden', current_user_can( 'edit_post', $parent_id ) ) ) {
 			wp_die( esc_html__( 'Invalid product.', 'voucher-captain' ), 400 );
 		}
 		$config = ProductConfig::get( $product );
@@ -117,6 +122,20 @@ final class Preview {
 			}
 		}
 		self::stream( $pdf, 'preview.pdf' );
+	}
+
+	/**
+	 * S13: whether the customer preview may show a product's template data (dates, places, texts): only for a
+	 * published product whose password (if any) the visitor entered and that is not hidden from the catalog –
+	 * people who may edit the product see it in any case.
+	 *
+	 * @param string $status            Post status of the (parent) product.
+	 * @param bool   $password_required post_password_required() for the visitor.
+	 * @param string $visibility        Catalog visibility (visible, catalog, search, hidden).
+	 * @param bool   $can_edit          Whether the visitor may edit the product.
+	 */
+	public static function public_product( string $status, bool $password_required, string $visibility, bool $can_edit ): bool {
+		return 'publish' === $status && ( $can_edit || ( ! $password_required && 'hidden' !== $visibility ) );
 	}
 
 	/** Lifetime of a cached customer preview in seconds (M12-73). */

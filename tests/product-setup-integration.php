@@ -43,6 +43,17 @@ function vcap_ps_product( string $name, array $meta, string $price = '40' ): WC_
 	return $p;
 }
 
+/** S17: the product form is saved by a voucher manager (WP-CLI runs as user 0). */
+function vcap_ps_as_manager( callable $save ): void {
+	$grant = static fn( $caps ) => array( 'vcap_manage_vouchers' => true ) + (array) $caps;
+	add_filter( 'user_has_cap', $grant );
+	try {
+		$save();
+	} finally {
+		remove_filter( 'user_has_cap', $grant );
+	}
+}
+
 /** Paid order for a product (vouchers are issued on "processing"); $fields: personalisation of the line. */
 function vcap_ps_buy( WC_Product $product, array $fields = array(), string $email = 'ps-buyer@example.com' ): array {
 	$order   = wc_create_order();
@@ -84,6 +95,29 @@ vcap_ps_assert( 1 === count( $errors ) && false !== strpos( $errors[0], '7' ) &&
 $ranged->update_meta_data( '_vcap_custom_min', '300' );
 $ranged->save();
 vcap_ps_assert( count( CustomAmount::config_errors( ProductConfig::get( wc_get_product( $ranged->get_id() ) ) ) ) >= 1 && 'error' === ( ProductChecks::problems( wc_get_product( $ranged->get_id() ) )[0]['level'] ?? '' ), 'minimum above maximum is an error on the product screen' );
+
+// S4: the chosen amount is never worth more than was paid for the line (price filter, switcher, third-party discount).
+function vcap_ps_custom_order( WC_Product $product, float $paid, string $entered, string $currency = '' ): array {
+	$order   = wc_create_order();
+	$item_id = $order->add_product( $product, 1, array( 'subtotal' => $paid, 'total' => $paid ) );
+	$item    = $order->get_item( $item_id );
+	$item->update_meta_data( '_vcap_custom_amount', (float) $entered );
+	if ( '' !== $currency ) {
+		$item->update_meta_data( CustomAmount::CURRENCY_META, $currency );
+	}
+	$item->save();
+	$order->set_billing_email( 'ps-s4@example.com' );
+	$order->calculate_totals( false );
+	$order->payment_complete( 'txn-ps-s4-' . wp_generate_password( 6, false, false ) );
+	return array( wc_get_order( $order->get_id() ), vcap()->vouchers->for_order( $order->get_id() ) );
+}
+list( $s4_order, $s4_vouchers ) = vcap_ps_custom_order( $free, 30.0, '50' );
+$s4_notes = implode( ' ', array_map( static fn( $n ) => $n->content, wc_get_order_notes( array( 'order_id' => $s4_order->get_id() ) ) ) );
+vcap_ps_assert( 1 === count( $s4_vouchers ) && 30.0 === round( (float) $s4_vouchers[0]->initial_amount, 2 ) && str_contains( $s4_notes, 'does not match the amount paid' ), 'S4: a chosen amount of 50 paid with 30 issues a voucher worth 30 and notes it', array( $s4_vouchers ? $s4_vouchers[0]->initial_amount : null, $s4_notes ) );
+list( , $s4_ok ) = vcap_ps_custom_order( $free, 25.0, '25', get_woocommerce_currency() );
+vcap_ps_assert( 1 === count( $s4_ok ) && 25.0 === round( (float) $s4_ok[0]->initial_amount, 2 ), 'S4: a chosen amount that was paid in full is the face value', $s4_ok ? $s4_ok[0]->initial_amount : null );
+list( , $s4_fx ) = vcap_ps_custom_order( $free, 20.0, '25', 'XTS' === get_woocommerce_currency() ? 'XXX' : 'XTS' );
+vcap_ps_assert( 1 === count( $s4_fx ) && 20.0 === round( (float) $s4_fx[0]->initial_amount, 2 ), 'S4: an amount entered in another currency than the order counts as the amount paid', $s4_fx ? $s4_fx[0]->initial_amount : null );
 
 /* ---- 2. Fixed expiry date --------------------------------------------------------------------------------- */
 
@@ -464,7 +498,7 @@ vcap_ps_assert( (string) $settings_obj->get( 'vcap_code_separator' ) === $settin
 false === $keep_prefix ? delete_option( 'vcap_code_prefix' ) : update_option( 'vcap_code_prefix', $keep_prefix );
 $affix_product = vcap_ps_product( 'PS affix', array( 'code_prefix' => 'OK' ) );
 $_POST         = array( '_vcap_enabled' => 'yes', '_vcap_type' => 'voucher', '_vcap_code_prefix' => 'B&B', '_vcap_code_suffix' => 'END' );
-( new VCAP\ProductSettings() )->save( $affix_product );
+vcap_ps_as_manager( static fn() => ( new VCAP\ProductSettings() )->save( $affix_product ) );
 $affix_product->save();
 $_POST         = array();
 $affix_product = wc_get_product( $affix_product->get_id() );
@@ -495,14 +529,14 @@ vcap_ps_assert( 0 === $imp_report['imported'] && 0 === $imp_report['dupes_existi
 $coupled = vcap_ps_product( 'PS delivery date immediate', array() );
 $_POST   = array( '_vcap_enabled' => 'yes', '_vcap_type' => 'voucher', '_vcap_delivery' => 'immediate', '_vcap_builtin_fields' => array( 'recipient_name', 'delivery_date', 'delivery_date_required' ) );
 delete_transient( 'vcap_flash_' . get_current_user_id() );
-( new VCAP\ProductSettings() )->save( $coupled );
+vcap_ps_as_manager( static fn() => ( new VCAP\ProductSettings() )->save( $coupled ) );
 $coupled->save();
 $coupled = wc_get_product( $coupled->get_id() );
 vcap_ps_assert( 'customer' === $coupled->get_meta( '_vcap_delivery' ) && in_array( 'delivery_date_required', (array) $coupled->get_meta( '_vcap_builtin_fields' ), true ), 'the delivery date field with "Immediately" switches the delivery to the customer date' );
 vcap_ps_assert( in_array( 'info', array_column( Flash::pending(), 'type' ), true ), 'the shop is told that the delivery was switched' );
 $fixed_day = vcap_ps_product( 'PS delivery date fixed', array() );
 $_POST     = array( '_vcap_enabled' => 'yes', '_vcap_type' => 'voucher', '_vcap_delivery' => 'date', '_vcap_delivery_date' => wp_date( 'Y-m-d', time() + 20 * DAY_IN_SECONDS ), '_vcap_builtin_fields' => array( 'message', 'delivery_date' ) );
-( new VCAP\ProductSettings() )->save( $fixed_day );
+vcap_ps_as_manager( static fn() => ( new VCAP\ProductSettings() )->save( $fixed_day ) );
 $fixed_day->save();
 $fixed_day = wc_get_product( $fixed_day->get_id() );
 vcap_ps_assert( 'date' === $fixed_day->get_meta( '_vcap_delivery' ) && array( 'message' ) === array_values( (array) $fixed_day->get_meta( '_vcap_builtin_fields' ) ) && in_array( 'warning', array_column( Flash::pending(), 'type' ), true ), 'with a fixed delivery date the field is switched off, with a warning' );
@@ -607,7 +641,7 @@ list( , $var_bad ) = vcap_ps_buy( $pct_variations['150'] );
 list( , $var_ok )  = vcap_ps_buy( $pct_variations['30'] );
 vcap_ps_assert( ! $var_bad && 1 === count( $var_ok ) && 30.0 === (float) ( new WC_Coupon( $var_ok[0]->coupon_id ) )->get_amount() && 'percent' === ( new WC_Coupon( $var_ok[0]->coupon_id ) )->get_discount_type(), 'an order of the 150 % variation issues nothing, the 30 % variation a 30 % coupon' );
 $_POST = array( 'vcap_variation_enabled' => array( 0 => '1' ), 'vcap_var' => array( 0 => array( 'amount' => '120' ) ) );
-( new VCAP\ProductSettings() )->save_variation( $pct_variations['30'], 0 );
+vcap_ps_as_manager( static fn() => ( new VCAP\ProductSettings() )->save_variation( $pct_variations['30'], 0 ) );
 $pct_variations['30']->save();
 $_POST = array();
 vcap_ps_assert( '30' === (string) wc_get_product( $pct_variations['30']->get_id() )->get_meta( '_vcap_amount' ), 'saving 120 as the value of a percentage variation keeps the previous 30' );
@@ -627,14 +661,14 @@ vcap_ps_assert( 1 === count( $retry ) && 'percent' === ( new WC_Coupon( $retry[0
 // Saving the product form: an invalid combination keeps the previous discount setup.
 $form = vcap_ps_product( 'PS form discount', array( 'type' => 'voucher', 'discount_type' => 'fixed_cart', 'amount_source' => 'price' ), '80' );
 $_POST = array( '_vcap_enabled' => 'yes', '_vcap_type' => 'voucher', '_vcap_discount_type' => 'percent', '_vcap_amount_source' => 'price', '_vcap_amount' => '' );
-( new VCAP\ProductSettings() )->save( $form );
+vcap_ps_as_manager( static fn() => ( new VCAP\ProductSettings() )->save( $form ) );
 $form->save();
 $_POST = array();
 $form  = wc_get_product( $form->get_id() );
 vcap_ps_assert( 'fixed_cart' === $form->get_meta( '_vcap_discount_type' ) && 'price' === $form->get_meta( '_vcap_amount_source' ) && $form->is_purchasable(), 'saving "percentage from the product price" keeps the previous discount setup' );
 vcap_ps_assert( class_exists( 'WC_Admin_Meta_Boxes' ) || false !== strpos( (string) wp_json_encode( Flash::pending() ), 'not saved' ), 'the product screen says why it was not saved' );
 $_POST = array( '_vcap_enabled' => 'yes', '_vcap_type' => 'voucher', '_vcap_discount_type' => 'percent', '_vcap_amount_source' => 'fixed', '_vcap_amount' => '25' );
-( new VCAP\ProductSettings() )->save( $form );
+vcap_ps_as_manager( static fn() => ( new VCAP\ProductSettings() )->save( $form ) );
 $form->save();
 $_POST = array();
 $form  = wc_get_product( $form->get_id() );

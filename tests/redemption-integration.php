@@ -282,8 +282,32 @@ vcap_redeem_assert( 400 === $p13_key->get_status(), 'P13: a key of another conne
 $p13_meta = vcap_redeem_rest( 'POST', '/vcap/v1/redemptions', array( 'code' => $rest_voucher->code, 'key' => 'it-' . wp_generate_uuid4(), 'target' => 'test:course:1', 'meta' => array( 'a' => array( 'b' => array( 'c' => array( 'd' => 1 ) ) ) ) ) );
 vcap_redeem_assert( 400 === $p13_meta->get_status(), 'P13: metadata deeper than 3 levels is refused' );
 wp_set_current_user( $user_b );
-vcap_redeem_assert( 403 === vcap_redeem_rest( 'POST', '/vcap/v1/redemptions/' . $key6 . '/commit' )->get_status(), 'REST commit by another user is forbidden' );
-vcap_redeem_assert( 403 === vcap_redeem_rest( 'GET', '/vcap/v1/redemptions/' . $key6 )->get_status(), 'REST read by another user is forbidden' );
+vcap_redeem_assert( 404 === vcap_redeem_rest( 'POST', '/vcap/v1/redemptions/' . $key6 . '/commit' )->get_status(), 'REST commit by another user is refused like an unknown key (S9: 404, no 403/404 oracle)' );
+vcap_redeem_assert( 404 === vcap_redeem_rest( 'GET', '/vcap/v1/redemptions/' . $key6 )->get_status(), 'REST read by another user is refused like an unknown key' );
+// S9: the permission check no longer lets a missing redemption through, and the callbacks check again in the
+// service: a redemption created after the permission check (race) is not driven by another customer.
+$s9_controller = new VCAP\API\V1\RestController( $service );
+$s9_key        = 'it-' . wp_generate_uuid4();
+$s9_request    = new WP_REST_Request( 'POST', '/vcap/v1/redemptions/' . $s9_key . '/release' );
+$s9_request->set_param( 'key', $s9_key );
+$s9_perm       = $s9_controller->can_access( $s9_request );
+list( $s9_voucher ) = vcap_redeem_voucher( 'single', 8.0 );
+$service->reserve( $s9_voucher->code, array( 'key' => $s9_key, 'target' => 'test:course:9', 'user_id' => $user_a ) ); // Created after the check.
+$s9_release = $s9_controller->release( $s9_request );
+$s9_commit  = $s9_controller->commit( $s9_request );
+$s9_state   = $service->get( $s9_key );
+vcap_redeem_assert( is_wp_error( $s9_perm ) && 404 === ( $s9_perm->get_error_data()['status'] ?? 0 ) && is_wp_error( $s9_release ) && is_wp_error( $s9_commit ) && 'reserved' === ( $s9_state['state'] ?? '' ), 'S9: a missing redemption is refused by the permission check, and one created after it is not released or committed by another customer', array( $s9_perm, $s9_release, $s9_commit, $s9_state['state'] ?? null ) );
+$service->release( $s9_key );
+list( $s9_internal_voucher ) = vcap_redeem_voucher( 'single', 8.0 );
+$s9_internal = 'wpcap-' . wp_generate_password( 12, false, false );
+$service->reserve( $s9_internal_voucher->code, array( 'key' => $s9_internal, 'target' => 'test:ticket:1', 'user_id' => $user_b ) );
+$s9_unknown  = vcap_redeem_rest( 'POST', '/vcap/v1/redemptions/wpcap-' . wp_generate_password( 12, false, false ) . '/release' );
+$s9_own_int  = vcap_redeem_rest( 'POST', '/vcap/v1/redemptions/' . $s9_internal . '/release' );
+$s9_int_req  = new WP_REST_Request( 'POST', '/vcap/v1/redemptions/' . $s9_internal . '/release' );
+$s9_int_req->set_param( 'key', $s9_internal );
+$s9_direct   = $s9_controller->release( $s9_int_req );
+vcap_redeem_assert( 404 === $s9_unknown->get_status() && 404 === $s9_own_int->get_status() && $s9_unknown->get_data()['code'] === $s9_own_int->get_data()['code'] && is_wp_error( $s9_direct ) && 'reserved' === ( $service->get( $s9_internal )['state'] ?? '' ), 'S9: an internal key (wpcap-…) is refused to customers with the same answer whether it exists or not, also when the callback is reached directly', array( $s9_unknown->get_data(), $s9_own_int->get_data() ) );
+$service->release( $s9_internal );
 wp_set_current_user( $user_a );
 $response = vcap_redeem_rest( 'POST', '/vcap/v1/redemptions/' . $key6 . '/commit' );
 vcap_redeem_assert( 200 === $response->get_status() && 'committed' === $response->get_data()['state'], 'REST commit by the owner completes the redemption' );

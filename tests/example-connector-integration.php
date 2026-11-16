@@ -91,4 +91,7 @@ vcap_ex_assert( ! in_array( $connector->redeem( $user, $plain_voucher->code ), a
 // Refund after the redemption: the example policy takes the access back.
 vcap()->issuer->void( vcap()->vouchers->get( $vouchers[0]->id ), 'Purchase order refunded' );
 vcap_ex_assert( ! $connector->has_access( $user, VCAP_Example_Connector::key( $user, $vouchers[0]->code ) ), 'voiding a redeemed voucher revokes the access (example policy)' );
+// S21: the reference connector registers its key prefix as internal and binds voucher and target completely.
+vcap_ex_assert( VCAP\API\V1\RestController::is_internal_key( VCAP_Example_Connector::key( $user, $vouchers[1]->code ) ), 'S21: keys "example:…" are internal (never accepted or driven over REST)' );
+vcap_ex_assert( is_wp_error( $connector->allowed( true, $vouchers[1], 'example:other', $user ) ) && true === $connector->allowed( true, $vouchers[1], VCAP_Example_Connector::TARGET, $user ), 'S21: only the connector\'s own target is accepted for its prefix' );
 echo "Voucher Captain example connector checks passed.\n";

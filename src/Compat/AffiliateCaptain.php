@@ -30,6 +30,73 @@ final class AffiliateCaptain {
 	public function register(): void {
 		add_action( 'plugins_loaded', array( $this, 'init' ), 20 );
 		$this->init();
+		// S18: an assignment ends with the last code of its campaign (a new campaign of the same name starts
+		// without partner); kept in step even while Affiliate Captain is inactive.
+		add_action( 'before_delete_post', array( $this, 'remember_deleted' ), 10, 2 );
+		add_action( 'deleted_post', array( $this, 'forget_empty_campaign' ), 10, 2 );
+		add_action( 'vcap_daily_maintenance', array( self::class, 'prune' ), 50, 0 );
+	}
+
+	/** @var string[] Campaigns of coupons being deleted in this request. */
+	private array $deleting = array();
+
+	/** @param mixed $post Post being deleted. */
+	public function remember_deleted( $post_id, $post = null ): void {
+		if ( $post instanceof \WP_Post && 'shop_coupon' === $post->post_type ) {
+			$campaign = (string) get_post_meta( (int) $post_id, Campaigns::META, true );
+			if ( '' !== $campaign ) {
+				$this->deleting[ (int) $post_id ] = $campaign;
+			}
+		}
+	}
+
+	/** @param mixed $post Deleted post. */
+	public function forget_empty_campaign( $post_id, $post = null ): void {
+		$campaign = $this->deleting[ (int) $post_id ] ?? '';
+		unset( $this->deleting[ (int) $post_id ] );
+		if ( '' !== $campaign ) {
+			self::prune( array( $campaign ) );
+		}
+	}
+
+	/**
+	 * S18: removes the partner of campaigns that have no codes any more (all, or the ones named).
+	 *
+	 * @param string[]|null $campaigns Campaign names (null: every assigned campaign).
+	 * @return int Assignments removed.
+	 */
+	public static function prune( ?array $campaigns = null ): int {
+		global $wpdb;
+		$map     = self::assignments();
+		$removed = 0;
+		foreach ( null === $campaigns ? array_keys( $map ) : $campaigns as $campaign ) {
+			$campaign = (string) $campaign;
+			if ( ! isset( $map[ $campaign ] ) ) {
+				continue;
+			}
+			$left = $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value = %s LIMIT 1", Campaigns::META, $campaign ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			if ( null === $left && '' === (string) $wpdb->last_error ) {
+				unset( $map[ $campaign ] );
+				++$removed;
+			}
+		}
+		if ( $removed ) {
+			update_option( self::OPTION, $map, false );
+		}
+		return $removed;
+	}
+
+	/**
+	 * S18: codes under the name of a campaign that is assigned to a partner earn that partner commission, so
+	 * generating them is a partner-program decision as well: '' when the current user may, else the reason.
+	 */
+	public static function generation_refusal( string $campaign ): string {
+		$campaign = Campaigns::clean_name( $campaign );
+		if ( '' === $campaign || '' === self::partner_for_campaign( $campaign ) || current_user_can( self::CAPABILITY ) ) { // phpcs:ignore WordPress.WP.Capabilities.Unknown -- Registered by WP Affiliate Captain.
+			return '';
+		}
+		/* translators: %s: campaign name */
+		return sprintf( __( 'The campaign "%s" is assigned to a partner in WP Affiliate Captain: its codes earn that partner commission. Generating more codes under this name needs the right to manage affiliates. No codes were generated.', 'voucher-captain' ), $campaign );
 	}
 
 	public function init(): void {

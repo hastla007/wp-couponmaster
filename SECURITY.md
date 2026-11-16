@@ -90,7 +90,7 @@ A personal voucher ("Who may redeem": buyer, recipient, or buyer or recipient; r
 
 ## Redemption API targets
 
-Over REST, customers may reserve, commit or release only for targets whose prefix a connector registered (`vcap_rest_redemption_target_prefixes`, default none); shop managers and connector users may use any other target. Targets and keys of built-in integrations (`passcaptain:…`, `wpcap-…`; filters `vcap_internal_redemption_target_prefixes`, `vcap_internal_redemption_key_prefixes`) are refused over REST, so nobody can book a ticket voucher or a Pass Captain payment without its delivery. Targets are checked in their stored (normalised) form.
+Over REST, customers may reserve, commit or release only for targets whose prefix a connector registered (`vcap_rest_redemption_target_prefixes`, default none); shop managers and connector users may use any other target. Targets and keys of built-in integrations (`passcaptain:…`, `wpcap-…`; filters `vcap_internal_redemption_target_prefixes`, `vcap_internal_redemption_key_prefixes`) are refused over REST, so nobody can book a ticket voucher or a Pass Captain payment without its delivery. Targets are checked in their stored (normalised) form. For customers, another user's redemption, an internal one and an unknown key get the same `404` (no existence oracle), and commit, release and refund repeat the access check in the redemption service under the row lock, so a redemption created after the REST permission check is never driven by another customer (S9).
 
 ## Deactivation
 
@@ -99,6 +99,8 @@ Gift cards and store credit are WooCommerce coupons without a usage limit whose 
 ## Guest PDF links
 
 Guest PDF links are signed with an HMAC tied to the site secret, the voucher token and the voucher's link version (the number of reissues; links of vouchers never reissued keep their earlier signature, so mails already sent stay valid). The secret is created once with `add_option()` and never overwritten after a failed read (which would invalidate every link already sent). A rendered PDF is kept for at most an hour in the private upload folder under a name that changes with every voucher change, and a `downloaded` event is written at most once an hour per voucher. Page links expire after one day. Email-link lifetime follows the merchant's download-link setting (default 90 days for shops that never saved it; a value saved before is kept; zero means no expiry). A changed token, version, expiry, or signature makes the URL invalid: reissuing a voucher (new code, new token, next version) invalidates every link sent before. Customers get a fresh link at any time in My Account → Vouchers (links there are re-signed on every view; the buyer can also have the email sent again). Admin-generated links use a nonce and capability check.
+
+*PDF rendering (E2):* dompdf runs without remote files, PHP or JavaScript and reads local files only from the plugin folder, the uploads folder and the folders of custom fonts registered with `vcap_pdf_fonts` (its `chroot`; not the WordPress root with `wp-config.php`). Paths are compared as real paths at directory boundaries, so a sibling such as `uploads-private` or a `../` path is refused.
 
 ## Personal data and retention
 
