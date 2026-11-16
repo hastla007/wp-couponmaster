@@ -13689,3 +13689,65 @@ msgid ""
 msgstr ""
 "Bis dahin werden Geschenkkarten und Kundenguthaben an der Kasse abgelehnt, "
 "weil ihr Restwert nicht abgebucht werden kann."
+
+#: src/API/V1/CommandLimits.php:199
+msgid "Issue vouchers (voucher.issue)"
+msgstr "Gutscheine ausstellen (voucher.issue)"
+
+#: src/API/V1/CommandLimits.php:200
+msgid "Void vouchers (voucher.void)"
+msgstr "Gutscheine stornieren (voucher.void)"
+
+#: src/API/V1/CommandLimits.php:201
+msgid "Reactivate vouchers (voucher.reactivate)"
+msgstr "Gutscheine reaktivieren (voucher.reactivate)"
+
+#: src/API/V1/CommandLimits.php:202
+msgid "Redeem vouchers (voucher.redeem)"
+msgstr "Gutscheine einlösen (voucher.redeem)"
+
+#: src/API/V1/CommandLimits.php:207
+msgid "Automatic voucher commands"
+msgstr "Automatische Gutschein-Befehle"
+
+#: src/API/V1/CommandLimits.php:209
+msgid "Add-ons such as workflow automations can issue, void, reactivate and redeem vouchers through these entry points. Each one is off until you switch it on. The limits below are the highest values Voucher Captain allows; you can only lower them. Every call is recorded in the voucher history without the code."
+msgstr "Erweiterungen wie Workflow-Automatisierungen können über diese Einstiegspunkte Gutscheine ausstellen, stornieren, reaktivieren und einlösen. Jeder ist aus, bis Sie ihn einschalten. Die Grenzen unten sind die höchsten Werte, die Voucher Captain erlaubt; Sie können sie nur senken. Jeder Aufruf wird ohne den Code im Gutscheinverlauf festgehalten."
+
+#: src/API/V1/CommandLimits.php:218
+msgid "Allow this command"
+msgstr "Diesen Befehl erlauben"
+
+#: src/API/V1/CommandLimits.php:221
+msgid "Calls per day"
+msgstr "Aufrufe pro Tag"
+
+#. translators: %d: highest number of calls per day
+#: src/API/V1/CommandLimits.php:231
+#, php-format
+msgid "Per calendar day and site, all automations together (at most %d)."
+msgstr "Pro Kalendertag und Website, alle Automatisierungen zusammen (höchstens %d)."
+
+#: src/API/V1/CommandLimits.php:235
+msgid "Vouchers per recipient and day"
+msgstr "Gutscheine pro Empfänger und Tag"
+
+#. translators: %d: highest number per recipient and day
+#: src/API/V1/CommandLimits.php:245
+#, php-format
+msgid "At most %d."
+msgstr "Höchstens %d."
+
+#: src/API/V1/CommandLimits.php:254
+msgid "In the shop currency. Empty: 100 EUR. At most 100 EUR; in a shop with another currency, the command refuses amounts until you enter a maximum here that is worth no more than 100 EUR."
+msgstr "In der Shopwährung. Leer: 100 EUR. Höchstens 100 EUR; in einem Shop mit anderer Währung lehnt der Befehl Beträge ab, bis Sie hier einen Höchstbetrag eintragen, der nicht mehr als 100 EUR wert ist."
+
+#: src/API/V1/CommandService.php:139
+msgid "Automatic command"
+msgstr "Automatischer Befehl"
+
+#. translators: 1: command, 2: result, 3: result code, 4: workflow, 5: run, 6: step, 7: authorising user id, 8: reason key
+#: src/API/V1/CommandService.php:158
+#, php-format
+msgid "%1$s: %2$s (%3$s) – workflow %4$s, run %5$s, step %6$s, authorised by user #%7$s, reason %8$s"
+msgstr "%1$s: %2$s (%3$s) – Workflow %4$s, Lauf %5$s, Schritt %6$s, freigegeben von Benutzer #%7$s, Grund %8$s"
