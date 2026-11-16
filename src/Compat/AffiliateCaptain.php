@@ -99,12 +99,40 @@ final class AffiliateCaptain {
 		return sprintf( __( 'The campaign "%s" is assigned to a partner in WP Affiliate Captain: its codes earn that partner commission. Generating more codes under this name needs the right to manage affiliates. No codes were generated.', 'voucher-captain' ), $campaign );
 	}
 
+	/**
+	 * SEC2: a coupon saved over the WooCommerce REST API by a user without the affiliate right cannot be put into a
+	 * campaign that is assigned to a partner (its orders would earn that partner commission): the campaign of the
+	 * coupon stays as it was.
+	 *
+	 * @param mixed $coupon Coupon about to be saved.
+	 * @return mixed
+	 */
+	public static function guard_campaign_meta( $coupon ) {
+		if ( ! $coupon instanceof \WC_Coupon || current_user_can( self::CAPABILITY ) ) { // phpcs:ignore WordPress.WP.Capabilities.Unknown -- Registered by WP Affiliate Captain.
+			return $coupon;
+		}
+		$id     = (int) $coupon->get_id();
+		$stored = $id > 0 ? (string) get_post_meta( $id, Campaigns::META, true ) : '';
+		$wanted = (string) $coupon->get_meta( Campaigns::META );
+		if ( $wanted === $stored || '' === self::generation_refusal( $wanted ) ) {
+			return $coupon;
+		}
+		if ( '' !== $stored ) {
+			$coupon->update_meta_data( Campaigns::META, $stored );
+		} else {
+			$coupon->delete_meta_data( Campaigns::META );
+		}
+		return $coupon;
+	}
+
 	public function init(): void {
 		if ( $this->done || ! self::available() ) {
 			return;
 		}
 		$this->done = true;
 		add_filter( 'wpac_coupon_affiliate', array( $this, 'coupon_affiliate' ), 20, 2 );
+		// SEC2: the S18 right also on the WooCommerce REST coupon API (meta_data can carry the campaign).
+		add_filter( 'woocommerce_rest_pre_insert_shop_coupon_object', array( self::class, 'guard_campaign_meta' ), 10, 1 );
 		add_filter( 'wpac_registered_integrations', array( $this, 'register_integration' ) );
 		add_filter( 'wpac_commission_base', array( $this, 'commission_base' ), 10, 3 );
 		add_action( 'vcap_campaigns_table_header', array( $this, 'table_header' ) );

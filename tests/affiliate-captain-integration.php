@@ -106,6 +106,22 @@ wp_set_current_user( 1 );
 $s18_admin_ok = '' === AffiliateCaptain::generation_refusal( $name ) || ! current_user_can( AffiliateCaptain::CAPABILITY );
 vcap_aff_assert( '' !== $s18_refused && str_contains( $s18_refused, $name ) && '' === $s18_free && $s18_admin_ok, 'S18: without wpac_manage_affiliates no codes can be generated under a campaign assigned to a partner (other names are free)' );
 vcap_aff_assert( str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Admin/CampaignAdmin.php' ), 'AffiliateCaptain::generation_refusal( $name )' ), 'S18: the "Generate codes" handler asks before generating coupons' );
+// SEC2: the same clerk cannot put a coupon into the partner's campaign over the WooCommerce REST API either.
+wp_set_current_user( $s18_clerk );
+$sec2_request = new WP_REST_Request( 'POST', '/wc/v3/coupons' );
+$sec2_request->set_body_params(
+	array(
+		'code'          => 'vcap-sec2-' . strtolower( wp_generate_password( 6, false, false ) ),
+		'discount_type' => 'percent',
+		'amount'        => '10',
+		'meta_data'     => array( array( 'key' => VCAP\Campaigns::META, 'value' => $name ) ),
+	)
+);
+$sec2_response = rest_do_request( $sec2_request );
+wp_set_current_user( 1 );
+$sec2_id = (int) ( $sec2_response->get_data()['id'] ?? 0 );
+vcap_aff_assert( 201 === $sec2_response->get_status() && $sec2_id > 0 && '' === (string) get_post_meta( $sec2_id, VCAP\Campaigns::META, true ), 'SEC2: over the REST coupon API a user without wpac_manage_affiliates cannot assign a coupon to a partner campaign (the coupon is saved without it)', array( $sec2_response->get_status(), get_post_meta( $sec2_id, VCAP\Campaigns::META, true ) ) );
+wp_delete_post( $sec2_id, true );
 wp_delete_user( $s18_clerk );
 foreach ( $codes as $code ) {
 	wp_delete_post( wc_get_coupon_id_by_code( $code ), true );
