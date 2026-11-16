@@ -74,6 +74,11 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 == Changelog ==
 
 = 1.2.0 =
+* Fix (security): a customer-chosen voucher amount is worth at most what was paid for it per voucher, and only in the currency it was entered in (fixed when added to the cart); a difference is noted on the order. Same for gift card top-ups.
+* Fix (security): REST redemptions – a missing, internal or another user's redemption gets the same 404 for customers; commit, release and refund check access and owner again under the row lock.
+* Fix (security): referral rewards are "Individual use only"; "first order only" coupons are held at checkout per customer (also against a parallel order with a plus address); WP Pass Captain continues an open ticket reservation only for the same caller.
+* Fix (security): voucher settings of a product, PDF templates and field groups need the voucher managers' right (not only product rights); with WP Affiliate Captain, codes under a campaign assigned to a partner need the right to manage affiliates, and the assignment ends with the campaign's last code.
+* Fix (security): no customer preview for password-protected or hidden products; scanner links only with http(s); the PDF renderer reads local files only from the plugin, uploads and custom font folders.
 * Fix (security): personal vouchers (only buyer/recipient) are redeemed online only by a customer logged in with the matching account email – a guest typing the buyer's address at checkout (also in the cart/checkout blocks, connectors and the WP Pass Captain checkout) is asked to log in with the masked address. Staff at the counter and in wp-admin are not affected; transferable vouchers neither.
 * New: "Reissue code" on the voucher page (and as a bulk action): new code and token, remaining value carried over, the old code and its download links stop working, optionally the new code is mailed. Email download links now expire after 90 days by default (a lifetime saved before is kept).
 * New: role "Voucher cashier" (scanner only, no access to orders or customers); WooCommerce no longer sends scanner staff away from wp-admin. Raising a remaining value needs its own right "vcap_increase_balance" (administrators and shop managers); "Add" above the face value asks first. "Refund as store credit" needs WooCommerce's right to edit orders.
