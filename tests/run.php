@@ -2271,5 +2271,34 @@ preg_match_all( '/`(vcap_[a-z0-9_]+)`/', $m102_part, $m102_named );
 $m102_missing = array_values( array_filter( array_unique( $m102_named[1] ), static fn( $h ) => ! str_contains( $m102_hooks, '`' . $h . '`' ) ) );
 check( 'M12-102: FREE-PREMIUM.md refers to docs/HOOKS.md instead of an own hook table, and every hook it names is in HOOKS.md', '' !== $m102_part && str_contains( $m102_doc, '(HOOKS.md)' ) && ! preg_match( '/^\|\s*`vcap_/m', $m102_doc ) && count( $m102_named[1] ) > 10 && array() === $m102_missing, implode( ', ', $m102_missing ) );
 
+// Review 16.11.2026 (R16-13): the extension points a premium add-on needs exist, every hook names its first version,
+// and an add-on can check one contract version. The core knows nothing about the add-on.
+$r16_root  = dirname( __DIR__ );
+$r16_main  = (string) file_get_contents( $r16_root . '/voucher-captain.php' );
+$r16_hooks = (string) file_get_contents( $r16_root . '/docs/HOOKS.md' );
+$r16_conn  = (string) file_get_contents( $r16_root . '/CONNECTORS.md' );
+preg_match( "/define\( 'VCAP_VERSION', '(\d+\.\d+\.\d+)' \);/", $r16_main, $r16_plugin );
+$r16_plugin = $r16_plugin[1] ?? '0.0.0';
+preg_match( "/define\( 'VCAP_CONTRACT_VERSION', '(\d+\.\d+\.\d+)' \);/", $r16_main, $r16_contract );
+check( 'R16-13: VCAP_CONTRACT_VERSION is defined in the main file, has major 1 (api_v1) and its history is in CONNECTORS.md', isset( $r16_contract[1] ) && str_starts_with( $r16_contract[1], '1.' ) && str_contains( $r16_conn, '`VCAP_CONTRACT_VERSION`' ) && str_contains( $r16_conn, '| ' . ( $r16_contract[1] ?? '?' ) . ' | ' . $r16_plugin . ' |' ), $r16_contract[1] ?? 'not defined' );
+preg_match_all( '/^\| `(vcap_[a-z0-9_]+)` \| ([^|]*) \|/m', $r16_hooks, $r16_rows, PREG_SET_ORDER );
+$r16_no_since = array();
+$r16_since    = array();
+foreach ( $r16_rows as $r16_row ) {
+	$r16_since[ $r16_row[1] ] = trim( $r16_row[2] );
+	if ( ! preg_match( '/^\d+\.\d+\.\d+$/', trim( $r16_row[2] ) ) || version_compare( trim( $r16_row[2] ), $r16_plugin, '>' ) ) {
+		$r16_no_since[] = $r16_row[1];
+	}
+}
+check( 'R16-13: every hook in docs/HOOKS.md names its first plugin version, none later than this version', count( $r16_rows ) > 200 && array() === $r16_no_since, implode( ', ', $r16_no_since ) );
+$r16_addon = array( 'vcap_admin_menu' => '1.2.0', 'vcap_settings_fields' => '1.1.0', 'vcap_template_design' => '1.1.0', 'vcap_report_group' => '1.1.0', 'vcap_voucher_links' => '1.2.0', 'vcap_voucher_event' => '1.1.0', 'vcap_voucher_issued_standalone' => '1.2.0', 'vcap_voucher_redeemed' => '1.1.0' );
+check( 'R16-13: the extension points for menu, settings, templates, reports, links and events are documented with their version', array() === array_diff_assoc( $r16_addon, $r16_since ), wp_json_encode( array_diff_assoc( $r16_addon, $r16_since ) ) );
+$r16_generator = (string) file_get_contents( $r16_root . '/bin/hooks.php' );
+$r16_before    = "<?php\n/**\n * A new hook.\n *\n * @since 1.4.0\n */\n";
+preg_match_all( '/^function (vcap_hooks_since|vcap_hooks_with_since)\(.*?^}/ms', $r16_generator, $r16_fn );
+eval( implode( "\n", $r16_fn[0] ) ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- the two pure helper functions of bin/hooks.php (the script itself writes the file).
+list( $r16_merged, $r16_missing ) = vcap_hooks_with_since( array( 'vcap_old' => array( 'since' => '' ), 'vcap_new' => array( 'since' => vcap_hooks_since( $r16_before ) ), 'vcap_undocumented' => array( 'since' => vcap_hooks_since( "<?php\n" ) ) ), array( 'vcap_old' => '1.1.0' ) );
+check( 'R16-13: the hook reference takes the version from the list or from @since and reports a hook without one', '1.1.0' === $r16_merged['vcap_old']['since'] && '1.4.0' === $r16_merged['vcap_new']['since'] && array( 'vcap_undocumented' ) === $r16_missing, wp_json_encode( $r16_missing ) );
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

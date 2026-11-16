@@ -208,7 +208,7 @@ foreach ( $recipients as $i => $r ) {
 }
 ```
 
-## Returned voucher emails (bounces, since 1.3.0)
+## Returned voucher emails (bounces, since 1.2.0)
 
 "Delivered" means that `wp_mail()` accepted the email. Voucher emails carry the headers `X-VCAP-Voucher` (the voucher
 id, comma separated for a bundled email) and `X-VCAP-Role` (`recipient` or `buyer`). A bounce handler (webhook of the

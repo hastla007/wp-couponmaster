@@ -1042,7 +1042,7 @@ final class Delivery {
 		/**
 		 * A voucher email came back (Delivery::mark_bounced()). Args: Voucher, role ('recipient'|'buyer'), reason.
 		 *
-		 * @since 1.3.0
+		 * @since 1.2.0
 		 */
 		do_action( 'vcap_voucher_bounced', $voucher, $role, $reason );
 		return true;
