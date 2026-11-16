@@ -109,7 +109,7 @@ final class CouponLink {
 			return false;
 		}
 		CodeLookup::found();
-		if ( ! WC()->session->has_session() ) {
+		if ( method_exists( WC()->session, 'has_session' ) && ! WC()->session->has_session() && method_exists( WC()->session, 'set_customer_session_cookie' ) ) {
 			WC()->session->set_customer_session_cookie( true ); // Guests need a session to keep the code.
 		}
 		WC()->session->set( self::SESSION_KEY, $code );

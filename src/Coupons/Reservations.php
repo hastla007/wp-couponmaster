@@ -171,6 +171,9 @@ final class Reservations {
 		// The order may have been edited after checkout: only coupons still on it, with the same amount, are committed.
 		$current = array();
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
+			if ( ! $item instanceof \WC_Order_Item_Coupon ) {
+				continue;
+			}
 			$current[ wc_format_coupon_code( $item->get_code() ) ] = $this->lookup->used_amount( $item ) ?? -1.0; // No rate: never matches.
 		}
 		$failed   = false;

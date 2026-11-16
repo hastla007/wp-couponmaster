@@ -126,6 +126,9 @@ final class BookBack {
 		$done  = OrderCoupons::order_map( $order, SingleUse::SINGLE_USE_RETURNED_META );
 		$codes = array();
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
+			if ( ! $item instanceof \WC_Order_Item_Coupon ) {
+				continue;
+			}
 			$code    = wc_format_coupon_code( $item->get_code() );
 			$voucher = isset( $done[ $code ] ) ? null : $this->lookup->find_voucher_for_code( $code, true );
 			if ( ! $voucher || $voucher->is_multi_use() || ! $voucher->coupon_id ) {

@@ -863,8 +863,14 @@ final class TopUp {
 		$refunded   = 0.0;
 		// Straight from the refund documents: the order's cached refund list can be older than this refund.
 		foreach ( wc_get_orders( array( 'type' => 'shop_order_refund', 'parent' => $order->get_id(), 'limit' => -1 ) ) as $refund ) {
+			if ( ! method_exists( $refund, 'get_amount' ) ) {
+				continue;
+			}
 			$refunded += abs( (float) $refund->get_amount() );
 			foreach ( $refund->get_items( array( 'line_item', 'fee', 'shipping' ) ) as $refund_item ) {
+				if ( ! method_exists( $refund_item, 'get_total' ) || ! method_exists( $refund_item, 'get_total_tax' ) ) {
+					continue;
+				}
 				$amount      = abs( (float) $refund_item->get_total() ) + abs( (float) $refund_item->get_total_tax() );
 				$attributed += $amount;
 				$original    = (int) $refund_item->get_meta( '_refunded_item_id' );
@@ -999,7 +1005,10 @@ final class TopUp {
 		$lost    = 0.0;
 		foreach ( $shares as $item_id => $share ) {
 			$item = $order->get_item( $item_id );
-			$done = $item instanceof \WC_Order_Item_Product ? (float) $item->get_meta( self::DONE_META ) : 0.0;
+			if ( ! $item instanceof \WC_Order_Item_Product ) {
+				continue;
+			}
+			$done = (float) $item->get_meta( self::DONE_META );
 			if ( $done <= 0 ) {
 				continue;
 			}

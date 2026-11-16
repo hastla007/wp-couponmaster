@@ -70,6 +70,9 @@ final class OrderCoupons {
 	/** Whether balance vouchers of the order are still not charged. */
 	public function open_balance_coupons( \WC_Order $order, array $applied ): bool {
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
+			if ( ! $item instanceof \WC_Order_Item_Coupon ) {
+				continue;
+			}
 			$code    = wc_format_coupon_code( $item->get_code() );
 			$voucher = $this->find_voucher_for_code( $code );
 			if ( $voucher && $voucher->is_multi_use() && ! isset( $applied[ $code ] ) ) {

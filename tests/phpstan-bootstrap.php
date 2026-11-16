@@ -72,3 +72,15 @@ if ( ! function_exists( 'as_schedule_single_action' ) ) {
 if ( ! interface_exists( 'PassCaptain\Integrations\Vouchers\ProviderInterface' ) ) {
 	eval( 'namespace PassCaptain\Integrations\Vouchers; interface ProviderInterface {}' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- PHPStan bootstrap only, never shipped.
 }
+// WP-CLI (only loaded in a WP-CLI run; VCAP\CLI\Command is registered there).
+if ( ! class_exists( 'WP_CLI' ) ) {
+	eval( 'class WP_CLI { public static function line( $m = "" ) {} public static function success( $m ) {} public static function warning( $m ) {} public static function error( $m, $exit = true ) {} public static function halt( $code ) {} public static function add_command( $name, $callable, $args = array() ) {} }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- PHPStan bootstrap only, never shipped.
+	require_once __DIR__ . '/phpstan-wp-cli-utils.php';
+}
+// Affiliate Captain (optional plugin, VCAP\Compat\AffiliateCaptain checks function_exists()).
+if ( ! function_exists( 'wpac_resolve_partner_code' ) ) {
+	/** @return array<string, mixed>|null */
+	function wpac_resolve_partner_code( string $code, array $context = array() ) {
+		return null;
+	}
+}

@@ -170,7 +170,7 @@ final class MultiCurrency {
 		if ( ! function_exists( $function ) ) {
 			return null;
 		}
-		$multi = $function();
+		$multi = call_user_func( $function );
 		return is_object( $multi ) && method_exists( $multi, 'get_enabled_currencies' ) ? $multi : null;
 	}
 

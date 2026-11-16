@@ -1170,7 +1170,7 @@ final class Delivery {
 				continue;
 			}
 			$email = $emails[ $class ] ?? null;
-			if ( ! $email ) {
+			if ( ! $email || ! method_exists( $email, 'trigger' ) ) {
 				$failures[ $role ] = 'not_registered';
 				continue;
 			}
@@ -1387,7 +1387,7 @@ final class Delivery {
 		$handover = Workflow\Handover::active( Workflow\Handover::EXPIRY_REMINDER );
 		$emails   = WC()->mailer()->get_emails();
 		$email    = $emails['VCAP_Email_Voucher_Expiry'] ?? null;
-		if ( ! $handover && ( ! $email || ! $email->is_enabled() ) ) {
+		if ( ! $handover && ( ! $email || ! $email->is_enabled() || ! method_exists( $email, 'trigger' ) ) ) {
 			return 0;
 		}
 		$start = microtime( true );
@@ -1424,7 +1424,7 @@ final class Delivery {
 						continue;
 					}
 					try {
-						$mailed = $email->trigger( $voucher );
+						$mailed = method_exists( $email, 'trigger' ) && $email->trigger( $voucher );
 					} catch ( \Throwable $e ) {
 						// One broken voucher (PDF, template, mail plugin) neither keeps its claim nor stops the others.
 						Claim::release( $claim );

@@ -89,12 +89,16 @@ final class Ledger {
 				WHERE v.created_at <= %s AND {$value}
 			) x WHERE outstanding > 0.00001 GROUP BY currency, type, expired, free";
 		$rows   = $wpdb->get_results( $wpdb->prepare( $sql, $until, self::free_pattern(), $until, $until, $until, $until, $until ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
+		/** @var array<string, array<string, array{count:int,amount:float,expired_count:int,expired_amount:float,free_count:int,free_amount:float}>> $totals */
 		$totals = array();
 		foreach ( $rows ? $rows : array() as $r ) {
 			$currency = '' !== (string) $r['currency'] ? (string) $r['currency'] : (string) get_option( 'woocommerce_currency' );
 			$expired  = (bool) (int) $r['expired'];
-			$bucket   = &$totals[ $currency ][ (string) $r['type'] ];
-			$bucket   = $bucket ?? array( 'count' => 0, 'amount' => 0.0, 'expired_count' => 0, 'expired_amount' => 0.0, 'free_count' => 0, 'free_amount' => 0.0 );
+			$type     = (string) $r['type'];
+			if ( ! isset( $totals[ $currency ][ $type ] ) ) {
+				$totals[ $currency ][ $type ] = array( 'count' => 0, 'amount' => 0.0, 'expired_count' => 0, 'expired_amount' => 0.0, 'free_count' => 0, 'free_amount' => 0.0 );
+			}
+			$bucket = &$totals[ $currency ][ $type ];
 			$bucket[ $expired ? 'expired_count' : 'count' ] += (int) $r['cnt'];
 			$bucket[ $expired ? 'expired_amount' : 'amount' ] = round( $bucket[ $expired ? 'expired_amount' : 'amount' ] + (float) $r['amount'], API\V1\RedemptionService::decimals( $currency ) );
 			if ( ! $expired && (int) $r['free'] ) {

@@ -20,3 +20,10 @@ parameters:
     - vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
     - vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
   reportUnmatchedIgnoredErrors: false
+  ignoreErrors:
+    # WordPress core files that only exist in a real installation (ABSPATH points into tests/ for the analysis).
+    -
+      identifier: requireOnce.fileNotFound
+      paths:
+        - src/Admin/VouchersListTable.php
+        - src/Install.php

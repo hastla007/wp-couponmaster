@@ -245,6 +245,7 @@ final class Import {
 			$this->finish( $report );
 		}
 
+		$rows = array();
 		try {
 			$rows = SpreadsheetReader::read( $file['tmp_name'], $ext );
 		} catch ( \Throwable $e ) {

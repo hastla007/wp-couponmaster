@@ -187,7 +187,7 @@ final class ProductSetup {
 			'quantity'       => max( 1, min( 10, absint( $base->get_meta( TicketContract::META_QTY ) ) ?: 1 ) ),
 			'label'          => $label,
 			// Fixed date: the voucher can be exchanged until the event starts (UTC).
-			'starts_at'      => $starts_at ?? '',
+			'starts_at'      => $starts_at,
 		);
 		return $extra;
 	}

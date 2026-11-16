@@ -51,9 +51,10 @@ final class TicketContract {
 	}
 
 	/**
-	 * The tickets a voucher is exchanged for: ticket_type_id, quantity, label – or null.
+	 * The tickets a voucher is exchanged for: ticket type (0 when the customer picks a date of the event), event,
+	 * ticket name, quantity, label – or null.
 	 *
-	 * @return array{ticket_type_id:int,quantity:int,label:string}|null
+	 * @return array{ticket_type_id:int,event_id:int,ticket_name:string,quantity:int,label:string}|null
 	 */
 	public static function target( Voucher $voucher ): ?array {
 		$target = null;

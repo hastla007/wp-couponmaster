@@ -356,6 +356,9 @@ final class PaymentVouchers {
 		if ( $subject instanceof \WC_Order ) {
 			$open['shipping'] = 0.0;
 			foreach ( $subject->get_items( array( 'line_item', 'shipping', 'fee' ) ) as $id => $item ) {
+				if ( ! method_exists( $item, 'get_total' ) || ! method_exists( $item, 'get_total_tax' ) ) {
+					continue;
+				}
 				$gross = max( 0.0, (float) $item->get_total() + (float) $item->get_total_tax() );
 				if ( $item instanceof \WC_Order_Item_Product ) {
 					$open[ 'item:' . $id ] = $gross;
@@ -432,6 +435,9 @@ final class PaymentVouchers {
 		}
 		$removed = false;
 		foreach ( $order->get_items( 'fee' ) as $item_id => $fee ) {
+			if ( ! $fee instanceof \WC_Order_Item_Fee ) {
+				continue;
+			}
 			if ( '' !== (string) $fee->get_meta( self::FEE_META ) ) {
 				$order->remove_item( $item_id );
 				$removed = true;
@@ -469,7 +475,7 @@ final class PaymentVouchers {
 	private static function order_gross( \WC_Order $order ): float {
 		$gross = 0.0;
 		foreach ( $order->get_items( array( 'line_item', 'fee', 'shipping' ) ) as $item ) {
-			if ( $item instanceof \WC_Order_Item_Fee && '' !== (string) $item->get_meta( self::FEE_META ) ) {
+			if ( ( $item instanceof \WC_Order_Item_Fee && '' !== (string) $item->get_meta( self::FEE_META ) ) || ! method_exists( $item, 'get_total' ) || ! method_exists( $item, 'get_total_tax' ) ) {
 				continue;
 			}
 			$gross += (float) $item->get_total() + (float) $item->get_total_tax();
@@ -508,6 +514,9 @@ final class PaymentVouchers {
 		}
 		$due = self::order_gross( $order );
 		foreach ( $order->get_items( 'fee' ) as $fee ) {
+			if ( ! $fee instanceof \WC_Order_Item_Fee ) {
+				continue;
+			}
 			if ( '' !== (string) $fee->get_meta( self::FEE_META ) ) {
 				$due -= abs( (float) $fee->get_total() ); // What other vouchers already pay.
 			}
@@ -551,6 +560,9 @@ final class PaymentVouchers {
 		$diff    = 0.0;
 		$applied = array_map( 'wc_format_coupon_code', $order->get_coupon_codes() );
 		foreach ( $order->get_items( 'fee' ) as $item_id => $fee ) {
+			if ( ! $fee instanceof \WC_Order_Item_Fee ) {
+				continue;
+			}
 			$code = (string) $fee->get_meta( self::FEE_META );
 			if ( '' !== $code && ! in_array( wc_format_coupon_code( $code ), $applied, true ) ) {
 				$diff -= (float) $fee->get_total();
@@ -589,6 +601,9 @@ final class PaymentVouchers {
 	public static function paid_amount( \WC_Order $order, string $code ): ?float {
 		$code = wc_format_coupon_code( $code );
 		foreach ( $order->get_items( 'fee' ) as $fee ) {
+			if ( ! $fee instanceof \WC_Order_Item_Fee ) {
+				continue;
+			}
 			if ( $code === (string) $fee->get_meta( self::FEE_META ) ) {
 				return abs( (float) $fee->get_total() );
 			}

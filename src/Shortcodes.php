@@ -417,7 +417,7 @@ final class Shortcodes {
 			return $handled;
 		}
 		if ( ! WC()->cart || WC()->cart->is_empty() ) {
-			if ( WC()->session && ! WC()->session->has_session() ) {
+			if ( WC()->session && method_exists( WC()->session, 'has_session' ) && ! WC()->session->has_session() && method_exists( WC()->session, 'set_customer_session_cookie' ) ) {
 				WC()->session->set_customer_session_cookie( true );
 			}
 			WC()->session->set( CouponLink::SESSION_KEY, $code );
@@ -479,7 +479,7 @@ final class Shortcodes {
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- a public link; the code only fills in the form.
 		if ( isset( $_GET['vcap_code'] ) && is_string( $_GET['vcap_code'] ) && $session ) {
 			$code = self::clean_code( sanitize_text_field( wp_unslash( $_GET['vcap_code'] ) ) );
-			if ( $session->has_session() ) {
+			if ( method_exists( $session, 'has_session' ) && $session->has_session() ) {
 				$session->set( self::PREFILL_KEY, '' !== $code ? $code : null );
 			} elseif ( self::plausible_code( $code ) ) {
 				// No WooCommerce session is started for a link (48 hours, and hosts skip their page cache for

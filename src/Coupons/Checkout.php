@@ -31,6 +31,9 @@ final class Checkout {
 		$reservations = OrderCoupons::order_map( $order, '_vcap_reservations' );
 		$coupons      = array();
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
+			if ( ! $item instanceof \WC_Order_Item_Coupon ) {
+				continue;
+			}
 			$code = wc_format_coupon_code( $item->get_code() );
 			if ( isset( $redemptions[ $code ] ) ) {
 				continue;

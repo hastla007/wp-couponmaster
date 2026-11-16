@@ -1359,7 +1359,7 @@ final class Issuer {
 		$current_id = $refund instanceof \WC_Order_Refund ? (int) $refund->get_id() : 0;
 		$refunded   = 0.0;
 		foreach ( wc_get_orders( array( 'type' => 'shop_order_refund', 'parent' => $order->get_id(), 'limit' => -1 ) ) as $earlier ) {
-			if ( (int) $earlier->get_id() !== $current_id ) {
+			if ( (int) $earlier->get_id() !== $current_id && method_exists( $earlier, 'get_amount' ) ) {
 				$refunded += abs( (float) $earlier->get_amount() );
 			}
 		}

@@ -10,8 +10,8 @@
  * @var bool               $staff
  * @var bool               $public
  * @var string             $notice
- * @var string             $notice_level 'ok', 'warning' or 'error'
- * @var string             $checkin_key  One-time key of the check-in form (a resent form never admits twice).
+ * @var string|null        $notice_level 'ok', 'warning' or 'error'
+ * @var string|null        $checkin_key  One-time key of the check-in form (a resent form never admits twice).
  */
 
 defined( 'ABSPATH' ) || exit;

@@ -629,6 +629,9 @@ final class ProductConfig {
 		$country = '';
 		$applied = array_keys( array_filter( (array) ( $item->get_taxes()['subtotal'] ?? array() ), static fn( $v ) => '' !== (string) $v && 0.0 !== (float) $v ) );
 		foreach ( $order->get_items( 'tax' ) as $tax ) {
+			if ( ! $tax instanceof \WC_Order_Item_Tax ) {
+				continue;
+			}
 			if ( in_array( (int) $tax->get_rate_id(), array_map( 'intval', $applied ), true ) && class_exists( '\WC_Tax' ) ) {
 				$country = strtoupper( (string) ( \WC_Tax::_get_tax_rate( (int) $tax->get_rate_id() )['tax_rate_country'] ?? '' ) );
 				if ( '' !== $country ) {

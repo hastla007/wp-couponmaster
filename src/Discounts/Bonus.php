@@ -56,6 +56,9 @@ final class Bonus {
 		$all      = 0.0;
 		$discount = 0.0;
 		foreach ( $order->get_items( 'coupon' ) as $coupon_item ) {
+			if ( ! $coupon_item instanceof \WC_Order_Item_Coupon ) {
+				continue;
+			}
 			$amount = (float) $coupon_item->get_discount() + ( wc_prices_include_tax() ? (float) $coupon_item->get_discount_tax() : 0.0 );
 			$all   += $amount;
 			$id     = wc_get_coupon_id_by_code( $coupon_item->get_code() );
@@ -286,7 +289,7 @@ final class Bonus {
 		$current_id = $refund instanceof \WC_Order_Refund ? (int) $refund->get_id() : 0;
 		$refunded   = 0.0;
 		foreach ( wc_get_orders( array( 'type' => 'shop_order_refund', 'parent' => $order->get_id(), 'limit' => -1 ) ) as $earlier ) {
-			if ( (int) $earlier->get_id() !== $current_id ) {
+			if ( (int) $earlier->get_id() !== $current_id && method_exists( $earlier, 'get_amount' ) ) {
 				$refunded += abs( (float) $earlier->get_amount() );
 			}
 		}
@@ -401,7 +404,7 @@ final class Bonus {
 	private function send( \WC_Coupon $coupon, \WC_Order $order, array $campaign ): void {
 		$mailer = WC()->mailer();
 		$emails = $mailer ? $mailer->get_emails() : array();
-		if ( isset( $emails['VCAP_Email_Bonus'] ) ) {
+		if ( isset( $emails['VCAP_Email_Bonus'] ) && method_exists( $emails['VCAP_Email_Bonus'], 'trigger' ) ) {
 			$emails['VCAP_Email_Bonus']->trigger( $coupon, $order, $campaign['title'] );
 		}
 	}

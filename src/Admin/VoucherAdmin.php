@@ -597,7 +597,7 @@ final class VoucherAdmin {
 		}
 		if ( '' === $reason ) {
 			$started = time();
-			if ( $email->trigger( $v ) ) {
+			if ( method_exists( $email, 'trigger' ) && $email->trigger( $v ) ) {
 				// Masked (SECURITY.md, D8): the history is seen by all staff and exported.
 				$this->repo->log( $v->id, 'resent', null, null, \VCAP\Note::make( 'resent', array( $role, \VCAP\Mask::email( $address ) ) ) );
 				// A first delivery by hand counts as the delivery (H7): the daily safety net does not send it again.

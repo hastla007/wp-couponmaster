@@ -66,6 +66,9 @@ final class Settlement {
 		$applied      = OrderCoupons::order_map( $order, '_vcap_redemptions' );
 		$reservations = OrderCoupons::order_map( $order, '_vcap_reservations' );
 		foreach ( $order->get_items( 'coupon' ) as $item ) {
+			if ( ! $item instanceof \WC_Order_Item_Coupon ) {
+				continue;
+			}
 			$code    = wc_format_coupon_code( $item->get_code() );
 			$voucher = $this->lookup->find_voucher_for_code( $code, true ); // Books 0 (charges nothing): a reissued code too.
 			if ( ! $voucher || ! $voucher->is_multi_use() || isset( $applied[ $code ] ) ) {

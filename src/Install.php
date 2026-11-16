@@ -66,7 +66,7 @@ final class Install {
 	 * Data migrations by the schema version that introduced them. A migration returns false while work is left
 	 * (time budget), so it continues on the next request before the version is stored.
 	 *
-	 * @var array<string, callable-string>
+	 * @var array<string, string>
 	 */
 	private const MIGRATIONS = array(
 		'1.4.0' => 'migrate_1_4_0',

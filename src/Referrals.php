@@ -371,7 +371,7 @@ final class Referrals {
 		$order->add_order_note( sprintf( __( 'Referral reward: coupon %1$s for customer account #%2$d.', 'voucher-captain' ), Mask::code( (string) $coupon->get_code() ), $owner ) );
 		$mailer = WC()->mailer();
 		$emails = $mailer ? $mailer->get_emails() : array();
-		if ( isset( $emails['VCAP_Email_Referral'] ) ) {
+		if ( isset( $emails['VCAP_Email_Referral'] ) && method_exists( $emails['VCAP_Email_Referral'], 'trigger' ) ) {
 			$emails['VCAP_Email_Referral']->trigger( $coupon, $order, __( 'Refer a friend', 'voucher-captain' ), (string) $user->user_email );
 		}
 	}
