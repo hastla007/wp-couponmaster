@@ -753,6 +753,7 @@ final class ProductSettings {
 		$hidden     = array_diff( array_map( 'sanitize_key', (array) $product->get_meta( '_vcap_channels' ) ), $registered );
 		$product->update_meta_data( '_vcap_channels', array_values( array_filter( array_unique( array_merge( $channels, $hidden ) ) ) ) );
 		$this->save_gift_options( $product, $post );
+		/** A voucher product's settings are being saved (args: WC_Product, posted data): save the fields added in vcap_product_settings_fields. */
 		do_action( 'vcap_product_settings_save', $product, $post );
 		foreach ( array( 'product_ids', 'exclude_product_ids', 'category_ids', 'exclude_category_ids' ) as $key ) {
 			$product->update_meta_data( '_vcap_' . $key, array_values( array_filter( array_map( 'absint', (array) ( $post[ '_vcap_' . $key ] ?? array() ) ) ) ) );

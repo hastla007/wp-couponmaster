@@ -219,8 +219,14 @@ final class Settings {
 		return $tabs;
 	}
 
-	private function section_list(): array {
-		return array(
+	/**
+	 * Sections of the "Vouchers" settings tab (id => label): the core's own, then those of add-ons (A4, filter
+	 * "vcap_settings_sections"). Add-ons cannot rename or remove a core section.
+	 *
+	 * @return array<string, string>
+	 */
+	public function section_list(): array {
+		$core = array(
 			''           => __( 'General', 'voucher-captain' ),
 			// M12-90: the former "General" page split up (the option keys are unchanged).
 			'redemption' => __( 'Redemption & balance', 'voucher-captain' ),
@@ -230,6 +236,20 @@ final class Settings {
 			'privacy'  => __( 'Privacy & advanced', 'voucher-captain' ),
 			'api'      => __( 'Integrations (API)', 'voucher-captain' ),
 		);
+		/**
+		 * Extra sections of the "Vouchers" settings tab (arg: array of section id => label). Add-ons add their own
+		 * section here and its fields with "vcap_settings_fields" (second argument: the section id); WooCommerce
+		 * saves them. Core sections cannot be renamed or removed.
+		 */
+		$extra = apply_filters( 'vcap_settings_sections', array() );
+		foreach ( is_array( $extra ) ? $extra : array() as $id => $label ) {
+			$id    = sanitize_title( (string) $id );
+			$label = trim( wp_strip_all_tags( (string) $label ) );
+			if ( '' !== $id && '' !== $label && ! array_key_exists( $id, $core ) ) {
+				$core[ $id ] = $label;
+			}
+		}
+		return $core;
 	}
 
 	public function sections(): void {
@@ -278,8 +298,14 @@ final class Settings {
 				$fields = self::general_part( $this->general_fields(), $section );
 				break;
 			default:
-				$fields = self::general_part( $this->general_fields(), '' );
+				// A4: a section of an add-on starts empty (its fields come from "vcap_settings_fields"); unknown
+				// sections show "General" as before.
+				$fields = '' !== $section && array_key_exists( $section, $this->section_list() ) ? array() : self::general_part( $this->general_fields(), '' );
 		}
+		/**
+		 * Fields of a section of the "Vouchers" settings tab (args: WooCommerce settings fields, section id – '' is
+		 * "General"). Add-ons add fields to a core section or fill their own section from "vcap_settings_sections".
+		 */
 		return apply_filters( 'vcap_settings_fields', $fields, $section );
 	}
 

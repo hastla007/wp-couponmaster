@@ -46,17 +46,18 @@ final class ReportsAdmin {
 	 */
 	private static function view(): string {
 		$view = sanitize_key( wp_unslash( $_GET['view'] ?? '' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only.
-		$views = array( 'overview', 'campaigns', 'liability', 'journal', 'counter' );
-		if ( \VCAP\Compat\PassCaptainReconcile::available() ) {
-			$views[] = 'reconcile';
-		}
-		if ( in_array( $view, $views, true ) ) {
+		if ( array_key_exists( $view, self::tab_list() ) ) {
 			return $view;
 		}
 		return 'overview'; // M12-92: the overview is the first page (a CSV link without a view stays the campaign report).
 	}
 
-	private static function tabs( string $current ): void {
+	/**
+	 * Report views (view id => tab label): the core's own, then those of add-ons (A4, filter "vcap_report_tabs").
+	 *
+	 * @return array<string, string>
+	 */
+	public static function tab_list(): array {
 		$tabs = array(
 			'overview'  => __( 'Overview', 'voucher-captain' ),
 			'campaigns' => __( 'Campaigns and codes', 'voucher-captain' ),
@@ -67,6 +68,24 @@ final class ReportsAdmin {
 		if ( \VCAP\Compat\PassCaptainReconcile::available() ) {
 			$tabs['reconcile'] = __( 'Pass Captain reconciliation', 'voucher-captain' );
 		}
+		/**
+		 * Extra tabs of Vouchers → Reports (arg: array of view id => label). Add-ons print the page of their view in
+		 * the action "vcap_report_page" (arg: view id); the page checks the voucher capability first. Core views
+		 * cannot be renamed, removed or replaced.
+		 */
+		$extra = apply_filters( 'vcap_report_tabs', array() );
+		foreach ( is_array( $extra ) ? $extra : array() as $id => $label ) {
+			$id    = sanitize_key( (string) $id );
+			$label = trim( wp_strip_all_tags( (string) $label ) );
+			if ( '' !== $id && '' !== $label && ! array_key_exists( $id, $tabs ) && 'reconcile' !== $id ) {
+				$tabs[ $id ] = $label;
+			}
+		}
+		return $tabs;
+	}
+
+	private static function tabs( string $current ): void {
+		$tabs = self::tab_list();
 		echo '<nav class="nav-tab-wrapper" aria-label="' . esc_attr__( 'Reports', 'voucher-captain' ) . '">';
 		foreach ( $tabs as $key => $label ) {
 			$url = add_query_arg( array( 'page' => 'vcap-reports', 'view' => $key ), admin_url( 'admin.php' ) );
@@ -98,6 +117,15 @@ final class ReportsAdmin {
 		}
 		if ( 'overview' === $view ) {
 			$this->overview_page();
+			return;
+		}
+		if ( 'campaigns' !== $view ) {
+			// A4: a view of an add-on (filter "vcap_report_tabs").
+			echo '<div class="wrap"><h1>' . esc_html__( 'Reports', 'voucher-captain' ) . '</h1>';
+			self::tabs( $view );
+			/** Prints the page of an add-on's report view (arg: view id from "vcap_report_tabs"), below the tabs. */
+			do_action( 'vcap_report_page', $view );
+			echo '</div>';
 			return;
 		}
 		list( $from, $to ) = self::range( $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only filter.

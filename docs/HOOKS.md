@@ -25,13 +25,14 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_passcaptain_tickets_issued` | `src/Compat/PassCaptain/Exchange.php` | – |
 | `vcap_product_availability_changed` | `src/ProductChecks.php` | A voucher product became purchasable or stopped being purchasable (date passed, batch empty or refilled, discount setup). Its WordPress and WooCommerce caches have been cleared; full-page caches can purge its URL here. Arguments: the product, the new unsellable reason ('' = purchasable again; date_past, date_missing, codes_empty, discount_invalid) and the previous reason ('' = was purchasable). |
 | `vcap_product_settings_fields` | `src/ProductSettings.php` | Extra product fields of connectors (saved in vcap_product_settings_save). |
-| `vcap_product_settings_save` | `src/ProductSettings.php` | – |
+| `vcap_product_settings_save` | `src/ProductSettings.php` | A voucher product's settings are being saved (args: WC_Product, posted data): save the fields added in vcap_product_settings_fields. |
 | `vcap_rate_limit_hit` | `src/Plugin.php` | Fires the first time a visitor exceeds the limit of a bucket in a window. |
 | `vcap_redeem_form_fields` | `src/Shortcodes.php` | Extra fields of connectors (e.g. the date for a ticket voucher), posted with the code. |
 | `vcap_redemption_refunded` | `src/API/V1/RedemptionService.php` | Fires once per refund of a completed external redemption. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_redemption_released` | `src/API/V1/RedemptionService.php` | Fires when a reservation was released (cancelled by the caller or expired). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_redemption_reserved` | `src/API/V1/RedemptionService.php` | Fires after a voucher was reserved for an external redemption. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_redemption_reversed` | `src/Tickets.php` | A counter redemption was cancelled (amount booked back). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
+| `vcap_report_page` | `src/Admin/ReportsAdmin.php` | Prints the page of an add-on's report view (arg: view id from "vcap_report_tabs"), below the tabs. |
 | `vcap_store_credit_changed` | `src/StoreCredit.php` | The store credit of a customer changed (args: user id, amount, balance after, event, reason, order id). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_ticket_checked_in` | `src/Tickets.php` | – *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_topup_held` | `src/TopUp.php` | – |
@@ -157,8 +158,8 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_pdf_title` | `src/PdfRenderer.php` | Title of a voucher PDF (args: string $title, Voucher $voucher). |
 | `vcap_personal_voucher_email_verified` | `src/PersonalVoucher.php` | Whether the account email of a customer counts as verified for personal vouchers (V6). Default: the customer proved the mailbox (password reset through the emailed link, or the confirmation link) or the account is grandfathered (registered before the proof of mailbox was introduced, email unchanged since; AP-S1-1). |
 | `vcap_physical_activation_statuses` | `src/PhysicalCards.php` | Order statuses at which physical gift cards are activated (default: completed). |
-| `vcap_placeholder_definitions` | `src/Placeholders.php` | – |
-| `vcap_placeholders` | `src/Placeholders.php` | – |
+| `vcap_placeholder_definitions` | `src/Placeholders.php` | Placeholders offered in the PDF designer and the email texts (arg: array of token => label); fill them in vcap_placeholders. |
+| `vcap_placeholders` | `src/Placeholders.php` | Values of the placeholders for a voucher (args: array of token => text, Voucher); texts are escaped when printed. |
 | `vcap_product_config` | `src/ProductConfig.php` | – |
 | `vcap_protect_voucher_coupons` | `src/Coupons/CouponSync.php` | Whether trashing/deleting a voucher's WooCommerce coupon is refused (default: in wp-admin and REST requests). |
 | `vcap_purgeable_claim_kinds` | `src/Claim.php` | – |
@@ -178,7 +179,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_redemption_allowed` | `src/API/V1/RedemptionService.php` | Filters whether a voucher may be redeemed for a target (e.g. "only course vouchers unlock courses"). Return false or a WP_Error to refuse. Runs before the voucher row is locked (D6), but may still run inside a caller's transaction: no remote calls that can take long, no own transaction (CONNECTORS.md). |
 | `vcap_redemption_channel_allowed` | `src/Channels.php` | – |
 | `vcap_redemption_channel_for_target` | `src/Channels.php` | – |
-| `vcap_redemption_channels` | `src/Channels.php` | – |
+| `vcap_redemption_channels` | `src/Channels.php` | Redemption channels (arg: array of channel key => label): connectors add where their vouchers can be redeemed (API.md). |
 | `vcap_redemption_providers` | `src/API/V1/VoucherService.php` | Filters the redemption providers available for a voucher code. |
 | `vcap_redemption_site_wide_failures` | `src/API/V1/RedemptionService.php` | Invalid codes per 15 minutes across all callers; above it every caller's quota shrinks (brake). |
 | `vcap_redemption_target_available` | `src/API/V1/RedemptionService.php` | Filters whether the redemption target is currently available (e.g. the course still exists). Same timing rules as vcap_redemption_allowed. |
@@ -186,15 +187,16 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_referral_min_spend` | `src/Referrals.php` | Minimum order value of referral codes (V3). |
 | `vcap_referral_same_address` | `src/Referrals.php` | – |
 | `vcap_refund_guest_as_gift_card` | `src/StoreCredit.php` | Whether a guest order can be refunded as a new gift card instead of store credit (default true). |
-| `vcap_render_template_id` | `src/PdfRenderer.php` | – |
-| `vcap_report_group` | `src/Reports.php` | – |
-| `vcap_report_statuses` | `src/Reports.php` | – |
+| `vcap_render_template_id` | `src/PdfRenderer.php` | The PDF template a voucher is printed with (args: template id, Voucher), e.g. a translation of the template. |
+| `vcap_report_group` | `src/Reports.php` | Group of a coupon code in the campaign report (args: array{type, name}, code, coupon id), e.g. an add-on's own source. |
+| `vcap_report_statuses` | `src/Reports.php` | Order statuses (without "wc-") whose orders count in the campaign report (default: WooCommerce's paid statuses and refunded). |
+| `vcap_report_tabs` | `src/Admin/ReportsAdmin.php` | Extra tabs of Vouchers → Reports (arg: array of view id => label). Add-ons print the page of their view in the action "vcap_report_page" (arg: view id); the page checks the voucher capability first. Core views cannot be renamed, removed or replaced. |
 | `vcap_rest_can_access_redemption` | `src/API/V1/RestController.php` | Filters whether the current user may read/commit/release a redemption. |
 | `vcap_rest_can_redeem` | `src/API/V1/RestController.php` | Filters whether the current user may redeem vouchers through the REST API. |
 | `vcap_rest_redemption_target_prefixes` | `src/API/V1/RestController.php` | Target prefixes customers may redeem for over REST (connectors that let customers redeem in the browser add theirs, e.g. "learnboating:"). Default none. |
 | `vcap_restore_extension_days` | `src/Coupons/BookBack.php` | – |
 | `vcap_sample_voucher` | `src/Preview.php` | – |
-| `vcap_sanitize_design` | `src/TemplatePostType.php` | – |
+| `vcap_sanitize_design` | `src/TemplatePostType.php` | A design after it was cleaned for saving (args: clean design, design as posted); add-on element types keep their own keys here. |
 | `vcap_scanner_checkin` | `src/Tickets.php` | – |
 | `vcap_scanner_describe` | `src/Tickets.php` | Connector details for the scanner (e.g. "ticket voucher – exchange first", redeemable false). |
 | `vcap_scanner_lookup` | `src/Tickets.php` | Codes Voucher Captain does not know may belong to another plugin (shared scanner, e.g. Pass Captain tickets). |
@@ -203,7 +205,8 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_sells_ticket_vouchers` | `src/Compat/PassCaptain/TicketContract.php` | – |
 | `vcap_send_expiry_reminder` | `src/Delivery.php` | – |
 | `vcap_setting_` | `src/Settings.php` | – |
-| `vcap_settings_fields` | `src/Settings.php` | – |
+| `vcap_settings_fields` | `src/Settings.php` | Fields of a section of the "Vouchers" settings tab (args: WooCommerce settings fields, section id – '' is "General"). Add-ons add fields to a core section or fill their own section from "vcap_settings_sections". |
+| `vcap_settings_sections` | `src/Settings.php` | Extra sections of the "Vouchers" settings tab (arg: array of section id => label). Add-ons add their own section here and its fields with "vcap_settings_fields" (second argument: the section id); WooCommerce saves them. Core sections cannot be renamed or removed. |
 | `vcap_shop_channel_refused_message` | `src/Coupons/CartCoupons.php` | Message for a voucher that is not redeemable in the shop (e.g. a ticket voucher: where to use it instead). |
 | `vcap_should_issue_for_order` | `src/Issuer.php` | – |
 | `vcap_site_has_redeem_form` | `src/Shortcodes.php` | Whether a site-wide template (theme file, builder layout, widget) shows the redeem form. |
@@ -212,7 +215,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_statutory_expiry` | `src/ProductConfig.php` | – |
 | `vcap_subscription_issue_on_switch` | `src/Compat/Subscriptions.php` | Whether a subscription switch or resubscribe order issues vouchers (default false; args: order, "switch"\|"resubscribe"). |
 | `vcap_suspend_on_payment_reversal` | `src/Issuer.php` | Whether vouchers of an order are suspended when its payment is reversed or held (default: "void on refund"). |
-| `vcap_template_design` | `src/TemplatePostType.php` | – |
+| `vcap_template_design` | `src/TemplatePostType.php` | The design (JSON layout: page, elements) of a PDF template as it is printed (args: design, template id). |
 | `vcap_topup_amount` | `src/TopUp.php` | Value added to the card for a top-up line (default: its face value like a new gift card, in the base currency). |
 | `vcap_topup_customer_note` | `src/TopUp.php` | Whether the customer gets an order note (email) confirming the top-up (default true). |
 | `vcap_topup_expires_at` | `src/TopUp.php` | – |
@@ -229,5 +232,5 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_voucher_pays_after_tax` | `src/PaymentVouchers.php` | – |
 | `vcap_voucher_pays_shipping_and_fees` | `src/PaymentVouchers.php` | Whether a voucher paying after tax may also pay shipping and fees (default: when it is not limited to products or categories). |
 | `vcap_voucher_tax_treatment` | `src/ProductConfig.php` | – |
-| `vcap_voucher_types` | `src/Voucher.php` | – |
+| `vcap_voucher_types` | `src/Voucher.php` | Extra voucher types of connectors and add-ons (arg: array of type key => label). Core types cannot be replaced; see API.md → Extension points. |
 | `vcap_vouchers_per_item` | `src/Issuer.php` | – |

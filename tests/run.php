@@ -1315,7 +1315,7 @@ $smoke_yml = (string) file_get_contents( "$root/.github/workflows/plugin-smoke.y
 $release_yml = (string) file_get_contents( "$root/.github/workflows/release.yml" );
 check( 'release.yml builds one ZIP (no editions, no licence server tooling or manifest)', str_contains( $release_yml, 'bin/build.sh' ) && ! preg_match( '/VCAP_EDITION|VCAP_LICENSE_|wp-license|wplc|premium/', $release_yml . $smoke_yml ) );
 check( 'release.yml refuses a tag that is not on main', str_contains( $release_yml, 'merge-base --is-ancestor "$SHA" origin/main' ) );
-check( 'ci-green checks every job of the CI run, not only the run conclusion', str_contains( $release_yml, 'actions/runs/${id}/jobs' ) && str_contains( $release_yml, 'REPORT_ONLY: plugin-check' ) );
+check( 'ci-green checks every job of the CI run, not only the run conclusion', str_contains( $release_yml, 'actions/runs/${id}/jobs' ) && str_contains( $release_yml, 'REPORT_ONLY:' ) );
 check( 'only the Pass Captain work branch may be skipped; the pinned release and main must be downloaded', (bool) preg_match( '/pass_captain_ref: v\d+\.\d+\.\d+\s*\n\s*archive: [0-9a-f]{40}\s*\n\s*required: true/', $smoke_yml ) && (bool) preg_match( '/pass_captain_ref: main\s*\n\s*archive: refs\/heads\/main\s*\n\s*required: true/', $smoke_yml ) && str_contains( $smoke_yml, 'if [ "${{ matrix.required }}" = "true" ]; then' ) );
 check( 'quality-wide blocks on WordPress.Security findings and on growing findings (no continue-on-error)', (bool) preg_match( '/\n  quality-wide:\n(?:(?!\n  [a-z-]+:\n).)*WordPress\.Security\.EscapeOutput(?:(?!\n  [a-z-]+:\n).)*Findings must not grow/s', $smoke_yml ) && ! preg_match( '/\n  quality-wide:\n(?:(?!\n  [a-z-]+:\n).)*continue-on-error/s', $smoke_yml ) );
 preg_match( '/\n  ecosystem:\n(.*?)\n  [a-z-]+:\n/s', $smoke_yml, $r15 );
@@ -2270,6 +2270,88 @@ $m102_part  = (string) strstr( $m102_doc, '## Öffentliche Erweiterungspunkte' )
 preg_match_all( '/`(vcap_[a-z0-9_]+)`/', $m102_part, $m102_named );
 $m102_missing = array_values( array_filter( array_unique( $m102_named[1] ), static fn( $h ) => ! str_contains( $m102_hooks, '`' . $h . '`' ) ) );
 check( 'M12-102: FREE-PREMIUM.md refers to docs/HOOKS.md instead of an own hook table, and every hook it names is in HOOKS.md', '' !== $m102_part && str_contains( $m102_doc, '(HOOKS.md)' ) && ! preg_match( '/^\|\s*`vcap_/m', $m102_doc ) && count( $m102_named[1] ) > 10 && array() === $m102_missing, implode( ', ', $m102_missing ) );
+
+
+echo "\nFree core, add-on extension points, offline (A2, A4, A5, A8)\n";
+// A2: the license guard finds licensing/update code, a premium build and unlisted network calls (self-test on a
+// fixture plugin, so a broken pattern cannot pass unnoticed).
+$a2_dir = $out . '/guard-fixture-' . getmypid();
+foreach ( array( 'src', 'bin', 'assets/js' ) as $a2_sub ) {
+	@mkdir( "$a2_dir/$a2_sub", 0777, true );
+}
+file_put_contents( "$a2_dir/voucher-captain.php", "<?php\n/**\n * Plugin Name: X\n * Update URI: https://licenses.example/\n */\ndefine( 'VCAP_EDITION', 'premium' );\n" );
+file_put_contents( "$a2_dir/src/Licensing.php", "<?php\n\$c = new LicenseClient( 'https://licenses.example/wp-json/wplc/v1/' );\nadd_filter( 'pre_set_site_transient_update_plugins', 'x' );\nadd_filter( 'plugins_api', 'x', 10, 3 );\nadd_filter( 'update_plugins_licenses.example', 'x' );\nif ( allows_entitlement( 'voucher.wallet' ) ) {}\n\$r = wp_remote_post( 'https://licenses.example/activate' );\n\$h = curl_init( 'https://x.example' );\n" );
+file_put_contents( "$a2_dir/assets/js/x.js", "fetch( 'https://evil.example/collect' );\n\$.post( cfg.ajaxUrl, {} );\n" );
+file_put_contents( "$a2_dir/bin/build.sh", "#!/usr/bin/env bash\nVCAP_EDITION=premium bin/build-premium.sh\n" );
+exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( dirname( __DIR__ ) . '/tests/license-guard.php' ) . ' ' . escapeshellarg( $a2_dir ) . ' 2>&1', $a2_log, $a2_status );
+$a2_text = implode( "\n", $a2_log );
+$a2_want = array( 'license client', 'WP License Captain API', '"Update URI" header', 'own update filter', 'own plugins_api filter', 'update_plugins_{hostname}', 'entitlement check', 'edition constant', 'wp_remote_post() is not on the allowlist', 'curl_init() is not on the allowlist', 'x.js:1: browser request', 'bin/build.sh:2: edition switch', 'bin/build.sh:2: premium edition' );
+$a2_miss = array_values( array_filter( $a2_want, static fn( $w ) => ! str_contains( $a2_text, $w ) ) );
+check( 'A2: the license guard fails on license client, wplc/v1, Update URI, own update filters, entitlement checks, edition constants, a premium build and network calls off the allowlist', 1 === $a2_status && array() === $a2_miss && ! str_contains( $a2_text, 'x.js:2' ), implode( ', ', $a2_miss ) . ' / ' . $a2_text );
+file_put_contents( "$a2_dir/voucher-captain.php", "<?php\n/**\n * Plugin Name: X\n */\n" );
+file_put_contents( "$a2_dir/src/Licensing.php", "<?php\n// Clean.\n" );
+file_put_contents( "$a2_dir/assets/js/x.js", "\$.post( cfg.ajaxUrl, {} );\n" );
+file_put_contents( "$a2_dir/bin/build.sh", "#!/usr/bin/env bash\n# One build (docs/FREE-PREMIUM.md).\n" );
+$a2_log = array();
+exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( dirname( __DIR__ ) . '/tests/license-guard.php' ) . ' ' . escapeshellarg( $a2_dir ) . ' 2>&1', $a2_log, $a2_status );
+check( 'A2: a clean plugin passes the license guard', 0 === $a2_status, implode( ' ', $a2_log ) );
+$a2_guard = array();
+exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( dirname( __DIR__ ) . '/tests/license-guard.php' ) . ' 2>&1', $a2_guard, $a2_guard_status );
+check( 'A5: the only HTTP requests of the core are the allowlisted ones (PDF images from vcap_pdf_remote_hosts, Site Health loopback), each described in readme.txt → External services', 0 === $a2_guard_status && str_contains( implode( ' ', $a2_guard ), 'src/Health.php:' ) && str_contains( implode( ' ', $a2_guard ), 'src/PdfRenderer.php:' ) && (bool) preg_match( '/== External services ==.*vcap_pdf_remote_hosts.*Site Health.*== Changelog ==/s', (string) file_get_contents( dirname( __DIR__ ) . '/readme.txt' ) ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/readme.txt' ), 'never contacts a license or update server' ), implode( ' ', $a2_guard ) );
+
+// A4: settings section of an add-on – added after the core sections, core sections cannot be renamed, its page
+// shows only its own fields.
+$a4_settings = new VCAP\Settings();
+add_filter( 'vcap_settings_sections', static fn( $s ) => array( 'pro' => '<b>Wallet</b>', '' => 'Hijack', 'api' => 'Hijack', 'Bad Id!' => 'Other', 'empty' => '' ) + $s );
+add_filter( 'vcap_settings_fields', static fn( $f, $section ) => 'pro' === $section ? array_merge( $f, array( array( 'id' => 'vcap_pro_wallet', 'type' => 'checkbox' ) ) ) : $f, 10, 2 );
+$a4_sections = $a4_settings->section_list();
+check( 'A4: vcap_settings_sections adds an add-on section (label as text, id sanitised) after the core ones; core sections and their labels stay', 'Wallet' === ( $a4_sections['pro'] ?? '' ) && 'Other' === ( $a4_sections['bad-id'] ?? '' ) && ! isset( $a4_sections['empty'] ) && 'General' === $a4_sections[''] && 'Integrations (API)' === $a4_sections['api'] && 'pro' === array_keys( $a4_sections )[7], var_export( $a4_sections, true ) );
+check( 'A4: the page of an add-on section starts empty and shows the fields the add-on adds with vcap_settings_fields', array( array( 'id' => 'vcap_pro_wallet', 'type' => 'checkbox' ) ) === $a4_settings->fields( 'pro' ) );
+unset( $GLOBALS['vcap_test_filters']['vcap_settings_sections'], $GLOBALS['vcap_test_filters']['vcap_settings_fields'] );
+
+// A4: report tab of an add-on.
+add_filter( 'vcap_report_tabs', static fn( $t ) => array( 'wallet' => 'Wallet passes', 'journal' => 'Hijack', 'reconcile' => 'Fake', '' => 'x' ) + $t );
+$a4_tabs = VCAP\Admin\ReportsAdmin::tab_list();
+unset( $GLOBALS['vcap_test_filters']['vcap_report_tabs'] );
+$a4_reports_src = (string) file_get_contents( dirname( __DIR__ ) . '/src/Admin/ReportsAdmin.php' );
+check( 'A4: vcap_report_tabs adds an add-on report tab; core views cannot be renamed and "reconcile" only appears with WP Pass Captain', 'Wallet passes' === ( $a4_tabs['wallet'] ?? '' ) && 'Redemption journal' === $a4_tabs['journal'] && ( VCAP\Compat\PassCaptainReconcile::available() || ! isset( $a4_tabs['reconcile'] ) ) && ! isset( $a4_tabs[''] ) && 'overview' === array_key_first( $a4_tabs ), var_export( $a4_tabs, true ) );
+check( 'A4: the page of an add-on report view is printed by vcap_report_page after the capability check', str_contains( $a4_reports_src, "do_action( 'vcap_report_page', \$view );" ) && strpos( $a4_reports_src, 'current_user_can( Menu::cap() )' ) < strpos( $a4_reports_src, "do_action( 'vcap_report_page'" ) );
+
+// A4: every hook of API.md → "Extension points for add-ons" is called in the code and listed in docs/HOOKS.md with
+// a description; issue_standalone() is public and fires its action.
+$a4_api   = (string) file_get_contents( dirname( __DIR__ ) . '/API.md' );
+$a4_part  = (string) strstr( (string) strstr( $a4_api, '## Extension points for add-ons' ), '## WP Pass Captain', true );
+$a4_hooks = (string) file_get_contents( dirname( __DIR__ ) . '/docs/HOOKS.md' );
+$a4_code  = '';
+foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( dirname( __DIR__ ) . '/src', FilesystemIterator::SKIP_DOTS ) ) as $a4_file ) {
+	$a4_code .= (string) file_get_contents( $a4_file->getPathname() );
+}
+foreach ( glob( dirname( __DIR__ ) . '/templates/{,*/,*/*/}*.php', GLOB_BRACE ) as $a4_file ) {
+	$a4_code .= (string) file_get_contents( $a4_file );
+}
+$a4_code .= (string) file_get_contents( dirname( __DIR__ ) . '/voucher-captain.php' );
+preg_match_all( '/^\| ([^|]+) \|/m', $a4_part, $a4_rows );
+$a4_names = array();
+foreach ( $a4_rows[1] as $a4_cell ) {
+	preg_match_all( '/`(vcap_[a-z0-9_]+)`/', $a4_cell, $a4_m );
+	$a4_names = array_merge( $a4_names, $a4_m[1] );
+}
+$a4_names = array_values( array_unique( $a4_names ) );
+$a4_bad   = array_values( array_filter( $a4_names, static fn( $h ) => ! preg_match( "/\\b(do_action|apply_filters|Db::action)\\(\\s*'" . preg_quote( $h, '/' ) . "'/", $a4_code ) || ! preg_match( '/^\| `' . preg_quote( $h, '/' ) . '` \| [^|]+ \| (?!– )/m', $a4_hooks ) ) );
+check( 'A4: every add-on extension point in API.md (menu, settings, templates, reports, voucher links, events …) is called in the code and described in docs/HOOKS.md', count( $a4_names ) >= 25 && array() === $a4_bad && str_contains( $a4_part, '| `vcap_voucher_event` |' ) && str_contains( $a4_part, 'issue_standalone' ), count( $a4_names ) . ' hooks; missing or undescribed: ' . implode( ', ', $a4_bad ) );
+$a4_issue = new ReflectionMethod( VCAP\Issuer::class, 'issue_standalone' );
+check( 'A4: Issuer::issue_standalone() is public and fires vcap_voucher_issued_standalone; API.md says the caller checks the capability', $a4_issue->isPublic() && str_contains( $a4_code, "do_action( 'vcap_voucher_issued_standalone', \$voucher, \$args );" ) && str_contains( $a4_api, '**Permission and context are the caller\'s responsibility**' ) );
+check( 'A4: vcap_voucher_links is used in the voucher email (HTML and text), the customer\'s voucher list (My Account and order pages) and the bundled email', str_contains( $a4_code, "Downloads::voucher_links( \$voucher, 'email' )" ) && str_contains( $a4_code, "Downloads::voucher_links( \$voucher, 'email_plain' )" ) && str_contains( $a4_code, "Downloads::voucher_links( \$voucher, 'account' )" ) && str_contains( $a4_code, "Downloads::voucher_links( \$vcap_v, 'email' )" ) && str_contains( $a4_code, "Downloads::voucher_links( \$vcap_v, 'email_plain' )" ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Downloads.php' ), "'myaccount/vouchers-table.php'" ) );
+
+// A8: Plugin Check blocks on errors (no continue-on-error), the release gate has no report-only job left.
+preg_match( '/\n  plugin-check:\n(.*?)(?=\n  [a-z-]+:\n|$)/s', $smoke_yml . "\n", $a8_job );
+check( 'A8: the plugin-check job fails on every Plugin Check ERROR (not on warnings) and is not continue-on-error; ci-green lists no report-only job', isset( $a8_job[1] ) && ! str_contains( $a8_job[1], 'continue-on-error' ) && str_contains( $a8_job[1], "if grep -q ',ERROR,' plugin-check.csv; then" ) && ! str_contains( $a8_job[1], "grep -q ',WARNING,'" ) && str_contains( $release_yml, "REPORT_ONLY: ''" ) );
+
+// A5: the whole unit run worked without network: the fake transport is off unless a test sets it, and the only
+// requests made were the ones the C7 checks asked for (template images from an allowed host).
+$a5_hosts = array_values( array_unique( array_map( static fn( $u ) => (string) parse_url( $u, PHP_URL_HOST ), $GLOBALS['vcap_test_requests'] ?? array() ) ) );
+check( 'A5: the core flows of the unit run (boot, issuing, PDFs, emails, redemption, reports) made no HTTP request except the deliberate C7 image download', array( 'cdn.shop.test' ) === $a5_hosts && ! isset( $GLOBALS['vcap_test_http'] ), implode( ', ', $a5_hosts ) );
+check( 'A5: the integration suites block every outgoing request and fail on one from Voucher Captain (tests/no-network.php)', is_file( dirname( __DIR__ ) . '/tests/no-network.php' ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/tests/woocommerce-integration.php' ), '$vcap_offline = vcap_test_no_network();' ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/tests/order-lifecycle-integration.php' ), '$vcap_offline = vcap_test_no_network();' ) );
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );
