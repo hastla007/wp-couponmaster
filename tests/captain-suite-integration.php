@@ -272,6 +272,22 @@ $r9_free = $requests->reject( (int) $r9_req['request_id'] );
 wp_set_current_user( $r9_user );
 vcap_cs_assert( is_wp_error( $r9_busy[0] ) && 'vcap_in_progress' === $r9_busy[0]->get_error_code() && is_wp_error( $r9_busy[1] ) && 'vcap_in_progress' === $r9_busy[1]->get_error_code() && true === $r9_free, 'R9: a state change waits for the lock of the request; while another holds it nothing happens, afterwards it works', array( $r9_busy, $r9_free ) );
 
+// SEC3: at most 5 new requests per contact address in an hour (form spam), repeats of an entry are still answered.
+$sec3_tag     = strtolower( wp_generate_password( 6, false, false ) );
+$sec3_mail    = 'cs-sec3-' . $sec3_tag . '@example.com';
+$sec3_results = array();
+for ( $sec3_i = 1; $sec3_i <= 6; $sec3_i++ ) {
+	$sec3_results[] = $requests->submit( array( 'reference' => "formcaptain:entry:sec3-{$sec3_tag}-{$sec3_i}", 'contact' => array( 'email' => $sec3_mail ) ) );
+}
+$sec3_again = $requests->submit( array( 'reference' => "formcaptain:entry:sec3-{$sec3_tag}-1", 'contact' => array( 'email' => $sec3_mail ) ) );
+$sec3_other = $requests->submit( array( 'reference' => 'formcaptain:entry:sec3-other-' . $sec3_tag, 'contact' => array( 'email' => 'other-' . $sec3_mail ) ) );
+vcap_cs_assert( 5 === count( array_filter( array_slice( $sec3_results, 0, 5 ), 'is_array' ) ) && is_wp_error( $sec3_results[5] ) && 'vcap_request_limit' === $sec3_results[5]->get_error_code() && is_array( $sec3_again ) && $sec3_again['replayed'] && is_array( $sec3_other ), 'SEC3: the sixth new request of one contact address within an hour is refused (429); a repeat of an earlier entry and other addresses still work', array_map( static fn( $r ) => is_wp_error( $r ) ? $r->get_error_code() : 'ok', $sec3_results ) );
+foreach ( array_merge( array_slice( $sec3_results, 0, 5 ), array( $sec3_other ) ) as $sec3_r ) {
+	if ( is_array( $sec3_r ) ) {
+		wp_delete_post( (int) $sec3_r['request_id'], true );
+	}
+}
+
 // R5: the admin list pages and filters by state (default "to do" = open/partial).
 $r5_todo = array_column( VoucherRequests::page( array( VoucherRequests::STATE_OPEN, VoucherRequests::STATE_PARTIAL ), 1, 200 )['items'], 'id' );
 $r5_done = array_column( VoucherRequests::page( array( VoucherRequests::STATE_ISSUED, VoucherRequests::STATE_HANDED_OVER ), 1, 200 )['items'], 'id' );

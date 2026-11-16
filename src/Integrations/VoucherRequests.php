@@ -371,6 +371,9 @@ final class VoucherRequests {
 			if ( 0 === $max || ( $this->count_open )( $max ) >= $max ) {
 				return new \WP_Error( 'vcap_request_limit', __( 'Too many voucher requests are waiting to be handled. Please try again later.', 'voucher-captain' ), array( 'status' => 429 ) );
 			}
+			if ( self::flooded( $clean ) ) {
+				return new \WP_Error( 'vcap_request_limit', __( 'You have sent several voucher requests in a short time. Please try again later.', 'voucher-captain' ), array( 'status' => 429 ) );
+			}
 		}
 		if ( ! add_option( $claim, '0:' . time(), '', false ) ) {
 			$stored = (string) get_option( $claim, '0' );
@@ -893,6 +896,30 @@ final class VoucherRequests {
 			self::STATE_HANDED_OVER => __( 'Handed over to a company order', 'voucher-captain' ),
 		);
 		return $labels[ $state ] ?? $state;
+	}
+
+	/** SEC3: new requests per visitor (client address) and per contact address in RATE_WINDOW seconds. */
+	public const RATE_PER_VISITOR = 5;
+	public const RATE_WINDOW      = HOUR_IN_SECONDS;
+
+	/**
+	 * SEC3: whether this new request comes too often from the same visitor or contact address (form spam), so a
+	 * flood cannot fill the open-request limit for everyone. Limits: filter `vcap_rate_limit_request`. Background
+	 * calls without a visitor (WP-Cron, WP-CLI) are counted by contact address only.
+	 *
+	 * @param array<string, mixed> $request Normalised request.
+	 */
+	private static function flooded( array $request ): bool {
+		global $wpdb;
+		if ( ! is_object( $wpdb ) || ! function_exists( 'wp_salt' ) ) {
+			return false; // No database (unit tests).
+		}
+		$email = strtolower( trim( (string) ( $request['contact']['email'] ?? '' ) ) );
+		if ( '' !== $email && \VCAP\Plugin::rate_limited( 'request', self::RATE_PER_VISITOR, 0, self::RATE_WINDOW, true, 'contact:' . hash( 'sha256', $email ) ) ) {
+			return true;
+		}
+		$background = ( defined( 'DOING_CRON' ) && DOING_CRON ) || ( defined( 'WP_CLI' ) && WP_CLI );
+		return ! $background && \VCAP\Plugin::rate_limited( 'request', self::RATE_PER_VISITOR, 0, self::RATE_WINDOW );
 	}
 
 	/** R8: request stored for a form reference (by its hash on the request), 0 when there is none. */

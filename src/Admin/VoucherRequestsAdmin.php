@@ -18,6 +18,7 @@ final class VoucherRequestsAdmin {
 	public function register(): void {
 		add_action( 'admin_post_vcap_request_confirm', array( $this, 'confirm' ) );
 		add_action( 'admin_post_vcap_request_reject', array( $this, 'reject' ) );
+		add_action( 'admin_post_vcap_request_bulk_reject', array( $this, 'bulk_reject' ) );
 		add_action( 'admin_post_vcap_request_handover', array( $this, 'handover' ) );
 	}
 
@@ -72,17 +73,25 @@ final class VoucherRequestsAdmin {
 			echo '<p>' . esc_html__( 'No voucher requests yet.', 'voucher-captain' ) . '</p>';
 			return;
 		}
-		echo '<table class="widefat striped"><thead><tr><th>' . esc_html__( 'Received', 'voucher-captain' ) . '</th><th>' . esc_html__( 'Type', 'voucher-captain' ) . '</th><th>' . esc_html__( 'Contact', 'voucher-captain' ) . '</th><th>' . esc_html__( 'Vouchers', 'voucher-captain' ) . '</th><th>' . esc_html__( 'Status', 'voucher-captain' ) . '</th></tr></thead><tbody>';
+		// SEC3: open requests can be rejected together (e.g. after a flood of spam entries).
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="vcap_request_bulk_reject" />';
+		wp_nonce_field( 'vcap_request_bulk_reject' );
+		echo '<table class="widefat striped"><thead><tr><td class="check-column"><span class="screen-reader-text">' . esc_html__( 'Select', 'voucher-captain' ) . '</span></td><th>' . esc_html__( 'Received', 'voucher-captain' ) . '</th><th>' . esc_html__( 'Type', 'voucher-captain' ) . '</th><th>' . esc_html__( 'Contact', 'voucher-captain' ) . '</th><th>' . esc_html__( 'Vouchers', 'voucher-captain' ) . '</th><th>' . esc_html__( 'Status', 'voucher-captain' ) . '</th></tr></thead><tbody>';
 		foreach ( $rows as $r ) {
 			$url     = add_query_arg( array( 'page' => self::SLUG, 'request' => (int) $r['id'] ), admin_url( 'admin.php' ) );
 			$contact = (array) $r['contact'];
-			echo '<tr><td><a href="' . esc_url( $url ) . '">' . esc_html( get_date_from_gmt( (string) $r['received_at'], get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ) . '</a></td>';
+			$check   = VoucherRequests::STATE_OPEN === (string) $r['state']
+				/* translators: %d: id of the voucher request */
+				? '<label class="screen-reader-text" for="vcap-req-' . (int) $r['id'] . '">' . esc_html( sprintf( __( 'Select request %d', 'voucher-captain' ), (int) $r['id'] ) ) . '</label><input type="checkbox" id="vcap-req-' . (int) $r['id'] . '" name="requests[]" value="' . (int) $r['id'] . '" />'
+				: '';
+			echo '<tr><th scope="row" class="check-column">' . $check . '</th><td><a href="' . esc_url( $url ) . '">'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built from escaped parts above. . esc_html( get_date_from_gmt( (string) $r['received_at'], get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ) . '</a></td>';
 			echo '<td>' . esc_html( self::kind_label( (string) $r['kind'] ) ) . '</td>';
 			echo '<td>' . esc_html( trim( $contact['company'] . ' ' . $contact['name'] ) ) . '</td>';
 			echo '<td>' . esc_html( (string) (int) $r['quantity'] ) . '</td>';
 			echo '<td>' . esc_html( self::state_label( (string) $r['state'] ) ) . '</td></tr>';
 		}
 		echo '</tbody></table>';
+		echo '<p><button type="submit" class="button" onclick="return window.confirm(this.dataset.confirm);" data-confirm="' . esc_attr__( 'Reject and delete the selected open requests?', 'voucher-captain' ) . '">' . esc_html__( 'Reject selected', 'voucher-captain' ) . '</button></p></form>';
 		if ( $result['pages'] > 1 ) {
 			$pages = paginate_links(
 				array(
@@ -241,6 +250,34 @@ final class VoucherRequestsAdmin {
 		/* translators: %d: id of the company order */
 		Flash::add( 'success', sprintf( __( 'Handed over to company order #%d', 'voucher-captain' ), (int) $result['order_id'] ) );
 		wp_safe_redirect( '' !== $result['url'] ? $result['url'] : $back, 302, 'Voucher Captain' );
+		exit;
+	}
+
+	/** SEC3: rejects the selected open requests (each through reject(), with its rights check and lock). */
+	public function bulk_reject(): void {
+		check_admin_referer( 'vcap_request_bulk_reject' );
+		$ids     = array_values( array_unique( array_filter( array_map( 'absint', (array) wp_unslash( $_POST['requests'] ?? array() ) ) ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- absint above.
+		$done    = 0;
+		$refused = 0;
+		foreach ( $ids as $id ) {
+			if ( true === $this->requests->reject( $id ) ) {
+				++$done;
+			} else {
+				++$refused;
+			}
+		}
+		if ( $done ) {
+			/* translators: %d: number of rejected requests */
+			Flash::add( 'success', sprintf( _n( '%d voucher request rejected and deleted.', '%d voucher requests rejected and deleted.', $done, 'voucher-captain' ), $done ) );
+		}
+		if ( $refused ) {
+			/* translators: %d: number of requests that could not be rejected */
+			Flash::add( 'error', sprintf( _n( '%d request could not be rejected (no longer open or not allowed).', '%d requests could not be rejected (no longer open or not allowed).', $refused, 'voucher-captain' ), $refused ) );
+		}
+		if ( ! $ids ) {
+			Flash::add( 'error', __( 'No request was selected.', 'voucher-captain' ) );
+		}
+		wp_safe_redirect( add_query_arg( array( 'page' => self::SLUG ), admin_url( 'admin.php' ) ) );
 		exit;
 	}
 
