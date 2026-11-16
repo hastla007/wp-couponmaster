@@ -26,7 +26,7 @@ defined( 'ABSPATH' ) || exit;
  * Nothing is written: no reservation is released, no coupon repaired, no cache primed, no hook fired. The methods do
  * not check the current user; the caller decides who may see the result.
  *
- * @since 1.2.0 (contract 1.2.0)
+ * @since 1.3.0 (contract 1.2.0)
  */
 final class ReadService {
 	/** Keys of read_voucher(), in this order. */
@@ -67,7 +67,7 @@ final class ReadService {
 	/**
 	 * State of a voucher, gift card, ticket or store credit account by its record id.
 	 *
-	 * @since 1.2.0
+	 * @since 1.3.0
 	 * @param int|string $id Voucher id (`voucher_id` of the events); a string must be a positive whole number.
 	 * @return array<string, mixed>|null The keys of VOUCHER_KEYS, or null when no voucher has this id.
 	 */
@@ -79,7 +79,7 @@ final class ReadService {
 	/**
 	 * State of a gift card (type `giftcard`) by its record id, with the number of top-ups.
 	 *
-	 * @since 1.2.0
+	 * @since 1.3.0
 	 * @param int|string $id Voucher id of the gift card.
 	 * @return array<string, mixed>|null The keys of VOUCHER_KEYS and GIFT_CARD_KEYS, or null when no gift card has this id.
 	 */
@@ -98,7 +98,7 @@ final class ReadService {
 	/**
 	 * Store credit account of a customer by WordPress user id. Opens no account and repairs nothing.
 	 *
-	 * @since 1.2.0
+	 * @since 1.3.0
 	 * @param int|string $user_id WordPress user id of the customer.
 	 * @return array<string, mixed>|null The keys of STORE_CREDIT_KEYS, or null when the user has no account.
 	 */
@@ -129,7 +129,7 @@ final class ReadService {
 	 * An external redemption (vcap()->redemptions) by its record id. Reads the row as stored: an overdue
 	 * reservation is reported as `reserved` with its past `expires_at` (the background job releases it).
 	 *
-	 * @since 1.2.0
+	 * @since 1.3.0
 	 * @param int|string $id Record id of the redemption (`redemption_id` of read_redemptions()).
 	 * @return array<string, mixed>|null The keys of REDEMPTION_KEYS, or null when no redemption has this id.
 	 */
@@ -150,7 +150,7 @@ final class ReadService {
 	/**
 	 * External redemptions of a voucher, newest first (at most MAX_REDEMPTIONS).
 	 *
-	 * @since 1.2.0
+	 * @since 1.3.0
 	 * @param int|string $voucher_id Voucher id.
 	 * @return array<int, array<string, mixed>>|null Entries with the keys of REDEMPTION_KEYS (empty when it has none), or null when no voucher has this id.
 	 */
@@ -175,7 +175,7 @@ final class ReadService {
 	/**
 	 * The vouchers of a WooCommerce order: their number and record ids (each readable with voucher()).
 	 *
-	 * @since 1.2.0
+	 * @since 1.3.0
 	 * @param int|string $order_id WooCommerce order id.
 	 * @return array<string, mixed>|null The keys of ORDER_KEYS, or null when no voucher belongs to this order.
 	 */

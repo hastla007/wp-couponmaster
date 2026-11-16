@@ -3,7 +3,7 @@
  * Plugin Name:       Voucher Captain
  * Plugin URI:        https://github.com/hastla007/wp-couponmaster
  * Description:       Sell personalised PDF vouchers, gift cards and store credit with WooCommerce: visual PDF designer, recipient fields, scheduled delivery, balance-tracked gift cards, code import and redemption in the shop, by API or in WP Pass Captain.
- * Version:           1.2.0
+ * Version:           1.3.0
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Requires Plugins:  woocommerce
@@ -18,14 +18,14 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'VCAP_VERSION', '1.2.0' );
+define( 'VCAP_VERSION', '1.3.0' );
 define( 'VCAP_DB_VERSION', '1.8.0' );
 /*
  * Version of the public extension contract (hooks, vcap()->api_v1, vcap()->redemptions, REST vcap/v1,
  * VCAP\Contracts\*) – independent of the plugin version. Major = API generation (1 = v1), minor rises with every
  * release that adds hooks, methods or arguments. Add-ons and connectors check this instead of single hooks
- * (CONNECTORS.md, section 6; docs/HOOKS.md). 1.0.0 = plugin 1.1.0, 1.1.0 = plugin 1.2.0, 1.2.0 = plugin 1.2.0 with
- * the read functions vcap_read_*() / vcap()->read (API.md → "Read functions"), 1.3.0 = plugin 1.2.0 with the
+ * (CONNECTORS.md, section 6; docs/HOOKS.md). 1.0.0 = plugin 1.1.0, 1.1.0 = plugin 1.2.0, 1.2.0 = plugin 1.3.0 with
+ * the read functions vcap_read_*() / vcap()->read (API.md → "Read functions"), 1.3.0 = plugin 1.3.0 with the
  * voucher commands vcap_command_*() / vcap()->commands (API.md → "Voucher commands").
  */
 define( 'VCAP_CONTRACT_VERSION', '1.3.0' );

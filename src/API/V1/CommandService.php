@@ -33,7 +33,7 @@ defined( 'ABSPATH' ) || exit;
  *   Refusals are final (`final` = true, R-8.13); only `failed` (lock busy, temporary database error) may be retried
  *   with the same key.
  *
- * @since 1.2.0 (contract 1.3.0)
+ * @since 1.3.0 (contract 1.3.0)
  */
 final class CommandService {
 	/** Keys of every reply, in this order. */

@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
  * What CommandService keeps between calls. The production store is OptionCommandStore (options of the site under a
  * named database lock); tests use an in-memory store.
  *
- * @since 1.2.0 (contract 1.3.0)
+ * @since 1.3.0 (contract 1.3.0)
  */
 interface CommandStore {
 	/**

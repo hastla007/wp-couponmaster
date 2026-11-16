@@ -20,7 +20,7 @@ defined( 'ABSPATH' ) || exit;
  * then an amount in another currency is refused unless the operator entered an own maximum amount in the shop currency
  * (which he vouches is not above 100 EUR in value).
  *
- * @since 1.2.0 (contract 1.3.0)
+ * @since 1.3.0 (contract 1.3.0)
  */
 final class CommandLimits {
 	/** The four commands (spec names). */
@@ -179,7 +179,7 @@ final class CommandLimits {
 			 * per_recipient, max_amount_minor, amount_allowed}, command, currency of the amount). Values above the given
 			 * ones, and enabled = true for a command the operator switched off, have no effect.
 			 *
-			 * @since 1.2.0 (contract 1.3.0)
+			 * @since 1.3.0 (contract 1.3.0)
 			 */
 			apply_filters( 'vcap_command_limits', $defaults, $command, $currency );
 		$filtered            = is_array( $filtered ) ? $filtered : $defaults;

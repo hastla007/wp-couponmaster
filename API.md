@@ -221,7 +221,7 @@ The role no longer counts as delivered, the voucher history gets a "Delivery fai
 fourth argument the buyer is told by email (with the signed "Correct the recipient" link where the gift may still be
 redirected). The action `vcap_voucher_bounced( Voucher $voucher, string $role, string $reason )` fires afterwards.
 
-## Read functions (since 1.2.0, contract 1.2.0)
+## Read functions (since 1.3.0, contract 1.2.0)
 
 Read-only state of a voucher by its **record id**, for add-ons and automations that must re-check an event or evaluate
 a condition without knowing the voucher code (an event carries the `voucher_id`, never the code). Available once the
@@ -232,12 +232,12 @@ plugin booted (`vcap_loaded`); check `function_exists( 'vcap_read_voucher' )` or
 
 | Function | Argument | Returns | Since |
 |---|---|---|---|
-| `vcap_read_voucher( int\|string $id )` | voucher id | voucher keys below, or `null` | 1.2.0 |
-| `vcap_read_gift_card( int\|string $id )` | voucher id of a gift card | voucher keys plus `top_up_count`, `top_up_reversed_count`; `null` when the id is unknown or no gift card (type `giftcard`) | 1.2.0 |
-| `vcap_read_store_credit( int\|string $user_id )` | WordPress user id | `user_id`, `account_id` (voucher id of the account), `status`, `currency`, `balance_minor`, `created_at`, `updated_at`; `null` when the user has no account (none is opened) | 1.2.0 |
-| `vcap_read_redemption( int\|string $id )` | record id of an external redemption | redemption keys below, or `null` | 1.2.0 |
-| `vcap_read_redemptions( int\|string $voucher_id )` | voucher id | list of redemptions (redemption keys), newest first, at most 100; `[]` when it has none; `null` when the voucher id is unknown | 1.2.0 |
-| `vcap_read_order_vouchers( int\|string $order_id )` | WooCommerce order id | `order_id`, `voucher_count`, `voucher_ids` (int[]); `null` when no voucher belongs to the order | 1.2.0 |
+| `vcap_read_voucher( int\|string $id )` | voucher id | voucher keys below, or `null` | 1.3.0 |
+| `vcap_read_gift_card( int\|string $id )` | voucher id of a gift card | voucher keys plus `top_up_count`, `top_up_reversed_count`; `null` when the id is unknown or no gift card (type `giftcard`) | 1.3.0 |
+| `vcap_read_store_credit( int\|string $user_id )` | WordPress user id | `user_id`, `account_id` (voucher id of the account), `status`, `currency`, `balance_minor`, `created_at`, `updated_at`; `null` when the user has no account (none is opened) | 1.3.0 |
+| `vcap_read_redemption( int\|string $id )` | record id of an external redemption | redemption keys below, or `null` | 1.3.0 |
+| `vcap_read_redemptions( int\|string $voucher_id )` | voucher id | list of redemptions (redemption keys), newest first, at most 100; `[]` when it has none; `null` when the voucher id is unknown | 1.3.0 |
+| `vcap_read_order_vouchers( int\|string $order_id )` | WooCommerce order id | `order_id`, `voucher_count`, `voucher_ids` (int[]); `null` when no voucher belongs to the order | 1.3.0 |
 
 **Voucher keys** (always all of them, in this order): `voucher_id`, `type` (`voucher`, `giftcard`, `ticket`, `credit` or
 a connector type), `status` (`active`, `scheduled`, `reserved`, `redeemed`, `expired`, `void`), `usage_mode`
@@ -283,7 +283,7 @@ add_action( 'vcap_voucher_event', function ( $voucher_id, $event ) {
 }, 10, 2 );
 ```
 
-## Voucher commands (since 1.2.0, contract 1.3.0)
+## Voucher commands (since 1.3.0, contract 1.3.0)
 
 The four commands an automatic caller (a workflow automation, an add-on) may run on vouchers (suite specification 8.3,
 decisions D11/D11b, requirement VC-1): issue, void, reactivate and redeem. Limits, protocol, idempotency, permission

@@ -17,7 +17,7 @@ if ( ! function_exists( 'vcap_read_voucher' ) ) {
 	/**
 	 * State of a voucher, gift card, ticket or store credit account by record id; null for an unknown id.
 	 *
-	 * @since 1.2.0
+	 * @since 1.3.0
 	 * @param int|string $id Voucher id.
 	 * @return array<string, mixed>|null
 	 */
@@ -30,7 +30,7 @@ if ( ! function_exists( 'vcap_read_gift_card' ) ) {
 	/**
 	 * State of a gift card by record id, with its top-up counts; null when no gift card has this id.
 	 *
-	 * @since 1.2.0
+	 * @since 1.3.0
 	 * @param int|string $id Voucher id of the gift card.
 	 * @return array<string, mixed>|null
 	 */
@@ -43,7 +43,7 @@ if ( ! function_exists( 'vcap_read_store_credit' ) ) {
 	/**
 	 * Store credit account of a customer by WordPress user id; null when the user has none.
 	 *
-	 * @since 1.2.0
+	 * @since 1.3.0
 	 * @param int|string $user_id WordPress user id.
 	 * @return array<string, mixed>|null
 	 */
@@ -56,7 +56,7 @@ if ( ! function_exists( 'vcap_read_redemption' ) ) {
 	/**
 	 * An external redemption by its record id; null for an unknown id.
 	 *
-	 * @since 1.2.0
+	 * @since 1.3.0
 	 * @param int|string $id Redemption record id.
 	 * @return array<string, mixed>|null
 	 */
@@ -69,7 +69,7 @@ if ( ! function_exists( 'vcap_read_redemptions' ) ) {
 	/**
 	 * External redemptions of a voucher, newest first; null when no voucher has this id.
 	 *
-	 * @since 1.2.0
+	 * @since 1.3.0
 	 * @param int|string $voucher_id Voucher id.
 	 * @return array<int, array<string, mixed>>|null
 	 */
@@ -82,7 +82,7 @@ if ( ! function_exists( 'vcap_read_order_vouchers' ) ) {
 	/**
 	 * Number and record ids of the vouchers of a WooCommerce order; null when the order has none.
 	 *
-	 * @since 1.2.0
+	 * @since 1.3.0
 	 * @param int|string $order_id WooCommerce order id.
 	 * @return array<string, mixed>|null
 	 */
@@ -118,7 +118,7 @@ if ( ! function_exists( 'vcap_command_issue' ) ) {
 	/**
 	 * Command voucher.issue: issues a voucher with a fixed value to a WordPress user (suite spec 8.3.2).
 	 *
-	 * @since 1.2.0 (contract 1.3.0)
+	 * @since 1.3.0 (contract 1.3.0)
 	 * @param array<string, mixed> $args idempotency_key, reason, workflow_id, run_id, step_id, authorized_by_user_id,
 	 *                                   recipient_user_id, amount_minor, currency, product_id (optional).
 	 * @return array<string, mixed> Reply (CommandService::RESULT_KEYS).
@@ -132,7 +132,7 @@ if ( ! function_exists( 'vcap_command_void' ) ) {
 	/**
 	 * Command voucher.void: voids a voucher by its id, without refund (suite spec 8.3.3).
 	 *
-	 * @since 1.2.0 (contract 1.3.0)
+	 * @since 1.3.0 (contract 1.3.0)
 	 * @param array<string, mixed> $args Common fields plus voucher_id.
 	 * @return array<string, mixed> Reply (CommandService::RESULT_KEYS).
 	 */
@@ -145,7 +145,7 @@ if ( ! function_exists( 'vcap_command_reactivate' ) ) {
 	/**
 	 * Command voucher.reactivate: reactivates a void voucher not voided because of a refund (suite spec 8.3.3).
 	 *
-	 * @since 1.2.0 (contract 1.3.0)
+	 * @since 1.3.0 (contract 1.3.0)
 	 * @param array<string, mixed> $args Common fields plus voucher_id.
 	 * @return array<string, mixed> Reply (CommandService::RESULT_KEYS).
 	 */
@@ -158,7 +158,7 @@ if ( ! function_exists( 'vcap_command_redeem' ) ) {
 	/**
 	 * Command voucher.redeem: redeems a voucher by its id, wholly or partly (suite spec 8.3.4).
 	 *
-	 * @since 1.2.0 (contract 1.3.0)
+	 * @since 1.3.0 (contract 1.3.0)
 	 * @param array<string, mixed> $args Common fields plus voucher_id, amount_minor, currency, target.
 	 * @return array<string, mixed> Reply (CommandService::RESULT_KEYS).
 	 */

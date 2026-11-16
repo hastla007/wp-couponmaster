@@ -41,7 +41,7 @@ Entscheidung des Betreibers vom 13.11.2026 (verbindlich). Dieses Dokument ersetz
 
 ## Funktionsumfang „Kern, dauerhaft frei“
 
-Stand 1.2.0 (Schema 1.8.0), abgeleitet aus `src/` und readme.txt. Alles in dieser Tabelle ist und bleibt frei.
+Stand 1.3.0 (Schema 1.8.0), abgeleitet aus `src/` und readme.txt. Alles in dieser Tabelle ist und bleibt frei.
 
 | Bereich | Umfang |
 |---|---|
@@ -102,9 +102,9 @@ Besonders nützlich für ein Add-on: `vcap_settings_sections` (eigener Abschnitt
 `vcap_vouchers_issued`, `vcap_voucher_redeemed`, `vcap_voucher_event`.
 
 **Vertragsversion:** Die Konstante `VCAP_CONTRACT_VERSION` (seit Plugin 1.2.0) nennt die Version dieser öffentlichen
-Schnittstelle, unabhängig von der Plugin-Version: 1.0.0 = Plugin 1.1.0, 1.1.0 = Plugin 1.2.0, 1.2.0 = Plugin 1.2.0 mit den
+Schnittstelle, unabhängig von der Plugin-Version: 1.0.0 = Plugin 1.1.0, 1.1.0 = Plugin 1.2.0, 1.2.0 = Plugin 1.3.0 mit den
 Lesefunktionen `vcap_read_*()` / `vcap()->read` (Zustand eines Gutscheins über die ID, ohne Code und personenbezogene
-Daten; API.md → „Read functions“), 1.3.0 = Plugin 1.2.0 mit den Gutschein-Befehlen `vcap_command_*()` /
+Daten; API.md → „Read functions“), 1.3.0 = Plugin 1.3.0 mit den Gutschein-Befehlen `vcap_command_*()` /
 `vcap()->commands` (ausstellen, sperren, reaktivieren, einlösen über die ID; ab Werk aus, feste Grenzen, Protokoll;
 API.md → „Voucher commands“). Ein Add-on prüft sie
 einmal, statt einzelne Hooks abzufragen (CONNECTORS.md → 6.); die erste Version jedes Hooks steht in der Spalte

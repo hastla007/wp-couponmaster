@@ -18,7 +18,7 @@ defined( 'ABSPATH' ) || exit;
  * CommandBackend on the plugin's own services: the commands go through the same paths as the admin (issue without an
  * order, void, reactivate) and the redemption API, so the core keeps its checks, history entries, hooks and mails.
  *
- * @since 1.2.0 (contract 1.3.0)
+ * @since 1.3.0 (contract 1.3.0)
  */
 final class CoreCommandBackend implements CommandBackend {
 	/**

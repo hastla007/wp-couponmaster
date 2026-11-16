@@ -80,7 +80,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_checkin_undo_minutes` | 1.2.0 | `src/Tickets.php` | – |
 | `vcap_claim_retention_days` | 1.2.0 | `src/Claim.php` | – |
 | `vcap_client_ip` | 1.2.0 | `src/Health.php`, `src/Plugin.php` | – |
-| `vcap_command_limits` | 1.2.0 | `src/API/V1/CommandLimits.php` | Lowers the limits of an automatic voucher command or switches it off (args: limits {enabled, per_day, per_recipient, max_amount_minor, amount_allowed}, command, currency of the amount). Values above the given ones, and enabled = true for a command the operator switched off, have no effect. |
+| `vcap_command_limits` | 1.3.0 | `src/API/V1/CommandLimits.php` | Lowers the limits of an automatic voucher command or switches it off (args: limits {enabled, per_day, per_recipient, max_amount_minor, amount_allowed}, command, currency of the amount). Values above the given ones, and enabled = true for a command the operator switched off, have no effect. |
 | `vcap_counter_limit_applies` | 1.2.0 | `src/Counter.php` | Whether the daily counter limits apply (default: not for staff who manage vouchers). Args: bool, user id, Voucher. |
 | `vcap_counter_limits` | 1.2.0 | `src/Counter.php` | Daily limits of counter redemptions for a staff member at a till (0 = unlimited), e.g. other limits per branch. Args: limits {user: {amount, count}, till: {amount, count}}, user id, till, Voucher\|null. |
 | `vcap_counter_locations` | 1.2.0 | `src/Counter.php` | The managed tills/branches offered on the scanner. Args: string[] list. |

@@ -6,7 +6,7 @@ Tested up to: 7.1
 Requires PHP: 8.1
 WC requires at least: 8.9
 WC tested up to: 11.2
-Stable tag: 1.2.0
+Stable tag: 1.3.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -77,6 +77,11 @@ The plugin itself makes only these HTTP requests:
 On the same site (no external transfer): with WP Pass Captain active, ticket exchanges and ticket payments pass the voucher code, amount, the customer's name and email address and attendee names to WP Pass Captain. With WP Affiliate Captain active, the partner of a code campaign is passed to it for the commission of orders that use the code.
 
 == Changelog ==
+
+= 1.3.0 =
+* Dev: read functions vcap_read_voucher(), vcap_read_gift_card(), vcap_read_store_credit(), vcap_read_redemption(), vcap_read_redemptions() and vcap_read_order_vouchers() (service vcap()->read, contract 1.2.0) return the state of a voucher by its id – status, amounts in minor units, expiry, delivery, counts – never the code or personal data, and write nothing.
+* New: voucher commands for automations (contract 1.3.0): vcap_command_issue(), vcap_command_void(), vcap_command_reactivate() and vcap_command_redeem() (service vcap()->commands) issue, void, reactivate and redeem vouchers by id with an idempotency key and the rights of the authorising user. Each is off until switched on under Settings → Vouchers → Integrations (API); fixed limits the shop can only lower: at most 100 EUR per voucher or redemption, 50 calls a day per command, 1 issued voucher per recipient and day. Every call is recorded without the code.
+* Dev: VCAP_CONTRACT_VERSION 1.3.0 (1.2.0 with the read functions, 1.3.0 with the voucher commands); the plugin version rises with the contract.
 
 = 1.2.0 =
 * Fix (security): personal vouchers (only buyer/recipient) are redeemed online only by a customer logged in with the matching account email – a guest typing the buyer's address at checkout (also in the cart/checkout blocks, connectors and the WP Pass Captain checkout) is asked to log in with the masked address. Staff at the counter and in wp-admin are not affected; transferable vouchers neither.
@@ -167,9 +172,7 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 * Fix: database updates run in admin, cron and WP-CLI requests or the background action vcap_migrate, never in shop requests; tables are created and checked once per update; the schema check covers every index.
 * New: Site Health check for the PHP extensions mbstring, dom, gd, zip and iconv; activation stops without mbstring or dom.
 * Dev: vcap() is defined only when WooCommerce is active in a supported version; new action vcap_loaded and VCAP\Plugin::ready().
-* Dev: constant VCAP_CONTRACT_VERSION (1.3.0) names the version of the public hook and API contract; docs/HOOKS.md lists the first version of every hook.
-* Dev: read functions vcap_read_voucher(), vcap_read_gift_card(), vcap_read_store_credit(), vcap_read_redemption(), vcap_read_redemptions() and vcap_read_order_vouchers() (service vcap()->read, contract 1.2.0) return the state of a voucher by its id – status, amounts in minor units, expiry, delivery, counts – never the code or personal data, and write nothing.
-* New: voucher commands for automations (contract 1.3.0): vcap_command_issue(), vcap_command_void(), vcap_command_reactivate() and vcap_command_redeem() (service vcap()->commands) issue, void, reactivate and redeem vouchers by id with an idempotency key and the rights of the authorising user. Each is off until switched on under Settings → Vouchers → Integrations (API); fixed limits the shop can only lower: at most 100 EUR per voucher or redemption, 50 calls a day per command, 1 issued voucher per recipient and day. Every call is recorded without the code.
+* Dev: constant VCAP_CONTRACT_VERSION (1.1.0) names the version of the public hook and API contract; docs/HOOKS.md lists the first version of every hook.
 * Fix (privacy): imported cards get a random reference instead of one derived from their code.
 * Fix (security): text from visitors (code of a redeem link, recipient name, attendee fields) can no longer run shortcodes through block output.
 * Fix: the redeem form needs no nonce for guests and keeps pages cacheable unless it shows data of the visitor; it is also recognised in synced patterns, template parts, widgets and builder layouts. Its notices appear only in the form that was sent.
@@ -211,6 +214,9 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 * Initial release.
 
 == Upgrade Notice ==
+
+= 1.3.0 =
+Adds read functions and voucher commands for add-ons and automations (contract 1.3.0; the commands are off by default). From 1.1.x the database is updated to version 1.8.0 – back up first.
 
 = 1.2.0 =
 All features stay free, including the new gift card top-up and multi-purpose vouchers as payment. The database is updated to version 1.8.0 – back up first.

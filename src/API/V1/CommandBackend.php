@@ -15,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
  * The core paths CommandService calls. The production backend is CoreCommandBackend (Issuer, RedemptionService,
  * VoucherRepository); tests use a fake.
  *
- * @since 1.2.0 (contract 1.3.0)
+ * @since 1.3.0 (contract 1.3.0)
  */
 interface CommandBackend {
 	/**

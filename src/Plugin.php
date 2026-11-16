@@ -21,9 +21,9 @@ final class Plugin {
 	public Tickets $tickets;
 	public API\V1\VoucherService $api_v1;
 	public API\V1\RedemptionService $redemptions;
-	/** Read-only state of vouchers, gift cards, store credit and redemptions by record id (since 1.2.0, contract 1.2.0). */
+	/** Read-only state of vouchers, gift cards, store credit and redemptions by record id (since 1.3.0, contract 1.2.0). */
 	public API\V1\ReadService $read;
-	/** The four voucher commands for automatic callers: issue, void, reactivate, redeem (since 1.2.0, contract 1.3.0). */
+	/** The four voucher commands for automatic callers: issue, void, reactivate, redeem (since 1.3.0, contract 1.3.0). */
 	public API\V1\CommandService $commands;
 	/** Exchange of ticket vouchers for WP Pass Captain tickets (works only while Pass Captain is active). */
 	public Compat\PassCaptainTickets $passcaptain_tickets;

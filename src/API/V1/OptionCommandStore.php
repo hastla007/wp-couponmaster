@@ -21,7 +21,7 @@ defined( 'ABSPATH' ) || exit;
  * (counters), "vcap_cmd_log_<Y-m-d>" (protocol, at most 500 entries a day, then only counted), "vcap_cmd_days"
  * (index for the clean-up: day => reply options of that day).
  *
- * @since 1.2.0 (contract 1.3.0)
+ * @since 1.3.0 (contract 1.3.0)
  */
 final class OptionCommandStore implements CommandStore {
 	/** Days replies (idempotency) are kept. */
