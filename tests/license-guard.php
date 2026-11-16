@@ -4,12 +4,21 @@
  * no license client, no WP License Captain API calls, no "Update URI" header, no own update filters, no entitlement
  * checks, no edition or license constants.
  *
- *   php tests/license-guard.php
+ *   php tests/license-guard.php [--root=DIR]
  *
- * Exits 1 and lists file:line of every hit.
+ * Exits 1 and lists file:line of every hit. --root checks another directory with the same layout (used by
+ * tests/run.php to prove that the guard finds planted license code).
+ *
+ * The only license-related text allowed in the shipped files is the clean-up of what pre-release builds with a
+ * license client left behind (VCAP\Install::LEGACY_LICENSE_OPTIONS and its comments, see $allowed below).
  */
 
 $root = dirname( __DIR__ );
+foreach ( array_slice( $argv ?? array(), 1 ) as $arg ) {
+	if ( str_starts_with( $arg, '--root=' ) ) {
+		$root = rtrim( substr( $arg, 7 ), '/' );
+	}
+}
 
 // Shipped files and folders (bin/build.sh), without bundled third-party code.
 $paths   = array( 'voucher-captain.php', 'uninstall.php', 'readme.txt', 'src', 'templates', 'assets', 'examples', 'config' );
@@ -24,7 +33,17 @@ $patterns = array(
 	'/\ballows_entitlement\b/'                         => 'entitlement check',
 	'/VCAP_EDITION/'                                   => 'edition constant',
 	'/VCAP_LICENSE_/'                                  => 'license constant',
+	'/wplc_/i'                                         => 'WP License Captain prefix (wplc_)',
+	'/[\'"]site_transient_update_plugins[\'"]/'        => 'own update filter (site_transient_update_plugins)',
+	'/entitlement/i'                                   => 'entitlement',
+	'/licen[sc]e_key/i'                                => 'license key handling',
 );
+
+// Clean-up of earlier builds: the legacy option names and the comment lines of src/Install.php may name what is removed.
+$allowed = array(
+	'src/Install.php' => '/^\s*(\*|\/\*\*|\'vcap_wplc_[a-z_]+\',\s*$)/',
+);
+$allowed_for = array( 'WP License Captain prefix (wplc_)', 'entitlement' );
 
 $files = array();
 foreach ( $paths as $path ) {
@@ -62,6 +81,9 @@ foreach ( $files as $relative ) {
 	foreach ( false === $lines ? array() : $lines as $number => $line ) {
 		foreach ( $patterns as $pattern => $what ) {
 			if ( preg_match( $pattern, $line ) ) {
+				if ( isset( $allowed[ $relative ] ) && in_array( $what, $allowed_for, true ) && preg_match( $allowed[ $relative ], $line ) ) {
+					continue;
+				}
 				$hits[] = sprintf( '%s:%d: %s – %s', $relative, $number + 1, $what, trim( $line ) );
 			}
 		}

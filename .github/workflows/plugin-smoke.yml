@@ -8,6 +8,7 @@ on:
       - codex/fix-voucher-audit-findings
       - claude/wp-plugin-analyse-todo-hvollo
       - claude/wp-plugin-analyse-todo-hvollo-refactors
+      - claude/sharp-mendel-xiiwf3
   pull_request:
 
 jobs:

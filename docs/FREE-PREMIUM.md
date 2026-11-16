@@ -26,7 +26,10 @@ Entscheidung des Betreibers vom 13.11.2026 (verbindlich). Dieses Dokument ersetz
    Kernfunktion nachträglich sperren.
 6. **Absicherung:** `tests/license-guard.php` (CI-Job `smoke`) durchsucht die ausgelieferten Dateien
    (`voucher-captain.php`, `uninstall.php`, `readme.txt`, `src/`, `templates/`, `assets/` ohne `assets/vendor/`,
-   `examples/`, `config/`) nach Lizenz- und Update-Code und schlägt mit Datei:Zeile fehl. `bin/build.sh` verweigert
+   `examples/`, `config/`) nach Lizenz- und Update-Code und schlägt mit Datei:Zeile fehl. Gesucht wird auch nach
+   `wplc_`, `entitlement`, `license_key` und Filtern auf `site_transient_update_plugins`; erlaubt ist allein die
+   Aufräumliste aus Regel 4 in `src/Install.php`. `tests/run.php` belegt mit eingeschleusten Beispielen, dass der
+   Wächter anschlägt. `bin/build.sh` verweigert
    einen Plugin-Kopf mit `Update URI` oder Editions-/Lizenzkonstanten.
 
 ## Funktionsumfang „Kern, dauerhaft frei“

@@ -1325,6 +1325,43 @@ check( 'the release smoke is manual and installs the draft ZIP over the previous
 check( 'CI runs the license guard in the smoke job', str_contains( $smoke_yml, 'php tests/license-guard.php' ) && is_file( "$root/tests/license-guard.php" ) );
 exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( "$root/tests/license-guard.php" ) . ' 2>&1', $guard_log, $guard_status );
 check( 'free core: no licensing or update code in the shipped files (tests/license-guard.php)', 0 === $guard_status, implode( ' ', $guard_log ) );
+// A2 / R16-09: the guard really finds license code – planted samples in a copy of the layout make it fail, the
+// clean-up list of earlier builds alone does not.
+$guard_tmp = sys_get_temp_dir() . '/vcap-guard-' . bin2hex( random_bytes( 4 ) );
+mkdir( "$guard_tmp/src", 0700, true );
+$guard_run = static function () use ( $root, $guard_tmp ): array {
+	$log = array();
+	exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( "$root/tests/license-guard.php" ) . ' ' . escapeshellarg( "--root=$guard_tmp" ) . ' 2>&1', $log, $status );
+	return array( $status, implode( ' ', $log ) );
+};
+file_put_contents( "$guard_tmp/voucher-captain.php", "<?php\n/**\n * Plugin Name: X\n */\n" );
+file_put_contents( "$guard_tmp/src/Install.php", "<?php\n/**\n * Options of the license client of earlier builds and the stored entitlement snapshot.\n */\n\$legacy = array(\n\t'vcap_wplc_credentials',\n\t'vcap_wplc_credentials_entitlements_cache',\n);\n" );
+list( $guard_clean_status, $guard_clean_log ) = $guard_run();
+$guard_samples = array(
+	'license client'       => '$client = new LicenseClient();',
+	'server route'         => "wp_remote_post( \$server . '/wp-json/wplc/v1/activations' );",
+	'update header'        => " * Update URI: https://license.example.com/voucher-captain",
+	'update filter'        => "add_filter( 'pre_set_site_transient_update_plugins', 'x' );",
+	'update filter (read)' => "add_filter( 'site_transient_update_plugins', 'x' );",
+	'plugins_api'          => "add_filter( 'plugins_api', 'x', 10, 3 );",
+	'entitlement check'    => "if ( \$license->allows_entitlement( 'voucher.wallet_passes' ) ) {}",
+	'entitlement wording'  => "if ( ! vcap_has_entitlement( 'voucher.reports' ) ) { return; }",
+	'license key'          => "update_option( 'vcap_license_key', \$key );",
+	'wplc option'          => "get_option( 'wplc_credentials' );",
+	'legacy name in code'  => "get_option( 'vcap_wplc_credentials' );",
+);
+$guard_missed = array();
+foreach ( $guard_samples as $guard_label => $guard_sample ) {
+	file_put_contents( "$guard_tmp/src/Sample.php", "<?php\n$guard_sample\n" );
+	list( $guard_sample_status, $guard_sample_log ) = $guard_run();
+	if ( 1 !== $guard_sample_status || ! str_contains( $guard_sample_log, 'src/Sample.php:2' ) ) {
+		$guard_missed[] = $guard_label;
+	}
+}
+array_map( 'unlink', array_filter( array( "$guard_tmp/src/Sample.php", "$guard_tmp/src/Install.php", "$guard_tmp/voucher-captain.php" ), 'is_file' ) );
+rmdir( "$guard_tmp/src" );
+rmdir( $guard_tmp );
+check( 'free core (A2): the license guard accepts the clean-up list of earlier builds and fails on every planted kind of license code', 0 === $guard_clean_status && array() === $guard_missed, $guard_clean_log . ' missed: ' . implode( ', ', $guard_missed ) );
 $plugin_src = (string) file_get_contents( "$root/src/Plugin.php" );
 check( 'free core: top-up, referrals, ticket vouchers and the shared scanner are registered unconditionally', ! is_dir( "$root/src/Licensing" ) && ! is_file( "$root/config/premium-features.php" ) && ! str_contains( $plugin_src, 'Licensing' ) && str_contains( $plugin_src, '( new TopUp( $this->vouchers, $this->coupons ) )->register();' ) && str_contains( $plugin_src, '$referrals->register();' ) && str_contains( $plugin_src, '$this->passcaptain_tickets->register();' ) && str_contains( $plugin_src, '( new Compat\PassCaptainScanner() )->register();' ) );
 check( 'free core: license data of earlier builds is removed on upgrade and uninstall', in_array( 'vcap_wplc_credentials', VCAP\Install::LEGACY_LICENSE_OPTIONS, true ) && 'vcap_license_refresh' === VCAP\Install::LEGACY_LICENSE_HOOK && str_contains( (string) file_get_contents( "$root/uninstall.php" ), 'vcap_uninstall_license_data();' ) );
