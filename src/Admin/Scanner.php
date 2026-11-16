@@ -119,7 +119,13 @@ final class Scanner {
 		);
 		?>
 		<div class="wrap vcap-wrap vcap-scanner-wrap">
-			<h1><?php $vcap_logo = \VCAP\Brand::logo( 'scanner' ); if ( '' !== $vcap_logo ) : ?><img src="<?php echo esc_url( $vcap_logo ); ?>" alt="<?php echo esc_attr( \VCAP\Brand::name( 'scanner' ) ); ?>" class="vcap-brand-logo" height="32" /> <?php endif; ?><?php esc_html_e( 'Scanner', 'voucher-captain' ); ?></h1>
+			<?php $vcap_logo = \VCAP\Brand::logo( 'scanner' ); ?>
+			<h1>
+				<?php if ( '' !== $vcap_logo ) : ?>
+					<img src="<?php echo esc_url( $vcap_logo ); ?>" alt="<?php echo esc_attr( \VCAP\Brand::name( 'scanner' ) ); ?>" class="vcap-brand-logo" height="32" />
+				<?php endif; ?>
+				<?php esc_html_e( 'Scanner', 'voucher-captain' ); ?>
+			</h1>
 			<p class="description"><?php esc_html_e( 'Scan ticket or voucher QR codes with the camera of this device, a USB/Bluetooth barcode scanner, or type a code.', 'voucher-captain' ); ?></p>
 			<?php if ( \VCAP\Compat\PassCaptainScanner::service() ) : ?>
 				<p class="description"><?php esc_html_e( 'Shared scanner: WP Pass Captain tickets are recognised too and checked in at Pass Captain (needs the Pass Captain check-in permission). Voucher codes are always looked up in Voucher Captain first.', 'voucher-captain' ); ?></p>
