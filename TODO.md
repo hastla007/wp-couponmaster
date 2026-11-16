@@ -1360,6 +1360,8 @@ Unabhängige Durchsicht der Sicherheitskorrekturen S4–S21, der Captain-Suite- 
 - [x] Last- und Performance-Test mit 20.000 Gutscheinen: alle Abläufe schnell; einmaliges Nachholen von expire_overdue 2,8 s (RELEASE_CHECKLIST.md → Load test).
 - [x] Testsuiten in zufälliger Reihenfolge laufen lassen: zwei Abhängigkeiten gefunden und behoben (refund-lifecycle hinterließ einen Steuersatz, der die Suite tax störte; feste Käuferadresse löste beim zweiten Lauf die Neukunden-Sperre M12-23 aus). Danach zwei Zufallsreihenfolgen (Seeds 11, 23) mit allen 49 Suites grün. Wiederholtes Laufen ohne Zurücksetzen füllt Ratenlimits und das 24-h-Fenster der Sperre – gewolltes Verhalten, kein Testfehler.
 
+- [x] Form-Captain-Connector (Branch `claude/sleepy-ptolemy-n32guj`, Form-Captain-Sitzung): `VoucherRequests::forget_reference()` (VC-FC-06) übernommen und mit der echten Klasse getestet – gelöschter Formulareintrag/widerrufene Einwilligung löscht offene bzw. anonymisiert ausgestellte Anfragen ohne Benutzerrecht (API.md, Tests in captain-suite). **Beim Mergen beachten:** beide Branches bringen eine Admin-Seite „Voucher requests“; ist der Anfrage-Dienst des Kerns da, blendet der Connector seine eigene aus, solange seine Rückfall-Tabelle leer ist.
+
 ## Sicherheitsprüfung der Änderungen seit 4269878 (16.11.2026)
 
 Unabhängige Prüfung (nur lesend) der Sicherheitskorrekturen, Captain-Suite- und Workflow-Verträge, R1–R12 und White Label: nichts Kritisches oder Hohes.
