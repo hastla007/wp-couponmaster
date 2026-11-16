@@ -220,7 +220,7 @@ Stand in `main` am 13.11.2026: kein Lizenzcode vorhanden (per Suche nach `Licens
 
 ### B. Premium-Add-on (gebaut in `hastla007/captain-pro`)
 
-Die Aufgaben B1 bis B11 gehören nicht mehr in dieses Repository. Das Add-on liegt als `addons/voucher-captain-pro` in `hastla007/captain-pro` (gemeinsamer Kernel `packages/addon-kernel`, Lizenzclient `packages/license-client` als unveränderte Kopie aus `hastla007/wp-license`); offene Punkte führt dessen `TODO.md`. Geprüft am 16.11.2026 gegen captain-pro `main` (0ba7cc6), nur gelesen:
+Die Aufgaben B1 bis B11 gehören nicht mehr in dieses Repository. Das Add-on liegt als `addons/voucher-captain-pro` in `hastla007/captain-pro` (gemeinsamer Kernel `packages/addon-kernel`, Lizenzclient `packages/license-client` als unveränderte Kopie aus `hastla007/wp-license`); offene Punkte führt dessen `TODO.md`. Geprüft am 16.11.2026 gegen captain-pro `main` (0ba7cc6), nur gelesen. Der Branch `…-hvollo-refactors` führt B1 bis B11 weiter als Einzelaufgaben mit Belegen aus einem Arbeitsbranch von captain-pro (z. B. `tests/Kernel/LicenseFailureTest.php`, das es in `main` dort noch nicht gibt); diese Tabelle nennt nur, was in captain-pro `main` steht:
 
 | Punkt | Stand in captain-pro | Beleg dort |
 |---|---|---|
