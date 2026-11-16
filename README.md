@@ -90,6 +90,17 @@ Nach der Aktivierung werden zwei Startvorlagen angelegt (Geschenkkarte A5 und Gu
 - [Release-Prozess, statische Analyse, Drittlizenzen](RELEASE.md)
 - [50-Punkte-Roadmap](ROADMAP.md)
 
+
+### Captain-Suite-Verbund: Form, Review und Pass
+
+Voucher Captain bleibt alleiniger Eigentümer von Gutscheincode, Wert, Ausgabe, Einlösung, Erstattung und Gutschein-PII. Die bestehende Ticket-Bridge bleibt die verbindliche Integration für Gutschein → Ticket; Voucher Captain ruft dafür den dokumentierten Pass-Service auf. Form Captain kann später für Firmenanfragen oder Gutschein-Personalisierung verwendet werden. Eine Formulareinsendung erzeugt weder Gutschein noch Zahlung; Ausstellung erfolgt erst nach expliziter Prüfung/Bestätigung und über den Voucher-Service.
+
+Review Captain ist ein separater optionaler Adapter. Ein Kauf oder die bloße Ausstellung eines Gutscheins ist kein abgeschlossenes Kundenerlebnis und löst keine Review-Einladung aus. Für Service-/Erlebnisgutscheine kann erst eine bestätigte, idempotente Einlösung als geeigneter Trigger dienen, sofern der Anbieter/Betreiber sie als tatsächliche Leistungserbringung klassifiziert. Refund/Storno, Opt-out, Frequenzlimit und Empfängerauflösung müssen berücksichtigt werden. Allgemeine Rabattcodes, Guthabenaufladungen und Shopbestellungen lösen standardmäßig keine Einladung aus. Review Captain besitzt Einladung, Versand und Review; Voucher Captain liefert nur die stabile Einlösungsreferenz über den versionierten PHP-Vertrag.
+
+Affiliate Captain kann Verkauf/Erstattung über seinen bestehenden Verkaufsquellenvertrag verarbeiten. Ein Voucher-Ereignis darf nicht parallel eine zweite Provision neben dem WooCommerce-Auftrag erzeugen; die Quelle und Idempotenz müssen vor Aktivierung des Connectors festgelegt werden. Aggregierte Review-Auswertung ist ein späterer, read-only Ausbau und darf weder Kunden-/Review-PII noch provisionswirksame Änderungen enthalten. Alle Erweiterungen bleiben optional und vermeiden direkte Tabellenzugriffe.
+
+
+
 ## Entwicklung
 
 ```bash
