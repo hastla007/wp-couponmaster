@@ -5,9 +5,9 @@
  *   wp eval-file tests/account-integration.php
  */
 
-function vcap_acct_assert( bool $condition, string $message ): void {
+function vcap_acct_assert( bool $condition, string $message, $detail = null ): void {
 	if ( ! $condition ) {
-		throw new RuntimeException( 'FAIL: ' . $message );
+		throw new RuntimeException( 'FAIL: ' . $message . ( null === $detail ? '' : ' – ' . wp_json_encode( $detail ) ) );
 	}
 	echo "PASS: {$message}\n";
 }
@@ -672,7 +672,9 @@ vcap_acct_assert( 1 === vcap()->downloads->link_version( $v10_new ) && false ===
 wp_parse_str( (string) wp_parse_url( vcap()->downloads->signed_url( $v10_new, true ), PHP_URL_QUERY ), $v10_link );
 vcap_acct_assert( true === $v10_valid->invoke( vcap()->downloads, $v10_new->token, (int) $v10_link['exp'], (string) $v10_link['sig'], vcap()->downloads->link_version( $v10_new ) ), 'V10: fresh links (My Account, new email) work with the new token' );
 $v10_discounts = new WC_Discounts( vcap_acct_order( $v6_goods, $buyer, $login . '@example.com' ) );
-vcap_acct_assert( is_wp_error( $v10_discounts->is_coupon_valid( new WC_Coupon( $v10_old['code'] ) ) ), 'V10: the old code can no longer be redeemed' );
+$v10_old_coupon = new WC_Coupon( $v10_old['code'] );
+$v10_old_valid  = $v10_discounts->is_coupon_valid( $v10_old_coupon );
+vcap_acct_assert( is_wp_error( $v10_old_valid ), 'V10: the old code can no longer be redeemed', array( 'coupon_id' => $v10_old_coupon->get_id(), 'virtual' => $v10_old_coupon->get_virtual(), 'code' => $v10_old_coupon->get_code(), 'new_code' => $v10_new->code, 'amount' => $v10_old_coupon->get_amount(), 'by_code' => wc_get_coupon_id_by_code( $v10_old['code'] ), 'result' => is_wp_error( $v10_old_valid ) ? $v10_old_valid->get_error_message() : $v10_old_valid ) );
 $v10_by_old = VCAP\Reissue::voucher_of_previous_code( vcap()->vouchers, $v10_old['code'] );
 vcap_acct_assert( $v10_by_old && $v10_by_old->id === $v10->id, 'V10: refunds of orders paid with the old code still find the voucher (previous code on the new coupon)' );
 vcap()->coupons->restore_order( wc_get_order( $v10_pay->get_id() ) );
