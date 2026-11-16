@@ -33,7 +33,7 @@ final class FirstOrderCoupons {
 		// S14: the order being placed holds the first-order discount under the customer's lock (as Usage::hold).
 		add_action( 'woocommerce_checkout_order_processed', array( $this, 'hold_classic' ), 49, 3 );
 		add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'hold_store_api' ), 49, 1 );
-		add_action( 'woocommerce_before_pay_action', array( $this, 'hold' ), 4, 1 );
+		add_action( 'woocommerce_before_pay_action', array( $this, 'hold_pay_page' ), 4, 1 );
 		// An order created or changed in this request may change the answer of has_previous_order().
 		foreach ( array( 'woocommerce_new_order', 'woocommerce_update_order', 'woocommerce_order_status_changed', 'woocommerce_delete_order', 'woocommerce_trash_order' ) as $hook ) {
 			add_action( $hook, array( self::class, 'forget' ) );
@@ -311,6 +311,22 @@ final class FirstOrderCoupons {
 		global $wpdb;
 		foreach ( array_reverse( $locks ) as $lock ) {
 			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', Install::lock_name( $lock ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+	}
+
+	/**
+	 * SEC4 (d): "Pay for order" page. WooCommerce does not catch exceptions of woocommerce_before_pay_action, so the
+	 * refusal becomes an error notice – WooCommerce then does not take the payment (like reserve_retry_order()).
+	 *
+	 * @param mixed $order Order about to be paid.
+	 */
+	public function hold_pay_page( $order ): void {
+		try {
+			$this->hold( $order );
+		} catch ( \Exception $e ) {
+			if ( function_exists( 'wc_add_notice' ) ) {
+				wc_add_notice( $e->getMessage(), 'error' );
+			}
 		}
 	}
 

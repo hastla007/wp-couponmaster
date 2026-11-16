@@ -424,10 +424,20 @@ final class Services {
 		if ( $prior && 'redeem' !== $prior['service'] ) {
 			return self::error( 'vcap_idempotency_conflict', __( 'This idempotency key was already used for another request.', 'voucher-captain' ), 409 );
 		}
+		$identity = array( 'user_id', 'email', 'email_verified' );
+		if ( ! current_user_can( 'vcap_manage_vouchers' ) && ! current_user_can( 'manage_woocommerce' ) ) { // phpcs:ignore WordPress.WP.Capabilities.Unknown -- Registered by Install.
+			// SEC4 (a): a till (vcap_redeem_api) acts for itself – it cannot vouch for another person's account or
+			// verified address, which would unlock personal vouchers of that person.
+			$identity = array();
+			if ( get_current_user_id() > 0 ) {
+				$args['user_id'] = get_current_user_id();
+				$identity        = array( 'user_id' );
+			}
+		}
 		$call   = array(
 			'key'    => $key,
 			'target' => $target,
-		) + array_intersect_key( $args, array_flip( array( 'amount', 'currency', 'user_id', 'email', 'email_verified' ) ) );
+		) + array_intersect_key( $args, array_flip( array_merge( array( 'amount', 'currency' ), $identity ) ) );
 		$reserved = Source::with( Source::WORKFLOW, fn() => $this->redemptions->reserve( $code, $call ) );
 		if ( is_wp_error( $reserved ) ) {
 			return self::wrap( $reserved );

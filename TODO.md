@@ -1359,3 +1359,15 @@ Unabhängige Durchsicht der Sicherheitskorrekturen S4–S21, der Captain-Suite- 
 - [ ] Browser-E2E-Tests für die neuen Funktionen (Live-Vorschau, Design-Auswahl, Geschenkkarten-Feld im Block-Warenkorb, Gutschein ins Kundenguthaben, Empfänger korrigieren).
 - [ ] Last- und Performance-Test mit großen Datenmengen.
 - [ ] Testsuiten in zufälliger Reihenfolge laufen lassen (versteckte Abhängigkeiten).
+
+## Sicherheitsprüfung der Änderungen seit 4269878 (16.11.2026)
+
+Unabhängige Prüfung (nur lesend) der Sicherheitskorrekturen, Captain-Suite- und Workflow-Verträge, R1–R12 und White Label: nichts Kritisches oder Hohes.
+
+- [x] **[PRIO: MITTEL]** **SEC1 – Workflow-Dienst `issue` ohne das Recht, Werte zu erhöhen.** *Problem:* Admin und CLI verlangen zum Ausstellen zusätzlich `vcap_increase_balance`, der Workflow-Dienst nicht; außerdem wurde `paid` des Aufrufers ignoriert. *Lösung:* gleiches Recht wie „Neuer Gutschein“, `paid` wird übernommen (Standard `false`). *Erledigt: tests/workflow-integration.php „SEC1“, WORKFLOW.md.*
+- [x] **[PRIO: NIEDRIG]** **SEC2 – Partner-Kampagne über die WC-REST-API.** *Problem:* S18 schützte nur „Codes erzeugen“; über `POST /wc/v3/coupons` mit `_vcap_campaign` konnten Bestellungen einem Partner zugerechnet werden. *Lösung:* `AffiliateCaptain::guard_campaign_meta()` auf `woocommerce_rest_pre_insert_shop_coupon_object`. *Erledigt: tests/affiliate-captain-integration.php „SEC2“ (ohne Fix rot).*
+- [x] **[PRIO: NIEDRIG]** **SEC3 – Spam-Flut füllt das Limit der Gutschein-Anfragen.** *Lösung:* höchstens 5 neue Anfragen je Besucher und je Kontaktadresse pro Stunde (Filter `vcap_rate_limit_request`), Sammelaktion „Ausgewählte ablehnen“. *Erledigt: tests/captain-suite-integration.php „SEC3“, übersetzt.*
+- [x] **[PRIO: NIEDRIG]** **SEC4a – Identität bei Workflow-Einlösungen.** *Lösung:* `user_id`/`email`/`email_verified` für eine andere Person nur von Gutschein-Verwaltern; eine Kasse (`vcap_redeem_api`) gilt als sie selbst. *Erledigt: src/Workflow/Services.php, WORKFLOW.md.*
+- [x] **[PRIO: NIEDRIG]** **SEC4d – „Bestellung bezahlen“ mit Erstkauf-Gutschein.** *Problem:* die Ablehnung warf eine von WooCommerce nicht gefangene Ausnahme (Fehlerseite). *Lösung:* Hinweis statt Ausnahme, WooCommerce nimmt dann keine Zahlung an. *Erledigt: `FirstOrderCoupons::hold_pay_page()`.*
+- [x] **[PRIO: INFO]** **SEC4b – Wiederholte Formulareinträge melden den Stand der Anfrage.** Bewertet: die Antwort geht nur an das Formular-Plugin; es ist für nicht erratbare Referenzen verantwortlich (CONTRACTS-Doku). Keine Änderung.
+- [ ] **[PRIO: ENTSCHEIDUNG]** **SEC4c – Kunden dürfen eigene Einlösungen über `/redemptions/{key}/refund` zurückbuchen** (für Konnektor-Präfixe, die Kunden erlaubt sind). Der Wert geht auf den Gutschein zurück, auch wenn der Konnektor seine Leistung schon erbracht hat. *Frage an die Inhaberin:* so gewollt, oder sollen Rückbuchungen nach `commit` nur Verwaltern bzw. dem Konnektor selbst erlaubt sein?
