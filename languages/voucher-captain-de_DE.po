@@ -13811,3 +13811,122 @@ msgstr "Einlösung bestätigt eine Leistung (für Bewertungseinladungen)"
 
 msgid "For experience or service vouchers: a redemption at the counter then confirms that the service was provided, and a review plugin (e.g. WP Review Captain) may invite the customer afterwards. Voucher Captain sends no invitation itself. Purchases, issuing, top-ups, discount codes and store credit never count."
 msgstr "Für Erlebnis- oder Leistungsgutscheine: Eine Einlösung an der Kasse bestätigt dann, dass die Leistung erbracht wurde, und ein Bewertungs-Plugin (z. B. WP Review Captain) darf den Kunden danach einladen. Voucher Captain versendet selbst keine Einladung. Kauf, Ausgabe, Aufladung, Rabattcodes und Kundenguthaben zählen nie."
+
+msgid "Workflow plugin (provider contract)"
+msgstr "Workflow-Plugin (Provider-Vertrag)"
+
+msgid "Sent to %s on request of the workflow plugin"
+msgstr "Auf Anforderung des Workflow-Plugins an %s gesendet"
+
+msgid "Requested by the workflow plugin: %1$s (request %2$s)"
+msgstr "Vom Workflow-Plugin angefordert: %1$s (Anfrage %2$s)"
+
+msgid "%1$s (%2$d day before the expiry) handed over to the workflow plugin – Voucher Captain did not send it."
+msgid_plural "%1$s (%2$d days before the expiry) handed over to the workflow plugin – Voucher Captain did not send it."
+msgstr[0] "%1$s (%2$d Tag vor Ablauf) an das Workflow-Plugin übergeben – Voucher Captain hat sie nicht gesendet."
+msgstr[1] "%1$s (%2$d Tage vor Ablauf) an das Workflow-Plugin übergeben – Voucher Captain hat sie nicht gesendet."
+
+msgid "%s handed over to the workflow plugin – Voucher Captain did not send it."
+msgstr "%s an das Workflow-Plugin übergeben – Voucher Captain hat sie nicht gesendet."
+
+msgid "Workflow plugin (e.g. Workflow Captain)"
+msgstr "Workflow-Plugin (z. B. Workflow Captain)"
+
+msgid "Voucher Captain reports voucher events to a workflow plugin and offers it services (see WORKFLOW.md). Sales, refunds and bookings always stay with Voucher Captain. Optional emails below are left to the workflow plugin only while it is active, compatible and takes them over – otherwise Voucher Captain sends them as usual."
+msgstr "Voucher Captain meldet Gutschein-Ereignisse an ein Workflow-Plugin und bietet ihm Services an (siehe WORKFLOW.md). Verkäufe, Erstattungen und Buchungen bleiben immer bei Voucher Captain. Die optionalen E-Mails unten überlässt Voucher Captain dem Workflow-Plugin nur, solange es aktiv und kompatibel ist und sie übernimmt – sonst sendet Voucher Captain sie wie gewohnt."
+
+msgid "Leave to the workflow plugin"
+msgstr "Dem Workflow-Plugin überlassen"
+
+msgid "Workflow"
+msgstr "Workflow"
+
+msgid "Workflow action"
+msgstr "Workflow-Aktion"
+
+msgid "Handed over to the workflow"
+msgstr "An den Workflow übergeben"
+
+msgid "Notice to the buyer: gift delivered"
+msgstr "Hinweis an den Käufer: Geschenk zugestellt"
+
+msgid "Notice to the buyer: gift used"
+msgstr "Hinweis an den Käufer: Geschenk eingelöst"
+
+msgid "Provider contract %s"
+msgstr "Provider-Vertrag %s"
+
+msgid "No workflow plugin registered – all voucher flows and emails run natively."
+msgstr "Kein Workflow-Plugin angemeldet – alle Gutscheinabläufe und E-Mails laufen wie gewohnt in Voucher Captain."
+
+msgid "%1$s is registered but expects contract %2$s – not compatible: no events, no hand-over, all voucher flows run natively."
+msgstr "%1$s ist angemeldet, erwartet aber Vertrag %2$s – nicht kompatibel: keine Ereignisse, keine Übergabe, alle Gutscheinabläufe laufen wie gewohnt in Voucher Captain."
+
+msgid "%1$s registered (edition: %2$s, licence: %3$s)."
+msgstr "%1$s angemeldet (Edition: %2$s, Lizenz: %3$s)."
+
+msgid "Handed over to the workflow now: %s"
+msgstr "Derzeit an den Workflow übergeben: %s"
+
+msgid "Switched on, but sent by Voucher Captain because the workflow plugin does not take them over now: %s"
+msgstr "Eingeschaltet, aber von Voucher Captain gesendet, weil das Workflow-Plugin sie derzeit nicht übernimmt: %s"
+
+msgid "Last event: %1$s (%2$s, %3$s UTC)"
+msgstr "Letztes Ereignis: %1$s (%2$s, %3$s UTC)"
+
+msgid "Last event: none yet"
+msgstr "Letztes Ereignis: noch keines"
+
+msgid "Events delivered: %1$d, listener errors: %2$d"
+msgstr "Zugestellte Ereignisse: %1$d, Listener-Fehler: %2$d"
+
+msgid "Last error: %1$s UTC at history entry %2$d – %3$s. The workflow plugin can fetch missed events again (replay from this entry)."
+msgstr "Letzter Fehler: %1$s UTC bei Verlaufseintrag %2$d – %3$s. Das Workflow-Plugin kann verpasste Ereignisse erneut abrufen (ab diesem Eintrag)."
+
+msgid "issue voucher"
+msgstr "Gutschein ausstellen"
+
+msgid "send voucher email again"
+msgstr "Gutschein-E-Mail erneut senden"
+
+msgid "void voucher"
+msgstr "Gutschein ungültig machen"
+
+msgid "reactivate voucher"
+msgstr "Gutschein reaktivieren"
+
+msgid "redeem voucher"
+msgstr "Gutschein einlösen"
+
+msgid "An idempotency key of 8–64 characters (letters, digits, . _ : -) is required."
+msgstr "Ein Idempotenzschlüssel mit 8–64 Zeichen (Buchstaben, Ziffern, . _ : -) ist erforderlich."
+
+msgid "This idempotency key was already used for another request."
+msgstr "Dieser Idempotenzschlüssel wurde bereits für eine andere Anfrage verwendet."
+
+msgid "The role must be \"recipient\" or \"buyer\"."
+msgstr "Die Rolle muss „recipient“ oder „buyer“ sein."
+
+msgid "The voucher email could not be sent. The reason is in the voucher history."
+msgstr "Die Gutschein-E-Mail konnte nicht gesendet werden. Den Grund finden Sie im Verlauf des Gutscheins."
+
+msgid "Please give a reason for voiding the voucher."
+msgstr "Bitte geben Sie einen Grund für das Ungültigmachen an."
+
+msgid "Voided by the workflow plugin: %s"
+msgstr "Vom Workflow-Plugin ungültig gemacht: %s"
+
+msgid "The voucher could not be voided completely (see its history). Please try again."
+msgstr "Der Gutschein konnte nicht vollständig ungültig gemacht werden (siehe Verlauf). Bitte versuchen Sie es erneut."
+
+msgid "This voucher was voided because its purchase was refunded or cancelled. It can only be reactivated on the voucher screen."
+msgstr "Dieser Gutschein wurde ungültig gemacht, weil sein Kauf erstattet oder storniert wurde. Er kann nur auf der Gutscheinseite reaktiviert werden."
+
+msgid "The voucher could not be reactivated (see its history)."
+msgstr "Der Gutschein konnte nicht reaktiviert werden (siehe Verlauf)."
+
+msgid "A voucher code and a redemption target are required."
+msgstr "Ein Gutscheincode und ein Einlöseziel sind erforderlich."
+
+msgid "This communication is not handed over to the workflow plugin."
+msgstr "Diese Kommunikation ist nicht an das Workflow-Plugin übergeben."
