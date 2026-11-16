@@ -78,7 +78,10 @@ function vcap_rl_events( Voucher $voucher ): array {
 function vcap_rl_purchase( WC_Product $product, int $qty = 1, string $method = 'stripe' ): array {
 	$order = wc_create_order();
 	$line  = $order->add_product( $product, $qty );
-	$order->set_billing_email( 'refund-lifecycle@example.com' );
+	// A fresh buyer per run: the M12-23 security hold sums one address's voucher orders over 24 hours.
+	static $email = null;
+	$email ??= 'refund-lifecycle-' . strtolower( wp_generate_password( 8, false, false ) ) . '@example.com';
+	$order->set_billing_email( $email );
 	$order->set_payment_method( $method );
 	$order->calculate_totals( false );
 	$order->set_status( 'processing' );
@@ -260,6 +263,7 @@ vcap_rl_assert( 36.0 === round( abs( (float) $m11_refund->get_amount() ), 2 ), '
 
 // M12-11 + M12-07: refunded as credit, a bought gift card is written off consistently.
 update_option( 'woocommerce_calc_taxes', 'no' );
+WC_Tax::_delete_tax_rate( $m11_rate ); // Leaves no rate behind for suites that run later (e.g. tax).
 $m11b = wc_create_order( array( 'customer_id' => $m11_user ) );
 $m11b->add_product( $giftcard, 1 );
 $m11b->set_billing_email( 'rl-credit@example.com' );

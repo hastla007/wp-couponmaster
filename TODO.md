@@ -1352,12 +1352,12 @@ Unabhängige Durchsicht der Sicherheitskorrekturen S4–S21, der Captain-Suite- 
 - [x] readme.txt: Changelog 1.2.0 vervollständigt, Upgrade-Hinweis zur neuen Standardeinstellung für Mehrzweckgutscheine.
 - [x] Freigabe-Unterlagen: TAX.md 3.2 (physische Karten, Umbuchung ins Kundenguthaben, Firmenbestellungen, Workflow) mit Fragen F22/F23; Datenschutztext zu Bewertungseinladungen (übersetzt).
 - [x] Multisite: Workflow-Instanz, Gutschein-Anfragen und Review-Datensätze je Website getrennt; Netzwerk-Deinstallation löscht Anfragen nur auf Websites mit Opt-in (tests/multisite-data-integration.php, CI-Job multisite).
-- [ ] Tabellennamen in SQL auf `%i` umstellen (125 Plugin-Check-Warnungen) – in Arbeit.
-- [ ] Kompatibilität WooCommerce 11.3.0 – Testlauf in Arbeit.
-- [ ] Sicherheitsprüfung der Änderungen seit 4269878 – in Arbeit.
+- [x] Tabellennamen in SQL auf `%i` umstellen: 86 Abfragen in 28 Dateien; Plugin-Check-Warnungen 125 → 41.
+- [x] Kompatibilität WooCommerce 11.3.0: alle Suites grün (HPOS und klassisch), „getestet bis“ 11.3, CI nutzt 11.3.0.
+- [x] Sicherheitsprüfung der Änderungen seit 4269878: siehe Abschnitt unten (SEC1–SEC4d erledigt, SEC4c wartet auf Entscheidung).
 - [ ] Barrierefreiheit automatisch mit axe-core prüfen (Vorbereitung der Screenreader-Abnahme).
 - [ ] Browser-E2E-Tests für die neuen Funktionen (Live-Vorschau, Design-Auswahl, Geschenkkarten-Feld im Block-Warenkorb, Gutschein ins Kundenguthaben, Empfänger korrigieren).
-- [ ] Last- und Performance-Test mit großen Datenmengen.
+- [x] Last- und Performance-Test mit 20.000 Gutscheinen: alle Abläufe schnell; einmaliges Nachholen von expire_overdue 2,8 s (RELEASE_CHECKLIST.md → Load test).
 - [ ] Testsuiten in zufälliger Reihenfolge laufen lassen (versteckte Abhängigkeiten).
 
 ## Sicherheitsprüfung der Änderungen seit 4269878 (16.11.2026)
