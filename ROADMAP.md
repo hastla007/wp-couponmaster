@@ -58,7 +58,7 @@ Abgehakte Punkte sind implementiert und durch die aufgeführten CI-Jobs (`.githu
 36. [x] PDF-Downloads und Gastlinks auf Zugriffsschutz und Ablauf testen.
 37. [x] Abhängigkeiten und Composer-Lockdatei regelmäßig auf bekannte Schwachstellen prüfen.
 38. [x] PHPCS mit WordPress- und WooCommerce-Regeln in CI ergänzen. (Streng für `src/API/V1` und `src/Contracts` im Job `quality`; ganzes Plugin mit WordPress-Extra, I18n und Security report-only im Job `quality-wide`, Altlasten-Abbau siehe RELEASE.md → Static analysis.)
-39. [x] Statische Analyse für PHP 8.1-Typen, Nullwerte und Datenbank-Rückgaben einführen. (PHPStan Level 0 streng für API/Verträge; Level 1 für das ganze Plugin mit Baseline, report-only, `quality-wide`; WordPress Plugin Check report-only, `plugin-check`.)
+39. [x] Statische Analyse für PHP 8.1-Typen, Nullwerte und Datenbank-Rückgaben einführen. (PHPStan Level 0 streng für API/Verträge; Level 1 für das ganze Plugin mit Baseline, report-only, `quality-wide`; WordPress Plugin Check `plugin-check`, seit 16.11.2026 blockierend bei Fehlern, Warnungen nur Bericht.)
 40. [x] Geheimnisse, Debug-Ausgaben und sensible Bestell-/Empfängerdaten in Logs prüfen.
 
 ## Stand
@@ -71,7 +71,8 @@ Außerhalb der 50 Punkte, Stand Release und Lizenz:
 
 - [x] Entscheidung Free/Premium (13.11.2026): Kern frei mit allen Funktionen (WordPress.org), kein Lizenz-/Update-Code im Kern; Premium als getrenntes Add-on ([docs/FREE-PREMIUM.md](docs/FREE-PREMIUM.md)).
 - [x] Release-ZIP mit Lizenzdateien aller Bibliotheken und `THIRD-PARTY-NOTICES.txt` (geprüft im Job `quality`).
-- [ ] wordpress.org-Tauglichkeit: Befunde von Plugin Check und der breiten PHPCS/PHPStan-Prüfung abarbeiten, danach die Jobs blockierend schalten.
+- [ ] wordpress.org-Tauglichkeit: Plugin Check ist fehlerfrei und blockiert bei Fehlern; offen sind die Warnungen von Plugin Check und die Befunde der breiten PHPCS/PHPStan-Prüfung, danach auch diese blockierend schalten.
+- [ ] Premium-Add-on `voucher-captain-pro` (Repository `hastla007/captain-pro`) nutzt nur die Andockpunkte aus API.md → „Extension points for add-ons“; der Kern bleibt unverändert frei.
 
 ## P2 – Produktreife und Betrieb
 

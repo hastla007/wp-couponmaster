@@ -178,12 +178,11 @@ add_action( 'vcap_voucher_redeemed', function ( array $redemption ) { /* audit, 
 | `send` | Deliver by email now (default `true`). `false`: the voucher counts as handed over, no email (the admin can still send it). |
 | `delivery_at` | Deliver and activate later (UTC). |
 | `code` | Own, unused code; default a generated one. It must be as hard to guess as a generated code (at least `vcap_min_code_bits`, default 50 bits, rated like an imported code with `CodeGenerator::analyse_batch()`), otherwise the call answers `vcap_weak_code`. |
-| `paid` | Whether the voucher was sold (paid outside WooCommerce, e.g. a company order on invoice). Default `false`: a voucher without a sale (goodwill, prize) is a price reduction for VAT (treatment `discount`) and is listed as free of charge in the liability report (TAX.md 2.8, M12-42). |
 | `allow_weak` | `true`: accept an own code below that strength knowingly (e.g. a printed card series). Default `false`. |
 | `source`, `reference` | Free label of the caller and an idempotency key (up to 100 characters, e.g. `order-4711/3`), both shown in the history. A second call with the same `reference` issues nothing and answers `vcap_reference_used` with `voucher_id` in the error data (0 while the first call is still running). |
 | `reason` | Why it was issued (e.g. "goodwill"), shown in the history with source and reference. |
 | `balance` | Remaining value below `amount` (stored balance only), e.g. an existing card taken over with what is left of it. Default: `amount`. |
-| `paid` | Whether money was received for the voucher. Vouchers → New voucher and `wp vcap issue --amount=…` pass `false` (goodwill, prize), the card import passes `true`. The core passes it on to `vcap_voucher_issued_standalone`; the tax handling of sold/unsold vouchers reads it. |
+| `paid` | Whether the voucher was sold, i.e. paid outside WooCommerce (e.g. a company order on invoice). Default `false`: a voucher without a sale (goodwill, prize) is a price reduction for VAT (treatment `discount`) and is listed as free of charge in the liability report (TAX.md 2.8, M12-42). Vouchers → New voucher and `wp vcap issue --amount=…` pass `false`, the card import passes `true`. The core passes it on to `vcap_voucher_issued_standalone`; the tax handling of sold/unsold vouchers reads it. |
 
 The admin screens Vouchers → New voucher and Vouchers → Import cards and the commands `wp vcap issue --amount=<amount> [--email=<email>] [--product=<id>] [--send]` and `wp vcap import <file> [--dry-run]` are built on this method (sources `admin`, `cli`, `import`; imported cards get the history entry `imported`).
 
@@ -250,6 +249,42 @@ The voucher line snapshot (`VCAP\Issuer::line_data( $item )`, order item meta `_
 ### Refunds of completed redemptions
 
 `vcap()->redemptions->refund( $key, $amount, $refund_key )` gives back (part of) a committed redemption, e.g. when the service it paid for is refunded. Gift cards get the amount back on their balance; a single-use voucher becomes usable again once the refunds reach the redeemed amount (partial refunds are recorded only). Idempotent per `$refund_key`; refunds are capped at the redeemed amount (`vcap_refund_exceeded`), only committed redemptions can be refunded (`vcap_not_committed`). Ledger event `api_refunded`, action `vcap_redemption_refunded`.
+
+## Extension points for add-ons (public API since 1.2.0)
+
+Voucher Captain is free and complete; paid features live in a separate add-on plugin (docs/FREE-PREMIUM.md, planned:
+`voucher-captain-pro`). An add-on uses only the points below, the PHP API above and the REST namespace `vcap/v1`. They
+are public API under the versioning rules of CONNECTORS.md → *API versioning policy*: within 1.x only additive changes
+(new hooks, extra trailing arguments, new array keys); a hook is never renamed, removed or given a different meaning
+without a deprecation period. `tests/run.php` ("A4: add-on extension points") checks that every hook of this table is
+called in the code and listed in docs/HOOKS.md, the generated reference with each call site.
+
+| Hook / function | Type | Arguments | Since | Use |
+|---|---|---|---|---|
+| `vcap_loaded` | action | `VCAP\Plugin` | 1.2.0 | Start of the add-on: the services (`vcap()->api_v1`, `->redemptions`, `->issuer` …) exist. |
+| `vcap_admin_menu` | action | `string $parent_slug` (`vcap-vouchers`) | 1.2.0 | Own pages under *Vouchers*: `add_submenu_page( $parent_slug, … )` (shown before *Settings*). |
+| `vcap_settings_sections` | filter | `array $sections` (id ⇒ label) | 1.2.0 | Own section of WooCommerce → Settings → Vouchers; core sections cannot be renamed or removed. |
+| `vcap_settings_fields` | filter | `array $fields`, `string $section` | 1.0.0 | Fields of a section (WooCommerce settings API, saved by WooCommerce). An add-on section starts empty. |
+| `vcap_product_settings_fields` / `vcap_product_settings_save` | action | – / `WC_Product`, `array $post` | 1.1.0 | Own fields in the product's *Voucher* tab and saving them. |
+| `vcap_template_design` | filter | `array $design`, `int $template_id` | 1.0.0 | The design a PDF template prints with. |
+| `vcap_sanitize_design` | filter | `array $clean`, `array $posted` | 1.0.0 | Keep own element keys when a design is saved. |
+| `vcap_render_template_id` | filter | `int $template_id`, `Voucher` | 1.0.0 | Print a voucher with another template. |
+| `vcap_placeholder_definitions` / `vcap_placeholders` | filter | `array $defs` / `array $values`, `Voucher` | 1.0.0 | Own placeholders in PDFs and email texts. |
+| `vcap_report_tabs` | filter | `array $tabs` (view id ⇒ label) | 1.2.0 | Own tab under *Vouchers → Reports*; core views cannot be replaced. |
+| `vcap_report_page` | action | `string $view` | 1.2.0 | Print the page of the own report tab (the capability is checked before). |
+| `vcap_report_group` | filter | `array $group`, `string $code`, `int $coupon_id` | 1.1.0 | Group of a code in the campaign report. |
+| `vcap_voucher_types`, `vcap_redemption_channels`, `vcap_redemption_allowed` | filter | see *Extension points for connector plugins* | 1.1.0 | Own voucher types, channels and rules. |
+| `vcap_redemption_providers` / `VCAP\Contracts\RedemptionProvider` | filter / interface | see *Provider extension* | 1.1.0 | Own redemption backend. |
+| `vcap_voucher_admin_actions` / `vcap_voucher_admin_action` | action / filter | see docs/HOOKS.md | 1.1.0 | Own buttons on the voucher page. |
+| `vcap_voucher_links` | filter | `array $links`, `Voucher`, `string $context` (`email`, `email_plain`, `account` – also the order received page and *My Account → View order* –, `placeholder`) | 1.2.0 | Links such as "Add to Wallet" in the voucher email, the voucher lists and the PDF placeholder `{link:<id>}`. |
+| `vcap_voucher_next_steps` | filter | `string[] $steps`, `Voucher` | 1.1.0 | Steps in the voucher email after receiving it. |
+| `vcap()->issuer->issue_standalone( $args )` | method | see *Issuing vouchers without an order* | 1.2.0 | Vouchers without an order (company orders, goodwill); the caller checks the capability. Then `vcap_voucher_issued_standalone` (`Voucher`, `$args`). |
+| `vcap_vouchers_issued` | action | `Voucher[]`, `WC_Order` | 1.0.0 | Vouchers of an order were issued. |
+| `vcap_voucher_redeemed` | action | see *External redemptions* | 1.1.0 | An external redemption was completed (after COMMIT). |
+| `vcap_voucher_event` | action | `$voucher_id`, `$event`, `$amount`, `$balance_after`, `$note`, `$order_id`, `$source`, `$user_id` | 1.0.0; `$source`/`$user_id` 1.2.0 | Every history entry (after COMMIT). Register with `add_action( 'vcap_voucher_event', $cb, 10, 8 )` for the last two; `$source` is `VCAP\Source::current()` (admin, cron, rest, scanner, checkout, cli, web), `$user_id` 0 for none. |
+
+The core makes no request to a license or update server and needs no add-on (tests/license-guard.php, readme.txt →
+External services). An add-on never locks or moves a core feature (docs/FREE-PREMIUM.md).
 
 ## WP Pass Captain
 

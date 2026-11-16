@@ -55,7 +55,7 @@ version is not greater than the newest existing `vX.Y.Z` tag (shops would not be
 5. The `Release` workflow checks the version first (job `version`, see Changelog), then that the tagged commit is
    on `main` and waits for the push run of `Plugin smoke tests` on it (job `ci-green`, up to about two hours). It
    stops unless the run finished with *success* **and every job of it** succeeded (or was skipped) – a job with
-   `continue-on-error` that failed counts as failed; only the report-only `plugin-check` gives a warning. No run, a
+   `continue-on-error` that failed counts as failed (there is no report-only job at the moment). No run, a
    failed or a cancelled run blocks the release (re-run CI, then re-run the release workflow). It then builds the ZIP twice
    (identical SHA-256 required) and creates a **draft** GitHub release with `voucher-captain.zip`, its `.sha256` file
    and a CycloneDX SBOM (`voucher-captain.cdx.json`, `bin/sbom.php`, SECURITY.md). There is one build: the free core
@@ -88,7 +88,7 @@ last release → current ZIP and previous schema → current, each followed by a
 | --- | --- | --- | --- |
 | `quality` | `src/API/V1`, `src/Contracts` – PHPCS WordPress and WooCommerce-Core, PHPStan level 8 | `phpstan.neon.dist` | yes |
 | `quality-wide` | whole plugin (`voucher-captain.php`, `uninstall.php`, `config/`, `src/`, `templates/`) – PHPCS WordPress-Extra incl. `WordPress.WP.I18n` (text domain `voucher-captain`), `WordPress.Security.*`, prefix check; PHPStan level 3 | `phpcs.xml.dist`, `phpstan-wide.neon.dist` + `phpstan-baseline.neon` | `WordPress.Security.*`: yes (every finding); all other findings: must not grow against the base commit (ratchet), the full report is informational |
-| `plugin-check` | installed release ZIP – WordPress Plugin Check (PCP), static and runtime checks | – | no (report-only) |
+| `plugin-check` | installed release ZIP – WordPress Plugin Check (PCP), static and runtime checks | – | errors: yes (every finding of type ERROR); warnings: informational |
 
 The wide scans were introduced on an existing code base. Security findings block at once; the other findings are
 technical debt that may only shrink: the job counts the PHPCS and PHPStan findings of the commit and of its base (pull
@@ -102,10 +102,11 @@ request base, or the previous commit of a push) and fails when either count grow
 - **PHPStan**: the job uploads a baseline of the current findings (`phpstan-baseline.generated.neon`). Review it and
   commit it as `phpstan-baseline.neon`; from then on every new finding is visible in the step "PHPStan level 3". Never
   add baseline entries by hand for new code.
-- **Plugin Check**: the result table is in the job summary and the artifact `plugin-check`. Errors there must be
-  resolved before a wordpress.org submission.
-- When a scan has no findings left (or only baselined ones), make its whole report blocking. `plugin-check` keeps
-  `continue-on-error` until then; the release job `ci-green` lists its failures as a warning.
+- **Plugin Check**: the result table is in the job summary and the artifact `plugin-check`. Since A8 (16.11.2026,
+  the run on a86d877 had 0 errors and about 200 warnings) every ERROR fails the job and so blocks merges and releases;
+  warnings stay informational and are worked off before the wordpress.org submission.
+- When a scan has no findings left (or only baselined ones), make its whole report blocking (for Plugin Check: fail
+  on warnings too).
 
 ## Third-party licences
 
