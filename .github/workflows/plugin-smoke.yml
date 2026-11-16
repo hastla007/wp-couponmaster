@@ -10,6 +10,13 @@ on:
       - claude/wp-plugin-analyse-todo-hvollo-refactors
   pull_request:
 
+# A newer push to the same branch (or pull request) cancels the older run that is still queued or running – the
+# newest commit is what counts, and the ratchet compares against github.event.before, not against an earlier run.
+# Runs on main always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
