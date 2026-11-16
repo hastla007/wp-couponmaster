@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-16 15:36+0000\n"
+"POT-Creation-Date: 2026-11-16 17:11+0000\n"
 "X-Domain: voucher-captain\n"
 
 #. Plugin Name of the plugin
@@ -1271,7 +1271,7 @@ msgstr ""
 msgid "net of cancelled redemptions and refunds"
 msgstr ""
 
-#: src/Admin/ReportsAdmin.php:195 src/Integrations/VoucherRequests.php:912
+#: src/Admin/ReportsAdmin.php:195 src/Integrations/VoucherRequests.php:987
 msgid "Open"
 msgstr ""
 
@@ -2893,7 +2893,7 @@ msgstr ""
 msgid "Buyer → recipient"
 msgstr ""
 
-#: src/Admin/VouchersListTable.php:34 src/Integrations/VoucherRequests.php:914 src/Ledger.php:550 src/VoucherRepository.php:1142
+#: src/Admin/VouchersListTable.php:34 src/Integrations/VoucherRequests.php:989 src/Ledger.php:550 src/VoucherRepository.php:1142
 msgid "Issued"
 msgstr ""
 
@@ -6589,29 +6589,33 @@ msgstr ""
 msgid "The extension did not answer with a company order. The request stays open."
 msgstr ""
 
-#: src/Integrations/VoucherRequests.php:899 src/Tickets.php:693 src/Tickets.php:700 src/Tickets.php:707 src/Workflow/Services.php:201
+#: src/Integrations/VoucherRequests.php:898
+msgid "A reference is required."
+msgstr ""
+
+#: src/Integrations/VoucherRequests.php:974 src/Tickets.php:693 src/Tickets.php:700 src/Tickets.php:707 src/Workflow/Services.php:201
 msgid "This action is still being processed. Please wait a moment and try again."
 msgstr ""
 
-#: src/Integrations/VoucherRequests.php:913
+#: src/Integrations/VoucherRequests.php:988
 msgid "Partly issued"
 msgstr ""
 
-#: src/Integrations/VoucherRequests.php:915
+#: src/Integrations/VoucherRequests.php:990
 msgid "Handed over to a company order"
 msgstr ""
 
 #. translators: 1: number of the voucher in the request, 2: reason
-#: src/Integrations/VoucherRequests.php:1012
+#: src/Integrations/VoucherRequests.php:1087
 #, php-format
 msgid "Voucher %1$d: %2$s"
 msgstr ""
 
-#: src/Integrations/VoucherRequests.php:1012
+#: src/Integrations/VoucherRequests.php:1087
 msgid "Unknown error"
 msgstr ""
 
-#: src/Integrations/VoucherRequests.php:1034
+#: src/Integrations/VoucherRequests.php:1109
 msgid "Only open voucher requests can be rejected."
 msgstr ""
 

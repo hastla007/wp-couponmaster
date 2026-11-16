@@ -54,6 +54,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_voucher_reissued` | `src/Reissue.php` | Fires after a voucher was reissued with a new code and token (V10). The old code is no longer redeemable. |
 | `vcap_voucher_request_confirmed` | `src/Integrations/VoucherRequests.php` | A manager confirmed a voucher request (vouchers were issued through the voucher service). |
 | `vcap_voucher_request_expired` | `src/Integrations/VoucherRequests.php` | A voucher request was deleted by the retention rule (D10). No personal data in the arguments. |
+| `vcap_voucher_request_forgotten` | `src/Integrations/VoucherRequests.php` | VC-FC-06: a request was forgotten because its form entry was deleted or its consent withdrawn. No personal data in the arguments. |
 | `vcap_voucher_request_handed_over` | `src/Integrations/VoucherRequests.php` | A voucher request was handed over to a company order of an add-on (no personal data). |
 | `vcap_voucher_request_received` | `src/Integrations/VoucherRequests.php` | A voucher request was stored (nothing was issued). No personal data in the arguments. |
 | `vcap_voucher_request_rejected` | `src/Integrations/VoucherRequests.php` | A manager rejected (deleted) a voucher request. |

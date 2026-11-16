@@ -878,6 +878,81 @@ final class VoucherRequests {
 	}
 
 	/**
+	 * VC-FC-06: forgets the request of a form reference, because the form plugin deleted the entry or its consent was
+	 * withdrawn (contract: ADAPTERS.md 7.1). Runs without a capability check – it is called from WP-Cron, retention
+	 * or WP-CLI of the form plugin, never from a visitor request.
+	 *
+	 * - Open request: deleted with its data.
+	 * - Partly issued, issued or handed over: contact (name, email, phone), recipients, message and note are removed;
+	 *   company, amounts, counts and the issued vouchers stay (they belong to the voucher ledger).
+	 * - The claim of the reference becomes "rejected:<UTC>", so a repeated submit() of the same reference stores
+	 *   nothing new (removed later by purge_rejected_claims()).
+	 *
+	 * @since 1.2.0
+	 * @param string $reference Form reference as given to submit().
+	 * @return bool|\WP_Error True when a request was deleted or anonymised, false when none was stored for it.
+	 */
+	public function forget_reference( string $reference ) {
+		$reference = trim( $reference );
+		if ( '' === $reference ) {
+			return new \WP_Error( 'vcap_invalid_args', __( 'A reference is required.', 'voucher-captain' ), array( 'status' => 400 ) );
+		}
+		$claim  = self::CLAIM_PREFIX . md5( $reference );
+		$stored = (string) get_option( $claim, '' );
+		$id     = str_starts_with( $stored, self::REJECTED_CLAIM ) ? 0 : (int) $stored;
+		if ( 0 === $id ) {
+			$id = self::id_by_reference( $reference );
+		}
+		// Before the request goes: a repeat that arrives meanwhile is answered "rejected" and stores nothing.
+		update_option( $claim, self::REJECTED_CLAIM . gmdate( 'Y-m-d H:i:s' ), false );
+		if ( 0 === $id ) {
+			/**
+			 * VC-FC-06: a request was forgotten because its form entry was deleted or its consent withdrawn. No personal
+			 * data in the arguments.
+			 *
+			 * @since 1.2.0
+			 * @param int    $request_id Request (0 when none was stored for the reference).
+			 * @param string $result     deleted, anonymized or none.
+			 */
+			do_action( 'vcap_voucher_request_forgotten', 0, 'none' );
+			return false;
+		}
+		return self::locked( $id, fn() => $this->forget_locked( $id ) );
+	}
+
+	/**
+	 * Deletes (open) or anonymises (issued, partly issued, handed over) a request, see forget_reference().
+	 *
+	 * @return bool True when the request was changed.
+	 */
+	private function forget_locked( int $id ): bool {
+		$request = self::get( $id );
+		if ( ! $request ) {
+			return false;
+		}
+		if ( self::STATE_OPEN === $request['state'] ) {
+			wp_delete_post( $id, true );
+			$result = 'deleted';
+		} else {
+			$data            = (array) get_post_meta( $id, self::META, true );
+			$data['contact'] = array( 'name' => '', 'email' => '', 'phone' => '' ) + (array) ( $data['contact'] ?? array() );
+			foreach ( array_keys( (array) ( $data['recipients'] ?? array() ) ) as $i ) {
+				$data['recipients'][ $i ] = array( 'name' => '', 'email' => '', 'message' => '' );
+			}
+			$data['message'] = '';
+			$data['note']    = '';
+			update_post_meta( $id, self::META, $data );
+			delete_post_meta( $id, self::EMAIL_META );
+			// Issue errors may quote a recipient's data; with the recipients gone nothing can be retried anyway.
+			delete_post_meta( $id, self::ERRORS_META );
+			$result = 'anonymized';
+		}
+		/** This action is documented in forget_reference(). */
+		do_action( 'vcap_voucher_request_forgotten', $id, $result );
+		return true;
+	}
+
+	/**
 	 * R9: runs $action while holding the lock of request $id (MySQL GET_LOCK, 10 s); the request is read fresh inside.
 	 *
 	 * @return mixed|\WP_Error

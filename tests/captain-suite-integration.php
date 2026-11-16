@@ -235,6 +235,37 @@ $ho_product->delete( true );
 remove_filter( 'vcap_voucher_request_handover_available', $available, 10 );
 remove_filter( 'vcap_voucher_request_handover', $takeover, 10 );
 
+// VC-FC-06: forget_reference() – the form plugin deleted an entry or its consent was withdrawn (runs without a user).
+$fg_events = array();
+$fg_watch  = static function ( $request_id, $result ) use ( &$fg_events ) {
+	$fg_events[] = array( (int) $request_id, (string) $result );
+};
+add_action( 'vcap_voucher_request_forgotten', $fg_watch, 10, 2 );
+$fg_submit = static function ( string $ref ) use ( $requests ) {
+	return $requests->submit( array( 'reference' => $ref, 'amount' => '10', 'message' => 'Hello', 'contact' => array( 'company' => 'Forget GmbH', 'name' => 'Fiona', 'email' => 'cs-fg-' . strtolower( wp_generate_password( 6, false, false ) ) . '@example.com', 'phone' => '+43 1 234' ), 'recipients' => array( array( 'name' => 'Ann', 'email' => 'cs-fg-ann@example.com', 'message' => 'For you' ) ) ) );
+};
+wp_set_current_user( 0 );
+$fg_open_ref = 'formcaptain:entry:cs-fg-open-' . strtolower( wp_generate_password( 8, false, false ) );
+$fg_open     = $fg_submit( $fg_open_ref );
+$fg_done     = $requests->forget_reference( $fg_open_ref );
+$fg_again    = $fg_submit( $fg_open_ref );
+vcap_cs_assert( true === $fg_done && null === VoucherRequests::get( (int) $fg_open['request_id'] ) && is_array( $fg_again ) && 'rejected' === $fg_again['state'] && 0 === (int) $fg_again['request_id'] && array( (int) $fg_open['request_id'], 'deleted' ) === $fg_events[0], 'VC-FC-06: without a user, an open request is deleted and the same reference is not stored again', array( $fg_again, $fg_events ) );
+wp_set_current_user( 1 );
+$fg_iss_ref = 'formcaptain:entry:cs-anon-' . strtolower( wp_generate_password( 8, false, false ) );
+wp_set_current_user( 0 );
+$fg_iss = $fg_submit( $fg_iss_ref );
+wp_set_current_user( 1 );
+update_post_meta( (int) $fg_iss['request_id'], VoucherRequests::STATE_META, VoucherRequests::STATE_PARTIAL ); // As after a partly failed issue.
+update_post_meta( (int) $fg_iss['request_id'], VoucherRequests::ERRORS_META, array( 'Voucher 1: cs-fg-ann@example.com refused' ) );
+wp_set_current_user( 0 );
+$fg_anon = $requests->forget_reference( $fg_iss_ref );
+wp_set_current_user( 1 );
+$fg_left = VoucherRequests::get( (int) $fg_iss['request_id'] );
+$fg_dump = wp_json_encode( get_post_meta( (int) $fg_iss['request_id'] ) );
+vcap_cs_assert( true === $fg_anon && is_array( $fg_left ) && 'Forget GmbH' === $fg_left['contact']['company'] && '' === $fg_left['contact']['email'] && '' === $fg_left['contact']['name'] && '' === $fg_left['contact']['phone'] && '' === $fg_left['message'] && ! str_contains( (string) $fg_dump, 'cs-fg-' ) && ! str_contains( (string) $fg_dump, 'Fiona' ) && ! str_contains( (string) $fg_dump, 'For you' ), 'VC-FC-06: a request with issued vouchers is anonymised (company stays; contact, recipients, message and issue errors go)', $fg_dump );
+vcap_cs_assert( false === $requests->forget_reference( 'formcaptain:entry:cs-fg-unknown-' . strtolower( wp_generate_password( 8, false, false ) ) ) && is_wp_error( $requests->forget_reference( '  ' ) ), 'VC-FC-06: an unknown reference answers false, an empty one an error' );
+remove_action( 'vcap_voucher_request_forgotten', $fg_watch, 10 );
+
 // Decision D10 (16.11.2026): retention of requests in the daily maintenance.
 global $wpdb;
 $make = static function ( string $suffix ) use ( $requests ): int {

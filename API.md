@@ -357,7 +357,16 @@ address and message. Erasure blanks exactly these fields (company, value and cou
 policy text names the requests. Actions (no personal data): `vcap_voucher_request_received` ( `id`, `kind`,
 `vouchers` ), `vcap_voucher_request_confirmed` ( `id`, `state`, `voucher_ids`, `user_id` ),
 `vcap_voucher_request_rejected` ( `id`, `user_id` ), `vcap_voucher_request_handed_over` ( `id`, `order_id`,
-`user_id` ), `vcap_voucher_request_expired` ( `id` ).
+`user_id` ), `vcap_voucher_request_expired` ( `id` ), `vcap_voucher_request_forgotten` ( `id` (0 when none was stored),
+`deleted`|`anonymized`|`none` ).
+
+`forget_reference( string $reference )` → `bool` or `WP_Error` (VC-FC-06, for the form plugin when an entry is deleted or
+its consent withdrawn; called from WP-Cron, retention or WP-CLI, so it checks **no** capability): an `open` request is
+deleted; a `partial`, `issued` or `handed_over` one is anonymised like the privacy eraser (contact name, email and
+phone, recipients, message, note and stored issue errors go; company, value, count and the issued vouchers stay). The
+reference's claim becomes `rejected`, so a repeated `submit()` answers `state: rejected` and stores nothing. `true`
+when a request was changed, `false` when none was stored for the reference, `vcap_invalid_args` for an empty one.
+Runs under the request's lock (as confirm/hand-over/reject).
 
 Retention (owner decision 16.11.2026): the daily maintenance (step `voucher_requests`, batches of 50 within the step's
 time budget) deletes requests in the states `open` and `partial` 6 months after their receipt (a `partial` one after
