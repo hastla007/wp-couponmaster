@@ -296,6 +296,12 @@ Ohne Befund geprüft: Nonce- und Capability-Checks aller `admin_post_`-, `wp_aja
 ## P2 – Captain-Suite-Integration: Form Captain und Review Captain (15.11.2026)
 
 - [ ] Form Captain Anfragen für Firmenbestellung/Personalisierung über den versionierten Formularaktionsvertrag anbinden; explizite Freigabe vor Angebot, Zahlung oder Gutscheinausstellung. Keine Entry-Datenbank direkt lesen.
+  - *Stand 16.11.2026 (aus wp-formmaster P8-06, Branch `claude/sleepy-ptolemy-n32guj`):* Form Captain Free liefert jetzt Contract 1.1.0 (`wp-formmaster/docs/spec/api-v1.md`, Referenz-Connector `connectors/form-captain-reference-connector`, `docs/CONNECTORS.md`). Konkrete Schritte:
+  - [ ] **VC-FC-01** Formularaktion „Gutscheinanfrage an Voucher Captain“ über `form_captain_register_action_v1()` (bzw. Connector-Registry `form_captain_connectors_v1`) registrieren, mit expliziter Feld-Allowlist (Firma, Ansprechperson, E-Mail, Anzahl, Wert, Personalisierungstext, Einwilligung) und Idempotency-Key aus Website, Formular und Entry.
+  - [ ] **VC-FC-02** Die Aktion legt nur eine **Anfrage** im Status „zu prüfen“ an (eigene Voucher-Tabelle/-Service), nie einen Gutschein, ein Angebot oder eine Zahlung. Admin bestätigt, ändert oder lehnt ab; erst die Bestätigung ruft den bestehenden Voucher-Ausstellungsservice auf.
+  - [ ] **VC-FC-03** Daten nur über `form_captain_get_entry_v1()` mit den nötigen Scopes lesen; kein Zugriff auf Form-Tabellen. Löschung des Entries (Form Captain Erasure) entfernt die offene Anfrage oder anonymisiert sie.
+  - [ ] **VC-FC-04** Fehlerfälle über die Outbox von Form Captain: Voucher Captain inaktiv → `retry`, ungültige Daten → endgültiger Fehler mit Code; Doppelzustellung legt keine zweite Anfrage an.
+  - [ ] **VC-FC-05** Tests: Contract-Testkit von Form Captain (`tests/integration/Contract`), E2E Form-Anfrage → manuelle Bestätigung → Gutschein (siehe E2E-Bullet unten).
 - [ ] Review-Adapter auf dem bestehenden Voucher-PHP-Vertrag aufbauen und nur freigegebene Erlebnis-/Serviceeinlösungen als mögliche Review-Quelle zulassen; normale Rabattcode-Einlösung, Ausgabe, Aufladung und Kauf ausschließen.
 - [ ] Prüfen, welche Einlösungsarten tatsächlich eine Leistungserbringung bestätigen; dafür explizite Adapterkonfiguration und stabile Experience-/Redemption-ID festlegen.
 - [ ] Refund/Storno und wiederholte Einlöseereignisse an Review Captain über versionierte, idempotente Zustandsübergänge melden; Empfänger-/Opt-out-Auflösung datensparsam und berechtigt halten.
