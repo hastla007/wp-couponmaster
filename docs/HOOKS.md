@@ -34,7 +34,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_redemption_reversed` | `src/Tickets.php` | A counter redemption was cancelled (amount booked back). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_review_recipient_resolved` | `src/Integrations/ReviewSource.php` | A recipient was given to a review plugin (for audit logs; no personal data). |
 | `vcap_review_redemption_eligible` | `src/Integrations/ReviewSource.php` | A redemption confirmed a service and may be used for a review invitation (once per reference). Payload (contract 1.0.0, no personal data): contract, event, event_id, reference, source, site_id, channel, experience_id (voucher product), occurred_at (UTC), reason. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
-| `vcap_review_redemption_revoked` | `src/Integrations/ReviewSource.php` | A review source was withdrawn (once per reference): reason redeem_reversed, refunded or voided. Same payload as vcap_review_redemption_eligible with event "revoked". *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
+| `vcap_review_redemption_revoked` | `src/Integrations/ReviewSource.php` | A review source was withdrawn (once per reference): reason redeem_reversed, refunded, voided, erased (personal data of the voucher erased), deleted or no_recipient (no address left). Same payload as vcap_review_redemption_eligible with event "revoked". *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_store_credit_changed` | `src/StoreCredit.php` | The store credit of a customer changed (args: user id, amount, balance after, event, reason, order id). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_ticket_checked_in` | `src/Tickets.php` | – *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_topup_held` | `src/TopUp.php` | – |
@@ -240,6 +240,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_voucher_next_steps` | `templates/emails/plain/voucher.php`, `templates/emails/voucher.php` | Steps after receiving the voucher (e.g. "exchange it for tickets on the redeem page"); connectors add them for their voucher types. Empty: the usual "enter the code at checkout" hint. |
 | `vcap_voucher_pays_after_tax` | `src/PaymentVouchers.php` | – |
 | `vcap_voucher_pays_shipping_and_fees` | `src/PaymentVouchers.php` | Whether a voucher paying after tax may also pay shipping and fees (default: when it is not limited to products or categories). |
+| `vcap_voucher_requests_max_open` | `src/Integrations/VoucherRequests.php` | Most open requests at a time (protection against floods of form entries); above it submit() answers `vcap_request_limit` (429). 0 accepts no new request. |
 | `vcap_voucher_tax_treatment` | `src/ProductConfig.php` | – |
 | `vcap_voucher_types` | `src/Voucher.php` | – |
 | `vcap_vouchers_per_item` | `src/Issuer.php` | – |

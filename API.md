@@ -279,8 +279,11 @@ Events (after the COMMIT, once per reference and event):
 
 - `vcap_review_redemption_eligible( array $payload )` – after the confirmed redemption.
 - `vcap_review_redemption_revoked( array $payload )` – reason `redeem_reversed` (counter cancellation), `refunded`
-  (any refund of the external redemption) or `voided` (voucher voided, e.g. its purchase refunded). Only a
-  reference that was eligible is revoked; revoked is final.
+  (any refund of the external redemption), `voided` (voucher voided, e.g. its purchase refunded), `erased` (the
+  privacy eraser removed the voucher's personal data), `deleted` (voucher deleted) or `no_recipient` (no address
+  left, e.g. after the retention cleanup – noticed on the next `recipient()` call). Only a reference that was
+  eligible is revoked; revoked is final. With `erased`, `deleted` and `no_recipient` the reference is also unlinked
+  from the voucher, so no address can be resolved for it any more.
 
 Payload (exactly these keys): `contract` (`1.0.0`), `event` (`eligible`/`revoked`), `event_id` (`{reference}:{event}`),
 `reference`, `source` (`voucher-captain`), `site_id`, `channel` (`counter`/`external`), `experience_id` (voucher
@@ -326,7 +329,9 @@ order opens it under *Vouchers → Voucher requests* and either issues the vouch
 `replayed: true`), `kind` (`company_order`, `personalisation`), `product_id` (a voucher product), `amount` (per
 voucher), `quantity` (without recipients), `recipients` (list of `name`, `email`, `message`), `contact` (`company`,
 `name`, `email` – required, `phone`), `message`, `note`, `contract` (optional, major 1). At most 100 vouchers. Every
-other key (`paid`, `code`, `send`, a status …) is dropped. `submit()` checks no capability – it is called for
+other key (`paid`, `code`, `send`, a status …) is dropped. While 500 requests are open (filter
+`vcap_voucher_requests_max_open`; 0 accepts none) a new reference is refused with `vcap_request_limit` (429); a
+repeated reference is still answered. `submit()` checks no capability – it is called for
 visitors after the form plugin's own nonce and spam checks; the form plugin's entries are never read.
 
 `confirm( $request_id, [ 'sale' => 'sold'|'free', 'send' => bool, 'product_id', 'amount', 'type', 'reason' ] )`
@@ -336,7 +341,11 @@ contact): repeating it issues only what is missing. States `open`, `partial` (so
 again), `issued` (the recipient list is then removed from the request; the data lives in the vouchers). `reject()`
 deletes an open request. Errors: `vcap_request_contract` (409), `vcap_invalid_request`, `vcap_invalid_email`,
 `vcap_invalid_product`, `vcap_invalid_amount` (400), `vcap_not_allowed` (403), `vcap_invalid_args`, `vcap_not_found`,
-`vcap_temporary_failure` (503). Actions (no personal data): `vcap_voucher_request_received` ( `id`, `kind`,
+`vcap_temporary_failure` (503), `vcap_request_limit` (429). Privacy: requests are part of WordPress's personal data
+export and erasure (Tools → Export/Erase Personal Data, exporter/eraser `voucher-captain-requests`, 100 requests per
+page). A person gets only their own part: as contact the contact data, message and note; as recipient their name,
+address and message. Erasure blanks exactly these fields (company, value and count stay). The suggested privacy
+policy text names the requests. Actions (no personal data): `vcap_voucher_request_received` ( `id`, `kind`,
 `vouchers` ), `vcap_voucher_request_confirmed` ( `id`, `state`, `voucher_ids`, `user_id` ),
 `vcap_voucher_request_rejected` ( `id`, `user_id` ).
 

@@ -2373,6 +2373,9 @@ if ( ! function_exists( 'wp_insert_post' ) ) {
 		return $id;
 	}
 }
+if ( ! function_exists( 'add_post_meta' ) ) {
+	function add_post_meta( $id, $k, $v, $unique = false ) { $GLOBALS['vcap_test_meta'][ $id ][ $k ][] = $v; return true; }
+}
 if ( ! function_exists( 'wp_delete_post' ) ) {
 	function wp_delete_post( $id, $force = false ) { unset( $GLOBALS['vcap_test_posts'][ (int) $id ], $GLOBALS['vcap_test_meta'][ (int) $id ] ); return true; }
 }
@@ -2383,7 +2386,9 @@ $cs_requests = new VoucherRequests(
 		$v           = new Voucher();
 		$v->id       = 3000 + count( $cs_issued );
 		return $v;
-	}
+	},
+	static fn() => array(),
+	static fn() => 0
 );
 $cs_in = array(
 	'contract'   => '1.0',
@@ -2434,6 +2439,68 @@ $cs_again = $cs_issue_all->invoke(
 	array( 'sale' => 'sold' )
 );
 check( 'Captain Suite form: after confirmation one voucher per recipient is issued through the voucher service; a repeat keeps issued ones and reports the rest (partial)', 'issued' === $cs_all['state'] && array( 3001, 3002 ) === $cs_all['vouchers'] && 2 === count( $cs_issued ) && 'partial' === $cs_again['state'] && array( 3001 ) === $cs_again['vouchers'] && 1 === count( $cs_again['errors'] ), json_encode( array( $cs_all, $cs_again ) ) );
+$GLOBALS['vcap_test_filters'] = $cs_filters;
+
+// Captain Suite follow-up: erased or deleted vouchers withdraw their review references; privacy tools and the open
+// limit of voucher requests.
+$cs_events = array();
+$cs_vouchers2 = array( 21 => $cs_voucher( 21 ), 22 => $cs_voucher( 22 ), 23 => $cs_voucher( 23, array( 'recipient_email' => '', 'buyer_email' => '' ) ) );
+$cs_source2   = new ReviewSource( static fn( int $id ) => $cs_vouchers2[ $id ] ?? null );
+$cs_source2->register();
+add_action( ReviewSource::EVENT_ELIGIBLE, static function ( $p ) use ( &$cs_events ) { $cs_events[] = $p; } );
+add_action( ReviewSource::EVENT_REVOKED, static function ( $p ) use ( &$cs_events ) { $cs_events[] = $p; } );
+add_filter( 'vcap_review_recipient_allowed', static fn() => true );
+foreach ( array( 21 => 801, 22 => 802, 23 => 803 ) as $cs_vid => $cs_eid ) {
+	do_action( 'vcap_voucher_redeemed', array( 'voucher_id' => $cs_vid, 'event_id' => $cs_eid ) + $cs_counter );
+}
+do_action( 'vcap_voucher_event', 21, VCAP\TaxAccounting::ERASED_EVENT, null, null, '', 0, 'admin', 1 );
+$cs_r21 = ReviewSource::reference( 'counter:801' );
+$cs_g21 = $cs_source2->recipient( $cs_r21 );
+check( 'Captain Suite review: the privacy eraser of a voucher revokes its references ("erased"), unlinks them and drops the index – no recipient can be resolved', 4 === count( $cs_events ) && 'erased' === $cs_events[3]['reason'] && $cs_r21 === $cs_events[3]['reference'] && is_wp_error( $cs_g21 ) && 'vcap_review_revoked' === $cs_g21->get_error_code() && 0 === get_option( ReviewSource::OPTION_PREFIX . $cs_r21 )['voucher_id'] && false === get_option( ReviewSource::INDEX_PREFIX . 21, false ), json_encode( $cs_events ) );
+do_action( 'vcap_voucher_deleted', $cs_vouchers2[22] );
+$cs_g23 = $cs_source2->recipient( ReviewSource::reference( 'counter:803' ) );
+$cs_g23b = $cs_source2->recipient( ReviewSource::reference( 'counter:803' ) );
+check( 'Captain Suite review: a deleted voucher revokes its references ("deleted"); a voucher without any address left (retention) is withdrawn on the first lookup', 6 === count( $cs_events ) && 'deleted' === $cs_events[4]['reason'] && 'no_recipient' === $cs_events[5]['reason'] && is_wp_error( $cs_g23 ) && 'vcap_review_no_recipient' === $cs_g23->get_error_code() && is_wp_error( $cs_g23b ) && 'vcap_review_revoked' === $cs_g23b->get_error_code(), json_encode( array_slice( $cs_events, 4 ) ) );
+$GLOBALS['vcap_test_filters'] = $cs_filters;
+
+$cs_find  = static function ( string $email, int $limit, int $offset ): array {
+	$ids = array();
+	foreach ( $GLOBALS['vcap_test_meta'] as $id => $meta ) {
+		if ( in_array( strtolower( $email ), (array) ( $meta[ VoucherRequests::EMAIL_META ] ?? array() ), true ) ) {
+			$ids[] = (int) $id;
+		}
+	}
+	return array_slice( $ids, $offset, $limit );
+};
+$cs_open  = 0;
+$cs_req2  = new VoucherRequests( static fn( array $a ) => new WP_Error( 'x', 'not used' ), $cs_find, static function ( int $cap ) use ( &$cs_open ) { return min( $cap, $cs_open ); } );
+$cs_req2->register();
+$cs_p_in  = array( 'reference' => 'formcaptain:entry:privacy-1', 'contact' => array( 'company' => 'ACME', 'name' => 'Hanna', 'email' => 'HR2@acme.example', 'phone' => '+43 1 234' ), 'message' => 'Für das Team', 'recipients' => array( array( 'name' => 'Ann', 'email' => 'ann2@acme.example', 'message' => 'Danke Ann' ), array( 'name' => 'Bob', 'email' => 'bob2@acme.example' ) ) );
+$cs_p_id  = $cs_req2->submit( $cs_p_in )['request_id'] ?? 0;
+$cs_ex_a  = $cs_req2->export( 'ann2@acme.example' );
+$cs_ex_c  = $cs_req2->export( 'hr2@acme.example' );
+$cs_vals  = static fn( array $ex ) => implode( '|', array_column( $ex['data'][0]['data'] ?? array(), 'value' ) );
+check( 'Captain Suite form: requests are found by every address they name (lower case) and exported per person – a recipient sees only their own entry, the contact the contact data', array( 'hr2@acme.example', 'ann2@acme.example', 'bob2@acme.example' ) === $GLOBALS['vcap_test_meta'][ $cs_p_id ][ VoucherRequests::EMAIL_META ] && 1 === count( $cs_ex_a['data'] ) && $cs_ex_a['done'] && 'vcap-voucher-requests' === $cs_ex_a['data'][0]['group_id'] && 'vcap-request-' . $cs_p_id === $cs_ex_a['data'][0]['item_id'] && str_contains( $cs_vals( $cs_ex_a ), 'Danke Ann' ) && ! str_contains( $cs_vals( $cs_ex_a ), 'bob2' ) && ! str_contains( $cs_vals( $cs_ex_a ), '+43' ) && str_contains( $cs_vals( $cs_ex_c ), '+43 1 234' ) && str_contains( $cs_vals( $cs_ex_c ), 'Für das Team' ) && ! str_contains( $cs_vals( $cs_ex_c ), 'ann2' ), $cs_vals( $cs_ex_a ) . ' / ' . $cs_vals( $cs_ex_c ) );
+$cs_er    = $cs_req2->erase( 'ANN2@acme.example' );
+$cs_after = get_post_meta( $cs_p_id, VoucherRequests::META, true );
+// The test stub of delete_post_meta() drops all rows of the key (WordPress drops only the row with that value).
+$cs_erased_index = $GLOBALS['vcap_test_meta'][ $cs_p_id ][ VoucherRequests::EMAIL_META ] ?? null;
+$GLOBALS['vcap_test_meta'][ $cs_p_id ][ VoucherRequests::EMAIL_META ] = array( 'hr2@acme.example', 'bob2@acme.example' );
+$cs_er_c  = $cs_req2->erase( 'hr2@acme.example' );
+$cs_after2 = get_post_meta( $cs_p_id, VoucherRequests::META, true );
+check( 'Captain Suite form: the eraser removes name, address and message of the erased person only; for the contact also phone, message and note (company and count stay)', $cs_er['items_removed'] && ! $cs_er['items_retained'] && $cs_er['done'] && null === $cs_erased_index && array( 'name' => '', 'email' => '', 'message' => '' ) === $cs_after['recipients'][0] && 'bob2@acme.example' === $cs_after['recipients'][1]['email'] && 'HR2@acme.example' === $cs_after['contact']['email'] && $cs_er_c['items_removed'] && '' === $cs_after2['contact']['email'] && '' === $cs_after2['contact']['phone'] && '' === $cs_after2['contact']['name'] && '' === $cs_after2['message'] && 'ACME' === $cs_after2['contact']['company'] && 2 === $cs_after2['quantity'] && array() === $cs_req2->export( 'hr2@acme.example' )['data'], json_encode( $cs_after2 ) );
+check( 'Captain Suite form: exporter and eraser are registered with WordPress\'s privacy tools', isset( apply_filters( 'wp_privacy_personal_data_exporters', array() )['voucher-captain-requests'], apply_filters( 'wp_privacy_personal_data_erasers', array() )['voucher-captain-requests'] ) );
+$cs_open  = 500;
+$cs_full  = $cs_req2->submit( array( 'reference' => 'formcaptain:entry:privacy-2' ) + $cs_p_in );
+$cs_again = $cs_req2->submit( $cs_p_in );
+add_filter( 'vcap_voucher_requests_max_open', static fn() => 501 );
+$cs_more  = $cs_req2->submit( array( 'reference' => 'formcaptain:entry:privacy-3' ) + $cs_p_in );
+$GLOBALS['vcap_test_filters'] = $cs_filters;
+$cs_open  = 0;
+add_filter( 'vcap_voucher_requests_max_open', static fn() => 0 );
+$cs_none  = $cs_req2->submit( array( 'reference' => 'formcaptain:entry:privacy-4' ) + $cs_p_in );
+check( 'Captain Suite form: with 500 open requests (vcap_voucher_requests_max_open) submit() refuses new ones with vcap_request_limit (429), a repeated entry is still answered, a higher limit accepts, 0 accepts none', is_wp_error( $cs_full ) && 'vcap_request_limit' === $cs_full->get_error_code() && 429 === $cs_full->get_error_data()['status'] && false === get_option( VoucherRequests::CLAIM_PREFIX . md5( 'formcaptain:entry:privacy-2' ), false ) && is_array( $cs_again ) && $cs_again['replayed'] && is_array( $cs_more ) && ! $cs_more['replayed'] && is_wp_error( $cs_none ) && 'vcap_request_limit' === $cs_none->get_error_code() );
+check( 'Captain Suite form: the suggested privacy policy text names voucher requests', (bool) array_filter( VCAP\Privacy::policy_paragraphs(), static fn( $p ) => str_starts_with( $p, 'Voucher requests:' ) ) );
 $GLOBALS['vcap_test_filters'] = $cs_filters;
 
 echo "\n$passed passed, $failed failed. Output: $out\n";

@@ -37,20 +37,171 @@ final class VoucherRequests {
 	public const STATE_OPEN     = 'open';
 	public const STATE_PARTIAL  = 'partial';
 	public const STATE_ISSUED   = 'issued';
+	/** Lookup rows (one per lower-case address of contact and recipients) for the privacy exporter and eraser. */
+	public const EMAIL_META     = '_vcap_request_email';
+	/** Default of `vcap_voucher_requests_max_open`. */
+	public const MAX_OPEN       = 500;
+	/** Requests per privacy export/erasure page. */
+	public const PRIVACY_PAGE   = 100;
 
 	/** @var callable(array): mixed */
 	private $issue;
+	/** @var callable(string, int, int): int[] */
+	private $find;
+	/** @var callable(int): int */
+	private $count_open;
 
 	/**
-	 * @param callable|null $issue Issues one voucher (default: vcap()->issuer->issue_standalone()).
+	 * @param callable|null $issue      Issues one voucher (default: vcap()->issuer->issue_standalone()).
+	 * @param callable|null $find       Request ids naming an address ($email, $limit, $offset; default: EMAIL_META).
+	 * @param callable|null $count_open Number of open requests, counted up to $cap (default: a post query).
 	 */
-	public function __construct( ?callable $issue = null ) {
-		$this->issue = $issue ?? static fn( array $args ) => vcap()->issuer->issue_standalone( $args );
+	public function __construct( ?callable $issue = null, ?callable $find = null, ?callable $count_open = null ) {
+		$this->issue      = $issue ?? static fn( array $args ) => vcap()->issuer->issue_standalone( $args );
+		$this->find       = $find ?? array( self::class, 'ids_for_email' );
+		$this->count_open = $count_open ?? array( self::class, 'open_count' );
 	}
 
 	public function register(): void {
 		add_action( 'init', array( $this, 'register_post_type' ) );
 		add_filter( 'vcap_voucher_request_service_v1', array( $this, 'service' ) );
+		add_filter( 'wp_privacy_personal_data_exporters', array( $this, 'exporters' ) );
+		add_filter( 'wp_privacy_personal_data_erasers', array( $this, 'erasers' ) );
+	}
+
+	/** @param mixed $exporters What the previous filter returned. */
+	public function exporters( $exporters ): array {
+		$exporters = is_array( $exporters ) ? $exporters : array();
+		$exporters['voucher-captain-requests'] = array(
+			'exporter_friendly_name' => __( 'Voucher requests', 'voucher-captain' ),
+			'callback'               => array( $this, 'export' ),
+		);
+		return $exporters;
+	}
+
+	/** @param mixed $erasers What the previous filter returned. */
+	public function erasers( $erasers ): array {
+		$erasers = is_array( $erasers ) ? $erasers : array();
+		$erasers['voucher-captain-requests'] = array(
+			'eraser_friendly_name' => __( 'Voucher requests', 'voucher-captain' ),
+			'callback'             => array( $this, 'erase' ),
+		);
+		return $erasers;
+	}
+
+	/** Lower-case addresses a request names (contact and recipients). @return string[] */
+	public static function emails( array $request ): array {
+		$emails = array( (string) ( $request['contact']['email'] ?? '' ) );
+		foreach ( (array) ( $request['recipients'] ?? array() ) as $r ) {
+			$emails[] = (string) ( $r['email'] ?? '' );
+		}
+		return array_values( array_unique( array_filter( array_map( static fn( $e ) => strtolower( trim( $e ) ), $emails ) ) ) );
+	}
+
+	/**
+	 * Ids of requests naming the address. Read from the posts tables directly (own post type): WP_Query would show
+	 * private posts only to their author or to users with read_private_posts.
+	 *
+	 * @return int[]
+	 */
+	public static function ids_for_email( string $email, int $limit, int $offset ): array {
+		global $wpdb;
+		return array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( "SELECT p.ID FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = %s AND m.meta_value = %s WHERE p.post_type = %s GROUP BY p.ID ORDER BY p.ID LIMIT %d OFFSET %d", self::EMAIL_META, strtolower( trim( $email ) ), self::POST_TYPE, max( 1, $limit ), max( 0, $offset ) ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
+
+	/** Open requests, counted up to $cap (also for visitors, see ids_for_email()). */
+	public static function open_count( int $cap ): int {
+		global $wpdb;
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM ( SELECT p.ID FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = %s AND m.meta_value = %s WHERE p.post_type = %s LIMIT %d ) open_requests", self::STATE_META, self::STATE_OPEN, self::POST_TYPE, max( 1, $cap ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
+
+	/**
+	 * Privacy exporter: the parts of requests that belong to the address – as contact (contact data, message,
+	 * note) or as recipient (name, email, message). Other recipients of the same request are not exported.
+	 *
+	 * @return array{data: array<int, array<string, mixed>>, done: bool}
+	 */
+	public function export( string $email, int $page = 1 ): array {
+		$ids   = ( $this->find )( $email, self::PRIVACY_PAGE, max( 0, ( $page - 1 ) * self::PRIVACY_PAGE ) );
+		$items = array();
+		foreach ( $ids as $id ) {
+			$request = self::get( (int) $id );
+			if ( ! $request ) {
+				continue;
+			}
+			$data = array(
+				array( 'name' => __( 'Reference', 'voucher-captain' ), 'value' => (string) $request['reference'] ),
+				array( 'name' => __( 'Received', 'voucher-captain' ), 'value' => (string) $request['received_at'] ),
+				array( 'name' => __( 'Status', 'voucher-captain' ), 'value' => (string) $request['state'] ),
+			);
+			$contact = (array) $request['contact'];
+			if ( 0 === strcasecmp( (string) $contact['email'], $email ) ) {
+				$data[] = array( 'name' => __( 'Company', 'voucher-captain' ), 'value' => (string) $contact['company'] );
+				$data[] = array( 'name' => __( 'Contact name', 'voucher-captain' ), 'value' => (string) $contact['name'] );
+				$data[] = array( 'name' => __( 'Contact email', 'voucher-captain' ), 'value' => (string) $contact['email'] );
+				$data[] = array( 'name' => __( 'Phone', 'voucher-captain' ), 'value' => (string) $contact['phone'] );
+				$data[] = array( 'name' => __( 'Message', 'voucher-captain' ), 'value' => (string) $request['message'] );
+				$data[] = array( 'name' => __( 'Note', 'voucher-captain' ), 'value' => (string) $request['note'] );
+			}
+			foreach ( (array) $request['recipients'] as $r ) {
+				if ( 0 === strcasecmp( (string) $r['email'], $email ) ) {
+					$data[] = array( 'name' => __( 'Recipient name', 'voucher-captain' ), 'value' => (string) $r['name'] );
+					$data[] = array( 'name' => __( 'Recipient email', 'voucher-captain' ), 'value' => (string) $r['email'] );
+					$data[] = array( 'name' => __( 'Message', 'voucher-captain' ), 'value' => (string) $r['message'] );
+				}
+			}
+			$items[] = array(
+				'group_id'    => 'vcap-voucher-requests',
+				'group_label' => __( 'Voucher requests', 'voucher-captain' ),
+				'item_id'     => 'vcap-request-' . (int) $id,
+				'data'        => $data,
+			);
+		}
+		return array( 'data' => $items, 'done' => count( $ids ) < self::PRIVACY_PAGE );
+	}
+
+	/**
+	 * Privacy eraser: removes the address with the name, phone and texts that belong to it (contact: name, email,
+	 * phone, message, note; recipient: name, email, message). The company name, amounts and the count stay. Erased
+	 * requests no longer match the address, so every page starts at the first match.
+	 *
+	 * @return array{items_removed: bool, items_retained: bool, messages: string[], done: bool}
+	 */
+	public function erase( string $email, int $page = 1 ): array {
+		$ids      = ( $this->find )( $email, self::PRIVACY_PAGE, 0 );
+		$removed  = false;
+		$retained = false;
+		$lower    = strtolower( trim( $email ) );
+		foreach ( $ids as $id ) {
+			$request = get_post_meta( (int) $id, self::META, true );
+			if ( is_array( $request ) ) {
+				$hit = false;
+				if ( 0 === strcasecmp( (string) ( $request['contact']['email'] ?? '' ), $email ) ) {
+					$request['contact'] = array( 'name' => '', 'email' => '', 'phone' => '' ) + (array) $request['contact'];
+					$request['message'] = '';
+					$request['note']    = '';
+					$hit                = true;
+				}
+				foreach ( (array) ( $request['recipients'] ?? array() ) as $i => $r ) {
+					if ( 0 === strcasecmp( (string) ( $r['email'] ?? '' ), $email ) ) {
+						$request['recipients'][ $i ] = array( 'name' => '', 'email' => '', 'message' => '' );
+						$hit                         = true;
+					}
+				}
+				if ( $hit && ! update_post_meta( (int) $id, self::META, $request ) ) {
+					$retained = true;
+					continue;
+				}
+				$removed = $removed || $hit;
+			}
+			delete_post_meta( (int) $id, self::EMAIL_META, $lower );
+		}
+		return array(
+			'items_removed'  => $removed,
+			'items_retained' => $retained,
+			'messages'       => $retained ? array( __( 'Some voucher requests could not be anonymised. Please retry the erasure request.', 'voucher-captain' ) ) : array(),
+			'done'           => count( $ids ) < self::PRIVACY_PAGE,
+		);
 	}
 
 	/**
@@ -175,6 +326,19 @@ final class VoucherRequests {
 			return $clean;
 		}
 		$claim = self::CLAIM_PREFIX . md5( $clean['reference'] );
+		if ( false === get_option( $claim, false ) ) {
+			/**
+			 * Most open requests at a time (protection against floods of form entries); above it submit() answers
+			 * `vcap_request_limit` (429). 0 accepts no new request.
+			 *
+			 * @since 1.2.0
+			 * @param int $max Default 500.
+			 */
+			$max = max( 0, (int) apply_filters( 'vcap_voucher_requests_max_open', self::MAX_OPEN ) );
+			if ( 0 === $max || ( $this->count_open )( $max ) >= $max ) {
+				return new \WP_Error( 'vcap_request_limit', __( 'Too many voucher requests are waiting to be handled. Please try again later.', 'voucher-captain' ), array( 'status' => 429 ) );
+			}
+		}
 		if ( ! add_option( $claim, 0, '', false ) ) {
 			$id = (int) get_option( $claim, 0 );
 			return array(
@@ -199,6 +363,9 @@ final class VoucherRequests {
 		}
 		update_post_meta( (int) $id, self::META, $clean );
 		update_post_meta( (int) $id, self::STATE_META, self::STATE_OPEN );
+		foreach ( self::emails( $clean ) as $address ) {
+			add_post_meta( (int) $id, self::EMAIL_META, $address );
+		}
 		update_option( $claim, (int) $id, false );
 		/**
 		 * A voucher request was stored (nothing was issued). No personal data in the arguments.
@@ -313,6 +480,10 @@ final class VoucherRequests {
 		if ( self::STATE_ISSUED === $result['state'] ) {
 			// The recipients' data now lives in the vouchers (and their retention rules): keep only the count here.
 			$request = (array) get_post_meta( $id, self::META, true );
+			$contact = strtolower( (string) ( $request['contact']['email'] ?? '' ) );
+			foreach ( array_diff( self::emails( $request ), array( $contact ) ) as $address ) {
+				delete_post_meta( $id, self::EMAIL_META, $address );
+			}
 			$request['recipients'] = array();
 			update_post_meta( $id, self::META, $request );
 		}

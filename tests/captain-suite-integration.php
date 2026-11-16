@@ -150,6 +150,9 @@ vcap_cs_assert( is_array( $sub ) && 'open' === $sub['state'] && 0 === $issued, '
 $again = $requests->submit( array( 'reference' => $entry, 'contact' => array( 'email' => 'cs-hr@example.com' ) ) );
 vcap_cs_assert( is_array( $again ) && $again['replayed'] && $sub['request_id'] === $again['request_id'], 'the same form entry is not stored twice' );
 vcap_cs_assert( is_wp_error( $requests->confirm( $sub['request_id'], array( 'sale' => 'free' ) ) ) && 0 === $issued, 'a visitor cannot confirm a request' );
+$export = $requests->export( 'CS-Ann@example.com' );
+vcap_cs_assert( 1 === count( $export['data'] ) && 'vcap-request-' . $sub['request_id'] === $export['data'][0]['item_id'], 'the privacy exporter finds the open request by a recipient address', $export );
+
 wp_set_current_user( 1 );
 vcap_cs_assert( is_wp_error( $requests->confirm( $sub['request_id'], array() ) ) && 0 === $issued, 'the manager must decide sold or free of charge' );
 $done = $requests->confirm( $sub['request_id'], array( 'sale' => 'free', 'send' => false ) );
@@ -159,5 +162,9 @@ vcap_cs_assert( is_array( $repeat ) && $done['vouchers'] === $repeat['vouchers']
 $first = vcap()->vouchers->get( (int) $done['vouchers'][0] );
 vcap_cs_assert( $first instanceof Voucher && 'cs-ann@example.com' === $first->recipient_email && 'cs-hr@example.com' === $first->buyer_email, 'the vouchers carry recipient and company as buyer' );
 vcap_cs_assert( array() === VoucherRequests::get( $sub['request_id'] )['recipients'], 'the issued request keeps no recipient list of its own' );
+vcap_cs_assert( array() === $requests->export( 'cs-ann@example.com' )['data'], 'after issuing, the request no longer holds the recipient (exported with the voucher instead)' );
+$erased = $requests->erase( 'cs-hr@example.com' );
+vcap_cs_assert( $erased['items_removed'] && '' === VoucherRequests::get( $sub['request_id'] )['contact']['email'] && array() === $requests->export( 'cs-hr@example.com' )['data'], 'the privacy eraser removes the contact from the request' );
+
 
 echo "Captain Suite integration: all checks passed.\n";

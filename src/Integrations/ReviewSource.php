@@ -68,6 +68,7 @@ final class ReviewSource {
 		add_action( 'vcap_redemption_reversed', array( $this, 'on_reversed' ), 10, 2 );
 		add_action( 'vcap_redemption_refunded', array( $this, 'on_refunded' ) );
 		add_action( 'vcap_voucher_event', array( $this, 'on_voucher_event' ), 10, 2 );
+		add_action( 'vcap_voucher_deleted', array( $this, 'on_voucher_deleted' ) );
 	}
 
 	/**
@@ -239,11 +240,42 @@ final class ReviewSource {
 	 * @param mixed $event      History event.
 	 */
 	public function on_voucher_event( $voucher_id, $event = '' ): void {
-		if ( 'voided' !== $event ) {
-			return;
+		if ( 'voided' === $event ) {
+			foreach ( (array) get_option( self::INDEX_PREFIX . (int) $voucher_id, array() ) as $reference ) {
+				$this->revoke( (string) $reference, 'voided' );
+			}
+		} elseif ( \VCAP\TaxAccounting::ERASED_EVENT === $event ) {
+			$this->forget_voucher( (int) $voucher_id, 'erased' ); // Privacy eraser: personal data of the voucher removed.
 		}
-		foreach ( (array) get_option( self::INDEX_PREFIX . (int) $voucher_id, array() ) as $reference ) {
-			$this->revoke( (string) $reference, 'voided' );
+	}
+
+	/**
+	 * `vcap_voucher_deleted`.
+	 *
+	 * @param mixed $voucher Voucher as it was stored.
+	 */
+	public function on_voucher_deleted( $voucher ): void {
+		if ( $voucher instanceof Voucher ) {
+			$this->forget_voucher( (int) $voucher->id, 'deleted' );
+		}
+	}
+
+	/**
+	 * The voucher's personal data was erased or the voucher deleted: its references are revoked (reported once if
+	 * still eligible) and no longer linked to the voucher, so no recipient can be resolved; the index goes.
+	 */
+	public function forget_voucher( int $voucher_id, string $reason ): void {
+		$index = (array) get_option( self::INDEX_PREFIX . $voucher_id, array() );
+		foreach ( $index as $reference ) {
+			$this->revoke( (string) $reference, $reason );
+			$record = self::record( (string) $reference );
+			if ( $record && 0 !== (int) $record['voucher_id'] ) {
+				$record['voucher_id'] = 0;
+				update_option( self::OPTION_PREFIX . $reference, $record, false );
+			}
+		}
+		if ( $index ) {
+			delete_option( self::INDEX_PREFIX . $voucher_id );
 		}
 	}
 
@@ -283,17 +315,19 @@ final class ReviewSource {
 		if ( ! self::can_resolve() ) {
 			return new \WP_Error( 'vcap_review_not_allowed', __( 'You are not allowed to do this.', 'voucher-captain' ), array( 'status' => 403 ) );
 		}
-		$record  = self::record( $reference );
-		$voucher = $record ? ( $this->lookup )( (int) $record['voucher_id'] ) : null;
+		$record = self::record( $reference );
+		if ( $record && 'eligible' !== $record['state'] ) {
+			return new \WP_Error( 'vcap_review_revoked', 'The redemption was cancelled, refunded or its personal data erased.', array( 'status' => 410 ) );
+		}
+		$voucher = $record && (int) $record['voucher_id'] > 0 ? ( $this->lookup )( (int) $record['voucher_id'] ) : null;
 		if ( ! $record || ! $voucher instanceof Voucher ) {
 			return new \WP_Error( 'vcap_review_unknown_reference', 'Unknown review reference.', array( 'status' => 404 ) );
-		}
-		if ( 'eligible' !== $record['state'] ) {
-			return new \WP_Error( 'vcap_review_revoked', 'The redemption was cancelled or refunded.', array( 'status' => 410 ) );
 		}
 		$role  = is_email( $voucher->recipient_email ) ? 'recipient' : 'buyer';
 		$email = 'recipient' === $role ? $voucher->recipient_email : ( is_email( $voucher->buyer_email ) ? $voucher->buyer_email : '' );
 		if ( '' === $email ) {
+			// The addresses are gone (retention cleanup or erasure): the reference is withdrawn for good.
+			$this->forget_voucher( (int) $voucher->id, 'no_recipient' );
 			return new \WP_Error( 'vcap_review_no_recipient', 'No address is known for this redemption.', array( 'status' => 404 ) );
 		}
 		/**
@@ -386,7 +420,8 @@ final class ReviewSource {
 			return;
 		}
 		/**
-		 * A review source was withdrawn (once per reference): reason redeem_reversed, refunded or voided. Same
+		 * A review source was withdrawn (once per reference): reason redeem_reversed, refunded, voided, erased
+		 * (personal data of the voucher erased), deleted or no_recipient (no address left). Same
 		 * payload as vcap_review_redemption_eligible with event "revoked".
 		 *
 		 * @since 1.2.0
