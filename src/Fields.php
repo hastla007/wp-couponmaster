@@ -70,7 +70,9 @@ final class Fields {
 				'show_ui'         => true,
 				'show_in_menu'    => 'vcap-vouchers',
 				'supports'        => array( 'title', 'page-attributes' ),
-				'capability_type' => 'product',
+				// S17: voucher managers only, not every role that may edit products.
+				'capability_type' => array( 'vcap_field_group', 'vcap_field_groups' ),
+				'capabilities'    => ProductSettings::manager_post_caps(),
 				'map_meta_cap'    => true,
 				'rewrite'         => false,
 			)

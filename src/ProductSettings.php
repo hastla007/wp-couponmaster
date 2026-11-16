@@ -111,6 +111,9 @@ final class ProductSettings {
 		global $product_object;
 		$p = $product_object instanceof \WC_Product ? $product_object : new \WC_Product_Simple();
 		echo '<div id="vcap_product_data" class="panel woocommerce_options_panel hidden">';
+		if ( ! self::may_manage() ) {
+			echo '<div class="notice notice-warning inline"><p>' . esc_html( self::no_right_message() ) . '</p></div>';
+		}
 
 		$this->panel_general( $p );
 		$this->panel_gift_options( $p );
@@ -683,9 +686,48 @@ final class ProductSettings {
 		}
 	}
 
+	/**
+	 * S17: voucher settings of a product (value, value source, template …) create value: only voucher managers
+	 * change them, not every role that may edit products (e.g. a vendor role with edit_products).
+	 */
+	public static function may_manage(): bool {
+		return current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' ); // phpcs:ignore WordPress.WP.Capabilities.Unknown -- Registered by Install / WooCommerce.
+	}
+
+	/**
+	 * S17: capabilities of the voucher post types (PDF templates, field groups): every primitive capability is the
+	 * voucher managers' right instead of the product rights.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function manager_post_caps(): array {
+		$cap = Admin\Menu::cap();
+		return array_fill_keys( array( 'edit_posts', 'edit_others_posts', 'edit_private_posts', 'edit_published_posts', 'publish_posts', 'read_private_posts', 'delete_posts', 'delete_private_posts', 'delete_published_posts', 'delete_others_posts', 'create_posts' ), $cap ) + array( 'read' => 'read' );
+	}
+
+	private static function no_right_message(): string {
+		return __( 'Only voucher managers can change the voucher settings of a product. Your changes to these settings are not saved; the other product data is.', 'voucher-captain' );
+	}
+
+	/** S17: the product form is saved by someone without the right: voucher settings stay, a notice says so. */
+	private static function refuse_without_right( bool $posted ): bool {
+		if ( self::may_manage() ) {
+			return false;
+		}
+		static $told = false;
+		if ( $posted && ! $told ) {
+			$told = true;
+			self::save_error( self::no_right_message() );
+		}
+		return true;
+	}
+
 	public function save( \WC_Product $product ): void {
 		// Nonce is verified by WooCommerce before woocommerce_admin_process_product_object fires.
 		// phpcs:disable WordPress.Security.NonceVerification.Missing
+		if ( self::refuse_without_right( isset( $_POST['_vcap_type'] ) || isset( $_POST['_vcap_enabled'] ) ) ) {
+			return;
+		}
 		$product->update_meta_data( '_vcap_enabled', isset( $_POST['_vcap_enabled'] ) ? 'yes' : 'no' );
 		if ( ! isset( $_POST['_vcap_type'] ) ) {
 			return;
@@ -921,6 +963,9 @@ final class ProductSettings {
 
 	public function save_variation( \WC_Product_Variation $variation, int $loop ): void {
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the variations nonce.
+		if ( self::refuse_without_right( isset( $_POST['vcap_var'][ $loop ] ) || isset( $_POST['vcap_variation_enabled'][ $loop ] ) ) ) {
+			return;
+		}
 		$variation->update_meta_data( '_vcap_enabled', isset( $_POST['vcap_variation_enabled'][ $loop ] ) ? 'yes' : 'no' );
 		$data = isset( $_POST['vcap_var'][ $loop ] ) ? (array) wp_unslash( $_POST['vcap_var'][ $loop ] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		// phpcs:enable

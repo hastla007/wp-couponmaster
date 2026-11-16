@@ -50,7 +50,9 @@ final class TemplatePostType {
 				'show_ui'         => true,
 				'show_in_menu'    => 'vcap-vouchers',
 				'supports'        => array( 'title' ),
-				'capability_type' => 'product',
+				// S17: voucher managers only, not every role that may edit products.
+				'capability_type' => array( 'vcap_template', 'vcap_templates' ),
+				'capabilities'    => ProductSettings::manager_post_caps(),
 				'map_meta_cap'    => true,
 				'rewrite'         => false,
 				'query_var'       => false,
@@ -230,7 +232,7 @@ final class TemplatePostType {
 	}
 
 	public function maybe_create_defaults(): void {
-		if ( 'yes' !== get_option( 'vcap_needs_default_template' ) || ! current_user_can( 'edit_products' ) ) {
+		if ( 'yes' !== get_option( 'vcap_needs_default_template' ) || ! ProductSettings::may_manage() ) {
 			return;
 		}
 		update_option( 'vcap_needs_default_template', 'no' );
@@ -717,7 +719,7 @@ final class TemplatePostType {
 
 	public function ajax_preview(): void {
 		check_ajax_referer( 'vcap_template_preview', 'nonce' );
-		if ( ! current_user_can( 'edit_products' ) ) {
+		if ( ! ProductSettings::may_manage() ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
 		$design = json_decode( wp_unslash( (string) ( $_POST['design'] ?? '' ) ), true ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised below.
@@ -729,7 +731,7 @@ final class TemplatePostType {
 	/** @param mixed $actions What the previous filter returned (AP-Q2-6: a non-array is normalised). */
 	public function row_actions( $actions, \WP_Post $post ): array {
 		$actions = is_array( $actions ) ? $actions : array();
-		if ( self::POST_TYPE === $post->post_type && current_user_can( 'edit_products' ) ) {
+		if ( self::POST_TYPE === $post->post_type && ProductSettings::may_manage() ) {
 			$url                  = wp_nonce_url( admin_url( 'admin.php?action=vcap_duplicate_template&post=' . $post->ID ), 'vcap_duplicate_' . $post->ID );
 			$actions['duplicate'] = '<a href="' . esc_url( $url ) . '">' . esc_html__( 'Duplicate', 'voucher-captain' ) . '</a>';
 			unset( $actions['inline hide-if-no-js'] );
@@ -740,7 +742,7 @@ final class TemplatePostType {
 	public function duplicate(): void {
 		$id = absint( $_GET['post'] ?? 0 );
 		check_admin_referer( 'vcap_duplicate_' . $id );
-		if ( ! current_user_can( 'edit_products' ) || self::POST_TYPE !== get_post_type( $id ) ) {
+		if ( ! ProductSettings::may_manage() || self::POST_TYPE !== get_post_type( $id ) ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
 		$new = wp_insert_post(
