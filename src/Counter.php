@@ -145,7 +145,7 @@ final class Counter {
 		}
 		global $wpdb;
 		$events = Install::tables()['events'];
-		$row    = $wpdb->get_row( $wpdb->prepare( "SELECT till, receipt FROM {$events} WHERE id = %d AND event = 'redeemed'", (int) $m[1] ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$row    = $wpdb->get_row( $wpdb->prepare( "SELECT till, receipt FROM %i WHERE id = %d AND event = 'redeemed'", $events, (int) $m[1] ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		return $row ? array( 'till' => (string) $row['till'], 'receipt' => (string) $row['receipt'] ) : $out;
 	}
 
@@ -300,9 +300,9 @@ final class Counter {
 		$since = Ledger::utc_range( $today, $today )[0];
 		$value = Ledger::VALUE_VOUCHERS;
 		if ( 'till' === $scope ) {
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT COUNT(*) AS cnt, COALESCE( SUM( CASE WHEN {$value} AND v.currency = %s THEN e.amount ELSE 0 END ), 0 ) AS amount FROM {$t['events']} e INNER JOIN {$t['vouchers']} v ON v.id = e.voucher_id WHERE e.created_at >= %s AND e.event = 'redeemed' AND e.order_id = 0 AND e.till = %s", $currency, $since, (string) $key ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $value is a constant.
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT COUNT(*) AS cnt, COALESCE( SUM( CASE WHEN {$value} AND v.currency = %s THEN e.amount ELSE 0 END ), 0 ) AS amount FROM %i e INNER JOIN %i v ON v.id = e.voucher_id WHERE e.created_at >= %s AND e.event = 'redeemed' AND e.order_id = 0 AND e.till = %s", $currency, $t['events'], $t['vouchers'], $since, (string) $key ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $value is a constant.
 		} else {
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT COUNT(*) AS cnt, COALESCE( SUM( CASE WHEN {$value} AND v.currency = %s THEN e.amount ELSE 0 END ), 0 ) AS amount FROM {$t['events']} e INNER JOIN {$t['vouchers']} v ON v.id = e.voucher_id WHERE e.created_at >= %s AND e.event = 'redeemed' AND e.order_id = 0 AND e.user_id = %d", $currency, $since, (int) $key ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $value is a constant.
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT COUNT(*) AS cnt, COALESCE( SUM( CASE WHEN {$value} AND v.currency = %s THEN e.amount ELSE 0 END ), 0 ) AS amount FROM %i e INNER JOIN %i v ON v.id = e.voucher_id WHERE e.created_at >= %s AND e.event = 'redeemed' AND e.order_id = 0 AND e.user_id = %d", $currency, $t['events'], $t['vouchers'], $since, (int) $key ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $value is a constant.
 		}
 		return array( 'count' => (int) ( $row['cnt'] ?? 0 ), 'amount' => (float) ( $row['amount'] ?? 0 ) );
 	}

@@ -61,7 +61,7 @@ final class Ledger {
 		$until = self::utc_range( $date, $date )[1];
 		// Cached per day: every change of value or validity writes a ledger row (edits included), so the newest
 		// ledger and voucher ids are part of the key.
-		$state     = $wpdb->get_row( "SELECT ( SELECT MAX(id) FROM {$t['events']} ) AS e, ( SELECT MAX(id) FROM {$t['vouchers']} ) AS v", ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$state     = $wpdb->get_row( $wpdb->prepare( 'SELECT ( SELECT MAX(id) FROM %i ) AS e, ( SELECT MAX(id) FROM %i ) AS v', $t['events'], $t['vouchers'] ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$cache_key = 'vcap_liability_v2_' . md5( (string) wp_json_encode( array( $until, $state, get_option( 'woocommerce_currency' ) ) ) );
 		$cached    = get_transient( $cache_key );
 		if ( is_array( $cached ) && isset( $cached['totals'] ) ) {
@@ -123,7 +123,7 @@ final class Ledger {
 		$last   = 0;
 		$value  = self::VALUE_VOUCHERS;
 		do {
-			$vouchers = $wpdb->get_results( $wpdb->prepare( "SELECT v.* FROM {$tables['vouchers']} v WHERE v.id > %d AND v.created_at <= %s AND {$value} ORDER BY v.id LIMIT 500", $last, $until ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$vouchers = $wpdb->get_results( $wpdb->prepare( "SELECT v.* FROM %i v WHERE v.id > %d AND v.created_at <= %s AND {$value} ORDER BY v.id LIMIT 500", $tables['vouchers'], $last, $until ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			if ( ! $vouchers ) {
 				break;
 			}
@@ -348,7 +348,7 @@ final class Ledger {
 		global $wpdb;
 		$tables = Install::tables();
 		list( $start, $end ) = self::utc_range( $from, $to );
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT MIN(id) AS lo, MAX(id) AS hi FROM {$tables['events']} WHERE created_at BETWEEN %s AND %s", $start, $end ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT MIN(id) AS lo, MAX(id) AS hi FROM %i WHERE created_at BETWEEN %s AND %s', $tables['events'], $start, $end ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		return array( (int) ( $row['lo'] ?? 0 ), (int) ( $row['hi'] ?? 0 ) );
 	}
 

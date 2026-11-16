@@ -365,7 +365,7 @@ final class Plugin {
 	public static function reset_rate_limits(): void {
 		global $wpdb;
 		if ( Install::counters_ready() ) {
-			$wpdb->query( 'DELETE FROM ' . Install::tables()['rate'] ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared -- table name from Install.
+			$wpdb->query( $wpdb->prepare( 'DELETE FROM %i', Install::tables()['rate'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
 		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( self::RATE_PREFIX ) . '%' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( function_exists( 'wp_cache_supports' ) && wp_cache_supports( 'flush_group' ) ) {
@@ -468,7 +468,7 @@ final class Plugin {
 			$exempt = current_user_can( 'manage_woocommerce' ) || current_user_can( 'vcap_manage_vouchers' ); // phpcs:ignore WordPress.WP.Capabilities.Unknown -- Registered by Install / WooCommerce.
 			if ( ! $exempt ) {
 				$table  = Install::tables()['vouchers'];
-				$exempt = (bool) $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE user_id = %d LIMIT 1", $user_id ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$exempt = (bool) $wpdb->get_var( $wpdb->prepare( 'SELECT 1 FROM %i WHERE user_id = %d LIMIT 1', $table, $user_id ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 					|| ( isset( vcap()->vouchers ) && array() !== vcap()->vouchers->for_customer( $user_id, 1 ) );
 			}
 			/** Whether the current user keeps the full rate-limit quota while the site-wide brake is on. */
@@ -515,7 +515,7 @@ final class Plugin {
 		if ( Install::counters_ready() ) {
 			// B16: one row of the table vcap_rate_limits per counter and window, counted atomically.
 			$table = Install::tables()['rate'];
-			$wpdb->query( $wpdb->prepare( "INSERT INTO {$table} (window_end, counter_key, hits) VALUES (%d, %s, 1) ON DUPLICATE KEY UPDATE hits = hits + 1", self::rate_window_end( $window ), $key ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->query( $wpdb->prepare( 'INSERT INTO %i (window_end, counter_key, hits) VALUES (%d, %s, 1) ON DUPLICATE KEY UPDATE hits = hits + 1', $table, self::rate_window_end( $window ), $key ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		} else {
 			$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, '1', 'no') ON DUPLICATE KEY UPDATE option_value = option_value + 1", $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
@@ -534,7 +534,7 @@ final class Plugin {
 		global $wpdb;
 		if ( Install::counters_ready() ) {
 			$table = Install::tables()['rate'];
-			$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET hits = hits - 1 WHERE window_end = %d AND counter_key = %s AND hits > 0", self::rate_window_end( $window ), $key ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->query( $wpdb->prepare( 'UPDATE %i SET hits = hits - 1 WHERE window_end = %d AND counter_key = %s AND hits > 0', $table, self::rate_window_end( $window ), $key ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			return;
 		}
 		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = option_value - 1 WHERE option_name = %s AND option_value > 0", $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -554,7 +554,7 @@ final class Plugin {
 		global $wpdb;
 		if ( Install::counters_ready() ) {
 			$table = Install::tables()['rate'];
-			return (int) $wpdb->get_var( $wpdb->prepare( "SELECT hits FROM {$table} WHERE window_end = %d AND counter_key = %s", self::rate_window_end( $window ), $key ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT hits FROM %i WHERE window_end = %d AND counter_key = %s', $table, self::rate_window_end( $window ), $key ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
 		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::rate_option( $key, $window ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
@@ -574,7 +574,7 @@ final class Plugin {
 		do {
 			$deleted = 0;
 			if ( '' !== $table ) {
-				$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE window_end <= %d LIMIT %d", time(), $limit ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$deleted = $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE window_end <= %d LIMIT %d', $table, time(), $limit ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			}
 			if ( false !== $deleted && (int) $deleted < $limit ) {
 				$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND option_name < %s LIMIT %d", $wpdb->esc_like( self::RATE_PREFIX ) . '%', self::RATE_PREFIX . sprintf( '%010d', time() ) . '_', $limit ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery

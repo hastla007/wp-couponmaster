@@ -235,7 +235,7 @@ $wpdb->delete( VCAP\Install::tables()['usage'], array( 'campaign_id' => 990004 )
 $wpdb->delete( $b12_counts, array( 'campaign_id' => 990004 ) );
 wp_delete_user( $v4_user );
 vcap_promo_assert( 2 === $b12_cart, 'B12: four cart checks read the total and the customer count once each (' . $b12_cart . ' queries)' );
-vcap_promo_assert( 1 === count( $b12_total ) && str_starts_with( $b12_total[0], "SELECT uses FROM {$b12_counts} " ), 'B12: the total of a promotion is read from its counter row, not counted over all uses' );
+vcap_promo_assert( 1 === count( $b12_total ) && str_starts_with( $b12_total[0], "SELECT uses FROM `{$b12_counts}` " ), 'B12: the total of a promotion is read from its counter row, not counted over all uses' );
 vcap_promo_assert( 'usage_limit_customer' === $b12_after, 'B12: a use added in the request is counted at once (memo forgotten)' );
 vcap_promo_assert( $b12_fresh >= 1, 'B12: the check that decides under the lock reads the database' );
 // B12: counter kept with every add/remove, totals of all limited promotions primed in one query, daily recount.

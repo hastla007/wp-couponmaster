@@ -109,10 +109,12 @@ final class Reservations {
 		$days   = max( 1, (int) apply_filters( 'vcap_orphaned_hold_days', 90 ) );
 		$rows   = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prepare(
-				"SELECT e.voucher_id, e.order_id FROM {$events} e WHERE e.event = 'reserved' AND e.order_id > 0 AND e.created_at >= %s
-					AND NOT EXISTS ( SELECT 1 FROM {$events} x WHERE x.voucher_id = e.voucher_id AND x.order_id = e.order_id AND x.id > e.id AND x.event IN ({$in}) )
+				"SELECT e.voucher_id, e.order_id FROM %i e WHERE e.event = 'reserved' AND e.order_id > 0 AND e.created_at >= %s
+					AND NOT EXISTS ( SELECT 1 FROM %i x WHERE x.voucher_id = e.voucher_id AND x.order_id = e.order_id AND x.id > e.id AND x.event IN ({$in}) )
 					ORDER BY e.id LIMIT 200", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS )
+				$events,
+				gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS ),
+				$events
 			),
 			ARRAY_A
 		);

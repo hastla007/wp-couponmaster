@@ -72,7 +72,7 @@ final class PhysicalCards {
 		$done  = 0;
 		foreach ( self::waiting( $order->get_id() ) as $voucher ) {
 			$now     = vcap()->vouchers->now();
-			$changed = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'active', updated_at = %s WHERE id = %d AND status = 'scheduled' AND delivery_at IS NULL", $now, $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$changed = $wpdb->query( $wpdb->prepare( "UPDATE %i SET status = 'active', updated_at = %s WHERE id = %d AND status = 'scheduled' AND delivery_at IS NULL", $table, $now, $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			if ( 1 !== (int) $changed ) {
 				continue;
 			}

@@ -562,7 +562,8 @@ final class Health {
 		$table = Install::tables()['vouchers'];
 		$rows  = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prepare(
-				"SELECT currency, COUNT(*) AS n FROM {$table} WHERE status IN ('active','scheduled','reserved') AND discount_type <> 'percent' AND type <> 'ticket' AND currency <> '' AND currency <> %s GROUP BY currency ORDER BY n DESC LIMIT 10", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT currency, COUNT(*) AS n FROM %i WHERE status IN ('active','scheduled','reserved') AND discount_type <> 'percent' AND type <> 'ticket' AND currency <> '' AND currency <> %s GROUP BY currency ORDER BY n DESC LIMIT 10",
+				$table,
 				(string) get_option( 'woocommerce_currency' )
 			),
 			ARRAY_A

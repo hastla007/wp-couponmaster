@@ -318,7 +318,7 @@ final class Delivery {
 		global $wpdb;
 		$now     = $this->repo->now();
 		$table   = Install::tables()['vouchers'];
-		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET delivered_at = %s, updated_at = %s WHERE id = %d AND delivered_at IS NULL AND status = 'active'", $now, $now, $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$updated = $wpdb->query( $wpdb->prepare( "UPDATE %i SET delivered_at = %s, updated_at = %s WHERE id = %d AND delivered_at IS NULL AND status = 'active'", $table, $now, $now, $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( 1 === (int) $updated ) {
 			$voucher->delivered_at = $now;
 			delete_transient( 'vcap_undelivered_count' );
@@ -545,7 +545,7 @@ final class Delivery {
 		}
 		global $wpdb;
 		$table     = Install::tables()['vouchers'];
-		$activated = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'active', updated_at = %s WHERE id = %d AND status = 'scheduled'", $now, $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$activated = $wpdb->query( $wpdb->prepare( "UPDATE %i SET status = 'active', updated_at = %s WHERE id = %d AND status = 'scheduled'", $table, $now, $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( 1 !== (int) $activated ) {
 			return false;
 		}
@@ -596,8 +596,9 @@ final class Delivery {
 		$table   = Install::tables()['vouchers'];
 		$updated = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prepare(
-				"UPDATE {$table} SET delivered_at = %s, status = CASE WHEN status = 'scheduled' THEN 'active' ELSE status END, updated_at = %s
-				WHERE id = %d AND delivered_at IS NULL AND status IN ('scheduled','active')", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"UPDATE %i SET delivered_at = %s, status = CASE WHEN status = 'scheduled' THEN 'active' ELSE status END, updated_at = %s
+				WHERE id = %d AND delivered_at IS NULL AND status IN ('scheduled','active')",
+				$table,
 				$now,
 				$now,
 				$voucher->id
@@ -706,7 +707,7 @@ final class Delivery {
 		}
 		global $wpdb;
 		$table = Install::tables()['vouchers'];
-		$due   = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE order_item_id = %d AND delivered_at IS NULL AND status IN ('scheduled','active') AND ( delivery_at IS NULL OR delivery_at <= %s )", $voucher->order_item_id, $this->repo->now() ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$due   = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM %i WHERE order_item_id = %d AND delivered_at IS NULL AND status IN ('scheduled','active') AND ( delivery_at IS NULL OR delivery_at <= %s )", $table, $voucher->order_item_id, $this->repo->now() ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( $due < $threshold ) {
 			return '';
 		}
@@ -957,7 +958,7 @@ final class Delivery {
 	private function refuse_expired( Voucher $voucher ): void {
 		global $wpdb;
 		$table   = Install::tables()['vouchers'];
-		$changed = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'expired', updated_at = %s WHERE id = %d AND delivered_at IS NULL AND status IN ('scheduled','active')", $this->repo->now(), $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$changed = $wpdb->query( $wpdb->prepare( "UPDATE %i SET status = 'expired', updated_at = %s WHERE id = %d AND delivered_at IS NULL AND status IN ('scheduled','active')", $table, $this->repo->now(), $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( 1 !== (int) $changed ) {
 			return; // Changed meanwhile, or recorded by a parallel run.
 		}
@@ -1057,7 +1058,7 @@ final class Delivery {
 		if ( Install::storage_ready() ) {
 			global $wpdb;
 			$table = Install::tables()['vouchers'];
-			$roles = (string) $wpdb->get_var( $wpdb->prepare( "SELECT delivered_roles FROM {$table} WHERE id = %d", $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$roles = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT delivered_roles FROM %i WHERE id = %d', $table, $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$roles = array_values( array_intersect( array_filter( explode( ',', $roles ) ), array( 'recipient', 'buyer' ) ) );
 			if ( $roles ) {
 				return $roles;
@@ -1081,7 +1082,7 @@ final class Delivery {
 		if ( Install::storage_ready() ) {
 			global $wpdb;
 			$table = Install::tables()['vouchers'];
-			$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET delivered_roles = %s WHERE id = %d", implode( ',', $delivered ), $voucher_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->query( $wpdb->prepare( 'UPDATE %i SET delivered_roles = %s WHERE id = %d', $table, implode( ',', $delivered ), $voucher_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			delete_transient( $key );
 			return;
 		}
@@ -1260,7 +1261,7 @@ final class Delivery {
 		$tables = Install::tables();
 		$limit  = self::RESTORE_BATCH;
 		if ( 'vouchers' === $phase ) {
-			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, delivery_at FROM {$tables['vouchers']} WHERE status = 'scheduled' AND delivered_at IS NULL AND id > %d ORDER BY id LIMIT %d", $after, $limit ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, delivery_at FROM %i WHERE status = 'scheduled' AND delivered_at IS NULL AND id > %d ORDER BY id LIMIT %d", $tables['vouchers'], $after, $limit ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$rows = $rows ? $rows : array();
 			foreach ( $rows as $row ) {
 				$args = array( 'voucher_id' => (int) $row['id'] );
@@ -1278,7 +1279,7 @@ final class Delivery {
 			return count( $rows ) >= $limit ? array( 'vouchers', (int) end( $rows )['id'] ) : array( 'redemptions', 0 );
 		}
 		if ( 'redemptions' === $phase ) {
-			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, expires_at FROM {$tables['redemptions']} WHERE state = %s AND expires_at IS NOT NULL AND id > %d ORDER BY id LIMIT %d", API\V1\RedemptionService::STATE_RESERVED, $after, $limit ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT id, expires_at FROM %i WHERE state = %s AND expires_at IS NOT NULL AND id > %d ORDER BY id LIMIT %d', $tables['redemptions'], API\V1\RedemptionService::STATE_RESERVED, $after, $limit ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$rows = $rows ? $rows : array();
 			foreach ( $rows as $row ) {
 				$args = array( 'redemption_id' => (int) $row['id'] );

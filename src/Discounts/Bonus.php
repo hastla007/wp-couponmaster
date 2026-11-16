@@ -249,7 +249,7 @@ final class Bonus {
 		$lookup = $wpdb->prefix . 'wc_order_coupon_lookup';
 		$sum    = null;
 		if ( $lookup === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $lookup ) ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			$sum = $wpdb->get_var( $wpdb->prepare( "SELECT SUM(discount_amount) FROM {$lookup} WHERE coupon_id = %d", $coupon->get_id() ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$sum = $wpdb->get_var( $wpdb->prepare( 'SELECT SUM(discount_amount) FROM %i WHERE coupon_id = %d', $lookup, $coupon->get_id() ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
 		if ( 'percent' === $coupon->get_discount_type() ) {
 			return max( 0.0, (float) $sum );

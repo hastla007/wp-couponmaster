@@ -359,7 +359,7 @@ final class RedemptionService {
 		}
 		$now   = gmdate( 'Y-m-d H:i:s' );
 		$table = Install::tables()['redemptions'];
-		$keys  = $wpdb->get_col( $wpdb->prepare( "SELECT redemption_key FROM {$table} WHERE voucher_id = %d AND state = %s AND expires_at <= %s LIMIT 50", $voucher->id, self::STATE_RESERVED, $now ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$keys  = $wpdb->get_col( $wpdb->prepare( 'SELECT redemption_key FROM %i WHERE voucher_id = %d AND state = %s AND expires_at <= %s LIMIT 50', $table, $voucher->id, self::STATE_RESERVED, $now ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$done  = false;
 		foreach ( $keys ? $keys : array() as $key ) {
 			$result = $this->transition( (string) $key, self::STATE_RELEASED, array(), true );

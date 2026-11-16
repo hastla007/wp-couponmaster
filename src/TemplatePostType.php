@@ -158,7 +158,7 @@ final class TemplatePostType {
 	private static function vouchers_issued_since( int $since ): bool {
 		global $wpdb;
 		$table = Install::tables()['vouchers'];
-		return (bool) $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE created_at >= %s LIMIT 1", gmdate( 'Y-m-d H:i:s', $since ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from Install.
+		return (bool) $wpdb->get_var( $wpdb->prepare( 'SELECT 1 FROM %i WHERE created_at >= %s LIMIT 1', $table, gmdate( 'Y-m-d H:i:s', $since ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	/** A template is deleted for good: keep its designs for the vouchers issued with it (not autoloaded). */

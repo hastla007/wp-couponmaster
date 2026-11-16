@@ -412,7 +412,7 @@ final class ProductConfig {
 		if ( ! array_key_exists( $voucher->id, self::$snapshots ) ) {
 			global $wpdb;
 			$events = Install::tables()['events'];
-			$note   = $wpdb->get_var( $wpdb->prepare( "SELECT note FROM {$events} WHERE voucher_id = %d AND event = 'issued' ORDER BY id LIMIT 1", $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$note   = $wpdb->get_var( $wpdb->prepare( "SELECT note FROM %i WHERE voucher_id = %d AND event = 'issued' ORDER BY id LIMIT 1", $events, $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			if ( count( self::$snapshots ) > 1000 ) {
 				self::$snapshots = array();
 			}

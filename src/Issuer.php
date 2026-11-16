@@ -1140,9 +1140,9 @@ final class Issuer {
 		$like = $wpdb->esc_like( substr( $note, 0, -2 ) . ',' ) . '%';
 		if ( null !== $since && false !== strtotime( $since . ' UTC' ) ) {
 			$from = gmdate( 'Y-m-d H:i:s', (int) strtotime( $since . ' UTC' ) - MINUTE_IN_SECONDS );
-			return (int) $wpdb->get_var( $wpdb->prepare( "SELECT voucher_id FROM {$events} WHERE created_at >= %s AND event = 'issued' AND order_id = 0 AND ( note = %s OR note LIKE %s ) ORDER BY created_at, id LIMIT 1", $from, $note, $like ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			return (int) $wpdb->get_var( $wpdb->prepare( "SELECT voucher_id FROM %i WHERE created_at >= %s AND event = 'issued' AND order_id = 0 AND ( note = %s OR note LIKE %s ) ORDER BY created_at, id LIMIT 1", $events, $from, $note, $like ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
-		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT voucher_id FROM {$events} WHERE event = 'issued' AND order_id = 0 AND ( note = %s OR note LIKE %s ) ORDER BY id LIMIT 1", $note, $like ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT voucher_id FROM %i WHERE event = 'issued' AND order_id = 0 AND ( note = %s OR note LIKE %s ) ORDER BY id LIMIT 1", $events, $note, $like ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	/**

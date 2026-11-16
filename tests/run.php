@@ -1550,7 +1550,7 @@ final class VCAP_Test_Wpdb {
 	public array $answers = array();
 	public function prepare( $query, ...$args ) {
 		$args = isset( $args[0] ) && is_array( $args[0] ) ? $args[0] : $args;
-		return vsprintf( str_replace( array( '%d', '%s' ), array( '%d', "'%s'" ), $query ), $args );
+		return vsprintf( str_replace( array( '%d', '%s', '%i' ), array( '%d', "'%s'", '%s' ), $query ), $args );
 	}
 	public function esc_like( $s ) { return addcslashes( (string) $s, '_%\\' ); }
 	public function suppress_errors( $s = true ) { return false; }
@@ -2786,7 +2786,7 @@ $GLOBALS['wpdb']  = new class() {
 	public array $events    = array();
 	public function prepare( $query, ...$args ) {
 		$args = isset( $args[0] ) && is_array( $args[0] ) ? $args[0] : $args;
-		return vsprintf( str_replace( array( '%d', '%s' ), array( '%d', "'%s'" ), $query ), $args );
+		return vsprintf( str_replace( array( '%d', '%s', '%i' ), array( '%d', "'%s'", '%s' ), $query ), $args );
 	}
 	public function esc_like( $s ) { return addcslashes( (string) $s, '_%\\' ); }
 	public function get_row( $q, $o = null ) {

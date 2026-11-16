@@ -81,7 +81,7 @@ final class TaxAccounting {
 		}
 		global $wpdb;
 		$events = Install::tables()['events'];
-		$last   = $wpdb->get_row( $wpdb->prepare( "SELECT event, amount FROM {$events} WHERE voucher_id = %d AND event IN ('expired','expiry_reversed') ORDER BY id DESC LIMIT 1", $voucher->id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$last   = $wpdb->get_row( $wpdb->prepare( "SELECT event, amount FROM %i WHERE voucher_id = %d AND event IN ('expired','expiry_reversed') ORDER BY id DESC LIMIT 1", $events, $voucher->id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( ! is_array( $last ) || 'expired' !== $last['event'] || null === $last['amount'] || (float) $last['amount'] <= 0 ) {
 			return;
 		}
@@ -196,7 +196,7 @@ final class TaxAccounting {
 	public static function revert_rest( VoucherRepository $repo, Voucher $voucher ): void {
 		global $wpdb;
 		$events = Install::tables()['events'];
-		$last   = $wpdb->get_row( $wpdb->prepare( "SELECT event, amount, note, order_id FROM {$events} WHERE voucher_id = %d AND event IN ('rest_converted','rest_reverted','restored','redeemed') ORDER BY id DESC LIMIT 1", $voucher->id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$last   = $wpdb->get_row( $wpdb->prepare( "SELECT event, amount, note, order_id FROM %i WHERE voucher_id = %d AND event IN ('rest_converted','rest_reverted','restored','redeemed') ORDER BY id DESC LIMIT 1", $events, $voucher->id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( ! is_array( $last ) || self::REST_CONVERTED_EVENT !== $last['event'] || ! function_exists( 'vcap' ) ) {
 			return;
 		}

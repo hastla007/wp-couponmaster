@@ -161,10 +161,10 @@ final class Usage {
 		$done = true;
 		if ( \VCAP\Install::storage_ready() ) {
 			$table = \VCAP\Install::tables()['usage'];
-			// phpcs:disable WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from Install.
+			// phpcs:disable WordPress.DB.DirectDatabaseQuery
 			$rows = '' !== $email
-				? $wpdb->get_results( $wpdb->prepare( "SELECT id, customer_key FROM {$table} WHERE customer_key = %s LIMIT %d", 'e:' . strtolower( trim( $email ) ), $limit ) )
-				: $wpdb->get_results( $wpdb->prepare( "SELECT id, customer_key FROM {$table} WHERE customer_key LIKE %s LIMIT %d", 'e:%', $limit ) );
+				? $wpdb->get_results( $wpdb->prepare( 'SELECT id, customer_key FROM %i WHERE customer_key = %s LIMIT %d', $table, 'e:' . strtolower( trim( $email ) ), $limit ) )
+				: $wpdb->get_results( $wpdb->prepare( 'SELECT id, customer_key FROM %i WHERE customer_key LIKE %s LIMIT %d', $table, 'e:%', $limit ) );
 			foreach ( (array) $rows as $row ) {
 				$wpdb->update( $table, array( 'customer_key' => self::stored_key( (string) $row->customer_key ) ), array( 'id' => (int) $row->id ), array( '%s' ), array( '%d' ) );
 			}
@@ -196,10 +196,10 @@ final class Usage {
 		if ( \VCAP\Install::counters_ready() ) {
 			// B12: the promotion's counter (one primary-key row) instead of counting every use.
 			$counts = \VCAP\Install::tables()['counts'];
-			return $legacy + (int) $wpdb->get_var( $wpdb->prepare( "SELECT uses FROM {$counts} WHERE campaign_id = %d", $campaign_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			return $legacy + (int) $wpdb->get_var( $wpdb->prepare( 'SELECT uses FROM %i WHERE campaign_id = %d', $counts, $campaign_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
 		$table = \VCAP\Install::tables()['usage'];
-		return $legacy + (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE campaign_id = %d", $campaign_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return $legacy + (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE campaign_id = %d', $table, $campaign_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	/**
@@ -248,7 +248,7 @@ final class Usage {
 			self::forget_counts( $id );
 			if ( $delta < 0 ) {
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$counts} SET uses = IF(uses > %d, uses - %d, 0) WHERE campaign_id = %d", -$delta, -$delta, $id ) ) ) {
+				if ( false === $wpdb->query( $wpdb->prepare( 'UPDATE %i SET uses = IF(uses > %d, uses - %d, 0) WHERE campaign_id = %d', $counts, -$delta, -$delta, $id ) ) ) {
 					return false;
 				}
 				continue;
@@ -276,13 +276,13 @@ final class Usage {
 		global $wpdb;
 		$tables = \VCAP\Install::tables();
 		self::forget_counts( $campaign_id );
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table names from Install.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery
 		if ( $campaign_id > 0 ) {
-			$ok = false !== $wpdb->query( $wpdb->prepare( "INSERT INTO {$tables['counts']} (campaign_id, uses) SELECT %d, COUNT(*) FROM {$tables['usage']} WHERE campaign_id = %d ON DUPLICATE KEY UPDATE uses = VALUES(uses)", $campaign_id, $campaign_id ) );
-			$ok = $ok && false !== $wpdb->query( $wpdb->prepare( "DELETE FROM {$tables['counts']} WHERE campaign_id = %d AND uses = 0", $campaign_id ) );
+			$ok = false !== $wpdb->query( $wpdb->prepare( 'INSERT INTO %i (campaign_id, uses) SELECT %d, COUNT(*) FROM %i WHERE campaign_id = %d ON DUPLICATE KEY UPDATE uses = VALUES(uses)', $tables['counts'], $campaign_id, $tables['usage'], $campaign_id ) );
+			$ok = $ok && false !== $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE campaign_id = %d AND uses = 0', $tables['counts'], $campaign_id ) );
 		} else {
-			$ok = false !== $wpdb->query( "INSERT INTO {$tables['counts']} (campaign_id, uses) SELECT campaign_id, COUNT(*) FROM {$tables['usage']} GROUP BY campaign_id ON DUPLICATE KEY UPDATE uses = VALUES(uses)" );
-			$ok = $ok && false !== $wpdb->query( "DELETE c FROM {$tables['counts']} c LEFT JOIN {$tables['usage']} u ON u.campaign_id = c.campaign_id WHERE u.campaign_id IS NULL" );
+			$ok = false !== $wpdb->query( $wpdb->prepare( 'INSERT INTO %i (campaign_id, uses) SELECT campaign_id, COUNT(*) FROM %i GROUP BY campaign_id ON DUPLICATE KEY UPDATE uses = VALUES(uses)', $tables['counts'], $tables['usage'] ) );
+			$ok = $ok && false !== $wpdb->query( $wpdb->prepare( 'DELETE c FROM %i c LEFT JOIN %i u ON u.campaign_id = c.campaign_id WHERE u.campaign_id IS NULL', $tables['counts'], $tables['usage'] ) );
 		}
 		// phpcs:enable
 		return $ok;
@@ -301,9 +301,9 @@ final class Usage {
 		}
 		global $wpdb;
 		$tables = \VCAP\Install::tables();
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table names from Install.
-		$actual = array_map( 'intval', array_column( (array) $wpdb->get_results( "SELECT campaign_id, COUNT(*) AS n FROM {$tables['usage']} GROUP BY campaign_id", ARRAY_A ), 'n', 'campaign_id' ) );
-		$stored = array_map( 'intval', array_column( (array) $wpdb->get_results( "SELECT campaign_id, uses FROM {$tables['counts']}", ARRAY_A ), 'uses', 'campaign_id' ) );
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery
+		$actual = array_map( 'intval', array_column( (array) $wpdb->get_results( $wpdb->prepare( 'SELECT campaign_id, COUNT(*) AS n FROM %i GROUP BY campaign_id', $tables['usage'] ), ARRAY_A ), 'n', 'campaign_id' ) );
+		$stored = array_map( 'intval', array_column( (array) $wpdb->get_results( $wpdb->prepare( 'SELECT campaign_id, uses FROM %i', $tables['counts'] ), ARRAY_A ), 'uses', 'campaign_id' ) );
 		// phpcs:enable
 		$fixed = 0;
 		foreach ( array_unique( array_merge( array_keys( $actual ), array_keys( $stored ) ) ) as $id ) {
@@ -472,7 +472,7 @@ final class Usage {
 		self::forget_counts( $campaign_id );
 		if ( \VCAP\Install::storage_ready() ) {
 			$table = \VCAP\Install::tables()['usage'];
-			if ( $order_id > 0 && $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE campaign_id = %d AND order_id = %d LIMIT 1", $campaign_id, $order_id ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( $order_id > 0 && $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE campaign_id = %d AND order_id = %d LIMIT 1', $table, $campaign_id, $order_id ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				self::given_back( $campaign_id );
 				return;
 			}

@@ -80,7 +80,7 @@ final class PassCaptainReconcile {
 		if ( $table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$reason = __( 'This version of WP Pass Captain does not provide the order data needed for the reconciliation.', 'voucher-captain' );
 		} else {
-			$have    = array_map( 'strtolower', (array) $wpdb->get_col( "SHOW COLUMNS FROM {$table}" ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$have    = array_map( 'strtolower', (array) $wpdb->get_col( $wpdb->prepare( 'SHOW COLUMNS FROM %i', $table ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$missing = array_diff( self::COLUMNS, $have );
 			if ( $missing ) {
 				/* translators: %s: missing columns */
@@ -107,7 +107,7 @@ final class PassCaptainReconcile {
 		// Fallback for Pass Captain versions without the reconciliation API.
 		global $wpdb;
 		$orders = $wpdb->prefix . 'wpcap_orders';
-		return $wpdb->get_results( $wpdb->prepare( "SELECT order_id, public_id, status, payment_status, payment_provider, provider_reference, currency, voucher_snapshot FROM {$orders} WHERE (voucher_snapshot IS NOT NULL AND voucher_snapshot <> '') OR provider_reference LIKE %s ORDER BY order_id DESC LIMIT %d", $wpdb->esc_like( 'voucher:' ) . '%', max( 1, $limit ) ) ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return $wpdb->get_results( $wpdb->prepare( "SELECT order_id, public_id, status, payment_status, payment_provider, provider_reference, currency, voucher_snapshot FROM %i WHERE (voucher_snapshot IS NOT NULL AND voucher_snapshot <> '') OR provider_reference LIKE %s ORDER BY order_id DESC LIMIT %d", $orders, $wpdb->esc_like( 'voucher:' ) . '%', max( 1, $limit ) ) ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	/** Newest orders from Pass Captain's reconciliation API, page by page, in the shape of the table rows. */
@@ -225,7 +225,7 @@ final class PassCaptainReconcile {
 		}
 		// Redemptions here that point to Pass Captain without an order there (reserved or committed only).
 		$table = Install::tables()['redemptions'];
-		$keys  = $wpdb->get_col( $wpdb->prepare( "SELECT redemption_key FROM {$table} WHERE target LIKE %s AND state IN ('reserved','committed') AND created_at < %s ORDER BY id DESC LIMIT %d", $wpdb->esc_like( 'passcaptain:' ) . '%', gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS ), max( 1, $limit ) ) ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$keys  = $wpdb->get_col( $wpdb->prepare( "SELECT redemption_key FROM %i WHERE target LIKE %s AND state IN ('reserved','committed') AND created_at < %s ORDER BY id DESC LIMIT %d", $table, $wpdb->esc_like( 'passcaptain:' ) . '%', gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS ), max( 1, $limit ) ) ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$unknown = array_values( array_filter( array_map( 'strval', $keys ), static fn( $key ) => empty( $seen[ $key ] ) ) );
 		$known   = $this->orders_existing( $unknown );
 		foreach ( $unknown as $key ) {

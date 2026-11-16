@@ -479,7 +479,7 @@ final class Privacy {
 		$changed = false;
 		if ( Install::storage_ready() ) {
 			$table   = Install::tables()['usage'];
-			$changed = (bool) $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE customer_key = %s LIMIT 1", $legacy ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$changed = (bool) $wpdb->get_var( $wpdb->prepare( 'SELECT 1 FROM %i WHERE customer_key = %s LIMIT 1', $table, $legacy ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
 		Discounts\Usage::hash_legacy_keys( $email, 5000 );
 		if ( function_exists( 'wc_get_orders' ) ) {

@@ -281,7 +281,7 @@ final class Campaigns {
 		yield array( __( 'Code', 'voucher-captain' ), __( 'Status', 'voucher-captain' ), __( 'Used on', 'voucher-captain' ), __( 'Order number', 'voucher-captain' ), __( 'Order ID', 'voucher-captain' ) );
 		$after = 0;
 		do {
-			$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT p.id, p.code, p.used_at, v.order_id FROM {$table} p LEFT JOIN {$v} v ON v.id = p.voucher_id WHERE p.batch = %s AND p.id > %d ORDER BY p.id LIMIT %d", $batch, $after, $limit ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$rows = (array) $wpdb->get_results( $wpdb->prepare( 'SELECT p.id, p.code, p.used_at, v.order_id FROM %i p LEFT JOIN %i v ON v.id = p.voucher_id WHERE p.batch = %s AND p.id > %d ORDER BY p.id LIMIT %d', $table, $v, $batch, $after, $limit ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$got = count( $rows );
 			if ( ! $got ) {
 				break;

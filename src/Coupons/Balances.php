@@ -207,8 +207,8 @@ final class Balances {
 		}
 		$t      = Install::tables();
 		$in     = self::ORDER_CHARGE_EVENTS_SQL;
-		$orders = (float) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE( SUM( e.amount ), 0 ) FROM {$t['events']} e WHERE e.voucher_id = %d AND e.event = 'reserved' AND e.order_id > 0 AND NOT EXISTS ( SELECT 1 FROM {$t['events']} x WHERE x.voucher_id = e.voucher_id AND x.order_id = e.order_id AND x.id > e.id AND x.event IN ({$in}) )", $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$api    = (float) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE( SUM( amount ), 0 ) FROM {$t['redemptions']} WHERE voucher_id = %d AND state = %s", $voucher->id, API\V1\RedemptionService::STATE_RESERVED ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$orders = (float) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE( SUM( e.amount ), 0 ) FROM %i e WHERE e.voucher_id = %d AND e.event = 'reserved' AND e.order_id > 0 AND NOT EXISTS ( SELECT 1 FROM %i x WHERE x.voucher_id = e.voucher_id AND x.order_id = e.order_id AND x.id > e.id AND x.event IN ({$in}) )", $t['events'], $voucher->id, $t['events'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$api    = (float) $wpdb->get_var( $wpdb->prepare( 'SELECT COALESCE( SUM( amount ), 0 ) FROM %i WHERE voucher_id = %d AND state = %s', $t['redemptions'], $voucher->id, API\V1\RedemptionService::STATE_RESERVED ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		return round( $orders + $api, $voucher->decimals() );
 	}
 

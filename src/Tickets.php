@@ -551,8 +551,9 @@ final class Tickets {
 		// this check-in on MySQL and MariaDB alike): a separate full-row write could undo a parallel undo_checkin().
 		$rows  = $wpdb->query( // phpcs:ignore
 			$wpdb->prepare(
-				"UPDATE {$table} SET status = IF(checkins + %d >= max_checkins, 'redeemed', status), checkins = checkins + %d, last_checkin_at = %s, updated_at = %s
+				"UPDATE %i SET status = IF(checkins + %d >= max_checkins, 'redeemed', status), checkins = checkins + %d, last_checkin_at = %s, updated_at = %s
 				WHERE id = %d AND checkins + %d <= max_checkins AND status IN ('active') AND (expires_at IS NULL OR expires_at >= %s)",
+				$table,
 				$count,
 				$count,
 				$now,
@@ -682,7 +683,7 @@ final class Tickets {
 		global $wpdb;
 		$hash   = md5( $key );
 		$events = Install::tables()['events'];
-		$mark   = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(MAX(id), 0) FROM {$events} WHERE voucher_id = %d", $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$mark   = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COALESCE(MAX(id), 0) FROM %i WHERE voucher_id = %d', $events, $voucher->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( self::scan_insert( $hash, $sig, $mark ) ) {
 			return null;
 		}
@@ -804,7 +805,7 @@ final class Tickets {
 		if ( Install::counters_ready() ) {
 			self::adopt_legacy_scan_key( $hash );
 			$table = Install::tables()['scan'];
-			$wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$table} (key_hash, signature, event_mark, claimed_at, response) VALUES (%s, %s, %d, %d, NULL)", $hash, $sig, $mark, time() ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->query( $wpdb->prepare( 'INSERT IGNORE INTO %i (key_hash, signature, event_mark, claimed_at, response) VALUES (%s, %s, %d, %d, NULL)', $table, $hash, $sig, $mark, time() ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			return 1 === (int) $wpdb->rows_affected;
 		}
 		$wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", self::SCAN_PREFIX . $hash, time() . '|' . $sig . '#' . $mark . '|' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -820,7 +821,7 @@ final class Tickets {
 		if ( Install::counters_ready() ) {
 			self::adopt_legacy_scan_key( $hash );
 			$table = Install::tables()['scan'];
-			$row   = $wpdb->get_row( $wpdb->prepare( "SELECT signature, event_mark, claimed_at, response FROM {$table} WHERE key_hash = %s", $hash ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$row   = $wpdb->get_row( $wpdb->prepare( 'SELECT signature, event_mark, claimed_at, response FROM %i WHERE key_hash = %s', $table, $hash ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			if ( ! $row ) {
 				return null;
 			}
@@ -840,7 +841,7 @@ final class Tickets {
 		global $wpdb;
 		if ( Install::counters_ready() ) {
 			$table = Install::tables()['scan'];
-			$taken = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET claimed_at = %d, event_mark = %d WHERE key_hash = %s AND claimed_at = %d AND response IS NULL", time(), $mark, $hash, $row['time'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$taken = $wpdb->query( $wpdb->prepare( 'UPDATE %i SET claimed_at = %d, event_mark = %d WHERE key_hash = %s AND claimed_at = %d AND response IS NULL', $table, time(), $mark, $hash, $row['time'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			return 1 === (int) $taken;
 		}
 		$taken = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s", time() . '|' . $sig . '#' . $mark . '|', self::SCAN_PREFIX . $hash, (string) ( $row['raw'] ?? '' ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -875,7 +876,7 @@ final class Tickets {
 		global $wpdb;
 		$table = Install::tables()['scan'];
 		// A key without event mark (written before the mark existed) or without answer keeps NULL (-1 / '').
-		return false !== $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$table} (key_hash, signature, event_mark, claimed_at, response) VALUES (%s, %s, NULLIF(%d, -1), %d, NULLIF(%s, ''))", $hash, substr( $row['sig'], 0, 32 ), $row['mark'] ?? -1, $row['time'], (string) $row['response'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return false !== $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO %i (key_hash, signature, event_mark, claimed_at, response) VALUES (%s, %s, NULLIF(%d, -1), %d, NULLIF(%s, ''))", $table, $hash, substr( $row['sig'], 0, 32 ), $row['mark'] ?? -1, $row['time'], (string) $row['response'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	/**
@@ -909,7 +910,7 @@ final class Tickets {
 		do {
 			$deleted = 0;
 			if ( '' !== $table ) {
-				$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE claimed_at < %d LIMIT %d", $cutoff, $limit ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$deleted = $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE claimed_at < %d LIMIT %d', $table, $cutoff, $limit ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			}
 			if ( false !== $deleted && (int) $deleted < $limit ) {
 				$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) < %d LIMIT %d", $wpdb->esc_like( self::SCAN_PREFIX ) . '%', $cutoff, $limit ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -1434,7 +1435,7 @@ final class Tickets {
 			}
 		} else {
 			$table = Install::tables()['vouchers'];
-			$done  = (int) $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = %s, balance = initial_amount, updated_at = %s WHERE id = %d AND status = %s", Voucher::STATUS_ACTIVE, gmdate( 'Y-m-d H:i:s' ), $voucher->id, Voucher::STATUS_REDEEMED ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$done  = (int) $wpdb->query( $wpdb->prepare( 'UPDATE %i SET status = %s, balance = initial_amount, updated_at = %s WHERE id = %d AND status = %s', $table, Voucher::STATUS_ACTIVE, gmdate( 'Y-m-d H:i:s' ), $voucher->id, Voucher::STATUS_REDEEMED ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			if ( 1 === $done ) {
 				$ok    = $this->repo->log( $voucher->id, 'redeem_reversed', $amount, null, $note );
 				$fresh = $this->repo->get( $voucher->id );

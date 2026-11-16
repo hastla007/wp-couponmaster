@@ -26,7 +26,7 @@ final class Claim {
 			return self::take_option( $name );
 		}
 		$table = Install::tables()['claims'];
-		$wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$table} (claim_key, kind, created_at) VALUES (%s, %s, %s)", self::key( $name ), self::kind( $name ), gmdate( 'Y-m-d H:i:s' ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( $wpdb->prepare( 'INSERT IGNORE INTO %i (claim_key, kind, created_at) VALUES (%s, %s, %s)', $table, self::key( $name ), self::kind( $name ), gmdate( 'Y-m-d H:i:s' ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( 1 !== (int) $wpdb->rows_affected ) {
 			return false;
 		}
@@ -41,7 +41,7 @@ final class Claim {
 			return null;
 		}
 		$table = Install::tables()['claims'];
-		$at    = $wpdb->get_var( $wpdb->prepare( "SELECT created_at FROM {$table} WHERE claim_key = %s", self::key( $name ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$at    = $wpdb->get_var( $wpdb->prepare( 'SELECT created_at FROM %i WHERE claim_key = %s', $table, self::key( $name ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		return null === $at ? null : (string) $at;
 	}
 
@@ -55,7 +55,7 @@ final class Claim {
 			return false;
 		}
 		$table = Install::tables()['claims'];
-		$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET created_at = %s WHERE claim_key = %s AND created_at = %s", gmdate( 'Y-m-d H:i:s' ), self::key( $name ), $taken_at ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( $wpdb->prepare( 'UPDATE %i SET created_at = %s WHERE claim_key = %s AND created_at = %s', $table, gmdate( 'Y-m-d H:i:s' ), self::key( $name ), $taken_at ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		return 1 === (int) $wpdb->rows_affected;
 	}
 
@@ -64,7 +64,7 @@ final class Claim {
 		global $wpdb;
 		if ( Install::storage_ready() ) {
 			$table = Install::tables()['claims'];
-			$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE claim_key = %s", self::key( $name ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE claim_key = %s', $table, self::key( $name ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			if ( ! Install::legacy_rows() ) {
 				return;
 			}

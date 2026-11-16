@@ -77,14 +77,14 @@ final class CardToCredit {
 		$error  = null;
 		$ok     = Db::transaction(
 			function () use ( $card, $user_id, $holds_code, $account, $table, $wpdb, &$amount, &$error ): bool {
-				$wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d FOR UPDATE", $card->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$wpdb->get_var( $wpdb->prepare( 'SELECT id FROM %i WHERE id = %d FOR UPDATE', $table, $card->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				$fresh = $this->repo->get( $card->id );
 				if ( ! $fresh || '' !== $this->refusal( $fresh, $user_id, $holds_code ) ) {
 					$error = new \WP_Error( 'vcap_card_refused', $fresh ? $this->refusal( $fresh, $user_id, $holds_code ) : __( 'Voucher code not found.', 'voucher-captain' ) );
 					return false;
 				}
 				$amount  = (float) $fresh->balance;
-				$changed = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET balance = 0, status = 'void', updated_at = %s WHERE id = %d AND status = 'active'", $this->repo->now(), $fresh->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$changed = $wpdb->query( $wpdb->prepare( "UPDATE %i SET balance = 0, status = 'void', updated_at = %s WHERE id = %d AND status = 'active'", $table, $this->repo->now(), $fresh->id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				if ( 1 !== (int) $changed || ! $this->repo->log( $fresh->id, 'moved_to_credit', $amount, 0.0, Note::make( 'moved_to_credit', array( Format::money_text( $amount, $fresh->currency ), Mask::code( (string) $account->code ) ) ) ) ) {
 					return false;
 				}

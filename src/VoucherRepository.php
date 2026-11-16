@@ -994,7 +994,8 @@ final class VoucherRepository {
 		global $wpdb;
 		$changed = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prepare(
-				"UPDATE {$this->events_table()} SET note = '[personal data removed]', actor_email_hash = '' WHERE voucher_id = %d AND note <> '' AND note <> '[personal data removed]' AND note NOT LIKE %s",
+				"UPDATE %i SET note = '[personal data removed]', actor_email_hash = '' WHERE voucher_id = %d AND note <> '' AND note <> '[personal data removed]' AND note NOT LIKE %s",
+				$this->events_table(),
 				$voucher_id,
 				$wpdb->esc_like( Note::PREFIX ) . '%'
 			)
@@ -1003,7 +1004,7 @@ final class VoucherRepository {
 			return false;
 		}
 		// The hash of an address found in a note is personal data of its own (coded notes keep their text).
-		if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$this->events_table()} SET actor_email_hash = '' WHERE voucher_id = %d AND actor_email_hash <> ''", $voucher_id ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( false === $wpdb->query( $wpdb->prepare( "UPDATE %i SET actor_email_hash = '' WHERE voucher_id = %d AND actor_email_hash <> ''", $this->events_table(), $voucher_id ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			return false;
 		}
 		return $this->log( $voucher_id, TaxAccounting::ERASED_EVENT, null, null, Note::make( 'privacy_erased', array( (int) $changed ) ) );
@@ -1092,7 +1093,7 @@ final class VoucherRepository {
 	 */
 	public function events_of( int $voucher_id, string $event, int $limit = 100 ): array {
 		global $wpdb;
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->events_table()} WHERE voucher_id = %d AND event = %s ORDER BY id DESC LIMIT %d", $voucher_id, $event, max( 1, $limit ) ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM %i WHERE voucher_id = %d AND event = %s ORDER BY id DESC LIMIT %d', $this->events_table(), $voucher_id, $event, max( 1, $limit ) ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		return array_reverse( $rows );
 	}
 

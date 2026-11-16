@@ -658,7 +658,7 @@ final class Downloads {
 	public function downloaded_recently( int $voucher_id ): bool {
 		global $wpdb;
 		$table = Install::tables()['events'];
-		return (bool) $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE voucher_id = %d AND event = 'downloaded' AND created_at > %s LIMIT 1", $voucher_id, gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from Install.
+		return (bool) $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM %i WHERE voucher_id = %d AND event = 'downloaded' AND created_at > %s LIMIT 1", $table, $voucher_id, gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	/**

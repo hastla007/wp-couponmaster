@@ -105,7 +105,7 @@ final class Install {
 		$site = function_exists( 'get_current_blog_id' ) ? get_current_blog_id() : 0;
 		if ( ! isset( self::$event_source[ $site ] ) ) {
 			global $wpdb;
-			self::$event_source[ $site ] = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM ' . self::tables()['events'] . ' LIKE %s', 'source' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
+			self::$event_source[ $site ] = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', self::tables()['events'], 'source' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
 		return self::$event_source[ $site ];
 	}
@@ -134,7 +134,7 @@ final class Install {
 		$site = function_exists( 'get_current_blog_id' ) ? get_current_blog_id() : 0;
 		if ( ! isset( self::$event_till[ $site ] ) ) {
 			global $wpdb;
-			self::$event_till[ $site ] = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM ' . self::tables()['events'] . ' LIKE %s', 'till' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
+			self::$event_till[ $site ] = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', self::tables()['events'], 'till' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
 		return self::$event_till[ $site ];
 	}
@@ -397,10 +397,10 @@ final class Install {
 		$ids      = array();
 		$suppress = $wpdb->suppress_errors( true );
 		if ( self::table_exists( $vouchers ) ) {
-			$ids = (array) $wpdb->get_col( "SELECT p.ID FROM {$wpdb->posts} p INNER JOIN {$vouchers} v ON v.coupon_id = p.ID WHERE p.post_type = 'shop_coupon' AND p.post_status = 'publish' AND v.usage_mode = 'balance'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$ids = (array) $wpdb->get_col( $wpdb->prepare( "SELECT p.ID FROM %i p INNER JOIN %i v ON v.coupon_id = p.ID WHERE p.post_type = 'shop_coupon' AND p.post_status = 'publish' AND v.usage_mode = 'balance'", $wpdb->posts, $vouchers ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			// Vouchers with redemption channels (order line "_vcap_line"): suspended unless the shop is one of them.
 			$itemmeta = $wpdb->prefix . 'woocommerce_order_itemmeta';
-			$rows     = (array) $wpdb->get_results( $wpdb->prepare( "SELECT p.ID, im.meta_value FROM {$wpdb->posts} p INNER JOIN {$vouchers} v ON v.coupon_id = p.ID INNER JOIN {$itemmeta} im ON im.order_item_id = v.order_item_id AND im.meta_key = %s WHERE p.post_type = 'shop_coupon' AND p.post_status = 'publish' AND v.order_item_id > 0 AND v.usage_mode <> 'balance' AND im.meta_value LIKE %s", Issuer::LINE_META, '%' . $wpdb->esc_like( 's:8:"channels";a:' ) . '%' ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$rows     = (array) $wpdb->get_results( $wpdb->prepare( "SELECT p.ID, im.meta_value FROM %i p INNER JOIN %i v ON v.coupon_id = p.ID INNER JOIN %i im ON im.order_item_id = v.order_item_id AND im.meta_key = %s WHERE p.post_type = 'shop_coupon' AND p.post_status = 'publish' AND v.order_item_id > 0 AND v.usage_mode <> 'balance' AND im.meta_value LIKE %s", $wpdb->posts, $vouchers, $itemmeta, Issuer::LINE_META, '%' . $wpdb->esc_like( 's:8:"channels";a:' ) . '%' ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			foreach ( $rows as $row ) {
 				$line = maybe_unserialize( (string) $row['meta_value'] );
 				if ( is_array( $line ) && ! empty( $line['channels'] ) && ! in_array( Channels::SHOP, (array) $line['channels'], true ) ) {
@@ -448,7 +448,7 @@ final class Install {
 		global $wpdb;
 		$table    = self::tables()['vouchers'];
 		$suppress = $wpdb->suppress_errors( true );
-		$mode     = $wpdb->get_var( $wpdb->prepare( "SELECT usage_mode FROM {$table} WHERE coupon_id = %d LIMIT 1", $coupon_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$mode     = $wpdb->get_var( $wpdb->prepare( 'SELECT usage_mode FROM %i WHERE coupon_id = %d LIMIT 1', $table, $coupon_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$wpdb->suppress_errors( $suppress );
 		return 'balance' === $mode;
 	}
@@ -1120,7 +1120,7 @@ final class Install {
 		$start  = microtime( true );
 		$cursor = (int) get_option( self::EVENT_TILL_CURSOR, 0 );
 		do {
-			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, event, note FROM {$table} WHERE id > %d AND ( ( event = 'redeemed' AND order_id = 0 ) OR event = 'redeem_reversed' ) ORDER BY id LIMIT 1000", $cursor ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, event, note FROM %i WHERE id > %d AND ( ( event = 'redeemed' AND order_id = 0 ) OR event = 'redeem_reversed' ) ORDER BY id LIMIT 1000", $table, $cursor ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			if ( ! $rows ) {
 				return true;
 			}
@@ -1128,7 +1128,7 @@ final class Install {
 				$parts = 'redeem_reversed' === $row['event'] ? Counter::reversed_context( (string) $row['note'] ) : Counter::parse_note( (string) $row['note'] );
 				if ( '' !== $parts['till'] || '' !== $parts['receipt'] ) {
 					// Only rows without a structured value (new bookings write it themselves).
-					$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET till = %s, receipt = %s WHERE id = %d AND till = '' AND receipt = ''", $parts['till'], $parts['receipt'], (int) $row['id'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$wpdb->query( $wpdb->prepare( "UPDATE %i SET till = %s, receipt = %s WHERE id = %d AND till = '' AND receipt = ''", $table, $parts['till'], $parts['receipt'], (int) $row['id'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				}
 			}
 			$cursor = (int) end( $rows )['id'];
@@ -1165,7 +1165,7 @@ final class Install {
 		$start  = microtime( true );
 		$cursor = (int) get_option( self::EVENT_HASH_CURSOR, 0 );
 		do {
-			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, note, actor_email_hash FROM {$table} WHERE id > %d ORDER BY id LIMIT 2000", $cursor ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT id, note, actor_email_hash FROM %i WHERE id > %d ORDER BY id LIMIT 2000', $table, $cursor ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			if ( ! $rows ) {
 				return true;
 			}
@@ -1242,7 +1242,7 @@ final class Install {
 				)
 			);
 			if ( $engine && 'innodb' !== strtolower( (string) $engine ) ) {
-				$wpdb->query( "ALTER TABLE {$tables[ $key ]} ENGINE=InnoDB" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i ENGINE=InnoDB', $tables[ $key ] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			}
 		}
 		delete_option( self::INNODB_OPTION );
@@ -1430,13 +1430,13 @@ final class Install {
 			if ( ! self::table_exists( $table ) ) {
 				continue;
 			}
-			$have = array_map( 'strtolower', array_unique( (array) $wpdb->get_col( "SHOW INDEX FROM {$table}", 2 ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$have = array_map( 'strtolower', array_unique( (array) $wpdb->get_col( $wpdb->prepare( 'SHOW INDEX FROM %i', $table ), 2 ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			preg_match_all( '/KEY ([a-z_]+) \(/', $schema[ $key ], $wanted );
 			if ( array_diff( $wanted[1], $have ) ) {
 				continue; // A replacement is still missing (verify_schema() reports it): keep the old index meanwhile.
 			}
 			foreach ( array_intersect( $names, $have ) as $name ) {
-				$wpdb->query( "ALTER TABLE {$table} DROP INDEX {$name}" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.SchemaChange -- names from OBSOLETE_INDEXES.
+				$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i DROP INDEX %i', $table, $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.SchemaChange -- names from OBSOLETE_INDEXES.
 			}
 		}
 	}
@@ -1457,12 +1457,12 @@ final class Install {
 				$problems[] = sprintf( 'table %s is missing', $table );
 				continue;
 			}
-			$have = array_map( 'strtolower', (array) $wpdb->get_col( "SHOW COLUMNS FROM {$table}" ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$have = array_map( 'strtolower', (array) $wpdb->get_col( $wpdb->prepare( 'SHOW COLUMNS FROM %i', $table ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			preg_match_all( '/^\s*([a-z_]+) (?:bigint|int|varchar|char|decimal|datetime|text|longtext|tinyint)/m', $sql, $cols );
 			foreach ( array_diff( $cols[1], $have ) as $missing ) {
 				$problems[] = sprintf( 'column %s.%s is missing', $table, $missing );
 			}
-			$indexes = array_map( 'strtolower', array_unique( (array) $wpdb->get_col( "SHOW INDEX FROM {$table}", 2 ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$indexes = array_map( 'strtolower', array_unique( (array) $wpdb->get_col( $wpdb->prepare( 'SHOW INDEX FROM %i', $table ), 2 ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			preg_match_all( '/(UNIQUE )?KEY ([a-z_]+) \(/', $sql, $keys, PREG_SET_ORDER );
 			foreach ( $keys as $key ) {
 				if ( ! in_array( $key[2], $indexes, true ) ) {

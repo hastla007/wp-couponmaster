@@ -45,7 +45,7 @@ final class Reports {
 			$out[ (int) $row['sold'] ? 'sold' : 'free' ] = array( 'count' => (int) $row['cnt'], 'value' => round( (float) $row['val'], 2 ) );
 		}
 		$value_vouchers = Ledger::VALUE_VOUCHERS;
-		$redeemed        = $wpdb->get_var( $wpdb->prepare( "SELECT SUM( CASE WHEN e.event IN ('redeemed','committed','api_committed') THEN e.amount ELSE -e.amount END ) FROM {$t['events']} e INNER JOIN {$t['vouchers']} v ON v.id = e.voucher_id WHERE e.created_at BETWEEN %s AND %s AND e.event IN ('redeemed','committed','api_committed','redeem_reversed','restored','api_refunded') AND e.amount IS NOT NULL AND v.currency = %s AND {$value_vouchers}", $start, $end, $currency ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$redeemed        = $wpdb->get_var( $wpdb->prepare( "SELECT SUM( CASE WHEN e.event IN ('redeemed','committed','api_committed') THEN e.amount ELSE -e.amount END ) FROM %i e INNER JOIN %i v ON v.id = e.voucher_id WHERE e.created_at BETWEEN %s AND %s AND e.event IN ('redeemed','committed','api_committed','redeem_reversed','restored','api_refunded') AND e.amount IS NOT NULL AND v.currency = %s AND {$value_vouchers}", $t['events'], $t['vouchers'], $start, $end, $currency ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$out['redeemed'] = round( (float) $redeemed, 2 );
 		foreach ( ( new Ledger( vcap()->vouchers ) )->liability( $to )['totals'][ $currency ] ?? array() as $bucket ) {
 			$out['open']['count'] += (int) $bucket['count'];
@@ -53,7 +53,7 @@ final class Reports {
 		}
 		$out['open']['value'] = round( $out['open']['value'], 2 );
 		// Expired in the period with value left: the stored balance, or a single-use voucher's value while unused.
-		$expired = $wpdb->get_row( $wpdb->prepare( "SELECT COUNT(*) AS cnt, SUM( CASE WHEN usage_mode = 'balance' THEN balance ELSE initial_amount END ) AS val FROM {$t['vouchers']} WHERE expires_at BETWEEN %s AND %s AND expires_at <= %s AND status IN ('active','expired') AND balance > 0 AND discount_type <> 'percent' AND type NOT IN ('ticket','credit') AND currency = %s", $start, $end, gmdate( 'Y-m-d H:i:s' ), $currency ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$expired = $wpdb->get_row( $wpdb->prepare( "SELECT COUNT(*) AS cnt, SUM( CASE WHEN usage_mode = 'balance' THEN balance ELSE initial_amount END ) AS val FROM %i WHERE expires_at BETWEEN %s AND %s AND expires_at <= %s AND status IN ('active','expired') AND balance > 0 AND discount_type <> 'percent' AND type NOT IN ('ticket','credit') AND currency = %s", $t['vouchers'], $start, $end, gmdate( 'Y-m-d H:i:s' ), $currency ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$out['expired'] = array( 'count' => (int) ( $expired['cnt'] ?? 0 ), 'value' => round( (float) ( $expired['val'] ?? 0 ), 2 ) );
 		$top = $wpdb->get_results( $wpdb->prepare( "SELECT product_id, COUNT(*) AS cnt, SUM( {$value} ) AS val FROM {$t['vouchers']} WHERE created_at BETWEEN %s AND %s AND order_id > 0 AND product_id > 0 AND type <> 'credit' AND currency = %s GROUP BY product_id ORDER BY cnt DESC, val DESC LIMIT 5", $start, $end, $currency ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		foreach ( $top as $row ) {
