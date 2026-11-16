@@ -34,6 +34,12 @@ final class Services {
 	/** Ledger event of the audit entry. */
 	public const AUDIT_EVENT = 'workflow_command';
 
+	/**
+	 * D9 (owner decision 16.11.2026): history entry of every successful contact() call – plugin, communication and
+	 * role (time and user are columns of the row). No address, name or code; no workflow event, no money.
+	 */
+	public const CONTACT_EVENT = 'workflow_contact_read';
+
 	/** Seconds after which a key without an outcome counts as abandoned (the call stopped before it finished). */
 	private const STALE = 120;
 
@@ -450,9 +456,22 @@ final class Services {
 	}
 
 	/**
+	 * D9: records that the workflow plugin read the contact data of a voucher (history entry CONTACT_EVENT with the
+	 * consumer's name, the communication and the role; the row keeps time and user). The entry maps to no workflow
+	 * event (Provider::map()) – reading contact data never triggers the workflow again – and carries no amount, so it
+	 * is in neither the liabilities nor the journal. The voucher's privacy export lists it.
+	 */
+	private function log_contact_read( Voucher $voucher, string $communication, string $role ): void {
+		$consumer = Provider::consumer();
+		$plugin   = mb_substr( sanitize_text_field( (string) ( $consumer['name'] ?? '' ) ), 0, 100 );
+		Source::with( Source::WORKFLOW, fn() => $this->vouchers->log( (int) $voucher->id, self::CONTACT_EVENT, null, null, Note::make( self::CONTACT_EVENT, array( '' !== $plugin ? $plugin : 'workflow', $communication, $role ) ) ) );
+	}
+
+	/**
 	 * Address and name for a communication the shop handed over to the workflow plugin (Handover::active()), so
 	 * the workflow can send it: role, email, name, the last characters of the code ("…7KQ2", no secret), balance,
-	 * currency and expiry. Refused for every other communication. Reads only, needs no idempotency key.
+	 * currency and expiry. Refused for every other communication. Needs no idempotency key; every successful call is
+	 * recorded in the voucher history (D9, CONTACT_EVENT).
 	 *
 	 * @return array|\WP_Error
 	 */
@@ -467,6 +486,7 @@ final class Services {
 		}
 		$role     = Handover::role( $voucher, $communication );
 		$decimals = RedemptionService::decimals( '' !== $voucher->currency ? $voucher->currency : 'EUR' );
+		$this->log_contact_read( $voucher, $communication, $role );
 		return array(
 			'contract_version' => Provider::CONTRACT_VERSION,
 			'voucher_id'       => (int) $voucher->id,

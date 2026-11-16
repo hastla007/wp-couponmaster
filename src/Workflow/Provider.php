@@ -40,6 +40,15 @@ final class Provider {
 	/** Random id of this site, part of every event id (stable across requests, distinct between shops). */
 	public const INSTANCE_OPTION = 'vcap_workflow_instance';
 
+	/**
+	 * D8 (owner decision 16.11.2026): the address the instance belongs to (autoloaded) – signature of the normalised
+	 * home_url, the previous instances (newest last, at most 5) and whether the admin notice is still due.
+	 */
+	public const INSTANCE_SITE_OPTION = 'vcap_workflow_instance_site';
+
+	/** Previous instances kept in INSTANCE_SITE_OPTION. */
+	private const PREVIOUS_MAX = 5;
+
 	/** Results of compatibility(). */
 	public const MISSING      = 'missing';
 	public const INCOMPATIBLE = 'incompatible';
@@ -107,6 +116,7 @@ final class Provider {
 		add_filter( 'vcap_internal_redemption_key_prefixes', array( self::class, 'internal_prefix' ) );
 		add_filter( 'vcap_internal_redemption_target_prefixes', array( self::class, 'internal_prefix' ) );
 		add_filter( 'vcap_active_integrations', array( self::class, 'integration' ) );
+		add_action( 'admin_notices', array( self::class, 'instance_notice' ) );
 	}
 
 	/**
@@ -380,12 +390,14 @@ final class Provider {
 
 	/** Stable, unique event id (UUID format) of a ledger row and event type on this site and blog. */
 	public static function event_id( int $ledger_id, string $type, int $blog_id = 0 ): string {
-		$hash    = sha1( 'vcap-workflow|' . self::instance() . '|' . ( $blog_id > 0 ? $blog_id : (int) get_current_blog_id() ) . '|' . $ledger_id . '|' . $type );
-		$variant = dechex( ( hexdec( substr( $hash, 16, 2 ) ) & 0x3f ) | 0x80 );
-		return substr( $hash, 0, 8 ) . '-' . substr( $hash, 8, 4 ) . '-5' . substr( $hash, 13, 3 ) . '-' . $variant . substr( $hash, 18, 2 ) . '-' . substr( $hash, 20, 12 );
+		return self::uuid( sha1( 'vcap-workflow|' . self::instance() . '|' . ( $blog_id > 0 ? $blog_id : (int) get_current_blog_id() ) . '|' . $ledger_id . '|' . $type ) );
 	}
 
-	/** Random id of this site (created once). */
+	/**
+	 * Random id of this site (created once). D8: it is bound to the site address – when the database runs under
+	 * another address (a copy or staging site), a new instance id is derived and the old one noted, so the copy's
+	 * events never carry the event ids of the original shop. http↔https and a trailing slash change nothing.
+	 */
 	public static function instance(): string {
 		$id = (string) get_option( self::INSTANCE_OPTION, '' );
 		if ( '' === $id ) {
@@ -394,7 +406,103 @@ final class Provider {
 				$id = (string) get_option( self::INSTANCE_OPTION, $id ); // Another request created it first.
 			}
 		}
-		return $id;
+		$signature = self::site_signature();
+		$site      = get_option( self::INSTANCE_SITE_OPTION, null );
+		if ( ! is_array( $site ) || '' === (string) ( $site['signature'] ?? '' ) ) {
+			// First run (or an update from a version without the binding): the current address is the instance's own.
+			update_option( self::INSTANCE_SITE_OPTION, array( 'signature' => $signature ) + ( is_array( $site ) ? $site : array() ), true );
+			return $id;
+		}
+		if ( hash_equals( (string) $site['signature'], $signature ) ) {
+			return $id;
+		}
+		// Derived, not random: requests that notice the new address at the same moment agree on the same id.
+		$new        = self::uuid( sha1( 'vcap-workflow-instance|' . $id . '|' . $signature ) );
+		$previous   = array_values( (array) ( $site['previous'] ?? array() ) );
+		$previous[] = array(
+			'instance'  => $id,
+			'signature' => (string) $site['signature'],
+			'until'     => gmdate( 'Y-m-d H:i:s' ),
+		);
+		update_option( self::INSTANCE_OPTION, $new, true );
+		update_option(
+			self::INSTANCE_SITE_OPTION,
+			array(
+				'signature'  => $signature,
+				'changed_at' => gmdate( 'Y-m-d H:i:s' ),
+				'previous'   => array_slice( $previous, -self::PREVIOUS_MAX ),
+				'notice'     => true,
+			),
+			true
+		);
+		/**
+		 * D8: the workflow instance id was renewed because the site address changed (copy/staging). Event ids of this
+		 * site differ from the original's from now on.
+		 *
+		 * @since 1.2.0
+		 * @param string $new_instance New instance id.
+		 * @param string $old_instance Previous instance id.
+		 */
+		do_action( 'vcap_workflow_instance_changed', $new, $id );
+		return $new;
+	}
+
+	/**
+	 * Signature of the site address the instance is bound to: home_url() without scheme and trailing slash, host in
+	 * lower case – so http↔https or "/" at the end change nothing, another host, port or path does.
+	 */
+	public static function site_signature( ?string $url = null ): string {
+		$url = strtolower( trim( null === $url ? (string) home_url() : $url ) );
+		$url = (string) preg_replace( '#^[a-z][a-z0-9+.\-]*://#', '', $url );
+		$url = rtrim( $url, '/' );
+		return substr( hash( 'sha256', 'vcap-workflow-site|' . $url ), 0, 32 );
+	}
+
+	/**
+	 * D8: when the instance was renewed because the site address changed: time (UTC) and the previous instance ids.
+	 *
+	 * @return array{changed_at:string, previous:string[], notice:bool}|null
+	 */
+	public static function instance_change(): ?array {
+		$site = get_option( self::INSTANCE_SITE_OPTION, null );
+		if ( ! is_array( $site ) || '' === (string) ( $site['changed_at'] ?? '' ) ) {
+			return null;
+		}
+		return array(
+			'changed_at' => (string) $site['changed_at'],
+			'previous'   => array_values( array_map( static fn( $p ) => (string) ( is_array( $p ) ? ( $p['instance'] ?? '' ) : $p ), (array) ( $site['previous'] ?? array() ) ) ),
+			'notice'     => ! empty( $site['notice'] ),
+		);
+	}
+
+	/** The text of the D8 notice (Site Health, admin notice). */
+	public static function instance_change_text(): string {
+		return __( 'New workflow instance because the address of the website changed (copy/staging).', 'voucher-captain' );
+	}
+
+	/**
+	 * `admin_notices`: tells a shop manager once that the instance was renewed (D8); the notice is cleared when shown.
+	 */
+	public static function instance_notice(): void {
+		if ( '' !== (string) get_option( self::INSTANCE_OPTION, '' ) ) {
+			self::instance(); // Notices a new address also before the next event.
+		}
+		$change = self::instance_change();
+		if ( ! $change || ! $change['notice'] || ! current_user_can( 'manage_woocommerce' ) ) { // phpcs:ignore WordPress.WP.Capabilities.Unknown -- WooCommerce capability.
+			return;
+		}
+		$site           = (array) get_option( self::INSTANCE_SITE_OPTION, array() );
+		$site['notice'] = false;
+		update_option( self::INSTANCE_SITE_OPTION, $site, true );
+		echo '<div class="notice notice-info is-dismissible"><p><strong>' . esc_html__( 'Voucher Captain', 'voucher-captain' ) . ':</strong> '
+			. esc_html( self::instance_change_text() ) . ' '
+			. esc_html__( 'A connected workflow plugin receives new event ids from now on; events of the original website are not repeated here.', 'voucher-captain' ) . '</p></div>';
+	}
+
+	/** A SHA-1 hex string in UUID form (version 5 bits, RFC 4122 variant). */
+	private static function uuid( string $hash ): string {
+		$variant = dechex( ( hexdec( substr( $hash, 16, 2 ) ) & 0x3f ) | 0x80 );
+		return substr( $hash, 0, 8 ) . '-' . substr( $hash, 8, 4 ) . '-5' . substr( $hash, 13, 3 ) . '-' . $variant . substr( $hash, 18, 2 ) . '-' . substr( $hash, 20, 12 );
 	}
 
 	/** UTC "Y-m-d H:i:s" as ISO 8601 ("2026-11-16T09:30:00Z"), null for none. */
@@ -638,6 +746,11 @@ final class Provider {
 		if ( $fallback ) {
 			/* translators: %s: list of communications */
 			$lines[] = sprintf( __( 'Switched on, but sent by Voucher Captain because the workflow plugin does not take them over now: %s', 'voucher-captain' ), $names( $fallback ) );
+		}
+		$change = self::instance_change();
+		if ( $change ) {
+			/* translators: 1: notice that the instance is new, 2: date (UTC), 3: previous instance id */
+			$lines[] = sprintf( __( '%1$s Since %2$s UTC, previous instance: %3$s', 'voucher-captain' ), self::instance_change_text(), $change['changed_at'], (string) end( $change['previous'] ) );
 		}
 		$lines[] = '' !== $s['last_event_id']
 			/* translators: 1: event id, 2: event type, 3: date (UTC) */

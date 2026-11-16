@@ -18,6 +18,7 @@ final class VoucherRequestsAdmin {
 	public function register(): void {
 		add_action( 'admin_post_vcap_request_confirm', array( $this, 'confirm' ) );
 		add_action( 'admin_post_vcap_request_reject', array( $this, 'reject' ) );
+		add_action( 'admin_post_vcap_request_handover', array( $this, 'handover' ) );
 	}
 
 	/** States as shown in the list. */
@@ -26,6 +27,7 @@ final class VoucherRequestsAdmin {
 			VoucherRequests::STATE_OPEN    => __( 'Open', 'voucher-captain' ),
 			VoucherRequests::STATE_PARTIAL => __( 'Partly issued', 'voucher-captain' ),
 			VoucherRequests::STATE_ISSUED  => __( 'Issued', 'voucher-captain' ),
+			VoucherRequests::STATE_HANDED_OVER => __( 'Handed over to a company order', 'voucher-captain' ),
 		);
 		return $labels[ $state ] ?? $state;
 	}
@@ -108,8 +110,26 @@ final class VoucherRequestsAdmin {
 			}
 			echo '</p>';
 		}
-		if ( VoucherRequests::STATE_ISSUED === $r['state'] ) {
+		$handover = VoucherRequests::handover( (int) $r['id'] );
+		if ( $handover ) {
+			/* translators: %d: id of the company order */
+			$text = sprintf( __( 'Handed over to company order #%d', 'voucher-captain' ), $handover['order_id'] );
+			echo '<div class="notice notice-info inline"><p>' . ( '' !== $handover['url'] ? '<a href="' . esc_url( $handover['url'] ) . '">' . esc_html( $text ) . '</a>' : esc_html( $text ) ) . ' (' . esc_html( get_date_from_gmt( $handover['at'], get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ) . ')</p></div>';
+		}
+		if ( in_array( $r['state'], array( VoucherRequests::STATE_ISSUED, VoucherRequests::STATE_HANDED_OVER ), true ) ) {
 			return;
+		}
+		if ( $this->requests->handover_available( $r ) ) {
+			?>
+			<h2><?php esc_html_e( 'Company order', 'voucher-captain' ); ?></h2>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="vcap-card">
+				<input type="hidden" name="action" value="vcap_request_handover" />
+				<input type="hidden" name="request" value="<?php echo esc_attr( (string) (int) $r['id'] ); ?>" />
+				<?php wp_nonce_field( 'vcap_request_handover_' . (int) $r['id'] ); ?>
+				<p class="description"><?php esc_html_e( 'An extension can take this request over as a company order (preview, invoice, issuing in one step). The recipients then move to the company order and no voucher is issued here.', 'voucher-captain' ); ?></p>
+				<?php submit_button( __( 'Take over as company order', 'voucher-captain' ), 'secondary', 'submit', false ); ?>
+			</form>
+			<?php
 		}
 		?>
 		<h2><?php esc_html_e( 'Issue vouchers', 'voucher-captain' ); ?></h2>
@@ -175,6 +195,27 @@ final class VoucherRequestsAdmin {
 			Flash::add( 'warning', __( 'Not all vouchers could be issued. Correct the settings and confirm again: vouchers issued already are not issued twice.', 'voucher-captain' ) );
 		}
 		wp_safe_redirect( add_query_arg( array( 'page' => self::SLUG, 'request' => $id ), admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	/**
+	 * admin-post "vcap_request_handover" (D5): nonce per request, right vcap_manage_vouchers (checked by
+	 * VoucherRequests::hand_over()). Success → to the company order of the add-on; an error → back to the request.
+	 */
+	public function handover(): void {
+		$id = isset( $_POST['request'] ) ? absint( $_POST['request'] ) : 0;
+		check_admin_referer( 'vcap_request_handover_' . $id );
+		$result = $this->requests->hand_over( $id );
+		$back   = add_query_arg( array( 'page' => self::SLUG, 'request' => $id ), admin_url( 'admin.php' ) );
+		if ( is_wp_error( $result ) ) {
+			/* translators: %s: reason */
+			Flash::add( 'error', sprintf( __( 'The request was not taken over as a company order: %s', 'voucher-captain' ), $result->get_error_message() ) );
+			wp_safe_redirect( $back );
+			exit;
+		}
+		/* translators: %d: id of the company order */
+		Flash::add( 'success', sprintf( __( 'Handed over to company order #%d', 'voucher-captain' ), (int) $result['order_id'] ) );
+		wp_safe_redirect( '' !== $result['url'] ? $result['url'] : $back, 302, 'Voucher Captain' );
 		exit;
 	}
 

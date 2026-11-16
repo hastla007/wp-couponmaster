@@ -1082,6 +1082,17 @@ final class VoucherRepository {
 		return $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->events_table()} WHERE voucher_id = %d ORDER BY id DESC LIMIT %d OFFSET %d", $voucher_id, $per_page, $offset ), ARRAY_A ) ?: array(); // phpcs:ignore
 	}
 
+	/**
+	 * D9: the newest history entries of one kind of a voucher (at most $limit), oldest first.
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function events_of( int $voucher_id, string $event, int $limit = 100 ): array {
+		global $wpdb;
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->events_table()} WHERE voucher_id = %d AND event = %s ORDER BY id DESC LIMIT %d", $voucher_id, $event, max( 1, $limit ) ), ARRAY_A ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return array_reverse( $rows );
+	}
+
 	/** B15: whether the voucher's history has an entry of this kind (without loading the history). */
 	public function has_event( int $voucher_id, string $event ): bool {
 		global $wpdb;
@@ -1166,6 +1177,7 @@ final class VoucherRepository {
 			Emails::USED_NOTICE_EVENT => __( 'Buyer told that the gift was used', 'voucher-captain' ),
 			Workflow\Services::AUDIT_EVENT => __( 'Workflow action', 'voucher-captain' ),
 			Workflow\Handover::EVENT       => __( 'Handed over to the workflow', 'voucher-captain' ),
+			Workflow\Services::CONTACT_EVENT => __( 'Contact data read by the workflow plugin', 'voucher-captain' ),
 		);
 		/** Labels of connector events in the voucher history. */
 		return (array) apply_filters( 'vcap_event_labels', $labels );

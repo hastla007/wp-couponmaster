@@ -101,7 +101,7 @@ vcap_cs_assert( ! str_contains( (string) wp_json_encode( $events ), $spa->code )
 $source->on_redeemed( array( 'channel' => 'counter', 'voucher_id' => $spa->id, 'event_id' => $event_id ) );
 vcap_cs_assert( 1 === count( $events ), 'a repeated event for the same redemption is not sent again' );
 $recipient = $source->recipient( $reference );
-vcap_cs_assert( is_array( $recipient ) && 'cs-rita@example.com' === $recipient['email'] && 'recipient' === $recipient['role'], 'a manager resolves the recipient of an eligible reference', $recipient );
+vcap_cs_assert( is_array( $recipient ) && 'cs-rita@example.com' === $recipient['email'] && 'recipient' === $recipient['role'] && get_locale() === $recipient['locale'], 'a manager resolves the recipient of an eligible reference (with the invitation locale: no order, no account → site language)', $recipient );
 $reversed = vcap()->tickets->reverse_redemption( vcap()->vouchers->get( $spa->id ), $event_id, 'Captain Suite test' );
 vcap_cs_assert( ! is_wp_error( $reversed ) && 2 === count( $events ) && 'revoked' === $events[1]['event'] && 'redeem_reversed' === $events[1]['reason'] && $reference === $events[1]['reference'], 'the cancelled counter redemption is revoked', $events );
 vcap_cs_assert( is_wp_error( $source->recipient( $reference ) ), 'a revoked reference gives no address' );
@@ -121,6 +121,16 @@ $com  = is_wp_error( $res ) ? $res : vcap()->redemptions->commit( $key );
 vcap_cs_assert( ! is_wp_error( $com ) && 3 === count( $events ) && ReviewSource::reference( 'external:' . $key ) === $events[2]['reference'] && 'external' === $events[2]['channel'], 'an external redemption for a registered target is eligible', is_wp_error( $com ) ? $com->get_error_code() : $events );
 $ref = vcap()->redemptions->refund( $key, 10.0, 'spa:cs-refund:' . strtolower( wp_generate_password( 8, false, false ) ) );
 vcap_cs_assert( ! is_wp_error( $ref ) && 4 === count( $events ) && 'refunded' === $events[3]['reason'], 'a refund of the external redemption revokes it', $events );
+// Decision D4 (16.11.2026): one service = one request – after the revoked first redemption the next one counts,
+// a further redemption of the same gift card does not.
+$key2 = 'spa:cs:' . strtolower( wp_generate_password( 10, false, false ) );
+$res2 = vcap()->redemptions->reserve( $card->code, array( 'key' => $key2, 'target' => 'spa:room-1', 'amount' => 20.0, 'user_id' => 1 ) );
+$com2 = is_wp_error( $res2 ) ? $res2 : vcap()->redemptions->commit( $key2 );
+vcap_cs_assert( ! is_wp_error( $com2 ) && 5 === count( $events ) && ReviewSource::reference( 'external:' . $key2 ) === $events[4]['reference'] && 'eligible' === $events[4]['event'], 'after the first redemption was revoked, the next redemption of the gift card is eligible again', $events );
+$key3 = 'spa:cs:' . strtolower( wp_generate_password( 10, false, false ) );
+$res3 = vcap()->redemptions->reserve( $card->code, array( 'key' => $key3, 'target' => 'spa:room-2', 'amount' => 20.0, 'user_id' => 1 ) );
+$com3 = is_wp_error( $res3 ) ? $res3 : vcap()->redemptions->commit( $key3 );
+vcap_cs_assert( ! is_wp_error( $com3 ) && 5 === count( $events ) && null === $source->get( ReviewSource::reference( 'external:' . $key3 ) ), 'a further redemption of the same gift card creates no event (first redemption only)', $events );
 remove_action( ReviewSource::EVENT_ELIGIBLE, $listen );
 remove_action( ReviewSource::EVENT_REVOKED, $listen );
 
@@ -166,5 +176,59 @@ vcap_cs_assert( array() === $requests->export( 'cs-ann@example.com' )['data'], '
 $erased = $requests->erase( 'cs-hr@example.com' );
 vcap_cs_assert( $erased['items_removed'] && '' === VoucherRequests::get( $sub['request_id'] )['contact']['email'] && array() === $requests->export( 'cs-hr@example.com' )['data'], 'the privacy eraser removes the contact from the request' );
 
+
+// Decision D5 (16.11.2026): hand-over to a company order of an add-on (played here by two filters).
+$calls     = 0;
+$available = static fn( $yes, $request_id ) => true;
+$takeover  = static function ( $result, $handover ) use ( &$calls ) {
+	++$calls;
+	return array(
+		'url'      => admin_url( 'admin.php?page=vcap-pro-bulk&order=4242' ),
+		'order_id' => 4242,
+	);
+};
+$ho_entry = 'formcaptain:entry:cs-ho-' . strtolower( wp_generate_password( 8, false, false ) );
+wp_set_current_user( 0 );
+$ho = $requests->submit( array( 'reference' => $ho_entry, 'amount' => '20', 'contact' => array( 'company' => 'ACME GmbH', 'email' => 'cs-ho@example.com' ), 'recipients' => array( array( 'name' => 'Ann', 'email' => 'cs-ho-ann@example.com' ), array( 'name' => 'Ben', 'email' => 'cs-ho-ben@example.com' ) ) ) );
+wp_set_current_user( 1 );
+$ho_id = (int) $ho['request_id'];
+vcap_cs_assert( ! $requests->handover_available( VoucherRequests::get( $ho_id ) ) && is_wp_error( $requests->hand_over( $ho_id ) ), 'without an add-on no hand-over is offered or possible' );
+add_filter( 'vcap_voucher_request_handover_available', $available, 10, 2 );
+add_filter( 'vcap_voucher_request_handover', $takeover, 10, 2 );
+vcap_cs_assert( $requests->handover_available( VoucherRequests::get( $ho_id ) ), 'with an add-on the manager is offered the hand-over of an open request with two recipients' );
+$ho_done = $requests->hand_over( $ho_id );
+vcap_cs_assert( is_array( $ho_done ) && 4242 === $ho_done['order_id'] && 'handed_over' === VoucherRequests::get( $ho_id )['state'] && array() === VoucherRequests::get( $ho_id )['recipients'] && 1 === $calls, 'the hand-over stores the company order and removes the recipients', $ho_done );
+$ho_again = $requests->hand_over( $ho_id );
+vcap_cs_assert( is_array( $ho_again ) && $ho_again['replayed'] && 4242 === $ho_again['order_id'] && 1 === $calls, 'a second hand-over answers the same company order' );
+$ho_issue = $requests->confirm( $ho_id, array( 'sale' => 'free', 'send' => false ) );
+vcap_cs_assert( is_wp_error( $ho_issue ) && 'vcap_handed_over' === $ho_issue->get_error_code(), 'a handed-over request cannot be issued' );
+vcap_cs_assert( array() === $requests->export( 'cs-ho-ann@example.com' )['data'] && 'handed_over' === $requests->export( 'cs-ho@example.com' )['data'][0]['data'][2]['value'], 'privacy export: the recipients are gone from the request, the contact sees the state handed_over' );
+remove_filter( 'vcap_voucher_request_handover_available', $available, 10 );
+remove_filter( 'vcap_voucher_request_handover', $takeover, 10 );
+
+// Decision D10 (16.11.2026): retention of requests in the daily maintenance.
+global $wpdb;
+$make = static function ( string $suffix ) use ( $requests ): int {
+	$r = $requests->submit( array( 'reference' => 'formcaptain:entry:cs-ret-' . $suffix . '-' . strtolower( wp_generate_password( 6, false, false ) ), 'contact' => array( 'email' => 'cs-ret@example.com' ), 'recipients' => array( array( 'name' => 'Ann', 'email' => 'cs-ret-ann@example.com' ) ) ) );
+	return (int) $r['request_id'];
+};
+$old_open   = $make( 'old-open' );
+$new_open   = $make( 'new-open' );
+$old_issued = $make( 'old-issued' );
+$mid_issued = $make( 'mid-issued' );
+$wpdb->update( $wpdb->posts, array( 'post_date_gmt' => gmdate( 'Y-m-d H:i:s', strtotime( '-7 months' ) ) ), array( 'ID' => $old_open ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+foreach ( array( $old_issued => '-25 months', $mid_issued => '-12 months' ) as $rid => $age ) {
+	$wpdb->update( $wpdb->posts, array( 'post_date_gmt' => gmdate( 'Y-m-d H:i:s', strtotime( '-30 months' ) ) ), array( 'ID' => $rid ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	update_post_meta( $rid, VoucherRequests::STATE_META, VoucherRequests::STATE_ISSUED );
+	update_post_meta( $rid, VoucherRequests::UPDATED_META, gmdate( 'Y-m-d H:i:s', strtotime( $age ) ) );
+}
+clean_post_cache( $old_open );
+vcap_cs_assert( in_array( $old_open, VoucherRequests::expired_ids( array( 'open', 'partial' ), gmdate( 'Y-m-d H:i:s', strtotime( '-6 months' ) ), 50 ), true ), 'an open request older than 6 months is found by the retention query' );
+vcap_cs_assert( $requests->purge_expired( 20.0 ), 'the retention purge finishes within its budget' );
+vcap_cs_assert( null === VoucherRequests::get( $old_open ) && null === VoucherRequests::get( $old_issued ) && null !== VoucherRequests::get( $new_open ) && null !== VoucherRequests::get( $mid_issued ) && null !== VoucherRequests::get( $ho_id ), 'open requests older than 6 months and issued ones older than 24 months (since issuing) are deleted, younger ones kept' );
+vcap_cs_assert( vcap()->delivery->run_maintenance_step( 'voucher_requests' ), 'the maintenance step voucher_requests runs' );
+foreach ( array( $new_open, $mid_issued, $ho_id ) as $rid ) {
+	wp_delete_post( $rid, true );
+}
 
 echo "Captain Suite integration: all checks passed.\n";

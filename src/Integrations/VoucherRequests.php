@@ -21,6 +21,12 @@ defined( 'ABSPATH' ) || exit;
  * Issuer::issue_standalone() (one idempotent reference per voucher), or rejects it (the request is deleted).
  * The form plugin's entries are never read: only what submit() receives is kept.
  *
+ * Hand-over (owner decision 16.11.2026, API.md → "Hand-over to a company order (add-on)"): an open request with at
+ * least two recipients can be handed over to an add-on that builds a company order from it (filters
+ * `vcap_voucher_request_handover_available` and `vcap_voucher_request_handover`). Without such an add-on nothing
+ * changes. Retention (D10): the daily maintenance deletes open and partly issued requests after 6 months and issued or
+ * handed-over ones after 24 months (filter `vcap_voucher_requests_retention_months`).
+ *
  * @since 1.2.0
  */
 final class VoucherRequests {
@@ -37,6 +43,23 @@ final class VoucherRequests {
 	public const STATE_OPEN     = 'open';
 	public const STATE_PARTIAL  = 'partial';
 	public const STATE_ISSUED   = 'issued';
+	/** Handed over to a company order of an add-on (D5): the order holds the recipients now. */
+	public const STATE_HANDED_OVER = 'handed_over';
+	/** Hand-over record: order_id, url, at (UTC), user_id. */
+	public const HANDOVER_META = '_vcap_request_handover';
+	/** Contract of the hand-over payload (API.md → "Hand-over to a company order (add-on)"). */
+	public const HANDOVER_CONTRACT = '1.0.0';
+	/** Fewest recipients a request needs to be offered as a company order. */
+	public const HANDOVER_MIN_RECIPIENTS = 2;
+	/** Last change by a manager (UTC; confirmation, hand-over) – the start of the retention period of closed requests. */
+	public const UPDATED_META = '_vcap_request_updated';
+	/** Default of `vcap_voucher_requests_retention_months` (D10): open/partial and issued/handed-over requests. */
+	public const RETENTION_MONTHS = array(
+		'open'   => 6,
+		'closed' => 24,
+	);
+	/** Requests one retention batch deletes. */
+	public const RETENTION_BATCH = 50;
 	/** Lookup rows (one per lower-case address of contact and recipients) for the privacy exporter and eraser. */
 	public const EMAIL_META     = '_vcap_request_email';
 	/** Default of `vcap_voucher_requests_max_open`. */
@@ -50,16 +73,20 @@ final class VoucherRequests {
 	private $find;
 	/** @var callable(int): int */
 	private $count_open;
+	/** @var callable(): bool */
+	private $can_manage;
 
 	/**
 	 * @param callable|null $issue      Issues one voucher (default: vcap()->issuer->issue_standalone()).
 	 * @param callable|null $find       Request ids naming an address ($email, $limit, $offset; default: EMAIL_META).
 	 * @param callable|null $count_open Number of open requests, counted up to $cap (default: a post query).
+	 * @param callable|null $can_manage Whether the current user may hand requests over (default: vcap_manage_vouchers).
 	 */
-	public function __construct( ?callable $issue = null, ?callable $find = null, ?callable $count_open = null ) {
+	public function __construct( ?callable $issue = null, ?callable $find = null, ?callable $count_open = null, ?callable $can_manage = null ) {
 		$this->issue      = $issue ?? static fn( array $args ) => vcap()->issuer->issue_standalone( $args );
 		$this->find       = $find ?? array( self::class, 'ids_for_email' );
 		$this->count_open = $count_open ?? array( self::class, 'open_count' );
+		$this->can_manage = $can_manage ?? static fn(): bool => current_user_can( 'vcap_manage_vouchers' ); // phpcs:ignore WordPress.WP.Capabilities.Unknown -- Registered by Install.
 	}
 
 	public function register(): void {
@@ -466,6 +493,9 @@ final class VoucherRequests {
 		if ( ! $request ) {
 			return new \WP_Error( 'vcap_not_found', __( 'This voucher request does not exist.', 'voucher-captain' ), array( 'status' => 404 ) );
 		}
+		if ( self::STATE_HANDED_OVER === $request['state'] ) {
+			return new \WP_Error( 'vcap_handed_over', __( 'This voucher request was handed over to a company order. Its vouchers are issued there.', 'voucher-captain' ), array( 'status' => 409 ) );
+		}
 		if ( self::STATE_ISSUED === $request['state'] ) {
 			return array(
 				'state'    => self::STATE_ISSUED,
@@ -477,15 +507,10 @@ final class VoucherRequests {
 		update_post_meta( $id, self::STATE_META, $result['state'] );
 		update_post_meta( $id, self::VOUCHERS_META, $result['vouchers'] );
 		update_post_meta( $id, self::ERRORS_META, $result['errors'] );
+		update_post_meta( $id, self::UPDATED_META, gmdate( 'Y-m-d H:i:s' ) );
 		if ( self::STATE_ISSUED === $result['state'] ) {
 			// The recipients' data now lives in the vouchers (and their retention rules): keep only the count here.
-			$request = (array) get_post_meta( $id, self::META, true );
-			$contact = strtolower( (string) ( $request['contact']['email'] ?? '' ) );
-			foreach ( array_diff( self::emails( $request ), array( $contact ) ) as $address ) {
-				delete_post_meta( $id, self::EMAIL_META, $address );
-			}
-			$request['recipients'] = array();
-			update_post_meta( $id, self::META, $request );
+			self::drop_recipients( $id );
 		}
 		/**
 		 * A manager confirmed a voucher request (vouchers were issued through the voucher service).
@@ -498,6 +523,293 @@ final class VoucherRequests {
 		 */
 		do_action( 'vcap_voucher_request_confirmed', $id, $result['state'], $result['vouchers'], get_current_user_id() );
 		return $result;
+	}
+
+	/**
+	 * Removes the recipients of a request (name, address, message and their lookup rows) and keeps only their
+	 * number: after issuing or a hand-over their data lives in the vouchers or the company order.
+	 */
+	private static function drop_recipients( int $id ): void {
+		$request = (array) get_post_meta( $id, self::META, true );
+		$contact = strtolower( (string) ( $request['contact']['email'] ?? '' ) );
+		foreach ( array_diff( self::emails( $request ), array( $contact ) ) as $address ) {
+			delete_post_meta( $id, self::EMAIL_META, $address );
+		}
+		$request['recipients'] = array();
+		update_post_meta( $id, self::META, $request );
+	}
+
+	// -----------------------------------------------------------------------------------------------------------
+	// D5: hand-over to a company order of an add-on (contract 1.0.0).
+	// -----------------------------------------------------------------------------------------------------------
+
+	/** Whether the current user may hand requests over (vcap_manage_vouchers). */
+	public function can_hand_over(): bool {
+		return (bool) ( $this->can_manage )();
+	}
+
+	/**
+	 * Whether the request view shows "Take over as company order": the request is open (nothing issued), has at least
+	 * two recipients, the user has vcap_manage_vouchers and an add-on offers the hand-over for it.
+	 *
+	 * @param array<string, mixed> $request Request (get()).
+	 */
+	public function handover_available( array $request ): bool {
+		if ( ! self::handover_possible( $request ) || ! $this->can_hand_over() ) {
+			return false;
+		}
+		/**
+		 * Whether an add-on takes this voucher request over as a company order (D5, contract 1.0.0). Default false:
+		 * without an add-on the request view stays as it is.
+		 *
+		 * @since 1.2.0
+		 * @param bool $available  Default false.
+		 * @param int  $request_id Request.
+		 */
+		return true === (bool) apply_filters( 'vcap_voucher_request_handover_available', false, (int) ( $request['id'] ?? 0 ) );
+	}
+
+	/**
+	 * Whether the request could be handed over at all: open (nothing issued) with at least two recipients.
+	 *
+	 * @param array<string, mixed> $request Request (get()).
+	 */
+	public static function handover_possible( array $request ): bool {
+		return self::STATE_OPEN === ( $request['state'] ?? '' ) && count( (array) ( $request['recipients'] ?? array() ) ) >= self::HANDOVER_MIN_RECIPIENTS;
+	}
+
+	/**
+	 * The data an add-on receives (exactly these keys): contract, request_id, reference ("vcap-request:{id}", stable –
+	 * the add-on de-duplicates by it), company, currency, recipients, note.
+	 *
+	 * @param array<string, mixed> $request Request (get()).
+	 * @return array<string, mixed>
+	 */
+	public static function handover_payload( array $request ): array {
+		$id         = (int) ( $request['id'] ?? 0 );
+		$contact    = (array) ( $request['contact'] ?? array() );
+		$amount     = '' !== (string) ( $request['amount'] ?? '' ) ? (float) $request['amount'] : 0.0;
+		$recipients = array();
+		foreach ( (array) ( $request['recipients'] ?? array() ) as $r ) {
+			$recipients[] = array(
+				'name'    => (string) ( $r['name'] ?? '' ),
+				'email'   => (string) ( $r['email'] ?? '' ),
+				'amount'  => $amount,
+				'message' => (string) ( $r['message'] ?? '' ),
+			);
+		}
+		$currency = function_exists( 'get_woocommerce_currency' ) ? (string) get_woocommerce_currency() : (string) get_option( 'woocommerce_currency', 'EUR' );
+		return array(
+			'contract'   => self::HANDOVER_CONTRACT,
+			'request_id' => $id,
+			'reference'  => 'vcap-request:' . $id,
+			'company'    => array(
+				'name'          => (string) ( $contact['company'] ?? '' ),
+				'contact_name'  => (string) ( $contact['name'] ?? '' ),
+				'contact_email' => (string) ( $contact['email'] ?? '' ),
+				'contact_phone' => (string) ( $contact['phone'] ?? '' ),
+			),
+			'currency'   => strtoupper( '' !== $currency ? $currency : 'EUR' ),
+			'recipients' => $recipients,
+			'note'       => implode( "\n\n", array_filter( array( trim( (string) ( $request['message'] ?? '' ) ), trim( (string) ( $request['note'] ?? '' ) ) ), 'strlen' ) ),
+		);
+	}
+
+	/**
+	 * Hands an open request over to a company order of an add-on (`vcap_voucher_request_handover`). On success the
+	 * request becomes "handed_over", keeps order id, URL, time and user, and loses its recipients (they belong to the
+	 * company order now). A WP_Error of the add-on leaves the request open with all its data. A request handed over
+	 * already answers its stored order (double click) without asking the add-on again.
+	 *
+	 * @return array{order_id:int, url:string, replayed:bool}|\WP_Error
+	 */
+	public function hand_over( int $id ) {
+		if ( ! $this->can_hand_over() ) {
+			return new \WP_Error( 'vcap_not_allowed', __( 'You are not allowed to do this.', 'voucher-captain' ), array( 'status' => 403 ) );
+		}
+		$request = self::get( $id );
+		if ( ! $request ) {
+			return new \WP_Error( 'vcap_not_found', __( 'This voucher request does not exist.', 'voucher-captain' ), array( 'status' => 404 ) );
+		}
+		if ( self::STATE_HANDED_OVER === $request['state'] ) {
+			$done = (array) get_post_meta( $id, self::HANDOVER_META, true );
+			return array(
+				'order_id' => (int) ( $done['order_id'] ?? 0 ),
+				'url'      => (string) ( $done['url'] ?? '' ),
+				'replayed' => true,
+			);
+		}
+		if ( ! self::handover_possible( $request ) ) {
+			/* translators: %d: fewest recipients */
+			return new \WP_Error( 'vcap_handover_not_possible', sprintf( __( 'Only open voucher requests with at least %d recipients can be taken over as a company order.', 'voucher-captain' ), self::HANDOVER_MIN_RECIPIENTS ), array( 'status' => 409 ) );
+		}
+		$unavailable = new \WP_Error( 'vcap_handover_unavailable', __( 'No extension takes over this request.', 'voucher-captain' ), array( 'status' => 409 ) );
+		if ( ! $this->handover_available( $request ) ) {
+			return $unavailable;
+		}
+		/**
+		 * Hands a voucher request over to a company order (D5, contract 1.0.0). Return `array{url: string, order_id:
+		 * int}` (admin URL of the order's preview) or a WP_Error; null means no extension took it. The same reference
+		 * again must answer the same order.
+		 *
+		 * @since 1.2.0
+		 * @param mixed $result   Default null.
+		 * @param array $handover contract, request_id, reference, company, currency, recipients, note.
+		 */
+		$result = apply_filters( 'vcap_voucher_request_handover', null, self::handover_payload( $request ) );
+		if ( null === $result ) {
+			return $unavailable;
+		}
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		$order_id = is_array( $result ) ? (int) ( $result['order_id'] ?? 0 ) : 0;
+		$url      = is_array( $result ) ? esc_url_raw( (string) ( $result['url'] ?? '' ) ) : '';
+		if ( $order_id <= 0 || '' === $url ) {
+			return new \WP_Error( 'vcap_handover_invalid', __( 'The extension did not answer with a company order. The request stays open.', 'voucher-captain' ), array( 'status' => 502 ) );
+		}
+		$now = gmdate( 'Y-m-d H:i:s' );
+		update_post_meta(
+			$id,
+			self::HANDOVER_META,
+			array(
+				'order_id' => $order_id,
+				'url'      => $url,
+				'at'       => $now,
+				'user_id'  => get_current_user_id(),
+			)
+		);
+		update_post_meta( $id, self::STATE_META, self::STATE_HANDED_OVER );
+		update_post_meta( $id, self::UPDATED_META, $now );
+		self::drop_recipients( $id );
+		/**
+		 * A voucher request was handed over to a company order of an add-on (no personal data).
+		 *
+		 * @since 1.2.0
+		 * @param int $request_id Request.
+		 * @param int $order_id   Company order of the add-on.
+		 * @param int $user_id    Acting user.
+		 */
+		do_action( 'vcap_voucher_request_handed_over', $id, $order_id, get_current_user_id() );
+		return array(
+			'order_id' => $order_id,
+			'url'      => $url,
+			'replayed' => false,
+		);
+	}
+
+	/**
+	 * The hand-over record of a request (order_id, url, at, user_id), null when it was not handed over.
+	 *
+	 * @return array{order_id:int, url:string, at:string, user_id:int}|null
+	 */
+	public static function handover( int $id ): ?array {
+		$done = get_post_meta( $id, self::HANDOVER_META, true );
+		if ( ! is_array( $done ) || (int) ( $done['order_id'] ?? 0 ) <= 0 ) {
+			return null;
+		}
+		return array(
+			'order_id' => (int) $done['order_id'],
+			'url'      => (string) ( $done['url'] ?? '' ),
+			'at'       => (string) ( $done['at'] ?? '' ),
+			'user_id'  => (int) ( $done['user_id'] ?? 0 ),
+		);
+	}
+
+	// -----------------------------------------------------------------------------------------------------------
+	// D10: retention (daily maintenance step "voucher_requests").
+	// -----------------------------------------------------------------------------------------------------------
+
+	/**
+	 * Months after which requests are deleted: "open" for open and partly issued requests (counted from the receipt,
+	 * a partly issued one from the last confirmation), "closed" for issued and handed-over ones (from the issuing or
+	 * the hand-over). 0 = never.
+	 *
+	 * @return array{open:int, closed:int}
+	 */
+	public static function retention_months(): array {
+		/**
+		 * Retention of voucher requests in months (D10): `open` – open and partly issued requests (default 6), `closed`
+		 * – issued and handed-over requests (default 24). 0 keeps them. Rejected requests are deleted at once.
+		 *
+		 * @since 1.2.0
+		 * @param array{open:int, closed:int} $months Months.
+		 */
+		$months = apply_filters( 'vcap_voucher_requests_retention_months', self::RETENTION_MONTHS );
+		$months = is_array( $months ) ? $months : array();
+		return array(
+			'open'   => max( 0, (int) ( $months['open'] ?? self::RETENTION_MONTHS['open'] ) ),
+			'closed' => max( 0, (int) ( $months['closed'] ?? self::RETENTION_MONTHS['closed'] ) ),
+		);
+	}
+
+	/**
+	 * Ids of requests in one of $states whose last change (UTC) lies before $before, oldest first.
+	 *
+	 * @param string[] $states States.
+	 * @return int[]
+	 */
+	public static function expired_ids( array $states, string $before, int $limit ): array {
+		global $wpdb;
+		$states = array_values( array_map( 'strval', $states ) );
+		if ( ! $states ) {
+			return array();
+		}
+		$in = implode( ',', array_fill( 0, count( $states ), '%s' ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- placeholders built above, values passed as one array.
+		return array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( "SELECT p.ID FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} s ON s.post_id = p.ID AND s.meta_key = %s LEFT JOIN {$wpdb->postmeta} u ON u.post_id = p.ID AND u.meta_key = %s WHERE p.post_type = %s AND s.meta_value IN ({$in}) AND COALESCE( u.meta_value, p.post_date_gmt ) < %s ORDER BY p.ID LIMIT %d", array_merge( array( self::STATE_META, self::UPDATED_META, self::POST_TYPE ), $states, array( $before, max( 1, $limit ) ) ) ) ) );
+	}
+
+	/**
+	 * Daily maintenance: deletes expired requests (retention_months()) in batches of RETENTION_BATCH until $budget
+	 * seconds are used. A deleted request takes its form-reference claim with it.
+	 *
+	 * @param callable|null $expired Finder ($states, $before, $limit) → ids (default: expired_ids()).
+	 * @return bool false when the time budget ran out before everything was deleted.
+	 */
+	public function purge_expired( float $budget = 20.0, ?callable $expired = null ): bool {
+		$expired = $expired ?? array( self::class, 'expired_ids' );
+		$start   = microtime( true );
+		$months  = self::retention_months();
+		$groups  = array(
+			'open'   => array( self::STATE_OPEN, self::STATE_PARTIAL ),
+			'closed' => array( self::STATE_ISSUED, self::STATE_HANDED_OVER ),
+		);
+		$seen    = array();
+		foreach ( $groups as $group => $states ) {
+			if ( $months[ $group ] <= 0 ) {
+				continue;
+			}
+			$before = gmdate( 'Y-m-d H:i:s', (int) strtotime( '-' . $months[ $group ] . ' months', time() ) );
+			do {
+				$ids   = array_values( array_diff( array_map( 'intval', (array) $expired( $states, $before, self::RETENTION_BATCH ) ), $seen ) );
+				$found = count( $ids );
+				foreach ( $ids as $id ) {
+					$seen[] = $id;
+					$this->delete_request( $id );
+				}
+				if ( $found && microtime( true ) - $start >= $budget ) {
+					return false;
+				}
+			} while ( self::RETENTION_BATCH === $found );
+		}
+		return true;
+	}
+
+	/** Deletes a request with its data and its form-reference claim (retention). */
+	private function delete_request( int $id ): void {
+		$request = get_post_meta( $id, self::META, true );
+		wp_delete_post( $id, true );
+		if ( is_array( $request ) && '' !== (string) ( $request['reference'] ?? '' ) ) {
+			delete_option( self::CLAIM_PREFIX . md5( (string) $request['reference'] ) );
+		}
+		/**
+		 * A voucher request was deleted by the retention rule (D10). No personal data in the arguments.
+		 *
+		 * @since 1.2.0
+		 * @param int $request_id Request.
+		 */
+		do_action( 'vcap_voucher_request_expired', $id );
 	}
 
 	/**

@@ -59,7 +59,7 @@ Each event is fired as `do_action( 'vcap_workflow_event', array $envelope )`:
 |---|---|---|
 | `contract_version` | string | `1.0.0` |
 | `provider` | string | `voucher-captain` |
-| `event_id` | string (UUID format) | Stable and unique: derived from the site (random id in the option `vcap_workflow_instance`), the blog, the ledger row and the type. The same ledger entry always gives the same id – also in `replay()`. |
+| `event_id` | string (UUID format) | Stable and unique: derived from the site (random id in the option `vcap_workflow_instance`), the blog, the ledger row and the type. The same ledger entry always gives the same id – also in `replay()`. The instance is bound to the site address (see *Copies and staging sites* below). |
 | `type` | string | One of the event types (table below). |
 | `occurred_at` | string | When the change was written, UTC ISO 8601 (`2026-11-16T09:30:00Z`). |
 | `source_type` | string | `voucher` |
@@ -116,6 +116,20 @@ A full refund of a gift card can be preceded by a `partial` event of the same re
 ### Delivery semantics
 
 - **After COMMIT.** Events are built from `vcap_voucher_event`, which fires only after the database transaction of the change was committed (D6, CONNECTORS.md → Event timing); a rolled-back change never fires one.
+**Copies and staging sites** (owner decision 16.11.2026): the instance belongs to the address of the website. The
+option `vcap_workflow_instance_site` (autoloaded) keeps a signature of the normalised `home_url()` – without scheme
+and trailing slash, host in lower case, so a switch between `http` and `https` or a `/` at the end changes nothing –,
+the previous instance ids (at most 5, with the old signature and the time) and whether the admin notice is due. When
+the database runs under another address (a copy, a staging site, a moved shop), the next event derives a new instance
+id from the old id and the new address (two requests at the same moment agree on it), notes the old one and fires
+`vcap_workflow_instance_changed( string $new_instance, string $old_instance )`. From then on the copy's event ids
+differ from the original's, so a workflow plugin connected to both never takes an event of the copy for one of the
+live shop. Site Health → *Workflow plugin (provider contract)* shows "New workflow instance because the address of
+the website changed (copy/staging)" with the time and the previous id, and shop managers (`manage_woocommerce`) see
+the same once as an admin notice. A site updated from a version without the binding keeps its instance and binds it
+to its current address. Moving the live shop to a new domain also gives a new instance: deduplicate by `event_id`
+and re-sync with `replay()` after such a move.
+
 - **At least once, deduplicate by `event_id`.** Store the ids you processed. Retries, replays and two listeners can deliver an event again; the id stays the same.
 - **Order.** `sequence` ascends with the ledger; within one request events arrive in that order. Do not assume a gap-free sequence (most ledger rows are no workflow event).
 - **A failing listener never undoes the change.** An exception thrown by a `vcap_workflow_event` listener is caught, logged (WooCommerce → Status → Logs, source `voucher-captain`) and counted in the admin status with the sequence it failed at. Catch up with `replay()`.
@@ -133,7 +147,7 @@ Call them on the provider: `vcap()->workflow->void( array( … ) )`. Each return
 | `void` | `idempotency_key`, `voucher_id`, `reason` (required, in the history) | `vcap_manage_vouchers`, `manage_woocommerce` | `voucher_id`, `status`, `changed` (`false` when it was void already) |
 | `reactivate` | `idempotency_key`, `voucher_id` | `vcap_increase_balance`, `manage_woocommerce` | `voucher_id`, `status`; never for a voucher voided because of a refund (`vcap_voided_after_refund`) |
 | `redeem` | `idempotency_key`, `code` (as the customer entered it, also `code#PIN`), `target` (prefixed with `workflow:`), `amount` (gift cards), `currency`, `user_id` / `email` + `email_verified` (personal vouchers, API.md → Identity) | `vcap_redeem_api`, `vcap_manage_vouchers`, `manage_woocommerce` | `voucher_id`, `redemption_key`, `state` (`committed`), `target`, `amount_minor`, `balance_after_minor`, `currency`, `committed_at` |
-| `contact` | `voucher_id`, `communication` | `vcap_manage_vouchers`, `manage_woocommerce` | Only for a communication handed over now (section 7): `role`, `email`, `name`, `code_hint` (`…7KQ2`), `balance_minor`, `currency`, `expires_at` |
+| `contact` | `voucher_id`, `communication` | `vcap_manage_vouchers`, `manage_woocommerce` | Only for a communication handed over now (section 7): `role`, `email`, `name`, `code_hint` (`…7KQ2`), `balance_minor`, `currency`, `expires_at`. Each successful call writes the history entry `workflow_contact_read` (section 7). |
 | `replay` | `after`, `limit` | – | see section 4 |
 | `status` | – | – | see section 8 |
 
@@ -179,6 +193,14 @@ Voucher Captain's own emails stay the default. Under **WooCommerce → Settings 
 | `gift_used` | Notice to the buyer: gift used (once per voucher) | buyer |
 
 A communication is handed over only while its switch is on **and** a compatible consumer is registered **and** lists it in `communications` **and** its `entitlement` is not `expired`. Otherwise Voucher Captain sends its own email as usual, so a missing, deactivated, incompatible or unlicensed workflow plugin never leaves a customer without the message. When handed over, Voucher Captain sends nothing, writes the history entry "Handed over to the workflow" (`workflow_handover`) at the moment it would have sent the email – with the same rules (reminder days, at most once, only gifts with a buyer address) – and fires `voucher.communication_handed_over`. The workflow plugin then gets address and name with `contact()`.
+
+Every successful `contact()` call is recorded in the voucher history (owner decision 16.11.2026): event
+`workflow_contact_read` with the time, the user id of the caller, the workflow plugin (the `name` of the registered
+consumer), the `communication` and the `role` – never the address, name or code. The entry is shown as "Contact data
+read by {plugin} (communication: {communication}, role: {role})", maps to **no** workflow event (reading contact data never starts a
+workflow again), carries no amount and is therefore in neither the liabilities nor the journal. The WordPress personal
+data export of the voucher lists these entries (group *Contact data read by the workflow plugin*). A refused call
+(communication not handed over, no permission) writes nothing.
 
 Never handed over: the voucher email with code and PDF, order emails, refunds, payments, bookings. Sales, refunds and redemptions are booked once, by Voucher Captain; workflow events are notifications, not sales – an affiliate plugin must not pay commission from them (WP Affiliate Captain reads orders).
 
