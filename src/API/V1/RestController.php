@@ -486,8 +486,32 @@ final class RestController {
 		if ( ! $this->is_manager() && self::is_internal_key( $key ) ) {
 			return self::not_found();
 		}
+		if ( ! $this->is_manager() && ! current_user_can( self::POS_CAP ) && ! $this->customer_may_refund( $key ) ) { // phpcs:ignore WordPress.WP.Capabilities.Unknown -- Optional, granted by the shop (API.md).
+			// SEC4c: the same answer for every key, so it tells nothing about the redemption.
+			return RedemptionService::error( 'vcap_refund_not_allowed', __( 'Only the shop can give back a completed redemption. Please contact the shop.', 'voucher-captain' ), 403 );
+		}
 		$args = $this->customer_args( $request );
 		return rest_ensure_response( $this->with_counter( $request, fn() => $this->service->refund( $key, (float) $request['amount'], (string) $request['refund_key'], $args ) ) );
+	}
+
+	/**
+	 * SEC4c (owner decision 16.11.2026): a customer account gives back a completed redemption only where a connector
+	 * allows it. By default only voucher managers, "Voucher POS" accounts (vcap_redeem_api) and server code
+	 * (`vcap()->redemptions->refund()`) refund – the service may already have been provided; a customer cancels before
+	 * the commit (release) instead.
+	 */
+	private function customer_may_refund( string $key ): bool {
+		$data = $this->service->get( $key );
+		/**
+		 * Filters whether a customer account may refund a completed redemption through the REST API (default false).
+		 * The access rules of commit (own redemption only) still apply afterwards.
+		 *
+		 * @since 1.2.0
+		 * @param bool       $allowed    Default false.
+		 * @param array|null $redemption Redemption data (target, channel, amount …), null when unknown.
+		 * @param int        $user_id    Current user.
+		 */
+		return true === apply_filters( 'vcap_customer_may_refund_redemption', false, is_wp_error( $data ) ? null : $data, get_current_user_id() );
 	}
 
 	/**

@@ -108,6 +108,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_customer_can_change` | `src/Downloads.php` | – |
 | `vcap_customer_can_resend` | `src/Downloads.php` | – |
 | `vcap_customer_daily_limit` | `src/VoucherPurchaseRules.php` | – |
+| `vcap_customer_may_refund_redemption` | `src/API/V1/RestController.php` | Filters whether a customer account may refund a completed redemption through the REST API (default false). The access rules of commit (own redemption only) still apply afterwards. |
 | `vcap_customer_preview_design` | `src/Preview.php` | – |
 | `vcap_delivery_hold_until` | `src/Delivery.php` | Until when (Unix time, null = not held) the vouchers of a new customer's order are held. |
 | `vcap_delivery_hour` | `src/Delivery.php` | – |

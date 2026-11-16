@@ -222,7 +222,37 @@ $ref_row = $wpdb->get_row( $wpdb->prepare( "SELECT till FROM {$events} WHERE vou
 vcap_pos_assert( 200 === $refund->get_status() && 5.0 === (float) $refund->get_data()['refunded'] && 45.0 === (float) vcap()->vouchers->get( $pos_card->id )->balance && 'POS 7' === $ref_row['till'], 'M12-46: POST /redemptions/{key}/refund gives the amount back', $refund->get_data() );
 wp_set_current_user( $other );
 $foreign = vcap_pos_rest( 'POST', '/vcap/v1/redemptions/' . $key . '/refund', array( 'amount' => 5, 'refund_key' => 'ref-' . wp_generate_password( 10, false, false ) ) );
-vcap_pos_assert( 404 === $foreign->get_status() && 45.0 === (float) vcap()->vouchers->get( $pos_card->id )->balance, 'M12-46: the refund route has the access rules of commit (another user: 404 like an unknown key, S9)', $foreign->get_data() );
+vcap_pos_assert( in_array( $foreign->get_status(), array( 403, 404 ), true ) && 45.0 === (float) vcap()->vouchers->get( $pos_card->id )->balance, 'M12-46: another account cannot refund the redemption (403 without refund right, else 404 like an unknown key, S9)', $foreign->get_data() );
+get_userdata( $other )->add_cap( VCAP\API\V1\RestController::POS_CAP );
+wp_set_current_user( $other );
+$foreign_pos = vcap_pos_rest( 'POST', '/vcap/v1/redemptions/' . $key . '/refund', array( 'amount' => 5, 'refund_key' => 'ref-' . wp_generate_password( 10, false, false ) ) );
+get_userdata( $other )->remove_cap( VCAP\API\V1\RestController::POS_CAP );
+vcap_pos_assert( 404 === $foreign_pos->get_status() && 45.0 === (float) vcap()->vouchers->get( $pos_card->id )->balance, 'M12-46: another POS account still sees a foreign redemption as unknown (404, S9)', $foreign_pos->get_data() );
+
+// SEC4c (owner decision 16.11.2026): a customer cannot refund their own completed redemption – the service may
+// already be provided; managers, POS accounts and the connector's server code can. A filter may allow it per connector.
+$cust      = vcap_pos_user( 'customer' );
+$sec4c_prefix = static fn( $prefixes ) => array_merge( (array) $prefixes, array( 'course:' ) ); // A connector letting customers redeem in the browser.
+add_filter( 'vcap_rest_redemption_target_prefixes', $sec4c_prefix );
+$cust_card = vcap_pos_voucher( 'balance', 40 );
+wp_set_current_user( $cust );
+$cust_key = 'sec4c-' . wp_generate_password( 10, false, false );
+$cust_res = vcap_pos_rest( 'POST', '/vcap/v1/redemptions', array( 'code' => $cust_card->code, 'key' => $cust_key, 'target' => 'course:sec4c', 'amount' => 15 ) );
+$cust_com = vcap_pos_rest( 'POST', '/vcap/v1/redemptions/' . $cust_key . '/commit' );
+$cust_ref = vcap_pos_rest( 'POST', '/vcap/v1/redemptions/' . $cust_key . '/refund', array( 'amount' => 15, 'refund_key' => 'ref-' . wp_generate_password( 10, false, false ) ) );
+vcap_pos_assert( 201 === $cust_res->get_status() && 200 === $cust_com->get_status() && 403 === $cust_ref->get_status() && 'vcap_refund_not_allowed' === $cust_ref->get_data()['code'] && 25.0 === (float) vcap()->vouchers->get( $cust_card->id )->balance, 'SEC4c: a customer cannot refund their own completed redemption (403, balance unchanged)', array( $cust_res->get_data(), $cust_ref->get_data() ) );
+$sec4c_allow = static fn( $allowed, $redemption ) => is_array( $redemption ) && 'course:sec4c' === $redemption['target'];
+add_filter( 'vcap_customer_may_refund_redemption', $sec4c_allow, 10, 2 );
+$cust_ok = vcap_pos_rest( 'POST', '/vcap/v1/redemptions/' . $cust_key . '/refund', array( 'amount' => 15, 'refund_key' => 'ref-' . wp_generate_password( 10, false, false ) ) );
+remove_filter( 'vcap_customer_may_refund_redemption', $sec4c_allow, 10 );
+vcap_pos_assert( 200 === $cust_ok->get_status() && 40.0 === (float) vcap()->vouchers->get( $cust_card->id )->balance, 'SEC4c: where a connector allows it (filter vcap_customer_may_refund_redemption), the owner may refund', $cust_ok->get_data() );
+wp_set_current_user( 1 );
+$mgr_key = 'sec4c-m-' . wp_generate_password( 10, false, false );
+vcap()->redemptions->reserve( $cust_card->code, array( 'key' => $mgr_key, 'target' => 'course:sec4c', 'amount' => 10, 'user_id' => $cust ) );
+vcap()->redemptions->commit( $mgr_key );
+$mgr_ref = vcap_pos_rest( 'POST', '/vcap/v1/redemptions/' . $mgr_key . '/refund', array( 'amount' => 10, 'refund_key' => 'ref-' . wp_generate_password( 10, false, false ) ) );
+remove_filter( 'vcap_rest_redemption_target_prefixes', $sec4c_prefix );
+vcap_pos_assert( 200 === $mgr_ref->get_status() && 40.0 === (float) vcap()->vouchers->get( $cust_card->id )->balance, 'SEC4c: a voucher manager refunds any completed redemption', $mgr_ref->get_data() );
 
 wp_set_current_user( 0 );
 delete_option( Counter::REQUIRE_RECEIPT );

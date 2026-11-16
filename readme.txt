@@ -89,6 +89,7 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 * Fix: a gift card kept in another currency than the shop base currency is refused in the cart and over the API instead of being taken 1:1; with currency switchers the cart cap is compared in the coupon's own units.
 * Fix: the customer's own reservation of an abandoned payment counts as available again; product and exclusion rules of a gift card limit only the lines it pays for instead of refusing the whole card.
 * Fix: an abandoned payment page no longer blocks a "first order only" coupon of the same customer for up to an hour.
+* Change (security): over the REST API a customer can no longer give back their own completed redemption (the service may already have been provided); voucher managers, "Voucher POS" accounts and connectors can. A connector may allow it again with the filter `vcap_customer_may_refund_redemption`.
 * Fix (security): voucher settings of a product are also guarded on the WooCommerce REST API and the CSV import (voucher managers only).
 * Fix: workflow plugins – the instance id stays the same with language plugins (WPML), an incompatible workflow plugin gets no events, repeated service calls never run twice, communications are handed over only with an active licence, "gift used" is never told twice.
 * Fix: voucher requests – list with pages and a state filter, a lock per request against two managers acting at once, rejected entries stay answered as rejected, interrupted submits are repaired; review-source records and rejected claims are removed after their retention period.
@@ -229,7 +230,7 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 == Upgrade Notice ==
 
 = 1.2.0 =
-All features stay free. The database is updated to version 1.8.0 – back up first. Existing shops keep how multi-purpose vouchers are booked; new installations book them as a payment after tax.
+All features stay free. The database is updated to version 1.8.0 – back up first. Existing shops keep how multi-purpose vouchers are booked; new installations book them as a payment after tax. Connectors: customers can no longer refund a completed redemption over the REST API (filter `vcap_customer_may_refund_redemption` to allow it).
 
 = 1.1.0 =
 Requires WooCommerce 8.9 or newer.

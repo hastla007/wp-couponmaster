@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-16 17:11+0000\n"
+"POT-Creation-Date: 2026-11-16 17:41+0000\n"
 "X-Domain: voucher-captain\n"
 
 #. Plugin Name of the plugin
@@ -195,6 +195,10 @@ msgstr ""
 
 #: src/API/V1/RestController.php:408
 msgid "A redemption key with a prefix (\"system:…\") must use the prefix of its target."
+msgstr ""
+
+#: src/API/V1/RestController.php:491
+msgid "Only the shop can give back a completed redemption. Please contact the shop."
 msgstr ""
 
 #: src/API/V1/VoucherService.php:94

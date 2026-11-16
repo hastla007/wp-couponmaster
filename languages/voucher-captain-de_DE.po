@@ -4,7 +4,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: Voucher Captain 1.0.0\n"
-"POT-Creation-Date: 2026-11-16 17:11+0000\n"
+"POT-Creation-Date: 2026-11-16 17:41+0000\n"
 "PO-Revision-Date: 2026-11-14 16:00+0000\n"
 "Last-Translator: \n"
 "Language-Team: German\n"
@@ -248,6 +248,11 @@ msgid ""
 msgstr ""
 "Ein Einlöseschlüssel mit Präfix („system:…“) muss das Präfix seines Ziels "
 "verwenden."
+
+#: src/API/V1/RestController.php:491
+msgid ""
+"Only the shop can give back a completed redemption. Please contact the shop."
+msgstr "Eine abgeschlossene Einlösung kann nur der Shop zurückbuchen. Bitte wenden Sie sich an den Shop."
 
 #: src/API/V1/VoucherService.php:94
 msgid "The voucher system returned an invalid response."
