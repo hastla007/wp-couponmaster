@@ -2295,6 +2295,33 @@ check( 'S19: the scanner takes links from the server only with an http(s) scheme
 $s21_doc = $sec_src( 'CONNECTORS.md' );
 $s21_ex  = $sec_src( 'examples/vcap-example-connector/vcap-example-connector.php' );
 check( 'S21: CONNECTORS.md requires the complete binding in vcap_redemption_allowed and names the key and REST target prefix filters; the example connector registers "example:"', str_contains( $s21_doc, 'bind voucher *and* target completely' ) && str_contains( $s21_doc, '`vcap_rest_redemption_target_prefixes`' ) && str_contains( $s21_doc, '**Register your server-side key prefixes**' ) && str_contains( $s21_ex, "add_filter( 'vcap_internal_redemption_key_prefixes', array( \$self, 'internal_keys' ) );" ) && str_contains( $s21_ex, "array( 'example:' )" ) && str_contains( $s21_ex, 'self::TARGET !== $target' ) );
+// E2: dompdf reads local files only from the plugin, the uploads and custom font folders – never ABSPATH, never a
+// sibling folder with the same prefix ("uploads-private"), also not through "../".
+$e2_uploads = rtrim( $GLOBALS['vcap_test_uploads'], '/' );
+$e2_sibling = $e2_uploads . '-private';
+@mkdir( $e2_sibling, 0777, true );
+file_put_contents( $e2_sibling . '/secret.png', 'x' );
+file_put_contents( $e2_uploads . '/e2-ok.png', 'x' );
+file_put_contents( ABSPATH . 'wp-config.php', '<?php // test' );
+$e2_opts  = PdfRenderer::dompdf_options();
+$e2_ok    = static fn( string $f ): bool => true === $e2_opts->validateLocalUri( $f )[0];
+$e2_dirs  = PdfRenderer::chroot_dirs();
+check(
+	'E2: the PDF chroot holds the plugin and the uploads only (no ABSPATH); siblings with a shared prefix and ../ escapes are refused',
+	! in_array( realpath( ABSPATH ), $e2_dirs, true ) && in_array( realpath( $e2_uploads ), $e2_dirs, true ) && in_array( realpath( VCAP_PATH ), $e2_dirs, true )
+		&& $e2_ok( $e2_uploads . '/e2-ok.png' ) && $e2_ok( 'file://' . $e2_uploads . '/e2-ok.png' ) && $e2_ok( VCAP_PATH . 'voucher-captain.php' )
+		&& ! $e2_ok( $e2_sibling . '/secret.png' ) && ! $e2_ok( $e2_uploads . '/../' . basename( $e2_sibling ) . '/secret.png' ) && ! $e2_ok( $e2_uploads . '/../../' . basename( dirname( $e2_uploads ) ) . '/' . basename( $e2_sibling ) . '/secret.png' )
+		&& ! $e2_ok( ABSPATH . 'wp-config.php' ) && ! $e2_ok( $e2_uploads . '/../vcap-abspath/wp-config.php' ),
+	json_encode( $e2_dirs )
+);
+$GLOBALS['vcap_test_filters']['vcap_pdf_fonts'][] = array( static fn( $fonts ) => array( 'E2 Font' => array( 'normal' => $e2_sibling . '/secret.png' ) ), 1 );
+check( 'E2: the folder of a custom font (vcap_pdf_fonts) is allowed as well', in_array( realpath( $e2_sibling ), PdfRenderer::chroot_dirs(), true ) );
+array_pop( $GLOBALS['vcap_test_filters']['vcap_pdf_fonts'] );
+@unlink( $e2_sibling . '/secret.png' );
+@unlink( $e2_uploads . '/e2-ok.png' );
+@unlink( ABSPATH . 'wp-config.php' );
+@rmdir( $e2_sibling );
+
 check( 'S6: referral rewards are "Individual use only" (several rewards cannot be stacked)', (bool) preg_match( '/function reward_coupon\(.*?set_individual_use\( true \).*?return \$coupon->save\(\)/s', $sec_src( 'src/Referrals.php' ) ) );
 
 echo "\n$passed passed, $failed failed. Output: $out\n";

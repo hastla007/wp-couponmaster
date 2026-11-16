@@ -78,10 +78,37 @@ final class PdfRenderer {
 		$options->set( 'fontDir', $tmp );
 		$options->set( 'fontCache', $tmp );
 		$options->set( 'tempDir', wp_is_writable( $tmp ) ? $tmp : sys_get_temp_dir() );
-		$uploads = wp_upload_dir( null, false );
-		$options->set( 'chroot', array_values( array_filter( array( VCAP_PATH, $uploads['basedir'], ABSPATH ) ) ) );
+		$options->set( 'chroot', self::chroot_dirs() );
 		/** Dompdf options used to render voucher PDFs (args: Dompdf\\Options). */
 		return apply_filters( 'vcap_dompdf_options', $options );
+	}
+
+	/**
+	 * E2: the only directories dompdf may read local files from – the plugin (its images and fonts), the uploads
+	 * (template images, the font cache) and the folders of custom fonts (vcap_pdf_fonts); not the whole WordPress
+	 * install (ABSPATH holds wp-config.php). Each entry is a real path; dompdf compares at directory boundaries,
+	 * so ".../uploads" does not allow a sibling ".../uploads-private".
+	 *
+	 * @return string[]
+	 */
+	public static function chroot_dirs(): array {
+		$uploads = wp_upload_dir( null, false );
+		$dirs    = array( VCAP_PATH, (string) ( $uploads['basedir'] ?? '' ) );
+		foreach ( self::custom_fonts() as $variants ) {
+			foreach ( (array) $variants as $path ) {
+				if ( is_string( $path ) && '' !== $path && is_file( $path ) ) {
+					$dirs[] = dirname( $path );
+				}
+			}
+		}
+		$real = array();
+		foreach ( $dirs as $dir ) {
+			$path = '' !== $dir ? realpath( $dir ) : false;
+			if ( false !== $path && is_dir( $path ) ) {
+				$real[ $path ] = $path;
+			}
+		}
+		return array_values( $real );
 	}
 
 	/**
