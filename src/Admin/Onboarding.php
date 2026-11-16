@@ -230,7 +230,7 @@ final class Onboarding {
 			return;
 		}
 		$days = (int) get_option( 'vcap_default_expiry_days', 365 );
-		echo '<div class="notice notice-warning vcap-validity-choice"><p><strong>' . esc_html__( 'Voucher Captain', 'voucher-captain' ) . ':</strong> ';
+		echo '<div class="notice notice-warning vcap-validity-choice"><p><strong>' . esc_html( \VCAP\Brand::name( 'notice' ) ) . ':</strong> ';
 		/* translators: %d: number of days */
 		echo esc_html( sprintf( _n( 'Vouchers of products without their own expiry are valid for %d day (stored default from before the statutory validity existed). In Germany vouchers are valid for 3 years to the end of the year by law; shorter periods can be invalid towards consumers. Which default should apply?', 'Vouchers of products without their own expiry are valid for %d days (stored default from before the statutory validity existed). In Germany vouchers are valid for 3 years to the end of the year by law; shorter periods can be invalid towards consumers. Which default should apply?', $days, 'voucher-captain' ), $days ) );
 		echo '</p><p>' . $this->button( 'validity_statutory', __( 'Use the statutory validity', 'voucher-captain' ), 'button button-primary' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in button().

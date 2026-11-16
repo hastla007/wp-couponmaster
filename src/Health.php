@@ -86,13 +86,13 @@ final class Health {
 		$tests = (array) $tests;
 		foreach ( array( 'extensions', 'schema', 'scheduler', 'mail', 'sender_domain', 'purchase_limits', 'redeem_page', 'markets', 'offline_payment', 'currency', 'rate_limits', 'template_images', 'template_overrides' ) as $id ) {
 			$tests['direct'][ 'vcap_' . $id ] = array(
-				'label' => __( 'Voucher Captain', 'voucher-captain' ),
+				'label' => Brand::name( 'site_health' ),
 				'test'  => array( $this, 'test_' . $id ),
 			);
 		}
 		foreach ( self::ASYNC as $id ) {
 			$tests['async'][ 'vcap_' . $id ] = array(
-				'label'             => __( 'Voucher Captain', 'voucher-captain' ),
+				'label'             => Brand::name( 'site_health' ),
 				'test'              => rest_url( 'vcap/v1/site-health/' . str_replace( '_', '-', $id ) ),
 				'has_rest'          => true,
 				'async_direct_test' => array( $this, 'test_' . $id ),

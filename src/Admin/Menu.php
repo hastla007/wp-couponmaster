@@ -33,12 +33,12 @@ final class Menu {
 	public function menu(): void {
 		$voucher_admin = new VoucherAdmin( vcap()->vouchers );
 		add_menu_page(
-			__( 'Vouchers', 'voucher-captain' ),
-			__( 'Vouchers', 'voucher-captain' ),
+			\VCAP\Brand::menu_title(),
+			\VCAP\Brand::menu_title(),
 			self::cap(),
 			'vcap-vouchers',
 			array( $voucher_admin, 'page' ),
-			'dashicons-tickets-alt',
+			\VCAP\Brand::menu_icon(),
 			56
 		);
 		add_submenu_page( 'vcap-vouchers', __( 'Issued vouchers', 'voucher-captain' ), __( 'Issued vouchers', 'voucher-captain' ), self::cap(), 'vcap-vouchers', array( $voucher_admin, 'page' ) );

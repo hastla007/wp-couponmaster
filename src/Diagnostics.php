@@ -20,7 +20,7 @@ final class Diagnostics {
 			return $info;
 		}
 		$info['voucher-captain'] = array(
-			'label'  => __( 'Voucher Captain', 'voucher-captain' ),
+			'label'  => Brand::name( 'site_health' ),
 			'fields' => $this->fields(),
 		);
 		return $info;

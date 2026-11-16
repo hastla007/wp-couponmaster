@@ -310,7 +310,7 @@ final class MultiCurrency {
 			', ',
 			array_map( static fn( \WC_Order $o ) => '<a href="' . esc_url( $o->get_edit_order_url() ) . '">#' . esc_html( $o->get_order_number() ) . '</a>', $open )
 		);
-		echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'Voucher Captain', 'voucher-captain' ) . ':</strong> '
+		echo '<div class="notice notice-error"><p><strong>' . esc_html( \VCAP\Brand::name( 'notice' ) ) . ':</strong> '
 			. esc_html__( 'These orders were paid in a foreign currency without a known exchange rate, so their vouchers were not issued and the orders are on hold. Set up a supported currency switcher (or the exchange rate on the order) and issue the vouchers from the order screen, or refund the orders:', 'voucher-captain' )
 			. ' ' . $links . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped above.
 	}

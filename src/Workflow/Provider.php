@@ -527,7 +527,7 @@ final class Provider {
 		$site           = (array) get_option( self::INSTANCE_SITE_OPTION, array() );
 		$site['notice'] = false;
 		update_option( self::INSTANCE_SITE_OPTION, $site, true );
-		echo '<div class="notice notice-info is-dismissible"><p><strong>' . esc_html__( 'Voucher Captain', 'voucher-captain' ) . ':</strong> '
+		echo '<div class="notice notice-info is-dismissible"><p><strong>' . esc_html( \VCAP\Brand::name( 'notice' ) ) . ':</strong> '
 			. esc_html( self::instance_change_text() ) . ' '
 			. esc_html__( 'A connected workflow plugin receives new event ids from now on; events of the original website are not repeated here.', 'voucher-captain' ) . '</p></div>';
 	}

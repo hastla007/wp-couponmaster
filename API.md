@@ -406,6 +406,10 @@ called in the code and listed in docs/HOOKS.md, the generated reference with eac
 |---|---|---|---|---|
 | `vcap_loaded` | action | `VCAP\Plugin` | 1.2.0 | Start of the add-on: the services (`vcap()->api_v1`, `->redemptions`, `->issuer` …) exist. |
 | `vcap_admin_menu` | action | `string $parent_slug` (`vcap-vouchers`) | 1.2.0 | Own pages under *Vouchers*: `add_submenu_page( $parent_slug, … )` (shown before *Settings*). |
+| `vcap_brand_name` | filter | `string $name`, `string $context` (`admin`, `notice`, `site_health`, `privacy`, `pdf`, `scanner`) | 1.2.0 | White label: the product name shown to people (admin notices, Site Health, support info, privacy text, PDF metadata). Technical identifiers (text domain, slugs, hooks, names in integration contracts) never change. |
+| `vcap_brand_logo` | filter | `string $url` (default `''`), `string $context` | 1.2.0 | White label: a logo next to the name (scanner page); the core shows none. |
+| `vcap_admin_menu_title` | filter | `string $title` (default "Vouchers") | 1.2.0 | White label: title of the main admin menu. |
+| `vcap_admin_menu_icon` | filter | `string $icon` (default `dashicons-tickets-alt`) | 1.2.0 | White label: icon of the main admin menu, as accepted by `add_menu_page()` (dashicon, image URL or data URI). |
 | `vcap_settings_sections` | filter | `array $sections` (id ⇒ label) | 1.2.0 | Own section of WooCommerce → Settings → Vouchers; core sections cannot be renamed or removed. |
 | `vcap_settings_fields` | filter | `array $fields`, `string $section` | 1.0.0 | Fields of a section (WooCommerce settings API, saved by WooCommerce). An add-on section starts empty. |
 | `vcap_product_settings_fields` / `vcap_product_settings_save` | action | – / `WC_Product`, `array $post` | 1.1.0 | Own fields in the product's *Voucher* tab and saving them. |

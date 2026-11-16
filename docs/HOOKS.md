@@ -67,6 +67,8 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | Hook | Where | Description |
 |---|---|---|
 | `vcap_active_integrations` | `src/Diagnostics.php` | Active integrations for the diagnostics (id => version or label), added by the integrations themselves. |
+| `vcap_admin_menu_icon` | `src/Brand.php` | Icon of the main admin menu (white label), as accepted by add_menu_page(). |
+| `vcap_admin_menu_title` | `src/Brand.php` | Title of the main admin menu (white label). |
 | `vcap_affiliate_commission_on_voucher_sales` | `src/Compat/AffiliateCaptain.php` | – |
 | `vcap_allow_refund_of_spent_top_ups` | `src/TopUp.php` | – |
 | `vcap_allow_refund_of_spent_vouchers` | `src/Issuer.php` | – |
@@ -81,6 +83,8 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_balance_rounding_tolerance` | `src/Coupons/Balances.php` | – |
 | `vcap_bonus_code_prefix` | `src/Discounts/Bonus.php` | – |
 | `vcap_bonus_coupon` | `src/Discounts/Bonus.php` | – |
+| `vcap_brand_logo` | `src/Brand.php` | Logo shown next to the product name (white label); '' shows none. |
+| `vcap_brand_name` | `src/Brand.php` | Product name shown to people (white label). Not used for technical identifiers. |
 | `vcap_builtin_fields` | `src/Fields.php` | – |
 | `vcap_bundle_pdf_limit` | `src/Delivery.php` | Most vouchers a bundled email attaches the PDF for; above it, download links only (0 = never a PDF). |
 | `vcap_bundle_threshold` | `src/Delivery.php` | Vouchers of one order line and recipient from which they are bundled into one email (0 = never). |

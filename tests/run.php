@@ -2308,6 +2308,22 @@ $a2_guard = array();
 exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( dirname( __DIR__ ) . '/tests/license-guard.php' ) . ' 2>&1', $a2_guard, $a2_guard_status );
 check( 'A5: the only HTTP requests of the core are the allowlisted ones (PDF images from vcap_pdf_remote_hosts, Site Health loopback), each described in readme.txt → External services', 0 === $a2_guard_status && str_contains( implode( ' ', $a2_guard ), 'src/Health.php:' ) && str_contains( implode( ' ', $a2_guard ), 'src/PdfRenderer.php:' ) && (bool) preg_match( '/== External services ==.*vcap_pdf_remote_hosts.*Site Health.*== Changelog ==/s', (string) file_get_contents( dirname( __DIR__ ) . '/readme.txt' ) ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/readme.txt' ), 'never contacts a license or update server' ), implode( ' ', $a2_guard ) );
 
+// White label (request of the premium add-on, 16.11.2026): name, logo, menu title and icon can be rebranded; empty or
+// non-string answers fall back to the defaults; technical identifiers stay.
+$wl_defaults = array( VCAP\Brand::name(), VCAP\Brand::logo(), VCAP\Brand::menu_title(), VCAP\Brand::menu_icon() );
+$GLOBALS['vcap_test_filters']['vcap_brand_name']       = array( array( static fn( $n, $c ) => 'pdf' === $c ? 'Acme PDF' : 'Acme <b>Gutscheine</b>', 2 ) );
+$GLOBALS['vcap_test_filters']['vcap_brand_logo']       = array( array( static fn() => 'https://acme.example/logo.svg', 1 ) );
+$GLOBALS['vcap_test_filters']['vcap_admin_menu_title'] = array( array( static fn() => 'Acme', 1 ) );
+$GLOBALS['vcap_test_filters']['vcap_admin_menu_icon']  = array( array( static fn() => '', 1 ) );
+$wl_branded = array( VCAP\Brand::name( 'notice' ), VCAP\Brand::name( 'pdf' ), VCAP\Brand::logo( 'scanner' ), VCAP\Brand::menu_title(), VCAP\Brand::menu_icon() );
+foreach ( array( 'vcap_brand_name', 'vcap_brand_logo', 'vcap_admin_menu_title', 'vcap_admin_menu_icon' ) as $wl_hook ) {
+	unset( $GLOBALS['vcap_test_filters'][ $wl_hook ] );
+}
+check( 'White label: defaults "Voucher Captain", no logo, menu "Vouchers" with the tickets dashicon', array( 'Voucher Captain', '', 'Vouchers', 'dashicons-tickets-alt' ) === $wl_defaults, wp_json_encode( $wl_defaults ) );
+check( 'White label: vcap_brand_name/logo (per context), vcap_admin_menu_title/icon rebrand; markup is stripped, an empty icon keeps the default', array( 'Acme Gutscheine', 'Acme PDF', 'https://acme.example/logo.svg', 'Acme', 'dashicons-tickets-alt' ) === $wl_branded, wp_json_encode( $wl_branded ) );
+$wl_src = (string) file_get_contents( dirname( __DIR__ ) . '/src/Admin/Menu.php' ) . file_get_contents( dirname( __DIR__ ) . '/src/PdfRenderer.php' ) . file_get_contents( dirname( __DIR__ ) . '/src/Health.php' );
+check( 'White label: the admin menu, the PDF metadata and Site Health use the brand, not a fixed name', str_contains( $wl_src, 'Brand::menu_title()' ) && str_contains( $wl_src, 'Brand::menu_icon()' ) && str_contains( $wl_src, "Brand::name( 'pdf' )" ) && str_contains( $wl_src, "Brand::name( 'site_health' )" ) && ! str_contains( $wl_src, "addInfo( 'Creator', 'Voucher Captain' )" ) );
+
 // A4: settings section of an add-on – added after the core sections, core sections cannot be renamed, its page
 // shows only its own fields.
 $a4_settings = new VCAP\Settings();

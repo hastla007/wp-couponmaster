@@ -65,7 +65,7 @@ final class Attention {
 		if ( ! $all ) {
 			return;
 		}
-		echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'Voucher Captain', 'voucher-captain' ) . ':</strong> '
+		echo '<div class="notice notice-error"><p><strong>' . esc_html( Brand::name( 'notice' ) ) . ':</strong> '
 			. esc_html__( 'These orders need your attention (money of a refund, cancellation or top-up was not booked as expected):', 'voucher-captain' ) . '</p><ul>';
 		foreach ( array_slice( $all, -20, null, true ) as $key => $case ) {
 			$order = (int) $case['order_id'] > 0 ? wc_get_order( (int) $case['order_id'] ) : null;
@@ -93,7 +93,7 @@ final class Attention {
 	public function site_health( $tests ) {
 		$tests = (array) $tests;
 		$tests['direct']['vcap_attention'] = array(
-			'label' => __( 'Voucher Captain', 'voucher-captain' ),
+			'label' => Brand::name( 'site_health' ),
 			'test'  => array( $this, 'test' ),
 		);
 		return $tests;

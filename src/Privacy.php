@@ -497,7 +497,7 @@ final class Privacy {
 
 	public function policy(): void {
 		if ( function_exists( 'wp_add_privacy_policy_content' ) ) {
-			wp_add_privacy_policy_content( __( 'Voucher Captain', 'voucher-captain' ), wp_kses_post( wpautop( implode( "\n\n", self::policy_paragraphs() ) ) ) );
+			wp_add_privacy_policy_content( Brand::name( 'privacy' ), wp_kses_post( wpautop( implode( "\n\n", self::policy_paragraphs() ) ) ) );
 		}
 	}
 

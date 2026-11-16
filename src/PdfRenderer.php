@@ -234,7 +234,7 @@ final class PdfRenderer {
 		$dompdf->loadHtml( $html, 'UTF-8' );
 		$dompdf->render();
 		$dompdf->addInfo( 'Title', self::pdf_title( $voucher ) );
-		$dompdf->addInfo( 'Creator', 'Voucher Captain' );
+		$dompdf->addInfo( 'Creator', Brand::name( 'pdf' ) );
 		return (string) $dompdf->output();
 	}
 
@@ -358,7 +358,7 @@ final class PdfRenderer {
 			$dompdf->loadHtml( $html, 'UTF-8' );
 			$dompdf->render();
 			$dompdf->addInfo( 'Title', self::pdf_title( $group['vouchers'][0] ) );
-			$dompdf->addInfo( 'Creator', 'Voucher Captain' );
+			$dompdf->addInfo( 'Creator', Brand::name( 'pdf' ) );
 			$out[] = array(
 				'vouchers' => $group['vouchers'],
 				'pdf'      => (string) $dompdf->output(),

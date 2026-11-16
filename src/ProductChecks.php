@@ -629,7 +629,7 @@ final class ProductChecks {
 						continue;
 					}
 					$seen[ $problem['message'] ] = true;
-					echo '<div class="notice notice-' . esc_attr( 'error' === $problem['level'] ? 'error' : 'warning' ) . '"><p><strong>' . esc_html__( 'Voucher Captain', 'voucher-captain' ) . ':</strong> ' . esc_html( $problem['message'] ) . '</p></div>';
+					echo '<div class="notice notice-' . esc_attr( 'error' === $problem['level'] ? 'error' : 'warning' ) . '"><p><strong>' . esc_html( Brand::name( 'notice' ) ) . ':</strong> ' . esc_html( $problem['message'] ) . '</p></div>';
 				}
 			}
 			return;
@@ -639,18 +639,18 @@ final class ProductChecks {
 		}
 		$problems = self::shop_problems();
 		if ( $problems['invalid'] ) {
-			echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'Voucher Captain', 'voucher-captain' ) . ':</strong> ' . esc_html__( 'These voucher products have an invalid discount setup (a percentage that is not a fixed value between 0 and 100, or "Fixed product discount") and cannot be bought until it is corrected:', 'voucher-captain' ) . ' ' . self::product_links( $problems['invalid'] ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in product_links().
+			echo '<div class="notice notice-error"><p><strong>' . esc_html( Brand::name( 'notice' ) ) . ':</strong> ' . esc_html__( 'These voucher products have an invalid discount setup (a percentage that is not a fixed value between 0 and 100, or "Fixed product discount") and cannot be bought until it is corrected:', 'voucher-captain' ) . ' ' . self::product_links( $problems['invalid'] ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in product_links().
 		}
 		if ( $problems['expired'] ) {
-			echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'Voucher Captain', 'voucher-captain' ) . ':</strong> ' . esc_html__( 'These voucher products have a fixed expiry date that has passed (or is missing) and can no longer be bought:', 'voucher-captain' ) . ' ' . self::expired_links( $problems['expired'] ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in expired_links().
+			echo '<div class="notice notice-error"><p><strong>' . esc_html( Brand::name( 'notice' ) ) . ':</strong> ' . esc_html__( 'These voucher products have a fixed expiry date that has passed (or is missing) and can no longer be bought:', 'voucher-captain' ) . ' ' . self::expired_links( $problems['expired'] ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in expired_links().
 		}
 		$empty = array_filter( $problems['codes'], static fn( $row ) => $row['free'] < 1 );
 		$low   = array_filter( $problems['codes'], static fn( $row ) => $row['free'] >= 1 );
 		if ( $empty ) {
-			echo '<div class="notice notice-warning"><p><strong>' . esc_html__( 'Voucher Captain', 'voucher-captain' ) . ':</strong> ' . esc_html__( 'The imported code batch of these voucher products is empty (products set to "stop selling" cannot be bought, the others get random codes). Import more codes under Vouchers → Import codes:', 'voucher-captain' ) . ' ' . self::product_links( array_column( $empty, 'product' ) ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in product_links().
+			echo '<div class="notice notice-warning"><p><strong>' . esc_html( Brand::name( 'notice' ) ) . ':</strong> ' . esc_html__( 'The imported code batch of these voucher products is empty (products set to "stop selling" cannot be bought, the others get random codes). Import more codes under Vouchers → Import codes:', 'voucher-captain' ) . ' ' . self::product_links( array_column( $empty, 'product' ) ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in product_links().
 		}
 		if ( $low ) {
-			echo '<div class="notice notice-warning"><p><strong>' . esc_html__( 'Voucher Captain', 'voucher-captain' ) . ':</strong> ' . esc_html__( 'The imported code batch of these voucher products is running low:', 'voucher-captain' ) . ' ' . self::product_links( array_column( $low, 'product' ) ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in product_links().
+			echo '<div class="notice notice-warning"><p><strong>' . esc_html( Brand::name( 'notice' ) ) . ':</strong> ' . esc_html__( 'The imported code batch of these voucher products is running low:', 'voucher-captain' ) . ' ' . self::product_links( array_column( $low, 'product' ) ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in product_links().
 		}
 	}
 
@@ -658,7 +658,7 @@ final class ProductChecks {
 	public function health_tests( $tests ) {
 		$tests = (array) $tests;
 		$tests['async']['vcap_voucher_products'] = array(
-			'label'             => __( 'Voucher Captain', 'voucher-captain' ),
+			'label'             => Brand::name( 'site_health' ),
 			'test'              => rest_url( 'vcap/v1/site-health/voucher-products' ),
 			'has_rest'          => true,
 			'async_direct_test' => array( $this, 'test_voucher_products' ),
