@@ -2289,6 +2289,9 @@ check( 'S17: voucher settings, PDF templates and field groups need vcap_manage_v
 $GLOBALS['vcap_test_options'][ VCAP\Compat\AffiliateCaptain::OPTION ] = array( 'Summer flyer' => 'PARTNER1' );
 check( 'S18: without wpac_manage_affiliates no codes are generated under a campaign name assigned to a partner; unassigned names are free', str_contains( VCAP\Compat\AffiliateCaptain::generation_refusal( 'Summer flyer' ), 'Summer flyer' ) && '' === VCAP\Compat\AffiliateCaptain::generation_refusal( 'Winter flyer' ) && str_contains( $sec_src( 'src/Admin/CampaignAdmin.php' ), "'coupons' === \$target ? \\VCAP\\Compat\\AffiliateCaptain::generation_refusal( \$name )" ) && str_contains( $sec_src( 'src/Compat/AffiliateCaptain.php' ), "add_action( 'deleted_post', array( \$this, 'forget_empty_campaign' ), 10, 2 );" ) );
 unset( $GLOBALS['vcap_test_options'][ VCAP\Compat\AffiliateCaptain::OPTION ] );
+$s19_js = $sec_src( 'assets/js/scanner.js' );
+preg_match_all( '/href="\' \+ (.*?) \+ \'"/', $s19_js, $s19_hrefs );
+check( 'S19: the scanner takes links from the server only with an http(s) scheme (every href goes through safeUrl())', str_contains( $s19_js, 'function safeUrl( u )' ) && str_contains( $s19_js, "return /^https?:\\/\\//i.test( s ) ? s : '';" ) && 2 === count( $s19_hrefs[1] ) && array() === array_filter( $s19_hrefs[1], static fn( $h ) => ! str_starts_with( $h, 'esc( safeUrl( ' ) ) && ! str_contains( $s19_js, 'if ( d.admin_url )' ), json_encode( $s19_hrefs[1] ) );
 check( 'S6: referral rewards are "Individual use only" (several rewards cannot be stacked)', (bool) preg_match( '/function reward_coupon\(.*?set_individual_use\( true \).*?return \$coupon->save\(\)/s', $sec_src( 'src/Referrals.php' ) ) );
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
