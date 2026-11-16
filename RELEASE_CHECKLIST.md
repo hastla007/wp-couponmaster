@@ -81,4 +81,4 @@ Checked one by one before the WordPress.org submission (A9). None is a security 
 | Site Health ledger check | 120 ms | 15 |
 | Maintenance "expire overdue" catching up ~1 400 overdue vouchers at once | 2.8 s | 4 232 (batches within the step's time budget; daily only a few) |
 
-No full table scans; seeding script: scratchpad `perf.php` (bulk insert, then the timings above).
+Times measured with a bulk-inserted data set (seeding and timing script kept outside the repository); query plans were not analysed separately.
