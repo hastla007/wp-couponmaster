@@ -99,6 +99,7 @@ $rewards = get_posts( array( 'post_type' => 'shop_coupon', 'numberposts' => -1, 
 vcap_ref_assert( 1 === count( $rewards ), 'one reward coupon is created' );
 $reward = new WC_Coupon( $rewards[0] );
 vcap_ref_assert( 15.0 === (float) $reward->get_amount() && array( 'ref-' . $tag . '@example.com' ) === $reward->get_email_restrictions() && 1 === $reward->get_usage_limit(), 'the reward coupon has the value, single use and the referrer email' );
+vcap_ref_assert( $reward->get_individual_use(), 'S6: the reward coupon is "Individual use only" (no stacking of several rewards)' );
 $friend_notes = implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $friend_order->get_id() ) ), 'content' ) );
 vcap_ref_assert( str_contains( $friend_notes, 'Referral reward' ) && ! str_contains( $friend_notes, 'ref-' . $tag . '@example.com' ) && ! str_contains( strtoupper( $friend_notes ), strtoupper( $reward->get_code() ) ) && str_contains( $friend_notes, '#' . $referrer ), 'the reward note in the friend\'s order names the referrer by account number and masks the reward code' );
 // A note as written by earlier versions (address and full code), to be redacted on erasure.

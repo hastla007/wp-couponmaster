@@ -2274,5 +2274,9 @@ preg_match_all( '/`(vcap_[a-z0-9_]+)`/', $m102_part, $m102_named );
 $m102_missing = array_values( array_filter( array_unique( $m102_named[1] ), static fn( $h ) => ! str_contains( $m102_hooks, '`' . $h . '`' ) ) );
 check( 'M12-102: FREE-PREMIUM.md refers to docs/HOOKS.md instead of an own hook table, and every hook it names is in HOOKS.md', '' !== $m102_part && str_contains( $m102_doc, '(HOOKS.md)' ) && ! preg_match( '/^\|\s*`vcap_/m', $m102_doc ) && count( $m102_named[1] ) > 10 && array() === $m102_missing, implode( ', ', $m102_missing ) );
 
+echo "Security check (S6–S21, E2)\n";
+$sec_src = static fn( string $file ): string => (string) file_get_contents( dirname( __DIR__ ) . '/' . $file );
+check( 'S6: referral rewards are "Individual use only" (several rewards cannot be stacked)', (bool) preg_match( '/function reward_coupon\(.*?set_individual_use\( true \).*?return \$coupon->save\(\)/s', $sec_src( 'src/Referrals.php' ) ) );
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );
