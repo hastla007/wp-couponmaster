@@ -23,6 +23,8 @@ final class Plugin {
 	public API\V1\RedemptionService $redemptions;
 	/** Read-only state of vouchers, gift cards, store credit and redemptions by record id (since 1.2.0, contract 1.2.0). */
 	public API\V1\ReadService $read;
+	/** The four voucher commands for automatic callers: issue, void, reactivate, redeem (since 1.2.0, contract 1.3.0). */
+	public API\V1\CommandService $commands;
 	/** Exchange of ticket vouchers for WP Pass Captain tickets (works only while Pass Captain is active). */
 	public Compat\PassCaptainTickets $passcaptain_tickets;
 	public StoreCredit $store_credit;
@@ -77,6 +79,7 @@ final class Plugin {
 		$this->api_v1    = new API\V1\VoucherService( $this->vouchers, $this->coupons );
 		$this->redemptions = new API\V1\RedemptionService( $this->vouchers );
 		$this->read        = new API\V1\ReadService( $this->vouchers, fn( Voucher $v ): bool => $this->issuer->voided_after_refund( $v ) );
+		$this->commands    = new API\V1\CommandService( new API\V1\CoreCommandBackend( $this->vouchers, $this->issuer, $this->redemptions ), new API\V1\OptionCommandStore() );
 		$this->passcaptain_tickets = new Compat\PassCaptainTickets( $this->redemptions, $this->vouchers );
 		$this->store_credit = new StoreCredit( $this->settings, $this->vouchers, $this->coupons );
 		$this->payments     = new PaymentVouchers( $this->vouchers );
@@ -132,6 +135,7 @@ final class Plugin {
 		( new NextSteps() )->register();
 		$this->tickets->register();
 		$this->redemptions->register();
+		$this->commands->register();
 		$this->store_credit->register();
 		( new OrderReturn( $this->vouchers, $this->coupons ) )->register();
 		$this->payments->register();

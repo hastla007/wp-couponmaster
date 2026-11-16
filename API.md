@@ -283,6 +283,104 @@ add_action( 'vcap_voucher_event', function ( $voucher_id, $event ) {
 }, 10, 2 );
 ```
 
+## Voucher commands (since 1.2.0, contract 1.3.0)
+
+The four commands an automatic caller (a workflow automation, an add-on) may run on vouchers (suite specification 8.3,
+decisions D11/D11b, requirement VC-1): issue, void, reactivate and redeem. Limits, protocol, idempotency, permission
+and abuse protection are enforced **here, in the core**, for every caller; no licence is checked. Available once the
+plugin booted (`vcap_loaded`); check `function_exists( 'vcap_command_issue' )` or
+`version_compare( VCAP_CONTRACT_VERSION, '1.3.0', '>=' )`. The functions are thin wrappers of the service
+`vcap()->commands` (`VCAP\API\V1\CommandService`, methods `issue()`, `void()`, `reactivate()`, `redeem()`,
+`run( $command, $args )` and `protocol( $day )`).
+
+| Function | Command | Fields besides the common ones | Capability of `authorized_by_user_id` | Since |
+|---|---|---|---|---|
+| `vcap_command_issue( array $args )` | `voucher.issue` | `recipient_user_id`, `amount_minor`, `currency`, optional `product_id` | `vcap_manage_vouchers` | 1.3.0 |
+| `vcap_command_void( array $args )` | `voucher.void` | `voucher_id` | `vcap_manage_vouchers` | 1.3.0 |
+| `vcap_command_reactivate( array $args )` | `voucher.reactivate` | `voucher_id` | `vcap_increase_balance` | 1.3.0 |
+| `vcap_command_redeem( array $args )` | `voucher.redeem` | `voucher_id`, `amount_minor`, `currency`, `target` | `vcap_redeem_api` or `vcap_manage_vouchers` | 1.3.0 |
+
+**Common fields** (all required, R-8.3): `idempotency_key` (1–100 printable ASCII characters without spaces; built by
+the caller from workflow, workflow version, event id and step, R-8.4), `reason` (fixed key of the caller, e.g.
+`loyalty_reward`; letters, digits, `_ . : -`, at most 64 characters – no free text), `workflow_id`, `run_id`,
+`step_id` (int or key of the same form), `authorized_by_user_id` (the WordPress user who published the workflow).
+
+**Rules.**
+- A voucher is named by its `voucher_id`, never by its code; a recipient by `recipient_user_id`, never by an address
+  (the core reads the address from the account and sends its own voucher mail). Money is given in minor units
+  (`amount_minor`, integer, `12.50 EUR` → `1250`) with `currency`. Any field not listed for a command – an own `code`,
+  `allow_weak`, `paid`, `discount_type`/percentages, `refund`/`after_refund`, a note, `recipient_email` – is refused as
+  `invalid_request` with `field` naming it (VC-2).
+- `voucher.issue` issues a fixed value (no percentage product, no ticket, `paid` = false) in the shop currency.
+  `voucher.void` voids without refund and books nothing back; `voucher.reactivate` never reactivates a voucher voided
+  because of a refund; `voucher.redeem` reserves and commits in one call through the redemption API, never more than
+  the remaining value (a single-use voucher only as a whole), any voucher (not only one issued by a workflow) except
+  store credit, tickets and percentage vouchers. `refund()` of the redemption API is not reachable.
+- The capability of `authorized_by_user_id` is checked with `user_can()` at every call; the current user is neither
+  used nor changed (no `wp_set_current_user()`), and the checks of `void()`/`reactivate()`/the REST layer are not
+  relied on (VC-9).
+- **Off by default.** Each command has its own switch in *WooCommerce → Settings → Vouchers → Integrations (API)*
+  ("Automatic voucher commands").
+- **Fixed limits** (owner's decision of 16.11.2026 on F-05; default and ceiling at once; the operator can only lower
+  them in the same settings, the filter `vcap_command_limits` can only lower them or switch a command off):
+
+  | Command | Maximum amount | Calls per calendar day and site | Further limit |
+  |---|---|---|---|
+  | `voucher.issue` | 100 EUR per voucher | 50 | 1 per calendar day and recipient |
+  | `voucher.void` | – | 50 | – |
+  | `voucher.reactivate` | – | 50 | – |
+  | `voucher.redeem` | 100 EUR per redemption | 50 | – |
+
+  A call above a limit is refused, not shortened. The calendar day is the site's time zone; all workflows count
+  together; void and reactivate have separate counters. Only executed calls (`done`) count. **Other currencies
+  (F-05a, open):** an amount in a currency other than EUR is refused (`currency_not_allowed`) unless it is the shop
+  currency and the operator entered an own *Maximum amount* there (worth no more than 100 EUR – not checked, there is
+  no exchange rate in the core).
+- **Atomic.** Checking, counting and executing run under one named database lock per site, so two parallel calls
+  never pass a limit together (R-8.3b).
+- **Idempotent.** A second call with the same `idempotency_key` does nothing and returns the stored reply of the first
+  (with `replayed` = true), even when the command was switched off since. The same key with other values (`reason`
+  or the command fields) is refused as `idempotency_conflict`. Replies are kept 90 days. `failed` replies are not
+  stored: the same key may be retried.
+- **Protocol** (R-8.3c). Every call – also refusals, conflicts, replays and lock failures – is written to the protocol
+  of the day (`vcap()->commands->protocol( 'Y-m-d' )`, kept 90 days, at most 500 entries a day) with `at`, `command`,
+  `status`, `code`, `voucher_id`, `amount_minor`, `currency`, `workflow_id`, `run_id`, `step_id`,
+  `authorized_by_user_id`, `reason`, `replayed`, `key_hash` (16 hex characters of a SHA-256 of the key). A call on a
+  known voucher (not a replay) also gets the history entry "Automatic command" with the same data; the core's own
+  entries (`issued`, `voided`, `reactivated`, `api_reserved` …), hooks and mails follow as for any other caller.
+
+**Reply** (always all keys, in this order): `status` (`done`, `duplicate` – the target state already held, nothing
+done –, `refused`, `failed`), `code`, `command`, `voucher_id`, `voucher_status`, `amount_minor`, `currency`,
+`balance_minor` (remaining value of a stored-balance voucher), `field` (with `invalid_request`), `final` (true for
+everything but `failed`: refusals are final, R-8.13 – do not retry), `replayed`, `at` (RFC 3339, UTC). Never a code,
+an address or a name.
+
+| `status` | `code` |
+|---|---|
+| `done` | `issued`, `voided`, `reactivated`, `redeemed` |
+| `duplicate` | `already_issued` (core reference of this key already used), `already_void`, `already_active` |
+| `refused` | `command_disabled`, `not_authorized`, `daily_limit_reached`, `recipient_daily_limit_reached`, `amount_over_limit`, `currency_not_allowed`, `currency_mismatch`, `invalid_request`, `idempotency_conflict`, `unknown_command`, `voucher_not_found`, `unsupported_voucher`, `invalid_product`, `percent_not_allowed`, `recipient_unknown`, `not_void`, `voided_after_refund`, `voucher_void`, `voucher_expired`, `voucher_redeemed`, `voucher_not_active`, `insufficient_balance`, `amount_mismatch`, `not_redeemable`, `reservation_released` |
+| `failed` | `busy` (lock held by a parallel call), `issue_failed`, `void_failed`, `reactivate_failed`, `redeem_failed`, `unavailable` (plugin not booted) |
+
+```php
+$reply = vcap_command_issue( array(
+    'idempotency_key'       => 'wf-12:v3:evt-9f2c:step-2',
+    'reason'                => 'loyalty_reward',
+    'workflow_id'           => 12,
+    'run_id'                => 'run-881',
+    'step_id'               => 'step-2',
+    'authorized_by_user_id' => 1,
+    'recipient_user_id'     => 57,
+    'amount_minor'          => 1000, // 10.00 EUR
+    'currency'              => 'EUR',
+) );
+if ( 'done' === $reply['status'] ) {
+    // $reply['voucher_id'], $reply['voucher_status'] – the core mails the voucher itself.
+} elseif ( ! $reply['final'] ) {
+    // retry later with the same key
+}
+```
+
 ## Extension points for connector plugins (since 1.1.0)
 
 ### Voucher types

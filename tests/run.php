@@ -2560,5 +2560,280 @@ preg_match( "/define\( 'VCAP_CONTRACT_VERSION', '(\d+\.\d+\.\d+)' \);/", $vc7_ma
 check( 'VC-7: the read functions raised the contract version to at least 1.2.0 (additive minor within major 1)', isset( $vc7_contract[1] ) && version_compare( $vc7_contract[1], '1.2.0', '>=' ) && str_starts_with( $vc7_contract[1], '1.' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'CONNECTORS.md' ), '| 1.2.0 | 1.2.0 | read functions `vcap_read_voucher()`' ) );
 $GLOBALS['wpdb'] = $vc7_saved_wpdb;
 
+// VC-1 / VOUCH-WF-13 (suite spec 8.3, R-8.1 to R-8.13; VC-2, VC-9): the four voucher commands with fixed limits,
+// switches (off by default), idempotency, permission of the authorising user, protocol and history without code.
+echo "\nVC-1: voucher commands (contract 1.3.0)\n";
+final class VCAP_Test_Command_Store implements VCAP\API\V1\CommandStore {
+	public array $replies = array(); public array $counts = array(); public array $log = array(); public bool $locked = false; public bool $lock_ok = true; public int $locks = 0;
+	public function lock(): bool { if ( ! $this->lock_ok ) { return false; } $this->locked = true; ++$this->locks; return true; }
+	public function unlock(): void { $this->locked = false; }
+	public function reply( string $key ): ?array { return $this->replies[ $key ] ?? null; }
+	public function save_reply( string $key, string $hash, array $result, string $day ): void { $this->replies[ $key ] = array( 'hash' => $hash, 'result' => $result ); }
+	public function count( string $day, string $bucket ): int { return (int) ( $this->counts[ $day ][ $bucket ] ?? 0 ); }
+	public function increment( string $day, array $buckets ): void { foreach ( $buckets as $b ) { $this->counts[ $day ][ $b ] = $this->count( $day, $b ) + 1; } }
+	public function protocol( string $day, array $entry ): void { $this->log[ $day ][] = $entry; }
+	public function entries( string $day ): array { return $this->log[ $day ] ?? array(); }
+}
+final class VCAP_Test_Command_Backend implements VCAP\API\V1\CommandBackend {
+	public array $vouchers = array(); public array $caps = array(); public array $users = array(); public array $calls = array(); public array $history = array();
+	public string $day = '2026-11-16'; public string $currency = 'EUR'; public int $next = 500; public bool $refund_void = false; public bool $locked_seen = true; public ?VCAP_Test_Command_Store $store = null;
+	public function voucher( int $id ): ?Voucher { return isset( $this->vouchers[ $id ] ) ? clone $this->vouchers[ $id ] : null; }
+	public function user_can( int $user_id, string $capability ): bool { return in_array( $capability, $this->caps[ $user_id ] ?? array(), true ); }
+	public function recipient( int $user_id ): ?array { return $this->users[ $user_id ] ?? null; }
+	public function shop_currency(): string { return $this->currency; }
+	public function today(): string { return $this->day; }
+	public function product_refusal( int $product_id ): string { return 77 === $product_id ? 'percent_not_allowed' : ( 55 === $product_id ? '' : 'invalid_product' ); }
+	private function seen(): void { $this->locked_seen = $this->locked_seen && $this->store && $this->store->locked; }
+	public function issue( array $args ): Voucher|WP_Error {
+		$this->seen(); $this->calls[] = array( 'issue', $args );
+		$v = new Voucher(); $v->id = $this->next++; $v->code = 'MARKERCMD-' . $v->id . 'ZQ'; $v->type = 'voucher'; $v->usage_mode = 'single'; $v->discount_type = 'fixed_cart'; $v->currency = $this->currency; $v->initial_amount = (float) $args['amount']; $v->balance = (float) $args['amount']; $v->status = 'active'; $v->recipient_email = $args['recipient_email'];
+		$this->vouchers[ $v->id ] = $v;
+		return $v;
+	}
+	public function void( Voucher $voucher ): bool { $this->seen(); $this->calls[] = array( 'void', $voucher->id ); $this->vouchers[ $voucher->id ]->status = 'void'; return true; }
+	public function reactivate( Voucher $voucher ): bool { $this->seen(); $this->calls[] = array( 'reactivate', $voucher->id ); $this->vouchers[ $voucher->id ]->status = 'active'; return true; }
+	public function voided_after_refund( Voucher $voucher ): bool { return $this->refund_void; }
+	public function redeem( Voucher $voucher, float $amount, string $target, string $key ): Voucher|WP_Error {
+		$this->seen(); $this->calls[] = array( 'redeem', $voucher->id, $amount, $target, $key );
+		$v = $this->vouchers[ $voucher->id ];
+		if ( $v->is_multi_use() ) { $v->balance = round( $v->balance - $amount, 2 ); $v->status = $v->balance <= 0 ? 'redeemed' : 'active'; } else { $v->status = 'redeemed'; }
+		return clone $v;
+	}
+	public function history( int $voucher_id, ?float $amount, string $note ): void { $this->history[] = array( $voucher_id, $amount, $note ); }
+}
+$vc1_mk = static function ( int $id, array $over = array() ): Voucher {
+	$v = new Voucher(); $v->id = $id; $v->code = 'MARKERCMD-' . $id . 'ZQ'; $v->type = 'giftcard'; $v->usage_mode = 'balance'; $v->discount_type = 'fixed_cart'; $v->currency = 'EUR'; $v->initial_amount = 80.0; $v->balance = 60.0; $v->status = 'active'; $v->recipient_email = 'marker.cmd@example.test'; $v->recipient_name = 'Marker Cmd';
+	foreach ( $over as $k => $val ) { $v->$k = $val; }
+	return $v;
+};
+$vc1_new = static function () use ( $vc1_mk ): array {
+	$store = new VCAP_Test_Command_Store();
+	$be    = new VCAP_Test_Command_Backend();
+	$be->store = $store;
+	$be->caps  = array( 7 => array( 'vcap_manage_vouchers', 'vcap_increase_balance' ), 8 => array( 'vcap_redeem_api' ), 9 => array( 'read' ) );
+	$be->users = array( 21 => array( 'email' => 'marker.recipient@example.test', 'name' => 'Marker Recipient' ), 22 => array( 'email' => 'marker.two@example.test', 'name' => 'Marker Two' ) );
+	$be->vouchers = array( 42 => $vc1_mk( 42 ), 43 => $vc1_mk( 43, array( 'status' => 'void' ) ), 44 => $vc1_mk( 44, array( 'type' => 'voucher', 'usage_mode' => 'single', 'initial_amount' => 25.0, 'balance' => 25.0 ) ), 45 => $vc1_mk( 45, array( 'type' => 'credit' ) ), 46 => $vc1_mk( 46, array( 'discount_type' => 'percent', 'type' => 'voucher', 'usage_mode' => 'single' ) ), 47 => $vc1_mk( 47, array( 'status' => 'redeemed', 'balance' => 0.0 ) ) );
+	return array( new VCAP\API\V1\CommandService( $be, $store ), $be, $store );
+};
+$vc1_n    = 0;
+$vc1_args = static function ( array $extra = array() ) use ( &$vc1_n ): array {
+	++$vc1_n;
+	return $extra + array( 'idempotency_key' => 'wf-3:v2:evt-' . $vc1_n . ':step-1', 'reason' => 'loyalty_reward', 'workflow_id' => 3, 'run_id' => 'run-' . $vc1_n, 'step_id' => 'step-1', 'authorized_by_user_id' => 7 );
+};
+$vc1_saved_opts = $GLOBALS['vcap_test_options'] ?? array();
+$vc1_on = static function ( array $commands ): void {
+	foreach ( $commands as $c ) {
+		$GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( $c, 'enabled' ) ] = 'yes';
+	}
+};
+$vc1_off = static function (): void {
+	foreach ( array_keys( $GLOBALS['vcap_test_options'] ?? array() ) as $k ) {
+		if ( str_starts_with( (string) $k, 'vcap_command_' ) ) {
+			unset( $GLOBALS['vcap_test_options'][ $k ] );
+		}
+	}
+};
+$GLOBALS['vcap_test_options']['woocommerce_currency'] = 'EUR';
+$vc1_off();
+list( $vc1, $vc1_be, $vc1_store ) = $vc1_new();
+$vc1_all = array();
+$vc1_off_results = array(
+	$vc1->issue( $vc1_args( array( 'recipient_user_id' => 21, 'amount_minor' => 1000, 'currency' => 'EUR' ) ) ),
+	$vc1->void( $vc1_args( array( 'voucher_id' => 42 ) ) ),
+	$vc1->reactivate( $vc1_args( array( 'voucher_id' => 43 ) ) ),
+	$vc1->redeem( $vc1_args( array( 'voucher_id' => 42, 'amount_minor' => 500, 'currency' => 'EUR', 'target' => 'course_unlock' ) ) ),
+);
+$vc1_all = array_merge( $vc1_all, $vc1_off_results );
+check( 'VC-1: all four commands are off by default (R-8.3d) – refused, final, code command_disabled, nothing executed', 4 === count( array_filter( $vc1_off_results, static fn( $r ) => 'refused' === $r['status'] && 'command_disabled' === $r['code'] && true === $r['final'] ) ) && array() === $vc1_be->calls && ! VCAP\API\V1\CommandLimits::enabled( 'voucher.issue' ), wp_json_encode( $vc1_off_results ) );
+check( 'VC-1: every reply has exactly the documented keys in order', 4 === count( array_filter( $vc1_off_results, static fn( $r ) => VCAP\API\V1\CommandService::RESULT_KEYS === array_keys( $r ) ) ) );
+check( 'VC-1: the fixed table of 8.3.1 – issue 100 EUR / 50 a day / 1 per recipient, void and reactivate 50, redeem 100 EUR / 50', array( 'per_day' => 50, 'per_recipient' => 1, 'max_amount_minor' => 10000, 'amount_allowed' => true ) === VCAP\API\V1\CommandLimits::effective( 'voucher.issue', 'EUR' ) && 50 === VCAP\API\V1\CommandLimits::effective( 'voucher.void' )['per_day'] && 50 === VCAP\API\V1\CommandLimits::effective( 'voucher.reactivate' )['per_day'] && array( 'per_day' => 50, 'per_recipient' => null, 'max_amount_minor' => 10000, 'amount_allowed' => true ) === VCAP\API\V1\CommandLimits::effective( 'voucher.redeem', 'EUR' ) );
+
+$vc1_on( VCAP\API\V1\CommandLimits::COMMANDS );
+list( $vc1, $vc1_be, $vc1_store ) = $vc1_new();
+$vc1_i_args = $vc1_args( array( 'recipient_user_id' => 21, 'amount_minor' => 2550, 'currency' => 'EUR' ) );
+$vc1_i      = $vc1->issue( $vc1_i_args );
+$vc1_all[]  = $vc1_i;
+$vc1_issue_call = $vc1_be->calls[0][1] ?? array();
+check( 'VC-1: issue – done, voucher id and state, amount in minor units; the core gets the address from the user account, sends its own mail, no own code, not paid', 'done' === $vc1_i['status'] && 'issued' === $vc1_i['code'] && 500 === $vc1_i['voucher_id'] && 'active' === $vc1_i['voucher_status'] && 2550 === $vc1_i['amount_minor'] && 'EUR' === $vc1_i['currency'] && 25.5 === $vc1_issue_call['amount'] && 'marker.recipient@example.test' === $vc1_issue_call['recipient_email'] && true === $vc1_issue_call['send'] && false === $vc1_issue_call['paid'] && ! isset( $vc1_issue_call['code'], $vc1_issue_call['allow_weak'], $vc1_issue_call['discount_type'] ) && str_starts_with( (string) $vc1_issue_call['reference'], 'command:' ) && $vc1_be->locked_seen, wp_json_encode( array( $vc1_i, $vc1_issue_call ) ) );
+$vc1_replay = $vc1->issue( $vc1_i_args );
+$vc1_all[]  = $vc1_replay;
+check( 'VC-1: the same key returns the stored reply of the first call and does nothing (R-8.3a)', 1 === count( $vc1_be->calls ) && true === $vc1_replay['replayed'] && array_diff_key( $vc1_replay, array( 'replayed' => 1 ) ) === array_diff_key( $vc1_i, array( 'replayed' => 1 ) ) && 1 === $vc1_store->count( '2026-11-16', 'voucher.issue' ) );
+$vc1_conflict = $vc1->issue( array( 'amount_minor' => 2600 ) + $vc1_i_args );
+$vc1_all[]    = $vc1_conflict;
+check( 'VC-1: the same key with other values is refused as idempotency_conflict, nothing executed, the first reply stays', 'refused' === $vc1_conflict['status'] && 'idempotency_conflict' === $vc1_conflict['code'] && 1 === count( $vc1_be->calls ) && 2550 === $vc1_store->replies[ $vc1_i_args['idempotency_key'] ]['result']['amount_minor'] );
+$vc1_r1 = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 21, 'amount_minor' => 1000, 'currency' => 'EUR' ) ) );
+$vc1_r2 = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 1000, 'currency' => 'EUR' ) ) );
+array_push( $vc1_all, $vc1_r1, $vc1_r2 );
+check( 'VC-1: 1 voucher per recipient and day – a second one for the same user is refused, another user still gets one', 'refused' === $vc1_r1['status'] && 'recipient_daily_limit_reached' === $vc1_r1['code'] && true === $vc1_r1['final'] && 'done' === $vc1_r2['status'] && 2 === count( $vc1_be->calls ) );
+$vc1_be->day = '2026-11-17';
+$vc1_r3      = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 21, 'amount_minor' => 1000, 'currency' => 'EUR' ) ) );
+check( 'VC-1: counters are per calendar day – the next day the recipient may get one again', 'done' === $vc1_r3['status'] );
+$vc1_be->day = '2026-11-16';
+$vc1_over = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 10001, 'currency' => 'EUR' ) ) );
+$vc1_max  = $vc1->redeem( $vc1_args( array( 'voucher_id' => 42, 'amount_minor' => 10001, 'currency' => 'EUR', 'target' => 'course_unlock', 'authorized_by_user_id' => 8 ) ) );
+array_push( $vc1_all, $vc1_over, $vc1_max );
+check( 'VC-1: amounts above 100 EUR are refused, not shortened (issue per voucher, redeem per redemption)', 'amount_over_limit' === $vc1_over['code'] && 'refused' === $vc1_over['status'] && 'amount_over_limit' === $vc1_max['code'] && 3 === count( $vc1_be->calls ) );
+// Daily limit per site: 50 a day; a lowered setting (3) wins, a higher one (500) never raises.
+$GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.void', 'per_day' ) ] = '500';
+check( 'VC-1: a setting above the table does not raise the limit (50)', 50 === VCAP\API\V1\CommandLimits::effective( 'voucher.void' )['per_day'] );
+add_filter( 'vcap_command_limits', $vc1_raise = static fn( $l ) => array( 'per_day' => 999, 'max_amount_minor' => 99999, 'enabled' => true ) + $l );
+check( 'VC-1: the filter cannot raise a limit either', 50 === VCAP\API\V1\CommandLimits::effective( 'voucher.void' )['per_day'] && 10000 === VCAP\API\V1\CommandLimits::effective( 'voucher.issue', 'EUR' )['max_amount_minor'] );
+remove_filter( 'vcap_command_limits', $vc1_raise );
+$GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.void', 'per_day' ) ] = '2';
+for ( $i = 100; $i < 103; $i++ ) {
+	$vc1_be->vouchers[ $i ] = $vc1_mk( $i );
+}
+$vc1_v = array();
+for ( $i = 100; $i < 103; $i++ ) {
+	$vc1_v[] = $vc1->void( $vc1_args( array( 'voucher_id' => $i ) ) );
+}
+$vc1_all = array_merge( $vc1_all, $vc1_v );
+check( 'VC-1: daily limit per site – the operator lowered void to 2: the third void of the day is refused (daily_limit_reached), no refund path', 'voided' === $vc1_v[0]['code'] && 'void' === $vc1_v[0]['voucher_status'] && 'done' === $vc1_v[1]['status'] && 'refused' === $vc1_v[2]['status'] && 'daily_limit_reached' === $vc1_v[2]['code'] && 'active' === $vc1_be->vouchers[102]->status && 2 === $vc1_store->count( '2026-11-16', 'voucher.void' ) );
+$vc1_dup = $vc1->void( $vc1_args( array( 'voucher_id' => 43 ) ) );
+$vc1_all[] = $vc1_dup;
+check( 'VC-1: void of a void voucher – duplicate already_void, counts nothing', 'duplicate' === $vc1_dup['status'] && 'already_void' === $vc1_dup['code'] && 2 === $vc1_store->count( '2026-11-16', 'voucher.void' ) );
+unset( $GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.void', 'per_day' ) ] );
+$vc1_issue_limit = $GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'per_day' ) ] = '2';
+$vc1_l = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'EUR' ) ) );
+check( 'VC-1: daily limit of issue per site (lowered to 2: two issued today) refuses the next one', 'daily_limit_reached' === $vc1_l['code'] );
+unset( $GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'per_day' ) ] );
+// Full 50 a day for reactivate.
+list( $vc1b, $vc1b_be, $vc1b_store ) = $vc1_new();
+for ( $i = 1000; $i < 1051; $i++ ) {
+	$vc1b_be->vouchers[ $i ] = $vc1_mk( $i, array( 'status' => 'void' ) );
+}
+$vc1_ra = array();
+for ( $i = 1000; $i < 1051; $i++ ) {
+	$vc1_ra[] = $vc1b->reactivate( $vc1_args( array( 'voucher_id' => $i ) ) );
+}
+check( 'VC-1: reactivate – 50 a day and site by default, the 51st is refused; separate counter from void', 50 === count( array_filter( $vc1_ra, static fn( $r ) => 'reactivated' === $r['code'] ) ) && 'daily_limit_reached' === $vc1_ra[50]['code'] && 0 === $vc1b_store->count( '2026-11-16', 'voucher.void' ) && 50 === $vc1b_store->count( '2026-11-16', 'voucher.reactivate' ) );
+$vc1_be->refund_void = true;
+$vc1_rr = $vc1->reactivate( $vc1_args( array( 'voucher_id' => 43 ) ) );
+$vc1_be->refund_void = false;
+$vc1_ra2 = $vc1->reactivate( $vc1_args( array( 'voucher_id' => 47 ) ) );
+array_push( $vc1_all, $vc1_rr, $vc1_ra2 );
+check( 'VC-1: reactivate refuses a voucher voided because of a refund (after_refund fixed false) and one that is not void', 'voided_after_refund' === $vc1_rr['code'] && 'not_void' === $vc1_ra2['code'] );
+// Permission (R-8.4 to R-8.8, VC-9): the authorising user, never the current user.
+$vc1_p = array(
+	$vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'EUR', 'authorized_by_user_id' => 9 ) ) ),
+	$vc1->void( $vc1_args( array( 'voucher_id' => 102, 'authorized_by_user_id' => 8 ) ) ),
+	$vc1->reactivate( $vc1_args( array( 'voucher_id' => 43, 'authorized_by_user_id' => 8 ) ) ),
+	$vc1->redeem( $vc1_args( array( 'voucher_id' => 42, 'amount_minor' => 100, 'currency' => 'EUR', 'target' => 'course_unlock', 'authorized_by_user_id' => 404 ) ) ),
+);
+$vc1_all = array_merge( $vc1_all, $vc1_p );
+check( 'VC-1/VC-9: a user without the capability (or unknown) is refused not_authorized, final; the core checks it itself', 4 === count( array_filter( $vc1_p, static fn( $r ) => 'not_authorized' === $r['code'] && true === $r['final'] ) ) );
+$vc1_src = (string) file_get_contents( VCAP_PATH . 'src/API/V1/CommandService.php' ) . file_get_contents( VCAP_PATH . 'src/API/V1/CoreCommandBackend.php' );
+check( 'VC-1/VC-9: no wp_set_current_user(), no current_user_can(); user_can() on the authorising user; refund paths fixed off; refund() not reachable', ! preg_match( '/wp_set_current_user|current_user_can|->refund\(|void_purchase|void_or_retry/', $vc1_src ) && str_contains( $vc1_src, 'user_can( $user, $capability )' ) && str_contains( $vc1_src, "->void( \$voucher, '', false )" ) && str_contains( $vc1_src, '->reactivate( $voucher, false )' ) );
+// Redeem.
+$vc1_rd   = $vc1->redeem( $vc1_args( array( 'voucher_id' => 42, 'amount_minor' => 1250, 'currency' => 'EUR', 'target' => 'course_unlock', 'authorized_by_user_id' => 8 ) ) );
+$vc1_call = end( $vc1_be->calls );
+$vc1_rd2  = $vc1->redeem( $vc1_args( array( 'voucher_id' => 42, 'amount_minor' => 4751, 'currency' => 'EUR', 'target' => 'course_unlock', 'authorized_by_user_id' => 8 ) ) );
+$vc1_rd3  = $vc1->redeem( $vc1_args( array( 'voucher_id' => 44, 'amount_minor' => 1000, 'currency' => 'EUR', 'target' => 'course_unlock', 'authorized_by_user_id' => 8 ) ) );
+$vc1_rd4  = $vc1->redeem( $vc1_args( array( 'voucher_id' => 44, 'amount_minor' => 2500, 'currency' => 'EUR', 'target' => 'course_unlock', 'authorized_by_user_id' => 8 ) ) );
+$vc1_rd5  = $vc1->redeem( $vc1_args( array( 'voucher_id' => 45, 'amount_minor' => 100, 'currency' => 'EUR', 'target' => 'course_unlock' ) ) );
+$vc1_rd6  = $vc1->redeem( $vc1_args( array( 'voucher_id' => 46, 'amount_minor' => 100, 'currency' => 'EUR', 'target' => 'course_unlock' ) ) );
+$vc1_rd7  = $vc1->redeem( $vc1_args( array( 'voucher_id' => 42, 'amount_minor' => 100, 'currency' => 'USD', 'target' => 'course_unlock' ) ) );
+array_push( $vc1_all, $vc1_rd, $vc1_rd2, $vc1_rd3, $vc1_rd4, $vc1_rd5, $vc1_rd6, $vc1_rd7 );
+check( 'VC-1: redeem by voucher_id – partial amount in minor units, balance after in minor units, reserve and commit by the core under a derived key', 'done' === $vc1_rd['status'] && 'redeemed' === $vc1_rd['code'] && 4750 === $vc1_rd['balance_minor'] && 1250 === $vc1_rd['amount_minor'] && 'redeem' === $vc1_call[0] && 12.5 === $vc1_call[2] && 'workflow:course_unlock' === $vc1_call[3] && (bool) preg_match( VCAP\API\V1\RedemptionService::KEY_PATTERN, $vc1_call[4] ), wp_json_encode( array( $vc1_rd, $vc1_call ) ) );
+check( 'VC-1: redeem never more than the remaining value; a single-use voucher only as a whole; store credit and percentage vouchers refused; currency must match', 'insufficient_balance' === $vc1_rd2['code'] && 'amount_mismatch' === $vc1_rd3['code'] && 'done' === $vc1_rd4['status'] && 'unsupported_voucher' === $vc1_rd5['code'] && 'unsupported_voucher' === $vc1_rd6['code'] && 'currency_mismatch' === $vc1_rd7['code'] );
+// VC-2: no code, no e-mail address, no own code / allow_weak / percent / paid.
+$vc1_bad = array(
+	$vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'EUR', 'code' => 'MYOWNCODE1' ) ) ),
+	$vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'EUR', 'allow_weak' => true ) ) ),
+	$vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'EUR', 'paid' => true ) ) ),
+	$vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'EUR', 'discount_type' => 'percent' ) ) ),
+	$vc1->issue( $vc1_args( array( 'recipient_email' => 'x@example.test', 'amount_minor' => 100, 'currency' => 'EUR' ) ) ),
+	$vc1->void( $vc1_args( array( 'code' => 'MARKERCMD-42ZQ' ) ) ),
+	$vc1->void( $vc1_args( array( 'voucher_id' => 42, 'refund' => true ) ) ),
+	$vc1->reactivate( $vc1_args( array( 'voucher_id' => 43, 'after_refund' => true ) ) ),
+	$vc1->redeem( $vc1_args( array( 'voucher_id' => 42, 'amount_minor' => '12.50', 'currency' => 'EUR', 'target' => 'course_unlock' ) ) ),
+	$vc1->redeem( $vc1_args( array( 'voucher_id' => 42, 'amount_minor' => 100, 'currency' => 'EUR', 'target' => 'free text target' ) ) ),
+	$vc1->void( $vc1_args( array( 'voucher_id' => 42, 'reason' => 'Free text reason' ) ) ),
+	$vc1->void( $vc1_args( array( 'voucher_id' => 42, 'run_id' => '' ) ) ),
+);
+$vc1_all = array_merge( $vc1_all, $vc1_bad );
+$vc1_fields = array_map( static fn( $r ) => $r['code'] . ':' . $r['field'], $vc1_bad );
+check( 'VC-2: own code, allow_weak, paid, percentage, e-mail address, code instead of id, refund switches, non-integer amounts, free-text keys and missing fields are refused (invalid_request with the field name)', array( 'invalid_request:code', 'invalid_request:allow_weak', 'invalid_request:paid', 'invalid_request:discount_type', 'invalid_request:recipient_email', 'invalid_request:code', 'invalid_request:refund', 'invalid_request:after_refund', 'invalid_request:amount_minor', 'invalid_request:target', 'invalid_request:reason', 'invalid_request:run_id' ) === $vc1_fields, implode( ', ', $vc1_fields ) );
+$vc1_prod = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'EUR', 'product_id' => 77 ) ) );
+$vc1_cur  = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'USD' ) ) );
+$vc1_nok  = $vc1->issue( array( 'idempotency_key' => str_repeat( 'k', 101 ) ) + $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'EUR' ) ) );
+array_push( $vc1_all, $vc1_prod, $vc1_cur, $vc1_nok );
+check( 'VC-2: a percentage product is refused; the currency must be the shop currency; the key has at most 100 characters', 'percent_not_allowed' === $vc1_prod['code'] && 'currency_mismatch' === $vc1_cur['code'] && 'invalid_request' === $vc1_nok['code'] && 'idempotency_key' === $vc1_nok['field'] );
+// F-05a: a shop in another currency refuses amounts until the operator enters an own maximum.
+$GLOBALS['vcap_test_options']['woocommerce_currency'] = 'CHF';
+$vc1_be->currency = 'CHF';
+$vc1_chf  = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'CHF' ) ) );
+$GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'max_amount' ) ] = '90.00';
+$vc1_be->day = '2026-11-18';
+$vc1_chf2 = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 9001, 'currency' => 'CHF' ) ) );
+$vc1_chf3 = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 9000, 'currency' => 'CHF' ) ) );
+array_push( $vc1_all, $vc1_chf, $vc1_chf2, $vc1_chf3 );
+check( 'VC-1 F-05a: non-EUR shop – refused (currency_not_allowed) without an own maximum; with one (90 CHF) above it refused, up to it done', 'currency_not_allowed' === $vc1_chf['code'] && true === $vc1_chf['final'] && 'amount_over_limit' === $vc1_chf2['code'] && 'done' === $vc1_chf3['status'] );
+unset( $GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'max_amount' ) ] );
+$GLOBALS['vcap_test_options']['woocommerce_currency'] = 'EUR';
+$vc1_be->currency = 'EUR';
+$vc1_be->day      = '2026-11-16';
+check( 'VC-1: settings sanitise to the table (count clamped, EUR amount at most 100.00, negative/blank = default)', '50' === VCAP\API\V1\CommandLimits::sanitize_count( 'vcap_command_void_per_day', '75' ) && '3' === VCAP\API\V1\CommandLimits::sanitize_count( 'vcap_command_void_per_day', '3' ) && '1' === VCAP\API\V1\CommandLimits::sanitize_count( 'vcap_command_issue_per_recipient', '9' ) && '100.00' === VCAP\API\V1\CommandLimits::sanitize_amount( 'vcap_command_issue_max_amount', '250' ) && '40.50' === VCAP\API\V1\CommandLimits::sanitize_amount( 'vcap_command_redeem_max_amount', '40,5' ) && '' === VCAP\API\V1\CommandLimits::sanitize_amount( 'vcap_command_redeem_max_amount', '-1' ) );
+$vc1_set = VCAP\API\V1\CommandService::settings_fields( array(), 'api' );
+check( 'VC-1: the switches are in "Integrations (API)", default "no"', 4 === count( array_filter( $vc1_set, static fn( $f ) => 'checkbox' === ( $f['type'] ?? '' ) && 'no' === $f['default'] && str_ends_with( $f['id'], '_enabled' ) ) ) && array() === VCAP\API\V1\CommandService::settings_fields( array(), 'codes' ) );
+// Switching off again is final for the next calls; a replay of a done call stays done.
+$GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'enabled' ) ] = 'no';
+$vc1_off2 = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'EUR' ) ) );
+$vc1_rep2 = $vc1->issue( $vc1_i_args );
+check( 'VC-1: switched off – new calls refused (command_disabled), a replay still returns the stored reply', 'command_disabled' === $vc1_off2['code'] && 'done' === $vc1_rep2['status'] && true === $vc1_rep2['replayed'] );
+$vc1_on( array( 'voucher.issue' ) );
+// Lock busy.
+$vc1_store->lock_ok = false;
+$vc1_busy = $vc1->void( $vc1_args( array( 'voucher_id' => 102 ) ) );
+$vc1_store->lock_ok = true;
+check( 'VC-1: lock busy – status failed (not final, may be retried with the same key), nothing stored or executed', 'failed' === $vc1_busy['status'] && 'busy' === $vc1_busy['code'] && false === $vc1_busy['final'] && 'active' === $vc1_be->vouchers[102]->status );
+check( 'VC-1: executions run under the lock and the lock is always released', $vc1_be->locked_seen && ! $vc1_store->locked );
+// Protocol and history (R-8.3c).
+$vc1_log = $vc1->protocol( '2026-11-16' );
+check( 'VC-1: every call is in the protocol – also refusals, conflicts, replays and lock failures – with the documented keys', count( $vc1_log ) >= 40 && array() === array_filter( $vc1_log, static fn( $e ) => VCAP\API\V1\CommandService::PROTOCOL_KEYS !== array_keys( $e ) ) && in_array( 'idempotency_conflict', array_column( $vc1_log, 'code' ), true ) && in_array( true, array_column( $vc1_log, 'replayed' ), true ) && in_array( 'busy', array_column( $vc1_log, 'code' ), true ) && in_array( 'command_disabled', array_column( $vc1_log, 'code' ), true ) );
+$vc1_e = array_values( array_filter( $vc1_log, static fn( $e ) => 'issued' === $e['code'] ) )[0] ?? array();
+check( 'VC-1: a protocol entry names command, workflow, run, step, voucher, amount, result, time and the authorising user; the key only as a short hash', 'voucher.issue' === ( $vc1_e['command'] ?? '' ) && '3' === $vc1_e['workflow_id'] && str_starts_with( (string) $vc1_e['run_id'], 'run-' ) && 'step-1' === $vc1_e['step_id'] && 500 === $vc1_e['voucher_id'] && 2550 === $vc1_e['amount_minor'] && 7 === $vc1_e['authorized_by_user_id'] && 'loyalty_reward' === $vc1_e['reason'] && 16 === strlen( (string) $vc1_e['key_hash'] ) && (bool) preg_match( '/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/', (string) $vc1_e['at'] ) );
+$vc1_h = array_map( static fn( $h ) => array( $h[0], VCAP\Note::decode( $h[2] ) ), $vc1_be->history );
+$vc1_h_void = array_values( array_filter( $vc1_h, static fn( $h ) => 100 === $h[0] ) );
+$vc1_h_ref  = array_values( array_filter( $vc1_h, static fn( $h ) => 43 === $h[0] && 'voided_after_refund' === ( $h[1]['args'][2] ?? '' ) ) );
+check( 'VC-1: calls on a known voucher get a history entry (coded note: command, result, code, workflow, run, step, user, reason) – also refusals; replays do not', 1 === count( $vc1_h_void ) && 'vcap_command' === $vc1_h_void[0][1]['code'] && array( 'voucher.void', 'done', 'voided', '3' ) === array_slice( $vc1_h_void[0][1]['args'], 0, 4 ) && 1 === count( $vc1_h_ref ) && 1 === count( array_filter( $vc1_h, static fn( $h ) => 500 === $h[0] ) ) );
+check( 'VC-1: the history note is translated through vcap_note_text with an event label', str_starts_with( (string) VCAP\API\V1\CommandService::note_text( '', 'vcap_command', array( 'voucher.void', 'done', 'voided', '3', 'r', 's', '7', 'x' ) ), 'voucher.void: done (voided)' ) && 'Automatic command' === VCAP\API\V1\CommandService::event_label( array() )['command'] );
+$vc1_json   = strtolower( (string) wp_json_encode( array( $vc1_all, $vc1_log, $vc1_be->history ) ) );
+$vc1_leaked = array_values( array_filter( array( 'markercmd-', 'marker.recipient@example.test', 'marker.two@example.test', 'marker recipient', 'marker.cmd@example.test', 'wf-3:v2:evt-' ), static fn( $s ) => str_contains( $vc1_json, $s ) ) );
+check( 'VC-1: no voucher code, address, name or raw idempotency key in any reply, protocol entry or history note', array() === $vc1_leaked, implode( ', ', $vc1_leaked ) );
+check( 'VC-1: money in minor units – amount_minor and balance_minor are integers in every reply', array() === array_filter( $vc1_all, static fn( $r ) => ( null !== $r['amount_minor'] && ! is_int( $r['amount_minor'] ) ) || ( null !== $r['balance_minor'] && ! is_int( $r['balance_minor'] ) ) ) );
+check( 'VC-1: refusals are final, only failed is not; status is one of done, duplicate, refused, failed', array() === array_filter( $vc1_all, static fn( $r ) => ! in_array( $r['status'], VCAP\API\V1\CommandService::STATUSES, true ) || ( 'failed' === $r['status'] ) === $r['final'] ) );
+// OptionCommandStore on the option stubs: replies, counters, protocol, clean-up.
+$vc1_saved_wpdb  = $GLOBALS['wpdb'] ?? null;
+$GLOBALS['wpdb'] = new VCAP_Test_Wpdb();
+$GLOBALS['wpdb']->answers = array( '/GET_LOCK/' => '1', '/RELEASE_LOCK/' => '1' );
+$vc1_os = new VCAP\API\V1\OptionCommandStore();
+$vc1_os_ok = $vc1_os->lock();
+$vc1_os->save_reply( 'k-1', 'h', array( 'status' => 'done' ), '2026-01-01' );
+$vc1_os->increment( '2026-01-01', array( 'voucher.void', 'voucher.void' ) );
+$vc1_os->protocol( '2026-01-01', array( 'code' => 'voided' ) );
+$vc1_os_before = array( $vc1_os->reply( 'k-1' ), $vc1_os->count( '2026-01-01', 'voucher.void' ), count( $vc1_os->entries( '2026-01-01' ) ) );
+$vc1_os->save_reply( 'k-2', 'h2', array( 'status' => 'refused' ), '2026-11-16' );
+$vc1_os->unlock();
+check( 'VC-1: OptionCommandStore – named lock per site, replies by key hash (not autoloaded), counters per day, protocol; days older than 90 days are removed', $vc1_os_ok && array( array( 'hash' => 'h', 'result' => array( 'status' => 'done' ) ), 2, 1 ) === $vc1_os_before && null === $vc1_os->reply( 'k-1' ) && 0 === $vc1_os->count( '2026-01-01', 'voucher.void' ) && array( 'hash' => 'h2', 'result' => array( 'status' => 'refused' ) ) === $vc1_os->reply( 'k-2' ) && false === ( $GLOBALS['vcap_test_autoload'][ 'vcap_cmd_reply_' . sha1( 'k-2' ) ] ?? null ) && ! isset( $GLOBALS['vcap_test_options']['vcap_cmd_reply_k-2'] ) && (bool) preg_grep( '/RELEASE_LOCK/', $GLOBALS['wpdb']->log ) );
+$GLOBALS['wpdb'] = $vc1_saved_wpdb;
+// Contract and docs.
+require_once VCAP_PATH . 'src/functions.php';
+$vc1_unready = vcap_command_void( array() );
+check( 'VC-1: without vcap()->commands the functions answer failed/unavailable (not final) instead of failing', 'failed' === $vc1_unready['status'] && 'unavailable' === $vc1_unready['code'] && VCAP\API\V1\CommandService::RESULT_KEYS === array_keys( $vc1_unready ) );
+$vc1_main = (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' );
+$vc1_api  = (string) file_get_contents( VCAP_PATH . 'API.md' );
+preg_match( "/define\( 'VCAP_CONTRACT_VERSION', '(\d+\.\d+\.\d+)' \);/", $vc1_main, $vc1_contract );
+check( 'VC-1: contract 1.3.0 (additive minor), documented in API.md and CONNECTORS.md; Plugin exposes vcap()->commands', isset( $vc1_contract[1] ) && version_compare( $vc1_contract[1], '1.3.0', '>=' ) && str_starts_with( $vc1_contract[1], '1.' ) && str_contains( $vc1_api, '## Voucher commands (since 1.2.0, contract 1.3.0)' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'CONNECTORS.md' ), '| 1.3.0 | 1.2.0 | voucher commands' ) && property_exists( VCAP\Plugin::class, 'commands' ) && 4 === count( array_filter( array( 'vcap_command_issue', 'vcap_command_void', 'vcap_command_reactivate', 'vcap_command_redeem' ), static fn( $f ) => function_exists( $f ) && str_contains( $vc1_api, '`' . $f . '( array $args )`' ) ) ) );
+$GLOBALS['vcap_test_options'] = $vc1_saved_opts;
+
+// VC-10 (R-4.7): the card import reference has no relation to the code.
+echo "\nVC-10: card import reference without the code\n";
+$vc10_a   = VCAP\Admin\CardImport::reference();
+$vc10_b   = VCAP\Admin\CardImport::reference();
+$vc10_src = (string) file_get_contents( VCAP_PATH . 'src/Admin/CardImport.php' );
+check( 'VC-10: the reference is random ("import:<uuid>"), differs per call and is not derived from the code (no hash of it in the source)', (bool) preg_match( '/^import:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $vc10_a ) && $vc10_a !== $vc10_b && 0 === ( new ReflectionMethod( VCAP\Admin\CardImport::class, 'reference' ) )->getNumberOfParameters() && ! preg_match( '/md5\(\s*strtolower\(\s*\$code|sha1\(\s*\$code|hash\([^)]*\$code/', $vc10_src ) && str_contains( $vc10_src, "'reference'       => self::reference()," ) && ! str_contains( $vc10_src, 'reference "import:<code>"' ) );
+check( 'VC-10: a second import stays idempotent through the code (entry "imported" → skipped, other existing code → taken), imports before VC-10 are recognised the same way', str_contains( $vc10_src, "has_event( \$existing->id, self::EVENT )" ) && str_contains( $vc10_src, 'Cards imported before VC-10 keep their old reference' ) );
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

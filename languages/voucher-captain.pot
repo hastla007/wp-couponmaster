@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-16 05:43+0000\n"
+"POT-Creation-Date: 2026-11-16 16:43+0000\n"
 "X-Domain: voucher-captain\n"
 
 #. Plugin Name of the plugin
@@ -27,6 +27,72 @@ msgstr ""
 #. Author of the plugin
 #: voucher-captain.php
 msgid "CouponMaster"
+msgstr ""
+
+#: src/API/V1/CommandLimits.php:199
+msgid "Issue vouchers (voucher.issue)"
+msgstr ""
+
+#: src/API/V1/CommandLimits.php:200
+msgid "Void vouchers (voucher.void)"
+msgstr ""
+
+#: src/API/V1/CommandLimits.php:201
+msgid "Reactivate vouchers (voucher.reactivate)"
+msgstr ""
+
+#: src/API/V1/CommandLimits.php:202
+msgid "Redeem vouchers (voucher.redeem)"
+msgstr ""
+
+#: src/API/V1/CommandLimits.php:207
+msgid "Automatic voucher commands"
+msgstr ""
+
+#: src/API/V1/CommandLimits.php:209
+msgid "Add-ons such as workflow automations can issue, void, reactivate and redeem vouchers through these entry points. Each one is off until you switch it on. The limits below are the highest values Voucher Captain allows; you can only lower them. Every call is recorded in the voucher history without the code."
+msgstr ""
+
+#: src/API/V1/CommandLimits.php:218
+msgid "Allow this command"
+msgstr ""
+
+#: src/API/V1/CommandLimits.php:221
+msgid "Calls per day"
+msgstr ""
+
+#. translators: %d: highest number of calls per day
+#: src/API/V1/CommandLimits.php:231
+#, php-format
+msgid "Per calendar day and site, all automations together (at most %d)."
+msgstr ""
+
+#: src/API/V1/CommandLimits.php:235
+msgid "Vouchers per recipient and day"
+msgstr ""
+
+#. translators: %d: highest number per recipient and day
+#: src/API/V1/CommandLimits.php:245
+#, php-format
+msgid "At most %d."
+msgstr ""
+
+#: src/API/V1/CommandLimits.php:250 src/ProductSettings.php:237
+msgid "Maximum amount"
+msgstr ""
+
+#: src/API/V1/CommandLimits.php:254
+msgid "In the shop currency. Empty: 100 EUR. At most 100 EUR; in a shop with another currency, the command refuses amounts until you enter a maximum here that is worth no more than 100 EUR."
+msgstr ""
+
+#: src/API/V1/CommandService.php:139
+msgid "Automatic command"
+msgstr ""
+
+#. translators: 1: command, 2: result, 3: result code, 4: workflow, 5: run, 6: step, 7: authorising user id, 8: reason key
+#: src/API/V1/CommandService.php:158
+#, php-format
+msgid "%1$s: %2$s (%3$s) – workflow %4$s, run %5$s, step %6$s, authorised by user #%7$s, reason %8$s"
 msgstr ""
 
 #: src/API/V1/RedemptionService.php:82 src/API/V1/RedemptionService.php:165
@@ -237,7 +303,7 @@ msgstr ""
 msgid "No matching voucher reservation could be released."
 msgstr ""
 
-#: src/Admin/CampaignAdmin.php:58 src/Admin/CampaignAdmin.php:191 src/Admin/CampaignAdmin.php:266 src/Admin/CardImport.php:230 src/Admin/CardImport.php:292 src/Admin/Import.php:47
+#: src/Admin/CampaignAdmin.php:58 src/Admin/CampaignAdmin.php:191 src/Admin/CampaignAdmin.php:266 src/Admin/CardImport.php:237 src/Admin/CardImport.php:299 src/Admin/Import.php:47
 msgid "You are not allowed to do this."
 msgstr ""
 
@@ -351,143 +417,143 @@ msgstr ""
 msgid "Creating WooCommerce coupons needs the WooCommerce right to publish coupons. No codes were generated."
 msgstr ""
 
-#: src/Admin/CardImport.php:105
+#: src/Admin/CardImport.php:112
 msgid "no valid code (1–100 characters without spaces)"
 msgstr ""
 
-#: src/Admin/CardImport.php:111
+#: src/Admin/CardImport.php:118
 msgid "no valid initial value"
 msgstr ""
 
-#: src/Admin/CardImport.php:115
+#: src/Admin/CardImport.php:122
 msgid "the balance must be a number between 0 and the initial value"
 msgstr ""
 
-#: src/Admin/CardImport.php:119
+#: src/Admin/CardImport.php:126
 msgid "nothing left (balance 0)"
 msgstr ""
 
-#: src/Admin/CardImport.php:125
+#: src/Admin/CardImport.php:132
 msgid "a single-use voucher cannot be partly used: import it as gift card"
 msgstr ""
 
 #. translators: %s: value in the file
-#: src/Admin/CardImport.php:131
+#: src/Admin/CardImport.php:138
 #, php-format
 msgid "expiry \"%s\" is not a date (use YYYY-MM-DD or DD.MM.YYYY)"
 msgstr ""
 
-#: src/Admin/CardImport.php:135
+#: src/Admin/CardImport.php:142
 msgid "already expired"
 msgstr ""
 
 #. translators: %s: value in the file
-#: src/Admin/CardImport.php:141
+#: src/Admin/CardImport.php:148
 #, php-format
 msgid "\"%s\" is not a valid email address"
 msgstr ""
 
-#: src/Admin/CardImport.php:146 src/Admin/CardImport.php:214
+#: src/Admin/CardImport.php:153 src/Admin/CardImport.php:221
 msgid "already imported"
 msgstr ""
 
-#: src/Admin/CardImport.php:150
+#: src/Admin/CardImport.php:157
 msgid "the code is already used by another voucher or coupon"
 msgstr ""
 
-#: src/Admin/CardImport.php:181
+#: src/Admin/CardImport.php:188
 msgid "The first row must name the columns; \"code\" and \"initial\" (value) are required, \"balance\", \"expiry\", \"recipient\", \"recipient name\" and \"type\" are optional."
 msgstr ""
 
-#: src/Admin/CardImport.php:193
+#: src/Admin/CardImport.php:200
 msgid "duplicate within the file"
 msgstr ""
 
-#: src/Admin/CardImport.php:210
+#: src/Admin/CardImport.php:217
 msgid "Import of existing cards"
 msgstr ""
 
-#: src/Admin/CardImport.php:236
+#: src/Admin/CardImport.php:243
 msgid "Import existing cards"
 msgstr ""
 
-#: src/Admin/CardImport.php:237
+#: src/Admin/CardImport.php:244
 msgid "Take over gift cards and vouchers that were sold before (another plugin, paper vouchers) with their remaining value. They keep their codes, get no email and appear in the reports and the outstanding value like any other card."
 msgstr ""
 
-#: src/Admin/CardImport.php:238
+#: src/Admin/CardImport.php:245
 msgid "First row: column names. Required: \"code\", \"initial\". Optional: \"balance\" (remaining value, default the initial value), \"expiry\" (YYYY-MM-DD or DD.MM.YYYY, empty = never expires), \"recipient\" (email), \"recipient name\", \"type\" (giftcard or voucher). Cards already imported are skipped, so the same file can be uploaded again."
 msgstr ""
 
 #. translators: 1: number of cards, 2: total remaining value
-#: src/Admin/CardImport.php:249
+#: src/Admin/CardImport.php:256
 #, php-format
 msgid "Dry run: %1$d cards with %2$s remaining value would be imported. Nothing was changed."
 msgstr ""
 
 #. translators: 1: number of cards, 2: total remaining value
-#: src/Admin/CardImport.php:251
+#: src/Admin/CardImport.php:258
 #, php-format
 msgid "%1$d cards with %2$s remaining value imported."
 msgstr ""
 
-#: src/Admin/CardImport.php:255
+#: src/Admin/CardImport.php:262
 msgid "Skipped rows"
 msgstr ""
 
-#: src/Admin/CardImport.php:255
+#: src/Admin/CardImport.php:262
 msgid "Rows with errors (not imported)"
 msgstr ""
 
 #. translators: 1: row number, 2: reason
-#: src/Admin/CardImport.php:260
+#: src/Admin/CardImport.php:267
 #, php-format
 msgid "Row %1$d: %2$s"
 msgstr ""
 
-#: src/Admin/CardImport.php:273 src/Admin/Import.php:133
+#: src/Admin/CardImport.php:280 src/Admin/Import.php:133
 msgid "File"
 msgstr ""
 
 #. translators: %d: maximum number of rows
-#: src/Admin/CardImport.php:276
+#: src/Admin/CardImport.php:283
 #, php-format
 msgid "CSV, XLS, XLSX or ODS, up to %d rows per upload (larger files: wp vcap import)."
 msgstr ""
 
-#: src/Admin/CardImport.php:279
+#: src/Admin/CardImport.php:286
 msgid "Dry run"
 msgstr ""
 
-#: src/Admin/CardImport.php:280
+#: src/Admin/CardImport.php:287
 msgid "Only check the file, import nothing"
 msgstr ""
 
-#: src/Admin/CardImport.php:283
+#: src/Admin/CardImport.php:290
 msgid "Upload"
 msgstr ""
 
-#: src/Admin/CardImport.php:299 src/Admin/Import.php:235
+#: src/Admin/CardImport.php:306 src/Admin/Import.php:235
 msgid "The file could not be uploaded."
 msgstr ""
 
-#: src/Admin/CardImport.php:301 src/Admin/Import.php:240
+#: src/Admin/CardImport.php:308 src/Admin/Import.php:240
 msgid "Unsupported file type. Please upload CSV, XLS, XLSX or ODS."
 msgstr ""
 
 #. translators: %d: maximum number of rows
-#: src/Admin/CardImport.php:307
+#: src/Admin/CardImport.php:314
 #, php-format
 msgid "The file has more than %d rows: split it or use \"wp vcap import\"."
 msgstr ""
 
 #. translators: %s: file name
-#: src/Admin/CardImport.php:310
+#: src/Admin/CardImport.php:317
 #, php-format
 msgid "Import of %s"
 msgstr ""
 
-#: src/Admin/CardImport.php:313 src/Admin/Import.php:251
+#: src/Admin/CardImport.php:320 src/Admin/Import.php:251
 msgid "The file could not be read:"
 msgstr ""
 
@@ -971,7 +1037,7 @@ msgstr ""
 msgid "WP Pass Captain ↗"
 msgstr ""
 
-#: src/Admin/Menu.php:64 src/Admin/Menu.php:64 src/Plugin.php:218 src/Shortcodes.php:74
+#: src/Admin/Menu.php:64 src/Admin/Menu.php:64 src/Plugin.php:225 src/Shortcodes.php:74
 msgid "Settings"
 msgstr ""
 
@@ -7280,12 +7346,12 @@ msgid "Valid indefinitely"
 msgstr ""
 
 #. translators: %s: comma separated table names
-#: src/Plugin.php:234
+#: src/Plugin.php:241
 #, php-format
 msgid "Voucher Captain: the voucher database tables do not support transactions (InnoDB). Gift card balances cannot be redeemed until these tables are converted to InnoDB: %s"
 msgstr ""
 
-#: src/Plugin.php:242
+#: src/Plugin.php:249
 msgid "Voucher Captain: the PDF libraries are missing. Install the release ZIP or run \"composer install --no-dev\" in the plugin folder."
 msgstr ""
 
@@ -7701,10 +7767,6 @@ msgstr ""
 
 #: src/ProductSettings.php:237
 msgid "Minimum amount"
-msgstr ""
-
-#: src/ProductSettings.php:237
-msgid "Maximum amount"
 msgstr ""
 
 #: src/ProductSettings.php:237
@@ -10427,17 +10489,17 @@ msgstr ""
 msgid "Open in admin"
 msgstr ""
 
-#: voucher-captain.php:70
+#: voucher-captain.php:79
 msgid "Voucher Captain requires WooCommerce to be installed and active."
 msgstr ""
 
 #. translators: %s: installed WooCommerce version
-#: voucher-captain.php:84
+#: voucher-captain.php:93
 #, php-format
 msgid "Voucher Captain requires WooCommerce 8.9 or newer (installed: %s). Please update WooCommerce."
 msgstr ""
 
-#: voucher-captain.php:84
+#: voucher-captain.php:93
 msgid "Until then, gift cards and store credit are refused at checkout, because their balance cannot be deducted."
 msgstr ""
 
