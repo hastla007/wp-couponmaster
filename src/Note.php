@@ -202,6 +202,20 @@ final class Note {
 				/* translators: 1: old code (masked), 2: new code (masked) */
 				$text = sprintf( __( 'Reissued: the code %1$s was replaced by %2$s. The old code and its download links no longer work.', 'voucher-captain' ), (string) $a( 0 ), (string) $a( 1 ) );
 				return '' !== (string) $a( 2 ) ? $text . ' ' . (string) $a( 2 ) : $text;
+			case 'resent_workflow':
+				/* translators: %s: roles, e.g. "Recipient, Buyer" */
+				return sprintf( __( 'Sent to %s on request of the workflow plugin', 'voucher-captain' ), self::roles( $a( 0 ) ) );
+			case Workflow\Services::AUDIT_EVENT:
+				// WF-03: the service, a hash of the idempotency key and of the request (no personal data).
+				/* translators: 1: action (issue, resend, void, reactivate, redeem), 2: short reference of the request */
+				return sprintf( __( 'Requested by the workflow plugin: %1$s (request %2$s)', 'voucher-captain' ), Workflow\Services::label( (string) $a( 0 ) ), substr( (string) $a( 1 ), 0, 8 ) );
+			case Workflow\Handover::EVENT:
+				$label = Workflow\Handover::labels()[ (string) $a( 0 ) ] ?? (string) $a( 0 );
+				return (int) $a( 1 ) > 0
+					/* translators: 1: communication, e.g. "Expiry reminder", 2: number of days before the expiry */
+					? sprintf( _n( '%1$s (%2$d day before the expiry) handed over to the workflow plugin – Voucher Captain did not send it.', '%1$s (%2$d days before the expiry) handed over to the workflow plugin – Voucher Captain did not send it.', (int) $a( 1 ), 'voucher-captain' ), $label, (int) $a( 1 ) )
+					/* translators: %s: communication, e.g. "Notice to the buyer: gift used" */
+					: sprintf( __( '%s handed over to the workflow plugin – Voucher Captain did not send it.', 'voucher-captain' ), $label );
 		}
 		return $code;
 	}

@@ -16,8 +16,8 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Claim {
 	private const PREFIX = '_vcap_claim_';
-	/** Kinds whose outcome is also stored on the order, order item or in the ledger (see purge()); "form": one-time admin form tokens (FormToken). */
-	private const PURGEABLE = array( 'usage', 'bonus', 'referral', 'referral-revoke', 'topup', 'expiry-reminder', 'form' );
+	/** Kinds whose outcome is also stored on the order, order item or in the ledger (see purge()); "form": one-time admin form tokens (FormToken); "workflow": keys of the workflow services (audit entry in the ledger). */
+	private const PURGEABLE = array( 'usage', 'bonus', 'referral', 'referral-revoke', 'topup', 'expiry-reminder', 'form', 'workflow' );
 
 	/** True for exactly one caller per name until released. */
 	public static function take( string $name ): bool {

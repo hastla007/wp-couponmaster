@@ -89,6 +89,10 @@ final class Diagnostics {
 			'label' => __( 'Rows still to move to the voucher tables', 'voucher-captain' ),
 			'value' => Install::legacy_rows() ? __( 'Yes (moved by the daily maintenance)', 'voucher-captain' ) : __( 'No', 'voucher-captain' ),
 		);
+		$fields['workflow'] = array(
+			'label' => __( 'Workflow plugin (provider contract)', 'voucher-captain' ),
+			'value' => isset( vcap()->workflow ) ? implode( '; ', vcap()->workflow->status_lines() ) : '—',
+		);
 		$fields['adapters'] = array(
 			'label' => __( 'Active integrations', 'voucher-captain' ),
 			'value' => self::adapters(),
@@ -169,6 +173,9 @@ final class Diagnostics {
 		}
 		if ( isset( $integrations['passcaptain'] ) ) {
 			$active[] = 'passcaptain';
+		}
+		if ( '' !== ( $integrations['workflow'] ?? '' ) ) {
+			$active[] = 'workflow: ' . $integrations['workflow'];
 		}
 		if ( defined( 'ICL_SITEPRESS_VERSION' ) ) {
 			$active[] = 'wpml';

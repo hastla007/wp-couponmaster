@@ -43,13 +43,14 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_voucher_delivered` | `src/Delivery.php` | A voucher was delivered to everyone it is meant for (args: Voucher $voucher, string[] $addresses). |
 | `vcap_voucher_delivery_given_up` | `src/Delivery.php` | A delivery was given up after $failures failed attempts. |
 | `vcap_voucher_double_use` | `src/Coupons/SingleUse.php` | – |
-| `vcap_voucher_event` | `src/VoucherRepository.php` | A history entry was written (args: voucher id, event, amount, balance after, note as text, order id, source (Source::current(): admin, cron, rest, scanner, checkout, cli, web), acting user id (0 = none)). The last two were added later: register with 8 accepted args to get them. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
+| `vcap_voucher_event` | `src/VoucherRepository.php` | A history entry was written (args: voucher id, event, amount, balance after, note as text, order id, source (Source::current(): admin, cron, rest, scanner, checkout, cli, web, workflow), acting user id (0 = none), the ledger row (array: id, created_at UTC, note = coded note {code, args} or null)). The last three were added later: register with 8 or 9 accepted args to get them. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_expired` | `src/VoucherRepository.php` | Vouchers whose validity ended were marked as expired (one call per batch of the daily maintenance). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_issued_standalone` | `src/Issuer.php` | A voucher was issued without an order (args: Voucher, the arguments of Issuer::issue_standalone()). |
 | `vcap_voucher_redeemed` | `src/API/V1/RedemptionService.php`, `src/VoucherRepository.php` | Fires once when an external redemption is completed. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_reissued` | `src/Reissue.php` | Fires after a voucher was reissued with a new code and token (V10). The old code is no longer redeemable. |
 | `vcap_voucher_updated` | `src/Tickets.php`, `src/VoucherRepository.php` | A voucher was saved (args: Voucher as stored, see CONNECTORS.md "Event timing"). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_vouchers_issued` | `src/Issuer.php` | Vouchers of an order were issued (args: Voucher[] $created, WC_Order $order). |
+| `vcap_workflow_event` | `src/Workflow/Provider.php` | Workflow event of contract v1 (WORKFLOW.md): an envelope with contract_version, provider, event_id (stable, the same on a replay), type, occurred_at (UTC), source_type, source_id (voucher id), sequence (ledger row id), blog_id, status, replayed and data (allowlisted fields, no personal data, no codes). Fired after the COMMIT of the change. |
 
 ## Filters
 
@@ -231,3 +232,5 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_voucher_tax_treatment` | `src/ProductConfig.php` | – |
 | `vcap_voucher_types` | `src/Voucher.php` | – |
 | `vcap_vouchers_per_item` | `src/Issuer.php` | – |
+| `vcap_workflow_consumer` | `src/Workflow/Provider.php` | A workflow plugin registers itself for the provider contract: return an array with id, name, version, contract (the contract version it was built for, e.g. "1.0.0"), edition (core\|pro), entitlement (active\|expired\|missing) and communications (those it handles now, see WORKFLOW.md). Null = none. |
+| `vcap_workflow_service_allowed` | `src/Workflow/Services.php` | Whether the current user may call a workflow service (issue, resend, void, reactivate, redeem, contact). Default: one of the capabilities in Workflow\Services::CAPS. Args: bool, service, the call's arguments. |
