@@ -71,6 +71,7 @@ final class Reports {
 
 	/** Paid statuses that count for reports. */
 	public static function statuses(): array {
+		/** Order statuses (without "wc-") whose orders count in the campaign report (default: WooCommerce's paid statuses and refunded). */
 		return array_map( static fn( $s ) => 'wc-' . $s, (array) apply_filters( 'vcap_report_statuses', array_merge( wc_get_is_paid_statuses(), array( 'refunded' ) ) ) );
 	}
 
@@ -108,6 +109,7 @@ final class Reports {
 					$group = array( 'type' => 'campaign', 'name' => $campaign );
 				}
 			}
+			/** Group of a coupon code in the campaign report (args: array{type, name}, code, coupon id), e.g. an add-on's own source. */
 			$group = (array) apply_filters( 'vcap_report_group', $group, $code, $id );
 		}
 		return $this->groups[ $code ] = $group;

@@ -197,6 +197,7 @@ final class PdfRenderer {
 	}
 
 	public function render( Voucher $voucher, ?array $design = null ): string {
+		/** The PDF template a voucher is printed with (args: template id, Voucher), e.g. a translation of the template. */
 		$design = $design ?? TemplatePostType::design_for_voucher( (int) apply_filters( 'vcap_render_template_id', $voucher->template_id, $voucher ), $voucher );
 		$html   = $this->html( $voucher, $design );
 		list( $w, $h ) = self::sheet_size( $design['page'] ?? array() );

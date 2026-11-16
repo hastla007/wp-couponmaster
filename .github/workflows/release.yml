@@ -60,8 +60,9 @@ jobs:
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
           # Jobs that may fail without blocking a release (continue-on-error in plugin-smoke.yml, RELEASE.md →
-          # Static analysis). Every other job must end with success (or be skipped).
-          REPORT_ONLY: plugin-check
+          # Static analysis). None at the moment: plugin-check blocks on errors since A8. Every other job must end
+          # with success (or be skipped).
+          REPORT_ONLY: ''
         run: |
           # The run conclusion alone is not enough: a job with continue-on-error fails while the run is "success".
           # A run must appear within 15 minutes and complete within 140 minutes.

@@ -32,7 +32,7 @@ php "$ROOT/bin/make-mo.php"
 cp -R "$ROOT/assets" "$ROOT/config" "$ROOT/languages" "$ROOT/src" "$ROOT/templates" "$DEST/"
 cp "$ROOT/voucher-captain.php" "$ROOT/uninstall.php" "$ROOT/readme.txt" "$ROOT/wpml-config.xml" "$ROOT/LICENSE" "$ROOT/composer.json" "$ROOT/composer.lock" "$DEST/"
 # One build: the free core (docs/FREE-PREMIUM.md). It carries no licensing code, no edition constants and no
-# "Update URI" header (updates come from WordPress.org); a premium add-on is a separate plugin.
+# "Update URI" header (updates come from WordPress.org); paid features belong in a separate add-on plugin.
 if grep -qE "^[[:space:]]*\*?[[:space:]]*Update URI[[:space:]]*:|VCAP_EDITION|VCAP_LICENSE_" "$DEST/voucher-captain.php"; then
 	echo "The plugin file must not carry an Update URI header or edition/license constants." >&2
 	exit 1

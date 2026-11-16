@@ -10,6 +10,10 @@ function vcap_integration_assert( bool $condition, string $message ): void {
 	echo "PASS: {$message}\n";
 }
 
+// A5: the core works alone (no add-on installed) and offline: every outgoing HTTP request of this suite is blocked.
+require_once __DIR__ . '/no-network.php';
+$vcap_offline = vcap_test_no_network();
+
 function vcap_integration_private_call( object $object, string $method, array $args ) {
 	$reflection = new ReflectionMethod( $object, $method );
 	$reflection->setAccessible( true );
@@ -194,4 +198,6 @@ $w16_features = wc_get_container()->get( Automattic\WooCommerce\Internal\Feature
 $w16_known    = in_array( 'product_block_editor', array_merge( $w16_features['compatible'] ?? array(), $w16_features['incompatible'] ?? array(), $w16_features['uncertain'] ?? array() ), true );
 vcap_integration_assert( ( ! $w16_known || in_array( 'product_block_editor', $w16_features['incompatible'] ?? array(), true ) ) && in_array( 'custom_order_tables', $w16_features['compatible'] ?? array(), true ) && in_array( 'cart_checkout_blocks', $w16_features['compatible'] ?? array(), true ), 'AP-W1-6: Voucher Captain declares the new product editor incompatible where WooCommerce offers it (' . ( $w16_known ? 'offered' : 'not offered by WooCommerce ' . WC()->version ) . '); HPOS and block checkout compatible' );
 
+$vcap_offline_core = $vcap_offline();
+vcap_integration_assert( array() === $vcap_offline_core, 'A5: the purchase, issuing, PDF, email and redemption checks of this suite ran with outgoing HTTP blocked and Voucher Captain requested nothing (' . implode( ', ', $vcap_offline_core ) . ')' );
 echo "WooCommerce integration checks passed.\n";

@@ -2,14 +2,18 @@
 /**
  * License guard (docs/FREE-PREMIUM.md): the shipped files of the free core contain no licensing or update code –
  * no license client, no WP License Captain API calls, no "Update URI" header, no own update filters, no entitlement
- * checks, no edition or license constants.
+ * checks, no edition or license constants – and bin/build.sh builds no second (premium) edition (A2).
  *
- *   php tests/license-guard.php
+ * Network calls (A5): every HTTP request the core can make is on the allowlist below (readme.txt → "External
+ * services" describes each one). The core never calls a license or update server; a new wp_remote_*() call, a
+ * cURL/socket call or a browser request to a URL that does not come from the page's own configuration fails.
  *
- * Exits 1 and lists file:line of every hit.
+ *   php tests/license-guard.php [plugin root]
+ *
+ * Exits 1 and lists file:line of every hit. The optional root is for the self-test in tests/run.php.
  */
 
-$root = dirname( __DIR__ );
+$root = isset( $argv[1] ) && '' !== $argv[1] ? rtrim( $argv[1], '/' ) : dirname( __DIR__ );
 
 // Shipped files and folders (bin/build.sh), without bundled third-party code.
 $paths   = array( 'voucher-captain.php', 'uninstall.php', 'readme.txt', 'src', 'templates', 'assets', 'examples', 'config' );
@@ -19,12 +23,38 @@ $patterns = array(
 	'/\bLicenseClient\b/'                              => 'license client',
 	'#wplc/v1#'                                        => 'WP License Captain API',
 	'/^\s*\*?\s*Update URI\s*:/'                       => '"Update URI" header',
-	'/pre_set_site_transient_update_plugins/'         => 'own update filter',
+	'/site_transient_update_plugins/'                  => 'own update filter',
+	'/[\'"]update_plugins_/'                           => 'own update filter (update_plugins_{hostname})',
 	'/[\'"]plugins_api[\'"]/'                          => 'own plugins_api filter',
 	'/\ballows_entitlement\b/'                         => 'entitlement check',
 	'/VCAP_EDITION/'                                   => 'edition constant',
 	'/VCAP_LICENSE_/'                                  => 'license constant',
 );
+
+// bin/build.sh is not shipped but decides what is: one build, no edition switch, no license tooling.
+$build_patterns = array(
+	'/\bLicenseClient\b/'       => 'license client',
+	'/wplc/i'                   => 'WP License Captain tooling',
+	'/VCAP_EDITION\s*=/'        => 'edition switch',
+	'/VCAP_LICENSE_\w*\s*=/'    => 'license constant',
+	'/(?<!FREE-)premium/i'       => 'premium edition',
+);
+
+/*
+ * A5: the only HTTP requests of the core (file => function => number of calls). Both are documented in readme.txt
+ * → "External services":
+ * - PdfRenderer::remote_image(): template images from hosts the shop names with "vcap_pdf_remote_hosts" (none by
+ *   default; meant for the shop's own CDN or offloaded media library).
+ * - Health::probe_private_dir(): Site Health loopback request to the shop's own uploads URL.
+ */
+$network_allowlist = array(
+	'src/PdfRenderer.php' => array( 'wp_safe_remote_get' => 1 ),
+	'src/Health.php'      => array( 'wp_remote_get' => 1 ),
+);
+$php_network = '/\b(wp_(?:safe_)?remote_(?:get|post|head|request)|download_url|curl_init|curl_multi_init|fsockopen|pfsockopen|stream_socket_client|_wp_http_get_object|wp_get_http)\s*\(|\bnew\s+\\\\?WP_Http\b|\b(?:file_get_contents|fopen|readfile|copy)\(\s*[\'"](?:https?|ftp):/i';
+// Browser requests: allowed only to a URL from the page's configuration (cfg.…, printed by PHP: REST/AJAX URLs of
+// the own site), never to a literal or computed foreign address.
+$js_network  = '/\b(fetch|\$\.(?:post|get|ajax|getJSON)|jQuery\.(?:post|get|ajax|getJSON)|navigator\.sendBeacon|importScripts|new\s+WebSocket|new\s+EventSource)\s*\(\s*([^,)]*)/';
 
 $files = array();
 foreach ( $paths as $path ) {
@@ -56,20 +86,70 @@ foreach ( $paths as $path ) {
 }
 sort( $files );
 
-$hits = array();
+$hits    = array();
+$network = array();
 foreach ( $files as $relative ) {
 	$lines = file( "$root/$relative", FILE_IGNORE_NEW_LINES );
+	$is_js = str_ends_with( $relative, '.js' );
+	$is_php = str_ends_with( $relative, '.php' );
 	foreach ( false === $lines ? array() : $lines as $number => $line ) {
 		foreach ( $patterns as $pattern => $what ) {
 			if ( preg_match( $pattern, $line ) ) {
 				$hits[] = sprintf( '%s:%d: %s – %s', $relative, $number + 1, $what, trim( $line ) );
 			}
 		}
+		if ( $is_php && preg_match_all( $php_network, $line, $m, PREG_SET_ORDER ) ) {
+			foreach ( $m as $call ) {
+				$function = strtolower( '' !== ( $call[1] ?? '' ) ? $call[1] : 'direct stream or WP_Http' );
+				$network[ $relative ][ $function ][] = $number + 1;
+			}
+		}
+		if ( $is_js && preg_match_all( $js_network, $line, $m, PREG_SET_ORDER ) ) {
+			foreach ( $m as $call ) {
+				if ( ! preg_match( '/^cfg\.[A-Za-z_]+/', trim( $call[2] ) ) ) {
+					$hits[] = sprintf( '%s:%d: browser request to a URL that is not from the page configuration (cfg.…) – %s', $relative, $number + 1, trim( $line ) );
+				}
+			}
+		}
+	}
+}
+
+// A5: network calls against the allowlist (also an allowlisted call that is gone, so the list stays exact).
+foreach ( $network as $relative => $functions ) {
+	foreach ( $functions as $function => $lines ) {
+		$allowed = $network_allowlist[ $relative ][ $function ] ?? 0;
+		if ( count( $lines ) > $allowed ) {
+			$hits[] = sprintf( '%s:%s: network call %s() is not on the allowlist of tests/license-guard.php (document it in readme.txt → External services first)', $relative, implode( ',', $lines ), $function );
+		}
+	}
+}
+if ( dirname( __DIR__ ) === $root ) {
+	foreach ( $network_allowlist as $relative => $functions ) {
+		foreach ( $functions as $function => $count ) {
+			if ( count( $network[ $relative ][ $function ] ?? array() ) !== $count ) {
+				$hits[] = sprintf( '%s: allowlisted network call %s() is used %d times, allowlist says %d – update the allowlist and readme.txt', $relative, $function, count( $network[ $relative ][ $function ] ?? array() ), $count );
+			}
+		}
+	}
+}
+
+$build = is_file( "$root/bin/build.sh" ) ? file( "$root/bin/build.sh", FILE_IGNORE_NEW_LINES ) : array();
+foreach ( false === $build ? array() : $build as $number => $line ) {
+	foreach ( $build_patterns as $pattern => $what ) {
+		if ( preg_match( $pattern, $line ) ) {
+			$hits[] = sprintf( 'bin/build.sh:%d: %s – %s', $number + 1, $what, trim( $line ) );
+		}
 	}
 }
 
 if ( $hits ) {
-	fwrite( STDERR, "License guard: licensing or update code in shipped files (docs/FREE-PREMIUM.md):\n  " . implode( "\n  ", $hits ) . "\n" );
+	fwrite( STDERR, "License guard: licensing, update or unlisted network code in the core (docs/FREE-PREMIUM.md):\n  " . implode( "\n  ", $hits ) . "\n" );
 	exit( 1 );
 }
-echo 'License guard: ' . count( $files ) . " shipped files checked, no licensing or update code.\n";
+$calls = array();
+foreach ( $network as $relative => $functions ) {
+	foreach ( $functions as $function => $lines ) {
+		$calls[] = "$relative:" . implode( ',', $lines ) . " $function()";
+	}
+}
+echo 'License guard: ' . count( $files ) . " shipped files and bin/build.sh checked, no licensing or update code. Network calls (all allowlisted): " . ( $calls ? implode( '; ', $calls ) : 'none' ) . ".\n";

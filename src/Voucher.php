@@ -79,6 +79,10 @@ final class Voucher {
 			'ticket'   => __( 'Ticket', 'voucher-captain' ),
 			'credit'   => __( 'Store credit', 'voucher-captain' ),
 		);
+		/**
+		 * Extra voucher types of connectors and add-ons (arg: array of type key => label). Core types cannot be
+		 * replaced; see API.md → Extension points.
+		 */
 		$extra = (array) apply_filters( 'vcap_voucher_types', array() );
 		foreach ( $extra as $key => $label ) {
 			$key = sanitize_key( (string) $key );
