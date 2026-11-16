@@ -237,10 +237,6 @@ msgstr "Dieses Einlöseziel wird von einer Integration verwaltet."
 msgid "Vouchers cannot be redeemed for this target here."
 msgstr "Gutscheine können für dieses Ziel hier nicht eingelöst werden."
 
-#: src/API/V1/RestController.php:289
-msgid "This redemption is managed by an integration."
-msgstr "Diese Einlösung wird von einer Integration verwaltet."
-
 #: src/API/V1/RestController.php:357
 msgid "This redemption key is reserved."
 msgstr "Dieser Einlöse-Schlüssel ist reserviert."
@@ -13930,3 +13926,15 @@ msgstr "Ein Gutscheincode und ein Einlöseziel sind erforderlich."
 
 msgid "This communication is not handed over to the workflow plugin."
 msgstr "Diese Kommunikation ist nicht an das Workflow-Plugin übergeben."
+
+msgid "The campaign \"%s\" is assigned to a partner in WP Affiliate Captain: its codes earn that partner commission. Generating more codes under this name needs the right to manage affiliates. No codes were generated."
+msgstr "Die Kampagne „%s“ ist in WP Affiliate Captain einem Partner zugeordnet: Ihre Codes bringen diesem Partner Provision. Um weitere Codes unter diesem Namen zu erzeugen, benötigen Sie das Recht, Affiliates zu verwalten. Es wurden keine Codes erzeugt."
+
+msgid "The coupon could not be checked right now. Please try again in a moment."
+msgstr "Der Gutschein konnte gerade nicht geprüft werden. Bitte versuchen Sie es gleich noch einmal."
+
+msgid "The voucher amount chosen for \"%1$s\" (%2$s) does not match the amount paid for it; the voucher is issued with the amount paid per voucher (%3$s)."
+msgstr "Der für „%1$s“ gewählte Gutscheinbetrag (%2$s) entspricht nicht dem dafür bezahlten Betrag; der Gutschein wird mit dem je Gutschein bezahlten Betrag (%3$s) ausgestellt."
+
+msgid "Only voucher managers can change the voucher settings of a product. Your changes to these settings are not saved; the other product data is."
+msgstr "Nur Gutschein-Verwalter können die Gutscheineinstellungen eines Produkts ändern. Ihre Änderungen an diesen Einstellungen werden nicht gespeichert, die übrigen Produktdaten schon."
