@@ -464,6 +464,13 @@ final class Settings {
 				'desc'  => Compat\PassCaptain::status_html(),
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_passcaptain' ),
+			array(
+				'type'  => 'title',
+				'title' => __( 'Workflow Captain', 'voucher-captain' ),
+				'id'    => 'vcap_workflowcaptain',
+				'desc'  => Compat\WorkflowCaptain::status_html(),
+			),
+			array( 'type' => 'sectionend', 'id' => 'vcap_workflowcaptain' ),
 		);
 		return array_merge( $fields, self::workflow_fields(), DatevExport::settings_fields() ); // M12-69.
 	}

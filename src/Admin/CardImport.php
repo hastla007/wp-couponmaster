@@ -10,9 +10,13 @@ defined( 'ABSPATH' ) || exit;
  * M12-56: takes over existing gift cards and vouchers with their remaining value (from YITH, PW, WooCommerce Gift
  * Cards, paper vouchers) from a CSV/XLSX/ODS file. Columns (header row, English or German names): code, initial
  * value, balance, expiry, recipient email, recipient name, type. Each row is issued through
- * Issuer::issue_standalone() (no email, marked as sold) with the reference "import:<code>", so a second run skips
- * what was imported already; every imported card gets the history entry "imported". A dry run checks every row
- * and changes nothing. Shared with "wp vcap import <file>".
+ * Issuer::issue_standalone() (no email, marked as sold) with a random reference "import:<uuid>" (VC-10, R-4.7: the
+ * reference has no relation to the code, so neither the history note nor the claim can lead back to it). A second run
+ * skips what was imported already: a code whose voucher has the history entry "imported" is reported as "already
+ * imported", any other existing code as taken – the code itself (unique in the shop) makes the import idempotent, not
+ * the reference. Cards imported before VC-10 keep their old reference "import:<md5 of the code>" in their history and
+ * claim; they are recognised the same way (entry "imported"), nothing is rewritten. A dry run checks every row and
+ * changes nothing. Shared with "wp vcap import <file>".
  */
 final class CardImport {
 	public const SLUG = 'vcap-import-cards';
@@ -88,9 +92,12 @@ final class CardImport {
 		return checkdate( $mo, $d, $y ) ? sprintf( '%04d-%02d-%02d', $y, $mo, $d ) : null;
 	}
 
-	/** Idempotency reference of an imported code. */
-	public static function reference( string $code ): string {
-		return 'import:' . md5( strtolower( $code ) );
+	/**
+	 * Reference of one imported card for issue_standalone(): random, without relation to the code (VC-10, R-4.7).
+	 * Before VC-10 it was "import:" plus the MD5 of the code, which a short code could be guessed back from.
+	 */
+	public static function reference(): string {
+		return 'import:' . wp_generate_uuid4();
 	}
 
 	/**
@@ -162,7 +169,7 @@ final class CardImport {
 			'send'            => false, // Existing cards are with their holders already.
 			'paid'            => true, // Sold before (in the old system or on paper).
 			'source'          => 'import',
-			'reference'       => self::reference( $code ),
+			'reference'       => self::reference(),
 		);
 		return $out;
 	}

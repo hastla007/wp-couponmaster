@@ -8,6 +8,7 @@ on:
       - codex/fix-voucher-audit-findings
       - claude/wp-plugin-analyse-todo-hvollo
       - claude/wp-plugin-analyse-todo-hvollo-refactors
+      - claude/sharp-mendel-xiiwf3
   pull_request:
 
 # A newer push to the same branch (or pull request) cancels the older run that is still queued or running – the

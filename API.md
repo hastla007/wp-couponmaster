@@ -47,7 +47,7 @@ add_filter( 'vcap_redemption_providers', function( array $providers, string $cod
 }, 10, 3 );
 ```
 
-Register a provider only when its external system is available. This hook defines the integration seam; it does not itself install or activate a Ticket Captain connector. A real cross-plugin adapter still needs a shared contract version and a two-plugin integration test.
+Register a provider only when its external system is available. This hook defines the integration seam; it does not itself install or activate a WP Pass Captain connector. A real cross-plugin adapter still needs a shared contract version and a two-plugin integration test.
 
 ## External redemptions (since 1.1.0)
 
@@ -224,6 +224,166 @@ vcap()->delivery->mark_bounced( $voucher_id, 'recipient', '550 mailbox unavailab
 The role no longer counts as delivered, the voucher history gets a "Delivery failed" entry, the order a note; with the
 fourth argument the buyer is told by email (with the signed "Correct the recipient" link where the gift may still be
 redirected). The action `vcap_voucher_bounced( Voucher $voucher, string $role, string $reason )` fires afterwards.
+
+## Read functions (since 1.3.0, contract 1.2.0)
+
+Read-only state of a voucher by its **record id**, for add-ons and automations that must re-check an event or evaluate
+a condition without knowing the voucher code (an event carries the `voucher_id`, never the code). Available once the
+plugin booted (`vcap_loaded`); check `function_exists( 'vcap_read_voucher' )` or
+`version_compare( VCAP_CONTRACT_VERSION, '1.2.0', '>=' )`. The functions are thin wrappers of the service
+`vcap()->read` (`VCAP\API\V1\ReadService`, methods `voucher()`, `gift_card()`, `store_credit()`, `redemption()`,
+`redemptions()`, `order_vouchers()`).
+
+| Function | Argument | Returns | Since |
+|---|---|---|---|
+| `vcap_read_voucher( int\|string $id )` | voucher id | voucher keys below, or `null` | 1.3.0 |
+| `vcap_read_gift_card( int\|string $id )` | voucher id of a gift card | voucher keys plus `top_up_count`, `top_up_reversed_count`; `null` when the id is unknown or no gift card (type `giftcard`) | 1.3.0 |
+| `vcap_read_store_credit( int\|string $user_id )` | WordPress user id | `user_id`, `account_id` (voucher id of the account), `status`, `currency`, `balance_minor`, `created_at`, `updated_at`; `null` when the user has no account (none is opened) | 1.3.0 |
+| `vcap_read_redemption( int\|string $id )` | record id of an external redemption | redemption keys below, or `null` | 1.3.0 |
+| `vcap_read_redemptions( int\|string $voucher_id )` | voucher id | list of redemptions (redemption keys), newest first, at most 100; `[]` when it has none; `null` when the voucher id is unknown | 1.3.0 |
+| `vcap_read_order_vouchers( int\|string $order_id )` | WooCommerce order id | `order_id`, `voucher_count`, `voucher_ids` (int[]); `null` when no voucher belongs to the order | 1.3.0 |
+
+**Voucher keys** (always all of them, in this order): `voucher_id`, `type` (`voucher`, `giftcard`, `ticket`, `credit` or
+a connector type), `status` (`active`, `scheduled`, `reserved`, `redeemed`, `expired`, `void`), `usage_mode`
+(`single`, `balance`, …), `currency`, `amount_minor` (face value), `balance_minor` (remaining value as stored),
+`order_id`, `product_id` (variation if any), `user_id` (owner of a store credit account) – each `null` when not set –,
+`transferable` (bool), `expires_at`, `created_at`, `updated_at`, `send_to` (`buyer`, `recipient`, `both`, `other`),
+`delivery_state` (`delivered`, `scheduled`, `pending`, `given_up`), `delivery_at` (planned), `delivered_at`,
+`delivered_roles` (subset of `recipient`, `buyer`), `delivery_failures` (failed attempts of the current delivery),
+`checkins`, `max_checkins`, `last_checkin_at` (tickets), `void_reason` (`refund` or `manual` for a void voucher, from
+`Issuer::voided_after_refund()`, never from the note; else `null`), `redemption_counts` (external redemptions per
+state: `reserved`, `committed`, `released`).
+
+**Redemption keys:** `redemption_id`, `voucher_id`, `state` (`reserved`, `committed`, `released`), `channel`
+(`external`), `amount_minor`, `currency` (of the voucher), `user_id` (`null` for none), `expires_at` (only while
+`reserved`), `created_at`, `committed_at` (only when `committed`). The row is read as stored: an overdue reservation is
+reported as `reserved` with its past `expires_at` (unlike `vcap()->redemptions->get()`, nothing is released here).
+
+**Format.** Amounts are integers in the smallest unit of the currency (`*_minor` with `currency`, ISO 4217 minor units
+from `config/currencies.php`: `12.50 EUR` → `1250`, `500 JPY` → `500`). Timestamps are RFC 3339 in UTC
+(`2026-11-16T09:30:00Z`) or `null`. A string id must be a positive whole number; anything else (a code, a token) is
+treated as unknown and answers `null`.
+
+**Never returned:** the voucher code or any part, hash or mask of it, the token and download links, buyer and
+recipient names and email addresses, the message, personalisation fields, conditions text, notes and reasons (free
+text), the redemption key (`redemption_key`), the redemption `target`, `meta`, tills and receipts. The queries name
+their columns, so these values are not even read. New keys may be added within contract 1.x (CONNECTORS.md → 6.);
+existing keys keep their meaning.
+
+**No side effects.** The functions write nothing (no released reservation, no repaired coupon, no opened store credit
+account, no cache entry, no hook) and do not check the current user: the caller decides who may see the result.
+Contact data and consent of a recipient are not part of them (open question F-13 of the suite specification, TODO.md
+→ VOUCH-WF-15).
+
+```php
+add_action( 'vcap_voucher_event', function ( $voucher_id, $event ) {
+    if ( 'voided' !== $event || ! function_exists( 'vcap_read_voucher' ) ) {
+        return;
+    }
+    $state = vcap_read_voucher( $voucher_id );
+    if ( $state && 'void' === $state['status'] && 'refund' === $state['void_reason'] ) {
+        // e.g. start a follow-up: $state['balance_minor'], $state['currency'], $state['order_id'] …
+    }
+}, 10, 2 );
+```
+
+## Voucher commands (since 1.3.0, contract 1.3.0)
+
+The four commands an automatic caller (a workflow automation, an add-on) may run on vouchers (suite specification 8.3,
+decisions D11/D11b, requirement VC-1): issue, void, reactivate and redeem. Limits, protocol, idempotency, permission
+and abuse protection are enforced **here, in the core**, for every caller; no licence is checked. Available once the
+plugin booted (`vcap_loaded`); check `function_exists( 'vcap_command_issue' )` or
+`version_compare( VCAP_CONTRACT_VERSION, '1.3.0', '>=' )`. The functions are thin wrappers of the service
+`vcap()->commands` (`VCAP\API\V1\CommandService`, methods `issue()`, `void()`, `reactivate()`, `redeem()`,
+`run( $command, $args )` and `protocol( $day )`).
+
+| Function | Command | Fields besides the common ones | Capability of `authorized_by_user_id` | Since |
+|---|---|---|---|---|
+| `vcap_command_issue( array $args )` | `voucher.issue` | `recipient_user_id`, `amount_minor`, `currency`, optional `product_id` | `vcap_manage_vouchers` | 1.3.0 |
+| `vcap_command_void( array $args )` | `voucher.void` | `voucher_id` | `vcap_manage_vouchers` | 1.3.0 |
+| `vcap_command_reactivate( array $args )` | `voucher.reactivate` | `voucher_id` | `vcap_increase_balance` | 1.3.0 |
+| `vcap_command_redeem( array $args )` | `voucher.redeem` | `voucher_id`, `amount_minor`, `currency`, `target` | `vcap_redeem_api` or `vcap_manage_vouchers` | 1.3.0 |
+
+**Common fields** (all required, R-8.3): `idempotency_key` (1–100 printable ASCII characters without spaces; built by
+the caller from workflow, workflow version, event id and step, R-8.4), `reason` (fixed key of the caller, e.g.
+`loyalty_reward`; letters, digits, `_ . : -`, at most 64 characters – no free text), `workflow_id`, `run_id`,
+`step_id` (int or key of the same form), `authorized_by_user_id` (the WordPress user who published the workflow).
+
+**Rules.**
+- A voucher is named by its `voucher_id`, never by its code; a recipient by `recipient_user_id`, never by an address
+  (the core reads the address from the account and sends its own voucher mail). Money is given in minor units
+  (`amount_minor`, integer, `12.50 EUR` → `1250`) with `currency`. Any field not listed for a command – an own `code`,
+  `allow_weak`, `paid`, `discount_type`/percentages, `refund`/`after_refund`, a note, `recipient_email` – is refused as
+  `invalid_request` with `field` naming it (VC-2).
+- `voucher.issue` issues a fixed value (no percentage product, no ticket, `paid` = false) in the shop currency.
+  `voucher.void` voids without refund and books nothing back; `voucher.reactivate` never reactivates a voucher voided
+  because of a refund; `voucher.redeem` reserves and commits in one call through the redemption API, never more than
+  the remaining value (a single-use voucher only as a whole), any voucher (not only one issued by a workflow) except
+  store credit, tickets and percentage vouchers. `refund()` of the redemption API is not reachable.
+- The capability of `authorized_by_user_id` is checked with `user_can()` at every call; the current user is neither
+  used nor changed (no `wp_set_current_user()`), and the checks of `void()`/`reactivate()`/the REST layer are not
+  relied on (VC-9).
+- **Off by default.** Each command has its own switch in *WooCommerce → Settings → Vouchers → Integrations (API)*
+  ("Automatic voucher commands").
+- **Fixed limits** (owner's decision of 16.11.2026 on F-05; default and ceiling at once; the operator can only lower
+  them in the same settings, the filter `vcap_command_limits` can only lower them or switch a command off):
+
+  | Command | Maximum amount | Calls per calendar day and site | Further limit |
+  |---|---|---|---|
+  | `voucher.issue` | 100 EUR per voucher | 50 | 1 per calendar day and recipient |
+  | `voucher.void` | – | 50 | – |
+  | `voucher.reactivate` | – | 50 | – |
+  | `voucher.redeem` | 100 EUR per redemption | 50 | – |
+
+  A call above a limit is refused, not shortened. The calendar day is the site's time zone; all workflows count
+  together; void and reactivate have separate counters. Only executed calls (`done`) count. **Other currencies
+  (F-05a, open):** an amount in a currency other than EUR is refused (`currency_not_allowed`) unless it is the shop
+  currency and the operator entered an own *Maximum amount* there (worth no more than 100 EUR – not checked, there is
+  no exchange rate in the core).
+- **Atomic.** Checking, counting and executing run under one named database lock per site, so two parallel calls
+  never pass a limit together (R-8.3b).
+- **Idempotent.** A second call with the same `idempotency_key` does nothing and returns the stored reply of the first
+  (with `replayed` = true), even when the command was switched off since. The same key with other values (`reason`
+  or the command fields) is refused as `idempotency_conflict`. Replies are kept 90 days. `failed` replies are not
+  stored: the same key may be retried.
+- **Protocol** (R-8.3c). Every call – also refusals, conflicts, replays and lock failures – is written to the protocol
+  of the day (`vcap()->commands->protocol( 'Y-m-d' )`, kept 90 days, at most 500 entries a day) with `at`, `command`,
+  `status`, `code`, `voucher_id`, `amount_minor`, `currency`, `workflow_id`, `run_id`, `step_id`,
+  `authorized_by_user_id`, `reason`, `replayed`, `key_hash` (16 hex characters of a SHA-256 of the key). A call on a
+  known voucher (not a replay) also gets the history entry "Automatic command" with the same data; the core's own
+  entries (`issued`, `voided`, `reactivated`, `api_reserved` …), hooks and mails follow as for any other caller.
+
+**Reply** (always all keys, in this order): `status` (`done`, `duplicate` – the target state already held, nothing
+done –, `refused`, `failed`), `code`, `command`, `voucher_id`, `voucher_status`, `amount_minor`, `currency`,
+`balance_minor` (remaining value of a stored-balance voucher), `field` (with `invalid_request`), `final` (true for
+everything but `failed`: refusals are final, R-8.13 – do not retry), `replayed`, `at` (RFC 3339, UTC). Never a code,
+an address or a name.
+
+| `status` | `code` |
+|---|---|
+| `done` | `issued`, `voided`, `reactivated`, `redeemed` |
+| `duplicate` | `already_issued` (core reference of this key already used), `already_void`, `already_active` |
+| `refused` | `command_disabled`, `not_authorized`, `daily_limit_reached`, `recipient_daily_limit_reached`, `amount_over_limit`, `currency_not_allowed`, `currency_mismatch`, `invalid_request`, `idempotency_conflict`, `unknown_command`, `voucher_not_found`, `unsupported_voucher`, `invalid_product`, `percent_not_allowed`, `recipient_unknown`, `not_void`, `voided_after_refund`, `voucher_void`, `voucher_expired`, `voucher_redeemed`, `voucher_not_active`, `insufficient_balance`, `amount_mismatch`, `not_redeemable`, `reservation_released` |
+| `failed` | `busy` (lock held by a parallel call), `issue_failed`, `void_failed`, `reactivate_failed`, `redeem_failed`, `unavailable` (plugin not booted) |
+
+```php
+$reply = vcap_command_issue( array(
+    'idempotency_key'       => 'wf-12:v3:evt-9f2c:step-2',
+    'reason'                => 'loyalty_reward',
+    'workflow_id'           => 12,
+    'run_id'                => 'run-881',
+    'step_id'               => 'step-2',
+    'authorized_by_user_id' => 1,
+    'recipient_user_id'     => 57,
+    'amount_minor'          => 1000, // 10.00 EUR
+    'currency'              => 'EUR',
+) );
+if ( 'done' === $reply['status'] ) {
+    // $reply['voucher_id'], $reply['voucher_status'] – the core mails the voucher itself.
+} elseif ( ! $reply['final'] ) {
+    // retry later with the same key
+}
+```
 
 ## Extension points for connector plugins (since 1.1.0)
 
@@ -433,10 +593,10 @@ called in the code and listed in docs/HOOKS.md, the generated reference with eac
 | `vcap_report_page` | action | `string $view` | 1.2.0 | Print the page of the own report tab (the capability is checked before). |
 | `vcap_report_group` | filter | `array $group`, `string $code`, `int $coupon_id` | 1.1.0 | Group of a code in the campaign report. |
 | `vcap_voucher_types`, `vcap_redemption_channels`, `vcap_redemption_allowed` | filter | see *Extension points for connector plugins* | 1.1.0 | Own voucher types, channels and rules. |
-| `vcap_redemption_providers` / `VCAP\Contracts\RedemptionProvider` | filter / interface | see *Provider extension* | 1.1.0 | Own redemption backend. |
+| `vcap_redemption_providers` / `VCAP\Contracts\RedemptionProvider` | filter / interface | see *Provider extension* | 1.0.0 | Own redemption backend. |
 | `vcap_voucher_admin_actions` / `vcap_voucher_admin_action` | action / filter | see docs/HOOKS.md | 1.1.0 | Own buttons on the voucher page. |
 | `vcap_voucher_links` | filter | `array $links`, `Voucher`, `string $context` (`email`, `email_plain`, `account` – also the order received page and *My Account → View order* –, `placeholder`) | 1.2.0 | Links such as "Add to Wallet" in the voucher email, the voucher lists and the PDF placeholder `{link:<id>}`. |
-| `vcap_voucher_next_steps` | filter | `string[] $steps`, `Voucher` | 1.1.0 | Steps in the voucher email after receiving it. |
+| `vcap_voucher_next_steps` | filter | `string[] $steps`, `Voucher` | 1.2.0 | Steps in the voucher email after receiving it. |
 | `vcap()->issuer->issue_standalone( $args )` | method | see *Issuing vouchers without an order* | 1.2.0 | Vouchers without an order (company orders, goodwill); the caller checks the capability. Then `vcap_voucher_issued_standalone` (`Voucher`, `$args`). |
 | `vcap_vouchers_issued` | action | `Voucher[]`, `WC_Order` | 1.0.0 | Vouchers of an order were issued. |
 | `vcap_voucher_redeemed` | action | see *External redemptions* | 1.1.0 | An external redemption was completed (after COMMIT). |
