@@ -14,7 +14,7 @@ The CI integration suite installs WordPress 7.1.4, WooCommerce 11.2.2, Yoast SEO
 | Database | MySQL 9.7 / MariaDB 12.3 (LTS; an older server is not blocked – Site Health shows a recommendation, filter `vcap_minimum_db_versions`) | MySQL 9.7, MariaDB 12.3 |
 | Yoast SEO | not required | 28.8 (optional, tested alongside) |
 
-The CI job `minimum-versions` installs WordPress 7.0 and WooCommerce 11.2.0 on PHP 8.5 **without** Yoast SEO and runs the full integration suite, so the minimums are tested, not assumed. Update both columns with every release.
+The CI job `minimum-versions` installs WordPress 7.0 and WooCommerce 11.2.2 (latest patch release of 11.2; 11.2.0 reused the order data of an earlier Store API checkout in the same PHP process, fixed in 11.2.2) on PHP 8.5 **without** Yoast SEO and runs the full integration suite, so the minimums are tested, not assumed. Update both columns with every release.
 
 ## Multisite
 

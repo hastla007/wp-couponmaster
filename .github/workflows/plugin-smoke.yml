@@ -138,7 +138,9 @@ jobs:
           php wp-cli.phar --path=wp-test eval 'global $wpdb; if ($wpdb->get_var("SHOW TABLES LIKE \"{$wpdb->prefix}vcap_vouchers\"")) { exit(1); }'
 
   minimum-versions:
-    # Oldest supported platform (plugin header) without Yoast SEO: WordPress 7.0, WooCommerce 11.2, PHP 8.5.
+    # Oldest supported platform (plugin header) without Yoast SEO: WordPress 7.0, WooCommerce 11.2, PHP 8.5. WooCommerce in its
+    # latest patch release: 11.2.0 reused the order and payment data of an earlier Store API checkout in the same PHP
+    # process (fixed in 11.2.2, woocommerce#70637) – the suites run several checkouts per process.
     runs-on: ubuntu-latest
     services:
       db:
@@ -170,7 +172,7 @@ jobs:
           php wp-cli.phar core download --path=wp-test --version=7.0
           php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
           php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher Captain minimum" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
-          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.2.0 --activate
+          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.2.2 --activate
           bin/build.sh
           php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
           php wp-cli.phar --path=wp-test plugin list
