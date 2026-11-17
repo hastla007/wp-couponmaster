@@ -289,7 +289,7 @@ final class PaymentVouchers {
 		$coupons = array();
 		$sort    = array();
 		foreach ( $codes as $code ) {
-			$coupon = new \WC_Coupon( (string) $code );
+			$coupon = Coupons\CouponFactory::for_code( (string) $code );
 			$type   = array(
 				'fixed_product' => 1,
 				'percent'       => 2,

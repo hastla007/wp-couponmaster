@@ -113,7 +113,7 @@ final class CartIntegration {
 		$others     = array_values( array_filter( array_map( 'strval', $coupons ), static fn( $c ) => ! self::id_from_code( $c ) ) );
 		$individual = false;
 		foreach ( $others as $code ) {
-			$other = new \WC_Coupon( $code );
+			$other = \VCAP\Coupons\CouponFactory::for_code( $code );
 			if ( $other->get_id() && $other->get_individual_use() ) {
 				$individual = true;
 				break;

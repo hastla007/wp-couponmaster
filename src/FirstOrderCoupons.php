@@ -248,7 +248,7 @@ final class FirstOrderCoupons {
 		if ( ! $order instanceof \WC_Order ) {
 			return;
 		}
-		$codes = array_values( array_filter( $order->get_coupon_codes(), static fn( $code ) => 'yes' === ( new \WC_Coupon( $code ) )->get_meta( self::META ) ) );
+		$codes = array_values( array_filter( $order->get_coupon_codes(), static fn( $code ) => 'yes' === Coupons\CouponFactory::for_code( (string) $code )->get_meta( self::META ) ) );
 		if ( ! $codes ) {
 			return;
 		}
@@ -395,7 +395,7 @@ final class FirstOrderCoupons {
 			return;
 		}
 		foreach ( WC()->cart->get_applied_coupons() as $code ) {
-			$coupon = new \WC_Coupon( $code );
+			$coupon = Coupons\CouponFactory::for_code( (string) $code );
 			// The order of an earlier attempt of this checkout (awaiting payment) is not an earlier order.
 			$awaiting = WC()->session ? (int) WC()->session->get( 'order_awaiting_payment' ) : 0;
 			if ( 'yes' === $coupon->get_meta( self::META ) && self::has_previous_order( get_current_user_id(), (string) ( $data['billing_email'] ?? '' ), $awaiting ) ) {
