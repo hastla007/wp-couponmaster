@@ -31,6 +31,12 @@ if ( ! function_exists( 'form_captain_contract_version' ) || ! class_exists( \Fo
 	return;
 }
 
+// These checks cover the adapter's own request table (the fallback). Voucher Captain 1.2.0 has the voucher request
+// service (vcap_voucher_request_service_v1); with it the adapter hands each request over instead. Switch the service off
+// for the fallback checks; the hand-over to the real service is checked at the end of this file.
+$vcap_fc_no_service = static fn() => null;
+add_filter( 'vcap_voucher_request_service_v1', $vcap_fc_no_service, PHP_INT_MAX );
+
 // Contract test kit of Form Captain, run with a minimal assertion adapter instead of PHPUnit.
 $vcap_fc_kit = WP_PLUGIN_DIR . '/form-captain/tests/integration/Contract/ConnectorContractAssertions.php';
 if ( ! is_readable( $vcap_fc_kit ) ) {
@@ -368,6 +374,22 @@ vcap_fc_assert( is_array( $withdrawn ) && $withdrawn['withdrawn'], 'Form Captain
 $closed = $requests->for_entry( $consent_entry )[0] ?? array();
 vcap_fc_assert( RequestRepository::STATUS_WITHDRAWN === ( $closed['status'] ?? '' ) && '' === $closed['email'] && 1 === (int) $closed['anonymized'], 'form_captain_consent_withdrawn_v1 closes the open request and removes its personal data' );
 vcap_fc_assert( is_wp_error( $service->approve( (int) $closed['id'], (int) $product->get_id() ) ), 'a withdrawn request can never be approved' );
+
+// Hand-over to the real voucher request service of Voucher Captain (when this version has it).
+remove_filter( 'vcap_voucher_request_service_v1', $vcap_fc_no_service, PHP_INT_MAX );
+if ( null !== RequestService::core_service() ) {
+	$vcap_fc_service_posts = static fn(): int => count( get_posts( array( 'post_type' => \VCAP\Integrations\VoucherRequests::POST_TYPE, 'post_status' => 'any', 'numberposts' => -1, 'fields' => 'ids' ) ) );
+	$posts_before          = $vcap_fc_service_posts();
+	$service_entry         = $vcap_fc_entry();
+	$service_job           = $vcap_fc_run( $kit->enqueue_action_job( $form, $service_entry, $action, 'a_vcap00001' ) );
+	vcap_fc_assert( 'succeeded' === $service_job['status'], 'with the voucher request service the job succeeds' );
+	vcap_fc_assert( ! $requests->for_entry( $service_entry ), 'with the service the request is not stored in the fallback table' );
+	vcap_fc_assert( $posts_before + 1 === $vcap_fc_service_posts(), 'the request is handed over to the voucher request service (one request)' );
+	vcap_fc_assert( $fc->get( EntryDeletionService::class )->delete( $service_entry, 'manual' ), 'Form Captain deletes the entry of the handed-over request' );
+	vcap_fc_assert( $posts_before === $vcap_fc_service_posts(), 'deleting the entry forgets the open request in the service (forget_reference)' );
+} else {
+	echo "SKIP: this Voucher Captain version has no voucher request service.\n";
+}
 
 $registry->deactivate( Connector::KEY );
 echo "Form Captain adapter checks passed.\n";
