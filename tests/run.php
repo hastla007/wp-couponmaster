@@ -2163,6 +2163,20 @@ check(
 		&& 'recommended' === $db_old['status'] && str_contains( $db_old['description'], 'MariaDB 10.11.6' ) && 'good' === $db_ok['status'] && 'recommended' === $db_mysql['status'] && 'good' === $db_health->test_database( 'garbage' )['status'],
 	wp_json_encode( array( $db_old['status'], $db_ok['status'], $db_mysql['status'] ) )
 );
+// MINVER-1: the declared minimums decide with an injected version (local runs use an older PHP than 8.5, so the
+// running PHP is never what is checked here). The load check in voucher-captain.php compares PHP_VERSION with the
+// header's "Requires PHP"; WordPress refuses the activation below "Requires at least" / "Requires PHP" itself.
+$minver_main = (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' );
+preg_match( "/version_compare\( PHP_VERSION, '([0-9.]+)', '<' \)/", $minver_main, $minver_guard );
+preg_match( '/^ \* Requires PHP:\s*(\S+)$/m', $minver_main, $minver_php );
+preg_match( '/^ \* Requires at least:\s*(\S+)$/m', $minver_main, $minver_wp );
+$minver_refused = static fn( string $running, string $minimum ): bool => version_compare( $running, $minimum, '<' );
+check( 'MINVER-1: the load check uses the declared PHP minimum: PHP 8.4 is refused, PHP 8.5 and 8.6 load', '8.5' === ( $minver_guard[1] ?? '' ) && ( $minver_php[1] ?? '' ) === $minver_guard[1] && $minver_refused( '8.4.14', $minver_guard[1] ) && ! $minver_refused( '8.5.0', $minver_guard[1] ) && ! $minver_refused( '8.6.0', $minver_guard[1] ) );
+check( 'MINVER-1: the declared WordPress minimum refuses 6.9 and accepts 7.0; WooCommerce 11.1 is refused, 11.2 accepted', '7.0' === ( $minver_wp[1] ?? '' ) && $minver_refused( '6.9.4', $minver_wp[1] ) && ! $minver_refused( '7.0', $minver_wp[1] ) && version_compare( '11.1.3', VCAP\Plugin::MIN_WC_VERSION, '<' ) && version_compare( '11.2.0', VCAP\Plugin::MIN_WC_VERSION, '>=' ) );
+$minver_composer = json_decode( (string) file_get_contents( VCAP_PATH . 'composer.json' ), true );
+$minver_lock     = json_decode( (string) file_get_contents( VCAP_PATH . 'composer.lock' ), true );
+check( 'MINVER-1: composer.json and composer.lock declare PHP 8.5 (require, platform)', '>=8.5' === ( $minver_composer['require']['php'] ?? '' ) && '8.5.0' === ( $minver_composer['config']['platform']['php'] ?? '' ) && '>=8.5' === ( $minver_lock['platform']['php'] ?? '' ) && '8.5.0' === ( $minver_lock['platform-overrides']['php'] ?? '' ) );
+check( 'MINVER-1: an old database server only gives a recommendation, with the minimum named (MySQL 8.4 / MariaDB 11.4 → recommended; MySQL 9.7 / MariaDB 12.3 → good)', 'recommended' === $db_health->test_database( '11.4.5-MariaDB' )['status'] && 'good' === $db_health->test_database( '9.7.0' )['status'] && 'good' === $db_health->test_database( '12.3.0-MariaDB' )['status'] && str_contains( $db_mysql['description'], 'MySQL 9.7 or newer' ) );
 $d14_filters = $GLOBALS['vcap_test_filters'] ?? array();
 unset( $GLOBALS['vcap_test_filters']['vcap_currency_health'] );
 $d14_plain = ( new VCAP\Health() )->test_currency();
