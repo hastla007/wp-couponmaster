@@ -133,6 +133,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_markets` | 1.2.0 | `src/Markets.php` | – |
 | `vcap_max_attachment_bytes` | 1.2.0 | `src/Delivery.php` | Largest PDF attachment (bytes) of a voucher email; above it download links are sent instead. |
 | `vcap_min_code_bits` | 1.2.0 | `src/Admin/Import.php`, `src/Campaigns.php`, `src/Issuer.php`, `src/Reissue.php` | This filter is documented in src/Issuer.php |
+| `vcap_minimum_db_versions` | 1.3.0 | `src/Health.php` | Filters the oldest database server versions Voucher Captain reports as supported in Site Health. |
 | `vcap_next_steps_emails` | 1.2.0 | `src/NextSteps.php` | WooCommerce order emails that show the delivery of the order's vouchers. |
 | `vcap_note_text` | 1.2.0 | `src/Note.php` | Text of a coded history note (connectors can translate their own codes). |
 | `vcap_offline_payment_methods` | 1.2.0 | `src/Issuer.php` | – |

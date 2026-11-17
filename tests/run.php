@@ -2150,6 +2150,18 @@ foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( dirname
 check( 'D14: no class masks codes or addresses on its own (all through VCAP\Mask)', array() === $d14_maskers, implode( ', ', $d14_maskers ) );
 $d14_core = (string) file_get_contents( dirname( __DIR__ ) . '/src/Health.php' ) . (string) file_get_contents( dirname( __DIR__ ) . '/src/Diagnostics.php' );
 check( 'D14: Site Health and the diagnostics no longer reference src/Compat classes (inverted through filters)', ! preg_match( '/Compat\\\\[A-Z]/', $d14_core ) );
+// Owner decision 16.11.2026: PHP 8.5, MySQL 9.7 / MariaDB 12.3 for all Captain plugins; an older database is only reported.
+$db_health = new VCAP\Health();
+$db_old    = $db_health->test_database( '5.5.5-10.11.6-MariaDB-0ubuntu0.24.04.1' );
+$db_ok     = $db_health->test_database( '12.3.1-MariaDB-ubu2404' );
+$db_mysql  = $db_health->test_database( '8.4.3' );
+check(
+	'PHP 8.5 / MySQL 9.7 / MariaDB 12.3: header and load check ask for PHP 8.5; the database version is read for MySQL and MariaDB (replication prefix skipped) and an older server is only a recommendation, never critical',
+	str_contains( (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' ), ' * Requires PHP:      8.5' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' ), "version_compare( PHP_VERSION, '8.5', '<' )" ) && str_contains( (string) file_get_contents( VCAP_PATH . 'readme.txt' ), "Requires PHP: 8.5\n" )
+		&& array( 'type' => 'mariadb', 'version' => '10.11.6' ) === VCAP\Health::parse_db_server( '5.5.5-10.11.6-MariaDB-0ubuntu0.24.04.1' ) && array( 'type' => 'mysql', 'version' => '9.7.0' ) === VCAP\Health::parse_db_server( '9.7' ) && null === VCAP\Health::parse_db_server( 'unknown' )
+		&& 'recommended' === $db_old['status'] && str_contains( $db_old['description'], 'MariaDB 10.11.6' ) && 'good' === $db_ok['status'] && 'recommended' === $db_mysql['status'] && 'good' === $db_health->test_database( 'garbage' )['status'],
+	wp_json_encode( array( $db_old['status'], $db_ok['status'], $db_mysql['status'] ) )
+);
 $d14_filters = $GLOBALS['vcap_test_filters'] ?? array();
 unset( $GLOBALS['vcap_test_filters']['vcap_currency_health'] );
 $d14_plain = ( new VCAP\Health() )->test_currency();

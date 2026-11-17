@@ -3,7 +3,7 @@ Contributors: hastla007
 Tags: woocommerce, gift card, voucher, pdf, store credit
 Requires at least: 6.4
 Tested up to: 7.1
-Requires PHP: 8.1
+Requires PHP: 8.5
 WC requires at least: 8.9
 WC tested up to: 11.2
 Stable tag: 1.3.0
@@ -25,7 +25,7 @@ Every feature is included and free (GPL-2.0-or-later): there is no license key, 
 == Installation ==
 
 1. Install and activate WooCommerce 8.9 or newer.
-2. Upload the release ZIP under Plugins → Add New → Upload Plugin and activate Voucher Captain. PHP 8.1 or newer with the mbstring and dom extensions is required (activation stops without them); GD (QR codes, barcodes and images in PDFs), zip (Excel import) and iconv are needed for those features. Tools → Site Health shows what is missing.
+2. Upload the release ZIP under Plugins → Add New → Upload Plugin and activate Voucher Captain. PHP 8.5 or newer with the mbstring and dom extensions is required (activation stops without them); GD (QR codes, barcodes and images in PDFs), zip (Excel import) and iconv are needed for those features. Tools → Site Health shows what is missing.
 3. Check WooCommerce → Settings → Vouchers (issuing status, validity, delivery, store credit, VAT treatment).
 4. Edit a product, tick "Voucher" and configure the "Voucher" tab. Two PDF templates (gift card A5, voucher/service pass A6) are created on activation; edit them in the Vouchers menu.
 5. Optional: create pages with the shortcodes [vcap_redeem] (redeem page), [vcap_balance] (balance check) and [vcap_my_vouchers].
@@ -83,6 +83,7 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 * New: voucher commands for automations (contract 1.3.0): vcap_command_issue(), vcap_command_void(), vcap_command_reactivate() and vcap_command_redeem() (service vcap()->commands) issue, void, reactivate and redeem vouchers by id with an idempotency key and the rights of the authorising user. Each is off until switched on under Settings → Vouchers → Integrations (API); fixed limits the shop can only lower: at most 100 EUR per voucher or redemption, 50 calls a day per command, 1 issued voucher per recipient and day. Every call is recorded without the code.
 * Dev: VCAP_CONTRACT_VERSION 1.3.0 (1.2.0 with the read functions, 1.3.0 with the voucher commands); the plugin version rises with the contract.
 * New: Settings → Vouchers → Integrations (API) shows the status of Workflow Captain for Voucher Captain when Workflow Captain is active (adapter, contract version, active workflows, events per state, last correlation ID, links); counts and links only.
+* Change: requires PHP 8.5 or newer (was 8.1), the same for all Captain plugins. Supported database servers are MySQL 9.7 or MariaDB 12.3 (LTS) or newer; an older server keeps working and is only reported in Site Health.
 
 = 1.2.0 =
 * Fix (security): personal vouchers (only buyer/recipient) are redeemed online only by a customer logged in with the matching account email – a guest typing the buyer's address at checkout (also in the cart/checkout blocks, connectors and the WP Pass Captain checkout) is asked to log in with the masked address. Staff at the counter and in wp-admin are not affected; transferable vouchers neither.
@@ -217,7 +218,7 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 == Upgrade Notice ==
 
 = 1.3.0 =
-Adds read functions and voucher commands for add-ons and automations (contract 1.3.0; the commands are off by default). From 1.1.x the database is updated to version 1.8.0 – back up first.
+Requires PHP 8.5 or newer (was 8.1); MySQL 9.7 / MariaDB 12.3 recommended. Adds read functions and voucher commands for add-ons and automations (contract 1.3.0; the commands are off by default). From 1.1.x the database is updated to version 1.8.0 – back up first.
 
 = 1.2.0 =
 All features stay free, including the new gift card top-up and multi-purpose vouchers as payment. The database is updated to version 1.8.0 – back up first.

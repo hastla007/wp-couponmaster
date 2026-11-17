@@ -13857,3 +13857,20 @@ msgstr "In Workflow Captain öffnen:"
 #: src/Settings.php:465
 msgid "Workflow Captain"
 msgstr "Workflow Captain"
+
+msgid "The database server is supported"
+msgstr "Der Datenbankserver wird unterstützt"
+
+#, php-format
+msgid "Voucher Captain supports MySQL %1$s or newer and MariaDB %2$s or newer."
+msgstr "Voucher Captain unterstützt MySQL %1$s oder neuer und MariaDB %2$s oder neuer."
+
+msgid "The database server is older than the supported minimum"
+msgstr "Der Datenbankserver ist älter als die unterstützte Mindestversion"
+
+#, php-format
+msgid "Voucher Captain supports MySQL %1$s or newer and MariaDB %2$s or newer; this site uses %3$s %4$s. The plugin keeps working and nothing is blocked, but older database servers are no longer tested. Ask your host for an update."
+msgstr "Voucher Captain unterstützt MySQL %1$s oder neuer und MariaDB %2$s oder neuer; diese Website nutzt %3$s %4$s. Das Plugin funktioniert weiter und nichts wird gesperrt, ältere Datenbankserver werden aber nicht mehr getestet. Bitten Sie Ihren Hoster um ein Update."
+
+msgid "Voucher Captain requires PHP 8.5 or newer."
+msgstr "Voucher Captain benötigt PHP 8.5 oder neuer."
