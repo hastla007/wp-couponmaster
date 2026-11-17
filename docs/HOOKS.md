@@ -18,6 +18,9 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_campaigns_table_cell` | `src/Admin/CampaignAdmin.php` | Extra cells of the campaign table (e.g. the partner of WP Affiliate Captain). |
 | `vcap_campaigns_table_header` | `src/Admin/CampaignAdmin.php` | – |
 | `vcap_card_moved_to_credit` | `src/CardToCredit.php` | A gift card was moved into a customer's store credit (args: card Voucher, user id, amount). |
+| `vcap_form_captain_request_approved` | `src/Integrations/FormCaptain/RequestService.php` | A voucher request from Form Captain was approved and its vouchers issued. |
+| `vcap_form_captain_request_created` | `src/Integrations/FormCaptain/RequestService.php` | A voucher request from Form Captain was stored (status pending). Nothing has been issued. |
+| `vcap_form_captain_request_rejected` | `src/Integrations/FormCaptain/RequestService.php` | A voucher request from Form Captain was rejected. |
 | `vcap_gift_card_topped_up` | `src/TopUp.php` | A gift card was topped up by an order (args: Voucher $card, float $amount, WC_Order $order, order item). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_loaded` | `voucher-captain.php` | Voucher Captain has booted: vcap() and its services (api_v1, redemptions …) can be used from here on. |
 | `vcap_no_cache` | `src/Shortcodes.php` | Fires when a page must not be cached (hook for cache plugins without DONOTCACHEPAGE support). |
@@ -126,6 +129,9 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_field_group_applies` | `src/Fields.php` | – |
 | `vcap_first_order_counting_statuses` | `src/FirstOrderCoupons.php` | – |
 | `vcap_first_order_counts_undone_order` | `src/FirstOrderCoupons.php` | Whether a refunded/cancelled order counts as earlier order for "first order only" (bool, WC_Order). |
+| `vcap_form_captain_available` | `src/Integrations/FormCaptain/RequestService.php` | Filters whether Voucher Captain accepts voucher requests from Form Captain right now. False makes the Form Captain job retry later (code `voucher_captain_unavailable`). |
+| `vcap_form_captain_max_quantity` | `src/Integrations/FormCaptain/RequestService.php` | – |
+| `vcap_form_captain_max_value` | `src/Integrations/FormCaptain/RequestService.php` | – |
 | `vcap_hold_velocity` | `src/Delivery.php` | Maximum voucher orders of new customers per address (IPv6 /64) within the hold window before further ones are held (default 0 = no velocity limit; rate limit bucket "voucher_buy"). |
 | `vcap_import_max_unzipped_bytes` | `src/SpreadsheetReader.php` | – |
 | `vcap_internal_redemption_key_prefixes` | `src/API/V1/RestController.php` | Key prefixes reserved for built-in integrations (never created or driven over REST). |
@@ -261,6 +267,7 @@ is open and fired only once it was committed (CONNECTORS.md, "Event timing").
 | `vcap_voucher_request_handover` | `src/Integrations/VoucherRequests.php` | Hands a voucher request over to a company order (D5, contract 1.0.0). Return `array{url: string, order_id: int}` (admin URL of the order's preview) or a WP_Error; null means no extension took it. The same reference again must answer the same order. |
 | `vcap_voucher_request_handover_available` | `src/Integrations/VoucherRequests.php` | Whether an add-on takes this voucher request over as a company order (D5, contract 1.0.0). Default false: without an add-on the request view stays as it is. |
 | `vcap_voucher_request_lock_wait` | `src/Integrations/VoucherRequests.php` | Seconds a state change of a voucher request waits for another one on the same request (R9). |
+| `vcap_voucher_request_service_v1` | `src/Integrations/FormCaptain/RequestService.php` | – |
 | `vcap_voucher_requests_max_open` | `src/Integrations/VoucherRequests.php` | Most open requests at a time (protection against floods of form entries); above it submit() answers `vcap_request_limit` (429). 0 accepts no new request. |
 | `vcap_voucher_requests_retention_months` | `src/Integrations/VoucherRequests.php` | Retention of voucher requests in months (D10): `open` – open and partly issued requests (default 6), `closed` – issued and handed-over requests (default 24). 0 keeps them. Rejected requests are deleted at once. |
 | `vcap_voucher_tax_treatment` | `src/ProductConfig.php` | – |

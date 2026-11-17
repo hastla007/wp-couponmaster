@@ -127,7 +127,7 @@ function vcap_uninstall_site(): bool {
 	}
 
 	global $wpdb;
-	foreach ( array( 'vcap_vouchers', 'vcap_events', 'vcap_code_pool', 'vcap_redemptions', 'vcap_promotion_usage', 'vcap_claims', 'vcap_promotion_counts', 'vcap_rate_limits', 'vcap_scan_keys' ) as $table ) {
+	foreach ( array( 'vcap_vouchers', 'vcap_events', 'vcap_code_pool', 'vcap_redemptions', 'vcap_promotion_usage', 'vcap_claims', 'vcap_promotion_counts', 'vcap_rate_limits', 'vcap_scan_keys', 'vcap_fc_requests' ) as $table ) {
 		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}{$table}" ); // phpcs:ignore
 	}
 	// Templates, field groups and promotions (vcap_discount, with their usage records).

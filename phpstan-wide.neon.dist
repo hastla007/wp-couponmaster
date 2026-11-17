@@ -23,6 +23,8 @@ parameters:
   scanFiles:
     - vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
     - vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
+    # Optional Form Captain adapter (src/Integrations/FormCaptain): symbols of the Form Captain plugin.
+    - tests/stubs/form-captain.php
   reportUnmatchedIgnoredErrors: false
   ignoreErrors:
     # WordPress core files that only exist in a real installation (ABSPATH points into tests/ for the analysis).
@@ -31,3 +33,4 @@ parameters:
       paths:
         - src/Admin/VouchersListTable.php
         - src/Install.php
+        - src/Integrations/FormCaptain/RequestRepository.php
