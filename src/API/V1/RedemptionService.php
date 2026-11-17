@@ -34,6 +34,10 @@ final class RedemptionService {
 	/** Allowed idempotency key format (callers typically use a UUID or "<system>:<id>"). */
 	public const KEY_PATTERN = '/^[A-Za-z0-9][A-Za-z0-9._:\-]{7,63}$/';
 
+	/** Failed-code rate limit (Plugin::rate_limited()): bucket and window. */
+	private const RATE_BUCKET = 'redemption';
+	private const RATE_WINDOW = 900;
+
 	/**
 	 * Construct the service.
 	 *
@@ -64,28 +68,66 @@ final class RedemptionService {
 	/**
 	 * Check whether a code can be redeemed, without reserving anything.
 	 *
-	 * @param string $code    Voucher code.
-	 * @param array  $args    Optional: target (string), amount (float), user_id (int, PHP callers only),
-	 *                        email (string, PHP callers only: customer email of a guest, for personal vouchers).
+	 * @param string               $code    Voucher code.
+	 * @param array<string, mixed> $args    Optional: target (string), amount (float), user_id (int, PHP callers only),
+	 *                       email (string, PHP callers only: customer email of a guest, for personal vouchers – only
+	 *                       with email_verified), email_verified (bool, PHP callers only: the caller vouches that the
+	 *                       customer controls this address, e.g. its own logged-in account or staff checked the ID),
+	 *                       currency (string, ISO 4217: the caller's currency; default the shop base currency, M12-33).
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	public function check( string $code, array $args = array() ) {
+	public function check( string $code, array $args = array() ): array|\WP_Error {
 		$user_id = $this->user_id( $args );
 		if ( $this->too_many_failures( $user_id ) ) {
 			return self::error( 'vcap_rate_limited', __( 'Too many invalid voucher codes. Please try again later.', 'voucher-captain' ), 429 );
 		}
-		$voucher = $this->find( $code );
+		$voucher = $this->visible( $this->find( $code ), $user_id );
 		if ( ! $voucher ) {
-			$this->record_failure( $user_id );
+			$this->record_failure();
 			return self::error( 'vcap_not_found', __( 'This voucher code is not valid.', 'voucher-captain' ), 404 );
 		}
-		$target = isset( $args['target'] ) ? $this->clean_target( (string) $args['target'] ) : '';
+		$this->record_success( $user_id );
+		if ( $this->release_expired_for( $voucher ) ) {
+			$voucher = $this->vouchers->get( $voucher->id ) ?? $voucher;
+		}
+		$target = isset( $args['target'] ) ? self::clean_target( (string) $args['target'] ) : '';
 		$amount = isset( $args['amount'] ) ? (float) $args['amount'] : null;
-		$check  = $this->eligibility( $voucher, $target, $amount, $user_id, (string) ( $args['email'] ?? '' ) );
+		$money  = self::currency_check( $voucher, $args );
+		if ( is_wp_error( $money ) ) {
+			return $money;
+		}
+		$check = $this->eligibility( $voucher, $target, $amount, $user_id, (string) ( $args['email'] ?? '' ), ! empty( $args['email_verified'] ) );
 		if ( is_wp_error( $check ) ) {
 			return $check;
 		}
 		return $this->voucher_data( $voucher );
+	}
+
+	/**
+	 * M12-33: a fixed value is only redeemed in the currency it is kept in. The caller may name the currency of its
+	 * own system ("currency", ISO 4217); without it the shop base currency is expected, so a voucher issued before
+	 * the base currency was changed (50 EUR) is never redeemed as 50 of the new currency (vcap_currency_mismatch).
+	 * Percentage vouchers have no currency.
+	 *
+	 * @param Voucher              $voucher Voucher.
+	 * @param array<string, mixed> $args    Request arguments.
+	 * @return true|\WP_Error
+	 */
+	public static function currency_check( Voucher $voucher, array $args ): bool|\WP_Error {
+		if ( 'percent' === $voucher->discount_type || $voucher->is_ticket() || '' === $voucher->currency ) {
+			return true;
+		}
+		$given    = isset( $args['currency'] ) && is_string( $args['currency'] ) ? strtoupper( sanitize_key( $args['currency'] ) ) : '';
+		$expected = '' !== $given ? $given : (string) get_option( 'woocommerce_currency' );
+		if ( '' === $expected || strtoupper( $voucher->currency ) === $expected ) {
+			return true;
+		}
+		return self::error(
+			'vcap_currency_mismatch',
+			/* translators: 1: currency of the voucher, 2: currency of the redemption */
+			sprintf( __( 'This voucher is kept in %1$s and cannot be redeemed in %2$s.', 'voucher-captain' ), $voucher->currency, $expected ),
+			409
+		);
 	}
 
 	/**
@@ -94,23 +136,29 @@ final class RedemptionService {
 	 * Idempotent: repeating the call with the same key and the same request returns the existing redemption;
 	 * the same key with a different request returns vcap_idempotency_conflict.
 	 *
-	 * @param string $code Voucher code.
-	 * @param array  $args key (string, required), target (string, required), amount (float, gift cards),
-	 *                     user_id (int, PHP callers only; REST always uses the authenticated user), meta (array),
-	 *                     ttl_minutes (int, PHP callers only: how long the reservation is held before it is released
-	 *                     automatically; default the "Reservation lifetime" setting, at most 60 days),
-	 *                     email (string, PHP callers only: verified customer email of a guest, for personal vouchers).
+	 * @param string               $code Voucher code.
+	 * @param array<string, mixed> $args key (string, required), target (string, required), amount (float, gift cards),
+	 *                    user_id (int, PHP callers only; REST always uses the authenticated user), meta (array),
+	 *                    ttl_minutes (int, PHP callers only: how long the reservation is held before it is released
+	 *                    automatically; default the "Reservation lifetime" setting, at most 60 days),
+	 *                    email (string, PHP callers only: verified customer email of a guest, for personal vouchers),
+	 *                    email_verified (bool, PHP callers only: required for email to unlock a personal voucher, V6),
+	 *                    currency (string, ISO 4217: the caller's currency; default the shop base currency, M12-33).
 	 * @return array<string, mixed>|\WP_Error
 	 * @throws \Throwable Database errors are re-thrown after the transaction was rolled back.
 	 */
-	public function reserve( string $code, array $args ) {
+	public function reserve( string $code, array $args ): array|\WP_Error {
 		$key    = (string) ( $args['key'] ?? '' );
-		$target = $this->clean_target( (string) ( $args['target'] ?? '' ) );
+		$target = self::clean_target( (string) ( $args['target'] ?? '' ) );
 		if ( ! preg_match( self::KEY_PATTERN, $key ) ) {
 			return self::error( 'vcap_invalid_request', __( 'A redemption key of 8–64 characters (letters, digits, . _ : -) is required.', 'voucher-captain' ), 400 );
 		}
 		if ( '' === $target ) {
 			return self::error( 'vcap_invalid_request', __( 'A redemption target is required.', 'voucher-captain' ), 400 );
+		}
+		if ( ! self::meta_acceptable( $args['meta'] ?? null ) ) {
+			/* translators: 1: maximum size in KB, 2: maximum nesting depth */
+			return self::error( 'vcap_invalid_request', sprintf( __( 'The redemption metadata is too large (at most %1$d KB and %2$d levels).', 'voucher-captain' ), (int) ( self::META_MAX_BYTES / 1024 ), self::META_MAX_DEPTH ), 400 );
 		}
 		$user_id = $this->user_id( $args );
 		if ( $this->too_many_failures( $user_id ) ) {
@@ -119,19 +167,24 @@ final class RedemptionService {
 
 		// A known key is answered before the voucher lookup, so retries keep working after the voucher changed.
 		$existing = $this->get_row( $key );
-		$voucher  = $this->find( $code );
+		$voucher  = $this->visible( $this->find( $code ), $user_id );
 		if ( ! $voucher ) {
 			if ( $existing ) {
+				$this->record_success( $user_id ); // A retry with a known key, not a guess.
 				return self::error( 'vcap_idempotency_conflict', __( 'This redemption key was already used for another request.', 'voucher-captain' ), 409 );
 			}
-			$this->record_failure( $user_id );
+			$this->record_failure();
 			return self::error( 'vcap_not_found', __( 'This voucher code is not valid.', 'voucher-captain' ), 404 );
 		}
-		$amount = $voucher->is_multi_use() ? round( (float) ( $args['amount'] ?? 0 ), wc_get_price_decimals() ) : round( $voucher->initial_amount, wc_get_price_decimals() );
+		$this->record_success( $user_id );
+		if ( ! $existing && $this->release_expired_for( $voucher ) ) {
+			$voucher = $this->vouchers->get( $voucher->id ) ?? $voucher;
+		}
+		$amount = $voucher->is_multi_use() ? round( (float) ( $args['amount'] ?? 0 ), self::decimals( $voucher->currency ) ) : round( $voucher->initial_amount, self::decimals( $voucher->currency ) );
 		$hash   = $this->request_hash( $voucher->id, $target, $amount, $user_id );
 		if ( $existing ) {
 			return hash_equals( (string) $existing['request_hash'], $hash )
-				? $this->redemption_data( $existing )
+				? $this->replay( $existing )
 				: self::error( 'vcap_idempotency_conflict', __( 'This redemption key was already used for another request.', 'voucher-captain' ), 409 );
 		}
 		if ( $voucher->is_multi_use() && $amount <= 0 ) {
@@ -141,30 +194,40 @@ final class RedemptionService {
 		if ( ! Install::tables_support_transactions() ) {
 			return self::error( 'vcap_temporary_failure', __( 'Voucher redemption is temporarily unavailable.', 'voucher-captain' ), 503 );
 		}
+		$money = self::currency_check( $voucher, $args );
+		if ( is_wp_error( $money ) ) {
+			return $money;
+		}
+		// D6: the deciding filters (vcap_redemption_allowed, vcap_redemption_target_available) run here, before the
+		// row lock, on the voucher as read now; a slow or remote listener then holds no lock. Under the lock the
+		// state-dependent rules (status, balance, owner) are checked again without them.
+		$check = $this->eligibility( $voucher, $target, $voucher->is_multi_use() ? $amount : null, $user_id, (string) ( $args['email'] ?? '' ), ! empty( $args['email_verified'] ) );
+		if ( is_wp_error( $check ) ) {
+			return $check;
+		}
 
 		global $wpdb;
 		$tables = Install::tables();
 		$ttl    = max( 1, min( 60 * 24 * 60, (int) ( $args['ttl_minutes'] ?? get_option( 'vcap_redemption_ttl', 15 ) ) ) ) * MINUTE_IN_SECONDS;
 		$now    = gmdate( 'Y-m-d H:i:s' );
 		$id     = 0;
-		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( ! \VCAP\Db::begin() ) {
 			return $this->temporary();
 		}
 		try {
-			$locked = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$tables['vouchers']} WHERE id = %d FOR UPDATE", $voucher->id ) ); // phpcs:ignore
-			$fresh  = $locked ? $this->vouchers->get( $voucher->id ) : null;
+			$fresh = $this->vouchers->get_for_update( (int) $voucher->id ); // M12-04: the row as committed now, under its lock.
 			if ( ! $fresh ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_reserve', array( 'voucher_id' => $voucher->id ) );
 				return $this->temporary();
 			}
-			$check = $this->eligibility( $fresh, $target, $fresh->is_multi_use() ? $amount : null, $user_id, (string) ( $args['email'] ?? '' ) );
+			$check = $this->eligibility( $fresh, $target, $fresh->is_multi_use() ? $amount : null, $user_id, (string) ( $args['email'] ?? '' ), ! empty( $args['email_verified'] ), false );
 			if ( is_wp_error( $check ) ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_reserve', array( 'voucher_id' => $voucher->id ) );
 				return $check;
 			}
 
 			if ( $fresh->is_multi_use() ) {
-				$fresh->balance = max( 0.0, round( $fresh->balance - $amount, wc_get_price_decimals() ) );
+				$fresh->balance = max( 0.0, round( $fresh->balance - $amount, self::decimals( $fresh->currency ) ) );
 				if ( $fresh->balance <= 0 ) {
 					$fresh->status = Voucher::STATUS_REDEEMED;
 				}
@@ -181,19 +244,19 @@ final class RedemptionService {
 					'amount'         => $amount,
 					'state'          => self::STATE_RESERVED,
 					'request_hash'   => $hash,
-					'meta'           => wp_json_encode( is_array( $args['meta'] ?? null ) ? $args['meta'] : array() ),
+					'meta'           => wp_json_encode( self::caller_meta( $args['meta'] ?? null ) ),
 					'expires_at'     => gmdate( 'Y-m-d H:i:s', time() + $ttl ),
 					'created_at'     => $now,
 					'updated_at'     => $now,
 				)
 			);
 			if ( ! $inserted ) {
-				// Same key inserted concurrently (unique index): answer like an idempotent retry.
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				// Same key inserted concurrently (unique index): answer like an idempotent retry (no failure to log).
+				\VCAP\Db::rollback_silently();
 				$row = $this->get_row( $key );
 				if ( $row ) {
 					return hash_equals( (string) $row['request_hash'], $hash )
-						? $this->redemption_data( $row )
+						? $this->replay( $row )
 						: self::error( 'vcap_idempotency_conflict', __( 'This redemption key was already used for another request.', 'voucher-captain' ), 409 );
 				}
 				return $this->temporary();
@@ -202,15 +265,15 @@ final class RedemptionService {
 			/* translators: 1: redemption key, 2: target */
 			$note = sprintf( __( 'Redemption %1$s for %2$s', 'voucher-captain' ), $key, $target );
 			if ( ! $this->vouchers->update( $fresh ) || ! $this->vouchers->log( $fresh->id, 'api_reserved', $amount, $fresh->balance, $note ) ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_reserve', array( 'voucher_id' => $voucher->id ) );
 				return $this->temporary();
 			}
-			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			if ( ! \VCAP\Db::commit() ) {
+				\VCAP\Db::rollback_if_error( 'api_reserve', array( 'voucher_id' => $voucher->id ) );
 				return $this->temporary();
 			}
 		} catch ( \Throwable $e ) {
-			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			\VCAP\Db::rollback( 'api_reserve', array( 'voucher_id' => $voucher->id ), $e );
 			throw $e;
 		}
 
@@ -225,29 +288,108 @@ final class RedemptionService {
 		 * @since 1.1.0
 		 * @param array $data Redemption data (see API.md).
 		 */
-		do_action( 'vcap_redemption_reserved', $data );
+		\VCAP\Db::action( 'vcap_redemption_reserved', $data );
 		return $data;
+	}
+
+	/**
+	 * Answer to a repeated reserve() with a known key and the same request: the open reservation (replayed = true),
+	 * the completed redemption (replayed = true; REST 200 instead of 201), or – when the reservation was released
+	 * or expired – the error vcap_redemption_released (409): it holds nothing any more, so a connector must not
+	 * deliver its service for it but revoke and ask the user to redeem again (with a new key).
+	 *
+	 * @param array<string, mixed> $row Redemption row.
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	private function replay( array $row ): array|\WP_Error {
+		if ( self::STATE_RESERVED === $row['state'] && strtotime( (string) $row['expires_at'] . ' UTC' ) <= time() ) {
+			// Expired, but the release job has not run yet: release it now, then answer like any released one.
+			$this->transition( (string) $row['redemption_key'], self::STATE_RELEASED, array(), true );
+			$row = $this->get_row( (string) $row['redemption_key'] ) ?? $row;
+		}
+		if ( self::STATE_RELEASED === $row['state'] ) {
+			return self::error( 'vcap_redemption_released', __( 'This voucher reservation was already released. Please redeem the voucher again.', 'voucher-captain' ), 409 );
+		}
+		return $this->redemption_data( $row ) + array( 'replayed' => true );
+	}
+
+	/** Largest caller metadata (JSON) and nesting depth accepted with a reservation. */
+	public const META_MAX_BYTES = 8192;
+	public const META_MAX_DEPTH = 3;
+
+	/**
+	 * Whether caller metadata stays within META_MAX_BYTES (as JSON) and META_MAX_DEPTH levels.
+	 *
+	 * @param mixed $meta Caller metadata.
+	 * @return bool
+	 */
+	public static function meta_acceptable( mixed $meta ): bool {
+		if ( null === $meta || array() === $meta || ! is_array( $meta ) ) {
+			return true; // Anything else is stored as an empty list (caller_meta()).
+		}
+		$depth = static function ( $value, int $level ) use ( &$depth ): bool {
+			if ( ! is_array( $value ) ) {
+				return true;
+			}
+			if ( $level > self::META_MAX_DEPTH ) {
+				return false;
+			}
+			foreach ( $value as $item ) {
+				if ( ! $depth( $item, $level + 1 ) ) {
+					return false;
+				}
+			}
+			return true;
+		};
+		$json  = wp_json_encode( $meta );
+		return false !== $json && strlen( (string) $json ) <= self::META_MAX_BYTES && $depth( $meta, 1 );
+	}
+
+	/**
+	 * Release this voucher's external reservations whose lifetime is over, right away (the scheduled release may
+	 * not run: WP-Cron off, loopback blocked). Called where the voucher is read for a redemption.
+	 *
+	 * @param Voucher $voucher Voucher.
+	 * @return bool Whether a reservation was released.
+	 */
+	public function release_expired_for( Voucher $voucher ): bool {
+		global $wpdb;
+		if ( ! $voucher->id || ( ! $voucher->is_multi_use() && Voucher::STATUS_RESERVED !== $voucher->status ) ) {
+			return false;
+		}
+		$now   = gmdate( 'Y-m-d H:i:s' );
+		$table = Install::tables()['redemptions'];
+		$keys  = $wpdb->get_col( $wpdb->prepare( 'SELECT redemption_key FROM %i WHERE voucher_id = %d AND state = %s AND expires_at <= %s LIMIT 50', $table, $voucher->id, self::STATE_RESERVED, $now ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$done  = false;
+		foreach ( $keys ? $keys : array() as $key ) {
+			$result = $this->transition( (string) $key, self::STATE_RELEASED, array(), true );
+			$done   = $done || ( ! is_wp_error( $result ) && self::STATE_RELEASED === ( $result['state'] ?? '' ) );
+		}
+		return $done;
 	}
 
 	/**
 	 * Make a reservation final. Idempotent: committing a committed redemption returns it unchanged.
 	 *
-	 * @param string $key  Redemption key.
-	 * @param array  $args user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
+	 * @param string               $key  Redemption key.
+	 * @param array<string, mixed> $args user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
+	 *                                   access (callable, S9): gets the redemption data and returns true or a WP_Error;
+	 *                                   checked before and again under the row lock.
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	public function commit( string $key, array $args = array() ) {
+	public function commit( string $key, array $args = array() ): array|\WP_Error {
 		return $this->transition( $key, self::STATE_COMMITTED, $args );
 	}
 
 	/**
 	 * Cancel a reservation and give the voucher value back. Idempotent for already released redemptions.
 	 *
-	 * @param string $key  Redemption key.
-	 * @param array  $args user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
+	 * @param string               $key  Redemption key.
+	 * @param array<string, mixed> $args user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
+	 *                                   access (callable, S9): as in commit().
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	public function release( string $key, array $args = array() ) {
+	public function release( string $key, array $args = array() ): array|\WP_Error {
 		return $this->transition( $key, self::STATE_RELEASED, $args );
 	}
 
@@ -259,21 +401,26 @@ final class RedemptionService {
 	 * the same refund key with a different amount is a conflict.
 	 *
 	 * @since 1.1.0
-	 * @param string $key        Redemption key.
-	 * @param float  $amount     Amount to give back (voucher currency).
-	 * @param string $refund_key Idempotency key of this refund.
-	 * @param array  $args       user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
+	 * @param string               $key        Redemption key.
+	 * @param float                $amount     Amount to give back (voucher currency).
+	 * @param string               $refund_key Idempotency key of this refund.
+	 * @param array<string, mixed> $args       user_id (int, PHP callers only) to enforce ownership; omit for trusted server code.
+	 *                                         access (callable, S9): as in commit().
 	 * @return array<string, mixed>|\WP_Error Redemption data plus refunded (total) and restored (this call).
 	 * @throws \Throwable Database errors are re-thrown after the transaction was rolled back.
 	 */
-	public function refund( string $key, float $amount, string $refund_key, array $args = array() ) {
-		$amount = round( $amount, wc_get_price_decimals() );
+	public function refund( string $key, float $amount, string $refund_key, array $args = array() ): array|\WP_Error {
+		$amount = (float) $amount; // Rounded to the voucher currency below.
 		if ( ! preg_match( self::KEY_PATTERN, $key ) || ! preg_match( self::KEY_PATTERN, $refund_key ) ) {
 			return self::error( 'vcap_invalid_request', __( 'A redemption key, a refund key and a positive amount are required.', 'voucher-captain' ), 400 );
 		}
 		$row = $this->get_row( $key );
 		if ( ! $row ) {
 			return self::error( 'vcap_reservation_missing', __( 'No redemption exists for this key.', 'voucher-captain' ), 404 );
+		}
+		$denied = $this->access_denied( $row, $args );
+		if ( $denied ) {
+			return $denied;
 		}
 		$known = json_decode( (string) $row['meta'], true );
 		if ( is_array( $known ) && isset( $known['_refunds'][ $refund_key ] ) ) {
@@ -286,9 +433,6 @@ final class RedemptionService {
 		if ( $amount <= 0 ) {
 			return self::error( 'vcap_invalid_request', __( 'A redemption key, a refund key and a positive amount are required.', 'voucher-captain' ), 400 );
 		}
-		if ( isset( $args['user_id'] ) && (int) $args['user_id'] !== (int) $row['user_id'] ) {
-			return self::error( 'vcap_not_allowed', __( 'This redemption belongs to another user.', 'voucher-captain' ), 403 );
-		}
 		if ( self::STATE_COMMITTED !== $row['state'] ) {
 			return self::error( 'vcap_not_committed', __( 'Only completed redemptions can be refunded.', 'voucher-captain' ), 409 );
 		}
@@ -298,38 +442,43 @@ final class RedemptionService {
 
 		global $wpdb;
 		$tables = Install::tables();
-		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( ! \VCAP\Db::begin() ) {
 			return $this->temporary();
 		}
 		try {
-			$wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$tables['vouchers']} WHERE id = %d FOR UPDATE", (int) $row['voucher_id'] ) ); // phpcs:ignore
+			// M12-04: voucher row first (as committed now, under its lock), then the redemption row, as in reserve().
+			$voucher = $this->vouchers->get_for_update( (int) $row['voucher_id'] );
 			$row     = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$tables['redemptions']} WHERE redemption_key = %s FOR UPDATE", $key ), ARRAY_A ); // phpcs:ignore
-			$voucher = $row ? $this->vouchers->get( (int) $row['voucher_id'] ) : null;
 			if ( ! $row || ! $voucher ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_refund', array( 'redemption_key' => $key ) );
 				return $this->temporary();
+			}
+			$denied = $this->access_denied( $row, $args ); // S9: again on the locked row.
+			if ( $denied ) {
+				\VCAP\Db::rollback_if_error( 'api_refund', array( 'redemption_key' => $key ) );
+				return $denied;
 			}
 			$meta    = json_decode( (string) $row['meta'], true );
 			$meta    = is_array( $meta ) ? $meta : array();
 			$refunds = isset( $meta['_refunds'] ) && is_array( $meta['_refunds'] ) ? array_map( 'floatval', $meta['_refunds'] ) : array();
 			if ( isset( $refunds[ $refund_key ] ) ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_refund', array( 'redemption_key' => $key ) );
 				return $this->redemption_data( $row ) + array(
 					'refunded' => array_sum( $refunds ),
 					'restored' => 0.0,
 				);
 			}
 			$redeemed = (float) $row['amount'];
-			$give     = round( min( $amount, $redeemed - array_sum( $refunds ) ), wc_get_price_decimals() );
+			$give     = round( min( $amount, $redeemed - array_sum( $refunds ) ), self::decimals( $voucher->currency ) );
 			if ( $give <= 0 ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_refund', array( 'redemption_key' => $key ) );
 				return self::error( 'vcap_refund_exceeded', __( 'This redemption has already been refunded completely.', 'voucher-captain' ), 409 );
 			}
 			$refunds[ $refund_key ] = $give;
 			$total                  = array_sum( $refunds );
 			$restored               = 0.0;
 			if ( $voucher->is_multi_use() ) {
-				$voucher->balance = round( $voucher->balance + $give, wc_get_price_decimals() );
+				$voucher->balance = round( $voucher->balance + $give, self::decimals( $voucher->currency ) );
 				$restored         = $give;
 				if ( Voucher::STATUS_REDEEMED === $voucher->status && $voucher->balance > 0 ) {
 					$voucher->status = $voucher->is_expired() ? Voucher::STATUS_EXPIRED : Voucher::STATUS_ACTIVE;
@@ -351,15 +500,15 @@ final class RedemptionService {
 			/* translators: 1: refund key, 2: redemption key */
 			$note = sprintf( __( 'Refund %1$s of redemption %2$s', 'voucher-captain' ), $refund_key, $key );
 			if ( 1 !== (int) $updated || ! $this->vouchers->update( $voucher ) || ! $this->vouchers->log( $voucher->id, 'api_refunded', $give, $voucher->balance, $note ) ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_refund', array( 'redemption_key' => $key ) );
 				return $this->temporary();
 			}
-			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			if ( ! \VCAP\Db::commit() ) {
+				\VCAP\Db::rollback_if_error( 'api_refund', array( 'redemption_key' => $key ) );
 				return $this->temporary();
 			}
 		} catch ( \Throwable $e ) {
-			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			\VCAP\Db::rollback( 'api_refund', array( 'redemption_key' => $key ), $e );
 			throw $e;
 		}
 
@@ -375,8 +524,59 @@ final class RedemptionService {
 		 * @param array $data   Redemption data with refunded (total) and restored (this call).
 		 * @param float $amount Amount refunded with this call.
 		 */
-		do_action( 'vcap_redemption_refunded', $data, $give );
+		\VCAP\Db::action( 'vcap_redemption_refunded', $data, $give );
 		return $data;
+	}
+
+	/**
+	 * Caller metadata as stored with a redemption. Keys starting with "_" are reserved for the service's own
+	 * bookkeeping (e.g. "_refunds"): a caller could otherwise pre-seed refunds and restore a voucher or lift the
+	 * refund cap. Nested values are kept as given.
+	 *
+	 * @param mixed $meta Caller metadata.
+	 * @return array<string, mixed>
+	 */
+	public static function caller_meta( mixed $meta ): array {
+		if ( ! is_array( $meta ) ) {
+			return array();
+		}
+		foreach ( array_keys( $meta ) as $key ) {
+			if ( 0 === strpos( (string) $key, '_' ) ) {
+				unset( $meta[ $key ] );
+			}
+		}
+		return $meta;
+	}
+
+	/**
+	 * Decimal places of a currency (ISO 4217 minor units), not the shop's price display setting: a shop that
+	 * shows whole forints still books exact amounts. Unknown or empty currency: 2 (the internal precision).
+	 *
+	 * @param string $currency ISO 4217 code.
+	 * @return int
+	 */
+	public static function decimals( string $currency ): int {
+		static $minor = null;
+		if ( null === $minor ) {
+			// ISO 4217 data (config/currencies.php): minor units that differ from 2.
+			$file  = dirname( __DIR__, 3 ) . '/config/currencies.php';
+			$minor = is_readable( $file ) ? (array) include $file : array();
+		}
+		$currency = strtoupper( $currency );
+		$decimals = 2;
+		foreach ( $minor as $units => $codes ) {
+			if ( in_array( $currency, (array) $codes, true ) ) {
+				$decimals = (int) $units;
+			}
+		}
+		/**
+		 * Decimal places used for voucher amounts of a currency.
+		 *
+		 * @since 1.2.0
+		 * @param int    $decimals Decimal places.
+		 * @param string $currency ISO 4217 code.
+		 */
+		return (int) apply_filters( 'vcap_currency_decimals', $decimals, $currency );
 	}
 
 	/**
@@ -385,15 +585,20 @@ final class RedemptionService {
 	 * @param string $key Redemption key.
 	 * @return array<string, mixed>|\WP_Error
 	 */
-	public function get( string $key ) {
+	public function get( string $key ): array|\WP_Error {
 		$row = preg_match( self::KEY_PATTERN, $key ) ? $this->get_row( $key ) : null;
+		if ( $row && self::STATE_RESERVED === $row['state'] && strtotime( (string) $row['expires_at'] . ' UTC' ) <= time() ) {
+			// Past its lifetime: released now instead of waiting for the background job.
+			$this->transition( $key, self::STATE_RELEASED, array(), true );
+			$row = $this->get_row( $key ) ?? $row;
+		}
 		return $row ? $this->redemption_data( $row ) : self::error( 'vcap_reservation_missing', __( 'No redemption exists for this key.', 'voucher-captain' ), 404 );
 	}
 
 	/**
 	 * Action Scheduler callback: release one reservation if it is still pending after its TTL.
 	 *
-	 * @param int|array $redemption_id Redemption id.
+	 * @param int|array<int|string, mixed> $redemption_id Redemption id.
 	 */
 	public function release_expired( $redemption_id ): void {
 		global $wpdb;
@@ -422,14 +627,14 @@ final class RedemptionService {
 	/**
 	 * Move a reservation to committed or released inside one transaction.
 	 *
-	 * @param string $key     Redemption key.
-	 * @param string $to      Target state.
-	 * @param array  $args    user_id for ownership checks.
-	 * @param bool   $expired Called by the expiry job.
+	 * @param string               $key     Redemption key.
+	 * @param string               $to      Target state.
+	 * @param array<string, mixed> $args    user_id for ownership checks.
+	 * @param bool                 $expired Called by the expiry job.
 	 * @return array<string, mixed>|\WP_Error
 	 * @throws \Throwable Database errors are re-thrown after the transaction was rolled back.
 	 */
-	private function transition( string $key, string $to, array $args, bool $expired = false ) {
+	private function transition( string $key, string $to, array $args, bool $expired = false ): array|\WP_Error {
 		if ( ! preg_match( self::KEY_PATTERN, $key ) ) {
 			return self::error( 'vcap_invalid_request', __( 'Invalid redemption key.', 'voucher-captain' ), 400 );
 		}
@@ -437,8 +642,9 @@ final class RedemptionService {
 		if ( ! $row ) {
 			return self::error( 'vcap_reservation_missing', __( 'No redemption exists for this key.', 'voucher-captain' ), 404 );
 		}
-		if ( isset( $args['user_id'] ) && (int) $args['user_id'] !== (int) $row['user_id'] ) {
-			return self::error( 'vcap_not_allowed', __( 'This redemption belongs to another user.', 'voucher-captain' ), 403 );
+		$denied = $this->access_denied( $row, $args );
+		if ( $denied ) {
+			return $denied;
 		}
 		if ( $to === $row['state'] ) {
 			return $this->redemption_data( $row ); // Idempotent repeat.
@@ -454,29 +660,39 @@ final class RedemptionService {
 
 		global $wpdb;
 		$tables = Install::tables();
-		if ( false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( ! \VCAP\Db::begin() ) {
 			return $this->temporary();
 		}
 		try {
 			// Same lock order as reserve(): voucher row first, then the redemption row.
-			$wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$tables['vouchers']} WHERE id = %d FOR UPDATE", (int) $row['voucher_id'] ) ); // phpcs:ignore
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$tables['redemptions']} WHERE redemption_key = %s FOR UPDATE", $key ), ARRAY_A ); // phpcs:ignore
+			$voucher = $this->vouchers->get_for_update( (int) $row['voucher_id'] ); // M12-04: as committed now.
+			$row     = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$tables['redemptions']} WHERE redemption_key = %s FOR UPDATE", $key ), ARRAY_A ); // phpcs:ignore
+			$denied  = $row ? $this->access_denied( $row, $args ) : null; // S9: again on the locked row.
+			if ( $denied ) {
+				\VCAP\Db::rollback_if_error( 'api_transition', array( 'redemption_key' => $key ) );
+				return $denied;
+			}
 			if ( ! $row || self::STATE_RESERVED !== $row['state'] ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_transition', array( 'redemption_key' => $key ) );
 				return $row && $to === $row['state'] ? $this->redemption_data( $row ) : self::error( 'vcap_reservation_missing', __( 'This reservation has expired or was cancelled. Please redeem the voucher again.', 'voucher-captain' ), 409 );
 			}
-			$voucher = $this->vouchers->get( (int) $row['voucher_id'] );
 			if ( ! $voucher ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_transition', array( 'redemption_key' => $key ) );
 				return $this->temporary();
 			}
 			$amount = (float) $row['amount'];
 			/* translators: 1: redemption key, 2: target */
 			$note = sprintf( __( 'Redemption %1$s for %2$s', 'voucher-captain' ), $key, $row['target'] );
 
+			if ( self::STATE_COMMITTED === $to && strtotime( (string) $row['expires_at'] . ' UTC' ) <= time() ) {
+				// Past its lifetime (release job not run yet): released, never completed.
+				\VCAP\Db::rollback_if_error( 'api_transition', array( 'redemption_key' => $key ) );
+				$this->transition( $key, self::STATE_RELEASED, array(), true );
+				return self::error( 'vcap_reservation_missing', __( 'This reservation has expired or was cancelled. Please redeem the voucher again.', 'voucher-captain' ), 409 );
+			}
 			if ( self::STATE_COMMITTED === $to && Voucher::STATUS_VOID === $voucher->status ) {
 				// Voided while reserved (e.g. the purchase order was refunded): never complete the redemption.
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_transition', array( 'redemption_key' => $key ) );
 				return self::error( 'vcap_cancelled', __( 'This voucher has been cancelled.', 'voucher-captain' ), 410 );
 			}
 			if ( self::STATE_COMMITTED === $to ) {
@@ -487,7 +703,7 @@ final class RedemptionService {
 				$event = 'api_committed';
 			} else {
 				if ( $voucher->is_multi_use() ) {
-					$voucher->balance = round( $voucher->balance + $amount, wc_get_price_decimals() );
+					$voucher->balance = round( $voucher->balance + $amount, self::decimals( $voucher->currency ) );
 				}
 				if ( in_array( $voucher->status, array( Voucher::STATUS_RESERVED, Voucher::STATUS_REDEEMED ), true ) && ( ! $voucher->is_multi_use() || $voucher->balance > 0 ) ) {
 					$voucher->status = $voucher->is_expired() ? Voucher::STATUS_EXPIRED : Voucher::STATUS_ACTIVE;
@@ -506,15 +722,15 @@ final class RedemptionService {
 				array( 'id' => (int) $row['id'] )
 			);
 			if ( 1 !== (int) $updated || ! $this->vouchers->update( $voucher ) || ! $this->vouchers->log( $voucher->id, $event, $amount, $voucher->balance, $note ) ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				\VCAP\Db::rollback_if_error( 'api_transition', array( 'redemption_key' => $key ) );
 				return $this->temporary();
 			}
-			if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			if ( ! \VCAP\Db::commit() ) {
+				\VCAP\Db::rollback_if_error( 'api_transition', array( 'redemption_key' => $key ) );
 				return $this->temporary();
 			}
 		} catch ( \Throwable $e ) {
-			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			\VCAP\Db::rollback( 'api_transition', array( 'redemption_key' => $key ), $e );
 			throw $e;
 		}
 
@@ -526,9 +742,18 @@ final class RedemptionService {
 			 *
 			 * @since 1.1.0
 			 * @param array $data Redemption data: redemption_key, voucher_id, code, user_id, target, amount,
-			 *                    currency, state, committed_at (UTC), meta.
+			 *                    currency, state, committed_at (UTC), meta; channel "external" (shop and counter
+			 *                    redemptions fire it too, with channel "shop" or "counter", see
+			 *                    VoucherRepository::fire_redeemed()).
 			 */
-			do_action( 'vcap_voucher_redeemed', $data );
+			\VCAP\Db::action(
+				'vcap_voucher_redeemed',
+				$data + array(
+					'channel'  => 'external',
+					'order_id' => 0,
+					'source'   => \VCAP\Source::current(),
+				)
+			);
 		} else {
 			/**
 			 * Fires when a reservation was released (cancelled by the caller or expired).
@@ -537,7 +762,7 @@ final class RedemptionService {
 			 * @param array $data    Redemption data.
 			 * @param bool  $expired Whether the reservation expired.
 			 */
-			do_action( 'vcap_redemption_released', $data, $expired );
+			\VCAP\Db::action( 'vcap_redemption_released', $data, $expired );
 		}
 		return $data;
 	}
@@ -550,9 +775,12 @@ final class RedemptionService {
 	 * @param float|null $amount  Requested gift card amount (null = whole voucher / not checked).
 	 * @param int        $user_id User id.
 	 * @param string     $email   Customer email given by a trusted PHP caller (e.g. a guest checkout), else ''.
+	 * @param bool       $email_verified Whether the caller vouches for $email (V6: only then it unlocks personal vouchers).
+	 * @param bool       $filters        Whether the deciding filters run (false for the re-check under the row lock,
+	 *                                   D6: they already ran before the lock was taken).
 	 * @return true|\WP_Error
 	 */
-	private function eligibility( Voucher $voucher, string $target, ?float $amount, int $user_id, string $email = '' ) {
+	private function eligibility( Voucher $voucher, string $target, ?float $amount, int $user_id, string $email = '', bool $email_verified = false, bool $filters = true ): bool|\WP_Error {
 		if ( 'credit' === $voucher->type ) {
 			// Store credit belongs to one customer account and is only used in the shop (owner check there).
 			return self::error( 'vcap_not_redeemable', __( 'Store credit can only be used in the shop.', 'voucher-captain' ), 422 );
@@ -594,18 +822,34 @@ final class RedemptionService {
 		// Email-restricted coupons (e.g. "recipient only") also restrict external redemption.
 		if ( $voucher->coupon_id ) {
 			$coupon = new \WC_Coupon( $voucher->coupon_id );
-			$emails = $coupon->get_id() ? array_map( 'strtolower', (array) $coupon->get_email_restrictions() ) : array();
+			if ( ! $coupon->get_id() || 'trash' === $coupon->get_status() ) {
+				// Without its coupon the restriction is unknown: fail closed (a personal voucher must not become
+				// redeemable for every account because its coupon was deleted).
+				return self::error( 'vcap_not_redeemable', __( 'This voucher cannot be redeemed right now. Please contact the shop.', 'voucher-captain' ), 422 );
+			}
+			// V6: the account's (verified) email of the acting user, or an email the trusted PHP caller vouches for
+			// (email_verified: its own authenticated customer, staff who checked the holder) – never an address a
+			// guest only typed in.
+			$emails = \VCAP\PersonalVoucher::restrictions( $coupon );
 			if ( $emails ) {
 				$user     = $user_id ? get_userdata( $user_id ) : null;
-				$accepted = array_filter( array( $user ? strtolower( (string) $user->user_email ) : '', strtolower( trim( $email ) ) ) );
-				if ( ! array_intersect( $accepted, $emails ) ) {
+				$user     = $user instanceof \WP_User ? $user : null;
+				$accepted = \VCAP\PersonalVoucher::allowed_for_user( $emails, $user ) || ( $email_verified && \VCAP\PersonalVoucher::matches( $email, $emails ) );
+				if ( ! $accepted ) {
+					if ( ! $user ) {
+						return self::error( 'vcap_login_required', \VCAP\PersonalVoucher::refusal( $emails, false ), 403 );
+					}
 					return self::error( 'vcap_not_allowed', __( 'This voucher is not valid for your account.', 'voucher-captain' ), 403 );
 				}
 			}
 		}
+		if ( ! $filters ) {
+			return true;
+		}
 		/**
 		 * Filters whether a voucher may be redeemed for a target (e.g. "only course vouchers unlock courses").
-		 * Return false or a WP_Error to refuse.
+		 * Return false or a WP_Error to refuse. Runs before the voucher row is locked (D6), but may still run inside
+		 * a caller's transaction: no remote calls that can take long, no own transaction (CONNECTORS.md).
 		 *
 		 * @since 1.1.0
 		 * @param true|\WP_Error|bool $allowed Current decision.
@@ -621,7 +865,8 @@ final class RedemptionService {
 			return self::error( 'vcap_not_allowed', __( 'This voucher cannot be used for this purpose.', 'voucher-captain' ), 403 );
 		}
 		/**
-		 * Filters whether the redemption target is currently available (e.g. the course still exists).
+		 * Filters whether the redemption target is currently available (e.g. the course still exists). Same
+		 * timing rules as vcap_redemption_allowed.
 		 *
 		 * @since 1.1.0
 		 * @param bool    $available Whether the target can be delivered.
@@ -641,6 +886,7 @@ final class RedemptionService {
 	 * @return Voucher|null
 	 */
 	private function find( string $code ): ?Voucher {
+		$code = \VCAP\CodeLookup::code_input( $code ); // M12-99: code#PIN (checked by CodeLookup::visible()).
 		$code = trim( sanitize_text_field( $code ) );
 		if ( '' === $code || strlen( $code ) > 100 ) {
 			return null;
@@ -649,9 +895,28 @@ final class RedemptionService {
 	}
 
 	/**
+	 * AP-S1-2: another customer's store credit reads like an unknown code (404, counted as a failed attempt) for
+	 * everyone but staff, so check and reserve do not confirm that such a code exists (CodeLookup::visible()).
+	 *
+	 * @param Voucher|null $voucher Voucher found by code.
+	 * @param int          $user_id Acting user.
+	 */
+	private function visible( ?Voucher $voucher, int $user_id ): ?Voucher {
+		if ( ! $voucher || $this->is_staff() || \VCAP\CodeLookup::visible( $voucher, $user_id ) ) {
+			return $voucher;
+		}
+		return null;
+	}
+
+	/** Shop staff (voucher managers, shop managers): they see every code in wp-admin anyway. */
+	private function is_staff(): bool {
+		return current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' ); // phpcs:ignore WordPress.WP.Capabilities.Unknown -- Registered by Install / WooCommerce.
+	}
+
+	/**
 	 * The acting user: explicit user_id from trusted PHP callers, otherwise the logged-in user.
 	 *
-	 * @param array $args Arguments.
+	 * @param array<string, mixed> $args Arguments.
 	 * @return int
 	 */
 	private function user_id( array $args ): int {
@@ -664,7 +929,7 @@ final class RedemptionService {
 	 * @param string $target Target.
 	 * @return string
 	 */
-	private function clean_target( string $target ): string {
+	public static function clean_target( string $target ): string {
 		return substr( (string) preg_replace( '/[^A-Za-z0-9._:\/\-]/', '', $target ), 0, 191 );
 	}
 
@@ -682,10 +947,35 @@ final class RedemptionService {
 	}
 
 	/**
-	 * Load a redemption row.
+	 * S9: whether the caller of commit(), release() or refund() may act on this redemption row: the access check
+	 * ($args['access'], e.g. the REST rules for customers) and the owner ($args['user_id']). Checked on the row as
+	 * read and again under its lock, so a redemption created after a caller's own check is never driven by it.
 	 *
-	 * @param string $key Key.
-	 * @return array<string, mixed>|null
+	 * @param array<string, mixed> $row  Redemption row.
+	 * @param array<string, mixed> $args Call arguments.
+	 * @return \WP_Error|null The refusal, or null when allowed.
+	 */
+	private function access_denied( array $row, array $args ): ?\WP_Error {
+		if ( isset( $args['access'] ) && is_callable( $args['access'] ) ) {
+			$allowed = call_user_func( $args['access'], $this->redemption_data( $row ) );
+			if ( true !== $allowed ) {
+				return is_wp_error( $allowed ) ? $allowed : self::error( 'vcap_reservation_missing', __( 'No redemption exists for this key.', 'voucher-captain' ), 404 );
+			}
+		}
+		if ( isset( $args['user_id'] ) && (int) $args['user_id'] !== (int) $row['user_id'] ) {
+			return self::error( 'vcap_not_allowed', __( 'This redemption belongs to another user.', 'voucher-captain' ), 403 );
+		}
+		return null;
+	}
+
+	/**
+	 * Stored redemption row by its key, or null when there is none.
+	 *
+	 * Reads the database on every call (the row changes under a transition), so it is not memoised.
+	 *
+	 * @phpstan-impure
+	 * @param string $key Redemption key.
+	 * @return array<string,mixed>|null
 	 */
 	private function get_row( string $key ): ?array {
 		global $wpdb;
@@ -697,7 +987,7 @@ final class RedemptionService {
 	/**
 	 * Public representation of a redemption.
 	 *
-	 * @param array|null $row Row.
+	 * @param array<string, mixed>|null $row Row.
 	 * @return array<string, mixed>
 	 */
 	private function redemption_data( ?array $row ): array {
@@ -730,6 +1020,7 @@ final class RedemptionService {
 	 * @return array<string, mixed>
 	 */
 	private function voucher_data( Voucher $voucher ): array {
+		$purpose = \VCAP\ProductConfig::purpose( $voucher );
 		return array(
 			'code'       => $voucher->code,
 			'type'       => $voucher->type,
@@ -739,6 +1030,11 @@ final class RedemptionService {
 			'currency'   => $voucher->currency,
 			'expires_at' => $voucher->expires_at,
 			'product_id' => $voucher->variation_id ? $voucher->variation_id : $voucher->product_id,
+			// M12-31: VAT classification – purpose "multi" (means of payment), "single" or "discount", the
+			// treatment ("payment", "single", "discount") and, for single-purpose vouchers, the VAT of the sale.
+			'purpose'    => $purpose,
+			'treatment'  => \VCAP\ProductConfig::tax_treatment( $voucher ),
+			'sale_tax'   => 'single' === $purpose ? \VCAP\ProductConfig::sale_tax( $voucher ) : null,
 		);
 	}
 
@@ -748,24 +1044,8 @@ final class RedemptionService {
 	 * @param Voucher $voucher Voucher.
 	 */
 	private function sync_coupon( Voucher $voucher ): void {
-		if ( ! $voucher->coupon_id ) {
-			return;
-		}
-		$coupon = new \WC_Coupon( $voucher->coupon_id );
-		if ( ! $coupon->get_id() ) {
-			return;
-		}
-		if ( $voucher->is_multi_use() ) {
-			$coupon->set_amount( $voucher->balance );
-		} elseif ( Voucher::STATUS_REDEEMED === $voucher->status ) {
-			// Used up outside the cart: make WooCommerce's own usage limit refuse it too.
-			$coupon->set_usage_count( max( 1, (int) $coupon->get_usage_count() ) );
-			$coupon->set_usage_limit( max( 1, (int) $coupon->get_usage_count() ) );
-		} elseif ( Voucher::STATUS_ACTIVE === $voucher->status && $coupon->get_usage_limit() > 0 && $coupon->get_usage_count() >= $coupon->get_usage_limit() ) {
-			// Usable again after a full refund: allow exactly one more use.
-			$coupon->set_usage_limit( (int) $coupon->get_usage_count() + 1 );
-		}
-		$coupon->save();
+		// Balance under the row lock; single use: used up outside the cart, or usable again after a full refund.
+		\VCAP\CouponManager::sync_coupon( $voucher, array( 'amount', 'usage' ) );
 	}
 
 	/**
@@ -778,33 +1058,117 @@ final class RedemptionService {
 	}
 
 	/**
-	 * Failed-code rate limit per user (and per visitor for anonymous calls).
+	 * Visitor key of the per-caller failed-code limit: the user (connectors and logged-in customers); '' = none
+	 * (PHP callers without a user count by address only).
 	 *
 	 * @param int $user_id User id.
 	 * @return string
 	 */
-	private function failure_key( int $user_id ): string {
-		return 'vcap_rl_redeem_' . ( $user_id ? 'u' . $user_id : md5( (string) \WC_Geolocation::get_ip_address() ) );
+	private function rate_visitor( int $user_id ): string {
+		return $user_id ? 'u' . $user_id : '';
 	}
 
 	/**
-	 * Whether the caller exceeded the configured number of invalid codes.
+	 * Configured number of invalid codes per caller and 15 minutes (0 = no limit).
+	 *
+	 * @return int
+	 */
+	private function max_failures(): int {
+		return (int) get_option( 'vcap_redemption_max_failures', 10 );
+	}
+
+	/**
+	 * Which counters the current lookup was counted in.
+	 *
+	 * @var array{user:bool, address:bool}
+	 */
+	private array $counted = array(
+		'user'    => false,
+		'address' => false,
+	);
+
+	/**
+	 * Whether the caller's attempts also count by address, in the bucket shared with the plugin's code forms
+	 * (CodeLookup): every caller except staff (connectors with voucher management rights) and requests without a
+	 * client address (cron, WP-CLI). Self-registered customer accounts therefore cannot multiply the quota.
+	 *
+	 * @return bool
+	 */
+	private function counts_by_address(): bool {
+		return ! $this->is_staff() && '' !== \VCAP\Plugin::client_ip();
+	}
+
+	/**
+	 * Counts the attempt before the code lookup (atomic, see Plugin::rate_limited()) and tells whether the caller
+	 * exceeded the number of invalid codes: per user (setting "vcap_redemption_max_failures") and per address in
+	 * the bucket of all code forms. Existing codes give the attempts back (record_success()).
 	 *
 	 * @param int $user_id User id.
 	 * @return bool
 	 */
 	private function too_many_failures( int $user_id ): bool {
-		$max = (int) get_option( 'vcap_redemption_max_failures', 10 );
-		return $max > 0 && (int) get_transient( $this->failure_key( $user_id ) ) >= $max;
+		$this->counted = array(
+			'user'    => false,
+			'address' => false,
+		);
+		$max           = $this->max_failures();
+		if ( $max > 0 && $user_id ) {
+			/**
+			 * Invalid codes per 15 minutes across all callers; above it every caller's quota shrinks (brake).
+			 *
+			 * @since 1.2.0
+			 * @param int $site_wide Default 300.
+			 */
+			$site_wide = (int) apply_filters( 'vcap_redemption_site_wide_failures', 300 );
+			if ( \VCAP\Plugin::rate_limited( self::RATE_BUCKET, $max, $site_wide, self::RATE_WINDOW, false, $this->rate_visitor( $user_id ) ) ) {
+				return true;
+			}
+			$this->counted['user'] = true;
+		}
+		if ( $this->counts_by_address() ) {
+			if ( \VCAP\CodeLookup::begin() ) {
+				if ( $this->counted['user'] ) {
+					\VCAP\Plugin::rate_limit_success( self::RATE_BUCKET, self::RATE_WINDOW, $this->rate_visitor( $user_id ) ); // Refused, not a failed code.
+					$this->counted['user'] = false;
+				}
+				return true;
+			}
+			$this->counted['address'] = true;
+		}
+		return false;
 	}
 
 	/**
-	 * Count an invalid code.
+	 * The code exists: give the counted attempts back.
 	 *
 	 * @param int $user_id User id.
 	 */
-	private function record_failure( int $user_id ): void {
-		$key = $this->failure_key( $user_id );
-		set_transient( $key, (int) get_transient( $key ) + 1, 15 * MINUTE_IN_SECONDS );
+	private function record_success( int $user_id ): void {
+		if ( $this->counted['user'] ) {
+			\VCAP\Plugin::rate_limit_success( self::RATE_BUCKET, self::RATE_WINDOW, $this->rate_visitor( $user_id ) );
+		}
+		if ( $this->counted['address'] ) {
+			\VCAP\CodeLookup::found();
+		}
+		$this->counted = array(
+			'user'    => false,
+			'address' => false,
+		);
+	}
+
+	/**
+	 * Count an invalid code site-wide (the caller's attempts are already counted).
+	 */
+	private function record_failure(): void {
+		if ( $this->counted['user'] ) {
+			\VCAP\Plugin::rate_limit_failure( self::RATE_BUCKET, self::RATE_WINDOW );
+		}
+		if ( $this->counted['address'] ) {
+			\VCAP\CodeLookup::failed();
+		}
+		$this->counted = array(
+			'user'    => false,
+			'address' => false,
+		);
 	}
 }

@@ -6,11 +6,12 @@ Voucher Captain talks to other plugins only through documented hooks and their p
 
 | Contract | How |
 |---|---|
-| Translatable content | `wpml-config.xml`: PDF templates (`vcap_template`) and field groups (`vcap_field_group`) are translatable post types; product voucher settings, channels and coupon SKU rules are copied to translations. Promotions (`vcap_discount`) are not translated – one rule set applies to all languages; their titles can be translated as strings. |
-| PDF in the order language | `vcap_render_template_id` (template id, voucher) – the WPML adapter returns the template translation for the order language (`wpml_object_id`). |
-| Emails in the customer language | WooCommerce/WCML switch the locale for customer emails; Voucher Captain emails are WooCommerce emails (`WC_Email`) and follow it. |
-| UI texts | Text domain `voucher-captain`; German (de_DE, de_AT) included. |
-| Other plugins (e.g. Polylang) | Implement `vcap_render_template_id` with the plugin's "translated post" function, and set the locale before `vcap()->delivery->send()` if the plugin does not switch it for WooCommerce emails. |
+| Translatable content | `wpml-config.xml`: PDF templates (`vcap_template`) and field groups (`vcap_field_group`) are translatable post types; product voucher settings, channels and coupon SKU rules are copied to translations, redemption conditions and the event location are translated. A unit test checks that every product setting (`ProductConfig::DEFAULTS`, enabled, top-up) is listed. Promotions (`vcap_discount`) are not translated – one rule set applies to all languages; their titles can be translated as strings. |
+| Settings texts | Default and per-country redemption conditions and the texts of the voucher emails (subject, heading, body, additional content): WPML string translation through `<admin-texts>` in `wpml-config.xml`; with Polylang they are registered as strings (Languages → Translations, group "Voucher Captain"). |
+| PDF in the order language | `vcap_render_template_id` (template id, voucher) – WPML (`wpml_object_id`) and Polylang (`pll_get_post`) return the template translation for the order language. |
+| Emails in the customer language | `Compat\Multilingual`: every voucher email (also scheduled deliveries, reminders, resends and bonus mails, which WCML does not handle) switches to the order language – WPML order meta `wpml_language`, Polylang `pll_get_post_language()`, filter `vcap_order_language` – and to its locale (filter `vcap_email_locale`, default: site language), so texts, dates in the PDF and links follow it. Staff PDF downloads use the same language. |
+| UI texts | Text domain `voucher-captain`; German (de_DE, de_AT) included. Site Health asks for a translation only for languages the shop offers (site language, WPML/Polylang languages). |
+| Other plugins | Return the order's language code with `vcap_order_language` and its locale with `vcap_email_locale`, and implement `vcap_render_template_id` with the plugin's "translated post" function. |
 
 ## 2. Multi-currency
 
@@ -18,18 +19,19 @@ WooCommerce coupons – and therefore voucher values, balances and store credit 
 
 | Contract | How |
 |---|---|
-| Voucher bought in another currency | `vcap_amount_to_base_currency( float $amount, string $currency, ?WC_Order $order )` converts the paid amount to the base currency before the voucher is created. Built in: WooCommerce Multilingual, Aelia, WOOCS, CURCY; unknown providers fall back to order meta `_vcap_exchange_rate`. |
+| Voucher bought in another currency | `vcap_amount_to_base_currency( float $amount, string $currency, ?WC_Order $order )` converts the paid amount to the base currency before the voucher is created. Built in: WooCommerce Multilingual, Aelia, WOOCS, CURCY, WooPayments Multi-Currency. The rate of the sale is stored at checkout as order meta `_vcap_exchange_rate` (order-currency units per base unit) and wins over the live rate later. |
+| No exchange rate known | Money is **never taken 1:1**. A rate counts as known for the base currency, a stored `_vcap_exchange_rate`, a built-in switcher that knows the currency (WCML and Aelia have no rate list: a currency they return unchanged counts as unknown), or another `vcap_amount_to_base_currency` callback that changes a probe amount (a callback returning the amount unchanged means "no rate"). Filter `vcap_currency_rate_known( bool $known, string $currency, ?WC_Order $order )` overrides this, e.g. for a converter with a rate of exactly 1. Without a rate: vouchers of the order are not issued (order on hold, note, admin notice), `refund_as_credit()` returns `vcap_credit_currency`, fixed-value vouchers are invalid in such a cart or order, a balance charge becomes a shortfall. Site Health ("Foreign currency without converter") lists refused currencies and switchers without adapter. |
 | Voucher used in another currency | The same filter converts the discount of a foreign-currency order before it is deducted from a balance. |
 | Line snapshot | `_vcap_line` keeps `order_currency` (paid) and `voucher_currency` (stored) separately. |
 | Reports | Amounts in other currencies are reported on separate lines and never added to base-currency totals. |
-| Store credit refunds | `refund_as_credit()` converts the refunded amount with the same filter. |
+| Store credit refunds | `refund_as_credit()` converts the refunded amount with the same filter (refused without a known rate). |
 
 An adapter for another switcher implements one filter:
 
 ```php
 add_filter( 'vcap_amount_to_base_currency', function ( float $amount, string $currency, $order ) {
     $rate = my_switcher_rate( $currency ); // units of $currency per 1 base unit
-    return $rate > 0 ? $amount / $rate : $amount;
+    return $rate > 0 ? $amount / $rate : $amount; // Unchanged = no rate: Voucher Captain refuses instead of 1:1.
 }, 10, 3 );
 ```
 
@@ -67,6 +69,23 @@ Built in: `src/Compat/AffiliateCaptain.php`, active only when WP Affiliate Capta
 | Orders, refunds | Recorded by Affiliate Captain's own WooCommerce integration – Voucher Captain sends nothing itself, so there is no double booking. |
 | Vouchers and gift cards | Purchased vouchers (`_vcap_voucher`) are means of payment and never map to a partner. By default the partner who brought the buyer of a voucher earns commission on the voucher sale (the redeeming order is reduced by the voucher amount, so nothing is paid twice). `add_filter( 'vcap_affiliate_commission_on_voucher_sales', '__return_false' )` pays nothing on voucher products instead. |
 | Status | Listed on Affiliate Captain's integration page (`wpac_registered_integrations`). |
+
+**No double commission (today's rule).** Affiliate Captain is the only place where commission is booked, and only on
+WooCommerce orders it records itself. Voucher Captain sends Affiliate Captain no sales events of its own; it only
+answers `wpac_coupon_affiliate` (which partner a campaign code belongs to) and `wpac_commission_base`. Per flow:
+
+| Flow | Commission |
+|---|---|
+| Buying a voucher or gift card (WooCommerce order) | Once, on that order, for the partner Affiliate Captain attributes to the buyer (referral link, cookie). With `vcap_affiliate_commission_on_voucher_sales` false: 0 on voucher lines. |
+| Redeeming it in a later shop order | The voucher reduces that order (coupon) or pays part of it (gift card): the voucher value is not counted again; the partner of that order earns only on what was paid with money. The voucher code itself never maps to a partner (`_vcap_voucher`). |
+| Redemption at the counter, through the redemption API or in the Pass Captain checkout | No WooCommerce order: no commission. |
+| Campaign discount code (Vouchers → Generate codes) used in an order | Once, on that order, for the campaign's partner (unless Affiliate Captain links the coupon directly). |
+| Refund of the voucher order | Handled by Affiliate Captain's own refund logic for that order; Voucher Captain voids the voucher. |
+| Vouchers issued without an order (New voucher, card import, confirmed voucher requests from forms) | No order: no commission. Company orders that should earn commission must go through a WooCommerce order. |
+| Review source events (`vcap_review_redemption_*`) | Never commission-relevant. |
+
+A future sales-source connector (voucher events as their own Affiliate Captain source) would need its own source key
+and idempotency and must exclude orders that Affiliate Captain already records – it is not part of 1.2.0.
 
 Test: `tests/affiliate-captain-integration.php` (runs with and without Affiliate Captain; without it the two contract functions are stubbed).
 

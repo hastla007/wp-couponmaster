@@ -22,6 +22,14 @@ final class CampaignAdmin {
 		return current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' );
 	}
 
+	/**
+	 * AP-S2-4: WooCommerce coupons copied from a template are published shop coupons – the voucher right alone is not
+	 * enough, WooCommerce's "publish_shop_coupons" is needed as well. Code pool batches only need the voucher right.
+	 */
+	public static function can_generate( string $target ): bool {
+		return 'pool' === $target || current_user_can( 'publish_shop_coupons' );
+	}
+
 	private function template_coupons(): array {
 		$ids = get_posts(
 			array(
@@ -40,7 +48,7 @@ final class CampaignAdmin {
 		$out = array();
 		foreach ( $ids as $id ) {
 			$coupon      = new \WC_Coupon( $id );
-			$out[ $id ] = $coupon->get_code() . ' – ' . ( 'percent' === $coupon->get_discount_type() ? $coupon->get_amount() . '%' : wp_strip_all_tags( wc_price( (float) $coupon->get_amount() ) ) );
+			$out[ $id ] = $coupon->get_code() . ' – ' . ( 'percent' === $coupon->get_discount_type() ? \VCAP\Format::percent( $coupon->get_amount() ) : wp_strip_all_tags( wc_price( (float) $coupon->get_amount() ) ) );
 		}
 		return $out;
 	}
@@ -51,11 +59,28 @@ final class CampaignAdmin {
 		}
 		$report = get_transient( self::REPORT . get_current_user_id() );
 		delete_transient( self::REPORT . get_current_user_id() );
+		list( $job, $running ) = JobProgress::load( Campaigns::JOB );
+		if ( $job && ! $running ) {
+			$report = array(
+				/* translators: 1: number of codes created, 2: error message */
+				'error'  => 'failed' === $job['status'] ? sprintf( __( 'Code generation stopped after %1$d codes: %2$s', 'voucher-captain' ), (int) $job['done'], (string) $job['error'] ) : '',
+				'count'  => (int) $job['done'],
+				'name'   => (string) $job['params']['name'],
+				'target' => (string) $job['params']['target'],
+			);
+		}
 		$templates = $this->template_coupons();
 		?>
 		<div class="wrap vcap-wrap">
 			<h1><?php esc_html_e( 'Generate codes', 'voucher-captain' ); ?></h1>
 			<p><?php esc_html_e( 'Create many unique codes at once, e.g. for partners, flyers or campaigns, and download them as CSV.', 'voucher-captain' ); ?></p>
+
+			<?php
+			if ( $running ) {
+				/* translators: %s: campaign or batch name */
+				JobProgress::render( $job, sprintf( __( 'Generating codes for "%s" …', 'voucher-captain' ), (string) $job['params']['name'] ) );
+			}
+			?>
 
 			<?php if ( is_array( $report ) ) : ?>
 				<div class="notice <?php echo $report['error'] ? 'notice-error' : 'notice-success'; ?>"><p>
@@ -79,12 +104,14 @@ final class CampaignAdmin {
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 					<input type="hidden" name="action" value="vcap_generate_codes" />
 					<?php wp_nonce_field( 'vcap_generate_codes' ); ?>
+					<?php echo FormToken::field(); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in field(). ?>
 					<table class="form-table" role="presentation">
 						<tr>
 							<th scope="row"><?php esc_html_e( 'Create', 'voucher-captain' ); ?></th>
 							<td>
-								<label><input type="radio" name="target" value="coupons" checked /> <?php esc_html_e( 'WooCommerce coupons (copy all settings of a template coupon)', 'voucher-captain' ); ?></label><br>
-								<label><input type="radio" name="target" value="pool" /> <?php esc_html_e( 'Codes for voucher products (code pool batch)', 'voucher-captain' ); ?></label>
+								<?php $coupons_ok = self::can_generate( 'coupons' ); ?>
+								<label><input type="radio" name="target" value="coupons" <?php checked( $coupons_ok ); ?> <?php disabled( ! $coupons_ok ); ?> /> <?php esc_html_e( 'WooCommerce coupons (copy all settings of a template coupon)', 'voucher-captain' ); ?></label><br>
+								<label><input type="radio" name="target" value="pool" <?php checked( ! $coupons_ok ); ?> /> <?php esc_html_e( 'Codes for voucher products (code pool batch)', 'voucher-captain' ); ?></label>
 							</td>
 						</tr>
 						<tr>
@@ -113,6 +140,7 @@ final class CampaignAdmin {
 								<label><?php esc_html_e( 'Prefix', 'voucher-captain' ); ?> <input type="text" name="prefix" class="small-text" maxlength="20" /></label>
 								<label><?php esc_html_e( 'Random part length', 'voucher-captain' ); ?> <input type="number" name="length" value="12" min="6" max="40" class="small-text" /></label>
 								<label><?php esc_html_e( 'Suffix', 'voucher-captain' ); ?> <input type="text" name="suffix" class="small-text" maxlength="20" /></label>
+								<p class="description"><?php esc_html_e( 'Codes that give a discount and voucher codes are made long enough that they cannot be guessed (at least 10 random letters and digits); a shorter length is raised.', 'voucher-captain' ); ?></p>
 							</td>
 						</tr>
 					</table>
@@ -162,7 +190,38 @@ final class CampaignAdmin {
 		if ( ! $this->can() ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
+		// One run per rendered form: a retried request ("1000 codes" twice) must not generate 2000 codes.
+		if ( ! FormToken::claim( 'generate' ) ) {
+			set_transient(
+				self::REPORT . get_current_user_id(),
+				array(
+					'error'   => '',
+					'message' => __( 'This form was already submitted; no further codes were generated. The codes of the first run are listed below.', 'voucher-captain' ),
+					'count'   => 0,
+					'name'    => '',
+					'target'  => '',
+				),
+				10 * MINUTE_IN_SECONDS
+			);
+			wp_safe_redirect( admin_url( 'admin.php?page=vcap-generate' ) );
+			exit;
+		}
 		$target = 'pool' === sanitize_key( wp_unslash( $_POST['target'] ?? '' ) ) ? 'pool' : 'coupons';
+		if ( ! self::can_generate( $target ) ) {
+			FormToken::release( 'generate' );
+			set_transient(
+				self::REPORT . get_current_user_id(),
+				array(
+					'error'  => __( 'Creating WooCommerce coupons needs the WooCommerce right to publish coupons. No codes were generated.', 'voucher-captain' ),
+					'count'  => 0,
+					'name'   => '',
+					'target' => '',
+				),
+				10 * MINUTE_IN_SECONDS
+			);
+			wp_safe_redirect( admin_url( 'admin.php?page=vcap-generate' ) );
+			exit;
+		}
 		$name   = Campaigns::clean_name( wp_unslash( (string) ( $_POST['name'] ?? '' ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		$count  = absint( $_POST['count'] ?? 0 );
 		$opts   = array(
@@ -170,9 +229,40 @@ final class CampaignAdmin {
 			'suffix' => sanitize_text_field( wp_unslash( $_POST['suffix'] ?? '' ) ),
 			'length' => absint( $_POST['length'] ?? 12 ),
 		);
-		$result = 'pool' === $target
-			? $this->campaigns->generate_pool( $name, $count, $opts )
-			: $this->campaigns->generate_coupons( absint( $_POST['template'] ?? 0 ), $name, $count, $opts );
+		$template = absint( $_POST['template'] ?? 0 );
+		$partner  = 'coupons' === $target ? \VCAP\Compat\AffiliateCaptain::generation_refusal( $name ) : '';
+		if ( '' !== $partner ) {
+			// S18: codes under a campaign assigned to a partner would route commission to that partner.
+			FormToken::release( 'generate' );
+			set_transient(
+				self::REPORT . get_current_user_id(),
+				array(
+					'error'  => $partner,
+					'count'  => 0,
+					'name'   => '',
+					'target' => '',
+				),
+				10 * MINUTE_IN_SECONDS
+			);
+			wp_safe_redirect( admin_url( 'admin.php?page=vcap-generate' ) );
+			exit;
+		}
+		if ( $count > Campaigns::STEP ) {
+			// B4: large runs are made in the background, Campaigns::STEP codes per step, with progress on this screen.
+			$queued = $this->campaigns->queue( $target, $template, $name, $count, $opts, get_current_user_id() );
+			if ( ! is_wp_error( $queued ) ) {
+				wp_safe_redirect( admin_url( 'admin.php?page=vcap-generate' ) );
+				exit;
+			}
+			$result = $queued;
+		} else {
+			$result = 'pool' === $target
+				? $this->campaigns->generate_pool( $name, $count, $opts )
+				: $this->campaigns->generate_coupons( $template, $name, $count, $opts );
+		}
+		if ( is_wp_error( $result ) ) {
+			FormToken::release( 'generate' ); // Nothing was generated: the corrected form may be sent again.
+		}
 		set_transient(
 			self::REPORT . get_current_user_id(),
 			array(
@@ -194,7 +284,11 @@ final class CampaignAdmin {
 		}
 		$name   = Campaigns::clean_name( wp_unslash( (string) ( $_GET['name'] ?? '' ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		$target = 'pool' === sanitize_key( wp_unslash( $_GET['target'] ?? '' ) ) ? 'pool' : 'coupons';
-		$rows   = 'pool' === $target ? $this->campaigns->pool_rows( $name ) : $this->campaigns->campaign_rows( $name );
+		if ( function_exists( 'wc_set_time_limit' ) ) {
+			wc_set_time_limit( 0 ); // A timeout would cut the file off without an error.
+		}
+		// Closing line "End of export: N" (AP-P1-2): a file cut off after the headers is recognisable.
+		$rows   = \VCAP\Csv::with_end_row( 'pool' === $target ? $this->campaigns->pool_rows( $name ) : $this->campaigns->campaign_rows( $name ) );
 		Campaigns::send_csv( 'codes-' . sanitize_title( $name ) . '-' . gmdate( 'Y-m-d' ) . '.csv', $rows );
 		exit;
 	}

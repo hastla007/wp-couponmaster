@@ -14,6 +14,19 @@ test.describe( 'Customer pages', () => {
 		expect( errors ).toEqual( [] );
 	} );
 
+	// M12-50 / M12-51: a redeem link lands on a URL no page cache has a copy of (random vcap_nc), without the code
+	// in the URL, sent with no-cache headers – and only then the form shows the code.
+	test( 'a redeem link fills in the form on an uncached URL without the code', async ( { page } ) => {
+		const errors = trackPluginErrors( page );
+		const response = await page.goto( '/voucher-tools/?vcap_code=E2E10' );
+		const url = new URL( page.url() );
+		expect( url.searchParams.has( 'vcap_code' ) ).toBe( false );
+		expect( url.searchParams.get( 'vcap_nc' ) || '' ).toMatch( /^[a-z0-9]{8}$/ );
+		expect( response.headers()[ 'cache-control' ] || '' ).toMatch( /no-cache|no-store/ );
+		await expect( page.locator( '#vcap-redeem-code' ) ).toHaveValue( 'E2E10' );
+		expect( errors ).toEqual( [] );
+	} );
+
 	test( 'the voucher blocks render on the front end', async ( { page } ) => {
 		await page.goto( '/voucher-blocks/' );
 		await expect( page.locator( '.vcap-balance-form' ) ).toBeVisible();

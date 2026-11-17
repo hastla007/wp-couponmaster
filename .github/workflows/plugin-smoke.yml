@@ -6,7 +6,16 @@ on:
       - main
       - claude/youthful-bardeen-7ejd7a
       - codex/fix-voucher-audit-findings
+      - claude/wp-plugin-analyse-todo-hvollo
+      - claude/wp-plugin-analyse-todo-hvollo-refactors
   pull_request:
+
+# A newer push to the same branch (or pull request) cancels the older run that is still queued or running – the
+# newest commit is what counts, and the ratchet compares against github.event.before, not against an earlier run.
+# Runs on main always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   smoke:
@@ -14,9 +23,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php: ['8.1', '8.4']
+        php: ['8.5']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -33,6 +42,22 @@ jobs:
         run: find . -path './vendor' -prune -o -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: Run plugin smoke tests
         run: php tests/run.php
+      - name: No licensing or update code in the shipped files (free core, docs/FREE-PREMIUM.md)
+        run: php tests/license-guard.php
+      - name: Translation template, email texts and legal text template are up to date
+        run: |
+          php bin/make-pot.php
+          git diff --exit-code -I 'POT-Creation-Date' -I '^#: ' -- languages/voucher-captain.pot
+          php bin/email-texts.php --check
+          php bin/legal-texts.php --check
+          php bin/hooks.php --check
+      - name: Release ZIP is reproducible (two builds, same SHA-256)
+        if: matrix.php == '8.5'
+        run: |
+          bin/build.sh
+          cp build/voucher-captain.zip.sha256 /tmp/first.sha256
+          bin/build.sh
+          diff /tmp/first.sha256 build/voucher-captain.zip.sha256
 
   wordpress-integration:
     runs-on: ubuntu-latest
@@ -40,11 +65,11 @@ jobs:
       fail-fast: false
       matrix:
         database:
-          - name: MySQL 8.4
-            image: mysql:8.4
+          - name: MySQL 9.7
+            image: mysql:9.7
             health_cmd: mysqladmin ping --host=127.0.0.1 --user=root --password=root
-          - name: MariaDB 11.4
-            image: mariadb:11.4
+          - name: MariaDB 12.3
+            image: mariadb:12.3
             health_cmd: healthcheck.sh --connect --innodb_initialized
         order_storage:
           - name: HPOS
@@ -69,11 +94,11 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up PHP 8.4
+      - uses: actions/checkout@v5
+      - name: Set up PHP 8.5
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: '8.5'
           extensions: dom, gd, mbstring, mysqli, xml, zip
           coverage: none
       - name: Install PDF inspection tools
@@ -89,7 +114,7 @@ jobs:
           php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher Captain CI" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
       - name: Build, install, and update the release ZIP
         run: |
-          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.2.2 --activate
+          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.3.0 --activate
           php wp-cli.phar --path=wp-test plugin install wordpress-seo --version=28.8 --activate
           php wp-cli.phar --path=wp-test option update woocommerce_custom_orders_table_enabled ${{ matrix.order_storage.enabled }}
           bin/build.sh
@@ -119,11 +144,13 @@ jobs:
           php wp-cli.phar --path=wp-test eval 'global $wpdb; if ($wpdb->get_var("SHOW TABLES LIKE \"{$wpdb->prefix}vcap_vouchers\"")) { exit(1); }'
 
   minimum-versions:
-    # Oldest supported platform (plugin header) without Yoast SEO: WordPress 6.4, WooCommerce 8.9, PHP 8.1.
+    # Oldest supported platform (plugin header) without Yoast SEO: WordPress 7.0, WooCommerce 11.2.2, PHP 8.5. WooCommerce in its
+    # latest patch release: 11.2.0 reused the order and payment data of an earlier Store API checkout in the same PHP
+    # process (fixed in 11.2.2, woocommerce#70637) – the suites run several checkouts per process.
     runs-on: ubuntu-latest
     services:
       db:
-        image: mysql:8.4
+        image: mysql:9.7
         env:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: wordpress
@@ -135,23 +162,23 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up PHP 8.1
+      - uses: actions/checkout@v5
+      - name: Set up PHP 8.5
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.1'
+          php-version: '8.5'
           extensions: dom, gd, mbstring, mysqli, xml, zip
           coverage: none
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist
       - name: Download WP-CLI
         run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
-      - name: Install WordPress 6.4, WooCommerce 8.9 and the release ZIP (no Yoast SEO)
+      - name: Install WordPress 7.0, WooCommerce 11.2.2 and the release ZIP (no Yoast SEO)
         run: |
-          php wp-cli.phar core download --path=wp-test --version=6.4.5
+          php wp-cli.phar core download --path=wp-test --version=7.0
           php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
           php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher Captain minimum" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
-          php wp-cli.phar --path=wp-test plugin install woocommerce --version=8.9.0 --activate
+          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.2.2 --activate
           bin/build.sh
           php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
           php wp-cli.phar --path=wp-test plugin list
@@ -161,17 +188,40 @@ jobs:
           VCAP_EXPECT_HPOS: ''
         run: tests/run-integration.sh
 
-  pass-captain:
-    # Voucher Captain as voucher provider of WP Pass Captain: released main and the upcoming release branch
-    # of hastla007/wp-passmaster (a ref that no longer exists is skipped).
+  ecosystem:
+    # Real third-party plugins from wordpress.org next to Voucher Captain: payment gateways and currency switchers
+    # (pinned releases, so the release gate is reproducible – raise them deliberately; the job prints the installed
+    # versions), each also with "Multi-purpose vouchers as payment"
+    # (vcap_mpv_after_tax: partial and full payment next to the gateway, foreign-currency cart).
+    # tests/ecosystem-integration.php
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        pass_captain_ref: ['main', 'claude/woocommerce-ticket-plugin-8q4m8q']
+        include:
+          - key: stripe
+            slug: woocommerce-gateway-stripe
+            version: '11.2.0'
+          - key: paypal
+            slug: woocommerce-paypal-payments
+            version: '4.2.2'
+          - key: woocs
+            slug: woocommerce-currency-switcher
+            version: '1.5.7'
+          - key: curcy
+            slug: woo-multi-currency
+            version: '2.2.22'
+          # CURCY with an exchange fee on top of the rate (effective rate 1.15 instead of 1.10).
+          - key: curcy-fee
+            slug: woo-multi-currency
+            version: '2.2.22'
+          - key: wcml
+            slug: woocommerce-multilingual
+            version: '5.6.3'
+    name: ecosystem (${{ matrix.key }})
     services:
       db:
-        image: mysql:8.4
+        image: mysql:9.7
         env:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: wordpress
@@ -183,11 +233,254 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up PHP 8.4
+      - uses: actions/checkout@v5
+      - name: Set up PHP 8.5
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: '8.5'
+          extensions: dom, gd, mbstring, mysqli, xml, zip
+          coverage: none
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist
+      - name: Download WP-CLI
+        run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
+      - name: Install WordPress, WooCommerce, ${{ matrix.slug }} ${{ matrix.version }} and the release ZIP
+        run: |
+          php wp-cli.phar core download --path=wp-test --version=7.1.4
+          php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
+          php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher Captain ecosystem" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
+          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.3.0 --activate
+          php wp-cli.phar --path=wp-test option update woocommerce_currency EUR
+          bin/build.sh
+          php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
+          php wp-cli.phar --path=wp-test plugin install ${{ matrix.slug }} --version=${{ matrix.version }} --activate
+          php wp-cli.phar --path=wp-test plugin list
+      - name: Voucher Captain with ${{ matrix.slug }}
+        env:
+          # A check that cannot run (e.g. the foreign-currency cart) fails the job instead of printing a warning.
+          VCAP_ECO_STRICT: '1'
+        run: |
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/ecosystem-integration.php" setup ${{ matrix.key }}
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/ecosystem-integration.php" run ${{ matrix.key }}
+          # Both plugins still load without PHP errors on a front-end request.
+          php wp-cli.phar --path=wp-test eval 'echo "ok\n";' 2>&1 | tee load.log
+          ! grep -E "PHP (Fatal|Warning)" load.log
+
+  multisite:
+    # Network activation sets up every site (own tables and options per site), new sites are set up on their
+    # first request, and a network uninstall removes data only on the sites that opted in.
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: mysql:9.7
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --password=root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up PHP 8.5
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: dom, gd, mbstring, mysqli, xml, zip
+          coverage: none
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist
+      - name: Download WP-CLI
+        run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
+      - name: Multisite network with Voucher Captain network-activated
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          php wp-cli.phar core download --path=wp-test --version=7.1.4
+          php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
+          $WP core multisite-install --url=http://localhost --title="Voucher Captain network" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
+          $WP site create --slug=before --title="Existing site"
+          $WP plugin install woocommerce --version=11.3.0 --activate-network
+          bin/build.sh
+          $WP plugin install build/voucher-captain.zip --activate-network
+          $WP site create --slug=after --title="New site"
+          check='global $wpdb; $ok = $wpdb->get_var( "SHOW TABLES LIKE \"{$wpdb->prefix}vcap_vouchers\"" ) && VCAP_DB_VERSION === get_option( "vcap_db_version" ) && get_option( "vcap_secret" ); echo get_current_blog_id(), " ", $wpdb->prefix, " ", $ok ? "ok" : "missing", "\n"; exit( $ok ? 0 : 1 );'
+          $WP eval "$check"
+          $WP --url=http://localhost/before/ eval "$check"
+          $WP --url=http://localhost/after/ eval "$check"
+      - name: Deleting a site drops its voucher tables
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          gone="$($WP site create --slug=gone --title="Deleted site" --porcelain)"
+          tables='global $wpdb; echo (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME LIKE %s", $wpdb->esc_like( $wpdb->base_prefix . getenv( "VCAP_SITE" ) . "_vcap_" ) . "%" ) );'
+          $WP --url=http://localhost/gone/ eval 'echo VCAP\Install::verify_schema() ? "incomplete" : "ok";'
+          test "$(VCAP_SITE="$gone" $WP eval "$tables")" = "9"
+          $WP site delete "$gone" --yes
+          test "$(VCAP_SITE="$gone" $WP eval "$tables")" = "0"
+      - name: Referral code and reward counter stay per site (one customer, two sites)
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          T="$GITHUB_WORKSPACE/tests/multisite-referral-integration.php"
+          $WP eval-file "$T" site-a
+          $WP --url=http://localhost/before/ eval-file "$T" site-b
+          $WP eval-file "$T" verify
+      - name: Workflow instance, voucher requests and review records stay per site
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          T="$GITHUB_WORKSPACE/tests/multisite-data-integration.php"
+          $WP eval-file "$T" record
+          $WP --url=http://localhost/before/ eval-file "$T" record
+          $WP --url=http://localhost/after/ eval-file "$T" record
+          $WP eval-file "$T" verify
+      - name: Network uninstall deletes data only on sites that opted in
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          $WP --url=http://localhost/after/ option update vcap_delete_on_uninstall yes
+          # A gift card on a subsite: network deactivation must suspend it on every site (no plugin = no deduction).
+          card='$c = new WC_Coupon(); $c->set_code( "vcap-ms-" . strtolower( wp_generate_password( 8, false, false ) ) ); $c->update_meta_data( "_vcap_voucher", "yes" ); $c->save(); $v = new VCAP\Voucher(); $v->code = $c->get_code(); $v->coupon_id = $c->get_id(); $v->order_item_id = 99000000 + $c->get_id(); $v->type = "giftcard"; $v->usage_mode = "balance"; $v->initial_amount = 10; $v->balance = 10; $v->currency = get_woocommerce_currency(); $v->status = "active"; $v->token = VCAP\VoucherRepository::new_token(); vcap()->vouchers->insert( $v ); echo "coupon:", $c->get_id(), "\n";'
+          coupon="$($WP --url=http://localhost/before/ eval "$card" | sed -n 's/^coupon://p')"
+          test -n "$coupon"
+          $WP plugin deactivate voucher-captain --network
+          test "$($WP --url=http://localhost/before/ eval "echo get_post_status( $coupon );")" = "draft"
+          $WP plugin uninstall voucher-captain
+          has='global $wpdb; echo $wpdb->get_var( "SHOW TABLES LIKE \"{$wpdb->prefix}vcap_vouchers\"" ) ? "kept" : "deleted";'
+          test "$($WP eval "$has")" = "kept"
+          test "$($WP --url=http://localhost/before/ eval "$has")" = "kept"
+          test "$($WP --url=http://localhost/after/ eval "$has")" = "deleted"
+          requests='echo (int) ( new WP_Query( array( "post_type" => "vcap_request", "post_status" => "any", "fields" => "ids", "posts_per_page" => -1 ) ) )->found_posts;'
+          test "$($WP eval "$requests")" != "0"
+          test "$($WP --url=http://localhost/after/ eval "$requests")" = "0"
+
+  upgrade:
+    # Updates as shops get them (COMPATIBILITY.md → Updates, RELEASE.md → Rollback), each with data, followed by a
+    # rollback to the version before and the update again:
+    # - release → current: from the last released version (newest vX.Y.Z tag below the current version; until the
+    #   first tag, the 1.1.0 release commit in PREVIOUS_RELEASE) to the current ZIP;
+    # - schema → development: from the parent of the last commit that changed VCAP_DB_VERSION (the schema right
+    #   before the change) to the current ZIP.
+    runs-on: ubuntu-latest
+    env:
+      # Voucher Captain 1.1.0 as released (merge "Voucher Captain 1.1.0 (#2)", schema 1.3.0): fallback while the
+      # repository has no vX.Y.Z tag yet.
+      PREVIOUS_RELEASE: 1fb789d03211f2446d7304a78e03b75e4d96566a
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - from: release
+            to: current
+          - from: schema
+            to: development
+    name: upgrade (${{ matrix.from }} → ${{ matrix.to }})
+    services:
+      db:
+        image: mysql:9.7
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --password=root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Set up PHP 8.5
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: dom, gd, mbstring, mysqli, xml, zip
+          coverage: none
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist
+      - name: Download WP-CLI
+        run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
+      - name: Build the previous and the current release ZIP
+        env:
+          FROM: ${{ matrix.from }}
+        run: |
+          current="$(sed -n 's/^ \* Version: *//p' voucher-captain.php | tr -d '[:space:]')"
+          case "$FROM" in
+            release)
+              git fetch --force --tags --quiet origin || true
+              tag="$(git tag -l 'v*' | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | grep -vxF "$current" \
+                | while read -r v; do [ "$(printf '%s\n%s\n' "$v" "$current" | sort -V | head -n 1)" = "$v" ] && echo "$v"; done | sort -V | tail -n 1 || true)"
+              prev="${tag:+v$tag}"
+              prev="${prev:-$PREVIOUS_RELEASE}"
+              ;;
+            schema) prev="$(git log -1 --format=%H -G"VCAP_DB_VERSION', '" -- voucher-captain.php)^" ;;
+          esac
+          echo "Previous: $prev – $(git show "$prev:voucher-captain.php" | grep -E "^ \* Version:|VCAP_DB_VERSION'" | tr -s ' ' | tr '\n' ' ')"
+          git worktree add "$RUNNER_TEMP/previous" "$prev"
+          ( cd "$RUNNER_TEMP/previous" && bin/build.sh )
+          cp "$RUNNER_TEMP/previous/build/voucher-captain.zip" "$RUNNER_TEMP/voucher-captain-previous.zip"
+          bin/build.sh
+      - name: Install WordPress, WooCommerce and the previous release with data
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          php wp-cli.phar core download --path=wp-test --version=7.1.4
+          php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
+          $WP core install --url=http://localhost --title="Voucher Captain upgrade" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
+          $WP plugin install woocommerce --version=11.3.0 --activate
+          $WP plugin install "$RUNNER_TEMP/voucher-captain-previous.zip" --activate
+          $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" setup
+      - name: Update to the current release and verify data and schema
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          $WP plugin install build/voucher-captain.zip --force
+          $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" verify
+      - name: Roll back to the previous release and update again
+        run: |
+          WP="php wp-cli.phar --path=wp-test"
+          $WP plugin install "$RUNNER_TEMP/voucher-captain-previous.zip" --force
+          $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" rollback
+          $WP plugin install build/voucher-captain.zip --force
+          $WP eval-file "$GITHUB_WORKSPACE/tests/upgrade-integration.php" verify
+
+  pass-captain:
+    # Voucher Captain as voucher provider of WP Pass Captain (hastla007/wp-passmaster): a pinned release (tag commit,
+    # reproducible), released main and the current work branch. A download that fails (codeload 5xx, rate limit, ref
+    # gone) fails the job for the release and main; only the work branch may be skipped, with a warning.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pass_captain_ref: v1.4.0
+            archive: 90c972ab681b32254887a945a11e17325e0a801c
+            required: true
+          - pass_captain_ref: main
+            archive: refs/heads/main
+            required: true
+          - pass_captain_ref: claude/youthful-bardeen-7ejd7a
+            archive: refs/heads/claude/youthful-bardeen-7ejd7a
+            required: false
+    name: pass-captain (${{ matrix.pass_captain_ref }})
+    services:
+      db:
+        image: mysql:9.7
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --password=root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up PHP 8.5
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
           extensions: dom, gd, mbstring, mysqli, xml, zip
           coverage: none
       - name: Install Composer dependencies
@@ -199,9 +492,13 @@ jobs:
           php wp-cli.phar core download --path=wp-test --version=7.1.4
           php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
           php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher + Pass Captain" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
-          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.2.2 --activate
-          if ! curl --fail --silent --show-error --location --output pass-captain.zip "https://codeload.github.com/hastla007/wp-passmaster/zip/refs/heads/${{ matrix.pass_captain_ref }}"; then
-            echo "Pass Captain ref ${{ matrix.pass_captain_ref }} is not available; skipping."
+          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.3.0 --activate
+          if ! curl --fail --silent --show-error --location --retry 4 --retry-all-errors --retry-delay 15 --output pass-captain.zip "https://codeload.github.com/hastla007/wp-passmaster/zip/${{ matrix.archive }}"; then
+            if [ "${{ matrix.required }}" = "true" ]; then
+              echo "::error::WP Pass Captain ${{ matrix.pass_captain_ref }} could not be downloaded – the cross-plugin gate cannot pass without it (re-run the job)."
+              exit 1
+            fi
+            echo "::warning::WP Pass Captain work branch ${{ matrix.pass_captain_ref }} is not available (deleted or download failed); its checks are skipped. The pinned release and main still ran."
             echo "VCAP_SKIP_PASS_CAPTAIN=1" >> "$GITHUB_ENV"
             exit 0
           fi
@@ -216,13 +513,16 @@ jobs:
         if: env.VCAP_SKIP_PASS_CAPTAIN != '1'
         run: |
           php wp-cli.phar --path=wp-test plugin get wp-pass-captain --field=version
+          php bin/check-coexistence.php wp-test/wp-content/plugins/voucher-captain wp-test/wp-content/plugins/wp-pass-captain
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/passcaptain-integration.php"
+          # Tax classification incl. what Pass Captain receives in the quote (TAX.md 4.2).
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/tax-integration.php"
 
   browser-e2e:
     runs-on: ubuntu-latest
     services:
       db:
-        image: mysql:8.4
+        image: mysql:9.7
         env:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: wordpress
@@ -234,11 +534,11 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up PHP 8.4
+      - uses: actions/checkout@v5
+      - name: Set up PHP 8.5
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: '8.5'
           extensions: dom, gd, mbstring, mysqli, xml, zip
           coverage: none
       - name: Install Composer dependencies
@@ -253,20 +553,20 @@ jobs:
           php wp-cli.phar --path=wp-test config set WP_DEBUG_LOG true --raw
           php wp-cli.phar --path=wp-test config set WP_DEBUG_DISPLAY false --raw
           php wp-cli.phar core install --path=wp-test --url=http://127.0.0.1:8080 --title="Voucher Captain E2E" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
-          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.2.2 --activate
+          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.3.0 --activate
           php wp-cli.phar --path=wp-test plugin install wordpress-seo --version=28.8 --activate
           bin/build.sh
           php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
           php wp-cli.phar --path=wp-test rewrite structure '/%postname%/'
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/e2e/setup.php"
           php wp-cli.phar --path=wp-test rewrite flush
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
       - name: Install Playwright and axe
         working-directory: tests/e2e
         run: |
-          npm install --no-audit --no-fund
+          npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
       - name: Start the web server
         run: |
@@ -277,22 +577,46 @@ jobs:
         working-directory: tests/e2e
         env:
           CI: 'true'
-        run: npx playwright test 01-product.spec.js 04-account-and-shortcodes.spec.js 05-admin-yoast.spec.js
-      - name: Browser tests – classic cart and checkout
+        run: npx playwright test 01-product.spec.js 04-account-and-shortcodes.spec.js 05-admin-yoast.spec.js 06-screen-reader.spec.js
+      - name: Browser tests – features of 1.2.0 (live preview, design choice, gift / for me, gift card field, card to store credit, new admin pages)
+        env:
+          CI: 'true'
+          E2E_NEW_FEATURES: 'yes'
+        run: |
+          php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/e2e/pages.php" classic
+          # Settings that change every product page and cart: on for this run only.
+          php wp-cli.phar --path=wp-test option update vcap_gift_toggle yes
+          php wp-cli.phar --path=wp-test option update vcap_giftcard_field yes
+          status=0
+          (cd tests/e2e && npx playwright test 07-new-features.spec.js) || status=$?
+          php wp-cli.phar --path=wp-test option update vcap_gift_toggle no
+          php wp-cli.phar --path=wp-test option update vcap_giftcard_field no
+          exit $status
+      - name: Browser tests – classic cart and checkout (personalised voucher, gift card through the redeem form)
         env:
           CI: 'true'
           E2E_CHECKOUT: classic
         run: |
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/e2e/pages.php" classic
           cd tests/e2e && npx playwright test 02-classic-checkout.spec.js
-      - name: Browser tests – cart and checkout blocks
+      - name: Browser tests – cart and checkout blocks (voucher purchase, gift card payment, single-use voucher warning, store credit)
         env:
           CI: 'true'
           E2E_CHECKOUT: blocks
         run: |
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/e2e/pages.php" blocks
+          # Gift cards and store credit pay after tax (payment rows of assets/js/cart-blocks.js).
+          php wp-cli.phar --path=wp-test option update vcap_mpv_after_tax yes
           cd tests/e2e && npx playwright test 03-block-checkout.spec.js
-      - name: Verify issued vouchers and PHP notices
+      - name: Browser tests – cart and checkout blocks with "Multi-purpose vouchers as payment" off (gift card as coupon)
+        env:
+          CI: 'true'
+          E2E_CHECKOUT: blocks
+          E2E_MPV_AFTER_TAX: 'no'
+        run: |
+          php wp-cli.phar --path=wp-test option update vcap_mpv_after_tax no
+          cd tests/e2e && npx playwright test 03-block-checkout.spec.js
+      - name: Verify issued vouchers, gift card balances and ledger, PHP notices
         run: |
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/e2e/verify.php"
           if [ -f wp-test/wp-content/debug.log ] && grep -i "voucher-captain" wp-test/wp-content/debug.log; then
@@ -301,7 +625,7 @@ jobs:
           fi
       - name: Upload browser test results
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: browser-e2e-results
           path: |
@@ -313,11 +637,11 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up PHP 8.4
+      - uses: actions/checkout@v5
+      - name: Set up PHP 8.5
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: '8.5'
           extensions: dom, gd, mbstring, mysqli, xml, zip
           coverage: none
       - name: Install dependencies
@@ -335,3 +659,166 @@ jobs:
         run: phpcs --standard=WooCommerce-Core --extensions=php --exclude=WordPress.Files.FileName src/API/V1 src/Contracts
       - name: Analyze API and contract types
         run: phpstan analyse --configuration=phpstan.neon.dist --no-progress
+      - name: Release ZIP (as shipped) carries a licence file for every bundled package, the notices and an SBOM
+        run: |
+          bin/build.sh
+          php bin/third-party-notices.php --check-zip build/voucher-captain.zip
+          php bin/sbom.php build/voucher-captain sbom.cdx.json
+
+  quality-wide:
+    # Wide scan of the whole plugin (src/, templates/, config/, main and uninstall file): PHPCS with phpcs.xml.dist
+    # (WordPress-Extra, I18n text domain, Security) and PHPStan level 3 with phpstan-wide.neon.dist + baseline
+    # (RELEASE.md → Static analysis). Blocking are: every WordPress.Security.* finding, and a growth of the PHPCS or
+    # PHPStan findings against the base commit (ratchet: pull request base, or the previous commit of a push). The
+    # full reports stay informational until the existing findings are worked off.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Set up PHP 8.5
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: dom, gd, mbstring, mysqli, xml, zip
+          coverage: none
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist
+      - name: Install PHPCS, WordPress Coding Standards, and PHPStan
+        run: |
+          composer global config allow-plugins.dealerdirect/phpcodesniffer-composer-installer true
+          composer global require --no-interaction squizlabs/php_codesniffer:^3.13 wp-coding-standards/wpcs:^3.0 phpstan/phpstan:^2.1
+          echo "$(composer global config bin-dir --absolute)" >> "$GITHUB_PATH"
+      - name: WordPress.Security sniffs on the whole plugin (blocking)
+        run: |
+          # Escaping, nonces, sanitising, safe redirects: no finding may reach a release. A justified exception gets an
+          # inline "phpcs:ignore WordPress.Security.<Sniff> -- reason" next to the code.
+          phpcs --sniffs=WordPress.Security.EscapeOutput,WordPress.Security.NonceVerification,WordPress.Security.PluginMenuSlug,WordPress.Security.SafeRedirect,WordPress.Security.ValidatedSanitizedInput --report-full --report-summary
+      - name: PHPCS (WordPress-Extra, I18n, Security) on the whole plugin (report)
+        run: |
+          phpcs --report-full=phpcs-full.txt --report-summary=phpcs-summary.txt --report-source=phpcs-source.txt --report-json=phpcs.json || true
+          { echo '### PHPCS (wide scan)'; echo '```'; cat phpcs-source.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          test -s phpcs.json
+      - name: PHPStan level 3 on the whole plugin (findings beyond phpstan-baseline.neon, report)
+        run: |
+          phpstan analyse --configuration=phpstan-wide.neon.dist --no-progress --memory-limit=1G --error-format=json > phpstan.json || true
+          phpstan analyse --configuration=phpstan-wide.neon.dist --no-progress --memory-limit=1G || true
+          test -s phpstan.json
+      - name: Findings must not grow (ratchet against the base commit)
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          count_phpcs() { php -r '$d = json_decode( file_get_contents( $argv[1] ), true ); echo (int) ( $d["totals"]["errors"] ?? -1 ) + (int) ( $d["totals"]["warnings"] ?? 0 );' "$1"; }
+          count_phpstan() { php -r '$d = json_decode( file_get_contents( $argv[1] ), true ); echo (int) ( $d["totals"]["errors"] ?? -1 ) + (int) ( $d["totals"]["file_errors"] ?? 0 );' "$1"; }
+          head_cs="$(count_phpcs phpcs.json)"
+          head_stan="$(count_phpstan phpstan.json)"
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            BASE="$(git rev-parse HEAD^ 2>/dev/null || true)"
+          fi
+          if [ -z "$BASE" ]; then echo "::warning::No base commit – ratchet skipped."; exit 0; fi
+          git worktree add --quiet "$RUNNER_TEMP/base" "$BASE"
+          ln -s "$GITHUB_WORKSPACE/vendor" "$RUNNER_TEMP/base/vendor"
+          base_cs=""; base_stan=""
+          if [ -f "$RUNNER_TEMP/base/phpcs.xml.dist" ]; then
+            ( cd "$RUNNER_TEMP/base" && phpcs --report-json="$RUNNER_TEMP/base-phpcs.json" -q > /dev/null || true )
+            base_cs="$(count_phpcs "$RUNNER_TEMP/base-phpcs.json")"
+          fi
+          if [ -f "$RUNNER_TEMP/base/phpstan-wide.neon.dist" ]; then
+            ( cd "$RUNNER_TEMP/base" && phpstan analyse --configuration=phpstan-wide.neon.dist --no-progress --memory-limit=1G --error-format=json > "$RUNNER_TEMP/base-phpstan.json" || true )
+            base_stan="$(count_phpstan "$RUNNER_TEMP/base-phpstan.json")"
+          fi
+          {
+            echo '### Findings ratchet'
+            echo "| Scan | base ${BASE:0:7} | this commit |"
+            echo '| --- | --- | --- |'
+            echo "| PHPCS (errors + warnings) | ${base_cs:-n/a} | ${head_cs} |"
+            echo "| PHPStan level 3 (beyond the baseline) | ${base_stan:-n/a} | ${head_stan} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          fail=0
+          if [ "$head_cs" -lt 0 ] || [ "$head_stan" -lt 0 ]; then echo "::error::A scan of this commit produced no report."; fail=1; fi
+          if [ -n "$base_cs" ] && [ "$base_cs" -ge 0 ] && [ "$head_cs" -gt "$base_cs" ]; then
+            echo "::error::PHPCS findings grew from ${base_cs} to ${head_cs} (see phpcs-full.txt in the artifact phpstan-baseline). Fix the new findings."
+            fail=1
+          fi
+          if [ -n "$base_stan" ] && [ "$base_stan" -ge 0 ] && [ "$head_stan" -gt "$base_stan" ]; then
+            echo "::error::PHPStan findings grew from ${base_stan} to ${head_stan}. Fix them – never add baseline entries for new code."
+            fail=1
+          fi
+          echo "PHPCS ${base_cs:-n/a} -> ${head_cs}, PHPStan ${base_stan:-n/a} -> ${head_stan}"
+          exit $fail
+      - name: Generate a PHPStan baseline of the current findings
+        if: always()
+        run: phpstan analyse --configuration=phpstan-wide.neon.dist --no-progress --memory-limit=1G --generate-baseline=phpstan-baseline.generated.neon --allow-empty-baseline || true
+      - name: Upload the reports and the generated baseline
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phpstan-baseline
+          path: |
+            phpcs-*.txt
+            phpcs.json
+            phpstan.json
+            phpstan-baseline.generated.neon
+          if-no-files-found: ignore
+
+  plugin-check:
+    # WordPress Plugin Check (PCP, the wordpress.org review tool) against the installed release ZIP as shipped.
+    # Blocking for errors (A8; the run of 16.11.2026 had none), warnings are reported only (RELEASE.md → Static
+    # analysis); the result table is in the job summary and the artifact plugin-check.
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: mysql:9.7
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --password=root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up PHP 8.5
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: dom, gd, mbstring, mysqli, xml, zip
+          coverage: none
+      - name: Download WP-CLI
+        run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
+      - name: Install WordPress, WooCommerce, Plugin Check and the release ZIP
+        run: |
+          php wp-cli.phar core download --path=wp-test --version=7.1.4
+          php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check
+          php wp-cli.phar core install --path=wp-test --url=http://localhost --title="Voucher Captain plugin check" --admin_user=admin --admin_password=ci-password --admin_email=ci@example.test
+          php wp-cli.phar --path=wp-test plugin install woocommerce --version=11.3.0 --activate
+          php wp-cli.phar --path=wp-test plugin install plugin-check --activate
+          bin/build.sh
+          php wp-cli.phar --path=wp-test plugin install build/voucher-captain.zip --activate
+          php wp-cli.phar --path=wp-test plugin list
+      - name: Plugin Check (static and runtime checks)
+        run: |
+          set +e
+          php wp-cli.phar --path=wp-test plugin check voucher-captain --format=csv \
+            --require="$GITHUB_WORKSPACE/wp-test/wp-content/plugins/plugin-check/cli.php" > plugin-check.csv
+          status=$?
+          cat plugin-check.csv
+          {
+            echo '### Plugin Check (errors block, warnings are reported)'
+            echo "Errors: $(grep -c ',ERROR,' plugin-check.csv || true), warnings: $(grep -c ',WARNING,' plugin-check.csv || true)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if grep -q ',ERROR,' plugin-check.csv; then
+            echo "::error::Plugin Check reported $(grep -c ',ERROR,' plugin-check.csv) error(s) – fix them before merging (wordpress.org review)."
+            exit 1
+          fi
+          exit $status
+      - name: Upload the Plugin Check result
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: plugin-check
+          path: plugin-check.csv
+          if-no-files-found: ignore

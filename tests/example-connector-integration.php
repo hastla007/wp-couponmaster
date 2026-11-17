@@ -67,6 +67,9 @@ update_user_meta( $user, VCAP_Example_Connector::PENDING, array( $key2 => VCAP_E
 $connector->retry( $user, $key2 );
 remove_filter( 'vcap_example_grant_fails', $fail );
 vcap_ex_assert( 'released' === vcap()->redemptions->get( $key2 )['state'] && VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $vouchers[2]->id )->status, 'after the last failed attempt the voucher is released and usable again' );
+// P5: the user tries the same code again: the released key answers vcap_redemption_released, the connector
+// starts over with a new key instead of granting for a reservation that holds nothing.
+vcap_ex_assert( 'granted' === $connector->redeem( $user, $vouchers[2]->code ) && 'committed' === vcap()->redemptions->get( VCAP_Example_Connector::key( $user, $vouchers[2]->code, 1 ) )['state'] && VCAP\Voucher::STATUS_REDEEMED === vcap()->vouchers->get( $vouchers[2]->id )->status, 'P5: after a released redemption the same code can be redeemed again under a new key' );
 
 // Wrong voucher type for the target.
 $plain = new WC_Product_Simple();
@@ -88,4 +91,7 @@ vcap_ex_assert( ! in_array( $connector->redeem( $user, $plain_voucher->code ), a
 // Refund after the redemption: the example policy takes the access back.
 vcap()->issuer->void( vcap()->vouchers->get( $vouchers[0]->id ), 'Purchase order refunded' );
 vcap_ex_assert( ! $connector->has_access( $user, VCAP_Example_Connector::key( $user, $vouchers[0]->code ) ), 'voiding a redeemed voucher revokes the access (example policy)' );
+// S21: the reference connector registers its key prefix as internal and binds voucher and target completely.
+vcap_ex_assert( VCAP\API\V1\RestController::is_internal_key( VCAP_Example_Connector::key( $user, $vouchers[1]->code ) ), 'S21: keys "example:…" are internal (never accepted or driven over REST)' );
+vcap_ex_assert( is_wp_error( $connector->allowed( true, $vouchers[1], 'example:other', $user ) ) && true === $connector->allowed( true, $vouchers[1], VCAP_Example_Connector::TARGET, $user ), 'S21: only the connector\'s own target is accepted for its prefix' );
 echo "Voucher Captain example connector checks passed.\n";

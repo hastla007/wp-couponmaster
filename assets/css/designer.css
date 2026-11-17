@@ -4,7 +4,7 @@
 .vcap-designer { --vcap-accent: #2271b1; font-size: 13px; }
 .vcap-d-toolbar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding: 8px 0 12px; border-bottom: 1px solid #dcdcde; margin-bottom: 12px; }
 .vcap-d-group { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.vcap-d-label { font-weight: 600; margin-right: 4px; }
+.vcap-d-label { font-weight: 600; margin-inline-end: 4px; }
 .vcap-d-zoom { min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
 .vcap-d-check { display: inline-flex; align-items: center; gap: 4px; margin: 0 6px; }
 .vcap-d-main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
@@ -58,9 +58,11 @@
 .vcap-d-layer-list { margin: 0; max-height: 280px; overflow: auto; }
 .vcap-d-layer-list li { display: flex; align-items: center; gap: 2px; margin: 0; border-bottom: 1px solid #f0f0f1; }
 .vcap-d-layer-list li.is-selected { background: #f0f6fc; }
-.vcap-d-layer-name { flex: 1; text-align: left; background: none; border: 0; padding: 6px 4px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vcap-d-layer-name { flex: 1; background: none; border: 0; padding: 6px 4px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
 .vcap-d-layer-type { display: inline-block; font-size: 10px; padding: 1px 5px; border-radius: 3px; background: #f0f0f1; color: #50575e; }
-.vcap-d-icon { background: none; border: 0; cursor: pointer; padding: 4px; color: #50575e; line-height: 1; }
+.vcap-d-icon { background: none; border: 0; cursor: pointer; padding: 4px; color: #50575e; line-height: 1; min-width: 24px; min-height: 24px; }
 .vcap-d-icon:hover, .vcap-d-icon:focus { color: var(--vcap-accent); }
 .vcap-d-icon.is-off, .vcap-d-icon.is-on { color: #b32d2e; }
 .vcap-d-help { margin-top: 10px; }
+.vcap-d-hint { grid-column: 1 / -1; margin: 0; font-size: 12px; }
+.vcap-d-el.is-overflowing { outline: 1px dashed #b32d2e; }
