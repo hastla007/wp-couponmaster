@@ -146,7 +146,7 @@ final class CommandService {
 	 *
 	 * @param mixed  $text Text so far.
 	 * @param string $code Note code.
-	 * @param array  $args Note arguments.
+	 * @param mixed  $args Note arguments (an array for a note of this class).
 	 * @return mixed
 	 */
 	public static function note_text( $text, $code = '', $args = array() ) {

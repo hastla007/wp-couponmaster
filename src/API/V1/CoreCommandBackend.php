@@ -84,7 +84,8 @@ final class CoreCommandBackend implements CommandBackend {
 	 * @return string
 	 */
 	public function today(): string {
-		return wp_date( 'Y-m-d' );
+		$day = wp_date( 'Y-m-d' );
+		return false === $day ? gmdate( 'Y-m-d' ) : $day;
 	}
 
 	/**

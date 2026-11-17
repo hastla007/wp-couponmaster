@@ -263,7 +263,7 @@ final class ReadService {
 			'delivery_at'       => $scheduled,
 			'delivered_at'      => $delivered,
 			'delivered_roles'   => $roles,
-			'delivery_failures' => (int) ( $attempts['failures'] ?? 0 ),
+			'delivery_failures' => $attempts['failures'],
 			'checkins'          => (int) $row['checkins'],
 			'max_checkins'      => (int) $row['max_checkins'],
 			'last_checkin_at'   => self::utc( $row['last_checkin_at'] ?? null ),
