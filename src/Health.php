@@ -84,7 +84,7 @@ final class Health {
 
 	public function tests( $tests ) {
 		$tests = (array) $tests;
-		foreach ( array( 'extensions', 'schema', 'scheduler', 'mail', 'sender_domain', 'purchase_limits', 'redeem_page', 'markets', 'offline_payment', 'currency', 'rate_limits', 'template_images', 'template_overrides' ) as $id ) {
+		foreach ( array( 'extensions', 'database', 'schema', 'scheduler', 'mail', 'sender_domain', 'purchase_limits', 'redeem_page', 'markets', 'offline_payment', 'currency', 'rate_limits', 'template_images', 'template_overrides' ) as $id ) {
 			$tests['direct'][ 'vcap_' . $id ] = array(
 				'label' => Brand::name( 'site_health' ),
 				'test'  => array( $this, 'test_' . $id ),
@@ -215,6 +215,92 @@ final class Health {
 	}
 
 	/** PHP extensions: mbstring and dom are needed for PDFs at all, gd for QR codes and barcodes, zip for imports. */
+	/** Oldest supported MySQL and MariaDB (owner decision 16.11.2026, the same for all Captain plugins; LTS releases). */
+	public const MIN_MYSQL   = '9.7';
+	public const MIN_MARIADB = '12.3';
+
+	/**
+	 * Minimum database versions, changeable with the filter "vcap_minimum_db_versions" (e.g. on a host whose older
+	 * server the operator has tested).
+	 *
+	 * @return array{mysql: string, mariadb: string}
+	 */
+	public static function minimum_db_versions(): array {
+		$defaults = array(
+			'mysql'   => self::MIN_MYSQL,
+			'mariadb' => self::MIN_MARIADB,
+		);
+		/**
+		 * Filters the oldest database server versions Voucher Captain reports as supported in Site Health.
+		 *
+		 * @since 1.2.0
+		 * @param array{mysql: string, mariadb: string} $versions Minimum versions.
+		 */
+		$filtered = apply_filters( 'vcap_minimum_db_versions', $defaults );
+		$out      = $defaults;
+		foreach ( array_keys( $defaults ) as $key ) {
+			if ( is_array( $filtered ) && isset( $filtered[ $key ] ) && is_scalar( $filtered[ $key ] ) && preg_match( '/^\d+(\.\d+){0,2}$/', (string) $filtered[ $key ] ) ) {
+				$out[ $key ] = (string) $filtered[ $key ];
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Server type and version from a version string ("9.7.0", "12.3.1-MariaDB-ubu2404", "5.5.5-10.11.6-MariaDB-…"):
+	 * MariaDB is detected by its name, the replication prefix "5.5.5-" of older MariaDB servers is skipped.
+	 *
+	 * @return array{type: string, version: string}|null Null when no version can be read.
+	 */
+	public static function parse_db_server( string $info ): ?array {
+		$info    = trim( $info );
+		$mariadb = false !== stripos( $info, 'mariadb' );
+		if ( $mariadb ) {
+			$info = (string) preg_replace( '/^5\.5\.5-/', '', $info );
+		}
+		if ( ! preg_match( '/(\d+)\.(\d+)(?:\.(\d+))?/', $info, $m ) ) {
+			return null;
+		}
+		return array(
+			'type'    => $mariadb ? 'mariadb' : 'mysql',
+			'version' => $m[1] . '.' . $m[2] . '.' . ( isset( $m[3] ) && '' !== $m[3] ? $m[3] : '0' ),
+		);
+	}
+
+	/**
+	 * Database server: an older one than the supported minimum is only reported ("recommended") – nothing is blocked,
+	 * bookings keep working.
+	 *
+	 * @param string|null $info Version string; null = the connected server.
+	 */
+	public function test_database( ?string $info = null ): array {
+		if ( null === $info ) {
+			global $wpdb;
+			$info = is_object( $wpdb ) && method_exists( $wpdb, 'db_server_info' ) ? (string) $wpdb->db_server_info() : '';
+			if ( '' === $info && is_object( $wpdb ) ) {
+				$info = (string) $wpdb->get_var( 'SELECT VERSION()' );
+			}
+		}
+		$server  = self::parse_db_server( $info );
+		$minimum = self::minimum_db_versions();
+		if ( ! $server || ! version_compare( $server['version'], $minimum[ $server['type'] ], '<' ) ) {
+			return self::result(
+				'database',
+				'good',
+				__( 'The database server is supported', 'voucher-captain' ),
+				/* translators: 1: minimum MySQL version, 2: minimum MariaDB version */
+				sprintf( __( 'Voucher Captain supports MySQL %1$s or newer and MariaDB %2$s or newer.', 'voucher-captain' ), $minimum['mysql'], $minimum['mariadb'] )
+			);
+		}
+		return self::result(
+			'database',
+			'recommended',
+			__( 'The database server is older than the supported minimum', 'voucher-captain' ),
+			/* translators: 1: minimum MySQL version, 2: minimum MariaDB version, 3: MySQL or MariaDB, 4: version of this server */
+			sprintf( __( 'Voucher Captain supports MySQL %1$s or newer and MariaDB %2$s or newer; this site uses %3$s %4$s. The plugin keeps working and nothing is blocked, but older database servers are no longer tested. Ask your host for an update.', 'voucher-captain' ), $minimum['mysql'], $minimum['mariadb'], 'mariadb' === $server['type'] ? 'MariaDB' : 'MySQL', $server['version'] )
+		);
+	}
+
 	public function test_extensions(): array {
 		$required    = Install::missing_extensions( Install::REQUIRED_EXTENSIONS );
 		$recommended = Install::missing_extensions( Install::RECOMMENDED_EXTENSIONS );
@@ -692,6 +778,7 @@ final class Health {
 			case 'scheduler':
 				return '<p><a href="' . esc_url( admin_url( 'admin.php?page=wc-status&tab=action-scheduler&status=pending&s=vcap' ) ) . '">' . esc_html__( 'Scheduled voucher tasks', 'voucher-captain' ) . '</a></p>';
 			case 'mail':
+			case 'database':
 			case 'template_overrides':
 			case 'ledger':
 				return '';

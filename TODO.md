@@ -1362,6 +1362,8 @@ Unabhängige Durchsicht der Sicherheitskorrekturen S4–S21, der Captain-Suite- 
 
 - [x] Form-Captain-Connector (Branch `claude/sleepy-ptolemy-n32guj`, Form-Captain-Sitzung): `VoucherRequests::forget_reference()` (VC-FC-06) übernommen und mit der echten Klasse getestet – gelöschter Formulareintrag/widerrufene Einwilligung löscht offene bzw. anonymisiert ausgestellte Anfragen ohne Benutzerrecht (API.md, Tests in captain-suite). **Beim Mergen beachten:** beide Branches bringen eine Admin-Seite „Voucher requests“; ist der Anfrage-Dienst des Kerns da, blendet der Connector seine eigene aus, solange seine Rückfall-Tabelle leer ist.
 
+- [x] **Mindestversionen angehoben (Entscheidung der Inhaberin 16.11.2026, wie Affiliate und Review Captain):** PHP 8.5 (vorher 8.1) im Plugin-Kopf, in readme.txt und composer.json; ältere PHP-Versionen laden das Plugin nicht und zeigen nur einen Admin-Hinweis. Datenbank MySQL 9.7 / MariaDB 12.3 (LTS): ein älterer Server wird nicht gesperrt, der Website-Zustand empfiehlt nur ein Update (Filter `vcap_minimum_db_versions`). CI auf PHP 8.5, MySQL 9.7 und MariaDB 12.3. Lokal nur Unit-Tests/PHPStan/PHPCS (hier gibt es kein PHP 8.5); die Integrationstests laufen in der CI. Hinweis: Pass Captain (8.2) und Form Captain (8.3) sind noch nicht angehoben.
+
 ## Sicherheitsprüfung der Änderungen seit 4269878 (16.11.2026)
 
 Unabhängige Prüfung (nur lesend) der Sicherheitskorrekturen, Captain-Suite- und Workflow-Verträge, R1–R12 und White Label: nichts Kritisches oder Hohes.

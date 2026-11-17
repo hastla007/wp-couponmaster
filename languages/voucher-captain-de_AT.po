@@ -4,7 +4,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: Voucher Captain 1.0.0\n"
-"POT-Creation-Date: 2026-11-16 17:41+0000\n"
+"POT-Creation-Date: 2026-11-17 05:53+0000\n"
 "PO-Revision-Date: 2026-11-14 16:00+0000\n"
 "Last-Translator: \n"
 "Language-Team: German\n"
@@ -252,7 +252,9 @@ msgstr ""
 #: src/API/V1/RestController.php:491
 msgid ""
 "Only the shop can give back a completed redemption. Please contact the shop."
-msgstr "Eine abgeschlossene Einlösung kann nur der Shop zurückbuchen. Bitte wenden Sie sich an den Shop."
+msgstr ""
+"Eine abgeschlossene Einlösung kann nur der Shop zurückbuchen. Bitte wenden "
+"Sie sich an den Shop."
 
 #: src/API/V1/VoucherService.php:94
 msgid "The voucher system returned an invalid response."
@@ -5961,7 +5963,7 @@ msgid "Database setup error"
 msgstr "Fehler bei der Datenbankeinrichtung"
 
 #: src/Diagnostics.php:46 src/Diagnostics.php:76 src/Diagnostics.php:189
-#: src/Health.php:650 src/Workflow/Provider.php:792
+#: src/Health.php:736 src/Workflow/Provider.php:792
 msgid "None"
 msgstr "Keiner"
 
@@ -7909,11 +7911,34 @@ msgstr "Ratenbegrenzungen für Code-Eingaben benötigen Aufmerksamkeit"
 msgid "Only the first %d voucher products were checked."
 msgstr "Nur die ersten %d Gutscheinprodukte wurden geprüft."
 
-#: src/Health.php:222
+#: src/Health.php:290
+msgid "The database server is supported"
+msgstr "Der Datenbankserver wird unterstützt"
+
+#. translators: 1: minimum MySQL version, 2: minimum MariaDB version
+#: src/Health.php:292
+#, php-format
+msgid "Voucher Captain supports MySQL %1$s or newer and MariaDB %2$s or newer."
+msgstr "Voucher Captain unterstützt MySQL %1$s oder neuer und MariaDB %2$s oder neuer."
+
+#: src/Health.php:298
+msgid "The database server is older than the supported minimum"
+msgstr "Der Datenbankserver ist älter als die unterstützte Mindestversion"
+
+#. translators: 1: minimum MySQL version, 2: minimum MariaDB version, 3: MySQL or MariaDB, 4: version of this server
+#: src/Health.php:300
+#, php-format
+msgid ""
+"Voucher Captain supports MySQL %1$s or newer and MariaDB %2$s or newer; this "
+"site uses %3$s %4$s. The plugin keeps working and nothing is blocked, but "
+"older database servers are no longer tested. Ask your host for an update."
+msgstr "Voucher Captain unterstützt MySQL %1$s oder neuer und MariaDB %2$s oder neuer; diese Website nutzt %3$s %4$s. Das Plugin funktioniert weiter und nichts wird gesperrt, ältere Datenbankserver werden aber nicht mehr getestet. Bitten Sie Ihren Hoster um ein Update."
+
+#: src/Health.php:308
 msgid "The PHP extensions for vouchers are available"
 msgstr "Die PHP-Erweiterungen für Gutscheine sind verfügbar"
 
-#: src/Health.php:222
+#: src/Health.php:308
 msgid ""
 "mbstring, dom, gd, zip and iconv are loaded: PDFs with QR codes and barcodes "
 "and spreadsheet imports work."
@@ -7921,12 +7946,12 @@ msgstr ""
 "mbstring, dom, gd, zip und iconv sind geladen: PDFs mit QR-Codes und "
 "Barcodes sowie Tabellen-Importe funktionieren."
 
-#: src/Health.php:225
+#: src/Health.php:311
 msgid "PHP extensions for vouchers are missing"
 msgstr "PHP-Erweiterungen für Gutscheine fehlen"
 
 #. translators: %s: comma separated PHP extension names
-#: src/Health.php:227
+#: src/Health.php:313
 #, php-format
 msgid ""
 "Without the PHP extensions %s, voucher PDFs cannot be created and voucher "
@@ -7936,12 +7961,12 @@ msgstr ""
 "und Gutschein-E-Mails schlagen fehl. Bitten Sie Ihren Hoster, sie zu "
 "aktivieren."
 
-#: src/Health.php:229
+#: src/Health.php:315
 msgid "Some PHP extensions for vouchers are missing"
 msgstr "Einige PHP-Erweiterungen für Gutscheine fehlen"
 
 #. translators: %s: comma separated PHP extension names
-#: src/Health.php:231
+#: src/Health.php:317
 #, php-format
 msgid ""
 "Missing PHP extensions: %s. Without gd, voucher PDFs have no QR codes, "
@@ -7952,22 +7977,22 @@ msgstr ""
 "Barcodes oder Bilder (Scanner können sie nicht lesen); ohne zip können keine "
 "Excel-Dateien importiert werden. Bitten Sie Ihren Hoster, sie zu aktivieren."
 
-#: src/Health.php:237
+#: src/Health.php:323
 msgid "The voucher database tables are complete"
 msgstr "Die Gutschein-Datenbanktabellen sind vollständig"
 
-#: src/Health.php:237
+#: src/Health.php:323
 msgid "All voucher tables, columns and indexes exist and support transactions."
 msgstr ""
 "Alle Gutschein-Tabellen, Spalten und Indizes sind vorhanden und unterstützen "
 "Transaktionen."
 
-#: src/Health.php:242
+#: src/Health.php:328
 msgid "The voucher database update is incomplete"
 msgstr "Die Gutschein-Datenbank-Aktualisierung ist unvollständig"
 
 #. translators: %s: technical details
-#: src/Health.php:244
+#: src/Health.php:330
 #, php-format
 msgid ""
 "Missing: %s. The update is retried automatically; check the database "
@@ -7976,11 +8001,11 @@ msgstr ""
 "Es fehlt: %s. Die Aktualisierung wird automatisch wiederholt; prüfen Sie die "
 "Datenbankrechte."
 
-#: src/Health.php:266
+#: src/Health.php:352
 msgid "Voucher deliveries and daily maintenance are scheduled"
 msgstr "Gutschein-Zustellungen und tägliche Wartung sind geplant"
 
-#: src/Health.php:266
+#: src/Health.php:352
 msgid ""
 "Scheduled vouchers, expiry reminders and the daily maintenance run through "
 "the Action Scheduler of WooCommerce."
@@ -7989,7 +8014,7 @@ msgstr ""
 "über den Action Scheduler von WooCommerce."
 
 #. translators: %d: number of overdue actions
-#: src/Health.php:270
+#: src/Health.php:356
 #, php-format
 msgid "%d scheduled voucher task has been waiting for more than an hour."
 msgid_plural ""
@@ -7997,7 +8022,7 @@ msgid_plural ""
 msgstr[0] "%d geplante Gutschein-Aufgabe wartet seit über einer Stunde."
 msgstr[1] "%d geplante Gutschein-Aufgaben warten seit über einer Stunde."
 
-#: src/Health.php:271
+#: src/Health.php:357
 msgid ""
 "The daily voucher maintenance (expiry, reminders, delivery retries) is not "
 "scheduled."
@@ -8005,11 +8030,11 @@ msgstr ""
 "Die tägliche Gutschein-Wartung (Ablauf, Erinnerungen, erneute "
 "Zustellversuche) ist nicht geplant."
 
-#: src/Health.php:272
+#: src/Health.php:358
 msgid "Voucher tasks are not running on time"
 msgstr "Gutschein-Aufgaben laufen nicht rechtzeitig"
 
-#: src/Health.php:272
+#: src/Health.php:358
 msgid ""
 "Check that WP-Cron or a server cron job runs, and look at WooCommerce → "
 "Status → Scheduled Actions (group \"vcap\")."
@@ -8017,11 +8042,11 @@ msgstr ""
 "Prüfen Sie, ob WP-Cron oder ein Server-Cronjob läuft, und sehen Sie unter "
 "WooCommerce → Status → Geplante Aktionen (Gruppe „vcap“) nach."
 
-#: src/Health.php:278
+#: src/Health.php:364
 msgid "No failed emails recorded"
 msgstr "Keine fehlgeschlagenen E-Mails protokolliert"
 
-#: src/Health.php:278
+#: src/Health.php:364
 msgid ""
 "Voucher Captain records emails that WordPress could not send (last 7 days)."
 msgstr ""
@@ -8029,7 +8054,7 @@ msgstr ""
 "(letzte 7 Tage)."
 
 #. translators: 1: number of failed mails, 2: date of the last one, 3: error message
-#: src/Health.php:283
+#: src/Health.php:369
 #, php-format
 msgid "%1$d email could not be sent in the last 7 days (last on %2$s: %3$s)."
 msgid_plural ""
@@ -8041,11 +8066,11 @@ msgstr[1] ""
 "%1$d E-Mails konnten in den letzten 7 Tagen nicht gesendet werden (zuletzt "
 "am %2$s: %3$s)."
 
-#: src/Health.php:288
+#: src/Health.php:374
 msgid "Emails could not be sent"
 msgstr "E-Mails konnten nicht gesendet werden"
 
-#: src/Health.php:288
+#: src/Health.php:374
 msgid ""
 "Vouchers and tickets are delivered by email: configure an SMTP or mail "
 "service plugin and send a test mail."
@@ -8053,11 +8078,11 @@ msgstr ""
 "Gutscheine und Tickets werden per E-Mail zugestellt: Richten Sie ein SMTP- "
 "oder Mailservice-Plugin ein und senden Sie eine Test-E-Mail."
 
-#: src/Health.php:338
+#: src/Health.php:424
 msgid "The sender address of the emails fits the shop"
 msgstr "Die Absenderadresse der E-Mails passt zum Shop"
 
-#: src/Health.php:338
+#: src/Health.php:424
 msgid ""
 "Voucher emails are sent from an address of the shop's domain or through a "
 "mail service plugin."
@@ -8065,12 +8090,12 @@ msgstr ""
 "Gutschein-E-Mails werden von einer Adresse der Shop-Domain oder über ein "
 "Mailservice-Plugin gesendet."
 
-#: src/Health.php:343
+#: src/Health.php:429
 msgid "Voucher emails are sent from another domain"
 msgstr "Gutschein-E-Mails werden von einer anderen Domain gesendet"
 
 #. translators: 1: sender domain, 2: shop domain
-#: src/Health.php:346
+#: src/Health.php:432
 #, php-format
 msgid ""
 "The emails are sent from an address at %1$s, but the shop runs on %2$s, and "
@@ -8083,11 +8108,11 @@ msgstr ""
 "Mails landen oft im Spam: Verwenden Sie eine Absenderadresse der Shop-Domain "
 "(WooCommerce → Einstellungen → E-Mails) oder richten Sie ein SMTP-Plugin ein."
 
-#: src/Health.php:364
+#: src/Health.php:450
 msgid "No purchases refused by the daily voucher limit"
 msgstr "Keine Käufe durch das tägliche Gutscheinlimit abgelehnt"
 
-#: src/Health.php:364
+#: src/Health.php:450
 msgid ""
 "Voucher Captain counts the checkouts that the maximum voucher value per "
 "customer and 24 hours refused (last 30 days)."
@@ -8095,12 +8120,12 @@ msgstr ""
 "Voucher Captain zählt die Bestellversuche, die der maximale Gutscheinwert "
 "pro Kunde und 24 Stunden abgelehnt hat (letzte 30 Tage)."
 
-#: src/Health.php:369
+#: src/Health.php:455
 msgid "Purchases were refused by the daily voucher limit"
 msgstr "Käufe wurden durch das tägliche Gutscheinlimit abgelehnt"
 
 #. translators: 1: number of refused checkouts, 2: limit
-#: src/Health.php:372
+#: src/Health.php:458
 #, php-format
 msgid ""
 "%1$d checkout was refused in the last 30 days because the vouchers exceeded "
@@ -8121,12 +8146,12 @@ msgstr[1] ""
 "Stammkunden betroffen sind, erhöhen Sie das Limit in den Gutschein-"
 "Einstellungen."
 
-#: src/Health.php:387
+#: src/Health.php:473
 msgid "The private voucher folder can be opened from the web"
 msgstr "Der private Gutscheinordner ist aus dem Web erreichbar"
 
 #. translators: %s: folder path
-#: src/Health.php:389
+#: src/Health.php:475
 #, php-format
 msgid ""
 "A test file in %s could be downloaded. The web server ignores the .htaccess "
@@ -8139,11 +8164,11 @@ msgstr ""
 "könnte jeder abrufen, der ihre Adresse kennt. Sperren Sie den Ordner in der "
 "Serverkonfiguration (siehe nginx-Beispiel in COMPATIBILITY.md)."
 
-#: src/Health.php:393
+#: src/Health.php:479
 msgid "The protection of the private voucher folder could not be tested"
 msgstr "Der Schutz des privaten Gutscheinordners konnte nicht geprüft werden"
 
-#: src/Health.php:393
+#: src/Health.php:479
 msgid ""
 "The site could not request a test file from itself. Make sure the web server "
 "blocks the private folder (see the nginx snippet in COMPATIBILITY.md)."
@@ -8152,11 +8177,11 @@ msgstr ""
 "sicher, dass der Webserver den privaten Ordner sperrt (siehe nginx-Beispiel "
 "in COMPATIBILITY.md)."
 
-#: src/Health.php:395
+#: src/Health.php:481
 msgid "The private voucher folder is protected"
 msgstr "Der private Gutscheinordner ist geschützt"
 
-#: src/Health.php:395
+#: src/Health.php:481
 msgid ""
 "PDF vouchers and fonts are stored in a folder that cannot be opened from the "
 "web (a test file could not be downloaded)."
@@ -8164,12 +8189,12 @@ msgstr ""
 "PDF-Gutscheine und Schriften liegen in einem Ordner, der aus dem Web nicht "
 "geöffnet werden kann (eine Testdatei ließ sich nicht herunterladen)."
 
-#: src/Health.php:400
+#: src/Health.php:486
 msgid "The private voucher folder is missing or unprotected"
 msgstr "Der private Gutscheinordner fehlt oder ist ungeschützt"
 
 #. translators: %s: folder path
-#: src/Health.php:402
+#: src/Health.php:488
 #, php-format
 msgid ""
 "Voucher Captain could not create or protect %s. Check the folder permissions."
@@ -8177,11 +8202,11 @@ msgstr ""
 "Voucher Captain konnte %s nicht anlegen oder schützen. Prüfen Sie die "
 "Ordnerrechte."
 
-#: src/Health.php:416
+#: src/Health.php:502
 msgid "The PDF template images can be read"
 msgstr "Die Bilder der PDF-Vorlagen sind lesbar"
 
-#: src/Health.php:416
+#: src/Health.php:502
 msgid ""
 "Every image of the published PDF templates is a readable JPEG, PNG or GIF "
 "file on this server."
@@ -8189,15 +8214,15 @@ msgstr ""
 "Jedes Bild der veröffentlichten PDF-Vorlagen ist eine lesbare JPEG-, PNG- "
 "oder GIF-Datei auf diesem Server."
 
-#: src/Health.php:418
+#: src/Health.php:504
 msgid "PDF template images are missing from voucher PDFs"
 msgstr "In Gutschein-PDFs fehlen Bilder der PDF-Vorlagen"
 
-#: src/Health.php:425
+#: src/Health.php:511
 msgid "The theme copies of the voucher templates are up to date"
 msgstr "Die Theme-Kopien der Gutschein-Vorlagen sind aktuell"
 
-#: src/Health.php:425
+#: src/Health.php:511
 msgid ""
 "The theme overrides no voucher template, or only with copies of the current "
 "version."
@@ -8206,17 +8231,17 @@ msgstr ""
 "aktuellen Version."
 
 #. translators: 1: template file, 2: version of the theme copy, 3: current version
-#: src/Health.php:431
+#: src/Health.php:517
 #, php-format
 msgid "%1$s (version %2$s, current %3$s)"
 msgstr "%1$s (Version %2$s, aktuell %3$s)"
 
-#: src/Health.php:438
+#: src/Health.php:524
 msgid "Your theme contains outdated copies of voucher templates"
 msgstr "Ihr Theme enthält veraltete Kopien von Gutschein-Vorlagen"
 
 #. translators: %s: list of template files with versions
-#: src/Health.php:440
+#: src/Health.php:526
 #, php-format
 msgid ""
 "Compare these files in yourtheme/woocommerce/voucher-captain/ with the "
@@ -8227,41 +8252,41 @@ msgstr ""
 "den Vorlagen des Plugins und aktualisieren Sie sie, sonst fehlen spätere "
 "Korrekturen (etwa der Einmalschlüssel des Check-in-Formulars): %s"
 
-#: src/Health.php:452
+#: src/Health.php:538
 msgid "The voucher redeem page is set up"
 msgstr "Die Einlöseseite für Gutscheine ist eingerichtet"
 
-#: src/Health.php:452
+#: src/Health.php:538
 msgid "Voucher emails and ticket vouchers link to a page with the redeem form."
 msgstr ""
 "Gutschein-E-Mails und Ticketgutscheine verlinken auf eine Seite mit dem "
 "Einlöseformular."
 
-#: src/Health.php:454
+#: src/Health.php:540
 msgid "The voucher redeem page needs attention"
 msgstr "Die Einlöseseite für Gutscheine braucht Aufmerksamkeit"
 
-#: src/Health.php:463
+#: src/Health.php:549
 msgid ""
 "statutory validity not verified (3 years to the end of the year is used)"
 msgstr ""
 "gesetzliche Gültigkeit nicht geprüft (es gelten 3 Jahre zum Jahresende)"
 
-#: src/Health.php:466
+#: src/Health.php:552
 msgid "no redemption conditions"
 msgstr "keine Einlösebedingungen"
 
 #. translators: %s: locale, e.g. fr_FR
-#: src/Health.php:470
+#: src/Health.php:556
 #, php-format
 msgid "no translation (%s)"
 msgstr "keine Übersetzung (%s)"
 
-#: src/Health.php:477
+#: src/Health.php:563
 msgid "Voucher rules are set for every EU country you sell to"
 msgstr "Für jedes EU-Verkaufsland sind Gutscheinregeln festgelegt"
 
-#: src/Health.php:477
+#: src/Health.php:563
 msgid ""
 "Each selling country has a verified voucher validity, redemption conditions "
 "and a translation."
@@ -8269,12 +8294,12 @@ msgstr ""
 "Für jedes Verkaufsland sind eine geprüfte Gutscheingültigkeit, "
 "Einlösebedingungen und eine Übersetzung vorhanden."
 
-#: src/Health.php:482
+#: src/Health.php:568
 msgid "Some EU selling countries need voucher settings"
 msgstr "Für einige EU-Verkaufsländer fehlen Gutschein-Einstellungen"
 
 #. translators: %s: list of countries with what is missing
-#: src/Health.php:484
+#: src/Health.php:570
 #, php-format
 msgid ""
 "Set the statutory validity and conditions per country under Vouchers → "
@@ -8284,11 +8309,11 @@ msgstr ""
 "die Bedingungen pro Land fest (rechtlich prüfen lassen) und ergänzen Sie "
 "Übersetzungen: %s"
 
-#: src/Health.php:494
+#: src/Health.php:580
 msgid "Vouchers are not sold with cash on delivery"
 msgstr "Gutscheine werden nicht per Nachnahme verkauft"
 
-#: src/Health.php:494
+#: src/Health.php:580
 msgid ""
 "Cash on delivery is not offered for virtual products. Orders paid by bank "
 "transfer or cheque issue vouchers once the payment is confirmed."
@@ -8297,11 +8322,11 @@ msgstr ""
 "Überweisung oder Scheck werden Gutscheine ausgestellt, sobald die Zahlung "
 "bestätigt ist."
 
-#: src/Health.php:496
+#: src/Health.php:582
 msgid "Cash on delivery is offered for virtual products"
 msgstr "Nachnahme wird für virtuelle Produkte angeboten"
 
-#: src/Health.php:496
+#: src/Health.php:582
 msgid ""
 "Voucher orders paid by cash on delivery are \"Processing\" before any money "
 "arrived. Their vouchers are issued only when the order is completed (or the "
@@ -8316,7 +8341,7 @@ msgstr ""
 "WooCommerce → Einstellungen → Zahlungen → Nachnahme aus, wenn Gutscheine nur "
 "mit sofortiger Zahlung verkauft werden sollen."
 
-#: src/Health.php:511
+#: src/Health.php:597
 msgid ""
 "Vouchers and gift card balances are kept in the shop base currency. Use a "
 "supported currency switcher (WooCommerce Multilingual, Aelia, WOOCS, CURCY, "
@@ -8328,12 +8353,12 @@ msgstr ""
 "(WooCommerce Multilingual, Aelia, WOOCS, CURCY, WooPayments Multi-Currency) "
 "oder rechnen Sie Beträge mit dem Filter „vcap_amount_to_base_currency“ um."
 
-#: src/Health.php:521
+#: src/Health.php:607
 msgid "Vouchers kept in another currency than the shop base currency"
 msgstr "Gutscheine in einer anderen Währung als der Basiswährung des Shops"
 
 #. translators: 1: shop base currency, 2: currencies with the number of vouchers
-#: src/Health.php:524
+#: src/Health.php:610
 #, php-format
 msgid ""
 "The shop base currency is %1$s, but usable fixed-value vouchers are kept in "
@@ -8346,12 +8371,12 @@ msgstr ""
 "werden im Warenkorb und über die API abgelehnt, bis ihr Wert umgerechnet ist "
 "(Restwert bearbeiten oder Gutscheine neu ausstellen)."
 
-#: src/Health.php:534
+#: src/Health.php:620
 msgid "Foreign-currency amounts could not be converted"
 msgstr "Beträge in Fremdwährung konnten nicht umgerechnet werden"
 
 #. translators: %s: currency codes
-#: src/Health.php:536
+#: src/Health.php:622
 #, php-format
 msgid ""
 "No exchange rate to the shop base currency was known for %s in the last 30 "
@@ -8362,12 +8387,12 @@ msgstr ""
 "Shops bekannt: Gutscheinverkäufe in dieser Währung wurden zurückgehalten, "
 "Erstattungen als Kundenguthaben und Gutscheine mit festem Wert abgelehnt."
 
-#: src/Health.php:544
+#: src/Health.php:630
 msgid "Foreign currency without converter"
 msgstr "Fremdwährung ohne Umrechnung"
 
 #. translators: %s: plugin name
-#: src/Health.php:546
+#: src/Health.php:632
 #, php-format
 msgid ""
 "Voucher Captain cannot read the exchange rates of %s. Orders in other "
@@ -8378,11 +8403,11 @@ msgstr ""
 "anderen Währungen können keine Gutscheine erzeugen und nicht über "
 "Geschenkkarten bezahlt werden, bis ein Kurs bekannt ist."
 
-#: src/Health.php:549
+#: src/Health.php:635
 msgid "Voucher amounts are converted to the shop base currency"
 msgstr "Gutscheinbeträge werden in die Basiswährung des Shops umgerechnet"
 
-#: src/Health.php:549
+#: src/Health.php:635
 msgid ""
 "Either all orders are in the base currency or a supported currency switcher "
 "provides the exchange rates."
@@ -8390,11 +8415,11 @@ msgstr ""
 "Entweder sind alle Bestellungen in der Basiswährung oder ein unterstützter "
 "Währungsumschalter liefert die Wechselkurse."
 
-#: src/Health.php:590
+#: src/Health.php:676
 msgid "Voucher validity is not shorter than the statutory period"
 msgstr "Die Gutscheingültigkeit ist nicht kürzer als die gesetzliche Frist"
 
-#: src/Health.php:590
+#: src/Health.php:676
 msgid ""
 "No voucher product ends before the statutory limitation period of the shop "
 "country or an EU selling country."
@@ -8402,12 +8427,12 @@ msgstr ""
 "Kein Gutscheinprodukt endet vor der gesetzlichen Verjährungsfrist des "
 "Shoplands oder eines EU-Verkaufslands."
 
-#: src/Health.php:595
+#: src/Health.php:681
 msgid "Some vouchers are valid for less than the statutory period"
 msgstr "Einige Gutscheine sind kürzer gültig als die gesetzliche Frist"
 
 #. translators: %s: products with the countries concerned
-#: src/Health.php:597
+#: src/Health.php:683
 #, php-format
 msgid ""
 "A validity shorter than the statutory limitation period is often invalid in "
@@ -8417,7 +8442,7 @@ msgstr ""
 "Gutscheinbedingungen häufig unwirksam. Bitte rechtlich prüfen lassen oder "
 "auf die gesetzliche Gültigkeit umstellen: %s"
 
-#: src/Health.php:611
+#: src/Health.php:697
 msgid ""
 "Not every voucher could be checked in time; run \"wp vcap ledger verify\" "
 "for the complete check."
@@ -8425,11 +8450,11 @@ msgstr ""
 "Nicht alle Gutscheine konnten rechtzeitig geprüft werden; führen Sie „wp "
 "vcap ledger verify“ für die vollständige Prüfung aus."
 
-#: src/Health.php:613
+#: src/Health.php:699
 msgid "Voucher balances match their history"
 msgstr "Die Restwerte der Gutscheine stimmen mit ihrem Verlauf überein"
 
-#: src/Health.php:613
+#: src/Health.php:699
 msgid ""
 "The balance of every gift card and store credit account equals the balance "
 "after its last booking in the history."
@@ -8437,12 +8462,12 @@ msgstr ""
 "Der Restwert jeder Geschenkkarte und jedes Kundenguthabenkontos entspricht "
 "dem Stand nach der letzten Buchung im Verlauf."
 
-#: src/Health.php:619
+#: src/Health.php:705
 msgid "Some voucher balances differ from their history"
 msgstr "Einige Restwerte weichen vom Verlauf ab"
 
 #. translators: 1: number of vouchers, 2: voucher codes
-#: src/Health.php:622
+#: src/Health.php:708
 #, php-format
 msgid ""
 "%1$d voucher has a stored balance that differs from the balance after its "
@@ -8464,21 +8489,21 @@ msgstr[1] ""
 "Prüfen und korrigieren: %2$s"
 
 #. translators: 1: product name, 2: expected tax status ("none" or "taxable")
-#: src/Health.php:650
+#: src/Health.php:736
 #, php-format
 msgid "%1$s (tax status should be \"%2$s\")"
 msgstr "%1$s (Steuerstatus sollte „%2$s“ sein)"
 
-#: src/Health.php:650
+#: src/Health.php:736
 msgid "Taxable"
 msgstr "Steuerpflichtig"
 
-#: src/Health.php:662
+#: src/Health.php:748
 msgid "Multi-purpose vouchers are never taxed"
 msgstr "Mehrzweckgutscheine werden nie versteuert"
 
 #. translators: %s: list of products
-#: src/Health.php:664
+#: src/Health.php:750
 #, php-format
 msgid ""
 "These voucher products sell multi-purpose vouchers without VAT (tax status "
@@ -8495,12 +8520,12 @@ msgstr ""
 "wird. Aktivieren Sie „Mehrzweckgutscheine als Zahlung“ oder machen Sie die "
 "Produkte steuerpflichtig und sprechen Sie mit Ihrer Steuerberatung: %s"
 
-#: src/Health.php:672
+#: src/Health.php:758
 msgid "Single-purpose vouchers in a shop that sells to several countries"
 msgstr "Einzweckgutscheine in einem Shop, der in mehrere Länder verkauft"
 
 #. translators: %s: list of products
-#: src/Health.php:674
+#: src/Health.php:760
 #, php-format
 msgid ""
 "A single-purpose voucher needs the place of supply and the VAT to be fixed "
@@ -8515,12 +8540,12 @@ msgstr ""
 "Produkte Einzweckgutscheine sind. Gutscheine werden nur für Waren mit dem "
 "USt-Satz und dem Land ihres Verkaufs eingelöst: %s"
 
-#: src/Health.php:678
+#: src/Health.php:764
 msgid "Voucher products have a tax status that fits their VAT treatment"
 msgstr ""
 "Der Steuerstatus der Gutscheinprodukte passt zu ihrer Umsatzsteuer-Einordnung"
 
-#: src/Health.php:678
+#: src/Health.php:764
 msgid ""
 "Multi-purpose vouchers are sold without VAT, single-purpose vouchers with "
 "VAT."
@@ -8528,7 +8553,7 @@ msgstr ""
 "Mehrzweckgutscheine werden ohne, Einzweckgutscheine mit Umsatzsteuer "
 "verkauft."
 
-#: src/Health.php:683
+#: src/Health.php:769
 msgid ""
 "Some voucher products have a tax status that does not fit their VAT treatment"
 msgstr ""
@@ -8536,7 +8561,7 @@ msgstr ""
 "Einordnung"
 
 #. translators: %s: list of products
-#: src/Health.php:685
+#: src/Health.php:771
 #, php-format
 msgid ""
 "Multi-purpose vouchers are sold without VAT (tax status \"None\"), single-"
@@ -8547,11 +8572,11 @@ msgstr ""
 "„Keiner“), Einzweckgutscheine mit Umsatzsteuer („Steuerpflichtig“). Bitte "
 "mit der Steuerberatung abstimmen und korrigieren: %s"
 
-#: src/Health.php:693
+#: src/Health.php:779
 msgid "Scheduled voucher tasks"
 msgstr "Geplante Gutschein-Aufgaben"
 
-#: src/Health.php:699
+#: src/Health.php:786
 msgid "Voucher settings"
 msgstr "Gutschein-Einstellungen"
 
@@ -14684,13 +14709,17 @@ msgstr "Dieser Code konnte nicht verifiziert werden."
 msgid "Open in admin"
 msgstr "Im Admin-Bereich öffnen"
 
-#: voucher-captain.php:70
+#: voucher-captain.php:27
+msgid "Voucher Captain requires PHP 8.5 or newer."
+msgstr "Voucher Captain benötigt PHP 8.5 oder neuer."
+
+#: voucher-captain.php:82
 msgid "Voucher Captain requires WooCommerce to be installed and active."
 msgstr ""
 "Voucher Captain erfordert, dass WooCommerce installiert und aktiviert ist."
 
 #. translators: %s: installed WooCommerce version
-#: voucher-captain.php:84
+#: voucher-captain.php:96
 #, php-format
 msgid ""
 "Voucher Captain requires WooCommerce 8.9 or newer (installed: %s). Please "
@@ -14699,7 +14728,7 @@ msgstr ""
 "Voucher Captain benötigt WooCommerce 8.9 oder neuer (installiert: %s). Bitte "
 "aktualisieren Sie WooCommerce."
 
-#: voucher-captain.php:84
+#: voucher-captain.php:96
 msgid ""
 "Until then, gift cards and store credit are refused at checkout, because "
 "their balance cannot be deducted."

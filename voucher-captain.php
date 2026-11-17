@@ -5,7 +5,7 @@
  * Description:       Sell personalised PDF vouchers, gift cards and store credit with WooCommerce: visual PDF designer, recipient fields, scheduled delivery, balance-tracked gift cards, code import and redemption in the shop, by API or in WP Pass Captain.
  * Version:           1.2.0
  * Requires at least: 6.4
- * Requires PHP:      8.1
+ * Requires PHP:      8.5
  * Requires Plugins:  woocommerce
  * WC requires at least: 8.9
  * WC tested up to:   11.3
@@ -17,6 +17,18 @@
  */
 
 defined( 'ABSPATH' ) || exit;
+
+// Owner decision 16.11.2026 (same for all Captain plugins): PHP 8.5 or newer. On an older PHP the plugin loads nothing
+// and only says why – WordPress itself refuses the activation there ("Requires PHP" above).
+if ( version_compare( PHP_VERSION, '8.5', '<' ) ) {
+	add_action(
+		'admin_notices',
+		static function (): void {
+			echo '<div class="notice notice-error"><p>' . esc_html__( 'Voucher Captain requires PHP 8.5 or newer.', 'voucher-captain' ) . '</p></div>';
+		}
+	);
+	return;
+}
 
 define( 'VCAP_VERSION', '1.2.0' );
 define( 'VCAP_DB_VERSION', '1.8.0' );

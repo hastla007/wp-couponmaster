@@ -7,11 +7,11 @@ the release commit. The `Release` workflow enforces this: its job `ci-green` ref
 not on `main` or has no push run of `Plugin smoke tests` in which every blocking job succeeded (RELEASE.md → Cutting a
 release).
 
-- [ ] Smoke tests and PHP lint on PHP 8.1 and 8.4; no licensing or update code in the shipped files (`tests/license-guard.php`, docs/FREE-PREMIUM.md); release ZIP reproducible (two builds, same SHA-256) – `smoke`.
+- [ ] Smoke tests and PHP lint on PHP 8.5; no licensing or update code in the shipped files (`tests/license-guard.php`, docs/FREE-PREMIUM.md); release ZIP reproducible (two builds, same SHA-256) – `smoke`.
 - [ ] Integration suites on MySQL 8.4 and MariaDB 11.4, each with HPOS and legacy order storage, plus parallel checkout – `wordpress-integration`.
 - [ ] Release ZIP installs, activates and updates in place (tables and voucher rows kept) on WordPress 7.1.4 / WooCommerce 11.2.2 – `wordpress-integration`.
 - [ ] Default uninstall keeps plugin data; `vcap_delete_on_uninstall=yes` removes the tables – `wordpress-integration`.
-- [ ] Oldest supported platform (WordPress 6.4, WooCommerce 8.9, PHP 8.1, no Yoast SEO) – `minimum-versions`.
+- [ ] Oldest supported platform (WordPress 6.4, WooCommerce 8.9, PHP 8.5, no Yoast SEO) – `minimum-versions`.
 - [ ] Multisite: network activation, a site added later, per-site uninstall – `multisite`.
 - [ ] Voucher Captain + WP Pass Captain (pinned release v1.4.0, `main` – both must run – and the work branch, which may be skipped with a warning): gift cards in the ticket checkout, ticket voucher exchange, refunds, shared scanner – `pass-captain`.
 - [ ] Updates with data from the last release and from the previous schema to the current ZIP, each with rollback – `upgrade`.

@@ -6,7 +6,7 @@ Abgehakte Punkte sind implementiert und durch die aufgeführten CI-Jobs (`.githu
 
 - Primäre Testbasis: WordPress 7.1.4, WooCommerce 11.2.2, PHP 8.4.27 und MySQL 8.4 LTS.
 - Zusätzliche Datenbankprüfung: MariaDB 11.4 LTS.
-- PHP 8.1 bleibt als deklarierte Mindestversion in der CI.
+- PHP 8.5 ist seit der Entscheidung vom 16.11.2026 die deklarierte Mindestversion (vorher 8.1); MySQL 9.7 / MariaDB 12.3 empfohlen.
 - Yoast SEO 28.8 wird optional auf Konflikte geprüft; es wird keine Plugin-Abhängigkeit.
 
 ## P0 – Finanz- und Zustellkorrektheit

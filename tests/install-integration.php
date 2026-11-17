@@ -356,6 +356,16 @@ vcap_inst_assert( isset( $health['async']['vcap_validity'], $health['async']['vc
 vcap_inst_assert( isset( rest_get_server()->get_routes()['/vcap/v1/site-health/validity'] ), 'the asynchronous checks have their REST route' );
 vcap_inst_assert( isset( $health['async']['vcap_voucher_products'], rest_get_server()->get_routes()['/vcap/v1/site-health/voucher-products'] ) && ! isset( $health['direct']['vcap_voucher_products'] ) && ! empty( $health['async']['vcap_voucher_products']['has_rest'] ), 'A8: the voucher product test (shop problems) runs asynchronously through REST' );
 
+// PHP 8.5 / MySQL 9.7 / MariaDB 12.3 (owner decision 16.11.2026): the connected server's version is read, and an older
+// server than the (filterable) minimum is only a recommendation.
+$inst_db      = new VCAP\Health();
+$inst_db_info = (string) $GLOBALS['wpdb']->db_server_info();
+$inst_db_high = static fn() => array( 'mysql' => '99.0', 'mariadb' => '99.0' );
+add_filter( 'vcap_minimum_db_versions', $inst_db_high );
+$inst_db_old = $inst_db->test_database();
+remove_filter( 'vcap_minimum_db_versions', $inst_db_high );
+vcap_inst_assert( isset( $health['direct']['vcap_database'] ) && null !== VCAP\Health::parse_db_server( $inst_db_info ) && 'recommended' === $inst_db_old['status'] && in_array( $inst_db->test_database()['status'], array( 'good', 'recommended' ), true ), 'Site Health reads the database server version; below the minimum it only recommends an update (never critical)' );
+
 // Free core (docs/FREE-PREMIUM.md): no license page or update handler, every feature on, no "Update URI" header.
 require_once ABSPATH . 'wp-admin/includes/plugin.php';
 $inst_header = get_plugin_data( VCAP_FILE, false, false );
