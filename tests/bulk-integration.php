@@ -35,8 +35,10 @@ wp_set_current_user( $admin_id );
 
 /* ---- 1. Code checks: own indexed tables first, WooCommerce last, batched, misses cached --------------------- */
 
+// MySQL 9 answers EXPLAIN as a tree by default: ask for the table format there (MariaDB has only that one).
+$explain_sql = false !== stripos( (string) $wpdb->db_server_info(), 'mariadb' ) ? 'EXPLAIN' : 'EXPLAIN FORMAT=TRADITIONAL';
 foreach ( array( 'vouchers', 'pool' ) as $key ) {
-	$explain = (array) $wpdb->get_row( "EXPLAIN SELECT code FROM {$tables[ $key ]} WHERE code IN ('B4-A', 'B4-B', 'B4-C')", ARRAY_A ); // phpcs:ignore
+	$explain = (array) $wpdb->get_row( "{$explain_sql} SELECT code FROM {$tables[ $key ]} WHERE code IN ('B4-A', 'B4-B', 'B4-C')", ARRAY_A ); // phpcs:ignore
 	vcap_bulk_assert( 'code' === ( $explain['key'] ?? '' ), "B4: the {$key} lookup by code uses the unique code index (no schema change needed)", $explain );
 }
 
