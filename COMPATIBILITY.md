@@ -8,13 +8,13 @@ The CI integration suite installs WordPress 7.1.4, WooCommerce 11.3.0, Yoast SEO
 
 | | Minimum (plugin header, enforced) | Test baseline |
 |---|---|---|
-| WordPress | 6.4 | 7.1.4 |
-| WooCommerce | 8.9 (first version with the `woocommerce_coupon_get_items_to_apply` filter used by promotions, purchase rules and SKU rules – verified against the 8.8.0–10.0.0 releases; older versions show an admin notice and the plugin stays inactive; gift card and store credit coupons are then refused at checkout, because nothing would deduct their balance) | 11.3.0 |
+| WordPress | 7.0 (owner decision 17.11.2026, the same for all Captain plugins: older WordPress emits core deprecations on PHP 8.5) | 7.1.4 |
+| WooCommerce | 11.2 (owner decision 17.11.2026; 8.9 was the first version with the `woocommerce_coupon_get_items_to_apply` filter used by promotions, purchase rules and SKU rules – verified against the 8.8.0–10.0.0 releases; older versions show an admin notice and the plugin stays inactive; gift card and store credit coupons are then refused at checkout, because nothing would deduct their balance) | 11.3.0 |
 | PHP | 8.5 (owner decision 16.11.2026, the same for all Captain plugins; checked on load) | 8.5 |
 | Database | MySQL 9.7 / MariaDB 12.3 (LTS; an older server is not blocked – Site Health shows a recommendation, filter `vcap_minimum_db_versions`) | MySQL 9.7, MariaDB 12.3 |
 | Yoast SEO | not required | 28.8 (optional, tested alongside) |
 
-The CI job `minimum-versions` installs WordPress 6.4.5 and WooCommerce 8.9.0 on PHP 8.5 **without** Yoast SEO and runs the full integration suite, so the minimums are tested, not assumed. Update both columns with every release.
+The CI job `minimum-versions` installs WordPress 7.0 and WooCommerce 11.2.0 on PHP 8.5 **without** Yoast SEO and runs the full integration suite, so the minimums are tested, not assumed. Update both columns with every release.
 
 ## Multisite
 

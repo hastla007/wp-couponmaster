@@ -4,7 +4,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: Voucher Captain 1.0.0\n"
-"POT-Creation-Date: 2026-11-17 05:53+0000\n"
+"POT-Creation-Date: 2026-11-17 06:10+0000\n"
 "PO-Revision-Date: 2026-11-14 16:00+0000\n"
 "Last-Translator: \n"
 "Language-Team: German\n"
@@ -7919,7 +7919,9 @@ msgstr "Der Datenbankserver wird unterstützt"
 #: src/Health.php:292
 #, php-format
 msgid "Voucher Captain supports MySQL %1$s or newer and MariaDB %2$s or newer."
-msgstr "Voucher Captain unterstützt MySQL %1$s oder neuer und MariaDB %2$s oder neuer."
+msgstr ""
+"Voucher Captain unterstützt MySQL %1$s oder neuer und MariaDB %2$s oder "
+"neuer."
 
 #: src/Health.php:298
 msgid "The database server is older than the supported minimum"
@@ -7932,7 +7934,11 @@ msgid ""
 "Voucher Captain supports MySQL %1$s or newer and MariaDB %2$s or newer; this "
 "site uses %3$s %4$s. The plugin keeps working and nothing is blocked, but "
 "older database servers are no longer tested. Ask your host for an update."
-msgstr "Voucher Captain unterstützt MySQL %1$s oder neuer und MariaDB %2$s oder neuer; diese Website nutzt %3$s %4$s. Das Plugin funktioniert weiter und nichts wird gesperrt, ältere Datenbankserver werden aber nicht mehr getestet. Bitten Sie Ihren Hoster um ein Update."
+msgstr ""
+"Voucher Captain unterstützt MySQL %1$s oder neuer und MariaDB %2$s oder "
+"neuer; diese Website nutzt %3$s %4$s. Das Plugin funktioniert weiter und "
+"nichts wird gesperrt, ältere Datenbankserver werden aber nicht mehr "
+"getestet. Bitten Sie Ihren Hoster um ein Update."
 
 #: src/Health.php:308
 msgid "The PHP extensions for vouchers are available"
@@ -14722,11 +14728,9 @@ msgstr ""
 #: voucher-captain.php:96
 #, php-format
 msgid ""
-"Voucher Captain requires WooCommerce 8.9 or newer (installed: %s). Please "
+"Voucher Captain requires WooCommerce 11.2 or newer (installed: %s). Please "
 "update WooCommerce."
-msgstr ""
-"Voucher Captain benötigt WooCommerce 8.9 oder neuer (installiert: %s). Bitte "
-"aktualisieren Sie WooCommerce."
+msgstr "Voucher Captain benötigt WooCommerce 11.2 oder neuer (installiert: %s). Bitte aktualisieren Sie WooCommerce."
 
 #: voucher-captain.php:96
 msgid ""

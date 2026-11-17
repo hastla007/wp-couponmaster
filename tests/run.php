@@ -2129,8 +2129,9 @@ $db_old    = $db_health->test_database( '5.5.5-10.11.6-MariaDB-0ubuntu0.24.04.1'
 $db_ok     = $db_health->test_database( '12.3.1-MariaDB-ubu2404' );
 $db_mysql  = $db_health->test_database( '8.4.3' );
 check(
-	'PHP 8.5 / MySQL 9.7 / MariaDB 12.3: header and load check ask for PHP 8.5; the database version is read for MySQL and MariaDB (replication prefix skipped) and an older server is only a recommendation, never critical',
+	'PHP 8.5 / WordPress 7.0 / WooCommerce 11.2 / MySQL 9.7 / MariaDB 12.3: header, readme and load checks agree; the database version is read for MySQL and MariaDB (replication prefix skipped) and an older server is only a recommendation, never critical',
 	str_contains( (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' ), ' * Requires PHP:      8.5' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' ), "version_compare( PHP_VERSION, '8.5', '<' )" ) && str_contains( (string) file_get_contents( VCAP_PATH . 'readme.txt' ), "Requires PHP: 8.5\n" )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' ), ' * Requires at least: 7.0' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' ), ' * WC requires at least: ' . VCAP\Plugin::MIN_WC_VERSION ) && '11.2' === VCAP\Plugin::MIN_WC_VERSION && str_contains( (string) file_get_contents( VCAP_PATH . 'readme.txt' ), "Requires at least: 7.0\n" ) && str_contains( (string) file_get_contents( VCAP_PATH . 'readme.txt' ), 'WC requires at least: ' . VCAP\Plugin::MIN_WC_VERSION . "\n" )
 		&& array( 'type' => 'mariadb', 'version' => '10.11.6' ) === VCAP\Health::parse_db_server( '5.5.5-10.11.6-MariaDB-0ubuntu0.24.04.1' ) && array( 'type' => 'mysql', 'version' => '9.7.0' ) === VCAP\Health::parse_db_server( '9.7' ) && null === VCAP\Health::parse_db_server( 'unknown' )
 		&& 'recommended' === $db_old['status'] && str_contains( $db_old['description'], 'MariaDB 10.11.6' ) && 'good' === $db_ok['status'] && 'recommended' === $db_mysql['status'] && 'good' === $db_health->test_database( 'garbage' )['status'],
 	wp_json_encode( array( $db_old['status'], $db_ok['status'], $db_mysql['status'] ) )
