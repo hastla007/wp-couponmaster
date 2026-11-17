@@ -11,6 +11,15 @@ function vcap_acc_assert( bool $condition, string $message ): void {
 	echo "PASS: {$message}\n";
 }
 
+// M12-101: settings and tax rates changed below are restored in finally, also when an assertion fails (the
+// suites share one database; run-integration.sh expects a freshly installed shop).
+require_once __DIR__ . '/state-guard.php';
+$vcap_restore = vcap_test_state_guard( array( 'woocommerce_calc_taxes', 'woocommerce_prices_include_tax', 'vcap_vouchers_buy_vouchers', VCAP\Compat\MultiCurrency::UNKNOWN_OPTION, VCAP\Compat\MultiCurrency::HELD_OPTION, VCAP\PaymentVouchers::OPTION ) );
+try {
+// M12-03: new installations settle multi-purpose vouchers as a payment after tax; this suite checks the coupon
+// mode of existing shops (the payment mode is covered in tax-integration section 8 and tax-accounting).
+update_option( VCAP\PaymentVouchers::OPTION, 'no' );
+
 function vcap_acc_card( float $value ): VCAP\Voucher {
 	$coupon = new WC_Coupon();
 	$coupon->set_code( 'vcap-acc-' . strtolower( wp_generate_password( 10, false, false ) ) );
@@ -81,6 +90,43 @@ vcap_acc_assert( 0.0 === vcap()->vouchers->get( $card->id )->balance && VCAP\Vou
 $next = wc_get_order( $next->get_id() );
 $next->update_status( 'refunded' );
 vcap_acc_assert( 30.0 === vcap()->vouchers->get( $card->id )->balance && VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $card->id )->status, 'a full refund restores the used balance and reactivates the card' );
+// Recalculating an order with a reserved gift card keeps the gift card amount (not the remaining balance 0).
+$recalc_card  = vcap_acc_card( 100 );
+$recalc_order = wc_create_order();
+$recalc_order->add_product( $product, 8 ); // 160
+$recalc_order->set_billing_email( 'acceptance-recalc@example.com' );
+$recalc_order->calculate_totals();
+$recalc_order->apply_coupon( $recalc_card->code );
+$recalc_order = wc_get_order( $recalc_order->get_id() );
+vcap()->coupons->reserve_order( $recalc_order );
+$recalc_order = wc_get_order( $recalc_order->get_id() );
+$recalc_order->recalculate_coupons();
+$recalc_order = wc_get_order( $recalc_order->get_id() );
+vcap_acc_assert( 100.0 === (float) $recalc_order->get_discount_total() && 60.0 === (float) $recalc_order->get_total(), 'recalculating the order keeps the reserved gift card amount' );
+$recalc_order->payment_complete( 'txn-recalc' );
+vcap_acc_assert( 0.0 === vcap()->vouchers->get( $recalc_card->id )->balance, 'payment deducts exactly the reserved 100' );
+
+// Foreign-currency order: the recalculated gift card amount is converted from the base currency (or, without
+// a known rate, the amount the order already granted is kept).
+$fx_card  = vcap_acc_card( 40 );
+$fx_order = wc_create_order();
+$fx_order->set_currency( 'CHF' === get_option( 'woocommerce_currency' ) ? 'EUR' : 'CHF' );
+$fx_order->update_meta_data( '_vcap_redemptions', array( $fx_card->code => 30 ) );
+$fx_order->save();
+$fx_rate = static fn( $amount ) => (float) $amount * 0.5; // 1 order unit = 0.5 base units.
+add_filter( 'vcap_amount_to_base_currency', $fx_rate, 20 );
+$fx_coupon = vcap()->coupons->order_coupon_object( new WC_Coupon( $fx_card->code ), $fx_card->code, null, $fx_order );
+remove_filter( 'vcap_amount_to_base_currency', $fx_rate, 20 );
+vcap_acc_assert( 60.0 === (float) $fx_coupon->get_amount(), 'a foreign-currency order recalculates the gift card in its own currency (30 base = 60)' );
+$fx_item = new WC_Order_Item_Coupon();
+$fx_item->set_code( $fx_card->code );
+$fx_item->set_discount( 25 );
+$no_rate = static fn( $amount ) => $amount;
+add_filter( 'vcap_amount_to_base_currency', $no_rate, 99 );
+$kept = vcap()->coupons->order_coupon_object( new WC_Coupon( $fx_card->code ), $fx_card->code, $fx_item, $fx_order );
+remove_filter( 'vcap_amount_to_base_currency', $no_rate, 99 );
+vcap_acc_assert( 25.0 === (float) $kept->get_amount(), 'without an exchange rate the discount the order already granted is kept' );
+
 // Partial refund of a voucher purchase: the refunded unit voids an unused voucher; refunding value already spent is refused.
 $gc_product = new WC_Product_Simple();
 $gc_product->set_name( 'Gift card 50' );
@@ -111,6 +157,46 @@ vcap_acc_assert( is_wp_error( $too_much ) && str_contains( $too_much->get_error_
 $allowed = wc_create_refund( array( 'order_id' => $purchase->get_id(), 'amount' => 20 ) );
 vcap_acc_assert( ! is_wp_error( $allowed ), 'refunding up to the unused value is possible' );
 
+// Shortfall: the gift card was emptied elsewhere before the late payment arrived. Nothing is fulfilled
+// (no voucher issued) until an administrator accepts the shortfall.
+update_option( 'vcap_vouchers_buy_vouchers', 'yes' ); // Gift cards may pay for gift cards here (default: no).
+$short_card  = vcap_acc_card( 30 );
+$short_order = wc_create_order();
+$short_order->add_product( $gc_product, 1 ); // Buys a 50 gift card.
+$short_order->set_billing_email( 'acceptance-shortfall@example.com' );
+$short_order->calculate_totals();
+$short_applied = $short_order->apply_coupon( $short_card->code );
+vcap_acc_assert( true === $short_applied, 'the gift card is applied to the gift card purchase (setting allows it)' );
+$emptied          = vcap()->vouchers->get( $short_card->id );
+$emptied->balance = 0.0; // Spent in another order meanwhile (no reservation held for this one).
+vcap()->vouchers->update( $emptied );
+wc_get_order( $short_order->get_id() )->payment_complete( 'txn-short' );
+$short_order = wc_get_order( $short_order->get_id() );
+$short_diag = sprintf( ' [status=%s shortfall=%s issued=%d balance=%s redemptions=%s notes=%s]', $short_order->get_status(), $short_order->get_meta( VCAP\CouponManager::SHORTFALL_META ), count( vcap()->vouchers->for_order( $short_order->get_id() ) ), vcap()->vouchers->get( $short_card->id )->balance, wp_json_encode( $short_order->get_meta( '_vcap_redemptions' ) ), wp_json_encode( array_map( static fn( $n ) => $n->content, wc_get_order_notes( array( 'order_id' => $short_order->get_id() ) ) ) ) );
+vcap_acc_assert( 'on-hold' === $short_order->get_status() && VCAP\CouponManager::has_shortfall( $short_order ) && ! vcap()->vouchers->for_order( $short_order->get_id() ), 'a gift card that can no longer be charged holds the order and nothing is issued' . ( 'on-hold' === $short_order->get_status() && VCAP\CouponManager::has_shortfall( $short_order ) && ! vcap()->vouchers->for_order( $short_order->get_id() ) ? '' : $short_diag ) );
+wp_set_current_user( 1 ); // The order action needs a shop manager.
+( new VCAP\Admin\OrderAdmin( vcap()->vouchers, vcap()->issuer ) )->accept_shortfall( $short_order );
+wp_set_current_user( 0 );
+$short_order = wc_get_order( $short_order->get_id() );
+vcap_acc_assert( 'processing' === $short_order->get_status() && ! VCAP\CouponManager::has_shortfall( $short_order ) && 1 === count( vcap()->vouchers->for_order( $short_order->get_id() ) ), 'after the shortfall is accepted the order is fulfilled (voucher issued)' );
+
+// Partial shortfall: only 10 of the 30 can be charged. A second payment confirmation (e.g. a late webhook
+// from on-hold) must not clear the hold by itself.
+$part_card  = vcap_acc_card( 30 );
+$part_order = wc_create_order();
+$part_order->add_product( $gc_product, 1 );
+$part_order->set_billing_email( 'acceptance-partial@example.com' );
+$part_order->calculate_totals();
+$part_order->apply_coupon( $part_card->code );
+$part_left          = vcap()->vouchers->get( $part_card->id );
+$part_left->balance = 10.0;
+vcap()->vouchers->update( $part_left );
+wc_get_order( $part_order->get_id() )->payment_complete( 'txn-part-1' );
+wc_get_order( $part_order->get_id() )->payment_complete( 'txn-part-2' );
+$part_order = wc_get_order( $part_order->get_id() );
+vcap_acc_assert( VCAP\CouponManager::has_shortfall( $part_order ) && 'on-hold' === $part_order->get_status() && ! vcap()->vouchers->for_order( $part_order->get_id() ) && 0.0 === (float) vcap()->vouchers->get( $part_card->id )->balance, 'a partial shortfall stays on hold after a second payment confirmation (nothing issued)' );
+update_option( 'vcap_vouchers_buy_vouchers', 'no' );
+
 // Tax-exclusive shop: a 60 gift card pays 60 of the gross price (not 60 net + 20 % tax) and 60 is deducted.
 update_option( 'woocommerce_calc_taxes', 'yes' );
 update_option( 'woocommerce_prices_include_tax', 'no' );
@@ -135,4 +221,199 @@ vcap_acc_assert( vcap()->vouchers->get( $gross_card->id )->balance < 0.02, 'the 
 WC_Tax::_delete_tax_rate( $rate_id );
 update_option( 'woocommerce_calc_taxes', 'no' );
 
+// A checkout refused after the reservation (e.g. by another plugin) and retried as a new order of the same
+// session gives the first order's reservation back right away.
+wc_load_cart();
+$retry_card  = vcap_acc_card( 25 );
+$first_try   = wc_create_order();
+$first_try->add_product( $product, 1 );
+$first_try->set_billing_email( 'acceptance-retry@example.com' );
+$first_try->calculate_totals();
+$first_try->apply_coupon( $retry_card->code );
+$first_try = wc_get_order( $first_try->get_id() );
+vcap()->coupons->release_previous_checkout_order( $first_try );
+vcap()->coupons->reserve_order( $first_try->get_id(), array(), $first_try );
+$reserved_balance = (float) vcap()->vouchers->get( $retry_card->id )->balance;
+$second_try = wc_create_order();
+$second_try->add_product( $product, 1 );
+$second_try->set_billing_email( 'acceptance-retry@example.com' );
+$second_try->save();
+vcap()->coupons->release_previous_checkout_order( $second_try );
+vcap_acc_assert( 5.0 === $reserved_balance && 25.0 === (float) vcap()->vouchers->get( $retry_card->id )->balance, 'a new checkout order of the session releases the abandoned order\'s reservation (gift card usable again at once)' );
+
+// Guest checkout, then the guest logs in (same session, same billing email) and checks out again as a customer.
+$login_user  = wp_insert_user( array( 'user_login' => 'vcap-acc-' . wp_generate_password( 6, false, false ), 'user_email' => 'acceptance-login-' . wp_generate_password( 6, false, false ) . '@example.com', 'user_pass' => wp_generate_password(), 'role' => 'customer' ) );
+$login_card  = vcap_acc_card( 25 );
+$guest_try   = wc_create_order();
+$guest_try->add_product( $product, 1 );
+$guest_try->set_billing_email( 'acceptance-login@example.com' );
+$guest_try->calculate_totals();
+$guest_try->apply_coupon( $login_card->code );
+$guest_try = wc_get_order( $guest_try->get_id() );
+vcap()->coupons->release_previous_checkout_order( $guest_try );
+vcap()->coupons->reserve_order( $guest_try->get_id(), array(), $guest_try );
+$login_try = wc_create_order( array( 'customer_id' => $login_user ) );
+$login_try->add_product( $product, 1 );
+$login_try->set_billing_email( 'Acceptance-Login@example.com' );
+$login_try->save();
+vcap()->coupons->release_previous_checkout_order( $login_try );
+vcap_acc_assert( 25.0 === (float) vcap()->vouchers->get( $login_card->id )->balance, 'after logging in, the new checkout order releases the guest order\'s reservation of the same session (same billing email)' );
+
+// An unpaid order of the account whose session is gone (placed before logging out) is released when the account
+// checks out again with the same gift card.
+$away_card  = vcap_acc_card( 25 );
+$away_order = wc_create_order( array( 'customer_id' => $login_user ) );
+$away_order->add_product( $product, 1 );
+$away_order->set_billing_email( 'acceptance-login@example.com' );
+$away_order->calculate_totals();
+$away_order->apply_coupon( $away_card->code );
+vcap()->coupons->reserve_order( wc_get_order( $away_order->get_id() ) );
+$away_reserved = (float) vcap()->vouchers->get( $away_card->id )->balance;
+WC()->session->set( VCAP\CouponManager::SESSION_ORDER, 0 );
+$back_order = wc_create_order( array( 'customer_id' => $login_user ) );
+$back_order->add_product( $product, 1 );
+$back_order->set_billing_email( 'acceptance-login@example.com' );
+$back_order->calculate_totals();
+$back_order->apply_coupon( $away_card->code );
+vcap()->coupons->release_previous_checkout_order( wc_get_order( $back_order->get_id() ) );
+vcap_acc_assert( 5.0 === $away_reserved && 25.0 === (float) vcap()->vouchers->get( $away_card->id )->balance, 'a new checkout of the account releases its earlier unpaid order holding the same gift card (session gone after logout)' );
+
+// Deactivation: without Voucher Captain nobody deducts balances, so balance coupons must not work.
+$idle_card = vcap_acc_card( 40 );
+VCAP\Install::suspend_balance_coupons();
+vcap_acc_assert( 0 === wc_get_coupon_id_by_code( $idle_card->code ) && 'draft' === get_post_status( $idle_card->coupon_id ), 'deactivating suspends gift card coupons (WooCommerce no longer finds the code)' );
+VCAP\Install::restore_balance_coupons();
+vcap_acc_assert( $idle_card->coupon_id === wc_get_coupon_id_by_code( $idle_card->code ) && 'publish' === get_post_status( $idle_card->coupon_id ), 'reactivating publishes exactly the suspended coupons again' );
+
+// Top-up of an existing gift card: no new card, the paid value goes onto the card; cancelling takes it back.
+$topup_card    = vcap_acc_card( 20 );
+$topup_product = new WC_Product_Simple();
+$topup_product->set_name( 'Gift card top-up' );
+$topup_product->set_regular_price( '30' );
+$topup_product->set_virtual( true );
+$topup_product->update_meta_data( '_vcap_enabled', 'yes' );
+$topup_product->update_meta_data( '_vcap_type', 'giftcard' );
+$topup_product->update_meta_data( '_vcap_usage', 'balance' );
+$topup_product->update_meta_data( VCAP\TopUp::PRODUCT_META, 'yes' );
+$topup_product->save();
+$topup_order = wc_create_order();
+$topup_line  = $topup_order->get_item( $topup_order->add_product( $topup_product, 1 ) );
+$topup_line->add_meta_data( VCAP\TopUp::ITEM_META, $topup_card->code, true );
+$topup_line->save();
+$topup_order->set_billing_email( 'topup@example.com' );
+$topup_order->calculate_totals();
+$topup_order->set_status( 'processing' );
+$topup_order->save();
+vcap()->issuer->issue_for_order( wc_get_order( $topup_order->get_id() ), true );
+vcap()->issuer->issue_for_order( wc_get_order( $topup_order->get_id() ), true ); // Repeated issuing runs book it once.
+vcap_acc_assert( 50.0 === (float) vcap()->vouchers->get( $topup_card->id )->balance && array() === vcap()->vouchers->for_order( $topup_order->get_id() ), 'a top-up adds the paid 30 to the existing card once and issues no new card' );
+vcap_acc_assert( is_string( ( new VCAP\TopUp( vcap()->vouchers, vcap()->coupons ) )->card( 'no-such-card' ) ), 'unknown codes cannot be topped up' );
+wc_get_order( $topup_order->get_id() )->update_status( 'cancelled' );
+vcap_acc_assert( 20.0 === (float) vcap()->vouchers->get( $topup_card->id )->balance, 'cancelling the top-up order takes the 30 back' );
+
+// Foreign currency without exchange rate: amounts are never taken 1:1 (vouchers and balances are in the base currency).
+$base_currency = (string) get_option( 'woocommerce_currency' );
+$no_rate       = 'CZK' === $base_currency ? 'HUF' : 'CZK';
+$fx_buy        = wc_create_order();
+$fx_buy->add_product( $gc_product, 1 ); // 50 in the order currency.
+$fx_buy->set_currency( $no_rate );
+$fx_buy->set_billing_email( 'acceptance-fx@example.com' );
+$fx_buy->calculate_totals();
+wc_get_order( $fx_buy->get_id() )->payment_complete( 'txn-fx-1' );
+$fx_buy   = wc_get_order( $fx_buy->get_id() );
+$fx_notes = implode( ' | ', array_map( static fn( $n ) => $n->content, wc_get_order_notes( array( 'order_id' => $fx_buy->get_id() ) ) ) );
+vcap_acc_assert( ! vcap()->vouchers->for_order( $fx_buy->get_id() ) && 'on-hold' === $fx_buy->get_status() && 'yes' === $fx_buy->get_meta( VCAP\Issuer::FX_HOLD_META ) && str_contains( $fx_notes, 'no exchange rate' ), 'a gift card paid in a currency without exchange rate is not issued (no 1:1) and the order is held with a note' );
+vcap_acc_assert( 'critical' === ( new VCAP\Health() )->test_currency()['status'], 'Site Health reports the foreign currency without converter' );
+$fx_buy->update_meta_data( VCAP\Compat\MultiCurrency::RATE_META, '25' ); // 25 order-currency units per base unit.
+$fx_buy->save();
+$fx_issued = vcap()->issuer->issue_for_order( wc_get_order( $fx_buy->get_id() ), true );
+vcap_acc_assert( 1 === count( $fx_issued ) && abs( 2.0 - (float) $fx_issued[0]->initial_amount ) < 0.001, 'with the exchange rate stored on the order the gift card is issued at its base value (50 / 25 = 2)' );
+$fx_spend = wc_create_order();
+$fx_spend->add_product( $product, 1 );
+$fx_spend->set_currency( $no_rate );
+$fx_spend->set_billing_email( 'acceptance-fx@example.com' );
+$fx_spend->calculate_totals();
+$fx_card    = vcap_acc_card( 40 );
+$fx_applied = $fx_spend->apply_coupon( $fx_card->code );
+vcap_acc_assert( is_wp_error( $fx_applied ) && str_contains( $fx_applied->get_error_message(), $no_rate ) && 40.0 === (float) vcap()->vouchers->get( $fx_card->id )->balance, 'a base-currency gift card is not valid in an order in a currency without exchange rate' );
+$fx_checkout = wc_create_order();
+$fx_checkout->set_currency( $no_rate );
+$fx_to_base  = static fn( $amount, $currency ) => $currency === $no_rate ? $amount / 20 : $amount;
+add_filter( 'vcap_amount_to_base_currency', $fx_to_base, 20, 2 );
+( new VCAP\Compat\MultiCurrency() )->store_rate( $fx_checkout );
+remove_filter( 'vcap_amount_to_base_currency', $fx_to_base, 20 );
+vcap_acc_assert( abs( 20.0 - (float) $fx_checkout->get_meta( VCAP\Compat\MultiCurrency::RATE_META ) ) < 0.0001, 'checkout stores the exchange rate a converter offers on the order' );
+delete_option( VCAP\Compat\MultiCurrency::UNKNOWN_OPTION );
+delete_option( VCAP\Compat\MultiCurrency::HELD_OPTION );
+
+// A single-use voucher in an unpaid (failed) order counts as used for the refund guard of its purchase. Paid after
+// its purchase was refunded anyway (voucher voided), the order is held with a shortfall instead of being fulfilled.
+$single_product = new WC_Product_Simple();
+$single_product->set_name( 'Voucher 30' );
+$single_product->set_regular_price( '30' );
+$single_product->set_virtual( true );
+$single_product->update_meta_data( '_vcap_enabled', 'yes' );
+$single_product->update_meta_data( '_vcap_type', 'voucher' );
+$single_product->update_meta_data( '_vcap_usage', 'single' );
+$single_product->save();
+$single_buy = wc_create_order();
+$single_buy->add_product( $single_product, 1 );
+$single_buy->set_billing_email( 'acceptance-single@example.com' );
+$single_buy->calculate_totals();
+wc_get_order( $single_buy->get_id() )->payment_complete( 'txn-single-buy' );
+$single = vcap()->vouchers->for_order( $single_buy->get_id() )[0] ?? null;
+vcap_acc_assert( $single instanceof VCAP\Voucher && VCAP\Voucher::STATUS_ACTIVE === $single->status, 'a single-use voucher of 30 is issued' );
+$single_use = wc_create_order();
+$single_use->add_product( $product, 2 );
+$single_use->set_billing_email( 'acceptance-single@example.com' );
+$single_use->calculate_totals();
+vcap_acc_assert( true === $single_use->apply_coupon( $single->code ), 'the voucher is applied to a second order' );
+wc_get_order( $single_use->get_id() )->update_status( 'failed', 'Card declined.' );
+$single_guard = wc_create_refund( array( 'order_id' => $single_buy->get_id(), 'amount' => 30 ) );
+vcap_acc_assert( is_wp_error( $single_guard ) && str_contains( $single_guard->get_error_message(), $single->code ), 'the purchase of a single-use voucher sitting in an unpaid order cannot be refunded' );
+add_filter( 'vcap_allow_refund_of_spent_vouchers', '__return_true' );
+$single_forced = wc_create_refund( array( 'order_id' => $single_buy->get_id(), 'amount' => 30 ) );
+remove_filter( 'vcap_allow_refund_of_spent_vouchers', '__return_true' );
+vcap_acc_assert( ! is_wp_error( $single_forced ) && VCAP\Voucher::STATUS_VOID === vcap()->vouchers->get( $single->id )->status, 'refunded knowingly anyway, the voucher is voided' );
+// "Pay for order" refuses the voided voucher: the classic pay form with an error notice (no payment is taken while
+// one is shown), the Store API (checkout/{order id}) with a client error.
+wc_clear_notices();
+vcap()->coupons->reserve_retry_order( wc_get_order( $single_use->get_id() ) );
+$single_notices = wc_get_notices( 'error' );
+wc_clear_notices();
+vcap_acc_assert( (bool) array_filter( $single_notices, static fn( $n ) => str_contains( wp_strip_all_tags( is_array( $n ) ? (string) $n['notice'] : (string) $n ), $single->code ) ), 'the classic pay form refuses an order whose single-use voucher was voided' );
+$single_store_api = '';
+try {
+	vcap()->coupons->reserve_store_api_order( wc_get_order( $single_use->get_id() ) );
+} catch ( \Throwable $e ) {
+	$single_store_api = $e->getMessage();
+}
+vcap_acc_assert( str_contains( $single_store_api, $single->code ), 'paying the order through the Store API is refused while its single-use voucher is voided (' . $single_store_api . ')' );
+wc_get_order( $single_use->get_id() )->payment_complete( 'txn-single-late' );
+$single_use = wc_get_order( $single_use->get_id() );
+$single_map = VCAP\CouponManager::order_map( $single_use, VCAP\CouponManager::SHORTFALL_AMOUNTS_META );
+$single_why = 'status ' . $single_use->get_status() . ', shortfall ' . ( VCAP\CouponManager::has_shortfall( $single_use ) ? 'yes' : 'no' ) . ', map ' . wp_json_encode( $single_map ) . ', voucher ' . vcap()->vouchers->get( $single->id )->status . ', coupons ' . wp_json_encode( $single_use->get_coupon_codes() ) . ', WC ' . WC_VERSION . ', notes: ' . implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $single_use->get_id() ) ), 'content' ) );
+vcap_acc_assert( 'on-hold' === $single_use->get_status() && VCAP\CouponManager::has_shortfall( $single_use ) && isset( $single_map[ wc_format_coupon_code( $single->code ) ] ), 'paying the order after the voucher was voided holds it with a shortfall instead of fulfilling the discount (' . $single_why . ')' );
+vcap_acc_assert( in_array( 'double_use', array_column( vcap()->vouchers->events( $single->id ), 'event' ), true ), 'the double use is in the voucher history' );
+
+// Pay page of a failed order whose gift card balance was used elsewhere meanwhile: no "refresh the cart" (there is
+// no cart there), a message that says what happened, and an order note for the shop.
+$gone_card  = vcap_acc_card( 30 );
+$gone_order = wc_create_order();
+$gone_order->add_product( $product, 1 );
+$gone_order->set_billing_email( 'acceptance-gone@example.com' );
+$gone_order->calculate_totals();
+$gone_order->apply_coupon( $gone_card->code );
+wc_get_order( $gone_order->get_id() )->update_status( 'failed', 'Card declined.' );
+vcap()->coupons->adjust_balance( vcap()->vouchers->get( $gone_card->id ), -30, 'redeem', 'Spent in the shop' );
+wc_clear_notices();
+vcap()->coupons->reserve_retry_order( wc_get_order( $gone_order->get_id() ) );
+$gone_notices = implode( ' ', array_map( static fn( $n ) => wp_strip_all_tags( is_array( $n ) ? (string) $n['notice'] : (string) $n ), wc_get_notices( 'error' ) ) );
+wc_clear_notices();
+$gone_notes = implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $gone_order->get_id() ) ), 'content' ) );
+vcap_acc_assert( str_contains( $gone_notices, $gone_card->code ) && ! str_contains( $gone_notices, 'Refresh the cart' ) && str_contains( $gone_notes, VCAP\Mask::code( $gone_card->code ) ) && ! str_contains( strtoupper( $gone_notes ), strtoupper( $gone_card->code ) ), 'the pay page refuses an order whose gift card balance was used elsewhere with its own message (no "refresh the cart") and an order note with the code masked (AP-S3-3) (' . $gone_notices . ')' );
+
 echo "Voucher Captain acceptance checks passed.\n";
+} finally {
+	$vcap_restore();
+}

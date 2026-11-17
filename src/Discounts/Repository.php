@@ -56,8 +56,11 @@ final class Repository {
 		return $post && self::POST_TYPE === $post->post_type && 'trash' !== $post->post_status ? self::build( $post ) : null;
 	}
 
-	public static function build( \WP_Post $post ): array {
-		$raw = json_decode( (string) get_post_meta( $post->ID, self::META, true ), true );
+	/**
+	 * @param string|null $rules Stored rules JSON when already loaded (null: read from post meta).
+	 */
+	public static function build( \WP_Post $post, ?string $rules = null ): array {
+		$raw = json_decode( null === $rules ? (string) get_post_meta( $post->ID, self::META, true ) : $rules, true );
 		return array(
 			'id'       => (int) $post->ID,
 			'title'    => '' !== $post->post_title ? $post->post_title : __( 'Promotion', 'voucher-captain' ),
@@ -74,13 +77,38 @@ final class Repository {
 				'post_status' => 'publish',
 				'numberposts' => 100,
 				'orderby'     => array( 'menu_order' => 'ASC', 'ID' => 'ASC' ),
+				// Only the rules are needed: no meta or term cache priming for every promotion on every cart.
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
 			)
 		);
-		$out = array();
+		$rules = self::rules_of( wp_list_pluck( $posts, 'ID' ) );
+		$out   = array();
 		foreach ( $posts as $post ) {
-			$campaign                   = self::build( $post );
+			$campaign                   = self::build( $post, $rules[ $post->ID ] ?? '' );
 			$this->cache[ $post->ID ] = $campaign;
 			$out[]                      = $campaign;
+		}
+		return $out;
+	}
+
+	/**
+	 * Stored rules of several promotions in one query.
+	 *
+	 * @param int[] $ids Post ids.
+	 * @return array<int, string> id => rules JSON
+	 */
+	private static function rules_of( array $ids ): array {
+		global $wpdb;
+		$ids = array_values( array_filter( array_map( 'intval', $ids ) ) );
+		if ( ! $ids ) {
+			return array();
+		}
+		$in   = implode( ',', $ids );
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s AND post_id IN ({$in}) ORDER BY meta_id", self::META ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+		$out  = array();
+		foreach ( $rows ? $rows : array() as $row ) {
+			$out[ (int) $row['post_id'] ] ??= (string) $row['meta_value'];
 		}
 		return $out;
 	}

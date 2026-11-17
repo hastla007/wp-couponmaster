@@ -1,0 +1,33 @@
+# Wide static analysis of the whole plugin (CI job quality-wide, report-only). The strict configuration for the public
+# API and contracts is phpstan.neon.dist (job quality, blocking).
+#
+# Existing findings belong in phpstan-baseline.neon: the job uploads a freshly generated baseline as the artifact
+# "phpstan-baseline"; commit it once reviewed (RELEASE.md → Static analysis). New code must not add findings.
+includes:
+  - phpstan-baseline.neon
+
+parameters:
+  # Level 3 on purpose (checked 16.11.2026): level 4/5 reported 201/246 findings, with treatPhpDocTypesAsCertain off
+  # still 43/84 – all "always true/false" checks on values that WordPress filters, other plugins or wc_get_order()
+  # (refunds) can deliver with another type, and WooCommerce stubs stricter than WooCommerce itself
+  # (update_meta_data() with int, set_taxes( false )). No real defect among them; the defensive checks stay.
+  level: 3
+  paths:
+    - voucher-captain.php
+    - uninstall.php
+    - config
+    - src
+    - templates
+  bootstrapFiles:
+    - tests/phpstan-bootstrap.php
+  scanFiles:
+    - vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
+    - vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
+  reportUnmatchedIgnoredErrors: false
+  ignoreErrors:
+    # WordPress core files that only exist in a real installation (ABSPATH points into tests/ for the analysis).
+    -
+      identifier: requireOnce.fileNotFound
+      paths:
+        - src/Admin/VouchersListTable.php
+        - src/Install.php

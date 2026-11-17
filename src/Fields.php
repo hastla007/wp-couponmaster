@@ -34,8 +34,15 @@ final class Fields {
 		add_filter( 'woocommerce_add_cart_item_data', array( $this, 'cart_item_data' ), 10, 3 );
 		add_filter( 'woocommerce_get_item_data', array( $this, 'display_item_data' ), 10, 2 );
 		add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'save_order_item' ), 10, 4 );
+		add_filter( 'woocommerce_order_item_display_meta_key', array( $this, 'display_meta_key' ), 10, 3 );
+		add_filter( 'woocommerce_order_item_display_meta_value', array( $this, 'display_meta_value' ), 10, 3 );
+		add_action( 'woocommerce_before_order_item_object_save', array( $this, 'sync_visible_meta' ), 10, 1 );
 		add_filter( 'woocommerce_order_again_cart_item_data', array( $this, 'order_again' ), 10, 3 );
+		add_action( 'woocommerce_check_cart_items', array( $this, 'check_cart_items' ) );
+		add_action( 'woocommerce_privacy_remove_order_personal_data', array( self::class, 'anonymise_order' ), 10, 1 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'assets' ) );
+		add_action( 'woocommerce_after_shop_loop_item', array( $this, 'loop_assets' ) );
+		add_filter( 'woocommerce_blocks_product_grid_item_html', array( $this, 'grid_assets' ), 10, 3 );
 		add_filter( 'woocommerce_product_add_to_cart_url', array( $this, 'loop_add_to_cart_url' ), 10, 2 );
 		add_filter( 'woocommerce_product_supports', array( $this, 'loop_ajax_support' ), 10, 3 );
 		add_filter( 'woocommerce_product_add_to_cart_text', array( $this, 'loop_add_to_cart_text' ), 10, 2 );
@@ -63,7 +70,9 @@ final class Fields {
 				'show_ui'         => true,
 				'show_in_menu'    => 'vcap-vouchers',
 				'supports'        => array( 'title', 'page-attributes' ),
-				'capability_type' => 'product',
+				// S17: voucher managers only, not every role that may edit products.
+				'capability_type' => array( 'vcap_field_group', 'vcap_field_groups' ),
+				'capabilities'    => ProductSettings::manager_post_caps(),
 				'map_meta_cap'    => true,
 				'rewrite'         => false,
 			)
@@ -71,6 +80,36 @@ final class Fields {
 	}
 
 	// ----------------------------------------------------------------- Definitions.
+
+	/** M12-47: built-in field that repeats the recipient email (checked, never stored with the order). */
+	public const CONFIRM_KEY = 'recipient_email_confirm';
+	/** M12-84: built-in field with the language of the recipient's email (a locale such as "de_DE"). */
+	public const LOCALE_KEY = 'recipient_locale';
+
+	/**
+	 * M12-84: languages a recipient email can be sent in – the site language and the installed translations
+	 * (filter "vcap_recipient_locales"), locale => name.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function recipient_locales(): array {
+		$codes = array_unique( array_merge( array( (string) get_locale() ), function_exists( 'get_available_languages' ) ? get_available_languages() : array() ) );
+		$out   = array();
+		foreach ( $codes as $code ) {
+			$code = (string) $code;
+			if ( '' === $code ) {
+				continue;
+			}
+			$name         = class_exists( '\Locale' ) ? (string) \Locale::getDisplayName( $code, $code ) : '';
+			$out[ $code ] = '' !== $name ? $name : $code;
+		}
+		if ( ! isset( $out['en_US'] ) && count( $out ) > 0 ) {
+			$out['en_US'] = class_exists( '\Locale' ) ? (string) \Locale::getDisplayName( 'en_US', 'en_US' ) : 'English (United States)';
+		}
+		/** Languages offered in the "Language of the recipient email" field (locale => name). */
+		$out = (array) apply_filters( 'vcap_recipient_locales', $out );
+		return array_map( 'strval', $out );
+	}
 
 	public static function builtin_definitions( array $config ): array {
 		$defs = array(
@@ -98,6 +137,7 @@ final class Fields {
 				'type'        => 'textarea',
 				'required'    => false,
 				'maxlength'   => max( 10, (int) ( $config['message_maxlength'] ?: 300 ) ),
+				'maxlines'    => max( 0, (int) ( $config['message_maxlines'] ?? 0 ) ), // M12-39: 0 = no limit.
 				'placeholder' => '',
 				'tooltip'     => '',
 			),
@@ -108,18 +148,73 @@ final class Fields {
 				'required'    => false,
 				'maxlength'   => 10,
 				'placeholder' => '',
-				'tooltip'     => __( 'The voucher is emailed on this day. Leave empty to send it right away.', 'voucher-captain' ),
+				/* translators: %s: time of day (e.g. 8:00 am) */
+				'tooltip'     => sprintf( __( 'The voucher is emailed on this day at about %s (shop time). Leave empty to send it right away.', 'voucher-captain' ), self::delivery_time_text() ),
+			),
+			// M12-55: the giver's name as the recipient sees it ({sender_name}; empty = the billing name).
+			'sender_name'     => array(
+				'key'         => 'sender_name',
+				'label'       => __( 'From (your name)', 'voucher-captain' ),
+				'type'        => 'text',
+				'required'    => false,
+				'maxlength'   => 100,
+				'placeholder' => '',
+				'tooltip'     => __( 'Shown to the recipient as the sender. Leave empty to use your billing name.', 'voucher-captain' ),
+			),
+			// M12-47: typed twice, a mistyped recipient address is noticed before the order.
+			self::CONFIRM_KEY => array(
+				'key'         => self::CONFIRM_KEY,
+				'label'       => __( 'Confirm recipient email', 'voucher-captain' ),
+				'type'        => 'email',
+				'required'    => false,
+				'maxlength'   => 200,
+				'placeholder' => '',
+				'tooltip'     => '',
+				'confirms'    => 'recipient_email',
+			),
+			// M12-84: the language of the recipient's email and PDF.
+			self::LOCALE_KEY  => array(
+				'key'           => self::LOCALE_KEY,
+				'label'         => __( 'Language of the recipient email', 'voucher-captain' ),
+				'type'          => 'select',
+				'required'      => false,
+				'maxlength'     => 20,
+				'placeholder'   => '',
+				'tooltip'       => '',
+				'options'       => array_keys( self::recipient_locales() ),
+				'option_labels' => self::recipient_locales(),
 			),
 		);
 		$enabled = (array) $config['builtin_fields'];
 		if ( 'customer' === $config['delivery'] && ! in_array( 'delivery_date', $enabled, true ) ) {
 			$enabled[] = 'delivery_date';
 		}
+		if ( 'buyer' === ( $config['send_to'] ?? '' ) ) {
+			// "Buyer only": nothing is ever sent to a recipient address. Ask for it only when it decides who may
+			// redeem the voucher, and say so.
+			$restrict = (string) ( $config['email_restrict'] ?? 'none' );
+			if ( 'recipient' === $restrict ) {
+				$defs['recipient_email']['tooltip'] = __( 'The voucher is sent to you, not to this address. Only this address can redeem it (yours, if you leave it empty).', 'voucher-captain' );
+			} elseif ( 'both' === $restrict ) {
+				$defs['recipient_email']['tooltip'] = __( 'The voucher is sent to you, not to this address. Only this address or yours can redeem it.', 'voucher-captain' );
+			} else {
+				$enabled = array_diff( $enabled, array( 'recipient_email', 'recipient_email_required' ) );
+			}
+		}
 		$out = array();
 		foreach ( $enabled as $key ) {
 			$base = preg_replace( '/_required$/', '', (string) $key );
+			if ( self::CONFIRM_KEY === $base ) {
+				continue; // Placed right after the recipient email below.
+			}
+			if ( self::LOCALE_KEY === $base && count( self::recipient_locales() ) < 2 ) {
+				continue; // One language only: nothing to choose.
+			}
 			if ( isset( $defs[ $base ] ) ) {
 				$out[ $base ] = $defs[ $base ];
+			}
+			if ( 'recipient_email' === $base && isset( $out['recipient_email'] ) && in_array( self::CONFIRM_KEY, $enabled, true ) ) {
+				$out[ self::CONFIRM_KEY ] = $defs[ self::CONFIRM_KEY ];
 			}
 		}
 		foreach ( $enabled as $key ) {
@@ -127,17 +222,54 @@ final class Fields {
 				$base = substr( (string) $key, 0, -9 );
 				if ( isset( $out[ $base ] ) ) {
 					$out[ $base ]['required'] = true;
+					$out[ $base ]['tooltip']  = self::required_tooltip( $base, $out[ $base ]['tooltip'], $config );
 				}
 			}
 		}
 		return apply_filters( 'vcap_builtin_fields', $out, $config );
 	}
 
+	/** Help text of a required built-in field: no "leave empty to …", which a required field does not allow. */
+	private static function required_tooltip( string $key, string $tooltip, array $config ): string {
+		if ( 'delivery_date' === $key ) {
+			/* translators: %s: time of day (e.g. 8:00 am) */
+			return sprintf( __( 'The voucher is emailed on this day at about %s (shop time).', 'voucher-captain' ), self::delivery_time_text() );
+		}
+		if ( 'recipient_email' === $key ) {
+			if ( 'buyer' !== ( $config['send_to'] ?? '' ) ) {
+				return '';
+			}
+			if ( 'recipient' === (string) ( $config['email_restrict'] ?? 'none' ) ) {
+				return __( 'The voucher is sent to you, not to this address. Only this address can redeem it.', 'voucher-captain' );
+			}
+		}
+		return $tooltip;
+	}
+
+	/**
+	 * Value of a "number" field, read strictly like amounts ("2,50" and "2.50" are 2.5; "1e3", "1.500" and
+	 * "12,50; 25" are refused instead of guessed). Null when it is empty or not one unambiguous number.
+	 */
+	public static function parse_number( string $raw ): ?string {
+		$parsed = Amount::parse(
+			$raw,
+			array(
+				'decimals'       => 4,
+				'decimal_sep'    => function_exists( 'wc_get_price_decimal_separator' ) ? wc_get_price_decimal_separator() : '.',
+				'strip'          => array(),
+				'allow_negative' => true,
+				'allow_zero'     => true,
+			)
+		);
+		return $parsed['ok'] ? (string) $parsed['value'] : null;
+	}
+
 	/** @return array<int, array{id:int,title:string,position:string,fields:array,assign:array}> */
 	public static function groups(): array {
-		static $cache = null;
-		if ( null !== $cache ) {
-			return $cache;
+		static $by_site = array(); // Per site: switch_to_blog() must not return another site's groups.
+		$site = get_current_blog_id();
+		if ( isset( $by_site[ $site ] ) ) {
+			return $by_site[ $site ];
 		}
 		$cache = array();
 		foreach ( get_posts( array( 'post_type' => self::POST_TYPE, 'post_status' => 'publish', 'numberposts' => 100, 'orderby' => 'menu_order', 'order' => 'ASC' ) ) as $post ) {
@@ -151,7 +283,7 @@ final class Fields {
 				'assign'   => is_array( $assign ) ? $assign : array( 'mode' => 'all' ),
 			);
 		}
-		return $cache;
+		return $by_site[ $site ] = $cache;
 	}
 
 	public static function group_applies( array $group, \WC_Product $product ): bool {
@@ -235,14 +367,50 @@ final class Fields {
 		if ( ! $product || ! ProductConfig::is_voucher( $product ) ) {
 			return;
 		}
-		wp_enqueue_style( 'vcap-frontend', VCAP_URL . 'assets/css/frontend.css', array(), VCAP_VERSION );
-		wp_enqueue_script( 'vcap-frontend', VCAP_URL . 'assets/js/frontend.js', array( 'jquery' ), VCAP_VERSION, true );
+		self::enqueue_assets();
+	}
+
+	/**
+	 * Shop pages, categories and product shortcodes: quick views (Astra, Flatsome, YITH, Woodmart …) load the
+	 * product form by AJAX, without the scripts of a product page. With a voucher product in the loop, the script
+	 * is printed in the footer, so suggested amounts, character counters and the preview work in the quick view.
+	 */
+	public function loop_assets(): void {
+		global $product;
+		if ( $product instanceof \WC_Product && ProductConfig::is_voucher( $product ) ) {
+			self::enqueue_assets();
+		}
+	}
+
+	/** Same for the product grid blocks (WooCommerce "All products", "Products by category" …). */
+	public function grid_assets( $html, $data = null, $product = null ) {
+		if ( $product instanceof \WC_Product && ProductConfig::is_voucher( $product ) ) {
+			self::enqueue_assets();
+		}
+		return $html;
+	}
+
+	/**
+	 * Style and script of the voucher fields. Enqueued on voucher product pages, on shop pages with voucher
+	 * products (quick views) and whenever the fields render, so [product_page] and page builder add-to-cart
+	 * widgets get them as well (printed in the footer).
+	 */
+	public static function enqueue_assets(): void {
+		Downloads::enqueue_style();
+		if ( wp_script_is( 'vcap-frontend', 'enqueued' ) ) {
+			return;
+		}
+		Downloads::register_assets();
+		wp_enqueue_script( 'vcap-frontend' );
 		wp_localize_script(
 			'vcap-frontend',
 			'vcapFront',
 			array(
-				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
-				'nonce'   => wp_create_nonce( 'vcap_preview' ),
+				'ajaxUrl'    => admin_url( 'admin-ajax.php' ),
+				// The preview goes through WooCommerce's front-end AJAX endpoint (also with a protected /wp-admin).
+				'previewUrl' => class_exists( '\\WC_AJAX' ) ? \WC_AJAX::get_endpoint( 'vcap_product_preview' ) : admin_url( 'admin-ajax.php' ),
+				// Only for logged-in customers (product pages of guests stay cacheable, see Preview::product_preview()).
+				'nonce'   => is_user_logged_in() ? wp_create_nonce( 'vcap_preview' ) : '',
 				'i18n'    => array(
 					/* translators: %d: characters left */
 					'charsLeft' => __( '%d characters left', 'voucher-captain' ),
@@ -266,46 +434,119 @@ final class Fields {
 		if ( ! $defs && '' === $amount_html ) {
 			return;
 		}
+		self::enqueue_assets();
 		$config = ProductConfig::get( $product );
 		echo '<div class="vcap-fields vcap-fields--' . esc_attr( $position ) . '">';
 		echo $amount_html; // phpcs:ignore WordPress.Security.EscapeOutput -- built by CustomAmount with escaping.
+		if ( self::gift_toggle_enabled() && array_intersect_key( $defs, array_flip( self::GIFT_KEYS ) ) ) {
+			$this->render_gift_toggle();
+		}
 		foreach ( $defs as $key => $field ) {
-			$this->render_field( $key, $field );
+			$this->render_field( $key, $field, $config );
 		}
 		if ( 'before_button' === $position ) {
-			$terms = ProductConfig::terms( $config, ProductConfig::country_of( WC()->customer ) );
-			if ( '' !== $terms || 'no' === $config['transferable'] ) {
+			// The same HTML for every visitor (product pages are cached): conditions per country are all shown,
+			// each under its country, instead of the variant of the visitor's (geolocated) country.
+			$variants = ProductConfig::terms_variants( $config );
+			if ( $variants || 'no' === $config['transferable'] ) {
 				echo '<details class="vcap-terms"><summary>' . esc_html__( 'Redemption conditions', 'voucher-captain' ) . '</summary>';
 				if ( 'no' === $config['transferable'] ) {
-					echo '<p>' . esc_html__( 'Personal – only the buyer or the named recipient can redeem it.', 'voucher-captain' ) . '</p>';
+					echo '<p>' . esc_html( ProductConfig::restriction_label( (string) $config['email_restrict'] ) ) . '</p>';
 				}
-				if ( '' !== $terms ) {
-					echo wp_kses_post( wpautop( esc_html( $terms ) ) );
+				foreach ( $variants as $country => $text ) {
+					$country  = (string) $country;
+					$labelled = '' !== $country || count( $variants ) > 1;
+					if ( $labelled ) {
+						$name  = WC()->countries ? ( WC()->countries->get_countries()[ $country ] ?? $country ) : $country;
+						$title = '' === $country
+							? __( 'Billing address in another country:', 'voucher-captain' )
+							/* translators: %s: country name */
+							: sprintf( __( 'Billing address in %s:', 'voucher-captain' ), $name );
+						echo '<div class="vcap-terms-country" data-country="' . esc_attr( $country ) . '"><p><strong>' . esc_html( $title ) . '</strong></p>';
+					}
+					echo wp_kses_post( wpautop( esc_html( $text ) ) );
+					if ( $labelled ) {
+						echo '</div>';
+					}
 				}
 				echo '</details>';
 			}
 		}
+		if ( 'before_button' === $position ) {
+			$hint = NextSteps::product_hint( $config );
+			if ( '' !== $hint ) {
+				echo '<p class="vcap-delivery-hint">' . esc_html( $hint ) . '</p>';
+			}
+			// M12-52: the security hold of new customers' larger orders, before the purchase.
+			$hold = NextSteps::hold_hint( $config, (float) $product->get_price() );
+			if ( '' !== $hold ) {
+				echo '<p class="vcap-hold-hint">' . esc_html( $hold ) . '</p>';
+			}
+		}
 		if ( 'before_button' === $position && 'yes' === $config['preview'] ) {
-			echo '<p class="vcap-preview-row"><button type="button" class="button vcap-preview-button" data-product="' . esc_attr( (string) $product->get_id() ) . '">' . esc_html__( 'Preview voucher', 'voucher-captain' ) . '</button></p>';
+			// M12-53: the live preview is drawn above; the PDF is the print preview and opens in a new window.
+			$hint_id = 'vcap-preview-hint-' . $product->get_id();
+			echo '<p class="vcap-preview-row"><button type="button" class="button vcap-preview-button" data-product="' . esc_attr( (string) $product->get_id() ) . '" aria-describedby="' . esc_attr( $hint_id ) . '">' . esc_html__( 'Print preview (PDF)', 'voucher-captain' ) . '</button> <span class="vcap-preview-hint screen-reader-text" id="' . esc_attr( $hint_id ) . '">' . esc_html__( 'opens in a new window', 'voucher-captain' ) . '</span></p>';
 		}
 		echo '</div>';
+	}
+
+	/** M12-95: fields that only matter for a gift (hidden and ignored when the customer buys "for me"). */
+	public const GIFT_KEYS = array( 'recipient_name', 'recipient_email', 'message' );
+
+	/** M12-95: setting "Gift / for me" choice. */
+	public static function gift_toggle_enabled(): bool {
+		return 'yes' === Settings::value( 'vcap_gift_toggle' );
+	}
+
+	/** Whether the customer chose "For me" (field "gift_mode" = "self", only with the setting on). */
+	private function for_self(): bool {
+		return self::gift_toggle_enabled() && 'self' === $this->posted_value( 'gift_mode' );
+	}
+
+	/** "As a gift" / "For me" (frontend.js hides the gift fields for "For me"; the server ignores them then). */
+	private function render_gift_toggle(): void {
+		$self = 'self' === $this->posted_value( 'gift_mode' );
+		$id   = Shortcodes::unique_id( 'vcap-gift-mode' );
+		echo '<fieldset class="vcap-gift-mode"><legend>' . esc_html__( 'Who is the voucher for?', 'voucher-captain' ) . '</legend>';
+		foreach ( array(
+			'gift' => __( 'As a gift', 'voucher-captain' ),
+			'self' => __( 'For me', 'voucher-captain' ),
+		) as $value => $label ) {
+			echo '<label for="' . esc_attr( $id . '-' . $value ) . '"><input type="radio" id="' . esc_attr( $id . '-' . $value ) . '" name="vcap_fields[gift_mode]" value="' . esc_attr( $value ) . '"' . checked( ( 'self' === $value ) === $self, true, false ) . ' /> ' . esc_html( $label ) . '</label> ';
+		}
+		echo '</fieldset>';
 	}
 
 	/** @var array<string, mixed>|null field values of a Store API request (blocks), used instead of $_POST */
 	private ?array $override = null;
 
+	/** @var array<string, string> first error per field of the last errors() call (marked when the form shows again) */
+	private array $invalid = array();
+
 	private function posted_value( string $key ): string {
 		if ( null !== $this->override ) {
 			$raw = $this->override[ $key ] ?? null;
-			return is_scalar( $raw ) ? (string) $raw : '';
+			return is_scalar( $raw ) ? self::normalize_newlines( (string) $raw ) : '';
 		}
-		// phpcs:ignore WordPress.Security.NonceVerification -- Add-to-cart form; WooCommerce handles the request.
-		$raw = isset( $_POST['vcap_fields'][ $key ] ) ? wp_unslash( $_POST['vcap_fields'][ $key ] ) : ( isset( $_REQUEST['vcap_fields'][ $key ] ) ? wp_unslash( $_REQUEST['vcap_fields'][ $key ] ) : null ); // phpcs:ignore
-		return is_scalar( $raw ) ? (string) $raw : '';
+		// Only the posted add-to-cart form (AP-F1-1): a link with ?vcap_fields[...] must not prefill a field (e.g. the
+		// recipient email of a gift) or carry text into the page. GET prefill is no documented feature.
+		// Add-to-cart form, WooCommerce handles the request; validated in errors(), sanitised with the cart item data.
+		$raw = isset( $_POST['vcap_fields'][ $key ] ) ? wp_unslash( $_POST['vcap_fields'][ $key ] ) : null; // phpcs:ignore WordPress.Security.NonceVerification, WordPress.Security.ValidatedSanitizedInput
+		return is_scalar( $raw ) ? self::normalize_newlines( (string) $raw ) : '';
 	}
 
-	private function render_field( string $key, array $field ): void {
-		$id       = 'vcap-field-' . sanitize_html_class( $key );
+	/**
+	 * Line breaks as "\n": browsers submit a textarea's breaks as "\r\n" but count them as one character (counter,
+	 * maxlength), so the length check and the shortening count them as one as well.
+	 */
+	public static function normalize_newlines( string $value ): string {
+		return str_replace( array( "\r\n", "\r" ), "\n", $value );
+	}
+
+	private function render_field( string $key, array $field, array $config = array() ): void {
+		// Unique on the page (two product forms, quick views): the first form keeps "vcap-field-{key}".
+		$id       = Shortcodes::unique_id( 'vcap-field-' . sanitize_html_class( $key ) );
 		$name     = 'vcap_fields[' . esc_attr( $key ) . ']';
 		$type     = in_array( $field['type'] ?? 'text', self::TYPES, true ) ? ( $field['type'] ?? 'text' ) : 'text';
 		$required = ! empty( $field['required'] );
@@ -314,27 +555,43 @@ final class Fields {
 		if ( '' === $value && isset( $field['default'] ) ) {
 			$value = (string) $field['default'];
 		}
-		$desc_id = $id . '-desc';
-		$attrs   = sprintf( 'id="%s" name="%s"%s%s', esc_attr( $id ), $name, $required ? ' required aria-required="true"' : '', ! empty( $field['tooltip'] ) ? ' aria-describedby="' . esc_attr( $desc_id ) . '"' : '' );
+		if ( '' === $value && 'sender_name' === $key && is_user_logged_in() && function_exists( 'WC' ) && WC()->customer ) {
+			// M12-55: prefilled with the billing name (pages of logged-in customers are not cached).
+			$value = trim( WC()->customer->get_billing_first_name() . ' ' . WC()->customer->get_billing_last_name() );
+		}
+		$desc_id  = $id . '-desc';
+		$error    = $this->invalid[ $key ] ?? '';
+		// After a refused add to cart the field is marked invalid and names its error (the first one gets focus).
+		$describe = trim( ( ! empty( $field['tooltip'] ) ? $desc_id : '' ) . ( '' !== $error ? ' ' . $id . '-error' : '' ) );
+		$attrs    = sprintf( 'id="%s" name="%s"%s%s', esc_attr( $id ), $name, $required ? ' required aria-required="true"' : '', '' !== $describe ? ' aria-describedby="' . esc_attr( $describe ) . '"' : '' );
+		if ( '' !== $error ) {
+			$attrs .= ' aria-invalid="true"' . ( array_key_first( $this->invalid ) === $key ? ' data-vcap-focus="1"' : '' );
+		}
 		if ( $max > 0 && in_array( $type, array( 'text', 'textarea', 'email' ), true ) ) {
 			$attrs .= ' maxlength="' . esc_attr( (string) $max ) . '" data-vcap-counter="1"';
 		}
 		if ( ! empty( $field['placeholder'] ) ) {
 			$attrs .= ' placeholder="' . esc_attr( $field['placeholder'] ) . '"';
 		}
+		if ( ! empty( $field['confirms'] ) ) {
+			// M12-47: compared with the field it repeats while typing (frontend.js) and on the server (errors()).
+			$attrs .= ' data-vcap-confirm="' . esc_attr( (string) $field['confirms'] ) . '" data-vcap-mismatch="' . esc_attr__( 'The email addresses do not match.', 'voucher-captain' ) . '" autocomplete="off"';
+		}
 
-		echo '<p class="form-row vcap-field vcap-field--' . esc_attr( $type ) . '">';
+		echo '<p class="form-row vcap-field vcap-field--' . esc_attr( $type ) . '" data-vcap-key="' . esc_attr( $key ) . '">';
 		if ( 'checkbox' !== $type ) {
 			echo '<label for="' . esc_attr( $id ) . '">' . esc_html( $field['label'] ?? $key ) . ( $required ? ' <abbr class="required" title="' . esc_attr__( 'required', 'voucher-captain' ) . '">*</abbr>' : ' <span class="optional">(' . esc_html__( 'optional', 'voucher-captain' ) . ')</span>' ) . '</label>';
 		}
 		switch ( $type ) {
 			case 'textarea':
-				echo '<textarea ' . $attrs . ' rows="3">' . esc_textarea( $value ) . '</textarea>'; // phpcs:ignore WordPress.Security.EscapeOutput
+				// Visitor text with brackets as entities: a page with a product block runs do_shortcode() over the form.
+				echo '<textarea ' . $attrs . ' rows="3">' . Shortcodes::esc_html_text( $value ) . '</textarea>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_html_text().
 				break;
 			case 'select':
 				echo '<select ' . $attrs . '><option value="">' . esc_html__( '— Select —', 'voucher-captain' ) . '</option>'; // phpcs:ignore WordPress.Security.EscapeOutput
+				$labels = is_array( $field['option_labels'] ?? null ) ? $field['option_labels'] : array();
 				foreach ( self::options( $field ) as $option ) {
-					echo '<option value="' . esc_attr( $option ) . '"' . selected( $value, $option, false ) . '>' . esc_html( $option ) . '</option>';
+					echo '<option value="' . esc_attr( $option ) . '"' . selected( $value, $option, false ) . '>' . esc_html( (string) ( $labels[ $option ] ?? $option ) ) . '</option>';
 				}
 				echo '</select>';
 				break;
@@ -342,17 +599,53 @@ final class Fields {
 				echo '<label for="' . esc_attr( $id ) . '" class="checkbox"><input type="checkbox" value="1" ' . $attrs . checked( '1', $value, false ) . ' /> ' . esc_html( $field['label'] ?? $key ) . ( $required ? ' <abbr class="required" title="' . esc_attr__( 'required', 'voucher-captain' ) . '">*</abbr>' : '' ) . '</label>'; // phpcs:ignore WordPress.Security.EscapeOutput
 				break;
 			case 'date':
-				$min = 'delivery_date' === $key ? wp_date( 'Y-m-d', time() + DAY_IN_SECONDS ) : '';
-				$maxd = 'delivery_date' === $key ? wp_date( 'Y-m-d', time() + YEAR_IN_SECONDS ) : '';
-				echo '<input type="date" ' . $attrs . ' value="' . esc_attr( $value ) . '"' . ( $min ? ' min="' . esc_attr( $min ) . '" max="' . esc_attr( $maxd ) . '"' : '' ) . ' />'; // phpcs:ignore WordPress.Security.EscapeOutput
+				// H11: from today, like the server rule in errors() (a day already past the delivery hour sends at once).
+				// M12-16: in the modes "date"/"delay" from the shop's own delivery date. M12-86: as day offsets – the storefront script sets min/max, a cached page keeps no fixed date.
+				$range = 'delivery_date' === $key ? self::delivery_date_attributes( $config ) : '';
+				echo '<input type="date" ' . $attrs . ' value="' . Shortcodes::esc_attr_text( $value ) . '"' . $range . ' />'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_attr_text() and delivery_date_attributes().
 				break;
 			default:
-				echo '<input type="' . esc_attr( $type ) . '" class="input-text" ' . $attrs . ' value="' . esc_attr( $value ) . '" />'; // phpcs:ignore WordPress.Security.EscapeOutput
+				echo '<input type="' . esc_attr( $type ) . '" class="input-text" ' . $attrs . ' value="' . Shortcodes::esc_attr_text( $value ) . '" />'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_attr_text().
 		}
 		if ( ! empty( $field['tooltip'] ) ) {
 			echo '<span class="description vcap-field-help" id="' . esc_attr( $desc_id ) . '">' . esc_html( $field['tooltip'] ) . '</span>';
 		}
+		if ( '' !== $error ) {
+			echo '<span class="vcap-field-error" id="' . esc_attr( $id . '-error' ) . '">' . esc_html( $error ) . '</span>';
+		}
 		echo '</p>';
+	}
+
+	/**
+	 * Latest date the delivery date field offers: one year ahead, or earlier when the voucher would expire before
+	 * (Delivery::latest_delivery_date(), same rule as the server-side check in errors()).
+	 */
+	private static function max_delivery_date( array $config ): string {
+		$max    = wp_date( 'Y-m-d', time() + YEAR_IN_SECONDS );
+		$latest = $config ? Delivery::latest_delivery_date( $config, time(), self::customer_country() ) : null;
+		return null !== $latest && $latest < $max ? $latest : $max;
+	}
+
+	/**
+	 * Range of the delivery date field as data attributes (M12-86): days from today in the shop's time zone (min
+	 * 0, max up to max_delivery_date()) and the shop's UTC offset in minutes. frontend.js turns them into min/max
+	 * from the visitor's current date, so a page cache that keeps the product page for days or weeks does not
+	 * offer days already past or block days that became possible. The server checks the date anyway (errors()).
+	 */
+	public static function delivery_date_attributes( array $config ): string {
+		$tz    = wp_timezone();
+		$today = new \DateTimeImmutable( wp_date( 'Y-m-d' ) . ' 00:00:00', $tz );
+		$max   = new \DateTimeImmutable( self::max_delivery_date( $config ) . ' 00:00:00', $tz );
+		$min   = new \DateTimeImmutable( ( $config ? Delivery::earliest_customer_date( $config ) : wp_date( 'Y-m-d' ) ) . ' 00:00:00', $tz ); // M12-16.
+		$days  = max( 0, (int) round( ( $max->getTimestamp() - $today->getTimestamp() ) / DAY_IN_SECONDS ) );
+		$from  = max( 0, (int) round( ( $min->getTimestamp() - $today->getTimestamp() ) / DAY_IN_SECONDS ) );
+		$off   = (int) round( $tz->getOffset( new \DateTimeImmutable( 'now', $tz ) ) / MINUTE_IN_SECONDS );
+		return ' data-vcap-min-days="' . esc_attr( (string) $from ) . '" data-vcap-max-days="' . esc_attr( (string) $days ) . '" data-vcap-utc-offset="' . esc_attr( (string) $off ) . '"';
+	}
+
+	/** Country of the current customer (statutory validity, see ProductConfig::expiry_for()). */
+	private static function customer_country(): string {
+		return ProductConfig::country_of( function_exists( 'WC' ) && WC()->customer ? WC()->customer : null );
 	}
 
 	private static function options( array $field ): array {
@@ -369,8 +662,15 @@ final class Fields {
 	 * @return array<string, array{label:string,value:string}>
 	 */
 	public function collect_posted( \WC_Product $product, bool $only_filled = true ): array {
-		$out = array();
+		$out  = array();
+		$self = $this->for_self();
 		foreach ( $this->flat_definitions( $product ) as $key => $field ) {
+			if ( $self && in_array( (string) $key, self::GIFT_KEYS, true ) ) {
+				continue; // "For me": no recipient, no gift message.
+			}
+			if ( ! empty( $field['confirms'] ) ) {
+				continue; // M12-47: only checked, not kept.
+			}
 			$raw = $this->posted_value( (string) $key );
 			switch ( $field['type'] ?? 'text' ) {
 				case 'textarea':
@@ -380,7 +680,8 @@ final class Fields {
 					$value = sanitize_email( $raw );
 					break;
 				case 'number':
-					$value = '' === $raw ? '' : (string) wc_format_decimal( $raw );
+					$number = self::parse_number( $raw );
+					$value  = null === $number ? '' : $number;
 					break;
 				case 'date':
 					$value = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $raw ) ? $raw : '';
@@ -411,14 +712,109 @@ final class Fields {
 		if ( ! $product || ! ProductConfig::is_voucher( $product ) ) {
 			return $passed;
 		}
-		if ( is_array( $cart_item_data ) && ! empty( $cart_item_data['vcap_fields'] ) ) {
-			return $passed; // "Order again": values were validated when first ordered.
+		if ( is_array( $cart_item_data ) && ! empty( $cart_item_data['vcap_fields'] ) && is_array( $cart_item_data['vcap_fields'] ) ) {
+			// M12-59: "order again" (and other supplied values) are checked like the form, with today's rules
+			// (fields that became required, a delivery date that has passed).
+			$previous       = $this->override; // A Store API request keeps its own values (store_api_data()).
+			$this->override = self::plain_values( $cart_item_data['vcap_fields'] );
+			try {
+				$errors = $this->errors( $product );
+			} finally {
+				$this->override = $previous;
+			}
+			foreach ( $errors as $message ) {
+				wc_add_notice( $message, 'error' );
+				$passed = false;
+			}
+			return $passed;
 		}
 		foreach ( $this->errors( $product ) as $message ) {
 			wc_add_notice( $message, 'error' );
 			$passed = false;
 		}
+		if ( $passed ) {
+			foreach ( $this->print_warnings( $product ) as $message ) {
+				wc_add_notice( $message, 'notice' ); // Accepted, but the customer knows how the PDF will look.
+			}
+			$fit = $this->fit_problems( $product );
+			foreach ( $fit['errors'] as $message ) {
+				wc_add_notice( $message, 'error' );
+				$passed = false;
+			}
+			foreach ( $passed ? $fit['notices'] : array() as $message ) {
+				wc_add_notice( $message, 'notice' );
+			}
+		}
 		return $passed;
+	}
+
+	/**
+	 * M12-39: whether the customer's texts fit their boxes on the voucher, measured as the PDF sets them (the
+	 * product's template with the submitted values). A text that does not fit even at half the size would be cut
+	 * off: error with the number of lines the box holds. A text printed below 75 % of its size: notice.
+	 *
+	 * @return array{errors: string[], notices: string[]}
+	 */
+	public function fit_problems( \WC_Product $product ): array {
+		$out = array(
+			'errors'  => array(),
+			'notices' => array(),
+		);
+		if ( ! class_exists( '\Dompdf\Dompdf' ) ) {
+			return $out;
+		}
+		$labels = array();
+		foreach ( $this->flat_definitions( $product ) as $key => $field ) {
+			$labels[ strtolower( (string) $key ) ] = (string) ( $field['label'] ?? $key );
+		}
+		try {
+			list( $voucher, $design ) = ( new Preview( vcap()->pdf ) )->preview( $product, '', false );
+			$report                   = PdfRenderer::fit_report( $design, $voucher );
+		} catch ( \Throwable $e ) {
+			Logger::warning( 'The fit of the voucher texts could not be checked: ' . $e->getMessage() );
+			return $out;
+		}
+		foreach ( $report as $row ) {
+			$names = array();
+			foreach ( $row['tokens'] as $token ) {
+				$key = str_starts_with( $token, 'field:' ) ? substr( $token, 6 ) : $token;
+				if ( isset( $labels[ $key ] ) ) {
+					$names[] = $labels[ $key ];
+				}
+			}
+			if ( ! $names ) {
+				continue;
+			}
+			$label = implode( ', ', array_unique( $names ) );
+			if ( ! $row['fits'] ) {
+				/* translators: 1: field label(s), 2: number of lines */
+				$out['errors'][] = sprintf( __( '%1$s is too long for the voucher and would be cut off. Please shorten it (max. approx. %2$d lines).', 'voucher-captain' ), $label, $row['max_lines'] );
+			} elseif ( $row['scale'] < PdfRenderer::SHRINK_NOTICE ) {
+				/* translators: 1: field label(s), 2: percentage */
+				$out['notices'][] = sprintf( __( '%1$s is long and is printed in a smaller font on the voucher (%2$d %% of the normal size).', 'voucher-captain' ), $label, (int) round( $row['scale'] * 100 ) );
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Notices for submitted text values the voucher PDF cannot print as entered (characters without a glyph such
+	 * as emoji or Chinese letters, right-to-left text).
+	 *
+	 * @return string[]
+	 */
+	public function print_warnings( \WC_Product $product ): array {
+		$warnings = array();
+		foreach ( $this->flat_definitions( $product ) as $key => $field ) {
+			if ( ! in_array( $field['type'] ?? 'text', array( 'text', 'textarea' ), true ) ) {
+				continue;
+			}
+			$warning = PdfRenderer::print_warning( (string) ( $field['label'] ?? $key ), trim( $this->posted_value( (string) $key ) ) );
+			if ( '' !== $warning ) {
+				$warnings[] = $warning;
+			}
+		}
+		return $warnings;
 	}
 
 	/**
@@ -427,13 +823,29 @@ final class Fields {
 	 * @return string[]
 	 */
 	public function errors( \WC_Product $product ): array {
-		$errors = array();
+		$errors        = array();
+		$this->invalid = array();
+		$self          = $this->for_self();
 		foreach ( $this->flat_definitions( $product ) as $key => $field ) {
-			$raw   = trim( $this->posted_value( (string) $key ) );
-			$label = (string) ( $field['label'] ?? $key );
+			if ( $self && in_array( (string) $key, self::GIFT_KEYS, true ) ) {
+				continue; // "For me": the gift fields are not asked for.
+			}
+			$raw    = trim( $this->posted_value( (string) $key ) );
+			$label  = (string) ( $field['label'] ?? $key );
+			$before = count( $errors );
+			if ( ! empty( $field['confirms'] ) ) {
+				// M12-47: the repeated address must match the one it confirms (nothing to confirm when that is empty).
+				$other = trim( $this->posted_value( (string) $field['confirms'] ) );
+				if ( '' !== $other && 0 !== strcasecmp( $other, $raw ) ) {
+					$errors[]                       = '' === $raw ? __( 'Please enter the recipient email a second time to confirm it.', 'voucher-captain' ) : __( 'The recipient email addresses do not match. Please check them.', 'voucher-captain' );
+					$this->invalid[ (string) $key ] = end( $errors );
+				}
+				continue;
+			}
 			if ( ! empty( $field['required'] ) && '' === $raw ) {
 				/* translators: %s: field label */
-				$errors[] = sprintf( __( '%s is a required field.', 'voucher-captain' ), $label );
+				$errors[]                       = sprintf( __( '%s is a required field.', 'voucher-captain' ), $label );
+				$this->invalid[ (string) $key ] = end( $errors );
 				continue;
 			}
 			if ( '' === $raw ) {
@@ -445,15 +857,34 @@ final class Fields {
 				$errors[] = sprintf( __( '%s is not a valid email address.', 'voucher-captain' ), $label );
 			}
 			if ( 'date' === $type ) {
-				$ts = strtotime( $raw );
-				if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $raw ) || ! $ts ) {
+				// A local date (shop time zone), not UTC midnight as strtotime() would read it.
+				$ts = LocalDate::timestamp( $raw );
+				if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $raw ) || null === $ts ) {
 					/* translators: %s: field label */
 					$errors[] = sprintf( __( '%s is not a valid date.', 'voucher-captain' ), $label );
 				} elseif ( 'delivery_date' === $key && ( $raw < wp_date( 'Y-m-d' ) || $ts > time() + YEAR_IN_SECONDS + DAY_IN_SECONDS ) ) {
 					$errors[] = __( 'Please choose a delivery date between today and one year from now.', 'voucher-captain' );
+				} elseif ( 'delivery_date' === $key && $raw < Delivery::earliest_customer_date( ProductConfig::get( $product ) ) ) {
+					// M12-16: a presale date or waiting period of the shop is not brought forward.
+					$errors[] = sprintf(
+						/* translators: %s: earliest delivery date */
+						__( 'This voucher is delivered on %s at the earliest. Please choose this or a later date.', 'voucher-captain' ),
+						wp_date( (string) get_option( 'date_format' ), (int) strtotime( Delivery::earliest_customer_date( ProductConfig::get( $product ) ) . ' 12:00:00 ' . wp_timezone_string() ) )
+					);
+				} elseif ( 'delivery_date' === $key ) {
+					$latest = Delivery::latest_delivery_date( ProductConfig::get( $product ), time(), self::customer_country() );
+					if ( null !== $latest && $raw > $latest ) {
+						$errors[] = $latest < wp_date( 'Y-m-d' )
+							? __( 'This voucher cannot be delivered on a later date because it would already have expired. Leave the delivery date empty to receive it right away.', 'voucher-captain' )
+							: sprintf(
+								/* translators: %s: last possible delivery date */
+								__( 'The voucher would already have expired on this delivery date. Please choose %s or an earlier date.', 'voucher-captain' ),
+								wp_date( (string) get_option( 'date_format' ), (int) strtotime( $latest . ' 12:00:00 ' . wp_timezone_string() ) )
+							);
+					}
 				}
 			}
-			if ( 'number' === $type && ! is_numeric( wc_format_decimal( $raw ) ) ) {
+			if ( 'number' === $type && '' !== trim( $raw ) && null === self::parse_number( $raw ) ) {
 				/* translators: %s: field label */
 				$errors[] = sprintf( __( '%s must be a number.', 'voucher-captain' ), $label );
 			}
@@ -465,6 +896,14 @@ final class Fields {
 			if ( $max > 0 && mb_strlen( $raw ) > $max ) {
 				/* translators: 1: field label, 2: max length */
 				$errors[] = sprintf( __( '%1$s may contain at most %2$d characters.', 'voucher-captain' ), $label, $max );
+			}
+			$max_lines = (int) ( $field['maxlines'] ?? 0 );
+			if ( $max_lines > 0 && count( (array) preg_split( '/\r\n|\r|\n/', $raw ) ) > $max_lines ) {
+				/* translators: 1: field label, 2: max number of lines */
+				$errors[] = sprintf( __( '%1$s may contain at most %2$d lines.', 'voucher-captain' ), $label, $max_lines );
+			}
+			if ( count( $errors ) > $before ) {
+				$this->invalid[ (string) $key ] = $errors[ $before ];
 			}
 		}
 		return $errors;
@@ -499,6 +938,9 @@ final class Fields {
 			$this->override = is_array( $values ) ? $values : array();
 		}
 		$errors = $this->errors( $product );
+		if ( ! $errors ) {
+			$errors = $this->fit_problems( $product )['errors']; // M12-39: a text that would be cut off.
+		}
 		if ( $errors && class_exists( '\Automattic\WooCommerce\StoreApi\Exceptions\RouteException' ) ) {
 			throw new \Automattic\WooCommerce\StoreApi\Exceptions\RouteException( 'vcap_invalid_voucher_fields', esc_html( implode( ' ', $errors ) ), 400 );
 		}
@@ -521,10 +963,22 @@ final class Fields {
 	}
 
 	public function display_item_data( $item_data, $cart_item ) {
-		foreach ( (array) ( $cart_item['vcap_fields'] ?? array() ) as $field ) {
+		$fields = (array) ( $cart_item['vcap_fields'] ?? array() );
+		foreach ( $fields as $key => $field ) {
+			$value       = self::LOCALE_KEY === $key ? ( self::recipient_locales()[ (string) $field['value'] ] ?? (string) $field['value'] ) : (string) $field['value'];
 			$item_data[] = array(
 				'key'   => $field['label'],
-				'value' => $field['value'],
+				'value' => self::display_value( $value ),
+			);
+		}
+		// When and where the voucher goes (the buyer otherwise learns it only on the delivery day).
+		$product = $cart_item['data'] ?? null;
+		if ( $product instanceof \WC_Product && ProductConfig::is_voucher( $product ) && ! TopUp::is_topup( $product ) ) {
+			$config      = ProductConfig::get( $product );
+			$buyer       = function_exists( 'WC' ) && WC()->customer ? (string) WC()->customer->get_billing_email() : '';
+			$item_data[] = array(
+				'key'   => __( 'Delivery', 'voucher-captain' ),
+				'value' => NextSteps::summary( $config, $fields, $buyer, Delivery::compute_time( $config, $fields ) ),
 			);
 		}
 		return $item_data;
@@ -535,21 +989,306 @@ final class Fields {
 			return;
 		}
 		$item->add_meta_data( '_vcap_fields', $values['vcap_fields'], true );
-		// Visible copy (admin order screen, emails, {item_meta:Label} placeholders).
-		foreach ( $values['vcap_fields'] as $field ) {
+		// Visible copy (admin order screen, emails, {item_meta:…} placeholders). M10: under a stable key
+		// ("vcap_recipient_name"), whatever the language of the order; the label is shown by display_meta_key().
+		foreach ( $values['vcap_fields'] as $key => $field ) {
 			if ( '' !== (string) $field['value'] ) {
-				$item->add_meta_data( wp_strip_all_tags( $field['label'] ), $field['value'], true );
+				$item->add_meta_data( self::item_meta_key( (string) $key ), $field['value'], true );
 			}
 		}
 	}
 
+	/** M10: order item meta key of a field's visible copy. */
+	public static function item_meta_key( string $field_key ): string {
+		return self::ITEM_META_PREFIX . sanitize_key( $field_key );
+	}
+
+	/** Prefix of the visible order item meta of voucher fields (M10). */
+	public const ITEM_META_PREFIX = 'vcap_';
+
+	/** Built-in fields about the recipient (AP-S3-1): erased with the recipient's data. */
+	public const RECIPIENT_FIELDS = array( 'recipient_name', 'recipient_email', 'message' );
+
+	/**
+	 * AP-S3-1: removes the personalisation copies from an order line – the value in "_vcap_fields" (the label stays)
+	 * and the visible copy under the stable key ("vcap_recipient_email") or, for orders placed before M10, under
+	 * the field's label. Scopes:
+	 * - "recipient": the recipient fields and the merchant's own fields (the voucher row drops all its fields on
+	 *   a recipient erasure, so the order line follows it);
+	 * - "buyer": the merchant's own fields (typed by the buyer, they cannot be attributed to the recipient);
+	 * - "all": every field (retention, WooCommerce's order anonymisation).
+	 * The delivery date is no personal data and stays. Saves the line when something changed.
+	 *
+	 * @param \WC_Order_Item $item  Order line.
+	 * @param string         $scope recipient|buyer|all.
+	 * @return bool Whether something was removed.
+	 */
+	public static function erase_item_data( $item, string $scope ): bool {
+		if ( ! $item instanceof \WC_Order_Item ) {
+			return false;
+		}
+		$fields = $item->get_meta( '_vcap_fields' );
+		$fields = is_array( $fields ) ? $fields : array();
+		$keys   = array();
+		foreach ( array_keys( $fields ) as $key ) {
+			$key = (string) $key;
+			if ( 'delivery_date' === $key ) {
+				continue;
+			}
+			$recipient = in_array( $key, self::RECIPIENT_FIELDS, true );
+			if ( 'all' === $scope || ! $recipient || 'recipient' === $scope ) {
+				$keys[] = $key;
+			}
+		}
+		if ( 'buyer' !== $scope ) {
+			// Copies of the recipient fields without a "_vcap_fields" entry (edited lines, partial data).
+			$keys = array_values( array_unique( array_merge( $keys, self::RECIPIENT_FIELDS ) ) );
+		}
+		$changed = false;
+		foreach ( $keys as $key ) {
+			$field = is_array( $fields[ $key ] ?? null ) ? $fields[ $key ] : null;
+			$value = null !== $field ? (string) ( $field['value'] ?? '' ) : '';
+			if ( $item->meta_exists( self::item_meta_key( $key ) ) ) {
+				$item->delete_meta_data( self::item_meta_key( $key ) );
+				$changed = true;
+			}
+			$label = null !== $field ? wp_strip_all_tags( (string) ( $field['label'] ?? '' ) ) : '';
+			if ( '' !== $label && '' !== $value && $item->meta_exists( $label ) && (string) $item->get_meta( $label ) === $value ) {
+				$item->delete_meta_data( $label );
+				$changed = true;
+			}
+			if ( null !== $field && '' !== $value ) {
+				$fields[ $key ]['value'] = '';
+				$changed                 = true;
+			}
+		}
+		if ( ! $changed ) {
+			return false;
+		}
+		if ( $fields ) {
+			$item->update_meta_data( '_vcap_fields', $fields );
+		}
+		$item->save();
+		return true;
+	}
+
+	/**
+	 * AP-S3-1: the order line a voucher was issued for (false when there is none any more).
+	 *
+	 * @return \WC_Order_Item|false
+	 */
+	public static function voucher_item( int $order_item_id ) {
+		if ( $order_item_id <= 0 || ! class_exists( '\WC_Order_Factory' ) ) {
+			return false;
+		}
+		return \WC_Order_Factory::get_order_item( $order_item_id );
+	}
+
+	/**
+	 * AP-S3-1: order lines whose visible recipient email copy is this address (also lines of orders that never
+	 * issued a voucher: unpaid, cancelled). At most 500 per call.
+	 *
+	 * @return int[] order item ids
+	 */
+	public static function items_for_recipient( string $email ): array {
+		global $wpdb;
+		$email = trim( $email );
+		if ( '' === $email ) {
+			return array();
+		}
+		$table = $wpdb->prefix . 'woocommerce_order_itemmeta';
+		return array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT order_item_id FROM {$table} WHERE meta_key = %s AND meta_value = %s LIMIT 500", self::item_meta_key( 'recipient_email' ), $email ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.SlowDBQuery -- table name from $wpdb.
+	}
+
+	/**
+	 * AP-S3-1: WooCommerce's order anonymisation (erasure request with "Remove personal data from orders", or its
+	 * own retention of orders) also clears the personalisation copies of the order lines.
+	 *
+	 * @param \WC_Order $order Order being anonymised.
+	 */
+	public static function anonymise_order( $order ): void {
+		if ( ! $order instanceof \WC_Order ) {
+			return;
+		}
+		foreach ( $order->get_items() as $item ) {
+			self::erase_item_data( $item, 'all' );
+		}
+	}
+
+	/**
+	 * H11/M10: a field value as people read it – a date in the voucher date format ("24.12.2026" instead of
+	 * "2026-12-24"), anything else unchanged.
+	 */
+	public static function display_value( string $value ): string {
+		if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $value ) ) {
+			return $value;
+		}
+		$ts = LocalDate::timestamp( $value . 'T12:00' );
+		return null === $ts ? $value : wp_date( function_exists( 'vcap' ) ? vcap()->settings->date_format() : (string) get_option( 'date_format' ), $ts );
+	}
+
+	/** H11: the local time of day dated deliveries go out ("8:00 am"), for the help texts. */
+	public static function delivery_time_text(): string {
+		$dt = new \DateTimeImmutable( 'today', wp_timezone() );
+		return wp_date( (string) get_option( 'time_format', 'H:i' ), $dt->setTime( Delivery::delivery_hour(), 0 )->getTimestamp() );
+	}
+
+	/**
+	 * M10: label of a field's visible order item meta, from the field as ordered (_vcap_fields).
+	 *
+	 * @param string $display_key
+	 * @param object $meta WC_Meta_Data
+	 * @param mixed  $item
+	 */
+	public function display_meta_key( $display_key, $meta, $item = null ) {
+		$key = is_object( $meta ) && isset( $meta->key ) ? (string) $meta->key : '';
+		if ( ! str_starts_with( $key, self::ITEM_META_PREFIX ) || ! $item instanceof \WC_Order_Item ) {
+			return $display_key;
+		}
+		$fields = $item->get_meta( '_vcap_fields' );
+		$field  = is_array( $fields ) ? ( $fields[ substr( $key, strlen( self::ITEM_META_PREFIX ) ) ] ?? null ) : null;
+		return is_array( $field ) && '' !== (string) ( $field['label'] ?? '' ) ? wp_strip_all_tags( (string) $field['label'] ) : $display_key;
+	}
+
+	/**
+	 * M10/H11: dates of voucher fields (also the label-keyed copies of older orders) in the voucher date format.
+	 *
+	 * @param string $display_value
+	 * @param object $meta WC_Meta_Data
+	 * @param mixed  $item
+	 */
+	public function display_meta_value( $display_value, $meta, $item = null ) {
+		if ( ! $item instanceof \WC_Order_Item || ! is_object( $meta ) || ! is_scalar( $meta->value ?? null ) || ! is_array( $item->get_meta( '_vcap_fields' ) ) ) {
+			return $display_value;
+		}
+		$formatted = self::display_value( (string) $meta->value );
+		return $formatted !== (string) $meta->value ? esc_html( $formatted ) : $display_value;
+	}
+
+	/**
+	 * The visible copy of the personalisation (e.g. "Recipient email") can be edited on the order screen while the
+	 * order waits for its payment, but vouchers are issued from "_vcap_fields" (Z12). A corrected value is taken
+	 * over into "_vcap_fields" as long as no voucher of the line exists yet; an emptied or invalid value is not
+	 * (a typo such as "gmial.com" is corrected, a voucher never goes to an address that is not one).
+	 *
+	 * @param \WC_Order_Item $item Order item about to be saved.
+	 */
+	public function sync_visible_meta( $item ): void {
+		if ( ! $item instanceof \WC_Order_Item_Product || ! $item->get_id() ) {
+			return;
+		}
+		$fields = $item->get_meta( '_vcap_fields' );
+		if ( ! is_array( $fields ) || ! $fields || vcap()->vouchers->get_slot( (int) $item->get_id(), 0 ) ) {
+			return;
+		}
+		$changed = false;
+		foreach ( $fields as $key => $field ) {
+			if ( ! is_array( $field ) ) {
+				continue;
+			}
+			$visible = self::visible_meta( $item, (string) $key, $field );
+			if ( ! is_scalar( $visible ) || '' === (string) $visible || (string) $visible === (string) ( $field['value'] ?? '' ) ) {
+				continue;
+			}
+			$value = self::visible_value( (string) $key, (string) $visible );
+			if ( null === $value || $value === (string) ( $field['value'] ?? '' ) ) {
+				continue;
+			}
+			$fields[ $key ]['value'] = $value;
+			$changed                 = true;
+		}
+		if ( $changed ) {
+			$item->update_meta_data( '_vcap_fields', $fields );
+		}
+	}
+
+	/**
+	 * Z12/M10: the visible copy of a field on an order line – under its stable key ("vcap_recipient_email") or,
+	 * for orders placed before M10, under the field's label.
+	 *
+	 * @return mixed The value, '' when the line has no visible copy of the field.
+	 */
+	private static function visible_meta( \WC_Order_Item $item, string $key, array $field ) {
+		$stable = self::item_meta_key( $key );
+		if ( $item->meta_exists( $stable ) ) {
+			return $item->get_meta( $stable );
+		}
+		$label = wp_strip_all_tags( (string) ( $field['label'] ?? '' ) );
+		return '' !== $label ? $item->get_meta( $label ) : '';
+	}
+
+	/** A value typed into the visible order item meta, sanitised for its field (null: not accepted). */
+	public static function visible_value( string $key, string $value ): ?string {
+		$value = trim( $value );
+		if ( str_contains( $key, 'email' ) ) {
+			$email = sanitize_email( $value );
+			return is_email( $email ) ? $email : null;
+		}
+		if ( 'delivery_date' === $key ) {
+			$date = \DateTimeImmutable::createFromFormat( '!Y-m-d', $value );
+			return $date && $date->format( 'Y-m-d' ) === $value ? $value : null;
+		}
+		return sanitize_textarea_field( $value );
+	}
+
 	public function order_again( $data, $item, $order ) {
 		$fields = $item->get_meta( '_vcap_fields' );
+		if ( is_array( $fields ) ) {
+			// M12-59: the old delivery date is not taken over (it has usually passed: the voucher would go out at once).
+			unset( $fields['delivery_date'] );
+		}
 		if ( $fields ) {
 			$data['vcap_fields'] = $fields;
 			$data['vcap_key']    = md5( wp_json_encode( $fields ) );
 		}
 		return $data;
+	}
+
+	/**
+	 * Field values as the form would send them (key => value) from stored cart item data (key => label/value).
+	 *
+	 * @param array<string, mixed> $fields Cart item "vcap_fields".
+	 * @return array<string, string>
+	 */
+	private static function plain_values( array $fields ): array {
+		$out = array();
+		foreach ( $fields as $key => $field ) {
+			$value = is_array( $field ) ? ( $field['value'] ?? '' ) : $field;
+
+			$out[ (string) $key ] = is_scalar( $value ) ? (string) $value : '';
+		}
+		return $out;
+	}
+
+	/**
+	 * M12-59: a delivery date in the cart that has passed meanwhile (or now lies after the voucher's expiry) stops the
+	 * checkout instead of sending the voucher at once (classic checkout and Store API run this action).
+	 */
+	public function check_cart_items(): void {
+		if ( ! function_exists( 'WC' ) || ! WC()->cart ) {
+			return;
+		}
+		$today = wp_date( 'Y-m-d' );
+		foreach ( WC()->cart->get_cart() as $values ) {
+			$date    = (string) ( $values['vcap_fields']['delivery_date']['value'] ?? '' );
+			$product = $values['data'] ?? null;
+			if ( '' === $date || ! $product instanceof \WC_Product ) {
+				continue;
+			}
+			$latest = Delivery::latest_delivery_date( ProductConfig::get( $product ), time(), self::customer_country() );
+			if ( $date >= $today && ( null === $latest || $date <= $latest ) ) {
+				continue;
+			}
+			wc_add_notice(
+				sprintf(
+					/* translators: 1: product name, 2: delivery date */
+					__( 'The delivery date of "%1$s" (%2$s) is no longer possible. Please remove the voucher from the cart and add it again with another date.', 'voucher-captain' ),
+					$product->get_name(),
+					wp_date( (string) get_option( 'date_format' ), (int) strtotime( $date . ' 12:00:00 ' . wp_timezone_string() ) )
+				),
+				'error'
+			);
+		}
 	}
 
 	/** Loop "Add to cart" must go to the product page when personalisation fields exist. */
@@ -569,12 +1308,16 @@ final class Fields {
 
 	public function loop_add_to_cart_text( $text, $product ) {
 		if ( $product instanceof \WC_Product && $product->is_type( 'simple' ) && ProductConfig::is_voucher( $product ) && $this->has_required_or_custom( $product ) ) {
-			return __( 'Personalise', 'voucher-captain' );
+			return TopUp::is_topup( $product ) ? __( 'Top up', 'voucher-captain' ) : __( 'Personalise', 'voucher-captain' );
 		}
 		return $text;
 	}
 
+	/** Whether the product page has to be filled in first: a custom amount, voucher fields or a top-up card code. */
 	private function has_required_or_custom( \WC_Product $product ): bool {
+		if ( TopUp::is_topup( $product ) ) {
+			return true;
+		}
 		$config = ProductConfig::get( $product );
 		return 'custom' === $config['amount_source'] || (bool) $this->flat_definitions( $product );
 	}
@@ -587,7 +1330,7 @@ final class Fields {
 			return;
 		}
 		wp_enqueue_style( 'vcap-admin', VCAP_URL . 'assets/css/admin.css', array(), VCAP_VERSION );
-		wp_enqueue_script( 'vcap-field-groups', VCAP_URL . 'assets/js/field-groups.js', array( 'jquery', 'jquery-ui-sortable', 'wc-enhanced-select' ), VCAP_VERSION, true );
+		wp_enqueue_script( 'vcap-field-groups', VCAP_URL . 'assets/js/field-groups.js', array( 'jquery', 'jquery-ui-sortable', 'wc-enhanced-select', 'wp-a11y' ), VCAP_VERSION, true );
 		wp_enqueue_style( 'woocommerce_admin_styles' );
 		wp_localize_script(
 			'vcap-field-groups',
@@ -612,6 +1355,13 @@ final class Fields {
 					'tooltip'     => __( 'Help text', 'voucher-captain' ),
 					'options'     => __( 'Options (one per line)', 'voucher-captain' ),
 					'remove'      => __( 'Remove field', 'voucher-captain' ),
+					'moveUp'      => __( 'Move up', 'voucher-captain' ),
+					'moveDown'    => __( 'Move down', 'voucher-captain' ),
+					/* translators: %d: position of the field in the list */
+					'field'       => __( 'Field %d', 'voucher-captain' ),
+					/* translators: 1: field label, 2: new position in the list */
+					'moved'       => __( '%1$s moved to position %2$d.', 'voucher-captain' ),
+					'removed'     => __( 'Field removed.', 'voucher-captain' ),
 					'placeholderToken' => __( 'PDF placeholder:', 'voucher-captain' ),
 				),
 			)
@@ -694,6 +1444,24 @@ final class Fields {
 		<?php
 	}
 
+	/**
+	 * M11: the {field:KEY} key of a field – the key entered, else the label, as lowercase ASCII with "_"; labels
+	 * without Latin letters (Greek, Bulgarian …) get "field_N" (N = position in the group). Same rule as slug() in
+	 * assets/js/field-groups.js, so the token shown while editing is the key saved. '' for an empty row.
+	 */
+	public static function field_key( string $key, string $label, int $position ): string {
+		$raw = '' !== trim( $key ) ? $key : $label;
+		if ( '' === trim( $raw ) ) {
+			return '';
+		}
+		$slug = strtolower( remove_accents( str_replace( 'ß', 'ss', $raw ) ) );
+		$slug = trim( (string) preg_replace( '/[^a-z0-9]+/', '_', $slug ), '_' );
+		if ( '' === $slug ) {
+			return 'field_' . max( 1, $position );
+		}
+		return ctype_digit( $slug ) ? 'field_' . $slug : $slug;
+	}
+
 	public function save_group( int $post_id, \WP_Post $post ): void {
 		if ( ! isset( $_POST['vcap_field_group_nonce'] ) || ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['vcap_field_group_nonce'] ) ), 'vcap_field_group' ) ) {
 			return;
@@ -704,14 +1472,10 @@ final class Fields {
 		$fields_in = json_decode( wp_unslash( (string) ( $_POST['vcap_fields_json'] ?? '' ) ), true ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised below.
 		$fields    = array();
 		$reserved  = array( 'recipient_name', 'recipient_email', 'message', 'delivery_date' );
-		foreach ( is_array( $fields_in ) ? $fields_in : array() as $f ) {
-			$key = sanitize_key( $f['key'] ?? '' ) ?: sanitize_key( sanitize_title( $f['label'] ?? '' ) );
-			$key = str_replace( '-', '_', $key );
+		foreach ( array_values( is_array( $fields_in ) ? $fields_in : array() ) as $index => $f ) {
+			$key = self::field_key( (string) ( $f['key'] ?? '' ), (string) ( $f['label'] ?? '' ), $index + 1 );
 			if ( '' === $key ) {
 				continue;
-			}
-			if ( is_numeric( $key ) ) {
-				$key = 'field_' . $key;
 			}
 			// Never drop a field silently: make reserved or duplicate keys unique instead.
 			$base = $key;

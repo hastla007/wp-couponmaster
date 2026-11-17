@@ -7,11 +7,19 @@ defined( 'ABSPATH' ) || exit;
  * Admin menu: Vouchers (list/detail), PDF templates, Field groups, Import codes, Scanner, Settings.
  */
 final class Menu {
+	/** Screens of the order edit page (posts storage, HPOS). */
+	public const ORDER_SCREENS = array( 'shop_order', 'woocommerce_page_wc-orders' );
+
 	public function register(): void {
 		add_action( 'admin_menu', array( $this, 'menu' ), 9 );
 		add_action( 'admin_menu', array( $this, 'settings_link' ), 99 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'assets' ) );
 		add_filter( 'parent_file', array( $this, 'parent_file' ) );
+		// M12-19, M12-56: issuing without an order and importing existing cards.
+		( new IssueVoucher() )->register();
+		( new CardImport() )->register();
+		( new VoucherLinks() )->register(); // M12-54.
+		( new VoucherRequestsAdmin( vcap()->voucher_requests ) )->register(); // Captain Suite: requests from forms.
 	}
 
 	public static function cap(): string {
@@ -25,15 +33,20 @@ final class Menu {
 	public function menu(): void {
 		$voucher_admin = new VoucherAdmin( vcap()->vouchers );
 		add_menu_page(
-			__( 'Vouchers', 'voucher-captain' ),
-			__( 'Vouchers', 'voucher-captain' ),
+			\VCAP\Brand::menu_title(),
+			\VCAP\Brand::menu_title(),
 			self::cap(),
 			'vcap-vouchers',
 			array( $voucher_admin, 'page' ),
-			'dashicons-tickets-alt',
+			\VCAP\Brand::menu_icon(),
 			56
 		);
 		add_submenu_page( 'vcap-vouchers', __( 'Issued vouchers', 'voucher-captain' ), __( 'Issued vouchers', 'voucher-captain' ), self::cap(), 'vcap-vouchers', array( $voucher_admin, 'page' ) );
+		if ( IssueVoucher::can() ) {
+			add_submenu_page( 'vcap-vouchers', __( 'New voucher', 'voucher-captain' ), __( 'New voucher', 'voucher-captain' ), self::cap(), IssueVoucher::SLUG, array( new IssueVoucher(), 'page' ) );
+			add_submenu_page( 'vcap-vouchers', __( 'Import cards', 'voucher-captain' ), __( 'Import cards', 'voucher-captain' ), self::cap(), CardImport::SLUG, array( new CardImport(), 'page' ) );
+			add_submenu_page( 'vcap-vouchers', __( 'Voucher requests', 'voucher-captain' ), __( 'Voucher requests', 'voucher-captain' ), self::cap(), VoucherRequestsAdmin::SLUG, array( new VoucherRequestsAdmin( vcap()->voucher_requests ), 'page' ) );
+		}
 		add_submenu_page( 'vcap-vouchers', __( 'Import codes', 'voucher-captain' ), __( 'Import codes', 'voucher-captain' ), self::cap(), 'vcap-import', array( new Import( vcap()->code_pool ), 'page' ) );
 		add_submenu_page( 'vcap-vouchers', __( 'Generate codes', 'voucher-captain' ), __( 'Generate codes', 'voucher-captain' ), self::cap(), 'vcap-generate', array( new CampaignAdmin( new \VCAP\Campaigns( vcap()->code_pool, vcap()->vouchers ) ), 'page' ) );
 		add_submenu_page( 'vcap-vouchers', __( 'Reports', 'voucher-captain' ), __( 'Reports', 'voucher-captain' ), self::cap(), 'vcap-reports', array( new ReportsAdmin(), 'page' ) );
@@ -42,6 +55,11 @@ final class Menu {
 			// Link into Pass Captain's own menu (both plugins keep their menus).
 			add_submenu_page( 'vcap-vouchers', __( 'WP Pass Captain', 'voucher-captain' ), __( 'WP Pass Captain ↗', 'voucher-captain' ), 'wpcap_checkin', 'admin.php?page=wp-pass-captain' );
 		}
+		/**
+		 * The plugin's admin menu is registered (arg: parent slug "vcap-vouchers"): add-ons add their submenu pages
+		 * with add_submenu_page( $parent_slug, … ) here (before "Settings", which is added last).
+		 */
+		do_action( 'vcap_admin_menu', 'vcap-vouchers' );
 	}
 
 	public function settings_link(): void {
@@ -59,7 +77,9 @@ final class Menu {
 	}
 
 	public function assets( string $hook ): void {
-		if ( ! str_contains( $hook, 'vcap' ) ) {
+		// F14: also on the order screens (legacy and HPOS) – the voucher meta box uses the status marks.
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! str_contains( $hook, 'vcap' ) && ! ( $screen && in_array( $screen->id, self::ORDER_SCREENS, true ) ) ) {
 			return;
 		}
 		wp_enqueue_style( 'vcap-admin', VCAP_URL . 'assets/css/admin.css', array(), VCAP_VERSION );

@@ -16,13 +16,15 @@ defined( 'ABSPATH' ) || exit;
  * redemption key; commit/release use it from the reservation, refunds use Pass Captain's refund key.
  */
 final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\ProviderInterface {
-	private const ZERO_DECIMAL = array( 'BIF', 'CLP', 'DJF', 'GNF', 'ISK', 'JPY', 'KMF', 'KRW', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF' );
-
 	public function __construct( private RedemptionService $redemptions, private VoucherRepository $vouchers ) {}
 
-	/** ISO 4217 minor units (as Pass Captain uses them) – never the shop's display decimals. */
+	/**
+	 * ISO 4217 minor units (as Pass Captain uses them) – never the shop's display decimals. The same table as the
+	 * redemption API (config/currencies.php incl. three-decimal currencies, filter "vcap_currency_decimals"), so
+	 * amounts in minor units and stored amounts always agree.
+	 */
 	public static function decimals( string $currency ): int {
-		return in_array( strtoupper( $currency ), self::ZERO_DECIMAL, true ) ? 0 : 2;
+		return RedemptionService::decimals( $currency );
 	}
 
 	private static function to_minor( float $amount, int $decimals ): int {
@@ -43,7 +45,12 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 			return new \WP_Error( 'vcap_invalid_request', __( 'Please enter a voucher code.', 'voucher-captain' ) );
 		}
 		$email = sanitize_email( (string) ( $context['customer_email'] ?? '' ) );
-		$check = $this->redemptions->check( $code, array( 'target' => $target, 'email' => $email, 'user_id' => 0 ) );
+		// V6: the address typed in Pass Captain's checkout is no proof of identity. A personal voucher is accepted
+		// only for the logged-in customer's (verified) account email; the reservation still belongs to the
+		// integration (user_id 0), so only Pass Captain commits or releases it.
+		$verified = is_user_logged_in() ? \VCAP\PersonalVoucher::verified_email( wp_get_current_user() ) : '';
+		$identity = '' !== $verified ? array( 'email' => $verified, 'email_verified' => true ) : array( 'email' => $email );
+		$check    = $this->redemptions->check( $code, array( 'target' => $target, 'user_id' => 0 ) + $identity );
 		if ( is_wp_error( $check ) ) {
 			return $check;
 		}
@@ -51,6 +58,10 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 			return new \WP_Error( 'vcap_currency_mismatch', __( 'This voucher is in a different currency.', 'voucher-captain' ) );
 		}
 		$voucher  = $this->vouchers->get_by_code( (string) $check['code'] );
+		if ( $voucher && PassCaptainTickets::target( $voucher ) && ! PassCaptainTickets::value_use_allowed( $voucher ) ) {
+			// A ticket voucher stands for tickets, not for money: it is exchanged on the redeem page.
+			return new \WP_Error( 'vcap_ticket_voucher', __( 'This voucher is exchanged for tickets on the voucher redemption page and cannot pay for an order.', 'voucher-captain' ), array( 'status' => 422 ) );
+		}
 		$decimals = self::decimals( $currency );
 		$order    = self::to_major( $total, $decimals );
 		if ( null !== $check['balance'] ) {
@@ -65,7 +76,8 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 			return new \WP_Error( 'vcap_no_value', __( 'This voucher has no value left.', 'voucher-captain' ) );
 		}
 		$treatment = $voucher ? ProductConfig::tax_treatment( $voucher ) : 'discount';
-		return array(
+		$purpose   = $voucher ? ProductConfig::purpose( $voucher ) : 'discount';
+		return array_filter( array(
 			'version'      => 1,
 			'code'         => (string) $check['code'],
 			'currency'     => $currency,
@@ -74,11 +86,17 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 			'balance'      => null !== $check['balance'],
 			// VAT treatment for the ticket checkout: "payment" keeps the VAT, "single"/"discount" reduce it.
 			'treatment'    => $treatment,
-			// Pass Captain's terms: multi-purpose voucher (means of payment) or single-purpose (reduces price and VAT).
-			'purpose'      => 'payment' === $treatment ? 'multi' : 'single',
+			// Pass Captain's terms: multi-purpose voucher (means of payment), single-purpose voucher (VAT charged at the
+			// sale: reduces price and VAT) or promotion code ("discount": reduces price and VAT, nothing charged before).
+			'purpose'      => $purpose,
+			// Single-purpose only: VAT rate and country of the sale – Pass Captain treats the voucher as multi-purpose
+			// when the tickets carry another rate or are taxed in another country.
+			'sale_tax'     => 'single' === $purpose && $voucher ? ProductConfig::sale_tax( $voucher ) : null,
 			'target'       => $target,
-			'email'        => $email,
-		);
+			'email'        => $identity['email'],
+			// Set only when the address is the logged-in customer's account email (V6), see reserve().
+			'email_verified' => ! empty( $identity['email_verified'] ) ? true : null,
+		), static fn( $v ) => null !== $v );
 	}
 
 	/**
@@ -104,6 +122,8 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 			'meta'        => array( 'source' => 'passcaptain' ),
 			'ttl_minutes' => self::hold_minutes(),
 			'email'       => (string) ( $quote['email'] ?? '' ),
+			// V6: only the logged-in customer's account address (computed by quote()) unlocks a personal voucher.
+			'email_verified' => ! empty( $quote['email_verified'] ),
 			// Owned by the integration, not by the logged-in buyer: only Pass Captain commits or releases it.
 			'user_id'     => 0,
 		);
@@ -113,6 +133,11 @@ final class PassCaptainProvider implements \PassCaptain\Integrations\Vouchers\Pr
 		$reserved = $this->redemptions->reserve( (string) ( $quote['code'] ?? '' ), $args );
 		if ( is_wp_error( $reserved ) ) {
 			return $reserved;
+		}
+		// A replay of the same key returns the stored redemption: only an open reservation (or one Pass Captain
+		// already committed itself) is a success; a released one holds nothing and must not look reserved.
+		if ( ! in_array( (string) $reserved['state'], array( RedemptionService::STATE_RESERVED, RedemptionService::STATE_COMMITTED ), true ) ) {
+			return new \WP_Error( 'vcap_redemption_released', __( 'This voucher reservation was already released. Please apply the voucher again.', 'voucher-captain' ), array( 'status' => 409 ) );
 		}
 		return array(
 			'version'        => 1,

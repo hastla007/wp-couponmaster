@@ -107,6 +107,8 @@ $base     = get_option( 'woocommerce_currency' );
 vcap_compat_assert( 12.5 === $currency->convert( 12.5, $base ), 'base-currency voucher values are unchanged' );
 $converted = apply_filters( 'vcap_amount_to_base_currency', 12.5, 'TEST', null );
 vcap_compat_assert( 12.5 === (float) $converted, 'unknown currency providers retain the documented extension filter fallback' );
+vcap_compat_assert( ! VCAP\Compat\MultiCurrency::can_convert( 'TEST' ) && null === VCAP\Compat\MultiCurrency::to_base( 12.5, 'TEST' ), 'an amount the filter leaves unchanged counts as not convertible (money is never taken 1:1)' );
+delete_option( VCAP\Compat\MultiCurrency::UNKNOWN_OPTION );
 $aelia_converter = static function ( $amount, $currency_code, $base_currency ) { return (float) $amount / 2; };
 add_filter( 'wc_aelia_cs_convert', $aelia_converter, 10, 3 );
 $aelia_amount = $currency->convert( 25, 'EUR' );
@@ -199,6 +201,9 @@ try {
 	remove_filter( 'pre_wp_mail', $fail_mail, 999 );
 }
 vcap_compat_assert( null === vcap()->vouchers->get( $mail_voucher->id )->delivered_at, 'mailer failure does not mark a voucher as delivered' );
+$wpdb->update( VCAP\Install::tables()['vouchers'], array( 'created_at' => gmdate( 'Y-m-d H:i:s', time() - 2 * HOUR_IN_SECONDS ) ), array( 'id' => $mail_voucher->id ) );
+$undelivered_ids = static fn() => array_map( static fn( $v ) => $v->id, vcap()->vouchers->query( array( 'undelivered' => 'yes', 'per_page' => 500 ) )['items'] );
+vcap_compat_assert( in_array( $mail_voucher->id, $undelivered_ids(), true ), 'the voucher list can show vouchers that were never delivered' );
 $success_mail = static function ( $pre, $atts ) { return true; };
 add_filter( 'pre_wp_mail', $success_mail, 999, 2 );
 try {
@@ -207,6 +212,38 @@ try {
 	remove_filter( 'pre_wp_mail', $success_mail, 999 );
 }
 vcap_compat_assert( null !== vcap()->vouchers->get( $mail_voucher->id )->delivered_at, 'failed delivery is retried and marked only after successful mail' );
+vcap_compat_assert( ! in_array( $mail_voucher->id, $undelivered_ids(), true ), 'a delivered voucher leaves the "not delivered" list' );
+
+// "Send to buyer and recipient": delivered only when both got it; the retry mails only who is missing.
+list( $both_voucher ) = vcap_compat_voucher( 50, 'both-buyer@example.test' );
+$both_voucher->send_to         = 'both';
+$both_voucher->recipient_email = 'both-recipient@example.test';
+vcap()->vouchers->update( $both_voucher );
+$mailed      = array();
+$recipient_down = static function ( $pre, $atts ) use ( &$mailed ) {
+	$to = implode( ',', (array) $atts['to'] );
+	if ( str_contains( $to, 'both-recipient@' ) ) {
+		return false;
+	}
+	$mailed[] = $to;
+	return true;
+};
+add_filter( 'pre_wp_mail', $recipient_down, 999, 2 );
+try {
+	vcap()->delivery->deliver( $both_voucher->id );
+} finally {
+	remove_filter( 'pre_wp_mail', $recipient_down, 999 );
+}
+vcap_compat_assert( null === vcap()->vouchers->get( $both_voucher->id )->delivered_at, 'buyer and recipient: the voucher is not delivered while the recipient mail failed' );
+$mailed   = array();
+$all_up   = static function ( $pre, $atts ) use ( &$mailed ) { $mailed[] = implode( ',', (array) $atts['to'] ); return true; };
+add_filter( 'pre_wp_mail', $all_up, 999, 2 );
+try {
+	vcap()->delivery->deliver( $both_voucher->id );
+} finally {
+	remove_filter( 'pre_wp_mail', $all_up, 999 );
+}
+vcap_compat_assert( null !== vcap()->vouchers->get( $both_voucher->id )->delivered_at && 1 === count( $mailed ) && str_contains( $mailed[0], 'both-recipient@' ), 'the retry mails only the missing recipient and then marks the voucher delivered' );
 
 // Simulate a large legacy MyISAM installation and verify upgrade preserves rows while restoring InnoDB.
 list( $legacy_voucher ) = vcap_compat_voucher();
@@ -223,5 +260,33 @@ vcap_compat_assert( $before === $after && VCAP\Install::tables_support_transacti
 update_option( VCAP\Install::OPTION_DB_VERSION, '1.0.0' );
 VCAP\Install::maybe_upgrade();
 vcap_compat_assert( VCAP_DB_VERSION === get_option( VCAP\Install::OPTION_DB_VERSION ), 'plugin database upgrade path reaches the current schema version' );
+vcap_compat_assert( array() === VCAP\Install::verify_schema(), 'the installed schema is verified complete' );
+
+// A failed schema change (here: an ALTER the database refuses) keeps the old version so the upgrade is retried.
+$wpdb->query( "ALTER TABLE {$tables['pool']} DROP COLUMN used_at" );
+$block_alter = static fn( $q ) => ( str_starts_with( ltrim( (string) $q ), 'ALTER TABLE ' . $tables['pool'] ) && str_contains( (string) $q, 'used_at' ) ) ? 'SELECT 1' : $q;
+add_filter( 'query', $block_alter );
+update_option( VCAP\Install::OPTION_DB_VERSION, '1.0.0' );
+delete_transient( 'vcap_schema_retry' );
+VCAP\Install::maybe_upgrade();
+remove_filter( 'query', $block_alter );
+vcap_compat_assert( '1.0.0' === get_option( VCAP\Install::OPTION_DB_VERSION ) && str_contains( (string) get_option( VCAP\Install::SCHEMA_ERROR_OPTION ), 'used_at' ), 'an incomplete schema upgrade does not set the version and is reported' );
+delete_transient( 'vcap_schema_retry' );
+VCAP\Install::maybe_upgrade();
+vcap_compat_assert( VCAP_DB_VERSION === get_option( VCAP\Install::OPTION_DB_VERSION ) && false === get_option( VCAP\Install::SCHEMA_ERROR_OPTION ), 'the retried upgrade completes the schema' );
+
+// Site Health: failed mails are recorded (masked) and reported; the checks are registered.
+delete_option( VCAP\Health::MAIL_LOG );
+$health_tests = apply_filters( 'site_status_tests', array( 'direct' => array(), 'async' => array() ) );
+vcap_compat_assert( isset( $health_tests['direct']['vcap_scheduler'], $health_tests['direct']['vcap_mail'], $health_tests['async']['vcap_upload_dir'], $health_tests['direct']['vcap_redeem_page'] ), 'Voucher Captain adds its checks to Site Health' );
+$mail_test = $health_tests['direct']['vcap_mail']['test'];
+vcap_compat_assert( 'good' === call_user_func( $mail_test )['status'], 'without failed mails the mail check is good' );
+VCAP\Health::mail_begin( 'Voucher to recipient' ); // Only Voucher Captain mails are recorded.
+do_action( 'wp_mail_failed', new WP_Error( 'wp_mail_failed', 'SMTP connect() failed.', array( 'to' => array( 'jane.doe@example.com' ), 'subject' => 'Your voucher' ) ) );
+VCAP\Health::mail_end();
+$failures = VCAP\Health::mail_failures();
+vcap_compat_assert( 1 === count( $failures ) && ! str_contains( $failures[0]['to'], 'jane.doe' ) && str_contains( $failures[0]['error'], 'SMTP' ), 'a failed mail is recorded with a masked address' );
+vcap_compat_assert( 'critical' === call_user_func( $mail_test )['status'], 'failed mails are reported in Site Health' );
+delete_option( VCAP\Health::MAIL_LOG );
 
 echo "Voucher Captain compatibility checks passed.\n";

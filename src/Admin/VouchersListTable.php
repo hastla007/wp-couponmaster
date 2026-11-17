@@ -51,6 +51,12 @@ final class VouchersListTable extends \WP_List_Table {
 			'resend'     => __( 'Resend email', 'voucher-captain' ),
 			'void'       => __( 'Void', 'voucher-captain' ),
 			'reactivate' => __( 'Reactivate', 'voucher-captain' ),
+			'reissue'    => __( 'Reissue code (no email)', 'voucher-captain' ),
+			'print_nup'  => __( 'Print on A4 sheets (PDF, several per sheet)', 'voucher-captain' ),
+			// M12-94.
+			'extend'     => __( 'Extend validity…', 'voucher-captain' ),
+			'remind'     => __( 'Send expiry reminder', 'voucher-captain' ),
+			'export'     => __( 'Export selection (CSV)', 'voucher-captain' ),
 		);
 	}
 
@@ -71,6 +77,7 @@ final class VouchersListTable extends \WP_List_Table {
 		}
 		$type     = sanitize_key( $_GET['type'] ?? '' ); // phpcs:ignore WordPress.Security.NonceVerification
 		$expiring = sanitize_key( $_GET['expiring'] ?? '' ); // phpcs:ignore WordPress.Security.NonceVerification
+		$undeliv  = sanitize_key( $_GET['undelivered'] ?? '' ); // phpcs:ignore WordPress.Security.NonceVerification
 		echo '<div class="alignleft actions">';
 		echo '<label class="screen-reader-text" for="vcap-filter-type">' . esc_html__( 'Filter by type', 'voucher-captain' ) . '</label>';
 		echo '<select name="type" id="vcap-filter-type"><option value="">' . esc_html__( 'All types', 'voucher-captain' ) . '</option>';
@@ -78,8 +85,12 @@ final class VouchersListTable extends \WP_List_Table {
 			echo '<option value="' . esc_attr( $key ) . '"' . selected( $type, $key, false ) . '>' . esc_html( $label ) . '</option>';
 		}
 		echo '</select>';
-		echo '<label><input type="checkbox" name="expiring" value="soon" ' . checked( $expiring, 'soon', false ) . '> ' . esc_html__( 'Expiring within 30 days', 'voucher-captain' ) . '</label> ';
+		echo '<label><input type="checkbox" name="expiring" value="soon" ' . checked( $expiring, 'soon', false ) . '> ' . esc_html__( 'Expiring within 30 days (usable, with remaining value)', 'voucher-captain' ) . '</label> ';
+		echo '<label><input type="checkbox" name="undelivered" value="yes" ' . checked( $undeliv, 'yes', false ) . '> ' . esc_html__( 'Not delivered', 'voucher-captain' ) . '</label> ';
 		submit_button( __( 'Filter', 'voucher-captain' ), '', 'filter_action', false );
+		// M12-94: what "Extend validity…" extends by (days from the current expiry, or to a date).
+		echo ' <span class="vcap-extend-fields"><label for="vcap-extend-days">' . esc_html__( 'Extend by days', 'voucher-captain' ) . '</label> <input type="number" min="1" max="3650" step="1" id="vcap-extend-days" name="vcap_extend_days" style="width:5em" />';
+		echo ' <label for="vcap-extend-date">' . esc_html__( 'or until', 'voucher-captain' ) . '</label> <input type="date" id="vcap-extend-date" name="vcap_extend_date" /></span>';
 		$args = $this->filter_args();
 		$args['s'] = $args['search']; // filter_args() reads the search term from "s".
 		unset( $args['search'] );
@@ -96,6 +107,7 @@ final class VouchersListTable extends \WP_List_Table {
 			'type'     => sanitize_key( $_REQUEST['type'] ?? '' ),
 			'product'  => absint( $_REQUEST['product'] ?? 0 ),
 			'expiring' => sanitize_key( $_REQUEST['expiring'] ?? '' ),
+			'undelivered' => sanitize_key( $_REQUEST['undelivered'] ?? '' ),
 			'orderby'  => sanitize_key( $_REQUEST['orderby'] ?? 'id' ),
 			'order'    => sanitize_key( $_REQUEST['order'] ?? 'desc' ),
 		);
@@ -114,6 +126,7 @@ final class VouchersListTable extends \WP_List_Table {
 			)
 		);
 		$this->items           = $result['items'];
+		self::prime( $this->items );
 		$this->_column_headers = array( $this->get_columns(), array(), $this->get_sortable_columns(), 'code' );
 		$this->set_pagination_args(
 			array(
@@ -123,8 +136,44 @@ final class VouchersListTable extends \WP_List_Table {
 		);
 	}
 
+	/**
+	 * AP-P1-4: the orders of the page with one order query (Voucher::prime_orders()) and the products, variations and
+	 * coupons with one post and one meta query, instead of a few queries per row.
+	 *
+	 * @param Voucher[] $items
+	 */
+	public static function prime( array $items ): void {
+		Voucher::prime_orders( $items );
+		$posts = array();
+		foreach ( $items as $v ) {
+			$posts[] = (int) $v->product_id;
+			$posts[] = (int) $v->variation_id;
+			$posts[] = (int) $v->coupon_id;
+		}
+		$posts = array_values( array_unique( array_filter( $posts ) ) );
+		if ( $posts && function_exists( '_prime_post_caches' ) ) {
+			_prime_post_caches( $posts, false, true );
+		}
+	}
+
+	/** The rows are rendered: the primed orders are forgotten, so later code reads them fresh. */
+	public function display(): void {
+		try {
+			parent::display();
+		} finally {
+			Voucher::forget_orders();
+		}
+	}
+
+	/** Row checkbox with a label naming the voucher, like the core list tables (screen readers, bulk actions). */
 	protected function column_cb( $item ): string {
-		return '<input type="checkbox" name="voucher_ids[]" value="' . esc_attr( (string) $item->id ) . '" />';
+		if ( ! $item instanceof Voucher ) {
+			return '';
+		}
+		$id = 'cb-select-' . (int) $item->id;
+		/* translators: %s: voucher code */
+		return '<label class="screen-reader-text" for="' . esc_attr( $id ) . '">' . esc_html( sprintf( __( 'Select voucher %s', 'voucher-captain' ), $item->code ) ) . '</label>'
+			. '<input type="checkbox" id="' . esc_attr( $id ) . '" name="voucher_ids[]" value="' . esc_attr( (string) $item->id ) . '" />';
 	}
 
 	protected function column_code( Voucher $v ): string {
@@ -146,7 +195,7 @@ final class VouchersListTable extends \WP_List_Table {
 
 	protected function column_value( Voucher $v ): string {
 		if ( 'percent' === $v->discount_type ) {
-			return esc_html( wc_format_localized_decimal( $v->initial_amount ) . '%' );
+			return esc_html( \VCAP\Format::percent( $v->initial_amount ) );
 		}
 		$out = wc_price( $v->initial_amount, array( 'currency' => $v->currency ) );
 		if ( $v->is_multi_use() ) {
@@ -162,7 +211,7 @@ final class VouchersListTable extends \WP_List_Table {
 		$status = Voucher::STATUS_ACTIVE === $v->status && $v->is_expired() ? Voucher::STATUS_EXPIRED : $v->status;
 		$out    = '<mark class="vcap-status vcap-status--' . esc_attr( $status ) . '"><span>' . esc_html( $v->status_label() ) . '</span></mark>';
 		if ( Voucher::STATUS_SCHEDULED === $v->status && $v->delivery_at ) {
-			$out .= '<br><small>' . esc_html( get_date_from_gmt( $v->delivery_at, get_option( 'date_format' ) ) ) . '</small>';
+			$out .= '<br><small>' . esc_html( \VCAP\LocalDate::from_utc( $v->delivery_at, get_option( 'date_format' ) ) ) . '</small>';
 		}
 		return $out;
 	}
@@ -181,11 +230,11 @@ final class VouchersListTable extends \WP_List_Table {
 	}
 
 	protected function column_expires( Voucher $v ): string {
-		return $v->expires_at ? esc_html( get_date_from_gmt( $v->expires_at, get_option( 'date_format' ) ) ) : esc_html__( 'Never', 'voucher-captain' );
+		return $v->expires_at ? esc_html( \VCAP\LocalDate::from_utc( $v->expires_at, get_option( 'date_format' ) ) ) : esc_html__( 'Never', 'voucher-captain' );
 	}
 
 	protected function column_created( Voucher $v ): string {
-		return esc_html( get_date_from_gmt( $v->created_at, get_option( 'date_format' ) ) );
+		return esc_html( \VCAP\LocalDate::from_utc( $v->created_at, get_option( 'date_format' ) ) );
 	}
 
 	public function no_items(): void {

@@ -10,6 +10,10 @@ function vcap_integration_assert( bool $condition, string $message ): void {
 	echo "PASS: {$message}\n";
 }
 
+// A5: the core works alone (no add-on installed) and offline: every outgoing HTTP request of this suite is blocked.
+require_once __DIR__ . '/no-network.php';
+$vcap_offline = vcap_test_no_network();
+
 function vcap_integration_private_call( object $object, string $method, array $args ) {
 	$reflection = new ReflectionMethod( $object, $method );
 	$reflection->setAccessible( true );
@@ -150,7 +154,7 @@ vcap_integration_assert( 100.0 === (float) $repo->get( $audit_voucher->id )->bal
 
 // Delivery locks are connection-scoped, and a no-recipient attempt must remain eligible for retry.
 list( $delivery_voucher ) = vcap_integration_create_voucher( 100.0, '' );
-$lock_name   = 'vcap_delivery_' . $delivery_voucher->id;
+$lock_name   = VCAP\Install::lock_name( 'delivery_' . $delivery_voucher->id ); // The per-site name the worker uses.
 $other_db    = new wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
 $other_lock  = $other_db->get_var( $other_db->prepare( 'SELECT GET_LOCK(%s, 0)', $lock_name ) );
 $before_rows = count( $repo->events( $delivery_voucher->id ) );
@@ -162,4 +166,38 @@ vcap_integration_assert( 1 === (int) $other_lock && $before_rows === $after_rows
 vcap()->delivery->deliver( $delivery_voucher->id );
 vcap_integration_assert( null === $repo->get( $delivery_voucher->id )->delivered_at, 'unsent email remains eligible for delivery retry' );
 
+// Z13: saving a redesign keeps the design vouchers were issued with; deleting the template keeps it as well.
+$z13_admin = get_users( array( 'role' => 'administrator', 'number' => 1, 'fields' => 'ID' ) );
+wp_set_current_user( (int) ( $z13_admin[0] ?? 1 ) );
+$z13_tpl    = wp_insert_post( array( 'post_type' => VCAP\TemplatePostType::POST_TYPE, 'post_status' => 'publish', 'post_title' => 'Z13 template' ) );
+$z13_design = static fn( string $label ) => wp_json_encode( array( 'page' => array( 'format' => 'A6' ), 'elements' => array( array( 'id' => 't', 'type' => 'text', 'x' => 5, 'y' => 5, 'w' => 90, 'h' => 10, 'text' => $label ) ) ) );
+$z13_save   = static function ( string $label, bool $apply = false ) use ( $z13_tpl, $z13_design ): void {
+	$_POST = array( 'vcap_design_nonce' => wp_create_nonce( 'vcap_save_design' ), 'vcap_design' => wp_slash( $z13_design( $label ) ) ) + ( $apply ? array( 'vcap_design_apply_issued' => '1' ) : array() );
+	( new VCAP\TemplatePostType() )->save( (int) $z13_tpl, get_post( $z13_tpl ) );
+	$_POST = array();
+};
+$z13_save( 'Christmas design' );
+sleep( 1 );
+list( $z13_voucher ) = vcap_integration_create_voucher( 25.0, '' );
+$z13_voucher->template_id = (int) $z13_tpl;
+$repo->update( $z13_voucher );
+$z13_voucher = $repo->get( $z13_voucher->id );
+sleep( 1 );
+$z13_save( 'January design' );
+$z13_label = static fn( array $d ) => (string) ( $d['elements'][0]['text'] ?? '' );
+vcap_integration_assert( 'Christmas design' === $z13_label( VCAP\TemplatePostType::design_for_voucher( (int) $z13_tpl, $z13_voucher ) ) && 'January design' === $z13_label( VCAP\TemplatePostType::get_design( (int) $z13_tpl ) ), 'Z13: a voucher sold before a redesign keeps the design it was issued with' );
+vcap_integration_assert( str_contains( vcap()->pdf->html( $z13_voucher, VCAP\TemplatePostType::design_for_voucher( (int) $z13_tpl, $z13_voucher ) ), 'Christmas design' ), 'Z13: its PDF shows the old design' );
+wp_delete_post( (int) $z13_tpl, true );
+vcap_integration_assert( 'Christmas design' === $z13_label( VCAP\TemplatePostType::design_for_voucher( (int) $z13_tpl, $z13_voucher ) ), 'Z13: the design survives the deletion of the template' );
+delete_option( VCAP\TemplatePostType::ARCHIVE_OPTION . $z13_tpl );
+wp_set_current_user( 0 );
+
+// AP-W1-6: compatibility declarations – HPOS and block cart/checkout yes, the new product editor no. WooCommerce
+// versions without the product editor feature (removed in recent releases) ignore that declaration.
+$w16_features = wc_get_container()->get( Automattic\WooCommerce\Internal\Features\FeaturesController::class )->get_compatible_features_for_plugin( plugin_basename( VCAP_FILE ) );
+$w16_known    = in_array( 'product_block_editor', array_merge( $w16_features['compatible'] ?? array(), $w16_features['incompatible'] ?? array(), $w16_features['uncertain'] ?? array() ), true );
+vcap_integration_assert( ( ! $w16_known || in_array( 'product_block_editor', $w16_features['incompatible'] ?? array(), true ) ) && in_array( 'custom_order_tables', $w16_features['compatible'] ?? array(), true ) && in_array( 'cart_checkout_blocks', $w16_features['compatible'] ?? array(), true ), 'AP-W1-6: Voucher Captain declares the new product editor incompatible where WooCommerce offers it (' . ( $w16_known ? 'offered' : 'not offered by WooCommerce ' . WC()->version ) . '); HPOS and block checkout compatible' );
+
+$vcap_offline_core = $vcap_offline();
+vcap_integration_assert( array() === $vcap_offline_core, 'A5: the purchase, issuing, PDF, email and redemption checks of this suite ran with outgoing HTTP blocked and Voucher Captain requested nothing (' . implode( ', ', $vcap_offline_core ) . ')' );
 echo "WooCommerce integration checks passed.\n";

@@ -5,14 +5,14 @@
 Build an original WooCommerce plugin for gift vouchers, gift cards, stored-value balances, discount coupons, personalisation, PDF delivery, and voucher redemption. It can issue voucher-like service passes, but it is not the event catalogue, seat inventory, checkout, or event-entry system. Use original naming, code, UI, and visual assets; Flexible PDF Coupons is a functional reference, not a code or brand copy.
 
 
-## Boundary with Ticket Captain
+## Boundary with WP Pass Captain (formerly called "Ticket Captain")
 
-Voucher Captain and Ticket Captain are separate plugins with separate WordPress plugin entries, activation, updates, admin menus, and data ownership. When both are active, a versioned bridge connects their functions; neither plugin requires the other to operate.
+Voucher Captain and WP Pass Captain are separate plugins with separate WordPress plugin entries, activation, updates, admin menus, and data ownership. When both are active, a versioned bridge connects their functions; neither plugin requires the other to operate.
 
 - Voucher Captain owns voucher codes, discount rules, gift-card balances, voucher delivery, voucher-level redemption, and voucher history.
-- Ticket Captain owns event/occurrence data, ticket categories and capacities, event orders, seat assignments, event admission tickets, check-in, and ticket-specific refunds/status.
-- A Voucher Captain gift voucher may be configured to issue one or more Ticket Captain tickets after successful redemption. Ticket Captain may use a Voucher Captain code in its checkout only through reserve/commit/release/refund services.
-- Voucher Captain's existing scanner remains available for its own voucher/pass operations. Event admission uses Ticket Captain's ticket status and check-in records. A shared scanner may route by code prefix but must never confuse voucher redemption with event check-in.
+- WP Pass Captain owns event/occurrence data, ticket categories and capacities, event orders, seat assignments, event admission tickets, check-in, and ticket-specific refunds/status.
+- A Voucher Captain ticket voucher is exchanged for one or more WP Pass Captain tickets (implemented). WP Pass Captain uses a Voucher Captain code in its checkout only through reserve/commit/release/refund services (implemented, API.md).
+- Voucher Captain's scanner remains available for its own voucher/pass operations. Event admission uses WP Pass Captain's ticket status and check-in records. The shared scanner (implemented: Vouchers → Scanner) looks up voucher codes first and checks WP Pass Captain tickets in at Pass Captain; it never confuses voucher redemption with event check-in.
 - Customer-specific course access remains in the separate Bootsschule/Learnboating connector.
 
 ## Feature inventory
@@ -65,12 +65,14 @@ Voucher Captain and Ticket Captain are separate plugins with separate WordPress 
 - Use a maintained PDF library with a clear Composer/autoload strategy; keep HTML/template rendering separate from coupon lifecycle logic.
 - Treat imported codes, QR tokens, download URLs, and recipient data as untrusted or sensitive input; use capabilities, nonces, validation, escaping, and expiring signed links.
 
-## Open implementation decisions
+## Implementation decisions
 
-- PDF engine and minimum PHP/WordPress/WooCommerce versions.
-- Whether custom denominations require native support or integration with a product-price extension.
-- Whether commercial licensing/update delivery is required, or the first release is a single GPL plugin.
-- Supported ticket check-in workflows and whether scanning is single-use only or supports partial admission.
+| Question | Status |
+| --- | --- |
+| PDF engine and minimum versions | Decided: dompdf (bundled, scoped where needed); WordPress 7.0, WooCommerce 11.2.2, PHP 8.5 (owner decisions 16./17.11.2026; MySQL 9.7 / MariaDB 12.3 recommended) (plugin header, checked on load, CI job `minimum-versions`). |
+| Custom denominations | Decided: native custom amount per product (minimum, maximum, step, suggested amounts). |
+| Commercial licensing and update delivery | Decided (13.11.2026): the core is free (GPL-2.0-or-later, WordPress.org) with every feature and contains no licensing or update code; premium is a separate add-on that uses the public extension points (docs/FREE-PREMIUM.md). |
+| Ticket check-in workflows | Decided: Voucher Captain redeems its own vouchers and service passes (single use or balance); event tickets are checked in by WP Pass Captain, reached through the shared scanner. Partial admission belongs to WP Pass Captain. |
 
 ## Optional feature expansions
 
