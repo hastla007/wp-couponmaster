@@ -13672,16 +13672,6 @@ msgid "Voucher Captain requires WooCommerce to be installed and active."
 msgstr ""
 "Voucher Captain erfordert, dass WooCommerce installiert und aktiviert ist."
 
-#. translators: %s: installed WooCommerce version
-#: voucher-captain.php:84
-#, php-format
-msgid ""
-"Voucher Captain requires WooCommerce 8.9 or newer (installed: %s). Please "
-"update WooCommerce."
-msgstr ""
-"Voucher Captain benötigt WooCommerce 8.9 oder neuer (installiert: %s). Bitte "
-"aktualisieren Sie WooCommerce."
-
 #: voucher-captain.php:84
 msgid ""
 "Until then, gift cards and store credit are refused at checkout, because "
@@ -13874,3 +13864,7 @@ msgstr "Voucher Captain unterstützt MySQL %1$s oder neuer und MariaDB %2$s oder
 
 msgid "Voucher Captain requires PHP 8.5 or newer."
 msgstr "Voucher Captain benötigt PHP 8.5 oder neuer."
+
+#, php-format
+msgid "Voucher Captain requires WooCommerce 11.2 or newer (installed: %s). Please update WooCommerce."
+msgstr "Voucher Captain benötigt WooCommerce 11.2 oder neuer (installiert: %s). Bitte aktualisieren Sie WooCommerce."
