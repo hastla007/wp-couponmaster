@@ -4,7 +4,7 @@ Tags: woocommerce, gift card, voucher, pdf, store credit
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.5
-WC requires at least: 11.2
+WC requires at least: 11.2.2
 WC tested up to: 11.3
 Stable tag: 1.2.0
 License: GPL-2.0-or-later
@@ -24,7 +24,7 @@ Every feature is included and free (GPL-2.0-or-later): there is no license key, 
 
 == Installation ==
 
-1. Install and activate WooCommerce 11.2 or newer.
+1. Install and activate WooCommerce 11.2.2 or newer.
 2. Upload the release ZIP under Plugins → Add New → Upload Plugin and activate Voucher Captain. PHP 8.5 or newer with the mbstring and dom extensions is required (activation stops without them); GD (QR codes, barcodes and images in PDFs), zip (Excel import) and iconv are needed for those features. Tools → Site Health shows what is missing.
 3. Check WooCommerce → Settings → Vouchers (issuing status, validity, delivery, store credit, VAT treatment).
 4. Edit a product, tick "Voucher" and configure the "Voucher" tab. Two PDF templates (gift card A5, voucher/service pass A6) are created on activation; edit them in the Vouchers menu.
@@ -79,7 +79,7 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 == Changelog ==
 
 = 1.2.0 =
-* Change: requires PHP 8.5, WordPress 7.0 and WooCommerce 11.2 or newer (was PHP 8.1, WordPress 6.4, WooCommerce 8.9), the same for all Captain plugins. Supported database servers are MySQL 9.7 or MariaDB 12.3 (LTS) or newer; an older server keeps working and is only reported in Site Health.
+* Change: requires PHP 8.5, WordPress 7.0 and WooCommerce 11.2.2 or newer (was PHP 8.1, WordPress 6.4, WooCommerce 8.9), the same for all Captain plugins. Supported database servers are MySQL 9.7 or MariaDB 12.3 (LTS) or newer; an older server keeps working and is only reported in Site Health.
 * Change: new installations settle multi-purpose vouchers, gift cards and store credit as a payment after tax ("Multi-purpose vouchers as payment" on); existing shops keep their setting and see a Site Health note.
 * New: admin – "New voucher" (issue without an order, with reason; also `wp vcap issue --amount --email`), "Import cards" (existing gift cards from CSV/XLS/XLSX/ODS with dry run, also `wp vcap import`), bulk actions "Extend validity", "Send expiry reminder" and "Export selection (CSV)", search by code end, code without separators or order number, "Show vouchers" on the user profile.
 * New: storefront – live preview of the voucher while typing, design choice from several PDF templates, "As a gift / For me", a separate "Redeem a gift card" field in cart and checkout (classic and blocks), remaining balance in the mini cart, custom amounts through the Store API (blocks, headless).
@@ -231,7 +231,7 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 == Upgrade Notice ==
 
 = 1.2.0 =
-Requires PHP 8.5, WordPress 7.0 and WooCommerce 11.2 or newer (was PHP 8.1, WordPress 6.4, WooCommerce 8.9); MySQL 9.7 / MariaDB 12.3 recommended. All features stay free. The database is updated to version 1.8.0 – back up first. Existing shops keep how multi-purpose vouchers are booked; new installations book them as a payment after tax. Connectors: customers can no longer refund a completed redemption over the REST API (filter `vcap_customer_may_refund_redemption` to allow it).
+Requires PHP 8.5, WordPress 7.0 and WooCommerce 11.2.2 or newer (was PHP 8.1, WordPress 6.4, WooCommerce 8.9); MySQL 9.7 / MariaDB 12.3 recommended. All features stay free. The database is updated to version 1.8.0 – back up first. Existing shops keep how multi-purpose vouchers are booked; new installations book them as a payment after tax. Connectors: customers can no longer refund a completed redemption over the REST API (filter `vcap_customer_may_refund_redemption` to allow it).
 
 = 1.1.0 =
 Requires WooCommerce 8.9 or newer.

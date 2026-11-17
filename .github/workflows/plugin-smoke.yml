@@ -144,7 +144,7 @@ jobs:
           php wp-cli.phar --path=wp-test eval 'global $wpdb; if ($wpdb->get_var("SHOW TABLES LIKE \"{$wpdb->prefix}vcap_vouchers\"")) { exit(1); }'
 
   minimum-versions:
-    # Oldest supported platform (plugin header) without Yoast SEO: WordPress 7.0, WooCommerce 11.2, PHP 8.5. WooCommerce in its
+    # Oldest supported platform (plugin header) without Yoast SEO: WordPress 7.0, WooCommerce 11.2.2, PHP 8.5. WooCommerce in its
     # latest patch release: 11.2.0 reused the order and payment data of an earlier Store API checkout in the same PHP
     # process (fixed in 11.2.2, woocommerce#70637) – the suites run several checkouts per process.
     runs-on: ubuntu-latest
@@ -173,7 +173,7 @@ jobs:
         run: composer install --no-interaction --prefer-dist
       - name: Download WP-CLI
         run: curl --fail --silent --show-error https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar --output wp-cli.phar
-      - name: Install WordPress 7.0, WooCommerce 11.2 and the release ZIP (no Yoast SEO)
+      - name: Install WordPress 7.0, WooCommerce 11.2.2 and the release ZIP (no Yoast SEO)
         run: |
           php wp-cli.phar core download --path=wp-test --version=7.0
           php wp-cli.phar config create --path=wp-test --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1 --skip-check

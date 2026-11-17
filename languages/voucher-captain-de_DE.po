@@ -4,7 +4,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: Voucher Captain 1.0.0\n"
-"POT-Creation-Date: 2026-11-17 06:10+0000\n"
+"POT-Creation-Date: 2026-11-17 06:35+0000\n"
 "PO-Revision-Date: 2026-11-14 16:00+0000\n"
 "Last-Translator: \n"
 "Language-Team: German\n"
@@ -1659,7 +1659,7 @@ msgstr[0] "%d Gutschein (Kulanz, Gewinne, Importe)"
 msgstr[1] "%d Gutscheine (Kulanz, Gewinne, Importe)"
 
 #: src/Admin/ReportsAdmin.php:194 src/Admin/Scanner.php:115
-#: src/Tickets.php:1176 src/Voucher.php:64 src/VoucherRepository.php:1163
+#: src/Tickets.php:1176 src/Voucher.php:64 src/VoucherRepository.php:1164
 msgid "Redeemed"
 msgstr "Eingelöst"
 
@@ -1680,7 +1680,7 @@ msgstr[0] "%1$d Gutschein mit Restwert am %2$s"
 msgstr[1] "%1$d Gutscheine mit Restwert am %2$s"
 
 #: src/Admin/ReportsAdmin.php:196 src/Ledger.php:550 src/Tickets.php:196
-#: src/Voucher.php:65 src/VoucherRepository.php:1172
+#: src/Voucher.php:65 src/VoucherRepository.php:1173
 msgid "Expired"
 msgstr "Abgelaufen"
 
@@ -2740,7 +2740,7 @@ msgstr "WooCommerce-Code"
 msgid "none (ticket)"
 msgstr "keiner (Ticket)"
 
-#: src/Admin/VoucherAdmin.php:192 src/VoucherRepository.php:1152
+#: src/Admin/VoucherAdmin.php:192 src/VoucherRepository.php:1153
 msgid "Delivered"
 msgstr "Zugestellt"
 
@@ -3846,7 +3846,7 @@ msgid "Buyer → recipient"
 msgstr "Käufer → Empfänger"
 
 #: src/Admin/VouchersListTable.php:34 src/Integrations/VoucherRequests.php:989
-#: src/Ledger.php:550 src/VoucherRepository.php:1142
+#: src/Ledger.php:550 src/VoucherRepository.php:1143
 msgid "Issued"
 msgstr "Ausgestellt"
 
@@ -5039,7 +5039,7 @@ msgid "Already checked in by this scan"
 msgstr "Mit diesem Scan bereits eingecheckt"
 
 #: src/Compat/PassCaptainScanner.php:97 src/Tickets.php:645
-#: src/VoucherRepository.php:1168
+#: src/VoucherRepository.php:1169
 msgid "Checked in"
 msgstr "Eingecheckt"
 
@@ -5801,7 +5801,7 @@ msgstr ""
 "verfallener Restwert, Rundungsreste."
 
 #. translators: %s: reference id, searchable in WooCommerce → Status → Logs
-#: src/Db.php:282
+#: src/Db.php:313
 #, php-format
 msgid ""
 "A database error occurred (reference %s, see WooCommerce → Status → Logs)."
@@ -6635,7 +6635,7 @@ msgstr "Dieser Gutschein wurde nicht gefunden."
 msgid "This is the address the voucher is already sent to."
 msgstr "An diese Adresse wird der Gutschein bereits gesendet."
 
-#: src/Downloads.php:400 src/VoucherRepository.php:1179
+#: src/Downloads.php:400 src/VoucherRepository.php:1180
 msgid "Recipient corrected by the buyer"
 msgstr "Empfänger vom Käufer korrigiert"
 
@@ -10215,7 +10215,7 @@ msgstr "Gutscheineinlösungen"
 msgid "Target"
 msgstr "Ziel"
 
-#: src/Privacy.php:117 src/VoucherRepository.php:1184
+#: src/Privacy.php:117 src/VoucherRepository.php:1185
 msgid "Contact data read by the workflow plugin"
 msgstr "Kontaktdaten vom Workflow-Plugin abgerufen"
 
@@ -13689,7 +13689,7 @@ msgstr ""
 msgid "Please enter a reason for reverting this check-in."
 msgstr "Bitte geben Sie einen Grund für die Rücknahme des Check-ins an."
 
-#: src/Tickets.php:645 src/VoucherRepository.php:1169
+#: src/Tickets.php:645 src/VoucherRepository.php:1170
 msgid "Check-in reverted"
 msgstr "Check-in rückgängig gemacht"
 
@@ -14243,146 +14243,146 @@ msgstr ""
 "Der Mindestbestellwert für den Gutscheincode „%1$s“ beträgt %2$s. "
 "Gutscheinprodukte im Warenkorb zählen nicht dazu."
 
-#: src/VoucherRepository.php:1143
+#: src/VoucherRepository.php:1144
 msgid "Balance reserved for payment"
 msgstr "Restwert für Zahlung reserviert"
 
-#: src/VoucherRepository.php:1144
+#: src/VoucherRepository.php:1145
 msgid ""
 "Used in a shop order although already redeemed elsewhere – check the order"
 msgstr ""
 "In einer Shop-Bestellung verwendet, obwohl bereits anderswo eingelöst – "
 "Bestellung prüfen"
 
-#: src/VoucherRepository.php:1145
+#: src/VoucherRepository.php:1146
 msgid "Balance reservation committed"
 msgstr "Reservierung des Restwerts verbucht"
 
-#: src/VoucherRepository.php:1146
+#: src/VoucherRepository.php:1147
 msgid "Balance reservation released"
 msgstr "Reservierung des Restwerts freigegeben"
 
-#: src/VoucherRepository.php:1147
+#: src/VoucherRepository.php:1148
 msgid "Reserved for external redemption"
 msgstr "Für externe Einlösung reserviert"
 
-#: src/VoucherRepository.php:1148
+#: src/VoucherRepository.php:1149
 msgid "Redeemed externally"
 msgstr "Extern eingelöst"
 
-#: src/VoucherRepository.php:1149
+#: src/VoucherRepository.php:1150
 msgid "External reservation released"
 msgstr "Externe Reservierung freigegeben"
 
-#: src/VoucherRepository.php:1150
+#: src/VoucherRepository.php:1151
 msgid "External redemption refunded"
 msgstr "Externe Einlösung erstattet"
 
-#: src/VoucherRepository.php:1151
+#: src/VoucherRepository.php:1152
 msgid "Delivery scheduled"
 msgstr "Zustellung geplant"
 
-#: src/VoucherRepository.php:1153
+#: src/VoucherRepository.php:1154
 msgid "Delivery failed"
 msgstr "Zustellung fehlgeschlagen"
 
-#: src/VoucherRepository.php:1154
+#: src/VoucherRepository.php:1155
 msgid "Delivery given up (no more automatic attempts)"
 msgstr "Zustellung aufgegeben (keine automatischen Versuche mehr)"
 
-#: src/VoucherRepository.php:1155
+#: src/VoucherRepository.php:1156
 msgid "Not delivered: already expired"
 msgstr "Nicht zugestellt: bereits abgelaufen"
 
-#: src/VoucherRepository.php:1156
+#: src/VoucherRepository.php:1157
 msgid "Delivered without PDF"
 msgstr "Ohne PDF zugestellt"
 
-#: src/VoucherRepository.php:1157 src/Workflow/Handover.php:40
+#: src/VoucherRepository.php:1158 src/Workflow/Handover.php:40
 msgid "Expiry reminder"
 msgstr "Erinnerung vor Ablauf"
 
-#: src/VoucherRepository.php:1158
+#: src/VoucherRepository.php:1159
 msgid "Credit added"
 msgstr "Kundenguthaben gutgeschrieben"
 
-#: src/VoucherRepository.php:1159
+#: src/VoucherRepository.php:1160
 msgid "Credit removed"
 msgstr "Kundenguthaben belastet"
 
-#: src/VoucherRepository.php:1160
+#: src/VoucherRepository.php:1161
 msgid "Refunded as store credit"
 msgstr "Als Kundenguthaben erstattet"
 
-#: src/VoucherRepository.php:1161
+#: src/VoucherRepository.php:1162
 msgid "Store credit refund reversed"
 msgstr "Erstattung als Kundenguthaben zurückgebucht"
 
-#: src/VoucherRepository.php:1162
+#: src/VoucherRepository.php:1163
 msgid "Email resent"
 msgstr "E-Mail erneut gesendet"
 
-#: src/VoucherRepository.php:1164
+#: src/VoucherRepository.php:1165
 msgid "Redemption cancelled (value booked back)"
 msgstr "Einlösung storniert (Wert zurückgebucht)"
 
-#: src/VoucherRepository.php:1165
+#: src/VoucherRepository.php:1166
 msgid "Balance restored"
 msgstr "Restwert wiederhergestellt"
 
-#: src/VoucherRepository.php:1166
+#: src/VoucherRepository.php:1167
 msgid "Balance adjusted"
 msgstr "Restwert angepasst"
 
-#: src/VoucherRepository.php:1167
+#: src/VoucherRepository.php:1168
 msgid "Rounding rest booked off"
 msgstr "Rundungsrest ausgebucht"
 
-#: src/VoucherRepository.php:1170
+#: src/VoucherRepository.php:1171
 msgid "Voided"
 msgstr "Storniert"
 
-#: src/VoucherRepository.php:1171
+#: src/VoucherRepository.php:1172
 msgid "Reactivated"
 msgstr "Reaktiviert"
 
-#: src/VoucherRepository.php:1173
+#: src/VoucherRepository.php:1174
 msgid "Edited"
 msgstr "Bearbeitet"
 
-#: src/VoucherRepository.php:1174
+#: src/VoucherRepository.php:1175
 msgid "Downloaded"
 msgstr "Heruntergeladen"
 
-#: src/VoucherRepository.php:1175
+#: src/VoucherRepository.php:1176
 msgid "Reissued with a new code"
 msgstr "Mit neuem Code neu ausgestellt"
 
-#: src/VoucherRepository.php:1176
+#: src/VoucherRepository.php:1177
 msgid "Imported (existing card)"
 msgstr "Importiert (bestehende Karte)"
 
-#: src/VoucherRepository.php:1177
+#: src/VoucherRepository.php:1178
 msgid "Moved to store credit"
 msgstr "In Kundenguthaben übertragen"
 
-#: src/VoucherRepository.php:1178
+#: src/VoucherRepository.php:1179
 msgid "Activated"
 msgstr "Aktiviert"
 
-#: src/VoucherRepository.php:1180
+#: src/VoucherRepository.php:1181
 msgid "Delivery attempt"
 msgstr "Zustellversuch"
 
-#: src/VoucherRepository.php:1181
+#: src/VoucherRepository.php:1182
 msgid "Buyer told that the gift was used"
 msgstr "Käufer über die Einlösung des Geschenks informiert"
 
-#: src/VoucherRepository.php:1182
+#: src/VoucherRepository.php:1183
 msgid "Workflow action"
 msgstr "Workflow-Aktion"
 
-#: src/VoucherRepository.php:1183
+#: src/VoucherRepository.php:1184
 msgid "Handed over to the workflow"
 msgstr "An den Workflow übergeben"
 
@@ -14728,9 +14728,9 @@ msgstr ""
 #: voucher-captain.php:96
 #, php-format
 msgid ""
-"Voucher Captain requires WooCommerce 11.2 or newer (installed: %s). Please "
+"Voucher Captain requires WooCommerce 11.2.2 or newer (installed: %s). Please "
 "update WooCommerce."
-msgstr "Voucher Captain benötigt WooCommerce 11.2 oder neuer (installiert: %s). Bitte aktualisieren Sie WooCommerce."
+msgstr "Voucher Captain benötigt WooCommerce 11.2.2 oder neuer (installiert: %s). Bitte aktualisieren Sie WooCommerce."
 
 #: voucher-captain.php:96
 msgid ""

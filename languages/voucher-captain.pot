@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-17 06:10+0000\n"
+"POT-Creation-Date: 2026-11-17 06:35+0000\n"
 "X-Domain: voucher-captain\n"
 
 #. Plugin Name of the plugin
@@ -1267,7 +1267,7 @@ msgid_plural "%d vouchers (goodwill, prizes, imports)"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Admin/ReportsAdmin.php:194 src/Admin/Scanner.php:115 src/Tickets.php:1176 src/Voucher.php:64 src/VoucherRepository.php:1163
+#: src/Admin/ReportsAdmin.php:194 src/Admin/Scanner.php:115 src/Tickets.php:1176 src/Voucher.php:64 src/VoucherRepository.php:1164
 msgid "Redeemed"
 msgstr ""
 
@@ -1287,7 +1287,7 @@ msgid_plural "%1$d vouchers with value left on %2$s"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Admin/ReportsAdmin.php:196 src/Ledger.php:550 src/Tickets.php:196 src/Voucher.php:65 src/VoucherRepository.php:1172
+#: src/Admin/ReportsAdmin.php:196 src/Ledger.php:550 src/Tickets.php:196 src/Voucher.php:65 src/VoucherRepository.php:1173
 msgid "Expired"
 msgstr ""
 
@@ -2087,7 +2087,7 @@ msgstr ""
 msgid "none (ticket)"
 msgstr ""
 
-#: src/Admin/VoucherAdmin.php:192 src/VoucherRepository.php:1152
+#: src/Admin/VoucherAdmin.php:192 src/VoucherRepository.php:1153
 msgid "Delivered"
 msgstr ""
 
@@ -2897,7 +2897,7 @@ msgstr ""
 msgid "Buyer → recipient"
 msgstr ""
 
-#: src/Admin/VouchersListTable.php:34 src/Integrations/VoucherRequests.php:989 src/Ledger.php:550 src/VoucherRepository.php:1142
+#: src/Admin/VouchersListTable.php:34 src/Integrations/VoucherRequests.php:989 src/Ledger.php:550 src/VoucherRepository.php:1143
 msgid "Issued"
 msgstr ""
 
@@ -3827,7 +3827,7 @@ msgstr ""
 msgid "Already checked in by this scan"
 msgstr ""
 
-#: src/Compat/PassCaptainScanner.php:97 src/Tickets.php:645 src/VoucherRepository.php:1168
+#: src/Compat/PassCaptainScanner.php:97 src/Tickets.php:645 src/VoucherRepository.php:1169
 msgid "Checked in"
 msgstr ""
 
@@ -4378,7 +4378,7 @@ msgid "Counter account of value that is no longer owed: expired vouchers, forfei
 msgstr ""
 
 #. translators: %s: reference id, searchable in WooCommerce → Status → Logs
-#: src/Db.php:282
+#: src/Db.php:313
 #, php-format
 msgid "A database error occurred (reference %s, see WooCommerce → Status → Logs)."
 msgstr ""
@@ -5077,7 +5077,7 @@ msgstr ""
 msgid "This is the address the voucher is already sent to."
 msgstr ""
 
-#: src/Downloads.php:400 src/VoucherRepository.php:1179
+#: src/Downloads.php:400 src/VoucherRepository.php:1180
 msgid "Recipient corrected by the buyer"
 msgstr ""
 
@@ -7677,7 +7677,7 @@ msgstr ""
 msgid "Target"
 msgstr ""
 
-#: src/Privacy.php:117 src/VoucherRepository.php:1184
+#: src/Privacy.php:117 src/VoucherRepository.php:1185
 msgid "Contact data read by the workflow plugin"
 msgstr ""
 
@@ -10145,7 +10145,7 @@ msgstr ""
 msgid "Please enter a reason for reverting this check-in."
 msgstr ""
 
-#: src/Tickets.php:645 src/VoucherRepository.php:1169
+#: src/Tickets.php:645 src/VoucherRepository.php:1170
 msgid "Check-in reverted"
 msgstr ""
 
@@ -10533,143 +10533,143 @@ msgstr ""
 msgid "The minimum spend for coupon \"%1$s\" is %2$s. Voucher products in the cart do not count towards it."
 msgstr ""
 
-#: src/VoucherRepository.php:1143
+#: src/VoucherRepository.php:1144
 msgid "Balance reserved for payment"
 msgstr ""
 
-#: src/VoucherRepository.php:1144
+#: src/VoucherRepository.php:1145
 msgid "Used in a shop order although already redeemed elsewhere – check the order"
 msgstr ""
 
-#: src/VoucherRepository.php:1145
+#: src/VoucherRepository.php:1146
 msgid "Balance reservation committed"
 msgstr ""
 
-#: src/VoucherRepository.php:1146
+#: src/VoucherRepository.php:1147
 msgid "Balance reservation released"
 msgstr ""
 
-#: src/VoucherRepository.php:1147
+#: src/VoucherRepository.php:1148
 msgid "Reserved for external redemption"
 msgstr ""
 
-#: src/VoucherRepository.php:1148
+#: src/VoucherRepository.php:1149
 msgid "Redeemed externally"
 msgstr ""
 
-#: src/VoucherRepository.php:1149
+#: src/VoucherRepository.php:1150
 msgid "External reservation released"
 msgstr ""
 
-#: src/VoucherRepository.php:1150
+#: src/VoucherRepository.php:1151
 msgid "External redemption refunded"
 msgstr ""
 
-#: src/VoucherRepository.php:1151
+#: src/VoucherRepository.php:1152
 msgid "Delivery scheduled"
 msgstr ""
 
-#: src/VoucherRepository.php:1153
+#: src/VoucherRepository.php:1154
 msgid "Delivery failed"
 msgstr ""
 
-#: src/VoucherRepository.php:1154
+#: src/VoucherRepository.php:1155
 msgid "Delivery given up (no more automatic attempts)"
 msgstr ""
 
-#: src/VoucherRepository.php:1155
+#: src/VoucherRepository.php:1156
 msgid "Not delivered: already expired"
 msgstr ""
 
-#: src/VoucherRepository.php:1156
+#: src/VoucherRepository.php:1157
 msgid "Delivered without PDF"
 msgstr ""
 
-#: src/VoucherRepository.php:1157 src/Workflow/Handover.php:40
+#: src/VoucherRepository.php:1158 src/Workflow/Handover.php:40
 msgid "Expiry reminder"
 msgstr ""
 
-#: src/VoucherRepository.php:1158
+#: src/VoucherRepository.php:1159
 msgid "Credit added"
 msgstr ""
 
-#: src/VoucherRepository.php:1159
+#: src/VoucherRepository.php:1160
 msgid "Credit removed"
 msgstr ""
 
-#: src/VoucherRepository.php:1160
+#: src/VoucherRepository.php:1161
 msgid "Refunded as store credit"
 msgstr ""
 
-#: src/VoucherRepository.php:1161
+#: src/VoucherRepository.php:1162
 msgid "Store credit refund reversed"
 msgstr ""
 
-#: src/VoucherRepository.php:1162
+#: src/VoucherRepository.php:1163
 msgid "Email resent"
 msgstr ""
 
-#: src/VoucherRepository.php:1164
+#: src/VoucherRepository.php:1165
 msgid "Redemption cancelled (value booked back)"
 msgstr ""
 
-#: src/VoucherRepository.php:1165
+#: src/VoucherRepository.php:1166
 msgid "Balance restored"
 msgstr ""
 
-#: src/VoucherRepository.php:1166
+#: src/VoucherRepository.php:1167
 msgid "Balance adjusted"
 msgstr ""
 
-#: src/VoucherRepository.php:1167
+#: src/VoucherRepository.php:1168
 msgid "Rounding rest booked off"
 msgstr ""
 
-#: src/VoucherRepository.php:1170
+#: src/VoucherRepository.php:1171
 msgid "Voided"
 msgstr ""
 
-#: src/VoucherRepository.php:1171
+#: src/VoucherRepository.php:1172
 msgid "Reactivated"
 msgstr ""
 
-#: src/VoucherRepository.php:1173
+#: src/VoucherRepository.php:1174
 msgid "Edited"
 msgstr ""
 
-#: src/VoucherRepository.php:1174
+#: src/VoucherRepository.php:1175
 msgid "Downloaded"
 msgstr ""
 
-#: src/VoucherRepository.php:1175
+#: src/VoucherRepository.php:1176
 msgid "Reissued with a new code"
 msgstr ""
 
-#: src/VoucherRepository.php:1176
+#: src/VoucherRepository.php:1177
 msgid "Imported (existing card)"
 msgstr ""
 
-#: src/VoucherRepository.php:1177
+#: src/VoucherRepository.php:1178
 msgid "Moved to store credit"
 msgstr ""
 
-#: src/VoucherRepository.php:1178
+#: src/VoucherRepository.php:1179
 msgid "Activated"
 msgstr ""
 
-#: src/VoucherRepository.php:1180
+#: src/VoucherRepository.php:1181
 msgid "Delivery attempt"
 msgstr ""
 
-#: src/VoucherRepository.php:1181
+#: src/VoucherRepository.php:1182
 msgid "Buyer told that the gift was used"
 msgstr ""
 
-#: src/VoucherRepository.php:1182
+#: src/VoucherRepository.php:1183
 msgid "Workflow action"
 msgstr ""
 
-#: src/VoucherRepository.php:1183
+#: src/VoucherRepository.php:1184
 msgid "Handed over to the workflow"
 msgstr ""
 
@@ -10966,7 +10966,7 @@ msgstr ""
 #. translators: %s: installed WooCommerce version
 #: voucher-captain.php:96
 #, php-format
-msgid "Voucher Captain requires WooCommerce 11.2 or newer (installed: %s). Please update WooCommerce."
+msgid "Voucher Captain requires WooCommerce 11.2.2 or newer (installed: %s). Please update WooCommerce."
 msgstr ""
 
 #: voucher-captain.php:96

@@ -33,7 +33,7 @@ final class Plugin {
 	public Workflow\Provider $workflow;
 
 	/** Oldest WooCommerce version Voucher Captain runs with (header "WC requires at least"). */
-	public const MIN_WC_VERSION = '11.2';
+	public const MIN_WC_VERSION = '11.2.2';
 
 	/**
 	 * The running plugin. Boots it on the first call; only after requirements_met() (voucher-captain.php checks

@@ -7,7 +7,7 @@
  * Requires at least: 7.0
  * Requires PHP:      8.5
  * Requires Plugins:  woocommerce
- * WC requires at least: 11.2
+ * WC requires at least: 11.2.2
  * WC tested up to:   11.3
  * Author:            CouponMaster
  * Text Domain:       voucher-captain
@@ -93,7 +93,7 @@ add_action(
 				static function (): void {
 					if ( current_user_can( 'activate_plugins' ) ) {
 						/* translators: %s: installed WooCommerce version */
-						echo '<div class="notice notice-error"><p>' . esc_html( sprintf( __( 'Voucher Captain requires WooCommerce 11.2 or newer (installed: %s). Please update WooCommerce.', 'voucher-captain' ), WC_VERSION ) ) . ' ' . esc_html__( 'Until then, gift cards and store credit are refused at checkout, because their balance cannot be deducted.', 'voucher-captain' ) . '</p></div>';
+						echo '<div class="notice notice-error"><p>' . esc_html( sprintf( __( 'Voucher Captain requires WooCommerce 11.2.2 or newer (installed: %s). Please update WooCommerce.', 'voucher-captain' ), WC_VERSION ) ) . ' ' . esc_html__( 'Until then, gift cards and store credit are refused at checkout, because their balance cannot be deducted.', 'voucher-captain' ) . '</p></div>';
 					}
 				}
 			);
