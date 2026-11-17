@@ -81,6 +81,13 @@ VCAP\Db::reset();
 /* ---- M12-04: bookings inside an outer transaction (connector) see the latest committed balance ------------------ */
 
 $card = vcap_lg_voucher( 'balance', 100.0 );
+if ( false !== stripos( (string) $wpdb->db_server_info(), 'mariadb' ) ) {
+	// As MariaDB 11.6.2+ by default: a locking read of a row changed since the snapshot would fail with 1020 (and roll
+	// back the transaction). The plugin switches it off for its bookings (Db::classic_locking_reads()).
+	$lg_suppress = $wpdb->suppress_errors( true );
+	$wpdb->query( 'SET SESSION innodb_snapshot_isolation = ON' ); // phpcs:ignore
+	$wpdb->suppress_errors( $lg_suppress );
+}
 Db::begin(); // A connector's own Db::transaction() …
 $seen = vcap()->vouchers->get( $card->id ); // … that read the card first: its REPEATABLE READ snapshot is taken now.
 vcap_lg_other_deduct( $other, $card, 80.0 ); // The till deducts 80 € and commits meanwhile.

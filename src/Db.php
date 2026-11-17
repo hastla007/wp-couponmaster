@@ -36,6 +36,36 @@ final class Db {
 	 */
 	private static bool $lost = false;
 
+	/** Whether the server is MariaDB (null = not checked yet; false also when the setting below is unknown there). */
+	private static ?bool $snapshot_setting = null;
+
+	/**
+	 * MariaDB 11.6.2+ turns innodb_snapshot_isolation on by default: a locking read (SELECT … FOR UPDATE) of a row
+	 * another request changed after this transaction's first read then fails with 1020 "Record has changed since
+	 * last read" and the whole transaction is rolled back. The bookings rely on the classic InnoDB behaviour (the
+	 * locking read sees the latest committed row, M12-04) – as on MySQL and older MariaDB – so it is switched off for
+	 * this connection before each transaction and each locking read (it applies from the next statement on, also
+	 * inside a transaction another plugin opened). No effect on MySQL.
+	 */
+	public static function classic_locking_reads(): void {
+		global $wpdb;
+		if ( ! is_object( $wpdb ) ) {
+			return;
+		}
+		if ( null === self::$snapshot_setting ) {
+			$info                   = method_exists( $wpdb, 'db_server_info' ) ? (string) $wpdb->db_server_info() : '';
+			self::$snapshot_setting = false !== stripos( $info, 'mariadb' );
+		}
+		if ( ! self::$snapshot_setting ) {
+			return;
+		}
+		$suppress = $wpdb->suppress_errors( true );
+		if ( false === $wpdb->query( 'SET SESSION innodb_snapshot_isolation = OFF' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			self::$snapshot_setting = false; // A MariaDB version without the setting: nothing to switch off.
+		}
+		$wpdb->suppress_errors( $suppress );
+	}
+
 	/**
 	 * Opens a transaction, or a savepoint when one is already open. False when the database refused it (then
 	 * nothing is open and the caller must not commit or roll back).
@@ -46,6 +76,7 @@ final class Db {
 		if ( self::$lost ) {
 			return false; // M12-04: the outer transaction is gone; the caller must not commit or roll back.
 		}
+		self::classic_locking_reads();
 		$sql = 0 === self::$depth ? 'START TRANSACTION' : 'SAVEPOINT vcap_sp_' . self::$depth;
 		if ( false === $wpdb->query( $sql ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared -- constant SQL and an integer.
 			return false;
