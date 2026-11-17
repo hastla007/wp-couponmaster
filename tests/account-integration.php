@@ -673,10 +673,10 @@ wp_parse_str( (string) wp_parse_url( vcap()->downloads->signed_url( $v10_new, tr
 vcap_acct_assert( true === $v10_valid->invoke( vcap()->downloads, $v10_new->token, (int) $v10_link['exp'], (string) $v10_link['sig'], vcap()->downloads->link_version( $v10_new ) ), 'V10: fresh links (My Account, new email) work with the new token' );
 $v10_discounts = new WC_Discounts( vcap_acct_order( $v6_goods, $buyer, $login . '@example.com' ) );
 // As the cart resolves a code: new WC_Coupon( $code ) reads an unknown code that starts with digits as a post id
-// ("45ABC…" → coupon #45), so the old random code sometimes loaded another coupon here (flaky V10).
+// ("45ABC…" → coupon #45, seen with WordPress 7.0; 7.1 no longer casts such strings), so the old random code sometimes loaded another coupon here (flaky V10).
 $v10_old_coupon = VCAP\Coupons\CouponFactory::for_code( $v10_old['code'] );
 $v10_trap       = $v10_new->coupon_id . 'zzqvcapnotacode';
-vcap_acct_assert( (int) $v10_new->coupon_id === ( new WC_Coupon( $v10_trap ) )->get_id() && 0 === VCAP\Coupons\CouponFactory::for_code( $v10_trap )->get_id() && (int) $v10_new->coupon_id === VCAP\Coupons\CouponFactory::for_code( $v10_new->code )->get_id(), 'V10: an unknown code that starts with a coupon id does not load that coupon (WooCommerce reads it as an id; CouponFactory::for_code() checks the code like the cart)' );
+vcap_acct_assert( 0 === VCAP\Coupons\CouponFactory::for_code( $v10_trap )->get_id() && (int) $v10_new->coupon_id === VCAP\Coupons\CouponFactory::for_code( $v10_new->code )->get_id(), 'V10: an unknown code that starts with a coupon id does not load that coupon (older WordPress reads it as a post id; CouponFactory::for_code() checks the code like the cart)' );
 $v10_old_valid  = $v10_discounts->is_coupon_valid( $v10_old_coupon );
 vcap_acct_assert( is_wp_error( $v10_old_valid ), 'V10: the old code can no longer be redeemed', array( 'coupon_id' => $v10_old_coupon->get_id(), 'virtual' => $v10_old_coupon->get_virtual(), 'code' => $v10_old_coupon->get_code(), 'new_code' => $v10_new->code, 'amount' => $v10_old_coupon->get_amount(), 'by_code' => wc_get_coupon_id_by_code( $v10_old['code'] ), 'result' => is_wp_error( $v10_old_valid ) ? $v10_old_valid->get_error_message() : $v10_old_valid ) );
 $v10_by_old = VCAP\Reissue::voucher_of_previous_code( vcap()->vouchers, $v10_old['code'] );
