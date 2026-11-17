@@ -435,8 +435,10 @@ VCAP\Install::create_tables();
 $p6_event_idx = array_map( 'strtolower', array_unique( (array) $wpdb->get_col( "SHOW INDEX FROM {$tables['events']}", 2 ) ) ); // phpcs:ignore
 vcap_inst_assert( ! in_array( 'voucher_id', $p6_event_idx, true ) && in_array( 'voucher_ledger', $p6_event_idx, true ) && array() === VCAP\Install::verify_schema(), 'A16: a schema run drops the replaced events.voucher_id index again and the schema stays complete' );
 // The queries use them (possible keys of the optimizer).
+// MySQL 9 answers EXPLAIN as a tree by default: ask for the table format there (MariaDB has only that one).
 $p6_explain = static function ( string $sql ) use ( $wpdb ): string {
-	return strtolower( (string) implode( ',', array_column( (array) $wpdb->get_results( 'EXPLAIN ' . $sql, ARRAY_A ), 'possible_keys' ) ) ); // phpcs:ignore
+	$format = false !== stripos( (string) $wpdb->db_server_info(), 'mariadb' ) ? 'EXPLAIN ' : 'EXPLAIN FORMAT=TRADITIONAL ';
+	return strtolower( (string) implode( ',', array_column( (array) $wpdb->get_results( $format . $sql, ARRAY_A ), 'possible_keys' ) ) ); // phpcs:ignore
 };
 vcap_inst_assert( str_contains( $p6_explain( $wpdb->prepare( "SELECT id FROM {$tables['vouchers']} WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < %s ORDER BY expires_at LIMIT 500", gmdate( 'Y-m-d H:i:s' ) ) ), 'status_expires' ), 'B6: EXPLAIN of the expiry batch query offers the (status, expires_at) index' ); // phpcs:ignore
 vcap_inst_assert( str_contains( $p6_explain( $wpdb->prepare( "SELECT id FROM {$tables['events']} WHERE actor_email_hash = %s", hash( 'sha256', 'x@example.com' ) ) ), 'actor_email_hash' ), 'B5: EXPLAIN of the lookup by address hash offers the actor_email_hash index' ); // phpcs:ignore
