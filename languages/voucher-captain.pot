@@ -6,11 +6,11 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-17 06:35+0000\n"
+"POT-Creation-Date: 2026-11-17 07:36+0000\n"
 "X-Domain: voucher-captain\n"
 
 #. Plugin Name of the plugin
-#: voucher-captain.php src/Brand.php:17
+#: voucher-captain.php src/Brand.php:17 src/Integrations/FormCaptain/Connector.php:93
 msgid "Voucher Captain"
 msgstr ""
 
@@ -951,7 +951,7 @@ msgstr ""
 msgid "Import cards"
 msgstr ""
 
-#: src/Admin/Menu.php:48 src/Admin/Menu.php:48 src/Admin/VoucherRequestsAdmin.php:40 src/Integrations/VoucherRequests.php:109 src/Integrations/VoucherRequests.php:119 src/Integrations/VoucherRequests.php:188
+#: src/Admin/Menu.php:48 src/Admin/Menu.php:48 src/Admin/VoucherRequestsAdmin.php:40 src/Integrations/FormCaptain/RequestsAdmin.php:58 src/Integrations/FormCaptain/RequestsAdmin.php:62 src/Integrations/FormCaptain/RequestsAdmin.php:121
 msgid "Voucher requests"
 msgstr ""
 
@@ -1851,7 +1851,7 @@ msgstr ""
 msgid "User"
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:96 src/Admin/VoucherAdmin.php:330 src/Admin/VoucherAdmin.php:356 src/Admin/VoucherRequestsAdmin.php:122 src/Integrations/VoucherRequests.php:177 src/Ledger.php:574
+#: src/Admin/StoreCreditAdmin.php:96 src/Admin/VoucherAdmin.php:330 src/Admin/VoucherAdmin.php:356 src/Admin/VoucherRequestsAdmin.php:122 src/Integrations/FormCaptain/RequestsAdmin.php:239 src/Integrations/VoucherRequests.php:177
 msgid "Note"
 msgstr ""
 
@@ -2753,7 +2753,7 @@ msgstr ""
 msgid "Done"
 msgstr ""
 
-#: src/Admin/VoucherRequestsAdmin.php:55 src/Admin/VouchersListTable.php:65
+#: src/Admin/VoucherRequestsAdmin.php:55 src/Admin/VouchersListTable.php:65 src/Integrations/FormCaptain/RequestsAdmin.php:151
 msgid "All"
 msgstr ""
 
@@ -5661,7 +5661,7 @@ msgstr ""
 msgid "Leave empty to receive the voucher yourself."
 msgstr ""
 
-#: src/Fields.php:136 src/Placeholders.php:35 src/ProductSettings.php:531 templates/myaccount/vouchers-table.php:135
+#: src/Fields.php:136 src/Integrations/FormCaptain/RequestService.php:514 src/Placeholders.php:35 src/ProductSettings.php:531 templates/myaccount/vouchers-table.php:135
 msgid "Personal message"
 msgstr ""
 
@@ -5853,7 +5853,7 @@ msgstr ""
 msgid "Text area"
 msgstr ""
 
-#: src/Fields.php:1342
+#: src/Fields.php:1342 src/Integrations/FormCaptain/Connector.php:45 src/Integrations/FormCaptain/RequestsAdmin.php:221
 msgid "Email"
 msgstr ""
 
@@ -6527,8 +6527,220 @@ msgctxt "User role"
 msgid "Voucher cashier"
 msgstr ""
 
-#: src/Integrations/VoucherRequests.php:172
+#: src/Integrations/FormCaptain/Connector.php:34 src/Integrations/FormCaptain/RequestsAdmin.php:160 src/Integrations/FormCaptain/RequestsAdmin.php:219 src/Integrations/VoucherRequests.php:172
 msgid "Company"
+msgstr ""
+
+#: src/Integrations/FormCaptain/Connector.php:39 src/Integrations/FormCaptain/RequestsAdmin.php:160 src/Integrations/FormCaptain/RequestsAdmin.php:220
+msgid "Contact person"
+msgstr ""
+
+#: src/Integrations/FormCaptain/Connector.php:51 src/Integrations/FormCaptain/RequestsAdmin.php:222
+msgid "Number of vouchers"
+msgstr ""
+
+#: src/Integrations/FormCaptain/Connector.php:57 src/Integrations/FormCaptain/RequestsAdmin.php:223
+msgid "Value per voucher"
+msgstr ""
+
+#: src/Integrations/FormCaptain/Connector.php:63 src/Integrations/FormCaptain/RequestsAdmin.php:251
+msgid "Personalisation text"
+msgstr ""
+
+#: src/Integrations/FormCaptain/Connector.php:68
+msgid "Consent"
+msgstr ""
+
+#: src/Integrations/FormCaptain/Connector.php:130
+msgid "Submissions become voucher requests in Voucher Captain. Nothing is issued before a manager approves the request."
+msgstr ""
+
+#: src/Integrations/FormCaptain/Connector.php:131
+msgid "Voucher Captain cannot take requests right now (WooCommerce inactive or the request table is missing)."
+msgstr ""
+
+#: src/Integrations/FormCaptain/Connector.php:152
+msgid "Voucher request to Voucher Captain"
+msgstr ""
+
+#: src/Integrations/FormCaptain/Connector.php:160
+msgid "Suggested voucher product (ID, optional)"
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestService.php:261
+msgid "Please enter a contact person."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestService.php:264
+msgid "Please enter a valid email address."
+msgstr ""
+
+#. translators: %d: maximum number of vouchers
+#: src/Integrations/FormCaptain/RequestService.php:270
+#, php-format
+msgid "Please request between 1 and %d vouchers."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestService.php:275
+msgid "Please enter a valid voucher value."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestService.php:280
+msgid "The personalisation text is too long."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestService.php:283
+msgid "The request needs the consent of the sender."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestService.php:355
+msgid "Only open requests can be changed."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestService.php:363
+msgid "The request could not be saved."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestService.php:375
+msgid "Only open requests can be rejected."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestService.php:406 src/Integrations/FormCaptain/RequestService.php:413
+msgid "Only open requests can be approved."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestService.php:427
+msgid "The vouchers could not be issued. The request is still open."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestService.php:430
+msgid "No voucher could be issued for this request."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestService.php:433
+msgid "No voucher could be issued for this product. The request is still open."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestService.php:435
+msgid "Voucher request approved, vouchers issued. Payment by invoice."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestService.php:469
+msgid "Please choose a voucher product (a simple product or a variation with vouchers enabled)."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestService.php:472
+msgid "Please choose a voucher product that issues one voucher per item."
+msgstr ""
+
+#. translators: %d: request id
+#: src/Integrations/FormCaptain/RequestService.php:531
+#, php-format
+msgid "Created from voucher request #%d (Form Captain)."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:77
+msgid "Voucher Captain: the voucher request service cannot delete a request when a single Form Captain entry is deleted or its consent withdrawn (forget_reference() missing). Data protection requests are still handled by the eraser of the service."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:87
+msgid "To be reviewed"
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:88
+msgid "Being issued"
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:89
+msgid "Approved"
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:90
+msgid "Rejected"
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:91
+msgid "Consent withdrawn"
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:102
+msgid "Request saved."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:103
+msgid "Request approved, vouchers issued."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:104
+msgid "Request rejected."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:149
+msgid "Requests sent with Form Captain forms. A request never issues anything by itself: vouchers are issued only when you approve it."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:160
+msgid "Request"
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:166
+msgid "No requests yet."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:225
+msgid "All requests"
+msgstr ""
+
+#. translators: 1: request id, 2: status
+#: src/Integrations/FormCaptain/RequestsAdmin.php:227
+#, php-format
+msgid "Request #%1$d – %2$s"
+msgstr ""
+
+#. translators: 1: order number, 2: number of vouchers
+#: src/Integrations/FormCaptain/RequestsAdmin.php:232
+#, php-format
+msgid "Order #%1$s, %2$d voucher(s) issued."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:232
+msgid "Open order"
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:236
+msgid "The personal data of this request was removed (entry deleted or consent withdrawn in Form Captain)."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:253
+msgid "Voucher product"
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:254
+msgid "— Choose —"
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:258
+msgid "Approving creates an order on hold (to be invoiced) with this product and issues the vouchers through Voucher Captain."
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:260
+msgid "Reason for rejection (internal)"
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:265 templates/myaccount/vouchers-table.php:145
+msgid "Save changes"
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:266
+msgid "Approve and issue vouchers"
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:267
+msgid "Reject"
+msgstr ""
+
+#: src/Integrations/FormCaptain/RequestsAdmin.php:285
+msgid "Unknown action."
 msgstr ""
 
 #: src/Integrations/VoucherRequests.php:173
@@ -10921,10 +11133,6 @@ msgstr ""
 msgid "Send now"
 msgstr ""
 
-#: templates/myaccount/vouchers-table.php:145
-msgid "Save changes"
-msgstr ""
-
 #: templates/myaccount/vouchers-table.php:156
 msgid "To me"
 msgstr ""
@@ -10959,17 +11167,17 @@ msgstr ""
 msgid "Voucher Captain requires PHP 8.5 or newer."
 msgstr ""
 
-#: voucher-captain.php:82
+#: voucher-captain.php:85
 msgid "Voucher Captain requires WooCommerce to be installed and active."
 msgstr ""
 
 #. translators: %s: installed WooCommerce version
-#: voucher-captain.php:96
+#: voucher-captain.php:99
 #, php-format
 msgid "Voucher Captain requires WooCommerce 11.2.2 or newer (installed: %s). Please update WooCommerce."
 msgstr ""
 
-#: voucher-captain.php:96
+#: voucher-captain.php:99
 msgid "Until then, gift cards and store credit are refused at checkout, because their balance cannot be deducted."
 msgstr ""
 
