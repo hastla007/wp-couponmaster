@@ -11,7 +11,7 @@ release).
 - [ ] Integration suites on MySQL 8.4 and MariaDB 11.4, each with HPOS and legacy order storage, plus parallel checkout – `wordpress-integration`.
 - [ ] Release ZIP installs, activates and updates in place (tables and voucher rows kept) on WordPress 7.1.4 / WooCommerce 11.2.2 – `wordpress-integration`.
 - [ ] Default uninstall keeps plugin data; `vcap_delete_on_uninstall=yes` removes the tables – `wordpress-integration`.
-- [ ] Oldest supported platform (WordPress 7.0, WooCommerce 11.2, PHP 8.5, no Yoast SEO) – `minimum-versions`.
+- [ ] Oldest supported platform (WordPress 7.0, WooCommerce 11.2.2, PHP 8.5, no Yoast SEO) – `minimum-versions`.
 - [ ] Multisite: network activation, a site added later, per-site uninstall – `multisite`.
 - [ ] Voucher Captain + WP Pass Captain (pinned release v1.4.0, `main` – both must run – and the work branch, which may be skipped with a warning): gift cards in the ticket checkout, ticket voucher exchange, refunds, shared scanner – `pass-captain`.
 - [ ] Updates with data from the last release and from the previous schema to the current ZIP, each with rollback – `upgrade`.
