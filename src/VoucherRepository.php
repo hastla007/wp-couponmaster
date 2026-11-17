@@ -187,6 +187,7 @@ final class VoucherRepository {
 		if ( $id <= 0 ) {
 			return null;
 		}
+		Db::classic_locking_reads(); // MariaDB 11.6+: also inside a transaction another plugin opened.
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$this->table()} WHERE id = %d FOR UPDATE", $id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name of this plugin.
 		return is_array( $row ) ? Voucher::from_row( $row ) : null;
 	}
