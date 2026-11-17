@@ -327,7 +327,7 @@ jobs:
           $WP eval-file "$T" site-a
           $WP --url=http://localhost/before/ eval-file "$T" site-b
           $WP eval-file "$T" verify
-      - name: Workflow instance, voucher requests and review records stay per site
+      - name: Voucher requests and review records stay per site
         run: |
           WP="php wp-cli.phar --path=wp-test"
           T="$GITHUB_WORKSPACE/tests/multisite-data-integration.php"

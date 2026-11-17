@@ -16,7 +16,7 @@ final class Source {
 	public const CHECKOUT = 'checkout';
 	public const CLI      = 'cli';
 	public const WEB      = 'web';
-	/** WF-03: a service call of a workflow plugin (Workflow\Services). */
+	/** VC-1: a voucher command of an automatic caller (vcap_command_issue() and the other entry points). */
 	public const WORKFLOW = 'workflow';
 
 	/** REST routes of the ticket scanner (Tickets::rest_routes()). */

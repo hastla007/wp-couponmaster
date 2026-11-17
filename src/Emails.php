@@ -46,13 +46,6 @@ final class Emails {
 	 * @param mixed $voucher Voucher delivered (action vcap_voucher_delivered).
 	 */
 	public function gift_delivered( $voucher ): void {
-		if ( $voucher instanceof Voucher && 'both' !== $voucher->send_to && Workflow\Handover::active( Workflow\Handover::GIFT_DELIVERED ) ) {
-			// WF-04: handed over to the workflow plugin (switch on and a compatible plugin takes it): no own email.
-			if ( Emails\GiftNoticeEmail::applies( $voucher ) ) {
-				Workflow\Handover::record( $voucher, Workflow\Handover::GIFT_DELIVERED );
-			}
-			return;
-		}
 		$email = $voucher instanceof Voucher && 'both' !== $voucher->send_to ? self::notice( 'VCAP_Email_Gift_Delivered' ) : null;
 		if ( $email && Emails\GiftNoticeEmail::applies( $voucher ) ) {
 			try {
@@ -61,17 +54,6 @@ final class Emails {
 				Logger::error( 'Gift delivered notice failed: ' . Mask::addresses( $e->getMessage() ), array( 'voucher_id' => $voucher->id ) );
 			}
 		}
-	}
-
-	/** R12: whether the "gift used" notice of this voucher was handed over to the workflow plugin earlier. */
-	private static function gift_used_handed_over( Voucher $voucher ): bool {
-		$note = Workflow\Handover::note( Workflow\Handover::GIFT_USED );
-		foreach ( vcap()->vouchers->events_of( (int) $voucher->id, Workflow\Handover::EVENT ) as $event ) {
-			if ( (string) ( $event['note'] ?? '' ) === $note ) {
-				return true;
-			}
-		}
-		return false;
 	}
 
 	/**
@@ -83,21 +65,13 @@ final class Emails {
 		if ( ! is_array( $data ) || empty( $data['voucher_id'] ) ) {
 			return;
 		}
-		// WF-04: handed over to the workflow plugin – at most once per voucher (durable claim), no own email.
-		$handover = Workflow\Handover::active( Workflow\Handover::GIFT_USED );
-		$email    = $handover ? null : self::notice( 'VCAP_Email_Gift_Used' );
-		if ( ! $handover && ! $email ) {
+		$email = self::notice( 'VCAP_Email_Gift_Used' );
+		if ( ! $email ) {
 			return;
 		}
 		$voucher = vcap()->vouchers->get( (int) $data['voucher_id'] );
-		if ( ! $voucher || ! Emails\GiftNoticeEmail::applies( $voucher ) || vcap()->vouchers->has_event( $voucher->id, self::USED_NOTICE_EVENT ) || self::gift_used_handed_over( $voucher ) ) {
-			return; // R12: told once – natively or by the workflow plugin, also when the hand-over was switched off since.
-		}
-		if ( $handover ) {
-			if ( Claim::take( 'workflow-handover:gift-used:' . $voucher->id ) ) {
-				Workflow\Handover::record( $voucher, Workflow\Handover::GIFT_USED );
-			}
-			return;
+		if ( ! $voucher || ! Emails\GiftNoticeEmail::applies( $voucher ) || vcap()->vouchers->has_event( $voucher->id, self::USED_NOTICE_EVENT ) ) {
+			return; // R12: told once.
 		}
 		if ( ! Claim::take( 'gift-used:' . $voucher->id ) ) {
 			return;

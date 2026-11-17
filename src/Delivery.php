@@ -1384,11 +1384,9 @@ final class Delivery {
 		if ( ! $offsets ) {
 			return 0;
 		}
-		// WF-04: reminders handed over to the workflow plugin are recorded instead of sent (own email not needed).
-		$handover = Workflow\Handover::active( Workflow\Handover::EXPIRY_REMINDER );
-		$emails   = WC()->mailer()->get_emails();
-		$email    = $emails['VCAP_Email_Voucher_Expiry'] ?? null;
-		if ( ! $handover && ( ! $email || ! $email->is_enabled() || ! method_exists( $email, 'trigger' ) ) ) {
+		$emails = WC()->mailer()->get_emails();
+		$email  = $emails['VCAP_Email_Voucher_Expiry'] ?? null;
+		if ( ! $email || ! $email->is_enabled() || ! method_exists( $email, 'trigger' ) ) {
 			return 0;
 		}
 		$start = microtime( true );
@@ -1413,15 +1411,6 @@ final class Delivery {
 					// only after a successful send; a failed send gives the claim back and is retried after a day.
 					$claim = 'expiry-reminder:' . $voucher->id . ':' . $days;
 					if ( ! Claim::take( $claim ) ) {
-						continue;
-					}
-					if ( $handover ) {
-						// The history entry marks this reminder as handled (due_for_expiry_reminder()).
-						if ( Workflow\Handover::record( $voucher, Workflow\Handover::EXPIRY_REMINDER, (int) $days ) ) {
-							++$sent;
-						} else {
-							Claim::release( $claim );
-						}
 						continue;
 					}
 					try {
