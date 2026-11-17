@@ -519,16 +519,16 @@ jobs:
           php wp-cli.phar --path=wp-test eval-file "$GITHUB_WORKSPACE/tests/tax-integration.php"
 
   form-captain:
-    # Optional Form Captain adapter (voucher requests, contract v1): released main and the branch with contract 1.1.0
-    # of hastla007/wp-formmaster (a ref that no longer exists is skipped). Form Captain needs PHP 8.3 and WordPress 6.8.
+    # Optional Form Captain adapter (voucher requests, contract v1) against main of hastla007/wp-formmaster
+    # (contract 1.1.0; a ref that no longer exists is skipped). Form Captain needs PHP 8.5 and WordPress 7.0.
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        form_captain_ref: ['main', 'claude/sleepy-ptolemy-n32guj']
+        form_captain_ref: ['main']
     services:
       db:
-        image: mysql:8.4
+        image: mysql:9.7
         env:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: wordpress
@@ -541,10 +541,10 @@ jobs:
           --health-retries=10
     steps:
       - uses: actions/checkout@v4
-      - name: Set up PHP 8.4
+      - name: Set up PHP 8.5
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: '8.5'
           extensions: dom, gd, mbstring, mysqli, xml, zip
           coverage: none
       - name: Install Composer dependencies
