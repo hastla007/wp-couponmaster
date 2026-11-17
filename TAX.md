@@ -132,8 +132,9 @@ sind die Berichte unter „Gutscheine → Berichte“.
 - **Gutschein-Anfragen / Firmenbestellungen** (Captain Suite, D5): Beim Bestätigen wählt der Verwalter „verkauft“ oder
   „kostenlos“; das Kennzeichen geht wie in 3.1 an die Steuerlogik. Wird eine Anfrage an die Firmenbestellung eines
   Add-ons übergeben, stellt das Add-on Rechnung und Gutscheine aus – der Kern gibt dann nichts aus.
-- **Einlösungen über ein Workflow-Plugin** (WORKFLOW.md, Dienst `redeem`) laufen über dieselbe Einlöse-Logik wie die
-  Ladenkasse (Abschnitt 4) und erscheinen im Journal mit der Quelle `workflow`.
+- **Einlösungen über die Gutschein-Befehle** (`vcap_command_redeem()`, API.md → „Voucher commands“, z. B. aus einer
+  Workflow-Automatisierung) laufen über die Einlöse-Schnittstelle (`reserve`/`commit`, wie eine externe Einlösung)
+  und erscheinen im Journal wie diese.
 
 ## 4. Einlösung
 

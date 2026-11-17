@@ -6,7 +6,7 @@ Tested up to: 7.1
 Requires PHP: 8.5
 WC requires at least: 11.2.2
 WC tested up to: 11.3
-Stable tag: 1.2.0
+Stable tag: 1.3.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -78,6 +78,13 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 
 == Changelog ==
 
+= 1.3.0 =
+* Dev: read functions vcap_read_voucher(), vcap_read_gift_card(), vcap_read_store_credit(), vcap_read_redemption(), vcap_read_redemptions() and vcap_read_order_vouchers() (service vcap()->read, contract 1.2.0) return the state of a voucher by its id – status, amounts in minor units, expiry, delivery, counts – never the code or personal data, and write nothing.
+* New: voucher commands for automations (contract 1.3.0): vcap_command_issue(), vcap_command_void(), vcap_command_reactivate() and vcap_command_redeem() (service vcap()->commands) issue, void, reactivate and redeem vouchers by id with an idempotency key and the rights of the authorising user. Each is off until switched on under Settings → Vouchers → Integrations (API); fixed limits the shop can only lower: at most 100 EUR per voucher or redemption, 50 calls a day per command, 1 issued voucher per recipient and day. Every call is recorded without the code.
+* Dev: VCAP_CONTRACT_VERSION 1.3.0 (1.2.0 with the read functions, 1.3.0 with the voucher commands); the plugin version rises with the contract.
+* New: Settings → Vouchers → Integrations (API) shows the status of Workflow Captain for Voucher Captain when Workflow Captain is active (adapter, contract version, active workflows, events per state, last correlation ID, links); counts and links only.
+* Change: requires PHP 8.5, WordPress 7.0 and WooCommerce 11.2.2 or newer (was PHP 8.1, WordPress 6.4, WooCommerce 8.9), the same for all Captain plugins. Supported database servers are MySQL 9.7 or MariaDB 12.3 (LTS) or newer; an older server keeps working and is only reported in Site Health.
+
 = 1.2.0 =
 * Change: requires PHP 8.5, WordPress 7.0 and WooCommerce 11.2.2 or newer (was PHP 8.1, WordPress 6.4, WooCommerce 8.9), the same for all Captain plugins. Supported database servers are MySQL 9.7 or MariaDB 12.3 (LTS) or newer; an older server keeps working and is only reported in Site Health.
 * Change: new installations settle multi-purpose vouchers, gift cards and store credit as a payment after tax ("Multi-purpose vouchers as payment" on); existing shops keep their setting and see a Site Health note.
@@ -92,10 +99,8 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 * Fix: an abandoned payment page no longer blocks a "first order only" coupon of the same customer for up to an hour.
 * Change (security): over the REST API a customer can no longer give back their own completed redemption (the service may already have been provided); voucher managers, "Voucher POS" accounts and connectors can. A connector may allow it again with the filter `vcap_customer_may_refund_redemption`.
 * Fix (security): voucher settings of a product are also guarded on the WooCommerce REST API and the CSV import (voucher managers only).
-* Fix: workflow plugins – the instance id stays the same with language plugins (WPML), an incompatible workflow plugin gets no events, repeated service calls never run twice, communications are handed over only with an active licence, "gift used" is never told twice.
 * Fix: voucher requests – list with pages and a state filter, a lock per request against two managers acting at once, rejected entries stay answered as rejected, interrupted submits are repaired; review-source records and rejected claims are removed after their retention period.
 * New: Captain Suite contracts (optional, for the separate plugins WP Review Captain and WP Form Captain). Product setting "Redemption confirms a service (for review invitations)" (default off): counter redemptions of such vouchers are reported to a review plugin with a stable reference and no personal data, and withdrawn when the redemption is cancelled, refunded or the voucher voided. Vouchers → Voucher requests: requests from forms (company orders, personalisation) are only stored – vouchers are issued when a manager confirms them. Voucher Captain sends no review invitations itself. Requests are part of the WordPress personal data export and erasure and of the suggested privacy policy text; at most 500 open requests (filter `vcap_voucher_requests_max_open`). Erasing or deleting a voucher withdraws its review references. Only the first confirmed redemption of a voucher is reported for a review (one service = one request; filter `vcap_review_first_redemption_only`). With an add-on that offers it, an open request with several recipients can be taken over as a company order. The daily maintenance deletes open and partly issued requests after 6 months and issued or taken-over ones after 24 months (filter `vcap_voucher_requests_retention_months`, 0 = keep).
-* New: provider contract for workflow plugins (e.g. Workflow Captain, WORKFLOW.md): voucher events after each committed change (created, delivered, delivery failed, redeemed, redemption refunded, purchase refunded partly or fully, voided, reactivated, expired) without codes or personal data; services to issue, resend, void, reactivate and redeem with capability check, idempotency key and history entry; status in Site Health. Optional emails (expiry reminder, gift notices) can be left to the workflow plugin – off by default, and Voucher Captain sends them itself whenever no compatible workflow plugin takes them.
 * Fix (security): a customer-chosen voucher amount is worth at most what was paid for it per voucher, and only in the currency it was entered in (fixed when added to the cart); a difference is noted on the order. Same for gift card top-ups.
 * Fix (security): REST redemptions – a missing, internal or another user's redemption gets the same 404 for customers; commit, release and refund check access and owner again under the row lock.
 * Fix (security): referral rewards are "Individual use only"; "first order only" coupons are held at checkout per customer (also against a parallel order with a plus address); WP Pass Captain continues an open ticket reservation only for the same caller.
@@ -189,6 +194,8 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 * Fix: database updates run in admin, cron and WP-CLI requests or the background action vcap_migrate, never in shop requests; tables are created and checked once per update; the schema check covers every index.
 * New: Site Health check for the PHP extensions mbstring, dom, gd, zip and iconv; activation stops without mbstring or dom.
 * Dev: vcap() is defined only when WooCommerce is active in a supported version; new action vcap_loaded and VCAP\Plugin::ready().
+* Dev: constant VCAP_CONTRACT_VERSION (1.1.0) names the version of the public hook and API contract; docs/HOOKS.md lists the first version of every hook.
+* Fix (privacy): imported cards get a random reference instead of one derived from their code.
 * Fix (security): text from visitors (code of a redeem link, recipient name, attendee fields) can no longer run shortcodes through block output.
 * Fix: the redeem form needs no nonce for guests and keeps pages cacheable unless it shows data of the visitor; it is also recognised in synced patterns, template parts, widgets and builder layouts. Its notices appear only in the form that was sent.
 * Fix: editor and page builder previews show example notes and no longer create referral codes or show the editor's own vouchers; the block preview is not clickable.
@@ -229,6 +236,9 @@ On the same site (no external transfer): with WP Pass Captain active, ticket exc
 * Initial release.
 
 == Upgrade Notice ==
+
+= 1.3.0 =
+Requires PHP 8.5, WordPress 7.0 and WooCommerce 11.2.2 or newer (was PHP 8.1, WordPress 6.4, WooCommerce 8.9); MySQL 9.7 / MariaDB 12.3 recommended. Adds read functions and voucher commands for add-ons and automations (contract 1.3.0; the commands are off by default). From 1.1.x the database is updated to version 1.8.0 – back up first.
 
 = 1.2.0 =
 Requires PHP 8.5, WordPress 7.0 and WooCommerce 11.2.2 or newer (was PHP 8.1, WordPress 6.4, WooCommerce 8.9); MySQL 9.7 / MariaDB 12.3 recommended. All features stay free. The database is updated to version 1.8.0 – back up first. Existing shops keep how multi-purpose vouchers are booked; new installations book them as a payment after tax. Connectors: customers can no longer refund a completed redemption over the REST API (filter `vcap_customer_may_refund_redemption` to allow it).

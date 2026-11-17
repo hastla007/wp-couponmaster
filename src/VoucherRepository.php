@@ -705,14 +705,12 @@ final class VoucherRepository {
 				WHERE v.status = 'active' AND v.expires_at > %s AND v.expires_at <= %s
 				AND v.delivered_at IS NOT NULL AND v.type <> 'ticket'
 				AND ( v.usage_mode <> 'balance' OR v.balance > 0 ){$not_in}
-				AND NOT EXISTS ( SELECT 1 FROM {$this->events_table()} e WHERE e.voucher_id = v.id AND ( ( e.event = 'expiry_reminder' AND ( e.note = %s OR e.note IS NULL OR LEFT( e.note, 12 ) <> 'days_before=' ) ) OR ( e.event = %s AND e.note = %s ) ) )
+				AND NOT EXISTS ( SELECT 1 FROM {$this->events_table()} e WHERE e.voucher_id = v.id AND e.event = 'expiry_reminder' AND ( e.note = %s OR e.note IS NULL OR LEFT( e.note, 12 ) <> 'days_before=' ) )
 				AND NOT EXISTS ( SELECT 1 FROM {$this->events_table()} f WHERE f.voucher_id = v.id AND f.event = 'delivery_failed' AND f.created_at > %s )
 				ORDER BY v.expires_at ASC, v.id ASC LIMIT %d",
 				gmdate( 'Y-m-d H:i:s', time() + max( 0, $after_days ) * DAY_IN_SECONDS ),
 				gmdate( 'Y-m-d H:i:s', time() + $days * DAY_IN_SECONDS ),
 				'days_before=' . $days,
-				Workflow\Handover::EVENT, // WF-04: a reminder handed over to the workflow counts as handled.
-				Workflow\Handover::note( Workflow\Handover::EXPIRY_REMINDER, $days ),
 				gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS ),
 				max( 1, $limit )
 			),
@@ -1116,28 +1114,6 @@ final class VoucherRepository {
 		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$this->events_table()} WHERE voucher_id = %d", $voucher_id ) ); // phpcs:ignore
 	}
 
-	/**
-	 * WF-02: ledger rows after a row id, oldest first, through the primary key (replay of workflow events).
-	 *
-	 * @return array<int, array<string, mixed>>
-	 */
-	public function events_after( int $after_id, int $limit = 100 ): array {
-		global $wpdb;
-		return $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$this->events_table()} WHERE id > %d ORDER BY id ASC LIMIT %d", max( 0, $after_id ), max( 1, min( 500, $limit ) ) ), ARRAY_A ) ?: array(); // phpcs:ignore
-	}
-
-	/**
-	 * WF-03: the newest ledger row of one kind whose note contains $needle (read through the event index; for
-	 * rare kinds such as the workflow audit entries), null when there is none.
-	 *
-	 * @return array<string, mixed>|null
-	 */
-	public function event_with_note( string $event, string $needle ): ?array {
-		global $wpdb;
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$this->events_table()} WHERE event = %s AND note LIKE %s ORDER BY id DESC LIMIT 1", $event, '%' . $wpdb->esc_like( $needle ) . '%' ), ARRAY_A ); // phpcs:ignore
-		return is_array( $row ) ? $row : null;
-	}
-
 	public static function event_labels(): array {
 		$labels = array(
 			'issued'     => __( 'Issued', 'voucher-captain' ),
@@ -1180,9 +1156,6 @@ final class VoucherRepository {
 			Downloads::FIX_EVENT => __( 'Recipient corrected by the buyer', 'voucher-captain' ),
 			Delivery::ATTEMPT_EVENT => __( 'Delivery attempt', 'voucher-captain' ),
 			Emails::USED_NOTICE_EVENT => __( 'Buyer told that the gift was used', 'voucher-captain' ),
-			Workflow\Services::AUDIT_EVENT => __( 'Workflow action', 'voucher-captain' ),
-			Workflow\Handover::EVENT       => __( 'Handed over to the workflow', 'voucher-captain' ),
-			Workflow\Services::CONTACT_EVENT => __( 'Contact data read by the workflow plugin', 'voucher-captain' ),
 		);
 		/** Labels of connector events in the voucher history. */
 		return (array) apply_filters( 'vcap_event_labels', $labels );

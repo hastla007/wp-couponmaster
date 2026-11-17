@@ -2062,10 +2062,13 @@ final class Issuer {
 	 * @return bool False when the voucher could not be voided (nothing logged, the coupon stays as it was).
 	 */
 	public function void( Voucher $voucher, string $note = '', bool $refund = false ): bool {
+		// Voided for a refund or cancellation of its purchase: the history entry (and so the event "voided") names that
+		// order, so integrations can link the void to the one refund of the shop (E2E suite, T87).
+		$order_id = $refund ? max( 0, (int) $voucher->order_id ) : 0;
 		if ( Voucher::STATUS_VOID === $voucher->status ) {
 			if ( $refund && $this->suspended( $voucher ) ) {
 				// Suspended for its payment (M12-35), now refunded or cancelled: no longer resumed when paid again.
-				$this->repo->log( $voucher->id, 'voided', null, $voucher->balance, Note::make( self::REFUND_VOID_NOTE, array( $note ) ) );
+				$this->repo->log( $voucher->id, 'voided', null, $voucher->balance, Note::make( self::REFUND_VOID_NOTE, array( $note ) ), $order_id );
 			}
 			return true;
 		}
@@ -2076,10 +2079,10 @@ final class Issuer {
 		$text            = static fn( string $t ): string => $refund ? Note::make( self::REFUND_VOID_NOTE, array( $t ) ) : $t;
 		if ( ! $this->coupons->set_coupon_enabled( $voucher, false ) ) {
 			// The voucher is void but its coupon still works: say so loudly instead of pretending success.
-			$this->repo->log( $voucher->id, 'voided', null, $voucher->balance, $text( trim( $note . ' ' . __( '(WooCommerce coupon could not be disabled – disable it manually)', 'voucher-captain' ) ) ) );
+			$this->repo->log( $voucher->id, 'voided', null, $voucher->balance, $text( trim( $note . ' ' . __( '(WooCommerce coupon could not be disabled – disable it manually)', 'voucher-captain' ) ) ), $order_id );
 			return false;
 		}
-		$this->repo->log( $voucher->id, 'voided', null, $voucher->balance, $text( $note ) );
+		$this->repo->log( $voucher->id, 'voided', null, $voucher->balance, $text( $note ), $order_id );
 		if ( function_exists( 'as_unschedule_all_actions' ) ) {
 			as_unschedule_all_actions( 'vcap_deliver_voucher', array( 'voucher_id' => $voucher->id ), 'vcap' );
 		}

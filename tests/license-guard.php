@@ -29,6 +29,18 @@ $patterns = array(
 	'/\ballows_entitlement\b/'                         => 'entitlement check',
 	'/VCAP_EDITION/'                                   => 'edition constant',
 	'/VCAP_LICENSE_/'                                  => 'license constant',
+	// As in Affiliate Captain's guard (review 16.11.2026, R16-09): any other trace of the license client.
+	'/wplc_/i'                                         => 'WP License Captain prefix (wplc_)',
+	'/entitlement/i'                                   => 'entitlement wording',
+	'/licen[sc]e_key/i'                                => 'license key handling',
+);
+
+// The only license-related text allowed in the shipped files: the clean-up of what pre-release builds with a
+// license client left behind (VCAP\Install::LEGACY_LICENSE_OPTIONS and the comments around it, FREE-PREMIUM rule 4).
+$legacy_cleanup = array(
+	'file'  => 'src/Install.php',
+	'line'  => '/^\s*(\*|\/\*\*|\'vcap_wplc_[a-z_]+\',\s*$)/',
+	'whats' => array( 'WP License Captain prefix (wplc_)', 'entitlement wording' ),
 );
 
 // bin/build.sh is not shipped but decides what is: one build, no edition switch, no license tooling.
@@ -95,6 +107,9 @@ foreach ( $files as $relative ) {
 	foreach ( false === $lines ? array() : $lines as $number => $line ) {
 		foreach ( $patterns as $pattern => $what ) {
 			if ( preg_match( $pattern, $line ) ) {
+				if ( $legacy_cleanup['file'] === $relative && in_array( $what, $legacy_cleanup['whats'], true ) && preg_match( $legacy_cleanup['line'], $line ) ) {
+					continue;
+				}
 				$hits[] = sprintf( '%s:%d: %s – %s', $relative, $number + 1, $what, trim( $line ) );
 			}
 		}

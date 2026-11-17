@@ -169,7 +169,7 @@ final class CartCoupons {
 	public function keep_payment_means( $keep, $coupon = null, $applied = array() ) {
 		$keep = is_array( $keep ) ? $keep : array();
 		foreach ( (array) $applied as $code ) {
-			if ( ! in_array( $code, $keep, true ) && $this->is_payment_means( new \WC_Coupon( (string) $code ) ) ) {
+			if ( ! in_array( $code, $keep, true ) && $this->is_payment_means( CouponFactory::for_code( (string) $code ) ) ) {
 				$keep[] = $code;
 			}
 		}

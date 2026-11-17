@@ -62,7 +62,6 @@ final class Privacy {
 				'item_id'     => 'vcap-voucher-' . $voucher->id,
 				'data'        => $data,
 			);
-			$items = array_merge( $items, $this->workflow_contact_items( $voucher ) );
 		}
 		// All three sources are paged alike; the export is done only when every one of them is exhausted.
 		$uses        = $this->repo->events_noting( $email, self::EXPORT_PAGE, $offset );
@@ -99,32 +98,6 @@ final class Privacy {
 		}
 		$done = count( $vouchers ) < self::EXPORT_PAGE && count( $uses ) < self::EXPORT_PAGE && count( $redemptions ) < self::EXPORT_PAGE;
 		return array( 'data' => $items, 'done' => $done );
-	}
-
-	/**
-	 * D9: when a workflow plugin read the contact data of the voucher (history entries "workflow_contact_read", at
-	 * most the newest 100): date, plugin, communication and role.
-	 *
-	 * @return array<int, array<string, mixed>>
-	 */
-	public function workflow_contact_items( Voucher $voucher ): array {
-		$items = array();
-		foreach ( $this->repo->events_of( (int) $voucher->id, Workflow\Services::CONTACT_EVENT ) as $row ) {
-			$note    = Note::decode( (string) $row['note'] );
-			$args    = array_values( (array) ( $note['args'] ?? array() ) );
-			$items[] = array(
-				'group_id'    => 'vcap-workflow-contact',
-				'group_label' => __( 'Contact data read by the workflow plugin', 'voucher-captain' ),
-				'item_id'     => 'vcap-event-' . (int) $row['id'],
-				'data'        => array(
-					array( 'name' => __( 'Date', 'voucher-captain' ), 'value' => (string) $row['created_at'] ),
-					array( 'name' => __( 'Plugin', 'voucher-captain' ), 'value' => (string) ( $args[0] ?? '' ) ),
-					array( 'name' => __( 'Communication', 'voucher-captain' ), 'value' => Workflow\Handover::labels()[ (string) ( $args[1] ?? '' ) ] ?? (string) ( $args[1] ?? '' ) ),
-					array( 'name' => __( 'Role', 'voucher-captain' ), 'value' => Note::role_label( (string) ( $args[2] ?? '' ) ) ),
-				),
-			);
-		}
-		return $items;
 	}
 
 	/**

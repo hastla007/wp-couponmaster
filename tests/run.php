@@ -1325,6 +1325,36 @@ check( 'the release smoke is manual and installs the draft ZIP over the previous
 check( 'CI runs the license guard in the smoke job', str_contains( $smoke_yml, 'php tests/license-guard.php' ) && is_file( "$root/tests/license-guard.php" ) );
 exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( "$root/tests/license-guard.php" ) . ' 2>&1', $guard_log, $guard_status );
 check( 'free core: no licensing or update code in the shipped files (tests/license-guard.php)', 0 === $guard_status, implode( ' ', $guard_log ) );
+// R16-09: the guard also knows the patterns of Affiliate Captain's guard (wplc_ prefix, entitlement wording, license
+// key) and accepts nothing but the clean-up list of earlier builds in src/Install.php.
+$guard_tmp = sys_get_temp_dir() . '/vcap-guard-' . bin2hex( random_bytes( 4 ) );
+mkdir( "$guard_tmp/src", 0700, true );
+$guard_run = static function () use ( $root, $guard_tmp ): array {
+	$log = array();
+	exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( "$root/tests/license-guard.php" ) . ' ' . escapeshellarg( $guard_tmp ) . ' 2>&1', $log, $status );
+	return array( $status, implode( ' ', $log ) );
+};
+file_put_contents( "$guard_tmp/voucher-captain.php", "<?php\n/**\n * Plugin Name: X\n */\n" );
+file_put_contents( "$guard_tmp/src/Install.php", "<?php\n/**\n * Options of the license client of earlier builds and the stored entitlement snapshot.\n */\n\$legacy = array(\n\t'vcap_wplc_credentials',\n\t'vcap_wplc_credentials_entitlements_cache',\n);\n" );
+list( $guard_clean_status, $guard_clean_log ) = $guard_run();
+$guard_samples = array(
+	'entitlement wording' => "if ( ! vcap_has_entitlement( 'voucher.reports' ) ) { return; }",
+	'license key'         => "update_option( 'vcap_license_key', \$key );",
+	'wplc option'         => "get_option( 'wplc_credentials' );",
+	'legacy name in code' => "get_option( 'vcap_wplc_credentials' );",
+);
+$guard_missed = array();
+foreach ( $guard_samples as $guard_label => $guard_sample ) {
+	file_put_contents( "$guard_tmp/src/Sample.php", "<?php\n$guard_sample\n" );
+	list( $guard_sample_status, $guard_sample_log ) = $guard_run();
+	if ( 1 !== $guard_sample_status || ! str_contains( $guard_sample_log, 'src/Sample.php:2' ) ) {
+		$guard_missed[] = $guard_label;
+	}
+}
+array_map( 'unlink', array_filter( array( "$guard_tmp/src/Sample.php", "$guard_tmp/src/Install.php", "$guard_tmp/voucher-captain.php" ), 'is_file' ) );
+rmdir( "$guard_tmp/src" );
+rmdir( $guard_tmp );
+check( 'R16-09: the license guard accepts the clean-up list of earlier builds and fails on entitlement wording, license keys and wplc_ names', 0 === $guard_clean_status && array() === $guard_missed, $guard_clean_log . ' missed: ' . implode( ', ', $guard_missed ) );
 $plugin_src = (string) file_get_contents( "$root/src/Plugin.php" );
 check( 'free core: top-up, referrals, ticket vouchers and the shared scanner are registered unconditionally', ! is_dir( "$root/src/Licensing" ) && ! is_file( "$root/config/premium-features.php" ) && ! str_contains( $plugin_src, 'Licensing' ) && str_contains( $plugin_src, '( new TopUp( $this->vouchers, $this->coupons ) )->register();' ) && str_contains( $plugin_src, '$referrals->register();' ) && str_contains( $plugin_src, '$this->passcaptain_tickets->register();' ) && str_contains( $plugin_src, '( new Compat\PassCaptainScanner() )->register();' ) );
 check( 'free core: license data of earlier builds is removed on upgrade and uninstall', in_array( 'vcap_wplc_credentials', VCAP\Install::LEGACY_LICENSE_OPTIONS, true ) && 'vcap_license_refresh' === VCAP\Install::LEGACY_LICENSE_HOOK && str_contains( (string) file_get_contents( "$root/uninstall.php" ), 'vcap_uninstall_license_data();' ) );
@@ -2136,6 +2166,20 @@ check(
 		&& 'recommended' === $db_old['status'] && str_contains( $db_old['description'], 'MariaDB 10.11.6' ) && 'good' === $db_ok['status'] && 'recommended' === $db_mysql['status'] && 'good' === $db_health->test_database( 'garbage' )['status'],
 	wp_json_encode( array( $db_old['status'], $db_ok['status'], $db_mysql['status'] ) )
 );
+// MINVER-1: the declared minimums decide with an injected version (local runs use an older PHP than 8.5, so the
+// running PHP is never what is checked here). The load check in voucher-captain.php compares PHP_VERSION with the
+// header's "Requires PHP"; WordPress refuses the activation below "Requires at least" / "Requires PHP" itself.
+$minver_main = (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' );
+preg_match( "/version_compare\( PHP_VERSION, '([0-9.]+)', '<' \)/", $minver_main, $minver_guard );
+preg_match( '/^ \* Requires PHP:\s*(\S+)$/m', $minver_main, $minver_php );
+preg_match( '/^ \* Requires at least:\s*(\S+)$/m', $minver_main, $minver_wp );
+$minver_refused = static fn( string $running, string $minimum ): bool => version_compare( $running, $minimum, '<' );
+check( 'MINVER-1: the load check uses the declared PHP minimum: PHP 8.4 is refused, PHP 8.5 and 8.6 load', '8.5' === ( $minver_guard[1] ?? '' ) && ( $minver_php[1] ?? '' ) === $minver_guard[1] && $minver_refused( '8.4.14', $minver_guard[1] ) && ! $minver_refused( '8.5.0', $minver_guard[1] ) && ! $minver_refused( '8.6.0', $minver_guard[1] ) );
+check( 'MINVER-1: the declared WordPress minimum refuses 6.9 and accepts 7.0; WooCommerce 11.2.0 and 11.2.1 are refused (woocommerce#70637), 11.2.2 accepted', '7.0' === ( $minver_wp[1] ?? '' ) && $minver_refused( '6.9.4', $minver_wp[1] ) && ! $minver_refused( '7.0', $minver_wp[1] ) && version_compare( '11.2.0', VCAP\Plugin::MIN_WC_VERSION, '<' ) && version_compare( '11.2.1', VCAP\Plugin::MIN_WC_VERSION, '<' ) && version_compare( '11.2.2', VCAP\Plugin::MIN_WC_VERSION, '>=' ) );
+$minver_composer = json_decode( (string) file_get_contents( VCAP_PATH . 'composer.json' ), true );
+$minver_lock     = json_decode( (string) file_get_contents( VCAP_PATH . 'composer.lock' ), true );
+check( 'MINVER-1: composer.json and composer.lock declare PHP 8.5 (require, platform)', '>=8.5' === ( $minver_composer['require']['php'] ?? '' ) && '8.5.0' === ( $minver_composer['config']['platform']['php'] ?? '' ) && '>=8.5' === ( $minver_lock['platform']['php'] ?? '' ) && '8.5.0' === ( $minver_lock['platform-overrides']['php'] ?? '' ) );
+check( 'MINVER-1: an old database server only gives a recommendation, with the minimum named (MySQL 8.4 / MariaDB 11.4 → recommended; MySQL 9.7 / MariaDB 12.3 → good)', 'recommended' === $db_health->test_database( '11.4.5-MariaDB' )['status'] && 'good' === $db_health->test_database( '9.7.0' )['status'] && 'good' === $db_health->test_database( '12.3.0-MariaDB' )['status'] && str_contains( $db_mysql['description'], 'MySQL 9.7 or newer' ) );
 $d14_filters = $GLOBALS['vcap_test_filters'] ?? array();
 unset( $GLOBALS['vcap_test_filters']['vcap_currency_health'] );
 $d14_plain = ( new VCAP\Health() )->test_currency();
@@ -2782,306 +2826,27 @@ check( 'Decision D10: the database query reads the last change (or the receipt) 
 foreach ( $d10_more as $d10_id ) {
 	wp_delete_post( $d10_id, true );
 }
-echo "Workflow provider contract (WF-01 … WF-06)\n";
-// In-memory database for the workflow tests: voucher rows, ledger rows, option claims (schema < 1.4 fallback).
-$wf_saved_db      = $GLOBALS['wpdb'] ?? null;
-$wf_saved_filters = $GLOBALS['vcap_test_filters'];
-$wf_saved_options = $GLOBALS['vcap_test_options'];
-$GLOBALS['wpdb']  = new class() {
-	public string $prefix   = 'wp_';
-	public string $options  = 'wp_options';
-	public string $posts    = 'wp_posts';
-	public string $postmeta = 'wp_postmeta';
-	public int $insert_id   = 0;
-	public int $rows_affected = 0;
-	public string $last_error = '';
-	public array $vouchers  = array();
-	public array $events    = array();
-	public function prepare( $query, ...$args ) {
-		$args = isset( $args[0] ) && is_array( $args[0] ) ? $args[0] : $args;
-		return vsprintf( str_replace( array( '%d', '%s', '%i' ), array( '%d', "'%s'", '%s' ), $query ), $args );
+// D13: the provisional workflow provider contract was taken out of the free core (recoverable from 151786c). The
+// voucher commands (VC-1) still book with "workflow:" targets and "vcapcmd:" keys: those stay reserved for the server.
+check( 'D13/VC-1: keys "vcapcmd:"/"workflow:" and targets "workflow:" of the voucher commands are reserved for the server (never accepted over REST)', VCAP\API\V1\RestController::is_internal_key( 'vcapcmd:' . str_repeat( 'a', 40 ) ) && VCAP\API\V1\RestController::is_internal_key( 'workflow:abc12345' ) && VCAP\API\V1\RestController::is_internal_target( 'workflow:order:1' ) && ! VCAP\API\V1\RestController::is_internal_target( 'shop:order:1' ) );
+// VOUCH-WF-11: guard – the provisional provider contract does not come back into the core (the voucher commands
+// vcap_command_* and read functions vcap_read_* of contract 1.3.0 are allowed).
+$wf11_hits = array();
+$wf11_files = array( dirname( __DIR__ ) . '/voucher-captain.php' );
+foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( dirname( __DIR__ ) . '/src', FilesystemIterator::SKIP_DOTS ) ) as $wf11_file ) {
+	if ( 'php' === $wf11_file->getExtension() ) {
+		$wf11_files[] = $wf11_file->getPathname();
 	}
-	public function esc_like( $s ) { return addcslashes( (string) $s, '_%\\' ); }
-	public function get_row( $q, $o = null ) {
-		if ( preg_match( "/FROM wp_vcap_vouchers WHERE id = '(\\d+)'/", $q, $m ) ) {
-			return $this->vouchers[ (int) $m[1] ] ?? null;
-		}
-		if ( preg_match( "/FROM wp_vcap_events WHERE event = '([a-z_]+)' AND note LIKE '%(.*)%' ORDER BY id DESC/", $q, $m ) ) {
-			$needle = stripcslashes( $m[2] );
-			foreach ( array_reverse( $this->events ) as $row ) {
-				if ( $row['event'] === $m[1] && str_contains( (string) $row['note'], $needle ) ) {
-					return $row;
-				}
-			}
-		}
-		return null;
-	}
-	public function get_results( $q, $o = null ) {
-		if ( preg_match( "/FROM wp_vcap_events WHERE voucher_id = '?(\\d+)'? AND event = '([a-z_]+)' ORDER BY id DESC LIMIT '?(\\d+)/", $q, $m ) ) {
-			return array_slice( array_reverse( array_values( array_filter( $this->events, static fn( $r ) => (int) $r['voucher_id'] === (int) $m[1] && $r['event'] === $m[2] ) ) ), 0, (int) $m[3] );
-		}
-		if ( preg_match( '/FROM wp_vcap_events WHERE id > (\d+) ORDER BY id ASC LIMIT (\d+)/', $q, $m ) ) {
-			return array_slice( array_values( array_filter( $this->events, static fn( $r ) => $r['id'] > (int) $m[1] ) ), 0, (int) $m[2] );
-		}
-		return array();
-	}
-	public function get_var( $q ) { return null; }
-	public function get_col( $q, $i = 0 ) { return array(); }
-	public function query( $q ) {
-		if ( preg_match( "/INSERT IGNORE INTO wp_options \\(option_name, option_value, autoload\\) VALUES \\('([^']+)'/", $q, $m ) ) {
-			$this->rows_affected = array_key_exists( $m[1], $GLOBALS['vcap_test_options'] ) ? 0 : 1;
-			if ( $this->rows_affected ) {
-				$GLOBALS['vcap_test_options'][ $m[1] ] = (string) time();
-			}
-			return $this->rows_affected;
-		}
-		return 1;
-	}
-	public function insert( $table, $row ) {
-		if ( 'wp_vcap_events' === $table ) {
-			$this->insert_id      = count( $this->events ) + 1;
-			$this->events[]       = array( 'id' => $this->insert_id ) + $row;
-		}
-		return 1;
-	}
-	public function update( $table, $data, $where ) {
-		if ( 'wp_vcap_vouchers' === $table && isset( $this->vouchers[ (int) $where['id'] ] ) ) {
-			$this->vouchers[ (int) $where['id'] ] = array_merge( $this->vouchers[ (int) $where['id'] ], $data );
-		}
-		return 1;
-	}
-};
-$wf_voucher = static function ( int $id, array $props = array() ): Voucher {
-	$v = new Voucher();
-	foreach ( $props + array( 'code' => 'WFSECRET-7KQ2-ABCD', 'type' => 'giftcard', 'usage_mode' => 'balance', 'initial_amount' => 50.0, 'balance' => 30.0, 'currency' => 'EUR', 'order_id' => 77, 'product_id' => 12, 'buyer_name' => 'Anna Käufer', 'buyer_email' => 'anna@example.com', 'recipient_name' => 'Ben Empfänger', 'recipient_email' => 'ben@example.com', 'send_to' => 'recipient', 'token' => str_repeat( 'f0', 24 ), 'expires_at' => '2027-12-31 22:59:59' ) as $k => $val ) {
-		$v->$k = $val;
-	}
-	$v->id = $id;
-	$row   = $v->to_row();
-	$GLOBALS['wpdb']->vouchers[ $id ] = array( 'id' => $id ) + $row;
-	return $v;
-};
-$wf_repo     = new VCAP\VoucherRepository();
-$wf_provider = new VCAP\Workflow\Provider( $wf_repo, new VCAP\API\V1\RedemptionService( $wf_repo ) );
-$wf_provider->register();
-$wf_seen = array();
-$GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_OPTION ] = 'site-instance-1';
-
-// WF-01: contract descriptor and registration.
-$wf_desc = VCAP\Workflow\Provider::descriptor();
-check( 'WF-01: the provider contract is versioned (SemVer 1.x) and lists its events, services, communications and payload allowlist', (bool) preg_match( '/^1\.\d+\.\d+$/', VCAP\Workflow\Provider::CONTRACT_VERSION ) && array( '1' ) === $wf_desc['supported_contracts'] && in_array( 'voucher.refunded', $wf_desc['events'], true ) && in_array( 'redeem', $wf_desc['services'], true ) && array( 'expiry_reminder', 'gift_delivered', 'gift_used' ) === $wf_desc['communications'] && ! array_intersect( array( 'code', 'email', 'name', 'token', 'pdf', 'note' ), $wf_desc['data_fields'] ) && 'vcap_workflow_event' === $wf_desc['event_hook'] );
-$wf_registry = new class() {
-	public array $got = array();
-	public function register( $id, $provider ) { $this->got[ $id ] = $provider; }
-};
-do_action( 'workflow_captain_register_providers', $wf_registry );
-check( 'WF-01: Voucher Captain registers with a workflow registry (action workflow_captain_register_providers, filter workflow_captain_providers, filter vcap_workflow_provider)', ( $wf_registry->got['voucher-captain'] ?? null ) === $wf_provider && ( apply_filters( 'workflow_captain_providers', array() )['voucher-captain'] ?? null ) === $wf_provider && apply_filters( 'vcap_workflow_provider', null ) === $wf_provider );
-check( 'WF-03: keys and targets "workflow:" are reserved for the server (never accepted over REST)', in_array( 'workflow:', apply_filters( 'vcap_internal_redemption_key_prefixes', array( 'wpcap-' ) ), true ) && in_array( 'workflow:', apply_filters( 'vcap_internal_redemption_target_prefixes', array() ), true ) );
-
-// WF-02: mapping of ledger entries to events.
-$wf_map = static fn( string $e, ?array $note = null, ?float $amount = null, int $order = 0 ) => array_map( static fn( $i ) => $i[0], VCAP\Workflow\Provider::map( $e, $note, $amount, $order ) );
-check(
-	'WF-02: ledger entries map to the events of the contract (created, delivered, delivery failed, redeemed in shop/counter/external, redemption refunded, purchase refunded partly/fully, voided, reactivated, expired)',
-	array( 'voucher.created' ) === $wf_map( 'issued' ) && array( 'voucher.delivered' ) === $wf_map( 'delivered' ) && array( 'voucher.delivered' ) === $wf_map( 'resent' )
-		&& array( 'voucher.delivery_failed' ) === $wf_map( 'delivery_failed', array( 'code' => 'delivery_error', 'args' => array( 'j***@example.com' ) ) ) && array( 'voucher.delivery_failed' ) === $wf_map( 'delivery_given_up' )
-		&& array( 'voucher.redeemed' ) === $wf_map( 'redeemed', null, 10.0, 5 ) && array( 'voucher.redeemed' ) === $wf_map( 'committed', null, 10.0, 5 ) && array( 'voucher.redeemed' ) === $wf_map( 'api_committed', null, 10.0 )
-		&& array( 'voucher.redemption_refunded' ) === $wf_map( 'api_refunded', null, 4.0 ) && array( 'voucher.redemption_refunded' ) === $wf_map( 'restored', null, 4.0, 5 ) && array( 'voucher.redemption_refunded' ) === $wf_map( 'redeem_reversed', null, 4.0 )
-		&& array( 'voucher.refunded' ) === $wf_map( VCAP\Issuer::PURCHASE_REFUNDED_EVENT, null, -5.0, 77 )
-		&& array( 'voucher.refunded', 'voucher.voided' ) === $wf_map( 'voided', array( 'code' => VCAP\Issuer::REFUND_VOID_NOTE, 'args' => array( 'Order refunded' ) ) )
-		&& array( 'voucher.voided' ) === $wf_map( 'voided' ) && array( 'voucher.reactivated' ) === $wf_map( 'reactivated' ) && array( 'voucher.expired' ) === $wf_map( 'expired', null, 30.0 )
-		&& array() === $wf_map( 'downloaded' ) && array() === $wf_map( 'edited' ) && array() === $wf_map( VCAP\Workflow\Services::AUDIT_EVENT ) && array() === $wf_map( 'workflow_handover', array( 'code' => 'workflow_handover', 'args' => array( 'unknown' ) ) )
-);
-$wf_redeemed = VCAP\Workflow\Provider::map( 'redeemed', null, 12.5, 0 );
-$wf_partial  = VCAP\Workflow\Provider::map( VCAP\Issuer::PURCHASE_REFUNDED_EVENT, null, -5.0, 77 );
-$wf_full     = VCAP\Workflow\Provider::map( 'voided', array( 'code' => VCAP\Issuer::REFUND_VOID_NOTE, 'args' => array() ), null, 0 );
-check( 'WF-02: refund events tell partial (value taken off) from full (voided because of the refund); redemptions name their channel', 'partial' === $wf_partial[0][1]['scope'] && 'full' === $wf_full[0][1]['scope'] && 'refund' === $wf_full[1][1]['reason'] && 'counter' === $wf_redeemed[0][1]['channel'] && 'shop' === VCAP\Workflow\Provider::map( 'redeemed', null, 1.0, 9 )[0][1]['channel'] );
-
-// WF-02: envelope schema and redaction.
-$wf_v   = $wf_voucher( 41 );
-$wf_env = VCAP\Workflow\Provider::envelope( array( 'id' => 900, 'created_at' => '2026-11-16 08:30:00', 'order_id' => 0, 'source' => 'checkout' ), $wf_v, 'voucher.redeemed', $wf_redeemed[0][1] );
-check( 'WF-06: the envelope has exactly the fields of the contract, occurred_at in UTC (ISO 8601), the voucher id as source and the ledger row as sequence', VCAP\Workflow\Provider::ENVELOPE_FIELDS === array_keys( $wf_env ) && '1.0.0' === $wf_env['contract_version'] && 'voucher-captain' === $wf_env['provider'] && '2026-11-16T08:30:00Z' === $wf_env['occurred_at'] && 'voucher' === $wf_env['source_type'] && 41 === $wf_env['source_id'] && 900 === $wf_env['sequence'] && 1 === $wf_env['blog_id'] && 'active' === $wf_env['status'] && false === $wf_env['replayed'], json_encode( $wf_env ) );
-check( 'WF-06: amounts are minor units with the currency, plus stable ids (order, product) and the origin of the change', 1250 === $wf_env['data']['amount_minor'] && 3000 === $wf_env['data']['balance_minor'] && 5000 === $wf_env['data']['value_minor'] && 'EUR' === $wf_env['data']['currency'] && 77 === $wf_env['data']['order_id'] && 12 === $wf_env['data']['product_id'] && 'checkout' === $wf_env['data']['origin'] && '2027-12-31T22:59:59Z' === $wf_env['data']['expires_at'] && ! array_diff( array_keys( $wf_env['data'] ), VCAP\Workflow\Provider::DATA_FIELDS ), json_encode( $wf_env['data'] ) );
-$wf_json = (string) json_encode( $wf_env );
-check( 'WF-06: redaction – the envelope holds no code, token, email address or name of the voucher', ! str_contains( strtolower( $wf_json ), 'wfsecret' ) && ! str_contains( $wf_json, '7KQ2' ) && ! str_contains( $wf_json, '@' ) && ! str_contains( $wf_json, 'Anna' ) && ! str_contains( $wf_json, 'Ben' ) && ! str_contains( $wf_json, 'f0f0f0' ), $wf_json );
-$wf_red = VCAP\Workflow\Provider::redact( array( 'reason' => 'mail to anna@example.com failed', 'channel' => 'WFSECRET-7KQ2-ABCD', 'origin' => 'x' . strtolower( $wf_v->code ), 'scope' => array( 'nested' ), 'code' => 'WFSECRET-7KQ2-ABCD', 'email' => 'anna@example.com', 'final' => true, 'days' => 7 ), $wf_v );
-check( 'WF-06: the payload allowlist drops unknown keys, nested values, addresses and anything containing the code', array( 'final' => true, 'days' => 7 ) === $wf_red, json_encode( $wf_red ) );
-$wf_pct = VCAP\Workflow\Provider::envelope( array( 'id' => 901, 'created_at' => '2026-11-16 08:30:00' ), $wf_voucher( 42, array( 'type' => 'voucher', 'usage_mode' => 'single', 'discount_type' => 'percent', 'initial_amount' => 15.0 ) ), 'voucher.created', array() );
-check( 'WF-06: a percentage voucher carries its percent, no money amount or currency', 15.0 === $wf_pct['data']['percent'] && null === $wf_pct['data']['currency'] && null === $wf_pct['data']['value_minor'] && null === $wf_pct['data']['balance_minor'] );
-
-// Event ids: stable for the same ledger row and type, distinct per type, row, blog and site.
-$wf_id = VCAP\Workflow\Provider::event_id( 900, 'voucher.redeemed', 1 );
-check( 'WF-06: event ids are UUID-shaped, the same for the same ledger row and type (replays, retries) and differ per type and row', (bool) preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $wf_id ) && $wf_id === $wf_env['event_id'] && $wf_id === VCAP\Workflow\Provider::event_id( 900, 'voucher.redeemed', 1 ) && $wf_id !== VCAP\Workflow\Provider::event_id( 900, 'voucher.voided', 1 ) && $wf_id !== VCAP\Workflow\Provider::event_id( 901, 'voucher.redeemed', 1 ), $wf_id );
-$GLOBALS['vcap_test_blog_id'] = 7;
-$wf_env7 = VCAP\Workflow\Provider::envelope( array( 'id' => 900, 'created_at' => '2026-11-16 08:30:00' ), $wf_v, 'voucher.redeemed', array() );
-unset( $GLOBALS['vcap_test_blog_id'] );
-$GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_OPTION ] = 'site-instance-2';
-$wf_other_site = VCAP\Workflow\Provider::event_id( 900, 'voucher.redeemed', 1 );
-$GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_OPTION ] = 'site-instance-1';
-check( 'WF-06: multisite – the envelope names its blog, and the same ledger row id on another blog or another shop gets another event id', 7 === $wf_env7['blog_id'] && $wf_env7['event_id'] !== $wf_id && $wf_other_site !== $wf_id );
-unset( $GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_OPTION ] );
-$wf_new_instance = VCAP\Workflow\Provider::instance();
-check( 'WF-01: the site id is created once and kept', '' !== $wf_new_instance && $wf_new_instance === VCAP\Workflow\Provider::instance() );
-$GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_OPTION ] = 'site-instance-1';
-// Decision D8 (16.11.2026): the instance is bound to the site address – a copy/staging site gets a new instance id.
-$d8_sig = static fn( string $u ) => VCAP\Workflow\Provider::site_signature( $u );
-check( 'Decision D8: the address signature ignores http/https, letter case of the host and a trailing slash, but not another host, path or port', $d8_sig( 'https://shop.test' ) === $d8_sig( 'http://shop.test/' ) && $d8_sig( 'https://shop.test' ) === $d8_sig( 'HTTPS://Shop.TEST//' ) && $d8_sig( 'https://shop.test' ) === VCAP\Workflow\Provider::site_signature() && $d8_sig( 'https://shop.test' ) !== $d8_sig( 'https://staging.shop.test' ) && $d8_sig( 'https://shop.test' ) !== $d8_sig( 'https://shop.test/de' ) && $d8_sig( 'https://shop.test' ) !== $d8_sig( 'https://shop.test:8443' ) );
-unset( $GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_SITE_OPTION ] );
-$d8_legacy = VCAP\Workflow\Provider::instance();
-check( 'Decision D8: an install without a stored address (update) keeps its instance and binds it to the current address', 'site-instance-1' === $d8_legacy && $d8_sig( 'https://shop.test' ) === get_option( VCAP\Workflow\Provider::INSTANCE_SITE_OPTION )['signature'] && null === VCAP\Workflow\Provider::instance_change() );
-$GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_SITE_OPTION ]['signature'] = $d8_sig( 'http://shop.test/' );
-check( 'Decision D8: a switch from http to https (or a trailing slash) keeps the instance and its event ids', 'site-instance-1' === VCAP\Workflow\Provider::instance() && $wf_id === VCAP\Workflow\Provider::event_id( 900, 'voucher.redeemed', 1 ) && null === VCAP\Workflow\Provider::instance_change() );
-$d8_changes = array();
-add_action( 'vcap_workflow_instance_changed', static function ( ...$a ) use ( &$d8_changes ) { $d8_changes[] = $a; }, 10, 2 );
-$GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_SITE_OPTION ]['signature'] = $d8_sig( 'https://live-shop.example' ); // The database came from another address.
-$d8_new    = VCAP\Workflow\Provider::instance();
-$d8_change = VCAP\Workflow\Provider::instance_change();
-check(
-	'Decision D8: under another address (copy/staging) a new instance id is derived, the old one noted and announced once – event ids of the copy differ from the original',
-	'site-instance-1' !== $d8_new && (bool) preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $d8_new ) && $d8_new === get_option( VCAP\Workflow\Provider::INSTANCE_OPTION ) && $d8_new === VCAP\Workflow\Provider::instance()
-		&& $wf_id !== VCAP\Workflow\Provider::event_id( 900, 'voucher.redeemed', 1 ) && is_array( $d8_change ) && array( 'site-instance-1' ) === $d8_change['previous'] && true === $d8_change['notice'] && '' !== $d8_change['changed_at']
-		&& array( array( $d8_new, 'site-instance-1' ) ) === $d8_changes && $d8_sig( 'https://shop.test' ) === get_option( VCAP\Workflow\Provider::INSTANCE_SITE_OPTION )['signature'],
-	json_encode( array( $d8_new, $d8_change, $d8_changes ) )
-);
-$GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_OPTION ] = 'site-instance-1';
-$GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_SITE_OPTION ]['signature'] = $d8_sig( 'https://live-shop.example' );
-$d8_again = VCAP\Workflow\Provider::instance();
-check( 'Decision D8: requests that notice the new address at the same moment derive the same instance id (no random race)', $d8_new === $d8_again && array( 'site-instance-1', 'site-instance-1' ) === VCAP\Workflow\Provider::instance_change()['previous'] );
-$d8_lines = implode( "\n", $wf_provider->status_lines() );
-ob_start();
-VCAP\Workflow\Provider::instance_notice();
-$d8_notice_out = (string) ob_get_clean();
-$d8_src = (string) file_get_contents( dirname( __DIR__ ) . '/src/Workflow/Provider.php' );
-check( 'Decision D8: Site Health (Workflow plugin (provider contract)) names the new instance; the admin notice is for shop managers only and is cleared once shown', str_contains( $d8_lines, 'New workflow instance because the address of the website changed (copy/staging).' ) && '' === $d8_notice_out && VCAP\Workflow\Provider::instance_change()['notice'] && str_contains( $d8_src, "add_action( 'admin_notices', array( self::class, 'instance_notice' ) );" ) && (bool) preg_match( "/current_user_can\\( 'manage_woocommerce' \\).*?\\\$site\\['notice'\\] = false;/s", $d8_src ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/WORKFLOW.md' ), 'vcap_workflow_instance_site' ), $d8_lines );
-array_pop( $GLOBALS['vcap_test_filters']['vcap_workflow_instance_changed'] );
-$GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_OPTION ] = 'site-instance-1';
-unset( $GLOBALS['vcap_test_options'][ VCAP\Workflow\Provider::INSTANCE_SITE_OPTION ] );
-
-// WF-02 end to end: ledger entry → vcap_voucher_event (after COMMIT) → vcap_workflow_event.
-VCAP\Db::reset();
-$GLOBALS['wpdb']->events = array();
-$wf_repo->log( 41, 'redeemed', 12.5, 17.5, 'anna@example.com', 0 );
-check( 'WF-05: without a workflow listener nothing is built (no voucher read, no status written)', array() === $wf_seen && 0 === $wf_provider->status()['delivered'] );
-add_action( 'vcap_workflow_event', static function ( $e ) use ( &$wf_seen ) { $wf_seen[] = $e; } );
-$wf_repo->log( 41, 'voided', null, 30.0, VCAP\Note::make( VCAP\Issuer::REFUND_VOID_NOTE, array( 'Refunded to anna@example.com' ) ), 77 );
-check( 'WF-02: a full refund fires "voucher.refunded" (scope full) and "voucher.voided" for the same ledger row, with distinct ids and no note text', 2 === count( $wf_seen ) && 'voucher.refunded' === $wf_seen[0]['type'] && 'voucher.voided' === $wf_seen[1]['type'] && 2 === $wf_seen[0]['sequence'] && $wf_seen[0]['event_id'] !== $wf_seen[1]['event_id'] && ! str_contains( (string) json_encode( $wf_seen ), 'anna' ), json_encode( $wf_seen ) );
-$wf_seen = array();
-VCAP\Db::begin();
-$wf_repo->log( 41, VCAP\Issuer::PURCHASE_REFUNDED_EVENT, -5.0, 25.0, '', 77 );
-$wf_inside = count( $wf_seen );
-VCAP\Db::rollback_silently();
-VCAP\Db::begin();
-$wf_repo->log( 41, VCAP\Issuer::PURCHASE_REFUNDED_EVENT, -5.0, 25.0, '', 77 );
-VCAP\Db::commit();
-check( 'WF-02: events are post-commit – nothing while the transaction is open, nothing after a ROLLBACK, one event after the COMMIT', 0 === $wf_inside && 1 === count( $wf_seen ) && 'voucher.refunded' === $wf_seen[0]['type'] && 'partial' === $wf_seen[0]['data']['scope'] && 500 === $wf_seen[0]['data']['amount_minor'], json_encode( $wf_seen ) );
-$wf_voucher( 43, array( 'type' => 'credit', 'usage_mode' => 'balance', 'user_id' => 5 ) );
-$wf_seen = array();
-$wf_repo->log( 43, 'issued', 0.0, 0.0, '' );
-check( 'WF-02: store credit accounts (customer accounts, not vouchers) fire no workflow events', array() === $wf_seen );
-
-// Replay: same ids, replayed flag, cursor.
-$wf_live   = array_column( array_merge( array(), ( static function () use ( &$wf_seen, $wf_repo ) { $wf_seen = array(); $wf_repo->log( 41, 'reactivated', null, 30.0 ); return $wf_seen; } )() ), 'event_id' );
-$wf_replay = $wf_provider->replay( 0, 100 );
-$wf_ids    = array_column( $wf_replay['events'], 'event_id' );
-check( 'WF-06: replay from the ledger answers the same event ids as the live events (idempotent for the consumer), marked replayed, with the cursor of the last row', in_array( $wf_live[0] ?? 'x', $wf_ids, true ) && count( $wf_ids ) === count( array_unique( $wf_ids ) ) && ! in_array( false, array_column( $wf_replay['events'], 'replayed' ), true ) && count( $GLOBALS['wpdb']->events ) === $wf_replay['next'] && false === $wf_replay['more'] && $wf_provider->replay( $wf_replay['next'] )['events'] === array(), json_encode( $wf_replay['next'] ) );
-
-// WF-05: a failing workflow listener does not break the booking; the error is counted.
-add_action( 'vcap_workflow_event', static function () { throw new RuntimeException( 'Workflow down for anna@example.com' ); } );
-$wf_ok = $wf_repo->log( 41, 'expired', 30.0, 30.0 );
-$wf_st = $wf_provider->status();
-check( 'WF-05: a failing workflow listener is caught and counted (masked message, ledger row to replay from); the booking stands', $wf_ok && 1 === $wf_st['failures'] && str_contains( (string) $wf_st['last_error']['message'], 'a***@example.com' ) && count( $GLOBALS['wpdb']->events ) === $wf_st['last_error']['sequence'] && '' !== $wf_st['last_event_id'], json_encode( $wf_st ) );
-array_pop( $GLOBALS['vcap_test_filters']['vcap_workflow_event'] );
-
-// WF-01/WF-05: consumer compatibility, hand-over matrix (workflow core/pro present, missing, expired, incompatible).
-check( 'WF-05: no workflow plugin registered → "missing", native flows', null === VCAP\Workflow\Provider::consumer() && 'missing' === VCAP\Workflow\Provider::compatibility( null ) );
-$wf_consumer = array( 'id' => 'workflow-captain', 'name' => 'Workflow Captain', 'version' => '1.0.0', 'contract' => '1.3.0', 'edition' => 'pro', 'entitlement' => 'active', 'communications' => array( 'expiry_reminder', 'gift_used', 'voucher_email' ) );
-add_filter( 'vcap_workflow_consumer', static function () use ( &$wf_consumer ) { return $wf_consumer; } );
-$wf_c = VCAP\Workflow\Provider::consumer();
-check( 'WF-01: a consumer built for a newer minor version is compatible; communications it may not take (the voucher email) are dropped', 'compatible' === VCAP\Workflow\Provider::compatibility( $wf_c ) && array( 'expiry_reminder', 'gift_used' ) === $wf_c['communications'] );
-check( 'WF-04: switches off (default) → nothing is handed over even with a compatible workflow plugin', ! VCAP\Workflow\Handover::active( 'expiry_reminder' ) && 'no' === VCAP\Settings::DEFAULTS['vcap_workflow_handover_expiry_reminder'] && 'no' === VCAP\Settings::DEFAULTS['vcap_workflow_handover_gift_used'] && 'no' === VCAP\Settings::DEFAULTS['vcap_workflow_handover_gift_delivered'] );
-$GLOBALS['vcap_test_options']['vcap_workflow_handover_expiry_reminder'] = 'yes';
-$GLOBALS['vcap_test_options']['vcap_workflow_handover_gift_delivered']  = 'yes';
-check( 'WF-04: switch on + compatible plugin that handles it → handed over; one it does not handle stays native', VCAP\Workflow\Handover::active( 'expiry_reminder' ) && ! VCAP\Workflow\Handover::active( 'gift_delivered' ) && ! VCAP\Workflow\Handover::active( 'gift_used' ) );
-$wf_consumer['entitlement'] = 'expired';
-$wf_expired = VCAP\Workflow\Handover::active( 'expiry_reminder' );
-$wf_consumer['entitlement'] = 'active';
-$wf_consumer['edition']     = 'core';
-$wf_core = VCAP\Workflow\Handover::active( 'expiry_reminder' );
-$wf_consumer['contract'] = '2.0.0';
-$wf_major = VCAP\Workflow\Handover::active( 'expiry_reminder' ) || 'incompatible' !== VCAP\Workflow\Provider::compatibility( VCAP\Workflow\Provider::consumer() );
-$wf_consumer['contract'] = 'latest';
-$wf_bad = 'incompatible' === VCAP\Workflow\Provider::compatibility( VCAP\Workflow\Provider::consumer() );
-$wf_consumer['contract'] = '1.0.0';
-check( 'WF-06: matrix – licence expired → native; core edition that lists it → handed over; another major or no version → incompatible, native', ! $wf_expired && $wf_core && ! $wf_major && $wf_bad );
-$wf_lines = implode( "\n", $wf_provider->status_lines() );
-check( 'WF-05: the admin status names the contract version, the plugin, what is handed over, what falls back, the last event id and the listener errors', str_contains( $wf_lines, 'Provider contract 1.0.0' ) && str_contains( $wf_lines, 'Workflow Captain 1.0.0 registered' ) && str_contains( $wf_lines, 'Handed over to the workflow now: Expiry reminder' ) && str_contains( $wf_lines, 'Switched on, but sent by Voucher Captain because the workflow plugin does not take them over now: Notice to the buyer: gift delivered' ) && str_contains( $wf_lines, 'Last event: ' . $wf_st['last_event_id'] ) && str_contains( $wf_lines, 'listener errors: 1' ), $wf_lines );
-$wf_hv = VCAP\Workflow\Handover::note( 'expiry_reminder', 7 );
-check( 'WF-04: a handed-over expiry reminder is recorded with a fixed note (matched by the reminder query, so it is not sent again)', '@vcap:{"c":"workflow_handover","a":["expiry_reminder",7]}' === $wf_hv && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/VoucherRepository.php' ), "OR ( e.event = %s AND e.note = %s )" ) );
-$wf_seen = array();
-VCAP\Workflow\Handover::record( $wf_v, 'expiry_reminder', 7, $wf_repo );
-check( 'WF-04: the hand-over fires "voucher.communication_handed_over" with communication, days and role (no address)', 1 === count( $wf_seen ) && 'voucher.communication_handed_over' === $wf_seen[0]['type'] && 'expiry_reminder' === $wf_seen[0]['data']['communication'] && 7 === $wf_seen[0]['data']['days'] && 'recipient' === $wf_seen[0]['data']['role'] && ! str_contains( (string) json_encode( $wf_seen ), '@' ), json_encode( $wf_seen ) );
-check( 'WF-04: the history shows the hand-over in words', str_contains( VCAP\Note::render( $wf_hv ), 'handed over to the workflow plugin' ) && isset( VCAP\VoucherRepository::event_labels()['workflow_handover'], VCAP\VoucherRepository::event_labels()['workflow_command'] ) );
-unset( $GLOBALS['vcap_test_options']['vcap_workflow_handover_expiry_reminder'], $GLOBALS['vcap_test_options']['vcap_workflow_handover_gift_delivered'] );
-
-// WF-03: services – permission, idempotency key, replay, conflict, audit.
-$wf_void = array( 'voucher_id' => 44, 'reason' => 'Fraud check', 'idempotency_key' => 'wf-flow-1:void:44' );
-$wf_voucher( 44, array( 'status' => Voucher::STATUS_VOID ) );
-$wf_denied = $wf_provider->void( $wf_void );
-check( 'WF-03: services refuse callers without the capability (vcap_not_allowed, 403, contract error data)', is_wp_error( $wf_denied ) && 'vcap_not_allowed' === $wf_denied->get_error_code() && 403 === $wf_denied->get_error_data()['status'] && false === $wf_denied->get_error_data()['retryable'] && '1.0.0' === $wf_denied->get_error_data()['contract_version'] );
-add_filter( 'vcap_workflow_service_allowed', static fn( $allowed, $service ) => in_array( $service, array( 'void', 'reactivate', 'contact' ), true ), 10, 2 );
-$wf_nokey = $wf_provider->void( array( 'idempotency_key' => 'short' ) + $wf_void );
-check( 'WF-03: a changing service needs an idempotency key of 8–64 characters', is_wp_error( $wf_nokey ) && 'vcap_invalid_request' === $wf_nokey->get_error_code() );
-$wf_events_before = count( $GLOBALS['wpdb']->events );
-$wf_first  = $wf_provider->void( $wf_void );
-$wf_again  = $wf_provider->void( $wf_void );
-$wf_audits = array_values( array_filter( $GLOBALS['wpdb']->events, static fn( $r ) => 'workflow_command' === $r['event'] ) );
-check( 'WF-03: idempotency – the first call acts once and is audited (source "workflow"), the repeat answers the stored outcome without acting again', is_array( $wf_first ) && false === $wf_first['replayed'] && is_array( $wf_again ) && true === $wf_again['replayed'] && 44 === $wf_again['voucher_id'] && 1 === count( $wf_audits ) && $wf_events_before + 1 === count( $GLOBALS['wpdb']->events ) && ! str_contains( (string) $wf_audits[0]['note'], 'wf-flow-1' ), json_encode( array( $wf_first, $wf_again, $wf_audits ) ) );
-$wf_conflict = $wf_provider->void( array( 'reason' => 'Another reason' ) + $wf_void );
-$wf_cross    = $wf_provider->reactivate( array( 'voucher_id' => 44, 'idempotency_key' => $wf_void['idempotency_key'] ) );
-check( 'WF-03: the same key with another request (other reason, other service) is a conflict', is_wp_error( $wf_conflict ) && 'vcap_idempotency_conflict' === $wf_conflict->get_error_code() && is_wp_error( $wf_cross ) && 'vcap_idempotency_conflict' === $wf_cross->get_error_code() );
-$wf_voucher( 45, array( 'status' => Voucher::STATUS_ACTIVE ) );
-$wf_react  = $wf_provider->reactivate( array( 'voucher_id' => 45, 'idempotency_key' => 'wf-flow-2:react:45' ) );
-$wf_react2 = $wf_provider->reactivate( array( 'voucher_id' => 45, 'idempotency_key' => 'wf-flow-2:react:45' ) );
-check( 'WF-03: validation – only void vouchers are reactivated; a refused call frees its key (the retry is checked again, not "in progress")', is_wp_error( $wf_react ) && 'vcap_invalid_state' === $wf_react->get_error_code() && is_wp_error( $wf_react2 ) && 'vcap_invalid_state' === $wf_react2->get_error_code() );
-$wf_missing = $wf_provider->void( array( 'voucher_id' => 999, 'idempotency_key' => 'wf-flow-3:void:999' ) + $wf_void );
-$wf_credit  = $wf_provider->void( array( 'voucher_id' => 43, 'idempotency_key' => 'wf-flow-3:void:43' ) + $wf_void );
-check( 'WF-03: unknown vouchers and store credit accounts are not found', is_wp_error( $wf_missing ) && 'vcap_not_found' === $wf_missing->get_error_code() && is_wp_error( $wf_credit ) && 'vcap_not_found' === $wf_credit->get_error_code() );
-$wf_issue = $wf_provider->issue( array( 'amount' => 20, 'idempotency_key' => 'wf-flow-4:issue' ) );
-$wf_redeem = $wf_provider->redeem( array( 'code' => 'X', 'target' => 't', 'idempotency_key' => 'wf-flow-4:redeem' ) );
-check( 'WF-03: issue and redeem need their own permission (not granted here)', is_wp_error( $wf_issue ) && 'vcap_not_allowed' === $wf_issue->get_error_code() && is_wp_error( $wf_redeem ) && 'vcap_not_allowed' === $wf_redeem->get_error_code() );
-$d9_seen    = count( $wf_seen );
-$d9_rows    = count( $GLOBALS['wpdb']->events );
-$wf_contact = $wf_provider->contact( array( 'voucher_id' => 41, 'communication' => 'gift_delivered' ) );
-$GLOBALS['vcap_test_options']['vcap_workflow_handover_expiry_reminder'] = 'yes';
-$wf_contact2 = $wf_provider->contact( array( 'voucher_id' => 41, 'communication' => 'expiry_reminder' ) );
-unset( $GLOBALS['vcap_test_options']['vcap_workflow_handover_expiry_reminder'] );
-check( 'WF-04: contact data only for a handed-over communication – the holder\'s address and the masked code tail, never the code', is_wp_error( $wf_contact ) && 'vcap_not_allowed' === $wf_contact->get_error_code() && is_array( $wf_contact2 ) && 'ben@example.com' === $wf_contact2['email'] && 'recipient' === $wf_contact2['role'] && '…ABCD' === $wf_contact2['code_hint'] && ! str_contains( (string) json_encode( $wf_contact2 ), 'WFSECRET' ), json_encode( $wf_contact2 ) );
-$d9_reads = array_values( array_filter( array_slice( $GLOBALS['wpdb']->events, $d9_rows ), static fn( $r ) => VCAP\Workflow\Services::CONTACT_EVENT === $r['event'] ) );
-$d9_note  = VCAP\Note::decode( (string) ( $d9_reads[0]['note'] ?? '' ) );
-$d9_json  = (string) json_encode( $d9_reads );
-check(
-	'Decision D9: every successful contact() writes one history entry workflow_contact_read (time, user, plugin, communication, role) – none for a refused call, no address, name or code',
-	1 === count( $d9_reads ) && 'workflow_contact_read' === VCAP\Workflow\Services::CONTACT_EVENT && 41 === (int) $d9_reads[0]['voucher_id'] && null === $d9_reads[0]['amount'] && 0 === (int) $d9_reads[0]['user_id'] && '' !== (string) $d9_reads[0]['created_at']
-		&& array( 'Workflow Captain', 'expiry_reminder', 'recipient' ) === ( $d9_note['args'] ?? null ) && ! str_contains( $d9_json, 'example.com' ) && ! str_contains( $d9_json, 'Ben' ) && ! str_contains( strtolower( $d9_json ), 'wfsecret' ) && ! str_contains( $d9_json, 'ABCD' ),
-	$d9_json
-);
-check( 'Decision D9: the entry fires no workflow event (no loop), is no money event (liabilities, journal) and reads in words in the history', $d9_seen === count( $wf_seen ) && array() === VCAP\Workflow\Provider::map( VCAP\Workflow\Services::CONTACT_EVENT, $d9_note, null, 0 ) && ! in_array( VCAP\Workflow\Services::CONTACT_EVENT, VCAP\Ledger::MONEY_EVENTS, true ) && 'Contact data read by Workflow Captain (communication: Expiry reminder, role: Recipient).' === VCAP\Note::render( (string) $d9_reads[0]['note'] ) && isset( VCAP\VoucherRepository::event_labels()[ VCAP\Workflow\Services::CONTACT_EVENT ] ), VCAP\Note::render( (string) ( $d9_reads[0]['note'] ?? '' ) ) );
-$d9_items = ( new VCAP\Privacy( $wf_repo ) )->workflow_contact_items( $wf_v );
-check( 'Decision D9: the privacy export of the voucher lists the read (date, plugin, communication, role); WORKFLOW.md documents it', 1 === count( $d9_items ) && 'vcap-workflow-contact' === $d9_items[0]['group_id'] && array( 'Workflow Captain', 'Expiry reminder', 'Recipient' ) === array_slice( array_column( $d9_items[0]['data'], 'value' ), 1 ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/WORKFLOW.md' ), '`workflow_contact_read`' ), json_encode( $d9_items ) );
-check( 'WF-03: request fingerprints ignore the order of the arguments and differ per voucher', VCAP\Workflow\Services::signature( 'void', 1, array( 'a' => 1, 'b' => 2 ) ) === VCAP\Workflow\Services::signature( 'void', 1, array( 'b' => 2, 'a' => 1 ) ) && VCAP\Workflow\Services::signature( 'void', 1, array() ) !== VCAP\Workflow\Services::signature( 'void', 2, array() ) );
-
-$GLOBALS['vcap_test_filters'] = $wf_saved_filters;
-$GLOBALS['vcap_test_options'] = $wf_saved_options;
-$GLOBALS['wpdb']              = $wf_saved_db;
-VCAP\Db::reset();
-check( 'WF-01: WORKFLOW.md documents the contract (version, envelope, allowlist, errors, idempotency, deprecation) and every event type', ( static function (): bool {
-	$doc = (string) @file_get_contents( dirname( __DIR__ ) . '/WORKFLOW.md' );
-	foreach ( array_merge( VCAP\Workflow\Provider::EVENTS, VCAP\Workflow\Provider::ENVELOPE_FIELDS, VCAP\Workflow\Provider::DATA_FIELDS, array( 'Idempotency', 'Deprecation', 'vcap_workflow_consumer', 'workflow_captain_register_providers', VCAP\Workflow\Provider::CONTRACT_VERSION ) ) as $needle ) {
-		if ( ! str_contains( $doc, $needle ) ) {
-			return false;
+}
+foreach ( $wf11_files as $wf11_path ) {
+	$wf11_code = (string) file_get_contents( $wf11_path );
+	foreach ( array( 'vcap_' . 'workflow_event', 'Workflow\\' . 'Provider', 'vcap_' . 'workflow_consumer', 'vcap_' . 'workflow_service_allowed', 'vcap_' . 'workflow_handover' ) as $wf11_needle ) { // Split so that git grep finds no trace of the contract in the repository.
+		if ( str_contains( $wf11_code, $wf11_needle ) ) {
+			$wf11_hits[] = substr( $wf11_path, strlen( dirname( __DIR__ ) ) + 1 ) . ': ' . $wf11_needle;
 		}
 	}
-	return true;
-} )() );
+}
+check( 'VOUCH-WF-11: the provisional workflow provider contract (its event hook, consumer filter, handover options, the Workflow provider class) is not in src/ or voucher-captain.php', count( $wf11_files ) > 100 && array() === $wf11_hits && ! is_dir( dirname( __DIR__ ) . '/src/Workflow' ) && ! is_file( dirname( __DIR__ ) . '/WORKFLOW.md' ), implode( ', ', $wf11_hits ) );
 echo "Security check (S6–S21, E2)\n";
 $sec_src = static fn( string $file ): string => (string) file_get_contents( dirname( __DIR__ ) . '/' . $file );
 $s9_rest = $sec_src( 'src/API/V1/RestController.php' );
@@ -3131,6 +2896,500 @@ array_pop( $GLOBALS['vcap_test_filters']['vcap_pdf_fonts'] );
 @rmdir( $e2_sibling );
 
 check( 'S6: referral rewards are "Individual use only" (several rewards cannot be stacked)', (bool) preg_match( '/function reward_coupon\(.*?set_individual_use\( true \).*?return \$coupon->save\(\)/s', $sec_src( 'src/Referrals.php' ) ) );
+
+// A6 (free core): the code of the core names no premium offer, upgrade or add-on product.
+$a6_upsell = array();
+foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( dirname( __DIR__ ) . '/src', FilesystemIterator::SKIP_DOTS ) ) as $a6_file ) {
+	if ( 'php' === $a6_file->getExtension() && preg_match( '/upgrade to|go pro\b|pro version|premium feature|captain[ -]pro/i', (string) file_get_contents( $a6_file->getPathname() ) ) ) {
+		$a6_upsell[] = substr( $a6_file->getPathname(), strlen( dirname( __DIR__ ) ) + 1 );
+	}
+}
+check( 'A6: the core code names no premium offer, upgrade or add-on product', array() === $a6_upsell, implode( ', ', $a6_upsell ) );
+
+// Review 16.11.2026 (R16-07): the README table "Was der Kern heute ausgibt" names only actions that exist, with
+// the version of docs/HOOKS.md, and the fields it says vcap_voucher_redeemed carries are in the code.
+$r07_readme = (string) file_get_contents( dirname( __DIR__ ) . '/README.md' );
+$r07_part   = (string) strstr( (string) strstr( $r07_readme, '**Was der Kern heute ausgibt**' ), '## Entwicklung', true );
+$r07_ref    = (string) strstr( (string) file_get_contents( dirname( __DIR__ ) . '/docs/HOOKS.md' ), '## Filters', true );
+preg_match_all( '/^\| `(vcap_[a-z0-9_]+)` \| (\d+\.\d+\.\d+) \|/m', $r07_part, $r07_rows, PREG_SET_ORDER );
+$r07_wrong = array();
+foreach ( $r07_rows as $r07_row ) {
+	if ( ! str_contains( $r07_ref, '| `' . $r07_row[1] . '` | ' . $r07_row[2] . ' |' ) ) {
+		$r07_wrong[] = $r07_row[1];
+	}
+}
+$r07_fire = (string) file_get_contents( dirname( __DIR__ ) . '/src/VoucherRepository.php' ) . (string) file_get_contents( dirname( __DIR__ ) . '/src/API/V1/RedemptionService.php' );
+$r07_keys = array( 'voucher_id', 'code', 'user_id', 'amount', 'currency', 'order_id', 'channel', 'committed_at', 'source', 'redemption_key', 'target', 'till', 'receipt', 'state', 'balance_after', 'expires_at', 'created_at', 'meta' );
+$r07_lost = array_values( array_filter( $r07_keys, static fn( $k ) => ! str_contains( $r07_fire, "'" . $k . "'" ) || ! str_contains( $r07_part, '`' . $k . '`' ) ) );
+check( 'R16-07: the README list of emitted events matches docs/HOOKS.md and the redemption payload in the code', count( $r07_rows ) >= 18 && array() === $r07_wrong && array() === $r07_lost, implode( ', ', array_merge( $r07_wrong, $r07_lost ) ) );
+
+// Review 16.11.2026 (R16-13): the extension points a premium add-on needs exist, every hook names its first version,
+// and an add-on can check one contract version. The core knows nothing about the add-on.
+$r16_root  = dirname( __DIR__ );
+$r16_main  = (string) file_get_contents( $r16_root . '/voucher-captain.php' );
+$r16_hooks = (string) file_get_contents( $r16_root . '/docs/HOOKS.md' );
+$r16_conn  = (string) file_get_contents( $r16_root . '/CONNECTORS.md' );
+preg_match( "/define\( 'VCAP_VERSION', '(\d+\.\d+\.\d+)' \);/", $r16_main, $r16_plugin );
+$r16_plugin = $r16_plugin[1] ?? '0.0.0';
+preg_match( "/define\( 'VCAP_CONTRACT_VERSION', '(\d+\.\d+\.\d+)' \);/", $r16_main, $r16_contract );
+check( 'R16-13: VCAP_CONTRACT_VERSION is defined in the main file, has major 1 (api_v1) and its history is in CONNECTORS.md', isset( $r16_contract[1] ) && str_starts_with( $r16_contract[1], '1.' ) && str_contains( $r16_conn, '`VCAP_CONTRACT_VERSION`' ) && str_contains( $r16_conn, '| ' . ( $r16_contract[1] ?? '?' ) . ' | ' . $r16_plugin . ' |' ), $r16_contract[1] ?? 'not defined' );
+preg_match_all( '/^\| `(vcap_[a-z0-9_]+)` \| ([^|]*) \|/m', $r16_hooks, $r16_rows, PREG_SET_ORDER );
+$r16_no_since = array();
+$r16_since    = array();
+foreach ( $r16_rows as $r16_row ) {
+	$r16_since[ $r16_row[1] ] = trim( $r16_row[2] );
+	if ( ! preg_match( '/^\d+\.\d+\.\d+$/', trim( $r16_row[2] ) ) || version_compare( trim( $r16_row[2] ), $r16_plugin, '>' ) ) {
+		$r16_no_since[] = $r16_row[1];
+	}
+}
+check( 'R16-13: every hook in docs/HOOKS.md names its first plugin version, none later than this version', count( $r16_rows ) > 200 && array() === $r16_no_since, implode( ', ', $r16_no_since ) );
+$r16_addon = array( 'vcap_admin_menu' => '1.2.0', 'vcap_settings_sections' => '1.2.0', 'vcap_settings_fields' => '1.0.0', 'vcap_template_design' => '1.0.0', 'vcap_report_tabs' => '1.2.0', 'vcap_report_page' => '1.2.0', 'vcap_report_group' => '1.1.0', 'vcap_voucher_links' => '1.2.0', 'vcap_voucher_event' => '1.0.0', 'vcap_voucher_issued_standalone' => '1.2.0', 'vcap_voucher_redeemed' => '1.1.0' );
+// The "Since" cells of API.md → "Extension points for add-ons" agree with the generated reference.
+$r16_api = (string) strstr( (string) strstr( (string) file_get_contents( $r16_root . '/API.md' ), '## Extension points for add-ons' ), '## WP Pass Captain', true );
+$r16_api_wrong = array();
+foreach ( explode( "\n", $r16_api ) as $r16_line ) {
+	$r16_cells = explode( ' | ', $r16_line );
+	if ( count( $r16_cells ) < 5 || ! preg_match( '/^(\d+\.\d+\.\d+)/', trim( $r16_cells[3] ), $r16_v ) ) {
+		continue;
+	}
+	preg_match_all( '/`(vcap_[a-z0-9_]+)`/', $r16_cells[0], $r16_named );
+	foreach ( $r16_named[1] as $r16_name ) {
+		if ( isset( $r16_since[ $r16_name ] ) && $r16_since[ $r16_name ] !== $r16_v[1] ) {
+			$r16_api_wrong[] = $r16_name . ' (API.md ' . $r16_v[1] . ', HOOKS.md ' . $r16_since[ $r16_name ] . ')';
+		}
+	}
+}
+check( 'R16-13: the versions in API.md → "Extension points for add-ons" match docs/HOOKS.md', '' !== $r16_api && array() === $r16_api_wrong, implode( ', ', $r16_api_wrong ) );
+check( 'R16-13: the extension points for menu, settings, templates, reports, links and events are documented with their version', array() === array_diff_assoc( $r16_addon, $r16_since ), wp_json_encode( array_diff_assoc( $r16_addon, $r16_since ) ) );
+$r16_generator = (string) file_get_contents( $r16_root . '/bin/hooks.php' );
+$r16_before    = "<?php\n/**\n * A new hook.\n *\n * @since 1.4.0\n */\n";
+preg_match_all( '/^function (vcap_hooks_since|vcap_hooks_with_since)\(.*?^}/ms', $r16_generator, $r16_fn );
+eval( implode( "\n", $r16_fn[0] ) ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- the two pure helper functions of bin/hooks.php (the script itself writes the file).
+list( $r16_merged, $r16_missing ) = vcap_hooks_with_since( array( 'vcap_old' => array( 'since' => '' ), 'vcap_new' => array( 'since' => vcap_hooks_since( $r16_before ) ), 'vcap_undocumented' => array( 'since' => vcap_hooks_since( "<?php\n" ) ) ), array( 'vcap_old' => '1.1.0' ) );
+check( 'R16-13: the hook reference takes the version from the list or from @since and reports a hook without one', '1.1.0' === $r16_merged['vcap_old']['since'] && '1.4.0' === $r16_merged['vcap_new']['since'] && array( 'vcap_undocumented' ) === $r16_missing, wp_json_encode( $r16_missing ) );
+
+// VC-7 (suite spec 8.1, 4.3, R-4.7, R-5.1): read functions for the state of a voucher by its id – a fixed list of
+// keys, null for an unknown id, never a code, a name, an address, the redemption key, the target or meta, no writes.
+echo "\nVC-7: read functions (contract 1.2.0)\n";
+$vc7_saved_wpdb = $GLOBALS['wpdb'] ?? null;
+$GLOBALS['wpdb'] = new VCAP_Test_Wpdb();
+$vc7_code        = 'MARKERGIFT-7Q2XK9';
+$vc7_secrets     = array( $vc7_code, '7Q2XK9', strtolower( $vc7_code ), hash( 'sha256', $vc7_code ), hash( 'sha256', strtolower( $vc7_code ) ), 'marker.recipient@example.test', 'marker.buyer@example.test', 'Marker Recipient', 'Marker Buyer', 'MARKER MESSAGE', 'markertoken0123456789abcdef0123456789abcdef012345', 'rk-marker-secret-key', 'course:marker-target', 'marker-meta', 'MARKER NOTE', 'Marker till', 'MARKER-RECEIPT', 'MARKER TERMS', 'Marker field' );
+// Full rows as SELECT * would return them: the facade must build its answer from the allowed fields only.
+$vc7_voucher = static fn( array $over = array() ): array => $over + array(
+	'id' => '42', 'code' => $vc7_code, 'coupon_id' => '901', 'type' => 'giftcard', 'status' => 'active', 'order_id' => '1042', 'order_item_id' => '7', 'item_index' => '0',
+	'product_id' => '55', 'variation_id' => '0', 'template_id' => '3', 'usage_mode' => 'balance', 'discount_type' => 'fixed_cart', 'initial_amount' => '50.0000',
+	'balance' => '12.5000', 'currency' => 'EUR', 'expires_at' => '2029-12-31 23:59:59', 'buyer_name' => 'Marker Buyer', 'buyer_email' => 'marker.buyer@example.test',
+	'user_id' => '0', 'recipient_name' => 'Marker Recipient', 'recipient_email' => 'marker.recipient@example.test', 'message' => 'MARKER MESSAGE',
+	'fields' => '{"f":{"label":"Marker field","value":"Marker field"}}', 'send_to' => 'recipient', 'delivery_at' => null, 'delivered_at' => '2026-11-01 08:00:00',
+	'token' => 'markertoken0123456789abcdef0123456789abcdef012345', 'transferable' => '1', 'terms' => 'MARKER TERMS', 'max_checkins' => '1', 'checkins' => '0',
+	'last_checkin_at' => null, 'delivered_roles' => 'recipient,evil', 'created_at' => '2026-11-01 07:59:00', 'updated_at' => '2026-11-02 10:00:00',
+);
+$vc7_redemption = array( 'id' => '9', 'redemption_key' => 'rk-marker-secret-key', 'voucher_id' => '42', 'user_id' => '17', 'target' => 'course:marker-target', 'amount' => '7.5000', 'state' => 'committed', 'request_hash' => hash( 'sha256', 'x' ), 'meta' => '{"marker-meta":1}', 'expires_at' => '2026-11-02 10:15:00', 'created_at' => '2026-11-02 10:00:00', 'updated_at' => '2026-11-02 10:01:00' );
+$vc7_rows = array(
+	42 => $vc7_voucher(),
+	43 => $vc7_voucher( array( 'id' => '43', 'type' => 'voucher', 'usage_mode' => 'single', 'status' => 'void', 'balance' => '0.0000', 'initial_amount' => '5000', 'currency' => 'JPY', 'delivered_at' => null, 'delivery_at' => '2099-01-01 09:00:00', 'order_id' => '0' ) ),
+	44 => $vc7_voucher( array( 'id' => '44', 'type' => 'credit', 'user_id' => '17', 'order_id' => '0', 'balance' => '3.1250', 'currency' => 'KWD' ) ),
+);
+$GLOBALS['wpdb']->answers = array(
+	'/FROM wp_vcap_vouchers WHERE user_id = (\d+) AND type = \'credit\'/' => static fn( $q ) => preg_match( '/user_id = (\d+)/', $q, $m ) && 17 === (int) $m[1] ? $vc7_rows[44] : null,
+	'/^SELECT id FROM wp_vcap_vouchers WHERE order_id = (\d+)/'           => static fn( $q ) => preg_match( '/order_id = (\d+)/', $q, $m ) && 1042 === (int) $m[1] ? array( '42', '44' ) : array(),
+	'/FROM wp_vcap_vouchers WHERE id = (\d+)/'                            => static fn( $q ) => preg_match( '/WHERE id = (\d+)/', $q, $m ) ? ( $vc7_rows[ (int) $m[1] ] ?? null ) : null,
+	'/FROM wp_vcap_redemptions WHERE id = (\d+)/'                         => static fn( $q ) => str_contains( $q, 'WHERE id = 9' ) ? $vc7_redemption : null,
+	'/COUNT\(\*\) AS n FROM wp_vcap_redemptions WHERE voucher_id = 42 /'  => array( array( 'state' => 'committed', 'n' => '2' ), array( 'state' => 'released', 'n' => '1' ), array( 'state' => 'bogus', 'n' => '5' ) ),
+	'/FROM wp_vcap_redemptions WHERE voucher_id = 42 ORDER BY/'           => array( $vc7_redemption, array( 'state' => 'reserved', 'id' => '8' ) + $vc7_redemption ),
+	'/FROM wp_vcap_events WHERE voucher_id = 43 AND event IN/'    => array( array( 'event' => 'delivery_failed', 'created_at' => '2026-11-03 10:00:00', 'note' => 'MARKER NOTE' ), array( 'event' => 'delivery_given_up', 'created_at' => '2026-11-03 11:00:00' ) ),
+	'/AND event = \'topup\'/'                                              => '3',
+	'/AND event = \'topup_reversed\'/'                                     => '1',
+);
+$vc7_void_calls = array();
+$vc7_read       = new VCAP\API\V1\ReadService(
+	new VCAP\VoucherRepository(),
+	static function ( Voucher $v ) use ( &$vc7_void_calls ): bool {
+		$vc7_void_calls[] = array( $v->id, $v->status, $v->order_id, $v->code, $v->recipient_email );
+		return true;
+	}
+);
+$vc7_options    = $GLOBALS['vcap_test_options'] ?? array();
+$vc7_transients = $GLOBALS['vcap_test_transients'] ?? array();
+$vc7_results    = array(
+	'voucher'      => $vc7_read->voucher( 42 ),
+	'voucher_str'  => $vc7_read->voucher( '42' ),
+	'void'         => $vc7_read->voucher( 43 ),
+	'gift'         => $vc7_read->gift_card( 42 ),
+	'credit'       => $vc7_read->store_credit( 17 ),
+	'redemption'   => $vc7_read->redemption( 9 ),
+	'redemptions'  => $vc7_read->redemptions( 42 ),
+	'order'        => $vc7_read->order_vouchers( 1042 ),
+);
+$vc7_v = $vc7_results['voucher'];
+check( 'VC-7: read_voucher() returns exactly the documented keys in order', is_array( $vc7_v ) && VCAP\API\V1\ReadService::VOUCHER_KEYS === array_keys( $vc7_v ), wp_json_encode( array_keys( (array) $vc7_v ) ) );
+check(
+	'VC-7: voucher state – ids, type, status, amounts in minor units with currency, UTC timestamps, delivery, counts',
+	is_array( $vc7_v ) && 42 === $vc7_v['voucher_id'] && 'giftcard' === $vc7_v['type'] && 'active' === $vc7_v['status'] && 'EUR' === $vc7_v['currency'] && 5000 === $vc7_v['amount_minor'] && 1250 === $vc7_v['balance_minor']
+		&& 1042 === $vc7_v['order_id'] && 55 === $vc7_v['product_id'] && null === $vc7_v['user_id'] && true === $vc7_v['transferable'] && '2029-12-31T23:59:59Z' === $vc7_v['expires_at'] && '2026-11-01T07:59:00Z' === $vc7_v['created_at']
+		&& 'delivered' === $vc7_v['delivery_state'] && '2026-11-01T08:00:00Z' === $vc7_v['delivered_at'] && array( 'recipient' ) === $vc7_v['delivered_roles'] && 0 === $vc7_v['delivery_failures'] && null === $vc7_v['void_reason']
+		&& array( 'reserved' => 0, 'committed' => 2, 'released' => 1 ) === $vc7_v['redemption_counts'] && $vc7_v === $vc7_results['voucher_str'],
+	wp_json_encode( $vc7_v )
+);
+$vc7_void = $vc7_results['void'];
+check( 'VC-7: a void voucher reports void_reason through Issuer::voided_after_refund() with a voucher object without code or addresses; JPY has no minor digits; a given-up delivery is reported', is_array( $vc7_void ) && 'refund' === $vc7_void['void_reason'] && array( array( 43, 'void', 0, '', '' ) ) === $vc7_void_calls && 5000 === $vc7_void['amount_minor'] && 'JPY' === $vc7_void['currency'] && null === $vc7_void['order_id'] && 'given_up' === $vc7_void['delivery_state'] && 1 === $vc7_void['delivery_failures'] && '2099-01-01T09:00:00Z' === $vc7_void['delivery_at'], wp_json_encode( $vc7_void ) );
+check( 'VC-7: read_gift_card() adds the top-up counts; null for a voucher of another type', is_array( $vc7_results['gift'] ) && array_merge( VCAP\API\V1\ReadService::VOUCHER_KEYS, VCAP\API\V1\ReadService::GIFT_CARD_KEYS ) === array_keys( $vc7_results['gift'] ) && 3 === $vc7_results['gift']['top_up_count'] && 1 === $vc7_results['gift']['top_up_reversed_count'] && null === $vc7_read->gift_card( 43 ) );
+check( 'VC-7: read_store_credit() – account of the user with balance in minor units (KWD: three digits)', VCAP\API\V1\ReadService::STORE_CREDIT_KEYS === array_keys( (array) $vc7_results['credit'] ) && 17 === $vc7_results['credit']['user_id'] && 44 === $vc7_results['credit']['account_id'] && 3125 === $vc7_results['credit']['balance_minor'] && 'KWD' === $vc7_results['credit']['currency'], wp_json_encode( $vc7_results['credit'] ) );
+$vc7_r = $vc7_results['redemption'];
+check( 'VC-7: read_redemption() – state, channel, amount in minor units with the voucher currency, committed_at only when committed, no expiry after the reservation', VCAP\API\V1\ReadService::REDEMPTION_KEYS === array_keys( (array) $vc7_r ) && 9 === $vc7_r['redemption_id'] && 42 === $vc7_r['voucher_id'] && 'committed' === $vc7_r['state'] && 'external' === $vc7_r['channel'] && 750 === $vc7_r['amount_minor'] && 'EUR' === $vc7_r['currency'] && 17 === $vc7_r['user_id'] && null === $vc7_r['expires_at'] && '2026-11-02T10:01:00Z' === $vc7_r['committed_at'], wp_json_encode( $vc7_r ) );
+check( 'VC-7: read_redemptions() lists the redemptions of a voucher (a reserved one with its expiry); [] for a voucher without any', 2 === count( (array) $vc7_results['redemptions'] ) && 'reserved' === $vc7_results['redemptions'][1]['state'] && '2026-11-02T10:15:00Z' === $vc7_results['redemptions'][1]['expires_at'] && null === $vc7_results['redemptions'][1]['committed_at'] && array() === $vc7_read->redemptions( 43 ) );
+check( 'VC-7: read_order_vouchers() – number and ids of the vouchers of an order', array( 'order_id' => 1042, 'voucher_count' => 2, 'voucher_ids' => array( 42, 44 ) ) === $vc7_results['order'] );
+check(
+	'VC-7: unknown ids, zero, negative ids and strings that are no whole number (a code) answer null',
+	null === $vc7_read->voucher( 4711 ) && null === $vc7_read->voucher( 0 ) && null === $vc7_read->voucher( -42 ) && null === $vc7_read->voucher( $vc7_code ) && null === $vc7_read->voucher( '42abc' ) && null === $vc7_read->voucher( '042' ) && null === $vc7_read->voucher( '' )
+		&& null === $vc7_read->gift_card( 4711 ) && null === $vc7_read->store_credit( 18 ) && null === $vc7_read->store_credit( 'marker.buyer@example.test' ) && null === $vc7_read->redemption( 10 ) && null === $vc7_read->redemption( 'rk-marker-secret-key' )
+		&& null === $vc7_read->redemptions( 4711 ) && null === $vc7_read->order_vouchers( 1043 ) && null === $vc7_read->order_vouchers( 0 )
+);
+$vc7_json   = strtolower( (string) wp_json_encode( $vc7_results ) . serialize( $vc7_results ) );
+$vc7_leaked = array_values( array_filter( $vc7_secrets, static fn( $s ) => str_contains( $vc7_json, strtolower( $s ) ) ) );
+check( 'VC-7: no code (nor its tail or hash), token, name, address, message, field, terms, note, redemption key, target, meta, till or receipt of the fixtures appears in any result', array() === $vc7_leaked, implode( ', ', $vc7_leaked ) );
+$vc7_keys = array();
+array_walk_recursive( $vc7_results, static function ( $v, $k ) use ( &$vc7_keys ) { $vc7_keys[] = (string) $k; } );
+foreach ( $vc7_results as $vc7_res ) {
+	foreach ( (array) $vc7_res as $vc7_k => $vc7_val ) {
+		$vc7_keys[] = (string) $vc7_k;
+	}
+}
+check( 'VC-7: no result key names a code, token, name, email, message, note, reference, redemption key, target, meta or receipt', ! preg_grep( '/(code|token|name|email|message|note|reference|redemption_key|target|meta|receipt|till|fields|terms)/', array_unique( $vc7_keys ) ) );
+$vc7_sql = $GLOBALS['wpdb']->log;
+check( 'VC-7: only SELECTs; no SELECT *; the queries never name code, token, names, addresses, message, fields, terms, redemption key, target, request hash or meta', count( $vc7_sql ) > 10 && array() === preg_grep( '/^\s*SELECT\b/i', $vc7_sql, PREG_GREP_INVERT ) && ! preg_grep( '/SELECT \*|\b(INSERT|UPDATE|DELETE|REPLACE|GET_LOCK|FOR UPDATE)\b/i', $vc7_sql ) && ! preg_grep( '/\b(code|token|buyer_name|buyer_email|recipient_name|recipient_email|message|fields|terms|redemption_key|target|request_hash|meta|note|till|receipt)\b/', $vc7_sql ), implode( ' | ', $vc7_sql ) );
+check( 'VC-7: reading changes no option and no transient', $vc7_options === ( $GLOBALS['vcap_test_options'] ?? array() ) && $vc7_transients === ( $GLOBALS['vcap_test_transients'] ?? array() ) );
+$vc7_src = (string) file_get_contents( VCAP_PATH . 'src/API/V1/ReadService.php' );
+check( 'VC-7: ReadService fires no hook, writes nothing and does not go through the code lookups', ! preg_match( '/\b(do_action|apply_filters|Db::action|update_option|add_option|delete_option|set_transient|wp_cache_set|update_post_meta|->insert\(|->update\(|->delete\(|->query\(|->replace\(|get_by_code|get_by_token|->redemptions->get|->account\()/', $vc7_src ) );
+$vc7_fn = (string) file_get_contents( VCAP_PATH . 'src/functions.php' );
+$vc7_main = (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' );
+$vc7_api  = (string) file_get_contents( VCAP_PATH . 'API.md' );
+$vc7_names = array( 'vcap_read_voucher' => 'voucher', 'vcap_read_gift_card' => 'gift_card', 'vcap_read_store_credit' => 'store_credit', 'vcap_read_redemption' => 'redemption', 'vcap_read_redemptions' => 'redemptions', 'vcap_read_order_vouchers' => 'order_vouchers' );
+$vc7_missing = array_keys( array_filter( $vc7_names, static fn( $m, $f ) => ! str_contains( $vc7_fn, "function {$f}( int|string \$" ) || ! str_contains( $vc7_fn, "vcap()->read->{$m}(" ) || ! str_contains( $vc7_api, "`{$f}( int\\|string" ) || ! method_exists( VCAP\API\V1\ReadService::class, $m ), ARRAY_FILTER_USE_BOTH ) );
+check( 'VC-7: each read function wraps vcap()->read, is loaded after boot and documented in API.md with "Since 1.3.0"; Plugin exposes vcap()->read', array() === $vc7_missing && str_contains( $vc7_main, "require_once VCAP_PATH . 'src/functions.php';" ) && strpos( $vc7_main, "require_once VCAP_PATH . 'src/functions.php';" ) > strpos( $vc7_main, 'function vcap(): \VCAP\Plugin' ) && str_contains( $vc7_api, '## Read functions (since 1.3.0, contract 1.2.0)' ) && property_exists( VCAP\Plugin::class, 'read' ), implode( ', ', $vc7_missing ) );
+require_once VCAP_PATH . 'src/functions.php';
+check( 'VC-7: without vcap()->read (plugin not booted) the functions answer null instead of failing', null === vcap_read_voucher( 42 ) && null === vcap_read_store_credit( 17 ) && null === vcap_read_order_vouchers( 1042 ) );
+preg_match( "/define\( 'VCAP_CONTRACT_VERSION', '(\d+\.\d+\.\d+)' \);/", $vc7_main, $vc7_contract );
+check( 'VC-7: the read functions raised the contract version to at least 1.2.0 (additive minor within major 1)', isset( $vc7_contract[1] ) && version_compare( $vc7_contract[1], '1.2.0', '>=' ) && str_starts_with( $vc7_contract[1], '1.' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'CONNECTORS.md' ), '| 1.2.0 | 1.3.0 | read functions `vcap_read_voucher()`' ) );
+$GLOBALS['wpdb'] = $vc7_saved_wpdb;
+
+// VC-1 / VOUCH-WF-13 (suite spec 8.3, R-8.1 to R-8.13; VC-2, VC-9): the four voucher commands with fixed limits,
+// switches (off by default), idempotency, permission of the authorising user, protocol and history without code.
+echo "\nVC-1: voucher commands (contract 1.3.0)\n";
+final class VCAP_Test_Command_Store implements VCAP\API\V1\CommandStore {
+	public array $replies = array(); public array $counts = array(); public array $log = array(); public bool $locked = false; public bool $lock_ok = true; public int $locks = 0;
+	public function lock(): bool { if ( ! $this->lock_ok ) { return false; } $this->locked = true; ++$this->locks; return true; }
+	public function unlock(): void { $this->locked = false; }
+	public function reply( string $key ): ?array { return $this->replies[ $key ] ?? null; }
+	public function save_reply( string $key, string $hash, array $result, string $day ): void { $this->replies[ $key ] = array( 'hash' => $hash, 'result' => $result ); }
+	public function count( string $day, string $bucket ): int { return (int) ( $this->counts[ $day ][ $bucket ] ?? 0 ); }
+	public function increment( string $day, array $buckets ): void { foreach ( $buckets as $b ) { $this->counts[ $day ][ $b ] = $this->count( $day, $b ) + 1; } }
+	public function protocol( string $day, array $entry ): void { $this->log[ $day ][] = $entry; }
+	public function entries( string $day ): array { return $this->log[ $day ] ?? array(); }
+}
+final class VCAP_Test_Command_Backend implements VCAP\API\V1\CommandBackend {
+	public array $vouchers = array(); public array $caps = array(); public array $users = array(); public array $calls = array(); public array $history = array();
+	public string $day = '2026-11-16'; public string $currency = 'EUR'; public int $next = 500; public bool $refund_void = false; public bool $locked_seen = true; public ?VCAP_Test_Command_Store $store = null;
+	public function voucher( int $id ): ?Voucher { return isset( $this->vouchers[ $id ] ) ? clone $this->vouchers[ $id ] : null; }
+	public function user_can( int $user_id, string $capability ): bool { return in_array( $capability, $this->caps[ $user_id ] ?? array(), true ); }
+	public function recipient( int $user_id ): ?array { return $this->users[ $user_id ] ?? null; }
+	public function shop_currency(): string { return $this->currency; }
+	public function today(): string { return $this->day; }
+	public function product_refusal( int $product_id ): string { return 77 === $product_id ? 'percent_not_allowed' : ( 55 === $product_id ? '' : 'invalid_product' ); }
+	private function seen(): void { $this->locked_seen = $this->locked_seen && $this->store && $this->store->locked; }
+	public function issue( array $args ): Voucher|WP_Error {
+		$this->seen(); $this->calls[] = array( 'issue', $args );
+		$v = new Voucher(); $v->id = $this->next++; $v->code = 'MARKERCMD-' . $v->id . 'ZQ'; $v->type = 'voucher'; $v->usage_mode = 'single'; $v->discount_type = 'fixed_cart'; $v->currency = $this->currency; $v->initial_amount = (float) $args['amount']; $v->balance = (float) $args['amount']; $v->status = 'active'; $v->recipient_email = $args['recipient_email'];
+		$this->vouchers[ $v->id ] = $v;
+		return $v;
+	}
+	public function void( Voucher $voucher ): bool { $this->seen(); $this->calls[] = array( 'void', $voucher->id ); $this->vouchers[ $voucher->id ]->status = 'void'; return true; }
+	public function reactivate( Voucher $voucher ): bool { $this->seen(); $this->calls[] = array( 'reactivate', $voucher->id ); $this->vouchers[ $voucher->id ]->status = 'active'; return true; }
+	public function voided_after_refund( Voucher $voucher ): bool { return $this->refund_void; }
+	public function redeem( Voucher $voucher, float $amount, string $target, string $key ): Voucher|WP_Error {
+		$this->seen(); $this->calls[] = array( 'redeem', $voucher->id, $amount, $target, $key );
+		$v = $this->vouchers[ $voucher->id ];
+		if ( $v->is_multi_use() ) { $v->balance = round( $v->balance - $amount, 2 ); $v->status = $v->balance <= 0 ? 'redeemed' : 'active'; } else { $v->status = 'redeemed'; }
+		return clone $v;
+	}
+	public function history( int $voucher_id, ?float $amount, string $note ): void { $this->history[] = array( $voucher_id, $amount, $note ); }
+}
+$vc1_mk = static function ( int $id, array $over = array() ): Voucher {
+	$v = new Voucher(); $v->id = $id; $v->code = 'MARKERCMD-' . $id . 'ZQ'; $v->type = 'giftcard'; $v->usage_mode = 'balance'; $v->discount_type = 'fixed_cart'; $v->currency = 'EUR'; $v->initial_amount = 80.0; $v->balance = 60.0; $v->status = 'active'; $v->recipient_email = 'marker.cmd@example.test'; $v->recipient_name = 'Marker Cmd';
+	foreach ( $over as $k => $val ) { $v->$k = $val; }
+	return $v;
+};
+$vc1_new = static function () use ( $vc1_mk ): array {
+	$store = new VCAP_Test_Command_Store();
+	$be    = new VCAP_Test_Command_Backend();
+	$be->store = $store;
+	$be->caps  = array( 7 => array( 'vcap_manage_vouchers', 'vcap_increase_balance' ), 8 => array( 'vcap_redeem_api' ), 9 => array( 'read' ) );
+	$be->users = array( 21 => array( 'email' => 'marker.recipient@example.test', 'name' => 'Marker Recipient' ), 22 => array( 'email' => 'marker.two@example.test', 'name' => 'Marker Two' ) );
+	$be->vouchers = array( 42 => $vc1_mk( 42 ), 43 => $vc1_mk( 43, array( 'status' => 'void' ) ), 44 => $vc1_mk( 44, array( 'type' => 'voucher', 'usage_mode' => 'single', 'initial_amount' => 25.0, 'balance' => 25.0 ) ), 45 => $vc1_mk( 45, array( 'type' => 'credit' ) ), 46 => $vc1_mk( 46, array( 'discount_type' => 'percent', 'type' => 'voucher', 'usage_mode' => 'single' ) ), 47 => $vc1_mk( 47, array( 'status' => 'redeemed', 'balance' => 0.0 ) ) );
+	return array( new VCAP\API\V1\CommandService( $be, $store ), $be, $store );
+};
+$vc1_n    = 0;
+$vc1_args = static function ( array $extra = array() ) use ( &$vc1_n ): array {
+	++$vc1_n;
+	return $extra + array( 'idempotency_key' => 'wf-3:v2:evt-' . $vc1_n . ':step-1', 'reason' => 'loyalty_reward', 'workflow_id' => 3, 'run_id' => 'run-' . $vc1_n, 'step_id' => 'step-1', 'authorized_by_user_id' => 7 );
+};
+$vc1_saved_opts = $GLOBALS['vcap_test_options'] ?? array();
+$vc1_on = static function ( array $commands ): void {
+	foreach ( $commands as $c ) {
+		$GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( $c, 'enabled' ) ] = 'yes';
+	}
+};
+$vc1_off = static function (): void {
+	foreach ( array_keys( $GLOBALS['vcap_test_options'] ?? array() ) as $k ) {
+		if ( str_starts_with( (string) $k, 'vcap_command_' ) ) {
+			unset( $GLOBALS['vcap_test_options'][ $k ] );
+		}
+	}
+};
+$GLOBALS['vcap_test_options']['woocommerce_currency'] = 'EUR';
+$vc1_off();
+list( $vc1, $vc1_be, $vc1_store ) = $vc1_new();
+$vc1_all = array();
+$vc1_off_results = array(
+	$vc1->issue( $vc1_args( array( 'recipient_user_id' => 21, 'amount_minor' => 1000, 'currency' => 'EUR' ) ) ),
+	$vc1->void( $vc1_args( array( 'voucher_id' => 42 ) ) ),
+	$vc1->reactivate( $vc1_args( array( 'voucher_id' => 43 ) ) ),
+	$vc1->redeem( $vc1_args( array( 'voucher_id' => 42, 'amount_minor' => 500, 'currency' => 'EUR', 'target' => 'course_unlock' ) ) ),
+);
+$vc1_all = array_merge( $vc1_all, $vc1_off_results );
+check( 'VC-1: all four commands are off by default (R-8.3d) – refused, final, code command_disabled, nothing executed', 4 === count( array_filter( $vc1_off_results, static fn( $r ) => 'refused' === $r['status'] && 'command_disabled' === $r['code'] && true === $r['final'] ) ) && array() === $vc1_be->calls && ! VCAP\API\V1\CommandLimits::enabled( 'voucher.issue' ), wp_json_encode( $vc1_off_results ) );
+check( 'VC-1: every reply has exactly the documented keys in order', 4 === count( array_filter( $vc1_off_results, static fn( $r ) => VCAP\API\V1\CommandService::RESULT_KEYS === array_keys( $r ) ) ) );
+check( 'VC-1: the fixed table of 8.3.1 – issue 100 EUR / 50 a day / 1 per recipient, void and reactivate 50, redeem 100 EUR / 50', array( 'per_day' => 50, 'per_recipient' => 1, 'max_amount_minor' => 10000, 'amount_allowed' => true ) === VCAP\API\V1\CommandLimits::effective( 'voucher.issue', 'EUR' ) && 50 === VCAP\API\V1\CommandLimits::effective( 'voucher.void' )['per_day'] && 50 === VCAP\API\V1\CommandLimits::effective( 'voucher.reactivate' )['per_day'] && array( 'per_day' => 50, 'per_recipient' => null, 'max_amount_minor' => 10000, 'amount_allowed' => true ) === VCAP\API\V1\CommandLimits::effective( 'voucher.redeem', 'EUR' ) );
+
+$vc1_on( VCAP\API\V1\CommandLimits::COMMANDS );
+list( $vc1, $vc1_be, $vc1_store ) = $vc1_new();
+$vc1_i_args = $vc1_args( array( 'recipient_user_id' => 21, 'amount_minor' => 2550, 'currency' => 'EUR' ) );
+$vc1_i      = $vc1->issue( $vc1_i_args );
+$vc1_all[]  = $vc1_i;
+$vc1_issue_call = $vc1_be->calls[0][1] ?? array();
+check( 'VC-1: issue – done, voucher id and state, amount in minor units; the core gets the address from the user account, sends its own mail, no own code, not paid', 'done' === $vc1_i['status'] && 'issued' === $vc1_i['code'] && 500 === $vc1_i['voucher_id'] && 'active' === $vc1_i['voucher_status'] && 2550 === $vc1_i['amount_minor'] && 'EUR' === $vc1_i['currency'] && 25.5 === $vc1_issue_call['amount'] && 'marker.recipient@example.test' === $vc1_issue_call['recipient_email'] && true === $vc1_issue_call['send'] && false === $vc1_issue_call['paid'] && ! isset( $vc1_issue_call['code'], $vc1_issue_call['allow_weak'], $vc1_issue_call['discount_type'] ) && str_starts_with( (string) $vc1_issue_call['reference'], 'command:' ) && $vc1_be->locked_seen, wp_json_encode( array( $vc1_i, $vc1_issue_call ) ) );
+$vc1_replay = $vc1->issue( $vc1_i_args );
+$vc1_all[]  = $vc1_replay;
+check( 'VC-1: the same key returns the stored reply of the first call and does nothing (R-8.3a)', 1 === count( $vc1_be->calls ) && true === $vc1_replay['replayed'] && array_diff_key( $vc1_replay, array( 'replayed' => 1 ) ) === array_diff_key( $vc1_i, array( 'replayed' => 1 ) ) && 1 === $vc1_store->count( '2026-11-16', 'voucher.issue' ) );
+$vc1_conflict = $vc1->issue( array( 'amount_minor' => 2600 ) + $vc1_i_args );
+$vc1_all[]    = $vc1_conflict;
+check( 'VC-1: the same key with other values is refused as idempotency_conflict, nothing executed, the first reply stays', 'refused' === $vc1_conflict['status'] && 'idempotency_conflict' === $vc1_conflict['code'] && 1 === count( $vc1_be->calls ) && 2550 === $vc1_store->replies[ $vc1_i_args['idempotency_key'] ]['result']['amount_minor'] );
+$vc1_r1 = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 21, 'amount_minor' => 1000, 'currency' => 'EUR' ) ) );
+$vc1_r2 = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 1000, 'currency' => 'EUR' ) ) );
+array_push( $vc1_all, $vc1_r1, $vc1_r2 );
+check( 'VC-1: 1 voucher per recipient and day – a second one for the same user is refused, another user still gets one', 'refused' === $vc1_r1['status'] && 'recipient_daily_limit_reached' === $vc1_r1['code'] && true === $vc1_r1['final'] && 'done' === $vc1_r2['status'] && 2 === count( $vc1_be->calls ) );
+$vc1_be->day = '2026-11-17';
+$vc1_r3      = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 21, 'amount_minor' => 1000, 'currency' => 'EUR' ) ) );
+check( 'VC-1: counters are per calendar day – the next day the recipient may get one again', 'done' === $vc1_r3['status'] );
+$vc1_be->day = '2026-11-16';
+$vc1_over = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 10001, 'currency' => 'EUR' ) ) );
+$vc1_max  = $vc1->redeem( $vc1_args( array( 'voucher_id' => 42, 'amount_minor' => 10001, 'currency' => 'EUR', 'target' => 'course_unlock', 'authorized_by_user_id' => 8 ) ) );
+array_push( $vc1_all, $vc1_over, $vc1_max );
+check( 'VC-1: amounts above 100 EUR are refused, not shortened (issue per voucher, redeem per redemption)', 'amount_over_limit' === $vc1_over['code'] && 'refused' === $vc1_over['status'] && 'amount_over_limit' === $vc1_max['code'] && 3 === count( $vc1_be->calls ) );
+// Daily limit per site: 50 a day; a lowered setting (3) wins, a higher one (500) never raises.
+$GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.void', 'per_day' ) ] = '500';
+check( 'VC-1: a setting above the table does not raise the limit (50)', 50 === VCAP\API\V1\CommandLimits::effective( 'voucher.void' )['per_day'] );
+add_filter( 'vcap_command_limits', $vc1_raise = static fn( $l ) => array( 'per_day' => 999, 'max_amount_minor' => 99999, 'enabled' => true ) + $l );
+check( 'VC-1: the filter cannot raise a limit either', 50 === VCAP\API\V1\CommandLimits::effective( 'voucher.void' )['per_day'] && 10000 === VCAP\API\V1\CommandLimits::effective( 'voucher.issue', 'EUR' )['max_amount_minor'] );
+remove_filter( 'vcap_command_limits', $vc1_raise );
+$GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.void', 'per_day' ) ] = '2';
+for ( $i = 100; $i < 103; $i++ ) {
+	$vc1_be->vouchers[ $i ] = $vc1_mk( $i );
+}
+$vc1_v = array();
+for ( $i = 100; $i < 103; $i++ ) {
+	$vc1_v[] = $vc1->void( $vc1_args( array( 'voucher_id' => $i ) ) );
+}
+$vc1_all = array_merge( $vc1_all, $vc1_v );
+check( 'VC-1: daily limit per site – the operator lowered void to 2: the third void of the day is refused (daily_limit_reached), no refund path', 'voided' === $vc1_v[0]['code'] && 'void' === $vc1_v[0]['voucher_status'] && 'done' === $vc1_v[1]['status'] && 'refused' === $vc1_v[2]['status'] && 'daily_limit_reached' === $vc1_v[2]['code'] && 'active' === $vc1_be->vouchers[102]->status && 2 === $vc1_store->count( '2026-11-16', 'voucher.void' ) );
+$vc1_dup = $vc1->void( $vc1_args( array( 'voucher_id' => 43 ) ) );
+$vc1_all[] = $vc1_dup;
+check( 'VC-1: void of a void voucher – duplicate already_void, counts nothing', 'duplicate' === $vc1_dup['status'] && 'already_void' === $vc1_dup['code'] && 2 === $vc1_store->count( '2026-11-16', 'voucher.void' ) );
+unset( $GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.void', 'per_day' ) ] );
+$vc1_issue_limit = $GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'per_day' ) ] = '2';
+$vc1_l = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'EUR' ) ) );
+check( 'VC-1: daily limit of issue per site (lowered to 2: two issued today) refuses the next one', 'daily_limit_reached' === $vc1_l['code'] );
+unset( $GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'per_day' ) ] );
+// Full 50 a day for reactivate.
+list( $vc1b, $vc1b_be, $vc1b_store ) = $vc1_new();
+for ( $i = 1000; $i < 1051; $i++ ) {
+	$vc1b_be->vouchers[ $i ] = $vc1_mk( $i, array( 'status' => 'void' ) );
+}
+$vc1_ra = array();
+for ( $i = 1000; $i < 1051; $i++ ) {
+	$vc1_ra[] = $vc1b->reactivate( $vc1_args( array( 'voucher_id' => $i ) ) );
+}
+check( 'VC-1: reactivate – 50 a day and site by default, the 51st is refused; separate counter from void', 50 === count( array_filter( $vc1_ra, static fn( $r ) => 'reactivated' === $r['code'] ) ) && 'daily_limit_reached' === $vc1_ra[50]['code'] && 0 === $vc1b_store->count( '2026-11-16', 'voucher.void' ) && 50 === $vc1b_store->count( '2026-11-16', 'voucher.reactivate' ) );
+$vc1_be->refund_void = true;
+$vc1_rr = $vc1->reactivate( $vc1_args( array( 'voucher_id' => 43 ) ) );
+$vc1_be->refund_void = false;
+$vc1_ra2 = $vc1->reactivate( $vc1_args( array( 'voucher_id' => 47 ) ) );
+array_push( $vc1_all, $vc1_rr, $vc1_ra2 );
+check( 'VC-1: reactivate refuses a voucher voided because of a refund (after_refund fixed false) and one that is not void', 'voided_after_refund' === $vc1_rr['code'] && 'not_void' === $vc1_ra2['code'] );
+// Permission (R-8.4 to R-8.8, VC-9): the authorising user, never the current user.
+$vc1_p = array(
+	$vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'EUR', 'authorized_by_user_id' => 9 ) ) ),
+	$vc1->void( $vc1_args( array( 'voucher_id' => 102, 'authorized_by_user_id' => 8 ) ) ),
+	$vc1->reactivate( $vc1_args( array( 'voucher_id' => 43, 'authorized_by_user_id' => 8 ) ) ),
+	$vc1->redeem( $vc1_args( array( 'voucher_id' => 42, 'amount_minor' => 100, 'currency' => 'EUR', 'target' => 'course_unlock', 'authorized_by_user_id' => 404 ) ) ),
+);
+$vc1_all = array_merge( $vc1_all, $vc1_p );
+check( 'VC-1/VC-9: a user without the capability (or unknown) is refused not_authorized, final; the core checks it itself', 4 === count( array_filter( $vc1_p, static fn( $r ) => 'not_authorized' === $r['code'] && true === $r['final'] ) ) );
+$vc1_src = (string) file_get_contents( VCAP_PATH . 'src/API/V1/CommandService.php' ) . file_get_contents( VCAP_PATH . 'src/API/V1/CoreCommandBackend.php' );
+check( 'VC-1/VC-9: no wp_set_current_user(), no current_user_can(); user_can() on the authorising user; refund paths fixed off; refund() not reachable', ! preg_match( '/wp_set_current_user|current_user_can|->refund\(|void_purchase|void_or_retry/', $vc1_src ) && str_contains( $vc1_src, 'user_can( $user, $capability )' ) && str_contains( $vc1_src, "->void( \$voucher, '', false )" ) && str_contains( $vc1_src, '->reactivate( $voucher, false )' ) );
+// Redeem.
+$vc1_rd   = $vc1->redeem( $vc1_args( array( 'voucher_id' => 42, 'amount_minor' => 1250, 'currency' => 'EUR', 'target' => 'course_unlock', 'authorized_by_user_id' => 8 ) ) );
+$vc1_call = end( $vc1_be->calls );
+$vc1_rd2  = $vc1->redeem( $vc1_args( array( 'voucher_id' => 42, 'amount_minor' => 4751, 'currency' => 'EUR', 'target' => 'course_unlock', 'authorized_by_user_id' => 8 ) ) );
+$vc1_rd3  = $vc1->redeem( $vc1_args( array( 'voucher_id' => 44, 'amount_minor' => 1000, 'currency' => 'EUR', 'target' => 'course_unlock', 'authorized_by_user_id' => 8 ) ) );
+$vc1_rd4  = $vc1->redeem( $vc1_args( array( 'voucher_id' => 44, 'amount_minor' => 2500, 'currency' => 'EUR', 'target' => 'course_unlock', 'authorized_by_user_id' => 8 ) ) );
+$vc1_rd5  = $vc1->redeem( $vc1_args( array( 'voucher_id' => 45, 'amount_minor' => 100, 'currency' => 'EUR', 'target' => 'course_unlock' ) ) );
+$vc1_rd6  = $vc1->redeem( $vc1_args( array( 'voucher_id' => 46, 'amount_minor' => 100, 'currency' => 'EUR', 'target' => 'course_unlock' ) ) );
+$vc1_rd7  = $vc1->redeem( $vc1_args( array( 'voucher_id' => 42, 'amount_minor' => 100, 'currency' => 'USD', 'target' => 'course_unlock' ) ) );
+array_push( $vc1_all, $vc1_rd, $vc1_rd2, $vc1_rd3, $vc1_rd4, $vc1_rd5, $vc1_rd6, $vc1_rd7 );
+check( 'VC-1: redeem by voucher_id – partial amount in minor units, balance after in minor units, reserve and commit by the core under a derived key', 'done' === $vc1_rd['status'] && 'redeemed' === $vc1_rd['code'] && 4750 === $vc1_rd['balance_minor'] && 1250 === $vc1_rd['amount_minor'] && 'redeem' === $vc1_call[0] && 12.5 === $vc1_call[2] && 'workflow:course_unlock' === $vc1_call[3] && (bool) preg_match( VCAP\API\V1\RedemptionService::KEY_PATTERN, $vc1_call[4] ), wp_json_encode( array( $vc1_rd, $vc1_call ) ) );
+check( 'VC-1: redeem never more than the remaining value; a single-use voucher only as a whole; store credit and percentage vouchers refused; currency must match', 'insufficient_balance' === $vc1_rd2['code'] && 'amount_mismatch' === $vc1_rd3['code'] && 'done' === $vc1_rd4['status'] && 'unsupported_voucher' === $vc1_rd5['code'] && 'unsupported_voucher' === $vc1_rd6['code'] && 'currency_mismatch' === $vc1_rd7['code'] );
+// VC-2: no code, no e-mail address, no own code / allow_weak / percent / paid.
+$vc1_bad = array(
+	$vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'EUR', 'code' => 'MYOWNCODE1' ) ) ),
+	$vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'EUR', 'allow_weak' => true ) ) ),
+	$vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'EUR', 'paid' => true ) ) ),
+	$vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'EUR', 'discount_type' => 'percent' ) ) ),
+	$vc1->issue( $vc1_args( array( 'recipient_email' => 'x@example.test', 'amount_minor' => 100, 'currency' => 'EUR' ) ) ),
+	$vc1->void( $vc1_args( array( 'code' => 'MARKERCMD-42ZQ' ) ) ),
+	$vc1->void( $vc1_args( array( 'voucher_id' => 42, 'refund' => true ) ) ),
+	$vc1->reactivate( $vc1_args( array( 'voucher_id' => 43, 'after_refund' => true ) ) ),
+	$vc1->redeem( $vc1_args( array( 'voucher_id' => 42, 'amount_minor' => '12.50', 'currency' => 'EUR', 'target' => 'course_unlock' ) ) ),
+	$vc1->redeem( $vc1_args( array( 'voucher_id' => 42, 'amount_minor' => 100, 'currency' => 'EUR', 'target' => 'free text target' ) ) ),
+	$vc1->void( $vc1_args( array( 'voucher_id' => 42, 'reason' => 'Free text reason' ) ) ),
+	$vc1->void( $vc1_args( array( 'voucher_id' => 42, 'run_id' => '' ) ) ),
+);
+$vc1_all = array_merge( $vc1_all, $vc1_bad );
+$vc1_fields = array_map( static fn( $r ) => $r['code'] . ':' . $r['field'], $vc1_bad );
+check( 'VC-2: own code, allow_weak, paid, percentage, e-mail address, code instead of id, refund switches, non-integer amounts, free-text keys and missing fields are refused (invalid_request with the field name)', array( 'invalid_request:code', 'invalid_request:allow_weak', 'invalid_request:paid', 'invalid_request:discount_type', 'invalid_request:recipient_email', 'invalid_request:code', 'invalid_request:refund', 'invalid_request:after_refund', 'invalid_request:amount_minor', 'invalid_request:target', 'invalid_request:reason', 'invalid_request:run_id' ) === $vc1_fields, implode( ', ', $vc1_fields ) );
+$vc1_prod = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'EUR', 'product_id' => 77 ) ) );
+$vc1_cur  = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'USD' ) ) );
+$vc1_nok  = $vc1->issue( array( 'idempotency_key' => str_repeat( 'k', 101 ) ) + $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'EUR' ) ) );
+array_push( $vc1_all, $vc1_prod, $vc1_cur, $vc1_nok );
+check( 'VC-2: a percentage product is refused; the currency must be the shop currency; the key has at most 100 characters', 'percent_not_allowed' === $vc1_prod['code'] && 'currency_mismatch' === $vc1_cur['code'] && 'invalid_request' === $vc1_nok['code'] && 'idempotency_key' === $vc1_nok['field'] );
+// F-05a: a shop in another currency refuses amounts until the operator enters an own maximum.
+$GLOBALS['vcap_test_options']['woocommerce_currency'] = 'CHF';
+$vc1_be->currency = 'CHF';
+$vc1_chf  = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'CHF' ) ) );
+$GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'max_amount' ) ] = '90.00';
+$vc1_be->day = '2026-11-18';
+$vc1_chf2 = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 9001, 'currency' => 'CHF' ) ) );
+$vc1_chf3 = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 9000, 'currency' => 'CHF' ) ) );
+array_push( $vc1_all, $vc1_chf, $vc1_chf2, $vc1_chf3 );
+check( 'VC-1 F-05a: non-EUR shop – refused (currency_not_allowed) without an own maximum; with one (90 CHF) above it refused, up to it done', 'currency_not_allowed' === $vc1_chf['code'] && true === $vc1_chf['final'] && 'amount_over_limit' === $vc1_chf2['code'] && 'done' === $vc1_chf3['status'] );
+unset( $GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'max_amount' ) ] );
+$GLOBALS['vcap_test_options']['woocommerce_currency'] = 'EUR';
+$vc1_be->currency = 'EUR';
+$vc1_be->day      = '2026-11-16';
+check( 'VC-1: settings sanitise to the table (count clamped, EUR amount at most 100.00, negative/blank = default)', '50' === VCAP\API\V1\CommandLimits::sanitize_count( 'vcap_command_void_per_day', '75' ) && '3' === VCAP\API\V1\CommandLimits::sanitize_count( 'vcap_command_void_per_day', '3' ) && '1' === VCAP\API\V1\CommandLimits::sanitize_count( 'vcap_command_issue_per_recipient', '9' ) && '100.00' === VCAP\API\V1\CommandLimits::sanitize_amount( 'vcap_command_issue_max_amount', '250' ) && '40.50' === VCAP\API\V1\CommandLimits::sanitize_amount( 'vcap_command_redeem_max_amount', '40,5' ) && '' === VCAP\API\V1\CommandLimits::sanitize_amount( 'vcap_command_redeem_max_amount', '-1' ) );
+$vc1_set = VCAP\API\V1\CommandService::settings_fields( array(), 'api' );
+check( 'VC-1: the switches are in "Integrations (API)", default "no"', 4 === count( array_filter( $vc1_set, static fn( $f ) => 'checkbox' === ( $f['type'] ?? '' ) && 'no' === $f['default'] && str_ends_with( $f['id'], '_enabled' ) ) ) && array() === VCAP\API\V1\CommandService::settings_fields( array(), 'codes' ) );
+// Switching off again is final for the next calls; a replay of a done call stays done.
+$GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'enabled' ) ] = 'no';
+$vc1_off2 = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'EUR' ) ) );
+$vc1_rep2 = $vc1->issue( $vc1_i_args );
+check( 'VC-1: switched off – new calls refused (command_disabled), a replay still returns the stored reply', 'command_disabled' === $vc1_off2['code'] && 'done' === $vc1_rep2['status'] && true === $vc1_rep2['replayed'] );
+$vc1_on( array( 'voucher.issue' ) );
+// Lock busy.
+$vc1_store->lock_ok = false;
+$vc1_busy = $vc1->void( $vc1_args( array( 'voucher_id' => 102 ) ) );
+$vc1_store->lock_ok = true;
+check( 'VC-1: lock busy – status failed (not final, may be retried with the same key), nothing stored or executed', 'failed' === $vc1_busy['status'] && 'busy' === $vc1_busy['code'] && false === $vc1_busy['final'] && 'active' === $vc1_be->vouchers[102]->status );
+check( 'VC-1: executions run under the lock and the lock is always released', $vc1_be->locked_seen && ! $vc1_store->locked );
+// Protocol and history (R-8.3c).
+$vc1_log = $vc1->protocol( '2026-11-16' );
+check( 'VC-1: every call is in the protocol – also refusals, conflicts, replays and lock failures – with the documented keys', count( $vc1_log ) >= 40 && array() === array_filter( $vc1_log, static fn( $e ) => VCAP\API\V1\CommandService::PROTOCOL_KEYS !== array_keys( $e ) ) && in_array( 'idempotency_conflict', array_column( $vc1_log, 'code' ), true ) && in_array( true, array_column( $vc1_log, 'replayed' ), true ) && in_array( 'busy', array_column( $vc1_log, 'code' ), true ) && in_array( 'command_disabled', array_column( $vc1_log, 'code' ), true ) );
+$vc1_e = array_values( array_filter( $vc1_log, static fn( $e ) => 'issued' === $e['code'] ) )[0] ?? array();
+check( 'VC-1: a protocol entry names command, workflow, run, step, voucher, amount, result, time and the authorising user; the key only as a short hash', 'voucher.issue' === ( $vc1_e['command'] ?? '' ) && '3' === $vc1_e['workflow_id'] && str_starts_with( (string) $vc1_e['run_id'], 'run-' ) && 'step-1' === $vc1_e['step_id'] && 500 === $vc1_e['voucher_id'] && 2550 === $vc1_e['amount_minor'] && 7 === $vc1_e['authorized_by_user_id'] && 'loyalty_reward' === $vc1_e['reason'] && 16 === strlen( (string) $vc1_e['key_hash'] ) && (bool) preg_match( '/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/', (string) $vc1_e['at'] ) );
+$vc1_h = array_map( static fn( $h ) => array( $h[0], VCAP\Note::decode( $h[2] ) ), $vc1_be->history );
+$vc1_h_void = array_values( array_filter( $vc1_h, static fn( $h ) => 100 === $h[0] ) );
+$vc1_h_ref  = array_values( array_filter( $vc1_h, static fn( $h ) => 43 === $h[0] && 'voided_after_refund' === ( $h[1]['args'][2] ?? '' ) ) );
+check( 'VC-1: calls on a known voucher get a history entry (coded note: command, result, code, workflow, run, step, user, reason) – also refusals; replays do not', 1 === count( $vc1_h_void ) && 'vcap_command' === $vc1_h_void[0][1]['code'] && array( 'voucher.void', 'done', 'voided', '3' ) === array_slice( $vc1_h_void[0][1]['args'], 0, 4 ) && 1 === count( $vc1_h_ref ) && 1 === count( array_filter( $vc1_h, static fn( $h ) => 500 === $h[0] ) ) );
+check( 'VC-1: the history note is translated through vcap_note_text with an event label', str_starts_with( (string) VCAP\API\V1\CommandService::note_text( '', 'vcap_command', array( 'voucher.void', 'done', 'voided', '3', 'r', 's', '7', 'x' ) ), 'voucher.void: done (voided)' ) && 'Automatic command' === VCAP\API\V1\CommandService::event_label( array() )['command'] );
+$vc1_json   = strtolower( (string) wp_json_encode( array( $vc1_all, $vc1_log, $vc1_be->history ) ) );
+$vc1_leaked = array_values( array_filter( array( 'markercmd-', 'marker.recipient@example.test', 'marker.two@example.test', 'marker recipient', 'marker.cmd@example.test', 'wf-3:v2:evt-' ), static fn( $s ) => str_contains( $vc1_json, $s ) ) );
+check( 'VC-1: no voucher code, address, name or raw idempotency key in any reply, protocol entry or history note', array() === $vc1_leaked, implode( ', ', $vc1_leaked ) );
+check( 'VC-1: money in minor units – amount_minor and balance_minor are integers in every reply', array() === array_filter( $vc1_all, static fn( $r ) => ( null !== $r['amount_minor'] && ! is_int( $r['amount_minor'] ) ) || ( null !== $r['balance_minor'] && ! is_int( $r['balance_minor'] ) ) ) );
+check( 'VC-1: refusals are final, only failed is not; status is one of done, duplicate, refused, failed', array() === array_filter( $vc1_all, static fn( $r ) => ! in_array( $r['status'], VCAP\API\V1\CommandService::STATUSES, true ) || ( 'failed' === $r['status'] ) === $r['final'] ) );
+// OptionCommandStore on the option stubs: replies, counters, protocol, clean-up.
+$vc1_saved_wpdb  = $GLOBALS['wpdb'] ?? null;
+$GLOBALS['wpdb'] = new VCAP_Test_Wpdb();
+$GLOBALS['wpdb']->answers = array( '/GET_LOCK/' => '1', '/RELEASE_LOCK/' => '1' );
+$vc1_os = new VCAP\API\V1\OptionCommandStore();
+$vc1_os_ok = $vc1_os->lock();
+$vc1_os->save_reply( 'k-1', 'h', array( 'status' => 'done' ), '2026-01-01' );
+$vc1_os->increment( '2026-01-01', array( 'voucher.void', 'voucher.void' ) );
+$vc1_os->protocol( '2026-01-01', array( 'code' => 'voided' ) );
+$vc1_os_before = array( $vc1_os->reply( 'k-1' ), $vc1_os->count( '2026-01-01', 'voucher.void' ), count( $vc1_os->entries( '2026-01-01' ) ) );
+$vc1_os->save_reply( 'k-2', 'h2', array( 'status' => 'refused' ), '2026-11-16' );
+$vc1_os->unlock();
+check( 'VC-1: OptionCommandStore – named lock per site, replies by key hash (not autoloaded), counters per day, protocol; days older than 90 days are removed', $vc1_os_ok && array( array( 'hash' => 'h', 'result' => array( 'status' => 'done' ) ), 2, 1 ) === $vc1_os_before && null === $vc1_os->reply( 'k-1' ) && 0 === $vc1_os->count( '2026-01-01', 'voucher.void' ) && array( 'hash' => 'h2', 'result' => array( 'status' => 'refused' ) ) === $vc1_os->reply( 'k-2' ) && false === ( $GLOBALS['vcap_test_autoload'][ 'vcap_cmd_reply_' . sha1( 'k-2' ) ] ?? null ) && ! isset( $GLOBALS['vcap_test_options']['vcap_cmd_reply_k-2'] ) && (bool) preg_grep( '/RELEASE_LOCK/', $GLOBALS['wpdb']->log ) );
+$GLOBALS['wpdb'] = $vc1_saved_wpdb;
+// Contract and docs.
+require_once VCAP_PATH . 'src/functions.php';
+$vc1_unready = vcap_command_void( array() );
+check( 'VC-1: without vcap()->commands the functions answer failed/unavailable (not final) instead of failing', 'failed' === $vc1_unready['status'] && 'unavailable' === $vc1_unready['code'] && VCAP\API\V1\CommandService::RESULT_KEYS === array_keys( $vc1_unready ) );
+$vc1_main = (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' );
+$vc1_api  = (string) file_get_contents( VCAP_PATH . 'API.md' );
+preg_match( "/define\( 'VCAP_CONTRACT_VERSION', '(\d+\.\d+\.\d+)' \);/", $vc1_main, $vc1_contract );
+check( 'VC-1: contract 1.3.0 (additive minor), documented in API.md and CONNECTORS.md; Plugin exposes vcap()->commands', isset( $vc1_contract[1] ) && version_compare( $vc1_contract[1], '1.3.0', '>=' ) && str_starts_with( $vc1_contract[1], '1.' ) && str_contains( $vc1_api, '## Voucher commands (since 1.3.0, contract 1.3.0)' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'CONNECTORS.md' ), '| 1.3.0 | 1.3.0 | voucher commands' ) && property_exists( VCAP\Plugin::class, 'commands' ) && 4 === count( array_filter( array( 'vcap_command_issue', 'vcap_command_void', 'vcap_command_reactivate', 'vcap_command_redeem' ), static fn( $f ) => function_exists( $f ) && str_contains( $vc1_api, '`' . $f . '( array $args )`' ) ) ) );
+$GLOBALS['vcap_test_options'] = $vc1_saved_opts;
+
+// VC-10 (R-4.7): the card import reference has no relation to the code.
+echo "\nVC-10: card import reference without the code\n";
+$vc10_a   = VCAP\Admin\CardImport::reference();
+$vc10_b   = VCAP\Admin\CardImport::reference();
+$vc10_src = (string) file_get_contents( VCAP_PATH . 'src/Admin/CardImport.php' );
+check( 'VC-10: the reference is random ("import:<uuid>"), differs per call and is not derived from the code (no hash of it in the source)', (bool) preg_match( '/^import:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $vc10_a ) && $vc10_a !== $vc10_b && 0 === ( new ReflectionMethod( VCAP\Admin\CardImport::class, 'reference' ) )->getNumberOfParameters() && ! preg_match( '/md5\(\s*strtolower\(\s*\$code|sha1\(\s*\$code|hash\([^)]*\$code/', $vc10_src ) && str_contains( $vc10_src, "'reference'       => self::reference()," ) && ! str_contains( $vc10_src, 'reference "import:<code>"' ) );
+check( 'VC-10: a second import stays idempotent through the code (entry "imported" → skipped, other existing code → taken), imports before VC-10 are recognised the same way', str_contains( $vc10_src, "has_event( \$existing->id, self::EVENT )" ) && str_contains( $vc10_src, 'Cards imported before VC-10 keep their old reference' ) );
+
+// Suite task "Providerstatus … in Suite-Admins anzeigen": optional Workflow Captain status in the settings.
+echo "\nWorkflow Captain status (optional)\n";
+$wfc_missing = VCAP\Compat\WorkflowCaptain::status_html();
+check( 'Workflow Captain: without workflow_captain_status_for() the section says "not active" in one sentence, without links or licence wording', ! function_exists( 'workflow_captain_status_for' ) && null === VCAP\Compat\WorkflowCaptain::status() && str_starts_with( $wfc_missing, 'Not active' ) && ! str_contains( $wfc_missing, 'href=' ) && ! preg_match( '/licen[cs]e|premium|\bpro\b|upgrade|buy/i', $wfc_missing ) );
+$wfc_asked = array();
+$wfc_base  = 'https://example.test/wp-admin/admin.php';
+$wfc_html  = VCAP\Compat\WorkflowCaptain::status_html(
+	static function ( string $product ) use ( &$wfc_asked, $wfc_base ): array {
+		$wfc_asked[] = $product;
+		return array(
+			'version'             => 1,
+			'product'             => $product,
+			'adapter'             => 'registered',
+			'reason'              => null,
+			'contract_version'    => '1.3.0',
+			'active_workflows'    => 2,
+			'events'              => array( 'done' => 7, 'retry_wait' => 1 ),
+			'last_correlation_id' => 'c-1"><script>alert(1)</script>',
+			'links'               => array(
+				'workflows' => $wfc_base . '?page=workflow-captain-workflows',
+				'runs'      => $wfc_base . '?page=workflow-captain-runs',
+				'events'    => $wfc_base . '?page=workflow-captain-events&product=voucher-captain',
+				'providers' => 'javascript:alert(1)',
+			),
+		);
+	}
+);
+check( 'Workflow Captain: asks for the product voucher-captain and shows adapter, contract version, active workflows and events per state', array( 'voucher-captain' ) === $wfc_asked && str_contains( $wfc_html, 'Adapter: registered' ) && str_contains( $wfc_html, 'Contract version: 1.3.0' ) && str_contains( $wfc_html, 'Active workflows: 2' ) && str_contains( $wfc_html, 'done: 7' ) && str_contains( $wfc_html, 'waiting for retry: 1' ) );
+check( 'Workflow Captain: each state links to the event list with product and state filter', str_contains( $wfc_html, 'product=voucher-captain&state=retry_wait' ) && str_contains( $wfc_html, 'product=voucher-captain&state=done' ) );
+check( 'Workflow Captain: the last correlation ID is escaped and links to the events of Voucher Captain', ! str_contains( $wfc_html, '<script>' ) && str_contains( $wfc_html, '<code>c-1&quot;&gt;&lt;script&gt;' ) && str_contains( $wfc_html, 'product=voucher-captain"><code>' ) );
+check( 'Workflow Captain: links to workflows, runs and events; a link that is not http(s) is dropped', str_contains( $wfc_html, 'page=workflow-captain-workflows' ) && str_contains( $wfc_html, 'page=workflow-captain-runs' ) && ! str_contains( $wfc_html, 'javascript:' ) && ! str_contains( $wfc_html, '>Providers<' ) );
+$wfc_refused = VCAP\Compat\WorkflowCaptain::status_html( static fn() => array( 'adapter' => 'refused', 'reason' => 'major <b>2</b>', 'contract_version' => null, 'active_workflows' => 0, 'events' => array(), 'last_correlation_id' => null, 'links' => array() ) );
+check( 'Workflow Captain: a refused adapter shows its escaped reason, "none yet" and no links', str_contains( $wfc_refused, 'Adapter: refused (major &lt;b&gt;2&lt;/b&gt;)' ) && str_contains( $wfc_refused, 'none yet' ) && str_contains( $wfc_refused, 'Contract version: —' ) && ! str_contains( $wfc_refused, 'href=' ) );
+check( 'Workflow Captain: a missing adapter and a status function returning null are reported', str_contains( VCAP\Compat\WorkflowCaptain::status_html( static fn() => array( 'adapter' => 'missing' ) ), 'Adapter: not registered' ) && str_contains( VCAP\Compat\WorkflowCaptain::status_html( static fn() => null ), 'does not report a status yet' ) );
+if ( ! function_exists( 'workflow_captain_status_for' ) ) {
+	function workflow_captain_status_for( string $product ): ?array { // Declared here so it exists only from now on.
+		return array( 'product' => $product, 'adapter' => 'registered', 'contract_version' => '1.3.0', 'active_workflows' => 0, 'events' => array(), 'last_correlation_id' => null, 'links' => array() );
+	}
+}
+$wfc_settings = (string) file_get_contents( VCAP_PATH . 'src/Settings.php' );
+check( 'Workflow Captain: with the function the status is read by default; the "Integrations (API)" settings section shows it', VCAP\Compat\WorkflowCaptain::available() && 'voucher-captain' === ( VCAP\Compat\WorkflowCaptain::status()['product'] ?? '' ) && str_contains( VCAP\Compat\WorkflowCaptain::status_html(), 'Adapter: registered' ) && str_contains( $wfc_settings, "'desc'  => Compat\\WorkflowCaptain::status_html()," ) );
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );
