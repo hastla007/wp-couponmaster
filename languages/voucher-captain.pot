@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-23 20:28+0000\n"
+"POT-Creation-Date: 2026-11-23 20:55+0000\n"
 "X-Domain: voucher-captain\n"
 
 #. Plugin Name of the plugin
@@ -11092,47 +11092,51 @@ msgid "%s is a secret and cannot be read or changed here."
 msgstr ""
 
 #. translators: 1: option name, 2: what is expected
-#: src/SettingsTransfer.php:287
+#: src/SettingsTransfer.php:317
 #, php-format
 msgid "%1$s: invalid value, expected %2$s."
 msgstr ""
 
-#: src/SettingsTransfer.php:313
+#: src/SettingsTransfer.php:343
 msgid "a list of values"
 msgstr ""
 
-#: src/SettingsTransfer.php:318
+#: src/SettingsTransfer.php:352
+msgid "a set of named values"
+msgstr ""
+
+#: src/SettingsTransfer.php:355
 msgid "a page or post ID"
 msgstr ""
 
-#: src/SettingsTransfer.php:322 src/SettingsTransfer.php:327
+#: src/SettingsTransfer.php:359 src/SettingsTransfer.php:364
 msgid "text"
 msgstr ""
 
-#: src/SettingsTransfer.php:334
+#: src/SettingsTransfer.php:371
 msgid "letters, digits, dot, hyphen and underscore (up to 20 characters, separator up to 3)"
 msgstr ""
 
-#: src/SettingsTransfer.php:340
+#: src/SettingsTransfer.php:377
 msgid "days between 1 and 365 separated by commas, or 0"
 msgstr ""
 
-#: src/SettingsTransfer.php:377 src/SettingsTransfer.php:383
+#: src/SettingsTransfer.php:414 src/SettingsTransfer.php:420
 msgid "a whole number"
 msgstr ""
 
-#: src/SettingsTransfer.php:377
+#: src/SettingsTransfer.php:414
 msgid "a number"
 msgstr ""
 
 #. translators: 1: smallest value, 2: largest value
-#: src/SettingsTransfer.php:390
+#: src/SettingsTransfer.php:427
 #, php-format
 msgid "a value from %1$s to %2$s"
 msgstr ""
 
 #. translators: %s: highest amount
-#: src/SettingsTransfer.php:400
+#: src/SettingsTransfer.php:437
 #, php-format
 msgid "an amount up to %s"
 msgstr ""

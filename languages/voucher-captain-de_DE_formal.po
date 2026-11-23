@@ -4,7 +4,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: Voucher Captain 1.0.0\n"
-"POT-Creation-Date: 2026-11-23 20:28+0000\n"
+"POT-Creation-Date: 2026-11-23 20:55+0000\n"
 "PO-Revision-Date: 2026-11-14 16:00+0000\n"
 "Last-Translator: \n"
 "Language-Team: German\n"
@@ -11098,47 +11098,51 @@ msgid "%s is a secret and cannot be read or changed here."
 msgstr "%s ist ein Geheimnis und kann hier weder gelesen noch geändert werden."
 
 #. translators: 1: option name, 2: what is expected
-#: src/SettingsTransfer.php:287
+#: src/SettingsTransfer.php:317
 #, php-format
 msgid "%1$s: invalid value, expected %2$s."
 msgstr "%1$s: ungültiger Wert, erwartet: %2$s."
 
-#: src/SettingsTransfer.php:313
+#: src/SettingsTransfer.php:343
 msgid "a list of values"
 msgstr "eine Liste von Werten"
 
-#: src/SettingsTransfer.php:318
+#: src/SettingsTransfer.php:352
+msgid "a set of named values"
+msgstr "eine Gruppe benannter Werte"
+
+#: src/SettingsTransfer.php:355
 msgid "a page or post ID"
 msgstr "eine Seiten- oder Beitrags-ID"
 
-#: src/SettingsTransfer.php:322 src/SettingsTransfer.php:327
+#: src/SettingsTransfer.php:359 src/SettingsTransfer.php:364
 msgid "text"
 msgstr "Text"
 
-#: src/SettingsTransfer.php:334
+#: src/SettingsTransfer.php:371
 msgid "letters, digits, dot, hyphen and underscore (up to 20 characters, separator up to 3)"
 msgstr "Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich (bis 20 Zeichen, Trennzeichen bis 3)"
 
-#: src/SettingsTransfer.php:340
+#: src/SettingsTransfer.php:377
 msgid "days between 1 and 365 separated by commas, or 0"
 msgstr "Tage zwischen 1 und 365, durch Kommas getrennt, oder 0"
 
-#: src/SettingsTransfer.php:377 src/SettingsTransfer.php:383
+#: src/SettingsTransfer.php:414 src/SettingsTransfer.php:420
 msgid "a whole number"
 msgstr "eine ganze Zahl"
 
-#: src/SettingsTransfer.php:377
+#: src/SettingsTransfer.php:414
 msgid "a number"
 msgstr "eine Zahl"
 
 #. translators: 1: smallest value, 2: largest value
-#: src/SettingsTransfer.php:390
+#: src/SettingsTransfer.php:427
 #, php-format
 msgid "a value from %1$s to %2$s"
 msgstr "ein Wert von %1$s bis %2$s"
 
 #. translators: %s: highest amount
-#: src/SettingsTransfer.php:400
+#: src/SettingsTransfer.php:437
 #, php-format
 msgid "an amount up to %s"
 msgstr "ein Betrag bis %s"

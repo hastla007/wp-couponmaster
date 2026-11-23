@@ -602,10 +602,10 @@ final class Command {
 		}
 		$entry = SettingsRegistry::get( $key );
 		$input = $value;
-		if ( null !== $entry && in_array( $entry['type'], array( 'table', 'list' ), true ) && str_starts_with( ltrim( $value ), '[' ) ) {
+		if ( null !== $entry && ( ( in_array( $entry['type'], array( 'table', 'list' ), true ) && str_starts_with( ltrim( $value ), '[' ) ) || ( 'map' === $entry['type'] && str_starts_with( ltrim( $value ), '{' ) ) ) ) {
 			$input = json_decode( $value, true );
 			if ( ! is_array( $input ) ) {
-				self::error( sprintf( '%s: the value is no valid JSON array. Nothing was changed.', $key ) );
+				self::error( sprintf( '%s: the value is no valid JSON array or object. Nothing was changed.', $key ) );
 				return;
 			}
 		}

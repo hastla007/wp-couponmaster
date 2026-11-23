@@ -3852,6 +3852,42 @@ add_filter(
 );
 VCAP\SettingsRegistry::reset();
 check( 'SET-VC-01: filter vcap_settings_registry adds settings of add-ons (secrets stay out of the export); core entries stay, invalid keys are dropped; a callback may read settings', 'Shop' === VCAP\SettingsRegistry::default( 'vcap_pro_sms_sender' ) && 'Shop' === VCAP\Settings::value( 'vcap_pro_sms_sender' ) && VCAP\SettingsRegistry::has( 'vcap_attach_pdf' ) && ! in_array( 'vcap_pro_sms_key', VCAP\SettingsRegistry::with( 'export' ), true ) && ! VCAP\SettingsRegistry::has( 'Bad Key' ) );
+// SET-VC-27 (captain-pro): an add-on's option array has type "map" – export, import and WP-CLI keep its structure,
+// and the validate filter gets the raw value as 4th argument.
+$m27_seen = array();
+add_filter(
+	'vcap_settings_registry',
+	static function ( $settings ) {
+		$settings['vcap_pro_white_label'] = array( 'type' => 'map', 'default' => array(), 'section' => 'hidden' );
+		return $settings;
+	}
+);
+add_filter(
+	'vcap_settings_validate_value',
+	static function ( $result, $key, $entry, $raw = null ) use ( &$m27_seen ) {
+		if ( 'vcap_pro_white_label' === $key ) {
+			$m27_seen[] = $raw;
+		}
+		return $result;
+	},
+	10,
+	4
+);
+VCAP\SettingsRegistry::reset();
+$m27_in    = array( 'brand' => '<b>Shop</b> Name', 'colors' => array( 'accent' => '#123456', 'dark' => true ), 'max' => 5, 'bad key!' => 'x' );
+$m27_ok    = VCAP\SettingsTransfer::validate( 'vcap_pro_white_label', $m27_in );
+$m27_json  = VCAP\SettingsTransfer::validate( 'vcap_pro_white_label', '{"brand":"A","colors":{"accent":"#000"}}' );
+$m27_bad   = VCAP\SettingsTransfer::validate( 'vcap_pro_white_label', 'just text' );
+check(
+	'SET-VC-27: type "map" keeps an add-on\'s option array (text cleaned, numbers and booleans kept, keys limited to letters, digits, _ . -), JSON objects are read, other values refused; the validate filter gets the raw value as 4th argument',
+	'map' === VCAP\SettingsRegistry::get( 'vcap_pro_white_label' )['type']
+		&& array( 'brand' => 'Shop Name', 'colors' => array( 'accent' => '#123456', 'dark' => true ), 'max' => 5, 'badkey' => 'x' ) === $m27_ok
+		&& array( 'brand' => 'A', 'colors' => array( 'accent' => '#000' ) ) === $m27_json
+		&& is_wp_error( $m27_bad ) && $m27_in === ( $m27_seen[0] ?? null ) && 3 === count( $m27_seen )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'src/CLI/Command.php' ), '\'map\' === $entry[\'type\'] && str_starts_with( ltrim( $value ), \'{\' )' ),
+	wp_json_encode( array( $m27_ok, $m27_json ) )
+);
+unset( $GLOBALS['vcap_test_filters']['vcap_settings_validate_value'] );
 unset( $GLOBALS['vcap_test_filters']['vcap_settings_registry'] );
 VCAP\SettingsRegistry::reset();
 check( 'SET-VC-01: config/settings.php holds data only (no translated text, no option access) and the hook is documented; Settings::DEFAULTS is replaced by Settings::defaults() (kept deprecated, PV-P2-11)', ! preg_match( '/__\(|_e\(|esc_html|get_option|update_option/', (string) file_get_contents( VCAP_PATH . 'config/settings.php' ) ) && str_contains( (string) file_get_contents( VCAP_PATH . 'docs/HOOKS.md' ), '| `vcap_settings_registry` | 1.3.0 |' ) && defined( 'VCAP\\Settings::DEFAULTS' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Settings.php' ), '@deprecated 1.3.0' ) );

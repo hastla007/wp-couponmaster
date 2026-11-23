@@ -264,14 +264,44 @@ final class SettingsTransfer {
 		$result = self::check_type( $key, $entry, $value );
 		/**
 		 * Checks a value before it is imported or set with WP-CLI (args: value in the stored format or WP_Error,
-		 * option name, register entry). Add-ons check their own settings here; return a WP_Error to refuse.
+		 * option name, register entry, raw value as given (4th, since contract 1.8.0)). Add-ons check their own
+		 * settings here – also replace a WP_Error of the type check with their own result; return a WP_Error to refuse.
 		 *
 		 * @since 1.3.0
 		 * @param mixed                $result Value in the stored format, or WP_Error.
 		 * @param string               $key    Option name.
 		 * @param array<string, mixed> $entry  Register entry.
+		 * @param mixed                $raw    Value as given (file, WP-CLI).
 		 */
-		return apply_filters( 'vcap_settings_validate_value', $result, $key, $entry );
+		return apply_filters( 'vcap_settings_validate_value', $result, $key, $entry, $value );
+	}
+
+	/**
+	 * SET-VC-27: cleans a key-value array of type "map" – keys as sanitize_key() would allow plus dots and dashes,
+	 * strings with sanitize_text_field(), numbers and booleans kept, nested arrays up to 5 levels.
+	 *
+	 * @param array<mixed> $value Value.
+	 * @param int          $depth Nesting level.
+	 * @return array<mixed>
+	 */
+	private static function clean_map( array $value, int $depth = 0 ): array {
+		$out = array();
+		foreach ( $value as $k => $item ) {
+			$k = is_int( $k ) ? $k : (string) preg_replace( '/[^A-Za-z0-9_.\-]/', '', (string) $k );
+			if ( '' === $k ) {
+				continue;
+			}
+			if ( is_array( $item ) ) {
+				if ( $depth < 5 ) {
+					$out[ $k ] = self::clean_map( $item, $depth + 1 );
+				}
+			} elseif ( is_bool( $item ) || is_int( $item ) || is_float( $item ) || null === $item ) {
+				$out[ $k ] = $item;
+			} elseif ( is_scalar( $item ) ) {
+				$out[ $k ] = sanitize_text_field( (string) $item );
+			}
+		}
+		return $out;
 	}
 
 	/**
@@ -313,6 +343,13 @@ final class SettingsTransfer {
 					return $invalid( __( 'a list of values', 'voucher-captain' ) );
 				}
 				return array_values( array_filter( array_map( static fn( $item ) => sanitize_text_field( (string) $item ), $value ), static fn( $item ) => '' !== $item ) );
+			case 'map':
+				// SET-VC-27: an add-on's option array (e.g. white label, wallet settings) – structure kept, text cleaned;
+				// the add-on checks the content in vcap_settings_validate_value (it also gets the raw value).
+				if ( is_string( $value ) && str_starts_with( ltrim( $value ), '{' ) ) {
+					$value = json_decode( $value, true );
+				}
+				return is_array( $value ) ? self::clean_map( $value ) : $invalid( __( 'a set of named values', 'voucher-captain' ) );
 			case 'post':
 				if ( ! is_scalar( $value ) || ! preg_match( '/^\d+$/', trim( (string) $value ) ) ) {
 					return $invalid( __( 'a page or post ID', 'voucher-captain' ) );
