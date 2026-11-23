@@ -2422,7 +2422,7 @@ $a4_names = array_values( array_unique( $a4_names ) );
 $a4_bad   = array_values( array_filter( $a4_names, static fn( $h ) => ! preg_match( "/\\b(do_action|apply_filters|Db::action)\\(\\s*'" . preg_quote( $h, '/' ) . "'/", $a4_code ) || ! preg_match( '/^\| `' . preg_quote( $h, '/' ) . '` \| [^|]+ \| (?!– )/m', $a4_hooks ) ) );
 check( 'A4: every add-on extension point in API.md (menu, settings, templates, reports, voucher links, events …) is called in the code and described in docs/HOOKS.md', count( $a4_names ) >= 25 && array() === $a4_bad && str_contains( $a4_part, '| `vcap_voucher_event` |' ) && str_contains( $a4_part, 'issue_standalone' ), count( $a4_names ) . ' hooks; missing or undescribed: ' . implode( ', ', $a4_bad ) );
 $a4_issue = new ReflectionMethod( VCAP\Issuer::class, 'issue_standalone' );
-check( 'A4: Issuer::issue_standalone() is public and fires vcap_voucher_issued_standalone; API.md says the caller checks the capability', $a4_issue->isPublic() && str_contains( $a4_code, "do_action( 'vcap_voucher_issued_standalone', \$voucher, \$args );" ) && str_contains( $a4_api, '**Permission and context are the caller\'s responsibility**' ) );
+check( 'A4: Issuer::issue_standalone() is public and fires vcap_voucher_issued_standalone; API.md says the caller checks the capability', $a4_issue->isPublic() && str_contains( $a4_code, "Db::action( 'vcap_voucher_issued_standalone', \$voucher, \$args );" ) && str_contains( $a4_api, '**Permission and context are the caller\'s responsibility**' ) );
 check( 'A4: vcap_voucher_links is used in the voucher email (HTML and text), the customer\'s voucher list (My Account and order pages) and the bundled email', str_contains( $a4_code, "Downloads::voucher_links( \$voucher, 'email' )" ) && str_contains( $a4_code, "Downloads::voucher_links( \$voucher, 'email_plain' )" ) && str_contains( $a4_code, "Downloads::voucher_links( \$voucher, 'account' )" ) && str_contains( $a4_code, "Downloads::voucher_links( \$vcap_v, 'email' )" ) && str_contains( $a4_code, "Downloads::voucher_links( \$vcap_v, 'email_plain' )" ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Downloads.php' ), "'myaccount/vouchers-table.php'" ) );
 
 // A8: Plugin Check blocks on errors (no continue-on-error), the release gate has no report-only job left.
@@ -3484,6 +3484,13 @@ $e17_apim = (string) file_get_contents( VCAP_PATH . 'API.md' );
 $e17_conn = (string) file_get_contents( VCAP_PATH . 'CONNECTORS.md' );
 $e17_doc  = array_filter( array( 'voucher', 'voucher_by_code', 'log_event', 'connector_event', 'admin_url', 'line_snapshot' ), static fn( $m ) => ! method_exists( VCAP\API\V1\VoucherService::class, $m ) || ! str_contains( (string) ( new ReflectionMethod( VCAP\API\V1\VoucherService::class, $m ) )->getDocComment(), '@since 1.3.0 (contract 1.4.0)' ) || ! str_contains( $e17_apim, $m . '(' ) );
 check( 'VOUCH-E17-02: the six methods carry @since (contract 1.4.0), are documented in API.md → "Connector access"; contract 1.4.0 in the main file and CONNECTORS.md', array() === $e17_doc && str_contains( $e17_main, "define( 'VCAP_CONTRACT_VERSION', '1.4.0' );" ) && str_contains( $e17_apim, '### Connector access (since 1.3.0, contract 1.4.0)' ) && str_contains( $e17_conn, '| 1.4.0 | 1.3.0 | connector access' ), implode( ', ', $e17_doc ) );
+
+// VOUCH-WF-14: the six lifecycle actions without an "after COMMIT" note now go through Db::action() as well.
+$wf14_hooks   = array( 'vcap_vouchers_issued', 'vcap_voucher_issued_standalone', 'vcap_voucher_delivered', 'vcap_voucher_delivery_given_up', 'vcap_voucher_bounced', 'vcap_voucher_reissued' );
+$wf14_src     = (string) file_get_contents( VCAP_PATH . 'src/Issuer.php' ) . file_get_contents( VCAP_PATH . 'src/Delivery.php' ) . file_get_contents( VCAP_PATH . 'src/Reissue.php' );
+$wf14_doc     = (string) file_get_contents( VCAP_PATH . 'docs/HOOKS.md' );
+$wf14_missing = array_values( array_filter( $wf14_hooks, static fn( $h ) => str_contains( $wf14_src, "do_action( '{$h}'" ) || ! str_contains( $wf14_src, "Db::action( '{$h}'" ) || ! preg_match( '/^\| `' . preg_quote( $h, '/' ) . '` \|[^\n]*after COMMIT/m', $wf14_doc ) ) );
+check( 'VOUCH-WF-14: the six issue/delivery/bounce/reissue actions fire through Db::action() (after COMMIT inside a transaction) and docs/HOOKS.md says so', array() === $wf14_missing, implode( ', ', $wf14_missing ) );
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

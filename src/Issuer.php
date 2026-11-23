@@ -279,7 +279,7 @@ final class Issuer {
 				$this->delivery->schedule( $voucher );
 			}
 			/** Vouchers of an order were issued (args: Voucher[] $created, WC_Order $order). */
-			do_action( 'vcap_vouchers_issued', $issued, $order );
+			Db::action( 'vcap_vouchers_issued', $issued, $order );
 		}
 	}
 
@@ -637,7 +637,7 @@ final class Issuer {
 				$this->delivery->schedule( $voucher );
 			}
 			/** Vouchers of an order were issued (args: Voucher[] $created, WC_Order $order). */
-			do_action( 'vcap_vouchers_issued', $created, $order );
+			Db::action( 'vcap_vouchers_issued', $created, $order );
 		}
 		return $created;
 	}
@@ -1125,7 +1125,7 @@ final class Issuer {
 			$this->delivery->schedule( $voucher );
 		}
 		/** A voucher was issued without an order (args: Voucher, the arguments of Issuer::issue_standalone()). */
-		do_action( 'vcap_voucher_issued_standalone', $voucher, $args );
+		Db::action( 'vcap_voucher_issued_standalone', $voucher, $args );
 		return $voucher;
 	}
 

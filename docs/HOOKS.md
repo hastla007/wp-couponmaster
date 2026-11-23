@@ -47,17 +47,17 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_topup_held` | 1.2.0 | `src/TopUp.php` | – |
 | `vcap_topup_without_code` | 1.2.0 | `src/TopUp.php` | A top-up line without card code was held (no card issued, no top-up booked). |
 | `vcap_voucher_admin_actions` | 1.1.0 | `src/Admin/VoucherAdmin.php` | Extra buttons for connectors: call $form( $do, $label, $class, $extra_fields, $confirm_text ) and handle $do in vcap_voucher_admin_action. |
-| `vcap_voucher_bounced` | 1.2.0 | `src/Delivery.php` | A voucher email came back (Delivery::mark_bounced()). Args: Voucher, role ('recipient'\|'buyer'), reason. |
+| `vcap_voucher_bounced` | 1.2.0 | `src/Delivery.php` | A voucher email came back (Delivery::mark_bounced()). Args: Voucher, role ('recipient'\|'buyer'), reason. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_created` | 1.0.0 | `src/VoucherRepository.php` | A voucher row was inserted (args: Voucher). If its issuing fails afterwards, vcap_voucher_deleted follows. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_deleted` | 1.2.0 | `src/VoucherRepository.php` | A voucher was removed again (its issuing failed after "vcap_voucher_created"). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
-| `vcap_voucher_delivered` | 1.0.0 | `src/Delivery.php` | A voucher was delivered to everyone it is meant for (args: Voucher $voucher, string[] $addresses). |
-| `vcap_voucher_delivery_given_up` | 1.2.0 | `src/Delivery.php` | A delivery was given up after $failures failed attempts. |
+| `vcap_voucher_delivered` | 1.0.0 | `src/Delivery.php` | A voucher was delivered to everyone it is meant for (args: Voucher $voucher, string[] $addresses). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
+| `vcap_voucher_delivery_given_up` | 1.2.0 | `src/Delivery.php` | A delivery was given up after $failures failed attempts. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_double_use` | 1.1.0 | `src/Coupons/SingleUse.php` | – |
 | `vcap_voucher_event` | 1.0.0 | `src/VoucherRepository.php` | A history entry was written (args: voucher id, event, amount, balance after, note as text, order id, source (Source::current(): admin, cron, rest, scanner, checkout, cli, web, workflow), acting user id (0 = none), the ledger row (array: id, created_at UTC, note = coded note {code, args} or null)). The last three were added later: register with 8 or 9 accepted args to get them. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_expired` | 1.2.0 | `src/VoucherRepository.php` | Vouchers whose validity ended were marked as expired (one call per batch of the daily maintenance). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
-| `vcap_voucher_issued_standalone` | 1.2.0 | `src/Issuer.php` | A voucher was issued without an order (args: Voucher, the arguments of Issuer::issue_standalone()). |
+| `vcap_voucher_issued_standalone` | 1.2.0 | `src/Issuer.php` | A voucher was issued without an order (args: Voucher, the arguments of Issuer::issue_standalone()). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_redeemed` | 1.1.0 | `src/API/V1/RedemptionService.php`, `src/VoucherRepository.php` | Fires once when an external redemption is completed. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
-| `vcap_voucher_reissued` | 1.2.0 | `src/Reissue.php` | Fires after a voucher was reissued with a new code and token (V10). The old code is no longer redeemable. |
+| `vcap_voucher_reissued` | 1.2.0 | `src/Reissue.php` | Fires after a voucher was reissued with a new code and token (V10). The old code is no longer redeemable. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_request_confirmed` | 1.2.0 | `src/Integrations/VoucherRequests.php` | A manager confirmed a voucher request (vouchers were issued through the voucher service). |
 | `vcap_voucher_request_expired` | 1.2.0 | `src/Integrations/VoucherRequests.php` | A voucher request was deleted by the retention rule (D10). No personal data in the arguments. |
 | `vcap_voucher_request_forgotten` | 1.2.0 | `src/Integrations/VoucherRequests.php` | VC-FC-06: a request was forgotten because its form entry was deleted or its consent withdrawn. No personal data in the arguments. |
@@ -65,7 +65,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_voucher_request_received` | 1.2.0 | `src/Integrations/VoucherRequests.php` | A voucher request was stored (nothing was issued). No personal data in the arguments. |
 | `vcap_voucher_request_rejected` | 1.2.0 | `src/Integrations/VoucherRequests.php` | A manager rejected (deleted) a voucher request. |
 | `vcap_voucher_updated` | 1.0.0 | `src/Tickets.php`, `src/VoucherRepository.php` | A voucher was saved (args: Voucher as stored, see CONNECTORS.md "Event timing"). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
-| `vcap_vouchers_issued` | 1.0.0 | `src/Issuer.php` | Vouchers of an order were issued (args: Voucher[] $created, WC_Order $order). |
+| `vcap_vouchers_issued` | 1.0.0 | `src/Issuer.php` | Vouchers of an order were issued (args: Voucher[] $created, WC_Order $order). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 
 ## Filters
 

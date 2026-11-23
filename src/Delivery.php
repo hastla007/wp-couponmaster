@@ -616,7 +616,7 @@ final class Delivery {
 		}
 		$this->repo->log( $voucher->id, 'delivered', null, null, Note::make( 'delivered', $args ) );
 		/** A voucher was delivered to everyone it is meant for (args: Voucher $voucher, string[] $addresses). */
-		do_action( 'vcap_voucher_delivered', $voucher, $sent );
+		Db::action( 'vcap_voucher_delivered', $voucher, $sent );
 	}
 
 	/**
@@ -948,7 +948,7 @@ final class Delivery {
 		}
 		Logger::warning( 'Voucher delivery given up after repeated failures.', array( 'voucher_id' => $voucher->id, 'attempts' => $failures ) );
 		/** A delivery was given up after $failures failed attempts. */
-		do_action( 'vcap_voucher_delivery_given_up', $voucher, $failures );
+		Db::action( 'vcap_voucher_delivery_given_up', $voucher, $failures );
 	}
 
 	/**
@@ -1045,7 +1045,7 @@ final class Delivery {
 		 *
 		 * @since 1.2.0
 		 */
-		do_action( 'vcap_voucher_bounced', $voucher, $role, $reason );
+		Db::action( 'vcap_voucher_bounced', $voucher, $role, $reason );
 		return true;
 	}
 
