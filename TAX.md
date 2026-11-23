@@ -43,10 +43,11 @@ Wert einer Neuinstallation, und zeigt die Änderung vorher als „bisher → neu
 **Zurücksetzen, Import und Länderprofil wirken auf diese Einstellung** (PV-P3-8): Sie hat den Wert für
 Neuinstallationen „an“ (Register `config/settings.php`: Standard `no`, `fresh` `yes`, `legal`).
 - *Zurücksetzen* („Privacy & advanced“ → „Export, import and reset settings“ bzw. `wp vcap settings reset`, Abschnitt „Redemption &
-  balance“ oder alle) setzt sie wie bei einer Neuinstallation auf **„an“** – auch in einem bestehenden Shop, der sie
-  bisher aus hatte (fehlende Option = aus). Damit ändert sich ab diesem Zeitpunkt die Behandlung der Einlösung von
-  Mehrzweckgutscheinen (Abschnitt 4.1) und die erwartete Steuerklasse des Gutscheinprodukts (Tabelle oben). Vorher
-  wird automatisch eine Sicherung aller Einstellungen angelegt; die Änderung steht im Änderungsprotokoll.
+  balance“ oder alle) setzt sie auf den Standard bestehender Shops (**„aus“**, Option gelöscht) – nie auf den Wert
+  einer Neuinstallation (PV-P1-3). Ein Shop, der sie gespeichert „an“ hat (auch eine Neuinstallation ab 1.3.0),
+  wechselt damit auf „aus“; die Vorschau des Zurücksetzens zeigt das vorher als Änderung mit steuerlichem Gewicht,
+  erst die Bestätigung führt es aus. Vorher wird automatisch eine Sicherung angelegt; die Änderung steht im
+  Änderungsprotokoll.
 - *Import* einer Einstellungsdatei übernimmt den Wert des Quell-Shops (sie wird exportiert); ein Shop kann so von
   „aus“ auf „an“ oder umgekehrt wechseln.
 - *Länderprofile* ändern sie nicht (sie geben nur einen Hinweis, Abschnitt 8.2).

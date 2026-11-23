@@ -31,7 +31,10 @@ final class SettingsUi {
 	public const PREVENT_CHANGE = 'wc-settings-prevent-change-event';
 
 	/** Clears WooCommerce's unsaved-changes prompt (assets/js/admin/settings.js sets window.onbeforeunload). */
-	private const CLEAR_PROMPT = "window.onbeforeunload=null;if(this.dataset.vcapSent){return false;}this.dataset.vcapSent='1';this.setAttribute('aria-disabled','true');"; // PV-P5-2 + PV-P2-7: no leave prompt, a second click is ignored.
+	private const CLEAR_PROMPT = 'window.onbeforeunload=null;';
+
+	/** PV-P2-7: a second click on an action button is ignored (the first request runs). */
+	private const ONCE = "if(this.dataset.vcapSent){return false;}this.dataset.vcapSent='1';this.setAttribute('aria-disabled','true');";
 
 	/**
 	 * The field that prints the default button.
@@ -68,7 +71,7 @@ final class SettingsUi {
 	 * @param string $class  CSS classes.
 	 */
 	public static function action_button( string $action, string $label, string $class = 'button' ): string {
-		return '<button type="submit" class="' . esc_attr( $class ) . '" formnovalidate formaction="' . esc_url( add_query_arg( 'action', $action, admin_url( 'admin-post.php' ) ) ) . '" onclick="' . esc_attr( self::CLEAR_PROMPT ) . '">' . esc_html( $label ) . '</button>';
+		return '<button type="submit" class="' . esc_attr( $class ) . '" formnovalidate formaction="' . esc_url( add_query_arg( 'action', $action, admin_url( 'admin-post.php' ) ) ) . '" onclick="' . esc_attr( self::CLEAR_PROMPT . self::ONCE ) . '">' . esc_html( $label ) . '</button>';
 	}
 
 	/**

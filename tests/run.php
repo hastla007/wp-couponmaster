@@ -4709,7 +4709,7 @@ check(
 // PV-P2-7: a double click on "Apply" / "Reset" keeps the message of the first click.
 check(
 	'PV-P2-7: the buttons ignore a second click; an import or reset whose preview was used in the last 30 seconds returns to the page with the first message instead of "expired"',
-	str_contains( $st_tools_src, 'onclick="if(this.dataset.vcapSent){return false;}' ) && 2 === substr_count( $st_tools_src, 'self::repeated_click();' ) && 2 === substr_count( $st_tools_src, 'self::mark_used();' )
+	str_contains( VCAP\Admin\SettingsUi::action_button( 'vcap_settings_import_apply', 'Apply' ), 'if(this.dataset.vcapSent){return false;}' ) && 2 === substr_count( $st_tools_src, 'self::repeated_click();' ) && 2 === substr_count( $st_tools_src, 'self::mark_used();' )
 		&& strpos( $st_tools_src, 'self::repeated_click();' ) < strpos( $st_tools_src, "'The import preview has expired. Please upload the file again.'" )
 );
 // PV-P2-4 (SettingsTransfer part): a whole number from a file or WP-CLI is stored as one.
@@ -5376,8 +5376,8 @@ $pv_prev_html = VCAP\Admin\CountryProfilesAdmin::preview_html( 'AT' );
 preg_match_all( '/<button\b[^>]*>/', $pv_prev_html, $pv_buttons );
 check(
 	'PV-P5-2: the action buttons (country profile, import, reset) clear the unsaved-changes prompt on click, and the cells around their controls carry wc-settings-prevent-change-event (WooCommerce ignores changes inside)',
-	'wc-settings-prevent-change-event' === VCAP\Admin\SettingsUi::PREVENT_CHANGE && $pv_buttons[0] && count( $pv_buttons[0] ) === count( array_filter( $pv_buttons[0], static fn( $b ) => str_contains( $b, 'onclick="window.onbeforeunload=null;"' ) && str_contains( $b, 'formaction=' ) ) )
-		&& str_contains( VCAP\Admin\SettingsUi::action_button( 'vcap_settings_reset', 'Reset' ), 'formaction="https://shop.test/wp-admin/admin-post.php?action=vcap_settings_reset" onclick="window.onbeforeunload=null;"' )
+	'wc-settings-prevent-change-event' === VCAP\Admin\SettingsUi::PREVENT_CHANGE && $pv_buttons[0] && count( $pv_buttons[0] ) === count( array_filter( $pv_buttons[0], static fn( $b ) => str_contains( $b, 'onclick="window.onbeforeunload=null;' ) && str_contains( $b, 'formaction=' ) ) )
+		&& str_contains( VCAP\Admin\SettingsUi::action_button( 'vcap_settings_reset', 'Reset' ), 'formaction="https://shop.test/wp-admin/admin-post.php?action=vcap_settings_reset" onclick="window.onbeforeunload=null;if(this.dataset.vcapSent){return false;}' )
 		&& 1 === substr_count( $pv_tools_src, "<td class=\"forminp ' . esc_attr( SettingsUi::PREVENT_CHANGE ) . '\">" ) && 1 === substr_count( $pv_prof_src, "<td class=\"forminp ' . esc_attr( SettingsUi::PREVENT_CHANGE ) . '\">" )
 		&& str_contains( $pv_tools_src, 'return SettingsUi::action_button( $action, $label, $class );' ) && str_contains( $pv_prof_src, 'return SettingsUi::action_button( $action, $label, $class );' )
 		&& 0 === preg_match( '/<button type="submit"/', $pv_tools_src . $pv_prof_src ),
