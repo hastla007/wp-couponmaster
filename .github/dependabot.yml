@@ -1,0 +1,46 @@
+# Dependency updates, bundled so the Actions queue is not flooded: once a day at a fixed time, one grouped pull
+# request per ecosystem (security updates in their own group), at most two open at a time per ecosystem.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+      time: "05:00"
+      timezone: Europe/Vienna
+    open-pull-requests-limit: 2
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+      all:
+        applies-to: version-updates
+        patterns: ["*"]
+  - package-ecosystem: composer
+    directory: /
+    schedule:
+      interval: daily
+      time: "05:00"
+      timezone: Europe/Vienna
+    open-pull-requests-limit: 2
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+      all:
+        applies-to: version-updates
+        patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /tests/e2e
+    schedule:
+      interval: daily
+      time: "05:00"
+      timezone: Europe/Vienna
+    open-pull-requests-limit: 2
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+      all:
+        applies-to: version-updates
+        patterns: ["*"]

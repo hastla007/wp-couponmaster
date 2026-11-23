@@ -185,7 +185,8 @@ wc_clear_notices();
 // [vcap_balance] describes each kind of voucher by what it is worth.
 $check = static function ( array $props ) use ( $tag ) {
 	$v                 = new VCAP\Voucher();
-	$v->code           = 'vcap-bal-' . strtolower( wp_generate_password( 8, false, false ) );
+	// Letters only: the code is printed, and a random "80" or "12" in it would decide the amount checks below.
+	$v->code           = 'vcap-bal-' . strtr( strtolower( wp_generate_password( 8, false, false ) ), '0123456789', 'abcdefghij' );
 	$v->order_item_id  = 70000000 + random_int( 1, 9999999 );
 	$v->type           = $props['type'] ?? 'giftcard';
 	$v->usage_mode     = $props['usage_mode'] ?? 'balance';
@@ -202,7 +203,7 @@ $check = static function ( array $props ) use ( $tag ) {
 	return wp_strip_all_tags( html_entity_decode( $html ) );
 };
 $card = $check( array( 'initial' => 80, 'balance' => 12.25 ) );
-vcap_sc_assert( str_contains( $card, '12' ) && ! str_contains( $card, '80' ), 'a gift card shows its remaining balance' );
+vcap_sc_assert( str_contains( $card, '12' ) && ! str_contains( $card, '80' ), 'a gift card shows its remaining balance (got: ' . trim( preg_replace( '/\s+/', ' ', $card ) ) . ')' );
 $percent = $check( array( 'usage_mode' => 'single', 'discount_type' => 'percent', 'initial' => 15, 'balance' => 15 ) );
 vcap_sc_assert( str_contains( $percent, '15%' ) && ! str_contains( $percent, get_woocommerce_currency_symbol() ), 'a percentage voucher shows its discount, not an amount of money' );
 $single = $check( array( 'usage_mode' => 'single', 'initial' => 30, 'balance' => 30 ) );
