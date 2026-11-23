@@ -443,7 +443,7 @@ final class ProductConfig {
 
 	/**
 	 * Countries in which the validity of a voucher sold by this product ends before the statutory limitation period
-	 * (shop country and the EU countries the shop sells to). A validity shorter than the statutory period is often
+	 * (shop country and the countries in the market data the shop sells to). A validity shorter than the statutory period is often
 	 * invalid in standard terms (e.g. Germany: 3 years to the end of the year) – the admin is warned, not blocked.
 	 *
 	 * @return array<string, array{product:string, statutory:string}> country => both expiry dates (UTC) for a sale today
@@ -455,7 +455,7 @@ final class ProductConfig {
 		}
 		$config    = self::get( $product );
 		$base      = strtoupper( strtok( (string) get_option( 'woocommerce_default_country', '' ), ':' ) ?: '' );
-		// $selling: the EU selling countries when the caller checks many products (array_keys( Markets::readiness() )).
+		// $selling: the selling countries in the market data when the caller checks many products (array_keys( Markets::readiness() )).
 		$countries = array_unique( array_filter( array_merge( array( $base ), $selling ?? array_keys( Markets::readiness() ) ) ) );
 		$now       = time();
 		$short     = array();

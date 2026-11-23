@@ -38,6 +38,22 @@ final class I18n {
 		return is_array( $map ) ? $map : self::FALLBACKS;
 	}
 
+	/**
+	 * SET-VC-03: the locale and the locales whose files stand in for it, in order (de_CH → de_CH, de_DE_formal,
+	 * de_DE) – e.g. for Site Health's "translation available" check.
+	 *
+	 * @return string[]
+	 */
+	public static function chain( string $locale ): array {
+		$map   = self::fallbacks();
+		$chain = array( $locale );
+		while ( isset( $map[ $locale ] ) && ! in_array( (string) $map[ $locale ], $chain, true ) ) {
+			$locale  = (string) $map[ $locale ];
+			$chain[] = $locale;
+		}
+		return $chain;
+	}
+
 	private static function exists( string $mofile ): bool {
 		return is_readable( $mofile ) || is_readable( substr( $mofile, 0, -3 ) . '.l10n.php' );
 	}

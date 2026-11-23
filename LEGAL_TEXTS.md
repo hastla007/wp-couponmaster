@@ -44,6 +44,10 @@ dass die Vorlage aktuell ist und jeder Text noch existiert). Prüfung durch die 
 | SE | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
 | SI | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
 | SK | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
+| CH | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
+| GB | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
+| LI | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
+| NO | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
 
 ## 3. Feste Texte des Plugins
 

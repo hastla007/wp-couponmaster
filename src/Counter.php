@@ -153,14 +153,14 @@ final class Counter {
 
 	/**
 	 * Whether a counter redemption needs a receipt number (setting "Receipt no. required"; automatic = for shops
-	 * based in Germany or Austria, where the till receipt documents the sale – KassenSichV/RKSV). Filter
-	 * "vcap_counter_require_receipt".
+	 * based in a country whose market data sets "fiscal_receipt" – Germany and Austria, where the till receipt
+	 * documents the sale, KassenSichV/RKSV; SET-VC-10). Filter "vcap_counter_require_receipt" wins.
 	 */
 	public static function receipt_required(): bool {
 		$setting = (string) Settings::value( self::REQUIRE_RECEIPT );
 		if ( 'auto' === $setting || '' === $setting ) {
 			$country  = strtoupper( (string) strtok( (string) get_option( 'woocommerce_default_country', '' ), ':' ) );
-			$required = in_array( $country, array( 'DE', 'AT' ), true );
+			$required = Markets::fiscal_receipt( $country );
 		} else {
 			$required = 'yes' === $setting;
 		}

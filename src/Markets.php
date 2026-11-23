@@ -4,9 +4,10 @@ namespace VCAP;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * EU target market: country data (currency, locale, statutory voucher validity) kept as configuration – the data
- * file config/markets.php, the filter "vcap_markets" and the setting "Statutory validity per country" – instead of
- * code. VAT rates are never part of it (WooCommerce tax settings).
+ * Target markets (EU-27, Switzerland, Liechtenstein, United Kingdom, Norway): country data (currency, locales, EU
+ * membership, statutory voucher validity, till-receipt duty) kept as configuration – the data file
+ * config/markets.php, the filter "vcap_markets" and the setting "Statutory validity per country" – instead of code.
+ * VAT rates are never part of it (WooCommerce tax settings).
  */
 final class Markets {
 	/** Setting: one line per country, "AT: 30" or "DE: 3 end" (years, optional "end" = to the end of the year; 0 = never). */
@@ -22,6 +23,9 @@ final class Markets {
 		. 'NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW '
 		. 'SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO '
 		. 'TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW ';
+
+	/** EU member states – only used for market entries (added by the filter "vcap_markets") without an "eu" flag. */
+	private const EU_MEMBERS = array( 'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK' );
 
 	/** @var array<string, array<string, mixed>>|null */
 	private static ?array $data = null;
@@ -57,7 +61,7 @@ final class Markets {
 		return $out;
 	}
 
-	/** @return array<string, array{currency:string, locale:string, voucher_expiry:?array}> */
+	/** @return array<string, array<string, mixed>> */
 	public static function all(): array {
 		if ( null === self::$data ) {
 			$file       = dirname( __DIR__ ) . '/config/markets.php';
@@ -71,15 +75,46 @@ final class Markets {
 		self::$data = null;
 	}
 
-	/** @return array{currency:string, locale:string, voucher_expiry:?array}|null */
+	/**
+	 * Market data of a country, null when the country is not in the market data.
+	 *
+	 * @return array{currency:string, locale:string, languages:string[], eu:bool, fiscal_receipt:bool, voucher_expiry:?array}|null
+	 */
 	public static function get( string $country ): ?array {
-		$country = strtoupper( $country );
+		$country = strtoupper( trim( $country ) );
 		$all     = self::all();
-		return isset( $all[ $country ] ) ? $all[ $country ] + array( 'currency' => '', 'locale' => '', 'voucher_expiry' => null ) : null;
+		if ( '' === $country || ! isset( $all[ $country ] ) || ! is_array( $all[ $country ] ) ) {
+			return null;
+		}
+		$m         = $all[ $country ];
+		$locale    = (string) ( $m['locale'] ?? '' );
+		$languages = array_values( array_filter( array_map( 'strval', (array) ( $m['languages'] ?? array() ) ) ) );
+		return array(
+			'currency'       => (string) ( $m['currency'] ?? '' ),
+			'locale'         => $locale,
+			'languages'      => $languages ? $languages : array_filter( array( $locale ) ),
+			'eu'             => isset( $m['eu'] ) ? (bool) $m['eu'] : in_array( $country, self::EU_MEMBERS, true ),
+			'fiscal_receipt' => ! empty( $m['fiscal_receipt'] ),
+			'voucher_expiry' => is_array( $m['voucher_expiry'] ?? null ) ? $m['voucher_expiry'] : null,
+		);
 	}
 
-	public static function is_eu( string $country ): bool {
+	/** SET-VC-03: whether the country is in the market data (EU or not) – use is_eu() only for EU membership. */
+	public static function known( string $country ): bool {
 		return null !== self::get( $country );
+	}
+
+	/** SET-VC-03: whether the country is an EU member state (flag "eu" of the market data). */
+	public static function is_eu( string $country ): bool {
+		return (bool) ( self::get( $country )['eu'] ?? false );
+	}
+
+	/**
+	 * SET-VC-10: whether the till receipt documents a sale in this country (market flag "fiscal_receipt": DE, AT),
+	 * so the automatic "Receipt no. required" asks for the receipt number. Unknown countries: false.
+	 */
+	public static function fiscal_receipt( string $country ): bool {
+		return (bool) ( self::get( $country )['fiscal_receipt'] ?? false );
 	}
 
 	/**
@@ -115,13 +150,37 @@ final class Markets {
 	}
 
 	/**
-	 * EU countries the shop sells to (WooCommerce "Selling location(s)"), with what is still missing for each:
-	 * verified validity, country terms, translation.
+	 * Countries the shop sells to (WooCommerce "Selling location(s)").
 	 *
-	 * @return array<string, array{validity:bool, terms:bool, translation:bool, locale:string}>
+	 * @return string[]
 	 */
-	public static function readiness(): array {
+	public static function selling_countries(): array {
 		$countries = function_exists( 'WC' ) && WC()->countries ? array_keys( (array) WC()->countries->get_allowed_countries() ) : array();
+		return array_values( array_unique( array_map( static fn( $c ) => strtoupper( (string) $c ), $countries ) ) );
+	}
+
+	/**
+	 * SET-VC-03: selling countries without market data (the shop's defaults apply there – not checked at all).
+	 *
+	 * @param string[]|null $countries Selling countries (default: WooCommerce "Selling location(s)").
+	 * @return string[]
+	 */
+	public static function unknown_selling_countries( ?array $countries = null ): array {
+		$out = array_values( array_filter( array_map( 'strval', $countries ?? self::selling_countries() ), static fn( string $c ): bool => ! self::known( $c ) ) );
+		sort( $out );
+		return $out;
+	}
+
+	/**
+	 * Countries in the market data the shop sells to (EU and non-EU, e.g. Switzerland), with what is still missing
+	 * for each: verified validity, country terms, translation ("untranslated": offered locales of that country
+	 * without a translation).
+	 *
+	 * @param string[]|null $countries Selling countries (default: WooCommerce "Selling location(s)").
+	 * @return array<string, array{validity:bool, terms:bool, translation:bool, locale:string, untranslated:string[]}>
+	 */
+	public static function readiness( ?array $countries = null ): array {
+		$countries = $countries ?? self::selling_countries();
 		$terms     = ProductConfig::terms_by_country( (string) get_option( 'vcap_terms_by_country', '' ) );
 		$general   = '' !== trim( (string) get_option( 'vcap_default_terms', '' ) );
 		// Customers get the shop's languages (site language, WPML/Polylang): a translation for a country's locale
@@ -133,23 +192,33 @@ final class Markets {
 			if ( ! $market ) {
 				continue;
 			}
-			$locale = (string) $market['locale'];
-			$out[ (string) $country ] = array(
-				'validity'    => null !== self::expiry_rule( (string) $country ),
-				'terms'       => isset( $terms[ strtoupper( (string) $country ) ] ) || $general,
-				'translation' => 'en_GB' === $locale || 'en_US' === $locale || ! in_array( $locale, $offered, true ) || self::has_translation( $locale ),
-				'locale'      => $locale,
+			$untranslated = array();
+			foreach ( $market['languages'] as $locale ) {
+				if ( 'en_GB' !== $locale && 'en_US' !== $locale && in_array( $locale, $offered, true ) && ! self::has_translation( $locale ) ) {
+					$untranslated[] = $locale;
+				}
+			}
+			$country         = strtoupper( (string) $country );
+			$out[ $country ] = array(
+				'validity'     => null !== self::expiry_rule( $country ),
+				'terms'        => isset( $terms[ $country ] ) || $general,
+				'translation'  => ! $untranslated,
+				'locale'       => $market['locale'],
+				'untranslated' => $untranslated,
 			);
 		}
 		ksort( $out );
 		return $out;
 	}
 
+	/** Whether the plugin has a translation for $locale – its own file or one of the fallbacks (de_CH → de_DE_formal). */
 	private static function has_translation( string $locale ): bool {
-		$dirs = array( dirname( __DIR__ ) . '/languages', defined( 'WP_LANG_DIR' ) ? WP_LANG_DIR . '/plugins' : '' );
-		foreach ( array_filter( $dirs ) as $dir ) {
-			if ( is_readable( $dir . '/voucher-captain-' . $locale . '.mo' ) || is_readable( $dir . '/voucher-captain-' . $locale . '.l10n.php' ) ) {
-				return true;
+		$dirs = array_filter( array( dirname( __DIR__ ) . '/languages', defined( 'WP_LANG_DIR' ) ? WP_LANG_DIR . '/plugins' : '' ) );
+		foreach ( I18n::chain( $locale ) as $candidate ) {
+			foreach ( $dirs as $dir ) {
+				if ( is_readable( $dir . '/voucher-captain-' . $candidate . '.mo' ) || is_readable( $dir . '/voucher-captain-' . $candidate . '.l10n.php' ) ) {
+					return true;
+				}
 			}
 		}
 		return false;

@@ -1,0 +1,27 @@
+{
+	"Voucher rules are set for every country you sell to": {
+		"du": "Für jedes Verkaufsland sind Gutscheinregeln festgelegt",
+		"sie": "Für jedes Verkaufsland sind Gutscheinregeln festgelegt",
+		"at": "Für jedes Verkaufsland sind Gutscheinregeln festgelegt"
+	},
+	"Some selling countries need voucher settings": {
+		"du": "Für einige Verkaufsländer fehlen Gutschein-Einstellungen",
+		"sie": "Für einige Verkaufsländer fehlen Gutschein-Einstellungen",
+		"at": "Für einige Verkaufsländer fehlen Gutschein-Einstellungen"
+	},
+	"No voucher product ends before the statutory limitation period of the shop country or a selling country.": {
+		"du": "Kein Gutscheinprodukt endet vor der gesetzlichen Verjährungsfrist des Shoplands oder eines Verkaufslands.",
+		"sie": "Kein Gutscheinprodukt endet vor der gesetzlichen Verjährungsfrist des Shoplands oder eines Verkaufslands.",
+		"at": "Kein Gutscheinprodukt endet vor der gesetzlichen Verjährungsfrist des Shoplands oder eines Verkaufslands."
+	},
+	"No market data for these selling countries – the shop's default validity and the general conditions apply, nothing is checked there: %s": {
+		"du": "Für diese Verkaufsländer gibt es keine Länderdaten – dort gelten die Standard-Gültigkeit des Shops und die allgemeinen Einlösebedingungen, nichts davon ist geprüft: %s",
+		"sie": "Für diese Verkaufsländer gibt es keine Länderdaten – dort gelten die Standard-Gültigkeit des Shops und die allgemeinen Einlösebedingungen, nichts davon ist geprüft: %s",
+		"at": "Für diese Verkaufsländer gibt es keine Länderdaten – dort gelten die Standard-Gültigkeit des Shops und die allgemeinen Einlösebedingungen, nichts davon ist geprüft: %s"
+	},
+	"(and %d more)|(and %d more)": {
+		"du": ["(und %d weiteres)", "(und %d weitere)"],
+		"sie": ["(und %d weiteres)", "(und %d weitere)"],
+		"at": ["(und %d weiteres)", "(und %d weitere)"]
+	}
+}

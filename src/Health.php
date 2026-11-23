@@ -595,10 +595,15 @@ final class Health {
 		return self::result( 'redeem_page', 'recommended', __( 'The voucher redeem page needs attention', 'voucher-captain' ), $problem );
 	}
 
-	/** EU countries the shop sells to: verified voucher validity, country conditions and a translation for each. */
+	/**
+	 * Every country the shop sells to (SET-VC-03: not only the EU – Switzerland, Liechtenstein, United Kingdom,
+	 * Norway too): verified voucher validity, country conditions and a translation for each; selling countries
+	 * without market data are named (the shop's defaults apply there).
+	 */
 	public function test_markets(): array {
-		$gaps = array();
-		foreach ( Markets::readiness() as $country => $state ) {
+		$selling = Markets::selling_countries();
+		$gaps    = array();
+		foreach ( Markets::readiness( $selling ) as $country => $state ) {
 			$missing = array();
 			if ( ! $state['validity'] ) {
 				$missing[] = __( 'statutory validity not verified (3 years to the end of the year is used)', 'voucher-captain' );
@@ -608,21 +613,32 @@ final class Health {
 			}
 			if ( ! $state['translation'] ) {
 				/* translators: %s: locale, e.g. fr_FR */
-				$missing[] = sprintf( __( 'no translation (%s)', 'voucher-captain' ), $state['locale'] );
+				$missing[] = sprintf( __( 'no translation (%s)', 'voucher-captain' ), implode( ', ', $state['untranslated'] ? $state['untranslated'] : array( $state['locale'] ) ) );
 			}
 			if ( $missing ) {
 				$gaps[] = $country . ': ' . implode( ', ', $missing );
 			}
 		}
+		$unknown = Markets::unknown_selling_countries( $selling );
+		$note    = '';
+		if ( $unknown ) {
+			$shown = array_slice( $unknown, 0, 15 );
+			$rest  = count( $unknown ) - count( $shown );
+			$note  = ' ' . sprintf(
+				/* translators: %s: list of country codes */
+				__( 'No market data for these selling countries – the shop\'s default validity and the general conditions apply, nothing is checked there: %s', 'voucher-captain' ),
+				implode( ', ', $shown ) . ( $rest > 0 ? ' ' . sprintf( /* translators: %d: number of further countries */ _n( '(and %d more)', '(and %d more)', $rest, 'voucher-captain' ), $rest ) : '' )
+			);
+		}
 		if ( ! $gaps ) {
-			return self::result( 'markets', 'good', __( 'Voucher rules are set for every EU country you sell to', 'voucher-captain' ), __( 'Each selling country has a verified voucher validity, redemption conditions and a translation.', 'voucher-captain' ) );
+			return self::result( 'markets', 'good', __( 'Voucher rules are set for every country you sell to', 'voucher-captain' ), __( 'Each selling country has a verified voucher validity, redemption conditions and a translation.', 'voucher-captain' ) . $note );
 		}
 		return self::result(
 			'markets',
 			'recommended',
-			__( 'Some EU selling countries need voucher settings', 'voucher-captain' ),
+			__( 'Some selling countries need voucher settings', 'voucher-captain' ),
 			/* translators: %s: list of countries with what is missing */
-			sprintf( __( 'Set the statutory validity and conditions per country under Vouchers → Settings (have them checked legally) and add translations: %s', 'voucher-captain' ), implode( '; ', $gaps ) )
+			sprintf( __( 'Set the statutory validity and conditions per country under Vouchers → Settings (have them checked legally) and add translations: %s', 'voucher-captain' ), implode( '; ', $gaps ) ) . $note
 		);
 	}
 
@@ -728,7 +744,7 @@ final class Health {
 			}
 		}
 		if ( ! $names ) {
-			return self::result( 'validity', 'good', __( 'Voucher validity is not shorter than the statutory period', 'voucher-captain' ), __( 'No voucher product ends before the statutory limitation period of the shop country or an EU selling country.', 'voucher-captain' ) . self::truncation_note( $more ) );
+			return self::result( 'validity', 'good', __( 'Voucher validity is not shorter than the statutory period', 'voucher-captain' ), __( 'No voucher product ends before the statutory limitation period of the shop country or a selling country.', 'voucher-captain' ) . self::truncation_note( $more ) );
 		}
 		return self::result(
 			'validity',

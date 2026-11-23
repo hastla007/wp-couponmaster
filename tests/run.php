@@ -39,7 +39,43 @@ check( 'product conditions always win', 'Own' === ProductConfig::terms( array( '
 unset( $GLOBALS['vcap_test_options']['vcap_terms_by_country'], $GLOBALS['vcap_test_options']['vcap_default_terms'] );
 
 echo "EU markets (configuration, not code)\n";
-check( 'all 27 EU countries are configured', 27 === count( VCAP\Markets::all() ) && VCAP\Markets::is_eu( 'fr' ) && ! VCAP\Markets::is_eu( 'US' ) );
+check( 'all 27 EU countries are configured', 27 === count( array_filter( array_keys( VCAP\Markets::all() ), array( VCAP\Markets::class, 'is_eu' ) ) ) && VCAP\Markets::is_eu( 'fr' ) && ! VCAP\Markets::is_eu( 'US' ) );
+$m_ch = VCAP\Markets::get( 'ch' );
+check(
+	'SET-VC-03: Switzerland, Liechtenstein, United Kingdom and Norway are known countries but not EU members (CHF, de_CH/fr_CH/it_CH; validity not legally checked = null)',
+	31 === count( VCAP\Markets::all() ) && is_array( $m_ch ) && 'CHF' === $m_ch['currency'] && array( 'de_CH', 'fr_CH', 'it_CH' ) === $m_ch['languages'] && null === $m_ch['voucher_expiry'] && null === VCAP\Markets::expiry_rule( 'CH' )
+		&& 'CHF' === VCAP\Markets::get( 'LI' )['currency'] && 'GBP' === VCAP\Markets::get( 'GB' )['currency'] && 'NOK' === VCAP\Markets::get( 'NO' )['currency'] && array( 'de_AT' ) === VCAP\Markets::get( 'AT' )['languages']
+		&& VCAP\Markets::known( 'CH' ) && VCAP\Markets::known( 'gb' ) && VCAP\Markets::known( 'DE' ) && ! VCAP\Markets::known( 'US' ) && ! VCAP\Markets::known( '' )
+		&& ! VCAP\Markets::is_eu( 'CH' ) && ! VCAP\Markets::is_eu( 'LI' ) && ! VCAP\Markets::is_eu( 'GB' ) && ! VCAP\Markets::is_eu( 'NO' ) && VCAP\Markets::is_eu( 'DE' ),
+	json_encode( $m_ch )
+);
+$GLOBALS['vcap_test_filters']['vcap_markets'] = array( array( static fn( $m ) => (array) $m + array( 'XK' => array( 'currency' => 'EUR', 'locale' => 'sq' ) ), 1 ) );
+VCAP\Markets::reset();
+$m_eu_fallback = array( VCAP\Markets::known( 'XK' ), VCAP\Markets::is_eu( 'XK' ), VCAP\Markets::fiscal_receipt( 'XK' ) );
+unset( $GLOBALS['vcap_test_filters']['vcap_markets'] );
+VCAP\Markets::reset();
+check( 'SET-VC-03: a country added by the filter vcap_markets without "eu" flag is known, not EU, no receipt duty', array( true, false, false ) === $m_eu_fallback, json_encode( $m_eu_fallback ) );
+$m_rcpt = array();
+foreach ( array( 'DE', 'AT:9', 'CH', 'FR', 'US:CA', '' ) as $m_country ) {
+	$GLOBALS['vcap_test_options']['woocommerce_default_country'] = $m_country;
+	$m_rcpt[ $m_country ] = VCAP\Counter::receipt_required();
+}
+$GLOBALS['vcap_test_options']['woocommerce_default_country'] = 'CH';
+$GLOBALS['vcap_test_filters']['vcap_counter_require_receipt'] = array( array( static fn() => true, 1 ) );
+$m_rcpt_filter_ch = VCAP\Counter::receipt_required();
+$GLOBALS['vcap_test_options']['woocommerce_default_country'] = 'DE';
+$GLOBALS['vcap_test_filters']['vcap_counter_require_receipt'] = array( array( static fn() => false, 1 ) );
+$m_rcpt_filter_de = VCAP\Counter::receipt_required();
+$GLOBALS['vcap_test_options'][ VCAP\Counter::REQUIRE_RECEIPT ] = 'no';
+unset( $GLOBALS['vcap_test_filters']['vcap_counter_require_receipt'] );
+$m_rcpt_no_de = VCAP\Counter::receipt_required();
+unset( $GLOBALS['vcap_test_options']['woocommerce_default_country'], $GLOBALS['vcap_test_options'][ VCAP\Counter::REQUIRE_RECEIPT ] );
+check(
+	'SET-VC-10: automatic receipt number from the market flag "fiscal_receipt": DE and AT yes, CH and FR (and unknown countries) no; the filter vcap_counter_require_receipt wins; "no" stays no',
+	array( 'DE' => true, 'AT:9' => true, 'CH' => false, 'FR' => false, 'US:CA' => false, '' => false ) === $m_rcpt && true === $m_rcpt_filter_ch && false === $m_rcpt_filter_de && false === $m_rcpt_no_de
+		&& VCAP\Markets::fiscal_receipt( 'de' ) && VCAP\Markets::fiscal_receipt( 'AT' ) && ! VCAP\Markets::fiscal_receipt( 'CH' ) && ! VCAP\Markets::fiscal_receipt( 'FR' ),
+	json_encode( array( $m_rcpt, $m_rcpt_filter_ch, $m_rcpt_filter_de, $m_rcpt_no_de ) )
+);
 check( 'currency and locale per country', 'PLN' === VCAP\Markets::get( 'PL' )['currency'] && 'de_AT' === VCAP\Markets::get( 'AT' )['locale'] );
 check( 'verified validity: DE 3 years to the end of the year, AT 30 years', array( 'years' => 3, 'end_of_year' => true ) === ProductConfig::statutory_rule( 'DE' ) && array( 'years' => 30, 'end_of_year' => false ) === ProductConfig::statutory_rule( 'AT' ) );
 check( 'unverified country: shop default (3 years to the end of the year)', null === VCAP\Markets::expiry_rule( 'FR' ) && array( 'years' => 3, 'end_of_year' => true ) === ProductConfig::statutory_rule( 'FR' ) );
@@ -4492,6 +4528,25 @@ check(
 	json_encode( array( $st_r_dry, $st_r_imp, $st_r_imbad, $st_r_reset, $st_r_prof ) )
 );
 $GLOBALS['vcap_test_options'] = $st_saved;
+
+// SET-VC-03: Site Health checks every selling country in the market data, not only the EU (a Swiss shop gets hints).
+$GLOBALS['vcap_test_pll'] = array( 'de' => 'de_CH', 'fr' => 'fr_CH' );
+$m_ready                  = VCAP\Markets::readiness( array( 'CH', 'us', 'DE' ) );
+$GLOBALS['vcap_test_options']['vcap_terms_by_country'] = 'CH: Einlösung in allen Filialen.';
+$GLOBALS['vcap_test_options'][ VCAP\Markets::EXPIRY_OPTION ] = 'CH: 10';
+$m_ready_set = VCAP\Markets::readiness( array( 'CH' ) );
+unset( $GLOBALS['vcap_test_pll'], $GLOBALS['vcap_test_options']['vcap_terms_by_country'], $GLOBALS['vcap_test_options'][ VCAP\Markets::EXPIRY_OPTION ] );
+$m_health = (string) file_get_contents( VCAP_PATH . 'src/Health.php' );
+check(
+	'SET-VC-03: readiness covers Switzerland – validity not verified, no conditions, French (fr_CH, offered by Polylang) untranslated while de_CH uses the de_DE_formal file; unknown selling countries are listed separately',
+	array( 'CH', 'DE' ) === array_keys( $m_ready ) && false === $m_ready['CH']['validity'] && false === $m_ready['CH']['terms'] && false === $m_ready['CH']['translation'] && array( 'fr_CH' ) === $m_ready['CH']['untranslated'] && 'de_CH' === $m_ready['CH']['locale']
+		&& true === $m_ready['DE']['validity'] && true === $m_ready['DE']['translation']
+		&& true === $m_ready_set['CH']['validity'] && true === $m_ready_set['CH']['terms']
+		&& array( 'BR', 'US' ) === VCAP\Markets::unknown_selling_countries( array( 'US', 'CH', 'BR', 'DE' ) )
+		&& str_contains( $m_health, 'Markets::unknown_selling_countries( $selling )' ) && str_contains( $m_health, 'Voucher rules are set for every country you sell to' ) && ! str_contains( $m_health, 'every EU country' ),
+	json_encode( array( $m_ready, $m_ready_set ) )
+);
+check( 'SET-VC-03: the translation fallback chain (de_CH → de_DE_formal → de_DE)', array( 'de_CH', 'de_DE_formal', 'de_DE' ) === VCAP\I18n::chain( 'de_CH' ) && array( 'fr_CH' ) === VCAP\I18n::chain( 'fr_CH' ) );
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );
