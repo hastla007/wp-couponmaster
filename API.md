@@ -291,7 +291,7 @@ and abuse protection are enforced **here, in the core**, for every caller; no li
 plugin booted (`vcap_loaded`); check `function_exists( 'vcap_command_issue' )` or
 `version_compare( VCAP_CONTRACT_VERSION, '1.3.0', '>=' )`. The functions are thin wrappers of the service
 `vcap()->commands` (`VCAP\API\V1\CommandService`, methods `issue()`, `void()`, `reactivate()`, `redeem()`,
-`run( $command, $args )` and `protocol( $day )`).
+`run( $command, $args )`, `protocol( $day )` and `limits( $currency )`).
 
 | Function | Command | Fields besides the common ones | Capability of `authorized_by_user_id` | Since |
 |---|---|---|---|---|
@@ -338,6 +338,14 @@ the caller from workflow, workflow version, event id and step, R-8.4), `reason` 
   other currency is refused (`currency_not_allowed`) unless it is the shop currency and the operator entered an own
   *Maximum amount* there (worth no more than 100 EUR – not checked, there is no exchange rate in the core); until then
   `voucher.issue` and `voucher.redeem` are effectively off in that shop.
+- **Reading the limits** (since contract 1.6.0, SET-WC-15): `vcap_read_command_limits( string $currency = '' )`
+  (wrapper of `vcap()->commands->limits()`) returns the limits as they apply now, e.g. for a display in a workflow
+  editor: `day` (site time zone), `currency` (the given one, default the shop currency), `shop_currency`,
+  `fixed_currency` (`EUR`), `similar_currency` (CHF/USD/GBP), and per command under `commands['voucher.issue']` …:
+  `enabled`, `fixed` (the ceilings above), `effective` (`per_day`, `per_recipient`, `max_amount_minor` in minor units
+  of `currency` or null, `amount_allowed` – false when amounts in this currency are refused), `used_today` and
+  `remaining_today` (executed calls of the site today). No codes, no personal data, no per-recipient counters; null
+  before the plugin booted. Check `version_compare( VCAP_CONTRACT_VERSION, '1.6.0', '>=' )`.
 - **Atomic.** Checking, counting and executing run under one named database lock per site, so two parallel calls
   never pass a limit together (R-8.3b).
 - **Idempotent.** A second call with the same `idempotency_key` does nothing and returns the stored reply of the first
