@@ -507,13 +507,7 @@ final class Settings {
 				'default' => 'no',
 				'desc'    => __( 'Issue new vouchers for WooCommerce Subscriptions renewal orders.', 'voucher-captain' ),
 			),
-			array(
-				'title'   => __( 'Delete data on uninstall', 'voucher-captain' ),
-				'id'      => 'vcap_delete_on_uninstall',
-				'type'    => 'checkbox',
-				'default' => 'no',
-				'desc'    => self::delete_on_uninstall_description(),
-			),
+			...Admin\DataRemoval::fields( self::delete_on_uninstall_description() ),
 			array(
 				'title'   => __( 'Verbose log', 'voucher-captain' ),
 				'id'      => Logger::VERBOSE_OPTION,
@@ -1110,7 +1104,8 @@ final class Settings {
 	 * retention periods of bookkeeping records and a link to export the complete redemption journal first.
 	 */
 	public static function delete_on_uninstall_description(): string {
-		$text = __( 'Remove voucher tables (including the redemption journal), templates and settings when the plugin is deleted. The WooCommerce coupons of the vouchers are moved to the trash (restorable there), other coupons are kept.', 'voucher-captain' )
+		$text = __( 'Off (default): deleting the plugin keeps all data. On: deleting the plugin removes the voucher tables (including the redemption journal), templates, field groups, promotions, the voucher settings of products, the private PDF folder and all settings. The WooCommerce coupons of the vouchers are moved to the trash (restorable there), other coupons are kept.', 'voucher-captain' )
+			. ' ' . __( 'On a network each site decides for itself. Scheduled background jobs are always removed. This setting is not part of any export of settings.', 'voucher-captain' )
 			. ' ' . __( 'The journal is part of your bookkeeping records: retention periods are 8 or 10 years in Germany (§ 147 AO, § 257 HGB) and 7 years in Austria (§ 132 BAO). Export it before deleting the plugin.', 'voucher-captain' );
 		$url = Admin\ReportsAdmin::journal_csv_url( Admin\ReportsAdmin::JOURNAL_START, wp_date( 'Y-m-d' ) );
 		return esc_html( $text ) . ' <a href="' . esc_url( $url ) . '">' . esc_html__( 'Export the complete journal (CSV)', 'voucher-captain' ) . '</a>';

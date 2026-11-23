@@ -12041,10 +12041,6 @@ msgstr ""
 "Neue Gutscheine für Verlängerungsbestellungen von WooCommerce Subscriptions "
 "ausstellen."
 
-#: src/Settings.php:508
-msgid "Delete data on uninstall"
-msgstr "Daten bei Deinstallation löschen"
-
 #. translators: %d: hours
 #: src/Settings.php:520
 #, php-format
@@ -12673,17 +12669,6 @@ msgstr ""
 "Kasse zugeordnet werden. Der Scanner arbeitet nur online: Ohne Verbindung "
 "wird nichts gebucht (absichtlich – ein Offline-Scanner könnte denselben Code "
 "doppelt einlösen)."
-
-#: src/Settings.php:1110
-msgid ""
-"Remove voucher tables (including the redemption journal), templates and "
-"settings when the plugin is deleted. The WooCommerce coupons of the vouchers "
-"are moved to the trash (restorable there), other coupons are kept."
-msgstr ""
-"Gutscheintabellen (einschließlich des Einlösejournals), Vorlagen und "
-"Einstellungen beim Löschen des Plugins entfernen. Die WooCommerce-Codes der "
-"Gutscheine werden in den Papierkorb verschoben (dort wiederherstellbar), "
-"andere WooCommerce-Codes bleiben erhalten."
 
 #: src/Settings.php:1111
 msgid ""
@@ -14890,3 +14875,24 @@ msgstr "Eigene Marke"
 
 msgid "Your own name, logo and menu title instead of “Voucher Captain”. Available with Voucher Captain Pro."
 msgstr "Eigener Name, eigenes Logo und eigener Menütitel statt „Voucher Captain“. Verfügbar mit Voucher Captain Pro."
+
+msgid "Data removal was not switched on: type LÖSCHEN (or DELETE) in the confirmation field to switch it on. Your data is kept."
+msgstr "Das Löschen der Daten wurde nicht eingeschaltet: Geben Sie zum Einschalten LÖSCHEN in das Bestätigungsfeld ein. Ihre Daten bleiben erhalten."
+
+msgid "Remove all data when the plugin is deleted"
+msgstr "Beim Löschen des Plugins alle Daten entfernen"
+
+msgid "Confirm data removal"
+msgstr "Löschen der Daten bestätigen"
+
+msgid "Data removal is switched on. Untick the box above and save to keep the data again; no word is needed for that."
+msgstr "Das Löschen der Daten ist eingeschaltet. Entfernen Sie oben das Häkchen und speichern Sie, damit die Daten wieder erhalten bleiben; dafür ist kein Wort nötig."
+
+msgid "To switch data removal on, tick the box above and type LÖSCHEN (or DELETE) here, then save. Without the word the data is kept."
+msgstr "Zum Einschalten setzen Sie oben das Häkchen, geben hier LÖSCHEN ein und speichern. Ohne das Wort bleiben die Daten erhalten."
+
+msgid "Off (default): deleting the plugin keeps all data. On: deleting the plugin removes the voucher tables (including the redemption journal), templates, field groups, promotions, the voucher settings of products, the private PDF folder and all settings. The WooCommerce coupons of the vouchers are moved to the trash (restorable there), other coupons are kept."
+msgstr "Aus (Vorgabe): Beim Löschen des Plugins bleiben alle Daten erhalten. Ein: Beim Löschen des Plugins werden die Gutscheintabellen (mit dem Einlösejournal), Vorlagen, Feldgruppen, Aktionen, die Gutschein-Einstellungen der Produkte, der private PDF-Ordner und alle Einstellungen entfernt. Die WooCommerce-Coupons der Gutscheine kommen in den Papierkorb (dort wiederherstellbar), andere Coupons bleiben erhalten."
+
+msgid "On a network each site decides for itself. Scheduled background jobs are always removed. This setting is not part of any export of settings."
+msgstr "In einem Netzwerk entscheidet jede Website für sich. Geplante Hintergrundaufgaben werden immer entfernt. Diese Einstellung wird nicht mit anderen Einstellungen exportiert."

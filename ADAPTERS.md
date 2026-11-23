@@ -114,7 +114,7 @@ Built in: `src/Integrations/FormCaptain/`, loaded only after `form_captain_loade
 | Erasure (`form_captain_entry_deleted_v1`) | Open, rejected and withdrawn requests of the entry are deleted. Approved requests keep their numbers and order link but lose company, contact, e-mail and personalisation (the order belongs to WooCommerce and its privacy tools); issued vouchers stay untouched. |
 | Consent withdrawn (`form_captain_consent_withdrawn_v1`) | An open request becomes `withdrawn` and loses its personal data (it can never be approved); rejected requests are anonymised; approved requests stay (vouchers were issued under a contract – Form Captain sends `entry_deleted_v1` if the entry is erased). |
 | Hooks | `vcap_form_captain_request_created` (id), `vcap_form_captain_request_approved` (id, order, vouchers), `vcap_form_captain_request_rejected` (id). |
-| Uninstall | The table is dropped with the other tables when *Delete data on uninstall* is on. |
+| Uninstall | The table is dropped with the other tables when *Remove all data when the plugin is deleted* is on. |
 
 Test: `tests/form-captain-integration.php` (needs Form Captain; uses the contract test kit `tests/integration/Contract/ConnectorContractAssertions.php` of Form Captain; CI job `form-captain` against Form Captain `main` and the contract 1.1.0 branch).
 

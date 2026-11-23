@@ -3594,6 +3594,33 @@ remove_filter( 'vcap_settings_hints', $s7_extra );
 check( 'SET-VC-07: vcap_settings_hints adds lines; a non-https link or an empty text drops the line, tags are stripped', 'T' === ( $s7_ids['ok'] ?? '' ) && ! isset( $s7_ids['evil'] ) && ! isset( $s7_ids['empty'] ) && isset( $s7_ids['white_label'] ) );
 $s7_doc = (string) file_get_contents( VCAP_PATH . 'docs/FREE-PREMIUM.md' );
 check( 'SET-VC-07: FREE-PREMIUM.md rule 3 allows the hint lines (decision S1) and still forbids license code', str_contains( $s7_doc, 'Entscheidung S1 vom 23.11.2026' ) && str_contains( $s7_doc, 'Kein Lizenz- oder Update-Code im Kern' ) );
+// SET-VC-S10 (owner's decision S10, common standard of all Captain plugins): data is kept unless switched on with a typed word.
+if ( ! class_exists( 'WC_Admin_Settings' ) ) {
+	class WC_Admin_Settings { public static array $errors = array(); public static function add_error( $text ) { self::$errors[] = $text; } }
+}
+$s10_opt = VCAP\Admin\DataRemoval::OPTION;
+unset( $GLOBALS['vcap_test_options'][ $s10_opt ] );
+WC_Admin_Settings::$errors = array();
+$s10_words = array_map( array( VCAP\Admin\DataRemoval::class, 'is_confirmation' ), array( 'LÖSCHEN', 'löschen', ' Loeschen ', 'delete', 'Löschen!', 'ja', '', null ) );
+check( 'SET-VC-S10: LÖSCHEN, LOESCHEN and DELETE count in any letter case (spaces trimmed); other text does not', array( true, true, true, true, false, false, false, false ) === $s10_words );
+$s10_no_word = VCAP\Admin\DataRemoval::sanitize( 'yes', '' );
+$s10_errors  = count( WC_Admin_Settings::$errors );
+$s10_wrong   = VCAP\Admin\DataRemoval::sanitize( 'yes', 'ja' );
+$s10_ok      = VCAP\Admin\DataRemoval::sanitize( 'yes', 'löschen' );
+check( 'SET-VC-S10: switching on without (or with a wrong) word keeps "no" and shows an error; with the word it is "yes"', 'no' === $s10_no_word && 1 === $s10_errors && 'no' === $s10_wrong && 'yes' === $s10_ok );
+$GLOBALS['vcap_test_options'][ $s10_opt ] = 'yes';
+WC_Admin_Settings::$errors = array();
+check( 'SET-VC-S10: when already on, saving other fields needs no word; switching off needs none either', 'yes' === VCAP\Admin\DataRemoval::sanitize( 'yes', '' ) && 'no' === VCAP\Admin\DataRemoval::sanitize( 'no', '' ) && 'no' === VCAP\Admin\DataRemoval::sanitize( 'garbage', '' ) && array() === WC_Admin_Settings::$errors );
+unset( $GLOBALS['vcap_test_options'][ $s10_opt ] );
+$s10_fields = VCAP\Admin\DataRemoval::fields( 'desc' );
+ob_start();
+VCAP\Admin\DataRemoval::render( $s10_fields[1] );
+$s10_html = (string) ob_get_clean();
+check( 'SET-VC-S10: checkbox "Remove all data when the plugin is deleted" (default no, option name unchanged) and a confirmation field that is not stored', 'vcap_delete_on_uninstall' === $s10_fields[0]['id'] && 'Remove all data when the plugin is deleted' === $s10_fields[0]['title'] && 'no' === $s10_fields[0]['default'] && false === $s10_fields[1]['is_option'] && str_contains( $s10_html, 'name="' . VCAP\Admin\DataRemoval::CONFIRM_FIELD . '" value=""' ) && str_contains( $s10_html, 'LÖSCHEN' ) );
+$s10_uninst = (string) file_get_contents( VCAP_PATH . 'uninstall.php' );
+$s10_jobs   = strpos( $s10_uninst, "\tvcap_uninstall_jobs();" );
+check( 'SET-VC-S10: uninstall removes the scheduled jobs on every uninstall, before the "keep data" return', false !== $s10_jobs && $s10_jobs < strpos( $s10_uninst, 'if ( ! $delete_data )' ) && str_contains( $s10_uninst, "as_unschedule_all_actions( 'vcap_daily_maintenance' );" ) );
+check( 'SET-VC-S10: WP-CLI "wp vcap data-removal on" needs --confirm with the word', method_exists( VCAP\CLI\Command::class, 'data_removal' ) && str_contains( (string) ( new ReflectionMethod( VCAP\CLI\Command::class, 'data_removal' ) )->getDocComment(), '@subcommand data-removal' ) );
 $e17_main = (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' );
 $e17_apim = (string) file_get_contents( VCAP_PATH . 'API.md' );
 $e17_conn = (string) file_get_contents( VCAP_PATH . 'CONNECTORS.md' );
