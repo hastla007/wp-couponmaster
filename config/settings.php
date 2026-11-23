@@ -228,6 +228,8 @@ return array(
 		'vcap_needs_default_template',
 		'vcap_fc_requests_db_version',
 		'vcap_fc_forget_unsupported',
+		// SET-VC-21: 'yes' once the table "Rights per role" was saved (upgrades then keep the assignment).
+		'vcap_role_caps_customised',
 		// "Since" dates that must never change (Settings::insert_once()).
 		'vcap_routing_fixed_since',
 		'vcap_email_proof_since',

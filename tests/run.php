@@ -4129,5 +4129,106 @@ check( 'SET-VC-26: a limit hit remembers the visitor network only as a short key
 $px_field = array_values( array_filter( ( new VCAP\Settings() )->fields( 'privacy' ), static fn( $f ) => VCAP\Plugin::PROXY_HEADER_OPTION === ( $f['id'] ?? '' ) ) )[0] ?? array();
 check( 'SET-VC-26: "Privacy & advanced" has the select "Trusted proxy header" with the three choices and a warning about spoofed headers', 'select' === ( $px_field['type'] ?? '' ) && array( 'none', 'cloudflare', 'xff_last' ) === array_keys( $px_field['options'] ?? array() ) && 'none' === ( $px_field['default'] ?? '' ) && str_contains( (string) ( $px_field['desc'] ?? '' ), 'fake the header' ) );
 
+// SET-VC-21: role × right table (Privacy & advanced); the administrator cannot lose a right; uninstall removes them.
+echo "SET-VC-21 rights per role\n";
+final class VCAP_Test_Role {
+	public array $capabilities = array();
+	public function __construct( public string $name, array $caps = array() ) { $this->capabilities = array_fill_keys( $caps, true ); }
+	public function has_cap( $cap ) { return ! empty( $this->capabilities[ $cap ] ); }
+	public function add_cap( $cap ) { $this->capabilities[ $cap ] = true; }
+	public function remove_cap( $cap ) { unset( $this->capabilities[ $cap ] ); }
+}
+if ( ! function_exists( 'get_role' ) ) {
+	function get_role( $r ) { return $GLOBALS['vcap_test_roles'][ $r ] ?? null; }
+	function wp_roles() { return (object) array( 'role_objects' => $GLOBALS['vcap_test_roles'], 'role_names' => array_map( static fn( $r ) => $r->name, $GLOBALS['vcap_test_roles'] ), 'roles' => array(), 'use_db' => false ); }
+	function add_role( $r, $n, $c = array() ) { $GLOBALS['vcap_test_roles'][ $r ] = new VCAP_Test_Role( $n, array_keys( array_filter( $c ) ) ); return $GLOBALS['vcap_test_roles'][ $r ]; }
+}
+$rc_all   = VCAP\Admin\RoleCaps::CAPS;
+$rc_reset = static function () use ( $rc_all ) {
+	$GLOBALS['vcap_test_roles'] = array(
+		'administrator' => new VCAP_Test_Role( 'Administrator', array( 'manage_options', 'vcap_manage_vouchers' ) ),
+		'shop_manager'  => new VCAP_Test_Role( 'Shop manager', array( 'manage_woocommerce' ) ),
+		'support'       => new VCAP_Test_Role( 'Support', $rc_all ),
+		'editor'        => new VCAP_Test_Role( 'Editor' ),
+		'vcap_cashier'  => new VCAP_Test_Role( 'Voucher cashier', array( 'read', 'vcap_scan_tickets' ) ),
+	);
+};
+$rc_reset();
+$rc_changes = VCAP\Admin\RoleCaps::apply(
+	array(
+		'administrator' => array(),
+		'shop_manager'  => array(),
+		'support'       => array( 'vcap_manage_vouchers' => '1', 'vcap_scan_tickets' => '1' ),
+		'editor'        => array( 'vcap_scan_tickets' => '1', 'manage_options' => '1' ),
+		'nobody'        => array( 'vcap_manage_vouchers' => '1' ),
+	),
+	$GLOBALS['vcap_test_roles']
+);
+$rc_r = $GLOBALS['vcap_test_roles'];
+check(
+	'SET-VC-21: saving grants and removes the three rights per role as ticked; the administrator and roles with manage_woocommerce keep every right whatever was posted; unknown roles and rights are ignored',
+	array() === array_diff( $rc_all, array_keys( array_filter( $rc_r['administrator']->capabilities ) ) ) && array() === array_diff( $rc_all, array_keys( array_filter( $rc_r['shop_manager']->capabilities ) ) )
+		&& $rc_r['support']->has_cap( 'vcap_manage_vouchers' ) && ! $rc_r['support']->has_cap( 'vcap_increase_balance' )
+		&& $rc_r['editor']->has_cap( 'vcap_scan_tickets' ) && ! $rc_r['editor']->has_cap( 'manage_options' )
+		&& ! $rc_r['vcap_cashier']->has_cap( 'vcap_scan_tickets' ) && $rc_r['vcap_cashier']->has_cap( 'read' )
+		&& ! isset( $GLOBALS['vcap_test_roles']['nobody'] )
+		&& array( 'administrator:vcap_scan_tickets' => true, 'administrator:vcap_increase_balance' => true, 'shop_manager:vcap_manage_vouchers' => true, 'shop_manager:vcap_scan_tickets' => true, 'shop_manager:vcap_increase_balance' => true, 'support:vcap_increase_balance' => false, 'editor:vcap_scan_tickets' => true, 'vcap_cashier:vcap_scan_tickets' => false ) === $rc_changes,
+	(string) wp_json_encode( $rc_changes )
+);
+// save(): needs its own nonce and manage_options (the test user has neither) – nothing changes, nothing is marked.
+$_POST[ VCAP\Admin\RoleCaps::NONCE ]      = 'x';
+$_POST[ VCAP\Admin\RoleCaps::FIELD_TYPE ] = array( 'editor' => array( 'vcap_increase_balance' => '1' ) );
+if ( ! function_exists( 'wp_verify_nonce' ) ) {
+	function wp_verify_nonce( $n, $a = -1 ) { return 'valid-' . $a === $n ? 1 : false; }
+}
+$rc_saved = VCAP\Admin\RoleCaps::save();
+unset( $_POST[ VCAP\Admin\RoleCaps::NONCE ], $_POST[ VCAP\Admin\RoleCaps::FIELD_TYPE ] );
+$rc_src = (string) file_get_contents( VCAP_PATH . 'src/Admin/RoleCaps.php' );
+check(
+	'SET-VC-21: saving checks the own nonce and manage_woocommerce plus manage_options; without them nothing changes; without the table in the form save() does nothing',
+	false === $rc_saved && ! $GLOBALS['vcap_test_roles']['editor']->has_cap( 'vcap_increase_balance' ) && ! isset( $GLOBALS['vcap_test_options'][ VCAP\Admin\RoleCaps::CUSTOMISED_OPTION ] ) && false === VCAP\Admin\RoleCaps::save()
+		&& str_contains( $rc_src, "wp_verify_nonce( \$nonce, self::NONCE_ACTION ) || ! self::can_edit()" ) && str_contains( $rc_src, "current_user_can( 'manage_woocommerce' ) && current_user_can( 'manage_options' )" )
+);
+// The table: one row per role, the administrator's boxes ticked and disabled; without manage_options everything is read-only.
+ob_start();
+VCAP\Admin\RoleCaps::render( array( 'title' => 'Rights' ) );
+$rc_html = (string) ob_get_clean();
+check(
+	'SET-VC-21: the table lists every role with a named checkbox per right; the administrator row is ticked and disabled; a user without manage_options sees it read-only (no nonce)',
+	5 === substr_count( $rc_html, '<th scope="row">' ) && 3 === substr_count( $rc_html, 'name="vcap_role_caps[administrator]' ) && 3 === preg_match_all( '/name="vcap_role_caps\[administrator\]\[[a-z_]+\]" value="1" aria-label="[^"]+" checked disabled/', $rc_html )
+		&& str_contains( $rc_html, 'aria-label="Raise remaining values for Editor"' ) && ! str_contains( $rc_html, VCAP\Admin\RoleCaps::NONCE ) && str_contains( $rc_html, 'Only administrators can change the rights.' ) && str_contains( $rc_html, '<th scope="col">' ),
+	$rc_html
+);
+$rc_priv = ( new VCAP\Settings() )->fields( 'privacy' );
+check( 'SET-VC-21: the table is a block of "Privacy & advanced" without an option of its own; its state option is internal', in_array( VCAP\Admin\RoleCaps::FIELD_TYPE, array_column( $rc_priv, 'type' ), true ) && false === array_values( array_filter( $rc_priv, static fn( $f ) => VCAP\Admin\RoleCaps::FIELD_TYPE === ( $f['type'] ?? '' ) ) )[0]['is_option'] && VCAP\SettingsRegistry::is_internal( VCAP\Admin\RoleCaps::CUSTOMISED_OPTION ) );
+// Install::add_caps(): defaults for administrator and shop manager; once the table was saved only the administrator's.
+$rc_reset();
+$GLOBALS['vcap_test_roles']['shop_manager'] = new VCAP_Test_Role( 'Shop manager', array( 'manage_woocommerce' ) );
+VCAP\Install::add_caps();
+$rc_default = $GLOBALS['vcap_test_roles']['shop_manager']->has_cap( 'vcap_increase_balance' ) && $GLOBALS['vcap_test_roles']['administrator']->has_cap( 'vcap_scan_tickets' );
+$rc_reset();
+$GLOBALS['vcap_test_roles']['shop_manager']->remove_cap( 'vcap_increase_balance' );
+$GLOBALS['vcap_test_roles']['administrator']->remove_cap( 'vcap_manage_vouchers' );
+$GLOBALS['vcap_test_roles']['vcap_cashier']->remove_cap( 'vcap_scan_tickets' );
+update_option( VCAP\Admin\RoleCaps::CUSTOMISED_OPTION, 'yes' );
+VCAP\Install::add_caps();
+$rc_kept = ! $GLOBALS['vcap_test_roles']['shop_manager']->has_cap( 'vcap_increase_balance' ) && $GLOBALS['vcap_test_roles']['administrator']->has_cap( 'vcap_manage_vouchers' ) && ! $GLOBALS['vcap_test_roles']['vcap_cashier']->has_cap( 'vcap_scan_tickets' );
+delete_option( VCAP\Admin\RoleCaps::CUSTOMISED_OPTION );
+VCAP\Install::add_caps();
+check( 'SET-VC-21: an upgrade gives administrator and shop manager the rights; once the table was saved it only ensures the administrator\'s and keeps the saved assignment; the cashier role gets the scanner right back after an uninstall', $rc_default && $rc_kept && $GLOBALS['vcap_test_roles']['vcap_cashier']->has_cap( 'vcap_scan_tickets' ) );
+// Uninstall: the rights go from every role (also roles the table gave them), on every uninstall.
+$rc_reset();
+$GLOBALS['vcap_test_roles']['editor']->add_cap( 'vcap_manage_vouchers' );
+VCAP\Admin\RoleCaps::remove_all( $GLOBALS['vcap_test_roles'] );
+$rc_left = array_filter( $GLOBALS['vcap_test_roles'], static fn( $r ) => array() !== array_intersect( $rc_all, array_keys( $r->capabilities ) ) );
+$rc_un   = (string) file_get_contents( VCAP_PATH . 'uninstall.php' );
+check(
+	'SET-VC-21: uninstall removes the three rights from every role and forgets the saved table, on every uninstall (also when the data is kept)',
+	array() === $rc_left && $GLOBALS['vcap_test_roles']['administrator']->has_cap( 'manage_options' )
+		&& str_contains( $rc_un, 'VCAP\Admin\RoleCaps::remove_all( (array) wp_roles()->role_objects );' ) && str_contains( $rc_un, 'delete_option( VCAP\Admin\RoleCaps::CUSTOMISED_OPTION );' )
+		&& strpos( $rc_un, 'vcap_uninstall_caps(); // Every uninstall' ) < strpos( $rc_un, "if ( ! \$delete_data ) {\n\t\treturn false;" )
+);
+unset( $GLOBALS['vcap_test_roles'] );
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

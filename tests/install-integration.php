@@ -624,6 +624,14 @@ $w11_shown = translate_user_role( $w11_stored );
 remove_filter( 'gettext_with_context_voucher-captain', $w11_de, 10 );
 vcap_inst_assert( 'Gutschein-Kasse' === $w11_shown && 'Shop manager' === translate_user_role( 'Shop manager' ), 'AP-W1-1: translate_user_role() shows the cashier role in the plugin translation (other roles untouched)' );
 
+// SET-VC-21: the role table changes the real WordPress roles; the administrator keeps every right; uninstall removes them.
+VCAP\Admin\RoleCaps::apply( array( 'shop_manager' => array( 'vcap_scan_tickets' => '1' ), 'editor' => array( 'vcap_manage_vouchers' => '1' ) ), wp_roles()->role_objects );
+vcap_inst_assert( get_role( 'administrator' )->has_cap( 'vcap_increase_balance' ) && get_role( 'shop_manager' )->has_cap( 'vcap_increase_balance' ) && get_role( 'editor' )->has_cap( 'vcap_manage_vouchers' ) && ! get_role( VCAP\Install::CASHIER_ROLE )->has_cap( 'vcap_scan_tickets' ), 'SET-VC-21: the table grants and removes rights on the WordPress roles; administrator and shop manager (manage_woocommerce) keep all' );
+vcap_uninstall_caps();
+vcap_inst_assert( ! get_role( 'administrator' )->has_cap( 'vcap_manage_vouchers' ) && ! get_role( 'editor' )->has_cap( 'vcap_manage_vouchers' ) && ! get_role( 'shop_manager' )->has_cap( 'vcap_scan_tickets' ), 'SET-VC-21: uninstall removes the rights from every role' );
+VCAP\Install::add_caps();
+vcap_inst_assert( get_role( 'shop_manager' )->has_cap( 'vcap_increase_balance' ) && get_role( VCAP\Install::CASHIER_ROLE )->has_cap( 'vcap_scan_tickets' ), 'SET-VC-21: a new installation gives the default rights again' );
+
 // AP-W1-2 / AP-Q2-7: an outdated theme copy of a voucher template (no @version, e.g. without the check-in key)
 // is reported in Site Health; a current copy is not.
 $w12_dir  = get_stylesheet_directory() . '/woocommerce/voucher-captain';

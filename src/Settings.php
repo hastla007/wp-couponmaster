@@ -587,7 +587,7 @@ final class Settings {
 			Health::proxy_header_field(), // SET-VC-26.
 			array( 'type' => 'sectionend', 'id' => 'vcap_privacy' ),
 		);
-		$fields = array_merge( $fields, self::counter_limit_fields() );
+		$fields = array_merge( $fields, self::counter_limit_fields(), Admin\RoleCaps::fields() ); // SET-VC-21.
 		return $fields;
 	}
 

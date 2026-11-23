@@ -181,6 +181,7 @@ final class Plugin {
 			( new Admin\Menu() )->register();
 			( new Admin\ProHints() )->register();
 			( new Admin\DataRemoval() )->register();
+			( new Admin\RoleCaps() )->register(); // SET-VC-21: rights per role.
 			( new Admin\OrderAdmin( $this->vouchers, $this->issuer ) )->register();
 			( new Admin\VoucherAdmin( $this->vouchers ) )->register();
 			( new Admin\Import( $this->code_pool ) )->register();

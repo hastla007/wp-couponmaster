@@ -1,9 +1,9 @@
 <?php
 /**
  * Uninstall: only removes data when "Remove all data when the plugin is deleted" is on (switched on only with the typed
- * word LÖSCHEN/DELETE, VCAP\Admin\DataRemoval; each site of a network decides for itself). Always: scheduled jobs
- * and leftovers of the license client of earlier builds are removed, gift card and store credit coupons and coupons
- * with rules only Voucher Captain checks are suspended (draft) – without the plugin nothing would deduct their
+ * word LÖSCHEN/DELETE, VCAP\Admin\DataRemoval; each site of a network decides for itself). Always: scheduled jobs,
+ * the plugin's rights on every role (SET-VC-21) and leftovers of the license client of earlier builds are removed,
+ * gift card and store credit coupons and coupons with rules only Voucher Captain checks are suspended (draft) – without the plugin nothing would deduct their
  * balance or check their rules; with data deletion all Voucher Captain coupons go to the trash (restorable there),
  * the other WooCommerce coupons are kept.
  */
@@ -114,6 +114,19 @@ function vcap_uninstall_coupons( bool $delete_data ): array {
 }
 
 /**
+ * SET-VC-21: removes the plugin's rights (vcap_manage_vouchers, vcap_scan_tickets, vcap_increase_balance) from every
+ * role of the current site – also from roles an administrator gave them in "Rights per role" – and forgets that the
+ * table was saved, so a new installation starts with the default assignment again.
+ */
+function vcap_uninstall_caps(): void {
+	vcap_uninstall_autoload();
+	if ( function_exists( 'wp_roles' ) ) {
+		VCAP\Admin\RoleCaps::remove_all( (array) wp_roles()->role_objects );
+	}
+	delete_option( VCAP\Admin\RoleCaps::CUSTOMISED_OPTION );
+}
+
+/**
  * Removes Voucher Captain's data of the current site (only when that site opted in). Leftover license data of
  * earlier builds is removed and the balance coupons are suspended on every site (see vcap_uninstall_coupons()).
  *
@@ -124,6 +137,7 @@ function vcap_uninstall_site(): bool {
 	$delete_data = 'yes' === get_option( 'vcap_delete_on_uninstall', 'no' );
 	vcap_uninstall_coupons( $delete_data ); // First: needs the voucher table, which data deletion drops.
 	vcap_uninstall_jobs(); // Every uninstall, also when the data is kept: nothing would run the jobs any more.
+	vcap_uninstall_caps(); // Every uninstall: rights of a plugin that is gone (a new installation gives the defaults).
 	if ( ! $delete_data ) {
 		return false;
 	}
@@ -154,14 +168,6 @@ function vcap_uninstall_site(): bool {
 	vcap_uninstall_referral_meta( array( $wpdb->get_blog_prefix() . '_vcap_referral_coupon', $wpdb->get_blog_prefix() . '_vcap_referral_count' ) );
 	// Own daily counter limits and the fixed till of staff members (per-site user options, VCAP\Counter).
 	vcap_uninstall_referral_meta( array( $wpdb->get_blog_prefix() . 'vcap_counter_limit_amount', $wpdb->get_blog_prefix() . 'vcap_counter_limit_count', $wpdb->get_blog_prefix() . 'vcap_counter_location' ) );
-	foreach ( array( 'administrator', 'shop_manager' ) as $role_name ) {
-		$role = get_role( $role_name );
-		if ( $role ) {
-			$role->remove_cap( 'vcap_manage_vouchers' );
-			$role->remove_cap( 'vcap_scan_tickets' );
-			$role->remove_cap( 'vcap_increase_balance' );
-		}
-	}
 	remove_role( 'vcap_cashier' );
 	$uploads = wp_upload_dir( null, false );
 	// The private folder: "vcap" or, since M12-43, "vcap-<random suffix>" (the option naming it is already gone).

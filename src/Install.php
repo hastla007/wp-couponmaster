@@ -1483,14 +1483,20 @@ final class Install {
 	/** Stored (English) name of the cashier role; translated on display (translate_role_name()). */
 	public const CASHIER_ROLE_NAME = 'Voucher cashier';
 
+	/**
+	 * The rights of the plugin on the WordPress roles. Administrator and shop manager get all three – unless an
+	 * administrator saved the table "Rights per role" (SET-VC-21): then only the administrator's rights are ensured
+	 * and the saved assignment is kept.
+	 */
 	public static function add_caps(): void {
-		foreach ( array( 'administrator', 'shop_manager' ) as $role_name ) {
+		$customised = 'yes' === get_option( Admin\RoleCaps::CUSTOMISED_OPTION );
+		foreach ( $customised ? array( Admin\RoleCaps::FIXED_ROLE ) : array( 'administrator', 'shop_manager' ) as $role_name ) {
 			$role = get_role( $role_name );
 			if ( $role ) {
-				$role->add_cap( 'vcap_manage_vouchers' );
-				$role->add_cap( 'vcap_scan_tickets' );
-				// Raising a remaining value ("Add", "Set to" above it) creates value: its own right.
-				$role->add_cap( 'vcap_increase_balance' );
+				// Raising a remaining value ("Add", "Set to" above it) creates value: its own right (vcap_increase_balance).
+				foreach ( Admin\RoleCaps::CAPS as $cap ) {
+					$role->add_cap( $cap );
+				}
 			}
 		}
 		if ( ! get_role( self::CASHIER_ROLE ) ) {
@@ -1506,6 +1512,11 @@ final class Install {
 				)
 			);
 		} else {
+			// The uninstall takes the rights from every role but keeps the role while the data is kept: given back.
+			$cashier = get_role( self::CASHIER_ROLE );
+			if ( ! $customised && $cashier && ! $cashier->has_cap( 'vcap_scan_tickets' ) ) {
+				$cashier->add_cap( 'vcap_scan_tickets' );
+			}
 			// Installs before AP-W1-1 stored the name in the language of that request: stored in English once.
 			$roles = wp_roles();
 			if ( isset( $roles->roles[ self::CASHIER_ROLE ] ) && self::CASHIER_ROLE_NAME !== ( $roles->roles[ self::CASHIER_ROLE ]['name'] ?? '' ) ) {
