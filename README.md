@@ -158,6 +158,8 @@ php bin/make-mo.php
 ```
 Kompiliert die `.po`-Dateien zu `.mo`.
 
+Einstellungen: Standardwert, Typ, Grenzen, Abschnitt, rechtliches Gewicht, Export und Geheimnis jeder Option stehen an einer Stelle in `config/settings.php` (Klasse `VCAP\SettingsRegistry`, Filter `vcap_settings_registry`); Optionen, die keine Einstellungen sind (Zähler, Sperren, Versionen), stehen dort in der Liste `internal`. Ein Test in `tests/run.php` schlägt fehl, sobald der Code eine `vcap_`-Option liest, die in keiner der beiden Listen steht.
+
 Templates lassen sich im Theme unter `woocommerce/voucher-captain/` überschreiben.
 
 ## Lizenz

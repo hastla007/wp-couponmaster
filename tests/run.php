@@ -1857,7 +1857,7 @@ $d9 = new ReflectionClass( 'VCAP\\CLI\\Command' );
 check( 'D9: "wp vcap" has doctor, migrate, deliver, issue, sync, ratelimit, diagnostics', ! array_diff( array( 'doctor', 'migrate', 'deliver', 'issue', 'sync', 'ratelimit', 'diagnostics' ), array_map( static fn( $m ) => $m->getName(), $d9->getMethods( ReflectionMethod::IS_PUBLIC ) ) ) && str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Plugin.php' ), "defined( 'WP_CLI' ) && WP_CLI" ) );
 
 echo "P12 abuse protection (safe defaults)\n";
-$p12_defaults = VCAP\Settings::DEFAULTS;
+$p12_defaults = VCAP\Settings::defaults();
 check( 'V3/V5/V7: abuse limits are on by default (14 days wait, 10 rewards per 30 days, address check, 500 custom max, 1000 per 24 h, hold above 250 for 24 h)', 14 === $p12_defaults['vcap_referral_wait_days'] && 10 === $p12_defaults['vcap_referral_max_rewards'] && 'yes' === $p12_defaults['vcap_referral_address_check'] && 14 === $p12_defaults['vcap_bonus_wait_days'] && 500 === $p12_defaults['vcap_custom_max_default'] && 1000 === $p12_defaults['vcap_customer_daily_limit'] && 250 === $p12_defaults['vcap_hold_new_customer_above'] && 24 === $p12_defaults['vcap_hold_hours'] && '' === $p12_defaults['vcap_referral_min_spend'] );
 $p12_custom = array( 'amount_source' => 'custom', 'custom_min' => '', 'custom_max' => '', 'custom_step' => '1' ) + ProductConfig::DEFAULTS;
 $p12_max    = (float) ProductConfig::effective_custom_max( $p12_custom );
@@ -2122,7 +2122,7 @@ $r6_amt   = VCAP\Counter::exceeded( array( 'amount' => 100.0, 'count' => 0 ), ar
 $r6_cnt   = VCAP\Counter::exceeded( array( 'amount' => 0.0, 'count' => 3 ), array( 'count' => 3, 'amount' => 0.0 ), 0.0 );
 check( 'R6: daily limits: 0 = unlimited, exactly reaching the limit fits, one cent above is refused with what is left, the count limit counts this redemption', null === $r6_none && null === $r6_fits && 'amount' === $r6_amt['kind'] && 40.0 === $r6_amt['left'] && 'count' === $r6_cnt['kind'] && 0.0 === $r6_cnt['left'], var_export( array( $r6_fits, $r6_amt, $r6_cnt ), true ) );
 check( 'R6: the scanner message names the limit and what is left', str_contains( VCAP\Counter::limit_message( 'till', 'Shop 1', $r6_cnt, 'EUR' ), '"Shop 1"' ) && str_contains( VCAP\Counter::limit_message( 'user', '', $r6_cnt, 'EUR' ), 'left: 0' ) );
-check( 'R6: counter limits are off by default (0 = unlimited)', 0 === VCAP\Settings::DEFAULTS[ VCAP\Counter::USER_AMOUNT ] && 0 === VCAP\Settings::DEFAULTS[ VCAP\Counter::USER_COUNT ] && 0 === VCAP\Settings::DEFAULTS[ VCAP\Counter::TILL_AMOUNT ] && 0 === VCAP\Settings::DEFAULTS[ VCAP\Counter::TILL_COUNT ] );
+check( 'R6: counter limits are off by default (0 = unlimited)', 0 === VCAP\Settings::defaults()[ VCAP\Counter::USER_AMOUNT ] && 0 === VCAP\Settings::defaults()[ VCAP\Counter::USER_COUNT ] && 0 === VCAP\Settings::defaults()[ VCAP\Counter::TILL_AMOUNT ] && 0 === VCAP\Settings::defaults()[ VCAP\Counter::TILL_COUNT ] );
 $r6_head = VCAP\Ledger::journal_header();
 $r6_line = VCAP\Ledger::journal_line( array( 'created_at' => '2026-11-14 10:00:00', 'code' => 'ABC', 'type' => 'giftcard', 'currency' => 'EUR', 'event' => 'redeemed', 'amount' => 5, 'balance_after' => 10, 'order_id' => 0, 'till' => 'Shop 1', 'receipt' => '4711', 'note' => 'x' ) );
 check( 'R6: the journal CSV has its own till/branch and receipt columns', 'Shop 1' === $r6_line[ array_search( 'Till / branch', $r6_head, true ) ] && '4711' === $r6_line[ array_search( 'Receipt no.', $r6_head, true ) ] && count( $r6_head ) === count( $r6_line ) );
@@ -3667,6 +3667,135 @@ $wf14_src     = (string) file_get_contents( VCAP_PATH . 'src/Issuer.php' ) . fil
 $wf14_doc     = (string) file_get_contents( VCAP_PATH . 'docs/HOOKS.md' );
 $wf14_missing = array_values( array_filter( $wf14_hooks, static fn( $h ) => str_contains( $wf14_src, "do_action( '{$h}'" ) || ! str_contains( $wf14_src, "Db::action( '{$h}'" ) || ! preg_match( '/^\| `' . preg_quote( $h, '/' ) . '` \|[^\n]*after COMMIT/m', $wf14_doc ) ) );
 check( 'VOUCH-WF-14: the six issue/delivery/bounce/reissue actions fire through Db::action() (after COMMIT inside a transaction) and docs/HOOKS.md says so', array() === $wf14_missing, implode( ', ', $wf14_missing ) );
+
+// SET-VC-01: settings register – one source for default, type, bounds, section, legal weight, export, secret.
+echo "SET-VC-01 settings register\n";
+$sr_all      = VCAP\SettingsRegistry::all();
+$sr_internal = VCAP\SettingsRegistry::internal();
+// Constants whose value is an option name ("vcap_…"), per short class name, to resolve get_option( Class::CONST ).
+$sr_consts = array();
+foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( VCAP_PATH . 'src', FilesystemIterator::SKIP_DOTS ) ) as $sr_file ) {
+	$sr_php = (string) file_get_contents( (string) $sr_file );
+	if ( preg_match( '/^(?:final\s+|abstract\s+)?(?:class|trait|interface)\s+(\w+)/m', $sr_php, $sr_cm ) && preg_match_all( "/const\s+([A-Z0-9_]+)\s*=\s*'(vcap_[a-z0-9_]*)'\s*;/", $sr_php, $sr_cc, PREG_SET_ORDER ) ) {
+		foreach ( $sr_cc as $sr_c ) {
+			$sr_consts[ $sr_cm[1] ][ $sr_c[1] ] = $sr_c[2];
+		}
+	}
+}
+/*
+ * Option reads in PHP code that are neither a registered setting nor internal state: get_option(), get_site_option(),
+ * Settings::value() and settings->get()/yes() with a literal "vcap_…" name or a class constant holding one; a name
+ * followed by "." is a prefix ("vcap_reversal_" . $id) and must be an internal prefix.
+ */
+$sr_unknown = static function ( string $php, string $class ) use ( $sr_consts ): array {
+	$out = array();
+	preg_match_all( "/(?:\bget_option|\bget_site_option|Settings::value|settings(?:\(\))?->(?:get|yes)|\\\$this->(?:get|yes))\(\s*(?:'(vcap_[a-z0-9_]*)'|(?:\\\\?[A-Za-z_\\\\]*\\\\)?\b(self|static|[A-Z]\w*)::([A-Z0-9_]+))\s*([.,)])/", $php, $sr_m, PREG_SET_ORDER );
+	foreach ( $sr_m as $m ) {
+		$name = '' !== $m[1] ? $m[1] : ( $sr_consts[ in_array( $m[2], array( 'self', 'static' ), true ) ? $class : $m[2] ][ $m[3] ] ?? '' );
+		if ( '' === $name ) {
+			continue; // Not an option name of this plugin (e.g. woocommerce_currency).
+		}
+		$known = '.' === $m[4] ? VCAP\SettingsRegistry::is_internal( $name . 'x' ) : ( VCAP\SettingsRegistry::has( $name ) || VCAP\SettingsRegistry::is_internal( $name ) );
+		if ( ! $known ) {
+			$out[] = $name . ( '.' === $m[4] ? '…' : '' );
+		}
+	}
+	return $out;
+};
+$sr_found = array();
+$sr_files = array( VCAP_PATH . 'uninstall.php', VCAP_PATH . 'voucher-captain.php' );
+foreach ( array( 'src', 'templates', 'config' ) as $sr_dir ) {
+	foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( VCAP_PATH . $sr_dir, FilesystemIterator::SKIP_DOTS ) ) as $sr_file ) {
+		if ( str_ends_with( (string) $sr_file, '.php' ) ) {
+			$sr_files[] = (string) $sr_file;
+		}
+	}
+}
+foreach ( $sr_files as $sr_file ) {
+	$sr_php   = (string) file_get_contents( $sr_file );
+	$sr_class = preg_match( '/^(?:final\s+|abstract\s+)?(?:class|trait)\s+(\w+)/m', $sr_php, $sr_cm ) ? $sr_cm[1] : '';
+	foreach ( $sr_unknown( $sr_php, $sr_class ) as $sr_name ) {
+		$sr_found[] = $sr_name . ' (' . str_replace( VCAP_PATH, '', $sr_file ) . ')';
+	}
+}
+check( 'SET-VC-01: every vcap_ option the code reads is in the settings register or listed as internal state', array() === $sr_found, implode( ', ', array_unique( $sr_found ) ) );
+$sr_probe = $sr_unknown( "get_option( 'vcap_not_registered', '' ); get_option( 'vcap_unknown_prefix_' . \$id ); get_option( 'vcap_attach_pdf' ); Settings::value( 'vcap_code_length' ); get_option( 'vcap_reversal_' . \$id ); get_option( Install::OPTION_DB_VERSION ); get_option( \\VCAP\\PaymentVouchers::OPTION ); get_option( 'woocommerce_currency' ); get_option( 'vcap_mpv_after_tax_x' );", '' );
+check( 'SET-VC-01: the check fails for an unregistered option (literal, prefix, constant) and passes for settings and internal state', array( 'vcap_not_registered', 'vcap_unknown_prefix_…', 'vcap_mpv_after_tax_x' ) === $sr_probe && array( 'vcap_counter_till_x' ) === $sr_unknown( "get_option( self::TILL_AMOUNT ); get_option( 'vcap_counter_till_x' );", 'Counter' ) && array() === $sr_unknown( 'get_option( self::FAILED_LOOKUPS );', 'Counter' ),implode( ', ', $sr_probe ) );
+$sr_fielded = array_filter( $sr_all, static fn( $e ) => VCAP\SettingsRegistry::HIDDEN !== $e['section'] );
+check( 'SET-VC-01: 91 options are registered (89 with a field, 2 secrets) plus 4 user settings; settings and internal state do not overlap', 91 === count( $sr_all ) && 89 === count( $sr_fielded ) && array( 'vcap_secret', 'vcap_customer_key_secret' ) === VCAP\SettingsRegistry::with( 'secret' ) && array() === array_filter( array_keys( $sr_all ), static fn( $k ) => VCAP\SettingsRegistry::is_internal( $k ) ) && array( VCAP\Counter::META_AMOUNT, VCAP\Counter::META_COUNT, VCAP\Counter::META_LOCATION, VCAP\Admin\ProHints::USER_META ) === array_keys( VCAP\SettingsRegistry::user_meta() ), (string) count( $sr_all ) );
+check( 'SET-VC-01: secrets are never exported; the data removal switch and the support log are not exported either; selects list their choices', array() === array_intersect( VCAP\SettingsRegistry::with( 'secret' ), VCAP\SettingsRegistry::with( 'export' ) ) && ! in_array( 'vcap_delete_on_uninstall', VCAP\SettingsRegistry::with( 'export' ), true ) && ! in_array( VCAP\Logger::VERBOSE_OPTION, VCAP\SettingsRegistry::with( 'export' ), true ) && array() === array_filter( $sr_all, static fn( $e ) => 'select' === $e['type'] && ( empty( $e['choices'] ) || ( '' !== $e['default'] && ! in_array( (string) $e['default'], $e['choices'], true ) ) ) ) );
+// Defaults are those of 1.2.0 (formerly Settings::DEFAULTS) – a shop that never saved a setting behaves as before.
+$sr_def = VCAP\Settings::defaults();
+check( 'SET-VC-01: defaults are unchanged (codes, delivery, counter, links, DATEV, commands; fresh installs: PDF limit 20, payment after tax, delivery date)', array( 'processing', 'completed' ) === $sr_def['vcap_issue_statuses'] && 12 === $sr_def['vcap_code_length'] && 'alnum_upper' === $sr_def['vcap_code_charset'] && 90 === $sr_def['vcap_download_link_days'] && 8 === $sr_def['vcap_delivery_hour'] && 50 === $sr_def['vcap_bundle_pdf_limit'] && 'auto' === $sr_def[ VCAP\Counter::REQUIRE_RECEIPT ] && '' === $sr_def[ VCAP\Counter::LOCATIONS ] && 'gutschein' === $sr_def['vcap_coupon_link_param'] && 0 === $sr_def['vcap_expiry_reminder_days'] && 20 === VCAP\SettingsRegistry::fresh_default( 'vcap_bundle_pdf_limit' ) && 'yes' === VCAP\SettingsRegistry::fresh_default( VCAP\PaymentVouchers::OPTION ) && 'no' === $sr_def[ VCAP\PaymentVouchers::OPTION ] && 'yes' === VCAP\SettingsRegistry::fresh_default( 'vcap_new_product_delivery' ) && '0101' === $sr_def[ VCAP\DatevExport::OPTION_FY_START ] && '50' === $sr_def[ VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'per_day' ) ] );
+$GLOBALS['vcap_test_options']['vcap_delivery_hour'] = '30';
+check( 'SET-VC-01: Settings::get() returns a saved value unchanged (also one outside the bounds) and the register default when nothing is saved', '30' === ( new VCAP\Settings() )->get( 'vcap_delivery_hour' ) && 365 === ( new VCAP\Settings() )->get( 'vcap_default_expiry_days' ) && 365 === VCAP\Settings::value( 'vcap_default_expiry_days' ) && null === ( new VCAP\Settings() )->get( 'vcap_no_such_setting' ) );
+unset( $GLOBALS['vcap_test_options']['vcap_delivery_hour'] );
+// Fields: every option field of a core section is registered for that section, with the register's default and bounds.
+if ( ! function_exists( 'wc_get_order_statuses' ) ) {
+	function wc_get_order_statuses() { return array( 'wc-processing' => 'Processing', 'wc-completed' => 'Completed' ); }
+}
+$sr_settings = new VCAP\Settings();
+$sr_bad      = array();
+$sr_seen     = array();
+foreach ( array_keys( $sr_settings->section_list() ) as $sr_sec ) {
+	$sr_fields = $sr_settings->fields( (string) $sr_sec );
+	if ( 'api' === $sr_sec ) {
+		$sr_fields = VCAP\API\V1\ContactService::settings_fields( VCAP\API\V1\CommandService::settings_fields( $sr_fields, 'api' ), 'api' );
+	}
+	foreach ( $sr_fields as $sr_f ) {
+		$sr_id = (string) ( $sr_f['id'] ?? '' );
+		if ( in_array( $sr_f['type'] ?? '', array( 'title', 'sectionend' ), true ) || false === ( $sr_f['is_option'] ?? true ) ) {
+			continue;
+		}
+		$sr_e = VCAP\SettingsRegistry::get( $sr_id );
+		if ( null === $sr_e || (string) $sr_sec !== $sr_e['section'] ) {
+			$sr_bad[] = $sr_id . ' (section)';
+			continue;
+		}
+		$sr_seen[] = $sr_id;
+		if ( 'vcap_default_expiry_rule' !== $sr_id && (string) wp_json_encode( $sr_e['default'] ) !== (string) wp_json_encode( $sr_f['default'] ) && ! ( 'vcap_expiry_reminder_days' === $sr_id && '0' === $sr_f['default'] ) ) {
+			$sr_bad[] = $sr_id . ' (default)';
+		}
+		if ( 'number' === ( $sr_f['type'] ?? '' ) && ( ! in_array( $sr_e['type'], array( 'int', 'decimal' ), true ) || null === $sr_e['min'] || ( $sr_f['custom_attributes']['min'] ?? null ) !== $sr_e['min'] || ( $sr_f['custom_attributes']['max'] ?? null ) !== $sr_e['max'] ) ) {
+			$sr_bad[] = $sr_id . ' (bounds)';
+		}
+	}
+}
+$sr_missing = array_diff( array_keys( $sr_fielded ), $sr_seen );
+check( 'SET-VC-01: each option field is registered for its section with the register default and min/max; each registered setting with a section has a field there', array() === $sr_bad && array() === $sr_missing, implode( ', ', array_merge( $sr_bad, $sr_missing ) ) );
+check( 'SET-VC-01: field() puts min and max before step, keeps a default the field computes at runtime and leaves unregistered fields alone', array( 'min' => 0, 'max' => 23, 'step' => 1 ) === VCAP\SettingsRegistry::field( 'vcap_delivery_hour', array( 'type' => 'number', 'custom_attributes' => array( 'step' => 1 ) ) )['custom_attributes'] && 'days' === VCAP\SettingsRegistry::field( 'vcap_default_expiry_rule', array( 'type' => 'select', 'default' => 'days' ) )['default'] && array( 'id' => 'vcap_addon_x', 'type' => 'number' ) === VCAP\SettingsRegistry::field( 'vcap_addon_x', array( 'type' => 'number' ) ) );
+// Server-side check of numbers (min/max of the register) when the settings are saved.
+$sr_san = static fn( $v, $k ) => VCAP\SettingsRegistry::sanitize_option( $v, array( 'id' => $k ) );
+check(
+	'SET-VC-01: numbers are checked on the server – out of range is set to the bound, text or empty keeps the stored value (null), valid input is stored as entered',
+	'23' === $sr_san( '30', 'vcap_delivery_hour' ) && '0' === $sr_san( '-1', 'vcap_delivery_hour' ) && '8' === $sr_san( ' 8 ', 'vcap_delivery_hour' ) && null === $sr_san( 'abc', 'vcap_delivery_hour' ) && null === $sr_san( '', 'vcap_delivery_hour' )
+		&& '8' === $sr_san( '3', 'vcap_code_length' ) && '40' === $sr_san( '99', 'vcap_code_length' ) && '12' === $sr_san( '12.4', 'vcap_code_length' ) && '1440' === $sr_san( '5000', 'vcap_redemption_ttl' ) && '1' === $sr_san( '0', 'vcap_redemption_ttl' )
+		&& '10.50' === $sr_san( '10.50', 'vcap_custom_max_default' ) && '0' === $sr_san( '-5', 'vcap_customer_daily_limit' ) && '' === $sr_san( '', 'vcap_referral_min_spend' ) && '9' === $sr_san( '12', VCAP\DatevExport::OPTION_LENGTH )
+		&& '50' === $sr_san( '80', VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'per_day' ) ) && 'B&B' === $sr_san( 'B&B', 'vcap_code_prefix' ) && null === $sr_san( null, 'vcap_hold_hours' ) && 'x' === $sr_san( 'x', 'vcap_addon_unknown' )
+);
+$sr_numbers = array_keys( array_filter( $sr_all, static fn( $e ) => in_array( $e['type'], array( 'int', 'decimal' ), true ) ) );
+$sr_hook    = static fn( string $k ): string => 'woocommerce_admin_settings_sanitize_option_' . $k;
+$sr_before  = $GLOBALS['vcap_test_filters'] ?? array();
+VCAP\SettingsRegistry::hook_number_checks();
+check( 'SET-VC-01: saving the tab hooks the check for every number setting (priority 20, after the option\'s own sanitizer) and for no other', array() === array_filter( $sr_numbers, static fn( $k ) => count( $GLOBALS['vcap_test_filters'][ $sr_hook( $k ) ] ?? array() ) <= count( $sr_before[ $sr_hook( $k ) ] ?? array() ) ) && ( $sr_before[ $sr_hook( 'vcap_code_prefix' ) ] ?? null ) === ( $GLOBALS['vcap_test_filters'][ $sr_hook( 'vcap_code_prefix' ) ] ?? null ) && in_array( 'vcap_counter_limit_amount', $sr_numbers, true ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Settings.php' ), "SettingsRegistry::hook_number_checks(); // SET-VC-01" ) );
+$GLOBALS['vcap_test_filters'] = $sr_before;
+// Filter "vcap_settings_registry": add-ons add entries (and change attributes); core entries cannot be removed.
+add_filter(
+	'vcap_settings_registry',
+	static function ( $settings ) {
+		unset( $settings['vcap_attach_pdf'] );
+		// A callback that reads a setting gets the core register (no endless recursion).
+		$settings['vcap_pro_sms_sender'] = array( 'default' => 'gutschein' === VCAP\Settings::value( 'vcap_coupon_link_param' ) ? 'Shop' : 'x', 'section' => 'delivery' );
+		$settings['vcap_pro_sms_key']    = array( 'secret' => true, 'export' => true );
+		$settings['Bad Key']             = array();
+		return $settings;
+	}
+);
+VCAP\SettingsRegistry::reset();
+check( 'SET-VC-01: filter vcap_settings_registry adds settings of add-ons (secrets stay out of the export); core entries stay, invalid keys are dropped; a callback may read settings', 'Shop' === VCAP\SettingsRegistry::default( 'vcap_pro_sms_sender' ) && 'Shop' === VCAP\Settings::value( 'vcap_pro_sms_sender' ) && VCAP\SettingsRegistry::has( 'vcap_attach_pdf' ) && ! in_array( 'vcap_pro_sms_key', VCAP\SettingsRegistry::with( 'export' ), true ) && ! VCAP\SettingsRegistry::has( 'Bad Key' ) );
+unset( $GLOBALS['vcap_test_filters']['vcap_settings_registry'] );
+VCAP\SettingsRegistry::reset();
+check( 'SET-VC-01: config/settings.php holds data only (no translated text, no option access) and the hook is documented; Settings::DEFAULTS is replaced by Settings::defaults()', ! preg_match( '/__\(|_e\(|esc_html|get_option|update_option/', (string) file_get_contents( VCAP_PATH . 'config/settings.php' ) ) && str_contains( (string) file_get_contents( VCAP_PATH . 'docs/HOOKS.md' ), '| `vcap_settings_registry` | 1.3.0 |' ) && ! defined( 'VCAP\\Settings::DEFAULTS' ) );
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

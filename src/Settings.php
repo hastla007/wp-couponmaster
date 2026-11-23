@@ -7,81 +7,15 @@ defined( 'ABSPATH' ) || exit;
  * Global settings, rendered as a "Vouchers" tab under WooCommerce → Settings.
  */
 final class Settings {
-	public const DEFAULTS = array(
-		'vcap_issue_statuses'        => array( 'processing', 'completed' ),
-		'vcap_code_prefix'           => '',
-		'vcap_code_suffix'           => '',
-		'vcap_code_length'           => 12,
-		'vcap_code_charset'          => 'alnum_upper',
-		'vcap_code_order_ref'        => 'no',
-		'vcap_code_separator'        => '-',
-		'vcap_default_template'      => 0,
-		'vcap_default_expiry_days'   => 365,
-		'vcap_restore_on_cancel'     => 'yes',
-		'vcap_void_on_refund'        => 'yes',
-		'vcap_download_link_days'    => 90, // V10: for shops that never saved it; a saved value (also 0) is kept.
-		'vcap_show_thankyou'         => 'yes',
-		'vcap_show_myaccount'        => 'yes',
-		'vcap_myaccount_tab'         => 'yes',
-		'vcap_attach_pdf'            => 'yes',
-		'vcap_include_link'          => 'yes',
-		'vcap_expiry_reminder_days'  => 0,
-		'vcap_delivery_hour'         => 8,
-		'vcap_date_format'           => '',
-		'vcap_retention_days'        => 0,
-		'vcap_delete_on_uninstall'   => 'no',
-		'vcap_ticket_public_status'  => 'yes',
-		'vcap_scanner_show_holder'   => 'no',
-		'vcap_subscription_renewals' => 'no',
-		'vcap_pdf_filename'          => 'voucher-{coupon_code}',
-		'vcap_redemption_ttl'          => 15,
-		'vcap_coupon_link'             => 'no',
-		'vcap_discounts_on_vouchers'   => 'no',
-		'vcap_store_credit'            => 'no',
-		'vcap_campaigns_enabled'       => 'no',
-		'vcap_vouchers_buy_vouchers'   => 'no',
-		'vcap_coupon_link_param'       => 'gutschein',
-		// M12-95: storefront conveniences, off by default (existing shops keep their storefront).
-		'vcap_giftcard_field'          => 'no',
-		'vcap_minicart_balance'        => 'no',
-		'vcap_gift_toggle'             => 'no',
-		// Stored as "yes" on a first installation (Install::activate_site()); existing shops keep "no".
-		'vcap_new_product_delivery'    => 'no',
-		'vcap_redemption_max_failures' => 10,
-		'vcap_credit_with_coupons'     => 'yes',
-		'vcap_credit_apply_order'      => 'last',
-		'vcap_terms_by_country'        => '',
-		'vcap_expiry_by_country'       => '',
-		'vcap_referral_enabled'        => 'no',
-		'vcap_referral_friend_type'    => 'fixed_cart',
-		'vcap_referral_friend_amount'  => 10,
-		// V3: empty = automatic (twice a fixed friend discount); a fixed discount always needs a higher order value.
-		'vcap_referral_min_spend'      => '',
-		'vcap_referral_reward_amount'  => 10,
-		'vcap_referral_reward_as'      => 'coupon',
-		'vcap_referral_reward_days'    => 90,
-		// P12 abuse protection, safe defaults (0 switches each one off).
-		'vcap_referral_wait_days'      => 14,
-		'vcap_referral_max_rewards'    => 10,
-		'vcap_referral_address_check'  => 'yes',
-		'vcap_bonus_wait_days'         => 14,
-		'vcap_custom_max_default'      => 500,
-		'vcap_customer_daily_limit'    => 1000,
-		'vcap_hold_new_customer_above' => 250,
-		'vcap_hold_hours'              => 24,
-		// Z6: bundled delivery of large quantities (0 switches each one off).
-		'vcap_bundle_threshold'        => 5,
-		'vcap_bundle_pdf_limit'        => 50,
-		// R6: daily limits of counter (scanner) redemptions, off by default (0 = unlimited).
-		Counter::USER_AMOUNT           => 0,
-		Counter::USER_COUNT            => 0,
-		Counter::TILL_AMOUNT           => 0,
-		Counter::TILL_COUNT            => 0,
-		// M12-31: receipt number of the till required at the counter ('auto' = shops based in Germany or Austria).
-		Counter::REQUIRE_RECEIPT       => 'auto',
-		// M12-81: managed list of tills/branches ('' = free text on the scanner device).
-		Counter::LOCATIONS             => '',
-	);
+	/**
+	 * Defaults of the settings (option name => value) from the settings register (config/settings.php, SET-VC-01): what
+	 * get() returns while an option was never saved. Replaces the former constant Settings::DEFAULTS (same values).
+	 *
+	 * @return array<string, mixed>
+	 */
+	public static function defaults(): array {
+		return SettingsRegistry::defaults();
+	}
 
 	/**
 	 * A setting outside of an instance (static helpers such as ProductConfig): the same value Settings::get()
@@ -90,7 +24,7 @@ final class Settings {
 	 * @return mixed
 	 */
 	public static function value( string $key ) {
-		return apply_filters( 'vcap_setting_' . $key, get_option( $key, self::DEFAULTS[ $key ] ?? null ) );
+		return apply_filters( 'vcap_setting_' . $key, get_option( $key, SettingsRegistry::default( $key ) ) );
 	}
 
 	public function register(): void {
@@ -195,7 +129,7 @@ final class Settings {
 	public static function store_request_defaults(): array {
 		$stored = array();
 		foreach ( self::REQUEST_SETTINGS as $key ) {
-			if ( array_key_exists( $key, self::DEFAULTS ) && false !== add_option( $key, self::DEFAULTS[ $key ], '', 'yes' ) ) {
+			if ( SettingsRegistry::has( $key ) && false !== add_option( $key, SettingsRegistry::default( $key ), '', 'yes' ) ) {
 				$stored[] = $key;
 			}
 		}
@@ -203,9 +137,7 @@ final class Settings {
 	}
 
 	public function get( string $key ) {
-		$default = self::DEFAULTS[ $key ] ?? null;
-		$value   = get_option( $key, $default );
-		return apply_filters( 'vcap_setting_' . $key, $value );
+		return apply_filters( 'vcap_setting_' . $key, get_option( $key, SettingsRegistry::default( $key ) ) );
 	}
 
 	public function yes( string $key ): bool {
@@ -269,6 +201,7 @@ final class Settings {
 
 	public function save(): void {
 		global $current_section;
+		SettingsRegistry::hook_number_checks(); // SET-VC-01: every number is checked on the server, too.
 		\WC_Admin_Settings::save_fields( $this->fields( (string) $current_section ) );
 		update_option( 'vcap_flush_rewrite', 'yes' ); // The My Account tab may have been toggled.
 	}
@@ -316,91 +249,104 @@ final class Settings {
 	private function delivery_fields(): array {
 		$fields = array(
 			array( 'type' => 'title', 'title' => __( 'Delivery & downloads', 'voucher-captain' ), 'id' => 'vcap_delivery' ),
-			array(
-				'title'   => __( 'Attach PDF to emails', 'voucher-captain' ),
-				'id'      => 'vcap_attach_pdf',
-				'type'    => 'checkbox',
-				'default' => 'yes',
-				'desc'    => __( 'Attach the voucher PDF to voucher emails.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_attach_pdf',
+				array(
+					'title' => __( 'Attach PDF to emails', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Attach the voucher PDF to voucher emails.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( '"Gift / for me" choice', 'voucher-captain' ),
-				'id'      => 'vcap_gift_toggle',
-				'type'    => 'checkbox',
-				'default' => 'no',
-				'desc'    => __( 'On product pages with recipient fields, let the customer choose "As a gift" or "For me"; "For me" hides the recipient fields and sends the voucher to the buyer.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_gift_toggle',
+				array(
+					'title' => __( '"Gift / for me" choice', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'On product pages with recipient fields, let the customer choose "As a gift" or "For me"; "For me" hides the recipient fields and sends the voucher to the buyer.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( 'Delivery date for new products', 'voucher-captain' ),
-				'id'      => 'vcap_new_product_delivery',
-				'type'    => 'checkbox',
-				'default' => 'no',
-				'desc'    => __( 'New voucher products offer the "Delivery date" field by default (existing products keep their fields).', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_new_product_delivery',
+				array(
+					'title' => __( 'Delivery date for new products', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'New voucher products offer the "Delivery date" field by default (existing products keep their fields).', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( 'Download link in emails', 'voucher-captain' ),
-				'id'      => 'vcap_include_link',
-				'type'    => 'checkbox',
-				'default' => 'yes',
-				'desc'    => __( 'Include a secure download link in voucher emails.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_include_link',
+				array(
+					'title' => __( 'Download link in emails', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Include a secure download link in voucher emails.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'             => __( 'Download link lifetime (days)', 'voucher-captain' ),
-				'id'                => 'vcap_download_link_days',
-				'type'              => 'number',
-				'default'           => self::DEFAULTS['vcap_download_link_days'],
-				'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
-				'desc_tip'          => __( 'Signed links in emails expire after this many days (default 90). Customers get a fresh link in My Account at any time; reissuing a voucher invalidates its old links. 0 = never expire (not recommended).', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_download_link_days',
+				array(
+					'title'             => __( 'Download link lifetime (days)', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'Signed links in emails expire after this many days (default 90). Customers get a fresh link in My Account at any time; reissuing a voucher invalidates its old links. 0 = never expire (not recommended).', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'             => __( 'Delivery hour', 'voucher-captain' ),
-				'id'                => 'vcap_delivery_hour',
-				'type'              => 'number',
-				'default'           => self::DEFAULTS['vcap_delivery_hour'],
-				'custom_attributes' => array( 'min' => 0, 'max' => 23, 'step' => 1 ),
-				'desc_tip'          => __( 'Hour of the day (shop time, 0–23) at which vouchers with a delivery date are sent (default 8).', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_delivery_hour',
+				array(
+					'title'             => __( 'Delivery hour', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'Hour of the day (shop time, 0–23) at which vouchers with a delivery date are sent (default 8).', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'    => __( 'Expiry reminders (days before)', 'voucher-captain' ),
-				'id'       => 'vcap_expiry_reminder_days',
-				'type'     => 'text',
-				'default'  => '0',
-				'desc_tip' => __( 'Email the voucher holder this many days before a voucher with remaining value expires. Several reminders are separated by commas, e.g. "30, 7, 1"; each one is sent once. 0 = no reminders. The email text is edited under WooCommerce → Settings → Emails.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_expiry_reminder_days',
+				array(
+					'title'    => __( 'Expiry reminders (days before)', 'voucher-captain' ),
+					'type'     => 'text',
+					'default'  => '0',
+					'desc_tip' => __( 'Email the voucher holder this many days before a voucher with remaining value expires. Several reminders are separated by commas, e.g. "30, 7, 1"; each one is sent once. 0 = no reminders. The email text is edited under WooCommerce → Settings → Emails.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( 'Order confirmation', 'voucher-captain' ),
-				'id'      => 'vcap_show_thankyou',
-				'type'    => 'checkbox',
-				'default' => 'yes',
-				'desc'    => __( 'Show voucher downloads on the order received page.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_show_thankyou',
+				array(
+					'title' => __( 'Order confirmation', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Show voucher downloads on the order received page.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( 'My Account', 'voucher-captain' ),
-				'id'      => 'vcap_show_myaccount',
-				'type'    => 'checkbox',
-				'default' => 'yes',
-				'desc'    => __( 'Show voucher downloads in the My Account order details.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_show_myaccount',
+				array(
+					'title' => __( 'My Account', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Show voucher downloads in the My Account order details.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( 'My Account "Vouchers" tab', 'voucher-captain' ),
-				'id'      => 'vcap_myaccount_tab',
-				'type'    => 'checkbox',
-				'default' => 'yes',
-				'desc'    => __( 'Add a "Vouchers" tab listing all purchased vouchers with balance and status.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_myaccount_tab',
+				array(
+					'title' => __( 'My Account "Vouchers" tab', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Add a "Vouchers" tab listing all purchased vouchers with balance and status.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'    => __( 'PDF file name', 'voucher-captain' ),
-				'id'       => 'vcap_pdf_filename',
-				'type'     => 'text',
-				'default'  => 'voucher-{coupon_code}',
-				'desc_tip' => __( 'Placeholders are allowed, e.g. {coupon_code}, {order_number}.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_pdf_filename',
+				array(
+					'title'    => __( 'PDF file name', 'voucher-captain' ),
+					'type'     => 'text',
+					'desc_tip' => __( 'Placeholders are allowed, e.g. {coupon_code}, {order_number}.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'    => __( 'Date format', 'voucher-captain' ),
-				'id'       => 'vcap_date_format',
-				'type'     => 'text',
-				'default'  => '',
-				'desc_tip' => __( 'PHP date format used in PDFs and emails. Leave empty to use the WordPress date format.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_date_format',
+				array(
+					'title'    => __( 'Date format', 'voucher-captain' ),
+					'type'     => 'text',
+					'desc_tip' => __( 'PHP date format used in PDFs and emails. Leave empty to use the WordPress date format.', 'voucher-captain' ),
+				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_delivery' ),
 			array(
@@ -409,21 +355,23 @@ final class Settings {
 				'id'    => 'vcap_bundle',
 				'desc'  => __( 'Many vouchers of one order line for the same recipient are sent in one email with a list of all codes instead of one email per voucher; the buyer gets one copy per order. Vouchers with different delivery dates are sent separately. The email text is edited under WooCommerce → Settings → Emails → "Vouchers (bulk order)"; switching that email off sends every voucher on its own again.', 'voucher-captain' ),
 			),
-			array(
-				'title'             => __( 'One email from (vouchers)', 'voucher-captain' ),
-				'id'                => 'vcap_bundle_threshold',
-				'type'              => 'number',
-				'default'           => self::DEFAULTS['vcap_bundle_threshold'],
-				'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
-				'desc_tip'          => __( 'From this many vouchers of the same order line and recipient, due at the same time, they are sent together in one email (default 5). 0 = always one email per voucher.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_bundle_threshold',
+				array(
+					'title'             => __( 'One email from (vouchers)', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'From this many vouchers of the same order line and recipient, due at the same time, they are sent together in one email (default 5). 0 = always one email per voucher.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'             => __( 'One PDF up to (vouchers)', 'voucher-captain' ),
-				'id'                => 'vcap_bundle_pdf_limit',
-				'type'              => 'number',
-				'default'           => self::DEFAULTS['vcap_bundle_pdf_limit'],
-				'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
-				'desc_tip'          => __( 'A bundled email with up to this many vouchers carries one PDF with a page per voucher (default 20 for new shops). Larger bundles carry no attachment but a download link per voucher and the link to My Account. 0 = never attach a PDF to a bundled email.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_bundle_pdf_limit',
+				array(
+					'title'             => __( 'One PDF up to (vouchers)', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'A bundled email with up to this many vouchers carries one PDF with a page per voucher (default 20 for new shops). Larger bundles carry no attachment but a download link per voucher and the link to My Account. 0 = never attach a PDF to a bundled email.', 'voucher-captain' ),
+				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_bundle' ),
 		);
@@ -439,21 +387,23 @@ final class Settings {
 				'id'    => 'vcap_api',
 				'desc'  => __( 'Other plugins and apps can redeem vouchers through the PHP service vcap()->redemptions or the REST API /wp-json/vcap/v1/redemptions (see API.md).', 'voucher-captain' ),
 			),
-			array(
-				'title'             => __( 'Reservation lifetime (minutes)', 'voucher-captain' ),
-				'id'                => 'vcap_redemption_ttl',
-				'type'              => 'number',
-				'default'           => 15,
-				'custom_attributes' => array( 'min' => 1, 'max' => 1440, 'step' => 1 ),
-				'desc_tip'          => __( 'A reserved voucher that is neither completed nor cancelled within this time is released automatically.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_redemption_ttl',
+				array(
+					'title'             => __( 'Reservation lifetime (minutes)', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'A reserved voucher that is neither completed nor cancelled within this time is released automatically.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'             => __( 'Invalid code attempts', 'voucher-captain' ),
-				'id'                => 'vcap_redemption_max_failures',
-				'type'              => 'number',
-				'default'           => 10,
-				'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
-				'desc_tip'          => __( 'Number of invalid codes a user may enter within 15 minutes before further attempts are blocked. 0 = no limit.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_redemption_max_failures',
+				array(
+					'title'             => __( 'Invalid code attempts', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'Number of invalid codes a user may enter within 15 minutes before further attempts are blocked. 0 = no limit.', 'voucher-captain' ),
+				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_api' ),
 			array(
@@ -478,43 +428,48 @@ final class Settings {
 	private function privacy_fields(): array {
 		$fields = array(
 			array( 'type' => 'title', 'title' => __( 'Privacy & advanced', 'voucher-captain' ), 'id' => 'vcap_privacy' ),
-			array(
-				'title'             => __( 'Anonymise recipient data after (days)', 'voucher-captain' ),
-				'id'                => 'vcap_retention_days',
-				'type'              => 'number',
-				'default'           => 0,
-				'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
-				'desc_tip'          => __( 'Recipient name, email, message and custom fields are erased this many days after a voucher has expired or been fully redeemed. 0 = keep.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_retention_days',
+				array(
+					'title'             => __( 'Anonymise recipient data after (days)', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'Recipient name, email, message and custom fields are erased this many days after a voucher has expired or been fully redeemed. 0 = keep.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( 'Public ticket status', 'voucher-captain' ),
-				'id'      => 'vcap_ticket_public_status',
-				'type'    => 'checkbox',
-				'default' => 'yes',
-				'desc'    => __( 'When a ticket QR code is opened by someone without scanning rights, show whether the ticket is valid (no personal data).', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_ticket_public_status',
+				array(
+					'title' => __( 'Public ticket status', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'When a ticket QR code is opened by someone without scanning rights, show whether the ticket is valid (no personal data).', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( 'Holder name in the scanner', 'voucher-captain' ),
-				'id'      => 'vcap_scanner_show_holder',
-				'type'    => 'checkbox',
-				'default' => 'no',
-				'desc'    => __( 'Show the name of the buyer or recipient when a code is scanned. Personal tickets always show the name so it can be checked. Order number and original value are only shown to staff who manage vouchers.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_scanner_show_holder',
+				array(
+					'title' => __( 'Holder name in the scanner', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Show the name of the buyer or recipient when a code is scanned. Personal tickets always show the name so it can be checked. Order number and original value are only shown to staff who manage vouchers.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( 'Subscription renewals', 'voucher-captain' ),
-				'id'      => 'vcap_subscription_renewals',
-				'type'    => 'checkbox',
-				'default' => 'no',
-				'desc'    => __( 'Issue new vouchers for WooCommerce Subscriptions renewal orders.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_subscription_renewals',
+				array(
+					'title' => __( 'Subscription renewals', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Issue new vouchers for WooCommerce Subscriptions renewal orders.', 'voucher-captain' ),
+				)
 			),
 			...Admin\DataRemoval::fields( self::delete_on_uninstall_description() ),
-			array(
-				'title'   => __( 'Verbose log', 'voucher-captain' ),
-				'id'      => Logger::VERBOSE_OPTION,
-				'type'    => 'checkbox',
-				'default' => 'no',
-				/* translators: %d: hours */
-				'desc'    => sprintf( __( 'Write detailed entries about issuing and deliveries to the WooCommerce log (source "voucher-captain") for support. Switches itself off after %d hours.', 'voucher-captain' ), Logger::VERBOSE_HOURS ),
+			SettingsRegistry::field(
+				Logger::VERBOSE_OPTION,
+				array(
+					'title' => __( 'Verbose log', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					/* translators: %d: hours */
+					'desc'  => sprintf( __( 'Write detailed entries about issuing and deliveries to the WooCommerce log (source "voucher-captain") for support. Switches itself off after %d hours.', 'voucher-captain' ), Logger::VERBOSE_HOURS ),
+				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_privacy' ),
 		);
@@ -622,64 +577,72 @@ final class Settings {
 		}
 		$fields = array(
 			array( 'type' => 'title', 'title' => __( 'Voucher issuing', 'voucher-captain' ), 'id' => 'vcap_general' ),
-			array(
-				'title'   => __( 'Generate vouchers when order is', 'voucher-captain' ),
-				'id'      => 'vcap_issue_statuses',
-				'type'    => 'multiselect',
-				'class'   => 'wc-enhanced-select',
-				'options' => $statuses,
-				'default' => array( 'processing', 'completed' ),
-				'desc'    => $issue_desc,
+			SettingsRegistry::field(
+				'vcap_issue_statuses',
+				array(
+					'title'   => __( 'Generate vouchers when order is', 'voucher-captain' ),
+					'type'    => 'multiselect',
+					'class'   => 'wc-enhanced-select',
+					'options' => $statuses,
+					'desc'    => $issue_desc,
+				)
 			),
-			array(
-				'title'    => __( 'Default redemption conditions', 'voucher-captain' ),
-				'id'       => 'vcap_default_terms',
-				'type'     => 'textarea',
-				'default'  => '',
-				'css'      => 'min-width:400px;height:80px;',
-				'desc_tip' => __( 'Used when a product has no conditions of its own, e.g. "Not exchangeable for cash. Residual value remains on the voucher."', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_default_terms',
+				array(
+					'title'    => __( 'Default redemption conditions', 'voucher-captain' ),
+					'type'     => 'textarea',
+					'css'      => 'min-width:400px;height:80px;',
+					'desc_tip' => __( 'Used when a product has no conditions of its own, e.g. "Not exchangeable for cash. Residual value remains on the voucher."', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'    => __( 'Redemption conditions per country', 'voucher-captain' ),
-				'id'       => 'vcap_terms_by_country',
-				'type'     => 'textarea',
-				'default'  => '',
-				'css'      => 'min-width:400px;height:120px;',
-				'desc'     => __( 'Optional, for shops selling to several countries. One block per country, starting with the two-letter country code and a colon, e.g. "AT: Valid for 30 years." The billing country of the order decides; products with their own conditions and countries without a block use the conditions above. Have the texts checked legally for each country.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_terms_by_country',
+				array(
+					'title' => __( 'Redemption conditions per country', 'voucher-captain' ),
+					'type'  => 'textarea',
+					'css'   => 'min-width:400px;height:120px;',
+					'desc'  => __( 'Optional, for shops selling to several countries. One block per country, starting with the two-letter country code and a colon, e.g. "AT: Valid for 30 years." The billing country of the order decides; products with their own conditions and countries without a block use the conditions above. Have the texts checked legally for each country.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'    => __( 'Statutory validity per country', 'voucher-captain' ),
-				'id'       => Markets::EXPIRY_OPTION,
-				'type'     => 'textarea',
-				'default'  => '',
-				'css'      => 'min-width:400px;height:80px;',
-				'desc'     => __( 'Optional. One line per country: two-letter code, colon, years, and "end" for "to the end of the year" (0 = never expires), e.g. "DE: 3 end" or "AT: 30". Used for vouchers with the statutory validity; overrides the verified defaults (Germany 3 years to the end of the year, Austria 30 years). Countries without a rule use 3 years to the end of the year. Have the rules checked legally for each country.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				Markets::EXPIRY_OPTION,
+				array(
+					'title' => __( 'Statutory validity per country', 'voucher-captain' ),
+					'type'  => 'textarea',
+					'css'   => 'min-width:400px;height:80px;',
+					'desc'  => __( 'Optional. One line per country: two-letter code, colon, years, and "end" for "to the end of the year" (0 = never expires), e.g. "DE: 3 end" or "AT: 30". Used for vouchers with the statutory validity; overrides the verified defaults (Germany 3 years to the end of the year, Austria 30 years). Countries without a rule use 3 years to the end of the year. Have the rules checked legally for each country.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( 'Default template', 'voucher-captain' ),
-				'id'      => 'vcap_default_template',
-				'type'    => 'select',
-				'options' => $this->template_options(),
-				'default' => 0,
+			SettingsRegistry::field(
+				'vcap_default_template',
+				array(
+					'title'   => __( 'Default template', 'voucher-captain' ),
+					'type'    => 'select',
+					'options' => $this->template_options(),
+				)
 			),
-			array(
-				'title'    => __( 'Default validity', 'voucher-captain' ),
-				'id'       => 'vcap_default_expiry_rule',
-				'type'     => 'select',
-				'options'  => array(
-					'statutory' => __( 'Statutory default for the buyer\'s country (Germany: 3 years to the end of the year, Austria: 30 years)', 'voucher-captain' ),
-					'days'      => __( 'Fixed number of days (below)', 'voucher-captain' ),
-				),
-				'default'  => ProductConfig::default_expiry_rule(),
-				'desc_tip' => __( 'Used when a product does not define its own expiry. Shorter validity periods can be invalid towards consumers; have them checked legally.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_default_expiry_rule',
+				array(
+					'title'    => __( 'Default validity', 'voucher-captain' ),
+					'type'     => 'select',
+					'options'  => array(
+						'statutory' => __( 'Statutory default for the buyer\'s country (Germany: 3 years to the end of the year, Austria: 30 years)', 'voucher-captain' ),
+						'days'      => __( 'Fixed number of days (below)', 'voucher-captain' ),
+					),
+					'default'  => ProductConfig::default_expiry_rule(),
+					'desc_tip' => __( 'Used when a product does not define its own expiry. Shorter validity periods can be invalid towards consumers; have them checked legally.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'             => __( 'Default validity (days)', 'voucher-captain' ),
-				'id'                => 'vcap_default_expiry_days',
-				'type'              => 'number',
-				'default'           => 365,
-				'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
-				'desc_tip'          => __( 'Used with "Fixed number of days" when a product does not define its own expiry. 0 = never expires.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_default_expiry_days',
+				array(
+					'title'             => __( 'Default validity (days)', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'Used with "Fixed number of days" when a product does not define its own expiry. 0 = never expires.', 'voucher-captain' ),
+				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_general' ),
 
@@ -689,211 +652,236 @@ final class Settings {
 				'desc'  => __( 'Limits against vouchers bought with stolen payment details. 0 switches a limit off.', 'voucher-captain' ),
 				'id'    => 'vcap_abuse',
 			),
-			array(
-				'title'             => __( 'Default maximum of customer-chosen amounts', 'voucher-captain' ),
-				'id'                => 'vcap_custom_max_default',
-				'type'              => 'number',
-				'default'           => 500,
-				'css'               => 'width:90px',
-				'custom_attributes' => array( 'min' => 0, 'step' => '0.01' ),
-				'desc_tip'          => __( 'Applies to "customer chooses the amount" products without their own maximum (shop currency). 0 = no limit.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_custom_max_default',
+				array(
+					'title'             => __( 'Default maximum of customer-chosen amounts', 'voucher-captain' ),
+					'type'              => 'number',
+					'css'               => 'width:90px',
+					'custom_attributes' => array( 'step' => '0.01' ),
+					'desc_tip'          => __( 'Applies to "customer chooses the amount" products without their own maximum (shop currency). 0 = no limit.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'             => __( 'Maximum voucher value per customer and 24 hours', 'voucher-captain' ),
-				'id'                => 'vcap_customer_daily_limit',
-				'type'              => 'number',
-				'default'           => 1000,
-				'css'               => 'width:90px',
-				'custom_attributes' => array( 'min' => 0, 'step' => '0.01' ),
-				'desc_tip'          => __( 'Checked at checkout: vouchers in the cart plus vouchers ordered in the last 24 hours by the same account or billing email (shop currency). 0 = no limit.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_customer_daily_limit',
+				array(
+					'title'             => __( 'Maximum voucher value per customer and 24 hours', 'voucher-captain' ),
+					'type'              => 'number',
+					'css'               => 'width:90px',
+					'custom_attributes' => array( 'step' => '0.01' ),
+					'desc_tip'          => __( 'Checked at checkout: vouchers in the cart plus vouchers ordered in the last 24 hours by the same account or billing email (shop currency). 0 = no limit.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'             => __( 'Hold vouchers of new customers above', 'voucher-captain' ),
-				'id'                => 'vcap_hold_new_customer_above',
-				'type'              => 'number',
-				'default'           => 250,
-				'css'               => 'width:90px',
-				'custom_attributes' => array( 'min' => 0, 'step' => '0.01' ),
-				'desc_tip'          => __( 'Vouchers of a first order above this value are issued, but delivered and redeemable only after the hold below. 0 = off.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_hold_new_customer_above',
+				array(
+					'title'             => __( 'Hold vouchers of new customers above', 'voucher-captain' ),
+					'type'              => 'number',
+					'css'               => 'width:90px',
+					'custom_attributes' => array( 'step' => '0.01' ),
+					'desc_tip'          => __( 'Vouchers of a first order above this value are issued, but delivered and redeemable only after the hold below. 0 = off.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'             => __( 'Hold for (hours)', 'voucher-captain' ),
-				'id'                => 'vcap_hold_hours',
-				'type'              => 'number',
-				'default'           => 24,
-				'css'               => 'width:90px',
-				'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
+			SettingsRegistry::field(
+				'vcap_hold_hours',
+				array(
+					'title'             => __( 'Hold for (hours)', 'voucher-captain' ),
+					'type'              => 'number',
+					'css'               => 'width:90px',
+					'custom_attributes' => array( 'step' => 1 ),
+				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_abuse' ),
 
 			array( 'type' => 'title', 'title' => __( 'Coupon codes', 'voucher-captain' ), 'id' => 'vcap_codes' ),
-			array(
-				'title'             => __( 'Prefix', 'voucher-captain' ),
-				'id'                => 'vcap_code_prefix',
-				'type'              => 'text',
-				'default'           => '',
-				'desc_tip'          => __( 'Letters, digits, dot, hyphen and underscore, up to 20 characters.', 'voucher-captain' ),
-				'custom_attributes' => array( 'maxlength' => 20, 'pattern' => '[A-Za-z0-9._\-]*' ),
+			SettingsRegistry::field(
+				'vcap_code_prefix',
+				array(
+					'title'             => __( 'Prefix', 'voucher-captain' ),
+					'type'              => 'text',
+					'desc_tip'          => __( 'Letters, digits, dot, hyphen and underscore, up to 20 characters.', 'voucher-captain' ),
+					'custom_attributes' => array( 'maxlength' => 20, 'pattern' => '[A-Za-z0-9._\-]*' ),
+				)
 			),
-			array(
-				'title'             => __( 'Suffix', 'voucher-captain' ),
-				'id'                => 'vcap_code_suffix',
-				'type'              => 'text',
-				'default'           => '',
-				'desc_tip'          => __( 'Letters, digits, dot, hyphen and underscore, up to 20 characters.', 'voucher-captain' ),
-				'custom_attributes' => array( 'maxlength' => 20, 'pattern' => '[A-Za-z0-9._\-]*' ),
+			SettingsRegistry::field(
+				'vcap_code_suffix',
+				array(
+					'title'             => __( 'Suffix', 'voucher-captain' ),
+					'type'              => 'text',
+					'desc_tip'          => __( 'Letters, digits, dot, hyphen and underscore, up to 20 characters.', 'voucher-captain' ),
+					'custom_attributes' => array( 'maxlength' => 20, 'pattern' => '[A-Za-z0-9._\-]*' ),
+				)
 			),
-			array(
-				'title'             => __( 'Random part length', 'voucher-captain' ),
-				'id'                => 'vcap_code_length',
-				'type'              => 'number',
-				'default'           => 12,
-				'desc'              => __( 'Voucher codes are made at least as long as needed to be safe from guessing (about 2^50 combinations): 10 letters and digits, 11 letters or 16 digits.', 'voucher-captain' ),
-				'custom_attributes' => array( 'min' => 8, 'max' => 40, 'step' => 1 ),
+			SettingsRegistry::field(
+				'vcap_code_length',
+				array(
+					'title'             => __( 'Random part length', 'voucher-captain' ),
+					'type'              => 'number',
+					'desc'              => __( 'Voucher codes are made at least as long as needed to be safe from guessing (about 2^50 combinations): 10 letters and digits, 11 letters or 16 digits.', 'voucher-captain' ),
+					'custom_attributes' => array( 'step' => 1 ),
+				)
 			),
-			array(
-				'title'   => __( 'Characters', 'voucher-captain' ),
-				'id'      => 'vcap_code_charset',
-				'type'    => 'select',
-				'default' => 'alnum_upper',
-				'options' => array(
-					'alnum_upper' => __( 'Letters and digits, uppercase (no ambiguous characters)', 'voucher-captain' ),
-					'alpha_upper' => __( 'Letters only, uppercase', 'voucher-captain' ),
-					'numeric'     => __( 'Digits only', 'voucher-captain' ),
-					'alnum'       => __( 'Letters and digits, mixed case', 'voucher-captain' ),
-				),
+			SettingsRegistry::field(
+				'vcap_code_charset',
+				array(
+					'title'   => __( 'Characters', 'voucher-captain' ),
+					'type'    => 'select',
+					'options' => array(
+						'alnum_upper' => __( 'Letters and digits, uppercase (no ambiguous characters)', 'voucher-captain' ),
+						'alpha_upper' => __( 'Letters only, uppercase', 'voucher-captain' ),
+						'numeric'     => __( 'Digits only', 'voucher-captain' ),
+						'alnum'       => __( 'Letters and digits, mixed case', 'voucher-captain' ),
+					),
+				)
 			),
-			array(
-				'title'             => __( 'Separator', 'voucher-captain' ),
-				'id'                => 'vcap_code_separator',
-				'type'              => 'text',
-				'default'           => '-',
-				'css'               => 'width:60px',
-				'custom_attributes' => array( 'maxlength' => 3, 'pattern' => '[A-Za-z0-9._\-]*' ),
+			SettingsRegistry::field(
+				'vcap_code_separator',
+				array(
+					'title'             => __( 'Separator', 'voucher-captain' ),
+					'type'              => 'text',
+					'css'               => 'width:60px',
+					'custom_attributes' => array( 'maxlength' => 3, 'pattern' => '[A-Za-z0-9._\-]*' ),
+				)
 			),
-			array(
-				'title'   => __( 'Include order number', 'voucher-captain' ),
-				'id'      => 'vcap_code_order_ref',
-				'type'    => 'checkbox',
-				'default' => 'no',
-				'desc'    => __( 'Add the order number to the code, e.g. GIFT-1042-7KQ2M9XA.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_code_order_ref',
+				array(
+					'title' => __( 'Include order number', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Add the order number to the code, e.g. GIFT-1042-7KQ2M9XA.', 'voucher-captain' ),
+				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_codes' ),
 
 			array( 'type' => 'title', 'title' => __( 'Redemption', 'voucher-captain' ), 'id' => 'vcap_redeem' ),
-			array(
-				'title'    => __( 'Redeem page', 'voucher-captain' ),
-				'id'       => 'vcap_redeem_page_id',
-				'type'     => 'single_select_page',
-				'default'  => '',
-				'class'    => 'wc-enhanced-select-nostd',
-				'css'      => 'min-width:300px;',
-				'desc_tip' => true,
-				'desc'     => __( 'Page with the "Redeem voucher" block or [vcap_redeem]. Emails, PDFs ({redeem_url}) and the customer account link there, with the code filled in. Ticket vouchers are exchanged for tickets on this page.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_redeem_page_id',
+				array(
+					'title'    => __( 'Redeem page', 'voucher-captain' ),
+					'type'     => 'single_select_page',
+					'class'    => 'wc-enhanced-select-nostd',
+					'css'      => 'min-width:300px;',
+					'desc_tip' => true,
+					'desc'     => __( 'Page with the "Redeem voucher" block or [vcap_redeem]. Emails, PDFs ({redeem_url}) and the customer account link there, with the code filled in. Ticket vouchers are exchanged for tickets on this page.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( 'Restore balance on cancellation', 'voucher-captain' ),
-				'id'      => 'vcap_restore_on_cancel',
-				'type'    => 'checkbox',
-				'default' => 'yes',
-				'desc'    => __( 'Give the redeemed amount back when an order that used a voucher is cancelled, refunded or failed.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_restore_on_cancel',
+				array(
+					'title' => __( 'Restore balance on cancellation', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Give the redeemed amount back when an order that used a voucher is cancelled, refunded or failed.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( 'Multi-purpose vouchers as payment', 'voucher-captain' ),
-				'id'      => PaymentVouchers::OPTION,
-				'type'    => 'checkbox',
-				'default' => 'no',
-				'desc'    => __( 'Settle multi-purpose vouchers (gift cards, value vouchers sold in the shop, store credit) as a payment after tax: the order keeps the full VAT and the voucher pays part of the total as a separate line. This applies only to vouchers with the VAT treatment "Multi-purpose voucher" (or automatic) and the discount type "Fixed cart discount"; single-purpose vouchers, promotions, percentages, "Fixed product discount" and ticket vouchers without a value keep lowering price and VAT. Off: every voucher is a coupon and lowers price and VAT (previous behaviour). Have the switch confirmed by your tax adviser.', 'voucher-captain' ) . $this->not_settled_note(),
+			SettingsRegistry::field(
+				PaymentVouchers::OPTION,
+				array(
+					'title' => __( 'Multi-purpose vouchers as payment', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Settle multi-purpose vouchers (gift cards, value vouchers sold in the shop, store credit) as a payment after tax: the order keeps the full VAT and the voucher pays part of the total as a separate line. This applies only to vouchers with the VAT treatment "Multi-purpose voucher" (or automatic) and the discount type "Fixed cart discount"; single-purpose vouchers, promotions, percentages, "Fixed product discount" and ticket vouchers without a value keep lowering price and VAT. Off: every voucher is a coupon and lowers price and VAT (previous behaviour). Have the switch confirmed by your tax adviser.', 'voucher-captain' ) . $this->not_settled_note(),
+				)
 			),
-			array(
-				'title'   => __( 'Void vouchers on refund', 'voucher-captain' ),
-				'id'      => 'vcap_void_on_refund',
-				'type'    => 'checkbox',
-				'default' => 'yes',
-				'desc'    => __( 'Disable vouchers when the order they were bought with is fully refunded or cancelled.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_void_on_refund',
+				array(
+					'title' => __( 'Void vouchers on refund', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Disable vouchers when the order they were bought with is fully refunded or cancelled.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( 'Automatic promotions', 'voucher-captain' ),
-				'id'      => 'vcap_campaigns_enabled',
-				'type'    => 'checkbox',
-				'default' => 'no',
-				'desc'    => __( 'Apply published promotions (Vouchers → Promotions) automatically in the cart. The discount is shown as its own line in the cart and the order; catalog prices do not change.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_campaigns_enabled',
+				array(
+					'title' => __( 'Automatic promotions', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Apply published promotions (Vouchers → Promotions) automatically in the cart. The discount is shown as its own line in the cart and the order; catalog prices do not change.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'             => __( 'Bonus vouchers valid after (days)', 'voucher-captain' ),
-				'id'                => 'vcap_bonus_wait_days',
-				'type'              => 'number',
-				'default'           => 14,
-				'css'               => 'width:90px',
-				'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
-				'desc_tip'          => __( 'A bonus voucher is created when the order is paid, but sent and redeemable only after this many days; a cancelled or refunded order withdraws it before. 0 = at once.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_bonus_wait_days',
+				array(
+					'title'             => __( 'Bonus vouchers valid after (days)', 'voucher-captain' ),
+					'type'              => 'number',
+					'css'               => 'width:90px',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'A bonus voucher is created when the order is paid, but sent and redeemable only after this many days; a cancelled or refunded order withdraws it before. 0 = at once.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( 'Store credit', 'voucher-captain' ),
-				'id'      => 'vcap_store_credit',
-				'type'    => 'checkbox',
-				'default' => 'no',
-				'desc'    => __( 'Enable store credit accounts: credit customers manually (user profile) or refund orders as store credit (order screen); customers see and use their credit in My Account and the cart.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_store_credit',
+				array(
+					'title' => __( 'Store credit', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Enable store credit accounts: credit customers manually (user profile) or refund orders as store credit (order screen); customers see and use their credit in My Account and the cart.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( 'Store credit with discount codes', 'voucher-captain' ),
-				'id'      => 'vcap_credit_with_coupons',
-				'type'    => 'checkbox',
-				'default' => 'yes',
-				'desc'    => __( 'Allow store credit in the same order as discount codes. Discounts are always calculated first; gift cards and store credit then pay the remaining amount.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_credit_with_coupons',
+				array(
+					'title' => __( 'Store credit with discount codes', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Allow store credit in the same order as discount codes. Discounts are always calculated first; gift cards and store credit then pay the remaining amount.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( 'Order of gift cards and store credit', 'voucher-captain' ),
-				'id'      => 'vcap_credit_apply_order',
-				'type'    => 'select',
-				'default' => 'last',
-				'options' => array(
-					'last'  => __( 'Gift cards first, then store credit', 'voucher-captain' ),
-					'first' => __( 'Store credit first, then gift cards', 'voucher-captain' ),
-				),
+			SettingsRegistry::field(
+				'vcap_credit_apply_order',
+				array(
+					'title'   => __( 'Order of gift cards and store credit', 'voucher-captain' ),
+					'type'    => 'select',
+					'options' => array(
+						'last'  => __( 'Gift cards first, then store credit', 'voucher-captain' ),
+						'first' => __( 'Store credit first, then gift cards', 'voucher-captain' ),
+					),
+				)
 			),
-			array(
-				'title'   => __( 'Discount codes on vouchers', 'voucher-captain' ),
-				'id'      => 'vcap_discounts_on_vouchers',
-				'type'    => 'checkbox',
-				'default' => 'no',
-				'desc'    => __( 'Allow discount codes to reduce the price of voucher products. Vouchers keep their full face value, so a 10 % code on a 50 € voucher costs the shop 5 €.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_discounts_on_vouchers',
+				array(
+					'title' => __( 'Discount codes on vouchers', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Allow discount codes to reduce the price of voucher products. Vouchers keep their full face value, so a 10 % code on a 50 € voucher costs the shop 5 €.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( 'Pay vouchers with vouchers', 'voucher-captain' ),
-				'id'      => 'vcap_vouchers_buy_vouchers',
-				'type'    => 'checkbox',
-				'default' => 'no',
-				'desc'    => __( 'Allow vouchers and gift cards to pay for voucher products (off by default to prevent exchanging or extending vouchers).', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_vouchers_buy_vouchers',
+				array(
+					'title' => __( 'Pay vouchers with vouchers', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Allow vouchers and gift cards to pay for voucher products (off by default to prevent exchanging or extending vouchers).', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( 'Voucher links', 'voucher-captain' ),
-				'id'      => 'vcap_coupon_link',
-				'type'    => 'checkbox',
-				'default' => 'no',
-				'desc'    => __( 'Apply a coupon automatically when a customer opens a link such as https://your-shop/?gutschein=CODE (any WooCommerce coupon). The code is applied once, validated by WooCommerce, and only when the cart has products.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_coupon_link',
+				array(
+					'title' => __( 'Voucher links', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Apply a coupon automatically when a customer opens a link such as https://your-shop/?gutschein=CODE (any WooCommerce coupon). The code is applied once, validated by WooCommerce, and only when the cart has products.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'    => __( 'Link parameter', 'voucher-captain' ),
-				'id'       => 'vcap_coupon_link_param',
-				'type'     => 'text',
-				'default'  => 'gutschein',
-				'css'      => 'width:160px',
-				'desc_tip' => __( 'Name of the URL parameter (letters, digits, - and _).', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_coupon_link_param',
+				array(
+					'title'    => __( 'Link parameter', 'voucher-captain' ),
+					'type'     => 'text',
+					'css'      => 'width:160px',
+					'desc_tip' => __( 'Name of the URL parameter (letters, digits, - and _).', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( 'Gift card field', 'voucher-captain' ),
-				'id'      => 'vcap_giftcard_field',
-				'type'    => 'checkbox',
-				'default' => 'no',
-				'desc'    => __( 'Show a separate "Redeem a gift card" field in the cart and at checkout (classic pages and blocks). Gift cards and store credit are applied without reloading the page.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_giftcard_field',
+				array(
+					'title' => __( 'Gift card field', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Show a separate "Redeem a gift card" field in the cart and at checkout (classic pages and blocks). Gift cards and store credit are applied without reloading the page.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( 'Balance in the mini cart', 'voucher-captain' ),
-				'id'      => 'vcap_minicart_balance',
-				'type'    => 'checkbox',
-				'default' => 'no',
-				'desc'    => __( 'Show the remaining balance of applied gift cards in the mini cart widget.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_minicart_balance',
+				array(
+					'title' => __( 'Balance in the mini cart', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Show the remaining balance of applied gift cards in the mini cart widget.', 'voucher-captain' ),
+				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_redeem' ),
 
@@ -903,91 +891,101 @@ final class Settings {
 				'desc'  => __( 'Customers find their personal code in My Account → Vouchers. Friends use it on their first order; the referring customer is rewarded after the waiting period once that order is completed and paid. Own codes cannot be used.', 'voucher-captain' ),
 				'id'    => 'vcap_referral',
 			),
-			array(
-				'title'   => __( 'Refer a friend', 'voucher-captain' ),
-				'id'      => 'vcap_referral_enabled',
-				'type'    => 'checkbox',
-				'default' => 'no',
-				'desc'    => __( 'Enable referral codes', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_referral_enabled',
+				array(
+					'title' => __( 'Refer a friend', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'Enable referral codes', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'             => __( 'Discount for the friend', 'voucher-captain' ),
-				'id'                => 'vcap_referral_friend_amount',
-				'type'              => 'number',
-				'default'           => 10,
-				'css'               => 'width:90px',
-				'custom_attributes' => array( 'min' => 0, 'step' => '0.01' ),
+			SettingsRegistry::field(
+				'vcap_referral_friend_amount',
+				array(
+					'title'             => __( 'Discount for the friend', 'voucher-captain' ),
+					'type'              => 'number',
+					'css'               => 'width:90px',
+					'custom_attributes' => array( 'step' => '0.01' ),
+				)
 			),
-			array(
-				'title'   => __( 'Discount type', 'voucher-captain' ),
-				'id'      => 'vcap_referral_friend_type',
-				'type'    => 'select',
-				'default' => 'fixed_cart',
-				'options' => array(
-					'fixed_cart' => __( 'Fixed amount', 'voucher-captain' ),
-					'percent'    => __( 'Percentage', 'voucher-captain' ),
-				),
+			SettingsRegistry::field(
+				'vcap_referral_friend_type',
+				array(
+					'title'   => __( 'Discount type', 'voucher-captain' ),
+					'type'    => 'select',
+					'options' => array(
+						'fixed_cart' => __( 'Fixed amount', 'voucher-captain' ),
+						'percent'    => __( 'Percentage', 'voucher-captain' ),
+					),
+				)
 			),
-			array(
-				'title'             => __( 'Minimum order value for the friend', 'voucher-captain' ),
-				'id'                => 'vcap_referral_min_spend',
-				'type'              => 'number',
-				'default'           => '',
-				'css'               => 'width:90px',
-				'placeholder'       => __( 'automatic', 'voucher-captain' ),
-				'custom_attributes' => array( 'min' => 0, 'step' => '0.01' ),
-				'desc_tip'          => __( 'Empty: twice a fixed discount. A fixed discount always needs an order value above it (at least the discount plus 1).', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_referral_min_spend',
+				array(
+					'title'             => __( 'Minimum order value for the friend', 'voucher-captain' ),
+					'type'              => 'number',
+					'css'               => 'width:90px',
+					'placeholder'       => __( 'automatic', 'voucher-captain' ),
+					'custom_attributes' => array( 'step' => '0.01' ),
+					'desc_tip'          => __( 'Empty: twice a fixed discount. A fixed discount always needs an order value above it (at least the discount plus 1).', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'             => __( 'Reward for the referrer', 'voucher-captain' ),
-				'id'                => 'vcap_referral_reward_amount',
-				'type'              => 'number',
-				'default'           => 10,
-				'css'               => 'width:90px',
-				'custom_attributes' => array( 'min' => 0, 'step' => '0.01' ),
+			SettingsRegistry::field(
+				'vcap_referral_reward_amount',
+				array(
+					'title'             => __( 'Reward for the referrer', 'voucher-captain' ),
+					'type'              => 'number',
+					'css'               => 'width:90px',
+					'custom_attributes' => array( 'step' => '0.01' ),
+				)
 			),
-			array(
-				'title'   => __( 'Reward as', 'voucher-captain' ),
-				'id'      => 'vcap_referral_reward_as',
-				'type'    => 'select',
-				'default' => 'coupon',
-				'options' => array(
-					'coupon' => __( 'Coupon by email', 'voucher-captain' ),
-					'credit' => __( 'Store credit (requires store credit)', 'voucher-captain' ),
-				),
+			SettingsRegistry::field(
+				'vcap_referral_reward_as',
+				array(
+					'title'   => __( 'Reward as', 'voucher-captain' ),
+					'type'    => 'select',
+					'options' => array(
+						'coupon' => __( 'Coupon by email', 'voucher-captain' ),
+						'credit' => __( 'Store credit (requires store credit)', 'voucher-captain' ),
+					),
+				)
 			),
-			array(
-				'title'             => __( 'Reward coupon valid for (days)', 'voucher-captain' ),
-				'id'                => 'vcap_referral_reward_days',
-				'type'              => 'number',
-				'default'           => 90,
-				'css'               => 'width:90px',
-				'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
+			SettingsRegistry::field(
+				'vcap_referral_reward_days',
+				array(
+					'title'             => __( 'Reward coupon valid for (days)', 'voucher-captain' ),
+					'type'              => 'number',
+					'css'               => 'width:90px',
+					'custom_attributes' => array( 'step' => 1 ),
+				)
 			),
-			array(
-				'title'             => __( 'Waiting period before the reward (days)', 'voucher-captain' ),
-				'id'                => 'vcap_referral_wait_days',
-				'type'              => 'number',
-				'default'           => 14,
-				'css'               => 'width:90px',
-				'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
-				'desc_tip'          => __( 'Counted from the payment of the friend\'s order (e.g. the withdrawal period). A cancelled or refunded order earns nothing. 0 = at once.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_referral_wait_days',
+				array(
+					'title'             => __( 'Waiting period before the reward (days)', 'voucher-captain' ),
+					'type'              => 'number',
+					'css'               => 'width:90px',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( 'Counted from the payment of the friend\'s order (e.g. the withdrawal period). A cancelled or refunded order earns nothing. 0 = at once.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'             => __( 'Rewards per referrer and 30 days', 'voucher-captain' ),
-				'id'                => 'vcap_referral_max_rewards',
-				'type'              => 'number',
-				'default'           => 10,
-				'css'               => 'width:90px',
-				'custom_attributes' => array( 'min' => 0, 'step' => 1 ),
-				'desc_tip'          => __( '0 = unlimited.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_referral_max_rewards',
+				array(
+					'title'             => __( 'Rewards per referrer and 30 days', 'voucher-captain' ),
+					'type'              => 'number',
+					'css'               => 'width:90px',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc_tip'          => __( '0 = unlimited.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'   => __( 'Address check', 'voucher-captain' ),
-				'id'      => 'vcap_referral_address_check',
-				'type'    => 'checkbox',
-				'default' => 'yes',
-				'desc'    => __( 'No reward when the friend\'s billing address is the referrer\'s own address', 'voucher-captain' ),
+			SettingsRegistry::field(
+				'vcap_referral_address_check',
+				array(
+					'title' => __( 'Address check', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => __( 'No reward when the friend\'s billing address is the referrer\'s own address', 'voucher-captain' ),
+				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_referral' ),
 		);
@@ -997,8 +995,8 @@ final class Settings {
 	/** Voucher products the setting "Multi-purpose vouchers as payment" leaves out (only on the settings page). */
 	/** R6: daily limits of counter (scanner) redemptions (Counter), a block of the "Privacy & advanced" section. */
 	private static function counter_limit_fields(): array {
-		$money = array( 'min' => 0, 'step' => '0.01' );
-		$count = array( 'min' => 0, 'step' => 1 );
+		$money = array( 'step' => '0.01' );
+		$count = array( 'step' => 1 );
 		return array(
 			array(
 				'type'  => 'title',
@@ -1006,58 +1004,64 @@ final class Settings {
 				'desc'  => __( 'Daily limits for redemptions at the counter, per shop day (shop time zone). 0 = unlimited. Staff who manage vouchers are not limited; a staff member can get own limits on their user profile. The amount counts gift cards and value vouchers in the currency of the voucher being redeemed.', 'voucher-captain' ),
 				'id'    => 'vcap_counter_limits',
 			),
-			array(
-				'title'             => __( 'Amount per staff member and day', 'voucher-captain' ),
-				'id'                => Counter::USER_AMOUNT,
-				'type'              => 'number',
-				'default'           => 0,
-				'css'               => 'width:90px',
-				'custom_attributes' => $money,
+			SettingsRegistry::field(
+				Counter::USER_AMOUNT,
+				array(
+					'title'             => __( 'Amount per staff member and day', 'voucher-captain' ),
+					'type'              => 'number',
+					'css'               => 'width:90px',
+					'custom_attributes' => $money,
+				)
 			),
-			array(
-				'title'             => __( 'Redemptions per staff member and day', 'voucher-captain' ),
-				'id'                => Counter::USER_COUNT,
-				'type'              => 'number',
-				'default'           => 0,
-				'css'               => 'width:90px',
-				'custom_attributes' => $count,
+			SettingsRegistry::field(
+				Counter::USER_COUNT,
+				array(
+					'title'             => __( 'Redemptions per staff member and day', 'voucher-captain' ),
+					'type'              => 'number',
+					'css'               => 'width:90px',
+					'custom_attributes' => $count,
+				)
 			),
-			array(
-				'title'             => __( 'Amount per till/branch and day', 'voucher-captain' ),
-				'id'                => Counter::TILL_AMOUNT,
-				'type'              => 'number',
-				'default'           => 0,
-				'css'               => 'width:90px',
-				'custom_attributes' => $money,
-				'desc_tip'          => __( 'Counts by the till/branch set on the scanner device; devices without one share one limit.', 'voucher-captain' ),
+			SettingsRegistry::field(
+				Counter::TILL_AMOUNT,
+				array(
+					'title'             => __( 'Amount per till/branch and day', 'voucher-captain' ),
+					'type'              => 'number',
+					'css'               => 'width:90px',
+					'custom_attributes' => $money,
+					'desc_tip'          => __( 'Counts by the till/branch set on the scanner device; devices without one share one limit.', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'             => __( 'Redemptions per till/branch and day', 'voucher-captain' ),
-				'id'                => Counter::TILL_COUNT,
-				'type'              => 'number',
-				'default'           => 0,
-				'css'               => 'width:90px',
-				'custom_attributes' => $count,
+			SettingsRegistry::field(
+				Counter::TILL_COUNT,
+				array(
+					'title'             => __( 'Redemptions per till/branch and day', 'voucher-captain' ),
+					'type'              => 'number',
+					'css'               => 'width:90px',
+					'custom_attributes' => $count,
+				)
 			),
-			array(
-				'title'   => __( 'Receipt no. required', 'voucher-captain' ),
-				'id'      => Counter::REQUIRE_RECEIPT,
-				'type'    => 'select',
-				'default' => 'auto',
-				'options' => array(
-					'auto' => __( 'Automatic (required for shops based in Germany or Austria)', 'voucher-captain' ),
-					'yes'  => __( 'Required', 'voucher-captain' ),
-					'no'   => __( 'Optional', 'voucher-captain' ),
-				),
-				'desc'    => __( 'A counter redemption is only booked with the receipt number of the till receipt for the goods (checked on the server).', 'voucher-captain' ),
+			SettingsRegistry::field(
+				Counter::REQUIRE_RECEIPT,
+				array(
+					'title'   => __( 'Receipt no. required', 'voucher-captain' ),
+					'type'    => 'select',
+					'options' => array(
+						'auto' => __( 'Automatic (required for shops based in Germany or Austria)', 'voucher-captain' ),
+						'yes'  => __( 'Required', 'voucher-captain' ),
+						'no'   => __( 'Optional', 'voucher-captain' ),
+					),
+					'desc'    => __( 'A counter redemption is only booked with the receipt number of the till receipt for the goods (checked on the server).', 'voucher-captain' ),
+				)
 			),
-			array(
-				'title'    => __( 'Tills / branches', 'voucher-captain' ),
-				'id'       => Counter::LOCATIONS,
-				'type'     => 'textarea',
-				'default'  => '',
-				'css'      => 'width:300px;height:90px',
-				'desc'     => __( 'One per line. When set, the scanner offers this list instead of a free text field, and a staff member can be fixed to one on their user profile. The scanner works online only: without a connection nothing is booked (on purpose – an offline scanner could redeem the same code twice).', 'voucher-captain' ),
+			SettingsRegistry::field(
+				Counter::LOCATIONS,
+				array(
+					'title' => __( 'Tills / branches', 'voucher-captain' ),
+					'type'  => 'textarea',
+					'css'   => 'width:300px;height:90px',
+					'desc'  => __( 'One per line. When set, the scanner offers this list instead of a free text field, and a staff member can be fixed to one on their user profile. The scanner works online only: without a connection nothing is booked (on purpose – an offline scanner could redeem the same code twice).', 'voucher-captain' ),
+				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_counter_limits' ),
 		);

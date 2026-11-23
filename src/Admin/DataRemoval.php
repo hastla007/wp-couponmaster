@@ -87,12 +87,13 @@ final class DataRemoval {
 	 */
 	public static function fields( string $description ): array {
 		return array(
-			array(
-				'title'   => __( 'Remove all data when the plugin is deleted', 'voucher-captain' ),
-				'id'      => self::OPTION,
-				'type'    => 'checkbox',
-				'default' => 'no',
-				'desc'    => $description,
+			\VCAP\SettingsRegistry::field(
+				self::OPTION,
+				array(
+					'title' => __( 'Remove all data when the plugin is deleted', 'voucher-captain' ),
+					'type'  => 'checkbox',
+					'desc'  => $description,
+				)
 			),
 			array(
 				'title'     => __( 'Confirm data removal', 'voucher-captain' ),

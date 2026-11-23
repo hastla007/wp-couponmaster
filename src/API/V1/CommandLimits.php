@@ -7,6 +7,8 @@
 
 namespace VCAP\API\V1;
 
+use VCAP\SettingsRegistry;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -239,48 +241,45 @@ final class CommandLimits {
 			),
 		);
 		foreach ( self::FIXED as $command => $fixed ) {
-			$fields[] = array(
-				'title'   => $labels[ $command ],
-				'id'      => self::option( $command, self::SUFFIX_ENABLED ),
-				'type'    => 'checkbox',
-				'default' => 'no',
-				'desc'    => __( 'Allow this command', 'voucher-captain' ),
+			// SET-VC-01: id, default and bounds from the settings register (config/settings.php, built from FIXED).
+			$fields[] = SettingsRegistry::field(
+				self::option( $command, self::SUFFIX_ENABLED ),
+				array(
+					'title' => $labels[ $command ],
+					'type'  => 'checkbox',
+					'desc'  => __( 'Allow this command', 'voucher-captain' ),
+				)
 			);
-			$fields[] = array(
-				'title'             => __( 'Calls per day', 'voucher-captain' ),
-				'id'                => self::option( $command, self::SUFFIX_PER_DAY ),
-				'type'              => 'number',
-				'default'           => (string) $fixed['per_day'],
-				'custom_attributes' => array(
-					'min'  => 0,
-					'max'  => $fixed['per_day'],
-					'step' => 1,
-				),
-				/* translators: %d: highest number of calls per day */
-				'desc'              => sprintf( __( 'Per calendar day and site, all automations together (at most %d).', 'voucher-captain' ), $fixed['per_day'] ),
+			$fields[] = SettingsRegistry::field(
+				self::option( $command, self::SUFFIX_PER_DAY ),
+				array(
+					'title'             => __( 'Calls per day', 'voucher-captain' ),
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					/* translators: %d: highest number of calls per day */
+					'desc'              => sprintf( __( 'Per calendar day and site, all automations together (at most %d).', 'voucher-captain' ), $fixed['per_day'] ),
+				)
 			);
 			if ( null !== $fixed['per_recipient'] ) {
-				$fields[] = array(
-					'title'             => __( 'Vouchers per recipient and day', 'voucher-captain' ),
-					'id'                => self::option( $command, self::SUFFIX_RECIPIENT ),
-					'type'              => 'number',
-					'default'           => (string) $fixed['per_recipient'],
-					'custom_attributes' => array(
-						'min'  => 0,
-						'max'  => $fixed['per_recipient'],
-						'step' => 1,
-					),
-					/* translators: %d: highest number per recipient and day */
-					'desc'              => sprintf( __( 'At most %d.', 'voucher-captain' ), $fixed['per_recipient'] ),
+				$fields[] = SettingsRegistry::field(
+					self::option( $command, self::SUFFIX_RECIPIENT ),
+					array(
+						'title'             => __( 'Vouchers per recipient and day', 'voucher-captain' ),
+						'type'              => 'number',
+						'custom_attributes' => array( 'step' => 1 ),
+						/* translators: %d: highest number per recipient and day */
+						'desc'              => sprintf( __( 'At most %d.', 'voucher-captain' ), $fixed['per_recipient'] ),
+					)
 				);
 			}
 			if ( null !== $fixed['max_amount_minor'] ) {
-				$fields[] = array(
-					'title'   => __( 'Maximum amount', 'voucher-captain' ),
-					'id'      => self::option( $command, self::SUFFIX_AMOUNT ),
-					'type'    => 'text',
-					'default' => '',
-					'desc'    => __( 'In the shop currency. Empty: 100 (in EUR, CHF, USD and GBP), at most 100 there. In a shop with another currency, the command refuses amounts until you enter a maximum here that is worth no more than 100 EUR.', 'voucher-captain' ),
+				$fields[] = SettingsRegistry::field(
+					self::option( $command, self::SUFFIX_AMOUNT ),
+					array(
+						'title' => __( 'Maximum amount', 'voucher-captain' ),
+						'type'  => 'text',
+						'desc'  => __( 'In the shop currency. Empty: 100 (in EUR, CHF, USD and GBP), at most 100 there. In a shop with another currency, the command refuses amounts until you enter a maximum here that is worth no more than 100 EUR.', 'voucher-captain' ),
+					)
 				);
 			}
 		}
