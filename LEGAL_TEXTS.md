@@ -1,15 +1,17 @@
 # Rechtlich relevante Kundentexte – Prüfvorlage je Land
 
-Erzeugt mit `php bin/legal-texts.php` aus `languages/` und `config/markets.php` (nicht von Hand bearbeiten; CI prüft,
-dass die Vorlage aktuell ist und jeder Text noch existiert). Prüfung durch die Rechtsberatung je Verkaufsland.
+Erzeugt mit `php bin/legal-texts.php` aus `languages/`, `config/markets.php`, `config/country-profiles.php` und
+`config/settings.php` (nicht von Hand bearbeiten; CI prüft, dass die Vorlage aktuell ist und jeder Text noch existiert).
+Prüfung durch die Rechtsberatung je Verkaufsland. Kein Wert dieser Vorlage ist rechtlich geprüft, solange die
+Spalte „Rechtlich geprüft“ nicht abgehakt ist.
 
 ## 1. Texte, die der Shop selbst festlegt (Einstellungen, je Shop prüfen)
 
 | Was | Wo | Wirkung |
 |---|---|---|
 | Einlösebedingungen (allgemein) | WooCommerce → Einstellungen → Gutscheine → „Default redemption conditions“ | stehen auf Gutschein/PDF (`{redemption_terms}`), wenn das Produkt keine eigenen hat |
-| Einlösebedingungen pro Land | ebenda → „Redemption conditions per country“ (`AT: …`) | Rechnungsland entscheidet; Text wird am Gutschein festgeschrieben |
-| Gesetzliche Gültigkeit pro Land | ebenda → „Statutory validity per country“ (`DE: 3 end`) | Ablaufdatum neuer Gutscheine mit gesetzlicher Gültigkeit |
+| Einlösebedingungen pro Land | ebenda → „Redemption conditions per country“: Tabelle mit einer Zeile je Land und Sprache (Spalten **Land**, **Sprache** – „All languages“ oder ein Sprachcode wie `de_AT` –, **Text**) | Rechnungsland entscheidet, innerhalb des Landes die Sprache des Kunden (sonst die Zeile „All languages“); Text wird am Gutschein festgeschrieben |
+| Gesetzliche Gültigkeit pro Land | ebenda → „Statutory validity per country“: Tabelle mit einer Zeile je Land (Spalten **Land**, **Jahre** – 0 = unbegrenzt –, **zum Jahresende**, **Quelle/Notiz**) | Ablaufdatum neuer Gutscheine mit gesetzlicher Gültigkeit; überschreibt die Standardwerte aus Abschnitt 2 |
 | Bedingungen je Produkt | Produkt → Gutschein → „Redemption conditions“ | ersetzt die allgemeinen Bedingungen |
 | Restwert gekaufter Einmal-Wertgutscheine | Produkt → Gutschein → „Keep the rest“ (Standard aus) | aus: der nicht genutzte Rest verfällt, der Kunde wird im Warenkorb gewarnt (Text unten „Restwert“; Verfallklausel in AGB nach § 307 BGB bzw. ABGB prüfen); an: der Rest wird Kundenguthaben bzw. eine neue Geschenkkarte (TAX.md 4.3) |
 
@@ -49,7 +51,37 @@ dass die Vorlage aktuell ist und jeder Text noch existiert). Prüfung durch die 
 | LI | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
 | NO | – (Standard: 3 Jahre zum Jahresende) | nicht geprüft | ☐ |
 
-## 3. Feste Texte des Plugins
+## 3. Vorschläge der Länderprofile (`config/country-profiles.php`)
+
+Ein Länderprofil (Einstellungen → Gutscheine → Allgemein → „Country profile“) ändert nichts von selbst: Es zeigt
+„aktuell → vorgeschlagen“, übernommen wird nur, was der Admin abhakt. Werte mit rechtlichem Gewicht tragen den
+Hinweis „Rechtsprüfung“, bis die Prüfung im Profil vermerkt ist (`checked`). EU und OTHER sind neutral.
+
+| Profil | Gesetzliche Gültigkeit (Zeile) | Gültigkeit ohne eigene Angabe | Belegnummer an der Kasse | Empfängerdaten anonymisieren nach | Rechtlich geprüft |
+|---|---|---|---|---|---|
+| DE | 3 Jahre zum Jahresende – Quelle: §§ 195, 199 BGB (3 Jahre zum Jahresende) | gesetzlich (Zeile links) | Pflicht (Länderdaten `fiscal_receipt`) | 1095 Tage nach Ablauf/Einlösung | ☐ nicht geprüft |
+| AT | 30 Jahre – Quelle: OGH-Rechtsprechung (30 Jahre) | gesetzlich (Zeile links) | Pflicht (Länderdaten `fiscal_receipt`) | 1095 Tage nach Ablauf/Einlösung | ☐ nicht geprüft |
+| CH | 10 Jahre – Notiz: Art. 127 OR (10 Jahre) | gesetzlich (Zeile links) | – (kein Vorschlag) | 1095 Tage nach Ablauf/Einlösung | ☐ nicht geprüft |
+| EU | – (kein Vorschlag) | – (bleibt) | – (bleibt) | – (bleibt) | ☐ nicht geprüft |
+| OTHER | – (kein Vorschlag) | – (bleibt) | – (bleibt) | – (bleibt) | ☐ nicht geprüft |
+
+## 4. Aufbewahrungsfristen (Einstellungen → Gutscheine → „Privacy & advanced“ → „Retention“)
+
+Standardwerte aus `config/settings.php`; ein Filter gleichen Namens gewinnt. Ob eine Frist zu Datenschutz- und
+Aufbewahrungspflichten des Verkaufslandes passt, ist je Land zu prüfen (der Vorschlag der Länderprofile steht in
+Abschnitt 3).
+
+| Option | Was | Standard | Bereich | Rechtlich geprüft |
+|---|---|---|---|---|
+| `vcap_retention_days` | Empfängerdaten (Name, E-Mail, Nachricht, eigene Felder) anonymisieren nach | 0 (Tage nach Ablauf oder vollständiger Einlösung; 0 = behalten) | 0 – offen | ☐ |
+| `vcap_voucher_requests_open_months` | Offene Gutscheinanfragen (Form Captain) löschen nach | 6 (Monate ab Eingang bzw. letzter Bestätigung) | 1 – 120 | ☐ |
+| `vcap_voucher_requests_closed_months` | Erledigte Gutscheinanfragen löschen nach | 24 (Monate ab Ausgabe bzw. Übernahme) | 1 – 120 | ☐ |
+| `vcap_review_retention_months` | Notizen zu Bewertungseinladungen löschen nach | 24 (Monate ab Einlösung) | 1 – 120 | ☐ |
+| `vcap_review_revoked_retention_days` | Zurückgezogene Bewertungsnotizen löschen nach | 90 (Tage) | 30 – 3650 | ☐ |
+| `vcap_command_log_days` | Protokoll der Gutscheinbefehle (ohne Codes) behalten | 90 (Tage) | 30 – 3650 | ☐ |
+| `vcap_scanner_failed_lookup_days` | Fehlgeschlagene Kassenabfragen je Mitarbeiter behalten | 92 (Tage) | 31 – 3650 | ☐ |
+
+## 5. Feste Texte des Plugins
 
 ### Gültigkeit und Ablauf
 
@@ -95,10 +127,11 @@ dass die Vorlage aktuell ist und jeder Text noch existiert). Prüfung durch die 
 | Enter the code in the cart or at checkout on %s to redeem it. | Gib den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. | Geben Sie den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. | Geben Sie den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. | src/Channels.php:72 | ☐ |
 | This voucher has already been fully redeemed. | Dieser Gutschein wurde bereits vollständig eingelöst. | Dieser Gutschein wurde bereits vollständig eingelöst. | Dieser Gutschein wurde bereits vollständig eingelöst. | src/Coupons/CartCoupons.php:82 | ☐ |
 
-## 4. Freigabe
+## 6. Freigabe
 
 | Land | Geprüft von | Datum | Ergebnis |
 |---|---|---|---|
 | DE | | | ☐ freigegeben ☐ mit Änderungen |
 | AT | | | ☐ freigegeben ☐ mit Änderungen |
+| CH | | | ☐ freigegeben ☐ mit Änderungen |
 | | | | |

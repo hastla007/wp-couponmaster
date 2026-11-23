@@ -33,7 +33,7 @@ release).
 - [ ] Review keyboard and screen-reader flows for voucher purchase, balance check, account downloads, and scanner actions.
 - [ ] Settings pages with keyboard and a screen reader (PV-P5-10, ACCESSIBILITY.md → "Einstellungen"): in every section of WooCommerce → Settings → Vouchers, Enter in a field saves (no profile preview / import check), the action buttons ask no "leave page?" question, a refused value is announced and marked at its field, the country profile preview, tills table, export/import/reset and the change log are usable with Tab alone and read with their labels; on a phone width no sideways scrolling of the page.
 - [ ] Approve the customer email texts in `EMAILS.md` (generated, EN/DE/AT; CI job `smoke` fails when it is out of date). Translation coverage and placeholders are checked automatically (`tests/run.php` → Translations).
-- [ ] Legal review per selling country with `LEGAL_TEXTS.md` (generated: shop settings to check, statutory validity per country, fixed plugin texts on validity, transferability, residual value, refunds; CI job `smoke` keeps it current).
+- [ ] Legal review per selling country with `LEGAL_TEXTS.md` (generated: shop settings to check, statutory validity per country, country profile suggestions, retention periods, fixed plugin texts on validity, transferability, residual value, refunds; CI job `smoke` keeps it current).
 - [ ] Verify translations and customer-facing voucher expiry, transferability, residual value, and redemption terms for the store's legal policy.
 - [ ] Have the merchant's tax/accounting adviser approve voucher tax and refund treatment for each voucher type.
 
