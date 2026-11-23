@@ -26,7 +26,7 @@ Diese Liste ist eine Arbeitsliste, kein verifizierter Fortschrittsbericht. Abgeh
 - **Überholte Zweige (nichts mehr zu übernehmen, können gelöscht werden):** `claude/wp-plugin-analyse-todo-hvollo-refactors` (PR #19, gemergt), `claude/sharp-mendel-xiiwf3` und `claude/sleepy-ptolemy-n32guj` (in PR #19 enthalten; PR #18 geschlossen), `claude/minver-newest` (PR #17 geschlossen; MINVER-1 ist erledigt), `codex/multi-expiry-reminders` (mehrere Erinnerungstage mit Wiederholung sind seit 1.2.0 drin, M12-84, R4 B7), `codex/fix-voucher-audit-findings`, `docs/security-check-todo`, `claude/trusting-edison-bb7r9s`, `claude/wp-plugin-analyse-todo-hvollo`, `claude/plugin-todo-liste-2a83v4`.
 - **Lizenz:** Entscheidung vom 13.11.2026 – der Kern ist frei, ohne Lizenz- und Update-Code (docs/FREE-PREMIUM.md, `tests/license-guard.php`). Das Add-on liegt in `hastla007/captain-pro`; Projekt-Connectoren sind eigene Lizenzprodukte (Entscheidung 17).
 - **Prüfstand von `main` 1.3.0 (23.11.2026):** vollständiger Lauf von „Plugin smoke tests“ auf `main` (`b801e2e`, GitHub-Actions-Lauf 45151762580) grün, alle 23 Jobs; lokal `php tests/run.php` 733 Prüfungen bestanden, Lizenzwächter, Hook-, POT-, E-Mail- und Rechtstext-Prüfung grün, PHPCS (WordPress, WooCommerce-Core) auf `src/API/V1`, `src/Contracts`, `src/Integrations/FormCaptain` ohne Befund. Die WordPress-Integrationssuiten, PHPStan und die Matrix laufen nur in der CI (`.github/workflows/plugin-smoke.yml`).
-- **Zählung:** 45 Aufgaben offen, 755 erledigt (Befehl: `grep -c '^\s*- \[ \]' TODO.md` und `grep -c '^\s*- \[x\]' TODO.md`).
+- **Zählung:** 51 Aufgaben offen, 755 erledigt (Befehl: `grep -c '^\s*- \[ \]' TODO.md` und `grep -c '^\s*- \[x\]' TODO.md`).
 
 ## Einstellungen für den Verkauf (Analyse vom 23.11.2026)
 
@@ -91,6 +91,17 @@ Entschieden (Inhaber am 23.11.2026, übermittelt durch die Lizenz-Sitzung): **E1
 | E8 | Wo stehen die Add-on-Einstellungen? | a) eigene Seiten (heute); b) als Abschnitte im Tab „Gutscheine“; c) eigene Seiten + Link/Feld im Tab | **c)**: Zugangsdaten bleiben auf den eigenen Seiten, im Tab ersetzt ein Link die Hinweiszeile |
 | E9 | Fortlaufende Gutscheinnummer zusätzlich zum Code? | a) ja, frei, ab Werk aus; b) nur Pro; c) nicht bauen | **a)** – Buchhaltung und Kasse brauchen sie in mehreren Ländern |
 | E10 | Standard des Link-Parameters („gutschein“) für neue Shops | a) nach Sprache der Website; b) immer „voucher“; c) unverändert | **a)**, bestehende Shops unverändert, alter Parameter bleibt gültig |
+
+## Prüfphase Einstellungen und neue Funktionen
+
+Auftrag des Inhabers (23.11.2026, übermittelt durch die Lizenz-Sitzung; Text auch in captain-pro `docs/settings/README.md`, Abschnitt „Prüfphase“): sechs Experten prüfen unabhängig (je ein eigener Agent, gern parallel) am laufenden Plugin, nicht nur am Text, die neuen Einstellungen und ausdrücklich auch die übrigen neuen Funktionen der letzten Wochen (Lese-/Befehls-/Connector-/Kontaktfunktionen, Form-Captain-Anfragen, Währungsregel F-05a). Jeder Befund wird eine eigene `- [ ]`-Aufgabe mit Schweregrad, Fundstelle und Nachstellung und wird mit Test repariert. Eine Prüfaufgabe ist erst erledigt, wenn ihre Befunde behoben oder begründet als „wartet auf Inhaber“ bzw. „Rechtsprüfung“ gekennzeichnet sind und die CI grün ist. Die Prüfphase läuft nach jedem größeren Baustein (Register, Länderprofile, Geschäftsregeln, Pro-Hinweis) und einmal am Ende über alles. Am Ende je Experte melden: gefunden / behoben / offen mit Grund.
+
+- [ ] **SET-VC-P1 · Einstellungen und Daten.** Jede Einstellung: Vorgabe, Prüfung, Speichern, Wirkung im Code (keine toten Werte), Filter gewinnt, Migration bestehender Installationen ohne Verhaltensänderung, Export/Import-Rundlauf, Zurücksetzen, WP-CLI, Änderungsprotokoll, Multisite.
+- [ ] **SET-VC-P2 · Abläufe von Anfang bis Ende.** Hauptabläufe mit geänderten Einstellungen (Grenzwerte, 0, leer, Maximum, widersprüchliche Kombinationen), klassische und Block-Kasse, HPOS, Zeitzonen und Fristen über Mitternacht/Jahreswechsel, Wiederholungen und Doppelklicks, Rückwärtskompatibilität.
+- [ ] **SET-VC-P3 · Länder, Steuer und Recht.** Länderprofile DE, AT, CH, EU, OTHER – Vorschau, nichts still überschrieben, Währung, Zahlen-/Datumsformat, Steuerfälle, Pflichttexte, Einwilligungen, Fristen; kennzeichnet, was rechtlich geprüft werden muss, legt nichts Rechtliches fest.
+- [ ] **SET-VC-P4 · Sicherheit und Datenschutz.** Rechte und Nonces jeder Einstellungs- und Importaktion, Geheimnisse (nie im Export, nie im Protokoll), Ein-/Ausgaben, Aufbewahrung, Löschung und Auskunft mit den neuen Fristen, Protokolle, Deinstallation.
+- [ ] **SET-VC-P5 · Bedienung, Sprache und Barrierefreiheit.** Hilfetext und Fehlermeldung an jedem Feld, Tastatur und Screenreader, verständliche Sprache, de_DE „du“ und de_DE_formal „Sie“ vollständig, Hinweiszeilen unaufdringlich und ausblendbar, mobile Ansicht.
+- [ ] **SET-VC-P6 · Free/Pro-Grenze, Verträge und Betrieb.** Kein Lizenzcode und keine Rechteschlüssel im Kern (Wächtertest), Hinweiszeile ohne Funktionscode, Add-on meldet das Feld an und ersetzt die Zeile, Verhalten ohne Add-on / mit Add-on ohne Lizenz / mit Lizenz, Vertragsversion und Hook-Dokumentation, Leistung (Abfragen, Autoload-Optionen), Mindestplattform und CI-Matrix, Aktualisierung von der Vorversion.
 
 ## P0 – Repository, Status und Produktgrenze
 
