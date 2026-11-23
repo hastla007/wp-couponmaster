@@ -3391,5 +3391,99 @@ if ( ! function_exists( 'workflow_captain_status_for' ) ) {
 $wfc_settings = (string) file_get_contents( VCAP_PATH . 'src/Settings.php' );
 check( 'Workflow Captain: with the function the status is read by default; the "Integrations (API)" settings section shows it', VCAP\Compat\WorkflowCaptain::available() && 'voucher-captain' === ( VCAP\Compat\WorkflowCaptain::status()['product'] ?? '' ) && str_contains( VCAP\Compat\WorkflowCaptain::status_html(), 'Adapter: registered' ) && str_contains( $wfc_settings, "'desc'  => Compat\\WorkflowCaptain::status_html()," ) );
 
+
+// VOUCH-E17-02: connector access on vcap()->api_v1 (contract 1.4.0) – project connectors need no internal class.
+$e17_saved_wpdb  = $GLOBALS['wpdb'] ?? null;
+$GLOBALS['wpdb'] = new class() {
+	public string $prefix = 'wp_';
+	public int $insert_id = 0;
+	public array $log      = array();
+	public array $inserted = array();
+	public bool $fail      = false;
+	public array $rows     = array();
+	public function prepare( $query, ...$args ) {
+		$args = isset( $args[0] ) && is_array( $args[0] ) ? $args[0] : $args;
+		return vsprintf( str_replace( array( '%d', '%s', '%i' ), array( '%d', "'%s'", '%s' ), $query ), $args );
+	}
+	public function get_row( $q, $o = null ) {
+		$this->log[] = $q;
+		foreach ( $this->rows as $row ) {
+			if ( str_contains( $q, "WHERE id = '" . $row['id'] . "'" ) || str_contains( $q, "WHERE code = '" . $row['code'] . "'" ) ) {
+				return $row;
+			}
+		}
+		return null;
+	}
+	public function get_var( $q ) { $this->log[] = $q; return null; }
+	public function get_results( $q, $o = null ) { $this->log[] = $q; return array(); }
+	public function get_col( $q, $i = 0 ) { $this->log[] = $q; return array(); }
+	public function query( $q ) { $this->log[] = $q; return 1; }
+	public function insert( $table, $row ) {
+		if ( $this->fail ) {
+			return false;
+		}
+		$this->inserted[] = array( $table, $row );
+		$this->insert_id  = count( $this->inserted );
+		return 1;
+	}
+};
+$GLOBALS['wpdb']->rows = array(
+	array( 'id' => '81', 'code' => 'COURSE-7Q2XK9', 'coupon_id' => '0', 'type' => 'course', 'status' => 'active', 'order_id' => '1081', 'order_item_id' => '17', 'item_index' => '0', 'product_id' => '55', 'variation_id' => '56', 'template_id' => '0', 'usage_mode' => 'single', 'discount_type' => 'fixed_cart', 'initial_amount' => '40.0000', 'balance' => '40.0000', 'currency' => 'EUR', 'expires_at' => '2029-12-31 23:59:59', 'buyer_name' => 'Marker Buyer', 'buyer_email' => 'marker.buyer@example.test', 'user_id' => '9', 'recipient_name' => 'Marker Recipient', 'recipient_email' => 'marker.recipient@example.test', 'message' => 'MARKER MESSAGE', 'fields' => '[]', 'send_to' => 'buyer', 'delivery_at' => null, 'delivered_at' => null, 'token' => 'markertoken0123456789abcdef0123456789abcdef012345', 'transferable' => '1', 'terms' => 'MARKER TERMS', 'max_checkins' => '1', 'checkins' => '0', 'last_checkin_at' => null, 'created_at' => '2026-11-20 08:00:00', 'updated_at' => '2026-11-20 08:00:00' ),
+);
+VCAP\VoucherRepository::forget();
+$e17_api = new VCAP\API\V1\VoucherService( new VCAP\VoucherRepository(), ( new ReflectionClass( VCAP\CouponManager::class ) )->newInstanceWithoutConstructor() );
+$e17_v   = $e17_api->voucher( 81 );
+check( 'VOUCH-E17-02: voucher() returns the documented keys in order, with code, target product and order line', is_array( $e17_v ) && VCAP\API\V1\VoucherService::CONNECTOR_VOUCHER_KEYS === array_keys( $e17_v ) && 81 === $e17_v['id'] && 'COURSE-7Q2XK9' === $e17_v['code'] && 'course' === $e17_v['type'] && false === $e17_v['multi_use'] && 40.0 === $e17_v['value'] && 17 === $e17_v['order_item_id'] && 55 === $e17_v['product_id'] && 56 === $e17_v['variation_id'] && 9 === $e17_v['user_id'] && '2029-12-31 23:59:59' === $e17_v['expires'] && '2026-11-20 08:00:00' === $e17_v['created'], wp_json_encode( $e17_v ) );
+$e17_json = strtolower( (string) wp_json_encode( $e17_v ) );
+check( 'VOUCH-E17-02: voucher() carries no token, name, address, message or terms', ! preg_match( '/marker|token0123/', $e17_json ) );
+check( 'VOUCH-E17-02: voucher() answers null for an unknown, zero or negative id', null === $e17_api->voucher( 82 ) && null === $e17_api->voucher( 0 ) && null === $e17_api->voucher( -81 ) );
+VCAP\VoucherRepository::forget();
+$e17_by = array( $e17_api->voucher_by_code( 'course-7q2xk9' ), $e17_api->voucher_by_code( ' COURSE-7Q2XK9 ' ), $e17_api->voucher_by_code( 'COURSE-7Q2XK9#1234' ) );
+check( 'VOUCH-E17-02: voucher_by_code() finds the voucher case-insensitively, trimmed and with a #PIN suffix; same array as voucher()', $e17_by === array( $e17_v, $e17_v, $e17_v ) );
+check( 'VOUCH-E17-02: voucher_by_code() answers null for an unknown, empty or overlong code', null === $e17_api->voucher_by_code( 'NOPE-0000' ) && null === $e17_api->voucher_by_code( '' ) && null === $e17_api->voucher_by_code( str_repeat( 'A', 101 ) ) );
+$e17_ok = $e17_api->log_event( 81, 'learnboating_granted', '<b>Course 55</b> granted', 1081 );
+$e17_in = $GLOBALS['wpdb']->inserted[0] ?? array( '', array() );
+check( 'VOUCH-E17-02: log_event() writes the connector event with the plain-text note and order into the voucher history', true === $e17_ok && 'wp_vcap_events' === $e17_in[0] && 81 === $e17_in[1]['voucher_id'] && 'learnboating_granted' === $e17_in[1]['event'] && 'Course 55 granted' === $e17_in[1]['note'] && 1081 === $e17_in[1]['order_id'] && null === $e17_in[1]['amount'] && null === $e17_in[1]['balance_after'], wp_json_encode( $e17_in ) );
+$e17_long = $e17_api->log_event( 81, 'learnboating_failed', str_repeat( 'x', 600 ) );
+check( 'VOUCH-E17-02: log_event() cuts the note to 500 characters', true === $e17_long && 500 === mb_strlen( (string) ( $GLOBALS['wpdb']->inserted[1][1]['note'] ?? '' ) ) );
+$e17_bad = array();
+foreach ( array( 'redeemed', 'api_committed', 'voided', 'topup', 'vcap_custom', 'voucher_x', 'passcaptain_tickets', 'wc_thing', 'granted', 'Learnboating_granted', 'learnboating-granted', 'learnboating_', '_granted', 'learnboating__granted', 'learnboating granted', 'lb_' . str_repeat( 'a', 62 ) ) as $e17_event ) {
+	$e17_r = $e17_api->log_event( 81, $e17_event );
+	if ( ! ( $e17_r instanceof WP_Error && 'vcap_invalid_event' === $e17_r->get_error_code() ) || VCAP\API\V1\VoucherService::connector_event( $e17_event ) ) {
+		$e17_bad[] = $e17_event;
+	}
+}
+check( 'VOUCH-E17-02: log_event() refuses core events, reserved prefixes and malformed names (vcap_invalid_event), connector_event() agrees', array() === $e17_bad && 2 === count( $GLOBALS['wpdb']->inserted ) && VCAP\API\V1\VoucherService::connector_event( 'learnboating_revoked' ) && VCAP\API\V1\VoucherService::connector_event( 'lb2_access_granted_2' ), implode( ', ', $e17_bad ) );
+$e17_unknown = $e17_api->log_event( 4711, 'learnboating_granted' );
+$GLOBALS['wpdb']->fail = true;
+$e17_failed  = $e17_api->log_event( 81, 'learnboating_granted' );
+$GLOBALS['wpdb']->fail = false;
+check( 'VOUCH-E17-02: log_event() reports an unknown voucher and a failed insert', $e17_unknown instanceof WP_Error && 'vcap_unknown_voucher' === $e17_unknown->get_error_code() && $e17_failed instanceof WP_Error && 'vcap_log_failed' === $e17_failed->get_error_code() );
+check( 'VOUCH-E17-02: admin_url() points to the voucher on the Voucher Captain screen', 'https://shop.test/wp-admin/admin.php?page=vcap-vouchers&voucher=81' === $e17_api->admin_url( 81 ) && str_ends_with( $e17_api->admin_url( -3 ), 'voucher=0' ) );
+$GLOBALS['vcap_test_item_meta'][17]['_vcap_line'] = array( 'face_value' => 40.0, 'channels' => array( 'external' ), 'learnboating' => array( 'product_id' => 7, 'variation_id' => 0 ) );
+$GLOBALS['vcap_test_item_meta'][18]['_vcap_line'] = 'broken';
+check( 'VOUCH-E17-02: line_snapshot() returns the stored line snapshot with connector keys; [] for a missing, broken or invalid line', array( 'product_id' => 7, 'variation_id' => 0 ) === ( $e17_api->line_snapshot( 17 )['learnboating'] ?? null ) && array() === $e17_api->line_snapshot( 18 ) && array() === $e17_api->line_snapshot( 19 ) && array() === $e17_api->line_snapshot( 0 ) );
+unset( $GLOBALS['vcap_test_item_meta'][17], $GLOBALS['vcap_test_item_meta'][18] );
+$GLOBALS['wpdb'] = $e17_saved_wpdb;
+VCAP\VoucherRepository::forget();
+// Every event Voucher Captain writes itself is reserved: literal log() events, *_EVENT constants and the core labels.
+$e17_src = '';
+foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( VCAP_PATH . 'src', FilesystemIterator::SKIP_DOTS ) ) as $e17_file ) {
+	if ( str_ends_with( (string) $e17_file, '.php' ) && ! str_contains( (string) $e17_file, '/vendor' ) ) {
+		$e17_src .= (string) file_get_contents( (string) $e17_file );
+	}
+}
+preg_match_all( "/->log\(\s*[^,]+,\s*'([a-z_]+)'/", $e17_src, $e17_m1 );
+preg_match_all( "/(?:const [A-Z_]*EVENT|const EVENT)\s*=\s*'([a-z][a-z_]*)'/", $e17_src, $e17_m2 );
+preg_match_all( "/^\s*'([a-z_]+)'\s*=>\s*__\(/m", substr( $e17_src, (int) strpos( $e17_src, 'public static function event_labels(): array {' ), 6000 ), $e17_m3 );
+$e17_written = array_unique( array_merge( $e17_m1[1], $e17_m2[1], $e17_m3[1], array( 'api_committed', 'api_released', 'api_reserved' ) ) );
+$e17_missing = array_values( array_diff( $e17_written, VCAP\API\V1\VoucherService::CORE_EVENTS ) );
+check( 'VOUCH-E17-02: CORE_EVENTS lists every event Voucher Captain writes (log() literals, *_EVENT constants, core labels)', count( $e17_written ) > 40 && array() === $e17_missing, implode( ', ', $e17_missing ) );
+$e17_main = (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' );
+$e17_apim = (string) file_get_contents( VCAP_PATH . 'API.md' );
+$e17_conn = (string) file_get_contents( VCAP_PATH . 'CONNECTORS.md' );
+$e17_doc  = array_filter( array( 'voucher', 'voucher_by_code', 'log_event', 'connector_event', 'admin_url', 'line_snapshot' ), static fn( $m ) => ! method_exists( VCAP\API\V1\VoucherService::class, $m ) || ! str_contains( (string) ( new ReflectionMethod( VCAP\API\V1\VoucherService::class, $m ) )->getDocComment(), '@since 1.3.0 (contract 1.4.0)' ) || ! str_contains( $e17_apim, $m . '(' ) );
+check( 'VOUCH-E17-02: the six methods carry @since (contract 1.4.0), are documented in API.md → "Connector access"; contract 1.4.0 in the main file and CONNECTORS.md', array() === $e17_doc && str_contains( $e17_main, "define( 'VCAP_CONTRACT_VERSION', '1.4.0' );" ) && str_contains( $e17_apim, '### Connector access (since 1.3.0, contract 1.4.0)' ) && str_contains( $e17_conn, '| 1.4.0 | 1.3.0 | connector access' ), implode( ', ', $e17_doc ) );
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

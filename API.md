@@ -404,7 +404,21 @@ Each voucher product chooses where its vouchers can be redeemed ("Redeemable via
 
 `vcap()->api_v1->order_lines( WC_Order $order )` returns, per product line (keyed by order item id): product and variation id, name, quantity, refunded quantity, subtotal/total and taxes, refunded total, refunded VAT (`refunded_tax`, all rates of the line) and order currency, the voucher line snapshot and the vouchers issued for the line (id, code, type, status, value, balance, currency, expiry). Filter: `vcap_order_lines`.
 
-The voucher line snapshot (`VCAP\Issuer::line_data( $item )`, order item meta `_vcap_line`) is written once when the vouchers are issued: `face_value` and `voucher_currency` of each voucher, number of `vouchers`, `quantity`, `order_currency`, `subtotal`, `subtotal_tax`, `total`, `total_tax` (after discounts), `tax_class`, `tax_status`, `prices_include_tax`, `voucher_type`, `discount_type`, `amount_source`, `channels` and `recorded_at`.
+The voucher line snapshot (`vcap()->api_v1->line_snapshot( $order_item_id )` since contract 1.4.0, order item meta `_vcap_line`) is written once when the vouchers are issued: `face_value` and `voucher_currency` of each voucher, number of `vouchers`, `quantity`, `order_currency`, `subtotal`, `subtotal_tax`, `total`, `total_tax` (after discounts), `tax_class`, `tax_status`, `prices_include_tax`, `voucher_type`, `discount_type`, `amount_source`, `channels` and `recorded_at`.
+
+### Connector access (since 1.3.0, contract 1.4.0)
+
+Five methods of `vcap()->api_v1` cover what a connector plugin needs besides redeeming, so that it never reads `vcap()->vouchers`, the class `VCAP\Voucher`, `VCAP\Issuer::LINE_META` or the admin page slug (VOUCH-E17-02). Check `version_compare( VCAP_CONTRACT_VERSION, '1.4.0', '>=' )` before using them.
+
+| Method | Returns |
+| --- | --- |
+| `voucher( int $voucher_id )` | The voucher as an array or `null`: `id`, `code`, `type`, `status`, `usage_mode`, `multi_use` (bool), `value`, `balance`, `currency`, `expires`, `order_id`, `order_item_id`, `product_id`, `variation_id`, `user_id`, `created` (`VoucherService::CONNECTOR_VOUCHER_KEYS`). Amounts are decimals in the voucher currency, times `Y-m-d H:i:s` UTC or `null`. Contains the code (a connector redeems with it), never the token, names, addresses, message, personalisation fields or terms. |
+| `voucher_by_code( string $code )` | The same array for a code as a customer typed it (case-insensitive; `code#PIN` is reduced to the code, the PIN is not checked), or `null`. |
+| `log_event( int $voucher_id, string $event, string $note = '', int $order_id = 0 )` | `true` or a `WP_Error` (`vcap_invalid_event`, `vcap_unknown_voucher`, `vcap_log_failed`). Writes an entry of the connector into the voucher history. The event name is `<prefix>_<name>` (lower case, letters, digits, underscores, at most 64 characters), not one of Voucher Captain's own events (`VoucherService::CORE_EVENTS`) and not starting with `vcap_`, `voucher_`, `api_`, `passcaptain_`, `wc_`, `woocommerce_` or `wp_`; `VoucherService::connector_event( $event )` tells beforehand. The note is plain text, at most 500 characters: no full code, address or secret. Label it with the filter `vcap_event_labels`. |
+| `admin_url( int $voucher_id )` | Address of the voucher on the Voucher Captain admin screen (that screen checks the user's rights). |
+| `line_snapshot( int $order_item_id )` | The voucher line snapshot of an order line (see below; connector keys added through `vcap_line_snapshot` included), or `[]`. Same data as `voucher_line` of `order_lines()`, without loading the order. |
+
+None of them checks the current user: the connector decides who may see or trigger what. Redeeming still goes through `vcap()->redemptions` (reserve → commit/release), which checks status, channel, user and PIN.
 
 ### Refunds of completed redemptions
 

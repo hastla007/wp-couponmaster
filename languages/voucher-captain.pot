@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-17 07:32+0000\n"
+"POT-Creation-Date: 2026-11-23 09:10+0000\n"
 "X-Domain: voucher-captain\n"
 
 #. Plugin Name of the plugin
@@ -267,12 +267,20 @@ msgstr ""
 msgid "Only the shop can give back a completed redemption. Please contact the shop."
 msgstr ""
 
-#: src/API/V1/VoucherService.php:94
+#: src/API/V1/VoucherService.php:95
 msgid "The voucher system returned an invalid response."
 msgstr ""
 
-#: src/API/V1/VoucherService.php:196 src/API/V1/WooCommerceRedemptionProvider.php:48 src/API/V1/WooCommerceRedemptionProvider.php:73 src/API/V1/WooCommerceRedemptionProvider.php:116 src/API/V1/WooCommerceRedemptionProvider.php:154 src/Admin/VoucherAdmin.php:147
+#: src/API/V1/VoucherService.php:236
+msgid "This event name cannot be written to the voucher history."
+msgstr ""
+
+#: src/API/V1/VoucherService.php:240 src/API/V1/VoucherService.php:350 src/API/V1/WooCommerceRedemptionProvider.php:48 src/API/V1/WooCommerceRedemptionProvider.php:73 src/API/V1/WooCommerceRedemptionProvider.php:116 src/API/V1/WooCommerceRedemptionProvider.php:154
 msgid "Voucher not found."
+msgstr ""
+
+#: src/API/V1/VoucherService.php:244
+msgid "The voucher history could not be saved."
 msgstr ""
 
 #: src/API/V1/WooCommerceRedemptionProvider.php:76
@@ -4248,12 +4256,12 @@ msgid "Voucher %s can no longer be used (it was cancelled or redeemed elsewhere)
 msgstr ""
 
 #. translators: 1: voucher type, 2: order number
-#: src/Coupons/CouponFactory.php:51
+#: src/Coupons/CouponFactory.php:67
 #, php-format
 msgid "%1$s from order #%2$s (Voucher Captain)"
 msgstr ""
 
-#: src/Coupons/CouponFactory.php:91
+#: src/Coupons/CouponFactory.php:107
 msgid "No recipient email was given: redemption is limited to the buyer email instead."
 msgstr ""
 
@@ -10915,17 +10923,17 @@ msgstr ""
 msgid "Voucher Captain requires PHP 8.5 or newer."
 msgstr ""
 
-#: voucher-captain.php:91
+#: voucher-captain.php:93
 msgid "Voucher Captain requires WooCommerce to be installed and active."
 msgstr ""
 
 #. translators: %s: installed WooCommerce version
-#: voucher-captain.php:105
+#: voucher-captain.php:107
 #, php-format
 msgid "Voucher Captain requires WooCommerce 11.2.2 or newer (installed: %s). Please update WooCommerce."
 msgstr ""
 
-#: voucher-captain.php:105
+#: voucher-captain.php:107
 msgid "Until then, gift cards and store credit are refused at checkout, because their balance cannot be deducted."
 msgstr ""
 

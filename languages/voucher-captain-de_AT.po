@@ -14667,3 +14667,9 @@ msgid ""
 msgstr ""
 "Bis dahin werden Geschenkkarten und Kundenguthaben an der Kasse abgelehnt, "
 "weil ihr Restwert nicht abgebucht werden kann."
+
+msgid "This event name cannot be written to the voucher history."
+msgstr "Dieser Ereignisname kann nicht in den Gutscheinverlauf geschrieben werden."
+
+msgid "The voucher history could not be saved."
+msgstr "Der Gutscheinverlauf konnte nicht gespeichert werden."
