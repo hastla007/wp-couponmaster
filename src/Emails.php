@@ -14,6 +14,7 @@ final class Emails {
 		add_filter( 'woocommerce_email_classes', array( $this, 'classes' ) );
 		add_action( 'vcap_voucher_delivered', array( $this, 'gift_delivered' ), 20, 1 );
 		add_action( 'vcap_voucher_redeemed', array( $this, 'gift_used' ), 20, 1 );
+		Emails\Branding::register(); // SET-VC-29: accent colour and logo are stored checked.
 	}
 
 	/** @param mixed $emails What the previous filter returned (AP-Q2-6: a non-array is normalised, no TypeError). */

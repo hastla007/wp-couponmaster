@@ -27,6 +27,7 @@ final class Downloads {
 		add_action( 'template_redirect', array( $this, 'handle_balance' ), 8 );
 		add_action( 'init', array( self::class, 'register_assets' ), 5 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'styles' ) );
+		CustomCss::register(); // SET-VC-30: "Additional CSS" is stored cleaned.
 	}
 
 	/** Registers the storefront style and script (enqueued where vouchers are shown, see enqueue_style()). */
@@ -46,11 +47,16 @@ final class Downloads {
 	public static function enqueue_style(): void {
 		self::register_assets();
 		wp_enqueue_style( 'vcap-frontend' );
+		CustomCss::enqueue(); // SET-VC-30: the shop's additional CSS, only where plugin output is rendered.
 	}
 
 	public function styles(): void {
-		if ( is_account_page() || is_order_received_page() || is_product() || is_cart() || is_checkout() ) {
+		if ( is_account_page() ) {
 			self::enqueue_style();
+		} elseif ( is_order_received_page() || is_product() || is_cart() || is_checkout() ) {
+			// The base style only: these pages get the additional CSS once plugin output is rendered on them.
+			self::register_assets();
+			wp_enqueue_style( 'vcap-frontend' );
 		}
 	}
 

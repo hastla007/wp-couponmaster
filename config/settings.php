@@ -126,6 +126,11 @@ $vcap_settings = array(
 	'vcap_recipient_fix_days'        => array( 'type' => 'int', 'default' => 30, 'min' => 1, 'max' => 365, 'section' => 'delivery' ),
 	'vcap_recipient_fix_max'         => array( 'type' => 'int', 'default' => 2, 'min' => 0, 'max' => 2, 'section' => 'delivery' ),
 	'vcap_printed_link_grace_days'   => array( 'type' => 'int', 'default' => 30, 'min' => 0, 'max' => 3650, 'section' => 'delivery' ),
+	// SET-VC-29: '' = the WooCommerce email settings (base colour, header image) – shops look as before.
+	'vcap_email_color'               => array( 'section' => 'delivery' ),
+	'vcap_email_logo'                => array( 'section' => 'delivery' ),
+	// SET-VC-30: own CSS for the redeem form and the account area (stored cleaned, see VCAP\CustomCss).
+	'vcap_custom_css'                => array( 'type' => 'text', 'section' => 'delivery' ),
 
 	/* ---- Privacy & advanced ---- */
 	'vcap_retention_days'            => array( 'type' => 'int', 'default' => 0, 'min' => 0, 'section' => 'privacy', 'legal' => true ),

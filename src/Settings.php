@@ -424,6 +424,60 @@ final class Settings {
 				)
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_self_service' ),
+			// SET-VC-29: accent colour and logo of the voucher emails (free in the core, owner's rule S6), test email.
+			array(
+				'type'  => 'title',
+				'title' => __( 'Email appearance', 'voucher-captain' ),
+				'id'    => 'vcap_email_look',
+				'desc'  => __( 'Applies to the emails of Voucher Captain only. Empty fields use the WooCommerce email settings (WooCommerce → Settings → Emails).', 'voucher-captain' ),
+			),
+			SettingsRegistry::field(
+				Emails\Branding::COLOR_OPTION,
+				array(
+					'title'       => __( 'Accent colour', 'voucher-captain' ),
+					'type'        => 'color',
+					'css'         => 'width:6em;',
+					'placeholder' => (string) get_option( 'woocommerce_email_base_color', '' ),
+					'desc_tip'    => __( 'Colour of the header, buttons and the voucher frame in the voucher emails, e.g. #1f3a4d. Empty = the WooCommerce base colour.', 'voucher-captain' ),
+				)
+			),
+			SettingsRegistry::field(
+				Emails\Branding::LOGO_OPTION,
+				array(
+					'title'       => __( 'Logo', 'voucher-captain' ),
+					'type'        => 'text',
+					'css'         => 'min-width:400px;',
+					'placeholder' => (string) get_option( 'woocommerce_email_header_image', '' ),
+					'desc_tip'    => __( 'Address (URL) of the logo shown at the top of the voucher emails, e.g. from the media library. Empty = the WooCommerce header image.', 'voucher-captain' ),
+				)
+			),
+			array(
+				'type'      => 'vcap_test_email',
+				'title'     => __( 'Test email', 'voucher-captain' ),
+				'id'        => 'vcap_test_email',
+				'is_option' => false,
+			),
+			array( 'type' => 'sectionend', 'id' => 'vcap_email_look' ),
+			// SET-VC-30: own CSS for the redeem form and the account area.
+			array(
+				'type'  => 'title',
+				'title' => __( 'Additional CSS', 'voucher-captain' ),
+				'id'    => 'vcap_custom_css_block',
+			),
+			SettingsRegistry::field(
+				CustomCss::OPTION,
+				array(
+					'title'    => __( 'Additional CSS', 'voucher-captain' ),
+					'type'     => 'textarea',
+					'css'      => 'width:100%;min-height:10em;font-family:monospace;',
+					'desc'     => sprintf(
+						/* translators: %d: maximum number of characters */
+						__( 'Printed only on pages with Voucher Captain output (redeem form, balance check, blocks, voucher fields, My Account). Tags, @import, expression() and script addresses are removed; at most %d characters.', 'voucher-captain' ),
+						CustomCss::MAX_LENGTH
+					),
+				)
+			),
+			array( 'type' => 'sectionend', 'id' => 'vcap_custom_css_block' ),
 		);
 		return $fields;
 	}

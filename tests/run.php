@@ -3977,6 +3977,94 @@ check(
 		&& str_contains( $s31_pv, "rate_limited( 'email_confirm', self::send_per_hour()," ) && str_contains( $s31_pv, 'time() + self::link_lifetime();' ),
 	wp_json_encode( $s31_p )
 );
+// SET-VC-29: accent colour and logo of the voucher emails (default: WooCommerce), test email to the current user.
+echo "SET-VC-29 email appearance and test email\n";
+$b29 = 'VCAP\Emails\Branding';
+check( 'SET-VC-29: accent colour and logo are registered in "Delivery & downloads" with an empty default (WooCommerce settings apply), exported, no legal weight', '' === VCAP\SettingsRegistry::default( 'vcap_email_color' ) && '' === VCAP\SettingsRegistry::default( 'vcap_email_logo' ) && 'delivery' === VCAP\SettingsRegistry::get( 'vcap_email_color' )['section'] && 'delivery' === VCAP\SettingsRegistry::get( 'vcap_email_logo' )['section'] && in_array( 'vcap_email_logo', VCAP\SettingsRegistry::with( 'export' ), true ) && ! in_array( 'vcap_email_color', VCAP\SettingsRegistry::with( 'legal' ), true ) );
+unset( $GLOBALS['vcap_test_options']['vcap_email_color'], $GLOBALS['vcap_test_options']['vcap_email_logo'], $GLOBALS['vcap_test_options']['woocommerce_email_base_color'] );
+$b29_fallback = $b29::base_color();
+$GLOBALS['vcap_test_options']['woocommerce_email_base_color'] = '#7f54b3';
+$b29_wc = $b29::base_color();
+$GLOBALS['vcap_test_options']['vcap_email_color'] = '#AA0000';
+$b29_own = $b29::base_color();
+check( 'SET-VC-29: base colour = own accent colour, else the WooCommerce base colour, else #1f3a4d (existing shops look the same)', '#1f3a4d' === $b29_fallback && '#7f54b3' === $b29_wc && '#aa0000' === $b29_own );
+$GLOBALS['vcap_test_filters']['vcap_setting_vcap_email_color'][] = array( static fn( $v ) => '#00ff00', 1 );
+$b29_filtered = $b29::base_color();
+unset( $GLOBALS['vcap_test_filters']['vcap_setting_vcap_email_color'] );
+check( 'SET-VC-29: the filter vcap_setting_vcap_email_color wins over the stored colour', '#00ff00' === $b29_filtered );
+check( 'SET-VC-29: colour and logo are stored checked (hex colour or empty; http(s) URL or empty)', '#abc' === $b29::sanitize_color( ' #ABC ' ) && '' === $b29::sanitize_color( 'red;background:url(x)' ) && '' === $b29::sanitize_color( array() ) && 'https://shop.test/logo.png' === $b29::sanitize_logo( ' https://shop.test/logo.png ' ) && '' === $b29::sanitize_logo( 'javascript:alert(1)' ) && '' === $b29::sanitize_logo( '//evil.test/x.png' ) );
+$GLOBALS['vcap_test_options']['vcap_email_logo'] = 'https://shop.test/logo.png';
+$b29_inside = array();
+$b29_result = $b29::during(
+	static function () use ( $b29, &$b29_inside ) {
+		$b29_inside = array( has_filter( 'pre_option_woocommerce_email_header_image' ), has_filter( 'pre_option_woocommerce_email_base_color' ), apply_filters( 'pre_option_woocommerce_email_header_image', false ), apply_filters( 'pre_option_woocommerce_email_base_color', false ) );
+		return $b29::during( static fn() => 'nested' );
+	}
+);
+check( 'SET-VC-29: while a voucher email is rendered, WooCommerce\'s header image and base colour read the shop\'s logo and colour; afterwards the filters are gone (other shop emails unchanged)', 'nested' === $b29_result && array( true, true, 'https://shop.test/logo.png', '#aa0000' ) === $b29_inside && ! has_filter( 'pre_option_woocommerce_email_header_image' ) && ! has_filter( 'pre_option_woocommerce_email_base_color' ) );
+unset( $GLOBALS['vcap_test_options']['vcap_email_color'], $GLOBALS['vcap_test_options']['vcap_email_logo'] );
+check( 'SET-VC-29: with empty settings the WooCommerce values stay (pre_option passes false through)', false === $b29::pre_logo( false ) && false === $b29::pre_color( false ) );
+$b29_src = (string) file_get_contents( VCAP_PATH . 'src/Emails/VoucherEmail.php' ) . file_get_contents( VCAP_PATH . 'src/Emails/BonusEmail.php' ) . file_get_contents( VCAP_PATH . 'src/Emails/GiftNoticeEmail.php' );
+check( 'SET-VC-29: every Voucher Captain email renders and styles through Branding::during(); colors() takes Branding::base_color() and keeps the filter vcap_email_colors', 3 === substr_count( $b29_src, 'Branding::during( fn() => parent::get_content() )' ) && 3 === substr_count( $b29_src, 'Branding::during( fn() => parent::style_inline( $content ) )' ) && str_contains( $b29_src, '$base = Branding::base_color();' ) && str_contains( $b29_src, "apply_filters( 'vcap_email_colors', \$colors )" ) );
+// Test email: at most 5 per user and hour, only to the user's own address.
+$GLOBALS['vcap_test_transients'] = array();
+$b29_to   = array();
+$b29_send = static function ( string $address ) use ( &$b29_to ) {
+	$b29_to[] = $address;
+	return true;
+};
+$b29_runs = array();
+for ( $b29_i = 0; $b29_i < 6; $b29_i++ ) {
+	$b29_runs[] = VCAP\Preview::send_test_email( 7, 'admin@shop.test', $b29_send );
+}
+check( 'SET-VC-29: test emails – 5 per user and hour, the 6th is refused; each one only to the user\'s own address', array( 'sent', 'sent', 'sent', 'sent', 'sent', 'limit' ) === $b29_runs && array_fill( 0, 5, 'admin@shop.test' ) === $b29_to && 0 === VCAP\Preview::test_email_quota( 7 ) && 5 === VCAP\Preview::test_email_quota( 8 ) );
+$GLOBALS['vcap_test_transients'][ VCAP\Preview::TEST_MAIL_TRANSIENT . '7' ] = array( time() - 2 * HOUR_IN_SECONDS, time() - HOUR_IN_SECONDS - 5, time() - 60 );
+check( 'SET-VC-29: test emails older than an hour no longer count; no address or no user sends nothing; a failing mail counts as well', 4 === VCAP\Preview::test_email_quota( 7 ) && 'no_address' === VCAP\Preview::send_test_email( 7, 'not-an-address', $b29_send ) && 'no_address' === VCAP\Preview::send_test_email( 0, 'admin@shop.test', $b29_send ) && 'failed' === VCAP\Preview::send_test_email( 7, 'admin@shop.test', static fn() => false ) && 3 === VCAP\Preview::test_email_quota( 7 ) && 5 === count( $b29_to ) );
+$GLOBALS['vcap_test_transients'] = array();
+$b29_prev = (string) file_get_contents( VCAP_PATH . 'src/Preview.php' );
+check( 'SET-VC-29: the test email handler checks the capability and the nonce before sending, sends with no attachment and not to additional recipients', (bool) preg_match( "/function test_email_request\(\): void \{\s*if \( ! current_user_can\( 'manage_woocommerce' \) \) \{\s*wp_die\([^\n]*\n\s*\}\s*check_admin_referer\( self::TEST_MAIL_ACTION \);/", $b29_prev ) && str_contains( $b29_prev, '$email->send( $address, $subject, $email->get_content(), $email->get_headers(), array() )' ) && ! str_contains( $b29_prev, 'extra_recipients' ) );
+$b29_fields = ( new VCAP\Settings() )->fields( 'delivery' );
+$b29_types  = array_column( $b29_fields, 'type', 'id' );
+check( 'SET-VC-29: "Delivery & downloads" shows accent colour, logo and the test email button (no option)', 'color' === ( $b29_types['vcap_email_color'] ?? '' ) && 'text' === ( $b29_types['vcap_email_logo'] ?? '' ) && 'vcap_test_email' === ( $b29_types['vcap_test_email'] ?? '' ) );
+
+// SET-VC-30: additional CSS for the redeem form and the account area.
+echo "SET-VC-30 additional CSS\n";
+check( 'SET-VC-30: "Additional CSS" is a text setting of "Delivery & downloads" with an empty default and a textarea field', 'text' === VCAP\SettingsRegistry::get( 'vcap_custom_css' )['type'] && 'delivery' === VCAP\SettingsRegistry::get( 'vcap_custom_css' )['section'] && '' === VCAP\SettingsRegistry::default( 'vcap_custom_css' ) && 'textarea' === ( $b29_types['vcap_custom_css'] ?? '' ) );
+$c30 = 'VCAP\CustomCss';
+check(
+	'SET-VC-30: stored cleaned – tags and "</style" removed, expression(), javascript:/vbscript: URLs, behaviours, bindings and @import removed (also spelled with escapes or comments), child selectors kept',
+	'.vcap-redeem > button { color: #c00; }' === $c30::sanitize( '.vcap-redeem > button { color: #c00; }' )
+	&& ! str_contains( strtolower( $c30::sanitize( 'a{color:red}</style><script>alert(1)</script>' ) ), '<' )
+	&& ! str_contains( strtolower( $c30::sanitize( 'a{color:red}</STYLE ><b>x' ) ), 'style' )
+	&& ! preg_match( '/expression|javascript|vbscript|@import|behavior|binding/i', $c30::sanitize( "a{width:expression(alert(1));background:url(javascript:alert(1));b:url( vbscript:x)}\n@import url(https://evil.test/x.css);\nb{behavior:url(x.htc);-moz-binding:url(x.xml#y)}" ) )
+	&& ! preg_match( '/expression|javascript/i', $c30::sanitize( 'a{width:expr\\65ssion(1);w:e/**/xpression(1);background:url(java\\script:alert(1));c:url(jav ascript:x)}' ) )
+	&& ! preg_match( '/javascript/i', $c30::sanitize( 'a{background:url(javajavascript:script:alert(1))}' ) )
+	&& '' === $c30::sanitize( array( 'x' ) )
+);
+check( 'SET-VC-30: at most 10000 characters are stored; the save filter cleans the raw input (WooCommerce would turn ">" into "&gt;")', $c30::MAX_LENGTH === mb_strlen( $c30::sanitize( str_repeat( 'a{b:c}', 3000 ) ) ) && 'a > b{c:d}' === $c30::sanitize_option( 'a &gt; b{c:d}', array( 'id' => 'vcap_custom_css' ), 'a > b{c:d}<script>' ) );
+if ( ! function_exists( 'wp_style_is' ) ) {
+	function wp_style_is( $h, $l = 'enqueued' ) { return 'registered' === $l ? isset( $GLOBALS['vcap_test_styles']['registered'][ $h ] ) : isset( $GLOBALS['vcap_test_styles']['enqueued'][ $h ] ); }
+	function wp_register_style( $h, $src, $deps = array(), $ver = false ) { $GLOBALS['vcap_test_styles']['registered'][ $h ] = array( $src, $deps ); return true; }
+	function wp_enqueue_style( $h ) { $GLOBALS['vcap_test_styles']['enqueued'][ $h ] = true; }
+	function wp_add_inline_style( $h, $css ) { $GLOBALS['vcap_test_styles']['inline'][ $h ][] = $css; return true; }
+}
+if ( ! function_exists( 'wp_script_is' ) ) {
+	function wp_script_is( $h, $l = 'enqueued' ) { return true; }
+}
+$GLOBALS['vcap_test_styles'] = array();
+$c30::reset();
+unset( $GLOBALS['vcap_test_options']['vcap_custom_css'] );
+VCAP\Downloads::enqueue_style();
+$c30_empty = $GLOBALS['vcap_test_styles'];
+$GLOBALS['vcap_test_options']['vcap_custom_css'] = '.vcap-balance{color:#123}';
+VCAP\Downloads::enqueue_style();
+VCAP\Downloads::enqueue_style();
+check( 'SET-VC-30: printed with the storefront style where plugin output enqueues it (once per page, after "vcap-frontend"); nothing when empty', ! isset( $c30_empty['enqueued'][ $c30::HANDLE ] ) && isset( $c30_empty['enqueued']['vcap-frontend'] ) && array( '.vcap-balance{color:#123}' ) === ( $GLOBALS['vcap_test_styles']['inline'][ $c30::HANDLE ] ?? null ) && isset( $GLOBALS['vcap_test_styles']['enqueued'][ $c30::HANDLE ] ) && array( false, array( 'vcap-frontend' ) ) === ( $GLOBALS['vcap_test_styles']['registered'][ $c30::HANDLE ] ?? null ) );
+$c30_dl = (string) file_get_contents( VCAP_PATH . 'src/Downloads.php' );
+check( 'SET-VC-30: on product, cart, checkout and order received pages without plugin output only the base style is enqueued, the account area gets the CSS', (bool) preg_match( "/if \( is_account_page\(\) \) \{\s*self::enqueue_style\(\);\s*\} elseif \( is_order_received_page\(\) \|\| is_product\(\) \|\| is_cart\(\) \|\| is_checkout\(\) \) \{/", $c30_dl ) );
+unset( $GLOBALS['vcap_test_options']['vcap_custom_css'] );
+$c30::reset();
+$GLOBALS['vcap_test_styles'] = array();
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );
