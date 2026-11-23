@@ -192,6 +192,7 @@ final class Plugin {
 			( new Admin\CampaignAdmin( new Campaigns( $this->code_pool, $this->vouchers ) ) )->register();
 			( new Admin\ReportsAdmin() )->register();
 			( new Counter() )->register(); // Own daily counter limits on the user profile (R6).
+			( new CounterLocations() )->register(); // SET-VC-22: the table of tills/branches.
 		}
 
 		add_action( 'init', array( $this, 'load_textdomain' ), 0 );

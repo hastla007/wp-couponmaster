@@ -141,6 +141,8 @@ final class Settings {
 			'promotions' => __( 'Promotions & refer a friend', 'voucher-captain' ),
 			'codes'      => __( 'Codes', 'voucher-captain' ),
 			'delivery'   => __( 'Delivery & downloads', 'voucher-captain' ),
+			// SET-VC-22: counter limits, receipt number and tills, formerly on "Privacy & advanced" (keys unchanged).
+			'counter'    => __( 'Counter & locations', 'voucher-captain' ),
 			'privacy'  => __( 'Privacy & advanced', 'voucher-captain' ),
 			'api'      => __( 'Integrations (API)', 'voucher-captain' ),
 		);
@@ -200,6 +202,9 @@ final class Settings {
 				break;
 			case 'privacy':
 				$fields = $this->privacy_fields();
+				break;
+			case 'counter':
+				$fields = self::counter_fields();
 				break;
 			case 'redemption':
 			case 'promotions':
@@ -514,7 +519,7 @@ final class Settings {
 		return array_merge( $fields, DatevExport::settings_fields() ); // M12-69.
 	}
 
-	/** Section "Privacy & advanced" with the counter limits. */
+	/** Section "Privacy & advanced" (the counter limits moved to "Counter & locations", SET-VC-22). */
 	private function privacy_fields(): array {
 		$fields = array(
 			array( 'type' => 'title', 'title' => __( 'Privacy & advanced', 'voucher-captain' ), 'id' => 'vcap_privacy' ),
@@ -564,7 +569,7 @@ final class Settings {
 			Health::proxy_header_field(), // SET-VC-26.
 			array( 'type' => 'sectionend', 'id' => 'vcap_privacy' ),
 		);
-		$fields = array_merge( $fields, self::counter_limit_fields(), Admin\RoleCaps::fields() ); // SET-VC-21.
+		$fields = array_merge( $fields, Admin\RoleCaps::fields() ); // SET-VC-21.
 		// SET-VC-14/15/16: export, import, reset and change log of the settings.
 		return array_merge( $fields, Admin\SettingsTools::fields() );
 	}
@@ -1175,9 +1180,13 @@ final class Settings {
 		return array_merge( $fields, PaymentMethods::settings_fields() ); // SET-VC-19: block on "General".
 	}
 
-	/** Voucher products the setting "Multi-purpose vouchers as payment" leaves out (only on the settings page). */
-	/** R6: daily limits of counter (scanner) redemptions (Counter), a block of the "Privacy & advanced" section. */
-	private static function counter_limit_fields(): array {
+	/**
+	 * SET-VC-22: section "Counter & locations" – daily limits of counter (scanner) redemptions (R6), then receipt number
+	 * and the table of tills/branches (CounterLocations). The option names are those of 1.2.0.
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function counter_fields(): array {
 		$money = array( 'step' => '0.01' );
 		$count = array( 'step' => 1 );
 		return array(
@@ -1240,16 +1249,14 @@ final class Settings {
 					'desc'    => __( 'A counter redemption is only booked with the receipt number of the till receipt for the goods (checked on the server).', 'voucher-captain' ),
 				)
 			),
-			SettingsRegistry::field(
-				Counter::LOCATIONS,
-				array(
-					'title' => __( 'Tills / branches', 'voucher-captain' ),
-					'type'  => 'textarea',
-					'css'   => 'width:300px;height:90px',
-					'desc'  => __( 'One per line. When set, the scanner offers this list instead of a free text field, and a staff member can be fixed to one on their user profile. The scanner works online only: without a connection nothing is booked (on purpose – an offline scanner could redeem the same code twice).', 'voucher-captain' ),
-				)
-			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_counter_limits' ),
+			array(
+				'type'  => 'title',
+				'title' => __( 'Tills and branches', 'voucher-captain' ),
+				'id'    => 'vcap_counter_locations_block',
+			),
+			CounterLocations::field(), // Counter::LOCATIONS as a table.
+			array( 'type' => 'sectionend', 'id' => 'vcap_counter_locations_block' ),
 		);
 	}
 

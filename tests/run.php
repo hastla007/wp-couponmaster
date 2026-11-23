@@ -2458,7 +2458,7 @@ $a4_settings = new VCAP\Settings();
 add_filter( 'vcap_settings_sections', static fn( $s ) => array( 'pro' => '<b>Wallet</b>', '' => 'Hijack', 'api' => 'Hijack', 'Bad Id!' => 'Other', 'empty' => '' ) + $s );
 add_filter( 'vcap_settings_fields', static fn( $f, $section ) => 'pro' === $section ? array_merge( $f, array( array( 'id' => 'vcap_pro_wallet', 'type' => 'checkbox' ) ) ) : $f, 10, 2 );
 $a4_sections = $a4_settings->section_list();
-check( 'A4: vcap_settings_sections adds an add-on section (label as text, id sanitised) after the core ones; core sections and their labels stay', 'Wallet' === ( $a4_sections['pro'] ?? '' ) && 'Other' === ( $a4_sections['bad-id'] ?? '' ) && ! isset( $a4_sections['empty'] ) && 'General' === $a4_sections[''] && 'Integrations (API)' === $a4_sections['api'] && 'pro' === array_keys( $a4_sections )[7], var_export( $a4_sections, true ) );
+check( 'A4: vcap_settings_sections adds an add-on section (label as text, id sanitised) after the core ones; core sections and their labels stay', 'Wallet' === ( $a4_sections['pro'] ?? '' ) && 'Other' === ( $a4_sections['bad-id'] ?? '' ) && ! isset( $a4_sections['empty'] ) && 'General' === $a4_sections[''] && 'Integrations (API)' === $a4_sections['api'] && 'pro' === array_keys( $a4_sections )[8], var_export( $a4_sections, true ) );
 check( 'A4: the page of an add-on section starts empty and shows the fields the add-on adds with vcap_settings_fields', array( array( 'id' => 'vcap_pro_wallet', 'type' => 'checkbox' ) ) === $a4_settings->fields( 'pro' ) );
 unset( $GLOBALS['vcap_test_filters']['vcap_settings_sections'], $GLOBALS['vcap_test_filters']['vcap_settings_fields'] );
 
@@ -4691,6 +4691,75 @@ check(
 	str_contains( $c4_js, 'first.focus()' ) && str_contains( $c4_js, '( focus || add ).focus()' ) && str_contains( $c4_js, 'wp.a11y.speak' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'ACCESSIBILITY.md' ), 'SET-VC-04' )
 );
 $GLOBALS['vcap_test_options'] = $c4_saved;
+
+// SET-VC-22: own section "Counter & locations"; the till list as a table (name, key, active + add-on columns).
+echo "SET-VC-22 counter & locations\n";
+$c22_saved    = $GLOBALS['vcap_test_options'];
+$c22_settings = new VCAP\Settings();
+$c22_ids      = static fn( array $fields ): array => array_values( array_filter( array_map( static fn( $f ) => in_array( $f['type'] ?? '', array( 'title', 'sectionend' ), true ) ? '' : (string) ( $f['id'] ?? '' ), $fields ) ) );
+$c22_moved    = array( VCAP\Counter::USER_AMOUNT, VCAP\Counter::USER_COUNT, VCAP\Counter::TILL_AMOUNT, VCAP\Counter::TILL_COUNT, VCAP\Counter::REQUIRE_RECEIPT, VCAP\Counter::LOCATIONS );
+$c22_counter  = $c22_ids( $c22_settings->fields( 'counter' ) );
+check(
+	'SET-VC-22: section "Counter & locations" holds the counter limits, the receipt number and the till table (option names unchanged, register section "counter"); "Privacy & advanced" no longer does',
+	'Counter & locations' === ( $c22_settings->section_list()['counter'] ?? '' ) && $c22_moved === array_values( array_intersect( $c22_counter, $c22_moved ) ) && array() === array_intersect( $c22_ids( $c22_settings->fields( 'privacy' ) ), $c22_moved ) && array() === array_filter( $c22_moved, static fn( $k ) => 'counter' !== VCAP\SettingsRegistry::get( $k )['section'] ) && $c22_moved === VCAP\SettingsRegistry::in_section( 'counter' ),
+	wp_json_encode( $c22_counter )
+);
+// Old values: the free text of 1.2.0 (one name per line) is read as active tills with a key from the name.
+$GLOBALS['vcap_test_options'][ VCAP\Counter::LOCATIONS ] = "Shop A\r\nKasse Süd\n\n  Shop A \nShop A2";
+$c22_rows = VCAP\CounterLocations::rows();
+check(
+	'SET-VC-22: an old free-text till list is read – every line an active till (duplicates and empty lines dropped), keys from the names; the scanner list is unchanged',
+	array( 'Shop A', 'Kasse Süd', 'Shop A2' ) === VCAP\Counter::locations() && 'shop-a' === $c22_rows[0]['key'] && str_starts_with( $c22_rows[1]['key'], 'kasse-s' ) && 'shop-a2' === $c22_rows[2]['key'] && array( 'yes', 'yes', 'yes' ) === array_column( $c22_rows, 'active' ),
+	wp_json_encode( $c22_rows )
+);
+$c22_conv = VCAP\CounterLocations::sanitize_option( "Shop A\nShop B", array( 'id' => VCAP\Counter::LOCATIONS ), "Shop A\nShop B" );
+$c22_post = VCAP\CounterLocations::sanitize_option(
+	null,
+	array( 'id' => VCAP\Counter::LOCATIONS ),
+	array(
+		array( 'name' => 'Shop A', 'key' => 'shop-a', 'active' => 'yes' ),
+		array( 'name' => 'Pop-up <b>Stand</b>', 'key' => 'SHOP-A' ),
+		array( 'name' => '', 'key' => '', 'active' => 'yes' ),
+		array( 'name' => 'Shop A', 'key' => 'dup', 'active' => 'yes' ),
+	)
+);
+$GLOBALS['vcap_test_options'][ VCAP\Counter::LOCATIONS ] = $c22_post;
+check(
+	'SET-VC-22: saving converts the old text to the JSON table and stores the posted rows checked (unticked = inactive, empty rows and duplicate names dropped, unique keys); inactive tills are not offered on the scanner; nothing posted keeps the value',
+	is_array( json_decode( (string) $c22_conv, true ) ) && array( 'Shop A', 'Shop B' ) === array_column( json_decode( (string) $c22_conv, true ), 'name' )
+		&& array( array( 'name' => 'Shop A', 'key' => 'shop-a', 'active' => 'yes' ), array( 'name' => 'Pop-up Stand', 'key' => 'shop-a-2', 'active' => 'no' ) ) === VCAP\CounterLocations::rows()
+		&& array( 'Shop A' ) === VCAP\Counter::locations() && null === VCAP\CounterLocations::sanitize_option( null, array(), null ) && '' === VCAP\CounterLocations::sanitize_option( '', array(), array() ) && '' === VCAP\SettingsRegistry::default( VCAP\Counter::LOCATIONS ),
+	(string) $c22_post
+);
+// Add-on columns (filter vcap_counter_location_fields): rendered, stored with the row, kept while the add-on is off.
+add_filter(
+	'vcap_counter_location_fields',
+	static fn( $c ) => array_merge(
+		$c,
+		array(
+			'pos_id' => array( 'label' => 'POS terminal', 'type' => 'text' ),
+			'region' => array( 'label' => 'Region', 'type' => 'select', 'options' => array( 'north' => 'North', 'south' => 'South' ), 'default' => 'south' ),
+			'name'   => array( 'label' => 'Hijack', 'type' => 'checkbox' ),
+		)
+	)
+);
+$c22_cols = VCAP\CounterLocations::columns();
+$c22_add  = VCAP\CounterLocations::sanitize_option( null, array(), array( array( 'name' => 'Shop A', 'key' => 'shop-a', 'active' => 'yes', 'pos_id' => 'T-17', 'region' => 'west' ) ) );
+$GLOBALS['vcap_test_options'][ VCAP\Counter::LOCATIONS ] = $c22_add;
+ob_start();
+VCAP\CounterLocations::render( VCAP\CounterLocations::field() );
+$c22_html = (string) ob_get_clean();
+unset( $GLOBALS['vcap_test_filters']['vcap_counter_location_fields'] );
+$c22_kept = VCAP\CounterLocations::sanitize_option( null, array(), array( array( 'name' => 'Shop A1', 'key' => 'shop-a', 'active' => 'yes' ) ) );
+check(
+	'SET-VC-22: filter vcap_counter_location_fields adds columns (text, select) – shown in the table, stored with the row (unknown choice = default); core columns cannot be changed; the values stay when the add-on is off',
+	array( 'name', 'key', 'active', 'pos_id', 'region' ) === array_keys( $c22_cols ) && 'text' === $c22_cols['name']['type']
+		&& array( 'name' => 'Shop A', 'key' => 'shop-a', 'active' => 'yes', 'pos_id' => 'T-17', 'region' => 'south' ) === json_decode( (string) $c22_add, true )[0]
+		&& str_contains( $c22_html, '<th scope="col">POS terminal</th>' ) && str_contains( $c22_html, 'name="vcap_counter_locations[0][pos_id]" value="T-17"' ) && str_contains( $c22_html, 'name="vcap_counter_locations[3][name]"' ) && ! str_contains( $c22_html, 'vcap_counter_locations[4]' ) && str_contains( $c22_html, 'aria-label="Region, row 1"' )
+		&& 'T-17' === ( json_decode( (string) $c22_kept, true )[0]['pos_id'] ?? '' ) && 'Shop A1' === json_decode( (string) $c22_kept, true )[0]['name'],
+	$c22_html
+);
+$GLOBALS['vcap_test_options'] = $c22_saved;
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

@@ -386,7 +386,7 @@ vcap_inst_assert( ! $inst_own( 'pre_set_site_transient_update_plugins' ) && ! $i
 vcap_inst_assert( (bool) $inst_own( 'vcap_account_vouchers_top' ) && count( $inst_own( 'vcap_product_settings_fields' ) ) >= 2 && (bool) $inst_own( 'vcap_scanner_lookup' ), 'referrals, top-up, ticket vouchers and the shared scanner are registered' );
 vcap_inst_assert( ! method_exists( 'VCAP\\Admin\\ReportsAdmin', 'locked' ) && ! class_exists( 'VCAP\\Licensing\\Entitlements', false ) && ! is_dir( VCAP_PATH . 'src/Licensing' ), 'no locked report view and no license gate' );
 $inst_locked = array();
-foreach ( array( '', 'redemption', 'promotions', 'codes', 'delivery', 'privacy', 'api' ) as $inst_section ) {
+foreach ( array( '', 'redemption', 'promotions', 'codes', 'delivery', 'counter', 'privacy', 'api' ) as $inst_section ) {
 	foreach ( vcap()->settings->fields( $inst_section ) as $inst_field ) {
 		if ( isset( $inst_field['id'] ) && ( isset( $inst_field['custom_attributes']['disabled'] ) || ( array_key_exists( 'is_option', $inst_field ) && false === $inst_field['is_option'] ) ) ) {
 			$inst_locked[] = $inst_field['id'];

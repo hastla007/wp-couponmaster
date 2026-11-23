@@ -102,6 +102,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_contact_read_allowed` | 1.3.0 | `src/API/V1/ContactService.php` | Whether the current caller may read the contact of a voucher. |
 | `vcap_counter_limit_applies` | 1.2.0 | `src/Counter.php` | Whether the daily counter limits apply (default: not for staff who manage vouchers). Args: bool, user id, Voucher. |
 | `vcap_counter_limits` | 1.2.0 | `src/Counter.php` | Daily limits of counter redemptions for a staff member at a till (0 = unlimited), e.g. other limits per branch. Args: limits {user: {amount, count}, till: {amount, count}}, user id, till, Voucher\|null. |
+| `vcap_counter_location_fields` | 1.3.0 | `src/CounterLocations.php` | Columns of the table "Tills / branches" (section "Counter & locations"). Add-ons add a column as id => array( 'label' => …, 'type' => 'text'\|'checkbox'\|'select', 'default' => …, 'options' => array( value => label ) for a select ); its value is stored with the row and read with CounterLocations::rows(). The core columns name, key and active cannot be removed or changed. |
 | `vcap_counter_locations` | 1.2.0 | `src/Counter.php` | The managed tills/branches offered on the scanner. Args: string[] list. |
 | `vcap_counter_require_receipt` | 1.2.0 | `src/Counter.php` | Whether a counter redemption needs a receipt number. Args: bool. |
 | `vcap_counter_reversal_minutes` | 1.2.0 | `src/Tickets.php` | – |

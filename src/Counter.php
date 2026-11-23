@@ -32,7 +32,7 @@ final class Counter {
 	public const META_COUNT  = 'vcap_counter_limit_count';
 	/** M12-31: setting "Receipt no. required" – 'auto' (shops based in Germany or Austria), 'yes' or 'no'. */
 	public const REQUIRE_RECEIPT = 'vcap_counter_require_receipt';
-	/** M12-81: setting with the managed list of tills/branches, one per line ('' = free text on the device). */
+	/** M12-81: setting with the managed list of tills/branches ('' = free text on the device; SET-VC-22: a table, CounterLocations). */
 	public const LOCATIONS = 'vcap_counter_locations';
 	/** M12-81: user option (per site): the till/branch a staff member is fixed to ('' = chosen on the device). */
 	public const META_LOCATION = 'vcap_counter_location';
@@ -169,13 +169,13 @@ final class Counter {
 	}
 
 	/**
-	 * The managed list of tills/branches (setting, one per line; empty = free text on the device).
+	 * The managed list of tills/branches: names of the active rows of the table (SET-VC-22, CounterLocations; the
+	 * free text of 1.2.0 is still read); empty = free text on the device.
 	 *
 	 * @return string[]
 	 */
 	public static function locations(): array {
-		$list = preg_split( '/\r\n|\r|\n/', (string) Settings::value( self::LOCATIONS ) );
-		$list = array_values( array_unique( array_filter( array_map( array( self::class, 'clean_till' ), (array) $list ), static fn( $l ) => '' !== $l ) ) );
+		$list = CounterLocations::active_names();
 		/** The managed tills/branches offered on the scanner. Args: string[] list. */
 		return array_values( array_map( 'strval', (array) apply_filters( 'vcap_counter_locations', $list ) ) );
 	}

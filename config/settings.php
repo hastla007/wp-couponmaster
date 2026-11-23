@@ -16,7 +16,8 @@
  *             empty    false – 'int'/'decimal' only: an empty value is a valid setting (e.g. "automatic")
  *             choices  null – allowed values of a 'select'
  *             section  'hidden' – section of the "Vouchers" settings tab: '' (General), 'redemption', 'promotions',
- *                      'codes', 'delivery', 'privacy', 'api'; 'hidden' = no field (created by the plugin)
+ *                      'codes', 'delivery', 'counter', 'privacy', 'api';
+ *                      'hidden' = no field (created by the plugin)
  *             legal    false – the value has legal or tax weight (have it checked for the country)
  *             export   true (false for secrets) – part of an export of the settings (SET-VC-14)
  *             secret   false – never shown, exported or logged
@@ -148,17 +149,20 @@ $vcap_settings = array(
 	'vcap_debug_log'                 => array( 'type' => 'bool', 'default' => 'no', 'section' => 'privacy', 'export' => false ),
 	// SET-VC-26: header with the visitor address ('none' = REMOTE_ADDR only); the filter vcap_client_ip wins.
 	'vcap_proxy_header'              => array( 'type' => 'select', 'default' => 'none', 'choices' => array( 'none', 'cloudflare', 'xff_last' ), 'section' => 'privacy' ),
-	// R6: daily limits of counter (scanner) redemptions, off by default (0 = unlimited).
-	'vcap_counter_limit_amount'      => array( 'type' => 'decimal', 'default' => 0, 'min' => 0, 'section' => 'privacy' ),
-	'vcap_counter_limit_count'       => array( 'type' => 'int', 'default' => 0, 'min' => 0, 'section' => 'privacy' ),
-	'vcap_counter_till_limit_amount' => array( 'type' => 'decimal', 'default' => 0, 'min' => 0, 'section' => 'privacy' ),
-	'vcap_counter_till_limit_count'  => array( 'type' => 'int', 'default' => 0, 'min' => 0, 'section' => 'privacy' ),
-	// M12-31: receipt number of the till required at the counter ('auto' = shops based in Germany or Austria).
-	'vcap_counter_require_receipt'   => array( 'type' => 'select', 'default' => 'auto', 'choices' => array( 'auto', 'yes', 'no' ), 'section' => 'privacy', 'legal' => true ),
-	// M12-81: managed list of tills/branches ('' = free text on the scanner device).
-	'vcap_counter_locations'         => array( 'type' => 'text', 'section' => 'privacy' ),
 	// SET-VC-16: days the change log of the settings is kept (0 = until the entry limit SettingsLog::MAX_ENTRIES).
 	'vcap_settings_log_days'         => array( 'type' => 'int', 'default' => 365, 'min' => 0, 'section' => 'privacy' ),
+
+	/* ---- Counter & locations (SET-VC-22: moved from "Privacy & advanced", option names unchanged) ---- */
+	// R6: daily limits of counter (scanner) redemptions, off by default (0 = unlimited).
+	'vcap_counter_limit_amount'      => array( 'type' => 'decimal', 'default' => 0, 'min' => 0, 'section' => 'counter' ),
+	'vcap_counter_limit_count'       => array( 'type' => 'int', 'default' => 0, 'min' => 0, 'section' => 'counter' ),
+	'vcap_counter_till_limit_amount' => array( 'type' => 'decimal', 'default' => 0, 'min' => 0, 'section' => 'counter' ),
+	'vcap_counter_till_limit_count'  => array( 'type' => 'int', 'default' => 0, 'min' => 0, 'section' => 'counter' ),
+	// M12-31: receipt number of the till required at the counter ('auto' = shops based in Germany or Austria).
+	'vcap_counter_require_receipt'   => array( 'type' => 'select', 'default' => 'auto', 'choices' => array( 'auto', 'yes', 'no' ), 'section' => 'counter', 'legal' => true ),
+	// M12-81: managed list of tills/branches ('' = free text on the scanner device). SET-VC-22: a JSON list of rows
+	// (name, key, active, columns of add-ons – CounterLocations); one name per line (1.2.0) is still read.
+	'vcap_counter_locations'         => array( 'type' => 'text', 'section' => 'counter' ),
 
 	/* ---- Integrations (API) ---- */
 	'vcap_redemption_ttl'            => array( 'type' => 'int', 'default' => 15, 'min' => 1, 'max' => 1440, 'section' => 'api' ),
