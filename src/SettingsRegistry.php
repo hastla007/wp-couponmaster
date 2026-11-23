@@ -40,8 +40,11 @@ final class SettingsRegistry {
 	/** @var array<string, mixed>|null config/settings.php as read. */
 	private static ?array $config = null;
 
-	/** @var array<string, array<string, mixed>>|null The filtered settings once all plugins are loaded. */
+	/** @var array<string, array<string, mixed>>|null The filtered settings (see all() for when it is kept). */
 	private static ?array $cache = null;
+
+	/** Callbacks on "vcap_settings_registry" the cache was built with, null = kept for the whole request (from "init"). */
+	private static ?int $cache_hooks = null;
 
 	/** Whether the filter runs right now (a callback reading a setting gets the core register, no recursion). */
 	private static bool $filtering = false;
@@ -65,7 +68,31 @@ final class SettingsRegistry {
 
 	/** Forgets the cached register (tests, or after an add-on changed its filter late). */
 	public static function reset(): void {
-		self::$cache = null;
+		self::$cache       = null;
+		self::$cache_hooks = null;
+	}
+
+	/**
+	 * Number of callbacks on "vcap_settings_registry" (-1 when the hook store cannot be read): while plugins load, a
+	 * new callback (e.g. an add-on in "vcap_loaded") invalidates the cached register (PV-P6-1).
+	 */
+	private static function hook_count(): int {
+		if ( ! isset( $GLOBALS['wp_filter'] ) || ! is_array( $GLOBALS['wp_filter'] ) ) {
+			return -1;
+		}
+		$hook = $GLOBALS['wp_filter']['vcap_settings_registry'] ?? null;
+		if ( null === $hook ) {
+			return 0;
+		}
+		$callbacks = is_object( $hook ) && isset( $hook->callbacks ) && is_array( $hook->callbacks ) ? $hook->callbacks : null;
+		if ( null === $callbacks ) {
+			return -1;
+		}
+		$count = 0;
+		foreach ( $callbacks as $priority ) {
+			$count += is_array( $priority ) ? count( $priority ) : 0;
+		}
+		return $count;
 	}
 
 	/**
@@ -75,7 +102,10 @@ final class SettingsRegistry {
 	 */
 	public static function all(): array {
 		if ( null !== self::$cache ) {
-			return self::$cache;
+			if ( null === self::$cache_hooks || ( self::$cache_hooks >= 0 && self::hook_count() === self::$cache_hooks ) ) {
+				return self::$cache;
+			}
+			self::$cache = null;
 		}
 		$core = (array) ( self::config()['settings'] ?? array() );
 		if ( self::$filtering ) {
@@ -103,9 +133,20 @@ final class SettingsRegistry {
 				$out[ $key ] = self::normalise( $entry );
 			}
 		}
-		// Add-ons register their filters while plugins load; until then nothing is cached.
-		if ( did_action( 'plugins_loaded' ) ) {
-			self::$cache = $out;
+		/*
+		 * Add-ons register their filters while plugins load, in "plugins_loaded" or – as documented – in "vcap_loaded"
+		 * (PV-P6-1). From "init" on the register is kept for the request; before, it is kept only as long as no
+		 * callback was added to the filter (and the plugin forgets it right after "vcap_loaded").
+		 */
+		if ( did_action( 'init' ) ) {
+			self::$cache       = $out;
+			self::$cache_hooks = null;
+		} else {
+			$hooks = self::hook_count();
+			if ( $hooks >= 0 ) {
+				self::$cache       = $out;
+				self::$cache_hooks = $hooks;
+			}
 		}
 		return $out;
 	}

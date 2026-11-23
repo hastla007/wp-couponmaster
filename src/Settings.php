@@ -8,8 +8,91 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Settings {
 	/**
+	 * The defaults of plugin 1.2.0 (65 options), kept literally for add-ons that read Settings::DEFAULTS (PV-P2-11). It
+	 * is not maintained: newer settings are missing, it does not follow the filter "vcap_settings_registry", and the
+	 * country texts are the strings of 1.2.0 (tables since 1.3.0; '' reads as "no rows" in both).
+	 *
+	 * @deprecated 1.3.0 Use Settings::defaults() or SettingsRegistry::default( $key ).
+	 */
+	public const DEFAULTS = array(
+		'vcap_issue_statuses'        => array( 'processing', 'completed' ),
+		'vcap_code_prefix'           => '',
+		'vcap_code_suffix'           => '',
+		'vcap_code_length'           => 12,
+		'vcap_code_charset'          => 'alnum_upper',
+		'vcap_code_order_ref'        => 'no',
+		'vcap_code_separator'        => '-',
+		'vcap_default_template'      => 0,
+		'vcap_default_expiry_days'   => 365,
+		'vcap_restore_on_cancel'     => 'yes',
+		'vcap_void_on_refund'        => 'yes',
+		'vcap_download_link_days'    => 90, // V10: for shops that never saved it; a saved value (also 0) is kept.
+		'vcap_show_thankyou'         => 'yes',
+		'vcap_show_myaccount'        => 'yes',
+		'vcap_myaccount_tab'         => 'yes',
+		'vcap_attach_pdf'            => 'yes',
+		'vcap_include_link'          => 'yes',
+		'vcap_expiry_reminder_days'  => 0,
+		'vcap_delivery_hour'         => 8,
+		'vcap_date_format'           => '',
+		'vcap_retention_days'        => 0,
+		'vcap_delete_on_uninstall'   => 'no',
+		'vcap_ticket_public_status'  => 'yes',
+		'vcap_scanner_show_holder'   => 'no',
+		'vcap_subscription_renewals' => 'no',
+		'vcap_pdf_filename'          => 'voucher-{coupon_code}',
+		'vcap_redemption_ttl'          => 15,
+		'vcap_coupon_link'             => 'no',
+		'vcap_discounts_on_vouchers'   => 'no',
+		'vcap_store_credit'            => 'no',
+		'vcap_campaigns_enabled'       => 'no',
+		'vcap_vouchers_buy_vouchers'   => 'no',
+		'vcap_coupon_link_param'       => 'gutschein',
+		// M12-95: storefront conveniences, off by default (existing shops keep their storefront).
+		'vcap_giftcard_field'          => 'no',
+		'vcap_minicart_balance'        => 'no',
+		'vcap_gift_toggle'             => 'no',
+		// Stored as "yes" on a first installation (Install::activate_site()); existing shops keep "no".
+		'vcap_new_product_delivery'    => 'no',
+		'vcap_redemption_max_failures' => 10,
+		'vcap_credit_with_coupons'     => 'yes',
+		'vcap_credit_apply_order'      => 'last',
+		'vcap_terms_by_country'        => '',
+		'vcap_expiry_by_country'       => '',
+		'vcap_referral_enabled'        => 'no',
+		'vcap_referral_friend_type'    => 'fixed_cart',
+		'vcap_referral_friend_amount'  => 10,
+		// V3: empty = automatic (twice a fixed friend discount); a fixed discount always needs a higher order value.
+		'vcap_referral_min_spend'      => '',
+		'vcap_referral_reward_amount'  => 10,
+		'vcap_referral_reward_as'      => 'coupon',
+		'vcap_referral_reward_days'    => 90,
+		// P12 abuse protection, safe defaults (0 switches each one off).
+		'vcap_referral_wait_days'      => 14,
+		'vcap_referral_max_rewards'    => 10,
+		'vcap_referral_address_check'  => 'yes',
+		'vcap_bonus_wait_days'         => 14,
+		'vcap_custom_max_default'      => 500,
+		'vcap_customer_daily_limit'    => 1000,
+		'vcap_hold_new_customer_above' => 250,
+		'vcap_hold_hours'              => 24,
+		// Z6: bundled delivery of large quantities (0 switches each one off).
+		'vcap_bundle_threshold'        => 5,
+		'vcap_bundle_pdf_limit'        => 50,
+		// R6: daily limits of counter (scanner) redemptions, off by default (0 = unlimited).
+		Counter::USER_AMOUNT           => 0,
+		Counter::USER_COUNT            => 0,
+		Counter::TILL_AMOUNT           => 0,
+		Counter::TILL_COUNT            => 0,
+		// M12-31: receipt number of the till required at the counter ('auto' = shops based in Germany or Austria).
+		Counter::REQUIRE_RECEIPT       => 'auto',
+		// M12-81: managed list of tills/branches ('' = free text on the scanner device).
+		Counter::LOCATIONS             => '',
+	);
+
+	/**
 	 * Defaults of the settings (option name => value) from the settings register (config/settings.php, SET-VC-01): what
-	 * get() returns while an option was never saved. Replaces the former constant Settings::DEFAULTS (same values).
+	 * get() returns while an option was never saved. Replaces the constant Settings::DEFAULTS (deprecated).
 	 *
 	 * @return array<string, mixed>
 	 */
@@ -97,6 +180,8 @@ final class Settings {
 		'vcap_show_myaccount',
 		'vcap_myaccount_tab',
 		'vcap_show_thankyou',
+		// PV-P6-4: read on every gateway list (cart, checkout).
+		PaymentMethods::EXCLUDED_OPTION,
 	);
 
 	/**

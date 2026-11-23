@@ -3854,7 +3854,7 @@ VCAP\SettingsRegistry::reset();
 check( 'SET-VC-01: filter vcap_settings_registry adds settings of add-ons (secrets stay out of the export); core entries stay, invalid keys are dropped; a callback may read settings', 'Shop' === VCAP\SettingsRegistry::default( 'vcap_pro_sms_sender' ) && 'Shop' === VCAP\Settings::value( 'vcap_pro_sms_sender' ) && VCAP\SettingsRegistry::has( 'vcap_attach_pdf' ) && ! in_array( 'vcap_pro_sms_key', VCAP\SettingsRegistry::with( 'export' ), true ) && ! VCAP\SettingsRegistry::has( 'Bad Key' ) );
 unset( $GLOBALS['vcap_test_filters']['vcap_settings_registry'] );
 VCAP\SettingsRegistry::reset();
-check( 'SET-VC-01: config/settings.php holds data only (no translated text, no option access) and the hook is documented; Settings::DEFAULTS is replaced by Settings::defaults()', ! preg_match( '/__\(|_e\(|esc_html|get_option|update_option/', (string) file_get_contents( VCAP_PATH . 'config/settings.php' ) ) && str_contains( (string) file_get_contents( VCAP_PATH . 'docs/HOOKS.md' ), '| `vcap_settings_registry` | 1.3.0 |' ) && ! defined( 'VCAP\\Settings::DEFAULTS' ) );
+check( 'SET-VC-01: config/settings.php holds data only (no translated text, no option access) and the hook is documented; Settings::DEFAULTS is replaced by Settings::defaults() (kept deprecated, PV-P2-11)', ! preg_match( '/__\(|_e\(|esc_html|get_option|update_option/', (string) file_get_contents( VCAP_PATH . 'config/settings.php' ) ) && str_contains( (string) file_get_contents( VCAP_PATH . 'docs/HOOKS.md' ), '| `vcap_settings_registry` | 1.3.0 |' ) && defined( 'VCAP\\Settings::DEFAULTS' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Settings.php' ), '@deprecated 1.3.0' ) );
 
 // SET-VC-18: customer self-service and deadlines as settings (1.12 no. 16–21); defaults = the fixed values of 1.2.0,
 // the filters of the same name get the setting and win.
@@ -5320,6 +5320,137 @@ check(
 VCAP\SettingsRegistry::reset_flags();
 WC_Admin_Settings::$errors    = array();
 $GLOBALS['vcap_test_options'] = $pv_saved_opts;
+// ---- Test phase fixes, group B (registry timing, performance, contract). ----
+// PV-P6-1: add-on entries registered in "vcap_loaded" (after the register was read during boot) count.
+$pv61_saved = $GLOBALS['vcap_test_options'];
+$GLOBALS['wp_filter'] = array();
+VCAP\SettingsRegistry::reset();
+$pv61_boot = VCAP\SettingsRegistry::has( 'vcap_pv61_addon' ); // Read during boot (plugins_loaded), cached.
+$pv61_cb   = static fn( $s ) => $s + array( 'vcap_pv61_addon' => array( 'type' => 'int', 'default' => 7 ) );
+add_filter( 'vcap_settings_registry', $pv61_cb );
+$GLOBALS['wp_filter']['vcap_settings_registry'] = (object) array( 'callbacks' => array( 10 => array( 'pv61' => array( 'function' => $pv61_cb, 'accepted_args' => 1 ) ) ) );
+$pv61_loaded = VCAP\SettingsRegistry::has( 'vcap_pv61_addon' ) && 7 === VCAP\SettingsRegistry::default( 'vcap_pv61_addon' );
+// From "init" on, the register is kept for the request (a later filter needs reset()).
+$GLOBALS['vcap_test_did']['init'] = 1;
+VCAP\SettingsRegistry::reset();
+VCAP\SettingsRegistry::all();
+$pv61_cb2 = static fn( $s ) => $s + array( 'vcap_pv61_late' => array( 'default' => 'x' ) );
+add_filter( 'vcap_settings_registry', $pv61_cb2 );
+$GLOBALS['wp_filter']['vcap_settings_registry']->callbacks[10]['pv61b'] = array( 'function' => $pv61_cb2, 'accepted_args' => 1 );
+$pv61_kept = ! VCAP\SettingsRegistry::has( 'vcap_pv61_late' );
+VCAP\SettingsRegistry::reset();
+$pv61_reset = VCAP\SettingsRegistry::has( 'vcap_pv61_late' );
+$pv61_main  = (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' );
+check(
+	'PV-P6-1: a settings entry an add-on registers in vcap_loaded (after the register was read during boot) is in the register; from "init" on the register is kept for the request; the plugin forgets the register right after vcap_loaded; documented in API.md and FREE-PREMIUM.md',
+	! $pv61_boot && $pv61_loaded && $pv61_kept && $pv61_reset
+		&& (bool) preg_match( "/do_action\( 'vcap_loaded', \\\$vcap_plugin \);\s*(\/\/[^\n]*\n\s*)?\\\\VCAP\\\\SettingsRegistry::reset\(\);/", $pv61_main )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'API.md' ), 'forgotten right after this action (PV-P6-1)' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'docs/FREE-PREMIUM.md' ), 'PV-P6-1' ),
+	json_encode( array( $pv61_boot, $pv61_loaded, $pv61_kept, $pv61_reset ) )
+);
+unset( $GLOBALS['wp_filter'], $GLOBALS['vcap_test_did']['init'], $GLOBALS['vcap_test_filters']['vcap_settings_registry'] );
+VCAP\SettingsRegistry::reset();
+$GLOBALS['vcap_test_options'] = $pv61_saved;
+
+// PV-P6-2: the contract table ends with VCAP_CONTRACT_VERSION and names every 1.3.0 hook of docs/HOOKS.md.
+$pv62_main = (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' );
+$pv62_conn = (string) file_get_contents( VCAP_PATH . 'CONNECTORS.md' );
+preg_match( "/define\( 'VCAP_CONTRACT_VERSION', '(\d+\.\d+\.\d+)' \);/", $pv62_main, $pv62_const );
+preg_match_all( '/^\| (1\.\d+\.\d+) \| \d+\.\d+\.\d+ \| (.*) \|$/m', $pv62_conn, $pv62_rows, PREG_SET_ORDER );
+$pv62_versions = array_column( $pv62_rows, 1 );
+$pv62_last     = (string) end( $pv62_versions );
+$pv62_text     = implode( "\n", array_column( $pv62_rows, 2 ) );
+preg_match_all( '/^\| `(vcap_[a-z0-9_]+)` \| 1\.3\.0 \|/m', (string) file_get_contents( VCAP_PATH . 'docs/HOOKS.md' ), $pv62_hooks );
+$pv62_unnamed = array_values( array_filter( $pv62_hooks[1], static fn( string $hook ) => ! str_contains( $pv62_text, '`' . $hook . '`' ) ) );
+check(
+	'PV-P6-2: VCAP_CONTRACT_VERSION is 1.8.0 and the last row of the contract table in CONNECTORS.md; every hook marked 1.3.0 in docs/HOOKS.md is named in a contract row; readme.txt and API.md name contract 1.8.0',
+	'1.8.0' === ( $pv62_const[1] ?? '' ) && $pv62_last === $pv62_const[1] && array() === $pv62_unnamed && count( $pv62_hooks[1] ) > 15
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'readme.txt' ), 'VCAP_CONTRACT_VERSION 1.8.0' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'API.md' ), "version_compare( VCAP_CONTRACT_VERSION, '1.8.0', '>=' )" ),
+	$pv62_last . ' ' . implode( ', ', $pv62_unnamed )
+);
+
+// PV-P6-4: the excluded gateways are read on every gateway list – stored autoloaded like the other request settings.
+$pv64_saved                   = $GLOBALS['vcap_test_options'];
+$GLOBALS['vcap_test_options'] = array();
+$pv64_stored                  = VCAP\Settings::store_request_defaults();
+check(
+	'PV-P6-4: vcap_voucher_excluded_gateways is a request setting; its default (none) is stored autoloaded where nothing is saved, a saved list is kept',
+	in_array( VCAP\PaymentMethods::EXCLUDED_OPTION, VCAP\Settings::REQUEST_SETTINGS, true ) && in_array( 'vcap_voucher_excluded_gateways', $pv64_stored, true ) && array() === $GLOBALS['vcap_test_options']['vcap_voucher_excluded_gateways'] && 'yes' === ( $GLOBALS['vcap_test_autoload']['vcap_voucher_excluded_gateways'] ?? null ),
+	json_encode( $pv64_stored )
+);
+$GLOBALS['vcap_test_options'] = $pv64_saved;
+
+// PV-P6-5: the country select is built once per request; only the selection changes per row.
+VCAP\Admin\CountryTableField::reset_options();
+$pv65_m    = new ReflectionMethod( VCAP\Admin\CountryTableField::class, 'country_options' );
+$pv65_none = (string) $pv65_m->invoke( null, '' );
+$pv65_memo = ( new ReflectionProperty( VCAP\Admin\CountryTableField::class, 'country_options' ) )->getValue();
+$pv65_at   = (string) $pv65_m->invoke( null, 'AT' );
+$pv65_zz   = (string) $pv65_m->invoke( null, 'ZZ' );
+check(
+	'PV-P6-5: the options of the country select are built once and memoised; a row selects exactly its country; a stored code outside the list stays selectable',
+	is_string( $pv65_memo ) && $pv65_memo === $pv65_none && 0 === substr_count( $pv65_none, 'selected=' ) && 1 === substr_count( $pv65_at, 'selected=' ) && str_contains( $pv65_at, '<option value="AT" selected="selected">' ) && strlen( $pv65_at ) === strlen( $pv65_none ) + strlen( ' selected="selected"' )
+		&& str_ends_with( $pv65_zz, '<option value="ZZ" selected="selected">ZZ</option>' ) && 1 === substr_count( $pv65_zz, 'selected=' ),
+	substr( $pv65_at, 0, 200 )
+);
+VCAP\Admin\CountryTableField::reset_options();
+
+// PV-P6-6: uninstalling with data removal deletes the user setting "Hide hints on extensions".
+$pv66_un = (string) file_get_contents( VCAP_PATH . 'uninstall.php' );
+check(
+	'PV-P6-6: vcap_uninstall_user_meta() removes the user meta of the hint lines (ProHints::USER_META)',
+	'vcap_hide_pro_hints' === VCAP\Admin\ProHints::USER_META && (bool) preg_match( "/function vcap_uninstall_user_meta\(\): void \{[^}]*'vcap_hide_pro_hints'/", $pv66_un )
+);
+
+// PV-P6-7: the excluded gateways filter is in the extension point table of API.md.
+check( 'PV-P6-7: API.md → "Extension points for add-ons" lists vcap_voucher_excluded_gateways with version 1.3.0', str_contains( (string) file_get_contents( VCAP_PATH . 'API.md' ), '| `vcap_voucher_excluded_gateways` | filter |' ) );
+
+// PV-P2-10: the default validity in days has a ceiling of 100 years, also the product field.
+$pv210_reg = VCAP\SettingsRegistry::get( 'vcap_default_expiry_days' );
+check(
+	'PV-P2-10: vcap_default_expiry_days has max 36500 (saving 9999999 stores 36500); "Valid for (days)" of a product is capped the same way',
+	36500 === ( $pv210_reg['max'] ?? null ) && 36500 === (int) VCAP\SettingsRegistry::sanitize_option( '9999999', array( 'id' => 'vcap_default_expiry_days' ) )
+		&& 36500 === VCAP\ProductSettings::expiry_days( '9999999' ) && 30 === VCAP\ProductSettings::expiry_days( '30' ) && '' === VCAP\ProductSettings::expiry_days( '' ) && 36500 === VCAP\ProductSettings::MAX_EXPIRY_DAYS,
+	json_encode( array( $pv210_reg['max'] ?? null, VCAP\SettingsRegistry::sanitize_option( '9999999', array( 'id' => 'vcap_default_expiry_days' ) ) ) )
+);
+
+// PV-P2-11: Settings::DEFAULTS is back as a deprecated constant with the 65 defaults of 1.2.0 (equal to the register,
+// except the two country texts, which were strings in 1.2.0 and are tables since SET-VC-04 – both read '' as "none").
+$pv211_diff = array();
+foreach ( VCAP\Settings::DEFAULTS as $pv211_key => $pv211_value ) {
+	$pv211_table = in_array( $pv211_key, array( 'vcap_terms_by_country', 'vcap_expiry_by_country' ), true ) && '' === $pv211_value && array() === VCAP\SettingsRegistry::default( $pv211_key );
+	if ( ! $pv211_table && ( ! VCAP\SettingsRegistry::has( $pv211_key ) || VCAP\SettingsRegistry::default( $pv211_key ) !== $pv211_value ) ) {
+		$pv211_diff[ $pv211_key ] = array( $pv211_value, VCAP\SettingsRegistry::default( $pv211_key ) );
+	}
+}
+check(
+	'PV-P2-11: Settings::DEFAULTS exists again (@deprecated 1.3.0, 65 options of 1.2.0) and each value equals the register default (the country texts: 1.2.0 string \'\', now an empty table)',
+	65 === count( VCAP\Settings::DEFAULTS ) && array() === $pv211_diff && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Settings.php' ), '@deprecated 1.3.0 Use Settings::defaults()' ),
+	json_encode( $pv211_diff )
+);
+
+// PV-P3-7: LEGAL_TEXTS.md describes the country tables (with the language column of the conditions), lists the
+// suggestions of the country profiles (CH 10 years Art. 127 OR, retention 1095 days, receipt duty) and the retention
+// periods, all unchecked; the generator still reports it up to date.
+$pv37_md  = (string) file_get_contents( VCAP_PATH . 'LEGAL_TEXTS.md' );
+$pv37_out = array();
+$pv37_rc  = 1;
+exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( VCAP_PATH . 'bin/legal-texts.php' ) . ' --check 2>&1', $pv37_out, $pv37_rc );
+check(
+	'PV-P3-7: LEGAL_TEXTS.md shows the table format with the language column, the country profile suggestions (CH Art. 127 OR, 1095 days, receipt number) and the retention block (unchecked); bin/legal-texts.php --check passes',
+	0 === $pv37_rc && str_contains( $pv37_md, '**Land**, **Sprache**' ) && str_contains( $pv37_md, '## 3. Vorschläge der Länderprofile' ) && str_contains( $pv37_md, 'Art. 127 OR' ) && str_contains( $pv37_md, '1095 Tage' )
+		&& str_contains( $pv37_md, 'Pflicht (Länderdaten `fiscal_receipt`)' ) && str_contains( $pv37_md, '## 4. Aufbewahrungsfristen' ) && str_contains( $pv37_md, '| `vcap_retention_days` |' ) && str_contains( $pv37_md, '☐ nicht geprüft' ) && ! str_contains( $pv37_md, '(`AT: …`)' ),
+	implode( ' ', $pv37_out )
+);
+
+// PV-P3-8: TAX.md covers CH/LI/GB/NO, the tax hints of the country profiles, the effect of reset/import on
+// vcap_mpv_after_tax and voucher.issue (paid = false, row 2.8) – open points phrased as "zu prüfen".
+$pv38_tax = (string) file_get_contents( VCAP_PATH . 'TAX.md' );
+check(
+	'PV-P3-8: TAX.md has the sections non-EU countries (CH, LI, GB, NO), tax hints of the country profiles, reset/import effect on vcap_mpv_after_tax and voucher.issue issuing paid = false (row 2.8), without deciding the tax questions',
+	str_contains( $pv38_tax, '### 8.1 Länder außerhalb der EU' ) && str_contains( $pv38_tax, '| LI | ☐ |' ) && str_contains( $pv38_tax, '| NO | ☐ |' ) && str_contains( $pv38_tax, '### 8.2 Steuerhinweise der Länderprofile' )
+		&& str_contains( $pv38_tax, '**Zurücksetzen, Import und Länderprofil wirken auf diese Einstellung**' ) && str_contains( $pv38_tax, '`voucher.issue`' ) && str_contains( $pv38_tax, '(`paid => false`' ) && str_contains( $pv38_tax, 'Zeile 2.8' ) && substr_count( $pv38_tax, 'zu prüfen' ) >= 5
+);
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

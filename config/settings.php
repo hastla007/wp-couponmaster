@@ -45,7 +45,8 @@ $vcap_settings = array(
 	'vcap_default_template'          => array( 'type' => 'post', 'default' => 0, 'section' => '', 'export' => false ),
 	// Unsaved: ProductConfig::default_expiry_rule() decides ("days" for shops that saved a number of days).
 	'vcap_default_expiry_rule'       => array( 'type' => 'select', 'choices' => array( 'statutory', 'days' ), 'section' => '', 'legal' => true ),
-	'vcap_default_expiry_days'       => array( 'type' => 'int', 'default' => 365, 'min' => 0, 'section' => '', 'legal' => true ),
+	// PV-P2-10: at most 100 years (the product field "Valid for (days)" has the same ceiling).
+	'vcap_default_expiry_days'       => array( 'type' => 'int', 'default' => 365, 'min' => 0, 'max' => 36500, 'section' => '', 'legal' => true ),
 	/* ---- General: abuse protection (P12, 0 switches each one off) ---- */
 	'vcap_custom_max_default'        => array( 'type' => 'decimal', 'default' => 500, 'min' => 0, 'section' => '' ),
 	'vcap_customer_daily_limit'      => array( 'type' => 'decimal', 'default' => 1000, 'min' => 0, 'section' => '' ),

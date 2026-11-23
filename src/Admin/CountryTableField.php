@@ -217,25 +217,53 @@ final class CountryTableField {
 		return $out;
 	}
 
+	/** @var string|null Options of the country select without a selection, built once per request (PV-P6-5). */
+	private static ?string $country_options = null;
+
+	/** @var array<string, true> Country codes of the memoised options. */
+	private static array $country_codes = array();
+
 	/**
 	 * Options of the country select (WooCommerce's country list, else the ISO codes); a stored code that is not in
-	 * the list stays selectable.
+	 * the list stays selectable. The list (~250 options) is built once per request and only the selection is set
+	 * per row (PV-P6-5).
 	 */
 	private static function country_options( string $selected ): string {
-		$countries = function_exists( 'WC' ) && WC()->countries ? (array) WC()->countries->get_countries() : array();
-		if ( ! $countries ) {
-			foreach ( Markets::country_codes() as $code ) {
-				$countries[ $code ] = $code;
+		if ( null === self::$country_options ) {
+			$countries = function_exists( 'WC' ) && WC()->countries ? (array) WC()->countries->get_countries() : array();
+			if ( ! $countries ) {
+				foreach ( Markets::country_codes() as $code ) {
+					$countries[ $code ] = $code;
+				}
 			}
+			$out                 = '<option value="">' . esc_html__( '— Choose a country —', 'voucher-captain' ) . '</option>';
+			self::$country_codes = array();
+			foreach ( $countries as $code => $name ) {
+				self::$country_codes[ (string) $code ] = true;
+				$out                                  .= self::country_option( (string) $code, (string) $name );
+			}
+			self::$country_options = $out;
 		}
-		if ( '' !== $selected && ! isset( $countries[ $selected ] ) ) {
-			$countries[ $selected ] = $selected;
+		if ( '' === $selected ) {
+			return self::$country_options;
 		}
-		$out = '<option value="">' . esc_html__( '— Choose a country —', 'voucher-captain' ) . '</option>';
-		foreach ( $countries as $code => $name ) {
-			$out .= '<option value="' . esc_attr( (string) $code ) . '"' . ( (string) $code === $selected ? ' selected="selected"' : '' ) . '>' . esc_html( html_entity_decode( (string) $name, ENT_QUOTES, 'UTF-8' ) . ( (string) $name !== (string) $code ? ' (' . $code . ')' : '' ) ) . '</option>';
+		if ( ! isset( self::$country_codes[ $selected ] ) ) {
+			return self::$country_options . str_replace( '">', '" selected="selected">', self::country_option( $selected, $selected ) );
 		}
-		return $out;
+		$plain = '<option value="' . esc_attr( $selected ) . '">';
+		$pos   = strpos( self::$country_options, $plain );
+		return false === $pos ? self::$country_options : substr_replace( self::$country_options, '<option value="' . esc_attr( $selected ) . '" selected="selected">', $pos, strlen( $plain ) );
+	}
+
+	/** One option of the country select (without selection). */
+	private static function country_option( string $code, string $name ): string {
+		return '<option value="' . esc_attr( $code ) . '">' . esc_html( html_entity_decode( $name, ENT_QUOTES, 'UTF-8' ) . ( $name !== $code ? ' (' . $code . ')' : '' ) ) . '</option>';
+	}
+
+	/** Forgets the memoised country options (tests; another locale). */
+	public static function reset_options(): void {
+		self::$country_options = null;
+		self::$country_codes   = array();
 	}
 
 	/**

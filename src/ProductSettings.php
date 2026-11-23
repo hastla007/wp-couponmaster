@@ -7,6 +7,14 @@ defined( 'ABSPATH' ) || exit;
  * "Voucher" product type option, product data tab and per-variation overrides.
  */
 final class ProductSettings {
+	/** PV-P2-10: most days of "Valid for (days)" (100 years, as the setting vcap_default_expiry_days). */
+	public const MAX_EXPIRY_DAYS = 36500;
+
+	/** "Valid for (days)" as stored: '' (not set) or whole days, at most MAX_EXPIRY_DAYS. */
+	public static function expiry_days( string $value ): int|string {
+		return '' === trim( $value ) ? '' : min( absint( $value ), self::MAX_EXPIRY_DAYS );
+	}
+
 	public function register(): void {
 		add_filter( 'product_type_options', array( $this, 'type_option' ) );
 		add_filter( 'woocommerce_product_data_tabs', array( $this, 'tab' ) );
@@ -361,7 +369,7 @@ final class ProductSettings {
 				'label'             => __( 'Valid for (days)', 'voucher-captain' ),
 				'type'              => 'number',
 				'value'             => $this->v( $p, 'expiry_days' ),
-				'custom_attributes' => array( 'min' => 1, 'step' => 1 ),
+				'custom_attributes' => array( 'min' => 1, 'max' => self::MAX_EXPIRY_DAYS, 'step' => 1 ),
 				'wrapper_class'     => 'vcap-show-expiry-days',
 				'desc_tip'          => true,
 				'description'       => __( 'Required for "Days after purchase". Without a number of days the global default validity is used.', 'voucher-captain' ),
@@ -801,7 +809,7 @@ final class ProductSettings {
 		$ints = array( 'per_item', 'usage_limit', 'expiry_days', 'code_length', 'delivery_delay_days', 'max_checkins', 'message_maxlength', 'message_maxlines', 'code_pool_low' );
 		foreach ( $ints as $key ) {
 			$value = (string) ( $post[ '_vcap_' . $key ] ?? '' );
-			$product->update_meta_data( '_vcap_' . $key, '' === $value ? '' : absint( $value ) );
+			$product->update_meta_data( '_vcap_' . $key, 'expiry_days' === $key ? self::expiry_days( $value ) : ( '' === $value ? '' : absint( $value ) ) );
 		}
 		foreach ( array( 'expiry_date', 'delivery_date' ) as $key ) {
 			$value = (string) ( $post[ '_vcap_' . $key ] ?? '' );
@@ -964,12 +972,13 @@ final class ProductSettings {
 		);
 		woocommerce_wp_text_input(
 			array(
-				'id'            => "vcap_var_expiry_days_{$loop}",
-				'name'          => "vcap_var[{$loop}][expiry_days]",
-				'label'         => __( 'Valid for (days)', 'voucher-captain' ),
-				'type'          => 'number',
-				'value'         => $product->get_meta( '_vcap_expiry_days' ),
-				'wrapper_class' => 'form-row form-row-first',
+				'id'                => "vcap_var_expiry_days_{$loop}",
+				'name'              => "vcap_var[{$loop}][expiry_days]",
+				'label'             => __( 'Valid for (days)', 'voucher-captain' ),
+				'type'              => 'number',
+				'value'             => $product->get_meta( '_vcap_expiry_days' ),
+				'custom_attributes' => array( 'min' => 1, 'max' => self::MAX_EXPIRY_DAYS, 'step' => 1 ),
+				'wrapper_class'     => 'form-row form-row-first',
 			)
 		);
 		woocommerce_wp_text_input(
@@ -1026,7 +1035,8 @@ final class ProductSettings {
 			);
 		}
 		foreach ( array( 'expiry_days', 'per_item', 'max_checkins' ) as $key ) {
-			$variation->update_meta_data( '_vcap_' . $key, isset( $data[ $key ] ) && '' !== $data[ $key ] ? absint( $data[ $key ] ) : '' );
+			$value = isset( $data[ $key ] ) && is_scalar( $data[ $key ] ) ? (string) $data[ $key ] : '';
+			$variation->update_meta_data( '_vcap_' . $key, 'expiry_days' === $key ? self::expiry_days( $value ) : ( '' !== $value ? absint( $value ) : '' ) );
 		}
 		$event = (string) ( $data['event_date'] ?? '' );
 		$variation->update_meta_data( '_vcap_event_date', preg_match( '/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/', $event ) ? $event : '' );

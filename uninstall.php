@@ -231,7 +231,8 @@ function vcap_uninstall_referral_meta( array $keys ): void {
  * of a network, so on a network only when every site opted in.
  */
 function vcap_uninstall_user_meta(): void {
-	vcap_uninstall_referral_meta( array( '_vcap_referral_coupon', '_vcap_referral_count', '_vcap_verified_email', '_vcap_email_changed' ) );
+	// PV-P6-6: also the user's choice to hide the hint lines on extensions (VCAP\Admin\ProHints::USER_META).
+	vcap_uninstall_referral_meta( array( '_vcap_referral_coupon', '_vcap_referral_count', '_vcap_verified_email', '_vcap_email_changed', 'vcap_hide_pro_hints' ) );
 }
 
 if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {

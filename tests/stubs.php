@@ -143,7 +143,7 @@ function get_transient( $k ) { return $GLOBALS['vcap_test_transients'][ $k ] ?? 
 function set_transient( $k, $v, $e = 0 ) { $GLOBALS['vcap_test_transients'][ $k ] = $v; return true; }
 function get_post_status( $id = null ) { return false; }
 function get_permalink( $id = 0 ) { return ''; }
-function did_action( $h ) { return 0; }
+function did_action( $h ) { return $GLOBALS['vcap_test_did'][ $h ] ?? 0; }
 function delete_option( $k ) { unset( $GLOBALS['vcap_test_options'][ $k ] ); return true; }
 function delete_transient( $k ) { unset( $GLOBALS['vcap_test_transients'][ $k ] ); return true; }
 function get_site_transient( $k ) { return $GLOBALS['vcap_test_site_transients'][ $k ] ?? false; }
