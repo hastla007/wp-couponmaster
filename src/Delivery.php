@@ -24,7 +24,7 @@ final class Delivery {
 	 * Daily maintenance, one Action Scheduler action per step so that a failing or slow step never keeps the others
 	 * from running. Cheap purges first, mails and PDFs last.
 	 */
-	public const MAINTENANCE_STEPS = array( 'tmp_pdfs', 'rate_limits', 'mail_failures', 'scan_keys', 'claims', 'upload_dir', 'expire_overdue', 'retention', 'voucher_requests', 'review_refs', 'settings_log', 'legacy_rows', 'delivery_net', 'expiry_reminders' );
+	public const MAINTENANCE_STEPS = array( 'tmp_pdfs', 'rate_limits', 'mail_failures', 'scan_keys', 'claims', 'upload_dir', 'expire_overdue', 'retention', 'voucher_requests', 'review_refs', 'protocols', 'settings_log', 'legacy_rows', 'delivery_net', 'expiry_reminders' );
 
 	public function __construct( private Settings $settings, private VoucherRepository $repo ) {}
 
@@ -1543,11 +1543,18 @@ final class Delivery {
 				}
 				return $finished;
 			case 'voucher_requests':
-				// D10: open/partial requests after 6 months, issued/handed-over ones after 24 (batches of 50).
+				// D10: open/partial requests after 6 months, issued/handed-over ones after 24 (batches of 50); SET-VC-08:
+				// the periods are settings (block "Retention").
 				return ! isset( vcap()->voucher_requests ) || vcap()->voucher_requests->purge_expired( $budget );
 			case 'review_refs':
-				// R4: reference records of the review source (revoked after 90 days, all after 24 months).
+				// R4: reference records of the review source (revoked after 90 days, all after 24 months; settings since
+				// SET-VC-08).
 				return ! isset( vcap()->review_source ) || vcap()->review_source->purge( $budget );
+			case 'protocols':
+				// SET-VC-08: failed scanner lookups and the voucher command protocol, kept as set in "Retention".
+				Counter::prune_failed_lookups();
+				( new API\V1\OptionCommandStore() )->prune();
+				return true;
 			case 'settings_log':
 				// SET-VC-16: change log of the settings, kept "vcap_settings_log_days" days.
 				SettingsLog::prune( (int) $this->settings->get( SettingsLog::DAYS_OPTION ) );

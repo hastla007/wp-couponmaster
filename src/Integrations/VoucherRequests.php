@@ -765,23 +765,29 @@ final class VoucherRequests {
 	/**
 	 * Months after which requests are deleted: "open" for open and partly issued requests (counted from the receipt,
 	 * a partly issued one from the last confirmation), "closed" for issued and handed-over ones (from the issuing or
-	 * the hand-over). 0 = never.
+	 * the hand-over). 0 = never. SET-VC-08: the settings `vcap_voucher_requests_open_months` and
+	 * `vcap_voucher_requests_closed_months` (block "Retention", defaults RETENTION_MONTHS), then the filter, which wins.
 	 *
 	 * @return array{open:int, closed:int}
 	 */
 	public static function retention_months(): array {
+		$settings = array(
+			'open'   => \VCAP\SettingsRegistry::bounded_int( 'vcap_voucher_requests_open_months' ),
+			'closed' => \VCAP\SettingsRegistry::bounded_int( 'vcap_voucher_requests_closed_months' ),
+		);
 		/**
 		 * Retention of voucher requests in months (D10): `open` – open and partly issued requests (default 6), `closed`
 		 * – issued and handed-over requests (default 24). 0 keeps them. Rejected requests are deleted at once.
+		 * Since 1.3.0 the default is the setting of the block "Retention" (SET-VC-08).
 		 *
 		 * @since 1.2.0
 		 * @param array{open:int, closed:int} $months Months.
 		 */
-		$months = apply_filters( 'vcap_voucher_requests_retention_months', self::RETENTION_MONTHS );
+		$months = apply_filters( 'vcap_voucher_requests_retention_months', $settings );
 		$months = is_array( $months ) ? $months : array();
 		return array(
-			'open'   => max( 0, (int) ( $months['open'] ?? self::RETENTION_MONTHS['open'] ) ),
-			'closed' => max( 0, (int) ( $months['closed'] ?? self::RETENTION_MONTHS['closed'] ) ),
+			'open'   => max( 0, (int) ( $months['open'] ?? $settings['open'] ) ),
+			'closed' => max( 0, (int) ( $months['closed'] ?? $settings['closed'] ) ),
 		);
 	}
 

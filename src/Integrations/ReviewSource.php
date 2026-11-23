@@ -357,19 +357,38 @@ final class ReviewSource {
 
 	/** Records checked per database round in purge(). */
 	private const PURGE_BATCH = 200;
+	/** SET-VC-08: default of the setting `vcap_review_revoked_retention_days` (days a revoked record is kept). */
+	public const REVOKED_DAYS = 90;
+	/** SET-VC-08: default of the setting `vcap_review_retention_months` (months every record is kept at most). */
+	public const RETENTION_MONTHS = 24;
+
+	/**
+	 * SET-VC-08: retention of the reference records – the settings of the same name (block "Retention"), then the
+	 * filters, which win. 0 (filter only) keeps them.
+	 *
+	 * @return array{revoked_days:int, months:int}
+	 */
+	public static function retention(): array {
+		return array(
+			'revoked_days' => max( 0, (int) apply_filters( 'vcap_review_revoked_retention_days', \VCAP\SettingsRegistry::bounded_int( 'vcap_review_revoked_retention_days' ) ) ),
+			'months'       => max( 0, (int) apply_filters( 'vcap_review_retention_months', \VCAP\SettingsRegistry::bounded_int( 'vcap_review_retention_months' ) ) ),
+		);
+	}
 
 	/**
 	 * R4: daily retention of the reference records (one option each). Revoked records go after
 	 * `vcap_review_revoked_retention_days` (default 90 – long enough for the review plugin to reconcile them with
-	 * get()), every record after `vcap_review_retention_months` (default 24). 0 keeps them. Works in batches until
+	 * get()), every record after `vcap_review_retention_months` (default 24); settings since SET-VC-08, see
+	 * retention(). 0 keeps them. Works in batches until
 	 * done or $budget seconds are used.
 	 *
 	 * @return bool True when finished (nothing left to check within the budget).
 	 */
 	public function purge( float $budget = 10.0 ): bool {
 		global $wpdb;
-		$days   = (int) apply_filters( 'vcap_review_revoked_retention_days', 90 );
-		$months = (int) apply_filters( 'vcap_review_retention_months', 24 );
+		$keep   = self::retention();
+		$days   = $keep['revoked_days'];
+		$months = $keep['months'];
 		if ( $days <= 0 && $months <= 0 ) {
 			return true;
 		}

@@ -620,15 +620,6 @@ final class Settings {
 		$fields = array(
 			array( 'type' => 'title', 'title' => __( 'Privacy & advanced', 'voucher-captain' ), 'id' => 'vcap_privacy' ),
 			SettingsRegistry::field(
-				'vcap_retention_days',
-				array(
-					'title'             => __( 'Anonymise recipient data after (days)', 'voucher-captain' ),
-					'type'              => 'number',
-					'custom_attributes' => array( 'step' => 1 ),
-					'desc_tip'          => __( 'Recipient name, email, message and custom fields are erased this many days after a voucher has expired or been fully redeemed. 0 = keep.', 'voucher-captain' ),
-				)
-			),
-			SettingsRegistry::field(
 				'vcap_ticket_public_status',
 				array(
 					'title' => __( 'Public ticket status', 'voucher-captain' ),
@@ -666,8 +657,80 @@ final class Settings {
 			array( 'type' => 'sectionend', 'id' => 'vcap_privacy' ),
 		);
 		$fields = array_merge( $fields, Admin\RoleCaps::fields() ); // SET-VC-21.
+		$fields = array_merge( $fields, self::retention_fields() ); // SET-VC-08.
+		$fields = array_merge( $fields, self::counter_limit_fields(), Admin\RoleCaps::fields() ); // SET-VC-21.
 		// SET-VC-14/15/16: export, import, reset and change log of the settings.
 		return array_merge( $fields, Admin\SettingsTools::fields() );
+	}
+
+	/**
+	 * SET-VC-08: block "Retention" of the section "Privacy & advanced" – one field per period (1.12 no. 25, 26, 28, 29,
+	 * 31, 34) with the register's minimum and the visible note that the period is not legally checked. Defaults =
+	 * the values of 1.2.0; the filters named in API.md win over the settings.
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function retention_fields(): array {
+		$note   = ' ' . __( 'Not legally checked: have the period checked for your country.', 'voucher-captain' );
+		$number = static function ( string $key, string $title, string $help ) use ( $note ): array {
+			$entry = SettingsRegistry::get( $key );
+			$min   = (int) ( $entry['min'] ?? 0 );
+			/* translators: %d: smallest allowed value */
+			$floor = $min > 0 ? ' ' . sprintf( __( 'At least %d.', 'voucher-captain' ), $min ) : '';
+			return SettingsRegistry::field(
+				$key,
+				array(
+					'title'             => $title,
+					'type'              => 'number',
+					'custom_attributes' => array( 'step' => 1 ),
+					'desc'              => $help . $floor . $note,
+				)
+			);
+		};
+		return array(
+			array(
+				'type'  => 'title',
+				'title' => __( 'Retention', 'voucher-captain' ),
+				'desc'  => __( 'How long personal data and protocols are kept before the daily cleanup deletes them. The suggested privacy policy text names these periods.', 'voucher-captain' ),
+				'id'    => 'vcap_retention',
+			),
+			$number(
+				'vcap_retention_days',
+				__( 'Anonymise recipient data after (days)', 'voucher-captain' ),
+				__( 'Recipient name, email, message and custom fields are erased this many days after a voucher has expired or been fully redeemed. 0 = keep.', 'voucher-captain' )
+			),
+			$number(
+				'vcap_voucher_requests_open_months',
+				__( 'Delete open voucher requests after (months)', 'voucher-captain' ),
+				__( 'Voucher requests from forms that were never completed (open or partly issued), counted from the receipt or the last confirmation.', 'voucher-captain' )
+			),
+			$number(
+				'vcap_voucher_requests_closed_months',
+				__( 'Delete completed voucher requests after (months)', 'voucher-captain' ),
+				__( 'Issued voucher requests and requests taken over as a company order, counted from the issuing or the hand-over.', 'voucher-captain' )
+			),
+			$number(
+				'vcap_review_retention_months',
+				__( 'Delete review invitation notes after (months)', 'voucher-captain' ),
+				__( 'Notes that a redemption may lead to a review invitation (connected review plugin), counted from the redemption.', 'voucher-captain' )
+			),
+			$number(
+				'vcap_review_revoked_retention_days',
+				__( 'Delete withdrawn review invitation notes after (days)', 'voucher-captain' ),
+				__( 'Notes withdrawn after a cancellation or refund; the review plugin needs some time to see the withdrawal.', 'voucher-captain' )
+			),
+			$number(
+				'vcap_command_log_days',
+				__( 'Keep the voucher command protocol (days)', 'voucher-captain' ),
+				__( 'Daily counters and protocol of voucher commands from connected workflow tools (staff account, reason, result; no voucher codes).', 'voucher-captain' )
+			),
+			$number(
+				'vcap_scanner_failed_lookup_days',
+				__( 'Keep failed counter lookups (days)', 'voucher-captain' ),
+				__( 'Counts of unknown codes per staff member at the counter, shown in the counter report.', 'voucher-captain' )
+			),
+			array( 'type' => 'sectionend', 'id' => 'vcap_retention' ),
+		);
 	}
 
 	/* ---- M12-90: sections of the former "General" page. ---------------------------------------------------- */

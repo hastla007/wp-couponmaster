@@ -139,7 +139,16 @@ $vcap_settings = array(
 	'vcap_custom_css'                => array( 'type' => 'text', 'section' => 'delivery' ),
 
 	/* ---- Privacy & advanced ---- */
+	// SET-VC-08 (block "Retention"; 1.12 no. 25, 26, 28, 29, 31, 34): periods with legal weight, not legally checked.
+	// Defaults = the fixed values of 1.2.0 (owner decision S9: recipient data stays 0 = never, Site Health warns); the
+	// filters of the same name (vcap_command_log_days, vcap_scanner_failed_lookup_days: new) get the setting and win.
 	'vcap_retention_days'            => array( 'type' => 'int', 'default' => 0, 'min' => 0, 'section' => 'privacy', 'legal' => true ),
+	'vcap_voucher_requests_open_months'   => array( 'type' => 'int', 'default' => \VCAP\Integrations\VoucherRequests::RETENTION_MONTHS['open'], 'min' => 1, 'max' => 120, 'section' => 'privacy', 'legal' => true ),
+	'vcap_voucher_requests_closed_months' => array( 'type' => 'int', 'default' => \VCAP\Integrations\VoucherRequests::RETENTION_MONTHS['closed'], 'min' => 1, 'max' => 120, 'section' => 'privacy', 'legal' => true ),
+	'vcap_review_retention_months'        => array( 'type' => 'int', 'default' => \VCAP\Integrations\ReviewSource::RETENTION_MONTHS, 'min' => 1, 'max' => 120, 'section' => 'privacy', 'legal' => true ),
+	'vcap_review_revoked_retention_days'  => array( 'type' => 'int', 'default' => \VCAP\Integrations\ReviewSource::REVOKED_DAYS, 'min' => 30, 'max' => 3650, 'section' => 'privacy', 'legal' => true ),
+	'vcap_command_log_days'               => array( 'type' => 'int', 'default' => \VCAP\API\V1\OptionCommandStore::LOG_DAYS, 'min' => 30, 'max' => 3650, 'section' => 'privacy', 'legal' => true ),
+	'vcap_scanner_failed_lookup_days'     => array( 'type' => 'int', 'default' => \VCAP\Counter::FAILED_DAYS, 'min' => 31, 'max' => 3650, 'section' => 'privacy', 'legal' => true ),
 	'vcap_ticket_public_status'      => array( 'type' => 'bool', 'default' => 'yes', 'section' => 'privacy' ),
 	'vcap_scanner_show_holder'       => array( 'type' => 'bool', 'default' => 'no', 'section' => 'privacy', 'legal' => true ),
 	'vcap_subscription_renewals'     => array( 'type' => 'bool', 'default' => 'no', 'section' => 'privacy' ),

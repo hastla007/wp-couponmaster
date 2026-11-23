@@ -98,6 +98,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_claim_retention_days` | 1.2.0 | `src/Claim.php` | – |
 | `vcap_client_ip` | 1.2.0 | `src/Health.php`, `src/Plugin.php` | – |
 | `vcap_command_limits` | 1.3.0 | `src/API/V1/CommandLimits.php` | Lowers the limits of an automatic voucher command or switches it off (args: limits {enabled, per_day, per_recipient, max_amount_minor, amount_allowed}, command, currency of the amount). Values above the given ones, and enabled = true for a command the operator switched off, have no effect. |
+| `vcap_command_log_days` | 1.3.0 | `src/API/V1/OptionCommandStore.php` | Days the daily counters and the protocol of the voucher commands are kept. 0 keeps them. |
 | `vcap_contact_opted_out` | 1.3.0 | `src/API/V1/ContactService.php` | Whether the address must not be contacted for this purpose (e.g. an opt-out list). An opted-out address is never returned. |
 | `vcap_contact_read_allowed` | 1.3.0 | `src/API/V1/ContactService.php` | Whether the current caller may read the contact of a voucher. |
 | `vcap_counter_limit_applies` | 1.2.0 | `src/Counter.php` | Whether the daily counter limits apply (default: not for staff who manage vouchers). Args: bool, user id, Voucher. |
@@ -240,6 +241,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_sanitize_design` | 1.0.0 | `src/TemplatePostType.php` | A design after it was cleaned for saving (args: clean design, design as posted); add-on element types keep their own keys here. |
 | `vcap_scanner_checkin` | 1.1.0 | `src/Tickets.php` | – |
 | `vcap_scanner_describe` | 1.1.0 | `src/Tickets.php` | Connector details for the scanner (e.g. "ticket voucher – exchange first", redeemable false). |
+| `vcap_scanner_failed_lookup_days` | 1.3.0 | `src/Counter.php` | Days the counts of failed scanner lookups per staff member are kept (counter report). 0 keeps them. |
 | `vcap_scanner_lookup` | 1.1.0 | `src/Tickets.php` | Codes Voucher Captain does not know may belong to another plugin (shared scanner, e.g. Pass Captain tickets). |
 | `vcap_scanner_redeem_refused` | 1.1.0 | `src/Tickets.php` | Vouchers that must not be redeemed at the counter (e.g. ticket vouchers: exchange them for tickets). |
 | `vcap_scanner_show_holder` | 1.1.0 | `src/Tickets.php` | – |
@@ -282,7 +284,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_voucher_request_lock_wait` | 1.2.0 | `src/Integrations/VoucherRequests.php` | Seconds a state change of a voucher request waits for another one on the same request (R9). |
 | `vcap_voucher_request_service_v1` | 1.3.0 | `src/Integrations/FormCaptain/RequestService.php` | The voucher request service of the core (VoucherRequests::service()), when this Voucher Captain has it. |
 | `vcap_voucher_requests_max_open` | 1.2.0 | `src/Integrations/VoucherRequests.php` | Most open requests at a time (protection against floods of form entries); above it submit() answers `vcap_request_limit` (429). 0 accepts no new request. |
-| `vcap_voucher_requests_retention_months` | 1.2.0 | `src/Integrations/VoucherRequests.php` | Retention of voucher requests in months (D10): `open` – open and partly issued requests (default 6), `closed` – issued and handed-over requests (default 24). 0 keeps them. Rejected requests are deleted at once. |
+| `vcap_voucher_requests_retention_months` | 1.2.0 | `src/Integrations/VoucherRequests.php` | Retention of voucher requests in months (D10): `open` – open and partly issued requests (default 6), `closed` – issued and handed-over requests (default 24). 0 keeps them. Rejected requests are deleted at once. Since 1.3.0 the default is the setting of the block "Retention" (SET-VC-08). |
 | `vcap_voucher_tax_treatment` | 1.1.0 | `src/ProductConfig.php` | – |
 | `vcap_voucher_types` | 1.1.0 | `src/Voucher.php` | Extra voucher types of connectors and add-ons (arg: array of type key => label). Core types cannot be replaced; see API.md → Extension points. |
 | `vcap_vouchers_per_item` | 1.0.0 | `src/Issuer.php` | – |

@@ -8,6 +8,7 @@
 namespace VCAP\API\V1;
 
 use VCAP\Install;
+use VCAP\SettingsRegistry;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -18,15 +19,16 @@ defined( 'ABSPATH' ) || exit;
  * never pass a limit together (R-8.3b). The volume is small by design (at most 50 executed calls per command and day).
  *
  * Options: "vcap_cmd_reply_<sha1 of the key>" (reply and fingerprint, kept 90 days), "vcap_cmd_count_<Y-m-d>"
- * (counters), "vcap_cmd_log_<Y-m-d>" (protocol, at most 500 entries a day, then only counted), "vcap_cmd_days"
- * (index for the clean-up: day => reply options of that day).
+ * (counters), "vcap_cmd_log_<Y-m-d>" (protocol, at most 500 entries a day, then only counted; counters and protocol
+ * are kept `vcap_command_log_days` days, default 90), "vcap_cmd_days" (index for the clean-up: day => reply options
+ * of that day).
  *
  * @since 1.3.0 (contract 1.3.0)
  */
 final class OptionCommandStore implements CommandStore {
 	/** Days replies (idempotency) are kept. */
 	public const REPLY_DAYS = 90;
-	/** Days counters and protocol are kept. */
+	/** Days counters and protocol are kept: default of the setting `vcap_command_log_days` (SET-VC-08, log_days()). */
 	public const LOG_DAYS = 90;
 	/** Protocol entries kept per day; more are counted in "dropped". */
 	public const MAX_ENTRIES = 500;
@@ -195,6 +197,43 @@ final class OptionCommandStore implements CommandStore {
 	}
 
 	/**
+	 * SET-VC-08: days counters and protocol of the voucher commands are kept – the setting `vcap_command_log_days`
+	 * (block "Retention"), then the filter of the same name, which wins. 0 (filter only) keeps them. Replies
+	 * (idempotency) stay REPLY_DAYS: a technical value.
+	 */
+	public static function log_days(): int {
+		/**
+		 * Days the daily counters and the protocol of the voucher commands are kept. 0 keeps them.
+		 *
+		 * @since 1.3.0
+		 * @param int $days Days (default: the setting, 90).
+		 */
+		return max( 0, (int) apply_filters( 'vcap_command_log_days', SettingsRegistry::bounded_int( 'vcap_command_log_days' ) ) );
+	}
+
+	/**
+	 * SET-VC-08: daily maintenance (step "protocols") – the clean-up of touch() also on days without a command, so a
+	 * shorter retention takes effect the next day. Skipped when a command holds the lock.
+	 *
+	 * @param string $today Y-m-d (default: the shop day).
+	 */
+	public function prune( string $today = '' ): void {
+		$today = preg_match( '/^\d{4}-\d{2}-\d{2}$/', $today ) ? $today : (string) wp_date( 'Y-m-d' );
+		$index = $this->read( self::INDEX );
+		if ( ! is_array( $index ) || ! $index || ! $this->lock() ) {
+			return; // Nothing recorded yet, or a command holds the lock (its own clean-up follows on a new day).
+		}
+		try {
+			$index = $this->read( self::INDEX );
+			if ( is_array( $index ) ) {
+				$this->write( self::INDEX, $this->purge( $index, $today ) );
+			}
+		} finally {
+			$this->unlock();
+		}
+	}
+
+	/**
 	 * Deletes replies, counters and protocols of days older than the retention and drops them from the index.
 	 *
 	 * @param array<string, string[]> $index Day => reply options.
@@ -206,6 +245,7 @@ final class OptionCommandStore implements CommandStore {
 		if ( false === $base ) {
 			return $index;
 		}
+		$log_days = self::log_days();
 		foreach ( $index as $day => $options ) {
 			$time = strtotime( $day . ' 00:00:00 UTC' );
 			if ( false === $time ) {
@@ -218,11 +258,11 @@ final class OptionCommandStore implements CommandStore {
 					delete_option( (string) $option );
 				}
 			}
-			if ( $age > self::LOG_DAYS ) {
+			if ( $log_days > 0 && $age > $log_days ) {
 				delete_option( 'vcap_cmd_count_' . $day );
 				delete_option( 'vcap_cmd_log_' . $day );
 			}
-			if ( $age > max( self::REPLY_DAYS, self::LOG_DAYS ) ) {
+			if ( $log_days > 0 && $age > max( self::REPLY_DAYS, $log_days ) ) {
 				unset( $index[ $day ] );
 			}
 		}

@@ -481,17 +481,70 @@ final class Privacy {
 	 */
 	public static function policy_paragraphs(): array {
 		$paragraphs = array(
-			__( 'When you buy a voucher, we store the recipient name, recipient email address, personal message and any personalisation you enter so that we can create and deliver the voucher. The recipient receives an email with the voucher if you entered their address. This data is kept as long as the voucher can be used and is then removed according to our retention settings.', 'voucher-captain' ),
+			__( 'When you buy a voucher, we store the recipient name, recipient email address, personal message and any personalisation you enter so that we can create and deliver the voucher. The recipient receives an email with the voucher if you entered their address. This data is kept as long as the voucher can be used and is then removed according to our retention settings.', 'voucher-captain' ) . self::recipient_retention_sentence(),
 			__( 'Vouchers, gift cards and store credit keep a history of every change of their balance (issue, payment in an order, refund, top-up, manual correction) with the date, the amount, the order number and, when a voucher is used by another customer, that customer\'s email address. Store credit is linked to your customer account. We keep this history as long as the voucher or credit can be used and as long as we are required to keep accounting records.', 'voucher-captain' ),
 			__( 'Refer a friend: if you take part, we store your personal referral code, how many friends have ordered with it and which rewards you received. A friend\'s order that used your code is linked to your customer account so that we can give you the reward and take it back if the order is cancelled or refunded.', 'voucher-captain' ),
 			__( 'When a voucher is redeemed outside the shop checkout, for example by a booking or ticket system on this website that is connected to our vouchers, we record the redemption with the connected service, the amount, the date, your customer account and the details that service passes on (for example its order or booking number).', 'voucher-captain' ),
 			__( 'Tickets: when you exchange a ticket voucher for tickets or pay for tickets with a gift card, the voucher code, the amount, your name and email address and the attendee names you enter are passed to the ticket system on this website (Pass Captain), which issues and sends the tickets. Its privacy information applies to the tickets.', 'voucher-captain' ),
-			__( 'Voucher requests: when you ask for vouchers through a form on this website (for example a company order or a personalised voucher), we store the contact details you enter (company, name, email address, phone number), your message and note, and the names, email addresses and messages of the recipients you list, so that we can check the request and issue the vouchers. No voucher is issued and no payment is taken by the form itself. When the vouchers are issued, the recipient list is removed from the request and kept only with the vouchers; when the request is taken over as a company order, the recipient list moves to that order. A rejected request is deleted at once. Requests that were never completed are deleted after 6 months, issued requests and requests taken over as a company order after 24 months.', 'voucher-captain' ),
-			__( 'Review invitations: when a voucher for a service (for example a course or an experience) is redeemed and a review plugin on this website is connected, we note that this redemption may lead to a review invitation – without your name or email address. Only when the review plugin sends the invitation does it ask us for the email address and name of the recipient (or the buyer) and the language. Only the first redemption of a voucher counts. These notes are deleted 90 days after a cancellation or refund, and at the latest after 24 months.', 'voucher-captain' ),
+			__( 'Voucher requests: when you ask for vouchers through a form on this website (for example a company order or a personalised voucher), we store the contact details you enter (company, name, email address, phone number), your message and note, and the names, email addresses and messages of the recipients you list, so that we can check the request and issue the vouchers. No voucher is issued and no payment is taken by the form itself. When the vouchers are issued, the recipient list is removed from the request and kept only with the vouchers; when the request is taken over as a company order, the recipient list moves to that order. A rejected request is deleted at once.', 'voucher-captain' ) . ' ' . self::requests_retention_sentence(),
+			__( 'Review invitations: when a voucher for a service (for example a course or an experience) is redeemed and a review plugin on this website is connected, we note that this redemption may lead to a review invitation – without your name or email address. Only when the review plugin sends the invitation does it ask us for the email address and name of the recipient (or the buyer) and the language. Only the first redemption of a voucher counts.', 'voucher-captain' ) . self::review_retention_sentences(),
 			__( 'At the entrance or the counter, our staff may scan the code of your voucher or ticket. We record the time, the staff member and the result (redeemed, checked in or refused) in the voucher history.', 'voucher-captain' ),
 			__( 'Promotion limits per customer: when a promotion may be used only a limited number of times per customer, we record each use with your customer account or, for guest orders, with a keyed hash of your email address (not the address itself), so that the limit also applies to later orders. These records are deleted together with the promotion.', 'voucher-captain' ),
 			__( 'To protect voucher codes against guessing and our server against overload, we count code entries, PDF previews and downloads per visitor for a short time window (at most one hour). For this we store the counter under a keyed hash of your IP address (made with a secret key of this website, so it cannot be turned back into the address), never the address itself. The counters are deleted by the daily cleanup, at the latest about one day after the window has ended.', 'voucher-captain' ),
+			self::internal_records_paragraph(),
 		);
 		return $paragraphs;
+	}
+
+	/*
+	 * SET-VC-08: the retention periods of the block "Retention" (Settings::retention_fields()) as the policy text names
+	 * them – the values the daily cleanup uses (settings, then filters). 0 = no fixed period (kept until deleted).
+	 */
+
+	/** Recipient data: "removed N days after …" once vcap_retention_days is set; nothing more while it is 0. */
+	private static function recipient_retention_sentence(): string {
+		$days = max( 0, (int) get_option( 'vcap_retention_days', 0 ) );
+		if ( $days <= 0 ) {
+			return '';
+		}
+		/* translators: %d: days */
+		return ' ' . sprintf( _n( 'Recipient name, email address, message and personalisation are removed %d day after the voucher has expired or been fully redeemed.', 'Recipient name, email address, message and personalisation are removed %d days after the voucher has expired or been fully redeemed.', $days, 'voucher-captain' ), $days );
+	}
+
+	/** Voucher requests: the two periods of VoucherRequests::retention_months(). */
+	private static function requests_retention_sentence(): string {
+		$months = Integrations\VoucherRequests::retention_months();
+		/* translators: %d: months */
+		$after = static fn( int $n ): string => $n > 0 ? sprintf( _n( 'are deleted after %d month', 'are deleted after %d months', $n, 'voucher-captain' ), $n ) : __( 'are kept until we delete them', 'voucher-captain' );
+		/* translators: 1: e.g. "are deleted after 6 months", 2: e.g. "are deleted after 24 months" */
+		return sprintf( __( 'Requests that were never completed %1$s; issued requests and requests taken over as a company order %2$s.', 'voucher-captain' ), $after( $months['open'] ), $after( $months['closed'] ) );
+	}
+
+	/** Review invitations: the two periods of ReviewSource::retention(). */
+	private static function review_retention_sentences(): string {
+		$keep = Integrations\ReviewSource::retention();
+		$out  = '';
+		if ( $keep['revoked_days'] > 0 ) {
+			/* translators: %d: days */
+			$out .= ' ' . sprintf( _n( 'These notes are deleted %d day after a cancellation or refund.', 'These notes are deleted %d days after a cancellation or refund.', $keep['revoked_days'], 'voucher-captain' ), $keep['revoked_days'] );
+		}
+		if ( $keep['months'] > 0 ) {
+			/* translators: %d: months */
+			$out .= ' ' . sprintf( _n( 'Every note is deleted at the latest %d month after the redemption.', 'Every note is deleted at the latest %d months after the redemption.', $keep['months'], 'voucher-captain' ), $keep['months'] );
+		}
+		return '' !== $out ? $out : ' ' . __( 'These notes are kept until we delete them.', 'voucher-captain' );
+	}
+
+	/** Protocol of the voucher commands and the failed counter lookups (staff accounts, no customer data). */
+	private static function internal_records_paragraph(): string {
+		$log    = API\V1\OptionCommandStore::log_days();
+		$lookup = Counter::failed_lookup_days();
+		$text   = __( 'Internal records: voucher commands from workflow tools connected to this website (for example a voucher issued automatically to a customer account) are recorded with the time, the result, the staff account that authorised them and the reason, without voucher codes.', 'voucher-captain' );
+		/* translators: %d: days */
+		$text .= ' ' . ( $log > 0 ? sprintf( _n( 'This protocol is kept for %d day.', 'This protocol is kept for %d days.', $log, 'voucher-captain' ), $log ) : __( 'This protocol is kept until we delete it.', 'voucher-captain' ) );
+		$text .= ' ' . __( 'When a code scanned or entered at the counter is unknown, we count this per staff member for the counter report.', 'voucher-captain' );
+		/* translators: %d: days */
+		$text .= ' ' . ( $lookup > 0 ? sprintf( _n( 'These counts are kept for %d day.', 'These counts are kept for %d days.', $lookup, 'voucher-captain' ), $lookup ) : __( 'These counts are kept until we delete them.', 'voucher-captain' ) );
+		return $text;
 	}
 }

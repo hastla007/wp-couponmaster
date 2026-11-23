@@ -38,8 +38,8 @@ final class Counter {
 	public const META_LOCATION = 'vcap_counter_location';
 	/** M12-78: option with failed scanner lookups per shop day and staff member ({Y-m-d: {user id: count}}). */
 	public const FAILED_LOOKUPS = 'vcap_scanner_failed_lookups';
-	/** Days the failed-lookup counter keeps. */
-	private const FAILED_DAYS = 92;
+	/** Days the failed-lookup counter keeps: default of the setting `vcap_scanner_failed_lookup_days` (SET-VC-08). */
+	public const FAILED_DAYS = 92;
 	/** Seconds a counter booking waits for the limit lock of another one (same staff member or till). */
 	private const LOCK_WAIT = 5;
 
@@ -211,9 +211,48 @@ final class Counter {
 		$data  = is_array( $data ) ? $data : array();
 		$today = wp_date( 'Y-m-d' );
 		$data[ $today ][ $user_id ] = (int) ( $data[ $today ][ $user_id ] ?? 0 ) + 1;
-		$cut  = wp_date( 'Y-m-d', time() - self::FAILED_DAYS * DAY_IN_SECONDS );
-		$data = array_filter( $data, static fn( $day ) => (string) $day >= $cut, ARRAY_FILTER_USE_KEY );
-		update_option( self::FAILED_LOOKUPS, $data, false );
+		update_option( self::FAILED_LOOKUPS, self::without_old_lookups( $data ), false );
+	}
+
+	/**
+	 * SET-VC-08: days the failed-lookup counter keeps – the setting `vcap_scanner_failed_lookup_days` (block
+	 * "Retention"), then the filter of the same name, which wins. 0 (filter only) keeps every day.
+	 */
+	public static function failed_lookup_days(): int {
+		/**
+		 * Days the counts of failed scanner lookups per staff member are kept (counter report). 0 keeps them.
+		 *
+		 * @since 1.3.0
+		 * @param int $days Days (default: the setting, 92).
+		 */
+		return max( 0, (int) apply_filters( 'vcap_scanner_failed_lookup_days', SettingsRegistry::bounded_int( 'vcap_scanner_failed_lookup_days' ) ) );
+	}
+
+	/**
+	 * The failed-lookup counts without the days older than failed_lookup_days().
+	 *
+	 * @param array<mixed> $data Shop day (Y-m-d) => counts.
+	 * @return array<mixed>
+	 */
+	private static function without_old_lookups( array $data ): array {
+		$days = self::failed_lookup_days();
+		if ( $days <= 0 ) {
+			return $data;
+		}
+		$cut = (string) wp_date( 'Y-m-d', time() - $days * DAY_IN_SECONDS );
+		return array_filter( $data, static fn( $day ) => (string) $day >= $cut, ARRAY_FILTER_USE_KEY );
+	}
+
+	/** SET-VC-08: daily maintenance (step "protocols") – removes failed-lookup counts older than the retention. */
+	public static function prune_failed_lookups(): void {
+		$data = get_option( self::FAILED_LOOKUPS, null );
+		if ( ! is_array( $data ) ) {
+			return;
+		}
+		$kept = self::without_old_lookups( $data );
+		if ( count( $kept ) !== count( $data ) ) {
+			update_option( self::FAILED_LOOKUPS, $kept, false );
+		}
 	}
 
 	/**

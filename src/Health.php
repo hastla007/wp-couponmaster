@@ -139,7 +139,7 @@ final class Health {
 
 	public function tests( $tests ) {
 		$tests = (array) $tests;
-		foreach ( array( 'extensions', 'database', 'schema', 'scheduler', 'mail', 'sender_domain', 'purchase_limits', 'redeem_page', 'markets', 'offline_payment', 'currency', 'rate_limits', 'template_images', 'template_overrides' ) as $id ) {
+		foreach ( array( 'extensions', 'database', 'schema', 'scheduler', 'mail', 'sender_domain', 'purchase_limits', 'redeem_page', 'markets', 'offline_payment', 'currency', 'rate_limits', 'template_images', 'template_overrides', 'retention' ) as $id ) {
 			$tests['direct'][ 'vcap_' . $id ] = array(
 				'label' => Brand::name( 'site_health' ),
 				'test'  => array( $this, 'test_' . $id ),
@@ -755,6 +755,30 @@ final class Health {
 		);
 	}
 
+	/**
+	 * SET-VC-08 (owner decision S9): recipient data is kept without a period while "Anonymise recipient data after
+	 * (days)" is 0 – the default of new and old installations, nothing is deleted silently. Site Health recommends
+	 * setting a period as long as none is set.
+	 */
+	public function test_retention(): array {
+		$days = (int) get_option( 'vcap_retention_days', 0 );
+		if ( $days > 0 ) {
+			return self::result(
+				'retention',
+				'good',
+				__( 'A retention period for recipient data is set', 'voucher-captain' ),
+				/* translators: %d: days */
+				sprintf( _n( 'Recipient data is anonymised %d day after a voucher has expired or been fully redeemed. The period is not legally checked: have it checked for your country.', 'Recipient data is anonymised %d days after a voucher has expired or been fully redeemed. The period is not legally checked: have it checked for your country.', $days, 'voucher-captain' ), $days )
+			);
+		}
+		return self::result(
+			'retention',
+			'recommended',
+			__( 'No retention period for recipient data is set', 'voucher-captain' ),
+			__( 'Recipient names, email addresses and messages of vouchers are kept without a time limit. Data protection law usually requires deleting personal data once it is no longer needed. Set "Anonymise recipient data after (days)" under WooCommerce → Settings → Vouchers → Privacy & advanced → Retention (have the period checked legally for your country).', 'voucher-captain' )
+		);
+	}
+
 	/** Seconds the ledger check of Site Health may read (the rest is left to "wp vcap ledger verify"). */
 	private const LEDGER_BUDGET = 10.0;
 
@@ -853,6 +877,8 @@ final class Health {
 			case 'template_overrides':
 			case 'ledger':
 				return '';
+			case 'retention':
+				return '<p><a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=vcap&section=privacy' ) . '#vcap_retention-description' ) . '">' . esc_html__( 'Retention settings', 'voucher-captain' ) . '</a></p>';
 		}
 		return '<p><a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=vcap' ) ) . '">' . esc_html__( 'Voucher settings', 'voucher-captain' ) . '</a></p>';
 	}

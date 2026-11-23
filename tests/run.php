@@ -4845,5 +4845,131 @@ unset( $GLOBALS['vcap_test_filters']['vcap_subscription_issue_on_switch'] );
 check( 'SET-VC-33: WooCommerce Subscriptions – a switch order issues no voucher by default; the setting allows it; filter vcap_subscription_issue_on_switch wins', false === $s33_s_def && true === $s33_s_on && false === $s33_s_filtered );
 $GLOBALS['vcap_test_options'] = $s33_saved;
 
+// SET-VC-08: retention periods as settings (block "Retention", Privacy & advanced); defaults = the values of 1.2.0,
+// the filters get the setting and win; Site Health warns while no recipient data period is set (owner decision S9).
+echo "SET-VC-08 retention periods\n";
+VCAP\SettingsRegistry::reset();
+$r8_saved = $GLOBALS['vcap_test_options'];
+$r8_keys  = array( 'vcap_retention_days', 'vcap_voucher_requests_open_months', 'vcap_voucher_requests_closed_months', 'vcap_review_retention_months', 'vcap_review_revoked_retention_days', 'vcap_command_log_days', 'vcap_scanner_failed_lookup_days' );
+foreach ( $r8_keys as $r8_k ) {
+	unset( $GLOBALS['vcap_test_options'][ $r8_k ] );
+}
+$r8_def    = VCAP\Settings::defaults();
+$r8_fields = array();
+foreach ( VCAP\Settings::retention_fields() as $r8_f ) {
+	if ( isset( $r8_f['id'] ) && 'number' === ( $r8_f['type'] ?? '' ) ) {
+		$r8_fields[ (string) $r8_f['id'] ] = $r8_f;
+	}
+}
+$r8_privacy = array_column( ( new VCAP\Settings() )->fields( 'privacy' ), 'id' );
+check(
+	'SET-VC-08: defaults are today\'s values (recipient data 0 = never, requests 6/24 months, review notes 24 months / withdrawn 90 days, command protocol 90 days, failed lookups 92 days)',
+	0 === $r8_def['vcap_retention_days'] && 6 === $r8_def['vcap_voucher_requests_open_months'] && 24 === $r8_def['vcap_voucher_requests_closed_months'] && 24 === $r8_def['vcap_review_retention_months']
+		&& 90 === $r8_def['vcap_review_revoked_retention_days'] && 90 === $r8_def['vcap_command_log_days'] && 92 === $r8_def['vcap_scanner_failed_lookup_days']
+		&& array( 'open' => 6, 'closed' => 24 ) === VCAP\Integrations\VoucherRequests::retention_months() && array( 'revoked_days' => 90, 'months' => 24 ) === VCAP\Integrations\ReviewSource::retention()
+		&& 90 === VCAP\API\V1\OptionCommandStore::log_days() && 92 === VCAP\Counter::failed_lookup_days()
+);
+check(
+	'SET-VC-08: one field per period in the block "Retention" of Privacy & advanced; every one registered with a minimum, legal weight and the visible note "Not legally checked"',
+	$r8_keys === array_keys( $r8_fields ) && array() === array_diff( $r8_keys, $r8_privacy )
+		&& array() === array_filter( $r8_keys, static fn( $k ) => 'privacy' !== VCAP\SettingsRegistry::get( $k )['section'] || true !== VCAP\SettingsRegistry::get( $k )['legal'] || null === VCAP\SettingsRegistry::get( $k )['min'] )
+		&& array() === array_filter( $r8_fields, static fn( $f ) => ! str_contains( (string) ( $f['desc'] ?? '' ), 'Not legally checked' ) || array_key_exists( 'desc_tip', $f ) || ! isset( $f['custom_attributes']['min'] ) )
+		&& 30 === VCAP\SettingsRegistry::get( 'vcap_review_revoked_retention_days' )['min'] && 1 === VCAP\SettingsRegistry::get( 'vcap_voucher_requests_open_months' )['min'] && 0 === VCAP\SettingsRegistry::get( 'vcap_retention_days' )['min'],
+	implode( ', ', array_keys( $r8_fields ) )
+);
+// Voucher requests.
+$GLOBALS['vcap_test_options']['vcap_voucher_requests_open_months']   = '3';
+$GLOBALS['vcap_test_options']['vcap_voucher_requests_closed_months'] = '0'; // Below the minimum (written past the page).
+$r8_req  = VCAP\Integrations\VoucherRequests::retention_months();
+$r8_seen = null;
+add_filter(
+	'vcap_voucher_requests_retention_months',
+	static function ( $m ) use ( &$r8_seen ) {
+		$r8_seen = $m;
+		return array( 'open' => 2, 'closed' => 0 );
+	}
+);
+$r8_req_f = VCAP\Integrations\VoucherRequests::retention_months();
+array_pop( $GLOBALS['vcap_test_filters']['vcap_voucher_requests_retention_months'] );
+check( 'SET-VC-08: voucher requests – the settings open/completed act (never below 1 month), the filter gets them and wins (0 = keep)', array( 'open' => 3, 'closed' => 1 ) === $r8_req && array( 'open' => 3, 'closed' => 1 ) === $r8_seen && array( 'open' => 2, 'closed' => 0 ) === $r8_req_f );
+// Review invitations.
+$GLOBALS['vcap_test_options']['vcap_review_retention_months']       = '12';
+$GLOBALS['vcap_test_options']['vcap_review_revoked_retention_days'] = '5';
+$r8_rev = VCAP\Integrations\ReviewSource::retention();
+add_filter( 'vcap_review_retention_months', static fn( $m ) => $m + 1 );
+add_filter( 'vcap_review_revoked_retention_days', static fn() => 0 );
+$r8_rev_f = VCAP\Integrations\ReviewSource::retention();
+array_pop( $GLOBALS['vcap_test_filters']['vcap_review_retention_months'] );
+array_pop( $GLOBALS['vcap_test_filters']['vcap_review_revoked_retention_days'] );
+check( 'SET-VC-08: review invitation notes – months and withdrawn days follow the settings (withdrawn never below 30 days), the filters get them and win', array( 'revoked_days' => 30, 'months' => 12 ) === $r8_rev && array( 'revoked_days' => 0, 'months' => 13 ) === $r8_rev_f );
+// Command protocol: setting 30 days removes counters and protocol of older days in the daily maintenance.
+$GLOBALS['vcap_test_options']['vcap_command_log_days'] = '30';
+$r8_log = VCAP\API\V1\OptionCommandStore::log_days();
+add_filter( 'vcap_command_log_days', static fn( $d ) => $d * 2 );
+$r8_log_f = VCAP\API\V1\OptionCommandStore::log_days();
+array_pop( $GLOBALS['vcap_test_filters']['vcap_command_log_days'] );
+$r8_saved_wpdb            = $GLOBALS['wpdb'] ?? null;
+$GLOBALS['wpdb']          = new VCAP_Test_Wpdb();
+$GLOBALS['wpdb']->answers = array( '/GET_LOCK/' => '1', '/RELEASE_LOCK/' => '1' );
+$GLOBALS['vcap_test_options']['vcap_cmd_days']             = array( '2026-10-01' => array(), '2026-11-10' => array() );
+$GLOBALS['vcap_test_options']['vcap_cmd_log_2026-10-01']   = array( 'entries' => array( array( 'code' => 'x' ) ) );
+$GLOBALS['vcap_test_options']['vcap_cmd_count_2026-10-01'] = array( 'voucher.void' => 1 );
+$GLOBALS['vcap_test_options']['vcap_cmd_log_2026-11-10']   = array( 'entries' => array( array( 'code' => 'y' ) ) );
+( new VCAP\API\V1\OptionCommandStore() )->prune( '2026-11-23' );
+$r8_log_pruned = array( isset( $GLOBALS['vcap_test_options']['vcap_cmd_log_2026-10-01'] ), isset( $GLOBALS['vcap_test_options']['vcap_cmd_count_2026-10-01'] ), isset( $GLOBALS['vcap_test_options']['vcap_cmd_log_2026-11-10'] ) );
+$GLOBALS['vcap_test_options']['vcap_command_log_days']       = '90';
+$GLOBALS['vcap_test_options']['vcap_cmd_log_2026-10-01']     = array( 'entries' => array() );
+$GLOBALS['vcap_test_options']['vcap_cmd_days']['2026-10-01'] = array();
+( new VCAP\API\V1\OptionCommandStore() )->prune( '2026-11-23' );
+$r8_log_kept     = isset( $GLOBALS['vcap_test_options']['vcap_cmd_log_2026-10-01'] );
+$GLOBALS['wpdb'] = $r8_saved_wpdb;
+check( 'SET-VC-08: command protocol – the setting acts in the daily cleanup (30 days: a day 53 days ago goes, one 13 days ago stays; 90 days: kept), the filter gets it and wins', 30 === $r8_log && 60 === $r8_log_f && array( false, false, true ) === $r8_log_pruned && $r8_log_kept );
+// Failed counter lookups.
+$r8_today = wp_date( 'Y-m-d' );
+$r8_old   = wp_date( 'Y-m-d', time() - 40 * DAY_IN_SECONDS );
+$GLOBALS['vcap_test_options']['vcap_scanner_failed_lookup_days'] = '31';
+$GLOBALS['vcap_test_options'][ VCAP\Counter::FAILED_LOOKUPS ]    = array(
+	$r8_old   => array( 7 => 2 ),
+	$r8_today => array( 7 => 1 ),
+);
+VCAP\Counter::prune_failed_lookups();
+$r8_lookups = array_keys( $GLOBALS['vcap_test_options'][ VCAP\Counter::FAILED_LOOKUPS ] );
+$GLOBALS['vcap_test_options']['vcap_scanner_failed_lookup_days'] = '5'; // Below the minimum: 31.
+$r8_min = VCAP\Counter::failed_lookup_days();
+$GLOBALS['vcap_test_options'][ VCAP\Counter::FAILED_LOOKUPS ] = array( $r8_old => array( 7 => 2 ) );
+add_filter( 'vcap_scanner_failed_lookup_days', static fn() => 0 );
+VCAP\Counter::record_failed_lookup( 7 );
+$r8_lookups_f = array_keys( $GLOBALS['vcap_test_options'][ VCAP\Counter::FAILED_LOOKUPS ] );
+array_pop( $GLOBALS['vcap_test_filters']['vcap_scanner_failed_lookup_days'] );
+check( 'SET-VC-08: failed counter lookups – the setting acts in the daily cleanup (31 days: a day 40 days ago goes), never below 31; the filter wins (0 keeps every day)', array( $r8_today ) === $r8_lookups && 31 === $r8_min && in_array( $r8_old, $r8_lookups_f, true ) && in_array( $r8_today, $r8_lookups_f, true ) );
+// Recipient data: the maintenance step uses the setting; the daily maintenance calls the new step.
+$r8_delivery = (string) file_get_contents( VCAP_PATH . 'src/Delivery.php' );
+check( 'SET-VC-08: the daily maintenance uses every period (retention, voucher_requests, review_refs and the new step "protocols")', in_array( 'protocols', VCAP\Delivery::MAINTENANCE_STEPS, true ) && str_contains( $r8_delivery, "\$this->settings->get( 'vcap_retention_days' )" ) && str_contains( $r8_delivery, 'Counter::prune_failed_lookups();' ) && str_contains( $r8_delivery, '( new API\V1\OptionCommandStore() )->prune();' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Integrations/ReviewSource.php' ), '$keep   = self::retention();' ) );
+// Privacy policy text names the values.
+$GLOBALS['vcap_test_options']['vcap_retention_days']                 = '730';
+$GLOBALS['vcap_test_options']['vcap_voucher_requests_open_months']   = '4';
+$GLOBALS['vcap_test_options']['vcap_voucher_requests_closed_months'] = '36';
+$GLOBALS['vcap_test_options']['vcap_review_retention_months']        = '18';
+$GLOBALS['vcap_test_options']['vcap_review_revoked_retention_days']  = '60';
+$GLOBALS['vcap_test_options']['vcap_command_log_days']               = '120';
+$GLOBALS['vcap_test_options']['vcap_scanner_failed_lookup_days']     = '45';
+$r8_policy = implode( "\n", VCAP\Privacy::policy_paragraphs() );
+unset( $GLOBALS['vcap_test_options']['vcap_retention_days'] );
+$r8_policy0 = implode( "\n", VCAP\Privacy::policy_paragraphs() );
+check(
+	'SET-VC-08: the suggested privacy policy text names the periods set (recipient data, requests, review notes, command protocol, failed lookups); no recipient data period while it is 0',
+	str_contains( $r8_policy, 'removed 730 days after the voucher has expired' ) && str_contains( $r8_policy, 'never completed are deleted after 4 months' ) && str_contains( $r8_policy, 'company order are deleted after 36 months' )
+		&& str_contains( $r8_policy, 'deleted 60 days after a cancellation' ) && str_contains( $r8_policy, 'at the latest 18 months after' ) && str_contains( $r8_policy, 'This protocol is kept for 120 days.' ) && str_contains( $r8_policy, 'These counts are kept for 45 days.' )
+		&& ! str_contains( $r8_policy0, 'days after the voucher has expired' ),
+	$r8_policy
+);
+// Site Health: recommended while no recipient data period is set (S9), good once one is set.
+$r8_health_0 = ( new VCAP\Health() )->test_retention();
+$GLOBALS['vcap_test_options']['vcap_retention_days'] = '1095';
+$r8_health_1 = ( new VCAP\Health() )->test_retention();
+$r8_tests    = ( new VCAP\Health() )->tests( array() );
+check( 'SET-VC-08: Site Health recommends a recipient data period while it is 0 (link to the block "Retention") and is good with a period', 'recommended' === $r8_health_0['status'] && str_contains( $r8_health_0['actions'], 'section=privacy' ) && 'good' === $r8_health_1['status'] && str_contains( $r8_health_1['description'], '1095 days' ) && isset( $r8_tests['direct']['vcap_retention'] ) );
+$GLOBALS['vcap_test_options'] = $r8_saved;
+
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );
