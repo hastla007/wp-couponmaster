@@ -26,8 +26,8 @@ Diese Liste ist eine Arbeitsliste, kein verifizierter Fortschrittsbericht. Abgeh
 - **Überholte Zweige (nichts mehr zu übernehmen, können gelöscht werden):** `claude/wp-plugin-analyse-todo-hvollo-refactors` (PR #19, gemergt), `claude/sharp-mendel-xiiwf3` und `claude/sleepy-ptolemy-n32guj` (in PR #19 enthalten; PR #18 geschlossen), `claude/minver-newest` (PR #17 geschlossen; MINVER-1 ist erledigt), `codex/multi-expiry-reminders` (mehrere Erinnerungstage mit Wiederholung sind seit 1.2.0 drin, M12-84, R4 B7), `codex/fix-voucher-audit-findings`, `docs/security-check-todo`, `claude/trusting-edison-bb7r9s`, `claude/wp-plugin-analyse-todo-hvollo`, `claude/plugin-todo-liste-2a83v4`.
 - **Lizenz:** Entscheidung vom 13.11.2026 – der Kern ist frei, ohne Lizenz- und Update-Code (docs/FREE-PREMIUM.md, `tests/license-guard.php`). Das Add-on liegt in `hastla007/captain-pro`; Projekt-Connectoren sind eigene Lizenzprodukte (Entscheidung 17).
 - **Prüfstand von `main` 1.3.0 (23.11.2026):** vollständiger Lauf von „Plugin smoke tests“ auf `main` (`b801e2e`, GitHub-Actions-Lauf 45151762580) grün, alle 23 Jobs; lokal `php tests/run.php` 733 Prüfungen bestanden, Lizenzwächter, Hook-, POT-, E-Mail- und Rechtstext-Prüfung grün, PHPCS (WordPress, WooCommerce-Core) auf `src/API/V1`, `src/Contracts`, `src/Integrations/FormCaptain` ohne Befund. Die WordPress-Integrationssuiten, PHPStan und die Matrix laufen nur in der CI (`.github/workflows/plugin-smoke.yml`).
-- **Zählung:** 31 Aufgaben offen, 779 erledigt (Befehl: `grep -c '^\s*- \[ \]' TODO.md` und `grep -c '^\s*- \[x\]' TODO.md`).
-- **Zählung:** 31 Aufgaben offen, 779 erledigt (Befehl: `grep -c '^\s*- \[ \]' TODO.md` und `grep -c '^\s*- \[x\]' TODO.md`).
+- **Zählung:** 72 Aufgaben offen, 779 erledigt (Befehl: `grep -c '^\s*- \[ \]' TODO.md` und `grep -c '^\s*- \[x\]' TODO.md`).
+- **Zählung:** 72 Aufgaben offen, 779 erledigt (Befehl: `grep -c '^\s*- \[ \]' TODO.md` und `grep -c '^\s*- \[x\]' TODO.md`).
 
 ## Einstellungen für den Verkauf (Analyse vom 23.11.2026)
 
@@ -111,6 +111,54 @@ Noch offen bei Voucher Captain: E6, E8, E9, E10 (**wartet auf Inhaber**).
 ## Prüfphase Einstellungen und neue Funktionen
 
 Auftrag des Inhabers (23.11.2026, übermittelt durch die Lizenz-Sitzung; Text auch in captain-pro `docs/settings/README.md`, Abschnitt „Prüfphase“): sechs Experten prüfen unabhängig (je ein eigener Agent, gern parallel) am laufenden Plugin, nicht nur am Text, die neuen Einstellungen und ausdrücklich auch die übrigen neuen Funktionen der letzten Wochen (Lese-/Befehls-/Connector-/Kontaktfunktionen, Form-Captain-Anfragen, Währungsregel F-05a). Jeder Befund wird eine eigene `- [ ]`-Aufgabe mit Schweregrad, Fundstelle und Nachstellung und wird mit Test repariert. Eine Prüfaufgabe ist erst erledigt, wenn ihre Befunde behoben oder begründet als „wartet auf Inhaber“ bzw. „Rechtsprüfung“ gekennzeichnet sind und die CI grün ist. Die Prüfphase läuft nach jedem größeren Baustein (Register, Länderprofile, Geschäftsregeln, Pro-Hinweis) und einmal am Ende über alles. Am Ende je Experte melden: gefunden / behoben / offen mit Grund.
+
+### Befunde der Prüfphase (23.11.2026, Stand c888d3b)
+
+Sechs unabhängige Prüfer (P1 Daten, P2 Abläufe, P3 Länder/Steuer/Recht, P4 Sicherheit/Datenschutz, P5 Bedienung/Sprache, P6 Free/Pro/Betrieb). Kein KRITISCH-Befund. Rechts- und Inhaberfragen stehen am Ende.
+
+- [ ] **PV-P1-1 [WICHTIG]** `src/SettingsTransfer.php:65,220` — Export schreibt bei nie gespeicherter Gültigkeitsregel '' – ein Import in einen Shop mit „statutory“ + 365 Tagen schaltet die Regel auf „days“ um. Export/Vergleich nutzen die wirksame Regel, `''` wird abgelehnt.
+- [ ] **PV-P1-2 [WICHTIG]** `src/SettingsTransfer.php:65,239,270` — Eigener Export bzw. automatische Sicherung wird beim Import abgelehnt (alte Tabellentexte mit unlesbaren Zeilen, leere Zahlenfelder aus 1.2.0) – ein Zurücksetzen lässt sich dann nicht rückgängig machen. Export normalisiert (Tabellen als Zeilen, leere Zahl = Standard), Import wandelt alte Texte um.
+- [ ] **PV-P1-3/P2-5/P3-1 [WICHTIG]** `src/SettingsTransfer.php:380-405` — Zurücksetzen setzt die Werte einer Neuinstallation (`fresh`): bestehende Shops bekommen `vcap_mpv_after_tax` = yes (Risiko doppelter USt, TAX.md F17), PDF-Grenze 20, Zustellung neuer Produkte = yes – ohne Vorschau. Sicher umgesetzt: Zurücksetzen stellt den Standard bestehender Shops her (Register-`default`) und zeigt vorher „bisher → neu“ (Oberfläche und `--dry-run`). *Wartet auf Inhaber, ob „fresh“ gewollt ist.*
+- [ ] **PV-P1-4 [OPTIMIERUNG]** `src/CLI/Command.php:590` — `wp vcap settings get` gibt bei Tabellen „Array“ aus, `set` nimmt kein JSON für Tabellen/Listen.
+- [ ] **PV-P1-5/P6-3 [OPTIMIERUNG]** `src/SettingsLog.php:106-126` — Änderungsprotokoll schreibt das ganze Protokoll (bis 2.000 Einträge) je geänderter Option neu – einmal je Anfrage schreiben.
+- [ ] **PV-P1-6 [OPTIMIERUNG]** `src/Admin/SettingsTools.php:62` — Export-Text verspricht „jede Einstellung dieses Reiters“, die Rechte je Rolle sind nicht enthalten – Text korrigieren.
+- [ ] **PV-P4-2 [OPTIMIERUNG]** `src/Admin/RoleCaps.php:143-155` — Änderungen der Rechte je Rolle fehlen im Änderungsprotokoll.
+- [ ] **PV-P4-5/P2-3 [WICHTIG]** `src/SettingsTransfer.php:237-257` — Import/WP-CLI/Wiederherstellen bereinigen Textfelder anders als die Seite: Bedingungen verlieren HTML/Links, CSS und Logo-URL verlieren `%xx`. Je Option der eigene Bereiniger.
+- [ ] **PV-P2-6 [OPTIMIERUNG]** `src/SettingsTransfer.php backup()` — Jedes Zurücksetzen legt eine Sicherung an, auch ohne Änderung; nur 5 bleiben – die Ursprungswerte gehen verloren.
+- [ ] **PV-P2-7 [OPTIMIERUNG]** `src/Admin/SettingsTools.php, src/Admin/CountryProfilesAdmin.php` — Doppelklick auf „Übernehmen“ zeigt „abgelaufen, nichts geändert“, obwohl übernommen wurde.
+- [ ] **PV-P6-1 [WICHTIG]** `src/SettingsRegistry.php:103-106` — Add-on-Einträge, die sich wie dokumentiert in `vcap_loaded` anmelden, kommen nie ins Register (Zwischenspeicher ist dann schon gefüllt) – betrifft SET-VC-27 (captain-pro).
+- [ ] **PV-P6-2 [WICHTIG]** `voucher-captain.php:49, CONNECTORS.md` — Vertragstabelle nennt die neuen 1.3.0-Hooks der Einstellungen und Form Captain nicht. Umgesetzt als Vertrag 1.8.0 mit eigener Zeile. *Wartet auf Inhaber: Version erhöhen oder in 1.7.0 aufnehmen.*
+- [ ] **PV-P6-4 [OPTIMIERUNG]** `src/PaymentMethods.php:40,75` — `vcap_voucher_excluded_gateways` wird je Anfrage gelesen, ist aber nicht autoload – in `REQUEST_SETTINGS`.
+- [ ] **PV-P6-5 [OPTIMIERUNG]** `src/Admin/CountryTableField.php:198` — Länderauswahl wird je Zeile neu aufgebaut (~0,7 MB HTML) – einmal je Anfrage.
+- [ ] **PV-P6-6 [OPTIMIERUNG]** `uninstall.php:233` — Deinstallation mit Datenlöschung lässt `vcap_hide_pro_hints` stehen.
+- [ ] **PV-P6-7 [OPTIMIERUNG]** `API.md` — `vcap_voucher_excluded_gateways` fehlt in der Tabelle der Andockpunkte.
+- [ ] **PV-P2-10 [OPTIMIERUNG]** `config/settings.php` — `vcap_default_expiry_days` ohne Obergrenze (9.999.999 Tage → Datum im Jahr 29405).
+- [ ] **PV-P2-11 [OPTIMIERUNG]** `src/Settings.php` — `Settings::DEFAULTS` entfernt – ein Add-on, das sie nutzt, bricht ab. Als veraltete Konstante wieder da.
+- [ ] **PV-P3-7 [OPTIMIERUNG]** `bin/legal-texts.php` — LEGAL_TEXTS.md beschreibt das alte Textformat und zeigt die Vorschläge der Länderprofile und die Aufbewahrungsfristen nicht.
+- [ ] **PV-P3-8 [OPTIMIERUNG]** `TAX.md` — TAX.md ohne Abschnitt CH/LI/GB/NO, ohne Steuerhinweise der Länderprofile, ohne Wirkung von Zurücksetzen/Import auf `vcap_mpv_after_tax`; 3.2 ohne voucher.issue (paid=false).
+- [ ] **PV-P3-2 [WICHTIG]** `src/CountryProfiles.php:322-339` — Länderprofil hakt die Gültigkeitsregel vor, obwohl der Shop eigene Tage gespeichert hat.
+- [ ] **PV-P3-3 [WICHTIG]** `src/Admin/CountryTableField.php:76-84` — Eine fehlerhafte bearbeitete Zeile löscht beim Speichern die gespeicherte Zeile des Landes (z. B. CH 10 Jahre → Rückfall auf 3 Jahre).
+- [ ] **PV-P3-4 [WICHTIG]** `src/API/V1/CommandLimits.php:140-182` — Eigener Höchstbetrag (F-05a) ohne Währung gespeichert – Wechsel der Shopwährung oder Import aus anderer Währung hebt die Grenze aus.
+- [ ] **PV-P3-5 [WICHTIG]** `src/ProductConfig.php:261-272` — Mit Polylang zeigt die Produktseite die Bedingungen unübersetzt, der Gutschein übersetzt.
+- [ ] **PV-P3-6 [OPTIMIERUNG]** `src/Privacy.php:506` — Datenschutztext liest die Aufbewahrung ohne Filter, die Löschung mit Filter.
+- [ ] **PV-P4-1 [OPTIMIERUNG]** `src/CustomCss.php:61-66` — CSS-Escapes umgehen den Filter (`@\69mport`, `javascript\3a`).
+- [ ] **PV-P4-4 [OPTIMIERUNG]** `src/API/V1/OptionCommandStore.php:243-268` — Tageszähler behalten Empfänger-IDs bis zu 3.650 Tage – vergangene Empfängerzähler sofort löschen.
+- [ ] **PV-P2-2 [WICHTIG]** `src/PhysicalCards.php:97,118` — Physische Karten werden nie aktiviert, wenn die Aktivierungs-Status „Abgeschlossen“ auslassen und der Gutschein bei „Abgeschlossen“ ausgestellt wird.
+- [ ] **PV-P2-4 [WICHTIG]** `src/API/V1/CommandLimits.php lowered()/sanitize_count()` — Befehlsgrenzen „5.0“, „1e1“, „abc“, „-1“ werden still zur Obergrenze 50.
+- [ ] **PV-P2-9 [OPTIMIERUNG]** `src/Counter.php:177-206` — Alle Kassen deaktiviert → Scanner nimmt wieder Freitext an (umgeht Kassen-Limits).
+- [ ] **PV-P5-1 [WICHTIG]** `languages/voucher-captain-de_DE.po` — de_DE („du“) nutzt in ~23 Texten noch „Ihr/Ihre“ (Betreffzeilen der Kunden-E-Mails u. a.); S4-Test erfasst das Possessiv nicht.
+- [ ] **PV-P5-2/P2-1 [WICHTIG]** `src/Admin/CountryProfilesAdmin.php:89-117, src/Admin/SettingsTools.php:113` — Aktionsknöpfe im WooCommerce-Formular: Enter in einem Feld löst „Vorschau“/„Datei prüfen“ statt „Speichern“ aus, Hinweis „ungespeicherte Änderungen“ erscheint.
+- [ ] **PV-P5-3 [WICHTIG]** `src/Emails/Branding.php:48-65, src/CustomCss.php:45-72` — Logo, Farbe und CSS werden ohne Meldung verworfen bzw. gekürzt.
+- [ ] **PV-P5-4 [OPTIMIERUNG]** `src/SettingsRegistry.php:326-330` — Fehlermeldungen nicht mit dem Feld verknüpft; Hinweise mit role=status werden beim Laden nicht vorgelesen.
+- [ ] **PV-P5-5 [OPTIMIERUNG]** `src/API/V1/CommandLimits.php:256,279` — Mehrere Felder heißen gleich („Aufrufe pro Tag“) – Befehl in den Titel.
+- [ ] **PV-P5-6 [OPTIMIERUNG]** `src/Admin/SettingsTools.php:217-255` — Vorschau und Protokoll zeigen technische Optionsnamen, englisches yes/no, leere Zellen.
+- [ ] **PV-P5-7 [OPTIMIERUNG]** `src/Settings.php:433,854` — `min-width:400px` und breite Tabellen erzeugen auf dem Telefon seitliches Scrollen.
+- [ ] **PV-P5-8 [OPTIMIERUNG]** `src/Admin/Onboarding.php:141` — Link `#vcap_terms_by_country` ohne Ziel.
+- [ ] **PV-P5-9 [OPTIMIERUNG]** `languages/*.po` — Glossar: „WooCommerce-Coupon“ statt „WooCommerce-Code“, „Person, die gekauft hat“ statt „Käufer“. *de_AT „Kassa“/„Kasse“ gemischt – wartet auf Inhaber.*
+- [ ] **PV-P5-10 [OPTIMIERUNG]** `ACCESSIBILITY.md, RELEASE_CHECKLIST.md` — Länderprofil-Vorschau, Kassentabelle, Werkzeuge und Protokoll fehlen; kein Prüfpunkt Tastatur/Screenreader für Einstellungsseiten.
+- [ ] **PV-P2-8 [OPTIMIERUNG]** `src/Preview.php:78-95` — Test-E-Mail geht auch an Cc/Bcc der E-Mail (WooCommerce email_improvements).
+
+Rechtsprüfung / wartet auf Inhaber (kein Code): P3-9 Status der DE/AT-Gültigkeit („geprüft“ in config/markets.php vs. „Rechtsprüfung offen“ im Profil), CH 10 Jahre, 3-Jahres-Rückfall für ungeprüfte Märkte, Aufbewahrung 1095 Tage vorangehakt, Obergrenze 100 in CHF/GBP/USD, Belegpflicht nur DE/AT, Steuerhinweis-Sätze, Löschhinweis nur DE/AT; P1-7/P4-3 Änderungsprotokoll mit Exporter, aber ohne Eraser (berechtigtes Interesse oder Eraser?); Grenzen gegen Durchprobieren (SET-VC-31) und Mindestfristen (SET-VC-08) bestätigen.
 
 - [ ] **SET-VC-P1 · Einstellungen und Daten.** Jede Einstellung: Vorgabe, Prüfung, Speichern, Wirkung im Code (keine toten Werte), Filter gewinnt, Migration bestehender Installationen ohne Verhaltensänderung, Export/Import-Rundlauf, Zurücksetzen, WP-CLI, Änderungsprotokoll, Multisite.
 - [ ] **SET-VC-P2 · Abläufe von Anfang bis Ende.** Hauptabläufe mit geänderten Einstellungen (Grenzwerte, 0, leer, Maximum, widersprüchliche Kombinationen), klassische und Block-Kasse, HPOS, Zeitzonen und Fristen über Mitternacht/Jahreswechsel, Wiederholungen und Doppelklicks, Rückwärtskompatibilität.
