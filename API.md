@@ -604,6 +604,55 @@ Pro, company orders) may take a request over. Without such an add-on nothing cha
 - A handed-over request cannot be issued (`confirm()` → `vcap_handed_over`, 409) or rejected. Privacy export and
   erasure treat `handed_over` like `issued`.
 
+## Settings: export, import, reset, change log (since 1.3.0)
+
+One service, `VCAP\SettingsTransfer`, serves *WooCommerce → Settings → Vouchers → Privacy & advanced* and WP-CLI; it
+works on the settings register (`config/settings.php`, `VCAP\SettingsRegistry`).
+
+- **Export** (SET-VC-14): every global setting marked `export` – never a secret (`vcap_secret`,
+  `vcap_customer_key_secret`, entries with `secret`), never "Remove all data", the support log or the default template
+  ID, no product settings and no voucher data. File format:
+  `{"format": "voucher-captain-settings", "version": 1, "plugin_version": "1.3.0", "exported_at": "…Z", "settings": {option: value}}`.
+  Values are the stored values (the default where nothing is saved), not what a `vcap_setting_{key}` filter makes of them.
+- **Import**: the whole file is checked first – no JSON object of this format, no or a newer `version`, a secret or a
+  never-exported setting, or one invalid value refuses the whole file and nothing changes. Options this site does not
+  know (e.g. of an add-on that is not installed) are skipped and listed. The admin page shows a preview
+  (setting, current value, new value) and applies it after a second click; an automatic backup is taken before.
+  Settings missing in the file are left unchanged.
+- **Checks** (`SettingsTransfer::validate( $option, $value )`, also `wp vcap settings set`): `bool` takes yes/no
+  (also on/off, 1/0, true/false), `int`/`decimal` a number within min/max (a value outside is refused, not moved to the
+  bound as on the settings page), `select` one of its choices, `list` an array or comma-separated text, code prefix,
+  suffix and separator the code characters, reminder days are stored normalised; the filter
+  `vcap_settings_validate_value` (value or `WP_Error`, option, register entry) lets add-ons check their own options.
+- **Reset** (SET-VC-15): per section or for all sections, after a confirmation and an automatic backup (the last five
+  are kept, downloadable on the page or with `wp vcap settings export --backup`). A setting returns to what a new
+  installation has: options with a `fresh` value and the autoloaded request settings are stored with that value, all
+  others are deleted (so the register default applies). Secrets, "Remove all data", the default template, internal
+  state and the database (vouchers, history) are never touched.
+- **Change log** (SET-VC-16, `VCAP\SettingsLog`): every change of a registered option – from the settings page, an
+  import, a reset, WP-CLI or code (`added_option`, `updated_option`, `delete_option`) – with time, user, option,
+  value from → to and source (`VCAP\Source` plus import/reset/settings command); secrets are recorded as `********`.
+  Shown on *Privacy & advanced* (latest 50), part of the personal data export of the user who made the change, kept
+  `vcap_settings_log_days` days (default 365, 0 = keep; at most 2,000 entries) and cleaned up by the daily maintenance
+  step `settings_log`. Stored in the option `vcap_settings_log` (never autoloaded).
+- **Rights**: every action of the page needs `manage_woocommerce` and its nonce; the buttons post to `admin-post.php`
+  (actions `vcap_settings_export`, `vcap_settings_backup`, `vcap_settings_import`, `vcap_settings_import_apply`,
+  `vcap_settings_import_cancel`, `vcap_settings_reset`), so *Save changes* never imports or resets.
+
+### WP-CLI (SET-VC-17)
+
+| Command | Does |
+|---|---|
+| `wp vcap settings list [--section=<section>] [--format=table\|json\|csv\|yaml]` | Every setting with section, type, value, default and export flag (secrets masked). Sections: `general`, `redemption`, `promotions`, `codes`, `delivery`, `privacy`, `api` and those of add-ons. |
+| `wp vcap settings get <option> [--format=plain\|json]` | Stored value (default where nothing is saved). Secrets are refused. |
+| `wp vcap settings set <option> <value>` | Checked like the page (see *Checks*); refused values change nothing (exit code 1). "Remove all data" stays with `wp vcap data-removal`. |
+| `wp vcap settings export [--file=<path>] [--backup[=<time>]]` | The export JSON (or an automatic backup) to the output or a file. |
+| `wp vcap settings import <file> [--dry-run] [--yes]` | Lists the changes (`option: from -> to`), then applies them after a backup; `--dry-run` only lists. |
+| `wp vcap settings reset <section>\|all [--dry-run] [--yes]` | Reset to defaults after a backup (see *Reset*). |
+
+Every change made this way is in the change log with the source "WP-CLI". A `profile` sub-command (country profiles,
+SET-VC-02) follows when country profiles exist.
+
 ## Extension points for add-ons (public API since 1.2.0)
 
 Voucher Captain is free and complete; paid features live in a separate add-on plugin (docs/FREE-PREMIUM.md, planned:
@@ -628,6 +677,7 @@ called in the code and listed in docs/HOOKS.md, the generated reference with eac
 | `vcap_customer_can_resend` | filter | `bool $allowed` (setting `vcap_customer_can_resend`, default yes), `Voucher` | 1.1.0 | SET-VC-18: whether the buyer may resend a delivered voucher from My Account; the filter gets the setting and wins. |
 | `vcap_customer_can_change`, `vcap_recipient_fix_days`, `vcap_recipient_fix_max`, `vcap_topup_min_remaining_days`, `vcap_checkin_undo_minutes`, `vcap_counter_reversal_minutes` | filter | the setting of the same name, `Voucher` | 1.2.0 | SET-VC-18: customer self-service and deadlines are settings (Settings → Vouchers → Delivery & downloads "Customer self-service", Redemption & balance "Top-ups and counter"; defaults as in 1.2.0: yes, 30 days, 2, 30 days, 10 min, 15 min). Each filter gets the setting instead of the fixed value and wins; the floors of 1.2.0 stay (link at least 1 day, at most 2 corrections, windows not below 0). |
 | `vcap_printed_link_grace_days` | filter | `int $days` (setting `vcap_printed_link_grace_days`, default 30), `Voucher` | 1.3.0 | SET-VC-18: days the download link printed on a voucher (QR code) stays valid after the voucher expired (`Downloads::printed_link_grace_days()`). |
+| `vcap_settings_validate_value` | filter | value in the stored format or `WP_Error`, `string $option`, `array $entry` | 1.3.0 | Check a value of an own option before it is imported or set with `wp vcap settings set` (see *Settings: export, import, reset, change log*); return a `WP_Error` to refuse. |
 | `vcap_pro_hints_hidden` | filter | `bool $hidden`, `int $user_id` | 1.3.0 | Whether the hint lines are hidden for the current user (default: the user's setting "Hide hints on extensions"). |
 | `vcap_product_settings_fields` / `vcap_product_settings_save` | action | – / `WC_Product`, `array $post` | 1.1.0 | Own fields in the product's *Voucher* tab and saving them. |
 | `vcap_template_design` | filter | `array $design`, `int $template_id` | 1.0.0 | The design a PDF template prints with. |

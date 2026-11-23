@@ -1,0 +1,250 @@
+{
+ "The file is too large for a settings export.": {
+  "du": "Die Datei ist für einen Einstellungs-Export zu groß.",
+  "sie": "Die Datei ist für einen Einstellungs-Export zu groß.",
+  "at": "Die Datei ist für einen Einstellungs-Export zu groß."
+ },
+ "This is no settings export of Voucher Captain (JSON with \"format\": \"voucher-captain-settings\" expected).": {
+  "du": "Das ist kein Einstellungs-Export von Voucher Captain (erwartet wird JSON mit \"format\": \"voucher-captain-settings\").",
+  "sie": "Das ist kein Einstellungs-Export von Voucher Captain (erwartet wird JSON mit \"format\": \"voucher-captain-settings\").",
+  "at": "Das ist kein Einstellungs-Export von Voucher Captain (erwartet wird JSON mit \"format\": \"voucher-captain-settings\")."
+ },
+ "The settings export has no valid version field.": {
+  "du": "Der Einstellungs-Export hat kein gültiges Versionsfeld.",
+  "sie": "Der Einstellungs-Export hat kein gültiges Versionsfeld.",
+  "at": "Der Einstellungs-Export hat kein gültiges Versionsfeld."
+ },
+ "The settings export has format version %1$d; this version of Voucher Captain reads up to version %2$d. Update the plugin first.": {
+  "du": "Der Einstellungs-Export hat die Formatversion %1$d; diese Version von Voucher Captain liest bis Version %2$d. Aktualisiere zuerst das Plugin.",
+  "sie": "Der Einstellungs-Export hat die Formatversion %1$d; diese Version von Voucher Captain liest bis Version %2$d. Aktualisieren Sie zuerst das Plugin.",
+  "at": "Der Einstellungs-Export hat die Formatversion %1$d; diese Version von Voucher Captain liest bis Version %2$d. Aktualisieren Sie zuerst das Plugin."
+ },
+ "The settings export has no \"settings\" object.": {
+  "du": "Der Einstellungs-Export enthält kein Objekt \"settings\".",
+  "sie": "Der Einstellungs-Export enthält kein Objekt \"settings\".",
+  "at": "Der Einstellungs-Export enthält kein Objekt \"settings\"."
+ },
+ "%s is never part of a settings export.": {
+  "du": "%s ist nie Teil eines Einstellungs-Exports.",
+  "sie": "%s ist nie Teil eines Einstellungs-Exports.",
+  "at": "%s ist nie Teil eines Einstellungs-Exports."
+ },
+ "%s is no setting of Voucher Captain.": {
+  "du": "%s ist keine Einstellung von Voucher Captain.",
+  "sie": "%s ist keine Einstellung von Voucher Captain.",
+  "at": "%s ist keine Einstellung von Voucher Captain."
+ },
+ "%s is a secret and cannot be read or changed here.": {
+  "du": "%s ist ein Geheimnis und kann hier weder gelesen noch geändert werden.",
+  "sie": "%s ist ein Geheimnis und kann hier weder gelesen noch geändert werden.",
+  "at": "%s ist ein Geheimnis und kann hier weder gelesen noch geändert werden."
+ },
+ "%1$s: invalid value, expected %2$s.": {
+  "du": "%1$s: ungültiger Wert, erwartet: %2$s.",
+  "sie": "%1$s: ungültiger Wert, erwartet: %2$s.",
+  "at": "%1$s: ungültiger Wert, erwartet: %2$s."
+ },
+ "a list of values": {
+  "du": "eine Liste von Werten",
+  "sie": "eine Liste von Werten",
+  "at": "eine Liste von Werten"
+ },
+ "a page or post ID": {
+  "du": "eine Seiten- oder Beitrags-ID",
+  "sie": "eine Seiten- oder Beitrags-ID",
+  "at": "eine Seiten- oder Beitrags-ID"
+ },
+ "text": {
+  "du": "Text",
+  "sie": "Text",
+  "at": "Text"
+ },
+ "letters, digits, dot, hyphen and underscore (up to 20 characters, separator up to 3)": {
+  "du": "Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich (bis 20 Zeichen, Trennzeichen bis 3)",
+  "sie": "Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich (bis 20 Zeichen, Trennzeichen bis 3)",
+  "at": "Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich (bis 20 Zeichen, Trennzeichen bis 3)"
+ },
+ "days between 1 and 365 separated by commas, or 0": {
+  "du": "Tage zwischen 1 und 365, durch Kommas getrennt, oder 0",
+  "sie": "Tage zwischen 1 und 365, durch Kommas getrennt, oder 0",
+  "at": "Tage zwischen 1 und 365, durch Kommas getrennt, oder 0"
+ },
+ "a whole number": {
+  "du": "eine ganze Zahl",
+  "sie": "eine ganze Zahl",
+  "at": "eine ganze Zahl"
+ },
+ "a number": {
+  "du": "eine Zahl",
+  "sie": "eine Zahl",
+  "at": "eine Zahl"
+ },
+ "a value from %1$s to %2$s": {
+  "du": "ein Wert von %1$s bis %2$s",
+  "sie": "ein Wert von %1$s bis %2$s",
+  "at": "ein Wert von %1$s bis %2$s"
+ },
+ "an amount up to %s": {
+  "du": "ein Betrag bis %s",
+  "sie": "ein Betrag bis %s",
+  "at": "ein Betrag bis %s"
+ },
+ "Export, import and reset settings": {
+  "du": "Einstellungen exportieren, importieren und zurücksetzen",
+  "sie": "Einstellungen exportieren, importieren und zurücksetzen",
+  "at": "Einstellungen exportieren, importieren und zurücksetzen"
+ },
+ "The export contains every global setting of this tab as a JSON file, never keys, passwords or other secrets, and no product settings or voucher data. An import is checked completely and shown as a preview before anything is changed.": {
+  "du": "Der Export enthält alle globalen Einstellungen dieses Reiters als JSON-Datei, nie Schlüssel, Passwörter oder andere Geheimnisse und keine Produkteinstellungen oder Gutscheindaten. Ein Import wird vollständig geprüft und als Vorschau gezeigt, bevor etwas geändert wird.",
+  "sie": "Der Export enthält alle globalen Einstellungen dieses Reiters als JSON-Datei, nie Schlüssel, Passwörter oder andere Geheimnisse und keine Produkteinstellungen oder Gutscheindaten. Ein Import wird vollständig geprüft und als Vorschau gezeigt, bevor etwas geändert wird.",
+  "at": "Der Export enthält alle globalen Einstellungen dieses Reiters als JSON-Datei, nie Schlüssel, Passwörter oder andere Geheimnisse und keine Produkteinstellungen oder Gutscheindaten. Ein Import wird vollständig geprüft und als Vorschau gezeigt, bevor etwas geändert wird."
+ },
+ "Settings file": {
+  "du": "Einstellungsdatei",
+  "sie": "Einstellungsdatei",
+  "at": "Einstellungsdatei"
+ },
+ "Export": {
+  "du": "Export",
+  "sie": "Export",
+  "at": "Export"
+ },
+ "Download settings (JSON)": {
+  "du": "Einstellungen herunterladen (JSON)",
+  "sie": "Einstellungen herunterladen (JSON)",
+  "at": "Einstellungen herunterladen (JSON)"
+ },
+ "Import": {
+  "du": "Import",
+  "sie": "Import",
+  "at": "Import"
+ },
+ "Settings file (JSON export of Voucher Captain)": {
+  "du": "Einstellungsdatei (JSON-Export von Voucher Captain)",
+  "sie": "Einstellungsdatei (JSON-Export von Voucher Captain)",
+  "at": "Einstellungsdatei (JSON-Export von Voucher Captain)"
+ },
+ "Check file and show changes": {
+  "du": "Datei prüfen und Änderungen zeigen",
+  "sie": "Datei prüfen und Änderungen zeigen",
+  "at": "Datei prüfen und Änderungen zeigen"
+ },
+ "Automatic backups": {
+  "du": "Automatische Sicherungen",
+  "sie": "Automatische Sicherungen",
+  "at": "Automatische Sicherungen"
+ },
+ "before a reset": {
+  "du": "vor dem Zurücksetzen",
+  "sie": "vor dem Zurücksetzen",
+  "at": "vor dem Zurücksetzen"
+ },
+ "before an import": {
+  "du": "vor einem Import",
+  "sie": "vor einem Import",
+  "at": "vor einem Import"
+ },
+ "Download a backup and import it to restore the settings it contains.": {
+  "du": "Lade eine Sicherung herunter und importiere sie, um die darin enthaltenen Einstellungen wiederherzustellen.",
+  "sie": "Laden Sie eine Sicherung herunter und importieren Sie sie, um die darin enthaltenen Einstellungen wiederherzustellen.",
+  "at": "Laden Sie eine Sicherung herunter und importieren Sie sie, um die darin enthaltenen Einstellungen wiederherzustellen."
+ },
+ "Preview of the import": {
+  "du": "Vorschau des Imports",
+  "sie": "Vorschau des Imports",
+  "at": "Vorschau des Imports"
+ },
+ "The file contains no changes: every setting already has this value.": {
+  "du": "Die Datei enthält keine Änderungen: Jede Einstellung hat diesen Wert bereits.",
+  "sie": "Die Datei enthält keine Änderungen: Jede Einstellung hat diesen Wert bereits.",
+  "at": "Die Datei enthält keine Änderungen: Jede Einstellung hat diesen Wert bereits."
+ },
+ "Setting": {
+  "du": "Einstellung",
+  "sie": "Einstellung",
+  "at": "Einstellung"
+ },
+ "Current value": {
+  "du": "Aktueller Wert",
+  "sie": "Aktueller Wert",
+  "at": "Aktueller Wert"
+ },
+ "New value": {
+  "du": "Neuer Wert",
+  "sie": "Neuer Wert",
+  "at": "Neuer Wert"
+ },
+ "Not known on this site and skipped: %s": {
+  "du": "Auf dieser Website unbekannt und übersprungen: %s",
+  "sie": "Auf dieser Website unbekannt und übersprungen: %s",
+  "at": "Auf dieser Website unbekannt und übersprungen: %s"
+ },
+ "Apply these changes": {
+  "du": "Diese Änderungen übernehmen",
+  "sie": "Diese Änderungen übernehmen",
+  "at": "Diese Änderungen übernehmen"
+ },
+ "Cancel import": {
+  "du": "Import abbrechen",
+  "sie": "Import abbrechen",
+  "at": "Import abbrechen"
+ },
+ "You are not allowed to do this.": {
+  "du": "Du darfst das nicht.",
+  "sie": "Sie dürfen das nicht.",
+  "at": "Sie dürfen das nicht."
+ },
+ "This backup no longer exists.": {
+  "du": "Diese Sicherung gibt es nicht mehr.",
+  "sie": "Diese Sicherung gibt es nicht mehr.",
+  "at": "Diese Sicherung gibt es nicht mehr."
+ },
+ "Please choose a settings file (JSON) to import.": {
+  "du": "Bitte wähle eine Einstellungsdatei (JSON) zum Importieren.",
+  "sie": "Bitte wählen Sie eine Einstellungsdatei (JSON) zum Importieren.",
+  "at": "Bitte wählen Sie eine Einstellungsdatei (JSON) zum Importieren."
+ },
+ "The file was not imported, nothing was changed: %s": {
+  "du": "Die Datei wurde nicht importiert, nichts wurde geändert: %s",
+  "sie": "Die Datei wurde nicht importiert, nichts wurde geändert: %s",
+  "at": "Die Datei wurde nicht importiert, nichts wurde geändert: %s"
+ },
+ "The import preview has expired. Please upload the file again.": {
+  "du": "Die Vorschau des Imports ist abgelaufen. Bitte lade die Datei erneut hoch.",
+  "sie": "Die Vorschau des Imports ist abgelaufen. Bitte laden Sie die Datei erneut hoch.",
+  "at": "Die Vorschau des Imports ist abgelaufen. Bitte laden Sie die Datei erneut hoch."
+ },
+ "Import cancelled, nothing was changed.": {
+  "du": "Import abgebrochen, nichts wurde geändert.",
+  "sie": "Import abgebrochen, nichts wurde geändert.",
+  "at": "Import abgebrochen, nichts wurde geändert."
+ },
+ "%d setting will change:|%d settings will change:": {
+  "du": [
+   "%d Einstellung wird geändert:",
+   "%d Einstellungen werden geändert:"
+  ],
+  "sie": [
+   "%d Einstellung wird geändert:",
+   "%d Einstellungen werden geändert:"
+  ],
+  "at": [
+   "%d Einstellung wird geändert:",
+   "%d Einstellungen werden geändert:"
+  ]
+ },
+ "%d setting imported. A backup of the previous settings was saved.|%d settings imported. A backup of the previous settings was saved.": {
+  "du": [
+   "%d Einstellung importiert. Eine Sicherung der bisherigen Einstellungen wurde gespeichert.",
+   "%d Einstellungen importiert. Eine Sicherung der bisherigen Einstellungen wurde gespeichert."
+  ],
+  "sie": [
+   "%d Einstellung importiert. Eine Sicherung der bisherigen Einstellungen wurde gespeichert.",
+   "%d Einstellungen importiert. Eine Sicherung der bisherigen Einstellungen wurde gespeichert."
+  ],
+  "at": [
+   "%d Einstellung importiert. Eine Sicherung der bisherigen Einstellungen wurde gespeichert.",
+   "%d Einstellungen importiert. Eine Sicherung der bisherigen Einstellungen wurde gespeichert."
+  ]
+ }
+}

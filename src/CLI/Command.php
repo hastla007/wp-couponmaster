@@ -8,6 +8,9 @@ use VCAP\Health;
 use VCAP\Install;
 use VCAP\Ledger;
 use VCAP\Plugin;
+use VCAP\SettingsLog;
+use VCAP\SettingsRegistry;
+use VCAP\SettingsTransfer;
 use VCAP\Source;
 use VCAP\Voucher;
 
@@ -449,6 +452,227 @@ final class Command {
 		foreach ( $args ? $args : Delivery::MAINTENANCE_STEPS as $step ) {
 			$ok = vcap()->delivery->run_maintenance_step( (string) $step );
 			self::line( sprintf( '%-18s %s', $step, $ok ? 'ok' : 'failed (see the WooCommerce log)' ) );
+		}
+	}
+
+	/**
+	 * Reads and changes the settings of the register (SET-VC-17): list, get, set, export, import, reset.
+	 *
+	 * Values are checked like on the settings page (type, bounds, choices); secrets are never shown, exported or set.
+	 * Every change is recorded in the change log with the source "WP-CLI". Country profiles (SET-VC-02) do not exist
+	 * yet, so there is no "profile" sub-command.
+	 *
+	 * ## OPTIONS
+	 *
+	 * <action>
+	 * : list, get, set, export, import or reset.
+	 *
+	 * [<arg>...]
+	 * : get <key> | set <key> <value> | import <file> | reset [<section>|all].
+	 *
+	 * [--section=<section>]
+	 * : list: only this section (general, redemption, promotions, codes, delivery, privacy, api, …).
+	 *
+	 * [--format=<format>]
+	 * : list: table, json, csv or yaml; get: plain or json.
+	 *
+	 * [--file=<path>]
+	 * : export: write the JSON to this file instead of the output.
+	 *
+	 * [--backup[=<time>]]
+	 * : export: print an automatic backup instead (newest, or the one with this timestamp).
+	 *
+	 * [--dry-run]
+	 * : import, reset: only show what would change.
+	 *
+	 * [--yes]
+	 * : import, reset: do not ask for confirmation.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp vcap settings list --section=codes
+	 *     wp vcap settings get vcap_code_length
+	 *     wp vcap settings set vcap_code_length 16
+	 *     wp vcap settings export --file=settings.json
+	 *     wp vcap settings import settings.json --dry-run
+	 *     wp vcap settings reset codes --yes
+	 *
+	 * @param array $args       Positional arguments.
+	 * @param array $assoc_args Options.
+	 */
+	public function settings( $args = array(), $assoc_args = array() ): void {
+		$action = (string) array_shift( $args );
+		switch ( $action ) {
+			case 'list':
+				$this->settings_list( $assoc_args );
+				return;
+			case 'get':
+				$this->settings_get( (string) ( $args[0] ?? '' ), (string) ( $assoc_args['format'] ?? 'plain' ) );
+				return;
+			case 'set':
+				if ( count( $args ) < 2 ) {
+					self::error( 'Usage: wp vcap settings set <key> <value>' );
+					return;
+				}
+				$this->settings_set( (string) $args[0], (string) $args[1] );
+				return;
+			case 'export':
+				$this->settings_export( $assoc_args );
+				return;
+			case 'import':
+				$this->settings_import( (string) ( $args[0] ?? '' ), $assoc_args );
+				return;
+			case 'reset':
+				$this->settings_reset( (string) ( $args[0] ?? '' ), $assoc_args );
+				return;
+		}
+		self::error( 'Usage: wp vcap settings list|get|set|export|import|reset (country profiles are not available yet).' );
+	}
+
+	/** Section id of a section argument ('general' = General, '' / 'all' = all sections = null), false when unknown. */
+	private static function section_arg( string $section ): string|null|false {
+		if ( '' === $section || 'all' === $section ) {
+			return null;
+		}
+		return \VCAP\Admin\SettingsTools::reset_section( $section );
+	}
+
+	/** "wp vcap settings list". */
+	private function settings_list( array $assoc_args ): void {
+		$section = self::section_arg( (string) ( $assoc_args['section'] ?? '' ) );
+		if ( false === $section ) {
+			self::error( 'Unknown section.' );
+			return;
+		}
+		$rows = array();
+		foreach ( SettingsRegistry::all() as $key => $entry ) {
+			if ( null !== $section && $entry['section'] !== $section ) {
+				continue;
+			}
+			$rows[] = array(
+				'key'     => $key,
+				'section' => '' === $entry['section'] ? 'general' : $entry['section'],
+				'type'    => $entry['type'],
+				'value'   => $entry['secret'] ? SettingsLog::MASK : SettingsTransfer::display( SettingsTransfer::stored( $key ) ),
+				'default' => $entry['secret'] ? '' : SettingsTransfer::display( $entry['default'] ),
+				'export'  => $entry['export'] ? 'yes' : 'no',
+			);
+		}
+		self::table( $rows, array( 'key', 'section', 'type', 'value', 'default', 'export' ), (string) ( $assoc_args['format'] ?? 'table' ) );
+	}
+
+	/** "wp vcap settings get <key>". */
+	private function settings_get( string $key, string $format ): void {
+		$entry = SettingsRegistry::get( $key );
+		if ( null === $entry ) {
+			self::error( sprintf( '%s is no setting of Voucher Captain.', $key ) );
+			return;
+		}
+		if ( $entry['secret'] ) {
+			self::error( sprintf( '%s is a secret and is never shown.', $key ) );
+			return;
+		}
+		$value = SettingsTransfer::stored( $key );
+		self::line( 'json' === $format ? (string) wp_json_encode( $value ) : ( is_array( $value ) ? implode( ',', array_map( 'strval', $value ) ) : (string) $value ) );
+	}
+
+	/** "wp vcap settings set <key> <value>": checked like the settings page, recorded in the change log. */
+	private function settings_set( string $key, string $value ): void {
+		if ( \VCAP\Admin\DataRemoval::OPTION === $key ) {
+			self::error( 'Use "wp vcap data-removal on|off" for this setting.' );
+			return;
+		}
+		$valid = SettingsTransfer::validate( $key, $value );
+		if ( is_wp_error( $valid ) ) {
+			self::error( wp_strip_all_tags( $valid->get_error_message() ) . ' Nothing was changed.' );
+			return;
+		}
+		$changed = SettingsTransfer::apply( array( $key => $valid ), SettingsLog::VIA_CLI );
+		self::success( $changed ? sprintf( '%s = %s', $key, SettingsTransfer::display( $valid ) ) : sprintf( '%s already has this value.', $key ) );
+	}
+
+	/** "wp vcap settings export". */
+	private function settings_export( array $assoc_args ): void {
+		if ( isset( $assoc_args['backup'] ) ) {
+			$json = SettingsTransfer::backup_json( true === $assoc_args['backup'] ? 0 : (int) $assoc_args['backup'] );
+			if ( '' === $json ) {
+				self::error( 'No such backup.' );
+				return;
+			}
+		} else {
+			$json = SettingsTransfer::export_json();
+		}
+		$file = (string) ( $assoc_args['file'] ?? '' );
+		if ( '' === $file ) {
+			self::line( $json );
+			return;
+		}
+		if ( false === file_put_contents( $file, $json . "\n" ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- WP-CLI writes the file the admin named.
+			self::error( sprintf( 'Could not write %s.', $file ) );
+			return;
+		}
+		self::success( sprintf( 'Settings exported to %s.', $file ) );
+	}
+
+	/** "wp vcap settings import <file>": the whole file is checked first; one invalid value refuses it. */
+	private function settings_import( string $file, array $assoc_args ): void {
+		if ( '' === $file || ! is_readable( $file ) ) {
+			self::error( 'Usage: wp vcap settings import <file> [--dry-run] [--yes]' );
+			return;
+		}
+		$parsed = SettingsTransfer::parse( (string) file_get_contents( $file ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local file named by the admin.
+		if ( is_wp_error( $parsed ) ) {
+			self::error( 'The file was not imported, nothing was changed: ' . implode( ' ', array_map( 'strval', (array) ( $parsed->get_error_data() ?: array( $parsed->get_error_message() ) ) ) ) );
+			return;
+		}
+		if ( $parsed['unknown'] ) {
+			self::warning( 'Not known on this site and skipped: ' . implode( ', ', $parsed['unknown'] ) );
+		}
+		$diff = SettingsTransfer::diff( $parsed['settings'] );
+		if ( ! $diff ) {
+			self::success( 'Nothing to change: every setting already has this value.' );
+			return;
+		}
+		self::print_diff( $diff );
+		if ( isset( $assoc_args['dry-run'] ) ) {
+			self::line( sprintf( 'Dry run: %d settings would change.', count( $diff ) ) );
+			return;
+		}
+		if ( ! isset( $assoc_args['yes'] ) ) {
+			\WP_CLI::confirm( sprintf( 'Change %d settings?', count( $diff ) ) );
+		}
+		$backup  = SettingsTransfer::backup( SettingsLog::VIA_IMPORT );
+		$changed = SettingsTransfer::apply( $parsed['settings'], SettingsLog::VIA_IMPORT );
+		self::success( sprintf( '%d settings imported. Previous settings: wp vcap settings export --backup=%d', count( $changed ), $backup ) );
+	}
+
+	/** "wp vcap settings reset [<section>|all]": automatic backup first; secrets and database state stay. */
+	private function settings_reset( string $target, array $assoc_args ): void {
+		$section = '' === $target ? false : self::section_arg( $target );
+		if ( false === $section ) {
+			self::error( 'Usage: wp vcap settings reset <section>|all [--dry-run] [--yes]' );
+			return;
+		}
+		$keys = SettingsTransfer::resettable( $section );
+		if ( isset( $assoc_args['dry-run'] ) ) {
+			self::line( sprintf( 'Dry run: %d settings would be reset: %s', count( $keys ), implode( ', ', $keys ) ) );
+			return;
+		}
+		if ( ! isset( $assoc_args['yes'] ) ) {
+			\WP_CLI::confirm( sprintf( 'Reset %d settings to their defaults?', count( $keys ) ) );
+		}
+		$result = SettingsTransfer::reset( $section );
+		self::success( sprintf( '%d settings reset. Previous settings: wp vcap settings export --backup=%d', count( $result['changed'] ), $result['backup'] ) );
+	}
+
+	/**
+	 * Prints "key: from → to" per change.
+	 *
+	 * @param array<string, array{from: mixed, to: mixed}> $diff Changes.
+	 */
+	private static function print_diff( array $diff ): void {
+		foreach ( $diff as $key => $change ) {
+			self::line( sprintf( '%s: %s -> %s', $key, SettingsTransfer::display( $change['from'] ), SettingsTransfer::display( $change['to'] ) ) );
 		}
 	}
 

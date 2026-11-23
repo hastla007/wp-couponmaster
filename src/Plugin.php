@@ -177,8 +177,11 @@ final class Plugin {
 		$this->passcaptain_tickets->register();
 		( new Compat\PassCaptainScanner() )->register();
 
+		( new SettingsLog() )->register(); // SET-VC-16: change log of the settings (any source).
+
 		if ( is_admin() ) {
 			( new Admin\Menu() )->register();
+			( new Admin\SettingsTools() )->register();
 			( new Admin\ProHints() )->register();
 			( new Admin\DataRemoval() )->register();
 			( new Admin\RoleCaps() )->register(); // SET-VC-21: rights per role.

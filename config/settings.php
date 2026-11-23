@@ -155,6 +155,8 @@ $vcap_settings = array(
 	'vcap_counter_require_receipt'   => array( 'type' => 'select', 'default' => 'auto', 'choices' => array( 'auto', 'yes', 'no' ), 'section' => 'privacy', 'legal' => true ),
 	// M12-81: managed list of tills/branches ('' = free text on the scanner device).
 	'vcap_counter_locations'         => array( 'type' => 'text', 'section' => 'privacy' ),
+	// SET-VC-16: days the change log of the settings is kept (0 = until the entry limit SettingsLog::MAX_ENTRIES).
+	'vcap_settings_log_days'         => array( 'type' => 'int', 'default' => 365, 'min' => 0, 'section' => 'privacy' ),
 
 	/* ---- Integrations (API) ---- */
 	'vcap_redemption_ttl'            => array( 'type' => 'int', 'default' => 15, 'min' => 1, 'max' => 1440, 'section' => 'api' ),
@@ -251,6 +253,9 @@ return array(
 		'vcap_affiliate_campaigns',
 		'vcap_fx_unknown',
 		'vcap_fx_held_orders',
+		// SET-VC-14/15/16: automatic backups of the settings and the change log (never autoloaded).
+		'vcap_settings_backups',
+		'vcap_settings_log',
 	),
 	'internal_prefixes' => array(
 		'vcap_cmd_count_',

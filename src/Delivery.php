@@ -24,7 +24,7 @@ final class Delivery {
 	 * Daily maintenance, one Action Scheduler action per step so that a failing or slow step never keeps the others
 	 * from running. Cheap purges first, mails and PDFs last.
 	 */
-	public const MAINTENANCE_STEPS = array( 'tmp_pdfs', 'rate_limits', 'mail_failures', 'scan_keys', 'claims', 'upload_dir', 'expire_overdue', 'retention', 'voucher_requests', 'review_refs', 'legacy_rows', 'delivery_net', 'expiry_reminders' );
+	public const MAINTENANCE_STEPS = array( 'tmp_pdfs', 'rate_limits', 'mail_failures', 'scan_keys', 'claims', 'upload_dir', 'expire_overdue', 'retention', 'voucher_requests', 'review_refs', 'settings_log', 'legacy_rows', 'delivery_net', 'expiry_reminders' );
 
 	public function __construct( private Settings $settings, private VoucherRepository $repo ) {}
 
@@ -1548,6 +1548,10 @@ final class Delivery {
 			case 'review_refs':
 				// R4: reference records of the review source (revoked after 90 days, all after 24 months).
 				return ! isset( vcap()->review_source ) || vcap()->review_source->purge( $budget );
+			case 'settings_log':
+				// SET-VC-16: change log of the settings, kept "vcap_settings_log_days" days.
+				SettingsLog::prune( (int) $this->settings->get( SettingsLog::DAYS_OPTION ) );
+				return true;
 			case 'legacy_rows':
 				Install::move_legacy_rows_locked( $budget );
 				return Install::hash_event_notes( $budget );

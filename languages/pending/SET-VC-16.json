@@ -1,0 +1,82 @@
+{
+ "import": {
+  "du": "Import",
+  "sie": "Import",
+  "at": "Import"
+ },
+ "reset to defaults": {
+  "du": "Zurücksetzen auf Standard",
+  "sie": "Zurücksetzen auf Standard",
+  "at": "Zurücksetzen auf Standard"
+ },
+ "country profile": {
+  "du": "Länderprofil",
+  "sie": "Länderprofil",
+  "at": "Länderprofil"
+ },
+ "settings command": {
+  "du": "Einstellungsbefehl",
+  "sie": "Einstellungsbefehl",
+  "at": "Einstellungsbefehl"
+ },
+ "Voucher settings changes": {
+  "du": "Änderungen an Gutschein-Einstellungen",
+  "sie": "Änderungen an Gutschein-Einstellungen",
+  "at": "Änderungen an Gutschein-Einstellungen"
+ },
+ "Date": {
+  "du": "Datum",
+  "sie": "Datum",
+  "at": "Datum"
+ },
+ "From": {
+  "du": "Von",
+  "sie": "Von",
+  "at": "Von"
+ },
+ "To": {
+  "du": "Auf",
+  "sie": "Auf",
+  "at": "Auf"
+ },
+ "Source": {
+  "du": "Quelle",
+  "sie": "Quelle",
+  "at": "Quelle"
+ },
+ "User": {
+  "du": "Benutzer",
+  "sie": "Benutzer",
+  "at": "Benutzer"
+ },
+ "Change log of the settings": {
+  "du": "Änderungsprotokoll der Einstellungen",
+  "sie": "Änderungsprotokoll der Einstellungen",
+  "at": "Änderungsprotokoll der Einstellungen"
+ },
+ "Who changed which setting when, from which value to which (secrets masked), from the settings page, an import, a reset or WP-CLI.": {
+  "du": "Wer hat wann welche Einstellung von welchem Wert auf welchen geändert (Geheimnisse maskiert) – über die Einstellungsseite, einen Import, ein Zurücksetzen oder WP-CLI.",
+  "sie": "Wer hat wann welche Einstellung von welchem Wert auf welchen geändert (Geheimnisse maskiert) – über die Einstellungsseite, einen Import, ein Zurücksetzen oder WP-CLI.",
+  "at": "Wer hat wann welche Einstellung von welchem Wert auf welchen geändert (Geheimnisse maskiert) – über die Einstellungsseite, einen Import, ein Zurücksetzen oder WP-CLI."
+ },
+ "Keep the change log for (days)": {
+  "du": "Änderungsprotokoll aufbewahren (Tage)",
+  "sie": "Änderungsprotokoll aufbewahren (Tage)",
+  "at": "Änderungsprotokoll aufbewahren (Tage)"
+ },
+ "Entries older than this are removed by the daily maintenance (default 365). 0 = keep (only the newest 2,000 entries are kept).": {
+  "du": "Ältere Einträge entfernt die tägliche Wartung (Standard 365). 0 = behalten (nur die neuesten 2.000 Einträge bleiben).",
+  "sie": "Ältere Einträge entfernt die tägliche Wartung (Standard 365). 0 = behalten (nur die neuesten 2.000 Einträge bleiben).",
+  "at": "Ältere Einträge entfernt die tägliche Wartung (Standard 365). 0 = behalten (nur die neuesten 2.000 Einträge bleiben)."
+ },
+ "Latest changes": {
+  "du": "Letzte Änderungen",
+  "sie": "Letzte Änderungen",
+  "at": "Letzte Änderungen"
+ },
+ "No changes recorded yet.": {
+  "du": "Noch keine Änderungen aufgezeichnet.",
+  "sie": "Noch keine Änderungen aufgezeichnet.",
+  "at": "Noch keine Änderungen aufgezeichnet."
+ }
+}

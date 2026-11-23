@@ -590,6 +590,9 @@ final class Settings {
 		);
 		$fields = array_merge( $fields, self::counter_limit_fields(), Admin\RoleCaps::fields() ); // SET-VC-21.
 		return $fields;
+		$fields = array_merge( $fields, self::counter_limit_fields() );
+		// SET-VC-14/15/16: export, import, reset and change log of the settings.
+		return array_merge( $fields, Admin\SettingsTools::fields() );
 	}
 
 	/* ---- M12-90: sections of the former "General" page. ---------------------------------------------------- */

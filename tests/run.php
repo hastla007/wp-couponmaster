@@ -4289,6 +4289,209 @@ check(
 );
 WC_Admin_Settings::$errors = array();
 check( 'SET-VC-23: ACCESSIBILITY.md describes help texts, visible legal notes and the error messages of the settings', str_contains( (string) file_get_contents( VCAP_PATH . 'ACCESSIBILITY.md' ), '### Einstellungen: Hilfetexte und Fehlermeldungen' ) );
+// SET-VC-14/15/16/17: export, import, reset, change log and WP-CLI of the settings (VCAP\SettingsTransfer, VCAP\SettingsLog).
+echo "SET-VC-14..17 settings export, import, reset, change log, WP-CLI\n";
+$st_saved                     = $GLOBALS['vcap_test_options'] ?? array();
+$GLOBALS['vcap_test_options'] = array( 'vcap_secret' => 'top-secret-key', 'vcap_customer_key_secret' => 'k2', 'vcap_delete_on_uninstall' => 'yes', 'vcap_db_version' => '9', 'vcap_default_template' => 42 );
+$st_export                    = VCAP\SettingsTransfer::export();
+$st_json                      = VCAP\SettingsTransfer::export_json();
+check(
+	'SET-VC-14: the export has format, version and every exportable register value – never a secret, the data removal switch, the template ID, the support log or internal state',
+	VCAP\SettingsTransfer::FORMAT === $st_export['format'] && 1 === $st_export['version'] && VCAP\SettingsTransfer::exportable() === array_keys( $st_export['settings'] ) && VCAP\SettingsRegistry::with( 'export' ) === array_keys( $st_export['settings'] )
+		&& ! str_contains( $st_json, 'top-secret-key' ) && ! array_intersect( array( 'vcap_secret', 'vcap_customer_key_secret', 'vcap_delete_on_uninstall', 'vcap_default_template', 'vcap_debug_log', 'vcap_db_version' ), array_keys( $st_export['settings'] ) )
+		&& 365 === $st_export['settings']['vcap_default_expiry_days'] && is_array( json_decode( $st_json, true ) )
+);
+// Site A: changed settings, exported; site B: fresh (nothing saved), imports the file.
+$st_a = array( 'vcap_code_length' => '16', 'vcap_code_prefix' => 'GS', 'vcap_code_charset' => 'numeric', 'vcap_attach_pdf' => 'no', 'vcap_issue_statuses' => array( 'completed' ), 'vcap_default_terms' => "Zeile 1\nZeile 2", 'vcap_expiry_reminder_days' => '30, 7', 'vcap_settings_log_days' => '30', 'vcap_customer_daily_limit' => '250.50' );
+$GLOBALS['vcap_test_options'] = $st_a + array( 'vcap_secret' => 'site-a-secret' );
+$st_file                      = VCAP\SettingsTransfer::export_json();
+$st_keys                      = VCAP\SettingsTransfer::exportable();
+$st_values_a                  = array_map( array( VCAP\SettingsTransfer::class, 'stored' ), array_combine( $st_keys, $st_keys ) );
+$GLOBALS['vcap_test_options'] = array( 'vcap_secret' => 'site-b-secret' );
+$st_parsed                    = VCAP\SettingsTransfer::parse( $st_file );
+$st_diff                      = is_array( $st_parsed ) ? VCAP\SettingsTransfer::diff( $st_parsed['settings'] ) : array();
+$st_changed                   = is_array( $st_parsed ) ? VCAP\SettingsTransfer::apply( $st_parsed['settings'], VCAP\SettingsLog::VIA_IMPORT ) : array();
+$st_values_b                  = array_map( array( VCAP\SettingsTransfer::class, 'stored' ), array_combine( $st_keys, $st_keys ) );
+check(
+	'SET-VC-14: export → fresh site → import gives the same values; the preview lists exactly the changed settings (current → new); the secret of the new site stays',
+	is_array( $st_parsed ) && array() === array_filter( $st_keys, static fn( $k ) => ! VCAP\SettingsTransfer::same( $st_values_a[ $k ], $st_values_b[ $k ] ) ) && array() === array_diff( array_keys( $st_a ), array_keys( $st_diff ) ) && count( $st_a ) === count( $st_diff ) && array_keys( $st_diff ) === $st_changed
+		&& 12 === $st_diff['vcap_code_length']['from'] && '16' === $st_diff['vcap_code_length']['to'] && 'site-b-secret' === get_option( 'vcap_secret' ) && array() === VCAP\SettingsTransfer::diff( $st_parsed['settings'] ),
+	json_encode( array_keys( $st_diff ) )
+);
+$st_doc     = static function ( array $settings, array $extra = array() ): string {
+	return (string) json_encode( $extra + array( 'format' => 'voucher-captain-settings', 'version' => 1, 'settings' => $settings ) );
+};
+$st_before  = $GLOBALS['vcap_test_options'];
+$st_bad     = VCAP\SettingsTransfer::parse( $st_doc( array( 'vcap_code_length' => '20', 'vcap_delivery_hour' => '30', 'vcap_attach_pdf' => 'maybe' ) ) );
+$st_refused = array(
+	'format'  => VCAP\SettingsTransfer::parse( '{"settings":{}}' ),
+	'json'    => VCAP\SettingsTransfer::parse( 'not json' ),
+	'nover'   => VCAP\SettingsTransfer::parse( $st_doc( array(), array( 'version' => 'x' ) ) ),
+	'newer'   => VCAP\SettingsTransfer::parse( $st_doc( array(), array( 'version' => 2 ) ) ),
+	'secret'  => VCAP\SettingsTransfer::parse( $st_doc( array( 'vcap_secret' => 'stolen' ) ) ),
+	'removal' => VCAP\SettingsTransfer::parse( $st_doc( array( 'vcap_delete_on_uninstall' => 'yes' ) ) ),
+	'list'    => VCAP\SettingsTransfer::parse( $st_doc( array( 'a', 'b' ) ) ),
+);
+$st_unknown = VCAP\SettingsTransfer::parse( $st_doc( array( 'vcap_pro_only_option' => 'x', 'vcap_code_length' => 20 ) ) );
+check(
+	'SET-VC-14: an invalid file is refused as a whole (one bad value, wrong format, no/newer version, a secret or a never-exported setting) and nothing changes; unknown keys of add-ons are skipped and reported',
+	is_wp_error( $st_bad ) && 2 === count( (array) $st_bad->get_error_data() ) && str_contains( $st_bad->get_error_message(), 'vcap_delivery_hour' ) && str_contains( $st_bad->get_error_message(), 'vcap_attach_pdf' ) && array() === array_filter( $st_refused, static fn( $r ) => ! is_wp_error( $r ) )
+		&& $st_before === $GLOBALS['vcap_test_options'] && is_array( $st_unknown ) && array( 'vcap_pro_only_option' ) === $st_unknown['unknown'] && array( 'vcap_code_length' => '20' ) === $st_unknown['settings'],
+	json_encode( array_map( static fn( $r ) => is_wp_error( $r ) ? $r->get_error_code() : 'ok', $st_refused ) )
+);
+$st_v = static fn( string $k, $v ) => VCAP\SettingsTransfer::validate( $k, $v );
+check(
+	'SET-VC-14/17: values are checked like the settings page – yes/no (also on/off/1/0/true/false), whole numbers within min/max (refused instead of moved to the bound), choices, code affixes, reminder days stored normalised, lists; secrets are refused',
+	'yes' === $st_v( 'vcap_attach_pdf', 'on' ) && 'no' === $st_v( 'vcap_attach_pdf', false ) && is_wp_error( $st_v( 'vcap_attach_pdf', 'vielleicht' ) )
+		&& '16' === $st_v( 'vcap_code_length', 16 ) && is_wp_error( $st_v( 'vcap_code_length', '7' ) ) && is_wp_error( $st_v( 'vcap_code_length', '12.5' ) ) && is_wp_error( $st_v( 'vcap_code_length', '' ) ) && is_wp_error( $st_v( 'vcap_code_length', array( 1 ) ) )
+		&& '' === $st_v( 'vcap_referral_min_spend', '' ) && '10.50' === $st_v( 'vcap_customer_daily_limit', '10.50' ) && is_wp_error( $st_v( 'vcap_customer_daily_limit', '-1' ) )
+		&& 'numeric' === $st_v( 'vcap_code_charset', 'numeric' ) && is_wp_error( $st_v( 'vcap_code_charset', 'emoji' ) ) && '' === $st_v( 'vcap_default_expiry_rule', '' )
+		&& is_wp_error( $st_v( 'vcap_code_prefix', 'B&B' ) ) && 'GS-1' === $st_v( 'vcap_code_prefix', 'GS-1' ) && '30, 7, 1' === $st_v( 'vcap_expiry_reminder_days', '1,30;7' ) && '0' === $st_v( 'vcap_expiry_reminder_days', '0' ) && is_wp_error( $st_v( 'vcap_expiry_reminder_days', 'bald' ) )
+		&& array( 'processing', 'completed' ) === $st_v( 'vcap_issue_statuses', 'processing, completed' ) && is_wp_error( $st_v( 'vcap_secret', 'x' ) ) && is_wp_error( $st_v( 'vcap_no_such_option', 'x' ) )
+);
+add_filter( 'vcap_settings_validate_value', static fn( $value, $key ) => 'vcap_code_suffix' === $key && 'XX' === $value ? new WP_Error( 'addon', 'no XX' ) : $value, 10, 2 );
+check( 'SET-VC-14: filter vcap_settings_validate_value lets add-ons refuse a value', is_wp_error( $st_v( 'vcap_code_suffix', 'XX' ) ) && 'YY' === $st_v( 'vcap_code_suffix', 'YY' ) );
+unset( $GLOBALS['vcap_test_filters']['vcap_settings_validate_value'] );
+$st_tools_src = (string) file_get_contents( VCAP_PATH . 'src/Admin/SettingsTools.php' );
+preg_match_all( '/public static function (export|download_backup|import|import_apply|import_cancel|reset)\(\): void \{\s*(\S+)/', $st_tools_src, $st_m );
+$st_fields = ( new VCAP\Settings() )->fields( 'privacy' );
+check(
+	'SET-VC-14: every admin action needs manage_woocommerce and the nonce (guard() first); the tools, the change log and its retention field are under "Privacy & advanced"; the buttons post to admin-post (not "Save changes")',
+	6 === count( $st_m[1] ) && array( 'self::guard();' ) === array_values( array_unique( $st_m[2] ) ) && 'manage_woocommerce' === VCAP\Admin\SettingsTools::CAP && str_contains( $st_tools_src, 'check_admin_referer( self::NONCE, self::NONCE_FIELD );' ) && str_contains( $st_tools_src, 'formaction=' )
+		&& array( VCAP\Admin\SettingsTools::TOOLS_TYPE, VCAP\Admin\SettingsTools::LOG_TYPE ) === array_values( array_intersect( array_column( $st_fields, 'type' ), array( VCAP\Admin\SettingsTools::TOOLS_TYPE, VCAP\Admin\SettingsTools::LOG_TYPE ) ) ) && in_array( VCAP\SettingsLog::DAYS_OPTION, array_column( $st_fields, 'id' ), true )
+);
+
+// SET-VC-15: reset.
+$GLOBALS['vcap_test_options'] = array( 'vcap_secret' => 's', 'vcap_db_version' => '9', 'vcap_delete_on_uninstall' => 'yes', 'vcap_code_length' => '20', 'vcap_code_prefix' => 'GS', 'vcap_attach_pdf' => 'no', 'vcap_bundle_pdf_limit' => '5', 'vcap_coupon_link' => 'yes', 'vcap_default_expiry_days' => '30', 'vcap_default_template' => 7 );
+$st_pre   = VCAP\SettingsTransfer::export_json();
+$st_reset = VCAP\SettingsTransfer::reset( 'codes' );
+$st_o     = $GLOBALS['vcap_test_options'];
+check(
+	'SET-VC-15: reset of one section sets only its settings back (deleted = register default) after an automatic backup of all settings; other sections, secrets and database state stay',
+	array( 'vcap_code_prefix', 'vcap_code_length' ) === $st_reset['changed'] && ! isset( $st_o['vcap_code_length'] ) && ! isset( $st_o['vcap_code_prefix'] ) && 12 === VCAP\SettingsTransfer::stored( 'vcap_code_length' ) && 'no' === $st_o['vcap_attach_pdf'] && 's' === $st_o['vcap_secret'] && '9' === $st_o['vcap_db_version']
+		&& json_decode( $st_pre, true )['settings'] === json_decode( VCAP\SettingsTransfer::backup_json( $st_reset['backup'] ), true )['settings'] && 'reset' === VCAP\SettingsTransfer::backups()[ $st_reset['backup'] ]['reason'],
+	json_encode( $st_reset )
+);
+$st_all = VCAP\SettingsTransfer::reset( null );
+$st_o   = $GLOBALS['vcap_test_options'];
+for ( $st_i = 0; $st_i < 6; $st_i++ ) {
+	VCAP\SettingsTransfer::backup( 'import' );
+}
+check(
+	'SET-VC-15: reset of all sections stores what a new installation stores ("fresh" values, autoloaded request settings) and deletes the rest; the data removal switch, the template, secrets and state stay; 5 backups are kept',
+	'20' === (string) $st_o['vcap_bundle_pdf_limit'] && 'no' === $st_o['vcap_coupon_link'] && 'yes' === $st_o['vcap_mpv_after_tax'] && '1000' === (string) $st_o['vcap_customer_daily_limit'] && ! in_array( 'vcap_customer_daily_limit', $st_all['changed'], true ) && ! isset( $st_o['vcap_attach_pdf'] ) && ! isset( $st_o['vcap_default_expiry_days'] ) && 'yes' === $st_o['vcap_delete_on_uninstall'] && 7 === $st_o['vcap_default_template'] && 's' === $st_o['vcap_secret'] && '9' === $st_o['vcap_db_version']
+		&& in_array( 'vcap_attach_pdf', $st_all['changed'], true ) && ! in_array( 'vcap_secret', VCAP\SettingsTransfer::resettable(), true ) && ! in_array( 'vcap_delete_on_uninstall', VCAP\SettingsTransfer::resettable(), true ) && 5 === count( VCAP\SettingsTransfer::backups() ),
+	json_encode( array( $st_all['changed'], $st_o ) )
+);
+check( 'SET-VC-15: reset targets – "all" = every section, "general" = General, unknown targets are refused; the page needs the confirmation', null === VCAP\Admin\SettingsTools::reset_section( 'all' ) && '' === VCAP\Admin\SettingsTools::reset_section( 'general' ) && 'codes' === VCAP\Admin\SettingsTools::reset_section( 'codes' ) && false === VCAP\Admin\SettingsTools::reset_section( 'bogus' ) && str_contains( $st_tools_src, "empty( \$_POST['vcap_settings_reset_confirm'] )" ) );
+
+// SET-VC-16: change log.
+$GLOBALS['vcap_test_options'] = array();
+VCAP\Source::with( VCAP\Source::ADMIN, static fn() => VCAP\SettingsLog::updated( 'vcap_code_length', '12', '16' ) );
+VCAP\SettingsLog::with( VCAP\SettingsLog::VIA_IMPORT, static fn() => VCAP\Source::with( VCAP\Source::ADMIN, static fn() => VCAP\SettingsLog::added( 'vcap_attach_pdf', 'no' ) ) );
+VCAP\SettingsLog::with( VCAP\SettingsLog::VIA_CLI, static fn() => VCAP\Source::with( VCAP\Source::CLI, static fn() => VCAP\SettingsLog::updated( 'vcap_secret', 'old-secret', 'new-secret' ) ) );
+VCAP\SettingsLog::with( VCAP\SettingsLog::VIA_RESET, static fn() => VCAP\SettingsLog::updated( 'vcap_issue_statuses', array( 'completed' ), array( 'processing', 'completed' ) ) );
+VCAP\SettingsLog::updated( 'vcap_default_expiry_days', 365, '365' );
+VCAP\SettingsLog::updated( 'vcap_db_version', '1', '2' );
+VCAP\SettingsLog::updated( 'blogname', 'a', 'b' );
+$st_log = VCAP\SettingsLog::entries();
+check(
+	'SET-VC-16: changes of registered settings are logged with time, user, key, from → to and source (settings page, import, WP-CLI, reset); secrets masked; unchanged values (365 = "365"), state and foreign options are not logged',
+	4 === count( $st_log ) && 'vcap_code_length' === $st_log[0]['key'] && '12' === $st_log[0]['from'] && '16' === $st_log[0]['to'] && 'admin' === $st_log[0]['source'] && '' === $st_log[0]['via'] && 0 === $st_log[0]['user'] && abs( time() - $st_log[0]['time'] ) < 5
+		&& 'yes' === $st_log[1]['from'] && 'no' === $st_log[1]['to'] && 'import' === $st_log[1]['via'] && VCAP\SettingsLog::MASK === $st_log[2]['from'] && VCAP\SettingsLog::MASK === $st_log[2]['to'] && 'cli' === $st_log[2]['source'] && 'processing, completed' === $st_log[3]['to'] && 'reset' === $st_log[3]['via']
+		&& ! str_contains( (string) json_encode( $GLOBALS['vcap_test_options'] ), 'old-secret' ) && ! str_contains( (string) json_encode( $GLOBALS['vcap_test_options'] ), 'new-secret' ),
+	json_encode( $st_log )
+);
+check( 'SET-VC-16: the source names how a change was made', 'Admin (import)' === VCAP\SettingsLog::source_label( $st_log[1] ) && 'WP-CLI (settings command)' === VCAP\SettingsLog::source_label( $st_log[2] ) && 'Admin' === VCAP\SettingsLog::source_label( $st_log[0] ) );
+$GLOBALS['vcap_test_options'][ VCAP\SettingsLog::OPTION ] = array(
+	array( 'time' => time() - 400 * DAY_IN_SECONDS, 'user' => 7, 'key' => 'vcap_code_length', 'from' => '12', 'to' => '14', 'source' => 'admin', 'via' => '' ),
+	array( 'time' => time() - 10 * DAY_IN_SECONDS, 'user' => 7, 'key' => 'vcap_code_length', 'from' => '14', 'to' => '16', 'source' => 'admin', 'via' => '' ),
+	array( 'time' => time() - 5 * DAY_IN_SECONDS, 'user' => 8, 'key' => 'vcap_attach_pdf', 'from' => 'yes', 'to' => 'no', 'source' => 'cli', 'via' => '' ),
+);
+$GLOBALS['vcap_test_users']['admin7@example.test'] = (object) array( 'ID' => 7, 'locale' => '' );
+$st_px   = VCAP\SettingsLog::export_personal_data( 'admin7@example.test' );
+$st_none = VCAP\SettingsLog::prune( 0 );
+$st_gone = VCAP\SettingsLog::prune( 365 );
+unset( $GLOBALS['vcap_test_users']['admin7@example.test'] );
+check(
+	'SET-VC-16: the personal data export of a user contains their changes only; the daily maintenance removes entries older than the retention (default 365 days, 0 = keep)',
+	2 === count( $st_px['data'] ) && $st_px['done'] && '16' === $st_px['data'][1]['data'][3]['value'] && 0 === $st_none && 1 === $st_gone && 2 === count( VCAP\SettingsLog::entries() ) && array( 'vcap_attach_pdf', 'vcap_code_length' ) === array_column( VCAP\SettingsLog::latest( 5 ), 'key' )
+		&& 365 === VCAP\SettingsRegistry::default( VCAP\SettingsLog::DAYS_OPTION ) && 0 === VCAP\SettingsRegistry::get( VCAP\SettingsLog::DAYS_OPTION )['min'] && 'privacy' === VCAP\SettingsRegistry::get( VCAP\SettingsLog::DAYS_OPTION )['section']
+		&& in_array( 'settings_log', VCAP\Delivery::MAINTENANCE_STEPS, true ) && isset( VCAP\SettingsLog::exporters( array() )['voucher-captain-settings-log'] ),
+	json_encode( $st_px )
+);
+$GLOBALS['vcap_test_options'][ VCAP\SettingsLog::OPTION ] = array_fill( 0, VCAP\SettingsLog::MAX_ENTRIES, array( 'time' => time(), 'user' => 1, 'key' => 'vcap_code_length', 'from' => '1', 'to' => '2', 'source' => 'admin', 'via' => '' ) );
+VCAP\SettingsLog::updated( 'vcap_code_length', '12', '13' );
+$st_capped = VCAP\SettingsLog::entries();
+$st_plugin = (string) file_get_contents( VCAP_PATH . 'src/Plugin.php' );
+check(
+	'SET-VC-16: the log keeps the newest 2,000 entries; it is hooked for every source (added/updated/deleted option, outside the admin too) and in the personal data export',
+	VCAP\SettingsLog::MAX_ENTRIES === count( $st_capped ) && '13' === end( $st_capped )['to'] && strpos( $st_plugin, '( new SettingsLog() )->register();' ) < strpos( $st_plugin, 'if ( is_admin() ) {' )
+		&& ( static function () {
+			$b = $GLOBALS['vcap_test_filters'] ?? array();
+			( new VCAP\SettingsLog() )->register();
+			$ok = isset( $GLOBALS['vcap_test_filters']['added_option'], $GLOBALS['vcap_test_filters']['updated_option'], $GLOBALS['vcap_test_filters']['delete_option'], $GLOBALS['vcap_test_filters']['wp_privacy_personal_data_exporters'] );
+			$GLOBALS['vcap_test_filters'] = $b;
+			return $ok;
+		} )()
+);
+
+// SET-VC-17: WP-CLI (stub of WP_CLI that records the output; halt() ends the command).
+if ( ! class_exists( 'WP_CLI' ) ) {
+	eval( 'class WP_CLI { public static array $out = array(); public static function line( $m = "" ) { self::$out[] = "line: " . $m; } public static function success( $m ) { self::$out[] = "success: " . $m; } public static function warning( $m ) { self::$out[] = "warning: " . $m; } public static function error( $m, $exit = true ) { self::$out[] = "error: " . $m; } public static function halt( $code ) { throw new RuntimeException( "halt" ); } public static function confirm( $q, $a = array() ) { self::$out[] = "confirm: " . $q; } }' );
+}
+if ( ! function_exists( 'WP_CLI\Utils\format_items' ) ) {
+	eval( 'namespace WP_CLI\Utils; function format_items( $format, $rows, $fields ) { $GLOBALS["vcap_cli_rows"] = $rows; }' );
+}
+$st_cli = static function ( array $args, array $assoc = array() ): array {
+	\WP_CLI::$out = array();
+	try {
+		( new VCAP\CLI\Command() )->settings( $args, $assoc );
+	} catch ( RuntimeException $e ) {
+		\WP_CLI::$out[] = 'halted';
+	}
+	return \WP_CLI::$out;
+};
+$GLOBALS['vcap_test_options'] = array( 'vcap_secret' => 'cli-secret' );
+$st_r_set  = $st_cli( array( 'set', 'vcap_code_length', '18' ) );
+$st_r_bad  = $st_cli( array( 'set', 'vcap_code_length', '99' ) );
+$st_r_get  = $st_cli( array( 'get', 'vcap_code_length' ) );
+$st_r_sec  = $st_cli( array( 'get', 'vcap_secret' ) );
+$st_r_rm   = $st_cli( array( 'set', 'vcap_delete_on_uninstall', 'yes' ) );
+$st_cli( array( 'list' ), array( 'section' => 'codes', 'format' => 'json' ) );
+$st_rows = $GLOBALS['vcap_cli_rows'] ?? array();
+$st_cli( array( 'list' ) );
+$st_all_rows = $GLOBALS['vcap_cli_rows'] ?? array();
+$st_r_export = $st_cli( array( 'export' ) );
+$st_tmp      = sys_get_temp_dir() . '/vcap-settings-' . getmypid() . '.json';
+file_put_contents( $st_tmp, $st_doc( array( 'vcap_code_length' => '22', 'vcap_attach_pdf' => 'no' ) ) );
+$st_r_dry     = $st_cli( array( 'import', $st_tmp ), array( 'dry-run' => true ) );
+$st_after_dry = get_option( 'vcap_code_length' );
+$st_r_imp     = $st_cli( array( 'import', $st_tmp ), array( 'yes' => true ) );
+file_put_contents( $st_tmp, $st_doc( array( 'vcap_code_length' => '5' ) ) );
+$st_r_imbad = $st_cli( array( 'import', $st_tmp ), array( 'yes' => true ) );
+@unlink( $st_tmp );
+$st_r_reset = $st_cli( array( 'reset', 'codes' ), array( 'yes' => true ) );
+$st_r_prof  = $st_cli( array( 'profile', 'DE' ) );
+check(
+	'SET-VC-17: wp vcap settings set checks like the settings page (out of range refused, nothing changed), get prints the value, secrets are never shown; the data removal switch is left to "wp vcap data-removal"',
+	'success: vcap_code_length = 18' === $st_r_set[0] && str_starts_with( $st_r_bad[0], 'error: vcap_code_length: invalid value' ) && 'halted' === $st_r_bad[1] && array( 'line: 18' ) === $st_r_get && str_starts_with( $st_r_sec[0], 'error:' ) && ! str_contains( implode( ' ', $st_r_sec ), 'cli-secret' ) && str_contains( $st_r_rm[0], 'data-removal' ) && ! isset( $GLOBALS['vcap_test_options']['vcap_delete_on_uninstall'] ),
+	json_encode( array( $st_r_set, $st_r_bad, $st_r_get, $st_r_rm ) )
+);
+check(
+	'SET-VC-17: list shows the settings of a section (secrets masked in the full list), export prints the JSON without secrets',
+	array( 'vcap_code_prefix', 'vcap_code_suffix', 'vcap_code_length', 'vcap_code_charset', 'vcap_code_separator', 'vcap_code_order_ref' ) === array_column( $st_rows, 'key' ) && '18' === $st_rows[2]['value'] && VCAP\SettingsLog::MASK === array_column( $st_all_rows, 'value', 'key' )['vcap_secret']
+		&& 1 === count( $st_r_export ) && '18' === json_decode( substr( $st_r_export[0], 6 ), true )['settings']['vcap_code_length'] && ! str_contains( $st_r_export[0], 'cli-secret' ),
+	json_encode( $st_rows )
+);
+check(
+	'SET-VC-17: import shows the changes (dry run changes nothing) and applies them after a backup; an invalid file is refused; reset sets a section back; there is no "profile" sub-command yet (SET-VC-02 country profiles missing); API.md documents the commands',
+	in_array( 'line: vcap_code_length: 18 -> 22', $st_r_dry, true ) && '18' === $st_after_dry && str_starts_with( (string) end( $st_r_imp ), 'success: 2 settings imported.' ) && str_contains( implode( ' ', $st_r_imbad ), 'nothing was changed' ) && in_array( 'halted', $st_r_imbad, true )
+		&& str_starts_with( $st_r_reset[0], 'success: ' ) && ! isset( $GLOBALS['vcap_test_options']['vcap_code_length'] ) && 'no' === $GLOBALS['vcap_test_options']['vcap_attach_pdf'] && str_contains( $st_r_prof[0], 'country profiles are not available yet' )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'API.md' ), 'wp vcap settings import' ),
+	json_encode( array( $st_r_dry, $st_r_imp, $st_r_imbad, $st_r_reset, $st_r_prof ) )
+);
+$GLOBALS['vcap_test_options'] = $st_saved;
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );
