@@ -422,6 +422,33 @@ Five methods of `vcap()->api_v1` cover what a connector plugin needs besides red
 
 None of them checks the current user: the connector decides who may see or trigger what. Redeeming still goes through `vcap()->redemptions` (reserve → commit/release), which checks status, channel, user and PIN.
 
+### Contact and consent (since 1.3.0, contract 1.5.0)
+
+For add-ons that must reach the recipient (or buyer) of a voucher who has no WordPress account – e.g. Review Captain
+sending a review invitation (suite spec F-13). Check `version_compare( VCAP_CONTRACT_VERSION, '1.5.0', '>=' )`.
+**Off by default:** the operator switches it on under *Settings → Integrations (API) → Allow contact reads*, only after
+the data protection review (D8) and with a matching note in the privacy policy. Recording consent works while it is off.
+
+| Function (service `vcap()->contact`) | Returns |
+| --- | --- |
+| `vcap_record_contact_consent( $voucher_id, $purpose, array( 'role' => 'recipient', 'source' => 'form-captain', 'text' => 'review-optin-v1' ) )` (`record_consent()`) | `true` or `WP_Error` (`vcap_contact_invalid`, `vcap_unknown_voucher`, `vcap_contact_no_address`, `vcap_log_failed`). Records that the person of `role` (`recipient` or `buyer`) agreed to be contacted for `$purpose`; `source` names who asked, `text` the consent text shown (id or version, ≤ 64 characters). |
+| `vcap_withdraw_contact_consent( $voucher_id, $purpose, $source )` (`withdraw_consent()`) | `true` or `WP_Error`. A withdrawal wins over every earlier consent for the purpose. |
+| `vcap()->contact->consent( $voucher_id, $purpose )` | The valid consent (`role`, `source`, `text`, `given_at` in UTC) or `null`. |
+| `vcap_read_voucher_contact( $voucher_id, $purpose )` (`contact()`) | `voucher_id`, `purpose`, `role`, `email`, `name`, `locale`, `consent` – or `WP_Error`: `vcap_contact_disabled` (403), `vcap_contact_not_allowed` (403), `vcap_contact_invalid` (400), `vcap_unknown_voucher` (404), `vcap_contact_no_consent` (409), `vcap_contact_opted_out` (409). |
+
+- `$purpose` is a name of 3–40 lower-case letters, digits or underscores starting with a letter (`review_invitation`).
+  A consent counts only for its own purpose.
+- A consent is bound to the address it was given for: Voucher Captain stores a keyed hash of the address, never the
+  address. When the recipient's address is corrected or erased (privacy erasure, retention), the consent no longer
+  matches and `contact()` refuses.
+- `contact()` answers voucher managers, shop managers and background runs (WP-Cron, WP-CLI) without a logged-in user
+  (filter `vcap_contact_read_allowed`). Every answer is written to the voucher history (event `contact_read` with
+  purpose, role and acting user – no address) and announced with the action `vcap_voucher_contact_read`
+  (voucher id, purpose, user id). The filter `vcap_contact_opted_out` (address, purpose, voucher) can refuse an address.
+- The history events `contact_consent`, `contact_consent_withdrawn` and `contact_read` are core events; connectors
+  cannot write them through `log_event()`.
+- Frequency limits, the unsubscribe link and the content of the message stay the add-on's duty.
+
 ### Refunds of completed redemptions
 
 `vcap()->redemptions->refund( $key, $amount, $refund_key )` gives back (part of) a committed redemption, e.g. when the service it paid for is refunded. Gift cards get the amount back on their balance; a single-use voucher becomes usable again once the refunds reach the redeemed amount (partial refunds are recorded only). Idempotent per `$refund_key`; refunds are capped at the redeemed amount (`vcap_refund_exceeded`), only committed redemptions can be refunded (`vcap_not_committed`). Ledger event `api_refunded`, action `vcap_redemption_refunded`.

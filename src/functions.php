@@ -4,6 +4,10 @@
  * Thin wrappers of vcap()->read (VCAP\API\V1\ReadService); see API.md → "Read functions". Loaded by
  * voucher-captain.php once the plugin booted, so function_exists( 'vcap_read_voucher' ) tells they can be used.
  *
+ * Contact and consent (contract 1.5.0, off by default): vcap_read_voucher_contact(), vcap_record_contact_consent(),
+ * vcap_withdraw_contact_consent() – thin wrappers of vcap()->contact (VCAP\API\V1\ContactService); see API.md →
+ * "Contact and consent".
+ *
  * Voucher commands (contract 1.3.0): vcap_command_issue(), vcap_command_void(), vcap_command_reactivate(),
  * vcap_command_redeem() – thin wrappers of vcap()->commands (VCAP\API\V1\CommandService); see API.md → "Voucher
  * commands".
@@ -164,5 +168,50 @@ if ( ! function_exists( 'vcap_command_redeem' ) ) {
 	 */
 	function vcap_command_redeem( array $args ): array {
 		return function_exists( 'vcap' ) && isset( vcap()->commands ) ? vcap()->commands->redeem( $args ) : vcap_command_unavailable( 'voucher.redeem' );
+	}
+}
+
+if ( ! function_exists( 'vcap_read_voucher_contact' ) ) {
+	/**
+	 * Address and name of the person who consented to be contacted for $purpose about this voucher (F-13). Off until
+	 * the operator switches it on; refused without a valid consent.
+	 *
+	 * @since 1.3.0 (contract 1.5.0)
+	 * @param int    $voucher_id Voucher id.
+	 * @param string $purpose    Purpose, e.g. "review_invitation".
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	function vcap_read_voucher_contact( int $voucher_id, string $purpose ) {
+		return function_exists( 'vcap' ) && isset( vcap()->contact ) ? vcap()->contact->contact( $voucher_id, $purpose ) : new \WP_Error( 'vcap_unavailable', 'Voucher Captain is not ready.' );
+	}
+}
+
+if ( ! function_exists( 'vcap_record_contact_consent' ) ) {
+	/**
+	 * Records the consent of a voucher's recipient (or buyer) to be contacted for $purpose.
+	 *
+	 * @since 1.3.0 (contract 1.5.0)
+	 * @param int                  $voucher_id Voucher id.
+	 * @param string               $purpose    Purpose.
+	 * @param array<string, mixed> $consent    role, source, text (ContactService::record_consent()).
+	 * @return true|\WP_Error
+	 */
+	function vcap_record_contact_consent( int $voucher_id, string $purpose, array $consent ) {
+		return function_exists( 'vcap' ) && isset( vcap()->contact ) ? vcap()->contact->record_consent( $voucher_id, $purpose, $consent ) : new \WP_Error( 'vcap_unavailable', 'Voucher Captain is not ready.' );
+	}
+}
+
+if ( ! function_exists( 'vcap_withdraw_contact_consent' ) ) {
+	/**
+	 * Records the withdrawal of the consent for $purpose.
+	 *
+	 * @since 1.3.0 (contract 1.5.0)
+	 * @param int    $voucher_id Voucher id.
+	 * @param string $purpose    Purpose.
+	 * @param string $source     Who recorded it.
+	 * @return true|\WP_Error
+	 */
+	function vcap_withdraw_contact_consent( int $voucher_id, string $purpose, string $source ) {
+		return function_exists( 'vcap' ) && isset( vcap()->contact ) ? vcap()->contact->withdraw_consent( $voucher_id, $purpose, $source ) : new \WP_Error( 'vcap_unavailable', 'Voucher Captain is not ready.' );
 	}
 }

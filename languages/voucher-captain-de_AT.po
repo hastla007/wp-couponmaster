@@ -14821,3 +14821,24 @@ msgstr "Ablehnen"
 
 msgid "Unknown action."
 msgstr "Unbekannte Aktion."
+
+msgid "Contact read function"
+msgstr "Kontakt-Lesefunktion"
+
+msgid "Lets authorised add-ons read the address of a voucher's recipient or buyer for a purpose this person consented to (e.g. a review invitation). Every read is written to the voucher history. Switch it on only after your data protection review and with a matching note in your privacy policy."
+msgstr "Erlaubt berechtigten Add-ons, die Adresse der Empfängerin bzw. des Empfängers oder der Käuferin bzw. des Käufers eines Gutscheins für einen Zweck zu lesen, dem diese Person zugestimmt hat (z. B. eine Bitte um Bewertung). Jeder Zugriff wird im Verlauf des Gutscheins protokolliert. Schalten Sie die Funktion erst nach Ihrer Datenschutzprüfung und mit einem passenden Hinweis in Ihrer Datenschutzerklärung ein."
+
+msgid "Allow contact reads"
+msgstr "Kontaktabfragen erlauben"
+
+msgid "Answer contact requests of add-ons (only with recorded consent)"
+msgstr "Kontaktabfragen von Add-ons beantworten (nur mit protokollierter Einwilligung)"
+
+msgid "Contact consent recorded"
+msgstr "Einwilligung zur Kontaktaufnahme protokolliert"
+
+msgid "Contact consent withdrawn"
+msgstr "Einwilligung zur Kontaktaufnahme widerrufen"
+
+msgid "Contact read by an add-on"
+msgstr "Kontakt von einem Add-on gelesen"

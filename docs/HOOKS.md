@@ -48,6 +48,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_topup_without_code` | 1.2.0 | `src/TopUp.php` | A top-up line without card code was held (no card issued, no top-up booked). |
 | `vcap_voucher_admin_actions` | 1.1.0 | `src/Admin/VoucherAdmin.php` | Extra buttons for connectors: call $form( $do, $label, $class, $extra_fields, $confirm_text ) and handle $do in vcap_voucher_admin_action. |
 | `vcap_voucher_bounced` | 1.2.0 | `src/Delivery.php` | A voucher email came back (Delivery::mark_bounced()). Args: Voucher, role ('recipient'\|'buyer'), reason. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
+| `vcap_voucher_contact_read` | 1.3.0 | `src/API/V1/ContactService.php` | The contact of a voucher was given to a caller (for audit logs; no personal data). |
 | `vcap_voucher_created` | 1.0.0 | `src/VoucherRepository.php` | A voucher row was inserted (args: Voucher). If its issuing fails afterwards, vcap_voucher_deleted follows. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_deleted` | 1.2.0 | `src/VoucherRepository.php` | A voucher was removed again (its issuing failed after "vcap_voucher_created"). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_voucher_delivered` | 1.0.0 | `src/Delivery.php` | A voucher was delivered to everyone it is meant for (args: Voucher $voucher, string[] $addresses). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
@@ -97,6 +98,8 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_claim_retention_days` | 1.2.0 | `src/Claim.php` | – |
 | `vcap_client_ip` | 1.2.0 | `src/Health.php`, `src/Plugin.php` | – |
 | `vcap_command_limits` | 1.3.0 | `src/API/V1/CommandLimits.php` | Lowers the limits of an automatic voucher command or switches it off (args: limits {enabled, per_day, per_recipient, max_amount_minor, amount_allowed}, command, currency of the amount). Values above the given ones, and enabled = true for a command the operator switched off, have no effect. |
+| `vcap_contact_opted_out` | 1.3.0 | `src/API/V1/ContactService.php` | Whether the address must not be contacted for this purpose (e.g. an opt-out list). An opted-out address is never returned. |
+| `vcap_contact_read_allowed` | 1.3.0 | `src/API/V1/ContactService.php` | Whether the current caller may read the contact of a voucher. |
 | `vcap_counter_limit_applies` | 1.2.0 | `src/Counter.php` | Whether the daily counter limits apply (default: not for staff who manage vouchers). Args: bool, user id, Voucher. |
 | `vcap_counter_limits` | 1.2.0 | `src/Counter.php` | Daily limits of counter redemptions for a staff member at a till (0 = unlimited), e.g. other limits per branch. Args: limits {user: {amount, count}, till: {amount, count}}, user id, till, Voucher\|null. |
 | `vcap_counter_locations` | 1.2.0 | `src/Counter.php` | The managed tills/branches offered on the scanner. Args: string[] list. |

@@ -41,9 +41,10 @@ define( 'VCAP_DB_VERSION', '1.8.0' );
  * the read functions vcap_read_*() / vcap()->read (API.md → "Read functions"), 1.3.0 = plugin 1.3.0 with the
  * voucher commands vcap_command_*() / vcap()->commands (API.md → "Voucher commands"), 1.4.0 = plugin 1.3.0 with the
  * connector access of vcap()->api_v1 (voucher(), voucher_by_code(), log_event(), admin_url(), line_snapshot();
- * API.md → "Connector access").
+ * API.md → "Connector access"), 1.5.0 = plugin 1.3.0 with contact and consent of a voucher id, off by default
+ * (vcap()->contact, vcap_read_voucher_contact(); API.md → "Contact and consent").
  */
-define( 'VCAP_CONTRACT_VERSION', '1.4.0' );
+define( 'VCAP_CONTRACT_VERSION', '1.5.0' );
 define( 'VCAP_FILE', __FILE__ );
 define( 'VCAP_PATH', plugin_dir_path( __FILE__ ) );
 define( 'VCAP_URL', plugin_dir_url( __FILE__ ) );

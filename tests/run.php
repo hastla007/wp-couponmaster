@@ -3494,11 +3494,81 @@ preg_match_all( "/^\s*'([a-z_]+)'\s*=>\s*__\(/m", substr( $e17_src, (int) strpos
 $e17_written = array_unique( array_merge( $e17_m1[1], $e17_m2[1], $e17_m3[1], array( 'api_committed', 'api_released', 'api_reserved' ) ) );
 $e17_missing = array_values( array_diff( $e17_written, VCAP\API\V1\VoucherService::CORE_EVENTS ) );
 check( 'VOUCH-E17-02: CORE_EVENTS lists every event Voucher Captain writes (log() literals, *_EVENT constants, core labels)', count( $e17_written ) > 40 && array() === $e17_missing, implode( ', ', $e17_missing ) );
+// VOUCH-WF-15 / F-13 (owner's decision 23.11.2026): contact and consent of a voucher id, off by default (contract 1.5.0).
+if ( ! function_exists( 'wp_salt' ) ) {
+	function wp_salt( $scheme = 'auth' ) { return 'test-salt-' . $scheme; }
+}
+$wf15_v                  = new VCAP\Voucher();
+$wf15_v->id              = 91;
+$wf15_v->recipient_email = 'Gift@Example.test';
+$wf15_v->recipient_name  = 'Gerda Gift';
+$wf15_v->buyer_email     = 'buyer@example.test';
+$wf15_v->buyer_name      = 'Bob Buyer';
+$wf15_log                = array();
+$wf15_fail               = false;
+$wf15_svc                = new VCAP\API\V1\ContactService(
+	static fn( int $id ) => 91 === $id ? $wf15_v : null,
+	static function ( int $id ) use ( &$wf15_log ): array {
+		return array_values( array_filter( $wf15_log, static fn( $r ) => $r['voucher_id'] === $id ) );
+	},
+	static function ( int $id, string $event, string $note ) use ( &$wf15_log, &$wf15_fail ): bool {
+		if ( $wf15_fail ) {
+			return false;
+		}
+		$wf15_log[] = array( 'voucher_id' => $id, 'event' => $event, 'note' => $note, 'created_at' => '2026-11-23 10:0' . count( $wf15_log ) . ':00' );
+		return true;
+	}
+);
+$wf15_allow = static fn() => true;
+$wf15_off   = $wf15_svc->contact( 91, 'review_invitation' );
+check( 'VOUCH-WF-15: off by default – contact() answers vcap_contact_disabled (403) and writes nothing', ! VCAP\API\V1\ContactService::enabled() && $wf15_off instanceof WP_Error && 'vcap_contact_disabled' === $wf15_off->get_error_code() && array() === $wf15_log );
+$wf15_rec = $wf15_svc->record_consent( 91, 'review_invitation', array( 'role' => 'recipient', 'source' => 'form-captain', 'text' => 'review-optin-v1' ) );
+$wf15_bad = array(
+	$wf15_svc->record_consent( 91, 'Review', array( 'source' => 'x', 'text' => 'y' ) ),
+	$wf15_svc->record_consent( 91, 'review_invitation', array( 'role' => 'friend', 'source' => 'x', 'text' => 'y' ) ),
+	$wf15_svc->record_consent( 91, 'review_invitation', array( 'source' => '', 'text' => 'y' ) ),
+	$wf15_svc->record_consent( 91, 'review_invitation', array( 'source' => 'x', 'text' => '' ) ),
+);
+$wf15_unk = $wf15_svc->record_consent( 92, 'review_invitation', array( 'source' => 'x', 'text' => 'y' ) );
+check( 'VOUCH-WF-15: record_consent() works while the read function is off; invalid purpose/role/source/text and unknown vouchers are refused', true === $wf15_rec && 1 === count( $wf15_log ) && 4 === count( array_filter( $wf15_bad, static fn( $e ) => $e instanceof WP_Error && 'vcap_contact_invalid' === $e->get_error_code() ) ) && $wf15_unk instanceof WP_Error && 'vcap_unknown_voucher' === $wf15_unk->get_error_code() );
+check( 'VOUCH-WF-15: the consent entry is a core event and stores a hash of the address, never the address', 'contact_consent' === $wf15_log[0]['event'] && ! str_contains( strtolower( $wf15_log[0]['note'] ), 'gift@example' ) && str_contains( $wf15_log[0]['note'], 'purpose=review_invitation' ) && str_contains( $wf15_log[0]['note'], 'address=' ) && in_array( 'contact_consent', VCAP\API\V1\VoucherService::CORE_EVENTS, true ) && ! VCAP\API\V1\VoucherService::connector_event( 'contact_consent' ) );
+$GLOBALS['vcap_test_options'][ VCAP\API\V1\ContactService::OPTION_ENABLED ] = 'yes';
+$wf15_deny = $wf15_svc->contact( 91, 'review_invitation' );
+add_filter( 'vcap_contact_read_allowed', $wf15_allow );
+$wf15_read = $wf15_svc->contact( 91, 'review_invitation' );
+check( 'VOUCH-WF-15: switched on, a caller without rights is refused (vcap_contact_not_allowed); an allowed caller gets the documented keys with the consenting recipient', $wf15_deny instanceof WP_Error && 'vcap_contact_not_allowed' === $wf15_deny->get_error_code() && is_array( $wf15_read ) && VCAP\API\V1\ContactService::CONTACT_KEYS === array_keys( $wf15_read ) && 'gift@example.test' === $wf15_read['email'] && 'Gerda Gift' === $wf15_read['name'] && 'recipient' === $wf15_read['role'] && 'form-captain' === $wf15_read['consent']['source'] && 'review-optin-v1' === $wf15_read['consent']['text'] );
+check( 'VOUCH-WF-15: every read is in the history (contact_read, purpose and user, no address)', 'contact_read' === ( end( $wf15_log )['event'] ?? '' ) && str_contains( end( $wf15_log )['note'], 'purpose=review_invitation' ) && ! str_contains( end( $wf15_log )['note'], '@' ) );
+$wf15_other = $wf15_svc->contact( 91, 'newsletter' );
+$wf15_inval = $wf15_svc->contact( 91, 'x' );
+check( 'VOUCH-WF-15: a consent counts only for its own purpose (vcap_contact_no_consent); an invalid purpose is vcap_contact_invalid', $wf15_other instanceof WP_Error && 'vcap_contact_no_consent' === $wf15_other->get_error_code() && $wf15_inval instanceof WP_Error && 'vcap_contact_invalid' === $wf15_inval->get_error_code() );
+$wf15_v->recipient_email = 'new@example.test';
+$wf15_moved = $wf15_svc->contact( 91, 'review_invitation' );
+$wf15_v->recipient_email = '';
+$wf15_erased = $wf15_svc->contact( 91, 'review_invitation' );
+$wf15_v->recipient_email = 'gift@example.test';
+check( 'VOUCH-WF-15: a consent is bound to its address – after a correction or erasure of the address it no longer counts', $wf15_moved instanceof WP_Error && 'vcap_contact_no_consent' === $wf15_moved->get_error_code() && $wf15_erased instanceof WP_Error && 'vcap_contact_no_consent' === $wf15_erased->get_error_code() && is_array( $wf15_svc->contact( 91, 'review_invitation' ) ) );
+$wf15_opt = static fn( $out, $email ) => 'gift@example.test' === $email;
+add_filter( 'vcap_contact_opted_out', $wf15_opt, 10, 2 );
+$wf15_opted = $wf15_svc->contact( 91, 'review_invitation' );
+remove_filter( 'vcap_contact_opted_out', $wf15_opt );
+$wf15_wd    = $wf15_svc->withdraw_consent( 91, 'review_invitation', 'unsubscribe-link' );
+$wf15_after = $wf15_svc->contact( 91, 'review_invitation' );
+check( 'VOUCH-WF-15: the opt-out filter refuses an address; a withdrawal wins over the earlier consent', $wf15_opted instanceof WP_Error && 'vcap_contact_opted_out' === $wf15_opted->get_error_code() && true === $wf15_wd && $wf15_after instanceof WP_Error && 'vcap_contact_no_consent' === $wf15_after->get_error_code() && null === $wf15_svc->consent( 91, 'review_invitation' ) );
+$wf15_svc->record_consent( 91, 'review_invitation', array( 'role' => 'buyer', 'source' => 'checkout', 'text' => 'v2' ) );
+$wf15_buyer = $wf15_svc->contact( 91, 'review_invitation' );
+$wf15_fail  = true;
+$wf15_lf    = $wf15_svc->record_consent( 91, 'review_invitation', array( 'source' => 'x', 'text' => 'y' ) );
+$wf15_fail  = false;
+check( 'VOUCH-WF-15: a new consent after a withdrawal counts again (here by the buyer); a failed history write is reported', is_array( $wf15_buyer ) && 'buyer' === $wf15_buyer['role'] && 'buyer@example.test' === $wf15_buyer['email'] && $wf15_lf instanceof WP_Error && 'vcap_log_failed' === $wf15_lf->get_error_code() );
+remove_filter( 'vcap_contact_read_allowed', $wf15_allow );
+unset( $GLOBALS['vcap_test_options'][ VCAP\API\V1\ContactService::OPTION_ENABLED ] );
+$wf15_fields = VCAP\API\V1\ContactService::settings_fields( array(), 'api' );
+check( 'VOUCH-WF-15: the switch is in "Integrations (API)" with default "no"; functions and contract 1.5.0 are documented', 1 === count( array_filter( $wf15_fields, static fn( $f ) => VCAP\API\V1\ContactService::OPTION_ENABLED === ( $f['id'] ?? '' ) && 'checkbox' === $f['type'] && 'no' === $f['default'] ) ) && array() === VCAP\API\V1\ContactService::settings_fields( array(), 'codes' ) && function_exists( 'vcap_read_voucher_contact' ) && function_exists( 'vcap_record_contact_consent' ) && function_exists( 'vcap_withdraw_contact_consent' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'API.md' ), '### Contact and consent (since 1.3.0, contract 1.5.0)' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'CONNECTORS.md' ), '| 1.5.0 | 1.3.0 | contact and consent' ) );
 $e17_main = (string) file_get_contents( VCAP_PATH . 'voucher-captain.php' );
 $e17_apim = (string) file_get_contents( VCAP_PATH . 'API.md' );
 $e17_conn = (string) file_get_contents( VCAP_PATH . 'CONNECTORS.md' );
 $e17_doc  = array_filter( array( 'voucher', 'voucher_by_code', 'log_event', 'connector_event', 'admin_url', 'line_snapshot' ), static fn( $m ) => ! method_exists( VCAP\API\V1\VoucherService::class, $m ) || ! str_contains( (string) ( new ReflectionMethod( VCAP\API\V1\VoucherService::class, $m ) )->getDocComment(), '@since 1.3.0 (contract 1.4.0)' ) || ! str_contains( $e17_apim, $m . '(' ) );
-check( 'VOUCH-E17-02: the six methods carry @since (contract 1.4.0), are documented in API.md → "Connector access"; contract 1.4.0 in the main file and CONNECTORS.md', array() === $e17_doc && str_contains( $e17_main, "define( 'VCAP_CONTRACT_VERSION', '1.4.0' );" ) && str_contains( $e17_apim, '### Connector access (since 1.3.0, contract 1.4.0)' ) && str_contains( $e17_conn, '| 1.4.0 | 1.3.0 | connector access' ), implode( ', ', $e17_doc ) );
+check( 'VOUCH-E17-02: the six methods carry @since (contract 1.4.0), are documented in API.md → "Connector access"; contract 1.4.0 in the main file and CONNECTORS.md', array() === $e17_doc && 1 === preg_match( "/define\( 'VCAP_CONTRACT_VERSION', '(1\.\d+\.\d+)' \);/", $e17_main, $e17_cv ) && version_compare( $e17_cv[1], '1.4.0', '>=' ) && str_contains( $e17_apim, '### Connector access (since 1.3.0, contract 1.4.0)' ) && str_contains( $e17_conn, '| 1.4.0 | 1.3.0 | connector access' ), implode( ', ', $e17_doc ) );
 
 // VOUCH-WF-14: the six lifecycle actions without an "after COMMIT" note now go through Db::action() as well.
 $wf14_hooks   = array( 'vcap_vouchers_issued', 'vcap_voucher_issued_standalone', 'vcap_voucher_delivered', 'vcap_voucher_delivery_given_up', 'vcap_voucher_bounced', 'vcap_voucher_reissued' );

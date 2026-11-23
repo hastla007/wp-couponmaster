@@ -6,7 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-23 13:05+0000\n"
+"POT-Creation-Date: 2026-11-23 13:09+0000\n"
 "X-Domain: voucher-captain\n"
 
 #. Plugin Name of the plugin
@@ -93,6 +93,46 @@ msgstr ""
 #: src/API/V1/CommandService.php:158
 #, php-format
 msgid "%1$s: %2$s (%3$s) – workflow %4$s, run %5$s, step %6$s, authorised by user #%7$s, reason %8$s"
+msgstr ""
+
+#: src/API/V1/ContactService.php:105 src/API/V1/ContactService.php:139 src/API/V1/ContactService.php:216 src/API/V1/VoucherService.php:240 src/API/V1/VoucherService.php:350 src/API/V1/WooCommerceRedemptionProvider.php:48
+msgid "Voucher not found."
+msgstr ""
+
+#: src/API/V1/ContactService.php:120 src/API/V1/ContactService.php:147 src/API/V1/VoucherService.php:244
+msgid "The voucher history could not be saved."
+msgstr ""
+
+#: src/API/V1/ContactService.php:209 src/Admin/CampaignAdmin.php:58 src/Admin/CampaignAdmin.php:191 src/Admin/CampaignAdmin.php:283 src/Admin/CardImport.php:237 src/Admin/CardImport.php:299
+msgid "You are not allowed to do this."
+msgstr ""
+
+#: src/API/V1/ContactService.php:288
+msgid "Contact read function"
+msgstr ""
+
+#: src/API/V1/ContactService.php:290
+msgid "Lets authorised add-ons read the address of a voucher's recipient or buyer for a purpose this person consented to (e.g. a review invitation). Every read is written to the voucher history. Switch it on only after your data protection review and with a matching note in your privacy policy."
+msgstr ""
+
+#: src/API/V1/ContactService.php:294
+msgid "Allow contact reads"
+msgstr ""
+
+#: src/API/V1/ContactService.php:298
+msgid "Answer contact requests of add-ons (only with recorded consent)"
+msgstr ""
+
+#: src/API/V1/ContactService.php:316
+msgid "Contact consent recorded"
+msgstr ""
+
+#: src/API/V1/ContactService.php:317
+msgid "Contact consent withdrawn"
+msgstr ""
+
+#: src/API/V1/ContactService.php:318
+msgid "Contact read by an add-on"
 msgstr ""
 
 #: src/API/V1/RedemptionService.php:82 src/API/V1/RedemptionService.php:165
@@ -275,14 +315,6 @@ msgstr ""
 msgid "This event name cannot be written to the voucher history."
 msgstr ""
 
-#: src/API/V1/VoucherService.php:240 src/API/V1/VoucherService.php:350 src/API/V1/WooCommerceRedemptionProvider.php:48 src/API/V1/WooCommerceRedemptionProvider.php:73 src/API/V1/WooCommerceRedemptionProvider.php:116 src/API/V1/WooCommerceRedemptionProvider.php:154
-msgid "Voucher not found."
-msgstr ""
-
-#: src/API/V1/VoucherService.php:244
-msgid "The voucher history could not be saved."
-msgstr ""
-
 #: src/API/V1/WooCommerceRedemptionProvider.php:76
 msgid "A saved order and a positive amount are required."
 msgstr ""
@@ -309,10 +341,6 @@ msgstr ""
 
 #: src/API/V1/WooCommerceRedemptionProvider.php:157
 msgid "No matching voucher reservation could be released."
-msgstr ""
-
-#: src/Admin/CampaignAdmin.php:58 src/Admin/CampaignAdmin.php:191 src/Admin/CampaignAdmin.php:283 src/Admin/CardImport.php:237 src/Admin/CardImport.php:299 src/Admin/Import.php:47
-msgid "You are not allowed to do this."
 msgstr ""
 
 #. translators: 1: number of codes created, 2: error message
@@ -1045,7 +1073,7 @@ msgstr ""
 msgid "Pass Captain ↗"
 msgstr ""
 
-#: src/Admin/Menu.php:66 src/Admin/Menu.php:66 src/Plugin.php:232 src/Shortcodes.php:74
+#: src/Admin/Menu.php:66 src/Admin/Menu.php:66 src/Plugin.php:240 src/Shortcodes.php:74
 msgid "Settings"
 msgstr ""
 
@@ -7964,12 +7992,12 @@ msgid "Valid indefinitely"
 msgstr ""
 
 #. translators: %s: comma separated table names
-#: src/Plugin.php:248
+#: src/Plugin.php:256
 #, php-format
 msgid "Voucher Captain: the voucher database tables do not support transactions (InnoDB). Gift card balances cannot be redeemed until these tables are converted to InnoDB: %s"
 msgstr ""
 
-#: src/Plugin.php:256
+#: src/Plugin.php:264
 msgid "Voucher Captain: the PDF libraries are missing. Install the release ZIP or run \"composer install --no-dev\" in the plugin folder."
 msgstr ""
 
@@ -11131,17 +11159,17 @@ msgstr ""
 msgid "Voucher Captain requires PHP 8.5 or newer."
 msgstr ""
 
-#: voucher-captain.php:97
+#: voucher-captain.php:98
 msgid "Voucher Captain requires WooCommerce to be installed and active."
 msgstr ""
 
 #. translators: %s: installed WooCommerce version
-#: voucher-captain.php:111
+#: voucher-captain.php:112
 #, php-format
 msgid "Voucher Captain requires WooCommerce 11.2.2 or newer (installed: %s). Please update WooCommerce."
 msgstr ""
 
-#: voucher-captain.php:111
+#: voucher-captain.php:112
 msgid "Until then, gift cards and store credit are refused at checkout, because their balance cannot be deducted."
 msgstr ""
 
