@@ -153,11 +153,11 @@ msgstr "%1$s (%2$s): „%3$s“ ist keine ganze Zahl von 0 bis %4$d. Der gespeic
 
 #: src/API/V1/CommandLimits.php:417
 msgid "Calls per day"
-msgstr ""
+msgstr "Aufrufe pro Tag"
 
 #: src/API/V1/CommandLimits.php:417
 msgid "Vouchers per recipient and day"
-msgstr ""
+msgstr "Gutscheine pro Empfänger und Tag"
 
 #: src/API/V1/CommandService.php:146
 msgid "Automatic command"
