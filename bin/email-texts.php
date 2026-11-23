@@ -33,7 +33,8 @@ function vcap_et_entries( string $file ): array {
 }
 
 $pot   = vcap_et_entries( "$root/languages/voucher-captain.pot" );
-$de    = vcap_et_entries( "$root/languages/voucher-captain-de_DE.po" );
+$du    = vcap_et_entries( "$root/languages/voucher-captain-de_DE.po" ); // S4: "du".
+$de    = vcap_et_entries( "$root/languages/voucher-captain-de_DE_formal.po" ); // "Sie".
 $at    = vcap_et_entries( "$root/languages/voucher-captain-de_AT.po" );
 $cell  = static fn( string $s ): string => str_replace( array( '|', "\n" ), array( '\\|', '<br>' ), $s );
 $group = array();
@@ -53,7 +54,7 @@ $md .= "Überschrift und Zusatztext je E-Mail in WooCommerce überschreiben; die
 $md .= "Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____\n";
 $seen = array();
 foreach ( $group as $file => $entries ) {
-	$md .= "\n## `{$file}`\n\n| Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) |\n|---|---|---|\n";
+	$md .= "\n## `{$file}`\n\n| Englisch (Quelltext) | Deutsch (DE, du) | Deutsch (DE, Sie) | Deutsch (AT) |\n|---|---|---|---|\n";
 	foreach ( $entries as $key => $e ) {
 		if ( isset( $seen[ $key ] ) ) {
 			continue;
@@ -70,7 +71,7 @@ foreach ( $group as $file => $entries ) {
 			}
 			return $forms ? implode( ' / ', $forms ) : '**fehlt**';
 		};
-		$md .= '| ' . $cell( $src ) . ' | ' . $cell( $tr( $de ) ) . ' | ' . $cell( $tr( $at ) ) . " |\n";
+		$md .= '| ' . $cell( $src ) . ' | ' . $cell( $tr( $du ) ) . ' | ' . $cell( $tr( $de ) ) . ' | ' . $cell( $tr( $at ) ) . " |\n";
 	}
 }
 $md .= "\n" . count( $seen ) . " Texte.\n";

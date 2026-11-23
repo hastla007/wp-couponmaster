@@ -40,7 +40,8 @@ function vcap_lt_entries( string $file ): array {
 }
 
 $pot     = vcap_lt_entries( "$root/languages/voucher-captain.pot" );
-$de      = vcap_lt_entries( "$root/languages/voucher-captain-de_DE.po" );
+$du      = vcap_lt_entries( "$root/languages/voucher-captain-de_DE.po" ); // S4: "du".
+$de      = vcap_lt_entries( "$root/languages/voucher-captain-de_DE_formal.po" ); // "Sie".
 $at      = vcap_lt_entries( "$root/languages/voucher-captain-de_AT.po" );
 $markets = ( static function () use ( $root ) {
 	define( 'ABSPATH', __DIR__ );
@@ -67,13 +68,13 @@ foreach ( (array) $markets as $country => $m ) {
 }
 $md .= "\n## 3. Feste Texte des Plugins\n";
 foreach ( $topics as $topic => $ids ) {
-	$md .= "\n### {$topic}\n\n| Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) | Fundstelle | Freigabe |\n|---|---|---|---|---|\n";
+	$md .= "\n### {$topic}\n\n| Englisch (Quelltext) | Deutsch (DE, du) | Deutsch (DE, Sie) | Deutsch (AT) | Fundstelle | Freigabe |\n|---|---|---|---|---|---|\n";
 	foreach ( $ids as $id ) {
 		if ( ! isset( $pot[ $id ] ) ) {
 			$missing[] = $id;
 			continue;
 		}
-		$md .= '| ' . $cell( $id ) . ' | ' . $cell( $de[ $id ]['msgstr'] ?? '**fehlt**' ) . ' | ' . $cell( $at[ $id ]['msgstr'] ?? '**fehlt**' ) . ' | ' . $cell( implode( ' ', array_slice( $pot[ $id ]['refs'], 0, 2 ) ) ) . " | ☐ |\n";
+		$md .= '| ' . $cell( $id ) . ' | ' . $cell( $du[ $id ]['msgstr'] ?? '**fehlt**' ) . ' | ' . $cell( $de[ $id ]['msgstr'] ?? '**fehlt**' ) . ' | ' . $cell( $at[ $id ]['msgstr'] ?? '**fehlt**' ) . ' | ' . $cell( implode( ' ', array_slice( $pot[ $id ]['refs'], 0, 2 ) ) ) . " | ☐ |\n";
 	}
 }
 $md .= "\n## 4. Freigabe\n\n| Land | Geprüft von | Datum | Ergebnis |\n|---|---|---|---|\n| DE | | | ☐ freigegeben ☐ mit Änderungen |\n| AT | | | ☐ freigegeben ☐ mit Änderungen |\n| | | | |\n";

@@ -6,20 +6,21 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Locale fallback for the plugin's own translations.
  *
- * WordPress has no fallback between related locales: a shop on "Deutsch (Sie)" (de_DE_formal), Swiss German (de_CH,
- * de_CH_informal) or – without its own file – Austrian German (de_AT) would show the plugin in English, although the
- * German translation (formal "Sie") fits. When the requested file for such a locale does not exist, the German
- * (de_DE) file of the same folder or of the plugin's languages/ folder is loaded instead. A locale with its own file
- * (shipped or a language pack) always wins. The filter "vcap_translation_fallback_locales" changes the map.
+ * WordPress has no fallback between related locales: Swiss German (de_CH, de_CH_informal) or – without its own file –
+ * Austrian German (de_AT) would show the plugin in English, although a German translation fits. Owner decision S4 of
+ * 23.11.2026: de_DE addresses with "du", de_DE_formal with "Sie" (de_AT keeps its own "Sie" file). So formal locales
+ * fall back to de_DE_formal first (de_AT, de_CH → de_DE_formal → de_DE), informal ones to de_DE (de_CH_informal);
+ * the chain is followed until a file exists, in the same folder or in the plugin's languages/ folder. A locale with
+ * its own file (shipped or a language pack) always wins. The filter "vcap_translation_fallback_locales" changes the map.
  */
 final class I18n {
 	public const DOMAIN = 'voucher-captain';
 
 	/** Locale => locale whose file is used when the locale has none. */
 	public const FALLBACKS = array(
+		'de_AT'          => 'de_DE_formal',
+		'de_CH'          => 'de_DE_formal',
 		'de_DE_formal'   => 'de_DE',
-		'de_AT'          => 'de_DE',
-		'de_CH'          => 'de_DE',
 		'de_CH_informal' => 'de_DE',
 	);
 
@@ -47,8 +48,8 @@ final class I18n {
 	}
 
 	/**
-	 * Filter "load_textdomain_mofile": voucher-captain-de_DE_formal.mo → voucher-captain-de_DE.mo when only that one
-	 * exists (same folder first, then the plugin's languages/ folder).
+	 * Filter "load_textdomain_mofile": e.g. voucher-captain-de_CH.mo → voucher-captain-de_DE_formal.mo (then
+	 * voucher-captain-de_DE.mo) when the asked file does not exist (same folder first, then the plugin's languages/ folder).
 	 */
 	public static function mofile( $mofile, $domain ) {
 		if ( self::DOMAIN !== $domain || ! is_string( $mofile ) || ! str_ends_with( $mofile, '.mo' ) || self::exists( $mofile ) ) {
@@ -60,7 +61,12 @@ final class I18n {
 			return $mofile;
 		}
 		$locale = substr( $base, strlen( $prefix ) );
-		$map    = self::fallbacks();
+		// The plugin's own file of the same locale before any fallback (e.g. de_AT not in the global folder).
+		$own = self::own_dir() . $prefix . $locale . '.mo';
+		if ( self::exists( $own ) ) {
+			return $own;
+		}
+		$map = self::fallbacks();
 		$seen   = array( $locale => true );
 		while ( isset( $map[ $locale ] ) && ! isset( $seen[ $map[ $locale ] ] ) ) {
 			$locale          = (string) $map[ $locale ];
@@ -179,13 +185,15 @@ final class I18n {
 
 	/**
 	 * Filter "lang_dir_for_domain": without a file for the locale WordPress finds no folder and loads nothing just in
-	 * time; point it to the plugin's languages/ folder when a fallback file exists there (mofile() then picks it).
+	 * time; point it to the plugin's languages/ folder when it holds a file for the locale or a fallback (mofile() then
+	 * picks it; S4: de_DE_formal now ships its own file).
 	 */
 	public static function lang_dir( $path, $domain, $locale ) {
 		if ( self::DOMAIN !== $domain || $path || ! is_string( $locale ) || ! isset( self::fallbacks()[ $locale ] ) ) {
 			return $path;
 		}
-		$dir = self::own_dir();
-		return self::mofile( $dir . self::DOMAIN . '-' . $locale . '.mo', self::DOMAIN ) !== $dir . self::DOMAIN . '-' . $locale . '.mo' ? $dir : $path;
+		$dir    = self::own_dir();
+		$mofile = self::mofile( $dir . self::DOMAIN . '-' . $locale . '.mo', self::DOMAIN );
+		return str_starts_with( $mofile, $dir ) && self::exists( $mofile ) ? $dir : $path;
 	}
 }

@@ -62,7 +62,7 @@ Country-specific data is configuration, not code:
 | Redemption conditions / consumer information per country | setting *Redemption conditions per country*; the billing country decides and the text is fixed on the voucher |
 | Currency minor units (ISO 4217) | `config/currencies.php`, filter `vcap_currency_decimals` |
 | VAT rates, OSS, place of supply | WooCommerce tax settings only – Voucher Captain stores no rates (TAX.md) |
-| Languages | translation files `languages/voucher-captain-{locale}.mo` (included: de_DE, de_AT; POT for further languages) |
+| Languages | translation files `languages/voucher-captain-{locale}.mo` (included: de_DE ("du"), de_DE_formal and de_AT ("Sie"); de_CH uses de_DE_formal, de_CH_informal de_DE; POT for further languages) |
 
 *Tools → Site Health* checks every EU country in WooCommerce's selling locations: verified validity, conditions and a
 translation (test "Some EU selling countries need voucher settings"). `tests/run.php` covers the configuration.
