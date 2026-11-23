@@ -4,12 +4,18 @@
  *   wp eval-file tests/blocks-integration.php
  */
 
-function vcap_blocks_assert( bool $condition, string $message ): void {
+function vcap_blocks_assert( bool $condition, string $message, $detail = null ): void {
 	if ( ! $condition ) {
-		throw new RuntimeException( 'FAIL: ' . $message );
+		throw new RuntimeException( 'FAIL: ' . $message . ( null === $detail ? '' : ' – ' . wp_json_encode( $detail ) ) );
 	}
 	echo "PASS: {$message}\n";
 }
+
+// M12-101: settings and tax rates changed below are restored in finally, also when an assertion fails (the
+// suites share one database; run-integration.sh expects a freshly installed shop).
+require_once __DIR__ . '/state-guard.php';
+$vcap_restore = vcap_test_state_guard( array( VCAP\PaymentVouchers::OPTION, 'vcap_store_credit', 'woocommerce_calc_taxes', 'woocommerce_prices_include_tax' ) );
+try {
 
 add_filter( 'woocommerce_store_api_disable_nonce_check', '__return_true' );
 wc_load_cart();
@@ -22,6 +28,38 @@ $product->set_virtual( true );
 $product->update_meta_data( '_vcap_enabled', 'yes' );
 $product->update_meta_data( '_vcap_builtin_fields', array( 'recipient_name', 'recipient_email_required', 'message' ) );
 $product->save();
+
+// AP-F1-1 (before any Store API request of this run: those leave their field values in the Fields instance).
+// A page with a single-product block runs do_shortcode() over the block output. A crafted link
+// (?vcap_fields[message]=[shortcode]) must neither prefill the fields nor run a shortcode through them.
+$GLOBALS['vcap_f11_ran'] = 0;
+add_shortcode( 'vcap_f11_probe', static function () {
+	++$GLOBALS['vcap_f11_ran'];
+	return 'F11-PROBE-RAN';
+} );
+$f11_page = wp_insert_post(
+	array(
+		'post_type'    => 'page',
+		'post_status'  => 'publish',
+		'post_title'   => 'AP-F1-1 landing page',
+		'post_content' => '<!-- wp:woocommerce/single-product {"productId":' . $product->get_id() . '} --><div class="wp-block-woocommerce-single-product"><!-- wp:woocommerce/add-to-cart-form /--></div><!-- /wp:woocommerce/single-product -->',
+	)
+);
+$_GET['vcap_fields']     = array( 'message' => '[vcap_f11_probe]', 'recipient_email' => 'attacker@example.com' );
+$_REQUEST['vcap_fields'] = $_GET['vcap_fields'];
+$GLOBALS['post']         = get_post( $f11_page ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride
+setup_postdata( $GLOBALS['post'] );
+$f11_html = apply_filters( 'the_content', get_post_field( 'post_content', $f11_page ) );
+wp_reset_postdata();
+unset( $_GET['vcap_fields'], $_REQUEST['vcap_fields'] );
+vcap_blocks_assert( str_contains( $f11_html, 'vcap_fields[message]' ), 'AP-F1-1: the single-product block renders the voucher fields', substr( wp_strip_all_tags( $f11_html ), 0, 300 ) );
+vcap_blocks_assert( 0 === $GLOBALS['vcap_f11_ran'] && ! str_contains( $f11_html, 'F11-PROBE-RAN' ) && ! str_contains( $f11_html, 'attacker@example.com' ), 'AP-F1-1: a link with ?vcap_fields[...] prefills nothing and runs no shortcode in the product block' );
+// Values posted back after a refused add to cart are shown again, with brackets as entities.
+$_POST['vcap_fields'] = array( 'message' => '[vcap_f11_probe]' );
+$f11_posted           = apply_filters( 'the_content', get_post_field( 'post_content', $f11_page ) );
+unset( $_POST['vcap_fields'] );
+vcap_blocks_assert( 0 === $GLOBALS['vcap_f11_ran'] && str_contains( $f11_posted, '&#91;vcap_f11_probe&#93;' ), 'AP-F1-1: a posted value is shown again with escaped brackets and runs no shortcode', array( $GLOBALS['vcap_f11_ran'], preg_match( '/<textarea[^>]*vcap_fields\[message\][^>]*>[^<]*<\/textarea>|<input[^>]*vcap_fields\[message\][^>]*>/', $f11_posted, $f11_m ) ? $f11_m[0] : substr( $f11_posted, 0, 500 ) ) );
+wp_delete_post( $f11_page, true );
 
 function vcap_blocks_add( int $id, array $fields ) {
 	$request = new WP_REST_Request( 'POST', '/wc/store/v1/cart/add-item' );
@@ -184,6 +222,13 @@ $card_50 = vcap_blocks_voucher( $card_product, 50, 'balance', 'giftcard' );
 WC()->cart->apply_coupon( $card_50->code );
 list( , $forfeit_ext ) = vcap_blocks_cart_ext();
 vcap_blocks_assert( array() === ( $forfeit_ext['forfeits'] ?? null ), 'Store API cart: no warning for a gift card worth more than the cart (it keeps its balance)' );
+// The balance shown is what is left after this order (50 − 40 = 10), as a note – classic cart and blocks alike.
+$remaining_text = VCAP\CouponManager::remaining_balance_note( $card_50, 10.0 );
+vcap_blocks_assert( isset( $forfeit_ext['balances'][0] ) && $remaining_text === ( $forfeit_ext['balances'][0]['text'] ?? '' ) && false !== strpos( $forfeit_ext['balances'][0]['formatted'], '10' ), 'Store API cart: the gift card note shows the balance after this order (50 − 40 = 10), not the 50 before it', $forfeit_ext['balances'] ?? null );
+ob_start();
+vcap()->coupons->cart_balance_notice();
+$classic_balance = (string) ob_get_clean();
+vcap_blocks_assert( false !== strpos( html_entity_decode( $classic_balance, ENT_QUOTES, 'UTF-8' ), $remaining_text ) && false !== strpos( $classic_balance, 'colspan="2"' ), 'classic cart: the same note across the totals table (balance after this order: 10)', $classic_balance );
 WC()->cart->remove_coupons();
 
 // "Multi-purpose vouchers as payment": the single-use value voucher discounts 0 and pays 40 after tax – only the
@@ -210,6 +255,76 @@ vcap()->store_credit->adjust( $block_user, 15, 'Block test' );
 WC()->cart->add_to_cart( $block_goods->get_id(), 1 );
 $credit_ext = json_decode( (string) wp_json_encode( rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/cart' ) )->get_data() ), true )['extensions']['voucher-captain'] ?? array();
 vcap_blocks_assert( is_array( $credit_ext['store_credit'] ?? null ) && false !== strpos( $credit_ext['store_credit']['url'], 'vcap_apply_credit' ) && '' !== $credit_ext['store_credit']['text'], 'Store API cart: the "use store credit" hint with its link for a customer with credit' );
+// The link is data for React (href as is): a raw "&", not HTML-escaped "&amp;" (PHP would read "amp;_wpnonce").
+$credit_url = (string) ( $credit_ext['store_credit']['url'] ?? '' );
+wp_parse_str( (string) wp_parse_url( $credit_url, PHP_URL_QUERY ), $credit_query );
+vcap_blocks_assert( false === strpos( $credit_url, '&amp;' ) && '1' === ( $credit_query['vcap_apply_credit'] ?? '' ) && false !== wp_verify_nonce( (string) ( $credit_query['_wpnonce'] ?? '' ), 'vcap_apply_credit' ), 'Store API cart: the store credit link carries a valid _wpnonce (unescaped URL)' );
+// A Store API GET only reads: an account whose coupon is missing is not repaired while answering it.
+$credit_account = vcap()->store_credit->account( $block_user );
+wp_delete_post( $credit_account->coupon_id, true );
+rest_do_request( new WP_REST_Request( 'GET', '/wc/store/v1/cart' ) );
+vcap_blocks_assert( 0 === (int) wc_get_coupon_id_by_code( $credit_account->code ), 'Store API cart: answering a GET request does not recreate a missing store credit coupon' );
+vcap_blocks_assert( (int) vcap()->store_credit->account( $block_user )->coupon_id > 0 && (int) wc_get_coupon_id_by_code( $credit_account->code ) > 0, 'the store credit account still repairs its coupon outside the Store API answer' );
 wp_set_current_user( 0 );
 WC()->cart->empty_cart();
+
+// V6: a personal voucher is refused for guests in the Store API (cart/checkout blocks), whatever billing email is
+// entered, with the masked address to log in with; the account with that email may use it.
+$v6_tag   = strtolower( wp_generate_password( 6, false, false ) );
+$v6_mail  = 'v6-block-' . $v6_tag . '@example.com';
+$v6_owner = (int) wp_insert_user( array( 'user_login' => 'v6block' . $v6_tag, 'user_pass' => wp_generate_password( 24 ), 'user_email' => $v6_mail, 'role' => 'customer' ) );
+$v6_coupon = new WC_Coupon();
+$v6_coupon->set_code( 'vcap-v6-block-' . $v6_tag );
+$v6_coupon->set_discount_type( 'fixed_cart' );
+$v6_coupon->set_amount( 10 );
+$v6_coupon->set_usage_limit( 1 );
+$v6_coupon->set_email_restrictions( array( $v6_mail ) );
+$v6_coupon->update_meta_data( '_vcap_voucher', 'yes' );
+$v6_coupon->update_meta_data( '_vcap_email_restrict', 'buyer' );
+$v6_coupon->save();
+$v6_card                 = clone $block_card;
+$v6_card->id             = 0;
+$v6_card->code           = wc_format_coupon_code( $v6_coupon->get_code() );
+$v6_card->coupon_id      = $v6_coupon->get_id();
+$v6_card->order_item_id  = 96500000 + $v6_coupon->get_id();
+$v6_card->type           = 'voucher';
+$v6_card->usage_mode     = 'single';
+$v6_card->initial_amount = 10;
+$v6_card->balance        = 10;
+$v6_card->buyer_email    = $v6_mail;
+$v6_card->transferable   = false;
+$v6_card->token          = VCAP\VoucherRepository::new_token();
+$v6_card->id             = vcap()->vouchers->insert( $v6_card );
+wp_set_current_user( 0 );
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart( $block_goods->get_id(), 1 );
+WC()->customer->set_billing_email( $v6_mail );
+$v6_request = new WP_REST_Request( 'POST', '/wc/store/v1/cart/apply-coupon' );
+$v6_request->set_param( 'code', $v6_card->code );
+$v6_guest = rest_do_request( $v6_request );
+vcap_blocks_assert( $v6_guest->is_error() && str_contains( wp_json_encode( $v6_guest->get_data() ), 'Please log in with v***@example.com to use this personal voucher.' ) && ! in_array( $v6_card->code, WC()->cart->get_applied_coupons(), true ), 'V6: Store API – a guest with the buyer\'s billing email cannot apply a personal voucher ("Please log in with v***@example.com …")', $v6_guest->get_data() );
+wp_set_current_user( $v6_owner );
+$v6_unproven = rest_do_request( $v6_request );
+vcap_blocks_assert( $v6_unproven->is_error() && str_contains( wp_json_encode( $v6_unproven->get_data() ), 'Please confirm your email address v***@example.com' ), 'AP-S1-1: Store API – the matching account without a proof of mailbox is asked to confirm its address', $v6_unproven->get_data() );
+VCAP\PersonalVoucher::mark_verified( $v6_owner ); // As after the confirmation link or a password reset.
+$v6_mine = rest_do_request( $v6_request );
+vcap_blocks_assert( ! $v6_mine->is_error() && in_array( $v6_card->code, WC()->cart->get_applied_coupons(), true ), 'V6: Store API – logged in with the matching account the personal voucher is applied', $v6_mine->get_data() );
+WC()->cart->empty_cart();
+wp_set_current_user( 0 );
+
+// G12: the cart blocks script also loads in the editor, with sample voucher rows there; no script translations.
+$g12 = new VCAP\Compat\CartBlocksIntegration();
+$g12->initialize();
+$g12_script = wp_scripts()->registered[ VCAP\Compat\CartBlocksIntegration::HANDLE ] ?? null;
+vcap_blocks_assert( array( VCAP\Compat\CartBlocksIntegration::HANDLE ) === $g12->get_editor_script_handles() && $g12_script && ! in_array( 'wp-i18n', $g12_script->deps, true ) && empty( $g12_script->textdomain ), 'G12: the cart blocks script is an editor handle as well and loads no script translations' );
+vcap_blocks_assert( null === $g12->get_script_data()['preview'], 'G12: the storefront gets no sample rows' );
+require_once ABSPATH . 'wp-admin/includes/class-wp-screen.php';
+require_once ABSPATH . 'wp-admin/includes/screen.php';
+set_current_screen( 'post' );
+$g12_preview = $g12->get_script_data()['preview'];
+vcap_blocks_assert( is_array( $g12_preview ) && ! empty( $g12_preview['payments'][0]['label'] ) && ! empty( $g12_preview['balances'][0]['text'] ), 'G12: in the editor the blocks get a sample voucher payment and balance' );
+$GLOBALS['current_screen'] = null;
 echo "Voucher Captain block checks passed.\n";
+} finally {
+	$vcap_restore();
+}

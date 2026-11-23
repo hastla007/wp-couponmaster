@@ -41,8 +41,70 @@ async function addVoucherToCart( page, recipient ) {
 	await page.fill( '#vcap-field-recipient_name', 'Erika Muster' );
 	await page.fill( '#vcap-field-recipient_email', recipient );
 	await page.fill( '#vcap-field-message', 'Alles Gute!' );
-	await Promise.all( [ page.waitForLoadState( 'load' ), page.click( '.single_add_to_cart_button' ) ] );
+	await expect( page.locator( '#vcap-field-recipient_email' ), 'the recipient field is sent with the form' ).toBeEnabled();
+	// Wait for the answer to the add-to-cart POST itself: waiting for "load" of the page that is already loaded
+	// returned at once, so the next step could run before the cart was saved.
+	const [ response ] = await Promise.all( [
+		page.waitForResponse( ( r ) => 'POST' === r.request().method() && /e2e-voucher|add-to-cart|wc\/store\/v1\/cart\/add-item/.test( r.url() + ( r.request().postData() || '' ) ) ),
+		page.click( '.single_add_to_cart_button' ),
+	] );
+	expect( response.status(), 'the add-to-cart request succeeds' ).toBeLessThan( 400 );
+	await page.waitForLoadState( 'domcontentloaded' );
 	await expect( page.getByText( /has been added to your cart/i ).first() ).toBeVisible();
+	await expectCartLineFor( page, recipient );
 }
 
-module.exports = { state, expectAccessible, trackPluginErrors, login, addVoucherToCart };
+/**
+ * The cart (Store API, same session as the page) holds a voucher line personalised for the recipient. On failure
+ * the message lists what the cart holds instead, so a broken run shows its cause without the screenshot.
+ */
+async function expectCartLineFor( page, recipient ) {
+	const cart = await ( await page.request.get( '/wp-json/wc/store/v1/cart' ) ).json();
+	const lines = ( cart.items || [] ).map( ( item ) => ( {
+		name: item.name,
+		quantity: item.quantity,
+		data: ( item.item_data || [] ).map( ( d ) => `${ d.key || d.name }: ${ d.value || d.display || '' }` ),
+	} ) );
+	const found = lines.some( ( line ) => line.data.some( ( d ) => d.includes( recipient ) ) );
+	expect( found, `a cart line for ${ recipient }; the cart holds ${ JSON.stringify( lines ) }` ).toBeTruthy();
+}
+
+/** Visible text in the cart; on failure the message carries the cart content of the page. */
+async function expectCartShows( page, text, container ) {
+	try {
+		await expect( page.getByText( text ).first() ).toBeVisible();
+	} catch ( error ) {
+		const shown = await page.locator( container ).first().innerText().catch( () => '(cart not found)' );
+		throw new Error( `"${ text }" is not visible in the cart. Page ${ page.url() } shows:\n${ shown }\n\n${ error.message }` );
+	}
+}
+
+/**
+ * Empties the cart of the current visitor (items and codes) through the Store API, so a test – and its retry –
+ * starts from an empty cart (a logged-in customer's cart persists across tests).
+ */
+async function emptyCart( page ) {
+	const cart = await page.request.get( '/wp-json/wc/store/v1/cart' );
+	const headers = { Nonce: cart.headers().nonce || '' };
+	if ( cart.headers()[ 'cart-token' ] ) {
+		headers[ 'Cart-Token' ] = cart.headers()[ 'cart-token' ];
+	}
+	const items = await page.request.delete( '/wp-json/wc/store/v1/cart/items', { headers } );
+	const coupons = await page.request.delete( '/wp-json/wc/store/v1/cart/coupons', { headers } );
+	expect( items.ok() && coupons.ok(), 'the cart is emptied before the test' ).toBeTruthy();
+}
+
+/**
+ * A voucher code of its own for this test attempt (tests/e2e/setup.php creates a few per pool): a retry after a
+ * failure never meets a card the failed attempt already charged.
+ */
+function freshCode( pool, testInfo ) {
+	const codes = state()[ pool ] || [];
+	const code = codes[ testInfo.retry ];
+	if ( ! code ) {
+		throw new Error( `no unused code left in pool "${ pool }" (attempt ${ testInfo.retry + 1 })` );
+	}
+	return code;
+}
+
+module.exports = { state, expectAccessible, trackPluginErrors, login, addVoucherToCart, expectCartLineFor, expectCartShows, emptyCart, freshCode };

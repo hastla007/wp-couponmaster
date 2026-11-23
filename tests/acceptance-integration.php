@@ -11,6 +11,15 @@ function vcap_acc_assert( bool $condition, string $message ): void {
 	echo "PASS: {$message}\n";
 }
 
+// M12-101: settings and tax rates changed below are restored in finally, also when an assertion fails (the
+// suites share one database; run-integration.sh expects a freshly installed shop).
+require_once __DIR__ . '/state-guard.php';
+$vcap_restore = vcap_test_state_guard( array( 'woocommerce_calc_taxes', 'woocommerce_prices_include_tax', 'vcap_vouchers_buy_vouchers', VCAP\Compat\MultiCurrency::UNKNOWN_OPTION, VCAP\Compat\MultiCurrency::HELD_OPTION, VCAP\PaymentVouchers::OPTION ) );
+try {
+// M12-03: new installations settle multi-purpose vouchers as a payment after tax; this suite checks the coupon
+// mode of existing shops (the payment mode is covered in tax-integration section 8 and tax-accounting).
+update_option( VCAP\PaymentVouchers::OPTION, 'no' );
+
 function vcap_acc_card( float $value ): VCAP\Voucher {
 	$coupon = new WC_Coupon();
 	$coupon->set_code( 'vcap-acc-' . strtolower( wp_generate_password( 10, false, false ) ) );
@@ -232,6 +241,43 @@ $second_try->save();
 vcap()->coupons->release_previous_checkout_order( $second_try );
 vcap_acc_assert( 5.0 === $reserved_balance && 25.0 === (float) vcap()->vouchers->get( $retry_card->id )->balance, 'a new checkout order of the session releases the abandoned order\'s reservation (gift card usable again at once)' );
 
+// Guest checkout, then the guest logs in (same session, same billing email) and checks out again as a customer.
+$login_user  = wp_insert_user( array( 'user_login' => 'vcap-acc-' . wp_generate_password( 6, false, false ), 'user_email' => 'acceptance-login-' . wp_generate_password( 6, false, false ) . '@example.com', 'user_pass' => wp_generate_password(), 'role' => 'customer' ) );
+$login_card  = vcap_acc_card( 25 );
+$guest_try   = wc_create_order();
+$guest_try->add_product( $product, 1 );
+$guest_try->set_billing_email( 'acceptance-login@example.com' );
+$guest_try->calculate_totals();
+$guest_try->apply_coupon( $login_card->code );
+$guest_try = wc_get_order( $guest_try->get_id() );
+vcap()->coupons->release_previous_checkout_order( $guest_try );
+vcap()->coupons->reserve_order( $guest_try->get_id(), array(), $guest_try );
+$login_try = wc_create_order( array( 'customer_id' => $login_user ) );
+$login_try->add_product( $product, 1 );
+$login_try->set_billing_email( 'Acceptance-Login@example.com' );
+$login_try->save();
+vcap()->coupons->release_previous_checkout_order( $login_try );
+vcap_acc_assert( 25.0 === (float) vcap()->vouchers->get( $login_card->id )->balance, 'after logging in, the new checkout order releases the guest order\'s reservation of the same session (same billing email)' );
+
+// An unpaid order of the account whose session is gone (placed before logging out) is released when the account
+// checks out again with the same gift card.
+$away_card  = vcap_acc_card( 25 );
+$away_order = wc_create_order( array( 'customer_id' => $login_user ) );
+$away_order->add_product( $product, 1 );
+$away_order->set_billing_email( 'acceptance-login@example.com' );
+$away_order->calculate_totals();
+$away_order->apply_coupon( $away_card->code );
+vcap()->coupons->reserve_order( wc_get_order( $away_order->get_id() ) );
+$away_reserved = (float) vcap()->vouchers->get( $away_card->id )->balance;
+WC()->session->set( VCAP\CouponManager::SESSION_ORDER, 0 );
+$back_order = wc_create_order( array( 'customer_id' => $login_user ) );
+$back_order->add_product( $product, 1 );
+$back_order->set_billing_email( 'acceptance-login@example.com' );
+$back_order->calculate_totals();
+$back_order->apply_coupon( $away_card->code );
+vcap()->coupons->release_previous_checkout_order( wc_get_order( $back_order->get_id() ) );
+vcap_acc_assert( 5.0 === $away_reserved && 25.0 === (float) vcap()->vouchers->get( $away_card->id )->balance, 'a new checkout of the account releases its earlier unpaid order holding the same gift card (session gone after logout)' );
+
 // Deactivation: without Voucher Captain nobody deducts balances, so balance coupons must not work.
 $idle_card = vcap_acc_card( 40 );
 VCAP\Install::suspend_balance_coupons();
@@ -329,6 +375,20 @@ add_filter( 'vcap_allow_refund_of_spent_vouchers', '__return_true' );
 $single_forced = wc_create_refund( array( 'order_id' => $single_buy->get_id(), 'amount' => 30 ) );
 remove_filter( 'vcap_allow_refund_of_spent_vouchers', '__return_true' );
 vcap_acc_assert( ! is_wp_error( $single_forced ) && VCAP\Voucher::STATUS_VOID === vcap()->vouchers->get( $single->id )->status, 'refunded knowingly anyway, the voucher is voided' );
+// "Pay for order" refuses the voided voucher: the classic pay form with an error notice (no payment is taken while
+// one is shown), the Store API (checkout/{order id}) with a client error.
+wc_clear_notices();
+vcap()->coupons->reserve_retry_order( wc_get_order( $single_use->get_id() ) );
+$single_notices = wc_get_notices( 'error' );
+wc_clear_notices();
+vcap_acc_assert( (bool) array_filter( $single_notices, static fn( $n ) => str_contains( wp_strip_all_tags( is_array( $n ) ? (string) $n['notice'] : (string) $n ), $single->code ) ), 'the classic pay form refuses an order whose single-use voucher was voided' );
+$single_store_api = '';
+try {
+	vcap()->coupons->reserve_store_api_order( wc_get_order( $single_use->get_id() ) );
+} catch ( \Throwable $e ) {
+	$single_store_api = $e->getMessage();
+}
+vcap_acc_assert( str_contains( $single_store_api, $single->code ), 'paying the order through the Store API is refused while its single-use voucher is voided (' . $single_store_api . ')' );
 wc_get_order( $single_use->get_id() )->payment_complete( 'txn-single-late' );
 $single_use = wc_get_order( $single_use->get_id() );
 $single_map = VCAP\CouponManager::order_map( $single_use, VCAP\CouponManager::SHORTFALL_AMOUNTS_META );
@@ -336,4 +396,24 @@ $single_why = 'status ' . $single_use->get_status() . ', shortfall ' . ( VCAP\Co
 vcap_acc_assert( 'on-hold' === $single_use->get_status() && VCAP\CouponManager::has_shortfall( $single_use ) && isset( $single_map[ wc_format_coupon_code( $single->code ) ] ), 'paying the order after the voucher was voided holds it with a shortfall instead of fulfilling the discount (' . $single_why . ')' );
 vcap_acc_assert( in_array( 'double_use', array_column( vcap()->vouchers->events( $single->id ), 'event' ), true ), 'the double use is in the voucher history' );
 
+// Pay page of a failed order whose gift card balance was used elsewhere meanwhile: no "refresh the cart" (there is
+// no cart there), a message that says what happened, and an order note for the shop.
+$gone_card  = vcap_acc_card( 30 );
+$gone_order = wc_create_order();
+$gone_order->add_product( $product, 1 );
+$gone_order->set_billing_email( 'acceptance-gone@example.com' );
+$gone_order->calculate_totals();
+$gone_order->apply_coupon( $gone_card->code );
+wc_get_order( $gone_order->get_id() )->update_status( 'failed', 'Card declined.' );
+vcap()->coupons->adjust_balance( vcap()->vouchers->get( $gone_card->id ), -30, 'redeem', 'Spent in the shop' );
+wc_clear_notices();
+vcap()->coupons->reserve_retry_order( wc_get_order( $gone_order->get_id() ) );
+$gone_notices = implode( ' ', array_map( static fn( $n ) => wp_strip_all_tags( is_array( $n ) ? (string) $n['notice'] : (string) $n ), wc_get_notices( 'error' ) ) );
+wc_clear_notices();
+$gone_notes = implode( ' | ', wp_list_pluck( wc_get_order_notes( array( 'order_id' => $gone_order->get_id() ) ), 'content' ) );
+vcap_acc_assert( str_contains( $gone_notices, $gone_card->code ) && ! str_contains( $gone_notices, 'Refresh the cart' ) && str_contains( $gone_notes, VCAP\Mask::code( $gone_card->code ) ) && ! str_contains( strtoupper( $gone_notes ), strtoupper( $gone_card->code ) ), 'the pay page refuses an order whose gift card balance was used elsewhere with its own message (no "refresh the cart") and an order note with the code masked (AP-S3-3) (' . $gone_notices . ')' );
+
 echo "Voucher Captain acceptance checks passed.\n";
+} finally {
+	$vcap_restore();
+}

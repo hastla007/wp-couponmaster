@@ -71,6 +71,19 @@ $product->update_meta_data( '_vcap_expiry_mode', 'never' );
 $product->save();
 vcap_val_assert( array() === ProductConfig::short_validity( wc_get_product( $product->get_id() ) ), 'vouchers without expiry: no warning' );
 
+// L13: a shop whose settings page stored the untouched 365 days (rule "days" saved alongside) is asked once.
+$l13_choice = get_option( VCAP\Admin\Onboarding::VALIDITY_CHOICE, false );
+delete_option( VCAP\Admin\Onboarding::VALIDITY_CHOICE );
+update_option( 'vcap_default_expiry_days', 365 );
+update_option( 'vcap_default_expiry_rule', 'days' );
+vcap_val_assert( VCAP\Admin\Onboarding::needs_validity_choice(), 'L13: a stored default of days (also the untouched 365 saved by WooCommerce) asks once: statutory or keep the days' );
+vcap_val_assert( VCAP\Admin\Onboarding::choose_validity( 'statutory' ) && 'statutory' === ProductConfig::default_expiry_rule() && ! VCAP\Admin\Onboarding::needs_validity_choice(), 'L13: "Use the statutory validity" switches the default and the question is gone' );
+delete_option( VCAP\Admin\Onboarding::VALIDITY_CHOICE );
+update_option( 'vcap_default_expiry_rule', 'days' );
+vcap_val_assert( VCAP\Admin\Onboarding::choose_validity( 'days' ) && 'days' === ProductConfig::default_expiry_rule() && ! VCAP\Admin\Onboarding::needs_validity_choice() && ! VCAP\Admin\Onboarding::choose_validity( 'nonsense' ), 'L13: "Keep the days" keeps them and is not asked again' );
+delete_option( 'vcap_default_expiry_days' );
+false === $l13_choice ? delete_option( VCAP\Admin\Onboarding::VALIDITY_CHOICE ) : update_option( VCAP\Admin\Onboarding::VALIDITY_CHOICE, $l13_choice );
+
 update_option( 'woocommerce_default_country', $keep['country'] );
 false === $keep['rule'] ? delete_option( 'vcap_default_expiry_rule' ) : update_option( 'vcap_default_expiry_rule', $keep['rule'] );
 if ( null !== $keep['days'] ) {

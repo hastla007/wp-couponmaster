@@ -21,6 +21,31 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 | Available placeholders: %s | Verfügbare Platzhalter: %s | Verfügbare Platzhalter: %s |
 | Email body | E-Mail-Text | E-Mail-Text |
 
+## `src/Emails/BundleEmail.php`
+
+| Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) |
+|---|---|---|
+| Vouchers (bulk order) | Gutscheine (Sammelbestellung) | Gutscheine (Sammelbestellung) |
+| Sent instead of one email per voucher when an order line holds many vouchers for the same recipient: one email with all codes and one PDF (one page per voucher), or download links for very large quantities. The buyer gets one copy per order. The thresholds are set under WooCommerce → Settings → Vouchers → Delivery & downloads. | Wird statt einer E-Mail pro Gutschein versendet, wenn eine Bestellposition viele Gutscheine für denselben Empfänger enthält: eine E-Mail mit allen Codes und einem PDF (eine Seite pro Gutschein) oder – bei sehr großen Mengen – Download-Links. Der Käufer erhält eine Kopie pro Bestellung. Die Schwellenwerte legen Sie unter WooCommerce → Einstellungen → Gutscheine → Versand & Downloads fest. | Wird statt einer E-Mail pro Gutschein versendet, wenn eine Bestellposition viele Gutscheine für denselben Empfänger enthält: eine E-Mail mit allen Codes und einem PDF (eine Seite pro Gutschein) oder – bei sehr großen Mengen – Download-Links. Der Käufer erhält eine Kopie pro Bestellung. Die Schwellenwerte legen Sie unter WooCommerce → Einstellungen → Gutscheine → Versand & Downloads fest. |
+| {buyer_name} sent you {voucher_count} vouchers from {site_title} | {buyer_name} hat Ihnen {voucher_count} Gutscheine von {site_title} geschenkt | {buyer_name} hat Ihnen {voucher_count} Gutscheine von {site_title} geschenkt |
+| You received {voucher_count} vouchers from {site_title} | Sie haben {voucher_count} Gutscheine von {site_title} erhalten | Sie haben {voucher_count} Gutscheine von {site_title} erhalten |
+| Your {voucher_count} gift vouchers are on their way | Ihre {voucher_count} Geschenkgutscheine sind unterwegs | Ihre {voucher_count} Geschenkgutscheine sind unterwegs |
+| Your {voucher_count} vouchers from {site_title} | Ihre {voucher_count} Gutscheine von {site_title} | Ihre {voucher_count} Gutscheine von {site_title} |
+| You received {voucher_count} vouchers! | Sie haben {voucher_count} Gutscheine erhalten! | Sie haben {voucher_count} Gutscheine erhalten! |
+| Your {voucher_count} vouchers | Ihre {voucher_count} Gutscheine | Ihre {voucher_count} Gutscheine |
+| Hi {buyer_name}, thank you for your order #{order_number}. Your {voucher_count} vouchers are listed below. | Hallo {buyer_name}, vielen Dank für Ihre Bestellung #{order_number}. Ihre {voucher_count} Gutscheine finden Sie unten. | Hallo {buyer_name}, vielen Dank für Ihre Bestellung #{order_number}. Ihre {voucher_count} Gutscheine finden Sie unten. |
+| Hi {recipient_name}, {buyer_name} sent you {voucher_count} vouchers. You find all codes below. | Hallo {recipient_name}, {buyer_name} hat Ihnen {voucher_count} Gutscheine geschenkt. Alle Codes finden Sie unten. | Hallo {recipient_name}, {buyer_name} hat Ihnen {voucher_count} Gutscheine geschenkt. Alle Codes finden Sie unten. |
+| Hi {recipient_name}, you received {voucher_count} vouchers as a gift. You find all codes below. | Hallo {recipient_name}, Sie haben {voucher_count} Gutscheine geschenkt bekommen. Alle Codes finden Sie unten. | Hallo {recipient_name}, Sie haben {voucher_count} Gutscheine geschenkt bekommen. Alle Codes finden Sie unten. |
+| Hello, {buyer_name} sent you {voucher_count} vouchers. You find all codes below. | Hallo, {buyer_name} hat Ihnen {voucher_count} Gutscheine geschenkt. Alle Codes finden Sie unten. | Hallo, {buyer_name} hat Ihnen {voucher_count} Gutscheine geschenkt. Alle Codes finden Sie unten. |
+| Hello, you received {voucher_count} vouchers as a gift. You find all codes below. | Hallo, Sie haben {voucher_count} Gutscheine geschenkt bekommen. Alle Codes finden Sie unten. | Hallo, Sie haben {voucher_count} Gutscheine geschenkt bekommen. Alle Codes finden Sie unten. |
+| Hi {buyer_name}, your {voucher_count} gift vouchers are on their way. This copy with all codes is for your records. | Hallo {buyer_name}, Ihre {voucher_count} Geschenkgutscheine sind unterwegs. Diese Kopie mit allen Codes ist für Ihre Unterlagen. | Hallo {buyer_name}, Ihre {voucher_count} Geschenkgutscheine sind unterwegs. Diese Kopie mit allen Codes ist für Ihre Unterlagen. |
+| Hello, your {voucher_count} gift vouchers are on their way. This copy with all codes is for your records. | Hallo, Ihre {voucher_count} Geschenkgutscheine sind unterwegs. Diese Kopie mit allen Codes ist für Ihre Unterlagen. | Hallo, Ihre {voucher_count} Geschenkgutscheine sind unterwegs. Diese Kopie mit allen Codes ist für Ihre Unterlagen. |
+| Hello, thank you for your order #{order_number}. Your {voucher_count} vouchers are listed below. | Hallo, vielen Dank für Ihre Bestellung #{order_number}. Ihre {voucher_count} Gutscheine finden Sie unten. | Hallo, vielen Dank für Ihre Bestellung #{order_number}. Ihre {voucher_count} Gutscheine finden Sie unten. |
+| Hi {buyer_name}, your {voucher_count} vouchers are listed below. | Hallo {buyer_name}, Ihre {voucher_count} Gutscheine finden Sie unten. | Hallo {buyer_name}, Ihre {voucher_count} Gutscheine finden Sie unten. |
+| Hello, your {voucher_count} vouchers are listed below. | Hallo, Ihre {voucher_count} Gutscheine finden Sie unten. | Hallo, Ihre {voucher_count} Gutscheine finden Sie unten. |
+| Attach one PDF with all vouchers (up to the PDF limit of the bulk order settings) | Ein PDF mit allen Gutscheinen anhängen (bis zum PDF-Limit der Einstellungen für Sammelbestellungen) | Ein PDF mit allen Gutscheinen anhängen (bis zum PDF-Limit der Einstellungen für Sammelbestellungen) |
+| {voucher_count} is the number of vouchers in the email. | {voucher_count} ist die Anzahl der Gutscheine in der E-Mail. | {voucher_count} ist die Anzahl der Gutscheine in der E-Mail. |
+
 ## `src/Emails/BuyerEmail.php`
 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) |
@@ -51,6 +76,22 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 | Your voucher from {site_title} expires on {expiry_date} | Ihr Gutschein von {site_title} läuft am {expiry_date} ab | Ihr Gutschein von {site_title} läuft am {expiry_date} ab |
 | Don't forget your voucher | Vergessen Sie Ihren Gutschein nicht | Vergessen Sie Ihren Gutschein nicht |
 | Your voucher {coupon_code} is valid until {expiry_date}. Remaining value: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. |
+
+## `src/Emails/GiftNoticeEmail.php`
+
+| Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) |
+|---|---|---|
+| Voucher | Gutschein | Gutschein |
+| Gift used (buyer) | Geschenk eingelöst (Käufer) | Geschenk eingelöst (Käufer) |
+| Gift delivered (buyer) | Geschenk zugestellt (Käufer) | Geschenk zugestellt (Käufer) |
+| Optional: tells the buyer of a gift that the recipient used it for the first time (without the code). | Optional: Teilt dem Käufer eines Geschenks mit, dass der Empfänger es zum ersten Mal eingelöst hat (ohne den Code). | Optional: Teilt dem Käufer eines Geschenks mit, dass der Empfänger es zum ersten Mal eingelöst hat (ohne den Code). |
+| Optional: tells the buyer of a gift that it was delivered to the recipient (without the code). | Optional: Teilt dem Käufer eines Geschenks mit, dass es dem Empfänger zugestellt wurde (ohne den Code). | Optional: Teilt dem Käufer eines Geschenks mit, dass es dem Empfänger zugestellt wurde (ohne den Code). |
+| Your gift from {site_title} was used | Ihr Geschenk von {site_title} wurde eingelöst | Ihr Geschenk von {site_title} wurde eingelöst |
+| Your gift from {site_title} was delivered | Ihr Geschenk von {site_title} wurde zugestellt | Ihr Geschenk von {site_title} wurde zugestellt |
+| Your gift was used | Ihr Geschenk wurde eingelöst | Ihr Geschenk wurde eingelöst |
+| Your gift was delivered | Ihr Geschenk wurde zugestellt | Ihr Geschenk wurde zugestellt |
+| Good news: {recipient} used your gift ({product_name}) on {date}. | Gute Nachricht: {recipient} hat Ihr Geschenk ({product_name}) am {date} eingelöst. | Gute Nachricht: {recipient} hat Ihr Geschenk ({product_name}) am {date} eingelöst. |
+| Good news: your gift ({product_name}) was delivered to {recipient} on {date}. | Gute Nachricht: Ihr Geschenk ({product_name}) wurde am {date} an {recipient} zugestellt. | Gute Nachricht: Ihr Geschenk ({product_name}) wurde am {date} an {recipient} zugestellt. |
 
 ## `src/Emails/RecipientEmail.php`
 
@@ -93,16 +134,37 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 | Attach PDF | PDF anhängen | PDF anhängen |
 | Attach the voucher PDF | Gutschein-PDF anhängen | Gutschein-PDF anhängen |
 
+## `templates/emails/plain/voucher-bundle.php`
+
+| Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) |
+|---|---|---|
+| Valid until %s | Gültig bis %s | Gültig bis %s |
+| All vouchers are attached as one PDF, one page per voucher, ready to print. | Alle Gutscheine sind als ein PDF angehängt – eine Seite pro Gutschein, druckfertig. | Alle Gutscheine sind als ein PDF angehängt – eine Seite pro Gutschein, druckfertig. |
+| Download: | Download: | Download: |
+| All vouchers in your account: | Alle Gutscheine in Ihrem Konto: | Alle Gutscheine in Ihrem Konto: |
+
 ## `templates/emails/plain/voucher.php`
 
 | Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) |
 |---|---|---|
+| Correct the recipient | Empfänger korrigieren | Empfänger korrigieren |
+| Mistyped the recipient address? | Empfängeradresse vertippt? | Empfängeradresse vertippt? |
 | Value: %s | Wert: %s | Wert: %s |
 | What happens next | So geht es weiter | So geht es weiter |
 | Code: %s | Code: %s | Code: %s |
-| Valid until %s | Gültig bis %s | Gültig bis %s |
-| Download: | Download: | Download: |
 | Redeem now: | Jetzt einlösen: | Jetzt einlösen: |
+
+## `templates/emails/voucher-bundle.php`
+
+| Englisch (Quelltext) | Deutsch (DE) | Deutsch (AT) |
+|---|---|---|
+| Valid until | Gültig bis | Gültig bis |
+| Recipient | Empfänger | Empfänger |
+| Download each voucher as a PDF with the links in the table. | Laden Sie jeden Gutschein über die Links in der Tabelle als PDF herunter. | Laden Sie jeden Gutschein über die Links in der Tabelle als PDF herunter. |
+| PDF | PDF | PDF |
+| Links | Links | Links |
+| Download | Herunterladen | Herunterladen |
+| All vouchers in your account | Alle Gutscheine in Ihrem Konto | Alle Gutscheine in Ihrem Konto |
 
 ## `templates/emails/voucher.php`
 
@@ -112,6 +174,5 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 | Download ticket (PDF) | Ticket herunterladen (PDF) | Ticket herunterladen (PDF) |
 | Download voucher (PDF) | Gutschein herunterladen (PDF) | Gutschein herunterladen (PDF) |
 | Redeem now | Jetzt einlösen | Jetzt einlösen |
-| Enter the code in the cart or at checkout on %s to redeem it. | Geben Sie den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. | Geben Sie den Code im Warenkorb oder an der Kasse auf %s ein, um ihn einzulösen. |
 
-67 Texte.
+108 Texte.

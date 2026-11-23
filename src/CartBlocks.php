@@ -40,6 +40,15 @@ final class CartBlocks {
 				'schema_type'     => ARRAY_A,
 			)
 		);
+		if ( function_exists( 'woocommerce_store_api_register_update_callback' ) ) {
+			// M12-95: gift card field and store credit of the blocks (extensionCartUpdate, namespace "voucher-captain").
+			woocommerce_store_api_register_update_callback(
+				array(
+					'namespace' => self::NAMESPACE,
+					'callback'  => array( new GiftCardField( $this->repo, $this->payments, $this->credit ), 'store_api_update' ),
+				)
+			);
+		}
 	}
 
 	/** @param object $registry Automattic\WooCommerce\Blocks\Integrations\IntegrationRegistry */
@@ -62,6 +71,7 @@ final class CartBlocks {
 			'store_credit'   => null,
 			'forfeits'       => array(),
 			'promotions'     => array(),
+			'giftcard_field' => GiftCardField::block_texts(),
 		);
 		$cart = function_exists( 'WC' ) ? WC()->cart : null;
 		if ( ! $cart instanceof \WC_Cart ) {
@@ -80,11 +90,14 @@ final class CartBlocks {
 		foreach ( $cart->get_applied_coupons() as $code ) {
 			$voucher = $this->repo->get_by_code( wc_format_coupon_code( $code ) ) ?? $this->repo->get_by_code( $code );
 			if ( $voucher && $voucher->is_multi_use() ) {
+				// What is left after this order, shown as a note (not as an amount row between the discounts).
+				$remaining          = CouponManager::remaining_after_cart( $voucher, $cart, (string) $code, $this->payments->cart_payments() );
 				$data['balances'][] = array(
 					'code'      => wc_format_coupon_code( $code ),
 					/* translators: %s: voucher code */
 					'label'     => sprintf( __( 'Voucher %s balance', 'voucher-captain' ), $voucher->code ),
-					'formatted' => self::plain_price( (float) $voucher->balance, (string) $voucher->currency ),
+					'formatted' => self::plain_price( $remaining, (string) $voucher->currency ),
+					'text'      => CouponManager::remaining_balance_note( $voucher, $remaining ),
 				);
 			}
 		}
@@ -111,13 +124,14 @@ final class CartBlocks {
 			);
 		}
 		if ( $this->credit->enabled() && is_user_logged_in() ) {
-			$account = $this->credit->account( get_current_user_id() );
+			$account = $this->credit->account( get_current_user_id(), false, false ); // Read only: a GET response writes nothing.
 			if ( $account && $account->balance > 0 && ! $cart->has_discount( $account->code ) ) {
 				$data['store_credit'] = array(
 					/* translators: 1: balance, 2: link */
 					'text'       => trim( sprintf( __( 'You have %1$s store credit. %2$s', 'voucher-captain' ), self::plain_price( (float) $account->balance, (string) $account->currency ), '' ) ),
 					'link_label' => __( 'Use store credit', 'voucher-captain' ),
 					'url'        => $this->credit->apply_url(),
+					'inline'     => GiftCardField::enabled(), // M12-95: applied with extensionCartUpdate().
 				);
 			}
 		}
@@ -160,6 +174,7 @@ final class CartBlocks {
 					'code'      => $string,
 					'label'     => $string,
 					'formatted' => $string,
+					'text'      => $string,
 				)
 			),
 			'store_credit'   => array(
@@ -170,6 +185,22 @@ final class CartBlocks {
 					'text'       => $string,
 					'link_label' => $string,
 					'url'        => $string,
+					'inline'     => array(
+						'type'     => 'boolean',
+						'context'  => array( 'view', 'edit' ),
+						'readonly' => true,
+					),
+				),
+			),
+			'giftcard_field' => array(
+				'type'       => array( 'object', 'null' ),
+				'context'    => array( 'view', 'edit' ),
+				'readonly'   => true,
+				'properties' => array(
+					'label'       => $string,
+					'placeholder' => $string,
+					'button'      => $string,
+					'applied'     => $string,
 				),
 			),
 			'forfeits'       => $rows(
@@ -186,6 +217,43 @@ final class CartBlocks {
 					'label' => $string,
 				)
 			),
+		);
+	}
+
+	/**
+	 * G12: sample data for the cart and checkout blocks in the editor (the editor's preview cart carries no voucher):
+	 * one voucher payment and the remaining balance note, in the shape of cart_data().
+	 */
+	public static function preview_data(): array {
+		$code    = 'GIFT-XXXX-XXXX';
+		$voucher = new Voucher();
+		$voucher->code     = $code;
+		$voucher->currency = (string) get_woocommerce_currency();
+		return array(
+			'payments'       => array(
+				array(
+					'code'      => strtolower( $code ),
+					/* translators: %s: voucher code */
+					'label'     => sprintf( __( 'Voucher %s', 'voucher-captain' ), $code ),
+					'amount'    => (string) ( 20 * ( 10 ** wc_get_price_decimals() ) ),
+					'formatted' => self::plain_price( -20.0 ),
+				),
+			),
+			'paying_coupons' => array(),
+			'coupon_note'    => __( 'pays as voucher payment (see below)', 'voucher-captain' ),
+			'balances'       => array(
+				array(
+					'code'      => strtolower( $code ),
+					/* translators: %s: voucher code */
+					'label'     => sprintf( __( 'Voucher %s balance', 'voucher-captain' ), $code ),
+					'formatted' => self::plain_price( 30.0 ),
+					'text'      => CouponManager::remaining_balance_note( $voucher, 30.0 ),
+				),
+			),
+			'store_credit'   => null,
+			'forfeits'       => array(),
+			'promotions'     => array(),
+			'giftcard_field' => GiftCardField::block_texts(),
 		);
 	}
 

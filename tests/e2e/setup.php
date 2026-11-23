@@ -97,8 +97,93 @@ function vcap_e2e_voucher( string $type, string $usage, float $value ): string {
 	vcap()->vouchers->insert( $v );
 	return strtoupper( $v->code );
 }
-$state['gift_card']      = vcap_e2e_voucher( 'giftcard', 'balance', 20 );
-$state['single_voucher'] = vcap_e2e_voucher( 'voucher', 'single', 50 );
+// M12-101: a code of its own per test attempt (helpers.js freshCode(): index = retry), so a retried test never
+// meets a card its failed attempt already charged. Pools: block checkout with payment after tax, block checkout
+// with the card as a coupon (vcap_mpv_after_tax=no), classic redeem form, single-use voucher warning.
+$state['gift_cards']        = array();
+$state['gift_cards_coupon'] = array();
+$state['classic_cards']     = array();
+$state['single_vouchers']   = array();
+for ( $vcap_e2e_i = 0; $vcap_e2e_i < 3; $vcap_e2e_i++ ) {
+	$state['gift_cards'][]        = vcap_e2e_voucher( 'giftcard', 'balance', 20 );
+	$state['gift_cards_coupon'][] = vcap_e2e_voucher( 'giftcard', 'balance', 20 );
+	$state['classic_cards'][]     = vcap_e2e_voucher( 'giftcard', 'balance', 20 );
+	$state['single_vouchers'][]   = vcap_e2e_voucher( 'voucher', 'single', 50 );
+}
+
+// 07-new-features.spec.js (features of 1.2.0): a product, a customer and a request of its own; the products,
+// customers and codes of specs 01–06 stay as they are. The settings that change the storefront for every product
+// ("Gift / for me", "Gift card field") are switched on only for the run of that spec (.github/workflows/plugin-smoke.yml).
+// Design gallery + live preview: a voucher product with a customer-chosen amount and two published templates to
+// choose from: the two default designs, created the way the plugin does on the first admin page view (before, spec 05
+// created them in the middle of the run; now every product page shows the live preview from the start).
+wp_set_current_user( 1 );
+update_option( 'vcap_needs_default_template', 'yes' );
+( new VCAP\TemplatePostType() )->maybe_create_defaults();
+wp_set_current_user( 0 );
+$vcap_e2e_templates = get_posts( array( 'post_type' => VCAP\TemplatePostType::POST_TYPE, 'post_status' => 'publish', 'numberposts' => 2, 'orderby' => 'ID', 'order' => 'ASC', 'fields' => 'ids' ) );
+if ( count( $vcap_e2e_templates ) < 2 ) {
+	fwrite( STDERR, "Fewer than two PDF templates – the design gallery cannot be tested.\n" );
+	exit( 1 );
+}
+$state['templates'] = array_map( 'intval', $vcap_e2e_templates );
+$design             = new WC_Product_Simple();
+$design->set_name( 'E2E Design Voucher' );
+$design->set_slug( 'e2e-design-voucher' );
+$design->set_regular_price( '10' );
+$design->set_virtual( true );
+$design->set_status( 'publish' );
+$design->update_meta_data( '_vcap_enabled', 'yes' );
+$design->update_meta_data( '_vcap_type', 'giftcard' );
+$design->update_meta_data( '_vcap_usage', 'balance' );
+$design->update_meta_data( '_vcap_amount_source', 'custom' );
+$design->update_meta_data( '_vcap_custom_min', '5' );
+$design->update_meta_data( '_vcap_custom_max', '500' );
+$design->update_meta_data( '_vcap_template', (string) $state['templates'][0] );
+$design->update_meta_data( '_vcap_allowed_templates', $state['templates'] );
+$design->update_meta_data( '_vcap_builtin_fields', array( 'recipient_name', 'recipient_email', 'message' ) );
+$design->save();
+$state['design_product'] = $design->get_id();
+
+// "Redeem a gift card" field: codes of their own per attempt (0/1 classic cart, 2/3 cart block).
+$state['field_cards'] = array();
+for ( $vcap_e2e_i = 0; $vcap_e2e_i < 4; $vcap_e2e_i++ ) {
+	$state['field_cards'][] = vcap_e2e_voucher( 'giftcard', 'balance', 20 );
+}
+
+// "Add to my store credit": a customer of its own (the store credit of e2e-customer is used by 03) with gift cards
+// bought in their own order (one per attempt).
+$giftee = wp_insert_user( array( 'user_login' => 'e2e-giftee', 'user_pass' => 'e2e-Pass-123!', 'user_email' => 'e2e-giftee@example.test', 'role' => 'customer' ) );
+$state['giftee'] = (int) $giftee;
+$giftee_order    = wc_create_order( array( 'customer_id' => $giftee ) );
+$giftee_order->add_product( $goods, 1 );
+$giftee_order->set_billing_email( 'e2e-giftee@example.test' );
+$giftee_order->calculate_totals();
+$giftee_order->set_status( 'completed' );
+$giftee_order->save();
+$state['giftee_cards'] = array();
+for ( $vcap_e2e_i = 0; $vcap_e2e_i < 2; $vcap_e2e_i++ ) {
+	$code    = vcap_e2e_voucher( 'giftcard', 'balance', 12 );
+	$card    = vcap()->vouchers->get_by_code( wc_format_coupon_code( $code ) );
+	$card->order_id    = $giftee_order->get_id();
+	$card->buyer_email = 'e2e-giftee@example.test';
+	vcap()->vouchers->update( $card );
+	$state['giftee_cards'][] = $code;
+}
+
+// Vouchers → Voucher requests: one open request (as a form plugin hands it over).
+$vcap_e2e_request = vcap()->voucher_requests->submit(
+	array(
+		'reference'  => 'e2e:request:0001',
+		'kind'       => 'company_order',
+		'product_id' => $voucher->get_id(),
+		'amount'     => '25',
+		'quantity'   => 2,
+		'contact'    => array( 'company' => 'E2E GmbH', 'name' => 'Rita Request', 'email' => 'e2e-request@example.test' ),
+		'message'    => 'Two vouchers for our team, please.',
+	)
+);
+$state['voucher_request'] = is_wp_error( $vcap_e2e_request ) ? 0 : (int) $vcap_e2e_request['request_id'];
 
 file_put_contents( __DIR__ . '/.state.json', wp_json_encode( $state ) );
 echo "E2E shop prepared.\n";

@@ -4,7 +4,7 @@ namespace VCAP\Compat;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Shared scanner: Voucher Captain's scanner (Vouchers → Scanner) also recognises WP Pass Captain tickets and hands
+ * Shared scanner: Voucher Captain's scanner (Vouchers → Scanner) also recognises Pass Captain tickets and hands
  * them to Pass Captain's versioned check-in service ("wp_pass_captain_checkin_service_v1"). Voucher codes are always
  * looked up in Voucher Captain first; only codes it does not know are offered to Pass Captain. Voucher redemption and
  * ticket check-in stay separate actions with each plugin's own rules, locks, audit and capability (Pass Captain
@@ -74,7 +74,7 @@ final class PassCaptainScanner {
 		$service = self::service();
 		$base    = array(
 			'type'        => 'passcaptain',
-			'type_label'  => __( 'WP Pass Captain ticket', 'voucher-captain' ),
+			'type_label'  => __( 'Pass Captain ticket', 'voucher-captain' ),
 			'code'        => '',
 			'can_checkin' => false,
 			'admin_url'   => $service && method_exists( $service, 'admin_url' ) ? (string) $service->admin_url() : '',

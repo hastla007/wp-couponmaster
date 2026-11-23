@@ -59,6 +59,32 @@ $mails = array();
 vcap()->delivery->send_expiry_reminders();
 vcap_rem_assert( array() === array_values( array_filter( $mails, static fn( $to ) => str_contains( $to, $tag ) ) ), 'each voucher is reminded only once' );
 
+// B7: one run reminds every due voucher (batches until done, not 200 a day), skips vouchers without a valid
+// address and tries nothing while the email is disabled (no daily "delivery_failed" entries).
+$b7_tag      = strtolower( wp_generate_password( 6, false, false ) );
+$b7_vouchers = array();
+for ( $i = 0; $i < 205; $i++ ) {
+	$b7_vouchers[] = vcap_rem_voucher( "b7-{$b7_tag}-{$i}@example.com", 5 );
+}
+$b7_invalid = vcap_rem_voucher( 'not-an-address', 5 );
+$b7_backoff = vcap_rem_voucher( "b7-{$b7_tag}-backoff@example.com", 5 );
+vcap()->vouchers->log( $b7_backoff->id, 'delivery_failed', null, null, 'earlier failure' );
+update_option( 'vcap_expiry_reminder_days', 14 );
+$b7_settings = get_option( 'woocommerce_vcap_voucher_expiry_settings', array() );
+update_option( 'woocommerce_vcap_voucher_expiry_settings', array_merge( is_array( $b7_settings ) ? $b7_settings : array(), array( 'enabled' => 'no' ) ) );
+WC()->mailer()->get_emails()['VCAP_Email_Voucher_Expiry']->init_settings();
+WC()->mailer()->get_emails()['VCAP_Email_Voucher_Expiry']->enabled = 'no';
+vcap()->delivery->send_expiry_reminders();
+$b7_failed = static fn( $v ) => in_array( 'delivery_failed', array_column( vcap()->vouchers->events( $v->id ), 'event' ), true );
+vcap_rem_assert( ! $b7_failed( $b7_vouchers[0] ) && ! $b7_failed( $b7_invalid ), 'B7: with the reminder email disabled nothing is tried (no failed attempt in the history)' );
+WC()->mailer()->get_emails()['VCAP_Email_Voucher_Expiry']->enabled = 'yes';
+update_option( 'woocommerce_vcap_voucher_expiry_settings', is_array( $b7_settings ) ? $b7_settings : array() );
+$mails = array();
+vcap()->delivery->send_expiry_reminders();
+$b7_mine = array_values( array_filter( $mails, static fn( $to ) => str_contains( $to, "b7-{$b7_tag}-" ) ) );
+vcap_rem_assert( 205 === count( $b7_mine ) && ! in_array( "b7-{$b7_tag}-backoff@example.com", $b7_mine, true ), 'B7: one run reminds all 205 due vouchers (not only 200); a voucher whose mail failed within the last day waits (' . count( $b7_mine ) . ')' );
+vcap_rem_assert( ! $b7_failed( $b7_invalid ) && ! in_array( 'expiry_reminder', array_column( vcap()->vouchers->events( $b7_invalid->id ), 'event' ), true ), 'B7: a voucher without a valid address is skipped without a failed attempt' );
+
 update_option( 'vcap_expiry_reminder_days', 0 );
 remove_filter( 'pre_wp_mail', $catch, 10 );
 echo "Voucher Captain expiry reminder checks passed.\n";

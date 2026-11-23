@@ -17,19 +17,21 @@ final class CartBlocksIntegration implements IntegrationInterface {
 	}
 
 	public function initialize() {
-		wp_register_script( self::HANDLE, VCAP_URL . 'assets/js/cart-blocks.js', array( 'wc-blocks-checkout', 'wp-element', 'wp-plugins', 'wp-i18n' ), VCAP_VERSION, true );
-		wp_set_script_translations( self::HANDLE, 'voucher-captain', VCAP_PATH . 'languages' );
+		// All texts come translated from PHP (Store API data, get_script_data()): no script translations to load.
+		wp_register_script( self::HANDLE, VCAP_URL . 'assets/js/cart-blocks.js', array( 'wc-blocks-checkout', 'wp-element', 'wp-plugins' ), VCAP_VERSION, true );
 	}
 
 	public function get_script_handles() {
 		return array( self::HANDLE );
 	}
 
+	/** G12: the same script in the editor, so the cart and checkout blocks show the voucher rows there too. */
 	public function get_editor_script_handles() {
-		return array();
+		return array( self::HANDLE );
 	}
 
+	/** Sample voucher rows for the editor (wcSettings "voucher-captain_data"); nothing on the storefront. */
 	public function get_script_data() {
-		return array();
+		return array( 'preview' => is_admin() ? \VCAP\CartBlocks::preview_data() : null );
 	}
 }

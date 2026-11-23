@@ -20,6 +20,59 @@ final class OrderReturn {
 		add_action( 'admin_post_vcap_return_to_voucher', array( $this, 'handle' ) );
 		add_filter( 'vcap_event_labels', static fn( array $l ) => $l + array( CouponManager::RETURNED_EVENT => __( 'Booked back from a return', 'voucher-captain' ) ) );
 		add_filter( 'vcap_ledger_money_events', static fn( array $e ) => array_merge( $e, array( CouponManager::RETURNED_EVENT ) ) );
+		add_filter( 'woocommerce_order_fully_refunded_status', array( $this, 'keep_status_on_partial_return' ), 10, 3 );
+	}
+
+	/**
+	 * M12-02: WooCommerce sets an order to "Refunded" as soon as its money is refunded – also when a voucher paid
+	 * the rest and the customer keeps most of the goods (card 80 + PayPal 20, one item of 20 returned). "Refunded"
+	 * books the whole voucher charge back (and gives single-use vouchers back), so such an order keeps its status
+	 * while refundable items are left: an order note and a notice (Attention) say that the voucher part is booked
+	 * back on purpose with "Book back onto voucher" – or by setting the status by hand for a complete return.
+	 *
+	 * @param string|false $status   Status WooCommerce is about to set ("refunded").
+	 * @param int          $order_id Order id.
+	 * @param int          $refund_id Refund id.
+	 * @return string|false
+	 */
+	public function keep_status_on_partial_return( $status, $order_id = 0, $refund_id = 0 ) {
+		$order = $status ? wc_get_order( (int) $order_id ) : null;
+		if ( ! $order instanceof \WC_Order || $order->has_status( array( 'refunded', 'cancelled' ) ) || 'yes' !== Settings::value( 'vcap_restore_on_cancel' ) ) {
+			return $status; // Already refunded (status set by hand: WooCommerce refunds the rest), or nothing books back.
+		}
+		if ( ! $this->charged_vouchers( $order ) || $order->get_remaining_refund_items() <= 0 ) {
+			return $status;
+		}
+		/** Whether an order paid partly with vouchers keeps its status after a refund of all its money (default true). */
+		if ( ! apply_filters( 'vcap_keep_status_on_partial_return', true, $order, (int) $refund_id ) ) {
+			return $status;
+		}
+		$text = __( 'The money of this order was refunded completely, but vouchers paid the rest and refundable items are left: the order was not set to "Refunded", so the voucher charge was not booked back. Book the returned part back with "Book back onto voucher", or set the order to "Refunded" or "Cancelled" by hand if everything was returned.', 'voucher-captain' );
+		$order->add_order_note( $text );
+		Attention::add( $order->get_id(), 'partial-return', $text );
+		return false;
+	}
+
+	/** Whether the order charged a balance voucher or used a single-use voucher of this plugin (M12-02). */
+	private function charged_vouchers( \WC_Order $order ): bool {
+		if ( CouponManager::order_map( $order, '_vcap_redemptions' ) ) {
+			return true;
+		}
+		foreach ( $order->get_items( 'coupon' ) as $item ) {
+			$code = $item instanceof \WC_Order_Item_Coupon ? wc_format_coupon_code( $item->get_code() ) : '';
+			if ( '' !== $code && $this->repo->get_by_code( $code ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Name of the named lock (GET_LOCK) that serializes bookings back onto vouchers for one order, per site (see
+	 * Install::lock_name()). Public so other order paths (e.g. restoring a cancelled order) can take the same lock.
+	 */
+	public static function lock_name( int $order_id ): string {
+		return Install::lock_name( 'return_' . $order_id );
 	}
 
 	/** What can still be booked back: charged by the order minus already booked back (never negative). */
@@ -39,6 +92,7 @@ final class OrderReturn {
 		foreach ( $applied as $code => $amount ) {
 			$coupon  = function_exists( 'wc_get_coupon_id_by_code' ) ? (int) wc_get_coupon_id_by_code( (string) $code ) : 0;
 			$voucher = $coupon ? $this->repo->get_by_coupon( $coupon ) : $this->repo->get_by_code( (string) $code );
+			$voucher = $voucher ?? Reissue::voucher_of_previous_code( $this->repo, (string) $code ); // V10: code reissued since.
 			if ( ! $voucher || ! $voucher->is_multi_use() ) {
 				continue;
 			}
@@ -65,7 +119,7 @@ final class OrderReturn {
 		if ( '' === $reason ) {
 			return new \WP_Error( 'vcap_return_reason', __( 'Please enter a reason.', 'voucher-captain' ) );
 		}
-		$lock = 'vcap_return_' . $order->get_id();
+		$lock = self::lock_name( $order->get_id() );
 		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 10)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			return new \WP_Error( 'vcap_return_busy', __( 'Another booking for this order is running. Please reload the order and try again.', 'voucher-captain' ) );
 		}
@@ -120,7 +174,7 @@ final class OrderReturn {
 					/* translators: 1: amount, 2: voucher code, 3: new balance, 4: reason */
 					__( '%1$s booked back onto voucher %2$s (return), new balance %3$s. Reason: %4$s', 'voucher-captain' ),
 					wp_strip_all_tags( wc_price( $amount, array( 'currency' => $voucher->currency ) ) ),
-					$voucher->code,
+					Mask::code( $voucher->code ),
 					wp_strip_all_tags( wc_price( (float) $after->balance, array( 'currency' => $voucher->currency ) ) ),
 					$reason
 				) . ( '' !== $line ? ' (' . $line . ')' : '' ),
@@ -134,13 +188,18 @@ final class OrderReturn {
 		}
 	}
 
-	private function can(): bool {
-		return current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' );
+	/**
+	 * AP-S2-2: booking back raises a balance and changes the order – voucher managers also need WooCommerce's right to
+	 * edit orders and the right to raise voucher balances (Admin\VoucherAdmin::can_increase()).
+	 */
+	public static function can(): bool {
+		return ( current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' ) )
+			&& current_user_can( 'edit_shop_orders' ) && Admin\VoucherAdmin::can_increase();
 	}
 
 	/** Order screen (voucher box): book part of a gift card payment back onto the card. */
 	public function form( \WC_Order $order ): void {
-		if ( ! $this->can() ) {
+		if ( ! self::can() ) {
 			return;
 		}
 		$list = $this->returnable( $order );
@@ -187,17 +246,25 @@ final class OrderReturn {
 	public function handle(): void {
 		$order_id = absint( $_POST['order_id'] ?? 0 );
 		check_admin_referer( 'vcap_return_to_voucher_' . $order_id );
-		if ( ! $this->can() ) {
+		if ( ! self::can() ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
 		$order = wc_get_order( $order_id );
 		if ( ! $order instanceof \WC_Order ) {
 			wp_die( esc_html__( 'Order not found.', 'voucher-captain' ), 404 );
 		}
+		// Strictly parsed like every store credit form: "2,50" is never 250.
+		$raw    = sanitize_text_field( wp_unslash( $_POST['vcap_return_amount'] ?? '' ) );
+		$parsed = Admin\StoreCreditAdmin::parse_amount( $raw, false );
+		if ( ! $parsed['ok'] ) {
+			Flash::add( 'error', __( 'Booking back onto the voucher failed:', 'voucher-captain' ) . ' ' . Admin\StoreCreditAdmin::refusal( $raw, $parsed['error'] ) );
+			wp_safe_redirect( $order->get_edit_order_url() );
+			exit;
+		}
 		$result = $this->book_back(
 			$order,
 			sanitize_text_field( wp_unslash( $_POST['vcap_return_code'] ?? '' ) ),
-			(float) wc_format_decimal( sanitize_text_field( wp_unslash( $_POST['vcap_return_amount'] ?? '' ) ) ),
+			$parsed['value'],
 			sanitize_text_field( wp_unslash( $_POST['vcap_return_reason'] ?? '' ) ),
 			absint( $_POST['vcap_return_item'] ?? 0 )
 		);

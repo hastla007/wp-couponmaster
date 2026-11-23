@@ -16,7 +16,9 @@ final class Privacy {
 		add_action( 'admin_init', array( $this, 'policy' ) );
 	}
 
-	public function exporters( array $exporters ): array {
+	/** @param mixed $exporters What the previous filter returned (AP-Q2-6: a non-array is normalised). */
+	public function exporters( $exporters ): array {
+		$exporters = is_array( $exporters ) ? $exporters : array();
 		$exporters['voucher-captain'] = array(
 			'exporter_friendly_name' => __( 'Vouchers', 'voucher-captain' ),
 			'callback'               => array( $this, 'export' ),
@@ -24,7 +26,9 @@ final class Privacy {
 		return $exporters;
 	}
 
-	public function erasers( array $erasers ): array {
+	/** @param mixed $erasers What the previous filter returned (AP-Q2-6: a non-array is normalised). */
+	public function erasers( $erasers ): array {
+		$erasers = is_array( $erasers ) ? $erasers : array();
 		$erasers['voucher-captain'] = array(
 			'eraser_friendly_name' => __( 'Vouchers', 'voucher-captain' ),
 			'callback'             => array( $this, 'erase' ),
@@ -200,16 +204,12 @@ final class Privacy {
 		if ( $user_id <= 0 || ! function_exists( 'wc_get_orders' ) ) {
 			return array();
 		}
-		$orders = wc_get_orders(
-			array(
-				'limit'      => 500,
-				'type'       => 'shop_order',
-				'status'     => 'any',
-				'meta_query' => array( array( 'key' => Referrals::REWARDED, 'value' => (string) $user_id ) ), // phpcs:ignore WordPress.DB.SlowDBQuery
-			)
-		);
-		// Checked again here: older WooCommerce versions ignore meta_query in wc_get_orders() for some storages.
-		return array_values( array_filter( is_array( $orders ) ? $orders : array(), static fn( $o ) => $o instanceof \WC_Order && (int) $o->get_meta( Referrals::REWARDED ) === $user_id ) );
+		// From the order store in use (wc_get_orders() ignores meta_query for the classic store: it returned the 500
+		// newest orders of anyone, and rewards in older orders were never exported or erased).
+		$ids    = OrderLookup::ids_with_meta( Referrals::REWARDED, (string) $user_id, array( 'limit' => 500, 'order' => 'DESC' ) );
+		$orders = array_map( 'wc_get_order', $ids );
+		// Checked again here (the meta value of the order object is authoritative).
+		return array_values( array_filter( $orders, static fn( $o ) => $o instanceof \WC_Order && (int) $o->get_meta( Referrals::REWARDED ) === $user_id ) );
 	}
 
 	/**
@@ -252,6 +252,10 @@ final class Privacy {
 			}
 			foreach ( $this->referral_reward_orders( $user->ID ) as $order ) {
 				$reward = $order->get_meta( Referrals::REWARD );
+				$code   = is_array( $reward ) && ! empty( $reward['coupon'] ) ? (string) get_post_field( 'post_title', (int) $reward['coupon'] ) : '';
+				if ( ! self::redact_order_notes( $order->get_id(), array( $email, (string) $user->user_email ), $code ) ) {
+					$retained = true;
+				}
 				if ( is_array( $reward ) ) {
 					$reward['user']   = 0;
 					$reward['erased'] = time();
@@ -292,10 +296,52 @@ final class Privacy {
 		return array( $removed, $retained );
 	}
 
+	/**
+	 * Removes an address (and a reward code) from the notes of an order: reward notes of earlier versions named
+	 * the referrer's email address and the full code in the friend's order.
+	 *
+	 * @param string[] $emails Addresses to remove.
+	 * @param string   $code   Code to mask ('' = none).
+	 * @return bool false when a note could not be changed
+	 */
+	public static function redact_order_notes( int $order_id, array $emails, string $code = '' ): bool {
+		$emails = array_values( array_unique( array_filter( array_map( 'strval', $emails ) ) ) );
+		if ( ! $emails && '' === $code ) {
+			return true;
+		}
+		$ok    = true;
+		$notes = function_exists( 'wc_get_order_notes' ) ? wc_get_order_notes( array( 'order_id' => $order_id ) ) : array();
+		foreach ( (array) $notes as $note ) {
+			if ( ! is_object( $note ) || empty( $note->id ) ) {
+				continue;
+			}
+			$text = (string) $note->content;
+			$new  = $text;
+			foreach ( $emails as $address ) {
+				$new = (string) str_ireplace( $address, __( '[erased]', 'voucher-captain' ), $new );
+			}
+			if ( '' !== $code ) {
+				$new = (string) str_ireplace( $code, Mask::code( $code ), $new );
+			}
+			if ( $new === $text ) {
+				continue;
+			}
+			$updated = wp_update_comment( array( 'comment_ID' => (int) $note->id, 'comment_content' => $new ), true );
+			if ( false === $updated || is_wp_error( $updated ) ) {
+				$ok = false;
+			}
+		}
+		return $ok;
+	}
+
+	/** Voucher columns the eraser writes (M12-06): the personal data, never balance or status. */
+	public const ERASED_COLUMNS = array( 'recipient_email', 'recipient_name', 'message', 'fields', 'buyer_email', 'buyer_name' );
+
 	public function erase( string $email, int $page = 1 ): array {
 		$removed  = false;
 		$retained = false;
 		$vouchers = $this->repo->for_email( $email, 500 );
+		$items    = array(); // AP-S3-1: order lines whose personalisation copies go too (item id => scope).
 		foreach ( $vouchers as $voucher ) {
 			$changed = false;
 			if ( 0 === strcasecmp( $voucher->recipient_email, $email ) ) {
@@ -304,11 +350,19 @@ final class Privacy {
 				$voucher->recipient_name  = '';
 				$voucher->message         = '';
 				$voucher->fields          = array();
+				if ( $voucher->order_item_id ) {
+					$items[ $voucher->order_item_id ] = 'recipient';
+				}
 			}
 			if ( 0 === strcasecmp( $voucher->buyer_email, $email ) ) {
 				$voucher->buyer_email = '';
 				$voucher->buyer_name  = '';
-				$changed              = true;
+				// The merchant's own fields were typed by the buyer (the recipient's go with the recipient).
+				$voucher->fields = array_filter( $voucher->fields, static fn( $key ) => in_array( (string) $key, array_merge( Fields::RECIPIENT_FIELDS, array( 'delivery_date' ) ), true ), ARRAY_FILTER_USE_KEY );
+				$changed         = true;
+				if ( $voucher->order_item_id && ! isset( $items[ $voucher->order_item_id ] ) ) {
+					$items[ $voucher->order_item_id ] = 'buyer';
+				}
 			}
 			if ( ! $changed ) {
 				continue;
@@ -321,7 +375,7 @@ final class Privacy {
 				if ( $emails && ! $kept ) {
 					// An empty restriction would make a personal voucher usable by anyone: keep it restricted to an
 					// address nobody can have, until an administrator assigns a new holder.
-					$kept = array( 'erased-' . $voucher->id . '@invalid.invalid' );
+					$kept = array( VoucherRepository::erased_address( $voucher->id ) );
 				}
 				if ( count( $kept ) !== count( $emails ) || $kept !== array_values( $emails ) ) {
 					$coupon->set_email_restrictions( $kept );
@@ -329,11 +383,27 @@ final class Privacy {
 				}
 			}
 			// Remove free-text notes before clearing the lookup email, so a database failure remains retryable.
-			if ( ! $this->repo->anonymise_event_notes( $voucher->id ) || ! $this->repo->update( $voucher ) ) {
+			// M12-06: only the personal data columns – balance and status of $voucher were read before this loop and
+			// may be stale (a redemption landing meanwhile must not be undone).
+			if ( ! $this->repo->anonymise_event_notes( $voucher->id ) || ! $this->repo->update_columns( $voucher, self::ERASED_COLUMNS ) ) {
 				$retained = true;
 				continue;
 			}
 			$removed = true;
+		}
+		// AP-S3-1: the copies in the order lines (admin order screen, order emails, REST): of the vouchers above, and
+		// of lines naming the address as recipient without a voucher (unpaid or cancelled orders).
+		foreach ( Fields::items_for_recipient( $email ) as $item_id ) {
+			$items[ $item_id ] = 'recipient';
+		}
+		foreach ( $items as $item_id => $scope ) {
+			try {
+				if ( Fields::erase_item_data( Fields::voucher_item( (int) $item_id ), $scope ) ) {
+					$removed = true;
+				}
+			} catch ( \Throwable $e ) {
+				$retained = true;
+			}
 		}
 		// "Used by" entries in the history of other people's vouchers.
 		if ( $this->repo->events_noting( $email ) ) {
@@ -359,6 +429,11 @@ final class Privacy {
 				$removed = true;
 			}
 		}
+		// Promotion limits per customer: plain-text email keys of earlier versions become keyed hashes (the use
+		// keeps counting against the limit, the address is gone), also the key remembered on the orders.
+		if ( is_email( $email ) && $this->erase_promotion_keys( $email ) ) {
+			$removed = true;
+		}
 		list( $referrals_removed, $referrals_retained ) = $this->erase_referrals( $email );
 		$removed  = $removed || $referrals_removed;
 		$retained = $retained || $referrals_retained;
@@ -370,9 +445,32 @@ final class Privacy {
 		);
 	}
 
+	/** Converts the plain-text promotion usage keys of an address (see Discounts\Usage::hash_legacy_keys()). */
+	private function erase_promotion_keys( string $email ): bool {
+		global $wpdb;
+		$legacy  = 'e:' . strtolower( trim( $email ) );
+		$changed = false;
+		if ( Install::storage_ready() ) {
+			$table   = Install::tables()['usage'];
+			$changed = (bool) $wpdb->get_var( $wpdb->prepare( 'SELECT 1 FROM %i WHERE customer_key = %s LIMIT 1', $table, $legacy ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		Discounts\Usage::hash_legacy_keys( $email, 5000 );
+		if ( function_exists( 'wc_get_orders' ) ) {
+			$orders = array_map( 'wc_get_order', OrderLookup::ids_with_meta( Discounts\Usage::ORDER_KEY, $legacy, array( 'limit' => 500 ) ) );
+			foreach ( $orders as $order ) {
+				if ( $order instanceof \WC_Order && $legacy === (string) $order->get_meta( Discounts\Usage::ORDER_KEY ) ) {
+					$order->update_meta_data( Discounts\Usage::ORDER_KEY, Discounts\Usage::email_key( $email ) );
+					$order->save_meta_data();
+					$changed = true;
+				}
+			}
+		}
+		return $changed;
+	}
+
 	public function policy(): void {
 		if ( function_exists( 'wp_add_privacy_policy_content' ) ) {
-			wp_add_privacy_policy_content( __( 'Voucher Captain', 'voucher-captain' ), wp_kses_post( wpautop( implode( "\n\n", self::policy_paragraphs() ) ) ) );
+			wp_add_privacy_policy_content( Brand::name( 'privacy' ), wp_kses_post( wpautop( implode( "\n\n", self::policy_paragraphs() ) ) ) );
 		}
 	}
 
@@ -387,13 +485,13 @@ final class Privacy {
 			__( 'Vouchers, gift cards and store credit keep a history of every change of their balance (issue, payment in an order, refund, top-up, manual correction) with the date, the amount, the order number and, when a voucher is used by another customer, that customer\'s email address. Store credit is linked to your customer account. We keep this history as long as the voucher or credit can be used and as long as we are required to keep accounting records.', 'voucher-captain' ),
 			__( 'Refer a friend: if you take part, we store your personal referral code, how many friends have ordered with it and which rewards you received. A friend\'s order that used your code is linked to your customer account so that we can give you the reward and take it back if the order is cancelled or refunded.', 'voucher-captain' ),
 			__( 'When a voucher is redeemed outside the shop checkout, for example by a booking or ticket system on this website that is connected to our vouchers, we record the redemption with the connected service, the amount, the date, your customer account and the details that service passes on (for example its order or booking number).', 'voucher-captain' ),
-			__( 'Tickets: when you exchange a ticket voucher for tickets or pay for tickets with a gift card, the voucher code, the amount, your name and email address and the attendee names you enter are passed to the ticket system on this website (WP Pass Captain), which issues and sends the tickets. Its privacy information applies to the tickets.', 'voucher-captain' ),
+			__( 'Tickets: when you exchange a ticket voucher for tickets or pay for tickets with a gift card, the voucher code, the amount, your name and email address and the attendee names you enter are passed to the ticket system on this website (Pass Captain), which issues and sends the tickets. Its privacy information applies to the tickets.', 'voucher-captain' ),
+			__( 'Voucher requests: when you ask for vouchers through a form on this website (for example a company order or a personalised voucher), we store the contact details you enter (company, name, email address, phone number), your message and note, and the names, email addresses and messages of the recipients you list, so that we can check the request and issue the vouchers. No voucher is issued and no payment is taken by the form itself. When the vouchers are issued, the recipient list is removed from the request and kept only with the vouchers; when the request is taken over as a company order, the recipient list moves to that order. A rejected request is deleted at once. Requests that were never completed are deleted after 6 months, issued requests and requests taken over as a company order after 24 months.', 'voucher-captain' ),
+			__( 'Review invitations: when a voucher for a service (for example a course or an experience) is redeemed and a review plugin on this website is connected, we note that this redemption may lead to a review invitation – without your name or email address. Only when the review plugin sends the invitation does it ask us for the email address and name of the recipient (or the buyer) and the language. Only the first redemption of a voucher counts. These notes are deleted 90 days after a cancellation or refund, and at the latest after 24 months.', 'voucher-captain' ),
 			__( 'At the entrance or the counter, our staff may scan the code of your voucher or ticket. We record the time, the staff member and the result (redeemed, checked in or refused) in the voucher history.', 'voucher-captain' ),
-			__( 'To protect voucher codes against guessing, we count failed code entries per visitor for a short time window (at most 15 minutes). For this we store the counter under a hashed (pseudonymised) form of your IP address, never the address itself; the counters are deleted automatically after the window.', 'voucher-captain' ),
+			__( 'Promotion limits per customer: when a promotion may be used only a limited number of times per customer, we record each use with your customer account or, for guest orders, with a keyed hash of your email address (not the address itself), so that the limit also applies to later orders. These records are deleted together with the promotion.', 'voucher-captain' ),
+			__( 'To protect voucher codes against guessing and our server against overload, we count code entries, PDF previews and downloads per visitor for a short time window (at most one hour). For this we store the counter under a keyed hash of your IP address (made with a secret key of this website, so it cannot be turned back into the address), never the address itself. The counters are deleted by the daily cleanup, at the latest about one day after the window has ended.', 'voucher-captain' ),
 		);
-		if ( Licensing\Entitlements::required() ) {
-			$paragraphs[] = __( 'License check (premium edition): to check the license and offer updates, this website sends its address (URL), the WordPress, PHP and plugin versions and a random installation ID to the license server of the plugin vendor when the license is activated or deactivated, about twice a day and when updates are checked. The license key is sent only once, on activation, and is not stored on this website. No data about customers or orders is sent.', 'voucher-captain' );
-		}
 		return $paragraphs;
 	}
 }

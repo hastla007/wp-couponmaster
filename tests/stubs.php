@@ -63,13 +63,15 @@ function is_email( $s ) { return (bool) filter_var( (string) $s, FILTER_VALIDATE
 function absint( $n ) { return abs( (int) $n ); }
 function wp_json_encode( $v, $f = 0 ) { return json_encode( $v, $f | JSON_UNESCAPED_UNICODE ); }
 function wp_strip_all_tags( $s ) { return trim( strip_tags( (string) $s ) ); }
+function wp_is_writable( $p ) { return is_writable( (string) $p ); }
 function wp_specialchars_decode( $s, $q = ENT_NOQUOTES ) { return htmlspecialchars_decode( (string) $s, $q ); }
 function wp_unslash( $v ) { return $v; }
 function wp_slash( $v ) { return $v; }
 function wp_parse_args( $a, $d = array() ) { return array_merge( $d, (array) $a ); }
-function get_option( $k, $d = false ) { return $GLOBALS['vcap_test_options'][ $k ] ?? $d; }
+function remove_accents( $s ) { return strtr( (string) $s, array( 'ä' => 'a', 'ö' => 'o', 'ü' => 'u', 'Ä' => 'A', 'Ö' => 'O', 'Ü' => 'U', 'é' => 'e', 'è' => 'e', 'à' => 'a', 'ç' => 'c', 'ñ' => 'n', 'ß' => 'ss' ) ); }
+function get_option( $k, $d = false ) { $GLOBALS['vcap_test_option_reads'][ $k ] = ( $GLOBALS['vcap_test_option_reads'][ $k ] ?? 0 ) + 1; return $GLOBALS['vcap_test_options'][ $k ] ?? $d; }
 function update_option( $k, $v, $a = null ) { $GLOBALS['vcap_test_options'][ $k ] = $v; return true; }
-function add_option( $k, $v ) { if ( ! isset( $GLOBALS['vcap_test_options'][ $k ] ) ) { $GLOBALS['vcap_test_options'][ $k ] = $v; } }
+function add_option( $k, $v, $dep = '', $autoload = null ) { if ( array_key_exists( $k, $GLOBALS['vcap_test_options'] ?? array() ) ) { return false; } $GLOBALS['vcap_test_options'][ $k ] = $v; $GLOBALS['vcap_test_autoload'][ $k ] = $autoload; return true; }
 function get_bloginfo( $k ) { return 'Café Süß & Co'; }
 function home_url( $p = '' ) { return 'https://shop.test' . $p; }
 function admin_url( $p = '' ) { return 'https://shop.test/wp-admin/' . $p; }
@@ -93,7 +95,13 @@ function wc_format_localized_decimal( $n ) { return str_replace( '.', ',', (stri
 function wc_price( $amount, $args = array() ) { return '<span class="amount">' . number_format( (float) $amount, 2, ',', '.' ) . '&nbsp;&euro;</span>'; }
 function wc_get_product( $id ) { return null; }
 function wc_get_order( $id ) { return null; }
-function wc_format_coupon_code( $c ) { return strtolower( trim( (string) $c ) ); }
+// Like WooCommerce 11.3: html_entity_decode, sanitize_post_field( post_title, db ) (trim), wp_kses( …, 'entities' )
+// (tags removed, a bare "&" becomes "&amp;"), wc_strtolower. "B&B" → "b&amp;b".
+function wc_format_coupon_code( $c ) {
+	$v = trim( strip_tags( html_entity_decode( (string) $c, ENT_COMPAT, 'UTF-8' ) ) );
+	$v = (string) preg_replace( '/&(?![A-Za-z][A-Za-z0-9]*;|#\d+;|#x[0-9A-Fa-f]+;)/', '&amp;', $v );
+	return mb_strtolower( $v, 'UTF-8' );
+}
 function get_post_meta( $id, $k = '', $s = false ) { return $GLOBALS['vcap_test_meta'][ $id ][ $k ] ?? ''; }
 function get_posts( $a = array() ) { return array(); }
 function is_wp_error( $v ) { return $v instanceof WP_Error; }
@@ -125,6 +133,7 @@ final class VCAP_Test_Plugin {
 		$this->pdf       = new \VCAP\PdfRenderer( $this->settings );
 		$this->downloads = new class() {
 			public function signed_url( $v, $email = false ) { return 'https://shop.test/?vcap_pdf=' . $v->token; }
+			public function printed_url( $v ) { return 'https://shop.test/?vcap_pdf=' . $v->token . '&exp=0'; }
 		};
 	}
 }
@@ -157,7 +166,9 @@ if ( ! function_exists( 'wp_generate_uuid4' ) ) {
 }
 /** HTTP: $GLOBALS['vcap_test_http'] = callable( $url, $args ) returning array{code:int, body:string} or WP_Error. */
 if ( ! function_exists( 'wp_remote_request' ) ) {
-	function wp_remote_request( $url, $args = array() ) { $h = $GLOBALS['vcap_test_http'] ?? null; return $h ? $h( $url, $args ) : new WP_Error( 'http_request_failed', 'no transport' ); }
+	// A5: every request of the unit run is recorded (tests/run.php checks the list at the end); without a test
+	// transport the network is off ("no transport"), as in a shop without outgoing connections.
+	function wp_remote_request( $url, $args = array() ) { $GLOBALS['vcap_test_requests'][] = (string) $url; $h = $GLOBALS['vcap_test_http'] ?? null; return $h ? $h( $url, $args ) : new WP_Error( 'http_request_failed', 'no transport' ); }
 	function wp_remote_retrieve_response_code( $r ) { return is_array( $r ) ? (int) $r['code'] : 0; }
 	function wp_remote_retrieve_body( $r ) { return is_array( $r ) ? (string) $r['body'] : ''; }
 }
@@ -189,4 +200,11 @@ if ( ! function_exists( 'wp_remote_get' ) ) {
 	function wp_tempnam( $name = '' ) { return tempnam( sys_get_temp_dir(), 'vcap' ); }
 	function wp_parse_url( $url, $component = -1 ) { return parse_url( $url, $component ); }
 	function plugin_basename( $file ) { return basename( dirname( $file ) ) . '/' . basename( $file ); }
+}
+if ( ! function_exists( 'wp_cache_flush' ) ) {
+	// Object cache seam (M12-88): $GLOBALS['vcap_test_cache'] = [ 'supports' => bool, 'external' => bool, 'calls' => [] ].
+	function wp_cache_supports( $feature ) { return ! empty( $GLOBALS['vcap_test_cache']['supports'] ); }
+	function wp_using_ext_object_cache( $using = null ) { return ! empty( $GLOBALS['vcap_test_cache']['external'] ); }
+	function wp_cache_flush_runtime() { $GLOBALS['vcap_test_cache']['calls'][] = 'runtime'; return true; }
+	function wp_cache_flush() { $GLOBALS['vcap_test_cache']['calls'][] = 'full'; return true; }
 }

@@ -28,15 +28,50 @@ foreach ( array( 'classic' => 'e2e-classic@example.test', 'block' => 'e2e-block@
 	echo "PASS: {$flow} checkout issued voucher {$vouchers[0]->code} for {$expected} (order status {$order->get_status()}).\n";
 }
 
-// Block checkout paid partly with a gift card after tax (03-block-checkout.spec.js, vcap_mpv_after_tax=yes): goods
-// 30, card 20 as an untaxed payment line, 10 left for the gateway.
-$orders = wc_get_orders( array( 'billing_email' => 'e2e-block-giftcard@example.test', 'limit' => 1, 'orderby' => 'date', 'order' => 'DESC' ) );
-$state  = json_decode( (string) file_get_contents( __DIR__ . '/.state.json' ), true );
-if ( ! $orders ) {
-	throw new RuntimeException( 'FAIL: no block checkout order paid with the gift card found.' );
+// Orders paid partly with a 20.00 gift card (goods 30.00, 10.00 left for the gateway): the card's pool in
+// tests/e2e/setup.php, the billing email of the spec. Each must total 10, have charged its card 20 exactly once in
+// the ledger (one "committed" booking of that order) and left the card at 0 (M12-58). The card is found by the order, not by
+// a fixed code, so a retried test (fresh card per attempt, M12-101) is verified with the card it really used.
+$state = json_decode( (string) file_get_contents( __DIR__ . '/.state.json' ), true );
+$flows = array(
+	'block checkout, payment after tax'              => array( 'gift_cards', 'e2e-block-giftcard@example.test' ),
+	'block checkout, card as coupon (after tax off)' => array( 'gift_cards_coupon', 'e2e-block-giftcard-coupon@example.test' ),
+	'classic checkout, redeem form'                  => array( 'classic_cards', 'e2e-classic-redeem@example.test' ),
+);
+foreach ( $flows as $flow => list( $pool, $billing ) ) {
+	$orders = wc_get_orders( array( 'billing_email' => $billing, 'limit' => 1, 'orderby' => 'date', 'order' => 'DESC' ) );
+	if ( ! $orders ) {
+		throw new RuntimeException( "FAIL: no order of the {$flow} found ({$billing})." );
+	}
+	$order   = $orders[0];
+	$card    = null;
+	$charged = 0.0;
+	$count   = 0;
+	foreach ( (array) ( $state[ $pool ] ?? array() ) as $code ) {
+		$voucher = vcap()->vouchers->get_by_code( wc_format_coupon_code( $code ) ) ?? vcap()->vouchers->get_by_code( $code );
+		if ( ! $voucher ) {
+			continue;
+		}
+		$events = array_filter( vcap()->vouchers->events( $voucher->id ), static fn( $e ) => (int) $e['order_id'] === $order->get_id() && 'committed' === $e['event'] ); // The booking that charged the card (after its hold "reserved").
+		if ( $events ) {
+			$card    = $voucher;
+			$charged = array_sum( array_map( static fn( $e ) => (float) $e['amount'], $events ) );
+			$count   = count( $events );
+		}
+	}
+	if ( ! $card || abs( 10.0 - (float) $order->get_total() ) > 0.001 || abs( 20.0 - $charged ) > 0.001 || 1 !== $count || abs( (float) $card->balance ) > 0.001 ) {
+		throw new RuntimeException( "FAIL: the {$flow} order should total 10 and charge its gift card 20 once (balance 0), got total " . $order->get_total() . ', charged ' . $charged . ', balance ' . ( $card ? $card->balance : 'no card' ) . '.' );
+	}
+	echo "PASS: {$flow}: order total 10, gift card " . VCAP\Mask::code( $card->code ) . " charged 20 once in the ledger, balance 0.\n";
 }
-$paid = VCAP\PaymentVouchers::paid_amount( $orders[0], (string) $state['gift_card'] );
-if ( abs( 10.0 - (float) $orders[0]->get_total() ) > 0.001 || null === $paid || abs( 20.0 - $paid ) > 0.001 ) {
-	throw new RuntimeException( 'FAIL: the gift card order should total 10 with a payment line of 20, got total ' . $orders[0]->get_total() . ' and payment ' . wp_json_encode( $paid ) . '.' );
+
+// Payment after tax (vcap_mpv_after_tax=yes): the card is an untaxed payment line of 20 next to the gateway.
+$after_tax = wc_get_orders( array( 'billing_email' => 'e2e-block-giftcard@example.test', 'limit' => 1, 'orderby' => 'date', 'order' => 'DESC' ) )[0];
+$paid      = null;
+foreach ( (array) $state['gift_cards'] as $code ) {
+	$paid = $paid ?? VCAP\PaymentVouchers::paid_amount( $after_tax, (string) $code );
 }
-echo "PASS: block checkout with the gift card: payment line 20, order total 10.\n";
+if ( null === $paid || abs( 20.0 - $paid ) > 0.001 ) {
+	throw new RuntimeException( 'FAIL: the gift card order after tax should have a payment line of 20, got ' . wp_json_encode( $paid ) . '.' );
+}
+echo "PASS: block checkout with the gift card after tax: payment line 20, order total 10.\n";

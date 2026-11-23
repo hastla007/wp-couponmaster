@@ -7,7 +7,7 @@ use VCAP\Install;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Reconciliation of Voucher Captain's redemptions with WP Pass Captain's orders (same database):
+ * Reconciliation of Voucher Captain's redemptions with Pass Captain's orders (same database):
  *
  * - ticket checkout: every Pass Captain order paid (partly) by a voucher keeps a snapshot with the redemption
  *   key, amount, state and refunded share – compared with the redemption here;
@@ -64,7 +64,7 @@ final class PassCaptainReconcile {
 	 */
 	public static function unsupported_reason(): string {
 		if ( ! PassCaptain::active() ) {
-			return __( 'WP Pass Captain is not active.', 'voucher-captain' );
+			return __( 'Pass Captain is not active.', 'voucher-captain' );
 		}
 		if ( 'table' !== self::source() ) {
 			return '';
@@ -78,13 +78,13 @@ final class PassCaptainReconcile {
 		$table  = $wpdb->prefix . 'wpcap_orders';
 		$reason = '';
 		if ( $table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			$reason = __( 'This version of WP Pass Captain does not provide the order data needed for the reconciliation.', 'voucher-captain' );
+			$reason = __( 'This version of Pass Captain does not provide the order data needed for the reconciliation.', 'voucher-captain' );
 		} else {
-			$have    = array_map( 'strtolower', (array) $wpdb->get_col( "SHOW COLUMNS FROM {$table}" ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$have    = array_map( 'strtolower', (array) $wpdb->get_col( $wpdb->prepare( 'SHOW COLUMNS FROM %i', $table ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$missing = array_diff( self::COLUMNS, $have );
 			if ( $missing ) {
 				/* translators: %s: missing columns */
-				$reason = sprintf( __( 'This version of WP Pass Captain stores its orders differently (missing: %s); the reconciliation is not available.', 'voucher-captain' ), implode( ', ', $missing ) );
+				$reason = sprintf( __( 'This version of Pass Captain stores its orders differently (missing: %s); the reconciliation is not available.', 'voucher-captain' ), implode( ', ', $missing ) );
 			}
 		}
 		set_transient( 'vcap_pc_reconcile_schema', array( 'schema' => $schema, 'reason' => $reason ), DAY_IN_SECONDS );
@@ -107,7 +107,7 @@ final class PassCaptainReconcile {
 		// Fallback for Pass Captain versions without the reconciliation API.
 		global $wpdb;
 		$orders = $wpdb->prefix . 'wpcap_orders';
-		return $wpdb->get_results( $wpdb->prepare( "SELECT order_id, public_id, status, payment_status, payment_provider, provider_reference, currency, voucher_snapshot FROM {$orders} WHERE (voucher_snapshot IS NOT NULL AND voucher_snapshot <> '') OR provider_reference LIKE %s ORDER BY order_id DESC LIMIT %d", $wpdb->esc_like( 'voucher:' ) . '%', max( 1, $limit ) ) ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return $wpdb->get_results( $wpdb->prepare( "SELECT order_id, public_id, status, payment_status, payment_provider, provider_reference, currency, voucher_snapshot FROM %i WHERE (voucher_snapshot IS NOT NULL AND voucher_snapshot <> '') OR provider_reference LIKE %s ORDER BY order_id DESC LIMIT %d", $orders, $wpdb->esc_like( 'voucher:' ) . '%', max( 1, $limit ) ) ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	/** Newest orders from Pass Captain's reconciliation API, page by page, in the shape of the table rows. */
@@ -197,9 +197,10 @@ final class PassCaptainReconcile {
 				$issues[] = self::issue( 'checkout', $ref, $key, __( 'Pass Captain could not confirm the voucher payment (commit failed) – check the order.', 'voucher-captain' ) );
 			} elseif ( isset( $expected[ $pc_state ] ) && $expected[ $pc_state ] !== $row['state'] ) {
 				/* translators: 1: state in Pass Captain, 2: state in Voucher Captain */
-				$issues[] = self::issue( 'checkout', $ref, $key, sprintf( __( 'State differs: Pass Captain "%1$s", Voucher Captain "%2$s".', 'voucher-captain' ), $pc_state, $row['state'] ) );
+				$issues[] = self::issue( 'checkout', $ref, $key, sprintf( __( 'State differs: Pass Captain "%1$s", Voucher Captain "%2$s".', 'voucher-captain' ), self::state_label( $pc_state ), self::state_label( (string) $row['state'] ) ) );
 			}
-			$decimals = RedemptionService::decimals( (string) ( $o->currency ?: $row['currency'] ) );
+			$currency = (string) ( $o->currency ?: $row['currency'] );
+			$decimals = RedemptionService::decimals( $currency );
 			// amount_minor is the voucher's share in both treatments (amount_paid_by_voucher is 0 for single-purpose vouchers).
 			$pc_paid  = (int) ( $snapshot['amount_minor'] ?? 0 ) / ( 10 ** $decimals );
 			$tolerance = 0.5 / ( 10 ** $decimals );
@@ -208,7 +209,7 @@ final class PassCaptainReconcile {
 			$differs   = $single ? (float) $row['amount'] + $tolerance < $pc_paid : abs( $pc_paid - (float) $row['amount'] ) > $tolerance;
 			if ( RedemptionService::STATE_COMMITTED === $row['state'] && $differs ) {
 				/* translators: 1: amount in Pass Captain, 2: amount in Voucher Captain */
-				$issues[] = self::issue( 'checkout', $ref, $key, sprintf( __( 'Amount differs: Pass Captain %1$s, Voucher Captain %2$s.', 'voucher-captain' ), wc_format_decimal( $pc_paid, $decimals ), wc_format_decimal( (float) $row['amount'], $decimals ) ) );
+				$issues[] = self::issue( 'checkout', $ref, $key, sprintf( __( 'Amount differs: Pass Captain %1$s, Voucher Captain %2$s.', 'voucher-captain' ), \VCAP\Tickets::money_text( $pc_paid, $currency ), \VCAP\Tickets::money_text( (float) $row['amount'], $currency ) ) );
 			}
 			$pc_refunded = (int) ( $snapshot['refunded_minor'] ?? 0 ) / ( 10 ** $decimals );
 			$vc_refunded = array_sum( array_map( 'floatval', (array) ( $row['meta']['_refunds'] ?? array() ) ) );
@@ -219,15 +220,17 @@ final class PassCaptainReconcile {
 				: abs( $pc_refunded - $vc_refunded ) > $tolerance;
 			if ( $refund_differs ) {
 				/* translators: 1: refunded in Pass Captain, 2: given back in Voucher Captain */
-				$issues[] = self::issue( 'checkout', $ref, $key, sprintf( __( 'Refunds differ: Pass Captain refunded %1$s of the voucher share, Voucher Captain gave back %2$s.', 'voucher-captain' ), wc_format_decimal( $pc_refunded, $decimals ), wc_format_decimal( $vc_refunded, $decimals ) ) );
+				$issues[] = self::issue( 'checkout', $ref, $key, sprintf( __( 'Refunds differ: Pass Captain refunded %1$s of the voucher share, Voucher Captain gave back %2$s.', 'voucher-captain' ), \VCAP\Tickets::money_text( $pc_refunded, $currency ), \VCAP\Tickets::money_text( $vc_refunded, $currency ) ) );
 			}
 		}
 		// Redemptions here that point to Pass Captain without an order there (reserved or committed only).
 		$table = Install::tables()['redemptions'];
-		$keys  = $wpdb->get_col( $wpdb->prepare( "SELECT redemption_key FROM {$table} WHERE target LIKE %s AND state IN ('reserved','committed') AND created_at < %s ORDER BY id DESC LIMIT %d", $wpdb->esc_like( 'passcaptain:' ) . '%', gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS ), max( 1, $limit ) ) ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		foreach ( $keys as $key ) {
-			if ( empty( $seen[ $key ] ) && ! $this->order_exists( (string) $key ) ) {
-				$issues[] = self::issue( 'orphan', '–', (string) $key, __( 'Voucher Captain holds a redemption for Pass Captain without a matching Pass Captain order.', 'voucher-captain' ) );
+		$keys  = $wpdb->get_col( $wpdb->prepare( "SELECT redemption_key FROM %i WHERE target LIKE %s AND state IN ('reserved','committed') AND created_at < %s ORDER BY id DESC LIMIT %d", $table, $wpdb->esc_like( 'passcaptain:' ) . '%', gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS ), max( 1, $limit ) ) ) ?: array(); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$unknown = array_values( array_filter( array_map( 'strval', $keys ), static fn( $key ) => empty( $seen[ $key ] ) ) );
+		$known   = $this->orders_existing( $unknown );
+		foreach ( $unknown as $key ) {
+			if ( empty( $known[ $key ] ) ) {
+				$issues[] = self::issue( 'orphan', '–', $key, __( 'Voucher Captain holds a redemption for Pass Captain without a matching Pass Captain order.', 'voucher-captain' ) );
 			}
 		}
 		return array( 'checked' => count( $rows ), 'issues' => $issues, 'source' => self::source() );
@@ -250,21 +253,64 @@ final class PassCaptainReconcile {
 		}
 	}
 
+	/** Seconds the answer for a key without a Pass Captain order is kept (true orphans are asked again after it). */
+	public const ORPHAN_CACHE_SECONDS = 6 * HOUR_IN_SECONDS;
+
 	/**
-	 * Whether Pass Captain has an order for the key beyond the rows checked. The API looks up checkout and
-	 * exchange orders; the table fallback only exchange orders (provider reference "voucher:<key>").
+	 * Which of the keys Pass Captain has an order for beyond the rows checked. The API looks up checkout and
+	 * exchange orders, one key at a time; the table fallback only exchange orders (provider reference
+	 * "voucher:<key>"), 500 keys per query. A key found missing is remembered for ORPHAN_CACHE_SECONDS, so every
+	 * report call does not search Pass Captain's orders for each true orphan again.
+	 *
+	 * @param string[] $keys
+	 * @return array<string, bool> key => true when an order exists
 	 */
-	private function order_exists( string $key ): bool {
+	private function orders_existing( array $keys ): array {
 		global $wpdb;
 		$source = self::source();
-		if ( 'filter' === $source ) {
-			return false; // Only the supplied rows are known.
+		$found  = array();
+		if ( ! $keys || 'filter' === $source ) {
+			return $found; // Only the supplied rows are known.
 		}
+		$cache   = get_transient( 'vcap_pc_orphans' );
+		$cache   = is_array( $cache ) && ( $cache['source'] ?? '' ) === $source ? $cache : array( 'source' => $source, 'missing' => array() );
+		$missing = array_filter( (array) $cache['missing'], static fn( $until ) => (int) $until > time() );
+		$ask     = array_values( array_filter( $keys, static fn( $key ) => ! isset( $missing[ $key ] ) ) );
 		if ( 'api' === $source ) {
-			$found = call_user_func( array( self::API, 'orders' ), array( 'redemption_key' => $key, 'limit' => 1 ) );
-			return is_array( $found ) && array() !== $found;
+			foreach ( $ask as $key ) {
+				$rows          = call_user_func( array( self::API, 'orders' ), array( 'redemption_key' => $key, 'limit' => 1 ) );
+				$found[ $key ] = is_array( $rows ) && array() !== $rows;
+			}
+		} else {
+			foreach ( array_chunk( $ask, 500 ) as $chunk ) {
+				$refs = array_map( static fn( $key ) => 'voucher:' . $key, $chunk );
+				$in   = implode( ',', array_fill( 0, count( $refs ), '%s' ) );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built above.
+				foreach ( (array) $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT provider_reference FROM {$wpdb->prefix}wpcap_orders WHERE provider_reference IN ({$in})", $refs ) ) as $ref ) {
+					$found[ substr( (string) $ref, strlen( 'voucher:' ) ) ] = true;
+				}
+			}
 		}
-		return (bool) $wpdb->get_var( $wpdb->prepare( "SELECT order_id FROM {$wpdb->prefix}wpcap_orders WHERE provider_reference = %s LIMIT 1", 'voucher:' . $key ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		foreach ( $ask as $key ) {
+			if ( empty( $found[ $key ] ) ) {
+				$missing[ $key ] = time() + self::ORPHAN_CACHE_SECONDS;
+			} else {
+				unset( $missing[ $key ] );
+			}
+		}
+		set_transient( 'vcap_pc_orphans', array( 'source' => $source, 'missing' => array_slice( $missing, -5000, null, true ) ), self::ORPHAN_CACHE_SECONDS );
+		return array_filter( $found );
+	}
+
+	/** U14: a redemption state as shop staff read it ("committed" → "Confirmed"); unknown states stay as they are. */
+	public static function state_label( string $state ): string {
+		$labels = array(
+			RedemptionService::STATE_RESERVED  => __( 'Reserved', 'voucher-captain' ),
+			RedemptionService::STATE_COMMITTED => __( 'Confirmed', 'voucher-captain' ),
+			RedemptionService::STATE_RELEASED  => __( 'Released', 'voucher-captain' ),
+			'commit_failed'                    => __( 'Confirmation failed', 'voucher-captain' ),
+		);
+		return $labels[ $state ] ?? $state;
 	}
 
 	private static function issue( string $kind, string $order, string $key, string $problem ): array {

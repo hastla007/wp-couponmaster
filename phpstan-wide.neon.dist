@@ -7,7 +7,11 @@ includes:
   - phpstan-baseline.neon
 
 parameters:
-  level: 1
+  # Level 3 on purpose (checked 16.11.2026): level 4/5 reported 201/246 findings, with treatPhpDocTypesAsCertain off
+  # still 43/84 – all "always true/false" checks on values that WordPress filters, other plugins or wc_get_order()
+  # (refunds) can deliver with another type, and WooCommerce stubs stricter than WooCommerce itself
+  # (update_meta_data() with int, set_taxes( false )). No real defect among them; the defensive checks stay.
+  level: 3
   paths:
     - voucher-captain.php
     - uninstall.php
@@ -19,6 +23,14 @@ parameters:
   scanFiles:
     - vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
     - vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
-  dynamicConstantNames:
-    - VCAP_LICENSE_REQUIRED
+    # Optional Form Captain adapter (src/Integrations/FormCaptain): symbols of the Form Captain plugin.
+    - tests/stubs/form-captain.php
   reportUnmatchedIgnoredErrors: false
+  ignoreErrors:
+    # WordPress core files that only exist in a real installation (ABSPATH points into tests/ for the analysis).
+    -
+      identifier: requireOnce.fileNotFound
+      paths:
+        - src/Admin/VouchersListTable.php
+        - src/Install.php
+        - src/Integrations/FormCaptain/RequestRepository.php

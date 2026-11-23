@@ -64,4 +64,56 @@
 			</property>
 		</properties>
 	</rule>
+	<!--
+		Deliberate exceptions (checked 16.11.2026, RELEASE_CHECKLIST.md → Plugin Check warnings):
+		- Template variables are the documented template API for theme overrides ({theme}/voucher-captain/); renaming
+		  them would break existing overrides.
+		- Hooks of WooCommerce, WPML, Aelia and Pass Captain are fired on purpose for compatibility; own hooks all
+		  start with vcap_.
+		- DONOTCACHEPAGE is the constant page caches read; it cannot carry a prefix.
+	-->
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound">
+		<exclude-pattern>templates/*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound">
+		<exclude-pattern>templates/emails/*</exclude-pattern>
+		<exclude-pattern>src/Emails/*</exclude-pattern>
+		<exclude-pattern>src/CartBlocks.php</exclude-pattern>
+		<exclude-pattern>src/PaymentVouchers.php</exclude-pattern>
+		<exclude-pattern>src/Compat/*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound">
+		<exclude-pattern>src/Compat/*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound">
+		<exclude-pattern>src/Shortcodes.php</exclude-pattern>
+	</rule>
+	<!--
+		Callbacks of WordPress and WooCommerce hooks receive every argument of the hook, also the ones after the last
+		one they use; and parameter names of public methods ($class, $default, $list …) are part of the API for named
+		arguments – renaming them would break callers.
+	-->
+	<rule ref="Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed">
+		<severity>0</severity>
+	</rule>
+	<rule ref="Universal.NamingConventions.NoReservedKeywordParameterNames">
+		<severity>0</severity>
+	</rule>
+	<!-- Capabilities registered by WooCommerce and by this plugin (Install::add_caps / cashier role). -->
+	<rule ref="WordPress.WP.Capabilities">
+		<properties>
+			<property name="custom_capabilities" type="array">
+				<element value="manage_woocommerce"/>
+				<element value="edit_shop_orders"/>
+				<element value="edit_shop_coupons"/>
+				<element value="publish_shop_coupons"/>
+				<element value="edit_products"/>
+				<element value="edit_product"/>
+				<element value="view_woocommerce_reports"/>
+				<element value="vcap_manage_vouchers"/>
+				<element value="vcap_scan_tickets"/>
+				<element value="vcap_increase_balance"/>
+			</property>
+		</properties>
+	</rule>
 </ruleset>

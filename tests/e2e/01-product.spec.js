@@ -38,12 +38,12 @@ test.describe( 'Product page', () => {
 	test( 'the personalised PDF preview works with the keyboard', async ( { page, context } ) => {
 		await page.goto( '/product/e2e-voucher/' );
 		await page.fill( '#vcap-field-recipient_name', 'Vorschau Person' );
-		const button = page.getByRole( 'button', { name: /Preview voucher/i } );
+		const button = page.getByRole( 'button', { name: /Print preview/i } );
 		await expect( button ).toBeVisible();
 		await button.focus();
 		await expect( button ).toBeFocused();
 		const [ response ] = await Promise.all( [
-			context.waitForEvent( 'response', ( r ) => r.url().includes( 'admin-ajax.php' ) && 'POST' === r.request().method() ),
+			context.waitForEvent( 'response', ( r ) => ( r.url().includes( 'wc-ajax=vcap_product_preview' ) || r.url().includes( 'admin-ajax.php' ) ) && 'POST' === r.request().method() ),
 			page.keyboard.press( 'Enter' ),
 		] );
 		expect( response.status() ).toBe( 200 );

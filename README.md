@@ -1,19 +1,8 @@
 # Voucher Captain
 
-WooCommerce-Plugin für personalisierte **PDF-Gutscheine, Geschenkkarten, Guthaben und Rabattcodes**. Voucher Captain verwaltet Gutscheine und Gutschein-Einlösungen. Die Eventverwaltung, Ticketkontingente, Sitzplätze, Eventbestellungen und der Einlass gehören zu [WP Pass Captain](https://github.com/hastla007/wp-passmaster). Beide Plugins bleiben eigenständig; sind beide aktiv, verbindet sie ein versionierter Vertrag: Gutscheine und Geschenkkarten bezahlen Tickets in der Pass-Captain-Kasse, Ticketgutscheine werden gegen Tickets getauscht, der gemeinsame Scanner prüft beides ([API.md](API.md), [CONNECTORS.md](CONNECTORS.md)). Code, Namen und Gestaltung sind eigenständig.
+WooCommerce-Plugin für personalisierte **PDF-Gutscheine, Geschenkkarten, Guthaben und Rabattcodes**. Voucher Captain verwaltet Gutscheine und Gutschein-Einlösungen. Die Eventverwaltung, Ticketkontingente, Sitzplätze, Eventbestellungen und der Einlass gehören zu [Pass Captain](https://github.com/hastla007/wp-passmaster). Beide Plugins bleiben eigenständig; sind beide aktiv, verbindet sie ein versionierter Vertrag: Gutscheine und Geschenkkarten bezahlen Tickets in der Pass-Captain-Kasse, Ticketgutscheine werden gegen Tickets getauscht, der gemeinsame Scanner prüft beides ([API.md](API.md), [CONNECTORS.md](CONNECTORS.md)). Code, Namen und Gestaltung sind eigenständig.
 
-**Editionen.** Free- und Premium-Edition entstehen aus demselben Code (`bin/build.sh`, `VCAP_EDITION=free|premium`, Liste in `config/premium-features.php`, Details in [LICENSING.md](LICENSING.md)). Premium-Updates kommen vom Lizenzserver; auch die Free-Edition trägt einen `Update URI`-Header (Standard `false`, `VCAP_FREE_UPDATE_URI`), damit WordPress nie ein gleichnamiges wordpress.org-Plugin als Update anbietet.
-
-| Funktion | Free | Premium (aktive Lizenz) |
-|---|---|---|
-| PDF-Gutscheine, Designer, Personalisierung, Zustellung, Geschenkkarten mit Restwert, Kundenguthaben, Scanner, Code-Import und Code-Kampagnen, Einlöse-API, Steuerbehandlung | ja | ja |
-| Offener Gutscheinwert zum Stichtag, Einlösejournal (mit CSV), Pass-Captain-Abgleich | ja | ja |
-| Bezahlen mit Gutscheinen und Geschenkkarten in der WP-Pass-Captain-Kasse | ja | ja |
-| Aktionen und Bonusgutscheine, Freunde werben, Aufladung von Geschenkkarten | – | ja |
-| Auswertung nach Kampagnen und Partnern | – | ja |
-| Ticketgutscheine und gemeinsamer Scanner mit WP Pass Captain | – | ja |
-
-Ohne aktive Lizenz wird Verkauftes weiter abgewickelt (Einlösung, Erstattung, Rückbuchung von Aufladungen, Prämien und Bonusgutscheinen). Bestandskunden von 1.1.0 auf der Free-Edition: laufende Aktionen greifen nicht mehr, bereits verteilte Empfehlungscodes werden abgelehnt (Prämien für Bestellungen, die schon einen Code genutzt haben, werden weiter gutgeschrieben bzw. zurückgenommen), Aufladeprodukte sind nicht mehr kaufbar.
+**Kern frei.** Voucher Captain ist vollständig frei (GPL-2.0-or-later) und enthält keinen Lizenz- oder Update-Code: Alle Funktionen – auch Aktionen und Bonusgutscheine, Freunde werben, Aufladung von Geschenkkarten, Auswertung nach Kampagnen und Partnern sowie Ticketgutscheine und gemeinsamer Scanner mit Pass Captain – sind ohne Einschränkung verfügbar. Ausgelieferte Funktionen werden nie nachträglich gesperrt oder verschoben. Premiumfunktionen entstehen nur als getrenntes Add-on (`voucher-captain-pro`, eigenes Repository) über die öffentlichen Erweiterungspunkte ([API.md](API.md) → „Extension points for add-ons“, [docs/FREE-PREMIUM.md](docs/FREE-PREMIUM.md)); der Kern ruft keinen Lizenz- oder Update-Server auf.
 
 ## Funktionen
 
@@ -48,7 +37,7 @@ Eigene Platzhalter lassen sich über die Filter `vcap_placeholder_definitions` u
 
 ## Voraussetzungen
 
-WordPress 6.4+, WooCommerce 8.9+ (wird beim Laden geprüft), PHP 8.1+ (mit GD, mbstring, zip). Getestet bis WordPress 7.1 und WooCommerce 11.2.
+WordPress 7.0+, WooCommerce 11.2.2+ (wird beim Laden geprüft), PHP 8.5+ (mit GD, mbstring, zip); Datenbank MySQL 9.7+ oder MariaDB 12.3+ (ältere Server: nur Hinweis im Website-Zustand). Getestet bis WordPress 7.1 und WooCommerce 11.3.
 
 ## Installation
 
@@ -81,6 +70,13 @@ Nach der Aktivierung werden zwei Startvorlagen angelegt (Geschenkkarte A5 und Gu
 - *Erstattung als Guthaben:* nur ausdrücklich über „Als Guthaben erstatten“ in der Bestellung (nie automatisch, nicht für Gastbestellungen) und nur mit protokollierter Zustimmung des Kunden.
 - Gekaufte Gutscheine werden bei vollständiger Erstattung/Stornierung der Kaufbestellung gesperrt (*„Gutscheine bei Erstattung stornieren“*).
 
+**Missbrauchsschutz (Standard an, unter WooCommerce → Einstellungen → Gutscheine änderbar; 0 schaltet jede Grenze ab).**
+- *Wunschbetrag:* Produkte ohne eigenen Höchstbetrag sind auf *„Standard-Höchstbetrag für Wunschbeträge“* begrenzt (`vcap_custom_max_default`, Standard 500 in Shopwährung, nie unter dem Mindestbetrag des Produkts); ein eigener Höchstbetrag bleibt.
+- *Gutscheinwert je Kunde und 24 Stunden:* höchstens 1.000 (`vcap_customer_daily_limit`) – Gutscheine im Warenkorb plus in den letzten 24 Stunden bestellte (wartend, in Bearbeitung, abgeschlossen) desselben Kontos oder derselben normalisierten Rechnungs-E-Mail; die Kasse lehnt darüber ab.
+- *Haltefrist für Neukunden:* Gutscheine einer Erstbestellung über 250 (`vcap_hold_new_customer_above`) werden ausgestellt, aber erst nach 24 Stunden ab Zahlung (`vcap_hold_hours`) zugestellt und einlösbar (geplante Zustellung, Coupon bis dahin Entwurf). Neukunde = keine andere wartende/bezahlte Bestellung desselben Kontos bzw. derselben E-Mail, die älter als die Haltefrist ist. Danke-Seite, Bestellmails und Konto nennen den Termin; Code und PDF erscheinen erst danach. „Jetzt zustellen“ am Gutschein gibt früher frei.
+- *Freunde werben:* Prämie erst 14 Tage nach Zahlung der abgeschlossenen Freundesbestellung (`vcap_referral_wait_days`, geplante Aktion; Storno/Erstattung in der Frist verwirft sie), höchstens 10 Prämien je Werber in 30 Tagen (`vcap_referral_max_rewards`), keine Prämie bei Bestellsumme 0, unbezahlter Nachnahme/Vorkasse oder gleicher Rechnungs-/Lieferadresse wie der Werber (`vcap_referral_address_check`). Mindestbestellwert des Freundescodes: leer = doppelter Festrabatt; ein Festrabatt verlangt immer mehr als den Rabatt (mindestens Rabatt + 1).
+- *Bonusgutscheine:* gültig und versendet erst 14 Tage nach Zahlung (`vcap_bonus_wait_days`; bis dahin Entwurf, Gültigkeit ab diesem Tag). Eine Teilerstattung unter die Aktionsschwelle zieht einen ungenutzten Bonus zurück; ist er schon eingelöst, wird die Erstattung um den genutzten Bonus gekürzt (Filter `vcap_allow_refund_of_used_bonus`).
+
 ## Integrationen und Sicherheit
 
 - [Versionierte PHP-API und Providervertrag](API.md)
@@ -89,21 +85,56 @@ Nach der Aktivierung werden zwei Startvorlagen angelegt (Geschenkkarte A5 und Gu
 - [Connector-Plugins: Einlösung, Wiederholung, Storno, Versionierung](CONNECTORS.md)
 - [Adapter für Mehrsprachigkeit, Mehrwährung, Subscriptions und Produktfelder](ADAPTERS.md)
 - [Zustandsautomat für Reservierung, Buchung, Freigabe und Erstattung](STATE_MACHINE.md)
-- [Lizenzierung und Premium-Edition](LICENSING.md)
+- [Freier Kern und getrenntes Premium-Add-on](docs/FREE-PREMIUM.md)
 - [Steuerbehandlung je Gutscheinart](TAX.md)
 - [Release-Prozess, statische Analyse, Drittlizenzen](RELEASE.md)
 - [50-Punkte-Roadmap](ROADMAP.md)
 
 
-### Captain-Suite-Verbund: Form, Review und Pass
+### Captain-Suite-Verbund: Form, Review, Affiliate, Pass und Workflow
 
-Voucher Captain bleibt alleiniger Eigentümer von Gutscheincode, Wert, Ausgabe, Einlösung, Erstattung und Gutschein-PII. Die bestehende Ticket-Bridge bleibt die verbindliche Integration für Gutschein → Ticket; Voucher Captain ruft dafür den dokumentierten Pass-Service auf. Form Captain kann später für Firmenanfragen oder Gutschein-Personalisierung verwendet werden. Eine Formulareinsendung erzeugt weder Gutschein noch Zahlung; Ausstellung erfolgt erst nach expliziter Prüfung/Bestätigung und über den Voucher-Service.
+Voucher Captain bleibt alleiniger Eigentümer von Gutscheincode, Wert, Ausgabe, Einlösung, Erstattung und Gutschein-PII. Die bestehende Anbindung an Pass Captain bleibt die verbindliche Integration für Gutschein → Ticket; Voucher Captain ruft dafür den dokumentierten Pass-Service auf. Form Captain kann später für Firmenanfragen oder Gutschein-Personalisierung verwendet werden. Eine Formulareinsendung erzeugt weder Gutschein noch Zahlung; Ausstellung erfolgt erst nach expliziter Prüfung/Bestätigung durch einen Menschen und über den Voucher-Service. Automatisierungen wie Workflows dürfen nach den Entscheidungen D11/D11b des Inhabers (siehe [TODO.md](TODO.md)) Gutscheine ausstellen, entwerten, reaktivieren und einlösen – aber nur über die vier Gutschein-Befehle des Kerns (`vcap_command_issue()`, `vcap_command_void()`, `vcap_command_reactivate()`, `vcap_command_redeem()`, API.md → „Voucher commands“) mit festen Grenzen, Protokoll und Missbrauchsschutz, ab Werk ausgeschaltet. Erstattungen und andere Geldbewegungen bleiben Menschen vorbehalten.
 
-Review Captain ist ein separater optionaler Adapter. Ein Kauf oder die bloße Ausstellung eines Gutscheins ist kein abgeschlossenes Kundenerlebnis und löst keine Review-Einladung aus. Für Service-/Erlebnisgutscheine kann erst eine bestätigte, idempotente Einlösung als geeigneter Trigger dienen, sofern der Anbieter/Betreiber sie als tatsächliche Leistungserbringung klassifiziert. Refund/Storno, Opt-out, Frequenzlimit und Empfängerauflösung müssen berücksichtigt werden. Allgemeine Rabattcodes, Guthabenaufladungen und Shopbestellungen lösen standardmäßig keine Einladung aus. Review Captain besitzt Einladung, Versand und Review; Voucher Captain liefert nur die stabile Einlösungsreferenz über den versionierten PHP-Vertrag.
+Review Captain ist ein separater optionaler Adapter. Ein Kauf oder die bloße Ausstellung eines Gutscheins ist kein abgeschlossenes Kundenerlebnis und löst keine Review-Einladung aus. Für Service-/Erlebnisgutscheine kann erst eine bestätigte, idempotente Einlösung als geeigneter Trigger dienen, sofern der Anbieter/Betreiber sie als tatsächliche Leistungserbringung klassifiziert. Refund/Storno, Opt-out, Frequenzlimit und Empfängerauflösung müssen berücksichtigt werden. Allgemeine Rabattcodes, Guthabenaufladungen und Shopbestellungen lösen standardmäßig keine Einladung aus. Review Captain besitzt Einladung, Versand und Review. Ein Adapter darf aus dem Einlöseereignis nur die stabile Referenz (`voucher_id`, `redemption_key`, Zeitpunkt, Kanal) übernehmen: Das PHP-Ereignis `vcap_voucher_redeemed` übergibt heute zusätzlich den Gutscheincode und die Benutzer-ID (siehe Tabelle unten); beides darf den Adapter nicht verlassen.
 
 Affiliate Captain kann Verkauf/Erstattung über seinen bestehenden Verkaufsquellenvertrag verarbeiten. Ein Voucher-Ereignis darf nicht parallel eine zweite Provision neben dem WooCommerce-Auftrag erzeugen; die Quelle und Idempotenz müssen vor Aktivierung des Connectors festgelegt werden. Aggregierte Review-Auswertung ist ein späterer, read-only Ausbau und darf weder Kunden-/Review-PII noch provisionswirksame Änderungen enthalten. Alle Erweiterungen bleiben optional und vermeiden direkte Tabellenzugriffe.
 
+**Stand im Kern (1.2.0, Details in [API.md → Captain Suite](API.md#captain-suite-since-120)):**
 
+- *Review-Quelle v1* (`vcap_review_source_v1`): Nur Gutscheine, deren Produkt „Einlösung bestätigt eine Leistung (für Bewertungseinladungen)“ hat (Standard aus), und nur Einlösungen an der Kasse (Scanner, „Als eingelöst markieren (Laden)“) – externe Einlösungen nur für ausdrücklich registrierte Ziel-Präfixe – melden `vcap_review_redemption_eligible`; Storno der Kasseneinlösung, Erstattung der externen Einlösung oder Annullierung des Gutscheins melden `vcap_review_redemption_revoked`. Stabile Referenz je Einlösung, Wiederholungen ohne Duplikat, Payload ohne Code, Namen, E-Mail und Betrag. Die Adresse gibt nur `recipient()` an Gutschein-/Shopverwalter oder Hintergrundläufe heraus (Opt-out-Filter `vcap_review_opted_out`). Ohne lauschendes Review-Plugin wird nichts gespeichert.
+- *Gutschein-Anfragen v1* (`vcap_voucher_request_service_v1`): Ein Formular-Plugin übergibt Firmenbestellung oder Personalisierungswunsch mit `submit()`; daraus entsteht nur eine Anfrage unter *Gutscheine → Gutschein-Anfragen*. Gutscheine entstehen erst, wenn ein Verwalter sie dort ausdrücklich ausstellt (Verkauf oder kostenlos ist bewusst zu wählen) – über den vorhandenen Ausstellweg, idempotent je Gutschein. Keine Zahlung, kein Angebot, kein Lesen fremder Einträge.
+- *Affiliate-Deduplizierung* (heutige Regel, [ADAPTERS.md 5](ADAPTERS.md#5-wp-affiliate-captain-partner-programme)): Provision entsteht nur an WooCommerce-Bestellungen, die Affiliate Captain selbst erfasst. Voucher Captain meldet keine eigenen Verkaufs-, Einlösungs-, Review- oder Anfrageereignisse an Affiliate Captain.
+
+
+- Der Kern kennt weder Lizenzen noch ein „Pro“ eines anderen Plugins. Er prüft höchstens, ob ein Plugin vorhanden und kompatibel ist ([docs/FREE-PREMIUM.md](docs/FREE-PREMIUM.md)).
+- Gutscheinzustand, Guthaben und Journal ändern sich nur über die Services von Voucher Captain ([API.md](API.md)), nie durch direkte Tabellenzugriffe.
+- Ein künftiger Ereignisumschlag für andere Plugins oder Systeme lässt weg, was die heutigen PHP-Hooks für Code im selben WordPress mitgeben: Gutscheincode, Token und Download-Links, PDF, E-Mail-Adressen, Namen, Nachricht, eigene Feldwerte und – solange die Spezifikation nichts anderes festlegt – die Benutzer-ID. Übrig bleiben stabile IDs (`voucher_id`, `redemption_key`, `order_id`), Status, Betrag, Währung, Kanal, Quelle und Zeitpunkt.
+- Die PHP-Hooks selbst bleiben unverändert (Vertrag v1, nur additive Änderungen, [CONNECTORS.md](CONNECTORS.md) → 6.).
+
+**Was der Kern heute ausgibt** (PHP-Actions im selben WordPress; vollständige Liste mit Fundstellen: [docs/HOOKS.md](docs/HOOKS.md); Zeitpunkt nach COMMIT: [CONNECTORS.md](CONNECTORS.md) → „Event timing“). Ein `Voucher`-Objekt enthält immer Code, Token, Käufer- und Empfängerdaten.
+
+| Hook | Seit | Wann | Argumente |
+|---|---|---|---|
+| `vcap_vouchers_issued` | 1.0.0 | Gutscheine einer Bestellung wurden ausgestellt | `Voucher[]`, `WC_Order` |
+| `vcap_voucher_issued_standalone` | 1.2.0 | Gutschein ohne Bestellung ausgestellt (`issue_standalone()`) | `Voucher`, Argumente des Aufrufs |
+| `vcap_voucher_created` | 1.0.0 | Gutscheinzeile angelegt | `Voucher` |
+| `vcap_voucher_updated` | 1.0.0 | Gutschein gespeichert (jede Änderung) | `Voucher` |
+| `vcap_voucher_deleted` | 1.2.0 | Gutschein wieder entfernt, weil die Ausstellung scheiterte | `Voucher` |
+| `vcap_voucher_delivered` | 1.0.0 | E-Mail an alle Empfänger zugestellt | `Voucher`, E-Mail-Adressen |
+| `vcap_voucher_delivery_given_up` | 1.2.0 | Zustellung nach wiederholten Fehlern aufgegeben | `Voucher`, Zahl der Fehlversuche |
+| `vcap_voucher_bounced` | 1.2.0 | Gutschein-E-Mail kam zurück | `Voucher`, Rolle, Grund |
+| `vcap_voucher_redeemed` | 1.1.0 | Einlösung abgeschlossen (Shop, Schalter oder Einlöse-API) | Array: `voucher_id`, `code`, `user_id`, `amount`, `currency`, `order_id`, `channel` (`shop`, `counter`, `external`), `committed_at`, `source`, `redemption_key`, `target`; am Schalter zusätzlich `till`, `receipt`; über die Einlöse-API zusätzlich `state`, `balance_after`, `expires_at`, `created_at`, `meta` |
+| `vcap_redemption_reserved` | 1.1.0 | Gutschein für eine externe Einlösung reserviert | Array wie bei der Einlöse-API (mit `code`, `user_id`) |
+| `vcap_redemption_released` | 1.1.0 | Reservierung freigegeben oder abgelaufen | dasselbe Array, `bool $expired` |
+| `vcap_redemption_refunded` | 1.1.0 | Abgeschlossene externe Einlösung ganz oder teilweise erstattet | dasselbe Array, zurückgebuchter Betrag |
+| `vcap_redemption_reversed` | 1.2.0 | Schaltereinlösung storniert | Gutschein-ID, Journal-ID, Betrag, Grund |
+| `vcap_voucher_event` | 1.0.0 | Journaleintrag geschrieben, z. B. `issued`, `redeemed`, `voided`, `reactivated`, `expired`, `delivery_failed` | Gutschein-ID, Ereignis, Betrag, Restwert, Notiz als Text, Bestell-ID, Quelle, Benutzer-ID (die letzten beiden seit 1.2.0) |
+| `vcap_voucher_expired` | 1.2.0 | Tägliche Wartung hat abgelaufene Gutscheine markiert | `Voucher[]` (je Stapel) |
+| `vcap_voucher_reissued` | 1.2.0 | Gutschein mit neuem Code neu ausgestellt | `Voucher`, alter Code |
+| `vcap_store_credit_changed` | 1.1.0 | Kundenguthaben geändert | Benutzer-ID, Betrag, Saldo, Ereignis, Grund, Bestell-ID |
+| `vcap_gift_card_topped_up` | 1.2.0 | Geschenkkarte durch eine Bestellung aufgeladen | `Voucher`, Betrag, `WC_Order`, Bestellposition |
+
+Für Widerruf und Reaktivierung gibt es kein eigenes Ereignis; sie erscheinen als `voided` bzw. `reactivated` in `vcap_voucher_event` und als `vcap_voucher_updated`. Eine Ereignis-ID, ein Ausgangspuffer (Outbox) und eine Zustellung an andere Systeme (Webhooks) gibt es im Kern nicht.
 
 ## Entwicklung
 

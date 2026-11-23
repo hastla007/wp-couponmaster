@@ -28,6 +28,14 @@ Tastatur, Bildschirm nicht ansehen; Sprache der Seite Deutsch.
 Befunde mit Schweregrad (blockierend / erschwerend / kosmetisch) eintragen; blockierende vor dem Release beheben und
 in `tests/e2e/06-screen-reader.spec.js` als Regressionstest ergänzen.
 
+### Gutschein-PDF
+
+Das PDF ist ein Druckdokument und **nicht getaggt** (dompdf erzeugt kein Tagged PDF/PDF/UA): Screenreader lesen den
+Text in der Reihenfolge der Ebenen, ohne Überschriften- oder Lesereihenfolge-Struktur; QR-Code und Barcode haben keinen
+Alternativtext. Gesetzt sind der Dokumenttitel „Produkt – Shop“ (nie der Gutscheincode) und die Sprache (`lang` aus der
+Website- bzw. Bestellsprache). Barrierefreie Alternative: dieselben Angaben (Code, Wert, Gültigkeit, Einlösehinweise) stehen
+als HTML in der Gutschein-E-Mail und unter *Mein Konto → Gutscheine*.
+
 | Release | Geprüft von | Datum | NVDA-Version / Browser | VoiceOver / macOS | Ergebnis |
 |---|---|---|---|---|---|
 | | | | | | ☐ freigegeben |

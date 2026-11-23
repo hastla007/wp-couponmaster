@@ -54,10 +54,15 @@
 		<custom-field action="copy">_vcap_preview</custom-field>
 		<custom-field action="copy">_vcap_builtin_fields</custom-field>
 		<custom-field action="copy">_vcap_message_maxlength</custom-field>
+		<custom-field action="copy">_vcap_message_maxlines</custom-field>
+		<custom-field action="copy">_vcap_allowed_templates</custom-field>
+		<custom-field action="copy">_vcap_physical</custom-field>
+		<custom-field action="copy">_vcap_review_service</custom-field>
 		<custom-field action="copy">_vcap_tax_treatment</custom-field>
 		<custom-field action="copy">_vcap_code_pool_low</custom-field>
 		<custom-field action="copy">_vcap_code_pool_empty</custom-field>
 		<custom-field action="copy">_vcap_transferable</custom-field>
+		<custom-field action="copy">_vcap_keep_rest</custom-field>
 		<custom-field action="translate">_vcap_redemption_terms</custom-field>
 		<custom-field action="copy">_vcap_topup</custom-field>
 	</custom-fields>
@@ -76,7 +81,25 @@
 			<key name="intro" />
 			<key name="additional_content" />
 		</key>
+		<key name="woocommerce_vcap_voucher_bundle_settings">
+			<key name="subject" />
+			<key name="heading" />
+			<key name="intro" />
+			<key name="additional_content" />
+		</key>
 		<key name="woocommerce_vcap_voucher_expiry_settings">
+			<key name="subject" />
+			<key name="heading" />
+			<key name="intro" />
+			<key name="additional_content" />
+		</key>
+		<key name="woocommerce_vcap_gift_delivered_settings">
+			<key name="subject" />
+			<key name="heading" />
+			<key name="intro" />
+			<key name="additional_content" />
+		</key>
+		<key name="woocommerce_vcap_gift_used_settings">
 			<key name="subject" />
 			<key name="heading" />
 			<key name="intro" />

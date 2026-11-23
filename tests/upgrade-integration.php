@@ -10,9 +10,9 @@
  *   (install the current release again, then:)
  *   wp eval-file tests/upgrade-integration.php verify    – also the use written during the rollback is counted
  *
- *   verify <edition>   additionally checks the edition of the installed ZIP (free | premium | development)
- *   wp eval-file tests/upgrade-integration.php edition premium|free – same version, other edition ZIP installed over
- *                                                         it (free → premium and back): data, schema, edition
+ *
+ *   verify also checks that the installed ZIP is the free core (docs/FREE-PREMIUM.md): no "Update URI" header, no
+ *   licensing code, no license data of earlier builds left.
  *
  * The setup step only uses APIs that the previous release has as well (1.1.0: no VCAP\Claim yet – the claim part
  * is left out there).
@@ -56,6 +56,8 @@ if ( 'setup' === $mode ) {
 		$vouchers[] = $v->id;
 	}
 	vcap()->vouchers->log( $vouchers[0], 'redeemed', 30, 50, 'upgrade fixture', 4242 );
+	// A ledger note that is an address (WooCommerce "used by"): schema 1.5 finds it through actor_email_hash.
+	vcap()->vouchers->log( $vouchers[0], 'resent', null, null, 'upgrade-used-by@example.com' );
 	$wpdb->update( $tables['vouchers'], array( 'balance' => 50 ), array( 'id' => $vouchers[0] ) );
 
 	$promo = wp_insert_post( array( 'post_type' => 'vcap_discount', 'post_status' => 'publish', 'post_title' => 'Upgrade fixture promotion' ) );
@@ -85,35 +87,12 @@ if ( 'setup' === $mode ) {
 
 vcap_up_assert( ! empty( $fixture['vouchers'] ), 'fixture data from the previous release exists' );
 
-/** The installed ZIP is the expected edition; release editions carry an "Update URI" (no WordPress.org updates). */
-function vcap_up_edition( string $expected ): void {
-	if ( '' === $expected ) {
-		return;
-	}
-	$edition = class_exists( 'VCAP\Licensing\Entitlements' ) ? VCAP\Licensing\Entitlements::edition() : 'development';
-	vcap_up_assert( $expected === $edition, "the installed ZIP is the {$expected} edition" );
-	if ( 'development' !== $expected ) {
-		$uri = (string) get_file_data( VCAP_FILE, array( 'uri' => 'Update URI' ) )['uri'];
-		vcap_up_assert( '' !== $uri, "the {$expected} edition has the header Update URI ({$uri})" );
-	}
-	if ( 'premium' === $expected ) {
-		vcap_up_assert( in_array( 'promotions', VCAP\Licensing\Entitlements::locked(), true ), 'premium without an activated license: the premium features are locked' );
-	}
-}
-
-if ( 'edition' === $mode ) {
-	// Same version, other edition ZIP installed over it: nothing to migrate, nothing lost.
-	vcap_up_edition( (string) ( $args[1] ?? '' ) );
-	vcap_up_assert( VCAP_DB_VERSION === get_option( 'vcap_db_version' ) && array() === VCAP\Install::verify_schema(), 'the schema is unchanged and complete' );
-	$card   = vcap()->vouchers->get( (int) $fixture['vouchers'][0] );
-	$single = vcap()->vouchers->get( (int) $fixture['vouchers'][1] );
-	vcap_up_assert( $card && 50.0 === (float) $card->balance && $single && 25.0 === (float) $single->balance, 'vouchers and balances are kept across the edition change' );
-	vcap_up_assert( (int) $fixture['uses'] === VCAP\Discounts\Usage::count( (int) $fixture['promo'] ), 'promotion uses are kept across the edition change' );
-	if ( '' !== (string) $fixture['claim'] ) {
-		vcap_up_assert( ! VCAP\Claim::take( (string) $fixture['claim'] ), 'a claim stays taken across the edition change' );
-	}
-	echo "Voucher Captain edition change checks passed.\n";
-	return;
+/** The installed ZIP is the free core: no "Update URI" header, no license gate, no license data of earlier builds. */
+function vcap_up_free_core(): void {
+	$uri = (string) get_file_data( VCAP_FILE, array( 'uri' => 'Update URI' ) )['uri'];
+	vcap_up_assert( '' === $uri && ! defined( 'VCAP_EDITION' ) && ! class_exists( 'VCAP\Licensing\Entitlements', false ) && ! is_dir( VCAP_PATH . 'src/Licensing' ), 'the installed ZIP is the free core (no Update URI header, no license gate)' );
+	$left = array_filter( VCAP\Install::LEGACY_LICENSE_OPTIONS, static fn( $o ) => false !== get_option( $o ) );
+	vcap_up_assert( ! $left && ! wp_next_scheduled( VCAP\Install::LEGACY_LICENSE_HOOK ), 'no license data of earlier builds is left' );
 }
 
 if ( 'rollback' === $mode ) {
@@ -127,7 +106,7 @@ if ( 'rollback' === $mode ) {
 }
 
 // verify: the plugin booted (maybe_upgrade ran under its lock) – schema and data.
-vcap_up_edition( (string) ( $args[1] ?? '' ) );
+vcap_up_free_core();
 vcap_up_assert( VCAP_DB_VERSION === get_option( 'vcap_db_version' ) && version_compare( VCAP_DB_VERSION, (string) $fixture['db_version'], '>' ), 'the database is upgraded from ' . $fixture['db_version'] . ' to ' . VCAP_DB_VERSION );
 vcap_up_assert( array() === VCAP\Install::verify_schema() && '' === (string) get_option( VCAP\Install::SCHEMA_ERROR_OPTION, '' ), 'the upgraded schema is complete' );
 vcap_up_assert( ! $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name = %s", VCAP\Install::UPGRADE_LOCK ) ), 'the upgrade lock was given back' );
@@ -142,4 +121,10 @@ if ( '' !== (string) $fixture['claim'] ) {
 	vcap_up_assert( ! VCAP\Claim::take( (string) $fixture['claim'] ), 'a claim taken by the previous release stays taken' );
 }
 vcap_up_assert( ! $wpdb->get_var( $wpdb->prepare( "SELECT option_id FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( '_vcap_claim_' ) . '%' ) ), 'no claim options are left' );
+if ( version_compare( VCAP_DB_VERSION, '1.5.0', '>=' ) ) {
+	// Schema 1.5: ledger notes of earlier versions get their address hash (migration, then the daily maintenance).
+	VCAP\Install::hash_event_notes( 10.0 );
+	$noted = vcap()->vouchers->events_noting( 'upgrade-used-by@example.com' );
+	vcap_up_assert( 1 <= count( $noted ) && hash( 'sha256', 'upgrade-used-by@example.com' ) === $wpdb->get_var( $wpdb->prepare( "SELECT actor_email_hash FROM {$tables['events']} WHERE id = %d", (int) $noted[0]['id'] ) ), 'ledger notes of the previous release are found through their address hash' ); // phpcs:ignore
+}
 echo "Voucher Captain upgrade checks passed.\n";

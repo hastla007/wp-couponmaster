@@ -1,6 +1,6 @@
 <?php
 /**
- * Voucher Captain as voucher provider of WP Pass Captain (both plugins active).
+ * Voucher Captain as voucher provider of Pass Captain (both plugins active).
  *   wp eval-file tests/passcaptain-integration.php
  */
 
@@ -198,6 +198,8 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	$plain_page = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'publish', 'post_title' => 'About us', 'post_content' => 'Hello' ) );
 	update_option( 'vcap_redeem_page_id', $plain_page );
 	vcap_pc_assert( VCAP\Compat\PassCaptainTickets::sells_ticket_vouchers() && str_contains( VCAP\Shortcodes::redeem_page_problem(), 'About us' ), 'a redeem page without the redeem form is reported while ticket vouchers are sold' );
+	$d14_health = ( new VCAP\Health() )->test_redeem_page();
+	vcap_pc_assert( 'recommended' === $d14_health['status'] && str_contains( wp_json_encode( $d14_health ), 'About us' ), 'D14: Site Health learns through vcap_redeem_page_needed that ticket vouchers need the redeem page', $d14_health['status'] );
 	update_option( 'vcap_redeem_page_id', $redeem_page );
 	vcap_pc_assert( '' === VCAP\Shortcodes::redeem_page_problem(), 'a redeem page with the form is fine' );
 	delete_option( 'vcap_redeem_page_id' );
@@ -300,6 +302,23 @@ if ( class_exists( 'PassCaptain\\Integrations\\Vouchers\\TicketService' ) ) {
 	}
 	remove_filter( 'vcap_passcaptain_ticket_target', $give, 10 );
 	vcap_pc_assert( is_wp_error( vcap()->passcaptain_tickets->exchange( vcap_pc_voucher( 'single', 10 )->code ) ), 'vouchers without a ticket target are not exchanged' );
+
+	// S11: an open ticket reservation is continued only by the same caller for the same address (or by staff).
+	$s11      = vcap_pc_voucher( 'single', 20 );
+	$s11_give = static fn( $t, $v ) => $v->id === $s11->id ? array( 'ticket_type_id' => $full_type, 'quantity' => 1 ) : $t;
+	add_filter( 'vcap_passcaptain_ticket_target', $s11_give, 10, 2 );
+	wp_set_current_user( 0 );
+	vcap()->redemptions->reserve( $s11->code, array( 'key' => VCAP\Compat\PassCaptainTickets::key( $s11 ), 'target' => 'passcaptain:ticket:' . $full_type, 'user_id' => 0, 'meta' => array( 'email' => 's11-holder@example.com', 'tickets' => 1 ) ) );
+	$s11_other = wp_create_user( 's11-other-' . wp_generate_password( 5, false ), wp_generate_password(), 's11-other-' . wp_generate_password( 5, false ) . '@example.com' );
+	wp_set_current_user( $s11_other );
+	$s11_taken = vcap()->passcaptain_tickets->exchange( $s11->code, array( 'recipient_email' => 's11-thief@example.com' ) );
+	wp_set_current_user( 0 );
+	$s11_guest = vcap()->passcaptain_tickets->exchange( $s11->code, array( 'recipient_email' => 's11-thief@example.com' ) );
+	$s11_still = vcap()->redemptions->get( VCAP\Compat\PassCaptainTickets::key( $s11 ) );
+	$s11_own   = vcap()->passcaptain_tickets->exchange( $s11->code, array( 'recipient_email' => 's11-holder@example.com' ) );
+	remove_filter( 'vcap_passcaptain_ticket_target', $s11_give, 10 );
+	vcap_pc_assert( is_wp_error( $s11_taken ) && 'vcap_reserved' === $s11_taken->get_error_code() && is_wp_error( $s11_guest ) && 'reserved' === ( $s11_still['state'] ?? '' ), 'S11: another customer or a guest with another address cannot continue an open ticket reservation (conflict, nothing issued)', array( $s11_taken, $s11_guest ) );
+	vcap_pc_assert( is_array( $s11_own ) && 's11-holder@example.com' === $s11_own['email'], 'S11: the same caller with the same address continues it', $s11_own );
 
 	// "Customer chooses the date": the voucher names an event; the customer picks one of its upcoming dates.
 	if ( method_exists( VCAP\Compat\PassCaptainTickets::service(), 'options' ) ) {

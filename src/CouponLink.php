@@ -20,6 +20,7 @@ final class CouponLink {
 		// code entry points, independently of the link setting.
 		( new CouponGuard() )->register();
 		add_action( 'wp_loaded', array( $this, 'handle_request' ), 30 );
+		add_action( 'wp_loaded', array( $this, 'handle_redeem_form' ), 31 );
 		add_action( 'wp_loaded', array( $this, 'no_cache_while_pending' ), 40 );
 		add_action( 'woocommerce_add_to_cart', array( $this, 'apply_pending' ), 30, 0 );
 		add_action( 'woocommerce_cart_loaded_from_session', array( $this, 'apply_pending' ), 30, 0 );
@@ -97,18 +98,18 @@ final class CouponLink {
 		if ( ! function_exists( 'WC' ) || ! WC()->session ) {
 			return false;
 		}
-		if ( Plugin::rate_limited( 'couponlink', 20, 600, 10 * MINUTE_IN_SECONDS, false ) ) {
-			wc_add_notice( __( 'Too many voucher links opened. Please try again later.', 'voucher-captain' ), 'error' );
+		if ( CodeLookup::begin() ) {
+			wc_add_notice( CodeLookup::limited_message(), 'error' );
 			return false;
 		}
-		$code = wc_format_coupon_code( sanitize_text_field( $raw ) );
-		if ( '' === $code || strlen( $code ) > 100 || ! wc_get_coupon_id_by_code( $code ) ) {
-			Plugin::rate_limit_failure( 'couponlink', 10 * MINUTE_IN_SECONDS );
+		$code = wc_format_coupon_code( CodeLookup::code_input( sanitize_text_field( $raw ) ) ); // M12-99: code#PIN.
+		if ( ! CodeLookup::confirms( $code ) ) {
+			CodeLookup::failed();
 			wc_add_notice( __( 'This voucher link is not valid.', 'voucher-captain' ), 'error' );
 			return false;
 		}
-		Plugin::rate_limit_success( 'couponlink', 10 * MINUTE_IN_SECONDS );
-		if ( ! WC()->session->has_session() ) {
+		CodeLookup::found();
+		if ( method_exists( WC()->session, 'has_session' ) && ! WC()->session->has_session() && method_exists( WC()->session, 'set_customer_session_cookie' ) ) {
 			WC()->session->set_customer_session_cookie( true ); // Guests need a session to keep the code.
 		}
 		WC()->session->set( self::SESSION_KEY, $code );
@@ -135,6 +136,44 @@ final class CouponLink {
 		}
 	}
 
+	/** Form field and nonce action of the "Redeem" button of a balance check (M12-93). */
+	public const REDEEM_FIELD = 'vcap_redeem_code';
+	public const REDEEM_NONCE = 'vcap_redeem_in_cart';
+
+	/** Whether a checked voucher can be put into the cart by code (usable in the shop, no store credit or ticket). */
+	public static function redeemable_in_cart( Voucher $voucher ): bool {
+		return Voucher::STATUS_ACTIVE === $voucher->status && ! $voucher->is_expired() && 'credit' !== $voucher->type && ! $voucher->is_ticket()
+			&& $voucher->coupon_id > 0 && Channels::allowed( $voucher, Channels::SHOP ) && ( ! $voucher->is_multi_use() || $voucher->balance > 0 );
+	}
+
+	/**
+	 * M12-93: the "Redeem" button under a balance check result: posts the code to the cart, where it is applied as
+	 * soon as the cart has products (the same way as a coupon link, also with coupon links switched off).
+	 */
+	public static function redeem_button( string $code ): string {
+		return '<form method="post" class="vcap-redeem-in-cart" action="' . esc_url( wc_get_cart_url() ) . '">'
+			. wp_nonce_field( self::REDEEM_NONCE, '_vcap_redeem_nonce', false, false )
+			. '<input type="hidden" name="' . esc_attr( self::REDEEM_FIELD ) . '" value="' . esc_attr( $code ) . '" />'
+			. '<button type="submit" class="' . esc_attr( Shortcodes::button_class() ) . '">' . esc_html__( 'Redeem', 'voucher-captain' ) . Shortcodes::voucher_suffix( Mask::code( $code ) ) . '</button>'
+			. '</form>';
+	}
+
+	/** The "Redeem" button was sent: remember the code, apply it (or wait for products) and show the cart. */
+	public function handle_redeem_form(): void {
+		if ( is_admin() || ! isset( $_POST[ self::REDEEM_FIELD ] ) || ! is_string( $_POST[ self::REDEEM_FIELD ] ) ) {
+			return;
+		}
+		if ( ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['_vcap_redeem_nonce'] ?? '' ) ), self::REDEEM_NONCE ) ) {
+			return;
+		}
+		if ( $this->capture( sanitize_text_field( wp_unslash( $_POST[ self::REDEEM_FIELD ] ) ) ) ) {
+			$this->apply_pending();
+		}
+		Shortcodes::no_cache();
+		wp_safe_redirect( wc_get_cart_url() );
+		exit;
+	}
+
 	private function waiting_notice( string $code ): string {
 		return self::waiting_text( $code );
 	}
@@ -142,6 +181,6 @@ final class CouponLink {
 	/** "The voucher …ABCD will be applied …": the code masked, a notice may end up in a page cache. */
 	public static function waiting_text( string $code ): string {
 		/* translators: %s: masked voucher code, e.g. "…7QX2" */
-		return sprintf( __( 'The voucher %s will be applied as soon as you add products to your cart.', 'voucher-captain' ), Downloads::masked_code( $code ) );
+		return sprintf( __( 'The voucher %s will be applied as soon as you add products to your cart.', 'voucher-captain' ), Mask::code( $code ) );
 	}
 }

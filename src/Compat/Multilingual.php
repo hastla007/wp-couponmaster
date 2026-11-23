@@ -23,7 +23,7 @@ final class Multilingual {
 	public const OPTIONS = array( 'vcap_default_terms', 'vcap_terms_by_country' );
 
 	/** Customer emails whose texts can be translated (WooCommerce option "woocommerce_{id}_settings"). */
-	public const EMAIL_IDS = array( 'vcap_voucher_buyer', 'vcap_voucher_recipient', 'vcap_voucher_expiry', 'vcap_bonus_voucher', 'vcap_referral_reward' );
+	public const EMAIL_IDS = array( 'vcap_voucher_buyer', 'vcap_voucher_recipient', 'vcap_voucher_bundle', 'vcap_voucher_expiry', 'vcap_bonus_voucher', 'vcap_referral_reward', 'vcap_gift_delivered', 'vcap_gift_used' );
 
 	/** Text settings of these emails. */
 	public const EMAIL_KEYS = array( 'subject', 'heading', 'intro', 'additional_content' );

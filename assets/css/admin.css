@@ -1,6 +1,6 @@
 /* Voucher Captain – admin */
 .vcap-wrap .vcap-card { background: #fff; border: 1px solid #dcdcde; border-radius: 4px; padding: 4px 16px 16px; margin: 16px 0; }
-.vcap-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }
+.vcap-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); gap: 16px; }
 .vcap-detail-grid .vcap-card { margin: 16px 0 0; }
 .vcap-detail-grid table.widefat th { width: 38%; }
 .vcap-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -15,10 +15,10 @@ mark.vcap-status--expired, mark.vcap-status--void { background: #eba3a3; color: 
 .vcap-order-vouchers li { border-bottom: 1px solid #f0f0f1; padding-bottom: 6px; }
 .vcap-low { color: #b32d2e; font-weight: 600; }
 .vcap-group-title { margin: 12px 12px 4px; }
-.vcap-builtin-fields legend { float: left; width: 150px; margin: 0 0 0 -162px; padding: 0; }
+.vcap-builtin-fields legend { float: inline-start; width: 150px; margin: 0; margin-inline-start: -162px; padding: 0; }
 .vcap-builtin-grid { display: grid; gap: 4px; }
 .vcap-builtin-grid label { float: none !important; width: auto !important; margin: 0 !important; }
-.vcap-builtin-grid .vcap-required { color: #646970; margin-left: 10px !important; }
+.vcap-builtin-grid .vcap-required { color: #646970; margin-inline-start: 10px !important; }
 .vcap-variation-fields { clear: both; border-top: 1px dashed #dcdcde; padding-top: 6px; margin-top: 6px; }
 .vcap-fg-row { display: flex; gap: 10px; align-items: flex-start; background: #f6f7f7; border: 1px solid #dcdcde; border-radius: 4px; padding: 10px; margin-bottom: 8px; }
 .vcap-fg-move { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 18px; }
@@ -67,6 +67,20 @@ mark.vcap-status--expired, mark.vcap-status--void { background: #eba3a3; color: 
 .vcap-till { margin: 0 0 12px; }
 @media print {
 	#adminmenumain, #wpadminbar, #wpfooter, .vcap-scanner-wrap > .description, .vcap-scanner-video, .vcap-scanner-form, .vcap-auto, .vcap-till, .vcap-result .vcap-r-actions { display: none !important; }
-	#wpcontent { margin-left: 0 !important; }
+	#wpcontent { margin-inline-start: 0 !important; }
+	/* M12-31: the 80 mm redemption slip alone (masked code), not the scanner page. */
+	body.vcap-printing-slip * { visibility: hidden; }
+	body.vcap-printing-slip .vcap-slip, body.vcap-printing-slip .vcap-slip * { visibility: visible; }
+	body.vcap-printing-slip .vcap-slip { display: block; position: absolute; inset-block-start: 0; inset-inline-start: 0; width: 72mm; font: 12px/1.35 monospace; color: #000; }
+	@page { margin: 4mm; }
 }
+.vcap-slip { display: none; }
+.vcap-slip dl { display: grid; grid-template-columns: auto 1fr; gap: 0 2mm; margin: 2mm 0; }
+.vcap-slip dd { margin: 0; }
+.vcap-slip .vcap-slip-shop, .vcap-slip .vcap-slip-title { margin: 0; text-align: center; font-weight: 700; }
+.vcap-slip .vcap-slip-note { font-size: 10px; }
+.vcap-result .vcap-r-replayed { margin: 0; padding: 8px 16px; background: #fcf9e8; border: 1px solid #dba617; border-top: 0; font-weight: 600; }
+.vcap-result .vcap-r-personal { padding: 10px 16px; background: #fcf0a1; border: 1px solid #dba617; border-top: 0; color: #1d2327; }
+.vcap-result .vcap-id-checked { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.vcap-scanner-video #vcap-torch { position: absolute; z-index: 1; inset-block-start: 12px; inset-inline-end: 12px; min-height: 40px; }
 .vcap-code-label { align-self: center; font-weight: 600; }

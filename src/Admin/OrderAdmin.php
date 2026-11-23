@@ -91,7 +91,9 @@ final class OrderAdmin {
 		do_action( 'vcap_order_metabox_after', $order );
 	}
 
-	public function actions( array $actions, $order = null ): array {
+	/** @param mixed $actions What the previous filter returned (AP-Q2-6: a non-array is normalised). */
+	public function actions( $actions, $order = null ): array {
+		$actions = is_array( $actions ) ? $actions : array();
 		$order = $order instanceof \WC_Order ? $order : self::order_from( $GLOBALS['theorder'] ?? ( $GLOBALS['post'] ?? null ) );
 		if ( $order && \VCAP\CouponManager::has_shortfall( $order ) ) {
 			$actions['vcap_accept_shortfall'] = __( 'Accept voucher shortfall and fulfil the order', 'voucher-captain' );
@@ -105,7 +107,10 @@ final class OrderAdmin {
 
 	public function issue( \WC_Order $order ): void {
 		$created = $this->issuer->issue_for_order( $order, true );
-		if ( ! $created ) {
+		if ( ! $created && $this->issuer->last_failures ) {
+			/* translators: %d: number of vouchers */
+			$order->add_order_note( sprintf( _n( 'Generate vouchers: %d voucher could not be created – see the notes above and the WooCommerce log. It is retried automatically.', 'Generate vouchers: %d vouchers could not be created – see the notes above and the WooCommerce log. They are retried automatically.', $this->issuer->last_failures, 'voucher-captain' ), $this->issuer->last_failures ) );
+		} elseif ( ! $created && ! $this->issuer->last_deferred ) { // Deferred: the issuer noted the background run.
 			$order->add_order_note( __( 'Generate vouchers: all vouchers for this order already exist.', 'voucher-captain' ) );
 		}
 	}
@@ -114,15 +119,18 @@ final class OrderAdmin {
 		$count  = 0;
 		$failed = array();
 		foreach ( $this->repo->for_order( $order->get_id() ) as $v ) {
-			if ( Voucher::STATUS_VOID === $v->status ) {
-				continue;
+			if ( '' !== VoucherAdmin::resend_refusal( $v ) ) {
+				continue; // H7: scheduled gifts wait for their date; void, expired or used-up vouchers are not sent.
 			}
-			$sent = vcap()->delivery->send( $v );
+			$roles    = array();
+			$failures = array();
+			$sent     = vcap()->delivery->send( $v, null, $roles, $failures );
 			if ( ! $sent ) {
 				$failed[] = $v->code;
-				$this->repo->log( $v->id, 'delivery_failed', null, null, __( 'Resend from the order: no email was sent.', 'voucher-captain' ) );
+				$this->repo->log( $v->id, 'delivery_failed', null, null, \VCAP\Note::make( 'delivery_not_sent', array( (string) wp_json_encode( $failures ) ) ) );
 				continue;
 			}
+			vcap()->delivery->record_manual_send( $v, $roles );
 			$this->repo->log( $v->id, 'resent', null, null, sprintf( /* translators: %d: number of addresses */ _n( 'Sent again from the order to %d address', 'Sent again from the order to %d addresses', count( $sent ), 'voucher-captain' ), count( $sent ) ) );
 			++$count;
 		}

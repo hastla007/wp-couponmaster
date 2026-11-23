@@ -19,6 +19,7 @@ final class Placeholders {
 			'coupon_value_plain'=> __( 'Voucher value (number)', 'voucher-captain' ),
 			'coupon_balance'    => __( 'Remaining balance', 'voucher-captain' ),
 			'expiry_date'       => __( 'Expiry date', 'voucher-captain' ),
+			'expiry_line'       => __( 'Validity line ("Valid until …" or "Valid indefinitely")', 'voucher-captain' ),
 			'issue_date'        => __( 'Issue date', 'voucher-captain' ),
 			'voucher_type'      => __( 'Voucher type', 'voucher-captain' ),
 			'product_name'      => __( 'Product name', 'voucher-captain' ),
@@ -27,6 +28,7 @@ final class Placeholders {
 			'product_short_description' => __( 'Product short description', 'voucher-captain' ),
 			'buyer_name'        => __( 'Buyer name', 'voucher-captain' ),
 			'buyer_email'       => __( 'Buyer email', 'voucher-captain' ),
+			'sender_name'       => __( 'Sender name ("From" field, else buyer name)', 'voucher-captain' ),
 			'recipient_name'    => __( 'Recipient name', 'voucher-captain' ),
 			'holder_name'       => __( 'Holder name (recipient, else buyer)', 'voucher-captain' ),
 			'recipient_email'   => __( 'Recipient email', 'voucher-captain' ),
@@ -41,9 +43,11 @@ final class Placeholders {
 			'site_name'         => __( 'Site name', 'voucher-captain' ),
 			'site_url'          => __( 'Site URL', 'voucher-captain' ),
 			'redeem_url'        => __( 'Redeem page link with the code', 'voucher-captain' ),
+			'redeem_instructions' => __( 'How to redeem (from the redemption channels)', 'voucher-captain' ),
 			'redemption_terms'  => __( 'Redemption conditions', 'voucher-captain' ),
 			'transferable'      => __( 'Transferability', 'voucher-captain' ),
 		);
+		/** Placeholders offered in the PDF designer and the email texts (arg: array of token => label); fill them in vcap_placeholders. */
 		return apply_filters( 'vcap_placeholder_definitions', $defs );
 	}
 
@@ -99,6 +103,8 @@ final class Placeholders {
 			'coupon_value_plain'=> wc_format_localized_decimal( $voucher->initial_amount ),
 			'coupon_balance'    => 'percent' === $voucher->discount_type ? $value : self::money( $voucher->balance, $voucher->currency ),
 			'expiry_date'       => $voucher->expires_at ? self::date( $voucher->expires_at ) : __( 'unlimited', 'voucher-captain' ),
+			/* translators: %s: date */
+			'expiry_line'       => $voucher->expires_at ? sprintf( __( 'Valid until %s', 'voucher-captain' ), self::date( $voucher->expires_at ) ) : __( 'Valid indefinitely', 'voucher-captain' ),
 			'issue_date'        => self::date( $voucher->created_at ?: gmdate( 'Y-m-d H:i:s' ) ),
 			'voucher_type'      => Voucher::types()[ $voucher->type ] ?? $voucher->type,
 			'product_name'      => $product ? $product->get_name() : '',
@@ -108,6 +114,8 @@ final class Placeholders {
 			// Vouchers created before names were stored (or by hand) fall back to the order's billing name.
 			'buyer_name'        => $buyer,
 			'buyer_email'       => $voucher->buyer_email,
+			// M12-55: the giver's name as entered in the "From" field, else the buyer (billing) name.
+			'sender_name'       => '' !== trim( $voucher->field( 'sender_name' ) ) ? trim( $voucher->field( 'sender_name' ) ) : $buyer,
 			// Only the recipient's own name (a gift without one is not "For: <the buyer>"); {holder_name} falls back.
 			'recipient_name'    => trim( $voucher->recipient_name ),
 			'holder_name'       => '' !== trim( $voucher->recipient_name ) ? trim( $voucher->recipient_name ) : $buyer,
@@ -123,9 +131,11 @@ final class Placeholders {
 			'site_name'         => wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ),
 			'site_url'          => home_url( '/' ),
 			'redeem_url'        => $voucher->code ? Shortcodes::redeem_url( $voucher->code ) : '',
+			'redeem_instructions' => Channels::instructions( $voucher ),
 			'redemption_terms'  => '' !== $voucher->terms ? $voucher->terms : ProductConfig::terms( $config ),
 			'transferable'      => $voucher->transferable_label(),
 		);
+		/** Values of the placeholders for a voucher (args: array of token => text, Voucher); texts are escaped when printed. */
 		return apply_filters( 'vcap_placeholders', $values, $voucher );
 	}
 
@@ -163,11 +173,31 @@ final class Placeholders {
 		return true;
 	}
 
+	/**
+	 * M12-77: a PDF text without the lines that show {expiry_date} when the voucher has no expiry, so a template
+	 * line "Valid until {expiry_date}" is left out instead of printing "Valid until unlimited".
+	 */
+	public static function drop_undated_lines( string $text, Voucher $voucher ): string {
+		if ( $voucher->expires_at || false === stripos( $text, '{expiry_date}' ) ) {
+			return $text;
+		}
+		$lines = array_filter( (array) preg_split( '/\r\n|\r|\n/', $text ), static fn( $line ) => false === stripos( (string) $line, '{expiry_date}' ) );
+		return implode( "\n", $lines );
+	}
+
 	private static function dynamic( string $token, ?string $arg, Voucher $voucher, string $original ): string {
 		$order = $voucher->order();
 		switch ( $token ) {
 			case 'field':
 				return $voucher->field( (string) $arg );
+			case 'link':
+				// M12-74: {link:wallet} – the URL of the voucher link with this id from "vcap_voucher_links".
+				foreach ( Downloads::voucher_links( $voucher, 'placeholder' ) as $link ) {
+					if ( isset( $link['id'] ) && 0 === strcasecmp( $link['id'], (string) $arg ) ) {
+						return $link['url'];
+					}
+				}
+				return '';
 			case 'item_meta':
 				if ( $order && $voucher->order_item_id ) {
 					$item = $order->get_item( $voucher->order_item_id );

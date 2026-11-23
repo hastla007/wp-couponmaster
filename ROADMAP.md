@@ -6,7 +6,7 @@ Abgehakte Punkte sind implementiert und durch die aufgeführten CI-Jobs (`.githu
 
 - Primäre Testbasis: WordPress 7.1.4, WooCommerce 11.2.2, PHP 8.4.27 und MySQL 8.4 LTS.
 - Zusätzliche Datenbankprüfung: MariaDB 11.4 LTS.
-- PHP 8.1 bleibt als deklarierte Mindestversion in der CI.
+- PHP 8.5 ist seit der Entscheidung vom 16.11.2026 die deklarierte Mindestversion (vorher 8.1); MySQL 9.7 / MariaDB 12.3 empfohlen.
 - Yoast SEO 28.8 wird optional auf Konflikte geprüft; es wird keine Plugin-Abhängigkeit.
 
 ## P0 – Finanz- und Zustellkorrektheit
@@ -58,31 +58,31 @@ Abgehakte Punkte sind implementiert und durch die aufgeführten CI-Jobs (`.githu
 36. [x] PDF-Downloads und Gastlinks auf Zugriffsschutz und Ablauf testen.
 37. [x] Abhängigkeiten und Composer-Lockdatei regelmäßig auf bekannte Schwachstellen prüfen.
 38. [x] PHPCS mit WordPress- und WooCommerce-Regeln in CI ergänzen. (Streng für `src/API/V1` und `src/Contracts` im Job `quality`; ganzes Plugin mit WordPress-Extra, I18n und Security report-only im Job `quality-wide`, Altlasten-Abbau siehe RELEASE.md → Static analysis.)
-39. [x] Statische Analyse für PHP 8.1-Typen, Nullwerte und Datenbank-Rückgaben einführen. (PHPStan Level 0 streng für API/Verträge; Level 1 für das ganze Plugin mit Baseline, report-only, `quality-wide`; WordPress Plugin Check report-only, `plugin-check`.)
+39. [x] Statische Analyse für PHP 8.1-Typen, Nullwerte und Datenbank-Rückgaben einführen. (PHPStan Level 0 streng für API/Verträge; Level 1 für das ganze Plugin mit Baseline, report-only, `quality-wide`; WordPress Plugin Check `plugin-check`, seit 16.11.2026 blockierend bei Fehlern, Warnungen nur Bericht.)
 40. [x] Geheimnisse, Debug-Ausgaben und sensible Bestell-/Empfängerdaten in Logs prüfen.
 
 ## Stand
 
 Punkte 1–22, 24–44, 46 und 49–50 sind umgesetzt und in CI abgedeckt (darunter Yoast-Browser-E2E, 28, und der WP-Pass-Captain-Vertrag mit gemeinsamem Plugin-Test, 44). Der `Release`-Workflow baut ein Tag nur, wenn `Plugin smoke tests` für genau diesen Commit grün ist (RELEASE.md).
 
-Offen bleiben reale Gateway-Sandboxen (23), der Learnboating-Connector im Kursplugin (45), die steuerliche Freigabe je Gutscheinart (47) und der echte Screenreader-Test (48).
+Offen bleiben reale Gateway-Sandboxen (23), die steuerliche Freigabe je Gutscheinart (47) und der echte Screenreader-Test (48). Der Learnboating-Connector (45) ist ein eigenes Projektprodukt im learnboating-Repository (Entscheidung 17).
 
 Außerhalb der 50 Punkte, Stand Release und Lizenz:
 
-- [x] Lizenzierung über WP License Captain (Premium-Edition, fail-closed, signierter Offline-Cache) und Premium-Updates mit SHA-256-Prüfung; Abnahme gegen einen echten Lizenzserver (`license-acceptance`).
-- [ ] Aufteilung Free/Premium (`config/premium-features.php`) und Update-Kanal der Free-Edition – Entscheidung des Betreibers.
+- [x] Entscheidung Free/Premium (13.11.2026): Kern frei mit allen Funktionen (WordPress.org), kein Lizenz-/Update-Code im Kern; Premium als getrenntes Add-on ([docs/FREE-PREMIUM.md](docs/FREE-PREMIUM.md)).
 - [x] Release-ZIP mit Lizenzdateien aller Bibliotheken und `THIRD-PARTY-NOTICES.txt` (geprüft im Job `quality`).
-- [ ] wordpress.org-Tauglichkeit: Befunde von Plugin Check und der breiten PHPCS/PHPStan-Prüfung abarbeiten, danach die Jobs blockierend schalten.
+- [ ] wordpress.org-Tauglichkeit: Plugin Check ist fehlerfrei und blockiert bei Fehlern; offen sind die Warnungen von Plugin Check und die Befunde der breiten PHPCS/PHPStan-Prüfung, danach auch diese blockierend schalten.
+- [ ] Premium-Add-on `voucher-captain-pro` (Repository `hastla007/captain-pro`) nutzt nur die Andockpunkte aus API.md → „Extension points for add-ons“; der Kern bleibt unverändert frei.
 
 ## P2 – Produktreife und Betrieb
 
 41. [x] Öffentlichen, versionierten PHP-Service für Gutscheinprüfung und -einlösung definieren.
 42. [x] Einlöse-Provider-Schnittstelle ohne Abhängigkeit auf interne Tabellen spezifizieren.
 43. [x] Idempotency-Key und stabile Fehlercodes für externe Connectoren festlegen.
-44. [x] Voucher Captain und WP Pass Captain (früher „Ticket Captain“) über dokumentierten, optionalen Vertrag integrieren. (Pass-Captain-Checkout, Gutschein → Ticket, gemeinsamer Scanner; Job `pass-captain`)
-45. [ ] Learnboating-Connector als separates Add-on mit wiederholbarer Grant-Verarbeitung planen. (Vertrag und Grant-Service in Learnboating sind fertig, das Add-on fehlt; TODO.md → Connector für Learnboating.)
+44. [x] Voucher Captain und Pass Captain (früher „Ticket Captain“) über dokumentierten, optionalen Vertrag integrieren. (Pass-Captain-Checkout, Gutschein → Ticket, gemeinsamer Scanner; Job `pass-captain`)
+45. [x] Learnboating-Connector mit wiederholbarer Grant-Verarbeitung. (Gebaut als `learnboating-voucher-connector` im learnboating-Repository: eigenes, nicht verkauftes Projektprodukt mit eigener Lizenz nach Entscheidung 17 vom 16.11.2026, kein Add-on dieses Repositorys und kein Teil von Voucher Captain Pro; nutzt nur die öffentlichen Verträge, CONNECTORS.md §8. TODO.md → Connector für Learnboating.)
 46. [x] Ablauf-, Übertragbarkeits-, Restwert- und Einlösebedingungen im Kundenkonto erklären. (Kundenkonto-Tab, E-Mail, Produktseite; Bedingungen pro Land)
 47. [ ] Steuerbehandlung und Erstattungsreihenfolge je Gutscheinart mit Fachberatung spezifizieren. (Technisch umgesetzt und in TAX.md beschrieben: Steuerbehandlung je Produkt, Einstellung „Mehrzweckgutscheine als Zahlung“; offen: Freigabe durch die Steuerberatung.)
 48. [ ] Übersetzungen, Tastaturbedienung und Screenreader-Flows für Kauf und Einlösung prüfen. (Tastatur und axe automatisiert in `browser-e2e`; Übersetzung de_DE/de_AT vollständig geprüft in `smoke`, de_DE_formal/de_CH fallen auf de_DE zurück; offen: echter Screenreader)
 49. [x] Release-ZIP in sauberer WordPress-Installation installieren, aktualisieren und deinstallieren.
-50. [x] Abnahme von VCAP allein, WP Pass Captain allein und beiden Plugins gemeinsam als Release-Gate einführen.
+50. [x] Abnahme von VCAP allein, Pass Captain allein und beiden Plugins gemeinsam als Release-Gate einführen.

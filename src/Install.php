@@ -34,6 +34,23 @@ final class Install {
 	public const SCHEMA_STEP_OPTION = 'vcap_schema_step';
 	/** Action Scheduler action that continues an upgrade outside shop requests. */
 	public const MIGRATE_HOOK = 'vcap_migrate';
+	/** Set once the license data of earlier (licensed) builds has been removed from this site (autoloaded). */
+	public const LICENSE_CLEANUP_OPTION = 'vcap_license_data_removed';
+	/**
+	 * Options of the license client of earlier builds (site and network options): server, credentials and the
+	 * stored entitlement snapshot. The plugin no longer has a license; they are removed on upgrade and uninstall.
+	 */
+	public const LEGACY_LICENSE_OPTIONS = array(
+		'vcap_wplc_server_url',
+		'vcap_wplc_credentials',
+		'vcap_wplc_credentials_entitlements_cache',
+		'vcap_wplc_credentials_pending',
+		'vcap_wplc_credentials_last_check',
+		'vcap_wplc_credentials_copy_of',
+		'vcap_wplc_credentials_migrated',
+	);
+	/** Background license check of earlier builds (WP-Cron event and recurring Action Scheduler action). */
+	public const LEGACY_LICENSE_HOOK = 'vcap_license_refresh';
 	/** Sites a network activation sets up at once; the others are set up on their first request (maybe_upgrade()). */
 	public const NETWORK_ACTIVATION_SITES = 25;
 	/** PHP extensions without which Voucher Captain cannot work (PDF rendering, text handling). */
@@ -49,11 +66,89 @@ final class Install {
 	 * Data migrations by the schema version that introduced them. A migration returns false while work is left
 	 * (time budget), so it continues on the next request before the version is stored.
 	 *
-	 * @var array<string, callable-string>
+	 * @var array<string, string>
 	 */
 	private const MIGRATIONS = array(
 		'1.4.0' => 'migrate_1_4_0',
+		'1.5.0' => 'migrate_1_5_0',
+		'1.6.0' => 'migrate_1_6_0',
+		'1.7.0' => 'migrate_1_7_0',
+		'1.8.0' => 'migrate_1_8_0',
 	);
+	/**
+	 * Schema version of the counter tables (B12 promotion use counters, B16 rate limit counters and scanner
+	 * idempotency keys); they are used once STORAGE_OPTION reaches it (counters_ready()).
+	 */
+	public const COUNTERS_VERSION = '1.7.0';
+	/** Time the counter tables took over while rate limit and scanner key options may still exist (B16). */
+	public const LEGACY_THROTTLE_OPTION = 'vcap_legacy_throttle_rows';
+	/** Option name prefix of the rate limit counters before schema 1.7 ("vcap_rl_{window end}_{key}"). */
+	public const LEGACY_RATE_PREFIX = 'vcap_rl_';
+	/** Option name prefix of the scanner idempotency keys before schema 1.7 ("_vcap_scan_{md5 of the key}"). */
+	public const LEGACY_SCAN_PREFIX = '_vcap_scan_';
+	/** Schema version that added the "source" column of the ledger (D8). */
+	public const EVENT_SOURCE_VERSION = '1.6.0';
+
+	/**
+	 * Whether the ledger has its "source" column: the schema of EVENT_SOURCE_VERSION is installed, or its tables
+	 * were created by an upgrade whose data migrations still run (SCHEMA_STEP_OPTION).
+	 */
+	public static function event_source_ready(): bool {
+		$installed = version_compare( (string) get_option( self::OPTION_DB_VERSION, '0' ), self::EVENT_SOURCE_VERSION, '>=' );
+		$step      = (string) get_option( self::SCHEMA_STEP_OPTION, '' );
+		$to        = (string) substr( (string) strrchr( $step, '>' ), 1 );
+		if ( ! $installed && ( '' === $to || version_compare( $to, self::EVENT_SOURCE_VERSION, '<' ) ) ) {
+			return false;
+		}
+		// The column itself is checked once per site and request: a ledger write must never fail on a schema that
+		// is not what the version says (e.g. a failed or interrupted upgrade).
+		$site = function_exists( 'get_current_blog_id' ) ? get_current_blog_id() : 0;
+		if ( ! isset( self::$event_source[ $site ] ) ) {
+			global $wpdb;
+			self::$event_source[ $site ] = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', self::tables()['events'], 'source' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		return self::$event_source[ $site ];
+	}
+
+	/** @var array<int, bool> Whether the ledger of a site has its "source" column (event_source_ready()). */
+	private static array $event_source = array();
+
+	/** Schema version that added the ledger columns "till" and "receipt" of counter bookings (R6). */
+	public const EVENT_TILL_VERSION = '1.8.0';
+	/** Highest ledger id whose till/receipt was read from its note (schema 1.8.0; newer rows are written with them). */
+	public const EVENT_TILL_CURSOR = 'vcap_event_till_cursor';
+	/** @var array<int, bool> Whether the ledger of a site has its "till" column (event_till_ready()). */
+	private static array $event_till = array();
+
+	/**
+	 * Whether the ledger has the columns "till" and "receipt" (R6): the schema of EVENT_TILL_VERSION is installed,
+	 * or its tables were created by an upgrade whose data migrations still run – same rules as event_source_ready().
+	 */
+	public static function event_till_ready(): bool {
+		$installed = version_compare( (string) get_option( self::OPTION_DB_VERSION, '0' ), self::EVENT_TILL_VERSION, '>=' );
+		$step      = (string) get_option( self::SCHEMA_STEP_OPTION, '' );
+		$to        = (string) substr( (string) strrchr( $step, '>' ), 1 );
+		if ( ! $installed && ( '' === $to || version_compare( $to, self::EVENT_TILL_VERSION, '<' ) ) ) {
+			return false;
+		}
+		$site = function_exists( 'get_current_blog_id' ) ? get_current_blog_id() : 0;
+		if ( ! isset( self::$event_till[ $site ] ) ) {
+			global $wpdb;
+			self::$event_till[ $site ] = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', self::tables()['events'], 'till' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		return self::$event_till[ $site ];
+	}
+
+	/**
+	 * Indexes of earlier schemas that a later one replaced (dbDelta never drops an index): table key => names.
+	 * events.voucher_id is covered by voucher_ledger, vouchers.status by status_expires (both 1.5.0).
+	 */
+	private const OBSOLETE_INDEXES = array(
+		'events'   => array( 'voucher_id' ),
+		'vouchers' => array( 'status' ),
+	);
+	/** Highest ledger id whose actor_email_hash was filled from its note (schema 1.5.0; newer rows are written with it). */
+	public const EVENT_HASH_CURSOR = 'vcap_event_hash_cursor';
 	/** Schema version of the own storage in use (promotion usage, claims, delivery state per role). */
 	public const STORAGE_OPTION = 'vcap_storage_version';
 	/** Time the storage switched while rows were still in post meta / options (cleared once they all moved). */
@@ -103,8 +198,6 @@ final class Install {
 	 * already handled heals itself while the plugin stays active (Plugin::ensure_schedules(), resume()).
 	 */
 	public static function deactivate( $network_wide = false ): void {
-		// Cached update check of the premium updater (network-wide; Licensing\PremiumUpdater cache).
-		delete_site_transient( 'vcap_update_check' );
 		if ( is_multisite() && $network_wide ) {
 			if ( function_exists( 'wp_raise_memory_limit' ) ) {
 				wp_raise_memory_limit( 'admin' );
@@ -162,12 +255,19 @@ final class Install {
 				}
 			}
 			$offset += count( $ids );
-		} while ( count( $ids ) === $number );
+			$more = count( $ids ) === $number;
+		} while ( $more );
 	}
 
 	public static function activate_site(): void {
 		// Schema work only under the upgrade lock; when another request holds it, that request finishes the schema.
 		$locked = self::lock();
+		// M12-03: a new installation settles multi-purpose vouchers as a payment after tax (VAT on the full price,
+		// the voucher pays shipping and fees too). Existing shops keep their setting (missing option = off).
+		if ( '' === self::stored_version() ) {
+			add_option( PaymentVouchers::OPTION, 'yes' );
+		}
+		$fresh  = '' === self::stored_version(); // M12-48: a first installation on this site.
 		try {
 			if ( $locked ) {
 				$installed = self::stored_version();
@@ -179,8 +279,14 @@ final class Install {
 			}
 			if ( ! get_option( 'vcap_secret' ) ) {
 				update_option( 'vcap_secret', wp_generate_password( 64, true, true ), false );
+				// M12-95: a first installation (no secret yet) offers the delivery date on new voucher products.
+				add_option( 'vcap_new_product_delivery', 'yes' );
 			}
 			add_option( 'vcap_needs_default_template', 'yes' );
+			if ( $fresh ) {
+				// M12-48: new installs attach one PDF to bundled emails up to 20 vouchers (existing shops keep 50).
+				add_option( 'vcap_bundle_pdf_limit', 20 );
+			}
 			update_option( 'vcap_flush_rewrite', 'yes' );
 			self::resume();
 		} finally {
@@ -226,7 +332,7 @@ final class Install {
 			as_unschedule_all_actions( 'vcap_daily_maintenance' );
 			as_unschedule_all_actions( 'vcap_release_stale_order_reservations' );
 		}
-		wp_clear_scheduled_hook( Licensing\Entitlements::REFRESH_HOOK );
+		wp_clear_scheduled_hook( self::LEGACY_LICENSE_HOOK );
 		delete_option( self::SCHEDULES_OPTION );
 		// The first deactivation counts (a network deactivation run again keeps it): orders since then are caught up.
 		add_option( self::DEACTIVATED_OPTION, time() );
@@ -291,10 +397,10 @@ final class Install {
 		$ids      = array();
 		$suppress = $wpdb->suppress_errors( true );
 		if ( self::table_exists( $vouchers ) ) {
-			$ids = (array) $wpdb->get_col( "SELECT p.ID FROM {$wpdb->posts} p INNER JOIN {$vouchers} v ON v.coupon_id = p.ID WHERE p.post_type = 'shop_coupon' AND p.post_status = 'publish' AND v.usage_mode = 'balance'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$ids = (array) $wpdb->get_col( $wpdb->prepare( "SELECT p.ID FROM %i p INNER JOIN %i v ON v.coupon_id = p.ID WHERE p.post_type = 'shop_coupon' AND p.post_status = 'publish' AND v.usage_mode = 'balance'", $wpdb->posts, $vouchers ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			// Vouchers with redemption channels (order line "_vcap_line"): suspended unless the shop is one of them.
 			$itemmeta = $wpdb->prefix . 'woocommerce_order_itemmeta';
-			$rows     = (array) $wpdb->get_results( $wpdb->prepare( "SELECT p.ID, im.meta_value FROM {$wpdb->posts} p INNER JOIN {$vouchers} v ON v.coupon_id = p.ID INNER JOIN {$itemmeta} im ON im.order_item_id = v.order_item_id AND im.meta_key = %s WHERE p.post_type = 'shop_coupon' AND p.post_status = 'publish' AND v.order_item_id > 0 AND v.usage_mode <> 'balance' AND im.meta_value LIKE %s", Issuer::LINE_META, '%' . $wpdb->esc_like( 's:8:"channels";a:' ) . '%' ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$rows     = (array) $wpdb->get_results( $wpdb->prepare( "SELECT p.ID, im.meta_value FROM %i p INNER JOIN %i v ON v.coupon_id = p.ID INNER JOIN %i im ON im.order_item_id = v.order_item_id AND im.meta_key = %s WHERE p.post_type = 'shop_coupon' AND p.post_status = 'publish' AND v.order_item_id > 0 AND v.usage_mode <> 'balance' AND im.meta_value LIKE %s", $wpdb->posts, $vouchers, $itemmeta, Issuer::LINE_META, '%' . $wpdb->esc_like( 's:8:"channels";a:' ) . '%' ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			foreach ( $rows as $row ) {
 				$line = maybe_unserialize( (string) $row['meta_value'] );
 				if ( is_array( $line ) && ! empty( $line['channels'] ) && ! in_array( Channels::SHOP, (array) $line['channels'], true ) ) {
@@ -342,7 +448,7 @@ final class Install {
 		global $wpdb;
 		$table    = self::tables()['vouchers'];
 		$suppress = $wpdb->suppress_errors( true );
-		$mode     = $wpdb->get_var( $wpdb->prepare( "SELECT usage_mode FROM {$table} WHERE coupon_id = %d LIMIT 1", $coupon_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$mode     = $wpdb->get_var( $wpdb->prepare( 'SELECT usage_mode FROM %i WHERE coupon_id = %d LIMIT 1', $table, $coupon_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$wpdb->suppress_errors( $suppress );
 		return 'balance' === $mode;
 	}
@@ -367,7 +473,8 @@ final class Install {
 		if ( $legacy && self::table_exists( self::tables()['vouchers'] ) ) {
 			$vouchers = self::tables()['vouchers'];
 			foreach ( array_chunk( $legacy, 500 ) as $chunk ) {
-				$valid = array_map( 'intval', (array) $wpdb->get_col( "SELECT DISTINCT coupon_id FROM {$vouchers} WHERE usage_mode = 'balance' AND coupon_id IN (" . implode( ',', $chunk ) . ')' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+				$in    = implode( ',', array_fill( 0, count( $chunk ), '%d' ) );
+				$valid = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT coupon_id FROM {$vouchers} WHERE usage_mode = 'balance' AND coupon_id IN ({$in})", $chunk ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
 				$changed = self::publish_drafts( $valid ) || $changed;
 			}
 		}
@@ -379,12 +486,14 @@ final class Install {
 				break;
 			}
 			$changed = self::publish_drafts( $ids ) || $changed;
-			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE post_id IN (" . implode( ',', $ids ) . ') AND meta_key = %s', self::SUSPENDED_META ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+			$in = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE post_id IN ({$in}) AND meta_key = %s", array_merge( $ids, array( self::SUSPENDED_META ) ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built above.
 			foreach ( $ids as $id ) {
 				wp_cache_delete( $id, 'post_meta' );
 			}
 			$after = (int) end( $ids );
-		} while ( 500 === count( $ids ) );
+			$more = 500 === count( $ids );
+		} while ( $more );
 		if ( $changed ) {
 			self::flush_coupon_cache();
 		}
@@ -400,7 +509,9 @@ final class Install {
 		if ( ! $ids ) {
 			return false;
 		}
-		$wpdb->query( "UPDATE {$wpdb->posts} SET post_status = 'publish' WHERE ID IN (" . implode( ',', $ids ) . ") AND post_type = 'shop_coupon' AND post_status = 'draft'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+		$ids = array_map( 'intval', $ids );
+		$in  = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET post_status = 'publish' WHERE ID IN ({$in}) AND post_type = 'shop_coupon' AND post_status = 'draft'", $ids ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
 		foreach ( $ids as $id ) {
 			clean_post_cache( $id );
 		}
@@ -416,6 +527,14 @@ final class Install {
 	 * migrations would otherwise run twice after the next update. Administrators see a notice instead.
 	 */
 	public static function maybe_upgrade(): void {
+		if ( ! get_option( self::LICENSE_CLEANUP_OPTION ) ) {
+			// Once per site after the update from a licensed build; Action Scheduler is ready from "init" on.
+			if ( did_action( 'init' ) ) {
+				self::remove_license_data();
+			} else {
+				add_action( 'init', array( self::class, 'remove_license_data' ), 30 );
+			}
+		}
 		$installed = (string) get_option( self::OPTION_DB_VERSION );
 		if ( VCAP_DB_VERSION === $installed ) {
 			return;
@@ -454,6 +573,34 @@ final class Install {
 			}
 		} finally {
 			self::unlock();
+		}
+	}
+
+	/**
+	 * Removes what the license client of earlier builds left on this site (options, WP-Cron event, Action
+	 * Scheduler action, cached update check) and, on a multisite, the network license options. Voucher data is not
+	 * touched. Idempotent; runs once per site after the update (LICENSE_CLEANUP_OPTION) and on uninstall.
+	 *
+	 * @param bool $mark Remember that this site is clean (not during an uninstall, which removes everything).
+	 */
+	public static function remove_license_data( bool $mark = true ): void {
+		foreach ( self::LEGACY_LICENSE_OPTIONS as $option ) {
+			delete_option( $option );
+		}
+		if ( function_exists( 'is_multisite' ) && is_multisite() ) {
+			foreach ( self::LEGACY_LICENSE_OPTIONS as $option ) {
+				delete_site_option( $option );
+			}
+		}
+		delete_site_transient( 'vcap_update_check' );
+		if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
+			wp_clear_scheduled_hook( self::LEGACY_LICENSE_HOOK );
+		}
+		if ( function_exists( 'as_unschedule_all_actions' ) ) {
+			as_unschedule_all_actions( self::LEGACY_LICENSE_HOOK );
+		}
+		if ( $mark ) {
+			update_option( self::LICENSE_CLEANUP_OPTION, time(), true );
 		}
 	}
 
@@ -500,6 +647,7 @@ final class Install {
 			self::create_tables();
 			self::add_caps();
 			self::ensure_upload_dir();
+			Settings::store_request_defaults(); // AP-P1-7: saved values are kept.
 			if ( ! get_option( 'vcap_secret' ) ) {
 				update_option( 'vcap_secret', wp_generate_password( 64, true, true ), false );
 			}
@@ -618,6 +766,9 @@ final class Install {
 			'redemptions' => $prefix . 'vcap_redemptions',
 			'usage'       => $prefix . 'vcap_promotion_usage',
 			'claims'      => $prefix . 'vcap_claims',
+			'counts'      => $prefix . 'vcap_promotion_counts',
+			'rate'        => $prefix . 'vcap_rate_limits',
+			'scan'        => $prefix . 'vcap_scan_keys',
 		);
 	}
 
@@ -653,6 +804,20 @@ final class Install {
 	 */
 	public static function storage_ready(): bool {
 		return version_compare( (string) get_option( self::STORAGE_OPTION, '0' ), '1.4.0', '>=' );
+	}
+
+	/**
+	 * Whether the counter tables of schema 1.7 are in use: promotion use counters (vcap_promotion_counts), rate
+	 * limit counters (vcap_rate_limits) and scanner idempotency keys (vcap_scan_keys). Before that – e.g. while
+	 * another request still runs the upgrade – uses are counted from the usage table and options are used.
+	 */
+	public static function counters_ready(): bool {
+		return version_compare( (string) get_option( self::STORAGE_OPTION, '0' ), self::COUNTERS_VERSION, '>=' );
+	}
+
+	/** Whether rate limit counters or scanner keys may still be stored as options (moved by move_throttle_rows()). */
+	public static function legacy_throttle_rows(): bool {
+		return (int) get_option( self::LEGACY_THROTTLE_OPTION, 0 ) > 0;
 	}
 
 	/** Whether rows of the old storage may still exist (read as well until moved). */
@@ -718,14 +883,17 @@ final class Install {
 	 * migration (rows moved twice would count promotion uses twice). Skipped while another request holds the lock.
 	 */
 	public static function move_legacy_rows_locked( float $budget ): bool {
-		if ( ! self::storage_ready() || ! self::legacy_rows() ) {
+		$usage    = self::storage_ready() && self::legacy_rows();
+		$throttle = self::counters_ready() && self::legacy_throttle_rows();
+		if ( ! $usage && ! $throttle ) {
 			return true;
 		}
 		if ( ! self::lock() ) {
 			return true; // The request holding the lock moves them.
 		}
 		try {
-			return self::move_legacy_rows( $budget );
+			$done = ! $usage || self::move_legacy_rows( $budget );
+			return ( ! $throttle || self::move_throttle_rows( $budget ) ) && $done;
 		} finally {
 			self::unlock();
 		}
@@ -745,11 +913,17 @@ final class Install {
 			$values[] = '(%d, %s, 0, %s)';
 			array_push( $args, (int) $row['post_id'], substr( (string) $row['meta_value'], 0, 200 ), $now );
 		}
-		$ids   = implode( ',', array_map( 'intval', array_column( $rows, 'meta_id' ) ) );
-		$table = self::tables()['usage'];
+		$ids    = array_map( 'intval', array_column( $rows, 'meta_id' ) );
+		$in     = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+		$values = implode( ',', $values );
+		$table  = self::tables()['usage'];
+		// B12: the moved uses are added to the promotions' counters in the same transaction.
+		$moved = array_count_values( array_map( 'intval', array_column( $rows, 'post_id' ) ) );
 		$ok    = self::in_transaction(
-			static fn() => false !== $wpdb->query( $wpdb->prepare( "INSERT INTO {$table} (campaign_id, customer_key, order_id, created_at) VALUES " . implode( ',', $values ), $args ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				&& false !== $wpdb->query( "DELETE FROM {$wpdb->postmeta} WHERE meta_id IN ({$ids})" ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+			static fn() => false !== $wpdb->query( $wpdb->prepare( "INSERT INTO {$table} (campaign_id, customer_key, order_id, created_at) VALUES {$values}", $args ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- $values holds only placeholder groups built above.
+				&& false !== $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE meta_id IN ({$in})", $ids ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
+				&& ( ! self::counters_ready() || Discounts\Usage::add_to_counters( $moved ) ),
+			'migrate_usage_batch'
 		);
 		foreach ( array_unique( array_map( 'intval', array_column( $rows, 'post_id' ) ) ) as $post_id ) {
 			wp_cache_delete( $post_id, 'post_meta' );
@@ -771,11 +945,14 @@ final class Install {
 			$values[] = '(%s, %s, %s)';
 			array_push( $args, substr( (string) $row['option_name'], strlen( '_vcap_claim_' ), 32 ), 'legacy', gmdate( 'Y-m-d H:i:s', $time > 0 ? $time : time() ) );
 		}
-		$ids   = implode( ',', array_map( 'intval', array_column( $rows, 'option_id' ) ) );
-		$table = self::tables()['claims'];
-		$ok    = self::in_transaction(
-			static fn() => false !== $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$table} (claim_key, kind, created_at) VALUES " . implode( ',', $values ), $args ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				&& false !== $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_id IN ({$ids})" ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer ids.
+		$ids    = array_map( 'intval', array_column( $rows, 'option_id' ) );
+		$in     = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+		$values = implode( ',', $values );
+		$table  = self::tables()['claims'];
+		$ok     = self::in_transaction(
+			static fn() => false !== $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$table} (claim_key, kind, created_at) VALUES {$values}", $args ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- $values holds only placeholder groups built above.
+				&& false !== $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_id IN ({$in})", $ids ) ), // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
+			'migrate_claim_batch'
 		);
 		foreach ( array_column( $rows, 'option_name' ) as $name ) {
 			wp_cache_delete( (string) $name, 'options' );
@@ -783,21 +960,235 @@ final class Install {
 		return $ok ? count( $rows ) : -1;
 	}
 
-	/** Runs $work in a transaction: committed when it returns true, rolled back otherwise. */
-	private static function in_transaction( callable $work ): bool {
+	/**
+	 * 1.7.0: counter tables (B12, B16).
+	 *
+	 * Promotion use counters (vcap_promotion_counts) are filled from the usage table, once before the switch and
+	 * once after it: the second recount replaces what the first one and the increments of requests in between left,
+	 * so uses written while the first recount ran are not missed. Requests that still run the old code (no counter
+	 * increment) are corrected by the daily recount (Usage::reconcile()). Rate limit counters of running windows and
+	 * scanner idempotency keys move from wp_options into their tables in batches (move_throttle_rows()); until none
+	 * is left, a scanner key is also looked up as option (Tickets), so a repeat never acts twice.
+	 */
+	private static function migrate_1_7_0(): bool {
 		global $wpdb;
-		$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		try {
-			$ok = (bool) $work();
-		} catch ( \Throwable $e ) {
-			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			throw $e;
+		$tables = self::tables();
+		foreach ( array( 'counts', 'rate', 'scan' ) as $key ) {
+			if ( $tables[ $key ] !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $tables[ $key ] ) ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return false; // Never switch to tables that could not be created (upgrade_schema() reports them).
+			}
 		}
-		if ( $ok && false !== $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( ! self::counters_ready() ) {
+			if ( ! self::storage_ready() || ! Discounts\Usage::recount() ) {
+				return false; // The 1.4.0 step switches to the usage table first.
+			}
+			update_option( self::LEGACY_THROTTLE_OPTION, time() );
+			update_option( self::STORAGE_OPTION, self::COUNTERS_VERSION );
+			if ( ! Discounts\Usage::recount() ) {
+				return false;
+			}
+		} elseif ( ! self::legacy_throttle_rows() ) {
+			// Also after a rollback to an older version, which wrote options again: look for them once more.
+			update_option( self::LEGACY_THROTTLE_OPTION, time() );
+		}
+		return self::move_throttle_rows( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ? 8.0 : 2.0 );
+	}
+
+	/**
+	 * Moves rate limit counters of running windows and scanner idempotency keys from wp_options into their tables
+	 * (finished windows and keys older than two days are dropped), until none is left or the time budget is used.
+	 * The daily maintenance calls it again (move_legacy_rows_locked()), so options an older version wrote just
+	 * before the switch are moved as well.
+	 *
+	 * @param float $budget Seconds.
+	 * @return bool True when nothing is left.
+	 */
+	public static function move_throttle_rows( float $budget ): bool {
+		if ( ! self::counters_ready() || ! self::legacy_throttle_rows() ) {
 			return true;
 		}
-		$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$start = microtime( true );
+		do {
+			$rate = self::move_rate_batch( 500 );
+			$scan = self::move_scan_batch( 500 );
+			if ( $rate < 0 || $scan < 0 ) {
+				return false;
+			}
+			if ( 0 === $rate && 0 === $scan ) {
+				// Requests that started before the switch may still write options: keep looking for an hour.
+				if ( time() - (int) get_option( self::LEGACY_THROTTLE_OPTION, 0 ) > HOUR_IN_SECONDS ) {
+					delete_option( self::LEGACY_THROTTLE_OPTION );
+				}
+				return true;
+			}
+		} while ( microtime( true ) - $start < $budget );
 		return false;
+	}
+
+	/** @return int Options handled (moved or dropped), -1 on a database error. */
+	private static function move_rate_batch( int $limit ): int {
+		global $wpdb;
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT option_id, option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s ORDER BY option_id LIMIT %d", $wpdb->esc_like( self::LEGACY_RATE_PREFIX ) . '%', $limit ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( ! $rows ) {
+			return 0;
+		}
+		$values = array();
+		$args   = array();
+		foreach ( $rows as $row ) {
+			// "vcap_rl_{10-digit window end}_{64 hex key}"; counters of finished windows are dropped.
+			if ( ! preg_match( '/^vcap_rl_(\d{10})_([0-9a-f]{64})$/', (string) $row['option_name'], $m ) || (int) $m[1] <= time() ) {
+				continue;
+			}
+			$values[] = '(%d, %s, %d)';
+			array_push( $args, (int) $m[1], $m[2], max( 0, (int) $row['option_value'] ) );
+		}
+		$ids   = array_map( 'intval', array_column( $rows, 'option_id' ) );
+		$in    = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+		$table = self::tables()['rate'];
+		$sql   = implode( ',', $values );
+		$ok    = self::in_transaction(
+			static fn() => ( ! $values || false !== $wpdb->query( $wpdb->prepare( "INSERT INTO {$table} (window_end, counter_key, hits) VALUES {$sql} ON DUPLICATE KEY UPDATE hits = hits + VALUES(hits)", $args ) ) ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- $sql holds only placeholder groups built above.
+				&& false !== $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_id IN ({$in})", $ids ) ), // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
+			'migrate_rate_batch'
+		);
+		foreach ( array_column( $rows, 'option_name' ) as $name ) {
+			wp_cache_delete( (string) $name, 'options' );
+		}
+		return $ok ? count( $rows ) : -1;
+	}
+
+	/** @return int Options handled (moved or dropped), -1 on a database error. */
+	private static function move_scan_batch( int $limit ): int {
+		global $wpdb;
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT option_id, option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s ORDER BY option_id LIMIT %d", $wpdb->esc_like( self::LEGACY_SCAN_PREFIX ) . '%', $limit ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( ! $rows ) {
+			return 0;
+		}
+		$ids = array_map( 'intval', array_column( $rows, 'option_id' ) );
+		$in  = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+		$ok  = self::in_transaction(
+			static function () use ( $wpdb, $rows, $ids, $in ): bool {
+				foreach ( $rows as $row ) {
+					if ( ! Tickets::adopt_scan_option( substr( (string) $row['option_name'], strlen( self::LEGACY_SCAN_PREFIX ) ), (string) $row['option_value'] ) ) {
+						return false;
+					}
+				}
+				return false !== $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_id IN ({$in})", $ids ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above.
+			},
+			'migrate_scan_batch'
+		);
+		foreach ( array_column( $rows, 'option_name' ) as $name ) {
+			wp_cache_delete( (string) $name, 'options' );
+		}
+		return $ok ? count( $rows ) : -1;
+	}
+
+	/**
+	 * 1.6.0: the ledger column "source" (D8, created by the schema step). Earlier rows keep '' – their source is
+	 * unknown and shown without one; nothing to fill. The column is written as soon as it exists
+	 * (event_source_ready()), so this step only re-checks it after the DDL.
+	 */
+	private static function migrate_1_6_0(): bool {
+		self::$event_source = array();
+		return true;
+	}
+
+	/**
+	 * 1.8.0 (R6): the ledger columns "till" and "receipt" of counter bookings (created by the schema step, written by
+	 * new counter bookings as soon as they exist). Counter redemptions booked before carry both only inside their
+	 * note ("… · Receipt 4711 · Till Shop 1", Tickets::counter_note()); they are read from it in id batches, and a
+	 * cancellation ("Cancels redemption #N: …") takes the till and receipt of the redemption it cancels.
+	 */
+	private static function migrate_1_8_0(): bool {
+		self::$event_till = array();
+		return self::fill_event_tills( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ? 8.0 : 2.0 );
+	}
+
+	/**
+	 * Fills till/receipt of counter bookings after EVENT_TILL_CURSOR from their notes (Counter::parse_note()), in
+	 * batches of 1000 rows, until the newest row or the time budget.
+	 *
+	 * @param float $budget Seconds.
+	 * @return bool True when every row is done.
+	 */
+	public static function fill_event_tills( float $budget ): bool {
+		global $wpdb;
+		$table = self::tables()['events'];
+		if ( ! self::table_exists( $table ) || ! self::event_till_ready() ) {
+			return false;
+		}
+		$start  = microtime( true );
+		$cursor = (int) get_option( self::EVENT_TILL_CURSOR, 0 );
+		do {
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, event, note FROM %i WHERE id > %d AND ( ( event = 'redeemed' AND order_id = 0 ) OR event = 'redeem_reversed' ) ORDER BY id LIMIT 1000", $table, $cursor ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			if ( ! $rows ) {
+				return true;
+			}
+			foreach ( $rows as $row ) {
+				$parts = 'redeem_reversed' === $row['event'] ? Counter::reversed_context( (string) $row['note'] ) : Counter::parse_note( (string) $row['note'] );
+				if ( '' !== $parts['till'] || '' !== $parts['receipt'] ) {
+					// Only rows without a structured value (new bookings write it themselves).
+					$wpdb->query( $wpdb->prepare( "UPDATE %i SET till = %s, receipt = %s WHERE id = %d AND till = '' AND receipt = ''", $table, $parts['till'], $parts['receipt'], (int) $row['id'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				}
+			}
+			$cursor = (int) end( $rows )['id'];
+			$full   = 1000 === count( $rows );
+			update_option( self::EVENT_TILL_CURSOR, $cursor, false );
+		} while ( $full && microtime( true ) - $start < $budget );
+		return ! $full;
+	}
+
+	/**
+	 * 1.5.0: ledger notes that are an e-mail address (WooCommerce "used by") get its hash in actor_email_hash, so
+	 * privacy exports and erasures find them through an index instead of scanning every note. New rows are
+	 * written with the hash; existing ones are filled in id batches.
+	 */
+	private static function migrate_1_5_0(): bool {
+		return self::hash_event_notes( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ? 8.0 : 2.0 );
+	}
+
+	/**
+	 * Fills actor_email_hash of ledger rows after EVENT_HASH_CURSOR, in batches of 2000 ids, until the newest row
+	 * or the time budget. The daily maintenance calls it again: rows an older version wrote after a rollback
+	 * (without the hash) are filled as well. Rows after the cursor are also matched by their note
+	 * (VoucherRepository::events_noting()), so nothing is missed meanwhile.
+	 *
+	 * @param float $budget Seconds.
+	 * @return bool True when every row is done.
+	 */
+	public static function hash_event_notes( float $budget ): bool {
+		global $wpdb;
+		$table = self::tables()['events'];
+		if ( ! self::table_exists( $table ) ) {
+			return false;
+		}
+		$start  = microtime( true );
+		$cursor = (int) get_option( self::EVENT_HASH_CURSOR, 0 );
+		do {
+			$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT id, note, actor_email_hash FROM %i WHERE id > %d ORDER BY id LIMIT 2000', $table, $cursor ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			if ( ! $rows ) {
+				return true;
+			}
+			foreach ( $rows as $row ) {
+				$hash = VoucherRepository::note_hash( (string) $row['note'] );
+				if ( $hash !== (string) $row['actor_email_hash'] ) {
+					$wpdb->update( $table, array( 'actor_email_hash' => $hash ), array( 'id' => (int) $row['id'] ), array( '%s' ), array( '%d' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				}
+			}
+			$cursor = (int) end( $rows )['id'];
+			update_option( self::EVENT_HASH_CURSOR, $cursor, false );
+			$more = count( $rows ) === 2000 && microtime( true ) - $start < $budget;
+		} while ( $more );
+		return count( $rows ) < 2000;
+	}
+
+	/**
+	 * Runs $work in a transaction: committed when it returns true, rolled back otherwise. D2: a database error is
+	 * logged with $context and a reference (migration batches otherwise only report -1). D6: through the shared
+	 * helper Db::transaction() (savepoint when nested, buffered actions only after COMMIT).
+	 */
+	private static function in_transaction( callable $work, string $context = 'migration_batch' ): bool {
+		return Db::transaction( $work, $context );
 	}
 
 	/**
@@ -851,7 +1242,7 @@ final class Install {
 				)
 			);
 			if ( $engine && 'innodb' !== strtolower( (string) $engine ) ) {
-				$wpdb->query( "ALTER TABLE {$tables[ $key ]} ENGINE=InnoDB" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i ENGINE=InnoDB', $tables[ $key ] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			}
 		}
 		delete_option( self::INNODB_OPTION );
@@ -907,7 +1298,10 @@ final class Install {
 					UNIQUE KEY order_item_slot (order_item_id,item_index),
 					KEY order_id (order_id),
 					KEY coupon_id (coupon_id),
-					KEY status (status),
+					KEY status_expires (status,expires_at),
+					KEY status_updated (status,updated_at),
+					KEY expires_at (expires_at),
+					KEY delivery_due (delivered_at,status,delivery_at),
 					KEY product_id (product_id),
 					KEY recipient_email (recipient_email(100)),
 					KEY buyer_email (buyer_email(100)),
@@ -921,11 +1315,16 @@ final class Install {
 					balance_after decimal(19,4) NULL DEFAULT NULL,
 					order_id bigint(20) unsigned NOT NULL DEFAULT 0,
 					user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+					source varchar(20) NOT NULL DEFAULT '',
+					till varchar(100) NOT NULL DEFAULT '',
+					receipt varchar(64) NOT NULL DEFAULT '',
 					note text NULL,
+					actor_email_hash char(64) NOT NULL DEFAULT '',
 					created_at datetime NOT NULL,
 					PRIMARY KEY  (id),
-					KEY voucher_id (voucher_id),
+					KEY voucher_ledger (voucher_id,id,created_at,event,balance_after),
 					KEY voucher_order (voucher_id,order_id,id),
+					KEY actor_email_hash (actor_email_hash),
 					KEY event (event),
 					KEY created_at (created_at)
 				) ENGINE=InnoDB $collate;",
@@ -938,7 +1337,8 @@ final class Install {
 					used_at datetime NULL DEFAULT NULL,
 					PRIMARY KEY  (id),
 					UNIQUE KEY code (code),
-					KEY batch_free (batch,voucher_id)
+					KEY batch_free (batch,voucher_id),
+					KEY batch_used (batch,used_at)
 				) ENGINE=InnoDB $collate;",
 			'redemptions' => "CREATE TABLE {$t['redemptions']} (
 					id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -978,15 +1378,67 @@ final class Install {
 					PRIMARY KEY  (claim_key),
 					KEY kind_created (kind,created_at)
 				) ENGINE=InnoDB $collate;",
+			// counts: uses per promotion (B12), kept with the usage table by Discounts\Usage (the checkout counts under
+			// the promotion's lock) and recounted by the daily maintenance.
+			'counts' => "CREATE TABLE {$t['counts']} (
+					campaign_id bigint(20) unsigned NOT NULL,
+					uses bigint(20) unsigned NOT NULL DEFAULT 0,
+					PRIMARY KEY  (campaign_id)
+				) ENGINE=InnoDB $collate;",
+			// rate: fixed-window rate limit counters (Plugin::rate_limited()); counter_key is a keyed hash of bucket and visitor.
+			'rate' => "CREATE TABLE {$t['rate']} (
+					window_end int(10) unsigned NOT NULL,
+					counter_key char(64) NOT NULL,
+					hits int(10) unsigned NOT NULL DEFAULT 0,
+					PRIMARY KEY  (window_end,counter_key)
+				) ENGINE=InnoDB $collate;",
+			// scan: scanner idempotency keys (Tickets); key_hash is the md5 of the key, response the stored answer (NULL while running).
+			'scan' => "CREATE TABLE {$t['scan']} (
+					key_hash char(32) NOT NULL,
+					signature char(32) NOT NULL DEFAULT '',
+					event_mark bigint(20) unsigned NULL DEFAULT NULL,
+					claimed_at int(10) unsigned NOT NULL DEFAULT 0,
+					response longtext NULL,
+					PRIMARY KEY  (key_hash),
+					KEY claimed_at (claimed_at)
+				) ENGINE=InnoDB $collate;",
 		);
 	}
 
 	public static function create_tables(): void {
+		self::$event_source = array();
+		self::$event_till   = array();
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		foreach ( self::schema() as $sql ) {
 			dbDelta( $sql );
 		}
+		self::drop_obsolete_indexes();
 		self::ensure_transactional_tables( self::tables() );
+	}
+
+	/**
+	 * Drops indexes that a newer schema replaced by a covering one (OBSOLETE_INDEXES): each costs a write per
+	 * ledger insert or voucher change. Idempotent; only an index that exists is dropped, and only once its
+	 * replacement exists.
+	 */
+	private static function drop_obsolete_indexes(): void {
+		global $wpdb;
+		$tables = self::tables();
+		$schema = self::schema();
+		foreach ( self::OBSOLETE_INDEXES as $key => $names ) {
+			$table = $tables[ $key ];
+			if ( ! self::table_exists( $table ) ) {
+				continue;
+			}
+			$have = array_map( 'strtolower', array_unique( (array) $wpdb->get_col( $wpdb->prepare( 'SHOW INDEX FROM %i', $table ), 2 ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			preg_match_all( '/KEY ([a-z_]+) \(/', $schema[ $key ], $wanted );
+			if ( array_diff( $wanted[1], $have ) ) {
+				continue; // A replacement is still missing (verify_schema() reports it): keep the old index meanwhile.
+			}
+			foreach ( array_intersect( $names, $have ) as $name ) {
+				$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i DROP INDEX %i', $table, $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.SchemaChange -- names from OBSOLETE_INDEXES.
+			}
+		}
 	}
 
 	/**
@@ -1005,12 +1457,12 @@ final class Install {
 				$problems[] = sprintf( 'table %s is missing', $table );
 				continue;
 			}
-			$have = array_map( 'strtolower', (array) $wpdb->get_col( "SHOW COLUMNS FROM {$table}" ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$have = array_map( 'strtolower', (array) $wpdb->get_col( $wpdb->prepare( 'SHOW COLUMNS FROM %i', $table ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			preg_match_all( '/^\s*([a-z_]+) (?:bigint|int|varchar|char|decimal|datetime|text|longtext|tinyint)/m', $sql, $cols );
 			foreach ( array_diff( $cols[1], $have ) as $missing ) {
 				$problems[] = sprintf( 'column %s.%s is missing', $table, $missing );
 			}
-			$indexes = array_map( 'strtolower', array_unique( (array) $wpdb->get_col( "SHOW INDEX FROM {$table}", 2 ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$indexes = array_map( 'strtolower', array_unique( (array) $wpdb->get_col( $wpdb->prepare( 'SHOW INDEX FROM %i', $table ), 2 ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			preg_match_all( '/(UNIQUE )?KEY ([a-z_]+) \(/', $sql, $keys, PREG_SET_ORDER );
 			foreach ( $keys as $key ) {
 				if ( ! in_array( $key[2], $indexes, true ) ) {
@@ -1028,6 +1480,9 @@ final class Install {
 	/** Role for till and entrance staff: the scanner only (no orders, customers or settings). */
 	public const CASHIER_ROLE = 'vcap_cashier';
 
+	/** Stored (English) name of the cashier role; translated on display (translate_role_name()). */
+	public const CASHIER_ROLE_NAME = 'Voucher cashier';
+
 	public static function add_caps(): void {
 		foreach ( array( 'administrator', 'shop_manager' ) as $role_name ) {
 			$role = get_role( $role_name );
@@ -1039,31 +1494,97 @@ final class Install {
 			}
 		}
 		if ( ! get_role( self::CASHIER_ROLE ) ) {
+			// English, like the core roles: add_caps() runs at plugins_loaded (too early to translate) and the stored
+			// name must not depend on the language of whoever triggered the upgrade. Shown translated through
+			// translate_user_role() (see translate_role_name()).
 			add_role(
 				self::CASHIER_ROLE,
-				__( 'Voucher cashier', 'voucher-captain' ),
+				self::CASHIER_ROLE_NAME,
 				array(
 					'read'              => true,
 					'vcap_scan_tickets' => true,
 				)
 			);
+		} else {
+			// Installs before AP-W1-1 stored the name in the language of that request: stored in English once.
+			$roles = wp_roles();
+			if ( isset( $roles->roles[ self::CASHIER_ROLE ] ) && self::CASHIER_ROLE_NAME !== ( $roles->roles[ self::CASHIER_ROLE ]['name'] ?? '' ) ) {
+				$roles->roles[ self::CASHIER_ROLE ]['name'] = self::CASHIER_ROLE_NAME;
+				$roles->role_names[ self::CASHIER_ROLE ]    = self::CASHIER_ROLE_NAME;
+				if ( $roles->use_db ) {
+					update_option( $roles->role_key, $roles->roles );
+				}
+			}
 		}
 	}
 
+	/**
+	 * Filter gettext_with_context_default: translate_user_role() looks role names up in the "default" text domain
+	 * with the context "User role"; the cashier role's name comes from the plugin's translation.
+	 *
+	 * @param string $translation Translated text.
+	 * @param string $text        Text to translate.
+	 * @param string $context     Context.
+	 */
+	public static function translate_role_name( $translation, $text, $context ) {
+		if ( self::CASHIER_ROLE_NAME === $text && 'User role' === $context ) {
+			return _x( 'Voucher cashier', 'User role', 'voucher-captain' );
+		}
+		return $translation;
+	}
+
+	/** Option with the name of the private upload folder ("vcap-<random>", M12-43). */
+	public const PRIVATE_DIR_OPTION = 'vcap_private_dir';
+
 	public static function upload_dir(): string {
 		$uploads = wp_upload_dir( null, false );
-		return trailingslashit( $uploads['basedir'] ) . 'vcap';
+		return trailingslashit( $uploads['basedir'] ) . self::private_dir_name();
 	}
 
 	/**
-	 * Creates the private upload folders (PDFs, fonts, temp files) with their protection files.
+	 * M12-43: name of the private upload folder. A random suffix makes its URL unguessable where the web server
+	 * ignores .htaccess (nginx): nothing in it can be fetched without knowing the name. The folder "vcap" of
+	 * earlier versions is renamed once; where that fails it keeps being used (Site Health reports it if it is
+	 * reachable).
+	 */
+	public static function private_dir_name(): string {
+		$name = (string) get_option( self::PRIVATE_DIR_OPTION, '' );
+		if ( preg_match( '/^vcap(-[a-z0-9]{16,40})?$/', $name ) ) {
+			return $name;
+		}
+		$base = trailingslashit( wp_upload_dir( null, false )['basedir'] );
+		$name = 'vcap-' . strtolower( wp_generate_password( 20, false ) );
+		if ( ! add_option( self::PRIVATE_DIR_OPTION, $name, '', true ) ) {
+			// A parallel request chose the name first.
+			wp_cache_delete( 'notoptions', 'options' );
+			wp_cache_delete( 'alloptions', 'options' );
+			wp_cache_delete( self::PRIVATE_DIR_OPTION, 'options' );
+			$other = (string) get_option( self::PRIVATE_DIR_OPTION, '' );
+			return preg_match( '/^vcap(-[a-z0-9]{16,40})?$/', $other ) ? $other : 'vcap';
+		}
+		if ( is_dir( $base . 'vcap' ) && ! is_dir( $base . $name ) && ! @rename( $base . 'vcap', $base . $name ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions,WordPress.PHP.NoSilencedErrors -- reported below.
+			update_option( self::PRIVATE_DIR_OPTION, 'vcap', true );
+			Logger::warning( 'The private upload folder "vcap" could not be renamed to a name with a random suffix; it is kept.' );
+			return 'vcap';
+		}
+		return $name;
+	}
+
+	/**
+	 * .htaccess of the private folders: Apache 2.4 ("Require all denied") and 2.2 ("Deny from all"). nginx ignores
+	 * it: see the snippet in COMPATIBILITY.md and the Site Health check, which tries to fetch a file.
+	 */
+	public const HTACCESS = "# Voucher Captain: private files (voucher PDFs, fonts, temp files).\n<IfModule mod_authz_core.c>\n\tRequire all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n\tOrder deny,allow\n\tDeny from all\n</IfModule>\n";
+
+	/**
+	 * Creates the private upload folders (PDFs, fonts, temp files, image cache) with their protection files.
 	 *
 	 * @return bool False when a folder or protection file could not be written (remembered for an admin notice).
 	 */
 	public static function ensure_upload_dir(): bool {
 		$dir = self::upload_dir();
 		$ok  = true;
-		foreach ( array( $dir, $dir . '/fonts', $dir . '/tmp' ) as $d ) {
+		foreach ( array( $dir, $dir . '/fonts', $dir . '/tmp', $dir . '/img' ) as $d ) {
 			if ( ! is_dir( $d ) && ! wp_mkdir_p( $d ) ) {
 				$ok = false;
 				continue;
@@ -1071,7 +1592,9 @@ final class Install {
 			if ( ! file_exists( $d . '/index.html' ) && false === @file_put_contents( $d . '/index.html', '' ) ) { // phpcs:ignore
 				$ok = false;
 			}
-			if ( ! file_exists( $d . '/.htaccess' ) && false === @file_put_contents( $d . '/.htaccess', "Deny from all\n" ) ) { // phpcs:ignore
+			// The Apache 2.2 line of earlier versions is replaced by the 2.4 syntax (M12-43).
+			$current = is_readable( $d . '/.htaccess' ) ? (string) file_get_contents( $d . '/.htaccess' ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions
+			if ( self::HTACCESS !== $current && ( '' === $current || "Deny from all\n" === $current ) && false === @file_put_contents( $d . '/.htaccess', self::HTACCESS ) ) { // phpcs:ignore
 				$ok = false;
 			}
 		}
@@ -1081,5 +1604,38 @@ final class Install {
 			update_option( 'vcap_upload_dir_error', $dir, false );
 		}
 		return $ok;
+	}
+
+	/**
+	 * M12-43: removes temp files older than $age seconds from the private folder: temp PDFs and previews (they
+	 * show voucher codes), downloaded template images ("img-*"), unfinished writes ("*.part") and dompdf's temp
+	 * images in its temp folder (e.g. "ca_dompdf_img_*", barcode SVGs carrying the code). Old cached template
+	 * images are removed after 30 days without use.
+	 *
+	 * @return int Number of files removed.
+	 */
+	public static function purge_temp_files( int $age = HOUR_IN_SECONDS ): int {
+		$dir     = self::upload_dir();
+		$before  = time() - $age;
+		$removed = 0;
+		$sets    = array(
+			array( $dir . '/tmp', array( '*.pdf', 'img-*', '*.part', 'probe-*' ), $before ),
+			array( $dir . '/fonts', array( 'ca_dompdf_*', 'dompdf_*', '*.part', '*.tmp' ), $before ),
+			array( $dir . '/img', array( '*.part' ), $before ),
+			array( $dir . '/img', array( '*.png', '*.jpg' ), time() - 30 * DAY_IN_SECONDS ),
+		);
+		foreach ( $sets as $set ) {
+			foreach ( $set[1] as $pattern ) {
+				foreach ( glob( $set[0] . '/' . $pattern ) ?: array() as $file ) {
+					// The cache keeps images in use: their access time is not reliable, the modification time is
+					// refreshed when an image is used (see PdfRenderer::optimized_image()).
+					if ( is_file( $file ) && (int) filemtime( $file ) < $set[2] ) {
+						wp_delete_file( $file );
+						++$removed;
+					}
+				}
+			}
+		}
+		return $removed;
 	}
 }

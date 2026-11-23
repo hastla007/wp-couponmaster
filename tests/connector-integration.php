@@ -168,12 +168,30 @@ function vcap_conn_voucher( string $type, string $mode, float $value, array $ema
 // Store credit belongs to one customer account: never redeemable through the redemption API.
 $credit = vcap_conn_voucher( 'credit', 'balance', 40 );
 $refused = $service->check( $credit->code, array( 'target' => 'test:credit' ) );
-vcap_conn_assert( is_wp_error( $refused ) && 'vcap_not_redeemable' === $refused->get_error_code(), 'store credit cannot be redeemed through the redemption API' );
+vcap_conn_assert( is_wp_error( $refused ) && 'vcap_not_found' === $refused->get_error_code(), 'store credit cannot be redeemed through the redemption API (AP-S1-2: someone else\'s reads like an unknown code)' );
+$credit_owner     = (int) wp_insert_user( array( 'user_login' => 'conn-credit-' . strtolower( wp_generate_password( 6, false ) ), 'user_pass' => wp_generate_password( 20 ), 'user_email' => 'conn-credit-' . strtolower( wp_generate_password( 6, false ) ) . '@example.test', 'role' => 'customer' ) );
+$credit->user_id  = $credit_owner;
+vcap()->vouchers->update( $credit );
+$refused = $service->check( $credit->code, array( 'target' => 'test:credit', 'user_id' => $credit_owner ) );
+vcap_conn_assert( is_wp_error( $refused ) && 'vcap_not_redeemable' === $refused->get_error_code(), 'store credit cannot be redeemed through the redemption API, not even by its owner' );
 
-// Personal vouchers: a trusted PHP caller (guest checkout of a connector) may pass the customer email.
+// Personal vouchers (V6): an email a guest typed is no proof of identity. Only the logged-in account's email, or an
+// address the trusted PHP caller vouches for (email_verified), unlocks them.
 $personal = vcap_conn_voucher( 'voucher', 'single', 20, array( 'guest-buyer@example.com' ) );
-vcap_conn_assert( is_wp_error( $service->check( $personal->code, array( 'target' => 'test:personal' ) ) ), 'a personal voucher is refused without the customer email' );
-vcap_conn_assert( ! is_wp_error( $service->check( $personal->code, array( 'target' => 'test:personal', 'email' => 'Guest-Buyer@example.com' ) ) ), 'a personal voucher is accepted with the matching customer email' );
+vcap_conn_assert( is_wp_error( $service->check( $personal->code, array( 'target' => 'test:personal', 'user_id' => 0 ) ) ), 'a personal voucher is refused without the customer email' );
+$v6_guest = $service->check( $personal->code, array( 'target' => 'test:personal', 'user_id' => 0, 'email' => 'Guest-Buyer@example.com' ) );
+vcap_conn_assert( is_wp_error( $v6_guest ) && 'vcap_login_required' === $v6_guest->get_error_code() && 403 === $v6_guest->get_error_data()['status'] && str_contains( $v6_guest->get_error_message(), 'Please log in with g***@example.com' ), 'V6: a guest email passed without email_verified does not unlock a personal voucher ("Please log in with g***@example.com")' );
+vcap_conn_assert( ! is_wp_error( $service->check( $personal->code, array( 'target' => 'test:personal', 'user_id' => 0, 'email' => 'Guest-Buyer@example.com', 'email_verified' => true ) ) ), 'a personal voucher is accepted with the matching customer email the caller vouches for (email_verified)' );
+$v6_owner = wp_create_user( 'conn-v6-' . strtolower( wp_generate_password( 6, false ) ), wp_generate_password(), 'Guest-Buyer@example.com' );
+$v6_unproven = $service->check( $personal->code, array( 'target' => 'test:personal', 'user_id' => $v6_owner ) );
+vcap_conn_assert( is_wp_error( $v6_unproven ) && 'vcap_not_allowed' === $v6_unproven->get_error_code(), 'AP-S1-1: the matching account without a proof of mailbox may not redeem the personal voucher' );
+VCAP\PersonalVoucher::mark_verified( $v6_owner ); // As after the confirmation link or a password reset.
+vcap_conn_assert( ! is_wp_error( $service->check( $personal->code, array( 'target' => 'test:personal', 'user_id' => $v6_owner ) ) ), 'V6: the account with the matching email may redeem the personal voucher' );
+add_filter( 'vcap_personal_voucher_email_verified', '__return_false' );
+vcap_conn_assert( is_wp_error( $service->check( $personal->code, array( 'target' => 'test:personal', 'user_id' => $v6_owner ) ) ), 'V6: vcap_personal_voucher_email_verified can require a verification of its own' );
+remove_filter( 'vcap_personal_voucher_email_verified', '__return_false' );
+require_once ABSPATH . 'wp-admin/includes/user.php';
+wp_delete_user( $v6_owner );
 
 // Reactivating a voided single-use voucher that was already redeemed keeps it redeemed.
 $single = vcap_conn_voucher( 'voucher', 'single', 25 );
@@ -187,5 +205,58 @@ $unused = vcap_conn_voucher( 'voucher', 'single', 25 );
 vcap()->issuer->void( vcap()->vouchers->get( $unused->id ), 'Purchase order refunded' );
 vcap()->issuer->reactivate( vcap()->vouchers->get( $unused->id ) );
 vcap_conn_assert( VCAP\Voucher::STATUS_ACTIVE === vcap()->vouchers->get( $unused->id )->status, 'reactivating an unused voucher makes it active again' );
+
+// D12 (Pass Captain connector, without Pass Captain: a stub ticket service): taking tickets back checks the answers
+// of revoke_tickets() and release(); a failed restore after revoked tickets is logged – never silently.
+$d12_service = new class() {
+	public function issue_tickets( ...$args ) {
+		return array();
+	}
+	public function revoke_tickets( $key, $reason ) {
+		return new WP_Error( 'pc_down', 'Pass Captain unavailable' );
+	}
+	public function get( $key ) {
+		return null;
+	}
+};
+$d12_filter = static fn() => $d12_service;
+add_filter( VCAP\Compat\PassCaptainTickets::SERVICE_FILTER, $d12_filter );
+$d12_card  = vcap()->vouchers->get( $card->id );
+$d12_key   = 'passcaptain:ticket:d12-' . wp_generate_uuid4();
+$service->reserve( $d12_card->code, array( 'key' => $d12_key, 'target' => 'passcaptain:test', 'amount' => 5 ) );
+$service->commit( $d12_key );
+delete_option( VCAP\Compat\PassCaptainTickets::ATTENTION_OPTION );
+$d12_revoke = new ReflectionMethod( VCAP\Compat\PassCaptainTickets::class, 'revoke_checked' );
+$d12_revoke->setAccessible( true );
+$d12_ok     = $d12_revoke->invoke( vcap()->passcaptain_tickets, $d12_card, 'd12-exchange', 'test', $d12_key );
+$d12_events = array_values( array_filter( vcap()->vouchers->events( $d12_card->id ), static fn( $e ) => 'passcaptain_revoke_failed' === ( $e['event'] ?? '' ) ) );
+$d12_note   = (string) ( end( $d12_events )['note'] ?? '' );
+vcap_conn_assert( false === $d12_ok && str_contains( $d12_note, 'revoke_tickets pc_down' ) && str_contains( $d12_note, 'release ' ), 'D12: a failed revoke_tickets() and a refused release() are logged as passcaptain_revoke_failed with their error codes' );
+vcap_conn_assert( in_array( (int) $d12_card->id, array_map( 'intval', (array) get_option( VCAP\Compat\PassCaptainTickets::ATTENTION_OPTION ) ), true ), 'D12: the voucher is listed in the admin notice' );
+$d12_restore = new ReflectionMethod( VCAP\Compat\PassCaptainTickets::class, 'restore' );
+$d12_restore->setAccessible( true );
+$d12_restored = $d12_restore->invoke( vcap()->passcaptain_tickets, 'passcaptain:ticket:d12-missing-' . wp_generate_uuid4(), array( 'amount' => 5, 'meta' => array() ), $d12_card, 'abc123' );
+vcap_conn_assert( false === $d12_restored && in_array( 'passcaptain_restore_failed', array_column( vcap()->vouchers->events( $d12_card->id ), 'event' ), true ), 'D12: a failed restore (refund) after revoked tickets is logged as passcaptain_restore_failed' );
+remove_filter( VCAP\Compat\PassCaptainTickets::SERVICE_FILTER, $d12_filter );
+delete_option( VCAP\Compat\PassCaptainTickets::ATTENTION_OPTION );
+
+// VOUCH-E17-02: connector access on vcap()->api_v1 (contract 1.4.0) against a real issued voucher – no internal class.
+add_filter( 'vcap_line_snapshot', $e17_snap = static fn( array $extra ) => $extra + array( 'e17_target' => array( 'product_id' => 4242, 'variation_id' => 0 ) ) );
+list( $e17_order, $e17_vouchers ) = vcap_conn_issue( vcap_conn_product( 'E17 course voucher', array( 'external' ), 'course' ), 1 );
+remove_filter( 'vcap_line_snapshot', $e17_snap );
+$e17_id  = (int) $e17_vouchers[0]->id;
+$e17_api = vcap()->api_v1;
+$e17_v   = $e17_api->voucher( $e17_id );
+vcap_conn_assert( is_array( $e17_v ) && VCAP\API\V1\VoucherService::CONNECTOR_VOUCHER_KEYS === array_keys( $e17_v ) && $e17_id === $e17_v['id'] && 'course' === $e17_v['type'] && $e17_order->get_id() === $e17_v['order_id'] && $e17_v['order_item_id'] > 0, 'E17-02: voucher() reads an issued voucher as an array with order line and code' );
+vcap_conn_assert( $e17_v === $e17_api->voucher_by_code( strtolower( (string) $e17_v['code'] ) ) && null === $e17_api->voucher_by_code( 'E17-NOT-A-CODE' ), 'E17-02: voucher_by_code() finds it case-insensitively and nothing for an unknown code' );
+vcap_conn_assert( array( 'product_id' => 4242, 'variation_id' => 0 ) === ( $e17_api->line_snapshot( (int) $e17_v['order_item_id'] )['e17_target'] ?? null ) && 40.0 === (float) ( $e17_api->line_snapshot( (int) $e17_v['order_item_id'] )['face_value'] ?? 0 ), 'E17-02: line_snapshot() returns the core and connector keys of the order line' );
+add_filter( 'vcap_event_labels', $e17_label = static fn( array $l ) => $l + array( 'e17test_granted' => 'Course access granted' ) );
+$e17_logged = $e17_api->log_event( $e17_id, 'e17test_granted', 'Course 4242 granted', $e17_order->get_id() );
+$e17_events = array_values( array_filter( vcap()->vouchers->events( $e17_id ), static fn( $e ) => 'e17test_granted' === ( $e['event'] ?? '' ) ) );
+vcap_conn_assert( true === $e17_logged && 1 === count( $e17_events ) && 'Course 4242 granted' === (string) $e17_events[0]['note'] && 'Course access granted' === ( VCAP\VoucherRepository::event_labels()['e17test_granted'] ?? '' ), 'E17-02: log_event() writes the connector event into the voucher history, labelled through vcap_event_labels' );
+remove_filter( 'vcap_event_labels', $e17_label );
+$e17_core = $e17_api->log_event( $e17_id, 'redeemed', 'fake' );
+vcap_conn_assert( $e17_core instanceof WP_Error && 'vcap_invalid_event' === $e17_core->get_error_code() && 1 === count( array_filter( vcap()->vouchers->events( $e17_id ), static fn( $e ) => in_array( $e['event'] ?? '', array( 'redeemed', 'e17test_granted' ), true ) ) ), 'E17-02: a connector cannot write a core event such as redeemed' );
+vcap_conn_assert( str_contains( $e17_api->admin_url( $e17_id ), 'page=vcap-vouchers' ) && str_contains( $e17_api->admin_url( $e17_id ), 'voucher=' . $e17_id ), 'E17-02: admin_url() names the voucher screen' );
 
 echo "Voucher Captain connector checks passed.\n";

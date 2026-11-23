@@ -3,16 +3,19 @@
  * Voucher download list (order received page, My Account → order, My Account → Vouchers).
  *
  * Override: yourtheme/woocommerce/voucher-captain/myaccount/vouchers-table.php
+ * @version  1.2.0
  *
  * @var \VCAP\Voucher[]  $vouchers
  * @var \VCAP\Downloads  $downloads
  * @var string           $title
  * @var bool             $show_order
+ * @var bool             $received   M12-18: vouchers received from others (no change or resend forms).
  */
 
 defined( 'ABSPATH' ) || exit;
 
 $show_order = ! empty( $show_order );
+$vcap_received = ! empty( $received );
 ?>
 <section class="vcap-vouchers">
 	<?php if ( $title ) : ?>
@@ -39,6 +42,8 @@ $show_order = ! empty( $show_order );
 		<?php foreach ( $vouchers as $voucher ) : ?>
 			<?php
 			$product = $voucher->product();
+			// V7: vouchers held for the security check of a new customer's order show neither code nor PDF yet.
+			$vcap_held    = \VCAP\Delivery::is_held( $voucher );
 			$value   = 'percent' === $voucher->discount_type ? \VCAP\Format::percent( $voucher->initial_amount ) : wc_price( $voucher->initial_amount, array( 'currency' => $voucher->currency ) );
 			if ( $voucher->is_multi_use() ) {
 				/* translators: %s: remaining balance */
@@ -53,7 +58,7 @@ $show_order = ! empty( $show_order );
 						<br><small><?php /* translators: %s: recipient name */ printf( esc_html__( 'For %s', 'voucher-captain' ), \VCAP\Shortcodes::esc_html_text( $voucher->recipient_name ) ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_html_text(). ?></small>
 					<?php endif; ?>
 				</td>
-				<td data-title="<?php esc_attr_e( 'Code', 'voucher-captain' ); ?>"><code><?php echo esc_html( $voucher->code ); ?></code></td>
+				<td data-title="<?php esc_attr_e( 'Code', 'voucher-captain' ); ?>"><code><?php echo esc_html( $vcap_held ? \VCAP\Mask::code( $voucher->code ) : $voucher->code ); ?></code></td>
 				<td data-title="<?php esc_attr_e( 'Value', 'voucher-captain' ); ?>"><?php echo wp_kses_post( $value ); ?></td>
 				<td data-title="<?php esc_attr_e( 'Status', 'voucher-captain' ); ?>">
 					<?php echo esc_html( $voucher->status_label() ); ?>
@@ -64,13 +69,17 @@ $show_order = ! empty( $show_order );
 					<?php if ( $voucher->expires_at ) : ?>
 						<br><small><?php /* translators: %s: date */ printf( esc_html__( 'Valid until %s', 'voucher-captain' ), esc_html( wp_date( vcap()->settings->date_format(), strtotime( $voucher->expires_at . ' UTC' ) ) ) ); ?></small>
 					<?php endif; ?>
-					<?php if ( ! $voucher->transferable ) : ?>
-						<br><small><?php esc_html_e( 'Personal, not transferable', 'voucher-captain' ); ?></small>
+					<?php // U15: who may redeem it, from the restriction in effect (buyer only, recipient only, both, anyone). ?>
+					<br><small><?php echo esc_html( $voucher->transferable_label() ); ?></small>
+					<?php if ( \VCAP\Voucher::STATUS_ACTIVE === $voucher->status && '' !== \VCAP\Channels::instructions( $voucher ) ) : ?>
+						<br><small class="vcap-redeem-instructions"><?php echo esc_html( \VCAP\Channels::instructions( $voucher ) ); ?></small>
 					<?php endif; ?>
 					<?php if ( '' !== $voucher->terms ) : ?>
 						<details class="vcap-terms"><summary><?php esc_html_e( 'Redemption conditions', 'voucher-captain' ); ?></summary><?php echo wp_kses_post( wpautop( esc_html( $voucher->terms ) ) ); ?></details>
 					<?php endif; ?>
-					<?php if ( \VCAP\Voucher::STATUS_SCHEDULED === $voucher->status && $voucher->delivery_at ) : ?>
+					<?php if ( $vcap_held && $voucher->delivery_at ) : ?>
+						<br><small class="vcap-held"><?php /* translators: %s: date */ printf( esc_html__( 'Security check: the code is delivered and redeemable from %s.', 'voucher-captain' ), esc_html( \VCAP\LocalDate::from_utc( $voucher->delivery_at, vcap()->settings->date_format() . ' H:i' ) ) ); ?></small>
+					<?php elseif ( \VCAP\Voucher::STATUS_SCHEDULED === $voucher->status && $voucher->delivery_at ) : ?>
 						<br><small><?php /* translators: %s: date */ printf( esc_html__( 'Delivery on %s', 'voucher-captain' ), esc_html( \VCAP\LocalDate::from_utc( $voucher->delivery_at, vcap()->settings->date_format() ) ) ); ?></small>
 					<?php endif; ?>
 				</td>
@@ -80,6 +89,8 @@ $show_order = ! empty( $show_order );
 						$order = $voucher->order();
 						if ( $order && (int) $order->get_customer_id() === get_current_user_id() ) {
 							echo '<a href="' . esc_url( $order->get_view_order_url() ) . '">#' . esc_html( $order->get_order_number() ) . '</a>';
+						} elseif ( $order && ! $vcap_received && 0 === (int) $order->get_customer_id() ) {
+							echo '#' . esc_html( $order->get_order_number() ); // M12-18: a guest order of the verified address.
 						} else {
 							esc_html_e( 'Gift', 'voucher-captain' );
 						}
@@ -91,14 +102,61 @@ $show_order = ! empty( $show_order );
 					/** Extra actions of connectors (e.g. "Exchange for tickets", "Send tickets again"). */
 					do_action( 'vcap_account_voucher_actions', $voucher );
 					?>
-					<?php if ( \VCAP\Voucher::STATUS_VOID !== $voucher->status ) : ?>
+					<?php if ( \VCAP\Voucher::STATUS_VOID !== $voucher->status && ! $vcap_held ) : ?>
 						<a class="<?php echo esc_attr( \VCAP\Shortcodes::button_class( 'woocommerce-button button vcap-download-button' ) ); ?>" href="<?php echo esc_url( $downloads->signed_url( $voucher ) ); ?>" target="_blank" rel="noopener">
 							<?php esc_html_e( 'Download PDF', 'voucher-captain' ); ?><?php echo \VCAP\Shortcodes::voucher_suffix( $voucher->code ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in voucher_suffix(). ?>
 						</a>
 					<?php endif; ?>
-					<?php if ( $downloads->customer_can_resend( $voucher ) ) : ?>
+					<?php foreach ( \VCAP\Downloads::voucher_links( $voucher, 'account' ) as $vcap_link ) : ?>
+						<?php // Extra links of add-ons, e.g. "Add to Wallet" (filter vcap_voucher_links). ?>
+						<a class="<?php echo esc_attr( \VCAP\Shortcodes::button_class( 'woocommerce-button button vcap-voucher-link' ) ); ?>" href="<?php echo esc_url( $vcap_link['url'] ); ?>" target="_blank" rel="noopener"><?php echo esc_html( $vcap_link['label'] ); ?></a>
+					<?php endforeach; ?>
+					<?php if ( ! $vcap_received && $downloads->customer_can_change( $voucher ) ) : ?>
+						<?php
+						// H10/M12-16/M12-47: until delivery the buyer may correct the recipient, name and message; the date
+						// only where the product lets the customer choose it.
+						$vcap_opt = $downloads->change_options( $voucher );
+						$vcap_vid = (string) $voucher->id;
+						?>
+						<details class="vcap-change">
+							<summary><?php echo esc_html( $vcap_opt['date'] ? __( 'Change recipient or date', 'voucher-captain' ) : __( 'Change gift details', 'voucher-captain' ) ); ?></summary>
+							<form method="post" class="vcap-change-form">
+								<input type="hidden" name="vcap_change" value="<?php echo esc_attr( $vcap_vid ); ?>" />
+								<?php wp_nonce_field( 'vcap_change_' . $voucher->id, 'vcap_change_nonce' ); ?>
+								<?php if ( $vcap_opt['email'] ) : ?>
+									<p><label for="vcap-change-email-<?php echo esc_attr( $vcap_vid ); ?>"><?php esc_html_e( 'Recipient email', 'voucher-captain' ); ?></label>
+									<input type="email" class="input-text" name="vcap_change_email" id="vcap-change-email-<?php echo esc_attr( $vcap_vid ); ?>" value="<?php echo esc_attr( $voucher->recipient_email ); ?>" /></p>
+								<?php endif; ?>
+								<?php if ( $vcap_opt['name'] ) : ?>
+									<p><label for="vcap-change-name-<?php echo esc_attr( $vcap_vid ); ?>"><?php esc_html_e( 'Recipient name', 'voucher-captain' ); ?></label>
+									<input type="text" class="input-text" maxlength="100" name="vcap_change_name" id="vcap-change-name-<?php echo esc_attr( $vcap_vid ); ?>" value="<?php echo \VCAP\Shortcodes::esc_attr_text( $voucher->recipient_name ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_attr_text(). ?>" /></p>
+								<?php endif; ?>
+								<?php if ( $vcap_opt['message'] ) : ?>
+									<p><label for="vcap-change-message-<?php echo esc_attr( $vcap_vid ); ?>"><?php esc_html_e( 'Personal message', 'voucher-captain' ); ?></label>
+									<textarea class="input-text" rows="3" name="vcap_change_message" id="vcap-change-message-<?php echo esc_attr( $vcap_vid ); ?>"><?php echo \VCAP\Shortcodes::esc_html_text( $voucher->message ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_html_text(). ?></textarea></p>
+								<?php endif; ?>
+								<?php if ( $vcap_opt['date'] ) : ?>
+									<p><label for="vcap-change-date-<?php echo esc_attr( $vcap_vid ); ?>"><?php esc_html_e( 'Delivery date', 'voucher-captain' ); ?></label>
+									<input type="date" class="input-text" name="vcap_change_date" id="vcap-change-date-<?php echo esc_attr( $vcap_vid ); ?>" min="<?php echo esc_attr( $vcap_opt['min'] ); ?>" max="<?php echo esc_attr( $vcap_opt['max'] ); ?>" value="<?php echo esc_attr( $voucher->delivery_at ? \VCAP\LocalDate::from_utc( $voucher->delivery_at, 'Y-m-d' ) : '' ); ?>" /></p>
+								<?php endif; ?>
+								<?php if ( $vcap_opt['send_now'] ) : ?>
+									<p><label><input type="checkbox" name="vcap_change_now" value="1" /> <?php esc_html_e( 'Send now', 'voucher-captain' ); ?></label></p>
+								<?php endif; ?>
+								<button type="submit" class="<?php echo esc_attr( \VCAP\Shortcodes::button_class( 'woocommerce-button button vcap-change-button' ) ); ?>"><?php esc_html_e( 'Save changes', 'voucher-captain' ); ?></button>
+							</form>
+						</details>
+					<?php endif; ?>
+					<?php if ( ! $vcap_received && $downloads->customer_can_resend( $voucher ) ) : ?>
 						<form method="post" class="vcap-resend-form">
 							<input type="hidden" name="vcap_resend" value="<?php echo esc_attr( (string) $voucher->id ); ?>" />
+							<?php if ( \VCAP\Delivery::to_recipient( $voucher ) ) : ?>
+								<?php // H10: choose who gets the email again. ?>
+								<label class="screen-reader-text" for="vcap-resend-to-<?php echo esc_attr( (string) $voucher->id ); ?>"><?php esc_html_e( 'Send to', 'voucher-captain' ); ?></label>
+								<select name="vcap_resend_to" id="vcap-resend-to-<?php echo esc_attr( (string) $voucher->id ); ?>">
+									<option value="buyer"><?php esc_html_e( 'To me', 'voucher-captain' ); ?></option>
+									<option value="recipient"><?php echo esc_html( sprintf( /* translators: %s: recipient email */ __( 'To %s', 'voucher-captain' ), $voucher->recipient_email ) ); ?></option>
+								</select>
+							<?php endif; ?>
 							<?php wp_nonce_field( 'vcap_resend_' . $voucher->id, 'vcap_resend_nonce' ); ?>
 							<button type="submit" class="<?php echo esc_attr( \VCAP\Shortcodes::button_class( 'woocommerce-button button vcap-resend-button' ) ); ?>"><?php esc_html_e( 'Send email again', 'voucher-captain' ); ?><?php echo \VCAP\Shortcodes::voucher_suffix( $voucher->code ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in voucher_suffix(). ?></button>
 						</form>

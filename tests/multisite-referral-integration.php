@@ -28,6 +28,7 @@ function vcap_msref_enable( float $friend_amount ): void {
 	update_option( 'vcap_referral_reward_amount', 15 );
 	update_option( 'vcap_referral_reward_as', 'coupon' );
 	update_option( 'vcap_store_credit', 'no' );
+	update_option( 'vcap_referral_wait_days', 0 ); // The immediate reward (V3 waiting period: referral suite).
 }
 
 $state_option = 'vcap_multisite_referral_test';

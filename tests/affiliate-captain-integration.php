@@ -1,6 +1,6 @@
 <?php
 /**
- * WP Affiliate Captain adapter (partner per code campaign). Runs with and without Affiliate Captain installed:
+ * Affiliate Captain adapter (partner per code campaign). Runs with and without Affiliate Captain installed:
  * without it, the two contract functions are stubbed deterministically.
  *   wp eval-file tests/affiliate-captain-integration.php
  */
@@ -66,7 +66,7 @@ if ( ! $had_cap ) {
 	ob_start();
 	$admin->page();
 	$html = ob_get_clean();
-	vcap_aff_assert( str_contains( $html, 'Partner (WP Affiliate Captain)' ) && str_contains( $html, '<code>VCAP-TEST-PARTNER</code>' ) && ! str_contains( $html, 'value="VCAP-TEST-PARTNER"' ), 'without the Affiliate Captain capability the partner is shown read-only' );
+	vcap_aff_assert( str_contains( $html, 'Partner (Affiliate Captain)' ) && str_contains( $html, '<code>VCAP-TEST-PARTNER</code>' ) && ! str_contains( $html, 'value="VCAP-TEST-PARTNER"' ), 'without the Affiliate Captain capability the partner is shown read-only' );
 	$user->add_cap( AffiliateCaptain::CAPABILITY );
 }
 ob_start();
@@ -75,7 +75,7 @@ $html = ob_get_clean();
 if ( ! $had_cap ) {
 	$user->remove_cap( AffiliateCaptain::CAPABILITY );
 }
-vcap_aff_assert( str_contains( $html, 'Partner (WP Affiliate Captain)' ) && str_contains( $html, 'value="VCAP-TEST-PARTNER"' ), 'with the capability the campaign table shows the editable partner code' );
+vcap_aff_assert( str_contains( $html, 'Partner (Affiliate Captain)' ) && str_contains( $html, 'value="VCAP-TEST-PARTNER"' ), 'with the capability the campaign table shows the editable partner code' );
 
 $base = apply_filters( 'wpac_commission_base', 5000, array( 'product_id' => 0 ), array( 'source' => 'woocommerce' ) );
 vcap_aff_assert( 5000 === (int) $base, 'voucher sales earn commission by default' );
@@ -94,7 +94,43 @@ remove_filter( 'vcap_affiliate_commission_on_voucher_sales', '__return_false' );
 
 vcap_aff_assert( true === AffiliateCaptain::assign( $name, '' ) && null === apply_filters( 'wpac_coupon_affiliate', null, $codes[0] ), 'removing the partner stops the attribution' );
 
-foreach ( array_merge( $codes, array( $template->get_code(), $gift->get_code() ) ) as $code ) {
+// S18: generating more codes under a campaign assigned to a partner needs Affiliate Captain's right; the assignment
+// ends with the last code of the campaign.
+vcap_aff_assert( true === AffiliateCaptain::assign( $name, 'vcap-test-partner' ), 'S18: the partner is assigned again' );
+$s18_clerk = wp_insert_user( array( 'user_login' => 'vcap_s18_' . strtolower( wp_generate_password( 6, false, false ) ), 'user_pass' => wp_generate_password( 24 ), 'role' => 'shop_manager' ) );
+get_userdata( $s18_clerk )->add_cap( AffiliateCaptain::CAPABILITY, false ); // Denied for this user even if the role has it.
+wp_set_current_user( $s18_clerk );
+$s18_refused = AffiliateCaptain::generation_refusal( $name );
+$s18_free    = AffiliateCaptain::generation_refusal( 'Unassigned ' . wp_generate_password( 6, false, false ) );
+wp_set_current_user( 1 );
+$s18_admin_ok = '' === AffiliateCaptain::generation_refusal( $name ) || ! current_user_can( AffiliateCaptain::CAPABILITY );
+vcap_aff_assert( '' !== $s18_refused && str_contains( $s18_refused, $name ) && '' === $s18_free && $s18_admin_ok, 'S18: without wpac_manage_affiliates no codes can be generated under a campaign assigned to a partner (other names are free)' );
+vcap_aff_assert( str_contains( (string) file_get_contents( dirname( __DIR__ ) . '/src/Admin/CampaignAdmin.php' ), 'AffiliateCaptain::generation_refusal( $name )' ), 'S18: the "Generate codes" handler asks before generating coupons' );
+// SEC2: the same clerk cannot put a coupon into the partner's campaign over the WooCommerce REST API either.
+wp_set_current_user( $s18_clerk );
+$sec2_request = new WP_REST_Request( 'POST', '/wc/v3/coupons' );
+$sec2_request->set_body_params(
+	array(
+		'code'          => 'vcap-sec2-' . strtolower( wp_generate_password( 6, false, false ) ),
+		'discount_type' => 'percent',
+		'amount'        => '10',
+		'meta_data'     => array( array( 'key' => VCAP\Campaigns::META, 'value' => $name ) ),
+	)
+);
+$sec2_response = rest_do_request( $sec2_request );
+wp_set_current_user( 1 );
+$sec2_id = (int) ( $sec2_response->get_data()['id'] ?? 0 );
+vcap_aff_assert( 201 === $sec2_response->get_status() && $sec2_id > 0 && '' === (string) get_post_meta( $sec2_id, VCAP\Campaigns::META, true ), 'SEC2: over the REST coupon API a user without wpac_manage_affiliates cannot assign a coupon to a partner campaign (the coupon is saved without it)', array( $sec2_response->get_status(), get_post_meta( $sec2_id, VCAP\Campaigns::META, true ) ) );
+wp_delete_post( $sec2_id, true );
+wp_delete_user( $s18_clerk );
+foreach ( $codes as $code ) {
+	wp_delete_post( wc_get_coupon_id_by_code( $code ), true );
+}
+// The gift card above also carries the campaign name: the assignment stays until it is gone too.
+vcap_aff_assert( 'VCAP-TEST-PARTNER' === AffiliateCaptain::partner_for_campaign( $name ), 'S18: the assignment stays while a code of the campaign exists' );
+wp_delete_post( $gift->get_id(), true );
+vcap_aff_assert( '' === AffiliateCaptain::partner_for_campaign( $name ), 'S18: deleting the last code of a campaign removes its partner assignment' );
+foreach ( array( $template->get_code() ) as $code ) {
 	wp_delete_post( wc_get_coupon_id_by_code( $code ), true );
 }
 $product->delete( true );

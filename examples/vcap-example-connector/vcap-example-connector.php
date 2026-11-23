@@ -18,6 +18,8 @@ final class VCAP_Example_Connector {
 	const TARGET    = 'example:premium';    // What is unlocked; checked by vcap_redemption_allowed.
 	const PENDING   = 'vcap_example_pending'; // user meta: redemption key => attempts (survives timeouts).
 	const ACCESS    = 'vcap_example_access';  // user meta: redemption key => voucher id (the "grant").
+	const BY_VOUCHER = 'vcap_example_voucher'; // user meta (one row per granted voucher id): finds the user of a voucher.
+	const ATTEMPTS  = 'vcap_example_attempts'; // user meta: code hash => number of released earlier redemptions.
 	const RETRY     = 'vcap_example_retry';   // Action Scheduler hook.
 	const MAX_TRIES = 5;
 
@@ -32,6 +34,8 @@ final class VCAP_Example_Connector {
 		add_filter( 'vcap_redemption_channels', array( $self, 'channels' ) );
 		add_filter( 'vcap_redemption_channel_for_target', array( $self, 'channel_for_target' ), 10, 2 );
 		add_filter( 'vcap_redemption_allowed', array( $self, 'allowed' ), 10, 4 );
+		// Keys "example:…" are created on the server only: nobody may claim (or drive) them over REST.
+		add_filter( 'vcap_internal_redemption_key_prefixes', array( $self, 'internal_keys' ) );
 		add_action( self::RETRY, array( $self, 'retry' ), 10, 2 );
 		add_action( 'vcap_voucher_event', array( $self, 'on_voucher_event' ), 10, 2 );
 		add_shortcode( 'vcap_example_unlock', array( $self, 'shortcode' ) );
@@ -51,30 +55,47 @@ final class VCAP_Example_Connector {
 		return 0 === strpos( $target, 'example:' ) ? self::CHANNEL : $channel;
 	}
 
-	/** Only "premium" vouchers unlock the premium service. */
+	/**
+	 * Binds voucher and target completely: only "premium" vouchers, and only for the one target this connector
+	 * delivers (any other "example:…" target is refused – nothing would be delivered for it).
+	 */
 	public function allowed( $allowed, $voucher, string $target, int $user_id ) {
-		if ( 0 === strpos( $target, 'example:' ) && 'premium' !== $voucher->type ) {
+		if ( 0 !== strpos( $target, 'example:' ) ) {
+			return $allowed;
+		}
+		if ( self::TARGET !== $target || 'premium' !== $voucher->type ) {
 			return new WP_Error( 'vcap_not_allowed', __( 'This voucher cannot unlock the premium service.', 'vcap-example' ), array( 'status' => 403 ) );
 		}
 		return $allowed;
+	}
+
+	/** The connector's own key prefix is internal (CONNECTORS.md 2: never accepted over REST). */
+	public function internal_keys( array $prefixes ): array {
+		return array_merge( $prefixes, array( 'example:' ) );
 	}
 
 	// ---------------------------------------------------------------- redemption flow.
 
 	/**
 	 * Stable key per user and code: a double click, a reload or a retry after a timeout reuses it, so the voucher
-	 * is never reserved twice and the user is never granted twice.
+	 * is never reserved twice and the user is never granted twice. Once a redemption under a key was released
+	 * (expired, given up), that key holds nothing any more: the next attempt uses a new one ($attempt).
 	 */
-	public static function key( int $user_id, string $code ): string {
-		return 'example:' . $user_id . ':' . substr( hash( 'sha256', strtolower( trim( $code ) ) ), 0, 24 );
+	public static function key( int $user_id, string $code, int $attempt = 0 ): string {
+		return 'example:' . $user_id . ':' . self::code_hash( $code ) . ( $attempt > 0 ? '-' . $attempt : '' );
+	}
+
+	private static function code_hash( string $code ): string {
+		return substr( hash( 'sha256', strtolower( trim( $code ) ) ), 0, 24 );
 	}
 
 	/**
 	 * @return string 'granted' | 'retrying' | error message
 	 */
-	public function redeem( int $user_id, string $code ): string {
-		$service = vcap()->redemptions;
-		$key     = self::key( $user_id, $code );
+	public function redeem( int $user_id, string $code, bool $fresh_key = false ): string {
+		$service  = vcap()->redemptions;
+		$attempts = (array) get_user_meta( $user_id, self::ATTEMPTS, true );
+		$key      = self::key( $user_id, $code, (int) ( $attempts[ self::code_hash( $code ) ] ?? 0 ) );
 
 		// 1. Remember the key BEFORE calling the API, so a crash or timeout can be resumed.
 		$pending         = (array) get_user_meta( $user_id, self::PENDING, true );
@@ -91,6 +112,15 @@ final class VCAP_Example_Connector {
 			if ( 'vcap_already_redeemed' === $reserved->get_error_code() && $this->has_access( $user_id, $key ) ) {
 				$this->forget( $user_id, $key );
 				return 'granted'; // Completed earlier (e.g. by a retry job).
+			}
+			if ( 'vcap_redemption_released' === $reserved->get_error_code() && ! $fresh_key ) {
+				// The earlier redemption under this key was released: it reserves nothing. Take back what it may
+				// have granted, then redeem once more under a new key.
+				$this->revoke( $user_id, $key );
+				$this->forget( $user_id, $key );
+				$attempts[ self::code_hash( $code ) ] = (int) ( $attempts[ self::code_hash( $code ) ] ?? 0 ) + 1;
+				update_user_meta( $user_id, self::ATTEMPTS, $attempts );
+				return $this->redeem( $user_id, $code, true );
 			}
 			$this->forget( $user_id, $key );
 			return $reserved->get_error_message();
@@ -187,13 +217,18 @@ final class VCAP_Example_Connector {
 		if ( ! isset( $access[ $key ] ) ) {
 			$access[ $key ] = $voucher_id;
 			update_user_meta( $user_id, self::ACCESS, $access );
+			add_user_meta( $user_id, self::BY_VOUCHER, $voucher_id );
 		}
 	}
 
 	private function revoke( int $user_id, string $key ): void {
 		$access = (array) get_user_meta( $user_id, self::ACCESS, true );
+		$gone   = (int) ( $access[ $key ] ?? 0 );
 		unset( $access[ $key ] );
 		update_user_meta( $user_id, self::ACCESS, $access );
+		if ( $gone && ! in_array( $gone, array_map( 'intval', $access ), true ) ) {
+			delete_user_meta( $user_id, self::BY_VOUCHER, $gone );
+		}
 	}
 
 	public function has_access( int $user_id, string $key = '' ): bool {
@@ -209,14 +244,14 @@ final class VCAP_Example_Connector {
 		if ( 'voided' !== $event ) {
 			return;
 		}
-		global $wpdb;
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT user_id, meta_value FROM {$wpdb->usermeta} WHERE meta_key = %s", self::ACCESS ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		foreach ( $rows as $row ) {
-			$access = maybe_unserialize( $row->meta_value );
-			$left   = array_filter( (array) $access, static fn( $id ) => (int) $id !== (int) $voucher_id );
-			if ( count( $left ) !== count( (array) $access ) ) {
-				update_user_meta( (int) $row->user_id, self::ACCESS, $left );
-			}
+		// Only the users this voucher unlocked something for (reverse index written by grant(); no scan of every
+		// user's grants). Runs after Voucher Captain's COMMIT, so a rolled back void never revokes anything.
+		$users = get_users( array( 'meta_key' => self::BY_VOUCHER, 'meta_value' => (string) (int) $voucher_id, 'fields' => 'ID', 'number' => 100 ) ); // phpcs:ignore WordPress.DB.SlowDBQuery
+		foreach ( $users as $user_id ) {
+			$access = (array) get_user_meta( (int) $user_id, self::ACCESS, true );
+			$left   = array_filter( $access, static fn( $id ) => (int) $id !== (int) $voucher_id );
+			update_user_meta( (int) $user_id, self::ACCESS, $left );
+			delete_user_meta( (int) $user_id, self::BY_VOUCHER, (int) $voucher_id );
 		}
 	}
 

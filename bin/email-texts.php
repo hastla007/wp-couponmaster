@@ -39,7 +39,7 @@ $cell  = static fn( string $s ): string => str_replace( array( '|', "\n" ), arra
 $group = array();
 foreach ( $pot as $key => $e ) {
 	foreach ( $e['refs'] as $ref ) {
-		if ( preg_match( '#^(src/Emails/\w+\.php|templates/emails/[\w/]+\.php)#', $ref, $m ) ) {
+		if ( preg_match( '#^(src/Emails/\w+\.php|templates/emails/[\w/-]+\.php)#', $ref, $m ) ) {
 			$group[ $m[1] ][ $key ] = $e;
 		}
 	}

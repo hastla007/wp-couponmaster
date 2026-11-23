@@ -9,6 +9,20 @@ defined( 'ABSPATH' ) || exit;
  */
 final class SpreadsheetReader {
 	public const MAX_ROWS = 100000;
+	/** Columns of a worksheet (Excel: A … XFD). A cell reference beyond is refused, not padded up to. */
+	public const MAX_COLUMNS = 16384;
+
+	/**
+	 * Row with its cells at their column index; gaps stay gaps (a cell "ZZ1" does not create 700 empty cells).
+	 * Readers use $row[ $index ] ?? ''.
+	 *
+	 * @param array<int, string> $cells
+	 * @return array<int, string>
+	 */
+	private static function row( array $cells ): array {
+		ksort( $cells );
+		return $cells;
+	}
 
 	/**
 	 * @return array<int, array<int, string>>
@@ -31,11 +45,7 @@ final class SpreadsheetReader {
 	// ---------------------------------------------------------------- CSV.
 
 	public static function csv( string $file ): array {
-		$content = (string) file_get_contents( $file );
-		$content = preg_replace( '/^\xEF\xBB\xBF/', '', $content ); // BOM.
-		if ( ! mb_check_encoding( $content, 'UTF-8' ) ) {
-			$content = mb_convert_encoding( $content, 'UTF-8', 'Windows-1252' );
-		}
+		$content = self::to_utf8( (string) file_get_contents( $file ) );
 		$first     = strtok( $content, "\n" ) ?: '';
 		$delimiter = ',';
 		$best      = 0;
@@ -47,8 +57,8 @@ final class SpreadsheetReader {
 			}
 		}
 		$rows   = array();
-		$handle = fopen( 'php://temp', 'r+' );
-		fwrite( $handle, $content );
+		$handle = fopen( 'php://temp', 'r+' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- in-memory stream for fgetcsv(); WP_Filesystem has no stream API.
+		fwrite( $handle, $content ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- writes to the php://temp stream above.
 		rewind( $handle );
 		while ( false !== ( $row = fgetcsv( $handle, 0, $delimiter, '"', '\\' ) ) ) {
 			if ( array( null ) === $row ) {
@@ -59,8 +69,36 @@ final class SpreadsheetReader {
 				break;
 			}
 		}
-		fclose( $handle );
+		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- closes the php://temp stream above.
 		return $rows;
+	}
+
+	/**
+	 * Text of a CSV/TXT file as UTF-8: UTF-8 (with or without BOM), UTF-16 LE/BE with BOM (Excel "Unicode text")
+	 * or without BOM when every other byte is NUL, otherwise Windows-1252.
+	 */
+	public static function to_utf8( string $content ): string {
+		if ( str_starts_with( $content, "\xEF\xBB\xBF" ) ) {
+			return substr( $content, 3 );
+		}
+		$utf16 = '';
+		if ( str_starts_with( $content, "\xFF\xFE" ) ) {
+			$utf16   = 'UTF-16LE';
+			$content = substr( $content, 2 );
+		} elseif ( str_starts_with( $content, "\xFE\xFF" ) ) {
+			$utf16   = 'UTF-16BE';
+			$content = substr( $content, 2 );
+		} elseif ( strlen( $content ) >= 4 && 0 === strlen( $content ) % 2 ) {
+			$head  = substr( $content, 0, 200 );
+			$odd   = substr_count( implode( '', array_map( static fn( $p ) => $p[1] ?? '', str_split( $head, 2 ) ) ), "\0" );
+			$even  = substr_count( implode( '', array_map( static fn( $p ) => $p[0], str_split( $head, 2 ) ) ), "\0" );
+			$pairs = intdiv( strlen( $head ), 2 );
+			$utf16 = $odd >= 0.9 * $pairs && 0 === $even ? 'UTF-16LE' : ( $even >= 0.9 * $pairs && 0 === $odd ? 'UTF-16BE' : '' );
+		}
+		if ( '' !== $utf16 ) {
+			return (string) mb_convert_encoding( $content, 'UTF-8', $utf16 );
+		}
+		return mb_check_encoding( $content, 'UTF-8' ) ? $content : (string) mb_convert_encoding( $content, 'UTF-8', 'Windows-1252' );
 	}
 
 	// ---------------------------------------------------------------- XLSX.
@@ -122,10 +160,16 @@ final class SpreadsheetReader {
 	}
 
 	private static function col_index( string $ref ): int {
-		$letters = preg_replace( '/\d+/', '', strtoupper( $ref ) );
+		if ( ! preg_match( '/^([A-Za-z]{1,10})\d*$/', $ref, $m ) ) {
+			throw new \RuntimeException( esc_html__( 'The worksheet contains an invalid cell reference.', 'voucher-captain' ) );
+		}
+		$letters = strtoupper( $m[1] );
 		$n       = 0;
 		for ( $i = 0, $len = strlen( $letters ); $i < $len; $i++ ) {
 			$n = $n * 26 + ( ord( $letters[ $i ] ) - 64 );
+		}
+		if ( $n > self::MAX_COLUMNS ) {
+			throw new \RuntimeException( esc_html__( 'The worksheet has cells beyond the last column (XFD). Please save it again with the codes in the first columns.', 'voucher-captain' ) );
 		}
 		return max( 0, $n - 1 );
 	}
@@ -184,15 +228,13 @@ final class SpreadsheetReader {
 				} else {
 					$value = (string) $c->v;
 				}
+				if ( $idx >= self::MAX_COLUMNS ) {
+					throw new \RuntimeException( esc_html__( 'The worksheet has cells beyond the last column (XFD). Please save it again with the codes in the first columns.', 'voucher-captain' ) );
+				}
 				$cells[ $idx ] = trim( self::number_to_string( $value, $type ) );
 			}
 			if ( $cells ) {
-				$max  = max( array_keys( $cells ) );
-				$line = array();
-				for ( $i = 0; $i <= $max; $i++ ) {
-					$line[] = $cells[ $i ] ?? '';
-				}
-				$rows[] = $line;
+				$rows[] = self::row( $cells );
 			}
 			if ( count( $rows ) >= self::MAX_ROWS ) {
 				break;
@@ -243,14 +285,18 @@ final class SpreadsheetReader {
 				if ( count( $paras ) ) {
 					$parts = array();
 					foreach ( $paras as $p ) {
-						$parts[] = trim( strip_tags( $p->asXML() ) );
+						$parts[] = trim( wp_strip_all_tags( $p->asXML() ) );
 					}
 					$value = implode( "\n", $parts );
 				} else {
 					$value = (string) $cell->attributes( $office )->value;
 				}
-				for ( $i = 0; $i < $repeat; $i++ ) {
-					$line[] = html_entity_decode( trim( $value ), ENT_QUOTES | ENT_XML1, 'UTF-8' );
+				$value = html_entity_decode( trim( $value ), ENT_QUOTES | ENT_XML1, 'UTF-8' );
+				if ( '' === $value && count( $line ) + $repeat > self::MAX_COLUMNS ) {
+					break; // Trailing empty cells repeated to the end of the sheet.
+				}
+				for ( $i = 0; $i < $repeat && count( $line ) < self::MAX_COLUMNS; $i++ ) {
+					$line[] = $value;
 				}
 			}
 			while ( $line && '' === end( $line ) ) {
@@ -293,8 +339,18 @@ final class SpreadsheetReader {
 	}
 
 	private static function ole_stream( string $data, array $names ): ?string {
-		$sector_size      = 1 << self::u16( $data, 30 );
-		$mini_size        = 1 << self::u16( $data, 32 );
+		if ( strlen( $data ) < 512 ) {
+			throw new \RuntimeException( esc_html__( 'The XLS file is damaged.', 'voucher-captain' ) );
+		}
+		$sector_shift = self::u16( $data, 30 );
+		$mini_shift   = self::u16( $data, 32 );
+		if ( ! in_array( $sector_shift, array( 9, 12 ), true ) || 6 !== $mini_shift ) {
+			throw new \RuntimeException( esc_html__( 'The XLS file is damaged.', 'voucher-captain' ) );
+		}
+		$sector_size      = 1 << $sector_shift;
+		$mini_size        = 1 << $mini_shift;
+		// No chain can be longer than the file has sectors (a crafted chain must not loop a million times).
+		$max_sectors      = max( 1, intdiv( strlen( $data ), $sector_size ) );
 		$dir_start        = self::u32( $data, 48 );
 		$mini_cutoff      = self::u32( $data, 56 );
 		$mini_fat_start   = self::u32( $data, 60 );
@@ -311,7 +367,7 @@ final class SpreadsheetReader {
 			}
 		}
 		$next = $difat_start;
-		for ( $n = 0; $n < $difat_count && $next < 0xFFFFFFFA; $n++ ) {
+		for ( $n = 0; $n < min( $difat_count, $max_sectors ) && $next < 0xFFFFFFFA; $n++ ) {
 			$block = $sector( $next );
 			for ( $i = 0; $i < $sector_size / 4 - 1; $i++ ) {
 				$id = self::u32( $block, $i * 4 );
@@ -322,10 +378,14 @@ final class SpreadsheetReader {
 			$next = self::u32( $block, $sector_size - 4 );
 		}
 		$fat = array();
-		foreach ( $fat_sectors as $id ) {
-			$fat = array_merge( $fat, array_values( unpack( 'V*', $sector( $id ) ) ) );
+		foreach ( array_slice( $fat_sectors, 0, $max_sectors ) as $id ) {
+			$block = $sector( $id );
+			if ( strlen( $block ) === $sector_size ) {
+				array_push( $fat, ...array_values( unpack( 'V*', $block ) ) );
+			}
 		}
-		$chain = static function ( int $start, array $table, int $limit = 1000000 ): array {
+		$chain = static function ( int $start, array $table, int $limit = 0 ) use ( $max_sectors ): array {
+			$limit = $limit > 0 ? $limit : $max_sectors;
 			$ids = array();
 			while ( $start < 0xFFFFFFFA && isset( $table[ $start ] ) && count( $ids ) < $limit ) {
 				$ids[] = $start;
@@ -517,12 +577,7 @@ final class SpreadsheetReader {
 		ksort( $cells );
 		$rows = array();
 		foreach ( $cells as $row ) {
-			$max  = max( array_keys( $row ) );
-			$line = array();
-			for ( $i = 0; $i <= $max; $i++ ) {
-				$line[] = trim( (string) ( $row[ $i ] ?? '' ) );
-			}
-			$rows[] = $line;
+			$rows[] = self::row( array_map( static fn( $c ) => trim( (string) $c ), $row ) );
 		}
 		return $rows;
 	}

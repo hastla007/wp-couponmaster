@@ -49,11 +49,6 @@ final class Admin {
 
 	public function disabled_notice(): void {
 		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-		if ( $screen && Repository::POST_TYPE === $screen->post_type && ! \VCAP\Licensing\Entitlements::allows( 'promotions' ) ) {
-			// Locked (free edition or no active license): promotions are kept but not applied.
-			echo \VCAP\Licensing\Entitlements::locked_notice( 'promotions', false ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in locked_notice().
-			return;
-		}
 		if ( $screen && Repository::POST_TYPE === $screen->post_type && 'yes' !== get_option( 'vcap_campaigns_enabled', 'no' ) ) {
 			echo '<div class="notice notice-warning"><p>' . esc_html__( 'Promotions are switched off. Enable them under WooCommerce → Settings → Vouchers (“Automatic promotions”); until then no promotion is applied in the shop.', 'voucher-captain' ) . '</p></div>';
 		}
@@ -73,6 +68,7 @@ final class Admin {
 			array(
 				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 				'nonce'   => wp_create_nonce( 'vcap_campaign_preview' ),
+				'error'   => __( 'The preview could not be loaded. Please try again.', 'voucher-captain' ),
 			)
 		);
 	}
@@ -422,7 +418,9 @@ final class Admin {
 		wp_send_json_success( $html );
 	}
 
-	public function columns( array $columns ): array {
+	/** @param mixed $columns What the previous filter returned (AP-Q2-6: a non-array is normalised). */
+	public function columns( $columns ): array {
+		$columns = is_array( $columns ) ? $columns : array();
 		$date = $columns['date'] ?? null;
 		unset( $columns['date'] );
 		$columns['vcap_discount'] = __( 'Discount', 'voucher-captain' );

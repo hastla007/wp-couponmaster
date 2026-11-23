@@ -11,7 +11,8 @@ defined( 'ABSPATH' ) || exit;
  *
  * Money is never taken 1:1 from a foreign currency. Whether a rate is known is decided by can_convert():
  * the base currency, an exchange rate stored on the order at checkout (RATE_META: order-currency units per
- * base-currency unit), a supported switcher, or another callback of `vcap_amount_to_base_currency` that changes
+ * base-currency unit), a supported switcher that knows the currency (WCML and Aelia publish no rate list: they
+ * must change a probe amount as well), or another callback of `vcap_amount_to_base_currency` that changes
  * a probe amount (a converter returning the amount unchanged counts as "no rate"). Filter
  * `vcap_currency_rate_known` (bool, currency, order) overrides the result, e.g. for a converter whose rate is
  * exactly 1. Without a rate the money operation is refused: voucher sales are held (Issuer), store-credit
@@ -32,6 +33,37 @@ final class MultiCurrency {
 		add_action( 'woocommerce_checkout_create_order', array( $this, 'store_rate' ), 20, 1 );
 		add_action( 'woocommerce_store_api_checkout_update_order_meta', array( $this, 'store_rate' ), 20, 1 );
 		add_action( 'admin_notices', array( $this, 'held_notice' ) );
+		// D14: Site Health and the diagnostics read the currency state through filters, not from this class.
+		add_filter( 'vcap_currency_health', array( $this, 'health_state' ) );
+		add_filter( 'vcap_active_integrations', array( $this, 'integration' ) );
+	}
+
+	/**
+	 * Site Health (filter "vcap_currency_health"): currencies refused for want of a rate, unsupported switcher.
+	 *
+	 * @param mixed $state Default state.
+	 * @return array{unknown: array<string, int>, switcher: string}
+	 */
+	public function health_state( $state ): array {
+		return array(
+			'unknown'  => self::unknown_currencies(),
+			'switcher' => self::unsupported_switcher(),
+		) + ( is_array( $state ) ? $state : array() );
+	}
+
+	/**
+	 * Diagnostics (filter "vcap_active_integrations"): the supported currency switcher in use.
+	 *
+	 * @param mixed $active Integration id => version or label.
+	 * @return array<string, string>
+	 */
+	public function integration( $active ): array {
+		$active  = is_array( $active ) ? $active : array();
+		$adapter = self::adapter();
+		if ( '' !== $adapter ) {
+			$active['currency'] = $adapter;
+		}
+		return $active;
 	}
 
 	public function convert( $amount, $currency, $order = null ) {
@@ -49,15 +81,20 @@ final class MultiCurrency {
 			}
 		}
 
-		// WooCommerce Multilingual.
+		// WooCommerce Multilingual, Aelia Currency Switcher. M12-33: they return amounts of a currency they do not
+		// know unchanged; then a switcher that publishes rates (WOOCS, CURCY, WooPayments) may still know it.
 		global $woocommerce_wpml;
 		if ( isset( $woocommerce_wpml->multi_currency->prices ) && method_exists( $woocommerce_wpml->multi_currency->prices, 'unconvert_price_amount' ) ) {
-			return (float) $woocommerce_wpml->multi_currency->prices->unconvert_price_amount( $amount, $currency );
+			$converted = (float) $woocommerce_wpml->multi_currency->prices->unconvert_price_amount( $amount, $currency );
+			if ( abs( $converted - $amount ) > 1e-9 ) {
+				return $converted;
+			}
 		}
-
-		// Aelia Currency Switcher.
 		if ( has_filter( 'wc_aelia_cs_convert' ) ) {
-			return (float) apply_filters( 'wc_aelia_cs_convert', $amount, $currency, $base );
+			$converted = (float) apply_filters( 'wc_aelia_cs_convert', $amount, $currency, $base );
+			if ( abs( $converted - $amount ) > 1e-9 ) {
+				return $converted;
+			}
 		}
 
 		$rate = self::switcher_rate( (string) $currency );
@@ -133,7 +170,7 @@ final class MultiCurrency {
 		if ( ! function_exists( $function ) ) {
 			return null;
 		}
-		$multi = $function();
+		$multi = call_user_func( $function );
 		return is_object( $multi ) && method_exists( $multi, 'get_enabled_currencies' ) ? $multi : null;
 	}
 
@@ -147,19 +184,15 @@ final class MultiCurrency {
 			return true;
 		}
 		$known = ( $order instanceof \WC_Order && (float) $order->get_meta( self::RATE_META ) > 0 )
-			|| '' !== self::adapter() && ( self::switcher_rate( $currency ) > 0 || ! self::rate_listing_adapter() );
+			|| self::switcher_rate( $currency ) > 0;
 		if ( ! $known ) {
-			// Another converter on the public filter: it changes the probe (ours returns it unchanged here).
+			// A switcher without a rate list (WCML, Aelia) or another converter on the public filter: it changes the
+			// probe. WCML and Aelia return amounts of a currency they do not know unchanged – that is no rate either.
 			$probe = (float) apply_filters( 'vcap_amount_to_base_currency', self::PROBE, $currency, $order );
 			$known = $probe > 0 && abs( $probe - self::PROBE ) > 1e-9;
 		}
 		/** Whether amounts in this currency can be converted to the shop base currency (bool, currency, order). */
 		return (bool) apply_filters( 'vcap_currency_rate_known', $known, $currency, $order );
-	}
-
-	/** Whether the active adapter publishes a rate list (a missing currency then means "no rate"). */
-	private static function rate_listing_adapter(): bool {
-		return in_array( self::adapter(), array( 'WOOCS', 'CURCY', 'WooPayments Multi-Currency' ), true );
 	}
 
 	/**
@@ -177,6 +210,24 @@ final class MultiCurrency {
 			return null;
 		}
 		return (float) apply_filters( 'vcap_amount_to_base_currency', $amount, $currency, $order );
+	}
+
+	/**
+	 * M12-33: a base-currency amount converted into $currency (the inverse of to_base()), or null when no exchange
+	 * rate is known. Converted through a probe of 1000 base units, so a switcher's rounding stays out of the rate.
+	 *
+	 * @param \WC_Order|null $order Order whose stored exchange rate counts.
+	 */
+	public static function from_base( float $amount, string $currency, $order = null ): ?float {
+		if ( '' === $currency || get_option( 'woocommerce_currency' ) === $currency ) {
+			return $amount;
+		}
+		$probe = 1000.0;
+		$unit  = self::to_base( $probe, $currency, $order );
+		if ( null === $unit || $unit <= 0 ) {
+			return null;
+		}
+		return $amount * $probe / $unit;
 	}
 
 	/** Remembers (at most once an hour per currency) that a money operation was refused for want of a rate. */
@@ -259,7 +310,7 @@ final class MultiCurrency {
 			', ',
 			array_map( static fn( \WC_Order $o ) => '<a href="' . esc_url( $o->get_edit_order_url() ) . '">#' . esc_html( $o->get_order_number() ) . '</a>', $open )
 		);
-		echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'Voucher Captain', 'voucher-captain' ) . ':</strong> '
+		echo '<div class="notice notice-error"><p><strong>' . esc_html( \VCAP\Brand::name( 'notice' ) ) . ':</strong> '
 			. esc_html__( 'These orders were paid in a foreign currency without a known exchange rate, so their vouchers were not issued and the orders are on hold. Set up a supported currency switcher (or the exchange rate on the order) and issue the vouchers from the order screen, or refund the orders:', 'voucher-captain' )
 			. ' ' . $links . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped above.
 	}

@@ -28,8 +28,15 @@ final class Shortcodes {
 		add_shortcode( 'vcap_voucher_status', array( $this->downloads, 'balance_shortcode' ) );
 		add_shortcode( 'vcap_redeem', array( $this, 'redeem_shortcode' ) );
 		add_action( 'save_post_page', static fn() => delete_transient( 'vcap_redeem_page_guess' ) );
-		foreach ( array( 'save_post', 'deleted_post', 'update_option_widget_block', 'update_option_widget_text', 'update_option_widget_custom_html' ) as $hook ) {
-			add_action( $hook, array( self::class, 'forget_redeem_templates' ) );
+		// A8: the onboarding checklist's cached page lookup (also edits through REST, outside wp-admin).
+		add_action( 'save_post_page', array( Admin\Onboarding::class, 'forget_pages' ) );
+		add_action( 'deleted_post', array( Admin\Onboarding::class, 'forget_pages' ) );
+		// AP-P1-6: only saving a template, template part or builder layout (or a widget) can change the answer.
+		foreach ( array( 'save_post', 'deleted_post' ) as $hook ) {
+			add_action( $hook, array( self::class, 'forget_redeem_templates_for' ), 10, 2 );
+		}
+		foreach ( array( 'update_option_widget_block', 'update_option_widget_text', 'update_option_widget_custom_html' ) as $hook ) {
+			add_action( $hook, array( self::class, 'forget_redeem_templates' ), 10, 0 );
 		}
 		add_shortcode( 'vcap_my_vouchers', array( $this, 'my_vouchers_shortcode' ) );
 		add_shortcode( 'vcap_referral', array( $this, 'referral_shortcode' ) );
@@ -37,6 +44,13 @@ final class Shortcodes {
 		add_action( 'template_redirect', array( $this, 'handle_redeem' ), 8 );
 		add_action( 'template_redirect', array( $this, 'maybe_no_cache' ), 9 );
 		add_action( 'init', array( $this, 'blocks' ) );
+		// M12-50: page caches that know cookies to skip (WP Rocket) bypass pages for a waiting redeem link code.
+		add_filter( 'rocket_cache_reject_cookies', array( self::class, 'cache_reject_cookies' ) );
+		// M12-89: the content analysis of a page is remembered per request until the page or its meta changes.
+		add_action( 'clean_post_cache', array( self::class, 'forget_page_memo' ), 10, 0 );
+		foreach ( array( 'added_post_meta', 'updated_post_meta', 'deleted_post_meta' ) as $hook ) {
+			add_action( $hook, array( self::class, 'forget_page_memo' ), 10, 0 );
+		}
 	}
 
 	/**
@@ -100,6 +114,11 @@ final class Shortcodes {
 				break;
 			default:
 				$html = '';
+		}
+		// F16: the block wrapper carries the block's classes and styles (alignment, custom class name) like core blocks.
+		$wrapper = '' !== $html && function_exists( 'get_block_wrapper_attributes' ) && class_exists( 'WP_Block_Supports' ) && ! empty( \WP_Block_Supports::$block_to_render ) ? get_block_wrapper_attributes() : '';
+		if ( '' !== $wrapper ) {
+			$html = '<div ' . $wrapper . '>' . $html . '</div>';
 		}
 		return self::escape_shortcodes( $html );
 	}
@@ -197,9 +216,47 @@ final class Shortcodes {
 		}
 		if ( ! headers_sent() ) {
 			nocache_headers();
+			self::$no_cache_headers = true;
 		}
 		/** Fires when a page must not be cached (hook for cache plugins without DONOTCACHEPAGE support). */
 		do_action( 'vcap_no_cache' );
+	}
+
+	/** @var bool Whether no_cache() could still send its no-cache headers in this request (M12-51). */
+	private static bool $no_cache_headers = false;
+
+	/**
+	 * Whether this request sent the no-cache headers (no_cache() before any output): only then may a page show a
+	 * code from a redeem link – DONOTCACHEPAGE alone is unknown to Varnish, Cloudflare and other proxy caches.
+	 */
+	public static function no_cache_headers_sent(): bool {
+		return self::$no_cache_headers;
+	}
+
+	/** Tests: forget that the no-cache headers were sent. */
+	public static function reset_no_cache_headers(): void {
+		self::$no_cache_headers = false;
+	}
+
+	/**
+	 * Whether the redeem form may be filled in with a code from a redeem link (M12-51): the no-cache headers were
+	 * sent, or it is the configured redeem page itself (decided on template_redirect, before any output). A form
+	 * rendered only after the headers went out (theme file, builder) stays empty: a proxy cache could otherwise
+	 * keep the full code of one visitor for everybody.
+	 */
+	public static function may_prefill(): bool {
+		if ( self::$no_cache_headers ) {
+			return true;
+		}
+		$page = (int) get_option( 'vcap_redeem_page_id', 0 );
+		return $page > 0 && is_singular() && (int) get_queried_object_id() === $page;
+	}
+
+	/** Cookies for which WP Rocket serves no cached page (filter rocket_cache_reject_cookies, M12-50). */
+	public static function cache_reject_cookies( $cookies ): array {
+		$cookies   = is_array( $cookies ) ? $cookies : array();
+		$cookies[] = self::PREFILL_COOKIE;
+		return array_values( array_unique( $cookies ) );
 	}
 
 	/**
@@ -247,8 +304,8 @@ final class Shortcodes {
 		$found = get_transient( 'vcap_redeem_in_templates' );
 		if ( false === $found || ! in_array( $found, array( 'yes', 'no' ), true ) ) {
 			global $wpdb;
-			$types  = array( 'wp_template', 'wp_template_part', 'wp_block', 'elementor_library', 'et_template', 'et_header_layout', 'et_body_layout', 'et_footer_layout', 'fl-builder-template', 'fl-theme-layout' );
-			$in     = implode( ',', array_fill( 0, count( $types ), '%s' ) );
+			$types  = self::REDEEM_TEMPLATE_TYPES;
+			$in    = implode( ',', array_fill( 0, count( $types ), '%s' ) );
 			$like_b = '%' . $wpdb->esc_like( 'vcap/redeem' ) . '%';
 			$like_s = '%' . $wpdb->esc_like( '[vcap_redeem' ) . '%';
 			// phpcs:disable WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built above, cached in a transient.
@@ -266,8 +323,24 @@ final class Shortcodes {
 		return (bool) apply_filters( 'vcap_site_has_redeem_form', 'yes' === $found );
 	}
 
+	/** Post types of site-wide templates and builder layouts that may carry the redeem form. */
+	public const REDEEM_TEMPLATE_TYPES = array( 'wp_template', 'wp_template_part', 'wp_block', 'elementor_library', 'et_template', 'et_header_layout', 'et_body_layout', 'et_footer_layout', 'fl-builder-template', 'fl-theme-layout' );
+
 	public static function forget_redeem_templates(): void {
 		delete_transient( 'vcap_redeem_in_templates' );
+	}
+
+	/**
+	 * save_post / deleted_post: forgets site_has_redeem_template() only for a template or layout post type.
+	 *
+	 * @param int|string    $post_id
+	 * @param \WP_Post|null $post
+	 */
+	public static function forget_redeem_templates_for( $post_id, $post = null ): void {
+		$type = $post instanceof \WP_Post ? $post->post_type : (string) get_post_type( (int) $post_id );
+		if ( in_array( $type, self::REDEEM_TEMPLATE_TYPES, true ) ) {
+			self::forget_redeem_templates();
+		}
 	}
 
 	/** Notices of WooCommerce (only printed by the form a visitor just sent, see redeem_shortcode()). */
@@ -276,6 +349,37 @@ final class Shortcodes {
 			return '';
 		}
 		return (string) wc_print_notices( true );
+	}
+
+	/** Notice data marking notices of the voucher list's own forms ("send again"), see account_notices(). */
+	public const ACCOUNT_NOTICE = array( 'vcap_account' => 1 );
+
+	/**
+	 * Notices of the voucher list's own forms only (marked with ACCOUNT_NOTICE): "My vouchers" on any page must
+	 * not take other notices ("added to cart", field errors) from the page. The other notices stay in the session.
+	 */
+	private static function account_notices(): string {
+		if ( ! function_exists( 'wc_get_notices' ) || ! WC()->session ) {
+			return '';
+		}
+		$own  = array();
+		$rest = array();
+		foreach ( (array) wc_get_notices() as $type => $notices ) {
+			foreach ( (array) $notices as $notice ) {
+				if ( is_array( $notice ) && ! empty( $notice['data']['vcap_account'] ) ) {
+					$own[ $type ][] = $notice;
+				} else {
+					$rest[ $type ][] = $notice;
+				}
+			}
+		}
+		if ( ! $own ) {
+			return '';
+		}
+		wc_set_notices( $own );
+		$html = (string) wc_print_notices( true );
+		wc_set_notices( $rest );
+		return $html;
 	}
 
 	/** The result of a form a visitor just sent: focused on load (frontend.js), so screen readers read it. */
@@ -293,26 +397,27 @@ final class Shortcodes {
 	 * 'rejected' (WooCommerce refused it) or 'limited' (too many attempts).
 	 */
 	public function redeem( string $raw ): string {
-		// The attempt counts before the lookup and is given back for an existing code: a customer redeeming real
-		// vouchers is never locked out, and the site-wide counter only brakes guessing (see Plugin::rate_limited()).
-		if ( Plugin::rate_limited( 'redeem', 15, 300, 15 * MINUTE_IN_SECONDS, false ) ) {
-			wc_add_notice( __( 'Too many attempts. Please try again later.', 'voucher-captain' ), 'error' );
+		// The attempt counts before the lookup (one bucket for all code forms) and is given back for an existing
+		// code: a customer redeeming real vouchers is never locked out, and the site-wide counter only brakes
+		// guessing (see CodeLookup, Plugin::rate_limited()). Another customer's store credit reads as unknown.
+		if ( CodeLookup::begin() ) {
+			wc_add_notice( CodeLookup::limited_message(), 'error' );
 			return 'limited';
 		}
-		$code = wc_format_coupon_code( sanitize_text_field( $raw ) );
-		if ( '' === $code || strlen( $code ) > 100 || ! wc_get_coupon_id_by_code( $code ) ) {
-			Plugin::rate_limit_failure( 'redeem', 15 * MINUTE_IN_SECONDS );
-			wc_add_notice( __( 'Voucher code not found.', 'voucher-captain' ), 'error' );
+		$code = wc_format_coupon_code( CodeLookup::code_input( sanitize_text_field( $raw ) ) ); // M12-99: code#PIN.
+		if ( ! CodeLookup::confirms( $code ) ) {
+			CodeLookup::failed();
+			wc_add_notice( CodeLookup::not_found_message(), 'error' );
 			return 'invalid';
 		}
-		Plugin::rate_limit_success( 'redeem', 15 * MINUTE_IN_SECONDS );
+		CodeLookup::found();
 		/** Connectors may handle a code themselves (e.g. exchange it for tickets): return a result string. */
 		$handled = apply_filters( 'vcap_redeem_code', null, $code );
 		if ( is_string( $handled ) && '' !== $handled ) {
 			return $handled;
 		}
 		if ( ! WC()->cart || WC()->cart->is_empty() ) {
-			if ( WC()->session && ! WC()->session->has_session() ) {
+			if ( WC()->session && method_exists( WC()->session, 'has_session' ) && ! WC()->session->has_session() && method_exists( WC()->session, 'set_customer_session_cookie' ) ) {
 				WC()->session->set_customer_session_cookie( true );
 			}
 			WC()->session->set( CouponLink::SESSION_KEY, $code );
@@ -352,6 +457,7 @@ final class Shortcodes {
 		if ( WC()->session ) {
 			WC()->session->set( self::PREFILL_KEY, null ); // The link's code was used (or replaced) by the customer.
 		}
+		self::set_prefill_cookie( '' );
 		$this->result = $this->redeem( wp_unslash( (string) $_POST['vcap_redeem_code'] ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised in redeem().
 		if ( 'applied' === $this->result ) {
 			wp_safe_redirect( wc_get_cart_url() );
@@ -372,41 +478,104 @@ final class Shortcodes {
 		$session = WC()->session;
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- a public link; the code only fills in the form.
 		if ( isset( $_GET['vcap_code'] ) && is_string( $_GET['vcap_code'] ) && $session ) {
-			$code = self::clean_code( wp_unslash( $_GET['vcap_code'] ) );
-			if ( ! $session->has_session() ) {
-				$session->set_customer_session_cookie( true ); // Guests need a session to keep the code.
+			$code = self::clean_code( sanitize_text_field( wp_unslash( $_GET['vcap_code'] ) ) );
+			if ( method_exists( $session, 'has_session' ) && $session->has_session() ) {
+				$session->set( self::PREFILL_KEY, '' !== $code ? $code : null );
+			} elseif ( self::plausible_code( $code ) ) {
+				// No WooCommerce session is started for a link (48 hours, and hosts skip their page cache for
+				// it): the code waits in a short-lived cookie of its own until the form is used. Empty or
+				// implausible codes (mail link scanners, broken links) leave no cookie at all.
+				self::set_prefill_cookie( $code );
 			}
-			$session->set( self::PREFILL_KEY, '' !== $code ? $code : null );
 			if ( ! headers_sent() ) {
 				nocache_headers();
 				header( 'Referrer-Policy: no-referrer' );
 			}
-			wp_safe_redirect( remove_query_arg( 'vcap_code' ) );
+			wp_safe_redirect( self::redeem_link_target() );
 			exit;
 		}
 		// phpcs:enable
-		$prefill = $session && '' !== (string) $session->get( self::PREFILL_KEY, '' );
+		if ( headers_sent() ) {
+			return;
+		}
+		$prefill = ( $session && '' !== (string) $session->get( self::PREFILL_KEY, '' ) ) || '' !== self::prefill_cookie();
 		$on_page = is_singular() && self::page_has_redeem_form( (int) get_queried_object_id() );
-		if ( headers_sent() || ! ( $on_page || ( $prefill && self::request_shows_redeem_form() ) ) ) {
+		if ( ! ( $on_page || ( $prefill && self::request_shows_redeem_form() ) ) ) {
 			return;
 		}
 		header( 'Referrer-Policy: no-referrer' );
 		if ( $prefill ) {
-			if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-				define( 'DONOTCACHEPAGE', true );
-			}
-			nocache_headers();
+			self::no_cache(); // Before any output: the headers go out, so the form may show the code (M12-51).
 		}
+	}
+
+	/** Query argument with a random value on the redirect of a redeem link (M12-50). */
+	public const NO_CACHE_ARG = 'vcap_nc';
+
+	/**
+	 * Where a redeem link redirects to: the URL without the code, with a random query argument, so a full-page
+	 * cache (WP Rocket, LiteSpeed, Varnish, Cloudflare) has no copy of that URL and the page is built for this
+	 * visitor – a cached copy would never show the code from the cookie or session (M12-50).
+	 */
+	public static function redeem_link_target(): string {
+		return add_query_arg( self::NO_CACHE_ARG, strtolower( wp_generate_password( 8, false ) ), remove_query_arg( array( 'vcap_code', self::NO_CACHE_ARG ) ) );
 	}
 
 	/** Code to fill in the redeem form: from a redeem link (session), else from the URL (no session). */
 	public static function link_code(): string {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- only fills in the form.
-		$code = isset( $_GET['vcap_code'] ) && is_string( $_GET['vcap_code'] ) ? wp_unslash( $_GET['vcap_code'] ) : '';
+		$code = isset( $_GET['vcap_code'] ) && is_string( $_GET['vcap_code'] ) ? sanitize_text_field( wp_unslash( $_GET['vcap_code'] ) ) : '';
 		if ( '' === $code && function_exists( 'WC' ) && WC()->session ) {
 			$code = (string) WC()->session->get( self::PREFILL_KEY, '' );
 		}
+		if ( '' === $code ) {
+			$code = self::prefill_cookie();
+		}
 		return self::clean_code( $code );
+	}
+
+	/** Cookie that keeps the code of a redeem link for a visitor without a WooCommerce session. */
+	public const PREFILL_COOKIE = 'vcap_redeem_code';
+	/** Lifetime of that cookie (seconds). */
+	public const PREFILL_COOKIE_TTL = 30 * MINUTE_IN_SECONDS;
+
+	/** Whether a code from a link looks like a voucher or coupon code (letters or digits, 4 to 100 characters). */
+	public static function plausible_code( string $code ): bool {
+		return strlen( $code ) >= 4 && strlen( $code ) <= 100 && (bool) preg_match( '/[A-Za-z0-9]/', $code );
+	}
+
+	/** The code waiting in the redeem link cookie ('' = none). */
+	public static function prefill_cookie(): string {
+		$raw = isset( $_COOKIE[ self::PREFILL_COOKIE ] ) && is_string( $_COOKIE[ self::PREFILL_COOKIE ] ) ? sanitize_text_field( wp_unslash( $_COOKIE[ self::PREFILL_COOKIE ] ) ) : '';
+		return self::clean_code( $raw );
+	}
+
+	/** Keeps a redeem link's code in a short-lived, HTTP-only cookie ('' removes it). */
+	public static function set_prefill_cookie( string $code ): void {
+		if ( '' === $code ) {
+			if ( ! isset( $_COOKIE[ self::PREFILL_COOKIE ] ) ) {
+				return;
+			}
+			unset( $_COOKIE[ self::PREFILL_COOKIE ] );
+			$expires = time() - YEAR_IN_SECONDS;
+		} else {
+			$_COOKIE[ self::PREFILL_COOKIE ] = $code;
+			$expires                         = time() + self::PREFILL_COOKIE_TTL;
+		}
+		if ( ! headers_sent() ) {
+			setcookie(
+				self::PREFILL_COOKIE,
+				$code,
+				array(
+					'expires'  => $expires,
+					'path'     => defined( 'COOKIEPATH' ) && COOKIEPATH ? COOKIEPATH : '/',
+					'domain'   => defined( 'COOKIE_DOMAIN' ) && COOKIE_DOMAIN ? COOKIE_DOMAIN : '',
+					'secure'   => is_ssl(),
+					'httponly' => true,
+					'samesite' => 'Lax',
+				)
+			);
+		}
 	}
 
 	/**
@@ -440,14 +609,26 @@ final class Shortcodes {
 		return (string) apply_filters( 'vcap_redeem_url', $url, $code );
 	}
 
+	/** @var array<int, bool> Content analysis of page_has_redeem_form() per post id (this request, M12-89). */
+	private static array $page_memo = array();
+
+	/** Forgets the remembered content analysis (a post or its meta changed). */
+	public static function forget_page_memo(): void {
+		self::$page_memo = array();
+	}
+
 	/** Whether a page shows the redeem form (block or shortcode in its content). */
 	public static function page_has_redeem_form( int $page_id ): bool {
-		$has = self::content_has_redeem_form( (string) get_post_field( 'post_content', $page_id ) );
-		if ( ! $has ) {
-			// Elementor keeps its layout in post meta (shortcode widget or block in a text widget).
-			$builder = (string) get_post_meta( $page_id, '_elementor_data', true );
-			$has     = '' !== $builder && ( str_contains( $builder, 'vcap_redeem' ) || str_contains( $builder, 'vcap\\/redeem' ) || str_contains( $builder, 'vcap/redeem' ) );
+		if ( ! isset( self::$page_memo[ $page_id ] ) ) {
+			$has = self::content_has_redeem_form( (string) get_post_field( 'post_content', $page_id ) );
+			if ( ! $has ) {
+				// Elementor keeps its layout in post meta (shortcode widget or block in a text widget).
+				$builder = (string) get_post_meta( $page_id, '_elementor_data', true );
+				$has     = '' !== $builder && ( str_contains( $builder, 'vcap_redeem' ) || str_contains( $builder, 'vcap\\/redeem' ) || str_contains( $builder, 'vcap/redeem' ) );
+			}
+			self::$page_memo[ $page_id ] = $has;
 		}
+		$has = self::$page_memo[ $page_id ];
 		/** Whether the page shows the redeem form (e.g. true when a theme template renders it). */
 		return (bool) apply_filters( 'vcap_page_has_redeem_form', $has, $page_id );
 	}
@@ -515,7 +696,7 @@ final class Shortcodes {
 			$this->sent = false; // Shown once.
 		}
 		$invalid = '' !== $result && in_array( $this->result, array( 'invalid', 'rejected', 'limited', 'expired' ), true );
-		$value   = $preview ? '' : self::clean_code( (string) apply_filters( 'vcap_redeem_prefill', self::link_code() ) );
+		$value   = $preview || ! self::may_prefill() ? '' : self::clean_code( (string) apply_filters( 'vcap_redeem_prefill', self::link_code() ) );
 		ob_start();
 		?>
 		<form method="post" class="vcap-redeem-form" action="#<?php echo esc_attr( $form_id ); ?>">
@@ -526,9 +707,10 @@ final class Shortcodes {
 			?>
 			<input type="hidden" name="vcap_redeem_form" value="<?php echo esc_attr( $form_id ); ?>" />
 			<?php // Default button for Enter (implicit submission uses the first submit button; connector steps such as "Cancel" come before the visible one). ?>
-			<button type="submit" class="vcap-default-submit" tabindex="-1" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;"><?php echo esc_html( $atts['button'] ); ?></button>
+			<button type="submit" class="vcap-default-submit" tabindex="-1" aria-hidden="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);clip-path:inset(50%);white-space:nowrap;"><?php echo esc_html( $atts['button'] ); ?></button>
 			<label for="<?php echo esc_attr( $form_id . '-code' ); ?>"><?php esc_html_e( 'Voucher code', 'voucher-captain' ); ?></label>
 			<input type="text" id="<?php echo esc_attr( $form_id . '-code' ); ?>" name="vcap_redeem_code" required autocomplete="off" maxlength="100" value="<?php echo self::esc_attr_text( $value ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_attr_text(). ?>"<?php echo $invalid ? ' aria-invalid="true" aria-describedby="' . esc_attr( $form_id . '-result' ) . '"' : ''; ?> />
+			<?php echo CodeLookup::pin_hint(); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in pin_hint(). ?>
 			<?php
 			/** Extra fields of connectors (e.g. the date for a ticket voucher), posted with the code. */
 			do_action( 'vcap_redeem_form_fields' );
@@ -569,19 +751,21 @@ final class Shortcodes {
 		Downloads::enqueue_style();
 		ob_start();
 		$this->downloads->account_page( 'no' !== $atts['extras'] );
-		return self::wrap( self::notices() . ob_get_clean() );
+		return self::wrap( self::account_notices() . ob_get_clean() );
 	}
 
 	public function referral_shortcode(): string {
-		if ( ! Licensing\Entitlements::allows( 'referrals' ) ) {
-			// Locked premium feature: customers see nothing, shop managers see why.
-			return current_user_can( 'manage_woocommerce' ) ? self::wrap( '<p class="vcap-license-locked">' . esc_html( Licensing\Entitlements::locked_message( 'referrals' ) ) . '</p>' ) : '';
-		}
 		if ( self::is_editor_preview() ) {
 			return self::wrap( self::preview_note( __( 'Preview: logged-in customers see their personal referral code here.', 'voucher-captain' ) ) );
 		}
 		if ( ! is_user_logged_in() ) {
 			return self::login_hint();
+		}
+		if ( ! $this->referrals->enabled() ) {
+			// G9: customers see nothing; the shop staff learn why instead of an empty spot.
+			return current_user_can( 'manage_woocommerce' )
+				? self::wrap( self::preview_note( __( 'The "Refer a friend" program is switched off (WooCommerce → Settings → Vouchers), so customers see nothing here. Only shop managers see this note.', 'voucher-captain' ) ) )
+				: '';
 		}
 		Downloads::enqueue_style();
 		ob_start();

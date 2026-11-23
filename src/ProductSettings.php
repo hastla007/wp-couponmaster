@@ -17,6 +17,10 @@ final class ProductSettings {
 		add_action( 'woocommerce_admin_process_variation_object', array( $this, 'save_variation' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'assets' ) );
 		add_action( 'admin_notices', array( $this, 'tax_status_notice' ) );
+		// R7 (S17): the same right on the other ways to write product meta – REST API and CSV import.
+		add_filter( 'woocommerce_rest_pre_insert_product_object', array( self::class, 'guard_voucher_meta' ), 10, 1 );
+		add_filter( 'woocommerce_rest_pre_insert_product_variation_object', array( self::class, 'guard_voucher_meta' ), 10, 1 );
+		add_filter( 'woocommerce_product_import_pre_insert_product_object', array( self::class, 'guard_voucher_meta' ), 10, 1 );
 		if ( is_admin() ) {
 			Admin\Flash::register(); // Notices of save() survive the redirect after saving the product.
 		}
@@ -31,7 +35,9 @@ final class ProductSettings {
 		}
 	}
 
-	public function type_option( array $options ): array {
+	/** @param mixed $options What the previous filter returned (AP-Q2-6: a non-array is normalised). */
+	public function type_option( $options ): array {
+		$options                 = is_array( $options ) ? $options : array();
 		$options['vcap_enabled'] = array(
 			'id'            => '_vcap_enabled',
 			'wrapper_class' => 'show_if_simple show_if_variable',
@@ -42,7 +48,9 @@ final class ProductSettings {
 		return $options;
 	}
 
-	public function tab( array $tabs ): array {
+	/** @param mixed $tabs What the previous filter returned (AP-Q2-6: a non-array is normalised). */
+	public function tab( $tabs ): array {
+		$tabs         = is_array( $tabs ) ? $tabs : array();
 		$tabs['vcap'] = array(
 			'label'    => __( 'Voucher', 'voucher-captain' ),
 			'target'   => 'vcap_product_data',
@@ -77,7 +85,25 @@ final class ProductSettings {
 		if ( 'usage' === $key ) {
 			return ProductConfig::default_usage( (string) $this->v( $product, 'type' ) );
 		}
+		if ( 'builtin_fields' === $key ) {
+			return self::default_builtin_fields( $product );
+		}
 		return ProductConfig::DEFAULTS[ $key ];
+	}
+
+	/**
+	 * M12-95: the product page fields a product starts with. A new voucher product (never saved with voucher
+	 * settings) also offers the delivery date when "Delivery date for new products" is on; products that exist keep
+	 * what they have.
+	 *
+	 * @return string[]
+	 */
+	public static function default_builtin_fields( \WC_Product $product ): array {
+		$fields = ProductConfig::DEFAULTS['builtin_fields'];
+		if ( ! $product->meta_exists( '_vcap_enabled' ) && 'yes' === Settings::value( 'vcap_new_product_delivery' ) ) {
+			$fields[] = 'delivery_date';
+		}
+		return $fields;
 	}
 
 	/** A hint below a field, shown by product-admin.js while its condition holds ($class names the condition). */
@@ -89,7 +115,23 @@ final class ProductSettings {
 		global $product_object;
 		$p = $product_object instanceof \WC_Product ? $product_object : new \WC_Product_Simple();
 		echo '<div id="vcap_product_data" class="panel woocommerce_options_panel hidden">';
+		if ( ! self::may_manage() ) {
+			echo '<div class="notice notice-warning inline"><p>' . esc_html( self::no_right_message() ) . '</p></div>';
+		}
 
+		$this->panel_general( $p );
+		$this->panel_gift_options( $p );
+		$this->panel_value( $p );
+		$this->panel_redemption( $p );
+		$this->panel_restrictions( $p );
+		$this->panel_codes( $p );
+		$this->panel_personalisation( $p );
+		$this->panel_ticket( $p );
+		echo '</div>';
+	}
+
+	/** Product panel: Type, template and design. */
+	private function panel_general( \WC_Product $p ): void {
 		echo '<div class="options_group">';
 		woocommerce_wp_select(
 			array(
@@ -125,12 +167,56 @@ final class ProductSettings {
 				'id'          => '_vcap_preview',
 				'label'       => __( 'Customer preview', 'voucher-captain' ),
 				'value'       => $this->v( $p, 'preview' ),
-				'description' => __( 'Show a "Preview voucher" button on the product page.', 'voucher-captain' ),
+				'description' => __( 'Show a live preview of the voucher and a "Print preview (PDF)" button on the product page.', 'voucher-captain' ),
 			)
 		);
 		$this->hint( 'vcap-hint-virtual', __( 'Vouchers are sent by email as PDF. Tick "Virtual" at the top of the product data box – otherwise WooCommerce asks for a shipping address and may charge shipping for the voucher.', 'voucher-captain' ) );
 		echo '</div>';
+	}
 
+	/**
+	 * Product panel: link to the product's vouchers (M12-54), the design gallery (M12-96) and the physical card
+	 * mode (M12-97). Saved by save_gift_options().
+	 */
+	private function panel_gift_options( \WC_Product $p ): void {
+		echo '<div class="options_group vcap-gift-options">';
+		if ( $p->get_id() ) {
+			echo '<p class="form-field"><label>' . esc_html__( 'Issued vouchers', 'voucher-captain' ) . '</label><a class="button" href="' . esc_url( Admin\VoucherLinks::product_url( $p->get_id() ) ) . '">' . esc_html__( 'Show vouchers', 'voucher-captain' ) . '</a></p>';
+		}
+		$allowed = array_map( 'intval', (array) $this->v( $p, 'allowed_templates' ) );
+		echo '<p class="form-field"><label for="_vcap_allowed_templates">' . esc_html__( 'Designs to choose from', 'voucher-captain' ) . '</label>';
+		echo '<select id="_vcap_allowed_templates" name="_vcap_allowed_templates[]" multiple="multiple" class="wc-enhanced-select" style="width:50%" data-placeholder="' . esc_attr__( 'No choice (product template)', 'voucher-captain' ) . '">';
+		foreach ( $this->template_options() as $id => $title ) {
+			if ( '' === (string) $id ) {
+				continue;
+			}
+			echo '<option value="' . esc_attr( (string) $id ) . '"' . selected( in_array( (int) $id, $allowed, true ), true, false ) . '>' . esc_html( $title ) . '</option>';
+		}
+		echo '</select> ' . wc_help_tip( __( 'With two or more designs, the product page shows them as pictures to choose from; the chosen design is used for the PDF. The PDF template above is preselected.', 'voucher-captain' ) ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput -- wc_help_tip() escapes.
+		woocommerce_wp_checkbox(
+			array(
+				'id'          => '_vcap_physical',
+				'label'       => __( 'Physical card', 'voucher-captain' ),
+				'value'       => $this->v( $p, 'physical' ),
+				'description' => __( 'A printed card is shipped: no email to the recipient, the code comes from the imported batch (Codes), and the card is activated when the order is completed (shipped). Leave "Virtual" unticked.', 'voucher-captain' ),
+			)
+		);
+		echo '</div>';
+	}
+
+	/** Saves the fields of panel_gift_options(). */
+	private function save_gift_options( \WC_Product $product, array $post ): void {
+		$templates = array_values( array_filter( array_map( 'absint', (array) ( $post['_vcap_allowed_templates'] ?? array() ) ), static fn( $id ) => $id > 0 && TemplatePostType::POST_TYPE === get_post_type( $id ) ) );
+		$product->update_meta_data( '_vcap_allowed_templates', $templates );
+		$physical = isset( $post['_vcap_physical'] ) ? 'yes' : 'no';
+		$product->update_meta_data( '_vcap_physical', $physical );
+		if ( 'yes' === $physical && '' === (string) $product->get_meta( '_vcap_code_batch' ) ) {
+			self::save_error( __( 'Physical card: choose the imported code batch of the printed cards under Codes → Code source. Until then the cards get random codes that are not printed on any card.', 'voucher-captain' ) );
+		}
+	}
+
+	/** Product panel: Value: source, amount, tax treatment. */
+	private function panel_value( \WC_Product $p ): void {
 		echo '<div class="options_group"><h4 class="vcap-group-title">' . esc_html__( 'Value', 'voucher-captain' ) . '</h4>';
 		woocommerce_wp_select(
 			array(
@@ -163,6 +249,8 @@ final class ProductSettings {
 					'data_type'     => 'price',
 					'value'         => $this->v( $p, $key ),
 					'wrapper_class' => 'vcap-show-custom',
+					// V7: without an own maximum the shop's default maximum applies (WooCommerce → Settings → Vouchers).
+					'placeholder'   => 'custom_max' === $key && (float) Settings::value( 'vcap_custom_max_default' ) > 0 ? wc_format_localized_price( (string) Settings::value( 'vcap_custom_max_default' ) ) : '',
 				)
 			);
 		}
@@ -171,10 +259,10 @@ final class ProductSettings {
 				'id'            => '_vcap_custom_presets',
 				'label'         => __( 'Suggested amounts', 'voucher-captain' ),
 				'value'         => $this->v( $p, 'custom_presets' ),
-				'placeholder'   => '25, 50, 100',
+				'placeholder'   => '25; 50; 100',
 				'wrapper_class' => 'vcap-show-custom',
 				'desc_tip'      => true,
-				'description'   => __( 'Comma separated amounts shown as quick-pick buttons.', 'voucher-captain' ),
+				'description'   => __( 'Amounts shown as quick-pick buttons, separated by semicolons (e.g. 12,50; 25; 50).', 'voucher-captain' ),
 			)
 		);
 		woocommerce_wp_select(
@@ -197,7 +285,7 @@ final class ProductSettings {
 					'discount' => __( 'Promotion (price reduction)', 'voucher-captain' ),
 				),
 				'desc_tip'    => true,
-				'description' => __( 'How connected checkouts (e.g. WP Pass Captain) treat the voucher for VAT. Have the classification checked by your tax adviser.', 'voucher-captain' ),
+				'description' => __( 'How the voucher is treated for VAT when it is redeemed: by the shop with the setting "Multi-purpose vouchers as payment" (multi-purpose vouchers with "Fixed cart discount" then pay after tax and the full VAT stays; single-purpose vouchers and promotions keep lowering price and VAT) and by connected checkouts (e.g. Pass Captain). Have the classification checked by your tax adviser.', 'voucher-captain' ),
 			)
 		);
 		$short_validity = $p->get_id() ? ProductConfig::short_validity_message( $p ) : '';
@@ -205,11 +293,18 @@ final class ProductSettings {
 		if ( $conflict ) {
 			echo '<p class="form-field vcap-tax-conflict" role="alert" style="color:#b32d2e">' . esc_html( $conflict['message'] ) . '</p>';
 		}
+		$single_purpose = ProductConfig::single_purpose_warning( $p );
+		if ( '' !== $single_purpose ) {
+			echo '<p class="form-field vcap-single-purpose" role="alert" style="color:#b32d2e">' . esc_html( $single_purpose ) . '</p>';
+		}
 		if ( '' !== $short_validity ) {
 			echo '<p class="form-field vcap-short-validity" role="alert" style="color:#b32d2e">' . esc_html( $short_validity ) . '</p>';
 		}
 		echo '</div>';
+	}
 
+	/** Product panel: Redemption & validity. */
+	private function panel_redemption( \WC_Product $p ): void {
 		echo '<div class="options_group"><h4 class="vcap-group-title">' . esc_html__( 'Redemption & validity', 'voucher-captain' ) . '</h4>';
 		woocommerce_wp_select(
 			array(
@@ -227,6 +322,15 @@ final class ProductSettings {
 		);
 		$this->hint( 'vcap-hint-giftcard-single', __( 'Gift card with single use: whatever the customer does not use in the first order is lost. Gift cards usually keep their remaining value – choose "Multi-use with stored balance (gift card)".', 'voucher-captain' ), true );
 		$this->hint( 'vcap-hint-value-single', __( 'Single use: the whole value must be used in one order, a remaining value is lost (the customer is told so in the cart). Choose "Multi-use with stored balance" if the remaining value should be kept.', 'voucher-captain' ) );
+		// M12-68: the rest of a sold single-use value voucher is not lost but kept for the customer.
+		woocommerce_wp_checkbox(
+			array(
+				'id'          => '_vcap_keep_rest',
+				'label'       => __( 'Keep the rest', 'voucher-captain' ),
+				'value'       => $this->v( $p, 'keep_rest' ),
+				'description' => __( 'Single use: what an order does not use becomes store credit of the customer account (or a new gift card for guests) instead of being lost. Recommended where a forfeited rest would be unfair to consumers (e.g. Germany § 307 BGB).', 'voucher-captain' ),
+			)
+		);
 		woocommerce_wp_text_input(
 			array(
 				'id'                => '_vcap_usage_limit',
@@ -282,15 +386,24 @@ final class ProductSettings {
 				'value'       => ProductConfig::normalise_restriction( array( 'email_restrict' => $this->v( $p, 'email_restrict' ), 'transferable' => $this->v( $p, 'transferable' ) ) )['email_restrict'],
 				'options'     => ProductConfig::redemption_choices(),
 				'desc_tip'    => true,
-				'description' => __( 'Personal vouchers can only be redeemed by a customer logged in or checking out with one of these email addresses. The voucher text {transferable} follows this setting.', 'voucher-captain' ),
+				'description' => __( 'Personal vouchers can only be redeemed online by a customer logged in to a customer account with one of these email addresses (guest checkout with the address is refused); at the counter staff check the holder\'s identity. The voucher text {transferable} follows this setting.', 'voucher-captain' ),
 			)
 		);
 		$channels = (array) ProductConfig::get( $p )['channels'];
 		echo '<fieldset class="form-field vcap-channels"><legend>' . esc_html__( 'Redeemable via', 'voucher-captain' ) . '</legend>';
 		foreach ( Channels::all() as $key => $label ) {
-			echo '<label style="display:block;margin-left:0"><input type="checkbox" name="_vcap_channels[]" value="' . esc_attr( $key ) . '" ' . checked( in_array( $key, $channels, true ), true, false ) . ' /> ' . esc_html( $label ) . '</label>';
+			echo '<label style="display:block;margin-inline-start:0"><input type="checkbox" name="_vcap_channels[]" value="' . esc_attr( $key ) . '" ' . checked( in_array( $key, $channels, true ), true, false ) . ' /> ' . esc_html( $label ) . '</label>';
 		}
 		echo '<span class="description">' . esc_html__( 'Leave all unticked to allow every channel. Stored with each sold voucher.', 'voucher-captain' ) . '</span></fieldset>';
+		// Captain Suite: only vouchers marked here can become a review source (Integrations\ReviewSource).
+		woocommerce_wp_checkbox(
+			array(
+				'id'          => '_vcap_review_service',
+				'label'       => __( 'Redemption confirms a service (for review invitations)', 'voucher-captain' ),
+				'value'       => $this->v( $p, 'review_service' ),
+				'description' => __( 'For experience or service vouchers: a redemption at the counter then confirms that the service was provided, and a review plugin (e.g. Review Captain) may invite the customer afterwards. Voucher Captain sends no invitation itself. Purchases, issuing, top-ups, discount codes and store credit never count.', 'voucher-captain' ),
+			)
+		);
 		/** Extra product fields of connectors (saved in vcap_product_settings_save). */
 		do_action( 'vcap_product_settings_fields', $p );
 		woocommerce_wp_textarea_input(
@@ -304,7 +417,10 @@ final class ProductSettings {
 			)
 		);
 		echo '</div>';
+	}
 
+	/** Product panel: Coupon restrictions. */
+	private function panel_restrictions( \WC_Product $p ): void {
 		echo '<div class="options_group"><h4 class="vcap-group-title">' . esc_html__( 'Coupon restrictions', 'voucher-captain' ) . '</h4>';
 		foreach ( array(
 			'free_shipping'  => __( 'Allow free shipping', 'voucher-captain' ),
@@ -340,7 +456,10 @@ final class ProductSettings {
 		$this->category_select( '_vcap_category_ids', __( 'Valid for categories', 'voucher-captain' ), (array) $this->v( $p, 'category_ids' ) );
 		$this->category_select( '_vcap_exclude_category_ids', __( 'Exclude categories', 'voucher-captain' ), (array) $this->v( $p, 'exclude_category_ids' ) );
 		echo '</div>';
+	}
 
+	/** Product panel: Codes. */
+	private function panel_codes( \WC_Product $p ): void {
 		echo '<div class="options_group"><h4 class="vcap-group-title">' . esc_html__( 'Codes', 'voucher-captain' ) . '</h4>';
 		woocommerce_wp_select(
 			array(
@@ -380,10 +499,11 @@ final class ProductSettings {
 		foreach ( array( 'code_prefix' => __( 'Code prefix', 'voucher-captain' ), 'code_suffix' => __( 'Code suffix', 'voucher-captain' ) ) as $key => $label ) {
 			woocommerce_wp_text_input(
 				array(
-					'id'          => '_vcap_' . $key,
-					'label'       => $label,
-					'value'       => $this->v( $p, $key ),
-					'placeholder' => __( 'Global setting', 'voucher-captain' ),
+					'id'                => '_vcap_' . $key,
+					'label'             => $label,
+					'value'             => $this->v( $p, $key ),
+					'placeholder'       => __( 'Global setting', 'voucher-captain' ),
+					'custom_attributes' => array( 'maxlength' => 20, 'pattern' => '[A-Za-z0-9._\-]*' ),
 				)
 			);
 		}
@@ -398,7 +518,10 @@ final class ProductSettings {
 			)
 		);
 		echo '</div>';
+	}
 
+	/** Product panel: Personalisation & delivery. */
+	private function panel_personalisation( \WC_Product $p ): void {
 		echo '<div class="options_group"><h4 class="vcap-group-title">' . esc_html__( 'Personalisation & delivery', 'voucher-captain' ) . '</h4>';
 		$builtin = (array) $this->v( $p, 'builtin_fields' );
 		echo '<fieldset class="form-field vcap-builtin-fields"><legend>' . esc_html__( 'Product page fields', 'voucher-captain' ) . '</legend><div class="vcap-builtin-grid">';
@@ -407,7 +530,16 @@ final class ProductSettings {
 			'recipient_email' => __( 'Recipient email', 'voucher-captain' ),
 			'message'         => __( 'Personal message', 'voucher-captain' ),
 			'delivery_date'   => __( 'Delivery date', 'voucher-captain' ),
+			// M12-55 / M12-47 / M12-84.
+			'sender_name'           => __( 'From (your name)', 'voucher-captain' ),
+			Fields::CONFIRM_KEY     => __( 'Confirm recipient email', 'voucher-captain' ),
+			Fields::LOCALE_KEY      => __( 'Language of the recipient email', 'voucher-captain' ),
 		) as $key => $label ) {
+			if ( Fields::CONFIRM_KEY === $key ) {
+				// Required whenever a recipient email is entered; no own "required" box.
+				printf( '<span><label><input type="checkbox" name="_vcap_builtin_fields[]" value="%1$s" %2$s /> %3$s</label></span>', esc_attr( $key ), checked( in_array( $key, $builtin, true ), true, false ), esc_html( $label ) );
+				continue;
+			}
 			printf(
 				'<span><label><input type="checkbox" name="_vcap_builtin_fields[]" value="%1$s" %2$s /> %3$s</label> <label class="vcap-required"><input type="checkbox" name="_vcap_builtin_fields[]" value="%1$s_required" %4$s /> %5$s</label></span>',
 				esc_attr( $key ),
@@ -425,6 +557,17 @@ final class ProductSettings {
 				'type'              => 'number',
 				'value'             => $this->v( $p, 'message_maxlength' ),
 				'custom_attributes' => array( 'min' => 10, 'max' => 2000 ),
+			)
+		);
+		woocommerce_wp_text_input(
+			array(
+				'id'                => '_vcap_message_maxlines',
+				'label'             => __( 'Message max. lines', 'voucher-captain' ),
+				'type'              => 'number',
+				'value'             => $this->v( $p, 'message_maxlines' ),
+				'desc_tip'          => true,
+				'description'       => __( 'Empty or 0: no limit. Messages that would not fit the voucher are refused in any case.', 'voucher-captain' ),
+				'custom_attributes' => array( 'min' => 0, 'max' => 100 ),
 			)
 		);
 		woocommerce_wp_select(
@@ -458,25 +601,20 @@ final class ProductSettings {
 			array(
 				'id'          => '_vcap_send_to',
 				'label'       => __( 'Send voucher to', 'voucher-captain' ),
-				'value'       => $this->v( $p, 'send_to' ),
+				'value'       => ProductConfig::normalise_routing( array( 'send_to' => $this->v( $p, 'send_to' ), 'buyer_copy' => $this->v( $p, 'buyer_copy' ) ) )['send_to'],
 				'options'     => array(
-					'recipient' => __( 'Recipient (if an email was entered), otherwise buyer', 'voucher-captain' ),
 					'both'      => __( 'Recipient and buyer', 'voucher-captain' ),
+					'recipient' => __( 'Recipient (if an email was entered), otherwise buyer', 'voucher-captain' ),
 					'buyer'     => __( 'Buyer only (no email to recipient)', 'voucher-captain' ),
 				),
 			)
 		);
 		$this->hint( 'vcap-hint-buyer-recipient', __( 'With "Buyer only" nothing is sent to a recipient, so the product page does not ask for a recipient email – unless "Who may redeem" uses the recipient email; then the field only decides who can redeem.', 'voucher-captain' ) );
-		woocommerce_wp_checkbox(
-			array(
-				'id'          => '_vcap_buyer_copy',
-				'label'       => __( 'Buyer copy', 'voucher-captain' ),
-				'value'       => $this->v( $p, 'buyer_copy' ),
-				'description' => __( 'Also send the voucher to the buyer when it goes to a recipient.', 'voucher-captain' ),
-			)
-		);
 		echo '</div>';
+	}
 
+	/** Product panel: Ticket (ticket vouchers only). */
+	private function panel_ticket( \WC_Product $p ): void {
 		echo '<div class="options_group vcap-show-ticket"><h4 class="vcap-group-title">' . esc_html__( 'Ticket', 'voucher-captain' ) . '</h4>';
 		woocommerce_wp_text_input(
 			array(
@@ -504,8 +642,6 @@ final class ProductSettings {
 				'value' => $this->v( $p, 'event_location' ),
 			)
 		);
-		echo '</div>';
-
 		echo '</div>';
 	}
 
@@ -549,6 +685,10 @@ final class ProductSettings {
 			if ( $conflict ) {
 				$conflicts[ $conflict['message'] ] = $conflict['message'];
 			}
+			$single = ProductConfig::single_purpose_warning( $item );
+			if ( '' !== $single ) {
+				$conflicts[ $single ] = $single;
+			}
 		}
 		foreach ( $conflicts as $message ) {
 			echo '<div class="notice notice-warning"><p><strong>' . esc_html__( 'Voucher Captain – VAT', 'voucher-captain' ) . ':</strong> ' . esc_html( $message ) . '</p></div>';
@@ -559,9 +699,78 @@ final class ProductSettings {
 		}
 	}
 
+	/**
+	 * S17: voucher settings of a product (value, value source, template …) create value: only voucher managers
+	 * change them, not every role that may edit products (e.g. a vendor role with edit_products).
+	 */
+	public static function may_manage(): bool {
+		return current_user_can( 'vcap_manage_vouchers' ) || current_user_can( 'manage_woocommerce' ); // phpcs:ignore WordPress.WP.Capabilities.Unknown -- Registered by Install / WooCommerce.
+	}
+
+	/**
+	 * R7 (S17): a user who may edit products but is no voucher manager cannot set voucher settings (`_vcap_*`
+	 * product meta) through the WooCommerce REST API or the CSV import either: changed values are put back to the
+	 * stored ones, new keys are dropped. Other product data is saved as usual.
+	 *
+	 * @param mixed $product Product about to be saved.
+	 * @return mixed
+	 */
+	public static function guard_voucher_meta( $product ) {
+		if ( ! $product instanceof \WC_Product || self::may_manage() ) {
+			return $product;
+		}
+		$id = (int) $product->get_id();
+		foreach ( $product->get_meta_data() as $meta ) {
+			$key = (string) $meta->key;
+			if ( ! str_starts_with( $key, '_vcap_' ) ) {
+				continue;
+			}
+			if ( $id > 0 && metadata_exists( 'post', $id, $key ) ) {
+				$stored = get_post_meta( $id, $key, true );
+				if ( $stored !== $meta->value ) {
+					$product->update_meta_data( $key, $stored );
+				}
+			} else {
+				$product->delete_meta_data( $key );
+			}
+		}
+		return $product;
+	}
+
+	/**
+	 * S17: capabilities of the voucher post types (PDF templates, field groups): every primitive capability is the
+	 * voucher managers' right instead of the product rights.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function manager_post_caps(): array {
+		$cap = Admin\Menu::cap();
+		return array_fill_keys( array( 'edit_posts', 'edit_others_posts', 'edit_private_posts', 'edit_published_posts', 'publish_posts', 'read_private_posts', 'delete_posts', 'delete_private_posts', 'delete_published_posts', 'delete_others_posts', 'create_posts' ), $cap ) + array( 'read' => 'read' );
+	}
+
+	private static function no_right_message(): string {
+		return __( 'Only voucher managers can change the voucher settings of a product. Your changes to these settings are not saved; the other product data is.', 'voucher-captain' );
+	}
+
+	/** S17: the product form is saved by someone without the right: voucher settings stay, a notice says so. */
+	private static function refuse_without_right( bool $posted ): bool {
+		if ( self::may_manage() ) {
+			return false;
+		}
+		static $told = false;
+		if ( $posted && ! $told ) {
+			$told = true;
+			self::save_error( self::no_right_message() );
+		}
+		return true;
+	}
+
 	public function save( \WC_Product $product ): void {
 		// Nonce is verified by WooCommerce before woocommerce_admin_process_product_object fires.
 		// phpcs:disable WordPress.Security.NonceVerification.Missing
+		if ( self::refuse_without_right( isset( $_POST['_vcap_type'] ) || isset( $_POST['_vcap_enabled'] ) ) ) {
+			return;
+		}
 		$product->update_meta_data( '_vcap_enabled', isset( $_POST['_vcap_enabled'] ) ? 'yes' : 'no' );
 		if ( ! isset( $_POST['_vcap_type'] ) ) {
 			return;
@@ -573,14 +782,23 @@ final class ProductSettings {
 		}
 		$text = array( 'type', 'template', 'amount_source', 'custom_presets', 'discount_type', 'tax_treatment', 'usage', 'expiry_mode', 'email_restrict', 'code_batch', 'code_prefix', 'code_suffix', 'delivery', 'send_to', 'event_location', 'code_pool_empty' );
 		foreach ( $text as $key ) {
-			$product->update_meta_data( '_vcap_' . $key, sanitize_text_field( (string) ( $post[ '_vcap_' . $key ] ?? '' ) ) );
+			$value = sanitize_text_field( (string) ( $post[ '_vcap_' . $key ] ?? '' ) );
+			if ( in_array( $key, array( 'code_prefix', 'code_suffix' ), true ) && ! CodeGenerator::valid_affix( trim( $value ) ) ) {
+				// "B&B" would be changed by WooCommerce's code formatting: the code could never be found again.
+				self::save_error(
+					/* translators: %s: value entered */
+					sprintf( __( 'Code prefix/suffix "%s" was not saved: use only letters, digits, dot, hyphen and underscore (up to 20 characters).', 'voucher-captain' ), $value )
+				);
+				continue;
+			}
+			$product->update_meta_data( '_vcap_' . $key, 'code_prefix' === $key || 'code_suffix' === $key ? trim( $value ) : $value );
 		}
 		$decimals = array( 'amount', 'custom_min', 'custom_max', 'custom_step', 'min_spend', 'max_spend' );
 		foreach ( $decimals as $key ) {
 			$value = (string) ( $post[ '_vcap_' . $key ] ?? '' );
 			$product->update_meta_data( '_vcap_' . $key, '' === $value ? '' : wc_format_decimal( $value ) );
 		}
-		$ints = array( 'per_item', 'usage_limit', 'expiry_days', 'code_length', 'delivery_delay_days', 'max_checkins', 'message_maxlength', 'code_pool_low' );
+		$ints = array( 'per_item', 'usage_limit', 'expiry_days', 'code_length', 'delivery_delay_days', 'max_checkins', 'message_maxlength', 'message_maxlines', 'code_pool_low' );
 		foreach ( $ints as $key ) {
 			$value = (string) ( $post[ '_vcap_' . $key ] ?? '' );
 			$product->update_meta_data( '_vcap_' . $key, '' === $value ? '' : absint( $value ) );
@@ -592,9 +810,13 @@ final class ProductSettings {
 		$event = (string) ( $post['_vcap_event_date'] ?? '' );
 		$product->update_meta_data( '_vcap_event_date', preg_match( '/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/', $event ) ? $event : '' );
 		$product->update_meta_data( '_vcap_redemption_terms', sanitize_textarea_field( (string) ( $post['_vcap_redemption_terms'] ?? '' ) ) );
-		foreach ( array( 'free_shipping', 'individual_use', 'exclude_sale', 'preview', 'buyer_copy' ) as $key ) {
+		foreach ( array( 'free_shipping', 'individual_use', 'exclude_sale', 'preview', 'keep_rest', 'review_service' ) as $key ) {
 			$product->update_meta_data( '_vcap_' . $key, isset( $post[ '_vcap_' . $key ] ) ? 'yes' : 'no' );
 		}
+		// U12: one routing choice; the old "Buyer copy" flag is stored as its consequence (read by older code).
+		$routing = ProductConfig::normalise_routing( array( 'send_to' => (string) $product->get_meta( '_vcap_send_to' ), 'buyer_copy' => 'no' ) );
+		$product->update_meta_data( '_vcap_send_to', $routing['send_to'] );
+		$product->update_meta_data( '_vcap_buyer_copy', $routing['buyer_copy'] );
 		// "Who may redeem" decides; "transferable" is stored as its consequence (read by older code and exports).
 		$restrict = (string) $product->get_meta( '_vcap_email_restrict' );
 		$restrict = isset( ProductConfig::redemption_choices()[ $restrict ] ) ? $restrict : 'none';
@@ -615,11 +837,13 @@ final class ProductSettings {
 		// Channels of plugins that are inactive right now are not shown in the form: keep them, never drop them.
 		$hidden     = array_diff( array_map( 'sanitize_key', (array) $product->get_meta( '_vcap_channels' ) ), $registered );
 		$product->update_meta_data( '_vcap_channels', array_values( array_filter( array_unique( array_merge( $channels, $hidden ) ) ) ) );
+		$this->save_gift_options( $product, $post );
+		/** A voucher product's settings are being saved (args: WC_Product, posted data): save the fields added in vcap_product_settings_fields. */
 		do_action( 'vcap_product_settings_save', $product, $post );
 		foreach ( array( 'product_ids', 'exclude_product_ids', 'category_ids', 'exclude_category_ids' ) as $key ) {
 			$product->update_meta_data( '_vcap_' . $key, array_values( array_filter( array_map( 'absint', (array) ( $post[ '_vcap_' . $key ] ?? array() ) ) ) ) );
 		}
-		$allowed = array( 'recipient_name', 'recipient_email', 'message', 'delivery_date' );
+		$allowed = array( 'recipient_name', 'recipient_email', 'message', 'delivery_date', 'sender_name', Fields::CONFIRM_KEY, Fields::LOCALE_KEY );
 		$builtin = array();
 		foreach ( (array) ( $post['_vcap_builtin_fields'] ?? array() ) as $value ) {
 			$value = sanitize_key( $value );
@@ -783,6 +1007,9 @@ final class ProductSettings {
 
 	public function save_variation( \WC_Product_Variation $variation, int $loop ): void {
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the variations nonce.
+		if ( self::refuse_without_right( isset( $_POST['vcap_var'][ $loop ] ) || isset( $_POST['vcap_variation_enabled'][ $loop ] ) ) ) {
+			return;
+		}
 		$variation->update_meta_data( '_vcap_enabled', isset( $_POST['vcap_variation_enabled'][ $loop ] ) ? 'yes' : 'no' );
 		$data = isset( $_POST['vcap_var'][ $loop ] ) ? (array) wp_unslash( $_POST['vcap_var'][ $loop ] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		// phpcs:enable

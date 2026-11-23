@@ -42,11 +42,11 @@ final class CartIntegration {
 	}
 
 	/**
-	 * Whether new promotions are applied (setting and premium right "promotions"). Off: no promotion is added to a
-	 * cart and no bonus voucher is issued; existing orders keep their promotion discount when recalculated.
+	 * Whether new promotions are applied (setting "vcap_campaigns_enabled"). Off: no promotion is added to a cart
+	 * and no bonus voucher is issued; existing orders keep their promotion discount when recalculated.
 	 */
 	public function enabled(): bool {
-		return $this->settings->yes( 'vcap_campaigns_enabled' ) && \VCAP\Licensing\Entitlements::allows( 'promotions' );
+		return $this->settings->yes( 'vcap_campaigns_enabled' );
 	}
 
 	public static function code( int $id ): string {
@@ -113,7 +113,7 @@ final class CartIntegration {
 		$others     = array_values( array_filter( array_map( 'strval', $coupons ), static fn( $c ) => ! self::id_from_code( $c ) ) );
 		$individual = false;
 		foreach ( $others as $code ) {
-			$other = new \WC_Coupon( $code );
+			$other = \VCAP\Coupons\CouponFactory::for_code( $code );
 			if ( $other->get_id() && $other->get_individual_use() ) {
 				$individual = true;
 				break;
@@ -272,7 +272,10 @@ final class CartIntegration {
 						$lines[] = self::line( (string) $key, $item['data'], (int) $item['quantity'], (float) $item['data']->get_price() );
 					}
 				}
-				$available = array_values( array_filter( $this->campaigns->active(), static fn( $c ) => '' === self::usage_blocker( $c, $cart ) ) );
+				$active = $this->campaigns->active();
+				// B12: the totals of all limited promotions in one read of their counters (memo of this request).
+				Usage::prime_counts( array_map( static fn( $c ) => (int) $c['id'], array_filter( $active, static fn( $c ) => ! empty( $c['rules']['usage_limit'] ) ) ) );
+				$available = array_values( array_filter( $active, static fn( $c ) => '' === self::usage_blocker( $c, $cart ) ) );
 				foreach ( Engine::select( $available, $lines, $this->context( $cart ) ) as $id ) {
 					$desired[] = self::code( $id );
 				}
@@ -286,10 +289,11 @@ final class CartIntegration {
 		}
 	}
 
+	/** Coupon row label: the promotion title. WooCommerce prints the label unescaped (AP-F1-3). */
 	public function label( $label, $coupon ) {
 		if ( $coupon instanceof \WC_Coupon && $coupon->is_type( self::TYPE ) ) {
 			$campaign = $this->campaigns->get( self::id_from_code( $coupon->get_code() ) );
-			return $campaign ? $campaign['title'] : $label;
+			return $campaign ? esc_html( wp_strip_all_tags( (string) $campaign['title'] ) ) : $label;
 		}
 		return $label;
 	}

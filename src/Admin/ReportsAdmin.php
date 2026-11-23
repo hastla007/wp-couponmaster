@@ -9,13 +9,21 @@ use VCAP\Voucher;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Vouchers → Reports: redemptions, discount and revenue per code campaign/partner, promotion, bonus and coupon
- * (premium right "reports"), and – in every edition and without a license – the outstanding value at a date, the
- * redemption journal and the Pass Captain reconciliation: the accounting record of vouchers already sold.
+ * Vouchers → Reports: redemptions, discount and revenue per code campaign/partner, promotion, bonus and coupon,
+ * the outstanding value at a date, the redemption journal and the Pass Captain reconciliation: the accounting
+ * record of vouchers already sold.
  */
 final class ReportsAdmin {
 	public function register(): void {
 		add_action( 'admin_post_vcap_report_csv', array( $this, 'export' ) );
+	}
+
+	/** First day of a "complete journal" export (the plugin keeps no bookings before). */
+	public const JOURNAL_START = '2000-01-01';
+
+	/** Download link of the redemption journal CSV of a period (Y-m-d, local dates). */
+	public static function journal_csv_url( string $from, string $to ): string {
+		return wp_nonce_url( add_query_arg( array( 'action' => 'vcap_report_csv', 'view' => 'journal', 'from' => $from, 'to' => $to ), admin_url( 'admin-post.php' ) ), 'vcap_report_csv' );
 	}
 
 	/** @return array{0:string,1:string} sanitised from/to (Y-m-d), default the last 30 days */
@@ -33,38 +41,51 @@ final class ReportsAdmin {
 	}
 
 	/**
-	 * Is this report view locked? Only the campaign and partner evaluation needs the premium right; the outstanding
-	 * value, the journal and the reconciliation (and their CSV) stay available, also after a license ended.
+	 * Current report view: campaigns (default), liability, journal or reconcile. A CSV link without a view is the
+	 * campaign report.
 	 */
-	public static function locked( string $view ): bool {
-		return 'campaigns' === $view && ! \VCAP\Licensing\Entitlements::allows( 'reports' );
+	private static function view(): string {
+		$view = sanitize_key( wp_unslash( $_GET['view'] ?? '' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only.
+		if ( array_key_exists( $view, self::tab_list() ) ) {
+			return $view;
+		}
+		return 'overview'; // M12-92: the overview is the first page (a CSV link without a view stays the campaign report).
 	}
 
 	/**
-	 * Current report view: campaigns (default), liability, journal or reconcile. The page opens on the liability
-	 * while campaigns are locked; a CSV link without a view is always the campaign report.
+	 * Report views (view id => tab label): the core's own, then those of add-ons (A4, filter "vcap_report_tabs").
+	 *
+	 * @return array<string, string>
 	 */
-	private static function view( bool $page = true ): string {
-		$view = sanitize_key( wp_unslash( $_GET['view'] ?? '' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only.
-		$views = array( 'campaigns', 'liability', 'journal' );
-		if ( \VCAP\Compat\PassCaptainReconcile::available() ) {
-			$views[] = 'reconcile';
-		}
-		if ( in_array( $view, $views, true ) ) {
-			return $view;
-		}
-		return $page && self::locked( 'campaigns' ) ? 'liability' : 'campaigns';
-	}
-
-	private static function tabs( string $current ): void {
+	public static function tab_list(): array {
 		$tabs = array(
+			'overview'  => __( 'Overview', 'voucher-captain' ),
 			'campaigns' => __( 'Campaigns and codes', 'voucher-captain' ),
 			'liability' => __( 'Outstanding value', 'voucher-captain' ),
 			'journal'   => __( 'Redemption journal', 'voucher-captain' ),
+			'counter'   => __( 'Tills and staff', 'voucher-captain' ),
 		);
 		if ( \VCAP\Compat\PassCaptainReconcile::available() ) {
 			$tabs['reconcile'] = __( 'Pass Captain reconciliation', 'voucher-captain' );
 		}
+		/**
+		 * Extra tabs of Vouchers → Reports (arg: array of view id => label). Add-ons print the page of their view in
+		 * the action "vcap_report_page" (arg: view id); the page checks the voucher capability first. Core views
+		 * cannot be renamed, removed or replaced.
+		 */
+		$extra = apply_filters( 'vcap_report_tabs', array() );
+		foreach ( is_array( $extra ) ? $extra : array() as $id => $label ) {
+			$id    = sanitize_key( (string) $id );
+			$label = trim( wp_strip_all_tags( (string) $label ) );
+			if ( '' !== $id && '' !== $label && ! array_key_exists( $id, $tabs ) && 'reconcile' !== $id ) {
+				$tabs[ $id ] = $label;
+			}
+		}
+		return $tabs;
+	}
+
+	private static function tabs( string $current ): void {
+		$tabs = self::tab_list();
 		echo '<nav class="nav-tab-wrapper" aria-label="' . esc_attr__( 'Reports', 'voucher-captain' ) . '">';
 		foreach ( $tabs as $key => $label ) {
 			$url = add_query_arg( array( 'page' => 'vcap-reports', 'view' => $key ), admin_url( 'admin.php' ) );
@@ -90,10 +111,21 @@ final class ReportsAdmin {
 			$this->reconcile_page();
 			return;
 		}
-		if ( self::locked( $view ) ) {
+		if ( 'counter' === $view ) {
+			$this->counter_page();
+			return;
+		}
+		if ( 'overview' === $view ) {
+			$this->overview_page();
+			return;
+		}
+		if ( 'campaigns' !== $view ) {
+			// A4: a view of an add-on (filter "vcap_report_tabs").
 			echo '<div class="wrap"><h1>' . esc_html__( 'Reports', 'voucher-captain' ) . '</h1>';
 			self::tabs( $view );
-			echo \VCAP\Licensing\Entitlements::locked_notice( 'reports' ) . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in locked_notice().
+			/** Prints the page of an add-on's report view (arg: view id from "vcap_report_tabs"), below the tabs. */
+			do_action( 'vcap_report_page', $view );
+			echo '</div>';
 			return;
 		}
 		list( $from, $to ) = self::range( $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only filter.
@@ -105,7 +137,7 @@ final class ReportsAdmin {
 			<h1><?php esc_html_e( 'Reports', 'voucher-captain' ); ?></h1>
 			<?php self::tabs( 'campaigns' ); ?>
 			<form method="get" class="vcap-report-filter">
-				<input type="hidden" name="page" value="vcap-reports" />
+				<input type="hidden" name="page" value="vcap-reports" /><input type="hidden" name="view" value="campaigns" />
 				<label><?php esc_html_e( 'From', 'voucher-captain' ); ?> <input type="date" name="from" value="<?php echo esc_attr( $from ); ?>" /></label>
 				<label><?php esc_html_e( 'until', 'voucher-captain' ); ?> <input type="date" name="to" value="<?php echo esc_attr( $to ); ?>" /></label>
 				<button class="button"><?php esc_html_e( 'Show', 'voucher-captain' ); ?></button>
@@ -151,6 +183,59 @@ final class ReportsAdmin {
 		<?php
 	}
 
+	/** M12-92: key figures of a period (sold, redeemed, open, expired, best-selling products). */
+	private function overview_page(): void {
+		list( $from, $to ) = self::range( $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only filter.
+		$o     = Reports::overview( $from, $to );
+		$money = static fn( float $v ): string => wp_kses_post( wc_price( $v, array( 'currency' => $o['currency'] ) ) );
+		$cards = array(
+			array( __( 'Sold', 'voucher-captain' ), $money( $o['sold']['value'] ), sprintf( /* translators: %d: number of vouchers */ _n( '%d voucher from orders', '%d vouchers from orders', $o['sold']['count'], 'voucher-captain' ), $o['sold']['count'] ) ),
+			array( __( 'Issued without order', 'voucher-captain' ), $money( $o['free']['value'] ), sprintf( /* translators: %d: number of vouchers */ _n( '%d voucher (goodwill, prizes, imports)', '%d vouchers (goodwill, prizes, imports)', $o['free']['count'], 'voucher-captain' ), $o['free']['count'] ) ),
+			array( __( 'Redeemed', 'voucher-captain' ), $money( $o['redeemed'] ), __( 'net of cancelled redemptions and refunds', 'voucher-captain' ) ),
+			array( __( 'Open', 'voucher-captain' ), $money( $o['open']['value'] ), sprintf( /* translators: 1: number of vouchers, 2: date */ _n( '%1$d voucher with value left on %2$s', '%1$d vouchers with value left on %2$s', $o['open']['count'], 'voucher-captain' ), $o['open']['count'], $to ) ),
+			array( __( 'Expired', 'voucher-captain' ), $money( $o['expired']['value'] ), sprintf( /* translators: %d: number of vouchers */ _n( '%d voucher expired with value left', '%d vouchers expired with value left', $o['expired']['count'], 'voucher-captain' ), $o['expired']['count'] ) ),
+		);
+		?>
+		<div class="wrap">
+			<h1><?php esc_html_e( 'Reports', 'voucher-captain' ); ?></h1>
+			<?php self::tabs( 'overview' ); ?>
+			<form method="get" class="vcap-report-filter">
+				<input type="hidden" name="page" value="vcap-reports" /><input type="hidden" name="view" value="overview" />
+				<label><?php esc_html_e( 'From', 'voucher-captain' ); ?> <input type="date" name="from" value="<?php echo esc_attr( $from ); ?>" /></label>
+				<label><?php esc_html_e( 'until', 'voucher-captain' ); ?> <input type="date" name="to" value="<?php echo esc_attr( $to ); ?>" /></label>
+				<button class="button"><?php esc_html_e( 'Show', 'voucher-captain' ); ?></button>
+			</form>
+			<?php /* translators: %s: currency code */ ?>
+			<p class="description"><?php echo esc_html( sprintf( __( 'Vouchers in the shop currency (%s); store credit is not counted as sold. Details: "Outstanding value" (per day) and "Redemption journal" (every booking).', 'voucher-captain' ), $o['currency'] ) ); ?></p>
+			<div class="vcap-report-cards" style="display:flex;flex-wrap:wrap;gap:12px;margin:1em 0">
+				<?php foreach ( $cards as $card ) : ?>
+					<div class="vcap-card" style="flex:1 1 180px;margin:0">
+						<h2 style="margin-top:0"><?php echo esc_html( $card[0] ); ?></h2>
+						<p style="font-size:1.6em;margin:.2em 0"><strong><?php echo $card[1]; // phpcs:ignore WordPress.Security.EscapeOutput -- wc_price() through wp_kses_post(). ?></strong></p>
+						<p class="description"><?php echo esc_html( $card[2] ); ?></p>
+					</div>
+				<?php endforeach; ?>
+			</div>
+			<h2><?php esc_html_e( 'Best-selling voucher products', 'voucher-captain' ); ?></h2>
+			<table class="widefat striped">
+				<thead><tr><th><?php esc_html_e( 'Product', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'Vouchers sold', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'Value', 'voucher-captain' ); ?></th></tr></thead>
+				<tbody>
+				<?php if ( ! $o['top'] ) : ?>
+					<tr><td colspan="3"><?php esc_html_e( 'No vouchers were sold in this period.', 'voucher-captain' ); ?></td></tr>
+				<?php endif; ?>
+				<?php foreach ( $o['top'] as $row ) : ?>
+					<tr>
+						<td><a href="<?php echo esc_url( VoucherLinks::product_url( $row['product_id'] ) ); ?>"><?php echo esc_html( $row['name'] ); ?></a></td>
+						<td><?php echo esc_html( (string) $row['count'] ); ?></td>
+						<td><?php echo $money( $row['value'] ); // phpcs:ignore WordPress.Security.EscapeOutput -- wc_price() through wp_kses_post(). ?></td>
+					</tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
+		</div>
+		<?php
+	}
+
 	/** Stichtag: outstanding voucher value at the end of a day. */
 	private function liability_page(): void {
 		$date   = self::date_param( 'date', wp_date( 'Y-m-d' ) );
@@ -167,19 +252,20 @@ final class ReportsAdmin {
 				<button class="button"><?php esc_html_e( 'Show', 'voucher-captain' ); ?></button>
 				<a class="button" href="<?php echo esc_url( $csv ); ?>"><?php esc_html_e( 'Export CSV (per voucher)', 'voucher-captain' ); ?></a>
 			</form>
-			<p class="description"><?php esc_html_e( 'Value customers could still redeem at the end of the chosen day: the balance of gift cards and store credit, and the value of single-use vouchers not yet redeemed or voided. Expired value is shown separately. Percentage and ticket vouchers carry no monetary value and are not included. Have your accountant decide how to book it.', 'voucher-captain' ); ?></p>
+			<p class="description"><?php esc_html_e( 'Value customers could still redeem at the end of the chosen day: the balance of gift cards and store credit, and the value of single-use vouchers not yet redeemed or voided. Expired value is shown separately, and vouchers issued free of charge (goodwill, prizes) are shown as part of the total. Percentage vouchers and tickets without a value carry no monetary value and are not included. Have your accountant decide how to book it.', 'voucher-captain' ); ?></p>
 			<table class="widefat striped">
 				<thead><tr>
 					<th><?php esc_html_e( 'Currency', 'voucher-captain' ); ?></th>
 					<th><?php esc_html_e( 'Type', 'voucher-captain' ); ?></th>
 					<th><?php esc_html_e( 'Valid vouchers', 'voucher-captain' ); ?></th>
 					<th><?php esc_html_e( 'Outstanding value', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'Of which free of charge', 'voucher-captain' ); ?></th>
 					<th><?php esc_html_e( 'Expired vouchers', 'voucher-captain' ); ?></th>
 					<th><?php esc_html_e( 'Expired value', 'voucher-captain' ); ?></th>
 				</tr></thead>
 				<tbody>
 				<?php if ( ! $report['totals'] ) : ?>
-					<tr><td colspan="6"><?php esc_html_e( 'No outstanding voucher value on this day.', 'voucher-captain' ); ?></td></tr>
+					<tr><td colspan="7"><?php esc_html_e( 'No outstanding voucher value on this day.', 'voucher-captain' ); ?></td></tr>
 				<?php endif; ?>
 				<?php foreach ( $report['totals'] as $currency => $by_type ) : ?>
 					<?php foreach ( $by_type as $type => $t ) : ?>
@@ -188,6 +274,7 @@ final class ReportsAdmin {
 							<td><?php echo esc_html( $types[ $type ] ?? $type ); ?></td>
 							<td><?php echo esc_html( (string) $t['count'] ); ?></td>
 							<td><?php echo wp_kses_post( wc_price( $t['amount'], array( 'currency' => $currency ) ) ); ?></td>
+							<td><?php echo esc_html( (string) ( $t['free_count'] ?? 0 ) ) . ' / ' . wp_kses_post( wc_price( (float) ( $t['free_amount'] ?? 0 ), array( 'currency' => $currency ) ) ); ?></td>
 							<td><?php echo esc_html( (string) $t['expired_count'] ); ?></td>
 							<td><?php echo wp_kses_post( wc_price( $t['expired_amount'], array( 'currency' => $currency ) ) ); ?></td>
 						</tr>
@@ -205,7 +292,7 @@ final class ReportsAdmin {
 		$ledger  = new Ledger( vcap()->vouchers );
 		$journal = $ledger->journal( $from, $to, 1000 );
 		$total   = count( $journal ) < 1000 ? count( $journal ) : $ledger->journal_count( $from, $to );
-		$csv     = wp_nonce_url( add_query_arg( array( 'action' => 'vcap_report_csv', 'view' => 'journal', 'from' => $from, 'to' => $to ), admin_url( 'admin-post.php' ) ), 'vcap_report_csv' );
+		$csv     = self::journal_csv_url( $from, $to );
 		$labels  = \VCAP\VoucherRepository::event_labels();
 		?>
 		<div class="wrap">
@@ -217,8 +304,13 @@ final class ReportsAdmin {
 				<label><?php esc_html_e( 'until', 'voucher-captain' ); ?> <input type="date" name="to" value="<?php echo esc_attr( $to ); ?>" /></label>
 				<button class="button"><?php esc_html_e( 'Show', 'voucher-captain' ); ?></button>
 				<a class="button" href="<?php echo esc_url( $csv ); ?>"><?php esc_html_e( 'Export CSV', 'voucher-captain' ); ?></a>
+				<?php if ( \VCAP\DatevExport::configured() ) : ?>
+					<a class="button" href="<?php echo esc_url( add_query_arg( 'format', 'datev', $csv ) ); ?>"><?php esc_html_e( 'Export DATEV (EXTF)', 'voucher-captain' ); ?></a>
+				<?php else : ?>
+					<a href="<?php echo esc_url( admin_url( 'admin.php?page=wc-settings&tab=vcap&section=api' ) ); ?>"><?php esc_html_e( 'Set up the DATEV export', 'voucher-captain' ); ?></a>
+				<?php endif; ?>
 			</form>
-			<p class="description"><?php esc_html_e( 'Redemptions, refunds, credits and corrections with their amount, in booking order. The page shows the first 1,000 bookings; the CSV export contains all of them.', 'voucher-captain' ); ?></p>
+			<p class="description"><?php esc_html_e( 'Redemptions, refunds, credits and corrections with their amount, in booking order. Value taken off a voucher is negative, value added is positive. The page shows the first 1,000 bookings; the CSV export contains all of them.', 'voucher-captain' ); ?></p>
 			<?php if ( $total > count( $journal ) ) : ?>
 				<div class="notice notice-warning inline"><p>
 					<?php
@@ -235,19 +327,25 @@ final class ReportsAdmin {
 					<th><?php esc_html_e( 'Amount', 'voucher-captain' ); ?></th>
 					<th><?php esc_html_e( 'Balance after', 'voucher-captain' ); ?></th>
 					<th><?php esc_html_e( 'Order', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'Till / branch', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'Receipt no.', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'VAT treatment', 'voucher-captain' ); ?></th>
 				</tr></thead>
 				<tbody>
 				<?php if ( ! $journal ) : ?>
-					<tr><td colspan="6"><?php esc_html_e( 'No bookings in this period.', 'voucher-captain' ); ?></td></tr>
+					<tr><td colspan="9"><?php esc_html_e( 'No bookings in this period.', 'voucher-captain' ); ?></td></tr>
 				<?php endif; ?>
 				<?php foreach ( $journal as $r ) : ?>
 					<tr>
 						<td><?php echo esc_html( \VCAP\LocalDate::from_utc( $r['created_at'], get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ); ?></td>
 						<td><?php echo esc_html( strtoupper( (string) $r['code'] ) ); ?></td>
 						<td><?php echo esc_html( $labels[ $r['event'] ] ?? $r['event'] ); ?></td>
-						<td><?php echo wp_kses_post( wc_price( (float) $r['amount'], array( 'currency' => $r['currency'] ) ) ); ?></td>
+						<td><?php echo wp_kses_post( wc_price( \VCAP\Ledger::signed_amount( (string) $r['event'], $r['amount'] ), array( 'currency' => $r['currency'] ) ) ); ?></td>
 						<td><?php echo null === $r['balance_after'] ? '–' : wp_kses_post( wc_price( (float) $r['balance_after'], array( 'currency' => $r['currency'] ) ) ); ?></td>
-						<td><?php echo $r['order_id'] ? '#' . esc_html( (string) $r['order_id'] ) : '–'; ?></td>
+						<td><?php echo \VCAP\Format::order_link( $r['order_id'], '–' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in order_link(). ?></td>
+						<td><?php echo esc_html( '' !== (string) ( $r['till'] ?? '' ) ? (string) $r['till'] : '–' ); ?></td>
+						<td><?php echo esc_html( '' !== (string) ( $r['receipt'] ?? '' ) ? (string) $r['receipt'] : '–' ); ?></td>
+						<td><?php echo esc_html( \VCAP\ProductConfig::treatment_label( \VCAP\Ledger::row_treatment( $r ) ) ); ?></td>
 					</tr>
 				<?php endforeach; ?>
 				</tbody>
@@ -256,7 +354,99 @@ final class ReportsAdmin {
 		<?php
 	}
 
-	/** Differences between Voucher Captain's redemptions and WP Pass Captain's orders. */
+	/** Report grouping of the counter report: 'till' (default), 'user' or 'both'. */
+	private static function counter_group(): string {
+		$group = sanitize_key( wp_unslash( $_GET['group'] ?? '' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only.
+		return in_array( $group, array( 'till', 'user', 'both' ), true ) ? $group : 'till';
+	}
+
+	/** R6: counter redemptions per till/branch and staff member in a period. */
+	private function counter_page(): void {
+		list( $from, $to ) = self::range( $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only filter.
+		$group  = self::counter_group();
+		$rows   = ( new Ledger( vcap()->vouchers ) )->counter_totals( $from, $to, $group );
+		$csv    = wp_nonce_url( add_query_arg( array( 'action' => 'vcap_report_csv', 'view' => 'counter', 'from' => $from, 'to' => $to, 'group' => $group ), admin_url( 'admin-post.php' ) ), 'vcap_report_csv' );
+		$groups = array(
+			'till' => __( 'Till / branch', 'voucher-captain' ),
+			'user' => __( 'Staff member', 'voucher-captain' ),
+			'both' => __( 'Till and staff member', 'voucher-captain' ),
+		);
+		$cols   = 6 + ( 'both' === $group ? 2 : 1 );
+		?>
+		<div class="wrap">
+			<h1><?php esc_html_e( 'Reports', 'voucher-captain' ); ?></h1>
+			<?php self::tabs( 'counter' ); ?>
+			<form method="get" class="vcap-report-filter">
+				<input type="hidden" name="page" value="vcap-reports" /><input type="hidden" name="view" value="counter" />
+				<label><?php esc_html_e( 'From', 'voucher-captain' ); ?> <input type="date" name="from" value="<?php echo esc_attr( $from ); ?>" /></label>
+				<label><?php esc_html_e( 'until', 'voucher-captain' ); ?> <input type="date" name="to" value="<?php echo esc_attr( $to ); ?>" /></label>
+				<label><?php esc_html_e( 'Group by', 'voucher-captain' ); ?>
+					<select name="group">
+						<?php foreach ( $groups as $key => $label ) : ?>
+							<option value="<?php echo esc_attr( $key ); ?>" <?php selected( $group, $key ); ?>><?php echo esc_html( $label ); ?></option>
+						<?php endforeach; ?>
+					</select>
+				</label>
+				<button class="button"><?php esc_html_e( 'Show', 'voucher-captain' ); ?></button>
+				<a class="button" href="<?php echo esc_url( $csv ); ?>"><?php esc_html_e( 'Export CSV', 'voucher-captain' ); ?></a>
+			</form>
+			<p class="description"><?php esc_html_e( 'Redemptions at the counter (scanner and "Mark as redeemed (store)") with the till/branch set on the device, per currency. Cancellations count at the till of the redemption they cancel. Amounts include gift cards and value vouchers; percentage, ticket and reusable vouchers count only as redemptions.', 'voucher-captain' ); ?></p>
+			<table class="widefat striped">
+				<thead><tr>
+					<?php if ( 'user' !== $group ) : ?>
+						<th><?php esc_html_e( 'Till / branch', 'voucher-captain' ); ?></th>
+					<?php endif; ?>
+					<?php if ( 'till' !== $group ) : ?>
+						<th><?php esc_html_e( 'Staff member', 'voucher-captain' ); ?></th>
+					<?php endif; ?>
+					<th><?php esc_html_e( 'Currency', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'Redemptions', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'Amount redeemed', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'Cancellations', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'Amount cancelled', 'voucher-captain' ); ?></th>
+					<th><?php esc_html_e( 'Net amount', 'voucher-captain' ); ?></th>
+				</tr></thead>
+				<tbody>
+				<?php if ( ! $rows ) : ?>
+					<tr><td colspan="<?php echo esc_attr( (string) $cols ); ?>"><?php esc_html_e( 'No counter redemptions in this period.', 'voucher-captain' ); ?></td></tr>
+				<?php endif; ?>
+				<?php foreach ( $rows as $r ) : ?>
+					<tr>
+						<?php if ( 'user' !== $group ) : ?>
+							<td><?php echo esc_html( '' !== $r['till'] ? $r['till'] : __( '(no till set)', 'voucher-captain' ) ); ?></td>
+						<?php endif; ?>
+						<?php if ( 'till' !== $group ) : ?>
+							<td><?php echo esc_html( Ledger::staff_name( (int) $r['user_id'] ) ); ?></td>
+						<?php endif; ?>
+						<td><?php echo esc_html( $r['currency'] ); ?></td>
+						<td><?php echo esc_html( number_format_i18n( $r['count'] ) ); ?></td>
+						<td><?php echo wp_kses_post( wc_price( $r['amount'], array( 'currency' => $r['currency'] ) ) ); ?></td>
+						<td><?php echo esc_html( number_format_i18n( $r['reversed_count'] ) ); ?></td>
+						<td><?php echo wp_kses_post( wc_price( $r['reversed_amount'], array( 'currency' => $r['currency'] ) ) ); ?></td>
+						<td><?php echo wp_kses_post( wc_price( $r['net'], array( 'currency' => $r['currency'] ) ) ); ?></td>
+					</tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
+			<?php $failed = \VCAP\Counter::failed_lookups( $from, $to ); ?>
+			<h2><?php esc_html_e( 'Unknown codes looked up in the scanner', 'voucher-captain' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'Lookups of codes that do not exist, per staff member. Many of them can mean typing errors or a damaged print – or someone trying out codes. Above 100 within 15 minutes the scanner of that staff member pauses.', 'voucher-captain' ); ?></p>
+			<table class="widefat striped vcap-failed-lookups">
+				<thead><tr><th><?php esc_html_e( 'Staff member', 'voucher-captain' ); ?></th><th><?php esc_html_e( 'Unknown codes', 'voucher-captain' ); ?></th></tr></thead>
+				<tbody>
+				<?php if ( ! $failed ) : ?>
+					<tr><td colspan="2"><?php esc_html_e( 'None in this period.', 'voucher-captain' ); ?></td></tr>
+				<?php endif; ?>
+				<?php foreach ( $failed as $user_id => $count ) : ?>
+					<tr><td><?php echo esc_html( Ledger::staff_name( (int) $user_id ) ); ?></td><td><?php echo esc_html( number_format_i18n( $count ) ); ?></td></tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
+		</div>
+		<?php
+	}
+
+	/** Differences between Voucher Captain's redemptions and Pass Captain's orders. */
 	private function reconcile_page(): void {
 		$result = ( new \VCAP\Compat\PassCaptainReconcile( vcap()->redemptions ) )->run();
 		$kinds  = array(
@@ -276,12 +466,12 @@ final class ReportsAdmin {
 			endif;
 			?>
 			<?php if ( 'table' === ( $result['source'] ?? '' ) ) : ?>
-				<div class="notice notice-warning inline"><p><?php esc_html_e( 'This version of WP Pass Captain has no reconciliation interface yet, so its order table is read directly as a fallback. Please update WP Pass Captain.', 'voucher-captain' ); ?></p></div>
+				<div class="notice notice-warning inline"><p><?php esc_html_e( 'This version of Pass Captain has no reconciliation interface yet, so its order table is read directly as a fallback. Please update Pass Captain.', 'voucher-captain' ); ?></p></div>
 			<?php endif; ?>
 			<p class="description">
 				<?php
 				/* translators: %d: number of Pass Captain orders checked */
-				echo esc_html( sprintf( __( 'Compares the vouchers used in WP Pass Captain (ticket checkout and ticket vouchers) with the redemptions in Voucher Captain: state, amount and refunds. %d Pass Captain orders checked; only differences are listed, nothing is changed.', 'voucher-captain' ), (int) $result['checked'] ) );
+				echo esc_html( sprintf( __( 'Compares the vouchers used in Pass Captain (ticket checkout and ticket vouchers) with the redemptions in Voucher Captain: state, amount and refunds. %d Pass Captain orders checked; only differences are listed, nothing is changed.', 'voucher-captain' ), (int) $result['checked'] ) );
 				?>
 			</p>
 			<table class="widefat striped">
@@ -319,27 +509,30 @@ final class ReportsAdmin {
 		if ( ! current_user_can( Menu::cap() ) ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'voucher-captain' ), 403 );
 		}
-		$view   = self::view( false );
+		$view   = self::view();
 		$ledger = new Ledger( vcap()->vouchers );
-		// Streamed in batches: no row limit and no full report in memory.
+		// Streamed in batches: no row limit and no full report in memory; each file ends with "End of export: N".
 		if ( 'liability' === $view ) {
 			$date = self::date_param( 'date', wp_date( 'Y-m-d' ) );
-			Campaigns::send_csv( 'voucher-liability-' . $date . '.csv', Ledger::liability_csv( $ledger->liability_rows( $date ), $date ) );
+			\VCAP\Csv::send( 'voucher-liability-' . $date . '.csv', $ledger->liability_export( $date ) );
 			exit;
 		}
 		list( $from, $to ) = self::range( $_GET );
-		if ( 'journal' === $view ) {
-			$out = \VCAP\Csv::open( 'voucher-journal-' . $from . '-' . $to . '.csv' );
-			\VCAP\Csv::write( $out, Ledger::journal_header() );
-			foreach ( $ledger->journal_all( $from, $to ) as $row ) {
-				\VCAP\Csv::write( $out, Ledger::journal_line( $row ) );
-			}
-			fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+		if ( 'counter' === $view ) {
+			$group = self::counter_group();
+			\VCAP\Csv::send( 'voucher-counter-' . $group . '-' . $from . '-' . $to . '.csv', $ledger->counter_export( $from, $to, $group ) );
 			exit;
 		}
-		if ( self::locked( 'campaigns' ) ) {
-			// A bookmarked CSV link of the campaign report explains the lock instead of ending on a blank page.
-			wp_die( esc_html( \VCAP\Licensing\Entitlements::locked_message( 'reports' ) ), '', array( 'response' => 403, 'back_link' => true ) );
+		if ( 'journal' === $view ) {
+			if ( 'datev' === sanitize_key( wp_unslash( $_GET['format'] ?? '' ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- nonce checked above.
+				if ( ! \VCAP\DatevExport::configured() ) {
+					wp_die( esc_html__( 'Please set the consultant and client number and the three accounts of the DATEV export first (WooCommerce → Settings → Vouchers → Integrations).', 'voucher-captain' ), 400 );
+				}
+				\VCAP\DatevExport::send( $ledger, $from, $to ); // M12-69.
+				exit;
+			}
+			\VCAP\Csv::send( 'voucher-journal-' . $from . '-' . $to . '.csv', $ledger->journal_export( $from, $to ) );
+			exit;
 		}
 		Campaigns::send_csv( 'voucher-report-' . $from . '-' . $to . '.csv', Reports::csv_rows( ( new Reports() )->collect( $from, $to ) ) );
 		exit;

@@ -20,12 +20,12 @@
 .vcap-preview-row { clear: both; margin: .5em 0 0; }
 .vcap-vouchers { margin: 2em 0; }
 .vcap-vouchers-table code { font-size: 1em; letter-spacing: .05em; }
-.vcap-download { text-align: right; }
+.vcap-download { text-align: end; }
 .vcap-form-result:focus { outline: none; }
 .vcap-preview-note { margin: 0; }
 /* Cart totals: the voucher balance is a note, not a second total; the remaining-value warning spans the row. */
 .vcap-balance th, .vcap-balance td { font-weight: normal; }
-.woocommerce table.shop_table_responsive tr.vcap-residual-warning td { text-align: left; }
+.woocommerce table.shop_table_responsive tr.vcap-residual-warning td { text-align: start; }
 .woocommerce table.shop_table_responsive tr.vcap-residual-warning td::before { content: none; display: none; }
 .vcap-terms-country + .vcap-terms-country { margin-top: .6em; }
 /* Hidden text for screen readers (themes without this core class). */
@@ -36,3 +36,37 @@
 .vcap-resend-form { display: inline-block; margin: .3em 0 0; }
 .vcap-terms { margin: .4em 0; font-size: .9em; }
 .vcap-terms summary { cursor: pointer; }
+
+/* M12-95: gift card field (classic cart/checkout and blocks), "As a gift / For me", mini cart balance. */
+.vcap-giftcard-form,
+.vcap-giftcard-block { display: flex; flex-wrap: wrap; gap: .5em; align-items: center; margin: 0 0 1em; }
+.vcap-giftcard-form label,
+.vcap-giftcard-block label { flex-basis: 100%; font-weight: 600; }
+.vcap-giftcard-form .input-text,
+.vcap-giftcard-block .vcap-giftcard-input { flex: 1 1 12em; min-width: 0; }
+.vcap-giftcard-result:empty,
+.vcap-giftcard-block p:empty { display: none; }
+.vcap-giftcard-error { color: #b32d2e; }
+.vcap-gift-mode { border: 0; padding: 0; margin: 0 0 1em; }
+.vcap-gift-mode label { margin-inline-end: 1.5em; }
+.vcap-field[hidden] { display: none !important; }
+.vcap-minicart-balance { margin: .5em 0; }
+
+/* M12-53: live preview of the voucher on the product page (drawn by frontend.js). */
+.vcap-live-preview { max-width: 420px; margin: 0 0 1em; }
+.vcap-lp-page { position: relative; width: 100%; overflow: hidden; border-radius: 4px; box-shadow: 0 1px 4px rgba( 0, 0, 0, .18 ); }
+.vcap-lp-el { position: absolute; box-sizing: border-box; overflow: hidden; line-height: 1.2; white-space: normal; word-wrap: break-word; }
+.vcap-lp-code { background: repeating-linear-gradient( 45deg, #d5d5d5, #d5d5d5 3px, #ececec 3px, #ececec 6px ); }
+
+/* M12-96: design gallery (radio group with pictures). */
+.vcap-design-gallery { border: 0; padding: 0; margin: 0 0 1em; }
+.vcap-design-gallery legend { font-weight: 600; padding: 0; margin-bottom: .4em; }
+.vcap-design-options { display: flex; flex-wrap: wrap; gap: .6em; }
+.vcap-design-option { display: flex; flex-direction: column; align-items: center; width: 110px; cursor: pointer; text-align: center; font-size: .9em; }
+.vcap-design-option input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.vcap-design-thumb { display: block; width: 100%; border: 2px solid #ccc; border-radius: 4px; background-position: center; }
+.vcap-design-option input:checked + .vcap-design-thumb { border-color: currentColor; box-shadow: 0 0 0 2px currentColor; }
+.vcap-design-option input:focus-visible + .vcap-design-thumb { outline: 2px solid #2271b1; outline-offset: 2px; }
+
+/* M12-98: gift card → store credit. */
+.vcap-card-to-credit input[type="text"] { max-width: 16em; }

@@ -1,11 +1,21 @@
 const { test, expect } = require( '@playwright/test' );
-const { addVoucherToCart, expectAccessible, login, state, trackPluginErrors } = require( './helpers' );
+const { addVoucherToCart, emptyCart, expectAccessible, expectCartShows, freshCode, login, trackPluginErrors } = require( './helpers' );
 
-// Runs while the cart/checkout pages are the WooCommerce blocks (tests/e2e/pages.php blocks) and with the setting
-// "Multi-purpose vouchers as payment" on (plugin-smoke.yml → browser-e2e). The voucher rows come from
-// assets/js/cart-blocks.js (Store API data extensions["voucher-captain"], VCAP\CartBlocks).
+// Runs while the cart/checkout pages are the WooCommerce blocks (tests/e2e/pages.php blocks), twice
+// (plugin-smoke.yml → browser-e2e): with "Multi-purpose vouchers as payment" on (vcap_mpv_after_tax=yes, the
+// default run) and once more with it off (E2E_MPV_AFTER_TAX=no: the gift card is a coupon discount). The voucher
+// rows come from assets/js/cart-blocks.js (Store API data extensions["voucher-captain"], VCAP\CartBlocks).
+// Every test starts with an empty cart and uses a voucher code of its own per attempt (M12-101: retries are
+// idempotent).
+const AFTER_TAX = process.env.E2E_MPV_AFTER_TAX !== 'no';
+
 test.describe( 'cart and checkout blocks', () => {
 	test.skip( process.env.E2E_CHECKOUT !== 'blocks', 'block checkout run only' );
+
+	test.beforeEach( async ( { page } ) => {
+		await page.goto( '/' );
+		await emptyCart( page );
+	} );
 
 	/** Fills the block checkout and places the order (cash on delivery when offered). */
 	async function placeBlockOrder( page, email, lastName ) {
@@ -53,17 +63,19 @@ test.describe( 'cart and checkout blocks', () => {
 	const orderTotal = ( page ) => page.locator( '.wc-block-components-totals-footer-item .wc-block-components-totals-item__value' ).first();
 
 	test( 'a personalised voucher is bought through the block checkout', async ( { page } ) => {
+		test.skip( ! AFTER_TAX, 'payment after tax run only' );
 		const errors = trackPluginErrors( page );
 		await addVoucherToCart( page, 'block-recipient@example.test' );
 		await page.goto( '/cart/' );
-		await expect( page.getByText( 'block-recipient@example.test' ).first() ).toBeVisible();
+		await expectCartShows( page, 'block-recipient@example.test', '.wp-block-woocommerce-cart, main' );
 		await placeBlockOrder( page, 'e2e-block@example.test', 'Block' );
 		expect( errors ).toEqual( [] );
 	} );
 
-	test( 'a gift card pays after tax: payment row, remaining balance, coupon note and the right total', async ( { page } ) => {
+	test( 'a gift card pays after tax: payment row, remaining balance, coupon note and the right total', async ( { page }, testInfo ) => {
+		test.skip( ! AFTER_TAX, 'payment after tax run only' );
 		const errors = trackPluginErrors( page );
-		const code = state().gift_card;
+		const code = freshCode( 'gift_cards', testInfo );
 		await addGoodsToCart( page );
 		await page.goto( '/cart/' );
 		await applyCoupon( page, code );
@@ -71,7 +83,8 @@ test.describe( 'cart and checkout blocks', () => {
 		const payment = page.locator( '.vcap-voucher-payment' ).filter( { hasText: code } );
 		await expect( payment ).toBeVisible();
 		await expect( payment ).toContainText( /20[.,]00/ );
-		await expect( page.locator( '.vcap-balance' ).filter( { hasText: new RegExp( code, 'i' ) } ) ).toBeVisible();
+		// The note shows what is left after this order (20.00 card pays 20.00 → 0.00), not the balance before it.
+		await expect( page.locator( '.vcap-balance' ).filter( { hasText: new RegExp( code, 'i' ) } ) ).toContainText( /after this order:\s*\D*0[.,]00/i );
 		await expect( page.getByText( /pays as voucher payment/i ).first() ).toBeVisible();
 		await expect( orderTotal( page ) ).toContainText( /10[.,]00/ );
 		await page.goto( '/checkout/' );
@@ -81,9 +94,10 @@ test.describe( 'cart and checkout blocks', () => {
 		expect( errors ).toEqual( [] );
 	} );
 
-	test( 'a single-use voucher worth more than the cart warns in an accessible live region', async ( { page } ) => {
+	test( 'a single-use voucher worth more than the cart warns in an accessible live region', async ( { page }, testInfo ) => {
+		test.skip( ! AFTER_TAX, 'payment after tax run only' );
 		const errors = trackPluginErrors( page );
-		const code = state().single_voucher;
+		const code = freshCode( 'single_vouchers', testInfo );
 		await addGoodsToCart( page );
 		await page.goto( '/cart/' );
 		// The live region is rendered (empty) before anything happens, so the later warning is announced.
@@ -100,8 +114,10 @@ test.describe( 'cart and checkout blocks', () => {
 	} );
 
 	test( 'logged-in customers use their store credit from the block cart', async ( { page } ) => {
+		test.skip( ! AFTER_TAX, 'payment after tax run only' );
 		const errors = trackPluginErrors( page );
 		await login( page, 'e2e-customer', 'e2e-Pass-123!' );
+		await emptyCart( page ); // The customer's cart persists (also from a failed attempt).
 		await addGoodsToCart( page );
 		await page.goto( '/cart/' );
 		const hint = page.locator( '.vcap-store-credit-hint' );
@@ -113,6 +129,23 @@ test.describe( 'cart and checkout blocks', () => {
 		await expect( page.locator( '.vcap-voucher-payment' ) ).toContainText( /15[.,]00/ );
 		await expect( page.locator( '.vcap-store-credit-hint' ) ).toHaveCount( 0 );
 		await expect( orderTotal( page ) ).toContainText( /15[.,]00/ );
+		expect( errors ).toEqual( [] );
+	} );
+	// M12-58: with "Multi-purpose vouchers as payment" off the gift card is a coupon discount (fixed_cart) on the
+	// goods; tests/e2e/verify.php then checks the order total, the card's balance and its ledger booking.
+	test( 'with payment after tax off, a gift card is a coupon discount and the order is charged once', async ( { page }, testInfo ) => {
+		test.skip( AFTER_TAX, 'run with vcap_mpv_after_tax=no only' );
+		const errors = trackPluginErrors( page );
+		const code = freshCode( 'gift_cards_coupon', testInfo );
+		await addGoodsToCart( page );
+		await page.goto( '/cart/' );
+		await applyCoupon( page, code );
+		// No payment row: the 20.00 card reduces the goods like a coupon, 10.00 left to pay.
+		await expect( page.locator( '.vcap-voucher-payment' ) ).toHaveCount( 0 );
+		await expect( orderTotal( page ) ).toContainText( /10[.,]00/ );
+		await page.goto( '/checkout/' );
+		await expect( orderTotal( page ) ).toContainText( /10[.,]00/ );
+		await placeBlockOrder( page, 'e2e-block-giftcard-coupon@example.test', 'Coupon' );
 		expect( errors ).toEqual( [] );
 	} );
 } );

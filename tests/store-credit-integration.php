@@ -11,6 +11,11 @@ function vcap_sc_assert( bool $condition, string $message ): void {
 	echo "PASS: {$message}\n";
 }
 
+// M12-03: new installations settle multi-purpose vouchers as a payment after tax ("Multi-purpose vouchers as
+// payment" on). This suite checks the coupon mode of existing shops; the payment mode is covered in
+// tests/tax-integration.php section 8 and tests/tax-accounting-integration.php.
+update_option( VCAP\PaymentVouchers::OPTION, 'no' );
+
 function vcap_sc_user( string $name ): int {
 	$login = 'vcap_sc_' . $name . '_' . strtolower( wp_generate_password( 6, false, false ) );
 	return (int) wp_insert_user( array( 'user_login' => $login, 'user_pass' => wp_generate_password( 20 ), 'user_email' => $login . '@example.com', 'role' => 'customer' ) );
@@ -100,7 +105,9 @@ vcap_sc_assert( is_wp_error( $stale ), 'a second form with a stale remaining tot
 $guest = vcap_sc_order( $product, 0 );
 $guest->set_status( 'completed' );
 $guest->save();
-vcap_sc_assert( is_wp_error( $credit->refund_as_credit( $guest, 5, 'Guest', array( 'channel' => 'email' ) ) ), 'guest orders cannot be refunded as credit' );
+add_filter( 'vcap_refund_guest_as_gift_card', '__return_false' ); // M12-57: on by default (gift card), see refund-lifecycle.
+vcap_sc_assert( is_wp_error( $credit->refund_as_credit( $guest, 5, 'Guest', array( 'channel' => 'email' ) ) ), 'guest orders cannot be refunded as credit when refunds as gift card are turned off' );
+remove_filter( 'vcap_refund_guest_as_gift_card', '__return_false' );
 
 // Fault injection: WooCommerce cannot record the refund – the credit added first is booked back, nothing else changes.
 $before_fail  = $credit->balance( $alice );
@@ -164,6 +171,68 @@ vcap_sc_assert( is_wp_error( $check ), 'store credit can be kept apart from disc
 delete_option( 'vcap_credit_with_coupons' );
 WC()->cart->empty_cart();
 wp_set_current_user( 0 );
+
+// Profile credit (Q6/Q7): booked only after the profile was saved, once per form, amounts read strictly.
+$sc_admin_login = 'vcap_sc_admin_' . strtolower( wp_generate_password( 6, false, false ) );
+$sc_admin_id    = (int) wp_insert_user( array( 'user_login' => $sc_admin_login, 'user_pass' => wp_generate_password( 20 ), 'user_email' => $sc_admin_login . '@example.com', 'role' => 'administrator' ) );
+vcap_sc_assert( $sc_admin_id > 0, 'admin for the profile checks' );
+wp_set_current_user( $sc_admin_id );
+$profile_admin = new VCAP\Admin\StoreCreditAdmin( $credit, vcap()->vouchers );
+$dave          = vcap_sc_user( 'dave' );
+$profile_post  = static fn( string $amount, string $token, string $reason = 'Goodwill' ) => array(
+	'vcap_credit_nonce'  => wp_create_nonce( 'vcap_credit_' . $dave ),
+	'vcap_credit_amount' => $amount,
+	'vcap_credit_reason' => $reason,
+	VCAP\Admin\FormToken::FIELD => $token,
+);
+$token = VCAP\Admin\FormToken::generate();
+$_POST = $profile_post( '2,50', $token );
+$profile_admin->save_profile( $dave );
+vcap_sc_assert( 0.0 === $credit->balance( $dave ), 'Q6: nothing is booked before WordPress saved the profile' );
+$profile_errors = new WP_Error();
+$profile_admin->profile_errors( $profile_errors, true, get_userdata( $dave ) );
+vcap_sc_assert( ! $profile_errors->has_errors(), 'a valid credit adds no profile error' );
+$profile_admin->book_profile_credit( $dave );
+vcap_sc_assert( 2.5 === $credit->balance( $dave ), 'Q7: "2,50" on the profile is 2.50 store credit, not 250' );
+$profile_admin->save_profile( $dave );
+$profile_admin->book_profile_credit( $dave );
+vcap_sc_assert( 2.5 === $credit->balance( $dave ), 'Q6: the same form sent again (double click, reload) is not booked twice' );
+$_POST = $profile_post( '−1', VCAP\Admin\FormToken::generate() );
+$profile_admin->save_profile( $dave );
+$profile_admin->book_profile_credit( $dave );
+vcap_sc_assert( 1.5 === $credit->balance( $dave ), 'Q7: a Unicode minus removes credit instead of adding it' );
+$_POST = $profile_post( '1e3', VCAP\Admin\FormToken::generate() );
+$profile_admin->save_profile( $dave );
+$profile_errors = new WP_Error();
+$profile_admin->profile_errors( $profile_errors, true, get_userdata( $dave ) );
+$profile_admin->book_profile_credit( $dave );
+vcap_sc_assert( $profile_errors->has_errors() && 1.5 === $credit->balance( $dave ), 'Q7: "1e3" is refused as a profile error (the profile is not saved) and books nothing' );
+$_POST = $profile_post( '5', VCAP\Admin\FormToken::generate() );
+$profile_admin->save_profile( $dave );
+// Another profile error (e.g. a taken email address): WordPress does not save, profile_update never fires.
+$_POST = $profile_post( '5', $_POST[ VCAP\Admin\FormToken::FIELD ] );
+$profile_admin->save_profile( $dave );
+$profile_admin->book_profile_credit( $dave );
+vcap_sc_assert( 6.5 === $credit->balance( $dave ), 'Q6: a profile that failed once and is sent again books the credit once' );
+$_POST = array();
+delete_transient( 'vcap_flash_' . get_current_user_id() );
+wp_set_current_user( 0 );
+
+// AP-Q1-1 (a): an order paid partly with store credit and fully refunded as store credit: the credit it spent
+// comes back as well (the "refund_credit" ledger row of the same order must not hide its charge).
+$erin = vcap_sc_user( 'erin' );
+$credit->adjust( $erin, 5, 'Goodwill' );
+$erin_account = $credit->account( $erin );
+$erin_order   = vcap_sc_order( $product, $erin );
+$erin_order->apply_coupon( $erin_account->code );
+$erin_order = wc_get_order( $erin_order->get_id() );
+vcap()->coupons->reserve_order( $erin_order );
+$erin_order->payment_complete();
+$erin_order = wc_get_order( $erin_order->get_id() );
+vcap_sc_assert( 15.0 === (float) $erin_order->get_total() && 0.0 === $credit->balance( $erin ), 'AP-Q1-1: the 20 order is paid with 5 credit and 15 money' );
+$erin_refund = $credit->refund_as_credit( $erin_order, 15, 'Customer chose credit', array( 'channel' => 'email' ) );
+vcap_sc_assert( ! is_wp_error( $erin_refund ) && wc_get_order( $erin_order->get_id() )->has_status( 'refunded' ), 'AP-Q1-1: the money part is refunded as store credit (order fully refunded)' );
+vcap_sc_assert( 20.0 === $credit->balance( $erin ), 'AP-Q1-1: the 15 refunded as credit and the 5 credit spent on the order are both on the account (20)' );
 
 // Disabled feature: credit coupons stop working.
 update_option( 'vcap_store_credit', 'no' );

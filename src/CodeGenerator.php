@@ -20,16 +20,40 @@ final class CodeGenerator {
 	 */
 	public const MIN_BITS = 50;
 
-	/** Bits of a random code: length × log2(alphabet size). */
-	public static function bits( int $length, string $charset = 'alnum_upper' ): float {
+	/** Longest code the voucher table and WooCommerce lookups take (vouchers.code is varchar(100)). */
+	public const MAX_CODE_LENGTH = 100;
+	/** Characters a prefix, suffix or separator may use: they survive wc_format_coupon_code() unchanged. */
+	public const AFFIX_PATTERN = '/^[A-Za-z0-9._-]{0,20}$/';
+	/** Separators are kept short so that prefix, order number, random part and suffix fit MAX_CODE_LENGTH. */
+	public const SEPARATOR_PATTERN = '/^[A-Za-z0-9._-]{0,3}$/';
+
+	/** Whether a prefix/suffix (or, with $separator, a separator) may be used in codes. */
+	public static function valid_affix( string $value, bool $separator = false ): bool {
+		return (bool) preg_match( $separator ? self::SEPARATOR_PATTERN : self::AFFIX_PATTERN, $value );
+	}
+
+	/** Removes what a code part may not contain (settings saved before the check, filters). */
+	private static function clean_part( string $value, int $max ): string {
+		return substr( (string) preg_replace( '/[^A-Za-z0-9._-]/', '', $value ), 0, $max );
+	}
+
+	/**
+	 * Characters of a charset that are told apart when a code is entered. WooCommerce codes are case-insensitive,
+	 * so "a" and "A" are one character: the mixed-case set has 33, not 56 (estimated_bits() folds the same way).
+	 */
+	public static function effective_alphabet( string $charset = 'alnum_upper' ): int {
 		$chars = self::CHARSETS[ $charset ] ?? self::CHARSETS['alnum_upper'];
-		return $length * log( strlen( $chars ), 2 );
+		return count( array_unique( str_split( strtolower( $chars ) ) ) );
+	}
+
+	/** Bits of a random code: length × log2(effective alphabet size). */
+	public static function bits( int $length, string $charset = 'alnum_upper' ): float {
+		return $length * log( self::effective_alphabet( $charset ), 2 );
 	}
 
 	/** Shortest random part of a charset that reaches $bits (e.g. 10 letters/digits, 16 digits for 2^50). */
 	public static function min_length( string $charset = 'alnum_upper', int $bits = self::MIN_BITS ): int {
-		$chars = self::CHARSETS[ $charset ] ?? self::CHARSETS['alnum_upper'];
-		return (int) ceil( $bits / log( strlen( $chars ), 2 ) - 1e-9 );
+		return (int) ceil( $bits / log( self::effective_alphabet( $charset ), 2 ) - 1e-9 );
 	}
 
 	/**
@@ -38,7 +62,7 @@ final class CodeGenerator {
 	 * them as $prefix/$suffix) do not count. A single code says nothing about series or check digits: rate the
 	 * codes of a file with analyse_batch().
 	 */
-	public static function estimated_bits( string $code, string $prefix = '', string $suffix = '' ): float {
+	public static function estimated_bits( string $code, string $prefix = '', string $suffix = '', int $alphabet_seen = 0 ): float {
 		$code = strtolower( $code );
 		if ( '' !== $prefix && str_starts_with( $code, strtolower( $prefix ) ) ) {
 			$code = substr( $code, strlen( $prefix ) );
@@ -48,7 +72,41 @@ final class CodeGenerator {
 		}
 		$code     = (string) preg_replace( '/[^a-z0-9]/', '', $code );
 		$alphabet = ( preg_match( '/[0-9]/', $code ) ? 10 : 0 ) + ( preg_match( '/[a-z]/', $code ) ? 26 : 0 );
+		$alphabet = $alphabet_seen > 0 ? min( $alphabet, $alphabet_seen ) : $alphabet;
 		return $alphabet > 1 ? strlen( $code ) * log( $alphabet, 2 ) : 0.0;
+	}
+
+	/**
+	 * M12-26: the character set a batch really uses ("rests" without the shared prefix/suffix), 0 when the batch
+	 * is too small to tell. Hex codes use 16 of the 36 letters and digits: rated with 36 a 10-character hex code
+	 * would count as 52 bits instead of 40. The distinct characters seen are taken as the alphabet once it is
+	 * very unlikely (below one in a million) that codes drawn from all letters and digits of their kinds would
+	 * show so few of them: C(K, d) · (d / K)^n < 1e-6 for d distinct characters among n.
+	 *
+	 * @param string[] $rests Codes of the batch without prefix, suffix and separators (lower case).
+	 */
+	public static function alphabet_seen( array $rests ): int {
+		$chars = array();
+		$n     = 0;
+		foreach ( $rests as $rest ) {
+			foreach ( str_split( (string) preg_replace( '/[^a-z0-9]/', '', strtolower( (string) $rest ) ) ) as $char ) {
+				if ( '' !== $char ) {
+					$chars[ $char ] = true;
+					++$n;
+				}
+			}
+		}
+		$d    = count( $chars );
+		$keys = array_map( 'strval', array_keys( $chars ) );
+		$k    = ( preg_grep( '/[0-9]/', $keys ) ? 10 : 0 ) + ( preg_grep( '/[a-z]/', $keys ) ? 26 : 0 );
+		if ( $d < 2 || $d >= $k ) {
+			return 0;
+		}
+		$log_choose = 0.0; // ln C(k, d)
+		for ( $i = 1; $i <= $d; $i++ ) {
+			$log_choose += log( ( $k - $d + $i ) / $i );
+		}
+		return $log_choose + $n * log( $d / $k ) < log( 1e-6 ) ? $d : 0;
 	}
 
 	/**
@@ -120,7 +178,9 @@ final class CodeGenerator {
 	 * - a check digit (Luhn or GS1/EAN) every code carries – it follows from the other digits,
 	 * - numbered series: numbers that follow each other with the same or nearly the same step, or a number much
 	 *   closer to another code of the batch than random numbers would be. Such numbers count as 0 bits, only the
-	 *   rest of the code (e.g. random letters around it) counts.
+	 *   rest of the code (e.g. random letters around it) counts;
+	 * - characters the batch never uses: the alphabet is the set of characters seen (alphabet_seen(), M12-26),
+	 *   e.g. 16 for hex codes, once the batch is large enough to tell.
 	 *
 	 * $context are codes already in the batch: for a file with a single code they give the shared structure, and
 	 * a new code next to an existing number counts as part of the series. They are not rated themselves.
@@ -203,14 +263,15 @@ final class CodeGenerator {
 			}
 		}
 		$series = self::series( array_map( static fn( $p ) => $p[0], $numbers ), $others, $min_bits );
+		$seen   = self::alphabet_seen( array_merge( array_filter( $rests, static fn( $r ) => null !== $r ), $ctx_rests ) );
 
 		$bits = array();
 		foreach ( $codes as $key => $code ) {
 			if ( isset( $series[ $key ] ) ) {
-				$bits[ $key ] = self::estimated_bits( $numbers[ $key ][1] ); // Only what is around the number counts.
+				$bits[ $key ] = self::estimated_bits( $numbers[ $key ][1], '', '', $seen ); // Only what is around the number counts.
 				continue;
 			}
-			$bits[ $key ] = self::estimated_bits( $code, $prefix, $suffix );
+			$bits[ $key ] = self::estimated_bits( $code, $prefix, $suffix, $seen );
 			if ( $check_digit && null !== $rests[ $key ] && ctype_digit( $rests[ $key ] ) ) {
 				$bits[ $key ] = max( 0.0, $bits[ $key ] - log( 10, 2 ) );
 			}
@@ -313,22 +374,18 @@ final class CodeGenerator {
 	 *        min_bits: the random part is made long enough for this guessing space (codes that carry money).
 	 */
 	public static function build( array $opts ): string {
-		$sep     = (string) ( $opts['separator'] ?? '-' );
+		// Only characters WooCommerce keeps as they are ("B&B" would become "b&amp;b" and never be found again).
+		$sep     = self::clean_part( (string) ( $opts['separator'] ?? '-' ), 3 );
 		$charset = (string) ( $opts['charset'] ?? 'alnum_upper' );
 		$length  = max( 4, min( 40, (int) ( $opts['length'] ?? 12 ) ) );
 		if ( ! empty( $opts['min_bits'] ) ) {
 			$length = max( $length, min( 40, self::min_length( $charset, (int) $opts['min_bits'] ) ) );
 		}
-		$parts = array_filter(
-			array(
-				trim( (string) ( $opts['prefix'] ?? '' ) ),
-				trim( (string) ( $opts['order_ref'] ?? '' ) ),
-				self::random( $length, $charset ),
-				trim( (string) ( $opts['suffix'] ?? '' ) ),
-			),
-			'strlen'
-		);
-		return implode( $sep, $parts );
+		$prefix = self::clean_part( trim( (string) ( $opts['prefix'] ?? '' ) ), 20 );
+		$ref    = self::clean_part( trim( (string) ( $opts['order_ref'] ?? '' ) ), 20 );
+		$suffix = self::clean_part( trim( (string) ( $opts['suffix'] ?? '' ) ), 20 );
+		$parts  = array_filter( array( $prefix, $ref, self::random( $length, $charset ), $suffix ), 'strlen' );
+		return substr( implode( $sep, $parts ), 0, self::MAX_CODE_LENGTH ); // At most 20+20+40+20+3×3 = 109: trimmed at the end.
 	}
 
 	/**

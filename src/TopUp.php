@@ -13,6 +13,8 @@ defined( 'ABSPATH' ) || exit;
 final class TopUp {
 	public const PRODUCT_META  = '_vcap_topup';
 	public const ITEM_META     = '_vcap_topup_code';
+	/** Order item meta: id of the topped-up card (AP-Q1-3), the code alone is lost when the card is reissued. */
+	public const CARD_META     = '_vcap_topup_voucher_id';
 	public const DONE_META     = '_vcap_topup_done';
 	/** Top-up value of the line already taken back by refunds or cancellation (base currency). */
 	public const REVERSED_META = '_vcap_topup_reversed';
@@ -20,6 +22,10 @@ final class TopUp {
 	public const MISSING_META  = '_vcap_topup_missing';
 	/** A top-up line that could not be booked (card no longer valid, no value): held for the shop, not retried. */
 	public const HELD_META     = '_vcap_topup_held';
+	/** M12-09: a top-up line waiting for the V7 security hold of its order (value: hold end, Unix time). */
+	public const PENDING_META  = '_vcap_topup_pending';
+	/** M12-09: Action Scheduler hook that books a held top-up line once its order's hold is over. */
+	public const AFTER_HOLD_HOOK = 'vcap_topup_after_hold';
 	/** Default minimum remaining validity (days) of a card to be topped up (filter "vcap_topup_min_remaining_days"). */
 	public const MIN_REMAINING_DAYS = 30;
 	private const FIELD        = 'vcap_topup_code';
@@ -31,7 +37,7 @@ final class TopUp {
 		$this->register_features();
 	}
 
-	/** New sales: product setting, code field, add to cart (only with the premium right "topup"). */
+	/** New sales: product setting, code field, add to cart. */
 	public function register_features(): void {
 		add_action( 'vcap_product_settings_fields', array( $this, 'product_field' ) );
 		add_action( 'vcap_product_settings_save', array( $this, 'product_save' ), 10, 2 );
@@ -44,19 +50,9 @@ final class TopUp {
 		add_filter( 'woocommerce_order_again_cart_item_data', array( $this, 'order_again' ), 10, 3 );
 	}
 
-	/** Without the right: top-up products are not sold (they would otherwise issue new gift cards). */
-	public function register_locked(): void {
-		add_filter( 'woocommerce_is_purchasable', array( $this, 'not_purchasable' ), 20, 2 );
-		add_filter( 'woocommerce_variation_is_purchasable', array( $this, 'not_purchasable' ), 20, 2 );
-	}
-
-	public function not_purchasable( $purchasable, $product ) {
-		return $purchasable && self::is_topup( $product ) ? false : $purchasable;
-	}
-
 	/**
-	 * Top-ups already in carts and orders: always registered, also while the premium right is locked – the paid
-	 * value is booked onto the card (never a new card), cancellations and refunds take it back.
+	 * Top-ups already in carts and orders: the paid value is booked onto the card (never a new card),
+	 * cancellations and refunds take it back.
 	 */
 	public function register_lifecycle(): void {
 		// A top-up line without a card code can never be ordered (it would issue a new card).
@@ -64,13 +60,14 @@ final class TopUp {
 		add_filter( 'woocommerce_get_item_data', array( $this, 'item_data' ), 10, 2 );
 		add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'order_item_meta' ), 10, 3 );
 		add_filter( 'vcap_vouchers_per_item', array( $this, 'top_up_instead' ), 5, 3 );
+		add_action( self::AFTER_HOLD_HOOK, array( $this, 'after_hold' ), 10, 2 );
 		add_action( 'woocommerce_order_status_changed', array( $this, 'hold_after_transition' ), 30, 4 );
 		add_action( 'woocommerce_order_status_cancelled', array( $this, 'revoke' ), 20 );
 		add_action( 'woocommerce_order_status_refunded', array( $this, 'revoke' ), 20 );
 		add_action( 'woocommerce_order_partially_refunded', array( $this, 'reverse_refunded' ), 20, 2 );
 		add_action( 'woocommerce_create_refund', array( $this, 'guard_refund' ), 11, 2 );
-		add_filter( 'vcap_event_labels', static fn( array $l ) => $l + array( 'topup' => __( 'Topped up', 'voucher-captain' ), 'topup_reversed' => __( 'Top-up reversed', 'voucher-captain' ), Issuer::PURCHASE_REFUNDED_EVENT => __( 'Purchase refunded: purchased value taken off', 'voucher-captain' ), self::EXTENDED_EVENT => __( 'Validity extended', 'voucher-captain' ) ) );
-		add_filter( 'vcap_ledger_money_events', static fn( array $e ) => array_merge( $e, array( 'topup', 'topup_reversed', Issuer::PURCHASE_REFUNDED_EVENT ) ) );
+		add_filter( 'vcap_event_labels', static fn( array $l ) => $l + array( 'topup' => __( 'Topped up', 'voucher-captain' ), 'topup_reversed' => __( 'Top-up reversed', 'voucher-captain' ), Issuer::PURCHASE_REFUNDED_EVENT => __( 'Purchase refunded: purchased value taken off', 'voucher-captain' ), Issuer::PURCHASE_REFUND_REVERSED_EVENT => __( 'Purchase refund not recorded: purchased value booked back', 'voucher-captain' ), Issuer::SUSPENDED_EVENT => __( 'Suspended: payment of the order reversed or held', 'voucher-captain' ), self::EXTENDED_EVENT => __( 'Validity extended', 'voucher-captain' ) ) );
+		add_filter( 'vcap_ledger_money_events', static fn( array $e ) => array_merge( $e, array( 'topup', 'topup_reversed', Issuer::PURCHASE_REFUNDED_EVENT, Issuer::PURCHASE_REFUND_REVERSED_EVENT ) ) );
 	}
 
 	public static function is_topup( $product ): bool {
@@ -108,11 +105,12 @@ final class TopUp {
 		$id    = Shortcodes::unique_id( 'vcap-topup-code' ); // Unique on the page (two product forms, quick views).
 		echo '<p class="form-row vcap-topup-field"><label for="' . esc_attr( $id ) . '">' . esc_html__( 'Gift card code to top up', 'voucher-captain' ) . ' <abbr class="required" title="' . esc_attr__( 'required', 'voucher-captain' ) . '">*</abbr></label>';
 		echo '<input type="text" class="input-text" id="' . esc_attr( $id ) . '" name="' . esc_attr( self::FIELD ) . '" value="' . Shortcodes::esc_attr_text( $value ) . '" required autocomplete="off" maxlength="100" /></p>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped by esc_attr_text().
+		echo CodeLookup::pin_hint(); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in pin_hint().
 	}
 
 	/** @return Voucher|string The gift card that can be topped up, or why not. */
 	public function card( string $raw ) {
-		$code = wc_format_coupon_code( sanitize_text_field( $raw ) );
+		$code = wc_format_coupon_code( CodeLookup::code_input( sanitize_text_field( $raw ) ) ); // M12-99: code#PIN.
 		$card = '' !== $code ? ( $this->repo->get_by_code( $code ) ?? $this->repo->get_by_code( strtoupper( $code ) ) ) : null;
 		if ( ! $card ) {
 			return __( 'This gift card code was not found.', 'voucher-captain' );
@@ -148,24 +146,27 @@ final class TopUp {
 	}
 
 	/** @return true|string True when the code can be topped up, otherwise why not (failures count for the rate limit). */
-	private function check( string $raw ) {
-		$memo = null !== $this->override ? wc_format_coupon_code( sanitize_text_field( $raw ) ) : null;
+	private function check( string $raw, ?\WC_Product $product = null ) {
+		$memo = null !== $this->override ? wc_format_coupon_code( sanitize_text_field( $raw ) ) . ':' . ( $product ? $product->get_id() : 0 ) : null;
 		if ( null !== $memo && isset( $this->checked[ $memo ] ) ) {
 			return $this->checked[ $memo ]; // Store API runs the legacy and its own validation for the same request.
 		}
 		if ( '' === trim( sanitize_text_field( $raw ) ) ) {
 			$result = __( 'Please enter the code of the gift card to top up.', 'voucher-captain' ); // Not a guess: no attempt counted.
-		} elseif ( Plugin::rate_limited( 'topup', 15, 300, 15 * MINUTE_IN_SECONDS, false ) ) {
-			$result = __( 'Too many attempts. Please try again later.', 'voucher-captain' );
+		} elseif ( CodeLookup::begin() ) {
+			$result = CodeLookup::limited_message();
 		} else {
-			$card   = $this->card( $raw );
-			$result = $card instanceof Voucher ? self::remaining_validity_error( $card ) : $card;
-			$result = '' === $result ? true : $result;
-			if ( $card instanceof Voucher ) {
-				Plugin::rate_limit_success( 'topup', 15 * MINUTE_IN_SECONDS ); // An existing card gives the attempt back.
-			} else {
-				Plugin::rate_limit_failure( 'topup', 15 * MINUTE_IN_SECONDS );
+			// One answer for every code that cannot be topped up (unknown, another kind of voucher, void, expired,
+			// other currency): the form does not tell which codes exist. Only a card that can be topped up gives
+			// the attempt back; the order note of a held line keeps the exact reason (card()).
+			$card = $this->card( $raw );
+			$card = $card instanceof Voucher && ! CodeLookup::pin_ok( (string) $card->code ) ? null : $card; // M12-99: PIN cards need code#PIN.
+			CodeLookup::finish( $card instanceof Voucher );
+			$result = $card instanceof Voucher ? self::remaining_validity_error( $card ) : __( 'This code is not a gift card that can be topped up. Please check the code.', 'voucher-captain' );
+			if ( '' === $result && $card instanceof Voucher && $product ) {
+				$result = self::treatment_mismatch( $card, self::product_treatment( $product ) );
 			}
+			$result = '' === $result ? true : $result;
 		}
 		if ( null !== $memo ) {
 			$this->checked[ $memo ] = $result;
@@ -199,7 +200,8 @@ final class TopUp {
 		if ( ! $passed || ! self::is_topup( wc_get_product( (int) ( $variation_id ?: $product_id ) ) ) ) {
 			return $passed;
 		}
-		$result = $this->check( $this->posted_code( $cart_item_data ) );
+		$product = wc_get_product( (int) ( $variation_id ?: $product_id ) );
+		$result  = $this->check( $this->posted_code( $cart_item_data ), $product instanceof \WC_Product ? $product : null );
 		if ( true !== $result ) {
 			wc_add_notice( $result, 'error' );
 			return false;
@@ -218,7 +220,7 @@ final class TopUp {
 		$this->override = is_scalar( $raw ) ? sanitize_text_field( (string) $raw ) : '';
 		if ( '' !== $this->override ) {
 			$data['cart_item_data']                = (array) ( $data['cart_item_data'] ?? array() );
-			$data['cart_item_data'][ self::FIELD ] = wc_format_coupon_code( $this->override );
+			$data['cart_item_data'][ self::FIELD ] = wc_format_coupon_code( CodeLookup::split_pin( $this->override )[0] ); // Never the PIN.
 		}
 		return $data;
 	}
@@ -237,7 +239,7 @@ final class TopUp {
 			$raw            = $request->get_param( self::FIELD );
 			$this->override = is_scalar( $raw ) ? sanitize_text_field( (string) $raw ) : '';
 		}
-		$result = $this->check( $this->posted_code( is_array( $request ) ? ( $request['cart_item_data'] ?? array() ) : array() ) );
+		$result = $this->check( $this->posted_code( is_array( $request ) ? ( $request['cart_item_data'] ?? array() ) : array() ), $product instanceof \WC_Product ? $product : null );
 		if ( true !== $result && class_exists( '\Automattic\WooCommerce\StoreApi\Exceptions\RouteException' ) ) {
 			throw new \Automattic\WooCommerce\StoreApi\Exceptions\RouteException( 'vcap_invalid_topup_code', esc_html( $result ), 400 );
 		}
@@ -245,7 +247,7 @@ final class TopUp {
 
 	public function cart_item_data( $data, $product_id ) {
 		if ( self::is_topup( wc_get_product( (int) $product_id ) ) && isset( $_POST[ self::FIELD ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce add-to-cart.
-			$data[ self::FIELD ] = wc_format_coupon_code( sanitize_text_field( wp_unslash( $_POST[ self::FIELD ] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$data[ self::FIELD ] = wc_format_coupon_code( CodeLookup::split_pin( sanitize_text_field( wp_unslash( $_POST[ self::FIELD ] ) ) )[0] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- never the PIN (M12-99).
 		}
 		return $data;
 	}
@@ -285,7 +287,7 @@ final class TopUp {
 			$card   = $this->repo->get_by_code( wc_format_coupon_code( $code ) ) ?? $this->repo->get_by_code( $code );
 			$data[] = array(
 				'key'   => __( 'Tops up gift card', 'voucher-captain' ),
-				'value' => '…' . substr( $code, -4 ),
+				'value' => Mask::code( $code ),
 			);
 			if ( $card instanceof Voucher && $card->expires_at ) {
 				$data[] = array(
@@ -300,7 +302,34 @@ final class TopUp {
 	public function order_item_meta( $item, $cart_item_key, $values ): void {
 		if ( ! empty( $values[ self::FIELD ] ) && $item instanceof \WC_Order_Item_Product ) {
 			$item->add_meta_data( self::ITEM_META, (string) $values[ self::FIELD ], true );
+			$card = $this->card( (string) $values[ self::FIELD ] );
+			if ( $card instanceof Voucher && $card->id ) {
+				$item->add_meta_data( self::CARD_META, (int) $card->id, true );
+			}
 		}
+	}
+
+	/**
+	 * The card a top-up line belongs to (AP-Q1-3): by the stored card id, else by the code entered, else by a code
+	 * the card had before it was reissued (Reissue::voucher_of_previous_code()).
+	 */
+	public static function card_of_item( \WC_Order_Item_Product $item, VoucherRepository $repo ): ?Voucher {
+		$id = (int) $item->get_meta( self::CARD_META );
+		if ( $id > 0 ) {
+			$card = $repo->get( $id );
+			if ( $card ) {
+				return $card;
+			}
+		}
+		$code = trim( (string) $item->get_meta( self::ITEM_META ) );
+		if ( '' === $code ) {
+			return null;
+		}
+		$formatted = wc_format_coupon_code( $code );
+		return $repo->get_by_code( $code )
+			?? ( '' !== $formatted ? $repo->get_by_code( $formatted ) : null )
+			?? $repo->get_by_code( strtoupper( $code ) )
+			?? Reissue::voucher_of_previous_code( $repo, $code );
 	}
 
 	/* ---- Order lifecycle --------------------------------------------------------------------------- */
@@ -327,19 +356,38 @@ final class TopUp {
 			Claim::release( 'topup:' . $item->get_id() );
 			return 0;
 		}
+		// M12-09: the V7 security hold of a new customer's order applies to top-ups too – booked when it is over.
+		$hold    = Delivery::hold_until( $order, true );
+		$pending = '' !== (string) $item->get_meta( self::PENDING_META );
+		if ( ( $hold && $hold > time() ) || ( $pending && self::withdrawn( $order ) ) ) {
+			Claim::release( 'topup:' . $item->get_id() );
+			if ( $hold && $hold > time() ) {
+				$this->wait_for_hold( $order, $item, $hold );
+			}
+			return 0;
+		}
 		$card = $this->card( (string) $item->get_meta( self::ITEM_META ) );
 		if ( ! $card instanceof Voucher ) {
 			$this->hold_line( $order, $item, is_string( $card ) ? $card : '' );
 			return 0;
 		}
-		$config = is_array( $config ) && $config ? $config + ProductConfig::DEFAULTS : ( $item->get_product() ? ProductConfig::get( $item->get_product() ) : ProductConfig::DEFAULTS );
+		$config    = is_array( $config ) && $config ? $config + ProductConfig::DEFAULTS : ( $item->get_product() ? ProductConfig::get( $item->get_product() ) : ProductConfig::DEFAULTS );
+		$treatment = Issuer::line_treatment( $item, $config );
+		$mismatch  = self::treatment_mismatch( $card, $treatment );
+		if ( '' !== $mismatch ) {
+			$this->hold_line( $order, $item, $mismatch ); // M12-12: never booked onto a card with another VAT treatment.
+			return 0;
+		}
 		list( $value, $in_base ) = self::line_value(
 			$config,
 			(int) $item->get_quantity(),
 			(float) $item->get_subtotal(),
 			(float) $item->get_subtotal_tax(),
 			function_exists( 'wc_prices_include_tax' ) && wc_prices_include_tax(),
-			(string) $item->get_meta( '_vcap_custom_amount' )
+			(string) $item->get_meta( '_vcap_custom_amount' ),
+			$treatment,
+			(string) $item->get_meta( CustomAmount::CURRENCY_META ),
+			(string) $order->get_currency()
 		);
 		$base = $in_base ? $value : Compat\MultiCurrency::to_base( $value, (string) $order->get_currency(), $order );
 		if ( null === $base ) {
@@ -365,17 +413,91 @@ final class TopUp {
 		}
 		Attention::resolve( $order->get_id(), 'topup:' . $item->get_id() );
 		$item->update_meta_data( self::DONE_META, $amount );
+		$item->update_meta_data( self::CARD_META, (int) $card->id );
+		$item->delete_meta_data( self::PENDING_META );
 		$item->save_meta_data();
+		if ( $pending && $order->get_total_refunded() > 0 ) {
+			$this->reverse( $order->get_id(), false ); // Refunded during the hold: the refunded share is taken back.
+		}
 		$card = $this->repo->get( $card->id ) ?? $card;
 		$this->extend_after_top_up( $card, $order, $item );
 		/* translators: 1: amount, 2: masked card code */
-		$order->add_order_note( sprintf( __( 'Gift card …%2$s topped up by %1$s.', 'voucher-captain' ), wp_strip_all_tags( wc_price( $amount ) ), substr( strtoupper( $card->code ), -4 ) ) );
+		$order->add_order_note( sprintf( __( 'Gift card …%2$s topped up by %1$s.', 'voucher-captain' ), wp_strip_all_tags( wc_price( $amount ) ), Mask::code_tail( $card->code ) ) );
 		/** Whether the customer gets an order note (email) confirming the top-up (default true). */
 		if ( apply_filters( 'vcap_topup_customer_note', true, $card, $order, $item ) ) {
 			$order->add_order_note( self::confirmation( $card, $amount ), 1 );
 		}
-		do_action( 'vcap_gift_card_topped_up', $card, $amount, $order, $item );
+		/** A gift card was topped up by an order (args: Voucher $card, float $amount, WC_Order $order, order item). */
+		Db::action( 'vcap_gift_card_topped_up', $card, $amount, $order, $item );
 		return 0;
+	}
+
+	/**
+	 * M12-09: a top-up line of an order under the V7 security hold is booked when the hold is over (Action
+	 * Scheduler AFTER_HOLD_HOOK), not at payment – otherwise a first order paid with a stolen card would put its
+	 * value on a card that can be spent at once. Scheduled and noted once per line.
+	 */
+	private function wait_for_hold( \WC_Order $order, \WC_Order_Item_Product $item, int $hold ): void {
+		$args = array(
+			'order_id' => $order->get_id(),
+			'item_id'  => $item->get_id(),
+		);
+		if ( function_exists( 'as_has_scheduled_action' ) && ! as_has_scheduled_action( self::AFTER_HOLD_HOOK, $args, Delivery::GROUP ) ) {
+			as_schedule_single_action( $hold + MINUTE_IN_SECONDS, self::AFTER_HOLD_HOOK, $args, Delivery::GROUP );
+		}
+		if ( (int) $item->get_meta( self::PENDING_META ) === $hold ) {
+			return;
+		}
+		$item->update_meta_data( self::PENDING_META, (string) $hold );
+		$item->save_meta_data();
+		$order->add_order_note(
+			sprintf(
+				/* translators: 1: masked gift card code, 2: date and time */
+				__( 'Security hold: the top-up of gift card …%1$s is booked on %2$s, unless the order is cancelled or refunded before then.', 'voucher-captain' ),
+				Mask::code_tail( (string) $item->get_meta( self::ITEM_META ) ),
+				LocalDate::from_utc( gmdate( 'Y-m-d H:i:s', $hold ), vcap()->settings->date_format() . ' H:i' )
+			)
+		);
+	}
+
+	/** The order was cancelled, failed or refunded in full: a held top-up is never booked. */
+	private static function withdrawn( \WC_Order $order ): bool {
+		$total = (float) $order->get_total();
+		return $order->has_status( array( 'cancelled', 'refunded', 'failed', 'trash', 'pending', 'checkout-draft' ) ) || ( $total > 0 && (float) $order->get_total_refunded() >= $total - 0.001 );
+	}
+
+	/**
+	 * M12-09: the security hold of the order is over – books the held top-up line, after checking again that the
+	 * order was not cancelled or refunded meanwhile (a partial refund takes its share back right after booking).
+	 * An order that is not paid (any more) is booked when it is processed again.
+	 *
+	 * @param int|string $order_id Order id.
+	 * @param int|string $item_id  Order item id of the top-up line.
+	 */
+	public function after_hold( $order_id, $item_id = 0 ): void {
+		$order = wc_get_order( (int) $order_id );
+		$item  = $order instanceof \WC_Order ? $order->get_item( (int) $item_id ) : null;
+		if ( ! $order instanceof \WC_Order || ! $item instanceof \WC_Order_Item_Product || $item->get_meta( self::DONE_META ) || $item->get_meta( self::HELD_META ) ) {
+			return;
+		}
+		$hold = Delivery::hold_until( $order );
+		if ( $hold && $hold > time() ) {
+			$this->wait_for_hold( $order, $item, $hold ); // Hold moved (filter): wait again.
+			return;
+		}
+		if ( self::withdrawn( $order ) ) {
+			if ( '' !== (string) $item->get_meta( self::PENDING_META ) ) {
+				$item->delete_meta_data( self::PENDING_META );
+				$item->save_meta_data();
+				$order->add_order_note( __( 'Gift card top-up not booked: the order was cancelled or refunded during the security hold.', 'voucher-captain' ) );
+			}
+			return;
+		}
+		$statuses = array_map( 'sanitize_key', (array) Settings::value( 'vcap_issue_statuses' ) );
+		if ( ! $order->is_paid() && ! in_array( 'wc-' . $order->get_status(), $statuses, true ) && ! in_array( $order->get_status(), $statuses, true ) ) {
+			return;
+		}
+		$this->top_up_instead( 1, $item );
 	}
 
 	/** Customer confirmation of a top-up: masked card, amount, new balance and validity. */
@@ -384,7 +506,7 @@ final class TopUp {
 		$text  = sprintf(
 			/* translators: 1: masked gift card code, 2: amount added, 3: new balance */
 			__( 'Your gift card …%1$s was topped up by %2$s. New balance: %3$s.', 'voucher-captain' ),
-			substr( strtoupper( $card->code ), -4 ),
+			Mask::code_tail( $card->code ),
 			$money( $amount ),
 			$money( (float) $card->balance )
 		);
@@ -399,19 +521,50 @@ final class TopUp {
 	 * Value of a top-up line in the order currency – the rule of Issuer::voucher_amount() for a new gift card:
 	 * a fixed product amount (already in the base currency), the amount the customer entered, or the line price
 	 * before discounts (gross where shop prices include tax, net otherwise). Never what was paid after coupons.
+	 * M12-12: in a tax-exclusive shop a top-up sold with VAT that is not a multi-purpose voucher ($treatment) is
+	 * worth the gross amount paid, like a new card (T7, Issuer::sold_with_vat_value()).
 	 *
+	 * @param string $treatment VAT treatment of the top-up line (Issuer::line_treatment()).
 	 * @return array{0: float, 1: bool} value, whether it is in the base currency already
 	 */
-	public static function line_value( array $config, int $qty, float $subtotal, float $subtotal_tax, bool $prices_include_tax, string $custom = '' ): array {
+	public static function line_value( array $config, int $qty, float $subtotal, float $subtotal_tax, bool $prices_include_tax, string $custom = '', string $treatment = 'payment', string $custom_currency = '', string $order_currency = '' ): array {
 		$qty   = max( 1, $qty );
 		$units = $qty * max( 1, (int) ( $config['per_item'] ?? 1 ) );
 		if ( 'fixed' === ( $config['amount_source'] ?? '' ) ) {
 			return array( (float) wc_format_decimal( (string) ( $config['amount'] ?? 0 ) ) * $units, true );
 		}
+		$paid = $subtotal + ( $prices_include_tax ? $subtotal_tax : 0.0 );
 		if ( 'custom' === ( $config['amount_source'] ?? '' ) && '' !== $custom ) {
-			return array( (float) $custom * $units, false );
+			// S4: never more than was paid, and only in the currency the amount was entered in (like a new gift card).
+			$value = Issuer::custom_face_value( $custom, $custom_currency, $order_currency, $paid / $units, wc_get_price_decimals() )[0] * $units;
+		} else {
+			$value = $paid;
 		}
-		return array( $subtotal + ( $prices_include_tax ? $subtotal_tax : 0.0 ), false );
+		// A top-up always adds to a stored balance.
+		return array( Issuer::sold_with_vat_value( $value, array_merge( $config, array( 'usage' => 'balance' ) ), $subtotal, $subtotal_tax, $treatment, $prices_include_tax ), false );
+	}
+
+	/**
+	 * M12-12: a top-up must have the VAT treatment of the card it tops up: a multi-purpose top-up on a
+	 * single-purpose card would never be taxed, the other way round taxed twice. '' when they match, else the
+	 * message for the customer.
+	 */
+	public static function treatment_mismatch( Voucher $card, string $topup_treatment ): string {
+		if ( function_exists( 'wc_tax_enabled' ) && ! wc_tax_enabled() ) {
+			return ''; // No VAT in the shop (e.g. small business): the classification has no effect.
+		}
+		$card_treatment = ProductConfig::tax_treatment( $card );
+		if ( $card_treatment === $topup_treatment ) {
+			return '';
+		}
+		return __( 'This gift card cannot be topped up with this product: the card and the top-up are treated differently for VAT (multi-purpose or single-purpose voucher). Please choose the top-up product that belongs to your gift card, or buy a new gift card.', 'voucher-captain' );
+	}
+
+	/** VAT treatment of a top-up product: the treatment its gift card balance gets (Issuer::line_treatment()). */
+	public static function product_treatment( \WC_Product $product ): string {
+		$item = new \WC_Order_Item_Product();
+		$item->set_product( $product );
+		return Issuer::line_treatment( $item, ProductConfig::get( $product ) );
 	}
 
 	/** Ledger event: the validity of a gift card was extended (top-up, balance booked back). */
@@ -446,13 +599,7 @@ final class TopUp {
 		if ( ! $repo->update_columns( $voucher, array( 'expires_at' ), $from ) ) {
 			return false;
 		}
-		if ( $voucher->coupon_id && class_exists( '\WC_Coupon' ) ) {
-			$coupon = new \WC_Coupon( $voucher->coupon_id );
-			if ( $coupon->get_id() ) {
-				$coupon->set_date_expires( $ends );
-				$coupon->save();
-			}
-		}
+		CouponManager::sync_coupon( $voucher, array( 'expiry' ) );
 		$repo->log( $voucher->id, self::EXTENDED_EVENT, null, null, trim( $note . ' → ' . $voucher->expires_at ), $order_id );
 		return true;
 	}
@@ -532,16 +679,94 @@ final class TopUp {
 	}
 
 	/**
+	 * M12-21: takes back the share of the refunds saved so far (the refund being created included) before the
+	 * gateway pays it out, so the card cannot be spent meanwhile. Returns what was booked, for undo_reversal()
+	 * when the refund is not recorded after all.
+	 *
+	 * @return array<int, array{t:int, h:float, b:float}> top-up line, REVERSED_META before, amount taken back
+	 */
+	public function reverse_for_refund( \WC_Order $order ): array {
+		return $this->reverse( $order->get_id(), false );
+	}
+
+	/**
+	 * M12-21: books a reversal of reverse_for_refund() back (the refund was not recorded): the amount goes back
+	 * onto the card as a top-up and the line's REVERSED_META is set back.
+	 *
+	 * @param array{t:int, h:float, b:float} $booking
+	 */
+	public function undo_reversal( \WC_Order $order, array $booking ): bool {
+		$item = $order->get_item( (int) $booking['t'] );
+		if ( ! $item instanceof \WC_Order_Item_Product ) {
+			return false;
+		}
+		$card = self::card_of_item( $item, $this->repo );
+		if ( ! $card ) {
+			return false;
+		}
+		if ( (float) $booking['b'] > 0 ) {
+			/* translators: %s: order number */
+			$note = sprintf( __( 'Top-up of order #%s booked again: the refund was not recorded', 'voucher-captain' ), $order->get_order_number() );
+			if ( ! $this->coupons->adjust_balance( $card, (float) $booking['b'], 'topup', $note, $order->get_id() ) ) {
+				return false;
+			}
+		}
+		wc_update_order_item_meta( $item->get_id(), self::REVERSED_META, (float) $booking['h'] );
+		return true;
+	}
+
+	/**
+	 * M12-36/M12-37: what was taken back of a top-up line is more than the order's refunds cover now (a refund
+	 * was deleted, or the cancelled order was paid again): the difference is booked onto the card again. Nothing
+	 * happens while the order is cancelled, refunded or failed.
+	 */
+	public function rebook( \WC_Order $order, string $why ): void {
+		if ( $order->has_status( array( 'cancelled', 'refunded', 'failed' ) ) ) {
+			return;
+		}
+		$shares = self::refund_shares( $order );
+		foreach ( $order->get_items() as $item ) {
+			$done = $item instanceof \WC_Order_Item_Product ? (float) $item->get_meta( self::DONE_META ) : 0.0;
+			if ( $done <= 0 ) {
+				continue;
+			}
+			$handled = (float) wc_get_order_item_meta( $item->get_id(), self::REVERSED_META, true );
+			$card    = $handled > 0 ? self::card_of_item( $item, $this->repo ) : null;
+			if ( ! $card ) {
+				continue;
+			}
+			$target = min( $done, round( $done * max( 0.0, min( 1.0, (float) ( $shares[ $item->get_id() ] ?? 0.0 ) ) ), $card->decimals() ) );
+			$back   = round( $handled - $target, $card->decimals() );
+			if ( $back <= 0 ) {
+				continue;
+			}
+			$booked = 0.0;
+			/* translators: 1: order number, 2: why (e.g. "refund deleted") */
+			if ( ! $this->coupons->adjust_balance( $card, $back, 'topup', sprintf( __( 'Top-up of order #%1$s booked again (%2$s)', 'voucher-captain' ), $order->get_order_number(), $why ), $order->get_id(), $booked ) ) {
+				/* translators: %s: masked gift card code */
+				Attention::add( $order->get_id(), 'topup-rebook:' . $item->get_id(), sprintf( __( 'The top-up of gift card %s that was taken back could not be booked again. Top up the card by hand.', 'voucher-captain' ), Mask::code( $card->code ) ) );
+				continue;
+			}
+			wc_update_order_item_meta( $item->get_id(), self::REVERSED_META, $target );
+			/* translators: 1: masked gift card code, 2: amount */
+			$order->add_order_note( sprintf( __( 'Gift card %1$s: the top-up taken back before (%2$s) was booked onto the card again.', 'voucher-captain' ), Mask::code( $card->code ), wp_strip_all_tags( wc_price( $booked ) ) ) );
+		}
+	}
+
+	/**
 	 * Takes back what the refunds of the order cover of its top-up lines (all of it for a cancelled or fully
 	 * refunded order). Each line keeps what was handled in REVERSED_META, so repeated refunds and status changes
 	 * take back only the difference; the card gives back at most its balance.
+	 *
+	 * @return array<int, array{t:int, h:float, b:float}> what was booked (see reverse_for_refund())
 	 */
-	private function reverse( $order_id, bool $all ): void {
+	private function reverse( $order_id, bool $all ): array {
 		$order = wc_get_order( $order_id );
 		if ( ! $order instanceof \WC_Order ) {
-			return;
+			return array();
 		}
-		$shares = $all ? array() : self::refund_shares( $order );
+		$shares   = $all ? array() : self::refund_shares( $order );
+		$bookings = array();
 		foreach ( $order->get_items() as $item ) {
 			$done = $item instanceof \WC_Order_Item_Product ? (float) $item->get_meta( self::DONE_META ) : 0.0;
 			if ( $done <= 0 || ( ! $all && empty( $shares[ $item->get_id() ] ) ) ) {
@@ -552,39 +777,53 @@ final class TopUp {
 				continue; // Another request is taking this top-up back right now.
 			}
 			try {
-				$this->reverse_line( $order, $item, $done, $all ? 1.0 : (float) $shares[ $item->get_id() ], $all );
+				$booking = $this->reverse_line( $order, $item, $done, $all ? 1.0 : (float) $shares[ $item->get_id() ], $all );
+				if ( $booking ) {
+					$bookings[] = $booking;
+				}
 			} finally {
 				Claim::release( $lock );
 			}
 		}
+		return $bookings;
 	}
 
-	private function reverse_line( \WC_Order $order, \WC_Order_Item_Product $item, float $done, float $share, bool $all ): void {
+	/** @return array{t:int, h:float, b:float}|null What was booked (null: nothing). */
+	private function reverse_line( \WC_Order $order, \WC_Order_Item_Product $item, float $done, float $share, bool $all ): ?array {
+		// Fresh from the database: the item object can be older than a reversal booked meanwhile (M12-21).
 		$handled = (float) wc_get_order_item_meta( $item->get_id(), self::REVERSED_META, true );
 		if ( $all && $handled <= 0 && ! Claim::take( 'topup-revoke:' . $item->get_id() ) ) {
 			// Taken back completely by an earlier version (one claim per line, before REVERSED_META existed).
 			$item->update_meta_data( self::REVERSED_META, $done );
 			$item->save_meta_data();
-			return;
+			return null;
 		}
-		$card = $this->repo->get_by_code( (string) $item->get_meta( self::ITEM_META ) );
+		$card = self::card_of_item( $item, $this->repo );
 		if ( ! $card ) {
-			return;
+			if ( $all && $handled <= 0 ) {
+				Claim::release( 'topup-revoke:' . $item->get_id() );
+			}
+			$order->add_order_note( __( 'The gift card top-up could not be reversed: the gift card was not found. Please check the card balance.', 'voucher-captain' ) );
+			Attention::add( $order->get_id(), 'topup-reverse:' . $item->get_id(), __( 'A gift card top-up could not be reversed because the gift card was not found. Check the card and take the top-up back by hand.', 'voucher-captain' ) );
+			return null;
 		}
 		$target = min( $done, round( $done * max( 0.0, min( 1.0, $share ) ), $card->decimals() ) );
 		$want   = round( $target - $handled, $card->decimals() );
 		if ( $want <= 0 ) {
-			return;
+			return null;
 		}
-		$back = min( $want, self::card_shares( $card, $this->repo )['topup_unspent'] );
+		$back   = min( $want, self::card_shares( $card, $this->repo )['topup_unspent'] );
+		$booked = 0.0;
 		/* translators: %s: order number */
-		if ( $back > 0 && ! $this->coupons->adjust_balance( $card, -$back, 'topup_reversed', sprintf( __( 'Top-up of order #%s reversed', 'voucher-captain' ), $order->get_order_number() ), $order->get_id() ) ) {
+		if ( $back > 0 && ! $this->coupons->adjust_balance( $card, -$back, 'topup_reversed', sprintf( __( 'Top-up of order #%s reversed', 'voucher-captain' ), $order->get_order_number() ), $order->get_id(), $booked ) ) {
 			if ( $all && $handled <= 0 ) {
 				Claim::release( 'topup-revoke:' . $item->get_id() );
 			}
 			$order->add_order_note( __( 'The gift card top-up could not be reversed. Please check the card balance.', 'voucher-captain' ) );
-			return;
+			return null;
 		}
+		// M12-60: the note reports what the locked booking really took (the balance may have dropped meanwhile).
+		$back = abs( $booked );
 		$item->update_meta_data( self::REVERSED_META, $target );
 		$item->save_meta_data();
 		$order->add_order_note(
@@ -594,19 +833,25 @@ final class TopUp {
 				/* translators: %s: amount */
 				: sprintf( __( 'Gift card top-up reversed: %s taken back.', 'voucher-captain' ), wp_strip_all_tags( wc_price( $back ) ) )
 		);
+		return array(
+			't' => (int) $item->get_id(),
+			'h' => $handled,
+			'b' => $back,
+		);
 	}
 
 	/**
-	 * Share (0–1) of each booked top-up line that the order's refunds pay back. Refund lines count for their line
-	 * (_refunded_item_id); an amount refunded without lines pays back the rest of the order first and only the part
-	 * beyond it is spread over the top-up lines.
+	 * Share (0–1) of each booked top-up line and each line that issued vouchers (M12-07) that the order's refunds
+	 * pay back. Refund lines count for their line (_refunded_item_id); an amount refunded without lines pays back the
+	 * rest of the order first and only the part beyond it is spread over the top-up and voucher lines.
 	 *
+	 * @param int[] $voucher_lines Further lines holding vouchers of the order (lines issued before the line snapshot).
 	 * @return array<int, float> order item id => refunded share
 	 */
-	public static function refund_shares( \WC_Order $order ): array {
+	public static function refund_shares( \WC_Order $order, array $voucher_lines = array() ): array {
 		$lines = array();
 		foreach ( $order->get_items() as $item_id => $item ) {
-			if ( $item instanceof \WC_Order_Item_Product && (float) $item->get_meta( self::DONE_META ) > 0 ) {
+			if ( $item instanceof \WC_Order_Item_Product && ( (float) $item->get_meta( self::DONE_META ) > 0 || Issuer::line_data( $item ) || in_array( (int) $item_id, $voucher_lines, true ) ) ) {
 				$lines[ (int) $item_id ] = (float) $item->get_total() + (float) $item->get_total_tax();
 			}
 		}
@@ -618,8 +863,14 @@ final class TopUp {
 		$refunded   = 0.0;
 		// Straight from the refund documents: the order's cached refund list can be older than this refund.
 		foreach ( wc_get_orders( array( 'type' => 'shop_order_refund', 'parent' => $order->get_id(), 'limit' => -1 ) ) as $refund ) {
+			if ( ! method_exists( $refund, 'get_amount' ) ) {
+				continue;
+			}
 			$refunded += abs( (float) $refund->get_amount() );
 			foreach ( $refund->get_items( array( 'line_item', 'fee', 'shipping' ) ) as $refund_item ) {
+				if ( ! method_exists( $refund_item, 'get_total' ) || ! method_exists( $refund_item, 'get_total_tax' ) ) {
+					continue;
+				}
 				$amount      = abs( (float) $refund_item->get_total() ) + abs( (float) $refund_item->get_total_tax() );
 				$attributed += $amount;
 				$original    = (int) $refund_item->get_meta( '_refunded_item_id' );
@@ -695,6 +946,9 @@ final class TopUp {
 				case Issuer::PURCHASE_REFUNDED_EVENT:
 					$removed += $amount;
 					break;
+				case Issuer::PURCHASE_REFUND_REVERSED_EVENT:
+					$removed -= $amount;
+					break;
 			}
 		}
 		return self::shares( (float) $card->initial_amount, $removed, $topups, (float) $card->balance, Voucher::STATUS_VOID === $card->status );
@@ -708,22 +962,23 @@ final class TopUp {
 	 * @return array{0: float, 1: string[]} value, masked card codes
 	 */
 	public static function spent_value( \WC_Order $order, VoucherRepository $repo ): array {
-		$open = array();
+		$open  = array(); // card id => open amount
+		$cards = array();
 		foreach ( $order->get_items() as $item ) {
 			$done = $item instanceof \WC_Order_Item_Product ? (float) $item->get_meta( self::DONE_META ) : 0.0;
-			if ( $done > 0 ) {
-				$code          = (string) $item->get_meta( self::ITEM_META );
-				$open[ $code ] = ( $open[ $code ] ?? 0.0 ) + max( 0.0, $done - (float) $item->get_meta( self::REVERSED_META ) );
+			$card = $done > 0 ? self::card_of_item( $item, $repo ) : null;
+			if ( $card ) {
+				$cards[ $card->id ] = $card;
+				$open[ $card->id ]  = ( $open[ $card->id ] ?? 0.0 ) + max( 0.0, $done - (float) $item->get_meta( self::REVERSED_META ) );
 			}
 		}
 		$spent = 0.0;
 		$codes = array();
-		foreach ( $open as $code => $amount ) {
-			$card = $repo->get_by_code( $code );
-			$used = $card ? max( 0.0, $amount - self::card_shares( $card, $repo )['topup_unspent'] ) : 0.0;
+		foreach ( $open as $id => $amount ) {
+			$used = max( 0.0, $amount - self::card_shares( $cards[ $id ], $repo )['topup_unspent'] );
 			if ( $used > 0.0001 ) {
 				$spent  += $used;
-				$codes[] = '…' . substr( strtoupper( $code ), -4 );
+				$codes[] = Mask::code( $cards[ $id ]->code );
 			}
 		}
 		return array( $spent, $codes );
@@ -743,40 +998,64 @@ final class TopUp {
 		if ( ! $order instanceof \WC_Order ) {
 			return;
 		}
-		$shares = self::refund_shares( $order );
-		$need   = array(); // card code => [ amount to take back (base currency), order currency per base unit ]
+		$shares  = self::refund_shares( $order );
+		$need    = array(); // card id => [ amount to take back (base currency), order currency per base unit ]
+		$cards   = array();
+		$unknown = array(); // masked codes of top-ups whose card cannot be found
+		$lost    = 0.0;
 		foreach ( $shares as $item_id => $share ) {
 			$item = $order->get_item( $item_id );
-			$done = $item instanceof \WC_Order_Item_Product ? (float) $item->get_meta( self::DONE_META ) : 0.0;
+			if ( ! $item instanceof \WC_Order_Item_Product ) {
+				continue;
+			}
+			$done = (float) $item->get_meta( self::DONE_META );
 			if ( $done <= 0 ) {
 				continue;
 			}
-			$code             = (string) $item->get_meta( self::ITEM_META );
-			$want             = max( 0.0, $done * $share - (float) $item->get_meta( self::REVERSED_META ) );
-			$need[ $code ][0] = ( $need[ $code ][0] ?? 0.0 ) + $want;
-			$need[ $code ][1] = ( (float) $item->get_total() + (float) $item->get_total_tax() ) / $done;
+			$want = max( 0.0, $done * $share - (float) $item->get_meta( self::REVERSED_META ) );
+			$rate = ( (float) $item->get_total() + (float) $item->get_total_tax() ) / $done;
+			$card = self::card_of_item( $item, $this->repo );
+			if ( ! $card ) {
+				// AP-Q1-3: the top-up cannot be taken back from a card nobody finds – the refund would pay it out.
+				if ( $want > 0.0001 ) {
+					$lost     += $want * $rate;
+					$unknown[] = Mask::code( (string) $item->get_meta( self::ITEM_META ) );
+				}
+				continue;
+			}
+			$cards[ $card->id ]   = $card;
+			$need[ $card->id ][0] = ( $need[ $card->id ][0] ?? 0.0 ) + $want;
+			$need[ $card->id ][1] = $rate;
 		}
 		$over  = 0.0;
 		$codes = array();
-		foreach ( $need as $code => list( $want, $rate ) ) {
-			$card    = $this->repo->get_by_code( $code );
-			$missing = $card ? $want - self::card_shares( $card, $this->repo )['topup_unspent'] : 0.0;
-			if ( $card && $missing > 0.5 / ( 10 ** $card->decimals() ) ) {
+		foreach ( $need as $id => list( $want, $rate ) ) {
+			$missing = $want - self::card_shares( $cards[ $id ], $this->repo )['topup_unspent'];
+			if ( $missing > 0.5 / ( 10 ** $cards[ $id ]->decimals() ) ) {
 				$over   += $missing * $rate;
-				$codes[] = '…' . substr( strtoupper( $code ), -4 );
+				$codes[] = Mask::code( $cards[ $id ]->code );
 			}
 		}
 		$amount = (float) ( $args['amount'] ?? 0 );
-		if ( ! $codes || apply_filters( 'vcap_allow_refund_of_spent_top_ups', false, $order, $amount, $over ) ) {
+		if ( ( ! $codes && ! $unknown ) || apply_filters( 'vcap_allow_refund_of_spent_top_ups', false, $order, $amount, $over + $lost ) ) {
 			return;
+		}
+		if ( $unknown ) {
+			throw new \Exception(
+				sprintf(
+					/* translators: %s: masked gift card codes */
+					esc_html__( 'The gift card topped up by this order cannot be found (%s), so its top-up cannot be taken back. Check the card before refunding the top-up.', 'voucher-captain' ),
+					esc_html( implode( ', ', array_unique( $unknown ) ) )
+				)
+			);
 		}
 		$max = max( 0.0, round( $amount - $over, wc_get_price_decimals() ) );
 		throw new \Exception(
 			sprintf(
 				/* translators: 1: masked gift card codes, 2: maximum refund */
-				__( 'The gift card top-up of this order was already spent from the card (%1$s). At most %2$s can be refunded now.', 'voucher-captain' ),
-				implode( ', ', $codes ),
-				html_entity_decode( wp_strip_all_tags( wc_price( $max, array( 'currency' => $order->get_currency() ) ) ) )
+				esc_html__( 'The gift card top-up of this order was already spent from the card (%1$s). At most %2$s can be refunded now.', 'voucher-captain' ),
+				esc_html( implode( ', ', $codes ) ),
+				esc_html( html_entity_decode( wp_strip_all_tags( wc_price( $max, array( 'currency' => $order->get_currency() ) ) ) ) )
 			)
 		);
 	}

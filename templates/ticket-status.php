@@ -3,14 +3,15 @@
  * Ticket / voucher QR landing page.
  *
  * Override: yourtheme/woocommerce/voucher-captain/ticket-status.php
+ * @version  1.2.0
  *
  * @var \VCAP\Voucher|null $voucher
  * @var array|null         $data
  * @var bool               $staff
  * @var bool               $public
  * @var string             $notice
- * @var string             $notice_level 'ok', 'warning' or 'error'
- * @var string             $checkin_key  One-time key of the check-in form (a resent form never admits twice).
+ * @var string|null        $notice_level 'ok', 'warning' or 'error'
+ * @var string|null        $checkin_key  One-time key of the check-in form (a resent form never admits twice).
  */
 
 defined( 'ABSPATH' ) || exit;

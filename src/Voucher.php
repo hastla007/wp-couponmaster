@@ -79,6 +79,10 @@ final class Voucher {
 			'ticket'   => __( 'Ticket', 'voucher-captain' ),
 			'credit'   => __( 'Store credit', 'voucher-captain' ),
 		);
+		/**
+		 * Extra voucher types of connectors and add-ons (arg: array of type key => label). Core types cannot be
+		 * replaced; see API.md → Extension points.
+		 */
 		$extra = (array) apply_filters( 'vcap_voucher_types', array() );
 		foreach ( $extra as $key => $label ) {
 			$key = sanitize_key( (string) $key );
@@ -150,6 +154,15 @@ final class Voucher {
 		return 'ticket' === $this->type;
 	}
 
+	/**
+	 * M12-10: whether the voucher carries money: every voucher but a ticket, and a ticket with a value above 0
+	 * (sold with a fixed value). Such tickets are settled and reported like value vouchers (PaymentVouchers,
+	 * means of payment, Ledger::VALUE_VOUCHERS); a ticket without a value is an admission pass only.
+	 */
+	public function has_cash_value(): bool {
+		return ! $this->is_ticket() || $this->initial_amount > 0;
+	}
+
 	public function is_multi_use(): bool {
 		return 'balance' === $this->usage_mode;
 	}
@@ -168,8 +181,37 @@ final class Voucher {
 	}
 
 	public function order(): ?\WC_Order {
+		if ( $this->order_id && isset( self::$primed_orders[ $this->order_id ] ) ) {
+			return self::$primed_orders[ $this->order_id ];
+		}
 		$order = $this->order_id ? wc_get_order( $this->order_id ) : null;
 		return $order instanceof \WC_Order ? $order : null;
+	}
+
+	/** @var array<int, \WC_Order> orders loaded together for a list (prime_orders()), until forget_orders() */
+	private static array $primed_orders = array();
+
+	/**
+	 * B15: loads the orders of a voucher list with one query (not one wc_get_order() per row). Only for rendering
+	 * a list: call forget_orders() afterwards, so later code reads the orders fresh.
+	 *
+	 * @param Voucher[] $vouchers
+	 */
+	public static function prime_orders( array $vouchers ): void {
+		$ids = array_values( array_unique( array_filter( array_map( static fn( $v ) => (int) $v->order_id, $vouchers ) ) ) );
+		if ( ! $ids || ! function_exists( 'wc_get_orders' ) ) {
+			return;
+		}
+		foreach ( (array) wc_get_orders( array( 'post__in' => $ids, 'limit' => count( $ids ), 'type' => 'shop_order', 'status' => array_keys( wc_get_order_statuses() ) ) ) as $order ) {
+			if ( $order instanceof \WC_Order ) {
+				self::$primed_orders[ $order->get_id() ] = $order;
+			}
+		}
+	}
+
+	/** Forgets the orders of prime_orders(). */
+	public static function forget_orders(): void {
+		self::$primed_orders = array();
 	}
 
 	public function delivery_email(): string {
@@ -204,15 +246,15 @@ final class Voucher {
 		$buyer     = '' !== $this->buyer_email && in_array( strtolower( $this->buyer_email ), $emails, true );
 		$recipient = '' !== $this->recipient_email && in_array( strtolower( $this->recipient_email ), $emails, true );
 		if ( $recipient && ! $buyer ) {
-			return __( 'Personal – only the named recipient can redeem it.', 'voucher-captain' );
+			return __( 'Personal – only the named recipient can redeem it.', 'voucher-captain' ) . ' ' . PersonalVoucher::login_hint();
 		}
 		if ( $buyer && ! $recipient ) {
-			return __( 'Personal – only the buyer can redeem it.', 'voucher-captain' );
+			return __( 'Personal – only the buyer can redeem it.', 'voucher-captain' ) . ' ' . PersonalVoucher::login_hint();
 		}
 		if ( ! $buyer && ! $recipient ) {
-			return __( 'Personal – only the email addresses stored with the voucher can redeem it.', 'voucher-captain' );
+			return __( 'Personal – only the email addresses stored with the voucher can redeem it.', 'voucher-captain' ) . ' ' . PersonalVoucher::login_hint();
 		}
-		return __( 'Personal – only the buyer or the named recipient can redeem it.', 'voucher-captain' );
+		return __( 'Personal – only the buyer or the named recipient can redeem it.', 'voucher-captain' ) . ' ' . PersonalVoucher::login_hint();
 	}
 
 	public function field( string $key ): string {
