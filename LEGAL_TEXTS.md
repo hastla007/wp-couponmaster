@@ -52,8 +52,8 @@ dass die Vorlage aktuell ist und jeder Text noch existiert). Prüfung durch die 
 | Englisch (Quelltext) | Deutsch (DE, du) | Deutsch (DE, Sie) | Deutsch (AT) | Fundstelle | Freigabe |
 |---|---|---|---|---|---|
 | Valid until %s | Gültig bis %s | Gültig bis %s | Gültig bis %s | src/Placeholders.php:107 templates/emails/plain/voucher-bundle.php:46 | ☐ |
-| Valid until: %s | Gültig bis: %s | Gültig bis: %s | Gültig bis: %s | src/Downloads.php:987 | ☐ |
-| unlimited | unbegrenzt | unbegrenzt | unbegrenzt | src/Downloads.php:987 src/Placeholders.php:105 | ☐ |
+| Valid until: %s | Gültig bis: %s | Gültig bis: %s | Gültig bis: %s | src/Downloads.php:1025 | ☐ |
+| unlimited | unbegrenzt | unbegrenzt | unbegrenzt | src/Downloads.php:1025 src/Placeholders.php:105 | ☐ |
 | no expiry | unbegrenzt | unbegrenzt | unbegrenzt | src/Emails/BonusEmail.php:109 | ☐ |
 | Your voucher from {site_title} expires on {expiry_date} | Ihr Gutschein von {site_title} läuft am {expiry_date} ab | Ihr Gutschein von {site_title} läuft am {expiry_date} ab | Ihr Gutschein von {site_title} läuft am {expiry_date} ab | src/Emails/ExpiryReminderEmail.php:24 | ☐ |
 | Your voucher {coupon_code} is valid until {expiry_date}. Remaining value: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | src/Emails/ExpiryReminderEmail.php:32 | ☐ |
@@ -72,7 +72,7 @@ dass die Vorlage aktuell ist und jeder Text noch existiert). Prüfung durch die 
 
 | Englisch (Quelltext) | Deutsch (DE, du) | Deutsch (DE, Sie) | Deutsch (AT) | Fundstelle | Freigabe |
 |---|---|---|---|---|---|
-| Balance: %s | Restwert: %s | Restwert: %s | Restwert: %s | src/Downloads.php:981 templates/myaccount/vouchers-table.php:50 | ☐ |
+| Balance: %s | Restwert: %s | Restwert: %s | Restwert: %s | src/Downloads.php:1019 templates/myaccount/vouchers-table.php:50 | ☐ |
 | Remaining balance | Restwert | Restwert | Restwert | src/Placeholders.php:20 | ☐ |
 | Voucher %1$s: only %2$s of %3$s is used in this order. The voucher can be redeemed only once – the remaining %4$s will be lost. Add more items to use its full value. | Gutschein %1$s: In dieser Bestellung werden nur %2$s von %3$s angerechnet. Der Gutschein kann nur einmal eingelöst werden – der Restwert von %4$s verfällt. Lege weitere Artikel in den Warenkorb, um den vollen Wert zu nutzen. | Gutschein %1$s: In dieser Bestellung werden nur %2$s von %3$s angerechnet. Der Gutschein kann nur einmal eingelöst werden – der Restwert von %4$s verfällt. Legen Sie weitere Artikel in den Warenkorb, um den vollen Wert zu nutzen. | Gutschein %1$s: In dieser Bestellung werden nur %2$s von %3$s angerechnet. Der Gutschein kann nur einmal eingelöst werden – der Restwert von %4$s verfällt. Legen Sie weitere Artikel in den Warenkorb, um den vollen Wert zu nutzen. | src/ProductChecks.php:244 | ☐ |
 
