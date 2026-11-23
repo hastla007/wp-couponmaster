@@ -21,6 +21,15 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 | Available placeholders: %s | Verfügbare Platzhalter: %s | Verfügbare Platzhalter: %s | Verfügbare Platzhalter: %s |
 | Email body | E-Mail-Text | E-Mail-Text | E-Mail-Text |
 
+## `src/Emails/Branding.php`
+
+| Englisch (Quelltext) | Deutsch (DE, du) | Deutsch (DE, Sie) | Deutsch (AT) |
+|---|---|---|---|
+| Accent colour | Akzentfarbe | Akzentfarbe | Akzentfarbe |
+| %1$s: "%2$s" is no colour – enter it as # followed by 3 or 6 hexadecimal digits, e.g. #1f3a4d. The previous value is kept. | %1$s: „%2$s“ ist keine Farbe – gib sie als # gefolgt von 3 oder 6 Hexadezimalziffern ein, z. B. #1f3a4d. Der bisherige Wert bleibt erhalten. | %1$s: „%2$s“ ist keine Farbe – geben Sie sie als # gefolgt von 3 oder 6 Hexadezimalziffern ein, z. B. #1f3a4d. Der bisherige Wert bleibt erhalten. | %1$s: „%2$s“ ist keine Farbe – geben Sie sie als # gefolgt von 3 oder 6 Hexadezimalziffern ein, z. B. #1f3a4d. Der bisherige Wert bleibt erhalten. |
+| Logo | Logo | Logo | Logo |
+| %1$s: "%2$s" is no web address – enter the full address starting with https://. The previous value is kept. | %1$s: „%2$s“ ist keine Webadresse – gib die vollständige Adresse beginnend mit https:// ein. Der bisherige Wert bleibt erhalten. | %1$s: „%2$s“ ist keine Webadresse – geben Sie die vollständige Adresse beginnend mit https:// ein. Der bisherige Wert bleibt erhalten. | %1$s: „%2$s“ ist keine Webadresse – geben Sie die vollständige Adresse beginnend mit https:// ein. Der bisherige Wert bleibt erhalten. |
+
 ## `src/Emails/BundleEmail.php`
 
 | Englisch (Quelltext) | Deutsch (DE, du) | Deutsch (DE, Sie) | Deutsch (AT) |
@@ -175,4 +184,4 @@ Freigabe für Release: ____ · Datum: ____ · Geprüft von: ____
 | Download voucher (PDF) | Gutschein herunterladen (PDF) | Gutschein herunterladen (PDF) | Gutschein herunterladen (PDF) |
 | Redeem now | Jetzt einlösen | Jetzt einlösen | Jetzt einlösen |
 
-108 Texte.
+112 Texte.
