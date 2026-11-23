@@ -7,7 +7,7 @@ defined( 'ABSPATH' ) || exit;
  * EU VAT and accounting rules of the 12-expert audit (M12-28, M12-29, M12-68; TAX.md):
  *
  * - single-purpose vouchers are only redeemed for goods with the VAT rate and the country of their sale (cart,
- *   checkout, Store API and orders edited in the admin; WP Pass Captain checks the same itself);
+ *   checkout, Store API and orders edited in the admin; Pass Captain checks the same itself);
  * - the ledger books the remaining value of a single-use voucher that an order did not use ("forfeited", or kept as
  *   store credit / a new gift card with the product setting "Keep the rest"), the value lost at the expiry
  *   ("expired" with an amount) and its counter-booking when the voucher becomes valid again ("expiry_reversed").

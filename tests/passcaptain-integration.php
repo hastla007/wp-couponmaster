@@ -1,6 +1,6 @@
 <?php
 /**
- * Voucher Captain as voucher provider of WP Pass Captain (both plugins active).
+ * Voucher Captain as voucher provider of Pass Captain (both plugins active).
  *   wp eval-file tests/passcaptain-integration.php
  */
 

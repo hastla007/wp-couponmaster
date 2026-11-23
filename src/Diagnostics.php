@@ -5,7 +5,7 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Support information in Tools → Site Health → Info → "Voucher Captain" (also part of "Copy site info to clipboard"):
- * version, database version, schema errors, WP Pass Captain version, the last run of each daily maintenance step,
+ * version, database version, schema errors, Pass Captain version, the last run of each daily maintenance step,
  * given-up and undelivered deliveries, failed Action Scheduler tasks, open reservations, open cases (e.g. paid orders
  * without voucher), shortfalls, InnoDB, legacy rows, integrations, issuing statuses, retention, verbose log and the
  * "multi-purpose vouchers as payment" setting (D10). Contains no secret or customer data.
@@ -46,7 +46,7 @@ final class Diagnostics {
 			'value' => '' !== $schema && false !== $schema ? ( is_scalar( $schema ) ? (string) $schema : (string) wp_json_encode( $schema ) ) : __( 'None', 'voucher-captain' ),
 		);
 		$fields['pass_captain'] = array(
-			'label' => __( 'WP Pass Captain', 'voucher-captain' ),
+			'label' => __( 'Pass Captain', 'voucher-captain' ),
 			'value' => self::integrations()['passcaptain'] ?? __( 'Not active', 'voucher-captain' ),
 		);
 		$fields['maintenance'] = array(
@@ -88,10 +88,6 @@ final class Diagnostics {
 		$fields['legacy_rows'] = array(
 			'label' => __( 'Rows still to move to the voucher tables', 'voucher-captain' ),
 			'value' => Install::legacy_rows() ? __( 'Yes (moved by the daily maintenance)', 'voucher-captain' ) : __( 'No', 'voucher-captain' ),
-		);
-		$fields['workflow'] = array(
-			'label' => __( 'Workflow plugin (provider contract)', 'voucher-captain' ),
-			'value' => isset( vcap()->workflow ) ? implode( '; ', vcap()->workflow->status_lines() ) : '—',
 		);
 		$fields['adapters'] = array(
 			'label' => __( 'Active integrations', 'voucher-captain' ),
@@ -164,7 +160,7 @@ final class Diagnostics {
 		return is_array( $active ) ? array_map( 'strval', $active ) : array();
 	}
 
-	/** Integrations in use: currency switcher, WP Pass Captain, multilingual plugin, subscriptions. */
+	/** Integrations in use: currency switcher, Pass Captain, multilingual plugin, subscriptions. */
 	private static function adapters(): string {
 		$active       = array();
 		$integrations = self::integrations();
@@ -173,9 +169,6 @@ final class Diagnostics {
 		}
 		if ( isset( $integrations['passcaptain'] ) ) {
 			$active[] = 'passcaptain';
-		}
-		if ( '' !== ( $integrations['workflow'] ?? '' ) ) {
-			$active[] = 'workflow: ' . $integrations['workflow'];
 		}
 		if ( defined( 'ICL_SITEPRESS_VERSION' ) ) {
 			$active[] = 'wpml';

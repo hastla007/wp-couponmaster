@@ -616,7 +616,7 @@ final class Delivery {
 		}
 		$this->repo->log( $voucher->id, 'delivered', null, null, Note::make( 'delivered', $args ) );
 		/** A voucher was delivered to everyone it is meant for (args: Voucher $voucher, string[] $addresses). */
-		do_action( 'vcap_voucher_delivered', $voucher, $sent );
+		Db::action( 'vcap_voucher_delivered', $voucher, $sent );
 	}
 
 	/**
@@ -948,7 +948,7 @@ final class Delivery {
 		}
 		Logger::warning( 'Voucher delivery given up after repeated failures.', array( 'voucher_id' => $voucher->id, 'attempts' => $failures ) );
 		/** A delivery was given up after $failures failed attempts. */
-		do_action( 'vcap_voucher_delivery_given_up', $voucher, $failures );
+		Db::action( 'vcap_voucher_delivery_given_up', $voucher, $failures );
 	}
 
 	/**
@@ -1043,9 +1043,9 @@ final class Delivery {
 		/**
 		 * A voucher email came back (Delivery::mark_bounced()). Args: Voucher, role ('recipient'|'buyer'), reason.
 		 *
-		 * @since 1.3.0
+		 * @since 1.2.0
 		 */
-		do_action( 'vcap_voucher_bounced', $voucher, $role, $reason );
+		Db::action( 'vcap_voucher_bounced', $voucher, $role, $reason );
 		return true;
 	}
 
@@ -1384,11 +1384,9 @@ final class Delivery {
 		if ( ! $offsets ) {
 			return 0;
 		}
-		// WF-04: reminders handed over to the workflow plugin are recorded instead of sent (own email not needed).
-		$handover = Workflow\Handover::active( Workflow\Handover::EXPIRY_REMINDER );
-		$emails   = WC()->mailer()->get_emails();
-		$email    = $emails['VCAP_Email_Voucher_Expiry'] ?? null;
-		if ( ! $handover && ( ! $email || ! $email->is_enabled() || ! method_exists( $email, 'trigger' ) ) ) {
+		$emails = WC()->mailer()->get_emails();
+		$email  = $emails['VCAP_Email_Voucher_Expiry'] ?? null;
+		if ( ! $email || ! $email->is_enabled() || ! method_exists( $email, 'trigger' ) ) {
 			return 0;
 		}
 		$start = microtime( true );
@@ -1413,15 +1411,6 @@ final class Delivery {
 					// only after a successful send; a failed send gives the claim back and is retried after a day.
 					$claim = 'expiry-reminder:' . $voucher->id . ':' . $days;
 					if ( ! Claim::take( $claim ) ) {
-						continue;
-					}
-					if ( $handover ) {
-						// The history entry marks this reminder as handled (due_for_expiry_reminder()).
-						if ( Workflow\Handover::record( $voucher, Workflow\Handover::EXPIRY_REMINDER, (int) $days ) ) {
-							++$sent;
-						} else {
-							Claim::release( $claim );
-						}
 						continue;
 					}
 					try {

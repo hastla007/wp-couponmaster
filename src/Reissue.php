@@ -154,7 +154,7 @@ final class Reissue {
 		 * @param Voucher $voucher  The voucher with its new code.
 		 * @param string  $old_code The code it had before.
 		 */
-		do_action( 'vcap_voucher_reissued', $fresh, $old_code );
+		Db::action( 'vcap_voucher_reissued', $fresh, $old_code );
 		return $fresh;
 	}
 

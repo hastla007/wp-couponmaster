@@ -240,4 +240,23 @@ vcap_conn_assert( false === $d12_restored && in_array( 'passcaptain_restore_fail
 remove_filter( VCAP\Compat\PassCaptainTickets::SERVICE_FILTER, $d12_filter );
 delete_option( VCAP\Compat\PassCaptainTickets::ATTENTION_OPTION );
 
+// VOUCH-E17-02: connector access on vcap()->api_v1 (contract 1.4.0) against a real issued voucher – no internal class.
+add_filter( 'vcap_line_snapshot', $e17_snap = static fn( array $extra ) => $extra + array( 'e17_target' => array( 'product_id' => 4242, 'variation_id' => 0 ) ) );
+list( $e17_order, $e17_vouchers ) = vcap_conn_issue( vcap_conn_product( 'E17 course voucher', array( 'external' ), 'course' ), 1 );
+remove_filter( 'vcap_line_snapshot', $e17_snap );
+$e17_id  = (int) $e17_vouchers[0]->id;
+$e17_api = vcap()->api_v1;
+$e17_v   = $e17_api->voucher( $e17_id );
+vcap_conn_assert( is_array( $e17_v ) && VCAP\API\V1\VoucherService::CONNECTOR_VOUCHER_KEYS === array_keys( $e17_v ) && $e17_id === $e17_v['id'] && 'course' === $e17_v['type'] && $e17_order->get_id() === $e17_v['order_id'] && $e17_v['order_item_id'] > 0, 'E17-02: voucher() reads an issued voucher as an array with order line and code' );
+vcap_conn_assert( $e17_v === $e17_api->voucher_by_code( strtolower( (string) $e17_v['code'] ) ) && null === $e17_api->voucher_by_code( 'E17-NOT-A-CODE' ), 'E17-02: voucher_by_code() finds it case-insensitively and nothing for an unknown code' );
+vcap_conn_assert( array( 'product_id' => 4242, 'variation_id' => 0 ) === ( $e17_api->line_snapshot( (int) $e17_v['order_item_id'] )['e17_target'] ?? null ) && 40.0 === (float) ( $e17_api->line_snapshot( (int) $e17_v['order_item_id'] )['face_value'] ?? 0 ), 'E17-02: line_snapshot() returns the core and connector keys of the order line' );
+add_filter( 'vcap_event_labels', $e17_label = static fn( array $l ) => $l + array( 'e17test_granted' => 'Course access granted' ) );
+$e17_logged = $e17_api->log_event( $e17_id, 'e17test_granted', 'Course 4242 granted', $e17_order->get_id() );
+$e17_events = array_values( array_filter( vcap()->vouchers->events( $e17_id ), static fn( $e ) => 'e17test_granted' === ( $e['event'] ?? '' ) ) );
+vcap_conn_assert( true === $e17_logged && 1 === count( $e17_events ) && 'Course 4242 granted' === (string) $e17_events[0]['note'] && 'Course access granted' === ( VCAP\VoucherRepository::event_labels()['e17test_granted'] ?? '' ), 'E17-02: log_event() writes the connector event into the voucher history, labelled through vcap_event_labels' );
+remove_filter( 'vcap_event_labels', $e17_label );
+$e17_core = $e17_api->log_event( $e17_id, 'redeemed', 'fake' );
+vcap_conn_assert( $e17_core instanceof WP_Error && 'vcap_invalid_event' === $e17_core->get_error_code() && 1 === count( array_filter( vcap()->vouchers->events( $e17_id ), static fn( $e ) => in_array( $e['event'] ?? '', array( 'redeemed', 'e17test_granted' ), true ) ) ), 'E17-02: a connector cannot write a core event such as redeemed' );
+vcap_conn_assert( str_contains( $e17_api->admin_url( $e17_id ), 'page=vcap-vouchers' ) && str_contains( $e17_api->admin_url( $e17_id ), 'voucher=' . $e17_id ), 'E17-02: admin_url() names the voucher screen' );
+
 echo "Voucher Captain connector checks passed.\n";

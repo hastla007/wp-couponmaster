@@ -115,7 +115,7 @@ final class Revocation {
 	public function revoke_checked( Voucher $voucher, string $exchange_key, string $reason, string $release_key = '' ): bool {
 		$service = TicketContract::service();
 		$errors  = array();
-		$revoked = $service ? $service->revoke_tickets( $exchange_key, $reason ) : new \WP_Error( 'vcap_passcaptain_inactive', __( 'WP Pass Captain is not active.', 'voucher-captain' ) );
+		$revoked = $service ? $service->revoke_tickets( $exchange_key, $reason ) : new \WP_Error( 'vcap_passcaptain_inactive', __( 'Pass Captain is not active.', 'voucher-captain' ) );
 		if ( is_wp_error( $revoked ) ) {
 			$errors[] = 'revoke_tickets ' . $revoked->get_error_code() . ': ' . $revoked->get_error_message();
 		} elseif ( false === $revoked ) {

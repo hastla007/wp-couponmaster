@@ -388,6 +388,25 @@ if ( ! function_exists( 'wcs_order_contains_switch' ) && ! class_exists( 'WC_Sub
 	vcap_rl_assert( false === $subs->should_issue( true, $renewal2 ), 'M12-38: later renewals follow the renewal setting (off)' );
 }
 
+/* ---- T87 (Workflow Captain suite): a void after a refund names the refunded purchase order ------------------ */
+
+list( $t87_order, , $t87_vouchers ) = vcap_rl_purchase( $single, 1 );
+$t87_seen                            = array();
+$t87_hook                            = static function ( $voucher_id, $event, $amount, $balance, $note, $order_id ) use ( &$t87_seen ) {
+	if ( 'voided' === $event ) {
+		$t87_seen[] = (int) $order_id;
+	}
+};
+add_action( 'vcap_voucher_event', $t87_hook, 10, 6 );
+$t87_refund = wc_create_refund( array( 'order_id' => $t87_order->get_id(), 'amount' => 30 ) );
+remove_action( 'vcap_voucher_event', $t87_hook, 10 );
+$t87_voided = array_values( array_filter( vcap()->vouchers->events( $t87_vouchers[0]->id ), static fn( $e ) => 'voided' === $e['event'] ) );
+vcap_rl_assert( ! is_wp_error( $t87_refund ) && Voucher::STATUS_VOID === vcap_rl_status( $t87_vouchers[0] ) && array( $t87_order->get_id() ) === $t87_seen && $t87_order->get_id() === (int) ( $t87_voided[0]['order_id'] ?? 0 ), 'T87: the void after a full refund carries the purchase order in its history and in vcap_voucher_event', array( $t87_seen, $t87_voided ) );
+$t87_manual = vcap_rl_purchase( $single, 1 )[2][0];
+vcap()->issuer->void( vcap()->vouchers->get( $t87_manual->id ), 'manual' );
+$t87_mv = array_values( array_filter( vcap()->vouchers->events( $t87_manual->id ), static fn( $e ) => 'voided' === $e['event'] ) );
+vcap_rl_assert( 0 === (int) ( $t87_mv[0]['order_id'] ?? -1 ), 'T87: a manual void names no order' );
+
 delete_option( 'vcap_store_credit' );
 update_option( 'woocommerce_calc_taxes', 'no' );
 echo "Refund lifecycle checks passed.\n";

@@ -26,7 +26,8 @@ Please do **not** open a public issue, pull request or forum post for a security
 
 | Version | Security fixes |
 | --- | --- |
-| 1.2.x (current minor) | yes |
+| 1.3.x (current minor) | yes |
+| 1.2.x | until 6 months after the release of 1.3.0 – please update |
 | 1.1.x | until 6 months after the release of 1.2.0 – please update |
 | < 1.1 | no |
 

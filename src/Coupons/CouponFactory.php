@@ -14,6 +14,22 @@ defined( 'ABSPATH' ) || exit;
 final class CouponFactory {
 	public function __construct( private VoucherRepository $repo ) {}
 
+	/**
+	 * The WooCommerce coupon of a code, as the cart resolves it. `new WC_Coupon( $code )` falls back to reading the
+	 * code as a post id when no coupon has it (backwards compatibility in WooCommerce): a code that no longer exists
+	 * but starts with digits ("45ABC…") would load coupon #45. Like WC_Cart::apply_coupon(), the loaded code must be
+	 * the asked one; otherwise an empty coupon with that code is returned (id 0). Virtual coupons
+	 * (woocommerce_get_shop_coupon_data) keep working.
+	 */
+	public static function for_code( string $code ): \WC_Coupon {
+		$coupon = new \WC_Coupon( $code );
+		if ( wc_strtolower( wc_format_coupon_code( (string) $coupon->get_code() ) ) !== wc_strtolower( wc_format_coupon_code( $code ) ) ) {
+			$coupon = new \WC_Coupon();
+			$coupon->set_code( $code );
+		}
+		return $coupon;
+	}
+
 	public function code_exists( string $code ): bool {
 		return CodeIndex::taken( $code ); // B4: own tables first (indexed), WooCommerce last, misses cached.
 	}

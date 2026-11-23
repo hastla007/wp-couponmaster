@@ -13,7 +13,7 @@ release).
 - [ ] Default uninstall keeps plugin data; `vcap_delete_on_uninstall=yes` removes the tables – `wordpress-integration`.
 - [ ] Oldest supported platform (WordPress 7.0, WooCommerce 11.2.2, PHP 8.5, no Yoast SEO) – `minimum-versions`.
 - [ ] Multisite: network activation, a site added later, per-site uninstall – `multisite`.
-- [ ] Voucher Captain + WP Pass Captain (pinned release v1.4.0, `main` – both must run – and the work branch, which may be skipped with a warning): gift cards in the ticket checkout, ticket voucher exchange, refunds, shared scanner – `pass-captain`.
+- [ ] Voucher Captain + Pass Captain (pinned release v1.4.0, `main` – both must run – and the work branch, which may be skipped with a warning): gift cards in the ticket checkout, ticket voucher exchange, refunds, shared scanner – `pass-captain`.
 - [ ] Updates with data from the last release and from the previous schema to the current ZIP, each with rollback – `upgrade`.
 - [ ] Browser: product page, classic and block checkout (block: gift card paying after tax with payment row, balance and total, single-use voucher warning in its live region, store credit link), customer account, shortcodes, admin with Yoast SEO, axe accessibility and keyboard checks – `browser-e2e`.
 - [ ] Real gateways and currency switchers from wordpress.org next to Voucher Captain (Stripe, PayPal Payments, WOOCS, CURCY, WCML): purchase, voucher payment, refund, currency conversion, and "Multi-purpose vouchers as payment" (partial and full payment, foreign currency) – `ecosystem`.
@@ -41,10 +41,10 @@ release).
 | Installation | Required check | Status |
 | --- | --- | --- |
 | Voucher Captain alone | Activate, issue, deliver, redeem, refund, export/erase privacy data, uninstall | CI (`wordpress-integration`, `browser-e2e`); real gateway checks remain manual |
-| WP Pass Captain alone | Activate and complete its normal ticket lifecycle | Run in the WP Pass Captain repository |
+| Pass Captain alone | Activate and complete its normal ticket lifecycle | Run in the Pass Captain repository |
 | Both plugins | Install/activate together; pay with a gift card in the ticket checkout; exchange a ticket voucher; refunds and cancellations give vouchers back; shared scanner | CI `pass-captain` against Pass Captain `main` and the work branch |
 
-Do not advertise a Learnboating connector as supported until its external contract and the combined installation pass.
+The LearnBoating connector is a project product of its own (decision 17, learnboating repository) and is not advertised as a Voucher Captain feature. Its combined installation is tested in the CI of that repository against this plugin's public contract.
 - [ ] Screen reader listening test (NVDA + VoiceOver) with the protocol in `ACCESSIBILITY.md`; the accessibility tree is checked automatically in `browser-e2e`.
 
 ## Plugin Check warnings (state 16.11.2026: 0 errors, 199 warnings)

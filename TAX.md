@@ -132,8 +132,9 @@ sind die Berichte unter „Gutscheine → Berichte“.
 - **Gutschein-Anfragen / Firmenbestellungen** (Captain Suite, D5): Beim Bestätigen wählt der Verwalter „verkauft“ oder
   „kostenlos“; das Kennzeichen geht wie in 3.1 an die Steuerlogik. Wird eine Anfrage an die Firmenbestellung eines
   Add-ons übergeben, stellt das Add-on Rechnung und Gutscheine aus – der Kern gibt dann nichts aus.
-- **Einlösungen über ein Workflow-Plugin** (WORKFLOW.md, Dienst `redeem`) laufen über dieselbe Einlöse-Logik wie die
-  Ladenkasse (Abschnitt 4) und erscheinen im Journal mit der Quelle `workflow`.
+- **Einlösungen über die Gutschein-Befehle** (`vcap_command_redeem()`, API.md → „Voucher commands“, z. B. aus einer
+  Workflow-Automatisierung) laufen über die Einlöse-Schnittstelle (`reserve`/`commit`, wie eine externe Einlösung)
+  und erscheinen im Journal wie diese.
 
 ## 4. Einlösung
 
@@ -231,7 +232,7 @@ ausgebucht“ auf 0 gebucht; Storno/Erstattung der Bestellung gibt ihn mit der A
 größer als die Bestellung ist, behält ihren Rest. Nachweis: `tests/tax-integration.php` 9.2 („net prices, mixed
 rates, code + card (T8 …)“, klassischer Warenkorb und Bestellung) und 9.3 („net prices (T15): …“).
 
-### 4.2 In WP Pass Captain (Ticketkasse)
+### 4.2 In Pass Captain (Ticketkasse)
 
 Pass Captain fragt den Gutschein über den Provider-Vertrag an und erhält `treatment` und `purpose`
 (`src/Compat/PassCaptainProvider.php`, Nachweis Abschnitt 3 des Tests):
@@ -249,7 +250,7 @@ Zeilen-Snapshot (`tax_rate_bp`, `tax_country`), für ältere Gutscheine aus der 
 (`seller_country`); bei Abweichung gilt der Gutschein als Mehrzweckgutschein, die Bestellung vermerkt
 `purpose_changed` (`single_rate`/`single_country`). Gleiches gilt beim Tausch von Ticketgutscheinen.
 Nachweis: `tests/tax-integration.php` („the line snapshot records the VAT of the sale …“, „Pass Captain gets the rate
-and country of the sale …“, „purpose "discount" for a promotion code“) und in WP Pass Captain
+and country of the sale …“, „purpose "discount" for a promotion code“) und in Pass Captain
 `tests/integration/modules/zz_voucher_purpose.php` (Abweichung Satz/Land, Rabattcode-Rechnung, Tausch).
 
 ### 4.3 Restwert von Einmalgutscheinen
@@ -413,7 +414,7 @@ Prüfung je Land durch die Steuerberatung (je Zeile ankreuzen):
 | | *Multi-purpose voucher (means of payment, VAT on redemption)* / *Mehrzweckgutschein (Zahlungsmittel, USt bei Einlösung)* |
 | | *Single-purpose voucher (VAT already charged at sale)* / *Einzweckgutschein (USt bereits beim Verkauf abgerechnet)* |
 | | *Promotion (price reduction)* / *Rabattaktion (Preisnachlass)* |
-| Hilfetext | *How connected checkouts (e.g. WP Pass Captain) treat the voucher for VAT. Have the classification checked by your tax adviser.* |
+| Hilfetext | *How connected checkouts (e.g. Pass Captain) treat the voucher for VAT. Have the classification checked by your tax adviser.* |
 | Kunde | Gutscheintexte enthalten keine Steueraussage; Einlösebedingungen kommen aus den Ländertexten (Einstellungen → Bedingungen je Land) |
 
 | Kunde (Warenkorb) | Restwert eines Einmalgutscheins: „… the remaining %4$s will be lost …“ bzw. mit „Keep the rest“ „… is not lost: it is kept for you as store credit …“ (4.3, LEGAL_TEXTS.md) |

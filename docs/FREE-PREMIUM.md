@@ -41,7 +41,7 @@ Entscheidung des Betreibers vom 13.11.2026 (verbindlich). Dieses Dokument ersetz
 
 ## Funktionsumfang „Kern, dauerhaft frei“
 
-Stand 1.2.0 (Schema 1.8.0), abgeleitet aus `src/` und readme.txt. Alles in dieser Tabelle ist und bleibt frei.
+Stand 1.3.0 (Schema 1.8.0), abgeleitet aus `src/` und readme.txt. Alles in dieser Tabelle ist und bleibt frei.
 
 | Bereich | Umfang |
 |---|---|
@@ -61,8 +61,8 @@ Stand 1.2.0 (Schema 1.8.0), abgeleitet aus `src/` und readme.txt. Alles in diese
 | Code-Import & Code-Kampagnen | CSV/XLS/XLSX/ODS mit Batches, Formatprüfung und Duplikaterkennung; Kampagnen aus Vorlage-Coupon oder Code-Pool mit CSV-Export; Hintergrundläufe für große Mengen |
 | Berichte & Journal | Übersicht, Kampagnen und Codes (Partner, Aktionen, Bonus), offener Gutscheinwert zum Stichtag, Einlösejournal (CSV, DATEV-Buchungsstapel), Kassen und Personal, Pass-Captain-Abgleich |
 | Einlöse-API & Connectoren | `vcap()->api_v1`, `vcap()->redemptions` (Reservieren, Buchen, Freigeben, Erstatten mit Idempotenzschlüssel), REST `vcap/v1`, Einlösewege (Kanäle), Provider-Vertrag `VCAP\Contracts\RedemptionProvider`, Beispiel-Connector |
-| WP Pass Captain | Bezahlen von Tickets mit Gutscheinen in der Pass-Captain-Kasse, Ticketgutscheine (fester Termin oder Wahltermin) mit Tausch auf der Einlöseseite, gemeinsamer Scanner, Rücknahme bei Storno, Abgleichbericht |
-| WP Affiliate Captain | Code-Kampagnen einem Partner zuordnen (Provision über `wpac_coupon_affiliate`), Partnerspalte in den Kampagnen |
+| Pass Captain | Bezahlen von Tickets mit Gutscheinen in der Pass-Captain-Kasse, Ticketgutscheine (fester Termin oder Wahltermin) mit Tausch auf der Einlöseseite, gemeinsamer Scanner, Rücknahme bei Storno, Abgleichbericht |
+| Affiliate Captain | Code-Kampagnen einem Partner zuordnen (Provision über `wpac_coupon_affiliate`), Partnerspalte in den Kampagnen |
 | Steuer & Recht | Steuerbehandlung je Gutscheinart (Einzweck/Mehrzweck/Aktion), Einzweckgutscheine nur für passende Steuersätze, gesetzliche Gültigkeit je Land (EU-Marktdaten), Bedingungen je Land, Steuerprüfung der Produkte |
 | Kompatibilität | HPOS und klassische Bestellspeicherung, Block-Warenkorb/-Kasse, WPML/WCML, Polylang, Mehrwährung (WCML, Aelia, WOOCS, CURCY, WooPayments), Flexible Product/Checkout Fields, Cache-Plugins, Multisite (Netzwerkaktivierung, Deinstallation je Site) |
 | Shortcodes & Blöcke | `[vcap_balance]`/`[vcap_voucher_status]`, `[vcap_redeem]`, `[vcap_my_vouchers]`, `[vcap_referral]` und die passenden Blöcke |
@@ -101,7 +101,16 @@ Besonders nützlich für ein Add-on: `vcap_settings_sections` (eigener Abschnitt
 `vcap_voucher_admin_actions`/`vcap_voucher_admin_action` (Aktionen in der Gutscheinansicht) und die Ereignisse
 `vcap_vouchers_issued`, `vcap_voucher_redeemed`, `vcap_voucher_event`.
 
-Seit Schema 1.8.0 (R6) zusätzlich für das Add-on:
+**Vertragsversion:** Die Konstante `VCAP_CONTRACT_VERSION` (seit Plugin 1.2.0) nennt die Version dieser öffentlichen
+Schnittstelle, unabhängig von der Plugin-Version: 1.0.0 = Plugin 1.1.0, 1.1.0 = Plugin 1.2.0, 1.2.0 = Plugin 1.3.0 mit den
+Lesefunktionen `vcap_read_*()` / `vcap()->read` (Zustand eines Gutscheins über die ID, ohne Code und personenbezogene
+Daten; API.md → „Read functions“), 1.3.0 = Plugin 1.3.0 mit den Gutschein-Befehlen `vcap_command_*()` /
+`vcap()->commands` (ausstellen, sperren, reaktivieren, einlösen über die ID; ab Werk aus, feste Grenzen, Protokoll;
+API.md → „Voucher commands“). Ein Add-on prüft sie
+einmal, statt einzelne Hooks abzufragen (CONNECTORS.md → 6.); die erste Version jedes Hooks steht in der Spalte
+„Since“ von docs/HOOKS.md.
+
+Seit Plugin 1.2.0 (Vertragsversion 1.1.0, Schema 1.8.0, Paket R6) zusätzlich für das Add-on:
 
 - `vcap_admin_menu` (Action, `$parent_slug` = `vcap-vouchers`): nach dem Menü des Kerns, für eigene Unterseiten
   (`add_submenu_page( $parent_slug, … )`, erscheinen vor „Einstellungen“).

@@ -81,10 +81,6 @@ final class Settings {
 		Counter::REQUIRE_RECEIPT       => 'auto',
 		// M12-81: managed list of tills/branches ('' = free text on the scanner device).
 		Counter::LOCATIONS             => '',
-		// WF-04: optional emails handed over to a workflow plugin – off: Voucher Captain sends them itself.
-		Workflow\Handover::OPTIONS[ Workflow\Handover::EXPIRY_REMINDER ] => 'no',
-		Workflow\Handover::OPTIONS[ Workflow\Handover::GIFT_DELIVERED ]  => 'no',
-		Workflow\Handover::OPTIONS[ Workflow\Handover::GIFT_USED ]       => 'no',
 	);
 
 	/**
@@ -459,44 +455,20 @@ final class Settings {
 			array( 'type' => 'sectionend', 'id' => 'vcap_api' ),
 			array(
 				'type'  => 'title',
-				'title' => __( 'WP Pass Captain (tickets)', 'voucher-captain' ),
+				'title' => __( 'Pass Captain (tickets)', 'voucher-captain' ),
 				'id'    => 'vcap_passcaptain',
 				'desc'  => Compat\PassCaptain::status_html(),
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_passcaptain' ),
-		);
-		return array_merge( $fields, self::workflow_fields(), DatevExport::settings_fields() ); // M12-69.
-	}
-
-	/**
-	 * WF-04/WF-05: status of the workflow provider contract and the switches of the optional emails a workflow
-	 * plugin may take over (default off: Voucher Captain sends them).
-	 */
-	private static function workflow_fields(): array {
-		$fields = array(
 			array(
 				'type'  => 'title',
-				'title' => __( 'Workflow plugin (e.g. Workflow Captain)', 'voucher-captain' ),
-				'id'    => 'vcap_workflow',
-				'desc'  => ( function_exists( 'vcap' ) && isset( vcap()->workflow ) ? vcap()->workflow->status_html() . '<br />' : '' ) . esc_html__( 'Voucher Captain reports voucher events to a workflow plugin and offers it services (see WORKFLOW.md). Sales, refunds and bookings always stay with Voucher Captain. Optional emails below are left to the workflow plugin only while it is active, compatible and takes them over – otherwise Voucher Captain sends them as usual.', 'voucher-captain' ),
+				'title' => __( 'Workflow Captain', 'voucher-captain' ),
+				'id'    => 'vcap_suite_workflowcaptain',
+				'desc'  => Compat\WorkflowCaptain::status_html(),
 			),
+			array( 'type' => 'sectionend', 'id' => 'vcap_suite_workflowcaptain' ),
 		);
-		$labels = Workflow\Handover::labels();
-		$last   = count( Workflow\Handover::OPTIONS ) - 1;
-		$i      = 0;
-		foreach ( Workflow\Handover::OPTIONS as $communication => $option ) {
-			$fields[] = array(
-				'title'         => 0 === $i ? __( 'Leave to the workflow plugin', 'voucher-captain' ) : '',
-				'id'            => $option,
-				'type'          => 'checkbox',
-				'default'       => 'no',
-				'desc'          => $labels[ $communication ],
-				'checkboxgroup' => 0 === $i ? 'start' : ( $last === $i ? 'end' : '' ),
-			);
-			++$i;
-		}
-		$fields[] = array( 'type' => 'sectionend', 'id' => 'vcap_workflow' );
-		return $fields;
+		return array_merge( $fields, DatevExport::settings_fields() ); // M12-69.
 	}
 
 	/** Section "Privacy & advanced" with the counter limits. */

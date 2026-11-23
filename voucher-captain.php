@@ -2,8 +2,8 @@
 /**
  * Plugin Name:       Voucher Captain
  * Plugin URI:        https://github.com/hastla007/wp-couponmaster
- * Description:       Sell personalised PDF vouchers, gift cards and store credit with WooCommerce: visual PDF designer, recipient fields, scheduled delivery, balance-tracked gift cards, code import and redemption in the shop, by API or in WP Pass Captain.
- * Version:           1.2.0
+ * Description:       Sell personalised PDF vouchers, gift cards and store credit with WooCommerce: visual PDF designer, recipient fields, scheduled delivery, balance-tracked gift cards, code import and redemption in the shop, by API or in Pass Captain.
+ * Version:           1.3.0
  * Requires at least: 7.0
  * Requires PHP:      8.5
  * Requires Plugins:  woocommerce
@@ -30,8 +30,19 @@ if ( version_compare( PHP_VERSION, '8.5', '<' ) ) {
 	return;
 }
 
-define( 'VCAP_VERSION', '1.2.0' );
+define( 'VCAP_VERSION', '1.3.0' );
 define( 'VCAP_DB_VERSION', '1.8.0' );
+/*
+ * Version of the public extension contract (hooks, vcap()->api_v1, vcap()->redemptions, REST vcap/v1,
+ * VCAP\Contracts\*) – independent of the plugin version. Major = API generation (1 = v1), minor rises with every
+ * release that adds hooks, methods or arguments. Add-ons and connectors check this instead of single hooks
+ * (CONNECTORS.md, section 6; docs/HOOKS.md). 1.0.0 = plugin 1.1.0, 1.1.0 = plugin 1.2.0, 1.2.0 = plugin 1.3.0 with
+ * the read functions vcap_read_*() / vcap()->read (API.md → "Read functions"), 1.3.0 = plugin 1.3.0 with the
+ * voucher commands vcap_command_*() / vcap()->commands (API.md → "Voucher commands"), 1.4.0 = plugin 1.3.0 with the
+ * connector access of vcap()->api_v1 (voucher(), voucher_by_code(), log_event(), admin_url(), line_snapshot();
+ * API.md → "Connector access").
+ */
+define( 'VCAP_CONTRACT_VERSION', '1.4.0' );
 define( 'VCAP_FILE', __FILE__ );
 define( 'VCAP_PATH', plugin_dir_path( __FILE__ ) );
 define( 'VCAP_URL', plugin_dir_url( __FILE__ ) );
@@ -52,6 +63,9 @@ spl_autoload_register(
 		}
 	}
 );
+
+// Optional Form Captain adapter (voucher requests); stays inactive without Form Captain.
+\VCAP\Integrations\FormCaptain\Bootstrap::register();
 
 register_activation_hook( __FILE__, array( '\VCAP\Install', 'activate' ) );
 register_deactivation_hook( __FILE__, array( '\VCAP\Install', 'deactivate' ) );
@@ -109,6 +123,8 @@ add_action(
 			}
 		}
 		$vcap_plugin = \VCAP\Plugin::instance();
+		// Public read functions vcap_read_*() (contract 1.2.0) and commands vcap_command_*() (contract 1.3.0), API.md.
+		require_once VCAP_PATH . 'src/functions.php';
 		/**
 		 * Voucher Captain has booted: vcap() and its services (api_v1, redemptions …) can be used from here on.
 		 *

@@ -202,7 +202,7 @@ final class Settlement {
 		if ( $shortfall || $missing ) {
 			if ( ! self::has_shortfall( $order ) && class_exists( '\\PassCaptain\\Integrations\\WooCommerce\\OrderAdapter' ) && ! Compat\PassCaptain::supports_hold_fulfilment() ) {
 				// Tickets in this order would be issued although the gift card could not be charged in full.
-				$order->add_order_note( __( 'Gift card shortfall: the installed WP Pass Captain cannot hold ticket issuance. If this order contains tickets, check them – and update WP Pass Captain.', 'voucher-captain' ) );
+				$order->add_order_note( __( 'Gift card shortfall: the installed Pass Captain cannot hold ticket issuance. If this order contains tickets, check them – and update Pass Captain.', 'voucher-captain' ) );
 			}
 			$order->update_meta_data( self::SHORTFALL_META, 'yes' );
 		} elseif ( self::has_shortfall( $order ) && ! $this->lookup->open_balance_coupons( $order, $applied ) ) {

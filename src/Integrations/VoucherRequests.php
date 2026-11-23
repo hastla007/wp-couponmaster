@@ -1,6 +1,6 @@
 <?php
 /**
- * Captain Suite: voucher requests from forms (WP Form Captain, contract v1).
+ * Captain Suite: voucher requests from forms (Form Captain, contract v1).
  *
  * @package VCAP\Integrations
  */

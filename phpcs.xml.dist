@@ -68,7 +68,7 @@
 		Deliberate exceptions (checked 16.11.2026, RELEASE_CHECKLIST.md → Plugin Check warnings):
 		- Template variables are the documented template API for theme overrides ({theme}/voucher-captain/); renaming
 		  them would break existing overrides.
-		- Hooks of WooCommerce, WPML, Aelia and WP Pass Captain are fired on purpose for compatibility; own hooks all
+		- Hooks of WooCommerce, WPML, Aelia and Pass Captain are fired on purpose for compatibility; own hooks all
 		  start with vcap_.
 		- DONOTCACHEPAGE is the constant page caches read; it cannot carry a prefix.
 	-->

@@ -58,13 +58,13 @@ Other subscription plugins: return `false` from `vcap_should_issue_for_order` fo
 | Custom amount / price plugins | `vcap_custom_amount_price( float $price, array $cart_item )` sets the cart price of a "customer chooses amount" voucher; `vcap_voucher_amount( float $amount, WC_Order_Item_Product $item, array $config, WC_Order $order )` decides the face value issued. The paid line total is always in the line snapshot. |
 | Add-on plugins that add their own price (gift wrap etc.) | Face value defaults to the paid line price ÷ vouchers. If add-ons must not increase the face value, set the voucher value source to *Fixed* or filter `vcap_voucher_amount`. |
 
-## 5. WP Affiliate Captain (partner programme)
+## 5. Affiliate Captain (partner programme)
 
-Built in: `src/Compat/AffiliateCaptain.php`, active only when WP Affiliate Captain reports integration contract 1.x (`wpac_contract_version()`).
+Built in: `src/Compat/AffiliateCaptain.php`, active only when Affiliate Captain reports integration contract 1.x (`wpac_contract_version()`).
 
 | Contract | How |
 |---|---|
-| Partner per code campaign | Vouchers → Generate codes → Campaigns → *Partner (WP Affiliate Captain)*: enter the partner code. It is checked with `wpac_resolve_partner_code()` and stored in the option `vcap_affiliate_campaigns`. |
+| Partner per code campaign | Vouchers → Generate codes → Campaigns → *Partner (Affiliate Captain)*: enter the partner code. It is checked with `wpac_resolve_partner_code()` and stored in the option `vcap_affiliate_campaigns`. |
 | Coupon → partner | The adapter answers Affiliate Captain's `wpac_coupon_affiliate` filter (priority 20) for coupons of an assigned campaign. A coupon linked to a partner directly in Affiliate Captain wins (priority 10). Paused or ended partners are resolved by Affiliate Captain and receive nothing. |
 | Orders, refunds | Recorded by Affiliate Captain's own WooCommerce integration – Voucher Captain sends nothing itself, so there is no double booking. |
 | Vouchers and gift cards | Purchased vouchers (`_vcap_voucher`) are means of payment and never map to a partner. By default the partner who brought the buyer of a voucher earns commission on the voucher sale (the redeeming order is reduced by the voucher amount, so nothing is paid twice). `add_filter( 'vcap_affiliate_commission_on_voucher_sales', '__return_false' )` pays nothing on voucher products instead. |
@@ -96,3 +96,52 @@ Test: `tests/affiliate-captain-integration.php` (runs with and without Affiliate
 - Never change Voucher Captain's tables or `_vcap_*` meta directly; use the services (`vcap()->vouchers`, `vcap()->redemptions`, `vcap()->store_credit`).
 - Add an integration test that runs with and without the other plugin (a deterministic stub is fine when the plugin is commercial).
 - See [COMPATIBILITY.md](COMPATIBILITY.md) for what CI covers and [CONNECTORS.md](CONNECTORS.md) for redemption connectors.
+
+## 7. Form Captain (voucher requests)
+
+Built in: `src/Integrations/FormCaptain/`, loaded only after `form_captain_loaded_v1` with contract major 1 (Form Captain 1.0 or newer). Without Form Captain nothing is registered. Form Captain contract: `wp-formmaster/docs/spec/api-v1.md`, `docs/CONNECTORS.md`.
+
+| Contract | How |
+|---|---|
+| Connector | Key `voucher_captain` via `form_captain_connectors_v1`, action `voucher_captain.voucher_request` ("Voucher request to Voucher Captain") via `form_captain_register_action_v1()`. Form Captain keeps the connector disabled until the site opts in (*Form Captain → Integrations*). No entitlement: Voucher Captain is free. |
+| Field mapping (allowlist) | `company` (text, optional), `contact_name` (text), `email` (email), `quantity` (number/select/radio/text/hidden), `value` (same types, per voucher, base currency, "50", "50,50", "1.250,00"), `personalization` (textarea/text, optional, ≤ 1000 characters), `consent` (consent/checkbox). No sensitive fields; unmapped fields never arrive. Action setting `product_id`: optional voucher product suggested for the approval. |
+| What a submission does | Stores one **request** in the own table `{prefix}vcap_fc_requests` (status `pending`, "To be reviewed") – never a voucher, coupon, order, email or payment. The worker of Form Captain runs the callback; the job's mapped `values` are the only data read (no Form Captain tables, no `form_captain_get_entry_v1()` call needed). |
+| Idempotency | Request key `form-captain:{site}:{form}:{entry}` (UNIQUE). Repeated deliveries, a second action instance on the same form and retries after a timeout return `success` with the same `remote_id` (`vcap-request-{id}`) and store nothing new. |
+| Results | `success` (`created`, `already_created`); `retry` `voucher_captain_unavailable` (WooCommerce/Voucher Captain not running or table missing, filter `vcap_form_captain_available`) and `storage_failed`; `fail` with `invalid_job`, `missing_contact`, `invalid_email`, `invalid_quantity` (1–100, filter `vcap_form_captain_max_quantity`), `invalid_value` (> 0, ≤ 10000, filter `vcap_form_captain_max_value`), `text_too_long`, `consent_missing`. Test runs (`test_mode`) validate only and store nothing. Without WooCommerce the connector reports `requirements.ok = false`, so Form Captain retries instead of losing the job. |
+| Review | *Vouchers → Voucher requests* (capability `vcap_manage_vouchers`, nonce per request): list by status, edit an open request (validated like a submission), **approve** or **reject** (internal reason). |
+| Approval | Exactly once per request (atomic status change `pending → approving → approved`). Creates a WooCommerce order (`created_via = vcap_form_captain`, meta `_vcap_fc_request`) for the contact with the chosen voucher product (simple product or variation, one voucher per item), quantity × requested value, the personalisation as personal message, and calls `vcap()->issuer->issue_for_order( $order, true )` – the existing issuing service (codes, coupons, ledger, delivery). The order is set *on hold* (payment by invoice, outside the plugin). If nothing could be issued the order is cancelled and the request stays open. Voucher tables are never written by the adapter. |
+| Rejection | Status `rejected`; nothing is issued, no order. |
+| Erasure (`form_captain_entry_deleted_v1`) | Open, rejected and withdrawn requests of the entry are deleted. Approved requests keep their numbers and order link but lose company, contact, e-mail and personalisation (the order belongs to WooCommerce and its privacy tools); issued vouchers stay untouched. |
+| Consent withdrawn (`form_captain_consent_withdrawn_v1`) | An open request becomes `withdrawn` and loses its personal data (it can never be approved); rejected requests are anonymised; approved requests stay (vouchers were issued under a contract – Form Captain sends `entry_deleted_v1` if the entry is erased). |
+| Hooks | `vcap_form_captain_request_created` (id), `vcap_form_captain_request_approved` (id, order, vouchers), `vcap_form_captain_request_rejected` (id). |
+| Uninstall | The table is dropped with the other tables when *Delete data on uninstall* is on. |
+
+Test: `tests/form-captain-integration.php` (needs Form Captain; uses the contract test kit `tests/integration/Contract/ConnectorContractAssertions.php` of Form Captain; CI job `form-captain` against Form Captain `main` and the contract 1.1.0 branch).
+
+### 7.1 Hand-over to the voucher request service (one store, one screen)
+
+When Voucher Captain provides the request service `vcap_voucher_request_service_v1` (contract 1.x; `VCAP\Integrations\VoucherRequests`, being built on branch `claude/wp-plugin-analyse-todo-hvollo-refactors`), the adapter hands every checked request to `submit()` instead of storing it in its own table:
+
+- reference `formcaptain:{site hash}:{form}:{entry}` (idempotent in the service), kind `company_order` or `personalisation` (no company, with a text), product, amount, quantity, contact and message; nothing about payment or issuing;
+- answers: created / replayed → `success` with remote id `vcap-request-{id}`; HTTP 429/503 → `retry`; other errors → final `fail` with the code of the service; rejected earlier → `success` `already_rejected` (no new request);
+- the adapter's own screen "Voucher requests" is hidden while its fallback table is empty, so there is one menu entry.
+
+Without the service (Voucher Captain versions before it) the adapter keeps using its own table `vcap_fc_requests` and screen as described above.
+
+Erasure with the service: data protection requests are handled by the service's own exporter/eraser (by e-mail address, run by WordPress together with Form Captain's), its retention removes open requests after 6 months. Single entries (VC-FC-06): on `form_captain_entry_deleted_v1` and `form_captain_consent_withdrawn_v1` the adapter calls `forget_reference( $reference )` of the service with the reference of the hand-over (and still cleans its fallback table). A service without that method is left alone; this is logged once and shown to managers as an admin notice ("request service without forget_reference – deletion per entry not possible, data protection through the service's eraser").
+
+**Contract `forget_reference( string $reference ): bool|\WP_Error`** (service contract 1.x, additive):
+
+| Rule | |
+|---|---|
+| Caller | Runs **without a capability check** – it is called from WP-Cron, retention or WP-CLI of the form plugin. Never exposed to visitors (no REST route, no AJAX). |
+| Open request | Deleted with its data. |
+| Partly issued, issued, handed over | Anonymised: contact name, e-mail, phone, recipients, message and note are removed; company, amounts, counts and the issued vouchers stay (voucher ledger). |
+| Claim | The claim of the reference is set to "rejected" (with UTC time) **before** the request goes, so a repeated `submit()` with the same reference stores nothing new and answers `state = rejected`. The retention removes old rejected claims. |
+| Event | Fires `vcap_voucher_request_forgotten( int $request_id, string $result )` with `deleted`, `anonymized` or `none` (request id 0); no personal data. |
+| Answer | `true` when a request was deleted or anonymised, `false` when none was stored for the reference, `WP_Error` (`vcap_invalid_args`, 400) for an empty reference. Repeating the call is harmless. |
+
+Implemented in `VCAP\Integrations\VoucherRequests` on branch `claude/wp-plugin-analyse-todo-hvollo-refactors` (commit `b18621b`); anonymising also removes the stored issue errors (`_vcap_request_errors`). A repeated `submit()` of a forgotten reference answers `state = rejected` with `request_id = 0`; the adapter reports that as `success` / `already_rejected`.
+
+Test: `tests/form-captain-request-service.php` (22 checks, fake services with the interface of the real one, with and without `forget_reference()`).
+

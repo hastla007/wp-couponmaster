@@ -21,7 +21,11 @@ final class Plugin {
 	public Tickets $tickets;
 	public API\V1\VoucherService $api_v1;
 	public API\V1\RedemptionService $redemptions;
-	/** Exchange of ticket vouchers for WP Pass Captain tickets (works only while Pass Captain is active). */
+	/** Read-only state of vouchers, gift cards, store credit and redemptions by record id (since 1.3.0, contract 1.2.0). */
+	public API\V1\ReadService $read;
+	/** The four voucher commands for automatic callers: issue, void, reactivate, redeem (since 1.3.0, contract 1.3.0). */
+	public API\V1\CommandService $commands;
+	/** Exchange of ticket vouchers for Pass Captain tickets (works only while Pass Captain is active). */
 	public Compat\PassCaptainTickets $passcaptain_tickets;
 	/** Captain Suite (since 1.2.0): review source contract v1 and voucher requests from forms (contract v1). */
 	public Integrations\ReviewSource $review_source;
@@ -29,8 +33,6 @@ final class Plugin {
 	public StoreCredit $store_credit;
 	/** Multi-purpose vouchers as a payment after tax (setting "vcap_mpv_after_tax"). */
 	public PaymentVouchers $payments;
-	/** Workflow provider contract v1 (events, services, hand-over of optional emails; WORKFLOW.md). */
-	public Workflow\Provider $workflow;
 
 	/** Oldest WooCommerce version Voucher Captain runs with (header "WC requires at least"). */
 	public const MIN_WC_VERSION = '11.2.2';
@@ -79,12 +81,13 @@ final class Plugin {
 		$this->tickets   = new Tickets( $this->vouchers );
 		$this->api_v1    = new API\V1\VoucherService( $this->vouchers, $this->coupons );
 		$this->redemptions = new API\V1\RedemptionService( $this->vouchers );
+		$this->read        = new API\V1\ReadService( $this->vouchers, fn( Voucher $v ): bool => $this->issuer->voided_after_refund( $v ) );
+		$this->commands    = new API\V1\CommandService( new API\V1\CoreCommandBackend( $this->vouchers, $this->issuer, $this->redemptions ), new API\V1\OptionCommandStore() );
 		$this->passcaptain_tickets = new Compat\PassCaptainTickets( $this->redemptions, $this->vouchers );
 		$this->review_source       = new Integrations\ReviewSource();
 		$this->voucher_requests    = new Integrations\VoucherRequests();
 		$this->store_credit = new StoreCredit( $this->settings, $this->vouchers, $this->coupons );
 		$this->payments     = new PaymentVouchers( $this->vouchers );
-		$this->workflow     = new Workflow\Provider( $this->vouchers, $this->redemptions );
 
 		( new TemplatePostType() )->register();
 		( new ProductSettings() )->register();
@@ -137,6 +140,7 @@ final class Plugin {
 		( new NextSteps() )->register();
 		$this->tickets->register();
 		$this->redemptions->register();
+		$this->commands->register();
 		$this->store_credit->register();
 		( new OrderReturn( $this->vouchers, $this->coupons ) )->register();
 		$this->payments->register();
@@ -144,7 +148,6 @@ final class Plugin {
 		( new CartBlocks( $this->vouchers, $this->payments, $this->store_credit ) )->register();
 		( new GiftCardField( $this->vouchers, $this->payments, $this->store_credit ) )->register();
 		( new API\V1\RestController( $this->redemptions ) )->register();
-		$this->workflow->register(); // WF-01: provider contract for workflow plugins (optional, nothing waits for one).
 
 		// M12 package G: live preview and design gallery on the product page, physical cards, card → store credit.
 		( new LivePreview() )->register();

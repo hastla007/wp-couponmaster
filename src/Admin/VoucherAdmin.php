@@ -127,7 +127,7 @@ final class VoucherAdmin {
 		$table->views();
 		// Single GET form (like core list tables): search, filters, pagination and bulk actions.
 		// Bulk "Void" revokes Pass Captain tickets and cannot be undone by reactivating: ask first (assets/js/admin.js).
-		echo '<form method="get" class="vcap-list-form" data-bulk-void-confirm="' . esc_attr__( 'Void the selected vouchers? They can no longer be redeemed; tickets they were exchanged for in WP Pass Captain are revoked and not reissued when a voucher is reactivated.', 'voucher-captain' ) . '"><input type="hidden" name="page" value="vcap-vouchers" />';
+		echo '<form method="get" class="vcap-list-form" data-bulk-void-confirm="' . esc_attr__( 'Void the selected vouchers? They can no longer be redeemed; tickets they were exchanged for in Pass Captain are revoked and not reissued when a voucher is reactivated.', 'voucher-captain' ) . '"><input type="hidden" name="page" value="vcap-vouchers" />';
 		if ( ! empty( $_GET['status'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
 			echo '<input type="hidden" name="status" value="' . esc_attr( sanitize_key( $_GET['status'] ) ) . '" />'; // phpcs:ignore WordPress.Security.NonceVerification
 		}
@@ -152,7 +152,7 @@ final class VoucherAdmin {
 		$back    = admin_url( 'admin.php?page=vcap-vouchers' );
 		$form    = static function ( string $do, string $label, string $class = 'button', array $extra = array(), string $confirm = '' ) use ( $v ): void {
 			if ( '' === $confirm && 'void' === $do ) {
-				$confirm = __( 'Void this voucher? It can no longer be redeemed; tickets it was exchanged for in WP Pass Captain are revoked.', 'voucher-captain' );
+				$confirm = __( 'Void this voucher? It can no longer be redeemed; tickets it was exchanged for in Pass Captain are revoked.', 'voucher-captain' );
 			}
 			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="vcap-inline-form"' . ( '' !== $confirm ? ' data-confirm="' . esc_attr( $confirm ) . '"' : '' ) . '>';
 			echo '<input type="hidden" name="action" value="vcap_voucher_action" /><input type="hidden" name="do" value="' . esc_attr( $do ) . '" /><input type="hidden" name="id" value="' . esc_attr( (string) $v->id ) . '" />';

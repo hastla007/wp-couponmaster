@@ -65,7 +65,7 @@ Abgehakte Punkte sind implementiert und durch die aufgeführten CI-Jobs (`.githu
 
 Punkte 1–22, 24–44, 46 und 49–50 sind umgesetzt und in CI abgedeckt (darunter Yoast-Browser-E2E, 28, und der WP-Pass-Captain-Vertrag mit gemeinsamem Plugin-Test, 44). Der `Release`-Workflow baut ein Tag nur, wenn `Plugin smoke tests` für genau diesen Commit grün ist (RELEASE.md).
 
-Offen bleiben reale Gateway-Sandboxen (23), der Learnboating-Connector im Kursplugin (45), die steuerliche Freigabe je Gutscheinart (47) und der echte Screenreader-Test (48).
+Offen bleiben reale Gateway-Sandboxen (23), die steuerliche Freigabe je Gutscheinart (47) und der echte Screenreader-Test (48). Der Learnboating-Connector (45) ist ein eigenes Projektprodukt im learnboating-Repository (Entscheidung 17).
 
 Außerhalb der 50 Punkte, Stand Release und Lizenz:
 
@@ -79,10 +79,10 @@ Außerhalb der 50 Punkte, Stand Release und Lizenz:
 41. [x] Öffentlichen, versionierten PHP-Service für Gutscheinprüfung und -einlösung definieren.
 42. [x] Einlöse-Provider-Schnittstelle ohne Abhängigkeit auf interne Tabellen spezifizieren.
 43. [x] Idempotency-Key und stabile Fehlercodes für externe Connectoren festlegen.
-44. [x] Voucher Captain und WP Pass Captain (früher „Ticket Captain“) über dokumentierten, optionalen Vertrag integrieren. (Pass-Captain-Checkout, Gutschein → Ticket, gemeinsamer Scanner; Job `pass-captain`)
-45. [ ] Learnboating-Connector als separates Add-on mit wiederholbarer Grant-Verarbeitung planen. (Vertrag und Grant-Service in Learnboating sind fertig, das Add-on fehlt; TODO.md → Connector für Learnboating.)
+44. [x] Voucher Captain und Pass Captain (früher „Ticket Captain“) über dokumentierten, optionalen Vertrag integrieren. (Pass-Captain-Checkout, Gutschein → Ticket, gemeinsamer Scanner; Job `pass-captain`)
+45. [x] Learnboating-Connector mit wiederholbarer Grant-Verarbeitung. (Gebaut als `learnboating-voucher-connector` im learnboating-Repository: eigenes, nicht verkauftes Projektprodukt mit eigener Lizenz nach Entscheidung 17 vom 16.11.2026, kein Add-on dieses Repositorys und kein Teil von Voucher Captain Pro; nutzt nur die öffentlichen Verträge, CONNECTORS.md §8. TODO.md → Connector für Learnboating.)
 46. [x] Ablauf-, Übertragbarkeits-, Restwert- und Einlösebedingungen im Kundenkonto erklären. (Kundenkonto-Tab, E-Mail, Produktseite; Bedingungen pro Land)
 47. [ ] Steuerbehandlung und Erstattungsreihenfolge je Gutscheinart mit Fachberatung spezifizieren. (Technisch umgesetzt und in TAX.md beschrieben: Steuerbehandlung je Produkt, Einstellung „Mehrzweckgutscheine als Zahlung“; offen: Freigabe durch die Steuerberatung.)
 48. [ ] Übersetzungen, Tastaturbedienung und Screenreader-Flows für Kauf und Einlösung prüfen. (Tastatur und axe automatisiert in `browser-e2e`; Übersetzung de_DE/de_AT vollständig geprüft in `smoke`, de_DE_formal/de_CH fallen auf de_DE zurück; offen: echter Screenreader)
 49. [x] Release-ZIP in sauberer WordPress-Installation installieren, aktualisieren und deinstallieren.
-50. [x] Abnahme von VCAP allein, WP Pass Captain allein und beiden Plugins gemeinsam als Release-Gate einführen.
+50. [x] Abnahme von VCAP allein, Pass Captain allein und beiden Plugins gemeinsam als Release-Gate einführen.

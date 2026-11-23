@@ -62,7 +62,6 @@ final class Privacy {
 				'item_id'     => 'vcap-voucher-' . $voucher->id,
 				'data'        => $data,
 			);
-			$items = array_merge( $items, $this->workflow_contact_items( $voucher ) );
 		}
 		// All three sources are paged alike; the export is done only when every one of them is exhausted.
 		$uses        = $this->repo->events_noting( $email, self::EXPORT_PAGE, $offset );
@@ -99,32 +98,6 @@ final class Privacy {
 		}
 		$done = count( $vouchers ) < self::EXPORT_PAGE && count( $uses ) < self::EXPORT_PAGE && count( $redemptions ) < self::EXPORT_PAGE;
 		return array( 'data' => $items, 'done' => $done );
-	}
-
-	/**
-	 * D9: when a workflow plugin read the contact data of the voucher (history entries "workflow_contact_read", at
-	 * most the newest 100): date, plugin, communication and role.
-	 *
-	 * @return array<int, array<string, mixed>>
-	 */
-	public function workflow_contact_items( Voucher $voucher ): array {
-		$items = array();
-		foreach ( $this->repo->events_of( (int) $voucher->id, Workflow\Services::CONTACT_EVENT ) as $row ) {
-			$note    = Note::decode( (string) $row['note'] );
-			$args    = array_values( (array) ( $note['args'] ?? array() ) );
-			$items[] = array(
-				'group_id'    => 'vcap-workflow-contact',
-				'group_label' => __( 'Contact data read by the workflow plugin', 'voucher-captain' ),
-				'item_id'     => 'vcap-event-' . (int) $row['id'],
-				'data'        => array(
-					array( 'name' => __( 'Date', 'voucher-captain' ), 'value' => (string) $row['created_at'] ),
-					array( 'name' => __( 'Plugin', 'voucher-captain' ), 'value' => (string) ( $args[0] ?? '' ) ),
-					array( 'name' => __( 'Communication', 'voucher-captain' ), 'value' => Workflow\Handover::labels()[ (string) ( $args[1] ?? '' ) ] ?? (string) ( $args[1] ?? '' ) ),
-					array( 'name' => __( 'Role', 'voucher-captain' ), 'value' => Note::role_label( (string) ( $args[2] ?? '' ) ) ),
-				),
-			);
-		}
-		return $items;
 	}
 
 	/**
@@ -512,7 +485,7 @@ final class Privacy {
 			__( 'Vouchers, gift cards and store credit keep a history of every change of their balance (issue, payment in an order, refund, top-up, manual correction) with the date, the amount, the order number and, when a voucher is used by another customer, that customer\'s email address. Store credit is linked to your customer account. We keep this history as long as the voucher or credit can be used and as long as we are required to keep accounting records.', 'voucher-captain' ),
 			__( 'Refer a friend: if you take part, we store your personal referral code, how many friends have ordered with it and which rewards you received. A friend\'s order that used your code is linked to your customer account so that we can give you the reward and take it back if the order is cancelled or refunded.', 'voucher-captain' ),
 			__( 'When a voucher is redeemed outside the shop checkout, for example by a booking or ticket system on this website that is connected to our vouchers, we record the redemption with the connected service, the amount, the date, your customer account and the details that service passes on (for example its order or booking number).', 'voucher-captain' ),
-			__( 'Tickets: when you exchange a ticket voucher for tickets or pay for tickets with a gift card, the voucher code, the amount, your name and email address and the attendee names you enter are passed to the ticket system on this website (WP Pass Captain), which issues and sends the tickets. Its privacy information applies to the tickets.', 'voucher-captain' ),
+			__( 'Tickets: when you exchange a ticket voucher for tickets or pay for tickets with a gift card, the voucher code, the amount, your name and email address and the attendee names you enter are passed to the ticket system on this website (Pass Captain), which issues and sends the tickets. Its privacy information applies to the tickets.', 'voucher-captain' ),
 			__( 'Voucher requests: when you ask for vouchers through a form on this website (for example a company order or a personalised voucher), we store the contact details you enter (company, name, email address, phone number), your message and note, and the names, email addresses and messages of the recipients you list, so that we can check the request and issue the vouchers. No voucher is issued and no payment is taken by the form itself. When the vouchers are issued, the recipient list is removed from the request and kept only with the vouchers; when the request is taken over as a company order, the recipient list moves to that order. A rejected request is deleted at once. Requests that were never completed are deleted after 6 months, issued requests and requests taken over as a company order after 24 months.', 'voucher-captain' ),
 			__( 'Review invitations: when a voucher for a service (for example a course or an experience) is redeemed and a review plugin on this website is connected, we note that this redemption may lead to a review invitation – without your name or email address. Only when the review plugin sends the invitation does it ask us for the email address and name of the recipient (or the buyer) and the language. Only the first redemption of a voucher counts. These notes are deleted 90 days after a cancellation or refund, and at the latest after 24 months.', 'voucher-captain' ),
 			__( 'At the entrance or the counter, our staff may scan the code of your voucher or ticket. We record the time, the staff member and the result (redeemed, checked in or refused) in the voucher history.', 'voucher-captain' ),

@@ -164,7 +164,7 @@ final class CampaignAdmin {
 						<td><?php echo esc_html( (string) $c['total'] ); ?></td>
 						<?php
 						/**
-						 * Extra cells of the campaign table (e.g. the partner of WP Affiliate Captain).
+						 * Extra cells of the campaign table (e.g. the partner of Affiliate Captain).
 						 *
 						 * @since 1.2.0
 						 * @param string $campaign Campaign name.

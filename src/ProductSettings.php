@@ -285,7 +285,7 @@ final class ProductSettings {
 					'discount' => __( 'Promotion (price reduction)', 'voucher-captain' ),
 				),
 				'desc_tip'    => true,
-				'description' => __( 'How the voucher is treated for VAT when it is redeemed: by the shop with the setting "Multi-purpose vouchers as payment" (multi-purpose vouchers with "Fixed cart discount" then pay after tax and the full VAT stays; single-purpose vouchers and promotions keep lowering price and VAT) and by connected checkouts (e.g. WP Pass Captain). Have the classification checked by your tax adviser.', 'voucher-captain' ),
+				'description' => __( 'How the voucher is treated for VAT when it is redeemed: by the shop with the setting "Multi-purpose vouchers as payment" (multi-purpose vouchers with "Fixed cart discount" then pay after tax and the full VAT stays; single-purpose vouchers and promotions keep lowering price and VAT) and by connected checkouts (e.g. Pass Captain). Have the classification checked by your tax adviser.', 'voucher-captain' ),
 			)
 		);
 		$short_validity = $p->get_id() ? ProductConfig::short_validity_message( $p ) : '';
@@ -401,7 +401,7 @@ final class ProductSettings {
 				'id'          => '_vcap_review_service',
 				'label'       => __( 'Redemption confirms a service (for review invitations)', 'voucher-captain' ),
 				'value'       => $this->v( $p, 'review_service' ),
-				'description' => __( 'For experience or service vouchers: a redemption at the counter then confirms that the service was provided, and a review plugin (e.g. WP Review Captain) may invite the customer afterwards. Voucher Captain sends no invitation itself. Purchases, issuing, top-ups, discount codes and store credit never count.', 'voucher-captain' ),
+				'description' => __( 'For experience or service vouchers: a redemption at the counter then confirms that the service was provided, and a review plugin (e.g. Review Captain) may invite the customer afterwards. Voucher Captain sends no invitation itself. Purchases, issuing, top-ups, discount codes and store credit never count.', 'voucher-captain' ),
 			)
 		);
 		/** Extra product fields of connectors (saved in vcap_product_settings_save). */

@@ -29,7 +29,7 @@ final class TicketAdmin {
 			}
 		}
 		if ( $links ) {
-			echo '<div class="notice notice-error"><p>' . esc_html__( 'WP Pass Captain tickets could not be cancelled or a voucher could not be given back. The customer may hold valid tickets while the voucher is free again (or the other way round). Check these vouchers and their history:', 'voucher-captain' ) . ' ' . implode( ', ', $links ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above.
+			echo '<div class="notice notice-error"><p>' . esc_html__( 'Pass Captain tickets could not be cancelled or a voucher could not be given back. The customer may hold valid tickets while the voucher is free again (or the other way round). Check these vouchers and their history:', 'voucher-captain' ) . ' ' . implode( ', ', $links ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above.
 		}
 	}
 
@@ -66,7 +66,7 @@ final class TicketAdmin {
 				$form( 'passcaptain_resend', __( 'Send tickets again', 'voucher-captain' ), 'button', array(), __( 'Send the tickets again? New ticket codes are issued; the tickets sent so far become invalid.', 'voucher-captain' ) );
 			}
 			if ( Voucher::STATUS_VOID !== $voucher->status ) {
-				$form( 'passcaptain_undo', __( 'Undo exchange (e.g. to change the date)', 'voucher-captain' ), 'button', array(), __( 'Undo the exchange? Its tickets are cancelled in WP Pass Captain and the voucher becomes valid again, so it can be exchanged for another date.', 'voucher-captain' ) );
+				$form( 'passcaptain_undo', __( 'Undo exchange (e.g. to change the date)', 'voucher-captain' ), 'button', array(), __( 'Undo the exchange? Its tickets are cancelled in Pass Captain and the voucher becomes valid again, so it can be exchanged for another date.', 'voucher-captain' ) );
 			}
 			return;
 		}
@@ -165,7 +165,7 @@ final class TicketAdmin {
 
 	public function admin_messages( array $messages ): array {
 		return $messages + array(
-			'passcaptain_tickets_issued' => __( 'Tickets issued in WP Pass Captain and sent by email.', 'voucher-captain' ),
+			'passcaptain_tickets_issued' => __( 'Tickets issued in Pass Captain and sent by email.', 'voucher-captain' ),
 			'passcaptain_tickets_failed' => __( 'The tickets could not be issued. The reason is in the voucher history.', 'voucher-captain' ),
 			'passcaptain_resent'         => __( 'The tickets were sent again with new codes.', 'voucher-captain' ),
 			'passcaptain_resend_failed'  => __( 'The tickets could not be sent again. The reason is in the voucher history.', 'voucher-captain' ),

@@ -180,7 +180,8 @@ final class RestController {
 	}
 
 	/**
-	 * Keys used by built-in integrations (Pass Captain checkout "wpcap-…", ticket vouchers "passcaptain:…").
+	 * Keys used by built-in integrations (Pass Captain checkout "wpcap-…", ticket vouchers "passcaptain:…", voucher
+	 * commands "vcapcmd:…" and "workflow:…", VC-1).
 	 * Connectors add their own prefixes with the filter vcap_internal_redemption_key_prefixes.
 	 * "learnboating:grant:" stays in the default list for the project connector 1.0.0, which does not
 	 * register it; from 1.1.0 on the connector registers its prefixes itself (CONNECTORS.md §8).
@@ -195,14 +196,14 @@ final class RestController {
 		 * @since 1.2.0
 		 * @param string[] $prefixes Prefixes.
 		 */
-		$prefixes = (array) apply_filters( 'vcap_internal_redemption_key_prefixes', array( 'wpcap-', 'passcaptain:', 'learnboating:grant:' ) );
+		$prefixes = (array) apply_filters( 'vcap_internal_redemption_key_prefixes', array( 'wpcap-', 'passcaptain:', 'learnboating:grant:', 'vcapcmd:', 'workflow:' ) );
 		return self::has_prefix( $key, $prefixes );
 	}
 
 	/**
-	 * Targets of built-in integrations (Pass Captain checkout and ticket vouchers "passcaptain:…"): created and
-	 * completed by those integrations only, never over REST – otherwise a voucher could be booked for a ticket or
-	 * a ticket order without anything being delivered.
+	 * Targets of built-in integrations (Pass Captain checkout and ticket vouchers "passcaptain:…", voucher commands
+	 * "workflow:…", VC-1): created and completed by those integrations only, never over REST – otherwise a voucher
+	 * could be booked for a ticket or a ticket order without anything being delivered.
 	 *
 	 * @param string $target Redemption target.
 	 * @return bool
@@ -214,7 +215,7 @@ final class RestController {
 		 * @since 1.2.0
 		 * @param string[] $prefixes Prefixes.
 		 */
-		$prefixes = (array) apply_filters( 'vcap_internal_redemption_target_prefixes', array( 'passcaptain:' ) );
+		$prefixes = (array) apply_filters( 'vcap_internal_redemption_target_prefixes', array( 'passcaptain:', 'workflow:' ) );
 		return self::has_prefix( $target, $prefixes );
 	}
 
