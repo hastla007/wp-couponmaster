@@ -3784,6 +3784,7 @@ if ( ! function_exists( 'wc_get_order_statuses' ) ) {
 	function wc_get_order_statuses() { return array( 'wc-processing' => 'Processing', 'wc-completed' => 'Completed' ); }
 }
 $sr_settings = new VCAP\Settings();
+add_filter( 'vcap_settings_partner_active', static fn() => true ); // SET-VC-33: partner rules are shown while the partner is active.
 $sr_bad      = array();
 $sr_seen     = array();
 foreach ( array_keys( $sr_settings->section_list() ) as $sr_sec ) {
@@ -3810,6 +3811,7 @@ foreach ( array_keys( $sr_settings->section_list() ) as $sr_sec ) {
 		}
 	}
 }
+unset( $GLOBALS['vcap_test_filters']['vcap_settings_partner_active'] );
 $sr_missing = array_diff( array_keys( $sr_fielded ), $sr_seen );
 check( 'SET-VC-01: each option field is registered for its section with the register default and min/max; each registered setting with a section has a field there', array() === $sr_bad && array() === $sr_missing, implode( ', ', array_merge( $sr_bad, $sr_missing ) ) );
 check( 'SET-VC-01: field() puts min and max before step, keeps a default the field computes at runtime and leaves unregistered fields alone', array( 'min' => 0, 'max' => 23, 'step' => 1 ) === VCAP\SettingsRegistry::field( 'vcap_delivery_hour', array( 'type' => 'number', 'custom_attributes' => array( 'step' => 1 ) ) )['custom_attributes'] && 'days' === VCAP\SettingsRegistry::field( 'vcap_default_expiry_rule', array( 'type' => 'select', 'default' => 'days' ) )['default'] && array( 'id' => 'vcap_addon_x', 'type' => 'number' ) === VCAP\SettingsRegistry::field( 'vcap_addon_x', array( 'type' => 'number' ) ) );
@@ -4284,6 +4286,7 @@ unset( $GLOBALS['vcap_test_roles'] );
 echo "SET-VC-23 help texts and checks\n";
 $h23_settings = new VCAP\Settings();
 $h23_fields   = array();
+add_filter( 'vcap_settings_partner_active', static fn() => true ); // SET-VC-33: partner rules shown.
 foreach ( array_keys( $h23_settings->section_list() ) as $h23_sec ) {
 	$h23_list = $h23_settings->fields( (string) $h23_sec );
 	if ( 'api' === $h23_sec ) {
@@ -4296,6 +4299,7 @@ foreach ( array_keys( $h23_settings->section_list() ) as $h23_sec ) {
 		}
 	}
 }
+unset( $GLOBALS['vcap_test_filters']['vcap_settings_partner_active'] );
 $h23_text    = static fn( $f ): string => trim( wp_strip_all_tags( ( is_string( $f['desc'] ?? null ) ? $f['desc'] : '' ) . ' ' . ( is_string( $f['desc_tip'] ?? null ) ? $f['desc_tip'] : '' ) ) );
 $h23_without = array_keys( array_filter( $h23_fields, static fn( $f ) => strlen( $h23_text( $f ) ) < 12 ) );
 check( 'SET-VC-23: every register field has a help text (desc or desc_tip with at least a short sentence)', array() === $h23_without && count( $h23_fields ) === count( array_filter( VCAP\SettingsRegistry::all(), static fn( $e ) => VCAP\SettingsRegistry::HIDDEN !== $e['section'] ) ), implode( ', ', $h23_without ) . ' / ' . count( $h23_fields ) );
@@ -4760,6 +4764,86 @@ check(
 	$c22_html
 );
 $GLOBALS['vcap_test_options'] = $c22_saved;
+
+// SET-VC-33: rules of physical cards and partner plugins as settings (1.12 no. 12, 35, 38–40); default = 1.2.0,
+// the filter of the same name gets the setting and wins; partner rules are shown only while the partner is active.
+echo "SET-VC-33 integration rules\n";
+$s33_saved = $GLOBALS['vcap_test_options'];
+$s33_ids   = static fn(): array => array_column( array_filter( ( new VCAP\Settings() )->fields( 'api' ), static fn( $f ) => isset( $f['id'] ) && ! in_array( $f['type'] ?? '', array( 'title', 'sectionend' ), true ) ), 'id' );
+$s33_rules = array( VCAP\Integrations\ReviewSource::FIRST_ONLY_OPTION, VCAP\Compat\AffiliateCaptain::COMMISSION_OPTION, VCAP\Compat\PassCaptain\Revocation::RESTORE_OPTION, VCAP\Compat\Subscriptions::SWITCH_OPTION );
+add_filter( 'vcap_settings_partner_active', static fn() => false );
+$s33_off = $s33_ids();
+unset( $GLOBALS['vcap_test_filters']['vcap_settings_partner_active'] );
+add_filter( 'vcap_settings_partner_active', static fn( $active, $partner ) => 'affiliate' === $partner || 'subscriptions' === $partner, 10, 2 );
+$s33_some = $s33_ids();
+unset( $GLOBALS['vcap_test_filters']['vcap_settings_partner_active'] );
+check(
+	'SET-VC-33: block "Integration rules" on Integrations (API) – physical cards always, each partner rule only while its partner plugin is active; defaults are those of 1.2.0',
+	in_array( VCAP\PhysicalCards::STATUSES_OPTION, $s33_off, true ) && array() === array_intersect( $s33_rules, $s33_off ) && array( VCAP\Compat\AffiliateCaptain::COMMISSION_OPTION, VCAP\Compat\Subscriptions::SWITCH_OPTION ) === array_values( array_intersect( $s33_rules, $s33_some ) )
+		&& array( 'completed' ) === VCAP\SettingsRegistry::default( VCAP\PhysicalCards::STATUSES_OPTION ) && array( 'yes', 'yes', 'yes', 'no' ) === array_map( array( VCAP\SettingsRegistry::class, 'default' ), $s33_rules ) && array() === array_filter( array_merge( $s33_rules, array( VCAP\PhysicalCards::STATUSES_OPTION ) ), static fn( $k ) => 'api' !== VCAP\SettingsRegistry::get( $k )['section'] ),
+	wp_json_encode( array( $s33_off, $s33_some ) )
+);
+// No. 12: activation statuses of physical cards.
+$s33_default = VCAP\PhysicalCards::activation_statuses();
+$GLOBALS['vcap_test_options'][ VCAP\PhysicalCards::STATUSES_OPTION ] = array( 'processing', 'wc-completed', 'on-hold', 'processing' );
+$s33_set  = VCAP\PhysicalCards::activation_statuses();
+$s33_seen = null;
+add_filter( 'vcap_physical_activation_statuses', static function ( $statuses ) use ( &$s33_seen ) { $s33_seen = $statuses; return array( 'shipped' ); } );
+$s33_filtered = VCAP\PhysicalCards::activation_statuses();
+unset( $GLOBALS['vcap_test_filters']['vcap_physical_activation_statuses'] );
+check(
+	'SET-VC-33: physical cards – activated at "completed" by default; the setting (paid statuses only, empty = completed) decides; filter vcap_physical_activation_statuses gets it and wins',
+	array( 'completed' ) === $s33_default && array( 'processing', 'completed' ) === $s33_set && array( 'processing', 'completed' ) === $s33_seen && array( 'shipped' ) === $s33_filtered
+		&& array( 'completed' ) === VCAP\PhysicalCards::sanitize_statuses( array( 'pending', 'refunded' ) ) && array( 'completed' ) === VCAP\PhysicalCards::sanitize_statuses( '' ) && ! isset( VCAP\PhysicalCards::status_choices()['pending'] ),
+	wp_json_encode( array( $s33_default, $s33_set, $s33_seen ) )
+);
+// No. 35: review request only for the first redemption.
+$s33_voucher = new VCAP\Voucher();
+$s33_r_def   = VCAP\Integrations\ReviewSource::first_redemption_only( $s33_voucher );
+$GLOBALS['vcap_test_options'][ VCAP\Integrations\ReviewSource::FIRST_ONLY_OPTION ] = 'no';
+$s33_r_off = VCAP\Integrations\ReviewSource::first_redemption_only( $s33_voucher );
+add_filter( 'vcap_review_first_redemption_only', static fn() => true );
+$s33_r_filtered = VCAP\Integrations\ReviewSource::first_redemption_only( $s33_voucher );
+unset( $GLOBALS['vcap_test_filters']['vcap_review_first_redemption_only'] );
+check( 'SET-VC-33: review source – only the first redemption by default; setting off = every redemption; filter vcap_review_first_redemption_only wins', true === $s33_r_def && false === $s33_r_off && true === $s33_r_filtered );
+// No. 38: commission on voucher sales (Affiliate Captain).
+$s33_aff  = new VCAP\Compat\AffiliateCaptain();
+$s33_args = array();
+add_filter( 'vcap_affiliate_commission_on_voucher_sales', static function ( $pay ) use ( &$s33_args ) { $s33_args[] = $pay; return $pay; } );
+$s33_a_item = array( 'product_id' => 0 );
+$s33_a_sale = array( 'source' => 'woocommerce' );
+unset( $GLOBALS['vcap_test_options'][ VCAP\Compat\AffiliateCaptain::COMMISSION_OPTION ] );
+$s33_aff->commission_base( 100, $s33_a_item, $s33_a_sale );
+$GLOBALS['vcap_test_options'][ VCAP\Compat\AffiliateCaptain::COMMISSION_OPTION ] = 'no';
+$s33_aff->commission_base( 100, $s33_a_item, $s33_a_sale );
+unset( $GLOBALS['vcap_test_filters']['vcap_affiliate_commission_on_voucher_sales'] );
+add_filter( 'vcap_affiliate_commission_on_voucher_sales', static fn() => true );
+$s33_a_filtered = $s33_aff->commission_base( 100, array( 'product_id' => 4711 ), $s33_a_sale );
+unset( $GLOBALS['vcap_test_filters']['vcap_affiliate_commission_on_voucher_sales'] );
+check( 'SET-VC-33: Affiliate Captain – commission on voucher sales by default; the setting "no" reaches filter vcap_affiliate_commission_on_voucher_sales, which wins', array( true, false ) === $s33_args && 100 === $s33_a_filtered, wp_json_encode( $s33_args ) );
+// No. 39: Pass Captain – give the voucher back when its tickets are revoked.
+$s33_p_def = VCAP\Compat\PassCaptain\Revocation::restore_setting();
+$GLOBALS['vcap_test_options'][ VCAP\Compat\PassCaptain\Revocation::RESTORE_OPTION ] = 'no';
+$s33_p_off = VCAP\Compat\PassCaptain\Revocation::restore_setting();
+check( 'SET-VC-33: Pass Captain – the voucher is given back after revoked tickets by default; setting off keeps it redeemed; filter vcap_passcaptain_restore_on_revoke gets the setting and wins', true === $s33_p_def && false === $s33_p_off && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Compat/PassCaptain/Revocation.php' ), "apply_filters( 'vcap_passcaptain_restore_on_revoke', self::restore_setting(), \$voucher, \$info )" ) );
+// No. 40: subscription switch and resubscribe orders.
+if ( ! function_exists( 'wcs_order_contains_switch' ) ) {
+	function wcs_order_contains_switch( $order ) { return true; }
+}
+if ( ! class_exists( 'WC_Order' ) ) {
+	class WC_Order {}
+}
+$s33_subs  = new VCAP\Compat\Subscriptions();
+$s33_order = new WC_Order();
+unset( $GLOBALS['vcap_test_options'][ VCAP\Compat\Subscriptions::SWITCH_OPTION ] );
+$s33_s_def = $s33_subs->should_issue( true, $s33_order );
+$GLOBALS['vcap_test_options'][ VCAP\Compat\Subscriptions::SWITCH_OPTION ] = 'yes';
+$s33_s_on = $s33_subs->should_issue( true, $s33_order );
+add_filter( 'vcap_subscription_issue_on_switch', static fn() => false );
+$s33_s_filtered = $s33_subs->should_issue( true, $s33_order );
+unset( $GLOBALS['vcap_test_filters']['vcap_subscription_issue_on_switch'] );
+check( 'SET-VC-33: WooCommerce Subscriptions – a switch order issues no voucher by default; the setting allows it; filter vcap_subscription_issue_on_switch wins', false === $s33_s_def && true === $s33_s_on && false === $s33_s_filtered );
+$GLOBALS['vcap_test_options'] = $s33_saved;
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

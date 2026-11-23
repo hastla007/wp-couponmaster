@@ -516,7 +516,103 @@ final class Settings {
 			),
 			array( 'type' => 'sectionend', 'id' => 'vcap_suite_workflowcaptain' ),
 		);
-		return array_merge( $fields, DatevExport::settings_fields() ); // M12-69.
+		return array_merge( $fields, self::integration_rule_fields(), DatevExport::settings_fields() ); // SET-VC-33, M12-69.
+	}
+
+	/**
+	 * SET-VC-33: whether a partner plugin is active, so its rules are shown – 'review' (a review plugin takes the
+	 * events), 'affiliate' (Affiliate Captain), 'passcaptain' (Pass Captain), 'subscriptions' (WooCommerce
+	 * Subscriptions). A hidden rule keeps its stored value and still applies.
+	 */
+	public static function partner_active( string $partner ): bool {
+		switch ( $partner ) {
+			case 'review':
+				$active = Integrations\ReviewSource::active();
+				break;
+			case 'affiliate':
+				$active = Compat\AffiliateCaptain::available();
+				break;
+			case 'passcaptain':
+				$active = Compat\PassCaptain::active();
+				break;
+			case 'subscriptions':
+				$active = Compat\Subscriptions::active();
+				break;
+			default:
+				$active = false;
+		}
+		/**
+		 * Whether the settings of a partner plugin are shown (Settings → Vouchers → Integrations (API) → "Integration
+		 * rules"). Args: bool, partner id ('review', 'affiliate', 'passcaptain', 'subscriptions').
+		 *
+		 * @since 1.3.0
+		 * @param bool   $active  Whether the partner plugin is active.
+		 * @param string $partner Partner id.
+		 */
+		return (bool) apply_filters( 'vcap_settings_partner_active', $active, $partner );
+	}
+
+	/**
+	 * SET-VC-33 (1.12 no. 12, 35, 38–40): rules of physical cards and of partner plugins as settings; each partner
+	 * rule only while its plugin is active. The filters of the same name get the setting and win.
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function integration_rule_fields(): array {
+		$fields = array(
+			array(
+				'type'  => 'title',
+				'title' => __( 'Integration rules', 'voucher-captain' ),
+				'id'    => 'vcap_integration_rules',
+				'desc'  => __( 'Rules for physical gift cards and for partner plugins. A rule of a partner plugin is shown only while that plugin is active; its saved value is kept.', 'voucher-captain' ),
+			),
+			SettingsRegistry::field(
+				PhysicalCards::STATUSES_OPTION,
+				array(
+					'title'   => __( 'Activate physical cards at', 'voucher-captain' ),
+					'type'    => 'multiselect',
+					'class'   => 'wc-enhanced-select',
+					'options' => PhysicalCards::status_choices(),
+					'desc'    => __( 'Physical gift cards stay inactive until their order reaches one of these statuses (default: Completed, i.e. shipped). Only paid statuses can be chosen; empty = Completed.', 'voucher-captain' ),
+				)
+			),
+		);
+		$partner = array(
+			'review'        => array(
+				Integrations\ReviewSource::FIRST_ONLY_OPTION,
+				__( 'Review request only once per voucher', 'voucher-captain' ),
+				__( 'Only the first confirmed redemption of a voucher is passed on to the review plugin (a gift card used on several visits asks for one review). Off: every confirmed redemption counts.', 'voucher-captain' ),
+			),
+			'affiliate'     => array(
+				Compat\AffiliateCaptain::COMMISSION_OPTION,
+				__( 'Commission on voucher sales', 'voucher-captain' ),
+				__( 'The partner who brought the buyer earns commission on the sale of a voucher or gift card (Affiliate Captain). Off: voucher products earn no commission.', 'voucher-captain' ),
+			),
+			'passcaptain'   => array(
+				Compat\PassCaptain\Revocation::RESTORE_OPTION,
+				__( 'Give the voucher back when tickets are revoked', 'voucher-captain' ),
+				__( 'When Pass Captain revokes or refunds all tickets bought with a voucher (order or event cancelled), the redemption is refunded, the voucher is valid again and the customer is told. Off: the voucher stays redeemed.', 'voucher-captain' ),
+			),
+			'subscriptions' => array(
+				Compat\Subscriptions::SWITCH_OPTION,
+				__( 'Vouchers for subscription switches', 'voucher-captain' ),
+				__( 'Switch and resubscribe orders of WooCommerce Subscriptions issue new vouchers. Off (default): the subscription already got its voucher.', 'voucher-captain' ),
+			),
+		);
+		foreach ( $partner as $id => $rule ) {
+			if ( self::partner_active( $id ) ) {
+				$fields[] = SettingsRegistry::field(
+					$rule[0],
+					array(
+						'title' => $rule[1],
+						'type'  => 'checkbox',
+						'desc'  => $rule[2],
+					)
+				);
+			}
+		}
+		$fields[] = array( 'type' => 'sectionend', 'id' => 'vcap_integration_rules' );
+		return $fields;
 	}
 
 	/** Section "Privacy & advanced" (the counter limits moved to "Counter & locations", SET-VC-22). */

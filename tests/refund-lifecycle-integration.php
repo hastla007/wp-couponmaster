@@ -374,6 +374,13 @@ if ( ! function_exists( 'wcs_order_contains_switch' ) && ! class_exists( 'WC_Sub
 	add_filter( 'vcap_subscription_issue_on_switch', '__return_true' );
 	vcap_rl_assert( true === $subs->should_issue( true, $switch ), 'M12-38: the filter allows it' );
 	remove_filter( 'vcap_subscription_issue_on_switch', '__return_true' );
+	update_option( VCAP\Compat\Subscriptions::SWITCH_OPTION, 'yes' );
+	$s33_on = $subs->should_issue( true, $switch );
+	add_filter( 'vcap_subscription_issue_on_switch', '__return_false' );
+	$s33_filtered = $subs->should_issue( true, $switch );
+	remove_filter( 'vcap_subscription_issue_on_switch', '__return_false' );
+	delete_option( VCAP\Compat\Subscriptions::SWITCH_OPTION );
+	vcap_rl_assert( true === $s33_on && false === $s33_filtered, 'SET-VC-33: the setting "Vouchers for subscription switches" allows it; the filter wins' );
 	$trial = wc_create_order();
 	$trial->add_product( $giftcard, 1, array( 'subtotal' => 0, 'total' => 0 ) );
 	$trial->calculate_totals( false );

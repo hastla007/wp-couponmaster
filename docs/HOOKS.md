@@ -186,7 +186,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_pdf_remote_hosts` | 1.2.0 | `src/PdfRenderer.php` | – |
 | `vcap_pdf_title` | 1.2.0 | `src/PdfRenderer.php` | Title of a voucher PDF (args: string $title, Voucher $voucher). |
 | `vcap_personal_voucher_email_verified` | 1.2.0 | `src/PersonalVoucher.php` | Whether the account email of a customer counts as verified for personal vouchers (V6). Default: the customer proved the mailbox (password reset through the emailed link, or the confirmation link) or the account is grandfathered (registered before the proof of mailbox was introduced, email unchanged since; AP-S1-1). |
-| `vcap_physical_activation_statuses` | 1.2.0 | `src/PhysicalCards.php` | Order statuses at which physical gift cards are activated (default: completed). |
+| `vcap_physical_activation_statuses` | 1.2.0 | `src/PhysicalCards.php` | Order statuses at which physical gift cards are activated (default: the setting, "completed"). |
 | `vcap_placeholder_definitions` | 1.0.0 | `src/Placeholders.php` | Placeholders offered in the PDF designer and the email texts (arg: array of token => label); fill them in vcap_placeholders. |
 | `vcap_placeholders` | 1.0.0 | `src/Placeholders.php` | Values of the placeholders for a voucher (args: array of token => text, Voucher); texts are escaped when printed. |
 | `vcap_printed_link_grace_days` | 1.3.0 | `src/Downloads.php` | Days the download link printed on a voucher (QR code) stays valid after the voucher expired. |
@@ -248,6 +248,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_setting_` | 1.0.0 | `src/Settings.php` | – |
 | `vcap_settings_fields` | 1.0.0 | `src/Settings.php` | Fields of a section of the "Vouchers" settings tab (args: WooCommerce settings fields, section id – '' is "General"). Add-ons add fields to a core section or fill their own section from "vcap_settings_sections". |
 | `vcap_settings_hints` | 1.3.0 | `src/Admin/ProHints.php` | Hint lines for add-on functions (args: list of {id, section, title, text, link}). Text only; a line is dropped when its id, title or text is empty or its link is not https. |
+| `vcap_settings_partner_active` | 1.3.0 | `src/Settings.php` | Whether the settings of a partner plugin are shown (Settings → Vouchers → Integrations (API) → "Integration rules"). Args: bool, partner id ('review', 'affiliate', 'passcaptain', 'subscriptions'). |
 | `vcap_settings_registry` | 1.3.0 | `src/SettingsRegistry.php` | The settings register (arg: option name => attributes type, default, min, max, empty, choices, section, legal, export, secret, fresh – see config/settings.php). Add-ons add their own options here (for export without secrets, the change log and WP-CLI) and may change attributes of core entries; core entries cannot be removed. A changed default changes what Settings::get() returns for shops that never saved the option. |
 | `vcap_settings_sections` | 1.2.0 | `src/Settings.php` | Extra sections of the "Vouchers" settings tab (arg: array of section id => label). Add-ons add their own section here and its fields with "vcap_settings_fields" (second argument: the section id); WooCommerce saves them. Core sections cannot be renamed or removed. |
 | `vcap_settings_validate_value` | 1.3.0 | `src/SettingsTransfer.php` | Checks a value before it is imported or set with WP-CLI (args: value in the stored format or WP_Error, option name, register entry). Add-ons check their own settings here; return a WP_Error to refuse. |
@@ -257,7 +258,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_smtp_plugin_active` | 1.2.0 | `src/Health.php` | Whether the site sends its mails through an SMTP or mail service plugin (Site Health sender check). |
 | `vcap_stale_reservation_minutes` | 1.1.0 | `src/Coupons/Reservations.php`, `src/Discounts/Usage.php`, `src/FirstOrderCoupons.php` | – |
 | `vcap_statutory_expiry` | 1.1.0 | `src/ProductConfig.php` | – |
-| `vcap_subscription_issue_on_switch` | 1.2.0 | `src/Compat/Subscriptions.php` | Whether a subscription switch or resubscribe order issues vouchers (default false; args: order, "switch"\|"resubscribe"). |
+| `vcap_subscription_issue_on_switch` | 1.2.0 | `src/Compat/Subscriptions.php` | Whether a subscription switch or resubscribe order issues vouchers (default: the setting, no; args: order, "switch"\|"resubscribe"). |
 | `vcap_suspend_on_payment_reversal` | 1.2.0 | `src/Issuer.php` | Whether vouchers of an order are suspended when its payment is reversed or held (default: "void on refund"). |
 | `vcap_template_design` | 1.0.0 | `src/TemplatePostType.php` | The design (JSON layout: page, elements) of a PDF template as it is printed (args: design, template id). |
 | `vcap_topup_amount` | 1.2.0 | `src/TopUp.php` | Value added to the card for a top-up line (default: its face value like a new gift card, in the base currency). |

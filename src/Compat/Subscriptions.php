@@ -15,7 +15,7 @@ final class Subscriptions {
 	private bool $done = false;
 
 	public function init(): void {
-		if ( $this->done || ! class_exists( 'WC_Subscriptions' ) && ! function_exists( 'wcs_order_contains_renewal' ) ) {
+		if ( $this->done || ! self::active() ) {
 			return;
 		}
 		$this->done = true;
@@ -25,6 +25,14 @@ final class Subscriptions {
 		add_filter( 'product_type_options', array( $this, 'type_option_classes' ), 20 );
 	}
 
+	/** SET-VC-33 (1.12 no. 40): setting "switch and resubscribe orders issue vouchers" (default no; the filter wins). */
+	public const SWITCH_OPTION = 'vcap_subscription_issue_on_switch';
+
+	/** Whether WooCommerce Subscriptions is active. */
+	public static function active(): bool {
+		return class_exists( 'WC_Subscriptions' ) || function_exists( 'wcs_order_contains_renewal' );
+	}
+
 	/** Order meta: the vouchers of a free trial's sign-up order wait for the first paid renewal (M12-38). */
 	public const TRIAL_META = '_vcap_trial_waiting';
 
@@ -32,8 +40,9 @@ final class Subscriptions {
 	 * Which subscription orders issue vouchers:
 	 *  - Renewals only with the setting "vcap_subscription_renewals" – except the first paid renewal after a free
 	 *    trial, which issues what the sign-up order did not (M12-38).
-	 *  - Switch and resubscribe orders do not issue (the subscription already got its voucher; filter
-	 *    "vcap_subscription_issue_on_switch" with the order and its kind "switch" or "resubscribe" allows it).
+	 *  - Switch and resubscribe orders do not issue (the subscription already got its voucher; the setting or the
+	 *    filter "vcap_subscription_issue_on_switch" with the order and its kind "switch" or "resubscribe" allows it;
+	 *    the filter gets the setting and wins).
 	 *  - A sign-up order with a total of 0 because of a free trial waits for the first paid renewal.
 	 */
 	public function should_issue( bool $issue, \WC_Order $order ): bool {
@@ -43,8 +52,8 @@ final class Subscriptions {
 		foreach ( array( 'switch', 'resubscribe' ) as $kind ) {
 			$check = 'wcs_order_contains_' . $kind;
 			if ( function_exists( $check ) && $check( $order ) ) {
-				/** Whether a subscription switch or resubscribe order issues vouchers (default false; args: order, "switch"|"resubscribe"). */
-				return $issue && (bool) apply_filters( 'vcap_subscription_issue_on_switch', false, $order, $kind );
+				/** Whether a subscription switch or resubscribe order issues vouchers (default: the setting, no; args: order, "switch"|"resubscribe"). */
+				return $issue && (bool) apply_filters( 'vcap_subscription_issue_on_switch', 'yes' === \VCAP\Settings::value( self::SWITCH_OPTION ), $order, $kind );
 			}
 		}
 		if ( $issue && (float) $order->get_total() <= 0 && $this->free_trial( $order ) ) {

@@ -179,6 +179,14 @@ $vcap_settings = array(
 	'vcap_datev_income_account'      => array( 'section' => 'api', 'legal' => true ),
 	// VOUCH-WF-15: contact read function, off by default.
 	'vcap_contact_read_enabled'      => array( 'type' => 'bool', 'default' => 'no', 'section' => 'api', 'legal' => true ),
+	// SET-VC-33 (1.12 no. 12, 35, 38–40): rules of physical cards and partner plugins; defaults = the fixed values of
+	// 1.2.0, the filters of the same name get the setting and win. Partner fields are shown only while the partner
+	// plugin is active (Settings::partner_active()).
+	'vcap_physical_activation_statuses'          => array( 'type' => 'list', 'default' => array( 'completed' ), 'section' => 'api' ),
+	'vcap_review_first_redemption_only'          => array( 'type' => 'bool', 'default' => 'yes', 'section' => 'api' ),
+	'vcap_affiliate_commission_on_voucher_sales' => array( 'type' => 'bool', 'default' => 'yes', 'section' => 'api' ),
+	'vcap_passcaptain_restore_on_revoke'         => array( 'type' => 'bool', 'default' => 'yes', 'section' => 'api' ),
+	'vcap_subscription_issue_on_switch'          => array( 'type' => 'bool', 'default' => 'no', 'section' => 'api' ),
 
 	/* ---- Created by the plugin (no field) ---- */
 	// Key of signed links: created once, never replaced (Settings::secret()).

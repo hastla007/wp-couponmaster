@@ -91,6 +91,14 @@ vcap_aff_assert( $is_voucher && 0 === (int) $base, 'with the opt-out filter vouc
 $other = apply_filters( 'wpac_commission_base', 5000, array( 'product_id' => $template->get_id() ), array( 'source' => 'woocommerce' ) );
 vcap_aff_assert( 5000 === (int) $other, 'the opt-out filter leaves other products untouched' );
 remove_filter( 'vcap_affiliate_commission_on_voucher_sales', '__return_false' );
+// SET-VC-33: the setting does the same; the filter gets it and wins.
+update_option( AffiliateCaptain::COMMISSION_OPTION, 'no' );
+$base = apply_filters( 'wpac_commission_base', 5000, array( 'product_id' => $product->get_id() ), array( 'source' => 'woocommerce' ) );
+add_filter( 'vcap_affiliate_commission_on_voucher_sales', '__return_true' );
+$base_filtered = apply_filters( 'wpac_commission_base', 5000, array( 'product_id' => $product->get_id() ), array( 'source' => 'woocommerce' ) );
+remove_filter( 'vcap_affiliate_commission_on_voucher_sales', '__return_true' );
+delete_option( AffiliateCaptain::COMMISSION_OPTION );
+vcap_aff_assert( 0 === (int) $base && 5000 === (int) $base_filtered, 'SET-VC-33: with the setting "Commission on voucher sales" off voucher products earn no commission; the filter wins' );
 
 vcap_aff_assert( true === AffiliateCaptain::assign( $name, '' ) && null === apply_filters( 'wpac_coupon_affiliate', null, $codes[0] ), 'removing the partner stops the attribution' );
 
