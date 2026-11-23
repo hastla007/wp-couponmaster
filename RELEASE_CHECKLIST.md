@@ -44,7 +44,7 @@ release).
 | WP Pass Captain alone | Activate and complete its normal ticket lifecycle | Run in the WP Pass Captain repository |
 | Both plugins | Install/activate together; pay with a gift card in the ticket checkout; exchange a ticket voucher; refunds and cancellations give vouchers back; shared scanner | CI `pass-captain` against Pass Captain `main` and the work branch |
 
-Do not advertise a Learnboating connector as supported until its external contract and the combined installation pass.
+The LearnBoating connector is a project product of its own (decision 17, learnboating repository) and is not advertised as a Voucher Captain feature. Its combined installation is tested in the CI of that repository against this plugin's public contract.
 - [ ] Screen reader listening test (NVDA + VoiceOver) with the protocol in `ACCESSIBILITY.md`; the accessibility tree is checked automatically in `browser-e2e`.
 
 ## Plugin Check warnings (state 16.11.2026: 0 errors, 199 warnings)

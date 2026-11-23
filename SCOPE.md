@@ -13,7 +13,7 @@ Voucher Captain and WP Pass Captain are separate plugins with separate WordPress
 - WP Pass Captain owns event/occurrence data, ticket categories and capacities, event orders, seat assignments, event admission tickets, check-in, and ticket-specific refunds/status.
 - A Voucher Captain ticket voucher is exchanged for one or more WP Pass Captain tickets (implemented). WP Pass Captain uses a Voucher Captain code in its checkout only through reserve/commit/release/refund services (implemented, API.md).
 - Voucher Captain's scanner remains available for its own voucher/pass operations. Event admission uses WP Pass Captain's ticket status and check-in records. The shared scanner (implemented: Vouchers → Scanner) looks up voucher codes first and checks WP Pass Captain tickets in at Pass Captain; it never confuses voucher redemption with event check-in.
-- Customer-specific course access remains in the separate Bootsschule/Learnboating connector.
+- Customer-specific course access remains in the separate LearnBoating connector (`learnboating-voucher-connector`, a licensed project product in the learnboating repository, decision 17; CONNECTORS.md §8).
 
 ## Feature inventory
 
