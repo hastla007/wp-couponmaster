@@ -26,8 +26,8 @@ Diese Liste ist eine Arbeitsliste, kein verifizierter Fortschrittsbericht. Abgeh
 - **Überholte Zweige (nichts mehr zu übernehmen, können gelöscht werden):** `claude/wp-plugin-analyse-todo-hvollo-refactors` (PR #19, gemergt), `claude/sharp-mendel-xiiwf3` und `claude/sleepy-ptolemy-n32guj` (in PR #19 enthalten; PR #18 geschlossen), `claude/minver-newest` (PR #17 geschlossen; MINVER-1 ist erledigt), `codex/multi-expiry-reminders` (mehrere Erinnerungstage mit Wiederholung sind seit 1.2.0 drin, M12-84, R4 B7), `codex/fix-voucher-audit-findings`, `docs/security-check-todo`, `claude/trusting-edison-bb7r9s`, `claude/wp-plugin-analyse-todo-hvollo`, `claude/plugin-todo-liste-2a83v4`.
 - **Lizenz:** Entscheidung vom 13.11.2026 – der Kern ist frei, ohne Lizenz- und Update-Code (docs/FREE-PREMIUM.md, `tests/license-guard.php`). Das Add-on liegt in `hastla007/captain-pro`; Projekt-Connectoren sind eigene Lizenzprodukte (Entscheidung 17).
 - **Prüfstand von `main` 1.3.0 (23.11.2026):** vollständiger Lauf von „Plugin smoke tests“ auf `main` (`b801e2e`, GitHub-Actions-Lauf 45151762580) grün, alle 23 Jobs; lokal `php tests/run.php` 733 Prüfungen bestanden, Lizenzwächter, Hook-, POT-, E-Mail- und Rechtstext-Prüfung grün, PHPCS (WordPress, WooCommerce-Core) auf `src/API/V1`, `src/Contracts`, `src/Integrations/FormCaptain` ohne Befund. Die WordPress-Integrationssuiten, PHPStan und die Matrix laufen nur in der CI (`.github/workflows/plugin-smoke.yml`).
-- **Zählung:** 32 Aufgaben offen, 778 erledigt (Befehl: `grep -c '^\s*- \[ \]' TODO.md` und `grep -c '^\s*- \[x\]' TODO.md`).
-- **Zählung:** 32 Aufgaben offen, 778 erledigt (Befehl: `grep -c '^\s*- \[ \]' TODO.md` und `grep -c '^\s*- \[x\]' TODO.md`).
+- **Zählung:** 31 Aufgaben offen, 779 erledigt (Befehl: `grep -c '^\s*- \[ \]' TODO.md` und `grep -c '^\s*- \[x\]' TODO.md`).
+- **Zählung:** 31 Aufgaben offen, 779 erledigt (Befehl: `grep -c '^\s*- \[ \]' TODO.md` und `grep -c '^\s*- \[x\]' TODO.md`).
 
 ## Einstellungen für den Verkauf (Analyse vom 23.11.2026)
 
