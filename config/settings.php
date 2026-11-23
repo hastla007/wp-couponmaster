@@ -9,7 +9,8 @@
  *
  * settings  – option name => attributes. Missing attributes take these values:
  *             type     'string' (also: 'bool' = 'yes'/'no', 'int', 'decimal', 'text' = several lines, 'select',
- *                      'list' = array of strings, 'post' = post/page ID)
+ *                      'list' = array of strings, 'post' = post/page ID, 'table' = list of rows, checked by
+ *                      VCAP\Admin\CountryTableField::validate())
  *             default  '' – what Settings::get() returns while the option was never saved
  *             min/max  null – bounds of 'int'/'decimal', also checked on the server when the settings are saved
  *             empty    false – 'int'/'decimal' only: an empty value is a valid setting (e.g. "automatic")
@@ -37,8 +38,9 @@ $vcap_settings = array(
 	/* ---- General: issuing and validity ---- */
 	'vcap_issue_statuses'            => array( 'type' => 'list', 'default' => array( 'processing', 'completed' ), 'section' => '', 'legal' => true ),
 	'vcap_default_terms'             => array( 'type' => 'text', 'section' => '', 'legal' => true ),
-	'vcap_terms_by_country'          => array( 'type' => 'text', 'section' => '', 'legal' => true ),
-	'vcap_expiry_by_country'         => array( 'type' => 'text', 'section' => '', 'legal' => true ),
+	// SET-VC-04: tables (list of rows); text stored before 1.3.0 is still read (VCAP\Markets::terms_rows()/expiry_rows()).
+	'vcap_terms_by_country'          => array( 'type' => 'table', 'default' => array(), 'section' => '', 'legal' => true ),
+	'vcap_expiry_by_country'         => array( 'type' => 'table', 'default' => array(), 'section' => '', 'legal' => true ),
 	'vcap_default_template'          => array( 'type' => 'post', 'default' => 0, 'section' => '', 'export' => false ),
 	// Unsaved: ProductConfig::default_expiry_rule() decides ("days" for shops that saved a number of days).
 	'vcap_default_expiry_rule'       => array( 'type' => 'select', 'choices' => array( 'statutory', 'days' ), 'section' => '', 'legal' => true ),

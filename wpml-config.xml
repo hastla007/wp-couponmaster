@@ -68,7 +68,11 @@
 	</custom-fields>
 	<admin-texts>
 		<key name="vcap_default_terms" />
-		<key name="vcap_terms_by_country" />
+		<key name="vcap_terms_by_country">
+			<key name="*">
+				<key name="text" />
+			</key>
+		</key>
 		<key name="woocommerce_vcap_voucher_buyer_settings">
 			<key name="subject" />
 			<key name="heading" />

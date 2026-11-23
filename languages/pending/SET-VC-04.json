@@ -1,0 +1,132 @@
+{
+ "%1$s: \"%2$s\" is not a language of the shop.": {
+  "du": "%1$s: „%2$s“ ist keine Sprache des Shops.",
+  "sie": "%1$s: „%2$s“ ist keine Sprache des Shops.",
+  "at": "%1$s: „%2$s“ ist keine Sprache des Shops."
+ },
+ "%1$s: \"%2$s\" is not a number of years – enter a whole number from 0 (never expires) to 999.": {
+  "du": "%1$s: „%2$s“ ist keine Anzahl Jahre – gib eine ganze Zahl von 0 (läuft nie ab) bis 999 ein.",
+  "sie": "%1$s: „%2$s“ ist keine Anzahl Jahre – geben Sie eine ganze Zahl von 0 (läuft nie ab) bis 999 ein.",
+  "at": "%1$s: „%2$s“ ist keine Anzahl Jahre – geben Sie eine ganze Zahl von 0 (läuft nie ab) bis 999 ein."
+ },
+ "%1$s: this country already has a rule in row %2$d.": {
+  "du": "%1$s: Für dieses Land gibt es schon eine Regel in Zeile %2$d.",
+  "sie": "%1$s: Für dieses Land gibt es schon eine Regel in Zeile %2$d.",
+  "at": "%1$s: Für dieses Land gibt es schon eine Regel in Zeile %2$d."
+ },
+ "%1$s: this country already has conditions in this language in row %2$d.": {
+  "du": "%1$s: Für dieses Land gibt es schon Bedingungen in dieser Sprache in Zeile %2$d.",
+  "sie": "%1$s: Für dieses Land gibt es schon Bedingungen in dieser Sprache in Zeile %2$d.",
+  "at": "%1$s: Für dieses Land gibt es schon Bedingungen in dieser Sprache in Zeile %2$d."
+ },
+ "%s: choose a country.": {
+  "du": "%s: Wähle ein Land.",
+  "sie": "%s: Wählen Sie ein Land.",
+  "at": "%s: Wählen Sie ein Land."
+ },
+ "%s: enter the conditions or remove the row.": {
+  "du": "%s: Gib die Bedingungen ein oder entferne die Zeile.",
+  "sie": "%s: Geben Sie die Bedingungen ein oder entfernen Sie die Zeile.",
+  "at": "%s: Geben Sie die Bedingungen ein oder entfernen Sie die Zeile."
+ },
+ "Optional, for shops selling to several countries. One row per country and language; \"All languages\" applies when there is no row in the customer's language. The billing country of the order decides; products with their own conditions and countries without a row use the conditions above. To remove a row, use \"Remove\" or empty its fields. The texts are not legally checked by the plugin – have them checked for each country.": {
+  "du": "Optional, für Shops, die in mehrere Länder verkaufen. Eine Zeile je Land und Sprache; „Alle Sprachen“ gilt, wenn es keine Zeile in der Sprache des Kunden gibt. Das Rechnungsland der Bestellung entscheidet; Produkte mit eigenen Bedingungen und Länder ohne Zeile nutzen die Bedingungen oben. Um eine Zeile zu entfernen, nutze „Entfernen“ oder leere ihre Felder. Die Texte werden vom Plugin nicht rechtlich geprüft – lass sie für jedes Land prüfen.",
+  "sie": "Optional, für Shops, die in mehrere Länder verkaufen. Eine Zeile je Land und Sprache; „Alle Sprachen“ gilt, wenn es keine Zeile in der Sprache des Kunden gibt. Das Rechnungsland der Bestellung entscheidet; Produkte mit eigenen Bedingungen und Länder ohne Zeile nutzen die Bedingungen oben. Um eine Zeile zu entfernen, nutzen Sie „Entfernen“ oder leeren Sie ihre Felder. Die Texte werden vom Plugin nicht rechtlich geprüft – lassen Sie sie für jedes Land prüfen.",
+  "at": "Optional, für Shops, die in mehrere Länder verkaufen. Eine Zeile je Land und Sprache; „Alle Sprachen“ gilt, wenn es keine Zeile in der Sprache des Kunden gibt. Das Rechnungsland der Bestellung entscheidet; Produkte mit eigenen Bedingungen und Länder ohne Zeile nutzen die Bedingungen oben. Um eine Zeile zu entfernen, nutzen Sie „Entfernen“ oder leeren Sie ihre Felder. Die Texte werden vom Plugin nicht rechtlich geprüft – lassen Sie sie für jedes Land prüfen."
+ },
+ "Optional. One row per country: years (0 = never expires), \"to the end of the year\", and where the rule comes from. Used for vouchers with the statutory validity; overrides the verified defaults (Germany 3 years to the end of the year, Austria 30 years). Countries without a rule use 3 years to the end of the year. To remove a row, use \"Remove\" or empty its fields. The rules are not legally checked by the plugin – have them checked for each country.": {
+  "du": "Optional. Eine Zeile je Land: Jahre (0 = läuft nie ab), „zum Jahresende“ und woher die Regel stammt. Gilt für Gutscheine mit gesetzlicher Gültigkeit und ersetzt die geprüften Vorgaben (Deutschland 3 Jahre zum Jahresende, Österreich 30 Jahre). Länder ohne Regel nutzen 3 Jahre zum Jahresende. Um eine Zeile zu entfernen, nutze „Entfernen“ oder leere ihre Felder. Die Regeln werden vom Plugin nicht rechtlich geprüft – lass sie für jedes Land prüfen.",
+  "sie": "Optional. Eine Zeile je Land: Jahre (0 = läuft nie ab), „zum Jahresende“ und woher die Regel stammt. Gilt für Gutscheine mit gesetzlicher Gültigkeit und ersetzt die geprüften Vorgaben (Deutschland 3 Jahre zum Jahresende, Österreich 30 Jahre). Länder ohne Regel nutzen 3 Jahre zum Jahresende. Um eine Zeile zu entfernen, nutzen Sie „Entfernen“ oder leeren Sie ihre Felder. Die Regeln werden vom Plugin nicht rechtlich geprüft – lassen Sie sie für jedes Land prüfen.",
+  "at": "Optional. Eine Zeile je Land: Jahre (0 = läuft nie ab), „zum Jahresende“ und woher die Regel stammt. Gilt für Gutscheine mit gesetzlicher Gültigkeit und ersetzt die geprüften Vorgaben (Deutschland 3 Jahre zum Jahresende, Österreich 30 Jahre). Länder ohne Regel nutzen 3 Jahre zum Jahresende. Um eine Zeile zu entfernen, nutzen Sie „Entfernen“ oder leeren Sie ihre Felder. Die Regeln werden vom Plugin nicht rechtlich geprüft – lassen Sie sie für jedes Land prüfen."
+ },
+ "Row %1$d (%2$s)": {
+  "du": "Zeile %1$d (%2$s)",
+  "sie": "Zeile %1$d (%2$s)",
+  "at": "Zeile %1$d (%2$s)"
+ },
+ "Row %d": {
+  "du": "Zeile %d",
+  "sie": "Zeile %d",
+  "at": "Zeile %d"
+ },
+ "%1$s – not saved: %2$s": {
+  "du": "%1$s – nicht gespeichert: %2$s",
+  "sie": "%1$s – nicht gespeichert: %2$s",
+  "at": "%1$s – nicht gespeichert: %2$s"
+ },
+ "%1$s, row %2$s": {
+  "du": "%1$s, Zeile %2$s",
+  "sie": "%1$s, Zeile %2$s",
+  "at": "%1$s, Zeile %2$s"
+ },
+ "%1$s: these lines cannot be read: %2$s": {
+  "du": "%1$s: Diese Zeilen können nicht gelesen werden: %2$s",
+  "sie": "%1$s: Diese Zeilen können nicht gelesen werden: %2$s",
+  "at": "%1$s: Diese Zeilen können nicht gelesen werden: %2$s"
+ },
+ "%s: invalid value, expected a table.": {
+  "du": "%s: ungültiger Wert, erwartet wird eine Tabelle.",
+  "sie": "%s: ungültiger Wert, erwartet wird eine Tabelle.",
+  "at": "%s: ungültiger Wert, erwartet wird eine Tabelle."
+ },
+ "Country": {
+  "du": "Land",
+  "sie": "Land",
+  "at": "Land"
+ },
+ "Language": {
+  "du": "Sprache",
+  "sie": "Sprache",
+  "at": "Sprache"
+ },
+ "Source / note": {
+  "du": "Quelle / Notiz",
+  "sie": "Quelle / Notiz",
+  "at": "Quelle / Notiz"
+ },
+ "To the end of the year": {
+  "du": "Zum Jahresende",
+  "sie": "Zum Jahresende",
+  "at": "Zum Jahresende"
+ },
+ "Years": {
+  "du": "Jahre",
+  "sie": "Jahre",
+  "at": "Jahre"
+ },
+ "row %s": {
+  "du": "Zeile %s",
+  "sie": "Zeile %s",
+  "at": "Zeile %s"
+ },
+ "Row added.": {
+  "du": "Zeile hinzugefügt.",
+  "sie": "Zeile hinzugefügt.",
+  "at": "Zeile hinzugefügt."
+ },
+ "Row removed.": {
+  "du": "Zeile entfernt.",
+  "sie": "Zeile entfernt.",
+  "at": "Zeile entfernt."
+ },
+ "Add row": {
+  "du": "Zeile hinzufügen",
+  "sie": "Zeile hinzufügen",
+  "at": "Zeile hinzufügen"
+ },
+ "All languages": {
+  "du": "Alle Sprachen",
+  "sie": "Alle Sprachen",
+  "at": "Alle Sprachen"
+ },
+ "These lines of the previous text setting could not be converted into rows and are removed when you save. Enter them as rows if they are still needed:": {
+  "du": "Diese Zeilen der bisherigen Texteinstellung konnten nicht in Zeilen umgewandelt werden und werden beim Speichern entfernt. Trag sie als Zeilen ein, wenn du sie noch brauchst:",
+  "sie": "Diese Zeilen der bisherigen Texteinstellung konnten nicht in Zeilen umgewandelt werden und werden beim Speichern entfernt. Tragen Sie sie als Zeilen ein, wenn Sie sie noch brauchen:",
+  "at": "Diese Zeilen der bisherigen Texteinstellung konnten nicht in Zeilen umgewandelt werden und werden beim Speichern entfernt. Tragen Sie sie als Zeilen ein, wenn Sie sie noch brauchen:"
+ },
+ "— Choose a country —": {
+  "du": "— Land wählen —",
+  "sie": "— Land wählen —",
+  "at": "— Land wählen —"
+ }
+}

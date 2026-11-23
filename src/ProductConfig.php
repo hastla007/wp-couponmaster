@@ -233,8 +233,18 @@ final class ProductConfig {
 		if ( '' !== $terms ) {
 			return $terms;
 		}
-		// Shop-wide conditions in the customer's language (WPML translates the options, Polylang the strings).
-		$by_country = self::terms_by_country( Compat\Multilingual::translate( (string) get_option( 'vcap_terms_by_country', '' ) ) );
+		// Shop-wide conditions in the customer's language (WPML translates the options, Polylang the strings;
+		// SET-VC-04: a row of the table can also be for one language).
+		$stored = get_option( Markets::TERMS_OPTION, '' );
+		if ( is_array( $stored ) ) {
+			$stored = Markets::terms_rows( $stored );
+			foreach ( $stored as $i => $row ) {
+				$stored[ $i ]['text'] = Compat\Multilingual::translate( $row['text'] );
+			}
+		} else {
+			$stored = Compat\Multilingual::translate( (string) $stored );
+		}
+		$by_country = self::terms_by_country( $stored, self::terms_locale() );
 		$country    = strtoupper( $country );
 		if ( '' !== $country && isset( $by_country[ $country ] ) ) {
 			return $by_country[ $country ];
@@ -253,7 +263,7 @@ final class ProductConfig {
 		if ( '' !== $own ) {
 			return array( '' => $own );
 		}
-		$variants = self::terms_by_country( (string) get_option( 'vcap_terms_by_country', '' ) );
+		$variants = self::terms_by_country( get_option( Markets::TERMS_OPTION, '' ), self::terms_locale() );
 		$default  = trim( (string) get_option( 'vcap_default_terms', '' ) );
 		if ( '' !== $default ) {
 			$variants[''] = $default;
@@ -262,34 +272,42 @@ final class ProductConfig {
 	}
 
 	/**
-	 * Parse "AT: text" blocks (a block runs until the next line starting with a country code and a colon). Q12: only
-	 * ISO country codes start a block – "NB: …" or "OK: …" inside the conditions stays part of them.
+	 * Conditions per country (country => text) of the setting "Redemption conditions per country". SET-VC-04: the
+	 * stored table (rows with country, language, text; the row for $locale wins, see Markets::terms_for_locale()) or
+	 * the text of a value from before 1.3.0 – "AT: text" blocks, a block runs until the next line starting with a
+	 * country code and a colon; Q12: only ISO country codes start a block, "NB: …" stays part of the conditions.
 	 *
+	 * @param mixed  $raw    Stored value (rows or text).
+	 * @param string $locale Language of the customer, e.g. "de_AT" ('' = no preference).
 	 * @return array<string, string>
 	 */
-	public static function terms_by_country( string $raw ): array {
-		$out     = array();
-		$current = '';
-		foreach ( preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-			if ( preg_match( '/^\s*([A-Za-z]{2})\s*:\s*(.*)$/', $line, $m ) && Markets::is_country_code( $m[1] ) ) {
-				$current         = strtoupper( $m[1] );
-				$out[ $current ] = $m[2];
-				continue;
-			}
-			if ( '' !== $current ) {
-				$out[ $current ] .= "\n" . $line;
-			}
+	public static function terms_by_country( $raw, string $locale = '' ): array {
+		return Markets::terms_for_locale( Markets::terms_rows( $raw ), $locale );
+	}
+
+	/**
+	 * SET-VC-04: locale the conditions are picked for – the language of the mail being prepared, else the current
+	 * locale (visitor, or the locale a mail switched to).
+	 */
+	private static function terms_locale(): string {
+		$locale = Compat\Multilingual::locale_of( Compat\Multilingual::mail_language() );
+		if ( '' === $locale ) {
+			$locale = function_exists( 'determine_locale' ) ? (string) determine_locale() : (string) get_locale();
 		}
-		return array_filter( array_map( 'trim', $out ), 'strlen' );
+		return $locale;
 	}
 
 	/**
 	 * Q12: text of the setting "Redemption conditions per country" before the first country block – it belongs to
-	 * no country and would be dropped (reported on save).
+	 * no country and would be dropped (reported on save). SET-VC-04: a stored table has none.
 	 *
+	 * @param mixed $raw Stored value (text from before 1.3.0 or rows).
 	 * @return string[]
 	 */
-	public static function unassigned_terms_lines( string $raw ): array {
+	public static function unassigned_terms_lines( $raw ): array {
+		if ( ! is_string( $raw ) ) {
+			return array(); // SET-VC-04: rows are checked when they are saved (Markets::check_terms_rows()).
+		}
 		$out = array();
 		foreach ( preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
 			if ( preg_match( '/^\s*([A-Za-z]{2})\s*:/', $line, $m ) && Markets::is_country_code( $m[1] ) ) {

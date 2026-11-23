@@ -1304,7 +1304,8 @@ sort( $known_ids );
 check( 'every customer email of the plugin is in the list of translatable email texts', $email_ids === $known_ids, implode( ',', $email_ids ) );
 $admin_texts = true;
 foreach ( VCAP\Compat\Multilingual::OPTIONS as $option ) {
-	$admin_texts = $admin_texts && str_contains( $wpml, '<key name="' . $option . '" />' );
+	// SET-VC-04: the conditions per country are a table – WPML translates the text of each row.
+	$admin_texts = $admin_texts && ( str_contains( $wpml, '<key name="' . $option . '" />' ) || (bool) preg_match( '#<key name="' . $option . '">\s*<key name="\*">\s*<key name="text" />#', $wpml ) );
 }
 foreach ( VCAP\Compat\Multilingual::EMAIL_IDS as $id ) {
 	$block       = preg_match( '#<key name="woocommerce_' . $id . '_settings">(.*?)</key>\s*(?=<key name="woocommerce_|</admin-texts>)#s', $wpml, $m ) ? $m[1] : '';
@@ -4559,6 +4560,137 @@ check(
 	json_encode( array( $m_ready, $m_ready_set ) )
 );
 check( 'SET-VC-03: the translation fallback chain (de_CH → de_DE_formal → de_DE)', array( 'de_CH', 'de_DE_formal', 'de_DE' ) === VCAP\I18n::chain( 'de_CH' ) && array( 'fr_CH' ) === VCAP\I18n::chain( 'fr_CH' ) );
+// SET-VC-04: statutory validity and conditions per country as tables (rows), old text values still read.
+echo "SET-VC-04 country tables\n";
+$c4_saved = $GLOBALS['vcap_test_options'];
+$c4_exp   = VCAP\Markets::EXPIRY_OPTION;
+$c4_trm   = VCAP\Markets::TERMS_OPTION;
+// Old text values keep working (read unchanged, converted to rows).
+$GLOBALS['vcap_test_options'][ $c4_exp ] = "FR: 5 end\nAT: 1\nbroken";
+check(
+	'SET-VC-04: a validity value stored as text before 1.3.0 is read and converted to rows; the filter vcap_statutory_expiry still gets the same rule',
+	array( array( 'country' => 'FR', 'years' => 5, 'end_of_year' => true, 'note' => '' ), array( 'country' => 'AT', 'years' => 1, 'end_of_year' => false, 'note' => '' ) ) === VCAP\Markets::expiry_rows( get_option( $c4_exp ) )
+		&& array( 'years' => 5, 'end_of_year' => true ) === ProductConfig::statutory_rule( 'FR' ) && 'setting' === VCAP\Markets::expiry_rule( 'AT' )['source'] && array( 'broken' ) === VCAP\Markets::unparsed_expiry_lines( get_option( $c4_exp ) )
+);
+// The new storage: rows under the same option name.
+$GLOBALS['vcap_test_options'][ $c4_exp ] = array(
+	array( 'country' => 'fr', 'years' => '5', 'end_of_year' => '1', 'note' => 'Code civil' ),
+	array( 'country' => 'IT', 'years' => 10, 'end_of_year' => false, 'note' => '' ),
+);
+$GLOBALS['vcap_test_filters']['vcap_statutory_expiry'] = array( array( static fn( $rule, $country ) => 'IT' === $country ? array( 'years' => 2, 'end_of_year' => false ) : $rule, 2 ) );
+check(
+	'SET-VC-04: validity rows decide the statutory rule (note kept), unparsed lines are none, and the filter vcap_statutory_expiry still wins',
+	array( 'years' => 5, 'end_of_year' => true ) === ProductConfig::statutory_rule( 'FR' ) && array( 'years' => 2, 'end_of_year' => false ) === ProductConfig::statutory_rule( 'IT' ) && array( 'years' => 3, 'end_of_year' => true ) === ProductConfig::statutory_rule( 'DE' )
+		&& 'Code civil' === VCAP\Markets::expiry_rows( get_option( $c4_exp ) )[0]['note'] && array() === VCAP\Markets::unparsed_expiry_lines( get_option( $c4_exp ) )
+);
+unset( $GLOBALS['vcap_test_filters']['vcap_statutory_expiry'] );
+$c4_check = VCAP\Markets::check_expiry_rows(
+	array(
+		array( 'country' => 'DE', 'years' => '3', 'end_of_year' => '1', 'note' => 'BGB § 195' ),
+		array( 'country' => '', 'years' => '', 'note' => '' ),
+		array( 'country' => 'XX', 'years' => '3' ),
+		array( 'country' => 'AT', 'years' => 'drei' ),
+		array( 'country' => 'DE', 'years' => '5' ),
+		array( 'country' => '', 'years' => '4' ),
+		array( 'country' => 'NL', 'years' => '0' ),
+	)
+);
+check(
+	'SET-VC-04: an invalid validity row is not taken – unknown country, years not 0–999, a second row for a country, no country – and the error names the row; empty rows are skipped silently',
+	array( 'DE', 'NL' ) === array_column( $c4_check['rows'], 'country' ) && 0 === $c4_check['rows'][1]['years'] && array( 2, 3, 4, 5 ) === array_keys( $c4_check['errors'] )
+		&& str_starts_with( $c4_check['errors'][2], 'Row 3 (XX):' ) && str_contains( $c4_check['errors'][3], '"drei"' ) && str_contains( $c4_check['errors'][4], 'row 1' ) && str_starts_with( $c4_check['errors'][5], 'Row 6:' ),
+	json_encode( $c4_check )
+);
+// Conditions: old text blocks and rows with a language.
+check(
+	'SET-VC-04: conditions stored as text before 1.3.0 are read as rows for all languages (same result as before)',
+	array( array( 'country' => 'AT', 'language' => '', 'text' => 'Gültig 30 Jahre.' ) ) === VCAP\Markets::terms_rows( "AT: Gültig 30 Jahre." ) && array( 'AT' => 'Gültig 30 Jahre.' ) === ProductConfig::terms_by_country( "AT: Gültig 30 Jahre.", 'en_GB' )
+);
+$c4_rows = array(
+	array( 'country' => 'AT', 'language' => 'en_GB', 'text' => 'Valid for 30 years.' ),
+	array( 'country' => 'AT', 'language' => '', 'text' => "Gültig 30 Jahre.\nKeine Barauszahlung." ),
+	array( 'country' => 'CH', 'language' => 'fr_CH', 'text' => 'Valable 5 ans.' ),
+	array( 'country' => 'CH', 'language' => 'de_CH', 'text' => 'Gültig 5 Jahre.' ),
+);
+check(
+	'SET-VC-04: the row in the customer\'s language wins, else the row for all languages, else the same language, else the first row of the country',
+	array( 'AT' => 'Valid for 30 years.', 'CH' => 'Valable 5 ans.' ) === ProductConfig::terms_by_country( $c4_rows, 'en_GB' ) && array( 'AT' => "Gültig 30 Jahre.\nKeine Barauszahlung.", 'CH' => 'Gültig 5 Jahre.' ) === ProductConfig::terms_by_country( $c4_rows, 'de_DE' )
+		&& 'Valable 5 ans.' === ProductConfig::terms_by_country( $c4_rows, 'fr_FR' )['CH'] && 'Valable 5 ans.' === ProductConfig::terms_by_country( $c4_rows, 'it_IT' )['CH']
+);
+$GLOBALS['vcap_test_options'][ $c4_trm ] = $c4_rows;
+$GLOBALS['vcap_test_options']['vcap_default_terms'] = 'General terms';
+check(
+	'SET-VC-04: ProductConfig::terms() reads the table in the site language (de_DE), other countries use the general conditions; the health check sees the country conditions',
+	"Gültig 30 Jahre.\nKeine Barauszahlung." === ProductConfig::terms( ProductConfig::DEFAULTS, 'at' ) && 'Gültig 5 Jahre.' === ProductConfig::terms( ProductConfig::DEFAULTS, 'CH' ) && 'General terms' === ProductConfig::terms( ProductConfig::DEFAULTS, 'DE' )
+		&& isset( ProductConfig::terms_variants( ProductConfig::DEFAULTS )['AT'] ) && array() === ProductConfig::unassigned_terms_lines( $c4_rows )
+);
+$c4_tcheck = VCAP\Markets::check_terms_rows(
+	array(
+		array( 'country' => 'AT', 'language' => '', 'text' => '<b>Gültig</b> 30 Jahre.' ),
+		array( 'country' => 'AT', 'language' => '', 'text' => 'Doppelt' ),
+		array( 'country' => 'DE', 'language' => '', 'text' => '' ),
+		array( 'country' => 'DE', 'language' => 'x"y', 'text' => 'Text' ),
+		array( 'country' => '', 'language' => 'de_DE', 'text' => '' ),
+		array( 'country' => 'DE', 'language' => 'de_DE_formal', 'text' => 'Sie' ),
+	)
+);
+check(
+	'SET-VC-04: an invalid conditions row is not taken (second row for country and language, no text, invalid language) and named; a row with only a language is empty',
+	array( 'AT', 'DE' ) === array_column( $c4_tcheck['rows'], 'country' ) && 'de_DE_formal' === $c4_tcheck['rows'][1]['language'] && array( 1, 2, 3 ) === array_keys( $c4_tcheck['errors'] ) && str_starts_with( $c4_tcheck['errors'][1], 'Row 2 (AT):' ),
+	json_encode( $c4_tcheck )
+);
+// Settings page save: invalid rows are not saved, an error names them, the field was not on the page = keep value.
+WC_Admin_Settings::$errors = array();
+$c4_field = array( 'id' => $c4_exp, 'title' => 'Statutory validity per country' );
+$c4_saved_rows = VCAP\Admin\CountryTableField::sanitize( null, $c4_field, array( 'submitted' => '1', 'rows' => array( 5 => array( 'country' => 'DE', 'years' => '3', 'end_of_year' => '1', 'note' => '' ), 9 => array( 'country' => 'AT', 'years' => '-1' ), 12 => array( 'country' => '', 'years' => '' ) ) ) );
+$c4_terms_saved = VCAP\Admin\CountryTableField::sanitize( 'flattened', array( 'id' => $c4_trm, 'title' => 'Conditions' ), array( 'submitted' => '1', 'rows' => array( array( 'country' => 'AT', 'language' => '', 'text' => "Zeile 1\nZeile 2" ) ) ) );
+check(
+	'SET-VC-04: saving the settings page stores the valid rows, leaves an invalid row out with an error naming it, keeps line breaks of the conditions, and keeps the stored value when the table was not submitted',
+	array( array( 'country' => 'DE', 'years' => 3, 'end_of_year' => true, 'note' => '' ) ) === $c4_saved_rows && 1 === count( WC_Admin_Settings::$errors ) && str_contains( WC_Admin_Settings::$errors[0], 'Row 2 (AT):' ) && str_contains( WC_Admin_Settings::$errors[0], 'not saved' )
+		&& "Zeile 1\nZeile 2" === $c4_terms_saved[0]['text'] && null === VCAP\Admin\CountryTableField::sanitize( null, $c4_field, null ),
+	json_encode( array( $c4_saved_rows, WC_Admin_Settings::$errors ) )
+);
+$c4_rej = new ReflectionMethod( VCAP\Admin\CountryTableField::class, 'rejected' );
+$c4_rej->setAccessible( true );
+$c4_rejected = $c4_rej->invoke( null, $c4_exp, array( array( 'country' => 'DE', 'years' => '3' ), array( 'country' => 'at', 'years' => 'x<b>', 'note' => 'n' ) ), array( 1 => 'Row 2 (AT): "x" is not a number.' ) );
+check(
+	'SET-VC-04: a row that was not saved is kept (cleaned) to be shown again with its error, so nothing typed is lost',
+	array( array( 'country' => 'AT', 'error' => '"x" is not a number.', 'years' => 'x', 'end_of_year' => false, 'note' => 'n' ) ) === $c4_rejected,
+	json_encode( $c4_rejected )
+);
+// Import / WP-CLI (register type "table").
+$c4_imp_old = VCAP\SettingsTransfer::validate( $c4_exp, "DE: 3 end\nAT: 30" );
+$c4_imp_bad = VCAP\SettingsTransfer::validate( $c4_exp, array( array( 'country' => 'DE', 'years' => 'x' ) ) );
+check(
+	'SET-VC-04: both settings are of register type "table" (default: no rows); an import accepts rows or the old text and refuses an invalid row; a change of a table is detected and shown',
+	'table' === VCAP\SettingsRegistry::get( $c4_exp )['type'] && 'table' === VCAP\SettingsRegistry::get( $c4_trm )['type'] && array() === VCAP\SettingsRegistry::default( $c4_trm )
+		&& array( 'DE', 'AT' ) === array_column( (array) $c4_imp_old, 'country' ) && is_wp_error( $c4_imp_bad ) && is_wp_error( VCAP\SettingsTransfer::validate( $c4_exp, "DE: drei" ) )
+		&& ! VCAP\SettingsTransfer::same( array( array( 'country' => 'DE', 'years' => 3 ) ), array( array( 'country' => 'DE', 'years' => 5 ) ) ) && VCAP\SettingsTransfer::same( $c4_rows, $c4_rows )
+		&& 'DE 3 ✓; AT 30' === VCAP\SettingsTransfer::display( array( array( 'country' => 'DE', 'years' => 3, 'end_of_year' => true, 'note' => '' ), array( 'country' => 'AT', 'years' => 30, 'end_of_year' => false, 'note' => '' ) ) ),
+	json_encode( array( $c4_imp_old, VCAP\SettingsTransfer::display( (array) $c4_imp_old ) ) )
+);
+// Rendering: a real table, a label per control, buttons, one empty row, old unconvertible lines listed.
+$GLOBALS['vcap_test_options'][ $c4_exp ] = "DE: 3 end\nkaputt";
+ob_start();
+VCAP\Admin\CountryTableField::render( array( 'id' => $c4_exp, 'title' => 'Statutory validity per country', 'desc' => 'Not legally checked.' ) );
+$c4_html = (string) ob_get_clean();
+ob_start();
+VCAP\Admin\CountryTableField::render( array( 'id' => $c4_trm, 'title' => 'Conditions', 'desc' => '' ) );
+$c4_thtml = (string) ob_get_clean();
+check(
+	'SET-VC-04: the field is a table with caption and column headers, every control has its own label, "Add row" and "Remove" are buttons, an empty row works without JavaScript, old lines that cannot be converted are shown',
+	str_contains( $c4_html, '<caption' ) && 5 === substr_count( $c4_html, '<th scope="col">' ) && str_contains( $c4_html, 'for="vcap_expiry_by_country-0-country" data-label="Country, row %d">Country, row 1</label>' ) && str_contains( $c4_html, 'for="vcap_expiry_by_country-1-years" data-label="Years, row %d">Years, row 2</label>' )
+		&& str_contains( $c4_html, 'name="vcap_expiry_by_country[rows][0][end_of_year]" checked="checked"' ) && str_contains( $c4_html, '<option value="DE" selected="selected">' ) && str_contains( $c4_html, '<button type="button" class="button vcap-row-add"' ) && str_contains( $c4_html, 'class="button-link vcap-row-remove"' )
+		&& str_contains( $c4_html, '<template class="vcap-row-template">' ) && str_contains( $c4_html, '[rows][__index__][country]' ) && str_contains( $c4_html, '<code>kaputt</code>' ) && str_contains( $c4_html, 'name="vcap_expiry_by_country[submitted]"' ) && str_contains( $c4_html, 'Not legally checked.' )
+		&& str_contains( $c4_thtml, '>Language, row 1</label>' ) && str_contains( $c4_thtml, '<option value="en_GB" selected="selected">en_GB</option>' ) && str_contains( $c4_thtml, '<option value="">All languages</option>' ) && str_contains( $c4_thtml, "Gültig 30 Jahre.\nKeine Barauszahlung.</textarea>" ),
+	substr( $c4_thtml, 0, 400 )
+);
+$c4_js = (string) file_get_contents( VCAP_PATH . 'assets/js/country-table.js' );
+check(
+	'SET-VC-04: the script moves the focus after adding (first field) and removing (next row or "Add row") and announces it; ACCESSIBILITY.md describes the table',
+	str_contains( $c4_js, 'first.focus()' ) && str_contains( $c4_js, '( focus || add ).focus()' ) && str_contains( $c4_js, 'wp.a11y.speak' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'ACCESSIBILITY.md' ), 'SET-VC-04' )
+);
+$GLOBALS['vcap_test_options'] = $c4_saved;
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

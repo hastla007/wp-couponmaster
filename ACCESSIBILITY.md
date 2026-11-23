@@ -46,6 +46,15 @@ in `tests/e2e/06-screen-reader.spec.js` als Regressionstest ergänzen.
 - Die Tabelle *Rechte je Rolle* (Datenschutz & Erweitert) hat Spaltenköpfe, Zeilenköpfe je Rolle und für jedes
   Kästchen einen Namen „Recht für Rolle“; feste Kästchen (Administrator, Rollen mit „WooCommerce verwalten“) sind
   deaktiviert und angehakt.
+- *Gesetzliche Gültigkeit je Land* und *Einlösebedingungen je Land* (Allgemein, SET-VC-04) sind echte Tabellen
+  statt Freitext: Beschriftung (`caption`), Spaltenköpfe, und jedes Feld hat einen eigenen Namen mit Zeilennummer
+  („Land, Zeile 2“, „Jahre, Zeile 2“). „Zeile hinzufügen“ und „Entfernen“ sind Schaltflächen; nach dem Hinzufügen
+  steht der Fokus im Länderfeld der neuen Zeile, nach dem Entfernen auf „Entfernen“ der nächsten (sonst vorigen)
+  Zeile oder auf „Zeile hinzufügen“; beides wird über `wp.a11y.speak` angesagt (`assets/js/country-table.js`).
+  Ohne JavaScript gibt es immer eine leere Zeile für einen neuen Eintrag, und eine geleerte Zeile wird beim Speichern
+  entfernt. Eine ungültige Zeile wird nicht gespeichert: die Meldung oben nennt Einstellung und Zeile („Zeile 2 (FR):
+  …“), die Zeile erscheint danach mit ihrem Fehlertext (`aria-invalid`, `aria-describedby`) erneut, damit nichts
+  Eingegebenes verloren geht.
 
 ### Gutschein-PDF
 

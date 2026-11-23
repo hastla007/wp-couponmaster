@@ -236,6 +236,8 @@ final class SettingsTransfer {
 				return (int) $value;
 			case 'text':
 				return is_scalar( $value ) ? sanitize_textarea_field( (string) $value ) : $invalid( __( 'text', 'voucher-captain' ) );
+			case 'table':
+				return Admin\CountryTableField::validate( $key, $value ); // SET-VC-04.
 		}
 		if ( ! is_scalar( $value ) ) {
 			return $invalid( __( 'text', 'voucher-captain' ) );
@@ -300,7 +302,14 @@ final class SettingsTransfer {
 	/** Whether two stored values are the same setting (WooCommerce stores numbers as text: 365 equals "365"). */
 	public static function same( $a, $b ): bool {
 		if ( is_array( $a ) || is_array( $b ) ) {
-			return is_array( $a ) && is_array( $b ) && array_values( array_map( 'strval', $a ) ) === array_values( array_map( 'strval', $b ) );
+			if ( ! is_array( $a ) || ! is_array( $b ) ) {
+				return false;
+			}
+			$nested = static fn( array $list ) => array() !== array_filter( $list, 'is_array' );
+			if ( $nested( $a ) || $nested( $b ) ) {
+				return wp_json_encode( array_values( $a ) ) === wp_json_encode( array_values( $b ) ); // SET-VC-04: tables.
+			}
+			return array_values( array_map( 'strval', $a ) ) === array_values( array_map( 'strval', $b ) );
 		}
 		return ( is_scalar( $a ) || null === $a ) && ( is_scalar( $b ) || null === $b ) && (string) $a === (string) $b;
 	}
@@ -461,7 +470,8 @@ final class SettingsTransfer {
 	 */
 	public static function display( $value, int $max = 120 ): string {
 		if ( is_array( $value ) ) {
-			$value = implode( ', ', array_map( static fn( $item ) => is_scalar( $item ) ? (string) $item : '…', $value ) );
+			// SET-VC-04: a table row shows its values ("DE 3 1 note; AT 30").
+			$value = implode( is_array( reset( $value ) ) ? '; ' : ', ', array_map( static fn( $item ) => is_scalar( $item ) ? (string) $item : ( is_array( $item ) ? implode( ' ', array_filter( array_map( static fn( $cell ) => is_scalar( $cell ) && ! is_bool( $cell ) ? (string) $cell : ( true === $cell ? '✓' : '' ), $item ), 'strlen' ) ) : '…' ), $value ) );
 		} elseif ( is_bool( $value ) ) {
 			$value = $value ? 'yes' : 'no';
 		} elseif ( ! is_scalar( $value ) ) {

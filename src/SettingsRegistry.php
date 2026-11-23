@@ -18,7 +18,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class SettingsRegistry {
 	/** Data types of a setting. */
-	public const TYPES = array( 'string', 'text', 'bool', 'int', 'decimal', 'select', 'list', 'post' );
+	public const TYPES = array( 'string', 'text', 'bool', 'int', 'decimal', 'select', 'list', 'post', 'table' );
 
 	/** Section of settings without a field (created by the plugin, e.g. secrets). */
 	public const HIDDEN = 'hidden';

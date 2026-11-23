@@ -36,7 +36,8 @@ final class Settings {
 		foreach ( array( 'vcap_code_prefix', 'vcap_code_suffix', 'vcap_code_separator' ) as $affix ) {
 			add_filter( 'woocommerce_admin_settings_sanitize_option_' . $affix, array( $this, 'sanitize_affix' ), 10, 2 );
 		}
-		add_filter( 'woocommerce_admin_settings_sanitize_option_vcap_terms_by_country', array( $this, 'report_country_lines' ), 10, 2 );
+		// SET-VC-04: validity and conditions per country are tables, checked row by row on save.
+		( new Admin\CountryTableField() )->register();
 		// M12-84: "30, 7, 1" is stored normalised (largest first), anything else as 0 (no reminders).
 		add_filter(
 			'woocommerce_admin_settings_sanitize_option_vcap_expiry_reminder_days',
@@ -45,31 +46,6 @@ final class Settings {
 				return $days ? implode( ', ', $days ) : '0';
 			}
 		);
-		add_filter( 'woocommerce_admin_settings_sanitize_option_' . Markets::EXPIRY_OPTION, array( $this, 'report_country_lines' ), 10, 2 );
-	}
-
-	/**
-	 * Q12: the country settings are saved as entered, but lines that are not used are reported – text before the
-	 * first country block of the conditions, validity lines that are not "CC: years [end]".
-	 *
-	 * @param mixed $value
-	 * @param array $option
-	 * @return mixed
-	 */
-	public function report_country_lines( $value, $option = array() ) {
-		$id     = (string) ( $option['id'] ?? '' );
-		$lines  = Markets::EXPIRY_OPTION === $id ? Markets::unparsed_expiry_lines( (string) $value ) : ProductConfig::unassigned_terms_lines( (string) $value );
-		if ( $lines && class_exists( '\WC_Admin_Settings' ) ) {
-			\WC_Admin_Settings::add_error(
-				sprintf(
-					/* translators: 1: setting name, 2: lines that are not used */
-					__( '%1$s: these lines are not used because they do not start with a country code (e.g. "AT:") or are not in the expected format: %2$s', 'voucher-captain' ),
-					(string) ( $option['title'] ?? $id ),
-					implode( ' | ', array_slice( $lines, 0, 5 ) )
-				)
-			);
-		}
-		return $value;
 	}
 
 	/**
@@ -715,21 +691,19 @@ final class Settings {
 				)
 			),
 			SettingsRegistry::field(
-				'vcap_terms_by_country',
+				Markets::TERMS_OPTION,
 				array(
 					'title' => __( 'Redemption conditions per country', 'voucher-captain' ),
-					'type'  => 'textarea',
-					'css'   => 'min-width:400px;height:120px;',
-					'desc'  => __( 'Optional, for shops selling to several countries. One block per country, starting with the two-letter country code and a colon, e.g. "AT: Valid for 30 years." The billing country of the order decides; products with their own conditions and countries without a block use the conditions above. Have the texts checked legally for each country.', 'voucher-captain' ),
+					'type'  => Admin\CountryTableField::TERMS_TYPE,
+					'desc'  => __( 'Optional, for shops selling to several countries. One row per country and language; "All languages" applies when there is no row in the customer\'s language. The billing country of the order decides; products with their own conditions and countries without a row use the conditions above. To remove a row, use "Remove" or empty its fields. The texts are not legally checked by the plugin – have them checked for each country.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(
 				Markets::EXPIRY_OPTION,
 				array(
 					'title' => __( 'Statutory validity per country', 'voucher-captain' ),
-					'type'  => 'textarea',
-					'css'   => 'min-width:400px;height:80px;',
-					'desc'  => __( 'Optional. One line per country: two-letter code, colon, years, and "end" for "to the end of the year" (0 = never expires), e.g. "DE: 3 end" or "AT: 30". Used for vouchers with the statutory validity; overrides the verified defaults (Germany 3 years to the end of the year, Austria 30 years). Countries without a rule use 3 years to the end of the year. Have the rules checked legally for each country.', 'voucher-captain' ),
+					'type'  => Admin\CountryTableField::EXPIRY_TYPE,
+					'desc'  => __( 'Optional. One row per country: years (0 = never expires), "to the end of the year", and where the rule comes from. Used for vouchers with the statutory validity; overrides the verified defaults (Germany 3 years to the end of the year, Austria 30 years). Countries without a rule use 3 years to the end of the year. To remove a row, use "Remove" or empty its fields. The rules are not legally checked by the plugin – have them checked for each country.', 'voucher-captain' ),
 				)
 			),
 			SettingsRegistry::field(

@@ -140,7 +140,7 @@ final class Onboarding {
 	 * per country (e.g. only "AT: …") or a voucher product's own conditions.
 	 */
 	private static function has_terms(): bool {
-		if ( '' !== trim( (string) get_option( 'vcap_default_terms', '' ) ) || \VCAP\ProductConfig::terms_by_country( (string) get_option( 'vcap_terms_by_country', '' ) ) ) {
+		if ( '' !== trim( (string) get_option( 'vcap_default_terms', '' ) ) || \VCAP\ProductConfig::terms_by_country( get_option( \VCAP\Markets::TERMS_OPTION, '' ) ) ) {
 			return true;
 		}
 		return (bool) get_posts(
