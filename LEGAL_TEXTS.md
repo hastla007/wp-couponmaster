@@ -59,8 +59,8 @@ dass die Vorlage aktuell ist und jeder Text noch existiert). Prüfung durch die 
 | Valid until: %s | Gültig bis: %s | Gültig bis: %s | Gültig bis: %s | src/Downloads.php:1025 | ☐ |
 | unlimited | unbegrenzt | unbegrenzt | unbegrenzt | src/Downloads.php:1025 src/Placeholders.php:105 | ☐ |
 | no expiry | unbegrenzt | unbegrenzt | unbegrenzt | src/Emails/BonusEmail.php:109 | ☐ |
-| Your voucher from {site_title} expires on {expiry_date} | Ihr Gutschein von {site_title} läuft am {expiry_date} ab | Ihr Gutschein von {site_title} läuft am {expiry_date} ab | Ihr Gutschein von {site_title} läuft am {expiry_date} ab | src/Emails/ExpiryReminderEmail.php:24 | ☐ |
-| Your voucher {coupon_code} is valid until {expiry_date}. Remaining value: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | src/Emails/ExpiryReminderEmail.php:32 | ☐ |
+| Your voucher from {site_title} expires on {expiry_date} | Dein Gutschein von {site_title} läuft am {expiry_date} ab | Ihr Gutschein von {site_title} läuft am {expiry_date} ab | Ihr Gutschein von {site_title} läuft am {expiry_date} ab | src/Emails/ExpiryReminderEmail.php:24 | ☐ |
+| Your voucher {coupon_code} is valid until {expiry_date}. Remaining value: {coupon_balance}. | Dein Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | Ihr Gutschein {coupon_code} ist bis {expiry_date} gültig. Restwert: {coupon_balance}. | src/Emails/ExpiryReminderEmail.php:32 | ☐ |
 | This voucher has expired. | Dieser Gutschein ist abgelaufen. | Dieser Gutschein ist abgelaufen. | Dieser Gutschein ist abgelaufen. | src/API/V1/RedemptionService.php:812 src/Coupons/CartCoupons.php:374 | ☐ |
 
 ### Übertragbarkeit

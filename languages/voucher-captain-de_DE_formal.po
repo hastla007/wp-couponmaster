@@ -7991,7 +7991,7 @@ msgstr "%s ohne Bestellung ausgestellt (Voucher Captain)"
 
 #: src/Issuer.php:1237
 msgid "The voucher could not be created (WooCommerce coupon not saved). Please try again."
-msgstr "Der Gutschein konnte nicht erstellt werden (WooCommerce-Coupon nicht gespeichert). Bitte versuchen Sie es erneut."
+msgstr "Der Gutschein konnte nicht erstellt werden (WooCommerce-Code nicht gespeichert). Bitte versuchen Sie es erneut."
 
 #: src/Issuer.php:1264
 msgid "The order was set to \"Refunded\", but less than its total was refunded: it is handled as a cancellation – unused vouchers are voided, used ones stay valid."
@@ -9025,7 +9025,7 @@ msgstr "Gutschein-Anfragen: Wenn Sie über ein Formular auf dieser Website Gutsc
 
 #: src/Privacy.php:490
 msgid "Review invitations: when a voucher for a service (for example a course or an experience) is redeemed and a review plugin on this website is connected, we note that this redemption may lead to a review invitation – without your name or email address. Only when the review plugin sends the invitation does it ask us for the email address and name of the recipient (or the buyer) and the language. Only the first redemption of a voucher counts."
-msgstr "Bewertungseinladungen: Wird ein Gutschein für eine Leistung (zum Beispiel einen Kurs oder ein Erlebnis) eingelöst und ist auf dieser Website ein Bewertungs-Plugin angebunden, vermerken wir, dass diese Einlösung zu einer Bewertungseinladung führen kann – ohne Ihren Namen und Ihre E-Mail-Adresse. Erst wenn das Bewertungs-Plugin die Einladung versendet, fragt es bei uns die E-Mail-Adresse und den Namen der empfangenden Person (oder der Person, die gekauft hat) sowie die Sprache ab. Es zählt nur die erste Einlösung eines Gutscheins."
+msgstr "Bewertungseinladungen: Wird ein Gutschein für eine Leistung (zum Beispiel einen Kurs oder ein Erlebnis) eingelöst und ist auf dieser Website ein Bewertungs-Plugin angebunden, vermerken wir, dass diese Einlösung zu einer Bewertungseinladung führen kann – ohne Ihren Namen und Ihre E-Mail-Adresse. Erst wenn das Bewertungs-Plugin die Einladung versendet, fragt es bei uns die E-Mail-Adresse und den Namen der empfangenden Person (oder des Käufers) sowie die Sprache ab. Es zählt nur die erste Einlösung eines Gutscheins."
 
 #: src/Privacy.php:491
 msgid "At the entrance or the counter, our staff may scan the code of your voucher or ticket. We record the time, the staff member and the result (redeemed, checked in or refused) in the voucher history."
@@ -10843,7 +10843,7 @@ msgstr "Eine Einlösung an der Kasse wird nur mit der Belegnummer des Kassenbons
 
 #: src/Settings.php:1465
 msgid "Off (default): deleting the plugin keeps all data. On: deleting the plugin removes the voucher tables (including the redemption journal), templates, field groups, promotions, the voucher settings of products, the private PDF folder and all settings. The WooCommerce coupons of the vouchers are moved to the trash (restorable there), other coupons are kept."
-msgstr "Aus (Vorgabe): Beim Löschen des Plugins bleiben alle Daten erhalten. Ein: Beim Löschen des Plugins werden die Gutscheintabellen (mit dem Einlösejournal), Vorlagen, Feldgruppen, Aktionen, die Gutschein-Einstellungen der Produkte, der private PDF-Ordner und alle Einstellungen entfernt. Die WooCommerce-Coupons der Gutscheine kommen in den Papierkorb (dort wiederherstellbar), andere Coupons bleiben erhalten."
+msgstr "Aus (Vorgabe): Beim Löschen des Plugins bleiben alle Daten erhalten. Ein: Beim Löschen des Plugins werden die Gutscheintabellen (mit dem Einlösejournal), Vorlagen, Feldgruppen, Aktionen, die Gutschein-Einstellungen der Produkte, der private PDF-Ordner und alle Einstellungen entfernt. Die WooCommerce-Codes der Gutscheine kommen in den Papierkorb (dort wiederherstellbar), andere WooCommerce-Codes bleiben erhalten."
 
 #: src/Settings.php:1466
 msgid "On a network each site decides for itself. Scheduled background jobs are always removed. This setting is not part of any export of settings."

@@ -1153,7 +1153,7 @@ foreach ( array( 'de_DE', 'de_DE_formal', 'de_AT' ) as $locale ) {
 	foreach ( $po as $key => $translation ) {
 		$source = substr( $key, strpos( $key, "\x04" ) + 1 );
 		foreach ( $translation[0] as $form ) {
-			if ( preg_match( '/(?<![Kk]unden)(?<![Kk]unden-)[Gg]uthaben|WooCommerce-Gutschein|kaufenden? Person|[Bb]elohnung|gespeichert\w* Guthaben/u', $form, $u11_m ) ) {
+			if ( preg_match( '/(?<![Kk]unden)(?<![Kk]unden-)[Gg]uthaben|WooCommerce-Gutschein|WooCommerce-Coupon|Person, die gekauft hat|kaufenden? Person|[Bb]elohnung|gespeichert\w* Guthaben/u', $form, $u11_m ) ) {
 				$u11_off[] = $u11_m[0] . ': ' . $source;
 			}
 			if ( preg_match( '/store credit/i', $source ) && ! str_contains( $form, 'Kundenguthaben' ) ) {
@@ -1161,7 +1161,7 @@ foreach ( array( 'de_DE', 'de_DE_formal', 'de_AT' ) as $locale ) {
 			}
 		}
 	}
-	check( "U11: {$locale} uses the glossary (no bare \"Guthaben\", \"WooCommerce-Gutschein\", \"kaufende Person\", \"Belohnung\")", ! $u11_off, implode( ' | ', array_slice( $u11_off, 0, 5 ) ) );
+	check( "PV-P5-9 / U11: {$locale} uses the glossary (no bare \"Guthaben\", \"WooCommerce-Gutschein\", \"WooCommerce-Coupon\", \"Person, die gekauft hat\", \"kaufende Person\", \"Belohnung\")", ! $u11_off, implode( ' | ', array_slice( $u11_off, 0, 5 ) ) );
 	check( "U11: {$locale} translates every \"store credit\" as \"Kundenguthaben\"", ! $u11_credit, implode( ' | ', array_slice( array_unique( $u11_credit ), 0, 5 ) ) );
 }
 
@@ -1175,11 +1175,17 @@ $s4_sie      = vcap_test_po( dirname( __DIR__ ) . '/languages/voucher-captain-de
 $s4_at       = vcap_test_po( dirname( __DIR__ ) . '/languages/voucher-captain-de_AT.po' );
 $s4_bad      = array();
 $s4_address  = 0;
+// PV-P5-1: the formal possessive "Ihr/Ihre…" for "your" in de_DE (3rd-person "Ihre" = "its/their" stays allowed).
+$s4_possessive = '/\b(Ihr|Ihre[mnrs]?)\b/u';
+$s4_poss       = array();
 foreach ( $s4_du as $key => $entry ) {
 	foreach ( $entry[0] as $i => $du ) {
 		$sie = (string) ( $s4_sie[ $key ][0][ $i ] ?? '' );
 		if ( preg_match( $s4_formal, $du ) ) {
 			$s4_bad[] = 'de_DE uses "Sie": ' . $du;
+		}
+		if ( preg_match( $s4_possessive, $du ) && false !== stripos( explode( "\x04", (string) $key )[1] . ' ' . (string) $entry[1], 'your' ) ) {
+			$s4_poss[] = $du;
 		}
 		if ( preg_match( $s4_informal, $sie ) ) {
 			$s4_bad[] = 'de_DE_formal uses "du": ' . $sie;
@@ -1197,6 +1203,8 @@ foreach ( $s4_du as $key => $entry ) {
 		}
 	}
 }
+check( 'PV-P5-1: de_DE says "dein/deine" for "your" – no formal "Ihr/Ihre" possessive (3rd-person "Ihre" stays allowed)', array() === $s4_poss, implode( ' | ', array_slice( $s4_poss, 0, 5 ) ) );
+check( 'PV-P5-1: the possessive check sees "Ihr/Ihre" and leaves other words alone', 1 === preg_match( $s4_possessive, 'Ihre Gutscheine' ) && 1 === preg_match( $s4_possessive, 'an Ihrem Konto' ) && 0 === preg_match( $s4_possessive, 'Ihrerseits' ) && 0 === preg_match( $s4_possessive, 'Dein Gutschein' ) );
 check( 'S4: de_DE says "du", de_DE_formal and de_AT say "Sie" – no mix in one file, both German catalogs hold the same texts', array() === $s4_bad && array_keys( $s4_du ) === array_keys( $s4_sie ) && $s4_address > 100, implode( ' | ', array_slice( $s4_bad, 0, 5 ) ) . ' (addressed: ' . $s4_address . ')' );
 
 // Locale fallback (VCAP\I18n): German variants without their own file load the German translation.
