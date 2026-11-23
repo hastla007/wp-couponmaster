@@ -14673,3 +14673,153 @@ msgstr "Dieser Ereignisname kann nicht in den Gutscheinverlauf geschrieben werde
 
 msgid "The voucher history could not be saved."
 msgstr "Der Gutscheinverlauf konnte nicht gespeichert werden."
+
+msgid "Contact person"
+msgstr "Ansprechperson"
+
+msgid "Number of vouchers"
+msgstr "Anzahl Gutscheine"
+
+msgid "Value per voucher"
+msgstr "Wert je Gutschein"
+
+msgid "Personalisation text"
+msgstr "Personalisierungstext"
+
+msgid "Consent"
+msgstr "Einwilligung"
+
+msgid "Submissions become voucher requests in Voucher Captain. Nothing is issued before a manager approves the request."
+msgstr "Einsendungen werden zu Gutscheinanfragen in Voucher Captain. Ausgestellt wird erst, wenn eine verantwortliche Person die Anfrage freigibt."
+
+msgid "Voucher Captain cannot take requests right now (WooCommerce inactive or the request table is missing)."
+msgstr "Voucher Captain kann gerade keine Anfragen annehmen (WooCommerce ist inaktiv oder die Anfragetabelle fehlt)."
+
+msgid "Voucher request to Voucher Captain"
+msgstr "Gutscheinanfrage an Voucher Captain"
+
+msgid "Suggested voucher product (ID, optional)"
+msgstr "Vorgeschlagenes Gutscheinprodukt (ID, optional)"
+
+msgid "Please enter a contact person."
+msgstr "Bitte geben Sie eine Ansprechperson an."
+
+msgid "Please enter a valid email address."
+msgstr "Bitte geben Sie eine gültige E-Mail-Adresse an."
+
+msgid "Please request between 1 and %d vouchers."
+msgstr "Bitte fragen Sie zwischen 1 und %d Gutscheine an."
+
+msgid "Please enter a valid voucher value."
+msgstr "Bitte geben Sie einen gültigen Gutscheinwert an."
+
+msgid "The personalisation text is too long."
+msgstr "Der Personalisierungstext ist zu lang."
+
+msgid "The request needs the consent of the sender."
+msgstr "Für die Anfrage ist die Einwilligung der absendenden Person nötig."
+
+msgid "Only open requests can be changed."
+msgstr "Nur offene Anfragen können geändert werden."
+
+msgid "The request could not be saved."
+msgstr "Die Anfrage konnte nicht gespeichert werden."
+
+msgid "Only open requests can be rejected."
+msgstr "Nur offene Anfragen können abgelehnt werden."
+
+msgid "Only open requests can be approved."
+msgstr "Nur offene Anfragen können freigegeben werden."
+
+msgid "The vouchers could not be issued. The request is still open."
+msgstr "Die Gutscheine konnten nicht ausgestellt werden. Die Anfrage ist weiterhin offen."
+
+msgid "No voucher could be issued for this request."
+msgstr "Für diese Anfrage konnte kein Gutschein ausgestellt werden."
+
+msgid "No voucher could be issued for this product. The request is still open."
+msgstr "Für dieses Produkt konnte kein Gutschein ausgestellt werden. Die Anfrage ist weiterhin offen."
+
+msgid "Voucher request approved, vouchers issued. Payment by invoice."
+msgstr "Gutscheinanfrage freigegeben, Gutscheine ausgestellt. Zahlung auf Rechnung."
+
+msgid "Please choose a voucher product (a simple product or a variation with vouchers enabled)."
+msgstr "Bitte wählen Sie ein Gutscheinprodukt (ein einfaches Produkt oder eine Variante mit aktivierten Gutscheinen)."
+
+msgid "Please choose a voucher product that issues one voucher per item."
+msgstr "Bitte wählen Sie ein Gutscheinprodukt, das je Artikel einen Gutschein ausstellt."
+
+msgid "Created from voucher request #%d (Form Captain)."
+msgstr "Erstellt aus Gutscheinanfrage #%d (Form Captain)."
+
+msgid "Voucher Captain: the voucher request service cannot delete a request when a single Form Captain entry is deleted or its consent withdrawn (forget_reference() missing). Data protection requests are still handled by the eraser of the service."
+msgstr "Voucher Captain: Der Gutscheinanfrage-Dienst kann eine Anfrage nicht löschen, wenn ein einzelner Form-Captain-Eintrag gelöscht oder dessen Einwilligung widerrufen wird (forget_reference() fehlt). Datenschutzanfragen erledigt weiterhin der Löschdienst des Anfrage-Dienstes."
+
+msgid "To be reviewed"
+msgstr "Zu prüfen"
+
+msgid "Being issued"
+msgstr "Wird ausgestellt"
+
+msgid "Approved"
+msgstr "Freigegeben"
+
+msgid "Rejected"
+msgstr "Abgelehnt"
+
+msgid "Consent withdrawn"
+msgstr "Einwilligung widerrufen"
+
+msgid "Request saved."
+msgstr "Anfrage gespeichert."
+
+msgid "Request approved, vouchers issued."
+msgstr "Anfrage freigegeben, Gutscheine ausgestellt."
+
+msgid "Request rejected."
+msgstr "Anfrage abgelehnt."
+
+msgid "Requests sent with Form Captain forms. A request never issues anything by itself: vouchers are issued only when you approve it."
+msgstr "Anfragen aus Form-Captain-Formularen. Eine Anfrage stellt nie selbst etwas aus: Gutscheine werden erst ausgestellt, wenn Sie sie freigeben."
+
+msgid "Request"
+msgstr "Anfrage"
+
+msgid "No requests yet."
+msgstr "Noch keine Anfragen."
+
+msgid "All requests"
+msgstr "Alle Anfragen"
+
+msgid "Request #%1$d – %2$s"
+msgstr "Anfrage #%1$d – %2$s"
+
+msgid "Order #%1$s, %2$d voucher(s) issued."
+msgstr "Bestellung #%1$s, %2$d Gutschein(e) ausgestellt."
+
+msgid "Open order"
+msgstr "Bestellung öffnen"
+
+msgid "The personal data of this request was removed (entry deleted or consent withdrawn in Form Captain)."
+msgstr "Die personenbezogenen Daten dieser Anfrage wurden entfernt (Eintrag gelöscht oder Einwilligung in Form Captain widerrufen)."
+
+msgid "Voucher product"
+msgstr "Gutscheinprodukt"
+
+msgid "— Choose —"
+msgstr "— Auswählen —"
+
+msgid "Approving creates an order on hold (to be invoiced) with this product and issues the vouchers through Voucher Captain."
+msgstr "Die Freigabe legt mit diesem Produkt eine Bestellung „In Wartestellung“ (auf Rechnung) an und stellt die Gutscheine über Voucher Captain aus."
+
+msgid "Reason for rejection (internal)"
+msgstr "Ablehnungsgrund (intern)"
+
+msgid "Approve and issue vouchers"
+msgstr "Freigeben und Gutscheine ausstellen"
+
+msgid "Reject"
+msgstr "Ablehnen"
+
+msgid "Unknown action."
+msgstr "Unbekannte Aktion."

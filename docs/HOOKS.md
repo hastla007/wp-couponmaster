@@ -21,6 +21,9 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_campaigns_table_cell` | 1.1.0 | `src/Admin/CampaignAdmin.php` | Extra cells of the campaign table (e.g. the partner of WP Affiliate Captain). |
 | `vcap_campaigns_table_header` | 1.1.0 | `src/Admin/CampaignAdmin.php` | – |
 | `vcap_card_moved_to_credit` | 1.2.0 | `src/CardToCredit.php` | A gift card was moved into a customer's store credit (args: card Voucher, user id, amount). |
+| `vcap_form_captain_request_approved` | 1.3.0 | `src/Integrations/FormCaptain/RequestService.php` | A voucher request from Form Captain was approved and its vouchers issued. |
+| `vcap_form_captain_request_created` | 1.3.0 | `src/Integrations/FormCaptain/RequestService.php` | A voucher request from Form Captain was stored (status pending). Nothing has been issued. |
+| `vcap_form_captain_request_rejected` | 1.3.0 | `src/Integrations/FormCaptain/RequestService.php` | A voucher request from Form Captain was rejected. |
 | `vcap_gift_card_topped_up` | 1.2.0 | `src/TopUp.php` | A gift card was topped up by an order (args: Voucher $card, float $amount, WC_Order $order, order item). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_loaded` | 1.2.0 | `voucher-captain.php` | Voucher Captain has booted: vcap() and its services (api_v1, redemptions …) can be used from here on. |
 | `vcap_no_cache` | 1.2.0 | `src/Shortcodes.php` | Fires when a page must not be cached (hook for cache plugins without DONOTCACHEPAGE support). |
@@ -128,6 +131,9 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_field_group_applies` | 1.0.0 | `src/Fields.php` | – |
 | `vcap_first_order_counting_statuses` | 1.1.0 | `src/FirstOrderCoupons.php` | – |
 | `vcap_first_order_counts_undone_order` | 1.2.0 | `src/FirstOrderCoupons.php` | Whether a refunded/cancelled order counts as earlier order for "first order only" (bool, WC_Order). |
+| `vcap_form_captain_available` | 1.3.0 | `src/Integrations/FormCaptain/RequestService.php` | Filters whether Voucher Captain accepts voucher requests from Form Captain right now. False makes the Form Captain job retry later (code `voucher_captain_unavailable`). |
+| `vcap_form_captain_max_quantity` | 1.3.0 | `src/Integrations/FormCaptain/RequestService.php` | Most vouchers one Form Captain request may ask for. |
+| `vcap_form_captain_max_value` | 1.3.0 | `src/Integrations/FormCaptain/RequestService.php` | Highest value of one voucher requested through Form Captain (shop base currency). |
 | `vcap_hold_velocity` | 1.2.0 | `src/Delivery.php` | Maximum voucher orders of new customers per address (IPv6 /64) within the hold window before further ones are held (default 0 = no velocity limit; rate limit bucket "voucher_buy"). |
 | `vcap_import_max_unzipped_bytes` | 1.2.0 | `src/SpreadsheetReader.php` | – |
 | `vcap_internal_redemption_key_prefixes` | 1.1.0 | `src/API/V1/RestController.php` | Key prefixes reserved for built-in integrations (never created or driven over REST). |
@@ -263,6 +269,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_voucher_request_handover` | 1.2.0 | `src/Integrations/VoucherRequests.php` | Hands a voucher request over to a company order (D5, contract 1.0.0). Return `array{url: string, order_id: int}` (admin URL of the order's preview) or a WP_Error; null means no extension took it. The same reference again must answer the same order. |
 | `vcap_voucher_request_handover_available` | 1.2.0 | `src/Integrations/VoucherRequests.php` | Whether an add-on takes this voucher request over as a company order (D5, contract 1.0.0). Default false: without an add-on the request view stays as it is. |
 | `vcap_voucher_request_lock_wait` | 1.2.0 | `src/Integrations/VoucherRequests.php` | Seconds a state change of a voucher request waits for another one on the same request (R9). |
+| `vcap_voucher_request_service_v1` | 1.3.0 | `src/Integrations/FormCaptain/RequestService.php` | The voucher request service of the core (VoucherRequests::service()), when this Voucher Captain has it. |
 | `vcap_voucher_requests_max_open` | 1.2.0 | `src/Integrations/VoucherRequests.php` | Most open requests at a time (protection against floods of form entries); above it submit() answers `vcap_request_limit` (429). 0 accepts no new request. |
 | `vcap_voucher_requests_retention_months` | 1.2.0 | `src/Integrations/VoucherRequests.php` | Retention of voucher requests in months (D10): `open` – open and partly issued requests (default 6), `closed` – issued and handed-over requests (default 24). 0 keeps them. Rejected requests are deleted at once. |
 | `vcap_voucher_tax_treatment` | 1.1.0 | `src/ProductConfig.php` | – |
