@@ -118,7 +118,7 @@ final class CustomCss {
 			'/\\\\([0-9a-fA-F]{1,6})[ \t\n\f]?/',
 			static function ( array $m ): string {
 				$code = (int) hexdec( $m[1] );
-				$char = $code > 0 && $code <= 0x10FFFF ? mb_chr( $code, 'UTF-8' ) : false;
+				$char = $code > 0 && $code <= 0x10FFFF ? html_entity_decode( '&#' . $code . ';', ENT_QUOTES | ENT_HTML5, 'UTF-8' ) : false;
 				return false === $char ? '' : $char;
 			},
 			$css
