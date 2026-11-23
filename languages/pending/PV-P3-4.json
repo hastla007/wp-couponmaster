@@ -1,13 +1,17 @@
 {
-  "This maximum amount was entered in %1$s; the shop currency is now %2$s. It is not used: the command refuses amounts until you save a new maximum amount in %2$s.": {
-    "du": "Dieser Höchstbetrag wurde in %1$s eingetragen; die Shopwährung ist jetzt %2$s. Er wird nicht verwendet: Der Befehl lehnt Beträge ab, bis du einen neuen Höchstbetrag in %2$s speicherst.",
-    "sie": "Dieser Höchstbetrag wurde in %1$s eingetragen; die Shopwährung ist jetzt %2$s. Er wird nicht verwendet: Der Befehl lehnt Beträge ab, bis Sie einen neuen Höchstbetrag in %2$s speichern.",
-    "at": "Dieser Höchstbetrag wurde in %1$s eingetragen; die Shopwährung ist jetzt %2$s. Er wird nicht verwendet: Der Befehl lehnt Beträge ab, bis Sie einen neuen Höchstbetrag in %2$s speichern."
-  },
-  "Currency of the maximum amount": {"du": "Währung des Höchstbetrags", "sie": "Währung des Höchstbetrags", "at": "Währung des Höchstbetrags"},
-  "Recorded when you save the maximum amount. If the shop currency changes, the maximum amount is not used until you save a new one.": {
-    "du": "Wird beim Speichern des Höchstbetrags festgehalten. Ändert sich die Shopwährung, wird der Höchstbetrag nicht verwendet, bis du einen neuen speicherst.",
-    "sie": "Wird beim Speichern des Höchstbetrags festgehalten. Ändert sich die Shopwährung, wird der Höchstbetrag nicht verwendet, bis Sie einen neuen speichern.",
-    "at": "Wird beim Speichern des Höchstbetrags festgehalten. Ändert sich die Shopwährung, wird der Höchstbetrag nicht verwendet, bis Sie einen neuen speichern."
-  }
+ "This maximum amount was entered in %1$s; the shop currency is now %2$s. It is not used: the command refuses amounts until you save a new maximum amount in %2$s.": {
+  "du": "Dieser Höchstbetrag wurde in %1$s eingetragen; die Shopwährung ist jetzt %2$s. Er wird nicht verwendet: Der Befehl lehnt Beträge ab, bis du einen neuen Höchstbetrag in %2$s speicherst.",
+  "sie": "Dieser Höchstbetrag wurde in %1$s eingetragen; die Shopwährung ist jetzt %2$s. Er wird nicht verwendet: Der Befehl lehnt Beträge ab, bis Sie einen neuen Höchstbetrag in %2$s speichern.",
+  "at": "Dieser Höchstbetrag wurde in %1$s eingetragen; die Shopwährung ist jetzt %2$s. Er wird nicht verwendet: Der Befehl lehnt Beträge ab, bis Sie einen neuen Höchstbetrag in %2$s speichern."
+ },
+ "Recorded when you save the maximum amount. If the shop currency changes, the maximum amount is not used until you save a new one.": {
+  "du": "Wird beim Speichern des Höchstbetrags festgehalten. Ändert sich die Shopwährung, wird der Höchstbetrag nicht verwendet, bis du einen neuen speicherst.",
+  "sie": "Wird beim Speichern des Höchstbetrags festgehalten. Ändert sich die Shopwährung, wird der Höchstbetrag nicht verwendet, bis Sie einen neuen speichern.",
+  "at": "Wird beim Speichern des Höchstbetrags festgehalten. Ändert sich die Shopwährung, wird der Höchstbetrag nicht verwendet, bis Sie einen neuen speichern."
+ },
+ "Currency of the maximum amount (%s)": {
+  "du": "Währung des Höchstbetrags (%s)",
+  "sie": "Währung des Höchstbetrags (%s)",
+  "at": "Währung des Höchstbetrags (%s)"
+ }
 }

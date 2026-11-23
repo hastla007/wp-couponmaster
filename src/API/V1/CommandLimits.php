@@ -366,7 +366,8 @@ final class CommandLimits {
 				$fields[] = SettingsRegistry::field(
 					self::option( $command, self::SUFFIX_CURRENCY ),
 					array(
-						'title'             => __( 'Currency of the maximum amount', 'voucher-captain' ),
+						/* translators: %s: command, e.g. voucher.issue */
+						'title'             => sprintf( __( 'Currency of the maximum amount (%s)', 'voucher-captain' ), $command ),
 						'type'              => 'text',
 						'custom_attributes' => array( 'readonly' => 'readonly' ),
 						'desc'              => __( 'Recorded when you save the maximum amount. If the shop currency changes, the maximum amount is not used until you save a new one.', 'voucher-captain' ),
