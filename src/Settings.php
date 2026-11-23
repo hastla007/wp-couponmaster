@@ -656,9 +656,8 @@ final class Settings {
 			Health::proxy_header_field(), // SET-VC-26.
 			array( 'type' => 'sectionend', 'id' => 'vcap_privacy' ),
 		);
-		$fields = array_merge( $fields, Admin\RoleCaps::fields() ); // SET-VC-21.
 		$fields = array_merge( $fields, self::retention_fields() ); // SET-VC-08.
-		$fields = array_merge( $fields, self::counter_limit_fields(), Admin\RoleCaps::fields() ); // SET-VC-21.
+		$fields = array_merge( $fields, Admin\RoleCaps::fields() ); // SET-VC-21.
 		// SET-VC-14/15/16: export, import, reset and change log of the settings.
 		return array_merge( $fields, Admin\SettingsTools::fields() );
 	}
