@@ -32,6 +32,7 @@ final class Settings {
 		add_action( 'woocommerce_settings_vcap', array( $this, 'output' ) );
 		add_action( 'woocommerce_settings_save_vcap', array( $this, 'save' ) );
 		add_action( 'woocommerce_sections_vcap', array( $this, 'sections' ) );
+		add_action( 'woocommerce_admin_field_' . Admin\SettingsUi::DEFAULT_SUBMIT_TYPE, array( Admin\SettingsUi::class, 'render_default_submit' ) );
 		add_filter( 'woocommerce_admin_settings_sanitize_option_' . Logger::VERBOSE_OPTION, array( Logger::class, 'sanitize_verbose' ) );
 		foreach ( array( 'vcap_code_prefix', 'vcap_code_suffix', 'vcap_code_separator' ) as $affix ) {
 			add_filter( 'woocommerce_admin_settings_sanitize_option_' . $affix, array( $this, 'sanitize_affix' ), 10, 2 );
@@ -176,7 +177,8 @@ final class Settings {
 
 	public function output(): void {
 		global $current_section;
-		\WC_Admin_Settings::output_fields( $this->fields( (string) $current_section ) );
+		// PV-P5-2: a hidden "Save changes" button first, so Enter in a field saves instead of running an action button.
+		\WC_Admin_Settings::output_fields( array_merge( array( Admin\SettingsUi::default_submit_field() ), $this->fields( (string) $current_section ) ) );
 	}
 
 	public function save(): void {
@@ -430,7 +432,7 @@ final class Settings {
 				array(
 					'title'       => __( 'Logo', 'voucher-captain' ),
 					'type'        => 'text',
-					'css'         => 'min-width:400px;',
+					'css'         => 'width:100%;max-width:400px;',
 					'placeholder' => (string) get_option( 'woocommerce_email_header_image', '' ),
 					'desc_tip'    => __( 'Address (URL) of the logo shown at the top of the voucher emails, e.g. from the media library. Empty = the WooCommerce header image.', 'voucher-captain' ),
 				)
@@ -451,10 +453,12 @@ final class Settings {
 			SettingsRegistry::field(
 				CustomCss::OPTION,
 				array(
-					'title'    => __( 'Additional CSS', 'voucher-captain' ),
-					'type'     => 'textarea',
-					'css'      => 'width:100%;min-height:10em;font-family:monospace;',
-					'desc'     => sprintf(
+					'title'             => __( 'Additional CSS', 'voucher-captain' ),
+					'type'              => 'textarea',
+					'css'               => 'width:100%;min-height:10em;font-family:monospace;',
+					// PV-P5-3: the browser stops at the limit, too (CustomCss::sanitize_option() reports a longer text).
+					'custom_attributes' => array( 'maxlength' => CustomCss::MAX_LENGTH ),
+					'desc'              => sprintf(
 						/* translators: %d: maximum number of characters */
 						__( 'Printed only on pages with Voucher Captain output (redeem form, balance check, blocks, voucher fields, My Account). Tags, @import, expression() and script addresses are removed; at most %d characters.', 'voucher-captain' ),
 						CustomCss::MAX_LENGTH
@@ -851,7 +855,7 @@ final class Settings {
 				array(
 					'title'    => __( 'Default redemption conditions', 'voucher-captain' ),
 					'type'     => 'textarea',
-					'css'      => 'min-width:400px;height:80px;',
+					'css'      => 'width:100%;max-width:400px;height:80px;',
 					'desc_tip' => __( 'Used when a product has no conditions of its own, e.g. "Not exchangeable for cash. Residual value remains on the voucher."', 'voucher-captain' ),
 				)
 			),

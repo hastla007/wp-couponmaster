@@ -4418,7 +4418,7 @@ preg_match_all( '/public static function (export|download_backup|import|import_a
 $st_fields = ( new VCAP\Settings() )->fields( 'privacy' );
 check(
 	'SET-VC-14: every admin action needs manage_woocommerce and the nonce (guard() first); the tools, the change log and its retention field are under "Privacy & advanced"; the buttons post to admin-post (not "Save changes")',
-	6 === count( $st_m[1] ) && array( 'self::guard();' ) === array_values( array_unique( $st_m[2] ) ) && 'manage_woocommerce' === VCAP\Admin\SettingsTools::CAP && str_contains( $st_tools_src, 'check_admin_referer( self::NONCE, self::NONCE_FIELD );' ) && str_contains( $st_tools_src, 'formaction=' )
+	6 === count( $st_m[1] ) && array( 'self::guard();' ) === array_values( array_unique( $st_m[2] ) ) && 'manage_woocommerce' === VCAP\Admin\SettingsTools::CAP && str_contains( $st_tools_src, 'check_admin_referer( self::NONCE, self::NONCE_FIELD );' ) && str_contains( $st_tools_src, 'return SettingsUi::action_button( $action, $label, $class );' ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Admin/SettingsUi.php' ), 'formaction=' )
 		&& array( VCAP\Admin\SettingsTools::TOOLS_TYPE, VCAP\Admin\SettingsTools::LOG_TYPE ) === array_values( array_intersect( array_column( $st_fields, 'type' ), array( VCAP\Admin\SettingsTools::TOOLS_TYPE, VCAP\Admin\SettingsTools::LOG_TYPE ) ) ) && in_array( VCAP\SettingsLog::DAYS_OPTION, array_column( $st_fields, 'id' ), true )
 );
 
@@ -5191,6 +5191,135 @@ $GLOBALS['wpdb']                 = $cp_saved_wpdb;
 $GLOBALS['vcap_test_transients'] = $cp_saved_tr;
 $GLOBALS['vcap_test_options']    = $cp_saved;
 VCAP\CountryProfiles::reset();
+
+// ---- Group E (test phase fixes): language and settings UI ----
+$pv_saved_opts = $GLOBALS['vcap_test_options'];
+$pv_set_src    = (string) file_get_contents( VCAP_PATH . 'src/Settings.php' );
+$pv_tools_src  = (string) file_get_contents( VCAP_PATH . 'src/Admin/SettingsTools.php' );
+$pv_prof_src   = (string) file_get_contents( VCAP_PATH . 'src/Admin/CountryProfilesAdmin.php' );
+$pv_submit     = VCAP\Admin\SettingsUi::default_submit();
+check(
+	'PV-P5-2: every "Vouchers" section starts with a hidden "Save changes" button (name="save", screen-reader-text, not in the Tab order, hidden from screen readers), so Enter in a field saves instead of running the first action button',
+	str_starts_with( $pv_submit, '<button type="submit" name="save" value="Save changes"' ) && str_contains( $pv_submit, 'class="screen-reader-text vcap-default-submit"' ) && str_contains( $pv_submit, 'tabindex="-1"' ) && str_contains( $pv_submit, 'aria-hidden="true"' ) && str_contains( $pv_submit, 'onclick="window.onbeforeunload=null;"' )
+		&& str_contains( $pv_set_src, '\WC_Admin_Settings::output_fields( array_merge( array( Admin\SettingsUi::default_submit_field() ), $this->fields( (string) $current_section ) ) );' )
+		&& str_contains( $pv_set_src, "add_action( 'woocommerce_admin_field_' . Admin\SettingsUi::DEFAULT_SUBMIT_TYPE, array( Admin\SettingsUi::class, 'render_default_submit' ) );" )
+		&& VCAP\Admin\SettingsUi::DEFAULT_SUBMIT_TYPE === VCAP\Admin\SettingsUi::default_submit_field()['type'] && false === VCAP\Admin\SettingsUi::default_submit_field()['is_option'],
+	$pv_submit
+);
+$GLOBALS['vcap_test_options'] = array( 'woocommerce_default_country' => 'AT' );
+$pv_prev_html = VCAP\Admin\CountryProfilesAdmin::preview_html( 'AT' );
+preg_match_all( '/<button\b[^>]*>/', $pv_prev_html, $pv_buttons );
+check(
+	'PV-P5-2: the action buttons (country profile, import, reset) clear the unsaved-changes prompt on click, and the cells around their controls carry wc-settings-prevent-change-event (WooCommerce ignores changes inside)',
+	'wc-settings-prevent-change-event' === VCAP\Admin\SettingsUi::PREVENT_CHANGE && $pv_buttons[0] && count( $pv_buttons[0] ) === count( array_filter( $pv_buttons[0], static fn( $b ) => str_contains( $b, 'onclick="window.onbeforeunload=null;"' ) && str_contains( $b, 'formaction=' ) ) )
+		&& str_contains( VCAP\Admin\SettingsUi::action_button( 'vcap_settings_reset', 'Reset' ), 'formaction="https://shop.test/wp-admin/admin-post.php?action=vcap_settings_reset" onclick="window.onbeforeunload=null;"' )
+		&& 1 === substr_count( $pv_tools_src, "<td class=\"forminp ' . esc_attr( SettingsUi::PREVENT_CHANGE ) . '\">" ) && 1 === substr_count( $pv_prof_src, "<td class=\"forminp ' . esc_attr( SettingsUi::PREVENT_CHANGE ) . '\">" )
+		&& str_contains( $pv_tools_src, 'return SettingsUi::action_button( $action, $label, $class );' ) && str_contains( $pv_prof_src, 'return SettingsUi::action_button( $action, $label, $class );' )
+		&& 0 === preg_match( '/<button type="submit"/', $pv_tools_src . $pv_prof_src ),
+	implode( ' ', $pv_buttons[0] )
+);
+// PV-P5-3: colour, logo and CSS are not dropped silently.
+VCAP\SettingsRegistry::reset_flags();
+WC_Admin_Settings::$errors    = array();
+$GLOBALS['vcap_test_options'] = array( 'vcap_email_color' => '#abcdef', 'vcap_email_logo' => 'https://shop.test/old.png' );
+$pv_color = array(
+	'hex'   => VCAP\Emails\Branding::save_color( '1F3A4D', array( 'title' => 'Accent colour' ) ),
+	'ok'    => VCAP\Emails\Branding::save_color( '#123', array( 'title' => 'Accent colour' ) ),
+	'empty' => VCAP\Emails\Branding::save_color( '', array( 'title' => 'Accent colour' ) ),
+);
+$pv_color_err    = WC_Admin_Settings::$errors;
+$pv_color['bad'] = VCAP\Emails\Branding::save_color( 'red', array( 'title' => 'Accent colour' ) );
+$pv_logo         = array(
+	'bad'   => VCAP\Emails\Branding::save_logo( 'shop.test/logo.png', array( 'title' => 'Logo' ) ),
+	'ok'    => VCAP\Emails\Branding::save_logo( 'https://shop.test/new.png', array( 'title' => 'Logo' ) ),
+	'empty' => VCAP\Emails\Branding::save_logo( ' ', array( 'title' => 'Logo' ) ),
+);
+check(
+	'PV-P5-3: a colour without "#" is taken with one; another invalid colour or a logo address without http(s) keeps the previous value and names the field in a message; empty still means "WooCommerce default"',
+	array( 'hex' => '#1f3a4d', 'ok' => '#123', 'empty' => '', 'bad' => '#abcdef' ) === $pv_color && array() === $pv_color_err && array( 'bad' => 'https://shop.test/old.png', 'ok' => 'https://shop.test/new.png', 'empty' => '' ) === $pv_logo
+		&& 2 === count( WC_Admin_Settings::$errors ) && str_starts_with( WC_Admin_Settings::$errors[0], 'Accent colour: "red" is no colour' ) && str_starts_with( WC_Admin_Settings::$errors[1], 'Logo: "shop.test/logo.png" is no web address' )
+		&& isset( VCAP\SettingsRegistry::flagged()['vcap_email_color'], VCAP\SettingsRegistry::flagged()['vcap_email_logo'] )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'src/Emails/Branding.php' ), "array( self::class, 'save_logo' ), 10, 2" ),
+	json_encode( array( $pv_color, $pv_logo, WC_Admin_Settings::$errors ) )
+);
+VCAP\SettingsRegistry::reset_flags();
+WC_Admin_Settings::$errors = array();
+$pv_css       = array(
+	'same'    => VCAP\CustomCss::sanitize_option( 'x', array( 'title' => 'Additional CSS' ), " .a > .b { color: red; }\r\n" ),
+	'removed' => VCAP\CustomCss::sanitize_option( 'x', array( 'title' => 'Additional CSS' ), '@import url(x.css); .a { color: red; }' ),
+	'long'    => VCAP\CustomCss::sanitize_option( 'x', array( 'title' => 'Additional CSS' ), str_repeat( 'a', VCAP\CustomCss::MAX_LENGTH + 5 ) ),
+);
+$pv_css_field = array_values( array_filter( ( new VCAP\Settings() )->fields( 'delivery' ), static fn( $f ) => VCAP\CustomCss::OPTION === ( $f['id'] ?? '' ) ) );
+check(
+	'PV-P5-3: CSS that was shortened or had parts removed is saved with a message naming the field and the change; CSS stored as entered gives none; the textarea has maxlength',
+	'.a > .b { color: red; }' === $pv_css['same'] && '.a { color: red; }' === $pv_css['removed'] && VCAP\CustomCss::MAX_LENGTH === mb_strlen( $pv_css['long'] )
+		&& 2 === count( WC_Admin_Settings::$errors ) && str_contains( WC_Admin_Settings::$errors[0], 'Additional CSS was saved changed:' ) && str_contains( WC_Admin_Settings::$errors[0], 'not allowed' ) && str_contains( WC_Admin_Settings::$errors[1], 'shortened to 10000 characters' ) && ! str_contains( WC_Admin_Settings::$errors[1], 'not allowed' )
+		&& isset( VCAP\SettingsRegistry::flagged()[ VCAP\CustomCss::OPTION ] ) && VCAP\CustomCss::MAX_LENGTH === ( $pv_css_field[0]['custom_attributes']['maxlength'] ?? null ),
+	json_encode( WC_Admin_Settings::$errors )
+);
+// PV-P5-4: a refused or corrected number marks its field; notices after an action are announced.
+VCAP\SettingsRegistry::reset_flags();
+WC_Admin_Settings::$errors = array();
+$pv_n_saved = VCAP\SettingsRegistry::sanitize_option( 'abc', array( 'id' => 'vcap_hold_hours', 'title' => 'Hold hours' ) );
+$pv_n_field = VCAP\SettingsRegistry::field( 'vcap_hold_hours', array( 'title' => 'Hold hours', 'type' => 'number', 'desc_tip' => true, 'desc' => 'Help text' ) );
+$pv_n_other = VCAP\SettingsRegistry::field( 'vcap_hold_new_customer_above', array( 'title' => 'Other', 'type' => 'number', 'desc' => 'Plain' ) );
+VCAP\SettingsRegistry::reset_flags();
+$pv_n_after    = VCAP\SettingsRegistry::field( 'vcap_hold_hours', array( 'title' => 'Hold hours', 'type' => 'number' ) );
+$pv_err_notice = VCAP\Admin\SettingsUi::notice( array( 'type' => 'error', 'text' => 'Nope' ), 'vcap_settings_notice' );
+$pv_ok_notice  = VCAP\Admin\SettingsUi::notice( array( 'type' => 'success', 'text' => 'Done' ), 'vcap_settings_notice' );
+check(
+	'PV-P5-4: a number that was refused or corrected marks its field on the page after saving (aria-invalid, the message below it; a tooltip-only help stays in the tooltip); other fields stay unmarked',
+	null === $pv_n_saved && 1 === count( WC_Admin_Settings::$errors ) && 'true' === ( $pv_n_field['custom_attributes']['aria-invalid'] ?? '' ) && str_starts_with( (string) $pv_n_field['desc'], '<strong class="vcap-field-error">Hold hours: &quot;abc&quot; was not saved' ) && 'Help text' === $pv_n_field['desc_tip'] && 0 === ( $pv_n_field['custom_attributes']['min'] ?? null )
+		&& ! isset( $pv_n_other['custom_attributes']['aria-invalid'] ) && 'Plain' === $pv_n_other['desc'] && ! isset( $pv_n_after['custom_attributes']['aria-invalid'] ),
+	json_encode( array( $pv_n_field, WC_Admin_Settings::$errors ) )
+);
+check(
+	'PV-P5-4: the message after an action is announced – an error with role="alert", a success with role="status", focusable with an id; a reset without the confirmation marks the checkbox and points at the message',
+	str_contains( $pv_err_notice, 'id="vcap_settings_notice" class="notice inline notice-error" role="alert" tabindex="-1"' ) && str_contains( $pv_ok_notice, 'class="notice inline notice-success" role="status"' )
+		&& ! str_contains( $pv_tools_src . $pv_prof_src, 'role="status"><p>' ) && str_contains( $pv_tools_src, "__( 'Nothing was reset: please tick the confirmation first.', 'voucher-captain' ), 'vcap_settings_reset_confirm' );" )
+		&& str_contains( $pv_tools_src, "' aria-invalid=\"true\" aria-describedby=\"vcap_settings_notice\"'" ) && str_contains( $pv_prof_src, "SettingsUi::notice( \$notice, 'vcap_profile_notice' )" )
+);
+// PV-P5-5: the command limit fields name their command.
+$pv_cmd_titles = array_column( array_filter( VCAP\API\V1\CommandLimits::settings_fields(), static fn( $f ) => 'number' === ( $f['type'] ?? '' ) || 'text' === ( $f['type'] ?? '' ) ), 'title' );
+check(
+	'PV-P5-5: every limit field of the automatic commands has its own title with the command ("Calls per day (voucher.issue)")',
+	count( $pv_cmd_titles ) > 4 && count( $pv_cmd_titles ) === count( array_unique( $pv_cmd_titles ) ) && in_array( 'Calls per day (voucher.issue)', $pv_cmd_titles, true ) && in_array( 'Maximum amount (voucher.issue)', $pv_cmd_titles, true ),
+	json_encode( $pv_cmd_titles )
+);
+// PV-P5-6: preview and change log show field titles and readable values.
+$GLOBALS['vcap_test_options'] = $pv_saved_opts;
+check(
+	'PV-P5-6: the import preview and the change log name a setting by its field title (option name below), show Yes/No for switches and "(empty)" for nothing',
+	str_starts_with( VCAP\Admin\SettingsTools::setting_cell( 'vcap_default_terms' ), 'Default redemption conditions<br><code class="description">vcap_default_terms</code>' ) && '<code>vcap_unknown_x</code>' === VCAP\Admin\SettingsTools::setting_cell( 'vcap_unknown_x' )
+		&& 'Yes' === VCAP\Admin\SettingsTools::value_text( 'vcap_restore_on_cancel', 'yes' ) && 'No' === VCAP\Admin\SettingsTools::value_text( 'vcap_code_order_ref', 'no' ) && '(empty)' === VCAP\Admin\SettingsTools::value_text( 'vcap_default_terms', '' ) && 'yes' === VCAP\Admin\SettingsTools::value_text( 'vcap_default_terms', 'yes' )
+		&& 2 === substr_count( $pv_tools_src, 'self::setting_cell( (string)' ) && ! str_contains( $pv_tools_src, "'<code>' . esc_html( \$key ) . '</code></td>" ),
+	json_encode( array_slice( VCAP\Admin\SettingsTools::labels(), 0, 3 ) )
+);
+check(
+	'PV-P5-7: no fixed min-width:400px on the settings page (width:100%;max-width:400px instead); the preview, profile and change-log tables scroll in their own box',
+	! str_contains( $pv_set_src, 'min-width:400px' ) && 2 === substr_count( $pv_set_src, 'width:100%;max-width:400px;' ) && 2 === substr_count( $pv_tools_src, 'echo SettingsUi::scroll( $table' ) && str_contains( $pv_prev_html, '<div class="vcap-table-scroll" style="overflow-x:auto;max-width:100%;"><table class="widefat striped">' )
+);
+check(
+	'PV-P5-8: the checklist step "mandatory texts per country" links to the id of the conditions table (its title, rendered by CountryTableField)',
+	str_contains( (string) file_get_contents( VCAP_PATH . 'src/Admin/Onboarding.php' ), "'#' . \\VCAP\\Markets::TERMS_OPTION . '-label'" ) && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Admin/CountryTableField.php' ), "<span id=\"' . esc_attr( \$id ) . '-label\">'" )
+);
+// PV-P2-8: the test email goes to the admin only.
+$pv_cc_inside = VCAP\Preview::without_copies( 'vcap_test_mail', static fn() => array( apply_filters( 'woocommerce_email_cc_recipient_vcap_test_mail', 'boss@shop.test' ), apply_filters( 'woocommerce_email_bcc_recipient_vcap_test_mail', 'archive@shop.test' ), apply_filters( 'woocommerce_email_cc_recipient_other', 'x@shop.test' ) ) );
+$pv_cc_after  = array( apply_filters( 'woocommerce_email_cc_recipient_vcap_test_mail', 'boss@shop.test' ), apply_filters( 'woocommerce_email_bcc_recipient_vcap_test_mail', 'archive@shop.test' ) );
+check(
+	'PV-P2-8: while the test email is sent, its Cc and Bcc are empty (other emails untouched); afterwards they are back',
+	array( '', '', 'x@shop.test' ) === $pv_cc_inside && array( 'boss@shop.test', 'archive@shop.test' ) === $pv_cc_after && str_contains( (string) file_get_contents( VCAP_PATH . 'src/Preview.php' ), 'self::without_copies( (string) $email->id, static fn() => $email->send( $address, $subject, $email->get_content(), $email->get_headers(), array() ) )' ),
+	json_encode( array( $pv_cc_inside, $pv_cc_after ) )
+);
+$pv_a11y = (string) file_get_contents( VCAP_PATH . 'ACCESSIBILITY.md' );
+$pv_rel  = (string) file_get_contents( VCAP_PATH . 'RELEASE_CHECKLIST.md' );
+check(
+	'PV-P5-10: ACCESSIBILITY.md covers country profile preview, tills table, settings tools and change log; the release checklist has the keyboard / screen reader check of the settings pages',
+	str_contains( $pv_a11y, 'Länderprofil' ) && str_contains( $pv_a11y, 'Kassentabelle' ) && str_contains( $pv_a11y, 'Export, Import und Zurücksetzen' ) && str_contains( $pv_a11y, 'Änderungsprotokoll' ) && str_contains( $pv_rel, 'PV-P5-10' )
+);
+VCAP\SettingsRegistry::reset_flags();
+WC_Admin_Settings::$errors    = array();
+$GLOBALS['vcap_test_options'] = $pv_saved_opts;
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

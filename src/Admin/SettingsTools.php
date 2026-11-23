@@ -111,7 +111,46 @@ final class SettingsTools {
 
 	/** A submit button of the settings form that posts to an admin-post action instead of saving. */
 	private static function button( string $action, string $label, string $class = 'button' ): string {
-		return '<button type="submit" class="' . esc_attr( $class ) . '" formnovalidate formaction="' . esc_url( add_query_arg( 'action', $action, admin_url( 'admin-post.php' ) ) ) . '">' . esc_html( $label ) . '</button>';
+		return SettingsUi::action_button( $action, $label, $class ); // PV-P5-2: clears the unsaved-changes prompt.
+	}
+
+	/**
+	 * PV-P5-6: field titles of the registered settings (option name => title), from the fields of every section.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function labels(): array {
+		static $labels = null;
+		if ( null === $labels ) {
+			$labels   = array();
+			$settings = new Settings();
+			foreach ( array_keys( $settings->section_list() ) as $section ) {
+				foreach ( $settings->fields( (string) $section ) as $field ) {
+					$id    = is_array( $field ) ? (string) ( $field['id'] ?? '' ) : '';
+					$title = is_array( $field ) ? trim( wp_strip_all_tags( (string) ( $field['title'] ?? '' ) ) ) : '';
+					if ( '' !== $id && '' !== $title && ! isset( $labels[ $id ] ) && SettingsRegistry::has( $id ) ) {
+						$labels[ $id ] = $title;
+					}
+				}
+			}
+		}
+		return $labels;
+	}
+
+	/** PV-P5-6: name of a setting in the preview and the log – its field title, the option name below it (escaped HTML). */
+	public static function setting_cell( string $key ): string {
+		$title = self::labels()[ $key ] ?? '';
+		return '' !== $title ? esc_html( $title ) . '<br><code class="description">' . esc_html( $key ) . '</code>' : '<code>' . esc_html( $key ) . '</code>';
+	}
+
+	/**
+	 * PV-P5-6: a value in the preview and the log – Yes/No for a switch, "(empty)" for nothing (plain text).
+	 *
+	 * @param string $key   Option name.
+	 * @param mixed  $value Value.
+	 */
+	public static function value_text( string $key, $value ): string {
+		return SettingsUi::readable( SettingsTransfer::display( $value ), (string) ( SettingsRegistry::get( $key )['type'] ?? '' ) );
 	}
 
 	/**
@@ -157,12 +196,14 @@ final class SettingsTools {
 			delete_transient( self::NOTICE . $user );
 		}
 		$pending = get_transient( self::PENDING . $user );
-		echo '<tr valign="top"><th scope="row" class="titledesc">' . esc_html( (string) ( $field['title'] ?? '' ) ) . '</th><td class="forminp">';
+		// PV-P5-2: changes in these controls are no unsaved changes of the settings form.
+		echo '<tr valign="top"><th scope="row" class="titledesc">' . esc_html( (string) ( $field['title'] ?? '' ) ) . '</th><td class="forminp ' . esc_attr( SettingsUi::PREVENT_CHANGE ) . '">';
 		wp_nonce_field( self::NONCE, self::NONCE_FIELD, false );
 		if ( is_array( $notice ) ) {
-			$class = 'error' === ( $notice['type'] ?? '' ) ? 'notice-error' : 'notice-success';
-			echo '<div class="notice inline ' . esc_attr( $class ) . '" role="status"><p>' . esc_html( (string) ( $notice['text'] ?? '' ) ) . '</p></div>';
+			echo SettingsUi::notice( $notice, 'vcap_settings_notice' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in notice().
 		}
+		// PV-P5-4: an error about the confirmation marks the checkbox and points at the message.
+		$confirm_error = is_array( $notice ) && 'error' === ( $notice['type'] ?? '' ) && 'vcap_settings_reset_confirm' === ( $notice['field'] ?? '' );
 		if ( is_array( $pending ) && isset( $pending['settings'] ) && is_array( $pending['settings'] ) ) {
 			self::render_preview( $pending );
 		}
@@ -182,7 +223,7 @@ final class SettingsTools {
 			echo '<option value="' . esc_attr( $value ) . '">' . esc_html( $label ) . '</option>';
 		}
 		echo '</select></p>';
-		echo '<p><label><input type="checkbox" name="vcap_settings_reset_confirm" value="1"> ' . esc_html__( 'Yes, reset these settings to their defaults.', 'voucher-captain' ) . '</label></p>';
+		echo '<p><label><input type="checkbox" name="vcap_settings_reset_confirm" value="1"' . ( $confirm_error ? ' aria-invalid="true" aria-describedby="vcap_settings_notice"' : '' ) . '> ' . esc_html__( 'Yes, reset these settings to their defaults.', 'voucher-captain' ) . '</label></p>';
 		echo '<p>' . self::button( 'vcap_settings_reset', __( 'Reset settings', 'voucher-captain' ) ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in button().
 
 		$backups = SettingsTransfer::backups();
@@ -211,11 +252,12 @@ final class SettingsTools {
 		} else {
 			/* translators: %d: number of settings */
 			echo '<p>' . esc_html( sprintf( _n( '%d setting will change:', '%d settings will change:', count( $diff ), 'voucher-captain' ), count( $diff ) ) ) . '</p>';
-			echo '<table class="widefat striped"><thead><tr><th scope="col">' . esc_html__( 'Setting', 'voucher-captain' ) . '</th><th scope="col">' . esc_html__( 'Current value', 'voucher-captain' ) . '</th><th scope="col">' . esc_html__( 'New value', 'voucher-captain' ) . '</th></tr></thead><tbody>';
+			// PV-P5-6 / PV-P5-7: field titles, readable values, a table that scrolls on its own on small screens.
+			$table = '<table class="widefat striped"><thead><tr><th scope="col">' . esc_html__( 'Setting', 'voucher-captain' ) . '</th><th scope="col">' . esc_html__( 'Current value', 'voucher-captain' ) . '</th><th scope="col">' . esc_html__( 'New value', 'voucher-captain' ) . '</th></tr></thead><tbody>';
 			foreach ( $diff as $key => $change ) {
-				echo '<tr><td><code>' . esc_html( $key ) . '</code></td><td>' . esc_html( SettingsTransfer::display( $change['from'] ) ) . '</td><td>' . esc_html( SettingsTransfer::display( $change['to'] ) ) . '</td></tr>';
+				$table .= '<tr><td>' . self::setting_cell( (string) $key ) . '</td><td>' . esc_html( self::value_text( (string) $key, $change['from'] ) ) . '</td><td>' . esc_html( self::value_text( (string) $key, $change['to'] ) ) . '</td></tr>';
 			}
-			echo '</tbody></table>';
+			echo SettingsUi::scroll( $table . '</tbody></table>' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped above.
 		}
 		$unknown = array_map( 'strval', (array) ( $pending['unknown'] ?? array() ) );
 		if ( $unknown ) {
@@ -244,17 +286,18 @@ final class SettingsTools {
 			echo '<p>' . esc_html__( 'No changes recorded yet.', 'voucher-captain' ) . '</p></td></tr>';
 			return;
 		}
-		echo '<table class="widefat striped"><thead><tr>';
+		// PV-P5-6 / PV-P5-7: field titles, readable values, a table that scrolls on its own on small screens.
+		$table = '<table class="widefat striped"><thead><tr>';
 		foreach ( array( __( 'Date', 'voucher-captain' ), __( 'User', 'voucher-captain' ), __( 'Setting', 'voucher-captain' ), __( 'From', 'voucher-captain' ), __( 'To', 'voucher-captain' ), __( 'Source', 'voucher-captain' ) ) as $head ) {
-			echo '<th scope="col">' . esc_html( $head ) . '</th>';
+			$table .= '<th scope="col">' . esc_html( $head ) . '</th>';
 		}
-		echo '</tr></thead><tbody>';
+		$table .= '</tr></thead><tbody>';
 		foreach ( $rows as $row ) {
-			$user = $row['user'] > 0 ? get_userdata( $row['user'] ) : false;
-			$name = $user instanceof \WP_User ? $user->display_name : ( $row['user'] > 0 ? '#' . $row['user'] : '—' );
-			echo '<tr><td>' . esc_html( wp_date( 'Y-m-d H:i', $row['time'] ) ) . '</td><td>' . esc_html( $name ) . '</td><td><code>' . esc_html( $row['key'] ) . '</code></td><td>' . esc_html( SettingsTransfer::display( $row['from'] ) ) . '</td><td>' . esc_html( SettingsTransfer::display( $row['to'] ) ) . '</td><td>' . esc_html( SettingsLog::source_label( $row ) ) . '</td></tr>';
+			$user   = $row['user'] > 0 ? get_userdata( $row['user'] ) : false;
+			$name   = $user instanceof \WP_User ? $user->display_name : ( $row['user'] > 0 ? '#' . $row['user'] : '—' );
+			$table .= '<tr><td>' . esc_html( wp_date( 'Y-m-d H:i', $row['time'] ) ) . '</td><td>' . esc_html( $name ) . '</td><td>' . self::setting_cell( (string) $row['key'] ) . '</td><td>' . esc_html( self::value_text( (string) $row['key'], $row['from'] ) ) . '</td><td>' . esc_html( self::value_text( (string) $row['key'], $row['to'] ) ) . '</td><td>' . esc_html( SettingsLog::source_label( $row ) ) . '</td></tr>';
 		}
-		echo '</tbody></table></td></tr>';
+		echo SettingsUi::scroll( $table . '</tbody></table>' ) . '</td></tr>'; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped above.
 	}
 
 	/** Capability and nonce of every action; stops the request otherwise. */
@@ -266,12 +309,13 @@ final class SettingsTools {
 	}
 
 	/** Message shown after the redirect, then back to the section. */
-	private static function done( string $type, string $text ): never {
+	private static function done( string $type, string $text, string $field = '' ): never {
 		set_transient(
 			self::NOTICE . get_current_user_id(),
 			array(
-				'type' => $type,
-				'text' => $text,
+				'type'  => $type,
+				'text'  => $text,
+				'field' => $field, // PV-P5-4: the control the message is about ('' = none).
 			),
 			10 * MINUTE_IN_SECONDS
 		);
@@ -384,7 +428,7 @@ final class SettingsTools {
 			self::done( 'error', __( 'Please choose what to reset.', 'voucher-captain' ) );
 		}
 		if ( empty( $_POST['vcap_settings_reset_confirm'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- guard() checked the nonce.
-			self::done( 'error', __( 'Nothing was reset: please tick the confirmation first.', 'voucher-captain' ) );
+			self::done( 'error', __( 'Nothing was reset: please tick the confirmation first.', 'voucher-captain' ), 'vcap_settings_reset_confirm' );
 		}
 		$result = Source::with( Source::ADMIN, static fn() => SettingsTransfer::reset( $section ) );
 		/* translators: %d: number of settings */

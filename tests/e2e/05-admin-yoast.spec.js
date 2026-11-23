@@ -55,4 +55,28 @@ test.describe( 'Admin with Yoast SEO active', () => {
 		await expect( page.locator( '#vcap-campaign-preview-result' ) ).toContainText( /Choose at least one product|Total discount/ );
 		expect( errors ).toEqual( [] );
 	} );
+
+	// PV-P5-2: Enter in a settings field saves (hidden default button first in the form), and the action buttons of
+	// the country profile do not trigger WooCommerce's "leave page?" prompt.
+	test( 'settings: Enter saves, action buttons ask no "leave page?" question', async ( { page } ) => {
+		const errors = trackPluginErrors( page );
+		const dialogs = [];
+		page.on( 'dialog', async ( dialog ) => {
+			dialogs.push( dialog.type() );
+			await dialog.dismiss();
+		} );
+		await page.goto( '/wp-admin/admin.php?page=wc-settings&tab=vcap' );
+		await expect( page.locator( '#mainform button[type="submit"], #mainform input[type="submit"]' ).first() ).toHaveClass( /vcap-default-submit/ );
+		const days = page.locator( '#vcap_default_expiry_days' );
+		await days.fill( await days.inputValue() );
+		await Promise.all( [ page.waitForNavigation(), days.press( 'Enter' ) ] );
+		await expect( page.locator( '#message.updated, .notice-success, .updated' ).first() ).toBeVisible();
+		await expect( page.locator( '.vcap-profile-preview' ) ).toHaveCount( 0 );
+		await page.selectOption( '#vcap_profile', { index: 0 } );
+		await Promise.all( [ page.waitForNavigation(), page.getByRole( 'button', { name: 'Show suggested changes' } ).click() ] );
+		await expect( page.locator( '.vcap-profile-preview' ) ).toBeVisible();
+		await Promise.all( [ page.waitForNavigation(), page.locator( '.vcap-profile-preview' ).getByRole( 'button', { name: 'Cancel' } ).click() ] );
+		expect( dialogs ).toEqual( [] );
+		expect( errors ).toEqual( [] );
+	} );
 } );

@@ -87,7 +87,7 @@ final class CountryProfilesAdmin {
 
 	/** A submit button of the settings form that posts to an admin-post action instead of saving. */
 	private static function button( string $action, string $label, string $class = 'button' ): string {
-		return '<button type="submit" class="' . esc_attr( $class ) . '" formnovalidate formaction="' . esc_url( add_query_arg( 'action', $action, admin_url( 'admin-post.php' ) ) ) . '">' . esc_html( $label ) . '</button>';
+		return SettingsUi::action_button( $action, $label, $class ); // PV-P5-2: clears the unsaved-changes prompt.
 	}
 
 	/**
@@ -107,11 +107,11 @@ final class CountryProfilesAdmin {
 		$pending = self::pending();
 		$applied = CountryProfiles::applied();
 		$chosen  = '' !== $pending ? $pending : ( null !== $applied && null !== CountryProfiles::get( $applied['id'] ) ? $applied['id'] : CountryProfiles::for_base_country() );
-		echo '<tr valign="top"><th scope="row" class="titledesc"><label for="vcap_profile">' . esc_html( (string) ( is_array( $field ) ? ( $field['title'] ?? '' ) : '' ) ) . '</label></th><td class="forminp">';
+		// PV-P5-2: choosing a profile or ticking values is no unsaved change of the settings form.
+		echo '<tr valign="top"><th scope="row" class="titledesc"><label for="vcap_profile">' . esc_html( (string) ( is_array( $field ) ? ( $field['title'] ?? '' ) : '' ) ) . '</label></th><td class="forminp ' . esc_attr( SettingsUi::PREVENT_CHANGE ) . '">';
 		wp_nonce_field( self::NONCE, self::NONCE_FIELD, false );
 		if ( is_array( $notice ) ) {
-			$class = 'error' === ( $notice['type'] ?? '' ) ? 'notice-error' : 'notice-success';
-			echo '<div class="notice inline ' . esc_attr( $class ) . '" role="status"><p>' . esc_html( (string) ( $notice['text'] ?? '' ) ) . '</p></div>';
+			echo SettingsUi::notice( $notice, 'vcap_profile_notice' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in notice() (PV-P5-4: an error is announced).
 		}
 		echo '<select id="vcap_profile" name="vcap_profile">';
 		foreach ( array_keys( CountryProfiles::all() ) as $id ) {
@@ -143,7 +143,7 @@ final class CountryProfilesAdmin {
 			$html .= '<p>' . esc_html__( 'Nothing to change: every suggested value is already set.', 'voucher-captain' ) . '</p>';
 		} else {
 			$html .= '<p class="description">' . esc_html__( 'Only the ticked values are changed. Values you set yourself and the link parameter are not ticked: tick them to replace them.', 'voucher-captain' ) . '</p>';
-			$html .= '<table class="widefat striped"><thead><tr><th scope="col">' . esc_html__( 'Apply', 'voucher-captain' ) . '</th><th scope="col">' . esc_html__( 'Setting', 'voucher-captain' ) . '</th><th scope="col">' . esc_html__( 'Current value', 'voucher-captain' ) . '</th><th scope="col">' . esc_html__( 'Suggested value', 'voucher-captain' ) . '</th><th scope="col">' . esc_html__( 'Note', 'voucher-captain' ) . '</th></tr></thead><tbody>';
+			$html .= '<div class="vcap-table-scroll" style="overflow-x:auto;max-width:100%;"><table class="widefat striped"><thead><tr><th scope="col">' . esc_html__( 'Apply', 'voucher-captain' ) . '</th><th scope="col">' . esc_html__( 'Setting', 'voucher-captain' ) . '</th><th scope="col">' . esc_html__( 'Current value', 'voucher-captain' ) . '</th><th scope="col">' . esc_html__( 'Suggested value', 'voucher-captain' ) . '</th><th scope="col">' . esc_html__( 'Note', 'voucher-captain' ) . '</th></tr></thead><tbody>';
 			foreach ( $items as $item ) {
 				$box_id = 'vcap_profile_item_' . sanitize_html_class( $item['item'] );
 				$notes  = array();
@@ -164,7 +164,7 @@ final class CountryProfilesAdmin {
 					: '';
 				$html .= '<tr><td>' . $box . '</td><td>' . ( '' !== $box ? '<label for="' . esc_attr( $box_id ) . '">' . esc_html( $item['label'] ) . '</label>' : esc_html( $item['label'] ) ) . '</td><td>' . esc_html( $item['from'] ) . '</td><td>' . esc_html( $item['to'] ) . '</td><td>' . implode( ' ', $notes ) . '</td></tr>';
 			}
-			$html .= '</tbody></table>';
+			$html .= '</tbody></table></div>'; // PV-P5-7: the table scrolls on its own on small screens.
 		}
 		$hints = CountryProfiles::hints( $id );
 		if ( $hints ) {

@@ -87,10 +87,36 @@ final class Preview {
 		try {
 			/* translators: %s: subject of the voucher email */
 			$subject = sprintf( __( '[Test] %s', 'voucher-captain' ), $email->get_subject() );
-			return (bool) $email->send( $address, $subject, $email->get_content(), $email->get_headers(), array() );
+			// PV-P2-8: the test goes to $address only, never to the Cc/Bcc set for the email (WooCommerce email improvements).
+			return (bool) self::without_copies( (string) $email->id, static fn() => $email->send( $address, $subject, $email->get_content(), $email->get_headers(), array() ) );
 		} finally {
 			$email->voucher   = null;
 			$email->recipient = '';
+		}
+	}
+
+	/**
+	 * PV-P2-8: runs $send while the Cc and Bcc recipients of the email $email_id are empty (filters
+	 * "woocommerce_email_cc_recipient_{id}" / "woocommerce_email_bcc_recipient_{id}" at the last priority), then
+	 * removes the filters again.
+	 *
+	 * @template T
+	 * @param string        $email_id WooCommerce email id.
+	 * @param callable(): T $send     Sends the email.
+	 * @return T
+	 */
+	public static function without_copies( string $email_id, callable $send ) {
+		$none  = static fn(): string => '';
+		$hooks = array( 'woocommerce_email_cc_recipient_' . $email_id, 'woocommerce_email_bcc_recipient_' . $email_id );
+		foreach ( $hooks as $hook ) {
+			add_filter( $hook, $none, PHP_INT_MAX );
+		}
+		try {
+			return $send();
+		} finally {
+			foreach ( $hooks as $hook ) {
+				remove_filter( $hook, $none, PHP_INT_MAX );
+			}
 		}
 	}
 

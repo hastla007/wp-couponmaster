@@ -55,6 +55,30 @@ in `tests/e2e/06-screen-reader.spec.js` als Regressionstest ergänzen.
   entfernt. Eine ungültige Zeile wird nicht gespeichert: die Meldung oben nennt Einstellung und Zeile („Zeile 2 (FR):
   …“), die Zeile erscheint danach mit ihrem Fehlertext (`aria-invalid`, `aria-describedby`) erneut, damit nichts
   Eingegebenes verloren geht.
+- **Ein abgelehnter oder korrigierter Wert ist am Feld markiert** (PV-P5-4): Nach dem Speichern trägt das Feld
+  `aria-invalid="true"`, und die Meldung von oben steht noch einmal direkt unter dem Feld (der Screenreader liest
+  sie mit dem Feld vor). Das gilt für Zahlen, Akzentfarbe, Logo-Adresse und Zusätzliches CSS (PV-P5-3: eine Farbe
+  ohne „#“ wird mit „#“ übernommen, eine ungültige Farbe oder eine Logo-Adresse ohne http(s) wird nicht gespeichert,
+  gekürztes oder bereinigtes CSS wird gemeldet; das CSS-Feld hat `maxlength`).
+- **Enter speichert** (PV-P5-2): Jeder Abschnitt beginnt mit einer unsichtbaren Schaltfläche „Änderungen speichern“
+  (nicht per Tab erreichbar, für Screenreader verborgen). Enter in einem Feld speichert deshalb die Einstellungen und
+  löst nicht die erste Aktionsschaltfläche der Seite aus (Länderprofil-Vorschau, „Datei prüfen“).
+- **Länderprofil** (Allgemein, SET-VC-02): Auswahl mit Beschriftung „Profil“; die Vorschau ist eine Region mit
+  Überschrift („Vorgeschlagene Änderungen: …“) und eine Tabelle mit Spaltenköpfen, jedes Kästchen ist über
+  `label for` mit dem Namen der Einstellung verbunden. Hinweise „Rechtsprüfung ausstehend“ stehen als Text in der
+  Tabelle. Auswahl und Kästchen gelten nicht als ungespeicherte Änderung (`wc-settings-prevent-change-event`), die
+  Schaltflächen lösen keine Rückfrage „Seite verlassen?“ aus. Die Meldung nach „Übernehmen“/„Abbrechen“ wird
+  angesagt (Fehler `role="alert"`, Erfolg `role="status"`).
+- **Kassentabelle** (Kasse & Standorte, SET-VC-22): Tabelle mit unsichtbarer Beschriftung „Kassen und Filialen“,
+  Spaltenköpfen und für jedes Feld einem Namen mit Zeilennummer („Name, Zeile 2“); leere Zeilen für neue Kassen.
+- **Export, Import und Zurücksetzen** (Datenschutz & Erweitert, SET-VC-14/16): Dateifeld mit Beschriftung,
+  Bereichsauswahl mit Beschreibung (`aria-describedby`), Bestätigungskästchen mit Beschriftung. Die Import-Vorschau
+  ist eine Region mit Überschrift und Tabelle (Spaltenköpfe; Einstellung mit ihrem Feldnamen, Werte als Ja/Nein bzw.
+  „(leer)“, PV-P5-6). Meldungen werden angesagt; fehlt beim Zurücksetzen die Bestätigung, ist das Kästchen markiert
+  (`aria-invalid`, `aria-describedby` auf die Meldung).
+- **Änderungsprotokoll** (Datenschutz & Erweitert, SET-VC-15): Tabelle mit Spaltenköpfen (Datum, Benutzer,
+  Einstellung, Von, Nach, Quelle), Einstellungen mit Feldnamen, Werte lesbar (PV-P5-6). Breite Tabellen (Vorschau,
+  Protokoll, Länderprofil) scrollen auf dem Telefon in ihrem eigenen Kasten, nicht die ganze Seite (PV-P5-7).
 
 ### Gutschein-PDF
 

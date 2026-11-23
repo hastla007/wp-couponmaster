@@ -43,8 +43,44 @@ final class CustomCss {
 	 * @param mixed $raw_value Submitted value.
 	 */
 	public static function sanitize_option( $value, $option = array(), $raw_value = null ): string {
-		unset( $option );
-		return self::sanitize( null !== $raw_value ? $raw_value : $value );
+		$input = null !== $raw_value ? $raw_value : $value;
+		$clean = self::sanitize( $input );
+		// PV-P5-3: say so when the stored CSS differs from what was entered (shortened, parts removed).
+		$message = self::change_message( is_string( $input ) ? $input : '', $clean, is_array( $option ) ? (string) ( $option['title'] ?? '' ) : '' );
+		if ( '' !== $message ) {
+			if ( class_exists( '\WC_Admin_Settings' ) ) {
+				\WC_Admin_Settings::add_error( $message );
+			}
+			SettingsRegistry::flag( self::OPTION, $message );
+		}
+		return $clean;
+	}
+
+	/**
+	 * PV-P5-3: the message when the stored CSS is not what was entered ('' = stored as entered, apart from line
+	 * endings and surrounding spaces).
+	 *
+	 * @param string $input Entered CSS.
+	 * @param string $clean What sanitize() made of it.
+	 * @param string $label Field label ('' = "Additional CSS").
+	 */
+	public static function change_message( string $input, string $clean, string $label = '' ): string {
+		$plain = trim( str_replace( array( "\r\n", "\r" ), "\n", $input ) );
+		if ( $plain === $clean ) {
+			return '';
+		}
+		$label = '' !== trim( $label ) ? trim( wp_strip_all_tags( $label ) ) : __( 'Additional CSS', 'voucher-captain' );
+		$parts = array();
+		if ( mb_strlen( $plain ) > self::MAX_LENGTH ) {
+			/* translators: %d: maximum number of characters */
+			$parts[] = sprintf( __( 'it was shortened to %d characters', 'voucher-captain' ), self::MAX_LENGTH );
+			$plain   = trim( mb_substr( $plain, 0, self::MAX_LENGTH ) );
+		}
+		if ( $plain !== $clean ) {
+			$parts[] = __( 'comments and parts that are not allowed (tags, @import, expression(), script addresses, behaviours or bindings) were removed', 'voucher-captain' );
+		}
+		/* translators: 1: field label, 2: what was changed */
+		return sprintf( __( '%1$s was saved changed: %2$s. Check the saved text below.', 'voucher-captain' ), $label, implode( '; ', $parts ) );
 	}
 
 	/**

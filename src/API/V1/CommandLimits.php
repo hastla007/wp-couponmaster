@@ -253,7 +253,8 @@ final class CommandLimits {
 			$fields[] = SettingsRegistry::field(
 				self::option( $command, self::SUFFIX_PER_DAY ),
 				array(
-					'title'             => __( 'Calls per day', 'voucher-captain' ),
+					/* translators: %s: command, e.g. voucher.issue (PV-P5-5: every field names its command) */
+					'title'             => sprintf( __( 'Calls per day (%s)', 'voucher-captain' ), $command ),
 					'type'              => 'number',
 					'custom_attributes' => array( 'step' => 1 ),
 					/* translators: %d: highest number of calls per day */
@@ -264,7 +265,8 @@ final class CommandLimits {
 				$fields[] = SettingsRegistry::field(
 					self::option( $command, self::SUFFIX_RECIPIENT ),
 					array(
-						'title'             => __( 'Vouchers per recipient and day', 'voucher-captain' ),
+						/* translators: %s: command, e.g. voucher.issue */
+						'title'             => sprintf( __( 'Vouchers per recipient and day (%s)', 'voucher-captain' ), $command ),
 						'type'              => 'number',
 						'custom_attributes' => array( 'step' => 1 ),
 						/* translators: %d: highest number per recipient and day */
@@ -276,7 +278,8 @@ final class CommandLimits {
 				$fields[] = SettingsRegistry::field(
 					self::option( $command, self::SUFFIX_AMOUNT ),
 					array(
-						'title' => __( 'Maximum amount', 'voucher-captain' ),
+						/* translators: %s: command, e.g. voucher.issue */
+						'title' => sprintf( __( 'Maximum amount (%s)', 'voucher-captain' ), $command ),
 						'type'  => 'text',
 						'desc'  => __( 'In the shop currency. Empty: 100 (in EUR, CHF, USD and GBP), at most 100 there. In a shop with another currency, the command refuses amounts until you enter a maximum here that is worth no more than 100 EUR.', 'voucher-captain' ),
 					)

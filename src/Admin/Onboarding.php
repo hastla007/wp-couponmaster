@@ -138,7 +138,7 @@ final class Onboarding {
 					: __( 'Mandatory texts per country: redemption conditions for every country you sell to (have them checked legally)', 'voucher-captain' ),
 				'done'   => ! $missing,
 				'action' => '',
-				'url'    => $settings . '#' . \VCAP\Markets::TERMS_OPTION,
+				'url'    => $settings . '#' . \VCAP\Markets::TERMS_OPTION . '-label', // PV-P5-8: id of the table's title (CountryTableField).
 				'button' => __( 'Open settings', 'voucher-captain' ),
 			),
 			// M12-03 / SET-VC-25: confirm the tax type – how gift cards are taxed depends on two settings that belong

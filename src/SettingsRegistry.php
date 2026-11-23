@@ -46,6 +46,9 @@ final class SettingsRegistry {
 	/** Whether the filter runs right now (a callback reading a setting gets the core register, no recursion). */
 	private static bool $filtering = false;
 
+	/** @var array<string, string> PV-P5-4: fields whose value was refused or corrected in this request (key => message). */
+	private static array $flagged = array();
+
 	/**
 	 * config/settings.php (read once).
 	 *
@@ -250,6 +253,9 @@ final class SettingsRegistry {
 				$field['desc'] = '' !== $desc ? $tip . ' ' . $desc : $tip;
 			}
 		}
+		if ( isset( self::$flagged[ $key ] ) ) {
+			$field = self::mark_invalid( $field, self::$flagged[ $key ] );
+		}
 		if ( 'number' === ( $field['type'] ?? '' ) ) {
 			$bounds = array_filter(
 				array(
@@ -260,6 +266,50 @@ final class SettingsRegistry {
 			);
 			$field['custom_attributes'] = $bounds + (array) ( $field['custom_attributes'] ?? array() );
 		}
+		return $field;
+	}
+
+	/**
+	 * PV-P5-4: marks a field whose submitted value was refused or corrected in this request. WooCommerce shows the
+	 * message at the top of the page (WC_Admin_Settings::add_error()); the field itself then carries
+	 * aria-invalid="true" and repeats the message below it (see field()), so it can be found and is read out with it.
+	 */
+	public static function flag( string $key, string $message ): void {
+		if ( '' !== $key && '' !== $message ) {
+			self::$flagged[ $key ] = $message;
+		}
+	}
+
+	/**
+	 * Fields flagged in this request (key => message).
+	 *
+	 * @return array<string, string>
+	 */
+	public static function flagged(): array {
+		return self::$flagged;
+	}
+
+	/** Forgets the flagged fields (tests). */
+	public static function reset_flags(): void {
+		self::$flagged = array();
+	}
+
+	/**
+	 * A field with aria-invalid and the message as the first part of its description (a description shown only as a
+	 * tooltip – desc_tip true – moves to the tooltip text so the message stays visible).
+	 *
+	 * @param array<string, mixed> $field   Settings field.
+	 * @param string               $message Message.
+	 * @return array<string, mixed>
+	 */
+	private static function mark_invalid( array $field, string $message ): array {
+		$field['custom_attributes'] = array( 'aria-invalid' => 'true' ) + (array) ( $field['custom_attributes'] ?? array() );
+		$desc                       = trim( (string) ( $field['desc'] ?? '' ) );
+		if ( true === ( $field['desc_tip'] ?? null ) ) {
+			$field['desc_tip'] = '' !== $desc ? $desc : false;
+			$desc              = '';
+		}
+		$field['desc'] = '<strong class="vcap-field-error">' . esc_html( $message ) . '</strong>' . ( '' !== $desc ? '<br>' . $desc : '' );
 		return $field;
 	}
 
@@ -328,6 +378,7 @@ final class SettingsRegistry {
 		if ( '' !== $message && class_exists( '\WC_Admin_Settings' ) ) {
 			\WC_Admin_Settings::add_error( $message );
 		}
+		self::flag( $key, $message ); // PV-P5-4: the field is marked on the page shown after saving.
 		return $fixed;
 	}
 
