@@ -343,7 +343,13 @@ the caller from workflow, workflow version, event id and step, R-8.4), `reason` 
   (`CommandLimits::SIMILAR_CURRENCIES`), the same number 100 applies in that currency (the operator may lower it). Any
   other currency is refused (`currency_not_allowed`) unless it is the shop currency and the operator entered an own
   *Maximum amount* there (worth no more than 100 EUR – not checked, there is no exchange rate in the core); until then
-  `voucher.issue` and `voucher.redeem` are effectively off in that shop.
+  `voucher.issue` and `voucher.redeem` are effectively off in that shop. The own maximum amount is stored with the
+  currency it was entered in (`vcap_command_<issue|redeem>_max_amount_currency`, read-only on the settings page,
+  exported and imported with the amount; PV-P3-4): after a change of the shop currency, or an import from a shop in
+  another currency, the amount is not used and amounts are refused until a new maximum is saved on the settings page
+  (a value set with `wp vcap settings set` keeps the recorded currency; set both options there). An amount stored
+  without a currency counts once in the current shop currency, which is then recorded. A count setting must be a whole
+  number (also `5.0` or `1e1`); anything else is refused on the settings page and the stored value stays (PV-P2-4).
 - **Reading the limits** (since contract 1.6.0, SET-WC-15): `vcap_read_command_limits( string $currency = '' )`
   (wrapper of `vcap()->commands->limits()`) returns the limits as they apply now, e.g. for a display in a workflow
   editor: `day` (site time zone), `currency` (the given one, default the shop currency), `shop_currency`,

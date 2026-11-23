@@ -110,7 +110,14 @@ final class CommandService {
 		foreach ( $options['amounts'] as $option ) {
 			add_filter(
 				'woocommerce_admin_settings_sanitize_option_' . $option,
-				static fn( $value ) => CommandLimits::sanitize_amount( $option, $value )
+				static fn( $value ) => CommandLimits::sanitize_amount( $option, $value, true )
+			);
+		}
+		foreach ( $options['currencies'] as $option ) {
+			// PV-P3-4: read-only on the page – the posted value is ignored, sanitize_amount() recorded the currency.
+			add_filter(
+				'woocommerce_admin_settings_sanitize_option_' . $option,
+				static fn() => (string) get_option( $option, '' )
 			);
 		}
 		add_filter( 'vcap_event_labels', array( self::class, 'event_label' ) );

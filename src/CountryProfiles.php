@@ -322,6 +322,10 @@ final class CountryProfiles {
 			$compare = 'vcap_default_expiry_rule' === $key && '' === (string) $current ? ProductConfig::default_expiry_rule() : $current;
 			$changed = '' === $error && ! SettingsTransfer::same( $compare, $valid );
 			$own     = false !== get_option( $key, false ) && ! SettingsTransfer::same( $current, SettingsRegistry::default( $key ) );
+			// A shop that saved its own number of days but never the rule uses "days" (default_expiry_rule()): own value.
+			if ( 'vcap_default_expiry_rule' === $key && false === get_option( $key, false ) && false !== get_option( 'vcap_default_expiry_days', false ) ) {
+				$own = true;
+			}
 			$opt_in  = in_array( $key, self::OPT_IN, true );
 			$legal   = self::legal( $key );
 

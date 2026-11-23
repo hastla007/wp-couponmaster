@@ -180,6 +180,20 @@ final class Counter {
 		return array_values( array_map( 'strval', (array) apply_filters( 'vcap_counter_locations', $list ) ) );
 	}
 
+	/**
+	 * PV-P2-9: whether the shop keeps a list of tills/branches – the table has rows (active or not) or the filter
+	 * offers names. A device then books only at an active till of the list, never with a free text: "no list" (free
+	 * text) and "a list without an active till" (nothing can be booked) are different.
+	 */
+	public static function tills_managed(): bool {
+		return array() !== self::locations() || array() !== CounterLocations::rows();
+	}
+
+	/** PV-P2-9: what the scanner says while the list of tills has no active till. */
+	public static function no_active_till_message(): string {
+		return __( 'No till/branch of the list is active, so nothing can be booked. Ask an administrator to activate a till under WooCommerce → Settings → Vouchers → Counter & locations.', 'voucher-captain' );
+	}
+
 	/** The till/branch a staff member is fixed to ('' = chosen on the device; only names from the managed list). */
 	public static function fixed_location( int $user_id ): string {
 		$fixed = $user_id ? self::clean_till( (string) get_user_option( self::META_LOCATION, $user_id ) ) : '';
@@ -199,6 +213,10 @@ final class Counter {
 		}
 		$till      = self::clean_till( $till );
 		$locations = self::locations();
+		if ( ! $locations && self::tills_managed() ) {
+			// PV-P2-9: every till of the list is switched off – no free text (it would bypass the limits per till).
+			return new \WP_Error( 'vcap_till_none_active', self::no_active_till_message(), array( 'status' => 400 ) );
+		}
 		if ( $locations && ! in_array( $till, $locations, true ) ) {
 			return new \WP_Error( 'vcap_till_unknown', __( 'Please choose the till/branch of this device from the list.', 'voucher-captain' ), array( 'status' => 400 ) );
 		}

@@ -1,0 +1,7 @@
+{
+  "No till/branch of the list is active, so nothing can be booked. Ask an administrator to activate a till under WooCommerce → Settings → Vouchers → Counter & locations.": {
+    "du": "Keine Kasse/Filiale der Liste ist aktiv, daher kann nichts gebucht werden. Bitte eine Administratorin oder einen Administrator, unter WooCommerce → Einstellungen → Gutscheine → Kasse & Standorte eine Kasse zu aktivieren.",
+    "sie": "Keine Kasse/Filiale der Liste ist aktiv, daher kann nichts gebucht werden. Bitten Sie eine Administratorin oder einen Administrator, unter WooCommerce → Einstellungen → Gutscheine → Kasse & Standorte eine Kasse zu aktivieren.",
+    "at": "Keine Kasse/Filiale der Liste ist aktiv, daher kann nichts gebucht werden. Bitten Sie eine Administratorin oder einen Administrator, unter WooCommerce → Einstellungen → Gutscheine → Kasse & Standorte eine Kasse zu aktivieren."
+  }
+}

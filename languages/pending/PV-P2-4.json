@@ -1,0 +1,7 @@
+{
+  "%1$s (%2$s): \"%3$s\" is not a whole number from 0 to %4$d. The saved value %5$s was kept.": {
+    "du": "%1$s (%2$s): „%3$s“ ist keine ganze Zahl von 0 bis %4$d. Der gespeicherte Wert %5$s bleibt.",
+    "sie": "%1$s (%2$s): „%3$s“ ist keine ganze Zahl von 0 bis %4$d. Der gespeicherte Wert %5$s bleibt.",
+    "at": "%1$s (%2$s): „%3$s“ ist keine ganze Zahl von 0 bis %4$d. Der gespeicherte Wert %5$s bleibt."
+  }
+}

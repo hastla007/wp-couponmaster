@@ -34,6 +34,12 @@ final class CountryProfilesAdmin {
 	private const PENDING = 'vcap_profile_pending_';
 	private const NOTICE  = 'vcap_profile_notice_';
 
+	/** PV-P2-7: user transient – profile whose preview was just used (a second click of "Apply" is no error). */
+	private const USED = 'vcap_profile_used_';
+
+	/** PV-P2-7: seconds a used preview counts as "just applied". */
+	private const USED_SECONDS = 30;
+
 	/** Hooks. */
 	public function register(): void {
 		add_action( 'woocommerce_admin_field_' . self::FIELD_TYPE, array( self::class, 'render' ) );
@@ -225,8 +231,14 @@ final class CountryProfilesAdmin {
 		$items   = isset( $_POST['vcap_profile_items'] ) && is_array( $_POST['vcap_profile_items'] ) ? array_map( 'sanitize_key', wp_unslash( $_POST['vcap_profile_items'] ) ) : array(); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- guard() checked the nonce.
 		delete_transient( self::PENDING . get_current_user_id() );
 		if ( '' === $pending || $pending !== $posted ) {
+			if ( self::just_used( $posted ) ) {
+				// PV-P2-7: second click of "Apply" – the first one applied it; its message stays.
+				wp_safe_redirect( self::page_url() );
+				exit;
+			}
 			self::done( 'error', __( 'The preview of the country profile has expired. Nothing was changed; please choose the profile again.', 'voucher-captain' ) );
 		}
+		self::mark_used( $pending );
 		$result = CountryProfiles::apply( $pending, $items );
 		if ( is_wp_error( $result ) ) {
 			self::done( 'error', $result->get_error_message() );
@@ -240,6 +252,16 @@ final class CountryProfilesAdmin {
 				/* translators: 1: number of settings, 2: profile name */
 				: sprintf( _n( '%1$d setting was changed from the country profile "%2$s" (a backup of the previous settings was saved). Every value can be changed as before.', '%1$d settings were changed from the country profile "%2$s" (a backup of the previous settings was saved). Every value can be changed as before.', $count, 'voucher-captain' ), $count, CountryProfiles::label( $pending ) )
 		);
+	}
+
+	/** PV-P2-7: remembers for a few seconds that the preview of $id was used by the current user. */
+	public static function mark_used( string $id ): void {
+		set_transient( self::USED . get_current_user_id(), strtoupper( $id ), self::USED_SECONDS );
+	}
+
+	/** PV-P2-7: whether the current user used the preview of $id a moment ago (double click on "Apply"). */
+	public static function just_used( string $id ): bool {
+		return '' !== $id && strtoupper( $id ) === get_transient( self::USED . get_current_user_id() );
 	}
 
 	/** admin-post: close the preview, nothing is changed. */

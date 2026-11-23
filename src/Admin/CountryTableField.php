@@ -76,12 +76,62 @@ final class CountryTableField {
 		}
 		$rows  = is_array( $raw['rows'] ?? null ) ? array_values( $raw['rows'] ) : array();
 		$check = self::check( $id, $rows );
+		$kept  = self::keep_stored( $id, $rows, $check );
 		self::errors( $option, $check['errors'] );
 		$user = get_current_user_id();
 		if ( $check['errors'] && $user > 0 ) {
-			set_transient( self::REJECTED . $id . '_' . $user, self::rejected( $id, $rows, $check['errors'] ), 10 * MINUTE_IN_SECONDS );
+			set_transient( self::REJECTED . $id . '_' . $user, self::rejected( $id, $rows, $check['errors'], $kept ), 10 * MINUTE_IN_SECONDS );
 		}
 		return $check['rows'];
+	}
+
+	/**
+	 * PV-P3-3: an invalid edited row does not delete what was saved before. When a row is not saved and the stored
+	 * value has a row for the same country (conditions: country and language) that the submitted rows do not contain,
+	 * the stored row is kept and the error says so. Returns the positions of these rows.
+	 *
+	 * @param string                                                                     $id    Option name.
+	 * @param array<mixed>                                                               $rows  Submitted rows.
+	 * @param array{rows: array<int, array<string, mixed>>, errors: array<int, string>} $check Check result (changed).
+	 * @return array<int, true>
+	 */
+	private static function keep_stored( string $id, array $rows, array &$check ): array {
+		if ( ! $check['errors'] ) {
+			return array();
+		}
+		$expiry = Markets::EXPIRY_OPTION === $id;
+		$stored = get_option( $id, '' );
+		$stored = $expiry ? Markets::expiry_rows( $stored ) : Markets::terms_rows( $stored );
+		$key    = static function ( $row ) use ( $expiry ): string {
+			$text    = static fn( $value ): string => is_scalar( $value ) ? trim( (string) $value ) : '';
+			$country = strtoupper( $text( $row['country'] ?? '' ) );
+			return $expiry ? $country : $country . '|' . $text( $row['language'] ?? '' );
+		};
+		$taken = array();
+		foreach ( $check['rows'] as $row ) {
+			$taken[ $key( $row ) ] = true;
+		}
+		$kept = array();
+		foreach ( array_keys( $check['errors'] ) as $position ) {
+			$row = $rows[ $position ] ?? null;
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$wanted = $key( $row );
+			if ( isset( $taken[ $wanted ] ) || str_starts_with( $wanted, '|' ) || '' === $wanted ) {
+				continue;
+			}
+			foreach ( $stored as $old ) {
+				if ( $key( $old ) === $wanted ) {
+					$check['rows'][]               = $old;
+					$taken[ $wanted ]              = true;
+					$kept[ $position ]             = true;
+					$check['errors'][ $position ] .= ' ' . __( 'The previously saved row is kept.', 'voucher-captain' );
+					break;
+				}
+			}
+		}
+		return $kept;
 	}
 
 	/**
@@ -158,7 +208,7 @@ final class CountryTableField {
 		}
 		echo '<th scope="col"><span class="screen-reader-text">' . esc_html__( 'Actions', 'voucher-captain' ) . '</span></th></tr></thead><tbody>';
 		$index = 0;
-		foreach ( $rows as $row ) {
+		foreach ( self::without_kept( $rows, $invalid, $expiry ) as $row ) {
 			echo self::row( $id, (string) $index, $row, $expiry ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in row().
 			++$index;
 		}
@@ -283,6 +333,26 @@ final class CountryTableField {
 	}
 
 	/**
+	 * PV-P3-3: a stored row kept because its edited version was invalid is shown once – as the invalid row with its
+	 * error (saving it again unchanged keeps the stored row again).
+	 *
+	 * @param array<int, array<string, mixed>> $rows    Stored rows.
+	 * @param array<mixed>                     $invalid Rows not saved.
+	 * @param bool                             $expiry  Validity (else conditions).
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function without_kept( array $rows, array $invalid, bool $expiry ): array {
+		$key  = static fn( array $row ): string => strtoupper( (string) ( $row['country'] ?? '' ) ) . ( $expiry ? '' : '|' . (string) ( $row['language'] ?? '' ) );
+		$skip = array();
+		foreach ( $invalid as $row ) {
+			if ( is_array( $row ) && ! empty( $row['kept'] ) ) {
+				$skip[ $key( $row ) ] = true;
+			}
+		}
+		return $skip ? array_values( array_filter( $rows, static fn( array $row ): bool => ! isset( $skip[ $key( $row ) ] ) ) ) : $rows;
+	}
+
+	/**
 	 * Checks rows of one of the two settings.
 	 *
 	 * @param string       $id   Option name.
@@ -316,9 +386,10 @@ final class CountryTableField {
 	 * @param string             $id     Option name.
 	 * @param array<mixed>       $rows   Submitted rows (in form order).
 	 * @param array<int, string> $errors Errors by position of the row.
+	 * @param array<int, true>   $kept   Positions whose stored row was kept (PV-P3-3: shown instead of that row).
 	 * @return array<int, array<string, mixed>>
 	 */
-	private static function rejected( string $id, array $rows, array $errors ): array {
+	private static function rejected( string $id, array $rows, array $errors, array $kept = array() ): array {
 		$text = static fn( $value ): string => is_scalar( $value ) ? (string) $value : '';
 		$out  = array();
 		foreach ( $errors as $position => $error ) {
@@ -331,6 +402,9 @@ final class CountryTableField {
 				// Without "Row 2 (FR):" – the row is shown again at another position.
 				'error'   => (string) preg_replace( '/^[^:]*:\s*/', '', $error ),
 			);
+			if ( isset( $kept[ $position ] ) ) {
+				$clean['kept'] = true;
+			}
 			if ( Markets::EXPIRY_OPTION === $id ) {
 				$clean['years']       = sanitize_text_field( $text( $row['years'] ?? '' ) );
 				$clean['end_of_year'] = ! empty( $row['end_of_year'] );

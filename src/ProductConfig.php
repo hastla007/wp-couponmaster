@@ -233,18 +233,7 @@ final class ProductConfig {
 		if ( '' !== $terms ) {
 			return $terms;
 		}
-		// Shop-wide conditions in the customer's language (WPML translates the options, Polylang the strings;
-		// SET-VC-04: a row of the table can also be for one language).
-		$stored = get_option( Markets::TERMS_OPTION, '' );
-		if ( is_array( $stored ) ) {
-			$stored = Markets::terms_rows( $stored );
-			foreach ( $stored as $i => $row ) {
-				$stored[ $i ]['text'] = Compat\Multilingual::translate( $row['text'] );
-			}
-		} else {
-			$stored = Compat\Multilingual::translate( (string) $stored );
-		}
-		$by_country = self::terms_by_country( $stored, self::terms_locale() );
+		$by_country = self::terms_by_country( self::translated_terms_option(), self::terms_locale() );
 		$country    = strtoupper( $country );
 		if ( '' !== $country && isset( $by_country[ $country ] ) ) {
 			return $by_country[ $country ];
@@ -263,12 +252,32 @@ final class ProductConfig {
 		if ( '' !== $own ) {
 			return array( '' => $own );
 		}
-		$variants = self::terms_by_country( get_option( Markets::TERMS_OPTION, '' ), self::terms_locale() );
-		$default  = trim( (string) get_option( 'vcap_default_terms', '' ) );
+		// PV-P3-5: translated like terms() (Polylang strings), so the product page shows the text the voucher gets.
+		$variants = self::terms_by_country( self::translated_terms_option(), self::terms_locale() );
+		$default  = trim( Compat\Multilingual::translate( (string) get_option( 'vcap_default_terms', '' ) ) );
 		if ( '' !== $default ) {
 			$variants[''] = $default;
 		}
 		return $variants;
+	}
+
+	/**
+	 * Shop-wide conditions in the customer's language (WPML translates the options, Polylang the strings; SET-VC-04:
+	 * a row of the table can also be for one language): the rows with translated texts, or the translated text of a
+	 * value from before 1.3.0. Used by terms() and terms_variants() (PV-P3-5).
+	 *
+	 * @return array<int, array<string, mixed>>|string
+	 */
+	private static function translated_terms_option() {
+		$stored = get_option( Markets::TERMS_OPTION, '' );
+		if ( ! is_array( $stored ) ) {
+			return Compat\Multilingual::translate( (string) $stored );
+		}
+		$stored = Markets::terms_rows( $stored );
+		foreach ( $stored as $i => $row ) {
+			$stored[ $i ]['text'] = Compat\Multilingual::translate( (string) $row['text'] );
+		}
+		return $stored;
 	}
 
 	/**

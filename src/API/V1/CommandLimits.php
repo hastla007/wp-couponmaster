@@ -72,6 +72,7 @@ final class CommandLimits {
 	private const SUFFIX_PER_DAY   = 'per_day';
 	private const SUFFIX_RECIPIENT = 'per_recipient';
 	private const SUFFIX_AMOUNT    = 'max_amount';
+	private const SUFFIX_CURRENCY  = 'max_amount_currency';
 
 	/**
 	 * Option name of a setting of a command, e.g. "vcap_command_issue_enabled".
@@ -178,21 +179,86 @@ final class CommandLimits {
 		if ( '' === $raw || ! is_numeric( $raw ) || (float) $raw < 0 ) {
 			return null;
 		}
+		// PV-P3-4: an amount entered in another currency (shop currency changed, import) is no maximum here.
+		if ( self::amount_currency( $command ) !== $currency ) {
+			return null;
+		}
 		return (int) round( (float) $raw * ( 10 ** RedemptionService::decimals( $currency ) ) );
 	}
 
 	/**
-	 * A count setting lowered to [0, ceiling]; '' (not set) or anything that is no whole number = the ceiling.
+	 * PV-P3-4: currency the operator's maximum amount was entered in (option "vcap_command_<cmd>_max_amount_currency",
+	 * written when the settings page saves the amount; part of an export). An amount stored without a currency (before
+	 * this option existed) is taken to be in the current shop currency once: that currency is recorded right away, so
+	 * a later change of the shop currency no longer carries the number over. '' when no amount is stored.
+	 *
+	 * @param string $command Command.
+	 * @return string
+	 */
+	public static function amount_currency( string $command ): string {
+		$option   = self::option( $command, self::SUFFIX_CURRENCY );
+		$currency = strtoupper( trim( (string) get_option( $option, '' ) ) );
+		if ( '' !== $currency ) {
+			return $currency;
+		}
+		if ( '' === trim( (string) get_option( self::option( $command, self::SUFFIX_AMOUNT ), '' ) ) ) {
+			return '';
+		}
+		$currency = strtoupper( (string) get_option( 'woocommerce_currency', '' ) );
+		if ( '' !== $currency ) {
+			update_option( $option, $currency, false );
+		}
+		return $currency;
+	}
+
+	/**
+	 * PV-P3-4: whether the stored maximum amount of a command was entered in another currency than the shop currency
+	 * (it is then not used: amounts are refused until a new maximum is saved).
+	 *
+	 * @param string $command Command.
+	 * @return bool
+	 */
+	public static function amount_currency_mismatch( string $command ): bool {
+		$recorded = self::amount_currency( $command );
+		return '' !== $recorded && strtoupper( (string) get_option( 'woocommerce_currency', '' ) ) !== $recorded;
+	}
+
+	/**
+	 * A count setting lowered to [0, ceiling]; '' (not set) = the ceiling. PV-P2-4: a whole number written as a decimal
+	 * ("5.0", "1e1") counts as that number; anything else that is stored (e.g. "abc" or "-1" written around the settings
+	 * page) never raises a limit: it counts as 0.
 	 *
 	 * @param int   $ceiling Fixed ceiling.
 	 * @param mixed $setting Stored value.
 	 * @return int
 	 */
 	private static function lowered( int $ceiling, mixed $setting ): int {
-		if ( is_int( $setting ) || ( is_string( $setting ) && preg_match( '/^\s*\d+\s*$/', $setting ) ) ) {
-			return max( 0, min( $ceiling, (int) $setting ) );
+		if ( null === $setting || false === $setting || ( is_string( $setting ) && '' === trim( $setting ) ) ) {
+			return $ceiling;
 		}
-		return $ceiling;
+		$count = self::whole_number( $setting );
+		return null === $count ? 0 : max( 0, min( $ceiling, $count ) );
+	}
+
+	/**
+	 * PV-P2-4: a value as a whole number from 0 ("5", "5.0", "1e1", 5, 5.0), null for anything else.
+	 *
+	 * @param mixed $value Value.
+	 * @return int|null
+	 */
+	private static function whole_number( mixed $value ): ?int {
+		if ( is_int( $value ) ) {
+			return $value >= 0 ? $value : null;
+		}
+		$text = is_float( $value ) || is_string( $value ) ? trim( (string) $value ) : '';
+		if ( '' === $text || ! is_numeric( $text ) ) {
+			return null;
+		}
+		$number = (float) $text;
+		if ( $number < 0 || floor( $number ) !== $number ) {
+			return null;
+		}
+		return (int) min( $number, 1000000000.0 ); // Far above every ceiling; avoids an integer overflow.
 	}
 
 	/**
@@ -275,13 +341,35 @@ final class CommandLimits {
 				);
 			}
 			if ( null !== $fixed['max_amount_minor'] ) {
+				$desc = esc_html__( 'In the shop currency. Empty: 100 (in EUR, CHF, USD and GBP), at most 100 there. In a shop with another currency, the command refuses amounts until you enter a maximum here that is worth no more than 100 EUR.', 'voucher-captain' );
+				if ( self::amount_currency_mismatch( $command ) ) {
+					// PV-P3-4: the saved amount is in another currency and not used.
+					$desc = '<strong>' . esc_html(
+						sprintf(
+							/* translators: 1: currency the amount was entered in, 2: shop currency */
+							__( 'This maximum amount was entered in %1$s; the shop currency is now %2$s. It is not used: the command refuses amounts until you save a new maximum amount in %2$s.', 'voucher-captain' ),
+							self::amount_currency( $command ),
+							strtoupper( (string) get_option( 'woocommerce_currency', '' ) )
+						)
+					) . '</strong> ' . $desc;
+				}
 				$fields[] = SettingsRegistry::field(
 					self::option( $command, self::SUFFIX_AMOUNT ),
 					array(
 						/* translators: %s: command, e.g. voucher.issue */
 						'title' => sprintf( __( 'Maximum amount (%s)', 'voucher-captain' ), $command ),
 						'type'  => 'text',
-						'desc'  => __( 'In the shop currency. Empty: 100 (in EUR, CHF, USD and GBP), at most 100 there. In a shop with another currency, the command refuses amounts until you enter a maximum here that is worth no more than 100 EUR.', 'voucher-captain' ),
+						'desc'  => $desc,
+					)
+				);
+				// PV-P3-4: the currency the amount was entered in – shown read-only, recorded by sanitize_amount().
+				$fields[] = SettingsRegistry::field(
+					self::option( $command, self::SUFFIX_CURRENCY ),
+					array(
+						'title'             => __( 'Currency of the maximum amount', 'voucher-captain' ),
+						'type'              => 'text',
+						'custom_attributes' => array( 'readonly' => 'readonly' ),
+						'desc'              => __( 'Recorded when you save the maximum amount. If the shop currency changes, the maximum amount is not used until you save a new one.', 'voucher-captain' ),
 					)
 				);
 			}
@@ -294,7 +382,9 @@ final class CommandLimits {
 	}
 
 	/**
-	 * Sanitizes a saved count setting: a whole number within [0, ceiling], '' for the ceiling.
+	 * Sanitizes a saved count setting: a whole number within [0, ceiling] (also written as "5.0" or "1e1"), empty for
+	 * the ceiling. PV-P2-4: anything else ("abc", "-1", "2.5") is refused with an error on the settings page and the
+	 * stored value is kept – it never silently becomes the ceiling.
 	 *
 	 * @param string $option Option name.
 	 * @param mixed  $value  Submitted value.
@@ -306,10 +396,32 @@ final class CommandLimits {
 				self::SUFFIX_PER_DAY   => $fixed['per_day'],
 				self::SUFFIX_RECIPIENT => $fixed['per_recipient'],
 			) as $suffix => $ceiling ) {
-				if ( null !== $ceiling && self::option( $command, $suffix ) === $option ) {
-					$value = is_scalar( $value ) ? trim( (string) $value ) : '';
-					return preg_match( '/^\d+$/', $value ) ? (string) min( (int) $ceiling, (int) $value ) : (string) $ceiling;
+				if ( null === $ceiling || self::option( $command, $suffix ) !== $option ) {
+					continue;
 				}
+				$text = is_scalar( $value ) ? trim( (string) $value ) : '';
+				if ( '' === $text ) {
+					return (string) $ceiling;
+				}
+				$count = self::whole_number( $text );
+				if ( null !== $count ) {
+					return (string) min( (int) $ceiling, $count );
+				}
+				$kept = (string) self::lowered( (int) $ceiling, get_option( $option, '' ) );
+				if ( class_exists( '\WC_Admin_Settings' ) ) {
+					\WC_Admin_Settings::add_error(
+						sprintf(
+							/* translators: 1: setting, e.g. "Calls per day", 2: command, e.g. "voucher.issue", 3: value entered, 4: highest number, 5: value kept */
+							__( '%1$s (%2$s): "%3$s" is not a whole number from 0 to %4$d. The saved value %5$s was kept.', 'voucher-captain' ),
+							self::SUFFIX_PER_DAY === $suffix ? __( 'Calls per day', 'voucher-captain' ) : __( 'Vouchers per recipient and day', 'voucher-captain' ),
+							$command,
+							sanitize_text_field( $text ),
+							(int) $ceiling,
+							$kept
+						)
+					);
+				}
+				return $kept;
 			}
 		}
 		return '';
@@ -318,11 +430,48 @@ final class CommandLimits {
 	/**
 	 * Sanitizes a saved maximum amount: '' or a non-negative decimal; in a shop in EUR or SIMILAR_CURRENCIES never above 100.
 	 *
+	 * PV-P3-4: with $record (the settings page save) the shop currency is stored with the amount
+	 * ("vcap_command_<cmd>_max_amount_currency"). An unchanged amount that was entered in another currency is kept
+	 * with that currency (still not used, the page says so) – only a newly entered amount counts in the shop currency.
+	 * Without $record (checks of an import or WP-CLI) nothing is stored.
+	 *
+	 * @param string $option Option name.
+	 * @param mixed  $value  Submitted value.
+	 * @param bool   $record Store the shop currency with the amount (settings page).
+	 * @return string
+	 */
+	public static function sanitize_amount( string $option, mixed $value, bool $record = false ): string {
+		$amount = self::clean_amount( $option, $value );
+		if ( ! $record ) {
+			return $amount;
+		}
+		$shop = strtoupper( (string) get_option( 'woocommerce_currency', '' ) );
+		foreach ( self::FIXED as $command => $fixed ) {
+			if ( null === $fixed['max_amount_minor'] || self::option( $command, self::SUFFIX_AMOUNT ) !== $option ) {
+				continue;
+			}
+			$recorded = self::amount_currency( $command );
+			$stored   = trim( (string) get_option( $option, '' ) );
+			if ( '' !== $amount && '' !== $recorded && $recorded !== $shop && is_numeric( $stored ) && (float) $stored === (float) $amount ) {
+				return $stored; // Not entered again: stays in its currency and is not used.
+			}
+			if ( '' === $amount ) {
+				delete_option( self::option( $command, self::SUFFIX_CURRENCY ) );
+			} elseif ( '' !== $shop ) {
+				update_option( self::option( $command, self::SUFFIX_CURRENCY ), $shop, false );
+			}
+		}
+		return $amount;
+	}
+
+	/**
+	 * The amount check of sanitize_amount(), without storing anything.
+	 *
 	 * @param string $option Option name.
 	 * @param mixed  $value  Submitted value.
 	 * @return string
 	 */
-	public static function sanitize_amount( string $option, mixed $value ): string {
+	private static function clean_amount( string $option, mixed $value ): string {
 		$value = is_scalar( $value ) ? trim( str_replace( ',', '.', (string) $value ) ) : '';
 		if ( '' === $value || ! is_numeric( $value ) || (float) $value < 0 ) {
 			return '';
@@ -345,12 +494,13 @@ final class CommandLimits {
 	/**
 	 * Option names of all count settings and all amount settings.
 	 *
-	 * @return array{counts: string[], amounts: string[]}
+	 * @return array{counts: string[], amounts: string[], currencies: string[]}
 	 */
 	public static function setting_options(): array {
 		$out = array(
-			'counts'  => array(),
-			'amounts' => array(),
+			'counts'     => array(),
+			'amounts'    => array(),
+			'currencies' => array(),
 		);
 		foreach ( self::FIXED as $command => $fixed ) {
 			$out['counts'][] = self::option( $command, self::SUFFIX_PER_DAY );
@@ -358,7 +508,8 @@ final class CommandLimits {
 				$out['counts'][] = self::option( $command, self::SUFFIX_RECIPIENT );
 			}
 			if ( null !== $fixed['max_amount_minor'] ) {
-				$out['amounts'][] = self::option( $command, self::SUFFIX_AMOUNT );
+				$out['amounts'][]    = self::option( $command, self::SUFFIX_AMOUNT );
+				$out['currencies'][] = self::option( $command, self::SUFFIX_CURRENCY );
 			}
 		}
 		return $out;

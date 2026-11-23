@@ -94,8 +94,9 @@ final class CustomCss {
 		$css = (string) preg_replace( '#/\*.*?(\*/|$)#s', '', $css ); // Comments could hide the patterns below.
 		$css = wp_strip_all_tags( $css );
 		$css = str_replace( '<', '', $css ); // No "</style", no tag of any kind.
-		// Escapes (\65 = "e") and line breaks could spell a pattern out, so it is searched without them.
-		$probe = static fn( string $text ): string => strtolower( (string) preg_replace( '/[\s\\\\]+/', '', $text ) );
+		// Escapes (\65 = "e", \69 = "i", \3a = ":") and line breaks could spell a pattern out, so it is searched in the
+		// text with the escapes decoded (PV-P4-1) and without line breaks; a hit removes every backslash.
+		$probe = static fn( string $text ): string => strtolower( (string) preg_replace( '/[\s\\\\]+/', '', self::unescape( $text ) ) );
 		if ( preg_match( '/expression\(|javascript:|vbscript:|-moz-binding|behaviou?r:|@import/', $probe( $css ) ) ) {
 			$css = str_replace( '\\', '', $css );
 		}
@@ -106,6 +107,23 @@ final class CustomCss {
 		} while ( $before !== $css );
 		$css = trim( $css );
 		return mb_strlen( $css ) > self::MAX_LENGTH ? trim( mb_substr( $css, 0, self::MAX_LENGTH ) ) : $css;
+	}
+
+	/**
+	 * PV-P4-1: CSS escapes decoded – "\69" or "\000069 " (hex, one optional space after it) is the character with
+	 * that code point, "\o" is "o". Only used to search for the patterns.
+	 */
+	private static function unescape( string $css ): string {
+		$css = (string) preg_replace_callback(
+			'/\\\\([0-9a-fA-F]{1,6})[ \t\n\f]?/',
+			static function ( array $m ): string {
+				$code = (int) hexdec( $m[1] );
+				$char = $code > 0 && $code <= 0x10FFFF ? mb_chr( $code, 'UTF-8' ) : false;
+				return false === $char ? '' : $char;
+			},
+			$css
+		);
+		return (string) preg_replace( '/\\\\(.)/su', '$1', $css );
 	}
 
 	/** The CSS to print ('' = none). */

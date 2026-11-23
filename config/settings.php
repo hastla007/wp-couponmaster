@@ -216,6 +216,9 @@ foreach ( \VCAP\API\V1\CommandLimits::FIXED as $vcap_command => $vcap_fixed ) {
 	if ( null !== $vcap_fixed['max_amount_minor'] ) {
 		// No fixed maximum here: the ceiling depends on the shop currency (CommandLimits::sanitize_amount()).
 		$vcap_settings[ \VCAP\API\V1\CommandLimits::option( $vcap_command, 'max_amount' ) ] = array( 'type' => 'decimal', 'default' => '', 'min' => 0, 'empty' => true, 'section' => 'api' );
+		// PV-P3-4: currency of the maximum amount (read-only field; written on save, exported with the amount so an
+		// import into a shop with another currency does not carry the number over).
+		$vcap_settings[ \VCAP\API\V1\CommandLimits::option( $vcap_command, 'max_amount_currency' ) ] = array( 'section' => 'api' );
 	}
 }
 
@@ -276,6 +279,8 @@ return array(
 		'vcap_scanner_failed_lookups',
 		'vcap_pins_in_use',
 		'vcap_cmd_days',
+		// PV-P4-4: last day whose per-recipient counters of the voucher commands were deleted.
+		'vcap_cmd_recipients_until',
 		'vcap_affiliate_campaigns',
 		'vcap_fx_unknown',
 		'vcap_fx_held_orders',

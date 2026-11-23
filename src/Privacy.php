@@ -503,7 +503,7 @@ final class Privacy {
 
 	/** Recipient data: "removed N days after …" once vcap_retention_days is set; nothing more while it is 0. */
 	private static function recipient_retention_sentence(): string {
-		$days = max( 0, (int) get_option( 'vcap_retention_days', 0 ) );
+		$days = max( 0, (int) Settings::value( 'vcap_retention_days' ) ); // PV-P3-6: with the filter, like the cleanup.
 		if ( $days <= 0 ) {
 			return '';
 		}
@@ -535,7 +535,11 @@ final class Privacy {
 		return '' !== $out ? $out : ' ' . __( 'These notes are kept until we delete them.', 'voucher-captain' );
 	}
 
-	/** Protocol of the voucher commands and the failed counter lookups (staff accounts, no customer data). */
+	/**
+	 * Protocol of the voucher commands and the failed counter lookups (staff accounts, no voucher codes). PV-P4-4: the
+	 * daily count per recipient (customer account) of voucher.issue is only kept for its own day; the totals per day
+	 * and the protocol are kept for the period named.
+	 */
 	private static function internal_records_paragraph(): string {
 		$log    = API\V1\OptionCommandStore::log_days();
 		$lookup = Counter::failed_lookup_days();

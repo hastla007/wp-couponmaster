@@ -19,9 +19,9 @@ defined( 'ABSPATH' ) || exit;
  * never pass a limit together (R-8.3b). The volume is small by design (at most 50 executed calls per command and day).
  *
  * Options: "vcap_cmd_reply_<sha1 of the key>" (reply and fingerprint, kept 90 days), "vcap_cmd_count_<Y-m-d>"
- * (counters), "vcap_cmd_log_<Y-m-d>" (protocol, at most 500 entries a day, then only counted; counters and protocol
- * are kept `vcap_command_log_days` days, default 90), "vcap_cmd_days" (index for the clean-up: day => reply options
- * of that day).
+ * (counters; the per-recipient counters only until the day is over), "vcap_cmd_log_<Y-m-d>" (protocol, at most 500
+ * entries a day, then only counted; counters and protocol are kept `vcap_command_log_days` days, default 90),
+ * "vcap_cmd_days" (index for the clean-up: day => reply options of that day).
  *
  * @since 1.3.0 (contract 1.3.0)
  */
@@ -36,6 +36,9 @@ final class OptionCommandStore implements CommandStore {
 	private const LOCK_WAIT = 10;
 
 	private const INDEX = 'vcap_cmd_days';
+
+	/** PV-P4-4: last day (Y-m-d) whose per-recipient counters were deleted. */
+	private const RECIPIENTS_UNTIL = 'vcap_cmd_recipients_until';
 
 	/**
 	 * Name of the held lock.
@@ -235,6 +238,8 @@ final class OptionCommandStore implements CommandStore {
 
 	/**
 	 * Deletes replies, counters and protocols of days older than the retention and drops them from the index.
+	 * PV-P4-4: the per-recipient counters ("voucher.issue:recipient:<user id>") are only needed on their own day –
+	 * they are deleted as soon as the day is over; the totals per command stay for the retention.
 	 *
 	 * @param array<string, string[]> $index Day => reply options.
 	 * @param string                  $today Y-m-d.
@@ -246,6 +251,8 @@ final class OptionCommandStore implements CommandStore {
 			return $index;
 		}
 		$log_days = self::log_days();
+		$until    = (string) get_option( self::RECIPIENTS_UNTIL, '' );
+		$latest   = $until;
 		foreach ( $index as $day => $options ) {
 			$time = strtotime( $day . ' 00:00:00 UTC' );
 			if ( false === $time ) {
@@ -253,6 +260,10 @@ final class OptionCommandStore implements CommandStore {
 				continue;
 			}
 			$age = (int) floor( ( $base - $time ) / DAY_IN_SECONDS );
+			if ( $age >= 1 && strcmp( (string) $day, $until ) > 0 ) {
+				$this->drop_recipients( (string) $day );
+				$latest = strcmp( (string) $day, $latest ) > 0 ? (string) $day : $latest;
+			}
 			if ( $age > self::REPLY_DAYS ) {
 				foreach ( (array) $options as $option ) {
 					delete_option( (string) $option );
@@ -266,7 +277,27 @@ final class OptionCommandStore implements CommandStore {
 				unset( $index[ $day ] );
 			}
 		}
+		if ( $latest !== $until ) {
+			$this->write( self::RECIPIENTS_UNTIL, $latest );
+		}
 		return $index;
+	}
+
+	/**
+	 * PV-P4-4: removes the per-recipient buckets from the counters of a past day (the totals stay).
+	 *
+	 * @param string $day Y-m-d.
+	 */
+	private function drop_recipients( string $day ): void {
+		$option = 'vcap_cmd_count_' . $day;
+		$counts = $this->read( $option );
+		if ( ! is_array( $counts ) ) {
+			return;
+		}
+		$kept = array_filter( $counts, static fn( $bucket ): bool => ! str_contains( (string) $bucket, ':recipient:' ), ARRAY_FILTER_USE_KEY );
+		if ( count( $kept ) !== count( $counts ) ) {
+			$this->write( $option, $kept );
+		}
 	}
 
 	/**

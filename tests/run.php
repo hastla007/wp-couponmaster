@@ -3374,7 +3374,7 @@ $GLOBALS['vcap_test_options']['woocommerce_currency'] = 'SEK';
 $vc1_be->currency = 'SEK';
 $vc1_be->day      = '2026-11-19';
 $vc1_sek  = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 100, 'currency' => 'SEK' ) ) );
-$vc1_sekc = VCAP\API\V1\CommandLimits::sanitize_amount( 'vcap_command_issue_max_amount', '1100' );
+$vc1_sekc = VCAP\API\V1\CommandLimits::sanitize_amount( 'vcap_command_issue_max_amount', '1100', true );
 $GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'max_amount' ) ] = $vc1_sekc;
 $vc1_sek2 = $vc1->issue( $vc1_args( array( 'recipient_user_id' => 22, 'amount_minor' => 110000, 'currency' => 'SEK' ) ) );
 array_push( $vc1_all, $vc1_sek, $vc1_sek2 );
@@ -5008,7 +5008,7 @@ $cp_legal  = array_filter( $cp_de, static fn( $i ) => $i['legal'] );
 check(
 	'SET-VC-02: the preview of DE on a new shop shows current → suggested: statutory validity rule, the DE row of "Statutory validity per country" from the market data (3 years to the end of the year), retention 1,095 days, date format d.m.Y; receipt number and link parameter are already right; showing it changes nothing',
 	array( 'vcap_default_expiry_rule', 'expiry_row', 'vcap_counter_require_receipt', 'vcap_retention_days', 'vcap_date_format', 'vcap_coupon_link_param' ) === array_keys( $cp_de )
-		&& 'statutory' === $cp_de['vcap_default_expiry_rule']['value'] && $cp_de['vcap_default_expiry_rule']['preselected']
+		&& 'statutory' === $cp_de['vcap_default_expiry_rule']['value'] && $cp_de['vcap_default_expiry_rule']['changed'] && ! $cp_de['vcap_default_expiry_rule']['preselected'] && $cp_de['vcap_default_expiry_rule']['own']
 		&& array( 'country' => 'DE', 'years' => 3, 'end_of_year' => true ) === array_slice( $cp_de['expiry_row']['value'][0], 0, 3 ) && str_contains( $cp_de['expiry_row']['value'][0]['note'], '§§ 195, 199 BGB' ) && str_ends_with( $cp_de['expiry_row']['value'][0]['note'], '– Legal check pending' ) && $cp_de['expiry_row']['preselected'] && VCAP\Markets::EXPIRY_OPTION === $cp_de['expiry_row']['key']
 		&& '1095' === $cp_de['vcap_retention_days']['value'] && '0 (keep)' === $cp_de['vcap_retention_days']['from'] && $cp_de['vcap_retention_days']['preselected']
 		&& 'd.m.Y' === $cp_de['vcap_date_format']['value'] && 'WordPress date format' === $cp_de['vcap_date_format']['from'] && ! $cp_de['vcap_date_format']['legal']
@@ -5068,8 +5068,8 @@ $cp_o      = $GLOBALS['vcap_test_options'];
 $cp_after  = VCAP\CountryProfiles::preview( 'DE' );
 $cp_src    = (string) file_get_contents( VCAP_PATH . 'src/CountryProfiles.php' );
 check(
-	'SET-VC-02: applying stores only the ticked values (validity rule, retention), leaves the unticked own values (date format, DE row) unchanged, saves a backup first ("profile") and remembers the profile; the values stay freely editable (ordinary options)',
-	array( 'vcap_default_expiry_rule', 'vcap_retention_days' ) === $cp_pick && array( 'vcap_default_expiry_rule', 'vcap_retention_days' ) === $cp_result['changed'] && 'statutory' === $cp_o['vcap_default_expiry_rule'] && '1095' === $cp_o['vcap_retention_days']
+	'SET-VC-02: applying stores only the ticked values (retention), leaves the unticked own values (validity rule "days" of a shop with own days – PV-P3-2 –, date format, DE row) unchanged, saves a backup first ("profile") and remembers the profile; the values stay freely editable (ordinary options)',
+	array( 'vcap_retention_days' ) === $cp_pick && array( 'vcap_retention_days' ) === $cp_result['changed'] && ! isset( $cp_o['vcap_default_expiry_rule'] ) && 'days' === VCAP\ProductConfig::default_expiry_rule() && '1095' === $cp_o['vcap_retention_days']
 		&& 'Y-m-d' === $cp_o['vcap_date_format'] && 4 === $cp_o[ VCAP\Markets::EXPIRY_OPTION ][1]['years'] && 'profile' === VCAP\SettingsTransfer::backups()[ $cp_result['backup'] ]['reason']
 		&& 'DE' === VCAP\CountryProfiles::applied()['id'] && ! $cp_after['vcap_retention_days']['changed'] && $cp_after['vcap_date_format']['changed']
 		&& '7' === VCAP\SettingsTransfer::validate( 'vcap_retention_days', '7' ),
@@ -5451,6 +5451,229 @@ check(
 	str_contains( $pv38_tax, '### 8.1 Länder außerhalb der EU' ) && str_contains( $pv38_tax, '| LI | ☐ |' ) && str_contains( $pv38_tax, '| NO | ☐ |' ) && str_contains( $pv38_tax, '### 8.2 Steuerhinweise der Länderprofile' )
 		&& str_contains( $pv38_tax, '**Zurücksetzen, Import und Länderprofil wirken auf diese Einstellung**' ) && str_contains( $pv38_tax, '`voucher.issue`' ) && str_contains( $pv38_tax, '(`paid => false`' ) && str_contains( $pv38_tax, 'Zeile 2.8' ) && substr_count( $pv38_tax, 'zu prüfen' ) >= 5
 );
+// Test phase fixes, group C (PV-P3-2 … PV-P2-9).
+echo "PV group C fixes\n";
+$pvc_saved    = $GLOBALS['vcap_test_options'];
+$pvc_saved_tr = $GLOBALS['vcap_test_transients'] ?? array();
+// PV-P3-2: a shop with own days but no saved rule (effective "days") – the rule is its own value, not ticked.
+$GLOBALS['vcap_test_options'] = array( 'woocommerce_default_country' => 'DE', 'vcap_default_expiry_days' => '365' );
+VCAP\CountryProfiles::reset();
+$pvc_days = VCAP\CountryProfiles::preview( 'DE' )['vcap_default_expiry_rule'];
+$GLOBALS['vcap_test_options'] = array( 'woocommerce_default_country' => 'DE' );
+$pvc_new = VCAP\CountryProfiles::preview( 'DE' )['vcap_default_expiry_rule'];
+check(
+	'PV-P3-2: the country profile does not tick the statutory validity rule for a shop that saved its own number of days but never the rule (rule "days" applies: own value, shown, not ticked); a new shop without days has nothing to change',
+	'days' === ( static function () {
+		$GLOBALS['vcap_test_options']['vcap_default_expiry_days'] = '365';
+		$rule = VCAP\ProductConfig::default_expiry_rule();
+		unset( $GLOBALS['vcap_test_options']['vcap_default_expiry_days'] );
+		return $rule;
+	} )() && $pvc_days['changed'] && $pvc_days['own'] && ! $pvc_days['preselected'] && 'statutory' === $pvc_days['value']
+		&& ! $pvc_new['changed'] && ! $pvc_new['own'],
+	wp_json_encode( array( $pvc_days, $pvc_new ) )
+);
+// PV-P3-3: an invalid edited row keeps the stored row of that country.
+WC_Admin_Settings::$errors = array();
+$GLOBALS['vcap_test_options'] = array(
+	VCAP\Markets::EXPIRY_OPTION => array(
+		array( 'country' => 'CH', 'years' => 10, 'end_of_year' => false, 'note' => 'Art. 127 OR' ),
+		array( 'country' => 'FR', 'years' => 5, 'end_of_year' => true, 'note' => '' ),
+	),
+	VCAP\Markets::TERMS_OPTION  => array( array( 'country' => 'AT', 'language' => '', 'text' => 'Alt' ) ),
+);
+$pvc_exp_field = array( 'id' => VCAP\Markets::EXPIRY_OPTION, 'title' => 'Statutory validity per country' );
+$pvc_saved_exp = VCAP\Admin\CountryTableField::sanitize(
+	null,
+	$pvc_exp_field,
+	array(
+		'submitted' => '1',
+		'rows'      => array(
+			array( 'country' => 'CH', 'years' => '1o', 'note' => 'Art. 127 OR' ),
+			array( 'country' => 'FR', 'years' => '6', 'end_of_year' => '1', 'note' => '' ),
+			array( 'country' => 'IT', 'years' => 'x' ),
+		),
+	)
+);
+$pvc_exp_errors = WC_Admin_Settings::$errors;
+$pvc_saved_trm  = VCAP\Admin\CountryTableField::sanitize( null, array( 'id' => VCAP\Markets::TERMS_OPTION, 'title' => 'Conditions' ), array( 'submitted' => '1', 'rows' => array( array( 'country' => 'AT', 'language' => '', 'text' => '' ) ) ) );
+$pvc_rej        = new ReflectionMethod( VCAP\Admin\CountryTableField::class, 'rejected' );
+$pvc_rej->setAccessible( true );
+$pvc_rejected = $pvc_rej->invoke( null, VCAP\Markets::EXPIRY_OPTION, array( array( 'country' => 'CH', 'years' => '1o' ) ), array( 0 => 'Row 1 (CH): bad.' ), array( 0 => true ) );
+$pvc_without  = new ReflectionMethod( VCAP\Admin\CountryTableField::class, 'without_kept' );
+$pvc_without->setAccessible( true );
+$pvc_shown = $pvc_without->invoke( null, $GLOBALS['vcap_test_options'][ VCAP\Markets::EXPIRY_OPTION ], $pvc_rejected, true );
+check(
+	'PV-P3-3: saving a country table with an invalid edited row keeps the stored row of that country (CH stays 10 years, FR is updated, a new invalid IT row is only left out); the error says the saved row is kept; conditions: the stored AT row stays; the kept row is shown once – as the invalid row with its error',
+	array( array( 'country' => 'FR', 'years' => 6, 'end_of_year' => true, 'note' => '' ), array( 'country' => 'CH', 'years' => 10, 'end_of_year' => false, 'note' => 'Art. 127 OR' ) ) === $pvc_saved_exp
+		&& 2 === count( $pvc_exp_errors ) && str_contains( $pvc_exp_errors[0], 'Row 1 (CH):' ) && str_contains( $pvc_exp_errors[0], 'The previously saved row is kept.' ) && ! str_contains( $pvc_exp_errors[1], 'kept' )
+		&& array( array( 'country' => 'AT', 'language' => '', 'text' => 'Alt' ) ) === $pvc_saved_trm
+		&& true === $pvc_rejected[0]['kept'] && array( 'FR' ) === array_column( $pvc_shown, 'country' ),
+	wp_json_encode( array( $pvc_saved_exp, $pvc_exp_errors, $pvc_saved_trm ) )
+);
+// PV-P3-4: the own maximum amount is stored with its currency.
+$pvc_opt = VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'max_amount' );
+$pvc_cur = VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'max_amount_currency' );
+$GLOBALS['vcap_test_options'] = array( 'woocommerce_currency' => 'HUF' );
+$GLOBALS['vcap_test_options'][ $pvc_opt ] = VCAP\API\V1\CommandLimits::sanitize_amount( $pvc_opt, '39000', true );
+$pvc_huf = VCAP\API\V1\CommandLimits::effective( 'voucher.issue', 'HUF' );
+$pvc_rec = $GLOBALS['vcap_test_options'][ $pvc_cur ] ?? '';
+$GLOBALS['vcap_test_options']['woocommerce_currency'] = 'NOK';
+$pvc_nok      = VCAP\API\V1\CommandLimits::effective( 'voucher.issue', 'NOK' );
+$pvc_fields   = VCAP\API\V1\CommandLimits::settings_fields();
+$pvc_desc     = (string) ( array_values( array_filter( $pvc_fields, static fn( $f ) => ( $f['id'] ?? '' ) === $pvc_opt ) )[0]['desc'] ?? '' );
+$pvc_resaved  = VCAP\API\V1\CommandLimits::sanitize_amount( $pvc_opt, '39000', true ); // Saved again unchanged.
+$pvc_still    = $GLOBALS['vcap_test_options'][ $pvc_cur ];
+$pvc_new_save = VCAP\API\V1\CommandLimits::sanitize_amount( $pvc_opt, '1100', true );
+$GLOBALS['vcap_test_options'][ $pvc_opt ] = $pvc_new_save;
+$pvc_nok2 = VCAP\API\V1\CommandLimits::effective( 'voucher.issue', 'NOK' );
+// Import from a shop in another currency: amount and currency come together; the amount is not used here.
+$pvc_import = VCAP\SettingsTransfer::apply( array( $pvc_opt => '39000', $pvc_cur => 'HUF' ), VCAP\SettingsLog::VIA_IMPORT );
+$pvc_nok3   = VCAP\API\V1\CommandLimits::effective( 'voucher.issue', 'NOK' );
+// An amount stored before the currency existed counts once in the current shop currency, which is recorded.
+$GLOBALS['vcap_test_options'] = array( 'woocommerce_currency' => 'SEK', $pvc_opt => '500.00' );
+$pvc_legacy = VCAP\API\V1\CommandLimits::effective( 'voucher.issue', 'SEK' );
+$pvc_legrec = $GLOBALS['vcap_test_options'][ $pvc_cur ] ?? '';
+$GLOBALS['vcap_test_options']['woocommerce_currency'] = 'DKK';
+$pvc_legacy2 = VCAP\API\V1\CommandLimits::effective( 'voucher.issue', 'DKK' );
+check(
+	'PV-P3-4: the own maximum amount is stored with the shop currency; after a switch HUF 39000 → NOK the amount is not used (amount_allowed false, the field says why) until a new amount is saved (saving it unchanged keeps it refused); an import from a shop in another currency does not lift it; an amount stored before the currency counts once in the current currency, recorded',
+	39000 * 100 === $pvc_huf['max_amount_minor'] && 'HUF' === $pvc_rec && false === $pvc_nok['amount_allowed'] && null === $pvc_nok['max_amount_minor']
+		&& str_contains( $pvc_desc, 'entered in HUF; the shop currency is now NOK' ) && '39000.00' === $pvc_resaved && 'HUF' === $pvc_still
+		&& '1100.00' === $pvc_new_save,
+	wp_json_encode( array( $pvc_huf, $pvc_nok, $pvc_resaved, $pvc_still ) )
+);
+check(
+	'PV-P3-4: a newly saved amount counts in the new currency; import of amount + currency from another-currency shop refused (currency_not_allowed); legacy amount without currency recorded once and refused after the next currency switch; the currency is a read-only field of the register (section api, exported)',
+	110000 === $pvc_nok2['max_amount_minor'] && true === $pvc_nok2['amount_allowed'] && in_array( $pvc_cur, $pvc_import, true ) && false === $pvc_nok3['amount_allowed']
+		&& 50000 === $pvc_legacy['max_amount_minor'] && 'SEK' === $pvc_legrec && false === $pvc_legacy2['amount_allowed']
+		&& 'api' === VCAP\SettingsRegistry::get( $pvc_cur )['section'] && in_array( $pvc_cur, VCAP\SettingsTransfer::exportable(), true )
+		&& 'readonly' === ( array_values( array_filter( $pvc_fields, static fn( $f ) => ( $f['id'] ?? '' ) === $pvc_cur ) )[0]['custom_attributes']['readonly'] ?? '' )
+		&& '50.00' === VCAP\API\V1\CommandLimits::sanitize_amount( $pvc_opt, '50' ) && ! isset( $GLOBALS['vcap_test_options']['nothing'] ),
+	wp_json_encode( array( $pvc_nok2, $pvc_import, $pvc_nok3, $pvc_legacy, $pvc_legacy2 ) )
+);
+// PV-P2-4: counts "5.0"/"1e1" are whole numbers; "abc"/"-1" keep the stored value with an error.
+WC_Admin_Settings::$errors = array();
+$pvc_cnt = VCAP\API\V1\CommandLimits::option( 'voucher.issue', 'per_day' );
+$GLOBALS['vcap_test_options'] = array( $pvc_cnt => '7' );
+$pvc_counts = array(
+	VCAP\API\V1\CommandLimits::sanitize_count( $pvc_cnt, '5.0' ),
+	VCAP\API\V1\CommandLimits::sanitize_count( $pvc_cnt, '1e1' ),
+	VCAP\API\V1\CommandLimits::sanitize_count( $pvc_cnt, 'abc' ),
+	VCAP\API\V1\CommandLimits::sanitize_count( $pvc_cnt, '-1' ),
+	VCAP\API\V1\CommandLimits::sanitize_count( $pvc_cnt, '2.5' ),
+	VCAP\API\V1\CommandLimits::sanitize_count( $pvc_cnt, '' ),
+	VCAP\API\V1\CommandLimits::sanitize_count( $pvc_cnt, '999' ),
+);
+$pvc_cnt_errors = WC_Admin_Settings::$errors;
+$pvc_eff        = array();
+foreach ( array( '5.0', 'abc', '-1', '', '12' ) as $pvc_stored ) {
+	$GLOBALS['vcap_test_options'][ $pvc_cnt ] = $pvc_stored;
+	$pvc_eff[]                                = VCAP\API\V1\CommandLimits::effective( 'voucher.issue' )['per_day'];
+}
+check(
+	'PV-P2-4: command counts – "5.0" and "1e1" are stored as 5 and 10; "abc", "-1" and "2.5" are refused with an error naming the value and keep the stored 7 (never the ceiling 50); empty = the ceiling; above the ceiling = the ceiling; a stored "5.0" counts 5, a stored "abc"/"-1" never raises the limit (0)',
+	array( '5', '10', '7', '7', '7', '50', '50' ) === $pvc_counts && 3 === count( $pvc_cnt_errors ) && str_contains( $pvc_cnt_errors[0], '"abc" is not a whole number from 0 to 50. The saved value 7 was kept.' ) && str_contains( $pvc_cnt_errors[0], 'voucher.issue' )
+		&& array( 5, 0, 0, 50, 12 ) === $pvc_eff,
+	wp_json_encode( array( $pvc_counts, $pvc_cnt_errors, $pvc_eff ) )
+);
+// PV-P3-5: product page conditions translated like the voucher (Polylang strings).
+if ( ! function_exists( 'pll_translate_string' ) ) {
+	function pll_translate_string( $text, $lang ) { return $GLOBALS['vcap_test_pll'][ $lang ][ $text ] ?? $text; }
+}
+if ( ! function_exists( 'pll_current_language' ) ) {
+	function pll_current_language() { return $GLOBALS['vcap_test_pll_lang'] ?? ''; }
+}
+$GLOBALS['vcap_test_pll']      = array( 'en' => array( 'Gültig 3 Jahre.' => 'Valid 3 years.', 'Allgemein' => 'General' ) );
+$GLOBALS['vcap_test_pll_lang'] = 'en';
+$GLOBALS['vcap_test_options']  = array( 'vcap_default_terms' => 'Allgemein', VCAP\Markets::TERMS_OPTION => array( array( 'country' => 'DE', 'language' => '', 'text' => 'Gültig 3 Jahre.' ) ) );
+$pvc_variants = VCAP\ProductConfig::terms_variants( array() );
+check(
+	'PV-P3-5: terms_variants() (product page) runs the rows and the default conditions through Multilingual::translate() like terms() (voucher), so both show the same translated text',
+	array( 'DE' => 'Valid 3 years.', '' => 'General' ) === $pvc_variants && VCAP\ProductConfig::terms( array(), 'DE' ) === $pvc_variants['DE'] && VCAP\ProductConfig::terms( array(), 'US' ) === $pvc_variants[''],
+	wp_json_encode( $pvc_variants )
+);
+$GLOBALS['vcap_test_pll_lang'] = '';
+// PV-P3-6: the privacy text reads the retention through the filter, like the cleanup.
+$GLOBALS['vcap_test_options'] = array( 'vcap_retention_days' => '0' );
+add_filter( 'vcap_setting_vcap_retention_days', static fn() => 400 );
+$pvc_policy = (string) ( new ReflectionMethod( VCAP\Privacy::class, 'recipient_retention_sentence' ) )->invoke( null );
+array_pop( $GLOBALS['vcap_test_filters']['vcap_setting_vcap_retention_days'] );
+check( 'PV-P3-6: the suggested privacy text takes the retention period from Settings (filter vcap_setting_vcap_retention_days wins), the same value the cleanup uses', str_contains( $pvc_policy, 'removed 400 days after' ), $pvc_policy );
+// PV-P4-1: CSS escapes cannot spell @import or javascript: past the filter.
+$pvc_css = array_map(
+	array( VCAP\CustomCss::class, 'sanitize' ),
+	array( '@\69mport url(https://evil.example/x.css);', '@\000069mport "https://evil.example/x.css";', 'a{background:url(javascript\3a alert(1))}', '@imp\ort "x.css";', '.a::before{content:"\201C"}' )
+);
+$pvc_css_ok = true;
+foreach ( array_slice( $pvc_css, 0, 4 ) as $pvc_c ) {
+	$pvc_probe = strtolower( (string) preg_replace( '/\s+/', '', $pvc_c ) );
+	if ( str_contains( $pvc_probe, '@import' ) || str_contains( $pvc_probe, 'javascript:' ) || str_contains( $pvc_c, '\\' ) ) {
+		$pvc_css_ok = false;
+	}
+}
+check( 'PV-P4-1: custom CSS – hex escapes (@\69mport, @\000069mport, javascript\3a) and "\o" escapes are decoded before the search, so no @import or javascript: survives; harmless escapes (content "\201C") stay', $pvc_css_ok && '.a::before{content:"\201C"}' === $pvc_css[4], wp_json_encode( $pvc_css ) );
+// PV-P4-4: per-recipient counters of past days are deleted at once, the totals stay.
+$pvc_saved_wpdb            = $GLOBALS['wpdb'] ?? null;
+$GLOBALS['wpdb']           = new VCAP_Test_Wpdb();
+$GLOBALS['wpdb']->answers  = array( '/GET_LOCK/' => '1', '/RELEASE_LOCK/' => '1' );
+$GLOBALS['vcap_test_options'] = array(
+	'vcap_cmd_days'             => array( '2026-11-20' => array(), '2026-11-22' => array(), '2026-11-23' => array() ),
+	'vcap_cmd_count_2026-11-20' => array( 'voucher.issue' => 3, 'voucher.issue:recipient:17' => 1, 'voucher.issue:recipient:18' => 2 ),
+	'vcap_cmd_count_2026-11-22' => array( 'voucher.issue' => 1, 'voucher.issue:recipient:17' => 1 ),
+	'vcap_cmd_count_2026-11-23' => array( 'voucher.issue' => 1, 'voucher.issue:recipient:19' => 1 ),
+);
+( new VCAP\API\V1\OptionCommandStore() )->prune( '2026-11-23' );
+$pvc_o = $GLOBALS['vcap_test_options'];
+$GLOBALS['vcap_test_option_reads'] = array();
+( new VCAP\API\V1\OptionCommandStore() )->prune( '2026-11-23' );
+$pvc_reads = $GLOBALS['vcap_test_option_reads'];
+$GLOBALS['wpdb'] = $pvc_saved_wpdb;
+check(
+	'PV-P4-4: the daily clean-up deletes the per-recipient counters (customer account ids) of past days at once and keeps the totals; today\'s counters stay (the limit needs them); a day already cleaned is not read again',
+	array( 'voucher.issue' => 3 ) === $pvc_o['vcap_cmd_count_2026-11-20'] && array( 'voucher.issue' => 1 ) === $pvc_o['vcap_cmd_count_2026-11-22'] && 2 === count( $pvc_o['vcap_cmd_count_2026-11-23'] )
+		&& '2026-11-22' === $pvc_o['vcap_cmd_recipients_until'] && ! isset( $pvc_reads['vcap_cmd_count_2026-11-20'] ) && VCAP\SettingsRegistry::is_internal( 'vcap_cmd_recipients_until' )
+		&& ! str_contains( (string) file_get_contents( VCAP_PATH . 'src/Privacy.php' ), '(staff accounts, no customer data)' ),
+	wp_json_encode( $pvc_o )
+);
+// PV-P2-2: physical cards – "completed" always activates (issued only at completed with other activation statuses).
+$GLOBALS['vcap_test_options'] = array( VCAP\PhysicalCards::STATUSES_OPTION => array( 'processing' ) );
+$pvc_act = array( VCAP\PhysicalCards::activates( 'processing' ), VCAP\PhysicalCards::activates( 'completed' ), VCAP\PhysicalCards::activates( 'on-hold' ) );
+add_filter( 'vcap_physical_activation_statuses', static fn() => array() );
+$pvc_act_off = VCAP\PhysicalCards::activates( 'completed' );
+array_pop( $GLOBALS['vcap_test_filters']['vcap_physical_activation_statuses'] );
+$pvc_pc_src = (string) file_get_contents( VCAP_PATH . 'src/PhysicalCards.php' );
+check(
+	'PV-P2-2: physical cards – with activation status "processing" only, a card issued at "completed" is activated (prepare() and the status change use activates(): "completed" always counts); unpaid statuses never; an empty list of the filter switches the activation off',
+	array( true, true, false ) === $pvc_act && false === $pvc_act_off && 2 === substr_count( $pvc_pc_src, 'self::activates( (string)' ),
+	wp_json_encode( $pvc_act )
+);
+// PV-P2-9: a list whose tills are all switched off is no free text.
+$GLOBALS['vcap_test_options'] = array( VCAP\Counter::LOCATIONS => wp_json_encode( array( array( 'name' => 'Shop A', 'key' => 'shop-a', 'active' => 'no' ) ) ) );
+$pvc_none = VCAP\Counter::device_till( 'Somewhere' );
+$GLOBALS['vcap_test_options'] = array();
+$pvc_free = VCAP\Counter::device_till( 'Somewhere' );
+$GLOBALS['vcap_test_options'] = array( VCAP\Counter::LOCATIONS => wp_json_encode( array( array( 'name' => 'Shop A', 'key' => 'shop-a', 'active' => 'yes' ) ) ) );
+$pvc_list = array( VCAP\Counter::device_till( 'Shop A' ), VCAP\Counter::device_till( 'Somewhere' ) );
+check(
+	'PV-P2-9: counter tills – all tills of the list switched off refuses every booking (vcap_till_none_active, the scanner shows why) instead of taking free text; no list = free text as before; with an active till only listed names',
+	is_wp_error( $pvc_none ) && 'vcap_till_none_active' === $pvc_none->get_error_code() && 'Somewhere' === $pvc_free && 'Shop A' === $pvc_list[0] && is_wp_error( $pvc_list[1] )
+		&& str_contains( (string) file_get_contents( VCAP_PATH . 'src/Admin/Scanner.php' ), 'Counter::tills_managed()' ),
+	is_wp_error( $pvc_none ) ? $pvc_none->get_error_code() : wp_json_encode( $pvc_none )
+);
+// PV-P2-7 (country profile part): a second click of "Apply" is no "expired" error.
+$GLOBALS['vcap_test_transients'] = array();
+$pvc_before = VCAP\Admin\CountryProfilesAdmin::just_used( 'DE' );
+VCAP\Admin\CountryProfilesAdmin::mark_used( 'de' );
+$pvc_cpa_src = (string) file_get_contents( VCAP_PATH . 'src/Admin/CountryProfilesAdmin.php' );
+check(
+	'PV-P2-7: country profile – applying remembers the used preview for 30 seconds; a second "Apply" for that profile keeps the success message instead of "expired, nothing changed"; another profile is still refused',
+	false === $pvc_before && VCAP\Admin\CountryProfilesAdmin::just_used( 'DE' ) && ! VCAP\Admin\CountryProfilesAdmin::just_used( 'AT' ) && ! VCAP\Admin\CountryProfilesAdmin::just_used( '' )
+		&& preg_match( '/if \( self::just_used\( \$posted \) \) \{.*?wp_safe_redirect\( self::page_url\(\) \);\s*exit;/s', $pvc_cpa_src ) && str_contains( $pvc_cpa_src, 'self::mark_used( $pending );' ),
+	$pvc_cpa_src ? 'ok' : ''
+);
+$GLOBALS['vcap_test_transients'] = $pvc_saved_tr;
+$GLOBALS['vcap_test_options']    = $pvc_saved;
+VCAP\CountryProfiles::reset();
 
 echo "\n$passed passed, $failed failed. Output: $out\n";
 exit( $failed ? 1 : 0 );

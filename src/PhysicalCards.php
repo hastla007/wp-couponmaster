@@ -94,7 +94,17 @@ final class PhysicalCards {
 		}
 		$voucher->delivery_at  = null;
 		$voucher->delivered_at = $now;
-		$voucher->status       = in_array( $order->get_status(), self::activation_statuses(), true ) ? Voucher::STATUS_ACTIVE : Voucher::STATUS_SCHEDULED;
+		$voucher->status       = self::activates( (string) $order->get_status() ) ? Voucher::STATUS_ACTIVE : Voucher::STATUS_SCHEDULED;
+	}
+
+	/**
+	 * Whether an order status activates physical cards: one of activation_statuses(), and PV-P2-2 always "completed"
+	 * (the last paid status – an order there has passed every activation status, so a card issued only at
+	 * "completed" is not left inactive for good). Only an empty list of the filter switches the activation off.
+	 */
+	public static function activates( string $status ): bool {
+		$statuses = self::activation_statuses();
+		return in_array( $status, $statuses, true ) || ( 'completed' === $status && array() !== $statuses );
 	}
 
 	/** Physical cards of an order still waiting for the shipment. @return Voucher[] */
@@ -115,7 +125,7 @@ final class PhysicalCards {
 
 	/** @param mixed $order The order (WooCommerce passes it from 3.x on). */
 	public function on_status( $order_id, $from = '', $to = '', $order = null ): void {
-		if ( ! in_array( (string) $to, self::activation_statuses(), true ) ) {
+		if ( ! self::activates( (string) $to ) ) {
 			return;
 		}
 		$order = $order instanceof \WC_Order ? $order : wc_get_order( $order_id );
