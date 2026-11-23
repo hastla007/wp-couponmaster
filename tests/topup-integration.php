@@ -175,7 +175,15 @@ function vcap_topup_bought_card( WC_Product $card_product ): array {
 // Purchase refund first: the purchased value counts as spent first, so only the top-up can be paid back.
 list( $buy, $buy_line, $bought ) = vcap_topup_bought_card( $card_product );
 vcap_topup_assert( $bought instanceof VCAP\Voucher && 100.0 === vcap_topup_balance( $bought ), 'a gift card of 100 is bought' );
+$vc12_ctx = array();
+$vc12_cb  = static function ( ...$args ) use ( &$vc12_ctx ) {
+	$vc12_ctx[] = $args[4] ?? null;
+};
+add_action( 'vcap_gift_card_topped_up', $vc12_cb, 10, 5 );
 list( $top, $top_line ) = vcap_topup_order( $topup_product, $bought, 100 );
+remove_action( 'vcap_gift_card_topped_up', $vc12_cb, 10 );
+$vc12_topup = array_values( array_filter( vcap()->vouchers->events( (int) $bought->id ), static fn( $e ) => 'topup' === $e['event'] ) );
+vcap_topup_assert( 1 === count( $vc12_ctx ) && isset( $vc12_topup[0]['id'] ) && (int) $vc12_topup[0]['id'] === (int) ( $vc12_ctx[0]['journal_id'] ?? -1 ), 'VC-12: vcap_gift_card_topped_up passes the ledger id of the top-up as journal_id', array( $vc12_ctx, $vc12_topup ) );
 vcap()->coupons->adjust_balance( vcap()->vouchers->get( $bought->id ), -100, 'redeemed', 'spent in the shop' );
 vcap_topup_assert( 100.0 === vcap_topup_balance( $bought ), 'bought 100 + topped up 100, 100 spent: 100 left on the card' );
 $purchase_back = vcap_topup_refund( $buy, 100, array( $buy_line => array( 'qty' => 1, 'refund_total' => 100 ) ) );

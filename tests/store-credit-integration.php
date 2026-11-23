@@ -50,6 +50,18 @@ vcap_sc_assert( is_wp_error( $credit->adjust( $alice, -100, 'Too much' ) ), 'the
 vcap_sc_assert( is_wp_error( $credit->adjust( $alice, 10, '' ) ), 'a reason is required' );
 $events = array_column( vcap()->vouchers->events( $account->id ), 'note', 'event' );
 vcap_sc_assert( 'Goodwill' === ( $events['credit'] ?? '' ) && 'Correction' === ( $events['debit'] ?? '' ), 'credit changes are journaled with their reason' );
+$vc12_ctx = array();
+$vc12_cb  = static function ( ...$args ) use ( &$vc12_ctx ) {
+	$vc12_ctx[] = $args[6] ?? null;
+};
+add_action( 'vcap_store_credit_changed', $vc12_cb, 10, 7 );
+$credit->adjust( $alice, 5, 'Same second' );
+$credit->adjust( $alice, -5, 'Same second' );
+$credit->adjust( $alice, 5, 'Same second' );
+$credit->adjust( $alice, -5, 'Same second' ); // Balance back at 25 for the checks below.
+remove_action( 'vcap_store_credit_changed', $vc12_cb, 10 );
+$vc12_events = array_column( vcap()->vouchers->events( (int) $account->id ), 'id', 'id' );
+vcap_sc_assert( 4 === count( $vc12_ctx ) && 4 === count( array_unique( array_column( $vc12_ctx, 'journal_id' ) ) ) && array() === array_diff( array_column( $vc12_ctx, 'journal_id' ), array_keys( $vc12_events ) ), 'VC-12: vcap_store_credit_changed passes the ledger id of each booking as journal_id (four bookings in one second stay apart)', $vc12_ctx );
 
 // A missing account coupon is created again (balance kept); a failed coupon save does not leave a broken account.
 wp_delete_post( $account->coupon_id, true );

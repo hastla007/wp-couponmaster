@@ -24,7 +24,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_form_captain_request_approved` | 1.3.0 | `src/Integrations/FormCaptain/RequestService.php` | A voucher request from Form Captain was approved and its vouchers issued. |
 | `vcap_form_captain_request_created` | 1.3.0 | `src/Integrations/FormCaptain/RequestService.php` | A voucher request from Form Captain was stored (status pending). Nothing has been issued. |
 | `vcap_form_captain_request_rejected` | 1.3.0 | `src/Integrations/FormCaptain/RequestService.php` | A voucher request from Form Captain was rejected. |
-| `vcap_gift_card_topped_up` | 1.2.0 | `src/TopUp.php` | A gift card was topped up by an order (args: Voucher $card, float $amount, WC_Order $order, order item). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
+| `vcap_gift_card_topped_up` | 1.2.0 | `src/TopUp.php` | A gift card was topped up by an order (args: Voucher $card, float $amount, WC_Order $order, order item, context array with journal_id = ledger id of the top-up booking (since contract 1.7.0, VC-12; register 5 args)). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_loaded` | 1.2.0 | `voucher-captain.php` | Voucher Captain has booted: vcap() and its services (api_v1, redemptions …) can be used from here on. |
 | `vcap_no_cache` | 1.2.0 | `src/Shortcodes.php` | Fires when a page must not be cached (hook for cache plugins without DONOTCACHEPAGE support). |
 | `vcap_order_metabox_after` | 1.1.0 | `src/Admin/OrderAdmin.php` | – |
@@ -42,7 +42,7 @@ with a public API contract, the contract starts with 1.1.0). Add-ons check the c
 | `vcap_review_recipient_resolved` | 1.2.0 | `src/Integrations/ReviewSource.php` | A recipient was given to a review plugin (for audit logs; no personal data). |
 | `vcap_review_redemption_eligible` | 1.2.0 | `src/Integrations/ReviewSource.php` | A redemption confirmed a service and may be used for a review invitation (once per reference). Payload (contract 1.x, no personal data): contract, event, event_id, reference, source, site_id, channel, experience_id (voucher product), occurred_at (UTC), reason. *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_review_redemption_revoked` | 1.2.0 | `src/Integrations/ReviewSource.php` | A review source was withdrawn (once per reference): reason redeem_reversed, refunded, voided, erased (personal data of the voucher erased), deleted or no_recipient (no address left). Same payload as vcap_review_redemption_eligible with event "revoked". *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
-| `vcap_store_credit_changed` | 1.1.0 | `src/StoreCredit.php` | The store credit of a customer changed (args: user id, amount, balance after, event, reason, order id). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
+| `vcap_store_credit_changed` | 1.1.0 | `src/StoreCredit.php` | The store credit of a customer changed (args: user id, amount, balance after, event, reason, order id, context array with journal_id = ledger id of this booking (since contract 1.7.0, VC-12; register 7 args)). *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_ticket_checked_in` | 1.0.0 | `src/Tickets.php` | – *Inside a transaction: after COMMIT, dropped on ROLLBACK (D6).* |
 | `vcap_topup_held` | 1.2.0 | `src/TopUp.php` | – |
 | `vcap_topup_without_code` | 1.2.0 | `src/TopUp.php` | A top-up line without card code was held (no card issued, no top-up booked). |

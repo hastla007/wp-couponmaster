@@ -42,9 +42,11 @@ define( 'VCAP_DB_VERSION', '1.8.0' );
  * voucher commands vcap_command_*() / vcap()->commands (API.md → "Voucher commands"), 1.4.0 = plugin 1.3.0 with the
  * connector access of vcap()->api_v1 (voucher(), voucher_by_code(), log_event(), admin_url(), line_snapshot();
  * API.md → "Connector access"), 1.5.0 = plugin 1.3.0 with contact and consent of a voucher id, off by default
- * (vcap()->contact, vcap_read_voucher_contact(); API.md → "Contact and consent").
+ * (vcap()->contact, vcap_read_voucher_contact(); API.md → "Contact and consent"), 1.6.0 = plugin 1.3.0 with the
+ * read function of the command limits vcap_read_command_limits() / vcap()->commands->limits() (SET-WC-15), 1.7.0 =
+ * plugin 1.3.0 with journal_id in the context of vcap_store_credit_changed and vcap_gift_card_topped_up (VC-12).
  */
-define( 'VCAP_CONTRACT_VERSION', '1.5.0' );
+define( 'VCAP_CONTRACT_VERSION', '1.7.0' );
 define( 'VCAP_FILE', __FILE__ );
 define( 'VCAP_PATH', plugin_dir_path( __FILE__ ) );
 define( 'VCAP_URL', plugin_dir_url( __FILE__ ) );
