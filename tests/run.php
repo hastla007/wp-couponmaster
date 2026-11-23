@@ -3339,6 +3339,10 @@ unset( $GLOBALS['vcap_test_options'][ VCAP\API\V1\CommandLimits::option( 'vouche
 $GLOBALS['vcap_test_options']['woocommerce_currency'] = 'EUR';
 $vc1_be->currency = 'EUR';
 $vc1_be->day      = '2026-11-16';
+// VC-12: credit and top-up hooks pass the ledger id of the booking as journal_id (contract 1.7.0).
+$vc12_sc = (string) file_get_contents( VCAP_PATH . 'src/StoreCredit.php' );
+$vc12_tu = (string) file_get_contents( VCAP_PATH . 'src/TopUp.php' );
+check( 'VC-12: vcap_store_credit_changed (7th arg) and vcap_gift_card_topped_up (5th arg) pass array( journal_id => ledger id ); unknown bookings give 0', str_contains( $vc12_sc, "\$order_id, array( 'journal_id' => \$this->repo->last_log_id( (int) \$fresh->id, \$event ) ) );" ) && str_contains( $vc12_tu, "\$item, array( 'journal_id' => \$this->repo->last_log_id( (int) \$card->id, 'topup' ) ) );" ) && 0 === ( new ReflectionClass( VCAP\VoucherRepository::class ) )->newInstanceWithoutConstructor()->last_log_id( 999999, 'topup' ) );
 // SET-WC-15: the limits as they apply now, for a display (contract 1.6.0).
 $vc1_lim   = $vc1->limits();
 $vc1_used  = count( array_filter( $vc1->protocol( '2026-11-16' ), static fn( $e ) => 'voucher.issue' === $e['command'] && 'done' === $e['status'] && empty( $e['replayed'] ) ) );

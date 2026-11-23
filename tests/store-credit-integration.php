@@ -45,7 +45,17 @@ $added = $credit->adjust( $alice, 30, 'Goodwill' );
 $account = $credit->account( $alice );
 vcap_sc_assert( ! is_wp_error( $added ) && 30.0 === $added['balance'] && 'credit' === $account->type && $alice === $account->user_id, 'adding credit opens the account' );
 vcap_sc_assert( 30.0 === (float) ( new WC_Coupon( $account->coupon_id ) )->get_amount(), 'the account coupon follows the balance' );
+$vc12_ctx = array();
+$vc12_cb  = static function ( ...$args ) use ( &$vc12_ctx ) {
+	$vc12_ctx[] = $args[6] ?? null;
+};
+add_action( 'vcap_store_credit_changed', $vc12_cb, 10, 7 );
 vcap_sc_assert( 25.0 === $credit->adjust( $alice, -5, 'Correction' )['balance'], 'credit can be removed' );
+$credit->adjust( $alice, 5, 'Same second' );
+$credit->adjust( $alice, -5, 'Same second' );
+remove_action( 'vcap_store_credit_changed', $vc12_cb, 10 );
+$vc12_events = array_column( vcap()->vouchers->events( (int) $account->id ), 'id', 'id' );
+vcap_sc_assert( 3 === count( $vc12_ctx ) && 3 === count( array_unique( array_column( $vc12_ctx, 'journal_id' ) ) ) && array() === array_diff( array_column( $vc12_ctx, 'journal_id' ), array_keys( $vc12_events ) ), 'VC-12: vcap_store_credit_changed passes the ledger id of each booking as journal_id (three bookings in one second stay apart)', $vc12_ctx );
 vcap_sc_assert( is_wp_error( $credit->adjust( $alice, -100, 'Too much' ) ), 'the balance cannot go below zero' );
 vcap_sc_assert( is_wp_error( $credit->adjust( $alice, 10, '' ) ), 'a reason is required' );
 $events = array_column( vcap()->vouchers->events( $account->id ), 'note', 'event' );
