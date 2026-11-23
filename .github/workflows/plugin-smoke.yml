@@ -32,7 +32,7 @@ jobs:
           extensions: dom, gd, mbstring, xml, zip
           coverage: none
       - name: Install PDF inspection tools
-        run: sudo apt-get update && sudo apt-get install --yes poppler-utils
+        run: sudo rm -f /etc/apt/sources.list.d/microsoft*  && sudo apt-get update && sudo apt-get install --yes poppler-utils  # The runner image's Microsoft apt source answered 403 (23.11.2026); poppler comes from Ubuntu.
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist
       - name: Audit locked dependencies
@@ -101,7 +101,7 @@ jobs:
           extensions: dom, gd, mbstring, mysqli, xml, zip
           coverage: none
       - name: Install PDF inspection tools
-        run: sudo apt-get update && sudo apt-get install --yes poppler-utils
+        run: sudo rm -f /etc/apt/sources.list.d/microsoft*  && sudo apt-get update && sudo apt-get install --yes poppler-utils  # The runner image's Microsoft apt source answered 403 (23.11.2026); poppler comes from Ubuntu.
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist
       - name: Download WP-CLI
