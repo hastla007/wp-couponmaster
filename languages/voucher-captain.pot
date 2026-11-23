@@ -6,8 +6,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-23 19:12+0000\n"
-"POT-Creation-Date: 2026-11-23 19:20+0000\n"
+"POT-Creation-Date: 2026-11-23 19:28+0000\n"
 "X-Domain: voucher-captain\n"
 
 #. Plugin Name of the plugin
@@ -2260,8 +2259,7 @@ msgstr ""
 msgid "You cannot add store credit to your own account. Ask a shop manager. Nothing was changed."
 msgstr ""
 
-#: src/Admin/StoreCreditAdmin.php:70 src/Privacy.php:165 src/Settings.php:935 src/StoreCredit.php:605 src/Voucher.php:80
-#: src/Admin/StoreCreditAdmin.php:70 src/Privacy.php:165 src/Settings.php:832 src/StoreCredit.php:608 src/Voucher.php:80
+#: src/Admin/StoreCreditAdmin.php:70 src/Privacy.php:165 src/Settings.php:935 src/StoreCredit.php:608 src/Voucher.php:80
 msgid "Store credit"
 msgstr ""
 
@@ -5045,7 +5043,7 @@ msgstr ""
 msgid "Database setup error"
 msgstr ""
 
-#: src/Diagnostics.php:46 src/Diagnostics.php:76 src/Diagnostics.php:182 src/Health.php:791
+#: src/Diagnostics.php:46 src/Diagnostics.php:76 src/Diagnostics.php:182 src/Health.php:807
 msgid "None"
 msgstr ""
 
@@ -5613,8 +5611,7 @@ msgstr ""
 msgid "This is the address the voucher is already sent to."
 msgstr ""
 
-#: src/Downloads.php:438 src/VoucherRepository.php:1156
-#: src/Downloads.php:400 src/VoucherRepository.php:1172
+#: src/Downloads.php:438 src/VoucherRepository.php:1172
 msgid "Recipient corrected by the buyer"
 msgstr ""
 
@@ -6877,132 +6874,146 @@ msgstr ""
 msgid "The voucher redeem page needs attention"
 msgstr ""
 
-#: src/Health.php:604
+#: src/Health.php:609
 msgid "statutory validity not verified (3 years to the end of the year is used)"
 msgstr ""
 
-#: src/Health.php:607
+#: src/Health.php:612
 msgid "no redemption conditions"
 msgstr ""
 
 #. translators: %s: locale, e.g. fr_FR
-#: src/Health.php:611
+#: src/Health.php:616
 #, php-format
 msgid "no translation (%s)"
 msgstr ""
 
-#: src/Health.php:618
-msgid "Voucher rules are set for every EU country you sell to"
+#. translators: %s: list of country codes
+#: src/Health.php:629
+#, php-format
+msgid "No market data for these selling countries – the shop's default validity and the general conditions apply, nothing is checked there: %s"
 msgstr ""
 
-#: src/Health.php:618
+#. translators: %d: number of further countries
+#: src/Health.php:630
+#, php-format
+msgid "(and %d more)"
+msgid_plural "(and %d more)"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Health.php:634
+msgid "Voucher rules are set for every country you sell to"
+msgstr ""
+
+#: src/Health.php:634
 msgid "Each selling country has a verified voucher validity, redemption conditions and a translation."
 msgstr ""
 
-#: src/Health.php:623
-msgid "Some EU selling countries need voucher settings"
+#: src/Health.php:639
+msgid "Some selling countries need voucher settings"
 msgstr ""
 
 #. translators: %s: list of countries with what is missing
-#: src/Health.php:625
+#: src/Health.php:641
 #, php-format
 msgid "Set the statutory validity and conditions per country under Vouchers → Settings (have them checked legally) and add translations: %s"
 msgstr ""
 
-#: src/Health.php:635
+#: src/Health.php:651
 msgid "Vouchers are not sold with cash on delivery"
 msgstr ""
 
-#: src/Health.php:635
+#: src/Health.php:651
 msgid "Cash on delivery is not offered for virtual products. Orders paid by bank transfer or cheque issue vouchers once the payment is confirmed."
 msgstr ""
 
-#: src/Health.php:637
+#: src/Health.php:653
 msgid "Cash on delivery is offered for virtual products"
 msgstr ""
 
-#: src/Health.php:637
+#: src/Health.php:653
 msgid "Voucher orders paid by cash on delivery are \"Processing\" before any money arrived. Their vouchers are issued only when the order is completed (or the payment is recorded), so the customer waits. Switch off \"Accept for virtual orders\" under WooCommerce → Settings → Payments → Cash on delivery if vouchers should only be sold with immediate payment."
 msgstr ""
 
-#: src/Health.php:652
+#: src/Health.php:668
 msgid "Vouchers and gift card balances are kept in the shop base currency. Use a supported currency switcher (WooCommerce Multilingual, Aelia, WOOCS, CURCY, WooPayments Multi-Currency) or convert amounts with the filter \"vcap_amount_to_base_currency\"."
 msgstr ""
 
-#: src/Health.php:662
+#: src/Health.php:678
 msgid "Vouchers kept in another currency than the shop base currency"
 msgstr ""
 
 #. translators: 1: shop base currency, 2: currencies with the number of vouchers
-#: src/Health.php:665
+#: src/Health.php:681
 #, php-format
 msgid "The shop base currency is %1$s, but usable fixed-value vouchers are kept in %2$s (the base currency was changed after they were issued). They are refused in the cart and over the API until their value is converted (edit the balance or reissue them)."
 msgstr ""
 
-#: src/Health.php:675
+#: src/Health.php:691
 msgid "Foreign-currency amounts could not be converted"
 msgstr ""
 
 #. translators: %s: currency codes
-#: src/Health.php:677
+#: src/Health.php:693
 #, php-format
 msgid "No exchange rate to the shop base currency was known for %s in the last 30 days: voucher sales in that currency were held, store-credit refunds and fixed-value vouchers were refused."
 msgstr ""
 
-#: src/Health.php:685
+#: src/Health.php:701
 msgid "Foreign currency without converter"
 msgstr ""
 
 #. translators: %s: plugin name
-#: src/Health.php:687
+#: src/Health.php:703
 #, php-format
 msgid "Voucher Captain cannot read the exchange rates of %s. Orders in other currencies cannot issue vouchers or be charged to gift cards until a rate is known."
 msgstr ""
 
-#: src/Health.php:690
+#: src/Health.php:706
 msgid "Voucher amounts are converted to the shop base currency"
 msgstr ""
 
-#: src/Health.php:690
+#: src/Health.php:706
 msgid "Either all orders are in the base currency or a supported currency switcher provides the exchange rates."
 msgstr ""
 
-#: src/Health.php:731
+#: src/Health.php:747
 msgid "Voucher validity is not shorter than the statutory period"
 msgstr ""
 
-#: src/Health.php:731
-msgid "No voucher product ends before the statutory limitation period of the shop country or an EU selling country."
+#: src/Health.php:747
+msgid "No voucher product ends before the statutory limitation period of the shop country or a selling country."
 msgstr ""
 
-#: src/Health.php:736
+#: src/Health.php:752
 msgid "Some vouchers are valid for less than the statutory period"
 msgstr ""
 
 #. translators: %s: products with the countries concerned
-#: src/Health.php:738
+#: src/Health.php:754
 #, php-format
 msgid "A validity shorter than the statutory limitation period is often invalid in voucher conditions. Check legally or switch to the statutory validity: %s"
 msgstr ""
 
-#: src/Health.php:752
+#: src/Health.php:768
 msgid "Not every voucher could be checked in time; run \"wp vcap ledger verify\" for the complete check."
 msgstr ""
 
-#: src/Health.php:754
+#: src/Health.php:770
 msgid "Voucher balances match their history"
 msgstr ""
 
-#: src/Health.php:754
+#: src/Health.php:770
 msgid "The balance of every gift card and store credit account equals the balance after its last booking in the history."
 msgstr ""
 
-#: src/Health.php:760
+#: src/Health.php:776
 msgid "Some voucher balances differ from their history"
 msgstr ""
 
 #. translators: 1: number of vouchers, 2: voucher codes
-#: src/Health.php:763
+#: src/Health.php:779
 #, php-format
 msgid "%1$d voucher has a stored balance that differs from the balance after its last booking (written without a booking). The liability report reads the history, so it no longer matches the card. Check and correct: %2$s"
 msgid_plural "%1$d vouchers have a stored balance that differs from the balance after their last booking (written without a booking). The liability report reads the history, so it no longer matches the cards. Check and correct: %2$s"
@@ -7010,58 +7021,58 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: 1: product name, 2: expected tax status ("none" or "taxable")
-#: src/Health.php:791
+#: src/Health.php:807
 #, php-format
 msgid "%1$s (tax status should be \"%2$s\")"
 msgstr ""
 
-#: src/Health.php:791
+#: src/Health.php:807
 msgid "Taxable"
 msgstr ""
 
-#: src/Health.php:803
+#: src/Health.php:819
 msgid "Multi-purpose vouchers are never taxed"
 msgstr ""
 
 #. translators: %s: list of products
-#: src/Health.php:805
+#: src/Health.php:821
 #, php-format
 msgid "These voucher products sell multi-purpose vouchers without VAT (tax status \"None\"), but the setting \"Multi-purpose vouchers as payment\" is off: the vouchers are redeemed as a price reduction that lowers the VAT, so their value is taxed neither at the sale nor at the redemption. Turn on \"Multi-purpose vouchers as payment\" or make the products taxable, and check with your tax adviser: %s"
 msgstr ""
 
-#: src/Health.php:813
+#: src/Health.php:829
 msgid "Single-purpose vouchers in a shop that sells to several countries"
 msgstr ""
 
 #. translators: %s: list of products
-#: src/Health.php:815
+#: src/Health.php:831
 #, php-format
 msgid "A single-purpose voucher needs the place of supply and the VAT to be fixed at the sale. Your shop sells to several countries, so the country of the later redemption is open: check with your tax adviser whether these products are single-purpose vouchers. Vouchers are only redeemed for goods with the VAT rate and country of their sale: %s"
 msgstr ""
 
-#: src/Health.php:819
+#: src/Health.php:835
 msgid "Voucher products have a tax status that fits their VAT treatment"
 msgstr ""
 
-#: src/Health.php:819
+#: src/Health.php:835
 msgid "Multi-purpose vouchers are sold without VAT, single-purpose vouchers with VAT."
 msgstr ""
 
-#: src/Health.php:824
+#: src/Health.php:840
 msgid "Some voucher products have a tax status that does not fit their VAT treatment"
 msgstr ""
 
 #. translators: %s: list of products
-#: src/Health.php:826
+#: src/Health.php:842
 #, php-format
 msgid "Multi-purpose vouchers are sold without VAT (tax status \"None\"), single-purpose vouchers with VAT (\"Taxable\"). Check with your tax adviser and correct: %s"
 msgstr ""
 
-#: src/Health.php:834
+#: src/Health.php:850
 msgid "Scheduled voucher tasks"
 msgstr ""
 
-#: src/Health.php:841
+#: src/Health.php:857
 msgid "Voucher settings"
 msgstr ""
 
