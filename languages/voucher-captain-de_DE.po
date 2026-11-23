@@ -40,8 +40,8 @@ msgstr ""
 
 #. Author of the plugin
 #: voucher-captain.php
-msgid "CouponMaster"
-msgstr "CouponMaster"
+msgid "Captain Suite"
+msgstr "Captain Suite"
 
 #: src/API/V1/CommandLimits.php:199
 msgid "Issue vouchers (voucher.issue)"
@@ -107,13 +107,13 @@ msgstr "Höchstbetrag"
 
 #: src/API/V1/CommandLimits.php:254
 msgid ""
-"In the shop currency. Empty: 100 EUR. At most 100 EUR; in a shop with "
-"another currency, the command refuses amounts until you enter a maximum here "
-"that is worth no more than 100 EUR."
+"In the shop currency. Empty: 100 (in EUR, CHF, USD and GBP), at most 100 "
+"there. In a shop with another currency, the command refuses amounts until you "
+"enter a maximum here that is worth no more than 100 EUR."
 msgstr ""
-"In der Shopwährung. Leer: 100 EUR. Höchstens 100 EUR; in einem Shop mit "
-"anderer Währung lehnt der Befehl Beträge ab, bis Sie hier einen Höchstbetrag "
-"eintragen, der nicht mehr als 100 EUR wert ist."
+"In der Shopwährung. Leer: 100 (in EUR, CHF, USD und GBP), dort höchstens 100. "
+"In einem Shop mit anderer Währung lehnt der Befehl Beträge ab, bis Sie hier "
+"einen Höchstbetrag eintragen, der nicht mehr als 100 EUR wert ist."
 
 #: src/API/V1/CommandService.php:139
 msgid "Automatic command"
@@ -14821,3 +14821,24 @@ msgstr "Ablehnen"
 
 msgid "Unknown action."
 msgstr "Unbekannte Aktion."
+
+msgid "Contact read function"
+msgstr "Kontakt-Lesefunktion"
+
+msgid "Lets authorised add-ons read the address of a voucher's recipient or buyer for a purpose this person consented to (e.g. a review invitation). Every read is written to the voucher history. Switch it on only after your data protection review and with a matching note in your privacy policy."
+msgstr "Erlaubt berechtigten Add-ons, die Adresse der Empfängerin bzw. des Empfängers oder der Käuferin bzw. des Käufers eines Gutscheins für einen Zweck zu lesen, dem diese Person zugestimmt hat (z. B. eine Bitte um Bewertung). Jeder Zugriff wird im Verlauf des Gutscheins protokolliert. Schalten Sie die Funktion erst nach Ihrer Datenschutzprüfung und mit einem passenden Hinweis in Ihrer Datenschutzerklärung ein."
+
+msgid "Allow contact reads"
+msgstr "Kontaktabfragen erlauben"
+
+msgid "Answer contact requests of add-ons (only with recorded consent)"
+msgstr "Kontaktabfragen von Add-ons beantworten (nur mit protokollierter Einwilligung)"
+
+msgid "Contact consent recorded"
+msgstr "Einwilligung zur Kontaktaufnahme protokolliert"
+
+msgid "Contact consent withdrawn"
+msgstr "Einwilligung zur Kontaktaufnahme widerrufen"
+
+msgid "Contact read by an add-on"
+msgstr "Kontakt von einem Add-on gelesen"

@@ -1,22 +1,20 @@
 name: Plugin smoke tests
 
 on:
+  # Branches are checked through their pull request only; a push run exists only for main (release.yml → ci-green
+  # needs the push run of the tagged main commit). Manual runs stay possible.
   push:
     branches:
       - main
-      - claude/youthful-bardeen-7ejd7a
-      - codex/fix-voucher-audit-findings
-      - claude/wp-plugin-analyse-todo-hvollo
-      - claude/wp-plugin-analyse-todo-hvollo-refactors
-      - claude/sharp-mendel-xiiwf3
   pull_request:
+  workflow_dispatch:
 
-# A newer push to the same branch (or pull request) cancels the older run that is still queued or running – the
-# newest commit is what counts, and the ratchet compares against github.event.before, not against an earlier run.
+# A newer commit of the same pull request cancels the older run that is still queued or running – the newest commit
+# is what counts, and the ratchet compares against the base of the pull request (github.event.before on main).
 # Runs on main always finish.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   smoke:

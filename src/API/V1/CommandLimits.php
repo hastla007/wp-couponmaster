@@ -16,9 +16,10 @@ defined( 'ABSPATH' ) || exit;
  * ceiling. The operator can lower each of them in Voucher Captain → Settings → Integrations (API) and switch each
  * command off; nothing (no setting, no filter) raises a limit above the table. All four commands are off by default.
  *
- * Amounts: the ceiling is set in euro (100 EUR = 10000 minor units). F-05a (other currencies) is not decided yet; until
- * then an amount in another currency is refused unless the operator entered an own maximum amount in the shop currency
- * (which he vouches is not above 100 EUR in value).
+ * Amounts (owner's decision of 23.11.2026 on F-05a): the core converts nothing and knows no exchange rates. The ceiling
+ * is 100 in EUR and – only as the shop currency – the same number 100 in a short list of currencies of similar value
+ * (SIMILAR_CURRENCIES). In a shop with any other currency the operator enters the maximum amount once himself; until
+ * then amounts are refused (currency_not_allowed), so voucher.issue and voucher.redeem stay off there.
  *
  * @since 1.3.0 (contract 1.3.0)
  */
@@ -28,6 +29,14 @@ final class CommandLimits {
 
 	/** Currency the fixed amount ceiling is set in. */
 	public const FIXED_CURRENCY = 'EUR';
+
+	/**
+	 * Currencies whose unit is worth about as much as one euro: as the shop currency they get the same ceiling number
+	 * (100) without an own entry by the operator (F-05a). Kept short on purpose; anything else needs the operator.
+	 *
+	 * @since 1.3.0
+	 */
+	public const SIMILAR_CURRENCIES = array( 'CHF', 'USD', 'GBP' );
 
 	/**
 	 * Fixed ceilings per command: amount per voucher/redemption in minor units of EUR (null = no amount), calls per
@@ -118,8 +127,9 @@ final class CommandLimits {
 	/**
 	 * Maximum amount in minor units of $currency, null when amounts in it are refused (F-05a).
 	 *
-	 * EUR: the fixed 100 EUR, or the operator's lower amount when the shop currency is EUR. Another currency: only the
-	 * shop currency, and only with an own maximum amount entered by the operator.
+	 * EUR: the fixed 100 EUR, or the operator's lower amount when the shop currency is EUR. A currency of
+	 * SIMILAR_CURRENCIES as the shop currency: the same number 100 in it, or the operator's lower amount. Any other
+	 * currency: only the shop currency, and only with an own maximum amount entered by the operator.
 	 *
 	 * @param string $command  Command.
 	 * @param string $currency Currency (upper case).
@@ -132,7 +142,26 @@ final class CommandLimits {
 		if ( self::FIXED_CURRENCY === $currency ) {
 			return null === $own ? $fixed : min( $fixed, $own );
 		}
+		$ceiling = $currency === $shop ? self::similar_ceiling( $command, $currency ) : null;
+		if ( null !== $ceiling ) {
+			return null === $own ? $ceiling : min( $ceiling, $own );
+		}
 		return $own;
+	}
+
+	/**
+	 * The fixed ceiling number (100) in minor units of a currency of SIMILAR_CURRENCIES, null for any other currency.
+	 *
+	 * @param string $command  Command.
+	 * @param string $currency Currency (upper case).
+	 * @return int|null
+	 */
+	private static function similar_ceiling( string $command, string $currency ): ?int {
+		if ( ! in_array( $currency, self::SIMILAR_CURRENCIES, true ) || null === self::FIXED[ $command ]['max_amount_minor'] ) {
+			return null;
+		}
+		// FIXED is in EUR cents; the same number of major units in the other currency.
+		return (int) round( self::FIXED[ $command ]['max_amount_minor'] / 100 * ( 10 ** RedemptionService::decimals( $currency ) ) );
 	}
 
 	/**
@@ -251,7 +280,7 @@ final class CommandLimits {
 					'id'      => self::option( $command, self::SUFFIX_AMOUNT ),
 					'type'    => 'text',
 					'default' => '',
-					'desc'    => __( 'In the shop currency. Empty: 100 EUR. At most 100 EUR; in a shop with another currency, the command refuses amounts until you enter a maximum here that is worth no more than 100 EUR.', 'voucher-captain' ),
+					'desc'    => __( 'In the shop currency. Empty: 100 (in EUR, CHF, USD and GBP), at most 100 there. In a shop with another currency, the command refuses amounts until you enter a maximum here that is worth no more than 100 EUR.', 'voucher-captain' ),
 				);
 			}
 		}
@@ -285,7 +314,7 @@ final class CommandLimits {
 	}
 
 	/**
-	 * Sanitizes a saved maximum amount: '' or a non-negative decimal; in a EUR shop never above 100.
+	 * Sanitizes a saved maximum amount: '' or a non-negative decimal; in a shop in EUR or SIMILAR_CURRENCIES never above 100.
 	 *
 	 * @param string $option Option name.
 	 * @param mixed  $value  Submitted value.
@@ -300,8 +329,12 @@ final class CommandLimits {
 		$decimals = RedemptionService::decimals( $currency );
 		$amount   = round( (float) $value, $decimals );
 		foreach ( self::FIXED as $command => $fixed ) {
-			if ( self::option( $command, self::SUFFIX_AMOUNT ) === $option && self::FIXED_CURRENCY === $currency && null !== $fixed['max_amount_minor'] ) {
-				$amount = min( $amount, $fixed['max_amount_minor'] / ( 10 ** $decimals ) );
+			if ( self::option( $command, self::SUFFIX_AMOUNT ) !== $option || null === $fixed['max_amount_minor'] ) {
+				continue;
+			}
+			$ceiling = self::FIXED_CURRENCY === $currency ? $fixed['max_amount_minor'] : self::similar_ceiling( $command, $currency );
+			if ( null !== $ceiling ) {
+				$amount = min( $amount, $ceiling / ( 10 ** $decimals ) );
 			}
 		}
 		return number_format( $amount, $decimals, '.', '' );

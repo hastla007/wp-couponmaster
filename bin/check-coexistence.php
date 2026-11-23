@@ -84,7 +84,10 @@ list( $fb, $cb ) = vcap_coexist_globals( $b );
 if ( $same = array_intersect( $fa, $fb ) ) {
 	$problems[] = 'Same global functions: ' . implode( ', ', $same );
 }
-if ( $same = array_intersect( $ca, $cb ) ) {
+// WordPress conventions every plugin may set (guarded with defined() or wc_maybe_define_constant()): page and object
+// caches read them; two plugins setting the same one is intended, not a conflict.
+$shared_conventions = array( 'DONOTCACHEPAGE', 'DONOTCACHEOBJECT', 'DONOTCACHEDB', 'DONOTMINIFY', 'DONOTCDN' );
+if ( $same = array_diff( array_intersect( $ca, $cb ), $shared_conventions ) ) {
 	$problems[] = 'Same global constants: ' . implode( ', ', $same );
 }
 if ( $problems ) {

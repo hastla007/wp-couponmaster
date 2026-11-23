@@ -9,7 +9,7 @@
  * Requires Plugins:  woocommerce
  * WC requires at least: 11.2.2
  * WC tested up to:   11.3
- * Author:            CouponMaster
+ * Author:            Captain Suite
  * Text Domain:       voucher-captain
  * Domain Path:       /languages
  * License:           GPL-2.0-or-later
@@ -36,13 +36,15 @@ define( 'VCAP_DB_VERSION', '1.8.0' );
  * Version of the public extension contract (hooks, vcap()->api_v1, vcap()->redemptions, REST vcap/v1,
  * VCAP\Contracts\*) – independent of the plugin version. Major = API generation (1 = v1), minor rises with every
  * release that adds hooks, methods or arguments. Add-ons and connectors check this instead of single hooks
- * (CONNECTORS.md, section 6; docs/HOOKS.md). 1.0.0 = plugin 1.1.0, 1.1.0 = plugin 1.2.0, 1.2.0 = plugin 1.3.0 with
+ * (CONNECTORS.md, section 6; docs/HOOKS.md). The constant exists since plugin 1.3.0; 1.0.0 (plugin 1.1.0) and 1.1.0
+ * (plugin 1.2.0) were assigned afterwards and cannot be read on those versions. 1.2.0 = plugin 1.3.0 with
  * the read functions vcap_read_*() / vcap()->read (API.md → "Read functions"), 1.3.0 = plugin 1.3.0 with the
  * voucher commands vcap_command_*() / vcap()->commands (API.md → "Voucher commands"), 1.4.0 = plugin 1.3.0 with the
  * connector access of vcap()->api_v1 (voucher(), voucher_by_code(), log_event(), admin_url(), line_snapshot();
- * API.md → "Connector access").
+ * API.md → "Connector access"), 1.5.0 = plugin 1.3.0 with contact and consent of a voucher id, off by default
+ * (vcap()->contact, vcap_read_voucher_contact(); API.md → "Contact and consent").
  */
-define( 'VCAP_CONTRACT_VERSION', '1.4.0' );
+define( 'VCAP_CONTRACT_VERSION', '1.5.0' );
 define( 'VCAP_FILE', __FILE__ );
 define( 'VCAP_PATH', plugin_dir_path( __FILE__ ) );
 define( 'VCAP_URL', plugin_dir_url( __FILE__ ) );

@@ -333,9 +333,11 @@ the caller from workflow, workflow version, event id and step, R-8.4), `reason` 
 
   A call above a limit is refused, not shortened. The calendar day is the site's time zone; all workflows count
   together; void and reactivate have separate counters. Only executed calls (`done`) count. **Other currencies
-  (F-05a, open):** an amount in a currency other than EUR is refused (`currency_not_allowed`) unless it is the shop
-  currency and the operator entered an own *Maximum amount* there (worth no more than 100 EUR – not checked, there is
-  no exchange rate in the core).
+  (F-05a, decided 23.11.2026):** the core converts nothing. When the shop currency is CHF, USD or GBP
+  (`CommandLimits::SIMILAR_CURRENCIES`), the same number 100 applies in that currency (the operator may lower it). Any
+  other currency is refused (`currency_not_allowed`) unless it is the shop currency and the operator entered an own
+  *Maximum amount* there (worth no more than 100 EUR – not checked, there is no exchange rate in the core); until then
+  `voucher.issue` and `voucher.redeem` are effectively off in that shop.
 - **Atomic.** Checking, counting and executing run under one named database lock per site, so two parallel calls
   never pass a limit together (R-8.3b).
 - **Idempotent.** A second call with the same `idempotency_key` does nothing and returns the stored reply of the first
@@ -419,6 +421,33 @@ Five methods of `vcap()->api_v1` cover what a connector plugin needs besides red
 | `line_snapshot( int $order_item_id )` | The voucher line snapshot of an order line (see "Per-line order and refund data" above; connector keys added through `vcap_line_snapshot` included), or `[]`. Same data as `voucher_line` of `order_lines()`, without loading the order. |
 
 None of them checks the current user: the connector decides who may see or trigger what. Redeeming still goes through `vcap()->redemptions` (reserve → commit/release), which checks status, channel, user and PIN.
+
+### Contact and consent (since 1.3.0, contract 1.5.0)
+
+For add-ons that must reach the recipient (or buyer) of a voucher who has no WordPress account – e.g. Review Captain
+sending a review invitation (suite spec F-13). Check `version_compare( VCAP_CONTRACT_VERSION, '1.5.0', '>=' )`.
+**Off by default:** the operator switches it on under *Settings → Integrations (API) → Allow contact reads*, only after
+the data protection review (D8) and with a matching note in the privacy policy. Recording consent works while it is off.
+
+| Function (service `vcap()->contact`) | Returns |
+| --- | --- |
+| `vcap_record_contact_consent( $voucher_id, $purpose, array( 'role' => 'recipient', 'source' => 'form-captain', 'text' => 'review-optin-v1' ) )` (`record_consent()`) | `true` or `WP_Error` (`vcap_contact_invalid`, `vcap_unknown_voucher`, `vcap_contact_no_address`, `vcap_log_failed`). Records that the person of `role` (`recipient` or `buyer`) agreed to be contacted for `$purpose`; `source` names who asked, `text` the consent text shown (id or version, ≤ 64 characters). |
+| `vcap_withdraw_contact_consent( $voucher_id, $purpose, $source )` (`withdraw_consent()`) | `true` or `WP_Error`. A withdrawal wins over every earlier consent for the purpose. |
+| `vcap()->contact->consent( $voucher_id, $purpose )` | The valid consent (`role`, `source`, `text`, `given_at` in UTC) or `null`. |
+| `vcap_read_voucher_contact( $voucher_id, $purpose )` (`contact()`) | `voucher_id`, `purpose`, `role`, `email`, `name`, `locale`, `consent` – or `WP_Error`: `vcap_contact_disabled` (403), `vcap_contact_not_allowed` (403), `vcap_contact_invalid` (400), `vcap_unknown_voucher` (404), `vcap_contact_no_consent` (409), `vcap_contact_opted_out` (409). |
+
+- `$purpose` is a name of 3–40 lower-case letters, digits or underscores starting with a letter (`review_invitation`).
+  A consent counts only for its own purpose.
+- A consent is bound to the address it was given for: Voucher Captain stores a keyed hash of the address, never the
+  address. When the recipient's address is corrected or erased (privacy erasure, retention), the consent no longer
+  matches and `contact()` refuses.
+- `contact()` answers voucher managers, shop managers and background runs (WP-Cron, WP-CLI) without a logged-in user
+  (filter `vcap_contact_read_allowed`). Every answer is written to the voucher history (event `contact_read` with
+  purpose, role and acting user – no address) and announced with the action `vcap_voucher_contact_read`
+  (voucher id, purpose, user id). The filter `vcap_contact_opted_out` (address, purpose, voucher) can refuse an address.
+- The history events `contact_consent`, `contact_consent_withdrawn` and `contact_read` are core events; connectors
+  cannot write them through `log_event()`.
+- Frequency limits, the unsubscribe link and the content of the message stay the add-on's duty.
 
 ### Refunds of completed redemptions
 
